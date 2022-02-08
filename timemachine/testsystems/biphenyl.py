@@ -2,10 +2,10 @@
 
 import jax
 
+from timemachine.md.enhanced import load_or_pregenerate_samples
+
 jax.config.update("jax_enable_x64", True)
 
-import os
-import pickle
 import time
 from pathlib import Path
 
@@ -17,8 +17,6 @@ from timemachine.constants import BOLTZ
 
 from timemachine.fe import functional
 from timemachine.fe.absolute_hydration import (
-    generate_solvent_samples,
-    generate_ligand_samples,
     generate_endstate_samples,
 )
 
@@ -35,9 +33,6 @@ temperature = 300.0
 pressure = 1.0
 
 kBT = BOLTZ * temperature
-
-# global tmp directory # TODO: somewhere better?
-PATH_TO_SAMPLE_CACHES = Path("/tmp/sample_caches/")
 
 
 def get_biphenyl():
@@ -112,52 +107,6 @@ ligand_masses = np.array([a.GetMass() for a in mol.GetAtoms()])
 num_ligand_atoms = len(ligand_masses)
 
 
-def pregenerate_samples(mol, ff, seed, n_solvent_samples=1000, n_ligand_batches=30000):
-    ubps, params, masses, coords, box = enhanced.get_solvent_phase_system(mol, ff)
-    print(f"Generating {n_solvent_samples} solvent samples")
-    solvent_xvbs = generate_solvent_samples(
-        coords, box, masses, ubps, params, temperature, pressure, seed, n_solvent_samples
-    )
-
-    print("Generating ligand samples")
-    ligand_samples, ligand_log_weights = generate_ligand_samples(n_ligand_batches, mol, ff, temperature, seed)
-
-    return solvent_xvbs, ligand_samples, ligand_log_weights
-
-
-def load_or_pregenerate_samples(mol, ff, seed, n_solvent_samples=1000, n_ligand_batches=30000):
-
-    # hash canonical smiles
-    mol_hash = hash(Chem.MolToSmiles(mol))
-    # TODO: do I want this to be sensitive to other mol properties? conformer?
-
-    # hash all of the other parameters
-    # ff_hash = hash(tuple(np.array(ff.get_ordered_params()).flatten()))
-    # arg_hash = hash((seed, n_solvent_samples, n_ligand_batches))
-    # TODO: do I want this to be sensitive to ff's smirks strings too?
-    # TODO: store and check ff_hash, arg_hash match the one stored...
-
-    cache_path = PATH_TO_SAMPLE_CACHES / f"mol_{mol_hash}_x_solvent_samples.pkl"
-
-    if not os.path.exists(PATH_TO_SAMPLE_CACHES):
-        os.mkdir(PATH_TO_SAMPLE_CACHES)
-
-    if not os.path.exists(cache_path):
-        print(f"Cache not found at {cache_path}! Generating cache...")
-        solvent_xvbs, ligand_samples, ligand_log_weights = pregenerate_samples(
-            mol, ff, seed, n_solvent_samples, n_ligand_batches
-        )
-
-        with open(cache_path, "wb") as fh:
-            pickle.dump([solvent_xvbs, ligand_samples, ligand_log_weights], fh)
-    else:
-        with open(cache_path, "rb") as fh:
-            print(f"Loading cache from {cache_path}")
-            solvent_xvbs, ligand_samples, ligand_log_weights = pickle.load(fh)
-
-    return solvent_xvbs, ligand_samples, ligand_log_weights
-
-
 def bind_potentials(ubps, params):
     """modifies ubps in-place"""
     for u, p in zip(ubps, params):
@@ -190,7 +139,7 @@ def construct_biphenyl_test_system(n_steps=1000):
     * initial_samples
     """
 
-    seed = 2021
+    seed = 2022
     np.random.seed(seed)
 
     # set up potentials
@@ -207,7 +156,9 @@ def construct_biphenyl_test_system(n_steps=1000):
     npt_mover = construct_mover(ubps, masses, n_steps)
 
     # combine solvent and ligand samples
-    solvent_xvbs, ligand_samples, ligand_log_weights = load_or_pregenerate_samples(mol, ff, seed)
+    solvent_xvbs, ligand_samples, ligand_log_weights = load_or_pregenerate_samples(
+        mol, ff, seed, temperature=temperature, pressure=pressure
+    )
     n_endstate_samples = 5000  # TODO: expose this parameter?
     all_xvbs = generate_endstate_samples(
         n_endstate_samples, solvent_xvbs, ligand_samples, ligand_log_weights, num_ligand_atoms

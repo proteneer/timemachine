@@ -3,6 +3,8 @@
 # This file contains utility functions to generate samples in the gas-phase.
 
 import os
+import pickle
+
 import jax
 
 import multiprocessing
@@ -11,6 +13,7 @@ from scipy.special import logsumexp
 from jax.scipy.special import logsumexp as jlogsumexp
 
 from timemachine.fe import topology, free_energy
+from timemachine.fe.absolute_hydration import generate_solvent_samples, generate_ligand_samples
 from timemachine.fe.utils import get_romol_conf
 
 from timemachine.integrator import simulate
@@ -26,6 +29,11 @@ from timemachine.md.barostat.utils import get_group_indices, get_bond_list
 
 from rdkit import Chem
 from rdkit.Chem import rdMolDescriptors
+
+from pathlib import Path
+
+# global tmp directory # TODO: somewhere better?
+PATH_TO_SAMPLE_CACHES = Path("/tmp/sample_caches/")
 
 
 def identify_rotatable_bonds(mol):
@@ -556,3 +564,51 @@ def aligned_batch_propose(xvb, K, key, vacuum_samples, vacuum_log_weights):
 def jax_aligned_batch_propose_coords(x, K, key, vacuum_samples, vacuum_log_weights):
     vacuum_samples = jax_sample_from_log_weights(vacuum_samples, vacuum_log_weights, K, key)
     return batch_align_and_replace(vacuum_samples, x)
+
+
+def pregenerate_samples(mol, ff, seed, n_solvent_samples=1000, n_ligand_batches=30000, temperature=300.0, pressure=1.0):
+    ubps, params, masses, coords, box = get_solvent_phase_system(mol, ff)
+    print(f"Generating {n_solvent_samples} solvent samples")
+    solvent_xvbs = generate_solvent_samples(
+        coords, box, masses, ubps, params, temperature, pressure, seed, n_solvent_samples
+    )
+
+    print("Generating ligand samples")
+    ligand_samples, ligand_log_weights = generate_ligand_samples(n_ligand_batches, mol, ff, temperature, seed)
+
+    return solvent_xvbs, ligand_samples, ligand_log_weights
+
+
+def load_or_pregenerate_samples(
+    mol, ff, seed, n_solvent_samples=1000, n_ligand_batches=30000, temperature=300.0, pressure=1.0
+):
+
+    # hash canonical smiles
+    mol_hash = hash(Chem.MolToSmiles(mol))
+    # TODO: do I want this to be sensitive to other mol properties? conformer?
+
+    # hash all of the other parameters
+    # ff_hash = hash(tuple(np.array(ff.get_ordered_params()).flatten()))
+    # arg_hash = hash((seed, n_solvent_samples, n_ligand_batches, temperature, pressure))
+    # TODO: do I want this to be sensitive to ff's smirks strings too?
+    # TODO: store and check ff_hash, arg_hash match the one stored...
+
+    cache_path = PATH_TO_SAMPLE_CACHES / f"mol_{mol_hash}_x_solvent_samples.pkl"
+
+    if not os.path.exists(PATH_TO_SAMPLE_CACHES):
+        os.mkdir(PATH_TO_SAMPLE_CACHES)
+
+    if not os.path.exists(cache_path):
+        print(f"Cache not found at {cache_path}! Generating cache...")
+        solvent_xvbs, ligand_samples, ligand_log_weights = pregenerate_samples(
+            mol, ff, seed, n_solvent_samples, n_ligand_batches, temperature, pressure
+        )
+
+        with open(cache_path, "wb") as fh:
+            pickle.dump([solvent_xvbs, ligand_samples, ligand_log_weights], fh)
+    else:
+        with open(cache_path, "rb") as fh:
+            print(f"Loading cache from {cache_path}")
+            solvent_xvbs, ligand_samples, ligand_log_weights = pickle.load(fh)
+
+    return solvent_xvbs, ligand_samples, ligand_log_weights
