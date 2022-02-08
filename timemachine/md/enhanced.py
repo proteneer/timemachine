@@ -584,7 +584,8 @@ def load_or_pregenerate_samples(
 ):
 
     # hash canonical smiles
-    mol_hash = hash(Chem.MolToSmiles(mol))
+    canon_smiles = Chem.CanonSmiles(Chem.MolToSmiles(mol))
+    mol_hash = hash(canon_smiles)
     # TODO: do I want this to be sensitive to other mol properties? conformer?
 
     # hash all of the other parameters
