@@ -1,8 +1,9 @@
+from typing import Optional, Union
+
 import numpy as np
 from jax import numpy as jnp
-from timemachine.ff import nonbonded
 
-from typing import Union, Optional
+from timemachine.ff import nonbonded
 
 try:
     from scipy.optimize import root_scalar

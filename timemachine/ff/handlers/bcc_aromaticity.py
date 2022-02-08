@@ -2,10 +2,11 @@
 # https://raw.githubusercontent.com/openforcefield/openff-recharge/5384eddb00e594c14c925b2d72956cfa3e51a874/openff/recharge/charges/bcc.py
 # (ytz): we should just vendor this later.
 
-import re
-from openeye import oechem
-from typing import Any, Dict, List, Callable, Type, TypeVar
 import logging
+import re
+from typing import Any, Callable, Dict, List, Type, TypeVar
+
+from openeye import oechem
 
 T = TypeVar("T")
 

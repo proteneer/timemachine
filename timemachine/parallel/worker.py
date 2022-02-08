@@ -1,17 +1,14 @@
 import argparse
-
-from datetime import datetime
-import os
-
 import logging
+import os
 import pickle
 from concurrent import futures
-
-from timemachine.parallel.grpc import service_pb2, service_pb2_grpc
-from timemachine.parallel.utils import get_worker_status
-from timemachine.parallel.constants import DEFAULT_GRPC_OPTIONS
+from datetime import datetime
 
 import grpc
+from timemachine.parallel.constants import DEFAULT_GRPC_OPTIONS
+from timemachine.parallel.grpc import service_pb2, service_pb2_grpc
+from timemachine.parallel.utils import get_worker_status
 
 
 class Worker(service_pb2_grpc.WorkerServicer):

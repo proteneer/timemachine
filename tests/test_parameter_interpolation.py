@@ -3,13 +3,12 @@ from jax.config import config
 config.update("jax_enable_x64", True)
 import copy
 import functools
-import numpy as np
+
 import jax.numpy as jnp
+import numpy as np
+from common import GradientTest, prepare_water_system
 
-from common import GradientTest
 from timemachine.lib import potentials
-
-from common import prepare_water_system
 
 
 def interpolated_potential(conf, params, box, lamb, u_fn):

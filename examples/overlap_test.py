@@ -3,21 +3,18 @@ import os
 from jax.config import config
 
 config.update("jax_enable_x64", True)
-from rdkit import Chem
-
+import functools
 import multiprocessing
-
 
 import jax
 import jax.numpy as np
-import functools
 import numpy as onp
-
-from timemachine.ff.handlers.deserialize import deserialize_handlers
+from rdkit import Chem
 
 from timemachine.ff import handlers
-from timemachine.potentials import bonded, shape
+from timemachine.ff.handlers.deserialize import deserialize_handlers
 from timemachine.integrator import langevin_coefficients
+from timemachine.potentials import bonded, shape
 
 
 def pmi_restraints_new(conf, params, box, lamb, a_idxs, b_idxs, masses, angle_force, com_force):

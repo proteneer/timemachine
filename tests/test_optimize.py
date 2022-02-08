@@ -1,12 +1,12 @@
+import numpy as onp
+from common import get_110_ccc_ff
+from jax import config, grad
+from jax import numpy as jnp
+from jax import tree_util
+
+from timemachine.optimize.precondition import learning_rates_like_params
 from timemachine.optimize.step import truncated_step
 from timemachine.optimize.utils import flatten_and_unflatten
-from timemachine.optimize.precondition import learning_rates_like_params
-
-from common import get_110_ccc_ff
-
-import numpy as onp
-
-from jax import tree_util, grad, config, numpy as jnp
 
 config.update("jax_enable_x64", True)
 

@@ -1,10 +1,10 @@
 """Solvates a host, inserts guest(s) into solvated host, equilibrates
 """
 import os
+
 import numpy as np
 from rdkit.Chem.rdmolfiles import PDBWriter, SDWriter
 from rdkit.Geometry import Point3D
-
 
 MAX_NORM_FORCE = 20000
 

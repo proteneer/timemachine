@@ -1,18 +1,16 @@
-import pymbar
-from timemachine.fe import endpoint_correction, standard_state
-from collections import namedtuple
-
+import copy
 import dataclasses
 import time
-import copy
+from collections import namedtuple
+from typing import List, Tuple
+
 import numpy as np
+import pymbar
+
+from timemachine.fe import endpoint_correction, standard_state
+from timemachine.fe.utils import extract_delta_Us_from_U_knk, sanitize_energies
+from timemachine.lib import custom_ops, potentials
 from timemachine.md import minimizer
-
-from typing import Tuple, List
-
-from timemachine.fe.utils import sanitize_energies, extract_delta_Us_from_U_knk
-
-from timemachine.lib import potentials, custom_ops
 
 
 @dataclasses.dataclass

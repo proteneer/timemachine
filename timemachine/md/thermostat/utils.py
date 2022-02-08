@@ -1,6 +1,7 @@
 import numpy as np
-from timemachine.constants import BOLTZ
 from simtk.unit import Quantity, kelvin
+
+from timemachine.constants import BOLTZ
 
 
 def sample_velocities(masses: Quantity, temperature: Quantity) -> np.array:

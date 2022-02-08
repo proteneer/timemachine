@@ -1,5 +1,5 @@
-from timemachine.lib import custom_ops
 from timemachine.integrator import langevin_coefficients
+from timemachine.lib import custom_ops
 
 # safe to pickle!
 

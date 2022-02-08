@@ -1,6 +1,8 @@
-from jax import tree_util, numpy as np
+from typing import Callable, Tuple
+
 import numpy as onp
-from typing import Tuple, Callable
+from jax import numpy as np
+from jax import tree_util
 
 
 def get_shape(x):

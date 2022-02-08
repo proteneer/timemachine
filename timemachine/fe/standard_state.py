@@ -1,7 +1,8 @@
+import functools
+
 import numpy as np
 import scipy.integrate
 
-import functools
 from timemachine.potentials import rmsd
 
 

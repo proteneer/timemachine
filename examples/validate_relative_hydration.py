@@ -3,25 +3,24 @@
 # against the relative difference.
 
 import argparse
-import numpy as np
+import multiprocessing
 
+import numpy as np
+from rdkit import Chem
+
+from timemachine.fe import model_rabfe
 from timemachine.fe.free_energy_rabfe import (
     construct_absolute_lambda_schedule_solvent,
     construct_relative_lambda_schedule,
-    setup_relative_restraints_by_distance,
     get_romol_conf,
+    setup_relative_restraints_by_distance,
 )
-from timemachine.fe import model_rabfe
-from timemachine.md import builders, minimizer
-
 from timemachine.ff import Forcefield
 from timemachine.ff.handlers.deserialize import deserialize_handlers
+from timemachine.md import builders, minimizer
 from timemachine.parallel.client import CUDAPoolClient, GRPCClient
 from timemachine.parallel.utils import get_gpu_count
-
-import multiprocessing
 from timemachine.training.dataset import Dataset
-from rdkit import Chem
 
 if __name__ == "__main__":
 

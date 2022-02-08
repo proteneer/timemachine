@@ -4,9 +4,9 @@ config.update("jax_enable_x64", True)
 
 import numpy as np
 
-from timemachine.ff.handlers import nonbonded, bonded
-from timemachine.ff.handlers.serialize import bin_to_str
+from timemachine.ff.handlers import bonded, nonbonded
 from timemachine.ff.handlers.deserialize import deserialize_handlers
+from timemachine.ff.handlers.serialize import bin_to_str
 
 
 def test_harmonic_bond():

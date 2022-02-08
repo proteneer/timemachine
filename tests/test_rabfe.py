@@ -2,25 +2,23 @@ import os
 from unittest import TestCase
 
 import numpy as np
+from common import temporary_working_dir
 
-from timemachine.md import builders, minimizer
-from timemachine.fe.model_rabfe import RelativeBindingModel, AbsoluteConversionModel, AbsoluteStandardHydrationModel
+from timemachine.fe.frames import all_frames
 from timemachine.fe.free_energy import construct_lambda_schedule
 from timemachine.fe.free_energy_rabfe import (
-    setup_relative_restraints_by_distance,
-    get_romol_conf,
-    RelativeFreeEnergy,
     AbsoluteFreeEnergy,
+    RelativeFreeEnergy,
+    get_romol_conf,
+    setup_relative_restraints_by_distance,
 )
-from timemachine.fe.frames import all_frames
-from timemachine.potentials import rmsd
-from timemachine.lib.potentials import NonbondedInterpolated, Nonbonded
-from timemachine.testsystems.relative import hif2a_ligand_pair
-
+from timemachine.fe.model_rabfe import AbsoluteConversionModel, AbsoluteStandardHydrationModel, RelativeBindingModel
+from timemachine.lib.potentials import Nonbonded, NonbondedInterpolated
+from timemachine.md import builders, minimizer
 from timemachine.parallel.client import CUDAPoolClient
 from timemachine.parallel.utils import get_gpu_count
-
-from common import temporary_working_dir
+from timemachine.potentials import rmsd
+from timemachine.testsystems.relative import hif2a_ligand_pair
 
 DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
 NUM_GPUS = get_gpu_count()

@@ -2,7 +2,8 @@
 # https://github.com/openforcefield/bayes-implicit-solvent/blob/propertycalculator/bayes_implicit_solvent/gb_models/jax_gb_models.py
 
 import jax.numpy as np
-from timemachine.potentials.jax_utils import distance, convert_to_4d
+
+from timemachine.potentials.jax_utils import convert_to_4d, distance
 
 
 def step(x):

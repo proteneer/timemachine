@@ -1,16 +1,13 @@
-from collections import namedtuple
-
 import copy
+import dataclasses
+from collections import namedtuple
+from typing import List, Tuple
+
 import numpy as np
 
-from timemachine.lib import potentials, custom_ops
-
-from typing import Tuple, List
-
-import dataclasses
-
-from timemachine.parallel.client import SerialClient
+from timemachine.lib import custom_ops, potentials
 from timemachine.md.states import CoordsVelBox
+from timemachine.parallel.client import SerialClient
 
 
 @dataclasses.dataclass

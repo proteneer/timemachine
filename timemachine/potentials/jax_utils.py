@@ -1,9 +1,9 @@
+from typing import Tuple
+
+import jax
 import jax.numpy as np
 import numpy as onp
-import jax
 from jax import vmap
-
-from typing import Tuple
 
 Array = onp.array
 

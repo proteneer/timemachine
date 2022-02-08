@@ -3,16 +3,15 @@ from jax.config import config
 config.update("jax_enable_x64", True)
 
 import unittest
+
+import jax
 import numpy as np
-
-from timemachine.fe import topology
-
 from rdkit import Chem
 
+from timemachine.fe import topology
+from timemachine.fe.utils import get_romol_conf
 from timemachine.ff import Forcefield
 from timemachine.ff.handlers.deserialize import deserialize_handlers
-from timemachine.fe.utils import get_romol_conf
-import jax
 
 
 class BenzenePhenolSparseTest(unittest.TestCase):

@@ -11,40 +11,37 @@
 # For the solvent setup, we proceed as follows:
 # 1) Conversion of the ligand parameters into a ff-independent state.
 # 2) Run an absolute hydration free energy of the ff-independent state.
-import os
-import pickle
+
 import argparse
 import datetime
 import logging
-import numpy as np
-
+import os
+import pickle
 from pathlib import Path
 
+import numpy as np
+from rdkit import Chem
+
+import timemachine
+from timemachine.fe import model_rabfe
+from timemachine.fe.frames import all_frames, endpoint_frames_only, no_frames
 from timemachine.fe.free_energy_rabfe import (
+    RABFEResult,
     construct_absolute_lambda_schedule_complex,
     construct_absolute_lambda_schedule_solvent,
     construct_conversion_lambda_schedule,
     get_romol_conf,
     setup_relative_restraints_by_distance,
-    RABFEResult,
 )
-from timemachine.fe.utils import convert_uM_to_kJ_per_mole
-from timemachine.fe import model_rabfe
 from timemachine.fe.model_utils import verify_rabfe_pair
-from timemachine.fe.frames import endpoint_frames_only, all_frames, no_frames
-
+from timemachine.fe.utils import convert_uM_to_kJ_per_mole
 from timemachine.ff import Forcefield
 from timemachine.ff.handlers.deserialize import deserialize_handlers
+from timemachine.md import builders, minimizer
 from timemachine.parallel.client import CUDAPoolClient, GRPCClient
 from timemachine.parallel.utils import get_gpu_count
-
-
-from timemachine.training.dataset import Dataset
-from rdkit import Chem
-
-import timemachine
 from timemachine.potentials import rmsd
-from timemachine.md import builders, minimizer
+from timemachine.training.dataset import Dataset
 
 ALL_FRAMES = "all"
 ENDPOINTS_ONLY = "endpoints"

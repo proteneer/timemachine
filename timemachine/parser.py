@@ -1,6 +1,6 @@
-from typing import Optional, Dict, Any, List
 from dataclasses import dataclass, fields
 from pathlib import Path
+from typing import Any, Dict, List, Optional
 
 from yaml import safe_load
 

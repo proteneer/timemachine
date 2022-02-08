@@ -1,7 +1,7 @@
-import jax.numpy as jnp
-from jax.scipy.special import logsumexp
-import pymbar
 import jax
+import jax.numpy as jnp
+import pymbar
+from jax.scipy.special import logsumexp
 
 
 def EXP(w_raw):

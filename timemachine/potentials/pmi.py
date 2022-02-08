@@ -2,8 +2,8 @@
 # ported from Numerical diagonalization of 3x3 matrcies (sic), v1.1
 # https://www.mpi-hd.mpg.de/personalhomes/globes/3x3/index.html
 import jax
-import numpy as onp
 import jax.numpy as np
+import numpy as onp
 
 DBL_EPSILON = 2.2204460492503131e-16
 

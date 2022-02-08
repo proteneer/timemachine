@@ -1,4 +1,5 @@
 import numpy as np
+
 from timemachine.md.barostat.moves import CentroidRescaler
 from timemachine.md.barostat.utils import compute_intramolecular_distances
 

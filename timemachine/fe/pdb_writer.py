@@ -1,8 +1,10 @@
-import numpy as np
-
 import tempfile
+
+import numpy as np
+from rdkit import Chem
 from simtk.openmm import app
 from simtk.openmm.app import PDBFile
+
 from timemachine.fe.topology import SingleTopology
 
 # class PDBWriter():
@@ -35,9 +37,6 @@ from timemachine.fe.topology import SingleTopology
 #     def close(self):
 #         PDBFile.writeFooter(self.topology, self.outfile)
 #         self.outfile.flush()
-
-
-from rdkit import Chem
 
 
 def convert_single_topology_mols(coords: np.ndarray, topo: SingleTopology) -> np.ndarray:

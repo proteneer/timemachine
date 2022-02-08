@@ -1,19 +1,18 @@
 import numpy as np
-from timemachine.fe.free_energy_rabfe import (
-    RABFEResult,
-    setup_relative_restraints_by_distance,
-    setup_relative_restraints_using_smarts,
-    validate_lambda_schedule,
-    interpolate_pre_optimized_protocol,
-    construct_pre_optimized_absolute_lambda_schedule_solvent,
-)
-from timemachine.fe.atom_mapping import CompareDistNonterminal
-from timemachine.fe.utils import get_romol_conf
-
+import pytest
 from rdkit import Chem
 from rdkit.Chem import AllChem, rdFMCS
 
-import pytest
+from timemachine.fe.atom_mapping import CompareDistNonterminal
+from timemachine.fe.free_energy_rabfe import (
+    RABFEResult,
+    construct_pre_optimized_absolute_lambda_schedule_solvent,
+    interpolate_pre_optimized_protocol,
+    setup_relative_restraints_by_distance,
+    setup_relative_restraints_using_smarts,
+    validate_lambda_schedule,
+)
+from timemachine.fe.utils import get_romol_conf
 
 
 def test_rabfe_result_to_from_mol():

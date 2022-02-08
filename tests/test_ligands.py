@@ -1,5 +1,5 @@
-from rdkit import Chem
 import numpy as np
+from rdkit import Chem
 
 
 def get_biphenyl():

@@ -2,28 +2,23 @@
 # Analogous to https://github.com/openmm/openmm/blob/master/tests/TestMonteCarloBarostat.h#L204-L269
 # Expected runtime: ~ 10 minutes (10 replicates where each takes < 1 minute)
 
+from functools import partial
+
 import numpy as np
 from simtk import unit
 
-from timemachine.testsystems.relative import hif2a_ligand_pair
-
-from timemachine.md.builders import build_water_system
-from timemachine.md.minimizer import minimize_host_4d
-
 from timemachine.fe.free_energy import AbsoluteFreeEnergy
-
-from timemachine.md.ensembles import PotentialEnergyModel, NPTEnsemble
+from timemachine.lib import LangevinIntegrator
 from timemachine.md.barostat.moves import MonteCarloBarostat
 from timemachine.md.barostat.utils import get_bond_list, get_group_indices
+from timemachine.md.builders import build_water_system
+from timemachine.md.ensembles import NPTEnsemble, PotentialEnergyModel
+from timemachine.md.minimizer import minimize_host_4d
 from timemachine.md.states import CoordsVelBox
-from timemachine.md.utils import simulate_npt_traj
 from timemachine.md.thermostat.moves import UnadjustedLangevinMove
 from timemachine.md.thermostat.utils import sample_velocities
-
-from timemachine.lib import LangevinIntegrator
-
-from functools import partial
-
+from timemachine.md.utils import simulate_npt_traj
+from timemachine.testsystems.relative import hif2a_ligand_pair
 
 if __name__ == "__main__":
     # simulation parameters

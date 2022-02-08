@@ -2,17 +2,15 @@ from jax.config import config
 
 config.update("jax_enable_x64", True)
 
+import functools
+
+import numpy as np
+import pytest
+from common import GradientTest
 from rdkit import Chem
 
-import functools
-import numpy as np
-
-from timemachine.potentials import shape
 from timemachine.lib import potentials
-
-from common import GradientTest
-
-import pytest
+from timemachine.potentials import shape
 
 
 def recenter(conf):

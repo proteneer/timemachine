@@ -1,31 +1,23 @@
 # Run a simulation at constant temperature and pressure, at a variety of values of lambda
 
-import numpy as np
-from simtk import unit
-
-from timemachine.testsystems.relative import hif2a_ligand_pair
-
-from timemachine.md.builders import build_water_system
-from timemachine.md.minimizer import minimize_host_4d
-
-from timemachine.md.ensembles import PotentialEnergyModel, NPTEnsemble
-
-from timemachine.md.thermostat.utils import sample_velocities
-
-from timemachine.md.barostat.utils import get_bond_list, get_group_indices
-from timemachine.md.barostat.moves import MonteCarloBarostat
-
-from timemachine.md.thermostat.moves import UnadjustedLangevinMove
-
-from timemachine.md.states import CoordsVelBox
-from timemachine.md.utils import simulate_npt_traj
-
-from timemachine.fe.free_energy import AbsoluteFreeEnergy, construct_lambda_schedule
-
-from timemachine.lib import LangevinIntegrator
 from functools import partial
 
 import matplotlib.pyplot as plt
+import numpy as np
+from simtk import unit
+
+from timemachine.fe.free_energy import AbsoluteFreeEnergy, construct_lambda_schedule
+from timemachine.lib import LangevinIntegrator
+from timemachine.md.barostat.moves import MonteCarloBarostat
+from timemachine.md.barostat.utils import get_bond_list, get_group_indices
+from timemachine.md.builders import build_water_system
+from timemachine.md.ensembles import NPTEnsemble, PotentialEnergyModel
+from timemachine.md.minimizer import minimize_host_4d
+from timemachine.md.states import CoordsVelBox
+from timemachine.md.thermostat.moves import UnadjustedLangevinMove
+from timemachine.md.thermostat.utils import sample_velocities
+from timemachine.md.utils import simulate_npt_traj
+from timemachine.testsystems.relative import hif2a_ligand_pair
 
 # simulation parameters
 n_lambdas = 40

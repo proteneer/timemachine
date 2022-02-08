@@ -1,20 +1,17 @@
 from abc import ABC
+from typing import Any, List, Optional, Tuple
 
 import numpy as np
-
-from simtk import openmm
 from rdkit import Chem
+from simtk import openmm
 
-from timemachine.lib import potentials, LangevinIntegrator, MonteCarloBarostat
 from timemachine import constants
+from timemachine.fe import estimator_abfe, free_energy_rabfe, model_utils, topology
 from timemachine.fe.frames import endpoint_frames_only
-from timemachine.fe import free_energy_rabfe, topology, estimator_abfe, model_utils
 from timemachine.ff import Forcefield
-
+from timemachine.lib import LangevinIntegrator, MonteCarloBarostat, potentials
+from timemachine.md.barostat.utils import get_bond_list, get_group_indices
 from timemachine.parallel.client import AbstractClient, _MockFuture
-from typing import Optional, Tuple, Any, List
-
-from timemachine.md.barostat.utils import get_group_indices, get_bond_list
 
 
 class AbsoluteModel(ABC):

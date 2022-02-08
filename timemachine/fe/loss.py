@@ -1,13 +1,12 @@
-from jax import core
 import jax.numpy as jnp
-
-from jax.interpreters import ad
-
-from timemachine.fe import bar as tmbar, math_utils
 import pymbar
+from jax import core
+from jax.interpreters import ad
+from simtk import unit
 
 from timemachine.constants import kB
-from simtk import unit
+from timemachine.fe import bar as tmbar
+from timemachine.fe import math_utils
 
 
 # (ytz): the AD override trick is taken from:
