@@ -1,8 +1,10 @@
-from timemachine.constants import BOLTZ
-import numpy as np
-import jax
-from jax import random as jrandom
 import time
+
+import jax
+import numpy as np
+from jax import random as jrandom
+
+from timemachine.constants import BOLTZ
 
 
 def langevin_coefficients(temperature, dt, friction, masses):

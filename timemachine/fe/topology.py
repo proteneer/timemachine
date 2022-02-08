@@ -1,12 +1,12 @@
 from abc import ABC
-from rdkit.Chem import rdmolops
 
-import numpy as np
 import jax
 import jax.numpy as jnp
+import numpy as np
+from rdkit.Chem import rdmolops
 
-from timemachine.lib import potentials
 from timemachine.ff.handlers import nonbonded
+from timemachine.lib import potentials
 
 _SCALE_12 = 1.0
 _SCALE_13 = 1.0

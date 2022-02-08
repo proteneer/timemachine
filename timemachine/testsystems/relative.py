@@ -1,5 +1,7 @@
 # construct a relative transformation
 
+from pathlib import Path
+
 import numpy as np
 from rdkit import Chem
 
@@ -7,8 +9,6 @@ import timemachine
 from timemachine.fe import free_energy, topology
 from timemachine.ff import Forcefield
 from timemachine.ff.handlers.deserialize import deserialize_handlers
-
-from pathlib import Path
 
 root = Path(timemachine.__file__).parent.parent
 

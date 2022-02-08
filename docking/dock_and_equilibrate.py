@@ -1,21 +1,18 @@
 """Solvates a host, inserts guest(s) into solvated host, equilibrates
 """
 import os
-import time
 import tempfile
+import time
 
 import numpy as np
-
 from rdkit import Chem
 
-from timemachine.md import builders, minimizer
-from timemachine.fe import pdb_writer, free_energy
-
+from docking import report
+from timemachine.fe import free_energy, pdb_writer
 from timemachine.ff import Forcefield
 from timemachine.ff.handlers.deserialize import deserialize_handlers
-from timemachine.lib import custom_ops, LangevinIntegrator
-
-from docking import report
+from timemachine.lib import LangevinIntegrator, custom_ops
+from timemachine.md import builders, minimizer
 
 
 def dock_and_equilibrate(

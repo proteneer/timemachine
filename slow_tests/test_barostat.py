@@ -1,24 +1,19 @@
 import os
 import platform
+
 import numpy as np
+import pytest
 from simtk import unit
 
-import pytest
-
-from timemachine.testsystems.relative import hif2a_ligand_pair
-
+from timemachine.constants import BOLTZ, DISTANCE_UNIT, ENERGY_UNIT
+from timemachine.fe.free_energy import AbsoluteFreeEnergy
+from timemachine.lib import LangevinIntegrator, custom_ops
+from timemachine.md.barostat.moves import CentroidRescaler
+from timemachine.md.barostat.utils import compute_box_center, compute_box_volume, get_bond_list, get_group_indices
 from timemachine.md.builders import build_water_system
 from timemachine.md.minimizer import minimize_host_4d
-
-from timemachine.fe.free_energy import AbsoluteFreeEnergy
-
-from timemachine.md.barostat.moves import CentroidRescaler
-from timemachine.md.barostat.utils import get_bond_list, get_group_indices, compute_box_volume, compute_box_center
 from timemachine.md.thermostat.utils import sample_velocities
-
-from timemachine.lib import LangevinIntegrator, custom_ops
-
-from timemachine.constants import BOLTZ, ENERGY_UNIT, DISTANCE_UNIT
+from timemachine.testsystems.relative import hif2a_ligand_pair
 
 
 def test_barostat_zero_interval():

@@ -1,21 +1,19 @@
 import os
-import numpy as np
-import jax.numpy as jnp
 from pickle import dump, load
+from typing import List, Optional, Tuple
 
-from simtk import openmm
+import jax.numpy as jnp
+import numpy as np
 from rdkit import Chem
+from simtk import openmm
 
-from timemachine.md import minimizer
-from timemachine.lib import LangevinIntegrator, MonteCarloBarostat
-from timemachine.fe import free_energy, topology, estimator
+from timemachine.fe import estimator, free_energy, topology
 from timemachine.fe.model_utils import apply_hmr
 from timemachine.ff import Forcefield
+from timemachine.lib import LangevinIntegrator, MonteCarloBarostat
+from timemachine.md import minimizer
 from timemachine.md.barostat.utils import get_bond_list, get_group_indices
-
-
 from timemachine.parallel.client import AbstractClient, SerialClient
-from typing import Optional, List, Tuple
 
 
 class RBFEModel:

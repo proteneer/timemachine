@@ -1,47 +1,40 @@
 # Fit to multiple relative binding free energy edges
+import datetime
 import sys
 from argparse import ArgumentParser
+from collections import defaultdict, namedtuple
+from pathlib import Path
+from pickle import dump, load
+from time import time
+from typing import Any, Dict, List, Tuple, Union
+
 import jax
-from jax import numpy as jnp
 import numpy as np
-import datetime
+from jax import numpy as jnp
+
 import timemachine
-from timemachine.training.dataset import Dataset
+from timemachine.fe.estimator import SimulationResult
+
+# free energy classes
+from timemachine.fe.free_energy import RBFETransformIndex, RelativeFreeEnergy, construct_lambda_schedule
+from timemachine.fe.loss import pseudo_huber_loss  # , l1_loss, flat_bottom_loss
+from timemachine.fe.model import RBFEModel
 
 # forcefield handlers
 from timemachine.ff import Forcefield
-from timemachine.ff.handlers.serialize import serialize_handlers
 from timemachine.ff.handlers.deserialize import deserialize_handlers
 from timemachine.ff.handlers.nonbonded import AM1CCCHandler, LennardJonesHandler
-
-# free energy classes
-from timemachine.fe.free_energy import (
-    RelativeFreeEnergy,
-    construct_lambda_schedule,
-    RBFETransformIndex,
-)
-from timemachine.fe.estimator import SimulationResult
-from timemachine.fe.model import RBFEModel
-from timemachine.fe.loss import pseudo_huber_loss  # , l1_loss, flat_bottom_loss
+from timemachine.ff.handlers.serialize import serialize_handlers
 
 # MD initialization
 from timemachine.md import builders
+from timemachine.optimize.step import truncated_step
+from timemachine.optimize.utils import flatten_and_unflatten
 
 # parallelization across multiple GPUs
 from timemachine.parallel.client import CUDAPoolClient, GRPCClient
 from timemachine.parallel.utils import get_gpu_count
-
-from collections import namedtuple, defaultdict
-
-from pickle import load, dump
-
-from timemachine.optimize.step import truncated_step
-from timemachine.optimize.utils import flatten_and_unflatten
-
-from typing import Tuple, Dict, List, Union, Any
-
-from pathlib import Path
-from time import time
+from timemachine.training.dataset import Dataset
 
 array = Union[np.array, jnp.array]
 

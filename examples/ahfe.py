@@ -1,24 +1,17 @@
 # absolute hydration free energy
 
+import jax
 import numpy as np
-
 from rdkit import Chem
 from rdkit.Chem import AllChem
-from timemachine.fe import pdb_writer
-from timemachine.fe import topology
+
+from timemachine.fe import pdb_writer, topology
 from timemachine.fe.utils import get_romol_conf
-from timemachine.md import builders
-
-from timemachine.lib import potentials, custom_ops
-from timemachine.lib import LangevinIntegrator
-
-import jax
-
 from timemachine.ff import Forcefield
-
 from timemachine.ff.handlers import openmm_deserializer
-
 from timemachine.ff.handlers.deserialize import deserialize_handlers
+from timemachine.lib import LangevinIntegrator, custom_ops, potentials
+from timemachine.md import builders
 
 # 1. build water box
 # 2. build ligand

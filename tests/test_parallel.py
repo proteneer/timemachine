@@ -1,22 +1,18 @@
 # tests for parallel execution
-import numpy as np
+import concurrent
+import os
 import random
-
+import unittest
 from tempfile import NamedTemporaryFile
+from unittest.mock import patch
 
+import jax.numpy as jnp
+import numpy as np
+
+import grpc
 from timemachine import parallel
 from timemachine.parallel import client, worker
 from timemachine.parallel.utils import get_gpu_count
-
-import os
-import unittest
-from unittest.mock import patch
-
-
-import grpc
-import concurrent
-
-import jax.numpy as jnp
 
 
 def jax_fn(x):

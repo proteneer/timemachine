@@ -3,30 +3,26 @@
 
 import copy
 import gzip
-
 import pickle
 import unittest
+
 from jax.config import config
 
 config.update("jax_enable_x64", True)
 
-import numpy as np
-
 import functools
 import itertools
 
-from common import GradientTest
-from common import prepare_water_system, prepare_reference_nonbonded
+import numpy as np
+from common import GradientTest, prepare_reference_nonbonded, prepare_water_system
+from hilbertcurve.hilbertcurve import HilbertCurve
+from simtk.openmm import app
 
-from timemachine.potentials import nonbonded
+from timemachine.fe.utils import to_md_units
+from timemachine.ff.handlers import openmm_deserializer
 from timemachine.lib import potentials
 from timemachine.md import builders
-
-from hilbertcurve.hilbertcurve import HilbertCurve
-from timemachine.fe.utils import to_md_units
-
-from timemachine.ff.handlers import openmm_deserializer
-from simtk.openmm import app
+from timemachine.potentials import nonbonded
 
 np.set_printoptions(linewidth=500)
 

@@ -1,7 +1,9 @@
-import numpy as np
-import networkx as nx
-from scipy.spatial.distance import pdist
 from typing import List, Tuple
+
+import networkx as nx
+import numpy as np
+from scipy.spatial.distance import pdist
+
 from timemachine.lib.potentials import HarmonicBond
 
 

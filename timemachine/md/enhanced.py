@@ -2,29 +2,25 @@
 
 # This file contains utility functions to generate samples in the gas-phase.
 
-import os
-import jax
-
 import multiprocessing
+import os
+
+import jax
 import numpy as np
-from scipy.special import logsumexp
 from jax.scipy.special import logsumexp as jlogsumexp
-
-from timemachine.fe import topology, free_energy
-from timemachine.fe.utils import get_romol_conf
-
-from timemachine.integrator import simulate
-from timemachine.potentials import bonded, nonbonded, rmsd
-from timemachine.constants import BOLTZ
-from timemachine import lib
-from timemachine.lib import custom_ops
-
-from timemachine.md.states import CoordsVelBox
-from timemachine.md import minimizer
-from timemachine.md import builders
-
 from rdkit import Chem
 from rdkit.Chem import rdMolDescriptors
+from scipy.special import logsumexp
+
+from timemachine import lib
+from timemachine.constants import BOLTZ
+from timemachine.fe import free_energy, topology
+from timemachine.fe.utils import get_romol_conf
+from timemachine.integrator import simulate
+from timemachine.lib import custom_ops
+from timemachine.md import builders, minimizer
+from timemachine.md.states import CoordsVelBox
+from timemachine.potentials import bonded, nonbonded, rmsd
 
 
 def identify_rotatable_bonds(mol):
@@ -449,7 +445,7 @@ def get_solvent_phase_system(mol, ff):
     return ubps, params, masses, coords, water_box
 
 
-from timemachine.md.barostat.utils import get_group_indices, get_bond_list
+from timemachine.md.barostat.utils import get_bond_list, get_group_indices
 
 
 def equilibrate_solvent_phase(

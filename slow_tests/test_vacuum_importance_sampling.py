@@ -11,13 +11,13 @@ from jax.config import config
 config.update("jax_enable_x64", True)
 import jax
 import numpy as np
+import pytest
 
-from timemachine.md import enhanced
-from timemachine.potentials import bonded
 from tests import test_ligands
 from timemachine.ff import Forcefield
 from timemachine.ff.handlers.deserialize import deserialize_handlers
-import pytest
+from timemachine.md import enhanced
+from timemachine.potentials import bonded
 
 
 def get_ff_am1ccc():

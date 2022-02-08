@@ -2,19 +2,21 @@ import jax
 
 jax.config.update("jax_enable_x64", True)
 
-from jax import numpy as np, jit, vmap
 import numpy as onp
+from jax import jit
+from jax import numpy as np
+from jax import vmap
 
 onp.random.seed(2021)
 
 from timemachine.potentials.jax_utils import (
+    augment_dim,
+    batched_neighbor_inds,
+    compute_lifting_parameter,
     delta_r,
     distance_on_pairs,
     get_all_pairs_indices,
     get_group_group_indices,
-    compute_lifting_parameter,
-    augment_dim,
-    batched_neighbor_inds,
 )
 
 

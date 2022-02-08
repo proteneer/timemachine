@@ -2,7 +2,8 @@ from jax import config
 
 config.update("jax_enable_x64", True)
 
-from jax import custom_jvp, numpy as np
+from jax import custom_jvp
+from jax import numpy as np
 
 from timemachine.lib.potentials import SummedPotential
 

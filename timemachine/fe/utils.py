@@ -1,9 +1,8 @@
-import numpy as np
-import simtk.unit
+from typing import List
 
 import networkx as nx
-
-from typing import List
+import numpy as np
+import simtk.unit
 
 
 def to_md_units(q):

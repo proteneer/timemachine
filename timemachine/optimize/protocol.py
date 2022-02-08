@@ -45,11 +45,13 @@ import jax
 
 jax.config.update("jax_enable_x64", True)
 
-from jax import jit, vmap, numpy as np
+from typing import Callable
+
+from jax import jit
+from jax import numpy as np
+from jax import vmap
 from jax.scipy.special import logsumexp
 from scipy.optimize import bisect
-
-from typing import Callable
 
 Float = float
 Array = np.array

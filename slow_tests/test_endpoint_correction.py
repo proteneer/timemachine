@@ -1,22 +1,21 @@
 from jax.config import config
 
 config.update("jax_enable_x64", True)
-import jax
-
 import copy
 import functools
+from pathlib import Path
 
+import jax
+import numpy as np
 from rdkit import Chem
+
+from timemachine import constants
 from timemachine.fe import endpoint_correction
+from timemachine.fe.utils import get_romol_conf
+from timemachine.ff import Forcefield
+from timemachine.ff.handlers.deserialize import deserialize_handlers
 from timemachine.integrator import langevin_coefficients
 from timemachine.potentials import bonded
-from timemachine import constants
-import numpy as np
-
-from pathlib import Path
-from timemachine.ff.handlers.deserialize import deserialize_handlers
-from timemachine.ff import Forcefield
-from timemachine.fe.utils import get_romol_conf
 
 
 def setup_system():

@@ -1,7 +1,8 @@
 import jax.numpy as np
+from jax.ops import index, index_update
 from jax.scipy.special import erfc
-from jax.ops import index_update, index
-from timemachine.potentials.jax_utils import distance_on_pairs, distance, convert_to_4d, delta_r
+
+from timemachine.potentials.jax_utils import convert_to_4d, delta_r, distance, distance_on_pairs
 
 
 def switch_fn(dij, cutoff):

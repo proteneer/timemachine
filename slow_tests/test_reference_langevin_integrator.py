@@ -1,7 +1,8 @@
 from itertools import product
 
 import numpy as np
-from jax import numpy as jnp, jit, grad
+from jax import grad, jit
+from jax import numpy as jnp
 
 from timemachine.constants import BOLTZ
 from timemachine.integrator import LangevinIntegrator

@@ -1,22 +1,21 @@
+import contextlib
+import functools
+import itertools
 import os
 import unittest
-import numpy as np
-import jax
-import functools
-import contextlib
-from tempfile import TemporaryDirectory
-from timemachine.constants import ONE_4PI_EPS0
-import timemachine
 from pathlib import Path
-from timemachine.ff.handlers.deserialize import deserialize_handlers
-from timemachine.ff import Forcefield
+from tempfile import TemporaryDirectory
 
-from timemachine.potentials import bonded, nonbonded
-from timemachine.lib import potentials
-
+import jax
+import numpy as np
 from hilbertcurve.hilbertcurve import HilbertCurve
 
-import itertools
+import timemachine
+from timemachine.constants import ONE_4PI_EPS0
+from timemachine.ff import Forcefield
+from timemachine.ff.handlers.deserialize import deserialize_handlers
+from timemachine.lib import potentials
+from timemachine.potentials import bonded, nonbonded
 
 
 @contextlib.contextmanager

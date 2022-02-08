@@ -2,13 +2,12 @@
 from jax.config import config
 
 config.update("jax_enable_x64", True)
-from timemachine.ff import Forcefield
-from timemachine.ff.handlers.deserialize import deserialize_handlers
+import numpy as np
+from rdkit import Chem
 
 from timemachine.fe import topology
-from rdkit import Chem
-import numpy as np
-
+from timemachine.ff import Forcefield
+from timemachine.ff.handlers.deserialize import deserialize_handlers
 from timemachine.lib import potentials
 
 

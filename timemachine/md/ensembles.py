@@ -1,10 +1,11 @@
+from typing import Union
+
 import numpy as np
 from jax import numpy as jnp
 from simtk import unit
-from timemachine.md.barostat.utils import compute_box_volume
-from timemachine.constants import kB, ENERGY_UNIT, DISTANCE_UNIT
 
-from typing import Union
+from timemachine.constants import DISTANCE_UNIT, ENERGY_UNIT, kB
+from timemachine.md.barostat.utils import compute_box_volume
 
 non_unitted = Union[float, np.ndarray, jnp.ndarray]  # raw value without simtk unit attached
 

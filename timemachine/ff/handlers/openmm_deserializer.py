@@ -1,5 +1,4 @@
 import numpy as np
-
 from simtk import openmm as mm
 from simtk import unit
 

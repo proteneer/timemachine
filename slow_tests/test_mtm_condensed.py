@@ -1,31 +1,27 @@
-from jax.config import config
-
-from scipy.special import logsumexp
-import pickle
 import os
+import pickle
+
+from jax.config import config
+from scipy.special import logsumexp
 
 config.update("jax_enable_x64", True)
-import jax
-import jax.numpy as jnp
-
-from timemachine.md import enhanced
-from timemachine.md.moves import NPTMove, OptimizedMTMMove
-
+import copy
 import functools
 
-from timemachine.potentials import bonded, nonbonded
-from timemachine.constants import BOLTZ
-
+import jax
+import jax.numpy as jnp
 import numpy as np
-from tests import test_ligands
-import copy
+import pytest
 
+from tests import test_ligands
+from timemachine.constants import BOLTZ
 from timemachine.ff import Forcefield
 from timemachine.ff.handlers.deserialize import deserialize_handlers
+from timemachine.md import enhanced
+from timemachine.md.moves import NPTMove, OptimizedMTMMove
+from timemachine.potentials import bonded, nonbonded
 
 # (ytz): useful for visualization, so please leave this comment here!
-
-import pytest
 
 
 def get_ff_am1cc():

@@ -1,20 +1,19 @@
 import math
-from rdkit import Chem
+
 from jax.config import config
+from rdkit import Chem
 
 config.update("jax_enable_x64", True)
 
+from dataclasses import asdict, dataclass, fields
+
 import numpy as np
-
-from timemachine.fe import topology
-from timemachine.fe.utils import get_romol_conf
-
-from timemachine.ff.handlers import openmm_deserializer
-
 from scipy.optimize import linear_sum_assignment
 from scipy.spatial.distance import cdist
 
-from dataclasses import dataclass, fields, asdict
+from timemachine.fe import topology
+from timemachine.fe.utils import get_romol_conf
+from timemachine.ff.handlers import openmm_deserializer
 
 
 @dataclass(eq=False)
