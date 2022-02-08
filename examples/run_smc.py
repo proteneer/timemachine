@@ -7,7 +7,8 @@ import numpy as np
 
 from timemachine.fe.free_energy_rabfe import construct_pre_optimized_absolute_lambda_schedule_solvent
 from timemachine.md.smc import simple_smc, conditional_multinomial_resample
-from timemachine.testsystems.biphenyl import construct_biphenyl_test_system
+from timemachine.fe.absolute_hydration import setup_absolute_hydration_with_endpoint_samples
+from timemachine.testsystems import biphenyl
 
 
 def parse_options():
@@ -29,7 +30,9 @@ def parse_options():
 
 def set_up_biphenyl_system_for_smc(n_walkers, n_windows, n_md_steps, resample_thresh):
     """define initial samples, lambdas schedule, propagate fxn, log_prob fxn, resample fxn"""
-    reduced_potential, mover, initial_samples = construct_biphenyl_test_system(n_steps=n_md_steps)
+    mol, _ = biphenyl.get_biphenyl()
+    reduced_potential, mover, initial_samples = setup_absolute_hydration_with_endpoint_samples(mol, n_steps=n_md_steps)
+
     sample_inds = np.random.choice(np.arange(len(initial_samples)), size=n_walkers)
     samples = [initial_samples[i] for i in sample_inds]
 
