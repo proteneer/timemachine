@@ -70,4 +70,4 @@ $$$$"""
 def construct_biphenyl_test_system(n_steps=1000):
     mol, torsion_idxs = get_biphenyl()
 
-    return setup_absolute_hydration_with_endpoint_samples(mol, n_steps)
+    return setup_absolute_hydration_with_endpoint_samples(mol, n_steps=n_steps)
