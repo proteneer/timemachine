@@ -5,7 +5,7 @@ from rdkit import Chem
 
 import timemachine
 
-PATH_TO_FREESOLV = str(Path(timemachine.__file__).parent.parent / "timemachine/datasets/freesolv/freesolv.sdf")
+PATH_TO_FREESOLV = str(Path(timemachine.__file__).parent / "datasets/freesolv/freesolv.sdf")
 
 
 def fetch_freesolv() -> List[Chem.Mol]:
