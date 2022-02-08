@@ -90,4 +90,7 @@ if __name__ == "__main__":
     mols = fetch_freesolv()
 
     for mol in mols:
-        run_on_freesolv_mol(mol)
+        try:
+            run_on_freesolv_mol(mol)
+        except IndexError:
+            print(f"error encountered on mol={mol.GetProp('_Name')}")
