@@ -97,9 +97,9 @@ setup(
         "dev": ["black==21.10b0", "isort==5.10.1", "flake8==4.0.1", "pre-commit", "grpcio==1.43.0"],
         "test": ["pytest", "pytest-cov"],
     },
-    # package_data={
-    #     "sample": ["package_data.dat"],
-    # },
+    package_data={
+        "datasets": ["timemachine/datasets"],
+    },
     # entry_points={
     #     "console_scripts": [
     #         "sample=sample:main",
