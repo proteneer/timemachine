@@ -1,9 +1,10 @@
-grpcio==1.30.0
-protobuf==3.15.0
-numpy==1.21.4
-scipy==1.6.0
+scipy==1.7.3
 pymbar==3.0.5
 pyyaml==5.4.1
 networkx==2.5
 importlib-resources==5.4.0
 typing-extensions==4.1.1
+
+--extra-index-url https://pypi.anaconda.org/openeye/simple
+OpenEye-toolkits==2020.2.0
+OpenEye-toolkits-python3-linux-x64==2020.2.0

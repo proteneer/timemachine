@@ -38,8 +38,8 @@ repos:
         # See https://github.com/pre-commit/mirrors-mypy/issues/33#issuecomment-967247764
         exclude: '^timemachine/lib/custom_ops.py$'
 
--   repo: https://github.com/pre-commit/mirrors-clang-format
-    rev: v13.0.0
+-   repo: https://github.com/doublify/pre-commit-clang-format
+    rev: "62302476d0da01515660132d76902359bed0f782"
     hooks:
     -   id: clang-format
         types_or: [c, c++, cuda]

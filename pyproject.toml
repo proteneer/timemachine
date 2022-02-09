@@ -26,7 +26,6 @@ follow_imports = "silent"
 
 [build-system]
 requires = [
-  "cmake==3.22.1",
   "mypy==0.942",
   "setuptools>=43.0.0",
   "wheel",
