@@ -1,13 +1,11 @@
-from pathlib import Path
+from importlib import resources
 from typing import List
 
 from rdkit import Chem
 
-import timemachine
-
-PATH_TO_FREESOLV = str(Path(timemachine.__file__).parent / "datasets/freesolv/freesolv.sdf")
-
 
 def fetch_freesolv() -> List[Chem.Mol]:
-    supplier = Chem.SDMolSupplier(PATH_TO_FREESOLV, removeHs=False)
-    return [mol for mol in supplier]
+    with resources.path("timemachine", "datasets") as datasets_path:
+        freesolv_path = str(datasets_path / "freesolv" / "freesolv.sdf")
+        supplier = Chem.SDMolSupplier(freesolv_path, removeHs=False)
+        return [mol for mol in supplier]
