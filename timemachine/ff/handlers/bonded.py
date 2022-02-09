@@ -213,4 +213,12 @@ class ImproperTorsionHandler(SerializableMixIn):
 
         param_idxs = np.array(param_idxs)
 
-        return params[param_idxs], np.array(improper_idxs, dtype=np.int32)
+        # if no matches found, return arrays that can still be concatenated as expected
+        if len(param_idxs) > 0:
+            assigned_params = params[param_idxs]
+            improper_idxs = np.array(improper_idxs, dtype=np.int32)
+        else:
+            assigned_params = np.zeros(shape=(0, params.shape[1]), dtype=params.dtype)
+            improper_idxs = np.zeros(shape=(0, 4), dtype=np.int32)
+
+        return assigned_params, improper_idxs
