@@ -278,3 +278,7 @@ class NonbondedInterpolated(Nonbonded):
         custom_ctor = getattr(custom_ops, cls_name_base)
 
         return custom_ctor(*self.args)
+
+
+class NonbondedInteractionGroup(CustomOpWrapper):
+    pass
