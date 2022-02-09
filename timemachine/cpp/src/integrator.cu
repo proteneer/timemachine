@@ -37,9 +37,9 @@ __global__ void update_forward(
     const int N,
     const int D,
     const RealType ca,
-    const RealType *cbs, // N x 3, not P x N x 3, but we could just pass in the first index
-    const RealType *ccs, // N
-    const RealType *noise,
+    const RealType *cbs,   // N
+    const RealType *ccs,   // N
+    const RealType *noise, // N x 3
     RealType *x_t,
     RealType *v_t,
     const unsigned long long *du_dx,
@@ -74,6 +74,7 @@ void LangevinIntegrator::step_fwd(
     size_t n_blocks = (N_ * D + tpb - 1) / tpb;
     dim3 dimGrid_dx(n_blocks, D);
 
+    curandErrchk(curandSetStream(cr_rng_, stream));
     curandErrchk(templateCurandNormal(cr_rng_, d_noise_, round_up_even(N_ * D), 0.0, 1.0));
 
     update_forward<double>
