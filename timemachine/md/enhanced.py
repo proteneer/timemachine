@@ -42,10 +42,10 @@ def identify_rotatable_bonds(mol):
 
     """
     pattern = Chem.MolFromSmarts("[!$(*#*)&!D1]-&!@[!$(*#*)&!D1]")
-    matches = mol.GetSubstructMatches(pattern)
+    matches = mol.GetSubstructMatches(pattern, uniquify=1)
 
     # sanity check
-    assert len(matches) == rdMolDescriptors.CalcNumRotatableBonds(mol)
+    assert len(matches) >= rdMolDescriptors.CalcNumRotatableBonds(mol)
 
     sorted_matches = set()
 
