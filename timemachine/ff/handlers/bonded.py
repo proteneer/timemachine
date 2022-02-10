@@ -137,7 +137,7 @@ class ProperTorsionHandler:
 
         # if no matches found, return arrays that can still be concatenated as expected
         if len(param_idxs) > 0:
-            assigned_params = params[param_idxs]
+            assigned_params = params[scatter_idxs]
             proper_idxs = np.repeat(torsion_idxs, repeats, axis=0).astype(np.int32)
         else:
             assigned_params = params[[False] * len(params)]  # empty slice with same dtype, other dimensions
