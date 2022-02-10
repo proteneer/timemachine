@@ -26,10 +26,6 @@ def generate_vd_idxs(mol, smirks):
     return bond_idxs, param_idxs
 
 
-def parameterize_ligand(params, param_idxs):
-    return params[param_idxs]
-
-
 # its trivial to re-use this for everything except the ImproperTorsions
 class ReversibleBondHandler(SerializableMixIn):
     def __init__(self, smirks, params, props):
