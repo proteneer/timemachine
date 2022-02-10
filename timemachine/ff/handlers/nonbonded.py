@@ -155,10 +155,6 @@ def generate_nonbonded_idxs(mol, smirks):
     return param_idxs
 
 
-def parameterize_ligand(params, param_idxs):
-    return params[param_idxs]
-
-
 def compute_or_load_am1_charges(mol):
     """Unless already cached in mol's "AM1Cache" property, use OpenEye to compute AM1 partial charges."""
 

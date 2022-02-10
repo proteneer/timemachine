@@ -175,6 +175,17 @@ def test_proper_torsion():
     mask = np.argwhere(torsion_params > 90)
     assert np.all(ff_adjoints[mask] == 0.0)
 
+    # assert expected shape when no matches are found
+    null_smirks = ["[#1:1]~[#1:2]~[#1:3]~[#1:4]"]  # should never match anything
+    null_params = np.zeros((len(null_smirks), 3))
+    null_counts = np.ones(len(null_smirks), dtype=int)
+
+    assigned_params, proper_idxs = bonded.ProperTorsionHandler.static_parameterize(
+        null_params, null_smirks, null_counts, mol
+    )
+    assert assigned_params.shape == (0, 3)
+    assert proper_idxs.shape == (0, 4)
+
 
 def test_improper_torsion():
 
@@ -219,6 +230,14 @@ def test_improper_torsion():
     # # if a parameter is > 99 then its adjoint should be zero (converse isn't necessarily true since)
     mask = np.argwhere(torsion_params > 90)
     assert np.all(ff_adjoints[mask] == 0.0)
+
+    # assert expected shape when no matches are found
+    null_smirks = ["[#1:1]~[#1:2](~[#1:3])~[#1:4]"]  # should never match anything
+    null_params = np.zeros((len(null_smirks), 3))
+
+    assigned_params, improper_idxs = bonded.ImproperTorsionHandler.static_parameterize(null_params, null_smirks, mol)
+    assert assigned_params.shape == (0, 3)
+    assert improper_idxs.shape == (0, 4)
 
 
 def test_exclusions():
