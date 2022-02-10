@@ -1,0 +1,21 @@
+stages:          # List of stages for jobs, and their order of execution
+  - build-docker
+  - test
+
+
+docker_build:
+  stage: build-docker
+  image: docker:20.10
+  script:
+    - DOCKER_HOST=tcp://localhost:2375 docker login -u $CI_REGISTRY_USER -p $CI_JOB_TOKEN $CI_REGISTRY
+    - docker build -t $CI_REGISTRY_IMAGE:$CI_BUILD_REF -f BaseDockerfile .
+    - docker push $CI_REGISTRY_IMAGE:$CI_BUILD_REF
+
+unit-tests:
+  stage: test
+  image: $CI_REGISTRY_IMAGE:$CI_BUILD_REF
+  variables:
+    CMAKE_ARGS: -DCUDA_ARCH=75
+  script:
+    - CMAKE_BUILD_PARALLEL_LEVEL=$(nproc) pip install -e .[dev,test]
+    - make ci
