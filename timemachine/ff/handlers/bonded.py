@@ -140,7 +140,7 @@ class ProperTorsionHandler:
             assigned_params = params[scatter_idxs]
             proper_idxs = np.repeat(torsion_idxs, repeats, axis=0).astype(np.int32)
         else:
-            assigned_params = params[[False] * len(params)]  # empty slice with same dtype, other dimensions
+            assigned_params = params[:0]  # empty slice with same dtype, other dimensions
             proper_idxs = np.zeros((0, 4), dtype=np.int32)
 
         return assigned_params, proper_idxs
@@ -222,7 +222,7 @@ class ImproperTorsionHandler(SerializableMixIn):
             assigned_params = params[param_idxs]
             improper_idxs = np.array(improper_idxs, dtype=np.int32)
         else:
-            assigned_params = params[[False] * len(params)]  # empty slice with same dtype, other dimensions
+            assigned_params = params[:0]  # empty slice with same dtype, other dimensions
             improper_idxs = np.zeros((0, 4), dtype=np.int32)
 
         return assigned_params, improper_idxs
