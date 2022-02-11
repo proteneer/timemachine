@@ -2,7 +2,7 @@
 MKFILE_DIR := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
 CPP_DIR := $(MKFILE_DIR)timemachine/cpp/
 INSTALL_PREFIX := $(MKFILE_DIR)timemachine/
-PYTEST_CI_ARGS := --cov=. --cov-report=term-missing --durations=100
+PYTEST_CI_ARGS := --cov=. --cov-report=html:coverage/ --cov-append --durations=100
 
 NPROCS = `nproc`
 
