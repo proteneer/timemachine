@@ -406,25 +406,28 @@ void NonbondedInteractionGroup<RealType, Interpolated>::execute_device(
     kernel_idx |= d_du_dx ? 1 << 2 : 0;
     kernel_idx |= d_u ? 1 << 3 : 0;
 
-    kernel_ptrs_[kernel_idx]<<<p_ixn_count_[0], tpb, 0, stream>>>(
-        N,
-        d_sorted_x_,
-        d_sorted_p_,
-        d_box,
-        d_sorted_dp_dl_,
-        d_sorted_w_,
-        d_sorted_dw_dl_,
-        beta_,
-        cutoff_,
-        nblist_.get_ixn_tiles(),
-        nblist_.get_ixn_atoms(),
-        d_sorted_du_dx_,
-        d_sorted_du_dp_,
-        d_du_dl, // switch to nullptr if we don't request du_dl
-        d_u      // switch to nullptr if we don't request energies
-    );
+    if (p_ixn_count_[0] > 0) {
 
-    gpuErrchk(cudaPeekAtLastError());
+        kernel_ptrs_[kernel_idx]<<<p_ixn_count_[0], tpb, 0, stream>>>(
+            N,
+            d_sorted_x_,
+            d_sorted_p_,
+            d_box,
+            d_sorted_dp_dl_,
+            d_sorted_w_,
+            d_sorted_dw_dl_,
+            beta_,
+            cutoff_,
+            nblist_.get_ixn_tiles(),
+            nblist_.get_ixn_atoms(),
+            d_sorted_du_dx_,
+            d_sorted_du_dp_,
+            d_du_dl, // switch to nullptr if we don't request du_dl
+            d_u      // switch to nullptr if we don't request energies
+        );
+
+        gpuErrchk(cudaPeekAtLastError());
+    }
 
     // coords are N,3
     if (d_du_dx) {
