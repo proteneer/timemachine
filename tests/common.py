@@ -445,7 +445,7 @@ class GradientTest(unittest.TestCase):
             if compute_du_dl:
                 np.testing.assert_allclose(ref_du_dl, test_du_dl, rtol=rtol)
             if compute_du_dp:
-                np.testing.assert_allclose(ref_du_dp, test_du_dp, rtol=rtol)
+                np.testing.assert_allclose(ref_du_dp, test_du_dp, rtol=rtol, atol=atol)
 
             test_du_dx_2, test_du_dp_2, test_du_dl_2, test_u_2 = test_impl.execute_selective(
                 x, params, box, lamb, compute_du_dx, compute_du_dp, compute_du_dl, compute_u
