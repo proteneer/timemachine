@@ -14,7 +14,7 @@ docker_build:
 memory-tests:
   stage: test
   image: $CI_REGISTRY_IMAGE:$CI_COMMIT_REF_NAME
-  needs: ["build-docker"]
+  needs: ["docker_build"]
   variables:
     CMAKE_ARGS: -DCUDA_ARCH=75
   script:
@@ -30,7 +30,7 @@ memory-tests:
 unit-tests:
   stage: test
   image: $CI_REGISTRY_IMAGE:$CI_COMMIT_REF_NAME
-  needs: ["build-docker"]
+  needs: ["docker_build"]
   variables:
     CMAKE_ARGS: -DCUDA_ARCH=75
   script:
