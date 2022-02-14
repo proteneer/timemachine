@@ -11,16 +11,33 @@ docker_build:
     - docker build -t $CI_REGISTRY_IMAGE:$CI_BUILD_REF --target tm_base_env .
     - docker push $CI_REGISTRY_IMAGE:$CI_BUILD_REF
 
-unit-tests:
+memory-tests:
   stage: test
   image: $CI_REGISTRY_IMAGE:$CI_BUILD_REF
+  needs: ["build-docker"]
   variables:
     CMAKE_ARGS: -DCUDA_ARCH=75
   script:
     - CMAKE_BUILD_PARALLEL_LEVEL=$(nproc) pip install -e .[dev,test]
-    - make ci
+    - make verify memcheck_tests
   artifacts:
-    name: "$CI_JOB_NAME-$CI_COMMIT_REF_NAME"
+    name: "$CI_JOB_NAME-$CI_COMMIT_REF_NAME-memtests"
+    paths:
+        - coverage/
+    when: on_success
+    expire_in: 1 week
+
+unit-tests:
+  stage: test
+  image: $CI_REGISTRY_IMAGE:$CI_BUILD_REF
+  needs: ["build-docker"]
+  variables:
+    CMAKE_ARGS: -DCUDA_ARCH=75
+  script:
+    - CMAKE_BUILD_PARALLEL_LEVEL=$(nproc) pip install -e .[dev,test]
+    - make verify tests
+  artifacts:
+    name: "$CI_JOB_NAME-$CI_COMMIT_REF_NAME-tests"
     paths:
         - coverage/
     when: on_success
