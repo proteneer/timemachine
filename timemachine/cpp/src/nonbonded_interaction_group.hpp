@@ -10,7 +10,8 @@
 namespace timemachine {
 
 typedef void (*k_nonbonded_fn)(
-    const int N,
+    const int NC,
+    const int NR,
     const double *__restrict__ coords,
     const double *__restrict__ params, // [N]
     const double *__restrict__ box,

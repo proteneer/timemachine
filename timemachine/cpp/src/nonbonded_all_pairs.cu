@@ -356,6 +356,7 @@ void NonbondedAllPairs<RealType, Interpolated>::execute_device(
 
     kernel_ptrs_[kernel_idx]<<<p_ixn_count_[0], tpb, 0, stream>>>(
         N,
+        0,
         d_sorted_x_,
         d_sorted_p_,
         d_box,
