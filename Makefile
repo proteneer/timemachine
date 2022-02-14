@@ -19,8 +19,17 @@ clean:
 grpc:
 	python -m grpc_tools.protoc -I grpc/ --python_out=. --grpc_python_out=. grpc/timemachine/parallel/grpc/service.proto
 
-ci:
-	pre-commit run --all-files --show-diff-on-failure && \
-	export PYTHONPATH=$(MKFILE_DIR) && \
-	cuda-memcheck --leak-check full --error-exitcode 1 pytest $(PYTEST_CI_ARGS) tests/ && \
+.PHONY: verify
+verify:
+	pre-commit run --all-files --show-diff-on-failure
+
+.PHONY: memcheck_tests
+memcheck_tests:
+	cuda-memcheck --leak-check full --error-exitcode 1 pytest $(PYTEST_CI_ARGS) tests/
+
+.PHONY: tests
+tests:
 	pytest $(PYTEST_CI_ARGS) slow_tests/
+
+.PHONY: ci
+ci: verify memcheck_tests tests
