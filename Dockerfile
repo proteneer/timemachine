@@ -1,4 +1,4 @@
-FROM nvidia/cuda:11.6.0-devel-ubuntu20.04
+FROM nvidia/cuda:11.6.0-devel-ubuntu20.04 AS tm_base_env
 
 # Copied out of anaconda's dockerfile
 ARG MINICONDA_VERSION=4.6.14
@@ -73,3 +73,10 @@ RUN git clone https://github.com/openmm/openmm.git --branch "${OPENMM_VERSION}" 
 # Copy the pip requirements to cache when possible
 COPY requirements.txt /code/timemachine/
 RUN pip install --no-cache-dir -r timemachine/requirements.txt
+
+FROM tm_base_env as timemachine
+ARG CUDA_ARCH=75
+ENV CMAKE_ARGS -DCUDA_ARCH=${CUDA_ARCH}
+COPY . /code/timemachine/
+WORKDIR /code/timemachine/
+RUN CMAKE_BUILD_PARALLEL_LEVEL=$(nproc) pip install --no-cache-dir -e .[dev,test]

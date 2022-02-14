@@ -8,7 +8,7 @@ docker_build:
   image: docker:20.10
   script:
     - DOCKER_HOST=tcp://localhost:2375 docker login -u $CI_REGISTRY_USER -p $CI_JOB_TOKEN $CI_REGISTRY
-    - docker build -t $CI_REGISTRY_IMAGE:$CI_BUILD_REF -f BaseDockerfile .
+    - docker build -t $CI_REGISTRY_IMAGE:$CI_BUILD_REF --target tm_base_env .
     - docker push $CI_REGISTRY_IMAGE:$CI_BUILD_REF
 
 unit-tests:
