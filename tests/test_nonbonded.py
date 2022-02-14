@@ -184,9 +184,10 @@ class TestNonbondedDHFR(GradientTest):
         """
         Test against the reference jax platform for correctness.
         """
-
         # we can't go bigger than this due to memory limitations in the the reference platform.
         for N in [33, 65, 231, 1050, 4080]:
+
+            np.random.seed(2022)
 
             test_conf = self.host_conf[:N]
 
@@ -218,7 +219,7 @@ class TestNonbondedDHFR(GradientTest):
                 self.cutoff,
             )
 
-            for precision, rtol in [(np.float64, 1e-8), (np.float32, 1e-4)]:
+            for precision, rtol, atol in [(np.float64, 1e-8, 1e-8), (np.float32, 1e-4, 5e-4)]:
 
                 self.compare_forces(
                     test_conf,
@@ -227,7 +228,8 @@ class TestNonbondedDHFR(GradientTest):
                     self.lamb,
                     ref_nonbonded_fn,
                     test_nonbonded_fn,
-                    rtol,
+                    rtol=rtol,
+                    atol=atol,
                     precision=precision,
                 )
 

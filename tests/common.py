@@ -432,6 +432,7 @@ class GradientTest(unittest.TestCase):
         ref_du_dx, ref_du_dp, ref_du_dl = grad_fn(x, params, box, lamb)
 
         for combo in itertools.product([False, True], repeat=4):
+
             (compute_du_dx, compute_du_dp, compute_du_dl, compute_u) = combo
 
             # do each computation twice to check determinism
