@@ -167,6 +167,8 @@ if __name__ == "__main__":
         default=200000,
     )
 
+    parser.add_argument("--seed", default=None, type=int, help="Seed to run simulation with, default is random")
+
     parser.add_argument(
         "--blocker_name", type=str, help="Name of the ligand the sdf file to be used as a blocker", required=True
     )
@@ -191,6 +193,12 @@ if __name__ == "__main__":
         print("Connecting to GRPC workers...")
         client = GRPCClient(hosts=cmd_args.hosts)
     client.verify()
+
+    seed = cmd_args.seed
+    if seed is None:
+        seed = np.random.randint(np.iinfo(np.int32).max)
+    print("Simulation seed", seed)
+    np.random.seed(seed)
 
     path_to_ligand = cmd_args.ligand_sdf
     suppl = Chem.SDMolSupplier(path_to_ligand, removeHs=False)
@@ -384,6 +392,8 @@ if __name__ == "__main__":
 
         suffix = f"{mol_name}_{epoch}"
 
+        seed = np.random.randint(np.iinfo(np.int32).max)
+
         # Order of these simulations should match the order in which predictions are computed to ensure
         # efficient use of parallelism.
         return {
@@ -393,6 +403,7 @@ if __name__ == "__main__":
                 solvent_x0,
                 solvent_box0,
                 prefix="solvent_conversion_" + suffix,
+                seed=seed,
             ),
             "solvent_decouple": binding_model_solvent_decouple.simulate_futures(
                 ordered_params,
@@ -400,6 +411,7 @@ if __name__ == "__main__":
                 solvent_x0,
                 solvent_box0,
                 prefix="solvent_decouple_" + suffix,
+                seed=seed,
             ),
             "complex_conversion": binding_model_complex_conversion.simulate_futures(
                 ordered_params,
@@ -407,6 +419,7 @@ if __name__ == "__main__":
                 complex_conversion_x0,
                 complex_box0,
                 prefix="complex_conversion_" + suffix,
+                seed=seed,
             ),
             "complex_decouple": binding_model_complex_decouple.simulate_futures(
                 ordered_params,
@@ -416,10 +429,12 @@ if __name__ == "__main__":
                 complex_decouple_x0,
                 complex_box0,
                 prefix="complex_decouple_" + suffix,
+                seed=seed,
             ),
             "mol": mol,
             "blocker": blocker,
             "epoch": epoch,
+            "seed": seed,
         }
 
     def predict_dG(results: dict) -> RABFEResult:
@@ -478,6 +493,7 @@ if __name__ == "__main__":
             # Pop off futures to avoid accumulating memory.
             run = runs.pop(0)
             mol = run["mol"]
+            seed = run["seed"]
             epoch = run["epoch"]
             mol_name = mol.GetProp("_Name")
 
@@ -498,7 +514,7 @@ if __name__ == "__main__":
             try:
                 result = predict_dG(run)
                 print(
-                    f"Epoch: {epoch}, Mol: {mol_name}, Predicted dG: {result.dG_bind}, dG Err:"
+                    f"Epoch: {epoch}, Seed: {seed}, Mol: {mol_name}, Predicted dG: {result.dG_bind}, dG Err:"
                     f" {result.dG_bind_err}, Label: {label_dG}"
                 )
             except Exception:
