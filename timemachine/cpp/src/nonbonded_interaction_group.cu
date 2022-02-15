@@ -66,6 +66,10 @@ NonbondedInteractionGroup<RealType, Interpolated>::NonbondedInteractionGroup(
       compute_add_du_dp_interpolated_(
           kernel_cache_.program(kernel_src.c_str()).kernel("k_add_du_dp_interpolated").instantiate()) {
 
+    if (NR_ == 0) {
+        throw std::runtime_error("row_atom_idxs must be nonempty");
+    }
+
     // compute set of column atoms as set difference
     std::vector<int> all_atom_idxs(N_);
     std::iota(all_atom_idxs.begin(), all_atom_idxs.end(), 0);
