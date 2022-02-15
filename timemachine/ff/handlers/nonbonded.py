@@ -14,24 +14,7 @@ from timemachine.ff.handlers.bcc_aromaticity import match_smirks as oe_match_smi
 from timemachine.ff.handlers.serialize import SerializableMixIn
 from timemachine.ff.handlers.utils import match_smirks as rd_match_smirks
 from timemachine.ff.handlers.utils import sort_tuple
-
-AM1_CHARGE_CACHE = "AM1Cache"
-BOND_SMIRK_MATCH_CACHE = "BondSmirkMatchCache"
-
-
-def convert_to_nx(mol):
-    """
-    Convert an ROMol into a networkx graph.
-    """
-    g = nx.Graph()
-
-    for atom in mol.GetAtoms():
-        g.add_node(atom.GetIdx())
-
-    for bond in mol.GetBonds():
-        g.add_edge(bond.GetBeginAtomIdx(), bond.GetEndAtomIdx())
-
-    return g
+from timemachine.graph_utils import convert_to_nx
 
 
 def convert_to_oe(mol):
