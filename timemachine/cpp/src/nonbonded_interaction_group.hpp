@@ -35,6 +35,9 @@ private:
 
     std::array<k_nonbonded_fn, 16> kernel_ptrs_;
 
+    unsigned int *d_col_atom_idxs_;
+    unsigned int *d_row_atom_idxs_;
+
     int *d_lambda_plane_idxs_;
     int *d_lambda_offset_idxs_;
     int *p_ixn_count_; // pinned memory

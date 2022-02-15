@@ -6,6 +6,7 @@
 #include <cstdlib>
 #include <cub/cub.cuh>
 #include <iostream>
+#include <numeric>
 #include <set>
 #include <vector>
 
@@ -21,6 +22,11 @@
 #include <string>
 
 namespace timemachine {
+
+std::vector<int> set_to_vector(const std::set<int> &s) {
+    std::vector<int> v(s.begin(), s.end());
+    return v;
+}
 
 template <typename RealType, bool Interpolated>
 NonbondedInteractionGroup<RealType, Interpolated>::NonbondedInteractionGroup(
@@ -60,6 +66,17 @@ NonbondedInteractionGroup<RealType, Interpolated>::NonbondedInteractionGroup(
       compute_add_du_dp_interpolated_(
           kernel_cache_.program(kernel_src.c_str()).kernel("k_add_du_dp_interpolated").instantiate()) {
 
+    // compute set of column atoms as set difference
+    std::vector<int> all_atom_idxs(N_);
+    std::iota(all_atom_idxs.begin(), all_atom_idxs.end(), 0);
+    std::set<int> col_atom_idxs;
+    std::set_difference(
+        all_atom_idxs.begin(),
+        all_atom_idxs.end(),
+        row_atom_idxs.begin(),
+        row_atom_idxs.end(),
+        std::inserter(col_atom_idxs, col_atom_idxs.end()));
+
     if (lambda_offset_idxs.size() != N_) {
         throw std::runtime_error("lambda offset idxs need to have size N");
     }
@@ -67,6 +84,16 @@ NonbondedInteractionGroup<RealType, Interpolated>::NonbondedInteractionGroup(
     if (lambda_offset_idxs.size() != lambda_plane_idxs.size()) {
         throw std::runtime_error("lambda offset idxs and plane idxs need to be equivalent");
     }
+
+    std::vector<int> col_atom_idxs_v(set_to_vector(col_atom_idxs));
+    gpuErrchk(cudaMalloc(&d_col_atom_idxs_, NC_ * sizeof(*d_col_atom_idxs_)));
+    gpuErrchk(
+        cudaMemcpy(d_col_atom_idxs_, &col_atom_idxs_v[0], NC_ * sizeof(*d_col_atom_idxs_), cudaMemcpyHostToDevice));
+
+    std::vector<int> row_atom_idxs_v(set_to_vector(row_atom_idxs));
+    gpuErrchk(cudaMalloc(&d_row_atom_idxs_, NR_ * sizeof(*d_row_atom_idxs_)));
+    gpuErrchk(
+        cudaMemcpy(d_row_atom_idxs_, &row_atom_idxs_v[0], NR_ * sizeof(*d_row_atom_idxs_), cudaMemcpyHostToDevice));
 
     gpuErrchk(cudaMalloc(&d_lambda_plane_idxs_, N_ * sizeof(*d_lambda_plane_idxs_)));
     gpuErrchk(cudaMemcpy(
@@ -137,6 +164,8 @@ NonbondedInteractionGroup<RealType, Interpolated>::NonbondedInteractionGroup(
 
 template <typename RealType, bool Interpolated>
 NonbondedInteractionGroup<RealType, Interpolated>::~NonbondedInteractionGroup() {
+    gpuErrchk(cudaFree(d_col_atom_idxs_));
+    gpuErrchk(cudaFree(d_row_atom_idxs_));
 
     gpuErrchk(cudaFree(d_lambda_plane_idxs_));
     gpuErrchk(cudaFree(d_lambda_offset_idxs_));
