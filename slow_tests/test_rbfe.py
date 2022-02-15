@@ -2,8 +2,11 @@ import os
 from tempfile import TemporaryDirectory
 from unittest import TestCase
 
+import numpy as np
+
 from timemachine.fe.free_energy import construct_lambda_schedule
 from timemachine.fe.model import RBFEModel
+from timemachine.ff import Forcefield
 from timemachine.md import builders
 from timemachine.parallel.client import CUDAPoolClient
 from timemachine.parallel.utils import get_gpu_count
@@ -16,6 +19,9 @@ NUM_GPUS = get_gpu_count()
 class TestRBFEModel(TestCase):
     def test_predict(self):
         """Just to verify that we can handle the most basic RBFE prediction"""
+        # Use the Simple Charges to verify determinism of model. Needed as one endpoint uses the ff definition
+        forcefield = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
+
         complex_system, complex_coords, _, _, complex_box, _ = builders.build_protein_system(
             os.path.join(DATA_DIR, "hif2a_nowater_min.pdb")
         )
@@ -27,7 +33,7 @@ class TestRBFEModel(TestCase):
 
         model = RBFEModel(
             client=client,
-            ff=hif2a_ligand_pair.ff,
+            ff=forcefield,
             complex_system=complex_system,
             complex_coords=complex_coords,
             complex_box=complex_box,
@@ -40,14 +46,14 @@ class TestRBFEModel(TestCase):
             prod_steps=100,
         )
 
-        ordered_params = hif2a_ligand_pair.ff.get_ordered_params()
+        ordered_params = forcefield.get_ordered_params()
         mol_a = hif2a_ligand_pair.mol_a
         mol_b = hif2a_ligand_pair.mol_b
         core = hif2a_ligand_pair.core
 
-        ddg, results = model.predict(ordered_params, mol_a, mol_b, core)
+        ddg, results = model.predict(ordered_params, mol_a, mol_b, core, seed=2022)
         self.assertEqual(len(results), 2)
-        self.assertIsInstance(ddg, float)
+        np.testing.assert_equal(ddg, 12.32189679129123)
 
     def test_pre_equilibration(self):
         """Verify that equilibration of edges up front functions as expected"""

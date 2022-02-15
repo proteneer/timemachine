@@ -68,6 +68,7 @@ class RBFEModel:
         barostat_interval: int = 10,
         equilibration_steps: int = 100000,
         cache_path: str = "equilibration_cache.pkl",
+        seed: int = 0,
     ):
         """
         edges: List of tuples with mol_a, mol_b, core
@@ -86,6 +87,9 @@ class RBFEModel:
             Path to look for existing cache or path to where to save cache. By default
             it will write out a pickle file in the local directory.
 
+        seed: int
+            Seed to run the simulation using, defaults to generating a seed randomly
+
         Pre equilibrate edges and cache them for later use in predictions.
 
         Parallelized via the model client if possible
@@ -102,6 +106,9 @@ class RBFEModel:
 
         temperature = 300.0
         pressure = 1.0
+
+        if seed == 0:
+            seed = np.random.randint(np.iinfo(np.int32).max)
 
         for stage, host_system, host_coords, host_box in [
             ("complex", self.complex_system, self.complex_coords, self.complex_box),
@@ -125,8 +132,10 @@ class RBFEModel:
                 if self.hmr:
                     masses = apply_hmr(masses, bond_list)
                     time_step = 2.5e-3
-                integrator = LangevinIntegrator(temperature, time_step, 1.0, masses, 0)
-                barostat = MonteCarloBarostat(coords.shape[0], pressure, temperature, group_idxs, barostat_interval, 0)
+                integrator = LangevinIntegrator(temperature, time_step, 1.0, masses, seed)
+                barostat = MonteCarloBarostat(
+                    coords.shape[0], pressure, temperature, group_idxs, barostat_interval, seed
+                )
                 pots = []
                 for bp, params in zip(unbound_potentials, sys_params):
                     pots.append(bp.bind(np.asarray(params)))
@@ -146,7 +155,7 @@ class RBFEModel:
                 dump(self._equil_cache, ofs)
             print(f"Saved equilibration_cache to {cache_path}")
 
-    def predict(self, ff_params: list, mol_a: Chem.Mol, mol_b: Chem.Mol, core: np.ndarray):
+    def predict(self, ff_params: list, mol_a: Chem.Mol, mol_b: Chem.Mol, core: np.ndarray, seed: int = 0):
         """
         Predict the ddG of morphing mol_a into mol_b. This function is differentiable w.r.t. ff_params.
 
@@ -165,6 +174,9 @@ class RBFEModel:
         core: np.ndarray
             N x 2 list of ints corresponding to the atom mapping of the core.
 
+        seed: int
+            Seed to run the simulation using, defaults to generating a seed randomly
+
         Returns
         -------
         float
@@ -175,6 +187,9 @@ class RBFEModel:
 
         stage_dGs = []
         stage_results = []
+
+        if seed == 0:
+            seed = np.random.randint(np.iinfo(np.int32).max)
 
         for stage, host_system, host_coords, host_box, lambda_schedule in [
             ("complex", self.complex_system, self.complex_coords, self.complex_box, self.complex_schedule),
@@ -229,8 +244,6 @@ class RBFEModel:
                 masses = apply_hmr(masses, bond_list)
                 time_step = 2.5e-3
             group_idxs = get_group_indices(bond_list)
-
-            seed = 0
 
             temperature = 300.0
             pressure = 1.0

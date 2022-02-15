@@ -49,7 +49,7 @@ class AbsoluteModel(ABC):
         raise NotImplementedError()
 
     def simulate_futures(
-        self, ff_params, mol, x0, box0, prefix, core_idxs=None
+        self, ff_params, mol, x0, box0, prefix, core_idxs=None, seed=0
     ) -> Tuple[List[Any], estimator_abfe.FreeEnergyModel, List[Any]]:
         top = self.setup_topology(mol)
 
@@ -57,7 +57,8 @@ class AbsoluteModel(ABC):
 
         unbound_potentials, sys_params, masses = afe.prepare_host_edge(ff_params, self.host_system)
 
-        seed = 0
+        if seed == 0:
+            seed = np.random.randint(np.iinfo(np.int32).max)
 
         beta = 1 / (constants.BOLTZ * self.temperature)
 
@@ -166,7 +167,7 @@ class AbsoluteModel(ABC):
 
         return dG, dG_err
 
-    def predict(self, ff_params, mol, x0, box0, prefix, core_idxs=None):
+    def predict(self, ff_params, mol, x0, box0, prefix, core_idxs=None, seed=0):
         """Compute the absolute free of energy of decoupling mol_a.
 
         This function is differentiable w.r.t. ff_params.
@@ -192,6 +193,9 @@ class AbsoluteModel(ABC):
         core_idxs: None or list of int
             List of core_idxs we may wish to turn off.
 
+        seed: int
+            Seed to run the simulation using, defaults to generating a seed randomly
+
         Returns
         -------
         float
@@ -205,7 +209,9 @@ class AbsoluteModel(ABC):
             to compute delta_Us, the BAR estimates themselves become correlated.
 
         """
-        sys_params, model, futures = self.simulate_futures(ff_params, mol, x0, box0, prefix, core_idxs=core_idxs)
+        sys_params, model, futures = self.simulate_futures(
+            ff_params, mol, x0, box0, prefix, core_idxs=core_idxs, seed=seed
+        )
 
         dG, dG_err = self.predict_from_futures(sys_params, mol, model, futures)
 
@@ -249,7 +255,7 @@ class RelativeModel(ABC):
     def setup_topology(self, mol_a, mol_b):
         raise NotImplementedError()
 
-    def _futures_a_to_b(self, ff_params, mol_a, mol_b, combined_core_idxs, x0, box0, prefix):
+    def _futures_a_to_b(self, ff_params, mol_a, mol_b, combined_core_idxs, x0, box0, prefix, seed):
 
         num_host_atoms = x0.shape[0] - mol_a.GetNumAtoms() - mol_b.GetNumAtoms()
 
@@ -277,7 +283,6 @@ class RelativeModel(ABC):
         # tbd sample from boltzmann distribution later
         v0 = np.zeros_like(x0)
 
-        seed = 0
         beta = 1 / (constants.BOLTZ * self.temperature)
 
         bond_list = np.concatenate([unbound_potentials[0].get_idxs(), core_idxs])
@@ -369,7 +374,7 @@ class RelativeModel(ABC):
         return sys_params, model, futures
 
     def simulate_futures(
-        self, ff_params, mol_a, mol_b, core, x0, box0, prefix
+        self, ff_params, mol_a, mol_b, core, x0, box0, prefix, seed=0
     ) -> Tuple[List[Any], List[estimator_abfe.FreeEnergyModel], List[List[Any]]]:
 
         num_host_atoms = x0.shape[0] - mol_a.GetNumAtoms() - mol_b.GetNumAtoms()
@@ -384,6 +389,9 @@ class RelativeModel(ABC):
         # this is redundant, but thought it best to be explicit about ordering here..
         combined_coords = np.concatenate([host_coords, mol_a_coords, mol_b_coords])
 
+        if seed == 0:
+            seed = np.random.randint(np.iinfo(np.int32).max)
+
         all_sys = []
         models = []
         all_futures = []
@@ -395,6 +403,7 @@ class RelativeModel(ABC):
             combined_coords,
             box0,
             prefix + "_ref_to_mol",
+            seed,
         )
 
         all_sys.append(sys_params)
@@ -417,6 +426,7 @@ class RelativeModel(ABC):
             combined_coords,
             box0,
             prefix + "_mol_to_ref",
+            seed,
         )
 
         all_sys.append(sys_params)
@@ -471,6 +481,7 @@ class RelativeModel(ABC):
         x0: np.array,
         box0: np.array,
         prefix: str,
+        seed: int = 0,
     ):
         """
         Compute the free of energy of converting mol_a into mol_b. The starting state
@@ -496,15 +507,17 @@ class RelativeModel(ABC):
         core_idxs: np.array (Nx2), dtype int32
             Atom mapping defining the core, mapping atoms from mol_a to atoms in mol_b.
 
-        prefix: str
-            Auxiliary string to prepend print-outs
-
         x0: np.ndarray
             Initial coordinates of the combined system.
 
         box0: np.ndarray
             Initial box vectors.
 
+        prefix: str
+            Auxiliary string to prepend print-outs
+
+        seed: int
+            Seed to run the simulation using, defaults to generating a seed randomly
         Returns
         -------
         float
@@ -527,6 +540,7 @@ class RelativeModel(ABC):
             x0,
             box0,
             prefix,
+            seed=seed,
         )
         dG, dG_err = self.predict_from_futures(
             sys_params,

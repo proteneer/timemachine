@@ -13,6 +13,7 @@ from timemachine.fe.free_energy_rabfe import (
     setup_relative_restraints_by_distance,
 )
 from timemachine.fe.model_rabfe import AbsoluteConversionModel, AbsoluteStandardHydrationModel, RelativeBindingModel
+from timemachine.ff import Forcefield
 from timemachine.lib.potentials import Nonbonded, NonbondedInterpolated
 from timemachine.md import builders, minimizer
 from timemachine.parallel.client import CUDAPoolClient
@@ -220,14 +221,12 @@ class TestRABFEModels(TestCase):
 
         assert seen_nonbonded, "Found no NonbondedInterpolated potential"
 
-    def test_predict_complex_decouple(self):
-        """Just to verify that we can handle the most basic complex decoupling RABFE prediction"""
-        complex_system, complex_coords, _, _, complex_box, complex_topology = builders.build_protein_system(
-            os.path.join(DATA_DIR, "hif2a_nowater_min.pdb")
-        )
-
+    def test_predict_relative_binding_model(self):
+        """Just to verify that we can handle the most basic decoupling RABFE prediction"""
+        # Use the Simple Charges to verify determinism of model. Needed as one endpoint uses the ff definition
+        forcefield = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
         # build the water system
-        solvent_system, solvent_coords, solvent_box, _ = builders.build_water_system(4.0)
+        solvent_system, solvent_coords, solvent_box, solvent_topology = builders.build_water_system(4.0)
 
         temperature = 300.0
         pressure = 1.0
@@ -237,10 +236,10 @@ class TestRABFEModels(TestCase):
 
         model = RelativeBindingModel(
             client,
-            hif2a_ligand_pair.ff,
-            complex_system,
+            forcefield,
+            solvent_system,
             construct_lambda_schedule(2),
-            complex_topology,
+            solvent_topology,
             temperature,
             pressure,
             dt,
@@ -263,21 +262,24 @@ class TestRABFEModels(TestCase):
         )
 
         aligned_mol_coords = rmsd.apply_rotation_and_translation(mol_coords, R, t)
-        complex_coords = minimizer.minimize_host_4d(
+        solvent_coords = minimizer.minimize_host_4d(
             [mol_a, mol_b],
-            complex_system,
-            complex_coords,
-            hif2a_ligand_pair.ff,
-            complex_box,
+            solvent_system,
+            solvent_coords,
+            forcefield,
+            solvent_box,
             [ref_coords, aligned_mol_coords],
         )
-        complex_x0 = np.concatenate([complex_coords, ref_coords, aligned_mol_coords])
+        solvent_x0 = np.concatenate([solvent_coords, ref_coords, aligned_mol_coords])
 
-        ordered_params = hif2a_ligand_pair.ff.get_ordered_params()
+        ordered_params = forcefield.get_ordered_params()
         with temporary_working_dir() as temp_dir:
-            dG, dG_err = model.predict(ordered_params, mol_a, mol_b, core_idxs, complex_x0, complex_box, "prefix")
-            self.assertIsInstance(dG, float)
-            self.assertIsInstance(dG_err, float)
+            dG, dG_err = model.predict(
+                ordered_params, mol_a, mol_b, core_idxs, solvent_x0, solvent_box, "prefix", seed=2022
+            )
+            # Since this is FF independent no issues around AM1BCC charge differences on OS/Conf
+            np.testing.assert_equal(dG, -0.6962441656651208)
+            np.testing.assert_equal(dG_err, float("nan"))
             created_files = os.listdir(temp_dir)
             # 3 npz, 1 pdb and 1 npy per mol due to a->b and b->a
             self.assertEqual(len(created_files), 10)
@@ -285,14 +287,13 @@ class TestRABFEModels(TestCase):
             self.assertEqual(len([x for x in created_files if x.endswith(".npy")]), 2)
             self.assertEqual(len([x for x in created_files if x.endswith(".npz")]), 6)
 
-    def test_predict_complex_conversion(self):
-        """Just to verify that we can handle the most basic complex conversion RABFE prediction"""
-        complex_system, complex_coords, _, _, complex_box, complex_topology = builders.build_protein_system(
-            os.path.join(DATA_DIR, "hif2a_nowater_min.pdb")
-        )
+    def test_predict_absolute_conversion(self):
+        """Just to verify that we can handle the most basic conversion RABFE prediction"""
+        # Use the Simple Charges to verify determinism of model. Needed as one endpoint uses the ff definition
+        forcefield = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
 
         # build the water system
-        solvent_system, solvent_coords, solvent_box, _ = builders.build_water_system(4.0)
+        solvent_system, solvent_coords, solvent_box, solvent_topology = builders.build_water_system(4.0)
 
         temperature = 300.0
         pressure = 1.0
@@ -302,10 +303,10 @@ class TestRABFEModels(TestCase):
 
         model = AbsoluteConversionModel(
             client,
-            hif2a_ligand_pair.ff,
-            complex_system,
+            forcefield,
+            solvent_system,
             construct_lambda_schedule(2),
-            complex_topology,
+            solvent_topology,
             temperature,
             pressure,
             dt,
@@ -328,18 +329,18 @@ class TestRABFEModels(TestCase):
         )
 
         aligned_mol_coords = rmsd.apply_rotation_and_translation(mol_coords, R, t)
-        complex_coords = minimizer.minimize_host_4d(
-            [mol_b], complex_system, complex_coords, hif2a_ligand_pair.ff, complex_box, [aligned_mol_coords]
+        solvent_coords = minimizer.minimize_host_4d(
+            [mol_b], solvent_system, solvent_coords, forcefield, solvent_box, [aligned_mol_coords]
         )
-        complex_x0 = np.concatenate([complex_coords, aligned_mol_coords])
+        solvent_x0 = np.concatenate([solvent_coords, aligned_mol_coords])
 
-        ordered_params = hif2a_ligand_pair.ff.get_ordered_params()
+        ordered_params = forcefield.get_ordered_params()
         with temporary_working_dir() as temp_dir:
             dG, dG_err = model.predict(
-                ordered_params, mol_b, complex_x0, complex_box, "prefix", core_idxs=core_idxs[:, 0]
+                ordered_params, mol_b, solvent_x0, solvent_box, "prefix", core_idxs=core_idxs[:, 0], seed=2022
             )
-            self.assertIsInstance(dG, float)
-            self.assertIsInstance(dG_err, float)
+            np.testing.assert_equal(dG, 46.10281606478384)
+            np.testing.assert_equal(dG_err, 0.0)
             created_files = os.listdir(temp_dir)
             # 2 npz, 1 pdb and 1 npy per mol due to a->b and b->a
             self.assertEqual(len(created_files), 4)
