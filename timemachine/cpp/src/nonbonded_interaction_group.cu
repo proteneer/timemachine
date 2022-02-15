@@ -36,7 +36,7 @@ NonbondedInteractionGroup<RealType, Interpolated>::NonbondedInteractionGroup(
     const double beta,
     const double cutoff,
     const std::string &kernel_src)
-    : N_(lambda_offset_idxs.size()), NR_(row_atom_idxs.size()), NC_(N_ - NR_), cutoff_(cutoff), nblist_(N_),
+    : N_(lambda_offset_idxs.size()), NR_(row_atom_idxs.size()), NC_(N_ - NR_), cutoff_(cutoff), nblist_(NC_, NR_),
       beta_(beta), d_sort_storage_(nullptr), d_sort_storage_bytes_(0), nblist_padding_(0.1), disable_hilbert_(false),
       kernel_ptrs_({// enumerate over every possible kernel combination
                     // U: Compute U
@@ -160,7 +160,13 @@ NonbondedInteractionGroup<RealType, Interpolated>::NonbondedInteractionGroup(
 
     // estimate size needed to do radix sorting, this can use uninitialized data.
     cub::DeviceRadixSort::SortPairs(
-        d_sort_storage_, d_sort_storage_bytes_, d_sort_keys_in_, d_sort_keys_out_, d_sort_vals_in_, d_perm_, N_);
+        d_sort_storage_,
+        d_sort_storage_bytes_,
+        d_sort_keys_in_,
+        d_sort_keys_out_,
+        d_sort_vals_in_,
+        d_perm_,
+        std::max(NC_, NR_));
 
     gpuErrchk(cudaPeekAtLastError());
     gpuErrchk(cudaMalloc(&d_sort_storage_, d_sort_storage_bytes_));
@@ -215,12 +221,18 @@ void NonbondedInteractionGroup<RealType, Interpolated>::disable_hilbert_sort() {
 
 template <typename RealType, bool Interpolated>
 void NonbondedInteractionGroup<RealType, Interpolated>::hilbert_sort(
-    const double *d_coords, const double *d_box, cudaStream_t stream) {
+    const int N,
+    const unsigned int *d_atom_idxs,
+    const double *d_coords,
+    const double *d_box,
+    unsigned int *d_perm,
+    cudaStream_t stream) {
 
     const int tpb = 32;
-    const int B = (N_ + tpb - 1) / tpb;
+    const int B = ceil_divide(N, tpb);
 
-    k_coords_to_kv<<<B, tpb, 0, stream>>>(N_, d_coords, d_box, d_bin_to_idx_, d_sort_keys_in_, d_sort_vals_in_);
+    k_coords_to_kv_gather<<<B, tpb, 0, stream>>>(
+        N, d_atom_idxs, d_coords, d_box, d_bin_to_idx_, d_sort_keys_in_, d_sort_vals_in_);
 
     gpuErrchk(cudaPeekAtLastError());
 
@@ -230,8 +242,8 @@ void NonbondedInteractionGroup<RealType, Interpolated>::hilbert_sort(
         d_sort_keys_in_,
         d_sort_keys_out_,
         d_sort_vals_in_,
-        d_perm_,
-        N_,
+        d_perm,
+        N,
         0,                            // begin bit
         sizeof(*d_sort_keys_in_) * 8, // end bit
         stream                        // cudaStream
@@ -285,15 +297,14 @@ void NonbondedInteractionGroup<RealType, Interpolated>::execute_device(
     // identify which tiles contain interpolated parameters
 
     const int tpb = 32;
-    const int B = (N + tpb - 1) / tpb;
-
-    dim3 dimGrid(B, 3, 1);
+    const int B = ceil_divide(N_, tpb);
 
     // (ytz) see if we need to rebuild the neighborlist.
     // (ytz + jfass): note that this logic needs to change if we use NPT later on since a resize in the box
     // can introduce new interactions.
     k_check_rebuild_coords_and_box<RealType>
-        <<<B, tpb, 0, stream>>>(N, d_x, d_nblist_x_, d_box, d_nblist_box_, nblist_padding_, d_rebuild_nblist_);
+        <<<B, tpb, 0, stream>>>(N_, d_x, d_nblist_x_, d_box, d_nblist_box_, nblist_padding_, d_rebuild_nblist_);
+
     gpuErrchk(cudaPeekAtLastError());
 
     // we can optimize this away by doing the check on the GPU directly.
@@ -301,21 +312,28 @@ void NonbondedInteractionGroup<RealType, Interpolated>::execute_device(
         p_rebuild_nblist_, d_rebuild_nblist_, 1 * sizeof(*p_rebuild_nblist_), cudaMemcpyDeviceToHost, stream));
     gpuErrchk(cudaStreamSynchronize(stream)); // slow!
 
+    dim3 dimGrid(B, 3, 1);
+
     if (p_rebuild_nblist_[0] > 0) {
 
         // (ytz): update the permutation index before building neighborlist, as the neighborlist is tied
         // to a particular sort order
         if (!disable_hilbert_) {
-            this->hilbert_sort(d_x, d_box, stream);
+            this->hilbert_sort(NC_, d_col_atom_idxs_, d_x, d_box, d_perm_, stream);
+            this->hilbert_sort(NR_, d_row_atom_idxs_, d_x, d_box, d_perm_ + NC_, stream);
         } else {
-            k_arange<<<B, tpb, 0, stream>>>(N, d_perm_);
-            gpuErrchk(cudaPeekAtLastError());
+            gpuErrchk(cudaMemcpyAsync(
+                d_perm_, d_col_atom_idxs_, NC_ * sizeof(*d_col_atom_idxs_), cudaMemcpyDeviceToDevice, stream));
+            gpuErrchk(cudaMemcpyAsync(
+                d_perm_ + NC_, d_row_atom_idxs_, NR_ * sizeof(*d_row_atom_idxs_), cudaMemcpyDeviceToDevice, stream));
         }
 
         // compute new coordinates, new lambda_idxs, new_plane_idxs
-        k_permute<<<dimGrid, tpb, 0, stream>>>(N, d_perm_, d_x, d_sorted_x_);
+        k_permute<<<dimGrid, tpb, 0, stream>>>(N_, d_perm_, d_x, d_sorted_x_);
         gpuErrchk(cudaPeekAtLastError());
-        nblist_.build_nblist_device(N, d_sorted_x_, d_box, cutoff_ + nblist_padding_, stream);
+
+        nblist_.build_nblist_device(
+            NC_, NR_, d_sorted_x_, d_sorted_x_ + 3 * NC_, d_box, cutoff_ + nblist_padding_, stream);
         gpuErrchk(cudaMemcpyAsync(
             p_ixn_count_, nblist_.get_ixn_count(), 1 * sizeof(*p_ixn_count_), cudaMemcpyDeviceToHost, stream));
 
@@ -325,6 +343,7 @@ void NonbondedInteractionGroup<RealType, Interpolated>::execute_device(
         // then a particle can interact with multiple periodic copies.
         const double db_cutoff = (cutoff_ + nblist_padding_) * 2;
         cudaStreamSynchronize(stream);
+
         // Verify that box is orthogonal and the width of the box in all dimensions is greater than twice the cutoff
         for (int i = 0; i < 9; i++) {
             if (i == 0 || i == 4 || i == 8) {
@@ -369,6 +388,7 @@ void NonbondedInteractionGroup<RealType, Interpolated>::execute_device(
 
     // update new w coordinates
     // (tbd): cache lambda value for equilibrium calculations
+    // TODO: skip computing w coords for non-interacting atoms?
     CUresult result = compute_w_coords_instance_.configure(B, tpb, 0, stream)
                           .launch(N, lambda, cutoff_, d_lambda_plane_idxs_, d_lambda_offset_idxs_, d_w_, d_dw_dl_);
     if (result != 0) {

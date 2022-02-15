@@ -16,6 +16,16 @@ void __global__ k_coords_to_kv(
     unsigned int *keys,
     unsigned int *vals);
 
+// variant of k_coords_to_kv allowing the selection of a subset of coordinates
+void __global__ k_coords_to_kv_gather(
+    const int N,                   // number of atoms in selection
+    const unsigned int *atom_idxs, // [N] indices of atoms to select
+    const double *coords,
+    const double *box,
+    const unsigned int *bin_to_idx,
+    unsigned int *keys,
+    unsigned int *vals);
+
 template <typename RealType>
 void __global__ k_check_rebuild_box(const int N, const double *new_box, const double *old_box, int *rebuild) {
 

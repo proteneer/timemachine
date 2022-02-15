@@ -77,7 +77,13 @@ private:
 
     bool disable_hilbert_;
 
-    void hilbert_sort(const double *d_x, const double *d_box, cudaStream_t stream);
+    void hilbert_sort(
+        const int N,
+        const unsigned int *d_atom_idxs,
+        const double *d_x,
+        const double *d_box,
+        unsigned int *d_perm,
+        cudaStream_t stream);
 
     jitify::JitCache kernel_cache_;
     jitify::KernelInstantiation compute_w_coords_instance_;
