@@ -94,7 +94,7 @@ setup(
         "scipy",
     ],
     extras_require={
-        "dev": ["black==21.10b0", "isort==5.10.1", "flake8==4.0.1", "pre-commit", "grpcio==1.43.0"],
+        "dev": ["black==21.10b0", "isort==5.10.1", "flake8==4.0.1", "pre-commit"],
         "test": ["pytest", "pytest-cov"],
     },
     package_data={
