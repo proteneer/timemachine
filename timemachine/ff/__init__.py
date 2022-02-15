@@ -1,10 +1,43 @@
+from pathlib import Path
+from typing import Union
+
+from timemachine import __file__ as tm_path
 from timemachine.ff.handlers import bonded, nonbonded
+from timemachine.ff.handlers.deserialize import deserialize_handlers
+
+PARAMS_DIR = Path(tm_path).parent / "ff" / "params"
 
 
 class Forcefield:
     """
     Utility class for wrapping around a list of ff_handlers
     """
+
+    @classmethod
+    def load_from_file(cls, path: Union[str, Path]) -> "Forcefield":
+        """Load a forcefield from a path
+
+        Parameters
+        ----------
+
+        path: string or pathlib.Path
+            Either the filename of a built in ff (smirnoff_1_1_0_sc.py) or a path to a new forcefield file
+
+        Returns
+        -------
+        Forcefield
+            Return a ForceField object constructed from parameters file
+        """
+        original_path = str(path)
+        path = Path(path)  # Safe to construct a Path object from another Path object
+        if not path.is_file():
+            # Search built in params for the forcefields
+            path = PARAMS_DIR / original_path
+        if not path.is_file():
+            raise ValueError(f"Unable to find {original_path} in file system or built in forcefields")
+        with open(path, "r") as ifs:
+            handlers = deserialize_handlers(ifs.read())
+        return cls(handlers)
 
     def __init__(self, ff_handlers):
         self.hb_handle = None
