@@ -184,9 +184,10 @@ class TestNonbondedDHFR(GradientTest):
         """
         Test against the reference jax platform for correctness.
         """
-
         # we can't go bigger than this due to memory limitations in the the reference platform.
         for N in [33, 65, 231, 1050, 4080]:
+
+            np.random.seed(2022)
 
             test_conf = self.host_conf[:N]
 
@@ -218,7 +219,7 @@ class TestNonbondedDHFR(GradientTest):
                 self.cutoff,
             )
 
-            for precision, rtol in [(np.float64, 1e-8), (np.float32, 1e-4)]:
+            for precision, rtol, atol in [(np.float64, 1e-8, 1e-8), (np.float32, 1e-4, 5e-4)]:
 
                 self.compare_forces(
                     test_conf,
@@ -227,7 +228,8 @@ class TestNonbondedDHFR(GradientTest):
                     self.lamb,
                     ref_nonbonded_fn,
                     test_nonbonded_fn,
-                    rtol,
+                    rtol=rtol,
+                    atol=atol,
                     precision=precision,
                 )
 
@@ -306,7 +308,7 @@ class TestNonbondedWater(GradientTest):
         # the rebuild is triggered as long as the box *changes*.
         for test_box in [big_box, box]:
 
-            for precision, rtol in [(np.float64, 1e-8), (np.float32, 1e-4)]:
+            for precision, rtol, atol in [(np.float64, 1e-8, 1e-10), (np.float32, 1e-4, 3e-5)]:
 
                 self.compare_forces(
                     host_conf,
@@ -315,7 +317,8 @@ class TestNonbondedWater(GradientTest):
                     lamb,
                     ref_nonbonded_fn,
                     test_nonbonded_fn,
-                    rtol,
+                    rtol=rtol,
+                    atol=atol,
                     precision=precision,
                 )
 
@@ -457,7 +460,7 @@ class TestNonbonded(GradientTest):
             lambda_plane_idxs = np.random.randint(low=-2, high=2, size=N, dtype=np.int32)
             lambda_offset_idxs = np.random.randint(low=-2, high=2, size=N, dtype=np.int32)
 
-            for precision, rtol in [(np.float64, 1e-8), (np.float32, 1e-4)]:
+            for precision, rtol, atol in [(np.float64, 1e-8, 3e-11), (np.float32, 1e-4, 3e-5)]:
 
                 for cutoff in [1.0]:
                     # E = 0 # DEBUG!
@@ -470,7 +473,15 @@ class TestNonbonded(GradientTest):
                         print("lambda", lamb, "cutoff", cutoff, "precision", precision, "xshape", coords.shape)
 
                         self.compare_forces(
-                            coords, charge_params, box, lamb, ref_potential, test_potential, rtol, precision=precision
+                            coords,
+                            charge_params,
+                            box,
+                            lamb,
+                            ref_potential,
+                            test_potential,
+                            rtol=rtol,
+                            atol=atol,
+                            precision=precision,
                         )
 
     def test_nonbonded_with_box_smaller_than_cutoff(self):

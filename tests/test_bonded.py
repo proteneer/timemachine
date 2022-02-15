@@ -152,7 +152,7 @@ class TestBonded(GradientTest):
         box = np.eye(3) * 100
 
         # specific to harmonic bond force
-        relative_tolerance_at_precision = {np.float32: 2e-5, np.float64: 1e-9}
+        relative_tolerance_at_precision = {np.float64: 1e-7, np.float32: 2e-5}
 
         for precision, rtol in relative_tolerance_at_precision.items():
             test_potential = potentials.HarmonicBond(bond_idxs)
