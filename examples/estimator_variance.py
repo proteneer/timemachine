@@ -26,7 +26,6 @@ from rdkit import Chem
 from timemachine.fe import free_energy, topology
 from timemachine.fe.free_energy import construct_lambda_schedule
 from timemachine.ff import Forcefield
-from timemachine.ff.handlers.deserialize import deserialize_handlers
 from timemachine.md import builders, minimizer
 
 # parallelization across multiple GPUs
@@ -36,7 +35,6 @@ from timemachine.parallel.utils import get_gpu_count
 root = Path(__file__).parent.parent
 path_to_ligand = str(root.joinpath("tests/data/ligands_40.sdf"))
 path_to_protein = str(root.joinpath("tests/data/hif2a_nowater_min.pdb"))
-path_to_ff = str(root.joinpath("timemachine/ff/params/smirnoff_1_1_0_ccc.py"))
 
 
 def wrap_method(args, fxn):
@@ -171,10 +169,7 @@ if __name__ == "__main__":
             [21, 22],
         ]
     )
-    with open(path_to_ff) as f:
-        ff_handlers = deserialize_handlers(f.read())
-
-    forcefield = Forcefield(ff_handlers)
+    forcefield = Forcefield.load_from_file("smirnoff_1_1_0_ccc.py")
 
     transformation = RelativeTransformation(forcefield, mol_a, mol_b, core)
 

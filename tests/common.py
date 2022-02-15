@@ -3,17 +3,14 @@ import functools
 import itertools
 import os
 import unittest
-from pathlib import Path
 from tempfile import TemporaryDirectory
 
 import jax
 import numpy as np
 from hilbertcurve.hilbertcurve import HilbertCurve
 
-import timemachine
 from timemachine.constants import ONE_4PI_EPS0
 from timemachine.ff import Forcefield
-from timemachine.ff.handlers.deserialize import deserialize_handlers
 from timemachine.lib import potentials
 from timemachine.potentials import bonded, nonbonded
 
@@ -30,14 +27,7 @@ def temporary_working_dir():
 
 
 def get_110_ccc_ff():
-    root = Path(timemachine.__file__).parent.parent
-    path_to_ff = str(root.joinpath("timemachine/ff/params/smirnoff_1_1_0_ccc.py"))
-
-    with open(path_to_ff) as f:
-        ff_handlers = deserialize_handlers(f.read())
-
-    forcefield = Forcefield(ff_handlers)
-
+    forcefield = Forcefield.load_from_file("smirnoff_1_1_0_ccc.py")
     return forcefield
 
 

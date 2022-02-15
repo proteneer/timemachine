@@ -17,12 +17,10 @@ import datetime
 import logging
 import os
 import pickle
-from pathlib import Path
 
 import numpy as np
 from rdkit import Chem
 
-import timemachine
 from timemachine.fe import model_rabfe
 from timemachine.fe.frames import all_frames, endpoint_frames_only, no_frames
 from timemachine.fe.free_energy_rabfe import (
@@ -36,7 +34,6 @@ from timemachine.fe.free_energy_rabfe import (
 from timemachine.fe.model_utils import verify_rabfe_pair
 from timemachine.fe.utils import convert_uM_to_kJ_per_mole
 from timemachine.ff import Forcefield
-from timemachine.ff.handlers.deserialize import deserialize_handlers
 from timemachine.md import builders, minimizer
 from timemachine.parallel.client import CUDAPoolClient, GRPCClient
 from timemachine.parallel.utils import get_gpu_count
@@ -197,12 +194,8 @@ if __name__ == "__main__":
 
     path_to_ligand = cmd_args.ligand_sdf
     suppl = Chem.SDMolSupplier(path_to_ligand, removeHs=False)
-    root = Path(timemachine.__file__).parent.parent
 
-    with open(root.joinpath("timemachine/ff/params/smirnoff_1_1_0_ccc.py")) as f:
-        ff_handlers = deserialize_handlers(f.read())
-
-    forcefield = Forcefield(ff_handlers)
+    forcefield = Forcefield.load_from_file("smirnoff_1_1_0_ccc.py")
     mols = [x for x in suppl]
 
     dataset = Dataset(mols)

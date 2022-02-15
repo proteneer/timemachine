@@ -9,7 +9,6 @@ from timemachine.fe import pdb_writer, topology
 from timemachine.fe.utils import get_romol_conf
 from timemachine.ff import Forcefield
 from timemachine.ff.handlers import openmm_deserializer
-from timemachine.ff.handlers.deserialize import deserialize_handlers
 from timemachine.lib import LangevinIntegrator, custom_ops, potentials
 from timemachine.md import builders
 
@@ -46,10 +45,6 @@ combined_coords = np.concatenate([host_coords, ligand_coords])
 
 num_host_atoms = host_coords.shape[0]
 
-# note: .py file rather than .offxml file
-# note: _ccc suffix means "correctable charge corrections"
-ff_handlers = deserialize_handlers(open("timemachine/ff/params/smirnoff_1_1_0_ccc.py").read())
-
 final_potentials = []
 final_vjp_and_handles = []
 
@@ -62,7 +57,7 @@ for bp in host_bps:
         final_potentials.append(bp)
         final_vjp_and_handles.append(None)
 
-ff = Forcefield(ff_handlers)
+ff = Forcefield.load_from_file("smirnoff_1_1_0_ccc.py")
 gbt = topology.BaseTopology(romol, ff)
 hgt = topology.HostGuestTopology(host_p, gbt)
 

@@ -13,7 +13,6 @@ from timemachine import constants
 from timemachine.fe import endpoint_correction
 from timemachine.fe.utils import get_romol_conf
 from timemachine.ff import Forcefield
-from timemachine.ff.handlers.deserialize import deserialize_handlers
 from timemachine.integrator import langevin_coefficients
 from timemachine.potentials import bonded
 
@@ -22,12 +21,8 @@ def setup_system():
 
     root = Path(__file__).parent.parent
     path_to_ligand = str(root.joinpath("tests/data/ligands_40.sdf"))
-    path_to_ff = str(root.joinpath("timemachine/ff/params/smirnoff_1_1_0_ccc.py"))
 
-    with open(path_to_ff) as f:
-        ff_handlers = deserialize_handlers(f.read())
-
-    forcefield = Forcefield(ff_handlers)
+    forcefield = Forcefield.load_from_file("smirnoff_1_1_0_ccc.py")
     suppl = Chem.SDMolSupplier(path_to_ligand, removeHs=False)
     all_mols = [x for x in suppl]
     mol_a = copy.deepcopy(all_mols[1])

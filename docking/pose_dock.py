@@ -10,7 +10,6 @@ from docking import report
 from timemachine.fe import free_energy
 from timemachine.fe.utils import to_md_units
 from timemachine.ff import Forcefield
-from timemachine.ff.handlers.deserialize import deserialize_handlers
 from timemachine.lib import LangevinIntegrator, custom_ops
 
 
@@ -87,16 +86,7 @@ def pose_dock(
     box_lengths = box_lengths + padding
     box = np.eye(3, dtype=np.float64) * box_lengths
 
-    guest_ff_handlers = deserialize_handlers(
-        open(
-            os.path.join(
-                os.path.dirname(os.path.abspath(__file__)),
-                "..",
-                "timemachine/ff/params/smirnoff_1_1_0_ccc.py",
-            )
-        ).read()
-    )
-    ff = Forcefield(guest_ff_handlers)
+    ff = Forcefield.load_from_file("smirnoff_1_1_0_ccc.py")
 
     suppl = Chem.SDMolSupplier(guests_sdfile, removeHs=False)
     for guest_mol in suppl:
