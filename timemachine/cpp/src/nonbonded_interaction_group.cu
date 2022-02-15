@@ -6,6 +6,7 @@
 #include <cstdlib>
 #include <cub/cub.cuh>
 #include <iostream>
+#include <set>
 #include <vector>
 
 #include "fixed_point.hpp"
@@ -23,13 +24,14 @@ namespace timemachine {
 
 template <typename RealType, bool Interpolated>
 NonbondedInteractionGroup<RealType, Interpolated>::NonbondedInteractionGroup(
+    const std::set<int> &row_atom_idxs,
     const std::vector<int> &lambda_plane_idxs,  // [N]
     const std::vector<int> &lambda_offset_idxs, // [N]
     const double beta,
     const double cutoff,
     const std::string &kernel_src)
-    : N_(lambda_offset_idxs.size()), cutoff_(cutoff), nblist_(lambda_offset_idxs.size()), beta_(beta),
-      d_sort_storage_(nullptr), d_sort_storage_bytes_(0), nblist_padding_(0.1), disable_hilbert_(false),
+    : N_(lambda_offset_idxs.size()), NR_(row_atom_idxs.size()), NC_(N_ - NR_), cutoff_(cutoff), nblist_(N_),
+      beta_(beta), d_sort_storage_(nullptr), d_sort_storage_bytes_(0), nblist_padding_(0.1), disable_hilbert_(false),
       kernel_ptrs_({// enumerate over every possible kernel combination
                     // U: Compute U
                     // X: Compute DU_DL

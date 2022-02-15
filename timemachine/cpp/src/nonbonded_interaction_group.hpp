@@ -4,6 +4,7 @@
 #include "potential.hpp"
 #include "vendored/jitify.hpp"
 #include <array>
+#include <set>
 #include <vector>
 
 namespace timemachine {
@@ -28,6 +29,10 @@ typedef void (*k_nonbonded_fn)(
 template <typename RealType, bool Interpolated> class NonbondedInteractionGroup : public Potential {
 
 private:
+    const int N_;  // N_ = NC_ + NR_
+    const int NR_; // number of row atoms
+    const int NC_; // number of column atoms
+
     std::array<k_nonbonded_fn, 16> kernel_ptrs_;
 
     int *d_lambda_plane_idxs_;
@@ -37,8 +42,6 @@ private:
     double beta_;
     double cutoff_;
     Neighborlist<RealType> nblist_;
-
-    const int N_;
 
     double nblist_padding_;
     double *d_nblist_x_;    // coords which were used to compute the nblist
@@ -84,6 +87,7 @@ public:
     void disable_hilbert_sort();
 
     NonbondedInteractionGroup(
+        const std::set<int> &row_atom_idxs,
         const std::vector<int> &lambda_plane_idxs,  // N
         const std::vector<int> &lambda_offset_idxs, // N
         const double beta,
