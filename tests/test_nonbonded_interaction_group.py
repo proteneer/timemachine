@@ -112,7 +112,7 @@ def test_nonbonded_interaction_group_consistency_allpairs(
     example_nonbonded_params,
     example_coords,
     example_box,
-    rng,
+    rng: np.random.Generator,
 ):
     """Compares with reference nonbonded_v3 potential, which computes
     the sum of all pairwise interactions. This uses the identity
@@ -185,7 +185,7 @@ def test_nonbonded_interaction_group_consistency_allpairs(
 @pytest.mark.parametrize("precision,rtol,atol", [(np.float64, 1e-8, 1e-8), (np.float32, 1e-4, 5e-4)])
 @pytest.mark.parametrize("num_row_atoms", [1, 15])
 @pytest.mark.parametrize("num_atoms", [33, 231])
-def test_nonbonded_interaction_group_consistency_pairwise(
+def test_nonbonded_interaction_group_consistency_specific_pairs(
     num_atoms,
     num_row_atoms,
     precision,
