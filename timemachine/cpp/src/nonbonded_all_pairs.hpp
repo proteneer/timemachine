@@ -52,8 +52,12 @@ private:
     double *d_w_; // 4D coordinates
     double *d_dw_dl_;
 
-    // "sorted" means sorted according to the hilbert curve index
-    // "unsorted" means in the original order of the input
+    // "sorted" means
+    // - if hilbert sorting enabled, atoms are sorted according to the
+    //   hilbert curve index
+    // - otherwise, atom ordering is preserved with respect to input
+    //
+    // "unsorted" means the atom ordering is preserved with respect to input
     double *d_sorted_x_; // sorted coordinates
     double *d_sorted_w_; // sorted 4D coordinates
     double *d_sorted_dw_dl_;
