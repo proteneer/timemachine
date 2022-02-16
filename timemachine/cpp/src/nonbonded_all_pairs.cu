@@ -239,15 +239,17 @@ void NonbondedAllPairs<RealType, Interpolated>::execute_device(
     // g. note that du/dl is not an exact per-particle du/dl - it is only used for reduction purposes.
 
     if (N != N_) {
-        std::cout << N << " " << N_ << std::endl;
-        throw std::runtime_error("NonbondedAllPairs::execute_device() N != N_");
+        throw std::runtime_error(
+            "NonbondedAllPairs::execute_device(): expected N == N_, got N=" + std::to_string(N) +
+            ", N_=" + std::to_string(N_));
     }
 
     const int M = Interpolated ? 2 : 1;
 
     if (P != M * N_ * 3) {
-        std::cout << P << " " << N_ << std::endl;
-        throw std::runtime_error("NonbondedAllPairs::execute_device() P != M*N_*3");
+        throw std::runtime_error(
+            "NonbondedAllPairs::execute_device(): expected P == M*N_*3, got P=" + std::to_string(P) +
+            ", M*N_*3=" + std::to_string(M * N_ * 3));
     }
 
     // identify which tiles contain interpolated parameters
