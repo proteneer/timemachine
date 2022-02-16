@@ -300,8 +300,6 @@ void NonbondedInteractionGroup<RealType, Interpolated>::execute_device(
     const int B = ceil_divide(N_, tpb);
 
     // (ytz) see if we need to rebuild the neighborlist.
-    // (ytz + jfass): note that this logic needs to change if we use NPT later on since a resize in the box
-    // can introduce new interactions.
     k_check_rebuild_coords_and_box<RealType>
         <<<B, tpb, 0, stream>>>(N_, d_x, d_nblist_x_, d_box, d_nblist_box_, nblist_padding_, d_rebuild_nblist_);
 
