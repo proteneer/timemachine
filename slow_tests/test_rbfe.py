@@ -2,12 +2,12 @@ import os
 from tempfile import TemporaryDirectory
 from unittest import TestCase
 
-from timemachine.md import builders
-from timemachine.fe.model import RBFEModel
 from timemachine.fe.free_energy import construct_lambda_schedule
-from timemachine.testsystems.relative import hif2a_ligand_pair
+from timemachine.fe.model import RBFEModel
+from timemachine.md import builders
 from timemachine.parallel.client import CUDAPoolClient
 from timemachine.parallel.utils import get_gpu_count
+from timemachine.testsystems.relative import hif2a_ligand_pair
 
 DATA_DIR = os.path.join(os.path.dirname(__file__), "..", "tests", "data")
 NUM_GPUS = get_gpu_count()

@@ -1,7 +1,9 @@
-import numpy as np
-from timemachine.lib import custom_ops
 from typing import List
+
+import numpy as np
 from numpy.typing import NDArray
+
+from timemachine.lib import custom_ops
 
 # (ytz): classes in this class wrap custom_ops but have the added benefit
 # of being pickleable.

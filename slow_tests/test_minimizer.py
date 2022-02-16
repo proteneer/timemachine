@@ -1,9 +1,8 @@
 from rdkit import Chem
 
-from timemachine.md import minimizer, builders
-
-from timemachine.ff.handlers.deserialize import deserialize_handlers
 from timemachine.ff import Forcefield
+from timemachine.ff.handlers.deserialize import deserialize_handlers
+from timemachine.md import builders, minimizer
 
 
 def test_minimizer():

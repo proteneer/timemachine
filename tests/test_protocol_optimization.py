@@ -1,15 +1,14 @@
-from timemachine.optimize.protocol import (
-    rebalance_initial_protocol,
-    log_weights_from_mixture,
-    linear_u_kn_interpolant,
-    construct_work_stddev_estimator,
-)
-
+import numpy as np
 from pymbar import MBAR
 from pymbar.testsystems import HarmonicOscillatorsTestCase
-
-import numpy as np
 from scipy.special import logsumexp
+
+from timemachine.optimize.protocol import (
+    construct_work_stddev_estimator,
+    linear_u_kn_interpolant,
+    log_weights_from_mixture,
+    rebalance_initial_protocol,
+)
 
 np.random.seed(2021)
 

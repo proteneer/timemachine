@@ -2,36 +2,30 @@
 
 # This file contains utility functions to generate samples in the gas-phase.
 
+import multiprocessing
 import os
 import pickle
-
-import jax
-
-import multiprocessing
-import numpy as np
-from scipy.special import logsumexp
-from jax.scipy.special import logsumexp as jlogsumexp
-
-from timemachine.fe import topology, free_energy
-from timemachine.fe.utils import get_romol_conf
-
-from timemachine.integrator import simulate
-from timemachine.potentials import bonded, nonbonded, rmsd
-from timemachine.constants import BOLTZ
-from timemachine import lib
-from timemachine.lib import custom_ops
-
-from timemachine.md.states import CoordsVelBox
-from timemachine.md import minimizer, builders, moves
-from timemachine.md.barostat.utils import get_group_indices, get_bond_list
-from timemachine.utils import hash_mol
-
-from rdkit import Chem
-from rdkit.Chem import rdMolDescriptors
-
 from pathlib import Path
 
+import jax
+import numpy as np
+from jax.scipy.special import logsumexp as jlogsumexp
+from rdkit import Chem
+from rdkit.Chem import rdMolDescriptors
+from scipy.special import logsumexp
 from tqdm import tqdm
+
+from timemachine import lib
+from timemachine.constants import BOLTZ
+from timemachine.fe import free_energy, topology
+from timemachine.fe.utils import get_romol_conf
+from timemachine.integrator import simulate
+from timemachine.lib import custom_ops
+from timemachine.md import builders, minimizer, moves
+from timemachine.md.barostat.utils import get_bond_list, get_group_indices
+from timemachine.md.states import CoordsVelBox
+from timemachine.potentials import bonded, nonbonded, rmsd
+from timemachine.utils import hash_mol
 
 # global tmp directory # TODO: somewhere better?
 PATH_TO_SAMPLE_CACHES = Path("/tmp/sample_caches/")
@@ -56,7 +50,7 @@ def identify_rotatable_bonds(mol):
 
     """
     pattern = Chem.MolFromSmarts("[!$(*#*)&!D1]-&!@[!$(*#*)&!D1]")
-    matches = mol.GetSubstructMatches(pattern)
+    matches = mol.GetSubstructMatches(pattern, uniquify=1)
 
     # sanity check
     assert len(matches) >= rdMolDescriptors.CalcNumRotatableBonds(mol)

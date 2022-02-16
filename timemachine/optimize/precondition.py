@@ -1,11 +1,12 @@
 import numpy as np
+
 from timemachine.ff.handlers.bonded import (
     HarmonicAngleHandler,
     HarmonicBondHandler,
     ImproperTorsionHandler,
     ProperTorsionHandler,
 )
-from timemachine.ff.handlers.nonbonded import LennardJonesHandler, AM1CCCHandler
+from timemachine.ff.handlers.nonbonded import AM1CCCHandler, LennardJonesHandler
 
 default_learning_rates = {
     HarmonicBondHandler: np.zeros(2),  # k, length

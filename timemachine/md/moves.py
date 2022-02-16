@@ -1,16 +1,17 @@
-from timemachine.md.states import CoordsVelBox
+from functools import partial
 from typing import List, Tuple
-import numpy as np
-from scipy.special import logsumexp
 
-from jax.scipy.special import logsumexp as jlogsumexp
-from timemachine.lib import custom_ops
-from timemachine.md.barostat.utils import get_group_indices, get_bond_list
-from timemachine import lib
 import jax
 import jax.numpy as jnp
 import jax.random as jrandom
-from functools import partial
+import numpy as np
+from jax.scipy.special import logsumexp as jlogsumexp
+from scipy.special import logsumexp
+
+from timemachine import lib
+from timemachine.lib import custom_ops
+from timemachine.md.barostat.utils import get_bond_list, get_group_indices
+from timemachine.md.states import CoordsVelBox
 
 
 class MonteCarloMove:

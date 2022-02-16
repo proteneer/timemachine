@@ -17,23 +17,21 @@
 
 
 from functools import partial
-
-# parallelization across multiple GPUs
-from timemachine.parallel.client import CUDAPoolClient
-from timemachine.parallel.utils import get_gpu_count
+from pathlib import Path
+from time import time
 
 import numpy as np
 from rdkit import Chem
 
-from timemachine.fe import topology, free_energy
+from timemachine.fe import free_energy, topology
 from timemachine.fe.free_energy import construct_lambda_schedule
 from timemachine.ff import Forcefield
 from timemachine.ff.handlers.deserialize import deserialize_handlers
 from timemachine.md import builders, minimizer
 
-from time import time
-
-from pathlib import Path
+# parallelization across multiple GPUs
+from timemachine.parallel.client import CUDAPoolClient
+from timemachine.parallel.utils import get_gpu_count
 
 root = Path(__file__).parent.parent
 path_to_ligand = str(root.joinpath("tests/data/ligands_40.sdf"))

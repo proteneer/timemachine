@@ -1,11 +1,12 @@
 import functools
-
 from typing import Tuple
+
 import jax
-import numpy as np
 import jax.numpy as jnp
-from timemachine.potentials import bonded, rmsd
+import numpy as np
 from scipy.stats import special_ortho_group
+
+from timemachine.potentials import bonded, rmsd
 
 
 def exp_u(rotation, k, beta):

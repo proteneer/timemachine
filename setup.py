@@ -3,14 +3,16 @@
 Adapted from https://github.com/pypa/sampleproject/blob/main/setup.py
 """
 
-from setuptools import Extension, find_packages, setup
-from setuptools.command.build_ext import build_ext
-
 import os
 import pathlib
 import subprocess
 import sys
+
+from setuptools import Extension, find_packages, setup
+from setuptools.command.build_ext import build_ext
+
 import versioneer
+
 
 # CMake configuration adapted from https://github.com/pybind/cmake_example
 class CMakeExtension(Extension):
@@ -92,12 +94,12 @@ setup(
         "scipy",
     ],
     extras_require={
-        "dev": ["black==21.10b0", "pre-commit", "grpcio==1.43.0"],
+        "dev": ["black==21.10b0", "isort==5.10.1", "flake8==4.0.1", "pre-commit"],
         "test": ["pytest", "pytest-cov"],
     },
-    # package_data={
-    #     "sample": ["package_data.dat"],
-    # },
+    package_data={
+        "datasets": ["timemachine/datasets"],
+    },
     # entry_points={
     #     "console_scripts": [
     #         "sample=sample:main",

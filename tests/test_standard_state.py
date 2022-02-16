@@ -1,11 +1,9 @@
-import numpy as np
 import functools
 
-from timemachine.fe import standard_state
-
+import numpy as np
 import scipy.integrate
 
-
+from timemachine.fe import standard_state
 from timemachine.potentials import rmsd
 
 

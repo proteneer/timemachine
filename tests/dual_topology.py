@@ -3,21 +3,17 @@
 
 import argparse
 import os
+from multiprocessing import Pool
+
 import numpy as np
 from rdkit import Chem
 from rdkit.Chem import AllChem
 
-from timemachine.lib import custom_ops
-from timemachine.lib import LangevinIntegrator
-
-from timemachine.ff.handlers.deserialize import deserialize_handlers
-
-from timemachine.fe.utils import get_romol_conf
 from timemachine.fe import rbfe
-from timemachine.md import Recipe
-from timemachine.md import builders
-
-from multiprocessing import Pool
+from timemachine.fe.utils import get_romol_conf
+from timemachine.ff.handlers.deserialize import deserialize_handlers
+from timemachine.lib import LangevinIntegrator, custom_ops
+from timemachine.md import Recipe, builders
 
 
 def run(args):

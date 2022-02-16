@@ -1,6 +1,6 @@
 import numpy as np
 from simtk import unit
-from simtk.openmm import app, Vec3
+from simtk.openmm import Vec3, app
 
 
 def strip_units(coords):

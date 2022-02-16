@@ -1,11 +1,9 @@
 import numpy as np
 
+from timemachine.ff import Forcefield
 from timemachine.ff.handlers import openmm_deserializer
 from timemachine.ff.handlers.deserialize import deserialize_handlers
-from timemachine.ff import Forcefield
-
-from timemachine.lib import custom_ops, LangevinIntegrator, MonteCarloBarostat
-
+from timemachine.lib import LangevinIntegrator, MonteCarloBarostat, custom_ops
 from timemachine.md import builders, minimizer
 from timemachine.md.barostat.utils import get_bond_list, get_group_indices
 from timemachine.testsystems.relative import hif2a_ligand_pair as testsystem

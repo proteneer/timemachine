@@ -1,8 +1,8 @@
 # This is ported from Matt Harrigan's TF code:
 # https://github.com/mdtraj/tftraj/blob/master/tftraj/rmsd.py
 
-import jax.scipy
 import jax.numpy as np
+import jax.scipy
 
 
 @jax.jit

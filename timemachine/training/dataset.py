@@ -1,5 +1,5 @@
 from copy import deepcopy
-from typing import Tuple, Any, List
+from typing import Any, List, Tuple
 
 import numpy as np
 
