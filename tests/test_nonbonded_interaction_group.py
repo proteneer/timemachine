@@ -15,8 +15,13 @@ from timemachine.lib.potentials import NonbondedInteractionGroup
 
 @pytest.fixture(autouse=True)
 def set_random_seed():
-    np.random.seed(2021)
+    np.random.seed(2022)
     yield
+
+
+@pytest.fixture()
+def rng():
+    return np.random.default_rng(2022)
 
 
 @pytest.fixture
@@ -72,6 +77,7 @@ def test_nonbonded_interaction_group_correctness(
     example_nonbonded_potential,
     example_coords,
     example_box,
+    rng,
 ):
 
     coords = example_coords[:num_atoms]
@@ -91,17 +97,17 @@ def test_nonbonded_interaction_group_correctness(
 
     ref_allpairs = make_reference_nonbonded(np.zeros(num_atoms, dtype=np.int32))
 
-    num_col_atoms = num_atoms - num_row_atoms
+    row_atom_idxs = rng.choice(num_atoms, size=num_row_atoms, replace=False).astype(np.int32)
+    lambda_plane_idxs = np.zeros(num_atoms, dtype=np.int32)
+    lambda_plane_idxs[row_atom_idxs] = 1
 
-    ref_allpairs_minus_ixngroups = make_reference_nonbonded(
-        np.concatenate((np.zeros(num_row_atoms, dtype=np.int32), np.ones(num_col_atoms, dtype=np.int32)))
-    )
+    ref_allpairs_minus_ixngroups = make_reference_nonbonded(lambda_plane_idxs)
 
     def ref_ixngroups(*args):
         return ref_allpairs(*args) - ref_allpairs_minus_ixngroups(*args)
 
     test_ixngroups = NonbondedInteractionGroup(
-        np.arange(0, num_row_atoms, dtype=np.int32),
+        row_atom_idxs,
         np.zeros(num_atoms, dtype=np.int32),  # lambda plane indices
         lambda_offset_idxs,
         beta,
