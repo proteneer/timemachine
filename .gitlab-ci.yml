@@ -6,6 +6,9 @@ stages:          # List of stages for jobs, and their order of execution
 docker_build:
   stage: build-docker
   image: docker:20.10
+  tags:
+    - gpu
+    - docker
   script:
     - DOCKER_HOST=tcp://localhost:2375 docker login -u $CI_REGISTRY_USER -p $CI_JOB_TOKEN $CI_REGISTRY
     - docker build -t $CI_REGISTRY_IMAGE:$CI_COMMIT_SHA --target tm_base_env .
@@ -15,6 +18,8 @@ memory-tests:
   stage: test
   image: $CI_REGISTRY_IMAGE:$CI_COMMIT_SHA
   needs: ["docker_build"]
+  tags:
+    - gpu
   variables:
     CMAKE_ARGS: -DCUDA_ARCH=75
   script:
@@ -31,6 +36,8 @@ unit-tests:
   stage: test
   image: $CI_REGISTRY_IMAGE:$CI_COMMIT_SHA
   needs: ["docker_build"]
+  tags:
+    - gpu
   variables:
     CMAKE_ARGS: -DCUDA_ARCH=75
   script:
