@@ -20,7 +20,7 @@ def set_random_seed():
 
 
 @pytest.fixture
-def test_system():
+def example_system():
     pdb_path = "tests/data/5dfr_solv_equil.pdb"
     host_pdb = app.PDBFile(pdb_path)
     ff = app.ForceField("amber99sbildn.xml", "tip3p.xml")
@@ -32,8 +32,8 @@ def test_system():
 
 
 @pytest.fixture
-def ref_nonbonded_potential(test_system):
-    host_system, _, _ = test_system
+def example_nonbonded_potential(example_system):
+    host_system, _, _ = example_system
     host_fns, _ = openmm_deserializer.deserialize_system(host_system, cutoff=1.0)
 
     nonbonded_fn = None
@@ -45,14 +45,14 @@ def ref_nonbonded_potential(test_system):
 
 
 @pytest.fixture
-def test_conf(test_system):
-    _, host_coords, _ = test_system
+def example_coords(example_system):
+    _, host_coords, _ = example_system
     return np.array([[to_md_units(x), to_md_units(y), to_md_units(z)] for x, y, z in host_coords])
 
 
 @pytest.fixture
-def test_box(test_system):
-    _, _, box = test_system
+def example_box(example_system):
+    _, _, box = example_system
     return np.asarray(box / box.unit)
 
 
@@ -62,20 +62,29 @@ def test_box(test_system):
 @pytest.mark.parametrize("num_row_atoms", [1, 15])
 @pytest.mark.parametrize("num_atoms", [33, 231, 1050])
 def test_nonbonded_interaction_group_correctness(
-    num_atoms, num_row_atoms, precision, rtol, atol, cutoff, beta, ref_nonbonded_potential, test_conf, test_box
+    num_atoms,
+    num_row_atoms,
+    precision,
+    rtol,
+    atol,
+    cutoff,
+    beta,
+    example_nonbonded_potential,
+    example_coords,
+    example_box,
 ):
 
-    test_conf = test_conf[:num_atoms]
-    test_params = ref_nonbonded_potential.params[:num_atoms, :]
-    test_lambda_offset_idxs = np.zeros(num_atoms, dtype=np.int32)
+    coords = example_coords[:num_atoms]
+    params = example_nonbonded_potential.params[:num_atoms, :]
+    lambda_offset_idxs = np.zeros(num_atoms, dtype=np.int32)
 
     def make_reference_nonbonded(lambda_plane_idxs):
         return prepare_reference_nonbonded(
-            params=test_params,
+            params=params,
             exclusion_idxs=np.array([], dtype=np.int32),
             scales=np.zeros((0, 2), dtype=np.float64),
             lambda_plane_idxs=lambda_plane_idxs,
-            lambda_offset_idxs=test_lambda_offset_idxs,
+            lambda_offset_idxs=lambda_offset_idxs,
             beta=beta,
             cutoff=cutoff,
         )
@@ -94,15 +103,15 @@ def test_nonbonded_interaction_group_correctness(
     test_ixngroups = NonbondedInteractionGroup(
         np.arange(0, num_row_atoms, dtype=np.int32),
         np.zeros(num_atoms, dtype=np.int32),  # lambda plane indices
-        test_lambda_offset_idxs,
+        lambda_offset_idxs,
         beta,
         cutoff,
     )
 
     GradientTest().compare_forces(
-        test_conf,
-        test_params,
-        test_box,
+        coords,
+        params,
+        example_box,
         lamb=0.1,
         ref_potential=ref_ixngroups,
         test_potential=test_ixngroups,
