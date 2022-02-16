@@ -55,21 +55,24 @@ private:
 
     unsigned int *d_perm_; // hilbert curve permutation
 
-    double *d_w_;     //
-    double *d_dw_dl_; //
+    double *d_w_; // 4D coordinates
+    double *d_dw_dl_;
 
-    double *d_sorted_x_;     //
-    double *d_sorted_w_;     //
-    double *d_sorted_dw_dl_; //
-    double *d_sorted_p_;     //
-    double *d_unsorted_p_;   //
+    // "sorted" means sorted according to the hilbert curve index
+    // "unsorted" means in the original order of the input
+    double *d_sorted_x_; // sorted coordinates
+    double *d_sorted_w_; // sorted 4D coordinates
+    double *d_sorted_dw_dl_;
+    double *d_sorted_p_;   // sorted parameters
+    double *d_unsorted_p_; // unsorted parameters
     double *d_sorted_dp_dl_;
     double *d_unsorted_dp_dl_;
-    unsigned long long *d_sorted_du_dx_; //
-    unsigned long long *d_sorted_du_dp_; //
-    unsigned long long *d_du_dp_buffer_; //
+    unsigned long long *d_sorted_du_dx_;
+    unsigned long long *d_sorted_du_dp_;
+    unsigned long long *d_du_dp_buffer_;
 
-    unsigned int *d_bin_to_idx_;
+    // used for hilbert sorting
+    unsigned int *d_bin_to_idx_; // mapping from 256x256x256 grid to hilbert curve index
     unsigned int *d_sort_keys_in_;
     unsigned int *d_sort_keys_out_;
     unsigned int *d_sort_vals_in_;
