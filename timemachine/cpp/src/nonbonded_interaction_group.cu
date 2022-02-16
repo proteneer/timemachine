@@ -335,12 +335,14 @@ void NonbondedInteractionGroup<RealType, Interpolated>::execute_device(
         gpuErrchk(cudaMemcpyAsync(
             p_ixn_count_, nblist_.get_ixn_count(), 1 * sizeof(*p_ixn_count_), cudaMemcpyDeviceToHost, stream));
 
+        // this stream needs to be synchronized so we can be sure that p_ixn_count_ is properly set.
+        cudaStreamSynchronize(stream);
+
         std::vector<double> h_box(9);
         gpuErrchk(cudaMemcpyAsync(&h_box[0], d_box, 3 * 3 * sizeof(*d_box), cudaMemcpyDeviceToHost, stream));
         // Verify that the cutoff and box size are valid together. If cutoff is greater than half the box
         // then a particle can interact with multiple periodic copies.
         const double db_cutoff = (cutoff_ + nblist_padding_) * 2;
-        cudaStreamSynchronize(stream);
 
         // Verify that box is orthogonal and the width of the box in all dimensions is greater than twice the cutoff
         for (int i = 0; i < 9; i++) {
@@ -380,7 +382,6 @@ void NonbondedInteractionGroup<RealType, Interpolated>::execute_device(
         gpuErrchk(cudaMemsetAsync(d_sorted_dp_dl_, 0, N * 3 * sizeof(*d_sorted_dp_dl_), stream))
     }
 
-    // this stream needs to be synchronized so we can be sure that p_ixn_count_ is properly set.
     // reset buffers and sorted accumulators
     if (d_du_dx) {
         gpuErrchk(cudaMemsetAsync(d_sorted_du_dx_, 0, N * 3 * sizeof(*d_sorted_du_dx_), stream))
