@@ -110,6 +110,24 @@ def test_nonbonded_interaction_group_correctness(
     example_box,
     rng,
 ):
+    """Compares with reference nonbonded_v3 potential, which computes
+    the sum of all pairwise interactions. This uses the identity
+
+      U = U_A + U_B + U_AB
+
+    where
+    - `U` is the all-pairs potential over all atoms
+    - `U_A`, `U_B` are all-pairs potentials for interacting groups A
+      and B, respectively
+    - `U_AB` is the "interaction group" potential, i.e. the sum of
+      pairwise interactions `(a, b)` where `a` is in `A` and `b` is in
+      `B`
+
+    The quantity `U` is computed using the reference potential over
+    all atoms, and `U_A + U_B` computed using the reference potential
+    over all atoms separated into 2 lambda planes according to which
+    interacting group they belong
+    """
 
     coords = example_coords[:num_atoms]
     params = example_nonbonded_potential.params[:num_atoms, :]
