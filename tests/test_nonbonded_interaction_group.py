@@ -2,6 +2,8 @@ import jax
 
 jax.config.update("jax_enable_x64", True)
 
+import itertools
+
 import numpy as np
 import pytest
 from common import GradientTest, prepare_reference_nonbonded
@@ -11,6 +13,7 @@ from timemachine.fe.utils import to_md_units
 from timemachine.ff.handlers import openmm_deserializer
 from timemachine.lib import potentials
 from timemachine.lib.potentials import NonbondedInteractionGroup
+from timemachine.potentials import nonbonded
 
 
 @pytest.fixture(autouse=True)
@@ -37,7 +40,7 @@ def example_system():
 
 
 @pytest.fixture
-def example_nonbonded_potential(example_system):
+def example_nonbonded_params(example_system):
     host_system, _, _ = example_system
     host_fns, _ = openmm_deserializer.deserialize_system(host_system, cutoff=1.0)
 
@@ -46,7 +49,8 @@ def example_nonbonded_potential(example_system):
         if isinstance(f, potentials.Nonbonded):
             nonbonded_fn = f
 
-    return nonbonded_fn
+    assert nonbonded_fn is not None
+    return nonbonded_fn.params
 
 
 @pytest.fixture
@@ -97,7 +101,7 @@ def test_nonbonded_interaction_group_zero_interactions(rng: np.random.Generator)
 @pytest.mark.parametrize("precision,rtol,atol", [(np.float64, 1e-8, 1e-8), (np.float32, 1e-4, 5e-4)])
 @pytest.mark.parametrize("num_row_atoms", [1, 15])
 @pytest.mark.parametrize("num_atoms", [33, 231, 1050])
-def test_nonbonded_interaction_group_correctness(
+def test_nonbonded_interaction_group_consistency_allpairs(
     num_atoms,
     num_row_atoms,
     precision,
@@ -105,7 +109,7 @@ def test_nonbonded_interaction_group_correctness(
     atol,
     cutoff,
     beta,
-    example_nonbonded_potential,
+    example_nonbonded_params,
     example_coords,
     example_box,
     rng,
@@ -130,7 +134,7 @@ def test_nonbonded_interaction_group_correctness(
     """
 
     coords = example_coords[:num_atoms]
-    params = example_nonbonded_potential.params[:num_atoms, :]
+    params = example_nonbonded_params[:num_atoms, :]
     lambda_offset_idxs = np.zeros(num_atoms, dtype=np.int32)
 
     def make_reference_nonbonded(lambda_plane_idxs):
@@ -159,6 +163,64 @@ def test_nonbonded_interaction_group_correctness(
         row_atom_idxs,
         np.zeros(num_atoms, dtype=np.int32),  # lambda plane indices
         lambda_offset_idxs,
+        beta,
+        cutoff,
+    )
+
+    GradientTest().compare_forces(
+        coords,
+        params,
+        example_box,
+        lamb=0.1,
+        ref_potential=ref_ixngroups,
+        test_potential=test_ixngroups,
+        rtol=rtol,
+        atol=atol,
+        precision=precision,
+    )
+
+
+@pytest.mark.parametrize("beta", [2.0])
+@pytest.mark.parametrize("cutoff", [1.1])
+@pytest.mark.parametrize("precision,rtol,atol", [(np.float64, 1e-8, 1e-8), (np.float32, 1e-4, 5e-4)])
+@pytest.mark.parametrize("num_row_atoms", [1, 15])
+@pytest.mark.parametrize("num_atoms", [33, 231])
+def test_nonbonded_interaction_group_consistency_pairwise(
+    num_atoms,
+    num_row_atoms,
+    precision,
+    rtol,
+    atol,
+    cutoff,
+    beta,
+    example_nonbonded_params,
+    example_coords,
+    example_box,
+    rng,
+):
+    """Compares with reference nonbonded_v3_on_specific_pairs potential, which computes
+    the sum of interactions for a list of pairs.
+    """
+
+    coords = example_coords[:num_atoms]
+    params = example_nonbonded_params[:num_atoms, :]
+
+    row_atom_idxs = rng.choice(num_atoms, size=num_row_atoms, replace=False).astype(np.int32)
+    col_atom_idxs = np.setdiff1d(np.arange(num_atoms), row_atom_idxs)
+    pairs = itertools.product(row_atom_idxs, col_atom_idxs)
+    inds_l, inds_r = (np.array(ps) for ps in zip(*pairs))
+
+    def ref_ixngroups(coords, params, box, _):
+        vdW, electrostatics = nonbonded.nonbonded_v3_on_specific_pairs(
+            coords, params, box, inds_l, inds_r, beta, cutoff
+        )
+        total_energy = jax.numpy.sum(vdW + electrostatics)
+        return total_energy
+
+    test_ixngroups = NonbondedInteractionGroup(
+        row_atom_idxs,
+        np.zeros(num_atoms, dtype=np.int32),
+        np.zeros(num_atoms, dtype=np.int32),
         beta,
         cutoff,
     )
