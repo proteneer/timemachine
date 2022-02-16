@@ -70,6 +70,14 @@ NonbondedInteractionGroup<RealType, Interpolated>::NonbondedInteractionGroup(
         throw std::runtime_error("row_atom_idxs must be nonempty");
     }
 
+    if (lambda_offset_idxs.size() != N_) {
+        throw std::runtime_error("lambda offset idxs need to have size N");
+    }
+
+    if (lambda_offset_idxs.size() != lambda_plane_idxs.size()) {
+        throw std::runtime_error("lambda offset idxs and plane idxs need to be equivalent");
+    }
+
     // compute set of column atoms as set difference
     std::vector<int> all_atom_idxs(N_);
     std::iota(all_atom_idxs.begin(), all_atom_idxs.end(), 0);
@@ -80,14 +88,6 @@ NonbondedInteractionGroup<RealType, Interpolated>::NonbondedInteractionGroup(
         row_atom_idxs.begin(),
         row_atom_idxs.end(),
         std::inserter(col_atom_idxs, col_atom_idxs.end()));
-
-    if (lambda_offset_idxs.size() != N_) {
-        throw std::runtime_error("lambda offset idxs need to have size N");
-    }
-
-    if (lambda_offset_idxs.size() != lambda_plane_idxs.size()) {
-        throw std::runtime_error("lambda offset idxs and plane idxs need to be equivalent");
-    }
 
     std::vector<int> col_atom_idxs_v(set_to_vector(col_atom_idxs));
     gpuErrchk(cudaMalloc(&d_col_atom_idxs_, NC_ * sizeof(*d_col_atom_idxs_)));
