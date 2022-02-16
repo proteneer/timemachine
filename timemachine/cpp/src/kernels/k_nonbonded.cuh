@@ -391,12 +391,17 @@ void __device__ v_nonbonded_unified(
             d2ij += delta_w * delta_w;
         }
 
+        const bool valid_ij =
+            atom_i_idx < N &&
+            ((NR == 0) ? atom_i_idx < atom_j_idx && atom_j_idx < N // all-pairs case, only compute the upper tri
+                                                                   //   0  <= i < N, i < j < N
+                       : atom_j_idx < NC);                         // ixn groups case, compute all pairwise ixns
+                                                                   //   NC <= i < N, 0 <= j < NC
+
         // (ytz): note that d2ij must be *strictly* less than cutoff_squared. This is because we set the
         // non-interacting atoms to exactly real_cutoff*real_cutoff. This ensures that atoms who's 4th dimension
         // is set to cutoff are non-interacting.
-        if (d2ij < cutoff_squared && atom_i_idx < N &&
-            (NR == 0 && atom_j_idx > atom_i_idx && atom_j_idx < N || NR != 0 && atom_j_idx < NC)) {
-
+        if (d2ij < cutoff_squared && valid_ij) {
             // electrostatics
             RealType u;
             RealType es_prefactor;
