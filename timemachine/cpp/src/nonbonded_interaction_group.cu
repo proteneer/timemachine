@@ -362,6 +362,11 @@ void NonbondedInteractionGroup<RealType, Interpolated>::execute_device(
         gpuErrchk(cudaPeekAtLastError());
     }
 
+    // if the neighborlist is empty, we can return early
+    if (p_ixn_count_[0] == 0) {
+        return;
+    }
+
     // do parameter interpolation here
     if (Interpolated) {
         CUresult result = compute_permute_interpolated_.configure(dimGrid, tpb, 0, stream)
