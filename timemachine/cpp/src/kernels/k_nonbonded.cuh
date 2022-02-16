@@ -298,7 +298,7 @@ void __device__ v_nonbonded_unified(
     // int lambda_offset_i = atom_i_idx < N ? lambda_offset_idxs[atom_i_idx] : 0;
     // int lambda_plane_i = atom_i_idx < N ? lambda_plane_idxs[atom_i_idx] : 0;
 
-    int N = NC + NR;
+    const int N = NC + NR;
 
     if (NR != 0) {
         atom_i_idx += NC;
@@ -557,7 +557,7 @@ void __global__ k_nonbonded_unified(
     int row_block_idx = ixn_tiles[tile_idx];
     int atom_i_idx = row_block_idx * 32 + threadIdx.x;
 
-    int N = NC + NR;
+    const int N = NC + NR;
 
     if (NR != 0) {
         atom_i_idx += NC;
