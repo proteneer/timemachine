@@ -61,6 +61,37 @@ def example_box(example_system):
     return np.asarray(box / box.unit)
 
 
+def test_nonbonded_interaction_group_zero_interactions(num_row_atoms, rng: np.random.Generator):
+    num_atoms = 33
+    num_row_atoms = 15
+    beta = 2.0
+    lamb = 0.1
+    cutoff = 1.1
+    box = 10.0 * np.eye(3)
+    coords = rng.uniform(0, 1, size=(num_atoms, 3))
+    row_atom_idxs = rng.choice(num_atoms, size=num_row_atoms, replace=False).astype(np.int32)
+
+    # shift row atoms in x by twice the cutoff
+    coords[row_atom_idxs, 0] += 2 * cutoff
+
+    params = rng.uniform(0, 1, size=(num_atoms, 3))
+
+    potential = NonbondedInteractionGroup(
+        row_atom_idxs,
+        np.zeros(num_atoms, dtype=np.int32),
+        np.zeros(num_atoms, dtype=np.int32),
+        beta,
+        cutoff,
+    )
+
+    du_dx, du_dp, du_dl, u = potential.unbound_impl(np.float64).execute(coords, params, box, lamb)
+
+    assert (du_dx == 0).all()
+    assert (du_dp == 0).all()
+    assert du_dl == 0
+    assert u == 0
+
+
 @pytest.mark.parametrize("beta", [2.0])
 @pytest.mark.parametrize("cutoff", [1.1])
 @pytest.mark.parametrize("precision,rtol,atol", [(np.float64, 1e-8, 1e-8), (np.float32, 1e-4, 5e-4)])
