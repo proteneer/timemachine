@@ -61,7 +61,7 @@ def example_box(example_system):
     return np.asarray(box / box.unit)
 
 
-def test_nonbonded_interaction_group_zero_interactions(num_row_atoms, rng: np.random.Generator):
+def test_nonbonded_interaction_group_zero_interactions(rng: np.random.Generator):
     num_atoms = 33
     num_row_atoms = 15
     beta = 2.0
