@@ -6,9 +6,8 @@ import logging
 import re
 from typing import Any, Callable, Dict, List, Type, TypeVar
 
-from openeye import oechem
-
 T = TypeVar("T")
+OEMol = Any
 
 
 class RechargeException(BaseException):
@@ -51,6 +50,7 @@ def call_openeye(
     exception_kwargs
         The keyword arguments to pass to the exception.
     """
+    from openeye import oechem
 
     if exception_kwargs is None:
         exception_kwargs = {}
@@ -79,7 +79,7 @@ def call_openeye(
         logging.debug(output_string)
 
 
-def match_smirks(smirks: str, oe_molecule: oechem.OEMol, unique: bool = False) -> List[Dict[int, int]]:
+def match_smirks(smirks: str, oe_molecule: OEMol, unique: bool = False) -> List[Dict[int, int]]:
     """Attempt to find the indices (optionally unique) of all atoms which
     match a particular SMIRKS pattern.
     Parameters
@@ -95,6 +95,7 @@ def match_smirks(smirks: str, oe_molecule: oechem.OEMol, unique: bool = False) -
         A list of all the matches where each match is stored as a dictionary of
         the smirks indices and their corresponding matched atom indices.
     """
+    from openeye import oechem
 
     query = oechem.OEQMol()
     call_openeye(
@@ -128,7 +129,7 @@ class AromaticityModel:
     a specified aromatic model."""
 
     @classmethod
-    def _set_aromatic(cls, ring_matches: List[Dict[int, int]], oe_molecule: oechem.OEMol):
+    def _set_aromatic(cls, ring_matches: List[Dict[int, int]], oe_molecule: OEMol):
         """Flag all specified ring atoms and all ring bonds between those atoms
         as being aromatic.
 
@@ -161,7 +162,7 @@ class AromaticityModel:
                 bond.SetAromatic(True)
 
     @classmethod
-    def _assign_am1bcc(cls, oe_molecule: oechem.OEMol):
+    def _assign_am1bcc(cls, oe_molecule: OEMol):
         """Applies aromaticity flags based upon the aromaticity model
         outlined in the original AM1BCC publications _[1].
 
@@ -176,6 +177,7 @@ class AromaticityModel:
             of high-quality atomic charges. AM1-BCC model: II. Parameterization and
             validation. Journal of computational chemistry, 23(16), 1623–1641.
         """
+        from openeye import oechem
 
         oechem.OEClearAromaticFlags(oe_molecule)
 
@@ -308,7 +310,7 @@ class AromaticityModel:
         cls._set_aromatic(case_5_matches, oe_molecule)
 
     @classmethod
-    def assign(cls, oe_molecule: oechem.OEMol):
+    def assign(cls, oe_molecule: OEMol):
         """Clears the current aromaticity flags on a molecule and assigns
         new ones based on the specified aromaticity model.
 
