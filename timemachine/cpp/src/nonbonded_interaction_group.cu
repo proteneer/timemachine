@@ -180,7 +180,7 @@ NonbondedInteractionGroup<RealType, Interpolated>::~NonbondedInteractionGroup() 
     gpuErrchk(cudaFree(d_lambda_plane_idxs_));
     gpuErrchk(cudaFree(d_lambda_offset_idxs_));
     gpuErrchk(cudaFree(d_du_dp_buffer_));
-    gpuErrchk(cudaFree(d_perm_)); // nullptr if we never built nblist
+    gpuErrchk(cudaFree(d_perm_));
 
     gpuErrchk(cudaFree(d_bin_to_idx_));
     gpuErrchk(cudaFree(d_sorted_x_));
