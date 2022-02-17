@@ -64,10 +64,10 @@ def example_box(example_system):
 
 
 def test_nonbonded_interaction_group_invalid_indices():
-    def make_potential(row_atom_idxs, num_atoms):
+    def make_potential(ligand_idxs, num_atoms):
         lambda_plane_idxs = [0] * num_atoms
         lambda_offset_idxs = [0] * num_atoms
-        return NonbondedInteractionGroup(row_atom_idxs, lambda_plane_idxs, lambda_offset_idxs, 1.0, 1.0).unbound_impl(
+        return NonbondedInteractionGroup(ligand_idxs, lambda_plane_idxs, lambda_offset_idxs, 1.0, 1.0).unbound_impl(
             np.float64
         )
 
@@ -82,21 +82,21 @@ def test_nonbonded_interaction_group_invalid_indices():
 
 def test_nonbonded_interaction_group_zero_interactions(rng: np.random.Generator):
     num_atoms = 33
-    num_row_atoms = 15
+    num_atoms_ligand = 15
     beta = 2.0
     lamb = 0.1
     cutoff = 1.1
     box = 10.0 * np.eye(3)
     conf = rng.uniform(0, 1, size=(num_atoms, 3))
-    row_atom_idxs = rng.choice(num_atoms, size=num_row_atoms, replace=False).astype(np.int32)
+    ligand_idxs = rng.choice(num_atoms, size=num_atoms_ligand, replace=False).astype(np.int32)
 
-    # shift row atoms in x by twice the cutoff
-    conf[row_atom_idxs, 0] += 2 * cutoff
+    # shift ligand atoms in x by twice the cutoff
+    conf[ligand_idxs, 0] += 2 * cutoff
 
     params = rng.uniform(0, 1, size=(num_atoms, 3))
 
     potential = NonbondedInteractionGroup(
-        row_atom_idxs,
+        ligand_idxs,
         np.zeros(num_atoms, dtype=np.int32),
         np.zeros(num_atoms, dtype=np.int32),
         beta,
@@ -115,11 +115,11 @@ def test_nonbonded_interaction_group_zero_interactions(rng: np.random.Generator)
 @pytest.mark.parametrize("beta", [2.0])
 @pytest.mark.parametrize("cutoff", [1.1])
 @pytest.mark.parametrize("precision,rtol,atol", [(np.float64, 1e-8, 1e-8), (np.float32, 1e-4, 5e-4)])
-@pytest.mark.parametrize("num_row_atoms", [1, 15])
+@pytest.mark.parametrize("num_atoms_ligand", [1, 15])
 @pytest.mark.parametrize("num_atoms", [33, 231])
 def test_nonbonded_interaction_group_correctness(
     num_atoms,
-    num_row_atoms,
+    num_atoms_ligand,
     precision,
     rtol,
     atol,
@@ -136,17 +136,17 @@ def test_nonbonded_interaction_group_correctness(
     conf = example_conf[:num_atoms]
     params = example_nonbonded_params[:num_atoms, :]
 
-    row_atom_idxs = rng.choice(num_atoms, size=num_row_atoms, replace=False).astype(np.int32)
-    col_atom_idxs = np.setdiff1d(np.arange(num_atoms), row_atom_idxs)
+    ligand_idxs = rng.choice(num_atoms, size=num_atoms_ligand, replace=False).astype(np.int32)
+    host_idxs = np.setdiff1d(np.arange(num_atoms), ligand_idxs)
 
     def ref_ixngroups(conf, params, box, _):
         vdW, electrostatics, _ = nonbonded.nonbonded_v3_interaction_groups(
-            conf, params, box, row_atom_idxs, col_atom_idxs, beta, cutoff
+            conf, params, box, ligand_idxs, host_idxs, beta, cutoff
         )
         return jax.numpy.sum(vdW + electrostatics)
 
     test_ixngroups = NonbondedInteractionGroup(
-        row_atom_idxs,
+        ligand_idxs,
         np.zeros(num_atoms, dtype=np.int32),
         np.zeros(num_atoms, dtype=np.int32),
         beta,
@@ -170,11 +170,11 @@ def test_nonbonded_interaction_group_correctness(
 @pytest.mark.parametrize("beta", [2.0])
 @pytest.mark.parametrize("cutoff", [1.1])
 @pytest.mark.parametrize("precision,rtol,atol", [(np.float64, 1e-8, 1e-8), (np.float32, 1e-4, 5e-4)])
-@pytest.mark.parametrize("num_row_atoms", [1, 15])
+@pytest.mark.parametrize("num_atoms_ligand", [1, 15])
 @pytest.mark.parametrize("num_atoms", [33, 231, 1050])
 def test_nonbonded_interaction_group_consistency_allpairs_lambda_planes(
     num_atoms,
-    num_row_atoms,
+    num_atoms_ligand,
     precision,
     rtol,
     atol,
@@ -222,9 +222,9 @@ def test_nonbonded_interaction_group_consistency_allpairs_lambda_planes(
 
     ref_allpairs = make_reference_nonbonded(np.zeros(num_atoms, dtype=np.int32))
 
-    row_atom_idxs = rng.choice(num_atoms, size=num_row_atoms, replace=False).astype(np.int32)
+    ligand_idxs = rng.choice(num_atoms, size=num_atoms_ligand, replace=False).astype(np.int32)
     lambda_plane_idxs = np.zeros(num_atoms, dtype=np.int32)
-    lambda_plane_idxs[row_atom_idxs] = 1
+    lambda_plane_idxs[ligand_idxs] = 1
 
     ref_allpairs_minus_ixngroups = make_reference_nonbonded(lambda_plane_idxs)
 
@@ -232,7 +232,7 @@ def test_nonbonded_interaction_group_consistency_allpairs_lambda_planes(
         return ref_allpairs(*args) - ref_allpairs_minus_ixngroups(*args)
 
     test_ixngroups = NonbondedInteractionGroup(
-        row_atom_idxs,
+        ligand_idxs,
         np.zeros(num_atoms, dtype=np.int32),  # lambda plane indices
         lambda_offset_idxs,
         beta,
@@ -256,11 +256,11 @@ def test_nonbonded_interaction_group_consistency_allpairs_lambda_planes(
 @pytest.mark.parametrize("beta", [2.0])
 @pytest.mark.parametrize("cutoff", [1.1])
 @pytest.mark.parametrize("precision,rtol,atol", [(np.float64, 1e-12, 0), (np.float32, 1e-5, 0)])
-@pytest.mark.parametrize("num_row_atoms", [1, 15])
+@pytest.mark.parametrize("num_atoms_ligand", [1, 15])
 @pytest.mark.parametrize("num_atoms", [33, 231])
 def test_nonbonded_interaction_group_consistency_allpairs_constant_shift(
     num_atoms,
-    num_row_atoms,
+    num_atoms_ligand,
     precision,
     rtol,
     atol,
@@ -302,12 +302,12 @@ def test_nonbonded_interaction_group_consistency_allpairs_constant_shift(
             cutoff=cutoff,
         )(conf, params, example_box, lamb)
 
-    row_atom_idxs = rng.choice(num_atoms, size=num_row_atoms, replace=False).astype(np.int32)
+    ligand_idxs = rng.choice(num_atoms, size=num_atoms_ligand, replace=False).astype(np.int32)
 
     def test_ixngroups(conf):
         _, _, _, u = (
             NonbondedInteractionGroup(
-                row_atom_idxs,
+                ligand_idxs,
                 np.zeros(num_atoms, dtype=np.int32),
                 np.zeros(num_atoms, dtype=np.int32),
                 beta,
@@ -319,7 +319,7 @@ def test_nonbonded_interaction_group_consistency_allpairs_constant_shift(
         return u
 
     conf_prime = np.array(conf)
-    conf_prime[row_atom_idxs] += rng.normal(0, 0.01, size=(3,))
+    conf_prime[ligand_idxs] += rng.normal(0, 0.01, size=(3,))
 
     ref_delta = ref_allpairs(conf_prime) - ref_allpairs(conf)
     test_delta = test_ixngroups(conf_prime) - test_ixngroups(conf)
