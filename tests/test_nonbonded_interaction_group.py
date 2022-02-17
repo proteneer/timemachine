@@ -63,6 +63,23 @@ def example_box(example_system):
     return np.asarray(box / box.unit)
 
 
+def test_nonbonded_interaction_group_invalid_indices():
+    def make_potential(row_atom_idxs, num_atoms):
+        lambda_plane_idxs = [0] * num_atoms
+        lambda_offset_idxs = [0] * num_atoms
+        return NonbondedInteractionGroup(row_atom_idxs, lambda_plane_idxs, lambda_offset_idxs, 1.0, 1.0).unbound_impl(
+            np.float64
+        )
+
+    with pytest.raises(RuntimeError) as e:
+        make_potential([], 1)
+    assert "row_atom_idxs must be nonempty" in str(e)
+
+    with pytest.raises(RuntimeError) as e:
+        make_potential([1, 1], 3)
+    assert "atom indices must be unique" in str(e)
+
+
 def test_nonbonded_interaction_group_zero_interactions(rng: np.random.Generator):
     num_atoms = 33
     num_row_atoms = 15
@@ -92,6 +109,61 @@ def test_nonbonded_interaction_group_zero_interactions(rng: np.random.Generator)
     assert (du_dp == 0).all()
     assert du_dl == 0
     assert u == 0
+
+
+@pytest.mark.parametrize("lamb", [0.0, 0.1])
+@pytest.mark.parametrize("beta", [2.0])
+@pytest.mark.parametrize("cutoff", [1.1])
+@pytest.mark.parametrize("precision,rtol,atol", [(np.float64, 1e-8, 1e-8), (np.float32, 1e-4, 5e-4)])
+@pytest.mark.parametrize("num_row_atoms", [1, 15])
+@pytest.mark.parametrize("num_atoms", [33, 231])
+def test_nonbonded_interaction_group_correctness(
+    num_atoms,
+    num_row_atoms,
+    precision,
+    rtol,
+    atol,
+    cutoff,
+    beta,
+    lamb,
+    example_nonbonded_params,
+    example_conf,
+    example_box,
+    rng,
+):
+    "Compares with jax reference implementation."
+
+    conf = example_conf[:num_atoms]
+    params = example_nonbonded_params[:num_atoms, :]
+
+    row_atom_idxs = rng.choice(num_atoms, size=num_row_atoms, replace=False).astype(np.int32)
+    col_atom_idxs = np.setdiff1d(np.arange(num_atoms), row_atom_idxs)
+
+    def ref_ixngroups(conf, params, box, _):
+        vdW, electrostatics, _ = nonbonded.nonbonded_v3_interaction_groups(
+            conf, params, box, row_atom_idxs, col_atom_idxs, beta, cutoff
+        )
+        return jax.numpy.sum(vdW + electrostatics)
+
+    test_ixngroups = NonbondedInteractionGroup(
+        row_atom_idxs,
+        np.zeros(num_atoms, dtype=np.int32),
+        np.zeros(num_atoms, dtype=np.int32),
+        beta,
+        cutoff,
+    )
+
+    GradientTest().compare_forces(
+        conf,
+        params,
+        example_box,
+        lamb=lamb,
+        ref_potential=ref_ixngroups,
+        test_potential=test_ixngroups,
+        rtol=rtol,
+        atol=atol,
+        precision=precision,
+    )
 
 
 @pytest.mark.parametrize("lamb", [0.0, 0.1])
@@ -178,75 +250,3 @@ def test_nonbonded_interaction_group_consistency_allpairs(
         atol=atol,
         precision=precision,
     )
-
-
-@pytest.mark.parametrize("lamb", [0.0, 0.1])
-@pytest.mark.parametrize("beta", [2.0])
-@pytest.mark.parametrize("cutoff", [1.1])
-@pytest.mark.parametrize("precision,rtol,atol", [(np.float64, 1e-8, 1e-8), (np.float32, 1e-4, 5e-4)])
-@pytest.mark.parametrize("num_row_atoms", [1, 15])
-@pytest.mark.parametrize("num_atoms", [33, 231])
-def test_nonbonded_interaction_group_correctness(
-    num_atoms,
-    num_row_atoms,
-    precision,
-    rtol,
-    atol,
-    cutoff,
-    beta,
-    lamb,
-    example_nonbonded_params,
-    example_conf,
-    example_box,
-    rng,
-):
-    "Compares with jax reference implementation."
-
-    conf = example_conf[:num_atoms]
-    params = example_nonbonded_params[:num_atoms, :]
-
-    row_atom_idxs = rng.choice(num_atoms, size=num_row_atoms, replace=False).astype(np.int32)
-    col_atom_idxs = np.setdiff1d(np.arange(num_atoms), row_atom_idxs)
-
-    def ref_ixngroups(conf, params, box, _):
-        vdW, electrostatics, _ = nonbonded.nonbonded_v3_interaction_groups(
-            conf, params, box, row_atom_idxs, col_atom_idxs, beta, cutoff
-        )
-        return jax.numpy.sum(vdW + electrostatics)
-
-    test_ixngroups = NonbondedInteractionGroup(
-        row_atom_idxs,
-        np.zeros(num_atoms, dtype=np.int32),
-        np.zeros(num_atoms, dtype=np.int32),
-        beta,
-        cutoff,
-    )
-
-    GradientTest().compare_forces(
-        conf,
-        params,
-        example_box,
-        lamb=lamb,
-        ref_potential=ref_ixngroups,
-        test_potential=test_ixngroups,
-        rtol=rtol,
-        atol=atol,
-        precision=precision,
-    )
-
-
-def test_nonbonded_interaction_group_invalid_indices():
-    def make_potential(row_atom_idxs, num_atoms):
-        lambda_plane_idxs = [0] * num_atoms
-        lambda_offset_idxs = [0] * num_atoms
-        return NonbondedInteractionGroup(row_atom_idxs, lambda_plane_idxs, lambda_offset_idxs, 1.0, 1.0).unbound_impl(
-            np.float64
-        )
-
-    with pytest.raises(RuntimeError) as e:
-        make_potential([], 1)
-    assert "row_atom_idxs must be nonempty" in str(e)
-
-    with pytest.raises(RuntimeError) as e:
-        make_potential([1, 1], 3)
-    assert "atom indices must be unique" in str(e)
