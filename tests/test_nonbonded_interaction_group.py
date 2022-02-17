@@ -208,20 +208,11 @@ def test_nonbonded_interaction_group_correctness(
     row_atom_idxs = rng.choice(num_atoms, size=num_row_atoms, replace=False).astype(np.int32)
     col_atom_idxs = np.setdiff1d(np.arange(num_atoms), row_atom_idxs)
 
-    # hydrogen atoms have lennard-jones parameters set to 0
-    atom_is_hydrogen = (params[:, 1] == 0) & (params[:, 2] == 0)
-
     def ref_ixngroups(coords, params, box, _):
-        vdW, electrostatics, pairs = nonbonded.nonbonded_v3_interaction_groups(
+        vdW, electrostatics, _ = nonbonded.nonbonded_v3_interaction_groups(
             coords, params, box, row_atom_idxs, col_atom_idxs, beta, cutoff
         )
-
-        # custom ops implementation returns du/dp = 0 for lennard-jones params at zero
-        pair_has_hydrogen = atom_is_hydrogen[pairs[:, 0]] | atom_is_hydrogen[pairs[:, 1]]
-        vdW_pinned = vdW.at[pair_has_hydrogen].set(0.0)
-
-        total_energy = jax.numpy.sum(vdW_pinned + electrostatics)
-        return total_energy
+        return jax.numpy.sum(vdW + electrostatics)
 
     test_ixngroups = NonbondedInteractionGroup(
         row_atom_idxs,

@@ -244,7 +244,7 @@ def nonbonded_v3_on_specific_pairs(conf, params, box, inds_l, inds_r, beta: floa
     # vdW by Lennard-Jones
     sig_ij = apply_cutoff(sig[inds_l] + sig[inds_r])
     eps_ij = apply_cutoff(eps[inds_l] * eps[inds_r])
-    vdW = lennard_jones(dij, sig_ij, eps_ij)
+    vdW = np.where(eps_ij != 0, lennard_jones(dij, sig_ij, eps_ij), 0)
 
     # Electrostatics by direct-space part of PME
     qij = apply_cutoff(charges[inds_l] * charges[inds_r])
