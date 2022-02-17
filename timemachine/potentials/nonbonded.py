@@ -1,3 +1,5 @@
+import itertools
+
 import jax.numpy as np
 from jax.ops import index, index_update
 from jax.scipy.special import erfc
@@ -249,6 +251,17 @@ def nonbonded_v3_on_specific_pairs(conf, params, box, inds_l, inds_r, beta: floa
     electrostatics = direct_space_pme(dij, qij, beta)
 
     return vdW, electrostatics
+
+
+def nonbonded_v3_interaction_groups(conf, params, box, inds_l, inds_r, beta: float, cutoff: Optional[float] = None):
+    """Nonbonded interactions between all pairs of atoms $(i, j)$
+    where $i$ is in the first set and $j$ in the second.
+
+    See nonbonded_v3 docstring for more details
+    """
+    pairs = np.array(list(itertools.product(inds_l, inds_r)))
+    vdW, electrostatics = nonbonded_v3_on_specific_pairs(conf, params, box, pairs[:, 0], pairs[:, 1], beta, cutoff)
+    return vdW, electrostatics, pairs
 
 
 def validate_coulomb_cutoff(cutoff=1.0, beta=2.0, threshold=1e-2):

@@ -2,8 +2,6 @@ import jax
 
 jax.config.update("jax_enable_x64", True)
 
-import itertools
-
 import numpy as np
 import pytest
 from common import GradientTest, prepare_reference_nonbonded
@@ -185,7 +183,7 @@ def test_nonbonded_interaction_group_consistency_allpairs(
 @pytest.mark.parametrize("precision,rtol,atol", [(np.float64, 1e-8, 1e-8), (np.float32, 1e-4, 5e-4)])
 @pytest.mark.parametrize("num_row_atoms", [1, 15])
 @pytest.mark.parametrize("num_atoms", [33, 231])
-def test_nonbonded_interaction_group_consistency_specific_pairs(
+def test_nonbonded_interaction_group_correctness(
     num_atoms,
     num_row_atoms,
     precision,
@@ -198,27 +196,24 @@ def test_nonbonded_interaction_group_consistency_specific_pairs(
     example_box,
     rng,
 ):
-    """Compares with reference nonbonded_v3_on_specific_pairs potential, which computes
-    the sum of interactions for a list of pairs.
-    """
+    "Compares with jax reference implementation."
 
     coords = example_coords[:num_atoms]
     params = example_nonbonded_params[:num_atoms, :]
 
     row_atom_idxs = rng.choice(num_atoms, size=num_row_atoms, replace=False).astype(np.int32)
     col_atom_idxs = np.setdiff1d(np.arange(num_atoms), row_atom_idxs)
-    pairs = itertools.product(row_atom_idxs, col_atom_idxs)
-    inds_l, inds_r = (np.array(ps) for ps in zip(*pairs))
 
+    # hydrogen atoms have lennard-jones parameters set to 0
     atom_is_hydrogen = (params[:, 1] == 0) & (params[:, 2] == 0)
-    pair_has_hydrogen = atom_is_hydrogen[inds_l] | atom_is_hydrogen[inds_r]
 
     def ref_ixngroups(coords, params, box, _):
-        vdW, electrostatics = nonbonded.nonbonded_v3_on_specific_pairs(
-            coords, params, box, inds_l, inds_r, beta, cutoff
+        vdW, electrostatics, pairs = nonbonded.nonbonded_v3_interaction_groups(
+            coords, params, box, row_atom_idxs, col_atom_idxs, beta, cutoff
         )
 
-        # custom ops implementation returns du/dp = 0 for LJ params at zero
+        # custom ops implementation returns du/dp = 0 for lennard-jones params at zero
+        pair_has_hydrogen = atom_is_hydrogen[pairs[:, 0]] | atom_is_hydrogen[pairs[:, 1]]
         vdW_pinned = vdW.at[pair_has_hydrogen].set(0.0)
 
         total_energy = jax.numpy.sum(vdW_pinned + electrostatics)
