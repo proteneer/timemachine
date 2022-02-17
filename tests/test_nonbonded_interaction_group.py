@@ -52,9 +52,9 @@ def example_nonbonded_params(example_system):
 
 
 @pytest.fixture
-def example_coords(example_system):
-    _, host_coords, _ = example_system
-    return np.array([[to_md_units(x), to_md_units(y), to_md_units(z)] for x, y, z in host_coords])
+def example_conf(example_system):
+    _, host_conf, _ = example_system
+    return np.array([[to_md_units(x), to_md_units(y), to_md_units(z)] for x, y, z in host_conf])
 
 
 @pytest.fixture
@@ -70,11 +70,11 @@ def test_nonbonded_interaction_group_zero_interactions(rng: np.random.Generator)
     lamb = 0.1
     cutoff = 1.1
     box = 10.0 * np.eye(3)
-    coords = rng.uniform(0, 1, size=(num_atoms, 3))
+    conf = rng.uniform(0, 1, size=(num_atoms, 3))
     row_atom_idxs = rng.choice(num_atoms, size=num_row_atoms, replace=False).astype(np.int32)
 
     # shift row atoms in x by twice the cutoff
-    coords[row_atom_idxs, 0] += 2 * cutoff
+    conf[row_atom_idxs, 0] += 2 * cutoff
 
     params = rng.uniform(0, 1, size=(num_atoms, 3))
 
@@ -86,7 +86,7 @@ def test_nonbonded_interaction_group_zero_interactions(rng: np.random.Generator)
         cutoff,
     )
 
-    du_dx, du_dp, du_dl, u = potential.unbound_impl(np.float64).execute(coords, params, box, lamb)
+    du_dx, du_dp, du_dl, u = potential.unbound_impl(np.float64).execute(conf, params, box, lamb)
 
     assert (du_dx == 0).all()
     assert (du_dp == 0).all()
@@ -110,7 +110,7 @@ def test_nonbonded_interaction_group_consistency_allpairs(
     beta,
     lamb,
     example_nonbonded_params,
-    example_coords,
+    example_conf,
     example_box,
     rng: np.random.Generator,
 ):
@@ -133,7 +133,7 @@ def test_nonbonded_interaction_group_consistency_allpairs(
     interacting group they belong
     """
 
-    coords = example_coords[:num_atoms]
+    conf = example_conf[:num_atoms]
     params = example_nonbonded_params[:num_atoms, :]
     lambda_offset_idxs = np.zeros(num_atoms, dtype=np.int32)
 
@@ -168,7 +168,7 @@ def test_nonbonded_interaction_group_consistency_allpairs(
     )
 
     GradientTest().compare_forces(
-        coords,
+        conf,
         params,
         example_box,
         lamb=lamb,
@@ -196,21 +196,21 @@ def test_nonbonded_interaction_group_correctness(
     beta,
     lamb,
     example_nonbonded_params,
-    example_coords,
+    example_conf,
     example_box,
     rng,
 ):
     "Compares with jax reference implementation."
 
-    coords = example_coords[:num_atoms]
+    conf = example_conf[:num_atoms]
     params = example_nonbonded_params[:num_atoms, :]
 
     row_atom_idxs = rng.choice(num_atoms, size=num_row_atoms, replace=False).astype(np.int32)
     col_atom_idxs = np.setdiff1d(np.arange(num_atoms), row_atom_idxs)
 
-    def ref_ixngroups(coords, params, box, _):
+    def ref_ixngroups(conf, params, box, _):
         vdW, electrostatics, _ = nonbonded.nonbonded_v3_interaction_groups(
-            coords, params, box, row_atom_idxs, col_atom_idxs, beta, cutoff
+            conf, params, box, row_atom_idxs, col_atom_idxs, beta, cutoff
         )
         return jax.numpy.sum(vdW + electrostatics)
 
@@ -223,7 +223,7 @@ def test_nonbonded_interaction_group_correctness(
     )
 
     GradientTest().compare_forces(
-        coords,
+        conf,
         params,
         example_box,
         lamb=lamb,
