@@ -94,6 +94,7 @@ def test_nonbonded_interaction_group_zero_interactions(rng: np.random.Generator)
     assert u == 0
 
 
+@pytest.mark.parametrize("lamb", [0.0, 0.1])
 @pytest.mark.parametrize("beta", [2.0])
 @pytest.mark.parametrize("cutoff", [1.1])
 @pytest.mark.parametrize("precision,rtol,atol", [(np.float64, 1e-8, 1e-8), (np.float32, 1e-4, 5e-4)])
@@ -107,6 +108,7 @@ def test_nonbonded_interaction_group_consistency_allpairs(
     atol,
     cutoff,
     beta,
+    lamb,
     example_nonbonded_params,
     example_coords,
     example_box,
@@ -169,7 +171,7 @@ def test_nonbonded_interaction_group_consistency_allpairs(
         coords,
         params,
         example_box,
-        lamb=0.1,
+        lamb=lamb,
         ref_potential=ref_ixngroups,
         test_potential=test_ixngroups,
         rtol=rtol,
@@ -178,6 +180,7 @@ def test_nonbonded_interaction_group_consistency_allpairs(
     )
 
 
+@pytest.mark.parametrize("lamb", [0.0, 0.1])
 @pytest.mark.parametrize("beta", [2.0])
 @pytest.mark.parametrize("cutoff", [1.1])
 @pytest.mark.parametrize("precision,rtol,atol", [(np.float64, 1e-8, 1e-8), (np.float32, 1e-4, 5e-4)])
@@ -191,6 +194,7 @@ def test_nonbonded_interaction_group_correctness(
     atol,
     cutoff,
     beta,
+    lamb,
     example_nonbonded_params,
     example_coords,
     example_box,
@@ -231,7 +235,7 @@ def test_nonbonded_interaction_group_correctness(
         coords,
         params,
         example_box,
-        lamb=0.1,
+        lamb=lamb,
         ref_potential=ref_ixngroups,
         test_potential=test_ixngroups,
         rtol=rtol,
