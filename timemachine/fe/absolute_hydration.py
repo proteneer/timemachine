@@ -8,10 +8,10 @@ from tqdm import tqdm
 from timemachine.constants import BOLTZ
 from timemachine.fe import free_energy
 from timemachine.fe.free_energy_rabfe import construct_pre_optimized_absolute_lambda_schedule_solvent
-from timemachine.md import enhanced, builders, moves
+from timemachine.md import builders, enhanced, moves
 from timemachine.md.smc import conditional_multinomial_resample
 from timemachine.md.states import CoordsVelBox
-from timemachine.utils import get_ff_am1ccc, construct_potential, bind_potentials
+from timemachine.utils import bind_potentials, construct_potential, get_ff_am1ccc
 
 
 def generate_endstate_samples(num_samples, solvent_samples, ligand_samples, ligand_log_weights, num_ligand_atoms):
@@ -46,7 +46,7 @@ def get_solvent_phase_system(mol, ff):
     return ubps, params, masses, coords, water_box
 
 
-def setup_absolute_hydration_with_endpoint_samples(mol, temperature=300.0, pressure=1.0, n_steps=1000):
+def setup_absolute_hydration_with_endpoint_samples(mol, temperature=300.0, pressure=1.0, n_steps=1000, seed=2022):
     """Generate samples from the equilibrium distribution at lambda=1
 
     Return:
@@ -54,8 +54,12 @@ def setup_absolute_hydration_with_endpoint_samples(mol, temperature=300.0, press
     * npt_mover
     * initial_samples from lam = 1
     """
+    if type(seed) != int:
+        seed = np.random.randint(1000)
+        print(f"setting seed randomly to {seed}")
+    else:
+        print(f"setting seed to {seed}")
 
-    seed = 2022
     np.random.seed(seed)
 
     # set up potentials
