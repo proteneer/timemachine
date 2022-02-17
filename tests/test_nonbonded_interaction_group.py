@@ -172,7 +172,7 @@ def test_nonbonded_interaction_group_correctness(
 @pytest.mark.parametrize("precision,rtol,atol", [(np.float64, 1e-8, 1e-8), (np.float32, 1e-4, 5e-4)])
 @pytest.mark.parametrize("num_row_atoms", [1, 15])
 @pytest.mark.parametrize("num_atoms", [33, 231, 1050])
-def test_nonbonded_interaction_group_consistency_allpairs(
+def test_nonbonded_interaction_group_consistency_allpairs_lambda_planes(
     num_atoms,
     num_row_atoms,
     precision,
@@ -250,3 +250,78 @@ def test_nonbonded_interaction_group_consistency_allpairs(
         atol=atol,
         precision=precision,
     )
+
+
+@pytest.mark.parametrize("lamb", [0.0, 0.1])
+@pytest.mark.parametrize("beta", [2.0])
+@pytest.mark.parametrize("cutoff", [1.1])
+@pytest.mark.parametrize("precision,rtol,atol", [(np.float64, 1e-12, 0), (np.float32, 1e-5, 0)])
+@pytest.mark.parametrize("num_row_atoms", [1, 15])
+@pytest.mark.parametrize("num_atoms", [33, 231])
+def test_nonbonded_interaction_group_consistency_allpairs_constant_shift(
+    num_atoms,
+    num_row_atoms,
+    precision,
+    rtol,
+    atol,
+    cutoff,
+    beta,
+    lamb,
+    example_nonbonded_params,
+    example_conf,
+    example_box,
+    rng: np.random.Generator,
+):
+    """Compares with reference nonbonded_v3 potential, which computes
+    the sum of all pairwise interactions. This uses the identity
+
+      U(x') - U(x) = U_AB(x') - U_AB(x)
+
+    where
+    - `U` is the all-pairs potential over all atoms
+    - `U_A`, `U_B` are all-pairs potentials for interacting groups A
+      and B, respectively
+    - `U_AB` is the "interaction group" potential, i.e. the sum of
+      pairwise interactions `(a, b)` where `a` is in `A` and `b` is in
+      `B`
+    - the transformation x -> x' does not affect `U_A` or `U_B` (e.g.
+      a constant translation applied to each atom in one group)
+    """
+
+    conf = example_conf[:num_atoms]
+    params = example_nonbonded_params[:num_atoms, :]
+
+    def ref_allpairs(conf):
+        return prepare_reference_nonbonded(
+            params=params,
+            exclusion_idxs=np.array([], dtype=np.int32),
+            scales=np.zeros((0, 2), dtype=np.float64),
+            lambda_plane_idxs=np.zeros(num_atoms, dtype=np.int32),
+            lambda_offset_idxs=np.zeros(num_atoms, dtype=np.int32),
+            beta=beta,
+            cutoff=cutoff,
+        )(conf, params, example_box, lamb)
+
+    row_atom_idxs = rng.choice(num_atoms, size=num_row_atoms, replace=False).astype(np.int32)
+
+    def test_ixngroups(conf):
+        _, _, _, u = (
+            NonbondedInteractionGroup(
+                row_atom_idxs,
+                np.zeros(num_atoms, dtype=np.int32),
+                np.zeros(num_atoms, dtype=np.int32),
+                beta,
+                cutoff,
+            )
+            .unbound_impl(precision)
+            .execute(conf, params, example_box, lamb)
+        )
+        return u
+
+    conf_prime = np.array(conf)
+    conf_prime[row_atom_idxs] += rng.normal(0, 0.01, size=(3,))
+
+    ref_delta = ref_allpairs(conf_prime) - ref_allpairs(conf)
+    test_delta = test_ixngroups(conf_prime) - test_ixngroups(conf)
+
+    np.testing.assert_allclose(ref_delta, test_delta, rtol=rtol, atol=atol)
