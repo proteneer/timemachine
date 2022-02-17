@@ -90,9 +90,11 @@ def setup_absolute_hydration_with_endpoint_samples(mol, temperature=300.0, press
     return reduced_potential_fxn, npt_mover, all_xvbs
 
 
-def set_up_ahfe_system_for_smc(mol, n_walkers, n_windows, n_md_steps, resample_thresh):
+def set_up_ahfe_system_for_smc(mol, n_walkers, n_windows, n_md_steps, resample_thresh, seed=2022):
     """define initial samples, lambdas schedule, propagate fxn, log_prob fxn, resample fxn"""
-    reduced_potential, mover, initial_samples = setup_absolute_hydration_with_endpoint_samples(mol, n_steps=n_md_steps)
+    reduced_potential, mover, initial_samples = setup_absolute_hydration_with_endpoint_samples(
+        mol, n_steps=n_md_steps, seed=seed
+    )
 
     sample_inds = np.random.choice(np.arange(len(initial_samples)), size=n_walkers)
     samples = [initial_samples[i] for i in sample_inds]
