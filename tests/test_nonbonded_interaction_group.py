@@ -192,17 +192,16 @@ def test_nonbonded_interaction_group_consistency_allpairs_lambda_planes(
       U = U_A + U_B + U_AB
 
     where
-    - `U` is the all-pairs potential over all atoms
-    - `U_A`, `U_B` are all-pairs potentials for interacting groups A
-      and B, respectively
-    - `U_AB` is the "interaction group" potential, i.e. the sum of
-      pairwise interactions `(a, b)` where `a` is in `A` and `b` is in
-      `B`
+    - U is the all-pairs potential over all atoms
+    - U_A, U_B are all-pairs potentials for interacting groups A and
+      B, respectively
+    - U_AB is the "interaction group" potential, i.e. the sum of
+      pairwise interactions (a, b) where "a" is in A and "b" is in B
 
-    The quantity `U` is computed using the reference potential over
-    all atoms, and `U_A + U_B` computed using the reference potential
-    over all atoms separated into 2 lambda planes according to which
-    interacting group they belong
+    U is computed using the reference potential over all atoms, and
+    U_A + U_B computed using the reference potential over all atoms
+    separated into 2 lambda planes according to which interacting
+    group they belong
     """
 
     conf = example_conf[:num_atoms]
@@ -278,14 +277,13 @@ def test_nonbonded_interaction_group_consistency_allpairs_constant_shift(
       U(x') - U(x) = U_AB(x') - U_AB(x)
 
     where
-    - `U` is the all-pairs potential over all atoms
-    - `U_A`, `U_B` are all-pairs potentials for interacting groups A
-      and B, respectively
-    - `U_AB` is the "interaction group" potential, i.e. the sum of
-      pairwise interactions `(a, b)` where `a` is in `A` and `b` is in
-      `B`
-    - the transformation x -> x' does not affect `U_A` or `U_B` (e.g.
-      a constant translation applied to each atom in one group)
+    - U is the all-pairs potential over all atoms
+    - U_A, U_B are all-pairs potentials for interacting groups A and
+      B, respectively
+    - U_AB is the "interaction group" potential, i.e. the sum of
+      pairwise interactions (a, b) where "a" is in A and "b" is in B
+    - the transformation x -> x' does not affect U_A or U_B (e.g. a
+      constant translation applied to each atom in one group)
     """
 
     conf = example_conf[:num_atoms]
