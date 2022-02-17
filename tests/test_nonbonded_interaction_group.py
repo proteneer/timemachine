@@ -210,11 +210,18 @@ def test_nonbonded_interaction_group_consistency_specific_pairs(
     pairs = itertools.product(row_atom_idxs, col_atom_idxs)
     inds_l, inds_r = (np.array(ps) for ps in zip(*pairs))
 
+    atom_is_hydrogen = (params[:, 1] == 0) & (params[:, 2] == 0)
+    pair_has_hydrogen = atom_is_hydrogen[inds_l] | atom_is_hydrogen[inds_r]
+
     def ref_ixngroups(coords, params, box, _):
         vdW, electrostatics = nonbonded.nonbonded_v3_on_specific_pairs(
             coords, params, box, inds_l, inds_r, beta, cutoff
         )
-        total_energy = jax.numpy.sum(vdW + electrostatics)
+
+        # custom ops implementation returns du/dp = 0 for LJ params at zero
+        vdW_pinned = vdW.at[pair_has_hydrogen].set(0.0)
+
+        total_energy = jax.numpy.sum(vdW_pinned + electrostatics)
         return total_energy
 
     test_ixngroups = NonbondedInteractionGroup(
