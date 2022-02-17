@@ -254,7 +254,7 @@ def test_nonbonded_interaction_group_consistency_allpairs_lambda_planes(
 @pytest.mark.parametrize("lamb", [0.0, 0.1])
 @pytest.mark.parametrize("beta", [2.0])
 @pytest.mark.parametrize("cutoff", [1.1])
-@pytest.mark.parametrize("precision,rtol,atol", [(np.float64, 1e-12, 0), (np.float32, 1e-5, 0)])
+@pytest.mark.parametrize("precision,rtol,atol", [(np.float64, 1e-8, 1e-8), (np.float32, 1e-4, 5e-4)])
 @pytest.mark.parametrize("num_atoms_ligand", [1, 15])
 @pytest.mark.parametrize("num_atoms", [33, 231])
 def test_nonbonded_interaction_group_consistency_allpairs_constant_shift(
