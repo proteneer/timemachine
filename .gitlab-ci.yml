@@ -11,6 +11,7 @@ docker_build:
     - docker
   script:
     - DOCKER_HOST=tcp://localhost:2375 docker login -u $CI_REGISTRY_USER -p $CI_JOB_TOKEN $CI_REGISTRY
+    - docker pull $CI_REGISTRY_IMAGE:$CI_COMMIT_SHA || true
     - docker build -t $CI_REGISTRY_IMAGE:$CI_COMMIT_SHA --target tm_base_env .
     - docker push $CI_REGISTRY_IMAGE:$CI_COMMIT_SHA
 
