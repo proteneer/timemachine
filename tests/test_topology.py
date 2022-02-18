@@ -11,7 +11,6 @@ from rdkit import Chem
 from timemachine.fe import topology
 from timemachine.fe.utils import get_romol_conf
 from timemachine.ff import Forcefield
-from timemachine.ff.handlers.deserialize import deserialize_handlers
 
 
 class BenzenePhenolSparseTest(unittest.TestCase):
@@ -24,9 +23,7 @@ class BenzenePhenolSparseTest(unittest.TestCase):
         self.mol_b = all_mols[1]
 
         # atom type free
-        ff_handlers = deserialize_handlers(open("timemachine/ff/params/smirnoff_1_1_0_sc.py").read())
-
-        self.ff = Forcefield(ff_handlers)
+        self.ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
 
         super(BenzenePhenolSparseTest, self).__init__(*args, **kwargs)
 
@@ -225,8 +222,7 @@ class TestFactorizability(unittest.TestCase):
         mol_a = all_mols[0]
         mol_b = all_mols[1]
 
-        ff_handlers = deserialize_handlers(open("timemachine/ff/params/smirnoff_1_1_0_sc.py").read())
-        ff = Forcefield(ff_handlers)
+        ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
 
         core = np.array(
             [
@@ -266,8 +262,7 @@ class TestFactorizability(unittest.TestCase):
         mol_a = all_mols[1]
         mol_b = all_mols[4]
 
-        ff_handlers = deserialize_handlers(open("timemachine/ff/params/smirnoff_1_1_0_sc.py").read())
-        ff = Forcefield(ff_handlers)
+        ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
 
         core = np.array(
             [

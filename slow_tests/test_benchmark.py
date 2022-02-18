@@ -13,7 +13,6 @@ from timemachine.fe.topology import SingleTopology
 from timemachine.fe.utils import to_md_units
 from timemachine.ff import Forcefield
 from timemachine.ff.handlers import openmm_deserializer
-from timemachine.ff.handlers.deserialize import deserialize_handlers
 from timemachine.lib import LangevinIntegrator, MonteCarloBarostat, custom_ops
 from timemachine.md import builders, minimizer
 from timemachine.md.barostat.utils import get_bond_list, get_group_indices
@@ -200,9 +199,7 @@ def benchmark_hif2a(verbose=False, num_batches=100, steps_per_batch=1000):
 
     mol_a, mol_b, core = testsystem.mol_a, testsystem.mol_b, testsystem.core
 
-    # this
-    ff_handlers = deserialize_handlers(open("timemachine/ff/params/smirnoff_1_1_0_sc.py").read())
-    ff = Forcefield(ff_handlers)
+    ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
 
     single_topology = SingleTopology(mol_a, mol_b, core, ff)
     rfe = free_energy.RelativeFreeEnergy(single_topology)
