@@ -11,7 +11,7 @@ from timemachine.fe.utils import to_md_units
 from timemachine.ff.handlers import openmm_deserializer
 from timemachine.lib import potentials
 from timemachine.lib.potentials import NonbondedInteractionGroup
-from timemachine.potentials import nonbonded
+from timemachine.potentials import jax_utils, nonbonded
 
 
 @pytest.fixture(autouse=True)
@@ -136,19 +136,28 @@ def test_nonbonded_interaction_group_correctness(
     conf = example_conf[:num_atoms]
     params = example_nonbonded_params[:num_atoms, :]
 
+    lambda_plane_idxs = rng.integers(-2, 3, size=num_atoms, dtype=np.int32)
+    lambda_offset_idxs = rng.integers(-2, 3, size=num_atoms, dtype=np.int32)
+
     ligand_idxs = rng.choice(num_atoms, size=num_atoms_ligand, replace=False).astype(np.int32)
     host_idxs = np.setdiff1d(np.arange(num_atoms), ligand_idxs)
 
-    def ref_ixngroups(conf, params, box, _):
+    def ref_ixngroups(conf, params, box, lamb):
+
+        # compute 4d coordinates
+        w = jax_utils.compute_lifting_parameter(lamb, lambda_plane_idxs, lambda_offset_idxs, cutoff)
+        conf_4d = jax_utils.augment_dim(conf, w)
+        box_4d = (1000 * jax.numpy.eye(4)).at[:3, :3].set(box)
+
         vdW, electrostatics, _ = nonbonded.nonbonded_v3_interaction_groups(
-            conf, params, box, ligand_idxs, host_idxs, beta, cutoff
+            conf_4d, params, box_4d, ligand_idxs, host_idxs, beta, cutoff
         )
         return jax.numpy.sum(vdW + electrostatics)
 
     test_ixngroups = NonbondedInteractionGroup(
         ligand_idxs,
-        np.zeros(num_atoms, dtype=np.int32),
-        np.zeros(num_atoms, dtype=np.int32),
+        lambda_plane_idxs,
+        lambda_offset_idxs,
         beta,
         cutoff,
     )
