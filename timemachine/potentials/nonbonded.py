@@ -1,5 +1,3 @@
-import itertools
-
 import jax.numpy as np
 from jax.ops import index, index_update
 from jax.scipy.special import erfc
