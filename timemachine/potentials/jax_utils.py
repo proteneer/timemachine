@@ -140,6 +140,54 @@ def batched_neighbor_inds(confs, inds_l, inds_r, cutoff, boxes):
     return neighbor_inds_l, neighbor_inds_r
 
 
+def get_ligand_dependent_indices_batch(confs, boxes, ligand_indices, cutoff=1.2):
+    """Find atom pairs that depend on ligand and contribute to nonbonded sum.
+
+    For conf in confs, find atom pairs (i, j) where either:
+    * i in ligand_indices, j in environment_indices, and distance(i, j) < cutoff
+    * i in ligand_indices, j in ligand_indices, and i < j
+
+    Parameters
+    ----------
+    confs: (n_snapshots, n_atoms, 3) float array
+    boxes: (n_snapshots, 3, 3) float array
+    ligand_indices: (n_ligand) int array
+    cutoff: float
+
+    Returns
+    -------
+    (batch_inds_l, batch_inds_r)
+        each of shape (len(confs), n_pairs),
+        where n_pairs = maximum number of interacting pairs in confs
+
+    Notes
+    -----
+    * Index arrays are padded so each conf has the same number of interacting pairs -- a small fraction of the returned
+        pairs ij will have distance(i, j) > cutoff, so these may need to be filtered / masked again at later steps
+    * TODO [naming]: change to return a single [n_pairs, 2] array instead of pair of [n_pairs,] arrays?
+    * TODO [flexibility]: accept environment_indices instead of inferring them?
+    """
+    n_snapshots, n_atoms, _ = confs.shape
+    environment_indices = np.array(list(set(onp.arange(n_atoms)) - set(onp.array(ligand_indices))))
+
+    # (ligand, environment) pairs within distance cutoff
+    _inds_l, _inds_r = get_group_group_indices(len(ligand_indices), len(environment_indices))
+    inds_l, inds_r = ligand_indices[_inds_l], environment_indices[_inds_r]
+    neighbor_inds_l, neighbor_inds_r = batched_neighbor_inds(confs, inds_l, inds_r, cutoff, boxes)
+
+    # (ligand, ligand) pairs
+    _l, _r = get_all_pairs_indices(len(ligand_indices))
+    ligand_inds_l, ligand_inds_r = ligand_indices[_l], ligand_indices[_r]
+
+    # concatenate
+    batch_inds_l = np.hstack([neighbor_inds_l, np.repeat(ligand_inds_l[np.newaxis, :], n_snapshots, 0)])
+    batch_inds_r = np.hstack([neighbor_inds_r, np.repeat(ligand_inds_r[np.newaxis, :], n_snapshots, 0)])
+
+    assert batch_inds_l.shape == batch_inds_r.shape
+
+    return batch_inds_l, batch_inds_r
+
+
 def distance(x, box):
     # nonbonded distances require the periodic box
     assert x.shape[1] == 3 or x.shape[1] == 4  # 3d or 4d
