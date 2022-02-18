@@ -244,7 +244,7 @@ def nonbonded_v3_on_specific_pairs(conf, params, box, pairs, beta: float, cutoff
     * Responsibility of caller to ensure pair indices are complete.
     """
 
-    inds_l, inds_r = pairs
+    inds_l, inds_r = pairs.T
 
     # distances and cutoff
     dij = distance_on_pairs(conf[inds_l], conf[inds_r], box)
