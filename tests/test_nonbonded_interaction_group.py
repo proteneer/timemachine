@@ -206,7 +206,9 @@ def test_nonbonded_interaction_group_consistency_allpairs_lambda_planes(
 
     conf = example_conf[:num_atoms]
     params = example_nonbonded_params[:num_atoms, :]
-    lambda_offset_idxs = np.zeros(num_atoms, dtype=np.int32)
+
+    max_abs_offset_idx = 2  # i.e., lambda_offset_idxs in {-2, -1, 0, 1, 2}
+    lambda_offset_idxs = rng.integers(-max_abs_offset_idx, max_abs_offset_idx + 1, size=num_atoms, dtype=np.int32)
 
     def make_reference_nonbonded(lambda_plane_idxs):
         return prepare_reference_nonbonded(
@@ -222,8 +224,12 @@ def test_nonbonded_interaction_group_consistency_allpairs_lambda_planes(
     ref_allpairs = make_reference_nonbonded(np.zeros(num_atoms, dtype=np.int32))
 
     ligand_idxs = rng.choice(num_atoms, size=num_atoms_ligand, replace=False).astype(np.int32)
+
+    # for reference U_A + U_B computation, ensure minimum distance
+    # between a host and ligand atom is at least one cutoff distance
+    # when lambda = 1
     lambda_plane_idxs = np.zeros(num_atoms, dtype=np.int32)
-    lambda_plane_idxs[ligand_idxs] = 1
+    lambda_plane_idxs[ligand_idxs] = 2 * max_abs_offset_idx + 1
 
     ref_allpairs_minus_ixngroups = make_reference_nonbonded(lambda_plane_idxs)
 
@@ -289,13 +295,16 @@ def test_nonbonded_interaction_group_consistency_allpairs_constant_shift(
     conf = example_conf[:num_atoms]
     params = example_nonbonded_params[:num_atoms, :]
 
+    lambda_plane_idxs = rng.integers(-2, 3, size=num_atoms, dtype=np.int32)
+    lambda_offset_idxs = rng.integers(-2, 3, size=num_atoms, dtype=np.int32)
+
     def ref_allpairs(conf):
         return prepare_reference_nonbonded(
             params=params,
             exclusion_idxs=np.array([], dtype=np.int32),
             scales=np.zeros((0, 2), dtype=np.float64),
-            lambda_plane_idxs=np.zeros(num_atoms, dtype=np.int32),
-            lambda_offset_idxs=np.zeros(num_atoms, dtype=np.int32),
+            lambda_plane_idxs=lambda_plane_idxs,
+            lambda_offset_idxs=lambda_offset_idxs,
             beta=beta,
             cutoff=cutoff,
         )(conf, params, example_box, lamb)
@@ -306,8 +315,8 @@ def test_nonbonded_interaction_group_consistency_allpairs_constant_shift(
         _, _, _, u = (
             NonbondedInteractionGroup(
                 ligand_idxs,
-                np.zeros(num_atoms, dtype=np.int32),
-                np.zeros(num_atoms, dtype=np.int32),
+                lambda_plane_idxs,
+                lambda_offset_idxs,
                 beta,
                 cutoff,
             )
