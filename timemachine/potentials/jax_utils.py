@@ -19,7 +19,6 @@ distance stuff
 
 from typing import Tuple
 
-import jax
 import jax.numpy as np
 import numpy as onp
 from jax import vmap
@@ -86,21 +85,6 @@ def convert_to_4d(x3, lamb, lambda_plane_idxs, lambda_offset_idxs, cutoff):
     """(x,y,z) -> (x,y,z,w) where w = cutoff * (lambda_plane_idxs + lambda_offset_idxs * lamb)"""
     w = compute_lifting_parameter(lamb, lambda_plane_idxs, lambda_offset_idxs, cutoff)
     return augment_dim(x3, w)
-
-
-def rescale_coordinates(conf, indices, box, scales):
-    """Note: scales unused"""
-
-    mol_sizes = np.expand_dims(onp.bincount(indices), axis=1)
-    mol_centers = jax.ops.segment_sum(conf, indices) / mol_sizes
-
-    new_centers = mol_centers - box[2] * np.floor(np.expand_dims(mol_centers[..., 2], axis=-1) / box[2][2])
-    new_centers -= box[1] * np.floor(np.expand_dims(new_centers[..., 1], axis=-1) / box[1][1])
-    new_centers -= box[0] * np.floor(np.expand_dims(new_centers[..., 0], axis=-1) / box[0][0])
-
-    offset = new_centers - mol_centers
-
-    return conf + offset[indices]
 
 
 def delta_r(ri, rj, box=None):
