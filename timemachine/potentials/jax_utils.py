@@ -30,7 +30,7 @@ def get_all_pairs_indices(n: int) -> Tuple[Array, Array]:
     """all indices i, j such that i < j < n"""
     n_interactions = n * (n - 1) / 2
 
-    pairs = np.triu_indices(n, k=1)
+    pairs = np.stack(np.triu_indices(n, k=1)).T
 
     assert pairs.shape == (n_interactions, 2)
 
