@@ -88,7 +88,7 @@ def test_nonbonded_interaction_group_zero_interactions(rng: np.random.Generator)
     cutoff = 1.1
     box = 10.0 * np.eye(3)
     conf = rng.uniform(0, 1, size=(num_atoms, 3))
-    ligand_idxs = rng.choice(num_atoms, size=num_atoms_ligand, replace=False).astype(np.int32)
+    ligand_idxs = rng.choice(num_atoms, size=(num_atoms_ligand,), replace=False).astype(np.int32)
 
     # shift ligand atoms in x by twice the cutoff
     conf[ligand_idxs, 0] += 2 * cutoff
@@ -136,10 +136,10 @@ def test_nonbonded_interaction_group_correctness(
     conf = example_conf[:num_atoms]
     params = example_nonbonded_params[:num_atoms, :]
 
-    lambda_plane_idxs = rng.integers(-2, 3, size=num_atoms, dtype=np.int32)
-    lambda_offset_idxs = rng.integers(-2, 3, size=num_atoms, dtype=np.int32)
+    lambda_plane_idxs = rng.integers(-2, 3, size=(num_atoms,), dtype=np.int32)
+    lambda_offset_idxs = rng.integers(-2, 3, size=(num_atoms,), dtype=np.int32)
 
-    ligand_idxs = rng.choice(num_atoms, size=num_atoms_ligand, replace=False).astype(np.int32)
+    ligand_idxs = rng.choice(num_atoms, size=(num_atoms_ligand,), replace=False).astype(np.int32)
     host_idxs = np.setdiff1d(np.arange(num_atoms), ligand_idxs)
 
     def ref_ixngroups(conf, params, box, lamb):
@@ -202,10 +202,10 @@ def test_nonbonded_interaction_group_interpolated_correctness(
     params_final = params_initial + rng.normal(0, 0.01, size=params_initial.shape)
     params = np.concatenate((params_initial, params_final))
 
-    lambda_plane_idxs = rng.integers(-2, 3, size=num_atoms, dtype=np.int32)
-    lambda_offset_idxs = rng.integers(-2, 3, size=num_atoms, dtype=np.int32)
+    lambda_plane_idxs = rng.integers(-2, 3, size=(num_atoms,), dtype=np.int32)
+    lambda_offset_idxs = rng.integers(-2, 3, size=(num_atoms,), dtype=np.int32)
 
-    ligand_idxs = rng.choice(num_atoms, size=num_atoms_ligand, replace=False).astype(np.int32)
+    ligand_idxs = rng.choice(num_atoms, size=(num_atoms_ligand,), replace=False).astype(np.int32)
     host_idxs = np.setdiff1d(np.arange(num_atoms), ligand_idxs)
 
     @nonbonded.interpolated
@@ -284,7 +284,7 @@ def test_nonbonded_interaction_group_consistency_allpairs_lambda_planes(
     params = example_nonbonded_params[:num_atoms, :]
 
     max_abs_offset_idx = 2  # i.e., lambda_offset_idxs in {-2, -1, 0, 1, 2}
-    lambda_offset_idxs = rng.integers(-max_abs_offset_idx, max_abs_offset_idx + 1, size=num_atoms, dtype=np.int32)
+    lambda_offset_idxs = rng.integers(-max_abs_offset_idx, max_abs_offset_idx + 1, size=(num_atoms,), dtype=np.int32)
 
     def make_reference_nonbonded(lambda_plane_idxs):
         return prepare_reference_nonbonded(
@@ -299,7 +299,7 @@ def test_nonbonded_interaction_group_consistency_allpairs_lambda_planes(
 
     ref_allpairs = make_reference_nonbonded(np.zeros(num_atoms, dtype=np.int32))
 
-    ligand_idxs = rng.choice(num_atoms, size=num_atoms_ligand, replace=False).astype(np.int32)
+    ligand_idxs = rng.choice(num_atoms, size=(num_atoms_ligand,), replace=False).astype(np.int32)
 
     # for reference U_A + U_B computation, ensure minimum distance
     # between a host and ligand atom is at least one cutoff distance
@@ -371,8 +371,8 @@ def test_nonbonded_interaction_group_consistency_allpairs_constant_shift(
     conf = example_conf[:num_atoms]
     params = example_nonbonded_params[:num_atoms, :]
 
-    lambda_plane_idxs = rng.integers(-2, 3, size=num_atoms, dtype=np.int32)
-    lambda_offset_idxs = rng.integers(-2, 3, size=num_atoms, dtype=np.int32)
+    lambda_plane_idxs = rng.integers(-2, 3, size=(num_atoms,), dtype=np.int32)
+    lambda_offset_idxs = rng.integers(-2, 3, size=(num_atoms,), dtype=np.int32)
 
     def ref_allpairs(conf):
         return prepare_reference_nonbonded(
@@ -385,7 +385,7 @@ def test_nonbonded_interaction_group_consistency_allpairs_constant_shift(
             cutoff=cutoff,
         )(conf, params, example_box, lamb)
 
-    ligand_idxs = rng.choice(num_atoms, size=num_atoms_ligand, replace=False).astype(np.int32)
+    ligand_idxs = rng.choice(num_atoms, size=(num_atoms_ligand,), replace=False).astype(np.int32)
 
     def test_ixngroups(conf):
         _, _, _, u = (
