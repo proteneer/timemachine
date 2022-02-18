@@ -63,10 +63,6 @@ NonbondedAllPairs<RealType, Interpolated>::NonbondedAllPairs(
       compute_add_du_dp_interpolated_(
           kernel_cache_.program(kernel_src.c_str()).kernel("k_add_du_dp_interpolated").instantiate()) {
 
-    if (lambda_offset_idxs.size() != N_) {
-        throw std::runtime_error("lambda offset idxs need to have size N");
-    }
-
     if (lambda_offset_idxs.size() != lambda_plane_idxs.size()) {
         throw std::runtime_error("lambda offset idxs and plane idxs need to be equivalent");
     }

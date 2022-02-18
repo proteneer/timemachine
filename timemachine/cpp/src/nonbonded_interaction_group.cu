@@ -70,10 +70,6 @@ NonbondedInteractionGroup<RealType, Interpolated>::NonbondedInteractionGroup(
         throw std::runtime_error("row_atom_idxs must be nonempty");
     }
 
-    if (lambda_offset_idxs.size() != N_) {
-        throw std::runtime_error("lambda offset idxs need to have size N");
-    }
-
     if (lambda_offset_idxs.size() != lambda_plane_idxs.size()) {
         throw std::runtime_error("lambda offset idxs and plane idxs need to be equivalent");
     }
