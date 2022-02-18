@@ -259,7 +259,7 @@ def nonbonded_v3_interaction_groups(conf, params, box, inds_l, inds_r, beta: flo
 
     See nonbonded_v3 docstring for more details
     """
-    pairs = np.array(list(itertools.product(inds_l, inds_r)))
+    pairs = np.stack(np.meshgrid(inds_l, inds_r)).reshape(2, -1).T
     vdW, electrostatics = nonbonded_v3_on_specific_pairs(conf, params, box, pairs[:, 0], pairs[:, 1], beta, cutoff)
     return vdW, electrostatics, pairs
 
