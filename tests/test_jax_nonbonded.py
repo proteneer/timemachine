@@ -246,13 +246,14 @@ def _nonbonded_v3_clone(
         box_4d = None
     box = box_4d
 
-    # TODO: len(inds_i) == n_interactions -- may want to break this
+    # TODO: len(pairs) == n_interactions -- may want to break this
     #   up into more manageable blocks if n_interactions is large
-    inds_i, inds_j = get_all_pairs_indices(N)
+    pairs = get_all_pairs_indices(N)
 
-    lj, coulomb = nonbonded_v3_on_specific_pairs(conf, params, box, inds_i, inds_j, beta, cutoff)
+    lj, coulomb = nonbonded_v3_on_specific_pairs(conf, params, box, pairs, beta, cutoff)
 
     # keep only eps > 0
+    inds_i, inds_j = pairs.T
     eps = params[:, 2]
     lj = np.where(eps[inds_i] > 0, lj, 0)
     lj = np.where(eps[inds_j] > 0, lj, 0)
@@ -304,11 +305,11 @@ def test_vmap():
     n_total = n_ligand + n_environment
     conf, params, box, lamb, _, _, beta, cutoff, _, _ = generate_random_inputs(n_total, 3)
 
-    inds_i, inds_j = get_group_group_indices(n_ligand, n_environment)
-    inds_j += n_ligand
-    n_interactions = len(inds_i)
+    pairs = get_group_group_indices(n_ligand, n_environment)
+    pairs[:, 1] += n_ligand
+    n_interactions = len(pairs)
 
-    fixed_kwargs = dict(params=params, box=box, inds_l=inds_i, inds_r=inds_j, beta=beta, cutoff=cutoff)
+    fixed_kwargs = dict(params=params, box=box, pairs=pairs, beta=beta, cutoff=cutoff)
 
     # signature: conf -> ljs, coulombs, where ljs.shape == (n_interactions, )
     u_pairs = partial(nonbonded_v3_on_specific_pairs, **fixed_kwargs)
@@ -352,9 +353,10 @@ def test_jax_nonbonded_block():
     i_s, j_s = np.indices((split, N - split))
     indices_left = i_s.flatten()
     indices_right = j_s.flatten() + split
+    pairs = np.array([indices_left, indices_right]).T
 
     def u_b(x, box, params):
-        vdw, es = nonbonded_v3_on_specific_pairs(x, params, box, indices_left, indices_right, beta, cutoff)
+        vdw, es = nonbonded_v3_on_specific_pairs(x, params, box, pairs, beta, cutoff)
 
         return np.sum(vdw + es)
 

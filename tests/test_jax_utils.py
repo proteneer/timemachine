@@ -59,9 +59,9 @@ def test_get_all_pairs_indices():
     """check i < j < n"""
     ns = onp.random.randint(5, 50, 10)
     for n in ns:
-        inds_i, inds_j = get_all_pairs_indices(n)
-        assert (inds_i < inds_j).all()
-        assert (inds_j < n).all()
+        pairs = get_all_pairs_indices(n)
+        assert (pairs[:, 0] < pairs[:, 1]).all()
+        assert (pairs < n).all()
 
 
 def test_get_group_group_indices():
@@ -70,11 +70,11 @@ def test_get_group_group_indices():
     ms = onp.random.randint(5, 50, 10)
 
     for n, m in zip(ns, ms):
-        inds_i, inds_j = get_group_group_indices(n, m)
-        assert (inds_i < n).all()
-        assert (inds_j < m).all()
+        pairs = get_group_group_indices(n, m)
+        assert (pairs[:, 0] < n).all()
+        assert (pairs[:, 1] < m).all()
 
-        assert len(inds_i) == n * m
+        assert len(pairs) == n * m
 
 
 def test_compute_lifting_parameter():
@@ -118,22 +118,22 @@ def test_batched_neighbor_inds():
     boxes = np.array([np.eye(3)] * n_confs)
 
     n_alchemical = 50
-    inds_l, inds_r = get_group_group_indices(n=n_alchemical, m=n_particles - n_alchemical)
-    inds_r += n_alchemical
-    n_possible_interactions = len(inds_l)
+    inds_l, inds_r = get_group_group_indices(n=n_alchemical, m=n_particles - n_alchemical).T
+    pairs = np.array([inds_l, inds_r + n_alchemical]).T
+    n_possible_interactions = len(pairs)
 
     full_distances = vmap(distance_on_pairs)(confs[:, inds_l], confs[:, inds_r], boxes)
     assert full_distances.shape == (n_confs, n_possible_interactions)
 
-    neighbor_inds_l, neighbor_inds_r = batched_neighbor_inds(confs, inds_l, inds_r, cutoff, boxes)
-    n_neighbor_pairs = neighbor_inds_l.shape[1]
-    assert neighbor_inds_r.shape == (n_confs, n_neighbor_pairs)
+    batch_pairs = batched_neighbor_inds(confs, pairs, cutoff, boxes)
+    n_neighbor_pairs = batch_pairs.shape[1]
+    assert batch_pairs.shape == (n_confs, n_neighbor_pairs, 2)
     assert n_neighbor_pairs <= n_possible_interactions
 
-    def d(conf, inds_l, inds_r, box):
-        return distance_on_pairs(conf[inds_l], conf[inds_r], box)
+    def d(conf, pairs, box):
+        return distance_on_pairs(conf[pairs[:, 0]], conf[pairs[:, 1]], box)
 
-    neighbor_distances = vmap(d)(confs, neighbor_inds_l, neighbor_inds_r, boxes)
+    neighbor_distances = vmap(d)(confs, batch_pairs, boxes)
 
     assert neighbor_distances.shape == (n_confs, n_neighbor_pairs)
     assert np.sum(neighbor_distances < cutoff) == np.sum(full_distances < cutoff)

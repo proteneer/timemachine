@@ -30,23 +30,22 @@ def get_all_pairs_indices(n: int) -> Tuple[Array, Array]:
     """all indices i, j such that i < j < n"""
     n_interactions = n * (n - 1) / 2
 
-    inds_i, inds_j = np.triu_indices(n, k=1)
+    pairs = np.triu_indices(n, k=1)
 
-    assert len(inds_i) == n_interactions
+    assert pairs.shape == (n_interactions, 2)
 
-    return inds_i, inds_j
+    return pairs
 
 
 def get_group_group_indices(n: int, m: int) -> Tuple[Array, Array]:
     """all indices i, j such that i < n, j < m"""
     n_interactions = n * m
 
-    _inds_i, _inds_j = np.indices((n, m))
-    inds_i, inds_j = _inds_i.flatten(), _inds_j.flatten()
+    pairs = np.indices((n, m)).T
 
-    assert len(inds_i) == n_interactions
+    assert pairs.shape == (n_interactions, 2)
 
-    return inds_i, inds_j
+    return pairs
 
 
 def compute_lifting_parameter(lamb, lambda_plane_idxs, lambda_offset_idxs, cutoff):
@@ -109,20 +108,30 @@ def distance_on_pairs(ri, rj, box=None):
     return dij
 
 
-def batched_neighbor_inds(confs, inds_l, inds_r, cutoff, boxes):
-    """Given candidate interacting pairs (inds_l, inds_r),
-        inds_l.shape == n_interactions
-    exclude most pairs whose distances are >= cutoff (neighbor_inds_l, neighbor_inds_r)
-        neighbor_inds_l.shape == (len(confs), max_n_neighbors)
-        where the total number of neighbors returned for each conf in confs is the same
-        max_n_neighbors
+def batched_neighbor_inds(confs, pairs, cutoff, boxes):
+    """Given candidate interacting pairs, exclude most pairs whose distances are >= cutoff
 
-    This padding causes some amount of wasted effort, but keeps things nice and fixed-dimensional
-        for later XLA steps
+    Parameters
+    ----------
+    confs: (n_snapshots, n_atoms, 3) float array
+    pairs: (n_candidate_pairs, 2) integer array
+    cutoff: float
+    boxes: (n_snapshots, 3, 3) float array
+
+    Returns
+    -------
+    batch_pairs : (len(confs), max_n_neighbors, 2) array
+        where max_n_neighbors pairs are returned for each conf in confs
+
+    Notes
+    -----
+    * Padding causes some amount of wasted effort, but keeps things nice and fixed-dimensional for later XLA steps
+    * TODO [naming]: rename to get_interacting_pair_indices_batch or similar
+    * TODO [usability]: reorder input arguments in less surprising way
     """
     assert len(confs.shape) == 3
-    distances = vmap(distance_on_pairs)(confs[:, inds_l], confs[:, inds_r], boxes)
-    assert distances.shape == (len(confs), len(inds_l))
+    distances = vmap(distance_on_pairs)(confs[:, pairs[:, 0]], confs[:, pairs[:, 1]], boxes)
+    assert distances.shape == (len(confs), len(pairs))
 
     neighbor_masks = distances < cutoff
     # how many total neighbors?
@@ -134,13 +143,11 @@ def batched_neighbor_inds(confs, inds_l, inds_r, cutoff, boxes):
 
     # sorting in order of [falses, ..., trues]
     keep_inds = np.argsort(neighbor_masks, axis=1)[:, -max_n_neighbors:]
-    neighbor_inds_l = inds_l[keep_inds]
-    neighbor_inds_r = inds_r[keep_inds]
+    batch_pairs = pairs[keep_inds]
 
-    assert neighbor_inds_l.shape == (len(confs), max_n_neighbors)
-    assert neighbor_inds_l.shape == neighbor_inds_r.shape
+    assert batch_pairs.shape == (len(confs), max_n_neighbors, 2)
 
-    return neighbor_inds_l, neighbor_inds_r
+    return batch_pairs
 
 
 def get_ligand_dependent_indices_batch(confs, boxes, ligand_indices, cutoff=1.2):
@@ -159,36 +166,36 @@ def get_ligand_dependent_indices_batch(confs, boxes, ligand_indices, cutoff=1.2)
 
     Returns
     -------
-    (batch_inds_l, batch_inds_r)
-        each of shape (len(confs), n_pairs),
-        where n_pairs = maximum number of interacting pairs in confs
+    * batch_pairs: (n_snapshots, n_pairs, 2) int array
+        where n_pairs = maximum number of interacting pairs in any conf
 
     Notes
     -----
     * Index arrays are padded so each conf has the same number of interacting pairs -- a small fraction of the returned
         pairs ij will have distance(i, j) > cutoff, so these may need to be filtered / masked again at later steps
-    * TODO [naming]: change to return a single [n_pairs, 2] array instead of pair of [n_pairs,] arrays?
     * TODO [flexibility]: accept environment_indices instead of inferring them?
     """
     n_snapshots, n_atoms, _ = confs.shape
     environment_indices = np.array(list(set(onp.arange(n_atoms)) - set(onp.array(ligand_indices))))
 
     # (ligand, environment) pairs within distance cutoff
-    _inds_l, _inds_r = get_group_group_indices(len(ligand_indices), len(environment_indices))
-    inds_l, inds_r = ligand_indices[_inds_l], environment_indices[_inds_r]
-    neighbor_inds_l, neighbor_inds_r = batched_neighbor_inds(confs, inds_l, inds_r, cutoff, boxes)
+    pairs = get_group_group_indices(len(ligand_indices), len(environment_indices))
+    batch_ligand_environment_pairs = batched_neighbor_inds(confs, pairs, cutoff, boxes)
+    n_ligand_environment_pairs = batch_ligand_environment_pairs.shape[1]
 
     # (ligand, ligand) pairs
-    _l, _r = get_all_pairs_indices(len(ligand_indices))
-    ligand_inds_l, ligand_inds_r = ligand_indices[_l], ligand_indices[_r]
+    _pairs = get_all_pairs_indices(len(ligand_indices))
+    n_ligand_ligand_pairs = len(_pairs)
+    ligand_ligand_pairs = ligand_indices[_pairs]
+    batch_ligand_ligand_pairs = np.repeat(ligand_ligand_pairs[np.newaxis, :], n_snapshots, 0)
 
     # concatenate
-    batch_inds_l = np.hstack([neighbor_inds_l, np.repeat(ligand_inds_l[np.newaxis, :], n_snapshots, 0)])
-    batch_inds_r = np.hstack([neighbor_inds_r, np.repeat(ligand_inds_r[np.newaxis, :], n_snapshots, 0)])
+    n_pairs = n_ligand_environment_pairs + n_ligand_ligand_pairs
+    batch_pairs = np.hstack([batch_ligand_environment_pairs, batch_ligand_ligand_pairs])
 
-    assert batch_inds_l.shape == batch_inds_r.shape
+    assert batch_pairs.shape == (n_snapshots, n_pairs, 2)
 
-    return batch_inds_l, batch_inds_r
+    return batch_pairs
 
 
 def distance(x, box):

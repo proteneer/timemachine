@@ -219,14 +219,15 @@ def nonbonded_v3(
     return np.sum(eij_total / 2)
 
 
-def nonbonded_v3_on_specific_pairs(conf, params, box, inds_l, inds_r, beta: float, cutoff: Optional[float] = None):
+def nonbonded_v3_on_specific_pairs(conf, params, box, pairs, beta: float, cutoff: Optional[float] = None):
     """See nonbonded_v3 docstring for more details
 
     Notes
     -----
-    * Responsibility of caller to ensure pair indices (inds_l, inds_r) are complete.
-        In case of parameter interpolation, more pairs need to be added.
+    * Responsibility of caller to ensure pair indices are complete.
     """
+
+    inds_l, inds_r = pairs
 
     # distances and cutoff
     dij = distance_on_pairs(conf[inds_l], conf[inds_r], box)
