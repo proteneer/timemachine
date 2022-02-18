@@ -1,4 +1,5 @@
 import jax.numpy as np
+from jax import vmap
 from jax.ops import index, index_update
 from jax.scipy.special import erfc
 
@@ -267,6 +268,41 @@ def nonbonded_v3_on_specific_pairs(conf, params, box, pairs, beta: float, cutoff
     electrostatics = direct_space_pme(dij, qij, beta)
 
     return vdW, electrostatics
+
+
+def compute_batch_nonbonded(confs, boxes, pair_lists, nb_params, beta, cutoff):
+    """vmap over a batch of confs, boxes, pair_lists"""
+
+    def _compute_nonbonded(conf, box, pair_list):
+        vdw, electrostatics = nonbonded_v3_on_specific_pairs(conf, nb_params, box, pair_list, beta, cutoff)
+        return np.sum(vdw) + np.sum(electrostatics)
+
+    batch_of_energies = vmap(_compute_nonbonded)(confs, boxes, pair_lists)
+
+    assert batch_of_energies.shape == (len(confs),)
+
+    return batch_of_energies
+
+
+def construct_batch_nonbonded_as_fxn_of_ligand_nb_params(
+    confs, boxes, pair_lists, ligand_indices, nb_params, beta, cutoff
+):
+    """Compute energies on a batch of snapshots as a function of ligand nonbonded parameters
+
+    Notes
+    -----
+    * Depending on context, may need U_LL + U_HL (U_HL : host-ligand, U_LL : within-ligand).
+        It's very convenient to represent U_HL using just a pair list, but
+        an additional step will be required to handle exceptions / exclusions that appear in U_LL.
+            Exclusions: easy -- just omit some indices from pair list!
+            Exceptions: needs one more step: multiply contributions by lj_scale, coulomb scale...
+    """
+
+    def batch_nonbonded(ligand_nb_params):
+        new_nb_params = nb_params.at[ligand_indices].set(ligand_nb_params)
+        return compute_batch_nonbonded(confs, boxes, pair_lists, new_nb_params, beta, cutoff)
+
+    return batch_nonbonded
 
 
 def validate_coulomb_cutoff(cutoff=1.0, beta=2.0, threshold=1e-2):
