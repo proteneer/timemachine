@@ -282,3 +282,16 @@ class NonbondedInterpolated(Nonbonded):
 
 class NonbondedInteractionGroup(CustomOpWrapper):
     pass
+
+
+class NonbondedInteractionGroupInterpolated(NonbondedInteractionGroup):
+    def unbound_impl(self, precision):
+        cls_name_base = "NonbondedInteractionGroup"
+        if precision == np.float64:
+            cls_name_base += "_f64_interpolated"
+        else:
+            cls_name_base += "_f32_interpolated"
+
+        custom_ctor = getattr(custom_ops, cls_name_base)
+
+        return custom_ctor(*self.args)

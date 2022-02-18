@@ -1,3 +1,5 @@
+import functools
+
 import jax.numpy as np
 from jax.ops import index, index_update
 from jax.scipy.special import erfc
@@ -260,6 +262,22 @@ def nonbonded_v3_interaction_groups(conf, params, box, inds_l, inds_r, beta: flo
     pairs = np.stack(np.meshgrid(inds_l, inds_r)).reshape(2, -1).T
     vdW, electrostatics = nonbonded_v3_on_specific_pairs(conf, params, box, pairs[:, 0], pairs[:, 1], beta, cutoff)
     return vdW, electrostatics, pairs
+
+
+def interpolated(u_fn):
+    @functools.wraps(u_fn)
+    def wrapper(conf, params, box, lamb):
+
+        # params is expected to be the concatenation of initial
+        # (lambda = 0) and final (lamda = 1) parameters, each of
+        # length num_atoms
+        assert params.size % 2 == 0
+        num_atoms = params.shape[0] // 2
+
+        new_params = (1 - lamb) * params[:num_atoms] + lamb * params[num_atoms:]
+        return u_fn(conf, new_params, box, lamb)
+
+    return wrapper
 
 
 def validate_coulomb_cutoff(cutoff=1.0, beta=2.0, threshold=1e-2):
