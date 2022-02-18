@@ -41,7 +41,11 @@ def get_group_group_indices(n: int, m: int) -> Tuple[Array, Array]:
     """all indices i, j such that i < n, j < m"""
     n_interactions = n * m
 
-    pairs = np.indices((n, m)).T
+    # TODO [usability, flexibility]: modify signature to accept these index arrays rather than ints
+    group_a_indices = np.arange(n)
+    group_b_indices = np.arange(m)
+
+    pairs = np.stack(np.meshgrid(group_a_indices, group_b_indices)).reshape(2, -1).T
 
     assert pairs.shape == (n_interactions, 2)
 
