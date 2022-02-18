@@ -395,7 +395,6 @@ void NonbondedInteractionGroup<RealType, Interpolated>::execute_device(
 
     // update new w coordinates
     // (tbd): cache lambda value for equilibrium calculations
-    // TODO: skip computing w coords for non-interacting atoms?
     CUresult result = compute_w_coords_instance_.configure(B, tpb, 0, stream)
                           .launch(N, lambda, cutoff_, d_lambda_plane_idxs_, d_lambda_offset_idxs_, d_w_, d_dw_dl_);
     if (result != 0) {
