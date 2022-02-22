@@ -16,6 +16,9 @@ from timemachine.ff.handlers.utils import match_smirks as rd_match_smirks
 from timemachine.ff.handlers.utils import sort_tuple
 from timemachine.graph_utils import convert_to_nx
 
+AM1_CHARGE_CACHE = "AM1Cache"
+BOND_SMIRK_MATCH_CACHE = "BondSmirkMatchCache"
+
 
 def convert_to_oe(mol):
     """Convert an ROMol into an OEMol"""
