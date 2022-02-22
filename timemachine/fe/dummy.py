@@ -24,12 +24,11 @@ def _add_successors(mol, core, groups):
     return next_groups
 
 
-def identify_anchor_groups(mol, core, anchor):
+def identify_anchor_groups(mol, core, root_anchor):
     """
     Generate all choices for valid anchor groups. An anchor group
-    is an ordered sequence of core atoms starting with the anchor (a-b-c) that
-    are connected by bonds. In other words, an anchor group is a rooted subtree
-    with three nodes spanning from the anchor.
+    is an ordered sequence of core atoms (root_anchor,b,c) that are connected by bonds.
+    ie. an anchor group is a rooted subtree with three nodes spanning from the root_anchor.
 
     Parameters
     ----------
@@ -39,22 +38,22 @@ def identify_anchor_groups(mol, core, anchor):
     core: list or set or iterable
         core atoms
 
-    anchor: int
-        atom we're initializing the search over
+    root_anchor: int
+        core atom we're initializing the search over
 
     Returns
     -------
     3-tuple
         Returns anchor groups of size 1, 2, and 3. Size 1 group will always
-        be [[anchor]]. Size 2 groups will be [[anchor, x], ...] and size 3
-        groups will be [[anchor,x,y,], ...]
+        be [[root_anchor]]. Size 2 groups will be [[root_anchor, x], ...] and size 3
+        groups will be [[root_anchor,x,y,], ...]
 
     """
 
-    assert anchor in core
+    assert root_anchor in core
 
-    # We perform a bfs of depth 3 starting from the anchor.
-    layer_1_groups = [[anchor]]
+    # We perform a bfs of depth 3 starting from the root_anchor.
+    layer_1_groups = [[root_anchor]]
     layer_2_groups = _add_successors(mol, core, layer_1_groups)
     layer_3_groups = _add_successors(mol, core, layer_2_groups)
 
@@ -340,50 +339,20 @@ def enumerate_dummy_ixns(dg, ag):
 
         for (i,) in nc1:
             allowed_ixns.add((i, a))
-            allowed_ixns.add((a, i))
-            # this is actually same as above
-            # included to please the symmetry gods
 
         if len(ag) > 1:
             b = ag[1]
             for ij in nc2:
                 for i, j in itertools.permutations(ij):
                     allowed_ixns.add((i, j, a, b))
-                    # this looks weird at first, but is actually valid
-                    # consider:
-                    # i j
-                    # |/
-                    # a-b
-                    # we can freely rotate i-j independently of a-b
-                    # in both of the following cases.
-                    allowed_ixns.add((i, a, b, j))
-                    allowed_ixns.add((a, b, i, j))
-
-                    # disallowed examples would be (i,a,j,b)
 
             for (i,) in nc1:
                 allowed_ixns.add((i, a, b))
-                # consider
-                # i
-                # |
-                # a-b
-                # we're still allowed to have an angle term (a,b,i) without
-                # affecting the factorizability
-                allowed_ixns.add((a, b, i))
-
-                # disallowed examples would be (a,i,b)
 
             if len(ag) > 2:
                 c = ag[2]
                 for (i,) in nc1:
                     allowed_ixns.add((i, a, b, c))
-                    # this is also allowed (and encountered in a trefoil)
-                    # consider:
-                    #    i
-                    #   /
-                    #  / b--c
-                    # a-/
-                    allowed_ixns.add((a, b, c, i))
 
     return make_bond_set(allowed_ixns)
 
@@ -491,7 +460,7 @@ def flag_bonds(mol, core, bond_idxs):
     return keep_flags
 
 
-def generate_dg_ag_pairs(mol, core, bond_idxs, strict):
+def generate_dg_ag_pairs(mol, core, bond_idxs):
     """
     Generate all pairings of dummy group and anchor group atoms
     such that bond_idxs is maximized.
@@ -506,11 +475,6 @@ def generate_dg_ag_pairs(mol, core, bond_idxs, strict):
 
     bond_idxs: list of list of int
         list of 2-tuple, 3-tuple, 4-tuple used to compare
-
-    strict: bool
-        Whether or not we require bond terms to be present for
-        angle terms, and bond and angle terms to be present
-        for torsion terms.
 
     Returns
     -------
@@ -545,33 +509,31 @@ def generate_dg_ag_pairs(mol, core, bond_idxs, strict):
             mutual_bonds = allowed_dummy_ixns.intersection(ff_dummy_ixns)
             mutual_bonds = mutual_bonds.union(ff_core_ixns)
 
-            # do additional pruning by checking real bonds.
-            if strict:
-                bonds_12 = set()
-                bonds_13 = set()
-                bonds_14 = set()
-                for idxs in mutual_bonds:
-                    if len(idxs) == 2:
-                        bonds_12.add(idxs)
-                for idxs in mutual_bonds:
-                    if len(idxs) == 3:
-                        i, j, k = idxs
-                        if (ordered_tuple((i, j)) in bonds_12) and (ordered_tuple((j, k)) in bonds_12):
-                            bonds_13.add(idxs)
-                for idxs in mutual_bonds:
-                    if len(idxs) == 4:
-                        i, j, k, l = idxs
-                        if (
-                            (ordered_tuple((i, j)) in bonds_12)
-                            and (ordered_tuple((j, k)) in bonds_12)
-                            and (ordered_tuple((k, l)) in bonds_12)
-                            and (ordered_tuple((i, j, k)) in bonds_13)
-                            and (ordered_tuple((j, k, l)) in bonds_13)
-                        ):
-                            bonds_14.add(idxs)
+            # do additional pruning by checking given idxs
+            bonds_12 = set()
+            bonds_13 = set()
+            bonds_14 = set()
+            for idxs in mutual_bonds:
+                if len(idxs) == 2:
+                    bonds_12.add(idxs)
+            for idxs in mutual_bonds:
+                if len(idxs) == 3:
+                    i, j, k = idxs
+                    if (ordered_tuple((i, j)) in bonds_12) and (ordered_tuple((j, k)) in bonds_12):
+                        bonds_13.add(idxs)
+            for idxs in mutual_bonds:
+                if len(idxs) == 4:
+                    i, j, k, l = idxs
+                    if (
+                        (ordered_tuple((i, j)) in bonds_12)
+                        and (ordered_tuple((j, k)) in bonds_12)
+                        and (ordered_tuple((k, l)) in bonds_12)
+                        and (ordered_tuple((i, j, k)) in bonds_13)
+                        and (ordered_tuple((j, k, l)) in bonds_13)
+                    ):
+                        bonds_14.add(idxs)
 
-                mutual_bonds = bonds_12.union(bonds_13).union(bonds_14)
-
+            mutual_bonds = bonds_12.union(bonds_13).union(bonds_14)
             anchor_group_ixns.append(mutual_bonds)
 
         all_agcs.append(anchor_group_candidates)
@@ -580,7 +542,7 @@ def generate_dg_ag_pairs(mol, core, bond_idxs, strict):
     return dgs, all_agcs, all_agis
 
 
-def generate_optimal_dg_ag_pairs(mol, core, bond_idxs, strict=False):
+def generate_optimal_dg_ag_pairs(mol, core, bond_idxs):
     """
     Generate optimal (dummy group, anchor group) pairs given a list of bonded terms.
 
@@ -599,18 +561,13 @@ def generate_optimal_dg_ag_pairs(mol, core, bond_idxs, strict=False):
     bond_idxs: list of list of ints
         Input bond_idxs
 
-    strict: bool
-        Whether or not we require bond terms to be present
-        angle terms, and bond and angle terms to be present
-        for torsion terms.
-
     Returns
     -------
     3-tuple of dummy_groups, best_anchor_groups, best_anchor_group_ixns
         Best anchor group for each dummy group and its interactions are returned
 
     """
-    dgs, all_agcs, all_agis = generate_dg_ag_pairs(mol, core, bond_idxs, strict)
+    dgs, all_agcs, all_agis = generate_dg_ag_pairs(mol, core, bond_idxs)
 
     picked_agcs = []
     picked_agis = []

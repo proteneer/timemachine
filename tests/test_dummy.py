@@ -144,8 +144,8 @@ def assert_anchor_group_equality(a_groups, b_groups):
 
 def test_identify_anchor_groups():
     """
-    Test that we can correctly enumerate all anchor groups. We are allowed either
-    1, 2, or 3 atoms in an anchor group.
+    Test that we can correctly enumerate all anchor groups given a particular
+    starting root_anchor.
     """
 
     mol = Chem.MolFromSmiles("C1CC1F")
@@ -188,6 +188,10 @@ def test_identify_anchor_groups():
 
 
 def test_enumerate_anchor_groups():
+    """
+    Test enumeration of all reasonable anchor groups that span from all possible anchor roots.
+    For clarity, we explicitly enumerate size 1, 2 and 3 anchor groups.
+    """
     mol = Chem.MolFromSmiles("C1CC2OOC12")
     core = [0, 1, 2, 5]
     groups_of_1, groups_of_2, groups_of_3 = enumerate_anchor_groups(mol, core, [3, 4])
@@ -212,7 +216,11 @@ def test_enumerate_anchor_groups():
     assert_anchor_group_equality(groups_of_3, [[10, 9, 8], [10, 9, 4]])
 
 
-def test_enumerate_allowed_dummy_ixns_3_anchors():
+def test_enumerate_allowed_dummy_ixns_3_anchors_spot_check():
+    """
+    Test generation of allowed dummy interactions with the anchor groups. This is a spot check.
+    A more exhaustive 3_anchor one is below.
+    """
     dummy_group = {0, 1, 5, 8}
     anchor_group = [2, 3, 4]
 
@@ -247,42 +255,72 @@ def test_enumerate_allowed_dummy_ixns_3_anchors():
     assert (1, 8, 3, 4) not in allowed_ixns
 
 
+def test_enumerate_allowed_dummy_ixns_3_anchors_exhaustive():
+    """
+    Test generation of allowed dummy interactions with the anchor groups exhaustively.
+    """
+    dummy_group = {0, 1}
+    anchor_group = [2, 3, 4]
+
+    allowed_ixns = enumerate_dummy_ixns(dummy_group, anchor_group)
+
+    for ixn in allowed_ixns:
+        assert len(ixn) == len(set(ixn))
+
+    assert len(allowed_ixns) == 12
+
+    # 3 ixns
+    assert (0, 1) in allowed_ixns
+    assert (0, 2) in allowed_ixns
+    assert (1, 2) in allowed_ixns
+
+    # 5 ixns
+    assert (0, 1, 2) in allowed_ixns
+    assert (1, 0, 2) in allowed_ixns
+    assert (0, 2, 3) in allowed_ixns
+    assert (1, 2, 3) in allowed_ixns
+    assert (0, 2, 1) in allowed_ixns
+
+    # 3 ixns
+    assert (1, 0, 2, 3) in allowed_ixns
+    assert (0, 1, 2, 3) in allowed_ixns
+    assert (0, 2, 3, 4) in allowed_ixns
+    assert (1, 2, 3, 4) in allowed_ixns
+
+
 def test_enumerate_allowed_dummy_ixns_2_anchors():
+    """
+    Same as above but with 2 anchors
+    """
     dummy_group = {0, 1}
     anchor_group = [4, 5]
     allowed_ixns = enumerate_dummy_ixns(dummy_group, anchor_group)
 
     for ixn in allowed_ixns:
         assert len(ixn) == len(set(ixn))
-    assert len(allowed_ixns) == 16
-
-    assert (0, 5) not in allowed_ixns
-    assert (1, 5) not in allowed_ixns
+    assert len(allowed_ixns) == 10
 
     # 3 ixns
     assert (0, 1) in allowed_ixns
     assert (0, 4) in allowed_ixns
     assert (1, 4) in allowed_ixns
 
-    # 7 ixns
+    # 5 ixns
     assert (0, 1, 4) in allowed_ixns
     assert (1, 0, 4) in allowed_ixns
     assert (0, 4, 1) in allowed_ixns
     assert (0, 4, 5) in allowed_ixns
     assert (1, 4, 5) in allowed_ixns
-    assert (0, 5, 4) in allowed_ixns
-    assert (1, 5, 4) in allowed_ixns
 
-    # 6 ixns
+    # 2 ixns
     assert (0, 1, 4, 5) in allowed_ixns
     assert (1, 0, 4, 5) in allowed_ixns
-    assert (1, 0, 5, 4) in allowed_ixns
-    assert (0, 4, 5, 1) in allowed_ixns
-    assert (0, 5, 4, 1) in allowed_ixns
-    assert (0, 1, 5, 4) in allowed_ixns
 
 
 def test_enumerate_allowed_dummy_ixns_1_anchor():
+    """
+    Same as above but with 1 anchor
+    """
     dummy_group = {0, 1}
     anchor_group = [4]
     allowed_ixns = enumerate_dummy_ixns(dummy_group, anchor_group)
@@ -296,10 +334,22 @@ def test_enumerate_allowed_dummy_ixns_1_anchor():
 
 
 def test_flag_bonds():
+    """
+    Test that we flag bonds on and off correctly given a set bond_idxs.
+    """
     mol = Chem.MolFromSmiles("BrOC1=CC(F)=CC=N1")
     core = [2, 3, 4, 6, 7, 8]
     bond_pairs = [
-        (1, [0, 1, 2]),  # H-O-C
+        (1, [0, 1]),  # Br-O
+        (1, [1, 2]),  # O-C
+        (1, [2, 3]),  # C-C
+        (1, [3, 4]),  # C-C
+        (1, [4, 5]),  # C-F
+        (1, [4, 6]),  # C-C
+        (1, [6, 7]),  # C-C
+        (1, [7, 8]),  # C-N
+        (1, [8, 2]),  # N-C
+        (1, [0, 1, 2]),  # Br-O-C
         (1, [1, 2, 3]),  # O-C-C
         (1, [1, 2, 3, 4]),  # O-C-C-C
         (0, [1, 2, 7]),  # O-C-N
@@ -322,6 +372,9 @@ def test_flag_bonds():
 
 
 def test_flag_bonds_core_hop():
+    """
+    Test that if we do a core hop, one of the bonded terms should be turned off.
+    """
 
     mol = Chem.MolFromSmiles("FC1CO1")
 
@@ -340,7 +393,7 @@ def test_flag_bonds_core_hop():
         (1, [0, 1, 3]),
         (1, [3, 1, 2]),
         (0, [1, 3, 2]),
-        (1, [1, 2, 3]),  # this last one is technically allowed
+        (0, [1, 2, 3]),
     ]
 
     # TBD: we can prune this to only terms where the bonds actually exist between ijk, ijkl, etc.
@@ -353,18 +406,16 @@ def test_flag_bonds_core_hop():
     assert tuple(keep_flags) == tuple(expected_flags)
 
 
-def test_strict_mode_missing_ixns():
-
-    # tbd: strict is probably required after extensive offline
-    # discussion with jfass
+def test_dg_ag_missing_ixns_split():
+    """
+    Explicitly test enumeration when certain bond and angle terms are missing.
+    """
 
     # test the following behavior for the molecule
     #    2
     #    |
     # 0--1--3
-
-    # we want to test correctness of the strict when parts of the
-    # dummy-dummy interactions are missing
+    # test that we correct allowed interactions
 
     mol = Chem.MolFromSmiles("CC(C)C")
     core = [1, 3]
@@ -382,13 +433,7 @@ def test_strict_mode_missing_ixns():
         [0, 2, 1, 3],
     ]
 
-    dgs, agcs, agis = generate_optimal_dg_ag_pairs(mol, core, bond_idxs, strict=False)
-    for dgs, agcs, agis in zip(dgs, agcs, agis):
-        assert (0, 2, 1, 3) in agis
-        assert (0, 2, 1) in agis
-        assert (0, 2) in agis
-
-    dgs, agcs, agis = generate_optimal_dg_ag_pairs(mol, core, bond_idxs, strict=True)
+    dgs, agcs, agis = generate_optimal_dg_ag_pairs(mol, core, bond_idxs)
     for dgs, agcs, agis in zip(dgs, agcs, agis):
         assert (0, 2, 1, 3) in agis
         assert (0, 2, 1) in agis
@@ -407,13 +452,7 @@ def test_strict_mode_missing_ixns():
         [0, 2, 1, 3],
     ]
 
-    dgs, agcs, agis = generate_optimal_dg_ag_pairs(mol, core, bond_idxs, strict=False)
-    for dgs, agcs, agis in zip(dgs, agcs, agis):
-        assert (0, 2, 1, 3) in agis
-        assert (0, 2, 1) not in agis
-        assert (0, 2) in agis
-
-    dgs, agcs, agis = generate_optimal_dg_ag_pairs(mol, core, bond_idxs, strict=True)
+    dgs, agcs, agis = generate_optimal_dg_ag_pairs(mol, core, bond_idxs)
     for dgs, agcs, agis in zip(dgs, agcs, agis):
         assert (0, 2, 1, 3) not in agis
         assert (0, 2, 1) not in agis
@@ -432,13 +471,7 @@ def test_strict_mode_missing_ixns():
         [0, 2, 1, 3],
     ]
 
-    dgs, agcs, agis = generate_optimal_dg_ag_pairs(mol, core, bond_idxs, strict=False)
-    for dgs, agcs, agis in zip(dgs, agcs, agis):
-        assert (0, 2, 1, 3) in agis
-        assert (0, 2, 1) in agis
-        assert (0, 2) not in agis
-
-    dgs, agcs, agis = generate_optimal_dg_ag_pairs(mol, core, bond_idxs, strict=True)
+    dgs, agcs, agis = generate_optimal_dg_ag_pairs(mol, core, bond_idxs)
     for dgs, agcs, agis in zip(dgs, agcs, agis):
         assert (0, 2, 1, 3) not in agis
         assert (0, 2, 1) not in agis
@@ -457,20 +490,18 @@ def test_strict_mode_missing_ixns():
         [0, 2, 1, 3],
     ]
 
-    dgs, agcs, agis = generate_optimal_dg_ag_pairs(mol, core, bond_idxs, strict=False)
-    for dgs, agcs, agis in zip(dgs, agcs, agis):
-        assert (0, 2, 1, 3) in agis
-        assert (0, 2, 1) not in agis
-        assert (0, 2) not in agis
-
-    dgs, agcs, agis = generate_optimal_dg_ag_pairs(mol, core, bond_idxs, strict=True)
+    dgs, agcs, agis = generate_optimal_dg_ag_pairs(mol, core, bond_idxs)
     for dgs, agcs, agis in zip(dgs, agcs, agis):
         assert (0, 2, 1, 3) not in agis
         assert (0, 2, 1) not in agis
         assert (0, 2) not in agis
 
 
-def test_strict_mode_core_missing():
+def test_dg_ag_missing_ixns_linear():
+    """
+    Explicitly test enumeration when certain bond and angle terms are missing.
+    Identical to above test but for a linear chain.
+    """
 
     # let the molecule be a linear chain
     # 0-1-2-3
@@ -491,11 +522,7 @@ def test_strict_mode_core_missing():
         [0, 1, 2, 3],
     ]
 
-    dgs, agcs, agis = generate_optimal_dg_ag_pairs(mol, core, bond_idxs, strict=False)
-    for dgs, agcs, agis in zip(dgs, agcs, agis):
-        assert (0, 1, 2, 3) in agis
-
-    dgs, agcs, agis = generate_optimal_dg_ag_pairs(mol, core, bond_idxs, strict=True)
+    dgs, agcs, agis = generate_optimal_dg_ag_pairs(mol, core, bond_idxs)
     for dgs, agcs, agis in zip(dgs, agcs, agis):
         assert (0, 1, 2, 3) in agis
 
@@ -509,12 +536,7 @@ def test_strict_mode_core_missing():
         [0, 1, 2, 3],
     ]
 
-    dgs, agcs, agis = generate_optimal_dg_ag_pairs(mol, core, bond_idxs, strict=False)
-    for dgs, agcs, agis in zip(dgs, agcs, agis):
-        assert (0, 1, 2, 3) in agis
-        assert (1, 2, 3) not in agis
-
-    dgs, agcs, agis = generate_optimal_dg_ag_pairs(mol, core, bond_idxs, strict=True)
+    dgs, agcs, agis = generate_optimal_dg_ag_pairs(mol, core, bond_idxs)
     for dgs, agcs, agis in zip(dgs, agcs, agis):
         assert (0, 1, 2, 3) not in agis
         assert (1, 2, 3) not in agis
@@ -529,12 +551,7 @@ def test_strict_mode_core_missing():
         [0, 1, 2, 3],
     ]
 
-    dgs, agcs, agis = generate_optimal_dg_ag_pairs(mol, core, bond_idxs, strict=False)
-    for dgs, agcs, agis in zip(dgs, agcs, agis):
-        assert (0, 1, 2, 3) in agis
-        assert (1, 2, 3) in agis
-
-    dgs, agcs, agis = generate_optimal_dg_ag_pairs(mol, core, bond_idxs, strict=True)
+    dgs, agcs, agis = generate_optimal_dg_ag_pairs(mol, core, bond_idxs)
     for dgs, agcs, agis in zip(dgs, agcs, agis):
         assert (0, 1, 2, 3) not in agis
         assert (1, 2, 3) not in agis
@@ -554,7 +571,7 @@ def _draw_impl(mol, core, ff, fname):
         + [tuple(x.tolist()) for x in it_idxs]
     )
 
-    dgs, ags, ag_ixns = dummy.generate_optimal_dg_ag_pairs(mol, core, bond_idxs, strict=True)
+    dgs, ags, ag_ixns = dummy.generate_optimal_dg_ag_pairs(mol, core, bond_idxs)
 
     for idx, (dummy_group, anchor_group, anchor_ixns) in enumerate(zip(dgs, ags, ag_ixns)):
 
@@ -574,6 +591,9 @@ def _draw_impl(mol, core, ff, fname):
 
 
 def test_parameterize_and_draw_interactions():
+    """
+    This isn't really tested, but is here to verify that drawing code at least runs.
+    """
 
     ff_handlers = deserialize_handlers(open("timemachine/ff/params/smirnoff_1_1_0_sc.py").read())
     ff = Forcefield(ff_handlers)
