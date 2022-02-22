@@ -76,6 +76,8 @@ def test_nonbonded_all_pairs_correctness(
     example_box,
     rng: np.random.Generator,
 ):
+    "Compares with jax reference implementation."
+
     conf = example_conf[:num_atoms]
     params = example_nonbonded_params[:num_atoms, :]
 
@@ -108,7 +110,7 @@ def test_nonbonded_all_pairs_interpolated_correctness(
     example_box,
     rng: np.random.Generator,
 ):
-    "Compares with jax reference implementation."
+    "Compares with jax reference implementation, with parameter interpolation."
 
     conf = example_conf[:num_atoms]
     params_initial = example_nonbonded_params[:num_atoms, :]
