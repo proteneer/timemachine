@@ -2,6 +2,12 @@ stages:          # List of stages for jobs, and their order of execution
   - build-docker
   - test
 
+workflow:
+  rules:
+    # Only run the pipeline if its for a merge request or the default branch
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
 docker_build:
   stage: build-docker
   image: docker:20.10
@@ -9,6 +15,7 @@ docker_build:
     - gpu
     - docker
   variables:
+    # For this to work, $CI_COMMIT_REF_SLUG == $CI_DEFAULT_BRANCH
     DOCKER_TAG: $CI_REGISTRY_IMAGE:$CI_COMMIT_REF_SLUG
   script:
     - DOCKER_HOST=tcp://localhost:2375 docker login -u $CI_REGISTRY_USER -p $CI_JOB_TOKEN $CI_REGISTRY
@@ -26,6 +33,8 @@ memory-tests:
   needs: ["docker_build"]
   tags:
     - gpu
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
   variables:
     CMAKE_ARGS: -DCUDA_ARCH=75
   script:
@@ -44,6 +53,8 @@ unit-tests:
   needs: ["docker_build"]
   tags:
     - gpu
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
   variables:
     CMAKE_ARGS: -DCUDA_ARCH=75
   script:
