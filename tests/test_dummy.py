@@ -16,6 +16,18 @@ from timemachine.ff.handlers.deserialize import deserialize_handlers
 
 
 def test_identify_root_anchors():
+    """
+    Test the identification of root anchors given a dummy atom.
+
+    For example, if D were the dummy atom below:
+
+            D---1---2
+           /
+          0
+
+    its root anchors are the set of atoms {0, 1}
+
+    """
     mol = Chem.MolFromSmiles("C1CCC1N")
     core = [0, 1, 2, 3]
     anchors = identify_root_anchors(mol, core, dummy_atom=4)
@@ -59,13 +71,44 @@ def test_identify_root_anchors():
 
 
 def assert_set_equality(a_sets, b_sets):
+    # utility function to check that list of sets are equal
     frozen_a = [frozenset(a) for a in a_sets]
     frozen_b = [frozenset(b) for b in b_sets]
     assert frozenset(frozen_a) == frozenset(frozen_b)
 
 
 def test_identify_dummy_groups():
+    r"""
+    Test the heuristic for partitioning dummy atoms into dummy groups.
 
+    Given a system such as
+
+        D0-D1  D2
+       /     \ /
+      0-------1
+
+    The dummy groups identified should be {D0}, {D1, D2}. This partioning
+    maximizes the number of bonded terms that we can leave on:
+
+        D0 D1  D2
+       /     \ /  -> 3 dummy-anchor bonds
+      0-------1
+
+    Alternatively valid, but less efficient choices of dummy groups would be:
+
+    {D0, D1}, {D2}
+
+        D0-D1  D2
+       /       /  -> 2 dummy-anchor bonds:
+      0-------1
+
+    {D0, D1, D2}
+
+        D0-D1  D2
+       /       /  -> 1 dummy-anchor bond:
+      0-------1
+
+    """
     mol = Chem.MolFromSmiles("FC1CC1(F)N")
     core = [1, 2, 3]
     dg = identify_dummy_groups(mol, core)
@@ -86,6 +129,12 @@ def test_identify_dummy_groups():
     dg = identify_dummy_groups(mol, core)
     assert_set_equality(dg, [{3}, {4}])
 
+    # example above, where O's are dummy atoms, and Cs are core
+    mol = Chem.MolFromSmiles("OC1COO1")
+    core = [1, 2]
+    dg = identify_dummy_groups(mol, core)
+    assert_set_equality(dg, [{0, 4}, {3}])
+
 
 def assert_anchor_group_equality(a_groups, b_groups):
     frozen_a = [tuple(a) for a in a_groups]
@@ -94,6 +143,10 @@ def assert_anchor_group_equality(a_groups, b_groups):
 
 
 def test_identify_anchor_groups():
+    """
+    Test that we can correctly enumerate all anchor groups. We are allowed either
+    1, 2, or 3 atoms in an anchor group.
+    """
 
     mol = Chem.MolFromSmiles("C1CC1F")
     core = [0, 1, 2]
