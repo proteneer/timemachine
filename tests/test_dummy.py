@@ -6,6 +6,7 @@ from timemachine.fe.dummy import (
     enumerate_anchor_groups,
     enumerate_dummy_ixns,
     flag_bonds,
+    generate_optimal_dg_ag_pairs,
     identify_anchor_groups,
     identify_dummy_groups,
     identify_root_anchors,
@@ -297,6 +298,190 @@ def test_flag_bonds_core_hop():
     keep_flags = flag_bonds(mol, core, bond_idxs)
 
     assert tuple(keep_flags) == tuple(expected_flags)
+
+
+def test_strict_mode_missing_ixns():
+
+    # test the following behavior for the molecule
+    #    2
+    #    |
+    # 0--1--3
+
+    # we want to test correctness of the strict when parts of the
+    # dummy-dummy interactions are missing
+
+    mol = Chem.MolFromSmiles("CC(C)C")
+    core = [1, 3]
+
+    # base case, all required terms for the torsion is present
+    bond_idxs = [
+        [0, 1],
+        [1, 2],
+        [1, 3],
+        [0, 2],
+        [0, 1, 2],
+        [0, 1, 3],
+        [2, 1, 3],
+        [0, 2, 1],
+        [0, 2, 1, 3],
+    ]
+
+    dgs, agcs, agis = generate_optimal_dg_ag_pairs(mol, core, bond_idxs, strict=False)
+    for dgs, agcs, agis in zip(dgs, agcs, agis):
+        assert (0, 2, 1, 3) in agis
+        assert (0, 2, 1) in agis
+        assert (0, 2) in agis
+
+    dgs, agcs, agis = generate_optimal_dg_ag_pairs(mol, core, bond_idxs, strict=True)
+    for dgs, agcs, agis in zip(dgs, agcs, agis):
+        assert (0, 2, 1, 3) in agis
+        assert (0, 2, 1) in agis
+        assert (0, 2) in agis
+
+    # missing angle
+    bond_idxs = [
+        [0, 1],
+        [1, 2],
+        [1, 3],
+        [0, 2],
+        [0, 1, 2],
+        [0, 1, 3],
+        [2, 1, 3],
+        # [0, 2, 1],
+        [0, 2, 1, 3],
+    ]
+
+    dgs, agcs, agis = generate_optimal_dg_ag_pairs(mol, core, bond_idxs, strict=False)
+    for dgs, agcs, agis in zip(dgs, agcs, agis):
+        assert (0, 2, 1, 3) in agis
+        assert (0, 2, 1) not in agis
+        assert (0, 2) in agis
+
+    dgs, agcs, agis = generate_optimal_dg_ag_pairs(mol, core, bond_idxs, strict=True)
+    for dgs, agcs, agis in zip(dgs, agcs, agis):
+        assert (0, 2, 1, 3) not in agis
+        assert (0, 2, 1) not in agis
+        assert (0, 2) in agis
+
+    # missing bond
+    bond_idxs = [
+        [0, 1],
+        [1, 2],
+        [1, 3],
+        # [0, 2],
+        [0, 1, 2],
+        [0, 1, 3],
+        [2, 1, 3],
+        [0, 2, 1],
+        [0, 2, 1, 3],
+    ]
+
+    dgs, agcs, agis = generate_optimal_dg_ag_pairs(mol, core, bond_idxs, strict=False)
+    for dgs, agcs, agis in zip(dgs, agcs, agis):
+        assert (0, 2, 1, 3) in agis
+        assert (0, 2, 1) in agis
+        assert (0, 2) not in agis
+
+    dgs, agcs, agis = generate_optimal_dg_ag_pairs(mol, core, bond_idxs, strict=True)
+    for dgs, agcs, agis in zip(dgs, agcs, agis):
+        assert (0, 2, 1, 3) not in agis
+        assert (0, 2, 1) not in agis
+        assert (0, 2) not in agis
+
+    # missing bond and angle
+    bond_idxs = [
+        [0, 1],
+        [1, 2],
+        [1, 3],
+        # [0, 2],
+        [0, 1, 2],
+        [0, 1, 3],
+        [2, 1, 3],
+        # [0, 2, 1],
+        [0, 2, 1, 3],
+    ]
+
+    dgs, agcs, agis = generate_optimal_dg_ag_pairs(mol, core, bond_idxs, strict=False)
+    for dgs, agcs, agis in zip(dgs, agcs, agis):
+        assert (0, 2, 1, 3) in agis
+        assert (0, 2, 1) not in agis
+        assert (0, 2) not in agis
+
+    dgs, agcs, agis = generate_optimal_dg_ag_pairs(mol, core, bond_idxs, strict=True)
+    for dgs, agcs, agis in zip(dgs, agcs, agis):
+        assert (0, 2, 1, 3) not in agis
+        assert (0, 2, 1) not in agis
+        assert (0, 2) not in agis
+
+
+def test_strict_mode_core_missing():
+
+    # let the molecule be a linear chain
+    # 0-1-2-3
+
+    # we want to test correctness of the strict when parts of the
+    # torsion definition is missing
+
+    mol = Chem.MolFromSmiles("CCCC")
+    core = [1, 2, 3]
+
+    # base case, all required terms for the torsion is present
+    bond_idxs = [
+        [0, 1],
+        [1, 2],
+        [2, 3],
+        [0, 1, 2],
+        [1, 2, 3],
+        [0, 1, 2, 3],
+    ]
+
+    dgs, agcs, agis = generate_optimal_dg_ag_pairs(mol, core, bond_idxs, strict=False)
+    for dgs, agcs, agis in zip(dgs, agcs, agis):
+        assert (0, 1, 2, 3) in agis
+
+    dgs, agcs, agis = generate_optimal_dg_ag_pairs(mol, core, bond_idxs, strict=True)
+    for dgs, agcs, agis in zip(dgs, agcs, agis):
+        assert (0, 1, 2, 3) in agis
+
+    # disable angle
+    bond_idxs = [
+        [0, 1],
+        [1, 2],
+        [2, 3],
+        [0, 1, 2],
+        # [1, 2, 3],
+        [0, 1, 2, 3],
+    ]
+
+    dgs, agcs, agis = generate_optimal_dg_ag_pairs(mol, core, bond_idxs, strict=False)
+    for dgs, agcs, agis in zip(dgs, agcs, agis):
+        assert (0, 1, 2, 3) in agis
+        assert (1, 2, 3) not in agis
+
+    dgs, agcs, agis = generate_optimal_dg_ag_pairs(mol, core, bond_idxs, strict=True)
+    for dgs, agcs, agis in zip(dgs, agcs, agis):
+        assert (0, 1, 2, 3) not in agis
+        assert (1, 2, 3) not in agis
+
+    # disable bond
+    bond_idxs = [
+        [0, 1],
+        [1, 2],
+        # [2, 3],
+        [0, 1, 2],
+        [1, 2, 3],
+        [0, 1, 2, 3],
+    ]
+
+    dgs, agcs, agis = generate_optimal_dg_ag_pairs(mol, core, bond_idxs, strict=False)
+    for dgs, agcs, agis in zip(dgs, agcs, agis):
+        assert (0, 1, 2, 3) in agis
+        assert (1, 2, 3) in agis
+
+    dgs, agcs, agis = generate_optimal_dg_ag_pairs(mol, core, bond_idxs, strict=True)
+    for dgs, agcs, agis in zip(dgs, agcs, agis):
+        assert (0, 1, 2, 3) not in agis
+        assert (1, 2, 3) not in agis
 
 
 def _draw_impl(mol, core, ff, fname):

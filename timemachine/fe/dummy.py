@@ -391,6 +391,23 @@ def enumerate_dummy_ixns(dg, ag):
 def find_ags_for_dg(mol, core, dg):
     """
     Find all possible anchor groups for a given dummy group.
+
+    Parameters
+    ----------
+    mol: Chem.Mol
+        input molecule
+
+    core: list of int
+        core indices
+
+    dg: iterable of int
+        dummy group
+
+    Returns
+    -------
+    list of list of int of up to size 3
+        Returns all allowed anchor groups for a given dummy group.
+
     """
     anchors = []
     for dummy_atom in dg:
@@ -476,8 +493,8 @@ def flag_bonds(mol, core, bond_idxs):
 
 def generate_dg_ag_pairs(mol, core, bond_idxs, strict):
     """
-    Generate optimal pairing of dummy group and anchor group atoms such that
-    bond_idxs is maximized.
+    Generate all pairings of dummy group and anchor group atoms
+    such that bond_idxs is maximized.
 
     Parameters
     ----------
@@ -491,15 +508,18 @@ def generate_dg_ag_pairs(mol, core, bond_idxs, strict):
         list of 2-tuple, 3-tuple, 4-tuple used to compare
 
     strict: bool
+        Whether or not we require bond terms to be present for
+        angle terms, and bond and angle terms to be present
+        for torsion terms.
 
     Returns
     -------
-        list of (dummy_group, anchor_group) pairs
+        list of (dummy_group, anchor_group, anchor_group_ixns) triples
 
     """
     # 1. process core bonds
-    ff_core_ixns = set()
-    ff_dummy_ixns = set()
+    ff_core_ixns = set()  # ff interactions that involve *only* core atoms
+    ff_dummy_ixns = set()  # ff interactions that involve *any* dummy atom
     for atom_idxs in bond_idxs:
         if np.all([i in core for i in atom_idxs]):
             ff_core_ixns.add(tuple(atom_idxs))
@@ -523,7 +543,7 @@ def generate_dg_ag_pairs(mol, core, bond_idxs, strict):
             # set of all possible dummy interactions, without taking ff idxs into account
             allowed_dummy_ixns = enumerate_dummy_ixns(dg, ag)
             mutual_bonds = allowed_dummy_ixns.intersection(ff_dummy_ixns)
-            mutual_bonds |= ff_core_ixns
+            mutual_bonds = mutual_bonds.union(ff_core_ixns)
 
             # do additional pruning by checking real bonds.
             if strict:
@@ -561,7 +581,35 @@ def generate_dg_ag_pairs(mol, core, bond_idxs, strict):
 
 
 def generate_optimal_dg_ag_pairs(mol, core, bond_idxs, strict=False):
+    """
+    Generate optimal (dummy group, anchor group) pairs given a list of bonded terms.
 
+    The dummy groups are generated from dummy atoms defined as non-core atoms. The heuristic
+    used attempts to maximize the number of 1-2 terms that can be left on, then the number
+    of 1-3 terms that can be left on, and finally the number of 1-4 terms that can be left on.
+
+    Parameters
+    ----------
+    mol: Chem.Mol
+        Input molecule
+
+    core: list of int
+        Indices for the core atom
+
+    bond_idxs: list of list of ints
+        Input bond_idxs
+
+    strict: bool
+        Whether or not we require bond terms to be present
+        angle terms, and bond and angle terms to be present
+        for torsion terms.
+
+    Returns
+    -------
+    3-tuple of dummy_groups, best_anchor_groups, best_anchor_group_ixns
+        Best anchor group for each dummy group and its interactions are returned
+
+    """
     dgs, all_agcs, all_agis = generate_dg_ag_pairs(mol, core, bond_idxs, strict)
 
     picked_agcs = []
