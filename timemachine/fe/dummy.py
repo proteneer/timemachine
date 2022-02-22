@@ -1,5 +1,6 @@
 import copy
 import itertools
+from collections import defaultdict
 
 import networkx as nx
 import numpy as np
@@ -35,7 +36,7 @@ def identify_anchor_groups(mol, core, root_anchor):
     mol: Chem.Mol
         rdkit molecule
 
-    core: list or set or iterable
+    core: list or set or iterable of ints
         core atoms
 
     root_anchor: int
@@ -123,28 +124,24 @@ def identify_root_anchors(mol, core, dummy_atom):
             if i not in core:
                 for nb in sparse_graph[i]:
                     dfs(nb, visited)
-            else:
-                return
 
     visited = set()
 
     dfs(dummy_atom, visited)
-    anchors = []
 
-    for a_idx in visited:
-        if a_idx in core:
-            anchors.append(a_idx)
+    anchors = [a_idx for a_idx in visited if a_idx in core]
 
     return anchors
 
 
 def enumerate_anchor_groups(mol, core, dummy_group):
     """
-    An anchor group is a set of core atoms that are allowed to interact with the dummy
+    An anchor group is an ordered set of only core atoms that are allowed to interact with
     atoms in a dummy group in a way that allows the partition function to be separated.
-    Unlike dummy groups, anchor groups do not partition the non-core atoms. They're allowed
-    to overlap core atom indices. In other words, anchor groups for any particular dummy
-    group is fully independent of other anchor groups for any other dummy group.
+    Unlike dummy groups, anchor groups do not form disjoint partitions. Different anchor
+    groups are allowed to have overlap in core atoms used. In other words, anchor groups
+    for any particular dummy group is fully independent of other anchor groups for any
+    other dummy group.
 
     While the choices of atoms in an anchor group is arbitrary, one heuristic we use
     to enumerate anchor groups is as follows. In order to determine:
@@ -208,10 +205,7 @@ def identify_dummy_groups(mol, core):
     2) Generate an induced graph using edges from above set.
     3) Disconnected components of the resulting induced graph are our dummy groups.
 
-    We limit ourselves to only 1-2 and 1-3 interactions in 1) because we're typically
-    guaranteed that there exists a direct bond or that they're at most one bond away.
-
-    For example:
+    Code example:
 
     ```
     mol = Chem.MolFromSmiles("FC1CC1(F)N")
@@ -270,10 +264,8 @@ def identify_dummy_groups(mol, core):
                 dists.append(nx.shortest_path_length(g, source=dummy, target=a))
             anchor_membership.append(np.argmin(dists))
 
-        anchor_kv = {}
+        anchor_kv = defaultdict(set)
         for idx, anchor in enumerate(anchor_membership):
-            if anchor not in anchor_kv:
-                anchor_kv[anchor] = set()
             anchor_kv[anchor].add(dg[idx])
 
         for v in anchor_kv.values():
@@ -404,6 +396,8 @@ def make_bond_set(old_set):
     """
     Bond set has the requirement that indices are symmetrically
     reversible. i.e. ij = ji, ijk = kji, ijkl = lkji
+
+    This is required to avoid duplication of bonds.
     """
     new_set = set()
     for idxs in old_set:
@@ -429,7 +423,8 @@ def flag_bonds(mol, core, bond_idxs):
 
     Returns
     -------
-        boolean flags, 1: keep, 0: remove
+    boolean flags of len(bond_idxs)
+        1: keep, 0: remove
 
     """
 
@@ -581,7 +576,7 @@ def generate_optimal_dg_ag_pairs(mol, core, bond_idxs):
             torsion_count = np.sum([len(idxs) == 4 for idxs in mutual_bonds])
             counts.append((bond_count, angle_count, torsion_count))
 
-        best_idx = sorted(zip(range(len(counts)), counts), reverse=True, key=lambda x: x[1])[0][0]
+        best_idx = max(zip(range(len(counts)), counts), key=lambda x: x[1])[0]
         picked_agcs.append(agcs[best_idx])
         picked_agis.append(agis[best_idx])
 
