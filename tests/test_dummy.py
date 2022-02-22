@@ -104,8 +104,8 @@ def test_identify_dummy_groups():
 
     {D0, D1, D2}
 
-        D0-D1  D2
-       /       /  -> 1 dummy-anchor bond:
+        D0-D1--D2
+       /          -> 1 dummy-anchor bond:
       0-------1
 
     """
