@@ -14,6 +14,20 @@ from timemachine.fe.dummy import (
 from timemachine.ff import Forcefield
 from timemachine.ff.handlers.deserialize import deserialize_handlers
 
+# These tests check the various utilities used to turn off interactions
+# such that the end-states are separable. A useful glossary of terms is as follows.
+# The tests in this module do not test for numerical stability, but only checks for correctness.
+
+# Many of the tests here are tediously written by hand, but should hopefully be sufficiently documented.
+
+# dummy atom - an R-group atom that is inserted or deleted in an alchemical transformation
+# dummy group - a collection of dummy atoms (eg. multiple dummy hydrogen atoms on CH3 can belong to the same dummy group, with C being a core atom).
+# core atom - not a dummy atom
+# anchor/core anchor - a core atom that is allowed to interact with the atoms in a given dummy group
+# anchor group - a set of ordered anchor atoms (up to 3) that can be used to define bond, angle, torsion terms in specialized ways
+# root-anchor - first atom in an anchor group, also the anchor atom that has direct 1-2 bonds to dummy atoms.
+# partition - only applies to dummy groups, as we require that dummy groups disjointly partition dummy atoms.
+
 
 def test_identify_root_anchors():
     """
@@ -244,15 +258,18 @@ def test_enumerate_allowed_dummy_ixns_3_anchors_spot_check():
     assert (3, 2, 8, 5) in allowed_ixns
     assert (1, 8, 2, 3) in allowed_ixns
 
-    assert (0, 1, 3) not in allowed_ixns
-    assert (0, 1, 4) not in allowed_ixns
-    assert (0, 2, 4) not in allowed_ixns
-    assert (0, 3) not in allowed_ixns
-    assert (0, 4) not in allowed_ixns
-    assert (5, 3, 4) not in allowed_ixns
-    assert (1, 5, 4) not in allowed_ixns
-    assert (5, 8, 2, 4) not in allowed_ixns
-    assert (1, 8, 3, 4) not in allowed_ixns
+    # root anchor = 2
+    # second anchor = 3
+    # third anchor = 4
+    assert (0, 3) not in allowed_ixns  # dummy-bond only allowed to root anchor
+    assert (0, 4) not in allowed_ixns  # dummy-bond only allowed to root anchor
+    assert (0, 1, 3) not in allowed_ixns  # angles can't skip the root anchor
+    assert (0, 1, 4) not in allowed_ixns  # angles can't skip the root anchor
+    assert (0, 2, 4) not in allowed_ixns  # angles can't skip the second anchor
+    assert (5, 3, 4) not in allowed_ixns  # angles can't skip the root anchor
+    assert (1, 5, 4) not in allowed_ixns  # angles can't skip the root anchor
+    assert (5, 8, 2, 4) not in allowed_ixns  # torsion can't skip the second anchor
+    assert (1, 8, 3, 4) not in allowed_ixns  # torsion can't skip the root anchor
 
 
 def test_enumerate_allowed_dummy_ixns_3_anchors_exhaustive():
