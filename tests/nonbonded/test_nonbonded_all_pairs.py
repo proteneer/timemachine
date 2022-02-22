@@ -40,7 +40,7 @@ def test_nonbonded_all_pairs_invalid_num_params():
 def make_ref_potential(lambda_plane_idxs, lambda_offset_idxs, beta, cutoff):
     @functools.wraps(nonbonded.nonbonded_v3)
     def wrapped(conf, params, box, lamb):
-        num_atoms, _ = conf
+        num_atoms, _ = conf.shape
         no_rescale = np.ones((num_atoms, num_atoms))
         return nonbonded.nonbonded_v3(
             conf,
