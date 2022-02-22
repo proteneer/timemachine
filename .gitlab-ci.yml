@@ -5,7 +5,7 @@ stages:          # List of stages for jobs, and their order of execution
 workflow:
   rules:
     # Only run the pipeline if its for a merge request or the default branch
-    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_PIPELINE_SOURCE == "external_pull_request_event"
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
 
 docker_build:
@@ -34,7 +34,7 @@ memory-tests:
   tags:
     - gpu
   rules:
-    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_PIPELINE_SOURCE == "external_pull_request_event"
   variables:
     CMAKE_ARGS: -DCUDA_ARCH=75
   script:
@@ -54,7 +54,7 @@ unit-tests:
   tags:
     - gpu
   rules:
-    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_PIPELINE_SOURCE == "external_pull_request_event"
   variables:
     CMAKE_ARGS: -DCUDA_ARCH=75
   script:
