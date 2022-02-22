@@ -2,22 +2,26 @@ stages:          # List of stages for jobs, and their order of execution
   - build-docker
   - test
 
-
 docker_build:
   stage: build-docker
   image: docker:20.10
   tags:
     - gpu
     - docker
+  variables:
+    DOCKER_TAG: $CI_REGISTRY_IMAGE:$CI_COMMIT_REF_SLUG
+    BASE_IMAGE: nvidia/cuda:11.6.0-devel-ubuntu20.04
   script:
     - DOCKER_HOST=tcp://localhost:2375 docker login -u $CI_REGISTRY_USER -p $CI_JOB_TOKEN $CI_REGISTRY
     - docker pull $CI_REGISTRY_IMAGE:$CI_COMMIT_SHA || true
-    - docker build -t $CI_REGISTRY_IMAGE:$CI_COMMIT_SHA --target tm_base_env .
-    - docker push $CI_REGISTRY_IMAGE:$CI_COMMIT_SHA
+    # Cache from base image and most recent image to get most out of the caching
+    - docker build --build-arg IMAGE_NAME=BASE_IMAGE -t $DOCKER_TAG --cache-from $BASE_IMAGE,$DOCKER_TAG --target tm_base_env .
+    - docker push $DOCKER_TAG
+
 
 memory-tests:
   stage: test
-  image: $CI_REGISTRY_IMAGE:$CI_COMMIT_SHA
+  image: $CI_REGISTRY_IMAGE:$CI_COMMIT_REF_SLUG
   needs: ["docker_build"]
   tags:
     - gpu
@@ -35,7 +39,7 @@ memory-tests:
 
 unit-tests:
   stage: test
-  image: $CI_REGISTRY_IMAGE:$CI_COMMIT_SHA
+  image: $CI_REGISTRY_IMAGE:$CI_COMMIT_REF_SLUG
   needs: ["docker_build"]
   tags:
     - gpu

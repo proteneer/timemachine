@@ -1,4 +1,5 @@
-FROM nvidia/cuda:11.6.0-devel-ubuntu20.04 AS tm_base_env
+ARG IMAGE_NAME=nvidia/cuda:11.6.0-devel-ubuntu20.04
+FROM ${IMAGE_NAME} AS tm_base_env
 
 # Copied out of anaconda's dockerfile
 ARG MINICONDA_VERSION=4.6.14
