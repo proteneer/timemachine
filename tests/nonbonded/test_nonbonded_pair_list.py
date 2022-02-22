@@ -8,7 +8,7 @@ import numpy as np
 import pytest
 from common import GradientTest
 
-from timemachine.lib.potentials import NonbondedPairList
+from timemachine.lib.potentials import NonbondedPairList, NonbondedPairListInterpolated
 from timemachine.potentials import jax_utils, nonbonded
 
 
@@ -92,6 +92,70 @@ def test_nonbonded_pair_list_correctness(
     GradientTest().compare_forces(
         example_conf,
         example_nonbonded_params,
+        example_box,
+        lamb,
+        ref_potential,
+        test_potential,
+        precision=precision,
+        rtol=rtol,
+        atol=atol,
+    )
+
+
+@pytest.mark.parametrize("lamb", [0.0, 0.1])
+@pytest.mark.parametrize("beta", [2.0])
+@pytest.mark.parametrize("cutoff", [1.1])
+@pytest.mark.parametrize("precision,rtol,atol", [(np.float64, 1e-8, 1e-8), (np.float32, 1e-4, 5e-4)])
+@pytest.mark.parametrize("ixn_group_size", [2, 33, 231])
+def test_nonbonded_pair_list_interpolated_correctness(
+    ixn_group_size,
+    precision,
+    rtol,
+    atol,
+    cutoff,
+    beta,
+    lamb,
+    example_nonbonded_params,
+    example_conf,
+    example_box,
+    rng: np.random.Generator,
+):
+    "Compares with jax reference implementation, with parameter interpolation."
+
+    num_atoms, _ = example_conf.shape
+
+    params_initial = example_nonbonded_params
+    params_final = params_initial + rng.normal(0, 0.01, size=params_initial.shape)
+    params = np.concatenate((params_initial, params_final))
+
+    # randomly select 2 interaction groups and construct all pairwise interactions
+    atom_idxs = rng.choice(
+        num_atoms,
+        size=(
+            2,
+            ixn_group_size,
+        ),
+        replace=False,
+    ).astype(np.int32)
+
+    pair_idxs = np.stack(np.meshgrid(atom_idxs[0, :], atom_idxs[1, :])).reshape(2, -1).T
+    num_pairs, _ = pair_idxs.shape
+
+    scales = rng.uniform(0, 1, size=(num_pairs, 2))
+
+    lambda_plane_idxs = rng.integers(-2, 3, size=(num_atoms,), dtype=np.int32)
+    lambda_offset_idxs = rng.integers(-2, 3, size=(num_atoms,), dtype=np.int32)
+
+    ref_potential = nonbonded.interpolated(
+        make_ref_potential(pair_idxs, scales, lambda_plane_idxs, lambda_offset_idxs, beta, cutoff)
+    )
+    test_potential = NonbondedPairListInterpolated(
+        pair_idxs, scales, lambda_plane_idxs, lambda_offset_idxs, beta, cutoff
+    )
+
+    GradientTest().compare_forces(
+        example_conf,
+        params,
         example_box,
         lamb,
         ref_potential,
