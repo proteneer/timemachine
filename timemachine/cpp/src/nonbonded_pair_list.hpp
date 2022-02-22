@@ -6,7 +6,7 @@
 
 namespace timemachine {
 
-template <typename RealType, bool Negated, bool Interpolated> class NonbondedPairs : public Potential {
+template <typename RealType, bool Negated, bool Interpolated> class NonbondedPairList : public Potential {
 
 private:
     int *d_pair_idxs_; // [M, 2]
@@ -36,7 +36,7 @@ private:
     jitify::KernelInstantiation compute_add_du_dp_interpolated_;
 
 public:
-    NonbondedPairs(
+    NonbondedPairList(
         const std::vector<int> &pair_idxs,          // [M, 2]
         const std::vector<double> &scales,          // [M, 2]
         const std::vector<int> &lambda_plane_idxs,  // [N]
@@ -45,7 +45,7 @@ public:
         const double cutoff,
         const std::string &kernel_src);
 
-    ~NonbondedPairs();
+    ~NonbondedPairList();
 
     virtual void execute_device(
         const int N,

@@ -1,3 +1,5 @@
+import functools
+
 import jax.numpy as np
 from jax import vmap
 from jax.ops import index, index_update
@@ -261,7 +263,7 @@ def nonbonded_v3_on_specific_pairs(conf, params, box, pairs, beta: float, cutoff
     # vdW by Lennard-Jones
     sig_ij = apply_cutoff(sig[inds_l] + sig[inds_r])
     eps_ij = apply_cutoff(eps[inds_l] * eps[inds_r])
-    vdW = lennard_jones(dij, sig_ij, eps_ij)
+    vdW = np.where(eps_ij != 0, lennard_jones(dij, sig_ij, eps_ij), 0)
 
     # Electrostatics by direct-space part of PME
     qij = apply_cutoff(charges[inds_l] * charges[inds_r])
@@ -303,6 +305,33 @@ def construct_batch_nonbonded_as_fxn_of_ligand_nb_params(
         return compute_batch_nonbonded(confs, boxes, pair_lists, new_nb_params, beta, cutoff)
 
     return batch_nonbonded
+
+
+def nonbonded_v3_interaction_groups(conf, params, box, inds_l, inds_r, beta: float, cutoff: Optional[float] = None):
+    """Nonbonded interactions between all pairs of atoms $(i, j)$
+    where $i$ is in the first set and $j$ in the second.
+
+    See nonbonded_v3 docstring for more details
+    """
+    pairs = np.stack(np.meshgrid(inds_l, inds_r)).reshape(2, -1).T
+    vdW, electrostatics = nonbonded_v3_on_specific_pairs(conf, params, box, pairs, beta, cutoff)
+    return vdW, electrostatics, pairs
+
+
+def interpolated(u_fn):
+    @functools.wraps(u_fn)
+    def wrapper(conf, params, box, lamb):
+
+        # params is expected to be the concatenation of initial
+        # (lambda = 0) and final (lamda = 1) parameters, each of
+        # length num_atoms
+        assert params.size % 2 == 0
+        num_atoms = params.shape[0] // 2
+
+        new_params = (1 - lamb) * params[:num_atoms] + lamb * params[num_atoms:]
+        return u_fn(conf, new_params, box, lamb)
+
+    return wrapper
 
 
 def validate_coulomb_cutoff(cutoff=1.0, beta=2.0, threshold=1e-2):

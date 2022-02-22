@@ -2,22 +2,13 @@ from jax.config import config
 
 config.update("jax_enable_x64", True)
 import copy
-import functools
 
 import jax.numpy as jnp
 import numpy as np
 from common import GradientTest, prepare_water_system
 
 from timemachine.lib import potentials
-
-
-def interpolated_potential(conf, params, box, lamb, u_fn):
-    assert params.size % 2 == 0
-
-    CP = params.shape[0] // 2
-    new_params = (1 - lamb) * params[:CP] + lamb * params[CP:]
-
-    return u_fn(conf, new_params, box, lamb)
+from timemachine.potentials import nonbonded
 
 
 class TestInterpolatedPotential(GradientTest):
@@ -57,7 +48,7 @@ class TestInterpolatedPotential(GradientTest):
 
                 print("lambda", lamb, "cutoff", cutoff, "precision", precision, "xshape", coords.shape)
 
-                ref_interpolated_potential = functools.partial(interpolated_potential, u_fn=ref_potential)
+                ref_interpolated_potential = nonbonded.interpolated(ref_potential)
 
                 test_interpolated_potential = potentials.NonbondedInterpolated(*test_potential.args)
 
