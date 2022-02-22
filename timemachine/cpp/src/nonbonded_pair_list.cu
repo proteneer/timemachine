@@ -24,19 +24,22 @@ NonbondedPairList<RealType, Negated, Interpolated>::NonbondedPairList(
           kernel_cache_.program(kernel_src.c_str()).kernel("k_add_du_dp_interpolated").instantiate()) {
 
     if (pair_idxs.size() % 2 != 0) {
-        throw std::runtime_error("pair_idxs.size() must be exactly 2*M");
+        throw std::runtime_error("pair_idxs.size() must be even, but got " + std::to_string(pair_idxs.size()));
     }
 
     for (int i = 0; i < M_; i++) {
         auto src = pair_idxs[i * 2 + 0];
         auto dst = pair_idxs[i * 2 + 1];
         if (src == dst) {
-            throw std::runtime_error("illegal pair with src == dst");
+            throw std::runtime_error(
+                "illegal pair with src == dst: " + std::to_string(src) + ", " + std::to_string(dst));
         }
     }
 
     if (scales.size() / 2 != M_) {
-        throw std::runtime_error("bad scales size!");
+        throw std::runtime_error(
+            "expected same number of pairs and scale tuples, but got " + std::to_string(M_) +
+            " != " + std::to_string(scales.size() / 2));
     }
 
     gpuErrchk(cudaMalloc(&d_pair_idxs_, M_ * 2 * sizeof(*d_pair_idxs_)));
