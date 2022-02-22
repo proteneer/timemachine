@@ -6,14 +6,16 @@
 #include <cstdlib>
 #include <cub/cub.cuh>
 #include <iostream>
+#include <numeric>
+#include <set>
 #include <vector>
 
 #include "fixed_point.hpp"
 #include "gpu_utils.cuh"
-#include "nonbonded_dense.hpp"
+#include "nonbonded_interaction_group.hpp"
 #include "vendored/hilbert.h"
 
-#include "k_nonbonded_dense.cuh"
+#include "k_nonbonded.cuh"
 
 #include <fstream>
 #include <streambuf>
@@ -21,20 +23,21 @@
 
 namespace timemachine {
 
+std::vector<int> set_to_vector(const std::set<int> &s) {
+    std::vector<int> v(s.begin(), s.end());
+    return v;
+}
+
 template <typename RealType, bool Interpolated>
-NonbondedDense<RealType, Interpolated>::NonbondedDense(
+NonbondedInteractionGroup<RealType, Interpolated>::NonbondedInteractionGroup(
+    const std::set<int> &row_atom_idxs,
     const std::vector<int> &lambda_plane_idxs,  // [N]
     const std::vector<int> &lambda_offset_idxs, // [N]
     const double beta,
     const double cutoff,
-    const std::string &kernel_src
-    // const std::string &transform_lambda_charge,
-    // const std::string &transform_lambda_sigma,
-    // const std::string &transform_lambda_epsilon,
-    // const std::string &transform_lambda_w
-    )
-    : N_(lambda_offset_idxs.size()), cutoff_(cutoff), nblist_(lambda_offset_idxs.size()), beta_(beta),
-      d_sort_storage_(nullptr), d_sort_storage_bytes_(0), nblist_padding_(0.1), disable_hilbert_(false),
+    const std::string &kernel_src)
+    : N_(lambda_offset_idxs.size()), NR_(row_atom_idxs.size()), NC_(N_ - NR_), cutoff_(cutoff), nblist_(NC_, NR_),
+      beta_(beta), d_sort_storage_(nullptr), d_sort_storage_bytes_(0), nblist_padding_(0.1), disable_hilbert_(false),
       kernel_ptrs_({// enumerate over every possible kernel combination
                     // U: Compute U
                     // X: Compute DU_DL
@@ -63,13 +66,34 @@ NonbondedDense<RealType, Interpolated>::NonbondedDense(
       compute_add_du_dp_interpolated_(
           kernel_cache_.program(kernel_src.c_str()).kernel("k_add_du_dp_interpolated").instantiate()) {
 
-    if (lambda_offset_idxs.size() != N_) {
-        throw std::runtime_error("lambda offset idxs need to have size N");
+    if (NR_ == 0) {
+        throw std::runtime_error("row_atom_idxs must be nonempty");
     }
 
     if (lambda_offset_idxs.size() != lambda_plane_idxs.size()) {
         throw std::runtime_error("lambda offset idxs and plane idxs need to be equivalent");
     }
+
+    // compute set of column atoms as set difference
+    std::vector<int> all_atom_idxs(N_);
+    std::iota(all_atom_idxs.begin(), all_atom_idxs.end(), 0);
+    std::set<int> col_atom_idxs;
+    std::set_difference(
+        all_atom_idxs.begin(),
+        all_atom_idxs.end(),
+        row_atom_idxs.begin(),
+        row_atom_idxs.end(),
+        std::inserter(col_atom_idxs, col_atom_idxs.end()));
+
+    std::vector<int> col_atom_idxs_v(set_to_vector(col_atom_idxs));
+    gpuErrchk(cudaMalloc(&d_col_atom_idxs_, NC_ * sizeof(*d_col_atom_idxs_)));
+    gpuErrchk(
+        cudaMemcpy(d_col_atom_idxs_, &col_atom_idxs_v[0], NC_ * sizeof(*d_col_atom_idxs_), cudaMemcpyHostToDevice));
+
+    std::vector<int> row_atom_idxs_v(set_to_vector(row_atom_idxs));
+    gpuErrchk(cudaMalloc(&d_row_atom_idxs_, NR_ * sizeof(*d_row_atom_idxs_)));
+    gpuErrchk(
+        cudaMemcpy(d_row_atom_idxs_, &row_atom_idxs_v[0], NR_ * sizeof(*d_row_atom_idxs_), cudaMemcpyHostToDevice));
 
     gpuErrchk(cudaMalloc(&d_lambda_plane_idxs_, N_ * sizeof(*d_lambda_plane_idxs_)));
     gpuErrchk(cudaMemcpy(
@@ -132,18 +156,27 @@ NonbondedDense<RealType, Interpolated>::NonbondedDense(
 
     // estimate size needed to do radix sorting, this can use uninitialized data.
     cub::DeviceRadixSort::SortPairs(
-        d_sort_storage_, d_sort_storage_bytes_, d_sort_keys_in_, d_sort_keys_out_, d_sort_vals_in_, d_perm_, N_);
+        d_sort_storage_,
+        d_sort_storage_bytes_,
+        d_sort_keys_in_,
+        d_sort_keys_out_,
+        d_sort_vals_in_,
+        d_perm_,
+        std::max(NC_, NR_));
 
     gpuErrchk(cudaPeekAtLastError());
     gpuErrchk(cudaMalloc(&d_sort_storage_, d_sort_storage_bytes_));
 };
 
-template <typename RealType, bool Interpolated> NonbondedDense<RealType, Interpolated>::~NonbondedDense() {
+template <typename RealType, bool Interpolated>
+NonbondedInteractionGroup<RealType, Interpolated>::~NonbondedInteractionGroup() {
+    gpuErrchk(cudaFree(d_col_atom_idxs_));
+    gpuErrchk(cudaFree(d_row_atom_idxs_));
 
     gpuErrchk(cudaFree(d_lambda_plane_idxs_));
     gpuErrchk(cudaFree(d_lambda_offset_idxs_));
     gpuErrchk(cudaFree(d_du_dp_buffer_));
-    gpuErrchk(cudaFree(d_perm_)); // nullptr if we never built nblist
+    gpuErrchk(cudaFree(d_perm_));
 
     gpuErrchk(cudaFree(d_bin_to_idx_));
     gpuErrchk(cudaFree(d_sorted_x_));
@@ -173,22 +206,29 @@ template <typename RealType, bool Interpolated> NonbondedDense<RealType, Interpo
 };
 
 template <typename RealType, bool Interpolated>
-void NonbondedDense<RealType, Interpolated>::set_nblist_padding(double val) {
+void NonbondedInteractionGroup<RealType, Interpolated>::set_nblist_padding(double val) {
     nblist_padding_ = val;
 }
 
-template <typename RealType, bool Interpolated> void NonbondedDense<RealType, Interpolated>::disable_hilbert_sort() {
+template <typename RealType, bool Interpolated>
+void NonbondedInteractionGroup<RealType, Interpolated>::disable_hilbert_sort() {
     disable_hilbert_ = true;
 }
 
 template <typename RealType, bool Interpolated>
-void NonbondedDense<RealType, Interpolated>::hilbert_sort(
-    const double *d_coords, const double *d_box, cudaStream_t stream) {
+void NonbondedInteractionGroup<RealType, Interpolated>::hilbert_sort(
+    const int N,
+    const unsigned int *d_atom_idxs,
+    const double *d_coords,
+    const double *d_box,
+    unsigned int *d_perm,
+    cudaStream_t stream) {
 
     const int tpb = 32;
-    const int B = (N_ + tpb - 1) / tpb;
+    const int B = ceil_divide(N, tpb);
 
-    k_coords_to_kv<<<B, tpb, 0, stream>>>(N_, d_coords, d_box, d_bin_to_idx_, d_sort_keys_in_, d_sort_vals_in_);
+    k_coords_to_kv_gather<<<B, tpb, 0, stream>>>(
+        N, d_atom_idxs, d_coords, d_box, d_bin_to_idx_, d_sort_keys_in_, d_sort_vals_in_);
 
     gpuErrchk(cudaPeekAtLastError());
 
@@ -198,8 +238,8 @@ void NonbondedDense<RealType, Interpolated>::hilbert_sort(
         d_sort_keys_in_,
         d_sort_keys_out_,
         d_sort_vals_in_,
-        d_perm_,
-        N_,
+        d_perm,
+        N,
         0,                            // begin bit
         sizeof(*d_sort_keys_in_) * 8, // end bit
         stream                        // cudaStream
@@ -208,16 +248,8 @@ void NonbondedDense<RealType, Interpolated>::hilbert_sort(
     gpuErrchk(cudaPeekAtLastError());
 }
 
-void __global__ k_arange(int N, unsigned int *arr) {
-    const int atom_idx = blockIdx.x * blockDim.x + threadIdx.x;
-    if (atom_idx >= N) {
-        return;
-    }
-    arr[atom_idx] = atom_idx;
-}
-
 template <typename RealType, bool Interpolated>
-void NonbondedDense<RealType, Interpolated>::execute_device(
+void NonbondedInteractionGroup<RealType, Interpolated>::execute_device(
     const int N,
     const int P,
     const double *d_x,
@@ -247,29 +279,28 @@ void NonbondedDense<RealType, Interpolated>::execute_device(
     // g. note that du/dl is not an exact per-particle du/dl - it is only used for reduction purposes.
 
     if (N != N_) {
-        std::cout << N << " " << N_ << std::endl;
-        throw std::runtime_error("NonbondedDense::execute_device() N != N_");
+        throw std::runtime_error(
+            "NonbondedAllPairs::execute_device(): expected N == N_, got N=" + std::to_string(N) +
+            ", N_=" + std::to_string(N_));
     }
 
     const int M = Interpolated ? 2 : 1;
 
     if (P != M * N_ * 3) {
-        std::cout << P << " " << N_ << std::endl;
-        throw std::runtime_error("NonbondedDense::execute_device() P != M*N_*3");
+        throw std::runtime_error(
+            "NonbondedAllPairs::execute_device(): expected P == M*N_*3, got P=" + std::to_string(P) +
+            ", M*N_*3=" + std::to_string(M * N_ * 3));
     }
 
     // identify which tiles contain interpolated parameters
 
     const int tpb = 32;
-    const int B = (N + tpb - 1) / tpb;
-
-    dim3 dimGrid(B, 3, 1);
+    const int B = ceil_divide(N_, tpb);
 
     // (ytz) see if we need to rebuild the neighborlist.
-    // (ytz + jfass): note that this logic needs to change if we use NPT later on since a resize in the box
-    // can introduce new interactions.
     k_check_rebuild_coords_and_box<RealType>
-        <<<B, tpb, 0, stream>>>(N, d_x, d_nblist_x_, d_box, d_nblist_box_, nblist_padding_, d_rebuild_nblist_);
+        <<<B, tpb, 0, stream>>>(N_, d_x, d_nblist_x_, d_box, d_nblist_box_, nblist_padding_, d_rebuild_nblist_);
+
     gpuErrchk(cudaPeekAtLastError());
 
     // we can optimize this away by doing the check on the GPU directly.
@@ -277,30 +308,41 @@ void NonbondedDense<RealType, Interpolated>::execute_device(
         p_rebuild_nblist_, d_rebuild_nblist_, 1 * sizeof(*p_rebuild_nblist_), cudaMemcpyDeviceToHost, stream));
     gpuErrchk(cudaStreamSynchronize(stream)); // slow!
 
+    dim3 dimGrid(B, 3, 1);
+
     if (p_rebuild_nblist_[0] > 0) {
 
         // (ytz): update the permutation index before building neighborlist, as the neighborlist is tied
         // to a particular sort order
         if (!disable_hilbert_) {
-            this->hilbert_sort(d_x, d_box, stream);
+            this->hilbert_sort(NC_, d_col_atom_idxs_, d_x, d_box, d_perm_, stream);
+            this->hilbert_sort(NR_, d_row_atom_idxs_, d_x, d_box, d_perm_ + NC_, stream);
         } else {
-            k_arange<<<B, tpb, 0, stream>>>(N, d_perm_);
-            gpuErrchk(cudaPeekAtLastError());
+            gpuErrchk(cudaMemcpyAsync(
+                d_perm_, d_col_atom_idxs_, NC_ * sizeof(*d_col_atom_idxs_), cudaMemcpyDeviceToDevice, stream));
+            gpuErrchk(cudaMemcpyAsync(
+                d_perm_ + NC_, d_row_atom_idxs_, NR_ * sizeof(*d_row_atom_idxs_), cudaMemcpyDeviceToDevice, stream));
         }
 
         // compute new coordinates, new lambda_idxs, new_plane_idxs
-        k_permute<<<dimGrid, tpb, 0, stream>>>(N, d_perm_, d_x, d_sorted_x_);
+        k_permute<<<dimGrid, tpb, 0, stream>>>(N_, d_perm_, d_x, d_sorted_x_);
         gpuErrchk(cudaPeekAtLastError());
-        nblist_.build_nblist_device(N, d_sorted_x_, d_box, cutoff_ + nblist_padding_, stream);
+
+        nblist_.build_nblist_device(
+            NC_, NR_, d_sorted_x_, d_sorted_x_ + 3 * NC_, d_box, cutoff_ + nblist_padding_, stream);
         gpuErrchk(cudaMemcpyAsync(
             p_ixn_count_, nblist_.get_ixn_count(), 1 * sizeof(*p_ixn_count_), cudaMemcpyDeviceToHost, stream));
 
         std::vector<double> h_box(9);
         gpuErrchk(cudaMemcpyAsync(&h_box[0], d_box, 3 * 3 * sizeof(*d_box), cudaMemcpyDeviceToHost, stream));
+
+        // this stream needs to be synchronized so we can be sure that p_ixn_count_ is properly set.
+        cudaStreamSynchronize(stream);
+
         // Verify that the cutoff and box size are valid together. If cutoff is greater than half the box
         // then a particle can interact with multiple periodic copies.
         const double db_cutoff = (cutoff_ + nblist_padding_) * 2;
-        cudaStreamSynchronize(stream);
+
         // Verify that box is orthogonal and the width of the box in all dimensions is greater than twice the cutoff
         for (int i = 0; i < 9; i++) {
             if (i == 0 || i == 4 || i == 8) {
@@ -321,6 +363,11 @@ void NonbondedDense<RealType, Interpolated>::execute_device(
         gpuErrchk(cudaPeekAtLastError());
     }
 
+    // if the neighborlist is empty, we can return early
+    if (p_ixn_count_[0] == 0) {
+        return;
+    }
+
     // do parameter interpolation here
     if (Interpolated) {
         CUresult result = compute_permute_interpolated_.configure(dimGrid, tpb, 0, stream)
@@ -334,7 +381,6 @@ void NonbondedDense<RealType, Interpolated>::execute_device(
         gpuErrchk(cudaMemsetAsync(d_sorted_dp_dl_, 0, N * 3 * sizeof(*d_sorted_dp_dl_), stream))
     }
 
-    // this stream needs to be synchronized so we can be sure that p_ixn_count_ is properly set.
     // reset buffers and sorted accumulators
     if (d_du_dx) {
         gpuErrchk(cudaMemsetAsync(d_sorted_du_dx_, 0, N * 3 * sizeof(*d_sorted_du_dx_), stream))
@@ -363,7 +409,8 @@ void NonbondedDense<RealType, Interpolated>::execute_device(
     kernel_idx |= d_u ? 1 << 3 : 0;
 
     kernel_ptrs_[kernel_idx]<<<p_ixn_count_[0], tpb, 0, stream>>>(
-        N,
+        NC_,
+        NR_,
         d_sorted_x_,
         d_sorted_p_,
         d_box,
@@ -410,7 +457,7 @@ void NonbondedDense<RealType, Interpolated>::execute_device(
 }
 
 template <typename RealType, bool Interpolated>
-void NonbondedDense<RealType, Interpolated>::du_dp_fixed_to_float(
+void NonbondedInteractionGroup<RealType, Interpolated>::du_dp_fixed_to_float(
     const int N, const int P, const unsigned long long *du_dp, double *du_dp_float) {
 
     // In the interpolated case we have derivatives for the initial and final parameters
@@ -426,9 +473,9 @@ void NonbondedDense<RealType, Interpolated>::du_dp_fixed_to_float(
     }
 }
 
-template class NonbondedDense<double, true>;
-template class NonbondedDense<float, true>;
-template class NonbondedDense<double, false>;
-template class NonbondedDense<float, false>;
+template class NonbondedInteractionGroup<double, true>;
+template class NonbondedInteractionGroup<float, true>;
+template class NonbondedInteractionGroup<double, false>;
+template class NonbondedInteractionGroup<float, false>;
 
 } // namespace timemachine

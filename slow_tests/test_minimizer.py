@@ -1,7 +1,6 @@
 from rdkit import Chem
 
 from timemachine.ff import Forcefield
-from timemachine.ff.handlers.deserialize import deserialize_handlers
 from timemachine.md import builders, minimizer
 
 
@@ -16,7 +15,7 @@ def test_minimizer():
     mol_a = all_mols[1]
     mol_b = all_mols[4]
 
-    ff = Forcefield(deserialize_handlers(open("timemachine/ff/params/smirnoff_1_1_0_ccc.py").read()))
+    ff = Forcefield.load_from_file("smirnoff_1_1_0_ccc.py")
 
     # these methods will throw if the minimization failed
     minimizer.minimize_host_4d([mol_a, mol_b], complex_system, complex_coords, ff, complex_box)

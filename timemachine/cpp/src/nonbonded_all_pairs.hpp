@@ -9,7 +9,8 @@
 namespace timemachine {
 
 typedef void (*k_nonbonded_fn)(
-    const int N,
+    const int NC,
+    const int NR,
     const double *__restrict__ coords,
     const double *__restrict__ params, // [N]
     const double *__restrict__ box,
@@ -25,7 +26,7 @@ typedef void (*k_nonbonded_fn)(
     unsigned long long *__restrict__ du_dl_buffer,
     unsigned long long *__restrict__ u_buffer);
 
-template <typename RealType, bool Interpolated> class NonbondedDense : public Potential {
+template <typename RealType, bool Interpolated> class NonbondedAllPairs : public Potential {
 
 private:
     std::array<k_nonbonded_fn, 16> kernel_ptrs_;
@@ -48,21 +49,28 @@ private:
 
     unsigned int *d_perm_; // hilbert curve permutation
 
-    double *d_w_;     //
-    double *d_dw_dl_; //
+    double *d_w_; // 4D coordinates
+    double *d_dw_dl_;
 
-    double *d_sorted_x_;     //
-    double *d_sorted_w_;     //
-    double *d_sorted_dw_dl_; //
-    double *d_sorted_p_;     //
-    double *d_unsorted_p_;   //
+    // "sorted" means
+    // - if hilbert sorting enabled, atoms are sorted according to the
+    //   hilbert curve index
+    // - otherwise, atom ordering is preserved with respect to input
+    //
+    // "unsorted" means the atom ordering is preserved with respect to input
+    double *d_sorted_x_; // sorted coordinates
+    double *d_sorted_w_; // sorted 4D coordinates
+    double *d_sorted_dw_dl_;
+    double *d_sorted_p_;   // sorted parameters
+    double *d_unsorted_p_; // unsorted parameters
     double *d_sorted_dp_dl_;
     double *d_unsorted_dp_dl_;
-    unsigned long long *d_sorted_du_dx_; //
-    unsigned long long *d_sorted_du_dp_; //
-    unsigned long long *d_du_dp_buffer_; //
+    unsigned long long *d_sorted_du_dx_;
+    unsigned long long *d_sorted_du_dp_;
+    unsigned long long *d_du_dp_buffer_;
 
-    unsigned int *d_bin_to_idx_;
+    // used for hilbert sorting
+    unsigned int *d_bin_to_idx_; // mapping from 256x256x256 grid to hilbert curve index
     unsigned int *d_sort_keys_in_;
     unsigned int *d_sort_keys_out_;
     unsigned int *d_sort_vals_in_;
@@ -83,14 +91,14 @@ public:
     void set_nblist_padding(double val);
     void disable_hilbert_sort();
 
-    NonbondedDense(
+    NonbondedAllPairs(
         const std::vector<int> &lambda_plane_idxs,  // N
         const std::vector<int> &lambda_offset_idxs, // N
         const double beta,
         const double cutoff,
         const std::string &kernel_src);
 
-    ~NonbondedDense();
+    ~NonbondedAllPairs();
 
     virtual void execute_device(
         const int N,
