@@ -7,6 +7,7 @@ workflow:
     # Only run the pipeline if its for a merge request or the default branch
     - if: '$CI_PIPELINE_SOURCE == "external_pull_request_event"'
     - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+    - if: '$CI_EXTERNAL_PULL_REQUEST_IID != null || $CI_EXTERNAL_PULL_REQUEST_IID != ""'
 
 docker_build:
   stage: build-docker
