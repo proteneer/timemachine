@@ -2,7 +2,7 @@
 
 index stuff
 * get_all_pairs_indices
-* get_group_group_indices
+* pairs_from_interaction_groups
 * batched_neighbor_inds
 * get_ligand_dependent_indices_batch
 
@@ -17,8 +17,6 @@ distance stuff
 * convert_to_4d
 """
 
-from typing import Tuple
-
 import jax.numpy as np
 import numpy as onp
 from jax import vmap
@@ -26,7 +24,7 @@ from jax import vmap
 Array = onp.array
 
 
-def get_all_pairs_indices(n: int) -> Tuple[Array, Array]:
+def get_all_pairs_indices(n: int) -> Array:
     """all indices i, j such that i < j < n"""
     n_interactions = n * (n - 1) / 2
 
@@ -37,13 +35,9 @@ def get_all_pairs_indices(n: int) -> Tuple[Array, Array]:
     return pairs
 
 
-def get_group_group_indices(n: int, m: int) -> Tuple[Array, Array]:
-    """all indices i, j such that i < n, j < m"""
-    n_interactions = n * m
-
-    # TODO [usability, flexibility]: modify signature to accept these index arrays rather than ints
-    group_a_indices = np.arange(n)
-    group_b_indices = np.arange(m)
+def pairs_from_interaction_groups(group_a_indices: Array, group_b_indices: Array) -> Array:
+    """(a, b) for a in group_a_indices, b in group_b_indices"""
+    n_interactions = len(group_a_indices) * len(group_b_indices)
 
     pairs = np.stack(np.meshgrid(group_a_indices, group_b_indices)).reshape(2, -1).T
 
@@ -183,8 +177,8 @@ def get_ligand_dependent_indices_batch(confs, boxes, ligand_indices, cutoff=1.2)
     environment_indices = np.array(list(set(onp.arange(n_atoms)) - set(onp.array(ligand_indices))))
 
     # (ligand, environment) pairs within distance cutoff
-    pairs = get_group_group_indices(len(ligand_indices), len(environment_indices))
-    batch_ligand_environment_pairs = batched_neighbor_inds(confs, pairs, cutoff, boxes)
+    candidate_pairs = pairs_from_interaction_groups(ligand_indices, environment_indices)
+    batch_ligand_environment_pairs = batched_neighbor_inds(confs, candidate_pairs, cutoff, boxes)
     n_ligand_environment_pairs = batch_ligand_environment_pairs.shape[1]
 
     # (ligand, ligand) pairs

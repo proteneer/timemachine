@@ -16,7 +16,7 @@ from timemachine.potentials.jax_utils import (
     delta_r,
     distance_on_pairs,
     get_all_pairs_indices,
-    get_group_group_indices,
+    pairs_from_interaction_groups,
 )
 
 
@@ -64,15 +64,22 @@ def test_get_all_pairs_indices():
         assert (pairs < n).all()
 
 
-def test_get_group_group_indices():
-    """check i < n, j < m"""
-    ns = onp.random.randint(5, 50, 10)
-    ms = onp.random.randint(5, 50, 10)
+def test_get_pairs_from_interaction_groups_indices():
+    """on random instances of varying size, assert expected number and identity of interacting pairs"""
+    num_instances = 10
+    ns = onp.random.randint(5, 50, num_instances)
+    ms = onp.random.randint(5, 50, num_instances)
 
     for n, m in zip(ns, ms):
-        pairs = get_group_group_indices(n, m)
-        assert (pairs[:, 0] < n).all()
-        assert (pairs[:, 1] < m).all()
+        atom_indices = np.arange(n + m)
+
+        # non-contiguous group indices
+        onp.random.shuffle(atom_indices)
+        group_a_indices, group_b_indices = atom_indices[:n], atom_indices[-m:]
+
+        pairs = pairs_from_interaction_groups(group_a_indices, group_b_indices)
+        assert set(pairs[:, 0]) == set(group_a_indices)
+        assert set(pairs[:, 1]) == set(group_b_indices)
 
         assert len(pairs) == n * m
 
@@ -118,11 +125,10 @@ def test_batched_neighbor_inds():
     boxes = np.array([np.eye(3)] * n_confs)
 
     n_alchemical = 50
-    inds_l, inds_r = get_group_group_indices(n=n_alchemical, m=n_particles - n_alchemical).T
-    pairs = np.array([inds_l, inds_r + n_alchemical]).T
+    pairs = pairs_from_interaction_groups(np.arange(n_alchemical), np.arange(n_alchemical, n_particles))
     n_possible_interactions = len(pairs)
 
-    full_distances = vmap(distance_on_pairs)(confs[:, inds_l], confs[:, inds_r], boxes)
+    full_distances = vmap(distance_on_pairs)(confs[:, pairs[:, 0]], confs[:, pairs[:, 1]], boxes)
     assert full_distances.shape == (n_confs, n_possible_interactions)
 
     batch_pairs = batched_neighbor_inds(confs, pairs, cutoff, boxes)

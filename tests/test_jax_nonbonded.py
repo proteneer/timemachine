@@ -19,7 +19,12 @@ from simtk import unit
 
 from timemachine.ff.handlers import openmm_deserializer
 from timemachine.md import builders
-from timemachine.potentials.jax_utils import convert_to_4d, distance, get_all_pairs_indices, get_group_group_indices
+from timemachine.potentials.jax_utils import (
+    convert_to_4d,
+    distance,
+    get_all_pairs_indices,
+    pairs_from_interaction_groups,
+)
 from timemachine.potentials.nonbonded import nonbonded_block, nonbonded_v3, nonbonded_v3_on_specific_pairs
 
 Conf = Params = Box = ChargeMask = LJMask = LambdaPlaneIdxs = LambdaOffsetIdxs = np.array
@@ -305,8 +310,10 @@ def test_vmap():
     n_total = n_ligand + n_environment
     conf, params, box, lamb, _, _, beta, cutoff, _, _ = generate_random_inputs(n_total, 3)
 
-    pairs = get_group_group_indices(n_ligand, n_environment)
-    pairs[:, 1] += n_ligand
+    ligand_indices = np.arange(n_ligand)
+    environment_indices = np.arange(n_environment) + n_ligand
+    pairs = pairs_from_interaction_groups(ligand_indices, environment_indices)
+
     n_interactions = len(pairs)
 
     fixed_kwargs = dict(params=params, box=box, pairs=pairs, beta=beta, cutoff=cutoff)

@@ -307,15 +307,14 @@ def construct_batch_nonbonded_as_fxn_of_ligand_nb_params(
     return batch_nonbonded
 
 
-def nonbonded_v3_interaction_groups(conf, params, box, inds_l, inds_r, beta: float, cutoff: Optional[float] = None):
+def nonbonded_v3_interaction_groups(conf, params, box, pairs, beta: float, cutoff: Optional[float] = None):
     """Nonbonded interactions between all pairs of atoms $(i, j)$
     where $i$ is in the first set and $j$ in the second.
 
     See nonbonded_v3 docstring for more details
     """
-    pairs = np.stack(np.meshgrid(inds_l, inds_r)).reshape(2, -1).T
     vdW, electrostatics = nonbonded_v3_on_specific_pairs(conf, params, box, pairs, beta, cutoff)
-    return vdW, electrostatics, pairs
+    return vdW, electrostatics
 
 
 def interpolated(u_fn):
