@@ -355,6 +355,9 @@ def test_flag_bonds_core_hop():
 
 def test_strict_mode_missing_ixns():
 
+    # tbd: strict is probably required after extensive offline
+    # discussion with jfass
+
     # test the following behavior for the molecule
     #    2
     #    |
