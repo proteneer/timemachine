@@ -50,9 +50,9 @@ def make_ref_potential(pair_idxs, scales, lambda_plane_idxs, lambda_offset_idxs,
 @pytest.mark.parametrize("beta", [2.0])
 @pytest.mark.parametrize("cutoff", [1.1])
 @pytest.mark.parametrize("precision,rtol,atol", [(np.float64, 1e-8, 1e-8), (np.float32, 1e-4, 5e-4)])
-@pytest.mark.parametrize("num_atoms_interacting", [1, 30, 1000])
+@pytest.mark.parametrize("ixn_group_size", [2, 33, 231])
 def test_nonbonded_pair_list_correctness(
-    num_atoms_interacting,
+    ixn_group_size,
     precision,
     rtol,
     atol,
@@ -68,11 +68,12 @@ def test_nonbonded_pair_list_correctness(
 
     num_atoms, _ = example_conf.shape
 
+    # randomly select 2 interaction groups and construct all pairwise interactions
     atom_idxs = rng.choice(
         num_atoms,
         size=(
             2,
-            num_atoms_interacting,
+            ixn_group_size,
         ),
         replace=False,
     ).astype(np.int32)
