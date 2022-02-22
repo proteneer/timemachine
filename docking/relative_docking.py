@@ -4,7 +4,6 @@
 2. Does the same thing in solvent instead of protein
 3. Repeats 1 & 2 for the opposite direction (guest_B --> guest_A)
 """
-import os
 import time
 
 import numpy as np
@@ -15,7 +14,6 @@ from docking import report
 from timemachine.fe import free_energy, topology
 from timemachine.fe.atom_mapping import get_core_by_geometry, get_core_by_mcs, get_core_by_smarts, mcs_map
 from timemachine.ff import Forcefield
-from timemachine.ff.handlers.deserialize import deserialize_handlers
 from timemachine.lib import LangevinIntegrator, custom_ops
 from timemachine.md import builders, minimizer
 
@@ -96,16 +94,7 @@ def do_relative_docking(host_pdbfile, mol_a, mol_b, core, num_switches, transiti
     orig_guest_coords_a = np.array(guest_conformer_a.GetPositions(), dtype=np.float64)
     orig_guest_coords_a = orig_guest_coords_a / 10  # convert to md_units
 
-    guest_ff_handlers = deserialize_handlers(
-        open(
-            os.path.join(
-                os.path.dirname(os.path.abspath(__file__)),
-                "..",
-                "timemachine/ff/params/smirnoff_1_1_0_ccc.py",
-            )
-        ).read()
-    )
-    ff = Forcefield(guest_ff_handlers)
+    ff = Forcefield.load_from_file("smirnoff_1_1_0_ccc.py")
 
     all_works = {}
     for system, coords, box, label in zip(

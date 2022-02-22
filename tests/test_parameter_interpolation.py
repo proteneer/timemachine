@@ -2,22 +2,13 @@ from jax.config import config
 
 config.update("jax_enable_x64", True)
 import copy
-import functools
 
 import jax.numpy as jnp
 import numpy as np
 from common import GradientTest, prepare_water_system
 
 from timemachine.lib import potentials
-
-
-def interpolated_potential(conf, params, box, lamb, u_fn):
-    assert params.size % 2 == 0
-
-    CP = params.shape[0] // 2
-    new_params = (1 - lamb) * params[:CP] + lamb * params[CP:]
-
-    return u_fn(conf, new_params, box, lamb)
+from timemachine.potentials import nonbonded
 
 
 class TestInterpolatedPotential(GradientTest):
@@ -42,7 +33,7 @@ class TestInterpolatedPotential(GradientTest):
         lambda_offset_idxs = np.random.randint(low=0, high=2, size=N, dtype=np.int32)
 
         for lamb in [0.0, 0.2, 1.0]:
-            for precision, rtol in [(np.float64, 1e-8), (np.float32, 1e-4)]:
+            for precision, rtol, atol in [(np.float64, 1e-8, 3e-11), (np.float32, 1e-4, 3e-6)]:
 
                 # E = 0 # DEBUG!
                 qlj_src, ref_potential, test_potential = prepare_water_system(
@@ -57,7 +48,7 @@ class TestInterpolatedPotential(GradientTest):
 
                 print("lambda", lamb, "cutoff", cutoff, "precision", precision, "xshape", coords.shape)
 
-                ref_interpolated_potential = functools.partial(interpolated_potential, u_fn=ref_potential)
+                ref_interpolated_potential = nonbonded.interpolated(ref_potential)
 
                 test_interpolated_potential = potentials.NonbondedInterpolated(*test_potential.args)
 
@@ -68,7 +59,8 @@ class TestInterpolatedPotential(GradientTest):
                     lamb,
                     ref_interpolated_potential,
                     test_interpolated_potential,
-                    rtol,
+                    rtol=rtol,
+                    atol=atol,
                     precision=precision,
                 )
 
@@ -128,7 +120,7 @@ class TestInterpolatedPotential(GradientTest):
             qlj = interpolate_params(lamb, qlj_src, qlj_dst)
             return ref_potential(x, qlj, box, lamb)
 
-        for precision, rtol in [(np.float64, 1e-8), (np.float32, 1e-4)]:
+        for precision, rtol, atol in [(np.float64, 1e-8, 1e-11), (np.float32, 1e-4, 1e-6)]:
 
             for lamb in [0.0, 0.2, 0.6, 0.7, 0.8, 1.0]:
 
@@ -147,5 +139,13 @@ class TestInterpolatedPotential(GradientTest):
                 )
 
                 self.compare_forces(
-                    coords, qlj, box, lamb, u_reference, test_interpolated_potential, rtol, precision=precision
+                    coords,
+                    qlj,
+                    box,
+                    lamb,
+                    u_reference,
+                    test_interpolated_potential,
+                    rtol=rtol,
+                    atol=atol,
+                    precision=precision,
                 )
