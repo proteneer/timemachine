@@ -586,7 +586,7 @@ def test_compute_or_load_am1_charges():
     returned on repeated calls"""
 
     # get some molecules
-    cache_key = "AM1Cache"
+    cache_key = nonbonded.AM1_CHARGE_CACHE
     suppl = Chem.SDMolSupplier("tests/data/ligands_40.sdf", removeHs=False)
     all_mols = [mol for mol in suppl]
     all_mols = all_mols[:5]  # truncate so that whole test is ~ 10 seconds
@@ -608,11 +608,15 @@ def test_compute_or_load_am1_charges():
         np.testing.assert_array_equal(fresh, cached)
 
 
-def test_bond_smirks_matches():
+def test_compute_or_load_bond_smirks_matches():
     """Loop over test ligands, asserting that
+    * verify no cache key
     * returned indices are in bounds
-    * returned bonds are present in the mol"""
+    * returned bonds are present in the mol
+    * verify a cache key
+    * verify new values match initial matches"""
     # get some molecules
+    match_cache_key = nonbonded.BOND_SMIRK_MATCH_CACHE
     suppl = Chem.SDMolSupplier("tests/data/ligands_40.sdf", removeHs=False)
     all_mols = [mol for mol in suppl]
 
@@ -620,8 +624,12 @@ def test_bond_smirks_matches():
     smirks_list = [smirks for (smirks, param) in AM1CCC_CHARGES["patterns"]]
 
     for mol in all_mols:
-        bond_idxs, type_idxs = nonbonded.bond_smirks_matches(mol, smirks_list)
+        assert not mol.HasProp(match_cache_key)
 
+    fresh_matches = []
+    for mol in all_mols:
+        bond_idxs, type_idxs = nonbonded.compute_or_load_bond_smirks_matches(mol, smirks_list)
+        fresh_matches.append((bond_idxs, type_idxs))
         # assert indices in bounds
         assert (bond_idxs.min() >= 0) and (bond_idxs.max() < mol.GetNumAtoms())
         assert (type_idxs.min() >= 0) and (type_idxs.max() < len(smirks_list))
@@ -634,6 +642,12 @@ def test_bond_smirks_matches():
             bonds.add((b, a))
         for bond in bond_idxs:
             assert tuple(bond) in bonds
+    for mol in all_mols:
+        assert mol.HasProp(match_cache_key)
+    cached_matches = [nonbonded.compute_or_load_bond_smirks_matches(mol, smirks_list) for mol in all_mols]
+    for (fresh_bonds, fresh_types), (cached_bonds, cached_types) in zip(fresh_matches, cached_matches):
+        np.testing.assert_array_equal(fresh_bonds, cached_bonds)
+        np.testing.assert_array_equal(fresh_types, cached_types)
 
 
 def test_apply_bond_charge_corrections():

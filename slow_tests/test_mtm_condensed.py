@@ -16,7 +16,6 @@ import pytest
 from tests import test_ligands
 from timemachine.constants import BOLTZ
 from timemachine.ff import Forcefield
-from timemachine.ff.handlers.deserialize import deserialize_handlers
 from timemachine.md import enhanced
 from timemachine.md.moves import NPTMove, OptimizedMTMMove
 from timemachine.potentials import bonded, nonbonded
@@ -25,8 +24,7 @@ from timemachine.potentials import bonded, nonbonded
 
 
 def get_ff_am1cc():
-    ff_handlers = deserialize_handlers(open("timemachine/ff/params/smirnoff_1_1_0_ccc.py").read())
-    ff = Forcefield(ff_handlers)
+    ff = Forcefield.load_from_file("smirnoff_1_1_0_ccc.py")
     return ff
 
 

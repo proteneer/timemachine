@@ -14,7 +14,7 @@ void __device__ __forceinline__ accumulate(unsigned long long *__restrict acc, u
 }
 
 template <typename RealType, bool Negated>
-void __global__ k_nonbonded_pairs(
+void __global__ k_nonbonded_pair_list(
     const int M, // number of pairs
     const double *__restrict__ coords,
     const double *__restrict__ params,

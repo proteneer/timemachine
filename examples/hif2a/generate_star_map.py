@@ -24,7 +24,6 @@ from timemachine.fe.utils import convert_uIC50_to_kJ_per_mole
 
 # 0. Get force field
 from timemachine.ff import Forcefield
-from timemachine.ff.handlers.deserialize import deserialize_handlers
 from timemachine.parser import TimemachineConfig
 
 
@@ -207,9 +206,7 @@ if __name__ == "__main__":
         sys.exit(1)
     map_config = config.map_generation
 
-    with open(map_config.forcefield) as f:
-        ff_handlers = deserialize_handlers(f.read())
-    forcefield = Forcefield(ff_handlers)
+    forcefield = Forcefield.load_from_file(map_config.forcefield)
 
     mols = []
     # Ensure we pickle up mol properties

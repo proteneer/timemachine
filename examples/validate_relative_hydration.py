@@ -16,7 +16,6 @@ from timemachine.fe.free_energy_rabfe import (
     setup_relative_restraints_by_distance,
 )
 from timemachine.ff import Forcefield
-from timemachine.ff.handlers.deserialize import deserialize_handlers
 from timemachine.md import builders, minimizer
 from timemachine.parallel.client import CUDAPoolClient, GRPCClient
 from timemachine.parallel.utils import get_gpu_count
@@ -63,10 +62,7 @@ if __name__ == "__main__":
     path_to_ligand = "tests/data/ligands_40.sdf"
     suppl = Chem.SDMolSupplier(path_to_ligand, removeHs=False)
 
-    with open("timemachine/ff/params/smirnoff_1_1_0_ccc.py") as f:
-        ff_handlers = deserialize_handlers(f.read())
-
-    forcefield = Forcefield(ff_handlers)
+    forcefield = Forcefield.load_from_file("smirnoff_1_1_0_ccc.py")
     mols = [x for x in suppl]
 
     dataset = Dataset(mols)

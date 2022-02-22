@@ -13,7 +13,6 @@ from rdkit import Chem
 from docking import report
 from timemachine.fe import free_energy, pdb_writer
 from timemachine.ff import Forcefield
-from timemachine.ff.handlers.deserialize import deserialize_handlers
 from timemachine.lib import LangevinIntegrator, custom_ops
 from timemachine.md import builders, minimizer
 
@@ -139,16 +138,7 @@ def calculate_rigorous_work(
     water_mol = Chem.MolFromPDBFile(water_pdb, removeHs=False)
     os.remove(water_pdb)
 
-    guest_ff_handlers = deserialize_handlers(
-        open(
-            os.path.join(
-                os.path.dirname(os.path.abspath(__file__)),
-                "..",
-                "timemachine/ff/params/smirnoff_1_1_0_ccc.py",
-            )
-        ).read()
-    )
-    ff = Forcefield(guest_ff_handlers)
+    ff = Forcefield.load_from_file("smirnoff_1_1_0_ccc.py")
 
     # Run the procedure
     all_works = defaultdict(dict)

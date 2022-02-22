@@ -9,7 +9,6 @@ from timemachine.fe import pdb_writer, topology
 from timemachine.fe.utils import get_romol_conf
 from timemachine.ff import Forcefield
 from timemachine.ff.handlers import openmm_deserializer
-from timemachine.ff.handlers.deserialize import deserialize_handlers
 from timemachine.lib import LangevinIntegrator, custom_ops, potentials
 from timemachine.md import builders, minimizer
 
@@ -45,8 +44,7 @@ combined_masses = np.concatenate([host_masses, ligand_masses_a, ligand_masses_b]
 
 # note: .py file rather than .offxml file
 # note: _ccc suffix means "correctable charge corrections"
-ff_handlers = deserialize_handlers(open("timemachine/ff/params/smirnoff_1_1_0_ccc.py").read())
-ff = Forcefield(ff_handlers)
+ff = Forcefield.load_from_file("smirnoff_1_1_0_ccc.py")
 
 # for RHFE we need to insert the reference ligand first, before inserting the
 # decoupling ligand
