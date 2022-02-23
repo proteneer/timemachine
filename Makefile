@@ -27,9 +27,9 @@ verify:
 memcheck_tests:
 	cuda-memcheck --leak-check full --error-exitcode 1 pytest $(PYTEST_CI_ARGS) tests/
 
-.PHONY: tests
-tests:
+.PHONY: unit_tests
+unit_tests:
 	pytest $(PYTEST_CI_ARGS) slow_tests/
 
 .PHONY: ci
-ci: verify memcheck_tests tests
+ci: verify memcheck_tests unit_tests

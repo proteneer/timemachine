@@ -15,7 +15,7 @@ docker_build:
     - gpu
     - docker
   variables:
-    # For this to work, $CI_COMMIT_REF_SLUG == $CI_DEFAULT_BRANCH
+    # The default CI branch should slugify to the same name, so that $CI_COMMIT_REF_SLUG == $CI_DEFAULT_BRANCH
     DOCKER_TAG: $CI_REGISTRY_IMAGE:$CI_COMMIT_REF_SLUG
   script:
     - DOCKER_HOST=tcp://localhost:2375 docker login -u $CI_REGISTRY_USER -p $CI_JOB_TOKEN $CI_REGISTRY
@@ -59,7 +59,7 @@ unit-tests:
     CMAKE_ARGS: -DCUDA_ARCH=75
   script:
     - CMAKE_BUILD_PARALLEL_LEVEL=$(nproc) pip install -e .[dev,test]
-    - make verify tests
+    - make verify unit_tests
   artifacts:
     name: "$CI_JOB_NAME-$CI_COMMIT_REF_NAME-tests"
     paths:
