@@ -11,11 +11,11 @@ onp.random.seed(2021)
 
 from timemachine.potentials.jax_utils import (
     augment_dim,
-    batched_neighbor_inds,
     compute_lifting_parameter,
     delta_r,
     distance_on_pairs,
     get_all_pairs_indices,
+    get_interacting_pair_indices_batch,
     pairs_from_interaction_groups,
 )
 
@@ -131,7 +131,7 @@ def test_batched_neighbor_inds():
     full_distances = vmap(distance_on_pairs)(confs[:, pairs[:, 0]], confs[:, pairs[:, 1]], boxes)
     assert full_distances.shape == (n_confs, n_possible_interactions)
 
-    batch_pairs = batched_neighbor_inds(confs, pairs, cutoff, boxes)
+    batch_pairs = get_interacting_pair_indices_batch(confs, pairs, cutoff, boxes)
     n_neighbor_pairs = batch_pairs.shape[1]
     assert batch_pairs.shape == (n_confs, n_neighbor_pairs, 2)
     assert n_neighbor_pairs <= n_possible_interactions
