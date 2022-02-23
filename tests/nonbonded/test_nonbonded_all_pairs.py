@@ -95,7 +95,7 @@ def test_nonbonded_all_pairs_correctness(
 @pytest.mark.parametrize("lamb", [0.0, 0.1, 0.9, 1.0])
 @pytest.mark.parametrize("beta", [2.0])
 @pytest.mark.parametrize("cutoff", [1.1])
-@pytest.mark.parametrize("precision,rtol,atol", [(np.float64, 1e-8, 1e-8), (np.float32, 1e-4, 5e-4)])
+@pytest.mark.parametrize("precision,rtol,atol", [(np.float64, 1e-8, 1e-8), (np.float32, 2e-4, 5e-4)])
 @pytest.mark.parametrize("num_atoms", [33, 231, 4080])
 def test_nonbonded_all_pairs_interpolated_correctness(
     num_atoms,
