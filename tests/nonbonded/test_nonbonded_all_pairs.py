@@ -114,7 +114,7 @@ def test_nonbonded_all_pairs_interpolated_correctness(
 
     conf = example_conf[:num_atoms]
     params_initial = example_nonbonded_params[:num_atoms, :]
-    params_final = params_initial + rng.normal(0, 0.01, size=params_initial.shape)
+    params_final = params_initial + np.where(params_initial, rng.normal(0, 0.01, size=params_initial.shape), 0)
     params = np.concatenate((params_initial, params_final))
 
     lambda_plane_idxs = rng.integers(-2, 3, size=(num_atoms,), dtype=np.int32)
