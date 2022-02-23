@@ -120,7 +120,7 @@ class VacuumState:
 
         if decharge:
             charge_indices = jax.ops.index[:, 0]
-            nb_params = self.nb_params.at(charge_indices).set(0)
+            nb_params = self.nb_params.at[charge_indices].set(0)
         else:
             nb_params = self.nb_params
 
@@ -520,7 +520,7 @@ def align_and_replace(x_vacuum, x_solvent):
     num_ligand_atoms = len(x_vacuum)
     aligned_x_vacuum = align_sample(x_vacuum, x_solvent)
     ligand_indices = jax.ops.index[-num_ligand_atoms:]
-    return x_solvent.at(ligand_indices).set(aligned_x_vacuum)
+    return x_solvent.at[ligand_indices].set(aligned_x_vacuum)
 
 
 batch_align_and_replace = jax.jit(jax.vmap(align_and_replace, in_axes=(0, None)))

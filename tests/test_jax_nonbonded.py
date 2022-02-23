@@ -244,7 +244,7 @@ def _nonbonded_v3_clone(
     if box is not None:
         if box.shape[-1] == 3:
             box_4d = np.eye(4) * 1000
-            box_4d.at(index[:3, :3]).set(box)
+            box_4d.at[index[:3, :3]].set(box)
         else:
             box_4d = box
     else:

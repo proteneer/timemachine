@@ -3,7 +3,7 @@
 index stuff
 * get_all_pairs_indices
 * pairs_from_interaction_groups
-* batched_neighbor_inds
+* get_interacting_pair_indices_batch
 * get_ligand_dependent_indices_batch
 
 distance stuff

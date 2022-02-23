@@ -25,7 +25,7 @@ def get_optimal_rotation(x1, x2):
     correlation_matrix = np.dot(x2.T, x1)
     U, S, V_tr = np.linalg.svd(correlation_matrix, full_matrices=False)
     is_reflection = (np.linalg.det(U) * np.linalg.det(V_tr)) < 0.0
-    U = U.at(jax.ops.index[:, -1]).set(np.where(is_reflection, -U[:, -1], U[:, -1]))
+    U = U.at[jax.ops.index[:, -1]].set(np.where(is_reflection, -U[:, -1], U[:, -1]))
     rotation = np.dot(U, V_tr)
 
     return rotation
