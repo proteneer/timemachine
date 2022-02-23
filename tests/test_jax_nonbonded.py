@@ -13,7 +13,7 @@ from typing import Callable, Tuple
 from jax import jit
 from jax import numpy as np
 from jax import value_and_grad, vmap
-from jax.ops import index, index_update
+from jax.ops import index
 from scipy.optimize import minimize
 from simtk import unit
 
@@ -244,7 +244,7 @@ def _nonbonded_v3_clone(
     if box is not None:
         if box.shape[-1] == 3:
             box_4d = np.eye(4) * 1000
-            box_4d = index_update(box_4d, index[:3, :3], box)
+            box_4d.at(index[:3, :3]).set(box)
         else:
             box_4d = box
     else:

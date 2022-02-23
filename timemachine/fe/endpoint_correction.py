@@ -165,8 +165,8 @@ def estimate_delta_us(k_translation, k_rotation, core_idxs, core_params, beta, l
     def align(x, r, t):
         x_a, x_b = rmsd.rmsd_align(x[restr_group_idxs_a], x[restr_group_idxs_b])
         x_b = x_b @ r.T + t
-        x_new = jax.ops.index_update(x, restr_group_idxs_a, x_a)
-        x_new = jax.ops.index_update(x_new, restr_group_idxs_b, x_b)
+        x_new = x.at(restr_group_idxs_a).set(x_a)
+        x_new = x_new.at(restr_group_idxs_b).set(x_b)
         return x_new
 
     batch_align_fn = jax.jit(jax.vmap(align, (0, 0, 0)))

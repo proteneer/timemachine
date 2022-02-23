@@ -2,7 +2,7 @@ import functools
 
 import jax.numpy as np
 from jax import vmap
-from jax.ops import index, index_update
+from jax.ops import index
 from jax.scipy.special import erfc
 
 from timemachine.potentials.jax_utils import convert_to_4d, delta_r, distance, distance_on_pairs
@@ -175,7 +175,7 @@ def nonbonded_v3(
     if box is not None:
         if box.shape[-1] == 3:
             box_4d = np.eye(4) * 1000
-            box_4d = index_update(box_4d, index[:3, :3], box)
+            box_4d.at(index[:3, :3]).set(box)
         else:
             box_4d = box
     else:
