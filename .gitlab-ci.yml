@@ -1,10 +1,18 @@
 stages:          # List of stages for jobs, and their order of execution
   - build-docker
+  - lint
   - test
+
+variables:
+    # The default CI branch should slugify to the same name, such that $CI_COMMIT_REF_SLUG == $CI_DEFAULT_BRANCH
+    # which allows branches to use the default's branchs image as a cache
+    DOCKER_TAG: $CI_REGISTRY_IMAGE:$CI_COMMIT_REF_SLUG
 
 workflow:
   rules:
-    # Only run the pipeline if its for a pull request or the default branch
+    # Only run the pipeline for a pull request or the default branch
+    # In the case of the default branch, we want to build the image so that
+    # other branches have a base image to cache from when possible.
     - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
     - if: '$CI_EXTERNAL_PULL_REQUEST_IID != null || $CI_EXTERNAL_PULL_REQUEST_IID != ""'
 
@@ -14,9 +22,6 @@ docker_build:
   tags:
     - gpu
     - docker
-  variables:
-    # The default CI branch should slugify to the same name, so that $CI_COMMIT_REF_SLUG == $CI_DEFAULT_BRANCH
-    DOCKER_TAG: $CI_REGISTRY_IMAGE:$CI_COMMIT_REF_SLUG
   script:
     - DOCKER_HOST=tcp://localhost:2375 docker login -u $CI_REGISTRY_USER -p $CI_JOB_TOKEN $CI_REGISTRY
     # Pull the docker containers
@@ -26,20 +31,29 @@ docker_build:
     - docker build -t $DOCKER_TAG --cache-from $CI_REGISTRY_IMAGE:$CI_DEFAULT_BRANCH,$DOCKER_TAG --target tm_base_env .
     - docker push $DOCKER_TAG
 
+lint:
+  stage: lint
+  image: $DOCKER_TAG
+  needs: ["docker_build"]
+  tags:
+    - timemachine
+  rules:
+    - if: '$CI_EXTERNAL_PULL_REQUEST_IID != null || $CI_EXTERNAL_PULL_REQUEST_IID != ""'
+  script:
+    - CMAKE_BUILD_PARALLEL_LEVEL=$(nproc) pip install -e .[dev]
+    - make verify
 
 memory-tests:
   stage: test
-  image: $CI_REGISTRY_IMAGE:$CI_COMMIT_REF_SLUG
-  needs: ["docker_build"]
+  image: $DOCKER_TAG
+  needs: ["lint"]
   tags:
     - gpu
-  rules:
-    - if: '$CI_EXTERNAL_PULL_REQUEST_IID != null || $CI_EXTERNAL_PULL_REQUEST_IID != ""'
   variables:
     CMAKE_ARGS: -DCUDA_ARCH=75
   script:
     - CMAKE_BUILD_PARALLEL_LEVEL=$(nproc) pip install -e .[dev,test]
-    - make verify memcheck_tests
+    - make memcheck_tests
   artifacts:
     name: "$CI_JOB_NAME-$CI_COMMIT_REF_NAME-memtests"
     paths:
@@ -49,17 +63,15 @@ memory-tests:
 
 unit-tests:
   stage: test
-  image: $CI_REGISTRY_IMAGE:$CI_COMMIT_REF_SLUG
-  needs: ["docker_build"]
+  image: $DOCKER_TAG
+  needs: ["lint"]
   tags:
     - gpu
-  rules:
-    - if: '$CI_EXTERNAL_PULL_REQUEST_IID != null || $CI_EXTERNAL_PULL_REQUEST_IID != ""'
   variables:
     CMAKE_ARGS: -DCUDA_ARCH=75
   script:
     - CMAKE_BUILD_PARALLEL_LEVEL=$(nproc) pip install -e .[dev,test]
-    - make verify unit_tests
+    - make unit_tests
   artifacts:
     name: "$CI_JOB_NAME-$CI_COMMIT_REF_NAME-tests"
     paths:

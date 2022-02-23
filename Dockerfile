@@ -74,7 +74,7 @@ RUN git clone https://github.com/openmm/openmm.git --branch "${OPENMM_VERSION}" 
 COPY requirements.txt /code/timemachine/
 RUN pip install --no-cache-dir -r timemachine/requirements.txt
 
-FROM tm_base_env as timemachine
+FROM tm_base_env AS timemachine
 ARG CUDA_ARCH=75
 ENV CMAKE_ARGS -DCUDA_ARCH=${CUDA_ARCH}
 COPY . /code/timemachine/
