@@ -106,15 +106,15 @@ def distance_on_pairs(ri, rj, box=None):
     return dij
 
 
-def get_interacting_pair_indices_batch(confs, pairs, cutoff, boxes):
+def get_interacting_pair_indices_batch(confs, boxes, pairs, cutoff=1.2):
     """Given candidate interacting pairs, exclude most pairs whose distances are >= cutoff
 
     Parameters
     ----------
     confs: (n_snapshots, n_atoms, 3) float array
+    boxes: (n_snapshots, 3, 3) float array
     pairs: (n_candidate_pairs, 2) integer array
     cutoff: float
-    boxes: (n_snapshots, 3, 3) float array
 
     Returns
     -------
@@ -124,7 +124,6 @@ def get_interacting_pair_indices_batch(confs, pairs, cutoff, boxes):
     Notes
     -----
     * Padding causes some amount of wasted effort, but keeps things nice and fixed-dimensional for later XLA steps
-    * TODO [usability]: reorder input arguments in less surprising way
     """
     assert len(confs.shape) == 3
     distances = vmap(distance_on_pairs)(confs[:, pairs[:, 0]], confs[:, pairs[:, 1]], boxes)
@@ -177,7 +176,7 @@ def get_ligand_dependent_indices_batch(confs, boxes, ligand_indices, cutoff=1.2)
 
     # (ligand, environment) pairs within distance cutoff
     candidate_pairs = pairs_from_interaction_groups(ligand_indices, environment_indices)
-    batch_ligand_environment_pairs = get_interacting_pair_indices_batch(confs, candidate_pairs, cutoff, boxes)
+    batch_ligand_environment_pairs = get_interacting_pair_indices_batch(confs, boxes, candidate_pairs, cutoff)
     n_ligand_environment_pairs = batch_ligand_environment_pairs.shape[1]
 
     # (ligand, ligand) pairs
