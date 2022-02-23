@@ -393,7 +393,7 @@ def construct_batch_nonbonded_as_fxn_of_ligand_nb_params(confs, boxes, ligand_in
 
     host_indices = np.array(list(set(onp.arange(n_atoms)) - set(onp.array(ligand_indices))))
     batch_hl = construct_batch_nonbonded_hl_as_fxn_of_ligand_nb_params(
-        confs, boxes, host_indices, ligand_indices, ligand_indices, nb_params, beta, cutoff
+        confs, boxes, host_indices, ligand_indices, nb_params, beta, cutoff
     )
     batch_ll = construct_batch_nonbonded_ll_as_fxn_of_ligand_nb_params(
         confs, boxes, ligand_indices, exclusion_idxs, scale_factors, beta, cutoff
