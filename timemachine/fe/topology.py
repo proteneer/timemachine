@@ -84,7 +84,7 @@ def standard_qlj_typer(mol):
         # sigmas need to be halved
         standard_qlj.append((val[0], val[1] / 2, val[2]))
 
-    standard_qlj = np.array(standard_qlj)
+    standard_qlj = jnp.array(standard_qlj)
 
     return standard_qlj
 
@@ -547,8 +547,11 @@ class DualTopologyRHFE(DualTopology):
         qlj_params, nb_potential = super().parameterize_nonbonded(ff_q_params, ff_lj_params)
 
         # halve the strength of the charge and the epsilon parameters
-        src_qlj_params = jax.ops.index_update(qlj_params, jax.ops.index[:, 0], qlj_params[:, 0] * 0.5)
-        src_qlj_params = jax.ops.index_update(src_qlj_params, jax.ops.index[:, 2], qlj_params[:, 2] * 0.5)
+        charge_indices = jax.ops.index[:, 0]
+        epsilon_indices = jax.ops.index[:, 2]
+
+        src_qlj_params = qlj_params.at(charge_indices).multiply(0.5)
+        src_qlj_params = src_qlj_params.at(epsilon_indices).multiply(0.5)
         dst_qlj_params = qlj_params
         combined_qlj_params = jnp.concatenate([src_qlj_params, dst_qlj_params])
 
@@ -585,13 +588,15 @@ class DualTopologyStandardDecoupling(DualTopology):
         # worth of nonbonded interactions.
 
         # dst_qlj_params corresponds to the end-state where only one of the molecule interacts with the binding pocket.
-        src_qlj_params_a = jax.ops.index_update(qlj_params_a, jax.ops.index[:, 0], qlj_params_a[:, 0] * 0.5)
-        src_qlj_params_a = jax.ops.index_update(src_qlj_params_a, jax.ops.index[:, 2], src_qlj_params_a[:, 2] * 0.5)
+        charge_indices = jax.ops.index[:, 0]
+        epsilon_indices = jax.ops.index[:, 2]
+        src_qlj_params_a = qlj_params_a.at(charge_indices).multiply(0.5)
+        src_qlj_params_a = src_qlj_params_a.at(epsilon_indices).multiply(0.5)
         dst_qlj_params_a = qlj_params_a
 
         qlj_params_b = standard_qlj_typer(self.mol_b)
-        src_qlj_params_b = jax.ops.index_update(qlj_params_b, jax.ops.index[:, 0], qlj_params_b[:, 0] * 0.5)
-        src_qlj_params_b = jax.ops.index_update(src_qlj_params_b, jax.ops.index[:, 2], src_qlj_params_b[:, 2] * 0.5)
+        src_qlj_params_b = qlj_params_b.at(charge_indices).multiply(0.5)
+        src_qlj_params_b = src_qlj_params_b.at(epsilon_indices).multiply(0.5)
         dst_qlj_params_b = qlj_params_b
 
         src_qlj_params = jnp.concatenate([src_qlj_params_a, src_qlj_params_b])
