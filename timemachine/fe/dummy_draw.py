@@ -6,6 +6,11 @@ def rgb_to_decimal(x, y, z):
     return x / 255, y / 255, z / 255
 
 
+def draw_mol(mol, core):
+    highlightAtoms = [x for x in core]
+    return Draw.DrawMolecule(mol, highlightAtoms=highlightAtoms)
+
+
 def draw_dummy_core_ixns(mol, core, bonds, dummy_group, color_blind=False):
     """
     Draw a grid of molecules with interactions between atoms in dummy_group
@@ -25,7 +30,7 @@ def draw_dummy_core_ixns(mol, core, bonds, dummy_group, color_blind=False):
         COLOR_DUMMY_INACTIVE = (0.188, 0.835, 0.784)
         COLOR_CORE_ACTIVE = (0.9, 0.5, 0.5)
         COLOR_CORE_INACTIVE = (1, 0.8, 0.8)
-        COLOR_BOND = (0.96, 0.74, 0)
+        COLOR_BOND = (0.92, 0.1, 0.95)
 
     assert len(set(core).intersection(set(dummy_group))) == 0
 

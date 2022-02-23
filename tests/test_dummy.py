@@ -1,11 +1,13 @@
 import numpy as np
+import pytest
 from rdkit import Chem
 
 from timemachine.fe import dummy, dummy_draw
 from timemachine.fe.dummy import (
     enumerate_anchor_groups,
     enumerate_dummy_ixns,
-    flag_bonds,
+    flag_factorizable_bonds,
+    flag_stable_dummy_ixns,
     generate_optimal_dg_ag_pairs,
     identify_anchor_groups,
     identify_dummy_groups,
@@ -29,6 +31,14 @@ from timemachine.ff.handlers.deserialize import deserialize_handlers
 # partition - only applies to dummy groups, as we require that dummy groups disjointly partition dummy atoms.
 
 
+def get_bond_idxs(mol):
+    # not necessarily canonicalized!
+    idxs = []
+    for bond in mol.GetBonds():
+        idxs.append((bond.GetBeginAtomIdx(), bond.GetEndAtomIdx()))
+    return idxs
+
+
 def test_identify_root_anchors():
     """
     Test the identification of root anchors given a dummy atom.
@@ -42,17 +52,17 @@ def test_identify_root_anchors():
     its root anchors are the set of atoms {0, 1}
 
     """
-    mol = Chem.MolFromSmiles("C1CCC1N")
+    mol = get_bond_idxs(Chem.MolFromSmiles("C1CCC1N"))
     core = [0, 1, 2, 3]
     anchors = identify_root_anchors(mol, core, dummy_atom=4)
     assert set(anchors) == set([3])
 
-    mol = Chem.MolFromSmiles("C1CC2NC2C1")
+    mol = get_bond_idxs(Chem.MolFromSmiles("C1CC2NC2C1"))
     core = [0, 1, 2, 4, 5]
     anchors = identify_root_anchors(mol, core, dummy_atom=3)
     assert set(anchors) == set([2, 4])
 
-    mol = Chem.MolFromSmiles("C1OCC11CCCCC1")
+    mol = get_bond_idxs(Chem.MolFromSmiles("C1OCC11CCCCC1"))
     core = [3, 4, 5, 6, 7, 8]
     anchors = identify_root_anchors(mol, core, dummy_atom=0)
     assert set(anchors) == set([3])
@@ -61,7 +71,7 @@ def test_identify_root_anchors():
     anchors = identify_root_anchors(mol, core, dummy_atom=2)
     assert set(anchors) == set([3])
 
-    mol = Chem.MolFromSmiles("C1CC1.C1CCCCC1")
+    mol = get_bond_idxs(Chem.MolFromSmiles("C1CC1.C1CCCCC1"))
     core = [3, 4, 5, 6, 7, 8]
     anchors = identify_root_anchors(mol, core, dummy_atom=0)
     assert set(anchors) == set()
@@ -70,7 +80,7 @@ def test_identify_root_anchors():
     anchors = identify_root_anchors(mol, core, dummy_atom=2)
     assert set(anchors) == set()
 
-    mol = Chem.MolFromSmiles("C1CC2NC2C1")
+    mol = get_bond_idxs(Chem.MolFromSmiles("C1CC2NC2C1"))
     core = [0, 1, 2, 5]
     anchors = identify_root_anchors(mol, core, dummy_atom=3)
     assert set(anchors) == set([2, 5])
@@ -78,7 +88,7 @@ def test_identify_root_anchors():
     assert set(anchors) == set([2, 5])
 
     # cyclohexane with a nitrogen inside
-    mol = Chem.MolFromSmiles("C1C2CC3CC1N23")
+    mol = get_bond_idxs(Chem.MolFromSmiles("C1C2CC3CC1N23"))
     core = [0, 1, 2, 3, 4, 5]
     anchors = identify_root_anchors(mol, core, dummy_atom=6)
     assert set(anchors) == set([1, 3, 5])
@@ -123,30 +133,30 @@ def test_identify_dummy_groups():
       0-------1
 
     """
-    mol = Chem.MolFromSmiles("FC1CC1(F)N")
+    bond_idxs = get_bond_idxs(Chem.MolFromSmiles("FC1CC1(F)N"))
     core = [1, 2, 3]
-    dg = identify_dummy_groups(mol, core)
+    dg = identify_dummy_groups(bond_idxs, core)
     assert_set_equality(dg, [{0}, {4, 5}])
 
-    mol = Chem.MolFromSmiles("FC1CC1(F)NN")
+    bond_idxs = get_bond_idxs(Chem.MolFromSmiles("FC1CC1(F)NN"))
     core = [1, 2, 3]
-    dg = identify_dummy_groups(mol, core)
+    dg = identify_dummy_groups(bond_idxs, core)
     assert_set_equality(dg, [{0}, {4, 5, 6}])
 
-    mol = Chem.MolFromSmiles("C1CC11OO1")
+    bond_idxs = get_bond_idxs(Chem.MolFromSmiles("C1CC11OO1"))
     core = [0, 1, 2]
-    dg = identify_dummy_groups(mol, core)
+    dg = identify_dummy_groups(bond_idxs, core)
     assert_set_equality(dg, [{3, 4}])
 
-    mol = Chem.MolFromSmiles("C1CC2OOC12")
+    bond_idxs = get_bond_idxs(Chem.MolFromSmiles("C1CC2OOC12"))
     core = [0, 1, 2, 5]
-    dg = identify_dummy_groups(mol, core)
+    dg = identify_dummy_groups(bond_idxs, core)
     assert_set_equality(dg, [{3}, {4}])
 
     # example above, where O's are dummy atoms, and Cs are core
-    mol = Chem.MolFromSmiles("OC1COO1")
+    bond_idxs = get_bond_idxs(Chem.MolFromSmiles("OC1COO1"))
     core = [1, 2]
-    dg = identify_dummy_groups(mol, core)
+    dg = identify_dummy_groups(bond_idxs, core)
     assert_set_equality(dg, [{0, 4}, {3}])
 
 
@@ -162,40 +172,40 @@ def test_identify_anchor_groups():
     starting root_anchor.
     """
 
-    mol = Chem.MolFromSmiles("C1CC1F")
+    bond_idxs = get_bond_idxs(Chem.MolFromSmiles("C1CC1F"))
     core = [0, 1, 2]
-    groups_of_1, groups_of_2, groups_of_3 = identify_anchor_groups(mol, core, 0)
+    groups_of_1, groups_of_2, groups_of_3 = identify_anchor_groups(bond_idxs, core, 0)
     assert_anchor_group_equality(groups_of_1, [[0]])
     assert_anchor_group_equality(groups_of_2, [[0, 1], [0, 2]])
     assert_anchor_group_equality(groups_of_3, [[0, 1, 2], [0, 2, 1]])
 
-    groups_of_1, groups_of_2, groups_of_3 = identify_anchor_groups(mol, core, 1)
+    groups_of_1, groups_of_2, groups_of_3 = identify_anchor_groups(bond_idxs, core, 1)
     assert_anchor_group_equality(groups_of_1, [[1]])
     assert_anchor_group_equality(groups_of_2, [[1, 0], [1, 2]])
     assert_anchor_group_equality(groups_of_3, [[1, 0, 2], [1, 2, 0]])
 
-    groups_of_1, groups_of_2, groups_of_3 = identify_anchor_groups(mol, core, 2)
+    groups_of_1, groups_of_2, groups_of_3 = identify_anchor_groups(bond_idxs, core, 2)
     assert_anchor_group_equality(groups_of_1, [[2]])
     assert_anchor_group_equality(groups_of_2, [[2, 1], [2, 0]])
     assert_anchor_group_equality(groups_of_3, [[2, 1, 0], [2, 0, 1]])
 
-    mol = Chem.MolFromSmiles("NCCF")
+    bond_idxs = get_bond_idxs(Chem.MolFromSmiles("NCCF"))
     core = [1, 2]
-    groups_of_1, groups_of_2, groups_of_3 = identify_anchor_groups(mol, core, 1)
+    groups_of_1, groups_of_2, groups_of_3 = identify_anchor_groups(bond_idxs, core, 1)
     assert_anchor_group_equality(groups_of_1, [[1]])
     assert_anchor_group_equality(groups_of_2, [[1, 2]])
     assert_anchor_group_equality(groups_of_3, [])
 
-    mol = Chem.MolFromSmiles("C(C)(C)(C)C")
+    bond_idxs = get_bond_idxs(Chem.MolFromSmiles("C(C)(C)(C)C"))
     core = [0]
-    groups_of_1, groups_of_2, groups_of_3 = identify_anchor_groups(mol, core, 0)
+    groups_of_1, groups_of_2, groups_of_3 = identify_anchor_groups(bond_idxs, core, 0)
     assert_anchor_group_equality(groups_of_1, [[0]])
     assert_anchor_group_equality(groups_of_2, [])
     assert_anchor_group_equality(groups_of_3, [])
 
-    mol = Chem.MolFromSmiles("C(C)(F)CC")
+    bond_idxs = get_bond_idxs(Chem.MolFromSmiles("C(C)(F)CC"))
     core = [1, 0, 4, 3]
-    groups_of_1, groups_of_2, groups_of_3 = identify_anchor_groups(mol, core, 0)
+    groups_of_1, groups_of_2, groups_of_3 = identify_anchor_groups(bond_idxs, core, 0)
     assert_anchor_group_equality(groups_of_1, [[0]])
     assert_anchor_group_equality(groups_of_2, [[0, 1], [0, 3]])
     assert_anchor_group_equality(groups_of_3, [[0, 3, 4]])
@@ -206,7 +216,7 @@ def test_enumerate_anchor_groups():
     Test enumeration of all reasonable anchor groups that span from all possible anchor roots.
     For clarity, we explicitly enumerate size 1, 2 and 3 anchor groups.
     """
-    mol = Chem.MolFromSmiles("C1CC2OOC12")
+    mol = get_bond_idxs(Chem.MolFromSmiles("C1CC2OOC12"))
     core = [0, 1, 2, 5]
     groups_of_1, groups_of_2, groups_of_3 = enumerate_anchor_groups(mol, core, [3, 4])
     assert_anchor_group_equality(groups_of_1, [[2], [5]])
@@ -214,7 +224,7 @@ def test_enumerate_anchor_groups():
     assert_anchor_group_equality(groups_of_3, [[2, 1, 0], [2, 5, 0], [5, 0, 1], [5, 2, 1]])
 
     # aspirin
-    mol = Chem.MolFromSmiles("CC(=O)OC1=CC=CC=C1C(=O)O")
+    mol = get_bond_idxs(Chem.MolFromSmiles("CC(=O)OC1=CC=CC=C1C(=O)O"))
     core = [3, 4, 5, 6, 7, 8, 9, 10]
     groups_of_1, groups_of_2, groups_of_3 = enumerate_anchor_groups(mol, core, [0, 1, 2, 11, 12])
     assert_anchor_group_equality(groups_of_1, [[3], [10]])
@@ -350,11 +360,12 @@ def test_enumerate_allowed_dummy_ixns_1_anchor():
     assert (0, 4, 1) in allowed_ixns
 
 
-def test_flag_bonds():
+def test_flag_factorizable_bonds_basic():
     """
     Test that we flag bonds on and off correctly given a set bond_idxs.
     """
-    mol = Chem.MolFromSmiles("BrOC1=CC(F)=CC=N1")
+    # mol = Chem.MolFromSmiles("BrOC1=CC(F)=CC=N1")
+
     core = [2, 3, 4, 6, 7, 8]
     bond_pairs = [
         (1, [0, 1]),  # Br-O
@@ -379,21 +390,21 @@ def test_flag_bonds():
     expected_flags = [x[0] for x in bond_pairs]
     bond_idxs = [x[1] for x in bond_pairs]
 
-    keep_flags = flag_bonds(mol, core, bond_idxs)
+    keep_flags = flag_factorizable_bonds(core, bond_idxs)
     assert tuple(keep_flags) == tuple(expected_flags)
 
     # flipping the ordering should give us identical results
     bond_idxs = [x[::-1] for x in bond_idxs]
-    keep_flags = flag_bonds(mol, core, bond_idxs)
+    keep_flags = flag_factorizable_bonds(core, bond_idxs)
     assert tuple(keep_flags) == tuple(expected_flags)
 
 
-def test_flag_bonds_core_hop():
+def test_flag_factorizable_bonds_core_hop():
     """
     Test that if we do a core hop, one of the bonded terms should be turned off.
     """
 
-    mol = Chem.MolFromSmiles("FC1CO1")
+    # mol = Chem.MolFromSmiles("FC1CO1")
 
     #    F0       F
     #    |        .
@@ -418,7 +429,7 @@ def test_flag_bonds_core_hop():
     expected_flags = [x[0] for x in bond_pairs]
     bond_idxs = [x[1] for x in bond_pairs]
 
-    keep_flags = flag_bonds(mol, core, bond_idxs)
+    keep_flags = flag_factorizable_bonds(core, bond_idxs)
 
     assert tuple(keep_flags) == tuple(expected_flags)
 
@@ -434,7 +445,7 @@ def test_dg_ag_missing_ixns_split():
     # 0--1--3
     # test that we correct allowed interactions
 
-    mol = Chem.MolFromSmiles("CC(C)C")
+    Chem.MolFromSmiles("CC(C)C")
     core = [1, 3]
 
     # base case, all required terms for the torsion is present
@@ -450,7 +461,7 @@ def test_dg_ag_missing_ixns_split():
         [0, 2, 1, 3],
     ]
 
-    dgs, agcs, agis = generate_optimal_dg_ag_pairs(mol, core, bond_idxs)
+    dgs, agcs, agis = generate_optimal_dg_ag_pairs(core, bond_idxs)
     for dgs, agcs, agis in zip(dgs, agcs, agis):
         assert (0, 2, 1, 3) in agis
         assert (0, 2, 1) in agis
@@ -469,7 +480,7 @@ def test_dg_ag_missing_ixns_split():
         [0, 2, 1, 3],
     ]
 
-    dgs, agcs, agis = generate_optimal_dg_ag_pairs(mol, core, bond_idxs)
+    dgs, agcs, agis = generate_optimal_dg_ag_pairs(core, bond_idxs)
     for dgs, agcs, agis in zip(dgs, agcs, agis):
         assert (0, 2, 1, 3) not in agis
         assert (0, 2, 1) not in agis
@@ -488,7 +499,7 @@ def test_dg_ag_missing_ixns_split():
         [0, 2, 1, 3],
     ]
 
-    dgs, agcs, agis = generate_optimal_dg_ag_pairs(mol, core, bond_idxs)
+    dgs, agcs, agis = generate_optimal_dg_ag_pairs(core, bond_idxs)
     for dgs, agcs, agis in zip(dgs, agcs, agis):
         assert (0, 2, 1, 3) not in agis
         assert (0, 2, 1) not in agis
@@ -507,7 +518,7 @@ def test_dg_ag_missing_ixns_split():
         [0, 2, 1, 3],
     ]
 
-    dgs, agcs, agis = generate_optimal_dg_ag_pairs(mol, core, bond_idxs)
+    dgs, agcs, agis = generate_optimal_dg_ag_pairs(core, bond_idxs)
     for dgs, agcs, agis in zip(dgs, agcs, agis):
         assert (0, 2, 1, 3) not in agis
         assert (0, 2, 1) not in agis
@@ -526,7 +537,7 @@ def test_dg_ag_missing_ixns_linear():
     # we want to test correctness of the strict when parts of the
     # torsion definition is missing
 
-    mol = Chem.MolFromSmiles("CCCC")
+    # mol = Chem.MolFromSmiles("CCCC")
     core = [1, 2, 3]
 
     # base case, all required terms for the torsion is present
@@ -539,7 +550,7 @@ def test_dg_ag_missing_ixns_linear():
         [0, 1, 2, 3],
     ]
 
-    dgs, agcs, agis = generate_optimal_dg_ag_pairs(mol, core, bond_idxs)
+    dgs, agcs, agis = generate_optimal_dg_ag_pairs(core, bond_idxs)
     for dgs, agcs, agis in zip(dgs, agcs, agis):
         assert (0, 1, 2, 3) in agis
 
@@ -553,7 +564,7 @@ def test_dg_ag_missing_ixns_linear():
         [0, 1, 2, 3],
     ]
 
-    dgs, agcs, agis = generate_optimal_dg_ag_pairs(mol, core, bond_idxs)
+    dgs, agcs, agis = generate_optimal_dg_ag_pairs(core, bond_idxs)
     for dgs, agcs, agis in zip(dgs, agcs, agis):
         assert (0, 1, 2, 3) not in agis
         assert (1, 2, 3) not in agis
@@ -568,10 +579,9 @@ def test_dg_ag_missing_ixns_linear():
         [0, 1, 2, 3],
     ]
 
-    dgs, agcs, agis = generate_optimal_dg_ag_pairs(mol, core, bond_idxs)
-    for dgs, agcs, agis in zip(dgs, agcs, agis):
-        assert (0, 1, 2, 3) not in agis
-        assert (1, 2, 3) not in agis
+    with pytest.raises(dummy.MissingBondError):
+
+        generate_optimal_dg_ag_pairs(core, bond_idxs)
 
 
 def _draw_impl(mol, core, ff, fname):
@@ -588,7 +598,7 @@ def _draw_impl(mol, core, ff, fname):
         + [tuple(x.tolist()) for x in it_idxs]
     )
 
-    dgs, ags, ag_ixns = dummy.generate_optimal_dg_ag_pairs(mol, core, bond_idxs)
+    dgs, ags, ag_ixns = dummy.generate_optimal_dg_ag_pairs(core, bond_idxs)
 
     for idx, (dummy_group, anchor_group, anchor_ixns) in enumerate(zip(dgs, ags, ag_ixns)):
 
@@ -607,7 +617,7 @@ def _draw_impl(mol, core, ff, fname):
             fh.write(res)
 
 
-def test_parameterize_and_draw_interactions():
+def test_parameterize_and_draw_ixns():
     """
     This isn't really tested, but is here to verify that drawing code at least runs.
     """
@@ -634,3 +644,301 @@ def test_parameterize_and_draw_interactions():
     core = [2, 3, 4, 5, 6, 7]
 
     _draw_impl(mol, core, ff, "ring_open")
+
+
+def test_flag_dummy_core_ixns_trivial():
+    """
+    Some dummy core ixns need to be explicitly removed from the end-state due to
+    numerical instability. We can always remove a dummy-core interaction *without*
+    making the partition function any less factorizable. The general usage pattern
+    is to first prune numerically unstable dummy-core ixns, and then run factorizability
+    checks on the remaining bonds.
+
+    The test system here is:
+
+        2
+        |
+    0...1
+
+    """
+
+    # test missing bond in angle term
+    core = [0, 1]
+    bond_idxs = [(1, 2)]
+    bond_params = [(100, 0.1)]
+    angle_idxs = [(0, 1, 2)]
+    angle_params = [(100, 0.1)]
+    torsion_idxs = []
+    torsion_params = []
+
+    keep_angle_flags, keep_torsion_flags = flag_stable_dummy_ixns(
+        core,
+        bond_idxs,
+        bond_params,
+        angle_idxs,
+        angle_params,
+        torsion_idxs,
+        torsion_params,
+    )
+
+    # remove angle
+    assert keep_angle_flags == [0]
+
+    # remove torsion
+    assert keep_torsion_flags == []
+
+
+def test_flag_dummy_core_ixns_split():
+    """
+    Same intention as the above test, but with a non-trivial system:
+
+        2
+        |
+    0---1...3
+
+    We should keep only the [0,1,2] angle but not the [2,1,3] angle.
+    Any torsions defined over these 4 atoms should be disallowed.
+    """
+
+    # test missing bond in angle term
+    core = [0, 1, 3]
+    bond_idxs = [(1, 2), (0, 1)]
+    bond_params = [(100, 0.1), (100, 0.1)]
+    angle_idxs = [(0, 1, 2), (2, 1, 3)]
+    angle_params = [(100, 0.1), (100, 0.1)]
+
+    # add an improper
+    torsion_idxs = [(0, 2, 1, 3)]
+    torsion_params = [(50.0, 5.0, 1.0)]
+
+    keep_angle_flags, keep_torsion_flags = flag_stable_dummy_ixns(
+        core,
+        bond_idxs,
+        bond_params,
+        angle_idxs,
+        angle_params,
+        torsion_idxs,
+        torsion_params,
+    )
+
+    assert keep_angle_flags == [1, 0]
+    assert keep_torsion_flags == [0]
+
+
+def test_flag_dummy_core_torsions_missing_bonds():
+    r"""
+    Same intention as the above test, but with a non-trivial system:
+
+        3 <- dummy
+        |
+    0---2
+     \ /
+      1
+
+    Two torsions: [0,1,2,3], [1,0,2,3] are both allowed. If we remove a bond:
+
+        3 <- dummy
+        |
+    0   2
+     \ /
+      1
+
+    Then [1,0,2,3] should be pruned
+
+    """
+    # all interactions present
+    core = [0, 1, 2]
+    bond_idxs = [(0, 1), (0, 2), (1, 2), (2, 3)]
+    bond_params = [(100, 0.1)] * len(bond_idxs)
+    angle_idxs = [(0, 1, 2), (1, 0, 2), (0, 2, 1), (1, 2, 3), (0, 2, 3)]
+    angle_params = [(100, 0.2)] * len(angle_idxs)
+    torsion_idxs = [(0, 1, 2, 3), (1, 0, 2, 3)]
+    torsion_params = [(50.0, 5.0, 1.0)] * len(torsion_idxs)
+
+    keep_angle_flags, keep_torsion_flags = flag_stable_dummy_ixns(
+        core,
+        bond_idxs,
+        bond_params,
+        angle_idxs,
+        angle_params,
+        torsion_idxs,
+        torsion_params,
+    )
+
+    assert keep_angle_flags == [1, 1, 1, 1, 1]
+    assert keep_torsion_flags == [1, 1]
+
+    # remove bond term but keep the angle terms
+
+    core = [0, 1, 2]
+    bond_idxs = [(0, 1), (1, 2), (2, 3)]
+    bond_params = [(100, 0.1)] * len(bond_idxs)
+    angle_idxs = [(0, 1, 2), (1, 0, 2), (0, 2, 1), (1, 2, 3), (0, 2, 3)]
+    angle_params = [(100, 0.2)] * len(angle_idxs)
+    torsion_idxs = [(0, 1, 2, 3), (1, 0, 2, 3)]
+    torsion_params = [(50.0, 5.0, 1.0)] * len(torsion_idxs)
+
+    keep_angle_flags, keep_torsion_flags = flag_stable_dummy_ixns(
+        core,
+        bond_idxs,
+        bond_params,
+        angle_idxs,
+        angle_params,
+        torsion_idxs,
+        torsion_params,
+    )
+
+    # core-core ixns are untouched, even though they may be unstable, since we're
+    # not allowed to modify them. only the last dummy-core ixn is turned off.
+    assert keep_angle_flags == [1, 1, 1, 1, 0]
+
+    # one of the torsion terms is now disabled
+    assert keep_torsion_flags == [1, 0]
+
+
+def test_flag_dummy_core_bad_parameters():
+    r"""
+    Test cases where the bonded terms are present, but are numerically unstable to define
+    torsions over.
+
+    dummy
+    |
+    v
+    0   2
+     \ / \       allow the torsion [0,1,2,3]
+      1   3
+
+    0
+     \
+      1=2=3      disallow the torsion [0,1,2,3]
+
+    """
+
+    core = [1, 2, 3]
+    bond_idxs = [(0, 1), (1, 2), (2, 3)]
+    bond_params = [(100, 0.1)] * len(bond_idxs)
+    angle_idxs = [(0, 1, 2), (1, 2, 3)]
+    angle_params = [(100, 0.2), (100, 0.2)]
+    torsion_idxs = [(0, 1, 2, 3)]
+    torsion_params = [(50.0, 5.0, 1.0)] * len(torsion_idxs)
+
+    keep_angle_flags, keep_torsion_flags = flag_stable_dummy_ixns(
+        core,
+        bond_idxs,
+        bond_params,
+        angle_idxs,
+        angle_params,
+        torsion_idxs,
+        torsion_params,
+    )
+
+    assert keep_angle_flags == [1, 1]
+    assert keep_torsion_flags == [1]
+
+    bond_params = [(100, 0.1), (100, 0.1), (100, 0.1)]  # keep bond lengths the same
+    angle_params = [(100, 0.2), (100, np.pi)]  # modify angle params
+
+    keep_angle_flags, keep_torsion_flags = flag_stable_dummy_ixns(
+        core,
+        bond_idxs,
+        bond_params,
+        angle_idxs,
+        angle_params,
+        torsion_idxs,
+        torsion_params,
+    )
+
+    assert keep_angle_flags == [1, 1]
+    assert keep_torsion_flags == [0]
+
+    bond_params = [(100, 0.0), (100, 0.1), (100, 0.1)]  # modify the dummy-core bond length
+    angle_params = [(100, 0.2), (100, 0.2)]  # keep angle terms the same
+
+    keep_angle_flags, keep_torsion_flags = flag_stable_dummy_ixns(
+        core,
+        bond_idxs,
+        bond_params,
+        angle_idxs,
+        angle_params,
+        torsion_idxs,
+        torsion_params,
+    )
+
+    assert keep_angle_flags == [0, 1]
+    assert keep_torsion_flags == [0]
+
+    bond_params = [(100, 0.1), (100, 0.0), (100, 0.1)]  # modify the core-core bond length
+    angle_params = [(100, 0.2), (100, 0.2)]  # keep angle terms the same
+
+    keep_angle_flags, keep_torsion_flags = flag_stable_dummy_ixns(
+        core,
+        bond_idxs,
+        bond_params,
+        angle_idxs,
+        angle_params,
+        torsion_idxs,
+        torsion_params,
+    )
+
+    assert keep_angle_flags == [0, 1]  # angle spanning a dummy ixn should be disabled
+    assert keep_torsion_flags == [0]
+
+    bond_params = [(100, 0.1), (100, 0.1), (100, 0.0)]  # modify the core-core bond length
+    angle_params = [(100, 0.2), (100, 0.2)]  # keep angle terms the same
+
+    keep_angle_flags, keep_torsion_flags = flag_stable_dummy_ixns(
+        core,
+        bond_idxs,
+        bond_params,
+        angle_idxs,
+        angle_params,
+        torsion_idxs,
+        torsion_params,
+    )
+
+    assert keep_angle_flags == [1, 1]  # we do not turn off core-core ixns
+    assert keep_torsion_flags == [0]
+
+
+def test_flag_missing_ixns():
+    r"""
+    Test that a dummy-dummy ixn is left unperturbed despite being unstable
+
+       D3
+        |
+       D1        C5
+      /  \      /
+    D0    D2--C4
+                \
+                 C6
+
+    Define a dummy-dummy angle term over [D0, D3, D1], which is missing the [D0, D3] bond.
+    Define a dummy-dummy improper torsion term over [D0, D1, D2, D3], which is missing the [D2, D3] bond.
+    The above two are allowed because they're only dummy-dummy terms.
+
+    However, core-dummy [D2, C5, C4] angle term and [D2, C4, C6, C5] improper torsion must be turned off
+    because they involve core atoms and dummy atoms.
+    """
+
+    core = [4, 5, 6]
+    bond_idxs = [(0, 1), (1, 2), (3, 1), (2, 4), (5, 4), (6, 4)]
+    bond_params = [(100, 0.1)] * len(bond_idxs)
+    #                okay                  bad
+    angle_idxs = [(1, 3, 0), (0, 1, 3), (2, 5, 4), (2, 1, 3), (0, 1, 2), (1, 2, 4), (2, 4, 5), (6, 4, 2), (5, 4, 6)]
+    angle_params = [(100, 0.2)] * len(angle_idxs)
+    #                                  bad
+    torsion_idxs = [(0, 1, 2, 3), (2, 4, 6, 5), (5, 4, 2, 1), (1, 2, 4, 6)]
+    torsion_params = [(50.0, 5.0, 1.0)] * len(torsion_idxs)
+
+    keep_angle_flags, keep_torsion_flags = flag_stable_dummy_ixns(
+        core,
+        bond_idxs,
+        bond_params,
+        angle_idxs,
+        angle_params,
+        torsion_idxs,
+        torsion_params,
+    )
+
+    assert keep_angle_flags == [1, 1, 0, 1, 1, 1, 1, 1, 1]  # we do not turn off core-core ixns
+    assert keep_torsion_flags == [1, 0, 1, 1]
