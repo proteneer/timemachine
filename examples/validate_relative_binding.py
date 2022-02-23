@@ -259,6 +259,7 @@ if __name__ == "__main__":
         forcefield,
         complex_box,
         cmd_args.num_host_preequil_steps,
+        seed=seed,
     )
 
     # Generate an equilibrated solvent box to use.
@@ -271,6 +272,7 @@ if __name__ == "__main__":
         forcefield,
         solvent_box,
         cmd_args.num_host_preequil_steps,
+        seed=seed,
     )
 
     complex_conversion_schedule = construct_conversion_lambda_schedule(cmd_args.num_complex_conv_windows)
