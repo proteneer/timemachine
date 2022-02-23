@@ -95,7 +95,12 @@ def delta_r(ri, rj, box=None):
 
 
 def distance_on_pairs(ri, rj, box=None):
-    """O(n) where n = len(ri) = len(rj)"""
+    """O(n) where n = len(ri) = len(rj)
+
+    Notes
+    -----
+    TODO [performance]: any difference if the signature is (conf, pairs) rather than (ri, rj)?
+    """
     assert len(ri) == len(rj)
 
     diff = delta_r(ri, rj, box)
@@ -111,8 +116,8 @@ def get_interacting_pair_indices_batch(confs, boxes, pairs, cutoff=1.2):
 
     Parameters
     ----------
-    confs: (n_snapshots, n_atoms, 3) float array
-    boxes: (n_snapshots, 3, 3) float array
+    confs: (n_snapshots, n_atoms, dim) float array
+    boxes: (n_snapshots, dim, dim) float array
     pairs: (n_candidate_pairs, 2) integer array
     cutoff: float
 
@@ -125,7 +130,9 @@ def get_interacting_pair_indices_batch(confs, boxes, pairs, cutoff=1.2):
     -----
     * Padding causes some amount of wasted effort, but keeps things nice and fixed-dimensional for later XLA steps
     """
-    assert len(confs.shape) == 3
+    n_snapshots, n_atoms, dim = confs.shape
+    assert boxes.shape == (n_snapshots, dim, dim)
+
     distances = vmap(distance_on_pairs)(confs[:, pairs[:, 0]], confs[:, pairs[:, 1]], boxes)
     assert distances.shape == (len(confs), len(pairs))
 
