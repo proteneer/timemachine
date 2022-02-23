@@ -5,6 +5,7 @@ jax.config.update("jax_enable_x64", True)
 import numpy as np
 import pytest
 from common import GradientTest, prepare_reference_nonbonded
+from parameter_interpolation import gen_params
 
 from timemachine.lib.potentials import NonbondedInteractionGroup, NonbondedInteractionGroupInterpolated
 from timemachine.potentials import jax_utils, nonbonded
@@ -146,8 +147,7 @@ def test_nonbonded_interaction_group_interpolated_correctness(
 
     conf = example_conf[:num_atoms]
     params_initial = example_nonbonded_params[:num_atoms, :]
-    params_final = params_initial + rng.normal(0, 0.01, size=params_initial.shape)
-    params = np.concatenate((params_initial, params_final))
+    params = gen_params(params_initial, rng)
 
     lambda_plane_idxs = rng.integers(-2, 3, size=(num_atoms,), dtype=np.int32)
     lambda_offset_idxs = rng.integers(-2, 3, size=(num_atoms,), dtype=np.int32)

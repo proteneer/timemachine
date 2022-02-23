@@ -7,6 +7,7 @@ import functools
 import numpy as np
 import pytest
 from common import GradientTest
+from parameter_interpolation import gen_params
 
 from timemachine.lib.potentials import NonbondedPairList, NonbondedPairListInterpolated
 from timemachine.potentials import jax_utils, nonbonded
@@ -123,10 +124,7 @@ def test_nonbonded_pair_list_interpolated_correctness(
     "Compares with jax reference implementation, with parameter interpolation."
 
     num_atoms, _ = example_conf.shape
-
-    params_initial = example_nonbonded_params
-    params_final = params_initial + rng.normal(0, 0.01, size=params_initial.shape)
-    params = np.concatenate((params_initial, params_final))
+    params = gen_params(example_nonbonded_params, rng)
 
     # randomly select 2 interaction groups and construct all pairwise interactions
     atom_idxs = rng.choice(
