@@ -31,8 +31,9 @@ def one_sided_exp(delta_us):
 def interpret_as_mixture_potential(u_kn, f_k, N_k):
     """https://arxiv.org/abs/1704.00891"""
     n_states, n_samples = u_kn.shape
+    N_k = np.array(N_k)
     assert f_k.shape == (n_states,)
-    assert sum(N_k) == n_samples
+    assert np.sum(N_k) == n_samples
 
     return -logsumexp(f_k - u_kn.T, b=N_k, axis=1)
 
