@@ -314,6 +314,7 @@ class NonbondedInterpolated(Nonbonded):
             self.get_lambda_offset_idxs(),
             self.get_beta(),
             self.get_cutoff(),
+            None,
             *self.args[6:],  # remaining args are lambda transformation expressions
         ).unbound_impl(precision)
 
