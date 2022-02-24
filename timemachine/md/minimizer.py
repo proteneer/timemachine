@@ -1,4 +1,7 @@
+from typing import Optional, Tuple
+
 import numpy as np
+from numpy.typing import NDArray
 from rdkit import Chem
 from simtk import openmm
 
@@ -29,7 +32,7 @@ def bind_potentials(topo, ff):
     return u_impls
 
 
-def fire_minimize(x0: np.ndarray, u_impls, box: np.ndarray, lamb_sched: np.array) -> np.ndarray:
+def fire_minimize(x0: NDArray, u_impls, box: NDArray, lamb_sched: NDArray) -> NDArray:
     """
     Minimize coordinates using the FIRE algorithm
 
@@ -162,14 +165,59 @@ def minimize_host_4d(mols, host_system, host_coords, ff, box, mol_coords=None) -
 def equilibrate_host(
     mol: Chem.Mol,
     host_system: openmm.System,
-    host_coords: np.array,
+    host_coords: NDArray,
     temperature: float,
     pressure: float,
     ff: Forcefield,
-    box: np.array,
-    n_steps,
-):
+    box: NDArray,
+    n_steps: int,
+    seed: Optional[int] = None,
+) -> Tuple[NDArray, NDArray]:
+    """
+    Equilibrate a host system given a reference molecule using the MonteCarloBarostat.
 
+    Useful for preparing a host that will be used for multiple FEP calculations using the same reference, IE a starmap.
+
+    Performs the following:
+    - Minimize host with rigid mol
+    - Minimize host and mol
+    - Run n_steps with HMR enabled and MonteCarloBarostat every 5 steps
+
+    Parameters
+    ----------
+    mol: Chem.Mol
+        Ligand for the host to equilibrate with.
+
+    host_system: openmm.System
+        OpenMM System representing the host.
+
+    host_coords: np.ndarray
+        N x 3 coordinates of the host. units of nanometers.
+
+    temperature: float
+        Temperature at which to run the simulation. Units of kelvins.
+
+    pressure: float
+        Pressure at which to run the simulation. Units of bars.
+
+    ff: ff.Forcefield
+        Wrapper class around a list of handlers.
+
+    box: np.ndarray [3,3]
+        Box matrix for periodic boundary conditions. units of nanometers.
+
+    n_steps: int
+        Number of steps to run the simulation for.
+
+    seed: int or None
+        Value to seed simulation with
+
+    Returns
+    -------
+    tuple (coords, box)
+        Returns equilibrated system coords as well as the box.
+
+    """
     # insert mol into the binding pocket.
     host_bps, host_masses = openmm_deserializer.deserialize_system(host_system, cutoff=1.2)
 
@@ -207,7 +255,8 @@ def equilibrate_host(
     dt = 2.5e-3
     friction = 1.0
 
-    seed = 0
+    if seed is None:
+        seed = np.random.randint(np.iinfo(np.int32).max)
 
     integrator = LangevinIntegrator(temperature, dt, friction, combined_masses, seed).impl()
 
@@ -220,6 +269,7 @@ def equilibrate_host(
         u_impls
     )
 
+    # Re-minimize with the mol being flexible
     x0 = fire_minimize(x0, u_impls, box, np.ones(50))
     # context components: positions, velocities, box, integrator, energy fxns
     ctxt = custom_ops.Context(x0, v0, box, integrator, u_impls, barostat)

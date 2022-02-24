@@ -280,6 +280,23 @@ class NonbondedInterpolated(Nonbonded):
         return custom_ctor(*self.args)
 
 
+class NonbondedAllPairs(CustomOpWrapper):
+    pass
+
+
+class NonbondedAllPairsInterpolated(NonbondedAllPairs):
+    def unbound_impl(self, precision):
+        cls_name_base = "NonbondedAllPairs"
+        if precision == np.float64:
+            cls_name_base += "_f64_interpolated"
+        else:
+            cls_name_base += "_f32_interpolated"
+
+        custom_ctor = getattr(custom_ops, cls_name_base)
+
+        return custom_ctor(*self.args)
+
+
 class NonbondedInteractionGroup(CustomOpWrapper):
     pass
 
@@ -287,6 +304,23 @@ class NonbondedInteractionGroup(CustomOpWrapper):
 class NonbondedInteractionGroupInterpolated(NonbondedInteractionGroup):
     def unbound_impl(self, precision):
         cls_name_base = "NonbondedInteractionGroup"
+        if precision == np.float64:
+            cls_name_base += "_f64_interpolated"
+        else:
+            cls_name_base += "_f32_interpolated"
+
+        custom_ctor = getattr(custom_ops, cls_name_base)
+
+        return custom_ctor(*self.args)
+
+
+class NonbondedPairList(CustomOpWrapper):
+    pass
+
+
+class NonbondedPairListInterpolated(NonbondedPairList):
+    def unbound_impl(self, precision):
+        cls_name_base = "NonbondedPairList"
         if precision == np.float64:
             cls_name_base += "_f64_interpolated"
         else:
