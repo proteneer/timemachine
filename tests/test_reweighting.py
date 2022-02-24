@@ -103,7 +103,7 @@ def test_endpoint_reweighting_1d():
         samples_0, samples_1, vec_u_0_fxn, vec_u_1_fxn, ref_params, ref_delta_f
     )
 
-    assert_estimator_accurate(jit(estimate_delta_f), ref_params, n_random_trials=100)
+    assert_estimator_accurate(jit(estimate_delta_f), ref_params, n_random_trials=10, atol=5e-3)
 
 
 def test_endpoint_reweighting_ahfe():
@@ -111,11 +111,12 @@ def test_endpoint_reweighting_ahfe():
 
 
 def test_mixture_reweighting_1d():
+    onp.random.seed(2022)
     ref_params = np.ones(2)
     n_windows = 10
     lambdas = np.linspace(0, 1, n_windows)
 
-    n_samples_per_window = int(1e3)
+    n_samples_per_window = int(1e5)
     N_k = [n_samples_per_window] * n_windows
     n_samples_total = sum(N_k)
 
@@ -152,7 +153,7 @@ def test_mixture_reweighting_1d():
 
     # TODO [overkill] : BAR
     # ...
-    # u_mix_ti = ...
+    # u_mix_bar = ...
 
     # TODO [overkill] : SMC
     # ...
@@ -166,7 +167,7 @@ def test_mixture_reweighting_1d():
         # TODO [sign convention]: change signature to accept u_mix rather than log_weights?
         estimate_delta_f = construct_mixture_reweighting_estimator(xs, -u_mix, vec_u_0_fxn, vec_u_1_fxn)
 
-        assert_estimator_accurate(jit(estimate_delta_f), ref_params, n_random_trials=100)
+        assert_estimator_accurate(jit(estimate_delta_f), ref_params, n_random_trials=10, atol=1e-2)
 
 
 def test_mixture_reweighting_ahfe():
