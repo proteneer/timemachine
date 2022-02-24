@@ -4,6 +4,8 @@
 #include "potential.hpp"
 #include "vendored/jitify.hpp"
 #include <array>
+#include <optional>
+#include <set>
 #include <vector>
 
 namespace timemachine {
@@ -31,15 +33,19 @@ template <typename RealType, bool Interpolated> class NonbondedAllPairs : public
 private:
     std::array<k_nonbonded_fn, 16> kernel_ptrs_;
 
+    const int N_;
+    const int K_; // number of interacting atoms
+
     int *d_lambda_plane_idxs_;
     int *d_lambda_offset_idxs_;
-    int *p_ixn_count_; // pinned memory
 
     double beta_;
     double cutoff_;
-    Neighborlist<RealType> nblist_;
 
-    const int N_;
+    unsigned int *d_atom_idxs_; // [K_] indices of interacting atoms
+
+    Neighborlist<RealType> nblist_;
+    int *p_ixn_count_; // pinned memory
 
     double nblist_padding_;
     double *d_nblist_x_;    // coords which were used to compute the nblist
@@ -91,6 +97,7 @@ public:
         const std::vector<int> &lambda_offset_idxs, // N
         const double beta,
         const double cutoff,
+        const std::optional<std::set<int>> &atom_idxs,
         const std::string &kernel_src);
 
     ~NonbondedAllPairs();

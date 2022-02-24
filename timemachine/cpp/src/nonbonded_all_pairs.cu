@@ -6,6 +6,8 @@
 #include <cstdlib>
 #include <cub/cub.cuh>
 #include <iostream>
+#include <numeric>
+#include <optional>
 #include <vector>
 
 #include "fixed_point.hpp"
@@ -27,36 +29,37 @@ NonbondedAllPairs<RealType, Interpolated>::NonbondedAllPairs(
     const std::vector<int> &lambda_offset_idxs, // [N]
     const double beta,
     const double cutoff,
+    const std::optional<std::set<int>> &atom_idxs,
     const std::string &kernel_src
     // const std::string &transform_lambda_charge,
     // const std::string &transform_lambda_sigma,
     // const std::string &transform_lambda_epsilon,
     // const std::string &transform_lambda_w
     )
-    : N_(lambda_offset_idxs.size()), cutoff_(cutoff), nblist_(lambda_offset_idxs.size()), beta_(beta),
-      d_sort_storage_(nullptr), d_sort_storage_bytes_(0), nblist_padding_(0.1), disable_hilbert_(false),
-      kernel_ptrs_({// enumerate over every possible kernel combination
-                    // U: Compute U
-                    // X: Compute DU_DL
-                    // L: Compute DU_DX
-                    // P: Compute DU_DP
-                    //                             U  X  L  P
-                    &k_nonbonded_unified<RealType, 0, 0, 0, 0>,
-                    &k_nonbonded_unified<RealType, 0, 0, 0, 1>,
-                    &k_nonbonded_unified<RealType, 0, 0, 1, 0>,
-                    &k_nonbonded_unified<RealType, 0, 0, 1, 1>,
-                    &k_nonbonded_unified<RealType, 0, 1, 0, 0>,
-                    &k_nonbonded_unified<RealType, 0, 1, 0, 1>,
-                    &k_nonbonded_unified<RealType, 0, 1, 1, 0>,
-                    &k_nonbonded_unified<RealType, 0, 1, 1, 1>,
-                    &k_nonbonded_unified<RealType, 1, 0, 0, 0>,
-                    &k_nonbonded_unified<RealType, 1, 0, 0, 1>,
-                    &k_nonbonded_unified<RealType, 1, 0, 1, 0>,
-                    &k_nonbonded_unified<RealType, 1, 0, 1, 1>,
-                    &k_nonbonded_unified<RealType, 1, 1, 0, 0>,
-                    &k_nonbonded_unified<RealType, 1, 1, 0, 1>,
-                    &k_nonbonded_unified<RealType, 1, 1, 1, 0>,
-                    &k_nonbonded_unified<RealType, 1, 1, 1, 1>}),
+    : N_(lambda_offset_idxs.size()), K_(atom_idxs ? atom_idxs->size() : N_), cutoff_(cutoff), d_atom_idxs_(nullptr),
+      nblist_(lambda_offset_idxs.size()), beta_(beta), d_sort_storage_(nullptr), d_sort_storage_bytes_(0),
+      nblist_padding_(0.1), disable_hilbert_(false), kernel_ptrs_({// enumerate over every possible kernel combination
+                                                                   // U: Compute U
+                                                                   // X: Compute DU_DL
+                                                                   // L: Compute DU_DX
+                                                                   // P: Compute DU_DP
+                                                                   //                             U  X  L  P
+                                                                   &k_nonbonded_unified<RealType, 0, 0, 0, 0>,
+                                                                   &k_nonbonded_unified<RealType, 0, 0, 0, 1>,
+                                                                   &k_nonbonded_unified<RealType, 0, 0, 1, 0>,
+                                                                   &k_nonbonded_unified<RealType, 0, 0, 1, 1>,
+                                                                   &k_nonbonded_unified<RealType, 0, 1, 0, 0>,
+                                                                   &k_nonbonded_unified<RealType, 0, 1, 0, 1>,
+                                                                   &k_nonbonded_unified<RealType, 0, 1, 1, 0>,
+                                                                   &k_nonbonded_unified<RealType, 0, 1, 1, 1>,
+                                                                   &k_nonbonded_unified<RealType, 1, 0, 0, 0>,
+                                                                   &k_nonbonded_unified<RealType, 1, 0, 0, 1>,
+                                                                   &k_nonbonded_unified<RealType, 1, 0, 1, 0>,
+                                                                   &k_nonbonded_unified<RealType, 1, 0, 1, 1>,
+                                                                   &k_nonbonded_unified<RealType, 1, 1, 0, 0>,
+                                                                   &k_nonbonded_unified<RealType, 1, 1, 0, 1>,
+                                                                   &k_nonbonded_unified<RealType, 1, 1, 1, 0>,
+                                                                   &k_nonbonded_unified<RealType, 1, 1, 1, 1>}),
       compute_w_coords_instance_(kernel_cache_.program(kernel_src.c_str()).kernel("k_compute_w_coords").instantiate()),
       compute_gather_interpolated_(
           kernel_cache_.program(kernel_src.c_str()).kernel("k_gather_interpolated").instantiate()),
@@ -74,6 +77,12 @@ NonbondedAllPairs<RealType, Interpolated>::NonbondedAllPairs(
     gpuErrchk(cudaMalloc(&d_lambda_offset_idxs_, N_ * sizeof(*d_lambda_offset_idxs_)));
     gpuErrchk(cudaMemcpy(
         d_lambda_offset_idxs_, &lambda_offset_idxs[0], N_ * sizeof(*d_lambda_offset_idxs_), cudaMemcpyHostToDevice));
+
+    if (atom_idxs) {
+        gpuErrchk(cudaMalloc(&d_atom_idxs_, K_ * sizeof(*d_atom_idxs_)));
+        std::vector<int> atom_idxs_v(atom_idxs->begin(), atom_idxs->end());
+        gpuErrchk(cudaMemcpy(d_atom_idxs_, &atom_idxs_v[0], K_ * sizeof(*d_atom_idxs_), cudaMemcpyHostToDevice));
+    }
 
     gpuErrchk(cudaMalloc(&d_sorted_atom_idxs_, N_ * sizeof(*d_sorted_atom_idxs_)));
 
@@ -142,6 +151,11 @@ template <typename RealType, bool Interpolated> NonbondedAllPairs<RealType, Inte
 
     gpuErrchk(cudaFree(d_lambda_plane_idxs_));
     gpuErrchk(cudaFree(d_lambda_offset_idxs_));
+
+    if (d_atom_idxs_) {
+        gpuErrchk(cudaFree(d_atom_idxs_));
+    }
+
     gpuErrchk(cudaFree(d_du_dp_buffer_));
     gpuErrchk(cudaFree(d_sorted_atom_idxs_));
 
