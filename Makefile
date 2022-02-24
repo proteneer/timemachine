@@ -2,7 +2,7 @@
 MKFILE_DIR := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
 CPP_DIR := $(MKFILE_DIR)timemachine/cpp/
 INSTALL_PREFIX := $(MKFILE_DIR)timemachine/
-PYTEST_CI_ARGS := --cov=. --cov-report=term-missing --durations=100
+PYTEST_CI_ARGS := --cov=. --cov-report=html:coverage/ --cov-append --durations=100
 
 NPROCS = `nproc`
 
@@ -19,8 +19,17 @@ clean:
 grpc:
 	python -m grpc_tools.protoc -I grpc/ --python_out=. --grpc_python_out=. grpc/timemachine/parallel/grpc/service.proto
 
-ci:
-	pre-commit run --all-files --show-diff-on-failure && \
-	export PYTHONPATH=$(MKFILE_DIR) && \
-	cuda-memcheck --leak-check full --error-exitcode 1 pytest $(PYTEST_CI_ARGS) tests/ && \
+.PHONY: verify
+verify:
+	pre-commit run --all-files --show-diff-on-failure
+
+.PHONY: memcheck_tests
+memcheck_tests:
+	cuda-memcheck --leak-check full --error-exitcode 1 pytest $(PYTEST_CI_ARGS) tests/
+
+.PHONY: unit_tests
+unit_tests:
 	pytest $(PYTEST_CI_ARGS) slow_tests/
+
+.PHONY: ci
+ci: verify memcheck_tests unit_tests
