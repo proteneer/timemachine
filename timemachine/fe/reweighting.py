@@ -4,23 +4,20 @@ from jax import numpy as np
 from jax.scipy.special import logsumexp
 
 
-def mean(values):
-    return np.sum(values) / len(values)
-
-
 def log_mean(log_values):
+    # log(mean(values))
+    # = log(sum(values) / len(values))
     return logsumexp(log_values) - np.log(len(log_values))
 
 
-def estimate_z_ratio(importance_weights):
-    return mean(importance_weights)
-
-
 def estimate_log_z_ratio(log_importance_weights):
+    # log(mean(importance_weights))
     return log_mean(log_importance_weights)
 
 
 def one_sided_exp(delta_us):
+    # delta_us = -log_importance_weights
+    # delta_f  = -log_z_ratio
     return -estimate_log_z_ratio(-delta_us)
 
 
