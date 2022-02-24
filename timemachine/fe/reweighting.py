@@ -1,6 +1,13 @@
-__all__ = ["one_sided_exp", "construct_endpoint_reweighting_estimator", "construct_mixture_reweighting_estimator"]
+__all__ = [
+    "one_sided_exp",
+    "construct_endpoint_reweighting_estimator",
+    "construct_mixture_reweighting_estimator",
+    "interpret_as_mixture_potential",
+    "reweight_from_mixture",
+]
 
 from jax import numpy as np
+from jax import vmap
 from jax.scipy.special import logsumexp
 
 
@@ -19,6 +26,48 @@ def one_sided_exp(delta_us):
     # delta_us = -log_importance_weights
     # delta_f  = -log_z_ratio
     return -estimate_log_z_ratio(-delta_us)
+
+
+def interpret_as_mixture_potential(u_kn, f_k, N_k):
+    n_states, n_samples = u_kn.shape
+    assert f_k.shape == (n_states,)
+    assert np.sum(N_k) == n_samples
+
+    return -logsumexp(f_k - u_kn.T, b=N_k, axis=1)
+
+
+# # maybe a few other ways to phrase interpret_as_mixture_potential?
+# def normalized_logpdfs_from_mixture_components(u_kn, f_k):
+#     unnormalized_logpdfs = -u_kn
+#     log_normalizing_constants = -f_k
+#     normalized_logpdfs = unnormalized_logpdfs - log_normalizing_constants[:, np.newaxis]
+#     return normalized_logpdfs
+#
+#
+# def log_mixture_density(mixture_logpdfs, mixture_proportions):
+#     # p_mix(x_n) = sum_k w_k * p_k(x_n)
+#     # mixture_density = np.sum(mixture_pdfs * mixture_proprtions[:, np.newaxis], axis=0)
+#     return logsumexp(mixture_logpdfs, b=mixture_proportions, axis=0)
+
+
+# aside: a nice way to rephrase MBAR
+
+
+def reweight_from_mixture(u_kn, f_k, N_k):
+    """https://arxiv.org/abs/1704.00891"""
+    mixture_u_n = interpret_as_mixture_potential(u_kn, f_k, N_k)
+    delta_u_kn = u_kn - mixture_u_n[np.newaxis, :]
+    estimated_f_k = vmap(one_sided_exp)(delta_u_kn)
+    return estimated_f_k
+
+
+def mbar(u_kn, N_k):
+    """self-consistent iteration"""
+    f_k = np.zeros(len(u_kn))
+    for _ in range(1000):
+        f_k = reweight_from_mixture(u_kn, f_k, N_k)
+        f_k -= f_k[0]
+    return f_k
 
 
 def construct_endpoint_reweighting_estimator(samples_0, samples_1, vec_u_0_fxn, vec_u_1_fxn, ref_params, ref_delta_f):
