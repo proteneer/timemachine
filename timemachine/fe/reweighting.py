@@ -32,11 +32,15 @@ def construct_endpoint_reweighting_estimator(samples_0, samples_1, vec_u_0_fxn, 
     ref_u_0 = vec_u_0_fxn(samples_0, params=ref_params)
     ref_u_1 = vec_u_1_fxn(samples_1, params=ref_params)
 
-    def vec_delta_u_0(params):
-        return vec_u_0_fxn(samples_0, params) - ref_u_0
+    def endpoint_correction_0(params):
+        """estimate f(ref, 0) -> f(params, 0) by reweighting"""
+        delta_us = vec_u_0_fxn(samples_0, params) - ref_u_0
+        return one_sided_exp(delta_us)
 
-    def vec_delta_u_1(params):
-        return vec_u_1_fxn(samples_1, params) - ref_u_1
+    def endpoint_correction_1(params):
+        """estimate f(ref, 1) -> f(params, 1) by reweighting"""
+        delta_us = vec_u_1_fxn(samples_1, params) - ref_u_1
+        return one_sided_exp(delta_us)
 
     def estimate_delta_f(params):
         """estimate f(params, 1) - f(params, 0)
@@ -56,12 +60,9 @@ def construct_endpoint_reweighting_estimator(samples_0, samples_1, vec_u_0_fxn, 
         where
         * "f(ref, 0) -> f(ref, 1)" is assumed precomputed (using any precise free energy method)
         * "f(ref, 0) -> f(params, 0)" is estimated by reweighting
-        * "f(ref, 1) -> f(params, 0)" is estimated by reweighting
+        * "f(ref, 1) -> f(params, 1)" is estimated by reweighting
         """
-        endpoint_correction_0 = one_sided_exp(vec_delta_u_0(params))
-        endpoint_correction_1 = one_sided_exp(vec_delta_u_1(params))
-
-        return ref_delta_f - endpoint_correction_0 + endpoint_correction_1
+        return ref_delta_f - endpoint_correction_0(params) + endpoint_correction_1(params)
 
     return estimate_delta_f
 
@@ -77,17 +78,20 @@ def construct_mixture_reweighting_estimator(samples, log_weights, vec_u_0_fxn, v
     assert len(samples) == len(log_weights)
 
     def f_0(params):
+        """estimate f(params, 0) - f(ref) by reweighting"""
         log_numerator = -vec_u_0_fxn(samples, params)
         log_importance_weights = log_numerator - log_weights
         return one_sided_exp(-log_importance_weights)
 
     def f_1(params):
+        """estimate f(params, 1) - f(ref) by reweighting"""
         log_numerator = -vec_u_1_fxn(samples, params)
         log_importance_weights = log_numerator - log_weights
         return one_sided_exp(-log_importance_weights)
 
     def estimate_delta_f(params):
-        r"""estimate f(params, 0)  --->  f(params, 1)
+        r"""estimate f(params, 1) - f(params, 1)
+
         using this thermodynamic cycle:
 
         f(params, 0)  --->  f(params, 1)
