@@ -14,7 +14,6 @@ from rdkit import Chem
 
 from timemachine.fe import free_energy, topology
 from timemachine.ff import Forcefield
-from timemachine.ff.handlers.deserialize import deserialize_handlers
 from timemachine.md import builders, minimizer
 
 
@@ -57,8 +56,7 @@ if __name__ == "__main__":
     mol_a = all_mols[0]
     mol_b = all_mols[1]
 
-    ff_handlers = deserialize_handlers(open("timemachine/ff/params/smirnoff_1_1_0_ccc.py").read())
-    ff = Forcefield(ff_handlers)
+    ff = Forcefield.load_from_file("smirnoff_1_1_0_ccc.py")
 
     # the water system first.
     solvent_system, solvent_coords, solvent_box, omm_topology = builders.build_water_system(4.0)

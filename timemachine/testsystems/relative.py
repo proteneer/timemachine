@@ -8,7 +8,6 @@ from rdkit import Chem
 import timemachine
 from timemachine.fe import free_energy, topology
 from timemachine.ff import Forcefield
-from timemachine.ff.handlers.deserialize import deserialize_handlers
 
 root = Path(timemachine.__file__).parent.parent
 
@@ -21,12 +20,7 @@ def _setup_hif2a_ligand_pair(ff="timemachine/ff/params/smirnoff_1_1_0_ccc.py"):
     TODO: replace this with a testsystem class similar to those used in openmmtools
     """
     path_to_ligand = str(root.joinpath("tests/data/ligands_40.sdf"))
-    path_to_ff = str(root.joinpath(ff))
-
-    with open(path_to_ff) as f:
-        ff_handlers = deserialize_handlers(f.read())
-
-    forcefield = Forcefield(ff_handlers)
+    forcefield = Forcefield.load_from_file(ff)
 
     suppl = Chem.SDMolSupplier(path_to_ligand, removeHs=False)
     all_mols = [x for x in suppl]

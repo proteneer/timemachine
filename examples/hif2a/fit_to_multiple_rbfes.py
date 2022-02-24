@@ -22,7 +22,6 @@ from timemachine.fe.model import RBFEModel
 
 # forcefield handlers
 from timemachine.ff import Forcefield
-from timemachine.ff.handlers.deserialize import deserialize_handlers
 from timemachine.ff.handlers.nonbonded import AM1CCCHandler, LennardJonesHandler
 from timemachine.ff.handlers.serialize import serialize_handlers
 
@@ -250,11 +249,7 @@ if __name__ == "__main__":
         client = GRPCClient(hosts=args.hosts)
     client.verify()
 
-    # load and construct forcefield
-    with open(args.path_to_ff) as f:
-        ff_handlers = deserialize_handlers(f.read())
-
-    forcefield = Forcefield(ff_handlers)
+    forcefield = Forcefield.load_from_file(args.path_to_ff)
 
     relative_transformations: List[RelativeFreeEnergy] = []
     # load pre-defined collection of relative transformations
@@ -451,7 +446,7 @@ if __name__ == "__main__":
             # TODO: same for xs and du_dps snapshots
 
             # save updated forcefield .py files after every gradient step
-            step_params = serialize_handlers(ff_handlers)
+            step_params = serialize_handlers(ordered_handles)
             # TODO: consider if there's a more modular way to keep track of ff updates
             _save_forcefield(output_path.joinpath(f"forcefield_checkpoint_{step}.py"), ff_params=step_params)
             step += 1

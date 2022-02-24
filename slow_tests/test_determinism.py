@@ -2,7 +2,6 @@ import numpy as np
 
 from timemachine.ff import Forcefield
 from timemachine.ff.handlers import openmm_deserializer
-from timemachine.ff.handlers.deserialize import deserialize_handlers
 from timemachine.lib import LangevinIntegrator, MonteCarloBarostat, custom_ops
 from timemachine.md import builders, minimizer
 from timemachine.md.barostat.utils import get_bond_list, get_group_indices
@@ -25,8 +24,7 @@ def test_deterministic_energies():
     barostat_interval = 25
     mol_a, mol_b, _ = testsystem.mol_a, testsystem.mol_b, testsystem.core
 
-    ff_handlers = deserialize_handlers(open("timemachine/ff/params/smirnoff_1_1_0_sc.py").read())
-    ff = Forcefield(ff_handlers)
+    ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
 
     # build the protein system.
     complex_system, complex_coords, _, _, complex_box, _ = builders.build_protein_system(

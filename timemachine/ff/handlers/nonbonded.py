@@ -14,21 +14,10 @@ from timemachine.ff.handlers.bcc_aromaticity import match_smirks as oe_match_smi
 from timemachine.ff.handlers.serialize import SerializableMixIn
 from timemachine.ff.handlers.utils import match_smirks as rd_match_smirks
 from timemachine.ff.handlers.utils import sort_tuple
+from timemachine.graph_utils import convert_to_nx
 
-
-def convert_to_nx(mol):
-    """
-    Convert an ROMol into a networkx graph.
-    """
-    g = nx.Graph()
-
-    for atom in mol.GetAtoms():
-        g.add_node(atom.GetIdx())
-
-    for bond in mol.GetBonds():
-        g.add_edge(bond.GetBeginAtomIdx(), bond.GetEndAtomIdx())
-
-    return g
+AM1_CHARGE_CACHE = "AM1Cache"
+BOND_SMIRK_MATCH_CACHE = "BondSmirkMatchCache"
 
 
 def convert_to_oe(mol):
@@ -44,7 +33,7 @@ def convert_to_oe(mol):
 
     for buf_mol in ims.GetOEMols():
         oemol = oechem.OEMol(buf_mol)
-
+    ims.close()
     return oemol
 
 
@@ -159,24 +148,23 @@ def compute_or_load_am1_charges(mol):
     """Unless already cached in mol's "AM1Cache" property, use OpenEye to compute AM1 partial charges."""
 
     # check for cache
-    cache_key = "AM1Cache"
-    if not mol.HasProp(cache_key):
+    if not mol.HasProp(AM1_CHARGE_CACHE):
         # The charges returned by OEQuacPac is not deterministic across OS platforms. It is known
         # to be an issue that the atom ordering modifies the return values as well. A follow up
         # with OpenEye is in order
         # https://github.com/openforcefield/openff-toolkit/issues/983
         am1_charges = list(oe_assign_charges(mol, "AM1"))
 
-        mol.SetProp(cache_key, base64.b64encode(pickle.dumps(am1_charges)))
+        mol.SetProp(AM1_CHARGE_CACHE, base64.b64encode(pickle.dumps(am1_charges)))
 
     else:
-        am1_charges = pickle.loads(base64.b64decode(mol.GetProp(cache_key)))
+        am1_charges = pickle.loads(base64.b64decode(mol.GetProp(AM1_CHARGE_CACHE)))
 
     return np.array(am1_charges)
 
 
-def bond_smirks_matches(mol, smirks_list):
-    """Return an array of ordered bonds and an array of their assigned types
+def compute_or_load_bond_smirks_matches(mol, smirks_list):
+    """Unless already cached in mol's "BondSmirkMatchCache" property, uses OpenEye to compute arrays of ordered bonds and their assigned types.
 
     Notes
     -----
@@ -187,26 +175,29 @@ def bond_smirks_matches(mol, smirks_list):
     * Order within each smirks pattern matters
         For example, "[#6:1]~[#1:2]" and "[#1:1]~[#6:2]" will match atom pairs in the opposite order
     """
-    oemol = convert_to_oe(mol)
-    AromaticityModel.assign(oemol)
+    if not mol.HasProp(BOND_SMIRK_MATCH_CACHE):
+        oemol = convert_to_oe(mol)
+        AromaticityModel.assign(oemol)
 
-    bond_idxs = []  # [B, 2]
-    type_idxs = []  # [B]
+        bond_idxs = []  # [B, 2]
+        type_idxs = []  # [B]
 
-    for type_idx, smirks in enumerate(smirks_list):
-        matches = oe_match_smirks(smirks, oemol)
+        for type_idx, smirks in enumerate(smirks_list):
+            matches = oe_match_smirks(smirks, oemol)
 
-        for matched_indices in matches:
-            a, b = matched_indices[0], matched_indices[1]
-            forward_matched_bond = [a, b]
-            reverse_matched_bond = [b, a]
+            for matched_indices in matches:
+                a, b = matched_indices[0], matched_indices[1]
+                forward_matched_bond = [a, b]
+                reverse_matched_bond = [b, a]
 
-            already_assigned = forward_matched_bond in bond_idxs or reverse_matched_bond in bond_idxs
+                already_assigned = forward_matched_bond in bond_idxs or reverse_matched_bond in bond_idxs
 
-            if not already_assigned:
-                bond_idxs.append(forward_matched_bond)
-                type_idxs.append(type_idx)
-
+                if not already_assigned:
+                    bond_idxs.append(forward_matched_bond)
+                    type_idxs.append(type_idx)
+        mol.SetProp(BOND_SMIRK_MATCH_CACHE, base64.b64encode(pickle.dumps((bond_idxs, type_idxs))))
+    else:
+        bond_idxs, type_idxs = pickle.loads(base64.b64decode(mol.GetProp(BOND_SMIRK_MATCH_CACHE)))
     return np.array(bond_idxs), np.array(type_idxs)
 
 
@@ -440,7 +431,7 @@ class AM1CCCHandler(SerializableMixIn):
 
         """
         am1_charges = compute_or_load_am1_charges(mol)
-        bond_idxs, type_idxs = bond_smirks_matches(mol, smirks)
+        bond_idxs, type_idxs = compute_or_load_bond_smirks_matches(mol, smirks)
 
         deltas = params[type_idxs]
         q_params = apply_bond_charge_corrections(am1_charges, bond_idxs, deltas)

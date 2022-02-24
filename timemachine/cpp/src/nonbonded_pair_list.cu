@@ -1,14 +1,14 @@
 #include "gpu_utils.cuh"
-#include "k_nonbonded_pairs.cuh"
+#include "k_nonbonded_pair_list.cuh"
 #include "math_utils.cuh"
-#include "nonbonded_pairs.hpp"
+#include "nonbonded_pair_list.hpp"
 #include <stdexcept>
 #include <vector>
 
 namespace timemachine {
 
 template <typename RealType, bool Negated, bool Interpolated>
-NonbondedPairs<RealType, Negated, Interpolated>::NonbondedPairs(
+NonbondedPairList<RealType, Negated, Interpolated>::NonbondedPairList(
     const std::vector<int> &pair_idxs,          // [M, 2]
     const std::vector<double> &scales,          // [M, 2]
     const std::vector<int> &lambda_plane_idxs,  // [N]
@@ -24,19 +24,22 @@ NonbondedPairs<RealType, Negated, Interpolated>::NonbondedPairs(
           kernel_cache_.program(kernel_src.c_str()).kernel("k_add_du_dp_interpolated").instantiate()) {
 
     if (pair_idxs.size() % 2 != 0) {
-        throw std::runtime_error("pair_idxs.size() must be exactly 2*M");
+        throw std::runtime_error("pair_idxs.size() must be even, but got " + std::to_string(pair_idxs.size()));
     }
 
     for (int i = 0; i < M_; i++) {
         auto src = pair_idxs[i * 2 + 0];
         auto dst = pair_idxs[i * 2 + 1];
         if (src == dst) {
-            throw std::runtime_error("illegal pair with src == dst");
+            throw std::runtime_error(
+                "illegal pair with src == dst: " + std::to_string(src) + ", " + std::to_string(dst));
         }
     }
 
     if (scales.size() / 2 != M_) {
-        throw std::runtime_error("bad scales size!");
+        throw std::runtime_error(
+            "expected same number of pairs and scale tuples, but got " + std::to_string(M_) +
+            " != " + std::to_string(scales.size() / 2));
     }
 
     gpuErrchk(cudaMalloc(&d_pair_idxs_, M_ * 2 * sizeof(*d_pair_idxs_)));
@@ -72,7 +75,7 @@ NonbondedPairs<RealType, Negated, Interpolated>::NonbondedPairs(
 };
 
 template <typename RealType, bool Negated, bool Interpolated>
-NonbondedPairs<RealType, Negated, Interpolated>::~NonbondedPairs() {
+NonbondedPairList<RealType, Negated, Interpolated>::~NonbondedPairList() {
     gpuErrchk(cudaFree(d_pair_idxs_));
     gpuErrchk(cudaFree(d_scales_));
     gpuErrchk(cudaFree(d_lambda_plane_idxs_));
@@ -89,7 +92,7 @@ NonbondedPairs<RealType, Negated, Interpolated>::~NonbondedPairs() {
 };
 
 template <typename RealType, bool Negated, bool Interpolated>
-void NonbondedPairs<RealType, Negated, Interpolated>::execute_device(
+void NonbondedPairList<RealType, Negated, Interpolated>::execute_device(
     const int N,
     const int P,
     const double *d_x,
@@ -129,7 +132,7 @@ void NonbondedPairs<RealType, Negated, Interpolated>::execute_device(
 
     int num_blocks_pairs = ceil_divide(M_, tpb);
 
-    k_nonbonded_pairs<RealType, Negated><<<num_blocks_pairs, tpb, 0, stream>>>(
+    k_nonbonded_pair_list<RealType, Negated><<<num_blocks_pairs, tpb, 0, stream>>>(
         M_,
         d_x,
         Interpolated ? d_p_interp_ : d_p,
@@ -162,9 +165,9 @@ void NonbondedPairs<RealType, Negated, Interpolated>::execute_device(
     }
 }
 
-// TODO: this implementation is duplicated from NonbondedDense. Worth adding NonbondedBase?
+// TODO: this implementation is duplicated from NonbondedAllPairs
 template <typename RealType, bool Negated, bool Interpolated>
-void NonbondedPairs<RealType, Negated, Interpolated>::du_dp_fixed_to_float(
+void NonbondedPairList<RealType, Negated, Interpolated>::du_dp_fixed_to_float(
     const int N, const int P, const unsigned long long *du_dp, double *du_dp_float) {
 
     // In the interpolated case we have derivatives for the initial and final parameters
@@ -180,16 +183,16 @@ void NonbondedPairs<RealType, Negated, Interpolated>::du_dp_fixed_to_float(
     }
 }
 
-template class NonbondedPairs<double, true, true>;
-template class NonbondedPairs<float, true, true>;
+template class NonbondedPairList<double, true, true>;
+template class NonbondedPairList<float, true, true>;
 
-template class NonbondedPairs<double, false, true>;
-template class NonbondedPairs<float, false, true>;
+template class NonbondedPairList<double, false, true>;
+template class NonbondedPairList<float, false, true>;
 
-template class NonbondedPairs<double, true, false>;
-template class NonbondedPairs<float, true, false>;
+template class NonbondedPairList<double, true, false>;
+template class NonbondedPairList<float, true, false>;
 
-template class NonbondedPairs<double, false, false>;
-template class NonbondedPairs<float, false, false>;
+template class NonbondedPairList<double, false, false>;
+template class NonbondedPairList<float, false, false>;
 
 } // namespace timemachine
