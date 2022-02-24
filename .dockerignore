@@ -1,0 +1,24 @@
+# Python Related
+*/__pycache__/*
+**/.Python/*
+**/build/*
+**/dist/*
+**/*.egg-info/*
+**/.coverage/*
+*/.ipynb_checkpoints*
+
+# Git Files
+**/.git*
+
+# Swap files
+*.swp
+*.swo
+
+# C extensions
+*.so
+
+# OS Files
+*.DS_Store
+
+# Licensing
+oe_license.txt
