@@ -84,7 +84,7 @@ def assert_estimator_accurate(estimate_delta_f, analytical_delta_f, ref_params, 
 
 
 def test_endpoint_reweighting_1d():
-    """assert that endpoint reweighting estimator fo delta_f(params), grad(delta_f)(params) is accurate
+    """assert that endpoint reweighting estimator for delta_f(params), grad(delta_f)(params) is accurate
     on tractable 1D system"""
     onp.random.seed(2022)
 
@@ -387,6 +387,6 @@ def test_interpret_as_mixture_potential():
         mixture_u_n = interpret_as_mixture_potential(u_kn, f_k, N_k)
         assert mixture_u_n.shape == (sum(N_k),)
 
-        # if we reweight from mixture
+        # if we reweight from mixture, should approximately recover component free energies
         estimated_f_k = reweight_from_mixture(u_kn, f_k, N_k)
         onp.testing.assert_allclose(estimated_f_k, f_k, atol=atol)
