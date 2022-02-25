@@ -110,20 +110,18 @@ def _make_fake_sample_batch(conf, box, ligand_indices, n_snapshots=100):
     (but instead of actually populating confs, boxes with valid samples
      just randomly perturb conf and box a bunch of times)
     """
-    confs = []
-    boxes = []
+
+    samples = []
 
     for _ in range(n_snapshots):
-        conf = onp.array(conf)
-        conf[ligand_indices] += 0.005 * onp.random.randn(len(ligand_indices), 3)
+        _conf = onp.array(conf)
+        _conf[ligand_indices] += 0.005 * onp.random.randn(len(ligand_indices), 3)
 
-        confs.append(conf)
-        boxes.append(box + np.diag(0.005 * onp.random.randn(3)))
+        _box = box + np.diag(0.005 * onp.random.randn(3))
 
-    confs = np.array(confs)
-    boxes = np.array(boxes)
+        samples.append((_conf, _box))
 
-    return confs, boxes
+    return samples
 
 
 def make_ahfe_test_system():
@@ -243,10 +241,10 @@ def test_endpoint_reweighting_ahfe():
     """
     onp.random.seed(2022)
 
-    pseudo_samples_0, pseudo_samples_0, batched_u_0, batched_u_1, ref_params, ref_delta_f = make_ahfe_test_system()
+    fake_samples_0, fake_samples_1, batched_u_0, batched_u_1, ref_params, ref_delta_f = make_ahfe_test_system()
 
     estimate_delta_f = construct_endpoint_reweighting_estimator(
-        pseudo_samples_0, pseudo_samples_0, batched_u_0, batched_u_1, ref_params, ref_delta_f
+        fake_samples_0, fake_samples_1, batched_u_0, batched_u_1, ref_params, ref_delta_f
     )
 
     v, g = value_and_grad(estimate_delta_f)(ref_params)
