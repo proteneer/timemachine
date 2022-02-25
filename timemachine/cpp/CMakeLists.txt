@@ -64,7 +64,7 @@ include_directories(src/kernels)
 include_directories(${CMAKE_CURRENT_BINARY_DIR}/eigen)
 include_directories(${CMAKE_CURRENT_BINARY_DIR}/${CUB_SRC_DIR})
 
-set_property(TARGET ${LIBRARY_NAME} PROPERTY CUDA_STANDARD 14)
+set_property(TARGET ${LIBRARY_NAME} PROPERTY CUDA_STANDARD 17)
 
 if (NOT CUDA_ARCH)
   set(CUDA_ARCH "75")
