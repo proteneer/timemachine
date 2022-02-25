@@ -3,11 +3,9 @@ __all__ = [
     "construct_endpoint_reweighting_estimator",
     "construct_mixture_reweighting_estimator",
     "interpret_as_mixture_potential",
-    "reweight_from_mixture",
 ]
 
 from jax import numpy as np
-from jax import vmap
 from jax.scipy.special import logsumexp
 
 
@@ -36,14 +34,6 @@ def interpret_as_mixture_potential(u_kn, f_k, N_k):
     assert np.sum(N_k) == n_samples
 
     return -logsumexp(f_k - u_kn.T, b=N_k, axis=1)
-
-
-def reweight_from_mixture(u_kn, f_k, N_k):
-    """https://arxiv.org/abs/1704.00891"""
-    mixture_u_n = interpret_as_mixture_potential(u_kn, f_k, N_k)
-    delta_u_kn = u_kn - mixture_u_n[np.newaxis, :]
-    estimated_f_k = vmap(one_sided_exp)(delta_u_kn)
-    return estimated_f_k
 
 
 def construct_endpoint_reweighting_estimator(
