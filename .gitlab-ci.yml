@@ -8,13 +8,13 @@ variables:
     # which allows branches to use the default's branchs image as a cache
     DOCKER_TAG: $CI_REGISTRY_IMAGE:$CI_COMMIT_REF_SLUG
 
-workflow:
-  rules:
-    # Only run the pipeline for a pull request or the default branch
-    # In the case of the default branch, we want to build the image so that
-    # other branches have a base image to cache from when possible.
-    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
-    - if: '$CI_EXTERNAL_PULL_REQUEST_IID != null && $CI_EXTERNAL_PULL_REQUEST_IID != ""'
+# workflow:
+#   rules:
+#     # Only run the pipeline for a pull request or the default branch
+#     # In the case of the default branch, we want to build the image so that
+#     # other branches have a base image to cache from when possible.
+#     - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+#     - if: '$CI_EXTERNAL_PULL_REQUEST_IID != null && $CI_EXTERNAL_PULL_REQUEST_IID != ""'
 
 docker_build:
   stage: build-docker
@@ -23,6 +23,7 @@ docker_build:
     - gpu
     - docker
   script:
+    - export
     - DOCKER_HOST=tcp://localhost:2375 docker login -u $CI_REGISTRY_USER -p $CI_JOB_TOKEN $CI_REGISTRY
     # Pull the docker containers
     - docker pull $CI_REGISTRY_IMAGE:$CI_DEFAULT_BRANCH || true
