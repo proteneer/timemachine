@@ -23,8 +23,8 @@ docker_build:
     - gpu
     - docker
   script:
-    - export
     - DOCKER_HOST=tcp://localhost:2375 docker login -u $CI_REGISTRY_USER -p $CI_JOB_TOKEN $CI_REGISTRY
+    - export
     # Pull the docker containers
     - docker pull $CI_REGISTRY_IMAGE:$CI_DEFAULT_BRANCH || true
     - docker pull $DOCKER_TAG || true
