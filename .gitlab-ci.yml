@@ -15,7 +15,6 @@ workflow:
     # other branches have a base image to cache from when possible.
     - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
     - if: $CI_EXTERNAL_PULL_REQUEST_IID
-    - if: $CI_JOB_MANUAL
 
 docker_build:
   stage: build-docker
@@ -40,7 +39,6 @@ lint:
     - timemachine
   rules:
     - if: $CI_EXTERNAL_PULL_REQUEST_IID
-    - if: $CI_JOB_MANUAL
   script:
     - CMAKE_BUILD_PARALLEL_LEVEL=$(nproc) pip install -e .[dev]
     - make verify
