@@ -32,14 +32,14 @@ docker_build:
     - docker build -t $DOCKER_TAG --cache-from $CI_REGISTRY_IMAGE:$CI_DEFAULT_BRANCH,$DOCKER_TAG --target tm_base_env .
     - docker push $DOCKER_TAG
 
-lint:
+lint-code:
   stage: lint
   image: $DOCKER_TAG
   needs: ["docker_build"]
   tags:
     - timemachine
-  rules:
-    - if: '$CI_EXTERNAL_PULL_REQUEST_IID != null && $CI_EXTERNAL_PULL_REQUEST_IID != ""'
+  # rules:
+  #   - if: '$CI_EXTERNAL_PULL_REQUEST_IID != null && $CI_EXTERNAL_PULL_REQUEST_IID != ""'
   script:
     - CMAKE_BUILD_PARALLEL_LEVEL=$(nproc) pip install -e .[dev]
     - make verify
