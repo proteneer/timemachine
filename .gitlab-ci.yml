@@ -8,13 +8,13 @@ variables:
     # which allows branches to use the default's branchs image as a cache
     DOCKER_TAG: $CI_REGISTRY_IMAGE:$CI_COMMIT_REF_SLUG
 
-# workflow:
-#   rules:
-#     # Only run the pipeline for a pull request or the default branch
-#     # In the case of the default branch, we want to build the image so that
-#     # other branches have a base image to cache from when possible.
-#     - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
-#     - if: '$CI_EXTERNAL_PULL_REQUEST_IID != null && $CI_EXTERNAL_PULL_REQUEST_IID != ""'
+workflow:
+  rules:
+    # Only run the pipeline for a pull request or the default branch
+    # In the case of the default branch, we want to build the image so that
+    # other branches have a base image to cache from when possible.
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+    - if: $CI_EXTERNAL_PULL_REQUEST_IID
 
 docker_build:
   stage: build-docker
@@ -24,10 +24,57 @@ docker_build:
     - docker
   script:
     - DOCKER_HOST=tcp://localhost:2375 docker login -u $CI_REGISTRY_USER -p $CI_JOB_TOKEN $CI_REGISTRY
-    - export
     # Pull the docker containers
     - docker pull $CI_REGISTRY_IMAGE:$CI_DEFAULT_BRANCH || true
     - docker pull $DOCKER_TAG || true
     # Cache from default branch and most recent image to get most out of the caching
     - docker build -t $DOCKER_TAG --cache-from $CI_REGISTRY_IMAGE:$CI_DEFAULT_BRANCH,$DOCKER_TAG --target tm_base_env .
     - docker push $DOCKER_TAG
+
+lint:
+  stage: lint
+  image: $DOCKER_TAG
+  needs: ["docker_build"]
+  tags:
+    - timemachine
+  rules:
+    - if: $CI_EXTERNAL_PULL_REQUEST_IID
+  script:
+    - CMAKE_BUILD_PARALLEL_LEVEL=$(nproc) pip install -e .[dev]
+    - make verify
+
+memory-tests:
+  stage: test
+  image: $DOCKER_TAG
+  needs: ["lint"]
+  tags:
+    - gpu
+  variables:
+    CMAKE_ARGS: -DCUDA_ARCH=75
+  script:
+    - CMAKE_BUILD_PARALLEL_LEVEL=$(nproc) pip install -e .[test]
+    - make memcheck_tests
+  artifacts:
+    name: "$CI_JOB_NAME-$CI_COMMIT_REF_NAME-memtests"
+    paths:
+        - coverage/
+    when: on_success
+    expire_in: 1 week
+
+unit-tests:
+  stage: test
+  image: $DOCKER_TAG
+  needs: ["lint"]
+  tags:
+    - gpu
+  variables:
+    CMAKE_ARGS: -DCUDA_ARCH=75
+  script:
+    - CMAKE_BUILD_PARALLEL_LEVEL=$(nproc) pip install -e .[test]
+    - make unit_tests
+  artifacts:
+    name: "$CI_JOB_NAME-$CI_COMMIT_REF_NAME-tests"
+    paths:
+        - coverage/
+    when: on_success
+    expire_in: 1 week
