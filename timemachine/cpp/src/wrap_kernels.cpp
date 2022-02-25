@@ -758,8 +758,8 @@ template <typename RealType, bool Interpolated> void declare_nonbonded_all_pairs
             py::arg("transform_lambda_w") = "lambda");
 }
 
-std::set<int> unique_idxs(const std::vector<int> &idxs) {
-    std::set<int> unique_idxs(idxs.begin(), idxs.end());
+std::set<unsigned int> unique_idxs(const std::vector<unsigned int> &idxs) {
+    std::set<unsigned int> unique_idxs(idxs.begin(), idxs.end());
     if (unique_idxs.size() < idxs.size()) {
         throw std::runtime_error("atom indices must be unique");
     }
@@ -786,9 +786,9 @@ void declare_nonbonded_interaction_group(py::module &m, const char *typestr) {
                         const std::string &transform_lambda_sigma = "lambda",
                         const std::string &transform_lambda_epsilon = "lambda",
                         const std::string &transform_lambda_w = "lambda") {
-                std::vector<int> row_atom_idxs(row_atom_idxs_i.size());
+                std::vector<unsigned int> row_atom_idxs(row_atom_idxs_i.size());
                 std::memcpy(row_atom_idxs.data(), row_atom_idxs_i.data(), row_atom_idxs_i.size() * sizeof(int));
-                std::set<int> unique_row_atom_idxs(unique_idxs(row_atom_idxs));
+                std::set<unsigned int> unique_row_atom_idxs(unique_idxs(row_atom_idxs));
 
                 std::vector<int> lambda_plane_idxs(lambda_plane_idxs_i.size());
                 std::memcpy(
