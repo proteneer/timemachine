@@ -258,6 +258,14 @@ def test_endpoint_reweighting_ahfe():
     assert g.shape == ref_params.shape
     # assert anything_about_direction_of_g  # not expected because the "sample" arrays are made up
 
+    # expect different estimate when evaluated on slightly different parameters
+    params_prime = ref_params + 0.01 * onp.random.randn(*ref_params.shape)
+    v_prime, g_prime = value_and_grad(estimate_delta_f)(params_prime)
+    assert v_prime != v
+    assert (g_prime != g).any()
+    assert np.isfinite(v_prime)
+    assert np.isfinite(g_prime).all()
+
 
 def test_mixture_reweighting_ahfe():
     """on made-up inputs of the right shape,
@@ -281,6 +289,14 @@ def test_mixture_reweighting_ahfe():
     assert (g != 0).any()
     assert g.shape == ref_params.shape
     # assert anything_about_direction_of_g  # not expected because the inputs are non-physical
+
+    # expect different estimate when evaluated on slightly different parameters
+    params_prime = ref_params + 0.01 * onp.random.randn(*ref_params.shape)
+    v_prime, g_prime = value_and_grad(estimate_delta_f)(params_prime)
+    assert v_prime != v
+    assert (g_prime != g).any()
+    assert np.isfinite(v_prime)
+    assert np.isfinite(g_prime).all()
 
 
 def test_zeros(sim_atol=1e-1):
