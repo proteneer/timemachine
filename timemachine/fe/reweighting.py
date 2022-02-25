@@ -46,7 +46,9 @@ def reweight_from_mixture(u_kn, f_k, N_k):
     return estimated_f_k
 
 
-def construct_endpoint_reweighting_estimator(samples_0, samples_1, vec_u_0_fxn, vec_u_1_fxn, ref_params, ref_delta_f):
+def construct_endpoint_reweighting_estimator(
+    samples_0, samples_1, batched_u_0_fxn, batched_u_1_fxn, ref_params, ref_delta_f
+):
     """assuming
     * endpoint samples (samples_0, samples_1)
     * precise estimate of free energy difference at initial params
@@ -54,17 +56,17 @@ def construct_endpoint_reweighting_estimator(samples_0, samples_1, vec_u_0_fxn, 
 
     construct an estimator of f(params, 1) - f(params, 0)
     """
-    ref_u_0 = vec_u_0_fxn(samples_0, params=ref_params)
-    ref_u_1 = vec_u_1_fxn(samples_1, params=ref_params)
+    ref_u_0 = batched_u_0_fxn(samples_0, ref_params)
+    ref_u_1 = batched_u_1_fxn(samples_1, ref_params)
 
     def endpoint_correction_0(params):
         """estimate f(ref, 0) -> f(params, 0) by reweighting"""
-        delta_us = vec_u_0_fxn(samples_0, params) - ref_u_0
+        delta_us = batched_u_0_fxn(samples_0, params) - ref_u_0
         return one_sided_exp(delta_us)
 
     def endpoint_correction_1(params):
         """estimate f(ref, 1) -> f(params, 1) by reweighting"""
-        delta_us = vec_u_1_fxn(samples_1, params) - ref_u_1
+        delta_us = batched_u_1_fxn(samples_1, params) - ref_u_1
         return one_sided_exp(delta_us)
 
     def estimate_delta_f(params):
@@ -92,7 +94,7 @@ def construct_endpoint_reweighting_estimator(samples_0, samples_1, vec_u_0_fxn, 
     return estimate_delta_f
 
 
-def construct_mixture_reweighting_estimator(samples, log_weights, vec_u_0_fxn, vec_u_1_fxn):
+def construct_mixture_reweighting_estimator(samples, log_weights, batched_u_0_fxn, batched_u_1_fxn):
     """assuming
     * samples from a distribution p_ref(x)
       that has good overlap with BOTH p_0(params)(x) and p_1(params)(x),
@@ -104,13 +106,13 @@ def construct_mixture_reweighting_estimator(samples, log_weights, vec_u_0_fxn, v
 
     def f_0(params):
         """estimate f(params, 0) - f(ref) by reweighting"""
-        log_numerator = -vec_u_0_fxn(samples, params)
+        log_numerator = -batched_u_0_fxn(samples, params)
         log_importance_weights = log_numerator - log_weights
         return one_sided_exp(-log_importance_weights)
 
     def f_1(params):
         """estimate f(params, 1) - f(ref) by reweighting"""
-        log_numerator = -vec_u_1_fxn(samples, params)
+        log_numerator = -batched_u_1_fxn(samples, params)
         log_importance_weights = log_numerator - log_weights
         return one_sided_exp(-log_importance_weights)
 
