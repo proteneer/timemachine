@@ -5,28 +5,34 @@ __all__ = [
     "interpret_as_mixture_potential",
 ]
 
+from typing import Callable, Collection
+
 from jax import numpy as np
 from jax.scipy.special import logsumexp
 
+Samples = Params = Collection
+Energies = Array = np.array
+BatchedReducedPotentialFxn = Callable[[Samples, Params], Energies]
 
-def log_mean(log_values):
+
+def log_mean(log_values: Array) -> float:
     # log(mean(values))
     # = log(sum(values) / len(values))
     return logsumexp(log_values) - np.log(len(log_values))
 
 
-def estimate_log_z_ratio(log_importance_weights):
+def estimate_log_z_ratio(log_importance_weights: Array) -> float:
     # log(mean(importance_weights))
     return log_mean(log_importance_weights)
 
 
-def one_sided_exp(delta_us):
+def one_sided_exp(delta_us: Array) -> float:
     # delta_us = -log_importance_weights
     # delta_f  = -log_z_ratio
     return -estimate_log_z_ratio(-delta_us)
 
 
-def interpret_as_mixture_potential(u_kn, f_k, N_k):
+def interpret_as_mixture_potential(u_kn: Array, f_k: Array, N_k: Array) -> Array:
     """Interpret samples from multiple states as if they originate from a *single* state given by this potential.
 
     Notes
@@ -65,8 +71,13 @@ def interpret_as_mixture_potential(u_kn, f_k, N_k):
 
 
 def construct_endpoint_reweighting_estimator(
-    samples_0, samples_1, batched_u_0_fxn, batched_u_1_fxn, ref_params, ref_delta_f
-):
+    samples_0: Samples,
+    samples_1: Samples,
+    batched_u_0_fxn: BatchedReducedPotentialFxn,
+    batched_u_1_fxn: BatchedReducedPotentialFxn,
+    ref_params: Params,
+    ref_delta_f: float,
+) -> Callable[[Params], float]:
     """assuming
     * endpoint samples (samples_0, samples_1)
     * precise estimate of free energy difference at initial params
@@ -77,17 +88,17 @@ def construct_endpoint_reweighting_estimator(
     ref_u_0 = batched_u_0_fxn(samples_0, ref_params)
     ref_u_1 = batched_u_1_fxn(samples_1, ref_params)
 
-    def endpoint_correction_0(params):
+    def endpoint_correction_0(params) -> float:
         """estimate f(ref, 0) -> f(params, 0) by reweighting"""
         delta_us = batched_u_0_fxn(samples_0, params) - ref_u_0
         return one_sided_exp(delta_us)
 
-    def endpoint_correction_1(params):
+    def endpoint_correction_1(params) -> float:
         """estimate f(ref, 1) -> f(params, 1) by reweighting"""
         delta_us = batched_u_1_fxn(samples_1, params) - ref_u_1
         return one_sided_exp(delta_us)
 
-    def estimate_delta_f(params):
+    def estimate_delta_f(params: Params) -> float:
         """estimate f(params, 1) - f(params, 0)
 
         using this thermodynamic cycle:
@@ -112,7 +123,12 @@ def construct_endpoint_reweighting_estimator(
     return estimate_delta_f
 
 
-def construct_mixture_reweighting_estimator(samples, log_weights, batched_u_0_fxn, batched_u_1_fxn):
+def construct_mixture_reweighting_estimator(
+    samples: Samples,
+    log_weights: Array,
+    batched_u_0_fxn: BatchedReducedPotentialFxn,
+    batched_u_1_fxn: BatchedReducedPotentialFxn,
+) -> Callable[[Params], float]:
     """assuming
     * samples from a distribution p_ref(x)
       that has good overlap with BOTH p_0(params)(x) and p_1(params)(x),
@@ -148,13 +164,13 @@ def construct_mixture_reweighting_estimator(samples, log_weights, batched_u_0_fx
         log_importance_weights = log_numerator - log_weights
         return one_sided_exp(-log_importance_weights)
 
-    def f_1(params):
+    def f_1(params) -> float:
         """estimate f(params, 1) - f(ref) by reweighting"""
         log_numerator = -batched_u_1_fxn(samples, params)
         log_importance_weights = log_numerator - log_weights
         return one_sided_exp(-log_importance_weights)
 
-    def estimate_delta_f(params):
+    def estimate_delta_f(params) -> float:
         r"""estimate f(params, 1) - f(params, 1)
 
         using this thermodynamic cycle:
