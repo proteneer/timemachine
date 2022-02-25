@@ -18,7 +18,7 @@ from timemachine.fe.reweighting import (
 from timemachine.ff import Forcefield
 from timemachine.md.enhanced import get_solvent_phase_system
 
-# TODO: should these be moved into a test fixture? or to the testsystems module?
+# TODO: should gaussian test system be moved into a test fixture? or perhaps to the testsystems module?
 
 
 def make_gaussian_testsystem():
@@ -318,3 +318,71 @@ def test_one_sided_exp():
         tm_estimate = one_sided_exp(reduced_works)
 
         assert np.isclose(tm_estimate, pymbar_estimate)
+
+
+def test_interpret_as_mixture_potential():
+    """assert approximate self-consistency a la https://arxiv.org/abs/1704.00891
+
+    Notes
+    -----
+    * interprets samples from multiple lambda windows as instead coming from a single mixture distribution
+    * asserts that one-sided exp estimates of delta_f(mixture distribution -> lambda_window) are approximately
+        equal to their exact values
+    * this form of self-consistency should become exact in limit of large num_samples
+    """
+
+    onp.random.seed(2022)
+
+    # more samples --> tighter absolute tolerance possible in test assertion
+    n_samples_per_window = int(1e6)
+    atol = 1e-3
+
+    u_fxn, normalized_u_fxn, sample, reduced_free_energy = make_gaussian_testsystem()
+
+    ref_params = np.ones(2)
+    n_windows = 5
+    lambdas = np.linspace(0, 1, n_windows)
+
+    N_k = [n_samples_per_window] * n_windows
+    n_samples_total = sum(N_k)
+
+    def make_arrays(normalized=False):
+        """u_kn, f_k, N_k (with f_k = zeros if normalized)"""
+        trajs = [sample(lam, ref_params, n_samples_per_window) for lam in lambdas]
+        xs = np.vstack(trajs).flatten()
+
+        u_kn = onp.zeros((n_windows, n_samples_total))
+
+        if normalized:
+            vec_u = vmap(normalized_u_fxn, in_axes=(0, None, None))
+            f_k = np.zeros(n_windows)
+        else:
+            vec_u = vmap(u_fxn, in_axes=(0, None, None))
+            f_k = np.array([reduced_free_energy(lam, ref_params) for lam in lambdas])
+            f_k -= f_k[0]
+
+            # double-check this is different from normalized case
+            assert (np.abs(f_k) > 10 * atol).any()
+
+        for k in range(n_windows):
+            u_kn[k] = vec_u(xs, lambdas[k], ref_params)
+
+        return u_kn, f_k, N_k
+
+    def reweight_from_mixture(u_kn, f_k, N_k):
+        """https://arxiv.org/abs/1704.00891"""
+        mixture_u_n = interpret_as_mixture_potential(u_kn, f_k, N_k)
+        delta_u_kn = u_kn - mixture_u_n[np.newaxis, :]
+        estimated_f_k = vmap(one_sided_exp)(delta_u_kn)
+        return estimated_f_k - estimated_f_k[0]
+
+    for normalized in [False, True]:
+        u_kn, f_k, N_k = make_arrays(normalized)
+
+        # double-check shape
+        mixture_u_n = interpret_as_mixture_potential(u_kn, f_k, N_k)
+        assert mixture_u_n.shape == (sum(N_k),)
+
+        # if we reweight from mixture
+        estimated_f_k = reweight_from_mixture(u_kn, f_k, N_k)
+        onp.testing.assert_allclose(estimated_f_k, f_k, atol=atol)
