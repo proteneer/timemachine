@@ -1,7 +1,3 @@
-from jax import config
-
-config.update("jax_enable_x64", True)
-
 import numpy as onp
 from jax import grad, jit
 from jax import numpy as np
@@ -131,10 +127,14 @@ def _make_fake_sample_batch(conf, box, ligand_indices, n_snapshots=100):
 
 
 def make_ahfe_test_system():
+    """an alchemical freesolv ligand in a water box, with:
+    * batched, differentiable reduced potential functions (using construct_differentiable_interface_fast)
+    * fake "endpoint samples" (random perturbations of initial (conf, box) -- not actual samples!)
+    """
     mol = fetch_freesolv()[123]
     ff = Forcefield.load_from_file("smirnoff_1_1_0_ccc.py")
     temperature = 300
-    ref_delta_f = -23.0  # from a short reference calculation, in kB T
+    ref_delta_f = -23.0  # from a short SMC calculation on mobley_242480, in kB T
 
     # doesn't have to be the same
     n_snapshots_0 = 100
@@ -170,31 +170,9 @@ def make_ahfe_test_system():
     return samples_0, samples_1, batched_u_0, batched_u_1, ref_params, ref_delta_f
 
 
-def test_endpoint_reweighting_ahfe():
-    """on made-up inputs of the right shape,
-    check that derivative of an absolute hydration free energy w.r.t .ligand nonbonded parameters can be computed using
-    custom ops
-    """
-    onp.random.seed(2022)
-
-    pseudo_samples_0, pseudo_samples_0, batched_u_0, batched_u_1, ref_params, ref_delta_f = make_ahfe_test_system()
-
-    estimate_delta_f = construct_endpoint_reweighting_estimator(
-        pseudo_samples_0, pseudo_samples_0, batched_u_0, batched_u_1, ref_params, ref_delta_f
-    )
-
-    v, g = value_and_grad(estimate_delta_f)(ref_params)
-
-    assert np.isfinite(v)
-    assert v == ref_delta_f
-    assert np.isfinite(g).all()
-    assert (g != 0).any()
-    assert g.shape == ref_params.shape
-    # assert anything_about_direction_of_g  # not expected because the "sample" arrays are made up
-
-
 def test_mixture_reweighting_1d():
-    """for a variety of estimators"""
+    """using a variety of free energy estimates (MBAR, TI, analytical) to obtain reference mixture weights,
+    assert that mixture reweighting estimator of delta_f(params), grad(delta_f)(params) is accurate"""
     onp.random.seed(2022)
 
     u_fxn, normalized_u_fxn, sample, reduced_free_energy = make_gaussian_testsystem()
@@ -258,6 +236,29 @@ def test_mixture_reweighting_1d():
         assert_estimator_accurate(estimate_delta_f, exact_delta_f, ref_params, n_random_trials=10, atol=1e-2)
 
 
+def test_endpoint_reweighting_ahfe():
+    """on made-up inputs of the right shape,
+    check that derivative of an absolute hydration free energy w.r.t .ligand nonbonded parameters can be computed using
+    custom ops
+    """
+    onp.random.seed(2022)
+
+    pseudo_samples_0, pseudo_samples_0, batched_u_0, batched_u_1, ref_params, ref_delta_f = make_ahfe_test_system()
+
+    estimate_delta_f = construct_endpoint_reweighting_estimator(
+        pseudo_samples_0, pseudo_samples_0, batched_u_0, batched_u_1, ref_params, ref_delta_f
+    )
+
+    v, g = value_and_grad(estimate_delta_f)(ref_params)
+
+    assert np.isfinite(v)
+    assert v == ref_delta_f
+    assert np.isfinite(g).all()
+    assert (g != 0).any()
+    assert g.shape == ref_params.shape
+    # assert anything_about_direction_of_g  # not expected because the "sample" arrays are made up
+
+
 def test_mixture_reweighting_ahfe():
     """on made-up inputs of the right shape,
     check that derivative of an absolute hydration free energy w.r.t .ligand nonbonded parameters can be computed using
@@ -275,11 +276,11 @@ def test_mixture_reweighting_ahfe():
     v, g = value_and_grad(estimate_delta_f)(ref_params)
 
     assert np.isfinite(v)
-    # assert v == ref_delta_f  # not expected in this case, due to fake_log_weights
+    # assert v == ref_delta_f  # not expected in this case, due to non-physical fake_log_weights
     assert np.isfinite(g).all()
     assert (g != 0).any()
     assert g.shape == ref_params.shape
-    # assert anything_about_direction_of_g  # not expected because the "sample" arrays are made up
+    # assert anything_about_direction_of_g  # not expected because the inputs are non-physical
 
 
 def test_zeros(sim_atol=1e-1):
