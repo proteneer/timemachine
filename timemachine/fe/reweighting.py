@@ -31,20 +31,25 @@ def interpret_as_mixture_potential(u_kn, f_k, N_k):
 
     Notes
     -----
+    * This is nicely illustrated in ref [1] as a way to interpret MBAR [2]
+    * Depends on the accuracy of the input free energy estimates (f_k - f_k[0]) for the source states.
     * This is not the only way to interpret samples from multiple distributions
         as if they come from a single mixture distribution.
-        In ref [2], alternatives are systematically enumerated.
-        Assuming f_k are exact, the current approach corresponds to N3 in ref [2].
-
-        (This is the most expensive of the options in ref [2],
+        In ref [3], alternatives are systematically enumerated.
+        Assuming f_k are exact, the current approach corresponds to N3 in ref [3].
+        (N3 the most computationally expensive of the options in ref [3],
         since it requires evaluating all k energy functions on every sample,
         but it is also the lowest variance.)
 
     References
     ----------
-    [1] [Shirts, 2017] https://arxiv.org/abs/1704.00891
+    [1] [Shirts, 2017] Reweighting from the mixture distribution as a better way to describe
+        the Multistate Bennett Acceptance Ratio
         https://arxiv.org/abs/1704.00891
-    [2] [Elvira+, 2019] Generalized multiple importance sampling
+    [2] [Shirts, Chodera, 2008] Statistically optimal analysis of samples from multiple equilibrium states.
+        J. Chem. Phys. 129:124105, 2008.
+        http://dx.doi.org/10.1063/1.2978177
+    [3] [Elvira+, 2019] Generalized multiple importance sampling
         https://arxiv.org/abs/1511.03095
     """
     n_states, n_samples = u_kn.shape
@@ -114,6 +119,26 @@ def construct_mixture_reweighting_estimator(samples, log_weights, batched_u_0_fx
 
     construct an estimator for the free energy difference
     f_1(params) - f_0(params)
+
+    Notes
+    -----
+    * This is essentially `computePerturbedFreeEnergies` in pymbar [1], but written in a slightly more generic way.
+        (Allows the samples to come from sources other than an MBAR mixture, produces a function that can be
+        differentiated w.r.t. params if batched_u_0_fxn, batched_u_0_fxn are differentiable w.r.t. params.)
+    * Reweighting from a single reference state is used in works like ref [2] in the context of force field fitting
+    * Forming a single reference state as a mixture of several states (i.e. a constant denominator "log_weights")
+        and differentiating the numerator ("-u(samples, params)") wr.t. params
+        is used in works like ref [3] to differentiate free energy estimates w.r.t. params.
+
+    References
+    ----------
+    [1] pymbar implementation of computePerturbedFreeEnergies
+        https://github.com/choderalab/pymbar/blob/3c4262c490261110a7595eec37df3e2b8caeab37/pymbar/mbar.py#L1163-L1237
+    [2] Messerly RA, Razavi SM, and Shirts MR. Configuration-Sampling-Based Surrogate Models for Rapid
+        parameterization of Non-Bonded Interactions.
+        J. Chem. Theory Comput. 2018, 14, 6, 3144–3162 https://doi.org/10.1021/acs.jctc.8b00223
+    [3] Wieder et al. PyTorch implementation of differentiable reweighting in neutromeratio
+        https://github.com/choderalab/neutromeratio/blob/2abf29f03e5175a988503b5d6ceeee8ce5bfd4ad/neutromeratio/parameter_gradients.py#L246-L267
     """
     assert len(samples) == len(log_weights)
 
