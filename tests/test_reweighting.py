@@ -1,9 +1,9 @@
 import numpy as onp
+import pymbar
 from jax import grad, jit
 from jax import numpy as np
 from jax import value_and_grad, vmap
 from jax.scipy.stats.norm import logpdf as norm_logpdf
-from pymbar import MBAR
 from scipy.stats import norm
 
 from timemachine.constants import BOLTZ
@@ -13,6 +13,7 @@ from timemachine.fe.reweighting import (
     construct_endpoint_reweighting_estimator,
     construct_mixture_reweighting_estimator,
     interpret_as_mixture_potential,
+    one_sided_exp,
 )
 from timemachine.ff import Forcefield
 from timemachine.md.enhanced import get_solvent_phase_system
@@ -205,7 +206,7 @@ def test_mixture_reweighting_1d():
     # various approximations to f_k at ref_params
 
     # MBAR
-    mbar = MBAR(u_kn, N_k=N_k)
+    mbar = pymbar.MBAR(u_kn, N_k=N_k)
     f_k_mbar = mbar.f_k
     u_mix_mbar = interpret_as_mixture_potential(u_kn, f_k_mbar, N_k)
 
@@ -295,3 +296,25 @@ def test_mixture_reweighting_ahfe():
     assert (g_prime != g).any()
     assert np.isfinite(v_prime)
     assert np.isfinite(g_prime).all()
+
+
+def test_one_sided_exp():
+    """assert consistency with pymbar.EXP on random instances"""
+
+    onp.random.seed(2022)
+    num_instances = 100
+
+    for _ in range(num_instances):
+        # instance parameters
+        num_works = onp.random.randint(1, 100)
+        mean = onp.random.randn() * 10
+        stddev = np.exp(onp.random.randn())
+
+        # random instance
+        reduced_works = onp.random.randn(num_works) * stddev + mean
+
+        # compare estimates
+        pymbar_estimate, _ = pymbar.EXP(reduced_works)
+        tm_estimate = one_sided_exp(reduced_works)
+
+        assert np.isclose(tm_estimate, pymbar_estimate)
