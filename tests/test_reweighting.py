@@ -22,6 +22,8 @@ from timemachine.md.enhanced import get_solvent_phase_system
 
 
 def make_gaussian_testsystem():
+    """normalized/unnormalized 1D Gaussian with a dependence on lambda and params"""
+
     def annealed_gaussian_def(lam, params):
         initial_mean, initial_log_sigma = 0.0, 0.0
         target_mean, target_log_sigma = params
@@ -59,7 +61,7 @@ def make_gaussian_testsystem():
 
 def assert_estimator_accurate(estimate_delta_f, analytical_delta_f, ref_params, n_random_trials, atol=5e-3):
     """for many random parameter sets, assert that the reweighted estimates of
-    delta_f(params) and grad(delta_f)(params) are consistent with analytical result"""
+    delta_f(params) and grad(delta_f)(params) are consistent with analytical_delta_f function"""
 
     def sample_random_params():
         mean = ref_params[0] + onp.random.rand()
@@ -82,10 +84,11 @@ def assert_estimator_accurate(estimate_delta_f, analytical_delta_f, ref_params, 
 
 
 def test_endpoint_reweighting_1d():
+    """assert that endpoint reweighting estimator fo delta_f(params), grad(delta_f)(params) is accurate
+    on tractable 1D system"""
+    onp.random.seed(2022)
 
     u_fxn, _, sample, reduced_free_energy = make_gaussian_testsystem()
-
-    onp.random.seed(2022)
 
     ref_params = np.zeros(2)
     ref_delta_f = reduced_free_energy(1.0, ref_params) - reduced_free_energy(0.0, ref_params)
@@ -107,72 +110,10 @@ def test_endpoint_reweighting_1d():
     assert_estimator_accurate(jit(estimate_delta_f), analytical_delta_f, ref_params, n_random_trials=10, atol=5e-3)
 
 
-def _make_fake_sample_batch(conf, box, ligand_indices, n_snapshots=100):
-    """PURELY FOR TESTING -- get arrays that look like a batch of confs, boxes
-    (but instead of actually populating confs, boxes with valid samples
-     just randomly perturb conf and box a bunch of times)
-    """
-
-    samples = []
-
-    for _ in range(n_snapshots):
-        _conf = onp.array(conf)
-        _conf[ligand_indices] += 0.005 * onp.random.randn(len(ligand_indices), 3)
-
-        _box = box + np.diag(0.005 * onp.random.randn(3))
-
-        samples.append((_conf, _box))
-
-    return samples
-
-
-def make_ahfe_test_system():
-    """an alchemical freesolv ligand in a water box, with:
-    * batched, differentiable reduced potential functions (using construct_differentiable_interface_fast)
-    * fake "endpoint samples" (random perturbations of initial (conf, box) -- not actual samples!)
-    """
-    mol = fetch_freesolv()[123]
-    ff = Forcefield.load_from_file("smirnoff_1_1_0_ccc.py")
-    temperature = 300
-    ref_delta_f = -23.0  # from a short SMC calculation on mobley_242480, in kB T
-
-    # doesn't have to be the same
-    n_snapshots_0 = 100
-    n_snapshots_1 = 50
-
-    ubps, params, masses, conf, box = get_solvent_phase_system(mol, ff)
-
-    lambda_offset_idxs = ubps[-1].get_lambda_offset_idxs()
-    ligand_indices = onp.where(lambda_offset_idxs == 1)[0]
-    ref_params = params[-1][ligand_indices]
-
-    # pretend these are endpoint samples
-    samples_0 = _make_fake_sample_batch(conf, box, ligand_indices, n_snapshots_0)
-    samples_1 = _make_fake_sample_batch(conf, box, ligand_indices, n_snapshots_1)
-
-    U_fxn = construct_differentiable_interface_fast(unbound_potentials=ubps, params=params)
-
-    def make_batched_u_fxn(lam=0.0):
-        def batched_u_fxn(samples, ligand_nb_params):
-            new_params = [np.array(p) for p in params]
-            new_params[-1] = new_params[-1].at[ligand_indices].set(ligand_nb_params)
-
-            U_s = np.array([U_fxn(conf, new_params, box, lam) for (conf, box) in samples])
-            u_s = U_s / (BOLTZ * temperature)
-
-            return u_s
-
-        return batched_u_fxn
-
-    batched_u_0 = make_batched_u_fxn(lam=0.0)
-    batched_u_1 = make_batched_u_fxn(lam=1.0)
-
-    return samples_0, samples_1, batched_u_0, batched_u_1, ref_params, ref_delta_f
-
-
 def test_mixture_reweighting_1d():
     """using a variety of free energy estimates (MBAR, TI, analytical) to obtain reference mixture weights,
-    assert that mixture reweighting estimator of delta_f(params), grad(delta_f)(params) is accurate"""
+    assert that mixture reweighting estimator of delta_f(params), grad(delta_f)(params) is accurate
+    on tractable 1D system"""
     onp.random.seed(2022)
 
     u_fxn, normalized_u_fxn, sample, reduced_free_energy = make_gaussian_testsystem()
@@ -234,6 +175,69 @@ def test_mixture_reweighting_1d():
         estimate_delta_f = jit(construct_mixture_reweighting_estimator(xs, -u_mix, vec_u_0_fxn, vec_u_1_fxn))
 
         assert_estimator_accurate(estimate_delta_f, analytical_delta_f, ref_params, n_random_trials=10, atol=1e-2)
+
+
+def _make_fake_sample_batch(conf, box, ligand_indices, n_snapshots=25):
+    """PURELY FOR TESTING -- get arrays that look like a batch of confs, boxes
+    (but instead of actually populating confs, boxes with valid samples
+     just randomly perturb conf and box a bunch of times)
+    """
+
+    samples = []
+
+    for _ in range(n_snapshots):
+        _conf = onp.array(conf)
+        _conf[ligand_indices] += 0.005 * onp.random.randn(len(ligand_indices), 3)
+
+        _box = box + np.diag(0.005 * onp.random.randn(3))
+
+        samples.append((_conf, _box))
+
+    return samples
+
+
+def make_ahfe_test_system():
+    """an alchemical freesolv ligand in a water box, with:
+    * batched, differentiable reduced potential functions (using construct_differentiable_interface_fast)
+    * fake "endpoint samples" (random perturbations of initial (conf, box) -- not actual samples!)
+    """
+    mol = fetch_freesolv()[123]
+    ff = Forcefield.load_from_file("smirnoff_1_1_0_ccc.py")
+    temperature = 300
+    ref_delta_f = -23.0  # from a short SMC calculation on mobley_242480, in kB T
+
+    # doesn't have to be the same
+    n_snapshots_0 = 10
+    n_snapshots_1 = 20
+
+    ubps, params, masses, conf, box = get_solvent_phase_system(mol, ff)
+
+    lambda_offset_idxs = ubps[-1].get_lambda_offset_idxs()
+    ligand_indices = onp.where(lambda_offset_idxs == 1)[0]
+    ref_params = params[-1][ligand_indices]
+
+    # pretend these are endpoint samples
+    samples_0 = _make_fake_sample_batch(conf, box, ligand_indices, n_snapshots_0)
+    samples_1 = _make_fake_sample_batch(conf, box, ligand_indices, n_snapshots_1)
+
+    U_fxn = construct_differentiable_interface_fast(unbound_potentials=ubps, params=params)
+
+    def make_batched_u_fxn(lam=0.0):
+        def batched_u_fxn(samples, ligand_nb_params):
+            new_params = [np.array(p) for p in params]
+            new_params[-1] = new_params[-1].at[ligand_indices].set(ligand_nb_params)
+
+            U_s = np.array([U_fxn(conf, new_params, box, lam) for (conf, box) in samples])
+            u_s = U_s / (BOLTZ * temperature)
+
+            return u_s
+
+        return batched_u_fxn
+
+    batched_u_0 = make_batched_u_fxn(lam=0.0)
+    batched_u_1 = make_batched_u_fxn(lam=1.0)
+
+    return samples_0, samples_1, batched_u_0, batched_u_1, ref_params, ref_delta_f
 
 
 def test_endpoint_reweighting_ahfe():
