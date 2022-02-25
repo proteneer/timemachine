@@ -294,11 +294,3 @@ def test_mixture_reweighting_ahfe():
     assert (g_prime != g).any()
     assert np.isfinite(v_prime)
     assert np.isfinite(g_prime).all()
-
-
-def test_zeros(sim_atol=1e-1):
-    """Assert that
-    * free energy differences between sampled, normalized states are approximately zero,
-    * reweighting estimate of delta_f for unsampled, yet normalized states is approximately zero
-    * gradient of delta_f w.r.t. params is approximately zeros, when varying params cannot influence free energy difference"""
-    pass
