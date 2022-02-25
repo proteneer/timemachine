@@ -1,5 +1,6 @@
 #pragma once
 
+#include "device_buffer.hpp"
 #include "neighborlist.hpp"
 #include "potential.hpp"
 #include "vendored/jitify.hpp"
@@ -31,26 +32,26 @@ template <typename RealType, bool Interpolated> class NonbondedAllPairs : public
 private:
     std::array<k_nonbonded_fn, 16> kernel_ptrs_;
 
-    int *d_lambda_plane_idxs_;
-    int *d_lambda_offset_idxs_;
+    const unsigned int N_;
+
+    DeviceBuffer<int> d_lambda_plane_idxs_;
+    DeviceBuffer<int> d_lambda_offset_idxs_;
     int *p_ixn_count_; // pinned memory
 
     double beta_;
     double cutoff_;
     Neighborlist<RealType> nblist_;
 
-    const int N_;
-
     double nblist_padding_;
-    double *d_nblist_x_;    // coords which were used to compute the nblist
-    double *d_nblist_box_;  // box which was used to rebuild the nblist
-    int *d_rebuild_nblist_; // whether or not we have to rebuild the nblist
-    int *p_rebuild_nblist_; // pinned
+    DeviceBuffer<double> d_nblist_x_;    // coords which were used to compute the nblist
+    DeviceBuffer<double> d_nblist_box_;  // box which was used to rebuild the nblist
+    DeviceBuffer<int> d_rebuild_nblist_; // whether or not we have to rebuild the nblist
+    int *p_rebuild_nblist_;              // pinned
 
-    unsigned int *d_perm_; // hilbert curve permutation
+    DeviceBuffer<unsigned int> d_perm_; // hilbert curve permutation
 
-    double *d_w_; // 4D coordinates
-    double *d_dw_dl_;
+    DeviceBuffer<double> d_w_; // 4D coordinates
+    DeviceBuffer<double> d_dw_dl_;
 
     // "sorted" means
     // - if hilbert sorting enabled, atoms are sorted according to the
@@ -58,24 +59,24 @@ private:
     // - otherwise, atom ordering is preserved with respect to input
     //
     // "unsorted" means the atom ordering is preserved with respect to input
-    double *d_sorted_x_; // sorted coordinates
-    double *d_sorted_w_; // sorted 4D coordinates
-    double *d_sorted_dw_dl_;
-    double *d_sorted_p_;   // sorted parameters
-    double *d_unsorted_p_; // unsorted parameters
-    double *d_sorted_dp_dl_;
-    double *d_unsorted_dp_dl_;
-    unsigned long long *d_sorted_du_dx_;
-    unsigned long long *d_sorted_du_dp_;
-    unsigned long long *d_du_dp_buffer_;
+    DeviceBuffer<double> d_sorted_x_; // sorted coordinates
+    DeviceBuffer<double> d_sorted_w_; // sorted 4D coordinates
+    DeviceBuffer<double> d_sorted_dw_dl_;
+    DeviceBuffer<double> d_sorted_p_;   // sorted parameters
+    DeviceBuffer<double> d_unsorted_p_; // unsorted parameters
+    DeviceBuffer<double> d_sorted_dp_dl_;
+    DeviceBuffer<double> d_unsorted_dp_dl_;
+    DeviceBuffer<unsigned long long> d_sorted_du_dx_;
+    DeviceBuffer<unsigned long long> d_sorted_du_dp_;
+    DeviceBuffer<unsigned long long> d_du_dp_buffer_;
 
     // used for hilbert sorting
-    unsigned int *d_bin_to_idx_; // mapping from 256x256x256 grid to hilbert curve index
-    unsigned int *d_sort_keys_in_;
-    unsigned int *d_sort_keys_out_;
-    unsigned int *d_sort_vals_in_;
-    unsigned int *d_sort_storage_;
-    size_t d_sort_storage_bytes_;
+    DeviceBuffer<unsigned int> d_bin_to_idx_; // mapping from 256x256x256 grid to hilbert curve index
+    DeviceBuffer<unsigned int> d_sort_keys_in_;
+    DeviceBuffer<unsigned int> d_sort_keys_out_;
+    DeviceBuffer<unsigned int> d_sort_vals_in_;
+    std::unique_ptr<DeviceBuffer<char>> d_sort_storage_;
+    size_t sort_storage_bytes_;
 
     bool disable_hilbert_;
 
