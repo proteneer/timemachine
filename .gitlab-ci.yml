@@ -38,7 +38,7 @@ lint:
   tags:
     - timemachine
   rules:
-    - if: $CI_EXTERNAL_PULL_REQUEST_IID
+    - if: '$CI_EXTERNAL_PULL_REQUEST_IID == "foobar"'
   script:
     - CMAKE_BUILD_PARALLEL_LEVEL=$(nproc) pip install -e .[dev]
     - make verify
