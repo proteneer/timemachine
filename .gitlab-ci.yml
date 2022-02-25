@@ -38,7 +38,7 @@ lint:
   tags:
     - timemachine
   rules:
-    - if: '$CI_EXTERNAL_PULL_REQUEST_IID == "foobar"'
+    - if: $CI_EXTERNAL_PULL_REQUEST_IID
   script:
     - CMAKE_BUILD_PARALLEL_LEVEL=$(nproc) pip install -e .[dev]
     - make verify
@@ -52,7 +52,7 @@ memory-tests:
   variables:
     CMAKE_ARGS: -DCUDA_ARCH=75
   rules:
-    - if: '$CI_EXTERNAL_PULL_REQUEST_IID == "foobar"'
+    - if: $CI_EXTERNAL_PULL_REQUEST_IID
   script:
     - CMAKE_BUILD_PARALLEL_LEVEL=$(nproc) pip install -e .[test]
     - make memcheck_tests
@@ -70,7 +70,7 @@ unit-tests:
   tags:
     - gpu
   rules:
-    - if: '$CI_EXTERNAL_PULL_REQUEST_IID == "foobar"'
+    - if: $CI_EXTERNAL_PULL_REQUEST_IID
   variables:
     CMAKE_ARGS: -DCUDA_ARCH=75
   script:
