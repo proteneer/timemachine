@@ -111,7 +111,8 @@ def test_endpoint_reweighting_1d():
 
 def _make_fake_sample_batch(conf, box, ligand_indices, n_snapshots=100):
     """PURELY FOR TESTING -- get arrays that look like a batch of confs, boxes
-    (but of actually populating confs, boxes with valid samples, just randomly perturb conf and box a bunch of times)
+    (but instead of actually populating confs, boxes with valid samples
+     just randomly perturb conf and box a bunch of times)
     """
     confs = []
     boxes = []
@@ -153,11 +154,10 @@ def make_ahfe_test_system():
 
     def make_batched_u_fxn(lam=0.0):
         def batched_u_fxn(samples, ligand_nb_params):
-            confs, boxes = samples
             new_params = [np.array(p) for p in params]
             new_params[-1] = new_params[-1].at[ligand_indices].set(ligand_nb_params)
 
-            U_s = np.array([U_fxn(conf, new_params, box, lam) for (conf, box) in zip(confs, boxes)])
+            U_s = np.array([U_fxn(conf, new_params, box, lam) for (conf, box) in samples])
             u_s = U_s / (BOLTZ * temperature)
 
             return u_s
@@ -266,7 +266,8 @@ def test_mixture_reweighting_ahfe():
     onp.random.seed(2022)
 
     (confs_0, boxes_0), (confs_1, boxes_1), batched_u_0, batched_u_1, ref_params, ref_delta_f = make_ahfe_test_system()
-    fake_samples = np.vstack([confs_0, confs_1]), np.vstack([boxes_0, boxes_1])
+    confs, boxes = np.vstack([confs_0, confs_1]), np.vstack([boxes_0, boxes_1])
+    fake_samples = list(zip(confs, boxes))
     fake_log_weights = onp.random.randn(len(fake_samples))
 
     estimate_delta_f = construct_mixture_reweighting_estimator(fake_samples, fake_log_weights, batched_u_0, batched_u_1)
