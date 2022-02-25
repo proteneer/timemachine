@@ -272,9 +272,8 @@ def test_mixture_reweighting_ahfe():
     """
     onp.random.seed(2022)
 
-    (confs_0, boxes_0), (confs_1, boxes_1), batched_u_0, batched_u_1, ref_params, ref_delta_f = make_ahfe_test_system()
-    confs, boxes = np.vstack([confs_0, confs_1]), np.vstack([boxes_0, boxes_1])
-    fake_samples = list(zip(confs, boxes))
+    _samples_0, _samples_1, batched_u_0, batched_u_1, ref_params, ref_delta_f = make_ahfe_test_system()
+    fake_samples = _samples_1 + _samples_1
     fake_log_weights = onp.random.randn(len(fake_samples))
 
     estimate_delta_f = construct_mixture_reweighting_estimator(fake_samples, fake_log_weights, batched_u_0, batched_u_1)
