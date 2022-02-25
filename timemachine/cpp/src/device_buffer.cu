@@ -13,12 +13,7 @@ template <typename T>
 DeviceBuffer<T>::DeviceBuffer(const std::size_t length)
     : size(length * sizeof(T)), data(static_cast<T *>(allocate(size))) {}
 
-template <typename T> DeviceBuffer<T>::~DeviceBuffer() {
-    // TODO: the file/line context reported by gpuErrchk on failure is
-    // not very useful when it's called from here. Is there a way to
-    // report a stack trace?
-    gpuErrchk(cudaFree(data));
-}
+template <typename T> DeviceBuffer<T>::~DeviceBuffer() { gpuErrchk(cudaFree(data)); }
 
 template <typename T> void DeviceBuffer<T>::copy_from_host(const T *host_buffer) const {
     gpuErrchk(cudaMemcpy(data, host_buffer, size, cudaMemcpyHostToDevice));

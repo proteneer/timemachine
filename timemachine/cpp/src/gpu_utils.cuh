@@ -2,7 +2,9 @@
 
 #include "curand.h"
 #include <cstdio>
+#include <execinfo.h>
 #include <iostream>
+#include <unistd.h>
 
 curandStatus_t templateCurandNormal(curandGenerator_t generator, float *outputPtr, size_t n, float mean, float stddev);
 
@@ -13,7 +15,15 @@ templateCurandNormal(curandGenerator_t generator, double *outputPtr, size_t n, d
     { gpuAssert((ans), __FILE__, __LINE__); }
 inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort = true) {
     if (code != cudaSuccess) {
-        fprintf(stderr, "GPUassert: %s %s %d\n", cudaGetErrorString(code), file, line);
+        fprintf(stderr, "GPUassert: error %s at %s:%d\n", cudaGetErrorString(code), file, line);
+        {
+            // print stack trace
+            // https://stackoverflow.com/a/77336/1427284
+            const int max_depth = 30;
+            void *entries[max_depth];
+            size_t size = backtrace(entries, max_depth);
+            backtrace_symbols_fd(entries, size, STDERR_FILENO);
+        }
         if (abort)
             exit(code);
     }
