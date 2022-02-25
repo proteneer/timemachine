@@ -109,7 +109,7 @@ def test_endpoint_reweighting_1d():
     assert_estimator_accurate(jit(estimate_delta_f), ref_delta_f, ref_params, n_random_trials=10, atol=5e-3)
 
 
-def _make_pseudo_sample_batch(conf, box, ligand_indices, n_snapshots=100):
+def _make_fake_sample_batch(conf, box, ligand_indices, n_snapshots=100):
     """PURELY FOR TESTING -- get arrays that look like a batch of confs, boxes
     (but of actually populating confs, boxes with valid samples, just randomly perturb conf and box a bunch of times)
     """
@@ -146,8 +146,8 @@ def make_ahfe_test_system():
     ref_params = params[-1][ligand_indices]
 
     # pretend these are endpoint samples
-    samples_0 = _make_pseudo_sample_batch(conf, box, ligand_indices, n_snapshots_0)
-    samples_1 = _make_pseudo_sample_batch(conf, box, ligand_indices, n_snapshots_1)
+    samples_0 = _make_fake_sample_batch(conf, box, ligand_indices, n_snapshots_0)
+    samples_1 = _make_fake_sample_batch(conf, box, ligand_indices, n_snapshots_1)
 
     U_fxn = construct_differentiable_interface_fast(unbound_potentials=ubps, params=params)
 
