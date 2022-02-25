@@ -101,8 +101,9 @@ def test_endpoint_reweighting_1d():
     estimate_delta_f = construct_endpoint_reweighting_estimator(
         samples_0, samples_1, vec_u_0_fxn, vec_u_1_fxn, ref_params, ref_delta_f
     )
+    analytical_delta_f = lambda params: reduced_free_energy(1.0, params) - reduced_free_energy(0.0, params)
 
-    assert_estimator_accurate(jit(estimate_delta_f), ref_delta_f, ref_params, n_random_trials=10, atol=5e-3)
+    assert_estimator_accurate(jit(estimate_delta_f), analytical_delta_f, ref_params, n_random_trials=10, atol=5e-3)
 
 
 def _make_fake_sample_batch(conf, box, ligand_indices, n_snapshots=100):
@@ -223,7 +224,7 @@ def test_mixture_reweighting_1d():
     # u_mix_smc = ...
 
     u_mixes = dict(exact_f_k=u_mix_exact, mbar_f_k=u_mix_mbar, ti_f_k=u_mix_ti)
-    exact_delta_f = f_k_exact[-1] - f_k_exact[0]
+    analytical_delta_f = lambda params: reduced_free_energy(1.0, params) - reduced_free_energy(0.0, params)
 
     for condition in u_mixes:
         u_mix = u_mixes[condition]
@@ -231,7 +232,7 @@ def test_mixture_reweighting_1d():
         # TODO [sign convention]: change signature to accept u_mix rather than log_weights?
         estimate_delta_f = jit(construct_mixture_reweighting_estimator(xs, -u_mix, vec_u_0_fxn, vec_u_1_fxn))
 
-        assert_estimator_accurate(estimate_delta_f, exact_delta_f, ref_params, n_random_trials=10, atol=1e-2)
+        assert_estimator_accurate(estimate_delta_f, analytical_delta_f, ref_params, n_random_trials=10, atol=1e-2)
 
 
 def test_endpoint_reweighting_ahfe():
