@@ -27,13 +27,36 @@ def one_sided_exp(delta_us):
 
 
 def interpret_as_mixture_potential(u_kn, f_k, N_k):
-    """https://arxiv.org/abs/1704.00891"""
+    """Interpret samples from multiple states as if they originate from a *single* state given by this potential.
+
+    Notes
+    -----
+    * This is not the only way to interpret samples from multiple distributions
+        as if they come from a single mixture distribution.
+        In ref [2], alternatives are systematically enumerated.
+        Assuming f_k are exact, the current approach corresponds to N3 in ref [2].
+
+        (This is the most expensive of the options in ref [2],
+        since it requires evaluating all k energy functions on every sample,
+        but it is also the lowest variance.)
+
+    References
+    ----------
+    [1] [Shirts, 2017] https://arxiv.org/abs/1704.00891
+        https://arxiv.org/abs/1704.00891
+    [2] [Elvira+, 2019] Generalized multiple importance sampling
+        https://arxiv.org/abs/1511.03095
+    """
     n_states, n_samples = u_kn.shape
     N_k = np.array(N_k)
     assert f_k.shape == (n_states,)
     assert np.sum(N_k) == n_samples
 
-    return -logsumexp(f_k - u_kn.T, b=N_k, axis=1)
+    mixture_u_n = -logsumexp(f_k - u_kn.T, b=N_k, axis=1)
+
+    assert mixture_u_n.shape == (n_samples,)
+
+    return mixture_u_n
 
 
 def construct_endpoint_reweighting_estimator(
