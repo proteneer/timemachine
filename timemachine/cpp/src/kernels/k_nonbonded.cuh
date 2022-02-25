@@ -85,6 +85,53 @@ void __global__ k_check_rebuild_coords_and_box(
     }
 }
 
+// TODO: DRY with k_check_rebuild_coords_and_box
+template <typename RealType>
+void __global__ k_check_rebuild_coords_and_box_gather(
+    const int N,
+    const unsigned int *atom_idxs,
+    const double *__restrict__ new_coords,
+    const double *__restrict__ old_coords,
+    const double *__restrict__ new_box,
+    const double *__restrict__ old_box,
+    const double padding,
+    int *rebuild) {
+
+    const int idx = blockIdx.x * blockDim.x + threadIdx.x;
+
+    if (idx < 9) {
+        // (ytz): box vectors have exactly 9 components
+        // we can probably derive a looser bound later on.
+        if (old_box[idx] != new_box[idx]) {
+            rebuild[0] = 1;
+        }
+    }
+
+    if (idx >= N) {
+        return;
+    }
+
+    const int atom_idx = atom_idxs[idx];
+
+    RealType xi = old_coords[atom_idx * 3 + 0];
+    RealType yi = old_coords[atom_idx * 3 + 1];
+    RealType zi = old_coords[atom_idx * 3 + 2];
+
+    RealType xj = new_coords[atom_idx * 3 + 0];
+    RealType yj = new_coords[atom_idx * 3 + 1];
+    RealType zj = new_coords[atom_idx * 3 + 2];
+
+    RealType dx = xi - xj;
+    RealType dy = yi - yj;
+    RealType dz = zi - zj;
+
+    RealType d2ij = dx * dx + dy * dy + dz * dz;
+    if (d2ij > static_cast<RealType>(0.25) * padding * padding) {
+        // (ytz): this is *safe* but technically is a race condition
+        rebuild[0] = 1;
+    }
+}
+
 template <typename RealType>
 void __global__ k_copy_nblist_coords_and_box(
     const int N,
