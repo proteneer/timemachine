@@ -171,7 +171,7 @@ def construct_mixture_reweighting_estimator(
         return one_sided_exp(-log_importance_weights)
 
     def estimate_delta_f(params) -> float:
-        r"""estimate f(params, 1) - f(params, 1)
+        r"""estimate f(params, 1) - f(params, 0)
 
         using this thermodynamic cycle:
 
