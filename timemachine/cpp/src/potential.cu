@@ -29,9 +29,9 @@ void Potential::execute_host(
     DeviceBuffer<double> d_p(P);
     DeviceBuffer<double> d_box(D * D);
 
-    d_x.copy_from(h_x);
-    d_p.copy_from(h_p);
-    d_box.copy_from(h_box);
+    d_x.copy_from_host(h_x);
+    d_p.copy_from_host(h_p);
+    d_box.copy_from_host(h_box);
 
     std::unique_ptr<DeviceBuffer<unsigned long long>> d_du_dx;
     std::unique_ptr<DeviceBuffer<unsigned long long>> d_du_dp;
@@ -71,16 +71,16 @@ void Potential::execute_host(
 
     // outputs
     if (h_du_dx) {
-        d_du_dx->copy_to(h_du_dx);
+        d_du_dx->copy_to_host(h_du_dx);
     }
     if (h_du_dp) {
-        d_du_dp->copy_to(h_du_dp);
+        d_du_dp->copy_to_host(h_du_dp);
     }
     if (h_du_dl) {
-        d_du_dl->copy_to(h_du_dl);
+        d_du_dl->copy_to_host(h_du_dl);
     }
     if (h_u) {
-        d_u->copy_to(h_u);
+        d_u->copy_to_host(h_u);
     }
 };
 
