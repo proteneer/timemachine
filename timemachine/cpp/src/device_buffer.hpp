@@ -8,6 +8,12 @@ template <typename T> class DeviceBuffer {
 public:
     DeviceBuffer(const std::size_t length);
 
+    // Disable the copy constructor.
+    // A correct implementation of this would allocate a new buffer
+    // and copy data, but we generally don't want to do this.
+    // Disabling copies prevents accidental pass-by-value
+    DeviceBuffer(const DeviceBuffer &) = delete;
+
     ~DeviceBuffer();
 
     const std::size_t size;
