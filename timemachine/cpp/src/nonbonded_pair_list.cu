@@ -2,6 +2,7 @@
 #include "k_nonbonded_pair_list.cuh"
 #include "math_utils.cuh"
 #include "nonbonded_pair_list.hpp"
+#include <numeric>
 #include <stdexcept>
 #include <vector>
 
@@ -21,7 +22,19 @@ NonbondedPairList<RealType, Negated, Interpolated>::NonbondedPairList(
       compute_permute_interpolated_(
           kernel_cache_.program(kernel_src.c_str()).kernel("k_permute_interpolated").instantiate()),
       compute_add_du_dp_interpolated_(
-          kernel_cache_.program(kernel_src.c_str()).kernel("k_add_du_dp_interpolated").instantiate()) {
+          kernel_cache_.program(kernel_src.c_str()).kernel("k_add_du_dp_interpolated").instantiate()),
+
+      d_pair_idxs_(M_ * 2),
+
+      d_lambda_plane_idxs_(N_), d_lambda_offset_idxs_(N_),
+
+      d_w_(N_), d_dw_dl_(N_), d_du_dp_buffer_(N_ * 3),
+
+      d_p_interp_(N_ * 3), d_dp_dl_(N_ * 3),
+
+      d_scales_(M_ * 2),
+
+      d_perm_(nullptr) {
 
     if (pair_idxs.size() % 2 != 0) {
         throw std::runtime_error("pair_idxs.size() must be even, but got " + std::to_string(pair_idxs.size()));
@@ -42,52 +55,19 @@ NonbondedPairList<RealType, Negated, Interpolated>::NonbondedPairList(
             " != " + std::to_string(scales.size() / 2));
     }
 
-    gpuErrchk(cudaMalloc(&d_pair_idxs_, M_ * 2 * sizeof(*d_pair_idxs_)));
-    gpuErrchk(cudaMemcpy(d_pair_idxs_, &pair_idxs[0], M_ * 2 * sizeof(*d_pair_idxs_), cudaMemcpyHostToDevice));
+    d_pair_idxs_.copy_from_host(&pair_idxs[0]);
 
-    gpuErrchk(cudaMalloc(&d_lambda_plane_idxs_, N_ * sizeof(*d_lambda_plane_idxs_)));
-    gpuErrchk(cudaMemcpy(
-        d_lambda_plane_idxs_, &lambda_plane_idxs[0], N_ * sizeof(*d_lambda_plane_idxs_), cudaMemcpyHostToDevice));
+    d_lambda_plane_idxs_.copy_from_host(&lambda_plane_idxs[0]);
+    d_lambda_offset_idxs_.copy_from_host(&lambda_offset_idxs[0]);
 
-    gpuErrchk(cudaMalloc(&d_lambda_offset_idxs_, N_ * sizeof(*d_lambda_offset_idxs_)));
-    gpuErrchk(cudaMemcpy(
-        d_lambda_offset_idxs_, &lambda_offset_idxs[0], N_ * sizeof(*d_lambda_offset_idxs_), cudaMemcpyHostToDevice));
-
-    gpuErrchk(cudaMalloc(&d_w_, N_ * sizeof(*d_w_)));
-    gpuErrchk(cudaMalloc(&d_dw_dl_, N_ * sizeof(*d_dw_dl_)));
-    gpuErrchk(cudaMalloc(&d_du_dp_buffer_, N_ * 3 * sizeof(*d_du_dp_buffer_)));
-
-    gpuErrchk(cudaMalloc(&d_p_interp_, N_ * 3 * sizeof(*d_p_interp_)));
-    gpuErrchk(cudaMalloc(&d_dp_dl_, N_ * 3 * sizeof(*d_dp_dl_)));
-
-    gpuErrchk(cudaMalloc(&d_scales_, M_ * 2 * sizeof(*d_scales_)));
-    gpuErrchk(cudaMemcpy(d_scales_, &scales[0], M_ * 2 * sizeof(*d_scales_), cudaMemcpyHostToDevice));
+    d_scales_.copy_from_host(&scales[0]);
 
     if (Interpolated) {
         // initialize identity permutation
-        std::vector<int> perm = std::vector<int>(N_);
-        for (int i = 0; i < N_; i++) {
-            perm[i] = i;
-        }
-        gpuErrchk(cudaMalloc(&d_perm_, N_ * sizeof(*d_perm_)));
-        gpuErrchk(cudaMemcpy(d_perm_, &perm[0], N_ * sizeof(*d_perm_), cudaMemcpyHostToDevice));
-    }
-};
-
-template <typename RealType, bool Negated, bool Interpolated>
-NonbondedPairList<RealType, Negated, Interpolated>::~NonbondedPairList() {
-    gpuErrchk(cudaFree(d_pair_idxs_));
-    gpuErrchk(cudaFree(d_scales_));
-    gpuErrchk(cudaFree(d_lambda_plane_idxs_));
-    gpuErrchk(cudaFree(d_lambda_offset_idxs_));
-    gpuErrchk(cudaFree(d_du_dp_buffer_));
-    gpuErrchk(cudaFree(d_w_));
-    gpuErrchk(cudaFree(d_dw_dl_));
-    gpuErrchk(cudaFree(d_p_interp_));
-    gpuErrchk(cudaFree(d_dp_dl_));
-
-    if (Interpolated) {
-        gpuErrchk(cudaFree(d_perm_));
+        std::vector<unsigned int> perm(N_);
+        std::iota(perm.begin(), perm.end(), 0);
+        d_perm_.reset(new DeviceBuffer<unsigned int>(N_));
+        d_perm_->copy_from_host(&perm[0]);
     }
 };
 
@@ -110,24 +90,26 @@ void NonbondedPairList<RealType, Negated, Interpolated>::execute_device(
     int num_blocks = ceil_divide(N, tpb);
     dim3 dimGrid(num_blocks, 3, 1);
 
-    CUresult result = compute_w_coords_instance_.configure(dimGrid, tpb, 0, stream)
-                          .launch(N, lambda, cutoff_, d_lambda_plane_idxs_, d_lambda_offset_idxs_, d_w_, d_dw_dl_);
+    CUresult result =
+        compute_w_coords_instance_.configure(dimGrid, tpb, 0, stream)
+            .launch(
+                N, lambda, cutoff_, d_lambda_plane_idxs_.data, d_lambda_offset_idxs_.data, d_w_.data, d_dw_dl_.data);
     if (result != 0) {
         throw std::runtime_error("Driver call to k_compute_w_coords");
     }
 
     if (Interpolated) {
         CUresult result = compute_permute_interpolated_.configure(dimGrid, tpb, 0, stream)
-                              .launch(lambda, N, d_perm_, d_p, d_p_interp_, d_dp_dl_);
+                              .launch(lambda, N, d_perm_->data, d_p, d_p_interp_.data, d_dp_dl_.data);
         if (result != 0) {
             throw std::runtime_error("Driver call to k_permute_interpolated failed");
         }
     } else {
-        gpuErrchk(cudaMemsetAsync(d_dp_dl_, 0, N * 3 * sizeof(*d_dp_dl_), stream))
+        gpuErrchk(cudaMemsetAsync(d_dp_dl_.data, 0, d_dp_dl_.size, stream))
     }
 
     if (d_du_dp) {
-        gpuErrchk(cudaMemsetAsync(d_du_dp_buffer_, 0, N * 3 * sizeof(*d_du_dp_buffer_), stream))
+        gpuErrchk(cudaMemsetAsync(d_du_dp_buffer_.data, 0, d_du_dp_buffer_.size, stream))
     }
 
     int num_blocks_pairs = ceil_divide(M_, tpb);
@@ -135,17 +117,17 @@ void NonbondedPairList<RealType, Negated, Interpolated>::execute_device(
     k_nonbonded_pair_list<RealType, Negated><<<num_blocks_pairs, tpb, 0, stream>>>(
         M_,
         d_x,
-        Interpolated ? d_p_interp_ : d_p,
+        Interpolated ? d_p_interp_.data : d_p,
         d_box,
-        d_dp_dl_,
-        d_w_,
-        d_dw_dl_,
-        d_pair_idxs_,
-        d_scales_,
+        d_dp_dl_.data,
+        d_w_.data,
+        d_dw_dl_.data,
+        d_pair_idxs_.data,
+        d_scales_.data,
         beta_,
         cutoff_,
         d_du_dx,
-        d_du_dp_buffer_,
+        d_du_dp_buffer_.data,
         d_du_dl,
         d_u);
 
@@ -154,12 +136,12 @@ void NonbondedPairList<RealType, Negated, Interpolated>::execute_device(
     if (d_du_dp) {
         if (Interpolated) {
             CUresult result = compute_add_du_dp_interpolated_.configure(dimGrid, tpb, 0, stream)
-                                  .launch(lambda, N, d_du_dp_buffer_, d_du_dp);
+                                  .launch(lambda, N, d_du_dp_buffer_.data, d_du_dp);
             if (result != 0) {
                 throw std::runtime_error("Driver call to k_add_du_dp_interpolated failed");
             }
         } else {
-            k_add_ull_to_ull<<<dimGrid, tpb, 0, stream>>>(N, d_du_dp_buffer_, d_du_dp);
+            k_add_ull_to_ull<<<dimGrid, tpb, 0, stream>>>(N, d_du_dp_buffer_.data, d_du_dp);
         }
         gpuErrchk(cudaPeekAtLastError());
     }

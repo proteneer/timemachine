@@ -1,5 +1,6 @@
 #pragma once
 
+#include "device_buffer.hpp"
 #include "potential.hpp"
 #include "vendored/jitify.hpp"
 #include <vector>
@@ -9,26 +10,26 @@ namespace timemachine {
 template <typename RealType, bool Negated, bool Interpolated> class NonbondedPairList : public Potential {
 
 private:
-    int *d_pair_idxs_; // [M, 2]
-    double *d_scales_; // [M, 2]
-    int *d_lambda_plane_idxs_;
-    int *d_lambda_offset_idxs_;
+    const unsigned int M_; // number of pairs
+    const unsigned int N_; // number of atoms
+
+    DeviceBuffer<int> d_pair_idxs_; // [M, 2]
+    DeviceBuffer<double> d_scales_; // [M, 2]
+    DeviceBuffer<int> d_lambda_plane_idxs_;
+    DeviceBuffer<int> d_lambda_offset_idxs_;
 
     double beta_;
     double cutoff_;
 
-    const int M_; // number of pairs
-    const int N_; // number of atoms
+    DeviceBuffer<double> d_w_;
+    DeviceBuffer<double> d_dw_dl_;
 
-    double *d_w_;
-    double *d_dw_dl_;
+    DeviceBuffer<double> d_p_interp_;
+    DeviceBuffer<double> d_dp_dl_;
 
-    double *d_p_interp_;
-    double *d_dp_dl_;
+    std::unique_ptr<DeviceBuffer<unsigned int>> d_perm_;
 
-    int *d_perm_;
-
-    unsigned long long *d_du_dp_buffer_;
+    DeviceBuffer<unsigned long long> d_du_dp_buffer_;
 
     jitify::JitCache kernel_cache_;
     jitify::KernelInstantiation compute_w_coords_instance_;
@@ -44,8 +45,6 @@ public:
         const double beta,
         const double cutoff,
         const std::string &kernel_src);
-
-    ~NonbondedPairList();
 
     virtual void execute_device(
         const int N,
