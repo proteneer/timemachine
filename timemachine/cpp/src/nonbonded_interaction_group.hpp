@@ -65,15 +65,11 @@ private:
     //   independently
     // - otherwise, atoms are sorted into contiguous blocks by
     //   interaction group, with arbitrary ordering within each block
-    //
-    // "unsorted" means the atom ordering is preserved with respect to input
     DeviceBuffer<double> d_sorted_x_; // sorted coordinates
     DeviceBuffer<double> d_sorted_w_; // sorted 4D coordinates
     DeviceBuffer<double> d_sorted_dw_dl_;
-    DeviceBuffer<double> d_sorted_p_;   // sorted parameters
-    DeviceBuffer<double> d_unsorted_p_; // unsorted parameters
+    DeviceBuffer<double> d_sorted_p_; // sorted parameters
     DeviceBuffer<double> d_sorted_dp_dl_;
-    DeviceBuffer<double> d_unsorted_dp_dl_;
     DeviceBuffer<unsigned long long> d_sorted_du_dx_;
     DeviceBuffer<unsigned long long> d_sorted_du_dp_;
     DeviceBuffer<unsigned long long> d_du_dp_buffer_;

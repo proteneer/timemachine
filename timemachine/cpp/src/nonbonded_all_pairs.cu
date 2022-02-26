@@ -72,8 +72,8 @@ NonbondedAllPairs<RealType, Interpolated>::NonbondedAllPairs(
 
       d_w_(N_), d_dw_dl_(N_), d_sorted_w_(N_), d_sorted_dw_dl_(N_),
 
-      d_unsorted_p_(N_ * 3), d_sorted_p_(N_ * 3), d_unsorted_dp_dl_(N_ * 3), d_sorted_dp_dl_(N_ * 3),
-      d_sorted_du_dx_(N_ * 3), d_sorted_du_dp_(N_ * 3), d_du_dp_buffer_(N_ * 3),
+      d_sorted_p_(N_ * 3), d_sorted_dp_dl_(N_ * 3), d_sorted_du_dx_(N_ * 3), d_sorted_du_dp_(N_ * 3),
+      d_du_dp_buffer_(N_ * 3),
 
       d_nblist_x_(N_ * 3), d_nblist_box_(3 * 3), d_rebuild_nblist_(1),
 
