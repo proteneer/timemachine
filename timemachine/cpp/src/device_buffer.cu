@@ -1,17 +1,17 @@
 #include "device_buffer.hpp"
 #include "gpu_utils.cuh"
-#include <cstddef>
 
 namespace timemachine {
 
-template <typename T> T *allocate(const std::size_t length) {
-    T *buffer;
-    gpuErrchk(cudaMalloc(&buffer, length * sizeof(T)));
+void *allocate(const std::size_t size) {
+    void *buffer;
+    gpuErrchk(cudaMalloc(&buffer, size));
     return buffer;
 }
 
 template <typename T>
-DeviceBuffer<T>::DeviceBuffer(const std::size_t length) : size(length * sizeof(T)), data(allocate<T>(length)) {}
+DeviceBuffer<T>::DeviceBuffer(const std::size_t length)
+    : size(length * sizeof(T)), data(static_cast<T *>(allocate(size))) {}
 
 template <typename T> DeviceBuffer<T>::~DeviceBuffer() {
     // TODO: the file/line context reported by gpuErrchk on failure is

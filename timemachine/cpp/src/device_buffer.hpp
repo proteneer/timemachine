@@ -5,11 +5,11 @@ namespace timemachine {
 
 template <typename T> class DeviceBuffer {
 public:
-    DeviceBuffer(const size_t length);
+    DeviceBuffer(const std::size_t length);
 
     ~DeviceBuffer();
 
-    const size_t size;
+    const std::size_t size;
 
     T *const data;
 
