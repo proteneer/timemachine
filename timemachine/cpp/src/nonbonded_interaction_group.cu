@@ -170,7 +170,7 @@ void NonbondedInteractionGroup<RealType, Interpolated>::disable_hilbert_sort() {
 template <typename RealType, bool Interpolated>
 void NonbondedInteractionGroup<RealType, Interpolated>::hilbert_sort(
     const unsigned int N,
-    const DeviceBuffer<unsigned int> d_atom_idxs,
+    const unsigned int *d_atom_idxs,
     const double *d_coords,
     const double *d_box,
     unsigned int *d_perm,
@@ -180,7 +180,7 @@ void NonbondedInteractionGroup<RealType, Interpolated>::hilbert_sort(
     const int B = ceil_divide(N, tpb);
 
     k_coords_to_kv_gather<<<B, tpb, 0, stream>>>(
-        N, d_atom_idxs.data, d_coords, d_box, d_bin_to_idx_.data, d_sort_keys_in_.data, d_sort_vals_in_.data);
+        N, d_atom_idxs, d_coords, d_box, d_bin_to_idx_.data, d_sort_keys_in_.data, d_sort_vals_in_.data);
 
     gpuErrchk(cudaPeekAtLastError());
 
@@ -266,8 +266,8 @@ void NonbondedInteractionGroup<RealType, Interpolated>::execute_device(
         // (ytz): update the permutation index before building neighborlist, as the neighborlist is tied
         // to a particular sort order
         if (!disable_hilbert_) {
-            this->hilbert_sort(NC_, d_col_atom_idxs_, d_x, d_box, d_perm_.data, stream);
-            this->hilbert_sort(NR_, d_row_atom_idxs_, d_x, d_box, d_perm_.data + NC_, stream);
+            this->hilbert_sort(NC_, d_col_atom_idxs_.data, d_x, d_box, d_perm_.data, stream);
+            this->hilbert_sort(NR_, d_row_atom_idxs_.data, d_x, d_box, d_perm_.data + NC_, stream);
         } else {
             d_col_atom_idxs_.copy_to_device(d_perm_.data);
             d_row_atom_idxs_.copy_to_device(d_perm_.data + NC_);

@@ -86,7 +86,7 @@ private:
 
     void hilbert_sort(
         const unsigned int N,
-        const DeviceBuffer<unsigned int> d_atom_idxs,
+        const unsigned int *d_atom_idxs,
         const double *d_x,
         const double *d_box,
         unsigned int *d_perm,
