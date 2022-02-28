@@ -1,8 +1,23 @@
 from rdkit import Chem
 
 
-def sort_tuple(arr):
+def canonicalize_bond(arr):
+    """
+    Canonicalize a bonded interaction. If arr[0] < arr[-1] then arr is
+    returned, else if arr[0] > arr[-1], then arr[::-1] is returned. If
+    arr[0] == arr[-1] then an exception is thrown.
 
+    Parameters
+    ----------
+    arr: list of int
+        Bond indices.
+
+    Returns
+    -------
+    arr: list of int
+        Canonicalized bond indices.
+
+    """
     container_type = type(arr)
 
     if len(arr) == 0:
@@ -11,6 +26,8 @@ def sort_tuple(arr):
         return arr
     elif arr[0] > arr[-1]:
         return container_type(reversed(arr))
+    elif arr[0] == arr[-1]:
+        raise Exception("arr[0] == [-1]")
     else:
         return arr
 

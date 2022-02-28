@@ -239,6 +239,9 @@ def test_improper_torsion():
     assert assigned_params.shape == (0, 3)
     assert improper_idxs.shape == (0, 4)
 
+    for idxs in improper_idxs:
+        assert idxs[0] < idxs[-1]
+
 
 def test_exclusions():
 
