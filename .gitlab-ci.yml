@@ -51,6 +51,8 @@ memory-tests:
     - gpu
   variables:
     CMAKE_ARGS: -DCUDA_ARCH=75
+  rules:
+    - if: $CI_EXTERNAL_PULL_REQUEST_IID
   script:
     - CMAKE_BUILD_PARALLEL_LEVEL=$(nproc) pip install -e .[test]
     - make memcheck_tests
@@ -67,6 +69,8 @@ unit-tests:
   needs: ["lint"]
   tags:
     - gpu
+  rules:
+    - if: $CI_EXTERNAL_PULL_REQUEST_IID
   variables:
     CMAKE_ARGS: -DCUDA_ARCH=75
   script:
