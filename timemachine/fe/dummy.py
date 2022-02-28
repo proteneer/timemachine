@@ -126,18 +126,20 @@ def identify_root_anchors(bond_idxs, core, dummy_atom):
                 nbs.append(col_idx)
         sparse_graph.append(nbs)
 
-    def dfs(i, visited):
+    # conditional depth first search that terminates when
+    # we encounter a core atom.
+    def conditional_dfs(i, visited):
         if i in visited:
             return
         else:
             visited.add(i)
             if i not in core:
                 for nb in sparse_graph[i]:
-                    dfs(nb, visited)
+                    conditional_dfs(nb, visited)
 
     visited = set()
 
-    dfs(dummy_atom, visited)
+    conditional_dfs(dummy_atom, visited)
 
     anchors = [a_idx for a_idx in visited if a_idx in core]
 
