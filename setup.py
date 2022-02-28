@@ -83,7 +83,6 @@ setup(
     install_requires=[
         "bootstrapped",
         "grpcio",
-        "grpcio-tools",
         "hilbertcurve",
         "jax",
         "jaxlib>0.1.74",
@@ -94,7 +93,7 @@ setup(
         "scipy",
     ],
     extras_require={
-        "dev": ["black==21.10b0", "isort==5.10.1", "flake8==4.0.1", "pre-commit"],
+        "dev": ["black==21.10b0", "isort==5.10.1", "flake8==4.0.1", "pre-commit", "grpcio-tools==1.30.0"],
         "test": ["pytest", "pytest-cov"],
     },
     package_data={
