@@ -14,7 +14,7 @@ workflow:
     # In the case of the default branch, we want to build the image so that
     # other branches have a base image to cache from when possible.
     - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
-    - if: '$CI_EXTERNAL_PULL_REQUEST_IID != null || $CI_EXTERNAL_PULL_REQUEST_IID != ""'
+    - if: $CI_EXTERNAL_PULL_REQUEST_IID
 
 docker_build:
   stage: build-docker
@@ -38,7 +38,7 @@ lint:
   tags:
     - timemachine
   rules:
-    - if: '$CI_EXTERNAL_PULL_REQUEST_IID != null || $CI_EXTERNAL_PULL_REQUEST_IID != ""'
+    - if: $CI_EXTERNAL_PULL_REQUEST_IID
   script:
     - CMAKE_BUILD_PARALLEL_LEVEL=$(nproc) pip install -e .[dev]
     - make verify
@@ -51,6 +51,8 @@ memory-tests:
     - gpu
   variables:
     CMAKE_ARGS: -DCUDA_ARCH=75
+  rules:
+    - if: $CI_EXTERNAL_PULL_REQUEST_IID
   script:
     - CMAKE_BUILD_PARALLEL_LEVEL=$(nproc) pip install -e .[test]
     - make memcheck_tests
@@ -67,6 +69,8 @@ unit-tests:
   needs: ["lint"]
   tags:
     - gpu
+  rules:
+    - if: $CI_EXTERNAL_PULL_REQUEST_IID
   variables:
     CMAKE_ARGS: -DCUDA_ARCH=75
   script:
