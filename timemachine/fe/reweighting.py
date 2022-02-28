@@ -106,7 +106,13 @@ def interpret_as_mixture_potential(u_kn: Array, f_k: Array, N_k: Array) -> Array
     assert f_k.shape == (n_states,)
     assert np.sum(N_k) == n_samples
 
-    mixture_u_n = -logsumexp(f_k - u_kn.T, b=N_k, axis=1)
+    q_kn = -u_kn
+    log_Z_k = -f_k[:, np.newaxis]
+    normalized_q_kn = q_kn - log_Z_k
+    w_k = N_k / np.sum(N_k)
+
+    mixture_q_n = logsumexp(normalized_q_kn, b=w_k, axis=0)
+    mixture_u_n = -mixture_q_n
 
     assert mixture_u_n.shape == (n_samples,)
 
