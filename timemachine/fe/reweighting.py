@@ -16,24 +16,64 @@ BatchedReducedPotentialFxn = Callable[[Samples, Params], Energies]
 
 
 def log_mean(log_values: Array) -> float:
-    # log(mean(values))
-    # = log(sum(values) / len(values))
-    return logsumexp(log_values) - np.log(len(log_values))
+    """stable log(mean(values))
+
+    log(mean(values))
+    = log(sum(values / len(values)))
+    = logsumexp(log(values) - log(len(values))
+    """
+    return logsumexp(log_values - np.log(len(log_values)))
 
 
 def estimate_log_z_ratio(log_importance_weights: Array) -> float:
-    # log(mean(importance_weights))
+    """stable log(mean(importance_weights))"""
     return log_mean(log_importance_weights)
 
 
 def one_sided_exp(delta_us: Array) -> float:
+    """ "exponential averaging
+
+    References
+    ----------
+    [1] pymbar implementation
+        https://github.com/choderalab/pymbar/blob/15f932a271343e611ed4be2d468c77b1d11cf01f/pymbar/exp.py#L54
+    """
     # delta_us = -log_importance_weights
     # delta_f  = -log_z_ratio
     return -estimate_log_z_ratio(-delta_us)
 
 
 def interpret_as_mixture_potential(u_kn: Array, f_k: Array, N_k: Array) -> Array:
-    """Interpret samples from multiple states as if they originate from a *single* state given by this potential.
+    r"""Interpret samples from multiple states k as if they originate from a single state
+    defined as a weighted mixture:
+
+    $p_{mix}(x) \propto \sum_k w_k q_k(x) / Z_k$
+
+    where
+    * $q_k(x) = exp(-u_k(x))$ is the Boltzmann weight function for state k
+    * $f_k = - log Z_k$ is the assumed normalization for state k
+    * $w_k \propto N_k$ is the mixture weight of state k
+
+    (up to a single constant)
+
+    Parameters
+    ----------
+    u_kn : [K, N] float array
+        reduced potentials of all N samples evaluated in all K states
+        u_kn[k, n] = u_k(x_n)
+    f_k : [K,] float array
+        reduced free energies of all K states
+        (up to an additive constant)
+    N_k : [K,] int array
+        number of samples from each individual state
+        (sum(N_k) must equal N)
+
+    Returns
+    -------
+    mixture_u_n : [N,] float array
+        mixture_u_n[n] = u_mix(x_n)
+
+        where u_mix(x) = -logsumexp([-u_k(x) + f_k[k] for k in range(K)])
 
     Notes
     -----
@@ -84,6 +124,35 @@ def construct_endpoint_reweighting_estimator(
         ref_delta_f ~= f(ref_params, 1) - f(ref_params, 0)
 
     construct an estimator of f(params, 1) - f(params, 0)
+
+    Parameters
+    ----------
+    samples_0: [N_0,] collection
+        samples from endstate 0
+    samples_1: [N_1,] collection
+        samples from endstate 1
+    batched_u_0_fxn
+        function that computes batch of endstate 0 energies at specified params
+        [u_0(x, params) for x in samples_0]
+    batched_u_1_fxn
+        function that computes batch of endstate 1 energies at specified params
+        [u_1(x, params) for x in samples_1]
+    ref_params
+        assume samples_0 ~ exp(-u_0(., ref_params)) and
+               samples_1 ~ exp(-u_1(., ref_params))
+    ref_delta_f
+        free energy difference between endstates 0, 1 at ref_params
+        ref_delta_f ~= f(ref_params, 1) - f(ref_params, 0)
+
+    Returns
+    -------
+    estimate_delta_f
+        computes an estimate f(params, 1) - f(params, 0) for arbitrary params
+
+        notes:
+        * estimate_delta_f(ref_params) == ref_delta_f
+        * estimate_delta_f(params) can become unreliable when
+          params is very different from ref_params
     """
     ref_u_0 = batched_u_0_fxn(samples_0, ref_params)
     ref_u_1 = batched_u_1_fxn(samples_1, ref_params)
@@ -129,12 +198,36 @@ def construct_mixture_reweighting_estimator(
     batched_u_0_fxn: BatchedReducedPotentialFxn,
     batched_u_1_fxn: BatchedReducedPotentialFxn,
 ) -> Callable[[Params], float]:
-    """assuming
-    * samples from a distribution p_ref(x)
+    r"""assuming
+    * samples from a distribution p_ref(x) \propto(exp(-u_ref(x))
       that has good overlap with BOTH p_0(params)(x) and p_1(params)(x),
+    * evaluation (or estimates) of log_weight(x) = -u_ref(x)
 
     construct an estimator for the free energy difference
     f_1(params) - f_0(params)
+
+    Parameters
+    ----------
+    samples: [N,] collection
+        x ~ p_ref(x) \propto exp(-u_ref(x))
+    log_weights: [N,] array
+        log_weights[n] = -u_ref(samples[n])
+    batched_u_0_fxn
+        computes batch of endstate 0 energies at specified params
+        [u_0(x, params) for x in samples]
+    batched_u_1_fxn
+        computes batch of endstate 1 energies at specified params
+        [u_1(x, params) for x in samples]
+
+    Returns
+    -------
+    estimate_delta_f
+        computes an estimate f(params, 1) - f(params, 0) for arbitrary params
+
+        notes:
+        * estimate_delta_f(ref_params) == ref_delta_f
+        * estimate_delta_f(params) can become unreliable when
+          params is very different from ref_params
 
     Notes
     -----
@@ -145,6 +238,7 @@ def construct_mixture_reweighting_estimator(
     * Forming a single reference state as a mixture of several states (i.e. a constant denominator "log_weights")
         and differentiating the numerator ("-u(samples, params)") wr.t. params
         is used in works like ref [3] to differentiate free energy estimates w.r.t. params.
+    * Non-requirement: u_ref does not have to be of the same functional form as u_0, u_1
 
     References
     ----------
