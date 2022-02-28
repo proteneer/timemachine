@@ -10,8 +10,11 @@ from typing import Callable, Collection
 from jax import numpy as np
 from jax.scipy.special import logsumexp
 
-Samples = Params = Collection
-Energies = Array = np.ndarray
+Samples = Collection
+Params = Collection
+Array = np.ndarray
+Energies = Array
+
 BatchedReducedPotentialFxn = Callable[[Samples, Params], Energies]
 
 
