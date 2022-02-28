@@ -698,8 +698,8 @@ def flag_stable_dummy_ixns(
     keep_angle_flags = []
 
     def ixn_is_all_core_or_all_dummy(atom_idxs):
-        all_core = np.all([a in core for a in atom_idxs])
-        all_dummy = np.all([a not in core for a in atom_idxs])
+        all_core = all(a in core for a in atom_idxs)
+        all_dummy = all(a not in core for a in atom_idxs)
 
         return all_core or all_dummy
 
