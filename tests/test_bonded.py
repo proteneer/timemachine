@@ -282,3 +282,23 @@ class TestBonded(GradientTest):
             )
 
             self.compare_forces(x, params, box, lamb, ref_potential, test_potential, rtol, precision=precision)
+
+            # test bitwise symmetry
+
+            test_potential_rev = potentials.PeriodicTorsion(torsion_idxs[:, ::-1], lamb_mult, lamb_offset)
+
+            test_potential_impl = test_potential.unbound_impl(precision)
+            test_potential_rev_impl = test_potential_rev.unbound_impl(precision)
+
+            test_du_dx, test_du_dp, test_du_dl, test_u = test_potential_impl.execute_selective(
+                x, params, box, lamb, 1, 1, 1, 1
+            )
+
+            test_du_dx_rev, test_du_dp_rev, test_du_dl_rev, test_u_rev = test_potential_rev_impl.execute_selective(
+                x, params, box, lamb, 1, 1, 1, 1
+            )
+
+            np.testing.assert_array_equal(test_u, test_u_rev)
+            np.testing.assert_array_equal(test_du_dx, test_du_dx_rev)
+            np.testing.assert_array_equal(test_du_dp, test_du_dp_rev)
+            np.testing.assert_array_equal(test_du_dl, test_du_dl_rev)
