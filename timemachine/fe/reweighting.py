@@ -31,7 +31,7 @@ def estimate_log_z_ratio(log_importance_weights: Array) -> float:
 
 
 def one_sided_exp(delta_us: Array) -> float:
-    """ "exponential averaging
+    """exponential averaging
 
     References
     ----------
