@@ -64,15 +64,11 @@ private:
     //   independently
     // - otherwise, atoms are sorted into contiguous blocks by
     //   interaction group, with arbitrary ordering within each block
-    //
-    // "unsorted" means the atom ordering is preserved with respect to input
     double *d_sorted_x_; // sorted coordinates
     double *d_sorted_w_; // sorted 4D coordinates
     double *d_sorted_dw_dl_;
-    double *d_sorted_p_;   // sorted parameters
-    double *d_unsorted_p_; // unsorted parameters
+    double *d_sorted_p_; // sorted parameters
     double *d_sorted_dp_dl_;
-    double *d_unsorted_dp_dl_;
     unsigned long long *d_sorted_du_dx_;
     unsigned long long *d_sorted_du_dp_;
     unsigned long long *d_du_dp_buffer_;
