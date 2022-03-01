@@ -101,20 +101,33 @@ def interpret_as_mixture_potential(u_kn: Array, f_k: Array, N_k: Array) -> Array
     [3] [Elvira+, 2019] Generalized multiple importance sampling
         https://arxiv.org/abs/1511.03095
     """
-    n_states, n_samples = u_kn.shape
+    # one-liner: mixture_u_n = -logsumexp(f_k - u_kn.T, b=N_k, axis=1)
+
+    # expanding steps:
+    K, N = u_kn.shape
+    assert f_k.shape == (K,)
     N_k = np.array(N_k)
-    assert f_k.shape == (n_states,)
-    assert np.sum(N_k) == n_samples
+    assert np.sum(N_k) == N
 
-    q_kn = -u_kn
-    log_Z_k = -f_k[:, np.newaxis]
-    normalized_q_kn = q_kn - log_Z_k
-    w_k = N_k / np.sum(N_k)
+    # q_k(x_n) = exp(-u_k(x_n))
+    log_q_kn = -u_kn
 
-    mixture_q_n = logsumexp(normalized_q_kn, b=w_k, axis=0)
-    mixture_u_n = -mixture_q_n
+    # p_k(x_n) = c q_k(x_n) / Z_k
+    # (up to a single undetermined constant c, shared across k)
+    log_Z_k = -f_k
+    normalized_log_q_kn = log_q_kn - np.expand_dims(log_Z_k, 1)
 
-    assert mixture_u_n.shape == (n_samples,)
+    # mixture weights from sampling proportions
+    log_w_k = np.log(N_k) - np.log(np.sum(N_k))
+
+    # q_mix(x_n) = \sum_k w_k p_k(x_n)
+    weighted_log_q_kn = np.expand_dims(log_w_k, 1) + normalized_log_q_kn
+    mixture_log_q_n = logsumexp(weighted_log_q_kn, axis=0)
+
+    # q_mix(x_n) = exp(-u_mix(x_n))
+    mixture_u_n = -mixture_log_q_n
+
+    assert mixture_u_n.shape == (N,)
 
     return mixture_u_n
 
