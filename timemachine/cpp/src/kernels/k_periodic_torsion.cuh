@@ -5,13 +5,17 @@ template <typename RealType> inline __device__ RealType dot_product(const RealTy
     return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
 }
 
+__device__ float rmul_rn(float a, float b) { return __fmul_rn(a, b); }
+
+__device__ double rmul_rn(double a, double b) { return __dmul_rn(a, b); }
+
 template <typename RealType>
 inline __device__ void cross_product(const RealType a[3], const RealType b[3], RealType c[3]) {
     // these extra __dmul_rn calls are needed to preserve bitwise anticommutativity
     // i.e. cross(a,b) is bitwise identical to -cross(b,a) except in the sign-bit
-    c[0] = __dmul_rn(a[1], b[2]) - __dmul_rn(a[2], b[1]);
-    c[1] = __dmul_rn(a[2], b[0]) - __dmul_rn(a[0], b[2]);
-    c[2] = __dmul_rn(a[0], b[1]) - __dmul_rn(a[1], b[0]);
+    c[0] = rmul_rn(a[1], b[2]) - rmul_rn(a[2], b[1]);
+    c[1] = rmul_rn(a[2], b[0]) - rmul_rn(a[0], b[2]);
+    c[2] = rmul_rn(a[0], b[1]) - rmul_rn(a[1], b[0]);
 }
 
 template <typename RealType, int D>
