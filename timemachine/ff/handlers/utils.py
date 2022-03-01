@@ -21,13 +21,13 @@ def canonicalize_bond(arr):
     container_type = type(arr)
 
     if len(arr) == 0:
-        raise Exception("zero sized array")
+        raise ValueError("zero sized array")
     elif len(arr) == 1:
         return arr
     elif arr[0] > arr[-1]:
         return container_type(reversed(arr))
     elif arr[0] == arr[-1]:
-        raise Exception("arr[0] == [-1]")
+        raise ValueError("Invalid bond with first and last indices equal")
     else:
         return arr
 
