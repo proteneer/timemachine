@@ -138,7 +138,7 @@ def test_mixture_reweighting_1d():
     lambdas = np.linspace(0, 1, n_windows)
 
     n_samples_per_window = int(1e5)
-    N_k = [n_samples_per_window] * n_windows
+    N_k = np.array([n_samples_per_window] * n_windows)
     n_samples_total = sum(N_k)
 
     trajs = [sample(lam, ref_params, n_samples_per_window) for lam in lambdas]
