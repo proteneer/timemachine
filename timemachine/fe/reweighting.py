@@ -74,9 +74,10 @@ def interpret_as_mixture_potential(u_kn: Array, f_k: Array, N_k: Array) -> Array
     Returns
     -------
     mixture_u_n : [N,] float array
-        mixture_u_n[n] = u_mix(x_n)
+        mixture_u_n[n] = u_mix(x_n), where
 
-        where u_mix(x) = -logsumexp([-u_k(x) + f_k[k] for k in range(K)])
+        u_mix(x) = -log(q_mix(x))
+        q_mix(x) = \sum_k w_k (q_k(x) / Z_k)
 
     Notes
     -----
