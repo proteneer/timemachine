@@ -114,26 +114,26 @@ MonteCarloBarostat::MonteCarloBarostat(
     this->reset_counters();
 };
 
-MonteCarloBarostat::~MonteCarloBarostat() {
-    gpuErrchk(cudaFree(d_x_after_));
-    gpuErrchk(cudaFree(d_centroids_));
-    gpuErrchk(cudaFree(d_atom_idxs_));
-    gpuErrchk(cudaFree(d_mol_idxs_));
-    gpuErrchk(cudaFree(d_mol_offsets_));
-    gpuErrchk(cudaFree(d_box_after_));
-    gpuErrchk(cudaFree(d_u_after_buffer_));
-    gpuErrchk(cudaFree(d_u_buffer_));
-    gpuErrchk(cudaFree(d_init_u_));
-    gpuErrchk(cudaFree(d_final_u_));
-    gpuErrchk(cudaFree(d_rand_));
-    gpuErrchk(cudaFree(d_length_scale_));
-    gpuErrchk(cudaFree(d_sum_storage_));
-    gpuErrchk(cudaFree(d_volume_));
-    gpuErrchk(cudaFree(d_volume_scale_));
-    gpuErrchk(cudaFree(d_volume_delta_));
-    gpuErrchk(cudaFree(d_num_accepted_));
-    gpuErrchk(cudaFree(d_num_attempted_));
-    curandErrchk(curandDestroyGenerator(cr_rng_));
+MonteCarloBarostat::~MonteCarloBarostat(){
+    // gpuErrchk(cudaFree(d_x_after_));
+    // gpuErrchk(cudaFree(d_centroids_));
+    // gpuErrchk(cudaFree(d_atom_idxs_));
+    // gpuErrchk(cudaFree(d_mol_idxs_));
+    // gpuErrchk(cudaFree(d_mol_offsets_));
+    // gpuErrchk(cudaFree(d_box_after_));
+    // gpuErrchk(cudaFree(d_u_after_buffer_));
+    // gpuErrchk(cudaFree(d_u_buffer_));
+    // gpuErrchk(cudaFree(d_init_u_));
+    // gpuErrchk(cudaFree(d_final_u_));
+    // gpuErrchk(cudaFree(d_rand_));
+    // gpuErrchk(cudaFree(d_length_scale_));
+    // gpuErrchk(cudaFree(d_sum_storage_));
+    // gpuErrchk(cudaFree(d_volume_));
+    // gpuErrchk(cudaFree(d_volume_scale_));
+    // gpuErrchk(cudaFree(d_volume_delta_));
+    // gpuErrchk(cudaFree(d_num_accepted_));
+    // gpuErrchk(cudaFree(d_num_attempted_));
+    // curandErrchk(curandDestroyGenerator(cr_rng_));
 };
 
 void __global__ rescale_positions(
