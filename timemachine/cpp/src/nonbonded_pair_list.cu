@@ -18,8 +18,8 @@ NonbondedPairList<RealType, Negated, Interpolated>::NonbondedPairList(
     const std::string &kernel_src)
     : N_(lambda_offset_idxs.size()), M_(pair_idxs.size() / 2), beta_(beta), cutoff_(cutoff),
       compute_w_coords_instance_(kernel_cache_.program(kernel_src.c_str()).kernel("k_compute_w_coords").instantiate()),
-      compute_permute_interpolated_(
-          kernel_cache_.program(kernel_src.c_str()).kernel("k_permute_interpolated").instantiate()),
+      compute_gather_interpolated_(
+          kernel_cache_.program(kernel_src.c_str()).kernel("k_gather_interpolated").instantiate()),
       compute_add_du_dp_interpolated_(
           kernel_cache_.program(kernel_src.c_str()).kernel("k_add_du_dp_interpolated").instantiate()) {
 
@@ -117,10 +117,10 @@ void NonbondedPairList<RealType, Negated, Interpolated>::execute_device(
     }
 
     if (Interpolated) {
-        CUresult result = compute_permute_interpolated_.configure(dimGrid, tpb, 0, stream)
+        CUresult result = compute_gather_interpolated_.configure(dimGrid, tpb, 0, stream)
                               .launch(lambda, N, d_perm_, d_p, d_p_interp_, d_dp_dl_);
         if (result != 0) {
-            throw std::runtime_error("Driver call to k_permute_interpolated failed");
+            throw std::runtime_error("Driver call to k_gather_interpolated failed");
         }
     } else {
         gpuErrchk(cudaMemsetAsync(d_dp_dl_, 0, N * 3 * sizeof(*d_dp_dl_), stream))
