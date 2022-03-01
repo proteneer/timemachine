@@ -3,6 +3,8 @@ import pytest
 
 from timemachine.lib import custom_ops, potentials
 
+pytestmark = [pytest.mark.memcheck]
+
 
 @pytest.fixture
 def harmonic_bond():

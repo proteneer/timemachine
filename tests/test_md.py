@@ -5,10 +5,13 @@ from jax.config import config
 
 config.update("jax_enable_x64", True)
 import jax
+import pytest
 from common import prepare_nb_system
 
 from timemachine.integrator import langevin_coefficients
 from timemachine.lib import custom_ops, potentials
+
+pytestmark = [pytest.mark.memcheck]
 
 
 class TestContext(unittest.TestCase):

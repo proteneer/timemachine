@@ -10,6 +10,8 @@ from common import GradientTest
 from timemachine.lib import potentials
 from timemachine.potentials import bonded, rmsd
 
+pytestmark = [pytest.mark.memcheck]
+
 
 class TestBonded(GradientTest):
     def test_centroid_restraint(self, n_particles=10, n_A=4, n_B=3, kb=5.4, b0=2.3):

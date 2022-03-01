@@ -9,13 +9,16 @@ from timemachine.lib import custom_ops
 
 
 @pytest.fixture(autouse=True)
-def reset_cuda_device_after_test():
+def reset_cuda_device_after_test(request):
     """Calls cudaDeviceReset() after each test.
 
     This is needed for 'cuda-memcheck --leak-check full' to catch leaks"""
 
     yield
 
+    # If the test is not marked for memory tests, no need to reset device
+    if request.node.get_closest_marker("memcheck") is None:
+        return
     # ensure that destructors are called before cudaDeviceReset()
     gc.collect()
 
