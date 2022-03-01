@@ -47,8 +47,6 @@ private:
     int *d_rebuild_nblist_; // whether or not we have to rebuild the nblist
     int *p_rebuild_nblist_; // pinned
 
-    unsigned int *d_perm_; // hilbert curve permutation
-
     double *d_w_; // 4D coordinates
     double *d_dw_dl_;
 
@@ -56,13 +54,14 @@ private:
     // - if hilbert sorting enabled, atoms are sorted according to the
     //   hilbert curve index
     // - otherwise, atom ordering is preserved with respect to input
-    double *d_sorted_x_; // sorted coordinates
-    double *d_sorted_w_; // sorted 4D coordinates
-    double *d_sorted_dw_dl_;
-    double *d_sorted_p_; // sorted parameters
-    double *d_sorted_dp_dl_;
-    unsigned long long *d_sorted_du_dx_;
-    unsigned long long *d_sorted_du_dp_;
+    unsigned int *d_sorted_atom_idxs_; // [K_] indices of interacting atoms, sorted by hilbert curve index
+    double *d_gathered_x_;             // sorted coordinates
+    double *d_gathered_w_;             // sorted 4D coordinates
+    double *d_gathered_dw_dl_;
+    double *d_gathered_p_; // sorted parameters
+    double *d_gathered_dp_dl_;
+    unsigned long long *d_gathered_du_dx_;
+    unsigned long long *d_gathered_du_dp_;
     unsigned long long *d_du_dp_buffer_;
 
     // used for hilbert sorting
