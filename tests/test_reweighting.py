@@ -59,9 +59,24 @@ def make_gaussian_testsystem():
     return u_fxn, normalized_u_fxn, sample, reduced_free_energy
 
 
-def assert_estimator_accurate(estimate_delta_f, analytical_delta_f, ref_params, n_random_trials, atol=5e-3):
+def assert_estimator_accurate(estimate_delta_f, analytical_delta_f, ref_params, n_random_trials, atol):
     """for many random parameter sets, assert that the reweighted estimates of
-    delta_f(params) and grad(delta_f)(params) are consistent with analytical_delta_f function"""
+    delta_f(params) and grad(delta_f)(params) are consistent with analytical_delta_f function
+
+    Parameters
+    ----------
+    estimate_delta_f: Callable[[params], float]
+        estimated free energy difference as a
+        differentiable function of params
+    analytical_delta_f: Callable[[params], float]
+        exact free energy difference as a
+        differentiable function of params
+    ref_params: [2,] array
+        generate random parameters near ref_params
+    n_random_trials: int
+    atol: float
+        absolute tolerance
+    """
 
     def sample_random_params():
         mean = ref_params[0] + onp.random.rand()
