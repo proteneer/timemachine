@@ -172,6 +172,26 @@ class TestBonded(GradientTest):
 
             self.compare_forces(x, params, box, lamb, ref_potential, test_potential, rtol, precision=precision)
 
+            # test bitwise commutativity
+            test_potential = potentials.HarmonicBond(bond_idxs, lamb_mult, lamb_offset)
+            test_potential_rev = potentials.HarmonicBond(bond_idxs[:, ::-1], lamb_mult, lamb_offset)
+
+            test_potential_impl = test_potential.unbound_impl(precision)
+            test_potential_rev_impl = test_potential_rev.unbound_impl(precision)
+
+            test_du_dx, test_du_dp, test_du_dl, test_u = test_potential_impl.execute_selective(
+                x, params, box, lamb, 1, 1, 1, 1
+            )
+
+            test_du_dx_rev, test_du_dp_rev, test_du_dl_rev, test_u_rev = test_potential_rev_impl.execute_selective(
+                x, params, box, lamb, 1, 1, 1, 1
+            )
+
+            np.testing.assert_array_equal(test_u, test_u_rev)
+            np.testing.assert_array_equal(test_du_dx, test_du_dx_rev)
+            np.testing.assert_array_equal(test_du_dp, test_du_dp_rev)
+            np.testing.assert_array_equal(test_du_dl, test_du_dl_rev)
+
     def test_harmonic_bond_singularity(self):
         """Test that two particles sitting directly on top of each other should generate a proper force."""
         x = np.array([[0.0, 0.0, 0.0], [0.0, 0.0, 0.0]], dtype=np.float64)
@@ -245,6 +265,26 @@ class TestBonded(GradientTest):
 
             self.compare_forces(x, params, box, lamb, ref_potential, test_potential, rtol, precision=precision)
 
+            # test bitwise commutativity
+            test_potential = potentials.HarmonicAngle(angle_idxs, lamb_mult, lamb_offset)
+            test_potential_rev = potentials.HarmonicAngle(angle_idxs[:, ::-1], lamb_mult, lamb_offset)
+
+            test_potential_impl = test_potential.unbound_impl(precision)
+            test_potential_rev_impl = test_potential_rev.unbound_impl(precision)
+
+            test_du_dx, test_du_dp, test_du_dl, test_u = test_potential_impl.execute_selective(
+                x, params, box, lamb, 1, 1, 1, 1
+            )
+
+            test_du_dx_rev, test_du_dp_rev, test_du_dl_rev, test_u_rev = test_potential_rev_impl.execute_selective(
+                x, params, box, lamb, 1, 1, 1, 1
+            )
+
+            np.testing.assert_array_equal(test_u, test_u_rev)
+            np.testing.assert_array_equal(test_du_dx, test_du_dx_rev)
+            np.testing.assert_array_equal(test_du_dp, test_du_dp_rev)
+            np.testing.assert_array_equal(test_du_dl, test_du_dl_rev)
+
     def test_periodic_torsion(self, n_particles=64, n_torsions=25, dim=3):
         """Randomly connect quadruples of particles, then validate the resulting PeriodicTorsion force"""
         np.random.seed(125)
@@ -283,8 +323,8 @@ class TestBonded(GradientTest):
 
             self.compare_forces(x, params, box, lamb, ref_potential, test_potential, rtol, precision=precision)
 
-            # test bitwise symmetry
-
+            # test bitwise commutativity
+            test_potential = potentials.PeriodicTorsion(torsion_idxs, lamb_mult, lamb_offset)
             test_potential_rev = potentials.PeriodicTorsion(torsion_idxs[:, ::-1], lamb_mult, lamb_offset)
 
             test_potential_impl = test_potential.unbound_impl(precision)
