@@ -111,11 +111,11 @@ void __global__ k_copy_nblist_coords_and_box(
 }
 
 template <typename RealType>
-void __global__ k_permute(
+void __global__ k_gather(
     const int N,
-    const unsigned int *__restrict__ perm,
+    const unsigned int *__restrict__ idxs,
     const RealType *__restrict__ array,
-    RealType *__restrict__ sorted_array) {
+    RealType *__restrict__ gathered_array) {
 
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     int stride = gridDim.y;
@@ -125,17 +125,17 @@ void __global__ k_permute(
         return;
     }
 
-    sorted_array[idx * stride + stride_idx] = array[perm[idx] * stride + stride_idx];
+    gathered_array[idx * stride + stride_idx] = array[idxs[idx] * stride + stride_idx];
 }
 
 template <typename RealType>
-void __global__ k_permute_2x(
+void __global__ k_gather_2x(
     const int N,
-    const unsigned int *__restrict__ perm,
+    const unsigned int *__restrict__ idxs,
     const RealType *__restrict__ array_1,
     const RealType *__restrict__ array_2,
-    RealType *__restrict__ sorted_array_1,
-    RealType *__restrict__ sorted_array_2) {
+    RealType *__restrict__ gathered_array_1,
+    RealType *__restrict__ gathered_array_2) {
 
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     int stride = gridDim.y;
@@ -145,15 +145,15 @@ void __global__ k_permute_2x(
         return;
     }
 
-    sorted_array_1[idx * stride + stride_idx] = array_1[perm[idx] * stride + stride_idx];
-    sorted_array_2[idx * stride + stride_idx] = array_2[perm[idx] * stride + stride_idx];
+    gathered_array_1[idx * stride + stride_idx] = array_1[idxs[idx] * stride + stride_idx];
+    gathered_array_2[idx * stride + stride_idx] = array_2[idxs[idx] * stride + stride_idx];
 }
 
 template <typename RealType>
-void __global__ k_inv_permute_accum(
+void __global__ k_scatter_accum(
     const int N,
-    const unsigned int *__restrict__ perm,
-    const RealType *__restrict__ sorted_array,
+    const unsigned int *__restrict__ unique_idxs, // NOTE: race condition possible if there are repeated indices
+    const RealType *__restrict__ gathered_array,
     RealType *__restrict__ array) {
 
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
@@ -164,14 +164,14 @@ void __global__ k_inv_permute_accum(
         return;
     }
 
-    array[perm[idx] * stride + stride_idx] += sorted_array[idx * stride + stride_idx];
+    array[unique_idxs[idx] * stride + stride_idx] += gathered_array[idx * stride + stride_idx];
 }
 
 template <typename RealType>
-void __global__ k_inv_permute_assign(
+void __global__ k_scatter_assign(
     const int N,
-    const unsigned int *__restrict__ perm,
-    const RealType *__restrict__ sorted_array,
+    const unsigned int *__restrict__ unique_idxs, // NOTE: race condition possible if there are repeated indices
+    const RealType *__restrict__ gathered_array,
     RealType *__restrict__ array) {
 
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
@@ -182,15 +182,15 @@ void __global__ k_inv_permute_assign(
         return;
     }
 
-    array[perm[idx] * stride + stride_idx] = sorted_array[idx * stride + stride_idx];
+    array[unique_idxs[idx] * stride + stride_idx] = gathered_array[idx * stride + stride_idx];
 }
 
 template <typename RealType>
-void __global__ k_inv_permute_assign_2x(
+void __global__ k_scatter_assign_2x(
     const int N,
-    const unsigned int *__restrict__ perm,
-    const RealType *__restrict__ sorted_array_1,
-    const RealType *__restrict__ sorted_array_2,
+    const unsigned int *__restrict__ unique_idxs, // NOTE: race condition possible if there are repeated indices
+    const RealType *__restrict__ gathered_array_1,
+    const RealType *__restrict__ gathered_array_2,
     RealType *__restrict__ array_1,
     RealType *__restrict__ array_2) {
 
@@ -202,8 +202,8 @@ void __global__ k_inv_permute_assign_2x(
         return;
     }
 
-    array_1[perm[idx] * stride + stride_idx] = sorted_array_1[idx * stride + stride_idx];
-    array_2[perm[idx] * stride + stride_idx] = sorted_array_2[idx * stride + stride_idx];
+    array_1[unique_idxs[idx] * stride + stride_idx] = gathered_array_1[idx * stride + stride_idx];
+    array_2[unique_idxs[idx] * stride + stride_idx] = gathered_array_2[idx * stride + stride_idx];
 }
 
 template <typename RealType> void __global__ k_reduce_buffer(int N, RealType *d_buffer, RealType *d_sum) {

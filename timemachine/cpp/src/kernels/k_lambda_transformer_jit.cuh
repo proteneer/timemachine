@@ -54,13 +54,13 @@ void __global__ k_compute_w_coords(
 
 } // 0 or 1, how much we offset from the plane by )
 
-void __global__ k_permute_interpolated(
+void __global__ k_gather_interpolated(
     const double lambda,
     const int N,
-    const unsigned int *__restrict__ perm,
+    const unsigned int *__restrict__ idxs,
     const double *__restrict__ d_p,
-    double *__restrict__ d_sorted_p,
-    double *__restrict__ d_sorted_dp_dl) {
+    double *__restrict__ d_gathered_p,
+    double *__restrict__ d_gathered_dp_dl) {
 
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     int stride = gridDim.y;
@@ -73,7 +73,7 @@ void __global__ k_permute_interpolated(
     int size = N * stride;
 
     int source_idx = idx * stride + stride_idx;
-    int target_idx = perm[idx] * stride + stride_idx;
+    int target_idx = idxs[idx] * stride + stride_idx;
 
     double step = 1e-7;
     Surreal<double> lambda_surreal(lambda, step);
@@ -94,8 +94,8 @@ void __global__ k_permute_interpolated(
         f_lambda_grad = (transform_lambda_epsilon(lambda_surreal).imag) / step;
     }
 
-    d_sorted_p[source_idx] = (1 - f_lambda) * d_p[target_idx] + f_lambda * d_p[size + target_idx];
-    d_sorted_dp_dl[source_idx] = f_lambda_grad * (d_p[size + target_idx] - d_p[target_idx]);
+    d_gathered_p[source_idx] = (1 - f_lambda) * d_p[target_idx] + f_lambda * d_p[size + target_idx];
+    d_gathered_dp_dl[source_idx] = f_lambda_grad * (d_p[size + target_idx] - d_p[target_idx]);
 }
 
 void __global__ k_add_du_dp_interpolated(

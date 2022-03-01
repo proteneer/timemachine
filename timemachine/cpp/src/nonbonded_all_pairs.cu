@@ -58,8 +58,8 @@ NonbondedAllPairs<RealType, Interpolated>::NonbondedAllPairs(
                     &k_nonbonded_unified<RealType, 1, 1, 1, 0>,
                     &k_nonbonded_unified<RealType, 1, 1, 1, 1>}),
       compute_w_coords_instance_(kernel_cache_.program(kernel_src.c_str()).kernel("k_compute_w_coords").instantiate()),
-      compute_permute_interpolated_(
-          kernel_cache_.program(kernel_src.c_str()).kernel("k_permute_interpolated").instantiate()),
+      compute_gather_interpolated_(
+          kernel_cache_.program(kernel_src.c_str()).kernel("k_gather_interpolated").instantiate()),
       compute_add_du_dp_interpolated_(
           kernel_cache_.program(kernel_src.c_str()).kernel("k_add_du_dp_interpolated").instantiate()) {
 
@@ -277,7 +277,7 @@ void NonbondedAllPairs<RealType, Interpolated>::execute_device(
         }
 
         // compute new coordinates, new lambda_idxs, new_plane_idxs
-        k_permute<<<dimGrid, tpb, 0, stream>>>(N, d_perm_, d_x, d_sorted_x_);
+        k_gather<<<dimGrid, tpb, 0, stream>>>(N, d_perm_, d_x, d_sorted_x_);
         gpuErrchk(cudaPeekAtLastError());
         nblist_.build_nblist_device(N, d_sorted_x_, d_box, cutoff_ + nblist_padding_, stream);
         gpuErrchk(cudaMemcpyAsync(
@@ -309,19 +309,19 @@ void NonbondedAllPairs<RealType, Interpolated>::execute_device(
         gpuErrchk(cudaMemcpyAsync(d_nblist_x_, d_x, N * 3 * sizeof(*d_x), cudaMemcpyDeviceToDevice, stream));
         gpuErrchk(cudaMemcpyAsync(d_nblist_box_, d_box, 3 * 3 * sizeof(*d_box), cudaMemcpyDeviceToDevice, stream));
     } else {
-        k_permute<<<dimGrid, tpb, 0, stream>>>(N, d_perm_, d_x, d_sorted_x_);
+        k_gather<<<dimGrid, tpb, 0, stream>>>(N, d_perm_, d_x, d_sorted_x_);
         gpuErrchk(cudaPeekAtLastError());
     }
 
     // do parameter interpolation here
     if (Interpolated) {
-        CUresult result = compute_permute_interpolated_.configure(dimGrid, tpb, 0, stream)
+        CUresult result = compute_gather_interpolated_.configure(dimGrid, tpb, 0, stream)
                               .launch(lambda, N, d_perm_, d_p, d_sorted_p_, d_sorted_dp_dl_);
         if (result != 0) {
-            throw std::runtime_error("Driver call to k_permute_interpolated failed");
+            throw std::runtime_error("Driver call to k_gather_interpolated failed");
         }
     } else {
-        k_permute<<<dimGrid, tpb, 0, stream>>>(N, d_perm_, d_p, d_sorted_p_);
+        k_gather<<<dimGrid, tpb, 0, stream>>>(N, d_perm_, d_p, d_sorted_p_);
         gpuErrchk(cudaPeekAtLastError());
         gpuErrchk(cudaMemsetAsync(d_sorted_dp_dl_, 0, N * 3 * sizeof(*d_sorted_dp_dl_), stream))
     }
@@ -343,7 +343,7 @@ void NonbondedAllPairs<RealType, Interpolated>::execute_device(
     }
 
     gpuErrchk(cudaPeekAtLastError());
-    k_permute_2x<<<B, tpb, 0, stream>>>(N, d_perm_, d_w_, d_dw_dl_, d_sorted_w_, d_sorted_dw_dl_);
+    k_gather_2x<<<B, tpb, 0, stream>>>(N, d_perm_, d_w_, d_dw_dl_, d_sorted_w_, d_sorted_dw_dl_);
     gpuErrchk(cudaPeekAtLastError());
 
     // look up which kernel we need for this computation
@@ -376,14 +376,14 @@ void NonbondedAllPairs<RealType, Interpolated>::execute_device(
 
     // coords are N,3
     if (d_du_dx) {
-        k_inv_permute_accum<<<dimGrid, tpb, 0, stream>>>(N, d_perm_, d_sorted_du_dx_, d_du_dx);
+        k_scatter_accum<<<dimGrid, tpb, 0, stream>>>(N, d_perm_, d_sorted_du_dx_, d_du_dx);
         gpuErrchk(cudaPeekAtLastError());
     }
 
     // params are N,3
     // this needs to be an accumulated permute
     if (d_du_dp) {
-        k_inv_permute_assign<<<dimGrid, tpb, 0, stream>>>(N, d_perm_, d_sorted_du_dp_, d_du_dp_buffer_);
+        k_scatter_assign<<<dimGrid, tpb, 0, stream>>>(N, d_perm_, d_sorted_du_dp_, d_du_dp_buffer_);
         gpuErrchk(cudaPeekAtLastError());
     }
 
