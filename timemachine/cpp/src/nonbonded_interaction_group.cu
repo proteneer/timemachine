@@ -112,10 +112,8 @@ NonbondedInteractionGroup<RealType, Interpolated>::NonbondedInteractionGroup(
     gpuErrchk(cudaMalloc(&d_sorted_w_, N_ * sizeof(*d_sorted_w_)));
     gpuErrchk(cudaMalloc(&d_sorted_dw_dl_, N_ * sizeof(*d_sorted_dw_dl_)));
 
-    gpuErrchk(cudaMalloc(&d_unsorted_p_, N_ * 3 * sizeof(*d_unsorted_p_)));         // interpolated
-    gpuErrchk(cudaMalloc(&d_sorted_p_, N_ * 3 * sizeof(*d_sorted_p_)));             // interpolated
-    gpuErrchk(cudaMalloc(&d_unsorted_dp_dl_, N_ * 3 * sizeof(*d_unsorted_dp_dl_))); // interpolated
-    gpuErrchk(cudaMalloc(&d_sorted_dp_dl_, N_ * 3 * sizeof(*d_sorted_dp_dl_)));     // interpolated
+    gpuErrchk(cudaMalloc(&d_sorted_p_, N_ * 3 * sizeof(*d_sorted_p_)));         // interpolated
+    gpuErrchk(cudaMalloc(&d_sorted_dp_dl_, N_ * 3 * sizeof(*d_sorted_dp_dl_))); // interpolated
     gpuErrchk(cudaMalloc(&d_sorted_du_dx_, N_ * 3 * sizeof(*d_sorted_du_dx_)));
     gpuErrchk(cudaMalloc(&d_sorted_du_dp_, N_ * 3 * sizeof(*d_sorted_du_dp_)));
     gpuErrchk(cudaMalloc(&d_du_dp_buffer_, N_ * 3 * sizeof(*d_du_dp_buffer_)));
@@ -185,9 +183,7 @@ NonbondedInteractionGroup<RealType, Interpolated>::~NonbondedInteractionGroup() 
     gpuErrchk(cudaFree(d_dw_dl_));
     gpuErrchk(cudaFree(d_sorted_w_));
     gpuErrchk(cudaFree(d_sorted_dw_dl_));
-    gpuErrchk(cudaFree(d_unsorted_p_));
     gpuErrchk(cudaFree(d_sorted_p_));
-    gpuErrchk(cudaFree(d_unsorted_dp_dl_));
     gpuErrchk(cudaFree(d_sorted_dp_dl_));
     gpuErrchk(cudaFree(d_sorted_du_dx_));
     gpuErrchk(cudaFree(d_sorted_du_dp_));
