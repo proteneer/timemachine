@@ -75,19 +75,19 @@ NonbondedAllPairs<RealType, Interpolated>::NonbondedAllPairs(
     gpuErrchk(cudaMemcpy(
         d_lambda_offset_idxs_, &lambda_offset_idxs[0], N_ * sizeof(*d_lambda_offset_idxs_), cudaMemcpyHostToDevice));
 
-    gpuErrchk(cudaMalloc(&d_perm_, N_ * sizeof(*d_perm_)));
+    gpuErrchk(cudaMalloc(&d_sorted_atom_idxs_, N_ * sizeof(*d_sorted_atom_idxs_)));
 
-    gpuErrchk(cudaMalloc(&d_sorted_x_, N_ * 3 * sizeof(*d_sorted_x_)));
+    gpuErrchk(cudaMalloc(&d_gathered_x_, N_ * 3 * sizeof(*d_gathered_x_)));
 
     gpuErrchk(cudaMalloc(&d_w_, N_ * sizeof(*d_w_)));
     gpuErrchk(cudaMalloc(&d_dw_dl_, N_ * sizeof(*d_dw_dl_)));
-    gpuErrchk(cudaMalloc(&d_sorted_w_, N_ * sizeof(*d_sorted_w_)));
-    gpuErrchk(cudaMalloc(&d_sorted_dw_dl_, N_ * sizeof(*d_sorted_dw_dl_)));
+    gpuErrchk(cudaMalloc(&d_gathered_w_, N_ * sizeof(*d_gathered_w_)));
+    gpuErrchk(cudaMalloc(&d_gathered_dw_dl_, N_ * sizeof(*d_gathered_dw_dl_)));
 
-    gpuErrchk(cudaMalloc(&d_sorted_p_, N_ * 3 * sizeof(*d_sorted_p_)));         // interpolated
-    gpuErrchk(cudaMalloc(&d_sorted_dp_dl_, N_ * 3 * sizeof(*d_sorted_dp_dl_))); // interpolated
-    gpuErrchk(cudaMalloc(&d_sorted_du_dx_, N_ * 3 * sizeof(*d_sorted_du_dx_)));
-    gpuErrchk(cudaMalloc(&d_sorted_du_dp_, N_ * 3 * sizeof(*d_sorted_du_dp_)));
+    gpuErrchk(cudaMalloc(&d_gathered_p_, N_ * 3 * sizeof(*d_gathered_p_)));         // interpolated
+    gpuErrchk(cudaMalloc(&d_gathered_dp_dl_, N_ * 3 * sizeof(*d_gathered_dp_dl_))); // interpolated
+    gpuErrchk(cudaMalloc(&d_gathered_du_dx_, N_ * 3 * sizeof(*d_gathered_du_dx_)));
+    gpuErrchk(cudaMalloc(&d_gathered_du_dp_, N_ * 3 * sizeof(*d_gathered_du_dp_)));
     gpuErrchk(cudaMalloc(&d_du_dp_buffer_, N_ * 3 * sizeof(*d_du_dp_buffer_)));
 
     gpuErrchk(cudaMallocHost(&p_ixn_count_, 1 * sizeof(*p_ixn_count_)));
@@ -126,7 +126,13 @@ NonbondedAllPairs<RealType, Interpolated>::NonbondedAllPairs(
 
     // estimate size needed to do radix sorting, this can use uninitialized data.
     cub::DeviceRadixSort::SortPairs(
-        d_sort_storage_, d_sort_storage_bytes_, d_sort_keys_in_, d_sort_keys_out_, d_sort_vals_in_, d_perm_, N_);
+        d_sort_storage_,
+        d_sort_storage_bytes_,
+        d_sort_keys_in_,
+        d_sort_keys_out_,
+        d_sort_vals_in_,
+        d_sorted_atom_idxs_,
+        N_);
 
     gpuErrchk(cudaPeekAtLastError());
     gpuErrchk(cudaMalloc(&d_sort_storage_, d_sort_storage_bytes_));
@@ -137,19 +143,19 @@ template <typename RealType, bool Interpolated> NonbondedAllPairs<RealType, Inte
     gpuErrchk(cudaFree(d_lambda_plane_idxs_));
     gpuErrchk(cudaFree(d_lambda_offset_idxs_));
     gpuErrchk(cudaFree(d_du_dp_buffer_));
-    gpuErrchk(cudaFree(d_perm_));
+    gpuErrchk(cudaFree(d_sorted_atom_idxs_));
 
     gpuErrchk(cudaFree(d_bin_to_idx_));
-    gpuErrchk(cudaFree(d_sorted_x_));
+    gpuErrchk(cudaFree(d_gathered_x_));
 
     gpuErrchk(cudaFree(d_w_));
     gpuErrchk(cudaFree(d_dw_dl_));
-    gpuErrchk(cudaFree(d_sorted_w_));
-    gpuErrchk(cudaFree(d_sorted_dw_dl_));
-    gpuErrchk(cudaFree(d_sorted_p_));
-    gpuErrchk(cudaFree(d_sorted_dp_dl_));
-    gpuErrchk(cudaFree(d_sorted_du_dx_));
-    gpuErrchk(cudaFree(d_sorted_du_dp_));
+    gpuErrchk(cudaFree(d_gathered_w_));
+    gpuErrchk(cudaFree(d_gathered_dw_dl_));
+    gpuErrchk(cudaFree(d_gathered_p_));
+    gpuErrchk(cudaFree(d_gathered_dp_dl_));
+    gpuErrchk(cudaFree(d_gathered_du_dx_));
+    gpuErrchk(cudaFree(d_gathered_du_dp_));
 
     gpuErrchk(cudaFree(d_sort_keys_in_));
     gpuErrchk(cudaFree(d_sort_keys_out_));
@@ -190,7 +196,7 @@ void NonbondedAllPairs<RealType, Interpolated>::hilbert_sort(
         d_sort_keys_in_,
         d_sort_keys_out_,
         d_sort_vals_in_,
-        d_perm_,
+        d_sorted_atom_idxs_,
         N_,
         0,                            // begin bit
         sizeof(*d_sort_keys_in_) * 8, // end bit
@@ -268,14 +274,14 @@ void NonbondedAllPairs<RealType, Interpolated>::execute_device(
         if (!disable_hilbert_) {
             this->hilbert_sort(d_x, d_box, stream);
         } else {
-            k_arange<<<B, tpb, 0, stream>>>(N, d_perm_);
+            k_arange<<<B, tpb, 0, stream>>>(N, d_sorted_atom_idxs_);
             gpuErrchk(cudaPeekAtLastError());
         }
 
         // compute new coordinates, new lambda_idxs, new_plane_idxs
-        k_gather<<<dimGrid, tpb, 0, stream>>>(N, d_perm_, d_x, d_sorted_x_);
+        k_gather<<<dimGrid, tpb, 0, stream>>>(N, d_sorted_atom_idxs_, d_x, d_gathered_x_);
         gpuErrchk(cudaPeekAtLastError());
-        nblist_.build_nblist_device(N, d_sorted_x_, d_box, cutoff_ + nblist_padding_, stream);
+        nblist_.build_nblist_device(N, d_gathered_x_, d_box, cutoff_ + nblist_padding_, stream);
         gpuErrchk(cudaMemcpyAsync(
             p_ixn_count_, nblist_.get_ixn_count(), 1 * sizeof(*p_ixn_count_), cudaMemcpyDeviceToHost, stream));
 
@@ -305,29 +311,29 @@ void NonbondedAllPairs<RealType, Interpolated>::execute_device(
         gpuErrchk(cudaMemcpyAsync(d_nblist_x_, d_x, N * 3 * sizeof(*d_x), cudaMemcpyDeviceToDevice, stream));
         gpuErrchk(cudaMemcpyAsync(d_nblist_box_, d_box, 3 * 3 * sizeof(*d_box), cudaMemcpyDeviceToDevice, stream));
     } else {
-        k_gather<<<dimGrid, tpb, 0, stream>>>(N, d_perm_, d_x, d_sorted_x_);
+        k_gather<<<dimGrid, tpb, 0, stream>>>(N, d_sorted_atom_idxs_, d_x, d_gathered_x_);
         gpuErrchk(cudaPeekAtLastError());
     }
 
     // do parameter interpolation here
     if (Interpolated) {
         CUresult result = compute_gather_interpolated_.configure(dimGrid, tpb, 0, stream)
-                              .launch(lambda, N, d_perm_, d_p, d_sorted_p_, d_sorted_dp_dl_);
+                              .launch(lambda, N, d_sorted_atom_idxs_, d_p, d_gathered_p_, d_gathered_dp_dl_);
         if (result != 0) {
             throw std::runtime_error("Driver call to k_gather_interpolated failed");
         }
     } else {
-        k_gather<<<dimGrid, tpb, 0, stream>>>(N, d_perm_, d_p, d_sorted_p_);
+        k_gather<<<dimGrid, tpb, 0, stream>>>(N, d_sorted_atom_idxs_, d_p, d_gathered_p_);
         gpuErrchk(cudaPeekAtLastError());
-        gpuErrchk(cudaMemsetAsync(d_sorted_dp_dl_, 0, N * 3 * sizeof(*d_sorted_dp_dl_), stream))
+        gpuErrchk(cudaMemsetAsync(d_gathered_dp_dl_, 0, N * 3 * sizeof(*d_gathered_dp_dl_), stream))
     }
 
     // reset buffers and sorted accumulators
     if (d_du_dx) {
-        gpuErrchk(cudaMemsetAsync(d_sorted_du_dx_, 0, N * 3 * sizeof(*d_sorted_du_dx_), stream))
+        gpuErrchk(cudaMemsetAsync(d_gathered_du_dx_, 0, N * 3 * sizeof(*d_gathered_du_dx_), stream))
     }
     if (d_du_dp) {
-        gpuErrchk(cudaMemsetAsync(d_sorted_du_dp_, 0, N * 3 * sizeof(*d_sorted_du_dp_), stream))
+        gpuErrchk(cudaMemsetAsync(d_gathered_du_dp_, 0, N * 3 * sizeof(*d_gathered_du_dp_), stream))
     }
 
     // update new w coordinates
@@ -339,7 +345,7 @@ void NonbondedAllPairs<RealType, Interpolated>::execute_device(
     }
 
     gpuErrchk(cudaPeekAtLastError());
-    k_gather_2x<<<B, tpb, 0, stream>>>(N, d_perm_, d_w_, d_dw_dl_, d_sorted_w_, d_sorted_dw_dl_);
+    k_gather_2x<<<B, tpb, 0, stream>>>(N, d_sorted_atom_idxs_, d_w_, d_dw_dl_, d_gathered_w_, d_gathered_dw_dl_);
     gpuErrchk(cudaPeekAtLastError());
 
     // look up which kernel we need for this computation
@@ -352,18 +358,18 @@ void NonbondedAllPairs<RealType, Interpolated>::execute_device(
     kernel_ptrs_[kernel_idx]<<<p_ixn_count_[0], tpb, 0, stream>>>(
         N,
         0,
-        d_sorted_x_,
-        d_sorted_p_,
+        d_gathered_x_,
+        d_gathered_p_,
         d_box,
-        d_sorted_dp_dl_,
-        d_sorted_w_,
-        d_sorted_dw_dl_,
+        d_gathered_dp_dl_,
+        d_gathered_w_,
+        d_gathered_dw_dl_,
         beta_,
         cutoff_,
         nblist_.get_ixn_tiles(),
         nblist_.get_ixn_atoms(),
-        d_sorted_du_dx_,
-        d_sorted_du_dp_,
+        d_gathered_du_dx_,
+        d_gathered_du_dp_,
         d_du_dl, // switch to nullptr if we don't request du_dl
         d_u      // switch to nullptr if we don't request energies
     );
@@ -372,14 +378,14 @@ void NonbondedAllPairs<RealType, Interpolated>::execute_device(
 
     // coords are N,3
     if (d_du_dx) {
-        k_scatter_accum<<<dimGrid, tpb, 0, stream>>>(N, d_perm_, d_sorted_du_dx_, d_du_dx);
+        k_scatter_accum<<<dimGrid, tpb, 0, stream>>>(N, d_sorted_atom_idxs_, d_gathered_du_dx_, d_du_dx);
         gpuErrchk(cudaPeekAtLastError());
     }
 
     // params are N,3
     // this needs to be an accumulated permute
     if (d_du_dp) {
-        k_scatter_assign<<<dimGrid, tpb, 0, stream>>>(N, d_perm_, d_sorted_du_dp_, d_du_dp_buffer_);
+        k_scatter_assign<<<dimGrid, tpb, 0, stream>>>(N, d_sorted_atom_idxs_, d_gathered_du_dp_, d_du_dp_buffer_);
         gpuErrchk(cudaPeekAtLastError());
     }
 
