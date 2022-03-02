@@ -114,21 +114,14 @@ class VacuumState:
         exclusions = self.nb_potential.get_exclusion_idxs()
         scales = self.nb_potential.get_scale_factors()
 
-        N = x.shape[0]
-        charge_rescale_mask = np.ones((N, N))
-        lj_rescale_mask = np.ones((N, N))
-
         if decharge:
             charge_indices = jax.ops.index[:, 0]
             nb_params = self.nb_params.at[charge_indices].set(0)
         else:
             nb_params = self.nb_params
 
-        for (i, j), (lj_scale, q_scale) in zip(exclusions, scales):
-            charge_rescale_mask[i][j] = 1 - q_scale
-            charge_rescale_mask[j][i] = 1 - q_scale
-            lj_rescale_mask[i][j] = 1 - lj_scale
-            lj_rescale_mask[j][i] = 1 - lj_scale
+        N = x.shape[0]
+        charge_rescale_mask, lj_rescale_mask = nonbonded.convert_exceptions_to_rescale_masks(exclusions, scales, N)
 
         beta = self.nb_potential.get_beta()
         cutoff = self.nb_potential.get_cutoff()
