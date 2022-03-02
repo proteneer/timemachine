@@ -7,7 +7,13 @@ from jax.ops import index
 from jax.scipy.special import erfc
 
 from timemachine.potentials import jax_utils
-from timemachine.potentials.jax_utils import convert_to_4d, delta_r, distance, distance_on_pairs
+from timemachine.potentials.jax_utils import (
+    convert_to_4d,
+    delta_r,
+    distance,
+    distance_on_pairs,
+    pairs_from_interaction_groups,
+)
 
 
 def switch_fn(dij, cutoff):
@@ -405,12 +411,13 @@ def construct_batch_nonbonded_as_fxn_of_ligand_nb_params(confs, boxes, ligand_in
     return batch_nonbonded
 
 
-def nonbonded_v3_interaction_groups(conf, params, box, pairs, beta: float, cutoff: Optional[float] = None):
+def nonbonded_v3_interaction_groups(conf, params, box, a_idxs, b_idxs, beta: float, cutoff: Optional[float] = None):
     """Nonbonded interactions between all pairs of atoms $(i, j)$
     where $i$ is in the first set and $j$ in the second.
 
     See nonbonded_v3 docstring for more details
     """
+    pairs = pairs_from_interaction_groups(a_idxs, b_idxs)
     vdW, electrostatics = nonbonded_v3_on_specific_pairs(conf, params, box, pairs, beta, cutoff)
     return vdW, electrostatics
 

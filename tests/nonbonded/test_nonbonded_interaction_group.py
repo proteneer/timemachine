@@ -97,9 +97,9 @@ def test_nonbonded_interaction_group_correctness(
         conf_4d = jax_utils.augment_dim(conf, w)
         box_4d = (1000 * jax.numpy.eye(4)).at[:3, :3].set(box)
 
-        pairs = np.ligand_idxs, host_idxs
-
-        vdW, electrostatics = nonbonded.nonbonded_v3_interaction_groups(conf_4d, params, box_4d, pairs, beta, cutoff)
+        vdW, electrostatics = nonbonded.nonbonded_v3_interaction_groups(
+            conf_4d, params, box_4d, ligand_idxs, host_idxs, beta, cutoff
+        )
         return jax.numpy.sum(vdW + electrostatics)
 
     test_ixngroups = NonbondedInteractionGroup(
@@ -155,8 +155,6 @@ def test_nonbonded_interaction_group_interpolated_correctness(
     ligand_idxs = rng.choice(num_atoms, size=(num_atoms_ligand,), replace=False).astype(np.int32)
     host_idxs = np.setdiff1d(np.arange(num_atoms), ligand_idxs)
 
-    pairs = jax_utils.pairs_from_interaction_groups(ligand_idxs, host_idxs)
-
     @nonbonded.interpolated
     def ref_ixngroups(conf, params, box, lamb):
 
@@ -165,7 +163,9 @@ def test_nonbonded_interaction_group_interpolated_correctness(
         conf_4d = jax_utils.augment_dim(conf, w)
         box_4d = (1000 * jax.numpy.eye(4)).at[:3, :3].set(box)
 
-        vdW, electrostatics = nonbonded.nonbonded_v3_interaction_groups(conf_4d, params, box_4d, pairs, beta, cutoff)
+        vdW, electrostatics = nonbonded.nonbonded_v3_interaction_groups(
+            conf_4d, params, box_4d, ligand_idxs, host_idxs, beta, cutoff
+        )
         return jax.numpy.sum(vdW + electrostatics)
 
     test_ixngroups = NonbondedInteractionGroupInterpolated(
