@@ -224,7 +224,7 @@ def construct_mixture_reweighting_estimator(
     r"""assuming
     * samples x_n from a distribution p_ref(x) \propto(exp(-u_ref(x))
       that has good overlap with BOTH p_0(params)(x) and p_1(params)(x),
-    * evaluation (or estimates) of u_ref_n[n] = -u_ref(x_n)
+    * evaluation (or estimates) of u_ref_n[n] = u_ref(x_n)
 
     construct an estimator for the free energy difference
     f_1(params) - f_0(params)
