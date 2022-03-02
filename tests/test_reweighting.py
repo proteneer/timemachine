@@ -109,7 +109,9 @@ def test_endpoint_reweighting_1d():
     ref_params = np.ones(2)  # (annealing Normal(0, 1) @ lambda=0 to Normal(1, exp(1)) @ lambda=1)
     ref_delta_f = reduced_free_energy(1.0, ref_params) - reduced_free_energy(0.0, ref_params)
 
+    # more samples --> tighter absolute tolerance possible in test assertion
     n_samples = int(1e6)
+    atol = 1e-3
 
     samples_0 = sample(0, ref_params, n_samples)
     samples_1 = sample(1, ref_params, n_samples)
@@ -123,7 +125,7 @@ def test_endpoint_reweighting_1d():
     )
     analytical_delta_f = lambda params: reduced_free_energy(1.0, params) - reduced_free_energy(0.0, params)
 
-    assert_estimator_accurate(jit(estimate_delta_f), analytical_delta_f, ref_params, n_random_trials=10, atol=5e-3)
+    assert_estimator_accurate(jit(estimate_delta_f), analytical_delta_f, ref_params, n_random_trials=10, atol=atol)
 
 
 def test_mixture_reweighting_1d():
@@ -136,10 +138,15 @@ def test_mixture_reweighting_1d():
 
     # ref_params: (mean, log_sigma) @ lambda=1
     ref_params = np.ones(2)  # (annealing Normal(0, 1) @ lambda=0 to Normal(1, exp(1)) @ lambda=1)
+    # easier-to-estimate free energy difference -> tighter tolerance possible in assertion
+
     n_windows = 10
     lambdas = np.linspace(0, 1, n_windows)
 
+    # bigger n samples per window --> ~ sqrt(n)-tighter tolerance possible in assertion
     n_samples_per_window = int(1e5)
+    atol = 1e-2
+
     N_k = np.array([n_samples_per_window] * n_windows)
     n_samples_total = sum(N_k)
 
@@ -190,7 +197,7 @@ def test_mixture_reweighting_1d():
 
         estimate_delta_f = jit(construct_mixture_reweighting_estimator(xs, u_mix, vec_u_0_fxn, vec_u_1_fxn))
 
-        assert_estimator_accurate(estimate_delta_f, analytical_delta_f, ref_params, n_random_trials=10, atol=1e-2)
+        assert_estimator_accurate(estimate_delta_f, analytical_delta_f, ref_params, n_random_trials=10, atol=atol)
 
 
 def _make_fake_sample_batch(conf, box, ligand_indices, n_snapshots=25):
