@@ -47,6 +47,21 @@ def test_summed_potential_keeps_referenced_potentials_alive(harmonic_bond):
 
 def test_summed_potential_get_potentials(harmonic_bond):
     impls = [harmonic_bond.unbound_impl(np.float32) for _ in range(2)]
-    params_sizes = [len(harmonic_bond.params) for _ in range(2)]
+    params_sizes = [harmonic_bond.params.size] * 2
     summed_impl = custom_ops.SummedPotential(impls, params_sizes)
     assert set(id(p) for p in summed_impl.get_potentials()) == set(id(p) for p in impls)
+
+
+def test_summed_potential_invalid_parameters_size(harmonic_bond):
+    sp = potentials.SummedPotential([harmonic_bond], [harmonic_bond.params])
+
+    with pytest.raises(RuntimeError) as e:
+        execute_bound_impl(sp.bind(np.empty(0)).bound_impl(np.float32))
+    assert f"SummedPotential::execute_device(): expected {harmonic_bond.params.size} parameters, got 0" in str(e)
+
+    with pytest.raises(RuntimeError) as e:
+        execute_bound_impl(sp.bind(np.ones(harmonic_bond.params.size + 1)).bound_impl(np.float32))
+    assert (
+        f"SummedPotential::execute_device(): expected {harmonic_bond.params.size} parameters, got {harmonic_bond.params.size + 1}"
+        in str(e)
+    )
