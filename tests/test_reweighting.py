@@ -186,8 +186,7 @@ def test_mixture_reweighting_1d():
     for condition in u_mixes:
         u_mix = u_mixes[condition]
 
-        # TODO [sign convention]: change signature to accept u_mix rather than log_weights?
-        estimate_delta_f = jit(construct_mixture_reweighting_estimator(xs, -u_mix, vec_u_0_fxn, vec_u_1_fxn))
+        estimate_delta_f = jit(construct_mixture_reweighting_estimator(xs, u_mix, vec_u_0_fxn, vec_u_1_fxn))
 
         assert_estimator_accurate(estimate_delta_f, analytical_delta_f, ref_params, n_random_trials=10, atol=1e-2)
 
@@ -294,10 +293,10 @@ def test_mixture_reweighting_ahfe():
     onp.random.seed(2022)
 
     _samples_0, _samples_1, batched_u_0, batched_u_1, ref_params, ref_delta_f = make_ahfe_test_system()
-    fake_samples = _samples_1 + _samples_1
-    fake_log_weights = onp.random.randn(len(fake_samples))
+    fake_samples_n = _samples_1 + _samples_1
+    fake_u_ref_n = onp.random.randn(len(fake_samples_n))
 
-    estimate_delta_f = construct_mixture_reweighting_estimator(fake_samples, fake_log_weights, batched_u_0, batched_u_1)
+    estimate_delta_f = construct_mixture_reweighting_estimator(fake_samples_n, fake_u_ref_n, batched_u_0, batched_u_1)
 
     v, g = value_and_grad(estimate_delta_f)(ref_params)
 

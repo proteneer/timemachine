@@ -216,31 +216,32 @@ def construct_endpoint_reweighting_estimator(
 
 
 def construct_mixture_reweighting_estimator(
-    samples: Samples,
-    log_weights: Array,
+    samples_n: Samples,
+    u_ref_n: Array,
     batched_u_0_fxn: BatchedReducedPotentialFxn,
     batched_u_1_fxn: BatchedReducedPotentialFxn,
 ) -> Callable[[Params], float]:
     r"""assuming
-    * samples from a distribution p_ref(x) \propto(exp(-u_ref(x))
+    * samples x_n from a distribution p_ref(x) \propto(exp(-u_ref(x))
       that has good overlap with BOTH p_0(params)(x) and p_1(params)(x),
-    * evaluation (or estimates) of log_weight(x) = -u_ref(x)
+    * evaluation (or estimates) of u_ref_n(x_n) = -u_ref(x_n)
 
     construct an estimator for the free energy difference
     f_1(params) - f_0(params)
 
     Parameters
     ----------
-    samples: [N,] collection
-        x ~ p_ref(x) \propto exp(-u_ref(x))
-    log_weights: [N,] array
-        log_weights[n] = -u_ref(samples[n])
+    samples_n: [N,] collection
+        samples[n] ~ p_ref
+        p_ref(x) \propto exp(-u_ref(x))
+    u_ref_n: [N,] array
+        u_ref_n[n] = u_ref(samples[n])
     batched_u_0_fxn
         computes batch of endstate 0 energies at specified params
-        [u_0(x, params) for x in samples]
+        [u_0(x, params) for x in samples_n]
     batched_u_1_fxn
         computes batch of endstate 1 energies at specified params
-        [u_1(x, params) for x in samples]
+        [u_1(x, params) for x in samples_n]
 
     Returns
     -------
@@ -258,8 +259,8 @@ def construct_mixture_reweighting_estimator(
         (Allows the samples to come from sources other than an MBAR mixture, produces a function that can be
         differentiated w.r.t. params if batched_u_0_fxn, batched_u_0_fxn are differentiable w.r.t. params.)
     * Reweighting from a single reference state is used in works like ref [2] in the context of force field fitting
-    * Forming a single reference state as a mixture of several states (i.e. a constant denominator "log_weights")
-        and differentiating the numerator ("-u(samples, params)") wr.t. params
+    * Forming a single reference state as a mixture of several states (i.e. a constant denominator "u_ref_n")
+        and differentiating the numerator ("-u(samples_n, params)") w.r.t. params
         is used in works like ref [3] to differentiate free energy estimates w.r.t. params.
     * Non-requirement: u_ref does not have to be of the same functional form as u_0, u_1
 
@@ -273,19 +274,17 @@ def construct_mixture_reweighting_estimator(
     [3] Wieder et al. PyTorch implementation of differentiable reweighting in neutromeratio
         https://github.com/choderalab/neutromeratio/blob/2abf29f03e5175a988503b5d6ceeee8ce5bfd4ad/neutromeratio/parameter_gradients.py#L246-L267
     """
-    assert len(samples) == len(log_weights)
+    assert len(samples_n) == len(u_ref_n)
 
     def f_0(params):
         """estimate f(params, 0) - f(ref) by reweighting"""
-        log_numerator = -batched_u_0_fxn(samples, params)
-        log_importance_weights = log_numerator - log_weights
-        return one_sided_exp(-log_importance_weights)
+        u_0_n = batched_u_0_fxn(samples_n, params)
+        return one_sided_exp(u_0_n - u_ref_n)
 
     def f_1(params) -> float:
         """estimate f(params, 1) - f(ref) by reweighting"""
-        log_numerator = -batched_u_1_fxn(samples, params)
-        log_importance_weights = log_numerator - log_weights
-        return one_sided_exp(-log_importance_weights)
+        u_1_n = batched_u_1_fxn(samples_n, params)
+        return one_sided_exp(u_1_n - u_ref_n)
 
     def estimate_delta_f(params) -> float:
         r"""estimate f(params, 1) - f(params, 0)
