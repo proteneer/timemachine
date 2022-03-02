@@ -111,7 +111,7 @@ def test_endpoint_reweighting_1d():
 
     # more samples --> tighter absolute tolerance possible in test assertion
     n_samples = int(1e6)
-    atol = 1e-3
+    atol = 1e-2
 
     samples_0 = sample(0, ref_params, n_samples)
     samples_1 = sample(1, ref_params, n_samples)
