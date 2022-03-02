@@ -326,7 +326,7 @@ def test_mixture_reweighting_ahfe():
 
 
 def test_one_sided_exp():
-    """assert consistency with pymbar.EXP on random instances"""
+    """assert consistency with pymbar.EXP on random instances + instances containing +inf work"""
 
     onp.random.seed(2022)
     num_instances = 100
@@ -345,6 +345,10 @@ def test_one_sided_exp():
         tm_estimate = one_sided_exp(reduced_works)
 
         assert np.isclose(tm_estimate, pymbar_estimate)
+
+    # also check +inf
+    reduced_works = np.array([+np.inf, 0])
+    assert np.isclose(one_sided_exp(reduced_works), pymbar.EXP(reduced_works)[0])
 
 
 def test_interpret_as_mixture_potential():
