@@ -327,6 +327,19 @@ class NonbondedPairList(CustomOpWrapper):
     pass
 
 
+class NonbondedPairListNegated(CustomOpWrapper):
+    def unbound_impl(self, precision):
+        cls_name_base = "NonbondedPairList"
+        if precision == np.float64:
+            cls_name_base += "_f64_negated"
+        else:
+            cls_name_base += "_f32_negated"
+
+        custom_ctor = getattr(custom_ops, cls_name_base)
+
+        return custom_ctor(*self.args)
+
+
 class NonbondedPairListInterpolated(NonbondedPairList):
     def unbound_impl(self, precision):
         cls_name_base = "NonbondedPairList"
@@ -334,6 +347,19 @@ class NonbondedPairListInterpolated(NonbondedPairList):
             cls_name_base += "_f64_interpolated"
         else:
             cls_name_base += "_f32_interpolated"
+
+        custom_ctor = getattr(custom_ops, cls_name_base)
+
+        return custom_ctor(*self.args)
+
+
+class NonbondedPairListNegatedInterpolated(CustomOpWrapper):
+    def unbound_impl(self, precision):
+        cls_name_base = "NonbondedPairList"
+        if precision == np.float64:
+            cls_name_base += "_f64_negated_interpolated"
+        else:
+            cls_name_base += "_f32_negated_interpolated"
 
         custom_ctor = getattr(custom_ops, cls_name_base)
 

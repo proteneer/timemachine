@@ -827,8 +827,8 @@ void declare_nonbonded_interaction_group(py::module &m, const char *typestr) {
             py::arg("transform_lambda_w") = "lambda");
 }
 
-template <typename RealType, bool Interpolated> void declare_nonbonded_pair_list(py::module &m, const char *typestr) {
-    const bool Negated = false;
+template <typename RealType, bool Negated, bool Interpolated>
+void declare_nonbonded_pair_list(py::module &m, const char *typestr) {
     using Class = timemachine::NonbondedPairList<RealType, Negated, Interpolated>;
     std::string pyclass_name = std::string("NonbondedPairList_") + typestr;
     py::class_<Class, std::shared_ptr<Class>, timemachine::Potential>(
@@ -1019,11 +1019,17 @@ PYBIND11_MODULE(custom_ops, m) {
     declare_nonbonded_interaction_group<double, false>(m, "f64");
     declare_nonbonded_interaction_group<float, false>(m, "f32");
 
-    declare_nonbonded_pair_list<double, true>(m, "f64_interpolated");
-    declare_nonbonded_pair_list<float, true>(m, "f32_interpolated");
+    declare_nonbonded_pair_list<double, false, false>(m, "f64");
+    declare_nonbonded_pair_list<float, false, false>(m, "f32");
 
-    declare_nonbonded_pair_list<double, false>(m, "f64");
-    declare_nonbonded_pair_list<float, false>(m, "f32");
+    declare_nonbonded_pair_list<double, false, true>(m, "f64_interpolated");
+    declare_nonbonded_pair_list<float, false, true>(m, "f32_interpolated");
+
+    declare_nonbonded_pair_list<double, true, false>(m, "f64_negated");
+    declare_nonbonded_pair_list<float, true, false>(m, "f32_negated");
+
+    declare_nonbonded_pair_list<double, true, true>(m, "f64_negated_interpolated");
+    declare_nonbonded_pair_list<float, true, true>(m, "f32_negated_interpolated");
 
     declare_context(m);
 }
