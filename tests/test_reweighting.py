@@ -105,7 +105,8 @@ def test_endpoint_reweighting_1d():
 
     u_fxn, _, sample, reduced_free_energy = make_gaussian_testsystem()
 
-    ref_params = np.zeros(2)
+    # ref_params: (mean, log_sigma) @ lambda=1
+    ref_params = np.ones(2)  # (annealing Normal(0, 1) @ lambda=0 to Normal(1, exp(1)) @ lambda=1)
     ref_delta_f = reduced_free_energy(1.0, ref_params) - reduced_free_energy(0.0, ref_params)
 
     n_samples = int(1e6)
@@ -133,7 +134,8 @@ def test_mixture_reweighting_1d():
 
     u_fxn, normalized_u_fxn, sample, reduced_free_energy = make_gaussian_testsystem()
 
-    ref_params = np.ones(2)
+    # ref_params: (mean, log_sigma) @ lambda=1
+    ref_params = np.ones(2)  # (annealing Normal(0, 1) @ lambda=0 to Normal(1, exp(1)) @ lambda=1)
     n_windows = 10
     lambdas = np.linspace(0, 1, n_windows)
 
