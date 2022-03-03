@@ -21,7 +21,7 @@ grpc:
 
 .PHONY: verify
 verify:
-	pre-commit run --all-files --show-diff-on-failure
+	pre-commit run --all-files --show-diff-on-failure --color=always
 
 .PHONY: memcheck_tests
 memcheck_tests:
