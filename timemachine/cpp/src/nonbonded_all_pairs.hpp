@@ -31,8 +31,6 @@ typedef void (*k_nonbonded_fn)(
 template <typename RealType, bool Interpolated> class NonbondedAllPairs : public Potential {
 
 private:
-    std::array<k_nonbonded_fn, 16> kernel_ptrs_;
-
     const int N_;
     const int K_; // number of interacting atoms
 
@@ -81,6 +79,8 @@ private:
     bool disable_hilbert_;
 
     void hilbert_sort(const double *d_x, const double *d_box, cudaStream_t stream);
+
+    std::array<k_nonbonded_fn, 16> kernel_ptrs_;
 
     jitify::JitCache kernel_cache_;
     jitify::KernelInstantiation compute_w_coords_instance_;

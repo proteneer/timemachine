@@ -36,30 +36,33 @@ NonbondedAllPairs<RealType, Interpolated>::NonbondedAllPairs(
     // const std::string &transform_lambda_epsilon,
     // const std::string &transform_lambda_w
     )
-    : N_(lambda_offset_idxs.size()), K_(atom_idxs ? atom_idxs->size() : N_), cutoff_(cutoff), d_atom_idxs_(nullptr),
-      nblist_(lambda_offset_idxs.size()), beta_(beta), d_sort_storage_(nullptr), d_sort_storage_bytes_(0),
-      nblist_padding_(0.1), disable_hilbert_(false), kernel_ptrs_({// enumerate over every possible kernel combination
-                                                                   // U: Compute U
-                                                                   // X: Compute DU_DL
-                                                                   // L: Compute DU_DX
-                                                                   // P: Compute DU_DP
-                                                                   //                             U  X  L  P
-                                                                   &k_nonbonded_unified<RealType, 0, 0, 0, 0>,
-                                                                   &k_nonbonded_unified<RealType, 0, 0, 0, 1>,
-                                                                   &k_nonbonded_unified<RealType, 0, 0, 1, 0>,
-                                                                   &k_nonbonded_unified<RealType, 0, 0, 1, 1>,
-                                                                   &k_nonbonded_unified<RealType, 0, 1, 0, 0>,
-                                                                   &k_nonbonded_unified<RealType, 0, 1, 0, 1>,
-                                                                   &k_nonbonded_unified<RealType, 0, 1, 1, 0>,
-                                                                   &k_nonbonded_unified<RealType, 0, 1, 1, 1>,
-                                                                   &k_nonbonded_unified<RealType, 1, 0, 0, 0>,
-                                                                   &k_nonbonded_unified<RealType, 1, 0, 0, 1>,
-                                                                   &k_nonbonded_unified<RealType, 1, 0, 1, 0>,
-                                                                   &k_nonbonded_unified<RealType, 1, 0, 1, 1>,
-                                                                   &k_nonbonded_unified<RealType, 1, 1, 0, 0>,
-                                                                   &k_nonbonded_unified<RealType, 1, 1, 0, 1>,
-                                                                   &k_nonbonded_unified<RealType, 1, 1, 1, 0>,
-                                                                   &k_nonbonded_unified<RealType, 1, 1, 1, 1>}),
+    : N_(lambda_offset_idxs.size()), K_(atom_idxs ? atom_idxs->size() : N_), beta_(beta), cutoff_(cutoff),
+      d_atom_idxs_(nullptr), nblist_(lambda_offset_idxs.size()), nblist_padding_(0.1), d_sort_storage_(nullptr),
+      d_sort_storage_bytes_(0), disable_hilbert_(false),
+
+      kernel_ptrs_({// enumerate over every possible kernel combination
+                    // U: Compute U
+                    // X: Compute DU_DL
+                    // L: Compute DU_DX
+                    // P: Compute DU_DP
+                    //                             U  X  L  P
+                    &k_nonbonded_unified<RealType, 0, 0, 0, 0>,
+                    &k_nonbonded_unified<RealType, 0, 0, 0, 1>,
+                    &k_nonbonded_unified<RealType, 0, 0, 1, 0>,
+                    &k_nonbonded_unified<RealType, 0, 0, 1, 1>,
+                    &k_nonbonded_unified<RealType, 0, 1, 0, 0>,
+                    &k_nonbonded_unified<RealType, 0, 1, 0, 1>,
+                    &k_nonbonded_unified<RealType, 0, 1, 1, 0>,
+                    &k_nonbonded_unified<RealType, 0, 1, 1, 1>,
+                    &k_nonbonded_unified<RealType, 1, 0, 0, 0>,
+                    &k_nonbonded_unified<RealType, 1, 0, 0, 1>,
+                    &k_nonbonded_unified<RealType, 1, 0, 1, 0>,
+                    &k_nonbonded_unified<RealType, 1, 0, 1, 1>,
+                    &k_nonbonded_unified<RealType, 1, 1, 0, 0>,
+                    &k_nonbonded_unified<RealType, 1, 1, 0, 1>,
+                    &k_nonbonded_unified<RealType, 1, 1, 1, 0>,
+                    &k_nonbonded_unified<RealType, 1, 1, 1, 1>}),
+
       compute_w_coords_instance_(kernel_cache_.program(kernel_src.c_str()).kernel("k_compute_w_coords").instantiate()),
       compute_gather_interpolated_(
           kernel_cache_.program(kernel_src.c_str()).kernel("k_gather_interpolated").instantiate()),
