@@ -442,7 +442,7 @@ def jax_sample_from_log_weights(weighted_samples, log_weights, size, key):
     return weighted_samples[idxs]
 
 
-def get_solvent_phase_system(mol, ff, box_width=3.0):
+def get_solvent_phase_system(mol, ff, box_width=3.0, minimize_energy=True):
 
     # construct water box
     water_system, water_coords, water_box, water_topology = builders.build_water_system(box_width)
@@ -454,10 +454,11 @@ def get_solvent_phase_system(mol, ff, box_width=3.0):
     ff_params = ff.get_ordered_params()
     ubps, params, masses, coords = afe.prepare_host_edge(ff_params, water_system, water_coords)
 
-    # energy-minimize water coordinates
-    host_coords = coords[:num_water_atoms]
-    new_host_coords = minimizer.minimize_host_4d([mol], water_system, host_coords, ff, water_box)
-    coords[:num_water_atoms] = new_host_coords
+    if minimize_energy:
+        # energy-minimize water coordinates
+        host_coords = coords[:num_water_atoms]
+        new_host_coords = minimizer.minimize_host_4d([mol], water_system, host_coords, ff, water_box)
+        coords[:num_water_atoms] = new_host_coords
 
     return ubps, params, masses, coords, water_box
 
