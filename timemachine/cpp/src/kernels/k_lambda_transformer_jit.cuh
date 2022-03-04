@@ -58,7 +58,8 @@ void __global__ k_gather_interpolated(
     const double lambda,
     const int N,
     const unsigned int *__restrict__ idxs,
-    const double *__restrict__ d_p,
+    const double *__restrict__ d_p0, // [P] initial parameters
+    const double *__restrict__ d_p1, // [P] final parameters
     double *__restrict__ d_gathered_p,
     double *__restrict__ d_gathered_dp_dl) {
 
@@ -69,8 +70,6 @@ void __global__ k_gather_interpolated(
     if (idx >= N) {
         return;
     }
-
-    int size = N * stride;
 
     int source_idx = idx * stride + stride_idx;
     int target_idx = idxs[idx] * stride + stride_idx;
@@ -94,8 +93,8 @@ void __global__ k_gather_interpolated(
         f_lambda_grad = (transform_lambda_epsilon(lambda_surreal).imag) / step;
     }
 
-    d_gathered_p[source_idx] = (1 - f_lambda) * d_p[target_idx] + f_lambda * d_p[size + target_idx];
-    d_gathered_dp_dl[source_idx] = f_lambda_grad * (d_p[size + target_idx] - d_p[target_idx]);
+    d_gathered_p[source_idx] = (1 - f_lambda) * d_p0[target_idx] + f_lambda * d_p1[target_idx];
+    d_gathered_dp_dl[source_idx] = f_lambda_grad * (d_p1[target_idx] - d_p0[target_idx]);
 }
 
 void __global__ k_add_du_dp_interpolated(

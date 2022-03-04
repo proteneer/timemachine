@@ -371,7 +371,7 @@ void NonbondedInteractionGroup<RealType, Interpolated>::execute_device(
     // do parameter interpolation here
     if (Interpolated) {
         CUresult result = compute_gather_interpolated_.configure(dimGrid, tpb, 0, stream)
-                              .launch(lambda, N, d_perm_, d_p, d_sorted_p_, d_sorted_dp_dl_);
+                              .launch(lambda, N, d_perm_, d_p, d_p + N * 3, d_sorted_p_, d_sorted_dp_dl_);
         if (result != 0) {
             throw std::runtime_error("Driver call to k_gather_interpolated failed");
         }
