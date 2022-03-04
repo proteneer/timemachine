@@ -3,6 +3,7 @@
 #include <memory>
 #include <vector>
 
+#include "device_buffer.hpp"
 #include "potential.hpp"
 
 namespace timemachine {
@@ -16,11 +17,9 @@ struct BoundPotential {
         std::vector<int> shape,
         const double *h_p);
 
-    ~BoundPotential();
-
-    double *d_p;
-    std::shared_ptr<Potential> potential;
     std::vector<int> shape;
+    DeviceBuffer<double> d_p;
+    std::shared_ptr<Potential> potential;
 
     int size() const;
 
@@ -44,7 +43,7 @@ struct BoundPotential {
         unsigned long long *d_u,
         cudaStream_t stream) {
         this->potential->execute_device(
-            N, this->size(), d_x, this->d_p, d_box, lambda, d_du_dx, d_du_dp, d_du_dl, d_u, stream);
+            N, this->size(), d_x, this->d_p.data, d_box, lambda, d_du_dx, d_du_dp, d_du_dl, d_u, stream);
     }
 };
 
