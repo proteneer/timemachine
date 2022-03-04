@@ -31,8 +31,8 @@ typedef void (*k_nonbonded_fn)(
 template <typename RealType, bool Interpolated> class NonbondedAllPairs : public Potential {
 
 private:
-    const int N_;
-    const int K_; // number of interacting atoms
+    const int N_; // total number of atoms, i.e. first dimension of input coords, params
+    const int K_; // number of interacting atoms, K_ <= N_
 
     int *d_lambda_plane_idxs_;
     int *d_lambda_offset_idxs_;
@@ -54,15 +54,18 @@ private:
     double *d_w_; // 4D coordinates
     double *d_dw_dl_;
 
-    // "sorted" means
-    // - if hilbert sorting enabled, atoms are sorted according to the
-    //   hilbert curve index
-    // - otherwise, atom ordering is preserved with respect to input
+    // "gathered" arrays represent the subset of atoms specified by
+    // atom_idxs (if the latter is specified, otherwise all atoms).
+    //
+    // If hilbert sorting is enabled, "gathered" arrays are sorted by
+    // hilbert curve index; otherwise, the ordering is that specified
+    // by atom_idxs (or the input ordering, if atom_idxs is not
+    // specified)
     unsigned int *d_sorted_atom_idxs_; // [K_] indices of interacting atoms, sorted by hilbert curve index
-    double *d_gathered_x_;             // sorted coordinates
-    double *d_gathered_w_;             // sorted 4D coordinates
+    double *d_gathered_x_;             // sorted coordinates for subset of atoms
+    double *d_gathered_w_;             // sorted 4D coordinates for subset of atoms
     double *d_gathered_dw_dl_;
-    double *d_gathered_p_; // sorted parameters
+    double *d_gathered_p_; // sorted parameters for subset of atoms
     double *d_gathered_dp_dl_;
     unsigned long long *d_gathered_du_dx_;
     unsigned long long *d_gathered_du_dp_;
