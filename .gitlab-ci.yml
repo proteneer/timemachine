@@ -40,7 +40,6 @@ lint:
   rules:
     - if: $CI_EXTERNAL_PULL_REQUEST_IID
   script:
-    - CMAKE_BUILD_PARALLEL_LEVEL=$(nproc) pip install -e .[dev]
     - make verify
 
 memory-tests:
