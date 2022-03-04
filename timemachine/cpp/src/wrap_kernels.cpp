@@ -8,6 +8,7 @@
 #include "bound_potential.hpp"
 #include "centroid_restraint.hpp"
 #include "context.hpp"
+#include "fanout_summed_potential.hpp"
 #include "fixed_point.hpp"
 #include "harmonic_angle.hpp"
 #include "harmonic_bond.hpp"
@@ -922,6 +923,20 @@ void declare_summed_potential(py::module &m) {
         .def("get_potentials", &timemachine::SummedPotential::get_potentials);
 }
 
+void declare_fanout_summed_potential(py::module &m) {
+
+    using Class = timemachine::FanoutSummedPotential;
+    std::string pyclass_name = std::string("FanoutSummedPotential");
+    py::class_<Class, std::shared_ptr<Class>, timemachine::Potential>(
+        m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
+        .def(
+            py::init([](std::vector<std::shared_ptr<timemachine::Potential>> potentials) {
+                return new timemachine::FanoutSummedPotential(potentials);
+            }),
+            py::arg("potentials"))
+        .def("get_potentials", &timemachine::FanoutSummedPotential::get_potentials);
+}
+
 const py::array_t<double, py::array::c_style>
 py_rmsd_align(const py::array_t<double, py::array::c_style> &x1, const py::array_t<double, py::array::c_style> &x2) {
 
@@ -969,6 +984,7 @@ PYBIND11_MODULE(custom_ops, m) {
     declare_potential(m);
     declare_bound_potential(m);
     declare_summed_potential(m);
+    declare_fanout_summed_potential(m);
 
     declare_neighborlist<double>(m, "f64");
     declare_neighborlist<float>(m, "f32");
