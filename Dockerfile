@@ -74,6 +74,11 @@ RUN git clone https://github.com/openmm/openmm.git --branch "${OPENMM_VERSION}" 
 COPY requirements.txt /code/timemachine/
 RUN pip install --no-cache-dir -r timemachine/requirements.txt
 
+# Install pre-commit and cache hooks
+RUN pip install --no-cache-dir pre-commit
+COPY .pre-commit-config.yaml /code/timemachine/
+RUN cd /code/timemachine && pre-commit install-hooks
+
 FROM tm_base_env AS timemachine
 ARG CUDA_ARCH=75
 ENV CMAKE_ARGS -DCUDA_ARCH=${CUDA_ARCH}
