@@ -73,7 +73,7 @@ RUN git clone https://github.com/openmm/openmm.git --branch "${OPENMM_VERSION}" 
 # Install pre-commit and cache hooks
 RUN pip install --no-cache-dir pre-commit
 COPY .pre-commit-config.yaml /code/timemachine/
-RUN cd /code/timemachine && git init . && pre-commit install-hooks
+RUN cd /code/timemachine && git init --bare . && pre-commit install-hooks
 
 # Copy the pip requirements to cache when possible
 COPY requirements.txt /code/timemachine/
