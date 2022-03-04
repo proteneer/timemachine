@@ -74,6 +74,12 @@ void HarmonicBond<RealType>::execute_device(
     unsigned long long *d_u,
     cudaStream_t stream) {
 
+    if (P != 2 * B_) {
+        throw std::runtime_error(
+            "HarmonicBond::execute_device(): expected P == 2*B, got P=" + std::to_string(P) +
+            ", 2*B=" + std::to_string(2 * B_));
+    }
+
     if (B_ > 0) {
         int tpb = 32;
         int blocks = (B_ + tpb - 1) / tpb;
