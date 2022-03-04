@@ -118,7 +118,7 @@ void NonbondedPairList<RealType, Negated, Interpolated>::execute_device(
 
     if (Interpolated) {
         CUresult result = compute_gather_interpolated_.configure(dimGrid, tpb, 0, stream)
-                              .launch(lambda, N, d_perm_, d_p, d_p_interp_, d_dp_dl_);
+                              .launch(lambda, N, d_perm_, d_p, d_p + N * 3, d_p_interp_, d_dp_dl_);
         if (result != 0) {
             throw std::runtime_error("Driver call to k_gather_interpolated failed");
         }
