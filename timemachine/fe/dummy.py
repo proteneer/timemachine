@@ -5,18 +5,29 @@ from collections import defaultdict
 import networkx as nx
 import numpy as np
 
-from timemachine.graph_utils import convert_to_nx
+
+def convert_bond_list_to_nx(bond_list):
+    """
+    Convert an ROMol into a networkx graph.
+    """
+    g = nx.Graph()
+    for i, j in bond_list:
+        assert i != j  # do not allow self-edges
+        g.add_edge(i, j)
+
+    return g
 
 
-def _add_successors(mol, core, groups):
+def _add_successors(bond_idxs, core, groups):
+
+    g = convert_bond_list_to_nx(bond_idxs)
     # (ytz): internal utility used for bfs
     next_groups = []
     for group in groups:
         # grab the last node
         last_node = group[-1]
-        for nbr in mol.GetAtomWithIdx(last_node).GetNeighbors():
+        for nbr in g.neighbors(last_node):
             new_group = copy.deepcopy(group)
-            nbr = nbr.GetIdx()
             # ensure is core_atom and not already visited
             if nbr in core and nbr not in new_group:
                 new_group.append(nbr)
@@ -25,7 +36,7 @@ def _add_successors(mol, core, groups):
     return next_groups
 
 
-def identify_anchor_groups(mol, core, root_anchor):
+def identify_anchor_groups(bond_idxs, core, root_anchor):
     """
     Generate all choices for valid anchor groups. An anchor group
     is an ordered sequence of core atoms (root_anchor,b,c) that are connected by bonds.
@@ -33,8 +44,8 @@ def identify_anchor_groups(mol, core, root_anchor):
 
     Parameters
     ----------
-    mol: Chem.Mol
-        rdkit molecule
+    bond_idxs: list of 2-tuples of ints
+        list of (i,j) bonds denoting the atoms in the bond
 
     core: list or set or iterable of ints
         core atoms
@@ -55,8 +66,8 @@ def identify_anchor_groups(mol, core, root_anchor):
 
     # We perform a bfs of depth 3 starting from the root_anchor.
     layer_1_groups = [[root_anchor]]
-    layer_2_groups = _add_successors(mol, core, layer_1_groups)
-    layer_3_groups = _add_successors(mol, core, layer_2_groups)
+    layer_2_groups = _add_successors(bond_idxs, core, layer_1_groups)
+    layer_3_groups = _add_successors(bond_idxs, core, layer_2_groups)
 
     # sanity assertions to make sure we don't have duplicate idxs
     for g in layer_2_groups:
@@ -68,7 +79,7 @@ def identify_anchor_groups(mol, core, root_anchor):
     return layer_1_groups, layer_2_groups, layer_3_groups
 
 
-def identify_root_anchors(mol, core, dummy_atom):
+def identify_root_anchors(bond_idxs, core, dummy_atom):
     """
     Identify the root anchor(s) for a given atom. A root anchor is defined as the starting atom
     in an anchor group (comprised of up to 3 anchor atoms). If this returns multiple root anchors
@@ -76,8 +87,8 @@ def identify_root_anchors(mol, core, dummy_atom):
 
     Parameters
     ----------
-    mol: Chem.Mol
-        rdkit molecule
+    bond_idxs: list of 2-tuples of ints
+        list of (i,j) bonds denoting the atoms in the bond
 
     core: list or set or iterable
         core atoms
@@ -91,19 +102,18 @@ def identify_root_anchors(mol, core, dummy_atom):
         List of root anchors that the dummy atom is connected to.
 
     """
-
     assert len(set(core)) == len(core)
 
     core = set(core)
-
     assert dummy_atom not in core
 
-    # first convert to a dense graph
-    N = mol.GetNumAtoms()
+    # first convert to a dense graph, and assume that bond_idxs start from zero
+    flat_idxs = np.array(bond_idxs).flatten()
+    N = np.amax(flat_idxs) + 1
+    assert N == len(set(flat_idxs))
     dense_graph = np.zeros((N, N), dtype=np.int32)
 
-    for bond in mol.GetBonds():
-        i, j = bond.GetBeginAtomIdx(), bond.GetEndAtomIdx()
+    for i, j in bond_idxs:
         dense_graph[i, j] = 1
         dense_graph[j, i] = 1
 
@@ -116,25 +126,27 @@ def identify_root_anchors(mol, core, dummy_atom):
                 nbs.append(col_idx)
         sparse_graph.append(nbs)
 
-    def dfs(i, visited):
+    # conditional depth first search that terminates when
+    # we encounter a core atom.
+    def conditional_dfs(i, visited):
         if i in visited:
             return
         else:
             visited.add(i)
             if i not in core:
                 for nb in sparse_graph[i]:
-                    dfs(nb, visited)
+                    conditional_dfs(nb, visited)
 
     visited = set()
 
-    dfs(dummy_atom, visited)
+    conditional_dfs(dummy_atom, visited)
 
     anchors = [a_idx for a_idx in visited if a_idx in core]
 
     return anchors
 
 
-def enumerate_anchor_groups(mol, core, dummy_group):
+def enumerate_anchor_groups(bond_idxs, core, dummy_group):
     """
     An anchor group is an ordered set of only core atoms that are allowed to interact with
     atoms in a dummy group in a way that allows the partition function to be separated.
@@ -152,8 +164,8 @@ def enumerate_anchor_groups(mol, core, dummy_group):
 
     Parameters
     ----------
-    mol: Chem.Mol
-        Molecule of interest
+    bond_idxs: list of 2-tuples of ints
+        list of (i,j) bonds denoting the atoms in the bond
 
     core: list of int
         core atoms
@@ -171,7 +183,7 @@ def enumerate_anchor_groups(mol, core, dummy_group):
     anchors = set()
 
     for dummy_atom in dummy_group:
-        for anchor_atom in identify_root_anchors(mol, core, dummy_atom):
+        for anchor_atom in identify_root_anchors(bond_idxs, core, dummy_atom):
             anchors.add(anchor_atom)
 
     l1s = []
@@ -179,7 +191,7 @@ def enumerate_anchor_groups(mol, core, dummy_group):
     l3s = []
 
     for anchor in anchors:
-        l1, l2, l3 = identify_anchor_groups(mol, core, anchor)
+        l1, l2, l3 = identify_anchor_groups(bond_idxs, core, anchor)
         l1s.extend(l1)
         l2s.extend(l2)
         l3s.extend(l3)
@@ -187,7 +199,7 @@ def enumerate_anchor_groups(mol, core, dummy_group):
     return l1s, l2s, l3s
 
 
-def identify_dummy_groups(mol, core):
+def identify_dummy_groups(bond_idxs, core):
     """
     A dummy group is a set of dummy atoms that are inserted or deleted in alchemical
     free energy calculations. The bonded terms that involve dummy atoms need to be
@@ -214,15 +226,22 @@ def identify_dummy_groups(mol, core):
     assert_set_equality(dg, [{0}, {4, 5}])
     ```
 
+    Parameters
+    ----------
+    bond_idxs: list of 2-tuples of ints
+        list of (i,j) bonds denoting the atoms in the bond
+
+    core: list of int
+        atoms in the core
+
     Returns
     -------
     List of set of ints:
         eg: [{3,4}, {7,8,9}]
 
     """
-
-    g = convert_to_nx(mol)
-    N = mol.GetNumAtoms()
+    g = convert_bond_list_to_nx(bond_idxs)
+    N = g.number_of_nodes()
     induced_g = nx.Graph()
 
     # add nodes and edges into the induced graph.
@@ -257,7 +276,7 @@ def identify_dummy_groups(mol, core):
         dg = list(dg)
         for dummy in dg:
             # identify membership of the dummy
-            anchors = identify_root_anchors(mol, core, dummy)
+            anchors = identify_root_anchors(bond_idxs, core, dummy)
             # get distance to anchor
             dists = []
             for a in anchors:
@@ -349,14 +368,14 @@ def enumerate_dummy_ixns(dg, ag):
     return make_bond_set(allowed_ixns)
 
 
-def find_ags_for_dg(mol, core, dg):
+def find_ags_for_dg(bond_idxs, core, dg):
     """
     Find all possible anchor groups for a given dummy group.
 
     Parameters
     ----------
-    mol: Chem.Mol
-        input molecule
+    bond_idxs: list of 2-tuples of ints
+        list of (i,j) bonds denoting the atoms in the bond
 
     core: list of int
         core indices
@@ -372,12 +391,12 @@ def find_ags_for_dg(mol, core, dg):
     """
     anchors = []
     for dummy_atom in dg:
-        anchors.extend(identify_root_anchors(mol, core, dummy_atom))
+        anchors.extend(identify_root_anchors(bond_idxs, core, dummy_atom))
     anchors = set(anchors)
 
     anchor_groups = []
     for anchor in anchors:
-        ag0, ag1, ag2 = identify_anchor_groups(mol, core, anchor)
+        ag0, ag1, ag2 = identify_anchor_groups(bond_idxs, core, anchor)
         anchor_groups.extend(ag0)
         anchor_groups.extend(ag1)
         anchor_groups.extend(ag2)
@@ -385,7 +404,7 @@ def find_ags_for_dg(mol, core, dg):
     return anchor_groups
 
 
-def ordered_tuple(ixn):
+def canonicalize_bond(ixn):
     if ixn[0] > ixn[-1]:
         return tuple(ixn[::-1])
     else:
@@ -401,38 +420,37 @@ def make_bond_set(old_set):
     """
     new_set = set()
     for idxs in old_set:
-        new_set.add(ordered_tuple(idxs))
+        new_set.add(canonicalize_bond(idxs))
     return new_set
 
 
-def flag_bonds(mol, core, bond_idxs):
+def flag_factorizable_bonds(core, valence_idxs):
     """
     Flags bonds based on minimizing the number of terms we have to
     turn off.
 
     Parameters
     ----------
-    mol: Chem.Mol
-        rdkit molecule
-
     core: list of int
         idxs of core atoms
 
-    bond_idxs: list of list of int
+    valence_idxs: list of list of int
         list of 2-tuple, 3-tuple, 4-tuple
 
     Returns
     -------
-    boolean flags of len(bond_idxs)
+    boolean flags of len(valence_idxs)
         1: keep, 0: remove
 
     """
 
+    # REDUNDANT - since valence_idxs already encode "mol"
+
     # 1. process core bonds
-    keep_flags = np.zeros(len(bond_idxs), dtype=np.int32)
+    keep_flags = np.zeros(len(valence_idxs), dtype=np.int32)
 
     dummy_ixns = set()
-    for b_idx, atom_idxs in enumerate(bond_idxs):
+    for b_idx, atom_idxs in enumerate(valence_idxs):
         if np.all([i in core for i in atom_idxs]):
             keep_flags[b_idx] = 1
         else:
@@ -441,45 +459,60 @@ def flag_bonds(mol, core, bond_idxs):
     dummy_ixns = make_bond_set(dummy_ixns)
 
     # 2. process dummy bonds
-    dgs, ags, ag_ixns = generate_optimal_dg_ag_pairs(mol, core, bond_idxs)
+    dgs, ags, ag_ixns = generate_optimal_dg_ag_pairs(core, valence_idxs)
 
     allowed_ixns = set()
 
     for ixns in ag_ixns:
         allowed_ixns |= ixns
 
-    for b_idx, atom_idxs in enumerate(bond_idxs):
-        if tuple(ordered_tuple(atom_idxs)) in allowed_ixns:
+    for b_idx, atom_idxs in enumerate(valence_idxs):
+        if tuple(canonicalize_bond(atom_idxs)) in allowed_ixns:
             keep_flags[b_idx] = 1
 
     return keep_flags
 
 
-def generate_dg_ag_pairs(mol, core, bond_idxs):
+class MissingBondError(Exception):
+    def __init__(self, bad_atom):
+        message = "atom " + str(bad_atom) + " is disconnected."
+        super().__init__(message)
+
+
+def generate_dg_ag_ixns(core, valence_idxs):
     """
-    Generate all pairings of dummy group and anchor group atoms
-    such that bond_idxs is maximized.
+    Generate all pairings of dummy group and anchor group atoms.
 
     Parameters
     ----------
-    mol: Chem.Mol
-        rdkit molecule
-
     core: list of int
         idxs of core atoms
 
-    bond_idxs: list of list of int
-        list of 2-tuple, 3-tuple, 4-tuple used to compare
+    valence_idxs: list of list of int
+        list of 2-tuple, 3-tuple, 4-tuple used to generate
 
     Returns
     -------
         list of (dummy_group, anchor_group, anchor_group_ixns) triples
 
     """
+    # sanity check that 13, 14 terms don't have extra interactions
+    bond_atoms = set()
+    for ij in valence_idxs:
+        if len(ij) == 2:
+            i, j = ij
+            bond_atoms.add(i)
+            bond_atoms.add(j)
+
+    for atom_idxs in valence_idxs:
+        for i in atom_idxs:
+            if i not in bond_atoms:
+                raise MissingBondError(i)
+
     # 1. process core bonds
     ff_core_ixns = set()  # ff interactions that involve *only* core atoms
     ff_dummy_ixns = set()  # ff interactions that involve *any* dummy atom
-    for atom_idxs in bond_idxs:
+    for atom_idxs in valence_idxs:
         if np.all([i in core for i in atom_idxs]):
             ff_core_ixns.add(tuple(atom_idxs))
         else:
@@ -489,13 +522,17 @@ def generate_dg_ag_pairs(mol, core, bond_idxs):
     ff_dummy_ixns = make_bond_set(ff_dummy_ixns)
 
     # 2. process dummy bonds
-    dgs = identify_dummy_groups(mol, core)
+    bond_12_idxs = [x for x in valence_idxs if len(x) == 2]
+    for ij in bond_12_idxs:
+        assert len(ij) == 2
+
+    dgs = identify_dummy_groups(bond_12_idxs, core)
 
     all_agcs = []
     all_agis = []
 
     for dg in dgs:
-        anchor_group_candidates = find_ags_for_dg(mol, core, dg)
+        anchor_group_candidates = find_ags_for_dg(bond_12_idxs, core, dg)
         anchor_group_ixns = []
         # enumerate over all interactions
         for ag in anchor_group_candidates:
@@ -514,17 +551,17 @@ def generate_dg_ag_pairs(mol, core, bond_idxs):
             for idxs in mutual_bonds:
                 if len(idxs) == 3:
                     i, j, k = idxs
-                    if (ordered_tuple((i, j)) in bonds_12) and (ordered_tuple((j, k)) in bonds_12):
+                    if (canonicalize_bond((i, j)) in bonds_12) and (canonicalize_bond((j, k)) in bonds_12):
                         bonds_13.add(idxs)
             for idxs in mutual_bonds:
                 if len(idxs) == 4:
                     i, j, k, l = idxs
                     if (
-                        (ordered_tuple((i, j)) in bonds_12)
-                        and (ordered_tuple((j, k)) in bonds_12)
-                        and (ordered_tuple((k, l)) in bonds_12)
-                        and (ordered_tuple((i, j, k)) in bonds_13)
-                        and (ordered_tuple((j, k, l)) in bonds_13)
+                        (canonicalize_bond((i, j)) in bonds_12)
+                        and (canonicalize_bond((j, k)) in bonds_12)
+                        and (canonicalize_bond((k, l)) in bonds_12)
+                        and (canonicalize_bond((i, j, k)) in bonds_13)
+                        and (canonicalize_bond((j, k, l)) in bonds_13)
                     ):
                         bonds_14.add(idxs)
 
@@ -537,7 +574,7 @@ def generate_dg_ag_pairs(mol, core, bond_idxs):
     return dgs, all_agcs, all_agis
 
 
-def generate_optimal_dg_ag_pairs(mol, core, bond_idxs):
+def generate_optimal_dg_ag_pairs(core, valence_idxs):
     """
     Generate optimal (dummy group, anchor group) pairs given a list of bonded terms.
 
@@ -549,12 +586,10 @@ def generate_optimal_dg_ag_pairs(mol, core, bond_idxs):
     ----------
     mol: Chem.Mol
         Input molecule
-
-    core: list of int
         Indices for the core atom
 
-    bond_idxs: list of list of ints
-        Input bond_idxs
+    valence_idxs: list of list of int
+        list of 2-tuple, 3-tuple, 4-tuple used to generate
 
     Returns
     -------
@@ -562,7 +597,7 @@ def generate_optimal_dg_ag_pairs(mol, core, bond_idxs):
         Best anchor group for each dummy group and its interactions are returned
 
     """
-    dgs, all_agcs, all_agis = generate_dg_ag_pairs(mol, core, bond_idxs)
+    dgs, all_agcs, all_agis = generate_dg_ag_ixns(core, valence_idxs)
 
     picked_agcs = []
     picked_agis = []
@@ -581,3 +616,144 @@ def generate_optimal_dg_ag_pairs(mol, core, bond_idxs):
         picked_agis.append(agis[best_idx])
 
     return dgs, picked_agcs, picked_agis
+
+
+def flag_stable_dummy_ixns(
+    core,
+    bond_idxs,
+    bond_params,
+    angle_idxs,
+    angle_params,
+    torsion_idxs,
+    torsion_params,
+    min_bond_k=10.0,
+    min_bond_l=0.02,
+    min_angle_k=10.0,
+    min_angle_offset=0.05,
+):
+    """
+    Prune extraneous dummy-core ixns that may be numerically unstable. Sources of numerical instability typically
+    are due to either missing interactions, or incompatible parameters. This does not prune interactions in the
+    dummy-dummy regions since they are required for correctness. While core-core interactions can be pruned, we
+    choose to leave them untouched for now.
+
+    0) All bond terms are untouched.
+    1) All angles i-j-k must have bond terms i-j and j-k present, and with k > 10 and b > 0.2 angstrom on said bonds
+    2) All torsions i-j-k-l must have angle terms i-j-k and j-k-l present, and with k > 10 and
+        abs(angle - pi) > 0.05 rad and abs(angle - 0) > 0.05. In addition, bonded terms i-j, j-k,
+        and k-l must be present, and with k > 10 and b > 0.2 angstrom
+
+    Note that this does not *strictly* guarantee that the system is stable. For example, ring systems do not have
+    angles/bonds set to their equilibrium values:
+
+                D
+               /
+        0--1--2
+        |  |  |
+        3--4--5
+
+    The torsion term 0-1-2-D is numerically unstable, even though the angles and bonds are well-defined. Note that the
+    0-1-2 angle term is not defined in the forcefield as having an equilibrium angle of zero. One additional sanity check
+    that we can probably add later on is to also check the *initial* geometry's bond/angle length parameters.
+
+    Conversely, an interaction may still be stable even if certain sub-component interactions are missing. For example,
+    improper torsions are missing bonds and angles in the trefoil definitions, but the geometry is well defined nevertheless.
+
+    Parameters
+    ----------
+    core: list of int
+        core indices
+
+    bond_idxs: list of 2-tuples
+        (i,j) tuples of the bonded terms
+
+    bond_params: list of 2-tuples
+        (k, b) force constant, bond length
+
+    angle_idxs: list of 3-tuples
+        (i,j,k) tuples where the angle is defined between i-j-k
+
+    angle_params: list of 2-tuples
+        (k, a) force constant, angle in radians
+
+    torsion_idxs: list of 4-tuples
+        (i,j,k,l) tuples where the torsion is defined over i-j-k-l
+
+    torsion_idxs: list of 3-tuples
+        (k, p, n) force constant, period, phase
+
+    Returns
+    -------
+    keep_angle_flags, keep_torsion_flags
+        boolean flags indicating which angles and torsions we keep
+
+    """
+
+    assert len(bond_idxs) == len(bond_params)
+    assert len(angle_idxs) == len(angle_params)
+    assert len(torsion_idxs) == len(torsion_params)
+
+    bond_kv = {}
+    for ij, params in zip(bond_idxs, bond_params):
+        bond_kv[canonicalize_bond(ij)] = params
+
+    keep_angle_flags = []
+
+    def ixn_is_all_core_or_all_dummy(atom_idxs):
+        all_core = all(a in core for a in atom_idxs)
+        all_dummy = all(a not in core for a in atom_idxs)
+
+        return all_core or all_dummy
+
+    def bond_is_okay(kb):
+        k, b = kb
+        return (k > min_bond_k) and (b > min_bond_l)
+
+    def angle_is_okay(ka):
+        k, a = ka
+        return (k > min_angle_k) and (np.abs(a - np.pi) > min_angle_offset) and (np.abs(a - 0.0) > min_angle_offset)
+
+    for (i, j, k), params in zip(angle_idxs, angle_params):
+        b0 = canonicalize_bond((i, j))
+        b1 = canonicalize_bond((j, k))
+        if (b0 in bond_kv) and (b1 in bond_kv):
+            bonds_okay = np.all([bond_is_okay(kb) for kb in [bond_kv[b0], bond_kv[b1]]])
+        else:
+            # missing bonds
+            bonds_okay = False
+
+        if ixn_is_all_core_or_all_dummy((i, j, k)) or bonds_okay:
+            keep_angle_flags.append(1)
+        else:
+            keep_angle_flags.append(0)
+
+    angle_kv = {}
+    for idx, (ijk, params) in enumerate(zip(angle_idxs, angle_params)):
+        if keep_angle_flags[idx]:
+            angle_kv[canonicalize_bond(ijk)] = params
+
+    keep_torsion_flags = []
+    for (i, j, k, l), params in zip(torsion_idxs, torsion_params):
+        b0 = canonicalize_bond((i, j))
+        b1 = canonicalize_bond((j, k))
+        b2 = canonicalize_bond((k, l))
+
+        if (b0 in bond_kv) and (b1 in bond_kv) and (b2 in bond_kv):
+            bonds_okay = np.all([bond_is_okay(kb) for kb in [bond_kv[b0], bond_kv[b1], bond_kv[b2]]])
+        else:
+            bonds_okay = False
+
+        a0 = canonicalize_bond((i, j, k))
+        a1 = canonicalize_bond((j, k, l))
+
+        if (a0 in angle_kv) and (a1 in angle_kv):
+            angles_okay = np.all([angle_is_okay(ka) for ka in [angle_kv[a0], angle_kv[a1]]])
+        else:
+            angles_okay = False
+
+        if ixn_is_all_core_or_all_dummy((i, j, k, l)) or (bonds_okay and angles_okay):
+            keep_torsion_flags.append(1)
+        else:
+            keep_torsion_flags.append(0)
+
+    return keep_angle_flags, keep_torsion_flags

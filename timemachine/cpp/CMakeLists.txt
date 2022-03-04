@@ -41,7 +41,6 @@ pybind11_add_module(${LIBRARY_NAME} SHARED NO_EXTRAS
   src/centroid_restraint.cu
   src/gpu_utils.cu
   src/vendored/hilbert.cpp
-  src/nonbonded.cu
   src/nonbonded_all_pairs.cu
   src/nonbonded_pair_list.cu
   src/nonbonded_interaction_group.cu
@@ -54,6 +53,7 @@ pybind11_add_module(${LIBRARY_NAME} SHARED NO_EXTRAS
   src/barostat.cu
   src/rmsd_align.cpp
   src/summed_potential.cu
+  src/fanout_summed_potential.cu
   src/device_buffer.cu
   src/kernels/k_nonbonded.cu
   src/kernels/nonbonded_common.cu

@@ -1,11 +1,14 @@
 #include "summed_potential.hpp"
 #include <memory>
+#include <numeric>
 #include <stdexcept>
 
 namespace timemachine {
 
-SummedPotential::SummedPotential(std::vector<std::shared_ptr<Potential>> potentials, std::vector<int> params_sizes)
-    : potentials_(potentials), params_sizes_(params_sizes) {
+SummedPotential::SummedPotential(
+    const std::vector<std::shared_ptr<Potential>> potentials, const std::vector<int> params_sizes)
+    : potentials_(potentials), params_sizes_(params_sizes),
+      P_(std::accumulate(params_sizes.begin(), params_sizes.end(), 0)) {
     if (potentials_.size() != params_sizes_.size()) {
         throw std::runtime_error("number of potentials != number of parameter sizes");
     }
@@ -26,9 +29,15 @@ void SummedPotential::execute_device(
     unsigned long long *d_u,
     cudaStream_t stream) {
 
+    if (P != P_) {
+        throw std::runtime_error(
+            "SummedPotential::execute_device(): expected " + std::to_string(P_) + " parameters, got " +
+            std::to_string(P));
+    }
+
     int offset = 0;
 
-    for (int i = 0; i < potentials_.size(); i++) {
+    for (auto i = 0; i < potentials_.size(); i++) {
 
         potentials_[i]->execute_device(
             N,
@@ -52,7 +61,7 @@ void SummedPotential::du_dp_fixed_to_float(
 
     int offset = 0;
 
-    for (int i = 0; i < potentials_.size(); i++) {
+    for (auto i = 0; i < potentials_.size(); i++) {
         potentials_[i]->du_dp_fixed_to_float(N, params_sizes_[i], du_dp + offset, du_dp_float + offset);
         offset += params_sizes_[i];
     }

@@ -2,7 +2,7 @@ import numpy as np
 
 from timemachine.ff.handlers.serialize import SerializableMixIn
 from timemachine.ff.handlers.suffix import _SUFFIX
-from timemachine.ff.handlers.utils import match_smirks, sort_tuple
+from timemachine.ff.handlers.utils import canonicalize_bond, match_smirks
 
 
 def generate_vd_idxs(mol, smirks):
@@ -17,7 +17,7 @@ def generate_vd_idxs(mol, smirks):
     for p_idx, patt in enumerate(smirks):
         matches = match_smirks(mol, patt)
         for m in matches:
-            sorted_m = sort_tuple(m)
+            sorted_m = canonicalize_bond(m)
             vd[sorted_m] = p_idx
 
     bond_idxs = np.array(list(vd.keys()), dtype=np.int32)
@@ -212,7 +212,7 @@ class ImproperTorsionHandler(SerializableMixIn):
             center = atom_idxs[1]
             others = [atom_idxs[0], atom_idxs[2], atom_idxs[3]]
             for p in [(others[i], others[j], others[k]) for (i, j, k) in [(0, 1, 2), (1, 2, 0), (2, 0, 1)]]:
-                improper_idxs.append((center, p[0], p[1], p[2]))
+                improper_idxs.append(canonicalize_bond((center, p[0], p[1], p[2])))
                 param_idxs.append(p_idx)
 
         param_idxs = np.array(param_idxs)
