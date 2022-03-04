@@ -66,8 +66,8 @@ void Neighborlist<RealType>::compute_block_bounds_host(
     double *h_bb_ctrs,
     double *h_bb_exts) {
 
-    double *d_coords = gpuErrchkCudaMallocAndCopy(h_coords, NC * 3 * sizeof(double));
-    double *d_box = gpuErrchkCudaMallocAndCopy(h_box, 3 * 3 * sizeof(double));
+    double *d_coords = gpuErrchkCudaMallocAndCopy(h_coords, NC * 3);
+    double *d_box = gpuErrchkCudaMallocAndCopy(h_box, 3 * 3);
 
     this->compute_block_bounds_device(NC, 0, D, d_coords, nullptr, d_box, static_cast<cudaStream_t>(0));
     gpuErrchk(cudaDeviceSynchronize());
@@ -101,12 +101,12 @@ std::vector<std::vector<int>> Neighborlist<RealType>::get_nblist_host(
     } else if (h_row_coords == nullptr && NR != 0) {
         throw std::runtime_error("No row coords provided, but NR != 0");
     }
-    double *d_col_coords = gpuErrchkCudaMallocAndCopy(h_column_coords, NC * 3 * sizeof(double));
+    double *d_col_coords = gpuErrchkCudaMallocAndCopy(h_column_coords, NC * 3);
 
     double *d_row_coords =
-        this->compute_full_matrix() ? gpuErrchkCudaMallocAndCopy(h_row_coords, NR * 3 * sizeof(double)) : nullptr;
+        this->compute_full_matrix() ? gpuErrchkCudaMallocAndCopy(h_row_coords, NR * 3) : nullptr;
 
-    double *d_box = gpuErrchkCudaMallocAndCopy(h_box, 3 * 3 * sizeof(double));
+    double *d_box = gpuErrchkCudaMallocAndCopy(h_box, 3 * 3);
 
     this->build_nblist_device(NC, NR, d_col_coords, d_row_coords, d_box, cutoff, static_cast<cudaStream_t>(0));
 
