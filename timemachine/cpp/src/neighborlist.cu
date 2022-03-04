@@ -103,8 +103,7 @@ std::vector<std::vector<int>> Neighborlist<RealType>::get_nblist_host(
     }
     double *d_col_coords = gpuErrchkCudaMallocAndCopy(h_column_coords, NC * 3);
 
-    double *d_row_coords =
-        this->compute_full_matrix() ? gpuErrchkCudaMallocAndCopy(h_row_coords, NR * 3) : nullptr;
+    double *d_row_coords = this->compute_full_matrix() ? gpuErrchkCudaMallocAndCopy(h_row_coords, NR * 3) : nullptr;
 
     double *d_box = gpuErrchkCudaMallocAndCopy(h_box, 3 * 3);
 
