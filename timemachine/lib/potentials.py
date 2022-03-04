@@ -53,6 +53,15 @@ class SummedPotential(CustomOpWrapper):
         return custom_ops.SummedPotential(impls, self._sizes)
 
 
+class FanoutSummedPotential(CustomOpWrapper):
+    def __init__(self, potentials: List[CustomOpWrapper]):
+        self._potentials = potentials
+
+    def unbound_impl(self, precision):
+        impls = [p.unbound_impl(precision) for p in self._potentials]
+        return custom_ops.FanoutSummedPotential(impls)
+
+
 # should not be used for Nonbonded Potentials
 # class InterpolatedPotential(CustomOpWrapper):
 
