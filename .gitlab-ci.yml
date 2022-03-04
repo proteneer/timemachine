@@ -49,6 +49,7 @@ memory-tests:
   needs: ["lint"]
   tags:
     - gpu
+    - testing
   variables:
     CMAKE_ARGS: -DCUDA_ARCH=75
   rules:
@@ -69,6 +70,7 @@ unit-tests:
   needs: ["lint"]
   tags:
     - gpu
+    - testing
   rules:
     - if: $CI_EXTERNAL_PULL_REQUEST_IID
   variables:
