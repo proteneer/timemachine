@@ -1,22 +1,3 @@
-"""Contents:
-
-index stuff
-* get_all_pairs_indices
-* pairs_from_interaction_groups
-* get_interacting_pair_indices_batch
-* get_ligand_dependent_indices_batch
-
-distance stuff
-* delta_r
-* distance
-* distance_on_pairs
-
-4D decoupling stuff
-* compute_lifting_parameter
-* augment_dim
-* convert_to_4d
-"""
-
 import jax.numpy as np
 import numpy as onp
 from jax import vmap
