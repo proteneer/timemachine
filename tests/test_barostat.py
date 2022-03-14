@@ -157,6 +157,7 @@ def test_barostat_partial_group_idxs():
     ctxt.multiple_steps(np.ones(1000) * lam)
 
 
+@pytest.mark.memcheck
 def test_barostat_is_deterministic():
     """Verify that the barostat results in the same box size shift after 1000
     steps. This is important to debugging as well as providing the ability to replicate

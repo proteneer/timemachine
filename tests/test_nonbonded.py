@@ -14,6 +14,7 @@ import functools
 import itertools
 
 import numpy as np
+import pytest
 from common import GradientTest, prepare_reference_nonbonded, prepare_water_system
 from hilbertcurve.hilbertcurve import HilbertCurve
 from simtk.openmm import app
@@ -25,6 +26,8 @@ from timemachine.md import builders
 from timemachine.potentials import nonbonded
 
 np.set_printoptions(linewidth=500)
+
+pytestmark = [pytest.mark.memcheck]
 
 
 def hilbert_sort(conf, D):

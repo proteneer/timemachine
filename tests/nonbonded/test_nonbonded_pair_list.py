@@ -12,6 +12,8 @@ from parameter_interpolation import gen_params
 from timemachine.lib.potentials import NonbondedPairList, NonbondedPairListInterpolated
 from timemachine.potentials import jax_utils, nonbonded
 
+pytestmark = [pytest.mark.memcheck]
+
 
 def test_nonbonded_pair_list_invalid_pair_idxs():
     with pytest.raises(RuntimeError) as e:

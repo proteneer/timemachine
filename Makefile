@@ -4,6 +4,8 @@ CPP_DIR := $(MKFILE_DIR)timemachine/cpp/
 INSTALL_PREFIX := $(MKFILE_DIR)timemachine/
 PYTEST_CI_ARGS := --color=yes --cov=. --cov-report=html:coverage/ --cov-append --durations=100
 
+MEMCHECK_MARKER := memcheck
+
 NPROCS = `nproc`
 
 .PHONY: build
@@ -25,11 +27,11 @@ verify:
 
 .PHONY: memcheck_tests
 memcheck_tests:
-	cuda-memcheck --leak-check full --error-exitcode 1 pytest $(PYTEST_CI_ARGS) tests/
+	compute-sanitizer --leak-check full --error-exitcode 1 pytest -m $(MEMCHECK_MARKER) $(PYTEST_CI_ARGS)
 
 .PHONY: unit_tests
 unit_tests:
-	pytest $(PYTEST_CI_ARGS) slow_tests/
+	pytest -m 'not $(MEMCHECK_MARKER)' $(PYTEST_CI_ARGS)
 
 .PHONY: ci
 ci: verify memcheck_tests unit_tests

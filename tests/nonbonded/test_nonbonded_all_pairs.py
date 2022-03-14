@@ -8,6 +8,8 @@ from parameter_interpolation import gen_params
 from timemachine.lib.potentials import NonbondedAllPairs, NonbondedAllPairsInterpolated
 from timemachine.potentials import nonbonded
 
+pytestmark = [pytest.mark.memcheck]
+
 
 def test_nonbonded_all_pairs_invalid_planes_offsets():
     with pytest.raises(RuntimeError) as e:
