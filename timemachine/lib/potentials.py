@@ -53,6 +53,15 @@ class SummedPotential(CustomOpWrapper):
         return custom_ops.SummedPotential(impls, self._sizes)
 
 
+class FanoutSummedPotential(CustomOpWrapper):
+    def __init__(self, potentials: List[CustomOpWrapper]):
+        self._potentials = potentials
+
+    def unbound_impl(self, precision):
+        impls = [p.unbound_impl(precision) for p in self._potentials]
+        return custom_ops.FanoutSummedPotential(impls)
+
+
 # should not be used for Nonbonded Potentials
 # class InterpolatedPotential(CustomOpWrapper):
 
@@ -208,6 +217,18 @@ class CentroidRestraint(CustomOpWrapper):
         return self.args[1]
 
 
+class NonbondedImplWrapper(custom_ops.FanoutSummedPotential):
+    def disable_hilbert_sort(self):
+        for impl in self.get_potentials():
+            if hasattr(impl, "disable_hilbert_sort"):
+                impl.disable_hilbert_sort()
+
+    def set_nblist_padding(self, padding):
+        for impl in self.get_potentials():
+            if hasattr(impl, "set_nblist_padding"):
+                impl.set_nblist_padding(padding)
+
+
 class Nonbonded(CustomOpWrapper):
     def __init__(self, *args):
 
@@ -222,6 +243,25 @@ class Nonbonded(CustomOpWrapper):
         assert len(exclusion_set) == exclusion_idxs.shape[0]
 
         super(Nonbonded, self).__init__(*args)
+
+    def unbound_impl(self, precision):
+        all_pairs_impl = NonbondedAllPairs(
+            self.get_lambda_plane_idxs(),
+            self.get_lambda_offset_idxs(),
+            self.get_beta(),
+            self.get_cutoff(),
+        ).unbound_impl(precision)
+
+        exclusions_impl = NonbondedPairListNegated(
+            self.get_exclusion_idxs(),
+            self.get_scale_factors(),
+            self.get_lambda_plane_idxs(),
+            self.get_lambda_offset_idxs(),
+            self.get_beta(),
+            self.get_cutoff(),
+        ).unbound_impl(precision)
+
+        return NonbondedImplWrapper([all_pairs_impl, exclusions_impl])
 
     def set_exclusion_idxs(self, x):
         self.args[0] = x
@@ -251,7 +291,7 @@ class Nonbonded(CustomOpWrapper):
         return self.args[4]
 
     def get_cutoff(self):
-        return self.args[-1]
+        return self.args[5]
 
     def interpolate(self):
         """
@@ -269,15 +309,25 @@ class Nonbonded(CustomOpWrapper):
 
 class NonbondedInterpolated(Nonbonded):
     def unbound_impl(self, precision):
-        cls_name_base = "Nonbonded"
-        if precision == np.float64:
-            cls_name_base += "_f64_interpolated"
-        else:
-            cls_name_base += "_f32_interpolated"
+        all_pairs_impl = NonbondedAllPairsInterpolated(
+            self.get_lambda_plane_idxs(),
+            self.get_lambda_offset_idxs(),
+            self.get_beta(),
+            self.get_cutoff(),
+            *self.args[6:],  # remaining args are lambda transformation expressions
+        ).unbound_impl(precision)
 
-        custom_ctor = getattr(custom_ops, cls_name_base)
+        exclusions_impl = NonbondedPairListNegatedInterpolated(
+            self.get_exclusion_idxs(),
+            self.get_scale_factors(),
+            self.get_lambda_plane_idxs(),
+            self.get_lambda_offset_idxs(),
+            self.get_beta(),
+            self.get_cutoff(),
+            *self.args[6:],  # remaining args are lambda transformation expressions
+        ).unbound_impl(precision)
 
-        return custom_ctor(*self.args)
+        return NonbondedImplWrapper([all_pairs_impl, exclusions_impl])
 
 
 class NonbondedAllPairs(CustomOpWrapper):
@@ -318,6 +368,19 @@ class NonbondedPairList(CustomOpWrapper):
     pass
 
 
+class NonbondedPairListNegated(CustomOpWrapper):
+    def unbound_impl(self, precision):
+        cls_name_base = "NonbondedPairList"
+        if precision == np.float64:
+            cls_name_base += "_f64_negated"
+        else:
+            cls_name_base += "_f32_negated"
+
+        custom_ctor = getattr(custom_ops, cls_name_base)
+
+        return custom_ctor(*self.args)
+
+
 class NonbondedPairListInterpolated(NonbondedPairList):
     def unbound_impl(self, precision):
         cls_name_base = "NonbondedPairList"
@@ -325,6 +388,19 @@ class NonbondedPairListInterpolated(NonbondedPairList):
             cls_name_base += "_f64_interpolated"
         else:
             cls_name_base += "_f32_interpolated"
+
+        custom_ctor = getattr(custom_ops, cls_name_base)
+
+        return custom_ctor(*self.args)
+
+
+class NonbondedPairListNegatedInterpolated(CustomOpWrapper):
+    def unbound_impl(self, precision):
+        cls_name_base = "NonbondedPairList"
+        if precision == np.float64:
+            cls_name_base += "_f64_negated_interpolated"
+        else:
+            cls_name_base += "_f32_negated_interpolated"
 
         custom_ctor = getattr(custom_ops, cls_name_base)
 

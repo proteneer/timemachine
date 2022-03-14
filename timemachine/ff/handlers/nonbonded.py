@@ -12,8 +12,8 @@ from timemachine import constants
 from timemachine.ff.handlers.bcc_aromaticity import AromaticityModel
 from timemachine.ff.handlers.bcc_aromaticity import match_smirks as oe_match_smirks
 from timemachine.ff.handlers.serialize import SerializableMixIn
+from timemachine.ff.handlers.utils import canonicalize_bond
 from timemachine.ff.handlers.utils import match_smirks as rd_match_smirks
-from timemachine.ff.handlers.utils import sort_tuple
 from timemachine.graph_utils import convert_to_nx
 
 AM1_CHARGE_CACHE = "AM1Cache"
@@ -109,7 +109,7 @@ def generate_exclusion_idxs(mol, scale12, scale13, scale14):
                 else:
                     assert 0
 
-                exclusions[sort_tuple((src, dst))] = scale
+                exclusions[canonicalize_bond((src, dst))] = scale
 
     idxs = list(exclusions.keys())
     scales = list(exclusions.values())
