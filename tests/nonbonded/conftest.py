@@ -25,7 +25,7 @@ def _example_system():
 
 
 @pytest.fixture(scope="module")
-def _example_nonbonded_params(_example_system):
+def _example_nonbonded_potential(_example_system):
     host_system, _, _ = _example_system
     host_fns, _ = openmm_deserializer.deserialize_system(host_system, cutoff=1.0)
 
@@ -35,7 +35,12 @@ def _example_nonbonded_params(_example_system):
             nonbonded_fn = f
 
     assert nonbonded_fn is not None
-    return nonbonded_fn.params
+    return nonbonded_fn
+
+
+@pytest.fixture()
+def _example_nonbonded_params(_example_nonbonded_potential):
+    return _example_nonbonded_potential.params
 
 
 @pytest.fixture(scope="module")
@@ -57,7 +62,17 @@ def rng():
 
 @pytest.fixture(scope="function")
 def example_nonbonded_params(_example_nonbonded_params):
-    return _example_nonbonded_params[:]
+    return np.array(_example_nonbonded_params)
+
+
+@pytest.fixture()
+def example_nonbonded_exclusion_idxs(_example_nonbonded_potential):
+    return _example_nonbonded_potential.get_exclusion_idxs()
+
+
+@pytest.fixture()
+def example_nonbonded_exclusion_scales(_example_nonbonded_potential):
+    return _example_nonbonded_potential.get_scale_factors()
 
 
 @pytest.fixture(scope="function")

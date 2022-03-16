@@ -314,6 +314,7 @@ class NonbondedInterpolated(Nonbonded):
             self.get_lambda_offset_idxs(),
             self.get_beta(),
             self.get_cutoff(),
+            None,
             *self.args[6:],  # remaining args are lambda transformation expressions
         ).unbound_impl(precision)
 
@@ -331,7 +332,15 @@ class NonbondedInterpolated(Nonbonded):
 
 
 class NonbondedAllPairs(CustomOpWrapper):
-    pass
+    def __init__(self, *args, disable_hilbert_sort=False):
+        super().__init__(*args)
+        self._disable_hilbert_sort = disable_hilbert_sort
+
+    def unbound_impl(self, precision):
+        impl = super().unbound_impl(precision)
+        if self._disable_hilbert_sort:
+            impl.disable_hilbert_sort()
+        return impl
 
 
 class NonbondedAllPairsInterpolated(NonbondedAllPairs):
@@ -348,7 +357,15 @@ class NonbondedAllPairsInterpolated(NonbondedAllPairs):
 
 
 class NonbondedInteractionGroup(CustomOpWrapper):
-    pass
+    def __init__(self, *args, disable_hilbert_sort=False):
+        super().__init__(*args)
+        self._disable_hilbert_sort = disable_hilbert_sort
+
+    def unbound_impl(self, precision):
+        impl = super().unbound_impl(precision)
+        if self._disable_hilbert_sort:
+            impl.disable_hilbert_sort()
+        return impl
 
 
 class NonbondedInteractionGroupInterpolated(NonbondedInteractionGroup):
