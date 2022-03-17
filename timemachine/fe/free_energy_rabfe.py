@@ -308,7 +308,7 @@ def construct_absolute_lambda_schedule_solvent(num_windows, nonbonded_cutoff=1.2
     Notes
     -----
     * manually optimized by YTZ
-    * schedule assumes nonbonded_cutoff = 1.2
+    * assumes nonbonded_cutoff = 1.2
         (since decoupling_distance = lambda * nonbonded_cutoff,
         this schedule will not be appropriate for nonbonded_cutoff != 1.2!)
     """
@@ -346,7 +346,6 @@ def construct_pre_optimized_absolute_lambda_schedule_solvent(num_windows, nonbon
         (since decoupling_distance = lambda * nonbonded_cutoff,
         this schedule will not be appropriate for nonbonded_cutoff != 1.2!)
     """
-
     assert nonbonded_cutoff == 1.2
 
     # fmt: off
@@ -384,6 +383,7 @@ def construct_relative_lambda_schedule(num_windows, nonbonded_cutoff=1.2):
         (since decoupling_distance = lambda * nonbonded_cutoff,
         this schedule will not be appropriate for nonbonded_cutoff != 1.2!)
     """
+    assert nonbonded_cutoff == 1.2
 
     A = int(0.15 * num_windows)
     B = int(0.60 * num_windows)
