@@ -4,6 +4,7 @@ CPP_DIR := $(MKFILE_DIR)timemachine/cpp/
 INSTALL_PREFIX := $(MKFILE_DIR)timemachine/
 PYTEST_CI_ARGS := --color=yes --cov=. --cov-report=html:coverage/ --cov-append --durations=100
 
+NOGPU_MARKER := nogpu
 MEMCHECK_MARKER := memcheck
 
 NPROCS = `nproc`
@@ -24,6 +25,10 @@ grpc:
 .PHONY: verify
 verify:
 	pre-commit run --all-files --show-diff-on-failure --color=always
+
+.PHONY: nogpu_tests
+nogpu_tests:
+	pytest -m $(NOGPU_MARKER) $(PYTEST_CI_ARGS)
 
 .PHONY: memcheck_tests
 memcheck_tests:
