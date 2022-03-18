@@ -218,6 +218,27 @@ class CentroidRestraint(CustomOpWrapper):
 
 
 class NonbondedImplWrapper(custom_ops.FanoutSummedPotential):
+    """Wraps custom_ops.FanoutSummedPotential, adding methods that
+    should be provided by the Nonbonded implementation according to
+    the current API spec"""
+
+    # NOTE: This extends custom_ops.FanoutSummedPotential (vs.
+    # CustomOpWrapper) because it needs to implement the C++ Potential
+    # class interface. The motivation for this is to allow the
+    # Nonbonded kernel as implemented using FanoutSummedPotential to
+    # maintain the same interface as the older monolithic kernel, in
+    # particular providing disable_hilbert_sort() and
+    # set_nblist_padding().
+    #
+    # Longer term, it might be preferable to make a breaking API
+    # change so that e.g. disable_hilbert_sort() isn't called directly
+    # on the full nonbonded potential (which is typically a sum of
+    # parts, not all of which use a neighborlist), but on the
+    # underlying NonbondedAllPairs or NonbondedInteractionGroup
+    # potentials (a helper function could be added to the Python
+    # library to make this more convenient). At that point, the
+    # wrapper class can be removed.
+
     def disable_hilbert_sort(self):
         for impl in self.get_potentials():
             if hasattr(impl, "disable_hilbert_sort"):
