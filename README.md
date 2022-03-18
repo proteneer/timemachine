@@ -45,14 +45,14 @@ conda activate timemachine
 
 ### Install Time Machine
 
-### Linux
+#### Linux
 
 ```shell
 pip install -r requirements.txt
 pip install .
 ```
 
-### Non-Linux
+#### Non-Linux
 
 The CUDA extension module implementing custom ops is only supported on Linux, but partial functionality is still available on non-Linux OSes. To install without the extension:
 
