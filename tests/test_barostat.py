@@ -22,7 +22,7 @@ def test_barostat_zero_interval():
     np.random.seed(seed)
 
     mol_a = hif2a_ligand_pair.mol_a
-    ff = hif2a_ligand_pair.ff
+    ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
     complex_system, complex_coords, complex_box, complex_top = build_water_system(
         initial_waterbox_width.value_in_unit(unit.nanometer)
     )
@@ -86,7 +86,7 @@ def test_barostat_partial_group_idxs():
 
     pressure = 1.0 * unit.atmosphere
     mol_a = hif2a_ligand_pair.mol_a
-    ff = hif2a_ligand_pair.ff
+    ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
     complex_system, complex_coords, complex_box, complex_top = build_water_system(
         initial_waterbox_width.value_in_unit(unit.nanometer)
     )
@@ -224,7 +224,7 @@ def test_barostat_varying_pressure():
     # Start out with a very large pressure
     pressure = 1000.0 * unit.atmosphere
     mol_a = hif2a_ligand_pair.mol_a
-    ff = hif2a_ligand_pair.ff
+    ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
     complex_system, complex_coords, complex_box, complex_top = build_water_system(
         initial_waterbox_width.value_in_unit(unit.nanometer)
     )
