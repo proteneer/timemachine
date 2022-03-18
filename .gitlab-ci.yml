@@ -51,9 +51,7 @@ nogpu-tests:
   rules:
     - if: $CI_EXTERNAL_PULL_REQUEST_IID
   script:
-    - CMAKE_BUILD_PARALLEL_LEVEL=$(nproc) pip install -e .[test]
-    # HACK: remove C++/CUDA library (is there a way to tell pip not to build it?)
-    - rm timemachine/lib/custom_ops.*.so
+    - SKIP_CUSTOM_OPS=1 pip install -e .[test]
     - make nogpu_tests
   artifacts:
     name: "$CI_JOB_NAME-$CI_COMMIT_REF_NAME-nogpu-tests"
