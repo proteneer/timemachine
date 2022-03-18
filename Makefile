@@ -36,7 +36,7 @@ memcheck_tests:
 
 .PHONY: unit_tests
 unit_tests:
-	pytest -m 'not $(MEMCHECK_MARKER)' $(PYTEST_CI_ARGS)
+	pytest -m 'not $(NOGPU_MARKER) and not $(MEMCHECK_MARKER)' $(PYTEST_CI_ARGS)
 
 .PHONY: ci
 ci: verify memcheck_tests unit_tests
