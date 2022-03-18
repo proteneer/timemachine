@@ -1,6 +1,5 @@
 from abc import ABC
 
-import jax
 import jax.numpy as jnp
 import numpy as np
 from rdkit.Chem import rdmolops
@@ -547,8 +546,8 @@ class DualTopologyRHFE(DualTopology):
         qlj_params, nb_potential = super().parameterize_nonbonded(ff_q_params, ff_lj_params)
 
         # halve the strength of the charge and the epsilon parameters
-        src_qlj_params = jax.ops.index_update(qlj_params, jax.ops.index[:, 0], qlj_params[:, 0] * 0.5)
-        src_qlj_params = jax.ops.index_update(src_qlj_params, jax.ops.index[:, 2], qlj_params[:, 2] * 0.5)
+        src_qlj_params = jnp.asarray(qlj_params).at[:, 0].set(qlj_params[:, 0] * 0.5)
+        src_qlj_params = jnp.asarray(src_qlj_params).at[:, 2].set(qlj_params[:, 2] * 0.5)
         dst_qlj_params = qlj_params
         combined_qlj_params = jnp.concatenate([src_qlj_params, dst_qlj_params])
 
@@ -585,13 +584,13 @@ class DualTopologyStandardDecoupling(DualTopology):
         # worth of nonbonded interactions.
 
         # dst_qlj_params corresponds to the end-state where only one of the molecule interacts with the binding pocket.
-        src_qlj_params_a = jax.ops.index_update(qlj_params_a, jax.ops.index[:, 0], qlj_params_a[:, 0] * 0.5)
-        src_qlj_params_a = jax.ops.index_update(src_qlj_params_a, jax.ops.index[:, 2], src_qlj_params_a[:, 2] * 0.5)
+        src_qlj_params_a = jnp.asarray(qlj_params_a).at[:, 0].set(qlj_params_a[:, 0] * 0.5)
+        src_qlj_params_a = jnp.asarray(src_qlj_params_a).at[:, 2].set(src_qlj_params_a[:, 2] * 0.5)
         dst_qlj_params_a = qlj_params_a
 
         qlj_params_b = standard_qlj_typer(self.mol_b)
-        src_qlj_params_b = jax.ops.index_update(qlj_params_b, jax.ops.index[:, 0], qlj_params_b[:, 0] * 0.5)
-        src_qlj_params_b = jax.ops.index_update(src_qlj_params_b, jax.ops.index[:, 2], src_qlj_params_b[:, 2] * 0.5)
+        src_qlj_params_b = jnp.asarray(qlj_params_b).at[:, 0].set(qlj_params_b[:, 0] * 0.5)
+        src_qlj_params_b = jnp.asarray(src_qlj_params_b).at[:, 2].set(src_qlj_params_b[:, 2] * 0.5)
         dst_qlj_params_b = qlj_params_b
 
         src_qlj_params = jnp.concatenate([src_qlj_params_a, src_qlj_params_b])
