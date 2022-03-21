@@ -338,6 +338,18 @@ class GBSAHandler(NonbondedHandler):
 
 
 class AM1Handler(SerializableMixIn):
+    """The AM1Handler generates charges for molecules using OpenEye's AM1[1] protocol.
+
+    Charges are conformer and platform dependent as of OpenEye Toolkits 2020.2.0 [2].
+
+    References
+    ----------
+    [1] AM1 Theory
+        https://docs.eyesopen.com/toolkits/python/quacpactk/molchargetheory.html#am1-charges
+    [2] Charging Inconsistencies
+        https://github.com/openforcefield/openff-toolkit/issues/1170
+    """
+
     def __init__(self, smirks, params, props):
         assert len(smirks) == 0
         assert len(params) == 0
@@ -363,6 +375,18 @@ class AM1Handler(SerializableMixIn):
 
 
 class AM1BCCHandler(SerializableMixIn):
+    """The AM1BCCHandler generates charges for molecules using OpenEye's AM1BCCELF10[1] protocol.
+
+    Charges are conformer and platform dependent as of OpenEye Toolkits 2020.2.0 [2].
+
+    References
+    ----------
+    [1] AM1BCCELF10 Theory
+        https://docs.eyesopen.com/toolkits/python/quacpactk/molchargetheory.html#elf-conformer-selection
+    [2] Charging Inconsistencies
+        https://github.com/openforcefield/openff-toolkit/issues/1170
+    """
+
     def __init__(self, smirks, params, props):
         assert len(smirks) == 0
         assert len(params) == 0
@@ -391,6 +415,22 @@ class AM1BCCHandler(SerializableMixIn):
 
 
 class AM1CCCHandler(SerializableMixIn):
+    """The AM1CCCHandler stands for AM1 Correctable Charge Correction (CCC) which uses OpenEye's AM1 charges[1]
+    along with corrections provided by the Forcefield definition in the form of smirks and charge deltas.
+
+    This handler supports back propagation with respect to ligand parameters, which is what the "Correctable" refers
+    to in CCC.
+
+    Charges are conformer and platform dependent as of OpenEye Toolkits 2020.2.0 [2].
+
+    References
+    ----------
+    [1] AM1 Theory
+        https://docs.eyesopen.com/toolkits/python/quacpactk/molchargetheory.html#am1-charges
+    [2] Charging Inconsistencies
+        https://github.com/openforcefield/openff-toolkit/issues/1170
+    """
+
     def __init__(self, smirks, params, props):
         """
         Parameters
