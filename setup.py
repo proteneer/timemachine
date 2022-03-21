@@ -99,7 +99,10 @@ setup(
         "test": ["pytest", "pytest-cov"],
     },
     package_data={
-        "timemachine": ["testsystems/data/ligands_40.sdf"],
+        "timemachine": [
+            "datasets/freesolv/freesolv.sdf",
+            "testsystems/data/ligands_40.sdf",
+        ],
     },
     # entry_points={
     #     "console_scripts": [
