@@ -591,22 +591,21 @@ def test_compute_or_load_am1_charges():
     # get some molecules
     cache_key = nonbonded.AM1_CHARGE_CACHE
     suppl = Chem.SDMolSupplier("tests/data/ligands_40.sdf", removeHs=False)
-    all_mols = [mol for mol in suppl]
-    all_mols = all_mols[:5]  # truncate so that whole test is ~ 10 seconds
+    mols = [mol for mol in suppl][:5]  # truncate so that whole test is ~ 10 seconds
 
     # don't expect AM1 cache yet
-    for mol in all_mols:
+    for mol in mols:
         assert not mol.HasProp(cache_key)
 
     # compute charges once
-    fresh_am1_charges = [nonbonded.compute_or_load_am1_charges(mol) for mol in all_mols]
+    fresh_am1_charges = [nonbonded.compute_or_load_am1_charges(mol) for mol in mols]
 
     # expect each mol to have AM1 cache now
-    for mol in all_mols:
+    for mol in mols:
         assert mol.HasProp(cache_key)
 
     # expect the same charges as the first time around
-    cached_am1_charges = [nonbonded.compute_or_load_am1_charges(mol) for mol in all_mols]
+    cached_am1_charges = [nonbonded.compute_or_load_am1_charges(mol) for mol in mols]
     for (fresh, cached) in zip(fresh_am1_charges, cached_am1_charges):
         np.testing.assert_array_equal(fresh, cached)
 
