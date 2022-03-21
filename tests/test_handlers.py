@@ -2,6 +2,7 @@ from jax.config import config
 
 config.update("jax_enable_x64", True)
 import functools
+from importlib import resources
 
 import jax
 import numpy as np
@@ -549,7 +550,9 @@ def test_am1_differences():
         if isinstance(ccc, nonbonded.AM1CCCHandler):
             break
 
-    suppl = Chem.SDMolSupplier("tests/data/ligands_40.sdf", removeHs=False)
+    with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
+        suppl = Chem.SDMolSupplier(str(path_to_ligand), removeHs=False)
+
     smi = "[H]c1c(OP(=S)(OC([H])([H])C([H])([H])[H])OC([H])([H])C([H])([H])[H])nc(C([H])(C([H])([H])[H])C([H])([H])[H])nc1C([H])([H])[H]"
     smi = "Clc1c(Cl)c(Cl)c(-c2c(Cl)c(Cl)c(Cl)c(Cl)c2Cl)c(Cl)c1Cl"
     mol = Chem.MolFromSmiles(smi)
@@ -590,7 +593,10 @@ def test_compute_or_load_am1_charges():
 
     # get some molecules
     cache_key = nonbonded.AM1_CHARGE_CACHE
-    suppl = Chem.SDMolSupplier("tests/data/ligands_40.sdf", removeHs=False)
+
+    with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
+        suppl = Chem.SDMolSupplier(str(path_to_ligand), removeHs=False)
+
     all_mols = [mol for mol in suppl]
     all_mols = all_mols[:5]  # truncate so that whole test is ~ 10 seconds
 
@@ -620,7 +626,10 @@ def test_compute_or_load_bond_smirks_matches():
     * verify new values match initial matches"""
     # get some molecules
     match_cache_key = nonbonded.BOND_SMIRK_MATCH_CACHE
-    suppl = Chem.SDMolSupplier("tests/data/ligands_40.sdf", removeHs=False)
+
+    with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
+        suppl = Chem.SDMolSupplier(str(path_to_ligand), removeHs=False)
+
     all_mols = [mol for mol in suppl]
 
     # get some bond smirks

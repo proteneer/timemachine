@@ -1,17 +1,12 @@
 # construct a relative transformation
 
-from pathlib import Path
+from importlib import resources
 
 import numpy as np
 from rdkit import Chem
 
-import timemachine
 from timemachine.fe import free_energy, topology
 from timemachine.ff import Forcefield
-
-root = Path(timemachine.__file__).parent.parent
-
-path_to_protein = str(root.joinpath("tests/data/hif2a_nowater_min.pdb"))
 
 
 def _setup_hif2a_ligand_pair(ff="timemachine/ff/params/smirnoff_1_1_0_ccc.py"):
@@ -19,10 +14,12 @@ def _setup_hif2a_ligand_pair(ff="timemachine/ff/params/smirnoff_1_1_0_ccc.py"):
 
     TODO: replace this with a testsystem class similar to those used in openmmtools
     """
-    path_to_ligand = str(root.joinpath("tests/data/ligands_40.sdf"))
+
     forcefield = Forcefield.load_from_file(ff)
 
-    suppl = Chem.SDMolSupplier(path_to_ligand, removeHs=False)
+    with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
+        suppl = Chem.SDMolSupplier(str(path_to_ligand), removeHs=False)
+
     all_mols = [x for x in suppl]
     mol_a = all_mols[1]
     mol_b = all_mols[4]
