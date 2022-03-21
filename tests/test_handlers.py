@@ -637,7 +637,7 @@ def mol_with_precomputed_charges():
     return dict(mol=test_mol, precomputed_charges=precomputed_charges)
 
 
-@pytest.mark.xfail("only expected to pass if test is run on Ubuntu 20.04.2")
+@pytest.mark.xfail
 def test_am1_platform_independent(mol_with_precomputed_charges):
     """Assert AM1 charges computed on test runner ~equal to those previously computed on possibly different platform"""
 
