@@ -5,7 +5,6 @@ from collections import Counter
 import jax.numpy as jnp
 import networkx as nx
 import numpy as np
-from jax import ops
 from rdkit import Chem
 
 from timemachine import constants
@@ -218,8 +217,8 @@ def apply_bond_charge_corrections(initial_charges, bond_idxs, deltas):
     """
 
     # apply bond charge corrections
-    incremented = ops.index_add(initial_charges, bond_idxs[:, 0], +deltas)
-    decremented = ops.index_add(incremented, bond_idxs[:, 1], -deltas)
+    incremented = jnp.asarray(initial_charges).at[bond_idxs[:, 0]].add(+deltas)
+    decremented = jnp.asarray(incremented).at[bond_idxs[:, 1]].add(-deltas)
     final_charges = decremented
 
     # make some safety assertions
