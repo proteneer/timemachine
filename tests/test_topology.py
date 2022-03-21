@@ -3,6 +3,7 @@ from jax.config import config
 config.update("jax_enable_x64", True)
 
 import unittest
+from importlib import resources
 
 import jax
 import numpy as np
@@ -217,7 +218,9 @@ class BenzenePhenolSparseTest(unittest.TestCase):
 class TestFactorizability(unittest.TestCase):
     def test_bad_factor(self):
         # test a bad mapping that results in a non-cancellable endpoint
-        suppl = Chem.SDMolSupplier("tests/data/ligands_40.sdf", removeHs=False)
+        with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
+            suppl = Chem.SDMolSupplier(str(path_to_ligand), removeHs=False)
+
         all_mols = [x for x in suppl]
         mol_a = all_mols[0]
         mol_b = all_mols[1]
@@ -257,7 +260,9 @@ class TestFactorizability(unittest.TestCase):
 
     def test_good_factor(self):
         # test a good mapping
-        suppl = Chem.SDMolSupplier("tests/data/ligands_40.sdf", removeHs=False)
+        with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
+            suppl = Chem.SDMolSupplier(str(path_to_ligand), removeHs=False)
+
         all_mols = [x for x in suppl]
         mol_a = all_mols[1]
         mol_b = all_mols[4]
