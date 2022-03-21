@@ -614,7 +614,7 @@ def test_compute_or_load_am1_charges():
 def mol_with_precomputed_charges():
     """Provide a test mol with partial charges precomputed on two different versions of Ubuntu"""
 
-    suppl = Chem.SDMolSupplier("../GitHub/timemachine/tests/data/ligands_40.sdf", removeHs=False)
+    suppl = Chem.SDMolSupplier("tests/data/ligands_40.sdf", removeHs=False)
     mols = [mol for mol in suppl]
     test_mol = mols[0]
 
