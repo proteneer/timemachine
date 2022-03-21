@@ -6,6 +6,8 @@ import multiprocessing
 import os
 
 import jax
+import jax.numpy as jnp
+import jax.random as jrandom
 import numpy as np
 from jax.scipy.special import logsumexp as jlogsumexp
 from rdkit import Chem
@@ -119,7 +121,7 @@ class VacuumState:
         lj_rescale_mask = np.ones((N, N))
 
         if decharge:
-            nb_params = self.nb_params.at[:, 0].set(0)
+            nb_params = jnp.asarray(self.nb_params).at[:, 0].set(0)
         else:
             nb_params = self.nb_params
 
@@ -399,10 +401,6 @@ def sample_from_log_weights(weighted_samples, log_weights, size):
     return weighted_samples[idxs]
 
 
-import jax.numpy as jnp
-import jax.random as jrandom
-
-
 def jax_sample_from_log_weights(weighted_samples, log_weights, size, key):
     """
     Given a collection of weighted samples with log_weights, resample them
@@ -518,7 +516,7 @@ def align_sample(x_vacuum, x_solvent):
 def align_and_replace(x_vacuum, x_solvent):
     num_ligand_atoms = len(x_vacuum)
     aligned_x_vacuum = align_sample(x_vacuum, x_solvent)
-    return x_solvent.at[-num_ligand_atoms:].set(aligned_x_vacuum)
+    return jnp.asarray(x_solvent).at[-num_ligand_atoms:].set(aligned_x_vacuum)
 
 
 batch_align_and_replace = jax.jit(jax.vmap(align_and_replace, in_axes=(0, None)))
