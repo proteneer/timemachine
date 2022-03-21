@@ -418,7 +418,7 @@ class AM1CCCHandler(SerializableMixIn):
     """The AM1CCCHandler stands for AM1 Correctable Charge Correction (CCC) which uses OpenEye's AM1 charges[1]
     along with corrections provided by the Forcefield definition in the form of smirks and charge deltas.
 
-    This handler supports back propagation with respect to ligand parameters, which is what the "Correctable" refers
+    This handler supports jax.grad with respect to the forcefield parameters, which is what the "Correctable" refers
     to in CCC.
 
     Charges are conformer and platform dependent as of OpenEye Toolkits 2020.2.0 [2].
