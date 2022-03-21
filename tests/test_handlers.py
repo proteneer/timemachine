@@ -610,6 +610,44 @@ def test_compute_or_load_am1_charges():
         np.testing.assert_array_equal(fresh, cached)
 
 
+@pytest.fixture
+def mol_with_precomputed_charges():
+    """Provide a test mol with partial charges precomputed on two different versions of Ubuntu"""
+
+    suppl = Chem.SDMolSupplier("../GitHub/timemachine/tests/data/ligands_40.sdf", removeHs=False)
+    mols = [mol for mol in suppl]
+    test_mol = mols[0]
+
+    # fmt: off
+    precomputed_charges = dict()
+    precomputed_charges['18.04.4'] = np.array([
+        -3.73202788, 0.16643369, 2.23365332, 1.17705863, -2.04989265, 0.9556971, -9.53151131, 0.20910295,
+        -2.48012128, 1.97433738, -1.83925727, 0.62695524, -1.7078312, 1.1217772, -1.10963652, -1.418694,
+        0.30269243, -1.27064814, -1.25520707, 33.66251065, -11.02858928, -11.02858928, -1.76122669, -0.07484801,
+        -1.55283109, -1.76122669, -11.19066194, 2.76395447, 2.01017014, 1.64158773, 1.9863602, 1.88569841,
+        2.04824232, 2.0012119, 2.0269077, 2.9992246, 2.9992246])
+    precomputed_charges['20.04.2'] = np.array([
+        -3.7402788, 0.12741843, 2.31380548, 1.14759094, -2.07122727, 0.97703173, -9.56911189, 0.19495845,
+        -2.47870684, 1.95076315, -1.76535233, 0.59371565, -1.72374378, 1.19815754, -1.04952241, -1.50250019,
+        0.33428183, -1.26510823, -1.29999797, 33.85876522, -11.07055139, -11.07055139, -1.75285791, -0.07602672,
+        -1.53915794, -1.75285791, -11.20162407, 2.74096953, 1.97751982, 1.63251182, 2.00109405, 1.84892264,
+        2.06061889, 2.00144761, 2.01688877, 2.97635786, 2.97635786])
+    # fmt: on
+
+    return dict(mol=test_mol, precomputed_charges=precomputed_charges)
+
+
+@pytest.mark.xfail("only expected to pass if test is run on Ubuntu 20.04.2")
+def test_am1_platform_independent(mol_with_precomputed_charges):
+    """Assert AM1 charges computed on test runner ~equal to those previously computed on possibly different platform"""
+
+    mol = mol_with_precomputed_charges["mol"]
+    expected_charges = mol_with_precomputed_charges["precomputed_charges"]["20.04.2"]
+
+    local_am1_charges = nonbonded.compute_or_load_am1_charges(mol)
+    np.testing.assert_array_almost_equal(local_am1_charges, expected_charges)
+
+
 def test_compute_or_load_bond_smirks_matches():
     """Loop over test ligands, asserting that
     * verify no cache key
