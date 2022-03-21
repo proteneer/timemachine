@@ -642,7 +642,7 @@ def test_am1_platform_independent(mol_with_precomputed_charges):
     """Assert AM1 charges computed on test runner ~equal to those previously computed on possibly different platform"""
 
     mol = mol_with_precomputed_charges["mol"]
-    expected_charges = mol_with_precomputed_charges["precomputed_charges"]["20.04.2"]
+    expected_charges = mol_with_precomputed_charges["precomputed_charges"]["18.04.4"]
 
     local_am1_charges = nonbonded.compute_or_load_am1_charges(mol)
     np.testing.assert_array_almost_equal(local_am1_charges, expected_charges)
