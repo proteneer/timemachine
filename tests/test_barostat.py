@@ -1,12 +1,10 @@
-import os
-import platform
-
 import numpy as np
 import pytest
 from simtk import unit
 
 from timemachine.constants import BOLTZ, DISTANCE_UNIT, ENERGY_UNIT
 from timemachine.fe.free_energy import AbsoluteFreeEnergy
+from timemachine.ff import Forcefield
 from timemachine.lib import LangevinIntegrator, custom_ops
 from timemachine.md.barostat.moves import CentroidRescaler
 from timemachine.md.barostat.utils import compute_box_center, compute_box_volume, get_bond_list, get_group_indices
@@ -24,7 +22,7 @@ def test_barostat_zero_interval():
     np.random.seed(seed)
 
     mol_a = hif2a_ligand_pair.mol_a
-    ff = hif2a_ligand_pair.ff
+    ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
     complex_system, complex_coords, complex_box, complex_top = build_water_system(
         initial_waterbox_width.value_in_unit(unit.nanometer)
     )
@@ -75,19 +73,6 @@ def test_barostat_zero_interval():
         baro.set_interval(0)
 
 
-def get_platform_version() -> str:
-    release_path = "/etc/os-release"
-    if os.path.isfile(release_path):
-        # AWS Ubuntu 20.04 doesn't have version in uname...
-        with open(release_path, "r") as ifs:
-            for line in ifs.readlines():
-                if line.startswith("PRETTY_NAME="):
-                    platform_version = line.strip()
-    else:
-        platform_version = platform.version()
-    return platform_version.lower()
-
-
 def test_barostat_partial_group_idxs():
     """Verify that the barostat can handle a subset of the molecules
     rather than all of them. This test only verify that it runs, not the behavior"""
@@ -101,7 +86,7 @@ def test_barostat_partial_group_idxs():
 
     pressure = 1.0 * unit.atmosphere
     mol_a = hif2a_ligand_pair.mol_a
-    ff = hif2a_ligand_pair.ff
+    ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
     complex_system, complex_coords, complex_box, complex_top = build_water_system(
         initial_waterbox_width.value_in_unit(unit.nanometer)
     )
@@ -163,7 +148,6 @@ def test_barostat_is_deterministic():
     steps. This is important to debugging as well as providing the ability to replicate
     simulations
     """
-    platform_version = get_platform_version()
     lam = 1.0
     temperature = 300.0 * unit.kelvin
     initial_waterbox_width = 3.0 * unit.nanometer
@@ -173,22 +157,12 @@ def test_barostat_is_deterministic():
     seed = 2021
     np.random.seed(seed)
 
-    # OpenEye's AM1 Charging values are OS platform dependent. To ensure that we have deterministic values
-    # we check against our two most common OS versions, Ubuntu 18.04 and 20.04.
-    box_vol = 26.69108878693324
-    lig_charge_vals = np.array(
-        [1.4572377542719206, -0.37011462071257184, 1.1478267014520305, -4.920284514559682, 0.16985194917937935]
-    )
-    if "ubuntu" not in platform_version:
-        print(f"Test expected to run under ubuntu 20.04 or 18.04, got {platform_version}")
-    if "18.04" in platform_version:
-        box_vol = 26.717918478980156
-        lig_charge_vals[3] = -4.920166483601927
+    box_vol = 27.08816
 
     pressure = 1.0 * unit.atmosphere
 
     mol_a = hif2a_ligand_pair.mol_a
-    ff = hif2a_ligand_pair.ff
+    ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
     complex_system, complex_coords, complex_box, complex_top = build_water_system(
         initial_waterbox_width.value_in_unit(unit.nanometer)
     )
@@ -206,9 +180,6 @@ def test_barostat_is_deterministic():
     group_indices = get_group_indices(bond_list)
 
     u_impls = []
-    # Look at the first five atoms and their assigned charges
-    ligand_charges = sys_params[-1][:, 0][len(min_complex_coords) :][:5]
-    np.testing.assert_array_almost_equal(lig_charge_vals, ligand_charges, decimal=5)
     for params, unbound_pot in zip(sys_params, unbound_potentials):
         bp = unbound_pot.bind(np.asarray(params))
         bp_impl = bp.bound_impl(precision=np.float32)
@@ -253,7 +224,7 @@ def test_barostat_varying_pressure():
     # Start out with a very large pressure
     pressure = 1000.0 * unit.atmosphere
     mol_a = hif2a_ligand_pair.mol_a
-    ff = hif2a_ligand_pair.ff
+    ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
     complex_system, complex_coords, complex_box, complex_top = build_water_system(
         initial_waterbox_width.value_in_unit(unit.nanometer)
     )
@@ -342,7 +313,7 @@ def test_molecular_ideal_gas():
     # generate an alchemical system of a waterbox + alchemical ligand:
     # effectively discard ligands by running in AbsoluteFreeEnergy mode at lambda = 1.0
     mol_a = hif2a_ligand_pair.mol_a
-    ff = hif2a_ligand_pair.ff
+    ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
     complex_system, complex_coords, complex_box, complex_top = build_water_system(
         initial_waterbox_width.value_in_unit(unit.nanometer)
     )
