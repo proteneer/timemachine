@@ -86,6 +86,7 @@ setup(
         "bootstrapped",
         "grpcio",
         "hilbertcurve",
+        "importlib-resources",
         "jax",
         "jaxlib>0.1.74",
         "networkx",
@@ -102,6 +103,9 @@ setup(
         "timemachine": [
             "datasets/freesolv/freesolv.sdf",
             "testsystems/data/ligands_40.sdf",
+            # NOTE: C++ sources used at runtime for JIT compilation
+            "cpp/src/*.hpp",
+            "cpp/src/kernels/*.cuh",
         ],
     },
     # entry_points={
