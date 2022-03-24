@@ -17,6 +17,7 @@
 
 
 from functools import partial
+from importlib import resources
 from pathlib import Path
 from time import time
 
@@ -33,7 +34,6 @@ from timemachine.parallel.client import CUDAPoolClient
 from timemachine.parallel.utils import get_gpu_count
 
 root = Path(__file__).parent.parent
-path_to_ligand = str(root.joinpath("tests/data/ligands_40.sdf"))
 path_to_protein = str(root.joinpath("tests/data/hif2a_nowater_min.pdb"))
 
 
@@ -130,7 +130,9 @@ if __name__ == "__main__":
 
     # TODO: move this test system constructor into a test fixture sort of thing
 
-    suppl = Chem.SDMolSupplier(path_to_ligand, removeHs=False)
+    with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
+        suppl = Chem.SDMolSupplier(str(path_to_ligand), removeHs=False)
+
     all_mols = [x for x in suppl]
     mol_a = all_mols[1]
     mol_b = all_mols[4]

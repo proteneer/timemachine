@@ -205,7 +205,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "-s",
         "--guests_sdfile",
-        default="tests/data/ligands_40.sdf",
+        default="timemachine/testsystems/data/ligands_40.sdf",
         help="guests to pose",
     )
     parser.add_argument("-t", "--transition_type", help="'insertion' or 'deletion'", default="insertion")
