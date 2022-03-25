@@ -12,8 +12,8 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 import pytest
+import test_ligands
 
-from tests import test_ligands
 from timemachine.constants import BOLTZ
 from timemachine.ff import Forcefield
 from timemachine.md import enhanced
