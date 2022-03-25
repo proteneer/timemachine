@@ -286,7 +286,7 @@ class NonbondedHandler(SerializableMixIn):
             parameters associated with each SMIRKS pattern
 
         smirks: list of str (P,)
-            SMIRKS patterns
+            SMIRKS patterns, to be parsed by RDKIT
 
         mol: Chem.ROMol
             rdkit molecule, should have hydrogens pre-added
@@ -313,7 +313,7 @@ class LennardJonesHandler(NonbondedHandler):
             params[:, 1] = sqrt(epsilons)
 
         smirks: list of str (P,)
-            SMIRKS patterns
+            SMIRKS patterns, to be parsed by RDKIT
 
         mol: Chem.ROMol
             molecule to be parameterized
@@ -337,6 +337,18 @@ class GBSAHandler(NonbondedHandler):
 
 
 class AM1Handler(SerializableMixIn):
+    """The AM1Handler generates charges for molecules using OpenEye's AM1[1] protocol.
+
+    Charges are conformer and platform dependent as of OpenEye Toolkits 2020.2.0 [2].
+
+    References
+    ----------
+    [1] AM1 Theory
+        https://docs.eyesopen.com/toolkits/python/quacpactk/molchargetheory.html#am1-charges
+    [2] Charging Inconsistencies
+        https://github.com/openforcefield/openff-toolkit/issues/1170
+    """
+
     def __init__(self, smirks, params, props):
         assert len(smirks) == 0
         assert len(params) == 0
@@ -362,6 +374,19 @@ class AM1Handler(SerializableMixIn):
 
 
 class AM1BCCHandler(SerializableMixIn):
+    """The AM1BCCHandler generates charges for molecules using OpenEye's AM1BCCELF10[1] protocol. Note that
+    if a single conformer molecular is passed to this handler, the charges appear equivalent with AM1BCC.
+
+    Charges are conformer and platform dependent as of OpenEye Toolkits 2020.2.0 [2].
+
+    References
+    ----------
+    [1] AM1BCCELF10 Theory
+        https://docs.eyesopen.com/toolkits/python/quacpactk/molchargetheory.html#elf-conformer-selection
+    [2] Charging Inconsistencies
+        https://github.com/openforcefield/openff-toolkit/issues/1170
+    """
+
     def __init__(self, smirks, params, props):
         assert len(smirks) == 0
         assert len(params) == 0
@@ -390,6 +415,25 @@ class AM1BCCHandler(SerializableMixIn):
 
 
 class AM1CCCHandler(SerializableMixIn):
+    """The AM1CCCHandler stands for AM1 Correctable Charge Correction (CCC) which uses OpenEye's AM1 charges[1]
+    along with corrections provided by the Forcefield definition in the form of SMIRKS and charge deltas. The SMIRKS
+    are currently parsed using the OpenEye Toolkits standard[2].
+
+    This handler supports jax.grad with respect to the forcefield parameters, which is what the "Correctable" refers
+    to in CCC.
+
+    Charges are conformer and platform dependent as of OpenEye Toolkits 2020.2.0 [3].
+
+    References
+    ----------
+    [1] AM1 Theory
+        https://docs.eyesopen.com/toolkits/python/quacpactk/molchargetheory.html#am1-charges
+    [2] OpenEye SMARTS standard
+        https://docs.eyesopen.com/toolkits/cpp/oechemtk/SMARTS.html
+    [3] Charging Inconsistencies
+        https://github.com/openforcefield/openff-toolkit/issues/1170
+    """
+
     def __init__(self, smirks, params, props):
         """
         Parameters
@@ -424,7 +468,7 @@ class AM1CCCHandler(SerializableMixIn):
         params: np.array, (P,)
             normalized charge increment for each matched bond
         smirks: list of str (P,)
-            SMIRKS patterns matching bonds
+            SMIRKS patterns matching bonds, to be parsed using OpenEye Toolkits
         mol: Chem.ROMol
             molecule to be parameterized.
 
