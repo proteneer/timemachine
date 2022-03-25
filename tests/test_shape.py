@@ -3,6 +3,7 @@ from jax.config import config
 config.update("jax_enable_x64", True)
 
 import functools
+from importlib import resources
 
 import numpy as np
 import pytest
@@ -57,7 +58,8 @@ class TestShape(GradientTest):
         * normalized overlap for similar configurations is between 0.5 and 1.0
         """
 
-        suppl = Chem.SDMolSupplier("tests/data/ligands_40.sdf", removeHs=False)
+        with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
+            suppl = Chem.SDMolSupplier(str(path_to_ligand), removeHs=False)
 
         prefactor = 2.7  # unitless
         lamb = (4 * np.pi) / (3 * prefactor)  # unitless
@@ -98,7 +100,8 @@ class TestShape(GradientTest):
     @pytest.mark.skip("disabled")
     def test_custom_op(self):
         """Construct a Shape potential and validate it using compare_forces"""
-        suppl = Chem.SDMolSupplier("tests/data/ligands_40.sdf", removeHs=False)
+        with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
+            suppl = Chem.SDMolSupplier(str(path_to_ligand), removeHs=False)
 
         prefactor = 2.7  # unitless
         lamb = (4 * np.pi) / (3 * prefactor)  # unitless
