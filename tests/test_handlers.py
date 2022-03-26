@@ -617,10 +617,14 @@ def test_compute_or_load_am1_charges():
     for (fresh, cached) in zip(fresh_am1_charges, cached_am1_charges):
         np.testing.assert_array_equal(fresh, cached)
 
+
 def test_charging_compounds_with_non_zero_charge():
     patterns = [
         ["[#6a:1]:[#6a:2]", 0.0],
-        ["[#7X3ar5,#7X3+1,#7X3+0$(*-[#6X3$(*=[#7X3+1])]),$([#7X3](-[#8X1-1])=[#8X1]),$([#7X3](=[#8X1])=[#8X1]):1]-[#8X1,#8X2:2]", 0.2380991882939545],
+        [
+            "[#7X3ar5,#7X3+1,#7X3+0$(*-[#6X3$(*=[#7X3+1])]),$([#7X3](-[#8X1-1])=[#8X1]),$([#7X3](=[#8X1])=[#8X1]):1]-[#8X1,#8X2:2]",
+            0.2380991882939545,
+        ],
     ]
 
     smirks = [x[0] for x in patterns]
@@ -639,7 +643,6 @@ def test_charging_compounds_with_non_zero_charge():
 
     es_params = am1h.parameterize(negative_mol)
     np.testing.assert_almost_equal(np.sum(es_params) / np.sqrt(ONE_4PI_EPS0), -1.0, decimal=5)
-
 
 
 def test_compute_or_load_bond_smirks_matches():
