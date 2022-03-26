@@ -10,6 +10,7 @@ import pytest
 from rdkit import Chem
 from rdkit.Chem import AllChem
 
+from timemachine.constants import ONE_4PI_EPS0
 from timemachine.ff.charges import AM1CCC_CHARGES
 from timemachine.ff.handlers import bonded, nonbonded
 from timemachine.ff.handlers.deserialize import deserialize_handlers
@@ -615,6 +616,30 @@ def test_compute_or_load_am1_charges():
     cached_am1_charges = [nonbonded.compute_or_load_am1_charges(mol) for mol in all_mols]
     for (fresh, cached) in zip(fresh_am1_charges, cached_am1_charges):
         np.testing.assert_array_equal(fresh, cached)
+
+def test_charging_compounds_with_non_zero_charge():
+    patterns = [
+        ["[#6a:1]:[#6a:2]", 0.0],
+        ["[#7X3ar5,#7X3+1,#7X3+0$(*-[#6X3$(*=[#7X3+1])]),$([#7X3](-[#8X1-1])=[#8X1]),$([#7X3](=[#8X1])=[#8X1]):1]-[#8X1,#8X2:2]", 0.2380991882939545],
+    ]
+
+    smirks = [x[0] for x in patterns]
+    params = np.array([x[1] for x in patterns])
+    props = None
+    am1h = nonbonded.AM1CCCHandler(smirks, params, props)
+
+    positive_mol = Chem.AddHs(Chem.MolFromSmiles("c1cc[nH+]cc1"))
+    AllChem.EmbedMolecule(positive_mol)
+
+    negative_mol = Chem.AddHs(Chem.MolFromSmiles("[N+](=O)([O-])[O-]"))
+    AllChem.EmbedMolecule(negative_mol)
+
+    es_params = am1h.parameterize(positive_mol)
+    np.testing.assert_almost_equal(np.sum(es_params / np.sqrt(ONE_4PI_EPS0)), 1.0, decimal=5)
+
+    es_params = am1h.parameterize(negative_mol)
+    np.testing.assert_almost_equal(np.sum(es_params) / np.sqrt(ONE_4PI_EPS0), -1.0, decimal=5)
+
 
 
 def test_compute_or_load_bond_smirks_matches():
