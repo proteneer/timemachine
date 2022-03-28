@@ -57,6 +57,11 @@ def oe_assign_charges(mol, charge_model="AM1BCCELF10"):
 
     partial_charges = np.array([atom.GetPartialCharge() for atom in oemol.GetAtoms()])
 
+    # Verify that the charges sum up to an integer
+    net_charge = np.sum(partial_charges)
+    net_charge_is_integral = np.isclose(net_charge, np.round(net_charge), atol=1e-5)
+    assert net_charge_is_integral, f"Charge is not an integer: {net_charge}"
+
     # https://github.com/proteneer/timemachine#forcefield-gotchas
     # "The charges have been multiplied by sqrt(ONE_4PI_EPS0) as an optimization."
     inlined_constant = np.sqrt(constants.ONE_4PI_EPS0)
@@ -202,7 +207,7 @@ def compute_or_load_bond_smirks_matches(mol, smirks_list):
 
 def apply_bond_charge_corrections(initial_charges, bond_idxs, deltas):
     """For an arbitrary collection of ordered bonds and associated increments `(a, b, delta)`,
-    update `charges` by `charges[a] += delta`, `charges[b] -= delta`
+    update `charges` by `charges[a] += delta`, `charges[b] -= delta`.
 
     Notes
     -----
@@ -226,12 +231,9 @@ def apply_bond_charge_corrections(initial_charges, bond_idxs, deltas):
     assert len(deltas) == len(bond_idxs)
 
     net_charge = jnp.sum(initial_charges)
-    net_charge_is_integral = jnp.isclose(net_charge, jnp.round(net_charge), atol=1e-5)
-
     final_net_charge = jnp.sum(final_charges)
     net_charge_is_unchanged = jnp.isclose(final_net_charge, net_charge, atol=1e-5)
 
-    assert net_charge_is_integral
     assert net_charge_is_unchanged
 
     # print some safety warnings

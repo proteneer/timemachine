@@ -187,7 +187,7 @@ def test_endpoint_correction():
 
     assert results[0] < 0.15
     assert results[1] > 0.30
-    assert results[2] < 0.25
+    assert results[2] < 0.30
 
     # assert overlaps[0] < 0.15
     # assert overlaps[3] > 0.45

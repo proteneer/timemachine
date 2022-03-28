@@ -63,10 +63,16 @@ class TestGPUCount(unittest.TestCase):
     @patch("timemachine.parallel.utils.check_output")
     def test_get_gpu_count(self, mock_output):
         mock_output.return_value = b"\n".join([f"GPU #{i}".encode() for i in range(5)])
-        assert parallel.utils.get_gpu_count() == 5
+        with patch.dict("os.environ", {"CUDA_VISIBLE_DEVICES": ""}):
+            assert parallel.utils.get_gpu_count() == 5
 
         mock_output.return_value = b"\n".join([f"GPU #{i}".encode() for i in range(100)])
-        assert parallel.utils.get_gpu_count() == 100
+        with patch.dict("os.environ", {"CUDA_VISIBLE_DEVICES": ""}):
+            assert parallel.utils.get_gpu_count() == 100
+
+        # Respect CUDA_VISIBLE_DEVICES if present
+        with patch.dict("os.environ", {"CUDA_VISIBLE_DEVICES": "0,5,10"}):
+            assert parallel.utils.get_gpu_count() == 3
 
         mock_output.side_effect = FileNotFoundError("nvidia-smi missing")
         with self.assertRaises(FileNotFoundError):
