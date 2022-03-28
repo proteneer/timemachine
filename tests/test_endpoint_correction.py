@@ -3,7 +3,7 @@ from jax.config import config
 config.update("jax_enable_x64", True)
 import copy
 import functools
-from pathlib import Path
+from importlib import resources
 
 import jax
 import numpy as np
@@ -19,11 +19,11 @@ from timemachine.potentials import bonded
 
 def setup_system():
 
-    root = Path(__file__).parent.parent
-    path_to_ligand = str(root.joinpath("tests/data/ligands_40.sdf"))
-
     forcefield = Forcefield.load_from_file("smirnoff_1_1_0_ccc.py")
-    suppl = Chem.SDMolSupplier(path_to_ligand, removeHs=False)
+
+    with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
+        suppl = Chem.SDMolSupplier(str(path_to_ligand), removeHs=False)
+
     all_mols = [x for x in suppl]
     mol_a = copy.deepcopy(all_mols[1])
 
@@ -187,7 +187,7 @@ def test_endpoint_correction():
 
     assert results[0] < 0.15
     assert results[1] > 0.30
-    assert results[2] < 0.25
+    assert results[2] < 0.30
 
     # assert overlaps[0] < 0.15
     # assert overlaps[3] > 0.45

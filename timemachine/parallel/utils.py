@@ -1,12 +1,20 @@
+import os
 from subprocess import check_output
 
 from timemachine.parallel.grpc.service_pb2 import StatusResponse
 
 
 def get_gpu_count() -> int:
-    output = check_output(["nvidia-smi", "-L"])
     # Expected to return a line delimited summary of each GPU
-    return len([x for x in output.split(b"\n") if len(x)])
+    output = check_output(["nvidia-smi", "-L"])
+    gpu_list = [x for x in output.split(b"\n") if len(x)]
+
+    # Respect CUDA_VISIBLE_DEVICES in determining GPU count
+    visible_devices = os.environ.get("CUDA_VISIBLE_DEVICES")
+    if visible_devices:
+        gpu_list = [gpu_list[i] for i in map(int, visible_devices.split(","))]
+
+    return len(gpu_list)
 
 
 def get_worker_status() -> StatusResponse:

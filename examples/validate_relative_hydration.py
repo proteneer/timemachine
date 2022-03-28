@@ -4,6 +4,7 @@
 
 import argparse
 import multiprocessing
+from importlib import resources
 
 import numpy as np
 from rdkit import Chem
@@ -59,8 +60,8 @@ if __name__ == "__main__":
         client = GRPCClient(hosts=cmd_args.hosts)
     client.verify()
 
-    path_to_ligand = "tests/data/ligands_40.sdf"
-    suppl = Chem.SDMolSupplier(path_to_ligand, removeHs=False)
+    with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
+        suppl = Chem.SDMolSupplier(str(path_to_ligand), removeHs=False)
 
     forcefield = Forcefield.load_from_file("smirnoff_1_1_0_ccc.py")
     mols = [x for x in suppl]

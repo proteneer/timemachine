@@ -1,3 +1,5 @@
+from importlib import resources
+
 from rdkit import Chem
 
 from timemachine.ff import Forcefield
@@ -10,7 +12,9 @@ def test_minimizer():
         "tests/data/hif2a_nowater_min.pdb"
     )
 
-    suppl = Chem.SDMolSupplier("tests/data/ligands_40.sdf", removeHs=False)
+    with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
+        suppl = Chem.SDMolSupplier(str(path_to_ligand), removeHs=False)
+
     all_mols = [x for x in suppl]
     mol_a = all_mols[1]
     mol_b = all_mols[4]
@@ -26,7 +30,9 @@ def test_minimizer():
 def test_equilibrate_host():
     host_system, host_coords, host_box, _ = builders.build_water_system(4.0)
 
-    suppl = Chem.SDMolSupplier("tests/data/ligands_40.sdf", removeHs=False)
+    with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
+        suppl = Chem.SDMolSupplier(str(path_to_ligand), removeHs=False)
+
     mol = next(suppl)
 
     ff = Forcefield.load_from_file("smirnoff_1_1_0_ccc.py")

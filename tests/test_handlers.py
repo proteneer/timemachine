@@ -2,6 +2,7 @@ from jax.config import config
 
 config.update("jax_enable_x64", True)
 import functools
+from importlib import resources
 
 import jax
 import numpy as np
@@ -9,6 +10,7 @@ import pytest
 from rdkit import Chem
 from rdkit.Chem import AllChem
 
+from timemachine.constants import ONE_4PI_EPS0
 from timemachine.ff.charges import AM1CCC_CHARGES
 from timemachine.ff.handlers import bonded, nonbonded
 from timemachine.ff.handlers.deserialize import deserialize_handlers
@@ -549,7 +551,9 @@ def test_am1_differences():
         if isinstance(ccc, nonbonded.AM1CCCHandler):
             break
 
-    suppl = Chem.SDMolSupplier("tests/data/ligands_40.sdf", removeHs=False)
+    with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
+        suppl = Chem.SDMolSupplier(str(path_to_ligand), removeHs=False)
+
     smi = "[H]c1c(OP(=S)(OC([H])([H])C([H])([H])[H])OC([H])([H])C([H])([H])[H])nc(C([H])(C([H])([H])[H])C([H])([H])[H])nc1C([H])([H])[H]"
     smi = "Clc1c(Cl)c(Cl)c(-c2c(Cl)c(Cl)c(Cl)c(Cl)c2Cl)c(Cl)c1Cl"
     mol = Chem.MolFromSmiles(smi)
@@ -590,7 +594,10 @@ def test_compute_or_load_am1_charges():
 
     # get some molecules
     cache_key = nonbonded.AM1_CHARGE_CACHE
-    suppl = Chem.SDMolSupplier("tests/data/ligands_40.sdf", removeHs=False)
+
+    with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
+        suppl = Chem.SDMolSupplier(str(path_to_ligand), removeHs=False)
+
     all_mols = [mol for mol in suppl]
     all_mols = all_mols[:5]  # truncate so that whole test is ~ 10 seconds
 
@@ -611,6 +618,33 @@ def test_compute_or_load_am1_charges():
         np.testing.assert_array_equal(fresh, cached)
 
 
+def test_charging_compounds_with_non_zero_charge():
+    patterns = [
+        ["[#6a:1]:[#6a:2]", 0.0],
+        [
+            "[#7X3ar5,#7X3+1,#7X3+0$(*-[#6X3$(*=[#7X3+1])]),$([#7X3](-[#8X1-1])=[#8X1]),$([#7X3](=[#8X1])=[#8X1]):1]-[#8X1,#8X2:2]",
+            0.2380991882939545,
+        ],
+    ]
+
+    smirks = [x[0] for x in patterns]
+    params = np.array([x[1] for x in patterns])
+    props = None
+    am1h = nonbonded.AM1CCCHandler(smirks, params, props)
+
+    positive_mol = Chem.AddHs(Chem.MolFromSmiles("c1cc[nH+]cc1"))
+    AllChem.EmbedMolecule(positive_mol)
+
+    negative_mol = Chem.AddHs(Chem.MolFromSmiles("[N+](=O)([O-])[O-]"))
+    AllChem.EmbedMolecule(negative_mol)
+
+    es_params = am1h.parameterize(positive_mol)
+    np.testing.assert_almost_equal(np.sum(es_params / np.sqrt(ONE_4PI_EPS0)), 1.0, decimal=5)
+
+    es_params = am1h.parameterize(negative_mol)
+    np.testing.assert_almost_equal(np.sum(es_params) / np.sqrt(ONE_4PI_EPS0), -1.0, decimal=5)
+
+
 def test_compute_or_load_bond_smirks_matches():
     """Loop over test ligands, asserting that
     * verify no cache key
@@ -620,7 +654,10 @@ def test_compute_or_load_bond_smirks_matches():
     * verify new values match initial matches"""
     # get some molecules
     match_cache_key = nonbonded.BOND_SMIRK_MATCH_CACHE
-    suppl = Chem.SDMolSupplier("tests/data/ligands_40.sdf", removeHs=False)
+
+    with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
+        suppl = Chem.SDMolSupplier(str(path_to_ligand), removeHs=False)
+
     all_mols = [mol for mol in suppl]
 
     # get some bond smirks

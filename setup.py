@@ -77,13 +77,16 @@ setup(
         "Programming Language :: Python :: 3",
     ],
     keywords="molecular dynamics",
-    ext_modules=[CMakeExtension("timemachine.lib.custom_ops", "timemachine/cpp")],
+    ext_modules=[CMakeExtension("timemachine.lib.custom_ops", "timemachine/cpp")]
+    if not os.environ.get("SKIP_CUSTOM_OPS")
+    else [],
     packages=find_packages(),
     python_requires=">=3.7",
     install_requires=[
         "bootstrapped",
         "grpcio",
         "hilbertcurve",
+        "importlib-resources",
         "jax",
         "jaxlib>0.1.74",
         "networkx",
@@ -97,7 +100,13 @@ setup(
         "test": ["pytest", "pytest-cov"],
     },
     package_data={
-        "datasets": ["timemachine/datasets"],
+        "timemachine": [
+            "datasets/freesolv/freesolv.sdf",
+            "testsystems/data/ligands_40.sdf",
+            # NOTE: C++ sources used at runtime for JIT compilation
+            "cpp/src/*.hpp",
+            "cpp/src/kernels/*.cuh",
+        ],
     },
     # entry_points={
     #     "console_scripts": [
