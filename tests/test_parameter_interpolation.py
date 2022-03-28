@@ -5,10 +5,13 @@ import copy
 
 import jax.numpy as jnp
 import numpy as np
+import pytest
 from common import GradientTest, prepare_water_system
 
 from timemachine.lib import potentials
 from timemachine.potentials import nonbonded
+
+pytestmark = [pytest.mark.memcheck]
 
 
 class TestInterpolatedPotential(GradientTest):

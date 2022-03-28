@@ -646,6 +646,14 @@ std::string dirname(const std::string &fname) {
     return (std::string::npos == pos) ? "" : fname.substr(0, pos);
 }
 
+std::set<int> unique_idxs(const std::vector<int> &idxs) {
+    std::set<int> unique_idxs(idxs.begin(), idxs.end());
+    if (unique_idxs.size() < idxs.size()) {
+        throw std::runtime_error("atom indices must be unique");
+    }
+    return unique_idxs;
+}
+
 template <typename RealType, bool Interpolated> void declare_nonbonded_all_pairs(py::module &m, const char *typestr) {
 
     using Class = timemachine::NonbondedAllPairs<RealType, Interpolated>;
@@ -655,10 +663,12 @@ template <typename RealType, bool Interpolated> void declare_nonbonded_all_pairs
         .def("set_nblist_padding", &timemachine::NonbondedAllPairs<RealType, Interpolated>::set_nblist_padding)
         .def("disable_hilbert_sort", &timemachine::NonbondedAllPairs<RealType, Interpolated>::disable_hilbert_sort)
         .def(
-            py::init([](const py::array_t<int, py::array::c_style> &lambda_plane_idxs_i,
+            py::init([](const std::string &kernel_dir,
+                        const py::array_t<int, py::array::c_style> &lambda_plane_idxs_i,
                         const py::array_t<int, py::array::c_style> &lambda_offset_idxs_i,
                         const double beta,
                         const double cutoff,
+                        const std::optional<py::array_t<int, py::array::c_style>> &atom_idxs_i,
                         const std::string &transform_lambda_charge = "lambda",
                         const std::string &transform_lambda_sigma = "lambda",
                         const std::string &transform_lambda_epsilon = "lambda",
@@ -671,8 +681,13 @@ template <typename RealType, bool Interpolated> void declare_nonbonded_all_pairs
                 std::memcpy(
                     lambda_offset_idxs.data(), lambda_offset_idxs_i.data(), lambda_offset_idxs_i.size() * sizeof(int));
 
-                std::string dir_path = dirname(__FILE__);
-                std::string kernel_dir = dir_path + "/kernels";
+                std::optional<std::set<int>> unique_atom_idxs(std::nullopt);
+                if (atom_idxs_i) {
+                    std::vector<int> atom_idxs(atom_idxs_i->size());
+                    std::memcpy(atom_idxs.data(), atom_idxs_i->data(), atom_idxs_i->size() * sizeof(int));
+                    unique_atom_idxs.emplace(unique_idxs(atom_idxs));
+                }
+
                 std::string src_path = kernel_dir + "/k_lambda_transformer_jit.cuh";
                 std::ifstream t(src_path);
                 std::string source_str((std::istreambuf_iterator<char>(t)), std::istreambuf_iterator<char>());
@@ -686,24 +701,18 @@ template <typename RealType, bool Interpolated> void declare_nonbonded_all_pairs
                 source_str = std::regex_replace(source_str, std::regex("CUSTOM_EXPRESSION_W"), transform_lambda_w);
 
                 return new timemachine::NonbondedAllPairs<RealType, Interpolated>(
-                    lambda_plane_idxs, lambda_offset_idxs, beta, cutoff, source_str);
+                    lambda_plane_idxs, lambda_offset_idxs, beta, cutoff, unique_atom_idxs, source_str);
             }),
+            py::arg("kernel_dir"),
             py::arg("lambda_plane_idxs_i"),
             py::arg("lambda_offset_idxs_i"),
             py::arg("beta"),
             py::arg("cutoff"),
+            py::arg("atom_idxs_i") = py::none(),
             py::arg("transform_lambda_charge") = "lambda",
             py::arg("transform_lambda_sigma") = "lambda",
             py::arg("transform_lambda_epsilon") = "lambda",
             py::arg("transform_lambda_w") = "lambda");
-}
-
-std::set<int> unique_idxs(const std::vector<int> &idxs) {
-    std::set<int> unique_idxs(idxs.begin(), idxs.end());
-    if (unique_idxs.size() < idxs.size()) {
-        throw std::runtime_error("atom indices must be unique");
-    }
-    return unique_idxs;
 }
 
 template <typename RealType, bool Interpolated>
@@ -717,7 +726,8 @@ void declare_nonbonded_interaction_group(py::module &m, const char *typestr) {
             "disable_hilbert_sort",
             &timemachine::NonbondedInteractionGroup<RealType, Interpolated>::disable_hilbert_sort)
         .def(
-            py::init([](const py::array_t<int, py::array::c_style> &row_atom_idxs_i,
+            py::init([](const std::string &kernel_dir,
+                        const py::array_t<int, py::array::c_style> &row_atom_idxs_i,
                         const py::array_t<int, py::array::c_style> &lambda_plane_idxs_i,
                         const py::array_t<int, py::array::c_style> &lambda_offset_idxs_i,
                         const double beta,
@@ -738,8 +748,6 @@ void declare_nonbonded_interaction_group(py::module &m, const char *typestr) {
                 std::memcpy(
                     lambda_offset_idxs.data(), lambda_offset_idxs_i.data(), lambda_offset_idxs_i.size() * sizeof(int));
 
-                std::string dir_path = dirname(__FILE__);
-                std::string kernel_dir = dir_path + "/kernels";
                 std::string src_path = kernel_dir + "/k_lambda_transformer_jit.cuh";
                 std::ifstream t(src_path);
                 std::string source_str((std::istreambuf_iterator<char>(t)), std::istreambuf_iterator<char>());
@@ -755,6 +763,7 @@ void declare_nonbonded_interaction_group(py::module &m, const char *typestr) {
                 return new timemachine::NonbondedInteractionGroup<RealType, Interpolated>(
                     unique_row_atom_idxs, lambda_plane_idxs, lambda_offset_idxs, beta, cutoff, source_str);
             }),
+            py::arg("kernel_dir"),
             py::arg("row_atom_idxs_i"),
             py::arg("lambda_plane_idxs_i"),
             py::arg("lambda_offset_idxs_i"),
@@ -773,7 +782,8 @@ void declare_nonbonded_pair_list(py::module &m, const char *typestr) {
     py::class_<Class, std::shared_ptr<Class>, timemachine::Potential>(
         m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
         .def(
-            py::init([](const py::array_t<int, py::array::c_style> &pair_idxs_i,
+            py::init([](const std::string &kernel_dir,
+                        const py::array_t<int, py::array::c_style> &pair_idxs_i,
                         const py::array_t<double, py::array::c_style> &scales_i,
                         const py::array_t<int, py::array::c_style> &lambda_plane_idxs_i,
                         const py::array_t<int, py::array::c_style> &lambda_offset_idxs_i,
@@ -797,8 +807,6 @@ void declare_nonbonded_pair_list(py::module &m, const char *typestr) {
                 std::memcpy(
                     lambda_offset_idxs.data(), lambda_offset_idxs_i.data(), lambda_offset_idxs_i.size() * sizeof(int));
 
-                std::string dir_path = dirname(__FILE__);
-                std::string kernel_dir = dir_path + "/kernels";
                 std::string src_path = kernel_dir + "/k_lambda_transformer_jit.cuh";
                 std::ifstream t(src_path);
                 std::string source_str((std::istreambuf_iterator<char>(t)), std::istreambuf_iterator<char>());
@@ -814,6 +822,7 @@ void declare_nonbonded_pair_list(py::module &m, const char *typestr) {
                 return new timemachine::NonbondedPairList<RealType, Negated, Interpolated>(
                     pair_idxs, scales, lambda_plane_idxs, lambda_offset_idxs, beta, cutoff, source_str);
             }),
+            py::arg("kernel_dir"),
             py::arg("pair_idxs_i"),
             py::arg("scales_i"),
             py::arg("lambda_plane_idxs_i"),

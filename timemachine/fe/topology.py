@@ -550,8 +550,9 @@ class DualTopologyRHFE(DualTopology):
         charge_indices = jax.ops.index[:, 0]
         epsilon_indices = jax.ops.index[:, 2]
 
-        src_qlj_params = qlj_params.at[charge_indices].multiply(0.5)
-        src_qlj_params = src_qlj_params.at[epsilon_indices].multiply(0.5)
+        src_qlj_params = jnp.asarray(qlj_params).at[charge_indices].multiply(0.5)
+        src_qlj_params = jnp.asarray(src_qlj_params).at[epsilon_indices].multiply(0.5)
+
         dst_qlj_params = qlj_params
         combined_qlj_params = jnp.concatenate([src_qlj_params, dst_qlj_params])
 
@@ -590,13 +591,13 @@ class DualTopologyStandardDecoupling(DualTopology):
         # dst_qlj_params corresponds to the end-state where only one of the molecule interacts with the binding pocket.
         charge_indices = jax.ops.index[:, 0]
         epsilon_indices = jax.ops.index[:, 2]
-        src_qlj_params_a = qlj_params_a.at[charge_indices].multiply(0.5)
-        src_qlj_params_a = src_qlj_params_a.at[epsilon_indices].multiply(0.5)
+        src_qlj_params_a = jnp.asarray(qlj_params_a).at[charge_indices].multiply(0.5)
+        src_qlj_params_a = jnp.asarray(src_qlj_params_a).at[epsilon_indices].multiply(0.5)
         dst_qlj_params_a = qlj_params_a
 
         qlj_params_b = standard_qlj_typer(self.mol_b)
-        src_qlj_params_b = qlj_params_b.at[charge_indices].multiply(0.5)
-        src_qlj_params_b = src_qlj_params_b.at[epsilon_indices].multiply(0.5)
+        src_qlj_params_b = jnp.asarray(qlj_params_b).at[charge_indices].multiply(0.5)
+        src_qlj_params_b = jnp.asarray(src_qlj_params_b).at[epsilon_indices].multiply(0.5)
         dst_qlj_params_b = qlj_params_b
 
         src_qlj_params = jnp.concatenate([src_qlj_params_a, src_qlj_params_b])

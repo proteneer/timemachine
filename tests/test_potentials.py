@@ -4,6 +4,8 @@ import pytest
 from timemachine.lib import custom_ops
 from timemachine.lib.potentials import FanoutSummedPotential, HarmonicBond, SummedPotential
 
+pytestmark = [pytest.mark.memcheck]
+
 
 @pytest.fixture
 def harmonic_bond():
