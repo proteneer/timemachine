@@ -616,8 +616,9 @@ def test_compute_or_load_am1_charges():
 @pytest.fixture
 def mol_with_precomputed_charges():
     """Provide a test mol with partial charges precomputed on two different versions of Ubuntu"""
+    with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
+        suppl = Chem.SDMolSupplier(str(path_to_ligand), removeHs=False)
 
-    suppl = Chem.SDMolSupplier("tests/data/ligands_40.sdf", removeHs=False)
     mols = [mol for mol in suppl]
     test_mol = mols[0]
 
