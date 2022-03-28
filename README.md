@@ -37,7 +37,7 @@ We currently support the following functional forms. Parameters that can be opti
 
 If using conda the following can be used to configure your environment
 
-```
+```shell
 conda env create -f environment.yml -n timemachine
 conda install openmm=7.5.1 -c conda-forge # only if using openmm from conda
 conda activate timemachine
@@ -45,9 +45,20 @@ conda activate timemachine
 
 ### Install Time Machine
 
-```
+#### Linux
+
+```shell
 pip install -r requirements.txt
 pip install .
+```
+
+#### Non-Linux
+
+The CUDA extension module implementing custom ops is only supported on Linux, but partial functionality is still available on non-Linux OSes. To install without the extension:
+
+```shell
+pip install -r requirements.txt
+SKIP_CUSTOM_OPS=1 pip install .
 ```
 
 ## Developing Time Machine
@@ -63,18 +74,19 @@ Possible variants of the last step include
 
 ```shell
 pip install -e .[dev,test]                 # optionally install dev and test dependencies
-CMAKE_ARGS=-DCUDA_ARCH=86 pip install -e . # overriding CUDA_ARCH
+CMAKE_ARGS=-DCUDA_ARCH=86 pip install -e . # override CUDA_ARCH
+SKIP_CUSTOM_OPS=1 pip install -e .         # skip building CUDA extension (non-Linux)
 
 # use parallel CMake build with `nproc` threads
 CMAKE_BUILD_PARALLEL_LEVEL=$(nproc) pip install -e .
 ```
 
 To rebuild the extension module after making changes to the C++/CUDA code, either rerun
-```
+```shell
 pip install -e .
 ```
 or
-```
+```shell
 make build
 ```
 
@@ -84,7 +96,7 @@ Note that `PYTHONPATH` must be set to include the `timemachine` repo root. To ru
 
 For example, starting from a clean environment with the openeye license file in `~/.openeye`:
 
-```
+```shell
 OE_DIR=~/.openeye PYTHONPATH=. pytest -xsv tests/
 ```
 

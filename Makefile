@@ -4,6 +4,9 @@ CPP_DIR := $(MKFILE_DIR)timemachine/cpp/
 INSTALL_PREFIX := $(MKFILE_DIR)timemachine/
 PYTEST_CI_ARGS := --color=yes --cov=. --cov-report=html:coverage/ --cov-append --durations=100
 
+NOGPU_MARKER := nogpu
+MEMCHECK_MARKER := memcheck
+
 NPROCS = `nproc`
 
 .PHONY: build
@@ -23,13 +26,17 @@ grpc:
 verify:
 	pre-commit run --all-files --show-diff-on-failure --color=always
 
+.PHONY: nogpu_tests
+nogpu_tests:
+	pytest -m $(NOGPU_MARKER) $(PYTEST_CI_ARGS)
+
 .PHONY: memcheck_tests
 memcheck_tests:
-	cuda-memcheck --leak-check full --error-exitcode 1 pytest $(PYTEST_CI_ARGS) tests/
+	compute-sanitizer --launch-timeout 120 --leak-check full --error-exitcode 1 pytest -m $(MEMCHECK_MARKER) $(PYTEST_CI_ARGS)
 
 .PHONY: unit_tests
 unit_tests:
-	pytest $(PYTEST_CI_ARGS) slow_tests/
+	pytest -m 'not $(NOGPU_MARKER) and not $(MEMCHECK_MARKER)' $(PYTEST_CI_ARGS)
 
 .PHONY: ci
 ci: verify memcheck_tests unit_tests

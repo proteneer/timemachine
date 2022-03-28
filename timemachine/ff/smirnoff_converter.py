@@ -170,12 +170,12 @@ if __name__ == "__main__":
                     sigma = 2.0 * rmin_half / (2.0 ** (1.0 / 6.0))
                 else:
                     sigma = parse_quantity(s.attributes["sigma"].value)
-                # Take sqrt of epislon to avoid singularity in backprop
+                # Take sqrt of epsilon to avoid singularity in backprop
                 params.append([patt, sigma, np.sqrt(epsilon)])
             vdws = {"patterns": params, "props": {}}
             for key, val in xmldoc.getElementsByTagName("vdW")[0].attributes.items():
                 if key == "cutoff":
-                    # we don't do cuttoffs.
+                    # we don't do cutoffs.
                     continue
                 elif "scale" in key:
                     val = float(val)

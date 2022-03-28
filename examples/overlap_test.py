@@ -5,6 +5,7 @@ from jax.config import config
 config.update("jax_enable_x64", True)
 import functools
 import multiprocessing
+from importlib import resources
 
 import jax
 import jax.numpy as np
@@ -91,7 +92,8 @@ def get_heavy_atom_idxs(mol):
 def convergence(args):
     epoch, lamb, lamb_idx = args
 
-    suppl = Chem.SDMolSupplier("tests/data/ligands_40.sdf", removeHs=False)
+    with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
+        suppl = Chem.SDMolSupplier(str(path_to_ligand), removeHs=False)
 
     ligands = []
     for mol in suppl:

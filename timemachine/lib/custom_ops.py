@@ -1,6 +1,14 @@
-# (ytz): this file is left intentionally blank.
-# it's a trick to allow us to do a dummy import on the client side
-# that don't have custom_ops shared objects.
+# This file contains stubs for some classes defined in the C++
+# extension module.
+#
+# The purpose is to allow importing modules with
+# unavoidable top-level references to objects defined in the extension
+# (e.g. modules containing subclasses of classes defined in the C++
+# code).
+#
+# If the extension module .so file is present, the definitions
+# in it will take precedence over the stubs defined here.
 
-# on the worker side, a custom .so file for the custom_op and will
-# have higher import priority than the .py file
+
+class FanoutSummedPotential:
+    pass

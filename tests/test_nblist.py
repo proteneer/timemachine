@@ -7,6 +7,8 @@ from timemachine.lib import custom_ops
 from timemachine.md.builders import build_water_system
 from timemachine.testsystems.relative import hif2a_ligand_pair
 
+pytestmark = [pytest.mark.memcheck]
+
 
 def test_block_bounds():
 

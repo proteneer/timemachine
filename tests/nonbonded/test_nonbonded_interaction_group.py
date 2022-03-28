@@ -10,6 +10,8 @@ from parameter_interpolation import gen_params
 from timemachine.lib.potentials import NonbondedInteractionGroup, NonbondedInteractionGroupInterpolated
 from timemachine.potentials import jax_utils, nonbonded
 
+pytestmark = [pytest.mark.memcheck]
+
 
 def test_nonbonded_interaction_group_invalid_indices():
     def make_potential(ligand_idxs, num_atoms):
