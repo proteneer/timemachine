@@ -4,7 +4,9 @@ from jax.config import config
 config.update("jax_enable_x64", True)
 import numpy as np
 from rdkit import Chem
+from rdkit.Chem import AllChem
 
+from timemachine.constants import ONE_4PI_EPS0
 from timemachine.fe import topology
 from timemachine.ff import Forcefield
 from timemachine.lib import potentials
@@ -37,7 +39,10 @@ def test_base_topology_conversion_ring_torsion():
     dst_qlj_params = qlj_params[len(qlj_params) // 2 :]
 
     np.testing.assert_array_equal(vanilla_qlj_params, src_qlj_params)
-    np.testing.assert_array_equal(topology.standard_qlj_typer(mol), dst_qlj_params)
+
+    expected_qlj_params = np.array(vanilla_qlj_params)
+    expected_qlj_params[:, 0] = 0
+    np.testing.assert_array_equal(expected_qlj_params, dst_qlj_params)
 
 
 def test_base_topology_conversion_r_group():
@@ -56,7 +61,7 @@ def test_base_topology_conversion_r_group():
 def test_base_topology_standard_decoupling():
 
     # this class is typically used in the second step of the RABFE protocol for the solvent leg.
-    # we expected the charges to be zero, and the lj parameters to be standardized. In addition,
+    # we expected the charges to be zero. In addition,
     # the torsions should be turned off.
     ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
     mol = Chem.AddHs(Chem.MolFromSmiles("c1ccccc1O"))
@@ -80,8 +85,6 @@ def test_base_topology_standard_decoupling():
     assert len(combined_torsion_potential.get_lambda_mult()) == len(combined_torsion_potential.get_lambda_offset())
 
     # impropers should always be turned on.
-    # num_proper_torsions = len(torsion_potential.get_idxs())
-
     assert np.all(combined_torsion_potential.get_lambda_mult() == 0)
     assert np.all(combined_torsion_potential.get_lambda_offset() == 1)
 
@@ -89,7 +92,7 @@ def test_base_topology_standard_decoupling():
 
     assert not isinstance(nonbonded_potential, potentials.NonbondedInterpolated)
 
-    np.testing.assert_array_equal(topology.standard_qlj_typer(mol), qlj_params)
+    np.testing.assert_array_equal(qlj_params[:, 0], np.zeros_like(qlj_params[:, 0]))
 
     np.testing.assert_array_equal(
         nonbonded_potential.get_lambda_plane_idxs(), np.zeros(mol.GetNumAtoms(), dtype=np.int32)
@@ -251,3 +254,45 @@ def test_dual_topology_rhfe():
     np.testing.assert_array_equal(combined_lambda_plane_idxs, np.zeros(C))
     np.testing.assert_array_equal(combined_lambda_offset_idxs[:A], np.zeros(A))
     np.testing.assert_array_equal(combined_lambda_offset_idxs[A:], np.ones(B))
+
+
+def test_dual_topology_charge_conversion():
+
+    # test charge parameter interpolation for a charged molecule
+    ff = Forcefield.load_from_file("smirnoff_1_1_0_ccc.py")
+
+    #                                      12  3 45  67 89 0 1  2    3
+    mol_a = Chem.AddHs(Chem.MolFromSmiles("CC(=O)OC1=CC=CC=C1C([O-])=O"))  # 20 atoms (inc. Hs)
+    mol_b = Chem.AddHs(Chem.MolFromSmiles("CC(-[O-])OC1=CC=CC=C1C(O)=O"))  # 22 atoms
+
+    AllChem.EmbedMolecule(mol_a)
+    AllChem.EmbedMolecule(mol_b)
+
+    num_a_atoms = mol_a.GetNumAtoms()
+
+    mol_top = topology.DualTopologyChargeConversion(mol_a, mol_b, ff)
+
+    qlj_params, nonbonded_potential = mol_top.parameterize_nonbonded(ff.q_handle.params, ff.lj_handle.params)
+
+    qlj_params_src = qlj_params[: len(qlj_params) // 2]
+    qlj_params_dst = qlj_params[len(qlj_params) // 2 :]
+
+    q_params_src = qlj_params_src[:, 0]
+    q_params_dst = qlj_params_dst[:, 0]
+
+    q_params_src_a = q_params_src[:num_a_atoms]
+    q_params_src_b = q_params_src[num_a_atoms:]
+
+    np.testing.assert_array_equal(q_params_src_b, np.zeros_like(q_params_src_b))
+    np.testing.assert_almost_equal(np.sum(q_params_src_a), -1 * np.sqrt(ONE_4PI_EPS0), decimal=5)
+
+    q_params_dst_a = q_params_dst[:num_a_atoms]
+    q_params_dst_b = q_params_dst[num_a_atoms:]
+
+    np.testing.assert_almost_equal(np.sum(q_params_dst_b), -1 * np.sqrt(ONE_4PI_EPS0), decimal=5)
+    np.testing.assert_array_equal(q_params_dst_a, np.zeros_like(q_params_dst_a))
+
+    # test that net charge along path of interpolation is -1
+    for lam in np.linspace(0, 1, 100):
+        qi = (1 - lam) * q_params_src + lam * q_params_dst
+        np.testing.assert_almost_equal(np.sum(qi), -1 * np.sqrt(ONE_4PI_EPS0), decimal=5)
