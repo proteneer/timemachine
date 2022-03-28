@@ -281,7 +281,7 @@ def assert_no_second_derivative(f, x):
     assert type(problem) == TypeError
 
 
-def assert_ff_optimizable(U, coords, sys_params, box, lam):
+def assert_ff_optimizable(U, coords, sys_params, box, lam, tol=1e-10):
     """define a differentiable loss function in terms of U, assert it can be minimized,
     and return initial params, optimized params, and the loss function"""
 
@@ -304,7 +304,7 @@ def assert_ff_optimizable(U, coords, sys_params, box, lam):
     # minimization successful
     result = minimize(fun, x_0, jac=True, tol=0)
     x_opt = result.x
-    assert flat_loss(x_opt) < 1e-10
+    assert flat_loss(x_opt) < tol
 
     return x_0, x_opt, flat_loss
 
@@ -323,14 +323,15 @@ def test_functional():
     box = np.eye(3) * 100
     lam = 0.5
 
-    for precision in [np.float32, np.float64]:
+    tol_at_precision = {np.float32: 2.5e-10, np.float64: 1e-10}
+    for precision, tol in tol_at_precision.items():
         U = construct_differentiable_interface(unbound_potentials, precision)
 
         # U, grad(U) have the right shapes
         assert_shapes_consistent(U, coords, sys_params, box, lam)
 
         # can scipy.optimize a differentiable Jax function that calls U
-        x_0, x_opt, flat_loss = assert_ff_optimizable(U, coords, sys_params, box, lam)
+        x_0, x_opt, flat_loss = assert_ff_optimizable(U, coords, sys_params, box, lam, tol)
 
         # jacfwd agrees with jacrev
         assert_fwd_rev_consistent(flat_loss, x_0)
