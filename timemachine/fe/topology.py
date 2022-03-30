@@ -357,7 +357,7 @@ class BaseTopologyConversion(BaseTopology):
 
         qlj_params, nb_potential = super().parameterize_nonbonded(ff_q_params, ff_lj_params)
         src_qlj_params = qlj_params
-        dst_qlj_params = standard_qlj_typer(self.mol)
+        dst_qlj_params = jnp.asarray(qlj_params).at[:, 0].set(0.0)
 
         combined_qlj_params = jnp.concatenate([src_qlj_params, dst_qlj_params])
         lambda_plane_idxs = np.zeros(self.mol.GetNumAtoms(), dtype=np.int32)
@@ -381,8 +381,8 @@ class BaseTopologyStandardDecoupling(BaseTopology):
     def parameterize_nonbonded(self, ff_q_params, ff_lj_params):
 
         # mol is standardized into a forcefield independent state.
-        _, nb_potential = super().parameterize_nonbonded(ff_q_params, ff_lj_params)
-        qlj_params = standard_qlj_typer(self.mol)
+        qlj_params, nb_potential = super().parameterize_nonbonded(ff_q_params, ff_lj_params)
+        qlj_params = jnp.asarray(qlj_params).at[:, 0].multiply(0.0)
 
         return qlj_params, nb_potential
 
@@ -1048,3 +1048,59 @@ class SingleTopology:
         )
         combined_potential = potentials.PeriodicTorsion(combined_idxs, combined_lambda_mult, combined_lambda_offset)
         return combined_params, combined_potential
+
+
+class DualTopologyChargeConversion(DualTopology):
+    """
+    Let A and B be the two ligands of interest (typically both occupying the binding pocket)
+    Assume that exclusions are already defined between atoms in A and atoms in B.
+
+    Let this topology class compute the free energy associated with transferring the charge
+    from molecule A onto molecule B.
+
+    lambda=0: ligand A (charged), ligand B (decharged)
+    lambda=1: ligand A (decharged), ligand B (charged)
+
+    """
+
+    def parameterize_nonbonded(self, ff_q_params, ff_lj_params):
+        qlj_params_ab, nb_potential = super().parameterize_nonbonded(ff_q_params, ff_lj_params)
+        num_a_atoms = self.mol_a.GetNumAtoms()
+        qlj_params_src = qlj_params_ab.at[num_a_atoms:, 0].set(0.0)
+        qlj_params_dst = qlj_params_ab.at[:num_a_atoms, 0].set(0.0)
+        combined_qlj_params = jnp.concatenate([qlj_params_src, qlj_params_dst])
+        interpolated_potential = nb_potential.interpolate()
+
+        # probably already set to zeros by default
+        combined_lambda_plane_idxs = np.zeros(self.mol_a.GetNumAtoms() + self.mol_b.GetNumAtoms(), dtype=np.int32)
+        combined_lambda_offset_idxs = np.zeros(self.mol_a.GetNumAtoms() + self.mol_b.GetNumAtoms(), dtype=np.int32)
+        interpolated_potential.set_lambda_plane_idxs(combined_lambda_plane_idxs)
+        interpolated_potential.set_lambda_offset_idxs(combined_lambda_offset_idxs)
+
+        return combined_qlj_params, interpolated_potential
+
+
+class DualTopologyDecoupling(DualTopology):
+    """
+    Given two ligands A and B, let the end-states be:
+
+    lambda=0 A is fully charged, and interacting with the environment.
+             B is decharged, but "inserted"/interacting with the environment.
+
+    lambda=1 A is fully charged, and interacting with the environment.
+             B is decharged, and non-interacting with the environment.
+
+    """
+
+    def parameterize_nonbonded(self, ff_q_params, ff_lj_params):
+        qlj_params_combined, nb_potential = super().parameterize_nonbonded(ff_q_params, ff_lj_params)
+        qlj_params_combined = jnp.asarray(qlj_params_combined).at[self.mol_a.GetNumAtoms() :, 0].multiply(0.0)
+
+        combined_lambda_plane_idxs = np.zeros(self.mol_a.GetNumAtoms() + self.mol_b.GetNumAtoms(), dtype=np.int32)
+        combined_lambda_offset_idxs = np.concatenate(
+            [np.zeros(self.mol_a.GetNumAtoms(), dtype=np.int32), np.ones(self.mol_b.GetNumAtoms(), dtype=np.int32)]
+        )
+        nb_potential.set_lambda_plane_idxs(combined_lambda_plane_idxs)
+        nb_potential.set_lambda_offset_idxs(combined_lambda_offset_idxs)
+
+        return qlj_params_combined, nb_potential

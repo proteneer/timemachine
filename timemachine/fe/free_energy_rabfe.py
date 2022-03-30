@@ -99,7 +99,8 @@ class RABFEResult:
     @property
     def dG_complex(self):
         """effective free energy of removing from complex"""
-        return self.dG_complex_conversion + self.dG_complex_decouple
+        # return self.dG_complex_conversion + self.dG_complex_decouple
+        return -self.dG_complex_conversion + self.dG_complex_decouple
 
     @property
     def dG_solvent(self):
