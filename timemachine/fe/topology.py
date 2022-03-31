@@ -358,6 +358,7 @@ class BaseTopologyConversion(BaseTopology):
         qlj_params, nb_potential = super().parameterize_nonbonded(ff_q_params, ff_lj_params)
         src_qlj_params = qlj_params
         dst_qlj_params = jnp.asarray(qlj_params).at[:, 0].set(0.0)
+        dst_qlj_params = dst_qlj_params.at[:, 2].multiply(0.5)
 
         combined_qlj_params = jnp.concatenate([src_qlj_params, dst_qlj_params])
         lambda_plane_idxs = np.zeros(self.mol.GetNumAtoms(), dtype=np.int32)
@@ -383,6 +384,7 @@ class BaseTopologyStandardDecoupling(BaseTopology):
         # mol is standardized into a forcefield independent state.
         qlj_params, nb_potential = super().parameterize_nonbonded(ff_q_params, ff_lj_params)
         qlj_params = jnp.asarray(qlj_params).at[:, 0].multiply(0.0)
+        qlj_params = qlj_params.at[:, 2].multiply(0.5)
 
         return qlj_params, nb_potential
 
@@ -1067,7 +1069,9 @@ class DualTopologyChargeConversion(DualTopology):
         qlj_params_ab, nb_potential = super().parameterize_nonbonded(ff_q_params, ff_lj_params)
         num_a_atoms = self.mol_a.GetNumAtoms()
         qlj_params_src = qlj_params_ab.at[num_a_atoms:, 0].set(0.0)
+        qlj_params_src = qlj_params_src.at[num_a_atoms:, 2].multiply(0.5)
         qlj_params_dst = qlj_params_ab.at[:num_a_atoms, 0].set(0.0)
+        qlj_params_dst = qlj_params_dst.at[:num_a_atoms, 2].multiply(0.5)
         combined_qlj_params = jnp.concatenate([qlj_params_src, qlj_params_dst])
         interpolated_potential = nb_potential.interpolate()
 
@@ -1095,6 +1099,7 @@ class DualTopologyDecoupling(DualTopology):
     def parameterize_nonbonded(self, ff_q_params, ff_lj_params):
         qlj_params_combined, nb_potential = super().parameterize_nonbonded(ff_q_params, ff_lj_params)
         qlj_params_combined = jnp.asarray(qlj_params_combined).at[self.mol_a.GetNumAtoms() :, 0].multiply(0.0)
+        qlj_params_combined = qlj_params_combined.at[self.mol_a.GetNumAtoms() :, 2].multiply(0.5)
 
         combined_lambda_plane_idxs = np.zeros(self.mol_a.GetNumAtoms() + self.mol_b.GetNumAtoms(), dtype=np.int32)
         combined_lambda_offset_idxs = np.concatenate(
