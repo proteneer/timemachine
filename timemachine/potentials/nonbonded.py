@@ -24,6 +24,22 @@ from typing import Optional
 Array = np.array
 
 
+def combining_rule_sigma(sig_i, sig_j):
+    """Lorentz-Berthelot (sig_i + sig_j) / 2,
+    but assuming sig -> (sig / 2) has been applied
+    https://github.com/proteneer/timemachine/blob/2d0ef5bb45e034e33074f50e8e0a13189f1b0630/timemachine/ff/handlers/nonbonded.py#L334
+    """
+    return sig_i + sig_j
+
+
+def combining_rule_epsilon(eps_i, eps_j):
+    """Lorentz-Berthelot sqrt(eps_i * eps_j),
+    but assuming eps -> sqrt(eps) has been applied
+    (point 2 of https://github.com/proteneer/timemachine#forcefield-gotchas)
+    """
+    return eps_i * eps_j
+
+
 def lennard_jones(dij, sig_ij, eps_ij):
     """https://en.wikipedia.org/wiki/Lennard-Jones_potential"""
     sig6 = (sig_ij / dij) ** 6
@@ -80,8 +96,8 @@ def nonbonded_block(xi, xj, box, params_i, params_j, beta, cutoff):
     eps_i = np.expand_dims(params_i[:, 2], axis=1)
     eps_j = np.expand_dims(params_j[:, 2], axis=0)
 
-    sig_ij = sig_i + sig_j
-    eps_ij = eps_i * eps_j
+    sig_ij = combining_rule_sigma(sig_i, sig_j)
+    eps_ij = combining_rule_sigma(eps_i, eps_j)
 
     qi = np.expand_dims(params_i[:, 0], axis=1)
     qj = np.expand_dims(params_j[:, 0], axis=0)
@@ -196,12 +212,12 @@ def nonbonded_v3(
 
     sig_i = np.expand_dims(sig, 0)
     sig_j = np.expand_dims(sig, 1)
-    sig_ij = sig_i + sig_j
+    sig_ij = combining_rule_sigma(sig_i, sig_j)
 
     eps_i = np.expand_dims(eps, 0)
     eps_j = np.expand_dims(eps, 1)
 
-    eps_ij = eps_i * eps_j
+    eps_ij = combining_rule_epsilon(eps_i, eps_j)
 
     dij = distance(conf, box)
 
@@ -268,8 +284,12 @@ def nonbonded_v3_on_specific_pairs(conf, params, box, pairs, beta: float, cutoff
     charges, sig, eps = params.T
 
     # vdW by Lennard-Jones
-    sig_ij = apply_cutoff(sig[inds_l] + sig[inds_r])
-    eps_ij = apply_cutoff(eps[inds_l] * eps[inds_r])
+    sig_ij = combining_rule_sigma(sig[inds_l], sig[inds_r])
+    sig_ij = apply_cutoff(sig_ij)
+
+    eps_ij = combining_rule_epsilon(eps[inds_l], eps[inds_r])
+    eps_ij = apply_cutoff(eps_ij)
+
     vdW = np.where(eps_ij != 0, lennard_jones(dij, sig_ij, eps_ij), 0)
 
     # Electrostatics by direct-space part of PME
@@ -512,8 +532,6 @@ def lj_prefactor_on_atom(x_i, x_others, sig_i, sig_others, eps_others, box=None,
     sig6 = (sig_ij / d_ij) ** 6
     sig12 = sig6 ** 2
 
-    # note: "eps" throughout means "sqrt(eps)"! (see 2 https://github.com/proteneer/timemachine#forcefield-gotchas)
-    # return np.sum(4 * np.sqrt(eps_others) * (sig12 - sig6))
     return np.sum(4 * eps_others * (sig12 - sig6))
 
 
@@ -545,11 +563,5 @@ def lj_prefactors_on_traj(traj, boxes, sigmas, epsilons, ligand_indices, env_ind
 def lj_interaction_group_energy(eps_ligand, eps_prefactors):
     """assuming eps_prefactors = lj_prefactors_on_snapshot(x_ligand, ...),
     cheaply compute the energy of ligand-environment interaction group"""
-
-    # note: sqrt already in eps! reflecting combining rule,
-    #   see (2) in https://github.com/proteneer/timemachine#forcefield-gotchas
-    #   eps_ij = sqrt(eps_i * eps_j)
-    #          = sqrt(eps_i) * sqrt(eps_j)
-    #          = tm_eps_i * tm_eps_j
 
     return np.dot(eps_prefactors, eps_ligand)
