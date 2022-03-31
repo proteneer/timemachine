@@ -447,6 +447,7 @@ def validate_coulomb_cutoff(cutoff=1.0, beta=2.0, threshold=1e-2):
 # utilities for efficiently recomputing energy as a function of ligand charges
 #   (where x_ligand, x_environment, q_environment are all constant, but q_ligand is variable)
 #   exploiting the fact that nonbonded_interaction_group(ligand_charges) is a linear function of ligand_charges
+#   TODO: avoid repetition between this and lennard-jones
 
 
 def coulomb_prefactor_on_atom(x_i, x_others, q_others, box=None, beta=2.0, cutoff=np.inf):
@@ -495,3 +496,60 @@ def coulomb_interaction_group_energy(q_ligand, q_prefactors):
     cheaply compute the energy of ligand-environment interaction group"""
 
     return np.dot(q_prefactors, q_ligand)
+
+
+# utilities for efficiently recomputing energy as a function of ligand epsilon parameters
+#   (where x_ligand, x_environment, eps_environment are all constant, but eps_ligand is variable)
+#   exploiting the fact that nonbonded_interaction_group(eps_ligand) is a linear function of sqrt(eps_ligand)
+#   TODO: avoid repetition between this and coulomb
+
+
+def lj_prefactor_on_atom(x_i, x_others, sig_i, sig_others, eps_others, box=None, cutoff=np.inf):
+    displacements_ij = jax_utils.delta_r(x_i, x_others, box)
+    d2_ij = np.sum(displacements_ij ** 2, 1)
+    d_ij = np.where(d2_ij <= cutoff ** 2, np.sqrt(d2_ij), np.inf)
+    sig_ij = (sig_i + sig_others) / 2
+    sig6 = (sig_ij / d_ij) ** 6
+    sig12 = sig6 ** 2
+
+    # note: "eps" throughout means "sqrt(eps)"! (see 2 https://github.com/proteneer/timemachine#forcefield-gotchas)
+    # return np.sum(4 * np.sqrt(eps_others) * (sig12 - sig6))
+    return np.sum(4 * eps_others * (sig12 - sig6))
+
+
+def lj_prefactors_on_snapshot(x_ligand, x_env, sig_ligand, sig_others, eps_others, box=None, cutoff=np.inf):
+    """map lj_prefactor_on_atom over each atom in x_ligand"""
+
+    def f_atom(x_i, sig_i):
+        return lj_prefactor_on_atom(x_i, x_env, sig_i, sig_others, eps_others, box, cutoff)
+
+    return vmap(f_atom)(x_ligand, sig_ligand)
+
+
+def lj_prefactors_on_traj(traj, boxes, sigmas, epsilons, ligand_indices, env_indices, cutoff=np.inf):
+    """map lj_prefactors_on_snapshot over each snapshot in a trajectory"""
+
+    sig_ligand = sigmas[ligand_indices]
+
+    eps_env = epsilons[env_indices]
+    sig_env = sigmas[env_indices]
+
+    def f_snapshot(coords, box):
+        x_ligand = coords[ligand_indices]
+        x_env = coords[env_indices]
+        return lj_prefactors_on_snapshot(x_ligand, x_env, sig_ligand, sig_env, eps_env, box, cutoff)
+
+    return vmap(f_snapshot)(traj, boxes)
+
+
+def lj_interaction_group_energy(eps_ligand, eps_prefactors):
+    """assuming eps_prefactors = lj_prefactors_on_traj(x_ligand, ...),
+    cheaply compute the energy of ligand-environment interaction group"""
+
+    # note: sqrt already in eps! reflecting combining rule,
+    #   see (2) in https://github.com/proteneer/timemachine#forcefield-gotchas
+    #   eps_ij = sqrt(eps_i * eps_j)
+    #          = sqrt(eps_i) * sqrt(eps_j)
+    #          = tm_eps_i * tm_eps_j
+
+    return np.dot(eps_prefactors, eps_ligand)
