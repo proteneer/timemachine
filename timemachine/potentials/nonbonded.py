@@ -442,3 +442,56 @@ def validate_coulomb_cutoff(cutoff=1.0, beta=2.0, threshold=1e-2):
     following https://github.com/proteneer/timemachine/pull/424#discussion_r629678467"""
     if erfc(beta * cutoff) > threshold:
         print(UserWarning(f"erfc(beta * cutoff) = {erfc(beta * cutoff)} > threshold = {threshold}"))
+
+
+# utilities for efficiently recomputing energy as a function of ligand charges
+#   (where x_ligand, x_environment, q_environment are all constant, but q_ligand is variable)
+#   exploiting the fact that nonbonded_interaction_group(ligand_charges) is a linear function of ligand_charges
+
+
+def coulomb_prefactor_on_atom(x_i, x_others, q_others, box=None, beta=2.0, cutoff=np.inf):
+    """
+    to compute
+    contribution_i = sum_j (q_i * q_j) / d_ij * erfc(beta * d_ij)
+    efficiently as a function of q_i
+
+    precompute
+    prefactor_i = sum_j q_j / d_ij * erfc(beta * d_ij)
+
+    so that
+    contribution_i(q_i) = prefactor_i * q_i
+    """
+    displacements_ij = jax_utils.delta_r(x_i, x_others, box)
+    d2_ij = np.sum(displacements_ij ** 2, 1)
+    d_ij = np.where(d2_ij <= cutoff ** 2, np.sqrt(d2_ij), np.inf)
+    prefactor_i = np.sum((q_others / d_ij) * erfc(beta * d_ij))
+    return prefactor_i
+
+
+def coulomb_prefactors_on_snapshot(x_ligand, x_env, q_env, box=None, beta=2.0, cutoff=np.inf):
+    """map coulomb_prefactor_on_atom over each atom in x_ligand"""
+
+    def f_atom(x_i):
+        return coulomb_prefactor_on_atom(x_i, x_env, q_env, box, beta, cutoff)
+
+    return vmap(f_atom)(x_ligand)
+
+
+def coulomb_prefactors_on_traj(traj, boxes, charges, ligand_indices, env_indices, beta=2.0, cutoff=np.inf):
+    """map coulomb_prefactors_on_snapshot over each snapshot in a trajectory"""
+
+    q_env = charges[env_indices]
+
+    def f_snapshot(coords, box):
+        x_ligand = coords[ligand_indices]
+        x_env = coords[env_indices]
+        return coulomb_prefactors_on_snapshot(x_ligand, x_env, q_env, box, beta, cutoff)
+
+    return vmap(f_snapshot)(traj, boxes)
+
+
+def coulomb_interaction_group_energy(q_ligand, q_prefactors):
+    """assuming q_prefactors = coulomb_prefactors_on_snapshot(x_ligand, ...),
+    cheaply compute the energy of ligand-environment interaction group"""
+
+    return np.dot(q_prefactors, q_ligand)
