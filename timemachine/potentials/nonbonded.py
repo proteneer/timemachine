@@ -426,7 +426,7 @@ def interpolated(u_fn):
     def wrapper(conf, params, box, lamb):
 
         # params is expected to be the concatenation of initial
-        # (lambda = 0) and final (lamda = 1) parameters, each of
+        # (lambda = 0) and final (lambda = 1) parameters, each of
         # length num_atoms
         assert params.size % 2 == 0
         num_atoms = params.shape[0] // 2
