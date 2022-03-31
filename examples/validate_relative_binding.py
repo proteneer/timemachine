@@ -275,22 +275,10 @@ if __name__ == "__main__":
         seed=seed,
     )
 
-    complex_conversion_schedule = construct_conversion_lambda_schedule(cmd_args.num_complex_conv_windows)
-    # complex models
-    binding_model_complex_conversion = model_rabfe.AbsoluteConversionModel(
-        client,
-        forcefield,
-        complex_system,
-        complex_conversion_schedule,
-        complex_topology,
-        temperature,
-        pressure,
-        dt,
-        cmd_args.num_complex_equil_steps,
-        cmd_args.num_complex_prod_steps,
-        frame_filter=frame_filter,
-    )
+    # force constant for the harmonic core-restraints
+    k_core = 30.0
 
+    # complex models
     binding_model_complex_decouple = model_rabfe.RelativeBindingModel(
         client,
         forcefield,
@@ -303,6 +291,23 @@ if __name__ == "__main__":
         cmd_args.num_complex_equil_steps,
         cmd_args.num_complex_prod_steps,
         frame_filter=frame_filter,
+        k_core=k_core,
+    )
+
+    complex_conversion_schedule = construct_conversion_lambda_schedule(cmd_args.num_complex_conv_windows)
+    binding_model_complex_conversion = model_rabfe.RelativeConversionModel(
+        client,
+        forcefield,
+        complex_system,
+        complex_absolute_schedule,
+        complex_topology,
+        temperature,
+        pressure,
+        dt,
+        cmd_args.num_complex_equil_steps,
+        cmd_args.num_complex_prod_steps,
+        frame_filter=frame_filter,
+        k_core=k_core,
     )
 
     # solvent models.
@@ -377,16 +382,6 @@ if __name__ == "__main__":
         complex_decouple_x0 = np.concatenate([complex_decouple_x0, aligned_mol_coords, ref_coords])
 
         # compute the free energy of conversion in complex
-        complex_conversion_x0 = minimizer.minimize_host_4d(
-            [mol],
-            complex_system,
-            complex_host_coords,
-            forcefield,
-            complex_box0,
-            [aligned_mol_coords],
-        )
-        complex_conversion_x0 = np.concatenate([complex_conversion_x0, aligned_mol_coords])
-
         min_solvent_coords = minimizer.minimize_host_4d(
             [mol], solvent_system, solvent_host_coords, forcefield, solvent_box0
         )
@@ -418,7 +413,9 @@ if __name__ == "__main__":
             "complex_conversion": binding_model_complex_conversion.simulate_futures(
                 ordered_params,
                 mol,
-                complex_conversion_x0,
+                blocker_mol,
+                core_idxs,
+                complex_decouple_x0,
                 complex_box0,
                 prefix="complex_conversion_" + suffix,
                 seed=seed,
@@ -455,6 +452,7 @@ if __name__ == "__main__":
         dG_complex_conversion, dG_complex_conversion_error = binding_model_complex_conversion.predict_from_futures(
             results["complex_conversion"][0],
             results["mol"],
+            results["blocker"],
             results["complex_conversion"][1],
             results["complex_conversion"][2],
         )
