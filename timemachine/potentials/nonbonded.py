@@ -543,7 +543,7 @@ def lj_prefactors_on_traj(traj, boxes, sigmas, epsilons, ligand_indices, env_ind
 
 
 def lj_interaction_group_energy(eps_ligand, eps_prefactors):
-    """assuming eps_prefactors = lj_prefactors_on_traj(x_ligand, ...),
+    """assuming eps_prefactors = lj_prefactors_on_snapshot(x_ligand, ...),
     cheaply compute the energy of ligand-environment interaction group"""
 
     # note: sqrt already in eps! reflecting combining rule,
