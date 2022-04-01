@@ -437,7 +437,7 @@ def lj_prefactor_on_atom(x_i, x_others, sig_i, sig_others, eps_others, box=None,
     displacements_ij = jax_utils.delta_r(x_i, x_others, box)
     d2_ij = np.sum(displacements_ij ** 2, 1)
     d_ij = np.where(d2_ij <= cutoff ** 2, np.sqrt(d2_ij), np.inf)
-    sig_ij = (sig_i + sig_others) / 2
+    sig_ij = combining_rule_sigma(sig_i, sig_others)
     sig6 = (sig_ij / d_ij) ** 6
     sig12 = sig6 ** 2
     # note: eps_others rather than sqrt(eps_others) -- see `combining_rule_epsilon`
