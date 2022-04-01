@@ -1,7 +1,6 @@
 import functools
 
 import jax.numpy as np
-import numpy as onp
 from jax import vmap
 from jax.scipy.special import erfc
 
@@ -313,67 +312,6 @@ def compute_batch_nonbonded(confs, boxes, pair_lists, nb_params, beta, cutoff):
     return batch_of_energies
 
 
-def compute_batch_nonbonded_exceptions(confs, boxes, pair_list, prefactors, nb_params, beta, cutoff):
-    """vmap over a batch of confs, boxes
-    reusing the same pair list, (1 - scale_factors), ...
-
-    Notes
-    -----
-    * should be added to (not subtracted from) the nonbonded sum!
-    * prefactors = (1 - scale_factors)
-    """
-    vdw_prefactor, electrostatic_prefactor = prefactors.T
-
-    def _compute_nonbonded(conf, box):
-        vdw, electrostatics = nonbonded_v3_on_specific_pairs(conf, nb_params, box, pair_list, beta, cutoff)
-        return np.sum(vdw * vdw_prefactor) + np.sum(electrostatics * electrostatic_prefactor)
-
-    batch_of_energies = vmap(_compute_nonbonded)(confs, boxes)
-
-    assert batch_of_energies.shape == (len(confs),)
-
-    return batch_of_energies
-
-
-def get_intramolecular_nb_pairs_and_prefactors(ligand_indices, exclusion_idxs, scale_factors):
-    """
-    pairs (i, j) where:
-    * i in ligand indices
-    * j in ligand_indices
-    * i != j
-    * if exclusion_idxs[idx] = [i, j], (prefactors[idx] != 0).any()
-    """
-    n_ligand = len(ligand_indices)
-
-    # {(i, j) : i < j, i in ligand_indices, j in ligand_indices}
-    candidate_pairs_ll = onp.array([ligand_indices[_idx] for _idx in np.triu_indices(n_ligand, k=1)]).T
-    assert (candidate_pairs_ll[:, 0] < candidate_pairs_ll[:, 1]).all()
-    assert (exclusion_idxs[:, 0] < exclusion_idxs[:, 1]).all()
-
-    scales_dict = {tuple(pair): scales for (pair, scales) in zip(exclusion_idxs, scale_factors)}
-
-    pair_list = []
-    prefactors = []
-
-    DEFAULT_PREFACTOR = (1.0, 1.0)
-
-    for pair in candidate_pairs_ll:
-        pair = tuple(pair)
-
-        if pair in scales_dict:
-            prefactor = 1 - scales_dict[pair]
-            exclude = (prefactor == 0).all()
-            if exclude:
-                continue
-            else:
-                pair_list.append(pair)
-                prefactors.append(scales_dict[pair])
-        else:
-            pair_list.append(pair)
-            prefactors.append(DEFAULT_PREFACTOR)
-    return np.array(pair_list), np.array(prefactors)
-
-
 def construct_batch_nonbonded_hl_as_fxn_of_ligand_nb_params(
     confs, boxes, host_indices, ligand_indices, nb_params, beta, cutoff
 ):
@@ -387,47 +325,6 @@ def construct_batch_nonbonded_hl_as_fxn_of_ligand_nb_params(
         return compute_batch_nonbonded(confs, boxes, pairs_hl, new_nb_params, beta, cutoff)
 
     return batch_nonbonded_hl
-
-
-def construct_batch_nonbonded_ll_as_fxn_of_ligand_nb_params(
-    confs, boxes, ligand_indices, exclusion_idxs, scale_factors, nb_params, beta, cutoff
-):
-    """Compute ligand:ligand intramolecular nonbonded energies on a batch of snapshots as a function of ligand
-    nonbonded parameters
-    """
-    pairs_ll, prefactors_ll = get_intramolecular_nb_pairs_and_prefactors(ligand_indices, exclusion_idxs, scale_factors)
-
-    def batch_nonbonded_ll(ligand_nb_params):
-        new_nb_params = nb_params.at[ligand_indices].set(ligand_nb_params)
-        return compute_batch_nonbonded_exceptions(confs, boxes, pairs_ll, prefactors_ll, new_nb_params, beta, cutoff)
-
-    return batch_nonbonded_ll
-
-
-def construct_batch_nonbonded_as_fxn_of_ligand_nb_params(confs, boxes, ligand_indices, nb_potential, nb_params):
-    """
-    Notes
-    -----
-    * TODO [interface] : refactor to accept arrays, not nb_potential
-    """
-    n_snapshots, n_atoms, n_dimensions = confs.shape
-    beta = nb_potential.get_cutoff()
-    cutoff = nb_potential.get_cutoff()
-    exclusion_idxs = nb_potential.get_exclusion_idxs()
-    scale_factors = nb_potential.get_scale_factors()
-
-    host_indices = np.array(list(set(onp.arange(n_atoms)) - set(onp.array(ligand_indices))))
-    batch_hl = construct_batch_nonbonded_hl_as_fxn_of_ligand_nb_params(
-        confs, boxes, host_indices, ligand_indices, nb_params, beta, cutoff
-    )
-    batch_ll = construct_batch_nonbonded_ll_as_fxn_of_ligand_nb_params(
-        confs, boxes, ligand_indices, exclusion_idxs, scale_factors, nb_params, beta, cutoff
-    )
-
-    def batch_nonbonded(ligand_nb_params):
-        return batch_ll(ligand_nb_params) + batch_hl(ligand_nb_params)
-
-    return batch_nonbonded
 
 
 def nonbonded_v3_interaction_groups(conf, params, box, a_idxs, b_idxs, beta: float, cutoff: Optional[float] = None):
