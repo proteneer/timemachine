@@ -71,7 +71,7 @@ def test_get_pairs_from_interaction_groups_indices():
     ms = onp.random.randint(5, 50, num_instances)
 
     for n, m in zip(ns, ms):
-        atom_indices = np.arange(n + m)
+        atom_indices = onp.arange(n + m)
 
         # non-contiguous group indices
         onp.random.shuffle(atom_indices)
