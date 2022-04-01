@@ -525,14 +525,27 @@ def coulomb_interaction_group_energy(q_ligand, q_prefactors):
 
 
 def lj_prefactor_on_atom(x_i, x_others, sig_i, sig_others, eps_others, box=None, cutoff=np.inf):
+    """
+    to compute
+    contribution_i = sum_j LennardJones(x_i, x_j; (sig_i, eps_i), (sig_j, eps_j))
+    efficiently as a function of eps_i
+
+    precompute
+    prefactor_i = sum_j 4 * sqrt(eps_j) * ((sig_ij/r_ij)**12 - (sig_ij/r_ij)**6)
+
+    so that
+    contribution_i(eps_i) = prefactor_i * sqrt(eps_i)
+    """
+
     displacements_ij = jax_utils.delta_r(x_i, x_others, box)
     d2_ij = np.sum(displacements_ij ** 2, 1)
     d_ij = np.where(d2_ij <= cutoff ** 2, np.sqrt(d2_ij), np.inf)
     sig_ij = (sig_i + sig_others) / 2
     sig6 = (sig_ij / d_ij) ** 6
     sig12 = sig6 ** 2
-
-    return np.sum(4 * eps_others * (sig12 - sig6))
+    # note: eps_others rather than sqrt(eps_others) -- see `combining_rule_epsilon`
+    prefactor_i = np.sum(4 * eps_others * (sig12 - sig6))
+    return prefactor_i
 
 
 def lj_prefactors_on_snapshot(x_ligand, x_env, sig_ligand, sig_others, eps_others, box=None, cutoff=np.inf):
