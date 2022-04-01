@@ -267,7 +267,9 @@ def nonbonded_v3_on_specific_pairs(conf, params, box, pairs, beta: float, cutoff
 
     Notes
     -----
-    * Responsibility of caller to ensure pair indices are complete.
+    * Warning! This function performs no validation of pair indices. If the provided pairs are incomplete (e.g. omitting
+        some pairs of atoms that could be within cutoff, or omitting intramolecular pairs, ...), then incorrect results
+        can be returned.
     """
 
     inds_l, inds_r = pairs.T
