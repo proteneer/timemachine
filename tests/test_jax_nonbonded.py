@@ -24,7 +24,15 @@ from timemachine.potentials.jax_utils import (
     get_all_pairs_indices,
     pairs_from_interaction_groups,
 )
-from timemachine.potentials.nonbonded import nonbonded_block, nonbonded_v3, nonbonded_v3_on_specific_pairs
+from timemachine.potentials.nonbonded import (
+    coulomb_interaction_group_energy,
+    coulomb_prefactors_on_traj,
+    lj_interaction_group_energy,
+    lj_prefactors_on_traj,
+    nonbonded_block,
+    nonbonded_v3,
+    nonbonded_v3_on_specific_pairs,
+)
 
 Conf = Params = Box = ChargeMask = LJMask = LambdaPlaneIdxs = LambdaOffsetIdxs = np.array
 Lamb = Beta = Cutoff = Energy = float
@@ -367,3 +375,67 @@ def test_jax_nonbonded_block():
         return np.sum(vdw + es)
 
     onp.testing.assert_almost_equal(u_a(conf, box, params), u_b(conf, box, params))
+
+
+def test_precomputation():
+    """Assert that nonbonded interaction groups using precomputation agree with reference nonbonded_on_specific_pairs"""
+    system, positions, box, _ = builders.build_water_system(3.0)
+    bps, masses = openmm_deserializer.deserialize_system(system, cutoff=1.2)
+    nb = bps[-1]
+    params = nb.params
+
+    conf = positions.value_in_unit(unit.nanometer)
+
+    n_atoms = conf.shape[0]
+    beta = nb.get_beta()
+    cutoff = nb.get_cutoff()
+
+    # generate array in the shape of a "trajectory" by adding noise to an initial conformation
+    n_snapshots = 100
+    traj = np.array([conf] * n_snapshots) + onp.random.randn(n_snapshots, *conf.shape) * 0.005
+    boxes = np.array([box] * n_snapshots) * (1 - 0.0025 + onp.random.rand(n_snapshots, *box.shape) * 0.005)
+
+    # split system into "ligand" vs. "environment"
+    n_ligand = 3 * 10  # call the first 10 waters in the system "ligand" and the rest "environment"
+    ligand_idx = onp.arange(n_ligand)
+    env_idx = onp.arange(n_ligand, n_atoms)
+    pairs = pairs_from_interaction_groups(ligand_idx, env_idx)
+
+    # reference version: nonbonded_on_specific_pairs
+    def u_ref(x, box, params):
+        vdw, es = nonbonded_v3_on_specific_pairs(x, params, box, pairs, beta, cutoff)
+        return np.sum(vdw + es)
+
+    @jit
+    def u_batch_ref(eps_ligand, q_ligand):
+        new_params = np.array(params).at[ligand_idx, 0].set(q_ligand)
+        new_params = new_params.at[ligand_idx, 2].set(eps_ligand)
+
+        def f(x, box):
+            return u_ref(x, box, new_params)
+
+        return vmap(f)(traj, boxes)
+
+    # test version: with precomputation
+    charges, sigmas, epsilons = params.T
+    eps_prefactors = lj_prefactors_on_traj(traj, boxes, sigmas, epsilons, ligand_idx, env_idx, cutoff)
+    q_prefactors = coulomb_prefactors_on_traj(traj, boxes, charges, ligand_idx, env_idx, beta, cutoff)
+
+    @jit
+    def u_batch_test(eps_ligand, q_ligand):
+        vdw = lj_interaction_group_energy(eps_ligand, eps_prefactors)
+        es = coulomb_interaction_group_energy(q_ligand, q_prefactors)
+        return vdw + es
+
+    # generate many sets of ligand parameters to test on
+    eps_ligand_0 = epsilons[ligand_idx]
+    q_ligand_0 = charges[ligand_idx]
+
+    for _ in range(50):
+        eps_ligand = np.abs(eps_ligand_0 + (0.2 * onp.random.rand(n_ligand) - 0.1))  # pls don't be negative
+        q_ligand = q_ligand_0 + onp.random.randn(n_ligand)
+
+        expected = u_batch_ref(eps_ligand, q_ligand)
+        actual = u_batch_test(eps_ligand, q_ligand)
+
+        onp.testing.assert_almost_equal(actual, expected)
