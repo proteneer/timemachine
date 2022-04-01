@@ -554,7 +554,7 @@ def test_am1ccc_throws_error_on_phosphorus():
 
     with pytest.raises(RuntimeError) as e:
         _ = ff.q_handle.parameterize(mol)
-    assert "unsupported element" in e
+    assert "unsupported element" in str(e)
 
 
 def test_am1_differences():
