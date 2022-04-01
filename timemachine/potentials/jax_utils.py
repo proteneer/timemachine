@@ -164,6 +164,6 @@ def distance_from_one_to_others(x_i, x_others, box=None, cutoff=np.inf):
         if distance(x_i, x_j) > cutoff, d_ij is set to np.inf
     """
     displacements_ij = delta_r(x_i, x_others, box)
-    d2_ij = np.sum(displacements_ij ** 2, 1)
+    d2_ij = np.sum(displacements_ij ** 2, axis=1)
     d_ij = np.where(d2_ij <= cutoff ** 2, np.sqrt(d2_ij), np.inf)
     return d_ij
