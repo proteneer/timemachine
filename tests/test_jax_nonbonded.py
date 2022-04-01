@@ -449,16 +449,16 @@ def test_precomputation():
     reweight_test = jit(make_reweighter(u_batch_test))
 
     for _ in range(50):
-        eps_ligand = np.abs(eps_ligand_0 + (0.2 * onp.random.rand(n_ligand) - 0.1))  # pls don't be negative
+        eps_ligand = np.abs(eps_ligand_0 + (0.2 * onp.random.rand(n_ligand) - 0.1))  # abs() so eps will be non-negative
         q_ligand = q_ligand_0 + onp.random.randn(n_ligand)
 
         expected = u_batch_ref(eps_ligand, q_ligand)
         actual = u_batch_test(eps_ligand, q_ligand)
 
-        # test array of energies is ~equal
+        # test array of energies is ~equal to reference
         onp.testing.assert_array_almost_equal(actual, expected)
 
-        # test that reweighting estimates and gradients are ~equal
+        # test that reweighting estimates and gradients are ~equal to reference
         for argnum in [0, 1]:
             v_ref, g_ref = value_and_grad(reweight_ref, argnums=argnum)(eps_ligand, q_ligand)
             v_test, g_test = value_and_grad(reweight_test, argnums=argnum)(eps_ligand, q_ligand)

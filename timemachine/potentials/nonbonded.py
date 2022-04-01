@@ -339,27 +339,48 @@ def validate_coulomb_cutoff(cutoff=1.0, beta=2.0, threshold=1e-2):
 #   TODO: avoid repetition between this and lennard-jones
 
 
-def coulomb_prefactor_on_atom(x_i, x_others, q_others, box=None, beta=2.0, cutoff=np.inf):
-    """
-    to compute
-    contribution_i = sum_j (q_i * q_j) / d_ij * erfc(beta * d_ij)
-    efficiently as a function of q_i
+def coulomb_prefactor_on_atom(x_i, x_others, q_others, box=None, beta=2.0, cutoff=np.inf) -> float:
+    """Precompute part of (sum_i q_i * q_j / d_ij * rxn_field(d_ij)) that does not depend on q_i
 
-    precompute
-    prefactor_i = sum_j q_j / d_ij * erfc(beta * d_ij)
+    Parameters
+    ----------
+    x_i : [D] array
+        position of focus atom (in ligand)
+    x_others: [N_env, D] array
+        positions of all other atoms (in environment)
+    q_others: [N_env] array
+        charges of all other atoms (in environment)
+    box: optional diagonal [D, D] array
+    beta: float
+    cutoff: float
 
-    so that
-    contribution_i(q_i) = prefactor_i * q_i
+    Returns
+    -------
+    prefactor_i : float
+        sum_j q_j / d_ij * erfc(beta * d_ij)
     """
-    displacements_ij = jax_utils.delta_r(x_i, x_others, box)
-    d2_ij = np.sum(displacements_ij ** 2, 1)
-    d_ij = np.where(d2_ij <= cutoff ** 2, np.sqrt(d2_ij), np.inf)
+    d_ij = jax_utils.distance_from_one_to_others(x_i, x_others, box, cutoff)
     prefactor_i = np.sum((q_others / d_ij) * erfc(beta * d_ij))
     return prefactor_i
 
 
-def coulomb_prefactors_on_snapshot(x_ligand, x_env, q_env, box=None, beta=2.0, cutoff=np.inf):
-    """map coulomb_prefactor_on_atom over each atom in x_ligand"""
+def coulomb_prefactors_on_snapshot(x_ligand, x_env, q_env, box=None, beta=2.0, cutoff=np.inf) -> Array:
+    """Map coulomb_prefactor_on_atom over atoms in x_ligand
+
+    Parameters
+    ----------
+    x_ligand: [N_lig, D] array
+    x_env: [N_env, D] array
+    q_env: [N_env] array
+    box: optional diagonal [D, D] array
+    beta: float
+    cutoff: float
+
+    Returns
+    -------
+    prefactors: [N_lig] array
+        prefactors[i] = coulomb_prefactor_on_atom(x_ligand[i], ...)
+    """
 
     def f_atom(x_i):
         return coulomb_prefactor_on_atom(x_i, x_env, q_env, box, beta, cutoff)
@@ -368,7 +389,23 @@ def coulomb_prefactors_on_snapshot(x_ligand, x_env, q_env, box=None, beta=2.0, c
 
 
 def coulomb_prefactors_on_traj(traj, boxes, charges, ligand_indices, env_indices, beta=2.0, cutoff=np.inf):
-    """map coulomb_prefactors_on_snapshot over each snapshot in a trajectory"""
+    """Map coulomb_prefactors_on_snapshot over snapshots in a trajectory
+
+    Parameters
+    ----------
+    traj: [T, N, D] array
+    boxes: diagonal [T, D, D] array (or [T] array of Nones)
+    charges: [N] array
+    ligand_indices: [N_lig] array of ints
+    env_indices: [N_env] array of ints
+    beta: float
+    cutoff: float
+
+    Returns
+    -------
+    traj_prefactors: [T, N_lig] array
+        traj_prefactors[t] = coulomb_prefactors_on_snapshot(traj[t][ligand_indices], ...)
+    """
 
     q_env = charges[env_indices]
 
@@ -380,9 +417,19 @@ def coulomb_prefactors_on_traj(traj, boxes, charges, ligand_indices, env_indices
     return vmap(f_snapshot)(traj, boxes)
 
 
-def coulomb_interaction_group_energy(q_ligand, q_prefactors):
-    """assuming q_prefactors = coulomb_prefactors_on_snapshot(x_ligand, ...),
-    cheaply compute the energy of ligand-environment interaction group"""
+def coulomb_interaction_group_energy(q_ligand: Array, q_prefactors: Array) -> float:
+    """Assuming q_prefactors = coulomb_prefactors_on_snapshot(x_ligand, ...),
+    cheaply compute the energy of ligand-environment interaction group
+
+    Parameters
+    ----------
+    q_ligand: [N_lig] array
+    q_prefactors: [N_lig] array
+
+    Returns
+    -------
+    energy: float
+    """
 
     return np.dot(q_prefactors, q_ligand)
 
@@ -394,21 +441,29 @@ def coulomb_interaction_group_energy(q_ligand, q_prefactors):
 
 
 def lj_prefactor_on_atom(x_i, x_others, sig_i, sig_others, eps_others, box=None, cutoff=np.inf):
+    """Precompute part of sum_j LennardJones(x_i, x_j; (sig_i, eps_i), (sig_j, eps_j)) that does not depend on eps_i
+
+    Parameters
+    ----------
+    x_i : [D] array
+        position of focus atom (in ligand)
+    x_others: [N_env, D] array
+        positions of all other atoms (in environment)
+    sig_i: float
+        Lennard-Jones sigma parameter of focus atom
+    sig_others: [N_env] array
+        Lennard-Jones sigma parameters of all other atoms (in environment)
+    box: optional diagonal [D, D] array
+    beta: float
+    cutoff: float
+
+    Returns
+    -------
+    prefactor_i : float
+        sum_j 4 * sqrt(eps_j) * ((sig_ij/r_ij)**12 - (sig_ij/r_ij)**6)
     """
-    to compute
-    contribution_i = sum_j LennardJones(x_i, x_j; (sig_i, eps_i), (sig_j, eps_j))
-    efficiently as a function of eps_i
+    d_ij = jax_utils.distance_from_one_to_others(x_i, x_others, box, cutoff)
 
-    precompute
-    prefactor_i = sum_j 4 * sqrt(eps_j) * ((sig_ij/r_ij)**12 - (sig_ij/r_ij)**6)
-
-    so that
-    contribution_i(eps_i) = prefactor_i * sqrt(eps_i)
-    """
-
-    displacements_ij = jax_utils.delta_r(x_i, x_others, box)
-    d2_ij = np.sum(displacements_ij ** 2, 1)
-    d_ij = np.where(d2_ij <= cutoff ** 2, np.sqrt(d2_ij), np.inf)
     sig_ij = combining_rule_sigma(sig_i, sig_others)
     sig6 = (sig_ij / d_ij) ** 6
     sig12 = sig6 ** 2
@@ -417,17 +472,49 @@ def lj_prefactor_on_atom(x_i, x_others, sig_i, sig_others, eps_others, box=None,
     return prefactor_i
 
 
-def lj_prefactors_on_snapshot(x_ligand, x_env, sig_ligand, sig_others, eps_others, box=None, cutoff=np.inf):
-    """map lj_prefactor_on_atom over each atom in x_ligand"""
+def lj_prefactors_on_snapshot(x_ligand, x_env, sig_ligand, sig_env, eps_env, box=None, cutoff=np.inf):
+    """Map lj_prefactor_on_atom over atoms in x_ligand
+
+    Parameters
+    ----------
+    x_ligand: [N_lig, D] array
+    x_env: [N_env, D] array
+    sig_ligand: [N_lig] array
+    sig_env: [N_env] array
+    eps_env: [N_env] array
+    box: optional diagonal [D, D] array
+    cutoff: float
+
+    Returns
+    -------
+    prefactors: [N_lig] array
+        prefactors[i] = lj_prefactor_on_atom(x_ligand[i], ...)
+    """
 
     def f_atom(x_i, sig_i):
-        return lj_prefactor_on_atom(x_i, x_env, sig_i, sig_others, eps_others, box, cutoff)
+        return lj_prefactor_on_atom(x_i, x_env, sig_i, sig_env, eps_env, box, cutoff)
 
     return vmap(f_atom)(x_ligand, sig_ligand)
 
 
 def lj_prefactors_on_traj(traj, boxes, sigmas, epsilons, ligand_indices, env_indices, cutoff=np.inf):
-    """map lj_prefactors_on_snapshot over each snapshot in a trajectory"""
+    """Map lj_prefactors_on_snapshot over snapshots in a trajectory
+
+    Parameters
+    ----------
+    traj: [T, N, D] array
+    boxes: diagonal [T, D, D] array (or [T] array of Nones)
+    sigmas: [N] array
+    epsilons: [N] array
+    ligand_indices: [N_lig] array of ints
+    env_indices: [N_env] array of ints
+    cutoff: float
+
+    Returns
+    -------
+    traj_prefactors: [T, N_lig] array
+        traj_prefactors[t] = lj_prefactors_on_snapshot(traj[t][ligand_indices], ...)
+    """
 
     sig_ligand = sigmas[ligand_indices]
 
@@ -443,7 +530,17 @@ def lj_prefactors_on_traj(traj, boxes, sigmas, epsilons, ligand_indices, env_ind
 
 
 def lj_interaction_group_energy(eps_ligand, eps_prefactors):
-    """assuming eps_prefactors = lj_prefactors_on_snapshot(x_ligand, ...),
-    cheaply compute the energy of ligand-environment interaction group"""
+    """Assuming eps_prefactors = lj_prefactors_on_snapshot(x_ligand, ...),
+    cheaply compute the energy of ligand-environment interaction group
+
+    Parameters
+    ----------
+    eps_ligand: [N_lig] array
+    eps_prefactors: [N_lig] array
+
+    Returns
+    -------
+    energy: float
+    """
 
     return np.dot(eps_prefactors, eps_ligand)

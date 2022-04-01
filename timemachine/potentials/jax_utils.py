@@ -144,3 +144,26 @@ def distance(x, box):
     d2ij = np.where(np.eye(N), 0, d2ij)
     dij = np.where(np.eye(N), 0, np.sqrt(d2ij))
     return dij
+
+
+def distance_from_one_to_others(x_i, x_others, box=None, cutoff=np.inf):
+    """
+
+    Parameters
+    ----------
+    x_i : [dim] array
+    x_others: [N, dim] array
+        where dim = 3 or 4
+    box : optional diagonal [dim, dim] array
+    cutoff: float
+
+    Returns
+    -------
+    d_ij : [N] array
+        array of distances from x_i to each [x_j in x_others]
+        if distance(x_i, x_j) > cutoff, d_ij is set to np.inf
+    """
+    displacements_ij = delta_r(x_i, x_others, box)
+    d2_ij = np.sum(displacements_ij ** 2, 1)
+    d_ij = np.where(d2_ij <= cutoff ** 2, np.sqrt(d2_ij), np.inf)
+    return d_ij
