@@ -1,6 +1,7 @@
 import functools
 
 import jax.numpy as np
+import numpy as onp
 from jax import vmap
 from jax.scipy.special import erfc
 
@@ -114,12 +115,12 @@ def convert_exceptions_to_rescale_masks(exclusion_idxs, scales, N):
     """Converts exceptions / exclusions from list format used in Nonbonded to mask format used in nonbonded_v3"""
 
     # process masks for exclusions properly
-    charge_rescale_mask = np.ones((N, N))
+    charge_rescale_mask = onp.ones((N, N))  # to support item assignment
     for (i, j), exc in zip(exclusion_idxs, scales[:, 0]):
         charge_rescale_mask[i][j] = 1 - exc
         charge_rescale_mask[j][i] = 1 - exc
 
-    lj_rescale_mask = np.ones((N, N))
+    lj_rescale_mask = onp.ones((N, N))
     for (i, j), exc in zip(exclusion_idxs, scales[:, 1]):
         lj_rescale_mask[i][j] = 1 - exc
         lj_rescale_mask[j][i] = 1 - exc
