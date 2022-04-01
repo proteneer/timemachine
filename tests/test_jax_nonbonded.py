@@ -438,4 +438,4 @@ def test_precomputation():
         expected = u_batch_ref(eps_ligand, q_ligand)
         actual = u_batch_test(eps_ligand, q_ligand)
 
-        onp.testing.assert_almost_equal(actual, expected)
+        onp.testing.assert_array_almost_equal(actual, expected)
