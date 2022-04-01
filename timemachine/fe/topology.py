@@ -84,7 +84,7 @@ def standard_qlj_typer(mol):
         # sigmas need to be halved
         standard_qlj.append((val[0], val[1] / 2, val[2]))
 
-    standard_qlj = jnp.array(standard_qlj)
+    standard_qlj = np.array(standard_qlj)
 
     return standard_qlj
 
