@@ -298,35 +298,6 @@ def nonbonded_v3_on_specific_pairs(conf, params, box, pairs, beta: float, cutoff
     return vdW, electrostatics
 
 
-def compute_batch_nonbonded(confs, boxes, pair_lists, nb_params, beta, cutoff):
-    """vmap over a batch of confs, boxes, pair_lists"""
-
-    def _compute_nonbonded(conf, box, pair_list):
-        vdw, electrostatics = nonbonded_v3_on_specific_pairs(conf, nb_params, box, pair_list, beta, cutoff)
-        return np.sum(vdw) + np.sum(electrostatics)
-
-    batch_of_energies = vmap(_compute_nonbonded)(confs, boxes, pair_lists)
-
-    assert batch_of_energies.shape == (len(confs),)
-
-    return batch_of_energies
-
-
-def construct_batch_nonbonded_hl_as_fxn_of_ligand_nb_params(
-    confs, boxes, host_indices, ligand_indices, nb_params, beta, cutoff
-):
-    """Compute host:ligand nonbonded energies on a batch of snapshots as a function of ligand nonbonded parameters"""
-
-    candidate_hl_pairs = jax_utils.pairs_from_interaction_groups(ligand_indices, host_indices)
-    pairs_hl = jax_utils.get_interacting_pair_indices_batch(confs, boxes, candidate_hl_pairs)
-
-    def batch_nonbonded_hl(ligand_nb_params):
-        new_nb_params = nb_params.at[ligand_indices].set(ligand_nb_params)
-        return compute_batch_nonbonded(confs, boxes, pairs_hl, new_nb_params, beta, cutoff)
-
-    return batch_nonbonded_hl
-
-
 def nonbonded_v3_interaction_groups(conf, params, box, a_idxs, b_idxs, beta: float, cutoff: Optional[float] = None):
     """Nonbonded interactions between all pairs of atoms $(i, j)$
     where $i$ is in the first set and $j$ in the second.
