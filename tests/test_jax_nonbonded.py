@@ -16,6 +16,8 @@ from jax import value_and_grad, vmap
 from scipy.optimize import minimize
 from simtk import unit
 
+from timemachine.constants import BOLTZ
+from timemachine.fe.reweighting import one_sided_exp
 from timemachine.ff.handlers import openmm_deserializer
 from timemachine.md import builders
 from timemachine.potentials.jax_utils import (
@@ -431,6 +433,21 @@ def test_precomputation():
     eps_ligand_0 = epsilons[ligand_idx]
     q_ligand_0 = charges[ligand_idx]
 
+    temperature = 300
+    kBT = BOLTZ * temperature
+
+    def make_reweighter(u_batch_fxn):
+        u_0 = u_batch_fxn(eps_ligand_0, q_ligand_0)
+
+        def reweight(eps_ligand, q_ligand):
+            delta_us = (u_batch_fxn(eps_ligand, q_ligand) - u_0) / kBT
+            return one_sided_exp(delta_us)
+
+        return reweight
+
+    reweight_ref = jit(make_reweighter(u_batch_ref))
+    reweight_test = jit(make_reweighter(u_batch_test))
+
     for _ in range(50):
         eps_ligand = np.abs(eps_ligand_0 + (0.2 * onp.random.rand(n_ligand) - 0.1))  # pls don't be negative
         q_ligand = q_ligand_0 + onp.random.randn(n_ligand)
@@ -438,4 +455,13 @@ def test_precomputation():
         expected = u_batch_ref(eps_ligand, q_ligand)
         actual = u_batch_test(eps_ligand, q_ligand)
 
+        # test array of energies is ~equal
         onp.testing.assert_array_almost_equal(actual, expected)
+
+        # test that reweighting estimates and gradients are ~equal
+        for argnum in [0, 1]:
+            v_ref, g_ref = value_and_grad(reweight_ref, argnums=argnum)(eps_ligand, q_ligand)
+            v_test, g_test = value_and_grad(reweight_test, argnums=argnum)(eps_ligand, q_ligand)
+
+            onp.testing.assert_almost_equal(v_ref, v_test)
+            onp.testing.assert_array_almost_equal(g_ref, g_test)
