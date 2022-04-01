@@ -73,9 +73,9 @@ def test_get_pairs_from_interaction_groups_indices():
     for n, m in zip(ns, ms):
         atom_indices = onp.arange(n + m)
 
-        # non-contiguous group indices
-        onp.random.shuffle(atom_indices)
-        group_a_indices, group_b_indices = atom_indices[:n], atom_indices[-m:]
+        onp.random.shuffle(atom_indices)  # non-contiguous group indices
+        group_a_indices = atom_indices[:n]
+        group_b_indices = atom_indices[n:]
 
         pairs = pairs_from_interaction_groups(group_a_indices, group_b_indices)
         assert set(pairs[:, 0]) == set(group_a_indices)
