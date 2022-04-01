@@ -147,7 +147,7 @@ def distance(x, box):
 
 
 def distance_from_one_to_others(x_i, x_others, box=None, cutoff=np.inf):
-    """
+    """[d(x_i, x_j, box) for x_j in x_others]
 
     Parameters
     ----------

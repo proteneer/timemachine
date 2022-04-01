@@ -117,7 +117,7 @@ class VacuumState:
         scales = self.nb_potential.get_scale_factors()
 
         if decharge:
-            charge_indices = jax.ops.index[:, 0]
+            charge_indices = jax.numpy.index_exp[:, 0]
             nb_params = jnp.asarray(self.nb_params).at[charge_indices].set(0)
         else:
             nb_params = self.nb_params
@@ -510,7 +510,7 @@ def align_sample(x_vacuum, x_solvent):
 def align_and_replace(x_vacuum, x_solvent):
     num_ligand_atoms = len(x_vacuum)
     aligned_x_vacuum = align_sample(x_vacuum, x_solvent)
-    ligand_idxs = jax.ops.index[-num_ligand_atoms:]
+    ligand_idxs = jax.numpy.index_exp[-num_ligand_atoms:]
     return jnp.asarray(x_solvent).at[ligand_idxs].set(aligned_x_vacuum)
 
 

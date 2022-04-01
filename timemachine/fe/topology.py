@@ -547,8 +547,8 @@ class DualTopologyRHFE(DualTopology):
         qlj_params, nb_potential = super().parameterize_nonbonded(ff_q_params, ff_lj_params)
 
         # halve the strength of the charge and the epsilon parameters
-        charge_indices = jax.ops.index[:, 0]
-        epsilon_indices = jax.ops.index[:, 2]
+        charge_indices = jax.numpy.index_exp[:, 0]
+        epsilon_indices = jax.numpy.index_exp[:, 2]
 
         src_qlj_params = jnp.asarray(qlj_params).at[charge_indices].multiply(0.5)
         src_qlj_params = jnp.asarray(src_qlj_params).at[epsilon_indices].multiply(0.5)
@@ -589,8 +589,8 @@ class DualTopologyStandardDecoupling(DualTopology):
         # worth of nonbonded interactions.
 
         # dst_qlj_params corresponds to the end-state where only one of the molecule interacts with the binding pocket.
-        charge_indices = jax.ops.index[:, 0]
-        epsilon_indices = jax.ops.index[:, 2]
+        charge_indices = jax.numpy.index_exp[:, 0]
+        epsilon_indices = jax.numpy.index_exp[:, 2]
         src_qlj_params_a = jnp.asarray(qlj_params_a).at[charge_indices].multiply(0.5)
         src_qlj_params_a = jnp.asarray(src_qlj_params_a).at[epsilon_indices].multiply(0.5)
         dst_qlj_params_a = qlj_params_a
