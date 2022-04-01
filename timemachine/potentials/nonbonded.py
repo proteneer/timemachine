@@ -97,7 +97,7 @@ def nonbonded_block(xi, xj, box, params_i, params_j, beta, cutoff):
     eps_j = np.expand_dims(params_j[:, 2], axis=0)
 
     sig_ij = combining_rule_sigma(sig_i, sig_j)
-    eps_ij = combining_rule_sigma(eps_i, eps_j)
+    eps_ij = combining_rule_epsilon(eps_i, eps_j)
 
     qi = np.expand_dims(params_i[:, 0], axis=1)
     qj = np.expand_dims(params_j[:, 0], axis=0)
