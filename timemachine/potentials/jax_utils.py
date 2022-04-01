@@ -9,7 +9,7 @@ def get_all_pairs_indices(n: int) -> Array:
     """all indices i, j such that i < j < n"""
     n_interactions = n * (n - 1) / 2
 
-    pairs = np.stack(np.triu_indices(n, k=1)).T
+    pairs = onp.stack(onp.triu_indices(n, k=1)).T
 
     assert pairs.shape == (n_interactions, 2)
 
@@ -20,7 +20,7 @@ def pairs_from_interaction_groups(group_a_indices: Array, group_b_indices: Array
     """(a, b) for a in group_a_indices, b in group_b_indices"""
     n_interactions = len(group_a_indices) * len(group_b_indices)
 
-    pairs = np.stack(np.meshgrid(group_a_indices, group_b_indices)).reshape(2, -1).T
+    pairs = onp.stack(onp.meshgrid(group_a_indices, group_b_indices)).reshape(2, -1).T
 
     assert pairs.shape == (n_interactions, 2)
 
@@ -126,7 +126,7 @@ def get_interacting_pair_indices_batch(confs, boxes, pairs, cutoff=1.2):
     assert max_n_neighbors > 0
 
     # sorting in order of [falses, ..., trues]
-    keep_inds = np.argsort(neighbor_masks, axis=1)[:, -max_n_neighbors:]
+    keep_inds = onp.argsort(neighbor_masks, axis=1)[:, -max_n_neighbors:]
     batch_pairs = pairs[keep_inds]
 
     assert batch_pairs.shape == (len(confs), max_n_neighbors, 2)
