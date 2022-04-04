@@ -111,8 +111,8 @@ def nonbonded_block(xi, xj, box, params_i, params_j, beta, cutoff):
     return np.sum(nrg)
 
 
-def convert_exceptions_to_rescale_masks(exclusion_idxs, scales, N):
-    """Converts exceptions / exclusions from list format used in Nonbonded to mask format used in nonbonded_v3"""
+def convert_exclusions_to_rescale_masks(exclusion_idxs, scales, N):
+    """Converts exclusions from list format used in Nonbonded to mask format used in nonbonded_v3"""
 
     # process masks for exclusions properly
     charge_rescale_mask = onp.ones((N, N))  # to support item assignment

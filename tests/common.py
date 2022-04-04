@@ -131,7 +131,7 @@ def prepare_lj_system(
 def prepare_reference_nonbonded(params, exclusion_idxs, scales, lambda_plane_idxs, lambda_offset_idxs, beta, cutoff):
 
     N = params.shape[0]
-    charge_rescale_mask, lj_rescale_mask = nonbonded.convert_exceptions_to_rescale_masks(exclusion_idxs, scales, N)
+    charge_rescale_mask, lj_rescale_mask = nonbonded.convert_exclusions_to_rescale_masks(exclusion_idxs, scales, N)
 
     ref_total_energy = functools.partial(
         nonbonded.nonbonded_v3,

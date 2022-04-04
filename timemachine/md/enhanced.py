@@ -123,7 +123,7 @@ class VacuumState:
             nb_params = self.nb_params
 
         N = x.shape[0]
-        charge_rescale_mask, lj_rescale_mask = nonbonded.convert_exceptions_to_rescale_masks(exclusions, scales, N)
+        charge_rescale_mask, lj_rescale_mask = nonbonded.convert_exclusions_to_rescale_masks(exclusions, scales, N)
 
         beta = self.nb_potential.get_beta()
         cutoff = self.nb_potential.get_cutoff()
