@@ -301,12 +301,24 @@ def nonbonded_v3_on_specific_pairs(conf, params, box, pairs, beta: float, cutoff
     return vdW, electrostatics
 
 
+def validate_interaction_group_idxs(n_atoms, a_idxs, b_idxs):
+    """assert A and B are disjoint, contain no elements outside range(0, n_atoms), and contain no repeats"""
+    A, B = set(a_idxs), set(b_idxs)
+    AB = A.union(B)
+    assert A.isdisjoint(B)
+    assert max(AB) < n_atoms
+    assert min(AB) >= 0
+    assert len(a_idxs) == len(A)
+    assert len(b_idxs) == len(B)
+
+
 def nonbonded_v3_interaction_groups(conf, params, box, a_idxs, b_idxs, beta: float, cutoff: Optional[float] = None):
     """Nonbonded interactions between all pairs of atoms $(i, j)$
     where $i$ is in the first set and $j$ in the second.
 
     See nonbonded_v3 docstring for more details
     """
+    validate_interaction_group_idxs(len(conf), a_idxs, b_idxs)
     pairs = pairs_from_interaction_groups(a_idxs, b_idxs)
     vdW, electrostatics = nonbonded_v3_on_specific_pairs(conf, params, box, pairs, beta, cutoff)
     return vdW, electrostatics
@@ -408,6 +420,7 @@ def coulomb_prefactors_on_traj(traj, boxes, charges, ligand_indices, env_indices
     traj_prefactors: [T, N_lig] array
         traj_prefactors[t] = coulomb_prefactors_on_snapshot(traj[t][ligand_indices], ...)
     """
+    validate_interaction_group_idxs(len(traj[0]), ligand_indices, env_indices)
 
     q_env = charges[env_indices]
 
@@ -517,6 +530,7 @@ def lj_prefactors_on_traj(traj, boxes, sigmas, epsilons, ligand_indices, env_ind
     traj_prefactors: [T, N_lig] array
         traj_prefactors[t] = lj_prefactors_on_snapshot(traj[t][ligand_indices], ...)
     """
+    validate_interaction_group_idxs(len(traj[0]), ligand_indices, env_indices)
 
     sig_ligand = sigmas[ligand_indices]
 
