@@ -1,9 +1,18 @@
 import functools
 
 import jax.numpy as np
+import numpy as onp
+from jax import vmap
 from jax.scipy.special import erfc
 
-from timemachine.potentials.jax_utils import convert_to_4d, delta_r, distance, distance_on_pairs
+from timemachine.potentials import jax_utils
+from timemachine.potentials.jax_utils import (
+    convert_to_4d,
+    delta_r,
+    distance,
+    distance_on_pairs,
+    pairs_from_interaction_groups,
+)
 
 
 def switch_fn(dij, cutoff):
@@ -13,6 +22,22 @@ def switch_fn(dij, cutoff):
 from typing import Optional
 
 Array = np.array
+
+
+def combining_rule_sigma(sig_i, sig_j):
+    """Lorentz-Berthelot (sig_i + sig_j) / 2,
+    but assuming sig -> (sig / 2) has been applied
+    https://github.com/proteneer/timemachine/blob/2d0ef5bb45e034e33074f50e8e0a13189f1b0630/timemachine/ff/handlers/nonbonded.py#L334
+    """
+    return sig_i + sig_j
+
+
+def combining_rule_epsilon(eps_i, eps_j):
+    """Lorentz-Berthelot sqrt(eps_i * eps_j),
+    but assuming eps -> sqrt(eps) has been applied
+    (point 2 of https://github.com/proteneer/timemachine#forcefield-gotchas)
+    """
+    return eps_i * eps_j
 
 
 def lennard_jones(dij, sig_ij, eps_ij):
@@ -71,8 +96,8 @@ def nonbonded_block(xi, xj, box, params_i, params_j, beta, cutoff):
     eps_i = np.expand_dims(params_i[:, 2], axis=1)
     eps_j = np.expand_dims(params_j[:, 2], axis=0)
 
-    sig_ij = sig_i + sig_j
-    eps_ij = eps_i * eps_j
+    sig_ij = combining_rule_sigma(sig_i, sig_j)
+    eps_ij = combining_rule_epsilon(eps_i, eps_j)
 
     qi = np.expand_dims(params_i[:, 0], axis=1)
     qj = np.expand_dims(params_j[:, 0], axis=0)
@@ -84,6 +109,23 @@ def nonbonded_block(xi, xj, box, params_i, params_j, beta, cutoff):
 
     nrg = np.where(dij > cutoff, 0, es + lj)
     return np.sum(nrg)
+
+
+def convert_exclusions_to_rescale_masks(exclusion_idxs, scales, N):
+    """Converts exclusions from list format used in Nonbonded to mask format used in nonbonded_v3"""
+
+    # process masks for exclusions properly
+    charge_rescale_mask = onp.ones((N, N))  # to support item assignment
+    for (i, j), exc in zip(exclusion_idxs, scales[:, 0]):
+        charge_rescale_mask[i][j] = 1 - exc
+        charge_rescale_mask[j][i] = 1 - exc
+
+    lj_rescale_mask = onp.ones((N, N))
+    for (i, j), exc in zip(exclusion_idxs, scales[:, 1]):
+        lj_rescale_mask[i][j] = 1 - exc
+        lj_rescale_mask[j][i] = 1 - exc
+
+    return charge_rescale_mask, lj_rescale_mask
 
 
 def nonbonded_v3(
@@ -170,12 +212,12 @@ def nonbonded_v3(
 
     sig_i = np.expand_dims(sig, 0)
     sig_j = np.expand_dims(sig, 1)
-    sig_ij = sig_i + sig_j
+    sig_ij = combining_rule_sigma(sig_i, sig_j)
 
     eps_i = np.expand_dims(eps, 0)
     eps_j = np.expand_dims(eps, 1)
 
-    eps_ij = eps_i * eps_j
+    eps_ij = combining_rule_epsilon(eps_i, eps_j)
 
     dij = distance(conf, box)
 
@@ -220,14 +262,17 @@ def nonbonded_v3(
     return np.sum(eij_total / 2)
 
 
-def nonbonded_v3_on_specific_pairs(conf, params, box, inds_l, inds_r, beta: float, cutoff: Optional[float] = None):
+def nonbonded_v3_on_specific_pairs(conf, params, box, pairs, beta: float, cutoff: Optional[float] = None):
     """See nonbonded_v3 docstring for more details
 
     Notes
     -----
-    * Responsibility of caller to ensure pair indices (inds_l, inds_r) are complete.
-        In case of parameter interpolation, more pairs need to be added.
+    * Warning! This function performs no validation of pair indices. If the provided pairs are incomplete (e.g. omitting
+        some pairs of atoms that could be within cutoff, or omitting intramolecular pairs, ...), then incorrect results
+        can be returned.
     """
+
+    inds_l, inds_r = pairs.T
 
     # distances and cutoff
     dij = distance_on_pairs(conf[inds_l], conf[inds_r], box)
@@ -241,8 +286,12 @@ def nonbonded_v3_on_specific_pairs(conf, params, box, inds_l, inds_r, beta: floa
     charges, sig, eps = params.T
 
     # vdW by Lennard-Jones
-    sig_ij = apply_cutoff(sig[inds_l] + sig[inds_r])
-    eps_ij = apply_cutoff(eps[inds_l] * eps[inds_r])
+    sig_ij = combining_rule_sigma(sig[inds_l], sig[inds_r])
+    sig_ij = apply_cutoff(sig_ij)
+
+    eps_ij = combining_rule_epsilon(eps[inds_l], eps[inds_r])
+    eps_ij = apply_cutoff(eps_ij)
+
     vdW = np.where(eps_ij != 0, lennard_jones(dij, sig_ij, eps_ij), 0)
 
     # Electrostatics by direct-space part of PME
@@ -252,15 +301,27 @@ def nonbonded_v3_on_specific_pairs(conf, params, box, inds_l, inds_r, beta: floa
     return vdW, electrostatics
 
 
-def nonbonded_v3_interaction_groups(conf, params, box, inds_l, inds_r, beta: float, cutoff: Optional[float] = None):
+def validate_interaction_group_idxs(n_atoms, a_idxs, b_idxs):
+    """assert A and B are disjoint, contain no elements outside range(0, n_atoms), and contain no repeats"""
+    A, B = set(a_idxs), set(b_idxs)
+    AB = A.union(B)
+    assert A.isdisjoint(B)
+    assert max(AB) < n_atoms
+    assert min(AB) >= 0
+    assert len(a_idxs) == len(A)
+    assert len(b_idxs) == len(B)
+
+
+def nonbonded_v3_interaction_groups(conf, params, box, a_idxs, b_idxs, beta: float, cutoff: Optional[float] = None):
     """Nonbonded interactions between all pairs of atoms $(i, j)$
     where $i$ is in the first set and $j$ in the second.
 
     See nonbonded_v3 docstring for more details
     """
-    pairs = np.stack(np.meshgrid(inds_l, inds_r)).reshape(2, -1).T
-    vdW, electrostatics = nonbonded_v3_on_specific_pairs(conf, params, box, pairs[:, 0], pairs[:, 1], beta, cutoff)
-    return vdW, electrostatics, pairs
+    validate_interaction_group_idxs(len(conf), a_idxs, b_idxs)
+    pairs = pairs_from_interaction_groups(a_idxs, b_idxs)
+    vdW, electrostatics = nonbonded_v3_on_specific_pairs(conf, params, box, pairs, beta, cutoff)
+    return vdW, electrostatics
 
 
 def interpolated(u_fn):
@@ -268,7 +329,7 @@ def interpolated(u_fn):
     def wrapper(conf, params, box, lamb):
 
         # params is expected to be the concatenation of initial
-        # (lambda = 0) and final (lamda = 1) parameters, each of
+        # (lambda = 0) and final (lambda = 1) parameters, each of
         # length num_atoms
         assert params.size % 2 == 0
         num_atoms = params.shape[0] // 2
@@ -284,3 +345,218 @@ def validate_coulomb_cutoff(cutoff=1.0, beta=2.0, threshold=1e-2):
     following https://github.com/proteneer/timemachine/pull/424#discussion_r629678467"""
     if erfc(beta * cutoff) > threshold:
         print(UserWarning(f"erfc(beta * cutoff) = {erfc(beta * cutoff)} > threshold = {threshold}"))
+
+
+# utilities for efficiently recomputing energy as a function of ligand charges
+#   (where x_ligand, x_environment, q_environment are all constant, but q_ligand is variable)
+#   exploiting the fact that nonbonded_interaction_group(ligand_charges) is a linear function of ligand_charges
+#   TODO: avoid repetition between this and lennard-jones
+
+
+def coulomb_prefactor_on_atom(x_i, x_others, q_others, box=None, beta=2.0, cutoff=np.inf) -> float:
+    """Precompute part of (sum_i q_i * q_j / d_ij * rxn_field(d_ij)) that does not depend on q_i
+
+    Parameters
+    ----------
+    x_i : [D] array
+        position of focus atom (in ligand)
+    x_others: [N_env, D] array
+        positions of all other atoms (in environment)
+    q_others: [N_env] array
+        charges of all other atoms (in environment)
+    box: optional diagonal [D, D] array
+    beta: float
+    cutoff: float
+
+    Returns
+    -------
+    prefactor_i : float
+        sum_j q_j / d_ij * erfc(beta * d_ij)
+    """
+    d_ij = jax_utils.distance_from_one_to_others(x_i, x_others, box, cutoff)
+    prefactor_i = np.sum((q_others / d_ij) * erfc(beta * d_ij))
+    return prefactor_i
+
+
+def coulomb_prefactors_on_snapshot(x_ligand, x_env, q_env, box=None, beta=2.0, cutoff=np.inf) -> Array:
+    """Map coulomb_prefactor_on_atom over atoms in x_ligand
+
+    Parameters
+    ----------
+    x_ligand: [N_lig, D] array
+    x_env: [N_env, D] array
+    q_env: [N_env] array
+    box: optional diagonal [D, D] array
+    beta: float
+    cutoff: float
+
+    Returns
+    -------
+    prefactors: [N_lig] array
+        prefactors[i] = coulomb_prefactor_on_atom(x_ligand[i], ...)
+    """
+
+    def f_atom(x_i):
+        return coulomb_prefactor_on_atom(x_i, x_env, q_env, box, beta, cutoff)
+
+    return vmap(f_atom)(x_ligand)
+
+
+def coulomb_prefactors_on_traj(traj, boxes, charges, ligand_indices, env_indices, beta=2.0, cutoff=np.inf):
+    """Map coulomb_prefactors_on_snapshot over snapshots in a trajectory
+
+    Parameters
+    ----------
+    traj: [T, N, D] array
+    boxes: diagonal [T, D, D] array (or [T] array of Nones)
+    charges: [N] array
+    ligand_indices: [N_lig] array of ints
+    env_indices: [N_env] array of ints
+    beta: float
+    cutoff: float
+
+    Returns
+    -------
+    traj_prefactors: [T, N_lig] array
+        traj_prefactors[t] = coulomb_prefactors_on_snapshot(traj[t][ligand_indices], ...)
+    """
+    validate_interaction_group_idxs(len(traj[0]), ligand_indices, env_indices)
+
+    q_env = charges[env_indices]
+
+    def f_snapshot(coords, box):
+        x_ligand = coords[ligand_indices]
+        x_env = coords[env_indices]
+        return coulomb_prefactors_on_snapshot(x_ligand, x_env, q_env, box, beta, cutoff)
+
+    return vmap(f_snapshot)(traj, boxes)
+
+
+def coulomb_interaction_group_energy(q_ligand: Array, q_prefactors: Array) -> float:
+    """Assuming q_prefactors = coulomb_prefactors_on_snapshot(x_ligand, ...),
+    cheaply compute the energy of ligand-environment interaction group
+
+    Parameters
+    ----------
+    q_ligand: [N_lig] array
+    q_prefactors: [N_lig] array
+
+    Returns
+    -------
+    energy: float
+    """
+
+    return np.dot(q_prefactors, q_ligand)
+
+
+# utilities for efficiently recomputing energy as a function of ligand epsilon parameters
+#   (where x_ligand, x_environment, eps_environment are all constant, but eps_ligand is variable)
+#   exploiting the fact that nonbonded_interaction_group(eps_ligand) is a linear function of sqrt(eps_ligand)
+#   TODO: avoid repetition between this and coulomb
+
+
+def lj_prefactor_on_atom(x_i, x_others, sig_i, sig_others, eps_others, box=None, cutoff=np.inf):
+    """Precompute part of sum_j LennardJones(x_i, x_j; (sig_i, eps_i), (sig_j, eps_j)) that does not depend on eps_i
+
+    Parameters
+    ----------
+    x_i : [D] array
+        position of focus atom (in ligand)
+    x_others: [N_env, D] array
+        positions of all other atoms (in environment)
+    sig_i: float
+        Lennard-Jones sigma parameter of focus atom
+    sig_others: [N_env] array
+        Lennard-Jones sigma parameters of all other atoms (in environment)
+    box: optional diagonal [D, D] array
+    beta: float
+    cutoff: float
+
+    Returns
+    -------
+    prefactor_i : float
+        sum_j 4 * sqrt(eps_j) * ((sig_ij/r_ij)**12 - (sig_ij/r_ij)**6)
+    """
+    d_ij = jax_utils.distance_from_one_to_others(x_i, x_others, box, cutoff)
+
+    sig_ij = combining_rule_sigma(sig_i, sig_others)
+    sig6 = (sig_ij / d_ij) ** 6
+    sig12 = sig6 ** 2
+    # note: eps_others rather than sqrt(eps_others) -- see `combining_rule_epsilon`
+    prefactor_i = np.sum(4 * eps_others * (sig12 - sig6))
+    return prefactor_i
+
+
+def lj_prefactors_on_snapshot(x_ligand, x_env, sig_ligand, sig_env, eps_env, box=None, cutoff=np.inf):
+    """Map lj_prefactor_on_atom over atoms in x_ligand
+
+    Parameters
+    ----------
+    x_ligand: [N_lig, D] array
+    x_env: [N_env, D] array
+    sig_ligand: [N_lig] array
+    sig_env: [N_env] array
+    eps_env: [N_env] array
+    box: optional diagonal [D, D] array
+    cutoff: float
+
+    Returns
+    -------
+    prefactors: [N_lig] array
+        prefactors[i] = lj_prefactor_on_atom(x_ligand[i], ...)
+    """
+
+    def f_atom(x_i, sig_i):
+        return lj_prefactor_on_atom(x_i, x_env, sig_i, sig_env, eps_env, box, cutoff)
+
+    return vmap(f_atom)(x_ligand, sig_ligand)
+
+
+def lj_prefactors_on_traj(traj, boxes, sigmas, epsilons, ligand_indices, env_indices, cutoff=np.inf):
+    """Map lj_prefactors_on_snapshot over snapshots in a trajectory
+
+    Parameters
+    ----------
+    traj: [T, N, D] array
+    boxes: diagonal [T, D, D] array (or [T] array of Nones)
+    sigmas: [N] array
+    epsilons: [N] array
+    ligand_indices: [N_lig] array of ints
+    env_indices: [N_env] array of ints
+    cutoff: float
+
+    Returns
+    -------
+    traj_prefactors: [T, N_lig] array
+        traj_prefactors[t] = lj_prefactors_on_snapshot(traj[t][ligand_indices], ...)
+    """
+    validate_interaction_group_idxs(len(traj[0]), ligand_indices, env_indices)
+
+    sig_ligand = sigmas[ligand_indices]
+
+    eps_env = epsilons[env_indices]
+    sig_env = sigmas[env_indices]
+
+    def f_snapshot(coords, box):
+        x_ligand = coords[ligand_indices]
+        x_env = coords[env_indices]
+        return lj_prefactors_on_snapshot(x_ligand, x_env, sig_ligand, sig_env, eps_env, box, cutoff)
+
+    return vmap(f_snapshot)(traj, boxes)
+
+
+def lj_interaction_group_energy(eps_ligand, eps_prefactors):
+    """Assuming eps_prefactors = lj_prefactors_on_snapshot(x_ligand, ...),
+    cheaply compute the energy of ligand-environment interaction group
+
+    Parameters
+    ----------
+    eps_ligand: [N_lig] array
+    eps_prefactors: [N_lig] array
+
+    Returns
+    -------
+    energy: float
+    """
+
+    return np.dot(eps_prefactors, eps_ligand)

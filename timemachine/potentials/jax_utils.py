@@ -1,34 +1,31 @@
-from typing import Tuple
-
-import jax
 import jax.numpy as np
 import numpy as onp
 from jax import vmap
+from numpy.typing import NDArray
 
-Array = onp.array
+Array = NDArray
 
 
-def get_all_pairs_indices(n: int) -> Tuple[Array, Array]:
+def get_all_pairs_indices(n: int) -> Array:
     """all indices i, j such that i < j < n"""
     n_interactions = n * (n - 1) / 2
 
-    inds_i, inds_j = np.triu_indices(n, k=1)
+    pairs = onp.stack(onp.triu_indices(n, k=1)).T
 
-    assert len(inds_i) == n_interactions
+    assert pairs.shape == (n_interactions, 2)
 
-    return inds_i, inds_j
+    return pairs
 
 
-def get_group_group_indices(n: int, m: int) -> Tuple[Array, Array]:
-    """all indices i, j such that i < n, j < m"""
-    n_interactions = n * m
+def pairs_from_interaction_groups(group_a_indices: Array, group_b_indices: Array) -> Array:
+    """(a, b) for a in group_a_indices, b in group_b_indices"""
+    n_interactions = len(group_a_indices) * len(group_b_indices)
 
-    _inds_i, _inds_j = np.indices((n, m))
-    inds_i, inds_j = _inds_i.flatten(), _inds_j.flatten()
+    pairs = onp.stack(onp.meshgrid(group_a_indices, group_b_indices)).reshape(2, -1).T
 
-    assert len(inds_i) == n_interactions
+    assert pairs.shape == (n_interactions, 2)
 
-    return inds_i, inds_j
+    return pairs
 
 
 def compute_lifting_parameter(lamb, lambda_plane_idxs, lambda_offset_idxs, cutoff):
@@ -69,21 +66,6 @@ def convert_to_4d(x3, lamb, lambda_plane_idxs, lambda_offset_idxs, cutoff):
     return augment_dim(x3, w)
 
 
-def rescale_coordinates(conf, indices, box, scales):
-    """Note: scales unused"""
-
-    mol_sizes = np.expand_dims(onp.bincount(indices), axis=1)
-    mol_centers = jax.ops.segment_sum(conf, indices) / mol_sizes
-
-    new_centers = mol_centers - box[2] * np.floor(np.expand_dims(mol_centers[..., 2], axis=-1) / box[2][2])
-    new_centers -= box[1] * np.floor(np.expand_dims(new_centers[..., 1], axis=-1) / box[1][1])
-    new_centers -= box[0] * np.floor(np.expand_dims(new_centers[..., 0], axis=-1) / box[0][0])
-
-    offset = new_centers - mol_centers
-
-    return conf + offset[indices]
-
-
 def delta_r(ri, rj, box=None):
     diff = ri - rj  # this can be either N,N,3 or B,3
 
@@ -95,7 +77,12 @@ def delta_r(ri, rj, box=None):
 
 
 def distance_on_pairs(ri, rj, box=None):
-    """O(n) where n = len(ri) = len(rj)"""
+    """O(n) where n = len(ri) = len(rj)
+
+    Notes
+    -----
+    TODO [performance]: any difference if the signature is (conf, pairs) rather than (ri, rj)?
+    """
     assert len(ri) == len(rj)
 
     diff = delta_r(ri, rj, box)
@@ -106,20 +93,30 @@ def distance_on_pairs(ri, rj, box=None):
     return dij
 
 
-def batched_neighbor_inds(confs, inds_l, inds_r, cutoff, boxes):
-    """Given candidate interacting pairs (inds_l, inds_r),
-        inds_l.shape == n_interactions
-    exclude most pairs whose distances are >= cutoff (neighbor_inds_l, neighbor_inds_r)
-        neighbor_inds_l.shape == (len(confs), max_n_neighbors)
-        where the total number of neighbors returned for each conf in confs is the same
-        max_n_neighbors
+def get_interacting_pair_indices_batch(confs, boxes, pairs, cutoff=1.2):
+    """Given candidate interacting pairs, exclude most pairs whose distances are >= cutoff
 
-    This padding causes some amount of wasted effort, but keeps things nice and fixed-dimensional
-        for later XLA steps
+    Parameters
+    ----------
+    confs: (n_snapshots, n_atoms, dim) float array
+    boxes: (n_snapshots, dim, dim) float array
+    pairs: (n_candidate_pairs, 2) integer array
+    cutoff: float
+
+    Returns
+    -------
+    batch_pairs : (len(confs), max_n_neighbors, 2) array
+        where max_n_neighbors pairs are returned for each conf in confs
+
+    Notes
+    -----
+    * Padding causes some amount of wasted effort, but keeps things nice and fixed-dimensional for later XLA steps
     """
-    assert len(confs.shape) == 3
-    distances = vmap(distance_on_pairs)(confs[:, inds_l], confs[:, inds_r], boxes)
-    assert distances.shape == (len(confs), len(inds_l))
+    n_snapshots, n_atoms, dim = confs.shape
+    assert boxes.shape == (n_snapshots, dim, dim)
+
+    distances = vmap(distance_on_pairs)(confs[:, pairs[:, 0]], confs[:, pairs[:, 1]], boxes)
+    assert distances.shape == (len(confs), len(pairs))
 
     neighbor_masks = distances < cutoff
     # how many total neighbors?
@@ -130,14 +127,12 @@ def batched_neighbor_inds(confs, inds_l, inds_r, cutoff, boxes):
     assert max_n_neighbors > 0
 
     # sorting in order of [falses, ..., trues]
-    keep_inds = np.argsort(neighbor_masks, axis=1)[:, -max_n_neighbors:]
-    neighbor_inds_l = inds_l[keep_inds]
-    neighbor_inds_r = inds_r[keep_inds]
+    keep_inds = onp.argsort(neighbor_masks, axis=1)[:, -max_n_neighbors:]
+    batch_pairs = pairs[keep_inds]
 
-    assert neighbor_inds_l.shape == (len(confs), max_n_neighbors)
-    assert neighbor_inds_l.shape == neighbor_inds_r.shape
+    assert batch_pairs.shape == (len(confs), max_n_neighbors, 2)
 
-    return neighbor_inds_l, neighbor_inds_r
+    return batch_pairs
 
 
 def distance(x, box):
@@ -150,3 +145,26 @@ def distance(x, box):
     d2ij = np.where(np.eye(N), 0, d2ij)
     dij = np.where(np.eye(N), 0, np.sqrt(d2ij))
     return dij
+
+
+def distance_from_one_to_others(x_i, x_others, box=None, cutoff=np.inf):
+    """[d(x_i, x_j, box) for x_j in x_others]
+
+    Parameters
+    ----------
+    x_i : [dim] array
+    x_others: [N, dim] array
+        where dim = 3 or 4
+    box : optional diagonal [dim, dim] array
+    cutoff: float
+
+    Returns
+    -------
+    d_ij : [N] array
+        array of distances from x_i to each [x_j in x_others]
+        if distance(x_i, x_j) > cutoff, d_ij is set to np.inf
+    """
+    displacements_ij = delta_r(x_i, x_others, box)
+    d2_ij = np.sum(displacements_ij ** 2, axis=1)
+    d_ij = np.where(d2_ij <= cutoff ** 2, np.sqrt(d2_ij), np.inf)
+    return d_ij

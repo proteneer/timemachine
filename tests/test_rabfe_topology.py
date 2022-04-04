@@ -106,7 +106,7 @@ def test_base_topology_standard_decoupling():
 def test_dual_topology_standard_decoupling():
 
     # this class is used in double decoupling stages of the RABFE protocol. It modifies the
-    # DualTopology class in one ways:
+    # DualTopology class in one way:
     # 1) the nonbonded terms are interpolated at lambda=0 such that the epsilons and charges are at half strength.
 
     ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")

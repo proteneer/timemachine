@@ -16,10 +16,25 @@ from jax import value_and_grad, vmap
 from scipy.optimize import minimize
 from simtk import unit
 
+from timemachine.constants import BOLTZ
+from timemachine.fe.reweighting import one_sided_exp
 from timemachine.ff.handlers import openmm_deserializer
 from timemachine.md import builders
-from timemachine.potentials.jax_utils import convert_to_4d, distance, get_all_pairs_indices, get_group_group_indices
-from timemachine.potentials.nonbonded import nonbonded_block, nonbonded_v3, nonbonded_v3_on_specific_pairs
+from timemachine.potentials.jax_utils import (
+    convert_to_4d,
+    distance,
+    get_all_pairs_indices,
+    pairs_from_interaction_groups,
+)
+from timemachine.potentials.nonbonded import (
+    coulomb_interaction_group_energy,
+    coulomb_prefactors_on_traj,
+    lj_interaction_group_energy,
+    lj_prefactors_on_traj,
+    nonbonded_block,
+    nonbonded_v3,
+    nonbonded_v3_on_specific_pairs,
+)
 
 Conf = Params = Box = ChargeMask = LJMask = LambdaPlaneIdxs = LambdaOffsetIdxs = np.array
 Lamb = Beta = Cutoff = Energy = float
@@ -245,13 +260,14 @@ def _nonbonded_v3_clone(
         box_4d = None
     box = box_4d
 
-    # TODO: len(inds_i) == n_interactions -- may want to break this
+    # TODO: len(pairs) == n_interactions -- may want to break this
     #   up into more manageable blocks if n_interactions is large
-    inds_i, inds_j = get_all_pairs_indices(N)
+    pairs = get_all_pairs_indices(N)
 
-    lj, coulomb = nonbonded_v3_on_specific_pairs(conf, params, box, inds_i, inds_j, beta, cutoff)
+    lj, coulomb = nonbonded_v3_on_specific_pairs(conf, params, box, pairs, beta, cutoff)
 
     # keep only eps > 0
+    inds_i, inds_j = pairs.T
     eps = params[:, 2]
     lj = np.where(eps[inds_i] > 0, lj, 0)
     lj = np.where(eps[inds_j] > 0, lj, 0)
@@ -303,11 +319,13 @@ def test_vmap():
     n_total = n_ligand + n_environment
     conf, params, box, lamb, _, _, beta, cutoff, _, _ = generate_random_inputs(n_total, 3)
 
-    inds_i, inds_j = get_group_group_indices(n_ligand, n_environment)
-    inds_j += n_ligand
-    n_interactions = len(inds_i)
+    ligand_indices = np.arange(n_ligand)
+    environment_indices = np.arange(n_environment) + n_ligand
+    pairs = pairs_from_interaction_groups(ligand_indices, environment_indices)
 
-    fixed_kwargs = dict(params=params, box=box, inds_l=inds_i, inds_r=inds_j, beta=beta, cutoff=cutoff)
+    n_interactions = len(pairs)
+
+    fixed_kwargs = dict(params=params, box=box, pairs=pairs, beta=beta, cutoff=cutoff)
 
     # signature: conf -> ljs, coulombs, where ljs.shape == (n_interactions, )
     u_pairs = partial(nonbonded_v3_on_specific_pairs, **fixed_kwargs)
@@ -351,10 +369,99 @@ def test_jax_nonbonded_block():
     i_s, j_s = np.indices((split, N - split))
     indices_left = i_s.flatten()
     indices_right = j_s.flatten() + split
+    pairs = np.array([indices_left, indices_right]).T
 
     def u_b(x, box, params):
-        vdw, es = nonbonded_v3_on_specific_pairs(x, params, box, indices_left, indices_right, beta, cutoff)
+        vdw, es = nonbonded_v3_on_specific_pairs(x, params, box, pairs, beta, cutoff)
 
         return np.sum(vdw + es)
 
     onp.testing.assert_almost_equal(u_a(conf, box, params), u_b(conf, box, params))
+
+
+def test_precomputation():
+    """Assert that nonbonded interaction groups using precomputation agree with reference nonbonded_on_specific_pairs"""
+    system, positions, box, _ = builders.build_water_system(3.0)
+    bps, masses = openmm_deserializer.deserialize_system(system, cutoff=1.2)
+    nb = bps[-1]
+    params = nb.params
+
+    conf = positions.value_in_unit(unit.nanometer)
+
+    n_atoms = conf.shape[0]
+    beta = nb.get_beta()
+    cutoff = nb.get_cutoff()
+
+    # generate array in the shape of a "trajectory" by adding noise to an initial conformation
+    n_snapshots = 100
+    onp.random.seed(2022)
+    traj = np.array([conf] * n_snapshots) + onp.random.randn(n_snapshots, *conf.shape) * 0.005
+    boxes = np.array([box] * n_snapshots) * (1 - 0.0025 + onp.random.rand(n_snapshots, *box.shape) * 0.005)
+
+    # split system into "ligand" vs. "environment"
+    n_ligand = 3 * 10  # call the first 10 waters in the system "ligand" and the rest "environment"
+    ligand_idx = onp.arange(n_ligand)
+    env_idx = onp.arange(n_ligand, n_atoms)
+    pairs = pairs_from_interaction_groups(ligand_idx, env_idx)
+
+    # reference version: nonbonded_on_specific_pairs
+    def u_ref(x, box, params):
+        vdw, es = nonbonded_v3_on_specific_pairs(x, params, box, pairs, beta, cutoff)
+        return np.sum(vdw + es)
+
+    @jit
+    def u_batch_ref(eps_ligand, q_ligand):
+        new_params = np.array(params).at[ligand_idx, 0].set(q_ligand)
+        new_params = new_params.at[ligand_idx, 2].set(eps_ligand)
+
+        def f(x, box):
+            return u_ref(x, box, new_params)
+
+        return vmap(f)(traj, boxes)
+
+    # test version: with precomputation
+    charges, sigmas, epsilons = params.T
+    eps_prefactors = lj_prefactors_on_traj(traj, boxes, sigmas, epsilons, ligand_idx, env_idx, cutoff)
+    q_prefactors = coulomb_prefactors_on_traj(traj, boxes, charges, ligand_idx, env_idx, beta, cutoff)
+
+    @jit
+    def u_batch_test(eps_ligand, q_ligand):
+        vdw = lj_interaction_group_energy(eps_ligand, eps_prefactors)
+        es = coulomb_interaction_group_energy(q_ligand, q_prefactors)
+        return vdw + es
+
+    # generate many sets of ligand parameters to test on
+    eps_ligand_0 = epsilons[ligand_idx]
+    q_ligand_0 = charges[ligand_idx]
+
+    temperature = 300
+    kBT = BOLTZ * temperature
+
+    def make_reweighter(u_batch_fxn):
+        u_0 = u_batch_fxn(eps_ligand_0, q_ligand_0)
+
+        def reweight(eps_ligand, q_ligand):
+            delta_us = (u_batch_fxn(eps_ligand, q_ligand) - u_0) / kBT
+            return one_sided_exp(delta_us)
+
+        return reweight
+
+    reweight_ref = jit(make_reweighter(u_batch_ref))
+    reweight_test = jit(make_reweighter(u_batch_test))
+
+    for _ in range(5):
+        eps_ligand = np.abs(eps_ligand_0 + (0.2 * onp.random.rand(n_ligand) - 0.1))  # abs() so eps will be non-negative
+        q_ligand = q_ligand_0 + onp.random.randn(n_ligand)
+
+        expected = u_batch_ref(eps_ligand, q_ligand)
+        actual = u_batch_test(eps_ligand, q_ligand)
+
+        # test array of energies is ~equal to reference
+        onp.testing.assert_array_almost_equal(actual, expected)
+
+        # test that reweighting estimates and gradients are ~equal to reference
+        v_ref, gs_ref = value_and_grad(reweight_ref, argnums=(0, 1))(eps_ligand, q_ligand)
+        v_test, gs_test = value_and_grad(reweight_test, argnums=(0, 1))(eps_ligand, q_ligand)
+
+        onp.testing.assert_almost_equal(v_ref, v_test)
+        onp.testing.assert_array_almost_equal(gs_ref, gs_test)
