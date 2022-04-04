@@ -1,8 +1,9 @@
 import jax.numpy as np
 import numpy as onp
 from jax import vmap
+from numpy.typing import NDArray
 
-Array = onp.array
+Array = NDArray
 
 
 def get_all_pairs_indices(n: int) -> Array:
