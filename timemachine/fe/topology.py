@@ -1092,9 +1092,11 @@ class DualTopologyChargeConversion(DualTopology):
         combined_qlj_params = jnp.concatenate([qlj_params_src, qlj_params_dst])
         interpolated_potential = nb_potential.interpolate()
 
+        total_atoms = num_a_atoms + self.mol_b.GetNumAtoms()
+
         # probably already set to zeros by default
-        combined_lambda_plane_idxs = np.zeros(self.mol_a.GetNumAtoms() + self.mol_b.GetNumAtoms(), dtype=np.int32)
-        combined_lambda_offset_idxs = np.zeros(self.mol_a.GetNumAtoms() + self.mol_b.GetNumAtoms(), dtype=np.int32)
+        combined_lambda_plane_idxs = np.zeros(total_atoms, dtype=np.int32)
+        combined_lambda_offset_idxs = np.zeros(total_atoms, dtype=np.int32)
         interpolated_potential.set_lambda_plane_idxs(combined_lambda_plane_idxs)
         interpolated_potential.set_lambda_offset_idxs(combined_lambda_offset_idxs)
 
@@ -1122,9 +1124,10 @@ class DualTopologyDecoupling(DualTopology):
         qlj_params_combined = jnp.asarray(qlj_params_combined).at[charge_indices_b].set(0.0)
         qlj_params_combined = qlj_params_combined.at[epsilon_indices_b].multiply(0.5)
 
-        combined_lambda_plane_idxs = np.zeros(num_a_atoms + self.mol_b.GetNumAtoms(), dtype=np.int32)
+        num_b_atoms = self.mol_b.GetNumAtoms()
+        combined_lambda_plane_idxs = np.zeros(num_a_atoms + num_b_atoms, dtype=np.int32)
         combined_lambda_offset_idxs = np.concatenate(
-            [np.zeros(num_a_atoms, dtype=np.int32), np.ones(self.mol_b.GetNumAtoms(), dtype=np.int32)]
+            [np.zeros(num_a_atoms, dtype=np.int32), np.ones(num_b_atoms, dtype=np.int32)]
         )
         nb_potential.set_lambda_plane_idxs(combined_lambda_plane_idxs)
         nb_potential.set_lambda_offset_idxs(combined_lambda_offset_idxs)
