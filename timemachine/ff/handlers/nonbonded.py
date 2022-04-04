@@ -447,7 +447,6 @@ class AM1CCCHandler(SerializableMixIn):
             normalized charge for each
 
         props: any
-
         """
 
         assert len(smirks) == len(params)
@@ -455,12 +454,20 @@ class AM1CCCHandler(SerializableMixIn):
         self.smirks = smirks
         self.params = np.array(params, dtype=np.float64)
         self.props = props
+        self.supported_elements = {1, 6, 7, 8, 9, 14, 16, 17, 35, 53}  # note: omits phosphorus (15) for now
+
+    def validate_input(self, mol):
+        # TODO: read off supported elements from self.smirks, rather than hard-coding list of supported elements?
+        elements = set([a.GetAtomicNum() for a in mol.GetAtoms()])
+        if not elements.issubset(self.supported_elements):
+            raise RuntimeError("mol contains unsupported elements: ", elements - self.supported_elements)
 
     def partial_parameterize(self, params, mol):
+        self.validate_input(mol)
         return self.static_parameterize(params, self.smirks, mol)
 
     def parameterize(self, mol):
-        return self.static_parameterize(self.params, self.smirks, mol)
+        return self.partial_parameterize(self.params, mol)
 
     @staticmethod
     def static_parameterize(params, smirks, mol):
