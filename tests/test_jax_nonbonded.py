@@ -394,6 +394,7 @@ def test_precomputation():
 
     # generate array in the shape of a "trajectory" by adding noise to an initial conformation
     n_snapshots = 100
+    onp.random.seed(2022)
     traj = np.array([conf] * n_snapshots) + onp.random.randn(n_snapshots, *conf.shape) * 0.005
     boxes = np.array([box] * n_snapshots) * (1 - 0.0025 + onp.random.rand(n_snapshots, *box.shape) * 0.005)
 
@@ -448,7 +449,7 @@ def test_precomputation():
     reweight_ref = jit(make_reweighter(u_batch_ref))
     reweight_test = jit(make_reweighter(u_batch_test))
 
-    for _ in range(50):
+    for _ in range(5):
         eps_ligand = np.abs(eps_ligand_0 + (0.2 * onp.random.rand(n_ligand) - 0.1))  # abs() so eps will be non-negative
         q_ligand = q_ligand_0 + onp.random.randn(n_ligand)
 
@@ -459,9 +460,8 @@ def test_precomputation():
         onp.testing.assert_array_almost_equal(actual, expected)
 
         # test that reweighting estimates and gradients are ~equal to reference
-        for argnum in [0, 1]:
-            v_ref, g_ref = value_and_grad(reweight_ref, argnums=argnum)(eps_ligand, q_ligand)
-            v_test, g_test = value_and_grad(reweight_test, argnums=argnum)(eps_ligand, q_ligand)
+        v_ref, gs_ref = value_and_grad(reweight_ref, argnums=(0, 1))(eps_ligand, q_ligand)
+        v_test, gs_test = value_and_grad(reweight_test, argnums=(0, 1))(eps_ligand, q_ligand)
 
-            onp.testing.assert_almost_equal(v_ref, v_test)
-            onp.testing.assert_array_almost_equal(g_ref, g_test)
+        onp.testing.assert_almost_equal(v_ref, v_test)
+        onp.testing.assert_array_almost_equal(gs_ref, gs_test)
