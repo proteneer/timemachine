@@ -11,6 +11,7 @@ from rdkit import Chem
 from rdkit.Chem import AllChem
 
 from timemachine.constants import ONE_4PI_EPS0
+from timemachine.ff import Forcefield
 from timemachine.ff.charges import AM1CCC_CHARGES
 from timemachine.ff.handlers import bonded, nonbonded
 from timemachine.ff.handlers.deserialize import deserialize_handlers
@@ -538,9 +539,22 @@ def test_gbsa_handler():
     # test that we can use the adjoints
     adjoints = gb_vjp_fn(gb_params_adjoints)[0]
 
-    # if a parameter is > 99 then its adjoint should be zero (converse isn't necessarily true since)
+    # if a parameter is > 99 then its adjoint should be zero (converse isn't necessarily true)
     mask = np.argwhere(params > 90)
     assert np.all(adjoints[mask] == 0.0)
+
+
+def test_am1ccc_throws_error_on_phosphorus():
+    """Temporary, until phosphorus patterns are added to AM1CCC port"""
+    ff = Forcefield.load_from_file("smirnoff_1_1_0_ccc.py")
+
+    # contains phosphorus
+    smi = "[H]c1c(OP(=S)(OC([H])([H])C([H])([H])[H])OC([H])([H])C([H])([H])[H])nc(C([H])(C([H])([H])[H])C([H])([H])[H])nc1C([H])([H])[H]"
+    mol = Chem.AddHs(Chem.MolFromSmiles(smi))
+
+    with pytest.raises(RuntimeError) as e:
+        _ = ff.q_handle.parameterize(mol)
+    assert "unsupported element" in str(e)
 
 
 def test_am1_differences():
@@ -551,7 +565,6 @@ def test_am1_differences():
         if isinstance(ccc, nonbonded.AM1CCCHandler):
             break
 
-    # smi = "[H]c1c(OP(=S)(OC([H])([H])C([H])([H])[H])OC([H])([H])C([H])([H])[H])nc(C([H])(C([H])([H])[H])C([H])([H])[H])nc1C([H])([H])[H]"
     smi = "Clc1c(Cl)c(Cl)c(-c2c(Cl)c(Cl)c(Cl)c(Cl)c2Cl)c(Cl)c1Cl"
     mol = Chem.MolFromSmiles(smi)
     mol = Chem.AddHs(mol)
