@@ -2,6 +2,7 @@ Code, documentation, experiments we want to retain for reference, but that we're
 
 ### Contents
 * `docs/` -- write-up of initial vision for `timemachine`, involving efficient backpropagation through MD trajectories
+* `jax_tricks` -- misc. Jax functions
 * `lambda_schedules/`
   * `rabfe_relative_schedule.py` -- schedule that may be suitable for relative RABFE calculations
 * `thermo_deriv/` -- numerical experiments with "thermodynamic derivative" estimators, adjusting LJ parameters to match observables

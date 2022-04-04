@@ -99,7 +99,7 @@ def test_nonbonded_interaction_group_correctness(
         conf_4d = jax_utils.augment_dim(conf, w)
         box_4d = (1000 * jax.numpy.eye(4)).at[:3, :3].set(box)
 
-        vdW, electrostatics, _ = nonbonded.nonbonded_v3_interaction_groups(
+        vdW, electrostatics = nonbonded.nonbonded_v3_interaction_groups(
             conf_4d, params, box_4d, ligand_idxs, host_idxs, beta, cutoff
         )
         return jax.numpy.sum(vdW + electrostatics)
@@ -165,7 +165,7 @@ def test_nonbonded_interaction_group_interpolated_correctness(
         conf_4d = jax_utils.augment_dim(conf, w)
         box_4d = (1000 * jax.numpy.eye(4)).at[:3, :3].set(box)
 
-        vdW, electrostatics, _ = nonbonded.nonbonded_v3_interaction_groups(
+        vdW, electrostatics = nonbonded.nonbonded_v3_interaction_groups(
             conf_4d, params, box_4d, ligand_idxs, host_idxs, beta, cutoff
         )
         return jax.numpy.sum(vdW + electrostatics)
