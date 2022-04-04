@@ -1079,10 +1079,16 @@ class DualTopologyChargeConversion(DualTopology):
     def parameterize_nonbonded(self, ff_q_params, ff_lj_params):
         qlj_params_ab, nb_potential = super().parameterize_nonbonded(ff_q_params, ff_lj_params)
         num_a_atoms = self.mol_a.GetNumAtoms()
-        qlj_params_src = qlj_params_ab.at[num_a_atoms:, 0].set(0.0)
-        qlj_params_src = qlj_params_src.at[num_a_atoms:, 2].multiply(0.5)
-        qlj_params_dst = qlj_params_ab.at[:num_a_atoms, 0].set(0.0)
-        qlj_params_dst = qlj_params_dst.at[:num_a_atoms, 2].multiply(0.5)
+        charge_indices_b = jnp.index_exp[num_a_atoms:, 0]
+        epsilon_indices_b = jnp.index_exp[num_a_atoms:, 2]
+
+        charge_indices_a = jnp.index_exp[:num_a_atoms, 0]
+        epsilon_indices_a = jnp.index_exp[:num_a_atoms, 2]
+
+        qlj_params_src = qlj_params_ab.at[charge_indices_b].set(0.0)
+        qlj_params_src = qlj_params_src.at[epsilon_indices_b].multiply(0.5)
+        qlj_params_dst = qlj_params_ab.at[charge_indices_a].set(0.0)
+        qlj_params_dst = qlj_params_dst.at[epsilon_indices_a].multiply(0.5)
         combined_qlj_params = jnp.concatenate([qlj_params_src, qlj_params_dst])
         interpolated_potential = nb_potential.interpolate()
 
@@ -1109,12 +1115,16 @@ class DualTopologyDecoupling(DualTopology):
 
     def parameterize_nonbonded(self, ff_q_params, ff_lj_params):
         qlj_params_combined, nb_potential = super().parameterize_nonbonded(ff_q_params, ff_lj_params)
-        qlj_params_combined = jnp.asarray(qlj_params_combined).at[self.mol_a.GetNumAtoms() :, 0].set(0.0)
-        qlj_params_combined = qlj_params_combined.at[self.mol_a.GetNumAtoms() :, 2].multiply(0.5)
+        num_a_atoms = self.mol_a.GetNumAtoms()
+        charge_indices_b = jnp.index_exp[num_a_atoms:, 0]
+        epsilon_indices_b = jnp.index_exp[num_a_atoms:, 2]
 
-        combined_lambda_plane_idxs = np.zeros(self.mol_a.GetNumAtoms() + self.mol_b.GetNumAtoms(), dtype=np.int32)
+        qlj_params_combined = jnp.asarray(qlj_params_combined).at[charge_indices_b].set(0.0)
+        qlj_params_combined = qlj_params_combined.at[epsilon_indices_b].multiply(0.5)
+
+        combined_lambda_plane_idxs = np.zeros(num_a_atoms + self.mol_b.GetNumAtoms(), dtype=np.int32)
         combined_lambda_offset_idxs = np.concatenate(
-            [np.zeros(self.mol_a.GetNumAtoms(), dtype=np.int32), np.ones(self.mol_b.GetNumAtoms(), dtype=np.int32)]
+            [np.zeros(num_a_atoms, dtype=np.int32), np.ones(self.mol_b.GetNumAtoms(), dtype=np.int32)]
         )
         nb_potential.set_lambda_plane_idxs(combined_lambda_plane_idxs)
         nb_potential.set_lambda_offset_idxs(combined_lambda_offset_idxs)
