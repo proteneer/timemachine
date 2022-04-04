@@ -383,8 +383,10 @@ class BaseTopologyStandardDecoupling(BaseTopology):
 
         # mol is standardized into a forcefield independent state.
         qlj_params, nb_potential = super().parameterize_nonbonded(ff_q_params, ff_lj_params)
-        qlj_params = jnp.asarray(qlj_params).at[:, 0].multiply(0.0)
-        qlj_params = qlj_params.at[:, 2].multiply(0.5)
+        charge_indices = jnp.index_exp[:, 0]
+        epsilon_indices = jnp.index_exp[:, 2]
+        qlj_params = jnp.asarray(qlj_params).at[charge_indices].set(0.0)
+        qlj_params = qlj_params.at[epsilon_indices].multiply(0.5)
 
         return qlj_params, nb_potential
 
@@ -1104,7 +1106,7 @@ class DualTopologyDecoupling(DualTopology):
 
     def parameterize_nonbonded(self, ff_q_params, ff_lj_params):
         qlj_params_combined, nb_potential = super().parameterize_nonbonded(ff_q_params, ff_lj_params)
-        qlj_params_combined = jnp.asarray(qlj_params_combined).at[self.mol_a.GetNumAtoms() :, 0].multiply(0.0)
+        qlj_params_combined = jnp.asarray(qlj_params_combined).at[self.mol_a.GetNumAtoms() :, 0].set(0.0)
         qlj_params_combined = qlj_params_combined.at[self.mol_a.GetNumAtoms() :, 2].multiply(0.5)
 
         combined_lambda_plane_idxs = np.zeros(self.mol_a.GetNumAtoms() + self.mol_b.GetNumAtoms(), dtype=np.int32)
