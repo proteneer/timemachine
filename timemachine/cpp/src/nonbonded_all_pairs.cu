@@ -121,9 +121,13 @@ NonbondedAllPairs<RealType, Interpolated>::NonbondedAllPairs(
     const int N_BINS = 128;
     const int N_BITS = 8;
     const int capacity = 1 << N_BITS;
+
+    if (N_BINS != 8)) {  // TODO: allowing N_BINS != 8 will require more invasive changes
+            throw std::runtime_error("N_BITS=" + std::to_string(N_BITS) + " not allowed (only N_BITS=8 allowed)");
+        }
     if (N_BINS > capacity) {
         throw std::runtime_error(
-            "N_BITS=" + std::to_string(N_BITS) + " not big enough to represent N_BINS=" + std::to_string(N_BINS));
+            "N_BINS=" + std::to_string(N_BINS) + " exceeds capacity of N_BITS=" + std::to_string(N_BITS));
     }
     std::vector<unsigned int> bin_to_idx(N_BINS * N_BINS * N_BINS);
     for (int i = 0; i < N_BINS; i++) {
@@ -225,7 +229,7 @@ void NonbondedAllPairs<RealType, Interpolated>::hilbert_sort(
         d_sorted_atom_idxs_,
         K_,
         0,                            // begin bit
-        sizeof(*d_sort_keys_in_) * 8, // end bit  // TODO: modify nBits=8 depending on N_BINS?
+        sizeof(*d_sort_keys_in_) * 8, // end bit
         stream                        // cudaStream
     );
 
