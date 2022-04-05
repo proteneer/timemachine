@@ -513,16 +513,12 @@ void declare_bound_potential(py::module &m) {
                 const long unsigned int N = coords.shape()[0];
                 const long unsigned int D = coords.shape()[1];
 
+                // du_dx and du_dl are computed, but not used
                 std::vector<unsigned long long> du_dx(N * D);
                 std::vector<unsigned long long> du_dl(N, 0);
                 std::vector<unsigned long long> u(N, 0);
 
                 bp.execute_host(N, coords.data(), box.data(), lambda, &du_dx[0], &du_dl[0], &u[0]);
-
-                py::array_t<unsigned long long, py::array::c_style> py_du_dx({N, D});
-                for (unsigned int i = 0; i < du_dx.size(); i++) {
-                    py_du_dx.mutable_data()[i] = du_dx[i];
-                }
 
                 uint64_t u_sum = std::accumulate(u.begin(), u.end(), decltype(u)::value_type(0));
                 py::array_t<uint64_t, py::array::c_style> py_u(1);
