@@ -122,9 +122,9 @@ NonbondedAllPairs<RealType, Interpolated>::NonbondedAllPairs(
     const int N_BITS = 8;
     const int capacity = 1 << N_BITS;
 
-    if (N_BINS != 8)) {  // TODO: allowing N_BINS != 8 will require more invasive changes
-            throw std::runtime_error("N_BITS=" + std::to_string(N_BITS) + " not allowed (only N_BITS=8 allowed)");
-        }
+    if (N_BINS != 8) { // TODO: allowing N_BINS != 8 will require more invasive changes
+        throw std::runtime_error("N_BITS=" + std::to_string(N_BITS) + " not allowed (only N_BITS=8 allowed)");
+    }
     if (N_BINS > capacity) {
         throw std::runtime_error(
             "N_BINS=" + std::to_string(N_BINS) + " exceeds capacity of N_BITS=" + std::to_string(N_BITS));
