@@ -9,6 +9,8 @@ project(timemachine LANGUAGES CXX CUDA)
 find_package(PythonInterp 3.7 REQUIRED)
 find_package(PythonLibs 3.7 REQUIRED)
 
+set(CMAKE_CXX_FLAGS "-Werror")
+
 string(APPEND CMAKE_CUDA_FLAGS "-O3 -lineinfo")
 message(${CMAKE_CUDA_FLAGS})
 
