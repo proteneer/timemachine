@@ -9,6 +9,7 @@ void __global__ k_coords_to_kv(
     unsigned int *vals) {
 
     const int atom_idx = blockIdx.x * blockDim.x + threadIdx.x;
+    const int N_BINS = 256;
 
     if (atom_idx >= N) {
         return;
@@ -33,7 +34,7 @@ void __global__ k_coords_to_kv(
     unsigned int bin_y = y / binWidth;
     unsigned int bin_z = z / binWidth;
 
-    keys[atom_idx] = bin_to_idx[bin_x * 256 * 256 + bin_y * 256 + bin_z];
+    keys[atom_idx] = bin_to_idx[bin_x * N_BINS * N_BINS + bin_y * N_BINS + bin_z];
     // uncomment below if you want to preserve the atom ordering
     // keys[atom_idx] = atom_idx;
     vals[atom_idx] = atom_idx;
@@ -50,6 +51,7 @@ void __global__ k_coords_to_kv_gather(
     unsigned int *vals) {
 
     const int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    const int N_BINS = 256;
 
     if (idx >= N) {
         return;
@@ -76,7 +78,7 @@ void __global__ k_coords_to_kv_gather(
     unsigned int bin_y = y / binWidth;
     unsigned int bin_z = z / binWidth;
 
-    keys[idx] = bin_to_idx[bin_x * 256 * 256 + bin_y * 256 + bin_z];
+    keys[idx] = bin_to_idx[bin_x * N_BINS * N_BINS + bin_y * N_BINS + bin_z];
     // uncomment below if you want to preserve the atom ordering
     // keys[idx] = atom_idx;
     vals[idx] = atom_idx;
