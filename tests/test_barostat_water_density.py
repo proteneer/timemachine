@@ -7,13 +7,12 @@ from functools import partial
 import numpy as np
 from simtk import unit
 
-from timemachine.fe.free_energy import AbsoluteFreeEnergy
+from timemachine.fe.utils import get_romol_conf
 from timemachine.lib import LangevinIntegrator
 from timemachine.md.barostat.moves import MonteCarloBarostat
 from timemachine.md.barostat.utils import get_bond_list, get_group_indices
-from timemachine.md.builders import build_water_system
+from timemachine.md.enhanced import get_solvent_phase_system
 from timemachine.md.ensembles import NPTEnsemble, PotentialEnergyModel
-from timemachine.md.minimizer import minimize_host_4d
 from timemachine.md.states import CoordsVelBox
 from timemachine.md.thermostat.moves import UnadjustedLangevinMove
 from timemachine.md.thermostat.utils import sample_velocities
@@ -36,17 +35,15 @@ if __name__ == "__main__":
 
     # generate an alchemical system of a waterbox + alchemical ligand:
     # effectively discard ligands by running in AbsoluteFreeEnergy mode at lambda = 1.0
-    mol_a, _, core, ff = hif2a_ligand_pair.mol_a, hif2a_ligand_pair.mol_b, hif2a_ligand_pair.core, hif2a_ligand_pair.ff
-    complex_system, complex_coords, complex_box, complex_top = build_water_system(
-        initial_waterbox_width.value_in_unit(unit.nanometer)
+    mol_a, _, core, ff = (
+        hif2a_ligand_pair.mol_a,
+        hif2a_ligand_pair.mol_b,
+        hif2a_ligand_pair.top.core,
+        hif2a_ligand_pair.ff,
     )
-
-    min_complex_coords = minimize_host_4d([mol_a], complex_system, complex_coords, ff, complex_box)
-    afe = AbsoluteFreeEnergy(mol_a, ff)
-
-    unbound_potentials, sys_params, masses, coords = afe.prepare_host_edge(
-        ff.get_ordered_params(), complex_system, min_complex_coords
-    )
+    unbound_potentials, sys_params, masses, coords, complex_box = get_solvent_phase_system(mol_a, ff, margin=0.0)
+    n_lig_atoms = get_romol_conf(mol_a).shape[0]
+    n_water_mols = (coords.shape[0] - n_lig_atoms) // 3
 
     # define NPT ensemble
     potential_energy_model = PotentialEnergyModel(sys_params, unbound_potentials)
@@ -95,9 +92,8 @@ if __name__ == "__main__":
     final_volumes = np.array([np.mean(volume_traj[equil_time:]) for volume_traj in volume_trajs])
 
     volume = final_volumes * unit.nanometer ** 3
-    n_molecules = complex_top.getNumResidues()
     water_molecule_mass = 18.01528 * unit.amu
-    density = n_molecules * water_molecule_mass / (volume * unit.AVOGADRO_CONSTANT_NA)
+    density = n_water_mols * water_molecule_mass / (volume * unit.AVOGADRO_CONSTANT_NA)
 
     density_in_kg_l = density.value_in_unit(unit.kilogram / unit.liter)
 

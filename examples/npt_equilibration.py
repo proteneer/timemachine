@@ -6,13 +6,13 @@ import matplotlib.pyplot as plt
 import numpy as np
 from simtk import unit
 
-from timemachine.fe.free_energy import AbsoluteFreeEnergy, construct_lambda_schedule
+from timemachine.fe.lambda_schedule import construct_lambda_schedule
+from timemachine.fe.utils import get_romol_conf
 from timemachine.lib import LangevinIntegrator
+from timemachine.md import enhanced
 from timemachine.md.barostat.moves import MonteCarloBarostat
 from timemachine.md.barostat.utils import get_bond_list, get_group_indices
-from timemachine.md.builders import build_water_system
 from timemachine.md.ensembles import NPTEnsemble, PotentialEnergyModel
-from timemachine.md.minimizer import minimize_host_4d
 from timemachine.md.states import CoordsVelBox
 from timemachine.md.thermostat.moves import UnadjustedLangevinMove
 from timemachine.md.thermostat.utils import sample_velocities
@@ -33,18 +33,11 @@ temperature = 300 * unit.kelvin
 pressure = 1.013 * unit.bar
 lambdas = construct_lambda_schedule(n_lambdas)
 
-# build a pair of alchemical ligands in a water box
-mol_a, mol_b, core, ff = hif2a_ligand_pair.mol_a, hif2a_ligand_pair.mol_b, hif2a_ligand_pair.core, hif2a_ligand_pair.ff
-complex_system, complex_coords, complex_box, complex_top = build_water_system(
-    initial_waterbox_width.value_in_unit(unit.nanometer)
-)
-
-min_complex_coords = minimize_host_4d([mol_a], complex_system, complex_coords, ff, complex_box)
-afe = AbsoluteFreeEnergy(mol_a, ff)
-
-unbound_potentials, sys_params, masses, coords = afe.prepare_host_edge(
-    ff.get_ordered_params(), complex_system, min_complex_coords
-)
+# build an alchemical ligand in a water box
+mol_a, ff = hif2a_ligand_pair.mol_a, hif2a_ligand_pair.ff
+unbound_potentials, sys_params, masses, coords, complex_box = enhanced.get_solvent_phase_system(mol_a, ff)
+n_lig_atoms = get_romol_conf(mol_a).shape[0]
+n_water_mols = (coords.shape[0] - n_lig_atoms) // 3
 
 # define NPT ensemble
 potential_energy_model = PotentialEnergyModel(sys_params, unbound_potentials)
@@ -84,7 +77,7 @@ def plot_density(volume_trajs):
     final_volumes = np.array([np.median(volume_traj[equil_time:]) for volume_traj in volume_trajs])
 
     volume = final_volumes * unit.nanometer ** 3
-    n_molecules = complex_top.getNumResidues()
+    n_molecules = n_water_mols
     water_molecule_mass = 18.01528 * unit.amu
     density = n_molecules * water_molecule_mass / (volume * unit.AVOGADRO_CONSTANT_NA)
 

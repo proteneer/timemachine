@@ -3,13 +3,12 @@ import pytest
 from simtk import unit
 
 from timemachine.constants import BOLTZ, DISTANCE_UNIT, ENERGY_UNIT
-from timemachine.fe.free_energy import AbsoluteFreeEnergy
+from timemachine.fe.utils import get_romol_conf
 from timemachine.ff import Forcefield
 from timemachine.lib import LangevinIntegrator, custom_ops
 from timemachine.md.barostat.moves import CentroidRescaler
 from timemachine.md.barostat.utils import compute_box_center, compute_box_volume, get_bond_list, get_group_indices
-from timemachine.md.builders import build_water_system
-from timemachine.md.minimizer import minimize_host_4d
+from timemachine.md.enhanced import get_solvent_phase_system
 from timemachine.md.thermostat.utils import sample_velocities
 from timemachine.testsystems.relative import hif2a_ligand_pair
 
@@ -17,21 +16,13 @@ from timemachine.testsystems.relative import hif2a_ligand_pair
 def test_barostat_zero_interval():
     pressure = 1.0 * unit.atmosphere
     temperature = 300.0 * unit.kelvin
-    initial_waterbox_width = 2.5 * unit.nanometer
     seed = 2021
     np.random.seed(seed)
 
     mol_a = hif2a_ligand_pair.mol_a
     ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
-    complex_system, complex_coords, complex_box, complex_top = build_water_system(
-        initial_waterbox_width.value_in_unit(unit.nanometer)
-    )
 
-    afe = AbsoluteFreeEnergy(mol_a, ff)
-
-    unbound_potentials, sys_params, masses, coords = afe.prepare_host_edge(
-        ff.get_ordered_params(), complex_system, complex_coords
-    )
+    unbound_potentials, sys_params, _, coords, _ = get_solvent_phase_system(mol_a, ff)
 
     # get list of molecules for barostat by looking at bond table
     harmonic_bond_potential = unbound_potentials[0]
@@ -77,7 +68,6 @@ def test_barostat_partial_group_idxs():
     """Verify that the barostat can handle a subset of the molecules
     rather than all of them. This test only verify that it runs, not the behavior"""
     temperature = 300.0 * unit.kelvin
-    initial_waterbox_width = 3.0 * unit.nanometer
     timestep = 1.5 * unit.femtosecond
     barostat_interval = 3
     collision_rate = 1.0 / unit.picosecond
@@ -87,16 +77,7 @@ def test_barostat_partial_group_idxs():
     pressure = 1.0 * unit.atmosphere
     mol_a = hif2a_ligand_pair.mol_a
     ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
-    complex_system, complex_coords, complex_box, complex_top = build_water_system(
-        initial_waterbox_width.value_in_unit(unit.nanometer)
-    )
-
-    min_complex_coords = minimize_host_4d([mol_a], complex_system, complex_coords, ff, complex_box)
-    afe = AbsoluteFreeEnergy(mol_a, ff)
-
-    unbound_potentials, sys_params, masses, coords = afe.prepare_host_edge(
-        ff.get_ordered_params(), complex_system, min_complex_coords
-    )
+    unbound_potentials, sys_params, masses, coords, complex_box = get_solvent_phase_system(mol_a, ff)
 
     # get list of molecules for barostat by looking at bond table
     harmonic_bond_potential = unbound_potentials[0]
@@ -150,7 +131,6 @@ def test_barostat_is_deterministic():
     """
     lam = 1.0
     temperature = 300.0 * unit.kelvin
-    initial_waterbox_width = 3.0 * unit.nanometer
     timestep = 1.5 * unit.femtosecond
     barostat_interval = 3
     collision_rate = 1.0 / unit.picosecond
@@ -163,16 +143,8 @@ def test_barostat_is_deterministic():
 
     mol_a = hif2a_ligand_pair.mol_a
     ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
-    complex_system, complex_coords, complex_box, complex_top = build_water_system(
-        initial_waterbox_width.value_in_unit(unit.nanometer)
-    )
-
-    min_complex_coords = minimize_host_4d([mol_a], complex_system, complex_coords, ff, complex_box)
-    afe = AbsoluteFreeEnergy(mol_a, ff)
-
-    unbound_potentials, sys_params, masses, coords = afe.prepare_host_edge(
-        ff.get_ordered_params(), complex_system, min_complex_coords
-    )
+    # margin = 0 to match original reference value
+    unbound_potentials, sys_params, masses, coords, complex_box = get_solvent_phase_system(mol_a, ff, margin=0.0)
 
     # get list of molecules for barostat by looking at bond table
     harmonic_bond_potential = unbound_potentials[0]
@@ -214,7 +186,6 @@ def test_barostat_is_deterministic():
 
 def test_barostat_varying_pressure():
     temperature = 300.0 * unit.kelvin
-    initial_waterbox_width = 3.0 * unit.nanometer
     timestep = 1.5 * unit.femtosecond
     barostat_interval = 3
     collision_rate = 1.0 / unit.picosecond
@@ -225,16 +196,7 @@ def test_barostat_varying_pressure():
     pressure = 1000.0 * unit.atmosphere
     mol_a = hif2a_ligand_pair.mol_a
     ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
-    complex_system, complex_coords, complex_box, complex_top = build_water_system(
-        initial_waterbox_width.value_in_unit(unit.nanometer)
-    )
-
-    min_complex_coords = minimize_host_4d([mol_a], complex_system, complex_coords, ff, complex_box)
-    afe = AbsoluteFreeEnergy(mol_a, ff)
-
-    unbound_potentials, sys_params, masses, coords = afe.prepare_host_edge(
-        ff.get_ordered_params(), complex_system, min_complex_coords
-    )
+    unbound_potentials, sys_params, masses, coords, complex_box = get_solvent_phase_system(mol_a, ff, margin=0.0)
 
     # get list of molecules for barostat by looking at bond table
     harmonic_bond_potential = unbound_potentials[0]
@@ -299,7 +261,6 @@ def test_molecular_ideal_gas():
     """
 
     # simulation parameters
-    initial_waterbox_width = 3.0 * unit.nanometer
     timestep = 1.5 * unit.femtosecond
     collision_rate = 1.0 / unit.picosecond
     n_moves = 10000
@@ -314,16 +275,7 @@ def test_molecular_ideal_gas():
     # effectively discard ligands by running in AbsoluteFreeEnergy mode at lambda = 1.0
     mol_a = hif2a_ligand_pair.mol_a
     ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
-    complex_system, complex_coords, complex_box, complex_top = build_water_system(
-        initial_waterbox_width.value_in_unit(unit.nanometer)
-    )
-
-    min_complex_coords = minimize_host_4d([mol_a], complex_system, complex_coords, ff, complex_box)
-    afe = AbsoluteFreeEnergy(mol_a, ff)
-
-    _unbound_potentials, _sys_params, masses, coords = afe.prepare_host_edge(
-        ff.get_ordered_params(), complex_system, min_complex_coords
-    )
+    _unbound_potentials, _sys_params, masses, coords, complex_box = get_solvent_phase_system(mol_a, ff, margin=0.0)
 
     # drop the nonbonded potential
     unbound_potentials = _unbound_potentials[:-1]
@@ -339,7 +291,8 @@ def test_molecular_ideal_gas():
     relative_tolerance = 1e-2
     initial_relative_box_perturbation = 2 * relative_tolerance
 
-    n_molecules = complex_top.getNumResidues()
+    n_lig_atoms = get_romol_conf(mol_a).shape[0]
+    n_water_mols = (coords.shape[0] - n_lig_atoms) // 3
 
     bound_potentials = []
     for params, unbound_pot in zip(sys_params, unbound_potentials):
@@ -354,7 +307,7 @@ def test_molecular_ideal_gas():
     # expected volume
     md_pressure_unit = ENERGY_UNIT / DISTANCE_UNIT ** 3
     pressure_in_md = (pressure * unit.AVOGADRO_CONSTANT_NA).value_in_unit(md_pressure_unit)
-    expected_volume_in_md = (n_molecules + 1) * BOLTZ * temperatures.value_in_unit(unit.kelvin) / pressure_in_md
+    expected_volume_in_md = (n_water_mols + 1) * BOLTZ * temperatures.value_in_unit(unit.kelvin) / pressure_in_md
 
     for i, temperature in enumerate(temperatures):
 

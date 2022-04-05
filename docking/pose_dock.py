@@ -7,7 +7,7 @@ from simtk.openmm import app
 from simtk.openmm.app import PDBFile
 
 from docking import report
-from timemachine.fe import free_energy
+from timemachine.fe import free_energy, topology
 from timemachine.fe.utils import to_md_units
 from timemachine.ff import Forcefield
 from timemachine.lib import LangevinIntegrator, custom_ops
@@ -93,9 +93,10 @@ def pose_dock(
         start_time = time.time()
         guest_name = guest_mol.GetProp("_Name")
 
-        afe = free_energy.AbsoluteFreeEnergy(guest_mol, ff)
+        guest_topology = topology.BaseTopology(guest_mol, ff)
+        afe = free_energy.AbsoluteFreeEnergy(guest_mol, guest_topology)
 
-        ups, sys_params, masses, _ = afe.prepare_host_edge(ff.get_ordered_params(), host_system, host_conf)
+        ups, sys_params, masses = afe.prepare_host_edge(ff.get_ordered_params(), host_system)
 
         bps = []
         for up, sp in zip(ups, sys_params):

@@ -25,7 +25,7 @@ import numpy as np
 from rdkit import Chem
 
 from timemachine.fe import free_energy, topology
-from timemachine.fe.free_energy import construct_lambda_schedule
+from timemachine.fe.lambda_schedule import construct_lambda_schedule
 from timemachine.ff import Forcefield
 from timemachine.md import builders, minimizer
 

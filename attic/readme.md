@@ -10,3 +10,4 @@ Code, documentation, experiments we want to retain for reference, but that we're
     * note: somewhat tailored to use TI estimates, constant volume simulations, GRPC, ...
 * `scripts/`
   * `bootstrap_am1.py` -- script for approximating AM1BCC with atom types rather than bond types
+  * `rhfe_single.py` -- script for running relative hydration free energy with single topology

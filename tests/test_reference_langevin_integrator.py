@@ -6,7 +6,7 @@ from jax import numpy as jnp
 
 from timemachine.constants import BOLTZ
 from timemachine.integrator import LangevinIntegrator
-from timemachine.testsystems.relative import hif2a_ligand_pair
+from timemachine.testsystems.relative import hif2a_ligand_pair_vacuum_edge
 
 
 def test_reference_langevin_integrator(threshold=1e-4):
@@ -60,9 +60,7 @@ def test_reference_langevin_integrator_with_custom_ops():
     np.random.seed(2021)
 
     # define a force fxn using a mix of optimized custom_ops and prototype-friendly Jax
-
-    ff_params = hif2a_ligand_pair.ff.get_ordered_params()
-    unbound_potentials, sys_params, masses, coords = hif2a_ligand_pair.prepare_vacuum_edge(ff_params)
+    unbound_potentials, sys_params, masses, coords = hif2a_ligand_pair_vacuum_edge
     bound_potentials = [
         ubp.bind(params).bound_impl(np.float32) for (ubp, params) in zip(unbound_potentials, sys_params)
     ]

@@ -11,12 +11,14 @@ from typing import Any, Dict, List, Tuple, Union
 import jax
 import numpy as np
 from jax import numpy as jnp
+from rdkit.Chem import MolToSmiles
 
 import timemachine
 from timemachine.fe.estimator import SimulationResult
+from timemachine.fe.free_energy import RelativeFreeEnergy
 
 # free energy classes
-from timemachine.fe.free_energy import RBFETransformIndex, RelativeFreeEnergy, construct_lambda_schedule
+from timemachine.fe.lambda_schedule import construct_lambda_schedule
 from timemachine.fe.loss import pseudo_huber_loss  # , l1_loss, flat_bottom_loss
 from timemachine.fe.model import RBFEModel
 
@@ -118,6 +120,34 @@ def _blew_up(results: List[SimulationResult]) -> bool:
     return np.isnan(du_dls).any() or (du_dls.std(1).max() > 1000)
 
 
+class RBFETransformIndex:
+    """Builds an index of relative free energy transformations to use
+    with construct_mle_layer
+    """
+
+    def __len__(self):
+        return len(self._indices)
+
+    def __init__(self):
+        self._indices = {}
+
+    def build(self, refs: List[RelativeFreeEnergy]):
+        for ref in refs:
+            self.get_transform_indices(ref)
+
+    def get_transform_indices(self, ref: RelativeFreeEnergy) -> List[int]:
+        return self.get_mol_idx(ref.mol_a), self.get_mol_idx(ref.mol_b)
+
+    def get_mol_idx(self, mol):
+        hashed = self._mol_hash(mol)
+        if hashed not in self._indices:
+            self._indices[hashed] = len(self._indices)
+        return self._indices[hashed]
+
+    def _mol_hash(self, mol):
+        return MolToSmiles(mol)
+
+
 def loss_fxn(ff_params, batch: List[Tuple[RelativeFreeEnergy, RBFEModel]]):
     index = RBFETransformIndex()
     index.build([edge[0] for edge in batch])
@@ -126,7 +156,7 @@ def loss_fxn(ff_params, batch: List[Tuple[RelativeFreeEnergy, RBFEModel]]):
     preds = []
     for rfe, model in batch:
         indices.append(list(index.get_transform_indices(rfe)))
-        pred_ddG, stage_results = model.predict(ff_params, rfe.mol_a, rfe.mol_b, rfe.core)
+        pred_ddG, stage_results = model.predict(ff_params, rfe.mol_a, rfe.mol_b, rfe.top.core)
         all_results.extend(list(stage_results))
         preds.append(pred_ddG)
     labels = jnp.asarray([rfe.label for rfe, _ in batch])
