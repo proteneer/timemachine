@@ -12,8 +12,8 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 import pytest
-import test_ligands
 
+from timemachine import testsystems
 from timemachine.constants import BOLTZ
 from timemachine.ff import Forcefield
 from timemachine.md import enhanced
@@ -37,7 +37,7 @@ def test_condensed_phase_mtm():
     seed = 2021
     np.random.seed(seed)
 
-    mol, torsion_idxs = test_ligands.get_biphenyl()
+    mol, torsion_idxs = testsystems.ligands.get_biphenyl()
     ff = get_ff_am1cc()
 
     masses = np.array([a.GetMass() for a in mol.GetAtoms()])
