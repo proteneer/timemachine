@@ -129,6 +129,7 @@ NonbondedAllPairs<RealType, Interpolated>::NonbondedAllPairs(
                 hilbert_coords[1] = j;
                 hilbert_coords[2] = k;
 
+                // TODO: modify nBits=8 depending on N_BINS?
                 unsigned int bin = static_cast<unsigned int>(hilbert_c2i(3, 8, hilbert_coords));
                 bin_to_idx[i * N_BINS * N_BINS + j * N_BINS + k] = bin;
             }
@@ -219,7 +220,7 @@ void NonbondedAllPairs<RealType, Interpolated>::hilbert_sort(
         d_sorted_atom_idxs_,
         K_,
         0,                            // begin bit
-        sizeof(*d_sort_keys_in_) * 8, // end bit
+        sizeof(*d_sort_keys_in_) * 8, // end bit  // TODO: modify nBits=8 depending on N_BINS?
         stream                        // cudaStream
     );
 
