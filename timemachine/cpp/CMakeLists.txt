@@ -9,7 +9,7 @@ project(timemachine LANGUAGES CXX CUDA)
 find_package(PythonInterp 3.7 REQUIRED)
 find_package(PythonLibs 3.7 REQUIRED)
 
-set(CMAKE_CXX_FLAGS "-Werror -Wall")
+set(CMAKE_CXX_FLAGS "-Werror -Wall -Wextra")
 
 string(APPEND CMAKE_CUDA_FLAGS "-O3 -lineinfo")
 message(${CMAKE_CUDA_FLAGS})
@@ -32,6 +32,20 @@ if(NOT EXISTS ${EIGEN_SRC_DIR})
 endif()
 
 add_subdirectory(${CMAKE_CURRENT_BINARY_DIR}/${PYBIND_SRC_DIR} ${CMAKE_CURRENT_BINARY_DIR}/${PYBIND_SRC_DIR})
+
+
+# Disable warnings on vendored files
+file(
+  GLOB
+  VENDORED_FILES
+  "src/vendored/*.c*"
+  "src/vendored/*.h*"
+)
+set_source_files_properties(
+  ${VENDORED_FILES}
+  PROPERTIES
+  COMPILE_FLAGS "-w"
+)
 
 
 # NO_EXTRAS is needed since cuda doesn't use flto
