@@ -119,6 +119,12 @@ NonbondedAllPairs<RealType, Interpolated>::NonbondedAllPairs(
 
     // initialize hilbert curve
     const int N_BINS = 128;
+    const int N_BITS = 8;
+    const int capacity = 1 << N_BITS;
+    if (N_BINS > capacity) {
+        throw std::runtime_error(
+            "N_BITS=" + std::to_string(N_BITS) + " not big enough to represent N_BINS=" + std::to_string(N_BINS));
+    }
     std::vector<unsigned int> bin_to_idx(N_BINS * N_BINS * N_BINS);
     for (int i = 0; i < N_BINS; i++) {
         for (int j = 0; j < N_BINS; j++) {
@@ -129,8 +135,7 @@ NonbondedAllPairs<RealType, Interpolated>::NonbondedAllPairs(
                 hilbert_coords[1] = j;
                 hilbert_coords[2] = k;
 
-                // TODO: modify nBits=8 depending on N_BINS?
-                unsigned int bin = static_cast<unsigned int>(hilbert_c2i(3, 8, hilbert_coords));
+                unsigned int bin = static_cast<unsigned int>(hilbert_c2i(3, N_BITS, hilbert_coords));
                 bin_to_idx[i * N_BINS * N_BINS + j * N_BINS + k] = bin;
             }
         }
