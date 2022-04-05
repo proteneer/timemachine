@@ -20,7 +20,7 @@ void __global__ k_coords_to_kv(
     double by = box[1 * 3 + 1];
     double bz = box[2 * 3 + 2];
 
-    double binWidth = max(max(bx, by), bz) / 255.0;
+    double binWidth = max(max(bx, by), bz) / (N_BINS - 1.0);
 
     double x = coords[atom_idx * 3 + 0];
     double y = coords[atom_idx * 3 + 1];
@@ -64,7 +64,7 @@ void __global__ k_coords_to_kv_gather(
     double by = box[1 * 3 + 1];
     double bz = box[2 * 3 + 2];
 
-    double binWidth = max(max(bx, by), bz) / 255.0;
+    double binWidth = max(max(bx, by), bz) / (N_BINS - 1.0);
 
     double x = coords[atom_idx * 3 + 0];
     double y = coords[atom_idx * 3 + 1];
