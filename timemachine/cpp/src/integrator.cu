@@ -73,7 +73,7 @@ void LangevinIntegrator::step_fwd(
 
     const int D = 3;
     size_t tpb = warp_size;
-    size_t n_blocks = ceil_divide(N_ * D, tpb);
+    size_t n_blocks = ceil_divide(N_, tpb);
     dim3 dimGrid_dx(n_blocks, D);
 
     curandErrchk(curandSetStream(cr_rng_, stream));
