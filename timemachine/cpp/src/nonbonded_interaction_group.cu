@@ -132,7 +132,7 @@ NonbondedInteractionGroup<RealType, Interpolated>::NonbondedInteractionGroup(
     gpuErrchk(cudaMalloc(&d_sort_vals_in_, N_ * sizeof(d_sort_vals_in_)));
 
     // initialize hilbert curve
-    const int N_BINS = 256;
+    const int N_BINS = 128;
     std::vector<unsigned int> bin_to_idx(N_BINS * N_BINS * N_BINS);
     for (int i = 0; i < N_BINS; i++) {
         for (int j = 0; j < N_BINS; j++) {

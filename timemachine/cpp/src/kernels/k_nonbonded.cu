@@ -9,7 +9,7 @@ void __global__ k_coords_to_kv(
     unsigned int *vals) {
 
     const int atom_idx = blockIdx.x * blockDim.x + threadIdx.x;
-    const int N_BINS = 256;
+    const int N_BINS = 128;
 
     if (atom_idx >= N) {
         return;
@@ -51,7 +51,7 @@ void __global__ k_coords_to_kv_gather(
     unsigned int *vals) {
 
     const int idx = blockIdx.x * blockDim.x + threadIdx.x;
-    const int N_BINS = 256;
+    const int N_BINS = 128;
 
     if (idx >= N) {
         return;
