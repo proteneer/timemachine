@@ -157,21 +157,21 @@ def test_barostat_is_deterministic():
     seed = 2021
     np.random.seed(seed)
 
-    box_vol = 27.08816
+    box_vol = 26.89966
 
     pressure = 1.0 * unit.atmosphere
 
     mol_a = hif2a_ligand_pair.mol_a
     ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
-    complex_system, complex_coords, complex_box, complex_top = build_water_system(
+
+    host_system, host_coords, host_box, host_top = build_water_system(
         initial_waterbox_width.value_in_unit(unit.nanometer)
     )
 
-    min_complex_coords = minimize_host_4d([mol_a], complex_system, complex_coords, ff, complex_box)
     afe = AbsoluteFreeEnergy(mol_a, ff)
 
     unbound_potentials, sys_params, masses, coords = afe.prepare_host_edge(
-        ff.get_ordered_params(), complex_system, min_complex_coords
+        ff.get_ordered_params(), host_system, host_coords
     )
 
     # get list of molecules for barostat by looking at bond table
@@ -206,9 +206,11 @@ def test_barostat_is_deterministic():
         seed,
     )
 
-    ctxt = custom_ops.Context(coords, v_0, complex_box, integrator_impl, u_impls, barostat=baro)
-    ctxt.multiple_steps(np.ones(1000) * lam)
+    ctxt = custom_ops.Context(coords, v_0, host_box, integrator_impl, u_impls, barostat=baro)
+    ctxt.multiple_steps(np.ones(15) * lam)
     atm_box = ctxt.get_box()
+    # Verify that the volume of the box has changed
+    assert compute_box_volume(atm_box) != compute_box_volume(host_box)
     np.testing.assert_almost_equal(compute_box_volume(atm_box), box_vol, decimal=5)
 
 
