@@ -42,6 +42,7 @@ def test_base_topology_conversion_ring_torsion():
 
     expected_qlj_params = np.array(vanilla_qlj_params)
     expected_qlj_params[:, 0] = 0
+    expected_qlj_params[:, 2] *= 0.5
     np.testing.assert_array_equal(expected_qlj_params, dst_qlj_params)
 
 
