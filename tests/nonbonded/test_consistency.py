@@ -25,7 +25,6 @@ def filter_valid_exclusions(
     return np.array(idxs, dtype=np.int32), np.array(scales)
 
 
-@pytest.mark.parametrize("lamb", [0.0, 0.1])
 @pytest.mark.parametrize("beta", [2.0])
 @pytest.mark.parametrize("cutoff", [1.1])
 @pytest.mark.parametrize("precision", [np.float64, np.float32])
@@ -40,7 +39,6 @@ def test_nonbonded_consistency(
     precision,
     cutoff,
     beta,
-    lamb,
     example_nonbonded_params,
     example_nonbonded_exclusion_idxs,
     example_nonbonded_exclusion_scales,
@@ -105,40 +103,41 @@ def test_nonbonded_consistency(
         ]
     ).unbound_impl(precision)
 
-    du_dx_ref, du_dp_ref, du_dl_ref, u_ref = ref_impl.execute(conf, params, example_box, lamb)
-    du_dx_test, du_dp_test, du_dl_test, u_test = test_impl.execute(conf, params, example_box, lamb)
+    for lam in [0.0, 0.1]:
+        du_dx_ref, du_dp_ref, du_dl_ref, u_ref = ref_impl.execute(conf, params, example_box, lam)
+        du_dx_test, du_dp_test, du_dl_test, u_test = test_impl.execute(conf, params, example_box, lam)
 
-    np.testing.assert_array_equal(du_dx_test, du_dx_ref)
+        np.testing.assert_array_equal(du_dx_test, du_dx_ref)
 
-    if interpolated:
-        # NOTE: bitwise equivalence is not currently possible for the
-        # interpolated case. To see this, note that the interpolated
-        # energy is given by
-        #
-        #   u(p0, p1) = (1 - lam) * F(p0) + lam * F(p1)
-        #
-        # In particular,
-        #
-        #   du_dp1 = lam * f(p1)
-        #
-        # where f(p) = F'(p). The reference potential effectively sums
-        # over interactions before multiplication by \lambda
-        #
-        #   du_dp1_ref = lam * fixed_sum(f_host(p1), f_ligand(p1), f_host_ligand(p1))
-        #
-        # while the test potential (because it's implemented using
-        # SummedPotential), effectively distributes multiplication by
-        # \lambda into the sum
-        #
-        #   du_dp1_test = fixed_sum(lam * f_host(p1), lam * f_ligand(p1), lam * f_host_ligand(p1))
-        #
-        # Since `c * fixed_sum(x, y)` is not bitwise equivalent to
-        # `fixed_sum(c * x, c * y)` in general, the reference and test
-        # du_dps are not guaranteed to be bitwise equivalent in the
-        # interpolated case.
-        np.testing.assert_allclose(du_dp_test, du_dp_ref, rtol=1e-8, atol=1e-8)
-    else:
-        np.testing.assert_array_equal(du_dp_test, du_dp_ref)
+        if interpolated:
+            # NOTE: bitwise equivalence is not currently possible for the
+            # interpolated case. To see this, note that the interpolated
+            # energy is given by
+            #
+            #   u(p0, p1) = (1 - lam) * F(p0) + lam * F(p1)
+            #
+            # In particular,
+            #
+            #   du_dp1 = lam * f(p1)
+            #
+            # where f(p) = F'(p). The reference potential effectively sums
+            # over interactions before multiplication by \lambda
+            #
+            #   du_dp1_ref = lam * fixed_sum(f_host(p1), f_ligand(p1), f_host_ligand(p1))
+            #
+            # while the test potential (because it's implemented using
+            # SummedPotential), effectively distributes multiplication by
+            # \lambda into the sum
+            #
+            #   du_dp1_test = fixed_sum(lam * f_host(p1), lam * f_ligand(p1), lam * f_host_ligand(p1))
+            #
+            # Since `c * fixed_sum(x, y)` is not bitwise equivalent to
+            # `fixed_sum(c * x, c * y)` in general, the reference and test
+            # du_dps are not guaranteed to be bitwise equivalent in the
+            # interpolated case.
+            np.testing.assert_allclose(du_dp_test, du_dp_ref, rtol=1e-8, atol=1e-8)
+        else:
+            np.testing.assert_array_equal(du_dp_test, du_dp_ref)
 
-    np.testing.assert_array_equal(du_dl_test, du_dl_ref)
-    assert u_test == u_ref
+        np.testing.assert_array_equal(du_dl_test, du_dl_ref)
+        assert u_test == u_ref
