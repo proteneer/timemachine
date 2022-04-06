@@ -152,6 +152,7 @@ def construct_pre_optimized_absolute_lambda_schedule_solvent(num_windows, nonbon
 
     return lambda_schedule
 
+
 def construct_relative_lambda_schedule(num_windows, nonbonded_cutoff=1.2):
     """Generate a length-num_windows list of lambda values from 0.0 up to 1.0
     Notes
