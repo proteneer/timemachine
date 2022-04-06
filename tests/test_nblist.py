@@ -61,10 +61,10 @@ def get_water_coords(D, sort=False):
 
 def test_neighborlist():
 
+    water_coords = get_water_coords(3, sort=False)
     for size in [35, 64, 129, 1025, 1259, 2029]:
 
         for nblist in (custom_ops.Neighborlist_f32(size), custom_ops.Neighborlist_f64(size)):
-            water_coords = get_water_coords(3, sort=False)
 
             for _ in range(2):
 
