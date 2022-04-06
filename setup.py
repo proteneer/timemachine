@@ -96,7 +96,14 @@ setup(
         "scipy",
     ],
     extras_require={
-        "dev": ["black==21.10b0", "isort==5.10.1", "flake8==4.0.1", "pre-commit==2.17.0", "grpcio-tools==1.30.0"],
+        "dev": [
+            "black==21.10b0",
+            "click==8.0.4",  # pinned due to https://github.com/psf/black/issues/2964 -- unpin if upgrading black
+            "isort==5.10.1",
+            "flake8==4.0.1",
+            "pre-commit==2.17.0",
+            "grpcio-tools==1.30.0",
+        ],
         "test": ["pytest", "pytest-cov"],
     },
     package_data={
