@@ -11,7 +11,7 @@ from typing import Union
 import numpy as np
 
 from timemachine.fe import topology
-from timemachine.fe.utils import get_romol_conf
+from timemachine.fe.utils import get_mol_masses, get_romol_conf
 from timemachine.ff.handlers import openmm_deserializer
 
 
@@ -166,7 +166,7 @@ class AbsoluteFreeEnergy(BaseFreeEnergy):
 
     def prepare_host_edge(self, ff_params, host_system):
         """
-        Prepares the host-edge system
+        Prepares the host-guest system
 
         Parameters
         ----------
@@ -174,7 +174,7 @@ class AbsoluteFreeEnergy(BaseFreeEnergy):
             Exactly equal to bond_params, angle_params, proper_params, improper_params, charge_params, lj_params
 
         host_system: openmm.System
-            openmm System object to be deserialized
+            openmm System object to be deserialized.
 
         Returns
         -------
@@ -182,21 +182,69 @@ class AbsoluteFreeEnergy(BaseFreeEnergy):
             unbound_potentials, system_params, combined_masses
 
         """
-        ligand_masses = [a.GetMass() for a in self.mol.GetAtoms()]
-        host_bps, host_masses = openmm_deserializer.deserialize_system(host_system, cutoff=1.2)
+        ligand_masses = get_mol_masses(self.mol)
 
+        host_bps, host_masses = openmm_deserializer.deserialize_system(host_system, cutoff=1.2)
         hgt = topology.HostGuestTopology(host_bps, self.top)
 
         final_params, final_potentials = self._get_system_params_and_potentials(ff_params, hgt)
-
-        combined_masses = np.concatenate([host_masses, ligand_masses])
-
+        combined_masses = self._combine(ligand_masses, host_masses)
         return final_potentials, final_params, combined_masses
 
-    def prepare_combined_coords(self, host_coords):
-        # TODO ...
+    def prepare_vacuum_edge(self, ff_params):
+        """
+        Prepares the vacuum system
+
+        Parameters
+        ----------
+        ff_params: tuple of np.array
+            Exactly equal to bond_params, angle_params, proper_params, improper_params, charge_params, lj_params
+
+        Returns
+        -------
+        3-tuple
+            unbound_potentials, system_params, combined_masses
+
+        """
+        ligand_masses = get_mol_masses(self.mol)
+        final_params, final_potentials = self._get_system_params_and_potentials(ff_params, self.top)
+        return final_potentials, final_params, ligand_masses
+
+    def prepare_combined_coords(self, host_coords=None):
+        """
+        Returns the combined coordinates.
+
+        Parameters
+        ----------
+        host_coords: np.array
+            Nx3 array of atomic coordinates
+            If None, return just the ligand coordinates.
+
+        Returns
+        -------
+            combined_coordinates
+        """
         ligand_coords = get_romol_conf(self.mol)
-        return np.concatenate([host_coords, ligand_coords])
+        return self._combine(ligand_coords, host_coords)
+
+    def _combine(self, ligand_values, host_values=None):
+        """
+        Combine the values along the 0th axis.
+        The host values will be first, if given.
+        Then ligand values.
+
+        Parameters
+        ----------
+        ligand_values: np.array
+        host_values: Optional[np.array]
+
+        Returns
+        -------
+            combined_values
+        """
+        if host_values is None:
+            return ligand_values
+        return np.concatenate([host_values, ligand_values])
 
 
 # this class is serializable.
@@ -220,13 +268,14 @@ class RelativeFreeEnergy(BaseFreeEnergy):
 
     def prepare_host_edge(self, ff_params, host_system):
         """
-        Prepares the host-edge system
+        Prepares the host-guest system
+
         Parameters
         ----------
         ff_params: tuple of np.array
             Exactly equal to bond_params, angle_params, proper_params, improper_params, charge_params, lj_params
-        host_system: openmm.System
-            openmm System object to be deserialized
+        host_system: Optional[openmm.System]
+            openmm System object to be deserialized.
 
         Returns
         -------
@@ -234,34 +283,72 @@ class RelativeFreeEnergy(BaseFreeEnergy):
             unbound_potentials, system_params, combined_masses
 
         """
-
-        ligand_masses_a = [a.GetMass() for a in self.mol_a.GetAtoms()]
-        ligand_masses_b = [b.GetMass() for b in self.mol_b.GetAtoms()]
+        ligand_masses_a = get_mol_masses(self.mol_a)
+        ligand_masses_b = get_mol_masses(self.mol_b)
 
         host_bps, host_masses = openmm_deserializer.deserialize_system(host_system, cutoff=1.2)
-
         hgt = topology.HostGuestTopology(host_bps, self.top)
 
         final_params, final_potentials = self._get_system_params_and_potentials(ff_params, hgt)
 
-        if isinstance(self.top, topology.SingleTopology):
-            combined_masses = np.concatenate(
-                [host_masses, np.mean(self.top.interpolate_params(ligand_masses_a, ligand_masses_b), axis=0)]
-            )
-        else:
-            combined_masses = np.concatenate([host_masses, ligand_masses_a, ligand_masses_b])
-
+        combined_masses = self._combine(ligand_masses_a, ligand_masses_b, host_masses)
         return final_potentials, final_params, combined_masses
 
-    def prepare_combined_coords(self, host_coords):
-        # TODO ...
+    def prepare_vacuum_edge(self, ff_params):
+        """
+        Prepares the vacuum system
+
+        Parameters
+        ----------
+        ff_params: tuple of np.array
+            Exactly equal to bond_params, angle_params, proper_params, improper_params, charge_params, lj_params
+
+        Returns
+        -------
+        3-tuple
+            unbound_potentials, system_params, combined_masses
+
+        """
+        ligand_masses_a = get_mol_masses(self.mol_a)
+        ligand_masses_b = get_mol_masses(self.mol_b)
+
+        final_params, final_potentials = self._get_system_params_and_potentials(ff_params, self.top)
+        combined_masses = self._combine(ligand_masses_a, ligand_masses_b)
+        return final_potentials, final_params, combined_masses
+
+    def prepare_combined_coords(self, host_coords=None):
+        """
+        Returns the combined coordinates.
+
+        Parameters
+        ----------
+        host_coords: Optional[np.array]
+            Nx3 array of atomic coordinates.
+            If None, return just the combined ligand coordinates.
+
+        Returns
+        -------
+            combined_coordinates
+        """
         ligand_coords_a = get_romol_conf(self.mol_a)
         ligand_coords_b = get_romol_conf(self.mol_b)
 
+        return self._combine(ligand_coords_a, ligand_coords_b, host_coords)
+
+    def _combine(self, ligand_values_a, ligand_values_b, host_values=None):
+        """
+        Combine the values along the 0th axis. The host values will be first, if given.
+        The ligand values will be combined in a way that matches the topology.
+        For single topology this means interpolating the ligand_values_a and
+        ligand_values_b. For dual topology this is just concatenation.
+
+        Returns
+        -------
+            combined_values
+        """
         if isinstance(self.top, topology.SingleTopology):
-            combined_coords = np.concatenate(
-                [host_coords, np.mean(self.top.interpolate_params(ligand_coords_a, ligand_coords_b), axis=0)]
-            )
+            ligand_values = [np.mean(self.top.interpolate_params(ligand_values_a, ligand_values_b), axis=0)]
         else:
-            combined_coords = np.concatenate([host_coords, ligand_coords_a, ligand_coords_b])
-        return combined_coords
+            ligand_values = [ligand_values_a, ligand_values_b]
+        all_values = [host_values] + ligand_values if host_values is not None else ligand_values
+        return np.concatenate(all_values)
