@@ -506,43 +506,42 @@ class TestNonbonded(GradientTest):
         lambda_offset_idxs = np.random.randint(low=-2, high=2, size=N, dtype=np.int32)
 
         # Down shift box size to be only a portion of the cutoff
-        charge_params, ref_potential, test_potential = prepare_water_system(
+        charge_params, _, test_potential = prepare_water_system(
             coords, lambda_plane_idxs, lambda_offset_idxs, p_scale=1.0, cutoff=cutoff
         )
 
-        def run_nonbonded(precision, potential, x, box, params, lamb, steps=100):
-            test_impl = test_potential.unbound_impl(precision)
+        def run_nonbonded(potential, x, box, params, lamb, steps=100):
 
             x = (x.astype(np.float32)).astype(np.float64)
             params = (params.astype(np.float32)).astype(np.float64)
 
             assert x.ndim == 2
-            # N = x.shape[0]
-            # D = x.shape[1]
-
             assert x.dtype == np.float64
             assert params.dtype == np.float64
+
             for _ in range(steps):
-                _ = test_impl.execute_selective(x, params, box, lamb, True, True, True, True)
+                _ = potential.execute_selective(x, params, box, lamb, True, True, True, True)
+
+        test_impl = test_potential.unbound_impl(precision)
 
         # With the default box, all is well
-        run_nonbonded(precision, ref_potential, coords, box, charge_params, 0.0, steps=2)
+        run_nonbonded(test_impl, coords, box, charge_params, 0.0, steps=2)
 
         db_cutoff = (cutoff + padding) * 2
 
         # Make box with diagonals right at the limit
         box = np.eye(3) * db_cutoff
-        run_nonbonded(precision, ref_potential, coords, box, charge_params, 0.0)
+        run_nonbonded(test_impl, coords, box, charge_params, 0.0)
 
         # Non Orth Box, should fail
         box = np.ones_like(box) * (db_cutoff ** 2)
         with self.assertRaises(RuntimeError) as raised:
-            run_nonbonded(precision, ref_potential, coords, box, charge_params, 0.0)
+            run_nonbonded(test_impl, coords, box, charge_params, 0.0)
         assert "non-ortholinear box" in str(raised.exception)
         # Only populate the diag with values that are too low
         box = np.eye(3) * (db_cutoff * 0.3)
         with self.assertRaises(RuntimeError) as raised:
-            run_nonbonded(precision, ref_potential, coords, box, charge_params, 0.0)
+            run_nonbonded(test_impl, coords, box, charge_params, 0.0)
         assert "more than half" in str(raised.exception)
 
 
