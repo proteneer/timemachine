@@ -69,7 +69,7 @@ def test_base_topology_standard_decoupling():
     vanilla_mol_top = topology.BaseTopology(mol, ff)
     vanilla_torsion_params, _ = vanilla_mol_top.parameterize_proper_torsion(ff.pt_handle.params)
 
-    mol_top = topology.BaseTopologyStandardDecoupling(mol, ff)
+    mol_top = topology.BaseTopologyDecoupling(mol, ff)
     decouple_torsion_params, torsion_potential = mol_top.parameterize_proper_torsion(ff.pt_handle.params)
 
     np.testing.assert_array_equal(vanilla_torsion_params, decouple_torsion_params)

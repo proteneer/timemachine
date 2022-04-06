@@ -296,7 +296,7 @@ class BaseTopologyConversion(BaseTopology):
         return combined_qlj_params, interpolated_potential
 
 
-class BaseTopologyStandardDecoupling(BaseTopology):
+class BaseTopologyDecoupling(BaseTopology):
     """
     Decouple a ligand from the environment. The ligand has its charges set to zero
     and lennard jones epsilon halved.
@@ -306,8 +306,6 @@ class BaseTopologyStandardDecoupling(BaseTopology):
     """
 
     def parameterize_nonbonded(self, ff_q_params, ff_lj_params):
-
-        # mol is standardized into a forcefield independent state.
         qlj_params, nb_potential = super().parameterize_nonbonded(ff_q_params, ff_lj_params)
         charge_indices = jnp.index_exp[:, 0]
         epsilon_indices = jnp.index_exp[:, 2]

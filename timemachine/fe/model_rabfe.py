@@ -576,9 +576,9 @@ class AbsoluteConversionModel(AbsoluteModel):
         return top
 
 
-class AbsoluteStandardHydrationModel(AbsoluteModel):
+class AbsoluteDecouplingModel(AbsoluteModel):
     def setup_topology(self, mol):
-        top = topology.BaseTopologyStandardDecoupling(mol, self.ff)
+        top = topology.BaseTopologyDecoupling(mol, self.ff)
         return top
 
 
