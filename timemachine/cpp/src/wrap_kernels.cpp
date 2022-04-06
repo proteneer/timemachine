@@ -67,7 +67,6 @@ template <typename RealType> void declare_neighborlist(py::module &m, const char
                const py::array_t<double, py::array::c_style> &box,
                const double cutoff) -> std::vector<std::vector<int>> {
                 int N = coords.shape()[0];
-                int D = coords.shape()[1];
 
                 std::vector<std::vector<int>> ixn_list = nblist.get_nblist_host(N, coords.data(), box.data(), cutoff);
 
@@ -82,7 +81,6 @@ template <typename RealType> void declare_neighborlist(py::module &m, const char
                const double cutoff) -> std::vector<std::vector<int>> {
                 const int N = coords.shape()[0];
                 const int K = row_coords.shape()[0];
-                const int D = coords.shape()[1];
 
                 std::vector<std::vector<int>> ixn_list =
                     nblist.get_nblist_host(N, K, coords.data(), row_coords.data(), box.data(), cutoff);
@@ -279,7 +277,7 @@ void declare_context(py::module &m) {
             std::vector<unsigned long long> du_dx(N * D);
             ctxt.get_du_dx_t_minus_1(&du_dx[0]);
             py::array_t<double, py::array::c_style> py_du_dx({N, D});
-            for (int i = 0; i < du_dx.size(); i++) {
+            for (unsigned int i = 0; i < du_dx.size(); i++) {
                 py_du_dx.mutable_data()[i] = FIXED_TO_FLOAT<double>(du_dx[i]);
             }
             return py_du_dx;
@@ -339,7 +337,7 @@ void declare_potential(py::module &m) {
                     N, P, coords.data(), params.data(), box.data(), lambda, &du_dx[0], &du_dp[0], &du_dl[0], &u[0]);
 
                 py::array_t<double, py::array::c_style> py_du_dx({N, D});
-                for (int i = 0; i < du_dx.size(); i++) {
+                for (unsigned int i = 0; i < du_dx.size(); i++) {
                     // py_du_dx.mutable_data()[i] = static_cast<double>(static_cast<long long>(du_dx[i]))/FIXED_EXPONENT;
                     py_du_dx.mutable_data()[i] = FIXED_TO_FLOAT<double>(du_dx[i]);
                 }
@@ -394,7 +392,7 @@ void declare_potential(py::module &m) {
                     compute_u ? &u[0] : nullptr);
 
                 py::array_t<double, py::array::c_style> py_du_dx({N, D});
-                for (int i = 0; i < du_dx.size(); i++) {
+                for (unsigned int i = 0; i < du_dx.size(); i++) {
                     py_du_dx.mutable_data()[i] = FIXED_TO_FLOAT<double>(du_dx[i]);
                 }
 
@@ -449,7 +447,7 @@ void declare_potential(py::module &m) {
                 pot.execute_host_du_dx(N, P, coords.data(), params.data(), box.data(), lambda, &du_dx[0]);
 
                 py::array_t<double, py::array::c_style> py_du_dx({N, D});
-                for (int i = 0; i < du_dx.size(); i++) {
+                for (unsigned int i = 0; i < du_dx.size(); i++) {
                     py_du_dx.mutable_data()[i] = FIXED_TO_FLOAT<double>(du_dx[i]);
                 }
 
@@ -493,7 +491,7 @@ void declare_bound_potential(py::module &m) {
                 bp.execute_host(N, coords.data(), box.data(), lambda, &du_dx[0], &du_dl[0], &u[0]);
 
                 py::array_t<double, py::array::c_style> py_du_dx({N, D});
-                for (int i = 0; i < du_dx.size(); i++) {
+                for (unsigned int i = 0; i < du_dx.size(); i++) {
                     py_du_dx.mutable_data()[i] = FIXED_TO_FLOAT<double>(du_dx[i]);
                 }
 
@@ -515,19 +513,13 @@ void declare_bound_potential(py::module &m) {
                 const long unsigned int N = coords.shape()[0];
                 const long unsigned int D = coords.shape()[1];
 
+                // du_dx and du_dl are computed, but not used
                 std::vector<unsigned long long> du_dx(N * D);
                 std::vector<unsigned long long> du_dl(N, 0);
                 std::vector<unsigned long long> u(N, 0);
 
                 bp.execute_host(N, coords.data(), box.data(), lambda, &du_dx[0], &du_dl[0], &u[0]);
 
-                py::array_t<unsigned long long, py::array::c_style> py_du_dx({N, D});
-                for (int i = 0; i < du_dx.size(); i++) {
-                    py_du_dx.mutable_data()[i] = du_dx[i];
-                }
-
-                unsigned long long du_dl_sum =
-                    std::accumulate(du_dl.begin(), du_dl.end(), decltype(du_dl)::value_type(0));
                 uint64_t u_sum = std::accumulate(u.begin(), u.end(), decltype(u)::value_type(0));
                 py::array_t<uint64_t, py::array::c_style> py_u(1);
                 py_u.mutable_data()[0] = u_sum;
