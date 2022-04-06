@@ -1,9 +1,8 @@
 #include "gpu_utils.cuh"
 #include "k_periodic_torsion.cuh"
+#include "kernel_utils.cuh"
+#include "math_utils.cuh"
 #include "periodic_torsion.hpp"
-#include <chrono>
-#include <complex>
-#include <iostream>
 #include <vector>
 
 namespace timemachine {
@@ -78,8 +77,8 @@ void PeriodicTorsion<RealType>::execute_device(
     unsigned long long *d_u,
     cudaStream_t stream) {
 
-    int tpb = 32;
-    int blocks = (T_ + tpb - 1) / tpb;
+    const int tpb = warp_size;
+    const int blocks = ceil_divide(T_, tpb);
 
     const int D = 3;
 
