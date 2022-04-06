@@ -16,7 +16,6 @@ import itertools
 import numpy as np
 import pytest
 from common import GradientTest, prepare_reference_nonbonded, prepare_system_params, prepare_water_system
-from hilbertcurve.hilbertcurve import HilbertCurve
 from simtk.openmm import app
 
 from timemachine.fe.utils import to_md_units
@@ -28,17 +27,6 @@ from timemachine.potentials import nonbonded
 np.set_printoptions(linewidth=500)
 
 pytestmark = [pytest.mark.memcheck]
-
-
-def hilbert_sort(conf, D):
-    hc = HilbertCurve(64, D)
-    int_confs = (conf * 1000).astype(np.int64)
-    dists = []
-    for xyz in int_confs.tolist():
-        dist = hc.distance_from_coordinates(xyz)
-        dists.append(dist)
-    perm = np.argsort(dists)
-    return perm
 
 
 class TestNonbondedDHFR(GradientTest):
