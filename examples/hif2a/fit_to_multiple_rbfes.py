@@ -200,7 +200,7 @@ def equilibrate_edges(datasets: List[Dataset], systems: List[Dict[str, Any]], nu
     for path, edges in model_set.items():
         model = systems[path]
         model.equilibrate_edges(
-            [(edge.mol_a, edge.mol_b, edge.core) for edge in edges],
+            [(edge.mol_a, edge.mol_b, edge.top.core) for edge in edges],
             equilibration_steps=num_steps,
             cache_path=cache_path,
         )

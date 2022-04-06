@@ -9,7 +9,7 @@ from timemachine.fe import free_energy, topology
 from timemachine.ff import Forcefield
 
 
-def _setup_hif2a_ligand_pair(ff="smirnoff_1_1_0_ccc.py"):
+def setup_hif2a_ligand_pair(ff="smirnoff_1_1_0_ccc.py"):
     """Manually constructed atom map
 
     TODO: replace this with a testsystem class similar to those used in openmmtools
@@ -63,4 +63,4 @@ def _setup_hif2a_ligand_pair(ff="smirnoff_1_1_0_ccc.py"):
     return free_energy.RelativeFreeEnergy(single_topology)
 
 
-hif2a_ligand_pair = _setup_hif2a_ligand_pair()
+hif2a_ligand_pair = setup_hif2a_ligand_pair()

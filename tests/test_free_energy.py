@@ -322,7 +322,7 @@ def test_functional():
     """
 
     rfe = hif2a_ligand_pair
-    unbound_potentials, sys_params, _ = rfe.prepare_host_edge(rfe.ff.get_ordered_params())
+    unbound_potentials, sys_params, _ = rfe.prepare_vacuum_edge(rfe.ff.get_ordered_params())
     coords = rfe.prepare_combined_coords()
     box = np.eye(3) * 100
     lam = 0.5
@@ -365,7 +365,7 @@ def test_construct_differentiable_interface_fast():
     summation in Python"""
 
     rfe = hif2a_ligand_pair
-    unbound_potentials, sys_params, _ = rfe.prepare_host_edge(rfe.ff.get_ordered_params())
+    unbound_potentials, sys_params, _ = rfe.prepare_vacuum_edge(rfe.ff.get_ordered_params())
     coords = rfe.prepare_combined_coords()
     box = np.eye(3) * 100
     lam = 0.5
