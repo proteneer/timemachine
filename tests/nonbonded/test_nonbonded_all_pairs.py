@@ -1,75 +1,51 @@
-import functools
+from jax.config import config as jax_config
+
+jax_config.update("jax_enable_x64", True)
 
 import numpy as np
 import pytest
 from common import GradientTest
 from parameter_interpolation import gen_params
 
-from timemachine.lib.potentials import NonbondedAllPairs, NonbondedAllPairsInterpolated
-from timemachine.potentials import nonbonded
+from timemachine.potentials import NonbondedAllPairs, Precision
 
 pytestmark = [pytest.mark.memcheck]
 
 
 def test_nonbonded_all_pairs_invalid_planes_offsets():
     with pytest.raises(RuntimeError) as e:
-        NonbondedAllPairs([0], [0, 0], 2.0, 1.1).unbound_impl(np.float32)
+        NonbondedAllPairs([0], [0, 0], 2.0, 1.1).impl_cuda(Precision.F32)
 
     assert "lambda offset idxs and plane idxs need to be equivalent" in str(e)
 
 
 def test_nonbonded_all_pairs_invalid_atom_idxs():
     with pytest.raises(RuntimeError) as e:
-        NonbondedAllPairs([0, 1], [0], 2.0, 1.1, [0, 0]).unbound_impl(np.float32)
+        NonbondedAllPairs([0, 1], [0], 2.0, 1.1, [0, 0]).impl_cuda(Precision.F32)
 
     assert "atom indices must be unique" in str(e)
 
 
 def test_nonbonded_all_pairs_invalid_num_atoms():
-    potential = NonbondedAllPairs([0], [0], 2.0, 1.1).unbound_impl(np.float32)
+    impl = NonbondedAllPairs([0], [0], 2.0, 1.1).impl_cuda(Precision.F32)
     with pytest.raises(RuntimeError) as e:
-        potential.execute(np.zeros((2, 3)), np.zeros((1, 3)), np.eye(3), 0)
+        impl.execute(np.zeros((2, 3)), np.zeros((1, 3)), np.eye(3), 0)
 
     assert "NonbondedAllPairs::execute_device(): expected N == N_, got N=2, N_=1" in str(e)
 
 
 def test_nonbonded_all_pairs_invalid_num_params():
-    potential = NonbondedAllPairs([0], [0], 2.0, 1.1).unbound_impl(np.float32)
+    impl = NonbondedAllPairs([0], [0], 2.0, 1.1).impl_cuda(Precision.F32)
     with pytest.raises(RuntimeError) as e:
-        potential.execute(np.zeros((1, 3)), np.zeros((2, 3)), np.eye(3), 0)
+        impl.execute(np.zeros((1, 3)), np.zeros((2, 3)), np.eye(3), 0)
 
     assert "NonbondedAllPairs::execute_device(): expected P == M*N_*3, got P=6, M*N_*3=3" in str(e)
 
-    potential_interp = NonbondedAllPairsInterpolated([0], [0], 2.0, 1.1).unbound_impl(np.float32)
+    impl = NonbondedAllPairs([0], [0], 2.0, 1.1, interpolated=True).impl_cuda(Precision.F32)
     with pytest.raises(RuntimeError) as e:
-        potential_interp.execute(np.zeros((1, 3)), np.zeros((1, 3)), np.eye(3), 0)
+        impl.execute(np.zeros((1, 3)), np.zeros((1, 3)), np.eye(3), 0)
 
     assert "NonbondedAllPairs::execute_device(): expected P == M*N_*3, got P=3, M*N_*3=6" in str(e)
-
-
-def make_ref_potential(lambda_plane_idxs, lambda_offset_idxs, beta, cutoff, atom_idxs, interpolated):
-
-    s = atom_idxs if atom_idxs is not None else slice(None)
-
-    @functools.wraps(nonbonded.nonbonded_v3)
-    def wrapped(conf, params, box, lamb):
-        conf_ = conf[s, :]
-        num_atoms, _ = conf_.shape
-        no_rescale = np.ones((num_atoms, num_atoms))
-        return nonbonded.nonbonded_v3(
-            conf_,
-            params[s, :],
-            box,
-            lamb,
-            charge_rescale_mask=no_rescale,
-            lj_rescale_mask=no_rescale,
-            beta=beta,
-            cutoff=cutoff,
-            lambda_plane_idxs=lambda_plane_idxs[s],
-            lambda_offset_idxs=lambda_offset_idxs[s],
-        )
-
-    return nonbonded.interpolated(wrapped) if interpolated else wrapped
 
 
 def test_nonbonded_all_pairs_singleton_subset(rng: np.random.Generator):
@@ -85,10 +61,18 @@ def test_nonbonded_all_pairs_singleton_subset(rng: np.random.Generator):
     lambda_plane_idxs = rng.integers(-2, 3, size=(num_atoms,), dtype=np.int32)
     lambda_offset_idxs = rng.integers(-2, 3, size=(num_atoms,), dtype=np.int32)
 
-    for idx in rng.choice(num_atoms, size=(10,)):
+    for idx in rng.choice(num_atoms, size=(3,)):
         atom_idxs = np.array([idx], dtype=np.int32)
-        potential = NonbondedAllPairs(lambda_plane_idxs, lambda_offset_idxs, beta, cutoff, atom_idxs)
-        du_dx, du_dp, du_dl, u = potential.unbound_impl(np.float64).execute(conf, params, box, lamb)
+
+        impl = NonbondedAllPairs(
+            lambda_plane_idxs,
+            lambda_offset_idxs,
+            beta,
+            cutoff,
+            atom_idxs,
+        ).impl_cuda(Precision.F64)
+
+        du_dx, du_dp, du_dl, u = impl.execute(conf, params, box, lamb)
 
         assert (du_dx == 0).all()
         assert (du_dp == 0).all()
@@ -115,7 +99,7 @@ def test_nonbonded_all_pairs_improper_subset(rng: np.random.Generator):
     def test_impl(atom_idxs):
         return (
             NonbondedAllPairs(lambda_plane_idxs, lambda_offset_idxs, beta, cutoff, atom_idxs)
-            .unbound_impl(np.float64)
+            .impl_cuda(Precision.F64)
             .execute(conf, params, box, lamb)
         )
 
@@ -131,7 +115,7 @@ def test_nonbonded_all_pairs_improper_subset(rng: np.random.Generator):
 @pytest.mark.parametrize("lamb", [0.0, 0.1])
 @pytest.mark.parametrize("beta", [2.0])
 @pytest.mark.parametrize("cutoff", [1.1])
-@pytest.mark.parametrize("precision,rtol,atol", [(np.float64, 1e-8, 1e-8), (np.float32, 1e-4, 5e-4)])
+@pytest.mark.parametrize("precision,rtol,atol", [(Precision.F64, 1e-8, 1e-8), (Precision.F32, 1e-4, 5e-4)])
 @pytest.mark.parametrize("num_atoms_subset", [None, 33])
 @pytest.mark.parametrize("num_atoms", [33, 65, 231])
 @pytest.mark.parametrize("interpolated", [False, True])
@@ -163,11 +147,15 @@ def test_nonbonded_all_pairs_correctness(
         rng.choice(num_atoms, size=(num_atoms_subset,), replace=False).astype(np.int32) if num_atoms_subset else None
     )
 
-    ref_potential = make_ref_potential(lambda_plane_idxs, lambda_offset_idxs, beta, cutoff, atom_idxs, interpolated)
-
-    make_test_potential = NonbondedAllPairsInterpolated if interpolated else NonbondedAllPairs
-    test_potential = make_test_potential(lambda_plane_idxs, lambda_offset_idxs, beta, cutoff, atom_idxs)
+    potential = NonbondedAllPairs(lambda_plane_idxs, lambda_offset_idxs, beta, cutoff, atom_idxs)
 
     GradientTest().compare_forces(
-        conf, params, example_box, lamb, ref_potential, test_potential, precision=precision, rtol=rtol, atol=atol
+        conf,
+        params,
+        example_box,
+        lamb,
+        potential=potential,
+        precision=precision,
+        rtol=rtol,
+        atol=atol,
     )

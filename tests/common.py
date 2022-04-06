@@ -12,7 +12,7 @@ from hilbertcurve.hilbertcurve import HilbertCurve
 from timemachine.constants import ONE_4PI_EPS0
 from timemachine.ff import Forcefield
 from timemachine.lib import potentials
-from timemachine.potentials import bonded, nonbonded
+from timemachine.potentials import Potential, bonded, nonbonded
 
 
 @contextlib.contextmanager
@@ -392,10 +392,19 @@ class GradientTest(unittest.TestCase):
             assert 0
 
     def compare_forces(
-        self, x, params, box, lamb, ref_potential, test_potential, rtol, precision, atol=1e-8, benchmark=False
+        self,
+        x,
+        params,
+        box,
+        lamb,
+        potential: Potential,
+        rtol: float,
+        precision,
+        atol: float = 1e-8,
+        benchmark=False,
     ):
 
-        test_impl = test_potential.unbound_impl(precision)
+        test_impl = potential.impl_cuda(precision)
 
         x = (x.astype(np.float32)).astype(np.float64)
         params = (params.astype(np.float32)).astype(np.float64)
@@ -407,9 +416,7 @@ class GradientTest(unittest.TestCase):
         assert x.dtype == np.float64
         assert params.dtype == np.float64
 
-        ref_u = ref_potential(x, params, box, lamb)
-        grad_fn = jax.grad(ref_potential, argnums=(0, 1, 3))
-        ref_du_dx, ref_du_dp, ref_du_dl = grad_fn(x, params, box, lamb)
+        ref_du_dx, ref_du_dp, ref_du_dl, ref_u = potential.impl_reference().execute(x, params, box, lamb)
 
         for combo in itertools.product([False, True], repeat=4):
 
@@ -436,5 +443,5 @@ class GradientTest(unittest.TestCase):
             np.testing.assert_array_equal(test_du_dl, test_du_dl_2)
             np.testing.assert_array_equal(test_u, test_u_2)
 
-            if isinstance(test_potential, potentials.Nonbonded):
+            if isinstance(potential, potentials.Nonbonded):
                 np.testing.assert_array_equal(test_du_dp, test_du_dp_2)
