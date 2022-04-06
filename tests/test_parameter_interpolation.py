@@ -135,9 +135,7 @@ class TestInterpolatedPotential(GradientTest):
             args.append("lambda < 0.5 ? sin(lambda*PI)*sin(lambda*PI) : 1")  # transform epsilon
             args.append("1-lambda*lambda")  # transform w
 
-            test_interpolated_potential = potentials.NonbondedInterpolated(
-                *args,
-            )
+            test_interpolated_potential = potentials.NonbondedInterpolated(*args)
 
             self.compare_forces(
                 coords,

@@ -418,7 +418,17 @@ class GradientTest(unittest.TestCase):
         atol: float = 1e-8,
         benchmark: bool = False,
     ):
+        """
+        Compares the forces between a reference and a test potential.
 
+
+        Note
+        ----
+        Preferrable to pass a list of lambdas to this function than run this function
+        repeatedly, as this function constructs an unbound impl for the test_potential
+        which can be expensive relative to the time it takes to compute the forces/energies/etc.
+
+        """
         test_impl = test_potential.unbound_impl(precision)
 
         x = (x.astype(np.float32)).astype(np.float64)
