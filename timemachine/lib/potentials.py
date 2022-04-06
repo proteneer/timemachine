@@ -369,15 +369,7 @@ class NonbondedInterpolated(Nonbonded):
 
 
 class NonbondedAllPairs(NonbondedCustomOpWrapper):
-    def __init__(self, *args, disable_hilbert_sort=False):
-        super().__init__(*args)
-        self._disable_hilbert_sort = disable_hilbert_sort
-
-    def unbound_impl(self, precision):
-        impl = super().unbound_impl(precision)
-        if self._disable_hilbert_sort:
-            impl.disable_hilbert_sort()
-        return impl
+    pass
 
 
 class NonbondedAllPairsInterpolated(NonbondedAllPairs):
@@ -395,15 +387,7 @@ class NonbondedAllPairsInterpolated(NonbondedAllPairs):
 
 
 class NonbondedInteractionGroup(NonbondedCustomOpWrapper):
-    def __init__(self, *args, disable_hilbert_sort=False):
-        super().__init__(*args)
-        self._disable_hilbert_sort = disable_hilbert_sort
-
-    def unbound_impl(self, precision):
-        impl = super().unbound_impl(precision)
-        if self._disable_hilbert_sort:
-            impl.disable_hilbert_sort()
-        return impl
+    pass
 
 
 class NonbondedInteractionGroupInterpolated(NonbondedInteractionGroup):

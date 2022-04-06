@@ -282,7 +282,6 @@ def test_nonbonded_interaction_group_consistency_allpairs_lambda_planes(
     )
 
 
-@pytest.mark.parametrize("lamb", [0.0, 0.1])
 @pytest.mark.parametrize("beta", [2.0])
 @pytest.mark.parametrize("cutoff", [1.1])
 @pytest.mark.parametrize("precision,rtol,atol", [(np.float64, 1e-8, 1e-8), (np.float32, 1e-4, 5e-4)])
@@ -296,7 +295,6 @@ def test_nonbonded_interaction_group_consistency_allpairs_constant_shift(
     atol,
     cutoff,
     beta,
-    lamb,
     example_nonbonded_params,
     example_conf,
     example_box,
@@ -323,7 +321,7 @@ def test_nonbonded_interaction_group_consistency_allpairs_constant_shift(
     lambda_plane_idxs = rng.integers(-2, 3, size=(num_atoms,), dtype=np.int32)
     lambda_offset_idxs = rng.integers(-2, 3, size=(num_atoms,), dtype=np.int32)
 
-    def ref_allpairs(conf):
+    def ref_allpairs(conf, lamb):
         return prepare_reference_nonbonded(
             params=params,
             exclusion_idxs=np.array([], dtype=np.int32),
@@ -336,24 +334,22 @@ def test_nonbonded_interaction_group_consistency_allpairs_constant_shift(
 
     ligand_idxs = rng.choice(num_atoms, size=(num_atoms_ligand,), replace=False).astype(np.int32)
 
-    def test_ixngroups(conf):
-        _, _, _, u = (
-            NonbondedInteractionGroup(
-                ligand_idxs,
-                lambda_plane_idxs,
-                lambda_offset_idxs,
-                beta,
-                cutoff,
-            )
-            .unbound_impl(precision)
-            .execute(conf, params, example_box, lamb)
-        )
+    test_impl = NonbondedInteractionGroup(
+        ligand_idxs,
+        lambda_plane_idxs,
+        lambda_offset_idxs,
+        beta,
+        cutoff,
+    ).unbound_impl(precision)
+
+    def test_ixngroups(conf, lamb):
+        _, _, _, u = test_impl.execute(conf, params, example_box, lamb)
         return u
 
     conf_prime = np.array(conf)
     conf_prime[ligand_idxs] += rng.normal(0, 0.01, size=(3,))
 
-    ref_delta = ref_allpairs(conf_prime) - ref_allpairs(conf)
-    test_delta = test_ixngroups(conf_prime) - test_ixngroups(conf)
-
-    np.testing.assert_allclose(ref_delta, test_delta, rtol=rtol, atol=atol)
+    for lam in [0.0, 0.1]:
+        ref_delta = ref_allpairs(conf_prime, lam) - ref_allpairs(conf, lam)
+        test_delta = test_ixngroups(conf_prime, lam) - test_ixngroups(conf, lam)
+        np.testing.assert_allclose(ref_delta, test_delta, rtol=rtol, atol=atol)

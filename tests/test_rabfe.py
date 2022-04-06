@@ -9,7 +9,7 @@ from timemachine.fe.free_energy import AbsoluteFreeEnergy, RelativeFreeEnergy, g
 from timemachine.fe.lambda_schedule import construct_lambda_schedule
 from timemachine.fe.model_rabfe import (
     AbsoluteConversionModel,
-    AbsoluteStandardHydrationModel,
+    AbsoluteDecouplingModel,
     RelativeBindingModel,
     RelativeConversionModel,
 )
@@ -163,7 +163,7 @@ class TestRABFEModels(TestCase):
 
         client = CUDAPoolClient(NUM_GPUS)
 
-        decouple_model = AbsoluteStandardHydrationModel(
+        decouple_model = AbsoluteDecouplingModel(
             client,
             hif2a_ligand_pair.ff,
             host_system,
