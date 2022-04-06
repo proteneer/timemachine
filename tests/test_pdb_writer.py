@@ -17,9 +17,8 @@ def test_write_single_topology_frame():
 
     solvent_system, solvent_coords, solvent_box, solvent_top = builders.build_water_system(4.0)
 
-    unbound_potentials, sys_params, masses, coords = hif2a_ligand_pair.prepare_host_edge(
-        ff_params, solvent_system, solvent_coords
-    )
+    unbound_potentials, sys_params, masses = hif2a_ligand_pair.prepare_host_edge(ff_params, solvent_system)
+    coords = hif2a_ligand_pair.prepare_combined_coords(solvent_coords)
 
     coords *= 10  # nm to angstroms
     with NamedTemporaryFile(suffix=".pdb") as temp:
