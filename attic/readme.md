@@ -12,3 +12,4 @@ Code, documentation, experiments we want to retain for reference, but that we're
   * `bootstrap_am1.py` -- script for approximating AM1BCC with atom types rather than bond types
   * `rhfe_single.py` -- script for running relative hydration free energy with single topology
   * `rbfe_single.py` -- script for running relative binding free energy with single topology
+  * `estimator_variance.py` -- script determine how variance changes with computational effort
