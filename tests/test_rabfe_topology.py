@@ -59,7 +59,7 @@ def test_base_topology_conversion_r_group():
     assert potential.get_lambda_offset() is None
 
 
-def test_base_topology_standard_decoupling():
+def test_base_topology_decoupling():
 
     # this class is typically used in the second step of the RABFE protocol for the solvent leg.
     # we expected the charges to be zero. In addition,
@@ -69,7 +69,7 @@ def test_base_topology_standard_decoupling():
     vanilla_mol_top = topology.BaseTopology(mol, ff)
     vanilla_torsion_params, _ = vanilla_mol_top.parameterize_proper_torsion(ff.pt_handle.params)
 
-    mol_top = topology.BaseTopologyStandardDecoupling(mol, ff)
+    mol_top = topology.BaseTopologyDecoupling(mol, ff)
     decouple_torsion_params, torsion_potential = mol_top.parameterize_proper_torsion(ff.pt_handle.params)
 
     np.testing.assert_array_equal(vanilla_torsion_params, decouple_torsion_params)
@@ -101,101 +101,6 @@ def test_base_topology_standard_decoupling():
     np.testing.assert_array_equal(
         nonbonded_potential.get_lambda_offset_idxs(), np.ones(mol.GetNumAtoms(), dtype=np.int32)
     )
-
-
-def test_dual_topology_standard_decoupling():
-
-    # this class is used in double decoupling stages of the RABFE protocol. It modifies the
-    # DualTopology class in one way:
-    # 1) the nonbonded terms are interpolated at lambda=0 such that the epsilons and charges are at half strength.
-
-    ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
-    mol_a = Chem.AddHs(Chem.MolFromSmiles("c1ccccc1O"))
-    mol_b = Chem.AddHs(Chem.MolFromSmiles("c1ccccc1F"))
-    mol_c = Chem.CombineMols(mol_a, mol_b)
-    mol_top = topology.DualTopologyStandardDecoupling(mol_a, mol_b, ff)
-
-    decouple_torsion_params, torsion_potential = mol_top.parameterize_proper_torsion(ff.pt_handle.params)
-
-    combined_decouple_torsion_params, combined_torsion_potential = mol_top.parameterize_periodic_torsion(
-        ff.pt_handle.params, ff.it_handle.params
-    )
-
-    assert len(combined_torsion_potential.get_lambda_mult()) == len(combined_torsion_potential.get_idxs())
-    assert len(combined_torsion_potential.get_lambda_mult()) == len(combined_torsion_potential.get_lambda_offset())
-
-    # impropers should always be turned on.
-    # num_proper_torsions = len(torsion_potential.get_idxs())
-
-    assert np.all(combined_torsion_potential.get_lambda_mult() == 0)
-    assert np.all(combined_torsion_potential.get_lambda_offset() == 1)
-
-    qlj_params, nonbonded_potential = mol_top.parameterize_nonbonded(ff.q_handle.params, ff.lj_handle.params)
-
-    assert isinstance(nonbonded_potential, potentials.NonbondedInterpolated)
-
-    expected_qlj = topology.standard_qlj_typer(mol_c)
-    expected_qlj[:, 0] = expected_qlj[:, 0] / 2  # charges should be halved
-    expected_qlj[:, 2] = expected_qlj[:, 2] / 2  # eps should be halved
-
-    src_qlj_params = qlj_params[: len(qlj_params) // 2]
-    dst_qlj_params = qlj_params[len(qlj_params) // 2 :]
-
-    np.testing.assert_array_equal(src_qlj_params, expected_qlj)
-
-    expected_qlj = topology.standard_qlj_typer(mol_c)
-
-    np.testing.assert_array_equal(dst_qlj_params, expected_qlj)
-
-    combined_lambda_plane_idxs = nonbonded_potential.get_lambda_plane_idxs()
-    combined_lambda_offset_idxs = nonbonded_potential.get_lambda_offset_idxs()
-
-    A = mol_a.GetNumAtoms()
-    B = mol_b.GetNumAtoms()
-    C = mol_c.GetNumAtoms()
-
-    np.testing.assert_array_equal(combined_lambda_plane_idxs, np.zeros(C))
-    np.testing.assert_array_equal(combined_lambda_offset_idxs[:A], np.zeros(A))
-    np.testing.assert_array_equal(combined_lambda_offset_idxs[A:], np.ones(B))
-
-
-def test_dual_topology_standard_decoupling_charged():
-
-    # special test case for charged molecules, we expect the charges to be rescaled
-    # based on each individual molecule's charge, as opposed to based on the sum
-    # of the charges.
-
-    ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
-
-    mol_a = Chem.AddHs(Chem.MolFromSmiles("C1CC1[O-]"))
-    mol_b = Chem.AddHs(Chem.MolFromSmiles("C1[O+]CCCCC1"))
-
-    mol_top = topology.DualTopologyStandardDecoupling(mol_a, mol_b, ff)
-
-    qlj_params, nonbonded_potential = mol_top.parameterize_nonbonded(ff.q_handle.params, ff.lj_handle.params)
-
-    assert isinstance(nonbonded_potential, potentials.NonbondedInterpolated)
-
-    expected_qlj = np.concatenate([topology.standard_qlj_typer(mol_a), topology.standard_qlj_typer(mol_b)])
-
-    # need to set the charges correctly, and manually
-    N_A = mol_a.GetNumAtoms()
-    N_B = mol_b.GetNumAtoms()
-
-    expected_qlj[:N_A, 0] = -1.0 / N_A
-    expected_qlj[N_A:, 0] = 1.0 / N_B
-    expected_qlj[:, 2] = expected_qlj[:, 2]  # eps should be halved
-
-    src_qlj_params = qlj_params[: len(qlj_params) // 2]
-    dst_qlj_params = qlj_params[len(qlj_params) // 2 :]
-
-    np.testing.assert_array_equal(dst_qlj_params, expected_qlj)
-
-    expected_qlj[:N_A, 0] /= 2
-    expected_qlj[N_A:, 0] /= 2
-    expected_qlj[:, 2] /= 2  # eps should be halved
-
-    np.testing.assert_array_equal(src_qlj_params[:, 0], expected_qlj[:, 0])
 
 
 def test_dual_topology_minimization():
