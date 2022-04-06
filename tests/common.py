@@ -4,10 +4,12 @@ import itertools
 import os
 import unittest
 from tempfile import TemporaryDirectory
+from typing import List, Union
 
 import jax
 import numpy as np
 from hilbertcurve.hilbertcurve import HilbertCurve
+from numpy.typing import NDArray
 
 from timemachine.constants import ONE_4PI_EPS0
 from timemachine.ff import Forcefield
@@ -392,13 +394,26 @@ class GradientTest(unittest.TestCase):
             assert 0
 
     def compare_forces(
-        self, x, params, box, lamb, ref_potential, test_potential, rtol, precision, atol=1e-8, benchmark=False
+        self,
+        x: NDArray,
+        params: NDArray,
+        box: NDArray,
+        lambdas: Union[List[float], float],
+        ref_potential,
+        test_potential,
+        rtol: float,
+        precision,
+        atol: float = 1e-8,
+        benchmark: bool = False,
     ):
 
         test_impl = test_potential.unbound_impl(precision)
 
         x = (x.astype(np.float32)).astype(np.float64)
         params = (params.astype(np.float32)).astype(np.float64)
+
+        if isinstance(lambdas, float):
+            lambdas = [lambdas]
 
         assert x.ndim == 2
         # N = x.shape[0]
@@ -407,30 +422,31 @@ class GradientTest(unittest.TestCase):
         assert x.dtype == np.float64
         assert params.dtype == np.float64
 
-        ref_u = ref_potential(x, params, box, lamb)
-        grad_fn = jax.grad(ref_potential, argnums=(0, 1, 3))
-        ref_du_dx, ref_du_dp, ref_du_dl = grad_fn(x, params, box, lamb)
+        for lamb in lambdas:
+            print("lambda", lamb, "precision", precision, "xshape", x.shape)
+            ref_u = ref_potential(x, params, box, lamb)
+            grad_fn = jax.grad(ref_potential, argnums=(0, 1, 3))
+            ref_du_dx, ref_du_dp, ref_du_dl = grad_fn(x, params, box, lamb)
+            for combo in itertools.product([False, True], repeat=4):
 
-        for combo in itertools.product([False, True], repeat=4):
+                (compute_du_dx, compute_du_dp, compute_du_dl, compute_u) = combo
 
-            (compute_du_dx, compute_du_dp, compute_du_dl, compute_u) = combo
+                # do each computation twice to check determinism
+                test_du_dx, test_du_dp, test_du_dl, test_u = test_impl.execute_selective(
+                    x, params, box, lamb, compute_du_dx, compute_du_dp, compute_du_dl, compute_u
+                )
+                if compute_u:
+                    np.testing.assert_allclose(ref_u, test_u, rtol=rtol, atol=atol)
+                if compute_du_dx:
+                    self.assert_equal_vectors(np.array(ref_du_dx), np.array(test_du_dx), rtol)
+                if compute_du_dl:
+                    np.testing.assert_allclose(ref_du_dl, test_du_dl, rtol=rtol)
+                if compute_du_dp:
+                    np.testing.assert_allclose(ref_du_dp, test_du_dp, rtol=rtol, atol=atol)
 
-            # do each computation twice to check determinism
-            test_du_dx, test_du_dp, test_du_dl, test_u = test_impl.execute_selective(
-                x, params, box, lamb, compute_du_dx, compute_du_dp, compute_du_dl, compute_u
-            )
-            if compute_u:
-                np.testing.assert_allclose(ref_u, test_u, rtol=rtol, atol=atol)
-            if compute_du_dx:
-                self.assert_equal_vectors(np.array(ref_du_dx), np.array(test_du_dx), rtol)
-            if compute_du_dl:
-                np.testing.assert_allclose(ref_du_dl, test_du_dl, rtol=rtol)
-            if compute_du_dp:
-                np.testing.assert_allclose(ref_du_dp, test_du_dp, rtol=rtol, atol=atol)
-
-            test_du_dx_2, test_du_dp_2, test_du_dl_2, test_u_2 = test_impl.execute_selective(
-                x, params, box, lamb, compute_du_dx, compute_du_dp, compute_du_dl, compute_u
-            )
+                test_du_dx_2, test_du_dp_2, test_du_dl_2, test_u_2 = test_impl.execute_selective(
+                    x, params, box, lamb, compute_du_dx, compute_du_dp, compute_du_dl, compute_u
+                )
 
             np.testing.assert_array_equal(test_du_dx, test_du_dx_2)
             np.testing.assert_array_equal(test_du_dl, test_du_dl_2)

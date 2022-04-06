@@ -463,29 +463,24 @@ class TestNonbonded(GradientTest):
             lambda_plane_idxs = np.random.randint(low=-2, high=2, size=N, dtype=np.int32)
             lambda_offset_idxs = np.random.randint(low=-2, high=2, size=N, dtype=np.int32)
 
-            for precision, rtol, atol in [(np.float64, 1e-8, 3e-11), (np.float32, 1e-4, 3e-5)]:
+            for cutoff in [1.0]:
+                # E = 0 # DEBUG!
+                charge_params, ref_potential, test_potential = prepare_water_system(
+                    subset, lambda_plane_idxs, lambda_offset_idxs, p_scale=1.0, cutoff=cutoff
+                )
+                for precision, rtol, atol in [(np.float64, 1e-8, 1e-8), (np.float32, 1e-4, 3e-5)]:
 
-                for cutoff in [1.0]:
-                    # E = 0 # DEBUG!
-                    charge_params, ref_potential, test_potential = prepare_water_system(
-                        subset, lambda_plane_idxs, lambda_offset_idxs, p_scale=1.0, cutoff=cutoff
+                    self.compare_forces(
+                        subset,
+                        charge_params,
+                        box,
+                        [0.0, 0.1, 0.2],
+                        ref_potential,
+                        test_potential,
+                        rtol=rtol,
+                        atol=atol,
+                        precision=precision,
                     )
-
-                    for lamb in [0.0, 0.1, 0.2]:
-
-                        print("lambda", lamb, "cutoff", cutoff, "precision", precision, "xshape", subset.shape)
-
-                        self.compare_forces(
-                            subset,
-                            charge_params,
-                            box,
-                            lamb,
-                            ref_potential,
-                            test_potential,
-                            rtol=rtol,
-                            atol=atol,
-                            precision=precision,
-                        )
 
     def test_nonbonded_with_box_smaller_than_cutoff(self):
 
