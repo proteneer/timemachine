@@ -9,7 +9,7 @@ project(timemachine LANGUAGES CXX CUDA)
 find_package(PythonInterp 3.7 REQUIRED)
 find_package(PythonLibs 3.7 REQUIRED)
 
-set(CMAKE_CXX_FLAGS "-Werror -Wall -Wextra")
+string(APPEND CMAKE_CXX_FLAGS "-Werror -Wall -Wextra")
 
 string(APPEND CMAKE_CUDA_FLAGS "-O3 -lineinfo")
 message(${CMAKE_CUDA_FLAGS})
@@ -44,7 +44,7 @@ file(
 set_source_files_properties(
   ${VENDORED_FILES}
   PROPERTIES
-  COMPILE_FLAGS "-w"
+  COMPILE_OPTIONS "-w"
 )
 
 
