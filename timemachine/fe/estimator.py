@@ -1,11 +1,16 @@
 import copy
 import dataclasses
+import time
 from collections import namedtuple
 from typing import List, Tuple
 
 import numpy as np
+import pymbar
 
+from timemachine.fe import endpoint_correction, standard_state
+from timemachine.fe.utils import extract_delta_Us_from_U_knk, sanitize_energies
 from timemachine.lib import custom_ops, potentials
+from timemachine.md import minimizer
 from timemachine.md.states import CoordsVelBox
 from timemachine.parallel.client import SerialClient
 
@@ -13,7 +18,28 @@ from timemachine.parallel.client import SerialClient
 @dataclasses.dataclass
 class SimulationResult:
     xs: np.array
-    du_dls: np.array
+    boxes: np.array
+    lambda_us: np.array
+
+
+FreeEnergyModel = namedtuple(
+    "FreeEnergyModel",
+    [
+        "unbound_potentials",
+        "endpoint_correct",
+        "client",
+        "box",
+        "x0",
+        "v0",
+        "integrator",
+        "barostat",
+        "lambda_schedule",
+        "equil_steps",
+        "prod_steps",
+        "beta",
+        "prefix",
+    ],
+)
 
 
 def equilibrate(integrator, barostat, potentials, coords, box, lamb, equil_steps) -> Tuple:
@@ -50,6 +76,71 @@ def equilibrate(integrator, barostat, potentials, coords, box, lamb, equil_steps
     return CoordsVelBox(coords=ctxt.get_x_t(), velocities=ctxt.get_v_t(), box=ctxt.get_box())
 
 
+def run_model_simulations(model, sys_params):
+    assert len(sys_params) == len(model.unbound_potentials)
+
+    bound_potentials = []
+    for params, unbound_pot in zip(sys_params, model.unbound_potentials):
+        bp = unbound_pot.bind(np.asarray(params))
+        bound_potentials.append(bp)
+
+    all_args = []
+    for lamb_idx, lamb in enumerate(model.lambda_schedule):
+
+        subsample_interval = 1000
+
+        all_args.append(
+            (
+                lamb,
+                model.box,
+                model.x0,
+                model.v0,
+                bound_potentials,
+                model.integrator,
+                model.barostat,
+                model.equil_steps,
+                model.prod_steps,
+                subsample_interval,
+                subsample_interval,
+                model.lambda_schedule,
+            )
+        )
+
+    if model.endpoint_correct:
+
+        assert isinstance(bound_potentials[-1], potentials.HarmonicBond)
+
+        all_args.append(
+            (
+                1.0,
+                model.box,
+                model.x0,
+                model.v0,
+                bound_potentials[:-1],  # strip out the restraints
+                model.integrator,
+                model.barostat,
+                model.equil_steps,
+                model.prod_steps,
+                subsample_interval,
+                subsample_interval,
+                [],  # no need to evaluate Us for the endpoint correction
+            )
+        )
+
+    results = []
+    client = model.client
+    if client is None:
+        client = SerialClient()
+        client.verify()
+    futures = []
+    for args in all_args:
+        futures.append(client.submit(simulate, *args))
+
+    for future in futures:
+        results.append(future.result())
+    return results
+
+
 def simulate(
     lamb,
     box,
@@ -57,19 +148,20 @@ def simulate(
     v0,
     final_potentials,
     integrator,
+    barostat,
     equil_steps,
     prod_steps,
-    barostat,
-    x_interval=1000,
-    du_dl_interval=5,
-) -> SimulationResult:
+    x_interval,
+    u_interval,
+    lambda_windows,
+):
     """
     Run a simulation and collect relevant statistics for this simulation.
 
     Parameters
     ----------
     lamb: float
-        lambda parameter
+        lambda value used for the equilibrium simulation
 
     box: np.array
         3x3 numpy array of the box, dtype should be np.float64
@@ -86,6 +178,9 @@ def simulate(
     integrator: timemachine.Integrator
         integrator to be used for dynamics
 
+    barostat: timemachine.Barostat
+        barostat to be used for equilibration
+
     equil_steps: int
         number of equilibration steps
 
@@ -93,15 +188,15 @@ def simulate(
         number of production steps
 
     x_interval: int
-        how often we store coordinates. if x_interval == 0 then
+        how often we store coordinates. If x_interval == 0 then
         no frames are returned.
 
-    du_dl_interval: int
-        how often we store du_dls. if du_dl_interval == 0 then
-        no du_dls are returned
+    u_interval: int
+        how often we store energies. If u_interval == 0 then
+        no energies are returned
 
-    barostat: timemachine.lib.MonteCarloBarostat
-        Monte carlo barostat to use when simulating.
+    lambda_windows: list of float
+        lambda windows we evaluate energies at.
 
     Returns
     -------
@@ -109,19 +204,23 @@ def simulate(
         Results of the simulation.
 
     """
+
     all_impls = []
-    bonded_impls = []
-    nonbonded_impls = []
 
     for bp in final_potentials:
         impl = bp.bound_impl(np.float32)
-        if isinstance(bp, potentials.Nonbonded):
-            nonbonded_impls.append(impl)
-        else:
-            bonded_impls.append(impl)
         all_impls.append(impl)
 
+    # fire minimize once again, needed for parameter interpolation
+    x0 = minimizer.fire_minimize(x0, all_impls, box, np.ones(100, dtype=np.float64) * lamb)
+
+    # sanity check that forces are well behaved
+    for bp in all_impls:
+        du_dx, du_dl, u = bp.execute(x0, box, lamb)
+        norm_forces = np.linalg.norm(du_dx, axis=1)
+        assert np.all(norm_forces < 25000), "Forces much greater than expected after minimization"
     if integrator.seed == 0:
+        # this deepcopy is needed if we're running if client == None
         integrator = copy.deepcopy(integrator)
         integrator.seed = np.random.randint(np.iinfo(np.int32).max)
 
@@ -130,52 +229,31 @@ def simulate(
         barostat.seed = np.random.randint(np.iinfo(np.int32).max)
 
     intg_impl = integrator.impl()
-    baro_impl = barostat.impl(all_impls)
+    # technically we need to only pass in the nonbonded impl
+    barostat_impl = barostat.impl(all_impls)
     # context components: positions, velocities, box, integrator, energy fxns
-    ctxt = custom_ops.Context(
-        x0,
-        v0,
-        box,
-        intg_impl,
-        all_impls,
-        barostat=baro_impl,
-    )
-    base_interval = baro_impl.get_interval()
-    # Use an interval of 5 for equilibration
-    baro_impl.set_interval(5)
+    ctxt = custom_ops.Context(x0, v0, box, intg_impl, all_impls, barostat_impl)
 
     # equilibration
     equil_schedule = np.ones(equil_steps) * lamb
     ctxt.multiple_steps(equil_schedule)
 
-    baro_impl.set_interval(base_interval)
+    # (ytz): intentionally hard-coded, I'd rather the end-user *not*
+    # muck with this unless they have a good reason to.
+    barostat_impl.set_interval(25)
 
-    prod_schedule = np.ones(prod_steps) * lamb
+    full_us, xs, boxes = ctxt.multiple_steps_U(lamb, prod_steps, np.array(lambda_windows), u_interval, x_interval)
 
-    full_du_dls, xs, _ = ctxt.multiple_steps(prod_schedule, du_dl_interval, x_interval)
+    result = SimulationResult(
+        xs=xs.astype("float32"),
+        boxes=boxes.astype("float32"),
+        lambda_us=full_us,
+    )
 
-    result = SimulationResult(xs=xs.astype("float32"), du_dls=full_du_dls)
     return result
 
 
-FreeEnergyModel = namedtuple(
-    "FreeEnergyModel",
-    [
-        "unbound_potentials",
-        "client",
-        "box",
-        "x0",
-        "v0",
-        "integrator",
-        "lambda_schedule",
-        "equil_steps",
-        "prod_steps",
-        "barostat",
-    ],
-)
-
-
-def deltaG(model, sys_params) -> Tuple[float, List]:
+def deltaG_from_results(model, results, sys_params) -> Tuple[float, float, List]:
 
     assert len(sys_params) == len(model.unbound_potentials)
 
@@ -184,35 +262,115 @@ def deltaG(model, sys_params) -> Tuple[float, List]:
         bp = unbound_pot.bind(np.asarray(params))
         bound_potentials.append(bp)
 
-    client = model.client
-    if client is None:
-        client = SerialClient()
-        client.verify()
+    if model.endpoint_correct:
+        sim_results = results[:-1]
+    else:
+        sim_results = results
 
-    futures = []
-    for lamb in model.lambda_schedule:
-        args = (
-            lamb,
-            model.box,
-            model.x0,
-            model.v0,
-            bound_potentials,
-            model.integrator,
-            model.equil_steps,
-            model.prod_steps,
-            model.barostat,
+    U_knk = []
+    N_k = []
+    for result in sim_results:
+        U_knk.append(result.lambda_us)
+        N_k.append(len(result.lambda_us))  # number of frames
+
+    U_knk = np.array(U_knk)
+
+    bar_dG = 0
+    bar_dG_err = 0
+
+    delta_Us = extract_delta_Us_from_U_knk(U_knk)
+
+    for lambda_idx in range(len(model.lambda_schedule) - 1):
+
+        fwd_delta_u = model.beta * delta_Us[lambda_idx][0]
+        rev_delta_u = model.beta * delta_Us[lambda_idx][1]
+
+        dG_exact, exact_bar_err = pymbar.BAR(fwd_delta_u, rev_delta_u)
+        bar_dG += dG_exact / model.beta
+        exact_bar_overlap = endpoint_correction.overlap_from_cdf(fwd_delta_u, rev_delta_u)
+
+        # probably off by a factor of two since we re-use samples.
+        bar_dG_err += (exact_bar_err / model.beta) ** 2
+
+        lamb_start = model.lambda_schedule[lambda_idx]
+        lamb_end = model.lambda_schedule[lambda_idx + 1]
+
+        print(
+            f"{model.prefix}_BAR: lambda {lamb_start:.3f} -> {lamb_end:.3f} dG: {dG_exact/model.beta:.3f} dG_err: {exact_bar_err/model.beta:.3f} overlap: {exact_bar_overlap:.3f}"
         )
-        kwargs = {}  # Unused for now
-        futures.append(client.submit(simulate, *args, **kwargs))
 
-    results = [x.result() for x in futures]
+    # for MBAR we need to sanitize the energies
+    clean_U_knks = []  # [K, F, K]
+    for lambda_idx, full_us in enumerate(U_knk):
+        clean_U_knks.append(sanitize_energies(full_us, lambda_idx))
 
-    mean_du_dls = []
+    print(
+        model.prefix,
+        " MBAR: amin",
+        np.amin(clean_U_knks),
+        "median",
+        np.median(clean_U_knks),
+        "max",
+        np.amax(clean_U_knks),
+    )
 
-    for result in results:
-        # (ytz): figure out what to do with stddev(du_dl) later
-        mean_du_dls.append(np.mean(result.du_dls))
+    K = len(model.lambda_schedule)
+    clean_U_knks = np.array(clean_U_knks)  # [K, F, K]
+    U_kn = np.reshape(clean_U_knks, (-1, K)).transpose()  # [K, F*K]
+    u_kn = U_kn * model.beta
 
-    dG = np.trapz(mean_du_dls, model.lambda_schedule)
+    np.save(model.prefix + "_U_kn.npy", U_kn)
 
-    return dG, results
+    mbar = pymbar.MBAR(u_kn, N_k)
+    differences, error_estimates = mbar.getFreeEnergyDifferences()
+    f_k, error_k = differences[0], error_estimates[0]
+    mbar_dG = f_k[-1] / model.beta
+    mbar_dG_err = error_k[-1] / model.beta
+
+    bar_dG_err = np.sqrt(bar_dG_err)
+
+    dG = bar_dG  # use the exact answer
+
+    if model.endpoint_correct:
+        core_restr = bound_potentials[-1]
+        # (ytz): tbd, automatically find optimal k_translation/k_rotation such that
+        # standard deviation and/or overlap is maximized
+        k_translation = 200.0
+        k_rotation = 100.0
+        start = time.time()
+        lhs_du, rhs_du, rotation_samples, translation_samples = endpoint_correction.estimate_delta_us(
+            k_translation=k_translation,
+            k_rotation=k_rotation,
+            core_idxs=core_restr.get_idxs(),
+            core_params=core_restr.params.reshape((-1, 2)),
+            beta=model.beta,
+            lhs_xs=results[-2].xs,
+            rhs_xs=results[-1].xs,
+            seed=2021,
+        )
+        dG_endpoint, endpoint_err = pymbar.BAR(model.beta * lhs_du, model.beta * np.array(rhs_du))
+        dG_endpoint = dG_endpoint / model.beta
+        endpoint_err = endpoint_err / model.beta
+        # compute standard state corrections for translation and rotation
+        dG_ssc_translation, dG_ssc_rotation = standard_state.release_orientational_restraints(
+            k_translation, k_rotation, model.beta
+        )
+        overlap = endpoint_correction.overlap_from_cdf(lhs_du, rhs_du)
+        lhs_mean = np.mean(lhs_du)
+        rhs_mean = np.mean(rhs_du)
+        print(
+            f"{model.prefix} bar (A) {bar_dG:.3f} bar_err {bar_dG_err:.3f} mbar (A) {mbar_dG:.3f} mbar_err {mbar_dG_err:.3f} dG_endpoint (E) {dG_endpoint:.3f} dG_endpoint_err {endpoint_err:.3f} dG_ssc_translation {dG_ssc_translation:.3f} dG_ssc_rotation {dG_ssc_rotation:.3f} overlap {overlap:.3f} lhs_mean {lhs_mean:.3f} rhs_mean {rhs_mean:.3f} lhs_n {len(lhs_du)} rhs_n {len(rhs_du)} | time: {time.time()-start:.3f}s"
+        )
+        dG += dG_endpoint + dG_ssc_translation + dG_ssc_rotation
+        bar_dG_err = np.sqrt(bar_dG_err ** 2 + endpoint_err ** 2)
+    else:
+        print(
+            f"{model.prefix} bar (A) {bar_dG:.3f} bar_err {bar_dG_err:.3f} mbar (A) {mbar_dG:.3f} mbar_err {mbar_dG_err:.3f} "
+        )
+
+    return dG, bar_dG_err, results
+
+
+def deltaG(model, sys_params) -> Tuple[float, float, List]:
+    results = run_model_simulations(model, sys_params)
+    return deltaG_from_results(model=model, results=results, sys_params=sys_params)

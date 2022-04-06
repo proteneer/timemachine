@@ -8,6 +8,7 @@ import numpy as np
 from rdkit import Chem
 from scipy.optimize import check_grad, minimize
 
+from timemachine import constants
 from timemachine.fe import estimator, free_energy, topology
 from timemachine.fe.functional import construct_differentiable_interface, construct_differentiable_interface_fast
 from timemachine.ff import Forcefield
@@ -19,6 +20,7 @@ from timemachine.testsystems.relative import hif2a_ligand_pair
 
 
 def test_absolute_free_energy():
+    np.random.seed(2022)
 
     with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
         suppl = Chem.SDMolSupplier(str(path_to_ligand), removeHs=False)
@@ -41,7 +43,7 @@ def test_absolute_free_energy():
 
     lambda_schedule = np.linspace(0, 1.0, 4)
     equil_steps = 1000
-    prod_steps = 1000
+    prod_steps = 4000
 
     afe = free_energy.AbsoluteFreeEnergy(mol, ff)
 
@@ -67,6 +69,8 @@ def test_absolute_free_energy():
             client = CUDAPoolClient(1)
             temperature = 300.0
             pressure = 1.0
+            beta = 1 / (constants.BOLTZ * temperature)
+            endpoint_correct = False
 
             integrator = LangevinIntegrator(temperature, 1.5e-3, 1.0, masses, seed)
 
@@ -74,18 +78,21 @@ def test_absolute_free_energy():
 
             model = estimator.FreeEnergyModel(
                 unbound_potentials,
+                endpoint_correct,
                 client,
                 host_box,
                 x0,
                 v0,
                 integrator,
+                barostat,
                 lambda_schedule,
                 equil_steps,
                 prod_steps,
-                barostat,
+                beta,
+                "prefix",
             )
 
-            dG, _ = estimator.deltaG(model, sys_params)
+            dG, _, _ = estimator.deltaG(model, sys_params)
             dGs.append(dG)
 
         return dGs[0] - dGs[1]
@@ -156,7 +163,7 @@ def test_relative_free_energy():
 
     lambda_schedule = np.linspace(0, 1.0, 4)
     equil_steps = 1000
-    prod_steps = 1000
+    prod_steps = 4000
 
     single_topology = topology.SingleTopology(mol_a, mol_b, core, ff)
     rfe = free_energy.RelativeFreeEnergy(single_topology)
@@ -178,12 +185,27 @@ def test_relative_free_energy():
         client = CUDAPoolClient(1)
         temperature = 300.0
         pressure = 1.0
+        beta = 1 / (constants.BOLTZ * temperature)
+        endpoint_correct = False
 
         integrator = LangevinIntegrator(temperature, 1.5e-3, 1.0, masses, seed)
 
         barostat = MonteCarloBarostat(x0.shape[0], pressure, temperature, group_idxs, 25, seed)
+
         model = estimator.FreeEnergyModel(
-            unbound_potentials, client, box, x0, v0, integrator, lambda_schedule, equil_steps, prod_steps, barostat
+            unbound_potentials,
+            endpoint_correct,
+            client,
+            box,
+            x0,
+            v0,
+            integrator,
+            barostat,
+            lambda_schedule,
+            equil_steps,
+            prod_steps,
+            beta,
+            "prefix",
         )
 
         return estimator.deltaG(model, sys_params)[0]
@@ -214,6 +236,8 @@ def test_relative_free_energy():
 
             temperature = 300.0
             pressure = 1.0
+            beta = 1 / (constants.BOLTZ * temperature)
+            endpoint_correct = False
 
             integrator = LangevinIntegrator(temperature, 1.5e-3, 1.0, masses, seed)
 
@@ -221,18 +245,21 @@ def test_relative_free_energy():
 
             model = estimator.FreeEnergyModel(
                 unbound_potentials,
+                endpoint_correct,
                 client,
                 host_box,
                 x0,
                 v0,
                 integrator,
+                barostat,
                 lambda_schedule,
                 equil_steps,
                 prod_steps,
-                barostat,
+                beta,
+                "prefix",
             )
 
-            dG, _ = estimator.deltaG(model, sys_params)
+            dG, _, _ = estimator.deltaG(model, sys_params)
             dGs.append(dG)
 
         return dGs[0] - dGs[1]
