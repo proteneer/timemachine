@@ -15,7 +15,7 @@ Context::Context(
     Integrator *intg,
     std::vector<BoundPotential *> bps,
     MonteCarloBarostat *barostat)
-    : N_(N), intg_(intg), bps_(bps), step_(0), d_sum_storage_(nullptr), d_sum_storage_bytes_(0), barostat_(barostat) {
+    : N_(N), barostat_(barostat), step_(0), d_sum_storage_(nullptr), d_sum_storage_bytes_(0), intg_(intg), bps_(bps) {
     d_x_t_ = gpuErrchkCudaMallocAndCopy(x_0, N * 3);
     d_v_t_ = gpuErrchkCudaMallocAndCopy(v_0, N * 3);
     d_box_t_ = gpuErrchkCudaMallocAndCopy(box_0, 3 * 3);

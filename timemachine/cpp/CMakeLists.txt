@@ -18,6 +18,7 @@ string(APPEND CMAKE_CUDA_FLAGS
   " -Wno-sign-compare"
   " -Wextra"
   " -Wno-unused-parameter"
+  " -Wreorder"
 )
 message(${CMAKE_CUDA_FLAGS})
 
