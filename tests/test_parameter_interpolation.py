@@ -6,7 +6,7 @@ import copy
 import jax.numpy as jnp
 import numpy as np
 import pytest
-from common import GradientTest, prepare_water_system
+from common import GradientTest, prepare_system_params, prepare_water_system
 
 from timemachine.lib import potentials
 from timemachine.potentials import nonbonded
@@ -35,11 +35,15 @@ class TestInterpolatedPotential(GradientTest):
         lambda_plane_idxs = np.random.randint(low=0, high=2, size=N, dtype=np.int32)
         lambda_offset_idxs = np.random.randint(low=0, high=2, size=N, dtype=np.int32)
 
+        sigma_scale = 5.0
+
         qlj_src, ref_potential, test_potential = prepare_water_system(
-            coords, lambda_plane_idxs, lambda_offset_idxs, p_scale=1.0, cutoff=cutoff
+            coords, lambda_plane_idxs, lambda_offset_idxs, p_scale=sigma_scale, cutoff=cutoff
         )
 
-        qlj_dst, _, _ = prepare_water_system(coords, lambda_plane_idxs, lambda_offset_idxs, p_scale=1.0, cutoff=cutoff)
+        qlj_dst, _, _ = prepare_water_system(
+            coords, lambda_plane_idxs, lambda_offset_idxs, p_scale=sigma_scale, cutoff=cutoff
+        )
 
         qlj = np.concatenate([qlj_src, qlj_dst])
 
@@ -95,12 +99,14 @@ class TestInterpolatedPotential(GradientTest):
         def transform_w(lamb):
             return 1 - lamb * lamb
 
+        sigma_scale = 5.0
+
         # E = 0 # DEBUG!
         qlj_src, ref_potential, test_potential = prepare_water_system(
-            coords, lambda_plane_idxs, lambda_offset_idxs, p_scale=1.0, cutoff=cutoff
+            coords, lambda_plane_idxs, lambda_offset_idxs, p_scale=sigma_scale, cutoff=cutoff
         )
 
-        qlj_dst, _, _ = prepare_water_system(coords, lambda_plane_idxs, lambda_offset_idxs, p_scale=1.0, cutoff=cutoff)
+        qlj_dst = prepare_system_params(coords, sigma_scale=sigma_scale)
 
         def interpolate_params(lamb, qlj_src, qlj_dst):
             new_q = (1 - transform_q(lamb)) * qlj_src[:, 0] + transform_q(lamb) * qlj_dst[:, 0]

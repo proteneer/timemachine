@@ -148,6 +148,35 @@ def prepare_reference_nonbonded(params, exclusion_idxs, scales, lambda_plane_idx
     return ref_total_energy
 
 
+def prepare_system_params(x: NDArray, sigma_scale: float = 5.0) -> NDArray:
+    """
+    Prepares random parameters given a set of coordinates. The parameters are adjusted to be the correct
+    order of magnitude.
+
+    Parameters
+    ----------
+
+    x: Numpy array of Coordinates
+
+    sigma_scale: Factor to scale down sigma values by
+    """
+    assert x.ndim == 2
+    N = x.shape[0]
+
+    params = np.stack(
+        [
+            (np.random.rand(N).astype(np.float64) - 0.5) * np.sqrt(ONE_4PI_EPS0),  # q
+            np.random.rand(N).astype(np.float64) / sigma_scale,  # sig
+            np.random.rand(N).astype(np.float64),  # eps
+        ],
+        axis=1,
+    )
+
+    params[:, 1] = params[:, 1] / 2
+    params[:, 2] = np.sqrt(params[:, 2])
+    return params
+
+
 def prepare_water_system(x, lambda_plane_idxs, lambda_offset_idxs, p_scale, cutoff):
 
     assert x.ndim == 2
@@ -156,17 +185,7 @@ def prepare_water_system(x, lambda_plane_idxs, lambda_offset_idxs, p_scale, cuto
 
     assert N % 3 == 0
 
-    params = np.stack(
-        [
-            (np.random.rand(N).astype(np.float64) - 0.5) * np.sqrt(ONE_4PI_EPS0),  # q
-            np.random.rand(N).astype(np.float64) / 5.0,  # sig
-            np.random.rand(N).astype(np.float64),  # eps
-        ],
-        axis=1,
-    )
-
-    params[:, 1] = params[:, 1] / 2
-    params[:, 2] = np.sqrt(params[:, 2])
+    params = prepare_system_params(x, sigma_scale=p_scale)
 
     scales = []
     exclusion_idxs = []
@@ -219,14 +238,7 @@ def prepare_nb_system(x, E, lambda_plane_idxs, lambda_offset_idxs, p_scale, cuto
     N = x.shape[0]
     # D = x.shape[1]
 
-    params = np.stack(
-        [
-            (np.random.rand(N).astype(np.float64) - 0.5) * np.sqrt(ONE_4PI_EPS0),  # q
-            np.random.rand(N).astype(np.float64) / 10.0,  # sig
-            np.random.rand(N).astype(np.float64),  # eps
-        ],
-        axis=1,
-    )
+    params = prepare_system_params(x, sigma_scale=p_scale)
 
     atom_idxs = np.arange(N)
 

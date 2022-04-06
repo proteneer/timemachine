@@ -15,7 +15,7 @@ import itertools
 
 import numpy as np
 import pytest
-from common import GradientTest, prepare_reference_nonbonded, prepare_water_system
+from common import GradientTest, prepare_reference_nonbonded, prepare_system_params, prepare_water_system
 from hilbertcurve.hilbertcurve import HilbertCurve
 from simtk.openmm import app
 
@@ -411,40 +411,33 @@ class TestNonbonded(GradientTest):
 
         cutoff = 1.0
 
+        test_u = potentials.Nonbonded(exclusion_idxs, scales, lambda_plane_idxs, lambda_offset_idxs, beta, cutoff)
+
+        charge_rescale_mask = np.ones((N, N))
+        for (i, j), exc in zip(exclusion_idxs, scales[:, 0]):
+            charge_rescale_mask[i][j] = 1 - exc
+            charge_rescale_mask[j][i] = 1 - exc
+
+        lj_rescale_mask = np.ones((N, N))
+        for (i, j), exc in zip(exclusion_idxs, scales[:, 1]):
+            lj_rescale_mask[i][j] = 1 - exc
+            lj_rescale_mask[j][i] = 1 - exc
+
+        ref_u = functools.partial(
+            nonbonded.nonbonded_v3,
+            charge_rescale_mask=charge_rescale_mask,
+            lj_rescale_mask=lj_rescale_mask,
+            beta=beta,
+            cutoff=cutoff,
+            lambda_plane_idxs=lambda_plane_idxs,
+            lambda_offset_idxs=lambda_offset_idxs,
+        )
+
         for precision, rtol in [(np.float64, 1e-8), (np.float32, 1e-4)]:
-
-            test_u = potentials.Nonbonded(exclusion_idxs, scales, lambda_plane_idxs, lambda_offset_idxs, beta, cutoff)
-
-            charge_rescale_mask = np.ones((N, N))
-            for (i, j), exc in zip(exclusion_idxs, scales[:, 0]):
-                charge_rescale_mask[i][j] = 1 - exc
-                charge_rescale_mask[j][i] = 1 - exc
-
-            lj_rescale_mask = np.ones((N, N))
-            for (i, j), exc in zip(exclusion_idxs, scales[:, 1]):
-                lj_rescale_mask[i][j] = 1 - exc
-                lj_rescale_mask[j][i] = 1 - exc
-
-            ref_u = functools.partial(
-                nonbonded.nonbonded_v3,
-                charge_rescale_mask=charge_rescale_mask,
-                lj_rescale_mask=lj_rescale_mask,
-                beta=beta,
-                cutoff=cutoff,
-                lambda_plane_idxs=lambda_plane_idxs,
-                lambda_offset_idxs=lambda_offset_idxs,
-            )
 
             lamb = 0.0
 
-            params = np.stack(
-                [
-                    (np.random.rand(N).astype(np.float64) - 0.5) * np.sqrt(138.935456),  # q
-                    np.random.rand(N).astype(np.float64) / 10.0,  # sig
-                    np.random.rand(N).astype(np.float64),  # eps
-                ],
-                axis=1,
-            )
+            params = prepare_system_params(test_system)
 
             self.compare_forces(test_system, params, box, lamb, ref_u, test_u, rtol, precision=precision)
 
