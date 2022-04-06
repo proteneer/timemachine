@@ -21,8 +21,8 @@ MonteCarloBarostat::MonteCarloBarostat(
     const int interval,
     const std::vector<BoundPotential *> bps,
     const int seed)
-    : N_(N), pressure_(pressure), temperature_(temperature), interval_(interval), bps_(bps), group_idxs_(group_idxs),
-      num_grouped_atoms_(0), d_sum_storage_(nullptr), d_sum_storage_bytes_(0), seed_(seed), step_(0) {
+    : N_(N), bps_(bps), pressure_(pressure), temperature_(temperature), interval_(interval), seed_(seed),
+      group_idxs_(group_idxs), step_(0), num_grouped_atoms_(0), d_sum_storage_(nullptr), d_sum_storage_bytes_(0) {
 
     // Trigger check that interval is valid
     this->set_interval(interval_);
