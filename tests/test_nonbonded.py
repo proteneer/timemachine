@@ -294,7 +294,6 @@ class TestNonbondedWater(GradientTest):
 
         big_box = box + np.eye(3) * 1000
 
-        # print(big_box, small_box)
         # (ytz): note the ordering should be from large box to small box. though in the current code
         # the rebuild is triggered as long as the box *changes*.
         for test_box in [big_box, box]:
@@ -364,7 +363,6 @@ class TestNonbonded(GradientTest):
 
         np.random.seed(2020)
 
-        # water_coords = self.get_water_coords(3, sort=False)
         water_coords = self.get_water_coords(3, sort=False)
         test_system = water_coords[:126]  # multiple of 3
         box = np.eye(3) * 3
