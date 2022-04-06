@@ -3,6 +3,8 @@
 #include "fixed_point.hpp"
 #include "gpu_utils.cuh"
 #include "integrator.hpp"
+#include "kernel_utils.cuh"
+#include "math_utils.cuh"
 
 namespace timemachine {
 
@@ -21,7 +23,7 @@ LangevinIntegrator::LangevinIntegrator(int N, double dt, double ca, const double
     d_ccs_ = gpuErrchkCudaMallocAndCopy(h_ccs, N);
 
     curandErrchk(curandCreateGenerator(&cr_rng_, CURAND_RNG_PSEUDO_DEFAULT));
-    gpuErrchk(cudaMalloc((void **)&d_noise_, round_up_even(N * 3) * sizeof(double)));
+    gpuErrchk(cudaMalloc(&d_noise_, round_up_even(N * 3) * sizeof(double)));
     curandErrchk(curandSetPseudoRandomGeneratorSeed(cr_rng_, seed));
 }
 
@@ -37,12 +39,12 @@ __global__ void update_forward(
     const int N,
     const int D,
     const RealType ca,
-    const RealType *cbs,   // N
-    const RealType *ccs,   // N
-    const RealType *noise, // N x 3
-    RealType *x_t,
-    RealType *v_t,
-    const unsigned long long *du_dx,
+    const RealType *__restrict__ cbs,   // N
+    const RealType *__restrict__ ccs,   // N
+    const RealType *__restrict__ noise, // N x 3
+    RealType *__restrict__ x_t,
+    RealType *__restrict__ v_t,
+    const unsigned long long *__restrict__ du_dx,
     const RealType dt) {
 
     int atom_idx = blockIdx.x * blockDim.x + threadIdx.x;
@@ -70,8 +72,8 @@ void LangevinIntegrator::step_fwd(
     double *d_x_t, double *d_v_t, unsigned long long *d_du_dx_t, double *d_box_t_, cudaStream_t stream) {
 
     const int D = 3;
-    size_t tpb = 32;
-    size_t n_blocks = (N_ * D + tpb - 1) / tpb;
+    size_t tpb = warp_size;
+    size_t n_blocks = ceil_divide(N_, tpb);
     dim3 dimGrid_dx(n_blocks, D);
 
     curandErrchk(curandSetStream(cr_rng_, stream));
