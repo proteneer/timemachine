@@ -59,7 +59,7 @@ def test_base_topology_conversion_r_group():
     assert potential.get_lambda_offset() is None
 
 
-def test_base_topology_standard_decoupling():
+def test_base_topology_decoupling():
 
     # this class is typically used in the second step of the RABFE protocol for the solvent leg.
     # we expected the charges to be zero. In addition,
