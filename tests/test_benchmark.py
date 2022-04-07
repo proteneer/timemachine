@@ -5,7 +5,6 @@ relative binding free energy edge from the HIF2A test system"""
 import time
 
 import numpy as np
-from simtk.openmm import app
 
 from timemachine.fe.model_utils import apply_hmr
 from timemachine.fe.utils import to_md_units
@@ -13,6 +12,7 @@ from timemachine.ff.handlers import openmm_deserializer
 from timemachine.lib import LangevinIntegrator, MonteCarloBarostat, custom_ops
 from timemachine.md import builders, minimizer
 from timemachine.md.barostat.utils import get_bond_list, get_group_indices
+from timemachine.testsystems.dhfr import setup_dhfr
 
 
 def recenter(conf, box):
@@ -129,17 +129,7 @@ def benchmark(
 
 def benchmark_dhfr(verbose=False, num_batches=100, steps_per_batch=1000):
 
-    pdb_path = "tests/data/5dfr_solv_equil.pdb"
-    host_pdb = app.PDBFile(pdb_path)
-    protein_ff = app.ForceField("amber99sbildn.xml", "tip3p.xml")
-    host_system = protein_ff.createSystem(
-        host_pdb.topology, nonbondedMethod=app.NoCutoff, constraints=None, rigidWater=False
-    )
-    host_coords = host_pdb.positions
-    box = host_pdb.topology.getPeriodicBoxVectors()
-    box = np.asarray(box / box.unit)
-
-    host_fns, host_masses = openmm_deserializer.deserialize_system(host_system, cutoff=1.0)
+    host_fns, host_masses, host_coords, box = setup_dhfr()
 
     host_conf = []
     for x, y, z in host_coords:

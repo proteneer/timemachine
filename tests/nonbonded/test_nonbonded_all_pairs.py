@@ -143,7 +143,7 @@ def test_nonbonded_all_pairs_correctness(
     atol,
     cutoff,
     beta,
-    example_nonbonded_params,
+    example_nonbonded_potential,
     example_conf,
     example_box,
     rng: np.random.Generator,
@@ -151,7 +151,7 @@ def test_nonbonded_all_pairs_correctness(
     "Compares with jax reference implementation."
 
     conf = example_conf[:num_atoms]
-    params_initial = example_nonbonded_params[:num_atoms, :]
+    params_initial = example_nonbonded_potential.params[:num_atoms, :]
     params = gen_params(params_initial, rng) if interpolated else params_initial
 
     lambda_plane_idxs = rng.integers(-2, 3, size=(num_atoms,), dtype=np.int32)
