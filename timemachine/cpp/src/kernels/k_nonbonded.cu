@@ -105,11 +105,11 @@ unsigned int expand_bits(unsigned int v) {
 // From https://developer.nvidia.com/blog/thinking-parallel-part-iii-tree-construction-gpu/
 // Calculates a 30-bit Morton code for the
 // given 3D point located within the unit cube [0,1]^3.
-template <typename RealType> unsigned int morton_encode(RealType x, RealType y, RealType z) {
+unsigned int morton_encode(float x, float y, float z) {
     // TODO: rewrite without 3x repetition
-    float x = min(max(x * 1024.0f, 0.0f), 1023.0f);
-    float y = min(max(y * 1024.0f, 0.0f), 1023.0f);
-    float z = min(max(z * 1024.0f, 0.0f), 1023.0f);
+    x = min(max(x * 1024.0f, 0.0f), 1023.0f);
+    y = min(max(y * 1024.0f, 0.0f), 1023.0f);
+    z = min(max(z * 1024.0f, 0.0f), 1023.0f);
     unsigned int xx = expand_bits((unsigned int)x);
     unsigned int yy = expand_bits((unsigned int)y);
     unsigned int zz = expand_bits((unsigned int)z);
