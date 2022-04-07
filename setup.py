@@ -109,6 +109,7 @@ setup(
     package_data={
         "timemachine": [
             "datasets/freesolv/freesolv.sdf",
+            "testsystems/data/5dfr_solv_equil.pdb",
             "testsystems/data/ligands_40.sdf",
             # NOTE: C++ sources used at runtime for JIT compilation
             "cpp/src/*.hpp",
