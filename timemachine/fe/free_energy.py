@@ -6,9 +6,10 @@ from rdkit import Chem
 config.update("jax_enable_x64", True)
 
 from dataclasses import asdict, dataclass, fields
-from typing import Union
+from typing import List, Tuple, Union
 
 import numpy as np
+from rdkit.Chem import MolToSmiles
 
 from timemachine.fe import topology
 from timemachine.fe.utils import get_mol_masses, get_romol_conf
@@ -352,3 +353,26 @@ class RelativeFreeEnergy(BaseFreeEnergy):
             ligand_values = [ligand_values_a, ligand_values_b]
         all_values = [host_values] + ligand_values if host_values is not None else ligand_values
         return np.concatenate(all_values)
+
+
+class RBFETransformIndex:
+    """Builds an index of relative free energy transformations."""
+
+    def __len__(self):
+        return len(self._indices)
+
+    def __init__(self):
+        self._indices = {}
+
+    def build(self, refs: List[RelativeFreeEnergy]):
+        for ref in refs:
+            self.get_transform_indices(ref)
+
+    def get_transform_indices(self, ref: RelativeFreeEnergy) -> Tuple[int, int]:
+        return self.get_mol_idx(ref.mol_a), self.get_mol_idx(ref.mol_b)
+
+    def get_mol_idx(self, mol) -> int:
+        hashed = MolToSmiles(mol)
+        if hashed not in self._indices:
+            self._indices[hashed] = len(self._indices)
+        return self._indices[hashed]

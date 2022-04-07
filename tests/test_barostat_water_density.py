@@ -35,10 +35,7 @@ if __name__ == "__main__":
 
     # generate an alchemical system of a waterbox + alchemical ligand:
     # effectively discard ligands by running in AbsoluteFreeEnergy mode at lambda = 1.0
-    mol_a, ff = (
-        hif2a_ligand_pair.mol_a,
-        hif2a_ligand_pair.ff,
-    )
+    mol_a, ff = hif2a_ligand_pair.mol_a, hif2a_ligand_pair.ff
     unbound_potentials, sys_params, masses, coords, complex_box = get_solvent_phase_system(mol_a, ff, margin=0.0)
     n_lig_atoms = get_romol_conf(mol_a).shape[0]
     n_water_mols = (coords.shape[0] - n_lig_atoms) // 3

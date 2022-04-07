@@ -11,11 +11,10 @@ from typing import Any, Dict, List, Tuple, Union
 import jax
 import numpy as np
 from jax import numpy as jnp
-from rdkit.Chem import MolToSmiles
 
 import timemachine
 from timemachine.fe.estimator import SimulationResult
-from timemachine.fe.free_energy import RelativeFreeEnergy
+from timemachine.fe.free_energy import RBFETransformIndex, RelativeFreeEnergy
 
 # free energy classes
 from timemachine.fe.lambda_schedule import construct_lambda_schedule
@@ -118,31 +117,6 @@ def _blew_up(results: List[SimulationResult]) -> bool:
 
     # TODO: adjust this threshold a bit, move reliability calculations into fe/estimator.py or fe/model.py
     return np.isnan(du_dls).any() or (du_dls.std(1).max() > 1000)
-
-
-class RBFETransformIndex:
-    """Builds an index of relative free energy transformations to use
-    with construct_mle_layer
-    """
-
-    def __len__(self):
-        return len(self._indices)
-
-    def __init__(self):
-        self._indices = {}
-
-    def build(self, refs: List[RelativeFreeEnergy]):
-        for ref in refs:
-            self.get_transform_indices(ref)
-
-    def get_transform_indices(self, ref: RelativeFreeEnergy) -> List[int]:
-        return self.get_mol_idx(ref.mol_a), self.get_mol_idx(ref.mol_b)
-
-    def get_mol_idx(self, mol):
-        hashed = MolToSmiles(mol)
-        if hashed not in self._indices:
-            self._indices[hashed] = len(self._indices)
-        return self._indices[hashed]
 
 
 def loss_fxn(ff_params, batch: List[Tuple[RelativeFreeEnergy, RBFEModel]]):
