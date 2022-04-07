@@ -5,6 +5,15 @@
 #include "nonbonded_common.cuh"
 #include "surreal.cuh"
 
+// Divide [0,1]^3 box into HILBERT_GRID_DIM^3 voxels for Hilbert sort
+static const int HILBERT_GRID_DIM = 128;
+
+// Encode grid index along each dimension using HILBERT_N_BITS
+static const int HILBERT_N_BITS = 8;
+static const int HILBERT_MAX_GRID_DIM = 1 << HILBERT_N_BITS;
+static_assert(HILBERT_N_BITS == 8);
+static_assert(HILBERT_GRID_DIM <= HILBERT_MAX_GRID_DIM);
+
 void __global__ k_arange(int N, unsigned int *arr);
 
 // generate kv values from coordinates to be radix sorted
