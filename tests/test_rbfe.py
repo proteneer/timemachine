@@ -2,7 +2,7 @@ import os
 from tempfile import TemporaryDirectory
 from unittest import TestCase
 
-from timemachine.fe.free_energy import construct_lambda_schedule
+from timemachine.fe.lambda_schedule import construct_lambda_schedule
 from timemachine.fe.model import RBFEModel
 from timemachine.ff import Forcefield
 from timemachine.md import builders
@@ -47,7 +47,7 @@ class TestRBFEModel(TestCase):
         ordered_params = forcefield.get_ordered_params()
         mol_a = hif2a_ligand_pair.mol_a
         mol_b = hif2a_ligand_pair.mol_b
-        core = hif2a_ligand_pair.core
+        core = hif2a_ligand_pair.top.core
 
         ddg, results = model.predict(ordered_params, mol_a, mol_b, core)
         self.assertEqual(len(results), 2)
@@ -80,7 +80,7 @@ class TestRBFEModel(TestCase):
 
         mol_a = hif2a_ligand_pair.mol_a
         mol_b = hif2a_ligand_pair.mol_b
-        core = hif2a_ligand_pair.core
+        core = hif2a_ligand_pair.top.core
         assert len(model._equil_cache) == 0
         with TemporaryDirectory() as tempdir:
             cache_path = os.path.join(tempdir, "equil_cache.pkl")

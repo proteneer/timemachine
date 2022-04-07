@@ -109,7 +109,7 @@ class TestDocking(unittest.TestCase):
         mol_a, mol_b, core = (
             hif2a_ligand_pair.mol_a,
             hif2a_ligand_pair.mol_b,
-            hif2a_ligand_pair.core,
+            hif2a_ligand_pair.top.core,
         )
         host_pdbfile = str(Path(__file__).resolve().parent.parent.joinpath("tests", "data", "hif2a_nowater_min.pdb"))
         num_switches = 10

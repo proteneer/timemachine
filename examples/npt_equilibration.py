@@ -6,13 +6,12 @@ import matplotlib.pyplot as plt
 import numpy as np
 from simtk import unit
 
-from timemachine.fe.free_energy import AbsoluteFreeEnergy, construct_lambda_schedule
+from timemachine.fe.lambda_schedule import construct_lambda_schedule
 from timemachine.lib import LangevinIntegrator
+from timemachine.md import enhanced
 from timemachine.md.barostat.moves import MonteCarloBarostat
 from timemachine.md.barostat.utils import get_bond_list, get_group_indices
-from timemachine.md.builders import build_water_system
 from timemachine.md.ensembles import NPTEnsemble, PotentialEnergyModel
-from timemachine.md.minimizer import minimize_host_4d
 from timemachine.md.states import CoordsVelBox
 from timemachine.md.thermostat.moves import UnadjustedLangevinMove
 from timemachine.md.thermostat.utils import sample_velocities
@@ -33,18 +32,9 @@ temperature = 300 * unit.kelvin
 pressure = 1.013 * unit.bar
 lambdas = construct_lambda_schedule(n_lambdas)
 
-# build a pair of alchemical ligands in a water box
-mol_a, mol_b, core, ff = hif2a_ligand_pair.mol_a, hif2a_ligand_pair.mol_b, hif2a_ligand_pair.core, hif2a_ligand_pair.ff
-complex_system, complex_coords, complex_box, complex_top = build_water_system(
-    initial_waterbox_width.value_in_unit(unit.nanometer)
-)
-
-min_complex_coords = minimize_host_4d([mol_a], complex_system, complex_coords, ff, complex_box)
-afe = AbsoluteFreeEnergy(mol_a, ff)
-
-unbound_potentials, sys_params, masses, coords = afe.prepare_host_edge(
-    ff.get_ordered_params(), complex_system, min_complex_coords
-)
+# build an alchemical ligand in a water box
+mol_a, ff = hif2a_ligand_pair.mol_a, hif2a_ligand_pair.ff
+unbound_potentials, sys_params, masses, coords, complex_box = enhanced.get_solvent_phase_system(mol_a, ff)
 
 # define NPT ensemble
 potential_energy_model = PotentialEnergyModel(sys_params, unbound_potentials)
@@ -79,14 +69,13 @@ def plot_volume_trajs(volume_trajs):
     plt.close()
 
 
-def plot_density(volume_trajs):
+def plot_density(volume_trajs, n_water_mols):
     equil_time = len(volume_trajs[0]) // 2  # TODO: don't hard-code this?
     final_volumes = np.array([np.median(volume_traj[equil_time:]) for volume_traj in volume_trajs])
 
     volume = final_volumes * unit.nanometer ** 3
-    n_molecules = complex_top.getNumResidues()
     water_molecule_mass = 18.01528 * unit.amu
-    density = n_molecules * water_molecule_mass / (volume * unit.AVOGADRO_CONSTANT_NA)
+    density = n_water_mols * water_molecule_mass / (volume * unit.AVOGADRO_CONSTANT_NA)
 
     plt.scatter(lambdas, density.value_in_unit(unit.kilogram / unit.liter))
     plt.xlabel(r"$\lambda$")
@@ -101,6 +90,7 @@ if __name__ == "__main__":
     harmonic_bond_potential = unbound_potentials[0]
     bond_list = get_bond_list(harmonic_bond_potential)
     group_indices = get_group_indices(bond_list)
+    n_water_mols = len(group_indices) - 1  # 1 for the ligand
 
     # loop over lambdas, collecting NPT trajectories
     trajs = []
@@ -121,4 +111,4 @@ if __name__ == "__main__":
 
     # plot volume equilibration, final densities
     plot_volume_trajs(volume_trajs)
-    plot_density(volume_trajs)
+    plot_density(volume_trajs, n_water_mols)
