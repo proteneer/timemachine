@@ -252,7 +252,7 @@ def _wrap_simulate(args):
         temperature,
         masses,
         steps_per_batch,
-        batches_per_worker,
+        num_batches,
         burn_in_batches,
         num_workers,
         seed,
@@ -263,8 +263,9 @@ def _wrap_simulate(args):
     os.environ["XLA_FLAGS"] = "--xla_force_host_platform_device_count=" + str(num_workers)
 
     kT = temperature * BOLTZ
-
     x0 = get_romol_conf(mol)
+    batches_per_worker = int(np.ceil(num_batches / num_workers))
+
     xs_proposal = simulate(
         x0,
         U_proposal,
@@ -275,8 +276,6 @@ def _wrap_simulate(args):
         num_workers,
         seed,
     )
-
-    num_atoms = mol.GetNumAtoms()
 
     # discard burn-in batches and reshape into a single flat array
     xs_proposal = xs_proposal[:, burn_in_batches:, :, :]
@@ -293,7 +292,12 @@ def _wrap_simulate(args):
     log_weights = log_numerator - log_denominator
 
     # reshape into flat array by removing num_workers dimension
+    num_atoms = mol.GetNumAtoms()
     xs_proposal = xs_proposal.reshape(-1, num_atoms, 3)
+
+    # truncate to user requested num_batches
+    xs_proposal = xs_proposal[:num_batches, ...]
+    log_weights = log_weights[:num_batches]
 
     return xs_proposal, log_weights
 
@@ -341,9 +345,6 @@ def generate_log_weighted_samples(
     if num_workers is None:
         num_workers = os.cpu_count()
 
-    assert num_batches % num_workers == 0
-
-    batches_per_worker = num_batches // num_workers
     burn_in_batches = 1000
 
     with multiprocessing.get_context("spawn").Pool(1) as pool:
@@ -354,7 +355,7 @@ def generate_log_weighted_samples(
             temperature,
             masses,
             steps_per_batch,
-            batches_per_worker,
+            num_batches,
             burn_in_batches,
             num_workers,
             seed,
