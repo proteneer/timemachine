@@ -115,7 +115,7 @@ class NonbondedAllPairs(HasCustomOp):
         def reference_impl(coords: Array, params: Array, box: Array, lam: float) -> EnergyAndGradients:
             coords_subset = coords[subset_slice]
             num_atoms, _ = coords_subset.shape
-            rescale_mask = np.ones((num_atoms, num_atoms))
+            rescale_mask = nonbonded.convert_exclusions_to_rescale_masks([], [], num_atoms)
 
             return nonbonded.nonbonded_v3(
                 coords_subset,
