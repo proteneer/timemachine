@@ -216,7 +216,7 @@ class TestNonbondedDHFR(GradientTest):
                     test_conf,
                     test_params,
                     self.box,
-                    self.lamb,
+                    [self.lamb],
                     ref_nonbonded_fn,
                     test_nonbonded_fn,
                     rtol=rtol,
@@ -254,7 +254,7 @@ class TestNonbondedDHFR(GradientTest):
                     self.host_conf,
                     self.nonbonded_fn.params,
                     self.box,
-                    self.lamb,
+                    [self.lamb],
                     compute_du_dx,
                     compute_du_dp,
                     compute_du_dl,
@@ -304,7 +304,7 @@ class TestNonbondedWater(GradientTest):
                     host_conf,
                     test_nonbonded_fn.params,
                     test_box,
-                    lamb,
+                    [lamb],
                     ref_nonbonded_fn,
                     test_nonbonded_fn,
                     rtol=rtol,
@@ -425,7 +425,7 @@ class TestNonbonded(GradientTest):
 
             params = prepare_system_params(test_system)
 
-            self.compare_forces(test_system, params, box, lamb, ref_u, test_u, rtol, precision=precision)
+            self.compare_forces(test_system, params, box, [lamb], ref_u, test_u, rtol, precision=precision)
 
     def test_nonbonded(self):
 

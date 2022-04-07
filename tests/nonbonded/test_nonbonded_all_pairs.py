@@ -169,5 +169,5 @@ def test_nonbonded_all_pairs_correctness(
     test_potential = make_test_potential(lambda_plane_idxs, lambda_offset_idxs, beta, cutoff, atom_idxs)
 
     GradientTest().compare_forces(
-        conf, params, example_box, lamb, ref_potential, test_potential, precision=precision, rtol=rtol, atol=atol
+        conf, params, example_box, [lamb], ref_potential, test_potential, precision=precision, rtol=rtol, atol=atol
     )

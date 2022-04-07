@@ -4,7 +4,7 @@ import itertools
 import os
 import unittest
 from tempfile import TemporaryDirectory
-from typing import List, Union
+from typing import List
 
 import jax
 import numpy as np
@@ -414,7 +414,7 @@ class GradientTest(unittest.TestCase):
         x: NDArray,
         params: NDArray,
         box: NDArray,
-        lambdas: Union[List[float], float],
+        lambdas: List[float],
         ref_potential,
         test_potential,
         rtol: float,
@@ -438,9 +438,6 @@ class GradientTest(unittest.TestCase):
         x = (x.astype(np.float32)).astype(np.float64)
         params = (params.astype(np.float32)).astype(np.float64)
 
-        if isinstance(lambdas, float):
-            lambdas = [lambdas]
-
         assert x.ndim == 2
         # N = x.shape[0]
         # D = x.shape[1]
@@ -449,7 +446,6 @@ class GradientTest(unittest.TestCase):
         assert params.dtype == np.float64
 
         for lamb in lambdas:
-            print("lambda", lamb, "precision", precision, "xshape", x.shape)
             ref_u = ref_potential(x, params, box, lamb)
             grad_fn = jax.grad(ref_potential, argnums=(0, 1, 3))
             ref_du_dx, ref_du_dp, ref_du_dl = grad_fn(x, params, box, lamb)

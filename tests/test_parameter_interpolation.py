@@ -51,6 +51,8 @@ class TestInterpolatedPotential(GradientTest):
 
         test_interpolated_potential = potentials.NonbondedInterpolated(*test_potential.args)
 
+        lambda_vals = [0.0, 0.2, 1.0]
+
         for precision, rtol, atol in [(np.float64, 1e-8, 3e-11), (np.float32, 1e-4, 3e-6)]:
             # E = 0 # DEBUG!
             print("cutoff", cutoff, "precision", precision, "xshape", coords.shape)
@@ -58,7 +60,7 @@ class TestInterpolatedPotential(GradientTest):
                 coords,
                 qlj,
                 box,
-                [0.0, 0.2, 1.0],
+                lambda_vals,
                 ref_interpolated_potential,
                 test_interpolated_potential,
                 rtol=rtol,
@@ -125,6 +127,8 @@ class TestInterpolatedPotential(GradientTest):
             return ref_potential(x, qlj, box, lamb)
 
         qlj = np.concatenate([qlj_src, qlj_dst])
+
+        lambda_vals = [0.0, 0.2, 0.6, 0.7, 0.8, 1.0]
         for precision, rtol, atol in [(np.float64, 1e-8, 1e-11), (np.float32, 1e-4, 1e-6)]:
 
             print("cutoff", cutoff, "precision", precision, "xshape", coords.shape)
@@ -141,7 +145,7 @@ class TestInterpolatedPotential(GradientTest):
                 coords,
                 qlj,
                 box,
-                [0.0, 0.2, 0.6, 0.7, 0.8, 1.0],
+                lambda_vals,
                 u_reference,
                 test_interpolated_potential,
                 rtol=rtol,
