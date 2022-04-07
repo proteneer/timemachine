@@ -399,15 +399,7 @@ class TestNonbonded(GradientTest):
 
         test_u = potentials.Nonbonded(exclusion_idxs, scales, lambda_plane_idxs, lambda_offset_idxs, beta, cutoff)
 
-        charge_rescale_mask = np.ones((N, N))
-        for (i, j), exc in zip(exclusion_idxs, scales[:, 0]):
-            charge_rescale_mask[i][j] = 1 - exc
-            charge_rescale_mask[j][i] = 1 - exc
-
-        lj_rescale_mask = np.ones((N, N))
-        for (i, j), exc in zip(exclusion_idxs, scales[:, 1]):
-            lj_rescale_mask[i][j] = 1 - exc
-            lj_rescale_mask[j][i] = 1 - exc
+        charge_rescale_mask, lj_rescale_mask = nonbonded.convert_exclusions_to_rescale_masks(exclusion_idxs, scales, N)
 
         ref_u = functools.partial(
             nonbonded.nonbonded_v3,
