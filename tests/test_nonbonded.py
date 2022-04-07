@@ -423,13 +423,13 @@ class TestNonbonded(GradientTest):
 
         np.random.seed(4321)
 
-        _, coords, box, _ = builders.build_water_system(3.0)
-        coords = coords / coords.unit
+        _, all_coords, box, _ = builders.build_water_system(3.0)
+        all_coords = all_coords / all_coords.unit
         for size in [33, 231, 1050]:
 
-            subset = coords[:size]
+            coords = all_coords[:size]
 
-            N = subset.shape[0]
+            N = coords.shape[0]
 
             lambda_plane_idxs = np.random.randint(low=-2, high=2, size=N, dtype=np.int32)
             lambda_offset_idxs = np.random.randint(low=-2, high=2, size=N, dtype=np.int32)
@@ -437,12 +437,12 @@ class TestNonbonded(GradientTest):
             for cutoff in [1.0]:
                 # E = 0 # DEBUG!
                 charge_params, ref_potential, test_potential = prepare_water_system(
-                    subset, lambda_plane_idxs, lambda_offset_idxs, p_scale=5.0, cutoff=cutoff
+                    coords, lambda_plane_idxs, lambda_offset_idxs, p_scale=5.0, cutoff=cutoff
                 )
                 for precision, rtol, atol in [(np.float64, 1e-8, 1e-8), (np.float32, 1e-4, 5e-4)]:
 
                     self.compare_forces(
-                        subset,
+                        coords,
                         charge_params,
                         box,
                         [0.0, 0.1, 0.2],
