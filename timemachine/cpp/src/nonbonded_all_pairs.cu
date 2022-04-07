@@ -121,7 +121,7 @@ NonbondedAllPairs<RealType, Interpolated>::NonbondedAllPairs(
     for (int i = 0; i < 256; i++) {
         for (int j = 0; j < 256; j++) {
             for (int k = 0; k < 256; k++) {
-                unsigned int bin = static_cast<unsigned int>(morton3D(i / 255.0, j / 255.0, k / 255.0));
+                unsigned int bin = static_cast<unsigned int>(morton_encode(i / 255.0, j / 255.0, k / 255.0));
                 bin_to_idx[i * 256 * 256 + j * 256 + k] = bin;
             }
         }
