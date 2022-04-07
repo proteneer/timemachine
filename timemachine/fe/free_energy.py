@@ -171,7 +171,7 @@ class AbsoluteFreeEnergy(BaseFreeEnergy):
         Parameters
         ----------
         ff_params: tuple of np.array
-            Exactly equal to bond_params, angle_params, proper_params, improper_params, charge_params, lj_params
+            Expected parameter ordering is bond_params, angle_params, proper_params, improper_params, charge_params, lj_params
 
         host_system: openmm.System
             openmm System object to be deserialized.
@@ -198,7 +198,7 @@ class AbsoluteFreeEnergy(BaseFreeEnergy):
         Parameters
         ----------
         ff_params: tuple of np.array
-            Exactly equal to bond_params, angle_params, proper_params, improper_params, charge_params, lj_params
+            Expected parameter ordering is bond_params, angle_params, proper_params, improper_params, charge_params, lj_params
 
         Returns
         -------
@@ -273,7 +273,7 @@ class RelativeFreeEnergy(BaseFreeEnergy):
         Parameters
         ----------
         ff_params: tuple of np.array
-            Exactly equal to bond_params, angle_params, proper_params, improper_params, charge_params, lj_params
+            Expected parameter ordering is bond_params, angle_params, proper_params, improper_params, charge_params, lj_params
         host_system: Optional[openmm.System]
             openmm System object to be deserialized.
 
@@ -301,7 +301,7 @@ class RelativeFreeEnergy(BaseFreeEnergy):
         Parameters
         ----------
         ff_params: tuple of np.array
-            Exactly equal to bond_params, angle_params, proper_params, improper_params, charge_params, lj_params
+            Expected parameter ordering is bond_params, angle_params, proper_params, improper_params, charge_params, lj_params
 
         Returns
         -------
