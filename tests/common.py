@@ -159,6 +159,10 @@ def prepare_system_params(x: NDArray, sigma_scale: float = 5.0) -> NDArray:
     x: Numpy array of Coordinates
 
     sigma_scale: Factor to scale down sigma values by
+
+    Returns
+    -------
+    (N, 3) np.ndarray containing charges, sigmas and epsilons respectively.
     """
     assert x.ndim == 2
     N = x.shape[0]
