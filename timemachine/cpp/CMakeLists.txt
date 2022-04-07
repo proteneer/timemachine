@@ -16,6 +16,8 @@ string(APPEND CMAKE_CUDA_FLAGS
   " -Werror all-warnings"
   " -Wall"
   " -Wno-sign-compare"
+  " -Wextra"
+  " -Wno-unused-parameter"
 )
 message(${CMAKE_CUDA_FLAGS})
 
