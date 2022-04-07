@@ -120,14 +120,6 @@ When we have experimental measurements, the loss function and its derivative is 
 
 <img width="293" alt="Screen Shot 2020-09-29 at 10 25 41 AM" src="https://user-images.githubusercontent.com/2280724/94571590-28c29200-023e-11eb-8948-c8acb44eaa1a.png">
 
-## Relative Binding Free Energy (RBFE) Training
-
-An example source code of how one can train the RBFE via TI is available at:
-
-- [examples/rbfe_single.py](https://github.com/proteneer/timemachine/blob/master/examples/rbfe_single.py)
-
-To update the forcefield parameters, the timemachine computes derivatives of the potential with respect to redundant system parameters (C++/CUDA), which are backprop'd into unique forcefield parameters using vector jacobian products (python/jax). The parameters are fitted using gradient descent with gradient clipping whose bounds are set to physically sensible and numerically stable values for each parameter type.
-
 ## Forcefield Gotchas
 
 Most of the training is using the correctable charge corrections [ccc forcefield](https://github.com/proteneer/timemachine/blob/1a721dd3f05d6011cf028b0588e066682d38ba59/ff/params/smirnoff_1_1_0_ccc.py), which is SMIRNOFF 1.1.0 augmented with BCCs ported via the [recharge](https://github.com/openforcefield/openff-recharge) project. There are some additional modifications:

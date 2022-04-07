@@ -23,15 +23,14 @@ from rdkit import Chem
 
 from timemachine.fe import model_rabfe
 from timemachine.fe.frames import all_frames, endpoint_frames_only, no_frames
-from timemachine.fe.free_energy_rabfe import (
-    RABFEResult,
+from timemachine.fe.free_energy import RABFEResult, get_romol_conf
+from timemachine.fe.lambda_schedule import (
     construct_absolute_lambda_schedule_complex,
     construct_conversion_lambda_schedule,
     construct_pre_optimized_absolute_lambda_schedule_solvent,
-    get_romol_conf,
-    setup_relative_restraints_by_distance,
 )
 from timemachine.fe.model_utils import verify_rabfe_pair
+from timemachine.fe.restraints import setup_relative_restraints_by_distance
 from timemachine.fe.utils import convert_uM_to_kJ_per_mole
 from timemachine.ff import Forcefield
 from timemachine.md import builders, minimizer

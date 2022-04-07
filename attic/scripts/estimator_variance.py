@@ -25,7 +25,7 @@ import numpy as np
 from rdkit import Chem
 
 from timemachine.fe import free_energy, topology
-from timemachine.fe.free_energy import construct_lambda_schedule
+from timemachine.fe.lambda_schedule import construct_lambda_schedule
 from timemachine.ff import Forcefield
 from timemachine.md import builders, minimizer
 
@@ -74,7 +74,7 @@ def estimate_dG(
     ]:
 
         print("Minimizing the host structure to remove clashes.")
-        minimized_host_coords = minimizer.minimize_host_4d(mol_a, host_system, host_coords, ff, host_box)
+        minimized_host_coords = minimizer.minimize_host_4d([mol_a], host_system, host_coords, ff, host_box)
 
         single_topology = topology.SingleTopology(mol_a, mol_b, core, ff)
         rfe = free_energy.RelativeFreeEnergy(single_topology)
