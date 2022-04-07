@@ -13,7 +13,6 @@
 #include "fixed_point.hpp"
 #include "gpu_utils.cuh"
 #include "nonbonded_all_pairs.hpp"
-#include "vendored/hilbert.h"
 
 #include "k_nonbonded.cuh"
 
@@ -122,13 +121,7 @@ NonbondedAllPairs<RealType, Interpolated>::NonbondedAllPairs(
     for (int i = 0; i < 256; i++) {
         for (int j = 0; j < 256; j++) {
             for (int k = 0; k < 256; k++) {
-
-                bitmask_t hilbert_coords[3];
-                hilbert_coords[0] = i;
-                hilbert_coords[1] = j;
-                hilbert_coords[2] = k;
-
-                unsigned int bin = static_cast<unsigned int>(hilbert_c2i(3, 8, hilbert_coords));
+                unsigned int bin = static_cast<unsigned int>(morton3D(i / 255.0, j / 255.0, k / 255.0));
                 bin_to_idx[i * 256 * 256 + j * 256 + k] = bin;
             }
         }

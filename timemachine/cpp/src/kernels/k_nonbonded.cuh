@@ -26,6 +26,9 @@ void __global__ k_coords_to_kv_gather(
     unsigned int *keys,
     unsigned int *vals);
 
+unsigned int expand_bits(unsigned int v);
+template <typename RealType> unsigned int morton_encode(RealType x, RealType y, RealType z);
+
 template <typename RealType>
 void __global__ k_check_rebuild_box(const int N, const double *new_box, const double *old_box, int *rebuild) {
 

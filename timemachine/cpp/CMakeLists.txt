@@ -56,7 +56,6 @@ pybind11_add_module(${LIBRARY_NAME} SHARED NO_EXTRAS
   src/bound_potential.cu
   src/centroid_restraint.cu
   src/gpu_utils.cu
-  src/vendored/hilbert.cpp
   src/nonbonded_all_pairs.cu
   src/nonbonded_pair_list.cu
   src/nonbonded_interaction_group.cu

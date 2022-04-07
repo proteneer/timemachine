@@ -89,3 +89,29 @@ void __global__ k_arange(int N, unsigned int *arr) {
     }
     arr[atom_idx] = atom_idx;
 }
+
+// From https://developer.nvidia.com/blog/thinking-parallel-part-iii-tree-construction-gpu/
+// Expands a 10-bit integer into 30 bits
+// by inserting 2 zeros after each bit.
+unsigned int expand_bits(unsigned int v) {
+    // TODO: rewrite bit magic in more literate style
+    v = (v * 0x00010001u) & 0xFF0000FFu;
+    v = (v * 0x00000101u) & 0x0F00F00Fu;
+    v = (v * 0x00000011u) & 0xC30C30C3u;
+    v = (v * 0x00000005u) & 0x49249249u;
+    return v;
+}
+
+// From https://developer.nvidia.com/blog/thinking-parallel-part-iii-tree-construction-gpu/
+// Calculates a 30-bit Morton code for the
+// given 3D point located within the unit cube [0,1]^3.
+template <typename RealType> unsigned int morton_encode(RealType x, RealType y, RealType z) {
+    // TODO: rewrite without 3x repetition
+    float x = min(max(x * 1024.0f, 0.0f), 1023.0f);
+    float y = min(max(y * 1024.0f, 0.0f), 1023.0f);
+    float z = min(max(z * 1024.0f, 0.0f), 1023.0f);
+    unsigned int xx = expand_bits((unsigned int)x);
+    unsigned int yy = expand_bits((unsigned int)y);
+    unsigned int zz = expand_bits((unsigned int)z);
+    return xx * 4 + yy * 2 + zz;
+}
