@@ -53,13 +53,7 @@ public:
         cudaStream_t stream);
 
     void compute_block_bounds_host(
-        const int NC,
-        const int D,
-        const int block_size,
-        const double *h_coords,
-        const double *h_box,
-        double *h_bb_ctrs,
-        double *h_bb_exts);
+        const int NC, const int D, const double *h_coords, const double *h_box, double *h_bb_ctrs, double *h_bb_exts);
 
     unsigned int *get_ixn_atoms() { return d_ixn_atoms_; }
 
