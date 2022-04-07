@@ -7,7 +7,6 @@ import numpy as np
 from simtk import unit
 
 from timemachine.fe.lambda_schedule import construct_lambda_schedule
-from timemachine.fe.utils import get_romol_conf
 from timemachine.lib import LangevinIntegrator
 from timemachine.md import enhanced
 from timemachine.md.barostat.moves import MonteCarloBarostat
@@ -36,8 +35,6 @@ lambdas = construct_lambda_schedule(n_lambdas)
 # build an alchemical ligand in a water box
 mol_a, ff = hif2a_ligand_pair.mol_a, hif2a_ligand_pair.ff
 unbound_potentials, sys_params, masses, coords, complex_box = enhanced.get_solvent_phase_system(mol_a, ff)
-n_lig_atoms = get_romol_conf(mol_a).shape[0]
-n_water_mols = (coords.shape[0] - n_lig_atoms) // 3
 
 # define NPT ensemble
 potential_energy_model = PotentialEnergyModel(sys_params, unbound_potentials)
@@ -72,14 +69,13 @@ def plot_volume_trajs(volume_trajs):
     plt.close()
 
 
-def plot_density(volume_trajs):
+def plot_density(volume_trajs, n_water_mols):
     equil_time = len(volume_trajs[0]) // 2  # TODO: don't hard-code this?
     final_volumes = np.array([np.median(volume_traj[equil_time:]) for volume_traj in volume_trajs])
 
     volume = final_volumes * unit.nanometer ** 3
-    n_molecules = n_water_mols
     water_molecule_mass = 18.01528 * unit.amu
-    density = n_molecules * water_molecule_mass / (volume * unit.AVOGADRO_CONSTANT_NA)
+    density = n_water_mols * water_molecule_mass / (volume * unit.AVOGADRO_CONSTANT_NA)
 
     plt.scatter(lambdas, density.value_in_unit(unit.kilogram / unit.liter))
     plt.xlabel(r"$\lambda$")
@@ -94,6 +90,7 @@ if __name__ == "__main__":
     harmonic_bond_potential = unbound_potentials[0]
     bond_list = get_bond_list(harmonic_bond_potential)
     group_indices = get_group_indices(bond_list)
+    n_water_mols = len(group_indices) - 1  # 1 for the ligand
 
     # loop over lambdas, collecting NPT trajectories
     trajs = []
@@ -114,4 +111,4 @@ if __name__ == "__main__":
 
     # plot volume equilibration, final densities
     plot_volume_trajs(volume_trajs)
-    plot_density(volume_trajs)
+    plot_density(volume_trajs, n_water_mols)

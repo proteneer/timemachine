@@ -10,6 +10,8 @@ from timemachine.fe.lambda_schedule import (
 
 def test_validate_lambda_schedule():
     """check that assertions fail when they should"""
+
+    # Want to test 2 sizes, the latter is the one currently used in RABFE
     for K in [50, 64]:
         good_lambda_schedule = np.linspace(0, 1, K)
         reversed_schedule = good_lambda_schedule[::-1]

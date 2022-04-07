@@ -3,7 +3,6 @@ import pytest
 from simtk import unit
 
 from timemachine.constants import BOLTZ, DISTANCE_UNIT, ENERGY_UNIT
-from timemachine.fe.utils import get_romol_conf
 from timemachine.ff import Forcefield
 from timemachine.lib import LangevinIntegrator, custom_ops
 from timemachine.md.barostat.moves import CentroidRescaler
@@ -291,9 +290,6 @@ def test_molecular_ideal_gas():
     relative_tolerance = 1e-2
     initial_relative_box_perturbation = 2 * relative_tolerance
 
-    n_lig_atoms = get_romol_conf(mol_a).shape[0]
-    n_water_mols = (coords.shape[0] - n_lig_atoms) // 3
-
     bound_potentials = []
     for params, unbound_pot in zip(sys_params, unbound_potentials):
         bp = unbound_pot.bind(np.asarray(params))
@@ -307,6 +303,7 @@ def test_molecular_ideal_gas():
     # expected volume
     md_pressure_unit = ENERGY_UNIT / DISTANCE_UNIT ** 3
     pressure_in_md = (pressure * unit.AVOGADRO_CONSTANT_NA).value_in_unit(md_pressure_unit)
+    n_water_mols = len(group_indices) - 1  # 1 for the ligand
     expected_volume_in_md = (n_water_mols + 1) * BOLTZ * temperatures.value_in_unit(unit.kelvin) / pressure_in_md
 
     for i, temperature in enumerate(temperatures):

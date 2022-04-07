@@ -7,7 +7,6 @@ from functools import partial
 import numpy as np
 from simtk import unit
 
-from timemachine.fe.utils import get_romol_conf
 from timemachine.lib import LangevinIntegrator
 from timemachine.md.barostat.moves import MonteCarloBarostat
 from timemachine.md.barostat.utils import get_bond_list, get_group_indices
@@ -37,8 +36,6 @@ if __name__ == "__main__":
     # effectively discard ligands by running in AbsoluteFreeEnergy mode at lambda = 1.0
     mol_a, ff = hif2a_ligand_pair.mol_a, hif2a_ligand_pair.ff
     unbound_potentials, sys_params, masses, coords, complex_box = get_solvent_phase_system(mol_a, ff, margin=0.0)
-    n_lig_atoms = get_romol_conf(mol_a).shape[0]
-    n_water_mols = (coords.shape[0] - n_lig_atoms) // 3
 
     # define NPT ensemble
     potential_energy_model = PotentialEnergyModel(sys_params, unbound_potentials)
@@ -88,6 +85,7 @@ if __name__ == "__main__":
 
     volume = final_volumes * unit.nanometer ** 3
     water_molecule_mass = 18.01528 * unit.amu
+    n_water_mols = len(group_indices) - 1  # 1 for the ligand
     density = n_water_mols * water_molecule_mass / (volume * unit.AVOGADRO_CONSTANT_NA)
 
     density_in_kg_l = density.value_in_unit(unit.kilogram / unit.liter)
