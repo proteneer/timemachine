@@ -12,7 +12,7 @@ from rdkit import Chem
 from timemachine.fe import model_rabfe
 from timemachine.fe.free_energy import get_romol_conf
 from timemachine.fe.lambda_schedule import (
-    construct_absolute_lambda_schedule_solvent,
+    construct_pre_optimized_absolute_lambda_schedule_solvent,
     construct_relative_lambda_schedule,
 )
 from timemachine.fe.restraints import setup_relative_restraints_by_distance
@@ -68,7 +68,7 @@ if __name__ == "__main__":
 
     dataset = Dataset(mols)
 
-    absolute_solvent_schedule = construct_absolute_lambda_schedule_solvent(cmd_args.num_windows)
+    absolute_solvent_schedule = construct_pre_optimized_absolute_lambda_schedule_solvent(cmd_args.num_windows)
     relative_solvent_schedule = construct_relative_lambda_schedule(cmd_args.num_windows - 1)
     solvent_system, solvent_coords, solvent_box, solvent_topology = builders.build_water_system(4.0)
 
