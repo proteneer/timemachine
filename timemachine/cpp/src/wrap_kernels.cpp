@@ -56,7 +56,7 @@ template <typename RealType> void declare_neighborlist(py::module &m, const char
                 py::array_t<double, py::array::c_style> py_bb_exts({B, D});
 
                 nblist.compute_block_bounds_host(
-                    N, D, block_size, coords.data(), box.data(), py_bb_ctrs.mutable_data(), py_bb_exts.mutable_data());
+                    N, D, coords.data(), box.data(), py_bb_ctrs.mutable_data(), py_bb_exts.mutable_data());
 
                 return py::make_tuple(py_bb_ctrs, py_bb_exts);
             })
