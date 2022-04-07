@@ -5,7 +5,6 @@ import os
 import unittest
 from tempfile import TemporaryDirectory
 
-import jax
 import numpy as np
 from hilbertcurve.hilbertcurve import HilbertCurve
 

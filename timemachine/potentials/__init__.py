@@ -1,11 +1,10 @@
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Callable, NamedTuple, Optional, Protocol, Sequence, Tuple
+from typing import Any, Callable, NamedTuple, Optional, Protocol, Sequence
 
 import importlib_resources as resources
 import jax
-import numpy as np
 
 from timemachine.lib import custom_ops
 from timemachine.potentials import nonbonded
