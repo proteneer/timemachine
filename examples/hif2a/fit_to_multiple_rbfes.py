@@ -139,13 +139,10 @@ class RBFETransformIndex:
         return self.get_mol_idx(ref.mol_a), self.get_mol_idx(ref.mol_b)
 
     def get_mol_idx(self, mol):
-        hashed = self._mol_hash(mol)
+        hashed = MolToSmiles(mol)
         if hashed not in self._indices:
             self._indices[hashed] = len(self._indices)
         return self._indices[hashed]
-
-    def _mol_hash(self, mol):
-        return MolToSmiles(mol)
 
 
 def loss_fxn(ff_params, batch: List[Tuple[RelativeFreeEnergy, RBFEModel]]):
