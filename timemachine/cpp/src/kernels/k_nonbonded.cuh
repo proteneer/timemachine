@@ -5,6 +5,8 @@
 #include "nonbonded_common.cuh"
 #include "surreal.cuh"
 
+#define GRID_DIM 128 // Divide [0,1]^3 box into GRID_DIM x GRID_DIM x GRID_DIM voxels for hilbert sort
+
 void __global__ k_arange(int N, unsigned int *arr);
 
 // generate kv values from coordinates to be radix sorted
