@@ -9,7 +9,7 @@ import jax
 import numpy as np
 
 from timemachine.fe import model
-from timemachine.fe.free_energy import construct_lambda_schedule
+from timemachine.fe.lambda_schedule import construct_lambda_schedule
 from timemachine.fe.utils import convert_uIC50_to_kJ_per_mole
 from timemachine.ff.handlers.nonbonded import AM1CCCHandler, LennardJonesHandler
 from timemachine.ff.handlers.serialize import serialize_handlers
@@ -46,7 +46,7 @@ if __name__ == "__main__":
     client = CUDAPoolClient(max_workers=cmd_args.num_gpus)
 
     # fetch mol_a, mol_b, core, forcefield from testsystem
-    mol_a, mol_b, core = hif2a_ligand_pair.mol_a, hif2a_ligand_pair.mol_b, hif2a_ligand_pair.core
+    mol_a, mol_b, core = hif2a_ligand_pair.mol_a, hif2a_ligand_pair.mol_b, hif2a_ligand_pair.top.core
     forcefield = hif2a_ligand_pair.ff
 
     # compute ddG label from mol_a, mol_b

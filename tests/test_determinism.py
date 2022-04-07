@@ -22,7 +22,7 @@ def test_deterministic_energies():
     temperature = 300
     pressure = 1.0
     barostat_interval = 25
-    mol_a, mol_b, _ = testsystem.mol_a, testsystem.mol_b, testsystem.core
+    mol_a, mol_b = testsystem.mol_a, testsystem.mol_b
 
     ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
 

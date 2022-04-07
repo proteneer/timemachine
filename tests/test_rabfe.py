@@ -5,19 +5,15 @@ import numpy as np
 from common import temporary_working_dir
 
 from timemachine.fe.frames import all_frames
-from timemachine.fe.free_energy import construct_lambda_schedule
-from timemachine.fe.free_energy_rabfe import (
-    AbsoluteFreeEnergy,
-    RelativeFreeEnergy,
-    get_romol_conf,
-    setup_relative_restraints_by_distance,
-)
+from timemachine.fe.free_energy import AbsoluteFreeEnergy, RelativeFreeEnergy, get_romol_conf
+from timemachine.fe.lambda_schedule import construct_lambda_schedule
 from timemachine.fe.model_rabfe import (
     AbsoluteConversionModel,
     AbsoluteDecouplingModel,
     RelativeBindingModel,
     RelativeConversionModel,
 )
+from timemachine.fe.restraints import setup_relative_restraints_by_distance
 from timemachine.ff import Forcefield
 from timemachine.lib.potentials import Nonbonded, NonbondedInterpolated
 from timemachine.md import builders, minimizer

@@ -6,7 +6,7 @@ from rdkit import Chem
 from simtk import openmm
 
 from timemachine import constants
-from timemachine.fe import estimator_abfe, free_energy_rabfe, model_utils, topology
+from timemachine.fe import estimator_abfe, free_energy, model_utils, topology
 from timemachine.fe.frames import endpoint_frames_only
 from timemachine.ff import Forcefield
 from timemachine.lib import LangevinIntegrator, MonteCarloBarostat, potentials
@@ -53,7 +53,7 @@ class AbsoluteModel(ABC):
     ) -> Tuple[List[Any], estimator_abfe.FreeEnergyModel, List[Any]]:
         top = self.setup_topology(mol)
 
-        afe = free_energy_rabfe.AbsoluteFreeEnergy(mol, top)
+        afe = free_energy.AbsoluteFreeEnergy(mol, top)
 
         unbound_potentials, sys_params, masses = afe.prepare_host_edge(ff_params, self.host_system)
 
@@ -266,7 +266,7 @@ class RelativeModel(ABC):
         core_idxs[:, 1] -= mol_a.GetNumAtoms()
 
         dual_topology = self.setup_topology(mol_a, mol_b)
-        rfe = free_energy_rabfe.RelativeFreeEnergy(dual_topology)
+        rfe = free_energy.RelativeFreeEnergy(dual_topology)
 
         unbound_potentials, sys_params, masses = rfe.prepare_host_edge(ff_params, self.host_system)
 
@@ -638,7 +638,7 @@ class RelativeConversionModel:
         core_idxs[:, 1] -= mol_a.GetNumAtoms()
 
         dual_topology = self.setup_topology(mol_a, mol_b)
-        rfe = free_energy_rabfe.RelativeFreeEnergy(dual_topology)
+        rfe = free_energy.RelativeFreeEnergy(dual_topology)
 
         unbound_potentials, sys_params, masses = rfe.prepare_host_edge(ff_params, self.host_system)
 

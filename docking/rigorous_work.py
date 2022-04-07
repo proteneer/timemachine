@@ -11,7 +11,7 @@ import numpy as np
 from rdkit import Chem
 
 from docking import report
-from timemachine.fe import free_energy, pdb_writer
+from timemachine.fe import free_energy, pdb_writer, topology
 from timemachine.ff import Forcefield
 from timemachine.lib import LangevinIntegrator, custom_ops
 from timemachine.md import builders, minimizer
@@ -160,10 +160,9 @@ def calculate_rigorous_work(
         ):
             minimized_coords = minimizer.minimize_host_4d([guest_mol], system, coords, ff, box)
 
-            afe = free_energy.AbsoluteFreeEnergy(guest_mol, ff)
-            ups, sys_params, combined_masses, combined_coords = afe.prepare_host_edge(
-                ff.get_ordered_params(), system, minimized_coords
-            )
+            guest_topology = topology.BaseTopology(guest_mol, ff)
+            afe = free_energy.AbsoluteFreeEnergy(guest_mol, guest_topology)
+            ups, sys_params, combined_masses = afe.prepare_host_edge(ff.get_ordered_params(), system)
 
             combined_bps = []
             for up, sp in zip(ups, sys_params):

@@ -8,7 +8,8 @@ import numpy as np
 from rdkit import Chem
 from scipy.optimize import check_grad, minimize
 
-from timemachine.fe import estimator, free_energy, topology
+from timemachine.fe import estimator, free_energy, topology, utils
+from timemachine.fe.free_energy import RABFEResult
 from timemachine.fe.functional import construct_differentiable_interface, construct_differentiable_interface_fast
 from timemachine.ff import Forcefield
 from timemachine.lib import LangevinIntegrator, MonteCarloBarostat
@@ -43,7 +44,8 @@ def test_absolute_free_energy():
     equil_steps = 1000
     prod_steps = 1000
 
-    afe = free_energy.AbsoluteFreeEnergy(mol, ff)
+    bt = topology.BaseTopology(mol, ff)
+    afe = free_energy.AbsoluteFreeEnergy(mol, bt)
 
     def absolute_model(ff_params):
 
@@ -57,8 +59,8 @@ def test_absolute_free_energy():
             # minimize the host to avoid clashes
             host_coords = minimizer.minimize_host_4d([mol], host_system, host_coords, ff, host_box)
 
-            unbound_potentials, sys_params, masses, coords = afe.prepare_host_edge(ff_params, host_system, host_coords)
-
+            unbound_potentials, sys_params, masses = afe.prepare_host_edge(ff_params, host_system)
+            coords = afe.prepare_combined_coords(host_coords)
             harmonic_bond_potential = unbound_potentials[0]
             group_idxs = get_group_indices(get_bond_list(harmonic_bond_potential))
 
@@ -163,7 +165,8 @@ def test_relative_free_energy():
 
     def vacuum_model(ff_params):
 
-        unbound_potentials, sys_params, masses, coords = rfe.prepare_vacuum_edge(ff_params)
+        unbound_potentials, sys_params, masses = rfe.prepare_vacuum_edge(ff_params)
+        coords = rfe.prepare_combined_coords()
 
         x0 = coords
         v0 = np.zeros_like(coords)
@@ -192,7 +195,6 @@ def test_relative_free_energy():
     assert np.abs(dG) < 1000.0
 
     def binding_model(ff_params):
-
         dGs = []
 
         for host_system, host_coords, host_box in [
@@ -203,7 +205,8 @@ def test_relative_free_energy():
             # minimize the host to avoid clashes
             host_coords = minimizer.minimize_host_4d([mol_a], host_system, host_coords, ff, host_box)
 
-            unbound_potentials, sys_params, masses, coords = rfe.prepare_host_edge(ff_params, host_system, host_coords)
+            unbound_potentials, sys_params, masses = rfe.prepare_host_edge(ff_params, host_system)
+            coords = rfe.prepare_combined_coords(host_coords)
 
             x0 = coords
             v0 = np.zeros_like(coords)
@@ -318,8 +321,9 @@ def test_functional():
     * grad(nonlinear_function_in_terms_of_U) agrees with finite-difference
     """
 
-    ff_params = hif2a_ligand_pair.ff.get_ordered_params()
-    unbound_potentials, sys_params, _, coords = hif2a_ligand_pair.prepare_vacuum_edge(ff_params)
+    rfe = hif2a_ligand_pair
+    unbound_potentials, sys_params, _ = rfe.prepare_vacuum_edge(rfe.ff.get_ordered_params())
+    coords = rfe.prepare_combined_coords()
     box = np.eye(3) * 100
     lam = 0.5
 
@@ -360,8 +364,9 @@ def test_construct_differentiable_interface_fast():
     C++ code path produces equivalent results to doing the
     summation in Python"""
 
-    ff_params = hif2a_ligand_pair.ff.get_ordered_params()
-    unbound_potentials, sys_params, _, coords = hif2a_ligand_pair.prepare_vacuum_edge(ff_params)
+    rfe = hif2a_ligand_pair
+    unbound_potentials, sys_params, _ = rfe.prepare_vacuum_edge(rfe.ff.get_ordered_params())
+    coords = rfe.prepare_combined_coords()
     box = np.eye(3) * 100
     lam = 0.5
 
@@ -382,3 +387,40 @@ def test_construct_differentiable_interface_fast():
             np.testing.assert_array_equal(dU_dp, dU_dp_ref)
 
         np.testing.assert_array_equal(grad_U[2], grad_U_ref[2])
+
+
+def test_rabfe_result_to_from_mol():
+    """assert equality after round-trip to/from Mol SDF format"""
+    mol = Chem.MolFromSmiles("CCCONNN")
+
+    result = RABFEResult(
+        "my mol",
+        1.0,
+        float("nan"),
+        2.0,
+        2.1,
+        3.0,
+        3.1,
+        4.0,
+        4.1,
+    )
+
+    result.apply_to_mol(mol)
+
+    reconstructed = RABFEResult.from_mol(mol)
+    assert result == reconstructed
+
+
+def test_absolute_vacuum():
+    with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
+        mol = next(Chem.SDMolSupplier(str(path_to_ligand), removeHs=False))
+
+    ff = Forcefield.load_from_file("smirnoff_1_1_0_ccc.py")
+    ff_params = ff.get_ordered_params()
+
+    bt = topology.BaseTopology(mol, ff)
+    afe = free_energy.AbsoluteFreeEnergy(mol, bt)
+
+    unbound_potentials, sys_params, masses = afe.prepare_vacuum_edge(ff_params)
+    assert masses == utils.get_mol_masses(mol)
+    np.testing.assert_array_almost_equal(afe.prepare_combined_coords(), utils.get_romol_conf(mol))

@@ -10,12 +10,12 @@ import numpy as np
 from rdkit import Chem
 
 from timemachine.fe import model_rabfe
-from timemachine.fe.free_energy_rabfe import (
+from timemachine.fe.free_energy import get_romol_conf
+from timemachine.fe.lambda_schedule import (
     construct_pre_optimized_absolute_lambda_schedule_solvent,
     construct_relative_lambda_schedule,
-    get_romol_conf,
-    setup_relative_restraints_by_distance,
 )
+from timemachine.fe.restraints import setup_relative_restraints_by_distance
 from timemachine.ff import Forcefield
 from timemachine.md import builders, minimizer
 from timemachine.parallel.client import CUDAPoolClient, GRPCClient
