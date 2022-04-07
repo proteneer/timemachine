@@ -327,7 +327,7 @@ if __name__ == "__main__":
         frame_filter=frame_filter,
     )
 
-    binding_model_solvent_decouple = model_rabfe.AbsoluteStandardHydrationModel(
+    binding_model_solvent_decouple = model_rabfe.AbsoluteDecouplingModel(
         client,
         forcefield,
         solvent_system,
