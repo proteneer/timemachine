@@ -428,7 +428,7 @@ class GradientTest(unittest.TestCase):
 
         Note
         ----
-        Preferrable to pass a list of lambdas to this function than run this function
+        Preferable to pass a list of lambdas to this function than run this function
         repeatedly, as this function constructs an unbound impl for the test_potential
         which can be expensive relative to the time it takes to compute the forces/energies/etc.
 
