@@ -421,18 +421,32 @@ def jax_sample_from_log_weights(weighted_samples, log_weights, size, key):
     return weighted_samples[idxs]
 
 
-def get_solvent_phase_system(mol, ff):
-    masses = np.array([a.GetMass() for a in mol.GetAtoms()])
-    water_system, water_coords, water_box, water_topology = builders.build_water_system(3.0)
-    water_box = water_box + np.eye(3) * 0.5  # add a small margin around the box for stability
-    num_water_atoms = len(water_coords)
-    afe = free_energy.AbsoluteFreeEnergy(mol, ff)
-    ff_params = ff.get_ordered_params()
-    ubps, params, masses, coords = afe.prepare_host_edge(ff_params, water_system, water_coords)
+def get_solvent_phase_system(mol, ff, margin=0.5):
+    """
+    Given a mol and forcefield return a solvated system where the
+    solvent has been minimized.
 
-    host_coords = coords[:num_water_atoms]
-    new_host_coords = minimizer.minimize_host_4d([mol], water_system, host_coords, ff, water_box)
-    coords[:num_water_atoms] = new_host_coords
+    Parameters
+    ----------
+    mol: Chem.Mol
+
+    ff: Forcefield
+
+    margin: Optional, float
+        Box margin in nm, default is 0.5 nm.
+    """
+    masses = np.array([a.GetMass() for a in mol.GetAtoms()])
+    water_system, water_coords, water_box, _ = builders.build_water_system(3.0)
+    water_box = water_box + np.eye(3) * margin  # add a small margin around the box for stability
+    ligand_coords = get_romol_conf(mol)
+    bt = topology.BaseTopology(mol, ff)
+
+    afe = free_energy.AbsoluteFreeEnergy(mol, bt)
+    ff_params = ff.get_ordered_params()
+    ubps, params, masses = afe.prepare_host_edge(ff_params, water_system)
+
+    new_water_coords = minimizer.minimize_host_4d([mol], water_system, water_coords, ff, water_box)
+    coords = np.concatenate([new_water_coords, ligand_coords])
 
     return ubps, params, masses, coords, water_box
 

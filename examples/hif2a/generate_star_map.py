@@ -46,7 +46,7 @@ def _compute_label(mol_a, mol_b, prop_name: str):
 
 
 def rbfe_transformation_estimate(rfe: RelativeFreeEnergy):
-    return transformation_size(rfe.mol_a.GetNumAtoms(), rfe.mol_b.GetNumAtoms(), len(rfe.core))
+    return transformation_size(rfe.mol_a.GetNumAtoms(), rfe.mol_b.GetNumAtoms(), len(rfe.top.core))
 
 
 def get_core_by_permissive_mcs(mol_a, mol_b):

@@ -113,9 +113,9 @@ class RBFEModel:
                 topo = topology.DualTopologyMinimization(mol_a, mol_b, self.ff)
                 rfe = free_energy.RelativeFreeEnergy(topo)
                 min_coords = minimizer.minimize_host_4d([mol_a, mol_b], host_system, host_coords, self.ff, host_box)
-                unbound_potentials, sys_params, masses, coords = rfe.prepare_host_edge(
-                    ordered_params, host_system, min_coords
-                )
+                unbound_potentials, sys_params, masses = rfe.prepare_host_edge(ordered_params, host_system)
+                coords = rfe.prepare_combined_coords(min_coords)
+
                 # num_host_coords = len(host_coords)
                 # masses[num_host_coords:] *= 1000000 # Lets see if masses are the difference
                 harmonic_bond_potential = unbound_potentials[0]
@@ -188,7 +188,7 @@ class RBFEModel:
                 x0 = cached_state.coords
                 host_box = cached_state.box
                 num_host_coords = len(host_coords)
-                unbound_potentials, sys_params, masses, _ = rfe.prepare_host_edge(ff_params, host_system, host_coords)
+                unbound_potentials, sys_params, masses = rfe.prepare_host_edge(ff_params, host_system)
                 mol_a_size = mol_a.GetNumAtoms()
                 # Use Dual Topology to pre equilibrate, so have to get the mean of the two sets of mol,
                 # normally done within prepare_host_edge, but the whole system has moved by this stage
@@ -214,9 +214,8 @@ class RBFEModel:
                     [mol_a, mol_b], host_system, host_coords, self.ff, host_box
                 )
 
-                unbound_potentials, sys_params, masses, coords = rfe.prepare_host_edge(
-                    ff_params, host_system, min_host_coords
-                )
+                unbound_potentials, sys_params, masses = rfe.prepare_host_edge(ff_params, host_system)
+                coords = rfe.prepare_combined_coords(min_host_coords)
 
                 x0 = coords
             v0 = np.zeros_like(x0)

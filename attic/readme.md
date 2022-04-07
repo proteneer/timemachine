@@ -10,3 +10,9 @@ Code, documentation, experiments we want to retain for reference, but that we're
     * note: somewhat tailored to use TI estimates, constant volume simulations, GRPC, ...
 * `scripts/`
   * `bootstrap_am1.py` -- script for approximating AM1BCC with atom types rather than bond types
+  * `rhfe_single.py` runs three hydration free energy protocols that should give similar results:
+    * taking the difference between two absolute hydration free energy calculations (each computed using TI and 4D decoupling)
+    * computing a relative free energy using a complete atom-mapping (interpolating the valence energies, and interpolating the nonbonded parameters)
+    * computing a relative free energy using a partial atom-mapping (the atom being deleted / inserted is handled using 4D decoupling)
+  * `rbfe_single.py` -- script for running relative binding free energy with single topology
+  * `estimator_variance.py` measures run-to-run variability as a function of number of MD steps performed per run
