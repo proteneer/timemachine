@@ -109,9 +109,8 @@ def do_relative_docking(host_pdbfile, mol_a, mol_b, core, num_switches, transiti
         try:
             single_topology = topology.SingleTopology(mol_a, mol_b, core, ff)
             rfe = free_energy.RelativeFreeEnergy(single_topology)
-            ups, sys_params, combined_masses, combined_coords = rfe.prepare_host_edge(
-                ff.get_ordered_params(), system, min_coords
-            )
+            ups, sys_params, combined_masses = rfe.prepare_host_edge(ff.get_ordered_params(), system)
+            combined_coords = rfe.prepare_combined_coords(min_coords)
         except topology.AtomMappingError as e:
             print(f"NON-FACTORIZABLE PAIR: {combined_name}")
             print(e)

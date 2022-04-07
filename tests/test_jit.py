@@ -17,7 +17,7 @@ class TestJIT(TestCase):
                 mol_a, mol_b, _, ff = (
                     hif2a_ligand_pair.mol_a,
                     hif2a_ligand_pair.mol_b,
-                    hif2a_ligand_pair.core,
+                    hif2a_ligand_pair.top.core,
                     hif2a_ligand_pair.ff,
                 )
                 complex_system, complex_coords, complex_box, complex_top = build_water_system(2.6)
