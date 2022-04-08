@@ -1,48 +1,53 @@
 import copy
 import dataclasses
 import time
-from collections import namedtuple
-from typing import List, Tuple
+from typing import List, Optional, Tuple
 
 import numpy as np
 import pymbar
+from numpy.typing import NDArray
 
 from timemachine.fe import endpoint_correction, standard_state
 from timemachine.fe.utils import extract_delta_Us_from_U_knk, sanitize_energies
-from timemachine.lib import custom_ops, potentials
+from timemachine.lib import LangevinIntegrator, MonteCarloBarostat, custom_ops, potentials
 from timemachine.md import minimizer
 from timemachine.md.states import CoordsVelBox
-from timemachine.parallel.client import SerialClient
+from timemachine.parallel.client import AbstractClient, SerialClient
 
 
 @dataclasses.dataclass
 class SimulationResult:
-    xs: np.array
-    boxes: np.array
-    lambda_us: np.array
+    xs: NDArray
+    boxes: NDArray
+    lambda_us: NDArray
 
 
-FreeEnergyModel = namedtuple(
-    "FreeEnergyModel",
-    [
-        "unbound_potentials",
-        "endpoint_correct",
-        "client",
-        "box",
-        "x0",
-        "v0",
-        "integrator",
-        "barostat",
-        "lambda_schedule",
-        "equil_steps",
-        "prod_steps",
-        "beta",
-        "prefix",
-    ],
-)
+@dataclasses.dataclass
+class FreeEnergyModel:
+    unbound_potentials: List
+    endpoint_correct: bool
+    client: Optional[AbstractClient]
+    box: NDArray
+    x0: NDArray
+    v0: NDArray
+    integrator: LangevinIntegrator
+    barostat: MonteCarloBarostat
+    lambda_schedule: List[float]
+    equil_steps: int
+    prod_steps: int
+    beta: float
+    prefix: str
 
 
-def equilibrate(integrator, barostat, potentials, coords, box, lamb, equil_steps) -> Tuple:
+def equilibrate(
+    integrator: LangevinIntegrator,
+    barostat: LangevinIntegrator,
+    potentials: List,
+    coords: NDArray,
+    box: NDArray,
+    lamb: float,
+    equil_steps: int,
+) -> Tuple:
     all_impls = []
     v0 = np.zeros_like(coords)
 
@@ -76,7 +81,7 @@ def equilibrate(integrator, barostat, potentials, coords, box, lamb, equil_steps
     return CoordsVelBox(coords=ctxt.get_x_t(), velocities=ctxt.get_v_t(), box=ctxt.get_box())
 
 
-def run_model_simulations(model, sys_params):
+def run_model_simulations(model: FreeEnergyModel, sys_params: NDArray) -> List:
     """
     Runs simulations as defined by the FreeEnergyModel using the client.
 
@@ -164,18 +169,18 @@ def run_model_simulations(model, sys_params):
 
 
 def simulate(
-    lamb,
-    box,
-    x0,
-    v0,
-    final_potentials,
-    integrator,
-    barostat,
-    equil_steps,
-    prod_steps,
-    x_interval,
-    u_interval,
-    lambda_windows,
+    lamb: float,
+    box: NDArray,
+    x0: NDArray,
+    v0: NDArray,
+    final_potentials: List,
+    integrator: LangevinIntegrator,
+    barostat: MonteCarloBarostat,
+    equil_steps: int,
+    prod_steps: int,
+    x_interval: int,
+    u_interval: int,
+    lambda_windows: List[float],
 ):
     """
     Run a simulation and collect relevant statistics for this simulation.
@@ -275,7 +280,9 @@ def simulate(
     return result
 
 
-def deltaG_from_results(model, results, sys_params) -> Tuple[float, float, List]:
+def deltaG_from_results(
+    model: FreeEnergyModel, results: List, sys_params: NDArray
+) -> Tuple[float, float, List[SimulationResult]]:
     """
     Computes the deltaG from a set of results
 
@@ -417,7 +424,7 @@ def deltaG_from_results(model, results, sys_params) -> Tuple[float, float, List]
     return dG, bar_dG_err, results
 
 
-def deltaG(model, sys_params) -> Tuple[float, float, List]:
+def deltaG(model: FreeEnergyModel, sys_params: NDArray) -> Tuple[float, float, List[SimulationResult]]:
     """
     Computes the delta G of a FreeEnergyModel
 
