@@ -30,8 +30,11 @@ def wrap_impl(impl, pack=lambda x: x):
     def U_jvp(primals, tangents) -> Tuple[float, float]:
 
         # unpack inputs
-        coords, params, box, lam = primals
-        coords_t, params_t, box_t, lam_t = tangents
+        coords, _params, box, lam = primals
+        coords_t, _params_t, box_t, lam_t = tangents
+
+        # handle case where _params is a list of (maybe traced) arrays
+        params, params_t = pack(_params), pack(_params_t)
 
         # inspect tangent types to determine which derivatives are being requested
         def derivative_requested(array_t):
@@ -48,7 +51,7 @@ def wrap_impl(impl, pack=lambda x: x):
             raise RuntimeError("box derivatives not supported!")
 
         # call custom op once
-        result_tuple = impl.execute_selective(coords, pack(params), box, lam, *selection)
+        result_tuple = impl.execute_selective(coords, params, box, lam, *selection)
 
         # unpack result tuple
         primal_out = result_tuple[3]
