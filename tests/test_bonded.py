@@ -52,7 +52,7 @@ class TestBonded(GradientTest):
             params = np.array([], dtype=np.float64)
             lamb = 0.3  # doesn't matter
 
-            self.compare_forces(x_primal, params, box, lamb, ref_nrg, test_nrg, rtol, precision=precision)
+            self.compare_forces(x_primal, params, box, [lamb], ref_nrg, test_nrg, rtol, precision=precision)
 
     def test_centroid_restraint_singularity(self):
         # test singularity is stable when dij=0 and b0 = 0
@@ -85,7 +85,7 @@ class TestBonded(GradientTest):
                 params = np.array([], dtype=np.float64)
                 lamb = 0.3  # doesn't matter
 
-                self.compare_forces(coords, params, box, lamb, ref_nrg, test_nrg, rtol, precision=precision)
+                self.compare_forces(coords, params, box, [lamb], ref_nrg, test_nrg, rtol, precision=precision)
 
     @pytest.mark.skip("Currently not needed")
     def test_rmsd_restraint(self):
@@ -134,7 +134,9 @@ class TestBonded(GradientTest):
                     # this is due to fixed point accumulation of energy wipes out
                     # the low magnitude energies as some of test cases have
                     # an infinitesmally small absolute error (on the order of 1e-12)
-                    self.compare_forces(coords, params, box, lamb, ref_u, test_u, rtol, atol=atol, precision=precision)
+                    self.compare_forces(
+                        coords, params, box, [lamb], ref_u, test_u, rtol, atol=atol, precision=precision
+                    )
 
     def test_harmonic_bond(self, n_particles=64, n_bonds=35, dim=3):
         """Randomly connect pairs of particles, then validate the resulting HarmonicBond force"""
@@ -160,7 +162,7 @@ class TestBonded(GradientTest):
             test_potential = potentials.HarmonicBond(bond_idxs)
             ref_potential = functools.partial(bonded.harmonic_bond, bond_idxs=bond_idxs)
 
-            self.compare_forces(x, params, box, lamb, ref_potential, test_potential, rtol, precision=precision)
+            self.compare_forces(x, params, box, [lamb], ref_potential, test_potential, rtol, precision=precision)
 
         lamb_mult = np.random.randint(-5, 5, size=n_bonds, dtype=np.int32)
         lamb_offset = np.random.randint(-5, 5, size=n_bonds, dtype=np.int32)
@@ -172,7 +174,7 @@ class TestBonded(GradientTest):
                 bonded.harmonic_bond, bond_idxs=bond_idxs, lamb_mult=lamb_mult, lamb_offset=lamb_offset
             )
 
-            self.compare_forces(x, params, box, lamb, ref_potential, test_potential, rtol, precision=precision)
+            self.compare_forces(x, params, box, [lamb], ref_potential, test_potential, rtol, precision=precision)
 
             # test bitwise commutativity
             test_potential = potentials.HarmonicBond(bond_idxs, lamb_mult, lamb_offset)
@@ -212,7 +214,7 @@ class TestBonded(GradientTest):
             ref_potential = functools.partial(bonded.harmonic_bond, bond_idxs=bond_idxs)
 
             # we assert finite-ness of the forces.
-            self.compare_forces(x, params, box, lamb, ref_potential, test_potential, rtol, precision=precision)
+            self.compare_forces(x, params, box, [lamb], ref_potential, test_potential, rtol, precision=precision)
 
         # test with both zero and non zero terms
         x = np.array([[0.0, 0.0, 0.0], [0.0, 0.0, 0.0], [1.0, 0.0, 0.0]], dtype=np.float64)
@@ -228,7 +230,7 @@ class TestBonded(GradientTest):
             ref_potential = functools.partial(bonded.harmonic_bond, bond_idxs=bond_idxs)
 
             # we assert finite-ness of the forces.
-            self.compare_forces(x, params, box, lamb, ref_potential, test_potential, rtol, precision=precision)
+            self.compare_forces(x, params, box, [lamb], ref_potential, test_potential, rtol, precision=precision)
 
     def test_harmonic_angle(self, n_particles=64, n_angles=25, dim=3):
         """Randomly connect triples of particles, then validate the resulting HarmonicAngle force"""
@@ -253,7 +255,7 @@ class TestBonded(GradientTest):
             test_potential = potentials.HarmonicAngle(angle_idxs)
             ref_potential = functools.partial(bonded.harmonic_angle, angle_idxs=angle_idxs)
 
-            self.compare_forces(x, params, box, lamb, ref_potential, test_potential, rtol, precision=precision)
+            self.compare_forces(x, params, box, [lamb], ref_potential, test_potential, rtol, precision=precision)
 
         lamb_mult = np.random.randint(-5, 5, size=n_angles, dtype=np.int32)
         lamb_offset = np.random.randint(-5, 5, size=n_angles, dtype=np.int32)
@@ -265,7 +267,7 @@ class TestBonded(GradientTest):
                 bonded.harmonic_angle, angle_idxs=angle_idxs, lamb_mult=lamb_mult, lamb_offset=lamb_offset
             )
 
-            self.compare_forces(x, params, box, lamb, ref_potential, test_potential, rtol, precision=precision)
+            self.compare_forces(x, params, box, [lamb], ref_potential, test_potential, rtol, precision=precision)
 
             # test bitwise commutativity
             test_potential = potentials.HarmonicAngle(angle_idxs, lamb_mult, lamb_offset)
@@ -311,7 +313,7 @@ class TestBonded(GradientTest):
             test_potential = potentials.PeriodicTorsion(torsion_idxs)
             ref_potential = functools.partial(bonded.periodic_torsion, torsion_idxs=torsion_idxs)
 
-            self.compare_forces(x, params, box, lamb, ref_potential, test_potential, rtol, precision=precision)
+            self.compare_forces(x, params, box, [lamb], ref_potential, test_potential, rtol, precision=precision)
 
         lamb_mult = np.random.randint(-5, 5, size=n_torsions, dtype=np.int32)
         lamb_offset = np.random.randint(-5, 5, size=n_torsions, dtype=np.int32)
@@ -323,7 +325,7 @@ class TestBonded(GradientTest):
                 bonded.periodic_torsion, torsion_idxs=torsion_idxs, lamb_mult=lamb_mult, lamb_offset=lamb_offset
             )
 
-            self.compare_forces(x, params, box, lamb, ref_potential, test_potential, rtol, precision=precision)
+            self.compare_forces(x, params, box, [lamb], ref_potential, test_potential, rtol, precision=precision)
 
             # test bitwise commutativity
             test_potential = potentials.PeriodicTorsion(torsion_idxs, lamb_mult, lamb_offset)

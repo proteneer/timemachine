@@ -15,8 +15,7 @@ import itertools
 
 import numpy as np
 import pytest
-from common import GradientTest, prepare_reference_nonbonded, prepare_water_system
-from hilbertcurve.hilbertcurve import HilbertCurve
+from common import GradientTest, prepare_reference_nonbonded, prepare_system_params, prepare_water_system
 from simtk.openmm import app
 
 from timemachine.fe.utils import to_md_units
@@ -28,17 +27,6 @@ from timemachine.potentials import nonbonded
 np.set_printoptions(linewidth=500)
 
 pytestmark = [pytest.mark.memcheck]
-
-
-def hilbert_sort(conf, D):
-    hc = HilbertCurve(64, D)
-    int_confs = (conf * 1000).astype(np.int64)
-    dists = []
-    for xyz in int_confs.tolist():
-        dist = hc.distance_from_coordinates(xyz)
-        dists.append(dist)
-    perm = np.argsort(dists)
-    return perm
 
 
 class TestNonbondedDHFR(GradientTest):
@@ -228,7 +216,7 @@ class TestNonbondedDHFR(GradientTest):
                     test_conf,
                     test_params,
                     self.box,
-                    self.lamb,
+                    [self.lamb],
                     ref_nonbonded_fn,
                     test_nonbonded_fn,
                     rtol=rtol,
@@ -266,7 +254,7 @@ class TestNonbondedDHFR(GradientTest):
                     self.host_conf,
                     self.nonbonded_fn.params,
                     self.box,
-                    self.lamb,
+                    [self.lamb],
                     compute_du_dx,
                     compute_du_dp,
                     compute_du_dl,
@@ -306,7 +294,6 @@ class TestNonbondedWater(GradientTest):
 
         big_box = box + np.eye(3) * 1000
 
-        # print(big_box, small_box)
         # (ytz): note the ordering should be from large box to small box. though in the current code
         # the rebuild is triggered as long as the box *changes*.
         for test_box in [big_box, box]:
@@ -317,7 +304,7 @@ class TestNonbondedWater(GradientTest):
                     host_conf,
                     test_nonbonded_fn.params,
                     test_box,
-                    lamb,
+                    [lamb],
                     ref_nonbonded_fn,
                     test_nonbonded_fn,
                     rtol=rtol,
@@ -376,7 +363,6 @@ class TestNonbonded(GradientTest):
 
         np.random.seed(2020)
 
-        # water_coords = self.get_water_coords(3, sort=False)
         water_coords = self.get_water_coords(3, sort=False)
         test_system = water_coords[:126]  # multiple of 3
         box = np.eye(3) * 3
@@ -411,81 +397,61 @@ class TestNonbonded(GradientTest):
 
         cutoff = 1.0
 
+        test_u = potentials.Nonbonded(exclusion_idxs, scales, lambda_plane_idxs, lambda_offset_idxs, beta, cutoff)
+
+        charge_rescale_mask, lj_rescale_mask = nonbonded.convert_exclusions_to_rescale_masks(exclusion_idxs, scales, N)
+
+        ref_u = functools.partial(
+            nonbonded.nonbonded_v3,
+            charge_rescale_mask=charge_rescale_mask,
+            lj_rescale_mask=lj_rescale_mask,
+            beta=beta,
+            cutoff=cutoff,
+            lambda_plane_idxs=lambda_plane_idxs,
+            lambda_offset_idxs=lambda_offset_idxs,
+        )
+
         for precision, rtol in [(np.float64, 1e-8), (np.float32, 1e-4)]:
-
-            test_u = potentials.Nonbonded(exclusion_idxs, scales, lambda_plane_idxs, lambda_offset_idxs, beta, cutoff)
-
-            charge_rescale_mask = np.ones((N, N))
-            for (i, j), exc in zip(exclusion_idxs, scales[:, 0]):
-                charge_rescale_mask[i][j] = 1 - exc
-                charge_rescale_mask[j][i] = 1 - exc
-
-            lj_rescale_mask = np.ones((N, N))
-            for (i, j), exc in zip(exclusion_idxs, scales[:, 1]):
-                lj_rescale_mask[i][j] = 1 - exc
-                lj_rescale_mask[j][i] = 1 - exc
-
-            ref_u = functools.partial(
-                nonbonded.nonbonded_v3,
-                charge_rescale_mask=charge_rescale_mask,
-                lj_rescale_mask=lj_rescale_mask,
-                beta=beta,
-                cutoff=cutoff,
-                lambda_plane_idxs=lambda_plane_idxs,
-                lambda_offset_idxs=lambda_offset_idxs,
-            )
 
             lamb = 0.0
 
-            params = np.stack(
-                [
-                    (np.random.rand(N).astype(np.float64) - 0.5) * np.sqrt(138.935456),  # q
-                    np.random.rand(N).astype(np.float64) / 10.0,  # sig
-                    np.random.rand(N).astype(np.float64),  # eps
-                ],
-                axis=1,
-            )
+            params = prepare_system_params(test_system)
 
-            self.compare_forces(test_system, params, box, lamb, ref_u, test_u, rtol, precision=precision)
+            self.compare_forces(test_system, params, box, [lamb], ref_u, test_u, rtol, precision=precision)
 
     def test_nonbonded(self):
 
         np.random.seed(4321)
 
+        _, all_coords, box, _ = builders.build_water_system(3.0)
+        all_coords = all_coords / all_coords.unit
         for size in [33, 231, 1050]:
 
-            _, coords, box, _ = builders.build_water_system(6.2)
-            coords = coords / coords.unit
-            coords = coords[:size]
+            coords = all_coords[:size]
 
             N = coords.shape[0]
 
             lambda_plane_idxs = np.random.randint(low=-2, high=2, size=N, dtype=np.int32)
             lambda_offset_idxs = np.random.randint(low=-2, high=2, size=N, dtype=np.int32)
 
-            for precision, rtol, atol in [(np.float64, 1e-8, 3e-11), (np.float32, 1e-4, 3e-5)]:
+            for cutoff in [1.0]:
+                # E = 0 # DEBUG!
+                charge_params, ref_potential, test_potential = prepare_water_system(
+                    coords, lambda_plane_idxs, lambda_offset_idxs, p_scale=5.0, cutoff=cutoff
+                )
+                for precision, rtol, atol in [(np.float64, 1e-8, 1e-8), (np.float32, 1e-4, 5e-4)]:
 
-                for cutoff in [1.0]:
-                    # E = 0 # DEBUG!
-                    charge_params, ref_potential, test_potential = prepare_water_system(
-                        coords, lambda_plane_idxs, lambda_offset_idxs, p_scale=1.0, cutoff=cutoff
+                    self.compare_forces(
+                        coords,
+                        charge_params,
+                        box,
+                        [0.0, 0.1, 0.2],
+                        ref_potential,
+                        test_potential,
+                        rtol=rtol,
+                        atol=atol,
+                        precision=precision,
                     )
-
-                    for lamb in [0.0, 0.1, 0.2]:
-
-                        print("lambda", lamb, "cutoff", cutoff, "precision", precision, "xshape", coords.shape)
-
-                        self.compare_forces(
-                            coords,
-                            charge_params,
-                            box,
-                            lamb,
-                            ref_potential,
-                            test_potential,
-                            rtol=rtol,
-                            atol=atol,
-                            precision=precision,
-                        )
 
     def test_nonbonded_with_box_smaller_than_cutoff(self):
 
@@ -496,7 +462,7 @@ class TestNonbonded(GradientTest):
         size = 33
         padding = 0.1
 
-        _, coords, box, _ = builders.build_water_system(6.2)
+        _, coords, box, _ = builders.build_water_system(3.0)
         coords = coords / coords.unit
         coords = coords[:size]
 
@@ -506,43 +472,42 @@ class TestNonbonded(GradientTest):
         lambda_offset_idxs = np.random.randint(low=-2, high=2, size=N, dtype=np.int32)
 
         # Down shift box size to be only a portion of the cutoff
-        charge_params, ref_potential, test_potential = prepare_water_system(
+        charge_params, _, test_potential = prepare_water_system(
             coords, lambda_plane_idxs, lambda_offset_idxs, p_scale=1.0, cutoff=cutoff
         )
 
-        def run_nonbonded(precision, potential, x, box, params, lamb, steps=100):
-            test_impl = test_potential.unbound_impl(precision)
+        def run_nonbonded(potential, x, box, params, lamb, steps=100):
 
             x = (x.astype(np.float32)).astype(np.float64)
             params = (params.astype(np.float32)).astype(np.float64)
 
             assert x.ndim == 2
-            # N = x.shape[0]
-            # D = x.shape[1]
-
             assert x.dtype == np.float64
             assert params.dtype == np.float64
+
             for _ in range(steps):
-                _ = test_impl.execute_selective(x, params, box, lamb, True, True, True, True)
+                _ = potential.execute_selective(x, params, box, lamb, True, True, True, True)
+
+        test_impl = test_potential.unbound_impl(precision)
 
         # With the default box, all is well
-        run_nonbonded(precision, ref_potential, coords, box, charge_params, 0.0, steps=2)
+        run_nonbonded(test_impl, coords, box, charge_params, 0.0, steps=2)
 
         db_cutoff = (cutoff + padding) * 2
 
         # Make box with diagonals right at the limit
         box = np.eye(3) * db_cutoff
-        run_nonbonded(precision, ref_potential, coords, box, charge_params, 0.0)
+        run_nonbonded(test_impl, coords, box, charge_params, 0.0)
 
         # Non Orth Box, should fail
         box = np.ones_like(box) * (db_cutoff ** 2)
         with self.assertRaises(RuntimeError) as raised:
-            run_nonbonded(precision, ref_potential, coords, box, charge_params, 0.0)
+            run_nonbonded(test_impl, coords, box, charge_params, 0.0)
         assert "non-ortholinear box" in str(raised.exception)
         # Only populate the diag with values that are too low
         box = np.eye(3) * (db_cutoff * 0.3)
         with self.assertRaises(RuntimeError) as raised:
-            run_nonbonded(precision, ref_potential, coords, box, charge_params, 0.0)
+            run_nonbonded(test_impl, coords, box, charge_params, 0.0)
         assert "more than half" in str(raised.exception)
 
 
