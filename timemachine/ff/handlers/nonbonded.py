@@ -63,6 +63,7 @@ def oe_generate_conformations(oemol):
     omegaOpts = oeomega.OEOmegaOptions()
     omegaOpts.GetTorDriveOptions().SetUseGPU(False)
     omega = oeomega.OEOmega(omegaOpts)
+    # exclude the initial input conformer
     omega.SetIncludeInput(False)
     # needed to preserve the atom ordering
     omega.SetCanonOrder(False)

@@ -373,32 +373,15 @@ $$$$
     mol = Chem.MolFromMolBlock(mol_sdf, removeHs=False)
     es_params = am1h.parameterize(mol)
 
-    # TBD update with AM1 Symmetrize=True
-    ligand_params = np.array(
-        [
-            -5.36348,
-            6.98008,
-            -1.68885,
-            -4.04439,
-            1.93568,
-            -2.25534,
-            -0.87637,
-            -1.8679,
-            -0.66892,
-            -1.6588,
-            7.67174,
-            -6.1465,
-            -7.26945,
-            0.93978,
-            0.93978,
-            0.93978,
-            1.83702,
-            1.69675,
-            1.71667,
-            1.90762,
-            5.27508,
+    # fmt: off
+    ligand_params = np.array([
+        -5.36348, 6.98008, -1.68885, -4.04439, 1.93568, -2.25534,
+        -0.87637, -1.8679, -0.66892, -1.6588, 7.67174, -6.1465,
+        -7.26945, 0.93978, 0.93978, 0.93978, 1.83702, 1.69675,
+        1.71667, 1.90762, 5.27508,
         ]
     )
+    # fmt: on
 
     np.testing.assert_almost_equal(es_params, ligand_params, decimal=5)
 
@@ -601,7 +584,9 @@ def test_am1_differences():
 def test_am1elf10_conformer_independence():
     with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
         suppl = Chem.SDMolSupplier(str(path_to_ligand), removeHs=False)
-    mols = [mol for mol in suppl][:2]  # truncate so that whole test is ~ 10 seconds
+    # Pick a subset of molecules with chiral centers
+    mols = [mol for mol in suppl]
+    mols = [mols[0], mols[2], mols[3]]
 
     # need to assign so embedded molecules generated below
     # have the correct stereochemistry
