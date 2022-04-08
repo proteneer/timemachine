@@ -212,15 +212,7 @@ def prepare_water_system(x, lambda_plane_idxs, lambda_offset_idxs, p_scale, cuto
 
     test_potential = potentials.Nonbonded(exclusion_idxs, scales, lambda_plane_idxs, lambda_offset_idxs, beta, cutoff)
 
-    charge_rescale_mask = np.ones((N, N))
-    for (i, j), exc in zip(exclusion_idxs, scales[:, 0]):
-        charge_rescale_mask[i][j] = 1 - exc
-        charge_rescale_mask[j][i] = 1 - exc
-
-    lj_rescale_mask = np.ones((N, N))
-    for (i, j), exc in zip(exclusion_idxs, scales[:, 1]):
-        lj_rescale_mask[i][j] = 1 - exc
-        lj_rescale_mask[j][i] = 1 - exc
+    charge_rescale_mask, lj_rescale_mask = nonbonded.convert_exclusions_to_rescale_masks(exclusion_idxs, scales, N)
 
     ref_total_energy = functools.partial(
         nonbonded.nonbonded_v3,
@@ -255,15 +247,7 @@ def prepare_nb_system(x, E, lambda_plane_idxs, lambda_offset_idxs, p_scale, cuto
 
     test_potential = potentials.Nonbonded(exclusion_idxs, scales, lambda_plane_idxs, lambda_offset_idxs, beta, cutoff)
 
-    charge_rescale_mask = np.ones((N, N))
-    for (i, j), exc in zip(exclusion_idxs, scales[:, 0]):
-        charge_rescale_mask[i][j] = 1 - exc
-        charge_rescale_mask[j][i] = 1 - exc
-
-    lj_rescale_mask = np.ones((N, N))
-    for (i, j), exc in zip(exclusion_idxs, scales[:, 1]):
-        lj_rescale_mask[i][j] = 1 - exc
-        lj_rescale_mask[j][i] = 1 - exc
+    charge_rescale_mask, lj_rescale_mask = nonbonded.convert_exclusions_to_rescale_masks(exclusion_idxs, scales, N)
 
     ref_total_energy = functools.partial(
         nonbonded.nonbonded_v3,
