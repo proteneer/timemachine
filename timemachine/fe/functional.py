@@ -59,14 +59,23 @@ def wrap_impl(impl, pack=lambda x: x):
         primal_out = result_tuple[3]
         coords_grad, params_grad, lam_grad = result_tuple[:3]
 
-        # note: implementation of jvp by np.sum(x_dot * x_grad) is specialized to case of scalar-valued function
-        tangent_out = 0.0
+        # Jacobian-vector products
+        def explicit_jvp(gradient, tangent):
+            assert gradient.shape == tangent.shape
+            J = gradient.flatten().reshape(1, gradient.size)
+            v = tangent.flatten()
+            return np.matmul(J, v)
+
+        tangent_out = np.zeros(1)
         if derivative_requested(coords_dot):
-            tangent_out += np.sum(coords_dot * coords_grad)
+            tangent_out += explicit_jvp(coords_grad, coords_dot)
         if derivative_requested(params_dot):
-            tangent_out += np.sum(params_dot * params_grad)
+            tangent_out += explicit_jvp(params_grad, params_dot)
         if derivative_requested(lam_dot):
-            tangent_out += np.sum(lam_dot * lam_grad)
+            tangent_out += np.sum(explicit_jvp(np.array(lam_grad), np.array(lam_dot)))
+
+        # specific to case of scalar-valued U: float64[1] -> float64, so primal and tangent have equal shapes/dtypes
+        tangent_out = np.sum(tangent_out)
 
         return primal_out, tangent_out
 
