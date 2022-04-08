@@ -44,12 +44,11 @@ def test_optimized_MTM():
     state = enhanced.VacuumState(mol, ff)
 
     proposal_U = state.U_decharged
-    num_batches = 480
+    num_batches = 485
 
     vacuum_samples, vacuum_log_weights = enhanced.generate_log_weighted_samples(
         mol, temperature, state.U_easy, proposal_U, seed, num_batches=num_batches
     )
-
     ubps, params, masses, coords, box = enhanced.get_solvent_phase_system(mol, ff)
 
     nb_potential = ubps[-1]
