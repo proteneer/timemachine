@@ -361,8 +361,9 @@ def test_functional():
                 assert abs_err < 1e-3
 
         # grad w.r.t. box shouldn't be allowed
-        with pytest.raises(RuntimeError):
+        with pytest.raises(RuntimeError) as e:
             _ = grad(U, argnums=2)(coords, sys_params, box, lam)
+        assert "box" in str(e).lower()
 
 
 def test_construct_differentiable_interface_fast():
