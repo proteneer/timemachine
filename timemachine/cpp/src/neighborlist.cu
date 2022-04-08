@@ -58,13 +58,7 @@ template <typename RealType> Neighborlist<RealType>::~Neighborlist() {
 
 template <typename RealType>
 void Neighborlist<RealType>::compute_block_bounds_host(
-    const int NC,
-    const int D,
-    const int block_size,
-    const double *h_coords,
-    const double *h_box,
-    double *h_bb_ctrs,
-    double *h_bb_exts) {
+    const int NC, const int D, const double *h_coords, const double *h_box, double *h_bb_ctrs, double *h_bb_exts) {
 
     double *d_coords = gpuErrchkCudaMallocAndCopy(h_coords, NC * 3);
     double *d_box = gpuErrchkCudaMallocAndCopy(h_box, 3 * 3);
@@ -113,7 +107,6 @@ std::vector<std::vector<int>> Neighborlist<RealType>::get_nblist_host(
     const int tpb = warp_size;
     const int column_blocks = this->column_blocks();
     const int row_blocks = this->B();
-    const int Y = this->Y();
 
     unsigned long long MAX_TILE_BUFFER = row_blocks * column_blocks;
     unsigned long long MAX_ATOM_BUFFER = MAX_TILE_BUFFER * tpb;
@@ -167,7 +160,6 @@ void Neighborlist<RealType>::build_nblist_device(
     this->compute_block_bounds_device(NC, NR, D, d_col_coords, d_row_coords, d_box, stream);
 
     const int tpb = warp_size;
-    const int column_blocks = this->column_blocks();
     const int row_blocks = this->B();
     const int Y = this->Y();
 
@@ -252,8 +244,6 @@ void Neighborlist<RealType>::compute_block_bounds_device(
     } else if (d_row_coords == nullptr && NR != 0) {
         throw std::runtime_error("No row coords provided, but NR != 0");
     }
-
-    const bool compute_row_bounds = this->compute_full_matrix();
 
     const int tpb = warp_size;
     const int column_blocks = this->column_blocks(); // total number of blocks we need to process

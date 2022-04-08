@@ -45,6 +45,8 @@ public:
     void get_box(double *out_buffer) const;
 
 private:
+    int N_; // number of particles
+
     MonteCarloBarostat *barostat_;
 
     void _step(double lambda, unsigned long long *du_dl_out);
@@ -52,7 +54,6 @@ private:
     void _step_equilibrium(double lambda, unsigned long long *du_dl_out);
 
     int step_;
-    int N_; // number of particles
 
     double *d_x_t_;   // coordinates
     double *d_v_t_;   // velocities

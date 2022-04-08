@@ -19,7 +19,7 @@ void __global__ k_coords_to_kv(
     double by = box[1 * 3 + 1];
     double bz = box[2 * 3 + 2];
 
-    double binWidth = max(max(bx, by), bz) / 255.0;
+    double binWidth = max(max(bx, by), bz) / (HILBERT_GRID_DIM - 1.0);
 
     double x = coords[atom_idx * 3 + 0];
     double y = coords[atom_idx * 3 + 1];
@@ -33,7 +33,7 @@ void __global__ k_coords_to_kv(
     unsigned int bin_y = y / binWidth;
     unsigned int bin_z = z / binWidth;
 
-    keys[atom_idx] = bin_to_idx[bin_x * 256 * 256 + bin_y * 256 + bin_z];
+    keys[atom_idx] = bin_to_idx[bin_x * HILBERT_GRID_DIM * HILBERT_GRID_DIM + bin_y * HILBERT_GRID_DIM + bin_z];
     // uncomment below if you want to preserve the atom ordering
     // keys[atom_idx] = atom_idx;
     vals[atom_idx] = atom_idx;
@@ -62,7 +62,7 @@ void __global__ k_coords_to_kv_gather(
     double by = box[1 * 3 + 1];
     double bz = box[2 * 3 + 2];
 
-    double binWidth = max(max(bx, by), bz) / 255.0;
+    double binWidth = max(max(bx, by), bz) / (HILBERT_GRID_DIM - 1.0);
 
     double x = coords[atom_idx * 3 + 0];
     double y = coords[atom_idx * 3 + 1];
@@ -76,7 +76,7 @@ void __global__ k_coords_to_kv_gather(
     unsigned int bin_y = y / binWidth;
     unsigned int bin_z = z / binWidth;
 
-    keys[idx] = bin_to_idx[bin_x * 256 * 256 + bin_y * 256 + bin_z];
+    keys[idx] = bin_to_idx[bin_x * HILBERT_GRID_DIM * HILBERT_GRID_DIM + bin_y * HILBERT_GRID_DIM + bin_z];
     // uncomment below if you want to preserve the atom ordering
     // keys[idx] = atom_idx;
     vals[idx] = atom_idx;
