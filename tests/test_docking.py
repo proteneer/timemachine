@@ -3,26 +3,12 @@ Tests for the timemachine/docking/ files
 """
 import tempfile
 import unittest
-from importlib import resources
 from pathlib import Path
 
-from rdkit import Chem
+from common import get_hif2a_ligands_as_sdf_file
 
 from docking import dock_and_equilibrate, pose_dock, relative_docking, rigorous_work
 from timemachine.testsystems.relative import hif2a_ligand_pair
-
-
-def get_hif2a_ligands_as_sdf_file(num_mols: int) -> tempfile.NamedTemporaryFile:
-    mols = []
-    with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
-        suppl = Chem.SDMolSupplier(str(path_to_ligand), removeHs=False)
-        for _ in range(num_mols):
-            mols.append(next(suppl))
-    temp_sdf = tempfile.NamedTemporaryFile(suffix=".sdf")
-    with Chem.SDWriter(temp_sdf.name) as writer:
-        for mol in mols:
-            writer.write(mol)
-    return temp_sdf
 
 
 class TestDocking(unittest.TestCase):
