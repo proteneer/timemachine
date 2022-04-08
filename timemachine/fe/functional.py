@@ -59,7 +59,7 @@ def wrap_impl(impl, pack=lambda x: x):
             raise RuntimeError("box derivatives not supported!")
 
         # call custom op once
-        result_tuple = impl.execute_selective(coords, params, box, lam, *selection)
+        result_tuple = impl.execute_selective(coords, pack(params), box, lam, *selection)
 
         # unpack result tuple
         primal_out = result_tuple[3]
