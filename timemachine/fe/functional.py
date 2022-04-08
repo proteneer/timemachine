@@ -12,17 +12,6 @@ from timemachine.lib.potentials import SummedPotential
 
 
 def _make_selection_mask(compute_du_dx=False, compute_du_dp=False, compute_du_dl=False, compute_u=False):
-    requested_outputs = []
-    if compute_du_dx:
-        requested_outputs.append("dudx")
-    if compute_du_dp:
-        requested_outputs.append("dudp")
-    if compute_du_dl:
-        requested_outputs.append("dudl")
-    if compute_u:
-        requested_outputs.append("u")
-
-    print(f'calling execute_selective(..., {", ".join(requested_outputs)})')
     return (compute_du_dx, compute_du_dp, compute_du_dl, compute_u)
 
 
