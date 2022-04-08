@@ -36,8 +36,8 @@ NonbondedInteractionGroup<RealType, Interpolated>::NonbondedInteractionGroup(
     const double beta,
     const double cutoff,
     const std::string &kernel_src)
-    : N_(lambda_offset_idxs.size()), NR_(row_atom_idxs.size()), NC_(N_ - NR_), cutoff_(cutoff), nblist_(NC_, NR_),
-      beta_(beta), d_sort_storage_(nullptr), d_sort_storage_bytes_(0), nblist_padding_(0.1), disable_hilbert_(false),
+    : N_(lambda_offset_idxs.size()), NR_(row_atom_idxs.size()), NC_(N_ - NR_),
+
       kernel_ptrs_({// enumerate over every possible kernel combination
                     // U: Compute U
                     // X: Compute DU_DL
@@ -60,6 +60,10 @@ NonbondedInteractionGroup<RealType, Interpolated>::NonbondedInteractionGroup(
                     &k_nonbonded_unified<RealType, 1, 1, 0, 1>,
                     &k_nonbonded_unified<RealType, 1, 1, 1, 0>,
                     &k_nonbonded_unified<RealType, 1, 1, 1, 1>}),
+
+      beta_(beta), cutoff_(cutoff), nblist_(NC_, NR_), nblist_padding_(0.1), d_sort_storage_(nullptr),
+      d_sort_storage_bytes_(0), disable_hilbert_(false),
+
       compute_w_coords_instance_(kernel_cache_.program(kernel_src.c_str()).kernel("k_compute_w_coords").instantiate()),
       compute_gather_interpolated_(
           kernel_cache_.program(kernel_src.c_str()).kernel("k_gather_interpolated").instantiate()),

@@ -12,6 +12,14 @@ find_package(PythonLibs 3.7 REQUIRED)
 string(APPEND CMAKE_CXX_FLAGS "-Werror -Wall -Wextra")
 
 string(APPEND CMAKE_CUDA_FLAGS "-O3 -lineinfo")
+string(APPEND CMAKE_CUDA_FLAGS
+  " -Werror all-warnings"
+  " -Wall"
+  " -Wno-sign-compare"
+  " -Wextra"
+  " -Wno-unused-parameter"
+  " -Wreorder"
+)
 message(${CMAKE_CUDA_FLAGS})
 
 if (CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
