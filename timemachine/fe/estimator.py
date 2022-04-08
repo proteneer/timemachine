@@ -81,7 +81,7 @@ def equilibrate(
     return CoordsVelBox(coords=ctxt.get_x_t(), velocities=ctxt.get_v_t(), box=ctxt.get_box())
 
 
-def run_model_simulations(model: FreeEnergyModel, sys_params: NDArray) -> List:
+def run_model_simulations(model: FreeEnergyModel, sys_params: NDArray, subsample_interval: int = 1000) -> List:
     """
     Runs simulations as defined by the FreeEnergyModel using the client.
 
@@ -93,6 +93,9 @@ def run_model_simulations(model: FreeEnergyModel, sys_params: NDArray) -> List:
 
     sys_params: np.array
         Defines the system's potential parameters
+
+    subsample_interval: int
+        Interval to collect energies and frames
 
     Returns
     -------
@@ -113,8 +116,6 @@ def run_model_simulations(model: FreeEnergyModel, sys_params: NDArray) -> List:
 
     all_args = []
     for lamb_idx, lamb in enumerate(model.lambda_schedule):
-
-        subsample_interval = 1000
 
         all_args.append(
             (
@@ -424,7 +425,9 @@ def deltaG_from_results(
     return dG, bar_dG_err, results
 
 
-def deltaG(model: FreeEnergyModel, sys_params: NDArray) -> Tuple[float, float, List[SimulationResult]]:
+def deltaG(
+    model: FreeEnergyModel, sys_params: NDArray, subsample_interval: int = 1000
+) -> Tuple[float, float, List[SimulationResult]]:
     """
     Computes the delta G of a FreeEnergyModel
 
@@ -437,6 +440,9 @@ def deltaG(model: FreeEnergyModel, sys_params: NDArray) -> Tuple[float, float, L
     sys_params: np.array
         Defines the system's potential parameters
 
+    subsample_interval: int
+        Interval to collect energies and frames
+
     Returns
     -------
 
@@ -447,5 +453,5 @@ def deltaG(model: FreeEnergyModel, sys_params: NDArray) -> Tuple[float, float, L
         If the FreeEnergyModel has `endpoint_correct` set to True then the final potential in `unbound_potentials` must be
         a HarmonicBond potential. It will also run an additional simulation to collect vacuum samples to perform endpoint correction.
     """
-    results = run_model_simulations(model, sys_params)
+    results = run_model_simulations(model, sys_params, subsample_interval=subsample_interval)
     return deltaG_from_results(model=model, results=results, sys_params=sys_params)

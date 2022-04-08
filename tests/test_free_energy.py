@@ -44,7 +44,7 @@ def test_absolute_free_energy():
 
     lambda_schedule = np.linspace(0, 1.0, 4)
     equil_steps = 1000
-    prod_steps = 5000
+    prod_steps = 1000
 
     bt = topology.BaseTopology(mol, ff)
     afe = free_energy.AbsoluteFreeEnergy(mol, bt)
@@ -94,7 +94,7 @@ def test_absolute_free_energy():
                 "prefix",
             )
 
-            dG, _, _ = estimator.deltaG(model, sys_params)
+            dG, _, _ = estimator.deltaG(model, sys_params, subsample_interval=100)
             dGs.append(dG)
 
         return dGs[0] - dGs[1]
@@ -165,7 +165,7 @@ def test_relative_free_energy():
 
     lambda_schedule = np.linspace(0, 1.0, 4)
     equil_steps = 1000
-    prod_steps = 4000
+    prod_steps = 1000
 
     single_topology = topology.SingleTopology(mol_a, mol_b, core, ff)
     rfe = free_energy.RelativeFreeEnergy(single_topology)
@@ -211,7 +211,7 @@ def test_relative_free_energy():
             "prefix",
         )
 
-        return estimator.deltaG(model, sys_params)[0]
+        return estimator.deltaG(model, sys_params, subsample_interval=100)[0]
 
     dG = vacuum_model(ff_params)
     assert np.abs(dG) < 1000.0
