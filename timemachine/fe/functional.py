@@ -28,26 +28,28 @@ def wrap_impl(impl, pack=lambda x: x):
 
     @U.defjvp
     def U_jvp(primals, tangents) -> Tuple[float, float]:
+        # naming convention (x, x_dot), (primal_out, tangent_out) follow the jax custom jvp documentation example
+        # https://jax.readthedocs.io/en/latest/notebooks/Custom_derivative_rules_for_Python_code.html#custom-jvps-with-jax-custom-jvp
 
         # unpack inputs
         coords, _params, box, lam = primals
-        coords_t, _params_t, box_t, lam_t = tangents
+        coords_dot, _params_dot, box_dot, lam_dot = tangents
 
         # handle case where _params is a list of (maybe traced) arrays
-        params, params_t = pack(_params), pack(_params_t)
+        params, params_dot = pack(_params), pack(_params_dot)
 
         # inspect tangent types to determine which derivatives are being requested
         def derivative_requested(array_t):
             return isinstance(array_t, Tracer)
 
         selection = _make_selection_mask(
-            compute_du_dx=derivative_requested(coords_t),
-            compute_du_dp=derivative_requested(params_t),
-            compute_du_dl=derivative_requested(lam_t),
+            compute_du_dx=derivative_requested(coords_dot),
+            compute_du_dp=derivative_requested(params_dot),
+            compute_du_dl=derivative_requested(lam_dot),
             compute_u=True,
         )
 
-        if derivative_requested(box_t):
+        if derivative_requested(box_dot):
             raise RuntimeError("box derivatives not supported!")
 
         # call custom op once
@@ -55,17 +57,16 @@ def wrap_impl(impl, pack=lambda x: x):
 
         # unpack result tuple
         primal_out = result_tuple[3]
-        coords_g, params_g, lam_g = result_tuple[:3]
+        coords_grad, params_grad, lam_grad = result_tuple[:3]
 
-        # compute tangent_out by dotting tangents with jacobians
-        # TODO: make this a zippy comprehension?
+        # note: implementation of jvp by np.sum(x_dot * x_grad) is specialized to case of scalar-valued function
         tangent_out = 0.0
-        if derivative_requested(coords_t):
-            tangent_out += np.sum(coords_t * coords_g)
-        if derivative_requested(params_t):
-            tangent_out += np.sum(params_t * params_g)
-        if derivative_requested(lam_t):
-            tangent_out += np.sum(lam_t * lam_g)
+        if derivative_requested(coords_dot):
+            tangent_out += np.sum(coords_dot * coords_grad)
+        if derivative_requested(params_dot):
+            tangent_out += np.sum(params_dot * params_grad)
+        if derivative_requested(lam_dot):
+            tangent_out += np.sum(lam_dot * lam_grad)
 
         return primal_out, tangent_out
 
