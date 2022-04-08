@@ -72,7 +72,7 @@ def wrap_impl(impl, pack=lambda x: x):
         if derivative_requested(params_dot):
             tangent_out += explicit_jvp(params_grad, params_dot)
         if derivative_requested(lam_dot):
-            tangent_out += np.sum(explicit_jvp(np.array(lam_grad), np.array(lam_dot)))
+            tangent_out += explicit_jvp(np.array(lam_grad), np.array(lam_dot))
 
         # specific to case of scalar-valued U: float64[1] -> float64, so primal and tangent have equal shapes/dtypes
         tangent_out = np.sum(tangent_out)
