@@ -48,7 +48,7 @@ def wrap_impl(impl, pack=lambda x: x):
         def derivative_requested(array_t):
             return isinstance(array_t, Tracer)
 
-        selection = dict(
+        selection = _make_selection_mask(
             compute_du_dx=derivative_requested(coords_t),
             compute_du_dp=derivative_requested(params_t),
             compute_du_dl=derivative_requested(lam_t),
@@ -57,8 +57,6 @@ def wrap_impl(impl, pack=lambda x: x):
 
         if derivative_requested(box_t):
             raise RuntimeError("box derivatives not supported!")
-
-        _ = _make_selection_mask(**selection)  # TODO: only purpose is to print selection -- remove after debugging
 
         # call custom op once
         result_tuple = impl.execute_selective(coords, params, box, lam, *selection)
