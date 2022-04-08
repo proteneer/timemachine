@@ -118,25 +118,29 @@ NonbondedAllPairs<RealType, Interpolated>::NonbondedAllPairs(
     gpuErrchk(cudaMalloc(&d_sort_vals_in_, K_ * sizeof(d_sort_vals_in_)));
 
     // initialize hilbert curve
-    std::vector<unsigned int> bin_to_idx(256 * 256 * 256);
-    for (int i = 0; i < 256; i++) {
-        for (int j = 0; j < 256; j++) {
-            for (int k = 0; k < 256; k++) {
+    std::vector<unsigned int> bin_to_idx(HILBERT_GRID_DIM * HILBERT_GRID_DIM * HILBERT_GRID_DIM);
+    for (int i = 0; i < HILBERT_GRID_DIM; i++) {
+        for (int j = 0; j < HILBERT_GRID_DIM; j++) {
+            for (int k = 0; k < HILBERT_GRID_DIM; k++) {
 
                 bitmask_t hilbert_coords[3];
                 hilbert_coords[0] = i;
                 hilbert_coords[1] = j;
                 hilbert_coords[2] = k;
 
-                unsigned int bin = static_cast<unsigned int>(hilbert_c2i(3, 8, hilbert_coords));
-                bin_to_idx[i * 256 * 256 + j * 256 + k] = bin;
+                unsigned int bin = static_cast<unsigned int>(hilbert_c2i(3, HILBERT_N_BITS, hilbert_coords));
+                bin_to_idx[i * HILBERT_GRID_DIM * HILBERT_GRID_DIM + j * HILBERT_GRID_DIM + k] = bin;
             }
         }
     }
 
-    gpuErrchk(cudaMalloc(&d_bin_to_idx_, 256 * 256 * 256 * sizeof(*d_bin_to_idx_)));
     gpuErrchk(
-        cudaMemcpy(d_bin_to_idx_, &bin_to_idx[0], 256 * 256 * 256 * sizeof(*d_bin_to_idx_), cudaMemcpyHostToDevice));
+        cudaMalloc(&d_bin_to_idx_, HILBERT_GRID_DIM * HILBERT_GRID_DIM * HILBERT_GRID_DIM * sizeof(*d_bin_to_idx_)));
+    gpuErrchk(cudaMemcpy(
+        d_bin_to_idx_,
+        &bin_to_idx[0],
+        HILBERT_GRID_DIM * HILBERT_GRID_DIM * HILBERT_GRID_DIM * sizeof(*d_bin_to_idx_),
+        cudaMemcpyHostToDevice));
 
     // estimate size needed to do radix sorting, this can use uninitialized data.
     cub::DeviceRadixSort::SortPairs(
@@ -241,7 +245,7 @@ void NonbondedAllPairs<RealType, Interpolated>::execute_device(
 
     // (ytz) the nonbonded algorithm proceeds as follows:
 
-    // (done in constructor), construct a hilbert curve mapping each of the 256x256x256 cells into an index.
+    // (done in constructor), construct a hilbert curve mapping each of the HILBERT_GRID_DIM x HILBERT_GRID_DIM x HILBERT_GRID_DIM cells into an index.
     // a. decide if we need to rebuild the neighborlist, if so:
     //     - look up which cell each particle belongs to, and its linear index along the hilbert curve.
     //     - use radix pair sort keyed on the hilbert index with values equal to the atomic index

@@ -61,7 +61,6 @@ def test_nonbonded_interaction_group_zero_interactions(rng: np.random.Generator)
     assert u == 0
 
 
-@pytest.mark.parametrize("lamb", [0.0, 0.1])
 @pytest.mark.parametrize("beta", [2.0])
 @pytest.mark.parametrize("cutoff", [1.1])
 @pytest.mark.parametrize("precision,rtol,atol", [(np.float64, 1e-8, 1e-8), (np.float32, 1e-4, 5e-4)])
@@ -75,7 +74,6 @@ def test_nonbonded_interaction_group_correctness(
     atol,
     cutoff,
     beta,
-    lamb,
     example_nonbonded_params,
     example_conf,
     example_box,
@@ -111,12 +109,12 @@ def test_nonbonded_interaction_group_correctness(
         beta,
         cutoff,
     )
-
+    lambda_vals = [0.0, 0.1]
     GradientTest().compare_forces(
         conf,
         params,
         example_box,
-        lamb=lamb,
+        lambda_vals,
         ref_potential=ref_ixngroups,
         test_potential=test_ixngroups,
         rtol=rtol,
@@ -125,7 +123,6 @@ def test_nonbonded_interaction_group_correctness(
     )
 
 
-@pytest.mark.parametrize("lamb", [0.0, 0.1, 0.9, 1.0])
 @pytest.mark.parametrize("beta", [2.0])
 @pytest.mark.parametrize("cutoff", [1.1])
 @pytest.mark.parametrize("precision,rtol,atol", [(np.float64, 1e-8, 1e-8), (np.float32, 1e-4, 5e-4)])
@@ -139,7 +136,6 @@ def test_nonbonded_interaction_group_interpolated_correctness(
     atol,
     cutoff,
     beta,
-    lamb,
     example_nonbonded_params,
     example_conf,
     example_box,
@@ -177,12 +173,12 @@ def test_nonbonded_interaction_group_interpolated_correctness(
         beta,
         cutoff,
     )
-
+    lambda_vals = [0.0, 0.1, 0.9, 1.0]
     GradientTest().compare_forces(
         conf,
         params,
         example_box,
-        lamb=lamb,
+        lambda_vals,
         ref_potential=ref_ixngroups,
         test_potential=test_ixngroups,
         rtol=rtol,
@@ -191,7 +187,6 @@ def test_nonbonded_interaction_group_interpolated_correctness(
     )
 
 
-@pytest.mark.parametrize("lamb", [0.0, 0.1])
 @pytest.mark.parametrize("beta", [2.0])
 @pytest.mark.parametrize("cutoff", [1.1])
 @pytest.mark.parametrize("precision,rtol,atol", [(np.float64, 1e-8, 1e-8), (np.float32, 1e-4, 5e-4)])
@@ -205,7 +200,6 @@ def test_nonbonded_interaction_group_consistency_allpairs_lambda_planes(
     atol,
     cutoff,
     beta,
-    lamb,
     example_nonbonded_params,
     example_conf,
     example_box,
@@ -268,12 +262,12 @@ def test_nonbonded_interaction_group_consistency_allpairs_lambda_planes(
         beta,
         cutoff,
     )
-
+    lambda_vals = [0.0, 0.1]
     GradientTest().compare_forces(
         conf,
         params,
         example_box,
-        lamb=lamb,
+        lambda_vals,
         ref_potential=ref_ixngroups,
         test_potential=test_ixngroups,
         rtol=rtol,
