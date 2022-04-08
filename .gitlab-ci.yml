@@ -24,6 +24,8 @@ docker_build:
     - docker
   script:
     - DOCKER_HOST=tcp://localhost:2375 docker login -u $CI_REGISTRY_USER -p $CI_JOB_TOKEN $CI_REGISTRY
+    # Prune images older than 2 days
+    - docker system prune --filter "until=48h" -f -a
     # Pull the docker containers
     - docker pull $CI_REGISTRY_IMAGE:$CI_DEFAULT_BRANCH || true
     - docker pull $DOCKER_TAG || true
