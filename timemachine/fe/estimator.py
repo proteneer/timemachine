@@ -77,6 +77,28 @@ def equilibrate(integrator, barostat, potentials, coords, box, lamb, equil_steps
 
 
 def run_model_simulations(model, sys_params):
+    """
+    Runs simulations as defined by the FreeEnergyModel using the client.
+
+    Parameters
+    ----------
+
+    model: FreeEnergyModel
+        Defines the free energy calculations to be run
+
+    sys_params: np.array
+        Defines the system's potential parameters
+
+    Returns
+    -------
+
+    A list of Futures that return SimulationResults by calling `result()`
+
+
+    Note:
+        If the FreeEnergyModel has `endpoint_correct` set to True then the final potential in `unbound_potentials` must be
+        a HarmonicBond potential. It will also run an additional simulation to collect vacuum samples to perform endpoint correction.
+    """
     assert len(sys_params) == len(model.unbound_potentials)
 
     bound_potentials = []
@@ -254,7 +276,31 @@ def simulate(
 
 
 def deltaG_from_results(model, results, sys_params) -> Tuple[float, float, List]:
+    """
+    Computes the deltaG from a set of results
 
+    Parameters
+    ----------
+
+    model: FreeEnergyModel
+        Defines the free energy calculations to be run
+
+    results: List of futures that return SimulationResults
+
+    sys_params: np.array
+        Defines the system's potential parameters
+
+    Returns
+    -------
+
+    A tuple containing the BAR delta G, the BAR delta G Error and a list of SimulationResults
+
+
+    Note:
+        If the FreeEnergyModel has `endpoint_correct` set to True then the final potential in `unbound_potentials` must be
+        a HarmonicBond potential. Assumes the last result is a vacuum simulation that is used to compute the endpoint
+        correction.
+    """
     assert len(sys_params) == len(model.unbound_potentials)
 
     bound_potentials = []
@@ -372,5 +418,27 @@ def deltaG_from_results(model, results, sys_params) -> Tuple[float, float, List]
 
 
 def deltaG(model, sys_params) -> Tuple[float, float, List]:
+    """
+    Computes the delta G of a FreeEnergyModel
+
+    Parameters
+    ----------
+
+    model: FreeEnergyModel
+        Defines the free energy calculations
+
+    sys_params: np.array
+        Defines the system's potential parameters
+
+    Returns
+    -------
+
+    A tuple containing the BAR delta G, the BAR delta G Error and a list of SimulationResults
+
+
+    Note:
+        If the FreeEnergyModel has `endpoint_correct` set to True then the final potential in `unbound_potentials` must be
+        a HarmonicBond potential. It will also run an additional simulation to collect vacuum samples to perform endpoint correction.
+    """
     results = run_model_simulations(model, sys_params)
     return deltaG_from_results(model=model, results=results, sys_params=sys_params)
