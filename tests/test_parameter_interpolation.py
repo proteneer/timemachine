@@ -6,7 +6,7 @@ import copy
 import jax.numpy as jnp
 import numpy as np
 import pytest
-from common import GradientTest, prepare_water_system
+from common import GradientTest, prepare_system_params, prepare_water_system
 
 from timemachine.lib import potentials
 from timemachine.potentials import nonbonded
@@ -35,37 +35,38 @@ class TestInterpolatedPotential(GradientTest):
         lambda_plane_idxs = np.random.randint(low=0, high=2, size=N, dtype=np.int32)
         lambda_offset_idxs = np.random.randint(low=0, high=2, size=N, dtype=np.int32)
 
-        for lamb in [0.0, 0.2, 1.0]:
-            for precision, rtol, atol in [(np.float64, 1e-8, 3e-11), (np.float32, 1e-4, 3e-6)]:
+        sigma_scale = 5.0
 
-                # E = 0 # DEBUG!
-                qlj_src, ref_potential, test_potential = prepare_water_system(
-                    coords, lambda_plane_idxs, lambda_offset_idxs, p_scale=1.0, cutoff=cutoff
-                )
+        qlj_src, ref_potential, test_potential = prepare_water_system(
+            coords, lambda_plane_idxs, lambda_offset_idxs, p_scale=sigma_scale, cutoff=cutoff
+        )
 
-                qlj_dst, _, _ = prepare_water_system(
-                    coords, lambda_plane_idxs, lambda_offset_idxs, p_scale=1.0, cutoff=cutoff
-                )
+        qlj_dst, _, _ = prepare_water_system(
+            coords, lambda_plane_idxs, lambda_offset_idxs, p_scale=sigma_scale, cutoff=cutoff
+        )
 
-                qlj = np.concatenate([qlj_src, qlj_dst])
+        qlj = np.concatenate([qlj_src, qlj_dst])
 
-                print("lambda", lamb, "cutoff", cutoff, "precision", precision, "xshape", coords.shape)
+        ref_interpolated_potential = nonbonded.interpolated(ref_potential)
 
-                ref_interpolated_potential = nonbonded.interpolated(ref_potential)
+        test_interpolated_potential = potentials.NonbondedInterpolated(*test_potential.args)
 
-                test_interpolated_potential = potentials.NonbondedInterpolated(*test_potential.args)
+        lambda_vals = [0.0, 0.2, 1.0]
 
-                self.compare_forces(
-                    coords,
-                    qlj,
-                    box,
-                    lamb,
-                    ref_interpolated_potential,
-                    test_interpolated_potential,
-                    rtol=rtol,
-                    atol=atol,
-                    precision=precision,
-                )
+        for precision, rtol, atol in [(np.float64, 1e-8, 3e-11), (np.float32, 1e-4, 3e-6)]:
+            # E = 0 # DEBUG!
+            print("cutoff", cutoff, "precision", precision, "xshape", coords.shape)
+            self.compare_forces(
+                coords,
+                qlj,
+                box,
+                lambda_vals,
+                ref_interpolated_potential,
+                test_interpolated_potential,
+                rtol=rtol,
+                atol=atol,
+                precision=precision,
+            )
 
     def test_nonbonded_advanced(self):
 
@@ -100,12 +101,14 @@ class TestInterpolatedPotential(GradientTest):
         def transform_w(lamb):
             return 1 - lamb * lamb
 
+        sigma_scale = 5.0
+
         # E = 0 # DEBUG!
         qlj_src, ref_potential, test_potential = prepare_water_system(
-            coords, lambda_plane_idxs, lambda_offset_idxs, p_scale=1.0, cutoff=cutoff
+            coords, lambda_plane_idxs, lambda_offset_idxs, p_scale=sigma_scale, cutoff=cutoff
         )
 
-        qlj_dst, _, _ = prepare_water_system(coords, lambda_plane_idxs, lambda_offset_idxs, p_scale=1.0, cutoff=cutoff)
+        qlj_dst = prepare_system_params(coords, sigma_scale=sigma_scale)
 
         def interpolate_params(lamb, qlj_src, qlj_dst):
             new_q = (1 - transform_q(lamb)) * qlj_src[:, 0] + transform_q(lamb) * qlj_dst[:, 0]
@@ -123,32 +126,29 @@ class TestInterpolatedPotential(GradientTest):
             qlj = interpolate_params(lamb, qlj_src, qlj_dst)
             return ref_potential(x, qlj, box, lamb)
 
+        qlj = np.concatenate([qlj_src, qlj_dst])
+
+        lambda_vals = [0.0, 0.2, 0.6, 0.7, 0.8, 1.0]
         for precision, rtol, atol in [(np.float64, 1e-8, 1e-11), (np.float32, 1e-4, 1e-6)]:
 
-            for lamb in [0.0, 0.2, 0.6, 0.7, 0.8, 1.0]:
+            print("cutoff", cutoff, "precision", precision, "xshape", coords.shape)
 
-                qlj = np.concatenate([qlj_src, qlj_dst])
+            args = copy.deepcopy(test_potential.args)
+            args.append("lambda*lambda")  # transform q
+            args.append("sin(lambda*PI/2)")  # transform sigma
+            args.append("lambda < 0.5 ? sin(lambda*PI)*sin(lambda*PI) : 1")  # transform epsilon
+            args.append("1-lambda*lambda")  # transform w
 
-                print("lambda", lamb, "cutoff", cutoff, "precision", precision, "xshape", coords.shape)
+            test_interpolated_potential = potentials.NonbondedInterpolated(*args)
 
-                args = copy.deepcopy(test_potential.args)
-                args.append("lambda*lambda")  # transform q
-                args.append("sin(lambda*PI/2)")  # transform sigma
-                args.append("lambda < 0.5 ? sin(lambda*PI)*sin(lambda*PI) : 1")  # transform epsilon
-                args.append("1-lambda*lambda")  # transform w
-
-                test_interpolated_potential = potentials.NonbondedInterpolated(
-                    *args,
-                )
-
-                self.compare_forces(
-                    coords,
-                    qlj,
-                    box,
-                    lamb,
-                    u_reference,
-                    test_interpolated_potential,
-                    rtol=rtol,
-                    atol=atol,
-                    precision=precision,
-                )
+            self.compare_forces(
+                coords,
+                qlj,
+                box,
+                lambda_vals,
+                u_reference,
+                test_interpolated_potential,
+                rtol=rtol,
+                atol=atol,
+                precision=precision,
+            )
