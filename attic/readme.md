@@ -2,6 +2,7 @@ Code, documentation, experiments we want to retain for reference, but that we're
 
 ### Contents
 * `docs/` -- write-up of initial vision for `timemachine`, involving efficient backpropagation through MD trajectories
+* `docking/` -- Docking module that docks uses non-equilibrium switching
 * `jax_tricks` -- misc. Jax functions
 * `thermo_deriv/` -- numerical experiments with "thermodynamic derivative" estimators, adjusting LJ parameters to match observables
     * note: currently missing dependencies `thermo_deriv.lj_non_periodic.lennard_jones`, `thermo_deriv.lj.lennard_jones`.
