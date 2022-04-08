@@ -233,7 +233,7 @@ def main():
     parser.add_argument(
         "-s",
         "--guests_sdfile",
-        default="tests/data/ligands_40__first-two-ligs.sdf",
+        default="timemachine/testsystems/data/ligands_40.sdf",
         help="guests to pose",
     )
     parser.add_argument(

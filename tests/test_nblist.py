@@ -1,6 +1,6 @@
 import numpy as np
 import pytest
-from hilbertcurve.hilbertcurve import HilbertCurve
+from common import hilbert_sort
 
 from timemachine.fe.utils import get_romol_conf
 from timemachine.lib import custom_ops
@@ -52,17 +52,6 @@ def test_block_bounds():
         np.testing.assert_almost_equal(ref_exts, test_exts)
 
 
-def hilbert_sort(conf, D):
-    hc = HilbertCurve(64, D)
-    int_confs = (conf * 1000).astype(np.int64)
-    dists = []
-    for xyz in int_confs.tolist():
-        dist = hc.distance_from_coordinates(xyz)
-        dists.append(dist)
-    perm = np.argsort(dists)
-    return perm
-
-
 def get_water_coords(D, sort=False):
     x = np.load("tests/data/water.npy").astype(np.float32).astype(np.float64)
     x = x[:, :D]
@@ -72,10 +61,10 @@ def get_water_coords(D, sort=False):
 
 def test_neighborlist():
 
+    water_coords = get_water_coords(3, sort=False)
     for size in [35, 64, 129, 1025, 1259, 2029]:
 
         for nblist in (custom_ops.Neighborlist_f32(size), custom_ops.Neighborlist_f64(size)):
-            water_coords = get_water_coords(3, sort=False)
 
             for _ in range(2):
 
