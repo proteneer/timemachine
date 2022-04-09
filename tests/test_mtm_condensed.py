@@ -12,8 +12,8 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 import pytest
-import test_ligands
 
+from timemachine import testsystems
 from timemachine.constants import BOLTZ
 from timemachine.ff import Forcefield
 from timemachine.md import enhanced
@@ -21,11 +21,6 @@ from timemachine.md.moves import NPTMove, OptimizedMTMMove
 from timemachine.potentials import bonded, nonbonded
 
 # (ytz): useful for visualization, so please leave this comment here!
-
-
-def get_ff_am1cc():
-    ff = Forcefield.load_from_file("smirnoff_1_1_0_ccc.py")
-    return ff
 
 
 @pytest.mark.skip(reason="This takes too long to run on CI")
@@ -37,8 +32,8 @@ def test_condensed_phase_mtm():
     seed = 2021
     np.random.seed(seed)
 
-    mol, torsion_idxs = test_ligands.get_biphenyl()
-    ff = get_ff_am1cc()
+    mol, torsion_idxs = testsystems.ligands.get_biphenyl()
+    ff = Forcefield.load_from_file("smirnoff_1_1_0_ccc.py")
 
     masses = np.array([a.GetMass() for a in mol.GetAtoms()])
     num_ligand_atoms = len(masses)

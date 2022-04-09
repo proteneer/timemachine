@@ -12,8 +12,8 @@ config.update("jax_enable_x64", True)
 import jax
 import numpy as np
 import pytest
-import test_ligands
 
+from timemachine import testsystems
 from timemachine.ff import Forcefield
 from timemachine.md import enhanced
 from timemachine.potentials import bonded
@@ -34,7 +34,7 @@ def test_vacuum():
     such as torsions, steric clashes, by turning off specific torsions and nonbonded
     terms.
     """
-    mol, torsion_idxs = test_ligands.get_biphenyl()
+    mol, torsion_idxs = testsystems.ligands.get_biphenyl()
     ff = get_ff_am1ccc()
     temperature = 300
 

@@ -37,19 +37,19 @@ def test_nonbonded_consistency(
     precision,
     cutoff,
     beta,
-    example_nonbonded_params,
-    example_nonbonded_exclusion_idxs,
-    example_nonbonded_exclusion_scales,
+    example_nonbonded_potential,
     example_conf,
     example_box,
     rng: np.random.Generator,
 ):
     conf = example_conf[:num_atoms, :]
-    params_initial = example_nonbonded_params[:num_atoms, :]
+    params_initial = example_nonbonded_potential.params[:num_atoms, :]
     params = gen_params(params_initial, rng) if interpolated else params_initial
 
     exclusion_idxs, exclusion_scales = filter_valid_exclusions(
-        num_atoms, example_nonbonded_exclusion_idxs, example_nonbonded_exclusion_scales
+        num_atoms,
+        example_nonbonded_potential.get_exclusion_idxs(),
+        example_nonbonded_potential.get_scale_factors(),
     )
 
     lambda_plane_idxs = rng.integers(-2, 3, size=(num_atoms,), dtype=np.int32)
