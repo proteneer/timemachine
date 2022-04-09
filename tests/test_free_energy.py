@@ -5,6 +5,7 @@ config.update("jax_enable_x64", True)
 from importlib import resources
 
 import numpy as np
+import pytest
 from rdkit import Chem
 from scipy.optimize import check_grad, minimize
 
@@ -345,7 +346,8 @@ def test_functional():
     * a differentiable loss function in terms of U can be minimized,
     * forward-mode and reverse-mode differentiation of loss agree,
     * an exception is raised if we try to do something that requires second derivatives,
-    * grad(nonlinear_function_in_terms_of_U) agrees with finite-difference
+    * grad(nonlinear_function_in_terms_of_U) agrees with finite-difference,
+    * requesting derivative w.r.t. box causes a runtime error
     """
 
     rfe = hif2a_ligand_pair
@@ -384,6 +386,11 @@ def test_functional():
             for perturb in perturbations:
                 abs_err = check_grad(low_dim_f, grad(low_dim_f), perturb, epsilon=1e-4)
                 assert abs_err < 1e-3
+
+        # grad w.r.t. box shouldn't be allowed
+        with pytest.raises(RuntimeError) as e:
+            _ = grad(U, argnums=2)(coords, sys_params, box, lam)
+        assert "box" in str(e).lower()
 
 
 def test_construct_differentiable_interface_fast():
