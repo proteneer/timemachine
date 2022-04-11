@@ -7,10 +7,10 @@ Code, documentation, experiments we want to retain for reference, but that we're
    * `reservoir_sampler.py`
    * `rmsd.py` -- compute rmsd under Jax
    * `potentials` -- deprecated potentials
-     * `evp.py`
-     * `pmi.py`
-     * `gbsa.py` - GBSA implicit solvent model
-     * `shape.py` - Calculate volume overlap between two molecules
+     * `evp.py` -- eigenvalue problem solvers for small square matrices
+     * `pmi.py` -- principal moments of inertia related code
+     * `gbsa.py` -- GBSA implicit solvent model
+     * `shape.py` -- Calculate volume overlap between two molecules
    * `tests` -- deprecated tests
      * `test_shape.py` -- tests for potentials.shape
      * `dual_topology.py` -- test with TI and dual topology
