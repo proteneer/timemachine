@@ -1,4 +1,4 @@
-import jax.numpy as np
+import jax.numpy as jnp
 import numpy as onp
 from jax import vmap
 from numpy.typing import NDArray
@@ -51,8 +51,8 @@ def compute_lifting_parameter(lamb, lambda_plane_idxs, lambda_offset_idxs, cutof
 def augment_dim(x3: Array, w: Array) -> Array:
     """(x,y,z) -> (x,y,z,w)"""
 
-    d4 = np.expand_dims(w, axis=-1)
-    x4 = np.concatenate((x3, d4), axis=1)
+    d4 = jnp.expand_dims(w, axis=-1)
+    x4 = jnp.concatenate((x3, d4), axis=1)
 
     assert len(x4) == len(x3)
     assert x4.shape[1] == 4
@@ -71,8 +71,8 @@ def delta_r(ri, rj, box=None):
 
     # box is None for harmonic bonds, not None for nonbonded terms
     if box is not None:
-        box_diag = np.diag(box)
-        diff -= box_diag * np.floor(diff / box_diag + 0.5)
+        box_diag = jnp.diag(box)
+        diff -= box_diag * jnp.floor(diff / box_diag + 0.5)
     return diff
 
 
@@ -86,7 +86,7 @@ def distance_on_pairs(ri, rj, box=None):
     assert len(ri) == len(rj)
 
     diff = delta_r(ri, rj, box)
-    dij = np.linalg.norm(diff, axis=-1)
+    dij = jnp.linalg.norm(diff, axis=-1)
 
     assert len(dij) == len(ri)
 
@@ -121,7 +121,7 @@ def get_interacting_pair_indices_batch(confs, boxes, pairs, cutoff=1.2):
     neighbor_masks = distances < cutoff
     # how many total neighbors?
 
-    n_neighbors = np.sum(neighbor_masks, 1)
+    n_neighbors = jnp.sum(neighbor_masks, 1)
     max_n_neighbors = max(n_neighbors)
 
     assert max_n_neighbors > 0
@@ -138,16 +138,16 @@ def get_interacting_pair_indices_batch(confs, boxes, pairs, cutoff=1.2):
 def distance(x, box):
     # nonbonded distances require the periodic box
     assert x.shape[1] == 3 or x.shape[1] == 4  # 3d or 4d
-    ri = np.expand_dims(x, 0)
-    rj = np.expand_dims(x, 1)
-    d2ij = np.sum(np.power(delta_r(ri, rj, box), 2), axis=-1)
+    ri = jnp.expand_dims(x, 0)
+    rj = jnp.expand_dims(x, 1)
+    d2ij = jnp.sum(jnp.power(delta_r(ri, rj, box), 2), axis=-1)
     N = d2ij.shape[0]
-    d2ij = np.where(np.eye(N), 0, d2ij)
-    dij = np.where(np.eye(N), 0, np.sqrt(d2ij))
+    d2ij = jnp.where(jnp.eye(N), 0, d2ij)
+    dij = jnp.where(jnp.eye(N), 0, jnp.sqrt(d2ij))
     return dij
 
 
-def distance_from_one_to_others(x_i, x_others, box=None, cutoff=np.inf):
+def distance_from_one_to_others(x_i, x_others, box=None, cutoff=jnp.inf):
     """[d(x_i, x_j, box) for x_j in x_others]
 
     Parameters
@@ -165,6 +165,6 @@ def distance_from_one_to_others(x_i, x_others, box=None, cutoff=np.inf):
         if distance(x_i, x_j) > cutoff, d_ij is set to np.inf
     """
     displacements_ij = delta_r(x_i, x_others, box)
-    d2_ij = np.sum(displacements_ij ** 2, axis=1)
-    d_ij = np.where(d2_ij <= cutoff ** 2, np.sqrt(d2_ij), np.inf)
+    d2_ij = jnp.sum(displacements_ij ** 2, axis=1)
+    d_ij = jnp.where(d2_ij <= cutoff ** 2, jnp.sqrt(d2_ij), jnp.inf)
     return d_ij
