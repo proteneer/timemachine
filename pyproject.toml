@@ -20,6 +20,10 @@ plugins = ["numpy.typing.mypy_plugin"]
 ignore_missing_imports = true
 check_untyped_defs = false
 
+[[tool.mypy.overrides]]
+module = "timemachine._vendored.fire"
+follow_imports = "silent"
+
 [build-system]
 requires = ["setuptools>=43.0.0", "wheel", "cmake==3.22.1", "versioneer-518"]
 build-backend = "setuptools.build_meta"

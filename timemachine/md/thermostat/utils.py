@@ -1,10 +1,11 @@
 import numpy as np
+from numpy.typing import NDArray
 from simtk.unit import Quantity, kelvin
 
 from timemachine.constants import BOLTZ
 
 
-def sample_velocities(masses: Quantity, temperature: Quantity) -> np.array:
+def sample_velocities(masses: Quantity, temperature: Quantity) -> NDArray:
     """Sample Maxwell-Boltzmann velocities ~ N(0, sqrt(kB T / m)"""
     n_particles = len(masses)
     spatial_dim = 3

@@ -4,7 +4,7 @@
 
 import logging
 import re
-from typing import Any, Callable, Dict, List, Type, TypeVar
+from typing import Any, Callable, Dict, List, Set, Type, TypeVar
 
 T = TypeVar("T")
 OEMol = Any
@@ -32,7 +32,7 @@ class InvalidSmirksError(RechargeException):
 def call_openeye(
     oe_callable: Callable[[T], bool],
     *args: T,
-    exception_type: Type[RechargeException] = RuntimeError,
+    exception_type: Type[BaseException] = RuntimeError,
     exception_kwargs: Dict[str, Any] = None,
 ):
     """Wraps a call to an OpenEye function, either capturing the output in an
@@ -216,7 +216,7 @@ class AromaticityModel:
         )
 
         previous_case_2_atoms = None
-        case_2_atoms = {}
+        case_2_atoms: Set[int] = set()
 
         while previous_case_2_atoms != case_2_atoms:
 
@@ -245,7 +245,7 @@ class AromaticityModel:
         )
 
         previous_case_3_atoms = None
-        case_3_atoms = {}
+        case_3_atoms: Set[int] = set()
 
         while previous_case_3_atoms != case_3_atoms:
 

@@ -4,6 +4,8 @@ import jax.numpy as jnp
 import numpy as np
 from jax import vmap
 from jax.scipy.special import erfc
+from numpy.typing import NDArray
+from typing_extensions import TypeAlias
 
 from timemachine.potentials import jax_utils
 from timemachine.potentials.jax_utils import (
@@ -14,14 +16,14 @@ from timemachine.potentials.jax_utils import (
     pairs_from_interaction_groups,
 )
 
+Array: TypeAlias = NDArray
+
 
 def switch_fn(dij, cutoff):
     return jnp.power(jnp.cos((jnp.pi * jnp.power(dij, 8)) / (2 * cutoff)), 2)
 
 
 from typing import Optional
-
-Array = jnp.array
 
 
 def combining_rule_sigma(sig_i, sig_j):
@@ -378,7 +380,7 @@ def coulomb_prefactor_on_atom(x_i, x_others, q_others, box=None, beta=2.0, cutof
     return prefactor_i
 
 
-def coulomb_prefactors_on_snapshot(x_ligand, x_env, q_env, box=None, beta=2.0, cutoff=jnp.inf) -> Array:
+def coulomb_prefactors_on_snapshot(x_ligand, x_env, q_env, box=None, beta=2.0, cutoff=np.inf) -> Array:
     """Map coulomb_prefactor_on_atom over atoms in x_ligand
 
     Parameters

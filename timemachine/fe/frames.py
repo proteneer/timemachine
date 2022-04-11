@@ -1,7 +1,7 @@
-from typing import Any, Generator, List, Tuple
+from typing import Any, Iterable, List, Tuple
 
 SimulationResult = Any
-FrameIterator = Generator[Tuple[int, SimulationResult], None, None]
+FrameIterator = Iterable[Tuple[int, SimulationResult]]
 
 
 def all_frames(results: List[SimulationResult]) -> FrameIterator:
@@ -9,7 +9,7 @@ def all_frames(results: List[SimulationResult]) -> FrameIterator:
 
 
 def endpoint_frames_only(results: List[SimulationResult]) -> FrameIterator:
-    output = []
+    output: List[Tuple[int, SimulationResult]] = []
     if len(results) == 0:
         return output
     output.append((0, results[0]))

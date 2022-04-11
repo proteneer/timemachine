@@ -51,7 +51,7 @@ class RABFEResult:
             self.dG_solvent_decouple_error,
         )
 
-    def __eq__(self, other: "RABFEResult") -> bool:
+    def __eq__(self, other: object) -> bool:
         if not isinstance(other, RABFEResult):
             return NotImplemented
         equal = True

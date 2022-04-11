@@ -4,7 +4,7 @@ from jax.ops import segment_sum
 
 config.update("jax_enable_x64", True)
 
-from typing import Iterable, List, Tuple
+from typing import Callable, Iterable, List, Tuple
 
 import numpy as np
 
@@ -86,7 +86,7 @@ class CentroidRescaler:
 class MonteCarloBarostat(MonteCarloMove):
     def __init__(
         self,  # target_ensemble: NPTEnsemble,
-        reduced_potential_fxn: callable,
+        reduced_potential_fxn: Callable,
         group_indices: List[Iterable[int]],
         max_delta_volume: float = 0.05,
         adapt_proposal_scale: bool = True,
