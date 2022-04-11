@@ -69,7 +69,7 @@ class HostGuestTopology:
 
     def get_component_idxs(self) -> List[NDArray]:
         """
-        Return the atom indexes for each component of
+        Return the atom indices for each component of
         this topology as a list of NDArray. If the host is
         not present, this will just be the result from the guest topology.
         Otherwise, the result is in the order host atom idxs then guest
@@ -217,7 +217,7 @@ class BaseTopology:
 
     def get_component_idxs(self) -> List[NDArray]:
         """
-        Return the atom indexes for the molecule in
+        Return the atom indices for the molecule in
         this topology as a list of NDArray.
         """
         return [np.arange(self.get_num_atoms())]
@@ -366,7 +366,7 @@ class DualTopology(ABC):
 
     def get_component_idxs(self) -> List[NDArray]:
         """
-        Return the atom indexes for the two ligands in
+        Return the atom indices for the two ligands in
         this topology as a list of NDArray.
         """
         num_a_atoms = self.mol_a.GetNumAtoms()
@@ -608,10 +608,10 @@ class SingleTopology:
 
     def get_component_idxs(self) -> List[NDArray]:
         """
-        Return the atom indexes for the two ligands in
+        Return the atom indices for the two ligands in
         this topology as a list of NDArray. Both lists
-        will contain atom indexes for the core atoms
-        as well as the unique atom indexes for each ligand.
+        will contain atom indices for the core atoms
+        as well as the unique atom indices for each ligand.
         """
         return [self.a_to_c, self.b_to_c]
 
