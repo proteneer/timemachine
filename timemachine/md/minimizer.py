@@ -1,4 +1,4 @@
-from typing import Any, List, Optional, Tuple, Union
+from typing import Any, List, Optional, Tuple
 
 import numpy as np
 from numpy.typing import NDArray
@@ -113,7 +113,6 @@ def minimize_host_4d(mols, host_system, host_coords, ff, box, mol_coords=None) -
 
     num_host_atoms = host_coords.shape[0]
 
-    top: Union[topology.BaseTopology, topology.DualTopology]
     if len(mols) == 1:
         top = topology.BaseTopology(mols[0], ff)
     elif len(mols) == 2:
