@@ -12,6 +12,9 @@ from rdkit import Chem
 from timemachine.fe import topology
 from timemachine.fe.utils import get_romol_conf
 from timemachine.ff import Forcefield
+from timemachine.ff.handlers import openmm_deserializer
+from timemachine.md import builders
+from timemachine.testsystems.relative import hif2a_ligand_pair
 
 
 class BenzenePhenolSparseTest(unittest.TestCase):
@@ -311,3 +314,56 @@ class TestFactorizability(unittest.TestCase):
         _ = jax.vjp(st.parameterize_harmonic_angle, ff.ha_handle.params, has_aux=True)
         _ = jax.vjp(st.parameterize_periodic_torsion, ff.pt_handle.params, ff.it_handle.params, has_aux=True)
         _ = jax.vjp(st.parameterize_nonbonded, ff.q_handle.params, ff.lj_handle.params, has_aux=True)
+
+
+def test_component_idxs():
+    # single topology
+    # fmt: off
+    mol_a_idxs = np.array([
+        0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,
+        17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33], dtype=np.int32)
+    mol_b_idxs = np.array([
+        0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 29, 11, 12, 13, 14, 15, 16,
+        17, 18, 19, 20, 21, 34, 23, 26, 27, 28, 30, 31, 32], dtype=np.int32)
+    # fmt: on
+    np.testing.assert_equal(hif2a_ligand_pair.top.get_component_idxs(), [mol_a_idxs, mol_b_idxs])
+
+    # single topology w/host
+    solvent_system, coords, _, _ = builders.build_water_system(4.0)
+    host_bps, _ = openmm_deserializer.deserialize_system(solvent_system, cutoff=1.2)
+    hgt_single = topology.HostGuestTopology(host_bps, hif2a_ligand_pair.top)
+
+    num_solvent_atoms = coords.shape[0]
+    solvent_idxs = np.arange(num_solvent_atoms)
+
+    np.testing.assert_equal(
+        hgt_single.get_component_idxs(), [solvent_idxs, mol_a_idxs + num_solvent_atoms, mol_b_idxs + num_solvent_atoms]
+    )
+
+    # dual topology
+    with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
+        suppl = Chem.SDMolSupplier(str(path_to_ligand), removeHs=False)
+
+    all_mols = [x for x in suppl]
+    mol_a = all_mols[1]
+    mol_b = all_mols[4]
+    ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
+    dt = topology.DualTopology(mol_a, mol_b, ff)
+
+    mol_a_idxs = np.arange(mol_a.GetNumAtoms())
+    mol_b_idxs = np.arange(mol_b.GetNumAtoms()) + mol_a.GetNumAtoms()
+    np.testing.assert_equal(dt.get_component_idxs(), [mol_a_idxs, mol_b_idxs])
+
+    # dual topology w/host
+    hgt_dual = topology.HostGuestTopology(host_bps, dt)
+    np.testing.assert_equal(
+        hgt_dual.get_component_idxs(), [solvent_idxs, mol_a_idxs + num_solvent_atoms, mol_b_idxs + num_solvent_atoms]
+    )
+
+    # base topology
+    bt = topology.BaseTopology(mol_a, ff)
+    np.testing.assert_equal(bt.get_component_idxs(), [mol_a_idxs])
+
+    # base topology w/host
+    hgt_base = topology.HostGuestTopology(host_bps, bt)
+    np.testing.assert_equal(hgt_base.get_component_idxs(), [solvent_idxs, mol_a_idxs + num_solvent_atoms])

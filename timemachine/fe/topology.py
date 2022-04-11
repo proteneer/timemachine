@@ -1,7 +1,9 @@
 from abc import ABC
+from typing import List
 
 import jax.numpy as jnp
 import numpy as np
+from numpy.typing import NDArray
 
 from timemachine.ff.handlers import nonbonded
 from timemachine.lib import potentials
@@ -64,6 +66,21 @@ class HostGuestTopology:
 
     def get_num_atoms(self):
         return self.num_host_atoms + self.guest_topology.get_num_atoms()
+
+    def get_component_idxs(self) -> List[NDArray]:
+        """
+        Return the atom indexes for each component of
+        this topology as a list of NDArray. If the host is
+        not present, this will just be the result from the guest topology.
+        Otherwise, the result is in the order host atom idxs then guest
+        component atom idxs.
+        """
+        host_idxs = [np.arange(self.num_host_atoms)] if self.num_host_atoms else []
+        guest_idxs = [
+            guest_component_idxs + self.num_host_atoms
+            for guest_component_idxs in self.guest_topology.get_component_idxs()
+        ]
+        return host_idxs + guest_idxs
 
     # tbd: just merge the hamiltonians here
     def _parameterize_bonded_term(self, guest_params, guest_potential, host_potential):
@@ -197,6 +214,13 @@ class BaseTopology:
 
     def get_num_atoms(self):
         return self.mol.GetNumAtoms()
+
+    def get_component_idxs(self) -> List[NDArray]:
+        """
+        Return the atom indexes for the molecule in
+        this topology as a list of NDArray.
+        """
+        return [np.arange(self.get_num_atoms())]
 
     def parameterize_nonbonded(self, ff_q_params, ff_lj_params):
         q_params = self.ff.q_handle.partial_parameterize(ff_q_params, self.mol)
@@ -339,6 +363,15 @@ class DualTopology(ABC):
 
     def get_num_atoms(self):
         return self.mol_a.GetNumAtoms() + self.mol_b.GetNumAtoms()
+
+    def get_component_idxs(self) -> List[NDArray]:
+        """
+        Return the atom indexes for the two ligands in
+        this topology as a list of NDArray.
+        """
+        num_a_atoms = self.mol_a.GetNumAtoms()
+        num_b_atoms = self.mol_b.GetNumAtoms()
+        return [np.arange(num_a_atoms), num_a_atoms + np.arange(num_b_atoms)]
 
     def parameterize_nonbonded(self, ff_q_params, ff_lj_params):
 
@@ -572,6 +605,15 @@ class SingleTopology:
         assert len(set(tuple(core[:, 1]))) == len(core[:, 1])
 
         self.assert_factorizability()
+
+    def get_component_idxs(self) -> List[NDArray]:
+        """
+        Return the atom indexes for the two ligands in
+        this topology as a list of NDArray. Both lists
+        will contain atom indexes for the core atoms
+        as well as the unique atom indexes for each ligand.
+        """
+        return [self.a_to_c, self.b_to_c]
 
     def _identify_offending_core_indices(self):
         """Identifies atoms involved in violations of a factorizability assumption,
