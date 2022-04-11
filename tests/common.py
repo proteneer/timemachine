@@ -3,13 +3,15 @@ import functools
 import itertools
 import os
 import unittest
-from tempfile import TemporaryDirectory
+from importlib import resources
+from tempfile import NamedTemporaryFile, TemporaryDirectory
 from typing import List
 
 import jax
 import numpy as np
 from hilbertcurve.hilbertcurve import HilbertCurve
 from numpy.typing import NDArray
+from rdkit import Chem
 
 from timemachine.constants import ONE_4PI_EPS0
 from timemachine.ff import Forcefield
@@ -31,6 +33,19 @@ def temporary_working_dir():
 def get_110_ccc_ff():
     forcefield = Forcefield.load_from_file("smirnoff_1_1_0_ccc.py")
     return forcefield
+
+
+def get_hif2a_ligands_as_sdf_file(num_mols: int) -> NamedTemporaryFile:
+    mols = []
+    with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
+        suppl = Chem.SDMolSupplier(str(path_to_ligand), removeHs=False)
+        for _ in range(num_mols):
+            mols.append(next(suppl))
+    temp_sdf = NamedTemporaryFile(suffix=".sdf")
+    with Chem.SDWriter(temp_sdf.name) as writer:
+        for mol in mols:
+            writer.write(mol)
+    return temp_sdf
 
 
 def prepare_lj_system(
