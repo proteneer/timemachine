@@ -7,6 +7,7 @@ import numpy as np
 from rdkit import Chem
 from simtk import openmm
 
+from timemachine import constants
 from timemachine.fe import estimator, free_energy, topology
 from timemachine.fe.model_utils import apply_hmr
 from timemachine.ff import Forcefield
@@ -233,6 +234,8 @@ class RBFEModel:
 
             temperature = 300.0
             pressure = 1.0
+            beta = 1 / (constants.BOLTZ * temperature)
+            endpoint_correct = False
 
             integrator = LangevinIntegrator(temperature, time_step, 1.0, masses, seed)
 
@@ -240,18 +243,21 @@ class RBFEModel:
 
             model = estimator.FreeEnergyModel(
                 unbound_potentials,
+                endpoint_correct,
                 self.client,
                 host_box,
                 x0,
                 v0,
                 integrator,
+                barostat,
                 lambda_schedule,
                 self.equil_steps,
                 self.prod_steps,
-                barostat,
+                beta,
+                f"rbfe_{stage}",
             )
-
-            dG, results = estimator.deltaG(model, sys_params)
+            # Currently ignores the dG error
+            dG, _, results = estimator.deltaG(model, sys_params)
 
             stage_dGs.append(dG)
             stage_results.append((stage, results))

@@ -3,8 +3,6 @@ import pymbar
 from jax import grad, jit
 from jax import numpy as np
 from jax import value_and_grad, vmap
-from jax.scipy.stats.norm import logpdf as norm_logpdf
-from scipy.stats import norm
 
 from timemachine.constants import BOLTZ
 from timemachine.datasets import fetch_freesolv
@@ -17,46 +15,7 @@ from timemachine.fe.reweighting import (
 )
 from timemachine.ff import Forcefield
 from timemachine.md.enhanced import get_solvent_phase_system
-
-# TODO: should gaussian test system be moved into a test fixture? or perhaps to the testsystems module?
-
-
-def make_gaussian_testsystem():
-    """normalized/unnormalized 1D Gaussian with a dependence on lambda and params"""
-
-    def annealed_gaussian_def(lam, params):
-        initial_mean, initial_log_sigma = 0.0, 0.0
-        target_mean, target_log_sigma = params
-
-        # lam = 0 -> (mean = 0, stddev = 1)
-        # lam = 1 -> (mean = target_mean, stddev = target_sigma)
-        mean = lam * target_mean - (1 - lam) * initial_mean
-        stddev = np.exp(lam * target_log_sigma + (1 - lam) * initial_log_sigma)
-
-        return mean, stddev
-
-    def sample(lam, params, n_samples):
-        mean, stddev = annealed_gaussian_def(lam, params)
-        return norm.rvs(loc=mean, scale=stddev, size=(n_samples, 1))
-
-    def logpdf(x, lam, params):
-        mean, stddev = annealed_gaussian_def(lam, params)
-        return np.sum(norm_logpdf(x, loc=mean, scale=stddev))
-
-    def u_fxn(x, lam, params):
-        """unnormalized version of -logpdf"""
-        mean, stddev = annealed_gaussian_def(lam, params)
-        return np.sum(0.5 * ((x - mean) / stddev) ** 2)
-
-    def normalized_u_fxn(x, lam, params):
-        return -logpdf(x, lam, params)
-
-    def reduced_free_energy(lam, params):
-        mean, stddev = annealed_gaussian_def(lam, params)
-        log_z = np.log(stddev * np.sqrt(2 * np.pi))
-        return -log_z
-
-    return u_fxn, normalized_u_fxn, sample, reduced_free_energy
+from timemachine.testsystems.gaussian1d import make_gaussian_testsystem
 
 
 def assert_estimator_accurate(estimate_delta_f, analytical_delta_f, ref_params, n_random_trials, atol):

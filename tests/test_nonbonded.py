@@ -1,28 +1,26 @@
 # (ytz): check test and run benchmark with pytest:
 # pytest -xsv tests/test_nonbonded.py::TestNonbonded::test_dhfr && nvprof pytest -xsv tests/test_nonbonded.py::TestNonbonded::test_benchmark
-
-import copy
-import gzip
-import pickle
-import unittest
-
 from jax.config import config
 
 config.update("jax_enable_x64", True)
 
+import copy
 import functools
+import gzip
 import itertools
+import pickle
+import unittest
 
 import numpy as np
 import pytest
 from common import GradientTest, prepare_reference_nonbonded, prepare_system_params, prepare_water_system
-from simtk.openmm import app
 
 from timemachine.fe.utils import to_md_units
 from timemachine.ff.handlers import openmm_deserializer
 from timemachine.lib import potentials
 from timemachine.md import builders
 from timemachine.potentials import nonbonded
+from timemachine.testsystems.dhfr import setup_dhfr
 
 np.set_printoptions(linewidth=500)
 
@@ -32,19 +30,7 @@ pytestmark = [pytest.mark.memcheck]
 class TestNonbondedDHFR(GradientTest):
     def setUp(self):
         # This test checks hilbert curve re-ordering gives identical results
-        pdb_path = "tests/data/5dfr_solv_equil.pdb"
-        host_pdb = app.PDBFile(pdb_path)
-        protein_ff = app.ForceField("amber99sbildn.xml", "tip3p.xml")
-
-        host_system = protein_ff.createSystem(
-            host_pdb.topology, nonbondedMethod=app.NoCutoff, constraints=None, rigidWater=False
-        )
-
-        host_coords = host_pdb.positions
-        box = host_pdb.topology.getPeriodicBoxVectors()
-        self.box = np.asarray(box / box.unit)
-
-        host_fns, host_masses = openmm_deserializer.deserialize_system(host_system, cutoff=1.0)
+        host_fns, _, host_coords, self.box = setup_dhfr()
 
         for f in host_fns:
             if isinstance(f, potentials.Nonbonded):
