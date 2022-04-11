@@ -1,7 +1,7 @@
 import numpy as onp
 import pymbar
 from jax import grad, jit
-from jax import numpy as np
+from jax import numpy as jnp
 from jax import value_and_grad, vmap
 
 from timemachine.constants import BOLTZ
@@ -40,7 +40,7 @@ def assert_estimator_accurate(estimate_delta_f, analytical_delta_f, ref_params, 
     def sample_random_params():
         mean = ref_params[0] + onp.random.rand()
         log_sigma = ref_params[1] - onp.random.rand()
-        return np.array([mean, log_sigma])
+        return jnp.array([mean, log_sigma])
 
     f_hat, g_hat = value_and_grad(estimate_delta_f)(ref_params)
     f_ref, g_ref = value_and_grad(analytical_delta_f)(ref_params)
@@ -65,7 +65,7 @@ def test_endpoint_reweighting_1d():
     u_fxn, _, sample, reduced_free_energy = make_gaussian_testsystem()
 
     # ref_params: (mean, log_sigma) @ lambda=1
-    ref_params = np.ones(2)  # (annealing Normal(0, 1) @ lambda=0 to Normal(1, exp(1)) @ lambda=1)
+    ref_params = jnp.ones(2)  # (annealing Normal(0, 1) @ lambda=0 to Normal(1, exp(1)) @ lambda=1)
     ref_delta_f = reduced_free_energy(1.0, ref_params) - reduced_free_energy(0.0, ref_params)
 
     # more samples --> tighter absolute tolerance possible in test assertion
@@ -96,21 +96,21 @@ def test_mixture_reweighting_1d():
     u_fxn, normalized_u_fxn, sample, reduced_free_energy = make_gaussian_testsystem()
 
     # ref_params: (mean, log_sigma) @ lambda=1
-    ref_params = np.ones(2)  # (annealing Normal(0, 1) @ lambda=0 to Normal(1, exp(1)) @ lambda=1)
+    ref_params = jnp.ones(2)  # (annealing Normal(0, 1) @ lambda=0 to Normal(1, exp(1)) @ lambda=1)
     # easier-to-estimate free energy difference -> tighter tolerance possible in assertion
 
     n_windows = 10
-    lambdas = np.linspace(0, 1, n_windows)
+    lambdas = jnp.linspace(0, 1, n_windows)
 
     # bigger n samples per window --> ~ sqrt(n)-tighter tolerance possible in assertion
     n_samples_per_window = int(1e5)
     atol = 1e-2
 
-    N_k = np.array([n_samples_per_window] * n_windows)
+    N_k = jnp.array([n_samples_per_window] * n_windows)
     n_samples_total = sum(N_k)
 
     trajs = [sample(lam, ref_params, n_samples_per_window) for lam in lambdas]
-    xs = np.vstack(trajs).flatten()
+    xs = jnp.vstack(trajs).flatten()
     u_kn = onp.zeros((n_windows, n_samples_total))
     vec_u = vmap(u_fxn, in_axes=(0, None, None))
 
@@ -124,7 +124,7 @@ def test_mixture_reweighting_1d():
     # f_k estimates can come from any source, as long as they're accurate
 
     # using analytical f_k at ref_params
-    f_k_exact = np.array([reduced_free_energy(lam, ref_params) for lam in lambdas])
+    f_k_exact = jnp.array([reduced_free_energy(lam, ref_params) for lam in lambdas])
     u_mix_exact = interpret_as_mixture_potential(u_kn, f_k_exact, N_k)
 
     # various approximations to f_k at ref_params
@@ -136,8 +136,8 @@ def test_mixture_reweighting_1d():
 
     # TI
     vec_du_dl = vmap(grad(u_fxn, 1), (0, None, None))
-    mean_du_dls = np.array([np.mean(vec_du_dl(traj, lam, ref_params)) for (traj, lam) in zip(trajs, lambdas)])
-    f_k_ti = np.array([np.trapz(mean_du_dls[:k], lambdas[:k]) for k in range(n_windows)])
+    mean_du_dls = jnp.array([jnp.mean(vec_du_dl(traj, lam, ref_params)) for (traj, lam) in zip(trajs, lambdas)])
+    f_k_ti = jnp.array([jnp.trapz(mean_du_dls[:k], lambdas[:k]) for k in range(n_windows)])
     u_mix_ti = interpret_as_mixture_potential(u_kn, f_k_ti, N_k)
 
     # TODO [overkill] : BAR
@@ -171,7 +171,7 @@ def _make_fake_sample_batch(conf, box, ligand_indices, n_snapshots=25):
         _conf = onp.array(conf)
         _conf[ligand_indices] += 0.005 * onp.random.randn(len(ligand_indices), 3)
 
-        _box = box + np.diag(0.005 * onp.random.randn(3))
+        _box = box + jnp.diag(0.005 * onp.random.randn(3))
 
         samples.append((_conf, _box))
 
@@ -206,10 +206,10 @@ def make_ahfe_test_system():
 
     def make_batched_u_fxn(lam=0.0):
         def batched_u_fxn(samples, ligand_nb_params):
-            new_params = [np.array(p) for p in params]
+            new_params = [jnp.array(p) for p in params]
             new_params[-1] = new_params[-1].at[ligand_indices].set(ligand_nb_params)
 
-            U_s = np.array([U_fxn(conf, new_params, box, lam) for (conf, box) in samples])
+            U_s = jnp.array([U_fxn(conf, new_params, box, lam) for (conf, box) in samples])
             u_s = U_s / (BOLTZ * temperature)
 
             return u_s
@@ -237,9 +237,9 @@ def test_endpoint_reweighting_ahfe():
 
     v, g = value_and_grad(estimate_delta_f)(ref_params)
 
-    assert np.isfinite(v)
+    assert jnp.isfinite(v)
     assert v == ref_delta_f
-    assert np.isfinite(g).all()
+    assert jnp.isfinite(g).all()
     assert (g != 0).any()
     assert g.shape == ref_params.shape
     # assert anything_about_direction_of_g  # not expected because the "sample" arrays are made up
@@ -249,8 +249,8 @@ def test_endpoint_reweighting_ahfe():
     v_prime, g_prime = value_and_grad(estimate_delta_f)(params_prime)
     assert v_prime != v
     assert (g_prime != g).any()
-    assert np.isfinite(v_prime)
-    assert np.isfinite(g_prime).all()
+    assert jnp.isfinite(v_prime)
+    assert jnp.isfinite(g_prime).all()
 
 
 def test_mixture_reweighting_ahfe():
@@ -268,9 +268,9 @@ def test_mixture_reweighting_ahfe():
 
     v, g = value_and_grad(estimate_delta_f)(ref_params)
 
-    assert np.isfinite(v)
+    assert jnp.isfinite(v)
     # assert v == ref_delta_f  # not expected in this case, due to non-physical fake_log_weights
-    assert np.isfinite(g).all()
+    assert jnp.isfinite(g).all()
     assert (g != 0).any()
     assert g.shape == ref_params.shape
     # assert anything_about_direction_of_g  # not expected because the inputs are non-physical
@@ -280,8 +280,8 @@ def test_mixture_reweighting_ahfe():
     v_prime, g_prime = value_and_grad(estimate_delta_f)(params_prime)
     assert v_prime != v
     assert (g_prime != g).any()
-    assert np.isfinite(v_prime)
-    assert np.isfinite(g_prime).all()
+    assert jnp.isfinite(v_prime)
+    assert jnp.isfinite(g_prime).all()
 
 
 def test_one_sided_exp():
@@ -294,7 +294,7 @@ def test_one_sided_exp():
         # instance parameters
         num_works = onp.random.randint(1, 100)
         mean = onp.random.randn() * 10
-        stddev = np.exp(onp.random.randn())
+        stddev = jnp.exp(onp.random.randn())
 
         # random instance
         reduced_works = onp.random.randn(num_works) * stddev + mean
@@ -303,11 +303,11 @@ def test_one_sided_exp():
         pymbar_estimate, _ = pymbar.EXP(reduced_works)
         tm_estimate = one_sided_exp(reduced_works)
 
-        assert np.isclose(tm_estimate, pymbar_estimate)
+        assert jnp.isclose(tm_estimate, pymbar_estimate)
 
     # also check +inf
-    reduced_works = np.array([+np.inf, 0])
-    assert np.isclose(one_sided_exp(reduced_works), pymbar.EXP(reduced_works)[0])
+    reduced_works = jnp.array([+jnp.inf, 0])
+    assert jnp.isclose(one_sided_exp(reduced_works), pymbar.EXP(reduced_works)[0])
 
 
 def test_interpret_as_mixture_potential():
@@ -329,9 +329,9 @@ def test_interpret_as_mixture_potential():
 
     u_fxn, normalized_u_fxn, sample, reduced_free_energy = make_gaussian_testsystem()
 
-    ref_params = np.ones(2)
+    ref_params = jnp.ones(2)
     n_windows = 5
-    lambdas = np.linspace(0, 1, n_windows)
+    lambdas = jnp.linspace(0, 1, n_windows)
 
     N_k = [n_samples_per_window] * n_windows
     n_samples_total = sum(N_k)
@@ -339,20 +339,20 @@ def test_interpret_as_mixture_potential():
     def make_arrays(normalized=False):
         """u_kn, f_k, N_k (with f_k = zeros if normalized)"""
         trajs = [sample(lam, ref_params, n_samples_per_window) for lam in lambdas]
-        xs = np.vstack(trajs).flatten()
+        xs = jnp.vstack(trajs).flatten()
 
         u_kn = onp.zeros((n_windows, n_samples_total))
 
         if normalized:
             vec_u = vmap(normalized_u_fxn, in_axes=(0, None, None))
-            f_k = np.zeros(n_windows)
+            f_k = jnp.zeros(n_windows)
         else:
             vec_u = vmap(u_fxn, in_axes=(0, None, None))
-            f_k = np.array([reduced_free_energy(lam, ref_params) for lam in lambdas])
+            f_k = jnp.array([reduced_free_energy(lam, ref_params) for lam in lambdas])
             f_k -= f_k[0]
 
             # double-check this is different from normalized case
-            assert (np.abs(f_k) > 10 * atol).any()
+            assert (jnp.abs(f_k) > 10 * atol).any()
 
         for k in range(n_windows):
             u_kn[k] = vec_u(xs, lambdas[k], ref_params)
@@ -362,7 +362,7 @@ def test_interpret_as_mixture_potential():
     def reweight_from_mixture(u_kn, f_k, N_k):
         """https://arxiv.org/abs/1704.00891"""
         mixture_u_n = interpret_as_mixture_potential(u_kn, f_k, N_k)
-        delta_u_kn = u_kn - mixture_u_n[np.newaxis, :]
+        delta_u_kn = u_kn - mixture_u_n[jnp.newaxis, :]
         estimated_f_k = vmap(one_sided_exp)(delta_u_kn)
         return estimated_f_k - estimated_f_k[0]
 

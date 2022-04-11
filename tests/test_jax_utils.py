@@ -4,7 +4,7 @@ jax.config.update("jax_enable_x64", True)
 
 import numpy as onp
 from jax import jit
-from jax import numpy as np
+from jax import numpy as jnp
 from jax import vmap
 
 onp.random.seed(2021)
@@ -30,13 +30,13 @@ def test_delta_r():
 
     @jit
     def _distances(ri, rj, box):
-        return np.linalg.norm(delta_r(ri, rj, box), axis=1)
+        return jnp.linalg.norm(delta_r(ri, rj, box), axis=1)
 
     for _ in range(5):
         n_atoms = onp.random.randint(50, 1000)
         dim = onp.random.randint(3, 5)
         ri, rj = onp.random.randn(2, n_atoms, dim)
-        box = np.eye(dim)
+        box = jnp.eye(dim)
 
         dr_ij_1 = delta_r(ri, rj, box)
         dr_ji_1 = delta_r(rj, ri, box)
@@ -89,8 +89,8 @@ def test_compute_lifting_parameter():
     lambda_plane_idx, lambda_offset_idxs in [-1, 0, +1]"""
     cutoff = 5.0
 
-    lambda_plane_idxs = np.array([-1, -1, -1, 0, 0, 0, 1, 1, 1])
-    lambda_offset_idxs = np.array([-1, 0, 1, -1, 0, 1, -1, 0, 1])
+    lambda_plane_idxs = jnp.array([-1, -1, -1, 0, 0, 0, 1, 1, 1])
+    lambda_offset_idxs = jnp.array([-1, 0, 1, -1, 0, 1, -1, 0, 1])
 
     w0 = compute_lifting_parameter(0.0, lambda_plane_idxs, lambda_offset_idxs, cutoff)
     onp.testing.assert_allclose(w0, cutoff * lambda_plane_idxs)
@@ -122,10 +122,10 @@ def test_batched_neighbor_inds():
     confs = onp.random.rand(n_confs, n_particles, dim)
     cutoff = 0.3
 
-    boxes = np.array([np.eye(3)] * n_confs)
+    boxes = jnp.array([jnp.eye(3)] * n_confs)
 
     n_alchemical = 50
-    pairs = pairs_from_interaction_groups(np.arange(n_alchemical), np.arange(n_alchemical, n_particles))
+    pairs = pairs_from_interaction_groups(jnp.arange(n_alchemical), jnp.arange(n_alchemical, n_particles))
     n_possible_interactions = len(pairs)
 
     full_distances = vmap(distance_on_pairs)(confs[:, pairs[:, 0]], confs[:, pairs[:, 1]], boxes)
@@ -142,4 +142,4 @@ def test_batched_neighbor_inds():
     neighbor_distances = vmap(d)(confs, batch_pairs, boxes)
 
     assert neighbor_distances.shape == (n_confs, n_neighbor_pairs)
-    assert np.sum(neighbor_distances < cutoff) == np.sum(full_distances < cutoff)
+    assert jnp.sum(neighbor_distances < cutoff) == jnp.sum(full_distances < cutoff)
