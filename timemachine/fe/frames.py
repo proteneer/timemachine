@@ -1,6 +1,7 @@
-from typing import Any, Iterable, List, Tuple
+from typing import Iterable, List, Tuple
 
-SimulationResult = Any
+from timemachine.fe.estimator import SimulationResult
+
 FrameIterator = Iterable[Tuple[int, SimulationResult]]
 
 
