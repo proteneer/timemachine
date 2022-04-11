@@ -58,7 +58,7 @@ def test_nonbonded_pair_list_correctness(
     atol,
     cutoff,
     beta,
-    example_nonbonded_params,
+    example_nonbonded_potential,
     example_conf,
     example_box,
     rng: np.random.Generator,
@@ -90,7 +90,7 @@ def test_nonbonded_pair_list_correctness(
     lambda_vals = [0.0, 0.1]
     GradientTest().compare_forces(
         example_conf,
-        example_nonbonded_params,
+        example_nonbonded_potential.params,
         example_box,
         lambda_vals,
         ref_potential,
@@ -112,7 +112,7 @@ def test_nonbonded_pair_list_interpolated_correctness(
     atol,
     cutoff,
     beta,
-    example_nonbonded_params,
+    example_nonbonded_potential,
     example_conf,
     example_box,
     rng: np.random.Generator,
@@ -120,7 +120,7 @@ def test_nonbonded_pair_list_interpolated_correctness(
     "Compares with jax reference implementation, with parameter interpolation."
 
     num_atoms, _ = example_conf.shape
-    params = gen_params(example_nonbonded_params, rng)
+    params = gen_params(example_nonbonded_potential.params, rng)
 
     # randomly select 2 interaction groups and construct all pairwise interactions
     atom_idxs = rng.choice(

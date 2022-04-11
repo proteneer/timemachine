@@ -1,6 +1,6 @@
 import numpy as np
 
-from timemachine.fe import estimator_abfe
+from timemachine.fe import estimator
 from timemachine.lib import LangevinIntegrator, MonteCarloBarostat, potentials
 from timemachine.md.barostat.utils import get_bond_list, get_group_indices
 from timemachine.parallel.client import CUDAPoolClient
@@ -85,7 +85,7 @@ def test_free_energy_estimator():
     def loss_fn(sys_params):
 
         endpoint_correct = False
-        mdl = estimator_abfe.FreeEnergyModel(
+        mdl = estimator.FreeEnergyModel(
             unbound_potentials,
             endpoint_correct,
             client,
@@ -101,7 +101,7 @@ def test_free_energy_estimator():
             "test",
         )
 
-        dG, bar_dG_err, results = estimator_abfe.deltaG(mdl, sys_params)
+        dG, bar_dG_err, results = estimator.deltaG(mdl, sys_params)
 
         return dG ** 2
 
@@ -154,7 +154,7 @@ def test_free_energy_estimator_with_endpoint_correction():
     def loss_fn(sys_params):
 
         endpoint_correct = True
-        mdl = estimator_abfe.FreeEnergyModel(
+        mdl = estimator.FreeEnergyModel(
             unbound_potentials,
             endpoint_correct,
             client,
@@ -170,7 +170,7 @@ def test_free_energy_estimator_with_endpoint_correction():
             "test",
         )
 
-        dG, bar_dG_err, results = estimator_abfe.deltaG(mdl, sys_params)
+        dG, bar_dG_err, results = estimator.deltaG(mdl, sys_params)
 
         return dG ** 2
 

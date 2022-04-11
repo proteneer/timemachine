@@ -74,7 +74,7 @@ def test_nonbonded_interaction_group_correctness(
     atol,
     cutoff,
     beta,
-    example_nonbonded_params,
+    example_nonbonded_potential,
     example_conf,
     example_box,
     rng,
@@ -82,7 +82,7 @@ def test_nonbonded_interaction_group_correctness(
     "Compares with jax reference implementation."
 
     conf = example_conf[:num_atoms]
-    params = example_nonbonded_params[:num_atoms, :]
+    params = example_nonbonded_potential.params[:num_atoms, :]
 
     lambda_plane_idxs = rng.integers(-2, 3, size=(num_atoms,), dtype=np.int32)
     lambda_offset_idxs = rng.integers(-2, 3, size=(num_atoms,), dtype=np.int32)
@@ -136,7 +136,7 @@ def test_nonbonded_interaction_group_interpolated_correctness(
     atol,
     cutoff,
     beta,
-    example_nonbonded_params,
+    example_nonbonded_potential,
     example_conf,
     example_box,
     rng,
@@ -144,7 +144,7 @@ def test_nonbonded_interaction_group_interpolated_correctness(
     "Compares with jax reference implementation, with parameter interpolation."
 
     conf = example_conf[:num_atoms]
-    params_initial = example_nonbonded_params[:num_atoms, :]
+    params_initial = example_nonbonded_potential.params[:num_atoms, :]
     params = gen_params(params_initial, rng)
 
     lambda_plane_idxs = rng.integers(-2, 3, size=(num_atoms,), dtype=np.int32)
@@ -200,7 +200,7 @@ def test_nonbonded_interaction_group_consistency_allpairs_lambda_planes(
     atol,
     cutoff,
     beta,
-    example_nonbonded_params,
+    example_nonbonded_potential,
     example_conf,
     example_box,
     rng: np.random.Generator,
@@ -224,7 +224,7 @@ def test_nonbonded_interaction_group_consistency_allpairs_lambda_planes(
     """
 
     conf = example_conf[:num_atoms]
-    params = example_nonbonded_params[:num_atoms, :]
+    params = example_nonbonded_potential.params[:num_atoms, :]
 
     max_abs_offset_idx = 2  # i.e., lambda_offset_idxs in {-2, -1, 0, 1, 2}
     lambda_offset_idxs = rng.integers(-max_abs_offset_idx, max_abs_offset_idx + 1, size=(num_atoms,), dtype=np.int32)
@@ -289,7 +289,7 @@ def test_nonbonded_interaction_group_consistency_allpairs_constant_shift(
     atol,
     cutoff,
     beta,
-    example_nonbonded_params,
+    example_nonbonded_potential,
     example_conf,
     example_box,
     rng: np.random.Generator,
@@ -310,7 +310,7 @@ def test_nonbonded_interaction_group_consistency_allpairs_constant_shift(
     """
 
     conf = example_conf[:num_atoms]
-    params = example_nonbonded_params[:num_atoms, :]
+    params = example_nonbonded_potential.params[:num_atoms, :]
 
     lambda_plane_idxs = rng.integers(-2, 3, size=(num_atoms,), dtype=np.int32)
     lambda_offset_idxs = rng.integers(-2, 3, size=(num_atoms,), dtype=np.int32)

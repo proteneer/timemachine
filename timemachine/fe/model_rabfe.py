@@ -6,7 +6,7 @@ from rdkit import Chem
 from simtk import openmm
 
 from timemachine import constants
-from timemachine.fe import estimator_abfe, free_energy, model_utils, topology
+from timemachine.fe import estimator, free_energy, model_utils, topology
 from timemachine.fe.frames import endpoint_frames_only
 from timemachine.ff import Forcefield
 from timemachine.lib import LangevinIntegrator, MonteCarloBarostat, potentials
@@ -50,7 +50,7 @@ class AbsoluteModel(ABC):
 
     def simulate_futures(
         self, ff_params, mol, x0, box0, prefix, core_idxs=None, seed=0
-    ) -> Tuple[List[Any], estimator_abfe.FreeEnergyModel, List[Any]]:
+    ) -> Tuple[List[Any], estimator.FreeEnergyModel, List[Any]]:
         top = self.setup_topology(mol)
 
         afe = free_energy.AbsoluteFreeEnergy(mol, top)
@@ -76,7 +76,7 @@ class AbsoluteModel(ABC):
         v0 = np.zeros_like(x0)
 
         endpoint_correct = False
-        model = estimator_abfe.FreeEnergyModel(
+        model = estimator.FreeEnergyModel(
             unbound_potentials,
             endpoint_correct,
             self.client,
@@ -142,15 +142,15 @@ class AbsoluteModel(ABC):
         futures = []
         if self.client is None:
             for args in all_args:
-                futures.append(_MockFuture(estimator_abfe.simulate(*args)))
+                futures.append(_MockFuture(estimator.simulate(*args)))
         else:
             for args in all_args:
-                futures.append(self.client.submit(estimator_abfe.simulate, *args))
+                futures.append(self.client.submit(estimator.simulate, *args))
         return sys_params, model, futures
 
-    def predict_from_futures(self, sys_params, mol, model: estimator_abfe.FreeEnergyModel, futures: List[Any]):
+    def predict_from_futures(self, sys_params, mol, model: estimator.FreeEnergyModel, futures: List[Any]):
         results = [fut.result() for fut in futures]
-        dG, dG_err, results = estimator_abfe.deltaG_from_results(model, results, sys_params)
+        dG, dG_err, results = estimator.deltaG_from_results(model, results, sys_params)
 
         # uncomment if we want to visualize
         model_utils.generate_openmm_topology(
@@ -301,7 +301,7 @@ class RelativeModel(ABC):
         )
 
         endpoint_correct = True
-        model = estimator_abfe.FreeEnergyModel(
+        model = estimator.FreeEnergyModel(
             unbound_potentials,
             endpoint_correct,
             self.client,
@@ -368,16 +368,16 @@ class RelativeModel(ABC):
         futures = []
         if self.client is None:
             for args in all_args:
-                futures.append(_MockFuture(estimator_abfe.simulate(*args)))
+                futures.append(_MockFuture(estimator.simulate(*args)))
         else:
             for args in all_args:
-                futures.append(self.client.submit(estimator_abfe.simulate, *args))
+                futures.append(self.client.submit(estimator.simulate, *args))
 
         return sys_params, model, futures
 
     def simulate_futures(
         self, ff_params, mol_a, mol_b, core, x0, box0, prefix, seed=0
-    ) -> Tuple[List[Any], List[estimator_abfe.FreeEnergyModel], List[List[Any]]]:
+    ) -> Tuple[List[Any], List[estimator.FreeEnergyModel], List[List[Any]]]:
         """Compute the delta G of morphing mol_a into mol_b according to the
         protocol described by the topology object."""
 
@@ -440,7 +440,7 @@ class RelativeModel(ABC):
         return all_sys, models, all_futures
 
     def predict_from_futures(
-        self, sys_params, mol_a, mol_b, models: List[estimator_abfe.FreeEnergyModel], futures: List[List[Any]]
+        self, sys_params, mol_a, mol_b, models: List[estimator.FreeEnergyModel], futures: List[List[Any]]
     ):
         assert len(futures) == 2
         assert len(models) == 2
@@ -450,7 +450,7 @@ class RelativeModel(ABC):
         back_dG = 0
         for i, (params, model, sub_futures) in enumerate(zip(sys_params, models, futures)):
             results = [fut.result() for fut in sub_futures]
-            dG, dG_err, results = estimator_abfe.deltaG_from_results(model, results, params)
+            dG, dG_err, results = estimator.deltaG_from_results(model, results, params)
 
             # Save out the pdb
             model_utils.generate_openmm_topology(
@@ -674,7 +674,7 @@ class RelativeConversionModel:
         )
 
         endpoint_correct = False
-        model = estimator_abfe.FreeEnergyModel(
+        model = estimator.FreeEnergyModel(
             unbound_potentials,
             endpoint_correct,
             self.client,
@@ -720,16 +720,16 @@ class RelativeConversionModel:
         futures = []
         if self.client is None:
             for args in all_args:
-                futures.append(_MockFuture(estimator_abfe.simulate(*args)))
+                futures.append(_MockFuture(estimator.simulate(*args)))
         else:
             for args in all_args:
-                futures.append(self.client.submit(estimator_abfe.simulate, *args))
+                futures.append(self.client.submit(estimator.simulate, *args))
 
         return sys_params, model, futures
 
     def simulate_futures(
         self, ff_params, mol_a, mol_b, core, x0, box0, prefix, seed=0
-    ) -> Tuple[List[Any], List[estimator_abfe.FreeEnergyModel], List[List[Any]]]:
+    ) -> Tuple[List[Any], List[estimator.FreeEnergyModel], List[List[Any]]]:
         """Compute the delta G of decharging mol_a while simultaneously charging mol_b"""
 
         num_host_atoms = x0.shape[0] - mol_a.GetNumAtoms() - mol_b.GetNumAtoms()
@@ -768,7 +768,7 @@ class RelativeConversionModel:
         return all_sys, models, all_futures
 
     def predict_from_futures(
-        self, sys_params, mol_a, mol_b, models: List[estimator_abfe.FreeEnergyModel], futures: List[List[Any]]
+        self, sys_params, mol_a, mol_b, models: List[estimator.FreeEnergyModel], futures: List[List[Any]]
     ):
         assert len(futures) == 1
         assert len(models) == 1
@@ -779,7 +779,7 @@ class RelativeConversionModel:
         sub_futures = futures[0]
 
         results = [fut.result() for fut in sub_futures]
-        dG, dG_err, results = estimator_abfe.deltaG_from_results(model, results, params)
+        dG, dG_err, results = estimator.deltaG_from_results(model, results, params)
 
         # Save out the pdb
         model_utils.generate_openmm_topology(
