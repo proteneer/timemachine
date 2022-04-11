@@ -17,7 +17,7 @@ def get_gpu_count() -> int:
     return len(gpu_list)
 
 
-def get_worker_status() -> StatusResponse:
+def get_worker_status() -> StatusResponse:  # type: ignore
     try:
         with open("/proc/driver/nvidia/version") as ifs:
             nvidia_driver = ifs.read().strip()
@@ -26,7 +26,7 @@ def get_worker_status() -> StatusResponse:
     try:
         git_sha = check_output(["git", "rev-parse", "HEAD"]).strip()
     except FileNotFoundError:
-        git_sha = ""
+        git_sha = b""
     return StatusResponse(
         nvidia_driver=nvidia_driver,
         git_sha=git_sha,

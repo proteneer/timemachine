@@ -1,5 +1,6 @@
+from abc import abstractmethod
 from functools import partial
-from typing import List, Tuple
+from typing import Any, List, Tuple
 
 import jax
 import jax.numpy as jnp
@@ -119,7 +120,14 @@ class NPTMove(MonteCarloMove):
         return after_npt
 
 
-class DeterministicMTMMove:
+class DeterministicMTMMove(MonteCarloMove):
+
+    rng_key: Any
+
+    @abstractmethod
+    def acceptance_probability(self, x, box, key) -> Tuple[Any, Any, Any]:
+        pass
+
     def move(self, xvb: CoordsVelBox) -> CoordsVelBox:
         self.n_proposed += 1
         y_proposed, acceptance_probability, key = self.acceptance_probability(xvb.coords, xvb.box, self.rng_key)

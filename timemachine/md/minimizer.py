@@ -1,4 +1,4 @@
-from typing import Optional, Tuple
+from typing import Any, List, Optional, Tuple, Union
 
 import numpy as np
 from numpy.typing import NDArray
@@ -17,10 +17,10 @@ from timemachine.md.fire import fire_descent
 def bind_potentials(topo, ff):
     # setup the parameter handlers for the ligand
     tuples = [
-        [topo.parameterize_harmonic_bond, [ff.hb_handle]],
-        [topo.parameterize_harmonic_angle, [ff.ha_handle]],
-        [topo.parameterize_periodic_torsion, [ff.pt_handle, ff.it_handle]],
-        [topo.parameterize_nonbonded, [ff.q_handle, ff.lj_handle]],
+        (topo.parameterize_harmonic_bond, [ff.hb_handle]),
+        (topo.parameterize_harmonic_angle, [ff.ha_handle]),
+        (topo.parameterize_periodic_torsion, [ff.pt_handle, ff.it_handle]),
+        (topo.parameterize_nonbonded, [ff.q_handle, ff.lj_handle]),
     ]
 
     u_impls = []
@@ -113,6 +113,7 @@ def minimize_host_4d(mols, host_system, host_coords, ff, box, mol_coords=None) -
 
     num_host_atoms = host_coords.shape[0]
 
+    top: Union[topology.BaseTopology, topology.DualTopology]
     if len(mols) == 1:
         top = topology.BaseTopology(mols[0], ff)
     elif len(mols) == 2:
@@ -233,11 +234,11 @@ def equilibrate_host(
     hgt = topology.HostGuestTopology(host_bps, top)
 
     # setup the parameter handlers for the ligand
-    tuples = [
-        [hgt.parameterize_harmonic_bond, [ff.hb_handle]],
-        [hgt.parameterize_harmonic_angle, [ff.ha_handle]],
-        [hgt.parameterize_periodic_torsion, [ff.pt_handle, ff.it_handle]],
-        [hgt.parameterize_nonbonded, [ff.q_handle, ff.lj_handle]],
+    tuples: List[Tuple[Any, List[Any]]] = [
+        (hgt.parameterize_harmonic_bond, [ff.hb_handle]),
+        (hgt.parameterize_harmonic_angle, [ff.ha_handle]),
+        (hgt.parameterize_periodic_torsion, [ff.pt_handle, ff.it_handle]),
+        (hgt.parameterize_nonbonded, [ff.q_handle, ff.lj_handle]),
     ]
 
     u_impls = []
