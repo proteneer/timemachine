@@ -1,4 +1,3 @@
-from abc import ABC
 from typing import List
 
 import jax.numpy as jnp
@@ -339,7 +338,7 @@ class BaseTopologyDecoupling(BaseTopology):
         return qlj_params, nb_potential
 
 
-class DualTopology(ABC):
+class DualTopology(BaseTopology):
     def __init__(self, mol_a, mol_b, forcefield):
         """
         Utility for working with two ligands via dual topology. Both copies of the ligand
