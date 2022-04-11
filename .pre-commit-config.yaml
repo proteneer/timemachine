@@ -41,5 +41,6 @@ exclude: >
   | ^attic/
   | ^timemachine/parallel/grpc/
   | ^timemachine/ff/params/
+  | ^timemachine/_vendored/
   | ^versioneer\.py$
   | ^timemachine/_version\.py$
