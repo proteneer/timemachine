@@ -13,6 +13,7 @@ Code, documentation, experiments we want to retain for reference, but that we're
      * `shape.py` - Calculate volume overlap between two molecules
    * `tests` -- deprecated tests
      * `test_shape.py` -- tests for potentials.shape
+     * `dual_topology.py` -- test with TI and dual topology
 * `thermo_deriv/` -- numerical experiments with "thermodynamic derivative" estimators, adjusting LJ parameters to match observables
     * note: currently missing dependencies `thermo_deriv.lj_non_periodic.lennard_jones`, `thermo_deriv.lj.lennard_jones`.
     * note: `langevin_coefficients` dependency has since changed -- some scripts rely on a version of `langevin_coefficients` prior to PR #459
@@ -26,4 +27,4 @@ Code, documentation, experiments we want to retain for reference, but that we're
     * computing a relative free energy using a partial atom-mapping (the atom being deleted / inserted is handled using 4D decoupling)
   * `rbfe_single.py` -- script for running relative binding free energy with single topology
   * `estimator_variance.py` measures run-to-run variability as a function of number of MD steps performed per run
-  * `generate_gradients.py` use symbolic differentiation for common functional forms
+  * `generate_gradients.py` use symbolic differentiation for common functional forms to emit CUDA code
