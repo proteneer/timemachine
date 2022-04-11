@@ -159,15 +159,6 @@ void declare_context(py::module &m) {
             py::arg("store_x_interval") = 0)
         // .def("multiple_steps", &timemachine::Context::multiple_steps)
         .def(
-            "get_x_t",
-            [](timemachine::Context &ctxt) -> py::array_t<double, py::array::c_style> {
-                unsigned int N = ctxt.num_atoms();
-                unsigned int D = 3;
-                py::array_t<double, py::array::c_style> buffer({N, D});
-                ctxt.get_x_t(buffer.mutable_data());
-                return buffer;
-            })
-        .def(
             "multiple_steps_U",
             [](timemachine::Context &ctxt,
                const double lambda,
