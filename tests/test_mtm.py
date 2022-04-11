@@ -9,8 +9,8 @@ import jax
 import jax.numpy as jnp
 import jax.random as jrandom
 import numpy as np
-import test_ligands
 
+from timemachine import testsystems
 from timemachine.constants import BOLTZ
 from timemachine.ff import Forcefield
 from timemachine.md import enhanced
@@ -32,7 +32,7 @@ def test_optimized_MTM():
     seed = 2021
     np.random.seed(seed)
 
-    mol, _ = test_ligands.get_biphenyl()
+    mol, _ = testsystems.ligands.get_biphenyl()
     ff = get_ff_am1ccc()
 
     masses = np.array([a.GetMass() for a in mol.GetAtoms()])
@@ -44,12 +44,11 @@ def test_optimized_MTM():
     state = enhanced.VacuumState(mol, ff)
 
     proposal_U = state.U_decharged
-    num_batches = 480
+    num_batches = 485
 
     vacuum_samples, vacuum_log_weights = enhanced.generate_log_weighted_samples(
         mol, temperature, state.U_easy, proposal_U, seed, num_batches=num_batches
     )
-
     ubps, params, masses, coords, box = enhanced.get_solvent_phase_system(mol, ff)
 
     nb_potential = ubps[-1]

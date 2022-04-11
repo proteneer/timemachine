@@ -124,20 +124,14 @@ class VacuumState:
         exclusions = self.nb_potential.get_exclusion_idxs()
         scales = self.nb_potential.get_scale_factors()
 
-        N = x.shape[0]
-        charge_rescale_mask = np.ones((N, N))
-        lj_rescale_mask = np.ones((N, N))
-
         if decharge:
-            nb_params = jnp.asarray(self.nb_params).at[:, 0].set(0)
+            charge_indices = jnp.index_exp[:, 0]
+            nb_params = jnp.asarray(self.nb_params).at[charge_indices].set(0)
         else:
             nb_params = self.nb_params
 
-        for (i, j), (lj_scale, q_scale) in zip(exclusions, scales):
-            charge_rescale_mask[i][j] = 1 - q_scale
-            charge_rescale_mask[j][i] = 1 - q_scale
-            lj_rescale_mask[i][j] = 1 - lj_scale
-            lj_rescale_mask[j][i] = 1 - lj_scale
+        N = x.shape[0]
+        charge_rescale_mask, lj_rescale_mask = nonbonded.convert_exclusions_to_rescale_masks(exclusions, scales, N)
 
         beta = self.nb_potential.get_beta()
         cutoff = self.nb_potential.get_cutoff()
@@ -266,7 +260,7 @@ def _wrap_simulate(args):
         temperature,
         masses,
         steps_per_batch,
-        batches_per_worker,
+        num_batches,
         burn_in_batches,
         num_workers,
         seed,
@@ -277,8 +271,9 @@ def _wrap_simulate(args):
     os.environ["XLA_FLAGS"] = "--xla_force_host_platform_device_count=" + str(num_workers)
 
     kT = temperature * BOLTZ
-
     x0 = get_romol_conf(mol)
+    batches_per_worker = int(np.ceil(num_batches / num_workers))
+
     xs_proposal, vs_proposal = simulate(
         x0,
         U_proposal,
@@ -289,8 +284,6 @@ def _wrap_simulate(args):
         num_workers,
         seed,
     )
-
-    num_atoms = mol.GetNumAtoms()
 
     # discard burn-in batches and reshape into a single flat array
     xs_proposal = xs_proposal[:, burn_in_batches:, :, :]
@@ -308,12 +301,18 @@ def _wrap_simulate(args):
     log_weights = log_numerator - log_denominator
 
     # reshape into flat array by removing num_workers dimension
+    num_atoms = mol.GetNumAtoms()
     xs_proposal = xs_proposal.reshape(-1, num_atoms, 3)
     vs_proposal = vs_proposal.reshape(-1, num_atoms, 3)
 
-    xvs_proposal = np.stack([xs_proposal, vs_proposal], axis=1)
+    # TODO: double-check x -> (x, v) survived merge conflict resolution
+    # xvs_proposal = np.stack([xs_proposal, vs_proposal], axis=1)
 
-    return xvs_proposal, log_weights
+    # truncate to user requested num_batches
+    xs_proposal = xs_proposal[:num_batches, ...]
+    log_weights = log_weights[:num_batches]
+
+    return xs_proposal, log_weights
 
 
 def generate_log_weighted_samples(
@@ -359,9 +358,6 @@ def generate_log_weighted_samples(
     if num_workers is None:
         num_workers = os.cpu_count()
 
-    assert num_batches % num_workers == 0
-
-    batches_per_worker = num_batches // num_workers
     burn_in_batches = 1000
 
     with multiprocessing.get_context("spawn").Pool(1) as pool:
@@ -372,7 +368,7 @@ def generate_log_weighted_samples(
             temperature,
             masses,
             steps_per_batch,
-            batches_per_worker,
+            num_batches,
             burn_in_batches,
             num_workers,
             seed,
@@ -440,23 +436,44 @@ def jax_sample_from_log_weights(weighted_samples, log_weights, size, key):
     return weighted_samples[idxs]
 
 
-def get_solvent_phase_system(mol, ff, box_width=3.0, minimize_energy=True):
+def get_solvent_phase_system(mol, ff, box_width=3.0, margin=0.5, minimize_energy=True):
+    """
+    Given a mol and forcefield return a solvated system where the
+    solvent has (optionally) been minimized.
+
+    Parameters
+    ----------
+    mol: Chem.Mol
+
+    ff: Forcefield
+
+    box_width: float
+        water box initial width in nm
+
+    margin: Optional, float
+        Box margin in nm, default is 0.5 nm.
+
+    minimize_energy: bool
+        whether to apply minimize_host_4d
+    """
 
     # construct water box
     water_system, water_coords, water_box, water_topology = builders.build_water_system(box_width)
-    water_box = water_box + np.eye(3) * 0.5  # add a small margin around the box for stability
-    num_water_atoms = len(water_coords)
+    water_box = water_box + np.eye(3) * margin  # add a small margin around the box for stability
 
-    # absolute free energy
-    afe = free_energy.AbsoluteFreeEnergy(mol, ff)
+    # construct alchemical system
+    bt = topology.BaseTopology(mol, ff)
+    afe = free_energy.AbsoluteFreeEnergy(mol, bt)
     ff_params = ff.get_ordered_params()
-    ubps, params, masses, coords = afe.prepare_host_edge(ff_params, water_system, water_coords)
+    ubps, params, masses = afe.prepare_host_edge(ff_params, water_system)
 
+    # concatenate (optionally minimized) water_coords and ligand_coords
+    ligand_coords = get_romol_conf(mol)
     if minimize_energy:
-        # energy-minimize water coordinates
-        host_coords = coords[:num_water_atoms]
-        new_host_coords = minimizer.minimize_host_4d([mol], water_system, host_coords, ff, water_box)
-        coords[:num_water_atoms] = new_host_coords
+        new_water_coords = minimizer.minimize_host_4d([mol], water_system, water_coords, ff, water_box)
+        coords = np.concatenate([new_water_coords, ligand_coords])
+    else:
+        coords = np.concatenate([water_coords, ligand_coords])
 
     return ubps, params, masses, coords, water_box
 
@@ -531,7 +548,8 @@ def align_sample(x_vacuum, x_solvent):
 def align_and_replace(x_vacuum, x_solvent):
     num_ligand_atoms = len(x_vacuum)
     aligned_x_vacuum = align_sample(x_vacuum, x_solvent)
-    return jnp.asarray(x_solvent).at[-num_ligand_atoms:].set(aligned_x_vacuum)
+    ligand_idxs = jnp.index_exp[-num_ligand_atoms:]
+    return jnp.asarray(x_solvent).at[ligand_idxs].set(aligned_x_vacuum)
 
 
 batch_align_and_replace = jax.jit(jax.vmap(align_and_replace, in_axes=(0, None)))

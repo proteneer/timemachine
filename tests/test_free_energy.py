@@ -5,10 +5,13 @@ config.update("jax_enable_x64", True)
 from importlib import resources
 
 import numpy as np
+import pytest
 from rdkit import Chem
 from scipy.optimize import check_grad, minimize
 
-from timemachine.fe import estimator, free_energy, topology
+from timemachine import constants
+from timemachine.fe import estimator, free_energy, topology, utils
+from timemachine.fe.free_energy import RABFEResult
 from timemachine.fe.functional import construct_differentiable_interface, construct_differentiable_interface_fast
 from timemachine.ff import Forcefield
 from timemachine.lib import LangevinIntegrator, MonteCarloBarostat
@@ -19,6 +22,7 @@ from timemachine.testsystems.relative import hif2a_ligand_pair
 
 
 def test_absolute_free_energy():
+    np.random.seed(2022)
 
     with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
         suppl = Chem.SDMolSupplier(str(path_to_ligand), removeHs=False)
@@ -43,7 +47,8 @@ def test_absolute_free_energy():
     equil_steps = 1000
     prod_steps = 1000
 
-    afe = free_energy.AbsoluteFreeEnergy(mol, ff)
+    bt = topology.BaseTopology(mol, ff)
+    afe = free_energy.AbsoluteFreeEnergy(mol, bt)
 
     def absolute_model(ff_params):
 
@@ -57,8 +62,8 @@ def test_absolute_free_energy():
             # minimize the host to avoid clashes
             host_coords = minimizer.minimize_host_4d([mol], host_system, host_coords, ff, host_box)
 
-            unbound_potentials, sys_params, masses, coords = afe.prepare_host_edge(ff_params, host_system, host_coords)
-
+            unbound_potentials, sys_params, masses = afe.prepare_host_edge(ff_params, host_system)
+            coords = afe.prepare_combined_coords(host_coords)
             harmonic_bond_potential = unbound_potentials[0]
             group_idxs = get_group_indices(get_bond_list(harmonic_bond_potential))
 
@@ -67,6 +72,8 @@ def test_absolute_free_energy():
             client = CUDAPoolClient(1)
             temperature = 300.0
             pressure = 1.0
+            beta = 1 / (constants.BOLTZ * temperature)
+            endpoint_correct = False
 
             integrator = LangevinIntegrator(temperature, 1.5e-3, 1.0, masses, seed)
 
@@ -74,18 +81,21 @@ def test_absolute_free_energy():
 
             model = estimator.FreeEnergyModel(
                 unbound_potentials,
+                endpoint_correct,
                 client,
                 host_box,
                 x0,
                 v0,
                 integrator,
+                barostat,
                 lambda_schedule,
                 equil_steps,
                 prod_steps,
-                barostat,
+                beta,
+                "prefix",
             )
 
-            dG, _ = estimator.deltaG(model, sys_params)
+            dG, _, _ = estimator.deltaG(model, sys_params, subsample_interval=100)
             dGs.append(dG)
 
         return dGs[0] - dGs[1]
@@ -163,7 +173,8 @@ def test_relative_free_energy():
 
     def vacuum_model(ff_params):
 
-        unbound_potentials, sys_params, masses, coords = rfe.prepare_vacuum_edge(ff_params)
+        unbound_potentials, sys_params, masses = rfe.prepare_vacuum_edge(ff_params)
+        coords = rfe.prepare_combined_coords()
 
         x0 = coords
         v0 = np.zeros_like(coords)
@@ -178,21 +189,34 @@ def test_relative_free_energy():
         client = CUDAPoolClient(1)
         temperature = 300.0
         pressure = 1.0
+        beta = 1 / (constants.BOLTZ * temperature)
+        endpoint_correct = False
 
         integrator = LangevinIntegrator(temperature, 1.5e-3, 1.0, masses, seed)
 
         barostat = MonteCarloBarostat(x0.shape[0], pressure, temperature, group_idxs, 25, seed)
         model = estimator.FreeEnergyModel(
-            unbound_potentials, client, box, x0, v0, integrator, lambda_schedule, equil_steps, prod_steps, barostat
+            unbound_potentials,
+            endpoint_correct,
+            client,
+            box,
+            x0,
+            v0,
+            integrator,
+            barostat,
+            lambda_schedule,
+            equil_steps,
+            prod_steps,
+            beta,
+            "prefix",
         )
 
-        return estimator.deltaG(model, sys_params)[0]
+        return estimator.deltaG(model, sys_params, subsample_interval=100)[0]
 
     dG = vacuum_model(ff_params)
     assert np.abs(dG) < 1000.0
 
     def binding_model(ff_params):
-
         dGs = []
 
         for host_system, host_coords, host_box in [
@@ -203,7 +227,8 @@ def test_relative_free_energy():
             # minimize the host to avoid clashes
             host_coords = minimizer.minimize_host_4d([mol_a], host_system, host_coords, ff, host_box)
 
-            unbound_potentials, sys_params, masses, coords = rfe.prepare_host_edge(ff_params, host_system, host_coords)
+            unbound_potentials, sys_params, masses = rfe.prepare_host_edge(ff_params, host_system)
+            coords = rfe.prepare_combined_coords(host_coords)
 
             x0 = coords
             v0 = np.zeros_like(coords)
@@ -214,6 +239,8 @@ def test_relative_free_energy():
 
             temperature = 300.0
             pressure = 1.0
+            beta = 1 / (constants.BOLTZ * temperature)
+            endpoint_correct = False
 
             integrator = LangevinIntegrator(temperature, 1.5e-3, 1.0, masses, seed)
 
@@ -221,18 +248,21 @@ def test_relative_free_energy():
 
             model = estimator.FreeEnergyModel(
                 unbound_potentials,
+                endpoint_correct,
                 client,
                 host_box,
                 x0,
                 v0,
                 integrator,
+                barostat,
                 lambda_schedule,
                 equil_steps,
                 prod_steps,
-                barostat,
+                beta,
+                "prefix",
             )
 
-            dG, _ = estimator.deltaG(model, sys_params)
+            dG, _, _ = estimator.deltaG(model, sys_params, subsample_interval=100)
             dGs.append(dG)
 
         return dGs[0] - dGs[1]
@@ -315,11 +345,13 @@ def test_functional():
     * a differentiable loss function in terms of U can be minimized,
     * forward-mode and reverse-mode differentiation of loss agree,
     * an exception is raised if we try to do something that requires second derivatives,
-    * grad(nonlinear_function_in_terms_of_U) agrees with finite-difference
+    * grad(nonlinear_function_in_terms_of_U) agrees with finite-difference,
+    * requesting derivative w.r.t. box causes a runtime error
     """
 
-    ff_params = hif2a_ligand_pair.ff.get_ordered_params()
-    unbound_potentials, sys_params, _, coords = hif2a_ligand_pair.prepare_vacuum_edge(ff_params)
+    rfe = hif2a_ligand_pair
+    unbound_potentials, sys_params, _ = rfe.prepare_vacuum_edge(rfe.ff.get_ordered_params())
+    coords = rfe.prepare_combined_coords()
     box = np.eye(3) * 100
     lam = 0.5
 
@@ -354,14 +386,20 @@ def test_functional():
                 abs_err = check_grad(low_dim_f, grad(low_dim_f), perturb, epsilon=1e-4)
                 assert abs_err < 1e-3
 
+        # grad w.r.t. box shouldn't be allowed
+        with pytest.raises(RuntimeError) as e:
+            _ = grad(U, argnums=2)(coords, sys_params, box, lam)
+        assert "box" in str(e).lower()
+
 
 def test_construct_differentiable_interface_fast():
     """Assert that the computation of U and its derivatives using the
     C++ code path produces equivalent results to doing the
     summation in Python"""
 
-    ff_params = hif2a_ligand_pair.ff.get_ordered_params()
-    unbound_potentials, sys_params, _, coords = hif2a_ligand_pair.prepare_vacuum_edge(ff_params)
+    rfe = hif2a_ligand_pair
+    unbound_potentials, sys_params, _ = rfe.prepare_vacuum_edge(rfe.ff.get_ordered_params())
+    coords = rfe.prepare_combined_coords()
     box = np.eye(3) * 100
     lam = 0.5
 
@@ -382,3 +420,40 @@ def test_construct_differentiable_interface_fast():
             np.testing.assert_array_equal(dU_dp, dU_dp_ref)
 
         np.testing.assert_array_equal(grad_U[2], grad_U_ref[2])
+
+
+def test_rabfe_result_to_from_mol():
+    """assert equality after round-trip to/from Mol SDF format"""
+    mol = Chem.MolFromSmiles("CCCONNN")
+
+    result = RABFEResult(
+        "my mol",
+        1.0,
+        float("nan"),
+        2.0,
+        2.1,
+        3.0,
+        3.1,
+        4.0,
+        4.1,
+    )
+
+    result.apply_to_mol(mol)
+
+    reconstructed = RABFEResult.from_mol(mol)
+    assert result == reconstructed
+
+
+def test_absolute_vacuum():
+    with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
+        mol = next(Chem.SDMolSupplier(str(path_to_ligand), removeHs=False))
+
+    ff = Forcefield.load_from_file("smirnoff_1_1_0_ccc.py")
+    ff_params = ff.get_ordered_params()
+
+    bt = topology.BaseTopology(mol, ff)
+    afe = free_energy.AbsoluteFreeEnergy(mol, bt)
+
+    unbound_potentials, sys_params, masses = afe.prepare_vacuum_edge(ff_params)
+    assert masses == utils.get_mol_masses(mol)
+    np.testing.assert_array_almost_equal(afe.prepare_combined_coords(), utils.get_romol_conf(mol))

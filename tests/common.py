@@ -3,11 +3,15 @@ import functools
 import itertools
 import os
 import unittest
-from tempfile import TemporaryDirectory
+from importlib import resources
+from tempfile import NamedTemporaryFile, TemporaryDirectory
+from typing import List
 
 import jax
 import numpy as np
 from hilbertcurve.hilbertcurve import HilbertCurve
+from numpy.typing import NDArray
+from rdkit import Chem
 
 from timemachine.constants import ONE_4PI_EPS0
 from timemachine.ff import Forcefield
@@ -29,6 +33,19 @@ def temporary_working_dir():
 def get_110_ccc_ff():
     forcefield = Forcefield.load_from_file("smirnoff_1_1_0_ccc.py")
     return forcefield
+
+
+def get_hif2a_ligands_as_sdf_file(num_mols: int) -> NamedTemporaryFile:
+    mols = []
+    with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
+        suppl = Chem.SDMolSupplier(str(path_to_ligand), removeHs=False)
+        for _ in range(num_mols):
+            mols.append(next(suppl))
+    temp_sdf = NamedTemporaryFile(suffix=".sdf")
+    with Chem.SDWriter(temp_sdf.name) as writer:
+        for mol in mols:
+            writer.write(mol)
+    return temp_sdf
 
 
 def prepare_lj_system(
@@ -131,17 +148,7 @@ def prepare_lj_system(
 def prepare_reference_nonbonded(params, exclusion_idxs, scales, lambda_plane_idxs, lambda_offset_idxs, beta, cutoff):
 
     N = params.shape[0]
-
-    # process masks for exclusions properly
-    charge_rescale_mask = np.ones((N, N))
-    for (i, j), exc in zip(exclusion_idxs, scales[:, 0]):
-        charge_rescale_mask[i][j] = 1 - exc
-        charge_rescale_mask[j][i] = 1 - exc
-
-    lj_rescale_mask = np.ones((N, N))
-    for (i, j), exc in zip(exclusion_idxs, scales[:, 1]):
-        lj_rescale_mask[i][j] = 1 - exc
-        lj_rescale_mask[j][i] = 1 - exc
+    charge_rescale_mask, lj_rescale_mask = nonbonded.convert_exclusions_to_rescale_masks(exclusion_idxs, scales, N)
 
     ref_total_energy = functools.partial(
         nonbonded.nonbonded_v3,
@@ -156,6 +163,39 @@ def prepare_reference_nonbonded(params, exclusion_idxs, scales, lambda_plane_idx
     return ref_total_energy
 
 
+def prepare_system_params(x: NDArray, sigma_scale: float = 5.0) -> NDArray:
+    """
+    Prepares random parameters given a set of coordinates. The parameters are adjusted to be the correct
+    order of magnitude.
+
+    Parameters
+    ----------
+
+    x: Numpy array of Coordinates
+
+    sigma_scale: Factor to scale down sigma values by
+
+    Returns
+    -------
+    (N, 3) np.ndarray containing charges, sigmas and epsilons respectively.
+    """
+    assert x.ndim == 2
+    N = x.shape[0]
+
+    params = np.stack(
+        [
+            (np.random.rand(N).astype(np.float64) - 0.5) * np.sqrt(ONE_4PI_EPS0),  # q
+            np.random.rand(N).astype(np.float64) / sigma_scale,  # sig
+            np.random.rand(N).astype(np.float64),  # eps
+        ],
+        axis=1,
+    )
+
+    params[:, 1] = params[:, 1] / 2
+    params[:, 2] = np.sqrt(params[:, 2])
+    return params
+
+
 def prepare_water_system(x, lambda_plane_idxs, lambda_offset_idxs, p_scale, cutoff):
 
     assert x.ndim == 2
@@ -164,17 +204,7 @@ def prepare_water_system(x, lambda_plane_idxs, lambda_offset_idxs, p_scale, cuto
 
     assert N % 3 == 0
 
-    params = np.stack(
-        [
-            (np.random.rand(N).astype(np.float64) - 0.5) * np.sqrt(ONE_4PI_EPS0),  # q
-            np.random.rand(N).astype(np.float64) / 5.0,  # sig
-            np.random.rand(N).astype(np.float64),  # eps
-        ],
-        axis=1,
-    )
-
-    params[:, 1] = params[:, 1] / 2
-    params[:, 2] = np.sqrt(params[:, 2])
+    params = prepare_system_params(x, sigma_scale=p_scale)
 
     scales = []
     exclusion_idxs = []
@@ -197,15 +227,7 @@ def prepare_water_system(x, lambda_plane_idxs, lambda_offset_idxs, p_scale, cuto
 
     test_potential = potentials.Nonbonded(exclusion_idxs, scales, lambda_plane_idxs, lambda_offset_idxs, beta, cutoff)
 
-    charge_rescale_mask = np.ones((N, N))
-    for (i, j), exc in zip(exclusion_idxs, scales[:, 0]):
-        charge_rescale_mask[i][j] = 1 - exc
-        charge_rescale_mask[j][i] = 1 - exc
-
-    lj_rescale_mask = np.ones((N, N))
-    for (i, j), exc in zip(exclusion_idxs, scales[:, 1]):
-        lj_rescale_mask[i][j] = 1 - exc
-        lj_rescale_mask[j][i] = 1 - exc
+    charge_rescale_mask, lj_rescale_mask = nonbonded.convert_exclusions_to_rescale_masks(exclusion_idxs, scales, N)
 
     ref_total_energy = functools.partial(
         nonbonded.nonbonded_v3,
@@ -227,14 +249,7 @@ def prepare_nb_system(x, E, lambda_plane_idxs, lambda_offset_idxs, p_scale, cuto
     N = x.shape[0]
     # D = x.shape[1]
 
-    params = np.stack(
-        [
-            (np.random.rand(N).astype(np.float64) - 0.5) * np.sqrt(ONE_4PI_EPS0),  # q
-            np.random.rand(N).astype(np.float64) / 10.0,  # sig
-            np.random.rand(N).astype(np.float64),  # eps
-        ],
-        axis=1,
-    )
+    params = prepare_system_params(x, sigma_scale=p_scale)
 
     atom_idxs = np.arange(N)
 
@@ -247,15 +262,7 @@ def prepare_nb_system(x, E, lambda_plane_idxs, lambda_offset_idxs, p_scale, cuto
 
     test_potential = potentials.Nonbonded(exclusion_idxs, scales, lambda_plane_idxs, lambda_offset_idxs, beta, cutoff)
 
-    charge_rescale_mask = np.ones((N, N))
-    for (i, j), exc in zip(exclusion_idxs, scales[:, 0]):
-        charge_rescale_mask[i][j] = 1 - exc
-        charge_rescale_mask[j][i] = 1 - exc
-
-    lj_rescale_mask = np.ones((N, N))
-    for (i, j), exc in zip(exclusion_idxs, scales[:, 1]):
-        lj_rescale_mask[i][j] = 1 - exc
-        lj_rescale_mask[j][i] = 1 - exc
+    charge_rescale_mask, lj_rescale_mask = nonbonded.convert_exclusions_to_rescale_masks(exclusion_idxs, scales, N)
 
     ref_total_energy = functools.partial(
         nonbonded.nonbonded_v3,
@@ -402,9 +409,29 @@ class GradientTest(unittest.TestCase):
             assert 0
 
     def compare_forces(
-        self, x, params, box, lamb, ref_potential, test_potential, rtol, precision, atol=1e-8, benchmark=False
+        self,
+        x: NDArray,
+        params: NDArray,
+        box: NDArray,
+        lambdas: List[float],
+        ref_potential,
+        test_potential,
+        rtol: float,
+        precision,
+        atol: float = 1e-8,
+        benchmark: bool = False,
     ):
+        """
+        Compares the forces between a reference and a test potential.
 
+
+        Note
+        ----
+        Preferable to pass a list of lambdas to this function than run this function
+        repeatedly, as this function constructs an unbound impl for the test_potential
+        which can be expensive relative to the time it takes to compute the forces/energies/etc.
+
+        """
         test_impl = test_potential.unbound_impl(precision)
 
         x = (x.astype(np.float32)).astype(np.float64)
@@ -417,30 +444,30 @@ class GradientTest(unittest.TestCase):
         assert x.dtype == np.float64
         assert params.dtype == np.float64
 
-        ref_u = ref_potential(x, params, box, lamb)
-        grad_fn = jax.grad(ref_potential, argnums=(0, 1, 3))
-        ref_du_dx, ref_du_dp, ref_du_dl = grad_fn(x, params, box, lamb)
+        for lamb in lambdas:
+            ref_u = ref_potential(x, params, box, lamb)
+            grad_fn = jax.grad(ref_potential, argnums=(0, 1, 3))
+            ref_du_dx, ref_du_dp, ref_du_dl = grad_fn(x, params, box, lamb)
+            for combo in itertools.product([False, True], repeat=4):
 
-        for combo in itertools.product([False, True], repeat=4):
+                (compute_du_dx, compute_du_dp, compute_du_dl, compute_u) = combo
 
-            (compute_du_dx, compute_du_dp, compute_du_dl, compute_u) = combo
+                # do each computation twice to check determinism
+                test_du_dx, test_du_dp, test_du_dl, test_u = test_impl.execute_selective(
+                    x, params, box, lamb, compute_du_dx, compute_du_dp, compute_du_dl, compute_u
+                )
+                if compute_u:
+                    np.testing.assert_allclose(ref_u, test_u, rtol=rtol, atol=atol)
+                if compute_du_dx:
+                    self.assert_equal_vectors(np.array(ref_du_dx), np.array(test_du_dx), rtol)
+                if compute_du_dl:
+                    np.testing.assert_allclose(ref_du_dl, test_du_dl, rtol=rtol)
+                if compute_du_dp:
+                    np.testing.assert_allclose(ref_du_dp, test_du_dp, rtol=rtol, atol=atol)
 
-            # do each computation twice to check determinism
-            test_du_dx, test_du_dp, test_du_dl, test_u = test_impl.execute_selective(
-                x, params, box, lamb, compute_du_dx, compute_du_dp, compute_du_dl, compute_u
-            )
-            if compute_u:
-                np.testing.assert_allclose(ref_u, test_u, rtol=rtol, atol=atol)
-            if compute_du_dx:
-                self.assert_equal_vectors(np.array(ref_du_dx), np.array(test_du_dx), rtol)
-            if compute_du_dl:
-                np.testing.assert_allclose(ref_du_dl, test_du_dl, rtol=rtol)
-            if compute_du_dp:
-                np.testing.assert_allclose(ref_du_dp, test_du_dp, rtol=rtol, atol=atol)
-
-            test_du_dx_2, test_du_dp_2, test_du_dl_2, test_u_2 = test_impl.execute_selective(
-                x, params, box, lamb, compute_du_dx, compute_du_dp, compute_du_dl, compute_u
-            )
+                test_du_dx_2, test_du_dp_2, test_du_dl_2, test_u_2 = test_impl.execute_selective(
+                    x, params, box, lamb, compute_du_dx, compute_du_dp, compute_du_dl, compute_u
+                )
 
             np.testing.assert_array_equal(test_du_dx, test_du_dx_2)
             np.testing.assert_array_equal(test_du_dl, test_du_dl_2)

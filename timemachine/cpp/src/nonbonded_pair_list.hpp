@@ -9,6 +9,9 @@ namespace timemachine {
 template <typename RealType, bool Negated, bool Interpolated> class NonbondedPairList : public Potential {
 
 private:
+    const int N_; // number of atoms
+    const int M_; // number of pairs
+
     int *d_pair_idxs_; // [M, 2]
     double *d_scales_; // [M, 2]
     int *d_lambda_plane_idxs_;
@@ -16,9 +19,6 @@ private:
 
     double beta_;
     double cutoff_;
-
-    const int M_; // number of pairs
-    const int N_; // number of atoms
 
     double *d_w_;
     double *d_dw_dl_;

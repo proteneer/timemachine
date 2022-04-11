@@ -61,7 +61,6 @@ def test_nonbonded_interaction_group_zero_interactions(rng: np.random.Generator)
     assert u == 0
 
 
-@pytest.mark.parametrize("lamb", [0.0, 0.1])
 @pytest.mark.parametrize("beta", [2.0])
 @pytest.mark.parametrize("cutoff", [1.1])
 @pytest.mark.parametrize("precision,rtol,atol", [(np.float64, 1e-8, 1e-8), (np.float32, 1e-4, 5e-4)])
@@ -75,8 +74,7 @@ def test_nonbonded_interaction_group_correctness(
     atol,
     cutoff,
     beta,
-    lamb,
-    example_nonbonded_params,
+    example_nonbonded_potential,
     example_conf,
     example_box,
     rng,
@@ -84,7 +82,7 @@ def test_nonbonded_interaction_group_correctness(
     "Compares with jax reference implementation."
 
     conf = example_conf[:num_atoms]
-    params = example_nonbonded_params[:num_atoms, :]
+    params = example_nonbonded_potential.params[:num_atoms, :]
 
     lambda_plane_idxs = rng.integers(-2, 3, size=(num_atoms,), dtype=np.int32)
     lambda_offset_idxs = rng.integers(-2, 3, size=(num_atoms,), dtype=np.int32)
@@ -99,7 +97,7 @@ def test_nonbonded_interaction_group_correctness(
         conf_4d = jax_utils.augment_dim(conf, w)
         box_4d = (1000 * jax.numpy.eye(4)).at[:3, :3].set(box)
 
-        vdW, electrostatics, _ = nonbonded.nonbonded_v3_interaction_groups(
+        vdW, electrostatics = nonbonded.nonbonded_v3_interaction_groups(
             conf_4d, params, box_4d, ligand_idxs, host_idxs, beta, cutoff
         )
         return jax.numpy.sum(vdW + electrostatics)
@@ -111,12 +109,12 @@ def test_nonbonded_interaction_group_correctness(
         beta,
         cutoff,
     )
-
+    lambda_vals = [0.0, 0.1]
     GradientTest().compare_forces(
         conf,
         params,
         example_box,
-        lamb=lamb,
+        lambda_vals,
         ref_potential=ref_ixngroups,
         test_potential=test_ixngroups,
         rtol=rtol,
@@ -125,7 +123,6 @@ def test_nonbonded_interaction_group_correctness(
     )
 
 
-@pytest.mark.parametrize("lamb", [0.0, 0.1, 0.9, 1.0])
 @pytest.mark.parametrize("beta", [2.0])
 @pytest.mark.parametrize("cutoff", [1.1])
 @pytest.mark.parametrize("precision,rtol,atol", [(np.float64, 1e-8, 1e-8), (np.float32, 1e-4, 5e-4)])
@@ -139,8 +136,7 @@ def test_nonbonded_interaction_group_interpolated_correctness(
     atol,
     cutoff,
     beta,
-    lamb,
-    example_nonbonded_params,
+    example_nonbonded_potential,
     example_conf,
     example_box,
     rng,
@@ -148,7 +144,7 @@ def test_nonbonded_interaction_group_interpolated_correctness(
     "Compares with jax reference implementation, with parameter interpolation."
 
     conf = example_conf[:num_atoms]
-    params_initial = example_nonbonded_params[:num_atoms, :]
+    params_initial = example_nonbonded_potential.params[:num_atoms, :]
     params = gen_params(params_initial, rng)
 
     lambda_plane_idxs = rng.integers(-2, 3, size=(num_atoms,), dtype=np.int32)
@@ -165,7 +161,7 @@ def test_nonbonded_interaction_group_interpolated_correctness(
         conf_4d = jax_utils.augment_dim(conf, w)
         box_4d = (1000 * jax.numpy.eye(4)).at[:3, :3].set(box)
 
-        vdW, electrostatics, _ = nonbonded.nonbonded_v3_interaction_groups(
+        vdW, electrostatics = nonbonded.nonbonded_v3_interaction_groups(
             conf_4d, params, box_4d, ligand_idxs, host_idxs, beta, cutoff
         )
         return jax.numpy.sum(vdW + electrostatics)
@@ -177,12 +173,12 @@ def test_nonbonded_interaction_group_interpolated_correctness(
         beta,
         cutoff,
     )
-
+    lambda_vals = [0.0, 0.1, 0.9, 1.0]
     GradientTest().compare_forces(
         conf,
         params,
         example_box,
-        lamb=lamb,
+        lambda_vals,
         ref_potential=ref_ixngroups,
         test_potential=test_ixngroups,
         rtol=rtol,
@@ -191,7 +187,6 @@ def test_nonbonded_interaction_group_interpolated_correctness(
     )
 
 
-@pytest.mark.parametrize("lamb", [0.0, 0.1])
 @pytest.mark.parametrize("beta", [2.0])
 @pytest.mark.parametrize("cutoff", [1.1])
 @pytest.mark.parametrize("precision,rtol,atol", [(np.float64, 1e-8, 1e-8), (np.float32, 1e-4, 5e-4)])
@@ -205,8 +200,7 @@ def test_nonbonded_interaction_group_consistency_allpairs_lambda_planes(
     atol,
     cutoff,
     beta,
-    lamb,
-    example_nonbonded_params,
+    example_nonbonded_potential,
     example_conf,
     example_box,
     rng: np.random.Generator,
@@ -230,7 +224,7 @@ def test_nonbonded_interaction_group_consistency_allpairs_lambda_planes(
     """
 
     conf = example_conf[:num_atoms]
-    params = example_nonbonded_params[:num_atoms, :]
+    params = example_nonbonded_potential.params[:num_atoms, :]
 
     max_abs_offset_idx = 2  # i.e., lambda_offset_idxs in {-2, -1, 0, 1, 2}
     lambda_offset_idxs = rng.integers(-max_abs_offset_idx, max_abs_offset_idx + 1, size=(num_atoms,), dtype=np.int32)
@@ -268,12 +262,12 @@ def test_nonbonded_interaction_group_consistency_allpairs_lambda_planes(
         beta,
         cutoff,
     )
-
+    lambda_vals = [0.0, 0.1]
     GradientTest().compare_forces(
         conf,
         params,
         example_box,
-        lamb=lamb,
+        lambda_vals,
         ref_potential=ref_ixngroups,
         test_potential=test_ixngroups,
         rtol=rtol,
@@ -282,7 +276,6 @@ def test_nonbonded_interaction_group_consistency_allpairs_lambda_planes(
     )
 
 
-@pytest.mark.parametrize("lamb", [0.0, 0.1])
 @pytest.mark.parametrize("beta", [2.0])
 @pytest.mark.parametrize("cutoff", [1.1])
 @pytest.mark.parametrize("precision,rtol,atol", [(np.float64, 1e-8, 1e-8), (np.float32, 1e-4, 5e-4)])
@@ -296,8 +289,7 @@ def test_nonbonded_interaction_group_consistency_allpairs_constant_shift(
     atol,
     cutoff,
     beta,
-    lamb,
-    example_nonbonded_params,
+    example_nonbonded_potential,
     example_conf,
     example_box,
     rng: np.random.Generator,
@@ -318,12 +310,12 @@ def test_nonbonded_interaction_group_consistency_allpairs_constant_shift(
     """
 
     conf = example_conf[:num_atoms]
-    params = example_nonbonded_params[:num_atoms, :]
+    params = example_nonbonded_potential.params[:num_atoms, :]
 
     lambda_plane_idxs = rng.integers(-2, 3, size=(num_atoms,), dtype=np.int32)
     lambda_offset_idxs = rng.integers(-2, 3, size=(num_atoms,), dtype=np.int32)
 
-    def ref_allpairs(conf):
+    def ref_allpairs(conf, lamb):
         return prepare_reference_nonbonded(
             params=params,
             exclusion_idxs=np.array([], dtype=np.int32),
@@ -336,24 +328,22 @@ def test_nonbonded_interaction_group_consistency_allpairs_constant_shift(
 
     ligand_idxs = rng.choice(num_atoms, size=(num_atoms_ligand,), replace=False).astype(np.int32)
 
-    def test_ixngroups(conf):
-        _, _, _, u = (
-            NonbondedInteractionGroup(
-                ligand_idxs,
-                lambda_plane_idxs,
-                lambda_offset_idxs,
-                beta,
-                cutoff,
-            )
-            .unbound_impl(precision)
-            .execute(conf, params, example_box, lamb)
-        )
+    test_impl = NonbondedInteractionGroup(
+        ligand_idxs,
+        lambda_plane_idxs,
+        lambda_offset_idxs,
+        beta,
+        cutoff,
+    ).unbound_impl(precision)
+
+    def test_ixngroups(conf, lamb):
+        _, _, _, u = test_impl.execute(conf, params, example_box, lamb)
         return u
 
     conf_prime = np.array(conf)
     conf_prime[ligand_idxs] += rng.normal(0, 0.01, size=(3,))
 
-    ref_delta = ref_allpairs(conf_prime) - ref_allpairs(conf)
-    test_delta = test_ixngroups(conf_prime) - test_ixngroups(conf)
-
-    np.testing.assert_allclose(ref_delta, test_delta, rtol=rtol, atol=atol)
+    for lam in [0.0, 0.1]:
+        ref_delta = ref_allpairs(conf_prime, lam) - ref_allpairs(conf, lam)
+        test_delta = test_ixngroups(conf_prime, lam) - test_ixngroups(conf, lam)
+        np.testing.assert_allclose(ref_delta, test_delta, rtol=rtol, atol=atol)

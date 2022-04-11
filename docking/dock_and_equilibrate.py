@@ -8,7 +8,7 @@ import numpy as np
 from rdkit import Chem
 
 from docking import report
-from timemachine.fe import free_energy, pdb_writer
+from timemachine.fe import free_energy, pdb_writer, topology
 from timemachine.ff import Forcefield
 from timemachine.lib import LangevinIntegrator, custom_ops
 from timemachine.md import builders, minimizer
@@ -107,11 +107,10 @@ def dock_and_equilibrate(
             [guest_mol], solvated_host_system, solvated_host_coords, ff, host_box
         )
 
-        afe = free_energy.AbsoluteFreeEnergy(guest_mol, ff)
+        guest_topology = topology.BaseTopology(guest_mol, ff)
+        afe = free_energy.AbsoluteFreeEnergy(guest_mol, guest_topology)
 
-        ups, sys_params, combined_masses, _ = afe.prepare_host_edge(
-            ff.get_ordered_params(), solvated_host_system, minimized_coords
-        )
+        ups, sys_params, combined_masses = afe.prepare_host_edge(ff.get_ordered_params(), solvated_host_system)
 
         combined_bps = []
         for up, sp in zip(ups, sys_params):
@@ -234,7 +233,7 @@ def main():
     parser.add_argument(
         "-s",
         "--guests_sdfile",
-        default="tests/data/ligands_40__first-two-ligs.sdf",
+        default="timemachine/testsystems/data/ligands_40.sdf",
         help="guests to pose",
     )
     parser.add_argument(

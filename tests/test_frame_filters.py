@@ -1,6 +1,6 @@
 from unittest import TestCase
 
-from timemachine.fe.estimator_abfe import SimulationResult
+from timemachine.fe.estimator import SimulationResult
 from timemachine.fe.frames import all_frames, endpoint_frames_only, no_frames
 
 

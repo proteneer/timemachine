@@ -8,9 +8,10 @@ import jax
 import numpy as np
 import pytest
 from rdkit import Chem
-from rdkit.Chem import AllChem
+from rdkit.Chem import AllChem, rdmolops
 
 from timemachine.constants import ONE_4PI_EPS0
+from timemachine.ff import Forcefield
 from timemachine.ff.charges import AM1CCC_CHARGES
 from timemachine.ff.handlers import bonded, nonbonded
 from timemachine.ff.handlers.deserialize import deserialize_handlers
@@ -372,32 +373,15 @@ $$$$
     mol = Chem.MolFromMolBlock(mol_sdf, removeHs=False)
     es_params = am1h.parameterize(mol)
 
-    # TBD update with AM1 Symmetrize=True
-    ligand_params = np.array(
-        [
-            -6.10948,
-            7.08286,
-            -1.13097,
-            -4.3096,
-            2.03822,
-            -1.72492,
-            -0.98493,
-            -1.75663,
-            -0.70852,
-            -1.65444,
-            7.76463,
-            -6.49881,
-            -7.10585,
-            0.93707,
-            0.93707,
-            0.93707,
-            1.79376,
-            1.6654,
-            1.69322,
-            1.90986,
-            5.22498,
+    # fmt: off
+    ligand_params = np.array([
+        -5.36348, 6.98008, -1.68885, -4.04439, 1.93568, -2.25534,
+        -0.87637, -1.8679, -0.66892, -1.6588, 7.67174, -6.1465,
+        -7.26945, 0.93978, 0.93978, 0.93978, 1.83702, 1.69675,
+        1.71667, 1.90762, 5.27508,
         ]
     )
+    # fmt: on
 
     np.testing.assert_almost_equal(es_params, ligand_params, decimal=5)
 
@@ -538,9 +522,22 @@ def test_gbsa_handler():
     # test that we can use the adjoints
     adjoints = gb_vjp_fn(gb_params_adjoints)[0]
 
-    # if a parameter is > 99 then its adjoint should be zero (converse isn't necessarily true since)
+    # if a parameter is > 99 then its adjoint should be zero (converse isn't necessarily true)
     mask = np.argwhere(params > 90)
     assert np.all(adjoints[mask] == 0.0)
+
+
+def test_am1ccc_throws_error_on_phosphorus():
+    """Temporary, until phosphorus patterns are added to AM1CCC port"""
+    ff = Forcefield.load_from_file("smirnoff_1_1_0_ccc.py")
+
+    # contains phosphorus
+    smi = "[H]c1c(OP(=S)(OC([H])([H])C([H])([H])[H])OC([H])([H])C([H])([H])[H])nc(C([H])(C([H])([H])[H])C([H])([H])[H])nc1C([H])([H])[H]"
+    mol = Chem.AddHs(Chem.MolFromSmiles(smi))
+
+    with pytest.raises(RuntimeError) as e:
+        _ = ff.q_handle.parameterize(mol)
+    assert "unsupported element" in str(e)
 
 
 def test_am1_differences():
@@ -551,10 +548,6 @@ def test_am1_differences():
         if isinstance(ccc, nonbonded.AM1CCCHandler):
             break
 
-    with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
-        suppl = Chem.SDMolSupplier(str(path_to_ligand), removeHs=False)
-
-    smi = "[H]c1c(OP(=S)(OC([H])([H])C([H])([H])[H])OC([H])([H])C([H])([H])[H])nc(C([H])(C([H])([H])[H])C([H])([H])[H])nc1C([H])([H])[H]"
     smi = "Clc1c(Cl)c(Cl)c(-c2c(Cl)c(Cl)c(Cl)c(Cl)c2Cl)c(Cl)c1Cl"
     mol = Chem.MolFromSmiles(smi)
     mol = Chem.AddHs(mol)
@@ -588,34 +581,101 @@ def test_am1_differences():
             assert 0
 
 
+def test_am1elf10_conformer_independence():
+    with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
+        suppl = Chem.SDMolSupplier(str(path_to_ligand), removeHs=False)
+    # Pick a subset of molecules with chiral centers
+    mols = [mol for mol in suppl]
+    mols = [mols[0], mols[2], mols[3]]
+
+    # need to assign so embedded molecules generated below
+    # have the correct stereochemistry
+    for mol in mols:
+        rdmolops.AssignStereochemistryFrom3D(mol, confId=0, replaceExistingTags=True)
+
+    am1elf10_charges = [nonbonded.oe_assign_charges(mol, charge_model=nonbonded.AM1ELF10) for mol in mols]
+
+    # regenerate the conformations
+    for mol in mols:
+        AllChem.EmbedMolecule(mol, randomSeed=2022, useRandomCoords=True)
+
+    new_am1elf10_charges = [nonbonded.oe_assign_charges(mol, charge_model=nonbonded.AM1ELF10) for mol in mols]
+
+    # new conformations should have the same charges
+    for orig_charges, new_charges in zip(am1elf10_charges, new_am1elf10_charges):
+        delta_charges = np.abs(np.array(orig_charges) - np.array(new_charges))
+        assert np.sum(delta_charges) == pytest.approx(0.0)
+
+
 def test_compute_or_load_am1_charges():
     """Loop over test ligands, asserting that charges are stored in expected property and that the same charges are
     returned on repeated calls"""
 
     # get some molecules
-    cache_key = nonbonded.AM1_CHARGE_CACHE
-
+    cache_key = nonbonded.AM1ELF10_CHARGE_CACHE
     with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
         suppl = Chem.SDMolSupplier(str(path_to_ligand), removeHs=False)
 
-    all_mols = [mol for mol in suppl]
-    all_mols = all_mols[:5]  # truncate so that whole test is ~ 10 seconds
+    mols = [mol for mol in suppl][:5]  # truncate so that whole test is ~ 10 seconds
 
     # don't expect AM1 cache yet
-    for mol in all_mols:
+    for mol in mols:
         assert not mol.HasProp(cache_key)
 
     # compute charges once
-    fresh_am1_charges = [nonbonded.compute_or_load_am1_charges(mol) for mol in all_mols]
+    fresh_am1_charges = [nonbonded.compute_or_load_am1_charges(mol) for mol in mols]
 
     # expect each mol to have AM1 cache now
-    for mol in all_mols:
+    for mol in mols:
         assert mol.HasProp(cache_key)
 
     # expect the same charges as the first time around
-    cached_am1_charges = [nonbonded.compute_or_load_am1_charges(mol) for mol in all_mols]
+    cached_am1_charges = [nonbonded.compute_or_load_am1_charges(mol) for mol in mols]
     for (fresh, cached) in zip(fresh_am1_charges, cached_am1_charges):
         np.testing.assert_array_equal(fresh, cached)
+
+
+@pytest.fixture
+def mol_with_precomputed_charges():
+    """Provide a test mol with partial charges precomputed on two different versions of Ubuntu"""
+    with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
+        suppl = Chem.SDMolSupplier(str(path_to_ligand), removeHs=False)
+
+    mols = [mol for mol in suppl]
+    test_mol = mols[0]
+
+    # fmt: off
+    precomputed_charges = dict()
+    precomputed_charges['ubuntu-18.04.4'] = np.array([
+        -3.385959, 0.26308782, 2.30802986, 1.11718023, -2.11460365,
+        0.9725527, -9.18744615, 0.04042971, -2.49344069, 1.87709392,
+        -1.64877796, 0.57591713, -1.68873618, 1.19414994, -1.04834368,
+        -1.52407053, 0.30670004, -1.26003975, -1.3233364, 33.79971321,
+        -10.86357005, -10.86357005, -1.72362592, -0.10184044, -1.47951542,
+        -1.72362592, -11.32255943, 2.74250182, 1.64583123, 1.55000221,
+        1.69816584, 1.83477824, 2.11436794, 1.99956175, 1.98447416,
+        2.86426252, 2.86426252])
+    precomputed_charges['ubuntu-20.04.2'] = np.array([
+       -3.38772701, 0.26721331, 2.30272567, 1.11670881, -2.10741359,
+       0.96123709, -9.15420638, 0.03088217, -2.48495405, 1.872379,
+       -1.65467143, 0.58181069, -1.6896792, 1.19155677, -1.04775431,
+       -1.51994506, 0.3044605, -1.25933253, -1.32628322, 33.75586471,
+       -10.85178312, -10.85178312, -1.72386163, -0.10278342, -1.4785724,
+       -1.72386163, -11.31914145, 2.74450571, 1.64253075, 1.55165236,
+       1.69875511, 1.83418879, 2.1147215, 1.99413971, 1.98565289,
+       2.86638427, 2.86638427])
+    # fmt: on
+
+    return dict(mol=test_mol, precomputed_charges=precomputed_charges)
+
+
+def test_am1_platform_dependence(mol_with_precomputed_charges):
+    """Assert AM1 charges computed on test runner ~equal to those previously computed on 1 of 3 supported platforms"""
+
+    mol = mol_with_precomputed_charges["mol"]
+    local_am1_charges = nonbonded.compute_or_load_am1_charges(mol)
+    allowable_charges = mol_with_precomputed_charges["precomputed_charges"].values()
+    assert any(np.isclose(local_am1_charges, expected_charges).all() for expected_charges in allowable_charges)
 
 
 def test_charging_compounds_with_non_zero_charge():

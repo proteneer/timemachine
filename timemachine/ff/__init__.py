@@ -2,11 +2,10 @@ from pathlib import Path
 from typing import Union
 from warnings import warn
 
-from timemachine import __file__ as tm_path
+import importlib_resources as resources
+
 from timemachine.ff.handlers import bonded, nonbonded
 from timemachine.ff.handlers.deserialize import deserialize_handlers
-
-PARAMS_DIR = Path(tm_path).parent / "ff" / "params"
 
 
 class Forcefield:
@@ -31,16 +30,19 @@ class Forcefield:
         """
         original_path = str(path)
         path = Path(path)  # Safe to construct a Path object from another Path object
-        built_in_path = PARAMS_DIR / original_path
-        if built_in_path.is_file():
-            if path.is_file():
-                warn(f"Provided path {original_path} shares name with builtin forcefield, falling back to builtin")
-            # Search built in params for the forcefields
-            path = built_in_path
-        if not path.is_file():
-            raise ValueError(f"Unable to find {original_path} in file system or built in forcefields")
-        with open(path, "r") as ifs:
-            handlers = deserialize_handlers(ifs.read())
+
+        with resources.files("timemachine.ff.params") as params_path:
+            built_in_path = params_path / original_path
+            if built_in_path.is_file():
+                if path.is_file():
+                    warn(f"Provided path {original_path} shares name with builtin forcefield, falling back to builtin")
+                # Search built in params for the forcefields
+                path = built_in_path
+            if not path.is_file():
+                raise ValueError(f"Unable to find {original_path} in file system or built in forcefields")
+            with open(path, "r") as ifs:
+                handlers = deserialize_handlers(ifs.read())
+
         return cls(handlers)
 
     def __init__(self, ff_handlers):

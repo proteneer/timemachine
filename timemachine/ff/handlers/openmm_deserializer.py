@@ -26,7 +26,7 @@ def deserialize_system(system, cutoff):
     list of lib.Potential, masses
 
     Note: We add a small epsilon (1e-3) to all zero eps values to prevent
-    a singularity from occuring in the lennard jones derivatives
+    a singularity from occurring in the lennard jones derivatives
 
     """
 

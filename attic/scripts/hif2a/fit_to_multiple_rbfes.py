@@ -14,9 +14,10 @@ from jax import numpy as jnp
 
 import timemachine
 from timemachine.fe.estimator import SimulationResult
+from timemachine.fe.free_energy import RBFETransformIndex, RelativeFreeEnergy
 
 # free energy classes
-from timemachine.fe.free_energy import RBFETransformIndex, RelativeFreeEnergy, construct_lambda_schedule
+from timemachine.fe.lambda_schedule import construct_lambda_schedule
 from timemachine.fe.loss import pseudo_huber_loss  # , l1_loss, flat_bottom_loss
 from timemachine.fe.model import RBFEModel
 
@@ -126,7 +127,7 @@ def loss_fxn(ff_params, batch: List[Tuple[RelativeFreeEnergy, RBFEModel]]):
     preds = []
     for rfe, model in batch:
         indices.append(list(index.get_transform_indices(rfe)))
-        pred_ddG, stage_results = model.predict(ff_params, rfe.mol_a, rfe.mol_b, rfe.core)
+        pred_ddG, stage_results = model.predict(ff_params, rfe.mol_a, rfe.mol_b, rfe.top.core)
         all_results.extend(list(stage_results))
         preds.append(pred_ddG)
     labels = jnp.asarray([rfe.label for rfe, _ in batch])
@@ -170,7 +171,7 @@ def equilibrate_edges(datasets: List[Dataset], systems: List[Dict[str, Any]], nu
     for path, edges in model_set.items():
         model = systems[path]
         model.equilibrate_edges(
-            [(edge.mol_a, edge.mol_b, edge.core) for edge in edges],
+            [(edge.mol_a, edge.mol_b, edge.top.core) for edge in edges],
             equilibration_steps=num_steps,
             cache_path=cache_path,
         )

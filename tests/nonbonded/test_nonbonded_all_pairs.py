@@ -128,7 +128,6 @@ def test_nonbonded_all_pairs_improper_subset(rng: np.random.Generator):
     assert u_1 == u_2
 
 
-@pytest.mark.parametrize("lamb", [0.0, 0.1])
 @pytest.mark.parametrize("beta", [2.0])
 @pytest.mark.parametrize("cutoff", [1.1])
 @pytest.mark.parametrize("precision,rtol,atol", [(np.float64, 1e-8, 1e-8), (np.float32, 1e-4, 5e-4)])
@@ -144,8 +143,7 @@ def test_nonbonded_all_pairs_correctness(
     atol,
     cutoff,
     beta,
-    lamb,
-    example_nonbonded_params,
+    example_nonbonded_potential,
     example_conf,
     example_box,
     rng: np.random.Generator,
@@ -153,7 +151,7 @@ def test_nonbonded_all_pairs_correctness(
     "Compares with jax reference implementation."
 
     conf = example_conf[:num_atoms]
-    params_initial = example_nonbonded_params[:num_atoms, :]
+    params_initial = example_nonbonded_potential.params[:num_atoms, :]
     params = gen_params(params_initial, rng) if interpolated else params_initial
 
     lambda_plane_idxs = rng.integers(-2, 3, size=(num_atoms,), dtype=np.int32)
@@ -167,7 +165,15 @@ def test_nonbonded_all_pairs_correctness(
 
     make_test_potential = NonbondedAllPairsInterpolated if interpolated else NonbondedAllPairs
     test_potential = make_test_potential(lambda_plane_idxs, lambda_offset_idxs, beta, cutoff, atom_idxs)
-
+    lambda_values = [0.0, 0.1]
     GradientTest().compare_forces(
-        conf, params, example_box, lamb, ref_potential, test_potential, precision=precision, rtol=rtol, atol=atol
+        conf,
+        params,
+        example_box,
+        lambda_values,
+        ref_potential,
+        test_potential,
+        precision=precision,
+        rtol=rtol,
+        atol=atol,
     )

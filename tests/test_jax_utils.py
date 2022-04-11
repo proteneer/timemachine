@@ -11,12 +11,12 @@ onp.random.seed(2021)
 
 from timemachine.potentials.jax_utils import (
     augment_dim,
-    batched_neighbor_inds,
     compute_lifting_parameter,
     delta_r,
     distance_on_pairs,
     get_all_pairs_indices,
-    get_group_group_indices,
+    get_interacting_pair_indices_batch,
+    pairs_from_interaction_groups,
 )
 
 
@@ -59,22 +59,29 @@ def test_get_all_pairs_indices():
     """check i < j < n"""
     ns = onp.random.randint(5, 50, 10)
     for n in ns:
-        inds_i, inds_j = get_all_pairs_indices(n)
-        assert (inds_i < inds_j).all()
-        assert (inds_j < n).all()
+        pairs = get_all_pairs_indices(n)
+        assert (pairs[:, 0] < pairs[:, 1]).all()
+        assert (pairs < n).all()
 
 
-def test_get_group_group_indices():
-    """check i < n, j < m"""
-    ns = onp.random.randint(5, 50, 10)
-    ms = onp.random.randint(5, 50, 10)
+def test_get_pairs_from_interaction_groups_indices():
+    """on random instances of varying size, assert expected number and identity of interacting pairs"""
+    num_instances = 10
+    ns = onp.random.randint(5, 50, num_instances)
+    ms = onp.random.randint(5, 50, num_instances)
 
     for n, m in zip(ns, ms):
-        inds_i, inds_j = get_group_group_indices(n, m)
-        assert (inds_i < n).all()
-        assert (inds_j < m).all()
+        atom_indices = onp.arange(n + m)
 
-        assert len(inds_i) == n * m
+        onp.random.shuffle(atom_indices)  # non-contiguous group indices
+        group_a_indices = atom_indices[:n]
+        group_b_indices = atom_indices[n:]
+
+        pairs = pairs_from_interaction_groups(group_a_indices, group_b_indices)
+        assert set(pairs[:, 0]) == set(group_a_indices)
+        assert set(pairs[:, 1]) == set(group_b_indices)
+
+        assert len(pairs) == n * m
 
 
 def test_compute_lifting_parameter():
@@ -118,22 +125,21 @@ def test_batched_neighbor_inds():
     boxes = np.array([np.eye(3)] * n_confs)
 
     n_alchemical = 50
-    inds_l, inds_r = get_group_group_indices(n=n_alchemical, m=n_particles - n_alchemical)
-    inds_r += n_alchemical
-    n_possible_interactions = len(inds_l)
+    pairs = pairs_from_interaction_groups(np.arange(n_alchemical), np.arange(n_alchemical, n_particles))
+    n_possible_interactions = len(pairs)
 
-    full_distances = vmap(distance_on_pairs)(confs[:, inds_l], confs[:, inds_r], boxes)
+    full_distances = vmap(distance_on_pairs)(confs[:, pairs[:, 0]], confs[:, pairs[:, 1]], boxes)
     assert full_distances.shape == (n_confs, n_possible_interactions)
 
-    neighbor_inds_l, neighbor_inds_r = batched_neighbor_inds(confs, inds_l, inds_r, cutoff, boxes)
-    n_neighbor_pairs = neighbor_inds_l.shape[1]
-    assert neighbor_inds_r.shape == (n_confs, n_neighbor_pairs)
+    batch_pairs = get_interacting_pair_indices_batch(confs, boxes, pairs, cutoff)
+    n_neighbor_pairs = batch_pairs.shape[1]
+    assert batch_pairs.shape == (n_confs, n_neighbor_pairs, 2)
     assert n_neighbor_pairs <= n_possible_interactions
 
-    def d(conf, inds_l, inds_r, box):
-        return distance_on_pairs(conf[inds_l], conf[inds_r], box)
+    def d(conf, pairs, box):
+        return distance_on_pairs(conf[pairs[:, 0]], conf[pairs[:, 1]], box)
 
-    neighbor_distances = vmap(d)(confs, neighbor_inds_l, neighbor_inds_r, boxes)
+    neighbor_distances = vmap(d)(confs, batch_pairs, boxes)
 
     assert neighbor_distances.shape == (n_confs, n_neighbor_pairs)
     assert np.sum(neighbor_distances < cutoff) == np.sum(full_distances < cutoff)

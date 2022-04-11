@@ -5,17 +5,14 @@ relative binding free energy edge from the HIF2A test system"""
 import time
 
 import numpy as np
-from simtk.openmm import app
 
-from timemachine.fe import free_energy
 from timemachine.fe.model_utils import apply_hmr
-from timemachine.fe.topology import SingleTopology
 from timemachine.fe.utils import to_md_units
-from timemachine.ff import Forcefield
 from timemachine.ff.handlers import openmm_deserializer
 from timemachine.lib import LangevinIntegrator, MonteCarloBarostat, custom_ops
 from timemachine.md import builders, minimizer
 from timemachine.md.barostat.utils import get_bond_list, get_group_indices
+from timemachine.testsystems.dhfr import setup_dhfr
 
 
 def recenter(conf, box):
@@ -132,17 +129,7 @@ def benchmark(
 
 def benchmark_dhfr(verbose=False, num_batches=100, steps_per_batch=1000):
 
-    pdb_path = "tests/data/5dfr_solv_equil.pdb"
-    host_pdb = app.PDBFile(pdb_path)
-    protein_ff = app.ForceField("amber99sbildn.xml", "tip3p.xml")
-    host_system = protein_ff.createSystem(
-        host_pdb.topology, nonbondedMethod=app.NoCutoff, constraints=None, rigidWater=False
-    )
-    host_coords = host_pdb.positions
-    box = host_pdb.topology.getPeriodicBoxVectors()
-    box = np.asarray(box / box.unit)
-
-    host_fns, host_masses = openmm_deserializer.deserialize_system(host_system, cutoff=1.0)
+    host_fns, host_masses, host_coords, box = setup_dhfr()
 
     host_conf = []
     for x, y, z in host_coords:
@@ -195,16 +182,10 @@ def benchmark_dhfr(verbose=False, num_batches=100, steps_per_batch=1000):
 
 def benchmark_hif2a(verbose=False, num_batches=100, steps_per_batch=1000):
 
-    from timemachine.testsystems.relative import hif2a_ligand_pair as testsystem
+    from timemachine.testsystems.relative import setup_hif2a_ligand_pair
 
-    mol_a, mol_b, core = testsystem.mol_a, testsystem.mol_b, testsystem.core
-
-    ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
-
-    single_topology = SingleTopology(mol_a, mol_b, core, ff)
-    rfe = free_energy.RelativeFreeEnergy(single_topology)
-
-    ff_params = ff.get_ordered_params()
+    rfe = setup_hif2a_ligand_pair("smirnoff_1_1_0_sc.py")
+    mol_a, mol_b = rfe.mol_a, rfe.mol_b
 
     # build the protein system.
     complex_system, complex_coords, _, _, complex_box, _ = builders.build_protein_system(
@@ -221,7 +202,7 @@ def benchmark_hif2a(verbose=False, num_batches=100, steps_per_batch=1000):
         host_fns, host_masses = openmm_deserializer.deserialize_system(host_system, cutoff=1.0)
 
         # resolve host clashes
-        min_host_coords = minimizer.minimize_host_4d([mol_a, mol_b], host_system, host_coords, ff, host_box)
+        min_host_coords = minimizer.minimize_host_4d([mol_a, mol_b], host_system, host_coords, rfe.ff, host_box)
 
         x0 = min_host_coords
         v0 = np.zeros_like(x0)
@@ -254,11 +235,11 @@ def benchmark_hif2a(verbose=False, num_batches=100, steps_per_batch=1000):
         )
 
         # RBFE
-        unbound_potentials, sys_params, masses, coords = rfe.prepare_host_edge(ff_params, host_system, x0)
-
+        unbound_potentials, sys_params, masses = rfe.prepare_host_edge(rfe.ff.get_ordered_params(), host_system)
+        combined_coords = rfe.prepare_combined_coords(x0)
         bound_potentials = [x.bind(y) for (x, y) in zip(unbound_potentials, sys_params)]
 
-        x0 = coords
+        x0 = combined_coords
         v0 = np.zeros_like(x0)
 
         # lamb = 0.5

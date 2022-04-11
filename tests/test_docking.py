@@ -5,6 +5,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from common import get_hif2a_ligands_as_sdf_file
+
 from docking import dock_and_equilibrate, pose_dock, relative_docking, rigorous_work
 from timemachine.testsystems.relative import hif2a_ligand_pair
 
@@ -12,9 +14,7 @@ from timemachine.testsystems.relative import hif2a_ligand_pair
 class TestDocking(unittest.TestCase):
     def test_pose_dock(self):
         """Tests basic functionality of pose_dock"""
-        guests_sdfile = str(
-            Path(__file__).resolve().parent.parent.joinpath("tests", "data", "ligands_40__first-two-ligs.sdf")
-        )
+        temp_sdf = get_hif2a_ligands_as_sdf_file(1)
         host_pdbfile = str(Path(__file__).resolve().parent.parent.joinpath("tests", "data", "hif2a_nowater_min.pdb"))
         transition_type = "insertion"
         n_steps = 1001
@@ -24,7 +24,7 @@ class TestDocking(unittest.TestCase):
 
             pose_dock.pose_dock(
                 host_pdbfile,
-                guests_sdfile,
+                temp_sdf.name,
                 transition_type,
                 n_steps,
                 transition_steps,
@@ -36,9 +36,6 @@ class TestDocking(unittest.TestCase):
                 f"{outdir}/338/",
                 f"{outdir}/338/338_pd_1000_host.pdb",
                 f"{outdir}/338/338_pd_1000_guest.sdf",
-                f"{outdir}/43/",
-                f"{outdir}/43/43_pd_1000_host.pdb",
-                f"{outdir}/43/43_pd_1000_guest.sdf",
             ]
 
             for f in expected_output:
@@ -47,25 +44,20 @@ class TestDocking(unittest.TestCase):
     def test_dock_and_equilibrate(self):
         """Tests basic functionality of dock_and_equilibrate"""
         host_pdbfile = str(Path(__file__).resolve().parent.parent.joinpath("tests", "data", "hif2a_nowater_min.pdb"))
-        guests_sdfile = str(
-            Path(__file__).resolve().parent.parent.joinpath("tests", "data", "ligands_40__first-two-ligs.sdf")
-        )
+        temp_sdf = get_hif2a_ligands_as_sdf_file(1)
         max_lambda = 0.25
         insertion_steps = 501
         eq_steps = 1501
 
         with tempfile.TemporaryDirectory() as outdir:
             dock_and_equilibrate.dock_and_equilibrate(
-                host_pdbfile, guests_sdfile, max_lambda, insertion_steps, eq_steps, outdir
+                host_pdbfile, temp_sdf.name, max_lambda, insertion_steps, eq_steps, outdir
             )
 
             expected_output = [
                 f"{outdir}/338/",
                 f"{outdir}/338/338_ins_{insertion_steps-1}_host.pdb",
                 f"{outdir}/338/338_eq_1000_guest.sdf",
-                f"{outdir}/43/",
-                f"{outdir}/43/43_ins_{insertion_steps-1}_host.pdb",
-                f"{outdir}/43/43_eq_1000_guest.sdf",
             ]
 
             for f in expected_output:
@@ -74,19 +66,17 @@ class TestDocking(unittest.TestCase):
     def test_rigorous_work(self):
         """Tests basic functionality of rigorous_work"""
         host_pdbfile = str(Path(__file__).resolve().parent.parent.joinpath("tests", "data", "hif2a_nowater_min.pdb"))
-        guests_sdfile = str(
-            Path(__file__).resolve().parent.parent.joinpath("tests", "data", "ligands_40__first-two-ligs.sdf")
-        )
+        temp_sdf = get_hif2a_ligands_as_sdf_file(1)
         num_deletions = 10
         deletion_steps = 501
         with tempfile.TemporaryDirectory() as outdir:
             all_works = rigorous_work.calculate_rigorous_work(
-                host_pdbfile, guests_sdfile, outdir, num_deletions, deletion_steps
+                host_pdbfile, temp_sdf.name, outdir, num_deletions, deletion_steps
             )
 
             self.assertTrue("338" in all_works)
             self.assertTrue("protein" in all_works["338"])
-            self.assertTrue("solvent" in all_works["43"])
+            self.assertTrue("solvent" in all_works["338"])
             self.assertEqual(len(all_works["338"]["protein"]), 10)
 
             expected_output = [
@@ -94,10 +84,6 @@ class TestDocking(unittest.TestCase):
                 f"{outdir}/338/338_solvent-ins_500_host.pdb",
                 f"{outdir}/338/338_protein-eq1_5000_guest.sdf",
                 f"{outdir}/338/338_protein-eq2_05000_guest.sdf",
-                f"{outdir}/43/",
-                f"{outdir}/43/43_protein-ins_500_host.pdb",
-                f"{outdir}/43/43_solvent-eq1_5000_guest.sdf",
-                f"{outdir}/43/43_solvent-eq2_05000_guest.sdf",
             ]
 
             for f in expected_output:
@@ -109,7 +95,7 @@ class TestDocking(unittest.TestCase):
         mol_a, mol_b, core = (
             hif2a_ligand_pair.mol_a,
             hif2a_ligand_pair.mol_b,
-            hif2a_ligand_pair.core,
+            hif2a_ligand_pair.top.core,
         )
         host_pdbfile = str(Path(__file__).resolve().parent.parent.joinpath("tests", "data", "hif2a_nowater_min.pdb"))
         num_switches = 10

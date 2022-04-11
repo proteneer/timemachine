@@ -12,23 +12,17 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 import pytest
-import test_ligands
 
+from timemachine import testsystems
 from timemachine.constants import BOLTZ
+from timemachine.fe.utils import get_mol_masses
 from timemachine.ff import Forcefield
 from timemachine.md import enhanced
 from timemachine.md.moves import NPTMove, OptimizedMTMMove
 from timemachine.potentials import bonded, nonbonded
 
-# (ytz): useful for visualization, so please leave this comment here!
 
-
-def get_ff_am1cc():
-    ff = Forcefield.load_from_file("smirnoff_1_1_0_ccc.py")
-    return ff
-
-
-@pytest.mark.skip(reason="This takes too long to run on CI")
+@pytest.mark.nightly(reason="Takes a long time to run")
 def test_condensed_phase_mtm():
     """
     Tests multiple-try metropolis in the condensed phase.
@@ -37,10 +31,10 @@ def test_condensed_phase_mtm():
     seed = 2021
     np.random.seed(seed)
 
-    mol, torsion_idxs = test_ligands.get_biphenyl()
-    ff = get_ff_am1cc()
+    mol, torsion_idxs = testsystems.ligands.get_biphenyl()
+    ff = Forcefield.load_from_file("smirnoff_1_1_0_ccc.py")
 
-    masses = np.array([a.GetMass() for a in mol.GetAtoms()])
+    masses = get_mol_masses(mol)
     num_ligand_atoms = len(masses)
 
     temperature = 300.0
@@ -104,12 +98,12 @@ def test_condensed_phase_mtm():
     assert np.abs(np.sum(vacuum_weights) - 1) < 1e-5
     vacuum_torsions = batch_get_torsion(vacuum_samples).reshape(-1)
 
-    import matplotlib.pyplot as plt
+    # import matplotlib.pyplot as plt
 
-    plt.hist(vacuum_torsions, bins=50, density=True, weights=vacuum_weights)
-    plt.show()
+    # plt.hist([vacuum_torsions], bins=50, density=True, weights=[vacuum_weights])
+    # plt.show()
 
-    assert np.abs(np.average(vacuum_torsions, weights=vacuum_weights)) < 0.1
+    assert np.abs(np.average(vacuum_torsions, weights=vacuum_weights)) < 0.15
 
     num_batches = 3333
     md_steps_per_move = 150
@@ -126,10 +120,11 @@ def test_condensed_phase_mtm():
         ubps, params, masses, coords, box, temperature, pressure, num_equil_steps, seed
     )
 
+    lamb = 0.0
     # test with both frozen masses and free masses
     for test_masses in [frozen_masses, masses]:
 
-        # (ytz): emprically scanning over multiple Ks seem to suggest 50 is a sweet spot
+        # (ytz): emprically scanning over multiple Ks seem to suggest 100 is a sweet spot
         # leave this here for pedagogical purposes.
         # for K in [1, 5, 10, 25, 50, 100, 200, 400]:
 
@@ -140,8 +135,6 @@ def test_condensed_phase_mtm():
             vacuum_samples=jnp.array(vacuum_samples),
             vacuum_log_weights=jnp.array(vacuum_log_weights),
         )
-
-        lamb = 0.0
 
         npt_mover = NPTMove(ubps, lamb, test_masses, temperature, pressure, n_steps=md_steps_per_move, seed=seed)
         mtm_mover = OptimizedMTMMove(K, batch_proposal_coords_fn, batch_log_weights_fn, seed=seed)
@@ -163,9 +156,7 @@ def test_condensed_phase_mtm():
 
         all_torsions.append(np.asarray(enhanced_torsions))
 
-    # for biphenyl, reshape into -1
-    all_torsions = np.asarray(all_torsions).reshape(-1)
-
+    # lhs is (-np.pi, 0) and rhs is (0, np.pi)
     enhanced_torsions_lhs, _ = np.histogram(enhanced_torsions, bins=50, range=(-np.pi, 0), density=True)
     enhanced_torsions_rhs, _ = np.histogram(enhanced_torsions, bins=50, range=(0, np.pi), density=True)
 
@@ -182,15 +173,7 @@ def test_condensed_phase_mtm():
 
     vanilla_torsions = np.asarray(vanilla_torsions)
 
-    plt.hist(all_torsions[0], bins=np.linspace(-np.pi, np.pi, 100), density=True, alpha=0.5, label="enhanced_frozen")
-    plt.hist(all_torsions[1], bins=np.linspace(-np.pi, np.pi, 100), density=True, alpha=0.5, label="enhanced_free")
-    plt.hist(vanilla_torsions, bins=np.linspace(-np.pi, np.pi, 100), density=True, alpha=0.25, label="vanilla")
-    plt.legend()
-    plt.xlabel("torsion angle")
-    plt.ylabel("density")
-    plt.show()
-
-    vanilla_samples_lhs, _ = np.histogram(vanilla_torsions, bins=50, range=(-np.pi, 0), density=True)
+    vanilla_samples_rhs, _ = np.histogram(vanilla_torsions, bins=50, range=(0, np.pi), density=True)
 
     # check for consistency with vanilla samples
-    assert np.mean((enhanced_torsions_lhs - vanilla_samples_lhs) ** 2) < 5e-2
+    assert np.mean((enhanced_torsions_rhs - vanilla_samples_rhs) ** 2) < 5e-2

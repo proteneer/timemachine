@@ -9,7 +9,17 @@ project(timemachine LANGUAGES CXX CUDA)
 find_package(PythonInterp 3.7 REQUIRED)
 find_package(PythonLibs 3.7 REQUIRED)
 
+string(APPEND CMAKE_CXX_FLAGS "-Werror -Wall -Wextra")
+
 string(APPEND CMAKE_CUDA_FLAGS "-O3 -lineinfo")
+string(APPEND CMAKE_CUDA_FLAGS
+  " -Werror all-warnings"
+  " -Wall"
+  " -Wno-sign-compare"
+  " -Wextra"
+  " -Wno-unused-parameter"
+  " -Wreorder"
+)
 message(${CMAKE_CUDA_FLAGS})
 
 if (CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
@@ -30,6 +40,20 @@ if(NOT EXISTS ${EIGEN_SRC_DIR})
 endif()
 
 add_subdirectory(${CMAKE_CURRENT_BINARY_DIR}/${PYBIND_SRC_DIR} ${CMAKE_CURRENT_BINARY_DIR}/${PYBIND_SRC_DIR})
+
+
+# Disable warnings on vendored files
+file(
+  GLOB
+  VENDORED_FILES
+  "src/vendored/*.c*"
+  "src/vendored/*.h*"
+)
+set_source_files_properties(
+  ${VENDORED_FILES}
+  PROPERTIES
+  COMPILE_OPTIONS "-w"
+)
 
 
 # NO_EXTRAS is needed since cuda doesn't use flto
@@ -59,10 +83,10 @@ pybind11_add_module(${LIBRARY_NAME} SHARED NO_EXTRAS
   src/kernels/nonbonded_common.cu
 )
 
-include_directories(${CMAKE_CUDA_TOOLKIT_INCLUDE_DIRECTORIES})
 include_directories(src/kernels)
-include_directories(${CMAKE_CURRENT_BINARY_DIR}/eigen)
-include_directories(${CMAKE_CURRENT_BINARY_DIR}/${CUB_SRC_DIR})
+include_directories(SYSTEM ${CMAKE_CUDA_TOOLKIT_INCLUDE_DIRECTORIES})
+include_directories(SYSTEM ${CMAKE_CURRENT_BINARY_DIR}/${EIGEN_SRC_DIR})
+include_directories(SYSTEM ${CMAKE_CURRENT_BINARY_DIR}/${CUB_SRC_DIR})
 
 set_property(TARGET ${LIBRARY_NAME} PROPERTY CUDA_STANDARD 17)
 

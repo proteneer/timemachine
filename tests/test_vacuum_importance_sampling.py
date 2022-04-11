@@ -12,8 +12,8 @@ config.update("jax_enable_x64", True)
 import jax
 import numpy as np
 import pytest
-import test_ligands
 
+from timemachine import testsystems
 from timemachine.ff import Forcefield
 from timemachine.md import enhanced
 from timemachine.potentials import bonded
@@ -24,8 +24,8 @@ def get_ff_am1ccc():
     return ff
 
 
-@pytest.mark.skip(reason="This takes too long to run on CI")
-def test_vacuum():
+@pytest.mark.nightly(reason="This takes too long to run on CI")
+def test_vacuum_importance_sampling():
     """
     This tests importance sampling in the gas-phase, where samples generated
     from a proposal distribution p_easy are reweighted into the target p_decharged.
@@ -34,7 +34,7 @@ def test_vacuum():
     such as torsions, steric clashes, by turning off specific torsions and nonbonded
     terms.
     """
-    mol, torsion_idxs = test_ligands.get_biphenyl()
+    mol, torsion_idxs = testsystems.ligands.get_biphenyl()
     ff = get_ff_am1ccc()
     temperature = 300
 
@@ -69,6 +69,7 @@ def test_vacuum():
     assert np.abs(num_negative / (num_negative + num_positive) - 0.5) < 0.05
 
     # check that the distributions on the lhs look roughly identical
+    # lhs is (-np.pi, 0) and rhs is (0, np.pi)
     enhanced_torsions_lhs, _ = np.histogram(enhanced_torsions, bins=50, range=(-np.pi, 0), density=True)
     enhanced_torsions_rhs, _ = np.histogram(enhanced_torsions, bins=50, range=(0, np.pi), density=True)
 
@@ -87,7 +88,7 @@ def test_vacuum():
     vanilla_samples = enhanced.sample_from_log_weights(weighted_samples, log_weights, 100000)
 
     vanilla_torsions = batch_torsion_fn(vanilla_samples).reshape(-1)
-    vanilla_samples_lhs, _ = np.histogram(vanilla_torsions, bins=50, range=(-np.pi, 0), density=True)
+    vanilla_samples_rhs, _ = np.histogram(vanilla_torsions, bins=50, range=(0, np.pi), density=True)
 
     # check for consistency with vanilla samples
-    assert np.mean((enhanced_torsions_lhs - vanilla_samples_lhs) ** 2) < 5e-2
+    assert np.mean((enhanced_torsions_lhs - vanilla_samples_rhs) ** 2) < 5e-2

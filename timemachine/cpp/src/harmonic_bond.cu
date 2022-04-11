@@ -1,9 +1,8 @@
 #include "gpu_utils.cuh"
 #include "harmonic_bond.hpp"
 #include "k_harmonic_bond.cuh"
-#include <chrono>
-#include <complex>
-#include <iostream>
+#include "kernel_utils.cuh"
+#include "math_utils.cuh"
 #include <vector>
 
 namespace timemachine {
@@ -81,8 +80,8 @@ void HarmonicBond<RealType>::execute_device(
     }
 
     if (B_ > 0) {
-        int tpb = 32;
-        int blocks = (B_ + tpb - 1) / tpb;
+        const int tpb = warp_size;
+        const int blocks = ceil_divide(B_, tpb);
 
         k_harmonic_bond<RealType><<<blocks, tpb, 0, stream>>>(
             B_, d_x, d_p, lambda, d_lambda_mult_, d_lambda_offset_, d_bond_idxs_, d_du_dx, d_du_dp, d_du_dl, d_u);

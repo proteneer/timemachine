@@ -41,15 +41,12 @@ def make_ref_potential(pair_idxs, scales, lambda_plane_idxs, lambda_offset_idxs,
         conf_4d = jax_utils.augment_dim(conf, w)
         box_4d = (1000 * jax.numpy.eye(4)).at[:3, :3].set(box)
 
-        vdW, electrostatics = nonbonded.nonbonded_v3_on_specific_pairs(
-            conf_4d, params, box_4d, pair_idxs[:, 0], pair_idxs[:, 1], beta, cutoff
-        )
+        vdW, electrostatics = nonbonded.nonbonded_v3_on_specific_pairs(conf_4d, params, box_4d, pair_idxs, beta, cutoff)
         return jax.numpy.sum(scales[:, 1] * vdW + scales[:, 0] * electrostatics)
 
     return wrapped
 
 
-@pytest.mark.parametrize("lamb", [0.0, 0.1])
 @pytest.mark.parametrize("beta", [2.0])
 @pytest.mark.parametrize("cutoff", [1.1])
 @pytest.mark.parametrize("precision,rtol,atol", [(np.float64, 1e-8, 1e-8), (np.float32, 1e-4, 5e-4)])
@@ -61,8 +58,7 @@ def test_nonbonded_pair_list_correctness(
     atol,
     cutoff,
     beta,
-    lamb,
-    example_nonbonded_params,
+    example_nonbonded_potential,
     example_conf,
     example_box,
     rng: np.random.Generator,
@@ -91,12 +87,12 @@ def test_nonbonded_pair_list_correctness(
 
     ref_potential = make_ref_potential(pair_idxs, scales, lambda_plane_idxs, lambda_offset_idxs, beta, cutoff)
     test_potential = NonbondedPairList(pair_idxs, scales, lambda_plane_idxs, lambda_offset_idxs, beta, cutoff)
-
+    lambda_vals = [0.0, 0.1]
     GradientTest().compare_forces(
         example_conf,
-        example_nonbonded_params,
+        example_nonbonded_potential.params,
         example_box,
-        lamb,
+        lambda_vals,
         ref_potential,
         test_potential,
         precision=precision,
@@ -105,7 +101,6 @@ def test_nonbonded_pair_list_correctness(
     )
 
 
-@pytest.mark.parametrize("lamb", [0.0, 0.1])
 @pytest.mark.parametrize("beta", [2.0])
 @pytest.mark.parametrize("cutoff", [1.1])
 @pytest.mark.parametrize("precision,rtol,atol", [(np.float64, 1e-8, 1e-8), (np.float32, 1e-4, 5e-4)])
@@ -117,8 +112,7 @@ def test_nonbonded_pair_list_interpolated_correctness(
     atol,
     cutoff,
     beta,
-    lamb,
-    example_nonbonded_params,
+    example_nonbonded_potential,
     example_conf,
     example_box,
     rng: np.random.Generator,
@@ -126,7 +120,7 @@ def test_nonbonded_pair_list_interpolated_correctness(
     "Compares with jax reference implementation, with parameter interpolation."
 
     num_atoms, _ = example_conf.shape
-    params = gen_params(example_nonbonded_params, rng)
+    params = gen_params(example_nonbonded_potential.params, rng)
 
     # randomly select 2 interaction groups and construct all pairwise interactions
     atom_idxs = rng.choice(
@@ -152,12 +146,12 @@ def test_nonbonded_pair_list_interpolated_correctness(
     test_potential = NonbondedPairListInterpolated(
         pair_idxs, scales, lambda_plane_idxs, lambda_offset_idxs, beta, cutoff
     )
-
+    lambda_vals = [0.0, 0.1]
     GradientTest().compare_forces(
         example_conf,
         params,
         example_box,
-        lamb,
+        lambda_vals,
         ref_potential,
         test_potential,
         precision=precision,

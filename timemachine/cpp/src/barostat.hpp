@@ -44,11 +44,12 @@ public:
     void set_pressure(const double pressure);
 
 private:
+    const int N_;
+
     void reset_counters();
 
     const std::vector<BoundPotential *> bps_;
 
-    const int N_;
     double pressure_;
     const double temperature_;
     int interval_;
