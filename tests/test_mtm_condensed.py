@@ -156,6 +156,7 @@ def test_condensed_phase_mtm():
 
         all_torsions.append(np.asarray(enhanced_torsions))
 
+    # lhs is (-np.pi, 0) and rhs is (0, np.pi)
     enhanced_torsions_lhs, _ = np.histogram(enhanced_torsions, bins=50, range=(-np.pi, 0), density=True)
     enhanced_torsions_rhs, _ = np.histogram(enhanced_torsions, bins=50, range=(0, np.pi), density=True)
 
@@ -172,7 +173,7 @@ def test_condensed_phase_mtm():
 
     vanilla_torsions = np.asarray(vanilla_torsions)
 
-    vanilla_samples_lhs, _ = np.histogram(vanilla_torsions, bins=50, range=(0, np.pi), density=True)
+    vanilla_samples_rhs, _ = np.histogram(vanilla_torsions, bins=50, range=(0, np.pi), density=True)
 
     # check for consistency with vanilla samples
-    assert np.mean((enhanced_torsions_rhs - vanilla_samples_lhs) ** 2) < 5e-2
+    assert np.mean((enhanced_torsions_rhs - vanilla_samples_rhs) ** 2) < 5e-2
