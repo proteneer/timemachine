@@ -8,7 +8,7 @@ import jax
 import numpy as np
 import pytest
 from rdkit import Chem
-from rdkit.Chem import AllChem
+from rdkit.Chem import AllChem, rdmolops
 
 from timemachine.constants import ONE_4PI_EPS0
 from timemachine.ff import Forcefield
@@ -373,32 +373,15 @@ $$$$
     mol = Chem.MolFromMolBlock(mol_sdf, removeHs=False)
     es_params = am1h.parameterize(mol)
 
-    # TBD update with AM1 Symmetrize=True
-    ligand_params = np.array(
-        [
-            -6.10948,
-            7.08286,
-            -1.13097,
-            -4.3096,
-            2.03822,
-            -1.72492,
-            -0.98493,
-            -1.75663,
-            -0.70852,
-            -1.65444,
-            7.76463,
-            -6.49881,
-            -7.10585,
-            0.93707,
-            0.93707,
-            0.93707,
-            1.79376,
-            1.6654,
-            1.69322,
-            1.90986,
-            5.22498,
+    # fmt: off
+    ligand_params = np.array([
+        -5.36348, 6.98008, -1.68885, -4.04439, 1.93568, -2.25534,
+        -0.87637, -1.8679, -0.66892, -1.6588, 7.67174, -6.1465,
+        -7.26945, 0.93978, 0.93978, 0.93978, 1.83702, 1.69675,
+        1.71667, 1.90762, 5.27508,
         ]
     )
+    # fmt: on
 
     np.testing.assert_almost_equal(es_params, ligand_params, decimal=5)
 
@@ -598,12 +581,38 @@ def test_am1_differences():
             assert 0
 
 
+def test_am1elf10_conformer_independence():
+    with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
+        suppl = Chem.SDMolSupplier(str(path_to_ligand), removeHs=False)
+    # Pick a subset of molecules with chiral centers
+    mols = [mol for mol in suppl]
+    mols = [mols[0], mols[2], mols[3]]
+
+    # need to assign so embedded molecules generated below
+    # have the correct stereochemistry
+    for mol in mols:
+        rdmolops.AssignStereochemistryFrom3D(mol, confId=0, replaceExistingTags=True)
+
+    am1elf10_charges = [nonbonded.oe_assign_charges(mol, charge_model=nonbonded.AM1ELF10) for mol in mols]
+
+    # regenerate the conformations
+    for mol in mols:
+        AllChem.EmbedMolecule(mol, randomSeed=2022, useRandomCoords=True)
+
+    new_am1elf10_charges = [nonbonded.oe_assign_charges(mol, charge_model=nonbonded.AM1ELF10) for mol in mols]
+
+    # new conformations should have the same charges
+    for orig_charges, new_charges in zip(am1elf10_charges, new_am1elf10_charges):
+        delta_charges = np.abs(np.array(orig_charges) - np.array(new_charges))
+        assert np.sum(delta_charges) == pytest.approx(0.0)
+
+
 def test_compute_or_load_am1_charges():
     """Loop over test ligands, asserting that charges are stored in expected property and that the same charges are
     returned on repeated calls"""
 
     # get some molecules
-    cache_key = nonbonded.AM1_CHARGE_CACHE
+    cache_key = nonbonded.AM1ELF10_CHARGE_CACHE
     with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
         suppl = Chem.SDMolSupplier(str(path_to_ligand), removeHs=False)
 
@@ -638,24 +647,23 @@ def mol_with_precomputed_charges():
     # fmt: off
     precomputed_charges = dict()
     precomputed_charges['ubuntu-18.04.4'] = np.array([
-        -3.73202788, 0.16643369, 2.23365332, 1.17705863, -2.04989265, 0.9556971, -9.53151131, 0.20910295,
-        -2.48012128, 1.97433738, -1.83925727, 0.62695524, -1.7078312, 1.1217772, -1.10963652, -1.418694,
-        0.30269243, -1.27064814, -1.25520707, 33.66251065, -11.02858928, -11.02858928, -1.76122669, -0.07484801,
-        -1.55283109, -1.76122669, -11.19066194, 2.76395447, 2.01017014, 1.64158773, 1.9863602, 1.88569841,
-        2.04824232, 2.0012119, 2.0269077, 2.9992246, 2.9992246])
+        -3.385959, 0.26308782, 2.30802986, 1.11718023, -2.11460365,
+        0.9725527, -9.18744615, 0.04042971, -2.49344069, 1.87709392,
+        -1.64877796, 0.57591713, -1.68873618, 1.19414994, -1.04834368,
+        -1.52407053, 0.30670004, -1.26003975, -1.3233364, 33.79971321,
+        -10.86357005, -10.86357005, -1.72362592, -0.10184044, -1.47951542,
+        -1.72362592, -11.32255943, 2.74250182, 1.64583123, 1.55000221,
+        1.69816584, 1.83477824, 2.11436794, 1.99956175, 1.98447416,
+        2.86426252, 2.86426252])
     precomputed_charges['ubuntu-20.04.2'] = np.array([
-        -3.7402788, 0.12741843, 2.31380548, 1.14759094, -2.07122727, 0.97703173, -9.56911189, 0.19495845,
-        -2.47870684, 1.95076315, -1.76535233, 0.59371565, -1.72374378, 1.19815754, -1.04952241, -1.50250019,
-        0.33428183, -1.26510823, -1.29999797, 33.85876522, -11.07055139, -11.07055139, -1.75285791, -0.07602672,
-        -1.53915794, -1.75285791, -11.20162407, 2.74096953, 1.97751982, 1.63251182, 2.00109405, 1.84892264,
-        2.06061889, 2.00144761, 2.01688877, 2.97635786, 2.97635786])
-    # https://github.com/proteneer/timemachine/pull/675#pullrequestreview-917193780
-    precomputed_charges['mint-20.3'] = np.array([
-        -3.75100522, 0.12588611, 2.32099553, 1.12366315, -2.07252385, 0.99742342, -9.54754174, 0.15676827,
-        -2.4717525, 1.94934871, -1.76723819, 0.60668145, -1.70547392, 1.18884575, -1.04468964, -1.50261805,
-        0.34783699, -1.27347702, -1.32086118, 33.92005701, -11.08186691, -11.08186691, -1.75674766, -0.06836511,
-        -1.55931401, -1.75674766, -11.22012963, 2.74521284, 1.9725692, 1.63557641, 1.99744001, 1.84126116,
-        2.06285831, 1.9994439, 2.02042478, 2.98496217, 2.98496217])
+       -3.38772701, 0.26721331, 2.30272567, 1.11670881, -2.10741359,
+       0.96123709, -9.15420638, 0.03088217, -2.48495405, 1.872379,
+       -1.65467143, 0.58181069, -1.6896792, 1.19155677, -1.04775431,
+       -1.51994506, 0.3044605, -1.25933253, -1.32628322, 33.75586471,
+       -10.85178312, -10.85178312, -1.72386163, -0.10278342, -1.4785724,
+       -1.72386163, -11.31914145, 2.74450571, 1.64253075, 1.55165236,
+       1.69875511, 1.83418879, 2.1147215, 1.99413971, 1.98565289,
+       2.86638427, 2.86638427])
     # fmt: on
 
     return dict(mol=test_mol, precomputed_charges=precomputed_charges)
