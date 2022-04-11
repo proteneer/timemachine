@@ -1,6 +1,6 @@
 from typing import Callable, Tuple
 
-import numpy as onp
+import numpy as np
 from jax import numpy as jnp
 from jax import tree_util
 
@@ -19,7 +19,7 @@ def reshape(x, shape):
 
 def num_elements(shape):
     """floats (indicated by None) have 1 element"""
-    return 1 if shape is None else int(onp.prod(shape))
+    return 1 if shape is None else int(np.prod(shape))
 
 
 def flatten_and_unflatten(input_tree) -> Tuple[Callable, Callable]:

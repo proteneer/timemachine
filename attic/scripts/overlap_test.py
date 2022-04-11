@@ -9,7 +9,7 @@ from importlib import resources
 
 import jax
 import jax.numpy as jnp
-import numpy as onp
+import numpy as np
 from rdkit import Chem
 
 from timemachine.ff import handlers
@@ -73,7 +73,7 @@ def make_conformer(mol, conf_a, conf_b):
     cc = Chem.Conformer(mol.GetNumAtoms())
     conf = jnp.concatenate([conf_a, conf_b])
     conf *= 10
-    for idx, pos in enumerate(onp.asarray(conf)):
+    for idx, pos in enumerate(np.asarray(conf)):
         cc.SetAtomPosition(idx, (float(pos[0]), float(pos[1]), float(pos[2])))
     mol.AddConformer(cc)
 
@@ -172,8 +172,8 @@ def convergence(args):
         #         )
         #     )
 
-    masses_a = onp.array([a.GetMass() for a in ligand_a.GetAtoms()]) * 10000
-    masses_b = onp.array([a.GetMass() for a in ligand_b.GetAtoms()])
+    masses_a = np.array([a.GetMass() for a in ligand_a.GetAtoms()]) * 10000
+    masses_b = np.array([a.GetMass() for a in ligand_b.GetAtoms()])
 
     combined_masses = jnp.concatenate([masses_a, masses_b])
 
@@ -261,13 +261,13 @@ def convergence(args):
 
     dt = 1.5e-3
     ca, cb, cc = langevin_coefficients(300.0, dt, 1.0, combined_masses)
-    cb = -1 * onp.expand_dims(cb, axis=-1)
-    cc = onp.expand_dims(cc, axis=-1)
+    cb = -1 * np.expand_dims(cb, axis=-1)
+    cc = np.expand_dims(cc, axis=-1)
 
     du_dls = []
 
     # re-seed since forking
-    onp.random.seed(int.from_bytes(os.urandom(4), byteorder="little"))
+    np.random.seed(int.from_bytes(os.urandom(4), byteorder="little"))
 
     # for step in range(100000):
     for step in range(100000):
@@ -285,10 +285,10 @@ def convergence(args):
         else:
             du_dx = du_dx_fn(x_t, lamb)
 
-        v_t = ca * v_t + cb * du_dx + cc * onp.random.normal(size=x_t.shape)
+        v_t = ca * v_t + cb * du_dx + cc * np.random.normal(size=x_t.shape)
         x_t = x_t + v_t * dt
 
-    return jnp.mean(onp.mean(du_dls))
+    return jnp.mean(np.mean(du_dls))
 
 
 if __name__ == "__main__":
@@ -314,4 +314,4 @@ if __name__ == "__main__":
 
         for lamb, ddl in zip(lambda_schedule, avg_du_dls):
             print("lambda", lamb, "du_dl", ddl)
-        print(epoch, "epoch", "deltaG", onp.trapz(avg_du_dls, lambda_schedule))
+        print(epoch, "epoch", "deltaG", np.trapz(avg_du_dls, lambda_schedule))

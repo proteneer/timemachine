@@ -2,7 +2,7 @@ import jax
 
 jax.config.update("jax_enable_x64", True)
 
-import numpy as onp
+import numpy as np
 from numpy.random import rand, randint, randn, seed
 
 seed(2021)
@@ -72,7 +72,7 @@ def resolve_clashes(x0, box0, min_dist=0.1):
 
         def fun(xbox):
             v, g = value_and_grad(U_repulse)(xbox)
-            return float(v), onp.array(g, onp.float64)
+            return float(v), np.array(g, np.float64)
 
         initial_state = jnp.hstack([x0.flatten(), box0.flatten()])
         # print(f'penalty before: {U_repulse(initial_state)}')
@@ -122,8 +122,8 @@ def generate_waterbox_nb_args() -> NonbondedArgs:
     cutoff = nb.get_cutoff()
 
     lamb = 0.0
-    charge_rescale_mask = onp.ones((N, N))
-    lj_rescale_mask = onp.ones((N, N))
+    charge_rescale_mask = np.ones((N, N))
+    lj_rescale_mask = np.ones((N, N))
     lambda_plane_idxs = jnp.zeros(N, dtype=int)
     lambda_offset_idxs = jnp.zeros(N, dtype=int)
 
@@ -173,8 +173,8 @@ def generate_random_inputs(n_atoms, dim, instance_flags=difficult_instance_flags
     lamb = 0.0
     if instance_flags["randomize_lamb"]:
         lamb = rand()
-    charge_rescale_mask = onp.ones((n_atoms, n_atoms))
-    lj_rescale_mask = onp.ones((n_atoms, n_atoms))
+    charge_rescale_mask = np.ones((n_atoms, n_atoms))
+    lj_rescale_mask = np.ones((n_atoms, n_atoms))
 
     for _ in range(n_atoms):
         i, j = randint(n_atoms, size=2)
@@ -221,9 +221,9 @@ def compare_two_potentials(u_a: NonbondedFxn, u_b: NonbondedFxn, args: Nonbonded
     energy_a, gradients_a = value_and_grads(u_a)(*args)
     energy_b, gradients_b = value_and_grads(u_b)(*args)
 
-    onp.testing.assert_almost_equal(energy_a, energy_b)
+    np.testing.assert_almost_equal(energy_a, energy_b)
     for (g_a, g_b) in zip(gradients_a, gradients_b):
-        onp.testing.assert_allclose(g_a, g_b)
+        np.testing.assert_allclose(g_a, g_b)
 
 
 def _nonbonded_v3_clone(
@@ -287,8 +287,8 @@ def run_randomized_tests_of_jax_nonbonded(instance_generator, n_instances=10):
 
     min_size, max_size = 10, 50
 
-    random_sizes = onp.random.randint(min_size, max_size, n_instances)
-    dims = onp.random.randint(3, 5, n_instances)
+    random_sizes = np.random.randint(min_size, max_size, n_instances)
+    dims = np.random.randint(3, 5, n_instances)
 
     for n_atoms, dim in zip(random_sizes, dims):
         args = instance_generator(n_atoms, dim)
@@ -339,7 +339,7 @@ def test_vmap():
     # vmap over snapshots
     vmapped = jit(vmap(u))
     n_snapshots = 100
-    confs = onp.random.randn(n_snapshots, n_total, 3)
+    confs = np.random.randn(n_snapshots, n_total, 3)
     us = vmapped(confs)
     assert us.shape == (n_snapshots,)
 
@@ -376,7 +376,7 @@ def test_jax_nonbonded_block():
 
         return jnp.sum(vdw + es)
 
-    onp.testing.assert_almost_equal(u_a(conf, box, params), u_b(conf, box, params))
+    np.testing.assert_almost_equal(u_a(conf, box, params), u_b(conf, box, params))
 
 
 def test_precomputation():
@@ -394,14 +394,14 @@ def test_precomputation():
 
     # generate array in the shape of a "trajectory" by adding noise to an initial conformation
     n_snapshots = 100
-    onp.random.seed(2022)
-    traj = jnp.array([conf] * n_snapshots) + onp.random.randn(n_snapshots, *conf.shape) * 0.005
-    boxes = jnp.array([box] * n_snapshots) * (1 - 0.0025 + onp.random.rand(n_snapshots, *box.shape) * 0.005)
+    np.random.seed(2022)
+    traj = jnp.array([conf] * n_snapshots) + np.random.randn(n_snapshots, *conf.shape) * 0.005
+    boxes = jnp.array([box] * n_snapshots) * (1 - 0.0025 + np.random.rand(n_snapshots, *box.shape) * 0.005)
 
     # split system into "ligand" vs. "environment"
     n_ligand = 3 * 10  # call the first 10 waters in the system "ligand" and the rest "environment"
-    ligand_idx = onp.arange(n_ligand)
-    env_idx = onp.arange(n_ligand, n_atoms)
+    ligand_idx = np.arange(n_ligand)
+    env_idx = np.arange(n_ligand, n_atoms)
     pairs = pairs_from_interaction_groups(ligand_idx, env_idx)
 
     # reference version: nonbonded_on_specific_pairs
@@ -450,20 +450,18 @@ def test_precomputation():
     reweight_test = jit(make_reweighter(u_batch_test))
 
     for _ in range(5):
-        eps_ligand = jnp.abs(
-            eps_ligand_0 + (0.2 * onp.random.rand(n_ligand) - 0.1)
-        )  # abs() so eps will be non-negative
-        q_ligand = q_ligand_0 + onp.random.randn(n_ligand)
+        eps_ligand = jnp.abs(eps_ligand_0 + (0.2 * np.random.rand(n_ligand) - 0.1))  # abs() so eps will be non-negative
+        q_ligand = q_ligand_0 + np.random.randn(n_ligand)
 
         expected = u_batch_ref(eps_ligand, q_ligand)
         actual = u_batch_test(eps_ligand, q_ligand)
 
         # test array of energies is ~equal to reference
-        onp.testing.assert_array_almost_equal(actual, expected)
+        np.testing.assert_array_almost_equal(actual, expected)
 
         # test that reweighting estimates and gradients are ~equal to reference
         v_ref, gs_ref = value_and_grad(reweight_ref, argnums=(0, 1))(eps_ligand, q_ligand)
         v_test, gs_test = value_and_grad(reweight_test, argnums=(0, 1))(eps_ligand, q_ligand)
 
-        onp.testing.assert_almost_equal(v_ref, v_test)
-        onp.testing.assert_array_almost_equal(gs_ref, gs_test)
+        np.testing.assert_almost_equal(v_ref, v_test)
+        np.testing.assert_array_almost_equal(gs_ref, gs_test)

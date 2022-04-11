@@ -1,12 +1,12 @@
 import jax
 from jax import numpy as jnp
-import numpy as onp
+import numpy as np
 
 
 def rescale_coordinates(conf, indices, box, scales):
     """Note: scales unused"""
 
-    mol_sizes = jnp.expand_dims(onp.bincount(indices), axis=1)
+    mol_sizes = jnp.expand_dims(np.bincount(indices), axis=1)
     mol_centers = jax.ops.segment_sum(conf, indices) / mol_sizes
 
     new_centers = mol_centers - box[2] * jnp.floor(jnp.expand_dims(mol_centers[..., 2], axis=-1) / box[2][2])

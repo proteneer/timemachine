@@ -1,6 +1,6 @@
 import jax
 import jax.numpy as jnp
-import numpy as onp
+import numpy as np
 from jax.config import config
 
 config.update("jax_enable_x64", True)
@@ -107,7 +107,7 @@ def grad_eigh(w, v, wg, vg):
     else:
         assert 0
 
-    off_diag_mask = (onp.ones((3, 3)) - onp.eye(3)) / 2
+    off_diag_mask = (np.ones((3, 3)) - np.eye(3)) / 2
 
     return vjp_temp * jnp.eye(vjp_temp.shape[-1]) + (vjp_temp + vjp_temp.T) * off_diag_mask
     # return vjp_temp*np.eye(vjp_temp.shape[-1]) + (vjp_temp + vjp_temp.T) * tri
@@ -191,45 +191,45 @@ def test1():
 
     for _ in range(10):
         N = 50
-        x_a = onp.random.rand(N, 3)
-        x_b = onp.random.rand(N, 3)
+        x_a = np.random.rand(N, 3)
+        x_b = np.random.rand(N, 3)
 
-        a_com, a_tensor = inertia_tensor(x_a, onp.ones(N, dtype=jnp.float64))
-        b_com, b_tensor = inertia_tensor(x_b, onp.ones(N, dtype=jnp.float64))
+        a_com, a_tensor = inertia_tensor(x_a, np.ones(N, dtype=jnp.float64))
+        b_com, b_tensor = inertia_tensor(x_b, np.ones(N, dtype=jnp.float64))
 
-        rf = onp.asarray(grad_fn(a_tensor, b_tensor))
-        tf = onp.asarray(test_force(a_tensor, b_tensor))
+        rf = np.asarray(grad_fn(a_tensor, b_tensor))
+        tf = np.asarray(test_force(a_tensor, b_tensor))
 
-        onp.testing.assert_almost_equal(rf, tf, decimal=5)
+        np.testing.assert_almost_equal(rf, tf, decimal=5)
 
 
 def test0():
 
-    onp.random.seed(2020)
+    np.random.seed(2020)
 
     for trip in range(10):
         print("trip", trip)
         N = 50
-        x_a = onp.random.rand(N, 3)
+        x_a = np.random.rand(N, 3)
 
-        a_com, a_tensor = inertia_tensor(x_a, onp.ones(N, dtype=jnp.float64))
+        a_com, a_tensor = inertia_tensor(x_a, np.ones(N, dtype=jnp.float64))
 
-        onp_res = onp.linalg.eigh(a_tensor)
+        onp_res = np.linalg.eigh(a_tensor)
         w = onp_res[0]
         Q = onp_res[1]
         for d in range(3):
-            onp.testing.assert_almost_equal(jnp.matmul(a_tensor, Q[:, d]), w[d] * Q[:, d])
+            np.testing.assert_almost_equal(jnp.matmul(a_tensor, Q[:, d]), w[d] * Q[:, d])
 
         jnp_res = jnp.linalg.eigh(a_tensor)
         evp_res = dsyevv3(a_tensor)
 
         jnp.set_printoptions(formatter={"float": lambda x: "{0:0.16f}".format(x)})
 
-        onp.testing.assert_almost_equal(onp_res[0], jnp_res[0])
-        onp.testing.assert_almost_equal(onp_res[1], jnp_res[1])
+        np.testing.assert_almost_equal(onp_res[0], jnp_res[0])
+        np.testing.assert_almost_equal(onp_res[1], jnp_res[1])
 
-        onp.testing.assert_almost_equal(onp_res[0], evp_res[0])
-        onp.testing.assert_almost_equal(onp.abs(onp_res[1]), onp.abs(evp_res[1]))
+        np.testing.assert_almost_equal(onp_res[0], evp_res[0])
+        np.testing.assert_almost_equal(np.abs(onp_res[1]), np.abs(evp_res[1]))
 
 
 # test0()
