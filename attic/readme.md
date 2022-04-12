@@ -2,6 +2,7 @@ Code, documentation, experiments we want to retain for reference, but that we're
 
 ### Contents
 * `docs/` -- write-up of initial vision for `timemachine`, involving efficient backpropagation through MD trajectories
+* `docking/` -- Docking module that docks uses non-equilibrium switching
 * `jax_tricks` -- misc. Jax functions
 * `modules` -- misc. modules
    * `reservoir_sampler.py`
