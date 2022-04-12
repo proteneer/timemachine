@@ -142,4 +142,4 @@ def test_batched_neighbor_inds():
     neighbor_distances = vmap(d)(confs, batch_pairs, boxes)
 
     assert neighbor_distances.shape == (n_confs, n_neighbor_pairs)
-    assert jnp.sum(neighbor_distances < cutoff) == jnp.sum(full_distances < cutoff)
+    assert np.sum(neighbor_distances < cutoff) == np.sum(full_distances < cutoff)
