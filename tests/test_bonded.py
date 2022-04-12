@@ -150,7 +150,7 @@ class TestBonded(GradientTest):
         bond_idxs = []
         for _ in range(n_bonds):
             bond_idxs.append(np.random.choice(atom_idxs, size=2, replace=False))
-        bond_idxs = np.array(bond_idxs, dtype=np.int32)
+        bond_idxs = np.array(bond_idxs, dtype=np.int32) if n_bonds else np.zeros((0, 2), dtype=np.int32)
 
         lamb = 0.0
         box = np.eye(3) * 100
@@ -178,8 +178,7 @@ class TestBonded(GradientTest):
 
             # test bitwise commutativity
             test_potential = potentials.HarmonicBond(bond_idxs, lamb_mult, lamb_offset)
-            bond_idxs_rev = bond_idxs[:, ::-1] if n_bonds else bond_idxs
-            test_potential_rev = potentials.HarmonicBond(bond_idxs_rev, lamb_mult, lamb_offset)
+            test_potential_rev = potentials.HarmonicBond(bond_idxs[:, ::-1], lamb_mult, lamb_offset)
 
             test_potential_impl = test_potential.unbound_impl(precision)
             test_potential_rev_impl = test_potential_rev.unbound_impl(precision)
@@ -244,7 +243,7 @@ class TestBonded(GradientTest):
         angle_idxs = []
         for _ in range(n_angles):
             angle_idxs.append(np.random.choice(atom_idxs, size=3, replace=False))
-        angle_idxs = np.array(angle_idxs, dtype=np.int32)
+        angle_idxs = np.array(angle_idxs, dtype=np.int32) if n_angles else np.zeros((0, 3), dtype=np.int32)
 
         lamb = 0.0
         box = np.eye(3) * 100
@@ -272,8 +271,7 @@ class TestBonded(GradientTest):
 
             # test bitwise commutativity
             test_potential = potentials.HarmonicAngle(angle_idxs, lamb_mult, lamb_offset)
-            angle_idxs_rev = angle_idxs[:, ::-1] if n_angles else angle_idxs
-            test_potential_rev = potentials.HarmonicAngle(angle_idxs_rev, lamb_mult, lamb_offset)
+            test_potential_rev = potentials.HarmonicAngle(angle_idxs[:, ::-1], lamb_mult, lamb_offset)
 
             test_potential_impl = test_potential.unbound_impl(precision)
             test_potential_rev_impl = test_potential_rev.unbound_impl(precision)
@@ -303,7 +301,7 @@ class TestBonded(GradientTest):
         for _ in range(n_torsions):
             torsion_idxs.append(np.random.choice(atom_idxs, size=4, replace=False))
 
-        torsion_idxs = np.array(torsion_idxs, dtype=np.int32)
+        torsion_idxs = np.array(torsion_idxs, dtype=np.int32) if n_torsions else np.zeros((0, 4), dtype=np.int32)
 
         lamb = 0.0
         box = np.eye(3) * 100
@@ -331,8 +329,7 @@ class TestBonded(GradientTest):
 
             # test bitwise commutativity
             test_potential = potentials.PeriodicTorsion(torsion_idxs, lamb_mult, lamb_offset)
-            torsion_idxs_rev = torsion_idxs[:, ::-1] if n_torsions else torsion_idxs
-            test_potential_rev = potentials.PeriodicTorsion(torsion_idxs_rev, lamb_mult, lamb_offset)
+            test_potential_rev = potentials.PeriodicTorsion(torsion_idxs[:, ::-1], lamb_mult, lamb_offset)
 
             test_potential_impl = test_potential.unbound_impl(precision)
             test_potential_rev_impl = test_potential_rev.unbound_impl(precision)
