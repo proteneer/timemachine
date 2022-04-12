@@ -171,7 +171,7 @@ def _make_fake_sample_batch(conf, box, ligand_indices, n_snapshots=25):
         _conf = np.array(conf)
         _conf[ligand_indices] += 0.005 * np.random.randn(len(ligand_indices), 3)
 
-        _box = box + jnp.diag(0.005 * np.random.randn(3))
+        _box = box + np.diag(0.005 * np.random.randn(3))
 
         samples.append((_conf, _box))
 
