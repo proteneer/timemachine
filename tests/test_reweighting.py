@@ -345,7 +345,7 @@ def test_interpret_as_mixture_potential():
 
         if normalized:
             vec_u = vmap(normalized_u_fxn, in_axes=(0, None, None))
-            f_k = jnp.zeros(n_windows)
+            f_k = np.zeros(n_windows)
         else:
             vec_u = vmap(u_fxn, in_axes=(0, None, None))
             f_k = jnp.array([reduced_free_energy(lam, ref_params) for lam in lambdas])
