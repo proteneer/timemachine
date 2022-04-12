@@ -106,7 +106,7 @@ def test_mixture_reweighting_1d():
     n_samples_per_window = int(1e5)
     atol = 1e-2
 
-    N_k = jnp.array([n_samples_per_window] * n_windows)
+    N_k = np.array([n_samples_per_window] * n_windows)
     n_samples_total = sum(N_k)
 
     trajs = [sample(lam, ref_params, n_samples_per_window) for lam in lambdas]

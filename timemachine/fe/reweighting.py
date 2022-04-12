@@ -7,6 +7,7 @@ __all__ = [
 
 from typing import Callable, Collection
 
+import numpy as np
 from jax import numpy as jnp
 from jax.scipy.special import logsumexp
 
@@ -107,8 +108,8 @@ def interpret_as_mixture_potential(u_kn: Array, f_k: Array, N_k: Array) -> Array
     # expanding steps:
     K, N = u_kn.shape
     assert f_k.shape == (K,)
-    N_k = jnp.array(N_k)
-    assert jnp.sum(N_k) == N
+    N_k = np.array(N_k)
+    assert np.sum(N_k) == N
 
     # q_k(x_n) = exp(-u_k(x_n))
     log_q_kn = -u_kn
