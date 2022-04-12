@@ -417,7 +417,7 @@ def test1():
         rf = np.asarray(grad_fn(x_a, x_b, a_masses, b_masses))
         tf = np.asarray(test_force(x_a, x_b, a_masses, b_masses))
 
-        # onp.testing.assert_almost_equal(rf, tf, decimal=5)
+        # np.testing.assert_almost_equal(rf, tf, decimal=5)
         np.testing.assert_allclose(rf, tf, rtol=1e-5)
 
 

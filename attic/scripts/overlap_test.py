@@ -274,7 +274,7 @@ def convergence(args):
 
         # if step % 1000 == 0:
         #     u = nrg_fn(x_t, lamb)
-        #     print("step", step, "nrg", onp.asarray(u), "avg_du_dl",  onp.mean(du_dls))
+        #     print("step", step, "nrg", np.asarray(u), "avg_du_dl",  np.mean(du_dls))
         #     mol = make_conformer(combined_mol, x_t[:ligand_a.GetNumAtoms()], x_t[ligand_a.GetNumAtoms():])
         #     w.write(mol)
         #     w.flush()
