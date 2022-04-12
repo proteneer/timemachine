@@ -294,7 +294,7 @@ def test_one_sided_exp():
         # instance parameters
         num_works = np.random.randint(1, 100)
         mean = np.random.randn() * 10
-        stddev = jnp.exp(np.random.randn())
+        stddev = np.exp(np.random.randn())
 
         # random instance
         reduced_works = np.random.randn(num_works) * stddev + mean
