@@ -1,7 +1,7 @@
 # This is ported from Matt Harrigan's TF code:
 # https://github.com/mdtraj/tftraj/blob/master/tftraj/rmsd.py
 
-import jax.numpy as np
+import jax.numpy as jnp
 import jax.scipy
 
 
@@ -14,7 +14,7 @@ def optimal_rotational_quaternion(r):
     [1] http://dx.doi.org/10.1002/jcc.20110
     """
     # @formatter:off
-    return np.array(
+    return jnp.array(
         [
             [r[0][0] + r[1][1] + r[2][2], r[1][2] - r[2][1], r[2][0] - r[0][2], r[0][1] - r[1][0]],
             [r[1][2] - r[2][1], r[0][0] - r[1][1] - r[2][2], r[0][1] + r[1][0], r[0][2] + r[2][0]],
@@ -26,13 +26,13 @@ def optimal_rotational_quaternion(r):
 
 @jax.jit
 def squared_deviation(frame, target):
-    R = np.matmul(np.transpose(frame), target)
+    R = jnp.matmul(jnp.transpose(frame), target)
     F = optimal_rotational_quaternion(R)
     vals, vecs = jax.scipy.linalg.eigh(F)
     lmax = vals[-1]
-    sd = np.sum(frame ** 2 + target ** 2) - 2 * lmax
+    sd = jnp.sum(frame ** 2 + target ** 2) - 2 * lmax
     # singularities occur when sd is a very small negative number
-    return np.maximum(sd, 0)
+    return jnp.maximum(sd, 0)
 
 
 @jax.jit
@@ -55,9 +55,9 @@ def opt_rot_rmsd(x0, x1):
         A scalar denoting the distance
 
     """
-    x0_center = x0 - np.mean(x0, axis=0, keepdims=True)
-    x1_center = x1 - np.mean(x1, axis=0, keepdims=True)
+    x0_center = x0 - jnp.mean(x0, axis=0, keepdims=True)
+    x1_center = x1 - jnp.mean(x1, axis=0, keepdims=True)
     n_atoms = x0.shape[0]
     inner = squared_deviation(x0_center, x1_center) / n_atoms
-    inner = np.where(inner < 1e-12, 0, inner)
-    return np.sqrt(inner)
+    inner = jnp.where(inner < 1e-12, 0, inner)
+    return jnp.sqrt(inner)

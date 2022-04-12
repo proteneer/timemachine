@@ -1,7 +1,7 @@
 from typing import Callable, Tuple
 
-import numpy as onp
-from jax import numpy as np
+import numpy as np
+from jax import numpy as jnp
 from jax import tree_util
 
 
@@ -9,17 +9,17 @@ def get_shape(x):
     """safe to call on floats and arrays
     get_shape(1) -> None, get_shape(ones(2)) -> (2,)"""
 
-    return None if np.isscalar(x) else x.shape
+    return None if jnp.isscalar(x) else x.shape
 
 
 def reshape(x, shape):
     """assume x is scalar if shape is None"""
-    return float(x) if shape is None else np.reshape(x, shape)
+    return float(x) if shape is None else jnp.reshape(x, shape)
 
 
 def num_elements(shape):
     """floats (indicated by None) have 1 element"""
-    return 1 if shape is None else int(onp.prod(shape))
+    return 1 if shape is None else int(np.prod(shape))
 
 
 def flatten_and_unflatten(input_tree) -> Tuple[Callable, Callable]:
@@ -44,7 +44,7 @@ def flatten_and_unflatten(input_tree) -> Tuple[Callable, Callable]:
     def flatten(tree):
         leaves = tree_util.tree_leaves(tree)
         flattened_leaves = [reshape(leaf, num_elements(get_shape(leaf))) for leaf in leaves]
-        x = np.hstack(flattened_leaves)
+        x = jnp.hstack(flattened_leaves)
         assert len(x.shape) == 1
         return x
 

@@ -48,13 +48,13 @@ jax.config.update("jax_enable_x64", True)
 from typing import Callable
 
 from jax import jit
-from jax import numpy as np
+from jax import numpy as jnp
 from jax import vmap
 from jax.scipy.special import logsumexp
 from scipy.optimize import bisect
 
 Float = float
-Array = np.array
+Array = jnp.array
 WorkStddevEstimator = DistanceFxn = Callable[[Float, Float], Float]
 
 
@@ -115,7 +115,7 @@ def log_weights_from_mixture(u_kn: Array, f_k: Array, N_k: Array) -> Array:
     mixture of states p(x) = (1 / K) \sum_k e^-u_k / Z_k
     """
     log_q_k = f_k - u_kn.T
-    N_k = np.array(N_k, dtype=np.float64)  # may be ints, or in a list...
+    N_k = jnp.array(N_k, dtype=jnp.float64)  # may be ints, or in a list...
     log_weights = logsumexp(log_q_k, b=N_k, axis=1)
     return log_weights
 
@@ -125,7 +125,7 @@ def linear_u_kn_interpolant(lambdas: Array, u_kn: Array) -> Callable:
     at arbitrary new values lam"""
 
     def u_interp(u_n: Array, lam: Float) -> Float:
-        return np.nan_to_num(np.interp(lam, lambdas, u_n), nan=+np.inf, posinf=+np.inf)
+        return jnp.nan_to_num(jnp.interp(lam, lambdas, u_n), nan=+jnp.inf, posinf=+jnp.inf)
 
     @jit
     def vec_u_interp(lam: Float) -> Array:
@@ -174,15 +174,15 @@ def reweighted_stddev(f_n: Array, target_logpdf_n: Array, source_logpdf_n: Array
     """
 
     log_weights_n = target_logpdf_n - source_logpdf_n
-    weights = np.exp(log_weights_n - logsumexp(log_weights_n)).flatten()
+    weights = jnp.exp(log_weights_n - logsumexp(log_weights_n)).flatten()
 
-    f_mean = np.sum(weights * f_n)
+    f_mean = jnp.sum(weights * f_n)
     squared_deviations = (f_n - f_mean) ** 2
 
     # sanitize 0 * inf -> 0 (instead of nan)
     weighted_squared_deviations = weights * squared_deviations
-    sanitized = np.nan_to_num(weighted_squared_deviations, nan=0)
-    stddev = np.sqrt(np.sum(sanitized))
+    sanitized = jnp.nan_to_num(weighted_squared_deviations, nan=0)
+    stddev = jnp.sqrt(jnp.sum(sanitized))
 
     return stddev
 
@@ -196,7 +196,7 @@ def construct_max_work_stddev_distance(work_stddev_estimator) -> DistanceFxn:
         """if (next_lam - prev_lam <= max_step), compute max(forward_stddev, reverse_stddev)"""
         too_far = next_lam - prev_lam > max_step
         if too_far:
-            return +np.inf
+            return +jnp.inf
 
         # compute max of forward, reverse work stddevs
         forward_stddev = work_stddev_estimator(prev_lam, next_lam)
@@ -236,4 +236,4 @@ def greedily_optimize_protocol(distance_fxn: DistanceFxn, target_distance=0.5, m
     if protocol[-1] != 1.0:
         protocol.append(1.0)
 
-    return np.array(protocol)
+    return jnp.array(protocol)
