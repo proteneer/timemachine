@@ -303,11 +303,11 @@ def test_one_sided_exp():
         pymbar_estimate, _ = pymbar.EXP(reduced_works)
         tm_estimate = one_sided_exp(reduced_works)
 
-        assert jnp.isclose(tm_estimate, pymbar_estimate)
+        assert np.isclose(tm_estimate, pymbar_estimate)
 
     # also check +inf
     reduced_works = jnp.array([+np.inf, 0])
-    assert jnp.isclose(one_sided_exp(reduced_works), pymbar.EXP(reduced_works)[0])
+    assert np.isclose(one_sided_exp(reduced_works), pymbar.EXP(reduced_works)[0])
 
 
 def test_interpret_as_mixture_potential():
