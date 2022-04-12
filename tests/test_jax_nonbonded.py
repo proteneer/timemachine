@@ -2,7 +2,7 @@ import jax
 
 jax.config.update("jax_enable_x64", True)
 
-import numpy as onp
+import numpy as np
 from numpy.random import rand, randint, randn, seed
 
 seed(2021)
@@ -11,7 +11,7 @@ from functools import partial
 from typing import Callable, Tuple
 
 from jax import jit
-from jax import numpy as np
+from jax import numpy as jnp
 from jax import value_and_grad, vmap
 from scipy.optimize import minimize
 from simtk import unit
@@ -36,7 +36,7 @@ from timemachine.potentials.nonbonded import (
     nonbonded_v3_on_specific_pairs,
 )
 
-Conf = Params = Box = ChargeMask = LJMask = LambdaPlaneIdxs = LambdaOffsetIdxs = np.array
+Conf = Params = Box = ChargeMask = LJMask = LambdaPlaneIdxs = LambdaOffsetIdxs = jnp.array
 Lamb = Beta = Cutoff = Energy = float
 
 nonbonded_args = Conf, Params, Box, Lamb, ChargeMask, LJMask, Beta, Cutoff, LambdaPlaneIdxs, LambdaOffsetIdxs
@@ -47,16 +47,16 @@ NonbondedFxn = Callable[[*nonbonded_args], Energy]
 def resolve_clashes(x0, box0, min_dist=0.1):
     def urt(x, box):
         distance_matrix = distance(x, box)
-        i, j = np.triu_indices(len(distance_matrix), k=1)
+        i, j = jnp.triu_indices(len(distance_matrix), k=1)
         return distance_matrix[i, j]
 
     dij = urt(x0, box0)
     x_shape = x0.shape
     box_shape = box0.shape
 
-    if np.min(dij) < min_dist:
+    if jnp.min(dij) < min_dist:
         # print('some distances too small')
-        print(f"before optimization: min(dij) = {np.min(dij)} < min_dist threshold ({min_dist})")
+        print(f"before optimization: min(dij) = {jnp.min(dij)} < min_dist threshold ({min_dist})")
         # print('smallest few distances', sorted(dij)[:10])
 
         def unflatten(xbox):
@@ -68,13 +68,13 @@ def resolve_clashes(x0, box0, min_dist=0.1):
         def U_repulse(xbox):
             x, box = unflatten(xbox)
             dij = urt(x, box)
-            return np.sum(np.where(dij < min_dist, (dij - min_dist) ** 2, 0))
+            return jnp.sum(jnp.where(dij < min_dist, (dij - min_dist) ** 2, 0))
 
         def fun(xbox):
             v, g = value_and_grad(U_repulse)(xbox)
-            return float(v), onp.array(g, onp.float64)
+            return float(v), np.array(g, np.float64)
 
-        initial_state = np.hstack([x0.flatten(), box0.flatten()])
+        initial_state = jnp.hstack([x0.flatten(), box0.flatten()])
         # print(f'penalty before: {U_repulse(initial_state)}')
         result = minimize(fun, initial_state, jac=True, method="L-BFGS-B")
         # print(f'penalty after minimization: {U_repulse(result.x)}')
@@ -82,7 +82,7 @@ def resolve_clashes(x0, box0, min_dist=0.1):
         x, box = unflatten(result.x)
         dij = urt(x, box)
 
-        print(f"after optimization: min(dij) = {np.min(dij)}")
+        print(f"after optimization: min(dij) = {jnp.min(dij)}")
 
         return x, box
 
@@ -122,10 +122,10 @@ def generate_waterbox_nb_args() -> NonbondedArgs:
     cutoff = nb.get_cutoff()
 
     lamb = 0.0
-    charge_rescale_mask = onp.ones((N, N))
-    lj_rescale_mask = onp.ones((N, N))
-    lambda_plane_idxs = np.zeros(N, dtype=int)
-    lambda_offset_idxs = np.zeros(N, dtype=int)
+    charge_rescale_mask = np.ones((N, N))
+    lj_rescale_mask = np.ones((N, N))
+    lambda_plane_idxs = jnp.zeros(N, dtype=int)
+    lambda_offset_idxs = jnp.zeros(N, dtype=int)
 
     args = (
         conf,
@@ -145,9 +145,9 @@ def generate_waterbox_nb_args() -> NonbondedArgs:
 
 def generate_random_inputs(n_atoms, dim, instance_flags=difficult_instance_flags) -> NonbondedArgs:
     """Can toggle randomization of each argument using instance_flags"""
-    box = np.eye(dim)
+    box = jnp.eye(dim)
     if instance_flags["randomize_box"]:
-        box += np.diag(rand(dim))
+        box += jnp.diag(rand(dim))
     assert box.shape == (dim, dim)
 
     conf = rand(n_atoms, dim)
@@ -158,9 +158,9 @@ def generate_random_inputs(n_atoms, dim, instance_flags=difficult_instance_flags
     min_dist = 0.1
     conf, box = resolve_clashes(conf, box, min_dist=min_dist)
 
-    charges = np.zeros(n_atoms)
-    sig = min_dist * np.ones(n_atoms)
-    eps = np.ones(n_atoms)
+    charges = jnp.zeros(n_atoms)
+    sig = min_dist * jnp.ones(n_atoms)
+    eps = jnp.ones(n_atoms)
     if instance_flags["randomize_charges"]:
         charges = randn(n_atoms)
     if instance_flags["randomize_sigma"]:
@@ -168,13 +168,13 @@ def generate_random_inputs(n_atoms, dim, instance_flags=difficult_instance_flags
     if instance_flags["randomize_epsilon"]:
         eps = rand(n_atoms)
 
-    params = np.array([charges, sig, eps]).T
+    params = jnp.array([charges, sig, eps]).T
 
     lamb = 0.0
     if instance_flags["randomize_lamb"]:
         lamb = rand()
-    charge_rescale_mask = onp.ones((n_atoms, n_atoms))
-    lj_rescale_mask = onp.ones((n_atoms, n_atoms))
+    charge_rescale_mask = np.ones((n_atoms, n_atoms))
+    lj_rescale_mask = np.ones((n_atoms, n_atoms))
 
     for _ in range(n_atoms):
         i, j = randint(n_atoms, size=2)
@@ -190,8 +190,8 @@ def generate_random_inputs(n_atoms, dim, instance_flags=difficult_instance_flags
     if instance_flags["randomize_cutoff"]:
         cutoff += rand()
 
-    lambda_plane_idxs = np.zeros(n_atoms, dtype=int)
-    lambda_offset_idxs = np.zeros(n_atoms, dtype=int)
+    lambda_plane_idxs = jnp.zeros(n_atoms, dtype=int)
+    lambda_offset_idxs = jnp.zeros(n_atoms, dtype=int)
 
     if instance_flags["randomize_lambda_plane_idxs"]:
         lambda_plane_idxs = randint(low=-2, high=2, size=n_atoms)
@@ -221,9 +221,9 @@ def compare_two_potentials(u_a: NonbondedFxn, u_b: NonbondedFxn, args: Nonbonded
     energy_a, gradients_a = value_and_grads(u_a)(*args)
     energy_b, gradients_b = value_and_grads(u_b)(*args)
 
-    onp.testing.assert_almost_equal(energy_a, energy_b)
+    np.testing.assert_almost_equal(energy_a, energy_b)
     for (g_a, g_b) in zip(gradients_a, gradients_b):
-        onp.testing.assert_allclose(g_a, g_b)
+        np.testing.assert_allclose(g_a, g_b)
 
 
 def _nonbonded_v3_clone(
@@ -252,7 +252,7 @@ def _nonbonded_v3_clone(
     # make 4th dimension of box large enough so its roughly aperiodic
     if box is not None:
         if box.shape[-1] == 3:
-            box_4d = np.eye(4) * 1000
+            box_4d = jnp.eye(4) * 1000
             box_4d = box_4d.at[:3, :3].set(box)
         else:
             box_4d = box
@@ -269,12 +269,12 @@ def _nonbonded_v3_clone(
     # keep only eps > 0
     inds_i, inds_j = pairs.T
     eps = params[:, 2]
-    lj = np.where(eps[inds_i] > 0, lj, 0)
-    lj = np.where(eps[inds_j] > 0, lj, 0)
+    lj = jnp.where(eps[inds_i] > 0, lj, 0)
+    lj = jnp.where(eps[inds_j] > 0, lj, 0)
 
     eij_total = lj * lj_rescale_mask[inds_i, inds_j] + coulomb * charge_rescale_mask[inds_i, inds_j]
 
-    return np.sum(eij_total)
+    return jnp.sum(eij_total)
 
 
 def run_randomized_tests_of_jax_nonbonded(instance_generator, n_instances=10):
@@ -287,8 +287,8 @@ def run_randomized_tests_of_jax_nonbonded(instance_generator, n_instances=10):
 
     min_size, max_size = 10, 50
 
-    random_sizes = onp.random.randint(min_size, max_size, n_instances)
-    dims = onp.random.randint(3, 5, n_instances)
+    random_sizes = np.random.randint(min_size, max_size, n_instances)
+    dims = np.random.randint(3, 5, n_instances)
 
     for n_atoms, dim in zip(random_sizes, dims):
         args = instance_generator(n_atoms, dim)
@@ -319,8 +319,8 @@ def test_vmap():
     n_total = n_ligand + n_environment
     conf, params, box, lamb, _, _, beta, cutoff, _, _ = generate_random_inputs(n_total, 3)
 
-    ligand_indices = np.arange(n_ligand)
-    environment_indices = np.arange(n_environment) + n_ligand
+    ligand_indices = jnp.arange(n_ligand)
+    environment_indices = jnp.arange(n_environment) + n_ligand
     pairs = pairs_from_interaction_groups(ligand_indices, environment_indices)
 
     n_interactions = len(pairs)
@@ -334,12 +334,12 @@ def test_vmap():
 
     def u(conf):
         ljs, coulombs = u_pairs(conf)
-        return np.sum(ljs + coulombs)
+        return jnp.sum(ljs + coulombs)
 
     # vmap over snapshots
     vmapped = jit(vmap(u))
     n_snapshots = 100
-    confs = onp.random.randn(n_snapshots, n_total, 3)
+    confs = np.random.randn(n_snapshots, n_total, 3)
     us = vmapped(confs)
     assert us.shape == (n_snapshots,)
 
@@ -366,17 +366,17 @@ def test_jax_nonbonded_block():
         pj = params[split:]
         return nonbonded_block(xi, xj, box, pi, pj, beta, cutoff)
 
-    i_s, j_s = np.indices((split, N - split))
+    i_s, j_s = jnp.indices((split, N - split))
     indices_left = i_s.flatten()
     indices_right = j_s.flatten() + split
-    pairs = np.array([indices_left, indices_right]).T
+    pairs = jnp.array([indices_left, indices_right]).T
 
     def u_b(x, box, params):
         vdw, es = nonbonded_v3_on_specific_pairs(x, params, box, pairs, beta, cutoff)
 
-        return np.sum(vdw + es)
+        return jnp.sum(vdw + es)
 
-    onp.testing.assert_almost_equal(u_a(conf, box, params), u_b(conf, box, params))
+    np.testing.assert_almost_equal(u_a(conf, box, params), u_b(conf, box, params))
 
 
 def test_precomputation():
@@ -394,24 +394,24 @@ def test_precomputation():
 
     # generate array in the shape of a "trajectory" by adding noise to an initial conformation
     n_snapshots = 100
-    onp.random.seed(2022)
-    traj = np.array([conf] * n_snapshots) + onp.random.randn(n_snapshots, *conf.shape) * 0.005
-    boxes = np.array([box] * n_snapshots) * (1 - 0.0025 + onp.random.rand(n_snapshots, *box.shape) * 0.005)
+    np.random.seed(2022)
+    traj = jnp.array([conf] * n_snapshots) + np.random.randn(n_snapshots, *conf.shape) * 0.005
+    boxes = jnp.array([box] * n_snapshots) * (1 - 0.0025 + np.random.rand(n_snapshots, *box.shape) * 0.005)
 
     # split system into "ligand" vs. "environment"
     n_ligand = 3 * 10  # call the first 10 waters in the system "ligand" and the rest "environment"
-    ligand_idx = onp.arange(n_ligand)
-    env_idx = onp.arange(n_ligand, n_atoms)
+    ligand_idx = np.arange(n_ligand)
+    env_idx = np.arange(n_ligand, n_atoms)
     pairs = pairs_from_interaction_groups(ligand_idx, env_idx)
 
     # reference version: nonbonded_on_specific_pairs
     def u_ref(x, box, params):
         vdw, es = nonbonded_v3_on_specific_pairs(x, params, box, pairs, beta, cutoff)
-        return np.sum(vdw + es)
+        return jnp.sum(vdw + es)
 
     @jit
     def u_batch_ref(eps_ligand, q_ligand):
-        new_params = np.array(params).at[ligand_idx, 0].set(q_ligand)
+        new_params = jnp.array(params).at[ligand_idx, 0].set(q_ligand)
         new_params = new_params.at[ligand_idx, 2].set(eps_ligand)
 
         def f(x, box):
@@ -450,18 +450,18 @@ def test_precomputation():
     reweight_test = jit(make_reweighter(u_batch_test))
 
     for _ in range(5):
-        eps_ligand = np.abs(eps_ligand_0 + (0.2 * onp.random.rand(n_ligand) - 0.1))  # abs() so eps will be non-negative
-        q_ligand = q_ligand_0 + onp.random.randn(n_ligand)
+        eps_ligand = jnp.abs(eps_ligand_0 + (0.2 * np.random.rand(n_ligand) - 0.1))  # abs() so eps will be non-negative
+        q_ligand = q_ligand_0 + np.random.randn(n_ligand)
 
         expected = u_batch_ref(eps_ligand, q_ligand)
         actual = u_batch_test(eps_ligand, q_ligand)
 
         # test array of energies is ~equal to reference
-        onp.testing.assert_array_almost_equal(actual, expected)
+        np.testing.assert_array_almost_equal(actual, expected)
 
         # test that reweighting estimates and gradients are ~equal to reference
         v_ref, gs_ref = value_and_grad(reweight_ref, argnums=(0, 1))(eps_ligand, q_ligand)
         v_test, gs_test = value_and_grad(reweight_test, argnums=(0, 1))(eps_ligand, q_ligand)
 
-        onp.testing.assert_almost_equal(v_ref, v_test)
-        onp.testing.assert_array_almost_equal(gs_ref, gs_test)
+        np.testing.assert_almost_equal(v_ref, v_test)
+        np.testing.assert_array_almost_equal(gs_ref, gs_test)

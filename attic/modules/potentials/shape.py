@@ -1,9 +1,9 @@
-import jax.numpy as np
+import jax.numpy as jnp
 
 
 def squared_distance(ci, cj):
     diff = ci - cj
-    return np.sum(diff * diff, axis=-1)
+    return jnp.sum(diff * diff, axis=-1)
 
 
 def volume(conf_a, params_a, conf_b, params_b):
@@ -29,21 +29,21 @@ def volume(conf_a, params_a, conf_b, params_b):
         identical to params_a in semantics
 
     """
-    ci = np.expand_dims(conf_a, axis=1)  # N, 1, 3
-    cj = np.expand_dims(conf_b, axis=0)  # 1, N, 3
+    ci = jnp.expand_dims(conf_a, axis=1)  # N, 1, 3
+    cj = jnp.expand_dims(conf_b, axis=0)  # 1, N, 3
 
     d2ij = squared_distance(ci, cj)
 
-    ai = np.expand_dims(params_a[:, 0], axis=1)
-    aj = np.expand_dims(params_b[:, 0], axis=0)
+    ai = jnp.expand_dims(params_a[:, 0], axis=1)
+    aj = jnp.expand_dims(params_b[:, 0], axis=0)
 
-    pi = np.expand_dims(params_a[:, 1], axis=1)
-    pj = np.expand_dims(params_b[:, 1], axis=0)
+    pi = jnp.expand_dims(params_a[:, 1], axis=1)
+    pj = jnp.expand_dims(params_b[:, 1], axis=0)
 
-    kij = np.exp(-(ai * aj * d2ij) / (ai + aj))
-    vij = pi * pj * kij * np.power(np.pi / (ai + aj), 3 / 2)
+    kij = jnp.exp(-(ai * aj * d2ij) / (ai + aj))
+    vij = pi * pj * kij * jnp.power(jnp.pi / (ai + aj), 3 / 2)
 
-    return np.sum(vij)
+    return jnp.sum(vij)
 
 
 def normalized_overlap(conf_a, params_a, conf_b, params_b):
@@ -106,7 +106,7 @@ def harmonic_overlap(conf, params, box, lamb, a_idxs, b_idxs, alphas, weights, k
     conf_a = conf[a_idxs]
     conf_b = conf[b_idxs]
 
-    params_c = np.stack([alphas, weights], axis=1)
+    params_c = jnp.stack([alphas, weights], axis=1)
 
     params_a = params_c[a_idxs]
     params_b = params_c[b_idxs]
