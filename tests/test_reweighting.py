@@ -100,7 +100,7 @@ def test_mixture_reweighting_1d():
     # easier-to-estimate free energy difference -> tighter tolerance possible in assertion
 
     n_windows = 10
-    lambdas = jnp.linspace(0, 1, n_windows)
+    lambdas = np.linspace(0, 1, n_windows)
 
     # bigger n samples per window --> ~ sqrt(n)-tighter tolerance possible in assertion
     n_samples_per_window = int(1e5)
@@ -331,7 +331,7 @@ def test_interpret_as_mixture_potential():
 
     ref_params = jnp.ones(2)
     n_windows = 5
-    lambdas = jnp.linspace(0, 1, n_windows)
+    lambdas = np.linspace(0, 1, n_windows)
 
     N_k = [n_samples_per_window] * n_windows
     n_samples_total = sum(N_k)
