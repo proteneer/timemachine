@@ -319,8 +319,8 @@ def test_vmap():
     n_total = n_ligand + n_environment
     conf, params, box, lamb, _, _, beta, cutoff, _, _ = generate_random_inputs(n_total, 3)
 
-    ligand_indices = jnp.arange(n_ligand)
-    environment_indices = jnp.arange(n_environment) + n_ligand
+    ligand_indices = np.arange(n_ligand)
+    environment_indices = np.arange(n_environment) + n_ligand
     pairs = pairs_from_interaction_groups(ligand_indices, environment_indices)
 
     n_interactions = len(pairs)
