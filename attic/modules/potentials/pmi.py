@@ -442,7 +442,7 @@ def test0():
         jnp_res = jnp.linalg.eigh(a_tensor)
         evp_res = dsyevv3(a_tensor)
 
-        jnp.set_printoptions(formatter={"float": lambda x: "{0:0.16f}".format(x)})
+        np.set_printoptions(formatter={"float": lambda x: "{0:0.16f}".format(x)})
 
         np.testing.assert_almost_equal(onp_res[0], jnp_res[0])
         np.testing.assert_almost_equal(onp_res[1], jnp_res[1])
