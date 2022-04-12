@@ -99,4 +99,14 @@ unset(CUDA_ARCH CACHE)
 target_link_libraries(${LIBRARY_NAME} PRIVATE -lcurand -lcuda -lcudart -lcudadevrt -lnvrtc)
 set_target_properties(${LIBRARY_NAME} PROPERTIES PREFIX "")
 
+add_custom_command(
+  OUTPUT custom_ops.pyi
+  COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/generate_stubs
+  WORKING_DIRECTORY ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}
+  DEPENDS ${LIBRARY_NAME}
+  COMMENT "Generating typing stubs for ${LIBRARY_NAME}")
+
+add_custom_target(${LIBRARY_NAME}_stubs ALL DEPENDS custom_ops.pyi)
+
 install(TARGETS ${LIBRARY_NAME} DESTINATION "lib")
+install(FILES ${CMAKE_CURRENT_BINARY_DIR}/custom_ops.pyi DESTINATION "lib")

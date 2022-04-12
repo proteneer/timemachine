@@ -32,7 +32,11 @@ repos:
           - "numpy==1.21.4"
           - "types-protobuf==3.19.15"
           - "types-PyYAML==6.0.5"
-        files: '^timemachine'
+        files: '^timemachine.*\.pyi?$'
+
+        # Exclude custom_ops.py to work around clash with stub file when typechecking
+        # See https://github.com/pre-commit/mirrors-mypy/issues/33#issuecomment-967247764
+        exclude: '^timemachine/lib/custom_ops.py$'
 
 -   repo: https://github.com/pre-commit/mirrors-clang-format
     rev: v13.0.0
@@ -54,3 +58,4 @@ exclude: >
   | ^timemachine/_vendored/
   | ^versioneer\.py$
   | ^timemachine/_version\.py$
+  | ^timemachine/lib/custom_ops.pyi$
