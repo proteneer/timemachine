@@ -306,7 +306,7 @@ def test_one_sided_exp():
         assert jnp.isclose(tm_estimate, pymbar_estimate)
 
     # also check +inf
-    reduced_works = jnp.array([+jnp.inf, 0])
+    reduced_works = jnp.array([+np.inf, 0])
     assert jnp.isclose(one_sided_exp(reduced_works), pymbar.EXP(reduced_works)[0])
 
 

@@ -277,7 +277,7 @@ def nonbonded_v3_on_specific_pairs(conf, params, box, pairs, beta: float, cutoff
     # distances and cutoff
     dij = distance_on_pairs(conf[inds_l], conf[inds_r], box)
     if cutoff is None:
-        cutoff = jnp.inf
+        cutoff = np.inf
     keep_mask = dij <= cutoff
 
     def apply_cutoff(x):
