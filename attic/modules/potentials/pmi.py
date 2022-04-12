@@ -437,7 +437,7 @@ def test0():
         w = onp_res[0]
         Q = onp_res[1]
         for d in range(3):
-            np.testing.assert_almost_equal(jnp.matmul(a_tensor, Q[:, d]), w[d] * Q[:, d])
+            np.testing.assert_almost_equal(np.matmul(a_tensor, Q[:, d]), w[d] * Q[:, d])
 
         jnp_res = jnp.linalg.eigh(a_tensor)
         evp_res = dsyevv3(a_tensor)
