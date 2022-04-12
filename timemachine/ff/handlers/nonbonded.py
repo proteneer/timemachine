@@ -16,7 +16,13 @@ from timemachine.ff.handlers.utils import match_smirks as rd_match_smirks
 from timemachine.graph_utils import convert_to_nx
 
 AM1_CHARGE_CACHE = "AM1Cache"
+AM1ELF10_CHARGE_CACHE = "AM1ELF10Cache"
 BOND_SMIRK_MATCH_CACHE = "BondSmirkMatchCache"
+
+AM1 = "AM1"
+AM1ELF10 = "AM1ELF10"
+AM1BCC = "AM1BCC"
+AM1BCCELF10 = "AM1BCCELF10"
 
 
 def convert_to_oe(mol):
@@ -36,7 +42,42 @@ def convert_to_oe(mol):
     return oemol
 
 
-def oe_assign_charges(mol, charge_model="AM1BCCELF10"):
+def oe_generate_conformations(oemol):
+    """Generate conformations for the input molecule.
+    The molecule is modified in place.
+
+    Note: This currently does not filter out trans carboxylic acids.
+    See https://github.com/openforcefield/openff-toolkit/pull/1171
+
+    Parameters
+    ----------
+    oemol: oechem.OEMol
+
+    References
+    ----------
+    [1] https://docs.eyesopen.com/toolkits/cookbook/python/modeling/am1-bcc.html
+    """
+    from openeye import oeomega
+
+    # generate conformations using omega
+    omegaOpts = oeomega.OEOmegaOptions()
+    omegaOpts.GetTorDriveOptions().SetUseGPU(False)
+    omega = oeomega.OEOmega(omegaOpts)
+    # exclude the initial input conformer
+    omega.SetIncludeInput(False)
+    # needed to preserve the atom ordering
+    omega.SetCanonOrder(False)
+    omega.SetSampleHydrogens(True)
+    omega.SetEnergyWindow(15.0)
+    omega.SetMaxConfs(800)
+    omega.SetRMSThreshold(1.0)
+
+    has_confs = omega(oemol)
+    if not has_confs:
+        raise Exception(f"Unable to generate conformations for charge assignment {oemol.GetTitle()}")
+
+
+def oe_assign_charges(mol, charge_model=AM1BCCELF10):
     """assign partial charges, then premultiply by sqrt(ONE_4PI_EPS0)
     as an optimization"""
 
@@ -44,13 +85,17 @@ def oe_assign_charges(mol, charge_model="AM1BCCELF10"):
     from openeye import oequacpac
 
     charge_engines = {
-        "AM1": oequacpac.OEAM1Charges(symmetrize=True),
-        "AM1BCC": oequacpac.OEAM1BCCCharges(symmetrize=True),
-        "AM1BCCELF10": oequacpac.OEAM1BCCELF10Charges(),
+        AM1: oequacpac.OEAM1Charges(symmetrize=True),
+        AM1ELF10: oequacpac.OEELFCharges(oequacpac.OEAM1Charges(symmetrize=True), 10),
+        AM1BCC: oequacpac.OEAM1BCCCharges(symmetrize=True),
+        AM1BCCELF10: oequacpac.OEAM1BCCELF10Charges(),
     }
     charge_engine = charge_engines[charge_model]
 
     oemol = convert_to_oe(mol)
+    if charge_model in (AM1ELF10, AM1BCCELF10):
+        oe_generate_conformations(oemol)
+
     result = oequacpac.OEAssignCharges(oemol, charge_engine)
     if result is False:
         raise Exception("Unable to assign charges")
@@ -149,20 +194,20 @@ def generate_nonbonded_idxs(mol, smirks):
 
 
 def compute_or_load_am1_charges(mol):
-    """Unless already cached in mol's "AM1Cache" property, use OpenEye to compute AM1 partial charges."""
+    """Unless already cached in mol's "AM1ELF10_CHARGE_CACHE" property, use OpenEye to compute AM1ELF10 partial charges."""
 
     # check for cache
-    if not mol.HasProp(AM1_CHARGE_CACHE):
+    if not mol.HasProp(AM1ELF10_CHARGE_CACHE):
         # The charges returned by OEQuacPac is not deterministic across OS platforms. It is known
         # to be an issue that the atom ordering modifies the return values as well. A follow up
         # with OpenEye is in order
         # https://github.com/openforcefield/openff-toolkit/issues/983
-        am1_charges = list(oe_assign_charges(mol, "AM1"))
+        am1_charges = list(oe_assign_charges(mol, AM1ELF10))
 
-        mol.SetProp(AM1_CHARGE_CACHE, base64.b64encode(pickle.dumps(am1_charges)))
+        mol.SetProp(AM1ELF10_CHARGE_CACHE, base64.b64encode(pickle.dumps(am1_charges)))
 
     else:
-        am1_charges = pickle.loads(base64.b64decode(mol.GetProp(AM1_CHARGE_CACHE)))
+        am1_charges = pickle.loads(base64.b64decode(mol.GetProp(AM1ELF10_CHARGE_CACHE)))
 
     return np.array(am1_charges)
 

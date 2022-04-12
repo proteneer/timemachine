@@ -4,6 +4,17 @@ Code, documentation, experiments we want to retain for reference, but that we're
 * `docs/` -- write-up of initial vision for `timemachine`, involving efficient backpropagation through MD trajectories
 * `docking/` -- Docking module that docks uses non-equilibrium switching
 * `jax_tricks` -- misc. Jax functions
+* `modules` -- misc. modules
+   * `reservoir_sampler.py`
+   * `rmsd.py` -- compute rmsd under Jax
+   * `potentials` -- deprecated potentials
+     * `evp.py` -- eigenvalue problem solvers for small square matrices
+     * `pmi.py` -- principal moments of inertia related code
+     * `gbsa.py` -- GBSA implicit solvent model
+     * `shape.py` -- Calculate volume overlap between two molecules
+   * `tests` -- deprecated tests
+     * `test_shape.py` -- tests for potentials.shape
+     * `dual_topology.py` -- test with TI and dual topology
 * `thermo_deriv/` -- numerical experiments with "thermodynamic derivative" estimators, adjusting LJ parameters to match observables
     * note: currently missing dependencies `thermo_deriv.lj_non_periodic.lennard_jones`, `thermo_deriv.lj.lennard_jones`.
     * note: `langevin_coefficients` dependency has since changed -- some scripts rely on a version of `langevin_coefficients` prior to PR #459
@@ -17,6 +28,7 @@ Code, documentation, experiments we want to retain for reference, but that we're
     * computing a relative free energy using a partial atom-mapping (the atom being deleted / inserted is handled using 4D decoupling)
   * `rbfe_single.py` -- script for running relative binding free energy with single topology
   * `estimator_variance.py` measures run-to-run variability as a function of number of MD steps performed per run
+  * `generate_gradients.py` use symbolic differentiation for common functional forms to emit CUDA code
   * `npt_equilibration.py` samples the constant temperature and pressure ensemble for each of several lambda windows, by running thermostatted MD and pausing every few steps to apply a Monte Carlo barostat move
   * `ahfe.py` runs 4D decoupling simulations of aspirin in a waterbox, for later use in a TI estimator of the absolute hydration free energy.
   * `rhfe_dual.py` runs 4D decoupling simulations of aspirin and a version of aspirin that mutates an oxygen to a fluorine in a waterbox, subject to a centroid restraint, for later use in a TI estimator of the relative hydration free energy difference between these two compounds.
@@ -25,3 +37,4 @@ Code, documentation, experiments we want to retain for reference, but that we're
     * `hif2a/fit_to_multiple_rbfes.py` fits nonbonded parameters to the experimental IC50s associated with these ligands
   * `overlap_test.py` tests two restraint types, one based on principal moments of inertia and one based on a measure of shape overlap.
   * `potential_energy.py` computes the potential energy of an "alchemical" system, as well as its derivatives w.r.t. coords, params, or lam
+
