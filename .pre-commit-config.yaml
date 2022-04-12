@@ -45,6 +45,19 @@ repos:
         types_or: [c, c++, cuda]
         files: '^timemachine/cpp/src/'
 
+-   repo: local
+    hooks:
+    -   id: verify-typing-stubs
+        name: Verify typing stubs
+
+        # NOTE: Building generates new typing stubs, so this hook will
+        # fail if stub file committed to the repo is out of date.
+        # (pre-commit hooks fail if files are modified)
+        entry: make build
+
+        language: system
+        pass_filenames: false
+
 exclude: >
   (?x)
     \.pdb$
