@@ -1,4 +1,5 @@
 import jax.numpy as jnp
+import numpy as np
 
 
 def centroid_restraint(conf, params, box, lamb, group_a_idxs, group_b_idxs, kb, b0):
@@ -303,9 +304,9 @@ def periodic_torsion(conf, params, box, lamb, torsion_idxs, lamb_mult=None, lamb
     * if conf has more than 3 dimensions, this function only depends on the first 3
     """
     if lamb_mult is None:
-        lamb_mult = jnp.zeros(torsion_idxs.shape[0])
+        lamb_mult = np.zeros(torsion_idxs.shape[0])
     if lamb_offset is None:
-        lamb_offset = jnp.ones(torsion_idxs.shape[0])
+        lamb_offset = np.ones(torsion_idxs.shape[0])
 
     conf = conf[:, :3]  # this is defined only in 3d
 
