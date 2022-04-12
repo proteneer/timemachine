@@ -237,9 +237,9 @@ def test_endpoint_reweighting_ahfe():
 
     v, g = value_and_grad(estimate_delta_f)(ref_params)
 
-    assert jnp.isfinite(v)
+    assert np.isfinite(v)
     assert v == ref_delta_f
-    assert jnp.isfinite(g).all()
+    assert np.isfinite(g).all()
     assert (g != 0).any()
     assert g.shape == ref_params.shape
     # assert anything_about_direction_of_g  # not expected because the "sample" arrays are made up
@@ -249,8 +249,8 @@ def test_endpoint_reweighting_ahfe():
     v_prime, g_prime = value_and_grad(estimate_delta_f)(params_prime)
     assert v_prime != v
     assert (g_prime != g).any()
-    assert jnp.isfinite(v_prime)
-    assert jnp.isfinite(g_prime).all()
+    assert np.isfinite(v_prime)
+    assert np.isfinite(g_prime).all()
 
 
 def test_mixture_reweighting_ahfe():
@@ -268,9 +268,9 @@ def test_mixture_reweighting_ahfe():
 
     v, g = value_and_grad(estimate_delta_f)(ref_params)
 
-    assert jnp.isfinite(v)
+    assert np.isfinite(v)
     # assert v == ref_delta_f  # not expected in this case, due to non-physical fake_log_weights
-    assert jnp.isfinite(g).all()
+    assert np.isfinite(g).all()
     assert (g != 0).any()
     assert g.shape == ref_params.shape
     # assert anything_about_direction_of_g  # not expected because the inputs are non-physical
@@ -280,8 +280,8 @@ def test_mixture_reweighting_ahfe():
     v_prime, g_prime = value_and_grad(estimate_delta_f)(params_prime)
     assert v_prime != v
     assert (g_prime != g).any()
-    assert jnp.isfinite(v_prime)
-    assert jnp.isfinite(g_prime).all()
+    assert np.isfinite(v_prime)
+    assert np.isfinite(g_prime).all()
 
 
 def test_one_sided_exp():
