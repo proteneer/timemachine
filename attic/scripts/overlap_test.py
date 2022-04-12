@@ -8,8 +8,8 @@ import multiprocessing
 from importlib import resources
 
 import jax
-import jax.numpy as np
-import numpy as onp
+import jax.numpy as jnp
+import numpy as np
 from rdkit import Chem
 
 from timemachine.ff import handlers
@@ -23,46 +23,46 @@ def pmi_restraints_new(conf, params, box, lamb, a_idxs, b_idxs, masses, angle_fo
     a_com, a_tensor = inertia_tensor(conf[a_idxs], masses[a_idxs])
     b_com, b_tensor = inertia_tensor(conf[b_idxs], masses[b_idxs])
 
-    a_eval, a_evec = np.linalg.eigh(a_tensor)  # already sorted
-    b_eval, b_evec = np.linalg.eigh(b_tensor)  # already sorted
+    a_eval, a_evec = jnp.linalg.eigh(a_tensor)  # already sorted
+    b_eval, b_evec = jnp.linalg.eigh(b_tensor)  # already sorted
 
     # convert from column to row eigenvectors
-    a_rvec = np.transpose(a_evec)
-    b_rvec = np.transpose(b_evec)
+    a_rvec = jnp.transpose(a_evec)
+    b_rvec = jnp.transpose(b_evec)
 
     loss = []
     for a, b in zip(a_rvec, b_rvec):
-        delta = 1 - np.abs(np.dot(a, b))
+        delta = 1 - jnp.abs(jnp.dot(a, b))
         loss.append(delta * delta)
 
-    return angle_force * np.sum(loss) + com_force * np.linalg.norm(b_com - a_com)
+    return angle_force * jnp.sum(loss) + com_force * jnp.linalg.norm(b_com - a_com)
 
 
 def recenter(conf):
-    return conf - np.mean(conf, axis=0)
+    return conf - jnp.mean(conf, axis=0)
 
 
 def inertia_tensor(conf, masses):
-    com = np.average(conf, axis=0, weights=masses)
+    com = jnp.average(conf, axis=0, weights=masses)
     conf = conf - com
 
     xs = conf[:, 0]
     ys = conf[:, 1]
     zs = conf[:, 2]
-    xx = np.average(ys * ys + zs * zs, weights=masses)
-    yy = np.average(xs * xs + zs * zs, weights=masses)
-    zz = np.average(xs * xs + ys * ys, weights=masses)
-    xy = np.average(-xs * ys, weights=masses)
-    xz = np.average(-xs * zs, weights=masses)
-    yz = np.average(-ys * zs, weights=masses)
-    tensor = np.array([[xx, xy, xz], [xy, yy, yz], [xz, yz, zz]])
+    xx = jnp.average(ys * ys + zs * zs, weights=masses)
+    yy = jnp.average(xs * xs + zs * zs, weights=masses)
+    zz = jnp.average(xs * xs + ys * ys, weights=masses)
+    xy = jnp.average(-xs * ys, weights=masses)
+    xz = jnp.average(-xs * zs, weights=masses)
+    yz = jnp.average(-ys * zs, weights=masses)
+    tensor = jnp.array([[xx, xy, xz], [xy, yy, yz], [xz, yz, zz]])
 
     return com, tensor
 
 
 def get_conf(romol, idx):
     conformer = romol.GetConformer(idx)
-    guest_conf = np.array(conformer.GetPositions(), dtype=np.float64)
+    guest_conf = jnp.array(conformer.GetPositions(), dtype=jnp.float64)
     guest_conf /= 10
     return recenter(guest_conf)
 
@@ -71,9 +71,9 @@ def make_conformer(mol, conf_a, conf_b):
     mol.RemoveAllConformers()
     mol = Chem.CombineMols(mol, mol)
     cc = Chem.Conformer(mol.GetNumAtoms())
-    conf = np.concatenate([conf_a, conf_b])
+    conf = jnp.concatenate([conf_a, conf_b])
     conf *= 10
-    for idx, pos in enumerate(onp.asarray(conf)):
+    for idx, pos in enumerate(np.asarray(conf)):
         cc.SetAtomPosition(idx, (float(pos[0]), float(pos[1]), float(pos[2])))
     mol.AddConformer(cc)
 
@@ -86,7 +86,7 @@ def get_heavy_atom_idxs(mol):
     for a_idx, a in enumerate(mol.GetAtoms()):
         if a.GetAtomicNum() > 1:
             idxs.append(a_idx)
-    return np.array(idxs, dtype=np.int32)
+    return jnp.array(idxs, dtype=jnp.int32)
 
 
 def convergence(args):
@@ -119,7 +119,7 @@ def convergence(args):
     coords_a = recenter(coords_a)
     coords_b = recenter(coords_b)
 
-    coords = np.concatenate([coords_a, coords_b])
+    coords = jnp.concatenate([coords_a, coords_b])
 
     a_idxs = get_heavy_atom_idxs(ligand_a)
     b_idxs = get_heavy_atom_idxs(ligand_b)
@@ -172,10 +172,10 @@ def convergence(args):
         #         )
         #     )
 
-    masses_a = onp.array([a.GetMass() for a in ligand_a.GetAtoms()]) * 10000
-    masses_b = onp.array([a.GetMass() for a in ligand_b.GetAtoms()])
+    masses_a = np.array([a.GetMass() for a in ligand_a.GetAtoms()]) * 10000
+    masses_b = np.array([a.GetMass() for a in ligand_b.GetAtoms()])
 
-    combined_masses = np.concatenate([masses_a, masses_b])
+    combined_masses = jnp.concatenate([masses_a, masses_b])
 
     # com_restraint_fn = functools.partial(bonded.centroid_restraint,
     #     params=None,
@@ -204,13 +204,13 @@ def convergence(args):
     )
 
     prefactor = 2.7  # unitless
-    shape_lamb = (4 * np.pi) / (3 * prefactor)  # unitless
-    kappa = np.pi / (np.power(shape_lamb, 2 / 3))  # unitless
+    shape_lamb = (4 * jnp.pi) / (3 * prefactor)  # unitless
+    kappa = jnp.pi / (jnp.power(shape_lamb, 2 / 3))  # unitless
     sigma = 0.15  # 1 angstrom std, 95% coverage by 2 angstroms
     alpha = kappa / (sigma * sigma)
 
-    alphas = np.zeros(combined_mol.GetNumAtoms()) + alpha
-    weights = np.zeros(combined_mol.GetNumAtoms()) + prefactor
+    alphas = jnp.zeros(combined_mol.GetNumAtoms()) + alpha
+    weights = jnp.zeros(combined_mol.GetNumAtoms()) + prefactor
 
     shape_restraint_fn = functools.partial(
         shape.harmonic_overlap,
@@ -246,7 +246,7 @@ def convergence(args):
         s = []
         for u in nrg_fns:
             s.append(u(conf, lamb=lamb))
-        return np.sum(s)
+        return jnp.sum(s)
 
     grad_fn = jax.grad(nrg_fn, argnums=(0, 1))
     grad_fn = jax.jit(grad_fn)
@@ -255,19 +255,19 @@ def convergence(args):
     du_dx_fn = jax.jit(du_dx_fn)
 
     x_t = coords
-    v_t = np.zeros_like(x_t)
+    v_t = jnp.zeros_like(x_t)
 
     Chem.SDWriter("frames_heavy_" + str(epoch) + "_" + str(lamb_idx) + ".sdf")
 
     dt = 1.5e-3
     ca, cb, cc = langevin_coefficients(300.0, dt, 1.0, combined_masses)
-    cb = -1 * onp.expand_dims(cb, axis=-1)
-    cc = onp.expand_dims(cc, axis=-1)
+    cb = -1 * np.expand_dims(cb, axis=-1)
+    cc = np.expand_dims(cc, axis=-1)
 
     du_dls = []
 
     # re-seed since forking
-    onp.random.seed(int.from_bytes(os.urandom(4), byteorder="little"))
+    np.random.seed(int.from_bytes(os.urandom(4), byteorder="little"))
 
     # for step in range(100000):
     for step in range(100000):
@@ -285,10 +285,10 @@ def convergence(args):
         else:
             du_dx = du_dx_fn(x_t, lamb)
 
-        v_t = ca * v_t + cb * du_dx + cc * onp.random.normal(size=x_t.shape)
+        v_t = ca * v_t + cb * du_dx + cc * np.random.normal(size=x_t.shape)
         x_t = x_t + v_t * dt
 
-    return np.mean(onp.mean(du_dls))
+    return jnp.mean(np.mean(du_dls))
 
 
 if __name__ == "__main__":
@@ -296,7 +296,7 @@ if __name__ == "__main__":
     pool = multiprocessing.Pool()  # defaults to # of cpus
 
     # lambda_schedule = np.linspace(0, 1.0, os.cpu_count())
-    lambda_schedule = np.linspace(0, 1.0, 24)
+    lambda_schedule = jnp.linspace(0, 1.0, 24)
     # lambda_schedule = np.array([0.0])
     # lambda_schedule = [0.81, 0.81, 0.81, 0.81, 0.81, 0.81, 0.81, 0.81, 0.81, 0.81, 0.81]
     # lambda_schedule = np.array([1e-4, 5e-4, 1e-3, 5e-3, 0.01, 0.02, 0.03, 0.04, 0.05, 0.06, 0.07, 0.08, 0.09, 0.1, 0.11, 0.12, 0.13, 0.15,0.175, 0.2, 0.225, 0.25, 0.275, 0.3, 0.35, 0.4, 0.5])
@@ -310,8 +310,8 @@ if __name__ == "__main__":
         for l_idx, lamb in enumerate(lambda_schedule):
             args.append((epoch, lamb, l_idx))
         avg_du_dls = pool.map(convergence, args)
-        avg_du_dls = np.asarray(avg_du_dls)
+        avg_du_dls = jnp.asarray(avg_du_dls)
 
         for lamb, ddl in zip(lambda_schedule, avg_du_dls):
             print("lambda", lamb, "du_dl", ddl)
-        print(epoch, "epoch", "deltaG", onp.trapz(avg_du_dls, lambda_schedule))
+        print(epoch, "epoch", "deltaG", np.trapz(avg_du_dls, lambda_schedule))
