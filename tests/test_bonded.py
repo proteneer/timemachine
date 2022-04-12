@@ -178,7 +178,8 @@ class TestBonded(GradientTest):
 
             # test bitwise commutativity
             test_potential = potentials.HarmonicBond(bond_idxs, lamb_mult, lamb_offset)
-            test_potential_rev = potentials.HarmonicBond(bond_idxs[:, ::-1], lamb_mult, lamb_offset)
+            bond_idxs_rev = bond_idxs[:, ::-1] if n_bonds else bond_idxs
+            test_potential_rev = potentials.HarmonicBond(bond_idxs_rev, lamb_mult, lamb_offset)
 
             test_potential_impl = test_potential.unbound_impl(precision)
             test_potential_rev_impl = test_potential_rev.unbound_impl(precision)
@@ -271,7 +272,8 @@ class TestBonded(GradientTest):
 
             # test bitwise commutativity
             test_potential = potentials.HarmonicAngle(angle_idxs, lamb_mult, lamb_offset)
-            test_potential_rev = potentials.HarmonicAngle(angle_idxs[:, ::-1], lamb_mult, lamb_offset)
+            angle_idxs_rev = angle_idxs[:, ::-1] if n_angles else angle_idxs
+            test_potential_rev = potentials.HarmonicAngle(angle_idxs_rev, lamb_mult, lamb_offset)
 
             test_potential_impl = test_potential.unbound_impl(precision)
             test_potential_rev_impl = test_potential_rev.unbound_impl(precision)
@@ -329,7 +331,8 @@ class TestBonded(GradientTest):
 
             # test bitwise commutativity
             test_potential = potentials.PeriodicTorsion(torsion_idxs, lamb_mult, lamb_offset)
-            test_potential_rev = potentials.PeriodicTorsion(torsion_idxs[:, ::-1], lamb_mult, lamb_offset)
+            torsion_idxs_rev = torsion_idxs[:, ::-1] if n_torsions else torsion_idxs
+            test_potential_rev = potentials.PeriodicTorsion(torsion_idxs_rev, lamb_mult, lamb_offset)
 
             test_potential_impl = test_potential.unbound_impl(precision)
             test_potential_rev_impl = test_potential_rev.unbound_impl(precision)
@@ -346,3 +349,9 @@ class TestBonded(GradientTest):
             np.testing.assert_array_equal(test_du_dx, test_du_dx_rev)
             np.testing.assert_array_equal(test_du_dp, test_du_dp_rev)
             np.testing.assert_array_equal(test_du_dl, test_du_dl_rev)
+
+    def test_empty_potentials(self):
+        # Check that no error is given if the terms are empty
+        self.test_periodic_torsion(n_torsions=0)
+        self.test_harmonic_angle(n_angles=0)
+        self.test_harmonic_bond(n_bonds=0)

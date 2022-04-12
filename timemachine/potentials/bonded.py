@@ -115,6 +115,9 @@ def harmonic_bond(conf, params, box, lamb, bond_idxs, lamb_mult=None, lamb_offse
     * lamb argument is unused
 
     """
+    if bond_idxs.shape[0] == 0:
+        return 0.0
+
     assert params.shape == bond_idxs.shape
 
     if lamb_mult is None or lamb_offset is None or lamb is None:
@@ -187,6 +190,9 @@ def harmonic_angle(conf, params, box, lamb, angle_idxs, lamb_mult=None, lamb_off
     ------
     * lamb argument unused
     """
+    if angle_idxs.shape[0] == 0:
+        return 0.0
+
     if lamb_mult is None or lamb_offset is None or lamb is None:
         assert lamb_mult is None
         assert lamb_offset is None
@@ -302,6 +308,9 @@ def periodic_torsion(conf, params, box, lamb, torsion_idxs, lamb_mult=None, lamb
     * lamb argument unused
     * if conf has more than 3 dimensions, this function only depends on the first 3
     """
+    if torsion_idxs.shape[0] == 0:
+        return 0.0
+
     if lamb_mult is None:
         lamb_mult = jnp.zeros(torsion_idxs.shape[0])
     if lamb_offset is None:
