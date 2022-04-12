@@ -195,7 +195,6 @@ def test_relative_free_energy():
         integrator = LangevinIntegrator(temperature, 1.5e-3, 1.0, masses, seed)
 
         barostat = MonteCarloBarostat(x0.shape[0], pressure, temperature, group_idxs, 25, seed)
-
         model = estimator.FreeEnergyModel(
             unbound_potentials,
             endpoint_correct,
@@ -263,7 +262,7 @@ def test_relative_free_energy():
                 "prefix",
             )
 
-            dG, _, _ = estimator.deltaG(model, sys_params)
+            dG, _, _ = estimator.deltaG(model, sys_params, subsample_interval=100)
             dGs.append(dG)
 
         return dGs[0] - dGs[1]
