@@ -124,8 +124,8 @@ def generate_waterbox_nb_args() -> NonbondedArgs:
     lamb = 0.0
     charge_rescale_mask = np.ones((N, N))
     lj_rescale_mask = np.ones((N, N))
-    lambda_plane_idxs = jnp.zeros(N, dtype=int)
-    lambda_offset_idxs = jnp.zeros(N, dtype=int)
+    lambda_plane_idxs = np.zeros(N, dtype=int)
+    lambda_offset_idxs = np.zeros(N, dtype=int)
 
     args = (
         conf,
@@ -190,8 +190,8 @@ def generate_random_inputs(n_atoms, dim, instance_flags=difficult_instance_flags
     if instance_flags["randomize_cutoff"]:
         cutoff += rand()
 
-    lambda_plane_idxs = jnp.zeros(n_atoms, dtype=int)
-    lambda_offset_idxs = jnp.zeros(n_atoms, dtype=int)
+    lambda_plane_idxs = np.zeros(n_atoms, dtype=int)
+    lambda_offset_idxs = np.zeros(n_atoms, dtype=int)
 
     if instance_flags["randomize_lambda_plane_idxs"]:
         lambda_plane_idxs = randint(low=-2, high=2, size=n_atoms)

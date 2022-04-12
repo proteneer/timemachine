@@ -34,7 +34,7 @@ def _scatter_inds_from_group_inds(group_inds):
         for j in group:
             scatter_inds[j] = i
 
-    return jnp.array(scatter_inds, dtype=int)
+    return np.array(scatter_inds, dtype=int)
 
 
 class CentroidRescaler:
