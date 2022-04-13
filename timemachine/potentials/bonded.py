@@ -92,8 +92,8 @@ def harmonic_bond(conf, params, box, lamb, bond_idxs, lamb_mult=None, lamb_offse
     conf: shape [num_atoms, 3] np.array
         atomic coordinates
 
-    params: shape [num_params, 2] np.array
-        unique parameters
+    params: shape [num_bonds, 2] np.array
+        parameters
 
     box: shape [3, 3] np.array
         periodic boundary vectors, if not None
@@ -116,6 +116,9 @@ def harmonic_bond(conf, params, box, lamb, bond_idxs, lamb_mult=None, lamb_offse
 
     """
     assert params.shape == bond_idxs.shape
+
+    if bond_idxs.shape[0] == 0:
+        return 0.0
 
     if lamb_mult is None or lamb_offset is None or lamb is None:
         assert lamb_mult is None
@@ -160,8 +163,8 @@ def harmonic_angle(conf, params, box, lamb, angle_idxs, lamb_mult=None, lamb_off
     conf: shape [num_atoms, 3] np.array
         atomic coordinates
 
-    params: shape [num_params,] np.array
-        unique parameters
+    params: shape [num_angles, 2] np.array
+        parameters
 
     box: shape [3, 3] np.array
         periodic boundary vectors, if not None
@@ -187,6 +190,9 @@ def harmonic_angle(conf, params, box, lamb, angle_idxs, lamb_mult=None, lamb_off
     ------
     * lamb argument unused
     """
+    if angle_idxs.shape[0] == 0:
+        return 0.0
+
     if lamb_mult is None or lamb_offset is None or lamb is None:
         assert lamb_mult is None
         assert lamb_offset is None
@@ -275,8 +281,8 @@ def periodic_torsion(conf, params, box, lamb, torsion_idxs, lamb_mult=None, lamb
     conf: shape [num_atoms, 3] np.array
         atomic coordinates
 
-    params: shape [num_params,] np.array
-        unique parameters
+    params: shape [num_torsions, 3] np.array
+        parameters
 
     box: shape [3, 3] np.array
         periodic boundary vectors, if not None
@@ -293,15 +299,15 @@ def periodic_torsion(conf, params, box, lamb, torsion_idxs, lamb_mult=None, lamb
     torsion_idxs: shape [num_torsions, 4] np.array
         indices denoting the four atoms that define a torsion
 
-    param_idxs: shape [num_torsions, 3] np.array
-        indices into the params array denoting the force constant, phase, and period
-
     Notes:
     ------
     * box argument unused
     * lamb argument unused
     * if conf has more than 3 dimensions, this function only depends on the first 3
     """
+    if torsion_idxs.shape[0] == 0:
+        return 0.0
+
     if lamb_mult is None:
         lamb_mult = jnp.zeros(torsion_idxs.shape[0])
     if lamb_offset is None:

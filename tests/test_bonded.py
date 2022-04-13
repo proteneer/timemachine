@@ -150,7 +150,7 @@ class TestBonded(GradientTest):
         bond_idxs = []
         for _ in range(n_bonds):
             bond_idxs.append(np.random.choice(atom_idxs, size=2, replace=False))
-        bond_idxs = np.array(bond_idxs, dtype=np.int32)
+        bond_idxs = np.array(bond_idxs, dtype=np.int32) if n_bonds else np.zeros((0, 2), dtype=np.int32)
 
         lamb = 0.0
         box = np.eye(3) * 100
@@ -243,7 +243,7 @@ class TestBonded(GradientTest):
         angle_idxs = []
         for _ in range(n_angles):
             angle_idxs.append(np.random.choice(atom_idxs, size=3, replace=False))
-        angle_idxs = np.array(angle_idxs, dtype=np.int32)
+        angle_idxs = np.array(angle_idxs, dtype=np.int32) if n_angles else np.zeros((0, 3), dtype=np.int32)
 
         lamb = 0.0
         box = np.eye(3) * 100
@@ -301,7 +301,7 @@ class TestBonded(GradientTest):
         for _ in range(n_torsions):
             torsion_idxs.append(np.random.choice(atom_idxs, size=4, replace=False))
 
-        torsion_idxs = np.array(torsion_idxs, dtype=np.int32)
+        torsion_idxs = np.array(torsion_idxs, dtype=np.int32) if n_torsions else np.zeros((0, 4), dtype=np.int32)
 
         lamb = 0.0
         box = np.eye(3) * 100
@@ -346,3 +346,9 @@ class TestBonded(GradientTest):
             np.testing.assert_array_equal(test_du_dx, test_du_dx_rev)
             np.testing.assert_array_equal(test_du_dp, test_du_dp_rev)
             np.testing.assert_array_equal(test_du_dl, test_du_dl_rev)
+
+    def test_empty_potentials(self):
+        # Check that no error is given if the terms are empty
+        self.test_periodic_torsion(n_torsions=0)
+        self.test_harmonic_angle(n_angles=0)
+        self.test_harmonic_bond(n_bonds=0)
