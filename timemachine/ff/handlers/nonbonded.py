@@ -75,7 +75,7 @@ def oe_generate_conformations(oemol, sample_hydrogens=True):
 
     has_confs = omega(oemol)
     if not has_confs:
-        raise Exception(f"Unable to generate conformations for charge assignment for {oemol.GetTitle()}")
+        raise Exception(f"Unable to generate conformations for charge assignment for '{oemol.GetTitle()}'")
 
 
 def oe_assign_charges(mol, charge_model=AM1BCCELF10):
@@ -106,7 +106,7 @@ def oe_assign_charges(mol, charge_model=AM1BCCELF10):
             oe_generate_conformations(oemol, sample_hydrogens=False)
             result = oequacpac.OEAssignCharges(oemol, charge_engine)
         if result is False:
-            raise Exception(f"Unable to assign charges for {oemol.GetTitle()}")
+            raise Exception(f"Unable to assign charges for '{oemol.GetTitle()}'")
 
     partial_charges = np.array([atom.GetPartialCharge() for atom in oemol.GetAtoms()])
 
