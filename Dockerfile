@@ -70,6 +70,15 @@ RUN git clone https://github.com/openmm/openmm.git --branch "${OPENMM_VERSION}" 
     make -j "$(nproc)" install && \
     make PythonInstall
 
+# Copy the pip requirements to cache when possible
+COPY requirements.txt /code/timemachine/
+RUN pip install --no-cache-dir -r timemachine/requirements.txt
+
+# NOTE: timemachine_ci must come before timemachine in the Dockerfile;
+# otherwise, CI will try (and fail) to build timemachine to reach the
+# timemachine_ci target
+FROM tm_base_env AS timemachine_ci
+
 # Install pre-commit and cache hooks
 RUN pip install --no-cache-dir pre-commit==2.17.0
 COPY .pre-commit-config.yaml /code/timemachine/
@@ -78,10 +87,6 @@ RUN cd /code/timemachine && git init . && pre-commit install-hooks
 # Install CI requirements
 COPY ci/requirements.txt /code/timemachine/ci/requirements.txt
 RUN pip install --no-cache-dir -r timemachine/ci/requirements.txt
-
-# Copy the pip requirements to cache when possible
-COPY requirements.txt /code/timemachine/
-RUN pip install --no-cache-dir -r timemachine/requirements.txt
 
 FROM tm_base_env AS timemachine
 ARG CUDA_ARCH=75
