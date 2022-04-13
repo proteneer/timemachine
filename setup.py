@@ -111,6 +111,7 @@ setup(
             "datasets/freesolv/freesolv.sdf",
             "testsystems/data/5dfr_solv_equil.pdb",
             "testsystems/data/ligands_40.sdf",
+            "testsystems/data/mobley_820789.sdf",
             # NOTE: C++ sources used at runtime for JIT compilation
             "cpp/src/*.hpp",
             "cpp/src/kernels/*.cuh",
