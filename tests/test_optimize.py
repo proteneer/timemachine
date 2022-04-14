@@ -36,7 +36,7 @@ def test_flatten_and_unflatten_dict():
         Angles=np.random.randn(60, 3),
         Extras=dict(
             GlobalVars=[
-                jnp.arange(70),
+                np.arange(70),
                 np.random.randn(80, 4),
             ]
         ),

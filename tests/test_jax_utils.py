@@ -36,7 +36,7 @@ def test_delta_r():
         n_atoms = np.random.randint(50, 1000)
         dim = np.random.randint(3, 5)
         ri, rj = np.random.randn(2, n_atoms, dim)
-        box = jnp.eye(dim)
+        box = np.eye(dim)
 
         dr_ij_1 = delta_r(ri, rj, box)
         dr_ji_1 = delta_r(rj, ri, box)
@@ -122,10 +122,10 @@ def test_batched_neighbor_inds():
     confs = np.random.rand(n_confs, n_particles, dim)
     cutoff = 0.3
 
-    boxes = jnp.array([jnp.eye(3)] * n_confs)
+    boxes = jnp.array([np.eye(3)] * n_confs)
 
     n_alchemical = 50
-    pairs = pairs_from_interaction_groups(jnp.arange(n_alchemical), jnp.arange(n_alchemical, n_particles))
+    pairs = pairs_from_interaction_groups(np.arange(n_alchemical), np.arange(n_alchemical, n_particles))
     n_possible_interactions = len(pairs)
 
     full_distances = vmap(distance_on_pairs)(confs[:, pairs[:, 0]], confs[:, pairs[:, 1]], boxes)
@@ -142,4 +142,4 @@ def test_batched_neighbor_inds():
     neighbor_distances = vmap(d)(confs, batch_pairs, boxes)
 
     assert neighbor_distances.shape == (n_confs, n_neighbor_pairs)
-    assert jnp.sum(neighbor_distances < cutoff) == jnp.sum(full_distances < cutoff)
+    assert np.sum(neighbor_distances < cutoff) == np.sum(full_distances < cutoff)

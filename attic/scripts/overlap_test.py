@@ -274,7 +274,7 @@ def convergence(args):
 
         # if step % 1000 == 0:
         #     u = nrg_fn(x_t, lamb)
-        #     print("step", step, "nrg", onp.asarray(u), "avg_du_dl",  onp.mean(du_dls))
+        #     print("step", step, "nrg", np.asarray(u), "avg_du_dl",  np.mean(du_dls))
         #     mol = make_conformer(combined_mol, x_t[:ligand_a.GetNumAtoms()], x_t[ligand_a.GetNumAtoms():])
         #     w.write(mol)
         #     w.flush()
@@ -296,7 +296,7 @@ if __name__ == "__main__":
     pool = multiprocessing.Pool()  # defaults to # of cpus
 
     # lambda_schedule = np.linspace(0, 1.0, os.cpu_count())
-    lambda_schedule = jnp.linspace(0, 1.0, 24)
+    lambda_schedule = np.linspace(0, 1.0, 24)
     # lambda_schedule = np.array([0.0])
     # lambda_schedule = [0.81, 0.81, 0.81, 0.81, 0.81, 0.81, 0.81, 0.81, 0.81, 0.81, 0.81]
     # lambda_schedule = np.array([1e-4, 5e-4, 1e-3, 5e-3, 0.01, 0.02, 0.03, 0.04, 0.05, 0.06, 0.07, 0.08, 0.09, 0.1, 0.11, 0.12, 0.13, 0.15,0.175, 0.2, 0.225, 0.25, 0.275, 0.3, 0.35, 0.4, 0.5])
