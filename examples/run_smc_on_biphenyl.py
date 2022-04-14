@@ -2,9 +2,9 @@ import argparse
 from datetime import datetime
 from pickle import dump
 
-from timemachine.md.smc import simple_smc
 from timemachine.fe.absolute_hydration import set_up_ahfe_system_for_smc
-from timemachine.testsystems.biphenyl import get_biphenyl
+from timemachine.md.smc import simple_smc
+from timemachine.testsystems.ligands import get_biphenyl
 
 
 def parse_options():
