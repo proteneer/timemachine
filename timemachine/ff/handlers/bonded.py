@@ -70,11 +70,25 @@ class ReversibleBondHandler(SerializableMixIn):
 
 # we need to subclass to get the names backout
 class HarmonicBondHandler(ReversibleBondHandler):
-    pass
+    @staticmethod
+    def static_parameterize(params, smirks, mol):
+        mol_params, bond_idxs = super(HarmonicBondHandler, HarmonicBondHandler).static_parameterize(params, smirks, mol)
+        if len(mol_params) == 0:
+            mol_params = params[:0]  # empty slice with same dtype, other dimensions
+            bond_idxs = np.zeros((0, 2), dtype=np.int32)
+        return mol_params, bond_idxs
 
 
 class HarmonicAngleHandler(ReversibleBondHandler):
-    pass
+    @staticmethod
+    def static_parameterize(params, smirks, mol):
+        mol_params, angle_idxs = super(HarmonicAngleHandler, HarmonicAngleHandler).static_parameterize(
+            params, smirks, mol
+        )
+        if len(mol_params) == 0:
+            mol_params = params[:0]  # empty slice with same dtype, other dimensions
+            angle_idxs = np.zeros((0, 3), dtype=np.int32)
+        return mol_params, angle_idxs
 
 
 class ProperTorsionHandler:

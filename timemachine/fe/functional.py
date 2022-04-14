@@ -5,7 +5,7 @@ config.update("jax_enable_x64", True)
 from typing import Tuple
 
 from jax import custom_jvp
-from jax import numpy as np
+from jax import numpy as jnp
 from jax.interpreters.partial_eval import Tracer
 
 from timemachine.lib.potentials import SummedPotential
@@ -64,25 +64,25 @@ def wrap_impl(impl, pack=lambda x: x):
             assert gradient.shape == tangent.shape
             J = gradient.flatten().reshape(1, gradient.size)
             v = tangent.flatten()
-            return np.matmul(J, v)
+            return jnp.matmul(J, v)
 
-        tangent_out = np.zeros(1)
+        tangent_out = jnp.zeros(1)
         if derivative_requested(coords_dot):
             tangent_out += explicit_jvp(coords_grad, coords_dot)
         if derivative_requested(params_dot):
             tangent_out += explicit_jvp(params_grad, params_dot)
         if derivative_requested(lam_dot):
-            tangent_out += explicit_jvp(np.array(lam_grad), np.array(lam_dot))
+            tangent_out += explicit_jvp(jnp.array(lam_grad), jnp.array(lam_dot))
 
         # specific to case of scalar-valued U: float64[1] -> float64, so primal and tangent have equal shapes/dtypes
-        tangent_out = np.sum(tangent_out)
+        tangent_out = jnp.sum(tangent_out)
 
         return primal_out, tangent_out
 
     return U
 
 
-def construct_differentiable_interface(unbound_potentials, precision=np.float32):
+def construct_differentiable_interface(unbound_potentials, precision=jnp.float32):
     """Construct a differentiable function U(coords, params, box, lam) -> float
     from a collection of unbound potentials
 
@@ -95,12 +95,12 @@ def construct_differentiable_interface(unbound_potentials, precision=np.float32)
     U_s = [wrap_impl(impl) for impl in impls]
 
     def U(coords, params, box, lam):
-        return np.sum(np.array([U_i(coords, p_i, box, lam) for (U_i, p_i) in zip(U_s, params)]))
+        return jnp.sum(jnp.array([U_i(coords, p_i, box, lam) for (U_i, p_i) in zip(U_s, params)]))
 
     return U
 
 
-def construct_differentiable_interface_fast(unbound_potentials, params, precision=np.float32):
+def construct_differentiable_interface_fast(unbound_potentials, params, precision=jnp.float32):
     """Construct a differentiable function U(coords, params, box, lam) -> float
     from a collection of unbound potentials
 
@@ -112,7 +112,7 @@ def construct_differentiable_interface_fast(unbound_potentials, params, precisio
     impl = SummedPotential(unbound_potentials, params).unbound_impl(precision)
 
     def pack(params):
-        return np.concatenate([ps.reshape(-1) for ps in params])
+        return jnp.concatenate([ps.reshape(-1) for ps in params])
 
     U = wrap_impl(impl, pack)
 

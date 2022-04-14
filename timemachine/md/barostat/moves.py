@@ -6,7 +6,7 @@ config.update("jax_enable_x64", True)
 
 from typing import Iterable, List, Tuple
 
-import numpy as onp
+import numpy as np
 
 from timemachine.md.barostat.utils import compute_box_center, compute_box_volume
 from timemachine.md.moves import MonteCarloMove
@@ -24,8 +24,8 @@ def _scatter_inds_from_group_inds(group_inds):
 
     [[0,1,2], [3,4,5]] --> [0, 0, 0, 1, 1, 1]
     """
-    all_inds = onp.hstack(group_inds)
-    scatter_inds = onp.zeros(len(all_inds))
+    all_inds = np.hstack(group_inds)
+    scatter_inds = np.zeros(len(all_inds))
 
     # assert group_inds not overlapping
     assert len(all_inds) == len(set(all_inds))
@@ -34,7 +34,7 @@ def _scatter_inds_from_group_inds(group_inds):
         for j in group:
             scatter_inds[j] = i
 
-    return jnp.array(scatter_inds, dtype=int)
+    return np.array(scatter_inds, dtype=int)
 
 
 class CentroidRescaler:
@@ -124,7 +124,7 @@ class MonteCarloBarostat(MonteCarloMove):
         volume = compute_box_volume(x.box)
 
         # sample uniformly in [-max_delta_volume, +max_delta_volume]
-        delta_volume = (onp.random.rand() * 2 - 1) * self.max_delta_volume
+        delta_volume = (np.random.rand() * 2 - 1) * self.max_delta_volume
 
         # apply scaling move
         # eq. 4 from Aqvist et al 2004

@@ -1,4 +1,4 @@
-import numpy as onp
+import numpy as np
 from common import get_110_ccc_ff
 from jax import config, grad
 from jax import numpy as jnp
@@ -32,16 +32,16 @@ def test_flatten_and_unflatten_dict():
     """flatten/unflatten a nested object with array-valued leaves"""
 
     example_pytree = dict(
-        Bonds=onp.random.randn(50, 2),
-        Angles=onp.random.randn(60, 3),
+        Bonds=np.random.randn(50, 2),
+        Angles=np.random.randn(60, 3),
         Extras=dict(
             GlobalVars=[
-                jnp.arange(70),
-                onp.random.randn(80, 4),
+                np.arange(70),
+                np.random.randn(80, 4),
             ]
         ),
         Bias=1.2,
-        Multiplier=onp.array(2.5),
+        Multiplier=np.array(2.5),
     )
 
     check_flatten_and_unflatten_roundtrip(example_pytree)
@@ -86,7 +86,7 @@ def test_truncated_step():
 
         # if gradient magnitude is small, success has been attained!
         # and we don't want to confuse truncated_step by passing in an all-zeroes search direction
-        if onp.allclose(g_x, 0):
+        if np.allclose(g_x, 0):
             break
 
         # compute step
@@ -97,4 +97,4 @@ def test_truncated_step():
         traj.append(x_next)
         loss_traj.append(loss(x_next))
 
-    onp.testing.assert_almost_equal(loss_traj[-1], 0.0)
+    np.testing.assert_almost_equal(loss_traj[-1], 0.0)

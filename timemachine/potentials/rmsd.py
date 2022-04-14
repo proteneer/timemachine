@@ -1,13 +1,13 @@
-import jax.numpy as np
+import jax.numpy as jnp
 
 
 def psi(rotation, k):
-    cos_theta = (np.trace(rotation) - 1) / 2
+    cos_theta = (jnp.trace(rotation) - 1) / 2
     return cos_angle_u(cos_theta, k)
 
 
 def angle_u(theta, k):
-    return cos_angle_u(np.cos(theta), k)
+    return cos_angle_u(jnp.cos(theta), k)
 
 
 def cos_angle_u(cos_theta, k):
@@ -21,11 +21,11 @@ def get_optimal_rotation(x1, x2):
     assert x1.shape == x2.shape
 
     # x1 and x2 must be already mean aligned.
-    correlation_matrix = np.dot(x2.T, x1)
-    U, S, V_tr = np.linalg.svd(correlation_matrix, full_matrices=False)
-    is_reflection = (np.linalg.det(U) * np.linalg.det(V_tr)) < 0.0
-    U = U.at[:, -1].set(np.where(is_reflection, -U[:, -1], U[:, -1]))
-    rotation = np.dot(U, V_tr)
+    correlation_matrix = jnp.dot(x2.T, x1)
+    U, S, V_tr = jnp.linalg.svd(correlation_matrix, full_matrices=False)
+    is_reflection = (jnp.linalg.det(U) * jnp.linalg.det(V_tr)) < 0.0
+    U = U.at[:, -1].set(jnp.where(is_reflection, -U[:, -1], U[:, -1]))
+    rotation = jnp.dot(U, V_tr)
 
     return rotation
 
@@ -34,7 +34,7 @@ def get_optimal_translation(x1, x2):
     """
     Returns the displacement vector whose tail is at x1 and head its at x2.
     """
-    return np.mean(x2, axis=0) - np.mean(x1, axis=0)
+    return jnp.mean(x2, axis=0) - jnp.mean(x1, axis=0)
 
 
 def get_optimal_rotation_and_translation(x1, x2):
@@ -53,8 +53,8 @@ def get_optimal_rotation_and_translation(x1, x2):
         Rotation translation pair
     """
     t = get_optimal_translation(x1, x2)
-    x1 = x1 - np.mean(x1, axis=0)
-    x2 = x2 - np.mean(x2, axis=0)
+    x1 = x1 - jnp.mean(x1, axis=0)
+    x2 = x2 - jnp.mean(x2, axis=0)
     return get_optimal_rotation(x1, x2), t
 
 
@@ -62,7 +62,7 @@ def apply_rotation_and_translation(x, R, t):
     """
     Apply R and t from x.
     """
-    x_com = np.mean(x, axis=0)
+    x_com = jnp.mean(x, axis=0)
     aligned_x = (x - x_com) @ R - t + x_com
     return aligned_x
 
@@ -87,8 +87,8 @@ def align_x2_unto_x1(x1, x2):
         Optimally aligned x2
 
     """
-    com1 = np.mean(x1, axis=0)
-    com2 = np.mean(x2, axis=0)
+    com1 = jnp.mean(x1, axis=0)
+    com2 = jnp.mean(x2, axis=0)
     t = com2 - com1
     x1_centered = x1 - com1
     x2_centered = x2 - com2
@@ -125,8 +125,8 @@ def rmsd_align(x1, x2):
 
     assert x1.shape == x2.shape
 
-    x1 = x1 - np.mean(x1, axis=0)
-    x2 = x2 - np.mean(x2, axis=0)
+    x1 = x1 - jnp.mean(x1, axis=0)
+    x2 = x2 - jnp.mean(x2, axis=0)
 
     rotation = get_optimal_rotation(x1, x2)
 
@@ -176,8 +176,8 @@ def rmsd_restraint(conf, params, box, lamb, group_a_idxs, group_b_idxs, k):
     x1 = conf[group_a_idxs]
     x2 = conf[group_b_idxs]
     # recenter
-    x1 = x1 - np.mean(x1, axis=0)
-    x2 = x2 - np.mean(x2, axis=0)
+    x1 = x1 - jnp.mean(x1, axis=0)
+    x2 = x2 - jnp.mean(x2, axis=0)
 
     rotation = get_optimal_rotation(x1, x2)
 

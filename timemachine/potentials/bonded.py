@@ -1,4 +1,5 @@
-import jax.numpy as np
+import jax.numpy as jnp
+import numpy as np
 
 
 def centroid_restraint(conf, params, box, lamb, group_a_idxs, group_b_idxs, kb, b0):
@@ -12,17 +13,17 @@ def centroid_restraint(conf, params, box, lamb, group_a_idxs, group_b_idxs, kb, 
     xi = conf[group_a_idxs]
     xj = conf[group_b_idxs]
 
-    avg_xi = np.mean(xi, axis=0)
-    avg_xj = np.mean(xj, axis=0)
+    avg_xi = jnp.mean(xi, axis=0)
+    avg_xj = jnp.mean(xj, axis=0)
 
     dx = avg_xi - avg_xj
-    d2ij = np.sum(dx * dx)
-    d2ij = np.where(d2ij == 0, 0, d2ij)  # stabilize derivative
-    dij = np.sqrt(d2ij)
+    d2ij = jnp.sum(dx * dx)
+    d2ij = jnp.where(d2ij == 0, 0, d2ij)  # stabilize derivative
+    dij = jnp.sqrt(d2ij)
     delta = dij - b0
 
     # when b0 == 0 and dij == 0
-    return np.where(b0 == 0, kb * d2ij, kb * delta ** 2)
+    return jnp.where(b0 == 0, kb * d2ij, kb * delta ** 2)
 
 
 def restraint(conf, lamb, params, lamb_flags, box, bond_idxs):
@@ -67,14 +68,14 @@ def restraint(conf, lamb, params, lamb_flags, box, bond_idxs):
     ci = conf[bond_idxs[:, 0]]
     cj = conf[bond_idxs[:, 1]]
 
-    dij = np.sqrt(np.sum(np.power(ci - cj, 2), axis=-1) + f_lambda * f_lambda)
+    dij = jnp.sqrt(jnp.sum(jnp.power(ci - cj, 2), axis=-1) + f_lambda * f_lambda)
     kbs = params[:, 0]
     b0s = params[:, 1]
     a0s = params[:, 2]
 
-    term = 1 - np.exp(-a0s * (dij - b0s))
+    term = 1 - jnp.exp(-a0s * (dij - b0s))
 
-    energy = np.sum(kbs * term * term)
+    energy = jnp.sum(kbs * term * term)
 
     return energy
 
@@ -92,8 +93,8 @@ def harmonic_bond(conf, params, box, lamb, bond_idxs, lamb_mult=None, lamb_offse
     conf: shape [num_atoms, 3] np.array
         atomic coordinates
 
-    params: shape [num_params, 2] np.array
-        unique parameters
+    params: shape [num_bonds, 2] np.array
+        parameters
 
     box: shape [3, 3] np.array
         periodic boundary vectors, if not None
@@ -117,6 +118,9 @@ def harmonic_bond(conf, params, box, lamb, bond_idxs, lamb_mult=None, lamb_offse
     """
     assert params.shape == bond_idxs.shape
 
+    if bond_idxs.shape[0] == 0:
+        return 0.0
+
     if lamb_mult is None or lamb_offset is None or lamb is None:
         assert lamb_mult is None
         assert lamb_offset is None
@@ -130,17 +134,17 @@ def harmonic_bond(conf, params, box, lamb, bond_idxs, lamb_mult=None, lamb_offse
     cj = conf[bond_idxs[:, 1]]
 
     cij = ci - cj
-    d2ij = np.sum(cij * cij, axis=-1)
-    d2ij = np.where(d2ij == 0, 0, d2ij)  # stabilize derivative
-    dij = np.sqrt(d2ij)
+    d2ij = jnp.sum(cij * cij, axis=-1)
+    d2ij = jnp.where(d2ij == 0, 0, d2ij)  # stabilize derivative
+    dij = jnp.sqrt(d2ij)
     kbs = params[:, 0]
     r0s = params[:, 1]
 
     # this is here to prevent a numerical instability
     # when b0 == 0 and dij == 0
-    energy = np.where(r0s == 0, prefactor * kbs / 2 * d2ij, prefactor * kbs / 2 * np.power(dij - r0s, 2.0))
+    energy = jnp.where(r0s == 0, prefactor * kbs / 2 * d2ij, prefactor * kbs / 2 * jnp.power(dij - r0s, 2.0))
 
-    return np.sum(energy)
+    return jnp.sum(energy)
 
 
 def harmonic_angle(conf, params, box, lamb, angle_idxs, lamb_mult=None, lamb_offset=None, cos_angles=True):
@@ -160,8 +164,8 @@ def harmonic_angle(conf, params, box, lamb, angle_idxs, lamb_mult=None, lamb_off
     conf: shape [num_atoms, 3] np.array
         atomic coordinates
 
-    params: shape [num_params,] np.array
-        unique parameters
+    params: shape [num_angles, 2] np.array
+        parameters
 
     box: shape [3, 3] np.array
         periodic boundary vectors, if not None
@@ -187,6 +191,9 @@ def harmonic_angle(conf, params, box, lamb, angle_idxs, lamb_mult=None, lamb_off
     ------
     * lamb argument unused
     """
+    if angle_idxs.shape[0] == 0:
+        return 0.0
+
     if lamb_mult is None or lamb_offset is None or lamb is None:
         assert lamb_mult is None
         assert lamb_offset is None
@@ -206,19 +213,19 @@ def harmonic_angle(conf, params, box, lamb, angle_idxs, lamb_mult=None, lamb_off
     vij = ci - cj
     vjk = ck - cj
 
-    top = np.sum(np.multiply(vij, vjk), -1)
-    bot = np.linalg.norm(vij, axis=-1) * np.linalg.norm(vjk, axis=-1)
+    top = jnp.sum(jnp.multiply(vij, vjk), -1)
+    bot = jnp.linalg.norm(vij, axis=-1) * jnp.linalg.norm(vjk, axis=-1)
 
     tb = top / bot
 
     # (ytz): we use the squared version so that the energy is strictly positive
     if cos_angles:
-        energies = prefactor * kas / 2 * np.power(tb - np.cos(a0s), 2)
+        energies = prefactor * kas / 2 * jnp.power(tb - jnp.cos(a0s), 2)
     else:
-        angle = np.arccos(tb)
-        energies = prefactor * kas / 2 * np.power(angle - a0s, 2)
+        angle = jnp.arccos(tb)
+        energies = prefactor * kas / 2 * jnp.power(angle - a0s, 2)
 
-    return np.sum(energies, -1)  # reduce over all angles
+    return jnp.sum(energies, -1)  # reduce over all angles
 
 
 def signed_torsion_angle(ci, cj, ck, cl):
@@ -257,13 +264,13 @@ def signed_torsion_angle(ci, cj, ck, cl):
     rkj = cj - ck
     rkl = cl - ck
 
-    n1 = np.cross(rij, rkj)
-    n2 = np.cross(rkj, rkl)
+    n1 = jnp.cross(rij, rkj)
+    n2 = jnp.cross(rkj, rkl)
 
-    y = np.sum(np.multiply(np.cross(n1, n2), rkj / np.linalg.norm(rkj, axis=-1, keepdims=True)), axis=-1)
-    x = np.sum(np.multiply(n1, n2), -1)
+    y = jnp.sum(jnp.multiply(jnp.cross(n1, n2), rkj / jnp.linalg.norm(rkj, axis=-1, keepdims=True)), axis=-1)
+    x = jnp.sum(jnp.multiply(n1, n2), -1)
 
-    return np.arctan2(y, x)
+    return jnp.arctan2(y, x)
 
 
 def periodic_torsion(conf, params, box, lamb, torsion_idxs, lamb_mult=None, lamb_offset=None):
@@ -275,8 +282,8 @@ def periodic_torsion(conf, params, box, lamb, torsion_idxs, lamb_mult=None, lamb
     conf: shape [num_atoms, 3] np.array
         atomic coordinates
 
-    params: shape [num_params,] np.array
-        unique parameters
+    params: shape [num_torsions, 3] np.array
+        parameters
 
     box: shape [3, 3] np.array
         periodic boundary vectors, if not None
@@ -293,15 +300,15 @@ def periodic_torsion(conf, params, box, lamb, torsion_idxs, lamb_mult=None, lamb
     torsion_idxs: shape [num_torsions, 4] np.array
         indices denoting the four atoms that define a torsion
 
-    param_idxs: shape [num_torsions, 3] np.array
-        indices into the params array denoting the force constant, phase, and period
-
     Notes:
     ------
     * box argument unused
     * lamb argument unused
     * if conf has more than 3 dimensions, this function only depends on the first 3
     """
+    if torsion_idxs.shape[0] == 0:
+        return 0.0
+
     if lamb_mult is None:
         lamb_mult = np.zeros(torsion_idxs.shape[0])
     if lamb_offset is None:
@@ -321,5 +328,5 @@ def periodic_torsion(conf, params, box, lamb, torsion_idxs, lamb_mult=None, lamb
 
     prefactor = lamb_offset + lamb_mult * lamb
 
-    nrg = ks * (1 + np.cos(period * angle - phase))
-    return np.sum(prefactor * nrg, axis=-1)
+    nrg = ks * (1 + jnp.cos(period * angle - phase))
+    return jnp.sum(prefactor * nrg, axis=-1)

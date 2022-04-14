@@ -7,12 +7,13 @@ __all__ = [
 
 from typing import Callable, Collection
 
-from jax import numpy as np
+import numpy as np
+from jax import numpy as jnp
 from jax.scipy.special import logsumexp
 
 Samples = Collection
 Params = Collection
-Array = np.ndarray
+Array = jnp.ndarray
 Energies = Array
 
 BatchedReducedPotentialFxn = Callable[[Samples, Params], Energies]
@@ -25,7 +26,7 @@ def log_mean(log_values: Array) -> float:
     = log(sum(values / len(values)))
     = logsumexp(log(values) - log(len(values))
     """
-    return logsumexp(log_values - np.log(len(log_values)))
+    return logsumexp(log_values - jnp.log(len(log_values)))
 
 
 def estimate_log_z_ratio(log_importance_weights: Array) -> float:
@@ -116,13 +117,13 @@ def interpret_as_mixture_potential(u_kn: Array, f_k: Array, N_k: Array) -> Array
     # p_k(x_n) = c q_k(x_n) / Z_k
     # (up to a single undetermined constant c, shared across k)
     log_Z_k = -f_k
-    normalized_log_q_kn = log_q_kn - np.expand_dims(log_Z_k, 1)
+    normalized_log_q_kn = log_q_kn - jnp.expand_dims(log_Z_k, 1)
 
     # mixture weights from sampling proportions
-    log_w_k = np.log(N_k) - np.log(np.sum(N_k))
+    log_w_k = jnp.log(N_k) - jnp.log(jnp.sum(N_k))
 
     # q_mix(x_n) = \sum_k w_k p_k(x_n)
-    weighted_log_q_kn = np.expand_dims(log_w_k, 1) + normalized_log_q_kn
+    weighted_log_q_kn = jnp.expand_dims(log_w_k, 1) + normalized_log_q_kn
     mixture_log_q_n = logsumexp(weighted_log_q_kn, axis=0)
 
     # q_mix(x_n) = exp(-u_mix(x_n))

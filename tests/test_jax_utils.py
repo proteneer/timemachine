@@ -2,12 +2,12 @@ import jax
 
 jax.config.update("jax_enable_x64", True)
 
-import numpy as onp
+import numpy as np
 from jax import jit
-from jax import numpy as np
+from jax import numpy as jnp
 from jax import vmap
 
-onp.random.seed(2021)
+np.random.seed(2021)
 
 from timemachine.potentials.jax_utils import (
     augment_dim,
@@ -30,34 +30,34 @@ def test_delta_r():
 
     @jit
     def _distances(ri, rj, box):
-        return np.linalg.norm(delta_r(ri, rj, box), axis=1)
+        return jnp.linalg.norm(delta_r(ri, rj, box), axis=1)
 
     for _ in range(5):
-        n_atoms = onp.random.randint(50, 1000)
-        dim = onp.random.randint(3, 5)
-        ri, rj = onp.random.randn(2, n_atoms, dim)
+        n_atoms = np.random.randint(50, 1000)
+        dim = np.random.randint(3, 5)
+        ri, rj = np.random.randn(2, n_atoms, dim)
         box = np.eye(dim)
 
         dr_ij_1 = delta_r(ri, rj, box)
         dr_ji_1 = delta_r(rj, ri, box)
 
-        onp.testing.assert_allclose(dr_ij_1, -dr_ji_1)
+        np.testing.assert_allclose(dr_ij_1, -dr_ji_1)
 
         dr_ij_2 = jit(delta_r)(ri, rj, box)
         dr_ji_2 = jit(delta_r)(rj, ri, box)
 
-        onp.testing.assert_allclose(dr_ij_1, dr_ij_2)
-        onp.testing.assert_allclose(dr_ji_1, dr_ji_2)
+        np.testing.assert_allclose(dr_ij_1, dr_ij_2)
+        np.testing.assert_allclose(dr_ji_1, dr_ji_2)
 
         dij = _distances(ri, rj, box)
         dji = _distances(rj, ri, box)
 
-        onp.testing.assert_allclose(dij, dji)
+        np.testing.assert_allclose(dij, dji)
 
 
 def test_get_all_pairs_indices():
     """check i < j < n"""
-    ns = onp.random.randint(5, 50, 10)
+    ns = np.random.randint(5, 50, 10)
     for n in ns:
         pairs = get_all_pairs_indices(n)
         assert (pairs[:, 0] < pairs[:, 1]).all()
@@ -67,13 +67,13 @@ def test_get_all_pairs_indices():
 def test_get_pairs_from_interaction_groups_indices():
     """on random instances of varying size, assert expected number and identity of interacting pairs"""
     num_instances = 10
-    ns = onp.random.randint(5, 50, num_instances)
-    ms = onp.random.randint(5, 50, num_instances)
+    ns = np.random.randint(5, 50, num_instances)
+    ms = np.random.randint(5, 50, num_instances)
 
     for n, m in zip(ns, ms):
-        atom_indices = onp.arange(n + m)
+        atom_indices = np.arange(n + m)
 
-        onp.random.shuffle(atom_indices)  # non-contiguous group indices
+        np.random.shuffle(atom_indices)  # non-contiguous group indices
         group_a_indices = atom_indices[:n]
         group_b_indices = atom_indices[n:]
 
@@ -89,26 +89,26 @@ def test_compute_lifting_parameter():
     lambda_plane_idx, lambda_offset_idxs in [-1, 0, +1]"""
     cutoff = 5.0
 
-    lambda_plane_idxs = np.array([-1, -1, -1, 0, 0, 0, 1, 1, 1])
-    lambda_offset_idxs = np.array([-1, 0, 1, -1, 0, 1, -1, 0, 1])
+    lambda_plane_idxs = jnp.array([-1, -1, -1, 0, 0, 0, 1, 1, 1])
+    lambda_offset_idxs = jnp.array([-1, 0, 1, -1, 0, 1, -1, 0, 1])
 
     w0 = compute_lifting_parameter(0.0, lambda_plane_idxs, lambda_offset_idxs, cutoff)
-    onp.testing.assert_allclose(w0, cutoff * lambda_plane_idxs)
+    np.testing.assert_allclose(w0, cutoff * lambda_plane_idxs)
 
     w1 = compute_lifting_parameter(1.0, lambda_plane_idxs, lambda_offset_idxs, cutoff)
-    onp.testing.assert_allclose(w1, cutoff * (lambda_offset_idxs + lambda_plane_idxs))
+    np.testing.assert_allclose(w1, cutoff * (lambda_offset_idxs + lambda_plane_idxs))
 
 
 def test_augment_dim():
     """check xyz -> xyzw stacking"""
     for _ in range(5):
-        n = onp.random.randint(5, 10)
-        xyz = onp.random.randn(n, 3)
-        w = onp.random.randn(n)
+        n = np.random.randint(5, 10)
+        xyz = np.random.randn(n, 3)
+        w = np.random.randn(n)
 
         xyzw = augment_dim(xyz, w)
-        onp.testing.assert_allclose(xyzw[:, :3], xyz)
-        onp.testing.assert_allclose(xyzw[:, -1], w)
+        np.testing.assert_allclose(xyzw[:, :3], xyz)
+        np.testing.assert_allclose(xyzw[:, -1], w)
 
 
 def test_batched_neighbor_inds():
@@ -119,10 +119,10 @@ def test_batched_neighbor_inds():
     """
     n_confs, n_particles, dim = 100, 1000, 3
 
-    confs = onp.random.rand(n_confs, n_particles, dim)
+    confs = np.random.rand(n_confs, n_particles, dim)
     cutoff = 0.3
 
-    boxes = np.array([np.eye(3)] * n_confs)
+    boxes = jnp.array([np.eye(3)] * n_confs)
 
     n_alchemical = 50
     pairs = pairs_from_interaction_groups(np.arange(n_alchemical), np.arange(n_alchemical, n_particles))
