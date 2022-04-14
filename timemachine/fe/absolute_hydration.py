@@ -7,7 +7,7 @@ from tqdm import tqdm
 
 from timemachine.constants import BOLTZ
 from timemachine.fe import free_energy
-from timemachine.fe.free_energy_rabfe import construct_pre_optimized_absolute_lambda_schedule_solvent
+from timemachine.fe.lambda_schedule import construct_pre_optimized_absolute_lambda_schedule_solvent
 from timemachine.md import builders, enhanced, moves
 from timemachine.md.smc import conditional_multinomial_resample
 from timemachine.md.states import CoordsVelBox
@@ -17,23 +17,60 @@ from timemachine.utils import bind_potentials, construct_potential, get_ff_am1cc
 def generate_endstate_samples(num_samples, solvent_samples, ligand_samples, ligand_log_weights, num_ligand_atoms):
     """solvent + (noninteracting ligand) sample --> solvent + (vacuum ligand) sample
 
-    Assumptions:
-    ------------
+    Inputs
+    ------
+    * solvent_samples ~ p_noninteracting([x_solvent, x_ligand])
+    * (ligand_samples, ligand_log_weights) ~ p_vacuum(x_ligand)
+        (note: this set of samples is importance-weighted!)
+
+    Processing
+    ----------
+    * resample ligand_samples according to ligand_log_weights
+    * concatenate solvent component from p_noninteracting with ligand from p_vacuum
+
+
+    Returns
+    -------
+    * list of (coordinates, velocities, box), distributed according to
+
+
+    Assumptions
+    -----------
     * ligand indices: last num_ligand_atoms
 
-    TODO: document me more"""
+    Notes
+    -----
+    * TODO[generality]: refactor to accept two streams of unweighted samples, concatenate them
+        (rather than requiring and discarding ligand component in solvent_samples, performing multinomial resampling)
+    """
+
+    # assume this layout
+    num_total_atoms = len(solvent_samples[0].coords)
+    num_solvent_atoms = num_total_atoms - num_ligand_atoms
+    solvent_idxs = np.arange(0, num_solvent_atoms)
+
+    # sample according to log weights
+    ligand_xvs = enhanced.sample_from_log_weights(ligand_samples, ligand_log_weights, size=num_samples)
+
+    # sample uniformly with replacement
+    solvent_choice_idxs = np.random.choice(np.arange(len(solvent_samples)), size=num_samples)
+
     all_xvbs = []
-    for _ in tqdm(range(num_samples), desc="generating endstate samples"):
-        choice_idx = np.random.choice(np.arange(len(solvent_samples)))
-        solvent_x = solvent_samples[choice_idx].coords
-        solvent_v = solvent_samples[choice_idx].velocities
-        ligand_xv = enhanced.sample_from_log_weights(ligand_samples, ligand_log_weights, size=1)[0]
-        ligand_x = ligand_xv[0]
-        ligand_v = ligand_xv[1]
-        combined_x = np.concatenate([solvent_x[:-num_ligand_atoms], ligand_x], axis=0)
-        combined_v = np.concatenate([solvent_v[:-num_ligand_atoms], ligand_v], axis=0)
-        combined_box = solvent_samples[choice_idx].box
-        all_xvbs.append(CoordsVelBox(combined_x, combined_v, combined_box))
+    for i, choice_idx in enumerate(tqdm(solvent_choice_idxs, desc="generating endstate samples")):
+
+        # solvent + noninteracting ligand
+        noninteracting_xvb = solvent_samples[choice_idx]
+
+        # vacuum ligand
+        ligand_x, ligand_v = ligand_xvs[i]
+
+        # concatenate solvent
+        combined_x = np.concatenate([noninteracting_xvb.coords[solvent_idxs], ligand_x], axis=0)
+        combined_v = np.concatenate([noninteracting_xvb.velocities[solvent_idxs], ligand_v], axis=0)
+
+        combined_xvb = CoordsVelBox(combined_x, combined_v, noninteracting_xvb.box)
+
+        all_xvbs.append(combined_xvb)
     return all_xvbs
 
 
