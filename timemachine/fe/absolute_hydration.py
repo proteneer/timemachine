@@ -7,10 +7,11 @@ from tqdm import tqdm
 
 from timemachine.constants import BOLTZ
 from timemachine.fe.lambda_schedule import construct_pre_optimized_absolute_lambda_schedule_solvent
+from timemachine.ff import Forcefield
 from timemachine.md import enhanced, moves
 from timemachine.md.smc import conditional_multinomial_resample
 from timemachine.md.states import CoordsVelBox
-from timemachine.utils import bind_potentials, construct_potential, get_ff_am1ccc
+from timemachine.utils import bind_potentials, construct_potential
 
 
 def generate_endstate_samples(num_samples, solvent_samples, ligand_samples, ligand_log_weights, num_ligand_atoms):
@@ -90,7 +91,7 @@ def setup_absolute_hydration_with_endpoint_samples(mol, temperature=300.0, press
     np.random.seed(seed)
 
     # set up potentials
-    ff = get_ff_am1ccc()
+    ff = Forcefield.load_from_file("smirnoff_1_1_0_ccc.py")
     ubps, params, masses, _, _ = enhanced.get_solvent_phase_system(mol, ff)
     potential_fxn = construct_potential(ubps, params)
 

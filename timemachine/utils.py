@@ -1,21 +1,8 @@
-from pathlib import Path
-
-import timemachine
-from timemachine.fe import functional
-from timemachine.ff import Forcefield
-from timemachine.ff.handlers.deserialize import deserialize_handlers
-
-from rdkit import Chem
 import hashlib
 
+from rdkit import Chem
 
-def get_ff_am1ccc():
-    tm_path = Path(timemachine.__path__[0]).parent
-    path_to_ff = tm_path / "timemachine/ff/params/smirnoff_1_1_0_ccc.py"
-    with open(path_to_ff, "r") as f:
-        ff_handlers = deserialize_handlers(f.read())
-    ff = Forcefield(ff_handlers)
-    return ff
+from timemachine.fe import functional
 
 
 def bind_potentials(ubps, params):
