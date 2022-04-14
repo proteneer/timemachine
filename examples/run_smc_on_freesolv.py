@@ -91,5 +91,5 @@ if __name__ == "__main__":
     for mol in mols:
         try:
             run_on_freesolv_mol(mol)
-        except IndexError:
-            print(f"error encountered on mol={mol.GetProp('_Name')}")
+        except Exception as e:
+            print(f"error encountered on mol={mol.GetProp('_Name')}: {str(e)}")
