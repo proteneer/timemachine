@@ -47,6 +47,7 @@ jax.config.update("jax_enable_x64", True)
 
 from typing import Callable
 
+import numpy as np
 from jax import jit
 from jax import numpy as jnp
 from jax import vmap
@@ -115,7 +116,7 @@ def log_weights_from_mixture(u_kn: Array, f_k: Array, N_k: Array) -> Array:
     mixture of states p(x) = (1 / K) \sum_k e^-u_k / Z_k
     """
     log_q_k = f_k - u_kn.T
-    N_k = jnp.array(N_k, dtype=jnp.float64)  # may be ints, or in a list...
+    N_k = np.array(N_k, dtype=np.float64)  # may be ints, or in a list...
     log_weights = logsumexp(log_q_k, b=N_k, axis=1)
     return log_weights
 

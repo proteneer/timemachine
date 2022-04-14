@@ -218,12 +218,12 @@ def test0():
         w = onp_res[0]
         Q = onp_res[1]
         for d in range(3):
-            np.testing.assert_almost_equal(jnp.matmul(a_tensor, Q[:, d]), w[d] * Q[:, d])
+            np.testing.assert_almost_equal(np.matmul(a_tensor, Q[:, d]), w[d] * Q[:, d])
 
         jnp_res = jnp.linalg.eigh(a_tensor)
         evp_res = dsyevv3(a_tensor)
 
-        jnp.set_printoptions(formatter={"float": lambda x: "{0:0.16f}".format(x)})
+        np.set_printoptions(formatter={"float": lambda x: "{0:0.16f}".format(x)})
 
         np.testing.assert_almost_equal(onp_res[0], jnp_res[0])
         np.testing.assert_almost_equal(onp_res[1], jnp_res[1])

@@ -106,8 +106,8 @@ class HostGuestTopology:
             # the host is always on.
             host_params = host_potential.params
             host_idxs = host_potential.get_idxs()
-            host_lambda_mult = jnp.zeros(len(host_idxs), dtype=np.int32)
-            host_lambda_offset = jnp.ones(len(host_idxs), dtype=np.int32)
+            host_lambda_mult = np.zeros(len(host_idxs), dtype=np.int32)
+            host_lambda_offset = np.ones(len(host_idxs), dtype=np.int32)
         else:
             # (ytz): this extra jank is to work around jnp.concatenate not supporting empty lists.
             host_params = np.array([], dtype=guest_params.dtype).reshape((-1, guest_params.shape[1]))

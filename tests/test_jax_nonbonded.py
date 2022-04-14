@@ -47,7 +47,7 @@ NonbondedFxn = Callable[[*nonbonded_args], Energy]
 def resolve_clashes(x0, box0, min_dist=0.1):
     def urt(x, box):
         distance_matrix = distance(x, box)
-        i, j = jnp.triu_indices(len(distance_matrix), k=1)
+        i, j = np.triu_indices(len(distance_matrix), k=1)
         return distance_matrix[i, j]
 
     dij = urt(x0, box0)
@@ -124,8 +124,8 @@ def generate_waterbox_nb_args() -> NonbondedArgs:
     lamb = 0.0
     charge_rescale_mask = np.ones((N, N))
     lj_rescale_mask = np.ones((N, N))
-    lambda_plane_idxs = jnp.zeros(N, dtype=int)
-    lambda_offset_idxs = jnp.zeros(N, dtype=int)
+    lambda_plane_idxs = np.zeros(N, dtype=int)
+    lambda_offset_idxs = np.zeros(N, dtype=int)
 
     args = (
         conf,
@@ -190,8 +190,8 @@ def generate_random_inputs(n_atoms, dim, instance_flags=difficult_instance_flags
     if instance_flags["randomize_cutoff"]:
         cutoff += rand()
 
-    lambda_plane_idxs = jnp.zeros(n_atoms, dtype=int)
-    lambda_offset_idxs = jnp.zeros(n_atoms, dtype=int)
+    lambda_plane_idxs = np.zeros(n_atoms, dtype=int)
+    lambda_offset_idxs = np.zeros(n_atoms, dtype=int)
 
     if instance_flags["randomize_lambda_plane_idxs"]:
         lambda_plane_idxs = randint(low=-2, high=2, size=n_atoms)
@@ -319,8 +319,8 @@ def test_vmap():
     n_total = n_ligand + n_environment
     conf, params, box, lamb, _, _, beta, cutoff, _, _ = generate_random_inputs(n_total, 3)
 
-    ligand_indices = jnp.arange(n_ligand)
-    environment_indices = jnp.arange(n_environment) + n_ligand
+    ligand_indices = np.arange(n_ligand)
+    environment_indices = np.arange(n_environment) + n_ligand
     pairs = pairs_from_interaction_groups(ligand_indices, environment_indices)
 
     n_interactions = len(pairs)
