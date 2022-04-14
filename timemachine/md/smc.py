@@ -45,10 +45,14 @@ def simple_smc(
     Returns
     -------
     trajs_dict
-        [K-1, N] list of snapshots
-        [K-1, N] array of incremental log weights
-        [K-1, N] array of ancestor idxs
-        [K, N] array of log weights
+        "traj"
+            [K-1, N] list of snapshots
+        "incremental_log_weights_traj"
+            [K-1, N] array of incremental log weights
+        "ancestry"traj"
+            [K-1, N] array of ancestor idxs
+        "log_weights_traj"
+            [K, N] array of accumulated log weights
 
     References
     ----------
@@ -125,23 +129,28 @@ def multinomial_resample(log_weights):
     return indices, avg_log_weights
 
 
-def ess(log_weights):
-    """effective sample size, taking values in interval [1, len(log_weights)]"""
+def effective_sample_size(log_weights):
+    r"""Effective sample size, taking values in interval [1, len(log_weights)]
+
+    Notes
+    -----
+    * This uses the conventional definition ESS(w) = 1 / \sum_i w_i^2, which has some important known limitations!
+    * See [Elvira, Martino, Robert, 2018] "Rethinking the effective sample size" https://arxiv.org/abs/1809.04129
+        and references therein for some insightful discussion of limitations and possible improvements
+    """
     weights = np.exp(log_weights - logsumexp(log_weights))
     return 1 / np.sum(weights ** 2)
 
 
-def fractional_ess(log_weights):
+def fractional_effective_sample_size(log_weights):
     """effective sample size, normalized to interval (0, 1]"""
     n = len(log_weights)
-    return ess(log_weights) / n
+    return effective_sample_size(log_weights) / n
 
 
 def conditional_multinomial_resample(log_weights, thresh=0.5):
-    """if fractional_ess(log_weights) < thresh, multinomial_resample"""
-    frac_ess = fractional_ess(log_weights)
-    if frac_ess < thresh:
-        # print(f'fractional ESS = {frac_ess:.3f} < {thresh:.3f} -- resampling!')
+    """if fractional_effective_sample_size(log_weights) < thresh, then multinomial_resample"""
+    if fractional_effective_sample_size(log_weights) < thresh:
         return multinomial_resample(log_weights)
     else:
         return null_resample(log_weights)
