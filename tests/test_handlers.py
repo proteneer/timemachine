@@ -138,6 +138,35 @@ def test_harmonic_bond():
     mask = np.argwhere(bond_params > 90)
     assert np.all(ff_adjoints[mask] == 0.0)
 
+    # Check molecule with no bonds
+    mol = Chem.MolFromSmiles("[Na+]")
+    bond_params, bond_idxs = hbh.parameterize(mol)
+    assert bond_idxs.shape == (0, 2)
+    assert bond_params.shape == (0, 2)
+
+
+def test_harmonic_angle():
+    patterns = [
+        ["[*:1]-[#8:2]-[*:3]", 0.1, 0.2],
+    ]
+
+    smirks = [x[0] for x in patterns]
+    params = np.array([[x[1], x[2]] for x in patterns])
+    props = None
+
+    hah = bonded.HarmonicAngleHandler(smirks, params, props)
+    mol = Chem.AddHs(Chem.MolFromSmiles("O"))
+    angle_params, angle_idxs = hah.parameterize(mol)
+    assert angle_idxs.shape == (1, 3)
+    assert angle_params.shape == (1, 2)
+
+    # Check molecule with no angles
+    hah = bonded.HarmonicAngleHandler(smirks, params, props)
+    mol = Chem.MolFromSmiles("O=O")
+    angle_params, angle_idxs = hah.parameterize(mol)
+    assert angle_idxs.shape == (0, 3)
+    assert angle_params.shape == (0, 2)
+
 
 def test_proper_torsion():
 
