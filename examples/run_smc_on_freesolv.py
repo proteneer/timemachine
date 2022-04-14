@@ -10,7 +10,7 @@ from scipy.special import logsumexp
 import timemachine
 from timemachine.constants import BOLTZ
 from timemachine.fe.absolute_hydration import set_up_ahfe_system_for_smc
-from timemachine.md.smc import simple_smc
+from timemachine.md.smc import sequential_monte_carlo
 
 temperature = 300
 
@@ -69,7 +69,7 @@ def run_on_freesolv_mol(mol):
         mol, cmd_args.n_walkers, cmd_args.n_windows, cmd_args.n_md_steps, cmd_args.resample_thresh
     )
     # run simulation
-    smc_result = simple_smc(samples, lambdas, propagate, log_prob, resample)
+    smc_result = sequential_monte_carlo(samples, lambdas, propagate, log_prob, resample)
     log_weights = smc_result["log_weights_traj"][-1]
     reduced_dG = -logsumexp(log_weights - np.log(len(log_weights)))
     dG_kJmol = reduced_dG * (BOLTZ * temperature)

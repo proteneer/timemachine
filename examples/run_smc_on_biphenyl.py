@@ -3,7 +3,7 @@ from datetime import datetime
 from pickle import dump
 
 from timemachine.fe.absolute_hydration import set_up_ahfe_system_for_smc
-from timemachine.md.smc import simple_smc
+from timemachine.md.smc import sequential_monte_carlo
 from timemachine.testsystems.ligands import get_biphenyl
 
 
@@ -53,7 +53,7 @@ if __name__ == "__main__":
     )
 
     # run simulation
-    smc_result = simple_smc(samples, lambdas, propagate, log_prob, resample)
+    smc_result = sequential_monte_carlo(samples, lambdas, propagate, log_prob, resample)
 
     # save summary
     save_smc_result(smc_result, save_full_trajectories=cmd_args.debug_mode)

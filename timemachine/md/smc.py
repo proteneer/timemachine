@@ -21,7 +21,7 @@ Resampler = Callable[[LogWeights], Tuple[IndexArray, LogWeights]]
 ResultDict = Dict[str, Union[Samples, Array]]
 
 
-def simple_smc(
+def sequential_monte_carlo(
     samples: Samples,
     lambdas: Array,
     propagate: BatchPropagator,
@@ -45,7 +45,7 @@ def simple_smc(
     Returns
     -------
     trajs_dict
-        "traj"
+        "sample_traj"
             [K-1, N] list of snapshots
         "incremental_log_weights_traj"
             [K-1, N] array of incremental log weights
@@ -65,15 +65,15 @@ def simple_smc(
     log_weights = np.zeros(n)
 
     # store
-    traj = [samples]
+    sample_traj = [samples]
     ancestry_traj = [np.arange(n)]
     log_weights_traj = [np.array(log_weights)]
     incremental_log_weights_traj = []  # note: redundant but convenient
 
     trange = tqdm(lambdas[:-2])
 
-    def logging_stuff(samples, indices, log_weights, incremental_log_weights):
-        traj.append(samples)
+    def accumulate_results(samples, indices, log_weights, incremental_log_weights):
+        sample_traj.append(samples)
         ancestry_traj.append(indices)
         log_weights_traj.append(np.array(log_weights))
         incremental_log_weights_traj.append(np.array(incremental_log_weights))
@@ -83,18 +83,18 @@ def simple_smc(
     # main loop
     for (lam_initial, lam_target) in zip(trange, lambdas[1:-1]):
         # update log weights
-        incremental_log_weights = log_prob(traj[-1], lam_target) - log_prob(traj[-1], lam_initial)
+        incremental_log_weights = log_prob(sample_traj[-1], lam_target) - log_prob(sample_traj[-1], lam_initial)
         log_weights += incremental_log_weights
 
         # resample
         indices, log_weights = resample(log_weights)
-        resampled = [traj[-1][i] for i in indices]
+        resampled = [sample_traj[-1][i] for i in indices]
 
         # propagate
         samples = propagate(resampled, lam_target)
 
         # log
-        logging_stuff(samples, indices, log_weights, incremental_log_weights)
+        accumulate_results(samples, indices, log_weights, incremental_log_weights)
 
     # final result: a collection of samples, with associated log weights
     incremental_log_weights = log_prob(samples, lambdas[-1]) - log_prob(samples, lambdas[-2])
@@ -103,7 +103,7 @@ def simple_smc(
 
     # cast everything (except samples list) to arrays
     trajs_dict = dict(
-        traj=traj,
+        traj=sample_traj,
         log_weights_traj=np.array(log_weights_traj),
         ancestry_traj=np.array(ancestry_traj),
         incremental_log_weights_traj=np.array(incremental_log_weights_traj),
