@@ -1,9 +1,12 @@
 import os
 import subprocess
 import sys
+from glob import glob
 from pathlib import Path
+from pickle import load
 from typing import Dict, List, Optional
 
+import numpy as np
 import pytest
 from common import get_hif2a_ligands_as_sdf_file, temporary_working_dir
 from rdkit import Chem
@@ -100,3 +103,34 @@ def test_relative_binding():
             result = RABFEResult.from_mol(mol)
             assert isinstance(result.dG_bind, float)
             assert isinstance(result.dG_bind_err, float)
+
+
+def test_smc():
+    """run_smc_on_biphenyl.py with reasonable settings, and expect
+    * output in summary_smc_result_*.pkl
+    * no NaNs in accumulated log weights
+    * delta_f in ballpark of 0
+    """
+    config = dict(n_walkers=100, n_windows=100, n_md_steps=100)
+    cli_args = [f"--{key}={val}" for (key, val) in config.items()]
+
+    with temporary_working_dir() as temp_dir:
+        # expect running this script to write a summary_result_result_{uid}.pkl file
+        output_path = str(Path(temp_dir) / "summary_smc_result_*.pkl")
+        assert len(glob(output_path)) == 0
+        _ = run_example("run_smc_on_biphenyl.py", cli_args, cwd=temp_dir)
+        smc_result_fnames = glob(output_path)
+        assert len(smc_result_fnames) == 1
+
+        # load result
+        with open(smc_result_fnames[0], "rb") as f:
+            smc_result = load(f)
+
+        # expect no NaNs in accumulated log weights
+        log_weights_traj = smc_result["log_weights_traj"]
+        assert np.isfinite(log_weights_traj).all()
+
+        # expect delta_f in ballpark of 0
+        final_weights = np.exp(log_weights_traj[-1])
+        delta_f = -np.log(np.mean(final_weights))
+        assert (delta_f >= -10) and (delta_f <= +10)
