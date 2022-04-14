@@ -102,6 +102,7 @@ def oe_assign_charges(mol, charge_model=AM1BCCELF10):
         # Turn off hydrogen sampling if charge generation fails
         # https://github.com/openforcefield/openff-toolkit/issues/346#issuecomment-505202862
         if charge_model in ELF10_MODELS:
+            print(f"WARNING: Turning off hydrogen sampling for charge generation on molecule '{oemol.GetTitle()}'")
             oemol = convert_to_oe(mol)
             oe_generate_conformations(oemol, sample_hydrogens=False)
             result = oequacpac.OEAssignCharges(oemol, charge_engine)

@@ -647,7 +647,7 @@ def test_trans_carboxlic_acid():
 
     AllChem.EmbedMolecule(mol, randomSeed=2022, useRandomCoords=True)
     new_am1elf10_charges = nonbonded.oe_assign_charges(mol, charge_model=nonbonded.AM1ELF10)
-    delta_charges = np.abs(np.array(am1elf10_charges) - np.array(new_am1elf10_charges))
+    delta_charges = np.abs(am1elf10_charges - new_am1elf10_charges)
     assert np.sum(delta_charges) == pytest.approx(0.0)
 
 
