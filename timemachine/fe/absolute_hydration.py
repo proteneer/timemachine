@@ -6,9 +6,8 @@ import numpy as np
 from tqdm import tqdm
 
 from timemachine.constants import BOLTZ
-from timemachine.fe import free_energy
 from timemachine.fe.lambda_schedule import construct_pre_optimized_absolute_lambda_schedule_solvent
-from timemachine.md import builders, enhanced, moves
+from timemachine.md import enhanced, moves
 from timemachine.md.smc import conditional_multinomial_resample
 from timemachine.md.states import CoordsVelBox
 from timemachine.utils import bind_potentials, construct_potential, get_ff_am1ccc
@@ -72,15 +71,6 @@ def generate_endstate_samples(num_samples, solvent_samples, ligand_samples, liga
 
         all_xvbs.append(combined_xvb)
     return all_xvbs
-
-
-def get_solvent_phase_system(mol, ff):
-    water_system, water_coords, water_box, water_topology = builders.build_water_system(3.0)
-    water_box = water_box + np.eye(3) * 0.5  # add a small margin around the box for stability
-    afe = free_energy.AbsoluteFreeEnergy(mol, ff)
-    ff_params = ff.get_ordered_params()
-    ubps, params, masses, coords = afe.prepare_host_edge(ff_params, water_system, water_coords)
-    return ubps, params, masses, coords, water_box
 
 
 def setup_absolute_hydration_with_endpoint_samples(mol, temperature=300.0, pressure=1.0, n_steps=1000, seed=2022):
