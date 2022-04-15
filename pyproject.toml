@@ -15,6 +15,21 @@ skip_gitignore = true
 honor_noqa = true      # allow overriding with `# noqa`
 multi_line_output = 3  # https://pycqa.github.io/isort/docs/configuration/multi_line_output_modes.html
 
+[tool.mypy]
+plugins = ["numpy.typing.mypy_plugin"]
+ignore_missing_imports = true
+check_untyped_defs = false
+
+[[tool.mypy.overrides]]
+module = "timemachine._vendored.fire"
+follow_imports = "silent"
+
 [build-system]
-requires = ["setuptools>=43.0.0", "wheel", "cmake==3.22.1", "versioneer-518"]
+requires = [
+  "cmake==3.22.1",
+  "mypy==0.942",
+  "setuptools>=43.0.0",
+  "wheel",
+  "versioneer-518"
+]
 build-backend = "setuptools.build_meta"

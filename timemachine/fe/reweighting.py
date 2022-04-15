@@ -5,7 +5,7 @@ __all__ = [
     "interpret_as_mixture_potential",
 ]
 
-from typing import Callable, Collection
+from typing import Any, Callable, Collection
 
 import numpy as np
 from jax import numpy as jnp
@@ -13,7 +13,7 @@ from jax.scipy.special import logsumexp
 
 Samples = Collection
 Params = Collection
-Array = jnp.ndarray
+Array = Any  # see https://github.com/google/jax/issues/943
 Energies = Array
 
 BatchedReducedPotentialFxn = Callable[[Samples, Params], Energies]

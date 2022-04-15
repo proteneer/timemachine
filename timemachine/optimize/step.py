@@ -1,7 +1,6 @@
-from typing import Optional, Union
+from typing import Any, Callable, Optional
 
 import numpy as np
-from jax import numpy as jnp
 
 from timemachine.ff import nonbonded
 
@@ -14,28 +13,30 @@ except ImportError as error:
     raise error
 
 
-array = Union[np.array, jnp.array]
+# NOTE: precise array type currently not possible; see https://github.com/google/jax/issues/943
+# Array = Union[np.array, jnp.array]
+Array = Any
 
 
-def _taylor_first_order(x: array, f_x: float, grad: array) -> callable:
+def _taylor_first_order(x: Array, f_x: float, grad: Array) -> Callable:
     """
 
     Notes:
         TODO: is it preferable to use jax linearize? https://jax.readthedocs.io/en/latest/jax.html#jax.linearize
     """
 
-    def f_prime(y: array) -> float:
+    def f_prime(y: Array) -> float:
         return f_x + np.dot(grad, y - x)
 
     return f_prime
 
 
 def truncated_step(
-    x: array,
+    x: Array,
     f_x: float,
-    grad: array,
+    grad: Array,
     step_size: float = 0.1,
-    search_direction: Optional[array] = None,
+    search_direction: Optional[Array] = None,
     step_lower_bound: float = 0.0,
 ):
     """Motivated by https://arxiv.org/abs/1903.08619 , use knowledge of a lower-bound on f_x

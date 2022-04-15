@@ -2,8 +2,9 @@ import jax.numpy as jnp
 import numpy as np
 from jax import vmap
 from numpy.typing import NDArray
+from typing_extensions import TypeAlias
 
-Array = NDArray
+Array: TypeAlias = NDArray
 
 
 def get_all_pairs_indices(n: int) -> Array:

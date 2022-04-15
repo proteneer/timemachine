@@ -1,9 +1,10 @@
 import os
 from pickle import dump, load
-from typing import List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 
 import jax.numpy as jnp
 import numpy as np
+from numpy.typing import NDArray
 from rdkit import Chem
 from simtk import openmm
 
@@ -23,13 +24,13 @@ class RBFEModel:
         client: Optional[AbstractClient],
         ff: Forcefield,
         complex_system: openmm.System,
-        complex_coords: np.ndarray,
-        complex_box: np.ndarray,
-        complex_schedule: np.ndarray,
+        complex_coords: NDArray,
+        complex_box: NDArray,
+        complex_schedule: Union[Sequence[float], NDArray],
         solvent_system: openmm.System,
-        solvent_coords: np.ndarray,
-        solvent_box: np.ndarray,
-        solvent_schedule: np.ndarray,
+        solvent_coords: NDArray,
+        solvent_box: NDArray,
+        solvent_schedule: Union[Sequence[float], NDArray],
         equil_steps: int,
         prod_steps: int,
         barostat_interval: int = 25,
@@ -54,9 +55,9 @@ class RBFEModel:
         self.barostat_interval = barostat_interval
         self.pre_equilibrate = pre_equilibrate
         self.hmr = hmr
-        self._equil_cache = {}
+        self._equil_cache: Dict[str, Any] = {}
 
-    def _edge_hash(self, stage: str, mol_a: Chem.Mol, mol_b: Chem.Mol, core: np.ndarray) -> str:
+    def _edge_hash(self, stage: str, mol_a: Chem.Mol, mol_b: Chem.Mol, core: NDArray) -> str:
         a = Chem.MolToSmiles(mol_a)
         b = Chem.MolToSmiles(mol_b)
         # Perhaps bad idea to have ordering of a and b?
@@ -131,6 +132,7 @@ class RBFEModel:
                 pots = []
                 for bp, params in zip(unbound_potentials, sys_params):
                     pots.append(bp.bind(np.asarray(params)))
+                assert self.client is not None
                 future = self.client.submit(
                     estimator.equilibrate, *[integrator, barostat, pots, coords, host_box, lamb, equilibration_steps]
                 )
@@ -147,7 +149,7 @@ class RBFEModel:
                 dump(self._equil_cache, ofs)
             print(f"Saved equilibration_cache to {cache_path}")
 
-    def predict(self, ff_params: list, mol_a: Chem.Mol, mol_b: Chem.Mol, core: np.ndarray):
+    def predict(self, ff_params: list, mol_a: Chem.Mol, mol_b: Chem.Mol, core: NDArray):
         """
         Predict the ddG of morphing mol_a into mol_b. This function is differentiable w.r.t. ff_params.
 
@@ -163,7 +165,7 @@ class RBFEModel:
         mol_b: Chem.Mol
             Starting molecule corresponding to lambda = 1
 
-        core: np.ndarray
+        core: NDArray
             N x 2 list of ints corresponding to the atom mapping of the core.
 
         Returns

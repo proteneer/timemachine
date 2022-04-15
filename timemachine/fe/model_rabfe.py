@@ -1,7 +1,8 @@
 from abc import ABC
-from typing import Any, List, Optional, Tuple
+from typing import Any, Callable, List, Optional, Sequence, Tuple, Union
 
 import numpy as np
+from numpy.typing import NDArray
 from rdkit import Chem
 from simtk import openmm
 
@@ -17,17 +18,17 @@ from timemachine.parallel.client import AbstractClient, _MockFuture
 class AbsoluteModel(ABC):
     def __init__(
         self,
-        client: AbstractClient or None,
+        client: Optional[AbstractClient],
         ff: Forcefield,
         host_system: openmm.System,
-        host_schedule: np.ndarray,
+        host_schedule: Union[Sequence[float], NDArray],
         host_topology: openmm.app.Topology,
         temperature: float,
         pressure: float,
         dt: float,
         equil_steps: int,
         prod_steps: int,
-        frame_filter: Optional[callable] = None,
+        frame_filter: Optional[Callable] = None,
     ):
 
         self.host_system = host_system
@@ -235,7 +236,7 @@ class RelativeModel(ABC):
         dt: float,
         equil_steps: int,
         prod_steps: int,
-        frame_filter: Optional[callable] = None,
+        frame_filter: Optional[Callable] = None,
         k_core: float = 30.0,
     ):
 
@@ -445,9 +446,9 @@ class RelativeModel(ABC):
         assert len(futures) == 2
         assert len(models) == 2
         assert len(sys_params) == 2
-        err = 0
-        fwd_dG = 0
-        back_dG = 0
+        err = 0.0
+        fwd_dG = 0.0
+        back_dG = 0.0
         for i, (params, model, sub_futures) in enumerate(zip(sys_params, models, futures)):
             results = [fut.result() for fut in sub_futures]
             dG, dG_err, results = estimator.deltaG_from_results(model, results, params)
@@ -481,9 +482,9 @@ class RelativeModel(ABC):
         ff_params: list,
         mol_a: Chem.Mol,
         mol_b: Chem.Mol,
-        core_idxs: np.array,
-        x0: np.array,
-        box0: np.array,
+        core_idxs: NDArray,
+        x0: NDArray,
+        box0: NDArray,
         prefix: str,
         seed: int = 0,
     ):
@@ -508,7 +509,7 @@ class RelativeModel(ABC):
         mol_b: Chem.Mol
             Resulting molecule
 
-        core_idxs: np.array (Nx2), dtype int32
+        core_idxs: NDArray (Nx2), dtype int32
             Atom mapping defining the core, mapping atoms from mol_a to atoms in mol_b.
 
         x0: np.ndarray
@@ -606,7 +607,7 @@ class RelativeConversionModel:
         dt: float,
         equil_steps: int,
         prod_steps: int,
-        frame_filter: Optional[callable] = None,
+        frame_filter: Optional[Callable] = None,
         k_core: float = 30.0,
     ):
 
@@ -801,9 +802,9 @@ class RelativeConversionModel:
         ff_params: list,
         mol_a: Chem.Mol,
         mol_b: Chem.Mol,
-        core_idxs: np.array,
-        x0: np.array,
-        box0: np.array,
+        core_idxs: NDArray,
+        x0: NDArray,
+        box0: NDArray,
         prefix: str,
         seed: int = 0,
     ):
@@ -824,7 +825,7 @@ class RelativeConversionModel:
         mol_b: Chem.Mol
             Resulting molecule
 
-        core_idxs: np.array (Nx2), dtype int32
+        core_idxs: NDArray (Nx2), dtype int32
             Atom mapping defining the core, mapping atoms from mol_a to atoms in mol_b.
 
         x0: np.ndarray
