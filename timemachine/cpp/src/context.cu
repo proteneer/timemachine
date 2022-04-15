@@ -63,8 +63,11 @@ Context::multiple_steps(const std::vector<double> &lambda_schedule, int store_du
     if (store_x_interval <= 0) {
         throw std::runtime_error("store_x_interval <= 0");
     }
-    int du_dl_buffer_size = (lambda_schedule.size() + store_du_dl_interval - 1) / store_du_dl_interval;
-    int x_buffer_size = (lambda_schedule.size() + store_x_interval - 1) / store_x_interval;
+    if (lambda_schedule.size() % store_x_interval != 0) {
+        std::cout << "warning:: length of lambda_schedule modulo store_x_interval does not equal zero" << std::endl;
+    }
+    int du_dl_buffer_size = lambda_schedule.size() / store_du_dl_interval;
+    int x_buffer_size = lambda_schedule.size() / store_x_interval;
     int box_buffer_size = x_buffer_size * 3 * 3;
 
     std::vector<double> h_x_buffer(x_buffer_size * N_ * 3);
@@ -75,29 +78,29 @@ Context::multiple_steps(const std::vector<double> &lambda_schedule, int store_du
         gpuErrchk(cudaMalloc(&d_du_dl_buffer, du_dl_buffer_size * sizeof(*d_du_dl_buffer)));
         gpuErrchk(cudaMemset(d_du_dl_buffer, 0, du_dl_buffer_size * sizeof(*d_du_dl_buffer)));
 
-        for (int i = 0; i < lambda_schedule.size(); i++) {
+        for (int i = 1; i <= lambda_schedule.size(); i++) {
             // decide if we need to store the du_dl for this step
             unsigned long long *du_dl_ptr = nullptr;
             if (i % store_du_dl_interval == 0) {
                 // pemdas but just to make it clear we're doing pointer arithmetic
-                du_dl_ptr = d_du_dl_buffer + (i / store_du_dl_interval);
-            }
-
-            if (i % store_x_interval == 0) {
-                gpuErrchk(cudaMemcpy(
-                    &h_x_buffer[0] + (i / store_x_interval) * N_ * 3,
-                    d_x_t_,
-                    N_ * 3 * sizeof(double),
-                    cudaMemcpyDeviceToHost));
-                gpuErrchk(cudaMemcpy(
-                    &d_box_buffer[0] + (i / store_x_interval) * 3 * 3,
-                    d_box_t_,
-                    3 * 3 * sizeof(*d_box_buffer),
-                    cudaMemcpyDeviceToDevice));
+                du_dl_ptr = d_du_dl_buffer + ((i / store_du_dl_interval) - 1);
             }
 
             double lambda = lambda_schedule[i];
             this->_step(lambda, du_dl_ptr);
+
+            if (i % store_x_interval == 0) {
+                gpuErrchk(cudaMemcpy(
+                    &h_x_buffer[0] + ((i / store_x_interval) - 1) * N_ * 3,
+                    d_x_t_,
+                    N_ * 3 * sizeof(double),
+                    cudaMemcpyDeviceToHost));
+                gpuErrchk(cudaMemcpy(
+                    &d_box_buffer[0] + ((i / store_x_interval) - 1) * 3 * 3,
+                    d_box_t_,
+                    3 * 3 * sizeof(*d_box_buffer),
+                    cudaMemcpyDeviceToDevice));
+            }
         }
 
         cudaDeviceSynchronize();
@@ -138,7 +141,6 @@ std::array<std::vector<double>, 3> Context::multiple_steps_U(
     unsigned long long *d_u_traj = nullptr;
     double *d_box_traj = nullptr;
 
-    // try catch block is to deal with leaks in d_u_buffer
     if (store_u_interval <= 0) {
         throw std::runtime_error("store_u_interval <= 0");
     }
@@ -147,54 +149,44 @@ std::array<std::vector<double>, 3> Context::multiple_steps_U(
         throw std::runtime_error("store_x_interval <= 0");
     }
 
+    if (n_steps % store_x_interval != 0) {
+        std::cout << "warning:: n_steps modulo store_x_interval does not equal zero" << std::endl;
+    }
+
     int n_windows = lambda_windows.size();
-    int u_traj_size = ((n_steps + store_u_interval - 1) / store_u_interval) * n_windows;
-    int x_traj_size = (n_steps + store_x_interval - 1) / store_x_interval;
+    int u_traj_size = (n_steps / store_u_interval) * n_windows;
+    int x_traj_size = (n_steps / store_x_interval);
     int box_traj_size = x_traj_size * 3 * 3;
 
     std::vector<double> h_x_traj(x_traj_size * N_ * 3);
 
+    // try catch block is to deal with leaks in d_u_buffer
     try {
         gpuErrchk(cudaMalloc(&d_box_traj, box_traj_size * sizeof(*d_box_traj)));
         gpuErrchk(cudaMalloc(&d_u_traj, u_traj_size * sizeof(*d_u_traj)));
         gpuErrchk(cudaMemset(d_u_traj, 0, u_traj_size * sizeof(*d_u_traj)));
 
-        for (int step = 0; step < n_steps; step++) {
+        cudaStream_t stream = static_cast<cudaStream_t>(0);
+        for (int step = 1; step <= n_steps; step++) {
+
+            this->_step(lambda, nullptr);
 
             if (step % store_x_interval == 0) {
                 gpuErrchk(cudaMemcpy(
-                    &h_x_traj[0] + (step / store_x_interval) * N_ * 3,
+                    &h_x_traj[0] + ((step / store_x_interval) - 1) * N_ * 3,
                     d_x_t_,
                     N_ * 3 * sizeof(double),
                     cudaMemcpyDeviceToHost));
                 gpuErrchk(cudaMemcpy(
-                    &d_box_traj[0] + (step / store_x_interval) * 3 * 3,
+                    &d_box_traj[0] + ((step / store_x_interval) - 1) * 3 * 3,
                     d_box_t_,
                     3 * 3 * sizeof(*d_box_traj),
                     cudaMemcpyDeviceToDevice));
             }
 
-            cudaStream_t stream = static_cast<cudaStream_t>(0);
-
-            gpuErrchk(cudaMemsetAsync(d_du_dx_t_, 0, N_ * 3 * sizeof(*d_du_dx_t_), stream));
-
-            // first pass generate the forces
-            for (int i = 0; i < bps_.size(); i++) {
-                bps_[i]->execute_device(
-                    N_,
-                    d_x_t_,
-                    d_box_t_,
-                    lambda,
-                    d_du_dx_t_, // we only need the forces
-                    nullptr,
-                    nullptr,
-                    nullptr,
-                    stream);
-            }
-
             // we need to compute aggregate energies on this step
             if (step % store_u_interval == 0) {
-                unsigned long long *u_ptr = d_u_traj + (step / store_u_interval) * n_windows;
+                unsigned long long *u_ptr = d_u_traj + ((step / store_u_interval) - 1) * n_windows;
                 for (int w = 0; w < n_windows; w++) {
                     // reset buffers on each pass.
                     gpuErrchk(cudaMemsetAsync(d_u_buffer_, 0, N_ * sizeof(*d_u_buffer_), stream));
@@ -205,13 +197,6 @@ std::array<std::vector<double>, 3> Context::multiple_steps_U(
                     cub::DeviceReduce::Sum(d_sum_storage_, d_sum_storage_bytes_, d_u_buffer_, u_ptr + w, N_, stream);
                     gpuErrchk(cudaPeekAtLastError());
                 }
-            }
-
-            intg_->step_fwd(d_x_t_, d_v_t_, d_du_dx_t_, d_box_t_, stream);
-
-            if (barostat_) {
-                // May modify coords, du_dx and box size
-                barostat_->inplace_move(d_x_t_, d_box_t_, lambda, stream);
             }
         }
 

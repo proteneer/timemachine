@@ -145,7 +145,7 @@ void declare_context(py::module &m) {
 
                 int N = ctxt.num_atoms();
                 int D = 3;
-                int F = (lambda_schedule.size() + x_interval - 1) / x_interval;
+                int F = result[1].size() / (N * D);
                 py::array_t<double, py::array::c_style> out_x_buffer({F, N, D});
                 std::memcpy(out_x_buffer.mutable_data(), result[1].data(), result[1].size() * sizeof(double));
 
@@ -170,21 +170,21 @@ void declare_context(py::module &m) {
                 std::memcpy(
                     vec_lambda_windows.data(), lambda_windows.data(), vec_lambda_windows.size() * sizeof(double));
 
-                int u_interval = (store_u_interval <= 0) ? lambda_windows.size() : store_u_interval;
-                int x_interval = (store_x_interval <= 0) ? lambda_windows.size() : store_x_interval;
+                int u_interval = (store_u_interval <= 0) ? n_steps : store_u_interval;
+                int x_interval = (store_x_interval <= 0) ? n_steps : store_x_interval;
 
                 std::array<std::vector<double>, 3> result =
                     ctxt.multiple_steps_U(lambda, n_steps, vec_lambda_windows, u_interval, x_interval);
 
-                int UF = (n_steps + u_interval - 1) / u_interval;
                 int UW = lambda_windows.size();
+                int UF = result[0].size() > 0 ? result[0].size() / UW : 0;
 
                 py::array_t<double, py::array::c_style> out_u_buffer({UF, UW});
                 std::memcpy(out_u_buffer.mutable_data(), result[0].data(), result[0].size() * sizeof(double));
 
                 int N = ctxt.num_atoms();
                 int D = 3;
-                int F = (n_steps + x_interval - 1) / x_interval;
+                int F = result[1].size() / (N * D);
                 py::array_t<double, py::array::c_style> out_x_buffer({F, N, D});
                 std::memcpy(out_x_buffer.mutable_data(), result[1].data(), result[1].size() * sizeof(double));
 
@@ -193,6 +193,11 @@ void declare_context(py::module &m) {
 
                 return py::make_tuple(out_u_buffer, out_x_buffer, box_buffer);
             },
+            py::arg("lamb"),
+            py::arg("n_steps"),
+            py::arg("lambda_windows"),
+            py::arg("store_u_interval"),
+            py::arg("store_x_interval"),
             R"pbdoc(
         Compute energies across multiple lambda windows while simulating
         at a single fixed lambda window.
