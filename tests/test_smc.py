@@ -10,9 +10,11 @@ from timemachine.md.smc import (
 )
 import numpy as np
 from scipy.special import logsumexp
+import pytest
 
 
-def assert_resampler_correct(resampling_fxn: Resampler):
+@pytest.mark.parametrize("resampling_fxn", [null_resample, multinomial_resample, conditional_multinomial_resample])
+def test_resampler(resampling_fxn: Resampler):
     """On a collection of random log_weights vectors of varying size, assert that:
     * total weight before and after resampling are consistent
     * resampled indices are all in range
@@ -52,9 +54,3 @@ def assert_resampler_correct(resampling_fxn: Resampler):
         # assert resampled_indices are all between 0 and n_particles
         assert min(resampled_indices) >= 0
         assert max(resampled_indices) < n_particles
-
-
-def test_resamplers():
-    resamplers = [null_resample, multinomial_resample, conditional_multinomial_resample]
-    for resampler in resamplers:
-        assert_resampler_correct(resampler)
