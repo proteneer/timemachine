@@ -155,7 +155,7 @@ std::array<std::vector<double>, 3> Context::multiple_steps_U(
 
     int n_windows = lambda_windows.size();
     int u_traj_size = (n_steps / store_u_interval) * n_windows;
-    int x_traj_size = (n_steps / store_x_interval);
+    int x_traj_size = n_steps / store_x_interval;
     int box_traj_size = x_traj_size * 3 * 3;
 
     std::vector<double> h_x_traj(x_traj_size * N_ * 3);
