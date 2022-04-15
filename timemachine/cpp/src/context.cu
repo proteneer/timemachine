@@ -66,6 +66,11 @@ Context::multiple_steps(const std::vector<double> &lambda_schedule, int store_du
     if (lambda_schedule.size() % store_x_interval != 0) {
         std::cout << "warning:: length of lambda_schedule modulo store_x_interval does not equal zero" << std::endl;
     }
+
+    if (lambda_schedule.size() % store_du_dl_interval != 0) {
+        std::cout << "warning:: length of lambda_schedule modulo store_du_dl_interval does not equal zero" << std::endl;
+    }
+
     int du_dl_buffer_size = lambda_schedule.size() / store_du_dl_interval;
     int x_buffer_size = lambda_schedule.size() / store_x_interval;
     int box_buffer_size = x_buffer_size * 3 * 3;
@@ -151,6 +156,10 @@ std::array<std::vector<double>, 3> Context::multiple_steps_U(
 
     if (n_steps % store_x_interval != 0) {
         std::cout << "warning:: n_steps modulo store_x_interval does not equal zero" << std::endl;
+    }
+
+    if (n_steps % store_u_interval != 0) {
+        std::cout << "warning:: n_steps modulo store_u_interval does not equal zero" << std::endl;
     }
 
     int n_windows = lambda_windows.size();
