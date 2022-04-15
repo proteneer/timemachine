@@ -1,7 +1,7 @@
 import copy
 import dataclasses
 import time
-from typing import List, Optional, Tuple
+from typing import List, Optional, Sequence, Tuple, Union
 
 import numpy as np
 import pymbar
@@ -32,7 +32,7 @@ class FreeEnergyModel:
     v0: NDArray
     integrator: LangevinIntegrator
     barostat: MonteCarloBarostat
-    lambda_schedule: List[float]
+    lambda_schedule: Union[Sequence[float], NDArray]
     equil_steps: int
     prod_steps: int
     beta: float
@@ -41,7 +41,7 @@ class FreeEnergyModel:
 
 def equilibrate(
     integrator: LangevinIntegrator,
-    barostat: LangevinIntegrator,
+    barostat: MonteCarloBarostat,
     potentials: List,
     coords: NDArray,
     box: NDArray,
@@ -181,7 +181,7 @@ def simulate(
     prod_steps: int,
     x_interval: int,
     u_interval: int,
-    lambda_windows: List[float],
+    lambda_windows: Union[Sequence[float], NDArray],
 ):
     """
     Run a simulation and collect relevant statistics for this simulation.
@@ -321,13 +321,13 @@ def deltaG_from_results(
     else:
         sim_results = results
 
-    U_knk = []
+    U_knk_ = []
     N_k = []
     for result in sim_results:
-        U_knk.append(result.lambda_us)
+        U_knk_.append(result.lambda_us)
         N_k.append(len(result.lambda_us))  # number of frames
 
-    U_knk = np.array(U_knk)
+    U_knk = np.array(U_knk_)
 
     bar_dG = 0
     bar_dG_err = 0
@@ -354,9 +354,8 @@ def deltaG_from_results(
         )
 
     # for MBAR we need to sanitize the energies
-    clean_U_knks = []  # [K, F, K]
-    for lambda_idx, full_us in enumerate(U_knk):
-        clean_U_knks.append(sanitize_energies(full_us, lambda_idx))
+    # [K, F, K]
+    clean_U_knks = np.array([sanitize_energies(full_us, lambda_idx) for lambda_idx, full_us in enumerate(U_knk)])
 
     print(
         model.prefix,
@@ -369,7 +368,6 @@ def deltaG_from_results(
     )
 
     K = len(model.lambda_schedule)
-    clean_U_knks = np.array(clean_U_knks)  # [K, F, K]
     U_kn = np.reshape(clean_U_knks, (-1, K)).transpose()  # [K, F*K]
     u_kn = U_kn * model.beta
 

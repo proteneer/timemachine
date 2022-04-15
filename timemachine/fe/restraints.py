@@ -57,12 +57,10 @@ def setup_relative_restraints_by_distance(
 
     row_idxs, col_idxs = linear_sum_assignment(rij)
 
-    core_idxs = []
-
-    for core_a, core_b in zip(row_idxs, col_idxs):
-        core_idxs.append((core_idxs_a[core_a], core_idxs_b[core_b]))
-
-    core_idxs = np.array(core_idxs, dtype=np.int32)
+    core_idxs = np.array(
+        [(core_idxs_a[core_a], core_idxs_b[core_b]) for core_a, core_b in zip(row_idxs, col_idxs)],
+        dtype=np.int32,
+    )
 
     return core_idxs
 
