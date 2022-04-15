@@ -305,14 +305,13 @@ def _wrap_simulate(args):
     xs_proposal = xs_proposal.reshape(-1, num_atoms, 3)
     vs_proposal = vs_proposal.reshape(-1, num_atoms, 3)
 
-    # TODO: double-check x -> (x, v) survived merge conflict resolution
-    # xvs_proposal = np.stack([xs_proposal, vs_proposal], axis=1)
+    xvs_proposal = np.stack([xs_proposal, vs_proposal], axis=1)
 
     # truncate to user requested num_batches
-    xs_proposal = xs_proposal[:num_batches, ...]
+    xvs_proposal = xvs_proposal[:num_batches, ...]
     log_weights = log_weights[:num_batches]
 
-    return xs_proposal, log_weights
+    return xvs_proposal, log_weights
 
 
 def generate_log_weighted_samples(
