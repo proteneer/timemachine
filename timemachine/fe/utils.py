@@ -1,4 +1,4 @@
-from typing import List
+from typing import Any, List, Tuple
 
 import networkx as nx
 import numpy as np
@@ -189,7 +189,7 @@ def plot_atom_mapping(mol_a, mol_b, core):
     draw_mol(mol_b, core[:, 1].tolist(), atom_colors_b)
 
 
-def get_connected_components(nodes, relative_inds, absolute_inds) -> List[np.array]:
+def get_connected_components(nodes, relative_inds, absolute_inds) -> List[List[Any]]:
     """Construct a graph containing (len(nodes) + 1) nodes -- one for each original node, plus a new "reference" node.*
 
     Add edges
@@ -219,7 +219,7 @@ def get_connected_components(nodes, relative_inds, absolute_inds) -> List[np.arr
     # we will remove the "reference" node we added
     # however, if the user actually had a node named "reference", don't remove it
 
-    components = list(map(list, list(nx.connected_components(g))))
+    components: List[List[Any]] = list(map(list, list(nx.connected_components(g))))
 
     if "reference" in nodes:
         return components
@@ -233,7 +233,7 @@ def get_connected_components(nodes, relative_inds, absolute_inds) -> List[np.arr
         return filtered_components
 
 
-def validate_map(n_nodes: int, relative_inds: np.array, absolute_inds: np.array) -> bool:
+def validate_map(n_nodes: int, relative_inds: List[Tuple[int, int]], absolute_inds: List[int]) -> bool:
     """Construct a graph containing (n_nodes + 1) nodes -- one for each original node, plus a new "reference" node.
 
     Add edges
@@ -296,7 +296,7 @@ def sanitize_energies(full_us, lamb_idx, cutoff=10000):
 
     Parameters
     ----------
-    full_us: np.array of shape (F, K)
+    full_us: NDArray of shape (F, K)
         Matrix of full energies
 
     lamb_idx: int
@@ -322,7 +322,7 @@ def extract_delta_Us_from_U_knk(U_knk):
 
     Parameters
     ----------
-    U_knk: np.array of shape (K, N, K)
+    U_knk: NDArray of shape (K, N, K)
         Energies matrix, K simulations ran with N frames with
         energies evaluated at K states
 

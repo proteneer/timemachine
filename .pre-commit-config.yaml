@@ -24,12 +24,39 @@ repos:
     -   id: flake8
         exclude: '^timemachine/cpp'
 
+-   repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v0.942
+    hooks:
+    -   id: mypy
+        additional_dependencies:
+          - "numpy==1.21.4"
+          - "types-protobuf==3.19.15"
+          - "types-PyYAML==6.0.5"
+        files: '^timemachine.*\.pyi?$'
+
+        # Exclude custom_ops.py to work around clash with stub file when typechecking
+        # See https://github.com/pre-commit/mirrors-mypy/issues/33#issuecomment-967247764
+        exclude: '^timemachine/lib/custom_ops.py$'
+
 -   repo: https://github.com/pre-commit/mirrors-clang-format
     rev: v13.0.0
     hooks:
     -   id: clang-format
         types_or: [c, c++, cuda]
         files: '^timemachine/cpp/src/'
+
+-   repo: local
+    hooks:
+    -   id: verify-typing-stubs
+        name: Verify typing stubs
+
+        # NOTE: Building generates new typing stubs, so this hook will
+        # fail if stub file committed to the repo is out of date.
+        # (pre-commit hooks fail if files are modified)
+        entry: make build
+
+        language: system
+        pass_filenames: false
 
 exclude: >
   (?x)
@@ -41,5 +68,7 @@ exclude: >
   | ^attic/
   | ^timemachine/parallel/grpc/
   | ^timemachine/ff/params/
+  | ^timemachine/_vendored/
   | ^versioneer\.py$
   | ^timemachine/_version\.py$
+  | ^timemachine/lib/custom_ops.pyi$

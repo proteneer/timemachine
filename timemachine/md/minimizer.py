@@ -1,4 +1,4 @@
-from typing import Optional, Tuple
+from typing import Any, List, Optional, Tuple
 
 import numpy as np
 from numpy.typing import NDArray
@@ -17,10 +17,10 @@ from timemachine.md.fire import fire_descent
 def bind_potentials(topo, ff):
     # setup the parameter handlers for the ligand
     tuples = [
-        [topo.parameterize_harmonic_bond, [ff.hb_handle]],
-        [topo.parameterize_harmonic_angle, [ff.ha_handle]],
-        [topo.parameterize_periodic_torsion, [ff.pt_handle, ff.it_handle]],
-        [topo.parameterize_nonbonded, [ff.q_handle, ff.lj_handle]],
+        (topo.parameterize_harmonic_bond, [ff.hb_handle]),
+        (topo.parameterize_harmonic_angle, [ff.ha_handle]),
+        (topo.parameterize_periodic_torsion, [ff.pt_handle, ff.it_handle]),
+        (topo.parameterize_nonbonded, [ff.q_handle, ff.lj_handle]),
     ]
 
     u_impls = []
@@ -233,11 +233,11 @@ def equilibrate_host(
     hgt = topology.HostGuestTopology(host_bps, top)
 
     # setup the parameter handlers for the ligand
-    tuples = [
-        [hgt.parameterize_harmonic_bond, [ff.hb_handle]],
-        [hgt.parameterize_harmonic_angle, [ff.ha_handle]],
-        [hgt.parameterize_periodic_torsion, [ff.pt_handle, ff.it_handle]],
-        [hgt.parameterize_nonbonded, [ff.q_handle, ff.lj_handle]],
+    tuples: List[Tuple[Any, List[Any]]] = [
+        (hgt.parameterize_harmonic_bond, [ff.hb_handle]),
+        (hgt.parameterize_harmonic_angle, [ff.ha_handle]),
+        (hgt.parameterize_periodic_torsion, [ff.pt_handle, ff.it_handle]),
+        (hgt.parameterize_nonbonded, [ff.q_handle, ff.lj_handle]),
     ]
 
     u_impls = []

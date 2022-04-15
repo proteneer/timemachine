@@ -2,6 +2,7 @@ from typing import List, Tuple
 
 import networkx as nx
 import numpy as np
+from numpy.typing import NDArray
 from scipy.spatial.distance import pdist
 
 from timemachine.lib.potentials import HarmonicBond
@@ -34,11 +35,11 @@ def get_bond_list(harmonic_bond_potential: HarmonicBond) -> List[Tuple[int, int]
         or if there are valence bonds not represented as harmonic bonds (e.g. as length constraints)
     """
 
-    bond_list = list(map(tuple, harmonic_bond_potential.get_idxs()))
+    bond_list = [(i, j) for i, j in harmonic_bond_potential.get_idxs()]
     return bond_list
 
 
-def get_group_indices(bond_list: List[np.array]) -> List[np.array]:
+def get_group_indices(bond_list: List[Tuple[int, int]]) -> List[NDArray]:
     """Connected components of bond graph"""
 
     topology = nx.Graph(bond_list)
@@ -46,6 +47,6 @@ def get_group_indices(bond_list: List[np.array]) -> List[np.array]:
     return components
 
 
-def compute_intramolecular_distances(coords: np.array, group_indices: List[np.array]) -> List[np.array]:
+def compute_intramolecular_distances(coords: NDArray, group_indices: List[NDArray]) -> List[NDArray]:
     """pairwise distances within each group"""
     return [pdist(coords[inds]) for inds in group_indices]
