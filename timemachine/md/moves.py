@@ -1,6 +1,6 @@
 from abc import abstractmethod
 from functools import partial
-from typing import Any, List, Tuple, cast
+from typing import Any, List, Tuple
 
 import jax
 import jax.numpy as jnp
@@ -90,7 +90,9 @@ class NPTMove(MonteCarloMove):
         self.integrator_impl = intg.impl()
         all_impls = [bp.bound_impl(np.float32) for bp in ubps]
 
-        bond_list = get_bond_list(cast(potentials.HarmonicBond, ubps[0]))
+        assert isinstance(ubps[0], potentials.HarmonicBond), "First potential must be of type HarmonicBond"
+
+        bond_list = get_bond_list(ubps[0])
         group_idxs = get_group_indices(bond_list)
 
         barostat = lib.MonteCarloBarostat(len(masses), pressure, temperature, group_idxs, barostat_interval, seed + 1)
