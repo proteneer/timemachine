@@ -77,8 +77,8 @@ def equilibrate(
 
     # equilibration
     equil_schedule = np.ones(equil_steps) * lamb
-    ctxt.multiple_steps(equil_schedule)
-    return CoordsVelBox(coords=ctxt.get_x_t(), velocities=ctxt.get_v_t(), box=ctxt.get_box())
+    _, xs, boxes = ctxt.multiple_steps(equil_schedule)
+    return CoordsVelBox(coords=xs[0], velocities=ctxt.get_v_t(), box=boxes[0])
 
 
 def run_model_simulations(model: FreeEnergyModel, sys_params: NDArray, subsample_interval: int = 1000) -> List:

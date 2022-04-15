@@ -7,6 +7,7 @@ import jax.numpy as jnp
 import jax.random as jrandom
 import numpy as np
 from jax.scipy.special import logsumexp as jlogsumexp
+from numpy.typing import NDArray
 from scipy.special import logsumexp
 
 from timemachine import lib
@@ -73,16 +74,16 @@ class CompoundMove(MonteCarloMove):
 class NPTMove(MonteCarloMove):
     def __init__(
         self,
-        ubps,
-        lamb,
-        masses,
-        temperature,
-        pressure,
-        n_steps,
-        seed,
-        dt=1.5e-3,
-        friction=1.0,
-        barostat_interval=5,
+        ubps: List,
+        lamb: float,
+        masses: NDArray,
+        temperature: float,
+        pressure: float,
+        n_steps: int,
+        seed: int,
+        dt: float = 1.5e-3,
+        friction: float = 1.0,
+        barostat_interval: int = 5,
     ):
 
         intg = lib.LangevinIntegrator(temperature, dt, friction, masses, seed)
@@ -100,17 +101,17 @@ class NPTMove(MonteCarloMove):
         self.lamb = lamb
         self.n_steps = n_steps
 
-    def move(self, x: CoordsVelBox):
+    def move(self, x: CoordsVelBox) -> CoordsVelBox:
         # note: context creation overhead here is actually very small!
         ctxt = custom_ops.Context(
             x.coords, x.velocities, x.box, self.integrator_impl, self.bound_impls, self.barostat_impl
         )
 
         # arguments: lambda_schedule, du_dl_interval, x_interval
-        _ = ctxt.multiple_steps(self.lamb * np.ones(self.n_steps), 0, 0)
-        x_t = ctxt.get_x_t()
+        _, xs, boxes = ctxt.multiple_steps(self.lamb * np.ones(self.n_steps), 0, 0)
+        x_t = xs[0]
         v_t = ctxt.get_v_t()
-        box = ctxt.get_box()
+        box = boxes[0]
 
         after_npt = CoordsVelBox(x_t, v_t, box)
 
