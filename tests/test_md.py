@@ -9,7 +9,7 @@ import pytest
 from common import prepare_nb_system
 
 from timemachine.integrator import langevin_coefficients
-from timemachine.lib import custom_ops, potentials
+from timemachine.lib import custom_ops
 
 pytestmark = [pytest.mark.memcheck]
 
@@ -351,44 +351,7 @@ class TestContext(unittest.TestCase):
             lamb, num_steps, np.array([], dtype=np.float64), u_interval, x_interval
         )
 
-        assert test_us.shape == (2, 0)
-
-
-class TestObservable(unittest.TestCase):
-    def test_avg_potential_param_sizes_is_zero(self):
-        np.random.seed(814)
-
-        N = 8
-        D = 3
-
-        x0 = np.random.rand(N, D).astype(dtype=np.float64) * 2
-
-        masses = np.random.rand(N)
-
-        v0 = np.random.rand(x0.shape[0], x0.shape[1])
-
-        num_steps = 3
-        ca = np.random.rand()
-        cbs = -np.random.rand(len(masses)) / 1
-        ccs = np.zeros_like(cbs)
-
-        dt = 2e-3
-        lamb = np.random.rand()
-        box = np.eye(3) * 1.5
-
-        intg = custom_ops.LangevinIntegrator(dt, ca, cbs, ccs, 814)
-
-        # Construct a 'bad' centroid restraint
-        potential = potentials.CentroidRestraint(
-            np.random.randint(N, size=5, dtype=np.int32), np.random.randint(N, size=5, dtype=np.int32), 10.0, 0.0
-        )
-        # Bind to empty params
-        bp = potential.bind(np.zeros(0)).bound_impl(precision=np.float64)
-
-        ctxt = custom_ops.Context(x0, v0, box, intg, [bp])
-
-        for _ in range(num_steps):
-            ctxt.step(lamb)
+        assert test_us.shape == (0, 0)
 
 
 if __name__ == "__main__":
