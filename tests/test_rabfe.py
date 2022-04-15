@@ -298,7 +298,8 @@ class TestRABFEModels(TestCase):
             )
             # Since this is FF independent no issues around AM1BCC charge differences on OS/Conf
             np.testing.assert_almost_equal(dG, -0.418047, decimal=5)
-            np.testing.assert_almost_equal(dG_err, np.nan, decimal=5)
+            if not np.isnan(dG_err):
+                np.testing.assert_almost_equal(dG_err, 7.433752e-8, decimal=5)
             created_files = os.listdir(temp_dir)
             # 3 npz, 1 pdb and 1 npy per mol due to a->b and b->a
             self.assertEqual(len(created_files), 10)
