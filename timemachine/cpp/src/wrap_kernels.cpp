@@ -849,7 +849,7 @@ void declare_summed_potential(py::module &m) {
                     return new timemachine::SummedPotential(potentials, params_sizes);
                 }),
 
-            py::arg("potentialz"),
+            py::arg("potentials"),
             py::arg("params_sizes"))
         .def("get_potentials", &timemachine::SummedPotential::get_potentials);
 }
