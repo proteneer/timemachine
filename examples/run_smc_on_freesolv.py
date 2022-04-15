@@ -1,14 +1,12 @@
 import argparse
 from datetime import datetime
-from pathlib import Path
 from pickle import dump
 
 import numpy as np
-from rdkit import Chem
 from scipy.special import logsumexp
 
-import timemachine
 from timemachine.constants import BOLTZ
+from timemachine.datasets import fetch_freesolv
 from timemachine.fe.absolute_hydration import set_up_ahfe_system_for_smc
 from timemachine.md.smc import sequential_monte_carlo
 
@@ -22,6 +20,7 @@ def parse_options():
     parser.add_argument("--n_md_steps", type=int, help="number of MD steps per move", default=100)
     parser.add_argument("--resample_thresh", type=float, help="resample when fractional ESS < thresh", default=0.6)
     parser.add_argument("--debug_mode", type=bool, help="save full trajectories", default=False)
+    parser.add_argument("--n_mols", type=int, help="how many freesolv molecules to run on", default=10)
 
     cmd_args = parser.parse_args()
 
@@ -48,15 +47,6 @@ def save_smc_result(uid, smc_result, save_full_trajectories=False):
     if save_full_trajectories:
         with open(f"full_smc_traj_{uid}.pkl", "wb") as f:
             dump((smc_result, cmd_args), f)
-
-
-def fetch_freesolv():
-    path_to_freesolv = str(Path(timemachine.__file__).parent.parent / "timemachine/datasets/freesolv/freesolv.sdf")
-    print(path_to_freesolv)
-
-    suppl = Chem.SDMolSupplier(path_to_freesolv, removeHs=False)
-    mols = [x for x in suppl]
-    return mols
 
 
 def run_on_freesolv_mol(mol):
@@ -87,9 +77,7 @@ if __name__ == "__main__":
     cmd_args = parse_options()
 
     mols = fetch_freesolv()
+    select_mols = mols[: cmd_args.n_mols]
 
-    for mol in mols:
-        try:
-            run_on_freesolv_mol(mol)
-        except Exception as e:
-            print(f"error encountered on mol={mol.GetProp('_Name')}: {str(e)}")
+    for mol in select_mols:
+        run_on_freesolv_mol(mol)
