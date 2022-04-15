@@ -236,7 +236,7 @@ class TestContext(unittest.TestCase):
 
         v0 = np.random.rand(x0.shape[0], x0.shape[1])
 
-        num_steps = 5
+        num_steps = 12
         temperature = 300
         dt = 2e-3
         friction = 0.0
@@ -260,7 +260,8 @@ class TestContext(unittest.TestCase):
             all_du_dxs = []
             all_us = []
             all_lambda_us = []
-            for step in range(num_steps):
+
+            def compute_reference_values():
                 u = ref_nrg_fn(x_t, params, box, lamb)
                 all_us.append(u)
                 du_dl = dU_dl_fn(x_t, params, box, lamb)[0]
@@ -274,16 +275,20 @@ class TestContext(unittest.TestCase):
                 lus = []
                 for lamb_u in lambda_windows:
                     lus.append(ref_nrg_fn(x_t, params, box, lamb_u))
-
                 all_lambda_us.append(lus)
+
+            for step in range(num_steps):
+                compute_reference_values()
+
                 noise = np.random.randn(*v_t.shape)
 
-                v_mid = v_t + np.expand_dims(cbs, axis=-1) * du_dx
+                v_mid = v_t + np.expand_dims(cbs, axis=-1) * all_du_dxs[-1]
 
                 v_t = ca * v_mid + np.expand_dims(ccs, axis=-1) * noise
                 x_t += 0.5 * dt * (v_mid + v_t)
 
-                # note that we do not calculate the du_dl of the last frame.
+            # Compute them for the last set of coords
+            compute_reference_values()
             return all_xs, all_du_dxs, all_du_dps, all_du_dls, all_us, all_lambda_us
 
         box = np.eye(3) * 3.0
@@ -320,13 +325,13 @@ class TestContext(unittest.TestCase):
 
         lambda_schedule = np.ones(num_steps) * lamb
 
-        du_dl_interval = 3
-        x_interval = 2
+        du_dl_interval = 2
+        x_interval = 3
         start_box = ctxt_2.get_box()
         test_du_dls, test_xs, test_boxes = ctxt_2.multiple_steps(lambda_schedule, du_dl_interval, x_interval)
         end_box = ctxt_2.get_box()
-
-        np.testing.assert_allclose(test_du_dls, np.array([ref_all_du_dls[du_dl_interval - 1]]))
+        # Need to offset by -1 as du_dl is computed on frame during step, not after step
+        np.testing.assert_allclose(test_du_dls, ref_all_du_dls[du_dl_interval - 1 :: du_dl_interval])
 
         np.testing.assert_allclose(test_xs, ref_all_xs[x_interval::x_interval])
         np.testing.assert_array_equal(start_box, end_box)
@@ -342,7 +347,6 @@ class TestContext(unittest.TestCase):
         u_interval = 3
 
         test_us, test_xs, test_boxes = ctxt_3.multiple_steps_U(lamb, num_steps, lambda_windows, u_interval, x_interval)
-
         np.testing.assert_array_almost_equal(ref_all_lambda_us[u_interval::u_interval], test_us)
 
         np.testing.assert_array_almost_equal(ref_all_xs[x_interval::x_interval], test_xs)

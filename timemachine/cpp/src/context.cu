@@ -86,7 +86,7 @@ Context::multiple_steps(const std::vector<double> &lambda_schedule, int store_du
                 du_dl_ptr = d_du_dl_buffer + ((i / store_du_dl_interval) - 1);
             }
 
-            double lambda = lambda_schedule[i];
+            double lambda = lambda_schedule[i - 1];
             this->_step(lambda, du_dl_ptr);
 
             if (i % store_x_interval == 0) {
@@ -184,7 +184,7 @@ std::array<std::vector<double>, 3> Context::multiple_steps_U(
                     cudaMemcpyDeviceToDevice));
             }
 
-            // we need to compute aggregate energies on this step
+            // we need to compute aggregate energies
             if (step % store_u_interval == 0) {
                 unsigned long long *u_ptr = d_u_traj + ((step / store_u_interval) - 1) * n_windows;
                 for (int w = 0; w < n_windows; w++) {
