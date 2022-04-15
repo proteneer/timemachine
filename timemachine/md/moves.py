@@ -1,6 +1,6 @@
 from abc import abstractmethod
 from functools import partial
-from typing import Any, List, Tuple
+from typing import Any, List, Tuple, cast
 
 import jax
 import jax.numpy as jnp
@@ -11,7 +11,7 @@ from numpy.typing import NDArray
 from scipy.special import logsumexp
 
 from timemachine import lib
-from timemachine.lib import custom_ops
+from timemachine.lib import custom_ops, potentials
 from timemachine.md.barostat.utils import get_bond_list, get_group_indices
 from timemachine.md.states import CoordsVelBox
 
@@ -74,7 +74,7 @@ class CompoundMove(MonteCarloMove):
 class NPTMove(MonteCarloMove):
     def __init__(
         self,
-        ubps: List,
+        ubps: List[potentials.CustomOpWrapper],
         lamb: float,
         masses: NDArray,
         temperature: float,
@@ -90,7 +90,7 @@ class NPTMove(MonteCarloMove):
         self.integrator_impl = intg.impl()
         all_impls = [bp.bound_impl(np.float32) for bp in ubps]
 
-        bond_list = get_bond_list(ubps[0])
+        bond_list = get_bond_list(cast(potentials.HarmonicBond, ubps[0]))
         group_idxs = get_group_indices(bond_list)
 
         barostat = lib.MonteCarloBarostat(len(masses), pressure, temperature, group_idxs, barostat_interval, seed + 1)
