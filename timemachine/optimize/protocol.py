@@ -45,7 +45,7 @@ import jax
 
 jax.config.update("jax_enable_x64", True)
 
-from typing import Callable
+from typing import Any, Callable
 
 import numpy as np
 from jax import jit
@@ -55,8 +55,9 @@ from jax.scipy.special import logsumexp
 from scipy.optimize import bisect
 
 Float = float
-Array = jnp.array
-WorkStddevEstimator = DistanceFxn = Callable[[Float, Float], Float]
+Array = Any  # see https://github.com/google/jax/issues/943
+DistanceFxn = Callable[[Float, Float], Float]
+WorkStddevEstimator = DistanceFxn
 
 
 def rebalance_initial_protocol(

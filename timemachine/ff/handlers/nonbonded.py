@@ -23,6 +23,7 @@ AM1 = "AM1"
 AM1ELF10 = "AM1ELF10"
 AM1BCC = "AM1BCC"
 AM1BCCELF10 = "AM1BCCELF10"
+ELF10_MODELS = (AM1ELF10, AM1BCCELF10)
 
 
 def convert_to_oe(mol):
@@ -42,7 +43,7 @@ def convert_to_oe(mol):
     return oemol
 
 
-def oe_generate_conformations(oemol):
+def oe_generate_conformations(oemol, sample_hydrogens=True):
     """Generate conformations for the input molecule.
     The molecule is modified in place.
 
@@ -67,14 +68,14 @@ def oe_generate_conformations(oemol):
     omega.SetIncludeInput(False)
     # needed to preserve the atom ordering
     omega.SetCanonOrder(False)
-    omega.SetSampleHydrogens(True)
+    omega.SetSampleHydrogens(sample_hydrogens)
     omega.SetEnergyWindow(15.0)
     omega.SetMaxConfs(800)
     omega.SetRMSThreshold(1.0)
 
     has_confs = omega(oemol)
     if not has_confs:
-        raise Exception(f"Unable to generate conformations for charge assignment {oemol.GetTitle()}")
+        raise Exception(f"Unable to generate conformations for charge assignment for '{oemol.GetTitle()}'")
 
 
 def oe_assign_charges(mol, charge_model=AM1BCCELF10):
@@ -93,12 +94,20 @@ def oe_assign_charges(mol, charge_model=AM1BCCELF10):
     charge_engine = charge_engines[charge_model]
 
     oemol = convert_to_oe(mol)
-    if charge_model in (AM1ELF10, AM1BCCELF10):
+    if charge_model in ELF10_MODELS:
         oe_generate_conformations(oemol)
 
     result = oequacpac.OEAssignCharges(oemol, charge_engine)
     if result is False:
-        raise Exception("Unable to assign charges")
+        # Turn off hydrogen sampling if charge generation fails
+        # https://github.com/openforcefield/openff-toolkit/issues/346#issuecomment-505202862
+        if charge_model in ELF10_MODELS:
+            print(f"WARNING: Turning off hydrogen sampling for charge generation on molecule '{oemol.GetTitle()}'")
+            oemol = convert_to_oe(mol)
+            oe_generate_conformations(oemol, sample_hydrogens=False)
+            result = oequacpac.OEAssignCharges(oemol, charge_engine)
+        if result is False:
+            raise Exception(f"Unable to assign charges for '{oemol.GetTitle()}'")
 
     partial_charges = np.array([atom.GetPartialCharge() for atom in oemol.GetAtoms()])
 

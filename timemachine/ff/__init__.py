@@ -14,7 +14,7 @@ class Forcefield:
     """
 
     @classmethod
-    def load_from_file(cls, path: Union[str, Path]) -> "Forcefield":
+    def load_from_file(cls, path_or_str: Union[str, Path]) -> "Forcefield":
         """Load a forcefield from a path
 
         Parameters
@@ -28,8 +28,8 @@ class Forcefield:
         Forcefield
             Return a ForceField object constructed from parameters file
         """
-        original_path = str(path)
-        path = Path(path)  # Safe to construct a Path object from another Path object
+        original_path = str(path_or_str)
+        path = Path(path_or_str)  # Safe to construct a Path object from another Path object
 
         with resources.files("timemachine.ff.params") as params_path:
             built_in_path = params_path / original_path

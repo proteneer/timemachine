@@ -636,6 +636,21 @@ def test_am1elf10_conformer_independence():
         assert np.sum(delta_charges) == pytest.approx(0.0)
 
 
+def test_trans_carboxlic_acid():
+    # Test fallback to turn off hydrogen sampling if charge generation failed
+    # due to trans-COOH
+    with resources.path("timemachine.testsystems.data", "mobley_820789.sdf") as path_to_ligand:
+        suppl = Chem.SDMolSupplier(str(path_to_ligand), removeHs=False)
+    mol = next(suppl)
+    rdmolops.AssignStereochemistryFrom3D(mol, confId=0, replaceExistingTags=True)
+    am1elf10_charges = nonbonded.oe_assign_charges(mol, charge_model=nonbonded.AM1ELF10)
+
+    AllChem.EmbedMolecule(mol, randomSeed=2022, useRandomCoords=True)
+    new_am1elf10_charges = nonbonded.oe_assign_charges(mol, charge_model=nonbonded.AM1ELF10)
+    delta_charges = np.abs(am1elf10_charges - new_am1elf10_charges)
+    assert np.sum(delta_charges) == pytest.approx(0.0)
+
+
 def test_compute_or_load_am1_charges():
     """Loop over test ligands, asserting that charges are stored in expected property and that the same charges are
     returned on repeated calls"""

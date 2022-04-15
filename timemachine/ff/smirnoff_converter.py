@@ -3,6 +3,7 @@ import ast
 import operator as op
 import pprint
 from argparse import ArgumentParser
+from typing import Any, Dict
 from xml.dom import minidom
 
 import numpy as np
@@ -100,7 +101,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     xmldoc = minidom.parse(args.input_path)
-    forcefield = {}
+    forcefield: Dict[str, Any] = {}
 
     for tag in tags:
         itemlist = xmldoc.getElementsByTagName(tag)
@@ -172,7 +173,7 @@ if __name__ == "__main__":
                     sigma = parse_quantity(s.attributes["sigma"].value)
                 # Take sqrt of epsilon to avoid singularity in backprop
                 params.append([patt, sigma, np.sqrt(epsilon)])
-            vdws = {"patterns": params, "props": {}}
+            props: Dict[str, Any] = {}
             for key, val in xmldoc.getElementsByTagName("vdW")[0].attributes.items():
                 if key == "cutoff":
                     # we don't do cutoffs.
@@ -183,8 +184,8 @@ if __name__ == "__main__":
                     continue
                 if key == "version":
                     continue
-                vdws["props"][key] = val
-            forcefield["LennardJones"] = vdws
+                props[key] = val
+            forcefield["LennardJones"] = {"patterns": params, "props": props}
     if args.add_am1ccc_charges:
         forcefield["AM1CCC"] = AM1CCC_CHARGES
     stream = None

@@ -94,15 +94,17 @@ setup(
         "pymbar>3.0.4",
         "pyyaml",
         "scipy",
+        "typing-extensions",
     ],
     extras_require={
         "dev": [
             "black==21.10b0",
             "click==8.0.4",  # pinned due to https://github.com/psf/black/issues/2964 -- unpin if upgrading black
-            "isort==5.10.1",
             "flake8==4.0.1",
-            "pre-commit==2.17.0",
             "grpcio-tools==1.30.0",
+            "isort==5.10.1",
+            "mypy==0.942",
+            "pre-commit==2.17.0",
         ],
         "test": ["pytest", "pytest-cov"],
     },
@@ -111,6 +113,7 @@ setup(
             "datasets/freesolv/freesolv.sdf",
             "testsystems/data/5dfr_solv_equil.pdb",
             "testsystems/data/ligands_40.sdf",
+            "testsystems/data/mobley_820789.sdf",
             # NOTE: C++ sources used at runtime for JIT compilation
             "cpp/src/*.hpp",
             "cpp/src/kernels/*.cuh",

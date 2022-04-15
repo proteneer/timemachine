@@ -1,5 +1,6 @@
+import math
 from copy import deepcopy
-from typing import Any, List, Tuple
+from typing import Any, Iterator, List, Tuple
 
 import numpy as np
 
@@ -13,7 +14,7 @@ class Dataset:
         self.data = deepcopy(data)
 
     def num_batches(self, batch_size: int):
-        return np.math.ceil(len(self.data) / batch_size)
+        return math.ceil(len(self.data) / batch_size)
 
     def __len__(self):
         return len(self.data)
@@ -21,7 +22,7 @@ class Dataset:
     def shuffle(self):
         np.random.shuffle(self.data)
 
-    def iterbatches(self, batch_size: int) -> List[Any]:
+    def iterbatches(self, batch_size: int) -> Iterator[Any]:
         for batch in range(self.num_batches(batch_size)):
             start = batch * batch_size
             end = min((batch + 1) * batch_size, len(self.data))
@@ -94,12 +95,12 @@ class Dataset:
             provided by left and the second with the right indices.
 
         """
-        left = set(left)
-        right = set(right)
+        lefts = set(left)
+        rights = set(right)
         indices = set(range(len(self)))
-        if len(left.intersection(right)) > 0:
+        if len(lefts.intersection(rights)) > 0:
             raise ValueError("Left and right indices contain overlap")
-        if len(left.union(right)) != len(indices) or len(left.union(right).difference(indices)) > 0:
+        if len(lefts.union(rights)) != len(indices) or len(lefts.union(right).difference(indices)) > 0:
             raise ValueError("Indices provided don't match dataset indices")
         left_split = [self.data[i] for i in left]
         right_split = [self.data[i] for i in right]

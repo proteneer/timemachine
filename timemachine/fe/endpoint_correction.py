@@ -4,6 +4,7 @@ from typing import Tuple
 import jax
 import jax.numpy as jnp
 import numpy as np
+from numpy.typing import NDArray
 from scipy.stats import special_ortho_group
 
 from timemachine.potentials import bonded, rmsd
@@ -79,16 +80,16 @@ def estimate_delta_us(k_translation, k_rotation, core_idxs, core_params, beta, l
     k_rotation: float
         Force constant of the rotational restraint
 
-    core_idxs: int np.array (C, 2)
+    core_idxs: int NDArray (C, 2)
         Atom mapping between the two cores
 
-    core_params: float np.array (C, 2)
+    core_params: float NDArray (C, 2)
         Bonded parameters of the intractable restraint
 
-    lhs_xs: np.array [T, N, 3]
+    lhs_xs: NDArray [T, N, 3]
         Samples from the intractable left hand state, with the restraints turned on.
 
-    rhs_xs: np.array [T, N, 3]
+    rhs_xs: NDArray [T, N, 3]
         Samples from the non-interacting, fully unrestrained right hand state.
 
     beta: 1/kT
@@ -177,7 +178,7 @@ def estimate_delta_us(k_translation, k_rotation, core_idxs, core_params, beta, l
 
 
 # courtesy of jfass
-def ecdf(x: np.array) -> Tuple[np.array, np.array]:
+def ecdf(x: NDArray) -> Tuple[NDArray, NDArray]:
     """empirical cdf, from https://stackoverflow.com/a/37660583"""
     xs = np.sort(x)
     ys = np.arange(1, len(xs) + 1) / float(len(xs))
