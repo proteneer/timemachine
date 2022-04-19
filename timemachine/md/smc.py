@@ -21,12 +21,6 @@ BatchPropagator = Callable[[Samples, Lambda], Samples]
 BatchLogProb = Callable[[Samples, Lambda], LogWeights]
 
 Resampler = Callable[[LogWeights], Tuple[IndexArray, LogWeights]]
-
-# TODO: more precise type?
-#   if "ResultDict = Dict[str, Union[Samples, Array]]"
-#   error: Incompatible return value type
-#   (got "Dict[str, object]",
-#   expected "Dict[str, Union[List[Any], ndarray[Any, Any]]]")
 ResultDict = Dict[str, Any]
 
 

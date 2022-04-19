@@ -5,9 +5,9 @@ from rdkit import Chem
 from timemachine.fe import functional
 
 
-def bind_potentials(ubps, params):
-    """modifies ubps in-place"""
-    for u, p in zip(ubps, params):
+def bind_potentials(potentials, params):
+    """modifies potentials in-place"""
+    for u, p in zip(potentials, params):
         u.bind(p)
 
 

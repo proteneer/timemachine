@@ -17,9 +17,10 @@ from timemachine.testsystems.gaussian1d import make_gaussian_testsystem
 
 
 def generate_log_weights(n):
-    """sample log_weights ~ N(mu=mean, sigma=exp(log_stddev))
+    """sample an array of n log_weights,
+    log_weights[i] ~ N(mu=mean, sigma=exp(log_stddev)) for i in range(n)
     where
-    mean ~ N(mu=0, sigma=1)
+    mean       ~ N(mu=0, sigma=1)
     log_stddev ~ N(mu=0, sigma=1)
     """
     mean = np.random.randn()

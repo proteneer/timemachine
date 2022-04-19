@@ -5,4 +5,4 @@
 
 #### SMC
 * `run_smc_on_biphenyl.py` uses SMC to estimate the hydration free energy of biphenyl
-* `run_smc_on_freesolv.py` uses SMC to estimate absolute hydration free energies on FreeSolv
+* `run_smc_on_freesolv.py` uses SMC to estimate hydration free energies on FreeSolv
