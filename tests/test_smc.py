@@ -1,21 +1,20 @@
+import numpy as np
+import pytest
+from jax import jit, vmap
+from scipy.special import logsumexp
+
+from timemachine.fe.reweighting import one_sided_exp
 from timemachine.md.smc import (
-    sequential_monte_carlo,
     Resampler,
-    effective_sample_size,
-    null_resample,
-    multinomial_resample,
     conditional_multinomial_resample,
     effective_sample_size,
     fractional_effective_sample_size,
-    
+    multinomial_resample,
+    null_resample,
+    sequential_monte_carlo,
 )
-import numpy as np
-from scipy.special import logsumexp
-import pytest
-from jax import jit, vmap
-
-from timemachine.fe.reweighting import one_sided_exp
 from timemachine.testsystems.gaussian1d import make_gaussian_testsystem
+
 
 def generate_log_weights(n):
     """sample log_weights ~ N(mu=mean, sigma=exp(log_stddev))
@@ -30,7 +29,6 @@ def generate_log_weights(n):
     return log_weights
 
 
-
 @pytest.mark.parametrize("resampling_fxn", [null_resample, multinomial_resample, conditional_multinomial_resample])
 def test_resampler(resampling_fxn: Resampler):
     """On a collection of random log_weights vectors of varying size, assert that:
@@ -39,8 +37,8 @@ def test_resampler(resampling_fxn: Resampler):
 
     TODO: future refinements of this test might:
     * assert that estimates of expectations are self-consistent
-        sum([exp(log_weights[i]) * f(x[i])]) ~= sum([exp(resampled_log_weights[i]) * f(x[resampled_indices[i]])]) 
-    
+        sum([exp(log_weights[i]) * f(x[i])]) ~= sum([exp(resampled_log_weights[i]) * f(x[resampled_indices[i]])])
+
     Notes
     -----
     * Non-requirement: len(log_weights) == len(resampled_log_weights)
@@ -50,12 +48,12 @@ def test_resampler(resampling_fxn: Resampler):
         https://arxiv.org/abs/1903.12583
     """
     np.random.seed(2022)
-    
+
     n_instances = 100
     for _ in range(n_instances):
         n_particles = np.random.randint(1, 100)
         log_weights = generate_log_weights(n_particles)
-        
+
         # apply resampling_fxn
         resampled_indices, resampled_log_weights = resampling_fxn(log_weights)
 
@@ -73,7 +71,7 @@ def test_effective_sample_size():
     """On a collection of random log_weights vectors of varying size, assert that:
     * ess >= 1
     * ess <= n_particles
-    
+
     Also assert that:
     * on a vector of constant log weights `zeros(n_particles) + constant`,
         ess == n_particles, regardless of constant
@@ -91,7 +89,7 @@ def test_effective_sample_size():
 
         assert ess >= 1
         assert ess <= n_particles
-    
+
     # constant weights: ESS should be n_particles
     for _ in range(n_instances):
         n_particles = np.random.randint(1, 100)
@@ -100,7 +98,6 @@ def test_effective_sample_size():
         ess = effective_sample_size(log_weights)
 
         np.testing.assert_almost_equal(ess, n_particles)
-
 
     # degenerate weights: ESS should be 1
     for _ in range(n_instances):
@@ -179,14 +176,14 @@ def test_sequential_monte_carlo(resampling_fxn: Resampler):
         accept_mask = accept_probs >= test_vals
         updated = np.where(accept_mask, proposals, xs)
         assert updated.shape == xs.shape
-        
+
         return updated
 
     # apply SMC
     result_dict = sequential_monte_carlo(samples, lambdas, propagate, log_prob, resampling_fxn)
-    
+
     # compute running delta_f estimates
-    log_weights_traj = result_dict['log_weights_traj']
+    log_weights_traj = result_dict["log_weights_traj"]
     assert log_weights_traj.shape == (n_windows, n_particles)
     running_estimates = np.array([one_sided_exp(-log_weights) for log_weights in log_weights_traj])
 
@@ -195,6 +192,6 @@ def test_sequential_monte_carlo(resampling_fxn: Resampler):
 
     # assert this isn't a "no-op" test
     constant_predictions = np.ones(n_windows) * np.mean(ref_delta_fs)
-    mse_vs_smc_estimates = np.mean((ref_delta_fs - running_estimates)**2)
-    mse_vs_constant = np.mean((ref_delta_fs - constant_predictions)**2)
+    mse_vs_smc_estimates = np.mean((ref_delta_fs - running_estimates) ** 2)
+    mse_vs_constant = np.mean((ref_delta_fs - constant_predictions) ** 2)
     assert mse_vs_constant / mse_vs_smc_estimates > 1000
