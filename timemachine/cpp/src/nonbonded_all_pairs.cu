@@ -1,24 +1,14 @@
 #include "vendored/jitify.hpp"
-#include <algorithm>
-#include <cassert>
-#include <chrono>
-#include <complex>
-#include <cstdlib>
 #include <cub/cub.cuh>
-#include <iostream>
-#include <numeric>
-#include <optional>
-#include <vector>
 
 #include "fixed_point.hpp"
 #include "gpu_utils.cuh"
 #include "nonbonded_all_pairs.hpp"
+#include "nonbonded_common.cuh"
 #include "vendored/hilbert.h"
 
 #include "k_nonbonded.cuh"
 
-#include <fstream>
-#include <streambuf>
 #include <string>
 
 namespace timemachine {
