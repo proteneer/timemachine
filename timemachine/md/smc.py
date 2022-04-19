@@ -1,24 +1,33 @@
 # adapted from https://github.com/proteneer/timemachine/blob/7d6099b0f5b4a2d0b26c3edc7a91c18f7a526c00/md/experimental/smc.py
 
-from typing import Any, Callable, Dict, List, Tuple, Union
+from typing import Any, Callable, Dict, List, Tuple
 
 import numpy as np
 from scipy.special import logsumexp
 from tqdm import tqdm
+from typing_extensions import TypeAlias
 
 # type annotations
-Sample = Any
-Samples = List[Sample]  # e.g. List[CoordsVelBox]
+Sample: TypeAlias = Any
+Samples: TypeAlias = List[Sample]  # e.g. List[CoordsVelBox]
 
-Lambda = LogWeight = float
-LogWeights = IndexArray = Array = np.array
+Lambda: TypeAlias = float
+LogWeight: TypeAlias = float
+Array: TypeAlias = np.ndarray
+IndexArray: TypeAlias = Array
+LogWeights: TypeAlias = Array
 
 BatchPropagator = Callable[[Samples, Lambda], Samples]
 BatchLogProb = Callable[[Samples, Lambda], LogWeights]
 
 Resampler = Callable[[LogWeights], Tuple[IndexArray, LogWeights]]
 
-ResultDict = Dict[str, Union[Samples, Array]]
+# TODO: more precise type?
+#   if "ResultDict = Dict[str, Union[Samples, Array]]"
+#   error: Incompatible return value type
+#   (got "Dict[str, object]",
+#   expected "Dict[str, Union[List[Any], ndarray[Any, Any]]]")
+ResultDict = Dict[str, Any]
 
 
 def sequential_monte_carlo(
@@ -49,7 +58,7 @@ def sequential_monte_carlo(
             [K-1, N] list of snapshots
         "incremental_log_weights_traj"
             [K-1, N] array of incremental log weights
-        "ancestry"traj"
+        "ancestry_traj"
             [K-1, N] array of ancestor idxs
         "log_weights_traj"
             [K, N] array of accumulated log weights
