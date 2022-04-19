@@ -92,18 +92,18 @@ def setup_absolute_hydration_with_endpoint_samples(mol, temperature=300.0, press
 
     # set up potentials
     ff = Forcefield.load_from_file("smirnoff_1_1_0_ccc.py")
-    ubps, params, masses, _, _ = enhanced.get_solvent_phase_system(mol, ff)
-    potential_fxn = construct_potential(ubps, params)
+    potentials, params, masses, _, _ = enhanced.get_solvent_phase_system(mol, ff)
+    potential_fxn = construct_potential(potentials, params)
 
     kBT = BOLTZ * temperature
 
     def reduced_potential_fxn(xvb, lam):
         return potential_fxn(xvb, lam) / kBT
 
-    bind_potentials(ubps, params)
+    bind_potentials(potentials, params)
 
     # set up npt mover
-    npt_mover = moves.NPTMove(ubps, None, masses, temperature, pressure, n_steps, seed)
+    npt_mover = moves.NPTMove(potentials, None, masses, temperature, pressure, n_steps, seed)
 
     # combine solvent and ligand samples
     solvent_xvbs, ligand_samples, ligand_log_weights = enhanced.load_or_pregenerate_samples(
