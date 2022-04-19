@@ -81,11 +81,3 @@ void __global__ k_coords_to_kv_gather(
     // keys[idx] = atom_idx;
     vals[idx] = atom_idx;
 }
-
-void __global__ k_arange(int N, unsigned int *arr) {
-    const int atom_idx = blockIdx.x * blockDim.x + threadIdx.x;
-    if (atom_idx >= N) {
-        return;
-    }
-    arr[atom_idx] = atom_idx;
-}
