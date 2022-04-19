@@ -5,8 +5,10 @@
 namespace timemachine {
 
 template <typename T> T *allocate(const std::size_t length) {
-    T *buffer;
-    gpuErrchk(cudaMalloc(&buffer, length * sizeof(T)));
+    T *buffer = nullptr;
+    if (length > 0) {
+        gpuErrchk(cudaMalloc(&buffer, length * sizeof(T)));
+    }
     return buffer;
 }
 
