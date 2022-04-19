@@ -1,32 +1,20 @@
 #include "vendored/jitify.hpp"
-#include <algorithm>
-#include <cassert>
-#include <chrono>
 #include <complex>
-#include <cstdlib>
 #include <cub/cub.cuh>
-#include <iostream>
-#include <numeric>
 #include <set>
 #include <vector>
 
 #include "fixed_point.hpp"
 #include "gpu_utils.cuh"
+#include "nonbonded_common.cuh"
 #include "nonbonded_interaction_group.hpp"
 #include "vendored/hilbert.h"
 
 #include "k_nonbonded.cuh"
 
-#include <fstream>
-#include <streambuf>
 #include <string>
 
 namespace timemachine {
-
-std::vector<int> set_to_vector(const std::set<int> &s) {
-    std::vector<int> v(s.begin(), s.end());
-    return v;
-}
 
 template <typename RealType, bool Interpolated>
 NonbondedInteractionGroup<RealType, Interpolated>::NonbondedInteractionGroup(
@@ -79,17 +67,7 @@ NonbondedInteractionGroup<RealType, Interpolated>::NonbondedInteractionGroup(
     }
 
     // compute set of column atoms as set difference
-    std::vector<int> all_atom_idxs(N_);
-    std::iota(all_atom_idxs.begin(), all_atom_idxs.end(), 0);
-    std::set<int> col_atom_idxs;
-    std::set_difference(
-        all_atom_idxs.begin(),
-        all_atom_idxs.end(),
-        row_atom_idxs.begin(),
-        row_atom_idxs.end(),
-        std::inserter(col_atom_idxs, col_atom_idxs.end()));
-
-    std::vector<int> col_atom_idxs_v(set_to_vector(col_atom_idxs));
+    std::vector<int> col_atom_idxs_v = get_indices_difference(N_, row_atom_idxs);
     gpuErrchk(cudaMalloc(&d_col_atom_idxs_, NC_ * sizeof(*d_col_atom_idxs_)));
     gpuErrchk(
         cudaMemcpy(d_col_atom_idxs_, &col_atom_idxs_v[0], NC_ * sizeof(*d_col_atom_idxs_), cudaMemcpyHostToDevice));
