@@ -28,6 +28,8 @@ float __device__ __forceinline__ real_es_factor(float real_beta, float dij, floa
     return -inv_d2ij * (static_cast<float>(TWO_OVER_SQRT_PI) * beta_dij * exp_beta_dij_2 + erfc_beta_dij);
 }
 
+void __global__ k_arange(int N, unsigned int *arr);
+
 template <typename T> std::vector<T> set_to_vector(const std::set<T> &s) {
     std::vector<T> v(s.begin(), s.end());
     return v;
@@ -49,6 +51,7 @@ template <typename T> std::vector<T> get_indices_difference(const size_t N, cons
     std::vector<T> dif_vect(set_to_vector(difference));
     return dif_vect;
 }
+
 // Compute the terms associated with electrostatics.
 // This is pulled out into a function to ensure that the same bit values
 // are computed to ensure that that the fixed point values are exactly the same regardless

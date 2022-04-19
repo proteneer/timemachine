@@ -14,8 +14,6 @@ static const int HILBERT_MAX_GRID_DIM = 1 << HILBERT_N_BITS;
 static_assert(HILBERT_N_BITS == 8);
 static_assert(HILBERT_GRID_DIM <= HILBERT_MAX_GRID_DIM);
 
-void __global__ k_arange(int N, unsigned int *arr);
-
 // generate kv values from coordinates to be radix sorted
 void __global__ k_coords_to_kv(
     const int N,
