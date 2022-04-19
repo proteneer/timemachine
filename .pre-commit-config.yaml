@@ -57,6 +57,7 @@ repos:
 
         language: system
         pass_filenames: false
+        files: '^timemachine/cpp/src/wrap_kernels.cpp$'
 
 exclude: >
   (?x)
