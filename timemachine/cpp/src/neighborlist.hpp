@@ -62,14 +62,14 @@ public:
     unsigned int *get_ixn_count() { return d_ixn_count_; }
 
     // get max number of row blocks
-    int B() const;
+    int num_row_blocks() const;
 
 private:
     // Indicates that should compute interactions of all rows and columns
     // when a row is provided, otherwise only compute upper triangle of the ixn matrix.
     bool compute_full_matrix() const;
 
-    int column_blocks() const;
+    int num_column_blocks() const;
 
     // The number of column blocks divided by warp size. Each thread handles a block
     int Y() const;

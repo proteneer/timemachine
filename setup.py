@@ -85,7 +85,6 @@ setup(
     install_requires=[
         "bootstrapped",
         "grpcio",
-        "hilbertcurve",
         "importlib-resources",
         "jax",
         "jaxlib>0.1.74",
@@ -106,7 +105,7 @@ setup(
             "mypy==0.942",
             "pre-commit==2.17.0",
         ],
-        "test": ["pytest", "pytest-cov"],
+        "test": ["pytest", "pytest-cov", "hilbertcurve==1.0.5"],
     },
     package_data={
         "timemachine": [
