@@ -1,3 +1,4 @@
+from cmath import log
 from timemachine.md.smc import (
     #sequential_monte_carlo,
     Resampler,
@@ -6,7 +7,7 @@ from timemachine.md.smc import (
     multinomial_resample,
     conditional_multinomial_resample,
     effective_sample_size,
-    #fractional_effective_sample_size,
+    fractional_effective_sample_size,
     
 )
 import numpy as np
@@ -109,3 +110,18 @@ def test_effective_sample_size():
         ess = effective_sample_size(log_weights)
 
         np.testing.assert_almost_equal(ess, 1)
+
+
+def test_fractional_effective_sample_size():
+    """On random instances, check equal to effective_sample_size / n_particles"""
+    np.random.seed(2022)
+
+    # random weights
+    n_instances = 100
+    for _ in range(n_instances):
+        n_particles = np.random.randint(1, 100)
+        log_weights = generate_log_weights(n_particles)
+        ess = effective_sample_size(log_weights)
+        fractional_ess = fractional_effective_sample_size(log_weights)
+
+        np.testing.assert_almost_equal(fractional_ess, ess / n_particles)
