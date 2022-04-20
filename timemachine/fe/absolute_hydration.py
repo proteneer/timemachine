@@ -3,7 +3,6 @@
 from functools import partial
 
 import numpy as np
-from tqdm import tqdm
 
 from timemachine.constants import BOLTZ
 from timemachine.fe.lambda_schedule import construct_pre_optimized_absolute_lambda_schedule_solvent
@@ -56,7 +55,7 @@ def generate_endstate_samples(num_samples, solvent_samples, ligand_samples, liga
     solvent_choice_idxs = np.random.choice(np.arange(len(solvent_samples)), size=num_samples)
 
     all_xvbs = []
-    for i, choice_idx in enumerate(tqdm(solvent_choice_idxs, desc="generating endstate samples")):
+    for i, choice_idx in enumerate(solvent_choice_idxs):
 
         # solvent + noninteracting ligand
         noninteracting_xvb = solvent_samples[choice_idx]

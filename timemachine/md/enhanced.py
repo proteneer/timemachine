@@ -15,7 +15,6 @@ from jax.scipy.special import logsumexp as jlogsumexp
 from rdkit import Chem
 from rdkit.Chem import rdMolDescriptors
 from scipy.special import logsumexp
-from tqdm import tqdm
 
 from timemachine import lib
 from timemachine.constants import BOLTZ
@@ -647,7 +646,7 @@ def generate_solvent_samples(
     npt_mover = moves.NPTMove(potentials, lamb, masses, temperature, pressure, n_steps=md_steps_per_move, seed=seed)
 
     xvbs = [xvb0]
-    for _ in tqdm(range(n_samples), desc="generating solvent samples"):
+    for _ in range(n_samples):
         xvbs.append(npt_mover.move(xvbs[-1]))
     return xvbs
 

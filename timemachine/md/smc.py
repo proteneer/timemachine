@@ -4,7 +4,6 @@ from typing import Any, Callable, Dict, List, Tuple
 
 import numpy as np
 from scipy.special import logsumexp
-from tqdm import tqdm
 from typing_extensions import TypeAlias
 
 # type annotations
@@ -73,18 +72,14 @@ def sequential_monte_carlo(
     log_weights_traj = [np.array(log_weights)]
     incremental_log_weights_traj = []  # note: redundant but convenient
 
-    trange = tqdm(lambdas[:-2])
-
     def accumulate_results(samples, indices, log_weights, incremental_log_weights):
         sample_traj.append(samples)
         ancestry_traj.append(indices)
         log_weights_traj.append(np.array(log_weights))
         incremental_log_weights_traj.append(np.array(incremental_log_weights))
-        running_estimate = -logsumexp(log_weights - np.log(len(log_weights)))
-        trange.set_postfix(EXP=running_estimate)
 
     # main loop
-    for (lam_initial, lam_target) in zip(trange, lambdas[1:-1]):
+    for (lam_initial, lam_target) in zip(lambdas[:-2], lambdas[1:-1]):
         # update log weights
         incremental_log_weights = log_prob(sample_traj[-1], lam_target) - log_prob(sample_traj[-1], lam_initial)
         log_weights += incremental_log_weights
