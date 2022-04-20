@@ -49,6 +49,8 @@ def test_optimized_MTM():
     _vacuum_xv_samples, vacuum_log_weights = enhanced.generate_log_weighted_samples(
         mol, temperature, state.U_easy, proposal_U, seed, num_batches=num_batches
     )
+
+    # discard velocities: (x, v) -> x
     vacuum_samples = _vacuum_xv_samples[:, 0, :]
     ubps, params, masses, coords, box = enhanced.get_solvent_phase_system(mol, ff)
 
