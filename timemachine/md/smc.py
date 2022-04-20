@@ -152,3 +152,28 @@ def conditional_multinomial_resample(log_weights, thresh=0.5):
         return multinomial_resample(log_weights)
     else:
         return null_resample(log_weights)
+
+
+def refine_samples(samples, log_weights, propagate, lam):
+    """resample according to log_weights, then propagate at lam for a little bit"""
+
+    # weighted samples -> equally weighted samples
+    # TODO: replace multinomial resampling with something less wasteful, like stratified or systematic resampling
+    resample = multinomial_resample  # but not: null_resample or conditional_multinomial_resample
+    resampled_inds, log_weights = resample(log_weights)
+    assert np.std(log_weights) == 0, "Need equally weighted samples"
+
+    # diversify
+    updated_samples = propagate([samples[i] for i in resampled_inds], lam)
+    return updated_samples
+
+
+def get_endstate_samples_from_smc_result(smc_result, propagate, lambdas):
+    """unweighted approximate samples from lambdas[0] and lambdas[-1]
+
+    TODO: include lambdas array in smc_result dict?
+    """
+    initial_samples = refine_samples(smc_result["traj"][0], smc_result["log_weights_traj"][0], propagate, lambdas[0])
+    final_samples = refine_samples(smc_result["traj"][-1], smc_result["log_weights_traj"][-1], propagate, lambdas[-1])
+
+    return initial_samples, final_samples
