@@ -161,7 +161,7 @@ def refine_samples(samples, log_weights, propagate, lam):
     # TODO: replace multinomial resampling with something less wasteful, like stratified or systematic resampling
     resample = multinomial_resample  # but not: null_resample or conditional_multinomial_resample
     resampled_inds, log_weights = resample(log_weights)
-    assert np.std(log_weights) == 0, "Need equally weighted samples"
+    assert np.isclose(np.std(log_weights), 0), "Need equally weighted samples"
 
     # diversify
     updated_samples = propagate([samples[i] for i in resampled_inds], lam)
