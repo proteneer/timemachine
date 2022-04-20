@@ -25,7 +25,7 @@ def parse_options():
 
 
 def save_smc_result(smc_result, save_full_trajectories=False):
-    uid = f"{datetime.now()}"
+    uid = f"{datetime.now().isoformat(timespec='seconds')}"
 
     # by default, just save the final weighted samples, incremental log weight trajectory (and cmd_args)
     summary = dict(

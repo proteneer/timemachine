@@ -69,7 +69,7 @@ def run_on_freesolv_mol(mol):
     print(f"experimental: {props['dG']:.3f} kcal/mol")
 
     # save summary
-    uid = f"mol={name}_time={datetime.now()}"
+    uid = f"mol={name}_time={datetime.now().isoformat(timespec='seconds')}"
     save_smc_result(uid, smc_result, save_full_trajectories=cmd_args.debug_mode)
 
 
