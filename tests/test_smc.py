@@ -9,6 +9,7 @@ from timemachine.md.smc import (
     conditional_multinomial_resample,
     effective_sample_size,
     fractional_effective_sample_size,
+    get_endstate_samples_from_smc_result,
     multinomial_resample,
     null_resample,
     sequential_monte_carlo,
@@ -132,6 +133,7 @@ def test_fractional_effective_sample_size():
 def test_sequential_monte_carlo(resampling_fxn: Resampler):
     """Run SMC with the desired resampling_fxn on a Gaussian 1D test system, and assert that
     * running estimates of the free energy as a fxn of lambda match analytical free energies
+    * endstate samples have expected mean and stddev
     """
     np.random.seed(2022)
 
@@ -196,3 +198,16 @@ def test_sequential_monte_carlo(resampling_fxn: Resampler):
     mse_vs_smc_estimates = np.mean((ref_delta_fs - running_estimates) ** 2)
     mse_vs_constant = np.mean((ref_delta_fs - constant_predictions) ** 2)
     assert mse_vs_constant / mse_vs_smc_estimates > 1000
+
+    # extract endstate samples
+    samples_0, samples_1 = get_endstate_samples_from_smc_result(result_dict, propagate, lambdas)
+
+    # assert these have close to the expected mean and variance
+    mean_0, stddev_0 = np.mean(samples_0), np.std(samples_0)
+    mean_1, stddev_1 = np.mean(samples_1), np.std(samples_1)
+
+    np.testing.assert_almost_equal(mean_0, 0, decimal=1)
+    np.testing.assert_almost_equal(np.log(stddev_0), np.log(1), decimal=1)
+
+    np.testing.assert_almost_equal(mean_1, target_mean, decimal=1)
+    np.testing.assert_almost_equal(np.log(stddev_1), target_log_sigma, decimal=1)
