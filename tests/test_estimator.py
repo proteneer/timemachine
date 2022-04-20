@@ -101,7 +101,7 @@ def test_free_energy_estimator():
             "test",
         )
 
-        dG, bar_dG_err, results = estimator.deltaG(mdl, sys_params)
+        dG, bar_dG_err, results = estimator.deltaG(mdl, sys_params, subsample_interval=100)
 
         return dG ** 2
 
@@ -170,7 +170,7 @@ def test_free_energy_estimator_with_endpoint_correction():
             "test",
         )
 
-        dG, bar_dG_err, results = estimator.deltaG(mdl, sys_params)
+        dG, bar_dG_err, results = estimator.deltaG(mdl, sys_params, subsample_interval=100)
 
         return dG ** 2
 

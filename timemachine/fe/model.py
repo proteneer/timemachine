@@ -259,7 +259,7 @@ class RBFEModel:
                 f"rbfe_{stage}",
             )
             # Currently ignores the dG error
-            dG, _, results = estimator.deltaG(model, sys_params)
+            dG, _, results = estimator.deltaG(model, sys_params, subsample_interval=min(self.prod_steps, 1000))
 
             stage_dGs.append(dG)
             stage_results.append((stage, results))
