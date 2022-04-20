@@ -64,11 +64,13 @@ RUN git clone https://github.com/openmm/openmm.git --branch "${OPENMM_VERSION}" 
       -DOPENMM_BUILD_OPENCL_LIB=OFF \
       -DOPENMM_BUILD_RPMD_CUDA_LIB=OFF \
       -DOPENMM_BUILD_RPMD_OPENCL_LIB=OFF \
-      -DCMAKE_INSTALL_PREFIX=../openmm_install \
+      -DCMAKE_INSTALL_PREFIX=/opt/openmm_install \
       ../ && \
     make -j "$(nproc)" && \
     make -j "$(nproc)" install && \
-    make PythonInstall
+    make PythonInstall && \
+    cd /code/ && \
+    rm -rf openmm/
 
 # Copy the pip requirements to cache when possible
 COPY requirements.txt /code/timemachine/
