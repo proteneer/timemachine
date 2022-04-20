@@ -325,8 +325,8 @@ class TestContext(unittest.TestCase):
 
         lambda_schedule = np.ones(num_steps) * lamb
 
-        du_dl_interval = 2
-        x_interval = 3
+        du_dl_interval = 3
+        x_interval = 2
         start_box = ctxt_2.get_box()
         test_du_dls, test_xs, test_boxes = ctxt_2.multiple_steps(lambda_schedule, du_dl_interval, x_interval)
         end_box = ctxt_2.get_box()
@@ -355,7 +355,7 @@ class TestContext(unittest.TestCase):
             lamb, num_steps, np.array([], dtype=np.float64), u_interval, x_interval
         )
 
-        assert test_us.shape == (0, 0)
+        assert test_us.shape == (num_steps / u_interval, 0)
 
 
 if __name__ == "__main__":

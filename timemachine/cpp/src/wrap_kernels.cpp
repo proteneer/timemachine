@@ -156,8 +156,35 @@ void declare_context(py::module &m) {
             },
             py::arg("lambda_schedule"),
             py::arg("store_du_dl_interval") = 0,
-            py::arg("store_x_interval") = 0)
-        // .def("multiple_steps", &timemachine::Context::multiple_steps)
+            py::arg("store_x_interval") = 0,
+            R"pbdoc(
+        Take multiple steps with a specified lambda value at each step.
+
+        For store_du_dl_interval and store_x_interval, the values are stored after having
+        taken the number of steps specified by the interval. IE if the store_du_dl_interval is
+        5, then on the 5th step the du_dl will be stored.
+
+        Parameters
+        ----------
+        lambda_schedule: list of floats
+            Lambda value for each step, length of schedule is number of steps taken
+
+        store_du_dl_interval: int
+            How often we store the du_dl, stores on every store_du_dl_interval steps
+
+        store_x_interval: int
+            How often we store the frames, stores after every store_x_interval steps
+
+        Returns
+        -------
+        3-tuple of du_dls, coordinates, boxes
+            F = floor(len(lambda_schedule)/store_x_interval).
+            K = floor(len(lambda_schedule)/store_u_interval).
+            du_dls have shape (K)
+            Coordinates have shape (F, N, 3)
+            Boxes have shape (F, 3, 3)
+
+    )pbdoc")
         .def(
             "multiple_steps_U",
             [](timemachine::Context &ctxt,
@@ -176,8 +203,8 @@ void declare_context(py::module &m) {
                 std::array<std::vector<double>, 3> result =
                     ctxt.multiple_steps_U(lambda, n_steps, vec_lambda_windows, u_interval, x_interval);
 
+                int UF = n_steps / u_interval;
                 int UW = lambda_windows.size();
-                int UF = result[0].size() > 0 ? result[0].size() / UW : 0;
 
                 py::array_t<double, py::array::c_style> out_u_buffer({UF, UW});
                 std::memcpy(out_u_buffer.mutable_data(), result[0].data(), result[0].size() * sizeof(double));
@@ -203,7 +230,7 @@ void declare_context(py::module &m) {
         at a single fixed lambda window.
 
         Let lambda_windows have shape [K].
-        F = ceil(n_steps/store_u_interval).
+        F = floor(n_steps/store_u_interval).
 
         The returned U matrix has F rows and K columns.
 
@@ -219,10 +246,10 @@ void declare_context(py::module &m) {
             Lambda values to evaluate energies at
 
         store_u_interval: int
-            How often we store the energies
+            How often we store the energies, store after every store_u_interval steps
 
         store_x_interval: int
-            How often we store the frames
+            How often we store the frames, store after every store_x_interval steps
 
         Returns
         -------
