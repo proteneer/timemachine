@@ -3,18 +3,18 @@
 from typing import Any, Callable, Dict, List, Tuple
 
 import numpy as np
+from numpy.typing import NDArray
 from scipy.special import logsumexp
-from typing_extensions import TypeAlias
 
 # type annotations
-Sample: TypeAlias = Any
-Samples: TypeAlias = List[Sample]  # e.g. List[CoordsVelBox]
+Sample = Any
+Samples = List[Sample]  # e.g. List[CoordsVelBox]
 
-Lambda: TypeAlias = float
-LogWeight: TypeAlias = float
-Array: TypeAlias = np.ndarray
-IndexArray: TypeAlias = Array
-LogWeights: TypeAlias = Array
+Lambda = float
+LogWeight = float
+Array = NDArray
+IndexArray = Array
+LogWeights = Array
 
 BatchPropagator = Callable[[Samples, Lambda], Samples]
 BatchLogProb = Callable[[Samples, Lambda], LogWeights]
@@ -154,7 +154,7 @@ def conditional_multinomial_resample(log_weights, thresh=0.5):
         return null_resample(log_weights)
 
 
-def refine_samples(samples, log_weights, propagate, lam):
+def refine_samples(samples: Samples, log_weights: LogWeights, propagate: BatchPropagator, lam: float) -> Samples:
     """resample according to log_weights, then propagate at lam for a little bit"""
 
     # weighted samples -> equally weighted samples
@@ -168,7 +168,9 @@ def refine_samples(samples, log_weights, propagate, lam):
     return updated_samples
 
 
-def get_endstate_samples_from_smc_result(smc_result, propagate, lambdas):
+def get_endstate_samples_from_smc_result(
+    smc_result: ResultDict, propagate: BatchPropagator, lambdas: Array
+) -> Tuple[Samples, Samples]:
     """unweighted approximate samples from lambdas[0] and lambdas[-1]
 
     TODO: include lambdas array in smc_result dict?
