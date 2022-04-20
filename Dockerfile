@@ -3,7 +3,7 @@ FROM nvidia/cuda:11.6.0-devel-ubuntu20.04 AS tm_base_env
 # Copied out of anaconda's dockerfile
 ARG MINICONDA_VERSION=4.6.14
 ARG MAKE_VERSION=4.2.1-1.2
-ARG GIT_VERSION=1:2.25.1-1ubuntu3.2
+ARG GIT_VERSION=1:2.25.1-1ubuntu3.3
 ARG WGET_VERSION=1.20.3-1ubuntu2
 RUN apt-get update && apt-get install --no-install-recommends -y wget=${WGET_VERSION} git=${GIT_VERSION} make=${MAKE_VERSION} \
     && apt-get clean \
@@ -64,11 +64,13 @@ RUN git clone https://github.com/openmm/openmm.git --branch "${OPENMM_VERSION}" 
       -DOPENMM_BUILD_OPENCL_LIB=OFF \
       -DOPENMM_BUILD_RPMD_CUDA_LIB=OFF \
       -DOPENMM_BUILD_RPMD_OPENCL_LIB=OFF \
-      -DCMAKE_INSTALL_PREFIX=../openmm_install \
+      -DCMAKE_INSTALL_PREFIX=/opt/openmm_install \
       ../ && \
     make -j "$(nproc)" && \
     make -j "$(nproc)" install && \
-    make PythonInstall
+    make PythonInstall && \
+    cd /code/ && \
+    rm -rf openmm/
 
 # Copy the pip requirements to cache when possible
 COPY requirements.txt /code/timemachine/
