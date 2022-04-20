@@ -100,8 +100,6 @@ def setup_absolute_hydration_with_endpoint_samples(mol, temperature=300.0, press
         return potential_fxn(xvb, lam) / kBT
 
     bind_potentials(potentials, params)
-
-    # set up npt mover
     npt_mover = moves.NPTMove(potentials, None, masses, temperature, pressure, n_steps, seed)
 
     # combine solvent and ligand samples
