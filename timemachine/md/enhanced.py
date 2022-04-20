@@ -4,8 +4,6 @@
 
 import multiprocessing
 import os
-import pickle
-from pathlib import Path
 
 import jax
 import jax.numpy as jnp
@@ -26,10 +24,6 @@ from timemachine.md import builders, minimizer, moves
 from timemachine.md.barostat.utils import get_bond_list, get_group_indices
 from timemachine.md.states import CoordsVelBox
 from timemachine.potentials import bonded, nonbonded, rmsd
-from timemachine.utils import hash_mol
-
-# global tmp directory # TODO: somewhere better?
-PATH_TO_SAMPLE_CACHES = Path("/tmp/sample_caches/")
 
 
 def identify_rotatable_bonds(mol):
@@ -585,41 +579,6 @@ def pregenerate_samples(mol, ff, seed, n_solvent_samples=1000, n_ligand_batches=
 
     print("Generating ligand samples")
     ligand_samples, ligand_log_weights = generate_ligand_samples(n_ligand_batches, mol, ff, temperature, seed)
-
-    return solvent_xvbs, ligand_samples, ligand_log_weights
-
-
-def load_or_pregenerate_samples(
-    mol, ff, seed, n_solvent_samples=1000, n_ligand_batches=30000, temperature=300.0, pressure=1.0
-):
-
-    # hash canonical smiles
-    mol_hash = hash_mol(mol)
-    # TODO: do I want this to be sensitive to other mol properties? conformer?
-
-    # hash all of the other parameters
-    # ff_hash = hash(tuple(np.array(ff.get_ordered_params()).flatten()))
-    # arg_hash = hash((seed, n_solvent_samples, n_ligand_batches, temperature, pressure))
-    # TODO: do I want this to be sensitive to ff's smirks strings too?
-    # TODO: store and check ff_hash, arg_hash match the one stored...
-
-    cache_path = PATH_TO_SAMPLE_CACHES / f"mol_{mol_hash}_x_solvent_samples.pkl"
-
-    if not os.path.exists(PATH_TO_SAMPLE_CACHES):
-        os.mkdir(PATH_TO_SAMPLE_CACHES)
-
-    if not os.path.exists(cache_path):
-        print(f"Cache not found at {cache_path}! Generating cache...")
-        solvent_xvbs, ligand_samples, ligand_log_weights = pregenerate_samples(
-            mol, ff, seed, n_solvent_samples, n_ligand_batches, temperature, pressure
-        )
-
-        with open(cache_path, "wb") as fh:
-            pickle.dump([solvent_xvbs, ligand_samples, ligand_log_weights], fh)
-    else:
-        with open(cache_path, "rb") as fh:
-            print(f"Loading cache from {cache_path}")
-            solvent_xvbs, ligand_samples, ligand_log_weights = pickle.load(fh)
 
     return solvent_xvbs, ligand_samples, ligand_log_weights
 

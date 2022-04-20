@@ -105,7 +105,7 @@ def setup_absolute_hydration_with_endpoint_samples(mol, temperature=300.0, press
     npt_mover = moves.NPTMove(potentials, None, masses, temperature, pressure, n_steps, seed)
 
     # combine solvent and ligand samples
-    solvent_xvbs, ligand_samples, ligand_log_weights = enhanced.load_or_pregenerate_samples(
+    solvent_xvbs, ligand_samples, ligand_log_weights = enhanced.pregenerate_samples(
         mol, ff, seed, temperature=temperature, pressure=pressure
     )
     n_endstate_samples = 5000  # TODO: expose this parameter?
