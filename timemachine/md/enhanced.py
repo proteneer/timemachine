@@ -614,9 +614,8 @@ def generate_ligand_samples(num_batches, mol, ff, temperature, seed):
     """Generate (weighted) samples of the ligand in vacuum, by importance sampling from a less-hindered state where
     torsions and intramolecular nonbonded terms are disabled"""
     state = VacuumState(mol, ff)
-    proposal_U = state.U_full
     vacuum_samples, vacuum_log_weights = generate_log_weighted_samples(
-        mol, temperature, state.U_easy, proposal_U, num_batches=num_batches, seed=seed
+        mol, temperature, state.U_easy, state.U_full, num_batches=num_batches, seed=seed
     )
 
     return vacuum_samples, vacuum_log_weights
