@@ -1,3 +1,4 @@
+from http.client import CONFLICT
 import jax.numpy as jnp
 import numpy as np
 
@@ -116,6 +117,10 @@ def harmonic_bond(conf, params, box, lamb, bond_idxs, lamb_mult=None, lamb_offse
     * lamb argument is unused
 
     """
+
+    bond_idxs = np.array(bond_idxs)
+    params = np.array(params)
+
     assert params.shape == bond_idxs.shape
 
     if bond_idxs.shape[0] == 0:
@@ -146,6 +151,95 @@ def harmonic_bond(conf, params, box, lamb, bond_idxs, lamb_mult=None, lamb_offse
 
     return jnp.sum(energy)
 
+def get_centroid_cos_angles(conf, angle_idxs):
+
+    vij = []
+    vik = []
+
+
+    for idxs, j, k in angle_idxs:
+
+        x_j = conf[j]
+        # compute v-site from unit vectors relative to i
+        if len(idxs) == 2:
+            a, b = idxs
+            x_a, x_b = conf[a], conf[b]
+            x_ia = (x_a - x_j)
+            x_ia = x_j + x_ia/jnp.linalg.norm(x_ia)
+            x_ib = (x_b - x_j)
+            x_ib = x_j + x_ib/jnp.linalg.norm(x_ib)
+            x_i = (x_ia + x_ib)/2.0
+        elif len(idxs) == 3:
+            a, b, c = idxs
+            x_a, x_b, x_c = conf[a], conf[b], conf[c]
+            x_ia = (x_a - x_j)
+            x_ia = x_j + x_ia/jnp.linalg.norm(x_ia)
+            x_ib = (x_b - x_j)
+            x_ib = x_j + x_ib/jnp.linalg.norm(x_ib)
+            x_ic = (x_c - x_j)
+            x_ic = x_j + x_ic/jnp.linalg.norm(x_ic)
+            x_i = (x_ia + x_ib + x_ic)/3.0
+        else:
+            assert 0
+
+        vij.append(x_i-x_j)
+        x_k = conf[k]
+        vik.append(x_k-x_j)
+
+    vij = jnp.array(vij)
+    vik = jnp.array(vik)
+
+    top = jnp.sum(jnp.multiply(vij, vik), -1)
+    bot = jnp.linalg.norm(vij, axis=-1) * jnp.linalg.norm(vik, axis=-1)
+
+    tb = top / bot
+
+    return tb
+
+
+def harmonic_x_angle(conf, params, box, lamb, angle_idxs):
+    if len(angle_idxs) == 0:
+        return 0.0
+
+    params = jnp.array(params)
+    v_ij = []
+    v_ik = []
+
+    for (j, a), (j, b), (j, c) in angle_idxs:
+        x_a = conf[a]
+        x_b = conf[b]
+        x_c = conf[c]
+        x_j = conf[j]
+        v_ja = x_a - x_j
+        v_jb = x_b - x_j
+        v_jc = x_c - x_j
+        v_ij.append(jnp.cross(v_ja, v_jb))
+        v_ik.append(v_jc)
+
+    v_ij = jnp.array(v_ij)
+    v_ik = jnp.array(v_ik)
+    top = jnp.sum(jnp.multiply(v_ij, v_ik), -1)
+    bot = jnp.linalg.norm(v_ij, axis=-1) * jnp.linalg.norm(v_ik, axis=-1)
+    cos_angles = top / bot
+    kas = params[:, 0]
+    cos_2_angles = 2*cos_angles**2 - 1 # double angle - symmetrized to both ends
+    energies = kas / 2 * jnp.power(cos_2_angles - 1, 2)
+    return jnp.sum(energies)
+
+
+def harmonic_c_angle(conf, params, box, lamb, angle_idxs):
+    if len(angle_idxs) == 0:
+        return 0.0
+
+    params = jnp.array(params)
+    tbs = get_centroid_cos_angles(conf, angle_idxs)
+    kas = params[:, 0]
+    a0s = params[:, 1]
+
+    # we have to use the cos_angle form here since we often set a0s to pi
+    energies = kas / 2 * jnp.power(tbs - jnp.cos(a0s), 2)
+    return jnp.sum(energies)
+    
 
 def harmonic_angle(conf, params, box, lamb, angle_idxs, lamb_mult=None, lamb_offset=None, cos_angles=True):
     """
@@ -191,6 +285,10 @@ def harmonic_angle(conf, params, box, lamb, angle_idxs, lamb_mult=None, lamb_off
     ------
     * lamb argument unused
     """
+
+    angle_idxs = np.array(angle_idxs)
+    params = np.array(params)
+
     if angle_idxs.shape[0] == 0:
         return 0.0
 
@@ -306,6 +404,10 @@ def periodic_torsion(conf, params, box, lamb, torsion_idxs, lamb_mult=None, lamb
     * lamb argument unused
     * if conf has more than 3 dimensions, this function only depends on the first 3
     """
+
+    torsion_idxs = np.array(torsion_idxs)
+    params = np.array(params)
+
     if torsion_idxs.shape[0] == 0:
         return 0.0
 

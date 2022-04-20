@@ -214,7 +214,6 @@ class ImproperTorsionHandler(SerializableMixIn):
 
         for p_idx, patt in enumerate(smirks):
             matches = match_smirks(mol, patt)
-
             for m in matches:
                 key = make_key(m)
                 impropers[key] = p_idx

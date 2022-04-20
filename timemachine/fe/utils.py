@@ -264,6 +264,16 @@ def validate_map(n_nodes: int, relative_inds: List[Tuple[int, int]], absolute_in
     return len(components) == 1
 
 
+def get_romol_bonds(mol):
+    """
+    Return bond idxs given a mol
+    """
+    bond_list = []
+    for bond in mol.GetBonds():
+        bond_list.append([bond.GetBeginAtomIdx(), bond.GetEndAtomIdx()])
+    return bond_list
+
+
 def get_romol_conf(mol):
     """Coordinates of mol's 0th conformer, in nanometers"""
     conformer = mol.GetConformer(0)
