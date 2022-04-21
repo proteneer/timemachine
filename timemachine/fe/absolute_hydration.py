@@ -5,12 +5,12 @@ from functools import partial
 import numpy as np
 
 from timemachine.constants import BOLTZ
+from timemachine.fe import functional
 from timemachine.fe.lambda_schedule import construct_pre_optimized_absolute_lambda_schedule_solvent
 from timemachine.ff import Forcefield
 from timemachine.md import enhanced, moves
 from timemachine.md.smc import conditional_multinomial_resample
 from timemachine.md.states import CoordsVelBox
-from timemachine.utils import bind_potentials, construct_potential
 
 
 def generate_endstate_samples(num_samples, solvent_samples, ligand_samples, ligand_log_weights, num_ligand_atoms):
@@ -92,14 +92,16 @@ def setup_absolute_hydration_with_endpoint_samples(mol, temperature=300.0, press
     # set up potentials
     ff = Forcefield.load_from_file("smirnoff_1_1_0_ccc.py")
     potentials, params, masses, _, _ = enhanced.get_solvent_phase_system(mol, ff)
-    potential_fxn = construct_potential(potentials, params)
 
+    U_fn = functional.construct_differentiable_interface_fast(potentials, params)
     kBT = BOLTZ * temperature
 
     def reduced_potential_fxn(xvb, lam):
-        return potential_fxn(xvb, lam) / kBT
+        return U_fn(xvb.coords, params, xvb.box, lam) / kBT
 
-    bind_potentials(potentials, params)
+    for U, p in zip(potentials, params):
+        U.bind(p)
+
     npt_mover = moves.NPTMove(potentials, None, masses, temperature, pressure, n_steps, seed)
 
     # combine solvent and ligand samples
