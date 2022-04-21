@@ -46,6 +46,7 @@ def generate_endstate_samples(num_samples, solvent_samples, ligand_samples, liga
     # assume this layout
     num_total_atoms = len(solvent_samples[0].coords)
     num_solvent_atoms = num_total_atoms - num_ligand_atoms
+    assert num_solvent_atoms > 0, "Oops, did you really mean num_ligand_atoms >= num_total_atoms?"
     solvent_idxs = np.arange(0, num_solvent_atoms)
 
     # sample according to log weights
