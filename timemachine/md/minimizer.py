@@ -151,9 +151,9 @@ def minimize_host_4d(mols, host_system, host_coords, ff, box, mol_coords=None) -
     x0 = fire_minimize(x0, u_impls, box, np.ones(50))
     # context components: positions, velocities, box, integrator, energy fxns
     ctxt = custom_ops.Context(x0, v0, box, intg, u_impls)
-    ctxt.multiple_steps(np.linspace(1.0, 0, 1000))
+    _, xs, _ = ctxt.multiple_steps(np.linspace(1.0, 0, 1000))
 
-    final_coords = fire_minimize(ctxt.get_x_t(), u_impls, box, np.zeros(50))
+    final_coords = fire_minimize(xs[-1], u_impls, box, np.zeros(50))
     for impl in u_impls:
         du_dx, _, _ = impl.execute(final_coords, box, 0.0)
         norm = np.linalg.norm(du_dx, axis=-1)

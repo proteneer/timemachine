@@ -97,10 +97,11 @@ class AbsoluteModel(ABC):
             bp = unbound_pot.bind(np.asarray(params))
             bound_potentials.append(bp)
 
+        # Always get at least one sample
+        subsample_interval = min(self.prod_steps, 1000)
+
         all_args = []
         for lamb_idx, lamb in enumerate(model.lambda_schedule):
-
-            subsample_interval = 1000
 
             all_args.append(
                 (
@@ -323,10 +324,10 @@ class RelativeModel(ABC):
             bp = unbound_pot.bind(np.asarray(params))
             bound_potentials.append(bp)
 
+        # Always get at least one sample
+        subsample_interval = min(self.prod_steps, 1000)
         all_args = []
         for lamb_idx, lamb in enumerate(model.lambda_schedule):
-
-            subsample_interval = 1000
 
             all_args.append(
                 (
@@ -696,10 +697,11 @@ class RelativeConversionModel:
             bp = unbound_pot.bind(np.asarray(params))
             bound_potentials.append(bp)
 
+        # Always get at least one sample
+        subsample_interval = min(self.prod_steps, 1000)
+
         all_args = []
         for lamb_idx, lamb in enumerate(model.lambda_schedule):
-
-            subsample_interval = 1000
 
             all_args.append(
                 (

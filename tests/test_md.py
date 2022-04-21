@@ -9,12 +9,149 @@ import pytest
 from common import prepare_nb_system
 
 from timemachine.integrator import langevin_coefficients
-from timemachine.lib import custom_ops, potentials
+from timemachine.lib import custom_ops
 
 pytestmark = [pytest.mark.memcheck]
 
 
 class TestContext(unittest.TestCase):
+    def test_multiple_steps_store_interval(self):
+        np.random.seed(2022)
+
+        N = 8
+        D = 3
+
+        x0 = np.random.rand(N, D).astype(dtype=np.float64) * 2
+
+        E = 2
+
+        lambda_plane_idxs = np.random.randint(low=0, high=2, size=N, dtype=np.int32)
+        lambda_offset_idxs = np.random.randint(low=0, high=2, size=N, dtype=np.int32)
+
+        params, _, test_nrg = prepare_nb_system(
+            x0,
+            E,
+            lambda_plane_idxs,
+            lambda_offset_idxs,
+            p_scale=3.0,
+            cutoff=1.0,
+        )
+
+        masses = np.random.rand(N)
+        v0 = np.random.rand(x0.shape[0], x0.shape[1])
+
+        temperature = 300
+        dt = 2e-3
+        friction = 0.0
+        ca, cbs, ccs = langevin_coefficients(temperature, dt, friction, masses)
+
+        box = np.eye(3) * 3.0
+        intg = custom_ops.LangevinIntegrator(dt, ca, cbs, ccs, 1234)
+
+        bp = test_nrg.bind(params).bound_impl(precision=np.float64)
+        bps = [bp]
+
+        ctxt = custom_ops.Context(x0, v0, box, intg, bps)
+        test_du_dls, test_xs, test_boxes = ctxt.multiple_steps(np.zeros(10), 10, 10)
+        assert len(test_xs) == 1
+        assert len(test_du_dls) == 1
+        assert len(test_xs) == len(test_boxes)
+        # We should not get out the input frame
+        assert np.any(np.not_equal(x0, test_xs[0]))
+
+        # The current coordinates should match, as the number of steps and the interval match
+        np.testing.assert_array_equal(test_xs[0], ctxt.get_x_t())
+        _, test_frame_du_dl, _ = bps[0].execute(test_xs[0], test_boxes[0], 0.0)
+        np.testing.assert_array_equal(test_du_dls[0], test_frame_du_dl)
+
+        # Given an interval greater than the number of steps, return empty arrays
+        test_du_dls, test_xs, test_boxes = ctxt.multiple_steps(np.zeros(10), 100, 100)
+        assert len(test_xs) == 0
+        assert len(test_du_dls) == 0
+        assert len(test_boxes) == 0
+
+        # Given interval of 0, return the last frame
+        test_du_dls, test_xs, test_boxes = ctxt.multiple_steps(np.zeros(10), 0, 0)
+        assert len(test_xs) == 1
+        assert len(test_du_dls) == 1
+        assert len(test_boxes) == 1
+
+        np.testing.assert_array_equal(test_xs[0], ctxt.get_x_t())
+        _, test_frame_du_dl, _ = bps[0].execute(test_xs[0], test_boxes[0], 0.0)
+        np.testing.assert_array_equal(test_du_dls[0], test_frame_du_dl)
+
+    def test_multiple_steps_U_store_interval(self):
+        np.random.seed(2022)
+
+        N = 8
+        D = 3
+
+        x0 = np.random.rand(N, D).astype(dtype=np.float64) * 2
+
+        E = 2
+
+        lambda_plane_idxs = np.random.randint(low=0, high=2, size=N, dtype=np.int32)
+        lambda_offset_idxs = np.random.randint(low=0, high=2, size=N, dtype=np.int32)
+
+        params, _, test_nrg = prepare_nb_system(
+            x0,
+            E,
+            lambda_plane_idxs,
+            lambda_offset_idxs,
+            p_scale=3.0,
+            cutoff=1.0,
+        )
+
+        masses = np.random.rand(N)
+        v0 = np.random.rand(x0.shape[0], x0.shape[1])
+
+        temperature = 300
+        dt = 2e-3
+        friction = 0.0
+        ca, cbs, ccs = langevin_coefficients(temperature, dt, friction, masses)
+
+        box = np.eye(3) * 3.0
+        intg = custom_ops.LangevinIntegrator(dt, ca, cbs, ccs, 1234)
+
+        bp = test_nrg.bind(params).bound_impl(precision=np.float64)
+        bps = [bp]
+
+        lamb = 0.0
+        lamb_sched = np.linspace(0.0, 1.0, 5)
+
+        ctxt = custom_ops.Context(x0, v0, box, intg, bps)
+        test_us, test_xs, test_boxes = ctxt.multiple_steps_U(lamb, 10, lamb_sched, 10, 10)
+        assert len(test_xs) == 1
+        assert test_us.shape[0] == 1
+        assert test_us.shape[1] == len(lamb_sched)
+        assert len(test_xs) == len(test_boxes)
+        # We should not get out the input frame
+        assert np.any(np.not_equal(x0, test_xs[0]))
+
+        # The current coordinates should match, as the number of steps and the interval match
+        np.testing.assert_array_equal(test_xs[0], ctxt.get_x_t())
+        for i, window in enumerate(lamb_sched):
+            _, _, test_frame_u = bps[0].execute(test_xs[0], test_boxes[0], window)
+            np.testing.assert_array_equal(test_us[0][i], test_frame_u)
+
+        # Given an interval greater than the number of steps, return empty arrays
+        test_us, test_xs, test_boxes = ctxt.multiple_steps_U(lamb, 10, lamb_sched, 100, 100)
+        assert len(test_xs) == 0
+        assert len(test_us) == 0
+        assert len(test_boxes) == 0
+
+        # Given interval of 0, return the last frame
+        test_us, test_xs, test_boxes = ctxt.multiple_steps_U(lamb, 10, lamb_sched, 0, 0)
+        assert len(test_xs) == 1
+        assert test_us.shape[0] == 1
+        assert test_us.shape[1] == len(lamb_sched)
+        assert len(test_boxes) == 1
+
+        np.testing.assert_array_equal(test_xs[0], ctxt.get_x_t())
+        for i, window in enumerate(lamb_sched):
+            _, _, test_frame_u = bps[0].execute(test_xs[0], test_boxes[0], window)
+            np.testing.assert_array_equal(test_us[0][i], test_frame_u)
+
     def test_set_and_get(self):
         """
         This test the setters and getters in the context.
@@ -99,7 +236,7 @@ class TestContext(unittest.TestCase):
 
         v0 = np.random.rand(x0.shape[0], x0.shape[1])
 
-        num_steps = 5
+        num_steps = 12
         temperature = 300
         dt = 2e-3
         friction = 0.0
@@ -123,7 +260,8 @@ class TestContext(unittest.TestCase):
             all_du_dxs = []
             all_us = []
             all_lambda_us = []
-            for step in range(num_steps):
+
+            def compute_reference_values():
                 u = ref_nrg_fn(x_t, params, box, lamb)
                 all_us.append(u)
                 du_dl = dU_dl_fn(x_t, params, box, lamb)[0]
@@ -137,16 +275,20 @@ class TestContext(unittest.TestCase):
                 lus = []
                 for lamb_u in lambda_windows:
                     lus.append(ref_nrg_fn(x_t, params, box, lamb_u))
-
                 all_lambda_us.append(lus)
+
+            for step in range(num_steps):
+                compute_reference_values()
+
                 noise = np.random.randn(*v_t.shape)
 
-                v_mid = v_t + np.expand_dims(cbs, axis=-1) * du_dx
+                v_mid = v_t + np.expand_dims(cbs, axis=-1) * all_du_dxs[-1]
 
                 v_t = ca * v_mid + np.expand_dims(ccs, axis=-1) * noise
                 x_t += 0.5 * dt * (v_mid + v_t)
 
-                # note that we do not calculate the du_dl of the last frame.
+            # Compute them for the last set of coords
+            compute_reference_values()
             return all_xs, all_du_dxs, all_du_dps, all_du_dls, all_us, all_lambda_us
 
         box = np.eye(3) * 3.0
@@ -188,10 +330,10 @@ class TestContext(unittest.TestCase):
         start_box = ctxt_2.get_box()
         test_du_dls, test_xs, test_boxes = ctxt_2.multiple_steps(lambda_schedule, du_dl_interval, x_interval)
         end_box = ctxt_2.get_box()
+        # Need to offset by -1 as du_dl is computed on frame during step, not after step
+        np.testing.assert_allclose(test_du_dls, ref_all_du_dls[du_dl_interval - 1 :: du_dl_interval])
 
-        np.testing.assert_allclose(test_du_dls, ref_all_du_dls[::du_dl_interval])
-
-        np.testing.assert_allclose(test_xs, ref_all_xs[::x_interval])
+        np.testing.assert_allclose(test_xs, ref_all_xs[x_interval::x_interval])
         np.testing.assert_array_equal(start_box, end_box)
         for i in range(test_boxes.shape[0]):
             np.testing.assert_array_equal(start_box, test_boxes[i])
@@ -205,53 +347,15 @@ class TestContext(unittest.TestCase):
         u_interval = 3
 
         test_us, test_xs, test_boxes = ctxt_3.multiple_steps_U(lamb, num_steps, lambda_windows, u_interval, x_interval)
+        np.testing.assert_array_almost_equal(ref_all_lambda_us[u_interval::u_interval], test_us)
 
-        np.testing.assert_array_almost_equal(ref_all_lambda_us[::u_interval], test_us)
-
-        np.testing.assert_array_almost_equal(ref_all_xs[::x_interval], test_xs)
+        np.testing.assert_array_almost_equal(ref_all_xs[x_interval::x_interval], test_xs)
 
         test_us, test_xs, test_boxes = ctxt_3.multiple_steps_U(
             lamb, num_steps, np.array([], dtype=np.float64), u_interval, x_interval
         )
 
-        assert test_us.shape == (2, 0)
-
-
-class TestObservable(unittest.TestCase):
-    def test_avg_potential_param_sizes_is_zero(self):
-        np.random.seed(814)
-
-        N = 8
-        D = 3
-
-        x0 = np.random.rand(N, D).astype(dtype=np.float64) * 2
-
-        masses = np.random.rand(N)
-
-        v0 = np.random.rand(x0.shape[0], x0.shape[1])
-
-        num_steps = 3
-        ca = np.random.rand()
-        cbs = -np.random.rand(len(masses)) / 1
-        ccs = np.zeros_like(cbs)
-
-        dt = 2e-3
-        lamb = np.random.rand()
-        box = np.eye(3) * 1.5
-
-        intg = custom_ops.LangevinIntegrator(dt, ca, cbs, ccs, 814)
-
-        # Construct a 'bad' centroid restraint
-        potential = potentials.CentroidRestraint(
-            np.random.randint(N, size=5, dtype=np.int32), np.random.randint(N, size=5, dtype=np.int32), 10.0, 0.0
-        )
-        # Bind to empty params
-        bp = potential.bind(np.zeros(0)).bound_impl(precision=np.float64)
-
-        ctxt = custom_ops.Context(x0, v0, box, intg, [bp])
-
-        for _ in range(num_steps):
-            ctxt.step(lamb)
+        assert test_us.shape == (num_steps / u_interval, 0)
 
 
 if __name__ == "__main__":

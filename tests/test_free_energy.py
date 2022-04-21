@@ -95,7 +95,7 @@ def test_absolute_free_energy():
                 "prefix",
             )
 
-            dG, _, _ = estimator.deltaG(model, sys_params, subsample_interval=100)
+            dG, _, _ = estimator.deltaG(model, sys_params, subsample_interval=10)
             dGs.append(dG)
 
         return dGs[0] - dGs[1]
