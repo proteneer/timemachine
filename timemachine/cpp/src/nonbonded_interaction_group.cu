@@ -12,7 +12,6 @@
 #include "vendored/hilbert.h"
 
 #include "k_nonbonded.cuh"
-
 #include <string>
 
 namespace timemachine {

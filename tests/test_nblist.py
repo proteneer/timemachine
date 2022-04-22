@@ -94,30 +94,97 @@ def build_reference_ixn_list(coords: NDArray, box: NDArray, cutoff: float) -> Li
 
 
 def build_reference_ixn_list_with_subset(
-    coords: NDArray, box: NDArray, cutoff: float, row_atoms: int
-) -> List[List[float]]:
+    coords: NDArray, box: NDArray, cutoff: float, row_idxs: NDArray
+) -> List[List[int]]:
     N = coords.shape[0]
     block_size = 32
-    num_host_atoms = N - row_atoms
+    identity_idxs = np.arange(N)
+    col_idxs = np.delete(identity_idxs, row_idxs)
+    box_diag = np.diagonal(box)
 
-    col_coords = np.expand_dims(coords[:num_host_atoms], axis=0)
+    # Verify that the row_idxs and col_idxs are unique
+    np.testing.assert_array_equal(
+        np.sort(np.concatenate([col_idxs, row_idxs])),
+        identity_idxs,
+    )
+
+    col_coords = coords[col_idxs]
+    col_coords = np.expand_dims(col_coords, axis=0)
     # Compute the reference interactions of the ligand
     ref_ixn_list = []
-    row_atoms = coords[num_host_atoms:].shape[0]
-    num_blocks = (row_atoms + block_size - 1) // block_size
-    box_diag = np.diagonal(box)
+    all_row_coords = coords[row_idxs]
+    row_length = all_row_coords.shape[0]
+    num_blocks = (row_length + block_size - 1) // block_size
+
     for rbidx in range(num_blocks):
-        row_start = num_host_atoms + (rbidx * block_size)
-        row_end = min(num_host_atoms + ((rbidx + 1) * block_size), N)
-        row_coords = coords[row_start:row_end]
+        row_start = rbidx * block_size
+        row_end = min((rbidx + 1) * block_size, N)
+        row_coords = all_row_coords[row_start:row_end]
         row_coords = np.expand_dims(row_coords, axis=1)
         deltas = image_coords(row_coords - col_coords, box_diag)
 
         dij = np.linalg.norm(deltas, axis=-1)
         # Since the row and columns are unique, don't need to handle duplicates
         idxs = np.argwhere(np.any(dij < cutoff, axis=0))
+        # Get back the column indices that are ixns
+        idxs = col_idxs[idxs.reshape(-1)]
         ref_ixn_list.append(idxs.reshape(-1).tolist())
     return ref_ixn_list
+
+
+def assert_ixn_lists_are_equal(ref_ixn, test_ixn):
+    for bidx, (a, b) in enumerate(zip(ref_ixn, test_ixn)):
+        if sorted(a) != sorted(b):
+            print("TESTING bidx", bidx)
+            print(sorted(a))
+            print(sorted(b))
+        np.testing.assert_equal(sorted(a), sorted(b))
+
+
+def test_nblist_row_indices_are_order_independent():
+    D = 3
+    cutoff = 1.0
+    padding = 0.1
+
+    water_coords = get_water_coords(D, sort=False)
+    for size in [35, 64, 129, 1025, 1259, 2029]:
+        print("testing size:", size)
+
+        np.random.seed(1234)
+        water_idxs = np.random.choice(np.arange(water_coords.shape[0]), size, replace=False)
+        coords = water_coords[water_idxs]
+        diag = np.amax(coords, axis=0) - np.amin(coords, axis=0) + padding
+        box = np.diag(diag)
+
+        atom_idxs = np.random.choice(np.arange(coords.shape[0]), size // 2, replace=False)
+        atom_idxs = atom_idxs.astype(np.uint32)
+
+        reference_ixns = build_reference_ixn_list_with_subset(coords, box, cutoff, atom_idxs)
+        # Shuffle idxs, should still have the same set of interactions
+        shuffled_idxs = atom_idxs.copy()
+        np.random.shuffle(shuffled_idxs)
+
+        shuffled_ixns = build_reference_ixn_list_with_subset(coords, box, cutoff, shuffled_idxs)
+
+        # Verify that the ixns are the same, different ordering so each block will be different
+        reference_ixns_set = set(np.concatenate(reference_ixns).ravel())
+        shuffled_ixns_set = set(np.concatenate(shuffled_ixns).ravel())
+
+        np.testing.assert_array_equal(reference_ixns_set, shuffled_ixns_set)
+
+        # Verify that the C++ agrees
+        for nblist in [custom_ops.Neighborlist_f32(size), custom_ops.Neighborlist_f64(size)]:
+            nblist.set_row_idxs(atom_idxs)
+            test_ixn_list = nblist.get_nblist(coords, box, cutoff)
+            test_ixns_set = set(np.concatenate(test_ixn_list).ravel())
+            assert reference_ixns_set == test_ixns_set
+            assert_ixn_lists_are_equal(reference_ixns, test_ixn_list)
+
+            nblist.set_row_idxs(shuffled_idxs)
+            test_shuffle_ixn_list = nblist.get_nblist(coords, box, cutoff)
+            test_shuffle_ixns_set = set(np.concatenate(test_shuffle_ixn_list).ravel())
+            assert shuffled_ixns_set == test_shuffle_ixns_set
+            assert_ixn_lists_are_equal(shuffled_ixns, test_shuffle_ixn_list)
 
 
 def test_neighborlist():
@@ -152,51 +219,44 @@ def test_neighborlist():
 
                 assert len(ref_ixn_list) == len(test_ixn_list)
 
-                for bidx, (a, b) in enumerate(zip(ref_ixn_list, test_ixn_list)):
-                    if sorted(a) != sorted(b):
-                        print("TESTING bidx", bidx)
-                        print(sorted(a))
-                        print(sorted(b))
-                    np.testing.assert_equal(sorted(a), sorted(b))
+                assert_ixn_lists_are_equal(ref_ixn_list, test_ixn_list)
 
 
-def test_neighborlist_ligand_host_invalid_parameters():
-    cols = 10
-    rows = 5
-    box = np.eye(1)
-    cutoff = 1.0
-
-    # Constructing NBlist with rows > cols is invalid
-    with pytest.raises(RuntimeError) as e:
-        custom_ops.Neighborlist_f32(rows, cols)
-    assert "NR is greater than NC" in str(e.value)
+def test_neighborlist_invalid_row_idxs():
+    N = 3
 
     # Verify that the sizes of the rows and columns match how the NBlist was constructed
     for nblist in (
-        custom_ops.Neighborlist_f32(cols, rows),
-        custom_ops.Neighborlist_f64(cols, rows),
+        custom_ops.Neighborlist_f32(N),
+        custom_ops.Neighborlist_f64(N),
     ):
         with pytest.raises(RuntimeError) as e:
-            # Flip the order of rows and columns
-            nblist.get_nblist_host_ligand(
-                np.random.rand(rows, 3),
-                np.random.rand(cols, 3),
-                box,
-                cutoff,
-            )
-            assert "NC != NC_" in str(e.value)
+            nblist.set_row_idxs(np.zeros(0, dtype=np.uint32))
+        assert "idxs can't be empty" == str(e.value)
+
+        with pytest.raises(RuntimeError) as e:
+            nblist.set_row_idxs(np.zeros(2, dtype=np.uint32))
+        assert "atom indices must be unique" == str(e.value)
+
+        with pytest.raises(RuntimeError) as e:
+            nblist.set_row_idxs(np.arange(N * 5, dtype=np.uint32))
+        assert "number of idxs must be less than N" == str(e.value)
+
+        with pytest.raises(RuntimeError) as e:
+            nblist.set_row_idxs(np.arange(N - 1, dtype=np.uint32) * N * 5)
+        assert "indices values must be less than N" == str(e.value)
 
 
-def test_neighborlist_ligand_host():
+def test_neighborlist_on_subset_of_system():
     ligand = hif2a_ligand_pair.mol_a
     ligand_coords = get_romol_conf(ligand)
-    num_ligand_atoms = ligand_coords.shape[0]
 
     system, host_coords, box, top = build_water_system(4.0)
     num_host_atoms = host_coords.shape[0]
     host_coords = np.array(host_coords)
 
     coords = np.concatenate([host_coords, ligand_coords])
+    N = coords.shape[0]
 
     D = 3
     cutoff = 1.0
@@ -206,27 +266,34 @@ def test_neighborlist_ligand_host():
     diag = np.amax(coords, axis=0) - np.amin(coords, axis=0) + padding
     box = np.eye(3) * diag
 
-    # Can only sort the host coords, but not the row/ligand
+    atom_idxs = np.arange(num_host_atoms, N, dtype=np.uint32)
     sort = True
     if sort:
-        perm = hilbert_sort(coords[:num_host_atoms] + np.argmin(coords[:num_host_atoms]), D)
-        coords[:num_host_atoms] = coords[:num_host_atoms][perm]
+        perm = hilbert_sort(coords + np.argmin(coords), D)
+        coords = coords[perm]
+        # Get the new idxs of the ligand atoms
+        atom_idxs = np.isin(perm, atom_idxs).nonzero()[0]
+    atom_idxs = atom_idxs.astype(np.uint32)
 
-    ref_ixn_list = build_reference_ixn_list_with_subset(coords, box, cutoff, num_ligand_atoms)
+    reference_subset_ixns = build_reference_ixn_list_with_subset(coords, box, cutoff, atom_idxs)
+    reference_complete_ixns = build_reference_ixn_list(coords, box, cutoff)
 
     for nblist in (
-        custom_ops.Neighborlist_f32(num_host_atoms, num_ligand_atoms),
-        custom_ops.Neighborlist_f64(num_host_atoms, num_ligand_atoms),
+        custom_ops.Neighborlist_f32(N),
+        custom_ops.Neighborlist_f64(N),
     ):
+        nblist.set_row_idxs(atom_idxs)
         for _ in range(2):
 
-            test_ixn_list = nblist.get_nblist_host_ligand(coords[:num_host_atoms], coords[num_host_atoms:], box, cutoff)
+            test_ixn_list = nblist.get_nblist(coords, box, cutoff)
             # compute the sparsity of the tile
-            assert len(ref_ixn_list) == len(test_ixn_list), "Number of blocks with interactions don't agree"
+            assert len(reference_subset_ixns) == len(test_ixn_list), "Number of blocks with interactions don't agree"
 
-            for bidx, (a, b) in enumerate(zip(ref_ixn_list, test_ixn_list)):
-                if sorted(a) != sorted(b):
-                    print("TESTING bidx", bidx)
-                    print(sorted(a))
-                    print(sorted(b))
-                np.testing.assert_equal(sorted(a), sorted(b))
+            assert_ixn_lists_are_equal(reference_subset_ixns, test_ixn_list)
+        # Verify that you can reset the indices and go back to the regular neighborlist
+        nblist.reset_row_idxs()
+        test_ixn_list = nblist.get_nblist(coords, box, cutoff)
+        # compute the sparsity of the tile
+        assert len(reference_complete_ixns) == len(test_ixn_list), "Number of blocks with interactions don't agree"
+
+        assert_ixn_lists_are_equal(reference_complete_ixns, test_ixn_list)
