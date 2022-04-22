@@ -32,5 +32,6 @@ template <typename T> void DeviceBuffer<T>::copy_to(T *host_buffer) const {
 }
 
 template class DeviceBuffer<double>;
+template class DeviceBuffer<unsigned int>;
 template class DeviceBuffer<unsigned long long>;
 } // namespace timemachine

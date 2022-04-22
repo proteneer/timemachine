@@ -7,7 +7,7 @@
 #include <vector>
 
 typedef void (*k_nonbonded_fn)(
-    const int NC,
+    const int N,
     const int NR,
     const double *__restrict__ coords,
     const double *__restrict__ params, // [N]
@@ -17,6 +17,7 @@ typedef void (*k_nonbonded_fn)(
     const double *__restrict__ dw_dl,    // 4D derivatives
     const double beta,
     const double cutoff,
+    const unsigned int *__restrict__ row_idxs,
     const int *__restrict__ ixn_tiles,
     const unsigned int *__restrict__ ixn_atoms,
     unsigned long long *__restrict__ du_dx,
