@@ -380,7 +380,7 @@ void NonbondedAllPairs<RealType, Interpolated>::execute_device(
 
     kernel_ptrs_[kernel_idx]<<<p_ixn_count_[0], tpb, 0, stream>>>(
         K_,
-        0,
+        nblist_.get_num_row_idxs(),
         d_gathered_x_,
         d_gathered_p_,
         d_box,
@@ -389,6 +389,7 @@ void NonbondedAllPairs<RealType, Interpolated>::execute_device(
         d_gathered_dw_dl_,
         beta_,
         cutoff_,
+        nblist_.get_row_idxs(),
         nblist_.get_ixn_tiles(),
         nblist_.get_ixn_atoms(),
         d_gathered_du_dx_,

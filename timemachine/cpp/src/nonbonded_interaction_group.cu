@@ -49,7 +49,7 @@ NonbondedInteractionGroup<RealType, Interpolated>::NonbondedInteractionGroup(
                     &k_nonbonded_unified<RealType, 1, 1, 1, 0>,
                     &k_nonbonded_unified<RealType, 1, 1, 1, 1>}),
 
-      beta_(beta), cutoff_(cutoff), nblist_(NC_, NR_), nblist_padding_(0.1), d_sort_storage_(nullptr),
+      beta_(beta), cutoff_(cutoff), nblist_(N_), nblist_padding_(0.1), d_sort_storage_(nullptr),
       d_sort_storage_bytes_(0), disable_hilbert_(false),
 
       compute_w_coords_instance_(kernel_cache_.program(kernel_src.c_str()).kernel("k_compute_w_coords").instantiate()),
@@ -150,6 +150,11 @@ NonbondedInteractionGroup<RealType, Interpolated>::NonbondedInteractionGroup(
 
     gpuErrchk(cudaPeekAtLastError());
     gpuErrchk(cudaMalloc(&d_sort_storage_, d_sort_storage_bytes_));
+    // We will sort so that the row atoms are always first for the nblist. Cheaper to set once than to
+    // recompute the idxs from the permuation
+    std::vector<unsigned int> row_atoms(NR_);
+    std::iota(row_atoms.begin(), row_atoms.end(), 0);
+    nblist_.set_row_idxs(row_atoms);
 };
 
 template <typename RealType, bool Interpolated>
@@ -206,7 +211,7 @@ void NonbondedInteractionGroup<RealType, Interpolated>::hilbert_sort(
     unsigned int *d_perm,
     cudaStream_t stream) {
 
-    const int tpb = 32;
+    const int tpb = warp_size;
     const int B = ceil_divide(N, tpb);
 
     k_coords_to_kv_gather<<<B, tpb, 0, stream>>>(
@@ -276,7 +281,7 @@ void NonbondedInteractionGroup<RealType, Interpolated>::execute_device(
 
     // identify which tiles contain interpolated parameters
 
-    const int tpb = 32;
+    const int tpb = warp_size;
     const int B = ceil_divide(N_, tpb);
 
     // (ytz) see if we need to rebuild the neighborlist.
@@ -297,21 +302,20 @@ void NonbondedInteractionGroup<RealType, Interpolated>::execute_device(
         // (ytz): update the permutation index before building neighborlist, as the neighborlist is tied
         // to a particular sort order
         if (!disable_hilbert_) {
-            this->hilbert_sort(NC_, d_col_atom_idxs_, d_x, d_box, d_perm_, stream);
-            this->hilbert_sort(NR_, d_row_atom_idxs_, d_x, d_box, d_perm_ + NC_, stream);
+            this->hilbert_sort(NR_, d_row_atom_idxs_, d_x, d_box, d_perm_, stream);
+            this->hilbert_sort(NC_, d_col_atom_idxs_, d_x, d_box, d_perm_ + NR_, stream);
         } else {
             gpuErrchk(cudaMemcpyAsync(
-                d_perm_, d_col_atom_idxs_, NC_ * sizeof(*d_col_atom_idxs_), cudaMemcpyDeviceToDevice, stream));
+                d_perm_, d_row_atom_idxs_, NR_ * sizeof(*d_row_atom_idxs_), cudaMemcpyDeviceToDevice, stream));
             gpuErrchk(cudaMemcpyAsync(
-                d_perm_ + NC_, d_row_atom_idxs_, NR_ * sizeof(*d_row_atom_idxs_), cudaMemcpyDeviceToDevice, stream));
+                d_perm_ + NR_, d_col_atom_idxs_, NC_ * sizeof(*d_col_atom_idxs_), cudaMemcpyDeviceToDevice, stream));
         }
 
         // compute new coordinates, new lambda_idxs, new_plane_idxs
         k_gather<<<dimGrid, tpb, 0, stream>>>(N_, d_perm_, d_x, d_sorted_x_);
         gpuErrchk(cudaPeekAtLastError());
 
-        nblist_.build_nblist_device(
-            NC_, NR_, d_sorted_x_, d_sorted_x_ + 3 * NC_, d_box, cutoff_ + nblist_padding_, stream);
+        nblist_.build_nblist_device(N_, d_sorted_x_, d_box, cutoff_ + nblist_padding_, stream);
         gpuErrchk(cudaMemcpyAsync(
             p_ixn_count_, nblist_.get_ixn_count(), 1 * sizeof(*p_ixn_count_), cudaMemcpyDeviceToHost, stream));
 
@@ -391,8 +395,8 @@ void NonbondedInteractionGroup<RealType, Interpolated>::execute_device(
     kernel_idx |= d_u ? 1 << 3 : 0;
 
     kernel_ptrs_[kernel_idx]<<<p_ixn_count_[0], tpb, 0, stream>>>(
-        NC_,
-        NR_,
+        N,
+        nblist_.get_num_row_idxs(),
         d_sorted_x_,
         d_sorted_p_,
         d_box,
@@ -401,6 +405,7 @@ void NonbondedInteractionGroup<RealType, Interpolated>::execute_device(
         d_sorted_dw_dl_,
         beta_,
         cutoff_,
+        nblist_.get_row_idxs(),
         nblist_.get_ixn_tiles(),
         nblist_.get_ixn_atoms(),
         d_sorted_du_dx_,
