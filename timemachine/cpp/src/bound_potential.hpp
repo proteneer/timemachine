@@ -18,7 +18,7 @@ struct BoundPotential {
         const double *h_p);
 
     std::vector<int> shape;
-    DeviceBuffer<double> d_p;
+    std::unique_ptr<DeviceBuffer<double>> d_p;
     std::shared_ptr<Potential> potential;
 
     int size() const;
@@ -43,7 +43,17 @@ struct BoundPotential {
         unsigned long long *d_u,
         cudaStream_t stream) {
         this->potential->execute_device(
-            N, this->size(), d_x, this->d_p.data, d_box, lambda, d_du_dx, d_du_dp, d_du_dl, d_u, stream);
+            N,
+            this->size(),
+            d_x,
+            this->size() > 0 ? this->d_p->data : nullptr,
+            d_box,
+            lambda,
+            d_du_dx,
+            d_du_dp,
+            d_du_dl,
+            d_u,
+            stream);
     }
 };
 

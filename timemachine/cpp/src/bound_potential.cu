@@ -4,8 +4,11 @@
 namespace timemachine {
 
 BoundPotential::BoundPotential(std::shared_ptr<Potential> potential, std::vector<int> shape, const double *h_p)
-    : shape(shape), d_p(this->size()), potential(potential) {
-    d_p.copy_from(h_p);
+    : shape(shape), d_p(nullptr), potential(potential) {
+    if (this->size() > 0) {
+        d_p.reset(new DeviceBuffer<double>(this->size()));
+        d_p->copy_from(h_p);
+    }
 }
 
 void BoundPotential::execute_host(
