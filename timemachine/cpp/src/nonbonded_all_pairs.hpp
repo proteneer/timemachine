@@ -1,6 +1,7 @@
 #pragma once
 
 #include "neighborlist.hpp"
+#include "nonbonded_common.cuh"
 #include "potential.hpp"
 #include "vendored/jitify.hpp"
 #include <array>
@@ -9,24 +10,6 @@
 #include <vector>
 
 namespace timemachine {
-
-typedef void (*k_nonbonded_fn)(
-    const int NC,
-    const int NR,
-    const double *__restrict__ coords,
-    const double *__restrict__ params, // [N]
-    const double *__restrict__ box,
-    const double *__restrict__ dl_dp,
-    const double *__restrict__ coords_w, // 4D coords
-    const double *__restrict__ dw_dl,    // 4D derivatives
-    const double beta,
-    const double cutoff,
-    const int *__restrict__ ixn_tiles,
-    const unsigned int *__restrict__ ixn_atoms,
-    unsigned long long *__restrict__ du_dx,
-    unsigned long long *__restrict__ du_dp,
-    unsigned long long *__restrict__ du_dl_buffer,
-    unsigned long long *__restrict__ u_buffer);
 
 template <typename RealType, bool Interpolated> class NonbondedAllPairs : public Potential {
 
