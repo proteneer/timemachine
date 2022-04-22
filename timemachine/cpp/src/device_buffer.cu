@@ -5,10 +5,11 @@
 namespace timemachine {
 
 template <typename T> T *allocate(const std::size_t length) {
-    T *buffer = nullptr;
-    if (length > 0) {
-        gpuErrchk(cudaMalloc(&buffer, length * sizeof(T)));
+    if (length < 1) {
+        throw std::runtime_error("device buffer length must at least be 1");
     }
+    T *buffer;
+    gpuErrchk(cudaMalloc(&buffer, length * sizeof(T)));
     return buffer;
 }
 
