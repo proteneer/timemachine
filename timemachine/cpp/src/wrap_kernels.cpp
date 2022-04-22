@@ -827,12 +827,6 @@ template <typename RealType> void declare_periodic_torsion(py::module &m, const 
             py::arg("lamb_offset") = py::none());
 }
 
-// stackoverflow
-std::string dirname(const std::string &fname) {
-    size_t pos = fname.find_last_of("\\/");
-    return (std::string::npos == pos) ? "" : fname.substr(0, pos);
-}
-
 std::set<int> unique_idxs(const std::vector<int> &idxs) {
     std::set<int> unique_idxs(idxs.begin(), idxs.end());
     if (unique_idxs.size() < idxs.size()) {
