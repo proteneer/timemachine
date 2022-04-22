@@ -31,12 +31,7 @@ template <typename RealType> void declare_neighborlist(py::module &m, const char
     using Class = timemachine::Neighborlist<RealType>;
     std::string pyclass_name = std::string("Neighborlist_") + typestr;
     py::class_<Class>(m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
-        .def(
-            py::init([](int NC, std::optional<int> NR) {
-                return new timemachine::Neighborlist<RealType>(NC, NR.has_value() ? NR.value() : 0);
-            }),
-            py::arg("NC"),
-            py::arg("NR") = py::none())
+        .def(py::init([](int N) { return new timemachine::Neighborlist<RealType>(N); }), py::arg("N"))
         .def(
             "compute_block_bounds",
             [](timemachine::Neighborlist<RealType> &nblist,
@@ -50,13 +45,16 @@ template <typename RealType> void declare_neighborlist(py::module &m, const char
 
                 int N = coords.shape()[0];
                 int D = coords.shape()[1];
+                if (D != 3) {
+                    throw std::runtime_error("Dimensions must be 3");
+                }
                 int B = (N + block_size - 1) / block_size;
 
                 py::array_t<double, py::array::c_style> py_bb_ctrs({B, D});
                 py::array_t<double, py::array::c_style> py_bb_exts({B, D});
 
                 nblist.compute_block_bounds_host(
-                    N, D, coords.data(), box.data(), py_bb_ctrs.mutable_data(), py_bb_exts.mutable_data());
+                    N, coords.data(), box.data(), py_bb_ctrs.mutable_data(), py_bb_exts.mutable_data());
 
                 return py::make_tuple(py_bb_ctrs, py_bb_exts);
             })
@@ -71,22 +69,20 @@ template <typename RealType> void declare_neighborlist(py::module &m, const char
                 std::vector<std::vector<int>> ixn_list = nblist.get_nblist_host(N, coords.data(), box.data(), cutoff);
 
                 return ixn_list;
-            })
+            },
+            py::arg("coords"),
+            py::arg("box"),
+            py::arg("cutoff"))
         .def(
-            "get_nblist_host_ligand",
+            "set_row_idxs",
             [](timemachine::Neighborlist<RealType> &nblist,
-               const py::array_t<double, py::array::c_style> &coords,
-               const py::array_t<double, py::array::c_style> &row_coords,
-               const py::array_t<double, py::array::c_style> &box,
-               const double cutoff) -> std::vector<std::vector<int>> {
-                const int N = coords.shape()[0];
-                const int K = row_coords.shape()[0];
-
-                std::vector<std::vector<int>> ixn_list =
-                    nblist.get_nblist_host(N, K, coords.data(), row_coords.data(), box.data(), cutoff);
-
-                return ixn_list;
-            });
+               const py::array_t<unsigned int, py::array::c_style> &idxs_i) {
+                std::vector<unsigned int> idxs(idxs_i.size());
+                std::memcpy(idxs.data(), idxs_i.data(), idxs_i.size() * sizeof(unsigned int));
+                nblist.set_row_idxs(idxs);
+            },
+            py::arg("idxs"))
+        .def("reset_row_idxs", &timemachine::Neighborlist<RealType>::reset_row_idxs);
 }
 
 void declare_context(py::module &m) {
