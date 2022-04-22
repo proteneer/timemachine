@@ -317,7 +317,7 @@ template <
     bool COMPUTE_DU_DP>
 // void __device__ __forceinline__ v_nonbonded_unified(
 void __device__ v_nonbonded_unified(
-    const int NC,
+    const int N,
     const int NR,
     const double *__restrict__ coords,
     const double *__restrict__ params, // [N]
@@ -329,6 +329,7 @@ void __device__ v_nonbonded_unified(
     // const int * __restrict__ lambda_offset_idxs, // 0 or 1, how much we offset from the plane by cutoff
     const double beta,
     const double cutoff,
+    const unsigned int *__restrict__ row_idxs,
     const int *__restrict__ ixn_tiles,
     const unsigned int *__restrict__ ixn_atoms,
     unsigned long long *__restrict__ du_dx,
@@ -348,15 +349,10 @@ void __device__ v_nonbonded_unified(
 
     int row_block_idx = ixn_tiles[tile_idx];
 
-    int atom_i_idx = row_block_idx * 32 + threadIdx.x;
+    const int index = row_block_idx * 32 + threadIdx.x;
+    const unsigned int atom_i_idx = index < NR ? row_idxs[index] : N;
     // int lambda_offset_i = atom_i_idx < N ? lambda_offset_idxs[atom_i_idx] : 0;
     // int lambda_plane_i = atom_i_idx < N ? lambda_plane_idxs[atom_i_idx] : 0;
-
-    const int N = NC + NR;
-
-    if (NR != 0) {
-        atom_i_idx += NC;
-    }
 
     RealType ci_x = atom_i_idx < N ? coords[atom_i_idx * 3 + 0] : 0;
     RealType ci_y = atom_i_idx < N ? coords[atom_i_idx * 3 + 1] : 0;
@@ -390,15 +386,15 @@ void __device__ v_nonbonded_unified(
     // int lambda_offset_j = atom_j_idx < N ? lambda_offset_idxs[atom_j_idx] : 0;
     // int lambda_plane_j = atom_j_idx < N ? lambda_plane_idxs[atom_j_idx] : 0;
 
-    RealType cj_x = atom_j_idx < NC ? coords[atom_j_idx * 3 + 0] : 0;
-    RealType cj_y = atom_j_idx < NC ? coords[atom_j_idx * 3 + 1] : 0;
-    RealType cj_z = atom_j_idx < NC ? coords[atom_j_idx * 3 + 2] : 0;
-    RealType cj_w = atom_j_idx < NC ? coords_w[atom_j_idx] : 0;
+    RealType cj_x = atom_j_idx < N ? coords[atom_j_idx * 3 + 0] : 0;
+    RealType cj_y = atom_j_idx < N ? coords[atom_j_idx * 3 + 1] : 0;
+    RealType cj_z = atom_j_idx < N ? coords[atom_j_idx * 3 + 2] : 0;
+    RealType cj_w = atom_j_idx < N ? coords_w[atom_j_idx] : 0;
 
-    RealType dq_dl_j = atom_j_idx < NC ? dp_dl[atom_j_idx * 3 + 0] : 0;
-    RealType dsig_dl_j = atom_j_idx < NC ? dp_dl[atom_j_idx * 3 + 1] : 0;
-    RealType deps_dl_j = atom_j_idx < NC ? dp_dl[atom_j_idx * 3 + 2] : 0;
-    RealType dw_dl_j = atom_j_idx < NC ? dw_dl[atom_j_idx] : 0;
+    RealType dq_dl_j = atom_j_idx < N ? dp_dl[atom_j_idx * 3 + 0] : 0;
+    RealType dsig_dl_j = atom_j_idx < N ? dp_dl[atom_j_idx * 3 + 1] : 0;
+    RealType deps_dl_j = atom_j_idx < N ? dp_dl[atom_j_idx * 3 + 2] : 0;
+    RealType dw_dl_j = atom_j_idx < N ? dw_dl[atom_j_idx] : 0;
 
     unsigned long long gj_x = 0;
     unsigned long long gj_y = 0;
@@ -408,9 +404,9 @@ void __device__ v_nonbonded_unified(
     int lj_param_idx_sig_j = atom_j_idx * 3 + 1;
     int lj_param_idx_eps_j = atom_j_idx * 3 + 2;
 
-    RealType qj = atom_j_idx < NC ? params[charge_param_idx_j] : 0;
-    RealType sig_j = atom_j_idx < NC ? params[lj_param_idx_sig_j] : 0;
-    RealType eps_j = atom_j_idx < NC ? params[lj_param_idx_eps_j] : 0;
+    RealType qj = atom_j_idx < N ? params[charge_param_idx_j] : 0;
+    RealType sig_j = atom_j_idx < N ? params[lj_param_idx_sig_j] : 0;
+    RealType eps_j = atom_j_idx < N ? params[lj_param_idx_eps_j] : 0;
 
     unsigned long long g_qj = 0;
     unsigned long long g_sigj = 0;
@@ -445,17 +441,14 @@ void __device__ v_nonbonded_unified(
             d2ij += delta_w * delta_w;
         }
 
-        const bool valid_ij =
-            atom_i_idx < N &&
-            ((NR == 0) ? atom_i_idx < atom_j_idx && atom_j_idx < N // all-pairs case, only compute the upper tri
-                                                                   //   0  <= i < N, i < j < N
-                       : atom_j_idx < NC);                         // ixn groups case, compute all pairwise ixns
-                                                                   //   NC <= i < N, 0 <= j < NC
+        // All idxs must be smaller than N and if N == NR then we are doing upper triangle and thus atom_i_idx
+        // must be less than atom_j_idx
+        const bool valid_ij = atom_i_idx < N && atom_j_idx < N && N == NR ? atom_i_idx < atom_j_idx : true;
 
         // (ytz): note that d2ij must be *strictly* less than cutoff_squared. This is because we set the
         // non-interacting atoms to exactly real_cutoff*real_cutoff. This ensures that atoms who's 4th dimension
         // is set to cutoff are non-interacting.
-        if (d2ij < cutoff_squared && valid_ij) {
+        if (valid_ij && d2ij < cutoff_squared) {
             // electrostatics
             RealType u;
             RealType es_prefactor;
@@ -595,8 +588,8 @@ void __device__ v_nonbonded_unified(
 
 template <typename RealType, bool COMPUTE_U, bool COMPUTE_DU_DX, bool COMPUTE_DU_DL, bool COMPUTE_DU_DP>
 void __global__ k_nonbonded_unified(
-    const int NC,
-    const int NR,
+    const int N,
+    const int NR, // Number of row indices
     const double *__restrict__ coords,
     const double *__restrict__ params, // [N]
     const double *__restrict__ box,
@@ -605,6 +598,7 @@ void __global__ k_nonbonded_unified(
     const double *__restrict__ dw_dl,    // 4D derivatives
     const double beta,
     const double cutoff,
+    const unsigned int *__restrict__ row_idxs,
     const int *__restrict__ ixn_tiles,
     const unsigned int *__restrict__ ixn_atoms,
     unsigned long long *__restrict__ du_dx,
@@ -614,13 +608,8 @@ void __global__ k_nonbonded_unified(
 
     int tile_idx = blockIdx.x;
     int row_block_idx = ixn_tiles[tile_idx];
-    int atom_i_idx = row_block_idx * 32 + threadIdx.x;
-
-    const int N = NC + NR;
-
-    if (NR != 0) {
-        atom_i_idx += NC;
-    }
+    int index = row_block_idx * 32 + threadIdx.x;
+    const unsigned int atom_i_idx = index < NR ? row_idxs[index] : N;
 
     RealType dq_dl_i = atom_i_idx < N ? dp_dl[atom_i_idx * 3 + 0] : 0;
     RealType dsig_dl_i = atom_i_idx < N ? dp_dl[atom_i_idx * 3 + 1] : 0;
@@ -642,7 +631,7 @@ void __global__ k_nonbonded_unified(
 
     if (tile_is_vanilla) {
         v_nonbonded_unified<RealType, 0, COMPUTE_U, COMPUTE_DU_DX, COMPUTE_DU_DL, COMPUTE_DU_DP>(
-            NC,
+            N,
             NR,
             coords,
             params,
@@ -652,6 +641,7 @@ void __global__ k_nonbonded_unified(
             dw_dl,
             beta,
             cutoff,
+            row_idxs,
             ixn_tiles,
             ixn_atoms,
             du_dx,
@@ -660,7 +650,7 @@ void __global__ k_nonbonded_unified(
             u_buffer);
     } else {
         v_nonbonded_unified<RealType, 1, COMPUTE_U, COMPUTE_DU_DX, COMPUTE_DU_DL, COMPUTE_DU_DP>(
-            NC,
+            N,
             NR,
             coords,
             params,
@@ -670,6 +660,7 @@ void __global__ k_nonbonded_unified(
             dw_dl,
             beta,
             cutoff,
+            row_idxs,
             ixn_tiles,
             ixn_atoms,
             du_dx,
