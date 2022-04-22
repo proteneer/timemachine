@@ -86,3 +86,13 @@ template <> inline __device__ float fast_vec_norm<float, 4>(const float v[4]) {
 template <> inline __device__ double fast_vec_norm<double, 4>(const double v[4]) {
     return norm4d(v[0], v[1], v[2], v[3]);
 };
+
+// These are two lines of code are to deal with the formation of a non-commutative fma.
+// For more information, see: https://github.com/proteneer/timemachine/issues/386
+float __device__ __forceinline__ fix_nvidia_fmad(float a, float b, float c, float d) {
+    return __fmul_rn(a, b) + __fmul_rn(c, d);
+}
+
+double __device__ __forceinline__ fix_nvidia_fmad(double a, double b, double c, double d) {
+    return __dmul_rn(a, b) + __dmul_rn(c, d);
+}
