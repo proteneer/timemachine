@@ -6,6 +6,24 @@
 #include <set>
 #include <vector>
 
+typedef void (*k_nonbonded_fn)(
+    const int NC,
+    const int NR,
+    const double *__restrict__ coords,
+    const double *__restrict__ params, // [N]
+    const double *__restrict__ box,
+    const double *__restrict__ dl_dp,
+    const double *__restrict__ coords_w, // 4D coords
+    const double *__restrict__ dw_dl,    // 4D derivatives
+    const double beta,
+    const double cutoff,
+    const int *__restrict__ ixn_tiles,
+    const unsigned int *__restrict__ ixn_atoms,
+    unsigned long long *__restrict__ du_dx,
+    unsigned long long *__restrict__ du_dp,
+    unsigned long long *__restrict__ du_dl_buffer,
+    unsigned long long *__restrict__ u_buffer);
+
 #define PI 3.141592653589793115997963468544185161
 #define TWO_OVER_SQRT_PI 1.128379167095512595889238330988549829708
 
