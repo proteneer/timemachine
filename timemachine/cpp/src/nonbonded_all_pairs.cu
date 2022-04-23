@@ -420,7 +420,7 @@ void NonbondedAllPairs<RealType, Interpolated>::execute_device(
     // this needs to be an accumulated permute
     if (d_du_dp) {
         // scattered assignment updates K_ <= N_ elements; the rest should be 0
-        gpuErrchk(cudaMemset(d_du_dp_buffer_, 0, N_ * 3 * sizeof(*d_du_dp_buffer_)));
+        gpuErrchk(cudaMemsetAsync(d_du_dp_buffer_, 0, N_ * 3 * sizeof(*d_du_dp_buffer_), stream));
         k_scatter_assign<<<dim3(ceil_divide(K_, tpb), 3, 1), tpb, 0, stream>>>(
             K_, d_sorted_atom_idxs_, d_gathered_du_dp_, d_du_dp_buffer_);
         gpuErrchk(cudaPeekAtLastError());
