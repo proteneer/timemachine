@@ -135,7 +135,9 @@ def set_up_ahfe_system_for_smc(mol, n_walkers, n_windows, n_md_steps, resample_t
     sample_inds = np.random.choice(np.arange(len(initial_samples)), size=n_walkers)
     samples = [initial_samples[i] for i in sample_inds]
 
+    # note: tm convention lambda=1 means "decoupled", lambda=0 means "coupled"
     lambdas = construct_pre_optimized_absolute_lambda_schedule_solvent(n_windows)[::-1]
+    assert np.isclose(lambdas[0], 1.0) and np.isclose(lambdas[-1], 0.0)
 
     def propagate(xs, lam):
         mover.lamb = lam
