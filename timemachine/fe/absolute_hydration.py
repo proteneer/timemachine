@@ -61,7 +61,7 @@ def generate_endstate_samples(
     ligand_xvs = enhanced.sample_from_log_weights(ligand_samples, ligand_log_weights, size=num_samples)
 
     # sample uniformly with replacement
-    solvent_choice_idxs = np.random.choice(np.arange(len(solvent_samples)), size=num_samples)
+    solvent_choice_idxs = np.random.choice(len(solvent_samples), size=num_samples)
 
     all_xvbs = []
     for i, choice_idx in enumerate(solvent_choice_idxs):
