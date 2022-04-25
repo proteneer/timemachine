@@ -1,8 +1,10 @@
 """Absolute hydration free energies"""
 
 from functools import partial
+from typing import List, Sequence
 
 import numpy as np
+from numpy.typing import NDArray as Array
 
 from timemachine.constants import BOLTZ
 from timemachine.fe import functional
@@ -13,7 +15,13 @@ from timemachine.md.smc import conditional_multinomial_resample
 from timemachine.md.states import CoordsVelBox
 
 
-def generate_endstate_samples(num_samples, solvent_samples, ligand_samples, ligand_log_weights, num_ligand_atoms):
+def generate_endstate_samples(
+    num_samples: int,
+    solvent_samples: Sequence[CoordsVelBox],
+    ligand_samples: Sequence[CoordsVelBox],
+    ligand_log_weights: Array,
+    num_ligand_atoms: int,
+) -> List[CoordsVelBox]:
     """solvent + (noninteracting ligand) sample --> solvent + (vacuum ligand) sample
 
     Inputs
@@ -27,11 +35,9 @@ def generate_endstate_samples(num_samples, solvent_samples, ligand_samples, liga
     * resample ligand_samples according to ligand_log_weights
     * concatenate solvent component from p_noninteracting with ligand from p_vacuum
 
-
     Returns
     -------
-    * list of (coordinates, velocities, box), distributed according to
-
+    * list of (coordinates, velocities, box), distributed according to p_noninteracting
 
     Assumptions
     -----------
@@ -41,6 +47,8 @@ def generate_endstate_samples(num_samples, solvent_samples, ligand_samples, liga
     -----
     * TODO[generality]: refactor to accept two streams of unweighted samples, concatenate them
         (rather than requiring and discarding ligand component in solvent_samples, performing multinomial resampling)
+    * TODO[logic]: generate solvent samples once independently of ligand
+        (rather than duplicating work of solvent sampling across all ligands)
     """
 
     # assume this layout
