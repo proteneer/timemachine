@@ -1,6 +1,9 @@
+from typing import List
+
 import numpy as np
 import pytest
 from common import hilbert_sort
+from numpy.typing import NDArray
 
 from timemachine.fe.utils import get_romol_conf
 from timemachine.lib import custom_ops
@@ -21,7 +24,7 @@ def test_block_bounds():
 
         coords = np.random.randn(N, D)
         box_diag = np.random.rand(3) + 1
-        box = np.diag(box_diag)
+        box = np.eye(3) * box_diag
         num_blocks = (N + block_size - 1) // block_size
 
         ref_ctrs = []
@@ -59,59 +62,93 @@ def get_water_coords(D, sort=False):
     return x
 
 
+def image_coords(x: NDArray, box_diag: NDArray) -> NDArray:
+    return x - box_diag * np.floor(x / box_diag + 0.5)
+
+
+def build_reference_ixn_list(coords: NDArray, box: NDArray, cutoff: float) -> List[List[float]]:
+    # compute the sparsity of the tile
+    ref_ixn_list = []
+    N = coords.shape[0]
+
+    block_size = 32
+
+    num_blocks = (N + block_size - 1) // block_size
+    col_coords = np.expand_dims(coords, axis=0)
+
+    box_diag = np.diagonal(box)
+    for rbidx in range(num_blocks):
+        row_start = rbidx * block_size
+        row_end = min((rbidx + 1) * block_size, N)
+        row_coords = coords[row_start:row_end]
+        row_coords = np.expand_dims(row_coords, axis=1)
+
+        deltas = image_coords(row_coords - col_coords, box_diag)
+
+        # block size x N, tbd make periodic
+        dij = np.linalg.norm(deltas, axis=-1)
+        dij[:, :row_start] = cutoff  # slight hack to discard duplicates
+        idxs = np.argwhere(np.any(dij < cutoff, axis=0))
+        ref_ixn_list.append(idxs.reshape(-1).tolist())
+    return ref_ixn_list
+
+
+def build_reference_ixn_list_with_subset(
+    coords: NDArray, box: NDArray, cutoff: float, row_atoms: int
+) -> List[List[float]]:
+    N = coords.shape[0]
+    block_size = 32
+    num_host_atoms = N - row_atoms
+
+    col_coords = np.expand_dims(coords[:num_host_atoms], axis=0)
+    # Compute the reference interactions of the ligand
+    ref_ixn_list = []
+    row_atoms = coords[num_host_atoms:].shape[0]
+    num_blocks = (row_atoms + block_size - 1) // block_size
+    box_diag = np.diagonal(box)
+    for rbidx in range(num_blocks):
+        row_start = num_host_atoms + (rbidx * block_size)
+        row_end = min(num_host_atoms + ((rbidx + 1) * block_size), N)
+        row_coords = coords[row_start:row_end]
+        row_coords = np.expand_dims(row_coords, axis=1)
+        deltas = image_coords(row_coords - col_coords, box_diag)
+
+        dij = np.linalg.norm(deltas, axis=-1)
+        # Since the row and columns are unique, don't need to handle duplicates
+        idxs = np.argwhere(np.any(dij < cutoff, axis=0))
+        ref_ixn_list.append(idxs.reshape(-1).tolist())
+    return ref_ixn_list
+
+
 def test_neighborlist():
 
     water_coords = get_water_coords(3, sort=False)
     for size in [35, 64, 129, 1025, 1259, 2029]:
 
+        print("testing size:", size)
+
+        np.random.seed(1234)
+        atom_idxs = np.random.choice(np.arange(size), size, replace=False)
+        coords = water_coords[atom_idxs]
+        padding = 0.1
+        diag = np.amax(coords, axis=0) - np.amin(coords, axis=0) + padding
+        box = np.eye(3) * diag
+
+        D = 3
+        cutoff = 1.0
+
+        sort = True
+        if sort:
+            perm = hilbert_sort(coords + np.argmin(coords), D)
+            coords = coords[perm]
+
+        ref_ixn_list = build_reference_ixn_list(coords, box, cutoff)
+
         for nblist in (custom_ops.Neighborlist_f32(size), custom_ops.Neighborlist_f64(size)):
 
+            # Run twice to ensure deterministic results
             for _ in range(2):
-
-                print("testing size:", size)
-
-                atom_idxs = np.random.choice(np.arange(size), size, replace=False)
-                coords = water_coords[atom_idxs]
-                padding = 0.1
-                diag = np.amax(coords, axis=0) - np.amin(coords, axis=0) + padding
-                box = np.diag(diag)
-
-                N = coords.shape[0]
-                np.random.seed(1234)
-                D = 3
-
-                sort = True
-                if sort:
-                    perm = hilbert_sort(coords + np.argmin(coords), D)
-                    coords = coords[perm]
-
-                num_blocks_of_32 = (N + 32 - 1) // 32
-                col_coords = np.expand_dims(coords, axis=0)
-
-                cutoff = 1.0
-
                 test_ixn_list = nblist.get_nblist(coords, box, cutoff)
-
-                # for each tile, print list of interacting atoms
-
-                # compute the sparsity of the tile
-                ref_ixn_list = []
-
-                box_diag = np.diag(box)
-                for rbidx in range(num_blocks_of_32):
-                    row_start = rbidx * 32
-                    row_end = min((rbidx + 1) * 32, N)
-                    row_coords = coords[row_start:row_end]
-                    row_coords = np.expand_dims(row_coords, axis=1)
-
-                    deltas = row_coords - col_coords
-                    deltas -= box_diag * np.floor(deltas / box_diag + 0.5)
-
-                    # block size x N, tbd make periodic
-                    dij = np.linalg.norm(deltas, axis=-1)
-                    dij[:, :row_start] = cutoff  # slight hack to discard duplicates
-                    idxs = np.argwhere(np.any(dij < cutoff, axis=0))
-                    ref_ixn_list.append(idxs.reshape(-1).tolist())
 
                 assert len(ref_ixn_list) == len(test_ixn_list)
 
@@ -126,7 +163,7 @@ def test_neighborlist():
 def test_neighborlist_ligand_host_invalid_parameters():
     cols = 10
     rows = 5
-    box = np.diag(np.ones(3))
+    box = np.eye(1)
     cutoff = 1.0
 
     # Constructing NBlist with rows > cols is invalid
@@ -153,6 +190,7 @@ def test_neighborlist_ligand_host_invalid_parameters():
 def test_neighborlist_ligand_host():
     ligand = hif2a_ligand_pair.mol_a
     ligand_coords = get_romol_conf(ligand)
+    num_ligand_atoms = ligand_coords.shape[0]
 
     system, host_coords, box, top = build_water_system(4.0)
     num_host_atoms = host_coords.shape[0]
@@ -160,15 +198,13 @@ def test_neighborlist_ligand_host():
 
     coords = np.concatenate([host_coords, ligand_coords])
 
-    N = coords.shape[0]
     D = 3
     cutoff = 1.0
-    block_size = 32
     padding = 0.1
 
     np.random.seed(1234)
     diag = np.amax(coords, axis=0) - np.amin(coords, axis=0) + padding
-    box = np.diag(diag)
+    box = np.eye(3) * diag
 
     # Can only sort the host coords, but not the row/ligand
     sort = True
@@ -176,24 +212,7 @@ def test_neighborlist_ligand_host():
         perm = hilbert_sort(coords[:num_host_atoms] + np.argmin(coords[:num_host_atoms]), D)
         coords[:num_host_atoms] = coords[:num_host_atoms][perm]
 
-    col_coords = np.expand_dims(coords[:num_host_atoms], axis=0)
-    # Compute the reference interactions of the ligand
-    ref_ixn_list = []
-    num_ligand_atoms = coords[num_host_atoms:].shape[0]
-    num_blocks_of_32 = (num_ligand_atoms + block_size - 1) // block_size
-    box_diag = np.diag(box)
-    for rbidx in range(num_blocks_of_32):
-        row_start = num_host_atoms + (rbidx * block_size)
-        row_end = min(num_host_atoms + ((rbidx + 1) * block_size), N)
-        row_coords = coords[row_start:row_end]
-        row_coords = np.expand_dims(row_coords, axis=1)
-        deltas = row_coords - col_coords
-        deltas -= box_diag * np.floor(deltas / box_diag + 0.5)
-
-        dij = np.linalg.norm(deltas, axis=-1)
-        # Since the row and columns are unique, don't need to handle duplicates
-        idxs = np.argwhere(np.any(dij < cutoff, axis=0))
-        ref_ixn_list.append(idxs.reshape(-1).tolist())
+    ref_ixn_list = build_reference_ixn_list_with_subset(coords, box, cutoff, num_ligand_atoms)
 
     for nblist in (
         custom_ops.Neighborlist_f32(num_host_atoms, num_ligand_atoms),

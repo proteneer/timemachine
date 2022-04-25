@@ -26,17 +26,21 @@ void Potential::execute_host(
     const int &D = Potential::D;
 
     DeviceBuffer<double> d_x(N * D);
-    DeviceBuffer<double> d_p(P);
     DeviceBuffer<double> d_box(D * D);
 
     d_x.copy_from(h_x);
-    d_p.copy_from(h_p);
     d_box.copy_from(h_box);
 
+    std::unique_ptr<DeviceBuffer<double>> d_p;
     std::unique_ptr<DeviceBuffer<unsigned long long>> d_du_dx;
     std::unique_ptr<DeviceBuffer<unsigned long long>> d_du_dp;
     std::unique_ptr<DeviceBuffer<unsigned long long>> d_du_dl;
     std::unique_ptr<DeviceBuffer<unsigned long long>> d_u;
+
+    if (P > 0) {
+        d_p.reset(new DeviceBuffer<double>(P));
+        d_p->copy_from(h_p);
+    }
 
     // very important that these are initialized to zero since the kernels themselves just accumulate
     if (h_du_dx) {
@@ -60,7 +64,7 @@ void Potential::execute_host(
         N,
         P,
         d_x.data,
-        d_p.data,
+        P > 0 ? d_p->data : nullptr,
         d_box.data,
         lambda,
         d_du_dx ? d_du_dx->data : nullptr,
