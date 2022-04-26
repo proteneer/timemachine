@@ -14,7 +14,7 @@ k_add_ull_to_ull(const int N, const unsigned long long *__restrict__ src, unsign
     dest[idx * stride + stride_idx] += src[idx * stride + stride_idx];
 }
 
-void __global__ k_arange(int N, unsigned int *arr) {
+void __global__ k_arange(const int N, unsigned int *__restrict__ arr) {
     const int atom_idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (atom_idx >= N) {
         return;
