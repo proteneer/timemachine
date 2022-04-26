@@ -570,15 +570,19 @@ def jax_aligned_batch_propose_coords(x, K, key, vacuum_samples, vacuum_log_weigh
     return batch_align_and_replace(vacuum_samples, x)
 
 
-def pregenerate_samples(mol, ff, seed, n_solvent_samples=1000, n_ligand_batches=30000, temperature=300.0, pressure=1.0):
+def pregenerate_samples(
+    mol, ff, seed, n_solvent_samples=1000, n_ligand_batches=30000, temperature=300.0, pressure=1.0, num_workers=None
+):
     potentials, params, masses, coords, box = get_solvent_phase_system(mol, ff)
     print(f"Generating {n_solvent_samples} solvent samples")
     solvent_xvbs = generate_solvent_samples(
-        coords, box, masses, potentials, params, temperature, pressure, seed, n_solvent_samples
+        coords, box, masses, potentials, params, temperature, pressure, seed, n_solvent_samples, num_workers
     )
 
     print("Generating ligand samples")
-    ligand_samples, ligand_log_weights = generate_ligand_samples(n_ligand_batches, mol, ff, temperature, seed)
+    ligand_samples, ligand_log_weights = generate_ligand_samples(
+        n_ligand_batches, mol, ff, temperature, seed, num_workers=num_workers
+    )
 
     return solvent_xvbs, ligand_samples, ligand_log_weights
 
@@ -610,12 +614,12 @@ def generate_solvent_samples(
     return xvbs
 
 
-def generate_ligand_samples(num_batches, mol, ff, temperature, seed):
+def generate_ligand_samples(num_batches, mol, ff, temperature, seed, num_workers=None):
     """Generate (weighted) samples of the ligand in vacuum, by importance sampling from a less-hindered state where
     torsions and intramolecular nonbonded terms are disabled"""
     state = VacuumState(mol, ff)
     vacuum_samples, vacuum_log_weights = generate_log_weighted_samples(
-        mol, temperature, state.U_easy, state.U_full, num_batches=num_batches, seed=seed
+        mol, temperature, state.U_easy, state.U_full, num_batches=num_batches, seed=seed, num_workers=num_workers
     )
 
     return vacuum_samples, vacuum_log_weights

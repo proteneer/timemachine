@@ -15,6 +15,7 @@ from scipy.special import logsumexp
 from timemachine.constants import BOLTZ
 from timemachine.datasets import fetch_freesolv
 from timemachine.fe.free_energy import RABFEResult
+from timemachine.fe.utils import get_mol_name
 
 # All examples are to be tested nightly
 pytestmark = [pytest.mark.nightly]
@@ -136,6 +137,7 @@ def test_smc_biphenyl():
         # expect delta_f in ballpark of 0
         final_log_weights = smc_result["final_log_weights"]
         final_weights = np.exp(final_log_weights)
+
         delta_f = -np.log(np.mean(final_weights))
         assert np.abs(delta_f) <= 10
 
@@ -151,7 +153,7 @@ def test_smc_freesolv():
     cli_args = [f"--{key}={val}" for (key, val) in config.items()]
     temperature = 300
 
-    experimental_dGs = {mol.GetProp("_Name"): float(mol.GetProp("dG")) for mol in fetch_freesolv()}
+    experimental_dGs = {get_mol_name(mol): float(mol.GetProp("dG")) for mol in fetch_freesolv()}
 
     def get_predicted_dG(fname):
         """in kcal/mol"""
@@ -170,15 +172,13 @@ def test_smc_freesolv():
 
         return dG_in_kcalmol
 
-    def parse_mol_name(fname):
-        """
-        "path/to/summary_smc_result_mol=mobley_3105103_time=2022-02-08 19:10:51.705173.pkl"
-        -->
-        "mobley_3105103"
-
-        TODO: add a description string to the smc_result dict, then delete me
-        """
-        return fname.split("summary_smc_result_mol=")[-1].split("_time=")[0]
+    def get_mol_name_from_pkl(fname):
+        """in kcal/mol"""
+        with open(fname, "rb") as f:
+            smc_result = pickle.load(f)
+        # Make sure dG properties are preserved
+        _ = smc_result["mol"].GetProp("dG")
+        return get_mol_name(smc_result["mol"])
 
     with temporary_working_dir() as temp_dir:
         # expect running this script to write summary_result_result_{mol_name}_*.pkl files
@@ -193,7 +193,7 @@ def test_smc_freesolv():
         dG_expts = []
         for fname in smc_result_fnames:
             dG_preds.append(get_predicted_dG(fname))
-            dG_expts.append(experimental_dGs[parse_mol_name(fname)])
+            dG_expts.append(experimental_dGs[get_mol_name_from_pkl(fname)])
         dG_preds = np.array(dG_preds)
         dG_expts = np.array(dG_expts)
 

@@ -276,6 +276,11 @@ def get_mol_masses(mol):
     return [a.GetMass() for a in mol.GetAtoms()]
 
 
+def get_mol_name(mol) -> str:
+    """Return the title for the given mol"""
+    return mol.GetProp("_Name")
+
+
 def sanitize_energies(full_us, lamb_idx, cutoff=10000):
     """
     Given a matrix with F rows and K columns,

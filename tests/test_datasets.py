@@ -16,3 +16,14 @@ def test_fetch_freesolv():
     # unique names
     names = [mol.GetProp("_Name") for mol in mols]
     assert len(set(names)) == len(names)
+
+    # trunacated list
+    mols = fetch_freesolv(n_mols=5)
+    assert len(mols) == 5
+
+    # filtered mol
+    filter_name = mols[0].GetProp("_Name")
+    mols = fetch_freesolv(filter_mols=set([filter_name]))
+    assert len(mols) == 641
+    names = [mol.GetProp("_Name") for mol in mols]
+    assert filter_name not in names
