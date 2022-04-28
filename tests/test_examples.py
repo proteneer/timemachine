@@ -114,7 +114,7 @@ def test_smc_biphenyl():
     * no NaNs in accumulated log weights
     * delta_f in ballpark of 0
     """
-    config = dict(n_walkers=100, n_windows=100, n_md_steps=100)
+    config = dict(n_walkers=100, n_windows=100, n_md_steps=100, seed=2022)
     cli_args = [f"--{key}={val}" for (key, val) in config.items()]
 
     with temporary_working_dir() as temp_dir:
@@ -147,7 +147,7 @@ def test_smc_freesolv():
     * predictions within 2 kcal/mol of experiment
     """
     # n_mols=10 -> ~30-60 minutes on a single GPU
-    config = dict(n_walkers=100, n_windows=100, n_md_steps=100, n_mols=10)
+    config = dict(n_walkers=100, n_windows=100, n_md_steps=100, n_mols=10, seed=2022)
     cli_args = [f"--{key}={val}" for (key, val) in config.items()]
     temperature = 300
 
