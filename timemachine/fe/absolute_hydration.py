@@ -61,7 +61,7 @@ def generate_endstate_samples(
     ligand_xvs = enhanced.sample_from_log_weights(ligand_samples, ligand_log_weights, size=num_samples)
 
     # sample uniformly with replacement
-    solvent_choice_idxs = np.random.choice(len(solvent_samples), size=num_samples)
+    solvent_choice_idxs = np.random.choice(len(solvent_samples), size=num_samples, replace=True)
 
     all_xvbs = []
     for i, choice_idx in enumerate(solvent_choice_idxs):
@@ -133,7 +133,7 @@ def set_up_ahfe_system_for_smc(mol, n_walkers, n_windows, n_md_steps, resample_t
     )
     np.random.seed(seed)
 
-    sample_inds = np.random.choice(np.arange(len(initial_samples)), size=n_walkers)
+    sample_inds = np.random.choice(np.arange(len(initial_samples)), size=n_walkers, replace=True)
     samples = [initial_samples[i] for i in sample_inds]
 
     # note: tm convention lambda=1 means "decoupled", lambda=0 means "coupled"
