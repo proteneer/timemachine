@@ -8,7 +8,6 @@ from timemachine.md.smc import (
     Resampler,
     conditional_multinomial_resample,
     effective_sample_size,
-    fractional_effective_sample_size,
     get_endstate_samples_from_smc_result,
     multinomial_resample,
     null_resample,
@@ -112,21 +111,6 @@ def test_effective_sample_size():
         ess = effective_sample_size(log_weights)
 
         np.testing.assert_almost_equal(ess, 1)
-
-
-def test_fractional_effective_sample_size():
-    """On random instances, check equal to effective_sample_size / n_particles"""
-    np.random.seed(2022)
-
-    # random weights
-    n_instances = 100
-    for _ in range(n_instances):
-        n_particles = np.random.randint(1, 100)
-        log_weights = generate_log_weights(n_particles)
-        ess = effective_sample_size(log_weights)
-        fractional_ess = fractional_effective_sample_size(log_weights)
-
-        np.testing.assert_almost_equal(fractional_ess, ess / n_particles)
 
 
 @pytest.mark.parametrize("resampling_fxn", [null_resample, multinomial_resample, conditional_multinomial_resample])

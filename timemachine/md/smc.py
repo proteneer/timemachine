@@ -149,15 +149,11 @@ def effective_sample_size(log_weights):
     return 1 / np.sum(weights ** 2)
 
 
-def fractional_effective_sample_size(log_weights):
-    """effective sample size, normalized to interval (0, 1]"""
-    n = len(log_weights)
-    return effective_sample_size(log_weights) / n
-
-
 def conditional_multinomial_resample(log_weights, thresh=0.5):
     """if fractional_effective_sample_size(log_weights) < thresh, then multinomial_resample"""
-    if fractional_effective_sample_size(log_weights) < thresh:
+    n = len(log_weights)
+    fractional_ess = effective_sample_size(log_weights) / n
+    if fractional_ess < thresh:
         return multinomial_resample(log_weights)
     else:
         return null_resample(log_weights)
