@@ -137,7 +137,7 @@ def test_smc_biphenyl():
         final_log_weights = smc_result["final_log_weights"]
         final_weights = np.exp(final_log_weights)
         delta_f = -np.log(np.mean(final_weights))
-        assert (delta_f >= -10) and (delta_f <= +10)
+        assert np.abs(delta_f) <= 10
 
 
 def test_smc_freesolv():
