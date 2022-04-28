@@ -129,12 +129,13 @@ def test_smc_biphenyl():
         with open(smc_result_fnames[0], "rb") as f:
             smc_result = load(f)
 
-        # expect no NaNs in accumulated log weights
-        log_weights_traj = smc_result["log_weights_traj"]
-        assert np.isfinite(log_weights_traj).all()
+        # expect no NaNs in incremental log weights
+        incremental_log_weights_traj = smc_result["incremental_log_weights_traj"]
+        assert np.isfinite(incremental_log_weights_traj).all()
 
         # expect delta_f in ballpark of 0
-        final_weights = np.exp(log_weights_traj[-1])
+        final_log_weights = smc_result["final_log_weights"]
+        final_weights = np.exp(final_log_weights)
         delta_f = -np.log(np.mean(final_weights))
         assert (delta_f >= -10) and (delta_f <= +10)
 
@@ -157,12 +158,12 @@ def test_smc_freesolv():
         with open(fname, "rb") as f:
             smc_result = load(f)
 
-        # expect no NaNs in accumulated log weights
-        log_weights_traj = smc_result["log_weights_traj"]
-        assert np.isfinite(log_weights_traj).all()
+        # expect no NaNs in incremental log weights
+        incremental_log_weights_traj = smc_result["incremental_log_weights_traj"]
+        assert np.isfinite(incremental_log_weights_traj).all()
 
         # compute dG in kcal/mol from final log weights
-        log_weights = smc_result["log_weights_traj"][-1]
+        log_weights = smc_result["final_log_weights"]
         reduced_dG = -logsumexp(log_weights - np.log(len(log_weights)))
         dG_in_kJmol = reduced_dG * (BOLTZ * temperature)
         dG_in_kcalmol = dG_in_kJmol / 4.184
