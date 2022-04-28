@@ -33,7 +33,7 @@ def generate_log_weights(n):
 @pytest.mark.parametrize("resampling_fxn", [null_resample, multinomial_resample, conditional_multinomial_resample])
 def test_resampler(resampling_fxn: Resampler):
     """On a collection of random log_weights vectors of varying size, assert that:
-    * total weight before and after resampling are consistent
+    * total weight before and after resampling are consistent, and
     * resampled indices are all in range
 
     TODO: future refinements of this test might:
@@ -70,13 +70,13 @@ def test_resampler(resampling_fxn: Resampler):
 
 def test_effective_sample_size():
     """On a collection of random log_weights vectors of varying size, assert that:
-    * ess >= 1
+    * ess >= 1, and
     * ess <= n_particles
 
     Also assert that:
     * on a vector of constant log weights `zeros(n_particles) + constant`,
         ess == n_particles, regardless of constant
-    * on a vector `[0, -inf, -inf, ...] + constant`,
+    * on a vector `[0, -inf, -inf, ...] + constant`, and
         ess == 1, regardless of constant
     """
     np.random.seed(2022)
@@ -115,8 +115,8 @@ def test_effective_sample_size():
 
 @pytest.mark.parametrize("resampling_fxn", [null_resample, multinomial_resample, conditional_multinomial_resample])
 def test_sequential_monte_carlo(resampling_fxn: Resampler):
-    """Run SMC with the desired resampling_fxn on a Gaussian 1D test system, and assert that
-    * running estimates of the free energy as a fxn of lambda match analytical free energies
+    """Run SMC with the desired resampling_fxn on a Gaussian 1D test system, and assert that:
+    * running estimates of the free energy as a fxn of lambda match analytical free energies, and
     * endstate samples have expected mean and stddev
     """
     np.random.seed(2022)
