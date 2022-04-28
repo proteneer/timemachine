@@ -62,6 +62,10 @@ def sequential_monte_carlo(
         https://www.stats.ox.ac.uk/~doucet/smc_resources.html
     * [Dai, Heng, Jacob, Whiteley, 2020] An invitation to sequential Monte Carlo samplers
         https://arxiv.org/abs/2007.11936
+
+    See Also
+    --------
+    * get_endstate_samples_from_smc_result
     """
     n = len(samples)
     log_weights = np.zeros(n)
@@ -78,7 +82,12 @@ def sequential_monte_carlo(
         log_weights_traj.append(np.array(log_weights))
         incremental_log_weights_traj.append(np.array(incremental_log_weights))
 
-    # main loop
+    # Note: loop bounds [1:-1] intentional:
+    #   these steps are the only ones that contribute to the SMC result,
+    #   and some care is needed to extract endstate samples at t=0, t=T-1
+    #   See also
+    #   * discussion at https://github.com/proteneer/timemachine/pull/718#discussion_r854276326
+    #   * helper function get_endstate_samples_from_smc_result
     for (lam_initial, lam_target) in zip(lambdas[:-2], lambdas[1:-1]):
         # update log weights
         incremental_log_weights = log_prob(sample_traj[-1], lam_target) - log_prob(sample_traj[-1], lam_initial)
@@ -173,7 +182,7 @@ def get_endstate_samples_from_smc_result(
 ) -> Tuple[Samples, Samples]:
     """unweighted approximate samples from lambdas[0] and lambdas[-1]
 
-    TODO: include lambdas array in smc_result dict?
+    TODO: include lambdas array in smc_result dict? Some other way to match up {lambdas[0], lambdas[-1]} to {0.0, 1.0}?
     """
     initial_samples = refine_samples(smc_result["traj"][0], smc_result["log_weights_traj"][0], propagate, lambdas[0])
     final_samples = refine_samples(smc_result["traj"][-1], smc_result["log_weights_traj"][-1], propagate, lambdas[-1])
