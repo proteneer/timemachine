@@ -126,9 +126,10 @@ def identity_resample(log_weights):
 
 def multinomial_resample(log_weights):
     """sample proportional to exp(log_weights), with replacement"""
-    weights = np.exp(log_weights - logsumexp(log_weights))
+    normed_weights = np.exp(log_weights - logsumexp(log_weights))
+    assert np.isclose(np.sum(normed_weights), 1.0)
     n = len(log_weights)
-    indices = np.random.choice(np.arange(n), size=n, p=weights)
+    indices = np.random.choice(np.arange(n), size=n, p=normed_weights)
 
     # new weights
     avg_log_weights = logsumexp(log_weights - np.log(n)) * np.ones(n)
@@ -145,8 +146,9 @@ def effective_sample_size(log_weights):
     * See [Elvira, Martino, Robert, 2018] "Rethinking the effective sample size" https://arxiv.org/abs/1809.04129
         and references therein for some insightful discussion of limitations and possible improvements
     """
-    weights = np.exp(log_weights - logsumexp(log_weights))
-    return 1 / np.sum(weights ** 2)
+    normed_weights = np.exp(log_weights - logsumexp(log_weights))
+    assert np.isclose(np.sum(normed_weights), 1.0)
+    return 1 / np.sum(normed_weights ** 2)
 
 
 def conditional_multinomial_resample(log_weights, thresh=0.5):
