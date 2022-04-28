@@ -131,6 +131,7 @@ def set_up_ahfe_system_for_smc(mol, n_walkers, n_windows, n_md_steps, resample_t
     reduced_potential, mover, initial_samples = setup_absolute_hydration_with_endpoint_samples(
         mol, n_steps=n_md_steps, seed=seed
     )
+    np.random.seed(seed)
 
     sample_inds = np.random.choice(np.arange(len(initial_samples)), size=n_walkers)
     samples = [initial_samples[i] for i in sample_inds]

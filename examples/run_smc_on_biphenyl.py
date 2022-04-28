@@ -14,6 +14,7 @@ def parse_options():
     parser.add_argument("--n_md_steps", type=int, help="number of MD steps per move", default=100)
     parser.add_argument("--resample_thresh", type=float, help="resample when fractional ESS < thresh", default=0.6)
     parser.add_argument("--debug_mode", type=bool, help="save full trajectories", default=False)
+    parser.add_argument("--seed", type=int, help="random seed used for np.random and MD mover", default=2022)
 
     cmd_args = parser.parse_args()
 
@@ -49,7 +50,7 @@ if __name__ == "__main__":
     # prepare initial samples and lambda schedule, define functions for propagating, evaluating log_prob, and resampling
     mol, _ = get_biphenyl()
     samples, lambdas, propagate, log_prob, resample = set_up_ahfe_system_for_smc(
-        mol, cmd_args.n_walkers, cmd_args.n_windows, cmd_args.n_md_steps, cmd_args.resample_thresh
+        mol, cmd_args.n_walkers, cmd_args.n_windows, cmd_args.n_md_steps, cmd_args.resample_thresh, cmd_args.seed
     )
 
     # run simulation

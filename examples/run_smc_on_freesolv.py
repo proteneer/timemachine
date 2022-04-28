@@ -21,6 +21,7 @@ def parse_options():
     parser.add_argument("--resample_thresh", type=float, help="resample when fractional ESS < thresh", default=0.6)
     parser.add_argument("--debug_mode", type=bool, help="save full trajectories", default=False)
     parser.add_argument("--n_mols", type=int, help="how many freesolv molecules to run on", default=10)
+    parser.add_argument("--seed", type=int, help="random seed used for np.random and MD mover", default=2022)
 
     cmd_args = parser.parse_args()
 
@@ -56,7 +57,7 @@ def run_on_freesolv_mol(mol):
 
     # prepare initial samples and lambda schedule, define functions for propagating, evaluating log_prob, and resampling
     samples, lambdas, propagate, log_prob, resample = set_up_ahfe_system_for_smc(
-        mol, cmd_args.n_walkers, cmd_args.n_windows, cmd_args.n_md_steps, cmd_args.resample_thresh
+        mol, cmd_args.n_walkers, cmd_args.n_windows, cmd_args.n_md_steps, cmd_args.resample_thresh, cmd_args.seed
     )
     # run simulation
     smc_result = sequential_monte_carlo(samples, lambdas, propagate, log_prob, resample)
