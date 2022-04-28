@@ -118,7 +118,7 @@ def sequential_monte_carlo(
     return trajs_dict
 
 
-def null_resample(log_weights):
+def identity_resample(log_weights):
     """No interaction"""
     indices = np.arange(len(log_weights))
     return indices, log_weights
@@ -156,7 +156,7 @@ def conditional_multinomial_resample(log_weights, thresh=0.5):
     if fractional_ess < thresh:
         return multinomial_resample(log_weights)
     else:
-        return null_resample(log_weights)
+        return identity_resample(log_weights)
 
 
 def refine_samples(samples: Samples, log_weights: LogWeights, propagate: BatchPropagator, lam: float) -> Samples:
@@ -164,7 +164,7 @@ def refine_samples(samples: Samples, log_weights: LogWeights, propagate: BatchPr
 
     # weighted samples -> equally weighted samples
     # TODO: replace multinomial resampling with something less wasteful, like stratified or systematic resampling
-    resample = multinomial_resample  # but not: null_resample or conditional_multinomial_resample
+    resample = multinomial_resample  # but not: identity_resample or conditional_multinomial_resample
     resampled_inds, log_weights = resample(log_weights)
     assert np.isclose(np.std(log_weights), 0), "Need equally weighted samples"
 

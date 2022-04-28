@@ -9,8 +9,8 @@ from timemachine.md.smc import (
     conditional_multinomial_resample,
     effective_sample_size,
     get_endstate_samples_from_smc_result,
+    identity_resample,
     multinomial_resample,
-    null_resample,
     sequential_monte_carlo,
 )
 from timemachine.testsystems.gaussian1d import make_gaussian_testsystem
@@ -30,7 +30,7 @@ def generate_log_weights(n):
     return log_weights
 
 
-@pytest.mark.parametrize("resampling_fxn", [null_resample, multinomial_resample, conditional_multinomial_resample])
+@pytest.mark.parametrize("resampling_fxn", [identity_resample, multinomial_resample, conditional_multinomial_resample])
 def test_resampler(resampling_fxn: Resampler):
     """On a collection of random log_weights vectors of varying size, assert that:
     * total weight before and after resampling are consistent, and
@@ -113,7 +113,7 @@ def test_effective_sample_size():
         np.testing.assert_almost_equal(ess, 1)
 
 
-@pytest.mark.parametrize("resampling_fxn", [null_resample, multinomial_resample, conditional_multinomial_resample])
+@pytest.mark.parametrize("resampling_fxn", [identity_resample, multinomial_resample, conditional_multinomial_resample])
 def test_sequential_monte_carlo(resampling_fxn: Resampler):
     """Run SMC with the desired resampling_fxn on a Gaussian 1D test system, and assert that:
     * running estimates of the free energy as a fxn of lambda match analytical free energies, and
