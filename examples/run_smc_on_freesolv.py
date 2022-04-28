@@ -1,6 +1,6 @@
 import argparse
+import pickle
 from datetime import datetime
-from pickle import dump
 
 import numpy as np
 from scipy.special import logsumexp
@@ -41,12 +41,12 @@ def save_smc_result(uid, smc_result, save_full_trajectories=False):
         incremental_log_weights_traj=smc_result["incremental_log_weights_traj"],
     )
     with open(f"summary_smc_result_{uid}.pkl", "wb") as f:
-        dump((summary, cmd_args), f)
+        pickle.dump((summary, cmd_args), f)
 
     # optionally save trajectories
     if save_full_trajectories:
         with open(f"full_smc_traj_{uid}.pkl", "wb") as f:
-            dump((smc_result, cmd_args), f)
+            pickle.dump((smc_result, cmd_args), f)
 
 
 def run_on_freesolv_mol(mol):

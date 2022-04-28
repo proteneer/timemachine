@@ -1,6 +1,6 @@
 import argparse
+import pickle
 from datetime import datetime
-from pickle import dump
 
 from timemachine.fe.absolute_hydration import set_up_ahfe_system_for_smc
 from timemachine.md.smc import sequential_monte_carlo
@@ -35,12 +35,12 @@ def save_smc_result(smc_result, save_full_trajectories=False):
         incremental_log_weights_traj=smc_result["incremental_log_weights_traj"],
     )
     with open(f"summary_smc_result_{uid}.pkl", "wb") as f:
-        dump((summary, cmd_args), f)
+        pickle.dump((summary, cmd_args), f)
 
     # optionally save trajectories
     if save_full_trajectories:
         with open(f"full_smc_traj_{uid}.pkl", "wb") as f:
-            dump((smc_result, cmd_args), f)
+            pickle.dump((smc_result, cmd_args), f)
 
 
 if __name__ == "__main__":

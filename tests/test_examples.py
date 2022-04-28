@@ -1,9 +1,9 @@
 import os
+import pickle
 import subprocess
 import sys
 from glob import glob
 from pathlib import Path
-from pickle import load
 from typing import Dict, List, Optional
 
 import numpy as np
@@ -127,7 +127,7 @@ def test_smc_biphenyl():
 
         # load result
         with open(smc_result_fnames[0], "rb") as f:
-            smc_result = load(f)
+            smc_result = pickle.load(f)
 
         # expect no NaNs in incremental log weights
         incremental_log_weights_traj = smc_result["incremental_log_weights_traj"]
@@ -156,7 +156,7 @@ def test_smc_freesolv():
     def get_predicted_dG(fname):
         """in kcal/mol"""
         with open(fname, "rb") as f:
-            smc_result = load(f)
+            smc_result = pickle.load(f)
 
         # expect no NaNs in incremental log weights
         incremental_log_weights_traj = smc_result["incremental_log_weights_traj"]
