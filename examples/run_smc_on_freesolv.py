@@ -31,7 +31,7 @@ def parse_options():
     parser.add_argument("--n_md_steps", type=int, help="number of MD steps per move", default=100)
     parser.add_argument("--resample_thresh", type=float, help="resample when fractional ESS < thresh", default=0.6)
     parser.add_argument("--debug_mode", type=bool, help="save full trajectories", default=False)
-    parser.add_argument("--n_mols", type=int, help="how many freesolv molecules to run on", default=10)
+    parser.add_argument("--n_mols", type=int, help="how many freesolv molecules to run on")
     parser.add_argument("--seed", type=int, help="random seed used for np.random and MD mover", default=2022)
     parser.add_argument("--result_path", type=str, help="path with smc results", default=".")
     parser.add_argument("--filter_mols", type=str, help="filter molecules", nargs="+", default=[])
