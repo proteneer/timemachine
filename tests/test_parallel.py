@@ -12,7 +12,7 @@ import numpy as np
 import grpc
 from timemachine import parallel
 from timemachine.parallel import client, worker
-from timemachine.parallel.utils import batch_list, get_gpu_count
+from timemachine.parallel.utils import batch_list
 
 
 def jax_fn(x):
@@ -81,7 +81,7 @@ class TestGPUCount(unittest.TestCase):
 
 class TestCUDAPoolClient(unittest.TestCase):
     def setUp(self):
-        self.max_workers = get_gpu_count()
+        self.max_workers = 2
         self.cli = client.CUDAPoolClient(self.max_workers)
 
     def test_submit(self):
