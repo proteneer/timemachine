@@ -12,7 +12,7 @@ import numpy as np
 import grpc
 from timemachine import parallel
 from timemachine.parallel import client, worker
-from timemachine.parallel.utils import get_gpu_count
+from timemachine.parallel.utils import batch_list, get_gpu_count
 
 
 def jax_fn(x):
@@ -215,3 +215,7 @@ class TestGRPCClient(unittest.TestCase):
     def tearDown(self):
         for server in self.servers:
             server.stop(5)
+
+
+def test_batch_list():
+    assert batch_list(list(range(10)), 5) == [[0, 5], [1, 6], [2, 7], [3, 8], [4, 9]]

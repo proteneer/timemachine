@@ -1,7 +1,5 @@
 import argparse
-import os
 import pickle
-from collections import defaultdict
 from pathlib import Path
 from typing import Dict, List
 
@@ -15,8 +13,8 @@ from timemachine.fe.absolute_hydration import set_up_ahfe_system_for_smc
 from timemachine.fe.utils import get_mol_name
 from timemachine.ff import Forcefield
 from timemachine.md.smc import get_endstate_samples_from_smc_result, sequential_monte_carlo
-from timemachine.parallel.client import CUDAPoolClient, SerialClient
-from timemachine.parallel.utils import get_gpu_count
+from timemachine.parallel.client import CUDAPoolClient
+from timemachine.parallel.utils import batch_list, get_gpu_count
 
 temperature = 300
 
@@ -34,12 +32,14 @@ def parse_options():
     parser.add_argument("--n_mols", type=int, help="how many freesolv molecules to run on")
     parser.add_argument("--seed", type=int, help="random seed used for np.random and MD mover", default=2022)
     parser.add_argument("--result_path", type=str, help="path with smc results", default=".")
-    parser.add_argument("--filter_mols", type=str, help="filter molecules", nargs="+", default=[])
+    parser.add_argument(
+        "--exclude_mols", type=str, help="exclude the given molecules from the run", nargs="+", default=[]
+    )
     parser.add_argument("--n_gpus", type=int, help="number of gpus", default=get_gpu_count())
     parser.add_argument(
         "--n_cpus",
         type=int,
-        help="number of cpus to use for each SMC worker. None means use the default which varies based on the client.",
+        help="number of cpus to use for each SMC worker. None means use the default of all cpus on the worker.",
         default=None,
     )
     parser.add_argument(
@@ -73,7 +73,9 @@ def get_full_traj_path(path: Path, mol_id: str) -> Path:
     return path / f"full_smc_traj_{mol_id}.pkl"
 
 
-def save_smc_result(path: Path, mol: int, smc_result: Dict, cmd_args: argparse.Namespace, save_full_trajectories=False):
+def save_smc_result(
+    path: Path, mol: Chem.rdchem.Mol, smc_result: Dict, cmd_args: argparse.Namespace, save_full_trajectories=False
+):
     """
     Save the smc results as a pkl'd dictionary.
 
@@ -90,7 +92,7 @@ def save_smc_result(path: Path, mol: int, smc_result: Dict, cmd_args: argparse.N
         the refined samples from the end states.
         'initial_log_weights', 'final_log_weights' correspond to the
         log weights from both states.
-        'traj' is a list if trajectories, one for each lambda.
+        'traj' list of samples for lambdas, except for the last one
 
     cmd_args:
         Command line arguments, stored for reproducibility.
@@ -167,7 +169,7 @@ def run_on_mols(mols: List[Chem.rdchem.Mol], cmd_args: argparse.Namespace):
 
 def main():
     cmd_args = parse_options()
-    mols = fetch_freesolv(n_mols=cmd_args.n_mols, filter_mols=cmd_args.filter_mols)
+    mols = fetch_freesolv(n_mols=cmd_args.n_mols, exclude_mols=cmd_args.exclude_mols)
 
     # Create result folder
     result_path = Path(cmd_args.result_path)
@@ -175,23 +177,14 @@ def main():
 
     # Set up client
     num_gpus = cmd_args.n_gpus or 1
-    cmd_args.n_cpus = cmd_args.n_cpus or os.cpu_count()
-    cmd_args.n_cpus = cmd_args.n_cpus // num_gpus
-
-    if num_gpus > 1:
-        client = CUDAPoolClient(max_workers=num_gpus)
-    else:
-        client = SerialClient()
+    client = CUDAPoolClient(max_workers=num_gpus)
     client.verify()
-    print(f"using {num_gpus} gpus with {cmd_args.n_cpus} cpus per gpu")
+    print(f"using {num_gpus} gpus with {cmd_args.n_cpus or 'default'} cpus per gpu")
 
     # Batch mols
-    batch_mols = defaultdict(list)
-    for i in range(len(mols)):
-        batch_mols[i % num_gpus].append(mols[i])
-
+    batch_mols = batch_list(mols, num_gpus)
     futures = []
-    for mol_subset in batch_mols.values():
+    for mol_subset in batch_mols:
         futures.append(client.submit(run_on_mols, mol_subset, cmd_args))
 
     # Wait for jobs to complete
