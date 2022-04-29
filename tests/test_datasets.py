@@ -21,7 +21,7 @@ def test_fetch_freesolv():
     mols = fetch_freesolv(n_mols=5)
     assert len(mols) == 5
 
-    # excludeed mol
+    # excluded mol
     exclude_name = mols[0].GetProp("_Name")
     mols = fetch_freesolv(exclude_mols=set([exclude_name]))
     assert len(mols) == 641
