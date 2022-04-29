@@ -8,7 +8,7 @@ from timemachine.fe.utils import get_mol_name
 
 def fetch_freesolv(n_mols: Optional[int] = None, exclude_mols: Optional[Set[str]] = None) -> List[Chem.Mol]:
     """
-    Return the (potentially filtered) version of the free solv data set.
+    Return the (potentially truncated) free solv data set.
 
     Parameters
     ----------
@@ -17,7 +17,7 @@ def fetch_freesolv(n_mols: Optional[int] = None, exclude_mols: Optional[Set[str]
         means to keep all of the molecules.
 
     exclude_mols:
-        Filter molecules in the given set.
+        Exclude molecules in the given set.
 
     """
     exclude_mols = exclude_mols or set()
