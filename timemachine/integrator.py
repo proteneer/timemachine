@@ -161,11 +161,13 @@ def simulate(x0, U_fn, temperature, masses, steps_per_batch, num_batches, num_wo
     keys_t = np.array([jrandom.PRNGKey(seed + idx) for idx in range(num_workers)])
 
     all_xs = []
+    all_vs = []
 
     for batch_step in range(num_batches):
         #                                             [B,N,3][B,N,3][B,2]
         xs_t, vs_t, keys_t = batched_multiple_steps_fn(xs_t, vs_t, keys_t)
         all_xs.append(xs_t)
+        all_vs.append(vs_t)
 
     # result has shape [num_workers, num_batches, num_atoms, num_dimensions]
-    return np.transpose(np.array(all_xs), axes=[1, 0, 2, 3])
+    return np.transpose(np.array(all_xs), axes=[1, 0, 2, 3]), np.transpose(np.array(all_vs), axes=[1, 0, 2, 3])

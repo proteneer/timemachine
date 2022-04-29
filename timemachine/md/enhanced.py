@@ -20,7 +20,8 @@ from timemachine.fe import free_energy, topology
 from timemachine.fe.utils import get_romol_conf
 from timemachine.integrator import simulate
 from timemachine.lib import custom_ops
-from timemachine.md import builders, minimizer
+from timemachine.md import builders, minimizer, moves
+from timemachine.md.barostat.utils import get_bond_list, get_group_indices
 from timemachine.md.states import CoordsVelBox
 from timemachine.potentials import bonded, nonbonded, rmsd
 
@@ -266,7 +267,7 @@ def _wrap_simulate(args):
     x0 = get_romol_conf(mol)
     batches_per_worker = int(np.ceil(num_batches / num_workers))
 
-    xs_proposal = simulate(
+    xs_proposal, vs_proposal = simulate(
         x0,
         U_proposal,
         temperature,
@@ -279,6 +280,7 @@ def _wrap_simulate(args):
 
     # discard burn-in batches and reshape into a single flat array
     xs_proposal = xs_proposal[:, burn_in_batches:, :, :]
+    vs_proposal = vs_proposal[:, burn_in_batches:, :, :]
 
     batch_U_proposal_fn = jax.pmap(jax.vmap(U_proposal))
     batch_U_target_fn = jax.pmap(jax.vmap(U_target))
@@ -294,12 +296,15 @@ def _wrap_simulate(args):
     # reshape into flat array by removing num_workers dimension
     num_atoms = mol.GetNumAtoms()
     xs_proposal = xs_proposal.reshape(-1, num_atoms, 3)
+    vs_proposal = vs_proposal.reshape(-1, num_atoms, 3)
+
+    xvs_proposal = np.stack([xs_proposal, vs_proposal], axis=1)
 
     # truncate to user requested num_batches
-    xs_proposal = xs_proposal[:num_batches, ...]
+    xvs_proposal = xvs_proposal[:num_batches, ...]
     log_weights = log_weights[:num_batches]
 
-    return xs_proposal, log_weights
+    return xvs_proposal, log_weights
 
 
 def generate_log_weighted_samples(
@@ -360,12 +365,13 @@ def generate_log_weighted_samples(
             num_workers,
             seed,
         )
-        xs_proposal, log_weights = pool.map(_wrap_simulate, (args,))[0]
+        xvs_proposal, log_weights = pool.map(_wrap_simulate, (args,))[0]
 
-        assert xs_proposal.shape[0] == num_batches
+        assert xvs_proposal.shape[1] == 2
+        assert xvs_proposal.shape[0] == num_batches
         assert log_weights.shape[0] == num_batches
 
-        return xs_proposal, log_weights
+        return xvs_proposal, log_weights
 
 
 def sample_from_log_weights(weighted_samples, log_weights, size):
@@ -393,7 +399,7 @@ def sample_from_log_weights(weighted_samples, log_weights, size):
     assert len(weights) == len(weighted_samples)
     assert np.abs(np.sum(weights) - 1) < 1e-5
     idxs = np.random.choice(np.arange(len(weights)), size=size, p=weights)
-    return weighted_samples[idxs]
+    return [weighted_samples[i] for i in idxs]
 
 
 def jax_sample_from_log_weights(weighted_samples, log_weights, size, key):
@@ -422,10 +428,10 @@ def jax_sample_from_log_weights(weighted_samples, log_weights, size, key):
     return weighted_samples[idxs]
 
 
-def get_solvent_phase_system(mol, ff, margin=0.5):
+def get_solvent_phase_system(mol, ff, box_width=3.0, margin=0.5, minimize_energy=True):
     """
     Given a mol and forcefield return a solvated system where the
-    solvent has been minimized.
+    solvent has (optionally) been minimized.
 
     Parameters
     ----------
@@ -433,30 +439,39 @@ def get_solvent_phase_system(mol, ff, margin=0.5):
 
     ff: Forcefield
 
+    box_width: float
+        water box initial width in nm
+
     margin: Optional, float
         Box margin in nm, default is 0.5 nm.
-    """
-    masses = np.array([a.GetMass() for a in mol.GetAtoms()])
-    water_system, water_coords, water_box, _ = builders.build_water_system(3.0)
-    water_box = water_box + np.eye(3) * margin  # add a small margin around the box for stability
-    ligand_coords = get_romol_conf(mol)
-    bt = topology.BaseTopology(mol, ff)
 
+    minimize_energy: bool
+        whether to apply minimize_host_4d
+    """
+
+    # construct water box
+    water_system, water_coords, water_box, water_topology = builders.build_water_system(box_width)
+    water_box = water_box + np.eye(3) * margin  # add a small margin around the box for stability
+
+    # construct alchemical system
+    bt = topology.BaseTopology(mol, ff)
     afe = free_energy.AbsoluteFreeEnergy(mol, bt)
     ff_params = ff.get_ordered_params()
-    ubps, params, masses = afe.prepare_host_edge(ff_params, water_system)
+    potentials, params, masses = afe.prepare_host_edge(ff_params, water_system)
 
-    new_water_coords = minimizer.minimize_host_4d([mol], water_system, water_coords, ff, water_box)
-    coords = np.concatenate([new_water_coords, ligand_coords])
+    # concatenate (optionally minimized) water_coords and ligand_coords
+    ligand_coords = get_romol_conf(mol)
+    if minimize_energy:
+        new_water_coords = minimizer.minimize_host_4d([mol], water_system, water_coords, ff, water_box)
+        coords = np.concatenate([new_water_coords, ligand_coords])
+    else:
+        coords = np.concatenate([water_coords, ligand_coords])
 
-    return ubps, params, masses, coords, water_box
-
-
-from timemachine.md.barostat.utils import get_bond_list, get_group_indices
+    return potentials, params, masses, coords, water_box
 
 
 def equilibrate_solvent_phase(
-    ubps,
+    potentials,
     params,
     masses,
     coords,  # minimized_coords
@@ -474,7 +489,7 @@ def equilibrate_solvent_phase(
     friction = 1.0
 
     bps = []
-    for p, bp in zip(params, ubps):
+    for p, bp in zip(params, potentials):
         bps.append(bp.bind(p))
 
     all_impls = [bp.bound_impl(np.float32) for bp in bps]
@@ -482,7 +497,7 @@ def equilibrate_solvent_phase(
     intg_equil = lib.LangevinIntegrator(temperature, dt, friction, masses, seed)
     intg_equil_impl = intg_equil.impl()
 
-    bond_list = get_bond_list(ubps[0])
+    bond_list = get_bond_list(potentials[0])
     group_idxs = get_group_indices(bond_list)
     barostat_interval = 5
 
@@ -553,3 +568,54 @@ def aligned_batch_propose(xvb, K, key, vacuum_samples, vacuum_log_weights):
 def jax_aligned_batch_propose_coords(x, K, key, vacuum_samples, vacuum_log_weights):
     vacuum_samples = jax_sample_from_log_weights(vacuum_samples, vacuum_log_weights, K, key)
     return batch_align_and_replace(vacuum_samples, x)
+
+
+def pregenerate_samples(mol, ff, seed, n_solvent_samples=1000, n_ligand_batches=30000, temperature=300.0, pressure=1.0):
+    potentials, params, masses, coords, box = get_solvent_phase_system(mol, ff)
+    print(f"Generating {n_solvent_samples} solvent samples")
+    solvent_xvbs = generate_solvent_samples(
+        coords, box, masses, potentials, params, temperature, pressure, seed, n_solvent_samples
+    )
+
+    print("Generating ligand samples")
+    ligand_samples, ligand_log_weights = generate_ligand_samples(n_ligand_batches, mol, ff, temperature, seed)
+
+    return solvent_xvbs, ligand_samples, ligand_log_weights
+
+
+def generate_solvent_samples(
+    coords,
+    box,
+    masses,
+    potentials,
+    params,
+    temperature,
+    pressure,
+    seed,
+    n_samples,
+    num_equil_steps=50000,
+    md_steps_per_move=1000,
+):
+    """Discard num_equil_steps of MD, then return n_samples each separated by md_steps_per_move"""
+    xvb0 = equilibrate_solvent_phase(
+        potentials, params, masses, coords, box, temperature, pressure, num_equil_steps, seed
+    )
+
+    lamb = 1.0  # non-interacting state
+    npt_mover = moves.NPTMove(potentials, lamb, masses, temperature, pressure, n_steps=md_steps_per_move, seed=seed)
+
+    xvbs = [xvb0]
+    for _ in range(n_samples):
+        xvbs.append(npt_mover.move(xvbs[-1]))
+    return xvbs
+
+
+def generate_ligand_samples(num_batches, mol, ff, temperature, seed):
+    """Generate (weighted) samples of the ligand in vacuum, by importance sampling from a less-hindered state where
+    torsions and intramolecular nonbonded terms are disabled"""
+    state = VacuumState(mol, ff)
+    vacuum_samples, vacuum_log_weights = generate_log_weighted_samples(
+        mol, temperature, state.U_easy, state.U_full, num_batches=num_batches, seed=seed
+    )
+
+    return vacuum_samples, vacuum_log_weights

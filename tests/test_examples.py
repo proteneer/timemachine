@@ -1,13 +1,19 @@
 import os
+import pickle
 import subprocess
 import sys
+from glob import glob
 from pathlib import Path
 from typing import Dict, List, Optional
 
+import numpy as np
 import pytest
 from common import get_hif2a_ligands_as_sdf_file, temporary_working_dir
 from rdkit import Chem
+from scipy.special import logsumexp
 
+from timemachine.constants import BOLTZ
+from timemachine.datasets import fetch_freesolv
 from timemachine.fe.free_energy import RABFEResult
 
 # All examples are to be tested nightly
@@ -100,3 +106,103 @@ def test_relative_binding():
             result = RABFEResult.from_mol(mol)
             assert isinstance(result.dG_bind, float)
             assert isinstance(result.dG_bind_err, float)
+
+
+def test_smc_biphenyl():
+    """run_smc_on_biphenyl.py with reasonable settings, and expect
+    * output in summary_smc_result_*.pkl
+    * no NaNs in accumulated log weights
+    * delta_f in ballpark of 0
+    """
+    config = dict(n_walkers=100, n_windows=100, n_md_steps=100, seed=2022)
+    cli_args = [f"--{key}={val}" for (key, val) in config.items()]
+
+    with temporary_working_dir() as temp_dir:
+        # expect running this script to write a summary_result_result_{uid}.pkl file
+        output_path = str(Path(temp_dir) / "summary_smc_result_*.pkl")
+        assert len(glob(output_path)) == 0
+        _ = run_example("run_smc_on_biphenyl.py", cli_args, cwd=temp_dir)
+        smc_result_fnames = glob(output_path)
+        assert len(smc_result_fnames) == 1
+
+        # load result
+        with open(smc_result_fnames[0], "rb") as f:
+            smc_result = pickle.load(f)
+
+        # expect no NaNs in incremental log weights
+        incremental_log_weights_traj = smc_result["incremental_log_weights_traj"]
+        assert np.isfinite(incremental_log_weights_traj).all()
+
+        # expect delta_f in ballpark of 0
+        final_log_weights = smc_result["final_log_weights"]
+        final_weights = np.exp(final_log_weights)
+        delta_f = -np.log(np.mean(final_weights))
+        assert np.abs(delta_f) <= 10
+
+
+def test_smc_freesolv():
+    """run_smc_on_freesolv.py with reasonable settings on a small subset of FreeSolv, and expect
+    * output in summary_smc_result_*.pkl
+    * no NaNs in accumulated log weights
+    * predictions within 2 kcal/mol of experiment
+    """
+    # n_mols=10 -> ~30-60 minutes on a single GPU
+    config = dict(n_walkers=100, n_windows=100, n_md_steps=100, n_mols=10, seed=2022)
+    cli_args = [f"--{key}={val}" for (key, val) in config.items()]
+    temperature = 300
+
+    experimental_dGs = {mol.GetProp("_Name"): float(mol.GetProp("dG")) for mol in fetch_freesolv()}
+
+    def get_predicted_dG(fname):
+        """in kcal/mol"""
+        with open(fname, "rb") as f:
+            smc_result = pickle.load(f)
+
+        # expect no NaNs in incremental log weights
+        incremental_log_weights_traj = smc_result["incremental_log_weights_traj"]
+        assert np.isfinite(incremental_log_weights_traj).all()
+
+        # compute dG in kcal/mol from final log weights
+        log_weights = smc_result["final_log_weights"]
+        reduced_dG = -logsumexp(log_weights - np.log(len(log_weights)))
+        dG_in_kJmol = reduced_dG * (BOLTZ * temperature)
+        dG_in_kcalmol = dG_in_kJmol / 4.184
+
+        return dG_in_kcalmol
+
+    def parse_mol_name(fname):
+        """
+        "path/to/summary_smc_result_mol=mobley_3105103_time=2022-02-08 19:10:51.705173.pkl"
+        -->
+        "mobley_3105103"
+
+        TODO: add a description string to the smc_result dict, then delete me
+        """
+        return fname.split("summary_smc_result_mol=")[-1].split("_time=")[0]
+
+    with temporary_working_dir() as temp_dir:
+        # expect running this script to write summary_result_result_{mol_name}_*.pkl files
+        output_path = str(Path(temp_dir) / "summary_smc_result_*.pkl")
+        assert len(glob(output_path)) == 0
+        _ = run_example("run_smc_on_freesolv.py", cli_args, cwd=temp_dir)
+        smc_result_fnames = glob(output_path)
+        assert len(smc_result_fnames) == config["n_mols"]
+
+        # load predictions and experimental values
+        dG_preds = []
+        dG_expts = []
+        for fname in smc_result_fnames:
+            dG_preds.append(get_predicted_dG(fname))
+            dG_expts.append(experimental_dGs[parse_mol_name(fname)])
+        dG_preds = np.array(dG_preds)
+        dG_expts = np.array(dG_expts)
+
+        # compute error summaries
+        mean_abs_err_kcalmol = np.mean(np.abs(dG_preds - dG_expts))
+
+        # expect small error
+        # * MAE of ~1.5 kcal/mol: run with these settings on 10 molecules from FreeSolv
+        # * MAE of ~1.5 kcal/mol: run with these settings on ~500 molecules from FreeSolv
+        # * MAE of ~1.1 kcal/mol: FreeSolv reference calculations
+        #   https://www.biorxiv.org/content/10.1101/104281v1.full
+        assert mean_abs_err_kcalmol <= 2
