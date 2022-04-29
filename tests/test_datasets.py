@@ -17,7 +17,7 @@ def test_fetch_freesolv():
     names = [mol.GetProp("_Name") for mol in mols]
     assert len(set(names)) == len(names)
 
-    # trunacated list
+    # truncated list
     mols = fetch_freesolv(n_mols=5)
     assert len(mols) == 5
 
