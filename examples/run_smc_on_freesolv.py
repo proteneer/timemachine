@@ -73,7 +73,7 @@ def get_full_traj_path(path: Path, mol_id: str) -> Path:
     return path / f"full_smc_traj_{mol_id}.pkl"
 
 
-def save_smc_result(path: Path, mol, smc_result: Dict, cmd_args: argparse.Namespace, save_full_trajectories=False):
+def save_smc_result(path: Path, mol: int, smc_result: Dict, cmd_args: argparse.Namespace, save_full_trajectories=False):
     """
     Save the smc results as a pkl'd dictionary.
 
@@ -176,10 +176,10 @@ def main():
     # Set up client
     num_gpus = cmd_args.n_gpus or 1
     cmd_args.n_cpus = cmd_args.n_cpus or os.cpu_count()
+    cmd_args.n_cpus = cmd_args.n_cpus // num_gpus
 
     if num_gpus > 1:
         client = CUDAPoolClient(max_workers=num_gpus)
-        cmd_args.n_cpus = cmd_args.n_cpus // num_gpus
     else:
         client = SerialClient()
     client.verify()
