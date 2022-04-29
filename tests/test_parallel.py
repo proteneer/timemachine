@@ -107,6 +107,12 @@ class TestCUDAPoolClient(unittest.TestCase):
         with self.assertRaises(AssertionError):
             cli.verify()
 
+    def test_single_worker(self):
+        cli = client.CUDAPoolClient(1)
+        with patch.dict("os.environ", {"CUDA_VISIBLE_DEVICES": "123"}):
+            result = cli.submit(environ_check).result()
+        assert result == "123"
+
 
 class TestGRPCClient(unittest.TestCase):
     def setUp(self):
