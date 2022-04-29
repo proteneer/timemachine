@@ -109,39 +109,6 @@ def test_relative_binding():
             assert isinstance(result.dG_bind_err, float)
 
 
-def test_smc_biphenyl():
-    """run_smc_on_biphenyl.py with reasonable settings, and expect
-    * output in summary_smc_result_*.pkl
-    * no NaNs in accumulated log weights
-    * delta_f in ballpark of 0
-    """
-    config = dict(n_walkers=100, n_windows=100, n_md_steps=100, seed=2022)
-    cli_args = [f"--{key}={val}" for (key, val) in config.items()]
-
-    with temporary_working_dir() as temp_dir:
-        # expect running this script to write a summary_result_result_{uid}.pkl file
-        output_path = str(Path(temp_dir) / "summary_smc_result_*.pkl")
-        assert len(glob(output_path)) == 0
-        _ = run_example("run_smc_on_biphenyl.py", cli_args, cwd=temp_dir)
-        smc_result_fnames = glob(output_path)
-        assert len(smc_result_fnames) == 1
-
-        # load result
-        with open(smc_result_fnames[0], "rb") as f:
-            smc_result = pickle.load(f)
-
-        # expect no NaNs in incremental log weights
-        incremental_log_weights_traj = smc_result["incremental_log_weights_traj"]
-        assert np.isfinite(incremental_log_weights_traj).all()
-
-        # expect delta_f in ballpark of 0
-        final_log_weights = smc_result["final_log_weights"]
-        final_weights = np.exp(final_log_weights)
-
-        delta_f = -np.log(np.mean(final_weights))
-        assert np.abs(delta_f) <= 10
-
-
 def test_smc_freesolv():
     """run_smc_on_freesolv.py with reasonable settings on a small subset of FreeSolv, and expect
     * output in summary_smc_result_*.pkl
