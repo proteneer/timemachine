@@ -6,7 +6,7 @@ from typing import List, Sequence
 import numpy as np
 from numpy.typing import NDArray as Array
 
-from timemachine.constants import BOLTZ
+from timemachine.constants import BOLTZ, DEFAULT_FF
 from timemachine.fe import functional
 from timemachine.fe.lambda_schedule import construct_pre_optimized_absolute_lambda_schedule_solvent
 from timemachine.ff import Forcefield
@@ -82,7 +82,9 @@ def generate_endstate_samples(
     return all_xvbs
 
 
-def setup_absolute_hydration_with_endpoint_samples(mol, temperature=300.0, pressure=1.0, n_steps=1000, seed=2022):
+def setup_absolute_hydration_with_endpoint_samples(
+    mol, temperature=300.0, pressure=1.0, n_steps=1000, seed=2022, ff=None, num_workers=None
+):
     """Generate samples from the equilibrium distribution at lambda=1
 
     Return:
@@ -99,7 +101,7 @@ def setup_absolute_hydration_with_endpoint_samples(mol, temperature=300.0, press
     np.random.seed(seed)
 
     # set up potentials
-    ff = Forcefield.load_from_file("smirnoff_1_1_0_ccc.py")
+    ff = ff or Forcefield.load_from_file(DEFAULT_FF)
     potentials, params, masses, _, _ = enhanced.get_solvent_phase_system(mol, ff)
 
     U_fn = functional.construct_differentiable_interface_fast(potentials, params)
@@ -115,7 +117,7 @@ def setup_absolute_hydration_with_endpoint_samples(mol, temperature=300.0, press
 
     # combine solvent and ligand samples
     solvent_xvbs, ligand_samples, ligand_log_weights = enhanced.pregenerate_samples(
-        mol, ff, seed, temperature=temperature, pressure=pressure
+        mol, ff, seed, temperature=temperature, pressure=pressure, num_workers=num_workers
     )
     n_endstate_samples = 5000  # TODO: expose this parameter?
     num_ligand_atoms = mol.GetNumAtoms()
@@ -126,10 +128,12 @@ def setup_absolute_hydration_with_endpoint_samples(mol, temperature=300.0, press
     return reduced_potential_fxn, npt_mover, all_xvbs
 
 
-def set_up_ahfe_system_for_smc(mol, n_walkers, n_windows, n_md_steps, resample_thresh, seed=2022):
+def set_up_ahfe_system_for_smc(
+    mol, n_walkers, n_windows, n_md_steps, resample_thresh, seed=2022, ff=None, num_workers=None
+):
     """define initial samples, lambdas schedule, propagate fxn, log_prob fxn, resample fxn"""
     reduced_potential, mover, initial_samples = setup_absolute_hydration_with_endpoint_samples(
-        mol, n_steps=n_md_steps, seed=seed
+        mol, n_steps=n_md_steps, seed=seed, ff=ff, num_workers=num_workers
     )
     np.random.seed(seed)
 

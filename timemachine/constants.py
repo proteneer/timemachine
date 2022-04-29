@@ -11,3 +11,4 @@ ENERGY_UNIT = unit.kilojoule_per_mole
 DISTANCE_UNIT = unit.nanometer
 
 kB = unit.BOLTZMANN_CONSTANT_kB * unit.AVOGADRO_CONSTANT_NA
+DEFAULT_FF = "smirnoff_1_1_0_ccc.py"
