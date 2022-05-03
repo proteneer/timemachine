@@ -3,7 +3,7 @@ FROM nvidia/cuda:11.6.0-devel-ubuntu20.04 AS tm_base_env
 # Copied out of anaconda's dockerfile
 ARG MINICONDA_VERSION=4.6.14
 ARG MAKE_VERSION=4.2.1-1.2
-ARG GIT_VERSION=1:2.25.1-1ubuntu3.3
+ARG GIT_VERSION=1:2.25.1-*
 ARG WGET_VERSION=1.20.3-1ubuntu2
 RUN apt-get update && apt-get install --no-install-recommends -y wget=${WGET_VERSION} git=${GIT_VERSION} make=${MAKE_VERSION} \
     && apt-get clean \
