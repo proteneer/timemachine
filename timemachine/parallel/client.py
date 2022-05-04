@@ -129,15 +129,18 @@ class CUDAPoolClient(ProcessPoolClient):
         super().__init__(max_workers)
 
     @staticmethod
-    def wrapper(idx, fn, *args):
-        os.environ["CUDA_VISIBLE_DEVICES"] = str(idx)
+    def wrapper(max_workers, idx, fn, *args):
+        # for a single worker, do not overwrite CUDA_VISIBLE_DEVICES
+        # so that multiple single gpu jobs can be run on the same node
+        if max_workers > 1:
+            os.environ["CUDA_VISIBLE_DEVICES"] = str(idx)
         return fn(*args)
 
     def submit(self, task_fn, *args, **kwargs):
         """
         See abstract class for documentation.
         """
-        future = self.executor.submit(self.wrapper, self._idx, task_fn, *args)
+        future = self.executor.submit(self.wrapper, self.max_workers, self._idx, task_fn, *args)
         self._idx = (self._idx + 1) % self.max_workers
         return future
 

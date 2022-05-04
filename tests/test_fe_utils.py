@@ -94,3 +94,12 @@ def test_verify_rabfe_pair():
     err_msg = str(e.value)
     assert err_msg.startswith("Formal charge disagrees:")
     assert "ligand: 1" in err_msg
+
+
+def test_get_mol_name():
+    mol = Chem.MolFromSmiles("c1ccccc1")
+    with pytest.raises(KeyError):
+        utils.get_mol_name(mol)
+
+    mol.SetProp("_Name", "test_name")
+    assert utils.get_mol_name(mol) == "test_name"

@@ -1,5 +1,7 @@
 import os
+from collections import defaultdict
 from subprocess import check_output
+from typing import List
 
 from timemachine.parallel.grpc.service_pb2 import StatusResponse
 
@@ -31,3 +33,10 @@ def get_worker_status() -> StatusResponse:  # type: ignore
         nvidia_driver=nvidia_driver,
         git_sha=git_sha,
     )
+
+
+def batch_list(values: List, num_workers: int) -> List[List]:
+    batched_values = defaultdict(list)
+    for i, value in enumerate(values):
+        batched_values[i % num_workers].append(value)
+    return list(batched_values.values())

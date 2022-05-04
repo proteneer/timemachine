@@ -12,7 +12,7 @@ import numpy as np
 import grpc
 from timemachine import parallel
 from timemachine.parallel import client, worker
-from timemachine.parallel.utils import get_gpu_count
+from timemachine.parallel.utils import batch_list
 
 
 def jax_fn(x):
@@ -81,7 +81,7 @@ class TestGPUCount(unittest.TestCase):
 
 class TestCUDAPoolClient(unittest.TestCase):
     def setUp(self):
-        self.max_workers = get_gpu_count()
+        self.max_workers = 2
         self.cli = client.CUDAPoolClient(self.max_workers)
 
     def test_submit(self):
@@ -106,6 +106,12 @@ class TestCUDAPoolClient(unittest.TestCase):
         cli = client.CUDAPoolClient(814)
         with self.assertRaises(AssertionError):
             cli.verify()
+
+    def test_single_worker(self):
+        cli = client.CUDAPoolClient(1)
+        with patch.dict("os.environ", {"CUDA_VISIBLE_DEVICES": "123"}):
+            result = cli.submit(environ_check).result()
+        assert result == "123"
 
 
 class TestGRPCClient(unittest.TestCase):
@@ -215,3 +221,7 @@ class TestGRPCClient(unittest.TestCase):
     def tearDown(self):
         for server in self.servers:
             server.stop(5)
+
+
+def test_batch_list():
+    assert batch_list(list(range(10)), 5) == [[0, 5], [1, 6], [2, 7], [3, 8], [4, 9]]
