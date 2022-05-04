@@ -7,3 +7,4 @@ pyyaml==5.4.1
 networkx==2.5
 importlib-resources==5.4.0
 typing-extensions==4.1.1
+dill==0.3.4

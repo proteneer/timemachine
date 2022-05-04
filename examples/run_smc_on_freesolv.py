@@ -125,7 +125,7 @@ def save_smc_result(
             pickle.dump(smc_result, f)
 
 
-def run_on_freesolv_mol(mol: Chem.rdchem.Mol, cmd_args: argparse.Namespace):
+def run_on_freesolv_mol(mol: Chem.rdchem.Mol, ff: Forcefield, cmd_args: argparse.Namespace):
     name = get_mol_name(mol)
     props = mol.GetPropsAsDict()
     result_path = Path(cmd_args.result_path)
@@ -139,7 +139,7 @@ def run_on_freesolv_mol(mol: Chem.rdchem.Mol, cmd_args: argparse.Namespace):
         cmd_args.n_md_steps,
         cmd_args.resample_thresh,
         seed=cmd_args.seed,
-        ff=get_ff(cmd_args.ff),
+        ff=ff,
         num_workers=cmd_args.n_cpus,
     )
     # run simulation
@@ -162,9 +162,9 @@ def run_on_freesolv_mol(mol: Chem.rdchem.Mol, cmd_args: argparse.Namespace):
     save_smc_result(result_path, mol, smc_result, cmd_args, save_full_trajectories=cmd_args.debug_mode)
 
 
-def run_on_mols(mols: List[Chem.rdchem.Mol], cmd_args: argparse.Namespace):
+def run_on_mols(mols: List[Chem.rdchem.Mol], ff: Forcefield, cmd_args: argparse.Namespace):
     for mol in mols:
-        run_on_freesolv_mol(mol, cmd_args)
+        run_on_freesolv_mol(mol, ff, cmd_args)
 
 
 def main():
@@ -182,10 +182,11 @@ def main():
     print(f"using {num_gpus} gpus with {cmd_args.n_cpus or 'default'} cpus per gpu")
 
     # Batch mols
+    ff = get_ff(cmd_args.ff)
     batch_mols = batch_list(mols, num_gpus)
     futures = []
     for mol_subset in batch_mols:
-        futures.append(client.submit(run_on_mols, mol_subset, cmd_args))
+        futures.append(client.submit(run_on_mols, mol_subset, ff, cmd_args))
 
     # Wait for jobs to complete
     _ = [fut.result() for fut in futures]
