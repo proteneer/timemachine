@@ -115,8 +115,8 @@ def test_smc_freesolv():
     * no NaNs in accumulated log weights
     * predictions within 2 kcal/mol of experiment
     """
-    # n_mols=10 -> ~30-60 minutes on a single GPU
-    config = dict(n_walkers=100, n_windows=100, n_md_steps=100, n_mols=10, seed=2022)
+    # n_mols=2 -> ~10 minutes per mol on a single T4 GPU
+    config = dict(n_walkers=100, n_windows=100, n_md_steps=100, n_mols=2, seed=2022)
     cli_args = [f"--{key}={val}" for (key, val) in config.items()]
     temperature = 300
 
