@@ -45,13 +45,15 @@ def test_condensed_phase_mtm():
     proposal_U = state.U_decharged
     seed = 2021
 
-    cache_path = "cache.pkl"
+    cache_path = "mtm_condensed_cache.pkl"
     if not os.path.exists(cache_path):
         print("Generating cache")
         num_batches = 30000
         vacuum_samples, vacuum_log_weights = enhanced.generate_log_weighted_samples(
             mol, temperature, state.U_easy, proposal_U, num_batches=num_batches, seed=seed
         )
+        # Discard velocities
+        vacuum_samples = vacuum_samples[:, 0, :]
 
         with open(cache_path, "wb") as fh:
             pickle.dump([vacuum_samples, vacuum_log_weights], fh)
