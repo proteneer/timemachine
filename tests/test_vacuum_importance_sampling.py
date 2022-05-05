@@ -45,11 +45,12 @@ def test_vacuum_importance_sampling():
     # (ytz): hacky as hell, needs to be divisible by # of hyperthreaded cores
     num_samples = 120000
 
-    weighted_samples, log_weights = enhanced.generate_log_weighted_samples(
+    weighted_xv_samples, log_weights = enhanced.generate_log_weighted_samples(
         mol, temperature, state.U_easy, state.U_decharged, seed, num_batches=num_samples
     )
 
-    enhanced_samples = enhanced.sample_from_log_weights(weighted_samples, log_weights, 100000)
+    enhanced_xv_samples = enhanced.sample_from_log_weights(weighted_xv_samples, log_weights, 100000)
+    enhanced_samples = np.array([x for (x, v) in enhanced_xv_samples])
 
     @jax.jit
     def get_torsion(x_l):
@@ -76,7 +77,7 @@ def test_vacuum_importance_sampling():
     # check for symmetry about theta=0
     assert np.mean((enhanced_torsions_lhs - enhanced_torsions_rhs[::-1]) ** 2) < 5e-2
 
-    weighted_samples, log_weights = enhanced.generate_log_weighted_samples(
+    weighted_xv_samples, log_weights = enhanced.generate_log_weighted_samples(
         mol,
         temperature,
         state.U_decharged,
@@ -85,7 +86,8 @@ def test_vacuum_importance_sampling():
         seed=seed,
     )
 
-    vanilla_samples = enhanced.sample_from_log_weights(weighted_samples, log_weights, 100000)
+    vanilla_xv_samples = enhanced.sample_from_log_weights(weighted_xv_samples, log_weights, 100000)
+    vanilla_samples = np.array([x for (x, v) in vanilla_xv_samples])
 
     vanilla_torsions = batch_torsion_fn(vanilla_samples).reshape(-1)
     vanilla_samples_rhs, _ = np.histogram(vanilla_torsions, bins=50, range=(0, np.pi), density=True)

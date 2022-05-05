@@ -40,6 +40,7 @@ lint:
   needs: ["docker_build"]
   tags:
     - timemachine
+    - gpu
   rules:
     - if: $CI_EXTERNAL_PULL_REQUEST_IID
     - if: $NIGHTLY_TESTS
