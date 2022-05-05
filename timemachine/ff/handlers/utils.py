@@ -86,7 +86,8 @@ def check_bond_smarts_symmetric(bond_smarts: str) -> bool:
     * Does not match all possible bond smarts
         for example
         "[#6,#7:1]~[#7,#6:2]~[#1]"
-        will throw an error
+        should throw an error
+        TODO: detect this case
     """
 
     pattern = re.compile(r"\[(?P<atom1>.*)\:1\].\[(?P<atom2>.*)\:2\]")
