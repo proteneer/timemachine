@@ -8,7 +8,10 @@ from timemachine.parallel.grpc.service_pb2 import StatusResponse
 
 def get_gpu_count() -> int:
     # Expected to return a line delimited summary of each GPU
-    output = check_output(["nvidia-smi", "-L"])
+    try:
+        output = check_output(["nvidia-smi", "-L"])
+    except FileNotFoundError:
+        return 0
     gpu_list = [x for x in output.split(b"\n") if len(x)]
 
     # Respect CUDA_VISIBLE_DEVICES in determining GPU count
