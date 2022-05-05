@@ -52,6 +52,7 @@ nogpu-tests:
   needs: ["lint"]
   tags:
     - timemachine
+    - cpu
   rules:
     - if: $CI_EXTERNAL_PULL_REQUEST_IID
   script:

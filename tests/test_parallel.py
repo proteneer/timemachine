@@ -75,8 +75,7 @@ class TestGPUCount(unittest.TestCase):
             assert parallel.utils.get_gpu_count() == 3
 
         mock_output.side_effect = FileNotFoundError("nvidia-smi missing")
-        with self.assertRaises(FileNotFoundError):
-            parallel.utils.get_gpu_count()
+        assert parallel.utils.get_gpu_count() == 0
 
 
 class TestCUDAPoolClient(unittest.TestCase):
