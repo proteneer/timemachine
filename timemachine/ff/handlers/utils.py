@@ -1,3 +1,5 @@
+import re
+
 from rdkit import Chem
 
 
@@ -67,3 +69,27 @@ def match_smirks(mol, smirks):
         matches.append(tuple(mas))
 
     return matches
+
+
+def check_bond_smarts_symmetric(bond_smarts: str) -> bool:
+    """Match [<atom1>:1]*[<atom2>:2],
+    and return whether atom1 and atom2 are identical strings
+
+    Notes
+    -----
+    * The AM1CCC model contains symmetric patterns that must be assigned 0 parameters
+        (Otherwise, behavior when symmetric bond matches in an arbitrary direction)
+    * Only checks string equivalence!
+        for example
+        check_bond_smarts_symmetric("[#6,#7:1]~[#7,#6:2]")
+        will be a false negative
+    * Does not match all possible bond smarts
+        for example
+        "[#6,#7:1]~[#7,#6:2]~[#1]"
+        will throw an error
+    """
+
+    pattern = re.compile(r"\[(?P<atom1>.*)\:1\].\[(?P<atom2>.*)\:2\]")
+    match = pattern.match(bond_smarts)
+    assert type(match) is re.Match, "unrecognized bond smarts"
+    return match.group("atom1") == match.group("atom2")
