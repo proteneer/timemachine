@@ -1,6 +1,11 @@
 import re
 
+import numpy as np
+from numpy.typing import NDArray
+from openeye import oechem
 from rdkit import Chem
+
+from timemachine.ff.handlers.nonbonded import convert_to_oe
 
 
 def canonicalize_bond(arr):
@@ -72,7 +77,7 @@ def match_smirks(mol, smirks):
 
 
 def check_bond_smarts_symmetric(bond_smarts: str) -> bool:
-    """Match [<atom1>:1]*[<atom2>:2],
+    """Match [<atom1>:1]*[<atom2>:2]
     and return whether atom1 and atom2 are identical strings
 
     Notes
@@ -86,11 +91,31 @@ def check_bond_smarts_symmetric(bond_smarts: str) -> bool:
     * Does not match all possible bond smarts
         for example
         "[#6,#7:1]~[#7,#6:2]~[#1]"
-        should throw an error
-        TODO: detect this case
+        or
+        ""[#6:1](~[#8])(~[#16:2])"
+        would throw an error
     """
 
     pattern = re.compile(r"\[(?P<atom1>.*)\:1\].\[(?P<atom2>.*)\:2\]")
     match = pattern.match(bond_smarts)
+
     assert type(match) is re.Match, "unrecognized bond smarts"
+    assert match.span() == (0, len(bond_smarts)), "leftovers"
     return match.group("atom1") == match.group("atom2")
+
+
+def get_symmetry_classes(rdmol: Chem.Mol) -> NDArray:
+    """[atom.GetSymmetryClass() for atom in mol],
+    just renumbered for convenience"""
+
+    oemol = convert_to_oe(rdmol)
+    oechem.OEPerceiveSymmetry(oemol)
+    symmetry_classes = np.array([atom.GetSymmetryClass() for atom in oemol.GetAtoms()])
+    n_classes = len(set(symmetry_classes))
+
+    # make indexy / contiguous from 0 to n_classes
+    idx_map = {old_idx: new_idx for (new_idx, old_idx) in enumerate(set(symmetry_classes))}
+    symmetry_classes = np.array([idx_map[old_idx] for old_idx in symmetry_classes])
+    assert set(symmetry_classes) == set(range(n_classes))
+
+    return symmetry_classes
