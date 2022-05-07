@@ -2,19 +2,16 @@ import base64
 import pickle
 from collections import Counter
 
-import jax
 import jax.numpy as jnp
 import networkx as nx
 import numpy as np
-from jax import grad
-from numpy.typing import NDArray
 from rdkit import Chem
 
 from timemachine import constants
 from timemachine.ff.handlers.bcc_aromaticity import AromaticityModel
 from timemachine.ff.handlers.bcc_aromaticity import match_smirks as oe_match_smirks
 from timemachine.ff.handlers.serialize import SerializableMixIn
-from timemachine.ff.handlers.utils import canonicalize_bond, get_symmetry_classes
+from timemachine.ff.handlers.utils import canonicalize_bond
 from timemachine.ff.handlers.utils import match_smirks as rd_match_smirks
 from timemachine.graph_utils import convert_to_nx
 
@@ -548,43 +545,3 @@ class AM1CCCHandler(SerializableMixIn):
         assert q_params.shape[0] == mol.GetNumAtoms()  # check that return shape is consistent with input mol
 
         return q_params
-
-
-def get_spurious_param_idxs(mol, handle: AM1CCCHandler) -> NDArray:
-    """Find all indices i such that adjusting handle.params[i] can
-    result in distinct parameters being assigned to indistinguishable atoms in mol.
-
-    Optimizing the parameters associated with these indices should be avoided.
-    """
-
-    symmetry_classes = get_symmetry_classes(mol)
-
-    def assign_params(ff_params):
-        return handle.partial_parameterize(ff_params, mol)
-
-    def compute_spuriosity(ff_params):
-        # apply parameters
-        sys_params = assign_params(ff_params)
-
-        # compute the mean per symmetry class
-        class_sums = jax.ops.segment_sum(sys_params, symmetry_classes)
-        class_means = class_sums / np.bincount(symmetry_classes)
-
-        # expect no atom can be adjusted independently of others in its symmetry class
-        expected_constant_within_class = class_means[symmetry_classes]
-        assert expected_constant_within_class.shape == sys_params.shape
-        deviation_from_class_means = sys_params - expected_constant_within_class
-        spuriosity = jnp.sum(deviation_from_class_means ** 2)
-
-        return spuriosity
-
-    # TODO: may also want to try several points in the parameter space,
-    #   randomly or systematically flipping signs...
-    trial_params = np.ones(len(handle.params))
-
-    # get idxs where component of gradient w.r.t. trial_params is != 0
-    thresh = 1e-6
-    g = grad(compute_spuriosity)(trial_params)
-    spurious_idxs = np.where(np.abs(g) > thresh)[0]
-
-    return spurious_idxs

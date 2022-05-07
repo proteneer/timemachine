@@ -1,6 +1,9 @@
 import re
 
+import jax
 import numpy as np
+from jax import grad
+from jax import numpy as jnp
 from numpy.typing import NDArray
 from openeye import oechem
 from rdkit import Chem
@@ -119,3 +122,44 @@ def get_symmetry_classes(rdmol: Chem.Mol) -> NDArray:
     assert set(symmetry_classes) == set(range(n_classes))
 
     return symmetry_classes
+
+
+def get_spurious_param_idxs(mol, handle) -> NDArray:
+    """Find all indices i such that adjusting handle.params[i] can
+    result in distinct parameters being assigned to indistinguishable atoms in mol.
+
+    Optimizing the parameters associated with these indices should be avoided.
+    """
+
+    symmetry_classes = get_symmetry_classes(mol)
+
+    def assign_params(ff_params):
+        return handle.partial_parameterize(ff_params, mol)
+
+    def compute_spuriosity(ff_params):
+        # apply parameters
+        sys_params = assign_params(ff_params)
+
+        # compute the mean per symmetry class
+        class_sums = jax.ops.segment_sum(sys_params, symmetry_classes)
+        class_means = class_sums / np.bincount(symmetry_classes)
+
+        # expect no atom can be adjusted independently of others in its symmetry class
+        expected_constant_within_class = class_means[symmetry_classes]
+        assert expected_constant_within_class.shape == sys_params.shape
+        deviation_from_class_means = sys_params - expected_constant_within_class
+        spuriosity = jnp.sum(deviation_from_class_means ** 2)
+
+        return spuriosity
+
+    # TODO: may also want to try several points in the parameter space,
+    #   randomly or systematically flipping signs...
+    trial_params = np.ones(len(handle.params))  # TODO: generalize
+    assert trial_params.shape == handle.params.shape
+
+    # get idxs where component of gradient w.r.t. trial_params is != 0
+    thresh = 1e-6
+    g = grad(compute_spuriosity)(trial_params)
+    spurious_idxs = np.where(np.abs(g) > thresh)[0]
+
+    return spurious_idxs
