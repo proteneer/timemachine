@@ -16,6 +16,7 @@ from timemachine.ff import Forcefield
 from timemachine.ff.charges import AM1CCC_CHARGES
 from timemachine.ff.handlers import bonded, nonbonded
 from timemachine.ff.handlers.deserialize import deserialize_handlers
+from timemachine.ff.handlers.utils import get_spurious_param_idxs, get_symmetry_classes
 
 
 def test_harmonic_bond():
@@ -931,3 +932,32 @@ def test_lennard_jones_handler():
     # if a parameter is > 99 then its adjoint should be zero (converse isn't necessarily true since)
     mask = np.argwhere(params > 90)
     assert np.all(adjoints[mask] == 0.0)
+
+
+def test_symmetry_classes():
+    """Assert get_symmetry_classes returns arrays of expected length num_atoms"""
+    mols = fetch_freesolv()[:10]
+    for mol in mols:
+        sym_classes = get_symmetry_classes(mol)
+        assert len(sym_classes) == mol.GetNumAtoms()
+
+
+def test_spurious_param_idxs():
+    """Assert that get_spurious_param_idxs
+    * returns arrays with length sometimes > 0
+    * only ever returns indices of symmetric bond types"""
+    mols = fetch_freesolv()[50:55]  # expect three of these to trigger
+
+    ff = Forcefield.load_from_file(DEFAULT_FF)
+    q_handle = ff.q_handle
+    sym_idxs = set(np.where(q_handle.symmetric_pattern_mask)[0])
+
+    n_params_detected_per_mol = []
+    for mol in mols:
+        spurious_idxs = get_spurious_param_idxs(mol, q_handle)
+        assert set(spurious_idxs).issubset(sym_idxs)
+
+        n_params_detected_per_mol.append(len(spurious_idxs))
+
+    n_mols_with_any_detected_params = (np.array(n_params_detected_per_mol) > 0).sum()
+    assert n_mols_with_any_detected_params == 3
