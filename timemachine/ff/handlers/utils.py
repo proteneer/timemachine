@@ -126,10 +126,6 @@ def check_bond_smarts_symmetric(bond_smarts: str) -> bool:
         #  (false negatives possible -- but are also possible in the other branch...)
         return False
 
-    assert type(match) is re.Match, "unrecognized bond smarts"
-    assert match.span() == (0, len(bond_smarts)), "leftovers"
-    return match.group("atom1") == match.group("atom2")
-
 
 def get_symmetry_classes(rdmol: Chem.Mol) -> NDArray:
     """[atom.GetSymmetryClass() for atom in mol],
@@ -185,7 +181,7 @@ def get_spurious_param_idxs(mol, handle) -> NDArray:
     assert trial_params.shape == handle.params.shape
 
     # get idxs where component of gradient w.r.t. trial_params is != 0
-    thresh = 1e-6
+    thresh = 1e-4
     g = grad(compute_spuriosity)(trial_params)
     spurious_idxs = np.where(np.abs(g) > thresh)[0]
 
