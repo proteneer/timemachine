@@ -10,7 +10,7 @@ from timemachine import constants
 from timemachine.ff.handlers.bcc_aromaticity import AromaticityModel
 from timemachine.ff.handlers.bcc_aromaticity import match_smirks as oe_match_smirks
 from timemachine.ff.handlers.serialize import SerializableMixIn
-from timemachine.ff.handlers.utils import canonicalize_bond, convert_to_oe
+from timemachine.ff.handlers.utils import canonicalize_bond, check_bond_smarts_symmetric, convert_to_oe
 from timemachine.ff.handlers.utils import match_smirks as rd_match_smirks
 from timemachine.graph_utils import convert_to_nx
 
@@ -518,6 +518,7 @@ class AM1CCCHandler(SerializableMixIn):
             molecule to be parameterized.
 
         """
+        AM1CCCHandler.static_validate(params, smirks)
         am1_charges = compute_or_load_am1_charges(mol)
         bond_idxs, type_idxs = compute_or_load_bond_smirks_matches(mol, smirks)
 
@@ -527,3 +528,23 @@ class AM1CCCHandler(SerializableMixIn):
         assert q_params.shape[0] == mol.GetNumAtoms()  # check that return shape is consistent with input mol
 
         return q_params
+
+    @staticmethod
+    def static_validate(params, smirks):
+        """Raise ValueError if any symmetric bond patterns have non-zero parameter"""
+        for pattern, param in zip(smirks, params):
+            pattern_symmetric = check_bond_smarts_symmetric(pattern)
+            param_nonzero = param != 0
+            if pattern_symmetric and param_nonzero:
+                raise ValueError(f"a symmetric bond pattern {pattern} has a non-zero parameter {param}")
+
+    @property
+    def symmetric_pattern_mask(self):
+        """Boolean array where mask[i] == True if self.smirks[i] symmetric
+
+        Notes
+        -----
+        * During training, avoid modifying any parameters where this mask is True
+        """
+        mask = np.array([check_bond_smarts_symmetric(pattern) for pattern in self.smirks])
+        return mask
