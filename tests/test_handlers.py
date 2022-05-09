@@ -10,7 +10,8 @@ import pytest
 from rdkit import Chem
 from rdkit.Chem import AllChem, rdmolops
 
-from timemachine.constants import ONE_4PI_EPS0
+from timemachine.constants import DEFAULT_FF, ONE_4PI_EPS0
+from timemachine.datasets import fetch_freesolv
 from timemachine.ff import Forcefield
 from timemachine.ff.charges import AM1CCC_CHARGES
 from timemachine.ff.handlers import bonded, nonbonded
@@ -567,6 +568,37 @@ def test_am1ccc_throws_error_on_phosphorus():
     with pytest.raises(RuntimeError) as e:
         _ = ff.q_handle.parameterize(mol)
     assert "unsupported element" in str(e)
+
+
+def test_am1ccc_symmetric_patterns():
+    """Assert that AM1CCCHandler instances:
+    * have a symmetric_pattern_mask property with the expected shape and contents
+    * can be used with jax.grad
+    * raise ValueError when parameters associated with symmetric patterns != 0"""
+    ff = Forcefield.load_from_file(DEFAULT_FF)
+    q_handle = ff.q_handle
+    smirks, params = q_handle.smirks, q_handle.params
+    mol = fetch_freesolv()[123]
+
+    sym_pattern_mask = q_handle.symmetric_pattern_mask
+    assert len(sym_pattern_mask) == len(q_handle.smirks)
+    assert sum(sym_pattern_mask) == 25
+
+    def f(params):
+        return np.sum(q_handle.static_parameterize(params, smirks, mol) ** 2)
+
+    _ = f(params)
+    _ = jax.grad(f)(params)
+
+    # expect problems when parameters associated with symmetric patterns are 1.0
+    bad_params = np.array(params)
+    bad_params[sym_pattern_mask] = 1.0
+
+    with pytest.raises(ValueError):
+        _ = f(bad_params)
+
+    with pytest.raises(ValueError):
+        _ = jax.grad(f)(bad_params)
 
 
 def test_am1_differences():
