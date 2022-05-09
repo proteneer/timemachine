@@ -506,7 +506,7 @@ class AM1CCCHandler(SerializableMixIn):
         return self.partial_parameterize(self.params, mol)
 
     @staticmethod
-    def static_parameterize(params, smirks, mol):
+    def static_parameterize(params, smirks, mol, validate=True):
         """
         Parameters
         ----------
@@ -516,9 +516,12 @@ class AM1CCCHandler(SerializableMixIn):
             SMIRKS patterns matching bonds, to be parsed using OpenEye Toolkits
         mol: Chem.ROMol
             molecule to be parameterized.
-
+        validate: bool
+            check params, smirks
         """
-        AM1CCCHandler.static_validate(params, smirks)
+        if validate:
+            AM1CCCHandler.static_validate(params, smirks)
+
         am1_charges = compute_or_load_am1_charges(mol)
         bond_idxs, type_idxs = compute_or_load_bond_smirks_matches(mol, smirks)
 

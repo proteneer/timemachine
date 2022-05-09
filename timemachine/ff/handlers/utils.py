@@ -155,9 +155,10 @@ def get_spurious_param_idxs(mol, handle) -> NDArray:
     """
 
     symmetry_classes = get_symmetry_classes(mol)
+    smirks = handle.smirks
 
     def assign_params(ff_params):
-        return handle.partial_parameterize(ff_params, mol)
+        return handle.static_parameterize(ff_params, smirks, mol, validate=False)
 
     def compute_spuriosity(ff_params):
         # apply parameters
