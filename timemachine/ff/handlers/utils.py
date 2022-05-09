@@ -105,16 +105,26 @@ def check_bond_smarts_symmetric(bond_smarts: str) -> bool:
         for example
         check_bond_smarts_symmetric("[#6,#7:1]~[#7,#6:2]")
         will be a false negative
-    * Does not match all possible bond smarts
+    * Does not handle all possible bond smarts
         for example
-        "[#6,#7:1]~[#7,#6:2]~[#1]"
+        "[#6:1]~[#6:2]~[#1]"
         or
         "[#6:1](~[#8])(~[#16:2])"
-        would throw an error
+        will not be matched, will return False by default.
+        However, for the bond smarts subset used by the AM1CCC model, this covers most cases
     """
 
     pattern = re.compile(r"\[(?P<atom1>.*)\:1\].\[(?P<atom2>.*)\:2\]")
     match = pattern.match(bond_smarts)
+
+    if type(match) is re.Match:
+        complete = match.span() == (0, len(bond_smarts))
+        symmetric = match.group("atom1") == match.group("atom2")
+        return complete and symmetric
+    else:
+        # TODO: possibly warn in this branch?
+        #  (false negatives possible -- but are also possible in the other branch...)
+        return False
 
     assert type(match) is re.Match, "unrecognized bond smarts"
     assert match.span() == (0, len(bond_smarts)), "leftovers"
