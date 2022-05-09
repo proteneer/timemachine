@@ -9,9 +9,10 @@ namespace timemachine {
 template <typename RealType> class Neighborlist {
 
 private:
-    const int N_; // Number of atoms
-    int NC_;      // Number of atoms in column, N_ by default
-    int NR_;      // Number of atoms in row, N_ by default
+    const int max_size_; // Max number of atoms the buffers allow
+    int N_;              // Number of atoms
+    int NC_;             // Number of atoms in column, N_ by default
+    int NR_;             // Number of atoms in row, N_ by default
 
     double *d_row_block_bounds_ctr_;
     double *d_row_block_bounds_ext_;
@@ -35,6 +36,12 @@ public:
     void set_row_idxs(std::vector<unsigned int> idxs);
 
     void reset_row_idxs();
+
+    void reset_row_idxs_device(const cudaStream_t stream);
+
+    void resize(const int size);
+
+    void resize_device(const int size, const cudaStream_t stream);
 
     void set_idxs_device(
         const int NC, const int NR, unsigned int *column_idxs, unsigned int *row_idxs, const cudaStream_t stream);

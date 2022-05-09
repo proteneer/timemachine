@@ -9,7 +9,7 @@
 
 namespace timemachine {
 
-template <typename RealType> Neighborlist<RealType>::Neighborlist(const int N) : N_(N), NC_(N), NR_(N) {
+template <typename RealType> Neighborlist<RealType>::Neighborlist(const int N) : max_size_(N), N_(N), NC_(N), NR_(N) {
     const int tpb = warp_size;
     const int column_blocks = this->num_column_blocks();
     const int row_blocks = this->num_row_blocks();
@@ -31,8 +31,8 @@ template <typename RealType> Neighborlist<RealType>::Neighborlist(const int N) :
     gpuErrchk(cudaMalloc(&d_column_block_bounds_ext_, column_blocks * 3 * sizeof(*d_column_block_bounds_ext_)));
 
     // Row and column indice arrays
-    gpuErrchk(cudaMalloc(&d_column_idxs_, N_ * sizeof(*d_column_idxs_)));
-    gpuErrchk(cudaMalloc(&d_row_idxs_, N_ * sizeof(*d_row_idxs_)));
+    gpuErrchk(cudaMalloc(&d_column_idxs_, max_size_ * sizeof(*d_column_idxs_)));
+    gpuErrchk(cudaMalloc(&d_row_idxs_, max_size_ * sizeof(*d_row_idxs_)));
 
     this->reset_row_idxs();
 }
@@ -243,17 +243,41 @@ template <typename RealType> void Neighborlist<RealType>::set_row_idxs(std::vect
 }
 
 template <typename RealType> void Neighborlist<RealType>::reset_row_idxs() {
+    const cudaStream_t stream = static_cast<cudaStream_t>(0);
+    this->reset_row_idxs_device(stream);
+    gpuErrchk(cudaStreamSynchronize(stream));
+}
+
+template <typename RealType> void Neighborlist<RealType>::reset_row_idxs_device(const cudaStream_t stream) {
     const int tpb = warp_size;
     const int blocks = ceil_divide(N_, tpb);
     // Fill the indices with the 0 to N-1 indices, indicating 'normal' neighborlist operation
-    k_arange<<<blocks, tpb>>>(N_, d_column_idxs_);
+    k_arange<<<blocks, tpb, 0, stream>>>(N_, d_column_idxs_);
     gpuErrchk(cudaPeekAtLastError());
-    k_arange<<<blocks, tpb>>>(N_, d_row_idxs_);
+    k_arange<<<blocks, tpb, 0, stream>>>(N_, d_row_idxs_);
     gpuErrchk(cudaPeekAtLastError());
     this->NR_ = N_;
     this->NC_ = N_;
 }
 
+template <typename RealType> void Neighborlist<RealType>::resize(const int size) {
+    const cudaStream_t stream = static_cast<cudaStream_t>(0);
+    this->resize_device(size, stream);
+    gpuErrchk(cudaStreamSynchronize(stream));
+}
+
+// Resize the Neighborlist to function on a different size. Note that this only allows
+// finding interactions on a smaller set of the system, will not increase the size of the underlying buffers.
+template <typename RealType> void Neighborlist<RealType>::resize_device(const int size, const cudaStream_t stream) {
+    if (size <= 0) {
+        throw std::runtime_error("size is must be at least 1");
+    }
+    if (size > max_size_) {
+        throw std::runtime_error("size is greater than max size");
+    }
+    this->N_ = size;
+    this->reset_row_idxs_device(stream);
+}
 
 // set_idxs_device is for use when idxs exist on the GPU already and are used as the new idxs to compute the neighborlist on.
 template <typename RealType>

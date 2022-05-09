@@ -14,10 +14,12 @@ pytestmark = [pytest.mark.memcheck]
 
 
 def test_block_bounds():
-
     np.random.seed(2020)
-
-    for N in [128, 156, 298]:
+    sizes = [128, 156, 298]
+    max_size = max(sizes)
+    nblist = custom_ops.Neighborlist_f64(max_size)
+    for N in sizes:
+        nblist.resize(N)
         block_size = 32
 
         D = 3
@@ -48,7 +50,6 @@ def test_block_bounds():
         ref_ctrs = np.array(ref_ctrs)
         ref_exts = np.array(ref_exts)
 
-        nblist = custom_ops.Neighborlist_f64(N)
         test_ctrs, test_exts = nblist.compute_block_bounds(coords, box, block_size)
 
         np.testing.assert_almost_equal(ref_ctrs, test_ctrs)
@@ -145,9 +146,11 @@ def test_nblist_row_indices_are_order_independent():
     D = 3
     cutoff = 1.0
     padding = 0.1
-
+    sizes = [35, 64, 129, 1025, 1259, 2029]
+    max_size = max(sizes)
     water_coords = get_water_coords(D, sort=False)
-    for size in [35, 64, 129, 1025, 1259, 2029]:
+    nblists = [custom_ops.Neighborlist_f32(max_size), custom_ops.Neighborlist_f64(max_size)]
+    for size in sizes:
         print("testing size:", size)
 
         np.random.seed(1234)
@@ -175,7 +178,8 @@ def test_nblist_row_indices_are_order_independent():
         np.testing.assert_array_equal(reference_ixns_set, shuffled_ixns_set)
 
         # Verify that the C++ agrees
-        for nblist in [custom_ops.Neighborlist_f32(size), custom_ops.Neighborlist_f64(size)]:
+        for nblist in nblists:
+            nblist.resize(size)
             nblist.set_row_idxs(atom_idxs)
             test_ixn_list = nblist.get_nblist(coords, box, cutoff)
             test_ixns_set = set(np.concatenate(test_ixn_list).reshape(-1))
@@ -190,10 +194,11 @@ def test_nblist_row_indices_are_order_independent():
 
 
 def test_neighborlist():
-
     water_coords = get_water_coords(3, sort=False)
-    for size in [35, 64, 129, 1025, 1259, 2029]:
-
+    sizes = [35, 64, 129, 1025, 1259, 2029]
+    max_size = max(sizes)
+    nblists = [custom_ops.Neighborlist_f32(max_size), custom_ops.Neighborlist_f64(max_size)]
+    for size in sizes:
         print("testing size:", size)
 
         np.random.seed(1234)
@@ -212,9 +217,9 @@ def test_neighborlist():
             coords = coords[perm]
 
         ref_ixn_list = build_reference_ixn_list(coords, box, cutoff)
-
-        for nblist in (custom_ops.Neighborlist_f32(size), custom_ops.Neighborlist_f64(size)):
-
+        for nblist in nblists:
+            # Resize the nblist accordingly
+            nblist.resize(size)
             # Run twice to ensure deterministic results
             for _ in range(2):
                 test_ixn_list = nblist.get_nblist(coords, box, cutoff)
@@ -222,6 +227,23 @@ def test_neighborlist():
                 assert len(ref_ixn_list) == len(test_ixn_list)
 
                 assert_ixn_lists_are_equal(ref_ixn_list, test_ixn_list)
+
+
+def test_neighborlist_resize():
+    N = 3
+
+    # Verify that the sizes of the rows and columns match how the NBlist was constructed
+    for nblist in (
+        custom_ops.Neighborlist_f32(N),
+        custom_ops.Neighborlist_f64(N),
+    ):
+        with pytest.raises(RuntimeError) as e:
+            nblist.resize(0)
+        assert "size is must be at least 1" == str(e.value)
+
+        with pytest.raises(RuntimeError) as e:
+            nblist.resize(N + 1)
+        assert "size is greater than max size" == str(e.value)
 
 
 def test_neighborlist_invalid_row_idxs():
