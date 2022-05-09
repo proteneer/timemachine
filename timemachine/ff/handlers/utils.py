@@ -5,10 +5,24 @@ import numpy as np
 from jax import grad
 from jax import numpy as jnp
 from numpy.typing import NDArray
-from openeye import oechem
 from rdkit import Chem
 
-from timemachine.ff.handlers.nonbonded import convert_to_oe
+
+def convert_to_oe(mol):
+    """Convert an ROMol into an OEMol"""
+
+    # imported here for optional dependency
+    from openeye import oechem
+
+    mb = Chem.MolToMolBlock(mol)
+    ims = oechem.oemolistream()
+    ims.SetFormat(oechem.OEFormat_SDF)
+    ims.openstring(mb)
+
+    for buf_mol in ims.GetOEMols():
+        oemol = oechem.OEMol(buf_mol)
+    ims.close()
+    return oemol
 
 
 def canonicalize_bond(arr):
@@ -110,6 +124,9 @@ def check_bond_smarts_symmetric(bond_smarts: str) -> bool:
 def get_symmetry_classes(rdmol: Chem.Mol) -> NDArray:
     """[atom.GetSymmetryClass() for atom in mol],
     just renumbered for convenience"""
+
+    # imported here for optional dependency
+    from openeye import oechem
 
     oemol = convert_to_oe(rdmol)
     oechem.OEPerceiveSymmetry(oemol)
