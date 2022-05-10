@@ -10,7 +10,7 @@ import pytest
 from rdkit import Chem
 from rdkit.Chem import AllChem, rdmolops
 
-from timemachine.constants import ONE_4PI_EPS0
+from timemachine.constants import DEFAULT_FF, ONE_4PI_EPS0
 from timemachine.ff import Forcefield
 from timemachine.ff.charges import AM1CCC_CHARGES
 from timemachine.ff.handlers import bonded, nonbonded
@@ -899,3 +899,17 @@ def test_lennard_jones_handler():
     # if a parameter is > 99 then its adjoint should be zero (converse isn't necessarily true since)
     mask = np.argwhere(params > 90)
     assert np.all(adjoints[mask] == 0.0)
+
+
+def test_charge_symmetry():
+    """expect 2 distinct partial charges applied to benzene"""
+
+    # molecule with 2 atomic symmetry classes
+    benzene = "C1=CC=CC=C1"
+    mol = Chem.MolFromSmiles(benzene)
+    mol = Chem.AddHs(mol)
+
+    # expect 2 distinct charges, {+q, -q}
+    ff = Forcefield.load_from_file(DEFAULT_FF)
+    assigned_charges = np.array(ff.q_handle.parameterize(mol))
+    assert len(set(assigned_charges)) == 2
