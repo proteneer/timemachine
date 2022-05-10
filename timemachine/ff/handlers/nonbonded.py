@@ -243,12 +243,14 @@ def compute_or_load_bond_smirks_matches(mol, smirks_list):
         for type_idx, smirks in enumerate(smirks_list):
             matches = oe_match_smirks(smirks, oemol)
 
-            for match in matches:
-                bond = [match[0], match[1]]
-                already_assigned = bond in bond_idxs
+            for matched_indices in matches:
+                a, b = matched_indices[0], matched_indices[1]
+                forward_matched_bond = [a, b]
+
+                already_assigned = forward_matched_bond in bond_idxs
 
                 if not already_assigned:
-                    bond_idxs.append(bond)
+                    bond_idxs.append(forward_matched_bond)
                     type_idxs.append(type_idx)
         mol.SetProp(BOND_SMIRK_MATCH_CACHE, base64.b64encode(pickle.dumps((bond_idxs, type_idxs))))
     else:
