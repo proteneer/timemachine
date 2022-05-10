@@ -946,14 +946,20 @@ def test_spurious_param_idxs():
     """Assert that get_spurious_param_idxs
     * returns arrays with length sometimes > 0
     * only ever returns indices of symmetric bond types"""
-    mols = fetch_freesolv()[50:55]  # expect three of these to trigger
+
+    mols = fetch_freesolv()
+    mol_dict = {mol.GetProp("_Name"): mol for mol in mols}
+
+    # expect three of these to trigger
+    names = ["mobley_1743409", "mobley_1755375", "mobley_1760914", "mobley_1770205", "mobley_1781152"]
+    select_mols = [mol_dict[name] for name in names]
 
     ff = Forcefield.load_from_file(DEFAULT_FF)
     q_handle = ff.q_handle
     sym_idxs = set(np.where(q_handle.symmetric_pattern_mask)[0])
 
     n_params_detected_per_mol = []
-    for mol in mols:
+    for mol in select_mols:
         spurious_idxs = get_spurious_param_idxs(mol, q_handle)
         assert set(spurious_idxs).issubset(sym_idxs)
 
