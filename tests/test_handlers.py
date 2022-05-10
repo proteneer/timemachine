@@ -918,6 +918,4 @@ def test_symmetric_am1ccc():
     # at https://github.com/proteneer/timemachine/tree/fd14908113315ca07c8983e7ecd4dd92178d03a8
     # set(ref_charges) == {-1.8165082, -1.8158009, 0.90795946}
     # set(test_charges) == {-3.815801, -1.8158009, 0.18349183, 0.90795946}
-    assert len(set(test_charges)) == len(set(ref_charges)), set(test_charges)
-
-    np.testing.assert_allclose(test_charges, ref_charges)
+    np.testing.assert_array_equal(test_charges, ref_charges)
