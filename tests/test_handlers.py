@@ -899,3 +899,25 @@ def test_lennard_jones_handler():
     # if a parameter is > 99 then its adjoint should be zero (converse isn't necessarily true since)
     mask = np.argwhere(params > 90)
     assert np.all(adjoints[mask] == 0.0)
+
+
+def test_symmetric_am1ccc():
+    """Assert that (symmetric_bond_smarts, +1.0) has same behavior as (symmetric_bond_smarts, 0.0) on one test mol"""
+
+    cyclohexane = "C1CCCCC1"
+    mol = Chem.MolFromSmiles(cyclohexane)
+    mol = Chem.AddHs(mol)
+
+    smirks = ["[#6:1]~[#6:2]"]
+    zeros = np.zeros(len(smirks))
+    ones = np.ones(len(smirks))
+
+    ref_charges = np.array(nonbonded.AM1CCCHandler.static_parameterize(zeros, smirks, mol))
+    test_charges = np.array(nonbonded.AM1CCCHandler.static_parameterize(ones, smirks, mol))
+
+    # at https://github.com/proteneer/timemachine/tree/fd14908113315ca07c8983e7ecd4dd92178d03a8
+    # set(ref_charges) == {-1.8165082, -1.8158009, 0.90795946}
+    # set(test_charges) == {-3.815801, -1.8158009, 0.18349183, 0.90795946}
+    assert len(set(test_charges)) == len(set(ref_charges)), set(test_charges)
+
+    np.testing.assert_allclose(test_charges, ref_charges)
