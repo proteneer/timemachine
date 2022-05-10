@@ -243,15 +243,12 @@ def compute_or_load_bond_smirks_matches(mol, smirks_list):
         for type_idx, smirks in enumerate(smirks_list):
             matches = oe_match_smirks(smirks, oemol)
 
-            for matched_indices in matches:
-                a, b = matched_indices[0], matched_indices[1]
-                forward_matched_bond = [a, b]
-                reverse_matched_bond = [b, a]
-
-                already_assigned = forward_matched_bond in bond_idxs or reverse_matched_bond in bond_idxs
+            for match in matches:
+                bond = [match[0], match[1]]
+                already_assigned = bond in bond_idxs
 
                 if not already_assigned:
-                    bond_idxs.append(forward_matched_bond)
+                    bond_idxs.append(bond)
                     type_idxs.append(type_idx)
         mol.SetProp(BOND_SMIRK_MATCH_CACHE, base64.b64encode(pickle.dumps((bond_idxs, type_idxs))))
     else:
@@ -292,14 +289,10 @@ def apply_bond_charge_corrections(initial_charges, bond_idxs, deltas):
 
     # print some safety warnings
     directed_bonds = Counter([tuple(b) for b in bond_idxs])
-    undirected_bonds = Counter([tuple(sorted(b)) for b in bond_idxs])
 
     if max(directed_bonds.values()) > 1:
         duplicates = [bond for (bond, count) in directed_bonds.items() if count > 1]
         print(UserWarning(f"Duplicate directed bonds! {duplicates}"))
-    elif max(undirected_bonds.values()) > 1:
-        duplicates = [bond for (bond, count) in undirected_bonds.items() if count > 1]
-        print(UserWarning(f"Duplicate undirected bonds! {duplicates}"))
 
     return final_charges
 
