@@ -114,8 +114,8 @@ def get_symmetry_classes(rdmol: Chem.Mol) -> NDArray:
     return symmetry_classes
 
 
-def symmetrize(per_particle_params, mol):
-    """Replace param[atom] with mean([param[a] for a in symmetry_class(atom)])"""
+def symmetrize(per_particle_params: NDArray, mol: Chem.Mol) -> NDArray:
+    """Replace per_particle_params[atom] with mean([per_particle_params[a] for a in symmetry_class(atom)])"""
 
     # compute the mean per symmetry class
     symmetry_classes = get_symmetry_classes(mol)
