@@ -396,11 +396,12 @@ void declare_potential(py::module &m) {
                 const long unsigned int D = coords.shape()[1];
                 const long unsigned int P = params.size();
 
-                std::vector<unsigned long long> du_dx(N * D);
-                std::vector<unsigned long long> du_dp(P);
+                // initialize with fixed garbage values for debugging convenience (these should be overwritten by `execute_host`)
+                std::vector<unsigned long long> du_dx(N * D, 9999);
+                std::vector<unsigned long long> du_dp(P, 9999);
 
-                std::vector<unsigned long long> du_dl(N, 0);
-                std::vector<unsigned long long> u(N, 0);
+                std::vector<unsigned long long> du_dl(N, 9999);
+                std::vector<unsigned long long> u(N, 9999);
 
                 pot.execute_host(
                     N,
