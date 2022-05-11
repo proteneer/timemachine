@@ -230,9 +230,8 @@ def compute_or_load_bond_smirks_matches(mol, smirks_list):
             for matched_indices in matches:
                 a, b = matched_indices[0], matched_indices[1]
                 forward_matched_bond = [a, b]
-                reverse_matched_bond = [b, a]
 
-                already_assigned = forward_matched_bond in bond_idxs or reverse_matched_bond in bond_idxs
+                already_assigned = forward_matched_bond in bond_idxs
 
                 if not already_assigned:
                     bond_idxs.append(forward_matched_bond)
@@ -276,14 +275,10 @@ def apply_bond_charge_corrections(initial_charges, bond_idxs, deltas):
 
     # print some safety warnings
     directed_bonds = Counter([tuple(b) for b in bond_idxs])
-    undirected_bonds = Counter([tuple(sorted(b)) for b in bond_idxs])
 
     if max(directed_bonds.values()) > 1:
         duplicates = [bond for (bond, count) in directed_bonds.items() if count > 1]
         print(UserWarning(f"Duplicate directed bonds! {duplicates}"))
-    elif max(undirected_bonds.values()) > 1:
-        duplicates = [bond for (bond, count) in undirected_bonds.items() if count > 1]
-        print(UserWarning(f"Duplicate undirected bonds! {duplicates}"))
 
     return final_charges
 
