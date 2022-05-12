@@ -1,3 +1,5 @@
+import itertools
+
 import numpy as np
 import pytest
 
@@ -68,6 +70,137 @@ def test_summed_potential_invalid_parameters_size(harmonic_bond):
         f"SummedPotential::execute_device(): expected {harmonic_bond.params.size} parameters, got {harmonic_bond.params.size + 1}"
         in str(e)
     )
+
+
+def reference_execute_over_batch(unbound, coords, boxes, params, lambdas):
+    coord_batches = coords.shape[0]
+    param_batches = params.shape[0]
+    lambda_batches = lambdas.size
+    N = coords.shape[1]
+    D = coords.shape[2]
+    du_dx = np.empty((coord_batches, param_batches, lambda_batches, N, D))
+    du_dp = np.empty((coord_batches, param_batches, lambda_batches, *params.shape[1:]))
+    du_dl = np.empty((coord_batches, param_batches, lambda_batches))
+    u = np.empty((coord_batches, param_batches, lambda_batches))
+    for i in range(coord_batches):
+        for j in range(param_batches):
+            for k in range(lambda_batches):
+                ref_du_dx, ref_du_dp, ref_du_dl, ref_u = unbound.execute(coords[i], params[j], boxes[i], lambdas[k])
+                du_dx[i][j][k] = ref_du_dx
+                du_dp[i][j][k] = ref_du_dp
+                du_dl[i][j][k] = ref_du_dl
+                u[i][j][k] = ref_u
+    return du_dx, du_dp, du_dl, u
+
+
+def test_execute_selective_batch(harmonic_bond):
+    np.random.seed(2022)
+
+    N = 5
+
+    coords = np.random.random((N, 3))
+    perturbed_coords = coords + np.random.random(coords.shape)
+
+    num_coord_batches = 5
+    num_param_batches = 3
+
+    box = np.diag(np.ones(3))
+    coords_batch = np.stack([coords, perturbed_coords] * num_coord_batches)
+    boxes_batch = np.stack([box] * 2 * num_coord_batches)
+
+    params = harmonic_bond.params
+    random_params = np.random.random(params.shape)
+
+    params_batch = np.stack([params, random_params] * num_param_batches)
+
+    lambdas = np.array([0.0, 1.0])
+
+    unbound_impl = harmonic_bond.unbound_impl(np.float32)
+
+    ref_du_dx, ref_du_dp, ref_du_dl, ref_u = reference_execute_over_batch(
+        unbound_impl, coords_batch, boxes_batch, params_batch, lambdas
+    )
+
+    # Verify that number of boxes and coords match
+    with pytest.raises(RuntimeError) as e:
+        _ = unbound_impl.execute_selective_batch(
+            coords_batch,
+            params_batch,
+            boxes_batch[:num_coord_batches],
+            lambdas,
+            True,
+            True,
+            True,
+            True,
+        )
+    assert str(e.value) == "number of batches of coords and boxes don't match"
+
+    # Verify that coords have 3 dimensions
+    with pytest.raises(RuntimeError) as e:
+        _ = unbound_impl.execute_selective_batch(
+            coords,
+            params_batch,
+            box,
+            lambdas,
+            True,
+            True,
+            True,
+            True,
+        )
+    assert str(e.value) == "coords and boxes must have 3 dimensions"
+
+    # Verify that params must have at least two dimensions
+    with pytest.raises(RuntimeError) as e:
+        _ = unbound_impl.execute_selective_batch(
+            coords_batch,
+            np.ones(3),
+            boxes_batch,
+            lambdas,
+            True,
+            True,
+            True,
+            True,
+        )
+    assert str(e.value) == "parameters must have at least 2 dimensions"
+
+    shape_prefix = (len(coords_batch), len(params_batch), len(lambdas))
+
+    for combo in itertools.product([False, True], repeat=4):
+        compute_du_dx, compute_du_dp, compute_du_dl, compute_u = combo
+        batch_du_dx, batch_du_dp, batch_du_dl, batch_u = unbound_impl.execute_selective_batch(
+            coords_batch,
+            params_batch,
+            boxes_batch,
+            lambdas,
+            compute_du_dx,
+            compute_du_dp,
+            compute_du_dl,
+            compute_u,
+        )
+        if compute_du_dx:
+            assert batch_du_dx.shape == (*shape_prefix, N, 3)
+        else:
+            assert batch_du_dx is None
+        if compute_du_dp:
+            assert batch_du_dp.shape == (*shape_prefix, *harmonic_bond.params.shape)
+        else:
+            assert batch_du_dp is None
+        if compute_du_dl:
+            assert batch_du_dl.shape == (*shape_prefix,)
+        else:
+            assert batch_du_dl is None
+        if compute_u:
+            assert batch_u.shape == (*shape_prefix,)
+        else:
+            assert batch_u is None
+        if compute_du_dx:
+            np.testing.assert_array_equal(batch_du_dx, ref_du_dx)
+        if compute_du_dp:
+            np.testing.assert_array_equal(batch_du_dp, ref_du_dp)
+        if compute_du_dl:
+            np.testing.assert_array_equal(batch_du_dl, ref_du_dl)
+        if compute_u:
+            np.testing.assert_array_equal(batch_u, ref_u)
 
 
 def test_fanout_summed_potential_consistency():
