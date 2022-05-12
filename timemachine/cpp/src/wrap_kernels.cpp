@@ -382,6 +382,177 @@ void declare_potential(py::module &m) {
             py::arg("box"),
             py::arg("lam"))
         .def(
+            "execute_selective_batch",
+            [](timemachine::Potential &pot,
+               const py::array_t<double, py::array::c_style> &coords,
+               const py::array_t<double, py::array::c_style> &params,
+               const py::array_t<double, py::array::c_style> &boxes,
+               const py::array_t<double, py::array::c_style> &lambdas,
+               const bool compute_du_dx,
+               const bool compute_du_dp,
+               const bool compute_du_dl,
+               const bool compute_u) -> py::tuple {
+                if (coords.ndim() != 3 && boxes.ndim() != 3) {
+                    throw std::runtime_error("coords and boxes must have 3 dimensions");
+                }
+                if (coords.shape()[0] != boxes.shape()[0]) {
+                    throw std::runtime_error("number of batches of coords and boxes don't match");
+                }
+                if (params.ndim() < 2) {
+                    throw std::runtime_error("parameters must have at least 2 dimensions");
+                }
+                if (lambdas.size() < 1) {
+                    throw std::runtime_error("lambdas must have at least 1 value");
+                }
+                const long unsigned int coord_batches = coords.shape()[0];
+                const long unsigned int N = coords.shape()[1];
+                const long unsigned int D = coords.shape()[2];
+
+                const long unsigned int param_batches = params.shape()[0];
+                const long unsigned int P = params.size() / param_batches;
+
+                const long unsigned int lambda_batches = lambdas.size();
+
+                const long unsigned int total_executions = coord_batches * param_batches * lambda_batches;
+
+                // initialize with fixed garbage values for debugging convenience (these should be overwritten by `execute_batch_host`)
+                // Only initialize memory when needed, as buffers can be quite large
+                std::vector<unsigned long long> du_dx;
+                if (compute_du_dx) {
+                    du_dx.resize(total_executions * N * D, 9999);
+                }
+                std::vector<unsigned long long> du_dp;
+                if (compute_du_dp) {
+                    du_dp.resize(total_executions * P, 9999);
+                }
+                std::vector<unsigned long long> du_dl;
+                if (compute_du_dl) {
+                    du_dl.resize(total_executions * N, 9999);
+                }
+                std::vector<unsigned long long> u;
+                if (compute_u) {
+                    // u vector is an array of unsigned long long that will be accumulated into a float, hence total_executions * N
+                    u.resize(total_executions * N, 9999);
+                }
+
+                pot.execute_batch_host(
+                    coord_batches,
+                    N,
+                    param_batches,
+                    P,
+                    lambda_batches,
+                    coords.data(),
+                    params.data(),
+                    boxes.data(),
+                    lambdas.data(),
+                    compute_du_dx ? du_dx.data() : nullptr,
+                    compute_du_dp ? du_dp.data() : nullptr,
+                    compute_du_dl ? du_dl.data() : nullptr,
+                    compute_u ? u.data() : nullptr);
+
+                auto result = py::make_tuple(py::none(), py::none(), py::none(), py::none());
+                if (compute_du_dx) {
+                    py::array_t<double, py::array::c_style> py_du_dx(
+                        {coord_batches, param_batches, lambda_batches, N, D});
+                    for (unsigned int i = 0; i < du_dx.size(); i++) {
+                        py_du_dx.mutable_data()[i] = FIXED_TO_FLOAT<double>(du_dx[i]);
+                    }
+                    result[0] = py_du_dx;
+                }
+
+                if (compute_du_dp) {
+                    std::vector<ssize_t> pshape(params.shape(), params.shape() + params.ndim());
+                    // Remove the first dimension of the parameters shape to be consistent in ordering of return values
+                    pshape.erase(pshape.begin());
+                    // Append the new dimensions for the du_dps
+                    unsigned long int shape[] = {coord_batches, param_batches, lambda_batches};
+                    pshape.insert(pshape.begin(), shape, shape + 3);
+
+                    py::array_t<double, py::array::c_style> py_du_dp(pshape);
+                    for (unsigned int i = 0; i < total_executions; i++) {
+                        pot.du_dp_fixed_to_float(N, P, &du_dp[0] + (i * P), py_du_dp.mutable_data() + (i * P));
+                    }
+                    result[1] = py_du_dp;
+                }
+
+                if (compute_du_dl) {
+                    py::array_t<double, py::array::c_style> py_du_dl({coord_batches, param_batches, lambda_batches});
+                    for (unsigned int i = 0; i < total_executions; i++) {
+                        unsigned long long du_dl_sum = std::accumulate(
+                            &du_dl[0] + (i * N), &du_dl[0] + ((i + 1) * N), decltype(du_dl)::value_type(0));
+                        py_du_dl.mutable_data()[i] = FIXED_TO_FLOAT<double>(du_dl_sum);
+                    }
+                    result[2] = py_du_dl;
+                }
+
+                if (compute_u) {
+                    py::array_t<double, py::array::c_style> py_u({coord_batches, param_batches, lambda_batches});
+                    for (unsigned int i = 0; i < total_executions; i++) {
+                        unsigned long long u_sum =
+                            std::accumulate(&u[0] + (i * N), &u[0] + ((i + 1) * N), decltype(u)::value_type(0));
+                        py_u.mutable_data()[i] = FIXED_TO_FLOAT<double>(u_sum);
+                    }
+                    result[3] = py_u;
+                }
+
+                return result;
+            },
+            py::arg("coords"),
+            py::arg("params"),
+            py::arg("boxes"),
+            py::arg("lambs"),
+            py::arg("compute_du_dx"),
+            py::arg("compute_du_dp"),
+            py::arg("compute_du_dl"),
+            py::arg("compute_u"),
+            R"pbdoc(
+        Execute the potential over a batch of coords, parameters and lambdas. The total number
+        of executions of the potential is num_coord_batches * num_param_batches * num_lambda.
+
+        Note: This function allocates memory for all of the inputs on the GPU. This may lead to OOMs.
+
+        Parameters
+        ----------
+        coords: NDArray
+            A three dimensional array containing a batch of coordinates.
+
+        params: NDArray
+            A multi dimensional array containing a batch of parameters. First dimension
+            determines the batch size, the rest of the array is passed to the potential as the
+            parameters.
+
+        boxes: NDArray
+            A three dimensional array containing a batch of boxes.
+
+        lambdas: NDArray
+            An array of lambda values.
+
+        compute_du_dx: bool
+            Indicates to compute du_dx, else returns None for du_dx.
+
+        compute_du_dp: bool
+            Indicates to compute du_dp, else returns None for du_dp.
+
+        compute_du_dl: bool
+            Indicates to compute du_dl, else returns None for du_dl.
+
+        compute_u: bool
+            Indicates to compute u, else returns None for u.
+
+
+        Returns
+        -------
+        4-tuple of du_dx, du_dp, du_dl, u
+            coord_batch_size = coords.shape[0]
+            param_batch_size = params.shape[0]
+            lambda_batch_size = lambda.size()
+            du_dx has shape (coords_batch_size, param_batch_size, lambda_batch_size, N, 3)
+            du_dp has shape (coords_batch_size, param_batch_size, lambda_batch_size, P)
+            du_dl has shape (coords_batch_size, param_batch_size, lambda_batch_size)
+            u has shape (coords_batch_size, param_batch_size, lambda_batch_size)
+
+    )pbdoc")
+        .def(
             "execute_selective",
             [](timemachine::Potential &pot,
                const py::array_t<double, py::array::c_style> &coords,
