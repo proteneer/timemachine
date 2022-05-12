@@ -284,7 +284,7 @@ void NonbondedInteractionGroup<RealType, Interpolated>::execute_device(
 
     if (N != N_) {
         throw std::runtime_error(
-            "NonbondedAllPairs::execute_device(): expected N == N_, got N=" + std::to_string(N) +
+            "NonbondedInteractionGroup::execute_device(): expected N == N_, got N=" + std::to_string(N) +
             ", N_=" + std::to_string(N_));
     }
 
@@ -292,7 +292,7 @@ void NonbondedInteractionGroup<RealType, Interpolated>::execute_device(
 
     if (P != M * N_ * 3) {
         throw std::runtime_error(
-            "NonbondedAllPairs::execute_device(): expected P == M*N_*3, got P=" + std::to_string(P) +
+            "NonbondedInteractionGroup::execute_device(): expected P == M*N_*3, got P=" + std::to_string(P) +
             ", M*N_*3=" + std::to_string(M * N_ * 3));
     }
 
