@@ -902,7 +902,7 @@ def test_lennard_jones_handler():
 
 
 def test_charge_symmetry():
-    """expect 2 distinct partial charges applied to benzene"""
+    """Expect only 2 distinct partial charges applied to benzene"""
 
     # molecule with 2 atomic symmetry classes
     benzene = "C1=CC=CC=C1"
@@ -913,6 +913,21 @@ def test_charge_symmetry():
     ff = Forcefield.load_from_file(DEFAULT_FF)
     assigned_charges = np.array(ff.q_handle.parameterize(mol))
     assert len(set(assigned_charges)) == 2
+
+
+def test_charge_stereo_symmetry():
+    """Expect distinct charges on all atoms, in a case where symmetry is broken by stereo"""
+
+    # molecule where # stereo-oblivious symmetry classes = 8
+    # but # stereo-sensitive symmetry classes = n_atoms = 16
+    # https://github.com/proteneer/timemachine/pull/738#issuecomment-1126179492
+    smi = r"O/C(=C(/O)\C(\Cl)=C(\F)Cl)/C(/Cl)=C(\F)Cl"
+    mol = Chem.AddHs(Chem.MolFromSmiles(smi))
+
+    # expect distinct charges on all atoms
+    ff = Forcefield.load_from_file(DEFAULT_FF)
+    assigned_charges = np.array(ff.q_handle.parameterize(mol))
+    assert len(set(assigned_charges)) == mol.GetNumAtoms()
 
 
 def test_symmetric_am1ccc():

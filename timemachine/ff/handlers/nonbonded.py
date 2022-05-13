@@ -62,16 +62,27 @@ def oe_generate_conformations(oemol, sample_hydrogens=True):
 
 
 def oe_assign_charges(mol, charge_model=AM1BCCELF10):
-    """assign partial charges, then premultiply by sqrt(ONE_4PI_EPS0)
-    as an optimization"""
+    """Convert RD mol to OE mol, compute charges, convert to TM units
+
+    Notes
+    -----
+    * Passes `symmetrize=False` to toolkit functions where possible,
+        since `symmetrize=True` symmetrizes using stereo-insensitive equivalence classes
+        See: https://github.com/proteneer/timemachine/pull/738#issuecomment-1124280659
+        Exception: AM1BCCELF10 not configurable
+
+    See Also
+    --------
+    * ff/handlers/utils.py::symmetrize -- symmetrize using stereo-aware symmetry classes
+    """
 
     # imported here for optional dependency
     from openeye import oequacpac
 
     charge_engines = {
-        AM1: oequacpac.OEAM1Charges(symmetrize=True),
-        AM1ELF10: oequacpac.OEELFCharges(oequacpac.OEAM1Charges(symmetrize=True), 10),
-        AM1BCC: oequacpac.OEAM1BCCCharges(symmetrize=True),
+        AM1: oequacpac.OEAM1Charges(symmetrize=False),
+        AM1ELF10: oequacpac.OEELFCharges(oequacpac.OEAM1Charges(symmetrize=False), 10),
+        AM1BCC: oequacpac.OEAM1BCCCharges(symmetrize=False),
         AM1BCCELF10: oequacpac.OEAM1BCCELF10Charges(),
     }
     charge_engine = charge_engines[charge_model]
@@ -516,11 +527,13 @@ class AM1CCCHandler(SerializableMixIn):
 
         """
         am1_charges = compute_or_load_am1_charges(mol)
+        symmetrized_charges = symmetrize(am1_charges, mol)
+
         bond_idxs, type_idxs = compute_or_load_bond_smirks_matches(mol, smirks)
 
         deltas = params[type_idxs]
-        q_params = apply_bond_charge_corrections(am1_charges, bond_idxs, deltas)
+        q_params = apply_bond_charge_corrections(symmetrized_charges, bond_idxs, deltas)
 
-        assert q_params.shape[0] == mol.GetNumAtoms()  # check that return shape is consistent with input mol
+        assert q_params.shape == (mol.GetNumAtoms(),)  # check that return shape is consistent with input mol
 
         return q_params

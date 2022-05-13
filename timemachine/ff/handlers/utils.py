@@ -92,26 +92,20 @@ def convert_to_oe(mol):
     return oemol
 
 
-def get_symmetry_classes(rdmol: Chem.Mol) -> NDArray:
-    """Convenient wrapper for [atom.GetSymmetryClass() for atom in oemol]
-
-    (Accepts rdmol instead of oemol, and renumbers classes to be contiguous from 0 to n_classes.)
+def get_symmetry_classes(mol: Chem.Mol) -> NDArray:
+    """Assign arbitrary integer indices to atoms in mol, such that:
+    * symmetric atoms are assigned distinct indices
+    * indices are contiguous from 0 to n_classes
     """
-
-    # imported here for optional dependency
-    from openeye import oechem
-
-    oemol = convert_to_oe(rdmol)
-    oechem.OEPerceiveSymmetry(oemol)
-    symmetry_classes = np.array([atom.GetSymmetryClass() for atom in oemol.GetAtoms()])
+    symmetry_classes = list(Chem.CanonicalRankAtoms(mol, breakTies=False, includeChirality=True))
     n_classes = len(set(symmetry_classes))
 
     # make contiguous from 0 to n_classes
     idx_map = {old_idx: new_idx for (new_idx, old_idx) in enumerate(set(symmetry_classes))}
-    symmetry_classes = np.array([idx_map[old_idx] for old_idx in symmetry_classes])
+    symmetry_classes = [idx_map[old_idx] for old_idx in symmetry_classes]
     assert set(symmetry_classes) == set(range(n_classes))
 
-    return symmetry_classes
+    return np.array(symmetry_classes)
 
 
 def symmetrize(per_particle_params: NDArray, mol: Chem.Mol) -> NDArray:
