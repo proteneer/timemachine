@@ -43,3 +43,7 @@ def batch_list(values: List, num_workers: int) -> List[List]:
     for i, value in enumerate(values):
         batched_values[i % num_workers].append(value)
     return list(batched_values.values())
+
+
+def flatten_list(results: List[List[str]]) -> List[str]:
+    return [i for j in results for i in j]

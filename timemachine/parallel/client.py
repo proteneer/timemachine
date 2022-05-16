@@ -2,6 +2,7 @@ import multiprocessing
 import os
 import pickle
 from concurrent import futures
+from pathlib import Path
 from typing import Any, List, Optional, Union
 
 import grpc
@@ -238,3 +239,94 @@ class GRPCClient(AbstractClient):
                     assert False, f"Host {host} '{field}' new value of {new_val} != {prev_vals[field]}"
                 else:
                     prev_vals[field] = new_val
+
+
+class AbstractFileClient:
+    def store(self, path: str, data: bytes) -> str:
+        """
+        Store the results to the given path.
+
+        Parameters
+        ----------
+        path:
+            Relative path to store the data. The client may interpret
+            this path as appropriate (i.e. file path, s3 path, etc).
+
+        data:
+            Binary contents to store.
+
+        Returns
+        -------
+        str
+            Full name of the result as stored.
+
+        """
+        raise NotImplementedError()
+
+    def load(self, path: str) -> bytes:
+        """
+        Load the results from the given path.
+
+        Parameters
+        ----------
+        path:
+            Path to load from, the value returned by the `store` method.
+
+        Returns
+        -------
+        bytes
+            Binary contents of the file.
+        """
+        raise NotImplementedError()
+
+    def exists(self, path: str) -> bool:
+        """
+        Parameters
+        ----------
+        path:
+            Path to load from, the value returned by the `store` method.
+
+        Returns
+        -------
+        bool
+            True if the results exist at this path.
+        """
+        raise NotImplementedError()
+
+
+class FileClient(AbstractFileClient):
+    def __init__(self, base: Path = None):
+        self.base = base or Path().cwd()
+
+    def store(self, path: str, data: bytes):
+        """
+        See abstract class for documentation.
+        """
+        full_path = Path(self.full_path(path))
+        full_path.write_bytes(data)
+
+    def load(self, path: str) -> bytes:
+        """
+        See abstract class for documentation.
+        """
+        full_path = Path(self.full_path(path))
+        return full_path.read_bytes()
+
+    def full_path(self, path: str) -> str:
+        return str(Path(self.base, path).absolute())
+
+    def exists(self, path: str) -> bool:
+        """
+        See abstract class for documentation.
+        """
+        return Path(self.full_path(path)).exists()
+
+
+def save_results(result_paths: List[str], local_file_client: FileClient, remote_file_client: AbstractFileClient):
+    """
+    Load the results from `remote_file_client`, which may be remote and
+    store them on the local file system using `local_file_client`.
+    """
+    for result_path in result_paths:
+        if not local_file_client.exists(result_path):
+            local_file_client.store(result_path, remote_file_client.load(result_path))
