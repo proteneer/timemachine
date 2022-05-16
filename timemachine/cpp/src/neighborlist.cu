@@ -137,7 +137,7 @@ void Neighborlist<RealType>::build_nblist_device(
     dim3 dimGrid(row_blocks, Y, 1); // block x, y, z dims
 
     // (ytz): TBD shared memory, stream
-    if (!this->compute_full_matrix()) {
+    if (this->compute_upper_triangular()) {
         // Compute only the upper triangle as rows and cols are the same
         // pass duplicates of column coords and the bounding boxes
         k_find_blocks_with_ixns<RealType, true><<<dimGrid, tpb, 0, stream>>>(
@@ -204,7 +204,7 @@ void Neighborlist<RealType>::compute_block_bounds_device(
     gpuErrchk(cudaPeekAtLastError());
     // In the case of upper triangle of the matrix, the column and row indices are the same, so only compute block ixns for both
     // when they are different
-    if (this->compute_full_matrix()) {
+    if (!this->compute_upper_triangular()) {
         const int row_blocks = this->num_row_blocks();
         k_find_block_bounds<RealType><<<row_blocks, tpb, 0, stream>>>(
             N, row_blocks, NR_, d_row_idxs_, d_coords, d_box, d_row_block_bounds_ctr_, d_row_block_bounds_ext_);
@@ -284,8 +284,8 @@ void Neighborlist<RealType>::set_idxs_device(
     this->NC_ = NC;
 }
 
-template <typename RealType> bool Neighborlist<RealType>::compute_full_matrix() const {
-    return NR_ != N_ && NC_ != N_;
+template <typename RealType> bool Neighborlist<RealType>::compute_upper_triangular() const {
+    return NR_ == N_ && NC_ == N_;
 };
 
 template <typename RealType> int Neighborlist<RealType>::num_column_blocks() const {

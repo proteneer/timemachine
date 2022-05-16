@@ -62,9 +62,9 @@ public:
     int num_row_blocks() const;
 
 private:
-    // Indicates that should compute interactions of all rows and columns
-    // when a row is provided, otherwise only compute upper triangle of the ixn matrix.
-    bool compute_full_matrix() const;
+    // Indicates that should only compute the upper triangle of the interactions matrix, otherwise
+    // will compute the entire matrix.
+    bool compute_upper_triangular() const;
 
     int num_column_blocks() const;
 
