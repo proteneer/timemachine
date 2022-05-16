@@ -10,7 +10,7 @@ import pytest
 from rdkit import Chem
 from rdkit.Chem import AllChem, rdmolops
 
-from timemachine.constants import ONE_4PI_EPS0
+from timemachine.constants import DEFAULT_FF, ONE_4PI_EPS0
 from timemachine.ff import Forcefield
 from timemachine.ff.charges import AM1CCC_CHARGES
 from timemachine.ff.handlers import bonded, nonbonded
@@ -919,3 +919,25 @@ def test_symmetric_am1ccc():
     # set(ref_charges) == {-1.8165082, -1.8158009, 0.90795946}
     # set(test_charges) == {-3.815801, -1.8158009, 0.18349183, 0.90795946}
     np.testing.assert_array_equal(test_charges, ref_charges)
+
+
+def test_harmonic_bonds_complete():
+    """On a test molecule containing [oxygen] ~ [halogen] bonds,
+    assert that either: (1) a ValueError is raised or (2) the number of
+    parameterized bonds equals the number of input bonds"""
+
+    mol = Chem.MolFromSmiles("O(F)F")  # 0 smirks matches using current (2022-05-16) handler
+
+    ff = Forcefield.load_from_file(DEFAULT_FF)
+    parameterize = ff.hb_handle.parameterize
+
+    try:
+        with pytest.raises(ValueError) as e:
+            _, _ = parameterize(mol)
+
+            assert "number of bonds" in e
+    except Exception:
+        expected_num_bonds = mol.GetNumBonds()
+        _, idxs = parameterize(mol)
+
+        assert len(idxs) == expected_num_bonds
