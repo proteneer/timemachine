@@ -923,21 +923,14 @@ def test_symmetric_am1ccc():
 
 def test_harmonic_bonds_complete():
     """On a test molecule containing [oxygen] ~ [halogen] bonds,
-    assert that either: (1) a ValueError is raised or (2) the number of
-    parameterized bonds equals the number of input bonds"""
+    assert that a ValueError is raised."""
 
     mol = Chem.MolFromSmiles("O(F)F")  # 0 smirks matches using current (2022-05-16) handler
 
     ff = Forcefield.load_from_file(DEFAULT_FF)
     parameterize = ff.hb_handle.parameterize
 
-    try:
-        with pytest.raises(ValueError) as e:
-            _, _ = parameterize(mol)
+    with pytest.raises(ValueError) as e:
+        _, _ = parameterize(mol)
 
-            assert "number of bonds" in e
-    except Exception:
-        expected_num_bonds = mol.GetNumBonds()
-        _, idxs = parameterize(mol)
-
-        assert len(idxs) == expected_num_bonds
+        assert "number of bonds" in e
