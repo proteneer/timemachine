@@ -75,23 +75,6 @@ def match_smirks(mol, smirks):
     return matches
 
 
-def convert_to_oe(mol):
-    """Convert an ROMol into an OEMol"""
-
-    # imported here for optional dependency
-    from openeye import oechem
-
-    mb = Chem.MolToMolBlock(mol)
-    ims = oechem.oemolistream()
-    ims.SetFormat(oechem.OEFormat_SDF)
-    ims.openstring(mb)
-
-    for buf_mol in ims.GetOEMols():
-        oemol = oechem.OEMol(buf_mol)
-    ims.close()
-    return oemol
-
-
 def get_symmetry_classes(mol: Chem.Mol) -> NDArray:
     """Assign arbitrary integer indices to atoms in mol, such that:
     * symmetric atoms are assigned distinct indices

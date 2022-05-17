@@ -5,12 +5,13 @@ from collections import Counter
 import jax.numpy as jnp
 import networkx as nx
 import numpy as np
+from rdkit import Chem
 
 from timemachine import constants
 from timemachine.ff.handlers.bcc_aromaticity import AromaticityModel
 from timemachine.ff.handlers.bcc_aromaticity import match_smirks as oe_match_smirks
 from timemachine.ff.handlers.serialize import SerializableMixIn
-from timemachine.ff.handlers.utils import canonicalize_bond, convert_to_oe
+from timemachine.ff.handlers.utils import canonicalize_bond
 from timemachine.ff.handlers.utils import match_smirks as rd_match_smirks
 from timemachine.ff.handlers.utils import symmetrize
 from timemachine.graph_utils import convert_to_nx
@@ -24,6 +25,23 @@ AM1ELF10 = "AM1ELF10"
 AM1BCC = "AM1BCC"
 AM1BCCELF10 = "AM1BCCELF10"
 ELF10_MODELS = (AM1ELF10, AM1BCCELF10)
+
+
+def convert_to_oe(mol):
+    """Convert an ROMol into an OEMol"""
+
+    # imported here for optional dependency
+    from openeye import oechem
+
+    mb = Chem.MolToMolBlock(mol)
+    ims = oechem.oemolistream()
+    ims.SetFormat(oechem.OEFormat_SDF)
+    ims.openstring(mb)
+
+    for buf_mol in ims.GetOEMols():
+        oemol = oechem.OEMol(buf_mol)
+    ims.close()
+    return oemol
 
 
 def oe_generate_conformations(oemol, sample_hydrogens=True):
