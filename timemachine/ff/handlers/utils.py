@@ -73,6 +73,7 @@ def canonicalize_improper_torsion(torsion):
     canonicalized_1 = container_type([a, b, c, d])
 
     # approach 2: take min((b, a, c, d), (d, c, a, b)) (used for applying trefoil convention)
+    a, b, c, d = torsion
     canonicalized_2 = canonicalize_bonded_ixn([b, a, c, d])
 
     # TODO: which one?
