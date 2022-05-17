@@ -1,3 +1,4 @@
+from functools import wraps
 from typing import Set, Tuple
 
 from rdkit import Chem
@@ -7,7 +8,7 @@ from timemachine.graph_utils import convert_to_nx
 Angle = Tuple[int, int, int]
 
 
-def canonicalize_bond(arr):
+def canonicalize_bonded_ixn(arr):
     """
     Canonicalize a bonded interaction. If arr[0] < arr[-1] then arr is
     returned, else if arr[0] > arr[-1], then arr[::-1] is returned. If
@@ -38,10 +39,45 @@ def canonicalize_bond(arr):
         return arr
 
 
-def canonicalize_angle(angle) -> Tuple[int, int, int]:
-    """Treat angle(a, b, c) as equivalent to angle(c, b, a) -- e.g. when assessing ff coverage"""
-    a, b, c = angle
-    return min((a, b, c), (c, b, a))
+@wraps(canonicalize_bonded_ixn)
+def canonicalize_bond(bond):
+    assert len(bond) == 2
+    return canonicalize_bonded_ixn(bond)
+
+
+@wraps(canonicalize_bonded_ixn)
+def canonicalize_angle(angle):
+    assert len(angle) == 3
+    return canonicalize_bonded_ixn(angle)
+
+
+@wraps(canonicalize_bonded_ixn)
+def canonicalize_proper_torsion(torsion):
+    assert len(torsion) == 4
+    return canonicalize_bonded_ixn(torsion)
+
+
+@wraps(canonicalize_bonded_ixn)
+def canonicalize_improper_torsion(torsion):
+    """
+    WIP: extract from two definitions:
+    1. https://github.com/proteneer/timemachine/blob/8d6bd25a143aa81e8b3b8c6a33e6e03afe272c56/timemachine/ff/handlers/bonded.py#L226-L229
+    2. https://github.com/proteneer/timemachine/blob/8d6bd25a143aa81e8b3b8c6a33e6e03afe272c56/timemachine/ff/handlers/bonded.py#L206-L213
+    """
+
+    # approach 1: sort neighbors (used for FF parameter look up)
+    container_type = type(torsion)
+    assert len(set(torsion)) == len(torsion)
+    _a, b, _c, _d = torsion
+    a, c, d = sorted([_a, _c, _d])
+    canonicalized_1 = container_type([a, b, c, d])
+
+    # approach 2: take min((b, a, c, d), (d, c, a, b)) (used for applying trefoil convention)
+    canonicalized_2 = canonicalize_bonded_ixn([b, a, c, d])
+
+    # TODO: which one?
+    # return canonicalized
+    raise NotImplementedError(f"can't decide between {canonicalized_1} and {canonicalized_2}!")
 
 
 def get_all_angles(mol) -> Set[Angle]:
