@@ -73,16 +73,19 @@ class HarmonicBondHandler(ReversibleBondHandler):
     @staticmethod
     def static_parameterize(params, smirks, mol):
         mol_params, bond_idxs = super(HarmonicBondHandler, HarmonicBondHandler).static_parameterize(params, smirks, mol)
+
+        # validate expected number of bonds
+        expected_num_bonds = mol.GetNumBonds()
+        assigned_num_bonds = len(bond_idxs)
+        if assigned_num_bonds != expected_num_bonds:
+            message = f"""Did not assign the correct number of bonds!
+            (# assigned = {assigned_num_bonds}, but # expected = {expected_num_bonds}"""
+            raise ValueError(message)
+
+        # handle special case of 0 bonds
         if len(mol_params) == 0:
             mol_params = params[:0]  # empty slice with same dtype, other dimensions
             bond_idxs = np.zeros((0, 2), dtype=np.int32)
-
-            expected_num_bonds = mol.GetNumBonds()
-            assigned_num_bonds = len(bond_idxs)
-            if assigned_num_bonds != expected_num_bonds:
-                message = f"""Did not assign the correct number of bonds!
-                (# assigned = {assigned_num_bonds}, but # expected = {expected_num_bonds}"""
-                raise ValueError(message)
 
         return mol_params, bond_idxs
 
