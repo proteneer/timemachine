@@ -88,7 +88,7 @@ class HarmonicAngleHandler(ReversibleBondHandler):
 
         # check that an interaction is assigned to all possible angle tuples
         all_possible_angles = get_all_angles(mol)
-        parameterized_angles = set([canonicalize_angle(angle) for angle in angle_idxs])
+        parameterized_angles = set([canonicalize_angle((a, b, c)) for (a, b, c) in angle_idxs])
         missing_angles = set(all_possible_angles) - parameterized_angles
 
         if len(missing_angles) > 0:
