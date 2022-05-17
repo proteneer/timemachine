@@ -2,7 +2,7 @@ import numpy as np
 
 from timemachine.ff.handlers.serialize import SerializableMixIn
 from timemachine.ff.handlers.suffix import _SUFFIX
-from timemachine.ff.handlers.utils import canonicalize_bond, match_smirks
+from timemachine.ff.handlers.utils import canonicalize_angle, canonicalize_bond, get_all_angles, match_smirks
 
 
 def generate_vd_idxs(mol, smirks):
@@ -85,9 +85,20 @@ class HarmonicAngleHandler(ReversibleBondHandler):
         mol_params, angle_idxs = super(HarmonicAngleHandler, HarmonicAngleHandler).static_parameterize(
             params, smirks, mol
         )
+
+        # check that an interaction is assigned to all possible angle tuples
+        all_possible_angles = get_all_angles(mol)
+        parameterized_angles = set([canonicalize_angle(angle) for angle in angle_idxs])
+        missing_angles = set(all_possible_angles) - parameterized_angles
+
+        if len(missing_angles) > 0:
+            raise ValueError(f"missing angles! {missing_angles}")
+
+        # handle special case of no angles
         if len(mol_params) == 0:
             mol_params = params[:0]  # empty slice with same dtype, other dimensions
             angle_idxs = np.zeros((0, 3), dtype=np.int32)
+
         return mol_params, angle_idxs
 
 
