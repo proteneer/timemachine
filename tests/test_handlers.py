@@ -10,11 +10,13 @@ import pytest
 from rdkit import Chem
 from rdkit.Chem import AllChem, rdmolops
 
-from timemachine.constants import ONE_4PI_EPS0
+from timemachine.constants import DEFAULT_FF, ONE_4PI_EPS0
+from timemachine.datasets import fetch_freesolv
 from timemachine.ff import Forcefield
 from timemachine.ff.charges import AM1CCC_CHARGES
 from timemachine.ff.handlers import bonded, nonbonded
 from timemachine.ff.handlers.deserialize import deserialize_handlers
+from timemachine.ff.handlers.utils import canonicalize_angle, get_all_angles
 
 
 def test_harmonic_bond():
@@ -919,3 +921,27 @@ def test_symmetric_am1ccc():
     # set(ref_charges) == {-1.8165082, -1.8158009, 0.90795946}
     # set(test_charges) == {-3.815801, -1.8158009, 0.18349183, 0.90795946}
     np.testing.assert_array_equal(test_charges, ref_charges)
+
+
+def test_harmonic_angles_freesolv():
+    """Check that HarmonicAngleHandler runs without error on FreeSolv,
+    and that the set of parameterized angles for each mol is equal to the full set of possible angle tuples for each mol"""
+
+    ff = Forcefield.load_from_file(DEFAULT_FF)
+
+    def get_parameterized_angles(mol):
+        _, angle_idxs = ff.ha_handle.parameterize(mol)
+        angles = set([tuple(canonicalize_angle(angle)) for angle in angle_idxs])
+        return angles
+
+    def get_missing_angles(mol):
+        return get_all_angles(mol) - get_parameterized_angles(mol)
+
+    for mol in fetch_freesolv():
+
+        # runs without error
+        _ = ff.ha_handle.parameterize(mol)
+
+        # expect no missing angles
+        missing_angles = get_missing_angles(mol)
+        assert len(missing_angles) == 0
