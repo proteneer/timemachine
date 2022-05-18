@@ -16,7 +16,12 @@ from timemachine.ff import Forcefield
 from timemachine.ff.charges import AM1CCC_CHARGES
 from timemachine.ff.handlers import bonded, nonbonded
 from timemachine.ff.handlers.deserialize import deserialize_handlers
-from timemachine.ff.handlers.utils import canonicalize_angle, get_all_angles
+from timemachine.ff.handlers.utils import (
+    canonicalize_angle,
+    canonicalize_bonded_ixn,
+    get_all_angles,
+    get_improper_torsion_permutations,
+)
 
 
 def test_harmonic_bond():
@@ -929,19 +934,41 @@ def test_harmonic_angles_freesolv():
 
     ff = Forcefield.load_from_file(DEFAULT_FF)
 
-    def get_parameterized_angles(mol):
-        _, angle_idxs = ff.ha_handle.parameterize(mol)
-        angles = set([tuple(canonicalize_angle(angle)) for angle in angle_idxs])
-        return angles
-
-    def get_missing_angles(mol):
-        return get_all_angles(mol) - get_parameterized_angles(mol)
-
     for mol in fetch_freesolv():
 
         # runs without error
-        _ = ff.ha_handle.parameterize(mol)
+        _, angle_idxs = ff.ha_handle.parameterize(mol)
 
         # expect no missing angles
-        missing_angles = get_missing_angles(mol)
-        assert len(missing_angles) == 0
+        all_angles = get_all_angles(mol)
+        parameterized_angles = set([tuple(canonicalize_angle(angle)) for angle in angle_idxs])
+
+        assert len(all_angles - parameterized_angles) == 0, "missing angles!"
+        assert len(parameterized_angles - all_angles) == 0, "more angles than assumed possible!"
+
+
+def test_improper_enumeration():
+    """For random inputs, assert the enumerated permutations satisfy basic properties"""
+    np.random.seed(2022)
+
+    num_instances = 50
+
+    for _ in range(num_instances):
+        # (a, b, c, d) ~ Unif([0, 100]) w/o replacement
+        torsion = tuple(np.random.choice(100, (4,), replace=False))
+        assert len(set(torsion)) == len(torsion), "must be unique!"
+
+        canonical_permutations = get_improper_torsion_permutations(torsion)
+
+        assert len(canonical_permutations) == 3
+        assert len(set(canonical_permutations)) == 3
+
+        for p in canonical_permutations:
+            assert len(p) == 4
+            assert set(p) == set(torsion)
+            assert canonicalize_bonded_ixn(p) == p
+
+            # note: can't "assert canonicalize_improper_torsion(p) == p"
+            # since the trefoil permutations are of the form
+            # (a, b, c, d) -> (b, a', c', d'), not
+            # (a, b, c, d) -> (a', b, c', d')
