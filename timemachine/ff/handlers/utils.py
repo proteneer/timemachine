@@ -59,26 +59,42 @@ def canonicalize_proper_torsion(torsion):
 
 @wraps(canonicalize_bonded_ixn)
 def canonicalize_improper_torsion(torsion):
-    """
-    WIP: extract from two definitions:
-    1. https://github.com/proteneer/timemachine/blob/8d6bd25a143aa81e8b3b8c6a33e6e03afe272c56/timemachine/ff/handlers/bonded.py#L226-L229
-    2. https://github.com/proteneer/timemachine/blob/8d6bd25a143aa81e8b3b8c6a33e6e03afe272c56/timemachine/ff/handlers/bonded.py#L206-L213
+    """(a, b, c, d) -> (a', b, c', d')
+    where
+    (a', c', d') = sorted((a, c, d))
     """
 
-    # approach 1: sort neighbors (used for FF parameter look up)
+    # sort neighbors (used for FF parameter look up)
     container_type = type(torsion)
     assert len(set(torsion)) == len(torsion)
-    _a, b, _c, _d = torsion
-    a, c, d = sorted([_a, _c, _d])
-    canonicalized_1 = container_type([a, b, c, d])
 
-    # approach 2: take min((b, a, c, d), (d, c, a, b)) (used for applying trefoil convention)
-    a, b, c, d = torsion
-    canonicalized_2 = canonicalize_bonded_ixn([b, a, c, d])
+    center = torsion[1]
+    neighbors = [torsion[0], torsion[2], torsion[3]]
 
-    # TODO: which one?
-    # return canonicalized
-    raise NotImplementedError(f"can't decide between {canonicalized_1} and {canonicalized_2}!")
+    a, c, d = sorted(neighbors)
+    b = center
+
+    return container_type([a, b, c, d])
+
+
+def get_improper_torsion_permutations(torsion):
+    """Get all trefoil permutations"""
+
+    # see also implementations in
+    # * TM ImproperTorsionHandler https://github.com/proteneer/timemachine/blob/451803e01afe6231147a0e6a3ca019d4aa5069d8/timemachine/ff/handlers/bonded.py#L225-L230
+    # * espaloma https://github.com/choderalab/espaloma/blob/68d62847d4a20d4317157441710a25883ebda0cd/espaloma/redux/symmetry.py#L81-L87
+
+    torsion = canonicalize_improper_torsion(torsion)
+
+    center = torsion[1]
+    neighbors = [torsion[0], torsion[2], torsion[3]]
+    neighbor_permutations = [(0, 1, 2), (1, 2, 0), (2, 0, 1)]
+
+    canonical_permutations = []
+    for (i, j, k) in neighbor_permutations:
+        canonical_permutations.append(canonicalize_bonded_ixn([center, neighbors[i], neighbors[j], neighbors[k]]))
+
+    return canonical_permutations
 
 
 def get_all_angles(mol) -> Set[Angle]:

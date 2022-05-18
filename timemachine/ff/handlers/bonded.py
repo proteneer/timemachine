@@ -2,7 +2,14 @@ import numpy as np
 
 from timemachine.ff.handlers.serialize import SerializableMixIn
 from timemachine.ff.handlers.suffix import _SUFFIX
-from timemachine.ff.handlers.utils import canonicalize_angle, canonicalize_bonded_ixn, get_all_angles, match_smirks
+from timemachine.ff.handlers.utils import (
+    canonicalize_angle,
+    canonicalize_bonded_ixn,
+    canonicalize_improper_torsion,
+    get_all_angles,
+    get_improper_torsion_permutations,
+    match_smirks,
+)
 
 
 def generate_vd_idxs(mol, smirks):
@@ -214,30 +221,21 @@ class ImproperTorsionHandler(SerializableMixIn):
         # the first atom.
         impropers = dict()
 
-        def make_key(idxs):
-            assert len(idxs) == 4
-            # pivot around the center
-            ctr = idxs[1]
-            # sort the neighbors so they're unique
-            nbs = idxs[0], idxs[2], idxs[3]
-            nbs = sorted(nbs)
-            return nbs[0], ctr, nbs[1], nbs[2]
-
         for p_idx, patt in enumerate(smirks):
             matches = match_smirks(mol, patt)
 
             for m in matches:
-                key = make_key(m)
+                key = canonicalize_improper_torsion(m)
                 impropers[key] = p_idx
 
         improper_idxs = []
         param_idxs = []
 
         for atom_idxs, p_idx in impropers.items():
-            center = atom_idxs[1]
-            others = [atom_idxs[0], atom_idxs[2], atom_idxs[3]]
-            for p in [(others[i], others[j], others[k]) for (i, j, k) in [(0, 1, 2), (1, 2, 0), (2, 0, 1)]]:
-                improper_idxs.append(canonicalize_bonded_ixn((center, p[0], p[1], p[2])))
+
+            permutations = get_improper_torsion_permutations(atom_idxs)
+            for perm in permutations:
+                improper_idxs.append(perm)
                 param_idxs.append(p_idx)
 
         param_idxs = np.array(param_idxs)
