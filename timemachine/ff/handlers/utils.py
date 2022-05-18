@@ -82,7 +82,7 @@ def get_improper_torsion_permutations(torsion):
 
     # see also implementations in
     # * TM ImproperTorsionHandler https://github.com/proteneer/timemachine/blob/451803e01afe6231147a0e6a3ca019d4aa5069d8/timemachine/ff/handlers/bonded.py#L225-L230
-    # * espaloma https://github.com/choderalab/espaloma/blob/68d62847d4a20d4317157441710a25883ebda0cd/espaloma/redux/symmetry.py#L81-L87
+    # * OpenFF toolkit https://github.com/openforcefield/openff-toolkit/blob/fade767977cda3c2d70399ac38644aa5428414fe/openff/toolkit/typing/engines/smirnoff/parameters.py#L3437-L3453
 
     torsion = canonicalize_improper_torsion(torsion)
 
