@@ -932,4 +932,4 @@ def test_harmonic_bonds_complete():
 
     with pytest.raises(ValueError) as e:
         _, _ = parameterize(mol)
-    assert "number of bonds" in str(e)
+    assert "missing bonds" in str(e)

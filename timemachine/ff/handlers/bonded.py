@@ -74,12 +74,19 @@ class HarmonicBondHandler(ReversibleBondHandler):
     def static_parameterize(params, smirks, mol):
         mol_params, bond_idxs = super(HarmonicBondHandler, HarmonicBondHandler).static_parameterize(params, smirks, mol)
 
-        # validate expected number of bonds
-        expected_num_bonds = mol.GetNumBonds()
-        assigned_num_bonds = len(bond_idxs)
-        if assigned_num_bonds != expected_num_bonds:
-            message = f"""Did not assign the correct number of bonds!
-            (# assigned = {assigned_num_bonds}, but # expected = {expected_num_bonds}"""
+        # validate expected set of bonds
+        rd_bonds = set()
+        for b in mol.GetBonds():
+            rd_bonds.add(tuple(sorted([b.GetBeginAtomIdx(), b.GetEndAtomIdx()])))
+
+        ff_bonds = set()
+        for i, j in bond_idxs:
+            rd_bonds.add(tuple(sorted([i, j])))
+
+        if rd_bonds != ff_bonds:
+            message = f"""Did not preserve the bond table of input mol!
+            missing bonds (present in mol): {rd_bonds - ff_bonds}
+            new bonds (not present in mol): {ff_bonds - rd_bonds}"""
             raise ValueError(message)
 
         # handle special case of 0 bonds
