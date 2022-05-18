@@ -106,10 +106,9 @@ def get_all_angles(mol) -> Set[Angle]:
     angles = set()
     for a in range(n):
         for b in range(n):
-            b_neighbors = g.neighbors(b)
             for c in range(n):
-                ab = a in b_neighbors
-                bc = c in b_neighbors
+                ab = a in g.neighbors(b)
+                bc = c in g.neighbors(b)
                 a_neq_c = a != c
 
                 if ab and bc and a_neq_c:
