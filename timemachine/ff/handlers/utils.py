@@ -92,7 +92,7 @@ def get_improper_torsion_permutations(torsion):
 
     canonical_permutations = []
     for (i, j, k) in neighbor_permutations:
-        canonical_permutations.append(canonicalize_bonded_ixn([center, neighbors[i], neighbors[j], neighbors[k]]))
+        canonical_permutations.append(canonicalize_bonded_ixn((center, neighbors[i], neighbors[j], neighbors[k])))
 
     return canonical_permutations
 
