@@ -80,6 +80,12 @@ void HarmonicAngle<RealType>::execute_device(
     const int blocks = ceil_divide(A_, tpb);
 
     if (A_ > 0) {
+
+        if (P != A_ * 2) {
+            throw std::runtime_error(
+                "HarmonicAngle::execute_device(): expected P == 2*A_, got P=" + std::to_string(P) +
+                ", 2*A_=" + std::to_string(2 * A_));
+        }
         k_harmonic_angle_inference<RealType, 3><<<blocks, tpb, 0, stream>>>(
             A_, d_x, d_p, lambda, d_lambda_mult_, d_lambda_offset_, d_angle_idxs_, d_du_dx, d_du_dp, d_du_dl, d_u);
         gpuErrchk(cudaPeekAtLastError());
