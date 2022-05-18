@@ -79,7 +79,7 @@ def save_smc_result(
     smc_result: Dict,
     cmd_args: argparse.Namespace,
     save_full_trajectories=False,
-) -> str:
+):
     """
     Save the smc results as a pkl'd dictionary.
 
@@ -103,11 +103,6 @@ def save_smc_result(
 
     save_full_trajectories:
         Set to True to store the full smc trajectories
-
-    Returns
-    -------
-    str:
-        Relative path to the pkl.
     """
     mol_name = get_mol_name(mol)
     summary = dict(
@@ -134,8 +129,6 @@ def save_smc_result(
         pkl_contents = pickle.dumps(smc_result)
         file_client.store(full_traj_path, pkl_contents)
 
-    return result_path
-
 
 def run_on_freesolv_mol(
     file_client: AbstractFileClient, mol: Chem.rdchem.Mol, ff: Forcefield, cmd_args: argparse.Namespace
@@ -144,7 +137,7 @@ def run_on_freesolv_mol(
     Returns
     -------
     str:
-        Relative path to the pkl.
+        Relative path to the result pkl.
     """
     name = get_mol_name(mol)
     props = mol.GetPropsAsDict()
@@ -178,7 +171,8 @@ def run_on_freesolv_mol(
     smc_result["final_samples_refined"] = final_samples_refined
 
     # save summary
-    return save_smc_result(file_client, mol, smc_result, cmd_args, save_full_trajectories=cmd_args.debug_mode)
+    save_smc_result(file_client, mol, smc_result, cmd_args, save_full_trajectories=cmd_args.debug_mode)
+    return get_result_path(get_mol_name(mol))
 
 
 def run_on_mols(

@@ -242,7 +242,7 @@ class GRPCClient(AbstractClient):
 
 
 class AbstractFileClient:
-    def store(self, path: str, data: bytes) -> str:
+    def store(self, path: str, data: bytes):
         """
         Store the results to the given path.
 
@@ -254,12 +254,6 @@ class AbstractFileClient:
 
         data:
             Binary contents to store.
-
-        Returns
-        -------
-        str
-            Full name of the result as stored.
-
         """
         raise NotImplementedError()
 
