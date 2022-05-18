@@ -81,7 +81,7 @@ class HarmonicBondHandler(ReversibleBondHandler):
 
         ff_bonds = set()
         for i, j in bond_idxs:
-            rd_bonds.add(tuple(sorted([i, j])))
+            ff_bonds.add(tuple(sorted([i, j])))
 
         if rd_bonds != ff_bonds:
             message = f"""Did not preserve the bond table of input mol!
