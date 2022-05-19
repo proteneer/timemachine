@@ -1,5 +1,5 @@
 # This file tests geometry classification for a wide variety of molecules,
-# selected from common drugs and baran's heterocyclic chemistry
+# selected from common drugs and baran's heterocyclic chemistry.
 
 from rdkit import Chem
 
@@ -36,6 +36,7 @@ def test_assign_aspirin():
     ]
 
     assert atom_geometries == expected_atom_geometries
+
 
 def test_assign_nitrogens():
     """Test assignment with weird SP and SP2 nitrogens."""
@@ -147,29 +148,6 @@ def test_baran_pyrrole():
         LG.G3_PLANAR,
         LG.G3_PLANAR,
         LG.G3_PLANAR,
-        LG.G1_TERMINAL,
-        LG.G1_TERMINAL,
-        LG.G1_TERMINAL,
-        LG.G1_TERMINAL,
-        LG.G1_TERMINAL,
-    ]
-
-    assert atom_types == expected_types
-
-
-def test_baran_pyrrolidine():
-    mol = Chem.AddHs(Chem.MolFromSmiles("C1CCCN1"))
-    atom_types = geometry.classify_geometry(mol)
-    expected_types = [
-        LG.G4_TETRAHEDRAL,
-        LG.G4_TETRAHEDRAL,
-        LG.G4_TETRAHEDRAL,
-        LG.G4_TETRAHEDRAL,
-        LG.G3_PYRAMIDAL,
-        LG.G1_TERMINAL,
-        LG.G1_TERMINAL,
-        LG.G1_TERMINAL,
-        LG.G1_TERMINAL,
         LG.G1_TERMINAL,
         LG.G1_TERMINAL,
         LG.G1_TERMINAL,
@@ -633,7 +611,7 @@ def test_assign_with_dummy_atoms_nitrile():
 
 def test_assign_with_dummy_atoms_aspirin():
     mol = Chem.AddHs(Chem.MolFromSmiles("CC(=O)OC1=CC=CC=C1C(=O)O"))
-    core = [1,3,4,5,6,7,8,9,10,11]
+    core = [1, 3, 4, 5, 6, 7, 8, 9, 10, 11]
     atom_geometries = geometry.classify_geometry(mol, core=core)
 
     expected_atom_geometries = [
