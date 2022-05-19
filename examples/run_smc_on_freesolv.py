@@ -14,7 +14,7 @@ from timemachine.fe.utils import get_mol_name
 from timemachine.ff import Forcefield
 from timemachine.md.smc import get_endstate_samples_from_smc_result, sequential_monte_carlo
 from timemachine.parallel.client import AbstractFileClient, CUDAPoolClient, FileClient, save_results
-from timemachine.parallel.utils import batch_list, flatten_list, get_gpu_count
+from timemachine.parallel.utils import batch_list, get_gpu_count
 
 temperature = 300
 
@@ -207,7 +207,8 @@ def main():
         futures.append(client.submit(run_on_mols, file_client, mol_subset, ff, cmd_args))
 
     # Wait for jobs to complete
-    results = flatten_list([fut.result() for fut in futures])
+    batched_results = [fut.result() for fut in futures]
+    results = [i for j in batched_results for i in j]
 
     # Copy data
     local_file_client = FileClient(base=Path(cmd_args.result_path))

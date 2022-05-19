@@ -287,33 +287,39 @@ class AbstractFileClient:
         """
         raise NotImplementedError()
 
+    def full_path(self, path: str) -> str:
+        """
+        Parameters
+        ----------
+        path:
+            Relative path to use.
+
+        Returns
+        -------
+        str:
+            The full path, the meaning of which depends on the
+            subclass.
+        """
+        raise NotImplementedError()
+
 
 class FileClient(AbstractFileClient):
     def __init__(self, base: Path = None):
         self.base = base or Path().cwd()
 
     def store(self, path: str, data: bytes):
-        """
-        See abstract class for documentation.
-        """
         full_path = Path(self.full_path(path))
         full_path.write_bytes(data)
 
     def load(self, path: str) -> bytes:
-        """
-        See abstract class for documentation.
-        """
         full_path = Path(self.full_path(path))
         return full_path.read_bytes()
 
+    def exists(self, path: str) -> bool:
+        return Path(self.full_path(path)).exists()
+
     def full_path(self, path: str) -> str:
         return str(Path(self.base, path).absolute())
-
-    def exists(self, path: str) -> bool:
-        """
-        See abstract class for documentation.
-        """
-        return Path(self.full_path(path)).exists()
 
 
 def save_results(result_paths: List[str], local_file_client: FileClient, remote_file_client: AbstractFileClient):

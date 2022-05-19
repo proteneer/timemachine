@@ -1,7 +1,7 @@
 import os
 from collections import defaultdict
 from subprocess import check_output
-from typing import Any, List
+from typing import List
 
 from timemachine.parallel.grpc.service_pb2 import StatusResponse
 
@@ -43,7 +43,3 @@ def batch_list(values: List, num_workers: int) -> List[List]:
     for i, value in enumerate(values):
         batched_values[i % num_workers].append(value)
     return list(batched_values.values())
-
-
-def flatten_list(results: List[List[Any]]) -> List[Any]:
-    return [i for j in results for i in j]
