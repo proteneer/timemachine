@@ -1,6 +1,8 @@
 import functools
 
+import jax
 import numpy as np
+import scipy
 from rdkit import Chem
 
 from timemachine.fe import geometry, utils
@@ -8,12 +10,6 @@ from timemachine.fe.single_topology import SingleTopologyV2
 from timemachine.ff import Forcefield
 from timemachine.integrator import simulate
 from timemachine.potentials import bonded
-from timemachine.fe import utils
-
-import functools
-import jax
-import scipy
-
 
 # test that we do not invert stereochemical barriers at the end-states for various susceptible transformations.
 # most of these tests proceed by measuring the chiral volume defined by 4 atoms and ensuring that they're consistent
@@ -128,7 +124,7 @@ def measure_chiral_volume(x0, x1, x2, x3):
 def test_stereo_water_to_tetrahedral():
     mol_a = Chem.MolFromMolBlock(
         """
-  Mrv2202 05192218593D          
+  Mrv2202 05192218593D
 
   3  2  0  0  0  0            999 V2000
     0.5038    0.9940    0.3645 O   0  0  0  0  0  0  0  0  0  0  0  0
@@ -143,7 +139,7 @@ $$$$""",
 
     mol_b = Chem.MolFromMolBlock(
         """
-  Mrv2202 05192219003D          
+  Mrv2202 05192219003D
 
   5  4  0  0  0  0            999 V2000
     0.5038    0.9940    0.3645 C   0  0  1  0  0  0  0  0  0  0  0  0
@@ -191,10 +187,11 @@ $$$$""",
 
 
 def test_halomethyl_to_halomethylamine():
-    # test that we preserve stereochemistry when morphing from SP3->SP3"
+    # test that we preserve stereochemistry when morphing tetrahedral
+    # geometries
     mol_a = Chem.MolFromMolBlock(
         """
-  Mrv2202 05192216353D          
+  Mrv2202 05192216353D
 
   5  4  0  0  0  0            999 V2000
     0.3495    0.4000   -0.7530 C   0  0  2  0  0  0  0  0  0  0  0  0
@@ -213,7 +210,7 @@ $$$$""",
 
     mol_b = Chem.MolFromMolBlock(
         """
-  Mrv2202 05192216363D          
+  Mrv2202 05192216363D
 
   7  6  0  0  0  0            999 V2000
     0.3495    0.4000   -0.7530 C   0  0  2  0  0  0  0  0  0  0  0  0
@@ -270,7 +267,7 @@ def test_halomethyl_to_halomethylamine_inverted():
 
     mol_a = Chem.MolFromMolBlock(
         """
-  Mrv2202 05192216353D          
+  Mrv2202 05192216353D
 
   5  4  0  0  0  0            999 V2000
     0.3495    0.4000   -0.7530 C   0  0  2  0  0  0  0  0  0  0  0  0
@@ -289,7 +286,7 @@ $$$$""",
 
     mol_b = Chem.MolFromMolBlock(
         """
-  Mrv2202 05192216593D          
+  Mrv2202 05192216593D
 
   7  6  0  0  0  0            999 V2000
    -0.0814    0.0208   -1.3024 C   0  0  1  0  0  0  0  0  0  0  0  0
@@ -351,7 +348,7 @@ def test_ammonium_to_chloromethyl():
 
     mol_a = Chem.MolFromMolBlock(
         """
-  Mrv2202 05192218063D          
+  Mrv2202 05192218063D
 
   4  3  0  0  0  0            999 V2000
    -0.0541    0.5427   -0.3433 N   0  0  0  0  0  0  0  0  0  0  0  0
@@ -368,7 +365,7 @@ $$$$""",
 
     mol_b = Chem.MolFromMolBlock(
         """
-  Mrv2202 05192218063D          
+  Mrv2202 05192218063D
 
   5  4  0  0  0  0            999 V2000
    -0.0541    0.5427   -0.3433 C   0  0  0  0  0  0  0  0  0  0  0  0
