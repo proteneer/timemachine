@@ -1,4 +1,3 @@
-from http.client import CONFLICT
 import jax.numpy as jnp
 import numpy as np
 
@@ -151,11 +150,11 @@ def harmonic_bond(conf, params, box, lamb, bond_idxs, lamb_mult=None, lamb_offse
 
     return jnp.sum(energy)
 
+
 def get_centroid_cos_angles(conf, angle_idxs):
 
     vij = []
     vik = []
-
 
     for idxs, j, k in angle_idxs:
 
@@ -164,27 +163,27 @@ def get_centroid_cos_angles(conf, angle_idxs):
         if len(idxs) == 2:
             a, b = idxs
             x_a, x_b = conf[a], conf[b]
-            x_ia = (x_a - x_j)
-            x_ia = x_j + x_ia/jnp.linalg.norm(x_ia)
-            x_ib = (x_b - x_j)
-            x_ib = x_j + x_ib/jnp.linalg.norm(x_ib)
-            x_i = (x_ia + x_ib)/2.0
+            x_ia = x_a - x_j
+            x_ia = x_j + x_ia / jnp.linalg.norm(x_ia)
+            x_ib = x_b - x_j
+            x_ib = x_j + x_ib / jnp.linalg.norm(x_ib)
+            x_i = (x_ia + x_ib) / 2.0
         elif len(idxs) == 3:
             a, b, c = idxs
             x_a, x_b, x_c = conf[a], conf[b], conf[c]
-            x_ia = (x_a - x_j)
-            x_ia = x_j + x_ia/jnp.linalg.norm(x_ia)
-            x_ib = (x_b - x_j)
-            x_ib = x_j + x_ib/jnp.linalg.norm(x_ib)
-            x_ic = (x_c - x_j)
-            x_ic = x_j + x_ic/jnp.linalg.norm(x_ic)
-            x_i = (x_ia + x_ib + x_ic)/3.0
+            x_ia = x_a - x_j
+            x_ia = x_j + x_ia / jnp.linalg.norm(x_ia)
+            x_ib = x_b - x_j
+            x_ib = x_j + x_ib / jnp.linalg.norm(x_ib)
+            x_ic = x_c - x_j
+            x_ic = x_j + x_ic / jnp.linalg.norm(x_ic)
+            x_i = (x_ia + x_ib + x_ic) / 3.0
         else:
             assert 0
 
-        vij.append(x_i-x_j)
+        vij.append(x_i - x_j)
         x_k = conf[k]
-        vik.append(x_k-x_j)
+        vik.append(x_k - x_j)
 
     vij = jnp.array(vij)
     vik = jnp.array(vik)
@@ -222,7 +221,7 @@ def harmonic_x_angle(conf, params, box, lamb, angle_idxs):
     bot = jnp.linalg.norm(v_ij, axis=-1) * jnp.linalg.norm(v_ik, axis=-1)
     cos_angles = top / bot
     kas = params[:, 0]
-    cos_2_angles = 2*cos_angles**2 - 1 # double angle - symmetrized to both ends
+    cos_2_angles = 2 * cos_angles ** 2 - 1  # double angle - symmetrized to both ends
     energies = kas / 2 * jnp.power(cos_2_angles - 1, 2)
     return jnp.sum(energies)
 
@@ -239,7 +238,7 @@ def harmonic_c_angle(conf, params, box, lamb, angle_idxs):
     # we have to use the cos_angle form here since we often set a0s to pi
     energies = kas / 2 * jnp.power(tbs - jnp.cos(a0s), 2)
     return jnp.sum(energies)
-    
+
 
 def harmonic_angle(conf, params, box, lamb, angle_idxs, lamb_mult=None, lamb_offset=None, cos_angles=True):
     """

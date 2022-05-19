@@ -266,7 +266,7 @@ def validate_map(n_nodes: int, relative_inds: List[Tuple[int, int]], absolute_in
 
 def get_romol_bonds(mol):
     """
-    Return bond idxs given a mol
+    Return bond idxs given a mol. These are not canonicalized.
     """
     bond_list = []
     for bond in mol.GetBonds():
