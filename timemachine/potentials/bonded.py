@@ -118,7 +118,7 @@ def harmonic_bond(conf, params, box, lamb, bond_idxs, lamb_mult=None, lamb_offse
     """
 
     bond_idxs = np.array(bond_idxs)
-    params = np.array(params)
+    params = jnp.array(params)
 
     assert params.shape == bond_idxs.shape
 
@@ -286,7 +286,7 @@ def harmonic_angle(conf, params, box, lamb, angle_idxs, lamb_mult=None, lamb_off
     """
 
     angle_idxs = np.array(angle_idxs)
-    params = np.array(params)
+    params = jnp.array(params)
 
     if angle_idxs.shape[0] == 0:
         return 0.0
@@ -405,7 +405,7 @@ def periodic_torsion(conf, params, box, lamb, torsion_idxs, lamb_mult=None, lamb
     """
 
     torsion_idxs = np.array(torsion_idxs)
-    params = np.array(params)
+    params = jnp.array(params)
 
     if torsion_idxs.shape[0] == 0:
         return 0.0
