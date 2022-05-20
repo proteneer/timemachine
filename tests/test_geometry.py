@@ -1,5 +1,5 @@
 # This file tests geometry classification for a wide variety of molecules,
-# selected from common drugs and baran's heterocyclic chemistry.
+# selected from common drugs and Baran's heterocyclic chemistry.
 
 from rdkit import Chem
 
