@@ -220,7 +220,7 @@ def harmonic_x_angle(conf, params, box, lamb, angle_idxs):
     top = jnp.sum(jnp.multiply(v_ij, v_ik), -1)
     bot = jnp.linalg.norm(v_ij, axis=-1) * jnp.linalg.norm(v_ik, axis=-1)
     cos_angles = top / bot
-    kas = params[:, 0]
+    kas = params
     cos_2_angles = 2 * cos_angles ** 2 - 1  # double angle - symmetrized to both ends
     energies = kas / 2 * jnp.power(cos_2_angles - 1, 2)
     return jnp.sum(energies)

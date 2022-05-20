@@ -481,7 +481,7 @@ def setup_orientational_restraints(ff, mol_a, mol_b, core, dg, anchor):
                 # 2) one well explicitly encoding the stereo - probably better!
                 # implement 1 for now?
                 restraint_cross_angle_idxs.append(((j, a), (j, b), (j, k)))
-                restraint_cross_angle_params.append((1000.0, np.nan))
+                restraint_cross_angle_params.append(1000.0)
             else:
                 # planarize so we can enhance sample both stereoisomers using a centroid
                 # type a
@@ -545,9 +545,9 @@ def setup_orientational_restraints(ff, mol_a, mol_b, core, dg, anchor):
                 l, j, k, mol_b_bond_idxs, mol_b_bond_params, mol_b_angle_idxs, mol_b_angle_params
             )
             restraint_cross_angle_idxs.append(((j, a), (j, b), (j, k)))
-            restraint_cross_angle_params.append((1000.0, np.nan))
+            restraint_cross_angle_params.append(1000.0)
             restraint_cross_angle_idxs.append(((j, a), (j, b), (j, l)))
-            restraint_cross_angle_params.append((1000.0, np.nan))
+            restraint_cross_angle_params.append(1000.0)
         else:
             assert 0, "Illegal Geometry"
     elif anchor_core_geometry == LocalGeometry.G2_LINEAR:
@@ -600,7 +600,7 @@ def setup_orientational_restraints(ff, mol_a, mol_b, core, dg, anchor):
             k = atoms[0]
 
             restraint_cross_angle_idxs.append(((j, x), (j, y), (j, k)))
-            restraint_cross_angle_params.append((1000.0, np.nan))
+            restraint_cross_angle_params.append(1000.0)
 
         else:
             assert 0, "Illegal Geometry"
