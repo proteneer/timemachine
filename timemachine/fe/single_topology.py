@@ -6,8 +6,8 @@ from timemachine.fe import dummy, geometry, topology
 from timemachine.fe.geometry import LocalGeometry
 
 
-def is_planarizing(force, phase, period):
-    return period == 2 and (phase - np.pi) < 0.05 and force > 10.0
+def is_planarizing(force_constant, phase, period):
+    return period == 2 and (phase - np.pi) < 0.05 and force_constant > 10.0
 
 
 def identify_bonds_spanned_by_planar_torsions(proper_idxs, proper_params):
