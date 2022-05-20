@@ -208,7 +208,7 @@ def main():
 
     # Wait for jobs to complete
     batched_results = [fut.result() for fut in futures]
-    results = [i for j in batched_results for i in j]
+    results = [result for batch in batched_results for result in batch]
 
     # Copy data
     local_file_client = FileClient(base=Path(cmd_args.result_path))
