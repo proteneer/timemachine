@@ -38,9 +38,8 @@ def identify_bonds_spanned_by_planar_torsions(proper_idxs, proper_params):
     return planar_bonds
 
 
-# recursively replace items in a list of list
 def recursive_map(items, mapping):
-    """
+    """recursively replace items in a list of list
     mapping = np.arange(100)[::-1]
     items = [[0,2,3], [5,1,[2,5,6]], 3]
     result = recursive_map(items, mapping)
