@@ -1,6 +1,7 @@
 import functools
 
 import numpy as np
+import pytest
 from rdkit import Chem
 
 from timemachine.fe import single_topology, utils
@@ -54,15 +55,15 @@ def test_benzene_to_benzoic_acid():
     assert set(bond_idxs) == set([(5, 6), (6, 7), (6, 8), (8, 14)])
     assert set(angle_idxs) == set([(5, 6, 7), (5, 6, 8), (6, 8, 14), (7, 6, 8)])
     # assert set(proper_idxs) == set([(5, 6, 8, 14)]) # used to be a stereo-bond
-    assert set(proper_idxs) == set()
+    assert set(proper_idxs) == set([(5, 6, 8, 14), (7, 6, 8, 14)])
     assert set(improper_idxs) == set([(6, 5, 7, 8), (5, 8, 7, 6), (6, 8, 5, 7)])
     assert set(x_angle_idxs) == set()
     assert set(c_angle_idxs) == set([((0, 4), 5, 6)])
 
-    # core = np.array([[0, 0], [1, 1], [2, 2], [3, 3], [4, 4], [5, 5], [11, 6]])
+    core = np.array([[0, 0], [1, 1], [2, 2], [3, 3], [4, 4], [5, 5], [11, 6]])
     # no longer a stereo bond
-    # with pytest.raises(AssertionError):
-    # setup_orientational_restraints(ff, mol_a, mol_b, core, dg=[7, 8, 14], anchor=6)
+    with pytest.raises(AssertionError):
+        setup_orientational_restraints(ff, mol_a, mol_b, core, dg=[7, 8, 14], anchor=6)
 
 
 def test_benzene_to_aniline():

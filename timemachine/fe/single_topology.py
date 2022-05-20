@@ -1,15 +1,13 @@
 from collections.abc import Iterable
 
 import numpy as np
-from rdkit.Chem import AllChem
-from rdkit.Geometry import Point3D
 
-from timemachine.fe import dummy, geometry, topology, utils
+from timemachine.fe import dummy, geometry, topology
 from timemachine.fe.geometry import LocalGeometry
 
 
 def is_planarizing(force, phase, period):
-    return period == 2 and (phase - np.pi) < 0.05 and force > 30.0
+    return period == 2 and (phase - np.pi) < 0.05 and force > 10.0
 
 
 def identify_bonds_spanned_by_planar_torsions(proper_idxs, proper_params):
@@ -19,13 +17,23 @@ def identify_bonds_spanned_by_planar_torsions(proper_idxs, proper_params):
     """
     planar_bonds = dict()
 
-    for (i, j, k, l), (force, phase, period) in zip(proper_idxs, proper_params):
+    # collect unique idxs first
+    torsions = dict()
+    for idxs, params in zip(proper_idxs, proper_params):
+        idxs = tuple(idxs.tolist())
+        if idxs not in torsions:
+            torsions[idxs] = []
+        torsions[idxs].append(params)
 
-        if is_planarizing(force, phase, period):
-            canon_jk = dummy.canonicalize_bond((j, k))
-            if canon_jk not in planar_bonds:
-                planar_bonds[canon_jk] = []
-            planar_bonds[canon_jk].append((i, j, k, l))
+    for (i, j, k, l), all_params in torsions.items():
+        # planarizing torsions should be unique
+        if len(all_params) == 1:
+            force, phase, period = all_params[0]
+            if is_planarizing(force, phase, period):
+                canon_jk = dummy.canonicalize_bond((j, k))
+                if canon_jk not in planar_bonds:
+                    planar_bonds[canon_jk] = []
+                planar_bonds[canon_jk].append((i, j, k, l))
 
     return planar_bonds
 
@@ -45,37 +53,6 @@ def recursive_map(items, mapping):
         return tuple(res)
     else:
         return mapping[items]
-
-
-def embed_molecules(mol_a, mol_b, s_top, seed):
-    """
-    Given conformation of mol_a, embed mol_b relative to mol_a.
-
-    This should be used on molecules that are similar to each other. Attempting this
-    in the case of ring-opening, ring sized changes etc. will likely be catastrophic.
-    """
-    assert mol_a.GetNumConformers() == 1
-    # AllChem.EmbedMolecule(mol_a)
-    x0_a = utils.get_romol_conf(mol_a)  # nanometers
-    core = s_top.core
-    coord_map = {}
-    for i, j in core:
-        x, y, z = 10 * x0_a[i]
-        coord_map[int(j)] = Point3D(x, y, z)
-
-    # careful: useRandomCoords needs to be set True else we might get inverted stereochemistry
-    # this still doesn't fully guarantee consistency, but its better than nothing!
-    AllChem.EmbedMolecule(mol_b, coordMap=coord_map, randomSeed=seed, useRandomCoords=True)
-    x0_b = utils.get_romol_conf(mol_b)
-    x0 = np.zeros((s_top.get_num_atoms(), 3))
-    for src, dst in enumerate(s_top.a_to_c):
-        x0[dst] = x0_a[src]
-    for src, dst in enumerate(s_top.b_to_c):
-        x0[dst] = x0_b[src]
-
-    AllChem.EmbedMolecule(mol_b)
-
-    return x0
 
 
 def find_stereo_bonds(ring_bonds, proper_idxs, proper_params, mol):
@@ -193,10 +170,6 @@ def find_junction_bonds(anchor, bond_idxs):
     return jbs
 
 
-from rdkit import Chem
-from rdkit.Chem import rdFMCS
-
-
 def enumerate_anchor_groups(anchor_idx, bond_idxs, core_idxs):
 
     # enumerate all 1 and 2 neighbor anchor atoms to form valid anchor groups.
@@ -221,23 +194,6 @@ def enumerate_anchor_groups(anchor_idx, bond_idxs, core_idxs):
                 nbs_2.add((atom, src))
 
     return nbs_1, nbs_2
-
-
-def find_core(mol_a, mol_b):
-    # heuristic, maximize MCS first
-    # later on, truncate terminal to satisfy stereo bond rules
-    res = rdFMCS.FindMCS(
-        [mol_a, mol_b], atomCompare=rdFMCS.AtomCompare.CompareAny, bondCompare=rdFMCS.BondCompare.CompareAny
-    )
-
-    query = Chem.MolFromSmarts(res.smartsString)
-
-    a_match = mol_a.GetSubstructMatch(query)
-    b_match = mol_b.GetSubstructMatch(query)
-
-    core = np.stack([a_match, b_match], axis=1)
-
-    return core
 
 
 def setup_orientational_restraints(ff, mol_a, mol_b, core, dg, anchor):
