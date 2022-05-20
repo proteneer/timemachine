@@ -73,9 +73,27 @@ class HarmonicBondHandler(ReversibleBondHandler):
     @staticmethod
     def static_parameterize(params, smirks, mol):
         mol_params, bond_idxs = super(HarmonicBondHandler, HarmonicBondHandler).static_parameterize(params, smirks, mol)
+
+        # validate expected set of bonds
+        rd_bonds = set()
+        for b in mol.GetBonds():
+            rd_bonds.add(tuple(sorted([b.GetBeginAtomIdx(), b.GetEndAtomIdx()])))
+
+        ff_bonds = set()
+        for i, j in bond_idxs:
+            ff_bonds.add(tuple(sorted([i, j])))
+
+        if rd_bonds != ff_bonds:
+            message = f"""Did not preserve the bond table of input mol!
+            missing bonds (present in mol): {rd_bonds - ff_bonds}
+            new bonds (not present in mol): {ff_bonds - rd_bonds}"""
+            raise ValueError(message)
+
+        # handle special case of 0 bonds
         if len(mol_params) == 0:
             mol_params = params[:0]  # empty slice with same dtype, other dimensions
             bond_idxs = np.zeros((0, 2), dtype=np.int32)
+
         return mol_params, bond_idxs
 
 
