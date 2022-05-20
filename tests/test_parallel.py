@@ -3,6 +3,7 @@ import concurrent
 import os
 import random
 import unittest
+from pathlib import Path
 from tempfile import NamedTemporaryFile
 from unittest.mock import patch
 
@@ -224,3 +225,31 @@ class TestGRPCClient(unittest.TestCase):
 
 def test_batch_list():
     assert batch_list(list(range(10)), 5) == [[0, 5], [1, 6], [2, 7], [3, 8], [4, 9]]
+
+
+def test_file_client(tmpdir):
+    with tmpdir.as_cwd():
+        tmpdir.mkdir("subdir")
+        fc = client.FileClient("subdir")
+        fc.store("test", b"data")
+        assert fc.exists("test")
+        assert str(fc.full_path("test")) == str(Path(tmpdir, "subdir", "test"))
+        assert fc.load("test") == b"data"
+
+
+def test_save_results(tmpdir):
+    with tmpdir.as_cwd():
+        tmpdir.mkdir("remote")
+        rfc = client.FileClient("remote")
+        rfc.store("test", b"data")
+        rfc.store("test2", b"data")
+
+        tmpdir.mkdir("local")
+        lfc = client.FileClient("local")
+
+        result_paths = ["test", "test2"]
+        client.save_results(result_paths, lfc, rfc)
+
+        for result_path in result_paths:
+            assert lfc.exists(result_path)
+            assert Path("local", result_path).exists()

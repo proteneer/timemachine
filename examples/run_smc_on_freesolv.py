@@ -13,7 +13,7 @@ from timemachine.fe.absolute_hydration import set_up_ahfe_system_for_smc
 from timemachine.fe.utils import get_mol_name
 from timemachine.ff import Forcefield
 from timemachine.md.smc import get_endstate_samples_from_smc_result, sequential_monte_carlo
-from timemachine.parallel.client import CUDAPoolClient
+from timemachine.parallel.client import AbstractFileClient, CUDAPoolClient, FileClient, save_results
 from timemachine.parallel.utils import batch_list, get_gpu_count
 
 temperature = 300
@@ -62,27 +62,31 @@ def get_ff(ff_path=DEFAULT_FF) -> Forcefield:
     return Forcefield.load_from_file(ff_path)
 
 
-def get_result_path(path: Path, mol_id: str) -> Path:
+def get_result_path(mol_id: str) -> Path:
     """
     Return the path to the smc results for a particular molecule.
     """
-    return path / f"summary_smc_result_{mol_id}.pkl"
+    return f"summary_smc_result_{mol_id}.pkl"
 
 
-def get_full_traj_path(path: Path, mol_id: str) -> Path:
-    return path / f"full_smc_traj_{mol_id}.pkl"
+def get_full_traj_path(mol_id: str) -> Path:
+    return f"full_smc_traj_{mol_id}.pkl"
 
 
 def save_smc_result(
-    path: Path, mol: Chem.rdchem.Mol, smc_result: Dict, cmd_args: argparse.Namespace, save_full_trajectories=False
+    file_client: AbstractFileClient,
+    mol: Chem.rdchem.Mol,
+    smc_result: Dict,
+    cmd_args: argparse.Namespace,
+    save_full_trajectories=False,
 ):
     """
     Save the smc results as a pkl'd dictionary.
 
     Parameters
     ----------
-    path:
-        Path to the smc results pkl cache
+    file_client:
+        Client used to store the result files.
 
     mol: ROMol
         Molecule sampled using smc
@@ -99,7 +103,6 @@ def save_smc_result(
 
     save_full_trajectories:
         Set to True to store the full smc trajectories
-
     """
     mol_name = get_mol_name(mol)
     summary = dict(
@@ -116,19 +119,28 @@ def save_smc_result(
         summary["initial_samples"] = smc_result["traj"][0]
         summary["final_samples"] = smc_result["traj"][-1]
 
-    with open(get_result_path(path, mol_name), "wb") as f:
-        pickle.dump(summary, f)
+    result_path = get_result_path(mol_name)
+    pkl_contents = pickle.dumps(summary)
+    file_client.store(result_path, pkl_contents)
 
     # optionally save trajectories
     if save_full_trajectories:
-        with open(get_full_traj_path(path, mol_name), "wb") as f:
-            pickle.dump(smc_result, f)
+        full_traj_path = get_full_traj_path(mol_name)
+        pkl_contents = pickle.dumps(smc_result)
+        file_client.store(full_traj_path, pkl_contents)
 
 
-def run_on_freesolv_mol(mol: Chem.rdchem.Mol, cmd_args: argparse.Namespace):
+def run_on_freesolv_mol(
+    file_client: AbstractFileClient, mol: Chem.rdchem.Mol, ff: Forcefield, cmd_args: argparse.Namespace
+) -> str:
+    """
+    Returns
+    -------
+    str:
+        Relative path to the result pkl.
+    """
     name = get_mol_name(mol)
     props = mol.GetPropsAsDict()
-    result_path = Path(cmd_args.result_path)
     print(f"running on molecule {name}, dG={props['dG']} kcal/mol")
 
     # prepare initial samples and lambda schedule, define functions for propagating, evaluating log_prob, and resampling
@@ -139,7 +151,7 @@ def run_on_freesolv_mol(mol: Chem.rdchem.Mol, cmd_args: argparse.Namespace):
         cmd_args.n_md_steps,
         cmd_args.resample_thresh,
         seed=cmd_args.seed,
-        ff=get_ff(cmd_args.ff),
+        ff=ff,
         num_workers=cmd_args.n_cpus,
     )
     # run simulation
@@ -159,12 +171,17 @@ def run_on_freesolv_mol(mol: Chem.rdchem.Mol, cmd_args: argparse.Namespace):
     smc_result["final_samples_refined"] = final_samples_refined
 
     # save summary
-    save_smc_result(result_path, mol, smc_result, cmd_args, save_full_trajectories=cmd_args.debug_mode)
+    save_smc_result(file_client, mol, smc_result, cmd_args, save_full_trajectories=cmd_args.debug_mode)
+    return get_result_path(get_mol_name(mol))
 
 
-def run_on_mols(mols: List[Chem.rdchem.Mol], cmd_args: argparse.Namespace):
+def run_on_mols(
+    file_client: AbstractFileClient, mols: List[Chem.rdchem.Mol], ff: Forcefield, cmd_args: argparse.Namespace
+) -> List[str]:
+    results = []
     for mol in mols:
-        run_on_freesolv_mol(mol, cmd_args)
+        results.append(run_on_freesolv_mol(file_client, mol, ff, cmd_args))
+    return results
 
 
 def main():
@@ -179,16 +196,23 @@ def main():
     num_gpus = cmd_args.n_gpus or 1
     client = CUDAPoolClient(max_workers=num_gpus)
     client.verify()
+    file_client = FileClient(base=Path(cmd_args.result_path))
     print(f"using {num_gpus} gpus with {cmd_args.n_cpus or 'default'} cpus per gpu")
 
     # Batch mols
+    ff = get_ff(cmd_args.ff)
     batch_mols = batch_list(mols, num_gpus)
     futures = []
     for mol_subset in batch_mols:
-        futures.append(client.submit(run_on_mols, mol_subset, cmd_args))
+        futures.append(client.submit(run_on_mols, file_client, mol_subset, ff, cmd_args))
 
     # Wait for jobs to complete
-    _ = [fut.result() for fut in futures]
+    batched_results = [fut.result() for fut in futures]
+    results = [result for batch in batched_results for result in batch]
+
+    # Copy data
+    local_file_client = FileClient(base=Path(cmd_args.result_path))
+    save_results(results, local_file_client, file_client)
 
 
 if __name__ == "__main__":
