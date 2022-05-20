@@ -41,19 +41,27 @@ def simulate_idxs_and_params(idxs_and_params, x0):
     ) = idxs_and_params
 
     box = None
-    bond_U = functools.partial(bonded.harmonic_bond, params=bond_params, box=box, lamb=0.0, bond_idxs=bond_idxs)
-    angle_U = functools.partial(bonded.harmonic_angle, params=angle_params, box=box, lamb=0.0, angle_idxs=angle_idxs)
+    bond_U = functools.partial(
+        bonded.harmonic_bond, params=np.array(bond_params), box=box, lamb=0.0, bond_idxs=np.array(bond_idxs)
+    )
+    angle_U = functools.partial(
+        bonded.harmonic_angle, params=np.array(angle_params), box=box, lamb=0.0, angle_idxs=np.array(angle_idxs)
+    )
     proper_U = functools.partial(
-        bonded.periodic_torsion, params=proper_params, box=box, lamb=0.0, torsion_idxs=proper_idxs
+        bonded.periodic_torsion, params=np.array(proper_params), box=box, lamb=0.0, torsion_idxs=np.array(proper_idxs)
     )
     improper_U = functools.partial(
-        bonded.periodic_torsion, params=improper_params, box=box, lamb=0.0, torsion_idxs=improper_idxs
+        bonded.periodic_torsion,
+        params=np.array(improper_params),
+        box=box,
+        lamb=0.0,
+        torsion_idxs=np.array(improper_idxs),
     )
     c_angle_U = functools.partial(
-        bonded.harmonic_c_angle, params=c_angle_params, box=box, lamb=0.0, angle_idxs=c_angle_idxs
+        bonded.harmonic_c_angle, params=np.array(c_angle_params), box=box, lamb=0.0, angle_idxs=c_angle_idxs
     )
     x_angle_U = functools.partial(
-        bonded.harmonic_x_angle, params=x_angle_params, box=box, lamb=0.0, angle_idxs=x_angle_idxs
+        bonded.harmonic_x_angle, params=np.array(x_angle_params), box=box, lamb=0.0, angle_idxs=x_angle_idxs
     )
 
     def U_fn(x):
