@@ -54,18 +54,15 @@ def recursive_map(items, mapping):
         return mapping[items]
 
 
-def find_stereo_bonds(ring_bonds, proper_idxs, proper_params, mol):
+def find_chiral_bonds(ring_bonds, proper_idxs, proper_params, mol):
     # a stereo bond is defined as a bond that
-    # 1) has a proper torsion term that has k > 30 kJ/mol, period=2, phase=3.1415
+    # 1) has a single proper torsion term with k > 10 kJ/mol, period=2, phase=3.1415
     # 2) a bond that is not part of a ring system.
     # the reason why 2) is present is because the planar torsions spanning a
     # ring system are not used to enforce stereochemistry, since if we simply
-    # disabled them, we would *still* get the correct stereochemistry.
+    # disabled them, we would *still* get the correct stereochemistry due to steric effects.
     # consider a benzene devoid of any torsions (proper or improper), or non-bonded
-    # terms, and only angles and bonds are present. The hydrogens would still be correctly
-    # placed since the angles intrinsically restrain them.
-    # (ytz): note this is slightly buggy, multiple period torsions that span the same idxs may contain
-    # a term to planarize
+    # terms, and only angles and bonds are present. The hydrogens would still be correctly placed.
 
     canonical_ring_bonds = set()
     for ij in ring_bonds:
@@ -80,6 +77,7 @@ def find_stereo_bonds(ring_bonds, proper_idxs, proper_params, mol):
             dst = mol.GetAtomWithIdx(dst)
             if src.GetDegree() == 4 or dst.GetDegree() == 4:
                 # if either atom is tetrahedral then it has no pi bonds to conjugate over
+                # exception: weird sulfur groups
                 continue
             else:
                 canonical_stereo_bonds.add(k)
@@ -87,7 +85,7 @@ def find_stereo_bonds(ring_bonds, proper_idxs, proper_params, mol):
     return canonical_stereo_bonds
 
 
-def find_stereo_atoms(mol):
+def find_chiral_atoms(mol):
     mol_geom = geometry.classify_geometry(mol)
     stereo_atoms = set()
     for a in mol.GetAtoms():
@@ -100,7 +98,7 @@ def find_stereo_atoms(mol):
             if a.IsInRing() or a.GetAtomicNum() == 16 or a.GetAtomicNum() == 15:
                 stereo_atoms.add(a_idx)
         elif len(nbs) > 4:
-            assert 0
+            assert 0, "More than four neighbors found"
     return stereo_atoms
 
 
@@ -249,8 +247,8 @@ def setup_orientational_restraints(ff, mol_a, mol_b, core, dg, anchor):
         if b.IsInRing():
             mol_b_ring_bonds.append((b.GetBeginAtomIdx(), b.GetEndAtomIdx()))
 
-    stereo_bonds = find_stereo_bonds(mol_b_ring_bonds, mol_b_proper_idxs, mol_b_proper_params, mol_b)
-    stereo_atoms = find_stereo_atoms(mol_b)
+    stereo_bonds = find_chiral_bonds(mol_b_ring_bonds, mol_b_proper_idxs, mol_b_proper_params, mol_b)
+    stereo_atoms = find_chiral_atoms(mol_b)
 
     junction_bonds = find_junction_bonds(anchor, mol_b_bond_idxs)
     # (ytz): the mapping code should hopefully be able to guarantee this
@@ -601,10 +599,12 @@ def setup_end_state(ff, mol_a, mol_b, core, a_to_c, b_to_c):
     b_to_c: dict or array, supports []
         mapping from b into c
 
-    """
-    # 1) generate idxs and parameters for mol_b
-    # 2) identify its dummy atoms
+    Returns
+    -------
+    (all_idxs, all_parameters)
+        A tuple of bonded, angle, proper, c_angle, x_angle idxs and parameters.
 
+    """
     mol_b_top = topology.BaseTopology(mol_b, ff)
 
     _, mol_b_hb = mol_b_top.parameterize_harmonic_bond(ff.hb_handle.params)
