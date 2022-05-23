@@ -1,7 +1,7 @@
 # Utility functions to help assign and identify local geometry points
 
 from enum import Enum
-from typing import List
+from typing import List, Optional
 
 import numpy as np
 from rdkit import Chem
@@ -105,7 +105,9 @@ def label_stereo(
     return atom_geometries
 
 
-def classify_geometry(mol: Chem.Mol, ff: Forcefield = None, core: List[int] = None) -> List[LocalGeometry]:
+def classify_geometry(
+    mol: Chem.Mol, ff: Optional[Forcefield] = None, core: Optional[List[int]] = None
+) -> List[LocalGeometry]:
     """
     Identify the local geometry of the molecule. This currently uses a heuristic by inspecting
     the bonded forcefield indices and parameters. Tetrahedral geometries have four neighbors,
