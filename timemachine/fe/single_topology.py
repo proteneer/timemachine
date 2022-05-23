@@ -284,6 +284,7 @@ def setup_orientational_restraints(ff, mol_a, mol_b, core, dg, anchor):
             restraint_angle_params.append(params)
     for idxs, params in zip(mol_b_proper_idxs, mol_b_proper_params):
         _, jj, kk, _ = idxs
+        # only copy over proper torsions responsible for stereo bonds
         if np.all([a in dga for a in idxs]) and (dummy.canonicalize_bond((jj, kk)) in stereo_bonds):
             restraint_proper_idxs.append(tuple([int(x) for x in idxs]))
             restraint_proper_params.append(params)
@@ -647,16 +648,19 @@ def setup_end_state(ff, mol_a, mol_b, core, a_to_c, b_to_c):
     mol_a_angle_params, mol_a_ha = mol_a_top.parameterize_harmonic_angle(ff.ha_handle.params)
     mol_a_proper_params, mol_a_pt = mol_a_top.parameterize_proper_torsion(ff.pt_handle.params)
     mol_a_improper_params, mol_a_it = mol_a_top.parameterize_improper_torsion(ff.it_handle.params)
+    mol_a_nbpl_params, mol_a_nbpl = mol_a_top.parameterize_nonbonded_pairlist(ff.q_handle.params, ff.lj_handle.params)
 
     mol_a_bond_params = mol_a_bond_params.tolist()
     mol_a_angle_params = mol_a_angle_params.tolist()
     mol_a_proper_params = mol_a_proper_params.tolist()
     mol_a_improper_params = mol_a_improper_params.tolist()
+    mol_a_nbpl_params = mol_a_nbpl_params.tolist()
 
     mol_a_bond_idxs = recursive_map(mol_a_hb.get_idxs(), a_to_c)
     mol_a_angle_idxs = recursive_map(mol_a_ha.get_idxs(), a_to_c)
     mol_a_proper_idxs = recursive_map(mol_a_pt.get_idxs(), a_to_c)
     mol_a_improper_idxs = recursive_map(mol_a_it.get_idxs(), a_to_c)
+    mol_a_nbpl_idxs = recursive_map(mol_a_nbpl.get_idxs(), a_to_c)
 
     all_dummy_bond_idxs = recursive_map(all_dummy_bond_idxs, b_to_c)
     all_dummy_angle_idxs = recursive_map(all_dummy_angle_idxs, b_to_c)
@@ -678,6 +682,13 @@ def setup_end_state(ff, mol_a, mol_b, core, a_to_c, b_to_c):
     mol_c_improper_idxs = mol_a_improper_idxs + all_dummy_improper_idxs
     mol_c_improper_params = mol_a_improper_params + all_dummy_improper_params
 
+    mol_c_nbpl_idxs = mol_a_nbpl_idxs
+    num_combined_atoms = mol_a.GetNumAtoms() + mol_b.GetNumAtoms() - len(core)
+    mol_c_nbpl_params = np.zeros((num_combined_atoms, 3))
+    for a_idx, a_param in enumerate(mol_a_nbpl_params):
+        mol_c_nbpl_params[a_to_c[a_idx]] = a_param
+
+    # no need to parameterize dummy atoms of mol_b for the pairlist.
     mol_c_x_angle_idxs = all_dummy_x_angle_idxs
     mol_c_x_angle_params = all_dummy_x_angle_params
 
@@ -689,6 +700,13 @@ def setup_end_state(ff, mol_a, mol_b, core, a_to_c, b_to_c):
         (mol_c_angle_idxs, mol_c_angle_params),
         (mol_c_proper_idxs, mol_c_proper_params),
         (mol_c_improper_idxs, mol_c_improper_params),
+        (
+            mol_c_nbpl_idxs,
+            mol_a_nbpl.get_rescale_mask(),
+            mol_a_nbpl.get_beta(),
+            mol_a_nbpl.get_cutoff(),
+            mol_c_nbpl_params,
+        ),
         (mol_c_x_angle_idxs, mol_c_x_angle_params),
         (mol_c_c_angle_idxs, mol_c_c_angle_params),
     )

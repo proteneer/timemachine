@@ -292,6 +292,39 @@ class BaseTopology:
         combined_potential = potentials.PeriodicTorsion(combined_idxs, combined_lambda_mult, combined_lambda_offset)
         return combined_params, combined_potential
 
+    def parameterize_nonbonded_pairlist(self, ff_q_params, ff_lj_params):
+        # generate intramolecular nonbonded pairlist
+        # use same scale factors for electrostatics and vdWs
+        exclusion_idxs, scale_factors = nonbonded.generate_exclusion_idxs(
+            self.mol, scale12=_SCALE_12, scale13=_SCALE_13, scale14=_SCALE_14
+        )
+
+        # note: use same sf for electrostatics and vdw
+        # tpyically in protein ffs, gaff, the 1-4 ixns use different scale factors between vdw and electrostatics
+        exclusions_kv = dict()
+        for (i, j), sf in zip(exclusion_idxs, scale_factors):
+            assert i < j
+            exclusions_kv[(i, j)] = sf
+
+        inclusion_idxs, rescale_mask = [], []
+        for i in range(self.mol.GetNumAtoms()):
+            for j in range(i + 1, self.mol.GetNumAtoms()):
+                scale_factor = exclusions_kv.get((i, j), 0.0)
+                rescale_factor = 1 - scale_factor
+                # keep this ixn
+                if rescale_factor > 0:
+                    rescale_mask.append([rescale_factor, rescale_factor])
+                    inclusion_idxs.append([i, j])
+
+        q_params = self.ff.q_handle.partial_parameterize(ff_q_params, self.mol)
+        lj_params = self.ff.lj_handle.partial_parameterize(ff_lj_params, self.mol)
+        params = jnp.concatenate([jnp.reshape(q_params, (-1, 1)), jnp.reshape(lj_params, (-1, 2))], axis=1)
+
+        beta = _BETA
+        cutoff = _CUTOFF  # solve for this analytically later
+
+        return params, potentials.NonbondedPairList(inclusion_idxs, rescale_mask, beta, cutoff)
+
 
 class BaseTopologyConversion(BaseTopology):
     """

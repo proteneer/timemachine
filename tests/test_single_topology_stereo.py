@@ -1,6 +1,7 @@
 import functools
 
 import jax
+import jax.numpy as jnp
 import numpy as np
 import scipy
 from rdkit import Chem
@@ -9,7 +10,7 @@ from timemachine.fe import geometry, utils
 from timemachine.fe.single_topology import SingleTopologyV2
 from timemachine.ff import Forcefield
 from timemachine.integrator import simulate
-from timemachine.potentials import bonded
+from timemachine.potentials import bonded, nonbonded
 
 # test that we do not invert stereochemical barriers at the end-states for various susceptible transformations.
 # most of these tests proceed by measuring the chiral volume defined by 4 atoms and ensuring that they're consistent
@@ -36,6 +37,7 @@ def simulate_idxs_and_params(idxs_and_params, x0):
         (angle_idxs, angle_params),
         (proper_idxs, proper_params),
         (improper_idxs, improper_params),
+        (nbpl_idxs, nbpl_rescale_mask, nbpl_beta, nbpl_cutoff, nbpl_params),
         (x_angle_idxs, x_angle_params),
         (c_angle_idxs, c_angle_params),
     ) = idxs_and_params
@@ -57,6 +59,16 @@ def simulate_idxs_and_params(idxs_and_params, x0):
         lamb=0.0,
         torsion_idxs=np.array(improper_idxs),
     )
+
+    nbpl_U = functools.partial(
+        nonbonded.nonbonded_v3_on_specific_pairs,
+        pairs=np.array(nbpl_idxs),
+        params=np.array(nbpl_params),
+        box=box,
+        beta=nbpl_beta,
+        cutoff=nbpl_cutoff,
+        rescale_mask=np.array(nbpl_rescale_mask),
+    )
     c_angle_U = functools.partial(
         bonded.harmonic_c_angle, params=np.array(c_angle_params), box=box, lamb=0.0, angle_idxs=c_angle_idxs
     )
@@ -65,11 +77,21 @@ def simulate_idxs_and_params(idxs_and_params, x0):
     )
 
     def U_fn(x):
-        return bond_U(x) + angle_U(x) + proper_U(x) + improper_U(x) + c_angle_U(x) + x_angle_U(x)
+        vdw, q = nbpl_U(x)
+        return (
+            bond_U(x)
+            + angle_U(x)
+            + proper_U(x)
+            + improper_U(x)
+            + c_angle_U(x)
+            + x_angle_U(x)
+            + jnp.sum(vdw)
+            + jnp.sum(q)
+        )
 
     num_atoms = x0.shape[0]
-
     x_min = minimize_bfgs(x0, U_fn)
+
     num_workers = 1
     num_batches = 2000
     frames, _ = simulate(x_min, U_fn, 300.0, np.ones(num_atoms) * 4.0, 1000, num_batches, num_workers)
