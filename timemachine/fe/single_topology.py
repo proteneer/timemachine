@@ -58,9 +58,36 @@ def recursive_map(items, mapping):
 
 
 def find_chiral_bonds(ring_bonds, proper_idxs, proper_params, mol):
+    """
+    Find chiral bonds - note that a chiral bond is a local descriptor. i.e. only the neighboring
+    atoms to the bond are considered. Furthermore, all atoms are considered unique, even if they are hydrogens!
+
+    (ytz): we can simplify the API to just bond_idxs, and infer ring atoms and degree from the
+    connectivity alone without resorting to rdkit.
+
+    Parameters
+    ----------
+    ring_bonds: list of 2-tuple
+        Bonds that are part of a ring system.
+
+    proper_idxs: list of 4-tuple
+        Proper torsion idxs
+
+    proper_params: list of 3-tuple
+        Proper torsion parameters
+
+    mol: Chem.Mol
+        RDKit molecule
+
+    Returns
+    -------
+    set
+        Set of chiral bonds.
+
+    """
     # a stereo bond is defined as a bond that
     # 1) has a single proper torsion term with k > 10 kJ/mol, period=2, phase=3.1415
-    # 2) a bond that is not part of a ring system.
+    # 2) is not part of a ring system.
     # the reason why 2) is present is because the planar torsions spanning a
     # ring system are not used to enforce stereochemistry, since if we simply
     # disabled them, we would *still* get the correct stereochemistry due to steric effects.
@@ -72,7 +99,7 @@ def find_chiral_bonds(ring_bonds, proper_idxs, proper_params, mol):
         canonical_ring_bonds.add(dummy.canonicalize_bond(ij))
 
     planar_bonds_kv = identify_bonds_spanned_by_planar_torsions(proper_idxs, proper_params)
-    canonical_stereo_bonds = set()
+    canonical_chiral_bonds = set()
     for k in planar_bonds_kv.keys():
         if k not in canonical_ring_bonds:
             src, dst = k
@@ -83,26 +110,37 @@ def find_chiral_bonds(ring_bonds, proper_idxs, proper_params, mol):
                 # exception: weird sulfur groups
                 continue
             else:
-                canonical_stereo_bonds.add(k)
+                canonical_chiral_bonds.add(k)
 
-    return canonical_stereo_bonds
+    return canonical_chiral_bonds
 
 
 def find_chiral_atoms(mol):
+    """
+    Find chiral atoms in a molecule. Chirality is perceived locally, without taking
+    graph-symmetry into account. Eg. even something like CH4 would be considered
+    to be chiral since the hydrogens are distinguishable.
+
+    Returns
+    -------
+    set
+        Set of chiral atoms.
+
+    """
     mol_geom = geometry.classify_geometry(mol)
-    stereo_atoms = set()
+    chiral_atoms = set()
     for a in mol.GetAtoms():
         a_idx = a.GetIdx()
         nbs = a.GetNeighbors()
         if len(nbs) == 4:
-            stereo_atoms.add(a_idx)
+            chiral_atoms.add(a_idx)
         elif len(nbs) == 3 and mol_geom[a_idx] == LocalGeometry.G3_PYRAMIDAL:
             # if in ring, or is sulfur or phosphorus, this may not be guaranteed by
             if a.IsInRing() or a.GetAtomicNum() == 16 or a.GetAtomicNum() == 15:
-                stereo_atoms.add(a_idx)
+                chiral_atoms.add(a_idx)
         elif len(nbs) > 4:
             assert 0, "More than four neighbors found"
-    return stereo_atoms
+    return chiral_atoms
 
 
 def check_bond_stability(j, k, bond_idxs, bond_params):
