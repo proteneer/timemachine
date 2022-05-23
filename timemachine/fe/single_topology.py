@@ -174,10 +174,10 @@ def check_angle_stability(j, k, l, angle_idxs, angle_params):
         return False
     elif canonical_angles[jkl][0] < 50.0:
         return False
-    elif abs(canonical_angles[jkl][1] - 0) < 0.05:
-        return False
     elif abs(canonical_angles[jkl][1] - 3.1415) < 0.05:
         return False
+    elif abs(canonical_angles[jkl][1] - 0) < 0.05:
+        assert 0, "angle term of zero rad found."
 
     return True
 
