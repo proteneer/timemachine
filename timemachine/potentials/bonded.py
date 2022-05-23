@@ -148,49 +148,46 @@ def harmonic_bond(conf, params, box, lamb, bond_idxs, lamb_mult=None, lamb_offse
     return jnp.sum(energy)
 
 
-def get_centroid_cos_angles(conf, angle_idxs):
+def get_cos_angle(ci, cj, ck):
 
-    vij = []
-    vik = []
+    ci = jnp.array(ci)
+    cj = jnp.array(cj)
+    ck = jnp.array(ck)
 
-    for idxs, j, k in angle_idxs:
-
-        x_j = conf[j]
-        # compute v-site from unit vectors relative to i
-        if len(idxs) == 2:
-            a, b = idxs
-            x_a, x_b = conf[a], conf[b]
-            x_ia = x_a - x_j
-            x_ia = x_j + x_ia / jnp.linalg.norm(x_ia)
-            x_ib = x_b - x_j
-            x_ib = x_j + x_ib / jnp.linalg.norm(x_ib)
-            x_i = (x_ia + x_ib) / 2.0
-        elif len(idxs) == 3:
-            a, b, c = idxs
-            x_a, x_b, x_c = conf[a], conf[b], conf[c]
-            x_ia = x_a - x_j
-            x_ia = x_j + x_ia / jnp.linalg.norm(x_ia)
-            x_ib = x_b - x_j
-            x_ib = x_j + x_ib / jnp.linalg.norm(x_ib)
-            x_ic = x_c - x_j
-            x_ic = x_j + x_ic / jnp.linalg.norm(x_ic)
-            x_i = (x_ia + x_ib + x_ic) / 3.0
-        else:
-            assert 0
-
-        vij.append(x_i - x_j)
-        x_k = conf[k]
-        vik.append(x_k - x_j)
-
-    vij = jnp.array(vij)
-    vik = jnp.array(vik)
-
-    top = jnp.sum(jnp.multiply(vij, vik), -1)
-    bot = jnp.linalg.norm(vij, axis=-1) * jnp.linalg.norm(vik, axis=-1)
+    # compute cosine angle of three points
+    vij = ci - cj
+    vjk = ck - cj
+    top = jnp.sum(jnp.multiply(vij, vjk), -1)
+    bot = jnp.linalg.norm(vij, axis=-1) * jnp.linalg.norm(vjk, axis=-1)
 
     tb = top / bot
 
     return tb
+
+
+def get_centroid_cos_angles(conf, angle_idxs):
+
+    x_is = []
+    x_js = []
+    x_ks = []
+
+    for idxs, j, k in angle_idxs:
+        x_j = conf[j]
+        # compute v-site from unit vectors to avoid bond length
+        # change differences
+        a, b = idxs
+        x_a, x_b = conf[a], conf[b]
+        x_ia = x_a - x_j
+        x_ia = x_j + x_ia / jnp.linalg.norm(x_ia)
+        x_ib = x_b - x_j
+        x_ib = x_j + x_ib / jnp.linalg.norm(x_ib)
+        x_i = (x_ia + x_ib) / 2.0
+        x_k = conf[k]
+        x_is.append(x_i)
+        x_js.append(x_j)
+        x_ks.append(x_k)
+
+    return get_cos_angle(x_is, x_js, x_ks)
 
 
 def harmonic_x_angle(conf, params, box, lamb, angle_idxs):
@@ -198,9 +195,9 @@ def harmonic_x_angle(conf, params, box, lamb, angle_idxs):
         return 0.0
 
     params = jnp.array(params)
-    v_ij = []
-    v_ik = []
-
+    x_is = []
+    x_js = []
+    x_ks = []
     for (j, a), (j, b), (j, c) in angle_idxs:
         x_a = conf[a]
         x_b = conf[b]
@@ -208,15 +205,11 @@ def harmonic_x_angle(conf, params, box, lamb, angle_idxs):
         x_j = conf[j]
         v_ja = x_a - x_j
         v_jb = x_b - x_j
-        v_jc = x_c - x_j
-        v_ij.append(jnp.cross(v_ja, v_jb))
-        v_ik.append(v_jc)
+        x_is.append(x_j + jnp.cross(v_ja, v_jb))
+        x_js.append(x_j)
+        x_ks.append(x_c)
 
-    v_ij = jnp.array(v_ij)
-    v_ik = jnp.array(v_ik)
-    top = jnp.sum(jnp.multiply(v_ij, v_ik), -1)
-    bot = jnp.linalg.norm(v_ij, axis=-1) * jnp.linalg.norm(v_ik, axis=-1)
-    cos_angles = top / bot
+    cos_angles = get_cos_angle(x_is, x_js, x_ks)
     kas = params
     cos_2_angles = 2 * cos_angles ** 2 - 1  # double angle - symmetrized to both ends
     energies = kas / 2 * jnp.power(cos_2_angles - 1, 2)
