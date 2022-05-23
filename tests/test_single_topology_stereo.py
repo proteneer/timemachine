@@ -94,7 +94,8 @@ def simulate_idxs_and_params(idxs_and_params, x0):
 
     num_workers = 1
     num_batches = 2000
-    frames, _ = simulate(x_min, U_fn, 300.0, np.ones(num_atoms) * 4.0, 1000, num_batches, num_workers)
+    seed = 2023
+    frames, _ = simulate(x_min, U_fn, 300.0, np.ones(num_atoms) * 4.0, 1000, num_batches, num_workers, seed=seed)
     # (ytz): discard burn in later
     # burn_in_batches = num_batches//10
     burn_in_batches = 0
