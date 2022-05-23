@@ -17,15 +17,15 @@ from timemachine.potentials import bonded, nonbonded
 # at both end-states.
 
 
-def minimize_bfgs(x0, U_fn):
+def minimize_scipy(x0, U_fn):
     N = x0.shape[0]
 
-    def u_bfgs(x_flat):
+    def U_bfgs(x_flat):
         x_full = x_flat.reshape(N, 3)
         return U_fn(x_full)
 
-    grad_bfgs_fn = jax.grad(u_bfgs)
-    res = scipy.optimize.minimize(u_bfgs, x0.reshape(-1), jac=grad_bfgs_fn)
+    grad_bfgs_fn = jax.grad(U_bfgs)
+    res = scipy.optimize.minimize(U_bfgs, x0.reshape(-1), jac=grad_bfgs_fn)
     xi = res.x.reshape(N, 3)
     return xi
 
@@ -90,7 +90,7 @@ def simulate_idxs_and_params(idxs_and_params, x0):
         )
 
     num_atoms = x0.shape[0]
-    x_min = minimize_bfgs(x0, U_fn)
+    x_min = minimize_scipy(x0, U_fn)
 
     num_workers = 1
     num_batches = 2000
@@ -105,10 +105,10 @@ def simulate_idxs_and_params(idxs_and_params, x0):
     return frames
 
 
-def test_nblist_conversion():
+def test_adj_list_conversion():
     mol = Chem.MolFromSmiles("CC1CC1C(C)(C)C")
     bond_idxs = [[b.GetBeginAtomIdx(), b.GetEndAtomIdx()] for b in mol.GetBonds()]
-    nblist = geometry.bond_idxs_to_nblist(mol.GetNumAtoms(), bond_idxs)
+    nblist = geometry.bond_idxs_to_adj_list(mol.GetNumAtoms(), bond_idxs)
 
     expected = [[1], [0, 2, 3], [1, 3], [1, 2, 4], [3, 5, 6, 7], [4], [4], [4]]
 

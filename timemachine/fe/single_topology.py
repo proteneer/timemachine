@@ -1,13 +1,18 @@
+from collections import defaultdict
 from collections.abc import Iterable
+from enum import Enum
 
 import numpy as np
 
-from timemachine.fe import dummy, geometry, topology
+from timemachine.fe import dummy, geometry, topology, utils
 from timemachine.fe.geometry import LocalGeometry
 
 
 def is_planarizing(force_constant, phase, period):
-    return period == 2 and (phase - np.pi) < 0.05 and force_constant > 10.0
+    """
+    Determine if
+    """
+    return period == 2 and abs(phase - np.pi) < 0.05 and force_constant > 10.0
 
 
 def identify_bonds_spanned_by_planar_torsions(proper_idxs, proper_params):
@@ -18,11 +23,9 @@ def identify_bonds_spanned_by_planar_torsions(proper_idxs, proper_params):
     planar_bonds = dict()
 
     # collect unique idxs first
-    torsions = dict()
+    torsions = defaultdict(list)
     for idxs, params in zip(proper_idxs, proper_params):
         idxs = tuple(idxs.tolist())
-        if idxs not in torsions:
-            torsions[idxs] = []
         torsions[idxs].append(params)
 
     for (i, j, k, l), all_params in torsions.items():
@@ -175,7 +178,6 @@ def enumerate_anchor_groups(anchor_idx, bond_idxs, core_idxs):
     assert anchor_idx in [x[0] for x in bond_idxs] or anchor_idx in [x[1] for x in bond_idxs]
 
     nbs_1 = set()
-    nbs_2 = set()
     for src, dst in bond_idxs:
         if src == anchor_idx and dst in core_idxs:
             nbs_1.add(dst)
@@ -193,19 +195,40 @@ def enumerate_anchor_groups(anchor_idx, bond_idxs, core_idxs):
     return nbs_1, nbs_2
 
 
-def setup_orientational_restraints(ff, mol_a, mol_b, core, dg, anchor):
+def setup_dummy_interactions(ff, mol_a, mol_b, core, dummy_group, anchor):
     """
-    Add restraints between dummy atoms in a dummy_group and core atoms.
+    Add restraints between dummy atoms in a dummy_group and core atoms. Interactions involving
+    mol_b's dummy atoms are added in a factorizable, and numerically stable way relative to both
+    mol_b and mol_a.
 
-    mol_a's parameters are mainly used to check for numerical stability.
+    Parameters
+    ----------
+
+    mol_a: Chem.Mol
+        mol_a's parameters are mainly used to check for numerical stability.
+
+    mol_b: Chem.Mol
+        Source of the dummy atoms
+
+    core: np.array(N,2)
+        Core atoms
+
+    dummy_group: set
+        A set of dummy atoms tethered to an anchor
+
+    Returns
+    -------
+    (idxs, params)
+        A set of bond, angle, proper, improper, c_angle, and x_angle restraints
+
     """
-    core_b_to_a = dict()
-    for a, b in core:
-        core_b_to_a[b] = a
+    core_b_to_a = {b: a for a, b in core}
 
-    assert anchor in core_b_to_a
-    for d in dg:
-        assert d not in core_b_to_a
+    assert anchor in core_b_to_a, "anchor must be in core"
+
+    dummy_group = list(dummy_group)
+    for d in dummy_group:
+        assert d not in core_b_to_a, "dummy " + str(d) + " must not be in core"
 
     # these idxs/params can and should be cached, but is repeated here to keep the api simple
     mol_a_top = topology.BaseTopology(mol_a, ff)
@@ -231,13 +254,12 @@ def setup_orientational_restraints(ff, mol_a, mol_b, core, dg, anchor):
     mol_b_full_geometry = geometry.classify_geometry(mol_b)
     mol_b_core_geometry = geometry.classify_geometry(mol_b, core=mol_b_core)
 
-    dg = list(dg)
     # pick an arbitrary atom in the dummy_group and find the anchors, there may be
     # multiple anchors, eg (d=dummy, c=core):
     #   d...d
     #   |   |
     #   c---c
-    root_anchors = dummy.identify_root_anchors(mol_b_bond_idxs, mol_b_core, dg[0])
+    root_anchors = dummy.identify_root_anchors(mol_b_bond_idxs, mol_b_core, dummy_group[0])
     assert anchor in root_anchors
     # (ytz): we can relax this assertion later on.
     assert len(root_anchors) == 1, "multiple root anchors found."
@@ -273,23 +295,23 @@ def setup_orientational_restraints(ff, mol_a, mol_b, core, dg, anchor):
     # 1) bond, angle, and improper torsions are copied over.
     # 2) stereo bonds are copied over, but generic rotatable bonds are not.
     # 3) dummy-dummy nonbonded interactions are fully disabled.
-    dga = dg + [anchor]
+    dummy_groupa = dummy_group + [anchor]
     for idxs, params in zip(mol_b_bond_idxs, mol_b_bond_params):
-        if np.all([a in dga for a in idxs]):
+        if np.all([a in dummy_groupa for a in idxs]):
             restraint_bond_idxs.append(tuple([int(x) for x in idxs]))  # tuples are hashable etc.
             restraint_bond_params.append(params)
     for idxs, params in zip(mol_b_angle_idxs, mol_b_angle_params):
-        if np.all([a in dga for a in idxs]):
+        if np.all([a in dummy_groupa for a in idxs]):
             restraint_angle_idxs.append(tuple([int(x) for x in idxs]))
             restraint_angle_params.append(params)
     for idxs, params in zip(mol_b_proper_idxs, mol_b_proper_params):
         _, jj, kk, _ = idxs
         # only copy over proper torsions responsible for stereo bonds
-        if np.all([a in dga for a in idxs]) and (dummy.canonicalize_bond((jj, kk)) in stereo_bonds):
+        if np.all([a in dummy_groupa for a in idxs]) and (dummy.canonicalize_bond((jj, kk)) in stereo_bonds):
             restraint_proper_idxs.append(tuple([int(x) for x in idxs]))
             restraint_proper_params.append(params)
     for idxs, params in zip(mol_b_improper_idxs, mol_b_improper_params):
-        if np.all([a in dga for a in idxs]):
+        if np.all([a in dummy_groupa for a in idxs]):
             restraint_improper_idxs.append(tuple([int(x) for x in idxs]))
             restraint_improper_params.append(params)
 
@@ -322,7 +344,7 @@ def setup_orientational_restraints(ff, mol_a, mol_b, core, dg, anchor):
             #    .
             # i-j
             # add one angle between (i,j,k)
-            atoms = find_attached_dummy_atoms(dg, mol_b_bond_idxs, anchor)
+            atoms = find_attached_dummy_atoms(dummy_group, mol_b_bond_idxs, anchor)
             assert len(atoms) == 1
             k = atoms[0]
             # add one angle
@@ -332,7 +354,7 @@ def setup_orientational_restraints(ff, mol_a, mol_b, core, dg, anchor):
             # diagram:
             # i-j.k
             # add one angle between (i,j,k)
-            atoms = find_attached_dummy_atoms(dg, mol_b_bond_idxs, anchor)
+            atoms = find_attached_dummy_atoms(dummy_group, mol_b_bond_idxs, anchor)
             assert len(atoms) == 1
             k = atoms[0]
             restraint_angle_idxs.append((i, j, k))
@@ -343,7 +365,7 @@ def setup_orientational_restraints(ff, mol_a, mol_b, core, dg, anchor):
             #    .
             #     k1
             # add two angles: (i,j,k0) and (i,j,k1)
-            atoms = find_attached_dummy_atoms(dg, mol_b_bond_idxs, anchor)
+            atoms = find_attached_dummy_atoms(dummy_group, mol_b_bond_idxs, anchor)
             assert len(atoms) == 2
             k0, k1 = atoms
             if anchor in stereo_atoms:
@@ -366,7 +388,7 @@ def setup_orientational_restraints(ff, mol_a, mol_b, core, dg, anchor):
             # add two angles: (i,j,k0) and (i,j,k1)
             # typically we'd have to worry about stereochemistry, but we're
             # pretty confident here we don't have any stereo issues.
-            atoms = find_attached_dummy_atoms(dg, mol_b_bond_idxs, anchor)
+            atoms = find_attached_dummy_atoms(dummy_group, mol_b_bond_idxs, anchor)
             assert len(atoms) == 2
             k0, k1 = atoms
             restraint_angle_idxs.append((i, j, k0))
@@ -382,7 +404,7 @@ def setup_orientational_restraints(ff, mol_a, mol_b, core, dg, anchor):
             #     k1
             # add three angles: (i,j,k0) and (i,j,k1) and (i,j,k2)
             assert anchor in stereo_atoms
-            atoms = find_attached_dummy_atoms(dg, mol_b_bond_idxs, anchor)
+            atoms = find_attached_dummy_atoms(dummy_group, mol_b_bond_idxs, anchor)
             assert len(atoms) == 3
             k0, k1, k2 = atoms
             restraint_angle_idxs.append((i, j, k0))
@@ -425,7 +447,7 @@ def setup_orientational_restraints(ff, mol_a, mol_b, core, dg, anchor):
             )
 
             # a and b are core atoms, j being the anchor
-            atoms = find_attached_dummy_atoms(dg, mol_b_bond_idxs, anchor)
+            atoms = find_attached_dummy_atoms(dummy_group, mol_b_bond_idxs, anchor)
             assert len(atoms) == 1
             k = atoms[0]
 
@@ -463,7 +485,7 @@ def setup_orientational_restraints(ff, mol_a, mol_b, core, dg, anchor):
                 mol_a_angle_params,
             )
             # a and b are core atoms, j being the anchor
-            atoms = find_attached_dummy_atoms(dg, mol_b_bond_idxs, anchor)
+            atoms = find_attached_dummy_atoms(dummy_group, mol_b_bond_idxs, anchor)
             assert len(atoms) == 1
             k = atoms[0]
             restraint_centroid_angle_idxs.append((tuple(sorted((a, b))), j, k))
@@ -491,7 +513,7 @@ def setup_orientational_restraints(ff, mol_a, mol_b, core, dg, anchor):
                 mol_a_angle_params,
             )
 
-            atoms = find_attached_dummy_atoms(dg, mol_b_bond_idxs, anchor)
+            atoms = find_attached_dummy_atoms(dummy_group, mol_b_bond_idxs, anchor)
             assert len(atoms) == 2
             k, l = atoms
             # dummy-atoms l,j,k
@@ -520,10 +542,9 @@ def setup_orientational_restraints(ff, mol_a, mol_b, core, dg, anchor):
             # we have some choices here:
             # 1) if there is no ring-opening and closing, then we use a centroid angle restraint defined by [a,b,c],j,k
             # 2) if there is ring-opening and closing, then we need to enumerate possible cross-product based restraints.
-            # we currently support only 1) right now. But it would not be difficult to implement 2).
-
-            # it turns out that 1) is quite difficult, since ammonium groups do not have reasonable centroids due to
-            # rapid conversion. So we should always do 2) as it's more robust and enables more kinds of transformations.
+            # it turns out that 1) is quite difficult, since rapidly converting pyramidal groups (eg. ammonium) do not have
+            # reasonable centroids due to rapid conversion. So we should always do 2) as it's more robust and enables
+            # more kinds of transformations.
 
             a, b, c = nbs_1
 
@@ -549,7 +570,7 @@ def setup_orientational_restraints(ff, mol_a, mol_b, core, dg, anchor):
                     y = yy
                     break
 
-            atoms = find_attached_dummy_atoms(dg, mol_b_bond_idxs, anchor)
+            atoms = find_attached_dummy_atoms(dummy_group, mol_b_bond_idxs, anchor)
             assert len(atoms) == 1
             k = atoms[0]
 
@@ -612,7 +633,7 @@ def setup_end_state(ff, mol_a, mol_b, core, a_to_c, b_to_c):
     mol_b_bond_idxs = mol_b_hb.get_idxs()
 
     mol_b_core = core[:, 1]
-    mol_b_bond_idxs = [(b.GetBeginAtomIdx(), b.GetEndAtomIdx()) for b in mol_b.GetBonds()]
+    mol_b_bond_idxs = utils.get_romol_bonds(mol_b)
     dgs = dummy.identify_dummy_groups(mol_b_bond_idxs, mol_b_core)
 
     all_dummy_bond_idxs, all_dummy_bond_params = [], []
@@ -626,7 +647,7 @@ def setup_end_state(ff, mol_a, mol_b, core, a_to_c, b_to_c):
         dg = list(dg)
         root_anchors = dummy.identify_root_anchors(mol_b_bond_idxs, mol_b_core, dg[0])
         anchor = root_anchors[0]
-        all_idxs, all_params = setup_orientational_restraints(ff, mol_a, mol_b, core, dg=dg, anchor=anchor)
+        all_idxs, all_params = setup_dummy_interactions(ff, mol_a, mol_b, core, dg, anchor=anchor)
 
         all_dummy_bond_idxs.extend(all_idxs[0])
         all_dummy_angle_idxs.extend(all_idxs[1])
@@ -710,6 +731,12 @@ def setup_end_state(ff, mol_a, mol_b, core, a_to_c, b_to_c):
         (mol_c_x_angle_idxs, mol_c_x_angle_params),
         (mol_c_c_angle_idxs, mol_c_c_angle_params),
     )
+
+
+class AtomMembership(Enum):
+    CORE = 0
+    DUMMY_A = 1
+    DUMMY_B = 2
 
 
 class SingleTopologyV2:

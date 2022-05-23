@@ -20,7 +20,7 @@ class LocalGeometry(Enum):
     G4_TETRAHEDRAL = 6  # R-X(-H)(-H)H
 
 
-def bond_idxs_to_nblist(num_atoms, bond_idxs):
+def bond_idxs_to_adj_list(num_atoms, bond_idxs):
     """
     Convert tuples of bond idxs to a neighbor list encoded as
     a list of lists. The bonds are interpeted as undirected.
@@ -64,7 +64,7 @@ def label_stereo(
     improper_params,
 ):
     # list of list representation
-    nblist = bond_idxs_to_nblist(num_atoms, bond_idxs)
+    nblist = bond_idxs_to_adj_list(num_atoms, bond_idxs)
     atom_geometries = []
     for atom_idx, atom_nbs in enumerate(nblist):
         if len(atom_nbs) == 4:
@@ -97,17 +97,23 @@ def label_stereo(
         elif len(atom_nbs) == 1:
             atom_geometries.append(LocalGeometry.G1_TERMINAL)
         elif len(atom_nbs) == 0:
+            # dummy atom
             atom_geometries.append(None)
+        else:
+            assert 0, "Valency higher than 4 not supported."
 
     return atom_geometries
 
 
 def classify_geometry(mol: Chem.Mol, ff: Forcefield = None, core: List[int] = None) -> List[LocalGeometry]:
     """
-    Identify the local geometry of the molecule. This current uses a heuristic but we
-    should really be generating this from gas-phase simulations of the real forcefield.
+    Identify the local geometry of the molecule. This currently uses a heuristic by inspecting
+    the bonded forcefield indices and parameters. Tetrahedral geometries have four neighbors,
+    pyramidal geometries have three neighbors but lack an improper term, and planar geometries have an improper
+    term. Kink and linear geometries have two neighbors but differ in the angle term (latter is set to pi).
 
-    Currently, 3D coordinates are not required, but this may change in the future.
+    Ideally, we should be generating this from gas-phase simulations of the real forcefield. Currently, 3D
+    coordinates are not required, but this may change in the future.
 
     Parameters
     ----------
@@ -121,7 +127,6 @@ def classify_geometry(mol: Chem.Mol, ff: Forcefield = None, core: List[int] = No
     -------
     List[LocalGeometry]
         List of per atom geometries. Dummy atoms are None
-
 
     """
     if ff is None:
@@ -145,28 +150,28 @@ def classify_geometry(mol: Chem.Mol, ff: Forcefield = None, core: List[int] = No
     core_bond_idxs = []
     core_bond_params = []
     for ij, p in zip(bond_idxs, bond_params):
-        if np.all([a in core for a in ij]):
+        if all([a in core for a in ij]):
             core_bond_idxs.append(ij)
             core_bond_params.append(p)
 
     core_angle_idxs = []
     core_angle_params = []
     for ijk, p in zip(angle_idxs, angle_params):
-        if np.all([a in core for a in ijk]):
+        if all([a in core for a in ijk]):
             core_angle_idxs.append(ijk)
             core_angle_params.append(p)
 
     core_proper_idxs = []
     core_proper_params = []
     for ijkl, p in zip(proper_idxs, proper_params):
-        if np.all([a in core for a in ijkl]):
+        if all([a in core for a in ijkl]):
             core_proper_idxs.append(ijkl)
             core_proper_params.append(p)
 
     core_improper_idxs = []
     core_improper_params = []
     for ijkl, p in zip(improper_idxs, improper_params):
-        if np.all([a in core for a in ijkl]):
+        if all([a in core for a in ijkl]):
             core_improper_idxs.append(ijkl)
             core_improper_params.append(p)
 
