@@ -6,6 +6,7 @@ import numpy as np
 
 from timemachine.fe import dummy, geometry, topology, utils
 from timemachine.fe.geometry import LocalGeometry
+from timemachine.lib import potentials
 
 
 def is_planarizing(force_constant, phase, period):
@@ -746,6 +747,10 @@ def setup_end_state(ff, mol_a, mol_b, core, a_to_c, b_to_c):
     mol_c_improper_idxs = mol_a_improper_idxs + all_dummy_improper_idxs
     mol_c_improper_params = mol_a_improper_params + all_dummy_improper_params
 
+    # combine proper + improper
+    mol_c_torsion_idxs = mol_c_proper_idxs + mol_c_improper_idxs
+    mol_c_torsion_params = mol_c_proper_params + mol_c_improper_params
+
     mol_c_nbpl_idxs = mol_a_nbpl_idxs
     num_combined_atoms = mol_a.GetNumAtoms() + mol_b.GetNumAtoms() - len(core)
     mol_c_nbpl_params = np.zeros((num_combined_atoms, 3))
@@ -759,21 +764,100 @@ def setup_end_state(ff, mol_a, mol_b, core, a_to_c, b_to_c):
     mol_c_c_angle_idxs = all_dummy_c_angle_idxs
     mol_c_c_angle_params = all_dummy_c_angle_params
 
-    return (
-        (mol_c_bond_idxs, mol_c_bond_params),
-        (mol_c_angle_idxs, mol_c_angle_params),
-        (mol_c_proper_idxs, mol_c_proper_params),
-        (mol_c_improper_idxs, mol_c_improper_params),
-        (
-            mol_c_nbpl_idxs,
-            mol_a_nbpl.get_rescale_mask(),
-            mol_a_nbpl.get_beta(),
-            mol_a_nbpl.get_cutoff(),
-            mol_c_nbpl_params,
-        ),
-        (mol_c_x_angle_idxs, mol_c_x_angle_params),
-        (mol_c_c_angle_idxs, mol_c_c_angle_params),
+    bond_potential = potentials.HarmonicBond(mol_c_bond_idxs).bind(mol_c_bond_params)
+    angle_potential = potentials.HarmonicAngle(mol_c_angle_idxs).bind(mol_c_angle_params)
+    torsion_potential = potentials.PeriodicTorsion(mol_c_torsion_idxs).bind(mol_c_torsion_params)
+    nonbonded_potential = potentials.NonbondedPairList(
+        mol_c_nbpl_idxs,
+        mol_a_nbpl.get_rescale_mask(),
+        mol_a_nbpl.get_beta(),
+        mol_a_nbpl.get_cutoff(),
+    ).bind(mol_c_nbpl_params)
+    c_angle_potential = potentials.HarmonicCentroidAngle(mol_c_c_angle_idxs).bind(mol_c_c_angle_params)
+    x_angle_potential = potentials.HarmonicCrossDoubleAngle(mol_c_x_angle_idxs).bind(mol_c_x_angle_params)
+
+    system = VacuumSystem(
+        bond_potential, angle_potential, torsion_potential, nonbonded_potential, c_angle_potential, x_angle_potential
     )
+    return system
+
+
+import functools
+
+import jax.numpy as jnp
+
+from timemachine.potentials import bonded, nonbonded
+
+
+class VacuumSystem:
+
+    # utility system container
+
+    def __init__(self, bond, angle, torsion, nonbonded, c_angle, x_angle):
+        self.bond = bond
+        self.angle = angle
+        self.torsion = torsion
+        self.nonbonded = nonbonded
+        self.c_angle = c_angle
+        self.x_angle = x_angle
+
+    def get_U_fn(self):
+        """
+        Return a jax function that evaluates the potential energy of a set of coordinates.
+        """
+
+        box = None
+        bond_U = functools.partial(
+            bonded.harmonic_bond,
+            params=np.array(self.bond.params),
+            box=box,
+            lamb=0.0,
+            bond_idxs=np.array(self.bond.get_idxs()),
+        )
+        angle_U = functools.partial(
+            bonded.harmonic_angle,
+            params=np.array(self.angle.params),
+            box=box,
+            lamb=0.0,
+            angle_idxs=np.array(self.angle.get_idxs()),
+        )
+        torsion_U = functools.partial(
+            bonded.periodic_torsion,
+            params=np.array(self.torsion.params),
+            box=box,
+            lamb=0.0,
+            torsion_idxs=np.array(self.torsion.get_idxs()),
+        )
+
+        nbpl_U = functools.partial(
+            nonbonded.nonbonded_v3_on_specific_pairs,
+            pairs=np.array(self.nonbonded.get_idxs()),
+            params=np.array(self.nonbonded.params),
+            box=box,
+            beta=self.nonbonded.get_beta(),
+            cutoff=self.nonbonded.get_cutoff(),
+            rescale_mask=np.array(self.nonbonded.get_rescale_mask()),
+        )
+        c_angle_U = functools.partial(
+            bonded.harmonic_c_angle,
+            params=np.array(self.c_angle.params),
+            box=box,
+            lamb=0.0,
+            angle_idxs=self.c_angle.get_idxs(),
+        )
+        x_angle_U = functools.partial(
+            bonded.harmonic_x_angle,
+            params=np.array(self.x_angle.params),
+            box=box,
+            lamb=0.0,
+            angle_idxs=self.x_angle.get_idxs(),
+        )
+
+        def U_fn(x):
+            vdw, q = nbpl_U(x)
+            return bond_U(x) + angle_U(x) + torsion_U(x) + c_angle_U(x) + x_angle_U(x) + jnp.sum(vdw) + jnp.sum(q)
+
+        return U_fn
 
 
 class AtomMembership(Enum):

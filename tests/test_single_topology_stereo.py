@@ -1,7 +1,4 @@
-import functools
-
 import jax
-import jax.numpy as jnp
 import numpy as np
 import scipy
 from rdkit import Chem
@@ -10,7 +7,6 @@ from timemachine.fe import geometry, utils
 from timemachine.fe.single_topology import SingleTopologyV2
 from timemachine.ff import Forcefield
 from timemachine.integrator import simulate
-from timemachine.potentials import bonded, nonbonded
 
 # test that we do not invert stereochemical barriers at the end-states for various susceptible transformations.
 # most of these tests proceed by measuring the chiral volume defined by 4 atoms and ensuring that they're consistent
@@ -30,64 +26,9 @@ def minimize_scipy(x0, U_fn):
     return xi
 
 
-def simulate_idxs_and_params(idxs_and_params, x0):
+def simulate_system(system, x0):
 
-    (
-        (bond_idxs, bond_params),
-        (angle_idxs, angle_params),
-        (proper_idxs, proper_params),
-        (improper_idxs, improper_params),
-        (nbpl_idxs, nbpl_rescale_mask, nbpl_beta, nbpl_cutoff, nbpl_params),
-        (x_angle_idxs, x_angle_params),
-        (c_angle_idxs, c_angle_params),
-    ) = idxs_and_params
-
-    box = None
-    bond_U = functools.partial(
-        bonded.harmonic_bond, params=np.array(bond_params), box=box, lamb=0.0, bond_idxs=np.array(bond_idxs)
-    )
-    angle_U = functools.partial(
-        bonded.harmonic_angle, params=np.array(angle_params), box=box, lamb=0.0, angle_idxs=np.array(angle_idxs)
-    )
-    proper_U = functools.partial(
-        bonded.periodic_torsion, params=np.array(proper_params), box=box, lamb=0.0, torsion_idxs=np.array(proper_idxs)
-    )
-    improper_U = functools.partial(
-        bonded.periodic_torsion,
-        params=np.array(improper_params),
-        box=box,
-        lamb=0.0,
-        torsion_idxs=np.array(improper_idxs),
-    )
-
-    nbpl_U = functools.partial(
-        nonbonded.nonbonded_v3_on_specific_pairs,
-        pairs=np.array(nbpl_idxs),
-        params=np.array(nbpl_params),
-        box=box,
-        beta=nbpl_beta,
-        cutoff=nbpl_cutoff,
-        rescale_mask=np.array(nbpl_rescale_mask),
-    )
-    c_angle_U = functools.partial(
-        bonded.harmonic_c_angle, params=np.array(c_angle_params), box=box, lamb=0.0, angle_idxs=c_angle_idxs
-    )
-    x_angle_U = functools.partial(
-        bonded.harmonic_x_angle, params=np.array(x_angle_params), box=box, lamb=0.0, angle_idxs=x_angle_idxs
-    )
-
-    def U_fn(x):
-        vdw, q = nbpl_U(x)
-        return (
-            bond_U(x)
-            + angle_U(x)
-            + proper_U(x)
-            + improper_U(x)
-            + c_angle_U(x)
-            + x_angle_U(x)
-            + jnp.sum(vdw)
-            + jnp.sum(q)
-        )
+    U_fn = system.get_U_fn()
 
     num_atoms = x0.shape[0]
     x_min = minimize_scipy(x0, U_fn)
@@ -200,16 +141,16 @@ $$$$""",
 
     assert vol_cl > 0 and vol_br < 0
 
-    idxs_and_params = s_top.generate_end_state_mol_a()
-    frames = simulate_idxs_and_params(idxs_and_params, x0)
+    system = s_top.generate_end_state_mol_a()
+    frames = simulate_system(system, x0)
 
     for f in frames:
         vol_cl = measure_chiral_volume(f[0], f[1], f[2], f[3])
         vol_br = measure_chiral_volume(f[0], f[1], f[2], f[4])
         assert vol_cl > 0 and vol_br < 0
 
-    idxs_and_params = s_top.generate_end_state_mol_b()
-    frames = simulate_idxs_and_params(idxs_and_params, x0)
+    system = s_top.generate_end_state_mol_b()
+    frames = simulate_system(system, x0)
 
     for f in frames:
         vol_cl = measure_chiral_volume(f[0], f[1], f[2], f[3])
@@ -275,16 +216,16 @@ $$$$""",
     vol_d = measure_chiral_volume(x0[0], x0[1], x0[2], x0[5])
     assert vol_a < 0 and vol_d < 0
 
-    idxs_and_params = s_top.generate_end_state_mol_a()
-    frames = simulate_idxs_and_params(idxs_and_params, x0)
+    system = s_top.generate_end_state_mol_a()
+    frames = simulate_system(system, x0)
 
     for f in frames:
         vol_a = measure_chiral_volume(f[0], f[1], f[2], f[4])
         vol_d = measure_chiral_volume(f[0], f[1], f[2], f[5])
         assert vol_a < 0 and vol_d < 0
 
-    idxs_and_params = s_top.generate_end_state_mol_b()
-    frames = simulate_idxs_and_params(idxs_and_params, x0)
+    system = s_top.generate_end_state_mol_b()
+    frames = simulate_system(system, x0)
 
     for f in frames:
         vol_a = measure_chiral_volume(f[0], f[1], f[2], f[4])
@@ -351,16 +292,16 @@ $$$$""",
     vol_d = measure_chiral_volume(x0[0], x0[1], x0[2], x0[5])
     assert vol_a < 0 and vol_d > 0
 
-    idxs_and_params = s_top.generate_end_state_mol_a()
-    frames = simulate_idxs_and_params(idxs_and_params, x0)
+    system = s_top.generate_end_state_mol_a()
+    frames = simulate_system(system, x0)
 
     for f in frames:
         vol_a = measure_chiral_volume(f[0], f[1], f[2], f[4])
         vol_d = measure_chiral_volume(f[0], f[1], f[2], f[5])
         assert vol_a < 0 and vol_d > 0
 
-    idxs_and_params = s_top.generate_end_state_mol_b()
-    frames = simulate_idxs_and_params(idxs_and_params, x0)
+    system = s_top.generate_end_state_mol_b()
+    frames = simulate_system(system, x0)
 
     for f in frames:
         vol_a = measure_chiral_volume(f[0], f[1], f[2], f[4])
@@ -429,8 +370,8 @@ $$$$""",
     assert vol_a > 0 and vol_d < 0
 
     # G3_PYRAMIDAL -> G4_TETRAHEDRAL
-    idxs_and_params = s_top.generate_end_state_mol_a()
-    frames = simulate_idxs_and_params(idxs_and_params, x0)
+    system = s_top.generate_end_state_mol_a()
+    frames = simulate_system(system, x0)
 
     num_vol_a_pos = 0
     num_vol_a_neg = 0
@@ -448,8 +389,8 @@ $$$$""",
     assert abs(num_vol_a_pos / len(frames) - 0.5) < 0.05
 
     # G3_PYRAMIDAL -> G3_PYRAMIDAL (no dummy atoms)
-    idxs_and_params = s_top.generate_end_state_mol_b()
-    frames = simulate_idxs_and_params(idxs_and_params, x0)
+    system = s_top.generate_end_state_mol_b()
+    frames = simulate_system(system, x0)
 
     for f in frames:
         vol_a = measure_chiral_volume(f[0], f[1], f[2], f[3])
@@ -470,8 +411,8 @@ $$$$""",
     assert vol_a > 0 and vol_d < 0
 
     # G2_KINK -> G4_TETRAHEDRAL
-    idxs_and_params = s_top.generate_end_state_mol_a()
-    frames = simulate_idxs_and_params(idxs_and_params, x0)
+    system = s_top.generate_end_state_mol_a()
+    frames = simulate_system(system, x0)
 
     num_vol_a_pos = 0
     num_vol_a_neg = 0
@@ -489,8 +430,8 @@ $$$$""",
     assert abs(num_vol_a_pos / len(frames) - 0.5) < 0.05
 
     # G2_KINK -> G3_PYRAMIDAL
-    idxs_and_params = s_top.generate_end_state_mol_b()
-    frames = simulate_idxs_and_params(idxs_and_params, x0)
+    system = s_top.generate_end_state_mol_b()
+    frames = simulate_system(system, x0)
 
     # in this case, the nitrogen is forced to be planar via a
     # centroid restraint, so we will observed a mixture

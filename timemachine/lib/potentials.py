@@ -174,6 +174,14 @@ class HarmonicBond(BondedWrapper):
     pass
 
 
+class HarmonicCentroidAngle(BondedWrapper):
+    pass
+
+
+class HarmonicCrossDoubleAngle(BondedWrapper):
+    pass
+
+
 # this is an alias to make type checking easier
 class CoreRestraint(HarmonicBond):
     def unbound_impl(self, precision):
