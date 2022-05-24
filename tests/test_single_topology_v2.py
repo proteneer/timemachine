@@ -9,6 +9,42 @@ from timemachine.fe.single_topology import setup_dummy_interactions
 from timemachine.ff import Forcefield
 
 
+def test_find_chiral_atoms():
+
+    # trivalent nitrogens always achiral
+    # (probably wrong, but decent approximation for now)
+    mol = Chem.AddHs(Chem.MolFromSmiles("FN(F)F"))
+    chiral_atoms = single_topology.find_chiral_atoms(mol)
+    assert chiral_atoms == set()
+
+    # tetravalent nitrogens always chiral
+    mol = Chem.AddHs(Chem.MolFromSmiles("F[N+](F)(F)F"))
+    chiral_atoms = single_topology.find_chiral_atoms(mol)
+    assert chiral_atoms == set([1])
+
+    # trivalent phosphor/sulfur should throw an assertion
+    # tetravalent phosphor/sulfur okay
+    mol = Chem.AddHs(Chem.MolFromSmiles("CP(C)C"))
+    with pytest.raises(AssertionError):
+        single_topology.find_chiral_atoms(mol)
+
+    mol = Chem.AddHs(Chem.MolFromSmiles("COP([O-])([O-])=O"))
+    chiral_atoms = single_topology.find_chiral_atoms(mol)
+    assert chiral_atoms == set([0, 2])
+
+    mol = Chem.AddHs(Chem.MolFromSmiles("C[S+](C)C"))
+    with pytest.raises(AssertionError):
+        single_topology.find_chiral_atoms(mol)
+
+    mol = Chem.AddHs(Chem.MolFromSmiles("CS(C)=O"))
+    with pytest.raises(AssertionError):
+        single_topology.find_chiral_atoms(mol)
+
+    mol = Chem.AddHs(Chem.MolFromSmiles("CS(C)(=O)=O"))
+    chiral_atoms = single_topology.find_chiral_atoms(mol)
+    assert chiral_atoms == set([0, 1, 2])
+
+
 def test_benzene_to_phenol():
     mol_a = Chem.AddHs(Chem.MolFromSmiles("c1ccccc1"))
     mol_b = Chem.AddHs(Chem.MolFromSmiles("c1ccccc1O"))

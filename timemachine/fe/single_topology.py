@@ -86,12 +86,12 @@ def find_chiral_bonds(ring_bonds, proper_idxs, proper_params, mol):
         Set of chiral bonds.
 
     """
-    # a stereo bond is defined as a bond that
+    # a chiral bond is defined as a bond that
     # 1) has a single proper torsion term with k > 10 kJ/mol, period=2, phase=3.1415
     # 2) is not part of a ring system.
     # the reason why 2) is present is because the planar torsions spanning a
-    # ring system are not used to enforce stereochemistry, since if we simply
-    # disabled them, we would *still* get the correct stereochemistry due to steric effects.
+    # ring system are not used to enforce chiralchemistry, since if we simply
+    # disabled them, we would *still* get the correct chiralchemistry due to steric effects.
     # consider a benzene devoid of any torsions (proper or improper), or non-bonded
     # terms, and only angles and bonds are present. The hydrogens would still be correctly placed.
 
@@ -137,8 +137,8 @@ def find_chiral_atoms(mol):
             chiral_atoms.add(a_idx)
         elif len(nbs) == 3 and mol_geom[a_idx] == LocalGeometry.G3_PYRAMIDAL:
             # if in ring, or is sulfur or phosphorus, this may not be guaranteed by
-            if a.IsInRing() or a.GetAtomicNum() == 16 or a.GetAtomicNum() == 15:
-                chiral_atoms.add(a_idx)
+            if a.GetAtomicNum() == 16 or a.GetAtomicNum() == 15:
+                assert 0, "Pyramidal Phosphorous or Sulfur detected."
         elif len(nbs) > 4:
             assert 0, "More than four neighbors found"
     return chiral_atoms
@@ -313,12 +313,12 @@ def setup_dummy_interactions(ff, mol_a, mol_b, core, dummy_group, anchor):
         if b.IsInRing():
             mol_b_ring_bonds.append((b.GetBeginAtomIdx(), b.GetEndAtomIdx()))
 
-    stereo_bonds = find_chiral_bonds(mol_b_ring_bonds, mol_b_proper_idxs, mol_b_proper_params, mol_b)
-    stereo_atoms = find_chiral_atoms(mol_b)
+    chiral_bonds = find_chiral_bonds(mol_b_ring_bonds, mol_b_proper_idxs, mol_b_proper_params, mol_b)
+    chiral_atoms = find_chiral_atoms(mol_b)
 
     junction_bonds = find_junction_bonds(anchor, mol_b_bond_idxs)
     # (ytz): the mapping code should hopefully be able to guarantee this
-    assert junction_bonds.isdisjoint(stereo_bonds)
+    assert junction_bonds.isdisjoint(chiral_bonds)
 
     # generic forcefield restraints
     restraint_bond_idxs = []
@@ -337,25 +337,26 @@ def setup_dummy_interactions(ff, mol_a, mol_b, core, dummy_group, anchor):
     # numerically stable and factorizable. In order to enhance sampling, dummy atoms are designed
     # to sort of mimic the "enhanced" state. Where by:
     # 1) bond, angle, and improper torsions are copied over.
-    # 2) stereo bonds are copied over, but generic rotatable bonds are not.
+    # 2) chiral bonds are copied over, but generic rotatable bonds are not.
     # 3) dummy-dummy nonbonded interactions are fully disabled.
-    dummy_groupa = dummy_group + [anchor]
+    # tbd: achiral dummy atoms that are G3_PYRAMIDAL should be planarized?
+    dga = dummy_group + [anchor]
     for idxs, params in zip(mol_b_bond_idxs, mol_b_bond_params):
-        if np.all([a in dummy_groupa for a in idxs]):
+        if np.all([a in dga for a in idxs]):
             restraint_bond_idxs.append(tuple([int(x) for x in idxs]))  # tuples are hashable etc.
             restraint_bond_params.append(params)
     for idxs, params in zip(mol_b_angle_idxs, mol_b_angle_params):
-        if np.all([a in dummy_groupa for a in idxs]):
+        if np.all([a in dga for a in idxs]):
             restraint_angle_idxs.append(tuple([int(x) for x in idxs]))
             restraint_angle_params.append(params)
     for idxs, params in zip(mol_b_proper_idxs, mol_b_proper_params):
         _, jj, kk, _ = idxs
-        # only copy over proper torsions responsible for stereo bonds
-        if np.all([a in dummy_groupa for a in idxs]) and (dummy.canonicalize_bond((jj, kk)) in stereo_bonds):
+        # only copy over proper torsions responsible for chiral bonds
+        if np.all([a in dga for a in idxs]) and (dummy.canonicalize_bond((jj, kk)) in chiral_bonds):
             restraint_proper_idxs.append(tuple([int(x) for x in idxs]))
             restraint_proper_params.append(params)
     for idxs, params in zip(mol_b_improper_idxs, mol_b_improper_params):
-        if np.all([a in dummy_groupa for a in idxs]):
+        if np.all([a in dga for a in idxs]):
             restraint_improper_idxs.append(tuple([int(x) for x in idxs]))
             restraint_improper_params.append(params)
 
@@ -412,11 +413,12 @@ def setup_dummy_interactions(ff, mol_a, mol_b, core, dummy_group, anchor):
             atoms = find_attached_dummy_atoms(dummy_group, mol_b_bond_idxs, anchor)
             assert len(atoms) == 2
             k0, k1 = atoms
-            if anchor in stereo_atoms:
-                restraint_angle_idxs.append((i, j, k0))
-                restraint_angle_params.append((100.0, 1.91))  # 109 degrees
-                restraint_angle_idxs.append((i, j, k1))
-                restraint_angle_params.append((100.0, 1.91))  # 109 degrees
+            if anchor in chiral_atoms:
+                assert 0, "Junction atom is chiral and G3_PYRAMIDAL."
+                # restraint_angle_idxs.append((i, j, k0))
+                # restraint_angle_params.append((100.0, 1.91))  # 109 degrees
+                # restraint_angle_idxs.append((i, j, k1))
+                # restraint_angle_params.append((100.0, 1.91))  # 109 degrees
             else:
                 restraint_angle_idxs.append((i, j, k0))
                 restraint_angle_params.append((100.0, (2.0 / 3.0) * np.pi))
@@ -430,8 +432,8 @@ def setup_dummy_interactions(ff, mol_a, mol_b, core, dummy_group, anchor):
             #    .
             #     k1
             # add two angles: (i,j,k0) and (i,j,k1)
-            # typically we'd have to worry about stereochemistry, but we're
-            # pretty confident here we don't have any stereo issues.
+            # typically we'd have to worry about chiralchemistry, but we're
+            # pretty confident here we don't have any chiral issues.
             atoms = find_attached_dummy_atoms(dummy_group, mol_b_bond_idxs, anchor)
             assert len(atoms) == 2
             k0, k1 = atoms
@@ -447,7 +449,7 @@ def setup_dummy_interactions(ff, mol_a, mol_b, core, dummy_group, anchor):
             #    .
             #     k1
             # add three angles: (i,j,k0) and (i,j,k1) and (i,j,k2)
-            assert anchor in stereo_atoms
+            assert anchor in chiral_atoms
             atoms = find_attached_dummy_atoms(dummy_group, mol_b_bond_idxs, anchor)
             assert len(atoms) == 3
             k0, k1, k2 = atoms
@@ -495,11 +497,8 @@ def setup_dummy_interactions(ff, mol_a, mol_b, core, dummy_group, anchor):
             assert len(atoms) == 1
             k = atoms[0]
 
-            if anchor in stereo_atoms:
-                # two options
-                # 1) two wells at zero and pi
-                # 2) one well explicitly encoding the stereo - probably better!
-                # implement 1 for now?
+            if anchor in chiral_atoms:
+                assert 0, "Junction atom is chiral and G3_PYRAMIDAL."
                 restraint_cross_angle_idxs.append(((j, a), (j, b), (j, k)))
                 restraint_cross_angle_params.append(1000.0)
             else:
@@ -513,8 +512,8 @@ def setup_dummy_interactions(ff, mol_a, mol_b, core, dummy_group, anchor):
                 restraint_centroid_angle_params.append((5000.0, np.pi))
 
         elif anchor_full_geometry == LocalGeometry.G3_PLANAR:
-            # same as G3_PYRAMIDAL non-stereo
-            assert anchor not in stereo_atoms
+            # same as G3_PYRAMIDAL non-chiral
+            assert anchor not in chiral_atoms
             a, b = nbs_1
             assert check_bond_angle_stability(
                 a, j, b, mol_b_bond_idxs, mol_b_bond_params, mol_b_angle_idxs, mol_b_angle_params
