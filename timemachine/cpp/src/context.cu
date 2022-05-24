@@ -108,7 +108,7 @@ Context::multiple_steps(const std::vector<double> &lambda_schedule, int store_du
             }
         }
 
-        cudaDeviceSynchronize();
+        gpuErrchk(cudaDeviceSynchronize());
 
         std::vector<unsigned long long> h_du_dl_buffer_ull(du_dl_buffer_size);
         gpuErrchk(cudaMemcpy(
@@ -209,7 +209,7 @@ std::array<std::vector<double>, 3> Context::multiple_steps_U(
             }
         }
 
-        cudaDeviceSynchronize();
+        gpuErrchk(cudaDeviceSynchronize());
 
         std::vector<unsigned long long> h_u_traj_ull(u_traj_size);
         gpuErrchk(cudaMemcpy(&h_u_traj_ull[0], d_u_traj, u_traj_size * sizeof(*d_u_traj), cudaMemcpyDeviceToHost));
@@ -234,7 +234,7 @@ std::array<std::vector<double>, 3> Context::multiple_steps_U(
 
 void Context::step(double lambda) {
     this->_step(lambda, nullptr);
-    cudaDeviceSynchronize();
+    gpuErrchk(cudaDeviceSynchronize());
 }
 
 void Context::_step(double lambda, unsigned long long *du_dl_out) {

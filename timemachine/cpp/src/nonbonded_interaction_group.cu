@@ -323,7 +323,7 @@ void NonbondedInteractionGroup<RealType, Interpolated>::execute_device(
         gpuErrchk(cudaMemcpyAsync(&h_box[0], d_box, 3 * 3 * sizeof(*d_box), cudaMemcpyDeviceToHost, stream));
 
         // this stream needs to be synchronized so we can be sure that p_ixn_count_ is properly set.
-        cudaStreamSynchronize(stream);
+        gpuErrchk(cudaStreamSynchronize(stream));
 
         // Verify that the cutoff and box size are valid together. If cutoff is greater than half the box
         // then a particle can interact with multiple periodic copies.
