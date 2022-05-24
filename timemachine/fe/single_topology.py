@@ -91,8 +91,8 @@ def find_chiral_bonds(ring_bonds, proper_idxs, proper_params, mol):
     # 1) has a single proper torsion term with k > 10 kJ/mol, period=2, phase=3.1415
     # 2) is not part of a ring system.
     # the reason why 2) is present is because the planar torsions spanning a
-    # ring system are not used to enforce chiralchemistry, since if we simply
-    # disabled them, we would *still* get the correct chiralchemistry due to steric effects.
+    # ring system are not used to enforce chirality, since if we simply
+    # disabled them, we would *still* get the correct chirality due to steric effects.
     # consider a benzene devoid of any torsions (proper or improper), or non-bonded
     # terms, and only angles and bonds are present. The hydrogens would still be correctly placed.
 
@@ -440,7 +440,7 @@ def setup_dummy_interactions(ff, mol_a, mol_b, core, dummy_group, anchor):
             #    .
             #     k1
             # add two angles: (i,j,k0) and (i,j,k1)
-            # typically we'd have to worry about chiralchemistry, but we're
+            # typically we'd have to worry about chirality, but we're
             # pretty confident here we don't have any chiral issues.
             atoms = find_attached_dummy_atoms(dummy_group, mol_b_bond_idxs, anchor)
             assert len(atoms) == 2
@@ -510,7 +510,7 @@ def setup_dummy_interactions(ff, mol_a, mol_b, core, dummy_group, anchor):
                 restraint_cross_angle_idxs.append(((j, a), (j, b), (j, k)))
                 restraint_cross_angle_params.append(1000.0)
             else:
-                # planarize so we can enhance sample both stereoisomers using a centroid
+                # planarize so we can enhance sample both chiral states using a centroid
                 # type a
                 #       \
                 #      c.j.k <- angle (c,j,k) = 0.0
