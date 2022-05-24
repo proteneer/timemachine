@@ -317,10 +317,7 @@ def setup_dummy_interactions(ff, mol_a, mol_b, core, dummy_group, anchor):
     # (ytz): we can relax this assertion later on.
     assert len(root_anchors) == 1, "multiple root anchors found."
 
-    mol_b_ring_bonds = []
-    for b in mol_b.GetBonds():
-        if b.IsInRing():
-            mol_b_ring_bonds.append((b.GetBeginAtomIdx(), b.GetEndAtomIdx()))
+    mol_b_ring_bonds = [(b.GetBeginAtomIdx(), b.GetEndAtomIdx()) for b in mol_b.GetBonds() if b.IsInRing()]
 
     chiral_bonds = find_chiral_bonds(mol_b_ring_bonds, mol_b_proper_idxs, mol_b_proper_params, mol_b)
     chiral_atoms = find_chiral_atoms(mol_b)
@@ -351,21 +348,21 @@ def setup_dummy_interactions(ff, mol_a, mol_b, core, dummy_group, anchor):
     # tbd: achiral dummy atoms that are G3_PYRAMIDAL should be planarized?
     dga = dummy_group + [anchor]
     for idxs, params in zip(mol_b_bond_idxs, mol_b_bond_params):
-        if np.all([a in dga for a in idxs]):
+        if all([a in dga for a in idxs]):
             restraint_bond_idxs.append(tuple([int(x) for x in idxs]))  # tuples are hashable etc.
             restraint_bond_params.append(params)
     for idxs, params in zip(mol_b_angle_idxs, mol_b_angle_params):
-        if np.all([a in dga for a in idxs]):
+        if all([a in dga for a in idxs]):
             restraint_angle_idxs.append(tuple([int(x) for x in idxs]))
             restraint_angle_params.append(params)
     for idxs, params in zip(mol_b_proper_idxs, mol_b_proper_params):
         _, jj, kk, _ = idxs
         # only copy over proper torsions responsible for chiral bonds
-        if np.all([a in dga for a in idxs]) and (dummy.canonicalize_bond((jj, kk)) in chiral_bonds):
+        if all([a in dga for a in idxs]) and (dummy.canonicalize_bond((jj, kk)) in chiral_bonds):
             restraint_proper_idxs.append(tuple([int(x) for x in idxs]))
             restraint_proper_params.append(params)
     for idxs, params in zip(mol_b_improper_idxs, mol_b_improper_params):
-        if np.all([a in dga for a in idxs]):
+        if all([a in dga for a in idxs]):
             restraint_improper_idxs.append(tuple([int(x) for x in idxs]))
             restraint_improper_params.append(params)
 

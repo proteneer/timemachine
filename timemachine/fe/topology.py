@@ -300,7 +300,7 @@ class BaseTopology:
         )
 
         # note: use same sf for electrostatics and vdw
-        # tpyically in protein ffs, gaff, the 1-4 ixns use different scale factors between vdw and electrostatics
+        # typically in protein ffs, gaff, the 1-4 ixns use different scale factors between vdw and electrostatics
         exclusions_kv = dict()
         for (i, j), sf in zip(exclusion_idxs, scale_factors):
             assert i < j
