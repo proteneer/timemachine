@@ -155,6 +155,10 @@ def check_bond_stability(j, k, bond_idxs, bond_params):
 
     if jk not in canonical_bonds:
         return False
+    # these are lower bound (conservative estimates) for what's required
+    # to prevent the bond from sampling a length of 0 or from drifting
+    # arbitrarily apart. Angles defined over these bonds should hopefully
+    # then be stable.
     elif canonical_bonds[jk][0] < 50.0:
         return False
     elif canonical_bonds[jk][1] < 0.05:
@@ -175,6 +179,9 @@ def check_angle_stability(j, k, l, angle_idxs, angle_params):
 
     jkl = dummy.canonicalize_bond((j, k, l))
 
+    # similar to bonds, these hopefully will prevent angles from linearizing
+    # eg. in the case of nitrile groups or from spinning arbitrarily. these
+    # angle terms are typically used to define cross-products.
     if jkl not in canonical_angles:
         return False
     elif canonical_angles[jkl][0] < 50.0:
