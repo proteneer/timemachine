@@ -166,10 +166,10 @@ def check_angle_stability(j, k, l, angle_idxs, angle_params):
 
     canonical_angles = dict()
     for idxs, params in zip(angle_idxs, angle_params):
-        k, t = params
-        assert k > 0.0
-        assert t >= 0.0
-        assert t <= np.pi
+        force_const, theta = params
+        assert force_const > 0.0
+        assert theta >= 0.0
+        assert theta <= np.pi
         canonical_angles[dummy.canonicalize_bond(idxs)] = params
 
     jkl = dummy.canonicalize_bond((j, k, l))
