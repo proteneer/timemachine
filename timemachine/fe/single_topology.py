@@ -11,7 +11,8 @@ from timemachine.lib import potentials
 
 def is_planarizing(force_constant, phase, period):
     """
-    Determine if
+    Determine if this we're trying to enforce planarity of two atoms across a
+    bond. Typically these are encoded by proper torsions.
     """
     return period == 2 and abs(phase - np.pi) < 0.05 and force_constant > 10.0
 
