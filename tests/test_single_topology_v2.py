@@ -18,7 +18,7 @@ def test_benzene_to_phenol():
     ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
 
     # add [O,H] as the dummy-group
-    all_idxs, _ = setup_dummy_interactions(ff, mol_a, mol_b, core, dg=[6, 12], anchor=5)
+    all_idxs, _ = setup_dummy_interactions(ff, mol_a, mol_b, core, [6, 12], anchor=5)
     bond_idxs, angle_idxs, proper_idxs, improper_idxs, x_angle_idxs, c_angle_idxs = all_idxs
 
     assert set(bond_idxs) == set([(5, 6), (6, 12)])
@@ -30,7 +30,7 @@ def test_benzene_to_phenol():
 
     # allow H to map to O
     core = np.array([[0, 0], [1, 1], [2, 2], [3, 3], [4, 4], [5, 5], [11, 6]])
-    all_idxs, _ = setup_dummy_interactions(ff, mol_a, mol_b, core, dg=[12], anchor=6)
+    all_idxs, _ = setup_dummy_interactions(ff, mol_a, mol_b, core, [12], anchor=6)
     bond_idxs, angle_idxs, proper_idxs, improper_idxs, x_angle_idxs, c_angle_idxs = all_idxs
     assert set(bond_idxs) == set([(6, 12)])
     assert set(angle_idxs) == set([(5, 6, 12)])
@@ -49,7 +49,7 @@ def test_benzene_to_benzoic_acid():
 
     # note that the C-C bond in benzoic acid is rotatable, despite being SP2 hybridized at both ends
     # this is because of steric hindrance effects, the only planar non-rotatable bond is O=C-C-H
-    all_idxs, _ = setup_dummy_interactions(ff, mol_a, mol_b, core, dg=[6, 7, 8, 14], anchor=5)
+    all_idxs, _ = setup_dummy_interactions(ff, mol_a, mol_b, core, [6, 7, 8, 14], anchor=5)
     bond_idxs, angle_idxs, proper_idxs, improper_idxs, x_angle_idxs, c_angle_idxs = all_idxs
 
     assert set(bond_idxs) == set([(5, 6), (6, 7), (6, 8), (8, 14)])
@@ -63,7 +63,7 @@ def test_benzene_to_benzoic_acid():
     core = np.array([[0, 0], [1, 1], [2, 2], [3, 3], [4, 4], [5, 5], [11, 6]])
     # no longer a stereo bond
     with pytest.raises(AssertionError):
-        setup_dummy_interactions(ff, mol_a, mol_b, core, dg=[7, 8, 14], anchor=6)
+        setup_dummy_interactions(ff, mol_a, mol_b, core, [7, 8, 14], anchor=6)
 
 
 def test_benzene_to_aniline():
@@ -73,7 +73,7 @@ def test_benzene_to_aniline():
     core = np.array([[0, 0], [1, 1], [2, 2], [3, 3], [4, 4], [5, 5]])
     ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
 
-    all_idxs, _ = setup_dummy_interactions(ff, mol_a, mol_b, core, dg=[6, 12, 13], anchor=5)
+    all_idxs, _ = setup_dummy_interactions(ff, mol_a, mol_b, core, [6, 12, 13], anchor=5)
     bond_idxs, angle_idxs, proper_idxs, improper_idxs, x_angle_idxs, c_angle_idxs = all_idxs
 
     assert set(bond_idxs) == set([(5, 6), (6, 12), (6, 13)])
@@ -84,7 +84,7 @@ def test_benzene_to_aniline():
     assert set(c_angle_idxs) == set([((0, 4), 5, 6)])
 
     core = np.array([[0, 0], [1, 1], [2, 2], [3, 3], [4, 4], [5, 5], [11, 6]])
-    all_idxs, _ = setup_dummy_interactions(ff, mol_a, mol_b, core, dg=[12, 13], anchor=6)
+    all_idxs, _ = setup_dummy_interactions(ff, mol_a, mol_b, core, [12, 13], anchor=6)
     bond_idxs, angle_idxs, proper_idxs, improper_idxs, x_angle_idxs, c_angle_idxs = all_idxs
     assert set(bond_idxs) == set([(6, 12), (6, 13)])
     assert set(angle_idxs) == set([(5, 6, 13), (5, 6, 12), (12, 6, 13)])
@@ -102,7 +102,7 @@ def test_benzene_to_benzonitrile():
     core = np.array([[0, 0], [1, 1], [2, 2], [3, 3], [4, 4], [5, 5]])
     ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
 
-    all_idxs, _ = setup_dummy_interactions(ff, mol_a, mol_b, core, dg=[6, 7], anchor=5)
+    all_idxs, _ = setup_dummy_interactions(ff, mol_a, mol_b, core, [6, 7], anchor=5)
     bond_idxs, angle_idxs, proper_idxs, improper_idxs, x_angle_idxs, c_angle_idxs = all_idxs
 
     assert set(bond_idxs) == set([(5, 6), (6, 7)])
@@ -113,7 +113,7 @@ def test_benzene_to_benzonitrile():
     assert set(c_angle_idxs) == set([((0, 4), 5, 6)])
 
     core = np.array([[0, 0], [1, 1], [2, 2], [3, 3], [4, 4], [5, 5], [11, 6]])
-    all_idxs, _ = setup_dummy_interactions(ff, mol_a, mol_b, core, dg=[7], anchor=6)
+    all_idxs, _ = setup_dummy_interactions(ff, mol_a, mol_b, core, [7], anchor=6)
     bond_idxs, angle_idxs, proper_idxs, improper_idxs, x_angle_idxs, c_angle_idxs = all_idxs
     assert set(bond_idxs) == set([(6, 7)])
     assert set(angle_idxs) == set([(5, 6, 7)])
@@ -131,7 +131,7 @@ def test_benzene_to_toluene():
     core = np.array([[0, 0], [1, 1], [2, 2], [3, 3], [4, 4], [5, 5], [11, 6]])
     ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
 
-    all_idxs, _ = setup_dummy_interactions(ff, mol_a, mol_b, core, dg=[12, 13, 14], anchor=6)
+    all_idxs, _ = setup_dummy_interactions(ff, mol_a, mol_b, core, [12, 13, 14], anchor=6)
     bond_idxs, angle_idxs, proper_idxs, improper_idxs, x_angle_idxs, c_angle_idxs = all_idxs
 
     assert set(bond_idxs) == set([(6, 12), (6, 13), (6, 14)])
@@ -149,7 +149,7 @@ def test_ethanol_to_carboxylate():
     core = np.array([[0, 0], [1, 1], [5, 3]])
     ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
 
-    all_idxs, _ = setup_dummy_interactions(ff, mol_a, mol_b, core, dg=[2], anchor=1)
+    all_idxs, _ = setup_dummy_interactions(ff, mol_a, mol_b, core, [2], anchor=1)
     bond_idxs, angle_idxs, proper_idxs, improper_idxs, x_angle_idxs, c_angle_idxs = all_idxs
 
     assert set(bond_idxs) == set([(1, 2)])
@@ -167,7 +167,7 @@ def test_ethanol_to_ammonium():
     core = np.array([[0, 0], [1, 1], [5, 3]])
     ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
 
-    all_idxs, _ = setup_dummy_interactions(ff, mol_a, mol_b, core, dg=[2], anchor=1)
+    all_idxs, _ = setup_dummy_interactions(ff, mol_a, mol_b, core, [2], anchor=1)
     bond_idxs, angle_idxs, proper_idxs, improper_idxs, x_angle_idxs, c_angle_idxs = all_idxs
 
     assert set(bond_idxs) == set([(1, 2)])
@@ -184,7 +184,7 @@ def test_ammonium_to_tetrahedral():
     ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
     core = np.array([[0, 0], [1, 1], [2, 2], [3, 3]])
 
-    all_idxs, _ = setup_dummy_interactions(ff, mol_a, mol_b, core, dg=[4], anchor=0)
+    all_idxs, _ = setup_dummy_interactions(ff, mol_a, mol_b, core, [4], anchor=0)
     bond_idxs, angle_idxs, proper_idxs, improper_idxs, x_angle_idxs, c_angle_idxs = all_idxs
     assert set(bond_idxs) == set([(0, 4)])
     assert set(angle_idxs) == set()
@@ -193,7 +193,7 @@ def test_ammonium_to_tetrahedral():
     assert set(x_angle_idxs) == set([((0, 1), (0, 2), (0, 4))])
 
     core = np.array([[0, 0], [1, 1], [2, 2]])
-    all_idxs, _ = setup_dummy_interactions(ff, mol_a, mol_b, core, dg=[3, 4], anchor=0)
+    all_idxs, _ = setup_dummy_interactions(ff, mol_a, mol_b, core, [3, 4], anchor=0)
     bond_idxs, angle_idxs, proper_idxs, improper_idxs, x_angle_idxs, c_angle_idxs = all_idxs
     assert set(bond_idxs) == set([(0, 3), (0, 4)])
     assert set(angle_idxs) == set([(3, 0, 4)])
@@ -266,8 +266,8 @@ def test_check_stability():
     assert result is False
 
     # collapsed
-    result = single_topology.check_angle_stability(0, 1, 2, angle_idxs=[[0, 1, 2]], angle_params=[[100.0, 0.0]])
-    assert result is False
+    with pytest.raises(AssertionError):
+        single_topology.check_angle_stability(0, 1, 2, angle_idxs=[[0, 1, 2]], angle_params=[[100.0, 0.0]])
 
     # linear
     result = single_topology.check_angle_stability(0, 1, 2, angle_idxs=[[0, 1, 2]], angle_params=[[100.0, 3.1415]])
