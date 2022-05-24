@@ -138,7 +138,8 @@ def find_chiral_atoms(mol):
         if len(nbs) == 4:
             chiral_atoms.add(a_idx)
         elif len(nbs) == 3 and mol_geom[a_idx] == LocalGeometry.G3_PYRAMIDAL:
-            # if in ring, or is sulfur or phosphorus, this may not be guaranteed by
+            # Trivalent Sulfur/Phosphorus typically are not invertible, nor
+            # are they properly parameterized. So we assert if we detect this case.
             if a.GetAtomicNum() == 16 or a.GetAtomicNum() == 15:
                 assert 0, "Pyramidal Phosphorous or Sulfur detected."
         elif len(nbs) > 4:
