@@ -55,7 +55,7 @@ def bond_idxs_to_adj_list(num_atoms, bond_idxs):
     return nblist
 
 
-def label_stereo(
+def label_geometry(
     num_atoms,
     bond_idxs,
     angle_idxs,
@@ -63,6 +63,39 @@ def label_stereo(
     improper_idxs,
     improper_params,
 ):
+    """
+    Label the geometry given a set of atoms and forcefield parameters. This heuristic uses
+    the forcefield definitions to determine the local environment of each atom.
+
+    Parameters
+    ----------
+    num_atoms: int
+        Number of atoms
+
+    bond_idxs: list of 2-tuples
+        Bond indices
+
+    bond_params: list of 2-tuples
+        Bond parameterss
+
+    angle_idxs: list of 3-tuples
+        Angle indices
+
+    angle_params: list of 2-tuples
+        Angle parameters
+
+    improper_idxs: list of 4-tuples
+        Improper indices
+
+    improper_params: list of 4-tuples
+        Improper parameters
+
+    Returns
+    -------
+    List of length num_atoms
+        List of local geometries for each atom.
+
+    """
     # list of list representation
     nblist = bond_idxs_to_adj_list(num_atoms, bond_idxs)
     atom_geometries = []
@@ -86,7 +119,7 @@ def label_stereo(
             local_geometry = LocalGeometry.G2_KINK
             for (i, j, k), (_, angle) in zip(angle_idxs, angle_params):
                 if abs(angle) < 0.05:
-                    assert 0
+                    assert 0, "zero angle detected"
                 ii, kk = atom_nbs[0], atom_nbs[1]
                 if j == atom_idx:
                     if (i, k) == (ii, kk) or (i, k) == (kk, ii):
@@ -100,7 +133,7 @@ def label_stereo(
             # dummy atom
             atom_geometries.append(None)
         else:
-            assert 0, "Valency higher than 4 not supported."
+            assert 0, "valency higher than 4 not supported."
 
     return atom_geometries
 
@@ -177,7 +210,7 @@ def classify_geometry(
             core_improper_idxs.append(ijkl)
             core_improper_params.append(p)
 
-    atom_geometries = label_stereo(
+    atom_geometries = label_geometry(
         mol.GetNumAtoms(),
         core_bond_idxs,
         core_angle_idxs,

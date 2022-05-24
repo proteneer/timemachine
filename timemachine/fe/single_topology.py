@@ -262,6 +262,7 @@ def setup_dummy_interactions(ff, mol_a, mol_b, core, dummy_group, anchor):
     """
     core_b_to_a = {b: a for a, b in core}
 
+    assert len(dummy_group) > 0
     assert anchor in core_b_to_a, "anchor must be in core"
 
     dummy_group = list(dummy_group)
@@ -312,7 +313,7 @@ def setup_dummy_interactions(ff, mol_a, mol_b, core, dummy_group, anchor):
 
     junction_bonds = find_junction_bonds(anchor, mol_b_bond_idxs)
     # (ytz): the mapping code should hopefully be able to guarantee this
-    assert junction_bonds.intersection(stereo_bonds) == set()
+    assert junction_bonds.isdisjoint(stereo_bonds)
 
     # generic forcefield restraints
     restraint_bond_idxs = []
