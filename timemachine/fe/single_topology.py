@@ -1,12 +1,15 @@
+import functools
 from collections import defaultdict
 from collections.abc import Iterable
 from enum import Enum
 
+import jax.numpy as jnp
 import numpy as np
 
 from timemachine.fe import dummy, geometry, topology, utils
 from timemachine.fe.geometry import LocalGeometry
 from timemachine.lib import potentials
+from timemachine.potentials import bonded, nonbonded
 
 
 def is_planarizing(force_constant, phase, period):
@@ -22,10 +25,10 @@ def identify_bonds_spanned_by_planar_torsions(proper_idxs, proper_params):
     Identify bonds that are spanned by planar torsions and returns a dict of bonds
     and associated torsions that span it.
     """
-    planar_bonds = dict()
+    planar_bonds = defaultdict(list)
+    torsions = defaultdict(list)
 
     # collect unique idxs first
-    torsions = defaultdict(list)
     for idxs, params in zip(proper_idxs, proper_params):
         idxs = tuple(idxs.tolist())
         torsions[idxs].append(params)
@@ -36,8 +39,6 @@ def identify_bonds_spanned_by_planar_torsions(proper_idxs, proper_params):
             force, phase, period = all_params[0]
             if is_planarizing(force, phase, period):
                 canon_jk = dummy.canonicalize_bond((j, k))
-                if canon_jk not in planar_bonds:
-                    planar_bonds[canon_jk] = []
                 planar_bonds[canon_jk].append((i, j, k, l))
 
     return planar_bonds
@@ -674,8 +675,8 @@ def setup_end_state(ff, mol_a, mol_b, core, a_to_c, b_to_c):
 
     Returns
     -------
-    (all_idxs, all_parameters)
-        A tuple of bonded, angle, proper, c_angle, x_angle idxs and parameters.
+    VacuumSystem
+        A parameterized system in the vacuum.
 
     """
     mol_b_top = topology.BaseTopology(mol_b, ff)
@@ -787,13 +788,6 @@ def setup_end_state(ff, mol_a, mol_b, core, a_to_c, b_to_c):
         bond_potential, angle_potential, torsion_potential, nonbonded_potential, c_angle_potential, x_angle_potential
     )
     return system
-
-
-import functools
-
-import jax.numpy as jnp
-
-from timemachine.potentials import bonded, nonbonded
 
 
 class VacuumSystem:
