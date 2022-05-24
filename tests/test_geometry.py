@@ -494,8 +494,6 @@ def test_baran_tetrazole():
 
 
 def test_aniline():
-    # although aniline is slightly pyramidal, we'd rather it
-    # be assigned planar for safety.
     mol = Chem.AddHs(Chem.MolFromSmiles("c1ccccc1N"))
     atom_types = geometry.classify_geometry(mol)
     expected_types = [
