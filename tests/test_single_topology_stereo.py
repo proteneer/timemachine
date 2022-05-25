@@ -136,26 +136,28 @@ $$$$""",
     x_b = utils.get_romol_conf(mol_b)
     x0 = s_top.combine_confs(x_a, x_b)
 
-    vol_cl = measure_chiral_volume(x0[0], x0[1], x0[2], x0[3])
-    vol_br = measure_chiral_volume(x0[0], x0[1], x0[2], x0[4])
-
-    assert vol_cl > 0 and vol_br < 0
-
-    system = s_top.generate_end_state_mol_a()
-    frames = simulate_system(system, x0)
-
-    for f in frames:
-        vol_cl = measure_chiral_volume(f[0], f[1], f[2], f[3])
-        vol_br = measure_chiral_volume(f[0], f[1], f[2], f[4])
+    def assert_chiral_volume(x):
+        C, H, F, Cl, Br = range(5)
+        vol_cl = measure_chiral_volume(x[C], x[H], x[F], x[Cl])
+        vol_br = measure_chiral_volume(x[C], x[H], x[F], x[Br])
         assert vol_cl > 0 and vol_br < 0
+    
+    # initial condition
+    assert_chiral_volume(x0)
+    
+    # all frames of a simulation of end-state A
+    system_a = s_top.generate_end_state_mol_a()
+    frames_a = simulate_system(system_a, x0)
 
-    system = s_top.generate_end_state_mol_b()
-    frames = simulate_system(system, x0)
+    for f in frames_a:
+        assert_chiral_volume(f)
+    
+    # all frames of a simulation of end-state B
+    system_b = s_top.generate_end_state_mol_b()
+    frames_b = simulate_system(system_b, x0)
 
-    for f in frames:
-        vol_cl = measure_chiral_volume(f[0], f[1], f[2], f[3])
-        vol_br = measure_chiral_volume(f[0], f[1], f[2], f[4])
-        assert vol_cl > 0 and vol_br < 0
+    for f in frames_b:
+        assert_chiral_volume(f)
 
 
 def test_halomethyl_to_halomethylamine():
