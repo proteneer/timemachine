@@ -171,11 +171,10 @@ def get_centroid_cos_angles(conf, angle_idxs):
     x_js = []
     x_ks = []
 
-    for idxs, j, k in angle_idxs:
+    for (a, b), j, k in angle_idxs:
         x_j = conf[j]
         # compute v-site from unit vectors to avoid bond length
         # change differences
-        a, b = idxs
         x_a, x_b = conf[a], conf[b]
         x_ia = x_a - x_j
         x_ia = x_j + x_ia / jnp.linalg.norm(x_ia)
