@@ -156,9 +156,9 @@ def get_cos_angle(ci, cj, ck):
 
     # compute cosine angle of three points
     vij = ci - cj
-    vjk = ck - cj
-    top = jnp.sum(jnp.multiply(vij, vjk), -1)
-    bot = jnp.linalg.norm(vij, axis=-1) * jnp.linalg.norm(vjk, axis=-1)
+    vkj = ck - cj
+    top = jnp.sum(jnp.multiply(vij, vkj), -1)
+    bot = jnp.linalg.norm(vij, axis=-1) * jnp.linalg.norm(vkj, axis=-1)
 
     tb = top / bot
 
