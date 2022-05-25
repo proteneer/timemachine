@@ -277,7 +277,7 @@ def nonbonded_v3_on_specific_pairs(
     """
 
     if len(pairs) == 0:
-        return 0.0, 0.0
+        return np.zeros(1), np.zeros(1)
 
     inds_l, inds_r = pairs.T
 
