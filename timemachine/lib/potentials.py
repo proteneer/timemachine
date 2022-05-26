@@ -300,35 +300,47 @@ class Nonbonded(NonbondedCustomOpWrapper):
 
         return NonbondedImplWrapper([all_pairs_impl, exclusions_impl])
 
-    def set_exclusion_idxs(self, x):
-        self.args[0] = x
-
+    # args[0]: exclusion_idxs
     def get_exclusion_idxs(self):
         return self.args[0]
 
-    def set_scale_factors(self, x):
-        self.args[1] = x
+    def set_exclusion_idxs(self, exclusion_idxs):
+        self.args[0] = exclusion_idxs
 
+    # args[1]: scale_factors
     def get_scale_factors(self):
         return self.args[1]
 
+    def set_scale_factors(self, scale_factors):
+        self.args[1] = scale_factors
+
+    # args[2]: lambda_plane_idxs
     def get_lambda_plane_idxs(self):
         return self.args[2]
 
+    def set_lambda_plane_idxs(self, lambda_plane_idxs):
+        self.args[2] = lambda_plane_idxs
+
+    # args[3]: lambda_offset_idxs
     def get_lambda_offset_idxs(self):
         return self.args[3]
 
-    def set_lambda_plane_idxs(self, val):
-        self.args[2] = val
+    def set_lambda_offset_idxs(self, lambda_offset_idxs):
+        self.args[3] = lambda_offset_idxs
 
-    def set_lambda_offset_idxs(self, val):
-        self.args[3] = val
-
+    # args[4]: beta
     def get_beta(self):
         return self.args[4]
 
+    def set_beta(self, beta):
+        self.args[4] = beta
+
+    # args[5]: cutoff
     def get_cutoff(self):
         return self.args[5]
+
+    def set_cutoff(self, cutoff):
+        self.args[5] = cutoff
 
     def interpolate(self):
         """
