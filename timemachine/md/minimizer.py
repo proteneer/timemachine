@@ -10,6 +10,7 @@ from timemachine.fe.utils import get_romol_conf
 from timemachine.ff import Forcefield
 from timemachine.ff.handlers import openmm_deserializer
 from timemachine.lib import LangevinIntegrator, MonteCarloBarostat, custom_ops
+from timemachine.lib.potentials import SummedPotential
 from timemachine.md.barostat.utils import get_bond_list, get_group_indices
 from timemachine.md.fire import fire_descent
 
@@ -23,12 +24,18 @@ def bind_potentials(topo, ff):
         (topo.parameterize_nonbonded, [ff.q_handle, ff.lj_handle]),
     ]
 
-    u_impls = []
+    potentials = []
+    potential_params = []
 
     for fn, handles in tuples:
         params, potential = fn(*[h.params for h in handles])
-        bp = potential.bind(params)
-        u_impls.append(bp.bound_impl(precision=np.float32))
+        potential_params.append(np.asarray(params))
+        potentials.append(potential)
+    summed_potential = SummedPotential(potentials, potential_params)
+    # Flatten the arrays so we can concatenate them.
+    summed_potential = summed_potential.bind(np.concatenate([p.reshape(-1) for p in potential_params]).reshape(-1))
+    bound_pot = summed_potential.bound_impl(precision=np.float32)
+    u_impls = [bound_pot]
     return u_impls
 
 
