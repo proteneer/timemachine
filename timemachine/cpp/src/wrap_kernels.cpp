@@ -328,7 +328,8 @@ void declare_langevin_integrator(py::module &m) {
             py::arg("ca"),
             py::arg("cbs"),
             py::arg("ccs"),
-            py::arg("seed"));
+            py::arg("seed"))
+        .def("set_seed", &timemachine::LangevinIntegrator::set_seed);
 }
 
 void declare_potential(py::module &m) {
@@ -1029,7 +1030,8 @@ void declare_barostat(py::module &m) {
         }))
         .def("set_interval", &timemachine::MonteCarloBarostat::set_interval)
         .def("get_interval", &timemachine::MonteCarloBarostat::get_interval)
-        .def("set_pressure", &timemachine::MonteCarloBarostat::set_pressure);
+        .def("set_pressure", &timemachine::MonteCarloBarostat::set_pressure)
+        .def("set_seed", &timemachine::MonteCarloBarostat::set_seed);
 }
 
 void declare_summed_potential(py::module &m) {

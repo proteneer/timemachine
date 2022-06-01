@@ -24,7 +24,7 @@ LangevinIntegrator::LangevinIntegrator(int N, double dt, double ca, const double
 
     curandErrchk(curandCreateGenerator(&cr_rng_, CURAND_RNG_PSEUDO_DEFAULT));
     gpuErrchk(cudaMalloc(&d_noise_, round_up_even(N * 3) * sizeof(double)));
-    curandErrchk(curandSetPseudoRandomGeneratorSeed(cr_rng_, seed));
+    set_seed(seed);
 }
 
 LangevinIntegrator::~LangevinIntegrator() {
@@ -84,6 +84,8 @@ void LangevinIntegrator::step_fwd(
 
     gpuErrchk(cudaPeekAtLastError());
 }
+
+void LangevinIntegrator::set_seed(const int seed) { curandErrchk(curandSetPseudoRandomGeneratorSeed(cr_rng_, seed)); }
 
 } // end namespace timemachine
 

@@ -43,6 +43,8 @@ public:
 
     void set_pressure(const double pressure);
 
+    void set_seed(const int seed);
+
 private:
     const int N_;
 
@@ -53,7 +55,6 @@ private:
     double pressure_;
     const double temperature_;
     int interval_;
-    const int seed_;
     const std::vector<std::vector<int>> group_idxs_;
 
     // stuff that deals with RNG

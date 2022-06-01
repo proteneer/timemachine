@@ -32,6 +32,8 @@ public:
 
     virtual void step_fwd(
         double *d_x_t, double *d_v_t, unsigned long long *d_du_dx_t, double *d_box_t_, cudaStream_t stream) override;
+
+    void set_seed(const int seed);
 };
 
 // template<typename RealType>

@@ -21,8 +21,8 @@ MonteCarloBarostat::MonteCarloBarostat(
     const int interval,
     const std::vector<BoundPotential *> bps,
     const int seed)
-    : N_(N), bps_(bps), pressure_(pressure), temperature_(temperature), interval_(interval), seed_(seed),
-      group_idxs_(group_idxs), step_(0), num_grouped_atoms_(0), d_sum_storage_(nullptr), d_sum_storage_bytes_(0) {
+    : N_(N), bps_(bps), pressure_(pressure), temperature_(temperature), interval_(interval), group_idxs_(group_idxs),
+      step_(0), num_grouped_atoms_(0), d_sum_storage_(nullptr), d_sum_storage_bytes_(0) {
 
     // Trigger check that interval is valid
     this->set_interval(interval_);
@@ -38,7 +38,7 @@ MonteCarloBarostat::MonteCarloBarostat(
 
     curandErrchk(curandCreateGenerator(&cr_rng_, CURAND_RNG_PSEUDO_DEFAULT));
     gpuErrchk(cudaMalloc(&d_rand_, 2 * sizeof(double)));
-    curandErrchk(curandSetPseudoRandomGeneratorSeed(cr_rng_, seed_));
+    set_seed(seed);
 
     const int num_mols = group_idxs_.size();
 
@@ -389,5 +389,7 @@ void MonteCarloBarostat::set_pressure(const double pressure) {
     // adjustment, ie num attempted = 300 and num accepted = 150
     this->reset_counters();
 }
+
+void MonteCarloBarostat::set_seed(const int seed) { curandErrchk(curandSetPseudoRandomGeneratorSeed(cr_rng_, seed)); }
 
 } // namespace timemachine
