@@ -192,6 +192,21 @@ def test_barostat_is_deterministic():
     assert compute_box_volume(atm_box) != compute_box_volume(host_box)
     np.testing.assert_almost_equal(compute_box_volume(atm_box), box_vol, decimal=5)
 
+    # Verify that resetting the seed reproduces the initial result
+    baro.set_seed(seed)
+    integrator_impl.set_seed(seed)
+    ctxt = custom_ops.Context(coords, v_0, host_box, integrator_impl, u_impls, barostat=baro)
+    ctxt.multiple_steps(np.ones(15) * lam)
+    box_1 = ctxt.get_box()
+
+    baro.set_seed(seed)
+    integrator_impl.set_seed(seed)
+    ctxt = custom_ops.Context(coords, v_0, host_box, integrator_impl, u_impls, barostat=baro)
+    ctxt.multiple_steps(np.ones(15) * lam)
+    box_2 = ctxt.get_box()
+
+    np.testing.assert_allclose(box_1, box_2)
+
 
 def test_barostat_varying_pressure():
     temperature = 300.0 * unit.kelvin
