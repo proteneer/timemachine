@@ -18,6 +18,7 @@ from timemachine import lib
 from timemachine.constants import BOLTZ
 from timemachine.fe import free_energy, topology
 from timemachine.fe.utils import get_romol_conf
+from timemachine.ff import combine_ordered_params
 from timemachine.integrator import simulate
 from timemachine.lib import custom_ops
 from timemachine.md import builders, minimizer, moves
@@ -468,6 +469,75 @@ def get_solvent_phase_system(mol, ff, box_width=3.0, margin=0.5, minimize_energy
         coords = np.concatenate([water_coords, ligand_coords])
 
     return potentials, params, masses, coords, water_box
+
+
+def get_solvent_phase_system_parameter_changes(mol, ff0, ff1, box_width=3.0, margin=0.5, minimize_energy=True):
+    """
+    Given a mol and a pair of forcefields return a solvated system where the
+    solvent has (optionally) been minimized. The system is set up to determine
+    the relative free energy of changing the forcefield parameters.
+
+    Parameters
+    ----------
+    mol: Chem.Mol
+
+    ff0: Forcefield
+        Effective forcefield at lambda = 0.
+
+    ff1: Forcefield
+        Effective forcefield at lambda = 1.
+
+    box_width: float
+        water box initial width in nm
+
+    margin: Optional, float
+        Box margin in nm, default is 0.5 nm.
+
+    minimize_energy: bool
+        whether to apply minimize_host_4d
+    """
+
+    # construct water box
+    water_system, water_coords, water_box, water_topology = builders.build_water_system(box_width)
+    water_box = water_box + np.eye(3) * margin  # add a small margin around the box for stability
+
+    top = topology.RelativeFreeEnergyForcefield(mol, ff0, ff1)
+    afe = free_energy.AbsoluteFreeEnergy(mol, top)
+    combined_ff_params = combine_ordered_params(ff0, ff1)
+    potentials, params, masses = afe.prepare_host_edge(combined_ff_params, water_system)
+
+    # concatenate (optionally minimized) water_coords and ligand_coords
+    ligand_coords = get_romol_conf(mol)
+    if minimize_energy:
+        new_water_coords = minimizer.minimize_host_4d([mol], water_system, water_coords, ff0, water_box)
+        coords = np.concatenate([new_water_coords, ligand_coords])
+    else:
+        coords = np.concatenate([water_coords, ligand_coords])
+
+    return potentials, params, np.array(masses), coords, water_box
+
+
+def get_vacuum_phase_system_parameter_changes(mol, ff0, ff1):
+    """
+    Given a mol and a pair of forcefields return a vacuum system set up
+    to determine the free energy of changing the forcefield params.
+
+    Parameters
+    ----------
+    mol: Chem.Mol
+
+    ff0: Forcefield
+        Effective forcefield at lambda = 0.
+
+    ff1: Forcefield
+        Effective forcefield at lambda = 1.
+    """
+    top = topology.RelativeFreeEnergyForcefield(mol, ff0, ff1)
+    afe = free_energy.AbsoluteFreeEnergy(mol, top)
+    combined_ff_params = combine_ordered_params(ff0, ff1)
+    potentials, params, masses = afe.prepare_vacuum_edge(combined_ff_params)
+    coords = get_romol_conf(mol)
+    return potentials, params, np.array(masses), coords
 
 
 def equilibrate_solvent_phase(

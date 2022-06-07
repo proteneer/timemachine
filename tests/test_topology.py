@@ -4,15 +4,18 @@ config.update("jax_enable_x64", True)
 
 import unittest
 from importlib import resources
+from typing import Tuple
 
 import jax
 import numpy as np
+import pytest
 from rdkit import Chem
 
+from timemachine.constants import DEFAULT_FF
 from timemachine.fe import topology
 from timemachine.fe.utils import get_romol_conf
-from timemachine.ff import Forcefield
-from timemachine.ff.handlers import openmm_deserializer
+from timemachine.ff import Forcefield, combine_ordered_params
+from timemachine.ff.handlers import AM1CCCHandler, openmm_deserializer
 from timemachine.md import builders
 from timemachine.testsystems.relative import hif2a_ligand_pair
 
@@ -367,3 +370,63 @@ def test_component_idxs():
     # base topology w/host
     hgt_base = topology.HostGuestTopology(host_bps, bt)
     np.testing.assert_equal(hgt_base.get_component_idxs(), [solvent_idxs, mol_a_idxs + num_solvent_atoms])
+
+
+def test_relative_free_energy_forcefield():
+    BOND, ANGLE, PROPER, IMPROPER, CHARGE, LJ = 0, 1, 2, 3, 4, 5
+
+    with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
+        mol = next(Chem.SDMolSupplier(str(path_to_ligand), removeHs=False))
+
+    ff0 = Forcefield.load_from_file(DEFAULT_FF)
+    ff1 = Forcefield.load_from_file(DEFAULT_FF)
+
+    # Modify the charge parameters for ff1
+    for h, p in zip(ff1.get_ordered_handles(), ff1.get_ordered_params()):
+        if isinstance(h, AM1CCCHandler):
+            p += 1.0
+
+    fftop = topology.RelativeFreeEnergyForcefield(mol, ff0, ff1)
+    bt0 = topology.BaseTopology(mol, ff0)
+    bt1 = topology.BaseTopology(mol, ff1)
+
+    combined_params = combine_ordered_params(ff0, ff1)
+    combined_qlj_params, combined_ubp = fftop.parameterize_nonbonded(combined_params[CHARGE], combined_params[LJ])
+    qlj0_params, ubp0 = bt0.parameterize_nonbonded(ff0.get_ordered_params()[CHARGE], ff0.get_ordered_params()[LJ])
+    qlj1_params, ubp1 = bt1.parameterize_nonbonded(ff1.get_ordered_params()[CHARGE], ff1.get_ordered_params()[LJ])
+
+    coords = get_romol_conf(mol)
+    box = np.identity(3) * 99.0
+
+    def u_endstates(ubp, params) -> Tuple[float, float]:
+        u = ubp.bind(params).bound_impl(precision=np.float32)
+        _, _, u0_val = u.execute(coords, box, lam=0)
+        _, _, u1_val = u.execute(coords, box, lam=1)
+        return u0_val, u1_val
+
+    u0_combined, u1_combined = u_endstates(combined_ubp, combined_qlj_params)
+    u0, _ = u_endstates(ubp0, qlj0_params)
+    u1, _ = u_endstates(ubp1, qlj1_params)
+
+    # Check that the endstate NB energies are consistent
+    assert pytest.approx(u0_combined) == u0
+    assert pytest.approx(u1_combined) == u1
+
+    # Check that other terms can not be changed
+    fftop.parameterize_harmonic_bond(combined_params[BOND])
+    invalid = [combined_params[BOND][0], combined_params[BOND][0] + 1.0]
+    with pytest.raises(AssertionError, match="changing harmonic bond"):
+        fftop.parameterize_harmonic_bond(invalid)
+
+    fftop.parameterize_harmonic_angle(combined_params[ANGLE])
+    invalid = [combined_params[ANGLE][0], combined_params[ANGLE][0] + 1.0]
+    with pytest.raises(AssertionError, match="changing harmonic angle"):
+        fftop.parameterize_harmonic_angle(invalid)
+
+    fftop.parameterize_periodic_torsion(combined_params[PROPER], combined_params[IMPROPER])
+    invalid = [combined_params[PROPER][0], combined_params[PROPER][0] + 1.0]
+    with pytest.raises(AssertionError, match="changing proper"):
+        fftop.parameterize_periodic_torsion(invalid, combined_params[IMPROPER])
+    invalid = [combined_params[IMPROPER][0], combined_params[IMPROPER][0] + 1.0]
+    with pytest.raises(AssertionError, match="changing improper"):
+        fftop.parameterize_periodic_torsion(combined_params[PROPER], invalid)
