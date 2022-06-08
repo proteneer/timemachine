@@ -4,6 +4,7 @@ import jax.numpy as jnp
 import numpy as np
 from numpy.typing import NDArray
 
+from timemachine.fe.system import VacuumSystem
 from timemachine.ff.handlers import nonbonded
 from timemachine.lib import potentials
 
@@ -245,6 +246,42 @@ class BaseTopology:
 
         return params, nb
 
+    def parameterize_nonbonded_pairlist(self, ff_q_params, ff_lj_params):
+        """
+        Generate intramolecular nonbonded pairlist, and is mostly identical to the above
+        except implemented as a pairlist.
+        """
+        # use same scale factors for electrostatics and vdWs
+        exclusion_idxs, scale_factors = nonbonded.generate_exclusion_idxs(
+            self.mol, scale12=_SCALE_12, scale13=_SCALE_13, scale14=_SCALE_14
+        )
+
+        # note: use same scale factor for electrostatics and vdw
+        # typically in protein ffs, gaff, the 1-4 ixns use different scale factors between vdw and electrostatics
+        exclusions_kv = dict()
+        for (i, j), sf in zip(exclusion_idxs, scale_factors):
+            assert i < j
+            exclusions_kv[(i, j)] = sf
+
+        inclusion_idxs, rescale_mask = [], []
+        for i in range(self.mol.GetNumAtoms()):
+            for j in range(i + 1, self.mol.GetNumAtoms()):
+                scale_factor = exclusions_kv.get((i, j), 0.0)
+                rescale_factor = 1 - scale_factor
+                # keep this ixn
+                if rescale_factor > 0:
+                    rescale_mask.append([rescale_factor, rescale_factor])
+                    inclusion_idxs.append([i, j])
+
+        q_params = self.ff.q_handle.partial_parameterize(ff_q_params, self.mol)
+        lj_params = self.ff.lj_handle.partial_parameterize(ff_lj_params, self.mol)
+        params = jnp.concatenate([jnp.reshape(q_params, (-1, 1)), jnp.reshape(lj_params, (-1, 2))], axis=1)
+
+        beta = _BETA
+        cutoff = _CUTOFF  # solve for this analytically later
+
+        return params, potentials.NonbondedPairList(inclusion_idxs, rescale_mask, beta, cutoff)
+
     def parameterize_harmonic_bond(self, ff_params):
         params, idxs = self.ff.hb_handle.partial_parameterize(ff_params, self.mol)
         return params, potentials.HarmonicBond(idxs)
@@ -291,6 +328,27 @@ class BaseTopology:
 
         combined_potential = potentials.PeriodicTorsion(combined_idxs, combined_lambda_mult, combined_lambda_offset)
         return combined_params, combined_potential
+
+    def setup_end_state(self):
+
+        mol_bond_params, mol_hb = self.parameterize_harmonic_bond(self.ff.hb_handle.params)
+        mol_angle_params, mol_ha = self.parameterize_harmonic_angle(self.ff.ha_handle.params)
+        mol_proper_params, mol_pt = self.parameterize_proper_torsion(self.ff.pt_handle.params)
+        mol_improper_params, mol_it = self.parameterize_improper_torsion(self.ff.it_handle.params)
+        mol_nbpl_params, mol_nbpl = self.parameterize_nonbonded_pairlist(
+            self.ff.q_handle.params, self.ff.lj_handle.params
+        )
+        bond_potential = mol_hb.bind(mol_bond_params)
+        angle_potential = mol_ha.bind(mol_angle_params)
+
+        torsion_params = np.concatenate([mol_proper_params, mol_improper_params])
+        torsion_idxs = np.concatenate([mol_pt.get_idxs(), mol_it.get_idxs()])
+        torsion_potential = potentials.PeriodicTorsion(torsion_idxs).bind(torsion_params)
+        nonbonded_potential = mol_nbpl.bind(mol_nbpl_params)
+
+        system = VacuumSystem(bond_potential, angle_potential, torsion_potential, nonbonded_potential)
+
+        return system
 
 
 class BaseTopologyConversion(BaseTopology):
