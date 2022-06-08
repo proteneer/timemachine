@@ -49,9 +49,11 @@ private:
 
     MonteCarloBarostat *barostat_;
 
-    void _step(double lambda, unsigned long long *du_dl_out);
-
-    void _step_equilibrium(double lambda, unsigned long long *du_dl_out);
+    void _step(
+        std::vector<BoundPotential *> &bps,
+        const double lambda,
+        unsigned long long *du_dl_out,
+        const cudaStream_t stream);
 
     int step_;
 

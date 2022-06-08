@@ -76,7 +76,7 @@ Context::multiple_steps(const std::vector<double> &lambda_schedule, int store_du
     int box_buffer_size = x_buffer_size * 3 * 3;
 
     std::vector<double> h_x_buffer(x_buffer_size * N_ * 3);
-
+    cudaStream_t stream = static_cast<cudaStream_t>(0);
     try {
         gpuErrchk(cudaMalloc(&d_box_buffer, box_buffer_size * sizeof(*d_box_buffer)));
         // indicator so we can set it to a default arg.
@@ -92,7 +92,7 @@ Context::multiple_steps(const std::vector<double> &lambda_schedule, int store_du
             }
 
             double lambda = lambda_schedule[i - 1];
-            this->_step(lambda, du_dl_ptr);
+            this->_step(bps_, lambda, du_dl_ptr, stream);
 
             if (i % store_x_interval == 0) {
                 gpuErrchk(cudaMemcpy(
@@ -178,7 +178,7 @@ std::array<std::vector<double>, 3> Context::multiple_steps_U(
         cudaStream_t stream = static_cast<cudaStream_t>(0);
         for (int step = 1; step <= n_steps; step++) {
 
-            this->_step(lambda, nullptr);
+            this->_step(bps_, lambda, nullptr, stream);
 
             if (step % store_x_interval == 0) {
                 gpuErrchk(cudaMemcpy(
@@ -233,13 +233,13 @@ std::array<std::vector<double>, 3> Context::multiple_steps_U(
 }
 
 void Context::step(double lambda) {
-    this->_step(lambda, nullptr);
+    cudaStream_t stream = static_cast<cudaStream_t>(0);
+    this->_step(bps_, lambda, nullptr, stream);
     gpuErrchk(cudaDeviceSynchronize());
 }
 
-void Context::_step(double lambda, unsigned long long *du_dl_out) {
-
-    cudaStream_t stream = static_cast<cudaStream_t>(0);
+void Context::_step(
+    std::vector<BoundPotential *> &bps, const double lambda, unsigned long long *du_dl_out, const cudaStream_t stream) {
 
     gpuErrchk(cudaMemsetAsync(d_du_dx_t_, 0, N_ * 3 * sizeof(*d_du_dx_t_), stream));
 
@@ -247,8 +247,8 @@ void Context::_step(double lambda, unsigned long long *du_dl_out) {
         gpuErrchk(cudaMemsetAsync(d_du_dl_buffer_, 0, N_ * sizeof(*d_du_dl_buffer_), stream));
     }
 
-    for (int i = 0; i < bps_.size(); i++) {
-        bps_[i]->execute_device(
+    for (int i = 0; i < bps.size(); i++) {
+        bps[i]->execute_device(
             N_,
             d_x_t_,
             d_box_t_,
