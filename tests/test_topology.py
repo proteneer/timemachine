@@ -15,7 +15,7 @@ from timemachine.constants import DEFAULT_FF
 from timemachine.fe import topology
 from timemachine.fe.utils import get_romol_conf
 from timemachine.ff import Forcefield, combine_ordered_params
-from timemachine.ff.handlers import AM1CCCHandler, openmm_deserializer
+from timemachine.ff.handlers import openmm_deserializer
 from timemachine.md import builders
 from timemachine.testsystems.relative import hif2a_ligand_pair
 
@@ -381,9 +381,7 @@ def test_relative_free_energy_forcefield():
     ff1 = Forcefield.load_from_file(DEFAULT_FF)
 
     # Modify the charge parameters for ff1
-    for h, p in zip(ff1.get_ordered_handles(), ff1.get_ordered_params()):
-        if isinstance(h, AM1CCCHandler):
-            p += 1.0
+    ff1.q_handle.params += 1.0
 
     fftop = topology.RelativeFreeEnergyForcefield(mol, ff0, ff1)
     bt0 = topology.BaseTopology(mol, ff0)
