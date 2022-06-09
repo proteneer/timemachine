@@ -8,7 +8,6 @@ from timemachine.datasets import fetch_freesolv
 from timemachine.fe import utils
 from timemachine.fe.functional import construct_differentiable_interface_fast
 from timemachine.ff import Forcefield
-from timemachine.ff.handlers import AM1CCCHandler
 from timemachine.md import enhanced
 from timemachine.md.enhanced import identify_rotatable_bonds
 
