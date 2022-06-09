@@ -112,6 +112,11 @@ class NVTMove(MonteCarloMove):
 
 
 class NPTMove(NVTMove):
+    """
+    Functionally, NPT is implemented as NVTMove plus a MC Barostat.
+    So inherit from NVTMove here.
+    """
+
     def __init__(
         self,
         ubps: List[potentials.CustomOpWrapper],
