@@ -373,7 +373,6 @@ def test_component_idxs():
 
 
 def test_relative_free_energy_forcefield():
-    BOND, ANGLE, PROPER, IMPROPER, CHARGE, LJ = 0, 1, 2, 3, 4, 5
 
     with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
         mol = next(Chem.SDMolSupplier(str(path_to_ligand), removeHs=False))
@@ -390,10 +389,22 @@ def test_relative_free_energy_forcefield():
     bt0 = topology.BaseTopology(mol, ff0)
     bt1 = topology.BaseTopology(mol, ff1)
 
+    ordered_handles = ff0.get_ordered_handles()
+    bond_idx = ordered_handles.index(ff0.hb_handle)
+    angle_idx = ordered_handles.index(ff0.ha_handle)
+    proper_idx = ordered_handles.index(ff0.pt_handle)
+    improper_idx = ordered_handles.index(ff0.it_handle)
+    charge_idx = ordered_handles.index(ff0.q_handle)
+    lj_idx = ordered_handles.index(ff0.lj_handle)
+    ff0_params = ff0.get_ordered_params()
+    ff1_params = ff1.get_ordered_params()
+
     combined_params = combine_ordered_params(ff0, ff1)
-    combined_qlj_params, combined_ubp = fftop.parameterize_nonbonded(combined_params[CHARGE], combined_params[LJ])
-    qlj0_params, ubp0 = bt0.parameterize_nonbonded(ff0.get_ordered_params()[CHARGE], ff0.get_ordered_params()[LJ])
-    qlj1_params, ubp1 = bt1.parameterize_nonbonded(ff1.get_ordered_params()[CHARGE], ff1.get_ordered_params()[LJ])
+    combined_qlj_params, combined_ubp = fftop.parameterize_nonbonded(
+        combined_params[charge_idx], combined_params[lj_idx]
+    )
+    qlj0_params, ubp0 = bt0.parameterize_nonbonded(ff0_params[charge_idx], ff0_params[lj_idx])
+    qlj1_params, ubp1 = bt1.parameterize_nonbonded(ff1_params[charge_idx], ff1_params[lj_idx])
 
     coords = get_romol_conf(mol)
     box = np.identity(3) * 99.0
@@ -413,20 +424,20 @@ def test_relative_free_energy_forcefield():
     assert pytest.approx(u1_combined) == u1
 
     # Check that other terms can not be changed
-    fftop.parameterize_harmonic_bond(combined_params[BOND])
-    invalid = [combined_params[BOND][0], combined_params[BOND][0] + 1.0]
+    fftop.parameterize_harmonic_bond(combined_params[bond_idx])
+    invalid = [combined_params[bond_idx][0], combined_params[bond_idx][0] + 1.0]
     with pytest.raises(AssertionError, match="changing harmonic bond"):
         fftop.parameterize_harmonic_bond(invalid)
 
-    fftop.parameterize_harmonic_angle(combined_params[ANGLE])
-    invalid = [combined_params[ANGLE][0], combined_params[ANGLE][0] + 1.0]
+    fftop.parameterize_harmonic_angle(combined_params[angle_idx])
+    invalid = [combined_params[angle_idx][0], combined_params[angle_idx][0] + 1.0]
     with pytest.raises(AssertionError, match="changing harmonic angle"):
         fftop.parameterize_harmonic_angle(invalid)
 
-    fftop.parameterize_periodic_torsion(combined_params[PROPER], combined_params[IMPROPER])
-    invalid = [combined_params[PROPER][0], combined_params[PROPER][0] + 1.0]
+    fftop.parameterize_periodic_torsion(combined_params[proper_idx], combined_params[improper_idx])
+    invalid = [combined_params[proper_idx][0], combined_params[proper_idx][0] + 1.0]
     with pytest.raises(AssertionError, match="changing proper"):
-        fftop.parameterize_periodic_torsion(invalid, combined_params[IMPROPER])
-    invalid = [combined_params[IMPROPER][0], combined_params[IMPROPER][0] + 1.0]
+        fftop.parameterize_periodic_torsion(invalid, combined_params[improper_idx])
+    invalid = [combined_params[improper_idx][0], combined_params[improper_idx][0] + 1.0]
     with pytest.raises(AssertionError, match="changing improper"):
-        fftop.parameterize_periodic_torsion(combined_params[PROPER], invalid)
+        fftop.parameterize_periodic_torsion(combined_params[proper_idx], invalid)

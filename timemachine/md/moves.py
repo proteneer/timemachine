@@ -96,7 +96,7 @@ class NVTMove(MonteCarloMove):
         ctxt = custom_ops.Context(x.coords, x.velocities, x.box, self.integrator_impl, self.bound_impls)
         return self._steps(ctxt)
 
-    def _steps(self, ctxt: custom_ops.Context) -> CoordsVelBox:
+    def _steps(self, ctxt: "custom_ops.Context") -> CoordsVelBox:
         # arguments: lambda_schedule, du_dl_interval, x_interval
         _, xs, boxes = ctxt.multiple_steps(self.lamb * np.ones(self.n_steps), 0, 0)
         x_t = xs[0]
