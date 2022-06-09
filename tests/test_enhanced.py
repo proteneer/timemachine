@@ -27,9 +27,7 @@ def ff_pair():
     ff1 = Forcefield.load_from_file(DEFAULT_FF)
 
     # Modify the charge parameters for ff1
-    for h, p in zip(ff1.get_ordered_handles(), ff1.get_ordered_params()):
-        if isinstance(h, AM1CCCHandler):
-            p += 1.0
+    ff1.q_handle.params += 1.0
     return ff0, ff1
 
 
