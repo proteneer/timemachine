@@ -6,13 +6,17 @@ import pymbar
 import pytest
 
 from timemachine import testsystems
-from timemachine.constants import BOLTZ
+from timemachine.constants import BOLTZ, DEFAULT_FF
 from timemachine.fe import absolute_hydration
 from timemachine.fe.functional import construct_differentiable_interface_fast
 from timemachine.fe.reweighting import one_sided_exp
+from timemachine.ff import Forcefield
 from timemachine.md import enhanced, moves, smc
 from timemachine.md.states import CoordsVelBox
-from timemachine.utils import get_ff_am1ccc
+
+
+def get_ff_am1ccc():
+    return Forcefield.load_from_file(DEFAULT_FF)
 
 
 def test_smc_parameter_change_vacuum():
