@@ -1,6 +1,5 @@
 from typing import Optional
 
-import matplotlib.pyplot as plt
 import numpy as np
 from rdkit import Chem
 from rdkit.Chem import rdFMCS
@@ -261,14 +260,3 @@ def get_star_map(mols, threshold: float = 0.5):
     others.pop(hub_index)
 
     return hub, others
-
-
-def plot_transformation_sizes(transformation_sizes):
-    plt.imshow(transformation_sizes)
-    plt.xlabel("molecule index")
-    plt.ylabel("molecule index")
-    plt.title('"size of transformation"\n$(n_A - n_{MCS}) + (n_B - n_{MCS})$')
-
-    plt.tight_layout()
-
-    plt.colorbar()
