@@ -87,6 +87,7 @@ setup(
         "importlib-resources",
         "jax",
         "jaxlib>0.1.74",
+        "matplotlib",
         "networkx",
         "numpy",
         "pymbar>3.0.4",
