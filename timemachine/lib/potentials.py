@@ -405,7 +405,17 @@ class NonbondedInteractionGroupInterpolated(NonbondedInteractionGroup):
 
 
 class NonbondedPairList(NonbondedCustomOpWrapper):
-    pass
+    def get_idxs(self):
+        return self.args[0]
+
+    def get_rescale_mask(self):
+        return self.args[1]
+
+    def get_beta(self):
+        return self.args[2]
+
+    def get_cutoff(self):
+        return self.args[3]
 
 
 class NonbondedPairListNegated(NonbondedCustomOpWrapper):
