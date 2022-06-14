@@ -8,16 +8,14 @@ import jax.numpy as jnp
 import numpy as np
 import scipy
 from rdkit import Chem
-from rdkit.Chem import AllChem
 
-from timemachine.fe import chiral_utils, topology, utils
+from timemachine.fe import topology, utils
 from timemachine.ff import Forcefield
 from timemachine.integrator import simulate
 from timemachine.potentials.chiral_restraints import (
     U_chiral_atom,
     U_chiral_atom_batch,
     U_chiral_bond,
-    U_chiral_bond_batch,
     pyramidal_volume,
     torsion_volume,
 )
@@ -56,71 +54,6 @@ def simulate_system(U_fn, x0, num_samples=20000):
     # sanity check that we didn't undersample
     assert len(frames) == num_samples
     return frames
-
-
-def test_setup_chiral_atom_restraints():
-    """On a methane conformer, assert that permuting coordinates or permuting restr_idxs
-    both independently toggle the chiral restraint"""
-    mol = Chem.MolFromMolBlock(
-        """
-  Mrv2202 06072215563D
-
-  5  4  0  0  0  0            999 V2000
-    0.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
-   -0.3633   -0.5138    0.8900 H   0  0  0  0  0  0  0  0  0  0  0  0
-    1.0900    0.0000    0.0000 H   0  0  0  0  0  0  0  0  0  0  0  0
-   -0.3633    1.0277    0.0000 H   0  0  0  0  0  0  0  0  0  0  0  0
-   -0.3633   -0.5138   -0.8900 H   0  0  0  0  0  0  0  0  0  0  0  0
-  1  2  1  0  0  0  0
-  1  3  1  0  0  0  0
-  1  4  1  0  0  0  0
-  1  5  1  0  0  0  0
-M  END
-$$$$""",
-        removeHs=False,
-    )
-
-    # needs to be batched in order for jax to play nicely
-    x0 = utils.get_romol_conf(mol)
-    normal_restr_idxs = chiral_utils.setup_chiral_atom_restraints(mol, x0, 0)
-
-    x0_inverted = x0[[0, 2, 1, 3, 4]]  # swap two atoms
-    inverted_restr_idxs = chiral_utils.setup_chiral_atom_restraints(mol, x0_inverted, 0)
-
-    # check the sign of the resulting idxs
-    k = 1000.0
-    assert np.all(np.asarray(U_chiral_atom_batch(x0, normal_restr_idxs, k)) == 0)
-    assert np.all(np.asarray(U_chiral_atom_batch(x0, inverted_restr_idxs, k)) > 0)
-    assert np.all(np.asarray(U_chiral_atom_batch(x0_inverted, normal_restr_idxs, k)) > 0)
-    assert np.all(np.asarray(U_chiral_atom_batch(x0_inverted, inverted_restr_idxs, k)) == 0)
-
-
-def test_setup_chiral_bond_restraints():
-    """On a 'Cl/C(F)=N/F' conformer, assert that flipping a dihedral angle or permuting restr_idxs
-    both independently toggle the chiral bond restraint"""
-
-    mol_cis = Chem.MolFromSmiles(r"Cl\C(F)=N/F")
-    mol_trans = Chem.MolFromSmiles(r"Cl\C(F)=N\F")
-
-    AllChem.EmbedMolecule(mol_cis)
-    AllChem.EmbedMolecule(mol_trans)
-
-    # needs to be batched in order for jax to play nicely
-    x0_cis = utils.get_romol_conf(mol_cis)
-    x0_trans = utils.get_romol_conf(mol_trans)
-    src_atom = 1
-    dst_atom = 3
-    normal_restr_idxs, signs = chiral_utils.setup_chiral_bond_restraints(mol_cis, x0_cis, src_atom, dst_atom)
-
-    inverted_restr_idxs, inverted_signs = chiral_utils.setup_chiral_bond_restraints(
-        mol_trans, x0_trans, src_atom, dst_atom
-    )
-    k = 1000.0
-
-    assert np.all(np.asarray(U_chiral_bond_batch(x0_cis, normal_restr_idxs, k, signs)) == 0)
-    assert np.all(np.asarray(U_chiral_bond_batch(x0_cis, inverted_restr_idxs, k, inverted_signs)) > 0)
-    assert np.all(np.asarray(U_chiral_bond_batch(x0_trans, normal_restr_idxs, k, signs)) > 0)
-    assert np.all(np.asarray(U_chiral_bond_batch(x0_trans, inverted_restr_idxs, k, inverted_signs)) == 0)
 
 
 def test_chiral_restraints_pyramidal():
