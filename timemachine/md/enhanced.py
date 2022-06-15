@@ -176,7 +176,7 @@ class VacuumState:
         for idxs, params in zip(self.pt_potential.get_idxs(), self.proper_torsion_params):
             _, j, k, _ = idxs
             if (j, k) in rotatable_bonds:
-                logger.debug(f"turning off torsion %s", idxs)
+                logger.debug("turning off torsion %s", idxs)
                 continue
             else:
                 easy_proper_torsion_idxs.append(idxs)
