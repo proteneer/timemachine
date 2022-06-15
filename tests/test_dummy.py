@@ -151,13 +151,13 @@ def test_identify_dummy_groups():
     bond_idxs = get_bond_idxs(Chem.MolFromSmiles("C1CC2OOC12"))
     core = [0, 1, 2, 5]
     dg = identify_dummy_groups(bond_idxs, core)
-    assert_set_equality(dg, [{3}, {4}])
+    assert_set_equality(dg, [{3, 4}])
 
     # example above, where O's are dummy atoms, and Cs are core
     bond_idxs = get_bond_idxs(Chem.MolFromSmiles("OC1COO1"))
     core = [1, 2]
     dg = identify_dummy_groups(bond_idxs, core)
-    assert_set_equality(dg, [{0, 4}, {3}])
+    assert_set_equality(dg, [{0, 3, 4}])
 
 
 def assert_anchor_group_equality(a_groups, b_groups):

@@ -1,6 +1,5 @@
 import copy
 import itertools
-from collections import defaultdict
 
 import networkx as nx
 import numpy as np
@@ -259,38 +258,7 @@ def identify_dummy_groups(bond_idxs, core):
     # check that we didn't miss any dummy atoms
     assert np.sum([len(c) for c in cc]) == (N - len(core))
 
-    # refine based on rooted-anchor, this lets us deal with ring opening and closing:
-    #
-    #        D----D
-    #        |    |
-    #        C----C
-    #        |    |
-    #        C----C
-    #
-    # in this case, we want the dummy atoms to be in different groups.
-
-    dummy_groups = []
-
-    for dg in cc:
-        anchor_membership = []
-        dg = list(dg)
-        for dummy in dg:
-            # identify membership of the dummy
-            anchors = identify_root_anchors(bond_idxs, core, dummy)
-            # get distance to anchor
-            dists = []
-            for a in anchors:
-                dists.append(nx.shortest_path_length(g, source=dummy, target=a))
-            anchor_membership.append(np.argmin(dists))
-
-        anchor_kv = defaultdict(set)
-        for idx, anchor in enumerate(anchor_membership):
-            anchor_kv[anchor].add(dg[idx])
-
-        for v in anchor_kv.values():
-            dummy_groups.append(v)
-
-    return dummy_groups
+    return cc
 
 
 def enumerate_dummy_ixns(dg, ag):

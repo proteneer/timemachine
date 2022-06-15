@@ -64,6 +64,40 @@ def simulate_system(U_fn, x0, num_samples=20000, steps_per_batch=500, num_worker
     return frames
 
 
+def minimize_scipy(x0, U_fn):
+    shape = x0.shape
+
+    def U_flat(x_flat):
+        x_full = x_flat.reshape(*shape)
+        return U_fn(x_full)
+
+    grad_bfgs_fn = jax.jit(jax.grad(U_flat))
+    res = scipy.optimize.minimize(U_flat, x0.reshape(-1), jac=grad_bfgs_fn)
+    xi = res.x.reshape(*shape)
+    return xi
+
+
+def simulate_system(U_fn, x0, num_samples=20000, num_workers=None):
+    num_atoms = x0.shape[0]
+    x_min = minimize_scipy(x0, U_fn)
+    seed = 2023
+
+    num_workers = num_workers or multiprocessing.cpu_count()
+    samples_per_worker = int(np.ceil(num_samples / num_workers))
+
+    burn_in_batches = num_samples // 10
+    frames, _ = simulate(
+        x_min, U_fn, 300.0, np.ones(num_atoms) * 4.0, 500, samples_per_worker + burn_in_batches, num_workers, seed=seed
+    )
+    # (ytz): discard burn in batches
+    frames = frames[:, burn_in_batches:, :, :]
+    # collect over all workers
+    frames = frames.reshape(-1, num_atoms, 3)[:num_samples]
+    # sanity check that we didn't undersample
+    assert len(frames) == num_samples
+    return frames
+
+
 class VacuumSystem:
 
     # utility system container
@@ -103,13 +137,12 @@ class VacuumSystem:
         )
 
         nbpl_U = functools.partial(
-            nonbonded.nonbonded_v3_on_specific_pairs,
+            nonbonded.nonbonded_v3_on_precomputed_pairs,
             pairs=np.array(self.nonbonded.get_idxs()),
             params=np.array(self.nonbonded.params),
             box=None,
             beta=self.nonbonded.get_beta(),
             cutoff=self.nonbonded.get_cutoff(),
-            rescale_mask=np.array(self.nonbonded.get_rescale_mask()),
         )
 
         if self.chiral_atom:

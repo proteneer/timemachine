@@ -427,6 +427,20 @@ class NonbondedPairList(NonbondedCustomOpWrapper):
         return self.args[3]
 
 
+class NonbondedPairListPrecomputed(NonbondedCustomOpWrapper):
+    def get_idxs(self):
+        return self.args[0]
+
+    def set_idxs(self, idxs):
+        self.args[0] = idxs
+
+    def get_beta(self):
+        return self.args[1]
+
+    def get_cutoff(self):
+        return self.args[2]
+
+
 class NonbondedPairListNegated(NonbondedCustomOpWrapper):
     def unbound_impl(self, precision):
         cls_name_base = "NonbondedPairList"

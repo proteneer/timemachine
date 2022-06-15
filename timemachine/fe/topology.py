@@ -9,6 +9,7 @@ from timemachine.fe.system import VacuumSystem
 from timemachine.fe.utils import get_romol_conf
 from timemachine.ff.handlers import nonbonded
 from timemachine.lib import potentials
+from timemachine.potentials.nonbonded import combining_rule_epsilon, combining_rule_sigma
 
 _SCALE_12 = 1.0
 _SCALE_13 = 1.0
@@ -265,6 +266,7 @@ class BaseTopology:
             assert i < j
             exclusions_kv[(i, j)] = sf
 
+        # loop over all pairs
         inclusion_idxs, rescale_mask = [], []
         for i in range(self.mol.GetNumAtoms()):
             for j in range(i + 1, self.mol.GetNumAtoms()):
@@ -275,14 +277,31 @@ class BaseTopology:
                     rescale_mask.append([rescale_factor, rescale_factor])
                     inclusion_idxs.append([i, j])
 
+        inclusion_idxs = np.array(inclusion_idxs).reshape(-1, 2).astype(np.int32)
+
         q_params = self.ff.q_handle.partial_parameterize(ff_q_params, self.mol)
         lj_params = self.ff.lj_handle.partial_parameterize(ff_lj_params, self.mol)
-        params = jnp.concatenate([jnp.reshape(q_params, (-1, 1)), jnp.reshape(lj_params, (-1, 2))], axis=1)
+
+        sig_params = lj_params[:, 0]
+        eps_params = lj_params[:, 1]
+
+        l_idxs = inclusion_idxs[:, 0]
+        r_idxs = inclusion_idxs[:, 1]
+
+        q_ij = q_params[l_idxs] * q_params[r_idxs]
+        sig_ij = combining_rule_sigma(sig_params[l_idxs], sig_params[r_idxs])
+        eps_ij = combining_rule_epsilon(eps_params[l_idxs], eps_params[r_idxs])
+
+        params = []
+        for q, s, e, (sf_q, sf_lj) in zip(q_ij, sig_ij, eps_ij, rescale_mask):
+            params.append((q * sf_q, s, e * sf_lj))
+
+        params = np.array(params)
 
         beta = _BETA
         cutoff = _CUTOFF  # solve for this analytically later
 
-        return params, potentials.NonbondedPairList(inclusion_idxs, rescale_mask, beta, cutoff)
+        return params, potentials.NonbondedPairListPrecomputed(inclusion_idxs, beta, cutoff)
 
     def parameterize_harmonic_bond(self, ff_params):
         params, idxs = self.ff.hb_handle.partial_parameterize(ff_params, self.mol)
