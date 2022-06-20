@@ -1,6 +1,5 @@
 import itertools
 
-import numpy as np
 from rdkit import Chem
 
 from timemachine.potentials.chiral_restraints import pyramidal_volume, torsion_volume
@@ -36,11 +35,11 @@ def setup_chiral_atom_restraints(mol, conf, a_idx):
         vol = pyramidal_volume(conf[a_idx], conf[i], conf[j], conf[k])
         # vol may be >0 or <0, our chiral restraint always enforces vol < 0.
         if vol < 0:
-            restr_idxs.append([a_idx, i, j, k])
+            restr_idxs.append((a_idx, i, j, k))
         else:
-            restr_idxs.append([a_idx, j, i, k])
+            restr_idxs.append((a_idx, j, i, k))
 
-    return np.array(restr_idxs)
+    return restr_idxs
 
 
 def setup_chiral_bond_restraints(mol, conf, src_idx, dst_idx):
@@ -87,7 +86,7 @@ def setup_chiral_bond_restraints(mol, conf, src_idx, dst_idx):
             # set up torsion i,j,k,l
             i, j, k, l = a, src_idx, dst_idx, b
             vol = torsion_volume(conf[i], conf[j], conf[k], conf[l])
-            restr_idxs.append([i, j, k, l])
+            restr_idxs.append((i, j, k, l))
             if vol < 0:
                 # (jkaus): the restraints are turned on when the volume is positive
                 # so use the opposite sign here
@@ -95,7 +94,7 @@ def setup_chiral_bond_restraints(mol, conf, src_idx, dst_idx):
             else:
                 signs.append(-1)
 
-    return np.array(restr_idxs), np.array(signs)
+    return restr_idxs, signs
 
 
 def find_chiral_atoms(mol):

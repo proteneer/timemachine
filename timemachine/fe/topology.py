@@ -4,7 +4,9 @@ import jax.numpy as jnp
 import numpy as np
 from numpy.typing import NDArray
 
+from timemachine.fe import chiral_utils
 from timemachine.fe.system import VacuumSystem
+from timemachine.fe.utils import get_romol_conf
 from timemachine.ff.handlers import nonbonded
 from timemachine.lib import potentials
 
@@ -329,8 +331,71 @@ class BaseTopology:
         combined_potential = potentials.PeriodicTorsion(combined_idxs, combined_lambda_mult, combined_lambda_offset)
         return combined_params, combined_potential
 
-    def setup_end_state(self):
+    # def setup_chiral_restraints(self, restraint_k=1000.0):
+    def setup_chiral_restraints(self, restraint_k=1000.0):
+        """
+        Create chiral atom and bond potentials.
 
+        Parameters
+        ----------
+        restraint_k: float
+            Force constant of the restraints
+
+        Returns
+        -------
+        2-tuple
+            Returns a ChiralAtomRestraint and a ChiralBondRestraint
+
+        """
+        chiral_atoms = chiral_utils.find_chiral_atoms(self.mol)
+        chiral_bonds = chiral_utils.find_chiral_bonds(self.mol)
+
+        chiral_atom_restr_idxs = []
+        chiral_atom_params = []
+        for a_idx in chiral_atoms:
+            idxs = chiral_utils.setup_chiral_atom_restraints(self.mol, get_romol_conf(self.mol), a_idx)
+            for ii in idxs:
+                assert ii not in chiral_atom_restr_idxs
+            chiral_atom_restr_idxs.extend(idxs)
+            chiral_atom_params.extend(restraint_k for _ in idxs)
+
+        chiral_atom_params = np.array(chiral_atom_params)
+        chiral_atom_restr_idxs = np.array(chiral_atom_restr_idxs)
+        chiral_atom_potential = potentials.ChiralAtomRestraint(chiral_atom_restr_idxs).bind(chiral_atom_params)
+
+        chiral_bond_restr_idxs = []
+        chiral_bond_restr_signs = []
+        chiral_bond_params = []
+        for src_idx, dst_idx in chiral_bonds:
+            idxs, signs = chiral_utils.setup_chiral_bond_restraints(
+                self.mol, get_romol_conf(self.mol), src_idx, dst_idx
+            )
+            for ii in idxs:
+                assert ii not in chiral_bond_restr_idxs
+            chiral_bond_restr_idxs.extend(idxs)
+            chiral_bond_restr_signs.extend(signs)
+            chiral_bond_params.extend(restraint_k for _ in idxs)
+
+        chiral_bond_restr_idxs = np.array(chiral_bond_restr_idxs)
+        chiral_bond_restr_signs = np.array(chiral_bond_restr_signs)
+        chiral_bond_params = np.array(chiral_bond_params)
+        chiral_bond_potential = potentials.ChiralBondRestraint(chiral_bond_restr_idxs, chiral_bond_restr_signs).bind(
+            chiral_bond_params
+        )
+
+        return chiral_atom_potential, chiral_bond_potential
+
+    def setup_chiral_end_state(self):
+        """
+        Setup an end-state with chiral restraints attached.
+        """
+        system = self.setup_end_state()
+        chiral_atom_potential, chiral_bond_potential = self.setup_chiral_restraints()
+        system.chiral_atom = chiral_atom_potential
+        system.chiral_bond = chiral_bond_potential
+        return system
+
+    def setup_end_state(self):
         mol_bond_params, mol_hb = self.parameterize_harmonic_bond(self.ff.hb_handle.params)
         mol_angle_params, mol_ha = self.parameterize_harmonic_angle(self.ff.ha_handle.params)
         mol_proper_params, mol_pt = self.parameterize_proper_torsion(self.ff.pt_handle.params)
@@ -346,7 +411,7 @@ class BaseTopology:
         torsion_potential = potentials.PeriodicTorsion(torsion_idxs).bind(torsion_params)
         nonbonded_potential = mol_nbpl.bind(mol_nbpl_params)
 
-        system = VacuumSystem(bond_potential, angle_potential, torsion_potential, nonbonded_potential)
+        system = VacuumSystem(bond_potential, angle_potential, torsion_potential, nonbonded_potential, None, None)
 
         return system
 
