@@ -198,9 +198,7 @@ def set_up_smc_parameter_changes_at_endstates(
     if is_vacuum:
         potentials, params, masses, _ = enhanced.get_vacuum_phase_system_parameter_changes(mol, ff0, ff1)
     else:
-        potentials, params, masses, _, _ = enhanced.get_solvent_phase_system_parameter_changes(
-            mol, ff0, ff1, minimize_energy=False
-        )
+        potentials, params, masses, _, _ = enhanced.get_solvent_phase_system_parameter_changes(mol, ff0, ff1)
 
     U_fn = functional.construct_differentiable_interface_fast(potentials, params)
     kBT = BOLTZ * temperature
