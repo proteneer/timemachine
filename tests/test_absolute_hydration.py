@@ -19,7 +19,8 @@ def get_ff_am1ccc():
     return Forcefield.load_from_file(DEFAULT_FF)
 
 
-def test_smc_parameter_change_vacuum():
+@pytest.mark.parametrize("reverse", [False, True])
+def test_smc_parameter_change_vacuum(reverse):
     """
     Tests correctness of using SMC to switch between parameters.
     The SMC predicted dg ff0 -> ff1 should match results from
@@ -43,6 +44,9 @@ def test_smc_parameter_change_vacuum():
     ff1 = get_ff_am1ccc()
     ff1.q_handle.params += 0.2
     box = np.eye(3) * 1000.0
+
+    if reverse:
+        ff0, ff1 = ff1, ff0
 
     # generate vacuum samples for each ff
     def generate_samples(mol, ff) -> Tuple[enhanced.VacuumState, smc.Samples]:

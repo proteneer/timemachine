@@ -4,7 +4,6 @@ config.update("jax_enable_x64", True)
 
 import unittest
 from importlib import resources
-from typing import Tuple
 
 import jax
 import numpy as np
@@ -407,15 +406,15 @@ def test_relative_free_energy_forcefield():
     coords = get_romol_conf(mol)
     box = np.identity(3) * 99.0
 
-    def u_endstates(ubp, params) -> Tuple[float, float]:
-        u = ubp.bind(params).bound_impl(precision=np.float32)
-        _, _, u0_val = u.execute(coords, box, lam=0)
-        _, _, u1_val = u.execute(coords, box, lam=1)
-        return u0_val, u1_val
+    combined_impl = combined_ubp.bind(combined_qlj_params).bound_impl(precision=np.float32)
+    _, _, u0_combined = combined_impl.execute(coords, box, lam=0)
+    _, _, u1_combined = combined_impl.execute(coords, box, lam=1)
 
-    u0_combined, u1_combined = u_endstates(combined_ubp, combined_qlj_params)
-    u0, _ = u_endstates(ubp0, qlj0_params)
-    u1, _ = u_endstates(ubp1, qlj1_params)
+    u0_impl = ubp0.bind(qlj0_params).bound_impl(precision=np.float32)
+    _, _, u0 = u0_impl.execute(coords, box, lam=0)
+
+    u1_impl = ubp1.bind(qlj1_params).bound_impl(precision=np.float32)
+    _, _, u1 = u1_impl.execute(coords, box, lam=0)  # lam=0 for the fully interacting state here
 
     # Check that the endstate NB energies are consistent
     assert pytest.approx(u0_combined) == u0

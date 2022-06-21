@@ -471,11 +471,11 @@ def get_solvent_phase_system(mol, ff, box_width=3.0, margin=0.5, minimize_energy
     return potentials, params, masses, coords, water_box
 
 
-def get_solvent_phase_system_parameter_changes(mol, ff0, ff1, box_width=3.0, margin=0.5, minimize_energy=True):
+def get_solvent_phase_system_parameter_changes(mol, ff0, ff1, box_width=3.0, margin=0.5):
     """
-    Given a mol and a pair of forcefields return a solvated system where the
-    solvent has (optionally) been minimized. The system is set up to determine
-    the relative free energy of changing the forcefield parameters.
+    Given a mol and a pair of forcefields return a solvated system.
+    The system is set up to determine the relative free energy of
+    changing the forcefield parameters.
 
     Parameters
     ----------
@@ -506,13 +506,9 @@ def get_solvent_phase_system_parameter_changes(mol, ff0, ff1, box_width=3.0, mar
     combined_ff_params = combine_ordered_params(ff0, ff1)
     potentials, params, masses = afe.prepare_host_edge(combined_ff_params, water_system)
 
-    # concatenate (optionally minimized) water_coords and ligand_coords
+    # concatenate water_coords and ligand_coords
     ligand_coords = get_romol_conf(mol)
-    if minimize_energy:
-        new_water_coords = minimizer.minimize_host_4d([mol], water_system, water_coords, ff0, water_box)
-        coords = np.concatenate([new_water_coords, ligand_coords])
-    else:
-        coords = np.concatenate([water_coords, ligand_coords])
+    coords = np.concatenate([water_coords, ligand_coords])
 
     return potentials, params, np.array(masses), coords, water_box
 

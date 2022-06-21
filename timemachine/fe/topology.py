@@ -334,7 +334,7 @@ class RelativeFreeEnergyForcefield(BaseTopology):
 
         Parameter
         ---------
-        mol: ROMol
+        mol: Chem.Mol
             Ligand to be parameterized
 
         forcefield0: ff.Forcefield

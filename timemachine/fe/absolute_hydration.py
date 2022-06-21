@@ -158,7 +158,7 @@ def set_up_ahfe_system_for_smc(
     return samples, lambdas, propagate, log_prob, resample
 
 
-def set_up_ahfe_for_smc_parameter_changes(
+def set_up_smc_parameter_changes_at_endstates(
     mol,
     temperature=300.0,
     pressure=1.0,
@@ -181,8 +181,7 @@ def set_up_ahfe_for_smc_parameter_changes(
     Returns
     -------
     * reduced_potential_fxn
-    * mover at lam=0
-    * mover at lam=1
+    * mover with lamb=None. The mover.lamb attribute must be set before use.
     """
     if type(seed) != int:
         seed = np.random.randint(1000)
@@ -257,7 +256,7 @@ def set_up_ahfe_system_for_smc_parameter_changes(
         log_prob fxn
         resample fxn
     """
-    reduced_potential, mover = set_up_ahfe_for_smc_parameter_changes(
+    reduced_potential, mover = set_up_smc_parameter_changes_at_endstates(
         mol, n_steps=n_md_steps, seed=seed, ff0=ff0, ff1=ff1, is_vacuum=is_vacuum
     )
     np.random.seed(seed)

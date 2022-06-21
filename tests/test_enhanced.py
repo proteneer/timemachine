@@ -34,9 +34,7 @@ def test_get_solvent_phase_system_parameter_changes(ff_pair):
     ff0, ff1 = ff_pair
     mol = fetch_freesolv()[0]
 
-    ubps, params, m, coords, box = enhanced.get_solvent_phase_system_parameter_changes(
-        mol, ff0=ff0, ff1=ff1, minimize_energy=False
-    )
+    ubps, params, m, coords, box = enhanced.get_solvent_phase_system_parameter_changes(mol, ff0=ff0, ff1=ff1)
     U_ff = construct_differentiable_interface_fast(ubps, params)
 
     ubps0, params0, m0, coords0, box0 = enhanced.get_solvent_phase_system(mol, ff0, minimize_energy=False)
