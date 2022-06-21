@@ -2,6 +2,7 @@
 
 # This file contains utility functions to generate samples in the gas-phase.
 
+import logging
 import multiprocessing
 import os
 
@@ -25,6 +26,8 @@ from timemachine.md import builders, minimizer, moves
 from timemachine.md.barostat.utils import get_bond_list, get_group_indices
 from timemachine.md.states import CoordsVelBox
 from timemachine.potentials import bonded, nonbonded, rmsd
+
+logger = logging.getLogger(__name__)
 
 
 def identify_rotatable_bonds(mol):
@@ -174,7 +177,7 @@ class VacuumState:
         for idxs, params in zip(self.pt_potential.get_idxs(), self.proper_torsion_params):
             _, j, k, _ = idxs
             if (j, k) in rotatable_bonds:
-                print("turning off torsion", idxs)
+                logger.debug("turning off torsion %s", idxs)
                 continue
             else:
                 easy_proper_torsion_idxs.append(idxs)

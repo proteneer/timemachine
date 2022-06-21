@@ -264,7 +264,9 @@ def nonbonded_v3(
     return jnp.sum(eij_total / 2)
 
 
-def nonbonded_v3_on_specific_pairs(conf, params, box, pairs, beta: float, cutoff: Optional[float] = None):
+def nonbonded_v3_on_specific_pairs(
+    conf, params, box, pairs, beta: float, cutoff: Optional[float] = None, rescale_mask=None
+):
     """See nonbonded_v3 docstring for more details
 
     Notes
@@ -273,6 +275,9 @@ def nonbonded_v3_on_specific_pairs(conf, params, box, pairs, beta: float, cutoff
         some pairs of atoms that could be within cutoff, or omitting intramolecular pairs, ...), then incorrect results
         can be returned.
     """
+
+    if len(pairs) == 0:
+        return np.zeros(1), np.zeros(1)
 
     inds_l, inds_r = pairs.T
 
@@ -299,6 +304,13 @@ def nonbonded_v3_on_specific_pairs(conf, params, box, pairs, beta: float, cutoff
     # Electrostatics by direct-space part of PME
     qij = apply_cutoff(charges[inds_l] * charges[inds_r])
     electrostatics = direct_space_pme(dij, qij, beta)
+
+    if rescale_mask is not None:
+        assert rescale_mask.shape == (len(pairs), 2)
+        rescale_vdW = rescale_mask[:, 1]
+        vdW = jnp.where(rescale_vdW != 0, vdW, 0)
+        rescale_electrostatics = rescale_mask[:, 0]
+        electrostatics = jnp.where(rescale_electrostatics != 0, electrostatics, 0)
 
     return vdW, electrostatics
 
