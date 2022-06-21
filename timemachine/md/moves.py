@@ -71,7 +71,52 @@ class CompoundMove(MonteCarloMove):
         return np.sum(self.n_proposed_by_move)
 
 
-class NPTMove(MonteCarloMove):
+class NVTMove(MonteCarloMove):
+    def __init__(
+        self,
+        ubps: List[potentials.CustomOpWrapper],
+        lamb: float,
+        masses: NDArray,
+        temperature: float,
+        n_steps: int,
+        seed: int,
+        dt: float = 1.5e-3,
+        friction: float = 1.0,
+    ):
+        intg = lib.LangevinIntegrator(temperature, dt, friction, masses, seed)
+        self.integrator_impl = intg.impl()
+        all_impls = [bp.bound_impl(np.float32) for bp in ubps]
+
+        self.bound_impls = all_impls
+        self.lamb = lamb
+        self.n_steps = n_steps
+
+    def move(self, x: CoordsVelBox) -> CoordsVelBox:
+        # note: context creation overhead here is actually very small!
+        ctxt = custom_ops.Context(x.coords, x.velocities, x.box, self.integrator_impl, self.bound_impls)
+        return self._steps(ctxt)
+
+    def _steps(self, ctxt: "custom_ops.Context") -> CoordsVelBox:
+        # arguments: lambda_schedule, du_dl_interval, x_interval
+        _, xs, boxes = ctxt.multiple_steps(self.lamb * np.ones(self.n_steps), 0, 0)
+        x_t = xs[0]
+        v_t = ctxt.get_v_t()
+        box = boxes[0]
+
+        after_steps = CoordsVelBox(x_t, v_t, box)
+
+        self.n_proposed += 1
+        self.n_accepted += 1
+
+        return after_steps
+
+
+class NPTMove(NVTMove):
+    """
+    Functionally, NPT is implemented as NVTMove plus a MC Barostat.
+    So inherit from NVTMove here.
+    """
+
     def __init__(
         self,
         ubps: List[potentials.CustomOpWrapper],
@@ -85,10 +130,7 @@ class NPTMove(MonteCarloMove):
         friction: float = 1.0,
         barostat_interval: int = 5,
     ):
-
-        intg = lib.LangevinIntegrator(temperature, dt, friction, masses, seed)
-        self.integrator_impl = intg.impl()
-        all_impls = [bp.bound_impl(np.float32) for bp in ubps]
+        super().__init__(ubps, lamb, masses, temperature, n_steps, seed, dt=dt, friction=friction)
 
         assert isinstance(ubps[0], potentials.HarmonicBond), "First potential must be of type HarmonicBond"
 
@@ -96,31 +138,15 @@ class NPTMove(MonteCarloMove):
         group_idxs = get_group_indices(bond_list)
 
         barostat = lib.MonteCarloBarostat(len(masses), pressure, temperature, group_idxs, barostat_interval, seed + 1)
-        barostat_impl = barostat.impl(all_impls)
-
-        self.bound_impls = all_impls
+        barostat_impl = barostat.impl(self.bound_impls)
         self.barostat_impl = barostat_impl
-        self.lamb = lamb
-        self.n_steps = n_steps
 
     def move(self, x: CoordsVelBox) -> CoordsVelBox:
         # note: context creation overhead here is actually very small!
         ctxt = custom_ops.Context(
             x.coords, x.velocities, x.box, self.integrator_impl, self.bound_impls, self.barostat_impl
         )
-
-        # arguments: lambda_schedule, du_dl_interval, x_interval
-        _, xs, boxes = ctxt.multiple_steps(self.lamb * np.ones(self.n_steps), 0, 0)
-        x_t = xs[0]
-        v_t = ctxt.get_v_t()
-        box = boxes[0]
-
-        after_npt = CoordsVelBox(x_t, v_t, box)
-
-        self.n_proposed += 1
-        self.n_accepted += 1
-
-        return after_npt
+        return self._steps(ctxt)
 
 
 class DeterministicMTMMove(MonteCarloMove):

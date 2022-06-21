@@ -95,3 +95,7 @@ class Forcefield:
             Return a flat, pre-determined ordering of the handlers
         """
         return [self.hb_handle, self.ha_handle, self.pt_handle, self.it_handle, self.q_handle, self.lj_handle]
+
+
+def combine_ordered_params(ff0: Forcefield, ff1: Forcefield):
+    return list(zip(ff0.get_ordered_params(), ff1.get_ordered_params()))

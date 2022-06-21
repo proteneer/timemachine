@@ -14,11 +14,12 @@ import numpy as np
 import pytest
 
 from timemachine import testsystems
-from timemachine.constants import BOLTZ
+from timemachine.constants import BOLTZ, DEFAULT_FF
 from timemachine.fe.utils import get_mol_masses
 from timemachine.ff import Forcefield
 from timemachine.md import enhanced
-from timemachine.md.moves import NPTMove, OptimizedMTMMove
+from timemachine.md.moves import NPTMove, NVTMove, OptimizedMTMMove
+from timemachine.md.states import CoordsVelBox
 from timemachine.potentials import bonded, nonbonded
 
 
@@ -179,3 +180,25 @@ def test_condensed_phase_mtm():
 
     # check for consistency with vanilla samples
     assert np.mean((enhanced_torsions_rhs - vanilla_samples_rhs) ** 2) < 5e-2
+
+
+def test_nvt_box():
+    # Test box stays the same under NVTMove
+    seed = 2022
+    np.random.seed(seed)
+
+    mol, _ = testsystems.ligands.get_biphenyl()
+    ff = Forcefield.load_from_file(DEFAULT_FF)
+
+    ubps, params, masses, coords, box = enhanced.get_solvent_phase_system(mol, ff)
+    bps = []
+    for p, bp in zip(params, ubps):
+        bps.append(bp.bind(p))
+
+    temperature = 300.0
+    n_steps = 100
+    mover = NVTMove(ubps, 0, masses, temperature, n_steps, seed)
+    v0 = np.zeros_like(coords)
+    xvb0 = CoordsVelBox(coords, v0, box)
+    xvb = mover.move(xvb0)
+    assert np.allclose(box, xvb.box)
