@@ -317,8 +317,10 @@ def nonbonded_v3_on_specific_pairs(
 
 def nonbonded_v3_on_precomputed_pairs(conf, params, box, pairs, beta: float, cutoff: Optional[float] = None):
     """
+    Similar to pairlist, except that we pre-compute the scaled charges, epsilsons, and broadcast
+
     conf: N,3
-    params: P,2 (q_ij, s_ij, e_ij)
+    params: P,3 (q_ij, s_ij, e_ij)
     pairs: P,2 (i,j)
     """
 
