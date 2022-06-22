@@ -128,7 +128,7 @@ class BaseTopologyRescaledCharges(topology.BaseTopology):
 
 def test_chiral_restraints_torsion():
     """For a charge-scaled version of hydrogen peroxide, assert that:
-    * without chiral bond restraints, cis/trans states are sampled ~ 30%/70%
+    * without chiral bond restraints, cis/trans states are sampled ~ 25%/75%
     * with chiral bond restraints, ~ only specified state is sampled"""
     mol = Chem.MolFromMolBlock(
         """
@@ -166,9 +166,9 @@ $$$$""",
         vols_orig.append(torsion_volume(*f[torsion_idxs]))
     vols_orig = np.array(vols_orig)
 
-    # the 40/60 ratio is dependent on the scale defined above, which affects the repulsive
+    # the 25/75 ratio is dependent on the scale defined above, which affects the repulsive
     # strength of the hydrogens.)
-    assert np.abs(np.mean(vols_orig > 0) - 0.4) < 0.05
+    assert np.abs(np.mean(vols_orig > 0) - 0.25) < 0.05
 
     all_signs = [1, -1]  # [trans, cis]
     for sign in all_signs:

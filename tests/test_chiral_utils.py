@@ -78,19 +78,19 @@ def test_find_chiral_atoms():
     # test that we can identify chiral atoms ub a couple of tetrahedral and pyramidal
     # molecules.
 
-    mol = Chem.MolFromSmiles(r"FC(Cl)Br")
+    mol = Chem.AddHs(Chem.MolFromSmiles(r"FC(Cl)Br"))
     res = chiral_utils.find_chiral_atoms(mol)
     assert res == set([1])
 
-    mol = Chem.MolFromSmiles(r"FN(Cl)Br")
+    mol = Chem.AddHs(Chem.MolFromSmiles(r"FN(Cl)Br"))
     res = chiral_utils.find_chiral_atoms(mol)
     assert res == set([])
 
-    mol = Chem.MolFromSmiles(r"FS(Cl)Br")
+    mol = Chem.AddHs(Chem.MolFromSmiles(r"FS(Cl)Br"))
     res = chiral_utils.find_chiral_atoms(mol)
     assert res == set([1])
 
-    mol = Chem.MolFromSmiles(r"FP(Cl)Br")
+    mol = Chem.AddHs(Chem.MolFromSmiles(r"FP(Cl)Br"))
     res = chiral_utils.find_chiral_atoms(mol)
     assert res == set([1])
 

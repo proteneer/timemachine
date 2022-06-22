@@ -103,13 +103,12 @@ class VacuumSystem:
         )
 
         nbpl_U = functools.partial(
-            nonbonded.nonbonded_v3_on_specific_pairs,
+            nonbonded.nonbonded_v3_on_precomputed_pairs,
             pairs=np.array(self.nonbonded.get_idxs()),
             params=np.array(self.nonbonded.params),
             box=None,
             beta=self.nonbonded.get_beta(),
             cutoff=self.nonbonded.get_cutoff(),
-            rescale_mask=np.array(self.nonbonded.get_rescale_mask()),
         )
 
         if self.chiral_atom:
