@@ -31,8 +31,6 @@ def test_phenol():
     are present when either a single root anchor is provided, or when a root anchor and a neighbor anchor is provided.
     """
     mol = Chem.AddHs(Chem.MolFromSmiles("c1ccccc1O"))
-
-    # do not allow H to map to O
     ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
 
     # set [O,H] as the dummy group
@@ -110,9 +108,14 @@ def test_find_dummy_groups_and_anchors_multiple_angles():
     dgs_zero, jks_zero = single_topology_v3.find_dummy_groups_and_anchors(
         mol_a, mol_b, core_pairs[:, 0], core_pairs[:, 1]
     )
+
+    # this code should be invariant to different random seeds and different ordering of core pairs
     for idx in range(100):
         np.random.seed(idx)
-        dgs, jks = single_topology_v3.find_dummy_groups_and_anchors(mol_a, mol_b, core_pairs[:, 0], core_pairs[:, 1])
+        core_pairs_shuffle = np.array(core_pairs)
+        dgs, jks = single_topology_v3.find_dummy_groups_and_anchors(
+            mol_a, mol_b, core_pairs_shuffle[:, 0], core_pairs_shuffle[:, 1]
+        )
         assert dgs == dgs_zero
         assert jks == jks_zero
 
@@ -137,7 +140,10 @@ def testing_find_dummy_groups_and_multiple_anchors():
     )
     for idx in range(100):
         np.random.seed(idx)
-        dgs, jks = single_topology_v3.find_dummy_groups_and_anchors(mol_a, mol_b, core_pairs[:, 0], core_pairs[:, 1])
+        core_pairs_shuffle = np.array(core_pairs)
+        dgs, jks = single_topology_v3.find_dummy_groups_and_anchors(
+            mol_a, mol_b, core_pairs_shuffle[:, 0], core_pairs_shuffle[:, 1]
+        )
         assert dgs == dgs_zero
         assert jks == jks_zero
 
@@ -153,10 +159,11 @@ def testing_find_dummy_groups_and_multiple_anchors():
         assert jks == [(1, 2)]
 
 
-def test_hif2a_end_state_stability():
+def test_hif2a_end_state_stability(num_pairs_to_setup=25, num_pairs_to_simulate=5):
     """
     Pick some random pairs from the hif2a set and ensure that they're numerically stable at the
-    end-states under some a standard distance based atom_mapping protocol.
+    end-states under a distance based atom-mapping protocol. For a subset of them, we will also run
+    simulations.
     """
 
     with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
@@ -178,7 +185,7 @@ def test_hif2a_end_state_stability():
     batch_distance_check = jax.vmap(get_max_distance)
 
     # this has been tested for up to 50 random pairs
-    for pair_idx, (mol_a, mol_b) in enumerate(pairs[:100]):
+    for pair_idx, (mol_a, mol_b) in enumerate(pairs[:num_pairs_to_setup]):
 
         print("Checking", mol_a.GetProp("_Name"), "->", mol_b.GetProp("_Name"))
         mcs_threshold = 0.75  # distance threshold, in nanometers
@@ -201,7 +208,7 @@ def test_hif2a_end_state_stability():
             assert get_max_distance(x_min) < distance_cutoff
 
             # test running simulations on the first 5 pairs
-            if pair_idx < 5:
+            if pair_idx < num_pairs_to_simulate:
                 batch_U_fn = jax.vmap(U_fn)
                 frames = simulate_system(system.get_U_fn(), x0, num_samples=1000)
                 nrgs = batch_U_fn(frames)
