@@ -195,7 +195,7 @@ def test_hif2a_end_state_stability():
         for system in systems:
             U_fn = jax.jit(system.get_U_fn())
             assert np.isfinite(U_fn(x0))
-            x_min = minimize_scipy(x0, U_fn)
+            x_min = minimize_scipy(U_fn, x0)
             assert np.all(np.isfinite(x_min))
             distance_cutoff = 2.5  # in nanometers
             assert get_max_distance(x_min) < distance_cutoff

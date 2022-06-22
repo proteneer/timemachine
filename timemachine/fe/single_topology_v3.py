@@ -232,6 +232,7 @@ def setup_end_state(ff, mol_a, mol_b, core, a_to_c, b_to_c):
     mol_a_proper_params, mol_a_pt = mol_a_top.parameterize_proper_torsion(ff.pt_handle.params)
     mol_a_improper_params, mol_a_it = mol_a_top.parameterize_improper_torsion(ff.it_handle.params)
     mol_a_nbpl_params, mol_a_nbpl = mol_a_top.parameterize_nonbonded_pairlist(ff.q_handle.params, ff.lj_handle.params)
+    mol_a_chiral_atom, mol_a_chiral_bond = mol_a_top.setup_chiral_restraints()
 
     mol_a_bond_params = mol_a_bond_params.tolist()
     mol_a_angle_params = mol_a_angle_params.tolist()
@@ -244,6 +245,8 @@ def setup_end_state(ff, mol_a, mol_b, core, a_to_c, b_to_c):
     mol_a_proper_idxs = recursive_map(mol_a_pt.get_idxs(), a_to_c)
     mol_a_improper_idxs = recursive_map(mol_a_it.get_idxs(), a_to_c)
     mol_a_nbpl_idxs = recursive_map(mol_a_nbpl.get_idxs(), a_to_c)
+    mol_a_chiral_atom_idxs = recursive_map(mol_a_chiral_atom.get_idxs(), a_to_c)
+    mol_a_chiral_bond_idxs = recursive_map(mol_a_chiral_bond.get_idxs(), a_to_c)
 
     all_dummy_bond_idxs = recursive_map(all_dummy_bond_idxs, b_to_c)
     all_dummy_angle_idxs = recursive_map(all_dummy_angle_idxs, b_to_c)
@@ -274,7 +277,23 @@ def setup_end_state(ff, mol_a, mol_b, core, a_to_c, b_to_c):
     mol_a_nbpl.set_idxs(mol_a_nbpl_idxs)
     nonbonded_potential = mol_a_nbpl.bind(mol_a_nbpl_params)
 
-    return system.VacuumSystem(bond_potential, angle_potential, torsion_potential, nonbonded_potential)
+    chiral_atom_idxs = np.array(mol_a_chiral_atom_idxs, dtype=np.int32).reshape((-1, 4))
+    chiral_bond_idxs = np.array(mol_a_chiral_bond_idxs, dtype=np.int32).reshape((-1, 4))
+    chiral_bond_signs = np.array(mol_a_chiral_bond.get_signs())
+
+    chiral_atom_potential = potentials.ChiralAtomRestraint(chiral_atom_idxs).bind(mol_a_chiral_atom.params)
+    chiral_bond_potential = potentials.ChiralBondRestraint(chiral_bond_idxs, chiral_bond_signs).bind(
+        mol_a_chiral_bond.params
+    )
+
+    return system.VacuumSystem(
+        bond_potential,
+        angle_potential,
+        torsion_potential,
+        nonbonded_potential,
+        chiral_atom_potential,
+        chiral_bond_potential,
+    )
 
 
 def find_dummy_groups_and_anchors(mol_a, mol_b, core_a, core_b):
