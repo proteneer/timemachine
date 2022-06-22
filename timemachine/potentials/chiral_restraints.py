@@ -109,20 +109,27 @@ def U_chiral_bond(x, idxs, kc, s):
     return jnp.where(v > 0, kc * v ** 2, 0.0)
 
 
-# allow batching over multiple_idxs
+# allow batching over multiple idxs and force constants
 U_chiral_atom_batch = jax.vmap(U_chiral_atom, (None, 0, None), 0)
 U_chiral_bond_batch = jax.vmap(U_chiral_bond, (None, 0, None, 0), 0)
 
+# allow batching over multiple idxs and force constants
+U_chiral_atom_batch_all = jax.vmap(U_chiral_atom, (None, 0, 0), 0)
+U_chiral_bond_batch_all = jax.vmap(U_chiral_bond, (None, 0, 0, 0), 0)
 
-def chiral_atom_restraint(conf, params, box, lamb, idxs, kc):
+
+def chiral_atom_restraint(conf, params, box, lamb, idxs):
     """
     Flat-bottom chiral atom restraint
     """
-    return jnp.sum(U_chiral_atom_batch(conf, idxs, kc))
+    assert len(idxs) == len(params)
+    return jnp.sum(U_chiral_atom_batch_all(conf, idxs, params))
 
 
-def chiral_bond_restraint(conf, params, box, lamb, idxs, kc, signs):
+def chiral_bond_restraint(conf, params, box, lamb, idxs, signs):
     """
     Flat-bottom chiral bond restraint
     """
-    return jnp.sum(U_chiral_bond_batch(conf, idxs, kc, signs))
+    assert len(idxs) == len(params)
+    assert len(idxs) == len(signs)
+    return jnp.sum(U_chiral_bond_batch_all(conf, idxs, params, signs))

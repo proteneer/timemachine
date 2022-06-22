@@ -170,6 +170,15 @@ class BondedWrapper(CustomOpWrapper):
             self.args.append(offset)
 
 
+class ChiralAtomRestraint(BondedWrapper):
+    pass
+
+
+class ChiralBondRestraint(BondedWrapper):
+    def get_signs(self):
+        return self.args[1]
+
+
 class HarmonicBond(BondedWrapper):
     pass
 

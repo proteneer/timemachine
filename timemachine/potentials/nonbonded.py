@@ -308,9 +308,9 @@ def nonbonded_v3_on_specific_pairs(
     if rescale_mask is not None:
         assert rescale_mask.shape == (len(pairs), 2)
         rescale_vdW = rescale_mask[:, 1]
-        vdW = jnp.where(rescale_vdW != 0, vdW, 0)
+        vdW = jnp.where(rescale_vdW != 0, rescale_vdW * vdW, 0)
         rescale_electrostatics = rescale_mask[:, 0]
-        electrostatics = jnp.where(rescale_electrostatics != 0, electrostatics, 0)
+        electrostatics = jnp.where(rescale_electrostatics != 0, rescale_electrostatics * electrostatics, 0)
 
     return vdW, electrostatics
 
