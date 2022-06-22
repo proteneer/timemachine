@@ -30,10 +30,10 @@ $$$$""",
 
     # needs to be batched in order for jax to play nicely
     x0 = utils.get_romol_conf(mol)
-    normal_restr_idxs = chiral_utils.setup_chiral_atom_restraints(mol, x0, 0)
+    normal_restr_idxs = np.array(chiral_utils.setup_chiral_atom_restraints(mol, x0, 0))
 
     x0_inverted = x0[[0, 2, 1, 3, 4]]  # swap two atoms
-    inverted_restr_idxs = chiral_utils.setup_chiral_atom_restraints(mol, x0_inverted, 0)
+    inverted_restr_idxs = np.array(chiral_utils.setup_chiral_atom_restraints(mol, x0_inverted, 0))
 
     # check the sign of the resulting idxs
     k = 1000.0
@@ -59,10 +59,13 @@ def test_setup_chiral_bond_restraints():
     src_atom = 1
     dst_atom = 3
     normal_restr_idxs, signs = chiral_utils.setup_chiral_bond_restraints(mol_cis, x0_cis, src_atom, dst_atom)
-
+    normal_restr_idxs = np.array(normal_restr_idxs)
+    signs = np.array(signs)
     inverted_restr_idxs, inverted_signs = chiral_utils.setup_chiral_bond_restraints(
         mol_trans, x0_trans, src_atom, dst_atom
     )
+    inverted_restr_idxs = np.array(inverted_restr_idxs)
+    inverted_signs = np.array(inverted_signs)
     k = 1000.0
 
     assert np.all(np.asarray(U_chiral_bond_batch(x0_cis, normal_restr_idxs, k, signs)) == 0)
