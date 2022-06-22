@@ -367,7 +367,7 @@ def find_dummy_groups_and_anchors(mol_a, mol_b, core_a, core_b):
                 MultipleAnchorWarning,
             )
 
-        # (i,j,k) where is a dummy, j is anchor, and k is the angle anchor
+        # (i,j,k) where i is a dummy, j is anchor, and k is the angle anchor
         angle_jk = None
 
         # find an arbitrary but stable angle core atom that is one bond away from the root atom that is
