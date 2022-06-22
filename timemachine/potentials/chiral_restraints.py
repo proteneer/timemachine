@@ -105,8 +105,8 @@ def U_chiral_bond(x, idxs, kc, s):
     i, j, k, l = idxs
     # assert s == 1 or s == -1, can't be used during vmap/tracing
     x0, x1, x2, x3 = x[i], x[j], x[k], x[l]
-    v = s * torsion_volume(x0, x1, x2, x3)
-    return jnp.where(v > 0, kc * v ** 2, 0.0)
+    v = torsion_volume(x0, x1, x2, x3)
+    return jnp.where(v * s > 0, kc * v ** 2, 0.0)
 
 
 # allow batching over multiple idxs and force constants
