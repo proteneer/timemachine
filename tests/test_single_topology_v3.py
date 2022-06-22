@@ -112,7 +112,7 @@ def test_find_dummy_groups_and_anchors_multiple_angles():
     # this code should be invariant to different random seeds and different ordering of core pairs
     for idx in range(100):
         np.random.seed(idx)
-        core_pairs_shuffle = np.array(core_pairs)
+        core_pairs_shuffle = np.random.permutation(core_pairs)
         dgs, jks = single_topology_v3.find_dummy_groups_and_anchors(
             mol_a, mol_b, core_pairs_shuffle[:, 0], core_pairs_shuffle[:, 1]
         )
@@ -140,7 +140,7 @@ def testing_find_dummy_groups_and_multiple_anchors():
     )
     for idx in range(100):
         np.random.seed(idx)
-        core_pairs_shuffle = np.array(core_pairs)
+        core_pairs_shuffle = np.random.permutation(core_pairs)
         dgs, jks = single_topology_v3.find_dummy_groups_and_anchors(
             mol_a, mol_b, core_pairs_shuffle[:, 0], core_pairs_shuffle[:, 1]
         )
