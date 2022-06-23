@@ -177,6 +177,54 @@ def setup_dummy_interactions(
     )
 
 
+def canonicalize_improper_idxs(idxs):
+    """
+    Canonicalize an improper_idx while being symmetry aware.
+
+    Given idxs (i,j,k,l), where i is the center, and (j,k,l) are neighbors:
+
+    0) Canonicalize the (j,k,l) into (jj,kk,ll) by sorting
+    1) Generate clockwise rotations of (j,k,l)
+    2) Generate counter clockwise rotations of (j,k,l)
+    3) We now can sort 1) and 2) and assign a mapping
+
+    If the (j,k,l) is in the cw rotation ordered set, we're done. Otherwise it must
+    be in the ccw ordered set. We look up the corresponding idx in the cw set.
+
+    This does not do idxs[0] < idxs[-1] canonicalization.
+    """
+    i, j, k, l = idxs
+
+    # i is the center
+    # generate lexical order
+    key = (j, k, l)
+
+    jj, kk, ll = sorted(key)
+
+    # generate clockwise permutations
+    cw_jkl = (jj, kk, ll)
+    cw_klj = (kk, ll, jj)
+    cw_ljk = (ll, jj, kk)
+    cw_items = sorted([cw_jkl, cw_klj, cw_ljk])
+
+    if key in cw_items:
+        return (i, j, k, l)
+
+    # generate counter clockwise permutations
+    ccw_kjl = (kk, jj, ll)
+    ccw_jlk = (jj, ll, kk)
+    ccw_lkj = (ll, kk, jj)
+    ccw_items = sorted([ccw_kjl, ccw_jlk, ccw_lkj])
+
+    assert key in ccw_items
+
+    for idx, cw_item in enumerate(ccw_items):
+        if cw_item == key:
+            break
+
+    return (i, *cw_items[idx])
+
+
 def setup_end_state(ff, mol_a, mol_b, core, a_to_c, b_to_c):
     """
     Setup end-state for mol_a with dummy atoms of mol_b attached. The mapped indices will correspond
@@ -266,6 +314,17 @@ def setup_end_state(ff, mol_a, mol_b, core, a_to_c, b_to_c):
     mol_c_improper_idxs = mol_a_improper_idxs + all_dummy_improper_idxs
     mol_c_improper_params = mol_a_improper_params + all_dummy_improper_params
 
+    # canonicalize improper with cw/ccw check
+    mol_c_improper_idxs = tuple([canonicalize_improper_idxs(idxs) for idxs in mol_c_improper_idxs])
+
+    # check that the improper idxs are canonical
+    def assert_improper_idxs_are_canonical(all_idxs):
+        for _, j, k, l in all_idxs:
+            jj, kk, ll = sorted((j, k, l))
+            assert (jj, kk, ll) == (j, k, l) or (kk, ll, jj) == (j, k, l) or (ll, jj, kk) == (j, k, l)
+
+    assert_improper_idxs_are_canonical(mol_c_improper_idxs)
+
     # combine proper + improper
     mol_c_torsion_idxs = mol_c_proper_idxs + mol_c_improper_idxs
     mol_c_torsion_params = mol_c_proper_params + mol_c_improper_params
@@ -274,9 +333,11 @@ def setup_end_state(ff, mol_a, mol_b, core, a_to_c, b_to_c):
     mol_c_bond_idxs_canon = [canonicalize_bond(idxs) for idxs in mol_c_bond_idxs]
     bond_potential = potentials.HarmonicBond(mol_c_bond_idxs_canon).bind(mol_c_bond_params)
 
+    # canonicalize angles
     mol_c_angle_idxs_canon = [canonicalize_bond(idxs) for idxs in mol_c_angle_idxs]
     angle_potential = potentials.HarmonicAngle(mol_c_angle_idxs_canon).bind(mol_c_angle_params)
 
+    # canonicalize torsions with idxs[0] < idxs[-1] check
     mol_c_torsion_idxs_canon = [canonicalize_bond(idxs) for idxs in mol_c_torsion_idxs]
     torsion_potential = potentials.PeriodicTorsion(mol_c_torsion_idxs_canon).bind(mol_c_torsion_params)
 
