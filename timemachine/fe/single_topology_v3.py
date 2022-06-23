@@ -4,7 +4,7 @@ from collections.abc import Iterable
 import numpy as np
 
 from timemachine.fe import system, topology, utils
-from timemachine.fe.dummy import identify_dummy_groups, identify_root_anchors
+from timemachine.fe.dummy import canonicalize_bond, identify_dummy_groups, identify_root_anchors
 from timemachine.lib import potentials
 
 
@@ -180,7 +180,8 @@ def setup_dummy_interactions(
 def setup_end_state(ff, mol_a, mol_b, core, a_to_c, b_to_c):
     """
     Setup end-state for mol_a with dummy atoms of mol_b attached. The mapped indices will correspond
-    to the alchemical molecule with dummy atoms.
+    to the alchemical molecule with dummy atoms. Note that the bond, angle, torsion, nonbonded pairs,
+    chiral atom and chiral bond idxs are canonicalized.
 
     Parameters
     ----------
@@ -269,16 +270,32 @@ def setup_end_state(ff, mol_a, mol_b, core, a_to_c, b_to_c):
     mol_c_torsion_idxs = mol_c_proper_idxs + mol_c_improper_idxs
     mol_c_torsion_params = mol_c_proper_params + mol_c_improper_params
 
-    bond_potential = potentials.HarmonicBond(mol_c_bond_idxs).bind(mol_c_bond_params)
-    angle_potential = potentials.HarmonicAngle(mol_c_angle_idxs).bind(mol_c_angle_params)
-    torsion_potential = potentials.PeriodicTorsion(mol_c_torsion_idxs).bind(mol_c_torsion_params)
+    # canonicalize bonds
+    mol_c_bond_idxs_canon = [canonicalize_bond(idxs) for idxs in mol_c_bond_idxs]
+    bond_potential = potentials.HarmonicBond(mol_c_bond_idxs_canon).bind(mol_c_bond_params)
+
+    mol_c_angle_idxs_canon = [canonicalize_bond(idxs) for idxs in mol_c_angle_idxs]
+    angle_potential = potentials.HarmonicAngle(mol_c_angle_idxs_canon).bind(mol_c_angle_params)
+
+    mol_c_torsion_idxs_canon = [canonicalize_bond(idxs) for idxs in mol_c_torsion_idxs]
+    torsion_potential = potentials.PeriodicTorsion(mol_c_torsion_idxs_canon).bind(mol_c_torsion_params)
 
     # dummy atoms do not have any nonbonded interactions, so we simply turn them off
-    mol_a_nbpl.set_idxs(mol_a_nbpl_idxs)
+
+    mol_c_nbpl_idxs_canon = [canonicalize_bond(idxs) for idxs in mol_a_nbpl_idxs]
+    mol_a_nbpl.set_idxs(mol_c_nbpl_idxs_canon)
     nonbonded_potential = mol_a_nbpl.bind(mol_a_nbpl_params)
 
-    chiral_atom_idxs = np.array(mol_a_chiral_atom_idxs, dtype=np.int32).reshape((-1, 4))
-    chiral_bond_idxs = np.array(mol_a_chiral_bond_idxs, dtype=np.int32).reshape((-1, 4))
+    # chiral atoms need special code for canonicalization, since triple product is invariant
+    # under rotational symmetry (but not something like swap symmetry)
+    canon_chiral_atom_idxs = []
+    for i, j, k, l in mol_a_chiral_atom_idxs:
+        jj, kk, ll = min([(j, k, l), (l, j, k), (k, l, j)])
+        canon_chiral_atom_idxs.append((i, jj, kk, ll))
+
+    chiral_atom_idxs = np.array(canon_chiral_atom_idxs, dtype=np.int32).reshape((-1, 4))
+    mol_c_chiral_bond_idxs_canon = [canonicalize_bond(idxs) for idxs in mol_a_chiral_bond_idxs]
+    chiral_bond_idxs = np.array(mol_c_chiral_bond_idxs_canon, dtype=np.int32).reshape((-1, 4))
     chiral_bond_signs = np.array(mol_a_chiral_bond.get_signs())
 
     chiral_atom_potential = potentials.ChiralAtomRestraint(chiral_atom_idxs).bind(mol_a_chiral_atom.params)

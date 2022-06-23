@@ -159,6 +159,17 @@ def testing_find_dummy_groups_and_multiple_anchors():
         assert jks == [(1, 2)]
 
 
+def assert_bond_idxs_are_canonical(all_idxs):
+    for idxs in all_idxs:
+        assert idxs[0] < idxs[-1]
+
+
+def assert_chiral_atom_idxs_are_canonical(all_idxs):
+    for i, j, k, l in all_idxs:
+        assert (j, k, l) < (l, j, k)
+        assert (j, k, l) < (k, l, j)
+
+
 def test_hif2a_end_state_stability(num_pairs_to_setup=25, num_pairs_to_simulate=5):
     """
     Pick some random pairs from the hif2a set and ensure that they're numerically stable at the
@@ -200,6 +211,15 @@ def test_hif2a_end_state_stability(num_pairs_to_setup=25, num_pairs_to_simulate=
         ]
 
         for system in systems:
+
+            # assert that the idxs are canonicalized.
+            assert_bond_idxs_are_canonical(system.bond.get_idxs())
+            assert_bond_idxs_are_canonical(system.angle.get_idxs())
+            assert_bond_idxs_are_canonical(system.torsion.get_idxs())
+            assert_bond_idxs_are_canonical(system.nonbonded.get_idxs())
+            assert_bond_idxs_are_canonical(system.chiral_bond.get_idxs())
+            assert_chiral_atom_idxs_are_canonical(system.chiral_atom.get_idxs())
+
             U_fn = jax.jit(system.get_U_fn())
             assert np.isfinite(U_fn(x0))
             x_min = minimize_scipy(U_fn, x0)
