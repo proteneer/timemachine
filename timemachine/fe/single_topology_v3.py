@@ -290,7 +290,8 @@ def setup_end_state(ff, mol_a, mol_b, core, a_to_c, b_to_c):
     # under rotational symmetry (but not something like swap symmetry)
     canon_chiral_atom_idxs = []
     for i, j, k, l in mol_a_chiral_atom_idxs:
-        jj, kk, ll = min([(j, k, l), (l, j, k), (k, l, j)])
+        rotations = [(j, k, l), (l, j, k), (k, l, j)]
+        jj, kk, ll = min(rotations)
         canon_chiral_atom_idxs.append((i, jj, kk, ll))
 
     chiral_atom_idxs = np.array(canon_chiral_atom_idxs, dtype=np.int32).reshape((-1, 4))
