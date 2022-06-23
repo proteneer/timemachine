@@ -342,7 +342,6 @@ def setup_end_state(ff, mol_a, mol_b, core, a_to_c, b_to_c):
     torsion_potential = potentials.PeriodicTorsion(mol_c_torsion_idxs_canon).bind(mol_c_torsion_params)
 
     # dummy atoms do not have any nonbonded interactions, so we simply turn them off
-
     mol_c_nbpl_idxs_canon = [canonicalize_bond(idxs) for idxs in mol_a_nbpl_idxs]
     mol_a_nbpl.set_idxs(mol_c_nbpl_idxs_canon)
     nonbonded_potential = mol_a_nbpl.bind(mol_a_nbpl_params)
