@@ -1,5 +1,6 @@
 import warnings
 from collections.abc import Iterable
+from typing import Tuple
 
 import numpy as np
 
@@ -202,18 +203,20 @@ def canonicalize_improper_idxs(idxs) -> Tuple[int, int, int, int]:
     jj, kk, ll = sorted(key)
 
     # generate clockwise permutations
-    cw_jkl = (jj, kk, ll)
-    cw_klj = (kk, ll, jj)
-    cw_ljk = (ll, jj, kk)
+    # note: cw/ccw has nothing to do with the direction of rotation
+    # cw/ccw is related by a pair swap.
+    cw_jkl = (jj, kk, ll)  # starting idxs
+    cw_klj = (kk, ll, jj)  # rotate left
+    cw_ljk = (ll, jj, kk)  # rotate left
     cw_items = sorted([cw_jkl, cw_klj, cw_ljk])
 
     if key in cw_items:
         return (i, j, k, l)
 
     # generate counter clockwise permutations
-    ccw_kjl = (kk, jj, ll)
-    ccw_jlk = (jj, ll, kk)
-    ccw_lkj = (ll, kk, jj)
+    ccw_kjl = (kk, jj, ll)  # swap 1st and 2nd element
+    ccw_jlk = (jj, ll, kk)  # rotate left
+    ccw_lkj = (ll, kk, jj)  # rotate left
     ccw_items = sorted([ccw_kjl, ccw_jlk, ccw_lkj])
 
     assert key in ccw_items
