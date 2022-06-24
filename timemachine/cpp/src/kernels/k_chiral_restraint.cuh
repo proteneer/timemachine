@@ -51,6 +51,10 @@ void __global__ k_chiral_atom_restraint(
     pyramidal_vol_and_grad(xc, x1, x2, x3, vol, xc_grad, x1_grad, x2_grad, x3_grad);
     RealType k_restr = params[r_idx];
 
+    if (k_restr == 0) {
+        return;
+    }
+
     if (vol <= 0) {
         return;
     }
@@ -135,9 +139,15 @@ void __global__ k_chiral_bond_restraint(
     Vector<RealType> x3_grad;
 
     RealType vol;
-    torsion_vol_and_grad(x0, x1, x2, x3, vol, x0_grad, x1_grad, x2_grad, x3_grad);
     RealType k_restr = params[r_idx];
+
+    if (k_restr == 0) {
+        return;
+    }
+
     int sign = signs[r_idx];
+
+    torsion_vol_and_grad(x0, x1, x2, x3, vol, x0_grad, x1_grad, x2_grad, x3_grad);
 
     if (sign * vol <= 0) {
         return;
