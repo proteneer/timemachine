@@ -184,8 +184,8 @@ def canonicalize_improper_idxs(idxs):
     Given idxs (i,j,k,l), where i is the center, and (j,k,l) are neighbors:
 
     0) Canonicalize the (j,k,l) into (jj,kk,ll) by sorting
-    1) Generate clockwise rotations of (j,k,l)
-    2) Generate counter clockwise rotations of (j,k,l)
+    1) Generate clockwise rotations of (jj,kk,ll)
+    2) Generate counter clockwise rotations of (jj,kk,ll)
     3) We now can sort 1) and 2) and assign a mapping
 
     If the (j,k,l) is in the cw rotation ordered set, we're done. Otherwise it must
