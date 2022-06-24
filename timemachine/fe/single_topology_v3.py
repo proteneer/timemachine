@@ -177,7 +177,7 @@ def setup_dummy_interactions(
     )
 
 
-def canonicalize_improper_idxs(idxs):
+def canonicalize_improper_idxs(idxs) -> Tuple[int, int, int, int]:
     """
     Canonicalize an improper_idx while being symmetry aware.
 
