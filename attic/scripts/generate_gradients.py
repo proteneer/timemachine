@@ -232,48 +232,5 @@ def torsion_grads():
             print(out_str, ccode, ");")
 
 
-def pyramidal_volume_grads():
-
-    v0x = x1-x0
-    v0y = y1-y0
-    v0z = z1-z0
-
-    v1x = x2-x0
-    v1y = y2-y0
-    v1z = z2-z0
-
-    v2x = x3-x0
-    v2y = y3-y0
-    v2z = z3-z0
-    
-    n0 = norm(v0x,v0y,v0z)
-    n1 = norm(v1x,v1y,v1z)
-    n2 = norm(v2x,v2y,v2z)
-    
-    u0x = v0x/n0
-    u0y = v0y/n0
-    u0z = v0z/n0
-
-    u1x = v1x/n1
-    u1y = v1y/n1
-    u1z = v1z/n1
-
-    u2x = v2x/n2
-    u2y = v2y/n2
-    u2z = v2z/n2
-
-    cx, cy, cz = cross_product(u0x, u0y, u0z, u1x, u1y, u1z)
-    vol = dot_product(cx, cy, cz, u2x, u2y, u2z)
-
-    dvol_dx0 = sp.ccode(sp.simplify(sp.diff(vol, x0)))
-    dvol_dy0 = sp.ccode(sp.simplify(sp.diff(vol, y0)))
-    dvol_dz0 = sp.ccode(sp.simplify(sp.diff(vol, z0)))
-
-
-    print(dvol_dx0)
-    # print(dvol_dy0)
-    # print(dvol_dz0)
-
 # torsion_grads()
-# bond_grads()
-pyramidal_volume_grads()
+bond_grads()
