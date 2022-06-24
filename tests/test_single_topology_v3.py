@@ -17,6 +17,7 @@ from timemachine.fe.single_topology_v3 import (
     CoreBondChangeWarning,
     MultipleAnchorWarning,
     SingleTopologyV3,
+    canonicalize_improper_idxs,
     setup_dummy_interactions_from_ff,
 )
 from timemachine.fe.system import minimize_scipy, simulate_system
@@ -159,6 +160,17 @@ def testing_find_dummy_groups_and_multiple_anchors():
         assert jks == [(1, 2)]
 
 
+def assert_bond_idxs_are_canonical(all_idxs):
+    for idxs in all_idxs:
+        assert idxs[0] < idxs[-1]
+
+
+def assert_chiral_atom_idxs_are_canonical(all_idxs):
+    for _, j, k, l in all_idxs:
+        assert (j, k, l) < (l, j, k)
+        assert (j, k, l) < (k, l, j)
+
+
 def test_hif2a_end_state_stability(num_pairs_to_setup=25, num_pairs_to_simulate=5):
     """
     Pick some random pairs from the hif2a set and ensure that they're numerically stable at the
@@ -200,6 +212,15 @@ def test_hif2a_end_state_stability(num_pairs_to_setup=25, num_pairs_to_simulate=
         ]
 
         for system in systems:
+
+            # assert that the idxs are canonicalized.
+            assert_bond_idxs_are_canonical(system.bond.get_idxs())
+            assert_bond_idxs_are_canonical(system.angle.get_idxs())
+            assert_bond_idxs_are_canonical(system.torsion.get_idxs())
+            assert_bond_idxs_are_canonical(system.nonbonded.get_idxs())
+            assert_bond_idxs_are_canonical(system.chiral_bond.get_idxs())
+            assert_chiral_atom_idxs_are_canonical(system.chiral_atom.get_idxs())
+
             U_fn = jax.jit(system.get_U_fn())
             assert np.isfinite(U_fn(x0))
             x_min = minimize_scipy(U_fn, x0)
@@ -215,3 +236,20 @@ def test_hif2a_end_state_stability(num_pairs_to_setup=25, num_pairs_to_simulate=
                 assert np.all(np.isfinite(nrgs))
                 assert np.all(np.isfinite(frames))
                 assert np.all(batch_distance_check(frames) < distance_cutoff)
+
+
+def test_canonicalize_improper_idxs():
+
+    # these are in the cw rotation set
+    improper_idxs = [(5, 0, 1, 3), (5, 1, 3, 0), (5, 3, 0, 1)]
+
+    for idxs in improper_idxs:
+        # we should do nothing here.
+        assert idxs == canonicalize_improper_idxs(idxs)
+
+    # these are in the ccw rotation set
+    #                          1          2          0
+    # bad_improper_idxs = [(5,1,0,3), (5,3,1,0), (5,0,3,1)]
+    assert canonicalize_improper_idxs((5, 1, 0, 3)) == (5, 1, 3, 0)
+    assert canonicalize_improper_idxs((5, 3, 1, 0)) == (5, 3, 0, 1)
+    assert canonicalize_improper_idxs((5, 0, 3, 1)) == (5, 0, 1, 3)
