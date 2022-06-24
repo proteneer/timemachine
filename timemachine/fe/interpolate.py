@@ -18,9 +18,9 @@ def _add_dst_to_src_bond_or_angle(src_idxs, src_params, dst_idxs, dst_params):
     src_params: [[a,b], [c,d], [0,h]
 
     """
-    # used for:
-    # bonds, angles, and nonbonded terms. do not use this for torsions since the periods
-    # are unstable. note that *missing* terms are the result of core-hopping, or chiral
+    # used only for bond and angle terms
+    #
+    # note that *missing* terms are the result of core-hopping, or chiral
     # inversions on core atoms. dummy atom interactions (bonds/angles) are fully maintained
     # at the end-state.
     assert len(set((src_idxs))) == len(src_idxs)
