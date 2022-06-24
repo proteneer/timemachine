@@ -151,6 +151,10 @@ def test_align_chiral_atoms():
 
 
 def test_align_chiral_bonds():
+    """
+    Similar to the chiral_atoms test, except that we check to see if deduplication
+    is using the sign information correctly.
+    """
 
     a, b, c, d, e, f, g = np.random.rand(7)
 
