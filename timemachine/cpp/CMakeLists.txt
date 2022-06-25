@@ -72,6 +72,8 @@ pybind11_add_module(${LIBRARY_NAME} SHARED NO_EXTRAS
   src/harmonic_bond.cu
   src/harmonic_angle.cu
   src/periodic_torsion.cu
+  src/chiral_atom_restraint.cu
+  src/chiral_bond_restraint.cu
   src/integrator.cu
   src/context.cu
   src/barostat.cu
