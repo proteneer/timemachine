@@ -335,15 +335,15 @@ def periodic_torsion(conf, params, box, lamb, torsion_idxs, lamb_mult=None, lamb
 
 def flat_bottom_bond(conf, params, box, bond_idxs):
     """
-    U(r; k, r_min, r_max) = 
+    U(r; k, r_min, r_max) =
         (k/4) * (r - r_max)**4 if r > r_max
         (k/4) * (r - r_min)**4 if r < r_min
     """
     # compute distances
     i, j = bond_idxs.T
-    r = jnp.sqrt(jnp.sum(delta_r(conf[i], conf[j], box)**2, 1))
+    r = jnp.sqrt(jnp.sum(delta_r(conf[i], conf[j], box) ** 2, 1))
 
     # compute energies
     k, r_min, r_max = params.T
-    bond_energies = (k / 4) * ((r > r_max) * ((r - r_max)**4) + (r < r_min) * ((r - r_min)**4))
+    bond_energies = (k / 4) * ((r > r_max) * ((r - r_max) ** 4) + (r < r_min) * ((r - r_min) ** 4))
     return jnp.sum(bond_energies)
