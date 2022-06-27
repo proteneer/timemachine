@@ -70,6 +70,7 @@ pybind11_add_module(${LIBRARY_NAME} SHARED NO_EXTRAS
   src/nonbonded_interaction_group.cu
   src/neighborlist.cu
   src/harmonic_bond.cu
+  src/flat_bottom_bond.cu
   src/harmonic_angle.cu
   src/periodic_torsion.cu
   src/integrator.cu
