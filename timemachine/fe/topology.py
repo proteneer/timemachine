@@ -4,8 +4,12 @@ import jax.numpy as jnp
 import numpy as np
 from numpy.typing import NDArray
 
+from timemachine.fe import chiral_utils
+from timemachine.fe.system import VacuumSystem
+from timemachine.fe.utils import get_romol_conf
 from timemachine.ff.handlers import nonbonded
 from timemachine.lib import potentials
+from timemachine.potentials.nonbonded import combining_rule_epsilon, combining_rule_sigma
 
 _SCALE_12 = 1.0
 _SCALE_13 = 1.0
@@ -245,6 +249,60 @@ class BaseTopology:
 
         return params, nb
 
+    def parameterize_nonbonded_pairlist(self, ff_q_params, ff_lj_params):
+        """
+        Generate intramolecular nonbonded pairlist, and is mostly identical to the above
+        except implemented as a pairlist.
+        """
+        # use same scale factors for electrostatics and vdWs
+        exclusion_idxs, scale_factors = nonbonded.generate_exclusion_idxs(
+            self.mol, scale12=_SCALE_12, scale13=_SCALE_13, scale14=_SCALE_14
+        )
+
+        # note: use same scale factor for electrostatics and vdw
+        # typically in protein ffs, gaff, the 1-4 ixns use different scale factors between vdw and electrostatics
+        exclusions_kv = dict()
+        for (i, j), sf in zip(exclusion_idxs, scale_factors):
+            assert i < j
+            exclusions_kv[(i, j)] = sf
+
+        # loop over all pairs
+        inclusion_idxs, rescale_mask = [], []
+        for i in range(self.mol.GetNumAtoms()):
+            for j in range(i + 1, self.mol.GetNumAtoms()):
+                scale_factor = exclusions_kv.get((i, j), 0.0)
+                rescale_factor = 1 - scale_factor
+                # keep this ixn
+                if rescale_factor > 0:
+                    rescale_mask.append([rescale_factor, rescale_factor])
+                    inclusion_idxs.append([i, j])
+
+        inclusion_idxs = np.array(inclusion_idxs).reshape(-1, 2).astype(np.int32)
+
+        q_params = self.ff.q_handle.partial_parameterize(ff_q_params, self.mol)
+        lj_params = self.ff.lj_handle.partial_parameterize(ff_lj_params, self.mol)
+
+        sig_params = lj_params[:, 0]
+        eps_params = lj_params[:, 1]
+
+        l_idxs = inclusion_idxs[:, 0]
+        r_idxs = inclusion_idxs[:, 1]
+
+        q_ij = q_params[l_idxs] * q_params[r_idxs]
+        sig_ij = combining_rule_sigma(sig_params[l_idxs], sig_params[r_idxs])
+        eps_ij = combining_rule_epsilon(eps_params[l_idxs], eps_params[r_idxs])
+
+        params = []
+        for q, s, e, (sf_q, sf_lj) in zip(q_ij, sig_ij, eps_ij, rescale_mask):
+            params.append((q * sf_q, s, e * sf_lj))
+
+        params = np.array(params)
+
+        beta = _BETA
+        cutoff = _CUTOFF  # solve for this analytically later
+
+        return params, potentials.NonbondedPairListPrecomputed(inclusion_idxs, beta, cutoff)
+
     def parameterize_harmonic_bond(self, ff_params):
         params, idxs = self.ff.hb_handle.partial_parameterize(ff_params, self.mol)
         return params, potentials.HarmonicBond(idxs)
@@ -292,6 +350,90 @@ class BaseTopology:
         combined_potential = potentials.PeriodicTorsion(combined_idxs, combined_lambda_mult, combined_lambda_offset)
         return combined_params, combined_potential
 
+    # def setup_chiral_restraints(self, restraint_k=1000.0):
+    def setup_chiral_restraints(self, restraint_k=1000.0):
+        """
+        Create chiral atom and bond potentials.
+
+        Parameters
+        ----------
+        restraint_k: float
+            Force constant of the restraints
+
+        Returns
+        -------
+        2-tuple
+            Returns a ChiralAtomRestraint and a ChiralBondRestraint
+
+        """
+        chiral_atoms = chiral_utils.find_chiral_atoms(self.mol)
+        chiral_bonds = chiral_utils.find_chiral_bonds(self.mol)
+
+        chiral_atom_restr_idxs = []
+        chiral_atom_params = []
+        for a_idx in chiral_atoms:
+            idxs = chiral_utils.setup_chiral_atom_restraints(self.mol, get_romol_conf(self.mol), a_idx)
+            for ii in idxs:
+                assert ii not in chiral_atom_restr_idxs
+            chiral_atom_restr_idxs.extend(idxs)
+            chiral_atom_params.extend(restraint_k for _ in idxs)
+
+        chiral_atom_params = np.array(chiral_atom_params)
+        chiral_atom_restr_idxs = np.array(chiral_atom_restr_idxs)
+        chiral_atom_potential = potentials.ChiralAtomRestraint(chiral_atom_restr_idxs).bind(chiral_atom_params)
+
+        chiral_bond_restr_idxs = []
+        chiral_bond_restr_signs = []
+        chiral_bond_params = []
+        for src_idx, dst_idx in chiral_bonds:
+            idxs, signs = chiral_utils.setup_chiral_bond_restraints(
+                self.mol, get_romol_conf(self.mol), src_idx, dst_idx
+            )
+            for ii in idxs:
+                assert ii not in chiral_bond_restr_idxs
+            chiral_bond_restr_idxs.extend(idxs)
+            chiral_bond_restr_signs.extend(signs)
+            chiral_bond_params.extend(restraint_k for _ in idxs)
+
+        chiral_bond_restr_idxs = np.array(chiral_bond_restr_idxs)
+        chiral_bond_restr_signs = np.array(chiral_bond_restr_signs)
+        chiral_bond_params = np.array(chiral_bond_params)
+        chiral_bond_potential = potentials.ChiralBondRestraint(chiral_bond_restr_idxs, chiral_bond_restr_signs).bind(
+            chiral_bond_params
+        )
+
+        return chiral_atom_potential, chiral_bond_potential
+
+    def setup_chiral_end_state(self):
+        """
+        Setup an end-state with chiral restraints attached.
+        """
+        system = self.setup_end_state()
+        chiral_atom_potential, chiral_bond_potential = self.setup_chiral_restraints()
+        system.chiral_atom = chiral_atom_potential
+        system.chiral_bond = chiral_bond_potential
+        return system
+
+    def setup_end_state(self):
+        mol_bond_params, mol_hb = self.parameterize_harmonic_bond(self.ff.hb_handle.params)
+        mol_angle_params, mol_ha = self.parameterize_harmonic_angle(self.ff.ha_handle.params)
+        mol_proper_params, mol_pt = self.parameterize_proper_torsion(self.ff.pt_handle.params)
+        mol_improper_params, mol_it = self.parameterize_improper_torsion(self.ff.it_handle.params)
+        mol_nbpl_params, mol_nbpl = self.parameterize_nonbonded_pairlist(
+            self.ff.q_handle.params, self.ff.lj_handle.params
+        )
+        bond_potential = mol_hb.bind(mol_bond_params)
+        angle_potential = mol_ha.bind(mol_angle_params)
+
+        torsion_params = np.concatenate([mol_proper_params, mol_improper_params])
+        torsion_idxs = np.concatenate([mol_pt.get_idxs(), mol_it.get_idxs()])
+        torsion_potential = potentials.PeriodicTorsion(torsion_idxs).bind(torsion_params)
+        nonbonded_potential = mol_nbpl.bind(mol_nbpl_params)
+
+        system = VacuumSystem(bond_potential, angle_potential, torsion_potential, nonbonded_potential, None, None)
+
+        return system
+
 
 class BaseTopologyConversion(BaseTopology):
     """
@@ -317,6 +459,74 @@ class BaseTopologyConversion(BaseTopology):
         interpolated_potential.set_lambda_offset_idxs(lambda_offset_idxs)
 
         return combined_qlj_params, interpolated_potential
+
+
+class RelativeFreeEnergyForcefield(BaseTopology):
+    """
+    Used to run the same molecule under different forcefields.
+    Currently only changing the nonbonded parameters is supported.
+
+    The parameterize_* methods should be passed a list of parameters
+    corresponding to forcefield0 and forcefield1.
+    """
+
+    def __init__(self, mol, forcefield0, forcefield1):
+        """
+        Utility for working with a single ligand.
+
+        Parameter
+        ---------
+        mol: Chem.Mol
+            Ligand to be parameterized
+
+        forcefield0: ff.Forcefield
+            A convenience wrapper for forcefield lists.
+
+        forcefield1: ff.Forcefield
+            A convenience wrapper for forcefield lists.
+
+        """
+        self.mol = mol
+        self.ff = forcefield0
+        self.ff1 = forcefield1
+        self.bt1 = BaseTopology(mol, forcefield1)
+
+    def parameterize_nonbonded(self, ff_q_params, ff_lj_params):
+        assert self.ff.lj_handle.smirks == self.ff1.lj_handle.smirks, "changing lj smirks is not supported"
+        assert self.ff.q_handle.smirks == self.ff1.q_handle.smirks, "changing charge smirks is not supported"
+        src_qlj_params, nb_potential = super().parameterize_nonbonded(ff_q_params[0], ff_lj_params[0])
+        dst_qlj_params, _ = self.bt1.parameterize_nonbonded(ff_q_params[1], ff_lj_params[1])
+
+        combined_qlj_params = jnp.concatenate([src_qlj_params, dst_qlj_params])
+        lambda_plane_idxs = np.zeros(self.mol.GetNumAtoms(), dtype=np.int32)
+        lambda_offset_idxs = np.zeros(self.mol.GetNumAtoms(), dtype=np.int32)
+
+        interpolated_potential = nb_potential.interpolate()
+        interpolated_potential.set_lambda_plane_idxs(lambda_plane_idxs)
+        interpolated_potential.set_lambda_offset_idxs(lambda_offset_idxs)
+
+        return combined_qlj_params, interpolated_potential
+
+    def parameterize_harmonic_bond(self, ff_params):
+        assert np.allclose(ff_params[0], ff_params[1]), "changing harmonic bond parameters is not supported"
+        assert self.ff.hb_handle.smirks == self.ff1.hb_handle.smirks, "changing harmonic bond smirks is not supported"
+        return super().parameterize_harmonic_bond(ff_params[0])
+
+    def parameterize_harmonic_angle(self, ff_params):
+        assert np.allclose(ff_params[0], ff_params[1]), "changing harmonic angle parameters is not supported"
+        assert self.ff.ha_handle.smirks == self.ff1.ha_handle.smirks, "changing harmonic angle smirks is not supported"
+        return super().parameterize_harmonic_angle(ff_params[0])
+
+    def parameterize_periodic_torsion(self, proper_params, improper_params):
+        assert np.allclose(proper_params[0], proper_params[1]), "changing proper torsion parameters is not supported"
+        assert self.ff.pt_handle.smirks == self.ff1.pt_handle.smirks, "changing proper torsion smirks is not supported"
+        assert np.allclose(
+            improper_params[0], improper_params[1]
+        ), "changing improper torsion parameters is not supported"
+        assert (
+            self.ff.it_handle.smirks == self.ff1.it_handle.smirks
+        ), "changing improper torsion smirks is not supported"
+        return super().parameterize_periodic_torsion(proper_params[0], improper_params[0])
 
 
 class BaseTopologyDecoupling(BaseTopology):

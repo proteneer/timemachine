@@ -6,6 +6,7 @@
 // using this kernel.
 
 #include "../fixed_point.hpp"
+#include "kernel_utils.cuh"
 #include "nonbonded_common.cuh"
 
 template <bool Negated>

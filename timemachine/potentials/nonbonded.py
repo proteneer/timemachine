@@ -264,7 +264,9 @@ def nonbonded_v3(
     return jnp.sum(eij_total / 2)
 
 
-def nonbonded_v3_on_specific_pairs(conf, params, box, pairs, beta: float, cutoff: Optional[float] = None):
+def nonbonded_v3_on_specific_pairs(
+    conf, params, box, pairs, beta: float, cutoff: Optional[float] = None, rescale_mask=None
+):
     """See nonbonded_v3 docstring for more details
 
     Notes
@@ -273,6 +275,9 @@ def nonbonded_v3_on_specific_pairs(conf, params, box, pairs, beta: float, cutoff
         some pairs of atoms that could be within cutoff, or omitting intramolecular pairs, ...), then incorrect results
         can be returned.
     """
+
+    if len(pairs) == 0:
+        return np.zeros(1), np.zeros(1)
 
     inds_l, inds_r = pairs.T
 
@@ -299,6 +304,50 @@ def nonbonded_v3_on_specific_pairs(conf, params, box, pairs, beta: float, cutoff
     # Electrostatics by direct-space part of PME
     qij = apply_cutoff(charges[inds_l] * charges[inds_r])
     electrostatics = direct_space_pme(dij, qij, beta)
+
+    if rescale_mask is not None:
+        assert rescale_mask.shape == (len(pairs), 2)
+        rescale_vdW = rescale_mask[:, 1]
+        vdW = jnp.where(rescale_vdW != 0, vdW * rescale_vdW, 0)
+        rescale_electrostatics = rescale_mask[:, 0]
+        electrostatics = jnp.where(rescale_electrostatics != 0, electrostatics * rescale_electrostatics, 0)
+
+    return vdW, electrostatics
+
+
+def nonbonded_v3_on_precomputed_pairs(conf, params, box, pairs, beta: float, cutoff: Optional[float] = None):
+    """
+    Similar to pairlist, except that we pre-compute parameters with:
+
+    1) Broadcast parameters using pairs
+    2) Apply combining rules to charges, epsilsons, and broadcast
+    3) Apply rescale_mask to combined q_ij and eps_ij
+
+    conf: N,3
+    params: P,3 (q_ij, s_ij, e_ij)
+    pairs: P,2 (i,j)
+    """
+
+    if len(pairs) == 0:
+        return np.zeros(1), np.zeros(1)
+
+    inds_l, inds_r = pairs.T
+
+    # distances and cutoff
+    dij = distance_on_pairs(conf[inds_l], conf[inds_r], box)
+    if cutoff is None:
+        cutoff = np.inf
+    keep_mask = dij <= cutoff
+
+    def apply_cutoff(x):
+        return jnp.where(keep_mask, x, 0)
+
+    q_ij = apply_cutoff(params[:, 0])
+    sig_ij = apply_cutoff(params[:, 1])
+    eps_ij = apply_cutoff(params[:, 2])
+
+    vdW = jnp.where(eps_ij != 0, lennard_jones(dij, sig_ij, eps_ij), 0)
+    electrostatics = jnp.where(q_ij != 0, direct_space_pme(dij, q_ij, beta), 0)
 
     return vdW, electrostatics
 

@@ -1,6 +1,29 @@
 #pragma once
 
 #include "k_fixed_point.cuh"
+#include <algorithm>
+#include <numeric>
+#include <set>
+#include <vector>
+
+typedef void (*k_nonbonded_fn)(
+    const int N,
+    const int NR,
+    const double *__restrict__ coords,
+    const double *__restrict__ params, // [N]
+    const double *__restrict__ box,
+    const double *__restrict__ dl_dp,
+    const double *__restrict__ coords_w, // 4D coords
+    const double *__restrict__ dw_dl,    // 4D derivatives
+    const double beta,
+    const double cutoff,
+    const unsigned int *__restrict__ row_idxs,
+    const int *__restrict__ ixn_tiles,
+    const unsigned int *__restrict__ ixn_atoms,
+    unsigned long long *__restrict__ du_dx,
+    unsigned long long *__restrict__ du_dp,
+    unsigned long long *__restrict__ du_dl_buffer,
+    unsigned long long *__restrict__ u_buffer);
 
 #define PI 3.141592653589793115997963468544185161
 #define TWO_OVER_SQRT_PI 1.128379167095512595889238330988549829708
@@ -22,6 +45,30 @@ float __device__ __forceinline__ real_es_factor(float real_beta, float dij, floa
     erfc_beta_dij = (0.254829592f + (-0.284496736f + (1.421413741f + (-1.453152027f + 1.061405429f * t) * t) * t) * t) *
                     t * exp_beta_dij_2;
     return -inv_d2ij * (static_cast<float>(TWO_OVER_SQRT_PI) * beta_dij * exp_beta_dij_2 + erfc_beta_dij);
+}
+
+void __global__ k_arange(int N, unsigned int *arr);
+
+template <typename T> std::vector<T> set_to_vector(const std::set<T> &s) {
+    std::vector<T> v(s.begin(), s.end());
+    return v;
+}
+
+// Provided a number of indices and a subset of indices, construct
+// the indices from the complete set of indices
+template <typename T> std::vector<T> get_indices_difference(const size_t N, const std::set<T> initial_idxs) {
+    std::vector<T> all_idxs(N);
+    std::iota(all_idxs.begin(), all_idxs.end(), 0);
+    std::set<T> difference;
+    std::set_difference(
+        all_idxs.begin(),
+        all_idxs.end(),
+        initial_idxs.begin(),
+        initial_idxs.end(),
+        std::inserter(difference, difference.end()));
+
+    std::vector<T> dif_vect(set_to_vector(difference));
+    return dif_vect;
 }
 
 // Compute the terms associated with electrostatics.
@@ -94,13 +141,3 @@ void __device__ __forceinline__ compute_lj(
 
 void __global__
 k_add_ull_to_ull(const int N, const unsigned long long *__restrict__ src, unsigned long long *__restrict__ dest);
-
-// These are two lines of code are to deal with the formation of a non-commutative fma.
-// For more information, see: https://github.com/proteneer/timemachine/issues/386
-float __device__ __forceinline__ fix_nvidia_fmad(float a, float b, float c, float d) {
-    return __fmul_rn(a, b) + __fmul_rn(c, d);
-}
-
-double __device__ __forceinline__ fix_nvidia_fmad(double a, double b, double c, double d) {
-    return __dmul_rn(a, b) + __dmul_rn(c, d);
-}

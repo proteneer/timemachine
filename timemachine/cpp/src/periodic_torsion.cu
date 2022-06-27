@@ -83,6 +83,11 @@ void PeriodicTorsion<RealType>::execute_device(
     const int D = 3;
 
     if (blocks > 0) {
+        if (P != 3 * T_) {
+            throw std::runtime_error(
+                "PeriodicTorsion::execute_device(): expected P == 3*T_, got P=" + std::to_string(P) +
+                ", 3*T_=" + std::to_string(3 * T_));
+        }
         k_periodic_torsion<RealType, D><<<blocks, tpb, 0, stream>>>(
             T_, d_x, d_p, lambda, d_lambda_mult_, d_lambda_offset_, d_torsion_idxs_, d_du_dx, d_du_dp, d_du_dl, d_u);
         gpuErrchk(cudaPeekAtLastError());

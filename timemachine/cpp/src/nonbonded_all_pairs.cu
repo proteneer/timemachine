@@ -1,24 +1,14 @@
 #include "vendored/jitify.hpp"
-#include <algorithm>
-#include <cassert>
-#include <chrono>
-#include <complex>
-#include <cstdlib>
 #include <cub/cub.cuh>
-#include <iostream>
-#include <numeric>
-#include <optional>
-#include <vector>
 
 #include "fixed_point.hpp"
 #include "gpu_utils.cuh"
 #include "nonbonded_all_pairs.hpp"
+#include "nonbonded_common.cuh"
 #include "vendored/hilbert.h"
 
 #include "k_nonbonded.cuh"
 
-#include <fstream>
-#include <streambuf>
 #include <string>
 
 namespace timemachine {
@@ -320,7 +310,7 @@ void NonbondedAllPairs<RealType, Interpolated>::execute_device(
         gpuErrchk(cudaMemcpyAsync(&h_box[0], d_box, 3 * 3 * sizeof(*d_box), cudaMemcpyDeviceToHost, stream));
 
         // this stream needs to be synchronized so we can be sure that p_ixn_count_ is properly set.
-        cudaStreamSynchronize(stream);
+        gpuErrchk(cudaStreamSynchronize(stream));
 
         // Verify that the cutoff and box size are valid together. If cutoff is greater than half the box
         // then a particle can interact with multiple periodic copies.
@@ -390,7 +380,7 @@ void NonbondedAllPairs<RealType, Interpolated>::execute_device(
 
     kernel_ptrs_[kernel_idx]<<<p_ixn_count_[0], tpb, 0, stream>>>(
         K_,
-        0,
+        nblist_.get_num_row_idxs(),
         d_gathered_x_,
         d_gathered_p_,
         d_box,
@@ -399,6 +389,7 @@ void NonbondedAllPairs<RealType, Interpolated>::execute_device(
         d_gathered_dw_dl_,
         beta_,
         cutoff_,
+        nblist_.get_row_idxs(),
         nblist_.get_ixn_tiles(),
         nblist_.get_ixn_atoms(),
         d_gathered_du_dx_,
@@ -420,7 +411,7 @@ void NonbondedAllPairs<RealType, Interpolated>::execute_device(
     // this needs to be an accumulated permute
     if (d_du_dp) {
         // scattered assignment updates K_ <= N_ elements; the rest should be 0
-        gpuErrchk(cudaMemset(d_du_dp_buffer_, 0, N_ * 3 * sizeof(*d_du_dp_buffer_)));
+        gpuErrchk(cudaMemsetAsync(d_du_dp_buffer_, 0, N_ * 3 * sizeof(*d_du_dp_buffer_), stream));
         k_scatter_assign<<<dim3(ceil_divide(K_, tpb), 3, 1), tpb, 0, stream>>>(
             K_, d_sorted_atom_idxs_, d_gathered_du_dp_, d_du_dp_buffer_);
         gpuErrchk(cudaPeekAtLastError());

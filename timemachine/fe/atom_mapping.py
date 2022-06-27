@@ -1,6 +1,5 @@
 from typing import Optional
 
-import matplotlib.pyplot as plt
 import numpy as np
 from rdkit import Chem
 from rdkit.Chem import rdFMCS
@@ -169,8 +168,8 @@ def get_core_by_mcs(mol_a, mol_b, query, threshold=0.5):
     conf_b = mol_b.GetConformer(0).GetPositions()
 
     # note that >1 match possible here -- must pick minimum-cost match
-    matches_a = mol_a.GetSubstructMatches(query)
-    matches_b = mol_b.GetSubstructMatches(query)
+    matches_a = mol_a.GetSubstructMatches(query, uniquify=False)
+    matches_b = mol_b.GetSubstructMatches(query, uniquify=False)
 
     # cost[i, j] = sum_i distance(conf)
     cost = np.zeros((len(matches_a), len(matches_b)))
@@ -261,14 +260,3 @@ def get_star_map(mols, threshold: float = 0.5):
     others.pop(hub_index)
 
     return hub, others
-
-
-def plot_transformation_sizes(transformation_sizes):
-    plt.imshow(transformation_sizes)
-    plt.xlabel("molecule index")
-    plt.ylabel("molecule index")
-    plt.title('"size of transformation"\n$(n_A - n_{MCS}) + (n_B - n_{MCS})$')
-
-    plt.tight_layout()
-
-    plt.colorbar()

@@ -170,6 +170,15 @@ class BondedWrapper(CustomOpWrapper):
             self.args.append(offset)
 
 
+class ChiralAtomRestraint(BondedWrapper):
+    pass
+
+
+class ChiralBondRestraint(BondedWrapper):
+    def get_signs(self):
+        return self.args[1]
+
+
 class HarmonicBond(BondedWrapper):
     pass
 
@@ -414,7 +423,40 @@ class NonbondedInteractionGroupInterpolated(NonbondedInteractionGroup):
 
 
 class NonbondedPairList(NonbondedCustomOpWrapper):
-    pass
+    def get_idxs(self):
+        return self.args[0]
+
+    def get_rescale_mask(self):
+        return self.args[1]
+
+    def get_beta(self):
+        return self.args[2]
+
+    def get_cutoff(self):
+        return self.args[3]
+
+
+class NonbondedPairListPrecomputed(NonbondedCustomOpWrapper):
+    """
+    This implements a pairlist with precomputed parameters. It differs from
+    the regular NonbondedPairlist in that it expects params of the form s0*q_ij, s_ij, and s1*e_ij
+    where s are the scaling factor and combining rules have already been applied.
+
+    Note that you should not use this class to implement exclusions (that are later cancelled out by AllPairs)
+    since the floating point operations are different in python vs C++.
+    """
+
+    def get_idxs(self):
+        return self.args[0]
+
+    def set_idxs(self, idxs):
+        self.args[0] = idxs
+
+    def get_beta(self):
+        return self.args[1]
+
+    def get_cutoff(self):
+        return self.args[2]
 
 
 class NonbondedPairListNegated(NonbondedCustomOpWrapper):

@@ -2,11 +2,11 @@
 
 void __global__ k_coords_to_kv(
     const int N,
-    const double *coords,
-    const double *box,
-    const unsigned int *bin_to_idx,
-    unsigned int *keys,
-    unsigned int *vals) {
+    const double *__restrict__ coords,
+    const double *__restrict__ box,
+    const unsigned int *__restrict__ bin_to_idx,
+    unsigned int *__restrict__ keys,
+    unsigned int *__restrict__ vals) {
 
     const int atom_idx = blockIdx.x * blockDim.x + threadIdx.x;
 
@@ -42,12 +42,12 @@ void __global__ k_coords_to_kv(
 // TODO: DRY with k_coords_to_kv
 void __global__ k_coords_to_kv_gather(
     const int N,
-    const unsigned int *atom_idxs,
-    const double *coords,
-    const double *box,
-    const unsigned int *bin_to_idx,
-    unsigned int *keys,
-    unsigned int *vals) {
+    const unsigned int *__restrict__ atom_idxs,
+    const double *__restrict__ coords,
+    const double *__restrict__ box,
+    const unsigned int *__restrict__ bin_to_idx,
+    unsigned int *__restrict__ keys,
+    unsigned int *__restrict__ vals) {
 
     const int idx = blockIdx.x * blockDim.x + threadIdx.x;
 
@@ -80,12 +80,4 @@ void __global__ k_coords_to_kv_gather(
     // uncomment below if you want to preserve the atom ordering
     // keys[idx] = atom_idx;
     vals[idx] = atom_idx;
-}
-
-void __global__ k_arange(int N, unsigned int *arr) {
-    const int atom_idx = blockIdx.x * blockDim.x + threadIdx.x;
-    if (atom_idx >= N) {
-        return;
-    }
-    arr[atom_idx] = atom_idx;
 }

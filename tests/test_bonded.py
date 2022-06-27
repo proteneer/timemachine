@@ -8,7 +8,7 @@ import pytest
 from common import GradientTest
 
 from timemachine.lib import potentials
-from timemachine.potentials import bonded, rmsd
+from timemachine.potentials import bonded, chiral_restraints, rmsd
 
 pytestmark = [pytest.mark.memcheck]
 
@@ -406,3 +406,77 @@ class TestBonded(GradientTest):
         self.test_periodic_torsion(n_torsions=0)
         self.test_harmonic_angle(n_angles=0)
         self.test_harmonic_bond(n_bonds=0)
+
+    def test_chiral_atom_restraint(self, n_particles=64, n_restraints=35, dim=3):
+        """Randomly connect 4 particles, then validate the resulting forces"""
+        np.random.seed(125)  # TODO: where should this seed be set?
+
+        x = self.get_random_coords(n_particles, dim)
+        params = np.random.rand(n_restraints).astype(np.float64)
+
+        restr_idxs = []
+        for _ in range(n_restraints):
+            restr_idxs.append(np.random.choice(n_particles, size=4, replace=False))
+
+        restr_idxs = np.array(restr_idxs, dtype=np.int32) if n_restraints else np.zeros((0, 4), dtype=np.int32)
+
+        lamb = 0.0
+        box = np.eye(3) * 100
+
+        relative_tolerance_at_precision = {np.float64: 1e-9, np.float32: 1e-6}
+
+        for precision, rtol in relative_tolerance_at_precision.items():
+            test_potential = potentials.ChiralAtomRestraint(restr_idxs)
+            ref_potential = functools.partial(chiral_restraints.chiral_atom_restraint, idxs=restr_idxs)
+
+            self.compare_forces(x, params, box, [lamb], ref_potential, test_potential, rtol, precision=precision)
+
+            with self.assertRaises(Exception):
+                # wrong length
+                bad_idxs = np.array([[0, 1, 2, 3, 4], [4, 4, 3, 2, 1]])
+                bad_potential = potentials.ChiralAtomRestraint(bad_idxs)
+                bad_potential.unbound_impl()
+
+        # test some bad potentials
+
+    def test_chiral_bond_restraint(self, n_particles=64, n_restraints=35, dim=3):
+        """Randomly connect 4 particles, then validate the resulting forces. Also test
+        that scrambling the sign is sufficient"""
+        np.random.seed(125)  # TODO: where should this seed be set?
+
+        x = self.get_random_coords(n_particles, dim)
+
+        params = np.random.rand(n_restraints).astype(np.float64)
+
+        restr_idxs = []
+        signs = []
+        for _ in range(n_restraints):
+            restr_idxs.append(np.random.choice(n_particles, size=4, replace=False))
+            signs.append(np.random.choice(a=[-1, 1]))
+        restr_idxs = np.array(restr_idxs, dtype=np.int32) if n_restraints else np.zeros((0, 4), dtype=np.int32)
+        signs = np.array(signs, dtype=np.int32)
+
+        lamb = 0.0
+        box = np.eye(3) * 100
+
+        relative_tolerance_at_precision = {np.float64: 1e-9, np.float32: 1e-6}
+
+        for precision, rtol in relative_tolerance_at_precision.items():
+            test_potential = potentials.ChiralBondRestraint(restr_idxs, signs)
+            ref_potential = functools.partial(chiral_restraints.chiral_bond_restraint, idxs=restr_idxs, signs=signs)
+
+            self.compare_forces(x, params, box, [lamb], ref_potential, test_potential, rtol, precision=precision)
+
+            with self.assertRaises(RuntimeError):
+                # wrong length idxs
+                bad_idxs = np.array([[0, 1, 2, 3, 4], [4, 4, 3, 2, 1]], dtype=np.int32)
+                bad_signs = np.array([1, -1], dtype=np.int32)
+                bad_potential = potentials.ChiralBondRestraint(bad_idxs, bad_signs)
+                bad_potential.unbound_impl(precision)
+
+            with self.assertRaises(RuntimeError):
+                # inconsistent lengths between idxs and signs
+                bad_idxs = np.array([[0, 1, 2, 3], [4, 5, 3, 2]], dtype=np.int32)
+                bad_signs = np.array([1, -1, 1], dtype=np.int32)
+                bad_potential = potentials.ChiralBondRestraint(bad_idxs, bad_signs)
+                bad_potential.unbound_impl(precision)

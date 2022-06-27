@@ -12,6 +12,21 @@ public:
 
     static const int D;
 
+    void execute_batch_host(
+        const int coord_batch_size,
+        const int N,
+        const int param_batch_size,
+        const int P,
+        const int lambda_batch_size,
+        const double *h_x,
+        const double *h_p,
+        const double *h_box,
+        const double *lambdas,
+        unsigned long long *h_du_dx,
+        unsigned long long *h_du_dp,
+        unsigned long long *h_du_dl,
+        unsigned long long *h_u);
+
     void execute_host(
         const int N,
         const int P,
