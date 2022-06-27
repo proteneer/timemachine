@@ -196,6 +196,60 @@ class TestBonded(GradientTest):
             np.testing.assert_array_equal(test_du_dp, test_du_dp_rev)
             np.testing.assert_array_equal(test_du_dl, test_du_dl_rev)
 
+    def test_flat_bottom_bond(self, n_particles=64, n_bonds=35, dim=3):
+        """Randomly connect pairs of particles, then validate the resulting FlatBottomBond force"""
+        np.random.seed(2022)
+
+        # TODO(deboggle) : reduce code duplication between HarmonicBond and FlatBottomBond
+        x = self.get_random_coords(n_particles, dim)
+
+        atom_idxs = np.arange(n_particles)
+
+        # (k, r_min, r_max)
+        params = np.random.rand(n_bonds, 3).astype(np.float64)
+        params[:,0] *= 1000           # make k large
+        params[:,-1] += params[:,-2]  # guarantee r_max >= r_min
+        
+        bond_idxs = []
+        for _ in range(n_bonds):
+            bond_idxs.append(np.random.choice(atom_idxs, size=2, replace=False))
+        bond_idxs = np.array(bond_idxs, dtype=np.int32) if n_bonds else np.zeros((0, 2), dtype=np.int32)
+
+        box = np.eye(3) * 100
+
+        relative_tolerance_at_precision = {np.float64: 1e-7, np.float32: 2e-5}
+        lamb = 0.0
+        
+        for precision, rtol in relative_tolerance_at_precision.items():
+            test_potential = potentials.FlatBottomBond(bond_idxs)
+            _ref_potential = functools.partial(bonded.flat_bottom_bond, bond_idxs=bond_idxs)
+            
+            def ref_potential(x, params, box, lamb):
+                """doesn't depend on lamb, but self.compare_forces requires lamb in signature"""
+                return _ref_potential(x, params, box)
+
+            self.compare_forces(x, params, box, [lamb], ref_potential, test_potential, rtol, precision=precision)
+
+            # test bitwise commutativity
+            test_potential = potentials.FlatBottomBond(bond_idxs)
+            test_potential_rev = potentials.FlatBottomBond(bond_idxs[:, ::-1])
+
+            test_potential_impl = test_potential.unbound_impl(precision)
+            test_potential_rev_impl = test_potential_rev.unbound_impl(precision)
+
+            test_du_dx, test_du_dp, _, test_u = test_potential_impl.execute_selective(
+                x, params, box, lamb, 1, 1, 0, 1
+            )
+
+            test_du_dx_rev, test_du_dp_rev, _, test_u_rev = test_potential_rev_impl.execute_selective(
+                x, params, box, lamb, 1, 1, 0, 1
+            )
+
+            np.testing.assert_array_equal(test_u, test_u_rev)
+            np.testing.assert_array_equal(test_du_dx, test_du_dx_rev)
+            np.testing.assert_array_equal(test_du_dp, test_du_dp_rev)
+
+
     def test_harmonic_bond_singularity(self):
         """Test that two particles sitting directly on top of each other should generate a proper force."""
         x = np.array([[0.0, 0.0, 0.0], [0.0, 0.0, 0.0]], dtype=np.float64)
