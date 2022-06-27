@@ -1,5 +1,6 @@
 import jax.numpy as jnp
 import numpy as np
+from timemachine.potentials.jax_utils import delta_r
 
 
 def centroid_restraint(conf, params, box, lamb, group_a_idxs, group_b_idxs, kb, b0):
@@ -330,3 +331,19 @@ def periodic_torsion(conf, params, box, lamb, torsion_idxs, lamb_mult=None, lamb
 
     nrg = ks * (1 + jnp.cos(period * angle - phase))
     return jnp.sum(prefactor * nrg, axis=-1)
+
+
+def flat_bottom_bond(conf, params, box, bond_idxs):
+    """
+    U(r; k, r_min, r_max) = 
+        (k/4) * (r - r_max)**4 if r > r_max
+        (k/4) * (r - r_min)**4 if r < r_min
+    """
+    # compute distances
+    i, j = bond_idxs.T
+    r = jnp.sqrt(jnp.sum(delta_r(conf[i], conf[j], box)**2, 1))
+
+    # compute energies
+    k, r_min, r_max = params.T
+    bond_energies = (k / 4) * ((r > r_max) * ((r - r_max)**4) + (r < r_min) * ((r - r_min)**4))
+    return jnp.sum(bond_energies)
