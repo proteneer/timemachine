@@ -764,6 +764,7 @@ template <typename RealType> void declare_flat_bottom_bond(py::module &m, const 
                 return new Class(vec_bond_idxs);
             }),
             py::arg("bond_idxs"));
+}
 
 template <typename RealType> void declare_chiral_atom_restraint(py::module &m, const char *typestr) {
 
