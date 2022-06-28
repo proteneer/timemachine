@@ -15,7 +15,7 @@ from timemachine.ff import Forcefield
 def test_align_harmonic_bond():
     """
     Test that we can align idxs and parameters correctly for harmonic bonds.
-    We expect that decoupled terms have their force constants turned set to zero,
+    We expect that decoupled terms have their force constants set to zero,
     while maintaining the same equilibrium bond lengths.
     """
     a, b, c, d, e, f, g, h, i, j = np.random.rand(10)
