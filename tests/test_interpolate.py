@@ -5,6 +5,7 @@ config.update("jax_enable_x64", True)
 from importlib import resources
 
 import numpy as np
+import pytest
 from rdkit import Chem
 
 from timemachine.fe import atom_mapping, interpolate, single_topology_v3
@@ -20,24 +21,34 @@ def test_align_harmonic_bond():
     """
     a, b, c, d, e, f, g, h, i, j = np.random.rand(10)
 
-    # tbd: what do we do if there are repeats?
-    # merge repeats into a single term first?
     src_idxs = [(4, 9), (3, 4)]
     src_params = [(a, b), (c, d)]
 
     dst_idxs = [(3, 4), (5, 9), (2, 3)]
     dst_params = [(e, f), (g, h), (i, j)]
 
-    test_kv = interpolate.align_harmonic_bond_idxs_and_params(src_idxs, src_params, dst_idxs, dst_params)
+    test_set = interpolate.align_harmonic_bond_idxs_and_params(src_idxs, src_params, dst_idxs, dst_params)
 
-    ref_kv = {
+    ref_set = {
         ((4, 9), (a, b), (0, b)),
         ((3, 4), (c, d), (e, f)),
         ((5, 9), (0, h), (g, h)),
         ((2, 3), (0, j), (i, j)),
     }
 
-    assert test_kv == ref_kv
+    assert test_set == ref_set
+
+    # test that if there are repeats we throw an assertion
+    with pytest.raises(interpolate.DuplicateIdxsError):
+        src_idxs = [(4, 9), (4, 9)]
+        interpolate.align_harmonic_bond_idxs_and_params(src_idxs, src_params, dst_idxs, dst_params)
+
+    # test that non-canonical idxs should assert
+    with pytest.raises(AssertionError):
+        src_idxs = [(9, 4), (3, 4)]
+        interpolate.align_harmonic_bond_idxs_and_params(src_idxs, src_params, dst_idxs, dst_params)
+
+    # test non-canonical idxs throw an assertion
 
 
 def test_align_harmonic_angle():
@@ -56,16 +67,16 @@ def test_align_harmonic_angle():
     dst_idxs = [(3, 4, 6), (4, 5, 9), (2, 3, 4)]
     dst_params = [(e, f), (g, h), (i, j)]
 
-    test_kv = interpolate.align_harmonic_bond_idxs_and_params(src_idxs, src_params, dst_idxs, dst_params)
+    test_set = interpolate.align_harmonic_bond_idxs_and_params(src_idxs, src_params, dst_idxs, dst_params)
 
-    ref_kv = {
+    ref_set = {
         ((4, 9, 5), (a, b), (0, b)),
         ((3, 4, 6), (c, d), (e, f)),
         ((4, 5, 9), (0, h), (g, h)),
         ((2, 3, 4), (0, j), (i, j)),
     }
 
-    assert test_kv == ref_kv
+    assert test_set == ref_set
 
 
 def test_align_torsion():
@@ -87,9 +98,9 @@ def test_align_torsion():
     dst_idxs = [(2, 3, 9, 4), (2, 3, 9, 4), (0, 1, 4, 2), (3, 0, 2, 6)]
     dst_params = [(i, j, 2), (k, l, 1), (m, n, 3), (o, p, 4)]
 
-    test_kv = interpolate.align_torsion_idxs_and_params(src_idxs, src_params, dst_idxs, dst_params)
+    test_set = interpolate.align_torsion_idxs_and_params(src_idxs, src_params, dst_idxs, dst_params)
 
-    ref_kv = {
+    ref_set = {
         ((2, 3, 9, 4), (a, b, 2), (i, j, 2)),
         ((2, 1, 4, 3), (c, d, 1), (0, d, 1)),
         ((0, 1, 4, 2), (e, f, 3), (m, n, 3)),
@@ -98,7 +109,7 @@ def test_align_torsion():
         ((3, 0, 2, 6), (0, p, 4), (o, p, 4)),
     }
 
-    assert test_kv == ref_kv
+    assert test_set == ref_set
 
 
 def test_align_nonbonded():
@@ -113,9 +124,9 @@ def test_align_nonbonded():
     dst_idxs = [(0, 2), (4, 5)]
     dst_params = [(m, n, o), (p, q, r)]
 
-    test_kv = interpolate.align_nonbonded_idxs_and_params(src_idxs, src_params, dst_idxs, dst_params)
+    test_set = interpolate.align_nonbonded_idxs_and_params(src_idxs, src_params, dst_idxs, dst_params)
 
-    ref_kv = {
+    ref_set = {
         ((0, 3), (a, b, c), (0, 0, 0)),
         ((0, 2), (d, e, f), (m, n, o)),
         ((2, 3), (g, h, i), (0, 0, 0)),
@@ -123,7 +134,7 @@ def test_align_nonbonded():
         ((4, 5), (0, 0, 0), (p, q, r)),
     }
 
-    assert test_kv == ref_kv
+    assert test_set == ref_set
 
 
 def test_align_chiral_atoms():
@@ -138,22 +149,22 @@ def test_align_chiral_atoms():
     dst_idxs = [(0, 4, 3, 5), (4, 3, 5, 7)]
     dst_params = [d, e]
 
-    test_kv = interpolate.align_chiral_atom_idxs_and_params(src_idxs, src_params, dst_idxs, dst_params)
+    test_set = interpolate.align_chiral_atom_idxs_and_params(src_idxs, src_params, dst_idxs, dst_params)
 
-    ref_kv = {
+    ref_set = {
         ((0, 3, 4, 5), a, 0),
         ((0, 4, 3, 5), b, d),
         ((4, 3, 5, 6), c, 0),
         ((4, 3, 5, 7), 0, e),
     }
 
-    assert test_kv == ref_kv
+    assert test_set == ref_set
 
 
 def test_align_chiral_bonds():
     """
     Similar to the chiral_atoms test, except that we check to see if deduplication
-    is using the sign information correctly.
+    is using the sign information as part of the canonicalization routine.
     """
 
     a, b, c, d, e, f, g = np.random.rand(7)
@@ -165,11 +176,11 @@ def test_align_chiral_bonds():
     dst_params = [e, f, g]
     dst_signs = [1, -1, -1]
 
-    test_kv = interpolate.align_chiral_bond_idxs_and_params(
+    test_set = interpolate.align_chiral_bond_idxs_and_params(
         src_idxs, src_params, src_signs, dst_idxs, dst_params, dst_signs
     )
 
-    ref_kv = {
+    ref_set = {
         ((0, 3, 4, 5), 1, a, 0),
         ((0, 3, 4, 5), -1, b, f),
         ((0, 4, 3, 5), 1, c, 0),
@@ -178,7 +189,7 @@ def test_align_chiral_bonds():
         ((4, 3, 5, 7), 1, 0, e),
     }
 
-    assert test_kv == ref_kv
+    assert test_set == ref_set
 
 
 def test_intermediate_states(num_pairs_to_setup=10):
@@ -215,7 +226,7 @@ def test_intermediate_states(num_pairs_to_setup=10):
         U_test = system_lambda_0.get_U_fn()
 
         # these are not guaranteed to be bitwise identical
-        # since the permuting the order of idxs will affect
+        # since permuting the order of idxs will affect
         # the order of operations
         np.testing.assert_almost_equal(U_ref(x0), U_test(x0))
 

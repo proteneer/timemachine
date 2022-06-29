@@ -4,12 +4,13 @@ import os
 from importlib import resources
 
 import jax
+import matplotlib.pyplot as plt
 import numpy as np
 import pymbar
 from rdkit import Chem
 
 from timemachine.constants import BOLTZ
-from timemachine.fe import single_topology_v3
+from timemachine.fe import pdb_writer, single_topology_v3
 from timemachine.fe.system import simulate_system
 from timemachine.fe.utils import get_romol_conf
 from timemachine.ff import Forcefield
@@ -67,7 +68,9 @@ def test_hif2a_free_energy_estimates():
     st = single_topology_v3.SingleTopologyV3(mol_a, mol_b, core, forcefield)
 
     # lambda_schedule = np.linspace(0.0, 1.0, 5)
-    lambda_schedule = np.linspace(0.0, 0.1, 10)
+    lambda_schedule = np.linspace(0.0, 1.0, 12)
+    # lambda_schedule = [0.4444444444444444]
+    # lambda_schedule = [0.0]
     systems = [st.setup_intermediate_state(lamb) for lamb in lambda_schedule]
     U_fns = [sys.get_U_fn() for sys in systems]
 
@@ -81,8 +84,16 @@ def test_hif2a_free_energy_estimates():
     beta = 1 / kT
 
     for lambda_idx, U_fn in enumerate(U_fns):
-
-        all_frames.append(simulate_system(U_fn, x0, num_samples=1000))
+        print("lambda", lambda_schedule[lambda_idx], "U", U_fn(x0))
+        # continue
+        frames = simulate_system(U_fn, x0, num_samples=2000)
+        all_frames.append(frames)
+        writer = pdb_writer.PDBWriter([mol_a, mol_b], "debug_" + str(lambda_idx) + ".pdb")
+        for f in frames:
+            fc = pdb_writer.convert_single_topology_mols(f, st)
+            fc = fc - np.mean(fc, axis=0)
+            writer.write_frame(fc * 10)
+        writer.close()
 
         if lambda_idx > 0:
 
@@ -94,6 +105,12 @@ def test_hif2a_free_energy_estimates():
 
             fwd_delta_u = beta * (cur_U_fn(prev_frames) - prev_U_fn(prev_frames))
             rev_delta_u = beta * (prev_U_fn(cur_frames) - cur_U_fn(cur_frames))
+
+            plt.clf()
+            plt.hist(fwd_delta_u, alpha=0.5, label="fwd")
+            plt.hist(-rev_delta_u, alpha=0.5, label="-rev")
+            plt.legend()
+            plt.savefig(f"lambda_{lambda_idx-1}_{lambda_idx}.png")
 
             dG_exact, exact_bar_err = pymbar.BAR(fwd_delta_u, rev_delta_u)
             dG_exact /= beta

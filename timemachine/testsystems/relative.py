@@ -24,6 +24,9 @@ def setup_hif2a_ligand_pair(ff="smirnoff_1_1_0_ccc.py"):
     mol_a = all_mols[1]
     mol_b = all_mols[4]
 
+    print(Chem.MolToSmiles(mol_a))
+    print(Chem.MolToSmiles(mol_b))
+
     core = np.array(
         [
             [0, 0],

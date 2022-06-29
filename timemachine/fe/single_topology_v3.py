@@ -633,12 +633,43 @@ class SingleTopologyV3:
             new_params = interpolate_fn(src_params, dst_params, lamb)
             bond_params.append(new_params)
 
-        if src_cls_bond == potentials.NonbondedPairListPrecomputed:
-            assert src_bond.get_beta() == dst_bond.get_beta()
-            assert src_bond.get_cutoff() == dst_bond.get_cutoff()
-            return src_cls_bond(np.array(bond_idxs), src_bond.get_beta(), src_bond.get_cutoff()).bind(bond_params)
-        else:
-            return src_cls_bond(np.array(bond_idxs)).bind(bond_params)
+        return src_cls_bond(np.array(bond_idxs)).bind(bond_params)
+
+    def _setup_intermediate_nonbonded_term(self, src_nonbonded, dst_nonbonded, lamb, align_fn, interpolate_fn):
+
+        assert src_nonbonded.get_beta() == dst_nonbonded.get_beta()
+        assert src_nonbonded.get_cutoff() == dst_nonbonded.get_cutoff()
+
+        cutoff = src_nonbonded.get_cutoff()
+
+        pair_idxs_and_params = align_fn(
+            src_nonbonded.get_idxs(),
+            src_nonbonded.params,
+            dst_nonbonded.get_idxs(),
+            dst_nonbonded.params,
+        )
+        pair_idxs = []
+        pair_params = []
+        pair_offsets = []
+        for idxs, src_params, dst_params in pair_idxs_and_params:
+
+            if src_params == (0, 0, 0):
+                new_params = dst_params
+                offset = (1 - lamb) * cutoff
+            elif dst_params == (0, 0, 0):
+                new_params = src_params
+                offset = lamb * cutoff
+            else:
+                new_params = interpolate_fn(src_params, dst_params, lamb)
+                offset = 0
+
+            pair_idxs.append(idxs)
+            pair_params.append(new_params)
+            pair_offsets.append(offset)
+
+        return potentials.NonbondedPairListPrecomputed(
+            np.array(pair_idxs), np.array(pair_offsets), src_nonbonded.get_beta(), src_nonbonded.get_cutoff()
+        ).bind(pair_params)
 
     def _setup_intermediate_chiral_bond_term(self, src_bond, dst_bond, lamb, interpolate_fn):
 
@@ -651,7 +682,7 @@ class SingleTopologyV3:
             src_bond.get_signs(),
             dst_bond.get_idxs(),
             dst_bond.params,
-            dst_bond.get_idxs(),
+            dst_bond.get_signs(),
         )
         chiral_bond_idxs = []
         chiral_bond_params = []
@@ -685,7 +716,7 @@ class SingleTopologyV3:
         torsion = self._setup_intermediate_bonded_term(
             src_system.torsion, dst_system.torsion, lamb, interpolate.align_torsion_idxs_and_params, interpolate_fn
         )
-        nonbonded = self._setup_intermediate_bonded_term(
+        nonbonded = self._setup_intermediate_nonbonded_term(
             src_system.nonbonded,
             dst_system.nonbonded,
             lamb,

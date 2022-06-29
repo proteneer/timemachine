@@ -1,6 +1,10 @@
 import numpy as np
 
 
+class DuplicateIdxsError(RuntimeError):
+    pass
+
+
 def _add_dst_to_src_bond_or_angle(src_idxs, src_params, dst_idxs, dst_params):
     """
     eg:
@@ -9,8 +13,6 @@ def _add_dst_to_src_bond_or_angle(src_idxs, src_params, dst_idxs, dst_params):
 
     dst_idxs: [[3,4], [9,5]]
     dst_params: [[e, f], [g, h]]
-
-    zero_flags: [True, False]
 
     Generate end-state key value pairs
 
@@ -23,14 +25,16 @@ def _add_dst_to_src_bond_or_angle(src_idxs, src_params, dst_idxs, dst_params):
     # note that *missing* terms are the result of core-hopping, or chiral
     # inversions on core atoms. dummy atom interactions (bonds/angles) are fully maintained
     # at the end-state.
-    assert len(set((src_idxs))) == len(src_idxs)
-    assert len(set((dst_idxs))) == len(dst_idxs)
+    if len(set((src_idxs))) != len(src_idxs):
+        raise DuplicateIdxsError()
+
+    if len(set((dst_idxs))) != len(dst_idxs):
+        raise DuplicateIdxsError()
 
     src_kv = dict(zip(src_idxs, src_params))
     for idxs, params in zip(dst_idxs, dst_params):
         assert idxs[0] < idxs[-1]
         if idxs not in src_kv:
-            # new_params = []
             _, bond_or_angle = params
             src_kv[idxs] = (0, bond_or_angle)
 
@@ -45,14 +49,14 @@ def align_harmonic_bond_or_angle_idxs_and_params(src_idxs, src_params, dst_idxs,
     dst_idxs = [tuple(p) for p in dst_idxs]
     dst_params = [tuple(p) for p in dst_params]
 
-    src_kv = _add_dst_to_src_bond_or_angle(src_idxs, src_params, dst_idxs, dst_params)
-    dst_kv = _add_dst_to_src_bond_or_angle(dst_idxs, dst_params, src_idxs, src_params)
-    assert src_kv.keys() == dst_kv.keys()
+    src_set = _add_dst_to_src_bond_or_angle(src_idxs, src_params, dst_idxs, dst_params)
+    dst_set = _add_dst_to_src_bond_or_angle(dst_idxs, dst_params, src_idxs, src_params)
+    assert src_set.keys() == dst_set.keys()
 
     res = set()
 
-    for k in src_kv.keys():
-        res.add((tuple(k), src_kv[k], dst_kv[k]))
+    for k in src_set.keys():
+        res.add((tuple(k), src_set[k], dst_set[k]))
 
     return res
 
