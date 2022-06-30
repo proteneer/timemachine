@@ -1,12 +1,16 @@
 # test that we can estimate free energies reliably using pair bar.
 import multiprocessing
 import os
+
+os.environ["XLA_FLAGS"] = "--xla_force_host_platform_device_count=" + str(multiprocessing.cpu_count())
+
 from importlib import resources
 
 import jax
 import matplotlib.pyplot as plt
 import numpy as np
 import pymbar
+import pytest
 from rdkit import Chem
 
 from timemachine.constants import BOLTZ
@@ -15,9 +19,8 @@ from timemachine.fe.system import simulate_system
 from timemachine.fe.utils import get_romol_conf
 from timemachine.ff import Forcefield
 
-os.environ["XLA_FLAGS"] = "--xla_force_host_platform_device_count=" + str(multiprocessing.cpu_count())
 
-
+@pytest.mark.skip(reason="This is currently too slow to run on CI")
 def test_hif2a_free_energy_estimates():
     # Test that we can estimate the free energy differences for some simple transformations
 

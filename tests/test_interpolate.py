@@ -228,11 +228,20 @@ def test_intermediate_states(num_pairs_to_setup=10):
         # these are not guaranteed to be bitwise identical
         # since permuting the order of idxs will affect
         # the order of operations
-        np.testing.assert_almost_equal(U_ref(x0), U_test(x0))
+        # suggestion by jfass: test random coords
+        xs = [x0]
+        for _ in range(10):
+            xs.append(x0 + 0.01 * np.random.randn(*x0.shape))
+        for x in xs:
+            np.testing.assert_almost_equal(U_ref(x), U_test(x))
 
         system_dst = top.setup_end_state_dst()
         system_lambda_1 = top.setup_intermediate_state(1)
         U_ref = system_dst.get_U_fn()
         U_test = system_lambda_1.get_U_fn()
 
-        np.testing.assert_almost_equal(U_ref(x0), U_test(x0))
+        xs = [x0]
+        for _ in range(10):
+            xs.append(x0 + 0.01 * np.random.randn(*x0.shape))
+        for x in xs:
+            np.testing.assert_almost_equal(U_ref(x), U_test(x))
