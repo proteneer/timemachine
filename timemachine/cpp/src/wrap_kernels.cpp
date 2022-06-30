@@ -7,6 +7,8 @@
 #include "barostat.hpp"
 #include "bound_potential.hpp"
 #include "centroid_restraint.hpp"
+#include "chiral_atom_restraint.hpp"
+#include "chiral_bond_restraint.hpp"
 #include "context.hpp"
 #include "fanout_summed_potential.hpp"
 #include "fixed_point.hpp"
@@ -749,6 +751,39 @@ template <typename RealType> void declare_harmonic_bond(py::module &m, const cha
             py::arg("lamb_offset") = py::none());
 }
 
+template <typename RealType> void declare_chiral_atom_restraint(py::module &m, const char *typestr) {
+
+    using Class = timemachine::ChiralAtomRestraint<RealType>;
+    std::string pyclass_name = std::string("ChiralAtomRestraint_") + typestr;
+    py::class_<Class, std::shared_ptr<Class>, timemachine::Potential>(
+        m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
+        .def(
+            py::init([](const py::array_t<int, py::array::c_style> &idxs) {
+                std::vector<int> vec_idxs(idxs.data(), idxs.data() + idxs.size());
+                return new timemachine::ChiralAtomRestraint<RealType>(vec_idxs);
+            }),
+            py::arg("idxs"),
+            R"pbdoc(Please refer to timemachine.potentials.chiral_restraints for documentation on arguments)pbdoc");
+}
+
+template <typename RealType> void declare_chiral_bond_restraint(py::module &m, const char *typestr) {
+
+    using Class = timemachine::ChiralBondRestraint<RealType>;
+    std::string pyclass_name = std::string("ChiralBondRestraint_") + typestr;
+    py::class_<Class, std::shared_ptr<Class>, timemachine::Potential>(
+        m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
+        .def(
+            py::init([](const py::array_t<int, py::array::c_style> &idxs,
+                        const py::array_t<int, py::array::c_style> &signs) {
+                std::vector<int> vec_idxs(idxs.data(), idxs.data() + idxs.size());
+                std::vector<int> vec_signs(signs.data(), signs.data() + signs.size());
+                return new timemachine::ChiralBondRestraint<RealType>(vec_idxs, vec_signs);
+            }),
+            py::arg("idxs"),
+            py::arg("signs"),
+            R"pbdoc(Please refer to timemachine.potentials.chiral_restraints for documentation on arguments)pbdoc");
+}
+
 template <typename RealType> void declare_harmonic_angle(py::module &m, const char *typestr) {
 
     using Class = timemachine::HarmonicAngle<RealType>;
@@ -1120,6 +1155,12 @@ PYBIND11_MODULE(custom_ops, m) {
 
     declare_harmonic_bond<double>(m, "f64");
     declare_harmonic_bond<float>(m, "f32");
+
+    declare_chiral_atom_restraint<double>(m, "f64");
+    declare_chiral_atom_restraint<float>(m, "f32");
+
+    declare_chiral_bond_restraint<double>(m, "f64");
+    declare_chiral_bond_restraint<float>(m, "f32");
 
     declare_harmonic_angle<double>(m, "f64");
     declare_harmonic_angle<float>(m, "f32");
