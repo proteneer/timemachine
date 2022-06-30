@@ -10,7 +10,7 @@ import pymbar
 from rdkit import Chem
 
 from timemachine.constants import BOLTZ
-from timemachine.fe import pdb_writer, single_topology_v3
+from timemachine.fe import pdb_writer, single_topology_v3, utils
 from timemachine.fe.system import simulate_system
 from timemachine.fe.utils import get_romol_conf
 from timemachine.ff import Forcefield
@@ -67,10 +67,7 @@ def test_hif2a_free_energy_estimates():
 
     st = single_topology_v3.SingleTopologyV3(mol_a, mol_b, core, forcefield)
 
-    # lambda_schedule = np.linspace(0.0, 1.0, 5)
     lambda_schedule = np.linspace(0.0, 1.0, 12)
-    # lambda_schedule = [0.4444444444444444]
-    # lambda_schedule = [0.0]
     systems = [st.setup_intermediate_state(lamb) for lamb in lambda_schedule]
     U_fns = [sys.get_U_fn() for sys in systems]
 
@@ -83,8 +80,12 @@ def test_hif2a_free_energy_estimates():
     kT = BOLTZ * 300.0
     beta = 1 / kT
 
+    svg = utils.plot_atom_mapping_grid(mol_a, mol_b, core)
+    with open("atom_mapping.svg", "w") as fh:
+        fh.write(svg)
+
     for lambda_idx, U_fn in enumerate(U_fns):
-        print("lambda", lambda_schedule[lambda_idx], "U", U_fn(x0))
+        # print("lambda", lambda_schedule[lambda_idx], "U", U_fn(x0))
         # continue
         frames = simulate_system(U_fn, x0, num_samples=2000)
         all_frames.append(frames)
