@@ -39,6 +39,7 @@ def simulate_system(U_fn, x0, num_samples=20000, steps_per_batch=500, num_worker
         x_min = minimize_scipy(U_fn, x0)
     else:
         x_min = x0
+
     seed = 2023
 
     num_workers = num_workers or multiprocessing.cpu_count()
@@ -102,9 +103,16 @@ class VacuumSystem:
             torsion_idxs=np.array(self.torsion.get_idxs()),
         )
 
+        # for ij, p in zip(self.nonbonded.get_idxs(), self.nonbonded.params):
+        # print(ij, p)
+        # print(np.array(self.nonbonded.get_idxs()))
+        # print(np.array(self.nonbonded.params))
+        # assert 0
+
         nbpl_U = functools.partial(
             nonbonded.nonbonded_v3_on_precomputed_pairs,
             pairs=np.array(self.nonbonded.get_idxs()),
+            offsets=np.array(self.nonbonded.get_offsets()),
             params=np.array(self.nonbonded.params),
             box=None,
             beta=self.nonbonded.get_beta(),

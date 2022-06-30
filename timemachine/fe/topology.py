@@ -301,7 +301,9 @@ class BaseTopology:
         beta = _BETA
         cutoff = _CUTOFF  # solve for this analytically later
 
-        return params, potentials.NonbondedPairListPrecomputed(inclusion_idxs, beta, cutoff)
+        offsets = np.zeros(len(inclusion_idxs))
+
+        return params, potentials.NonbondedPairListPrecomputed(inclusion_idxs, offsets, beta, cutoff)
 
     def parameterize_harmonic_bond(self, ff_params):
         params, idxs = self.ff.hb_handle.partial_parameterize(ff_params, self.mol)

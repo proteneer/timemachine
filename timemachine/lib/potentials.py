@@ -443,11 +443,14 @@ class NonbondedPairListPrecomputed(NonbondedCustomOpWrapper):
     def set_idxs(self, idxs):
         self.args[0] = idxs
 
-    def get_beta(self):
+    def get_offsets(self):
         return self.args[1]
 
-    def get_cutoff(self):
+    def get_beta(self):
         return self.args[2]
+
+    def get_cutoff(self):
+        return self.args[3]
 
 
 class NonbondedPairListNegated(NonbondedCustomOpWrapper):
