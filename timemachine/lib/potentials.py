@@ -183,7 +183,6 @@ class HarmonicBond(BondedWrapper):
     pass
 
 
-
 class FlatBottomBond(CustomOpWrapper):
     def get_idxs(self):
         return self.args[0]

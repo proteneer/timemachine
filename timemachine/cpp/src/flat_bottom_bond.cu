@@ -1,5 +1,5 @@
-#include "gpu_utils.cuh"
 #include "flat_bottom_bond.hpp"
+#include "gpu_utils.cuh"
 #include "k_flat_bottom_bond.cuh"
 #include "kernel_utils.cuh"
 #include "math_utils.cuh"
@@ -8,9 +8,8 @@
 namespace timemachine {
 
 template <typename RealType>
-FlatBottomBond<RealType>::FlatBottomBond(const std::vector<int> &bond_idxs)
-    : B_(bond_idxs.size() / 2) {
-    
+FlatBottomBond<RealType>::FlatBottomBond(const std::vector<int> &bond_idxs) : B_(bond_idxs.size() / 2) {
+
     // validate bond_idxs: even length, all idxs non-negative, and no self-edges
     if (bond_idxs.size() % 2 != 0) {
         throw std::runtime_error("bond_idxs.size() must be exactly 2*k!");
@@ -33,9 +32,7 @@ FlatBottomBond<RealType>::FlatBottomBond(const std::vector<int> &bond_idxs)
     gpuErrchk(cudaMemcpy(d_bond_idxs_, &bond_idxs[0], B_ * 2 * sizeof(*d_bond_idxs_), cudaMemcpyHostToDevice));
 };
 
-template <typename RealType> FlatBottomBond<RealType>::~FlatBottomBond() {
-    gpuErrchk(cudaFree(d_bond_idxs_));
-};
+template <typename RealType> FlatBottomBond<RealType>::~FlatBottomBond() { gpuErrchk(cudaFree(d_bond_idxs_)); };
 
 template <typename RealType>
 void FlatBottomBond<RealType>::execute_device(
@@ -55,7 +52,9 @@ void FlatBottomBond<RealType>::execute_device(
     int expected_P = num_params_per_bond * B_;
 
     if (P != expected_P) {
-        throw std::runtime_error("FlatBottomBond::execute_device(): expected P == " + std::to_string(expected_P) + ", got P=" + std::to_string(P));
+        throw std::runtime_error(
+            "FlatBottomBond::execute_device(): expected P == " + std::to_string(expected_P) +
+            ", got P=" + std::to_string(P));
     }
 
     if (B_ > 0) {

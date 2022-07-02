@@ -50,23 +50,21 @@ void __global__ k_flat_bottom_bond(
 
     if (u) {
         // branchless implementation of piecewise function
-        RealType u_real = (k/4) * (r_lt_rmin * (pow(r - rmin, 4)) + r_gt_rmax * (pow(r - rmax, 4)));
+        RealType u_real = (k / 4) * (r_lt_rmin * (pow(r - rmin, 4)) + r_gt_rmax * (pow(r - rmax, 4)));
 
         // cast float -> fixed
         auto sum_u = FLOAT_TO_FIXED_BONDED<RealType>(u_real);
-        
+
         // atomic add to u array
         atomicAdd(u + src_idx, sum_u);
     }
 
     if (du_dp) {
         // compute parameter derivatives
-        RealType du_dk_real =
-            (r_gt_rmax * (pow(r - rmax, 4) / 4)) +
-            (r_lt_rmin * (pow(r - rmin, 4) / 4));
+        RealType du_dk_real = (r_gt_rmax * (pow(r - rmax, 4) / 4)) + (r_lt_rmin * (pow(r - rmin, 4) / 4));
         RealType du_drmin_real = r_lt_rmin * (-k * pow(r - rmin, 3));
         RealType du_drmax_real = r_gt_rmax * (-k * pow(r - rmax, 3));
-        
+
         // cast float -> fixed
         auto du_dk = FLOAT_TO_FIXED_BONDED<RealType>(du_dk_real);
         auto du_drmin = FLOAT_TO_FIXED_BONDED<RealType>(du_drmin_real);
@@ -80,11 +78,11 @@ void __global__ k_flat_bottom_bond(
 
     if (du_dx) {
         RealType du_dr = k * ((r_gt_rmax * pow(r - rmax, 3)) + (r_lt_rmin * pow(r - rmin, 3)));
-        
+
         for (int d = 0; d < 3; d++) {
             // compute du/dcoords
             RealType du_dsrc_real = du_dr * dx[d] / r;
-            RealType du_ddst_real = - du_dsrc_real;
+            RealType du_ddst_real = -du_dsrc_real;
 
             // cast float -> fixed
             auto du_dsrc = FLOAT_TO_FIXED_BONDED<RealType>(du_dsrc_real);

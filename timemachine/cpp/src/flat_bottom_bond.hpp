@@ -15,7 +15,7 @@ private:
 public:
     int num_bonds() const { return B_; }
 
-    FlatBottomBond(const std::vector<int> &bond_idxs);    // [B, 2]
+    FlatBottomBond(const std::vector<int> &bond_idxs); // [B, 2]
 
     ~FlatBottomBond();
 
