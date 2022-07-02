@@ -61,7 +61,8 @@ void FlatBottomBond<RealType>::execute_device(
         const int tpb = warp_size;
         const int blocks = ceil_divide(B_, tpb);
 
-        k_flat_bottom_bond<RealType><<<blocks, tpb, 0, stream>>>(B_, d_x, d_p, d_bond_idxs_, d_du_dx, d_du_dp, d_u);
+        k_flat_bottom_bond<RealType>
+            <<<blocks, tpb, 0, stream>>>(B_, d_x, d_box, d_p, d_bond_idxs_, d_du_dx, d_du_dp, d_u);
         gpuErrchk(cudaPeekAtLastError());
     }
 };
