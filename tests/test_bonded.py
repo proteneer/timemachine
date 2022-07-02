@@ -216,6 +216,9 @@ class TestBonded(GradientTest):
             bond_idxs.append(np.random.choice(atom_idxs, size=2, replace=False))
         bond_idxs = np.array(bond_idxs, dtype=np.int32) if n_bonds else np.zeros((0, 2), dtype=np.int32)
 
+        # Shift half of the bond indices by a single box dimension to ensure testing PBCs
+        x[bond_idxs[:, 1][: n_bonds // 2]] += np.diagonal(box)
+
         relative_tolerance_at_precision = {np.float64: 1e-7, np.float32: 2e-5}
         lamb = 0.0
 
