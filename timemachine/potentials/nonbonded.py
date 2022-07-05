@@ -326,6 +326,7 @@ def nonbonded_v3_on_precomputed_pairs(conf, params, box, pairs, offsets, beta: f
     conf: N,3
     params: P,3 (q_ij, s_ij, e_ij)
     pairs: P,2 (i,j)
+    w_offsets: P, 2 (q_w, lj_w), offsets for electrostatic and lj interactions
     """
 
     if len(pairs) == 0:
@@ -337,6 +338,7 @@ def nonbonded_v3_on_precomputed_pairs(conf, params, box, pairs, offsets, beta: f
     dij = distance_on_pairs(conf[inds_l], conf[inds_r], box, offsets)
     if cutoff is None:
         cutoff = np.inf
+
     keep_mask = dij <= cutoff
 
     def apply_cutoff(x):

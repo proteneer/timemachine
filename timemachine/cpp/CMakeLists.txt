@@ -12,14 +12,7 @@ find_package(PythonLibs 3.7 REQUIRED)
 string(APPEND CMAKE_CXX_FLAGS "-Werror -Wall -Wextra")
 
 string(APPEND CMAKE_CUDA_FLAGS "-O3 -lineinfo")
-string(APPEND CMAKE_CUDA_FLAGS
-  " -Werror all-warnings"
-  " -Wall"
-  " -Wno-sign-compare"
-  " -Wextra"
-  " -Wno-unused-parameter"
-  " -Wreorder"
-)
+
 message(${CMAKE_CUDA_FLAGS})
 
 if (CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
@@ -65,6 +58,7 @@ pybind11_add_module(${LIBRARY_NAME} SHARED NO_EXTRAS
   src/centroid_restraint.cu
   src/gpu_utils.cu
   src/vendored/hilbert.cpp
+  src/nonbonded_precomputed.cu
   src/nonbonded_all_pairs.cu
   src/nonbonded_pair_list.cu
   src/nonbonded_interaction_group.cu
