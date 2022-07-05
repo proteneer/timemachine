@@ -16,13 +16,6 @@ void __global__ k_nonbonded_precomputed(
     unsigned long long *__restrict__ du_dp,
     unsigned long long *__restrict__ u_buffer) {
 
-    // (ytz): oddly enough the order of atom_i and atom_j
-    // seem to not matter. I think this is because distance calculations
-    // are bitwise identical in both dij(i, j) and dij(j, i) . However we
-    // do need the calculation done for exclusions to perfectly mirror
-    // that of the nonbonded kernel itself. Remember that floating points
-    // commute but are not associative.
-
     const int pair_idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (pair_idx >= M) {
         return;

@@ -61,7 +61,6 @@ def test_nonbonded_pair_list_precomputed_correctness(
 
     params = np.random.rand(num_pairs, 3)
     params[:, 1] /= 5  # shrink lj ixns to avoid huge repulsive forces
-    # params[:, 2] = 0
 
     w_offsets = np.random.rand(num_pairs) / 3
     w_offsets = w_offsets.astype(np.float64)
