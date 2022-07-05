@@ -13,15 +13,20 @@ NonbondedPairListPrecomputed<RealType>::NonbondedPairListPrecomputed(
     : B_(idxs.size() / 2), beta_(beta), cutoff_(cutoff) {
 
     if (idxs.size() % 2 != 0) {
-        throw std::runtime_error("idxs.size() must be exactly 2*k!");
+        throw std::runtime_error("idxs.size() must be exactly 2*B!");
     }
 
     for (int b = 0; b < B_; b++) {
         auto src = idxs[b * 2 + 0];
         auto dst = idxs[b * 2 + 1];
         if (src == dst) {
-            throw std::runtime_error("src == dst");
+            throw std::runtime_error(
+                "illegal pair with src == dst: " + std::to_string(src) + ", " + std::to_string(dst));
         }
+    }
+
+    if (w_offsets.size() != B_) {
+        throw std::runtime_error("offset size does not match idxs size");
     }
 
     gpuErrchk(cudaMalloc(&d_idxs_, B_ * 2 * sizeof(*d_idxs_)));
