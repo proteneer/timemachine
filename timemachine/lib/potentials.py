@@ -171,10 +171,20 @@ class BondedWrapper(CustomOpWrapper):
 
 
 class ChiralAtomRestraint(BondedWrapper):
-    pass
+    def get_idxs(self):
+        return self.args[0]
+
+    def set_idxs(self, new_idxs):
+        self.args[0] = new_idxs
 
 
 class ChiralBondRestraint(BondedWrapper):
+    def get_idxs(self):
+        return self.args[0]
+
+    def set_idxs(self, new_idxs):
+        self.args[0] = new_idxs
+
     def get_signs(self):
         return self.args[1]
 

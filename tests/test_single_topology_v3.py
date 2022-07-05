@@ -253,3 +253,22 @@ def test_canonicalize_improper_idxs():
     assert canonicalize_improper_idxs((5, 1, 0, 3)) == (5, 1, 3, 0)
     assert canonicalize_improper_idxs((5, 3, 1, 0)) == (5, 3, 0, 1)
     assert canonicalize_improper_idxs((5, 0, 3, 1)) == (5, 0, 1, 3)
+
+
+def test_combine_masses():
+
+    C_mass = Chem.MolFromSmiles("C").GetAtomWithIdx(0).GetMass()
+    Br_mass = Chem.MolFromSmiles("Br").GetAtomWithIdx(0).GetMass()
+    F_mass = Chem.MolFromSmiles("F").GetAtomWithIdx(0).GetMass()
+    N_mass = Chem.MolFromSmiles("N").GetAtomWithIdx(0).GetMass()
+
+    mol_a = Chem.MolFromSmiles("BrC1=CC=CC=C1")
+    mol_b = Chem.MolFromSmiles("C1=CN=CC=C1F")
+    core = np.array([[1, 0], [2, 1], [3, 2], [4, 3], [5, 4], [6, 5]])
+    ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
+
+    st = SingleTopologyV3(mol_a, mol_b, core, ff)
+
+    test_masses = st.combine_masses()
+    ref_masses = [Br_mass, C_mass, C_mass, max(C_mass, N_mass), C_mass, C_mass, C_mass, F_mass]
+    np.testing.assert_almost_equal(test_masses, ref_masses)

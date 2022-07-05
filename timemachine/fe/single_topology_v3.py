@@ -6,6 +6,7 @@ import numpy as np
 
 from timemachine.fe import interpolate, system, topology, utils
 from timemachine.fe.dummy import canonicalize_bond, identify_dummy_groups, identify_root_anchors
+from timemachine.fe.system import HostGuestSystem
 from timemachine.lib import potentials
 
 
@@ -486,10 +487,10 @@ class SingleTopologyV3:
         Parameters
         ----------
         mol_a: ROMol
-            First ligand
+            First guest
 
         mol_b: ROMol
-            Second ligand
+            Second guest
 
         core: np.array (C, 2)
             Atom mapping from mol_a to mol_b.
@@ -504,25 +505,36 @@ class SingleTopologyV3:
         self.mol_b = mol_b
         self.core = core
         self.ff = forcefield
-
         assert core.shape[1] == 2
 
         # map into idxs in the combined molecule
+
         self.a_to_c = np.arange(mol_a.GetNumAtoms(), dtype=np.int32)  # identity
         self.b_to_c = np.zeros(mol_b.GetNumAtoms(), dtype=np.int32) - 1
 
+        # mark membership:
+        # 0: Core
+        # 1: R_A (default)
+        # 2: R_B
+        self.c_flags = np.ones(self.get_num_atoms(), dtype=np.int32)
         # test for uniqueness in core idxs for each mol
         assert len(set(tuple(core[:, 0]))) == len(core[:, 0])
         assert len(set(tuple(core[:, 1]))) == len(core[:, 1])
 
         for a, b in core:
+            self.c_flags[a] = 0
             self.b_to_c[b] = a
 
         iota = self.mol_a.GetNumAtoms()
         for b_idx, c_idx in enumerate(self.b_to_c):
             if c_idx == -1:
                 self.b_to_c[b_idx] = iota
+                self.c_flags[iota] = 2
                 iota += 1
+
+        # setup reverse mappings
+        self.c_to_a = {v: k for k, v in enumerate(self.a_to_c)}
+        self.c_to_b = {v: k for k, v in enumerate(self.b_to_c)}
 
     def get_num_atoms(self):
         """
@@ -535,9 +547,46 @@ class SingleTopologyV3:
         """
         return self.mol_a.GetNumAtoms() + self.mol_b.GetNumAtoms() - len(self.core)
 
+    def combine_masses(self):
+        """
+        Combine masses between two end-states using linear interpolation.
+
+        Parameters
+        ----------
+        lamb: float
+            Lambda value
+
+        Returns
+        -------
+        np.array
+            shape of self.get_num_atoms()
+        """
+        mol_a_masses = utils.get_mol_masses(self.mol_a)
+        mol_b_masses = utils.get_mol_masses(self.mol_b)
+        mol_c_masses = []
+        for c_idx in range(self.get_num_atoms()):
+
+            indicator = self.c_flags[c_idx]
+            if indicator == 0:
+                mass_a = mol_a_masses[self.c_to_a[c_idx]]
+                mass_b = mol_b_masses[self.c_to_b[c_idx]]
+                mass = max(mass_a, mass_b)
+            elif indicator == 1:
+                mass = mol_a_masses[self.c_to_a[c_idx]]
+            elif indicator == 2:
+                mass = mol_b_masses[self.c_to_b[c_idx]]
+            else:
+                assert 0
+
+            mol_c_masses.append(mass)
+
+        return mol_c_masses
+
     def combine_confs(self, x_a, x_b):
         """
-        Combine conformations of two molecules
+        Combine conformations of two molecules.
+
+        TBD: interpolate confs based on the lambda value.
 
         Parameters
         ----------
@@ -735,3 +784,179 @@ class SingleTopologyV3:
         )
 
         return system.VacuumSystem(bond, angle, torsion, nonbonded, chiral_atom, chiral_bond)
+
+    def _parameterize_host_guest_nonbonded(self, lamb, host_nonbonded):
+        # Parameterize nonbonded potential for the host guest interaction
+
+        guest_exclusions = []
+        guest_scale_factors = []
+
+        num_host_atoms = host_nonbonded.params.shape[0]
+        num_guest_atoms = self.get_num_atoms()
+
+        for i in range(num_guest_atoms):
+            for j in range(i + 1, num_guest_atoms):
+                guest_exclusions.append((i, j))
+                guest_scale_factors.append((1.0, 1.0))
+
+        guest_exclusions = np.array(guest_exclusions, dtype=np.int32) + num_host_atoms
+        guest_scale_factors = np.array(guest_scale_factors, dtype=np.float64)
+
+        combined_exclusion_idxs = np.concatenate([host_nonbonded.get_exclusion_idxs(), guest_exclusions])
+        combined_scale_factors = np.concatenate([host_nonbonded.get_scale_factors(), guest_scale_factors])
+
+        host_qlj = host_nonbonded.params
+
+        guest_charges = []
+        guest_sigmas = []
+        guest_epsilons = []
+        guest_lambda_plane_idxs = []
+        guest_lambda_offset_idxs = []
+
+        # generate charges and lj parameters for each guest
+        guest_a_q = self.ff.q_handle.parameterize(self.mol_a)
+        guest_a_lj = self.ff.lj_handle.parameterize(self.mol_a)
+
+        guest_b_q = self.ff.q_handle.parameterize(self.mol_b)
+        guest_b_lj = self.ff.lj_handle.parameterize(self.mol_b)
+
+        for idx, membership in enumerate(self.c_flags):
+            if membership == 0:  # core atom
+                a_idx = self.c_to_a[idx]
+                b_idx = self.c_to_b[idx]
+                plane = 0
+                offset = 0
+                # interpolate charges when in common-core
+                q = (1 - lamb) * guest_a_q[a_idx] + lamb * guest_b_q[b_idx]
+                sig = (1 - lamb) * guest_a_lj[a_idx, 0] + lamb * guest_b_lj[b_idx, 0]
+                eps = (1 - lamb) * guest_a_lj[a_idx, 1] + lamb * guest_b_lj[b_idx, 1]
+            elif membership == 1:  # dummy_A
+                a_idx = self.c_to_a[idx]
+                plane = 0
+                offset = 1
+                q = guest_a_q[a_idx]
+                sig = guest_a_lj[a_idx, 0]
+                eps = guest_a_lj[a_idx, 1]
+            elif membership == 2:  # dummy_B
+                b_idx = self.c_to_b[idx]
+                plane = -1
+                offset = 1
+                q = guest_b_q[b_idx]
+                sig = guest_b_lj[b_idx, 0]
+                eps = guest_b_lj[b_idx, 1]
+            else:
+                assert 0
+
+            guest_lambda_plane_idxs.append(plane)
+            guest_lambda_offset_idxs.append(offset)
+            guest_charges.append(q)
+            guest_sigmas.append(sig)
+            guest_epsilons.append(eps)
+
+        combined_lambda_plane_idxs = np.concatenate(
+            [host_nonbonded.get_lambda_plane_idxs(), guest_lambda_plane_idxs]
+        ).astype(np.int32)
+        combined_lambda_offset_idxs = np.concatenate(
+            [host_nonbonded.get_lambda_offset_idxs(), guest_lambda_offset_idxs]
+        ).astype(np.int32)
+
+        combined_charges = np.concatenate([host_qlj[:, 0], guest_charges])
+        combined_sigmas = np.concatenate([host_qlj[:, 1], guest_sigmas])
+        combined_epsilons = np.concatenate([host_qlj[:, 2], guest_epsilons])
+        combined_nonbonded_params = np.stack([combined_charges, combined_sigmas, combined_epsilons], axis=1)
+
+        combined_nonbonded = potentials.Nonbonded(
+            combined_exclusion_idxs,
+            combined_scale_factors,
+            combined_lambda_plane_idxs,
+            combined_lambda_offset_idxs,
+            host_nonbonded.get_beta(),
+            host_nonbonded.get_cutoff(),
+        ).bind(combined_nonbonded_params)
+
+        return combined_nonbonded
+
+    def combine_with_host(
+        self,
+        host_system,
+        lamb,
+    ):
+        """
+        Setup host guest system. Bonds, angles, torsions, chiral_atom, chiral_bond and nonbonded terms are
+        combined. In particular:
+
+        1) Bond, angle, torsion, chiral_atom, chiral_bond simply have the idxs shifted by num_host_atoms.
+        2) Host-host and host-guest interactions use a nonbonded potential, with exclusions set to the
+            original host-host exclusions, in addition to *all* guest-guest interactions being excluded.
+            Host-guest interactions are implemented as follows:
+            i) at lambda = 0, the dummy atoms of mol_a are fully interacting, and become non-interacting at lambda = 1
+            ii) at lambda = 0, the dummy atoms of mol_b are non-interacting, and become fully interacting at lambda = 1
+            iii) the core atoms have parameters interpolated from mol_a's qlj to mol_b's qlj.
+        3) guest-guest interactions use pre-computed nonbonded interactions implemented as a pairlist.
+
+        Parameters
+        ----------
+        host_system: VacuumSystem
+            Parameterized system of the host
+
+        lamb: float
+            Which lambda value we want to generate the combined system.
+
+        Returns
+        -------
+        7-tuple of potentials
+            bond, angle, torsion, chiral_atom, chiral_bond, guest_nonbonded_precomputed, full_nonbonded
+
+        """
+
+        guest_system = self.setup_intermediate_state(lamb=lamb)
+
+        num_host_atoms = host_system.nonbonded.params.shape[0]
+
+        guest_chiral_atom_idxs = np.array(guest_system.chiral_atom.get_idxs(), dtype=np.int32) + num_host_atoms
+        guest_system.chiral_atom.set_idxs(guest_chiral_atom_idxs)
+
+        guest_chiral_bond_idxs = np.array(guest_system.chiral_bond.get_idxs(), dtype=np.int32) + num_host_atoms
+        guest_system.chiral_bond.set_idxs(guest_chiral_bond_idxs)
+
+        guest_nonbonded_idxs = np.array(guest_system.nonbonded.get_idxs(), dtype=np.int32) + num_host_atoms
+        guest_system.nonbonded.set_idxs(guest_nonbonded_idxs)
+
+        combined_bond_idxs = np.concatenate(
+            [host_system.bond.get_idxs(), guest_system.bond.get_idxs() + num_host_atoms]
+        )
+        combined_bond_params = np.concatenate([host_system.bond.params, guest_system.bond.params])
+        combined_bond = potentials.HarmonicBond(combined_bond_idxs).bind(combined_bond_params)
+
+        combined_angle_idxs = np.concatenate(
+            [host_system.angle.get_idxs(), guest_system.angle.get_idxs() + num_host_atoms]
+        )
+        combined_angle_params = np.concatenate([host_system.angle.params, guest_system.angle.params])
+        combined_angle = potentials.HarmonicAngle(combined_angle_idxs).bind(combined_angle_params)
+
+        # complex proteins have torsions
+        if host_system.torsion:
+            combined_torsion_idxs = np.concatenate(
+                [host_system.torsion.get_idxs(), guest_system.torsion.get_idxs() + num_host_atoms]
+            )
+            combined_torsion_params = np.concatenate([host_system.torsion.params, guest_system.torsion.params])
+        else:
+            # solvent waters don't have torsions
+            combined_torsion_idxs = np.array(guest_system.torsion.get_idxs(), dtype=np.int32) + num_host_atoms
+            combined_torsion_params = np.array(guest_system.torsion.params, dtype=np.float64)
+
+        combined_torsion = potentials.PeriodicTorsion(combined_torsion_idxs).bind(combined_torsion_params)
+
+        # concatenate guest charges with host charges
+
+        combined_nonbonded = self._parameterize_host_guest_nonbonded(lamb, host_system.nonbonded)
+
+        return HostGuestSystem(
+            combined_bond,
+            combined_angle,
+            combined_torsion,
+            guest_system.chiral_atom,
+            guest_system.chiral_bond,
+            guest_system.nonbonded,
+            combined_nonbonded,
+        )
