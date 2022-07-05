@@ -427,7 +427,7 @@ class NonbondedPairList(NonbondedCustomOpWrapper):
         return self.args[3]
 
 
-class NonbondedPairListPrecomputed(NonbondedCustomOpWrapper):
+class NonbondedPairListPrecomputed(CustomOpWrapper):
     """
     This implements a pairlist with precomputed parameters. It differs from
     the regular NonbondedPairlist in that it expects params of the form s0*q_ij, s_ij, and s1*e_ij

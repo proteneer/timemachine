@@ -315,7 +315,15 @@ def nonbonded_v3_on_specific_pairs(
     return vdW, electrostatics
 
 
-def nonbonded_v3_on_precomputed_pairs(conf, params, box, pairs, offsets, beta: float, cutoff: Optional[float] = None):
+def nonbonded_v3_on_precomputed_pairs(
+    conf,
+    params,
+    box,
+    pairs,
+    offsets,
+    beta: float,
+    cutoff: Optional[float] = None,
+):
     """
     Similar to pairlist, except that we pre-compute parameters with:
 
