@@ -7,7 +7,6 @@ import numpy as np
 from rdkit import Chem
 from rdkit.Chem import AllChem
 
-from timemachine import constants
 from timemachine.fe import estimator, model_rabfe, model_utils, topology
 from timemachine.fe.free_energy import AbsoluteFreeEnergy, get_romol_conf
 from timemachine.ff import Forcefield
@@ -50,8 +49,6 @@ def simulate_vacuum(client, mol, ff, temperature, dt, equil_steps, prod_steps, s
     if seed == 0:
         seed = np.random.randint(np.iinfo(np.int32).max)
 
-    beta = 1 / (constants.BOLTZ * temperature)
-
     if dt > 1.5e-5:
         bond_list = get_bond_list(unbound_potentials[0])
         masses = model_utils.apply_hmr(masses, bond_list)
@@ -64,41 +61,26 @@ def simulate_vacuum(client, mol, ff, temperature, dt, equil_steps, prod_steps, s
 
     barostat = None
 
-    endpoint_correct = False
-    model = estimator.FreeEnergyModel(
-        unbound_potentials,
-        endpoint_correct,
-        client,
-        box,
-        mol_coords,
-        v0,
-        integrator,
-        barostat,
-        np.zeros(1),
-        equil_steps,
-        prod_steps,
-        beta,
-        "vacuum",
-    )
     bound_potentials = []
-    for params, unbound_pot in zip(sys_params, model.unbound_potentials):
+    for params, unbound_pot in zip(sys_params, unbound_potentials):
         bp = unbound_pot.bind(np.asarray(params))
         bound_potentials.append(bp)
     subsample_interval = 1000
     lamb = 0.0  # Fully embedded ligand
+    lambda_schedule = [lamb]
     args = (
         lamb,
-        model.box,
-        model.x0,
-        model.v0,
+        box,
+        mol_coords,
+        v0,
         bound_potentials,
-        model.integrator,
-        model.barostat,
-        model.equil_steps,
-        model.prod_steps,
+        integrator,
+        barostat,
+        equil_steps,
+        prod_steps,
         subsample_interval,
         subsample_interval,
-        model.lambda_schedule,
+        lambda_schedule,
     )
     futures = []
     futures.append(client.submit(estimator.simulate, *args))
