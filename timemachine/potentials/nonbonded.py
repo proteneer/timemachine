@@ -334,7 +334,7 @@ def nonbonded_v3_on_precomputed_pairs(
     conf: N,3
     params: P,3 (q_ij, s_ij, e_ij)
     pairs: P,2 (i,j)
-    offsets: P, 2 (w,) distance offsets for electrostatic and lj interactions
+    offsets: P (w,) distance offsets for electrostatic and lj interactions
     """
 
     if len(pairs) == 0:
