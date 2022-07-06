@@ -57,8 +57,8 @@ void NonbondedPairListPrecomputed<RealType>::execute_device(
 
     if (P != 3 * B_) {
         throw std::runtime_error(
-            "NonbondedPairListPrecomputed::execute_device(): expected P == 2*B, got P=" + std::to_string(P) +
-            ", 2*B=" + std::to_string(2 * B_));
+            "NonbondedPairListPrecomputed::execute_device(): expected P == 3*B, got P=" + std::to_string(P) +
+            ", 3*B=" + std::to_string(3 * B_));
     }
 
     if (B_ > 0) {
