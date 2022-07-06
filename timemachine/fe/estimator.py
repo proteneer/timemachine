@@ -176,7 +176,7 @@ def simulate(
     v0: NDArray,
     final_potentials: List,
     integrator: LangevinIntegrator,
-    barostat: MonteCarloBarostat,
+    barostat: Optional[MonteCarloBarostat],
     equil_steps: int,
     prod_steps: int,
     x_interval: int,
@@ -252,13 +252,16 @@ def simulate(
         integrator = copy.deepcopy(integrator)
         integrator.seed = np.random.randint(np.iinfo(np.int32).max)
 
-    if barostat.seed == 0:
-        barostat = copy.deepcopy(barostat)
-        barostat.seed = np.random.randint(np.iinfo(np.int32).max)
+    barostat_impl = None
+    if barostat is not None:
+        if barostat.seed == 0:
+            barostat = copy.deepcopy(barostat)
+            barostat.seed = np.random.randint(np.iinfo(np.int32).max)
+        barostat_impl = barostat.impl(all_impls)
 
     intg_impl = integrator.impl()
     # technically we need to only pass in the nonbonded impl
-    barostat_impl = barostat.impl(all_impls)
+
     # context components: positions, velocities, box, integrator, energy fxns
     ctxt = custom_ops.Context(x0, v0, box, intg_impl, all_impls, barostat_impl)
 
@@ -266,9 +269,10 @@ def simulate(
     equil_schedule = np.ones(equil_steps) * lamb
     ctxt.multiple_steps(equil_schedule)
 
-    # (ytz): intentionally hard-coded, I'd rather the end-user *not*
-    # muck with this unless they have a good reason to.
-    barostat_impl.set_interval(25)
+    if barostat_impl is not None:
+        # (ytz): intentionally hard-coded, I'd rather the end-user *not*
+        # muck with this unless they have a good reason to.
+        barostat_impl.set_interval(25)
 
     full_us, xs, boxes = ctxt.multiple_steps_U(lamb, prod_steps, np.array(lambda_windows), u_interval, x_interval)
 
