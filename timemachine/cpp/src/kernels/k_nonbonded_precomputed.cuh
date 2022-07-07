@@ -82,6 +82,7 @@ void __global__ k_nonbonded_precomputed(
     if (q_ij != 0) {
 
         // energies
+
         RealType nrg = q_ij * erfc(beta * d_ij) / d_ij;
         energy += FLOAT_TO_FIXED_NONBONDED(nrg);
 
