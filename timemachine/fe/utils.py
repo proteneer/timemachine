@@ -314,7 +314,7 @@ def get_romol_conf(mol):
 
 def get_mol_masses(mol):
     """Return the masses for the given mol"""
-    return [a.GetMass() for a in mol.GetAtoms()]
+    return np.array([a.GetMass() for a in mol.GetAtoms()])
 
 
 def get_mol_name(mol) -> str:
