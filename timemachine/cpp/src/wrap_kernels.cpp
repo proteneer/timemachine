@@ -19,6 +19,7 @@
 #include "nonbonded_all_pairs.hpp"
 #include "nonbonded_interaction_group.hpp"
 #include "nonbonded_pair_list.hpp"
+#include "nonbonded_precomputed.hpp"
 #include "periodic_torsion.hpp"
 #include "potential.hpp"
 #include "rmsd_align.hpp"
@@ -751,6 +752,28 @@ template <typename RealType> void declare_harmonic_bond(py::module &m, const cha
             py::arg("lamb_offset") = py::none());
 }
 
+template <typename RealType> void declare_nonbonded_precomputed(py::module &m, const char *typestr) {
+
+    using Class = timemachine::NonbondedPairListPrecomputed<RealType>;
+    std::string pyclass_name = std::string("NonbondedPairListPrecomputed_") + typestr;
+    py::class_<Class, std::shared_ptr<Class>, timemachine::Potential>(
+        m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
+        .def(
+            py::init([](const py::array_t<int, py::array::c_style> &pair_idxs,
+                        const py::array_t<double, py::array::c_style> &w_offsets,
+                        double beta,
+                        double cutoff) {
+                std::vector<int> vec_pair_idxs(pair_idxs.data(), pair_idxs.data() + pair_idxs.size());
+                std::vector<double> vec_w_offsets(w_offsets.data(), w_offsets.data() + w_offsets.size());
+                return new timemachine::NonbondedPairListPrecomputed<RealType>(
+                    vec_pair_idxs, vec_w_offsets, beta, cutoff);
+            }),
+            py::arg("pair_idxs"),
+            py::arg("w_offsets"),
+            py::arg("beta"),
+            py::arg("cutoff"));
+}
+
 template <typename RealType> void declare_chiral_atom_restraint(py::module &m, const char *typestr) {
 
     using Class = timemachine::ChiralAtomRestraint<RealType>;
@@ -1179,6 +1202,9 @@ PYBIND11_MODULE(custom_ops, m) {
 
     declare_nonbonded_interaction_group<double, false>(m, "f64");
     declare_nonbonded_interaction_group<float, false>(m, "f32");
+
+    declare_nonbonded_precomputed<double>(m, "f64");
+    declare_nonbonded_precomputed<float>(m, "f32");
 
     declare_nonbonded_pair_list<double, false, false>(m, "f64");
     declare_nonbonded_pair_list<float, false, false>(m, "f32");
