@@ -2,6 +2,7 @@
 
 import argparse
 import multiprocessing
+import pickle
 
 import numpy as np
 from rdkit import Chem
@@ -17,6 +18,21 @@ from timemachine.parallel.client import CUDAPoolClient
 from timemachine.parallel.utils import get_gpu_count
 
 
+def smiles_file_to_mols(path):
+    smi_params = Chem.SmilesParserParams()
+    smi_params.removeHs = False
+    with open(path, "r") as ifs:
+        for line in ifs.readlines():
+            if line.startswith("SMILES"):
+                continue
+            parts = line.strip("\n").split(" ")
+            smi_string = parts[0]
+            name = " ".join(parts[1:])
+            mol = Chem.MolFromSmiles(smi_string, smi_params)
+            mol.SetProp("_Name", name)
+            yield mol
+
+
 def simulate_solvent(model, mol, host_coords, box, seed):
     mol_coords = get_romol_conf(mol)
     minimized_host_coords = minimizer.minimize_host_4d(
@@ -28,7 +44,13 @@ def simulate_solvent(model, mol, host_coords, box, seed):
         [mol_coords],
     )
     ordered_params = model.ff.get_ordered_params()
-    return model.simulate_futures(
+    topo = model.setup_topology(mol)
+    afe = AbsoluteFreeEnergy(mol, topo)
+    unbound_pots, sys_params, _ = afe.prepare_host_edge(ordered_params, model.host_system)
+    bound_pots = []
+    for params, unbound_pot in zip(sys_params, unbound_pots):
+        bound_pots.append(unbound_pot.bind(params))
+    return bound_pots, model.simulate_futures(
         ordered_params,
         mol,
         np.concatenate([minimized_host_coords, mol_coords]),
@@ -49,7 +71,7 @@ def simulate_vacuum(client, mol, ff, temperature, dt, equil_steps, prod_steps, s
     if seed == 0:
         seed = np.random.randint(np.iinfo(np.int32).max)
 
-    if dt > 1.5e-5:
+    if dt > 1.5e-3:
         bond_list = get_bond_list(unbound_potentials[0])
         masses = model_utils.apply_hmr(masses, bond_list)
     friction = 1.0
@@ -65,7 +87,7 @@ def simulate_vacuum(client, mol, ff, temperature, dt, equil_steps, prod_steps, s
     for params, unbound_pot in zip(sys_params, unbound_potentials):
         bp = unbound_pot.bind(np.asarray(params))
         bound_potentials.append(bp)
-    subsample_interval = 1000
+    subsample_interval = min(prod_steps, 1000)
     lamb = 0.0  # Fully embedded ligand
     lambda_schedule = [lamb]
     args = (
@@ -84,7 +106,7 @@ def simulate_vacuum(client, mol, ff, temperature, dt, equil_steps, prod_steps, s
     )
     futures = []
     futures.append(client.submit(estimator.simulate, *args))
-    return futures
+    return bound_potentials, futures
 
 
 def main():
@@ -145,11 +167,10 @@ def main():
 
     count = 0
     futures = []
-    # Not reading in the hydrogens as defined in the smiles.
-    for mol in Chem.SmilesMolSupplier(cmd_args.smiles_file):
+    for mol in smiles_file_to_mols(cmd_args.smiles_file):
         if cmd_args.limit is not None and count >= cmd_args.limit:
             break
-        mol = Chem.AddHs(mol)
+        assert mol.GetNumAtoms() == AllChem.AddHs(mol).GetNumAtoms()
         AllChem.EmbedMolecule(mol, randomSeed=seed)
         sim_futures = simulate_solvent(solvent_model, mol, solvent_coords, solvent_box, seed)
         sim_vacuum_futures = simulate_vacuum(
@@ -158,7 +179,7 @@ def main():
 
         futures.append((mol, sim_futures, sim_vacuum_futures))
         count += 1
-    for mol, (_, free_energy, solv_futures), (vacuum_futures) in futures:
+    for mol, (solvent_pots, (_, free_energy, solv_futures)), (vacuum_pots, vacuum_futures) in futures:
         mol_name = mol.GetProp("_Name")
         assert len(solv_futures) == 1
         assert len(vacuum_futures) == 1
@@ -170,6 +191,10 @@ def main():
             box=free_energy.box,
             out_filename=f"solvent_topology_{mol_name}.pdb",
         )
+        with open(f"solvent_potentials_{mol_name}.pkl", "wb") as ofs:
+            pickle.dump(solvent_pots, ofs)
+        with open(f"vacuum_potentials_{mol_name}.pkl", "wb") as ofs:
+            pickle.dump(vacuum_pots, ofs)
         results = [f.result() for f in solv_futures]
         for res in results:
             np.savez(
