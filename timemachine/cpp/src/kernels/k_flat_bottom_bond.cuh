@@ -31,15 +31,6 @@ void __global__ k_flat_bottom_bond(
     int rmin_idx = params_idx + 1;
     int rmax_idx = params_idx + 2;
 
-    RealType box_diag[3];
-    box_diag[0] = box[0 * 3 + 0];
-    box_diag[1] = box[1 * 3 + 1];
-    box_diag[2] = box[2 * 3 + 2];
-    RealType inv_box[3];
-    inv_box[0] = 1 / box_diag[0];
-    inv_box[1] = 1 / box_diag[1];
-    inv_box[2] = 1 / box_diag[2];
-
     RealType k = params[k_idx];
     RealType rmin = params[rmin_idx];
     RealType rmax = params[rmax_idx];
@@ -48,8 +39,8 @@ void __global__ k_flat_bottom_bond(
     RealType dx[3];
     RealType r2 = 0;
     for (int d = 0; d < 3; d++) {
-        RealType delta = coords[src_idx * 3 + d] - coords[dst_idx * 3 + d];
-        delta -= box_diag[d] * nearbyint(delta * inv_box[d]);
+        double delta = coords[src_idx * 3 + d] - coords[dst_idx * 3 + d];
+        delta -= box[d * 3 + d] * nearbyint(delta / box[d * 3 + d]);
         dx[d] = delta;
         r2 += delta * delta;
     }
