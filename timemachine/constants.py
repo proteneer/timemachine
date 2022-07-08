@@ -12,3 +12,8 @@ DISTANCE_UNIT = unit.nanometer
 
 kB = unit.BOLTZMANN_CONSTANT_kB * unit.AVOGADRO_CONSTANT_NA
 DEFAULT_FF = "smirnoff_1_1_0_ccc.py"
+DEFAULT_TEMP = 300
+DEFAULT_KT = BOLTZ * DEFAULT_TEMP
+
+KCAL_TO_KJ = 4.184  # multiply to convert from kcal/mol to kJ
+KCAL_TO_DEFAULT_KT = KCAL_TO_KJ / DEFAULT_KT
