@@ -5,13 +5,13 @@ from typing import List, Sequence
 
 import numpy as np
 from numpy.typing import NDArray as Array
+from rdkit import Chem
 
 from timemachine.constants import BOLTZ, DEFAULT_FF
 from timemachine.fe import functional
 from timemachine.fe.lambda_schedule import construct_pre_optimized_absolute_lambda_schedule_solvent
 from timemachine.ff import Forcefield
-from timemachine.md import enhanced, moves
-from timemachine.md.smc import conditional_multinomial_resample
+from timemachine.md import enhanced, moves, smc
 from timemachine.md.states import CoordsVelBox
 
 
@@ -153,7 +153,7 @@ def set_up_ahfe_system_for_smc(
         u_s = np.array([reduced_potential(x, lam) for x in xs])
         return -u_s
 
-    resample = partial(conditional_multinomial_resample, thresh=resample_thresh)
+    resample = partial(smc.conditional_multinomial_resample, thresh=resample_thresh)
 
     return samples, lambdas, propagate, log_prob, resample
 
@@ -235,13 +235,23 @@ def set_up_ahfe_system_for_smc_parameter_changes(
 
     Parameters
     ----------
+    mol:
+        Molecule to use to generate samples.
+    n_walkers: int
+        Number of walkers to use
+    n_md_steps: int
+        Number of MD steps per walker
+    resample_thresh: float
+        Resample when the fraction ess falls below this value.
     initial_samples: Samples
         Initial set of unweighted samples generated using the initial forcefield.
+    seed: int
+        Random seed.
     ff0: Forcefield
         Initial forcefield (lam=0)
     ff1: Forcefield
         New forcefield (lam=1)
-    n_windws: int
+    n_windows: int
         Number of windows to use for parameter change.
     is_vacuum: bool
         True if this should be the vacuum leg or False for the solvent leg.
@@ -272,6 +282,46 @@ def set_up_ahfe_system_for_smc_parameter_changes(
         u_s = np.array([reduced_potential(x, lam) for x in xs])
         return -u_s
 
-    resample = partial(conditional_multinomial_resample, thresh=resample_thresh)
+    resample = partial(smc.conditional_multinomial_resample, thresh=resample_thresh)
 
     return samples, lambdas, propagate, log_prob, resample
+
+
+def generate_samples_for_smc_parameter_changes(
+    mol: Chem.rdchem.Mol,
+    ff0: Forcefield,
+    ff1: Forcefield,
+    initial_samples: smc.Samples,
+    n_windows=10,
+    is_vacuum=False,
+    n_walkers=100,
+    n_md_steps=100,
+    seed=2022,
+) -> smc.Samples:
+    """
+    Generate new samples under a modified potential.
+    See `set_up_ahfe_system_for_smc_parameter_changes` for parameters.
+
+    Returns
+    -------
+    New samples generated using ff1.
+    """
+    samples, lambdas, propagate, log_prob, resample = set_up_ahfe_system_for_smc_parameter_changes(
+        mol,
+        n_walkers=n_walkers,
+        n_md_steps=n_md_steps,
+        resample_thresh=0.6,
+        initial_samples=initial_samples,
+        ff0=ff0,
+        ff1=ff1,
+        is_vacuum=is_vacuum,
+        n_windows=n_windows,
+        seed=seed,
+    )
+
+    if is_vacuum:
+        smc_result = smc.sequential_monte_carlo(initial_samples, lambdas, propagate, log_prob, resample)
+        return smc.refine_samples(smc_result["traj"][-1], smc_result["log_weights_traj"][-1], propagate, lambdas[-1])
+    else:
+        smc_result = smc.sequential_monte_carlo(samples, lambdas, propagate, log_prob, resample)
+        return smc.refine_samples(smc_result["traj"][-1], smc_result["log_weights_traj"][-1], propagate, lambdas[-1])

@@ -3,6 +3,9 @@ from typing import Any, List, Tuple
 import networkx as nx
 import numpy as np
 import simtk.unit
+from rdkit import Chem
+from rdkit.Chem import AllChem, Draw
+from rdkit.Chem.Draw import rdMolDraw2D
 
 
 def to_md_units(q):
@@ -158,8 +161,6 @@ def simple_geometry_mapping(mol_a, mol_b, threshold=0.5):
 # TODO: add a visualization module?
 # TODO: compare with perses atom map visualizations?
 
-from rdkit.Chem.Draw import rdMolDraw2D
-
 
 def draw_mol(mol, highlightAtoms, highlightColors):
     """from YTZ, Feb 1, 2021"""
@@ -187,6 +188,36 @@ def plot_atom_mapping(mol_a, mol_b, core):
 
     draw_mol(mol_a, core[:, 0].tolist(), atom_colors_a)
     draw_mol(mol_b, core[:, 1].tolist(), atom_colors_b)
+
+
+def plot_atom_mapping_grid(mol_a, mol_b, core, show_idxs=False):
+    mol_a_2d = Chem.Mol(mol_a)
+    mol_b_2d = Chem.Mol(mol_b)
+
+    AllChem.Compute2DCoords(mol_a_2d)
+    AllChem.GenerateDepictionMatching2DStructure(mol_b_2d, mol_a_2d, atomMap=core.tolist())
+
+    atom_colors_a = {}
+    atom_colors_b = {}
+    for (a_idx, b_idx), rgb in zip(core, np.random.random((len(core), 3))):
+        atom_colors_a[int(a_idx)] = tuple(rgb.tolist())
+        atom_colors_b[int(b_idx)] = tuple(rgb.tolist())
+
+    if show_idxs:
+        for atom in mol_a_2d.GetAtoms():
+            atom.SetProp("molAtomMapNumber", str(atom.GetIdx()))
+        for atom in mol_b_2d.GetAtoms():
+            atom.SetProp("molAtomMapNumber", str(atom.GetIdx()))
+
+    return Draw.MolsToGridImage(
+        [mol_a_2d, mol_b_2d],
+        molsPerRow=2,
+        highlightAtomLists=[core[:, 0].tolist(), core[:, 1].tolist()],
+        highlightAtomColors=[atom_colors_a, atom_colors_b],
+        subImgSize=(400, 400),
+        legends=[mol_a.GetProp("_Name"), mol_b.GetProp("_Name")],
+        useSVG=True,
+    )
 
 
 def get_connected_components(nodes, relative_inds, absolute_inds) -> List[List[Any]]:

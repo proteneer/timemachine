@@ -3,6 +3,8 @@
 from typing import Any, Callable, Dict, List, Tuple
 
 import numpy as np
+from jax import numpy as jnp
+from jax.scipy.special import logsumexp as jlogsumexp
 from numpy.typing import NDArray
 from scipy.special import logsumexp
 
@@ -146,9 +148,8 @@ def effective_sample_size(log_weights):
     * See [Elvira, Martino, Robert, 2018] "Rethinking the effective sample size" https://arxiv.org/abs/1809.04129
         and references therein for some insightful discussion of limitations and possible improvements
     """
-    normed_weights = np.exp(log_weights - logsumexp(log_weights))
-    assert np.isclose(np.sum(normed_weights), 1.0)
-    return 1 / np.sum(normed_weights ** 2)
+    norm_weights = jnp.exp(log_weights - jlogsumexp(log_weights))
+    return 1 / jnp.sum(norm_weights ** 2)
 
 
 def conditional_multinomial_resample(log_weights, thresh=0.5):

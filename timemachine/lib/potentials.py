@@ -435,7 +435,7 @@ class NonbondedPairList(NonbondedCustomOpWrapper):
         return self.args[3]
 
 
-class NonbondedPairListPrecomputed(NonbondedCustomOpWrapper):
+class NonbondedPairListPrecomputed(CustomOpWrapper):
     """
     This implements a pairlist with precomputed parameters. It differs from
     the regular NonbondedPairlist in that it expects params of the form s0*q_ij, s_ij, and s1*e_ij
@@ -451,11 +451,14 @@ class NonbondedPairListPrecomputed(NonbondedCustomOpWrapper):
     def set_idxs(self, idxs):
         self.args[0] = idxs
 
-    def get_beta(self):
+    def get_offsets(self):
         return self.args[1]
 
-    def get_cutoff(self):
+    def get_beta(self):
         return self.args[2]
+
+    def get_cutoff(self):
+        return self.args[3]
 
 
 class NonbondedPairListNegated(NonbondedCustomOpWrapper):

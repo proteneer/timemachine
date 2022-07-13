@@ -77,7 +77,7 @@ def delta_r(ri, rj, box=None):
     return diff
 
 
-def distance_on_pairs(ri, rj, box=None):
+def distance_on_pairs(ri, rj, box=None, offsets=None):
     """O(n) where n = len(ri) = len(rj)
 
     Notes
@@ -87,6 +87,9 @@ def distance_on_pairs(ri, rj, box=None):
     assert len(ri) == len(rj)
 
     diff = delta_r(ri, rj, box)
+    if offsets is not None:
+        diff = jnp.concatenate([diff, jnp.array(offsets).reshape(-1, 1)], axis=1)
+
     dij = jnp.linalg.norm(diff, axis=-1)
 
     assert len(dij) == len(ri)

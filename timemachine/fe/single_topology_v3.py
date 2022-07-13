@@ -4,7 +4,7 @@ from typing import Tuple
 
 import numpy as np
 
-from timemachine.fe import system, topology, utils
+from timemachine.fe import interpolate, system, topology, utils
 from timemachine.fe.dummy import canonicalize_bond, identify_dummy_groups, identify_root_anchors
 from timemachine.lib import potentials
 
@@ -612,3 +612,126 @@ class SingleTopologyV3:
             return (1 - lamb) * U0_fn(x) + lamb * U1_fn(x)
 
         return U_fn
+
+    def _setup_intermediate_bonded_term(self, src_bond, dst_bond, lamb, align_fn, interpolate_fn):
+
+        src_cls_bond = type(src_bond)
+        dst_cls_bond = type(dst_bond)
+
+        assert src_cls_bond == dst_cls_bond
+
+        bond_idxs_and_params = align_fn(
+            src_bond.get_idxs(),
+            src_bond.params,
+            dst_bond.get_idxs(),
+            dst_bond.params,
+        )
+        bond_idxs = []
+        bond_params = []
+        for idxs, src_params, dst_params in bond_idxs_and_params:
+            bond_idxs.append(idxs)
+            new_params = interpolate_fn(src_params, dst_params, lamb)
+            bond_params.append(new_params)
+
+        return src_cls_bond(np.array(bond_idxs)).bind(bond_params)
+
+    def _setup_intermediate_nonbonded_term(self, src_nonbonded, dst_nonbonded, lamb, align_fn, interpolate_fn):
+
+        assert src_nonbonded.get_beta() == dst_nonbonded.get_beta()
+        assert src_nonbonded.get_cutoff() == dst_nonbonded.get_cutoff()
+
+        cutoff = src_nonbonded.get_cutoff()
+
+        pair_idxs_and_params = align_fn(
+            src_nonbonded.get_idxs(),
+            src_nonbonded.params,
+            dst_nonbonded.get_idxs(),
+            dst_nonbonded.params,
+        )
+        pair_idxs = []
+        pair_params = []
+        pair_offsets = []
+        for idxs, src_params, dst_params in pair_idxs_and_params:
+
+            if src_params == (0, 0, 0):
+                new_params = dst_params
+                offset = (1 - lamb) * cutoff
+            elif dst_params == (0, 0, 0):
+                new_params = src_params
+                offset = lamb * cutoff
+            else:
+                new_params = interpolate_fn(src_params, dst_params, lamb)
+                offset = 0
+
+            pair_idxs.append(idxs)
+            pair_params.append(new_params)
+            pair_offsets.append(offset)
+
+        return potentials.NonbondedPairListPrecomputed(
+            np.array(pair_idxs), np.array(pair_offsets), src_nonbonded.get_beta(), src_nonbonded.get_cutoff()
+        ).bind(pair_params)
+
+    def _setup_intermediate_chiral_bond_term(self, src_bond, dst_bond, lamb, interpolate_fn):
+
+        assert type(src_bond) == potentials.ChiralBondRestraint
+        assert type(dst_bond) == potentials.ChiralBondRestraint
+
+        idxs_and_params = interpolate.align_chiral_bond_idxs_and_params(
+            src_bond.get_idxs(),
+            src_bond.params,
+            src_bond.get_signs(),
+            dst_bond.get_idxs(),
+            dst_bond.params,
+            dst_bond.get_signs(),
+        )
+        chiral_bond_idxs = []
+        chiral_bond_params = []
+        chiral_bond_signs = []
+        for idxs, sign, src_k, dst_k in idxs_and_params:
+            chiral_bond_idxs.append(idxs)
+            new_params = interpolate_fn(src_k, dst_k, lamb)
+            chiral_bond_params.append(new_params)
+            chiral_bond_signs.append(sign)
+
+        # these should be properly sized
+        chiral_bond_idxs = np.array(chiral_bond_idxs, dtype=np.int32).reshape((-1, 4))
+
+        return potentials.ChiralBondRestraint(chiral_bond_idxs, chiral_bond_signs).bind(chiral_bond_params)
+
+    def setup_intermediate_state(self, lamb):
+        """
+        Setup intermediate states at some value of lambda.
+        """
+        src_system = self.setup_end_state_src()
+        dst_system = self.setup_end_state_dst()
+        interpolate_fn = interpolate.linear_interpolation
+
+        # tbd: use different interpolation functions later
+        bond = self._setup_intermediate_bonded_term(
+            src_system.bond, dst_system.bond, lamb, interpolate.align_harmonic_bond_idxs_and_params, interpolate_fn
+        )
+        angle = self._setup_intermediate_bonded_term(
+            src_system.angle, dst_system.angle, lamb, interpolate.align_harmonic_angle_idxs_and_params, interpolate_fn
+        )
+        torsion = self._setup_intermediate_bonded_term(
+            src_system.torsion, dst_system.torsion, lamb, interpolate.align_torsion_idxs_and_params, interpolate_fn
+        )
+        nonbonded = self._setup_intermediate_nonbonded_term(
+            src_system.nonbonded,
+            dst_system.nonbonded,
+            lamb,
+            interpolate.align_nonbonded_idxs_and_params,
+            interpolate_fn,
+        )
+        chiral_atom = self._setup_intermediate_bonded_term(
+            src_system.chiral_atom,
+            dst_system.chiral_atom,
+            lamb,
+            interpolate.align_chiral_atom_idxs_and_params,
+            interpolate_fn,
+        )
+        chiral_bond = self._setup_intermediate_chiral_bond_term(
+            src_system.chiral_bond, dst_system.chiral_bond, lamb, interpolate_fn
+        )
+
+        return system.VacuumSystem(bond, angle, torsion, nonbonded, chiral_atom, chiral_bond)
