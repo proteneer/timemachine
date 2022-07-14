@@ -206,10 +206,11 @@ class TestBonded(GradientTest):
 
         atom_idxs = np.arange(n_particles)
 
-        # (k, r_min, r_max)
-        params = np.random.rand(n_bonds, 3).astype(np.float64)
-        params[:, 0] *= 1000  # make k large
-        params[:, -1] += params[:, -2]  # guarantee r_max >= r_min
+        k = np.random.rand(n_bonds) * 1000  # k large
+        r_min = np.random.rand(n_bonds)  # r_min non-negative
+        r_max = r_min + np.random.rand(n_bonds)  # r_max >= r_min
+        params = np.array([k, r_min, r_max]).astype(np.float64).T
+        assert params.shape == (n_bonds, 3)
 
         bond_idxs = []
         for _ in range(n_bonds):
