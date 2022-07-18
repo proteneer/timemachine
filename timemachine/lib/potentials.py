@@ -183,6 +183,14 @@ class HarmonicBond(BondedWrapper):
     pass
 
 
+class FlatBottomBond(CustomOpWrapper):
+    def get_idxs(self):
+        return self.args[0]
+
+    def set_idxs(self, new_idxs):
+        self.args[0] = new_idxs
+
+
 # this is an alias to make type checking easier
 class CoreRestraint(HarmonicBond):
     def unbound_impl(self, precision):

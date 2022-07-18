@@ -12,6 +12,7 @@
 #include "context.hpp"
 #include "fanout_summed_potential.hpp"
 #include "fixed_point.hpp"
+#include "flat_bottom_bond.hpp"
 #include "harmonic_angle.hpp"
 #include "harmonic_bond.hpp"
 #include "integrator.hpp"
@@ -752,6 +753,20 @@ template <typename RealType> void declare_harmonic_bond(py::module &m, const cha
             py::arg("lamb_offset") = py::none());
 }
 
+template <typename RealType> void declare_flat_bottom_bond(py::module &m, const char *typestr) {
+
+    using Class = timemachine::FlatBottomBond<RealType>;
+    std::string pyclass_name = std::string("FlatBottomBond_") + typestr;
+    py::class_<Class, std::shared_ptr<Class>, timemachine::Potential>(
+        m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
+        .def(
+            py::init([](const py::array_t<int, py::array::c_style> &bond_idxs) {
+                std::vector<int> vec_bond_idxs(bond_idxs.data(), bond_idxs.data() + bond_idxs.size());
+                return new Class(vec_bond_idxs);
+            }),
+            py::arg("bond_idxs"));
+}
+
 template <typename RealType> void declare_nonbonded_precomputed(py::module &m, const char *typestr) {
 
     using Class = timemachine::NonbondedPairListPrecomputed<RealType>;
@@ -1178,6 +1193,9 @@ PYBIND11_MODULE(custom_ops, m) {
 
     declare_harmonic_bond<double>(m, "f64");
     declare_harmonic_bond<float>(m, "f32");
+
+    declare_flat_bottom_bond<double>(m, "f64");
+    declare_flat_bottom_bond<float>(m, "f32");
 
     declare_chiral_atom_restraint<double>(m, "f64");
     declare_chiral_atom_restraint<float>(m, "f32");
