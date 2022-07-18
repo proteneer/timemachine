@@ -86,7 +86,7 @@ setup(
         "grpcio",
         "importlib-resources",
         "jax",
-        "jaxlib>0.1.74",
+        "jaxlib>0.3.13",
         "networkx",
         "numpy",
         "pymbar>3.0.4",
