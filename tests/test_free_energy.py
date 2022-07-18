@@ -455,5 +455,27 @@ def test_absolute_vacuum():
     afe = free_energy.AbsoluteFreeEnergy(mol, bt)
 
     unbound_potentials, sys_params, masses = afe.prepare_vacuum_edge(ff_params)
-    assert masses == utils.get_mol_masses(mol)
+    assert np.all(masses == utils.get_mol_masses(mol))
     np.testing.assert_array_almost_equal(afe.prepare_combined_coords(), utils.get_romol_conf(mol))
+
+
+def test_vacuum_and_solvent_edge_types():
+    """Ensure that the values returned by the vacuum and solvent edges are all of the same type."""
+    with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
+        mol = next(Chem.SDMolSupplier(str(path_to_ligand), removeHs=False))
+
+    solvent_system, solvent_coords, solvent_box, _ = builders.build_water_system(3.0)
+
+    ff = Forcefield.load_from_file("smirnoff_1_1_0_ccc.py")
+    ff_params = ff.get_ordered_params()
+
+    bt = topology.BaseTopology(mol, ff)
+    afe = free_energy.AbsoluteFreeEnergy(mol, bt)
+
+    vacuum_unbound_potentials, vacuum_sys_params, vacuum_masses = afe.prepare_vacuum_edge(ff_params)
+
+    solvent_unbound_potentials, solvent_sys_params, solvent_masses = afe.prepare_host_edge(ff_params, solvent_system)
+
+    assert type(vacuum_unbound_potentials) == type(solvent_unbound_potentials)
+    assert type(vacuum_sys_params) == type(solvent_sys_params)
+    assert type(vacuum_masses) == type(solvent_masses)
