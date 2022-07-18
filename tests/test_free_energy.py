@@ -460,7 +460,7 @@ def test_absolute_vacuum():
 
 
 def test_vacuum_and_solvent_edge_types():
-    """Ensure that the values returned by the vacuum and solvent edges are all of the same time."""
+    """Ensure that the values returned by the vacuum and solvent edges are all of the same type."""
     with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
         mol = next(Chem.SDMolSupplier(str(path_to_ligand), removeHs=False))
 
