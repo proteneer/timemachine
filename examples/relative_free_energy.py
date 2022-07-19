@@ -5,9 +5,10 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pymbar
 from rdkit import Chem
+from rdkit.Chem import AllChem, Draw
 
 from timemachine.constants import BOLTZ
-from timemachine.fe import pdb_writer
+from timemachine.fe import atom_mapping, pdb_writer
 from timemachine.fe.single_topology_v3 import SingleTopologyV3
 from timemachine.fe.system import convert_bps_into_system
 from timemachine.fe.utils import get_romol_conf
@@ -220,11 +221,6 @@ def get_mol_by_name(mols, name):
             return m
 
     assert 0, "Mol not found"
-
-
-from rdkit.Chem import AllChem, Draw
-
-from timemachine.fe import atom_mapping
 
 
 def plot_atom_mapping_grid(mol_a, mol_b, core_smarts, core, show_idxs=False):
