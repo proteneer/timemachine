@@ -263,10 +263,7 @@ def _wrap_simulate(args):
         seed,
     ) = args
 
-    # wraps a callable fn so it runs in a subprocess with the device_count set explicitly
     assert multiprocessing.get_start_method() == "spawn"
-    os.environ["XLA_FLAGS"] = "--xla_force_host_platform_device_count=" + str(num_workers)
-
     kT = temperature * BOLTZ
     x0 = get_romol_conf(mol)
     batches_per_worker = int(np.ceil(num_batches / num_workers))
@@ -309,6 +306,10 @@ def _wrap_simulate(args):
     log_weights = log_weights[:num_batches]
 
     return xvs_proposal, log_weights
+
+
+def init_env(num_workers):
+    os.environ["XLA_FLAGS"] = "--xla_force_host_platform_device_count=" + str(num_workers)
 
 
 def generate_log_weighted_samples(
@@ -356,7 +357,8 @@ def generate_log_weighted_samples(
 
     burn_in_batches = 1000
 
-    with multiprocessing.get_context("spawn").Pool(1) as pool:
+    # wraps a callable fn so it runs in a subprocess with the device_count set explicitly
+    with multiprocessing.get_context("spawn").Pool(1, init_env, [num_workers]) as pool:
         args = (
             mol,
             U_proposal,
