@@ -7,6 +7,7 @@ import numpy as np
 import scipy
 
 from timemachine.integrator import simulate
+from timemachine.lib import potentials
 from timemachine.potentials import bonded, chiral_restraints, nonbonded
 
 
@@ -65,6 +66,25 @@ def simulate_system(U_fn, x0, num_samples=20000, steps_per_batch=500, num_worker
     return frames
 
 
+def convert_bps_into_system(bps):
+
+    system = VacuumSystem(None, None, None, None, None, None)
+
+    for pot in bps:
+        if isinstance(pot, potentials.HarmonicBond):
+            system.bond = pot
+        elif isinstance(pot, potentials.HarmonicAngle):
+            system.angle = pot
+        elif isinstance(pot, potentials.PeriodicTorsion):
+            system.torsion = pot
+        elif isinstance(pot, potentials.Nonbonded):
+            system.nonbonded = pot
+        else:
+            assert 0, "Unknown potential"
+
+    return system
+
+
 class VacuumSystem:
 
     # utility system container
@@ -102,13 +122,6 @@ class VacuumSystem:
             lamb=0.0,
             torsion_idxs=np.array(self.torsion.get_idxs()),
         )
-
-        # for ij, p in zip(self.nonbonded.get_idxs(), self.nonbonded.params):
-        # print(ij, p)
-        # print(np.array(self.nonbonded.get_idxs()))
-        # print(np.array(self.nonbonded.params))
-        # assert 0
-
         nbpl_U = functools.partial(
             nonbonded.nonbonded_v3_on_precomputed_pairs,
             pairs=np.array(self.nonbonded.get_idxs()),
@@ -149,3 +162,29 @@ class VacuumSystem:
             return bond_U(x) + angle_U(x) + torsion_U(x) + jnp.sum(Us_vdw) + jnp.sum(Us_coulomb) + chiral_U
 
         return U_fn
+
+
+class HostGuestSystem:
+
+    # utility system container
+
+    def __init__(self, bond, angle, torsion, chiral_atom, chiral_bond, nonbonded_guest_pairs, nonbonded_host_guest):
+        self.bond = bond
+        self.angle = angle
+        self.torsion = torsion
+        self.chiral_atom = chiral_atom
+        self.chiral_bond = chiral_bond
+        self.nonbonded_guest_pairs = nonbonded_guest_pairs
+        self.nonbonded_host_guest = nonbonded_host_guest
+
+    def get_U_fns(self):
+
+        return [
+            self.bond,
+            self.angle,
+            self.torsion,
+            self.chiral_atom,
+            self.chiral_bond,
+            self.nonbonded_guest_pairs,
+            self.nonbonded_host_guest,
+        ]
