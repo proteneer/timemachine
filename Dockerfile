@@ -5,7 +5,7 @@ ARG MINICONDA_VERSION=4.6.14
 ARG MAKE_VERSION=4.2.1-1.2
 ARG GIT_VERSION=1:2.25.1-*
 ARG WGET_VERSION=1.20.3-1ubuntu2
-RUN apt-get update && apt-get install --no-install-recommends -y wget=${WGET_VERSION} git=${GIT_VERSION} make=${MAKE_VERSION} \
+RUN apt-get update && apt-get install --no-install-recommends -y wget=${WGET_VERSION} git=${GIT_VERSION} make=${MAKE_VERSION} vim \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 RUN wget --quiet https://repo.anaconda.com/miniconda/Miniconda3-${MINICONDA_VERSION}-Linux-x86_64.sh -O ~/miniconda.sh && \
