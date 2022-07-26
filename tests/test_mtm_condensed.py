@@ -44,12 +44,11 @@ def test_condensed_phase_mtm():
     state = enhanced.VacuumState(mol, ff)
 
     proposal_U = state.U_decharged
-    seed = 2021
 
     cache_path = "mtm_condensed_cache.pkl"
     if not os.path.exists(cache_path):
         print("Generating cache")
-        num_batches = 30000
+        num_batches = 40000
         vacuum_samples, vacuum_log_weights = enhanced.generate_log_weighted_samples(
             mol, temperature, state.U_easy, proposal_U, num_batches=num_batches, seed=seed
         )
