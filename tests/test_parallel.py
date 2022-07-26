@@ -1,6 +1,7 @@
 # tests for parallel execution
 import concurrent
 import os
+import pickle
 import random
 import unittest
 from pathlib import Path
@@ -54,6 +55,11 @@ class TestProcessPool(unittest.TestCase):
         x = jnp.array([50.0, 2.0])
         fut = self.cli.submit(jax_fn, x)
         np.testing.assert_almost_equal(fut.result(), np.sqrt(x))
+
+    def test_pickle(self):
+        # test that the client can be pickled
+        cli = pickle.loads(pickle.dumps(self.cli))
+        assert cli.submit(square, 4).result() == 16
 
 
 def environ_check():
