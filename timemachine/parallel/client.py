@@ -99,14 +99,17 @@ class ProcessPoolClient(AbstractClient):
         """
         self.max_workers = max_workers
         self._idx = 0
+        self._executor = None
 
     @property
     def executor(self):
         # Property so it can be pickled
         # (ytz): on python <= 3.6 this will throw an exception since mp_context is
         # not supported
-        ctxt = multiprocessing.get_context("spawn")
-        return futures.ProcessPoolExecutor(max_workers=self.max_workers, mp_context=ctxt)
+        if self._executor is None:
+            ctxt = multiprocessing.get_context("spawn")
+            self._executor = futures.ProcessPoolExecutor(max_workers=self.max_workers, mp_context=ctxt)
+        return self._executor
 
     def submit(self, task_fn, *args, **kwargs):
         """
