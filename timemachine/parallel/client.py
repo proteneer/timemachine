@@ -97,12 +97,10 @@ class ProcessPoolClient(AbstractClient):
             Number of workers to launch via the ProcessPoolExecutor
 
         """
-        ctxt = multiprocessing.get_context("spawn")
-        # (ytz): on python <= 3.6 this will throw an exception since mp_context is
-        # not supported
-        self.executor = futures.ProcessPoolExecutor(max_workers=max_workers, mp_context=ctxt)
         self.max_workers = max_workers
         self._idx = 0
+        ctxt = multiprocessing.get_context("spawn")
+        self.executor = futures.ProcessPoolExecutor(max_workers=self.max_workers, mp_context=ctxt)
 
     def submit(self, task_fn, *args, **kwargs):
         """
@@ -117,6 +115,14 @@ class ProcessPoolClient(AbstractClient):
         See abstract class for documentation.
         """
         return
+
+    def __getstate__(self):
+        # Only store the max workers in the pickle
+        return (self.max_workers,)
+
+    def __setstate__(self, state):
+        max_workers = state[0]
+        self.__init__(max_workers)
 
 
 class CUDAPoolClient(ProcessPoolClient):
