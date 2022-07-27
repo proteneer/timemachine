@@ -4,7 +4,6 @@ from jax import numpy as jnp
 
 config.update("jax_enable_x64", True)
 
-from functools import partial
 
 from timemachine.integrator import VelocityVerletIntegrator
 
@@ -20,7 +19,9 @@ def assert_reversible(x0, v0, update_fxn):
     assert not np.isclose(x1, x0).all()
 
 
-def test_reversibility_on_quartic_potential():
+def test_reversibility_with_jax_potentials():
+    np.random.seed(2022)
+
     def U(x):
         return jnp.sum(x ** 4)
 
@@ -36,9 +37,24 @@ def test_reversibility_on_quartic_potential():
 
         intg = VelocityVerletIntegrator(force, masses, dt)
 
+        # check jax.lax.fori_loop implementation
         @jit
-        def update(x, v, n_steps=1000):
+        def jax_update(x, v):
             return intg._update_via_fori_loop(x, v, n_steps)
 
-        update_fxn = partial(update, n_steps=n_steps)
-        assert_reversible(x0, v0, update_fxn)
+        assert_reversible(x0, v0, jax_update)
+
+        # check step implementation
+        def step_update(x, v):
+            for t in range(n_steps):
+                x, v = intg.step(x, v)
+            return x, v
+
+        assert_reversible(x0, v0, step_update)
+
+        # check multiple_steps implementation
+        def multiple_steps_update(x, v):
+            xs, vs = intg.multiple_steps(x, v, n_steps)
+            return xs[-1], vs[-1]
+
+        assert_reversible(x0, v0, multiple_steps_update)
