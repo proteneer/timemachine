@@ -22,7 +22,7 @@ docker_build:
   image: docker:20.10
   tags:
     - gpu
-    - docker
+    - testing
   script:
     - DOCKER_HOST=tcp://localhost:2375 docker login -u $CI_REGISTRY_USER -p $CI_JOB_TOKEN $CI_REGISTRY
     # Prune images older than 2 days
@@ -39,7 +39,7 @@ lint:
   image: $DOCKER_TAG
   needs: ["docker_build"]
   tags:
-    - timemachine
+    - testing
     - gpu
   rules:
     - if: $CI_EXTERNAL_PULL_REQUEST_IID
@@ -52,7 +52,7 @@ nogpu-tests:
   image: $DOCKER_TAG
   needs: ["lint"]
   tags:
-    - timemachine
+    - testing
     - cpu
   rules:
     - if: $CI_EXTERNAL_PULL_REQUEST_IID
@@ -72,6 +72,7 @@ memory-tests:
   needs: ["lint"]
   tags:
     - gpu
+    - testing
   variables:
     CMAKE_ARGS: -DCUDA_ARCH=75
   rules:
@@ -92,6 +93,7 @@ unit-tests:
   needs: ["lint"]
   tags:
     - gpu
+    - testing
   rules:
     - if: $CI_EXTERNAL_PULL_REQUEST_IID
   variables:
@@ -112,6 +114,7 @@ nightly-tests:
   needs: ["lint"]
   tags:
     - gpu
+    - testing
   rules:
     - if: $NIGHTLY_TESTS
   variables:
