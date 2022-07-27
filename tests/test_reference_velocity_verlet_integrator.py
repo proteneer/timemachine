@@ -10,10 +10,11 @@ from timemachine.integrator import VelocityVerletIntegrator
 from timemachine.testsystems.relative import hif2a_ligand_pair
 
 
-def assert_reversible(x0, v0, update_fxn, atol=1e-8):
-    """assert that
-    * F(I(x0, v0))      != (x0, v0)
-    * F(I(F(I(x0, v0))) == (x0, v0)"""
+def assert_reversible(x0, v0, update_fxn, atol=1e-10):
+    """Assert that
+    * I(x0, v0) != (x0, v0)
+    * F(I(F(I(x0, v0)))) == (x0, v0)"""
+
     close = partial(np.allclose, atol=atol)
 
     # integrate, flip v, integrate, flip v
@@ -26,11 +27,11 @@ def assert_reversible(x0, v0, update_fxn, atol=1e-8):
     assert close(v0_, v0), f"max(abs(v0 - v0_)) = {np.max(np.abs(v0 - v0_))}"
 
     # also assert this is not a no-op
-    assert (not close(x1, x0)) and (not close(v1, v0)), "update_fxn didn't do anything!"
+    assert (not close(x1, x0)) and (not close(v1, v0))
 
 
-def assert_reversibility_using_step_implementations(intg, x0, v0, n_steps=1000, atol=1e-8):
-    """assert reversibility .step and .multiple_steps implementations"""
+def assert_reversibility_using_step_implementations(intg, x0, v0, n_steps=1000, atol=1e-10):
+    """Assert reversibility of .step and .multiple_steps implementations"""
 
     # check step implementation
     def step_update(x, v):
@@ -49,7 +50,7 @@ def assert_reversibility_using_step_implementations(intg, x0, v0, n_steps=1000, 
 
 
 def test_reversibility_with_jax_potentials():
-    """on a simple jax-transformable potential (quartic oscillators)
+    """On a simple jax-transformable potential (quartic oscillators)
     with randomized parameters and initial conditions
     (n oscillators, masses, dt, x0, v0)
     assert all 3 update functions
@@ -82,12 +83,13 @@ def test_reversibility_with_jax_potentials():
         def jax_update(x, v):
             return intg._update_via_fori_loop(x, v, n_steps)
 
-        assert_reversible(x0, v0, jax_update, atol=1e-8)
+        assert_reversible(x0, v0, jax_update, atol=1e-10)
 
 
 def test_reversibility_with_custom_ops_potentials():
     """Check reversibility of "public" .step and .multiple_steps implementations when `force_fxn`
     is a custom_op potential"""
+
     np.random.seed(2022)
 
     # define a Python force fxn that calls custom_ops
@@ -114,8 +116,8 @@ def test_reversibility_with_custom_ops_potentials():
         # check "public" .step and .multiple_steps implementations
         assert_reversibility_using_step_implementations(intg, x0, v0, n_steps, atol=1e-10)
 
-    # TODO: possibly investigate why n_steps=10000 fails
+    # TODO: possibly investigate why n_steps = 10000 fails
     # assert_reversibility_using_step_implementations(intg, x0, v0, n_steps=10000, atol=0.1)
     # * also fails with reduced dt = 1.0e-3
     # * passes with greatly reduced dt = 1.0e-4
-    # TODO: possibly replace with SummedPotential?
+    # TODO: does replacing np.sum(du_dxs, 0) with SummedPotential address this?
