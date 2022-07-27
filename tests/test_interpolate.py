@@ -39,7 +39,7 @@ def test_align_harmonic_bond():
     assert test_set == ref_set
 
     # test that if there are repeats we throw an assertion
-    with pytest.raises(interpolate.DuplicateIdxsError):
+    with pytest.raises(interpolate.DuplicateAlignmentKeysError):
         src_idxs = [(4, 9), (4, 9)]
         interpolate.align_harmonic_bond_idxs_and_params(src_idxs, src_params, dst_idxs, dst_params)
 

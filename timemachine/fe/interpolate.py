@@ -1,217 +1,93 @@
+from functools import partial
 import numpy as np
+from typing import Hashable
 
 
-class DuplicateIdxsError(RuntimeError):
+class DuplicateAlignmentKeysError(RuntimeError):
     pass
 
 
-def _add_dst_to_src_bond_or_angle(src_idxs, src_params, dst_idxs, dst_params):
-    """
-    eg:
-    src_idxs: [[4,9], [3,4]]
-    src_params: [[a, b], [c, d]]
+def align_idxs_and_params(
+    src_idxs,
+    src_params,
+    dst_idxs,
+    dst_params,
+    make_default,
+    key=lambda idxs, _: idxs,
+    get_idxs=lambda key: key,
+    validate_idxs=lambda _: None,
+):
+    for all_idxs in [src_idxs, dst_idxs]:
+        for idxs in all_idxs:
+            validate_idxs(idxs)
 
-    dst_idxs: [[3,4], [9,5]]
-    dst_params: [[e, f], [g, h]]
+    # used to convert arrays to a hashable type for use as dict keys and in sets
+    def to_hashable(x):
+        return x if isinstance(x, Hashable) else tuple(x)
 
-    Generate end-state key value pairs
+    def make_kv(all_idxs, all_params):
+        kvs = [(to_hashable(key(idxs, params)), params) for idxs, params in zip(all_idxs, all_params)]
 
-    src_idxs: [[4,9], [3,4], [9,5]]
-    src_params: [[a,b], [c,d], [0,h]
+        def has_duplicates(x):
+            x = list(x)
+            return len(set(x)) < len(x)
 
-    """
-    # used only for bond and angle terms
-    #
-    # note that *missing* terms are the result of core-hopping, or chiral
-    # inversions on core atoms. dummy atom interactions (bonds/angles) are fully maintained
-    # at the end-state.
-    if len(set((src_idxs))) != len(src_idxs):
-        raise DuplicateIdxsError()
+        if has_duplicates(k for k, _ in kvs):
+            raise DuplicateAlignmentKeysError()
 
-    if len(set((dst_idxs))) != len(dst_idxs):
-        raise DuplicateIdxsError()
+        return dict(kvs)
 
-    src_kv = dict(zip(src_idxs, src_params))
-    for idxs, params in zip(dst_idxs, dst_params):
-        assert idxs[0] < idxs[-1]
-        if idxs not in src_kv:
-            _, bond_or_angle = params
-            src_kv[idxs] = (0, bond_or_angle)
+    src_kv = make_kv(src_idxs, src_params)
+    dst_kv = make_kv(dst_idxs, dst_params)
 
-    return src_kv
-
-
-def align_harmonic_bond_or_angle_idxs_and_params(src_idxs, src_params, dst_idxs, dst_params):
-
-    # sanitize
-    src_idxs = [tuple(p) for p in src_idxs]
-    src_params = [tuple(p) for p in src_params]
-    dst_idxs = [tuple(p) for p in dst_idxs]
-    dst_params = [tuple(p) for p in dst_params]
-
-    src_set = _add_dst_to_src_bond_or_angle(src_idxs, src_params, dst_idxs, dst_params)
-    dst_set = _add_dst_to_src_bond_or_angle(dst_idxs, dst_params, src_idxs, src_params)
-    assert src_set.keys() == dst_set.keys()
-
-    res = set()
-
-    for k in src_set.keys():
-        res.add((tuple(k), src_set[k], dst_set[k]))
-
-    return res
+    return {
+        (
+            get_idxs(k),
+            to_hashable(src_kv[k]) if k in src_kv else make_default(dst_kv[k]),
+            to_hashable(dst_kv[k]) if k in dst_kv else make_default(src_kv[k]),
+        )
+        for k in set(src_kv.keys()).union(dst_kv.keys())
+    }
 
 
-align_harmonic_bond_idxs_and_params = align_harmonic_bond_or_angle_idxs_and_params
+def check_canonical_bond(bond):
+    assert bond[0] < bond[-1]
+
+
+align_harmonic_bond_or_angle_idxs_and_params = partial(
+    align_idxs_and_params,
+    make_default=lambda p: (0, p[1]),
+)
+align_harmonic_bond_idxs_and_params = partial(
+    align_harmonic_bond_or_angle_idxs_and_params,
+    validate_idxs=check_canonical_bond,
+)
 align_harmonic_angle_idxs_and_params = align_harmonic_bond_or_angle_idxs_and_params
+align_harmonic_bond_and_params = partial(align_idxs_and_params, make_default=lambda p: (0, p[1]))
+align_nonbonded_idxs_and_params = partial(align_idxs_and_params, make_default=lambda _: (0, 0, 0))
+align_chiral_atom_idxs_and_params = partial(align_idxs_and_params, make_default=lambda _: 0)
 
-# special case for torsions
-def _add_dst_to_src_torsion(src_idxs, src_params, dst_idxs, dst_params):
-
-    src_kv = dict()
-
-    for idxs, params in zip(src_idxs, src_params):
-        assert idxs[0] < idxs[-1]
-        k, phase, period = params
-        key = (idxs, period)
-        src_kv[key] = (k, phase)
-
-    for idxs, params in zip(dst_idxs, dst_params):
-        assert idxs[0] < idxs[-1]
-        k, phase, period = params
-        key = (idxs, period)
-        if key not in src_kv:
-            src_kv[key] = (0, phase)
-
-    return src_kv
-
-
-def align_torsion_idxs_and_params(src_idxs, src_params, dst_idxs, dst_params):
-
-    # sanitize
-    src_idxs = [tuple(p) for p in src_idxs]
-    src_params = [tuple(p) for p in src_params]
-    dst_idxs = [tuple(p) for p in dst_idxs]
-    dst_params = [tuple(p) for p in dst_params]
-
-    src_kv = _add_dst_to_src_torsion(src_idxs, src_params, dst_idxs, dst_params)
-    dst_kv = _add_dst_to_src_torsion(dst_idxs, dst_params, src_idxs, src_params)
-
-    assert src_kv.keys() == dst_kv.keys()
-
-    res = set()
-
-    for key in src_kv.keys():
-        idxs, period = key
-        assert idxs[0] < idxs[-1]
-        src_k, src_phase = src_kv[key]
-        dst_k, dst_phase = dst_kv[key]
-        res.add((idxs, (src_k, src_phase, period), (dst_k, dst_phase, period)))
-
-    return res
-
-
-def _add_dst_to_src_nonbonded(src_idxs, src_params, dst_idxs):
-    assert len(set((src_idxs))) == len(src_idxs)
-    assert len(set((dst_idxs))) == len(dst_idxs)
-
-    src_kv = dict(zip(src_idxs, src_params))
-    for idxs in dst_idxs:
-        assert idxs[0] < idxs[-1]
-        if idxs not in src_kv:
-            src_kv[idxs] = (0, 0, 0)
-
-    return src_kv
-
-
-def align_nonbonded_idxs_and_params(src_idxs, src_params, dst_idxs, dst_params):
-
-    # sanitize
-    src_idxs = [tuple(p) for p in src_idxs]
-    src_params = [tuple(p) for p in src_params]
-    dst_idxs = [tuple(p) for p in dst_idxs]
-    dst_params = [tuple(p) for p in dst_params]
-
-    src_kv = _add_dst_to_src_nonbonded(src_idxs, src_params, dst_idxs)
-    dst_kv = _add_dst_to_src_nonbonded(dst_idxs, dst_params, src_idxs)
-    assert src_kv.keys() == dst_kv.keys()
-
-    res = set()
-
-    for k in src_kv.keys():
-        res.add((tuple(k), src_kv[k], dst_kv[k]))
-
-    return res
-
-
-# special case for torsions
-def _add_dst_to_src_chiral_atom(src_idxs, src_params, dst_idxs):
-    src_kv = dict()
-
-    for idxs, k in zip(src_idxs, src_params):
-        src_kv[idxs] = k
-
-    for idxs in dst_idxs:
-        if idxs not in src_kv:
-            src_kv[idxs] = 0
-
-    return src_kv
-
-
-def align_chiral_atom_idxs_and_params(src_idxs, src_params, dst_idxs, dst_params):
-
-    # sanitize
-    src_idxs = [tuple(p) for p in src_idxs]
-    dst_idxs = [tuple(p) for p in dst_idxs]
-
-    src_kv = _add_dst_to_src_chiral_atom(src_idxs, src_params, dst_idxs)
-    dst_kv = _add_dst_to_src_chiral_atom(dst_idxs, dst_params, src_idxs)
-    assert src_kv.keys() == dst_kv.keys()
-
-    res = set()
-
-    for k in src_kv.keys():
-        res.add((tuple(k), src_kv[k], dst_kv[k]))
-
-    return res
-
-
-def _add_dst_to_src_chiral_bond(src_idxs, src_params, src_signs, dst_idxs, dst_params, dst_signs):
-    src_kv = dict()
-
-    for idxs, k, sign in zip(src_idxs, src_params, src_signs):
-        assert idxs[0] < idxs[-1]
-        key = (idxs, sign)
-        src_kv[key] = k
-
-    for idxs, k, sign in zip(dst_idxs, dst_params, dst_signs):
-        assert idxs[0] < idxs[-1]
-        key = (idxs, sign)
-        if key not in src_kv:
-            src_kv[key] = 0
-
-    return src_kv
+align_torsion_idxs_and_params = partial(
+    align_idxs_and_params,
+    make_default=lambda p: (0, p[1], p[2]),
+    key=lambda idxs, params: (idxs, params[2]),
+    get_idxs=lambda key: key[0],
+)
 
 
 def align_chiral_bond_idxs_and_params(src_idxs, src_params, src_signs, dst_idxs, dst_params, dst_signs):
-
-    # sanitize
-    src_idxs = [tuple(p) for p in src_idxs]
-    dst_idxs = [tuple(p) for p in dst_idxs]
-
-    src_kv = _add_dst_to_src_chiral_bond(src_idxs, src_params, src_signs, dst_idxs, dst_params, dst_signs)
-    dst_kv = _add_dst_to_src_chiral_bond(dst_idxs, dst_params, dst_signs, src_idxs, src_params, src_signs)
-
-    assert src_kv.keys() == dst_kv.keys()
-
-    res = set()
-
-    for key in src_kv.keys():
-        idxs, sign = key
-        src_k = src_kv[key]
-        dst_k = dst_kv[key]
-        res.add((idxs, sign, src_k, dst_k))
-
-    return res
+    return {
+        (idxs, s, p1, p2)
+        for idxs, (s, p1), (_, p2) in align_idxs_and_params(
+            src_idxs,
+            zip(src_signs, src_params),
+            dst_idxs,
+            zip(dst_signs, dst_params),
+            make_default=lambda ps: (ps[0], 0),
+            key=lambda idxs, ps: (idxs, ps[0]),
+            get_idxs=lambda key: key[0],
+        )
+    }
 
 
 def linear_interpolation(src_params, dst_params, lamb):
