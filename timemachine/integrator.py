@@ -90,12 +90,13 @@ class LangevinIntegrator(Integrator):
 
 class VelocityVerletIntegrator(Integrator):
     def __init__(self, force_fxn, masses, dt):
+        """WARNING: `.step` makes 2x more calls to force_fxn per timestep than `.multiple_steps`"""
         self.dt = dt
         self.masses = masses[:, np.newaxis]  # TODO: cleaner way to handle (n_atoms,) vs. (n_atoms, 3) mismatch?
         self.force_fxn = force_fxn
 
     def step(self, x, v):
-        # note: 2 calls to force_fxn per timestep
+        """WARNING: makes 2 calls to force_fxn per timestep -- prefer `.multiple_steps` in most cases"""
         v_mid = v + (0.5 * self.dt / self.masses) * self.force_fxn(x)
         x = x + self.dt * v_mid
         v = v_mid + (0.5 * self.dt / self.masses) * self.force_fxn(x)
