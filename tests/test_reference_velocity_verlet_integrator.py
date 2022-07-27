@@ -11,22 +11,23 @@ from timemachine.testsystems.relative import hif2a_ligand_pair
 
 
 def assert_reversible(x0, v0, update_fxn, atol=1e-10):
-    """Define a fxn involute as composition of flip_velocities and update_fxn,
+    """Define a fxn self_inverse as composition of flip_velocities and update_fxn,
     then assert that
-    * involute is its own inverse
-    * involute is not trivial (aka not the identity function)
+    * self_inverse is its own inverse
+    * self_inverse is not trivial (aka not the identity function)
     """
 
-    def involute(x, v):
-        """integrate forward in time, flip v -- expected to be its own inverse"""
+    def self_inverse(x, v):
+        """integrate forward in time, flip v
+        (expected to be an "involution" i.e. its own inverse)"""
         x_next, v_next = update_fxn(x, v)
         return x_next, -v_next
 
     close = partial(np.allclose, atol=atol)
 
-    # assert "involute" is really its own inverse
-    x1, v1 = involute(x0, x0)
-    x0_, v0_ = involute(x1, v1)
+    # assert "self_inverse" is really its own inverse
+    x1, v1 = self_inverse(x0, x0)
+    x0_, v0_ = self_inverse(x1, v1)
 
     assert close(x0_, x0), f"max(abs(x0 - x0_)) = {np.max(np.abs(x0 - x0_))}"
     assert close(v0_, v0), f"max(abs(v0 - v0_)) = {np.max(np.abs(v0 - v0_))}"
