@@ -17,6 +17,28 @@ def align_idxs_and_params(
     get_idxs=lambda key: key,
     validate_idxs=lambda _: None,
 ):
+    """
+    Aligns source and destination parameters. When a parameter is
+    present in one set but absent in the other, the missing value is
+    filled with a default computed from the value that is present. By
+    default, idxs are used as the alignment key.
+
+    Parameters
+    ----------
+    src_idxs, dst_idxs: array of int
+      Atom indices for each potential term. E.g. for harmonic bonds, each would have shape (num_bonds, 2)
+    src_params, dst_params: array of float
+      Parameters corresponding to the specified indices
+    make_default: callable
+      Should return the value to fill for missing src (dst) given the value present for dst (src)
+    key: callable
+      Should return the alignment key given arguments (idxs, params)
+    get_idxs: callable
+      Should return the idxs given an alignment key
+    validate_idxs: callable
+      Called on each set of idxs in src_idxs and dst_idxs; used to validate input
+    """
+
     for all_idxs in [src_idxs, dst_idxs]:
         for idxs in all_idxs:
             validate_idxs(idxs)
