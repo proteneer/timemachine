@@ -26,7 +26,7 @@ def assert_reversible(x0, v0, update_fxn, atol=1e-10):
     close = partial(np.allclose, atol=atol)
 
     # assert "self_inverse" is really its own inverse
-    x1, v1 = self_inverse(x0, x0)
+    x1, v1 = self_inverse(x0, v0)
     x0_, v0_ = self_inverse(x1, v1)
 
     assert close(x0_, x0), f"max(abs(x0 - x0_)) = {np.max(np.abs(x0 - x0_))}"
