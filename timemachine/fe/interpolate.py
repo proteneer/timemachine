@@ -38,6 +38,11 @@ def align_idxs_and_params(
       Should return the idxs given an alignment key
     validate_idxs: callable
       Called on each set of idxs in src_idxs and dst_idxs; used to validate input
+
+    Returns
+    -------
+    set
+      set of tuples (idxs, src_params, dst_params)
     """
 
     for all_idxs in [src_idxs, dst_idxs]:
