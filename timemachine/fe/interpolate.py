@@ -82,13 +82,9 @@ def assert_canonical_bond(bond):
     assert bond[0] < bond[-1]
 
 
-align_harmonic_bond_or_angle_idxs_and_params = partial(
-    align_idxs_and_params,
-    make_default=lambda p: (0, p[1]),
-)
+align_harmonic_bond_or_angle_idxs_and_params = partial(align_idxs_and_params, make_default=lambda p: (0, p[1]))
 align_harmonic_bond_idxs_and_params = partial(
-    align_harmonic_bond_or_angle_idxs_and_params,
-    validate_idxs=assert_canonical_bond,
+    align_harmonic_bond_or_angle_idxs_and_params, validate_idxs=assert_canonical_bond
 )
 align_harmonic_angle_idxs_and_params = align_harmonic_bond_or_angle_idxs_and_params
 align_nonbonded_idxs_and_params = partial(align_idxs_and_params, make_default=lambda _: (0, 0, 0))
