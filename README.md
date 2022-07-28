@@ -39,8 +39,8 @@ If using conda the following can be used to configure your environment
 
 ```shell
 conda env create -f environment.yml -n timemachine
-conda install openmm=7.5.1 -c conda-forge # only if using openmm from conda
 conda activate timemachine
+conda install openmm=7.5.1 -c conda-forge # only if using openmm from conda
 ```
 
 ### Install Time Machine
@@ -87,7 +87,7 @@ pip install -e .
 ```
 or
 ```shell
-make build
+make build  # Must have installed dev dependencies for this to work
 ```
 
 ### Running Tests
