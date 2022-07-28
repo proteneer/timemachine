@@ -87,7 +87,7 @@ pip install -e .
 ```
 or
 ```shell
-make build
+make build  # Must have installed dev dependencies for this to work
 ```
 
 ### Running Tests
