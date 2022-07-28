@@ -102,6 +102,7 @@ setup(
             "flake8==4.0.1",
             "grpcio-tools==1.30.0",
             "isort==5.10.1",
+            "mypy==0.942",
             "pre-commit==2.17.0",
         ],
         "test": ["pytest", "pytest-cov", "hilbertcurve==1.0.5"],
