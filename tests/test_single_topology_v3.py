@@ -171,6 +171,7 @@ def assert_chiral_atom_idxs_are_canonical(all_idxs):
         assert (j, k, l) < (k, l, j)
 
 
+@pytest.mark.nightly(reason="Takes awhile to run")
 def test_hif2a_end_state_stability(num_pairs_to_setup=25, num_pairs_to_simulate=5):
     """
     Pick some random pairs from the hif2a set and ensure that they're numerically stable at the
