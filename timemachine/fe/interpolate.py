@@ -1,6 +1,7 @@
 from functools import partial
-import numpy as np
 from typing import Hashable
+
+import numpy as np
 
 
 class DuplicateAlignmentKeysError(RuntimeError):
