@@ -191,6 +191,11 @@ def test_align_chiral_bonds():
 
     assert test_set == ref_set
 
+    src_signs[1] = 1
+    assert len(set(list(zip(src_idxs, src_signs))[:2])) == 1  # first 2 source alignment keys are duplicates
+    with pytest.raises(interpolate.DuplicateAlignmentKeysError):
+        interpolate.align_harmonic_bond_idxs_and_params(src_idxs, src_params, dst_idxs, dst_params)
+
 
 def test_intermediate_states(num_pairs_to_setup=10):
     """
