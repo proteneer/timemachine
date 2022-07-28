@@ -4,6 +4,7 @@ numpy==1.21.4
 scipy==1.6.0
 pymbar==3.0.5
 pyyaml==5.4.1
+mypy==0.942
 networkx==2.5
 importlib-resources==5.4.0
 typing-extensions==4.1.1

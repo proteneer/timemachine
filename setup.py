@@ -92,6 +92,7 @@ setup(
         "pymbar>3.0.4",
         "pyyaml",
         "scipy",
+        "mypy",
         "typing-extensions",
     ],
     extras_require={
