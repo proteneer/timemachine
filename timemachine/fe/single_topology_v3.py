@@ -2,6 +2,7 @@ import warnings
 from collections.abc import Iterable
 from typing import Tuple
 
+import jax.numpy as jnp
 import numpy as np
 
 from timemachine.fe import interpolate, system, topology, utils
@@ -536,6 +537,10 @@ class SingleTopologyV3:
         self.c_to_a = {v: k for k, v in enumerate(self.a_to_c)}
         self.c_to_b = {v: k for k, v in enumerate(self.b_to_c)}
 
+        # setup end states
+        self.src_system = self._setup_end_state_src()
+        self.dst_system = self._setup_end_state_dst()
+
     def get_num_atoms(self):
         """
         Get the total number of atoms in the alchemical hybrid.
@@ -612,7 +617,7 @@ class SingleTopologyV3:
             x0[dst] = x_b[src]
         return x0
 
-    def setup_end_state_src(self):
+    def _setup_end_state_src(self):
         """
         Setup the source end-state, where mol_a is fully interacting, with mol_b's dummy atoms attached
         in a factorizable way.
@@ -624,7 +629,7 @@ class SingleTopologyV3:
         """
         return setup_end_state(self.ff, self.mol_a, self.mol_b, self.core, self.a_to_c, self.b_to_c)
 
-    def setup_end_state_dst(self):
+    def _setup_end_state_dst(self):
         """
         Setup the source end-state, where mol_a is fully interacting, with mol_b's dummy atoms attached
         in a factorizable way.
@@ -653,8 +658,8 @@ class SingleTopologyV3:
             An energy function f: R^(NCx3) -> R^1
 
         """
-        U0_fn = self.setup_end_state_src().get_U_fn()
-        U1_fn = self.setup_end_state_dst().get_U_fn()
+        U0_fn = self.src_system.get_U_fn()
+        U1_fn = self.dst_system.get_U_fn()
 
         # revisit more efficient methods later
         def U_fn(x):
@@ -717,7 +722,7 @@ class SingleTopologyV3:
             pair_offsets.append(offset)
 
         return potentials.NonbondedPairListPrecomputed(
-            np.array(pair_idxs), np.array(pair_offsets), src_nonbonded.get_beta(), src_nonbonded.get_cutoff()
+            np.array(pair_idxs), jnp.array(pair_offsets), src_nonbonded.get_beta(), src_nonbonded.get_cutoff()
         ).bind(pair_params)
 
     def _setup_intermediate_chiral_bond_term(self, src_bond, dst_bond, lamb, interpolate_fn):
@@ -751,8 +756,8 @@ class SingleTopologyV3:
         """
         Setup intermediate states at some value of lambda.
         """
-        src_system = self.setup_end_state_src()
-        dst_system = self.setup_end_state_dst()
+        src_system = self.src_system
+        dst_system = self.dst_system
         interpolate_fn = interpolate.linear_interpolation
 
         # tbd: use different interpolation functions later

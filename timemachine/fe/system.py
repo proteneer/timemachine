@@ -103,21 +103,21 @@ class VacuumSystem:
         """
         bond_U = functools.partial(
             bonded.harmonic_bond,
-            params=np.array(self.bond.params),
+            params=jnp.array(self.bond.params),
             box=None,
             lamb=0.0,
             bond_idxs=np.array(self.bond.get_idxs()),
         )
         angle_U = functools.partial(
             bonded.harmonic_angle,
-            params=np.array(self.angle.params),
+            params=jnp.array(self.angle.params),
             box=None,
             lamb=0.0,
             angle_idxs=np.array(self.angle.get_idxs()),
         )
         torsion_U = functools.partial(
             bonded.periodic_torsion,
-            params=np.array(self.torsion.params),
+            params=jnp.array(self.torsion.params),
             box=None,
             lamb=0.0,
             torsion_idxs=np.array(self.torsion.get_idxs()),
@@ -125,8 +125,8 @@ class VacuumSystem:
         nbpl_U = functools.partial(
             nonbonded.nonbonded_v3_on_precomputed_pairs,
             pairs=np.array(self.nonbonded.get_idxs()),
-            offsets=np.array(self.nonbonded.get_offsets()),
-            params=np.array(self.nonbonded.params),
+            offsets=jnp.array(self.nonbonded.get_offsets()),
+            params=jnp.array(self.nonbonded.params),
             box=None,
             beta=self.nonbonded.get_beta(),
             cutoff=self.nonbonded.get_cutoff(),
@@ -135,7 +135,7 @@ class VacuumSystem:
         if self.chiral_atom:
             chiral_atom_U = functools.partial(
                 chiral_restraints.chiral_atom_restraint,
-                params=np.array(self.chiral_atom.params),
+                params=jnp.array(self.chiral_atom.params),
                 box=None,
                 idxs=np.array(self.chiral_atom.get_idxs()),
                 lamb=0.0,
@@ -146,7 +146,7 @@ class VacuumSystem:
         if self.chiral_bond:
             chiral_bond_U = functools.partial(
                 chiral_restraints.chiral_bond_restraint,
-                params=np.array(self.chiral_bond.params),
+                params=jnp.array(self.chiral_bond.params),
                 box=None,
                 idxs=np.array(self.chiral_bond.get_idxs()),
                 signs=np.array(self.chiral_bond.get_signs()),
