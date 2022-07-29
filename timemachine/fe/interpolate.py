@@ -19,30 +19,35 @@ def align_idxs_and_params(
     validate_idxs=lambda _: None,
 ):
     """
-    Aligns source and destination parameters. When a parameter is
-    present in one set but absent in the other, the missing value is
-    filled with a default computed from the value that is present. By
-    default, idxs are used as the alignment key.
+    Given two input parameter sets (idxs, params), aligns by the
+    specified key to produce two output parameter sets, where the
+    outputs have the same shape. When an (idxs, params) pair is
+    present in one input set but absent in the other, the missing
+    value is filled with a default computed from the value that is
+    present. By default, idxs are used as the alignment key.
 
     Parameters
     ----------
     src_idxs, dst_idxs: array of int
-      Atom indices for each potential term. E.g. for harmonic bonds, each would have shape (num_bonds, 2)
+        Atom indices for each potential term. E.g. for harmonic bonds,
+        each would have shape (num_bonds, 2)
     src_params, dst_params: array of float
-      Parameters corresponding to the specified indices
+        Parameters corresponding to the specified indices
     make_default: callable
-      Should return the value to fill for missing src (dst) given the value present for dst (src)
+        Should return the value to fill for missing src (dst) given
+        the value present for dst (src)
     key: callable
-      Should return the alignment key given arguments (idxs, params)
+        Should return the alignment key given arguments (idxs, params)
     get_idxs: callable
-      Should return the idxs given an alignment key
+        Should return the idxs given an alignment key
     validate_idxs: callable
-      Called on each set of idxs in src_idxs and dst_idxs; used to validate input
+        Called on each set of idxs in src_idxs and dst_idxs; used to
+        validate input
 
     Returns
     -------
     set
-      set of tuples (idxs, src_params, dst_params)
+        set of tuples (idxs, src_params, dst_params)
     """
 
     for all_idxs in [src_idxs, dst_idxs]:
