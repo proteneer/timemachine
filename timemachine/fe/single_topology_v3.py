@@ -536,6 +536,10 @@ class SingleTopologyV3:
         self.c_to_a = {v: k for k, v in enumerate(self.a_to_c)}
         self.c_to_b = {v: k for k, v in enumerate(self.b_to_c)}
 
+        # setup end states
+        self.src_system = self.setup_end_state_src()
+        self.dst_system = self.setup_end_state_dst()
+
     def get_num_atoms(self):
         """
         Get the total number of atoms in the alchemical hybrid.
@@ -751,8 +755,8 @@ class SingleTopologyV3:
         """
         Setup intermediate states at some value of lambda.
         """
-        src_system = self.setup_end_state_src()
-        dst_system = self.setup_end_state_dst()
+        src_system = self.src_system
+        dst_system = self.dst_system
         interpolate_fn = interpolate.linear_interpolation
 
         # tbd: use different interpolation functions later
