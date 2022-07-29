@@ -39,7 +39,7 @@ def test_align_harmonic_bond():
     assert test_set == ref_set
 
     # test that if there are repeats we throw an assertion
-    with pytest.raises(interpolate.DuplicateIdxsError):
+    with pytest.raises(interpolate.DuplicateAlignmentKeysError):
         src_idxs = [(4, 9), (4, 9)]
         interpolate.align_harmonic_bond_idxs_and_params(src_idxs, src_params, dst_idxs, dst_params)
 
@@ -190,6 +190,11 @@ def test_align_chiral_bonds():
     }
 
     assert test_set == ref_set
+
+    src_signs[1] = 1
+    assert len(set(list(zip(src_idxs, src_signs))[:2])) == 1  # first 2 alignment keys are duplicates
+    with pytest.raises(interpolate.DuplicateAlignmentKeysError):
+        interpolate.align_chiral_bond_idxs_and_params(src_idxs, src_params, src_signs, dst_idxs, dst_params, dst_signs)
 
 
 def test_intermediate_states(num_pairs_to_setup=10):
