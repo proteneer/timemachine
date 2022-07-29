@@ -127,3 +127,43 @@ def test_reversibility_with_custom_ops_potentials():
     # * also fails with reduced dt = 1.0e-3
     # * passes with greatly reduced dt = 1.0e-4
     # TODO: does replacing np.sum(du_dxs, 0) with SummedPotential address this?
+
+
+def test_trajectory_wise_self_consistency():
+    """Assert that trajectories produced by .step and .multiple_steps agree at all timesteps,
+    and that their final frames agree with ._update_via_fori_loop"""
+
+    np.random.seed(2022)
+
+    def u_fxn(x):
+        return jnp.sum(x ** 4)
+
+    force_fxn = jit(lambda x: -grad(u_fxn)(x))
+    n_atoms = 100
+    masses = np.ones(n_atoms)
+    dt = 0.1
+    intg = VelocityVerletIntegrator(force_fxn, masses, dt)
+
+    x0, v0 = np.random.randn(2, n_atoms, 3)
+
+    close = partial(np.allclose, atol=1e-10)  # would also pass with atol=0.0
+
+    for num_steps in [1, 10, 100, 1000]:
+
+        # reference: intg.step in for loop
+        ref_traj = [(x0, v0)]
+        for _ in range(num_steps):
+            ref_traj.append(intg.step(*ref_traj[-1]))
+
+        xs_ref = np.array([x for (x, v) in ref_traj])
+        vs_ref = np.array([v for (x, v) in ref_traj])
+
+        # test: multiple_steps
+        xs, vs = intg.multiple_steps(x0, v0, num_steps)
+
+        # assert trajectories are ~identical
+        assert close(xs_ref, xs) and close(vs_ref, vs)
+
+        # also that output of jax.lax loop matches last frame of ref traj
+        x_lax, v_lax = intg._update_via_fori_loop(x0, v0, num_steps)
+        assert close(xs_ref[-1], x_lax) and close(vs_ref[-1], v_lax)
