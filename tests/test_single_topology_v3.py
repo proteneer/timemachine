@@ -274,7 +274,7 @@ def test_combine_masses():
     np.testing.assert_almost_equal(test_masses, ref_masses)
 
 
-def test_jit_intermediate_potential():
+def test_jax_transform_intermediate_potential():
     def setup_arbitary_transformation():
         # NOTE: test system can probably be simplified; we just need
         # any SingleTopologyV3 and conformation
@@ -297,7 +297,12 @@ def test_jit_intermediate_potential():
 
     st, conf = setup_arbitary_transformation()
 
-    def U(lam):
-        return st.setup_intermediate_state(lam).get_U_fn()(conf)
+    def U(x, lam):
+        return st.setup_intermediate_state(lam).get_U_fn()(x)
 
-    jax.jit(U)(0.1)
+    _ = jax.jit(U)(conf, 0.1)
+
+    confs = jnp.array([conf for _ in range(10)])
+    lambdas = jnp.linspace(0, 1, 10)
+    _ = jax.vmap(U)(confs, lambdas)
+    _ = jax.jit(jax.vmap(U))(confs, lambdas)
