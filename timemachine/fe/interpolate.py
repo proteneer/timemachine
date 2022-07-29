@@ -48,6 +48,24 @@ def align_idxs_and_params(
     -------
     set
         set of tuples (idxs, src_params, dst_params)
+
+    Examples
+    --------
+        >>> align_harmonic_angle_idxs_and_params = partial(align_idxs_and_params, make_default=lambda p: (0.0, p[1]))
+
+        For harmonic bonds, we align on idxs and fill missing
+        parameters with (0, d) where d is the equilibrium bond length
+
+        >>> src_idxs = [[4, 9], [3, 4]]
+
+        >>> src_params = [[1.0 , 2.0], [3.0, 4.0]]
+
+        >>> dst_idxs = [[3, 4], [9, 5]]
+
+        >>> dst_params = [[5.0, 6.0], [7.0, 8.0]]
+
+        >>> align_harmonic_angle_idxs_and_params(src_idxs, src_params, dst_idxs, dst_params)
+        {((9, 5), (0.0, 8.0), (7.0, 8.0)), ((4, 9), (1.0, 2.0), (0.0, 2.0)), ((3, 4), (3.0, 4.0), (5.0, 6.0))}
     """
 
     for all_idxs in [src_idxs, dst_idxs]:
