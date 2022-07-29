@@ -1,5 +1,5 @@
 from functools import partial
-from typing import Hashable
+from typing import Any, Callable, Hashable, Set, Tuple
 
 import numpy as np
 
@@ -8,16 +8,21 @@ class DuplicateAlignmentKeysError(RuntimeError):
     pass
 
 
+Idxs = Any
+Params = Any
+Key = Any
+
+
 def align_idxs_and_params(
     src_idxs,
     src_params,
     dst_idxs,
     dst_params,
-    make_default,
-    key=lambda idxs, _: idxs,
-    get_idxs=lambda key: key,
-    validate_idxs=lambda _: None,
-):
+    make_default: Callable[[Params], Params],
+    key: Callable[[Idxs, Params], Key] = lambda idxs, _: idxs,
+    get_idxs: Callable[[Key], Idxs] = lambda key: key,
+    validate_idxs: Callable[[Idxs], None] = lambda _: None,
+) -> Set[Tuple[Idxs, Params, Params]]:
     """
     Given two input parameter sets (idxs, params), aligns by the
     specified key to produce two output parameter sets, where the
