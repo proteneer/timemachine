@@ -4,6 +4,8 @@ import multiprocessing
 import os
 from importlib import resources
 
+from timemachine.constants import DEFAULT_FF
+
 os.environ["XLA_FLAGS"] = "--xla_force_host_platform_device_count=" + str(multiprocessing.cpu_count())
 
 import jax
@@ -21,7 +23,7 @@ from timemachine.fe.single_topology_v3 import (
     setup_dummy_interactions_from_ff,
 )
 from timemachine.fe.system import minimize_scipy, simulate_system
-from timemachine.fe.utils import get_romol_conf
+from timemachine.fe.utils import get_mol_name, get_romol_conf
 from timemachine.ff import Forcefield
 from timemachine.potentials.jax_utils import distance
 
@@ -273,3 +275,32 @@ def test_combine_masses():
     test_masses = st.combine_masses()
     ref_masses = [Br_mass, C_mass, C_mass, max(C_mass, N_mass), C_mass, C_mass, C_mass, F_mass]
     np.testing.assert_almost_equal(test_masses, ref_masses)
+
+
+def test_jit_intermediate_potential():
+    def setup_arbitary_transformation():
+        # NOTE: test system can probably be simplified; we just need
+        # any SingleTopologyV3 and initial conformation
+        with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
+            suppl = Chem.SDMolSupplier(str(path_to_ligand), removeHs=False)
+            mols = {get_mol_name(mol): mol for mol in suppl}
+
+        mol_a = mols["206"]
+        mol_b = mols["57"]
+
+        mcs_threshold = 0.75
+        res = atom_mapping.mcs_map(mol_a, mol_b, mcs_threshold)
+        query = Chem.MolFromSmarts(res.smartsString)
+        core_pairs = atom_mapping.get_core_by_mcs(mol_a, mol_b, query, mcs_threshold)
+
+        ff = Forcefield.load_from_file(DEFAULT_FF)
+        st = SingleTopologyV3(mol_a, mol_b, core_pairs, ff)
+        conf = st.combine_confs(get_romol_conf(mol_a), get_romol_conf(mol_b))
+        return st, conf
+
+    st, conf = setup_arbitary_transformation()
+
+    def U(lam):
+        return st.setup_intermediate_state(lam).get_U_fn()(conf)
+
+    jax.jit(U)(0.1)
