@@ -54,7 +54,8 @@ def align_idxs_and_params(
         >>> align_harmonic_angle_idxs_and_params = partial(align_idxs_and_params, make_default=lambda p: (0.0, p[1]))
 
         For harmonic bonds, we align on idxs and fill missing
-        parameters with (0, d) where d is the equilibrium bond length
+        parameters using zero for the force constant and the
+        equilibrium bond length from the opposite end state.
 
         >>> src_idxs = [[4, 9], [3, 4]]
 
