@@ -104,55 +104,37 @@ class VelocityVerletIntegrator(Integrator):
         return x, v
 
     def multiple_steps(self, x, v, n_steps=1000):
-        # note: intermediate timesteps are staggered
-        #    xs[0], vs[0] = x_0, v_0
-        #    xs[1], vs[1] = x_2, v_{1.5}
-        #    xs[2], vs[2] = x_3, v_{2.5}
-        #    ...
-        #    xs[T-1], vs[T-1] = x_T, v_{T-0.5}
-        #    xs[T],   vs[T]   = x_T, v_T
-
-        # note: reorders loop slightly to avoid ~n_steps extraneous calls to force_fxn
 
         zs = [(x, v)]
 
-        # initialize traj
-        v = v + (0.5 * self.dt / self.masses) * self.force_fxn(x)
-        x = x + self.dt * v
+        f = self.force_fxn(x)
 
-        # run n_steps-1 steps
-        for t in range(n_steps - 1):
-            v = v + (self.dt / self.masses) * self.force_fxn(x)
+        for t in range(n_steps):
+            v = v + (0.5 * self.dt / self.masses) * f
             x = x + self.dt * v
+            f = self.force_fxn(x)
+            v = v + (0.5 * self.dt / self.masses) * f
 
             zs.append((x, v))
 
-        # finalize traj
-        v = v + (0.5 * self.dt / self.masses) * self.force_fxn(x)
-
-        zs.append((x, v))
-
         xs = np.array([x for (x, _) in zs])
         vs = np.array([v for (_, v) in zs])
+
         return xs, vs
 
     def _update_via_fori_loop(self, x, v, n_steps=1000):
-        # initialize
-        v = v + (0.5 * self.dt / self.masses) * self.force_fxn(x)
-        x = x + self.dt * v
-
         def velocity_verlet_loop_body(_, val):
-            x_prev, v_prev = val
+            x_prev, v_prev, f_prev = val
 
-            v = v_prev + (self.dt / self.masses) * self.force_fxn(x_prev)
-            x = x_prev + self.dt * v
-            return x, v
+            v_mid = v_prev + 0.5 * (self.dt / self.masses) * f_prev
+            x = x_prev + self.dt * v_mid
+            f = self.force_fxn(x)
+            v = v_mid + 0.5 * (self.dt / self.masses) * f
 
-        # run n_steps - 1 steps
-        x, v = jax.lax.fori_loop(0, n_steps - 1, velocity_verlet_loop_body, (x, v))
+            return x, v, f
 
-        # finalize
-        v = v + (0.5 * self.dt / self.masses) * self.force_fxn(x)
+        f = self.force_fxn(x)
+        x, v, _ = jax.lax.fori_loop(0, n_steps, velocity_verlet_loop_body, (x, v, f))
 
         return x, v
 
