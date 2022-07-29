@@ -858,6 +858,9 @@ class SingleTopologyV3:
             guest_sigmas.append(sig)
             guest_epsilons.append(eps)
 
+        np.testing.assert_equal(host_nonbonded.get_lambda_plane_idxs(), np.zeros(num_host_atoms))
+        np.testing.assert_equal(host_nonbonded.get_lambda_offset_idxs(), np.zeros(num_host_atoms))
+
         combined_lambda_plane_idxs = np.concatenate(
             [host_nonbonded.get_lambda_plane_idxs(), guest_lambda_plane_idxs]
         ).astype(np.int32)
