@@ -224,10 +224,9 @@ def test_intermediate_states(num_pairs_to_setup=10):
         x0 = top.combine_confs(get_romol_conf(mol_a), get_romol_conf(mol_b))
 
         # test end-states and check to see if the forces are the same
-        system_src = top.setup_end_state_src()
         system_lambda_0 = top.setup_intermediate_state(0)
 
-        U_ref = system_src.get_U_fn()
+        U_ref = top.src_system.get_U_fn()
         U_test = system_lambda_0.get_U_fn()
 
         # these are not guaranteed to be bitwise identical
@@ -240,9 +239,8 @@ def test_intermediate_states(num_pairs_to_setup=10):
         for x in xs:
             np.testing.assert_almost_equal(U_ref(x), U_test(x))
 
-        system_dst = top.setup_end_state_dst()
         system_lambda_1 = top.setup_intermediate_state(1)
-        U_ref = system_dst.get_U_fn()
+        U_ref = top.dst_system.get_U_fn()
         U_test = system_lambda_1.get_U_fn()
 
         xs = [x0]

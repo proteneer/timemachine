@@ -93,6 +93,7 @@ setup(
         "pyyaml",
         "scipy",
         "typing-extensions",
+        "matplotlib",
     ],
     extras_require={
         "dev": [
