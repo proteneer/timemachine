@@ -202,7 +202,7 @@ def test_hif2a_end_state_stability(num_pairs_to_setup=25, num_pairs_to_simulate=
     # this has been tested for up to 50 random pairs
     for pair_idx, (mol_a, mol_b) in enumerate(pairs[:num_pairs_to_setup]):
 
-        print("Checking", mol_a.GetProp("_Name"), "->", mol_b.GetProp("_Name"))
+        print("Checking", get_mol_name(mol_a), "->", get_mol_name(mol_b))
         mcs_threshold = 0.75  # distance threshold, in nanometers
         res = atom_mapping.mcs_map(mol_a, mol_b, mcs_threshold)
         query = Chem.MolFromSmarts(res.smartsString)
@@ -277,7 +277,7 @@ def test_combine_masses():
 def test_jit_intermediate_potential():
     def setup_arbitary_transformation():
         # NOTE: test system can probably be simplified; we just need
-        # any SingleTopologyV3 and initial conformation
+        # any SingleTopologyV3 and conformation
         with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
             suppl = Chem.SDMolSupplier(str(path_to_ligand), removeHs=False)
             mols = {get_mol_name(mol): mol for mol in suppl}
