@@ -106,7 +106,10 @@ def assert_canonical_bond(bond):
     assert bond[0] < bond[-1]
 
 
-align_harmonic_bond_or_angle_idxs_and_params = partial(align_idxs_and_params, make_default=lambda p: (0, p[1]))
+align_harmonic_bond_or_angle_idxs_and_params = partial(
+    align_idxs_and_params,
+    make_default=lambda p: (0, p[1]),  # 0 is force constant, p[1] is bond length
+)
 align_harmonic_bond_idxs_and_params = partial(
     align_harmonic_bond_or_angle_idxs_and_params, validate_idxs=assert_canonical_bond
 )
@@ -115,22 +118,22 @@ align_nonbonded_idxs_and_params = partial(align_idxs_and_params, make_default=la
 align_chiral_atom_idxs_and_params = partial(align_idxs_and_params, make_default=lambda _: 0)
 align_torsion_idxs_and_params = partial(
     align_idxs_and_params,
-    make_default=lambda p: (0, p[1], p[2]),
-    key=lambda idxs, params: (idxs, params[2]),
+    make_default=lambda p: (0, p[1], p[2]),  # p[1], p[2] is phase, period
+    key=lambda idxs, p: (idxs, p[2]),  # use idxs and period as key
     get_idxs=lambda key: key[0],
 )
 
 
 def align_chiral_bond_idxs_and_params(src_idxs, src_params, src_signs, dst_idxs, dst_params, dst_signs):
     return {
-        (idxs, s, p1, p2)
-        for idxs, (s, p1), (_, p2) in align_idxs_and_params(
+        (idxs, sign, p1, p2)
+        for idxs, (sign, p1), (_, p2) in align_idxs_and_params(
             src_idxs,
             zip(src_signs, src_params),
             dst_idxs,
             zip(dst_signs, dst_params),
-            make_default=lambda ps: (ps[0], 0),
-            key=lambda idxs, ps: (idxs, ps[0]),
+            make_default=lambda p: (p[0], 0),  # p[0] is sign, 0 is force constant
+            key=lambda idxs, p: (idxs, p[0]),  # use idxs and sign as key
             get_idxs=lambda key: key[0],
         )
     }
