@@ -209,10 +209,7 @@ def test_hif2a_end_state_stability(num_pairs_to_setup=25, num_pairs_to_simulate=
         core_pairs = atom_mapping.get_core_by_mcs(mol_a, mol_b, query, mcs_threshold)
         st = SingleTopologyV3(mol_a, mol_b, core_pairs, ff)
         x0 = st.combine_confs(get_romol_conf(mol_a), get_romol_conf(mol_b))
-        systems = [
-            st.setup_end_state_src(),
-            st.setup_end_state_dst(),
-        ]
+        systems = [st.src_system, st.dst_system]
 
         for system in systems:
 
