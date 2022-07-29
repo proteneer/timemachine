@@ -1,5 +1,5 @@
 from functools import partial
-from typing import Hashable
+from typing import Callable, Hashable, Iterable, Set, Tuple, TypeVar, cast
 
 import numpy as np
 
@@ -8,16 +8,21 @@ class DuplicateAlignmentKeysError(RuntimeError):
     pass
 
 
+Idxs = TypeVar("Idxs", bound=Iterable)
+Params = TypeVar("Params")
+Key = TypeVar("Key", bound=Hashable)
+
+
 def align_idxs_and_params(
-    src_idxs,
-    src_params,
-    dst_idxs,
-    dst_params,
-    make_default,
-    key=lambda idxs, _: idxs,
-    get_idxs=lambda key: key,
-    validate_idxs=lambda _: None,
-):
+    src_idxs: Iterable[Idxs],
+    src_params: Iterable[Params],
+    dst_idxs: Iterable[Idxs],
+    dst_params: Iterable[Params],
+    make_default: Callable[[Params], Params],
+    key: Callable[[Idxs, Params], Key] = lambda idxs, _: tuple(idxs),
+    get_idxs: Callable[[Key], Idxs] = lambda key: cast(Idxs, key),
+    validate_idxs: Callable[[Idxs], None] = lambda _: None,
+) -> Set[Tuple[Idxs, Params, Params]]:
     """
     Given two input parameter sets (idxs, params), aligns by the
     specified key to produce two output parameter sets, where the
@@ -73,12 +78,8 @@ def align_idxs_and_params(
         for idxs in all_idxs:
             validate_idxs(idxs)
 
-    # used to convert arrays to a hashable type for use as dict keys and in sets
-    def to_hashable(x):
-        return x if isinstance(x, Hashable) else tuple(x)
-
     def make_kv(all_idxs, all_params):
-        kvs = [(to_hashable(key(idxs, params)), params) for idxs, params in zip(all_idxs, all_params)]
+        kvs = [(key(idxs, params), params) for idxs, params in zip(all_idxs, all_params)]
 
         def has_duplicates(x):
             x = list(x)
@@ -92,11 +93,14 @@ def align_idxs_and_params(
     src_kv = make_kv(src_idxs, src_params)
     dst_kv = make_kv(dst_idxs, dst_params)
 
+    def make_params(x):
+        return cast(Params, x if isinstance(x, Hashable) else tuple(x))
+
     return {
         (
             get_idxs(k),
-            to_hashable(src_kv[k]) if k in src_kv else make_default(dst_kv[k]),
-            to_hashable(dst_kv[k]) if k in dst_kv else make_default(src_kv[k]),
+            make_params(src_kv[k]) if k in src_kv else make_default(dst_kv[k]),
+            make_params(dst_kv[k]) if k in dst_kv else make_default(src_kv[k]),
         )
         for k in set(src_kv.keys()).union(dst_kv.keys())
     }
