@@ -2,6 +2,7 @@ import warnings
 from collections.abc import Iterable
 from typing import Tuple
 
+import jax.numpy as jnp
 import numpy as np
 
 from timemachine.fe import interpolate, system, topology, utils
@@ -721,7 +722,7 @@ class SingleTopologyV3:
             pair_offsets.append(offset)
 
         return potentials.NonbondedPairListPrecomputed(
-            np.array(pair_idxs), np.array(pair_offsets), src_nonbonded.get_beta(), src_nonbonded.get_cutoff()
+            np.array(pair_idxs), jnp.array(pair_offsets), src_nonbonded.get_beta(), src_nonbonded.get_cutoff()
         ).bind(pair_params)
 
     def _setup_intermediate_chiral_bond_term(self, src_bond, dst_bond, lamb, interpolate_fn):
