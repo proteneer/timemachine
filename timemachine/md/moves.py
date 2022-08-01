@@ -1,6 +1,6 @@
 from abc import abstractmethod
 from functools import partial
-from typing import Any, List, Tuple
+from typing import Any, Callable, List, Optional, Tuple
 
 import jax
 import jax.numpy as jnp
@@ -11,6 +11,7 @@ from numpy.typing import NDArray
 from scipy.special import logsumexp
 
 from timemachine import lib
+from timemachine.constants import BOLTZ
 from timemachine.lib import custom_ops, potentials
 from timemachine.md.barostat.utils import get_bond_list, get_group_indices
 from timemachine.md.states import CoordsVelBox
@@ -109,6 +110,59 @@ class NVTMove(MonteCarloMove):
         self.n_accepted += 1
 
         return after_steps
+
+
+class ReferenceHMCMove(MonteCarloMove):
+    def __init__(
+        self,
+        U_fxn: Callable[[CoordsVelBox], float],
+        velocity_verlet_update_fxn: Callable[[CoordsVelBox], CoordsVelBox],
+        masses: NDArray,
+        temperature: float,
+        seed: Optional[int] = None,
+    ):
+        self.U_fxn = U_fxn
+        self.velocity_verlet_update_fxn = velocity_verlet_update_fxn
+        self.masses = masses
+        self.temperature = temperature
+
+        if seed is None:
+            seed = np.random.randint(10000)
+        self._rng = np.random.RandomState(seed)
+
+    @property
+    def kBT(self):
+        return self.temperature * BOLTZ
+
+    @property
+    def v_scale(self):
+        return np.sqrt(self.kBT / self.masses)[:, np.newaxis]
+
+    def _reduced_potential_energy(self, x: CoordsVelBox) -> float:
+        return self.U_fxn(x) / self.kBT
+
+    def _reduced_kinetic_energy(self, x: CoordsVelBox) -> float:
+        return 0.5 * np.sum((self.masses[:, np.newaxis] * (x.velocities ** 2))) / self.kBT
+
+    def _reduced_total_energy(self, x: CoordsVelBox) -> float:
+        u = self._reduced_potential_energy(x)
+        ke = self._reduced_kinetic_energy(x)
+        return u + ke
+
+    def augmented_logpdf(self, x: CoordsVelBox) -> float:
+        return -self._reduced_total_energy(x)
+
+    def propose(self, x: CoordsVelBox) -> Tuple[CoordsVelBox, float]:
+        v0 = self.v_scale * self._rng.randn(*x.coords.shape)
+
+        before = CoordsVelBox(x.coords, v0, x.box)
+        proposal = self.velocity_verlet_update_fxn(before)
+
+        log_q_before = self.augmented_logpdf(before)
+        log_q_proposed = self.augmented_logpdf(proposal)
+
+        log_accept_prob = np.nan_to_num(jnp.clip(log_q_proposed - log_q_before, a_max=0.0), nan=-np.inf)
+        return proposal, log_accept_prob
 
 
 class NPTMove(NVTMove):
