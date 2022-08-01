@@ -1,4 +1,5 @@
 import numpy as np
+from jax import numpy as jnp
 
 from timemachine.potentials.jax_utils import bernoulli_logpdf
 
@@ -9,6 +10,7 @@ def local_resampling_move(
     particle_selection_log_prob_fxn,
     mcmc_move,
 ):
+    x = jnp.array(x)
     n_particles = len(x)
 
     # select particles to be updated

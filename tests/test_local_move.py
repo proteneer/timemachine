@@ -68,8 +68,8 @@ def expect_no_drift(x0, move_fxn, observable_fxn, n_local_resampling_iterations=
     deviated_by_50percent_or_more = (avg_at_start / avg_at_end) <= 0.5 or (avg_at_start / avg_at_end) >= 1.5
     if deviated_by_50percent_or_more:
         msg = f"""
-            observable avg over start frames = {100 * avg_at_start:.3f}%
-            observable avg over end frames = {100 * avg_at_end:.3f}%
+            observable avg over start frames = {avg_at_start:.3f}
+            observable avg over end frames = {avg_at_end:.3f}
             but averages of this (and all other observables) should be constant over time
         """
         raise RuntimeError(msg)
