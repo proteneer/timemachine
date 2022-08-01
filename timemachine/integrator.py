@@ -100,10 +100,8 @@ class LangevinIntegrator(Integrator):
         Return trajectories of x and v, advanced by n_steps. Accepts a
         PRNGKey for determinism.
 
-        NOTE: if `force_fxn` is jax-transformable,
-        `multiple_steps_deterministic_lax` should be preferred in most
-        situations. The latter is expressed in terms of XLA
-        primitives, allowing jax.jit to produce efficient code.
+        Note: if force_fxn is jax-transformable,
+        multiple_steps_deterministic_lax should be preferred
         """
         keys = jax.random.split(key, n_steps + 1)
         xs, vs = [x], [v]
@@ -120,8 +118,10 @@ class LangevinIntegrator(Integrator):
     def multiple_steps_deterministic_lax(self, key, x, v, n_steps=1000):
         """
         Return trajectories of x and v, advanced by n_steps.
-        Implemented in terms of XLA primitives to allow jax.jit to
-        produce efficient code.
+        Implemented using jax.lax.scan to allow jax.jit to produce
+        efficient code.
+
+        Note: requires that force_fxn be jax-transformable
         """
 
         def f(xv, key):
