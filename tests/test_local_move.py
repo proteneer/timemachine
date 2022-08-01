@@ -161,13 +161,13 @@ def test_ideal_gas():
     incorrect_local_move = partial(naive_local_resampling_move, **common_kwargs)
 
     # test that num particles near center doesn't change dramatically
-    def num_particles_near_center(x):
+    def particle_frac_near_center(x):
         return np.mean(np.exp(central_particle_selection_log_prob_fxn(x)))
 
     def assert_correctness(local_move):
         # expect no drift
         traj, aux_traj = expect_no_drift(
-            x0, local_move, observable_fxn=num_particles_near_center, n_local_resampling_iterations=100
+            x0, local_move, observable_fxn=particle_frac_near_center, n_local_resampling_iterations=100
         )
 
         # assert move was not trivial
