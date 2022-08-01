@@ -327,14 +327,9 @@ def estimate_free_energy_given_samples(all_frames, all_boxes, all_U_fns, tempera
             for u_idx, (prev_U_fn, cur_U_fn) in enumerate(zip(prev_U_fns, cur_U_fns)):
                 fwd_delta_u = beta * (cur_U_fn(prev_frames, prev_boxes) - prev_U_fn(prev_frames, prev_boxes))
                 rev_delta_u = beta * (prev_U_fn(cur_frames, cur_boxes) - cur_U_fn(cur_frames, cur_boxes))
-
                 df, df_err = pymbar.BAR(fwd_delta_u, rev_delta_u)
-
                 plot_axis = all_axes[lamb_idx - 1][u_idx]
-                print(plot_axis)
-
                 plot_BAR(df, df_err, fwd_delta_u, rev_delta_u, U_names[u_idx], plot_axis)
-
                 all_fwd_delta_us.append(fwd_delta_u)
                 all_rev_delta_us.append(rev_delta_u)
 
