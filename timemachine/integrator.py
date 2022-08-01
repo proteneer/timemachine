@@ -80,11 +80,11 @@ class LangevinIntegrator(Integrator):
         # note: per-atom frictions allowed
         self.ca, self.cb, self.cc = np.expand_dims(ca, -1), np.expand_dims(cb, -1), np.expand_dims(cc, -1)
 
-    def _step(self, x, v, eta):
+    def _step(self, x, v, noise):
         """Intended to match https://github.com/proteneer/timemachine/blob/37e60205b3ae3358d9bb0967d03278ed184b8976/timemachine/cpp/src/integrator.cu#L71-L74"""
         v_mid = v + self.cb * self.force_fxn(x)
 
-        new_v = (self.ca * v_mid) + (self.cc * eta)
+        new_v = (self.ca * v_mid) + (self.cc * noise)
         new_x = x + 0.5 * self.dt * (v_mid + new_v)
 
         return new_x, new_v
