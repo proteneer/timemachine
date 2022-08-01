@@ -92,7 +92,7 @@ def sample(initial_state, protocol):
 
     bound_impls = [p.bound_impl(np.float32) for p in initial_state.U_fns]
     intg_impl = initial_state.integrator.impl()
-    baro_impl = initial_state.barostat.impl()
+    baro_impl = initial_state.barostat.impl(bound_impls)
 
     ctxt = custom_ops.Context(initial_state.x0, initial_state.v0, initial_state.box0, intg_impl, bound_impls, baro_impl)
 
@@ -450,7 +450,7 @@ def estimate_relative_free_energy(
 
         import traceback
 
-        exception = "".join(traceback.format_exception(type(e), e, e.__traceback__))
-        print(f"Exception: {exception}")
+        exception_msg = "".join(traceback.format_exception(type(e), e, e.__traceback__))
+        print(f"Exception: {exception_msg}")
 
         return SimulationResult(None, None, None, None, None, initial_states, protocol, e)
