@@ -1,5 +1,6 @@
 from itertools import product
 
+import jax
 import numpy as np
 from jax import grad, jit
 from jax import numpy as jnp
@@ -50,6 +51,32 @@ def test_reference_langevin_integrator(threshold=1e-4):
         print(f"{(temperature, friction, dt, mass)}".ljust(33), "->", histogram_mse)
 
         assert histogram_mse < threshold
+
+
+def test_reference_langevin_integrator_deterministic():
+    """
+    Asserts that trajectories produced by `_deterministic` methods
+    are reproducible, and that the implementation in terms of the XLA
+    scan primitive gives a consistent result to that of the
+    implementation as a Python for-loop
+    """
+    force_fxn = lambda x: -4 * x ** 3
+    langevin = LangevinIntegrator(force_fxn, masses=1.0, temperature=300.0, dt=0.1, friction=1.0)
+    x0, v0 = 0.1 * np.ones((2, 5))
+
+    # private "reference" implementation (not using XLA primitives)
+    xs1, vs1 = langevin._multiple_steps_deterministic(jax.random.PRNGKey(1), x0, v0)
+
+    # should give the same result using XLA primitives
+    xs2, vs2 = langevin.multiple_steps_deterministic(jax.random.PRNGKey(1), x0, v0)
+
+    # different seed; should give a different result
+    xs3, vs3 = langevin.multiple_steps_deterministic(jax.random.PRNGKey(2), x0, v0)
+
+    assert np.allclose(xs1, xs2)
+    assert np.allclose(vs1, vs2)
+    assert not np.allclose(xs1, xs3)
+    assert not np.allclose(vs1, vs3)
 
 
 def test_reference_langevin_integrator_with_custom_ops():

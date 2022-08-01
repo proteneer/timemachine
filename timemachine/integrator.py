@@ -1,4 +1,5 @@
 import time
+from functools import partial
 
 import jax
 import numpy as np
@@ -78,14 +79,58 @@ class LangevinIntegrator(Integrator):
         # note: per-atom frictions allowed
         self.ca, self.cb, self.cc = np.expand_dims(ca, -1), np.expand_dims(cb, -1), np.expand_dims(cc, -1)
 
-    def step(self, x, v):
+    def _step(self, x, v, eta):
         """Intended to match https://github.com/proteneer/timemachine/blob/37e60205b3ae3358d9bb0967d03278ed184b8976/timemachine/cpp/src/integrator.cu#L71-L74"""
         v_mid = v + self.cb * self.force_fxn(x)
 
-        new_v = (self.ca * v_mid) + (self.cc * np.random.randn(*x.shape))
+        new_v = (self.ca * v_mid) + (self.cc * eta)
         new_x = x + 0.5 * self.dt * (v_mid + new_v)
 
         return new_x, new_v
+
+    def step(self, x, v):
+        return self._step(x, v, np.random.randn(*x.shape))
+
+    def step_deterministic(self, key, x, v):
+        """Return copies x and v, updated by a single timestep. Accepts a PRNGKey for determinism."""
+        return self._step(x, v, jax.random.normal(key, x.shape))
+
+    def _multiple_steps_deterministic(self, key, x, v, n_steps=1000):
+        """
+        Return trajectories of x and v, advanced by n_steps. Accepts a
+        PRNGKey for determinism.
+
+        Note: in most situations `multiple_steps_deterministic` should
+        be preferred. The latter is expressed in terms of XLA
+        primitives, allowing jax.jit to produce efficient code. This
+        version is retained as a reference for testing.
+        """
+        keys = jax.random.split(key, n_steps + 1)
+        xs, vs = [x], [v]
+
+        for key in keys[:-1]:
+            new_x, new_v = self.step_deterministic(key, xs[-1], vs[-1])
+
+            xs.append(new_x)
+            vs.append(new_v)
+
+        return np.array(xs), np.array(vs)
+
+    @partial(jax.jit, static_argnums=(0, 4))
+    def multiple_steps_deterministic(self, key, x, v, n_steps=1000):
+        """
+        Return trajectories of x and v, advanced by n_steps.
+        Implemented in terms of XLA primitives to allow jax.jit to
+        produce efficient code.
+        """
+
+        def f(xv, key):
+            x, v = xv
+            return self.step_deterministic(key, x, v), xv
+
+        keys = jax.random.split(key, n_steps + 1)
+        _, (xs, vs) = jax.lax.scan(f, (x, v), keys)
+        return xs, vs
 
 
 class VelocityVerletIntegrator(Integrator):
