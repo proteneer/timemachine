@@ -447,4 +447,10 @@ def estimate_relative_free_energy(
         return SimulationResult(all_dGs, all_errs, plot_buffer, keep_frames, keep_boxes, initial_states, protocol, None)
 
     except Exception as e:
+
+        import traceback
+
+        exception = "".join(traceback.format_exception(type(e.exception), e.exception, e.exception.__traceback__))
+        print(f"Exception: {exception}")
+
         return SimulationResult(None, None, None, None, None, initial_states, protocol, e)
