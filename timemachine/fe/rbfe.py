@@ -242,7 +242,7 @@ SimulationResult = namedtuple(
         "frames",
         "boxes",
         "initial_states",
-        "simulation_protocol",
+        "protocol",
         "exception",
     ],
 )
