@@ -2,6 +2,7 @@ import time
 from functools import partial
 
 import jax
+import jax.numpy as jnp
 import numpy as np
 from jax import random as jrandom
 
@@ -103,10 +104,10 @@ class LangevinIntegrator(Integrator):
         Note: if force_fxn is jax-transformable,
         multiple_steps_deterministic_lax should be preferred
         """
-        keys = jax.random.split(key, n_steps + 1)
+        keys = jax.random.split(key, n_steps)
         xs, vs = [x], [v]
 
-        for key in keys[:-1]:
+        for key in keys:
             new_x, new_v = self.step_deterministic(key, xs[-1], vs[-1])
 
             xs.append(new_x)
@@ -126,11 +127,16 @@ class LangevinIntegrator(Integrator):
 
         def f(xv, key):
             x, v = xv
-            return self.step_deterministic(key, x, v), xv
+            xv_ = self.step_deterministic(key, x, v)
+            return xv_, xv_
 
-        keys = jax.random.split(key, n_steps + 1)
+        keys = jax.random.split(key, n_steps)
         _, (xs, vs) = jax.lax.scan(f, (x, v), keys)
-        return xs, vs
+
+        return (
+            jnp.concatenate((x[jnp.newaxis, :], xs)),
+            jnp.concatenate((v[jnp.newaxis, :], vs)),
+        )
 
 
 class VelocityVerletIntegrator(Integrator):
