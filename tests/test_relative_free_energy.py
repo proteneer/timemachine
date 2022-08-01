@@ -8,7 +8,7 @@ from timemachine.md import builders
 from timemachine.testsystems.relative import get_hif2a_ligand_pair_single_topology
 
 
-def test_bitwise_reproducibility(mol_a, mol_b, core, forcefield, n_frames):
+def run_bitwise_reproducibility(mol_a, mol_b, core, forcefield, n_frames):
     # test that we can bitwise reproduce our trajectory using the initial state information
 
     lambda_schedule = [0.01, 0.02, 0.03]
@@ -104,6 +104,7 @@ def test_run_hif2a_test_system():
     mol_b = st.mol_b
     core = st.core
     forcefield = st.ff
-    protein_path = "tests/data/hif2a_nowater_min.pdb"
 
-    run_pair(mol_a, mol_b, core, forcefield, n_frames=100, protein_path=protein_path)
+    # protein_path = "tests/data/hif2a_nowater_min.pdb"
+    # run_pair(mol_a, mol_b, core, forcefield, n_frames=100, protein_path=protein_path)
+    run_bitwise_reproducibility(mol_a, mol_b, core, forcefield, n_frames=1000)
