@@ -64,7 +64,7 @@ def run_pair(mol_a, mol_b, core, forcefield, n_frames, protein_path):
     assert len(solvent_res.frames[-1] == n_frames)
     assert len(solvent_res.boxes[0] == n_frames)
     assert len(solvent_res.boxes[-1] == n_frames)
-    assert [x.lamb for x in solvent_res.initial_states == lambda_schedule]
+    assert [x.lamb for x in solvent_res.initial_states] == lambda_schedule
     assert solvent_res.exception is None
     assert solvent_res.protocol.n_frames == n_frames
 
@@ -91,7 +91,7 @@ def run_pair(mol_a, mol_b, core, forcefield, n_frames, protein_path):
     assert len(complex_res.frames[-1]) == n_frames
     assert len(complex_res.boxes[0]) == n_frames
     assert len(complex_res.boxes[-1]) == n_frames
-    assert [x.lamb for x in complex_res.initial_states == lambda_schedule]
+    assert [x.lamb for x in complex_res.initial_states] == lambda_schedule
     assert complex_res.exception is None
     assert complex_res.protocol.n_frames == n_frames
 
