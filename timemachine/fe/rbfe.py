@@ -241,7 +241,7 @@ SimulationResult = namedtuple(
         "plot_png",
         "frames",
         "boxes",
-        "initial_state",
+        "initial_states",
         "simulation_protocol",
         "exception",
     ],
