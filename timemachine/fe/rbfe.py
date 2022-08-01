@@ -375,7 +375,7 @@ def estimate_free_energy_given_samples(all_frames, all_boxes, all_U_fns, tempera
 
 
 def estimate_relative_free_energy(
-    mol_a, mol_b, core, ff, host_config, seed, n_frames=1000, prefix="", lambda_schedule=None
+    mol_a, mol_b, core, ff, host_config, seed, n_frames=1000, prefix="", lambda_schedule=None, keep_idxs=None
 ):
     """
     Estimate relative free energy between mol_a and mol_b. Molecules should be aligned to each
@@ -410,6 +410,10 @@ def estimate_relative_free_energy(
     lambda_schedule: list of float
         This should only be set when debugging or unit testing. This argument may be removed later.
 
+    keep_idxs: list of int or None
+        If None, return only the end-state frames. Otherwise if not None, use only for debugging, and this
+        will return the frames corresponding to the idxs of interest.
+
     Returns
     -------
     SimulationResult
@@ -439,7 +443,12 @@ def estimate_relative_free_energy(
 
         keep_frames = []
         keep_boxes = []
-        keep_idxs = [0, -1]
+
+        if keep_idxs is None:
+            keep_idxs = [0, -1]
+
+        assert len(keep_idxs) <= len(lambda_schedule)
+
         for idx in keep_idxs:
             keep_frames.append(all_frames[idx])
             keep_boxes.append(all_boxes[idx])

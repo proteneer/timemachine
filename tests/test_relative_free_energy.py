@@ -3,9 +3,37 @@
 import numpy as np
 import pytest
 
-from timemachine.fe.rbfe import HostConfig, estimate_relative_free_energy
+from timemachine.fe.rbfe import HostConfig, estimate_relative_free_energy, generate_samples_for_all_states
 from timemachine.md import builders
 from timemachine.testsystems.relative import get_hif2a_ligand_pair_single_topology
+
+
+def test_bitwise_reproducibility(mol_a, mol_b, core, forcefield, n_frames):
+    # test that we can bitwise reproduce our trajectory using the initial state information
+
+    lambda_schedule = [0.01, 0.02, 0.03]
+    seed = 2023
+    box_width = 4.0
+    solvent_sys, solvent_conf, solvent_box, _ = builders.build_water_system(box_width)
+    solvent_box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes
+    solvent_host_config = HostConfig(solvent_sys, solvent_conf, solvent_box)
+    keep_idxs = [0, 1, 2]
+    solvent_res = estimate_relative_free_energy(
+        mol_a,
+        mol_b,
+        core,
+        forcefield,
+        solvent_host_config,
+        seed,
+        n_frames=n_frames,
+        prefix="solvent",
+        lambda_schedule=lambda_schedule,
+        keep_idxs=keep_idxs,
+    )
+
+    all_frames, all_boxes = generate_samples_for_all_states(solvent_res.initial_states, solvent_res.protocol)
+    np.testing.assert_equal(solvent_res.frames, all_frames)
+    np.testing.assert_equal(solvent_res.boxes, all_boxes)
 
 
 def run_pair(mol_a, mol_b, core, forcefield, n_frames, protein_path):
