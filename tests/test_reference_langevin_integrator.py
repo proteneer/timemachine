@@ -65,13 +65,13 @@ def test_reference_langevin_integrator_deterministic():
     x0, v0 = 0.1 * np.ones((2, 5))
 
     # private "reference" implementation (not using XLA primitives)
-    xs1, vs1 = langevin._multiple_steps_deterministic(jax.random.PRNGKey(1), x0, v0)
+    xs1, vs1 = langevin.multiple_steps_deterministic(jax.random.PRNGKey(1), x0, v0)
 
     # should give the same result using XLA primitives
-    xs2, vs2 = langevin.multiple_steps_deterministic(jax.random.PRNGKey(1), x0, v0)
+    xs2, vs2 = langevin.multiple_steps_deterministic_lax(jax.random.PRNGKey(1), x0, v0)
 
     # different seed; should give a different result
-    xs3, vs3 = langevin.multiple_steps_deterministic(jax.random.PRNGKey(2), x0, v0)
+    xs3, vs3 = langevin.multiple_steps_deterministic_lax(jax.random.PRNGKey(2), x0, v0)
 
     assert np.allclose(xs1, xs2)
     assert np.allclose(vs1, vs2)
