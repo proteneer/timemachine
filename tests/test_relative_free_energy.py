@@ -107,4 +107,4 @@ def test_run_hif2a_test_system():
 
     # protein_path = "tests/data/hif2a_nowater_min.pdb"
     # run_pair(mol_a, mol_b, core, forcefield, n_frames=100, protein_path=protein_path)
-    run_bitwise_reproducibility(mol_a, mol_b, core, forcefield, n_frames=1000)
+    run_bitwise_reproducibility(mol_a, mol_b, core, forcefield, n_frames=100)
