@@ -1,6 +1,7 @@
 import argparse
 import csv
 import pickle
+import traceback
 
 import numpy as np
 from rdkit import Chem
@@ -26,13 +27,12 @@ def get_mol_by_name(mols, name):
 
 def run_pair(mol_a, mol_b, core, forcefield_path, protein_path, n_frames, seed):
 
+    forcefield = Forcefield.load_from_file(forcefield_path)
+
     box_width = 4.0
     solvent_sys, solvent_conf, solvent_box, solvent_top = builders.build_water_system(box_width)
     solvent_box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes, deboggle later
     solvent_host_config = HostConfig(solvent_sys, solvent_conf, solvent_box)
-
-    forcefield = Forcefield.load_from_file(forcefield_path)
-
     solvent_res = estimate_relative_free_energy(
         mol_a, mol_b, core, forcefield, solvent_host_config, seed, n_frames=n_frames, prefix="solvent"
     )
@@ -40,7 +40,6 @@ def run_pair(mol_a, mol_b, core, forcefield_path, protein_path, n_frames, seed):
     complex_sys, complex_conf, _, _, complex_box, complex_top = builders.build_protein_system(protein_path)
     complex_box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes, deboggle later
     complex_host_config = HostConfig(complex_sys, complex_conf, complex_box)
-
     complex_res = estimate_relative_free_energy(
         mol_a, mol_b, core, forcefield, complex_host_config, seed + 1, n_frames=n_frames, prefix="complex"
     )
@@ -108,25 +107,44 @@ def read_from_args():
 
     for fut, meta in zip(futures, metadata):
         solvent_res, solvent_top, complex_res, complex_top = fut.result()
-        solvent_ddg = np.sum(solvent_res.all_dGs)
-        solvent_ddg_err = np.linalg.norm(solvent_res.all_errs)
-        complex_ddg = np.sum(complex_res.all_dGs)
-        complex_ddg_err = np.linalg.norm(complex_res.all_errs)
-
-        mol_a, mol_b, _, _, exp_ddg, fep_ddg, fep_ddg_err, ccc_ddg, ccc_ddg_err = meta
-        mol_a_name = get_mol_name(mol_a)
-        mol_b_name = get_mol_name(mol_b)
 
         with open(f"rbfe_result_{mol_a_name}_{mol_b_name}.pkl", "wb") as fh:
             pkl_obj = (meta, solvent_res, solvent_top, complex_res, complex_top)
             pickle.dump(pkl_obj, fh)
 
-        tm_ddg = complex_ddg - solvent_ddg
-        tm_err = np.linalg.norm([complex_ddg_err, solvent_ddg_err])
+        if solvent_res.exception:
+            exception = "".join(
+                traceback.format_exception(
+                    type(solvent_res.exception), solvent_res.exception, solvent_res.exception.__traceback__
+                )
+            )
+            print(f"failed: {mol_a_name} -> {mol_b_name} solvent leg, exception: {exception}")
+        if complex_res.exception:
+            exception = "".join(
+                traceback.format_exception(
+                    type(complex_res.exception), complex_res.exception, complex_res.exception.__traceback__
+                )
+            )
+            print(f"failed: {mol_a_name} -> {mol_b_name} complex leg, exception: {exception}")
 
-        print(
-            f"finished {mol_a_name} -> {mol_b_name} (kJ/mol) | complex {complex_ddg:.2f} +- {complex_ddg_err:.2f} | solvent {solvent_ddg:.2f} +- {solvent_ddg_err:.2f} | tm_pred {tm_ddg:.2f} +- {tm_err:.2f} | exp_ddg {exp_ddg:.2f} | fep_ddg {fep_ddg:.2f} +- {fep_ddg_err:.2f}"
-        )
+        # continue only if we both legs ran to completion
+        if solvent_res.exception is None and complex_res.exception is None:
+
+            solvent_ddg = np.sum(solvent_res.all_dGs)
+            solvent_ddg_err = np.linalg.norm(solvent_res.all_errs)
+            complex_ddg = np.sum(complex_res.all_dGs)
+            complex_ddg_err = np.linalg.norm(complex_res.all_errs)
+
+            mol_a, mol_b, _, _, exp_ddg, fep_ddg, fep_ddg_err, ccc_ddg, ccc_ddg_err = meta
+            mol_a_name = get_mol_name(mol_a)
+            mol_b_name = get_mol_name(mol_b)
+
+            tm_ddg = complex_ddg - solvent_ddg
+            tm_err = np.linalg.norm([complex_ddg_err, solvent_ddg_err])
+
+            print(
+                f"finished: {mol_a_name} -> {mol_b_name} (kJ/mol) | complex {complex_ddg:.2f} +- {complex_ddg_err:.2f} | solvent {solvent_ddg:.2f} +- {solvent_ddg_err:.2f} | tm_pred {tm_ddg:.2f} +- {tm_err:.2f} | exp_ddg {exp_ddg:.2f} | fep_ddg {fep_ddg:.2f} +- {fep_ddg_err:.2f}"
+            )
 
 
 if __name__ == "__main__":

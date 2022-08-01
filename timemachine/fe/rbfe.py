@@ -59,46 +59,6 @@ def plot_atom_mapping_grid(mol_a, mol_b, core_smarts, core, show_idxs=False):
     )
 
 
-def sample(bound_impls, masses, temperature, x0, v0, box0, lamb, group_idxs, seed, n_frames=500, burn_in=10000):
-
-    dt = 1e-3
-    friction = 1.0
-
-    intg = LangevinIntegrator(temperature, dt, friction, masses, seed)
-    intg_impl = intg.impl()
-
-    baro = MonteCarloBarostat(len(masses), 1.0, temperature, group_idxs, 15, seed + 1)
-    baro_impl = baro.impl(bound_impls)
-
-    ctxt = custom_ops.Context(x0, v0, box0, intg_impl, bound_impls, baro_impl)
-
-    # burn-in
-    ctxt.multiple_steps_U(
-        lamb=lamb,
-        n_steps=burn_in,
-        lambda_windows=[lamb],
-        store_u_interval=0,
-        store_x_interval=0,
-    )
-
-    # a crude, and probably not great, guess on the decorrelation time
-    steps_per_frame = 1000
-    # production
-    n_steps = n_frames * steps_per_frame
-    all_nrgs, all_coords, all_boxes = ctxt.multiple_steps_U(
-        lamb=lamb,
-        n_steps=n_steps,
-        lambda_windows=[lamb],
-        store_u_interval=steps_per_frame,
-        store_x_interval=steps_per_frame,
-    )
-
-    assert all_coords.shape[0] == n_frames
-    assert all_boxes.shape[0] == n_frames
-
-    return all_coords, all_boxes
-
-
 def get_batch_U_fns(bps, lamb):
     # return a function that takes in coords, boxes, lambda
     all_U_fns = []
@@ -125,34 +85,70 @@ class HostConfig:
         self.box = box
 
 
-def generate_samples(st, host_config, temperature, lambda_schedule, n_frames, seed):
+def sample(initial_state, protocol):
     """
-    Generate samples given a lambda_schedule. Let L be the number
-    of lambda windows T be the number of frames.
-
-    Parameters
-    ----------
-    st: SingleTopology
-        Topology container for the alchemical ligand
-
-    host_config: HostConfig
-        Configuration of the host
-
-    temperature: float
-        Temperature of the system, in Kelvins
-
-    lambda_schedule: np.array(L,)
-        Sequence of lambda windows
-
-    n_frames: int
-        Number of samples to generate per window
-
-    Returns
-    -------
-    3-tuple of all_frames, all_boxes, all_U_fns
-        all_frames has shape (L,T,N,3), all_boxes has shape (L,T,3,3), all_U_fns has shape (L,)
-
+    Generate a trajectory given an initial state and a simulation protocol
     """
+
+    bound_impls = [p.bound_impl(np.float32) for p in initial_state.U_fns]
+    intg_impl = initial_state.integrator.impl()
+    baro_impl = initial_state.barostat.impl()
+
+    ctxt = custom_ops.Context(initial_state.x0, initial_state.v0, initial_state.box0, intg_impl, bound_impls, baro_impl)
+
+    # burn-in
+    ctxt.multiple_steps_U(
+        lamb=initial_state.lamb,
+        n_steps=protocol.burn_in,
+        lambda_windows=[initial_state.lamb],
+        store_u_interval=0,
+        store_x_interval=0,
+    )
+
+    # a crude, and probably not great, guess on the decorrelation time
+    n_steps = protocol.n_frames * protocol.steps_per_frame
+    all_nrgs, all_coords, all_boxes = ctxt.multiple_steps_U(
+        lamb=initial_state.lamb,
+        n_steps=n_steps,
+        lambda_windows=[initial_state.lamb],
+        store_u_interval=protocol.steps_per_frame,
+        store_x_interval=protocol.steps_per_frame,
+    )
+
+    assert all_coords.shape[0] == protocol.n_frames
+    assert all_boxes.shape[0] == protocol.n_frames
+
+    return all_coords, all_boxes
+
+
+class SimulationProtocol:
+    def __init__(self, n_frames, burn_in=10000, steps_per_frame=1000):
+        self.n_frames = n_frames
+        self.burn_in = burn_in
+        self.steps_per_frame = steps_per_frame
+
+
+class InitialState:
+    """
+    An initial contains everything that is needed to bitwise reproduce a trajectory given a SimulationProtocol
+
+    This object can be pickled safely.
+    """
+
+    def __init__(self, U_fns, integrator, barostat, x0, v0, box0, lamb):
+        self.U_fns = U_fns
+        self.integrator = integrator
+        self.barostat = barostat
+        self.x0 = x0
+        self.v0 = v0
+        self.box0 = box0
+        self.lamb = lamb
+
+
+# setup the initial state so we can (hopefully) bitwise recover the identical simulation
+# to help us debug errors.
+def setup_initial_states(st, host_config, temperature, lambda_schedule, seed):
+
     host_bps, host_masses = openmm_deserializer.deserialize_system(host_config.omm_system, cutoff=1.2)
     host_conf = minimizer.minimize_host_4d(
         [st.mol_a, st.mol_b],
@@ -162,15 +158,12 @@ def generate_samples(st, host_config, temperature, lambda_schedule, n_frames, se
         host_config.box,
     )
 
-    all_U_fns = []
-    all_frames = []
-    all_boxes = []
+    initial_states = []
 
     for lamb_idx, lamb in enumerate(lambda_schedule):
         hgs = st.combine_with_host(convert_bps_into_system(host_bps), lamb=lamb)
-        all_U_fns.append(hgs.get_U_fns())
-        bound_impls = [p.bound_impl(np.float32) for p in hgs.get_U_fns()]
         # minimize water box around the ligand by 4D-decoupling
+        U_fns = hgs.get_U_fns()
         mol_a_conf = get_romol_conf(st.mol_a)
         mol_b_conf = get_romol_conf(st.mol_b)
         ligand_conf = st.combine_confs(mol_a_conf, mol_b_conf)
@@ -181,13 +174,28 @@ def generate_samples(st, host_config, temperature, lambda_schedule, n_frames, se
         group_idxs = get_group_indices(get_bond_list(hgs.bond))
         run_seed = seed + lamb_idx
         combined_masses = np.concatenate([host_masses, st.combine_masses()])
-        frames, boxes = sample(
-            bound_impls, combined_masses, temperature, x0, v0, box0, lamb, group_idxs, run_seed, n_frames=n_frames
-        )
+        dt = 1e-3
+        friction = 1.0
+        intg = LangevinIntegrator(temperature, dt, friction, combined_masses, run_seed)
+        baro = MonteCarloBarostat(len(combined_masses), 1.0, temperature, group_idxs, 15, run_seed + 1)
+        state = InitialState(U_fns, intg, baro, x0, v0, box0, lamb)
+        initial_states.append(state)
+
+    return initial_states
+
+
+def generate_samples_for_all_states(initial_states, protocol):
+    all_frames, all_boxes = [], []
+    for state_idx, state in enumerate(initial_states):
+        try:
+            frames, boxes = sample(state, protocol)
+        except Exception as exc:
+            # propagate the line information
+            raise ValueError(f"generate_samples_for_all_states failed on {state_idx}") from exc
         all_frames.append(frames)
         all_boxes.append(boxes)
 
-    return all_frames, all_boxes, all_U_fns
+    return all_frames, all_boxes
 
 
 def plot_BAR(df, df_err, fwd_delta_u, rev_delta_u, title, axes):
@@ -226,7 +234,18 @@ def plot_BAR(df, df_err, fwd_delta_u, rev_delta_u, title, axes):
 
 
 SimulationResult = namedtuple(
-    "SimulationResult", ["all_dGs", "all_errs", "plot_png", "frames", "boxes", "U_fns", "lambda_schedule"]
+    "SimulationResult",
+    [
+        "all_dGs",
+        "all_errs",
+        "plot_png",
+        "frames",
+        "boxes",
+        "initial_state",
+        "simulation_protocol",
+        "lambda_schedule",
+        "exception",
+    ],
 )
 
 
@@ -408,21 +427,25 @@ def estimate_relative_free_energy(
         warnings.warn("Warning: setting lambda_schedule manually, this argument may be removed in a future release.")
 
     temperature = DEFAULT_TEMP
-    all_frames, all_boxes, all_U_fns = generate_samples(
-        single_topology, host_config, temperature, lambda_schedule, n_frames, seed
-    )
-    all_dGs, all_errs, plot_buffer = estimate_free_energy_given_samples(
-        all_frames, all_boxes, all_U_fns, temperature, lambda_schedule, prefix
-    )
+    initial_states = setup_initial_states(single_topology, host_config, temperature, lambda_schedule, seed)
+    protocol = SimulationProtocol(n_frames=n_frames, burn_in=10000, steps_per_frame=1000)
 
-    keep_frames = []
-    keep_boxes = []
-    keep_U_fns = []
+    try:
+        all_frames, all_boxes = generate_samples_for_all_states(initial_states, protocol)
+        all_U_fns = [x.U_fns for x in initial_states]
 
-    keep_idxs = [0, -1]
-    for idx in keep_idxs:
-        keep_frames.append(all_frames[idx])
-        keep_boxes.append(all_boxes[idx])
-        keep_U_fns.append(all_U_fns[idx])
+        all_dGs, all_errs, plot_buffer = estimate_free_energy_given_samples(
+            all_frames, all_boxes, all_U_fns, temperature, lambda_schedule, prefix
+        )
 
-    return SimulationResult(all_dGs, all_errs, plot_buffer, keep_frames, keep_boxes, keep_U_fns, lambda_schedule)
+        keep_frames = []
+        keep_boxes = []
+        keep_idxs = [0, -1]
+        for idx in keep_idxs:
+            keep_frames.append(all_frames[idx])
+            keep_boxes.append(all_boxes[idx])
+
+        return SimulationResult(all_dGs, all_errs, plot_buffer, keep_frames, keep_boxes, initial_states, protocol, None)
+
+    except Exception as e:
+        return SimulationResult(None, None, None, None, None, initial_states, protocol, e)
