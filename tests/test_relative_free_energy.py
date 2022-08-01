@@ -36,7 +36,9 @@ def run_pair(mol_a, mol_b, core, forcefield, n_frames, protein_path):
     assert len(solvent_res.frames[-1] == n_frames)
     assert len(solvent_res.boxes[0] == n_frames)
     assert len(solvent_res.boxes[-1] == n_frames)
-    assert solvent_res.lambda_schedule == lambda_schedule
+    assert [x.lamb for x in solvent_res.initial_states == lambda_schedule]
+    assert solvent_res.exception is None
+    assert solvent_res.protocol.n_frames == n_frames
 
     seed = 2024
     complex_sys, complex_conf, _, _, complex_box, _ = builders.build_protein_system(protein_path)
@@ -61,7 +63,9 @@ def run_pair(mol_a, mol_b, core, forcefield, n_frames, protein_path):
     assert len(complex_res.frames[-1]) == n_frames
     assert len(complex_res.boxes[0]) == n_frames
     assert len(complex_res.boxes[-1]) == n_frames
-    assert complex_res.lambda_schedule == lambda_schedule
+    assert [x.lamb for x in complex_res.initial_states == lambda_schedule]
+    assert complex_res.exception is None
+    assert complex_res.protocol.n_frames == n_frames
 
 
 @pytest.mark.nightly(reason="Slow!")
