@@ -243,7 +243,6 @@ SimulationResult = namedtuple(
         "boxes",
         "initial_state",
         "simulation_protocol",
-        "lambda_schedule",
         "exception",
     ],
 )
