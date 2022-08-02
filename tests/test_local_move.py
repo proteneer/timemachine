@@ -39,10 +39,8 @@ def make_hmc_mover(x, logpdf_fxn, dt=0.1, n_steps=100):
         v0 = np.random.randn(*x.shape)
         (x1, v1), log_accept_prob = augmented_proposal(x0, v0)
 
-        if np.random.rand() < jnp.exp(log_accept_prob):
-            return x1, log_accept_prob
-        else:
-            return x0, log_accept_prob
+        x_new = x1 if np.random.rand() < jnp.exp(log_accept_prob) else x0
+        return x_new, log_accept_prob
 
     return hmc_move
 
