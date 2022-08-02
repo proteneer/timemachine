@@ -62,7 +62,7 @@ def test_reference_langevin_integrator_deterministic():
     """
     force_fxn = lambda x: -4 * x ** 3
     langevin = LangevinIntegrator(force_fxn, masses=1.0, temperature=300.0, dt=0.1, friction=1.0)
-    x0, v0 = 0.1 * np.ones((2, 5))
+    x0, v0 = 0.1 * jax.random.uniform(jax.random.PRNGKey(1), shape=(2, 5))
 
     xs1, vs1 = langevin.multiple_steps_deterministic(jax.random.PRNGKey(1), x0, v0)
 
