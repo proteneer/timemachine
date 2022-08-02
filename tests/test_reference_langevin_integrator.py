@@ -72,8 +72,8 @@ def test_reference_langevin_integrator_deterministic():
     # implementation based on jax.lax.scan should give identical result
     xs2, vs2 = langevin.multiple_steps_deterministic_lax(jax.random.PRNGKey(1), x0, v0)
 
-    assert np.allclose(xs1, xs2)
-    assert np.allclose(vs1, vs2)
+    np.testing.assert_allclose(xs1, xs2)
+    np.testing.assert_allclose(vs1, vs2)
 
     # different seed; should give a different result
     xs3, vs3 = langevin.multiple_steps_deterministic_lax(jax.random.PRNGKey(2), x0, v0)
