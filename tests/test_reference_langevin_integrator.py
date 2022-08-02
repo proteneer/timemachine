@@ -58,28 +58,52 @@ def test_reference_langevin_integrator(threshold=1e-4):
 
 def test_reference_langevin_integrator_deterministic():
     """
-    Asserts that trajectories produced by `_deterministic` methods
-    are reproducible, and that the implementation in terms of the XLA
-    scan primitive gives a consistent result to that of the
-    implementation as a Python for-loop
+    Asserts that trajectories produced by `_deterministic` methods are deterministic
     """
     force_fxn = lambda x: -4 * x ** 3
     langevin = LangevinIntegrator(force_fxn, masses=1.0, temperature=300.0, dt=0.1, friction=1.0)
     x0, v0 = 0.1 * jax.random.uniform(jax.random.PRNGKey(1), shape=(2, 5))
+    key, key_ = jax.random.split(jax.random.PRNGKey(1))
 
-    xs1, vs1 = langevin.multiple_steps_deterministic(jax.random.PRNGKey(1), x0, v0)
+    def assert_deterministic(method):
+        xs1, vs1 = method(key, x0, v0)
 
-    # implementation based on jax.lax.scan should give identical result
-    xs2, vs2 = langevin.multiple_steps_deterministic_lax(jax.random.PRNGKey(1), x0, v0)
+        # same key should give same result
+        xs2, vs2 = method(key, x0, v0)
+        np.testing.assert_array_equal(xs1, xs2)
+        np.testing.assert_array_equal(vs1, vs2)
 
+        # different key should give different result
+        xs3, vs3 = method(key_, x0, v0)
+        assert not np.allclose(xs2, xs3)
+        assert not np.allclose(vs2, vs3)
+
+    assert_deterministic(langevin.multiple_steps_deterministic)
+    assert_deterministic(langevin.multiple_steps_deterministic_lax)
+
+
+def test_reference_langevin_integrator_consistent():
+    """
+    Asserts that the implementation in terms of jax.lax primitives
+    gives a consistent result to that of the implementation as a
+    Python for-loop
+    """
+    force_fxn = lambda x: -4 * x ** 3
+    langevin = LangevinIntegrator(force_fxn, masses=1.0, temperature=300.0, dt=0.1, friction=1.0)
+    x0, v0 = 0.1 * jax.random.uniform(jax.random.PRNGKey(1), shape=(2, 5))
+    key = jax.random.PRNGKey(1)
+
+    xs1, vs1 = langevin.multiple_steps_deterministic(key, x0, v0)
+
+    # should be consistent with the jax.lax implementation
+    xs2, vs2 = langevin.multiple_steps_deterministic_lax(key, x0, v0)
+
+    # NOTE: result of the jax.lax implementation is NOT bitwise
+    # equivalent to the pure Python implementation. This might be due
+    # to loop-unrolling and reassociation optimizations performed by
+    # XLA
     np.testing.assert_allclose(xs1, xs2)
     np.testing.assert_allclose(vs1, vs2)
-
-    # different seed; should give a different result
-    xs3, vs3 = langevin.multiple_steps_deterministic_lax(jax.random.PRNGKey(2), x0, v0)
-
-    assert not np.allclose(xs1, xs3)
-    assert not np.allclose(vs1, vs3)
 
 
 def test_reference_langevin_integrator_with_custom_ops():
