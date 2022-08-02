@@ -1,5 +1,7 @@
 import time
+from abc import ABC, abstractmethod
 from functools import partial
+from typing import Any, Tuple
 
 import jax
 import jax.numpy as jnp
@@ -50,10 +52,11 @@ def langevin_coefficients(temperature, dt, friction, masses):
     return ca, cb, cc
 
 
-class Integrator:
-    def step(self, x, v):
+class Integrator(ABC):
+    @abstractmethod
+    def step(self, x, v) -> Tuple[Any, Any]:
         """Return copies x and v, updated by a single timestep"""
-        raise NotImplementedError
+        pass
 
     def multiple_steps(self, x, v, n_steps=1000):
         """Return trajectories of x and v, advanced by n_steps"""
@@ -68,7 +71,55 @@ class Integrator:
         return np.array(xs), np.array(vs)
 
 
-class LangevinIntegrator(Integrator):
+class StochasticIntegrator(ABC):
+    @abstractmethod
+    def step(self, x, v, rng) -> Tuple[Any, Any]:
+        pass
+
+    @abstractmethod
+    def step_lax(self, key, x, v) -> Tuple[Any, Any]:
+        pass
+
+    def multiple_steps(self, x, v, n_steps=1000, rng=None):
+        """Return trajectories of x and v, advanced by n_steps"""
+
+        rng = rng or np.random.default_rng()
+
+        xs, vs = [x], [v]
+
+        for _ in range(n_steps):
+            new_x, new_v = self.step(xs[-1], vs[-1], rng)
+
+            xs.append(new_x)
+            vs.append(new_v)
+
+        return np.array(xs), np.array(vs)
+
+    @partial(jax.jit, static_argnums=(0, 4))
+    def multiple_steps_lax(self, key, x, v, n_steps=1000):
+        """
+        Return trajectories of x and v, advanced by n_steps.
+        Implemented using jax.lax.scan to allow jax.jit to produce
+        efficient code.
+
+        Note: requires that force_fxn be jax-transformable
+        """
+
+        def f(xv, key):
+            x, v = xv
+            xv_ = self.step_lax(key, x, v)
+            return xv_, xv_
+
+        keys = jax.random.split(key, n_steps)
+        _, (xs, vs) = jax.lax.scan(f, (x, v), keys)
+
+        return (
+            jnp.concatenate((x[jnp.newaxis, :], xs)),
+            jnp.concatenate((v[jnp.newaxis, :], vs)),
+        )
+
+
+class LangevinIntegrator(StochasticIntegrator):
     def __init__(self, force_fxn, masses, temperature, dt, friction):
         """BAOAB (https://arxiv.org/abs/1203.5428), rotated by half a timestep"""
         self.dt = dt
@@ -89,54 +140,12 @@ class LangevinIntegrator(Integrator):
 
         return new_x, new_v
 
-    def step(self, x, v):
-        return self._step(x, v, np.random.randn(*x.shape))
+    def step(self, x, v, rng):
+        return self._step(x, v, rng.normal(*x.shape))
 
-    def step_deterministic(self, key, x, v):
+    def step_lax(self, key, x, v):
         """Return copies x and v, updated by a single timestep. Accepts a PRNGKey for determinism."""
         return self._step(x, v, jax.random.normal(key, x.shape))
-
-    def multiple_steps_deterministic(self, key, x, v, n_steps=1000):
-        """
-        Return trajectories of x and v, advanced by n_steps. Accepts a
-        PRNGKey for determinism.
-
-        Note: if force_fxn is jax-transformable,
-        multiple_steps_deterministic_lax should be preferred
-        """
-        keys = jax.random.split(key, n_steps)
-        xs, vs = [x], [v]
-
-        for key in keys:
-            new_x, new_v = self.step_deterministic(key, xs[-1], vs[-1])
-
-            xs.append(new_x)
-            vs.append(new_v)
-
-        return np.array(xs), np.array(vs)
-
-    @partial(jax.jit, static_argnums=(0, 4))
-    def multiple_steps_deterministic_lax(self, key, x, v, n_steps=1000):
-        """
-        Return trajectories of x and v, advanced by n_steps.
-        Implemented using jax.lax.scan to allow jax.jit to produce
-        efficient code.
-
-        Note: requires that force_fxn be jax-transformable
-        """
-
-        def f(xv, key):
-            x, v = xv
-            xv_ = self.step_deterministic(key, x, v)
-            return xv_, xv_
-
-        keys = jax.random.split(key, n_steps)
-        _, (xs, vs) = jax.lax.scan(f, (x, v), keys)
-
-        return (
-            jnp.concatenate((x[jnp.newaxis, :], xs)),
-            jnp.concatenate((v[jnp.newaxis, :], vs)),
-        )
 
 
 class VelocityVerletIntegrator(Integrator):
