@@ -7,7 +7,7 @@ import jax.numpy as jnp
 import jax.random as jrandom
 import numpy as np
 from jax.scipy.special import logsumexp as jlogsumexp
-from numpy.typing import NDArray
+from numpy.typing import NDArray as Array
 from scipy.special import logsumexp
 
 from timemachine import lib
@@ -21,11 +21,11 @@ class MonteCarloMove:
     n_proposed: int = 0
     n_accepted: int = 0
 
-    def propose(self, x: CoordsVelBox) -> Tuple[CoordsVelBox, float]:
+    def propose(self, x: Any) -> Tuple[Any, float]:
         """return proposed state and log acceptance probability"""
         raise NotImplementedError
 
-    def move(self, x: CoordsVelBox) -> CoordsVelBox:
+    def move(self, x: Any) -> Any:
         proposal, log_acceptance_probability = self.propose(x)
         self.n_proposed += 1
 
@@ -50,7 +50,7 @@ class CompoundMove(MonteCarloMove):
         """Apply each of a list of moves in sequence"""
         self.moves = moves
 
-    def move(self, x: CoordsVelBox) -> CoordsVelBox:
+    def move(self, x: Any) -> Any:
         for individual_move in self.moves:
             x = individual_move.move(x)
         return x
@@ -77,7 +77,7 @@ class NVTMove(MonteCarloMove):
         self,
         ubps: List[potentials.CustomOpWrapper],
         lamb: float,
-        masses: NDArray,
+        masses: Array,
         temperature: float,
         n_steps: int,
         seed: int,
@@ -92,10 +92,10 @@ class NVTMove(MonteCarloMove):
         self.lamb = lamb
         self.n_steps = n_steps
 
-    def move(self, x: CoordsVelBox) -> CoordsVelBox:
+    def propose(self, x: CoordsVelBox) -> Tuple[CoordsVelBox, float]:
         # note: context creation overhead here is actually very small!
         ctxt = custom_ops.Context(x.coords, x.velocities, x.box, self.integrator_impl, self.bound_impls)
-        return self._steps(ctxt)
+        return self._steps(ctxt), 0.0
 
     def _steps(self, ctxt: "custom_ops.Context") -> CoordsVelBox:
         # arguments: lambda_schedule, du_dl_interval, x_interval
@@ -112,12 +112,12 @@ class NVTMove(MonteCarloMove):
         return after_steps
 
 
-class ReferenceHMCMove(MonteCarloMove):
+class HMCMove(MonteCarloMove):
     def __init__(
         self,
-        U_fxn: Callable[[CoordsVelBox], float],
-        velocity_verlet_update_fxn: Callable[[CoordsVelBox], CoordsVelBox],
-        masses: NDArray,
+        U_fxn: Callable[[Array], float],
+        velocity_verlet_update_fxn: Callable[[Array, Array], Array],
+        masses: Array,
         temperature: float,
         seed: Optional[int] = None,
     ):
@@ -138,31 +138,30 @@ class ReferenceHMCMove(MonteCarloMove):
     def v_scale(self):
         return np.sqrt(self.kBT / self.masses)[:, np.newaxis]
 
-    def _reduced_potential_energy(self, x: CoordsVelBox) -> float:
+    def _reduced_potential_energy(self, x: Array) -> float:
         return self.U_fxn(x) / self.kBT
 
-    def _reduced_kinetic_energy(self, x: CoordsVelBox) -> float:
-        return 0.5 * np.sum((self.masses[:, np.newaxis] * (x.velocities ** 2))) / self.kBT
+    def _reduced_kinetic_energy(self, v: Array) -> float:
+        return 0.5 * np.sum((self.masses[:, np.newaxis] * (v ** 2))) / self.kBT
 
-    def _reduced_total_energy(self, x: CoordsVelBox) -> float:
+    def _reduced_total_energy(self, x: Array, v: Array) -> float:
         u = self._reduced_potential_energy(x)
-        ke = self._reduced_kinetic_energy(x)
+        ke = self._reduced_kinetic_energy(v)
         return u + ke
 
-    def augmented_logpdf(self, x: CoordsVelBox) -> float:
-        return -self._reduced_total_energy(x)
+    def augmented_logpdf(self, x: Array, v: Array) -> float:
+        return -self._reduced_total_energy(x, v)
 
-    def propose(self, x: CoordsVelBox) -> Tuple[CoordsVelBox, float]:
-        v0 = self.v_scale * self._rng.randn(*x.coords.shape)
+    def propose(self, x0: Array) -> Tuple[Array, float]:
+        v0 = self.v_scale * self._rng.randn(*x0.shape)
+        x1, v1 = self.velocity_verlet_update_fxn(x0, v0)
 
-        before = CoordsVelBox(x.coords, v0, x.box)
-        proposal = self.velocity_verlet_update_fxn(before)
+        log_q_before = self.augmented_logpdf(x0, v0)
+        log_q_proposed = self.augmented_logpdf(x1, v1)
 
-        log_q_before = self.augmented_logpdf(before)
-        log_q_proposed = self.augmented_logpdf(proposal)
+        log_accept_prob = float(np.nan_to_num(jnp.clip(log_q_proposed - log_q_before, a_max=0.0), nan=-np.inf))
 
-        log_accept_prob = np.nan_to_num(jnp.clip(log_q_proposed - log_q_before, a_max=0.0), nan=-np.inf)
-        return proposal, log_accept_prob
+        return x1, log_accept_prob
 
 
 class NPTMove(NVTMove):
@@ -175,7 +174,7 @@ class NPTMove(NVTMove):
         self,
         ubps: List[potentials.CustomOpWrapper],
         lamb: float,
-        masses: NDArray,
+        masses: Array,
         temperature: float,
         pressure: float,
         n_steps: int,
@@ -241,7 +240,7 @@ class OptimizedMTMMove(DeterministicMTMMove):
         batch_proposal_fn: Callable(x: np.array, K: int, key: jrandom.key) -> List[np.array]
             Given the current coords, sample size, and a key, return a list of conformations
 
-        batch_log_weights_fn: Callable(xs: List[np.array], box: np.array(3,3)) -> List[float]
+        batched_log_weights_fn: Callable(xs: List[np.array], box: np.array(3,3)) -> List[float]
             Return log weights given a list
 
         seed: int
