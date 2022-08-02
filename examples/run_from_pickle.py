@@ -24,6 +24,7 @@ def read_from_args():
         print("running complex")
         for initial_state in complex_res.initial_states:
             all_coords, all_boxes = rbfe.sample(initial_state, complex_res.protocol)
+        print("SUCCESS")
 
 
 if __name__ == "__main__":
