@@ -1,4 +1,3 @@
-from functools import partial
 from itertools import product
 
 import jax
