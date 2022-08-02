@@ -133,6 +133,10 @@ def read_from_args():
     for fut, meta in zip(futures, metadata):
         solvent_res, solvent_top, complex_res, complex_top = fut.result()
 
+        mol_a, mol_b, _, _, exp_ddg, fep_ddg, fep_ddg_err, ccc_ddg, ccc_ddg_err = meta
+        mol_a_name = get_mol_name(mol_a)
+        mol_b_name = get_mol_name(mol_b)
+
         with open(f"rbfe_result_{mol_a_name}_{mol_b_name}.pkl", "wb") as fh:
             pkl_obj = (meta, solvent_res, solvent_top, complex_res, complex_top)
             pickle.dump(pkl_obj, fh)
@@ -159,10 +163,6 @@ def read_from_args():
             solvent_ddg_err = np.linalg.norm(solvent_res.all_errs)
             complex_ddg = np.sum(complex_res.all_dGs)
             complex_ddg_err = np.linalg.norm(complex_res.all_errs)
-
-            mol_a, mol_b, _, _, exp_ddg, fep_ddg, fep_ddg_err, ccc_ddg, ccc_ddg_err = meta
-            mol_a_name = get_mol_name(mol_a)
-            mol_b_name = get_mol_name(mol_b)
 
             tm_ddg = complex_ddg - solvent_ddg
             tm_err = np.linalg.norm([complex_ddg_err, solvent_ddg_err])
