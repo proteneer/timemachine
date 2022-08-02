@@ -241,35 +241,17 @@ void Context::step(double lambda) {
 void Context::_step(
     std::vector<BoundPotential *> &bps, const double lambda, unsigned long long *du_dl_out, const cudaStream_t stream) {
 
-    gpuErrchk(cudaMemsetAsync(d_du_dx_t_, 0, N_ * 3 * sizeof(*d_du_dx_t_), stream));
-
     if (du_dl_out) {
         gpuErrchk(cudaMemsetAsync(d_du_dl_buffer_, 0, N_ * sizeof(*d_du_dl_buffer_), stream));
     }
 
-    for (int i = 0; i < bps.size(); i++) {
-        bps[i]->execute_device(
-            N_,
-            d_x_t_,
-            d_box_t_,
-            lambda,
-            d_du_dx_t_, // we only need the forces
-            nullptr,
-            du_dl_out ? d_du_dl_buffer_ : nullptr,
-            nullptr,
-            stream);
-    }
+    intg_->step_fwd(bps, lambda, d_x_t_, d_v_t_, d_box_t_, du_dl_out ? d_du_dl_buffer_ : nullptr, stream);
 
     // compute du_dl
     if (du_dl_out) {
         cub::DeviceReduce::Sum(d_sum_storage_, d_sum_storage_bytes_, d_du_dl_buffer_, du_dl_out, N_, stream);
         gpuErrchk(cudaPeekAtLastError());
     }
-
-    // for(int i=0; i < streams_.size(); i++) {
-    // gpuErrchk(cudaStreamSynchronize(streams_[i]));
-    // }
-    intg_->step_fwd(d_x_t_, d_v_t_, d_du_dx_t_, d_box_t_, stream);
 
     if (barostat_) {
         // May modify coords, du_dx and box size

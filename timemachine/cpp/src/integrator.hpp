@@ -1,6 +1,8 @@
 #pragma once
 
+#include "bound_potential.hpp"
 #include "curand.h"
+#include <vector>
 
 namespace timemachine {
 
@@ -9,8 +11,14 @@ class Integrator {
 public:
     virtual ~Integrator(){};
 
-    virtual void
-    step_fwd(double *d_x_t, double *d_v_t, unsigned long long *d_du_dx_t, double *d_box_t_, cudaStream_t stream) = 0;
+    virtual void step_fwd(
+        std::vector<BoundPotential *> bps,
+        double lamb,
+        double *d_x_t,
+        double *d_v_t,
+        double *d_box_t,
+        unsigned long long *d_du_dl,
+        cudaStream_t stream) = 0;
 };
 
 class LangevinIntegrator : public Integrator {
@@ -22,6 +30,7 @@ private:
     double *d_cbs_;
     double *d_ccs_;
     double *d_noise_;
+    unsigned long long *d_du_dx_;
 
     curandGenerator_t cr_rng_;
 
@@ -31,7 +40,13 @@ public:
     virtual ~LangevinIntegrator();
 
     virtual void step_fwd(
-        double *d_x_t, double *d_v_t, unsigned long long *d_du_dx_t, double *d_box_t_, cudaStream_t stream) override;
+        std::vector<BoundPotential *> bps,
+        double lamb,
+        double *d_x_t,
+        double *d_v_t,
+        double *d_box_t_,
+        unsigned long long *d_du_dl,
+        cudaStream_t stream) override;
 };
 
 // template<typename RealType>

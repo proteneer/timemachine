@@ -25,12 +25,15 @@ LangevinIntegrator::LangevinIntegrator(int N, double dt, double ca, const double
     curandErrchk(curandCreateGenerator(&cr_rng_, CURAND_RNG_PSEUDO_DEFAULT));
     gpuErrchk(cudaMalloc(&d_noise_, round_up_even(N * 3) * sizeof(double)));
     curandErrchk(curandSetPseudoRandomGeneratorSeed(cr_rng_, seed));
+
+    gpuErrchk(cudaMalloc(&d_du_dx_, N * 3 * sizeof(*d_du_dx_)));
 }
 
 LangevinIntegrator::~LangevinIntegrator() {
     gpuErrchk(cudaFree(d_cbs_));
     gpuErrchk(cudaFree(d_ccs_));
     gpuErrchk(cudaFree(d_noise_));
+    gpuErrchk(cudaFree(d_du_dx_));
     curandErrchk(curandDestroyGenerator(cr_rng_));
 }
 
@@ -69,7 +72,28 @@ __global__ void update_forward(
 };
 
 void LangevinIntegrator::step_fwd(
-    double *d_x_t, double *d_v_t, unsigned long long *d_du_dx_t, double *d_box_t_, cudaStream_t stream) {
+    std::vector<BoundPotential *> bps,
+    double lamb,
+    double *d_x_t,
+    double *d_v_t,
+    double *d_box_t,
+    unsigned long long *d_du_dl,
+    cudaStream_t stream) {
+
+    gpuErrchk(cudaMemsetAsync(d_du_dx_, 0, N_ * 3 * sizeof(*d_du_dx_), stream));
+
+    for (int i = 0; i < bps.size(); i++) {
+        bps[i]->execute_device(
+            N_,
+            d_x_t,
+            d_box_t,
+            lamb,
+            d_du_dx_, // we only need the forces
+            nullptr,
+            d_du_dl ? d_du_dl : nullptr,
+            nullptr,
+            stream);
+    }
 
     const int D = 3;
     size_t tpb = warp_size;
@@ -80,78 +104,9 @@ void LangevinIntegrator::step_fwd(
     curandErrchk(templateCurandNormal(cr_rng_, d_noise_, round_up_even(N_ * D), 0.0, 1.0));
 
     update_forward<double>
-        <<<dimGrid_dx, tpb, 0, stream>>>(N_, D, ca_, d_cbs_, d_ccs_, d_noise_, d_x_t, d_v_t, d_du_dx_t, dt_);
+        <<<dimGrid_dx, tpb, 0, stream>>>(N_, D, ca_, d_cbs_, d_ccs_, d_noise_, d_x_t, d_v_t, d_du_dx_, dt_);
 
     gpuErrchk(cudaPeekAtLastError());
 }
 
 } // end namespace timemachine
-
-// template<typename RealType>
-// void step_forward(
-//     int N,
-//     int D,
-//     const RealType ca,
-//     const RealType *d_coeff_bs,
-//     const RealType *d_coeff_cs, // N
-//     const RealType *d_noise_buffer,
-//     const RealType *d_x_old,
-//     const RealType *d_v_old,
-//     const unsigned long long *d_dE_dx_old,
-//     const RealType dt,
-//     RealType *d_x_new,
-//     RealType *d_v_new) {
-
-//     size_t tpb = 32;
-//     size_t n_blocks = (N*D + tpb - 1) / tpb;
-//     dim3 dimGrid_dx(n_blocks, D);
-
-//     update_forward<<<dimGrid_dx, tpb>>>(
-//         N,
-//         D,
-//         ca,
-//         d_coeff_bs,
-//         d_coeff_cs,
-//         d_noise_buffer,
-//         d_x_old,
-//         d_v_old,
-//         d_dE_dx_old,
-//         dt,
-//         d_x_new,
-//         d_v_new
-//     );
-
-//     cudaDeviceSynchronize();
-//     gpuErrchk(cudaPeekAtLastError());
-
-// };
-
-// template void step_forward<double>(
-//     int N,
-//     int D,
-//     const double ca,
-//     const double *d_coeff_bs,
-//     const double *d_coeff_cs,
-//     const double *d_noise_buffer,
-//     const double *d_x_old,
-//     const double *d_v_old,
-//     const unsigned long long *d_dE_dx_old,
-//     const double dt,
-//     double *d_x_new,
-//     double *d_v_new);
-
-// template void step_forward<float>(
-//     int N,
-//     int D,
-//     const float ca,
-//     const float *d_coeff_bs,
-//     const float *d_coeff_cs,
-//     const float *d_noise_buffer,
-//     const float *d_x_old,
-//     const float *d_v_old,
-//     const unsigned long long *d_dE_dx_old,
-//     const float dt,
-//     float *d_x_new,
-//     float *d_v_new);
-
-// }
