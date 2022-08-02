@@ -141,7 +141,7 @@ class LangevinIntegrator(StochasticIntegrator):
         return new_x, new_v
 
     def step(self, x, v, rng):
-        return self._step(x, v, rng.normal(*x.shape))
+        return self._step(x, v, rng.normal(size=x.shape))
 
     def step_lax(self, key, x, v):
         """Return copies x and v, updated by a single timestep. Accepts a PRNGKey for determinism."""
