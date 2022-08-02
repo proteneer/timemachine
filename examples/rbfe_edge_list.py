@@ -25,7 +25,7 @@ def get_mol_by_name(mols, name):
     assert 0, "Mol not found"
 
 
-def run_pair(mol_a, mol_b, core, forcefield_path, protein_path, n_frames, seed):
+def run_pair(mol_a, mol_b, core, forcefield_path, protein_path, n_frames, seed, prepare_only):
 
     forcefield = Forcefield.load_from_file(forcefield_path)
 
@@ -34,14 +34,30 @@ def run_pair(mol_a, mol_b, core, forcefield_path, protein_path, n_frames, seed):
     solvent_box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes, deboggle later
     solvent_host_config = HostConfig(solvent_sys, solvent_conf, solvent_box)
     solvent_res = estimate_relative_free_energy(
-        mol_a, mol_b, core, forcefield, solvent_host_config, seed, n_frames=n_frames, prefix="solvent"
+        mol_a,
+        mol_b,
+        core,
+        forcefield,
+        solvent_host_config,
+        seed,
+        n_frames=n_frames,
+        prefix="solvent",
+        prepare_only=prepare_only,
     )
 
     complex_sys, complex_conf, _, _, complex_box, complex_top = builders.build_protein_system(protein_path)
     complex_box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes, deboggle later
     complex_host_config = HostConfig(complex_sys, complex_conf, complex_box)
     complex_res = estimate_relative_free_energy(
-        mol_a, mol_b, core, forcefield, complex_host_config, seed + 1, n_frames=n_frames, prefix="complex"
+        mol_a,
+        mol_b,
+        core,
+        forcefield,
+        complex_host_config,
+        seed + 1,
+        n_frames=n_frames,
+        prefix="complex",
+        prepare_only=prepare_only,
     )
 
     return solvent_res, solvent_top, complex_res, complex_top
@@ -61,6 +77,7 @@ def read_from_args():
     parser.add_argument("--protein", type=str, help="PDB of the protein complex", required=True)
     parser.add_argument("--n_gpus", type=int, help="number of gpus", required=True)
     parser.add_argument("--seed", type=int, help="random seed for the runs", required=True)
+    parser.add_argument("--prepare_only", type=bool, help="generate initial states", required=True)
 
     args = parser.parse_args()
 
@@ -87,7 +104,15 @@ def read_from_args():
             query_mol = Chem.MolFromSmarts(mcs_result.smartsString)
             core = atom_mapping.get_core_by_mcs(mol_a, mol_b, query_mol, threshold=mcs_threshold)
             fut = cpc.submit(
-                run_pair, mol_a, mol_b, core, args.forcefield, args.protein, args.seed + row_idx, args.n_frames
+                run_pair,
+                mol_a,
+                mol_b,
+                core,
+                args.forcefield,
+                args.protein,
+                args.seed + row_idx,
+                args.n_frames,
+                args.prepare_only,
             )
             futures.append(fut)
 

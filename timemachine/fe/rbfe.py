@@ -369,8 +369,22 @@ def estimate_free_energy_given_samples(all_frames, all_boxes, all_U_fns, tempera
     return all_dGs, all_errs, img_as_bytes
 
 
+class PrepareOnlyException(Exception):
+    pass
+
+
 def estimate_relative_free_energy(
-    mol_a, mol_b, core, ff, host_config, seed, n_frames=1000, prefix="", lambda_schedule=None, keep_idxs=None
+    mol_a,
+    mol_b,
+    core,
+    ff,
+    host_config,
+    seed,
+    n_frames=1000,
+    prefix="",
+    lambda_schedule=None,
+    keep_idxs=None,
+    prepare_only=False,
 ):
     """
     Estimate relative free energy between mol_a and mol_b. Molecules should be aligned to each
@@ -409,6 +423,9 @@ def estimate_relative_free_energy(
         If None, return only the end-state frames. Otherwise if not None, use only for debugging, and this
         will return the frames corresponding to the idxs of interest.
 
+    prepare_only: bool
+        If True then return only the initial states.
+
     Returns
     -------
     SimulationResult
@@ -427,6 +444,10 @@ def estimate_relative_free_energy(
     temperature = DEFAULT_TEMP
     initial_states = setup_initial_states(single_topology, host_config, temperature, lambda_schedule, seed)
     protocol = SimulationProtocol(n_frames=n_frames, burn_in=10000, steps_per_frame=1000)
+
+    if prepare_only:
+        e = PrepareOnlyException()
+        return SimulationResult(None, None, None, None, None, initial_states, protocol, e)
 
     try:
         all_frames, all_boxes = generate_samples_for_all_states(initial_states, protocol)
