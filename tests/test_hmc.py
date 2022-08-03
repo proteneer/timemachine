@@ -1,7 +1,7 @@
 import numpy as np
 from jax import grad, jit
 
-from timemachine.constants import DEFAULT_FF
+from timemachine.constants import BOLTZ, DEFAULT_FF
 from timemachine.fe.utils import to_md_units
 from timemachine.ff import Forcefield
 from timemachine.integrator import VelocityVerletIntegrator
@@ -135,3 +135,65 @@ def test_hmc_on_dhfr():
     U_before = hmc_move.U_fxn(x0)
     U_after = hmc_move.U_fxn(traj[-1])
     assert abs(U_after - U_before) < 1000
+
+
+def prepare_quartic_hmc_move(num_oscillators=1000, dt=1.5e-3, n_steps=1000, temperature=300.0):
+    masses = np.ones(num_oscillators)
+
+    @jit
+    def U(x):
+        return np.sum(x ** 4)
+
+    def force(x):
+        return -grad(U)(x)
+
+    intg = VelocityVerletIntegrator(force, masses=masses, dt=dt)
+
+    @jit
+    def vv_update(x0, v0):
+        return intg._update_via_fori_loop(x0, v0, n_steps=n_steps)
+
+    hmc_move = HMCMove(U, vv_update, masses, temperature)
+
+    return hmc_move
+
+
+def test_hmc_on_quartic_potential():
+    """Run HMC on a system of independent quartic oscillators, assert canonical sampling"""
+
+    np.random.seed(2022)
+
+    num_oscillators = 10000
+
+    x0 = np.random.randn(num_oscillators, 3)
+    temperature = 300.0
+    hmc_move = prepare_quartic_hmc_move(num_oscillators, dt=0.05, temperature=temperature)
+
+    # run a few iterations
+    traj = [x0]
+    for _ in range(100):
+        traj.append(hmc_move.move(traj[-1]))
+
+    # assert we moved
+    assert traj[-1].shape == x0.shape
+    assert np.max(np.abs(traj[-1] - traj[0])) > 0.1
+
+    # assert high acceptance fraction
+    assert hmc_move.acceptance_fraction > 0.5, hmc_move.acceptance_fraction
+
+    # assert good sampling
+    samples = np.array(traj[10:]).flatten()
+
+    # summarize using histogram
+    y_empirical, edges = np.histogram(samples, bins=100, range=(-2, +2), density=True)
+    x_grid = (edges[1:] + edges[:-1]) / 2
+
+    # compare with e^{-U(x) / kB T} / Z
+    threshold = 1e-4
+
+    y = np.exp(-(x_grid ** 4) / (BOLTZ * temperature))
+    y_ref = y / np.trapz(y, x_grid)
+
+    histogram_mse = np.mean((y_ref - y_empirical) ** 2)
+
+    assert histogram_mse < threshold
