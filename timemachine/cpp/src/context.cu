@@ -285,10 +285,6 @@ void Context::set_x_t(const double *in_buffer) {
     gpuErrchk(cudaMemcpy(d_x_t_, in_buffer, N_ * 3 * sizeof(*in_buffer), cudaMemcpyHostToDevice));
 }
 
-void Context::get_du_dx_t_minus_1(unsigned long long *out_buffer) const {
-    gpuErrchk(cudaMemcpy(out_buffer, d_du_dx_t_, N_ * 3 * sizeof(*out_buffer), cudaMemcpyDeviceToHost));
-}
-
 void Context::get_x_t(double *out_buffer) const {
     gpuErrchk(cudaMemcpy(out_buffer, d_x_t_, N_ * 3 * sizeof(*out_buffer), cudaMemcpyDeviceToHost));
 }

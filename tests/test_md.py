@@ -314,9 +314,8 @@ class TestContext(unittest.TestCase):
             print("comparing step", step)
             test_x_t = ctxt.get_x_t()
             np.testing.assert_allclose(test_x_t, ref_all_xs[step])
+            test_du_dx_t, _, _ = bp.execute(test_x_t, box, lamb)
             ctxt.step(lamb)
-            test_du_dx_t = ctxt._get_du_dx_t_minus_1()
-            # test_u_t = ctxt._get_u_t_minus_1()
             # np.testing.assert_allclose(test_u_t, ref_all_us[step])
             np.testing.assert_allclose(test_du_dx_t, ref_all_du_dxs[step])
 

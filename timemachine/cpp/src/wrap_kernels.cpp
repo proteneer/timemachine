@@ -283,28 +283,11 @@ void declare_context(py::module &m) {
                 ctxt.get_v_t(buffer.mutable_data());
                 return buffer;
             })
-        .def(
-            "get_box",
-            [](timemachine::Context &ctxt) -> py::array_t<double, py::array::c_style> {
-                unsigned int D = 3;
-                py::array_t<double, py::array::c_style> buffer({D, D});
-                ctxt.get_box(buffer.mutable_data());
-                return buffer;
-            })
-        .def("_get_du_dx_t_minus_1", [](timemachine::Context &ctxt) -> py::array_t<double, py::array::c_style> {
-            PyErr_WarnEx(
-                PyExc_DeprecationWarning,
-                "_get_du_dx_t_minus_1() should only be used for testing. It will be removed in a future release.",
-                1);
-            unsigned int N = ctxt.num_atoms();
+        .def("get_box", [](timemachine::Context &ctxt) -> py::array_t<double, py::array::c_style> {
             unsigned int D = 3;
-            std::vector<unsigned long long> du_dx(N * D);
-            ctxt.get_du_dx_t_minus_1(&du_dx[0]);
-            py::array_t<double, py::array::c_style> py_du_dx({N, D});
-            for (unsigned int i = 0; i < du_dx.size(); i++) {
-                py_du_dx.mutable_data()[i] = FIXED_TO_FLOAT<double>(du_dx[i]);
-            }
-            return py_du_dx;
+            py::array_t<double, py::array::c_style> buffer({D, D});
+            ctxt.get_box(buffer.mutable_data());
+            return buffer;
         });
 }
 
