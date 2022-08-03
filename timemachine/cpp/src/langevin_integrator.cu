@@ -1,10 +1,9 @@
-#include <cstdio>
-
-#include "fixed_point.hpp"
 #include "gpu_utils.cuh"
-#include "integrator.hpp"
 #include "kernel_utils.cuh"
+#include "langevin_integrator.hpp"
 #include "math_utils.cuh"
+
+#include "kernels/k_integrator.cuh"
 
 namespace timemachine {
 
@@ -36,40 +35,6 @@ LangevinIntegrator::~LangevinIntegrator() {
     gpuErrchk(cudaFree(d_du_dx_));
     curandErrchk(curandDestroyGenerator(cr_rng_));
 }
-
-template <typename RealType>
-__global__ void update_forward(
-    const int N,
-    const int D,
-    const RealType ca,
-    const RealType *__restrict__ cbs,   // N
-    const RealType *__restrict__ ccs,   // N
-    const RealType *__restrict__ noise, // N x 3
-    RealType *__restrict__ x_t,
-    RealType *__restrict__ v_t,
-    const unsigned long long *__restrict__ du_dx,
-    const RealType dt) {
-
-    int atom_idx = blockIdx.x * blockDim.x + threadIdx.x;
-    if (atom_idx >= N) {
-        return;
-    }
-
-    int d_idx = blockIdx.y;
-    int local_idx = atom_idx * D + d_idx;
-
-    RealType force = FIXED_TO_FLOAT<RealType>(du_dx[local_idx]);
-
-    // BAOAB (https://arxiv.org/abs/1203.5428), rotated by half a timestep
-
-    // ca assumed to contain exp(-friction * dt)
-    // cbs assumed to contain dt / mass
-    // ccs assumed to contain sqrt(1 - exp(-2 * friction * dt)) * sqrt(kT / mass)
-    RealType v_mid = v_t[local_idx] + cbs[atom_idx] * force;
-
-    v_t[local_idx] = ca * v_mid + ccs[atom_idx] * noise[local_idx];
-    x_t[local_idx] += 0.5 * dt * (v_mid + v_t[local_idx]);
-};
 
 void LangevinIntegrator::step_fwd(
     std::vector<BoundPotential *> bps,
@@ -103,7 +68,7 @@ void LangevinIntegrator::step_fwd(
     curandErrchk(curandSetStream(cr_rng_, stream));
     curandErrchk(templateCurandNormal(cr_rng_, d_noise_, round_up_even(N_ * D), 0.0, 1.0));
 
-    update_forward<double>
+    update_forward_baoab<double>
         <<<dimGrid_dx, tpb, 0, stream>>>(N_, D, ca_, d_cbs_, d_ccs_, d_noise_, d_x_t, d_v_t, d_du_dx_, dt_);
 
     gpuErrchk(cudaPeekAtLastError());

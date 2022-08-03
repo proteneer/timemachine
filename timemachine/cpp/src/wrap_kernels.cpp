@@ -15,7 +15,7 @@
 #include "flat_bottom_bond.hpp"
 #include "harmonic_angle.hpp"
 #include "harmonic_bond.hpp"
-#include "integrator.hpp"
+#include "langevin_integrator.hpp"
 #include "neighborlist.hpp"
 #include "nonbonded_all_pairs.hpp"
 #include "nonbonded_interaction_group.hpp"
