@@ -42,7 +42,7 @@ def prepare_vacuum_hmc_move(mol, ff, dt=1e-3, n_steps=100, temperature=300.0, se
 
 
 def test_hmc_on_jax_system():
-    """Run HMC on a ligand in vacuum (using Jax reference potentials), assert acceptance rate > 95% when dt = 1 fs"""
+    """Run HMC on a ligand in vacuum (using Jax reference potentials), assert acceptance rate > 90% when dt = 1 fs"""
     seed = 2022
 
     np.random.seed(seed)
@@ -64,7 +64,7 @@ def test_hmc_on_jax_system():
     assert np.max(np.abs(traj[-1] - traj[0])) > 0.1
 
     # assert high acceptance fraction
-    assert hmc_move.acceptance_fraction > 0.95
+    assert hmc_move.acceptance_fraction > 0.9
 
     # assert energy didn't blow up
     U_before = hmc_move.U_fxn(x0)
