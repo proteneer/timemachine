@@ -1,7 +1,7 @@
 import time
 from abc import ABC, abstractmethod
 from functools import partial
-from typing import Any, Tuple
+from typing import Any, Optional, Tuple
 
 import jax
 import jax.numpy as jnp
@@ -58,7 +58,7 @@ class Integrator(ABC):
         """Return copies x and v, updated by a single timestep"""
         pass
 
-    def multiple_steps(self, x, v, n_steps=1000):
+    def multiple_steps(self, x, v, n_steps: int = 1000):
         """Return trajectories of x and v, advanced by n_steps"""
         xs, vs = [x], [v]
 
@@ -73,14 +73,16 @@ class Integrator(ABC):
 
 class StochasticIntegrator(ABC):
     @abstractmethod
-    def step(self, x, v, rng) -> Tuple[Any, Any]:
+    def step(self, x, v, rng: np.random.Generator) -> Tuple[Any, Any]:
+        """Return copies x and v, updated by a single timestep. Accepts a numpy Generator instance for determinism."""
         pass
 
     @abstractmethod
     def step_lax(self, key, x, v) -> Tuple[Any, Any]:
+        """Return copies x and v, updated by a single timestep. Accepts a jax PRNG key for determinism."""
         pass
 
-    def multiple_steps(self, x, v, n_steps=1000, rng=None):
+    def multiple_steps(self, x, v, n_steps: int = 1000, rng: Optional[np.random.Generator] = None):
         """Return trajectories of x and v, advanced by n_steps"""
 
         rng = rng or np.random.default_rng()
@@ -96,10 +98,9 @@ class StochasticIntegrator(ABC):
         return np.array(xs), np.array(vs)
 
     @partial(jax.jit, static_argnums=(0, 4))
-    def multiple_steps_lax(self, key, x, v, n_steps=1000):
+    def multiple_steps_lax(self, key, x, v, n_steps: int = 1000):
         """
-        Return trajectories of x and v, advanced by n_steps.
-        Implemented using jax.lax.scan to allow jax.jit to produce
+        Return trajectories of x and v, advanced by n_steps. Implemented using jax.lax.scan to allow jax.jit to produce
         efficient code.
 
         Note: requires that force_fxn be jax-transformable
@@ -144,7 +145,6 @@ class LangevinIntegrator(StochasticIntegrator):
         return self._step(x, v, rng.normal(size=x.shape))
 
     def step_lax(self, key, x, v):
-        """Return copies x and v, updated by a single timestep. Accepts a PRNGKey for determinism."""
         return self._step(x, v, jax.random.normal(key, x.shape))
 
 
