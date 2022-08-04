@@ -1,6 +1,7 @@
 import jax.numpy as jnp
 import numpy as np
 from jax import vmap
+from jax.scipy.special import logsumexp
 from numpy.typing import NDArray
 from typing_extensions import TypeAlias
 
@@ -172,3 +173,20 @@ def distance_from_one_to_others(x_i, x_others, box=None, cutoff=jnp.inf):
     d2_ij = jnp.sum(displacements_ij ** 2, axis=1)
     d_ij = jnp.where(d2_ij <= cutoff ** 2, jnp.sqrt(d2_ij), jnp.inf)
     return d_ij
+
+
+def bernoulli_logpdf(log_p_i, z_i) -> float:
+    """log( prod_i (z_i * p_i) + (1 - z_i) * (1 - p_i) )
+    where z_i are boolean outcomes, p_i are probabilities [0,1]"""
+
+    n = len(z_i)
+    assert z_i.shape == (n,)
+    assert log_p_i.shape == (n,)
+    # implement subtraction log(1 - p_i) using logsumexp
+    # * a[0] = log(1.0), a[1] = log(p_i)
+    a = jnp.array([jnp.zeros(n), log_p_i])
+    # * b[0] = 1, b[1] = -1
+    b = jnp.array([jnp.ones(n), -jnp.ones(n)])
+    log_1_minus_p_i = logsumexp(a=a, b=b, axis=0)
+
+    return jnp.sum(jnp.where(z_i, log_p_i, log_1_minus_p_i))
