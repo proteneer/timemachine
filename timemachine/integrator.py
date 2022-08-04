@@ -1,6 +1,10 @@
 import time
+from abc import ABC, abstractmethod
+from functools import partial
+from typing import Any, Optional, Tuple
 
 import jax
+import jax.numpy as jnp
 import numpy as np
 from jax import random as jrandom
 
@@ -48,12 +52,13 @@ def langevin_coefficients(temperature, dt, friction, masses):
     return ca, cb, cc
 
 
-class Integrator:
-    def step(self, x, v):
+class Integrator(ABC):
+    @abstractmethod
+    def step(self, x, v) -> Tuple[Any, Any]:
         """Return copies x and v, updated by a single timestep"""
-        raise NotImplementedError
+        pass
 
-    def multiple_steps(self, x, v, n_steps=1000):
+    def multiple_steps(self, x, v, n_steps: int = 1000):
         """Return trajectories of x and v, advanced by n_steps"""
         xs, vs = [x], [v]
 
@@ -66,7 +71,56 @@ class Integrator:
         return np.array(xs), np.array(vs)
 
 
-class LangevinIntegrator(Integrator):
+class StochasticIntegrator(ABC):
+    @abstractmethod
+    def step(self, x, v, rng: np.random.Generator) -> Tuple[Any, Any]:
+        """Return copies x and v, updated by a single timestep. Accepts a numpy Generator instance for determinism."""
+        pass
+
+    @abstractmethod
+    def step_lax(self, key, x, v) -> Tuple[Any, Any]:
+        """Return copies x and v, updated by a single timestep. Accepts a jax PRNG key for determinism."""
+        pass
+
+    def multiple_steps(self, x, v, n_steps: int = 1000, rng: Optional[np.random.Generator] = None):
+        """Return trajectories of x and v, advanced by n_steps"""
+
+        rng = rng or np.random.default_rng()
+
+        xs, vs = [x], [v]
+
+        for _ in range(n_steps):
+            new_x, new_v = self.step(xs[-1], vs[-1], rng)
+
+            xs.append(new_x)
+            vs.append(new_v)
+
+        return np.array(xs), np.array(vs)
+
+    @partial(jax.jit, static_argnums=(0, 4))
+    def multiple_steps_lax(self, key, x, v, n_steps: int = 1000):
+        """
+        Return trajectories of x and v, advanced by n_steps. Implemented using jax.lax.scan to allow jax.jit to produce
+        efficient code.
+
+        Note: requires that force_fxn be jax-transformable
+        """
+
+        def f(xv, key):
+            x, v = xv
+            xv_ = self.step_lax(key, x, v)
+            return xv_, xv_
+
+        keys = jax.random.split(key, n_steps)
+        _, (xs, vs) = jax.lax.scan(f, (x, v), keys)
+
+        return (
+            jnp.concatenate((x[jnp.newaxis, :], xs)),
+            jnp.concatenate((v[jnp.newaxis, :], vs)),
+        )
+
+
+class LangevinIntegrator(StochasticIntegrator):
     def __init__(self, force_fxn, masses, temperature, dt, friction):
         """BAOAB (https://arxiv.org/abs/1203.5428), rotated by half a timestep"""
         self.dt = dt
@@ -78,14 +132,20 @@ class LangevinIntegrator(Integrator):
         # note: per-atom frictions allowed
         self.ca, self.cb, self.cc = np.expand_dims(ca, -1), np.expand_dims(cb, -1), np.expand_dims(cc, -1)
 
-    def step(self, x, v):
+    def _step(self, x, v, noise):
         """Intended to match https://github.com/proteneer/timemachine/blob/37e60205b3ae3358d9bb0967d03278ed184b8976/timemachine/cpp/src/integrator.cu#L71-L74"""
         v_mid = v + self.cb * self.force_fxn(x)
 
-        new_v = (self.ca * v_mid) + (self.cc * np.random.randn(*x.shape))
+        new_v = (self.ca * v_mid) + (self.cc * noise)
         new_x = x + 0.5 * self.dt * (v_mid + new_v)
 
         return new_x, new_v
+
+    def step(self, x, v, rng):
+        return self._step(x, v, rng.normal(size=x.shape))
+
+    def step_lax(self, key, x, v):
+        return self._step(x, v, jax.random.normal(key, x.shape))
 
 
 class VelocityVerletIntegrator(Integrator):
