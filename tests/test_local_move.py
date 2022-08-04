@@ -63,7 +63,8 @@ def expect_no_drift(x0, move_fxn, observable_fxn, n_local_resampling_iterations=
     avg_at_start = np.mean(expected_selection_fraction_traj[:T])
     avg_at_end = np.mean(expected_selection_fraction_traj[-T:])
 
-    deviated_by_50percent_or_more = (avg_at_start / avg_at_end) <= 0.5 or (avg_at_start / avg_at_end) >= 1.5
+    ratio = avg_at_end / avg_at_start
+    deviated_by_50percent_or_more = ratio <= 0.5 or ratio >= 1.5
     if deviated_by_50percent_or_more:
         msg = f"""
             observable avg over start frames = {avg_at_start:.3f}
