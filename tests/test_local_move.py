@@ -163,15 +163,18 @@ def test_ideal_gas():
         return np.mean(np.exp(central_particle_selection_log_prob_fxn(x)))
 
     def assert_correctness(local_move):
-        # expect no drift
+        # primary assertion: expect no drift in % of particles in resampled region
         traj, aux_traj = expect_no_drift(
             x0, local_move, observable_fxn=particle_frac_near_center, n_local_resampling_iterations=100
         )
 
-        # assert move was not trivial
+        # secondary assertion: confirm move was not trivial
         avg_accept_prob = np.mean([np.mean(np.exp(log_accept_probs)) for log_accept_probs in aux_traj])
-        assert avg_accept_prob > 0.1
-        assert np.max(np.abs(traj[0] - traj[-1])) > r0
+        assert avg_accept_prob > 0.1, "traj was probably trivial: didn't accept enough moves"
+        assert np.max(np.abs(traj[0] - traj[-1])) > r0, "traj was probably trivial: didn't move very far"
+        initially_within_region = vmap(lambda x_i: jnp.linalg.norm(delta_r(x_i, center, box)))(x0) < r0
+        all_moved = ((traj[-1] - traj[0])[initially_within_region] != 0).all()
+        assert all_moved, "traj was probably trivial: didn't update all particles in local region"
 
     # expect local move to be correct
     assert_correctness(correct_local_move)
