@@ -65,6 +65,22 @@ def mcs_map(a, b, threshold: float = 0.5, timeout: int = 5, smarts: Optional[str
     return rdFMCS.FindMCS([a, b], params)
 
 
+def mcs_map_graph_only_complete_rings(a, b, timeout: int = 3600, smarts: Optional[str] = None):
+    """Find the MCS map of going from A to B, disregarding conformer information. This also ensures
+    that core-core bonds are not broken."""
+    return rdFMCS.FindMCS(
+        [a, b],
+        maximizeBonds=True,
+        timeout=timeout,
+        matchValences=False,
+        ringMatchesRingOnly=True,
+        completeRingsOnly=True,
+        matchChiralTag=False,
+        atomCompare=Chem.rdFMCS.AtomCompare.CompareAny,
+        bondCompare=Chem.rdFMCS.BondCompare.CompareAny,
+    )
+
+
 def transformation_size(n_A, n_B, n_MCS):
     """Heuristic size of transformation in terms of
         the number of atoms in A, B, and MCS(A, B)
