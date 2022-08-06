@@ -18,6 +18,14 @@ public:
         double *d_box_t,
         unsigned long long *d_du_dl,
         cudaStream_t stream) = 0;
+
+    virtual void finalize(
+        std::vector<BoundPotential *> bps,
+        double lamb,
+        double *d_x_t,
+        double *d_v_t,
+        double *d_box_t,
+        cudaStream_t stream) = 0;
 };
 
 // template<typename RealType>

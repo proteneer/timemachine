@@ -25,6 +25,7 @@
 #include "potential.hpp"
 #include "rmsd_align.hpp"
 #include "summed_potential.hpp"
+#include "verlet_integrator.hpp"
 
 #include <iostream>
 
@@ -124,7 +125,16 @@ void declare_context(py::module &m) {
             py::arg("integrator"),
             py::arg("bps"),
             py::arg("barostat") = py::none())
-        .def("step", &timemachine::Context::step)
+        .def(
+            "step",
+            &timemachine::Context::step,
+            py::arg("lamb"),
+            R"pbdoc(
+        Take a single step at a value of lambda.
+
+        Note: Must call `finalize` to ensure the correct velocities and positions to be returned by `get_x_t()` and `get_v_t()`,.
+        )pbdoc")
+        .def("finalize", &timemachine::Context::finalize, py::arg("lamb"))
         .def(
             "multiple_steps",
             [](timemachine::Context &ctxt,
@@ -329,6 +339,19 @@ void declare_langevin_integrator(py::module &m) {
             py::arg("cbs"),
             py::arg("ccs"),
             py::arg("seed"));
+}
+
+void declare_velocity_verlet_integrator(py::module &m) {
+
+    using Class = timemachine::VelocityVerletIntegrator;
+    std::string pyclass_name = std::string("VelocityVerletIntegrator");
+    py::class_<Class, timemachine::Integrator>(m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
+        .def(
+            py::init([](double dt, const py::array_t<double, py::array::c_style> &cbs) {
+                return new timemachine::VelocityVerletIntegrator(cbs.size(), dt, cbs.data());
+            }),
+            py::arg("dt"),
+            py::arg("cbs"));
 }
 
 void declare_potential(py::module &m) {
@@ -1175,6 +1198,7 @@ PYBIND11_MODULE(custom_ops, m) {
 
     declare_integrator(m);
     declare_langevin_integrator(m);
+    declare_velocity_verlet_integrator(m);
 
     declare_potential(m);
     declare_bound_potential(m);

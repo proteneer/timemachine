@@ -7,23 +7,19 @@
 
 namespace timemachine {
 
-class LangevinIntegrator : public Integrator {
+class VelocityVerletIntegrator : public Integrator {
 
 private:
     const int N_;
     const double dt_;
-    const double ca_;
+    bool initialized_;
     double *d_cbs_;
-    double *d_ccs_;
-    double *d_noise_;
     unsigned long long *d_du_dx_;
 
-    curandGenerator_t cr_rng_;
-
 public:
-    LangevinIntegrator(int N, double dt, double ca, const double *h_cbs, const double *h_ccs, int seed);
+    VelocityVerletIntegrator(int N, double dt, const double *h_cbs);
 
-    virtual ~LangevinIntegrator();
+    virtual ~VelocityVerletIntegrator();
 
     virtual void step_fwd(
         std::vector<BoundPotential *> bps,
