@@ -26,7 +26,7 @@ public:
     virtual ~LangevinIntegrator();
 
     virtual void step_fwd(
-        std::vector<BoundPotential *> bps,
+        std::vector<BoundPotential *> &bps,
         double lamb,
         double *d_x_t,
         double *d_v_t,
@@ -35,7 +35,7 @@ public:
         cudaStream_t stream) override;
 
     virtual void finalize(
-        std::vector<BoundPotential *> bps,
+        std::vector<BoundPotential *> &bps,
         double lamb,
         double *d_x_t,
         double *d_v_t,
