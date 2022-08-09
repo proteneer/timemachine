@@ -263,8 +263,21 @@ void declare_context(py::module &m) {
         .def(
             "set_x_t",
             [](timemachine::Context &ctxt, const py::array_t<double, py::array::c_style> new_x_t) {
+                if (new_x_t.shape()[0] != ctxt.num_atoms()) {
+                    throw std::runtime_error("number of new coords disagree with current coords");
+                }
                 ctxt.set_x_t(new_x_t.data());
-            })
+            },
+            py::arg("coords"))
+        .def(
+            "set_v_t",
+            [](timemachine::Context &ctxt, const py::array_t<double, py::array::c_style> new_v_t) {
+                if (new_v_t.shape()[0] != ctxt.num_atoms()) {
+                    throw std::runtime_error("number of new coords disagree with current coords");
+                }
+                ctxt.set_v_t(new_v_t.data());
+            },
+            py::arg("velocities"))
         .def(
             "get_x_t",
             [](timemachine::Context &ctxt) -> py::array_t<double, py::array::c_style> {

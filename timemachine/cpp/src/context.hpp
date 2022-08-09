@@ -38,6 +38,8 @@ public:
 
     void get_x_t(double *out_buffer) const;
 
+    void set_v_t(const double *in_buffer);
+
     void get_v_t(double *out_buffer) const;
 
     void get_box(double *out_buffer) const;
