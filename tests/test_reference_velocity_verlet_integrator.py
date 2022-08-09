@@ -10,7 +10,7 @@ from timemachine.integrator import VelocityVerletIntegrator
 from timemachine.testsystems.relative import hif2a_ligand_pair
 
 
-def assert_reversible(x0, v0, update_fxn, atol=1e-10):
+def assert_reversible(x0, v0, update_fxn, atol=1e-11):
     """Define a fxn self_inverse as composition of flip_velocities and update_fxn,
     then assert that
     * self_inverse is its own inverse
@@ -36,7 +36,7 @@ def assert_reversible(x0, v0, update_fxn, atol=1e-10):
     assert (not close(x1, x0)) and (not close(v1, v0))
 
 
-def assert_reversibility_using_step_implementations(intg, x0, v0, n_steps=1000, atol=1e-10):
+def assert_reversibility_using_step_implementations(intg, x0, v0, n_steps=1000, atol=1e-11):
     """Assert reversibility of .step and .multiple_steps implementations"""
 
     # check step implementation
@@ -89,7 +89,7 @@ def test_reversibility_with_jax_potentials():
         def jax_update(x, v):
             return intg._update_via_fori_loop(x, v, n_steps)
 
-        assert_reversible(x0, v0, jax_update, atol=1e-10)
+        assert_reversible(x0, v0, jax_update, atol=1e-11)
 
 
 def test_reversibility_with_custom_ops_potentials():
@@ -116,14 +116,8 @@ def test_reversibility_with_custom_ops_potentials():
 
     x0 = np.array(coords)
 
-    for n_steps in [1, 10, 100, 500, 1000]:  # , 10000]:
+    for n_steps in [1, 10, 100, 500, 1000, 10000]:
         v0 = np.random.randn(*coords.shape)
 
         # check "public" .step and .multiple_steps implementations
-        assert_reversibility_using_step_implementations(intg, x0, v0, n_steps, atol=1e-10)
-
-    # TODO: possibly investigate why n_steps = 10000 fails
-    # assert_reversibility_using_step_implementations(intg, x0, v0, n_steps=10000, atol=0.1)
-    # * also fails with reduced dt = 1.0e-3
-    # * passes with greatly reduced dt = 1.0e-4
-    # TODO: does replacing np.sum(du_dxs, 0) with SummedPotential address this?
+        assert_reversibility_using_step_implementations(intg, x0, v0, n_steps, atol=1e-11)
