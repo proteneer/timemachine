@@ -74,6 +74,14 @@ void LangevinIntegrator::step_fwd(
     gpuErrchk(cudaPeekAtLastError());
 }
 
+void LangevinIntegrator::initialize(
+    std::vector<BoundPotential *> &bps,
+    double lamb,
+    double *d_x_t,
+    double *d_v_t,
+    double *d_box_t,
+    cudaStream_t stream){};
+
 void LangevinIntegrator::finalize(
     std::vector<BoundPotential *> &bps,
     double lamb,

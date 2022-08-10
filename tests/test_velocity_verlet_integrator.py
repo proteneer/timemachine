@@ -51,7 +51,7 @@ def assert_reversibility_using_step_implementations(context, schedule, atol=1e-1
     def step_update(x, v, lamb_sched):
         context.set_x_t(x)
         context.set_v_t(v)
-
+        context.initialize(lamb_sched[0])
         for lamb in lamb_sched:
             context.step(lamb)
         # Must call finalize in case of using step
@@ -140,6 +140,7 @@ def test_matches_reference():
 
     n_steps = 10
 
+    # Add one step as the C++ context does N steps + 2 half steps (initialize, finalize)
     ref_xs, ref_vs = intg.multiple_steps(coords, v0, n_steps=n_steps + 1)
     np.testing.assert_array_almost_equal(ref_xs[0], coords, decimal=10)
     np.testing.assert_array_almost_equal(ref_xs[0], ctxt.get_x_t(), decimal=10)

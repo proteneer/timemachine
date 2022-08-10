@@ -309,7 +309,7 @@ class TestContext(unittest.TestCase):
         bps = [bp]
 
         ctxt = custom_ops.Context(x0, v0, box, intg, bps)
-
+        ctxt.initialize(lamb)
         for step in range(num_steps):
             print("comparing step", step)
             test_x_t = ctxt.get_x_t()
@@ -318,7 +318,7 @@ class TestContext(unittest.TestCase):
             ctxt.step(lamb)
             # np.testing.assert_allclose(test_u_t, ref_all_us[step])
             np.testing.assert_allclose(test_du_dx_t, ref_all_du_dxs[step])
-
+        ctxt.finalize(lamb)
         # test the multiple_steps method
         ctxt_2 = custom_ops.Context(x0, v0, box, intg, bps)
 

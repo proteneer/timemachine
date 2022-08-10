@@ -21,6 +21,7 @@ public:
     ~Context();
 
     void step(double lambda);
+    void initialize(double lambda);
     void finalize(double lambda);
 
     std::array<std::vector<double>, 3>

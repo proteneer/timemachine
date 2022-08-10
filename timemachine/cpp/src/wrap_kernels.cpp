@@ -132,9 +132,10 @@ void declare_context(py::module &m) {
             R"pbdoc(
         Take a single step at a value of lambda.
 
-        Note: Must call `finalize` to ensure the correct velocities and positions to be returned by `get_x_t()` and `get_v_t()`,.
+        Note: Must call `initialize` before stepping and `finalize` after stepping to ensure the correct velocities and positions to be returned by `get_x_t()` and `get_v_t()`,.
         )pbdoc")
         .def("finalize", &timemachine::Context::finalize, py::arg("lamb"))
+        .def("initialize", &timemachine::Context::initialize, py::arg("lamb"))
         .def(
             "multiple_steps",
             [](timemachine::Context &ctxt,
