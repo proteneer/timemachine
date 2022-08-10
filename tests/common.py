@@ -16,7 +16,7 @@ from rdkit import Chem
 from timemachine.constants import ONE_4PI_EPS0
 from timemachine.ff import Forcefield
 from timemachine.lib import potentials
-from timemachine.potentials import bonded, nonbonded
+from timemachine.potentials import bonded, generic, nonbonded
 
 
 @contextlib.contextmanager
@@ -475,3 +475,18 @@ class GradientTest(unittest.TestCase):
 
             if isinstance(test_potential, potentials.Nonbonded):
                 np.testing.assert_array_equal(test_du_dp, test_du_dp_2)
+
+    def compare_forces_gpu_vs_reference(
+        self,
+        x: NDArray,
+        params: NDArray,
+        box: NDArray,
+        lambdas: List[float],
+        potential: generic.Potential,
+        rtol: float,
+        precision,
+        atol: float = 1e-8,
+    ):
+        return self.compare_forces(
+            x, params, box, lambdas, potential.to_reference(), potential.to_gpu(), rtol, precision, atol
+        )

@@ -19,7 +19,7 @@ from timemachine.fe.utils import to_md_units
 from timemachine.ff.handlers import openmm_deserializer
 from timemachine.lib import potentials
 from timemachine.md import builders
-from timemachine.potentials import nonbonded
+from timemachine.potentials import generic, nonbonded
 from timemachine.testsystems.dhfr import setup_dhfr
 
 np.set_printoptions(linewidth=500)
@@ -182,29 +182,18 @@ class TestNonbondedDHFR(GradientTest):
             test_lambda_plane_idxs = np.random.randint(low=-2, high=2, size=N, dtype=np.int32)
             test_lambda_offset_idxs = np.random.randint(low=-2, high=2, size=N, dtype=np.int32)
 
-            test_nonbonded_fn = potentials.Nonbonded(
+            potential = generic.Nonbonded(
                 test_exclusions, test_scales, test_lambda_plane_idxs, test_lambda_offset_idxs, self.beta, self.cutoff
-            )
-
-            ref_nonbonded_fn = prepare_reference_nonbonded(
-                test_params,
-                test_exclusions,
-                test_scales,
-                test_lambda_plane_idxs,
-                test_lambda_offset_idxs,
-                self.beta,
-                self.cutoff,
             )
 
             for precision, rtol, atol in [(np.float64, 1e-8, 1e-8), (np.float32, 1e-4, 5e-4)]:
 
-                self.compare_forces(
+                self.compare_forces_gpu_vs_reference(
                     test_conf,
                     test_params,
                     self.box,
                     [self.lamb],
-                    ref_nonbonded_fn,
-                    test_nonbonded_fn,
+                    potential,
                     rtol=rtol,
                     atol=atol,
                     precision=precision,
@@ -257,9 +246,12 @@ class TestNonbondedWater(GradientTest):
 
         host_fns, host_masses = openmm_deserializer.deserialize_system(host_system, cutoff=1.0)
 
+        test_nonbonded_fn = None
         for f in host_fns:
             if isinstance(f, potentials.Nonbonded):
                 test_nonbonded_fn = f
+        assert test_nonbonded_fn is not None
+        assert test_nonbonded_fn.params is not None
 
         host_conf = []
         for x, y, z in host_coords:
@@ -268,15 +260,7 @@ class TestNonbondedWater(GradientTest):
 
         lamb = 0.1
 
-        ref_nonbonded_fn = prepare_reference_nonbonded(
-            test_nonbonded_fn.params,
-            test_nonbonded_fn.get_exclusion_idxs(),
-            test_nonbonded_fn.get_scale_factors(),
-            test_nonbonded_fn.get_lambda_plane_idxs(),
-            test_nonbonded_fn.get_lambda_offset_idxs(),
-            test_nonbonded_fn.get_beta(),
-            test_nonbonded_fn.get_cutoff(),
-        )
+        potential = generic.Nonbonded.from_gpu(test_nonbonded_fn)
 
         big_box = box + np.eye(3) * 1000
 
@@ -286,13 +270,12 @@ class TestNonbondedWater(GradientTest):
 
             for precision, rtol, atol in [(np.float64, 1e-8, 1e-10), (np.float32, 1e-4, 3e-5)]:
 
-                self.compare_forces(
+                self.compare_forces_gpu_vs_reference(
                     host_conf,
                     test_nonbonded_fn.params,
                     test_box,
                     [lamb],
-                    ref_nonbonded_fn,
-                    test_nonbonded_fn,
+                    potential,
                     rtol=rtol,
                     atol=atol,
                     precision=precision,
