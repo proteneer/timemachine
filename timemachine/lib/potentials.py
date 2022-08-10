@@ -244,6 +244,12 @@ class CentroidRestraint(CustomOpWrapper):
     def get_b_idxs(self):
         return self.args[1]
 
+    def get_kb(self):
+        return self.args[2]
+
+    def get_b0(self):
+        return self.args[3]
+
 
 class NonbondedImplWrapper(custom_ops.FanoutSummedPotential):
     """Wraps custom_ops.FanoutSummedPotential, adding methods that
