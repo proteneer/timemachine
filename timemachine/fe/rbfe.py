@@ -93,7 +93,7 @@ def sample(initial_state, protocol):
     Generate a trajectory given an initial state and a simulation protocol
     """
 
-    bound_impls = [p.bound_impl(np.float32) for p in initial_state.U_fns]
+    bound_impls = [p.bound_impl(np.float32) for p in initial_state.potentials]
     intg_impl = initial_state.integrator.impl()
     baro_impl = initial_state.barostat.impl(bound_impls)
 

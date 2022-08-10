@@ -1,6 +1,7 @@
 import argparse
 import csv
 import pickle
+import traceback
 
 import numpy as np
 from rdkit import Chem
@@ -106,8 +107,7 @@ def read_from_args():
             )
 
         except SimulationException as sim_exc:
-
-            print("Failed", sim_exc)
+            traceback.print_exc()
             with open(f"failed_rbfe_result_{mol_a_name}_{mol_b_name}.pkl", "wb") as fh:
                 pickle.dump(sim_exc, fh)
 
