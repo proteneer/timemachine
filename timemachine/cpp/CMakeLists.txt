@@ -95,8 +95,23 @@ include_directories(SYSTEM ${CMAKE_CURRENT_BINARY_DIR}/${CUB_SRC_DIR})
 set_property(TARGET ${LIBRARY_NAME} PROPERTY CUDA_STANDARD 17)
 
 if (NOT CUDA_ARCH)
-  set(CUDA_ARCH "75")
+  find_program(HAS_SMI "nvidia-smi")
+  # In cuda 11.6 nvidia-smi added support to get GPU compute capability query
+  if (HAS_SMI AND CMAKE_CUDA_COMPILER_VERSION MATCHES "11\.[6-9]\.*")
+    execute_process(
+      COMMAND
+      bash
+      "-c"
+      "nvidia-smi --query-gpu=compute_cap --format=csv | grep -v compute_cap"
+      OUTPUT_VARIABLE CUDA_ARCH
+      OUTPUT_STRIP_TRAILING_WHITESPACE
+    )
+    string(REPLACE "." "" CUDA_ARCH ${CUDA_ARCH})
+  else()
+    set(CUDA_ARCH "75")
+  endif()
 endif()
+message("Cuda Arch: " ${CUDA_ARCH})
 set_property(TARGET ${LIBRARY_NAME} PROPERTY CUDA_ARCHITECTURES "${CUDA_ARCH}")
 unset(CUDA_ARCH CACHE)
 
