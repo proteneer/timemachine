@@ -49,7 +49,7 @@ void VelocityVerletIntegrator::step_fwd(
                 nullptr,
                 stream);
         }
-        half_step_verlocity_verlet<double, true>
+        half_step_velocity_verlet<double, true>
             <<<dimGrid_dx, tpb, 0, stream>>>(N_, D, d_cbs_, d_x_t, d_v_t, d_du_dx_, dt_);
         gpuErrchk(cudaPeekAtLastError());
         initialized_ = true;
@@ -62,7 +62,7 @@ void VelocityVerletIntegrator::step_fwd(
             N_, d_x_t, d_box_t, lamb, d_du_dx_, nullptr, d_du_dl ? d_du_dl : nullptr, nullptr, stream);
     }
 
-    update_forward_verlocity_verlet<double><<<dimGrid_dx, tpb, 0, stream>>>(N_, D, d_cbs_, d_x_t, d_v_t, d_du_dx_, dt_);
+    update_forward_velocity_verlet<double><<<dimGrid_dx, tpb, 0, stream>>>(N_, D, d_cbs_, d_x_t, d_v_t, d_du_dx_, dt_);
 
     gpuErrchk(cudaPeekAtLastError());
 }
@@ -98,7 +98,7 @@ void VelocityVerletIntegrator::finalize(
             nullptr,
             stream);
     }
-    half_step_verlocity_verlet<double, false>
+    half_step_velocity_verlet<double, false>
         <<<dimGrid_dx, tpb, 0, stream>>>(N_, D, d_cbs_, d_x_t, d_v_t, d_du_dx_, dt_);
     gpuErrchk(cudaPeekAtLastError());
     initialized_ = false;

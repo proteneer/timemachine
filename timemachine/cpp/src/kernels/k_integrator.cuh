@@ -35,7 +35,7 @@ __global__ void update_forward_baoab(
 };
 
 template <typename RealType, bool UPDATE_X>
-__global__ void half_step_verlocity_verlet(
+__global__ void half_step_velocity_verlet(
     const int N,
     const int D,
     const RealType *__restrict__ cbs, // N, dt / mass
@@ -60,7 +60,7 @@ __global__ void half_step_verlocity_verlet(
 };
 
 template <typename RealType>
-__global__ void update_forward_verlocity_verlet(
+__global__ void update_forward_velocity_verlet(
     const int N,
     const int D,
     const RealType *__restrict__ cbs, // N, dt / mass
