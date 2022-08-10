@@ -82,12 +82,12 @@ def read_from_args():
 
     for fut, meta in zip(futures, metadata):
 
+        mol_a, mol_b, _, _, exp_ddg, fep_ddg, fep_ddg_err, ccc_ddg, ccc_ddg_err = meta
+        mol_a_name = get_mol_name(mol_a)
+        mol_b_name = get_mol_name(mol_b)
+
         try:
             solvent_res, solvent_top, complex_res, complex_top = fut.result()
-
-            mol_a, mol_b, _, _, exp_ddg, fep_ddg, fep_ddg_err, ccc_ddg, ccc_ddg_err = meta
-            mol_a_name = get_mol_name(mol_a)
-            mol_b_name = get_mol_name(mol_b)
 
             with open(f"success_rbfe_result_{mol_a_name}_{mol_b_name}.pkl", "wb") as fh:
                 pkl_obj = (meta, solvent_res, solvent_top, complex_res, complex_top)
@@ -106,6 +106,8 @@ def read_from_args():
             )
 
         except SimulationException as sim_exc:
+
+            print("Failed", sim_exc)
             with open(f"failed_rbfe_result_{mol_a_name}_{mol_b_name}.pkl", "wb") as fh:
                 pickle.dump(sim_exc, fh)
 
