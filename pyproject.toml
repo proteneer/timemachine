@@ -28,7 +28,7 @@ follow_imports = "silent"
 requires = [
   "cmake==3.22.1",
   "mypy==0.942",
-  "setuptools>=43.0.0",
+  "setuptools >= 43.0.0, < 64.0.0",
   "wheel",
   "versioneer-518"
 ]
