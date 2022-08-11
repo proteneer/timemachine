@@ -552,6 +552,17 @@ class SingleTopologyV3:
         """
         return self.mol_a.GetNumAtoms() + self.mol_b.GetNumAtoms() - len(self.core)
 
+    def get_num_dummy_atoms(self):
+        """
+        Get the total number of dummy atoms in the alchemical hybrid.
+
+        Returns
+        -------
+        int
+            Total number of atoms.
+        """
+        return self.mol_a.GetNumAtoms() + self.mol_b.GetNumAtoms() - len(self.core) - len(self.core)
+
     def combine_masses(self):
         """
         Combine masses between two end-states using linear interpolation.
