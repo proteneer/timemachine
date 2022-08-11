@@ -52,13 +52,19 @@ class CompareDistNonterminal(rdFMCS.MCSAtomCompare):
             return True
 
 
-def mcs_map(a, b, threshold: float = 0.5, timeout: int = 5, smarts: Optional[str] = None):
+def mcs_map(a, b, threshold: float = 2.0, timeout: int = 5, smarts: Optional[str] = None):
     """Find the MCS map of going from A to B"""
     params = rdFMCS.MCSParameters()
     params.BondCompareParameters.CompleteRingsOnly = 1
     params.BondCompareParameters.RingMatchesRingOnly = 1
-    params.AtomCompareParameters.matchValences = 1
-    params.AtomTyper = CompareDist(threshold=threshold)
+    params.BondTyper = rdFMCS.BondCompare.CompareAny
+
+    params.AtomCompareParameters.CompleteRingsOnly = 1
+    params.AtomCompareParameters.RingMatchesRingOnly = 1
+    params.AtomCompareParameters.matchValences = 0
+    params.AtomCompareParameters.MaxDistance = threshold
+    params.AtomTyper = rdFMCS.AtomCompare.CompareAny
+
     params.Timeout = timeout
     if smarts is not None:
         params.InitialSeed = smarts
@@ -187,11 +193,12 @@ def get_core_by_mcs(mol_a, mol_b, query, threshold=0.5):
     matches_a = mol_a.GetSubstructMatches(query, uniquify=False)
     matches_b = mol_b.GetSubstructMatches(query, uniquify=False)
 
-    # cost[i, j] = sum_i distance(conf)
     cost = np.zeros((len(matches_a), len(matches_b)))
     for i, a in enumerate(matches_a):
         for j, b in enumerate(matches_b):
-            cost[i, j] = np.linalg.norm(conf_a[np.array(a)] - conf_b[np.array(b)], axis=1).sum()
+            # if a single pair is outside of threshold, we set the cost to inf
+            dij = np.linalg.norm(conf_a[np.array(a)] - conf_b[np.array(b)], axis=1)
+            cost[i, j] = dij.sum() if np.all(dij < threshold) else np.inf
 
     # find (i,j) = argmin cost
     min_i, min_j = np.unravel_index(np.argmin(cost, axis=None), cost.shape)
@@ -206,7 +213,7 @@ def get_core_by_mcs(mol_a, mol_b, query, threshold=0.5):
     core = np.array([inds_a, inds_b]).T
 
     if not _check_core_map_distances(mol_a, mol_b, core, threshold):
-        raise (AtomMappingError(f"not all mapped atoms are within {threshold:.3f}Å of each other!"))
+        raise AtomMappingError(f"not all mapped atoms are within {threshold:.3f}Å of each other")
 
     return core
 
