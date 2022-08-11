@@ -14,11 +14,11 @@ FIXED_EXPONENT = 0x1000000000
 
 
 def FIXED_TO_FLOAT(v):
-    return jnp.float64(jnp.int64(v)) / FIXED_EXPONENT
+    return jnp.float64(jnp.int64(jnp.uint64(v))) / FIXED_EXPONENT
 
 
 def FLOAT_TO_FIXED(v):
-    return jnp.int64(v * FIXED_EXPONENT)
+    return jnp.uint64(jnp.int64(v * FIXED_EXPONENT))
 
 
 def langevin_coefficients(temperature, dt, friction, masses):
