@@ -30,9 +30,6 @@ class CMakeBuild(build_ext):
         if not extdir.endswith(os.path.sep):
             extdir += os.path.sep
 
-        debug = int(os.environ.get("DEBUG", 0)) if self.debug is None else self.debug
-        cfg = "Debug" if debug else "Release"
-
         cmake_args = [
             f"-DCMAKE_LIBRARY_OUTPUT_DIRECTORY={extdir}",
             f"-DPYTHON_EXECUTABLE={sys.executable}",
@@ -42,11 +39,8 @@ class CMakeBuild(build_ext):
         if "CMAKE_ARGS" in os.environ:
             cmake_args += [item for item in os.environ["CMAKE_ARGS"].split(" ") if item]
 
-        build_args += ["--config", cfg]
-
         if "CMAKE_BUILD_PARALLEL_LEVEL" not in os.environ:
-            nprocs = self.parallel if hasattr(self, "parallel") and self.parallel else multiprocessing.cpu_count()
-            build_args += [f"-j{nprocs}"]
+            build_args += [f"-j{multiprocessing.cpu_count()}"]
 
         if not os.path.exists(self.build_temp):
             os.makedirs(self.build_temp)
