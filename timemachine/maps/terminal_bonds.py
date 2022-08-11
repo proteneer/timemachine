@@ -1,10 +1,17 @@
+"""Summarize HarmonicBonds as Intervals in R+, construct maps between Intervals, & apply these maps to bond lengths"""
+
 from dataclasses import dataclass
 
 import numpy as np
-from jax import config, jit
+from jax import config, jacobian, jit
 from jax import numpy as jnp
+from jax import vmap
 
 config.update("jax_enable_x64", True)
+
+from typing import List
+
+from timemachine.constants import BOLTZ, DEFAULT_TEMP
 
 
 @dataclass
@@ -21,6 +28,30 @@ class Interval:
         assert self.lower > 0
 
 
+@dataclass
+class Gaussian:
+    mean: float
+    stddev: float
+
+    def to_interval(self, sigma_thresh=50):
+        r = self.stddev * sigma_thresh
+        interval = Interval(self.mean - r, self.mean + r)
+        interval.validate()
+        return interval
+
+
+def gaussians_from_harmonic_bonds(ks, eq_lengths, temperature=DEFAULT_TEMP) -> List[Gaussian]:
+    kBT = BOLTZ * temperature
+    params = zip(ks, eq_lengths)
+    return [Gaussian(eq_length, np.sqrt(1 / (k * kBT))) for (k, eq_length) in params]
+
+
+def bond_length(x, y):
+    # TODO: should this use periodic distance from timemachine.potentials.jax_utils?
+    #   (I don't think that's necessary, since bonded atoms won't be in different periodic boxes...)
+    return jnp.linalg.norm(x - y)
+
+
 @jit
 def interval_map(x, src_lb, src_ub, dst_lb, dst_ub):
     scale_factor = (dst_ub - dst_lb) / (src_ub - src_lb)
@@ -29,3 +60,121 @@ def interval_map(x, src_lb, src_ub, dst_lb, dst_ub):
     mapped = dst_lb + (x - src_lb) * scale_factor
 
     return jnp.where(in_support, mapped, np.nan)
+
+
+def conf_map(x, bond, param):
+    """Apply map to a single bond in a conformer x, return (updated x, logdetjac)"""
+    a, b = bond
+    dim = 3
+
+    def f(xy, param):
+        """R^[2 x dim] -> R^[2 x dim]"""
+        x, y = xy[:dim], xy[dim:]
+        src_lb, src_ub, dst_lb, dst_ub = param
+
+        r = bond_length(x, y)
+        new_r = interval_map(r, src_lb, src_ub, dst_lb, dst_ub)
+
+        vec = (y - x) / jnp.linalg.norm(y - x)
+        y_prime = x + new_r * vec
+
+        xy_prime = jnp.hstack([x, y_prime])
+        return xy_prime
+
+    def map_and_logdetjac(x, y, param):
+        xy = jnp.hstack([x, y])
+        xy_prime = f(xy, param)
+        y_prime = xy_prime[dim:]
+
+        jac = jacobian(f)(xy, param)
+        sign, logdet = jnp.linalg.slogdet(jac)
+
+        # negative det would be unexpected --> nan-poison if detected
+        logdetjac = jnp.where(sign == 1, logdet, jnp.nan)
+
+        return y_prime, logdetjac
+
+    x_b_mapped, logdetjac = map_and_logdetjac(x[a], x[b], param)
+    x_updated = x.at[b].set(x_b_mapped)
+
+    return x_updated, logdetjac
+
+
+apply_conf_map_to_traj = jit(vmap(conf_map, in_axes=(0, None, None)))
+
+
+def apply_sequence_of_conf_maps_to_traj(xs, bond_idxs, params):
+    """Apply maps to several bonds in a conformer, return (updated x, logdetjac)"""
+    xs_traj, logdetjac_increments_traj = [jnp.array(xs)], [np.zeros(len(xs))]
+
+    for (bond, param) in zip(bond_idxs, params):  # TODO: jax.lax for-loop?
+        xs_updated, logdetjac_increments = apply_conf_map_to_traj(xs_traj[-1], bond, param)
+
+        xs_traj.append(xs_updated)
+        logdetjac_increments_traj.append(logdetjac_increments)
+
+    return xs_traj[-1], np.sum(logdetjac_increments_traj, axis=0)
+
+
+class TerminalMappableState:
+    def __init__(self, terminal_bond_idxs, ks, eq_lengths, temperature=DEFAULT_TEMP, sigma_thresh=20):
+        """
+        for each (a, b) in terminal_bond_idxs,
+        prepare to construct a map that moves b -> b', conditioned on a
+
+        terminal_bond_idxs, ks, eq_lengths:
+            bonds that will be mapped,
+            assumed in order (anchor, terminal) --> TODO: assert and/or automatically correct this
+
+        temperature, sigma_thresh:
+            determine the size of the interval
+        """
+
+        B = len(terminal_bond_idxs)
+        assert (len(ks) == B) and (len(eq_lengths) == B)
+
+        self.idxs = terminal_bond_idxs
+        self.ks = ks
+        self.eq_lengths = eq_lengths
+
+        self.temperature = temperature
+        self.sigma_thresh = sigma_thresh
+
+        self.gaussians = gaussians_from_harmonic_bonds(ks, eq_lengths, DEFAULT_TEMP)
+        self.intervals = [g.to_interval(sigma_thresh) for g in self.gaussians]
+
+    def contains_in_support(self, x):
+        """returns whether x is in the support of state"""
+
+        bond_valid = []
+
+        for i in range(len(self.idxs)):
+            a, b = self.idxs[i]
+
+            r = bond_length(x[a], x[b])
+            interval = self.intervals[i]
+            bond_valid.append((r <= interval.upper) * (r >= interval.lower))
+
+        return jnp.array(bond_valid).all()
+
+
+def states_to_conf_map_params(src: TerminalMappableState, dst: TerminalMappableState):
+    # find bond idxs in common
+    src_bonds = set(tuple(b) for b in src.idxs)
+    dst_bonds = set(tuple(b) for b in dst.idxs)
+    bonds_in_common = src_bonds.intersection(dst_bonds)
+
+    bond_idxs = np.array(list(bonds_in_common))
+    assert len(bond_idxs) > 0 and bond_idxs.shape[1] == 2 and len(bond_idxs.shape) == 2
+
+    params_list = []
+
+    for (a, b) in bond_idxs:
+        src_interval = [interval for (idx, interval) in zip(src.idxs, src.intervals) if tuple(idx) == (a, b)][0]
+        dst_interval = [interval for (idx, interval) in zip(dst.idxs, dst.intervals) if tuple(idx) == (a, b)][0]
+
+        params_list.append((src_interval.lower, src_interval.upper, dst_interval.lower, dst_interval.upper))
+
+    params = np.array(params_list)
+
+    return bond_idxs, params
