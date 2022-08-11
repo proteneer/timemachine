@@ -43,7 +43,6 @@ class Bonded(Generic[BondedGpuPotential]):
 
     @classmethod
     def from_gpu(cls, p: BondedGpuPotential):
-        assert p.params is not None
         return cls(p.get_idxs(), p.get_lambda_mult(), p.get_lambda_offset())
 
 
@@ -96,7 +95,6 @@ class CentroidRestraint:
 
     @classmethod
     def from_gpu(cls, p: gpu.CentroidRestraint):
-        assert p.params is not None
         return cls(p.get_a_idxs(), p.get_b_idxs(), p.get_kb(), p.get_b0())
 
     def to_reference(self):
@@ -117,7 +115,6 @@ class ChiralAtomRestraint:
 
     @classmethod
     def from_gpu(cls, p: gpu.ChiralAtomRestraint):
-        assert p.params is not None
         return cls(p.get_idxs())
 
     def to_reference(self):
@@ -137,7 +134,6 @@ class ChiralBondRestraint:
 
     @classmethod
     def from_gpu(cls, p: gpu.ChiralBondRestraint):
-        assert p.params is not None
         return cls(p.get_idxs(), p.get_signs())
 
     def to_reference(self):
@@ -156,7 +152,6 @@ class FlatBottomBond:
 
     @classmethod
     def from_gpu(cls, p: gpu.FlatBottomBond):
-        assert p.params is not None
         return cls(p.get_idxs())
 
     def to_reference(self):
@@ -200,7 +195,6 @@ class Nonbonded:
 
     @classmethod
     def from_gpu(cls, p: gpu.Nonbonded):
-        assert p.params is not None
         return cls(
             p.get_exclusion_idxs(),
             p.get_scale_factors(),
