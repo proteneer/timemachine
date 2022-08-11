@@ -67,9 +67,6 @@ class HarmonicBond(Bonded):
 
 @dataclass
 class HarmonicAngle(Bonded):
-    lambda_mult: Optional[Array]
-    lambda_offset: Optional[Array]
-
     def to_reference(self):
         def U(conf, params, box, lam):
             return ref_bonded.harmonic_angle(
