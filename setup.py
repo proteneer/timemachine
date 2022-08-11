@@ -3,6 +3,7 @@
 Adapted from https://github.com/pypa/sampleproject/blob/main/setup.py
 """
 
+import multiprocessing
 import os
 import pathlib
 import subprocess
@@ -44,8 +45,8 @@ class CMakeBuild(build_ext):
         build_args += ["--config", cfg]
 
         if "CMAKE_BUILD_PARALLEL_LEVEL" not in os.environ:
-            if hasattr(self, "parallel") and self.parallel:
-                build_args += [f"-j{self.parallel}"]
+            nprocs = self.parallel if hasattr(self, "parallel") and self.parallel else multiprocessing.cpu_count()
+            build_args += [f"-j{nprocs}"]
 
         if not os.path.exists(self.build_temp):
             os.makedirs(self.build_temp)
