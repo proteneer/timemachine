@@ -21,6 +21,8 @@ def assert_bitwise_reversiblility(x0, v0, update_fxn):
         x_next, v_next = update_fxn(x, v)
         return x_next, -v_next
 
+    # Bitwise determinisim is only guarenteed for x0s, v0s where FIXED_TO_FLOAT(FLOAT_TO_FIXED(x)) == x
+    # This condition is not met for all floating point values and thus we roundtrip values initially.
     x0 = FIXED_TO_FLOAT(FLOAT_TO_FIXED(x0))
     v0 = FIXED_TO_FLOAT(FLOAT_TO_FIXED(v0))
 
