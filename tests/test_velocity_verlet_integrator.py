@@ -1,6 +1,7 @@
 from functools import partial
 
 import numpy as np
+import pytest
 
 from timemachine.integrator import VelocityVerletIntegrator as ReferenceVelocityVerlet
 from timemachine.lib import VelocityVerletIntegrator, custom_ops
@@ -33,8 +34,8 @@ def assert_reversible(x0, v0, update_fxn, lambdas, atol=1e-10):
     x1, v1, rev_lamb = self_inverse(x0, v0, lambdas)
     x0_, v0_, _ = self_inverse(x1, v1, rev_lamb)
 
-    np.testing.assert_almost_equal(x0_, x0, decimal=10)
-    np.testing.assert_almost_equal(v0_, v0, decimal=10)
+    np.testing.assert_allclose(x0_, x0, atol=atol)
+    np.testing.assert_allclose(v0_, v0, atol=atol)
 
     close = partial(np.allclose, atol=atol)
     # also assert this is not a no-op
@@ -142,12 +143,44 @@ def test_matches_reference():
 
     # Add one step as the C++ context does N steps + 2 half steps (initialize, finalize)
     ref_xs, ref_vs = intg.multiple_steps(coords, v0, n_steps=n_steps + 1)
-    np.testing.assert_array_almost_equal(ref_xs[0], coords, decimal=10)
-    np.testing.assert_array_almost_equal(ref_xs[0], ctxt.get_x_t(), decimal=10)
+    np.testing.assert_allclose(ref_xs[0], coords, atol=1e-10)
+    np.testing.assert_allclose(ref_xs[0], ctxt.get_x_t(), atol=1e-10)
 
     _, xs, _ = ctxt.multiple_steps(np.ones(n_steps) * lamb, 0, 1)
     assert xs.shape[0] == n_steps
     v1 = ctxt.get_v_t()
     atol = 1e-5
-    np.testing.assert_allclose(ref_xs[-1], xs[-1], atol=atol)
+    np.testing.assert_allclose(ref_xs[1:-1], xs, atol=atol)
     np.testing.assert_allclose(ref_vs[-1], v1, atol=atol)
+
+
+def test_initialization_and_finalization():
+    np.random.seed(2022)
+
+    # define a Python force fxn that calls custom_ops
+    rfe = hif2a_ligand_pair
+    unbound_potentials, sys_params, masses = rfe.prepare_vacuum_edge(rfe.ff.get_ordered_params())
+    coords = rfe.prepare_combined_coords()
+    bound_potentials = [
+        ubp.bind(params).bound_impl(np.float32) for (ubp, params) in zip(unbound_potentials, sys_params)
+    ]
+    box = 100 * np.eye(3)
+
+    dt = 1.5e-3
+
+    intg, ctxt = setup_velocity_verlet(bound_potentials, coords, box, dt, masses)  # noqa
+    with pytest.raises(RuntimeError) as e:
+        ctxt.finalize(0.0)
+    assert "not initialized" in str(e.value)
+
+    ctxt.initialize(0.0)
+
+    with pytest.raises(RuntimeError) as e:
+        ctxt.initialize(0.0)
+    assert "initialized twice" in str(e.value)
+
+    ctxt.finalize(0.0)
+
+    with pytest.raises(RuntimeError) as e:
+        ctxt.finalize(0.0)
+    assert "not initialized" in str(e.value)

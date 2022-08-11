@@ -52,8 +52,7 @@ void VelocityVerletIntegrator::initialize(
     cudaStream_t stream) {
 
     if (initialized_) {
-        // No op if this is initialized, will just mess up the velos
-        return;
+        throw std::runtime_error("initialized twice");
     }
     gpuErrchk(cudaMemsetAsync(d_du_dx_, 0, N_ * 3 * sizeof(*d_du_dx_), stream));
 
@@ -88,8 +87,7 @@ void VelocityVerletIntegrator::finalize(
     cudaStream_t stream) {
 
     if (!initialized_) {
-        // No op if this isn't initialized, will just mess up the velos
-        return;
+        throw std::runtime_error("not initialized");
     }
     gpuErrchk(cudaMemsetAsync(d_du_dx_, 0, N_ * 3 * sizeof(*d_du_dx_), stream));
 
