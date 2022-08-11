@@ -145,24 +145,6 @@ def prepare_lj_system(
 #     return charge_params, ref_total_energy, test_potential
 
 
-def prepare_reference_nonbonded(params, exclusion_idxs, scales, lambda_plane_idxs, lambda_offset_idxs, beta, cutoff):
-
-    N = params.shape[0]
-    charge_rescale_mask, lj_rescale_mask = nonbonded.convert_exclusions_to_rescale_masks(exclusion_idxs, scales, N)
-
-    ref_total_energy = functools.partial(
-        nonbonded.nonbonded_v3,
-        charge_rescale_mask=charge_rescale_mask,
-        lj_rescale_mask=lj_rescale_mask,
-        beta=beta,
-        cutoff=cutoff,
-        lambda_plane_idxs=lambda_plane_idxs,
-        lambda_offset_idxs=lambda_offset_idxs,
-    )
-
-    return ref_total_energy
-
-
 def prepare_system_params(x: NDArray, sigma_scale: float = 5.0) -> NDArray:
     """
     Prepares random parameters given a set of coordinates. The parameters are adjusted to be the correct

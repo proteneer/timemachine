@@ -4,11 +4,11 @@ jax.config.update("jax_enable_x64", True)
 
 import numpy as np
 import pytest
-from common import GradientTest, prepare_reference_nonbonded
+from common import GradientTest
 from parameter_interpolation import gen_params
 
 from timemachine.lib.potentials import NonbondedInteractionGroup, NonbondedInteractionGroupInterpolated
-from timemachine.potentials import jax_utils, nonbonded
+from timemachine.potentials import generic, jax_utils, nonbonded
 
 pytestmark = [pytest.mark.memcheck]
 
@@ -230,15 +230,14 @@ def test_nonbonded_interaction_group_consistency_allpairs_lambda_planes(
     lambda_offset_idxs = rng.integers(-max_abs_offset_idx, max_abs_offset_idx + 1, size=(num_atoms,), dtype=np.int32)
 
     def make_reference_nonbonded(lambda_plane_idxs):
-        return prepare_reference_nonbonded(
-            params=params,
+        return generic.Nonbonded(
             exclusion_idxs=np.array([], dtype=np.int32),
-            scales=np.zeros((0, 2), dtype=np.float64),
+            scale_factors=np.zeros((0, 2), dtype=np.float64),
             lambda_plane_idxs=lambda_plane_idxs,
             lambda_offset_idxs=lambda_offset_idxs,
             beta=beta,
             cutoff=cutoff,
-        )
+        ).to_reference()
 
     ref_allpairs = make_reference_nonbonded(np.zeros(num_atoms, dtype=np.int32))
 
@@ -316,15 +315,14 @@ def test_nonbonded_interaction_group_consistency_allpairs_constant_shift(
     lambda_offset_idxs = rng.integers(-2, 3, size=(num_atoms,), dtype=np.int32)
 
     def ref_allpairs(conf, lamb):
-        return prepare_reference_nonbonded(
-            params=params,
+        return generic.Nonbonded(
             exclusion_idxs=np.array([], dtype=np.int32),
-            scales=np.zeros((0, 2), dtype=np.float64),
+            scale_factors=np.zeros((0, 2), dtype=np.float64),
             lambda_plane_idxs=lambda_plane_idxs,
             lambda_offset_idxs=lambda_offset_idxs,
             beta=beta,
             cutoff=cutoff,
-        )(conf, params, example_box, lamb)
+        ).to_reference()(conf, params, example_box, lamb)
 
     ligand_idxs = rng.choice(num_atoms, size=(num_atoms_ligand,), replace=False).astype(np.int32)
 
