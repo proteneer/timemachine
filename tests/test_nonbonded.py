@@ -13,7 +13,7 @@ import unittest
 
 import numpy as np
 import pytest
-from common import GradientTest, prepare_reference_nonbonded, prepare_system_params, prepare_water_system
+from common import GradientTest, prepare_system_params, prepare_water_system
 
 from timemachine.fe.utils import to_md_units
 from timemachine.ff.handlers import openmm_deserializer

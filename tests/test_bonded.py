@@ -8,7 +8,7 @@ import pytest
 from common import GradientTest
 
 from timemachine.lib import potentials
-from timemachine.potentials import bonded, chiral_restraints, generic, rmsd
+from timemachine.potentials import generic, rmsd
 
 pytestmark = [pytest.mark.memcheck]
 
