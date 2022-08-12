@@ -17,7 +17,7 @@ PotentialFxn = Callable[[Conf, Params, Box, Lambda], float]
 Precision = Any
 
 
-GpuPotential = TypeVar("GpuPotential")
+GpuPotential = TypeVar("GpuPotential", bound=gpu.CustomOpWrapper)
 
 
 class Potential(Protocol, Generic[GpuPotential]):
