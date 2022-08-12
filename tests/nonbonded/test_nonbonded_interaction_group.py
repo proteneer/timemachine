@@ -315,14 +315,16 @@ def test_nonbonded_interaction_group_consistency_allpairs_constant_shift(
     lambda_offset_idxs = rng.integers(-2, 3, size=(num_atoms,), dtype=np.int32)
 
     def ref_allpairs(conf, lamb):
-        return generic.Nonbonded(
+        U_ref = generic.Nonbonded(
             exclusion_idxs=np.array([], dtype=np.int32),
             scale_factors=np.zeros((0, 2), dtype=np.float64),
             lambda_plane_idxs=lambda_plane_idxs,
             lambda_offset_idxs=lambda_offset_idxs,
             beta=beta,
             cutoff=cutoff,
-        ).to_reference()(conf, params, example_box, lamb)
+        ).to_reference()
+
+        return U_ref(conf, params, example_box, lamb)
 
     ligand_idxs = rng.choice(num_atoms, size=(num_atoms_ligand,), replace=False).astype(np.int32)
 
