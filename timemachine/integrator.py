@@ -168,10 +168,8 @@ class VelocityVerletIntegrator(Integrator):
 
     def step(self, x, v):
         """WARNING: makes 2 calls to force_fxn per timestep -- prefer `.multiple_steps` in most cases"""
-        fixed_x = FLOAT_TO_FIXED(x)
-        fixed_v = FLOAT_TO_FIXED(v)
-        v_mid = fixed_v + FLOAT_TO_FIXED((0.5 * self.cb) * self.force_fxn(x))
-        fixed_x = fixed_x + FLOAT_TO_FIXED(self.dt * FIXED_TO_FLOAT(v_mid))
+        v_mid = FLOAT_TO_FIXED(v) + FLOAT_TO_FIXED((0.5 * self.cb) * self.force_fxn(x))
+        fixed_x = FLOAT_TO_FIXED(x) + FLOAT_TO_FIXED(self.dt * FIXED_TO_FLOAT(v_mid))
         fixed_v = v_mid + FLOAT_TO_FIXED((0.5 * self.cb) * self.force_fxn(FIXED_TO_FLOAT(fixed_x)))
 
         return FIXED_TO_FLOAT(fixed_x), FIXED_TO_FLOAT(fixed_v)
@@ -212,11 +210,9 @@ class VelocityVerletIntegrator(Integrator):
 
     def _update_via_fori_loop(self, x, v, n_steps=1000):
         # initialize
-        v_fixed = FLOAT_TO_FIXED(v)
-        x_fixed = FLOAT_TO_FIXED(x)
 
-        v_fixed = v_fixed + FLOAT_TO_FIXED((0.5 * self.cb) * self.force_fxn(x))
-        x_fixed = x_fixed + FLOAT_TO_FIXED(self.dt * FIXED_TO_FLOAT(v_fixed))
+        v_fixed = FLOAT_TO_FIXED(v) + FLOAT_TO_FIXED((0.5 * self.cb) * self.force_fxn(x))
+        x_fixed = FLOAT_TO_FIXED(x) + FLOAT_TO_FIXED(self.dt * FIXED_TO_FLOAT(v_fixed))
 
         def velocity_verlet_loop_body(_, val):
             x_prev, v_prev = val
