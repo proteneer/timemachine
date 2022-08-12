@@ -102,7 +102,7 @@ if (NOT CUDA_ARCH)
       COMMAND
       bash
       "-c"
-      "nvidia-smi --query-gpu=compute_cap --format=csv | grep -v compute_cap"
+      "nvidia-smi --query-gpu=compute_cap --format=csv | grep -v compute_cap | sort -n | head -n1"
       OUTPUT_VARIABLE CUDA_ARCH
       OUTPUT_STRIP_TRAILING_WHITESPACE
     )
