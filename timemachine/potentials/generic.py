@@ -251,11 +251,6 @@ class SummedPotential:
         shapes = [ps.shape for ps in self.params_init]
 
         def U(conf, params, box, lam):
-
-            import numpy as np
-
-            assert conf.dtype == np.float64
-            assert params.dtype == np.float64
             return ref_summed.summed_potential(conf, params, box, lam, U_fns, shapes)
 
         return U
