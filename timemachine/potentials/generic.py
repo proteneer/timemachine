@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Any, Callable, Generic, Optional, TypeVar
+from typing import Any, Callable, Generic, Optional, Type, TypeVar
 
 from typing_extensions import Protocol
 
@@ -16,12 +16,14 @@ Lambda = float
 PotentialFxn = Callable[[Conf, Params, Box, Lambda], float]
 
 
+GenericPotential = TypeVar("GenericPotential", bound="Potential")
 GpuPotential = TypeVar("GpuPotential", bound=gpu.CustomOpWrapper)
+BondedGpuPotential = TypeVar("BondedGpuPotential", bound=gpu.BondedWrapper)
 
 
 class Potential(Protocol, Generic[GpuPotential]):
-    @staticmethod
-    def from_gpu(p: GpuPotential) -> "Potential":
+    @classmethod
+    def from_gpu(cls: Type[GenericPotential], p: GpuPotential) -> GenericPotential:
         ...
 
     def to_reference(self) -> PotentialFxn:
@@ -29,9 +31,6 @@ class Potential(Protocol, Generic[GpuPotential]):
 
     def to_gpu(self) -> GpuPotential:
         ...
-
-
-BondedGpuPotential = TypeVar("BondedGpuPotential", bound=gpu.BondedWrapper)
 
 
 @dataclass
