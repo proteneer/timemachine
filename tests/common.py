@@ -207,22 +207,9 @@ def prepare_water_system(x, lambda_plane_idxs, lambda_offset_idxs, p_scale, cuto
 
     beta = 2.0
 
-    test_potential = potentials.Nonbonded(exclusion_idxs, scales, lambda_plane_idxs, lambda_offset_idxs, beta, cutoff)
+    potential = generic.Nonbonded(exclusion_idxs, scales, lambda_plane_idxs, lambda_offset_idxs, beta, cutoff)
 
-    charge_rescale_mask, lj_rescale_mask = nonbonded.convert_exclusions_to_rescale_masks(exclusion_idxs, scales, N)
-
-    ref_total_energy = functools.partial(
-        nonbonded.nonbonded_v3,
-        charge_rescale_mask=charge_rescale_mask,
-        lj_rescale_mask=lj_rescale_mask,
-        beta=beta,
-        cutoff=cutoff,
-        lambda_plane_idxs=lambda_plane_idxs,
-        lambda_offset_idxs=lambda_offset_idxs,
-        runtime_validate=False,
-    )
-
-    return params, ref_total_energy, test_potential
+    return params, potential
 
 
 def prepare_nb_system(x, E, lambda_plane_idxs, lambda_offset_idxs, p_scale, cutoff):  # number of exclusions
