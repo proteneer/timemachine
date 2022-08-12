@@ -21,6 +21,8 @@ public:
     ~Context();
 
     void step(double lambda);
+    void initialize(double lambda);
+    void finalize(double lambda);
 
     std::array<std::vector<double>, 3>
     multiple_steps(const std::vector<double> &lambda_schedule, int store_du_dl_interval, int store_x_interval);
@@ -34,11 +36,11 @@ public:
 
     int num_atoms() const;
 
-    void get_du_dx_t_minus_1(unsigned long long *out_buffer) const;
-
     void set_x_t(const double *in_buffer);
 
     void get_x_t(double *out_buffer) const;
+
+    void set_v_t(const double *in_buffer);
 
     void get_v_t(double *out_buffer) const;
 
@@ -49,9 +51,11 @@ private:
 
     MonteCarloBarostat *barostat_;
 
-    void _step(double lambda, unsigned long long *du_dl_out);
-
-    void _step_equilibrium(double lambda, unsigned long long *du_dl_out);
+    void _step(
+        std::vector<BoundPotential *> &bps,
+        const double lambda,
+        unsigned long long *du_dl_out,
+        const cudaStream_t stream);
 
     int step_;
 
