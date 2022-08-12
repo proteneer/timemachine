@@ -3,13 +3,14 @@ import jax
 jax.config.update("jax_enable_x64", True)
 
 import itertools
+
 import numpy as np
 import pytest
+from common import GradientTest
 
 from timemachine.lib import custom_ops
-from timemachine.potentials import generic
 from timemachine.lib.potentials import FanoutSummedPotential, HarmonicBond, SummedPotential
-from common import GradientTest
+from timemachine.potentials import generic
 
 pytestmark = [pytest.mark.memcheck]
 

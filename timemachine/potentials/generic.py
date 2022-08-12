@@ -284,3 +284,5 @@ def from_gpu(p: gpu.CustomOpWrapper) -> Optional[Potential]:
 
     if isinstance(p, gpu.Nonbonded):
         return Nonbonded.from_gpu(p)
+
+    return None
