@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Any, Callable, Generic, Optional, Type, TypeVar
+from typing import Any, Callable, Generic, Optional, Sequence, Type, TypeVar
 
 from typing_extensions import Protocol
 
@@ -7,6 +7,7 @@ import timemachine.lib.potentials as gpu
 import timemachine.potentials.chiral_restraints as ref_chiral
 from timemachine.potentials import bonded as ref_bonded
 from timemachine.potentials import nonbonded as ref_nonbonded
+from timemachine.potentials import summed as ref_summed
 
 Array = Any
 Conf = Array
@@ -232,3 +233,59 @@ class Nonbonded:
             self.beta,
             self.cutoff,
         )
+
+
+@dataclass
+class SummedPotential:
+    potentials: Sequence[Potential]
+    params_init: Sequence[Array]
+
+    @classmethod
+    def from_gpu(cls, p: gpu.SummedPotential):
+        potentials = [from_gpu(p_) for p_ in p._potentials]
+        assert all(p_ is not None for p_ in potentials)
+        return SummedPotential([p_ for p_ in potentials if p_ is not None], p._params_init)
+
+    def to_reference(self):
+        U_fns = [p.to_reference() for p in self.potentials]
+        shapes = [ps.shape for ps in self.params_init]
+
+        def U(conf, params, box, lam):
+
+            import numpy as np
+
+            assert conf.dtype == np.float64
+            assert params.dtype == np.float64
+            return ref_summed.summed_potential(conf, params, box, lam, U_fns, shapes)
+
+        return U
+
+    def to_gpu(self):
+        gpu_potentials = [p.to_gpu() for p in self.potentials]
+        return gpu.SummedPotential(gpu_potentials, self.params_init)
+
+
+def from_gpu(p: gpu.CustomOpWrapper) -> Optional[Potential]:
+    if isinstance(p, gpu.HarmonicBond):
+        return HarmonicBond.from_gpu(p)
+
+    if isinstance(p, gpu.HarmonicAngle):
+        return HarmonicAngle.from_gpu(p)
+
+    if isinstance(p, gpu.CentroidRestraint):
+        return CentroidRestraint.from_gpu(p)
+
+    if isinstance(p, gpu.ChiralAtomRestraint):
+        return ChiralAtomRestraint.from_gpu(p)
+
+    if isinstance(p, gpu.ChiralBondRestraint):
+        return ChiralBondRestraint.from_gpu(p)
+
+    if isinstance(p, gpu.FlatBottomBond):
+        return FlatBottomBond.from_gpu(p)
+
+    if isinstance(p, gpu.PeriodicTorsion):
+        return PeriodicTorsion.from_gpu(p)
+
+    if isinstance(p, gpu.Nonbonded):
+        return Nonbonded.from_gpu(p)

@@ -1,4 +1,4 @@
-from typing import List
+from typing import Sequence
 
 import importlib_resources as resources
 import numpy as np
@@ -40,22 +40,23 @@ class CustomOpWrapper:
 
 
 class SummedPotential(CustomOpWrapper):
-    def __init__(self, potentials: List[CustomOpWrapper], params_init: List[NDArray]):
+    def __init__(self, potentials: Sequence[CustomOpWrapper], params_init: Sequence[NDArray]):
 
         if len(potentials) != len(params_init):
             raise ValueError("number of potentials != number of parameter arrays")
 
         self._potentials = potentials
-        self._sizes = [ps.size for ps in params_init]
+        self._params_init = params_init
         self.params = None
 
     def unbound_impl(self, precision):
+        sizes = [ps.size for ps in self._params_init]
         impls = [p.unbound_impl(precision) for p in self._potentials]
-        return custom_ops.SummedPotential(impls, self._sizes)
+        return custom_ops.SummedPotential(impls, sizes)
 
 
 class FanoutSummedPotential(CustomOpWrapper):
-    def __init__(self, potentials: List[CustomOpWrapper]):
+    def __init__(self, potentials: Sequence[CustomOpWrapper]):
         self._potentials = potentials
 
     def unbound_impl(self, precision):
