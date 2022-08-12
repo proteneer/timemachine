@@ -21,7 +21,7 @@ GpuPotential = TypeVar("GpuPotential", bound=gpu.CustomOpWrapper)
 BondedGpuPotential = TypeVar("BondedGpuPotential", bound=gpu.BondedWrapper)
 
 
-class Potential(Protocol, Generic[GpuPotential]):
+class Potential(Protocol[GpuPotential]):
     @classmethod
     def from_gpu(cls: Type[GenericPotential], p: GpuPotential) -> GenericPotential:
         ...
