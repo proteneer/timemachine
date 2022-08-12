@@ -14,7 +14,6 @@ Params = Array
 Box = Array
 Lambda = float
 PotentialFxn = Callable[[Conf, Params, Box, Lambda], float]
-Precision = Any
 
 
 GpuPotential = TypeVar("GpuPotential", bound=gpu.CustomOpWrapper)
