@@ -116,7 +116,7 @@ def read_from_args():
             )
             traceback.print_exc()
             with open(f"failed_rbfe_result_{mol_a_name}_{mol_b_name}.pkl", "wb") as fh:
-                pickle.dump(sim_exc, fh)
+                pickle.dump((sim_exc, meta), fh)
 
 
 if __name__ == "__main__":
