@@ -3,9 +3,42 @@
 import numpy as np
 import pytest
 
-from timemachine.fe.rbfe import HostConfig, estimate_relative_free_energy
+from timemachine.fe.rbfe import HostConfig, estimate_relative_free_energy, sample
 from timemachine.md import builders
 from timemachine.testsystems.relative import get_hif2a_ligand_pair_single_topology
+
+
+def run_bitwise_reproducibility(mol_a, mol_b, core, forcefield, n_frames):
+    # test that we can bitwise reproduce our trajectory using the initial state information
+
+    lambda_schedule = [0.01, 0.02, 0.03]
+    seed = 2023
+    box_width = 4.0
+    solvent_sys, solvent_conf, solvent_box, _ = builders.build_water_system(box_width)
+    solvent_box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes
+    solvent_host_config = HostConfig(solvent_sys, solvent_conf, solvent_box)
+    keep_idxs = [0, 1, 2]
+    solvent_res = estimate_relative_free_energy(
+        mol_a,
+        mol_b,
+        core,
+        forcefield,
+        solvent_host_config,
+        seed,
+        n_frames=n_frames,
+        prefix="solvent",
+        lambda_schedule=lambda_schedule,
+        keep_idxs=keep_idxs,
+    )
+
+    all_frames, all_boxes = [], []
+    for state in solvent_res.initial_states:
+        frames, boxes = sample(state, solvent_res.protocol)
+        all_frames.append(frames)
+        all_boxes.append(boxes)
+
+    np.testing.assert_equal(solvent_res.frames, all_frames)
+    np.testing.assert_equal(solvent_res.boxes, all_boxes)
 
 
 def run_pair(mol_a, mol_b, core, forcefield, n_frames, protein_path):
@@ -36,7 +69,9 @@ def run_pair(mol_a, mol_b, core, forcefield, n_frames, protein_path):
     assert len(solvent_res.frames[-1] == n_frames)
     assert len(solvent_res.boxes[0] == n_frames)
     assert len(solvent_res.boxes[-1] == n_frames)
-    assert solvent_res.lambda_schedule == lambda_schedule
+    assert [x.lamb for x in solvent_res.initial_states] == lambda_schedule
+    assert solvent_res.exception is None
+    assert solvent_res.protocol.n_frames == n_frames
 
     seed = 2024
     complex_sys, complex_conf, _, _, complex_box, _ = builders.build_protein_system(protein_path)
@@ -61,7 +96,9 @@ def run_pair(mol_a, mol_b, core, forcefield, n_frames, protein_path):
     assert len(complex_res.frames[-1]) == n_frames
     assert len(complex_res.boxes[0]) == n_frames
     assert len(complex_res.boxes[-1]) == n_frames
-    assert complex_res.lambda_schedule == lambda_schedule
+    assert [x.lamb for x in complex_res.initial_states] == lambda_schedule
+    assert complex_res.exception is None
+    assert complex_res.protocol.n_frames == n_frames
 
 
 @pytest.mark.nightly(reason="Slow!")
@@ -72,6 +109,13 @@ def test_run_hif2a_test_system():
     mol_b = st.mol_b
     core = st.core
     forcefield = st.ff
-    protein_path = "tests/data/hif2a_nowater_min.pdb"
 
+    protein_path = "tests/data/hif2a_nowater_min.pdb"
     run_pair(mol_a, mol_b, core, forcefield, n_frames=100, protein_path=protein_path)
+    run_bitwise_reproducibility(mol_a, mol_b, core, forcefield, n_frames=100)
+
+
+if __name__ == "__main__":
+    # convenience: so we can run this directly from python tests/test_relative_free_energy.py without
+    # toggling the pytest marker
+    test_run_hif2a_test_system()

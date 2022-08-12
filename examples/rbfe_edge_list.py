@@ -1,6 +1,7 @@
 import argparse
 import csv
 import pickle
+import traceback
 
 import numpy as np
 from rdkit import Chem
@@ -9,10 +10,8 @@ Chem.SetDefaultPickleProperties(Chem.PropertyPickleOptions.AllProps)
 
 from timemachine.constants import KCAL_TO_KJ
 from timemachine.fe import atom_mapping
-from timemachine.fe.rbfe import HostConfig, estimate_relative_free_energy
+from timemachine.fe.rbfe import SimulationException, run_pair
 from timemachine.fe.utils import get_mol_name
-from timemachine.ff import Forcefield
-from timemachine.md import builders
 from timemachine.parallel.client import CUDAPoolClient
 
 
@@ -22,30 +21,6 @@ def get_mol_by_name(mols, name):
             return m
 
     assert 0, "Mol not found"
-
-
-def run_pair(mol_a, mol_b, core, forcefield_path, protein_path, n_frames, seed):
-
-    box_width = 4.0
-    solvent_sys, solvent_conf, solvent_box, solvent_top = builders.build_water_system(box_width)
-    solvent_box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes, deboggle later
-    solvent_host_config = HostConfig(solvent_sys, solvent_conf, solvent_box)
-
-    forcefield = Forcefield.load_from_file(forcefield_path)
-
-    solvent_res = estimate_relative_free_energy(
-        mol_a, mol_b, core, forcefield, solvent_host_config, seed, n_frames=n_frames, prefix="solvent"
-    )
-
-    complex_sys, complex_conf, _, _, complex_box, complex_top = builders.build_protein_system(protein_path)
-    complex_box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes, deboggle later
-    complex_host_config = HostConfig(complex_sys, complex_conf, complex_box)
-
-    complex_res = estimate_relative_free_energy(
-        mol_a, mol_b, core, forcefield, complex_host_config, seed + 1, n_frames=n_frames, prefix="complex"
-    )
-
-    return solvent_res, solvent_top, complex_res, complex_top
 
 
 def read_from_args():
@@ -83,11 +58,12 @@ def read_from_args():
             mol_b = get_mol_by_name(mols, mol_b_name)
 
             print(f"Submitting job for {mol_a_name} -> {mol_b_name}")
-            mcs_result = atom_mapping.mcs_map_graph_only_complete_rings(mol_a, mol_b)
+            mcs_threshold = 2.0
+            mcs_result = atom_mapping.mcs_map(mol_a, mol_b, threshold=mcs_threshold)
             query_mol = Chem.MolFromSmarts(mcs_result.smartsString)
-            core = atom_mapping.get_core_by_mcs(mol_a, mol_b, query_mol, threshold=2.0)
+            core = atom_mapping.get_core_by_mcs(mol_a, mol_b, query_mol, threshold=mcs_threshold)
             fut = cpc.submit(
-                run_pair, mol_a, mol_b, core, args.forcefield, args.protein, args.seed + row_idx, args.n_frames
+                run_pair, mol_a, mol_b, core, args.forcefield, args.protein, args.n_frames, args.seed + row_idx
             )
             futures.append(fut)
 
@@ -106,26 +82,34 @@ def read_from_args():
             )
 
     for fut, meta in zip(futures, metadata):
-        solvent_res, solvent_top, complex_res, complex_top = fut.result()
-        solvent_ddg = np.sum(solvent_res.all_dGs)
-        solvent_ddg_err = np.linalg.norm(solvent_res.all_errs)
-        complex_ddg = np.sum(complex_res.all_dGs)
-        complex_ddg_err = np.linalg.norm(complex_res.all_errs)
 
         mol_a, mol_b, _, _, exp_ddg, fep_ddg, fep_ddg_err, ccc_ddg, ccc_ddg_err = meta
         mol_a_name = get_mol_name(mol_a)
         mol_b_name = get_mol_name(mol_b)
 
-        with open(f"rbfe_result_{mol_a_name}_{mol_b_name}.pkl", "wb") as fh:
-            pkl_obj = (meta, solvent_res, solvent_top, complex_res, complex_top)
-            pickle.dump(pkl_obj, fh)
+        try:
+            solvent_res, solvent_top, complex_res, complex_top = fut.result()
 
-        tm_ddg = complex_ddg - solvent_ddg
-        tm_err = np.linalg.norm([complex_ddg_err, solvent_ddg_err])
+            with open(f"success_rbfe_result_{mol_a_name}_{mol_b_name}.pkl", "wb") as fh:
+                pkl_obj = (meta, solvent_res, solvent_top, complex_res, complex_top)
+                pickle.dump(pkl_obj, fh)
 
-        print(
-            f"finished {mol_a_name} -> {mol_b_name} (kJ/mol) | complex {complex_ddg:.2f} +- {complex_ddg_err:.2f} | solvent {solvent_ddg:.2f} +- {solvent_ddg_err:.2f} | tm_pred {tm_ddg:.2f} +- {tm_err:.2f} | exp_ddg {exp_ddg:.2f} | fep_ddg {fep_ddg:.2f} +- {fep_ddg_err:.2f}"
-        )
+            solvent_ddg = np.sum(solvent_res.all_dGs)
+            solvent_ddg_err = np.linalg.norm(solvent_res.all_errs)
+            complex_ddg = np.sum(complex_res.all_dGs)
+            complex_ddg_err = np.linalg.norm(complex_res.all_errs)
+
+            tm_ddg = complex_ddg - solvent_ddg
+            tm_err = np.linalg.norm([complex_ddg_err, solvent_ddg_err])
+
+            print(
+                f"finished: {mol_a_name} -> {mol_b_name} (kJ/mol) | complex {complex_ddg:.2f} +- {complex_ddg_err:.2f} | solvent {solvent_ddg:.2f} +- {solvent_ddg_err:.2f} | tm_pred {tm_ddg:.2f} +- {tm_err:.2f} | exp_ddg {exp_ddg:.2f} | fep_ddg {fep_ddg:.2f} +- {fep_ddg_err:.2f}"
+            )
+
+        except SimulationException as sim_exc:
+            traceback.print_exc()
+            with open(f"failed_rbfe_result_{mol_a_name}_{mol_b_name}.pkl", "wb") as fh:
+                pickle.dump(sim_exc, fh)
 
 
 if __name__ == "__main__":
