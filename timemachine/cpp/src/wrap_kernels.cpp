@@ -15,7 +15,7 @@
 #include "flat_bottom_bond.hpp"
 #include "harmonic_angle.hpp"
 #include "harmonic_bond.hpp"
-#include "integrator.hpp"
+#include "langevin_integrator.hpp"
 #include "neighborlist.hpp"
 #include "nonbonded_all_pairs.hpp"
 #include "nonbonded_interaction_group.hpp"
@@ -25,6 +25,7 @@
 #include "potential.hpp"
 #include "rmsd_align.hpp"
 #include "summed_potential.hpp"
+#include "verlet_integrator.hpp"
 
 #include <iostream>
 
@@ -124,7 +125,17 @@ void declare_context(py::module &m) {
             py::arg("integrator"),
             py::arg("bps"),
             py::arg("barostat") = py::none())
-        .def("step", &timemachine::Context::step)
+        .def(
+            "step",
+            &timemachine::Context::step,
+            py::arg("lamb"),
+            R"pbdoc(
+        Take a single step at a value of lambda.
+
+        Note: Must call `initialize` before stepping and `finalize` after stepping to ensure the correct velocities and positions to be returned by `get_x_t()` and `get_v_t()`,.
+        )pbdoc")
+        .def("finalize", &timemachine::Context::finalize, py::arg("lamb"))
+        .def("initialize", &timemachine::Context::initialize, py::arg("lamb"))
         .def(
             "multiple_steps",
             [](timemachine::Context &ctxt,
@@ -263,8 +274,21 @@ void declare_context(py::module &m) {
         .def(
             "set_x_t",
             [](timemachine::Context &ctxt, const py::array_t<double, py::array::c_style> new_x_t) {
+                if (new_x_t.shape()[0] != ctxt.num_atoms()) {
+                    throw std::runtime_error("number of new coords disagree with current coords");
+                }
                 ctxt.set_x_t(new_x_t.data());
-            })
+            },
+            py::arg("coords"))
+        .def(
+            "set_v_t",
+            [](timemachine::Context &ctxt, const py::array_t<double, py::array::c_style> new_v_t) {
+                if (new_v_t.shape()[0] != ctxt.num_atoms()) {
+                    throw std::runtime_error("number of new coords disagree with current coords");
+                }
+                ctxt.set_v_t(new_v_t.data());
+            },
+            py::arg("velocities"))
         .def(
             "get_x_t",
             [](timemachine::Context &ctxt) -> py::array_t<double, py::array::c_style> {
@@ -283,28 +307,11 @@ void declare_context(py::module &m) {
                 ctxt.get_v_t(buffer.mutable_data());
                 return buffer;
             })
-        .def(
-            "get_box",
-            [](timemachine::Context &ctxt) -> py::array_t<double, py::array::c_style> {
-                unsigned int D = 3;
-                py::array_t<double, py::array::c_style> buffer({D, D});
-                ctxt.get_box(buffer.mutable_data());
-                return buffer;
-            })
-        .def("_get_du_dx_t_minus_1", [](timemachine::Context &ctxt) -> py::array_t<double, py::array::c_style> {
-            PyErr_WarnEx(
-                PyExc_DeprecationWarning,
-                "_get_du_dx_t_minus_1() should only be used for testing. It will be removed in a future release.",
-                1);
-            unsigned int N = ctxt.num_atoms();
+        .def("get_box", [](timemachine::Context &ctxt) -> py::array_t<double, py::array::c_style> {
             unsigned int D = 3;
-            std::vector<unsigned long long> du_dx(N * D);
-            ctxt.get_du_dx_t_minus_1(&du_dx[0]);
-            py::array_t<double, py::array::c_style> py_du_dx({N, D});
-            for (unsigned int i = 0; i < du_dx.size(); i++) {
-                py_du_dx.mutable_data()[i] = FIXED_TO_FLOAT<double>(du_dx[i]);
-            }
-            return py_du_dx;
+            py::array_t<double, py::array::c_style> buffer({D, D});
+            ctxt.get_box(buffer.mutable_data());
+            return buffer;
         });
 }
 
@@ -333,6 +340,19 @@ void declare_langevin_integrator(py::module &m) {
             py::arg("cbs"),
             py::arg("ccs"),
             py::arg("seed"));
+}
+
+void declare_velocity_verlet_integrator(py::module &m) {
+
+    using Class = timemachine::VelocityVerletIntegrator;
+    std::string pyclass_name = std::string("VelocityVerletIntegrator");
+    py::class_<Class, timemachine::Integrator>(m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
+        .def(
+            py::init([](double dt, const py::array_t<double, py::array::c_style> &cbs) {
+                return new timemachine::VelocityVerletIntegrator(cbs.size(), dt, cbs.data());
+            }),
+            py::arg("dt"),
+            py::arg("cbs"));
 }
 
 void declare_potential(py::module &m) {
@@ -1179,6 +1199,7 @@ PYBIND11_MODULE(custom_ops, m) {
 
     declare_integrator(m);
     declare_langevin_integrator(m);
+    declare_velocity_verlet_integrator(m);
 
     declare_potential(m);
     declare_bound_potential(m);

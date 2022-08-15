@@ -1,19 +1,17 @@
-from functools import partial
-
 import numpy as np
 from jax import config, grad, jit
 from jax import numpy as jnp
 
 config.update("jax_enable_x64", True)
 
-from timemachine.integrator import VelocityVerletIntegrator
+from timemachine.integrator import FIXED_TO_FLOAT, FLOAT_TO_FIXED, VelocityVerletIntegrator
 from timemachine.testsystems.relative import hif2a_ligand_pair
 
 
-def assert_reversible(x0, v0, update_fxn, atol=1e-10):
+def assert_bitwise_reversiblility(x0, v0, update_fxn):
     """Define a fxn self_inverse as composition of flip_velocities and update_fxn,
     then assert that
-    * self_inverse is its own inverse
+    * self_inverse is its own inverse with bitwise determinism
     * self_inverse is not trivial (aka not the identity function)
     """
 
@@ -23,20 +21,22 @@ def assert_reversible(x0, v0, update_fxn, atol=1e-10):
         x_next, v_next = update_fxn(x, v)
         return x_next, -v_next
 
-    close = partial(np.allclose, atol=atol)
+    # Bitwise determinisim is only guarenteed for x0s, v0s where FIXED_TO_FLOAT(FLOAT_TO_FIXED(x)) == x
+    # This condition is not met for all floating point values and thus we roundtrip values initially.
+    x0 = FIXED_TO_FLOAT(FLOAT_TO_FIXED(x0))
+    v0 = FIXED_TO_FLOAT(FLOAT_TO_FIXED(v0))
 
     # assert "self_inverse" is really its own inverse
     x1, v1 = self_inverse(x0, v0)
     x0_, v0_ = self_inverse(x1, v1)
-
-    assert close(x0_, x0), f"max(abs(x0 - x0_)) = {np.max(np.abs(x0 - x0_))}"
-    assert close(v0_, v0), f"max(abs(v0 - v0_)) = {np.max(np.abs(v0 - v0_))}"
+    np.testing.assert_array_equal(x0_, x0)
+    np.testing.assert_array_equal(v0_, v0)
 
     # also assert this is not a no-op
-    assert (not close(x1, x0)) and (not close(v1, v0))
+    assert (not np.allclose(x1, x0)) and (not np.allclose(v1, v0))
 
 
-def assert_reversibility_using_step_implementations(intg, x0, v0, n_steps=1000, atol=1e-10):
+def assert_reversibility_using_step_implementations(intg, x0, v0, n_steps=1000):
     """Assert reversibility of .step and .multiple_steps implementations"""
 
     # check step implementation
@@ -45,14 +45,14 @@ def assert_reversibility_using_step_implementations(intg, x0, v0, n_steps=1000, 
             x, v = intg.step(x, v)
         return x, v
 
-    assert_reversible(x0, v0, step_update, atol=atol)
+    assert_bitwise_reversiblility(x0, v0, step_update)
 
     # check multiple_steps implementation
     def multiple_steps_update(x, v):
         xs, vs = intg.multiple_steps(x, v, n_steps)
         return xs[-1], vs[-1]
 
-    assert_reversible(x0, v0, multiple_steps_update, atol=atol)
+    assert_bitwise_reversiblility(x0, v0, multiple_steps_update)
 
 
 def test_reversibility_with_jax_potentials():
@@ -89,7 +89,7 @@ def test_reversibility_with_jax_potentials():
         def jax_update(x, v):
             return intg._update_via_fori_loop(x, v, n_steps)
 
-        assert_reversible(x0, v0, jax_update, atol=1e-10)
+        assert_bitwise_reversiblility(x0, v0, jax_update)
 
 
 def test_reversibility_with_custom_ops_potentials():
@@ -116,14 +116,8 @@ def test_reversibility_with_custom_ops_potentials():
 
     x0 = np.array(coords)
 
-    for n_steps in [1, 10, 100, 500, 1000]:  # , 10000]:
+    for n_steps in [1, 10, 100, 500, 1000, 10000]:
         v0 = np.random.randn(*coords.shape)
 
         # check "public" .step and .multiple_steps implementations
-        assert_reversibility_using_step_implementations(intg, x0, v0, n_steps, atol=1e-10)
-
-    # TODO: possibly investigate why n_steps = 10000 fails
-    # assert_reversibility_using_step_implementations(intg, x0, v0, n_steps=10000, atol=0.1)
-    # * also fails with reduced dt = 1.0e-3
-    # * passes with greatly reduced dt = 1.0e-4
-    # TODO: does replacing np.sum(du_dxs, 0) with SummedPotential address this?
+        assert_reversibility_using_step_implementations(intg, x0, v0, n_steps)
