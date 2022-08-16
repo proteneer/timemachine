@@ -2,15 +2,11 @@ import numpy as np
 
 from timemachine.ff import Forcefield
 from timemachine.ff.handlers import openmm_deserializer
+from timemachine.integrator import FIXED_TO_FLOAT
 from timemachine.lib import LangevinIntegrator, MonteCarloBarostat, custom_ops
 from timemachine.md import builders, minimizer
 from timemachine.md.barostat.utils import get_bond_list, get_group_indices
 from timemachine.testsystems.relative import hif2a_ligand_pair as testsystem
-
-
-def FIXED_TO_FLOAT(v):
-    FIXED_EXPONENT = 0x1000000000
-    return np.float64(np.int64(v)) / FIXED_EXPONENT
 
 
 def test_deterministic_energies():
