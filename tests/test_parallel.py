@@ -35,7 +35,7 @@ class TestProcessPool(unittest.TestCase):
         self.cli = client.ProcessPoolClient(max_workers)
 
     def test_submit(self):
-
+        assert self.cli.max_workers == 10
         arr = np.linspace(0, 1.0, 5)
 
         futures = []
@@ -91,6 +91,7 @@ class TestCUDAPoolClient(unittest.TestCase):
         self.cli = client.CUDAPoolClient(self.max_workers)
 
     def test_submit(self):
+        assert self.cli.max_workers == 2
 
         operations = 10
 
@@ -146,6 +147,7 @@ class TestGRPCClient(unittest.TestCase):
 
     @patch("timemachine.parallel.worker.get_worker_status")
     def test_checking_host_status(self, mock_status):
+        assert self.cli.max_workers == 2
         # All the workers return the same thing
         mock_status.side_effect = [
             parallel.grpc.service_pb2.StatusResponse(nvidia_driver="foo", git_sha="bar") for _ in self.servers
@@ -231,6 +233,7 @@ class TestGRPCClient(unittest.TestCase):
 
 def test_batch_list():
     assert batch_list(list(range(10)), 5) == [[0, 5], [1, 6], [2, 7], [3, 8], [4, 9]]
+    assert batch_list(list(range(10)), None) == [[0], [1], [2], [3], [4], [5], [6], [7], [8], [9]]
 
 
 def test_file_client(tmpdir):

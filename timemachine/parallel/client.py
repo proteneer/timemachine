@@ -15,6 +15,9 @@ from timemachine.parallel.utils import get_gpu_count
 
 
 class AbstractClient:
+    def __init__(self):
+        self.max_workers = 1
+
     def submit(self, task_fn, *args, **kwargs):
         """
         Submit is an asynchronous method that will launch task_fn whose
@@ -199,6 +202,7 @@ class GRPCClient(AbstractClient):
             )
             self.stubs.append(service_pb2_grpc.WorkerStub(channel))
         self._idx = 0
+        self.max_workers = len(self.hosts)
 
     def _prepare_hosts(self, hosts: Union[str, List[str]], default_port: int):
         if isinstance(hosts, str):
