@@ -57,7 +57,7 @@ class TestLambdaPotential(GradientTest):
                 for precision, rtol in [(np.float64, 1e-8), (np.float32, 1e-4)]:
 
                     # E = 0 # DEBUG!
-                    params, ref_potential, test_potential = prepare_water_system(
+                    params, potential = prepare_water_system(
                         coords, lambda_plane_idxs, lambda_offset_idxs, p_scale=1.0, cutoff=cutoff
                     )
 
@@ -75,11 +75,11 @@ class TestLambdaPotential(GradientTest):
                     )
 
                     ref_potential = functools.partial(
-                        lambda_potential, multiplier=multiplier, offset=offset, u_fn=ref_potential
+                        lambda_potential, multiplier=multiplier, offset=offset, u_fn=potential.to_reference()
                     )
 
                     test_potential = potentials.LambdaPotential(
-                        test_potential,
+                        potential.to_gpu(),
                         N,
                         params.size,
                         multiplier,
