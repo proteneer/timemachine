@@ -449,8 +449,7 @@ def estimate_relative_free_energy(
         raise SimulationException(initial_states, protocol, combined_prefix) from old_exc
 
 
-def run_pair(mol_a, mol_b, core, forcefield, protein_path, n_frames, seed):
-
+def run_pair(mol_a, mol_b, core, forcefield, protein, n_frames, seed):
     box_width = 4.0
     solvent_sys, solvent_conf, solvent_box, solvent_top = builders.build_water_system(box_width)
     solvent_box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes, deboggle later
@@ -459,7 +458,7 @@ def run_pair(mol_a, mol_b, core, forcefield, protein_path, n_frames, seed):
         mol_a, mol_b, core, forcefield, solvent_host_config, seed, n_frames=n_frames, prefix="solvent"
     )
 
-    complex_sys, complex_conf, _, _, complex_box, complex_top = builders.build_protein_system(protein_path)
+    complex_sys, complex_conf, _, _, complex_box, complex_top = builders.build_protein_system(protein)
     complex_box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes, deboggle later
     complex_host_config = HostConfig(complex_sys, complex_conf, complex_box)
     complex_res = estimate_relative_free_energy(
