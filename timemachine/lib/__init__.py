@@ -20,6 +20,18 @@ class LangevinIntegrator:
         return custom_ops.LangevinIntegrator(self.dt, self.ca, self.cbs, self.ccs, self.seed)
 
 
+class VelocityVerletIntegrator:
+    def __init__(self, dt, masses):
+        self.dt = dt
+
+        cb = dt / masses
+        cb *= -1
+        self.cbs = cb
+
+    def impl(self):
+        return custom_ops.VelocityVerletIntegrator(self.dt, self.cbs)
+
+
 class MonteCarloBarostat:
 
     __slots__ = ("N", "temperature", "pressure", "group_idxs", "interval", "seed")
