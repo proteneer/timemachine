@@ -43,7 +43,7 @@ class Gaussian:
 def gaussians_from_harmonic_bonds(ks, eq_lengths, temperature=DEFAULT_TEMP) -> List[Gaussian]:
     kBT = BOLTZ * temperature
     params = zip(ks, eq_lengths)
-    return [Gaussian(eq_length, np.sqrt(1 / (k * kBT))) for (k, eq_length) in params]
+    return [Gaussian(eq_length, np.sqrt(kBT / k)) for (k, eq_length) in params]
 
 
 def bond_length(x, y):
