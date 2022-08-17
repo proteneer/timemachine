@@ -220,7 +220,6 @@ class Nonbonded:
                 self.cutoff,
                 self.lambda_plane_idxs,
                 self.lambda_offset_idxs,
-                runtime_validate=False,  # needed for this to be JAX-transformable
             )
 
         return U
