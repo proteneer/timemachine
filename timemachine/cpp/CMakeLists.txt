@@ -111,9 +111,10 @@ if (NOT CUDA_ARCH)
     STRING(REPLACE "." "" CUDA_ARCH ${CUDA_ARCH})
     # Verify that only one compute capability was returned
     STRING(REGEX MATCHALL "\n" NEW_LINES "${CUDA_ARCH}")
-    # length is num_gpus - 1
-    list(LENGTH NEW_LINES NUM_GPUS)
-    if(NUM_GPUS GREATER_EQUAL 1)
+    # NUM_COMPUTE_CAPS is off by one, as there will be one less newline than there are compute capabilities
+    list(LENGTH NEW_LINES NUM_COMPUTE_CAPS)
+    # If there are multiple compute capabilities, unset the CUDA_ARCH, fall back to the default below.
+    if(NUM_COMPUTE_CAPS GREATER_EQUAL 1)
       unset(CUDA_ARCH)
     endif()
   endif()
