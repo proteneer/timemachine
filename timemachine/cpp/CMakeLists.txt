@@ -103,14 +103,24 @@ if (NOT CUDA_ARCH)
       COMMAND
       bash
       "-c"
-      "nvidia-smi --query-gpu=compute_cap --format=csv | grep -v compute_cap | sort -n | head -n1"
+      "nvidia-smi --query-gpu=compute_cap --format=csv | grep -v compute_cap | uniq"
       OUTPUT_VARIABLE CUDA_ARCH
       OUTPUT_STRIP_TRAILING_WHITESPACE
     )
-    string(REPLACE "." "" CUDA_ARCH ${CUDA_ARCH})
-  else()
-    set(CUDA_ARCH "75")
+
+    STRING(REPLACE "." "" CUDA_ARCH ${CUDA_ARCH})
+    # Verify that only one compute capability was returned
+    STRING(REGEX MATCHALL "\n" NEW_LINES "${CUDA_ARCH}")
+    # length is num_gpus - 1
+    list(LENGTH NEW_LINES NUM_GPUS)
+    if(NUM_GPUS GREATER_EQUAL 1)
+      unset(CUDA_ARCH)
+    endif()
   endif()
+endif()
+# If still not set, default to 75
+if (NOT CUDA_ARCH)
+  set(CUDA_ARCH "75")
 endif()
 message("Cuda Arch: " ${CUDA_ARCH})
 set_property(TARGET ${LIBRARY_NAME} PROPERTY CUDA_ARCHITECTURES "${CUDA_ARCH}")
