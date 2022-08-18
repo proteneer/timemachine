@@ -16,7 +16,7 @@ from rdkit import Chem
 from timemachine.constants import ONE_4PI_EPS0
 from timemachine.ff import Forcefield
 from timemachine.lib import potentials
-from timemachine.potentials import bonded, nonbonded
+from timemachine.potentials import bonded, generic, nonbonded
 
 
 @contextlib.contextmanager
@@ -145,24 +145,6 @@ def prepare_lj_system(
 #     return charge_params, ref_total_energy, test_potential
 
 
-def prepare_reference_nonbonded(params, exclusion_idxs, scales, lambda_plane_idxs, lambda_offset_idxs, beta, cutoff):
-
-    N = params.shape[0]
-    charge_rescale_mask, lj_rescale_mask = nonbonded.convert_exclusions_to_rescale_masks(exclusion_idxs, scales, N)
-
-    ref_total_energy = functools.partial(
-        nonbonded.nonbonded_v3,
-        charge_rescale_mask=charge_rescale_mask,
-        lj_rescale_mask=lj_rescale_mask,
-        beta=beta,
-        cutoff=cutoff,
-        lambda_plane_idxs=lambda_plane_idxs,
-        lambda_offset_idxs=lambda_offset_idxs,
-    )
-
-    return ref_total_energy
-
-
 def prepare_system_params(x: NDArray, sigma_scale: float = 5.0) -> NDArray:
     """
     Prepares random parameters given a set of coordinates. The parameters are adjusted to be the correct
@@ -225,22 +207,9 @@ def prepare_water_system(x, lambda_plane_idxs, lambda_offset_idxs, p_scale, cuto
 
     beta = 2.0
 
-    test_potential = potentials.Nonbonded(exclusion_idxs, scales, lambda_plane_idxs, lambda_offset_idxs, beta, cutoff)
+    potential = generic.Nonbonded(exclusion_idxs, scales, lambda_plane_idxs, lambda_offset_idxs, beta, cutoff)
 
-    charge_rescale_mask, lj_rescale_mask = nonbonded.convert_exclusions_to_rescale_masks(exclusion_idxs, scales, N)
-
-    ref_total_energy = functools.partial(
-        nonbonded.nonbonded_v3,
-        charge_rescale_mask=charge_rescale_mask,
-        lj_rescale_mask=lj_rescale_mask,
-        beta=beta,
-        cutoff=cutoff,
-        lambda_plane_idxs=lambda_plane_idxs,
-        lambda_offset_idxs=lambda_offset_idxs,
-        runtime_validate=False,
-    )
-
-    return params, ref_total_energy, test_potential
+    return params, potential
 
 
 def prepare_nb_system(x, E, lambda_plane_idxs, lambda_offset_idxs, p_scale, cutoff):  # number of exclusions
@@ -475,3 +444,18 @@ class GradientTest(unittest.TestCase):
 
             if isinstance(test_potential, potentials.Nonbonded):
                 np.testing.assert_array_equal(test_du_dp, test_du_dp_2)
+
+    def compare_forces_gpu_vs_reference(
+        self,
+        x: NDArray,
+        params: NDArray,
+        box: NDArray,
+        lambdas: List[float],
+        potential: generic.Potential,
+        rtol: float,
+        precision,
+        atol: float = 1e-8,
+    ):
+        return self.compare_forces(
+            x, params, box, lambdas, potential.to_reference(), potential.to_gpu(), rtol, precision, atol
+        )

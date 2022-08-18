@@ -1,10 +1,16 @@
+import jax
+
+jax.config.update("jax_enable_x64", True)
+
 import itertools
 
 import numpy as np
 import pytest
+from common import GradientTest
 
 from timemachine.lib import custom_ops
 from timemachine.lib.potentials import FanoutSummedPotential, HarmonicBond, SummedPotential
+from timemachine.potentials import generic
 
 pytestmark = [pytest.mark.memcheck]
 
@@ -203,16 +209,12 @@ def test_execute_selective_batch(harmonic_bond):
             np.testing.assert_array_equal(batch_u, ref_u)
 
 
-def test_fanout_summed_potential_consistency():
-    """Assert FanoutSummedPotential consistent with SummedPotential on
-    a harmonic bond instance"""
-
+@pytest.fixture
+def harmonic_bond_test_system():
     np.random.seed(2022)
 
     num_atoms = 10
     num_bonds = 10
-    box = 3.0 * np.eye(3)
-    lamb = 0.1
 
     coords = np.random.uniform(0, 1, size=(num_atoms, 3)).astype(np.float32)
 
@@ -221,17 +223,47 @@ def test_fanout_summed_potential_consistency():
             [np.random.choice(num_atoms, size=(2,), replace=False) for _ in range(num_bonds)], dtype=np.int32
         )
 
-    harmonic_bond_1 = HarmonicBond(random_bond_idxs())
-    harmonic_bond_2 = HarmonicBond(random_bond_idxs())
+    harmonic_bond_1 = generic.HarmonicBond(random_bond_idxs())
+    harmonic_bond_2 = generic.HarmonicBond(random_bond_idxs())
 
-    params = np.random.uniform(0, 1, size=(num_bonds, 2))
+    params_1 = np.random.uniform(0, 1, size=(num_bonds, 2))
+    params_2 = np.random.uniform(0, 1, size=(num_bonds, 2))
+
+    return harmonic_bond_1, harmonic_bond_2, params_1, params_2, coords
+
+
+def test_summed_potential(harmonic_bond_test_system):
+    """Assert FanoutSummedPotential consistent with SummedPotential on
+    a harmonic bond instance"""
+
+    harmonic_bond_1, harmonic_bond_2, params_1, params_2, coords = harmonic_bond_test_system
+
+    potential = generic.SummedPotential([harmonic_bond_1, harmonic_bond_2], [params_1, params_2])
+
+    box = 3.0 * np.eye(3)
+    lamb = 0.1
+
+    params = np.concatenate((params_1.reshape(-1), params_2.reshape(-1)))
+
+    for rtol, precision in [(1e-6, np.float32), (1e-10, np.float64)]:
+        GradientTest().compare_forces_gpu_vs_reference(coords, params, box, [lamb], potential, rtol, precision)
+
+
+def test_fanout_summed_potential_consistency(harmonic_bond_test_system):
+    """Assert FanoutSummedPotential consistent with SummedPotential on
+    a harmonic bond instance"""
+
+    harmonic_bond_1, harmonic_bond_2, params, _, coords = harmonic_bond_test_system
 
     summed_potential = SummedPotential(
-        [harmonic_bond_1, harmonic_bond_2],
+        [harmonic_bond_1.to_gpu(), harmonic_bond_2.to_gpu()],
         [params, params],
     )
 
-    fanout_summed_potential = FanoutSummedPotential([harmonic_bond_1, harmonic_bond_2])
+    fanout_summed_potential = FanoutSummedPotential([harmonic_bond_1.to_gpu(), harmonic_bond_2.to_gpu()])
+
+    box = 3.0 * np.eye(3)
+    lamb = 0.1
 
     du_dx_ref, du_dps_ref, du_dl_ref, u_ref = summed_potential.unbound_impl(np.float32).execute(
         coords, [params, params], box, lamb

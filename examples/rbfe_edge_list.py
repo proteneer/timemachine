@@ -8,10 +8,13 @@ from rdkit import Chem
 
 Chem.SetDefaultPickleProperties(Chem.PropertyPickleOptions.AllProps)
 
+from simtk.openmm import app
+
 from timemachine.constants import KCAL_TO_KJ
 from timemachine.fe import atom_mapping
 from timemachine.fe.rbfe import SimulationException, run_pair
 from timemachine.fe.utils import get_mol_name
+from timemachine.ff import Forcefield
 from timemachine.parallel.client import CUDAPoolClient
 
 
@@ -48,6 +51,9 @@ def read_from_args():
     cpc = CUDAPoolClient(args.n_gpus)
     cpc.verify()
 
+    forcefield = Forcefield.load_from_file(args.forcefield)
+    protein = app.PDBFile(args.protein)
+
     with open(args.results_csv) as csvfile:
         reader = csv.reader(csvfile, delimiter=",")
         next(reader)
@@ -62,9 +68,7 @@ def read_from_args():
             mcs_result = atom_mapping.mcs_map(mol_a, mol_b, threshold=mcs_threshold)
             query_mol = Chem.MolFromSmarts(mcs_result.smartsString)
             core = atom_mapping.get_core_by_mcs(mol_a, mol_b, query_mol, threshold=mcs_threshold)
-            fut = cpc.submit(
-                run_pair, mol_a, mol_b, core, args.forcefield, args.protein, args.n_frames, args.seed + row_idx
-            )
+            fut = cpc.submit(run_pair, mol_a, mol_b, core, forcefield, protein, args.n_frames, args.seed + row_idx)
             futures.append(fut)
 
             metadata.append(
@@ -107,9 +111,12 @@ def read_from_args():
             )
 
         except SimulationException as sim_exc:
+            print(
+                f"failed: {mol_a_name} -> {mol_b_name} (kJ/mol) | complex {complex_ddg:.2f} +- {complex_ddg_err:.2f} | solvent {solvent_ddg:.2f} +- {solvent_ddg_err:.2f} | tm_pred {tm_ddg:.2f} +- {tm_err:.2f} | exp_ddg {exp_ddg:.2f} | fep_ddg {fep_ddg:.2f} +- {fep_ddg_err:.2f}"
+            )
             traceback.print_exc()
             with open(f"failed_rbfe_result_{mol_a_name}_{mol_b_name}.pkl", "wb") as fh:
-                pickle.dump(sim_exc, fh)
+                pickle.dump((sim_exc, meta), fh)
 
 
 if __name__ == "__main__":

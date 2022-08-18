@@ -1,3 +1,5 @@
+import os
+
 import numpy as np
 from simtk import unit
 from simtk.openmm import Vec3, app
@@ -8,9 +10,21 @@ def strip_units(coords):
 
 
 def build_protein_system(host_pdbfile):
+    """
+    Build a solvated protein system with a 10A padding.
 
+    Parameters
+    ---------
+    host_pdbfile: str or app.PDBFile
+        PDB of the host structure
+
+    """
     host_ff = app.ForceField("amber99sbildn.xml", "tip3p.xml")
-    host_pdb = app.PDBFile(host_pdbfile)
+    if isinstance(host_pdbfile, str):
+        assert os.path.exists(host_pdbfile)
+        host_pdb = app.PDBFile(host_pdbfile)
+    elif isinstance(host_pdbfile, app.PDBFile):
+        host_pdb = host_pdbfile
 
     modeller = app.Modeller(host_pdb.topology, host_pdb.positions)
     host_coords = strip_units(host_pdb.positions)
