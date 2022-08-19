@@ -1,0 +1,80 @@
+"""
+Assert accurate estimates for free energy differences between 1D Gaussians using exact maps
+"""
+
+from dataclasses import dataclass
+
+import numpy as np
+from pymbar import EXP
+
+from timemachine.maps.estimators import compute_mapped_reduced_work
+
+
+@dataclass
+class UnnormalizedGaussian:
+    mean: float
+    stddev: float
+    reduced_free_energy: float
+
+    def _normalized_logpdf(self, x):
+        return -((x - self.mean) ** 2) / (self.stddev ** 2) - np.log(self.stddev * np.sqrt(2 * np.pi))
+
+    def reduced_potential(self, x):
+        return -self._normalized_logpdf(x) + self.reduced_free_energy
+
+    def sample(self, n_samples=1000):
+        return np.random.randn(n_samples) * self.stddev + self.mean
+
+
+def construct_map(a: UnnormalizedGaussian, b: UnnormalizedGaussian):
+    shift = b.mean - a.mean
+    scale = b.stddev / a.stddev
+
+    def map_fxn(x):
+        centered = x - a.mean
+        scaled = scale * centered + a.mean
+        shifted = scaled + shift
+
+        logdetjacs = np.log(scale) * np.ones_like(x)
+
+        return shifted, logdetjacs
+
+    return map_fxn
+
+
+def test_one_sided_estimates():
+    np.random.seed(2022)
+
+    src_state = UnnormalizedGaussian(mean=0, stddev=1, reduced_free_energy=2)
+    src_samples = src_state.sample(1000)
+    u_src = src_state.reduced_potential
+
+    dst_states = [
+        UnnormalizedGaussian(
+            mean=np.random.randn(),
+            stddev=np.exp(np.random.randn()),  # positive
+            reduced_free_energy=np.random.randn(),
+        )
+        for _ in range(10)
+    ]
+
+    eps = 1e-10
+
+    for dst_state in dst_states:
+        u_dst = dst_state.reduced_potential
+
+        map_fxn = construct_map(src_state, dst_state)
+
+        # should have pretty high variance
+        naive_w_F = u_dst(src_samples) - u_src(src_samples)
+        assert np.std(naive_w_F) > eps
+
+        # since map_fxn is perfect, variance should be == 0...
+        mapped_w_F = compute_mapped_reduced_work(src_samples, u_src, u_dst, map_fxn)
+        assert np.std(mapped_w_F) < eps
+
+        # ... and estimated_delta_f should be == exact_delta_f
+        estimated_delta_f = EXP(mapped_w_F)[0]
+        exact_delta_f = dst_state.reduced_free_energy - src_state.reduced_free_energy
+
+        np.testing.assert_almost_equal(estimated_delta_f, exact_delta_f)
