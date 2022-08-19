@@ -5,7 +5,7 @@ __all__ = ["compute_mapped_reduced_work", "compute_mapped_u_kn"]
 
 
 def compute_mapped_reduced_work(src_samples, src_reduced_energy_fxn, dst_reduced_energy_fxn, map_fxn):
-    """minus log impportance weight, including a change of variables defined by map_fxn"""
+    """minus log impportance weight,including a change of variables defined by map_fxn"""
     mapped_samples, logdetjacs = map_fxn(src_samples)
 
     # compare with version without map_fxn
@@ -15,7 +15,11 @@ def compute_mapped_reduced_work(src_samples, src_reduced_energy_fxn, dst_reduced
 
 
 def compute_mapped_u_kn(sample_lists, reduced_energy_fxns, map_fxns):
-    """[Paliwal, Shirts, 2013] https://aip.scitation.org/doi/abs/10.1063/1.4801332"""
+    """evaluate every sample from state i in every state j,
+    incorporating a change of variables defined by map_fxns[i, j]
+
+    [Paliwal, Shirts, 2013] https://aip.scitation.org/doi/abs/10.1063/1.4801332
+    """
 
     K = len(sample_lists)
     assert len(reduced_energy_fxns) == K

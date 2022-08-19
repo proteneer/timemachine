@@ -49,12 +49,6 @@ def gaussians_from_harmonic_bonds(ks, eq_lengths, temperature=DEFAULT_TEMP) -> L
     return [Gaussian(eq_length, np.sqrt(kBT / k)) for (k, eq_length) in params]
 
 
-def bond_length(x, y):
-    # TODO: should this use periodic distance from timemachine.potentials.jax_utils?
-    #   (I don't think that's necessary, since bonded atoms won't be in different periodic boxes...)
-    return jnp.linalg.norm(x - y)
-
-
 @jit
 def interval_map(x, src_lb, src_ub, dst_lb, dst_ub):
     scale_factor = (dst_ub - dst_lb) / (src_ub - src_lb)
@@ -75,7 +69,7 @@ def conf_map(x, bond, param):
         x, y = xy[:dim], xy[dim:]
         src_lb, src_ub, dst_lb, dst_ub = param
 
-        r = bond_length(x, y)
+        r = jnp.linalg.norm(x - y)
         new_r = interval_map(r, src_lb, src_ub, dst_lb, dst_ub)
 
         vec = (y - x) / jnp.linalg.norm(y - x)
@@ -148,7 +142,7 @@ class TerminalMappableState:
 
         terminal_bond_idxs, ks, eq_lengths:
             bonds that will be mapped,
-            assumed in order (anchor, terminal) --> TODO: assert and/or automatically correct this
+            assumed in order (anchor, terminal)
 
         temperature, sigma_thresh:
             determine the size of the interval
@@ -175,7 +169,7 @@ class TerminalMappableState:
         for i in range(len(self.idxs)):
             a, b = self.idxs[i]
 
-            r = bond_length(x[a], x[b])
+            r = jnp.linalg.norm(x[a] - x[b])
             interval = self.intervals[i]
             bond_valid.append((r <= interval.upper) * (r >= interval.lower))
 

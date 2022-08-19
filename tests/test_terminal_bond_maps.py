@@ -1,3 +1,8 @@
+"""
+Assert invertibility for Interval-based bond length maps, and
+assert accurate free energy estimates for hydrogen <-> halogen mutations using TerminalBondMaps
+"""
+
 import numpy as np
 from jax import config, jit, vmap
 
