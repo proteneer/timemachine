@@ -36,7 +36,7 @@ class Gaussian:
     mean: float
     stddev: float
 
-    def to_interval(self, sigma_thresh=50):
+    def to_interval(self, sigma_thresh=20):
         r = self.stddev * sigma_thresh
         interval = Interval(self.mean - r, self.mean + r)
         interval.validate()
