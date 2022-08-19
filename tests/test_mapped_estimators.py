@@ -5,7 +5,7 @@ Assert accurate estimates for free energy differences between 1D Gaussians using
 from dataclasses import dataclass
 
 import numpy as np
-from pymbar import EXP
+from pymbar import BAR, EXP
 
 from timemachine.maps.estimators import compute_mapped_reduced_work
 
@@ -24,6 +24,14 @@ class UnnormalizedGaussian:
 
     def sample(self, n_samples=1000):
         return np.random.randn(n_samples) * self.stddev + self.mean
+
+    @classmethod
+    def initialize_randomly(cls):
+        return cls(
+            mean=np.random.randn(),
+            stddev=np.exp(np.random.randn()),  # positive
+            reduced_free_energy=np.random.randn(),
+        )
 
 
 def construct_map(a: UnnormalizedGaussian, b: UnnormalizedGaussian):
@@ -49,14 +57,7 @@ def test_one_sided_estimates():
     src_samples = src_state.sample(1000)
     u_src = src_state.reduced_potential
 
-    dst_states = [
-        UnnormalizedGaussian(
-            mean=np.random.randn(),
-            stddev=np.exp(np.random.randn()),  # positive
-            reduced_free_energy=np.random.randn(),
-        )
-        for _ in range(10)
-    ]
+    dst_states = [UnnormalizedGaussian.initialize_randomly() for _ in range(10)]
 
     eps = 1e-10
 
@@ -76,5 +77,32 @@ def test_one_sided_estimates():
         # ... and estimated_delta_f should be == exact_delta_f
         estimated_delta_f = EXP(mapped_w_F)[0]
         exact_delta_f = dst_state.reduced_free_energy - src_state.reduced_free_energy
+
+        np.testing.assert_almost_equal(estimated_delta_f, exact_delta_f)
+
+
+def test_two_sided_estimates():
+    np.random.seed(2022)
+
+    for _ in range(10):
+        state_a = UnnormalizedGaussian.initialize_randomly()
+        state_b = UnnormalizedGaussian.initialize_randomly()
+
+        map_fxn = construct_map(state_a, state_b)
+        inv_map_fxn = construct_map(state_b, state_a)
+
+        u_a = state_a.reduced_potential
+        u_b = state_b.reduced_potential
+
+        x_a = state_a.sample(1000)
+        x_b = state_b.sample(500)
+
+        w_F = compute_mapped_reduced_work(x_a, u_a, u_b, map_fxn)
+        w_R = compute_mapped_reduced_work(x_b, u_b, u_a, inv_map_fxn)
+
+        # estimated_delta_f = BAR(w_F, w_R)[0] #  default solver -> BoundsError: Cannot determine bound on free energy
+        estimated_delta_f = BAR(w_F, w_R, method="self-consistent-iteration", compute_uncertainty=False)
+
+        exact_delta_f = state_b.reduced_free_energy - state_a.reduced_free_energy
 
         np.testing.assert_almost_equal(estimated_delta_f, exact_delta_f)
