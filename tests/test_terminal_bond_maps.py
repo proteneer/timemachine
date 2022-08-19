@@ -147,7 +147,7 @@ def test_on_methane():
     src_identity_map = TerminalBondMap.from_states(src_state, src_state)
     _src_samples, _logdetjacs = src_identity_map(src_samples)
     np.testing.assert_allclose(_src_samples, src_samples)
-    np.testing.assert_allclose(_logdetjacs, 0.0, atol=1e-15)
+    np.testing.assert_allclose(_logdetjacs, 0.0, atol=1e-12)
 
     # construct all pairs maps
     map_fxns = np.zeros((K, K), dtype=object)
