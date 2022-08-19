@@ -5,7 +5,6 @@ from jax.config import config
 config.update("jax_enable_x64", True)
 
 import copy
-import functools
 import gzip
 import itertools
 import pickle
@@ -13,13 +12,13 @@ import unittest
 
 import numpy as np
 import pytest
-from common import GradientTest, prepare_reference_nonbonded, prepare_system_params, prepare_water_system
+from common import GradientTest, prepare_system_params, prepare_water_system
 
 from timemachine.fe.utils import to_md_units
 from timemachine.ff.handlers import openmm_deserializer
 from timemachine.lib import potentials
 from timemachine.md import builders
-from timemachine.potentials import nonbonded
+from timemachine.potentials import generic
 from timemachine.testsystems.dhfr import setup_dhfr
 
 np.set_printoptions(linewidth=500)
@@ -182,29 +181,18 @@ class TestNonbondedDHFR(GradientTest):
             test_lambda_plane_idxs = np.random.randint(low=-2, high=2, size=N, dtype=np.int32)
             test_lambda_offset_idxs = np.random.randint(low=-2, high=2, size=N, dtype=np.int32)
 
-            test_nonbonded_fn = potentials.Nonbonded(
+            potential = generic.Nonbonded(
                 test_exclusions, test_scales, test_lambda_plane_idxs, test_lambda_offset_idxs, self.beta, self.cutoff
-            )
-
-            ref_nonbonded_fn = prepare_reference_nonbonded(
-                test_params,
-                test_exclusions,
-                test_scales,
-                test_lambda_plane_idxs,
-                test_lambda_offset_idxs,
-                self.beta,
-                self.cutoff,
             )
 
             for precision, rtol, atol in [(np.float64, 1e-8, 1e-8), (np.float32, 1e-4, 5e-4)]:
 
-                self.compare_forces(
+                self.compare_forces_gpu_vs_reference(
                     test_conf,
                     test_params,
                     self.box,
                     [self.lamb],
-                    ref_nonbonded_fn,
-                    test_nonbonded_fn,
+                    potential,
                     rtol=rtol,
                     atol=atol,
                     precision=precision,
@@ -257,9 +245,12 @@ class TestNonbondedWater(GradientTest):
 
         host_fns, host_masses = openmm_deserializer.deserialize_system(host_system, cutoff=1.0)
 
+        test_nonbonded_fn = None
         for f in host_fns:
             if isinstance(f, potentials.Nonbonded):
                 test_nonbonded_fn = f
+        assert test_nonbonded_fn is not None
+        assert test_nonbonded_fn.params is not None
 
         host_conf = []
         for x, y, z in host_coords:
@@ -268,15 +259,7 @@ class TestNonbondedWater(GradientTest):
 
         lamb = 0.1
 
-        ref_nonbonded_fn = prepare_reference_nonbonded(
-            test_nonbonded_fn.params,
-            test_nonbonded_fn.get_exclusion_idxs(),
-            test_nonbonded_fn.get_scale_factors(),
-            test_nonbonded_fn.get_lambda_plane_idxs(),
-            test_nonbonded_fn.get_lambda_offset_idxs(),
-            test_nonbonded_fn.get_beta(),
-            test_nonbonded_fn.get_cutoff(),
-        )
+        potential = generic.Nonbonded.from_gpu(test_nonbonded_fn)
 
         big_box = box + np.eye(3) * 1000
 
@@ -286,13 +269,12 @@ class TestNonbondedWater(GradientTest):
 
             for precision, rtol, atol in [(np.float64, 1e-8, 1e-10), (np.float32, 1e-4, 3e-5)]:
 
-                self.compare_forces(
+                self.compare_forces_gpu_vs_reference(
                     host_conf,
                     test_nonbonded_fn.params,
                     test_box,
                     [lamb],
-                    ref_nonbonded_fn,
-                    test_nonbonded_fn,
+                    potential,
                     rtol=rtol,
                     atol=atol,
                     precision=precision,
@@ -383,19 +365,7 @@ class TestNonbonded(GradientTest):
 
         cutoff = 1.0
 
-        test_u = potentials.Nonbonded(exclusion_idxs, scales, lambda_plane_idxs, lambda_offset_idxs, beta, cutoff)
-
-        charge_rescale_mask, lj_rescale_mask = nonbonded.convert_exclusions_to_rescale_masks(exclusion_idxs, scales, N)
-
-        ref_u = functools.partial(
-            nonbonded.nonbonded_v3,
-            charge_rescale_mask=charge_rescale_mask,
-            lj_rescale_mask=lj_rescale_mask,
-            beta=beta,
-            cutoff=cutoff,
-            lambda_plane_idxs=lambda_plane_idxs,
-            lambda_offset_idxs=lambda_offset_idxs,
-        )
+        potential = generic.Nonbonded(exclusion_idxs, scales, lambda_plane_idxs, lambda_offset_idxs, beta, cutoff)
 
         for precision, rtol in [(np.float64, 1e-8), (np.float32, 1e-4)]:
 
@@ -403,7 +373,7 @@ class TestNonbonded(GradientTest):
 
             params = prepare_system_params(test_system)
 
-            self.compare_forces(test_system, params, box, [lamb], ref_u, test_u, rtol, precision=precision)
+            self.compare_forces_gpu_vs_reference(test_system, params, box, [lamb], potential, rtol, precision=precision)
 
     def test_nonbonded(self):
 
@@ -422,18 +392,17 @@ class TestNonbonded(GradientTest):
 
             for cutoff in [1.0]:
                 # E = 0 # DEBUG!
-                charge_params, ref_potential, test_potential = prepare_water_system(
+                charge_params, potential = prepare_water_system(
                     coords, lambda_plane_idxs, lambda_offset_idxs, p_scale=5.0, cutoff=cutoff
                 )
                 for precision, rtol, atol in [(np.float64, 1e-8, 1e-8), (np.float32, 1e-4, 5e-4)]:
 
-                    self.compare_forces(
+                    self.compare_forces_gpu_vs_reference(
                         coords,
                         charge_params,
                         box,
                         [0.0, 0.1, 0.2],
-                        ref_potential,
-                        test_potential,
+                        potential,
                         rtol=rtol,
                         atol=atol,
                         precision=precision,
@@ -458,7 +427,7 @@ class TestNonbonded(GradientTest):
         lambda_offset_idxs = np.random.randint(low=-2, high=2, size=N, dtype=np.int32)
 
         # Down shift box size to be only a portion of the cutoff
-        charge_params, _, test_potential = prepare_water_system(
+        charge_params, potential = prepare_water_system(
             coords, lambda_plane_idxs, lambda_offset_idxs, p_scale=1.0, cutoff=cutoff
         )
 
@@ -474,7 +443,7 @@ class TestNonbonded(GradientTest):
             for _ in range(steps):
                 _ = potential.execute_selective(x, params, box, lamb, True, True, True, True)
 
-        test_impl = test_potential.unbound_impl(precision)
+        test_impl = potential.to_gpu().unbound_impl(precision)
 
         # With the default box, all is well
         run_nonbonded(test_impl, coords, box, charge_params, 0.0, steps=2)

@@ -76,7 +76,8 @@ pybind11_add_module(${LIBRARY_NAME} SHARED NO_EXTRAS
   src/periodic_torsion.cu
   src/chiral_atom_restraint.cu
   src/chiral_bond_restraint.cu
-  src/integrator.cu
+  src/langevin_integrator.cu
+  src/verlet_integrator.cu
   src/context.cu
   src/barostat.cu
   src/rmsd_align.cpp
@@ -95,8 +96,34 @@ include_directories(SYSTEM ${CMAKE_CURRENT_BINARY_DIR}/${CUB_SRC_DIR})
 set_property(TARGET ${LIBRARY_NAME} PROPERTY CUDA_STANDARD 17)
 
 if (NOT CUDA_ARCH)
+  find_program(HAS_SMI "nvidia-smi")
+  # In cuda 11.6 nvidia-smi added support to get GPU compute capability query
+  if (HAS_SMI AND CMAKE_CUDA_COMPILER_VERSION MATCHES "11\.[6-9]\.*")
+    execute_process(
+      COMMAND
+      bash
+      "-c"
+      "nvidia-smi --query-gpu=compute_cap --format=csv | grep -v compute_cap | uniq"
+      OUTPUT_VARIABLE CUDA_ARCH
+      OUTPUT_STRIP_TRAILING_WHITESPACE
+    )
+
+    STRING(REPLACE "." "" CUDA_ARCH ${CUDA_ARCH})
+    # Verify that only one compute capability was returned
+    STRING(REGEX MATCHALL "\n" NEW_LINES "${CUDA_ARCH}")
+    # NUM_COMPUTE_CAPS is off by one, as there will be one less newline than there are compute capabilities
+    list(LENGTH NEW_LINES NUM_COMPUTE_CAPS)
+    # If there are multiple compute capabilities, unset the CUDA_ARCH, fall back to the default below.
+    if(NUM_COMPUTE_CAPS GREATER_EQUAL 1)
+      unset(CUDA_ARCH)
+    endif()
+  endif()
+endif()
+# If still not set, default to 75
+if (NOT CUDA_ARCH)
   set(CUDA_ARCH "75")
 endif()
+message("Cuda Arch: " ${CUDA_ARCH})
 set_property(TARGET ${LIBRARY_NAME} PROPERTY CUDA_ARCHITECTURES "${CUDA_ARCH}")
 unset(CUDA_ARCH CACHE)
 

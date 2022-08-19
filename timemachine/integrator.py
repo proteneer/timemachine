@@ -10,6 +10,16 @@ from jax import random as jrandom
 
 from timemachine.constants import BOLTZ
 
+FIXED_EXPONENT = 0x1000000000
+
+
+def FIXED_TO_FLOAT(v):
+    return jnp.float64(jnp.int64(jnp.uint64(v))) / FIXED_EXPONENT
+
+
+def FLOAT_TO_FIXED(v):
+    return jnp.uint64(jnp.int64(v * FIXED_EXPONENT))
+
 
 def langevin_coefficients(temperature, dt, friction, masses):
     """
@@ -154,14 +164,15 @@ class VelocityVerletIntegrator(Integrator):
         self.dt = dt
         self.masses = masses[:, np.newaxis]  # TODO: cleaner way to handle (n_atoms,) vs. (n_atoms, 3) mismatch?
         self.force_fxn = force_fxn
+        self.cb = self.dt / self.masses
 
     def step(self, x, v):
         """WARNING: makes 2 calls to force_fxn per timestep -- prefer `.multiple_steps` in most cases"""
-        v_mid = v + (0.5 * self.dt / self.masses) * self.force_fxn(x)
-        x = x + self.dt * v_mid
-        v = v_mid + (0.5 * self.dt / self.masses) * self.force_fxn(x)
+        v_mid = FLOAT_TO_FIXED(v) + FLOAT_TO_FIXED((0.5 * self.cb) * self.force_fxn(x))
+        fixed_x = FLOAT_TO_FIXED(x) + FLOAT_TO_FIXED(self.dt * FIXED_TO_FLOAT(v_mid))
+        fixed_v = v_mid + FLOAT_TO_FIXED((0.5 * self.cb) * self.force_fxn(FIXED_TO_FLOAT(fixed_x)))
 
-        return x, v
+        return FIXED_TO_FLOAT(fixed_x), FIXED_TO_FLOAT(fixed_v)
 
     def multiple_steps(self, x, v, n_steps=1000):
         # note: intermediate timesteps are staggered
@@ -173,48 +184,50 @@ class VelocityVerletIntegrator(Integrator):
         #    xs[T],   vs[T]   = x_T, v_T
 
         # note: reorders loop slightly to avoid ~n_steps extraneous calls to force_fxn
+        x_fixed = FLOAT_TO_FIXED(x)
+        v_fixed = FLOAT_TO_FIXED(v)
 
-        zs = [(x, v)]
-
+        zs = [(x_fixed, v_fixed)]
         # initialize traj
-        v = v + (0.5 * self.dt / self.masses) * self.force_fxn(x)
-        x = x + self.dt * v
+        v_fixed = v_fixed + FLOAT_TO_FIXED((0.5 * self.cb) * self.force_fxn(FIXED_TO_FLOAT(x_fixed)))
+        x_fixed = x_fixed + FLOAT_TO_FIXED(self.dt * FIXED_TO_FLOAT(v_fixed))
 
         # run n_steps-1 steps
         for t in range(n_steps - 1):
-            v = v + (self.dt / self.masses) * self.force_fxn(x)
-            x = x + self.dt * v
+            v_fixed = v_fixed + FLOAT_TO_FIXED(self.cb * self.force_fxn(FIXED_TO_FLOAT(x_fixed)))
+            x_fixed = x_fixed + FLOAT_TO_FIXED(self.dt * FIXED_TO_FLOAT(v_fixed))
 
-            zs.append((x, v))
+            zs.append((x_fixed, v_fixed))
 
         # finalize traj
-        v = v + (0.5 * self.dt / self.masses) * self.force_fxn(x)
+        v_fixed = v_fixed + FLOAT_TO_FIXED((0.5 * self.cb) * self.force_fxn(FIXED_TO_FLOAT(x_fixed)))
 
-        zs.append((x, v))
+        zs.append((x_fixed, v_fixed))
 
         xs = np.array([x for (x, _) in zs])
         vs = np.array([v for (_, v) in zs])
-        return xs, vs
+        return FIXED_TO_FLOAT(xs), FIXED_TO_FLOAT(vs)
 
     def _update_via_fori_loop(self, x, v, n_steps=1000):
         # initialize
-        v = v + (0.5 * self.dt / self.masses) * self.force_fxn(x)
-        x = x + self.dt * v
+
+        v_fixed = FLOAT_TO_FIXED(v) + FLOAT_TO_FIXED((0.5 * self.cb) * self.force_fxn(x))
+        x_fixed = FLOAT_TO_FIXED(x) + FLOAT_TO_FIXED(self.dt * FIXED_TO_FLOAT(v_fixed))
 
         def velocity_verlet_loop_body(_, val):
             x_prev, v_prev = val
 
-            v = v_prev + (self.dt / self.masses) * self.force_fxn(x_prev)
-            x = x_prev + self.dt * v
-            return x, v
+            v_fixed = v_prev + FLOAT_TO_FIXED(self.cb * self.force_fxn(FIXED_TO_FLOAT(x_prev)))
+            x_fixed = x_prev + FLOAT_TO_FIXED(self.dt * FIXED_TO_FLOAT(v_fixed))
+            return x_fixed, v_fixed
 
         # run n_steps - 1 steps
-        x, v = jax.lax.fori_loop(0, n_steps - 1, velocity_verlet_loop_body, (x, v))
+        x_fixed, v_fixed = jax.lax.fori_loop(0, n_steps - 1, velocity_verlet_loop_body, (x_fixed, v_fixed))
 
         # finalize
-        v = v + (0.5 * self.dt / self.masses) * self.force_fxn(x)
+        v_fixed = v_fixed + FLOAT_TO_FIXED((0.5 * self.cb) * self.force_fxn(FIXED_TO_FLOAT(x_fixed)))
 
-        return x, v
+        return FIXED_TO_FLOAT(x_fixed), FIXED_TO_FLOAT(v_fixed)
 
 
 def _fori_steps(x0, v0, key0, grad_fn, num_steps, dt, ca, cbs, ccs):

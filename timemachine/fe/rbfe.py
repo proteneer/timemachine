@@ -14,7 +14,6 @@ from timemachine.constants import BOLTZ, DEFAULT_TEMP
 from timemachine.fe.single_topology_v3 import SingleTopologyV3
 from timemachine.fe.system import convert_bps_into_system
 from timemachine.fe.utils import get_mol_name, get_romol_conf
-from timemachine.ff import Forcefield
 from timemachine.ff.handlers import openmm_deserializer
 from timemachine.lib import LangevinIntegrator, MonteCarloBarostat, custom_ops
 from timemachine.lib.potentials import CustomOpWrapper
@@ -450,10 +449,7 @@ def estimate_relative_free_energy(
         raise SimulationException(initial_states, protocol, combined_prefix) from old_exc
 
 
-def run_pair(mol_a, mol_b, core, forcefield_path, protein_path, n_frames, seed):
-
-    forcefield = Forcefield.load_from_file(forcefield_path)
-
+def run_pair(mol_a, mol_b, core, forcefield, protein, n_frames, seed):
     box_width = 4.0
     solvent_sys, solvent_conf, solvent_box, solvent_top = builders.build_water_system(box_width)
     solvent_box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes, deboggle later
@@ -462,7 +458,7 @@ def run_pair(mol_a, mol_b, core, forcefield_path, protein_path, n_frames, seed):
         mol_a, mol_b, core, forcefield, solvent_host_config, seed, n_frames=n_frames, prefix="solvent"
     )
 
-    complex_sys, complex_conf, _, _, complex_box, complex_top = builders.build_protein_system(protein_path)
+    complex_sys, complex_conf, _, _, complex_box, complex_top = builders.build_protein_system(protein)
     complex_box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes, deboggle later
     complex_host_config = HostConfig(complex_sys, complex_conf, complex_box)
     complex_res = estimate_relative_free_energy(

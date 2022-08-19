@@ -37,19 +37,19 @@ class TestInterpolatedPotential(GradientTest):
 
         sigma_scale = 5.0
 
-        qlj_src, ref_potential, test_potential = prepare_water_system(
+        qlj_src, potential = prepare_water_system(
             coords, lambda_plane_idxs, lambda_offset_idxs, p_scale=sigma_scale, cutoff=cutoff
         )
 
-        qlj_dst, _, _ = prepare_water_system(
+        qlj_dst, _ = prepare_water_system(
             coords, lambda_plane_idxs, lambda_offset_idxs, p_scale=sigma_scale, cutoff=cutoff
         )
 
         qlj = np.concatenate([qlj_src, qlj_dst])
 
-        ref_interpolated_potential = nonbonded.interpolated(ref_potential)
+        ref_interpolated_potential = nonbonded.interpolated(potential.to_reference())
 
-        test_interpolated_potential = potentials.NonbondedInterpolated(*test_potential.args)
+        test_interpolated_potential = potential.to_gpu().interpolate()
 
         lambda_vals = [0.0, 0.2, 1.0]
 
@@ -104,7 +104,7 @@ class TestInterpolatedPotential(GradientTest):
         sigma_scale = 5.0
 
         # E = 0 # DEBUG!
-        qlj_src, ref_potential, test_potential = prepare_water_system(
+        qlj_src, potential = prepare_water_system(
             coords, lambda_plane_idxs, lambda_offset_idxs, p_scale=sigma_scale, cutoff=cutoff
         )
 
@@ -124,7 +124,8 @@ class TestInterpolatedPotential(GradientTest):
             qlj_src = params[: len(params) // 2]
             qlj_dst = params[len(params) // 2 :]
             qlj = interpolate_params(lamb, qlj_src, qlj_dst)
-            return ref_potential(x, qlj, box, lamb)
+            U_ref = potential.to_reference()
+            return U_ref(x, qlj, box, lamb)
 
         qlj = np.concatenate([qlj_src, qlj_dst])
 
@@ -133,7 +134,7 @@ class TestInterpolatedPotential(GradientTest):
 
             print("cutoff", cutoff, "precision", precision, "xshape", coords.shape)
 
-            args = copy.deepcopy(test_potential.args)
+            args = copy.deepcopy(potential.to_gpu().args)
             args.append("lambda*lambda")  # transform q
             args.append("sin(lambda*PI/2)")  # transform sigma
             args.append("lambda < 0.5 ? sin(lambda*PI)*sin(lambda*PI) : 1")  # transform epsilon
