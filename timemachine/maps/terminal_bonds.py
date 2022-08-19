@@ -6,10 +6,13 @@ import numpy as np
 from jax import config, jacobian, jit
 from jax import numpy as jnp
 from jax import vmap
+from numpy.typing import NDArray
 
 config.update("jax_enable_x64", True)
 
 from typing import List
+
+import networkx as nx
 
 from timemachine.constants import BOLTZ, DEFAULT_TEMP
 
@@ -103,7 +106,7 @@ def conf_map(x, bond, param):
 apply_conf_map_to_traj = jit(vmap(conf_map, in_axes=(0, None, None)))
 
 
-def apply_sequence_of_conf_maps_to_traj(xs, bond_idxs, params):
+def apply_conf_maps_to_traj(xs, bond_idxs, params):
     """Apply maps to several bonds in a conformer, return (updated x, logdetjac)"""
     xs_traj, logdetjac_increments_traj = [jnp.array(xs)], [np.zeros(len(xs))]
 
@@ -114,6 +117,27 @@ def apply_sequence_of_conf_maps_to_traj(xs, bond_idxs, params):
         logdetjac_increments_traj.append(logdetjac_increments)
 
     return xs_traj[-1], np.sum(logdetjac_increments_traj, axis=0)
+
+
+# utilities for getting terminal bonds
+def get_degrees(bond_idxs):
+    g = nx.Graph()
+    g.add_edges_from(bond_idxs)
+    degrees = np.array([g.degree(i) for i in range(g.number_of_nodes())])
+    return degrees
+
+
+def get_terminal_bonds(bond_idxs):
+    """Get bonded pairs that involve a terminal atom"""
+
+    degrees = get_degrees(bond_idxs)
+    sort_by_descending_degree = lambda bond: tuple(sorted(bond, key=lambda i: degrees[i], reverse=True))
+    bonds = [sort_by_descending_degree(bond) for bond in bond_idxs]
+
+    is_terminal = lambda bond: degrees[bond[1]] == 1
+
+    terminal_bonds = sorted(filter(is_terminal, bonds))
+    return terminal_bonds
 
 
 class TerminalMappableState:
@@ -157,6 +181,17 @@ class TerminalMappableState:
 
         return jnp.array(bond_valid).all()
 
+    @classmethod
+    def from_harmonic_bond_params(cls, bond_idxs, params, temperature=DEFAULT_TEMP, sigma_thresh=20):
+        # bond (i, j) -> (k, eq_length)
+        param_dict = dict(zip(map(tuple, bond_idxs), params))  # bond idxs may be in arbitrary order
+
+        terminal_bond_tuples = get_terminal_bonds(bond_idxs)  # each tuple will be sorted in order (anchor, terminal)
+
+        ks, eq_lengths = np.array([param_dict[tuple(sorted(bond))] for bond in terminal_bond_tuples]).T
+
+        return cls(np.array(terminal_bond_tuples), ks, eq_lengths, temperature=temperature, sigma_thresh=sigma_thresh)
+
 
 def states_to_conf_map_params(src: TerminalMappableState, dst: TerminalMappableState):
     # find bond idxs in common
@@ -178,3 +213,17 @@ def states_to_conf_map_params(src: TerminalMappableState, dst: TerminalMappableS
     params = np.array(params_list)
 
     return bond_idxs, params
+
+
+@dataclass()
+class TerminalBondMap:
+    mapped_bond_idxs: NDArray
+    map_params: NDArray
+
+    @classmethod
+    def from_states(cls, src: TerminalMappableState, dst: TerminalMappableState):
+        bond_idxs, params = states_to_conf_map_params(src, dst)
+        return cls(bond_idxs, params)
+
+    def __call__(self, xs):
+        return apply_conf_maps_to_traj(xs, self.mapped_bond_idxs, self.map_params)
