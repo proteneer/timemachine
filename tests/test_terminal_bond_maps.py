@@ -61,7 +61,7 @@ def test_invertibility_of_interval_maps():
             np.testing.assert_allclose(xs_, xs, err_msg="f_inv(f(x)) != x!")
 
 
-# define some utility functions for
+# utility functions for vacuum test system
 
 
 def collect_samples(mol):
