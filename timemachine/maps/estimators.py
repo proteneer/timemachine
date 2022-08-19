@@ -1,13 +1,16 @@
 import numpy as np
-from pymbar.utils import kln_to_kn
+from pymbar.utils import kln_to_kn  # TODO: should this be "vendored"?
 
-
-def compute_reduced_work(src_samples, src_reduced_energy_fxn, dst_reduced_energy_fxn):
-    return dst_reduced_energy_fxn(src_samples) - src_reduced_energy_fxn(src_samples)
+__all__ = ["compute_mapped_reduced_work", "compute_mapped_u_kn"]
 
 
 def compute_mapped_reduced_work(src_samples, src_reduced_energy_fxn, dst_reduced_energy_fxn, map_fxn):
+    """minus log impportance weight, including a change of variables defined by map_fxn"""
     mapped_samples, logdetjacs = map_fxn(src_samples)
+
+    # compare with version without map_fxn
+    # return dst_reduced_energy_fxn(src_samples) - src_reduced_energy_fxn(src_samples)
+
     return dst_reduced_energy_fxn(mapped_samples) - src_reduced_energy_fxn(src_samples) - logdetjacs
 
 
@@ -29,6 +32,8 @@ def compute_mapped_u_kn(sample_lists, reduced_energy_fxns, map_fxns):
 
             xs_mapped, logdetjacs = map_k_to_l(xs_k)
 
+            # compare with version without maps
+            # u_kln[k, l, :N_k[k]] = u_l(xs_k)
             u_kln[k, l, : N_k[k]] = u_l(xs_mapped) - logdetjacs
 
     u_kn = kln_to_kn(u_kln, N_k)
