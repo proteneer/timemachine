@@ -1,13 +1,13 @@
 """
-Assert accurate estimates for free energy differences between 1D Gaussians using exact maps
+Assert accurate estimates for free energy differences between 1D Gaussians using perfect maps
 """
 
 from dataclasses import dataclass
 
 import numpy as np
-from pymbar import BAR, EXP
+from pymbar import BAR, EXP, MBAR
 
-from timemachine.maps.estimators import compute_mapped_reduced_work
+from timemachine.maps.estimators import compute_mapped_reduced_work, compute_mapped_u_kn
 
 
 @dataclass
@@ -106,3 +106,30 @@ def test_two_sided_estimates():
         exact_delta_f = state_b.reduced_free_energy - state_a.reduced_free_energy
 
         np.testing.assert_almost_equal(estimated_delta_f, exact_delta_f)
+
+
+def test_multistate_estimates():
+
+    # define a collection of states
+    K = 10
+    states = [UnnormalizedGaussian.initialize_randomly() for _ in range(K)]
+    u_fxns = [state.reduced_potential for state in states]
+
+    # define invertible maps between all pairs of states, and put these in a container supporting [i, j] indexing
+    map_fxns = np.zeros((K, K), dtype=object)
+    for i in range(K):
+        for j in range(K):
+            map_fxns[i, j] = construct_map(states[i], states[j])
+
+    # collect a different number of samples from each state
+    N_k = np.random.randint(100, 1000, size=K)
+    samples = [state.sample(n) for state, n in zip(states, N_k)]
+
+    # compute MBAR estimate
+    u_kn = compute_mapped_u_kn(samples, u_fxns, map_fxns)
+    mbar = MBAR(u_kn, N_k)
+
+    exact_f_k = np.array([state.reduced_free_energy for state in states])
+    exact_f_k -= exact_f_k[0]
+
+    np.testing.assert_allclose(mbar.f_k, exact_f_k)
