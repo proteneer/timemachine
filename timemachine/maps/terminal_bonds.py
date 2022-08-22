@@ -53,7 +53,7 @@ def interval_map(x, src_lb, src_ub, dst_lb, dst_ub):
 
     scale_factor = (dst_ub - dst_lb) / (src_ub - src_lb)
 
-    in_support = (x >= src_lb) * (x <= src_ub)
+    in_support = (x >= src_lb) & (x <= src_ub)
     mapped = dst_lb + (x - src_lb) * scale_factor
 
     return jnp.where(in_support, mapped, np.nan)
