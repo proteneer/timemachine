@@ -3,9 +3,16 @@ from typing import Any, List, Tuple
 import networkx as nx
 import numpy as np
 import simtk.unit
+from jax import grad, jit
+from jax import numpy as jnp
+from jax import value_and_grad
 from rdkit import Chem
 from rdkit.Chem import AllChem, Draw
 from rdkit.Chem.Draw import rdMolDraw2D
+from scipy.optimize import minimize
+
+from timemachine.constants import BOLTZ, DEFAULT_TEMP
+from timemachine.integrator import LangevinIntegrator
 
 
 def to_md_units(q):
@@ -402,3 +409,62 @@ def extract_delta_Us_from_U_knk(U_knk):
         delta_Us.append((fwd_delta_U, rev_delta_U))
 
     return np.array(delta_Us)
+
+
+def wrap_for_scipy_optimize(U, x0):
+    """Given a jax transformable function U and a configuration x0,
+    produce a flattened value_and_grad function compatible with the scipy.optimize L-BFGS-B implementation"""
+    shape = x0.shape
+
+    def wrapped(x):
+        v, g = value_and_grad(U)(x.reshape(shape))
+        return float(v), np.array(g.flatten(), dtype=np.float64)
+
+    return wrapped
+
+
+def minimize_energy(U_fxn, x0, verbose=True):
+    """using L-BFGS"""
+
+    fun = wrap_for_scipy_optimize(U_fxn, x0)
+    res = minimize(fun, x0.flatten(), jac=True, method="L-BFGS-B")
+    if verbose:
+        print(res)
+    return res.x.reshape(x0.shape)
+
+
+def partially_resample_configuration(U, x0, selection_mask, temperature=DEFAULT_TEMP, minimize_first=False):
+    r"""Approximately resample
+    x0[selection_mask] ~ p(x[selection_mask] | x0[!selection_mask])
+    where p(x) \propto exp(-U(x)/(BOLTZ * temperature))
+    using a few steps of Langevin dynamics
+    """
+    x0 = jnp.array(x0)
+    x0_subset = x0[selection_mask]
+
+    # prepare energy function defined on selected atoms only
+    def U_subset(x_subset):
+        return U(x0.at[selection_mask].set(x_subset))
+
+    # optionally minimize
+    if minimize_first:
+        x0_subset = minimize_energy(jit(U_subset), x0_subset)
+
+    # run MD
+    # TODO[decision]: expose these params?
+    masses = np.ones(len(x0_subset))
+    dt = 1.5e-3
+    friction = 1
+    n_steps = 1_000
+
+    force = jit(lambda x_subset: -grad(U_subset)(x_subset))
+    intg = LangevinIntegrator(force, masses, temperature=temperature, dt=dt, friction=friction)
+
+    v0_subset = np.random.randn(*x0_subset.shape) * np.sqrt(BOLTZ * temperature / masses[:, np.newaxis])
+    assert v0_subset.shape == x0_subset.shape
+
+    xs, _ = intg.multiple_steps(x0_subset, v0_subset, n_steps)
+
+    # return final state of MD trajectory
+    # TODO[decision]: return just one sample? or return a collection of samples?
+    return x0.at[selection_mask].set(xs[-1])
