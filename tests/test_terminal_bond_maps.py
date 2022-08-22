@@ -27,8 +27,6 @@ def test_invertibility_of_interval_maps():
     # construct a bunch of random intervals
     np.random.seed(2022)
     states = [Interval(np.random.rand(), 1 + np.random.rand()) for _ in range(50)]
-    for state in states:
-        state.validate()
 
     # generate test points up to within eps of interval bounds,
     # (eps slightly > 0 to avoid spurious <=, >= assertion errors near bounds...)
