@@ -77,6 +77,29 @@ class _MockFuture:
     def result(self):
         return self.val
 
+    @property
+    def id(self) -> str:
+        """
+        Return the id as a str for this subjob
+        """
+        return "1"
+
+
+class WrappedFuture:
+    def __init__(self, future, job_id: str):
+        self._future = future
+        self._id = job_id
+
+    def result(self):
+        return self._future.result()
+
+    def done(self):
+        return self._future.done()
+
+    @property
+    def id(self):
+        return self._id
+
 
 class SerialClient(AbstractClient):
     def submit(self, task_fn, *args, **kwargs):
@@ -102,6 +125,7 @@ class ProcessPoolClient(AbstractClient):
         """
         self.max_workers = max_workers
         self._idx = 0
+        self._total_idx = 0
         ctxt = multiprocessing.get_context("spawn")
         self.executor = futures.ProcessPoolExecutor(max_workers=self.max_workers, mp_context=ctxt)
 
@@ -110,8 +134,10 @@ class ProcessPoolClient(AbstractClient):
         See abstract class for documentation.
         """
         future = self.executor.submit(task_fn, *args)
+        job_id = str(self._total_idx)
+        self._total_idx += 1
         self._idx = (self._idx + 1) % self.max_workers
-        return future
+        return WrappedFuture(future, job_id)
 
     def verify(self):
         """
@@ -151,8 +177,10 @@ class CUDAPoolClient(ProcessPoolClient):
         See abstract class for documentation.
         """
         future = self.executor.submit(self.wrapper, self.max_workers, self._idx, task_fn, *args)
+        job_id = str(self._total_idx)
+        self._total_idx += 1
         self._idx = (self._idx + 1) % self.max_workers
-        return future
+        return WrappedFuture(future, job_id)
 
     def verify(self):
         """
@@ -163,14 +191,19 @@ class CUDAPoolClient(ProcessPoolClient):
 
 
 class BinaryFutureWrapper:
-    def __init__(self, future):
+    def __init__(self, future, job_id):
         """
         Utility class to help unwrap pickle'd Future objects.
         """
         self._future = future
+        self._id = job_id
 
     def result(self):
         return pickle.loads(self._future.result().binary)
+
+    @property
+    def id(self):
+        return self._id
 
 
 class GRPCClient(AbstractClient):
@@ -202,6 +235,7 @@ class GRPCClient(AbstractClient):
             )
             self.stubs.append(service_pb2_grpc.WorkerStub(channel))
         self._idx = 0
+        self._total_idx = 0
         self.max_workers = len(self.hosts)
 
     def _prepare_hosts(self, hosts: Union[str, List[str]], default_port: int):
@@ -226,8 +260,10 @@ class GRPCClient(AbstractClient):
         binary = pickle.dumps((task_fn, args, kwargs))
         request = service_pb2.PickleData(binary=binary)
         future = self.stubs[self._idx].Submit.future(request)
+        job_id = str(self._total_idx)
+        self._total_idx += 1
         self._idx = (self._idx + 1) % len(self.stubs)
-        return BinaryFutureWrapper(future)
+        return BinaryFutureWrapper(future, job_id)
 
     def verify(self):
         """

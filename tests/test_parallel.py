@@ -44,8 +44,12 @@ class TestProcessPool(unittest.TestCase):
             futures.append(fut)
 
         test_res = []
+        test_ids = []
         for f in futures:
             test_res.append(f.result())
+            test_ids.append(f.id)
+
+        assert test_ids == ["0", "1", "2", "3", "4"]
 
         np.testing.assert_array_equal(test_res, arr * arr)
 
@@ -101,8 +105,12 @@ class TestCUDAPoolClient(unittest.TestCase):
             futures.append(fut)
 
         test_res = []
+        test_ids = []
         for f in futures:
             test_res.append(f.result())
+            test_ids.append(f.id)
+
+        assert test_ids == ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"]
 
         expected = [str(i % self.max_workers) for i in range(operations)]
 
@@ -207,8 +215,12 @@ class TestGRPCClient(unittest.TestCase):
             futures.append(fut)
 
         test_res = []
+        test_ids = []
         for f in futures:
             test_res.append(f.result())
+            test_ids.append(f.id)
+
+        assert test_ids == ["0", "1", "2", "3", "4"]
 
         np.testing.assert_array_equal(test_res, xs * ys)
 
@@ -221,8 +233,12 @@ class TestGRPCClient(unittest.TestCase):
             futures.append(fut)
 
         test_res = []
+        test_ids = []
         for f in futures:
             test_res.append(f.result())
+            test_ids.append(f.id)
+
+        assert test_ids == ["0", "1", "2", "3", "4"]
 
         np.testing.assert_array_equal(test_res, xs * xs)
 
