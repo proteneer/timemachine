@@ -113,7 +113,7 @@ def apply_conf_maps_to_traj(xs, bond_idxs, params) -> Tuple[Array, Array]:
         xs_traj.append(xs_updated)
         logdetjac_increments_traj.append(logdetjac_increments)
 
-    return xs_traj[-1], jnp.sum(logdetjac_increments_traj, axis=0)
+    return xs_traj[-1], np.sum(logdetjac_increments_traj, axis=0)
 
 
 # utilities for getting terminal bonds

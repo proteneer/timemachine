@@ -15,7 +15,7 @@ def compute_mapped_reduced_work(src_samples, src_reduced_energy_fxn, dst_reduced
         https://journals.aps.org/pre/abstract/10.1103/PhysRevE.65.046122
     """
 
-    # compare with version without map_fxn
+    # compare to version without map_fxn
     # return dst_reduced_energy_fxn(src_samples) - src_reduced_energy_fxn(src_samples)
 
     mapped_samples, logdetjacs = map_fxn(src_samples)
@@ -44,7 +44,7 @@ def compute_mapped_u_kn(sample_lists, reduced_energy_fxns, map_fxns):
         for l in range(K):
             u_l = reduced_energy_fxns[l]
 
-            # compare with version without maps
+            # compare to version without maps
             # u_kln[k, l, :N_k[k]] = u_l(xs_k)
 
             map_k_to_l = map_fxns[k, l]
