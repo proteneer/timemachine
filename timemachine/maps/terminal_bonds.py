@@ -27,7 +27,7 @@ class Interval:
     def width(self) -> float:
         return self.upper - self.lower
 
-    def validate(self) -> None:
+    def __post_init__(self):
         assert self.width > 0
         assert self.lower > 0
 
@@ -40,7 +40,6 @@ class Gaussian:
     def to_interval(self, sigma_thresh=20) -> Interval:
         r = self.stddev * sigma_thresh
         interval = Interval(self.mean - r, self.mean + r)
-        interval.validate()
         return interval
 
     @classmethod
