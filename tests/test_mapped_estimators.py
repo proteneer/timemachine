@@ -109,6 +109,7 @@ def test_two_sided_estimates():
 
 
 def test_multistate_estimates():
+    np.random.seed(2022)
 
     # define a collection of states
     K = 10
