@@ -1,12 +1,13 @@
 """Summarize HarmonicBonds as Intervals in R+, construct maps between Intervals, & apply these maps to bond lengths"""
 
 from dataclasses import dataclass
+from typing import Tuple
 
 import numpy as np
 from jax import config, jacobian, jit
 from jax import numpy as jnp
 from jax import vmap
-from numpy.typing import NDArray
+from numpy.typing import NDArray as Array
 
 config.update("jax_enable_x64", True)
 
@@ -23,10 +24,10 @@ class Interval:
     upper: float
 
     @property
-    def width(self):
+    def width(self) -> float:
         return self.upper - self.lower
 
-    def validate(self):
+    def validate(self) -> None:
         assert self.width > 0
         assert self.lower > 0
 
@@ -36,7 +37,7 @@ class Gaussian:
     mean: float
     stddev: float
 
-    def to_interval(self, sigma_thresh=20):
+    def to_interval(self, sigma_thresh=20) -> Interval:
         r = self.stddev * sigma_thresh
         interval = Interval(self.mean - r, self.mean + r)
         interval.validate()
@@ -51,6 +52,8 @@ def gaussians_from_harmonic_bonds(ks, eq_lengths, temperature=DEFAULT_TEMP) -> L
 
 @jit
 def interval_map(x, src_lb, src_ub, dst_lb, dst_ub):
+    """map x in Interval[src_lb, src_ub] to y in Interval[dst_lb, dst_ub]"""
+
     scale_factor = (dst_ub - dst_lb) / (src_ub - src_lb)
 
     in_support = (x >= src_lb) * (x <= src_ub)
@@ -59,7 +62,7 @@ def interval_map(x, src_lb, src_ub, dst_lb, dst_ub):
     return jnp.where(in_support, mapped, np.nan)
 
 
-def conf_map(x, bond, param):
+def conf_map(x, bond, param) -> Tuple[Array, Array]:
     """Apply map to a single bond in a conformer x, return (updated x, logdetjac)"""
     a, b = bond
     dim = 3
@@ -100,8 +103,8 @@ def conf_map(x, bond, param):
 apply_conf_map_to_traj = jit(vmap(conf_map, in_axes=(0, None, None)))
 
 
-def apply_conf_maps_to_traj(xs, bond_idxs, params):
-    """Apply maps to several bonds in a conformer, return (updated x, logdetjac)"""
+def apply_conf_maps_to_traj(xs, bond_idxs, params) -> Tuple[Array, Array]:
+    """Apply maps to several bonds in a trajectory of conformers xs, return (updated xs, logdetjacs)"""
     xs_traj, logdetjac_increments_traj = [jnp.array(xs)], [np.zeros(len(xs))]
 
     for (bond, param) in zip(bond_idxs, params):  # TODO: jax.lax for-loop?
@@ -110,18 +113,18 @@ def apply_conf_maps_to_traj(xs, bond_idxs, params):
         xs_traj.append(xs_updated)
         logdetjac_increments_traj.append(logdetjac_increments)
 
-    return xs_traj[-1], np.sum(logdetjac_increments_traj, axis=0)
+    return xs_traj[-1], jnp.sum(logdetjac_increments_traj, axis=0)
 
 
 # utilities for getting terminal bonds
-def get_degrees(bond_idxs):
+def get_degrees(bond_idxs) -> Array:
     g = nx.Graph()
     g.add_edges_from(bond_idxs)
     degrees = np.array([g.degree(i) for i in range(g.number_of_nodes())])
     return degrees
 
 
-def get_terminal_bonds(bond_idxs):
+def get_terminal_bonds(bond_idxs) -> List[Tuple]:
     """Get bonded pairs that involve a terminal atom"""
 
     degrees = get_degrees(bond_idxs)
@@ -140,12 +143,24 @@ class TerminalMappableState:
         for each (a, b) in terminal_bond_idxs,
         prepare to construct a map that moves b -> b', conditioned on a
 
-        terminal_bond_idxs, ks, eq_lengths:
+        Parameters
+        -----------
+        terminal_bond_idxs: [B,2] ints
             bonds that will be mapped,
             assumed in order (anchor, terminal)
 
-        temperature, sigma_thresh:
-            determine the size of the interval
+        ks: [B,] positive floats
+            force constants of terminal bonds
+        eq_lengths: [B,] positive floats
+            equilibrium lengths of terminal bonds
+
+        temperature: positive float, assumed in kelvin
+            determines the stddev of the modeled bond length distribution
+            bond_length_distribution = Gaussian(mu=eq_length, sigma=sqrt(BOLTZ * temperature / k))
+
+        sigma_thresh: positive float, unitless
+            determines the size of the Interval mu +/- sigma_thresh * sigma to which the support of
+            bond_length_distribution will be truncated
         """
 
         B = len(terminal_bond_idxs)
@@ -161,7 +176,7 @@ class TerminalMappableState:
         self.gaussians = gaussians_from_harmonic_bonds(ks, eq_lengths, DEFAULT_TEMP)
         self.intervals = [g.to_interval(sigma_thresh) for g in self.gaussians]
 
-    def contains_in_support(self, x):
+    def contains_in_support(self, x) -> bool:
         """returns whether x is in the support of state"""
 
         bond_valid = []
@@ -211,13 +226,14 @@ def states_to_conf_map_params(src: TerminalMappableState, dst: TerminalMappableS
 
 @dataclass()
 class TerminalBondMap:
-    mapped_bond_idxs: NDArray
-    map_params: NDArray
+    mapped_bond_idxs: Array
+    map_params: Array
 
     @classmethod
     def from_states(cls, src: TerminalMappableState, dst: TerminalMappableState):
         bond_idxs, params = states_to_conf_map_params(src, dst)
         return cls(bond_idxs, params)
 
-    def __call__(self, xs):
-        return apply_conf_maps_to_traj(xs, self.mapped_bond_idxs, self.map_params)
+    def __call__(self, xs: Array) -> Tuple[Array, Array]:
+        mapped_xs, logdetjacs = apply_conf_maps_to_traj(xs, self.mapped_bond_idxs, self.map_params)
+        return mapped_xs, logdetjacs
