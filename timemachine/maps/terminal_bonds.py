@@ -43,11 +43,9 @@ class Gaussian:
         interval.validate()
         return interval
 
-
-def gaussians_from_harmonic_bonds(ks, eq_lengths, temperature=DEFAULT_TEMP) -> List[Gaussian]:
-    kBT = BOLTZ * temperature
-    params = zip(ks, eq_lengths)
-    return [Gaussian(eq_length, np.sqrt(kBT / k)) for (k, eq_length) in params]
+    @classmethod
+    def from_harmonic_bond(cls, force_constant, eq_length, temperature=DEFAULT_TEMP):
+        return cls(eq_length, np.sqrt(BOLTZ * temperature / force_constant))
 
 
 @jit
@@ -173,7 +171,7 @@ class TerminalMappableState:
         self.temperature = temperature
         self.sigma_thresh = sigma_thresh
 
-        self.gaussians = gaussians_from_harmonic_bonds(ks, eq_lengths, DEFAULT_TEMP)
+        self.gaussians = [Gaussian.from_harmonic_bond(k, r0, temperature) for k, r0 in zip(ks, eq_lengths)]
         self.intervals = [g.to_interval(sigma_thresh) for g in self.gaussians]
 
     def contains_in_support(self, x) -> bool:
