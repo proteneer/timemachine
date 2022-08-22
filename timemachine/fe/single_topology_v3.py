@@ -8,6 +8,7 @@ import numpy as np
 from timemachine.fe import interpolate, system, topology, utils
 from timemachine.fe.dummy import canonicalize_bond, identify_dummy_groups, identify_root_anchors
 from timemachine.fe.system import HostGuestSystem
+from timemachine.fe.utils import partially_resample_configuration
 from timemachine.lib import potentials
 
 
@@ -677,6 +678,20 @@ class SingleTopologyV3:
             return (1 - lamb) * U0_fn(x) + lamb * U1_fn(x)
 
         return U_fn
+
+    def resample_dummy_atoms(self, x0, lamb=0):
+        """Resample the configuration of dummy atoms at an endstate"""
+
+        flag_val = {0: 2, 1: 1}[lamb]
+        selection_mask = self.c_flags == flag_val
+
+        if sum(selection_mask) > 0:
+            U_fn = self.get_U_fn(lamb)
+            x_resampled = partially_resample_configuration(U_fn, x0, selection_mask)
+            assert x_resampled.shape == x0.shape
+            return x_resampled
+        else:
+            return jnp.array(x0)
 
     def _setup_intermediate_bonded_term(self, src_bond, dst_bond, lamb, align_fn, interpolate_fn):
 
