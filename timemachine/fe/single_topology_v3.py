@@ -686,7 +686,9 @@ class SingleTopologyV3:
         selection_mask = self.c_flags == flag_val
 
         if sum(selection_mask) > 0:
+            # TODO[performance]: construct cheaper version of U_fn that only includes dummy-anchor interactions
             U_fn = self.get_U_fn(lamb)
+
             x_resampled = partially_resample_configuration(U_fn, x0, selection_mask)
             assert x_resampled.shape == x0.shape
             return x_resampled
