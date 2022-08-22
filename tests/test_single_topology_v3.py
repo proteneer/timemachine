@@ -13,6 +13,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 from rdkit import Chem
+from rdkit.Chem import AllChem
 
 from timemachine.fe import atom_mapping, single_topology_v3
 from timemachine.fe.single_topology_v3 import (
@@ -306,3 +307,64 @@ def test_jax_transform_intermediate_potential():
     lambdas = jnp.linspace(0, 1, 10)
     _ = jax.vmap(U)(confs, lambdas)
     _ = jax.jit(jax.vmap(U))(confs, lambdas)
+
+
+def assert_resample_dummy_atoms_moves_only_expected_atoms(combined_topology, combined_conf):
+    """Replace combined_conf[dummy] with an approximate sample from p(x[dummy] | combined_conf[anchor])
+    for endstates lambda = 0, 1.
+
+    Assert that the expected set of atom idxs are updated."""
+
+    resampled_0 = combined_topology.resample_dummy_atoms(combined_conf, lamb=0)
+    resampled_1 = combined_topology.resample_dummy_atoms(combined_conf, lamb=1)
+
+    c_flags = combined_topology.c_flags
+    dummy_c_flags_at_lam = {0: 2, 1: 1}
+
+    select_mask_0 = c_flags == dummy_c_flags_at_lam[0]
+    select_mask_1 = c_flags == dummy_c_flags_at_lam[1]
+
+    frozen_mask_0 = c_flags != dummy_c_flags_at_lam[0]
+    frozen_mask_1 = c_flags != dummy_c_flags_at_lam[1]
+
+    # assert we didn't move core or mol_a-only atoms
+    np.testing.assert_allclose(resampled_0[frozen_mask_0], combined_conf[frozen_mask_0])
+
+    # assert we didn't move or mol_b-only atoms
+    np.testing.assert_allclose(resampled_1[frozen_mask_1], combined_conf[frozen_mask_1])
+
+    # assert we moved the expected atoms
+    thresh = 1e-2
+    moved_0 = set(np.where(np.linalg.norm(resampled_0 - combined_conf, axis=1) > thresh)[0])
+    moved_1 = set(np.where(np.linalg.norm(resampled_1 - combined_conf, axis=1) > thresh)[0])
+
+    assert moved_0 == set(np.where(select_mask_0)[0])
+    assert moved_1 == set(np.where(select_mask_1)[0])
+
+
+def test_resample_dummy_atoms_methane():
+    """1 flappy atom @ lambda=0, 1 flappy atom @ lambda=1"""
+
+    np.random.seed(2022)
+
+    parser_params = Chem.SmilesParserParams()
+    parser_params.removeHs = False
+
+    # mol_a: methane, mol_b: fluoromethane
+    mol_a = Chem.MolFromSmiles("C([H])([H])([H])([H])", parser_params)
+    mol_b = Chem.MolFromSmiles("C([H])([H])([H])(F)", parser_params)
+
+    AllChem.EmbedMolecule(mol_a, randomSeed=2022)
+    mol_b.AddConformer(mol_a.GetConformer(0))
+
+    conf_a = np.array(mol_a.GetConformer().GetPositions()) / 10
+    conf_b = np.array(mol_b.GetConformer().GetPositions()) / 10
+
+    atom_idxs = np.arange(mol_a.GetNumAtoms())
+    core = np.array([atom_idxs[:-1], atom_idxs[:-1]]).T
+
+    ff = Forcefield.load_from_file(DEFAULT_FF)
+    combined_topology = SingleTopologyV3(mol_a, mol_b, core, ff)
+    combined_conf = combined_topology.combine_confs(conf_a, conf_b)
+
+    assert_resample_dummy_atoms_moves_only_expected_atoms(combined_topology, combined_conf)
