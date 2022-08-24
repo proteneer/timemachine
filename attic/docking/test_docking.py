@@ -6,6 +6,7 @@ import unittest
 from pathlib import Path
 
 from common import get_hif2a_ligands_as_sdf_file
+from importlib import resources
 
 from docking import dock_and_equilibrate, pose_dock, relative_docking, rigorous_work
 from timemachine.testsystems.relative import hif2a_ligand_pair
@@ -15,7 +16,8 @@ class TestDocking(unittest.TestCase):
     def test_pose_dock(self):
         """Tests basic functionality of pose_dock"""
         temp_sdf = get_hif2a_ligands_as_sdf_file(1)
-        host_pdbfile = str(Path(__file__).resolve().parent.parent.joinpath("tests", "data", "hif2a_nowater_min.pdb"))
+        with resources.path("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as pdb_path:
+            host_pdbfile = str(pdb_path)
         transition_type = "insertion"
         n_steps = 1001
         transition_steps = 500
@@ -43,7 +45,8 @@ class TestDocking(unittest.TestCase):
 
     def test_dock_and_equilibrate(self):
         """Tests basic functionality of dock_and_equilibrate"""
-        host_pdbfile = str(Path(__file__).resolve().parent.parent.joinpath("tests", "data", "hif2a_nowater_min.pdb"))
+        with resources.path("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as pdb_path:
+            host_pdbfile = str(pdb_path)
         temp_sdf = get_hif2a_ligands_as_sdf_file(1)
         max_lambda = 0.25
         insertion_steps = 501
@@ -65,7 +68,8 @@ class TestDocking(unittest.TestCase):
 
     def test_rigorous_work(self):
         """Tests basic functionality of rigorous_work"""
-        host_pdbfile = str(Path(__file__).resolve().parent.parent.joinpath("tests", "data", "hif2a_nowater_min.pdb"))
+        with resources.path("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as pdb_path:
+            host_pdbfile = str(pdb_path)
         temp_sdf = get_hif2a_ligands_as_sdf_file(1)
         num_deletions = 10
         deletion_steps = 501
@@ -97,7 +101,8 @@ class TestDocking(unittest.TestCase):
             hif2a_ligand_pair.mol_b,
             hif2a_ligand_pair.top.core,
         )
-        host_pdbfile = str(Path(__file__).resolve().parent.parent.joinpath("tests", "data", "hif2a_nowater_min.pdb"))
+        with resources.path("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as pdb_path:
+            host_pdbfile = str(pdb_path)
         num_switches = 10
         transition_steps = 501
         works = relative_docking.do_relative_docking(host_pdbfile, mol_a, mol_b, core, num_switches, transition_steps)

@@ -67,7 +67,7 @@ if __name__ == "__main__":
 
     # build the protein system.
     complex_system, complex_coords, _, _, complex_box, _ = builders.build_protein_system(
-        "tests/data/hif2a_nowater_min.pdb"
+        "timemachine/testsystems/data/hif2a_nowater_min.pdb"
     )
 
     # build the water system.

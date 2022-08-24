@@ -66,7 +66,7 @@ def hif2a_pair():
     mol_b = st.mol_b
     core = st.core
     forcefield = st.ff
-    protein_path = "tests/data/hif2a_nowater_min.pdb"
+    protein_path = "timemachine/testsystems/data/hif2a_nowater_min.pdb"
 
     # fast
     seed = 2023
