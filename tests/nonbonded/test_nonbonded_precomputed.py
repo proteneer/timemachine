@@ -2,15 +2,12 @@ import jax
 
 jax.config.update("jax_enable_x64", True)
 
-import functools
-
-import jax.numpy as jnp
 import numpy as np
 import pytest
 from common import GradientTest
 
 from timemachine.lib.potentials import NonbondedPairListPrecomputed
-from timemachine.potentials import nonbonded, generic
+from timemachine.potentials import generic
 
 pytestmark = [pytest.mark.memcheck]
 
