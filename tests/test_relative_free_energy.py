@@ -1,5 +1,7 @@
 # test that we can run relative free energy simulations in complex and in solvent
 # this doesn't test for accuracy, just that everything mechanically runs.
+from importlib import resources
+
 import numpy as np
 import pytest
 
@@ -108,8 +110,8 @@ def test_run_hif2a_test_system():
     core = st.core
     forcefield = st.ff
 
-    protein_path = "tests/data/hif2a_nowater_min.pdb"
-    run_pair(mol_a, mol_b, core, forcefield, n_frames=100, protein_path=protein_path)
+    with resources.path("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as protein_path:
+        run_pair(mol_a, mol_b, core, forcefield, n_frames=100, protein_path=str(protein_path))
     run_bitwise_reproducibility(mol_a, mol_b, core, forcefield, n_frames=100)
 
 
