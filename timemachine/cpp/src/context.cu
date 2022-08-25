@@ -206,8 +206,8 @@ std::array<std::vector<double>, 2> Context::local_md(
     DeviceBuffer<unsigned int> d_row_idxs(N_);
     DeviceBuffer<unsigned int> d_col_idxs(N_);
 
-    int *p_num_selected;
-    gpuErrchk(cudaMallocHost(&p_num_selected, 1 * sizeof(*p_num_selected)));
+    // Pinned memory for getting lengths of indice arrays
+    DeviceBuffer<int, true> p_num_selected(1);
     DeviceBuffer<int> num_selected_buffer(1);
     LessThan select_op(N_);
 
@@ -269,10 +269,14 @@ std::array<std::vector<double>, 2> Context::local_md(
 
         // Copy the num out, that is the new num_row_indices, num_col_indices == N_ - num_row_indices
         gpuErrchk(cudaMemcpyAsync(
-            p_num_selected, num_selected_buffer.data, 1 * sizeof(*p_num_selected), cudaMemcpyDeviceToHost, stream));
+            p_num_selected.data,
+            num_selected_buffer.data,
+            1 * sizeof(*p_num_selected.data),
+            cudaMemcpyDeviceToHost,
+            stream));
         gpuErrchk(cudaStreamSynchronize(stream));
 
-        num_row_indices = p_num_selected[0];
+        num_row_indices = p_num_selected.data[0];
         num_col_indices = N_ - num_row_indices;
 
         // Invert to get the column indices
@@ -328,11 +332,15 @@ std::array<std::vector<double>, 2> Context::local_md(
 
         // Copy out the number of indices in the outer indices to the row indices
         gpuErrchk(cudaMemcpyAsync(
-            p_num_selected, num_selected_buffer.data, 1 * sizeof(*p_num_selected), cudaMemcpyDeviceToHost, stream));
+            p_num_selected.data,
+            num_selected_buffer.data,
+            1 * sizeof(*p_num_selected.data),
+            cudaMemcpyDeviceToHost,
+            stream));
         gpuErrchk(cudaStreamSynchronize(stream));
 
         // Set the nonbonded potential to compute forces of inner+outer sphere.
-        set_nonbonded_potential_idxs(nonbonded_potential, p_num_selected[0], d_row_idxs.data, stream);
+        set_nonbonded_potential_idxs(nonbonded_potential, p_num_selected.data[0], d_row_idxs.data, stream);
 
         for (int j = 0; j < local_steps; j++) {
             this->_step(bps_, lambda_schedule[global_steps + j], nullptr, d_sphere_idxs_inner.data, stream);
@@ -358,7 +366,6 @@ std::array<std::vector<double>, 2> Context::local_md(
 
     gpuErrchk(cudaStreamSynchronize(stream));
     gpuErrchk(cudaStreamDestroy(stream));
-    gpuErrchk(cudaFreeHost(p_num_selected));
 
     std::vector<double> h_box_buffer(box_buffer_size);
     d_box_buffer.copy_to(&h_box_buffer[0]);
