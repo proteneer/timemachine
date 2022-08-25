@@ -42,6 +42,8 @@ LangevinIntegrator::~LangevinIntegrator() {
     curandErrchk(curandDestroyGenerator(cr_rng_));
 }
 
+double LangevinIntegrator::get_temperature() { return this->temperature_; }
+
 void LangevinIntegrator::step_fwd(
     std::vector<BoundPotential *> &bps,
     double lamb,
