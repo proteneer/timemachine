@@ -1,3 +1,4 @@
+#include "constants.hpp"
 #include "gpu_utils.cuh"
 #include "kernel_utils.cuh"
 #include "langevin_integrator.hpp"
@@ -7,17 +8,30 @@
 
 namespace timemachine {
 
-LangevinIntegrator::LangevinIntegrator(int N, double dt, double ca, const double *h_cbs, const double *h_ccs, int seed)
-    : N_(N), dt_(dt), ca_(ca) {
+LangevinIntegrator::LangevinIntegrator(
+    int N, const double *masses, double temperature, double dt, double friction, int seed)
+    : N_(N), temperature_(temperature), dt_(dt), friction_(friction) {
 
-    d_cbs_ = gpuErrchkCudaMallocAndCopy(h_cbs, N);
-    d_ccs_ = gpuErrchkCudaMallocAndCopy(h_ccs, N);
+    ca_ = exp(-friction * dt);
+
+    const double kT = BOLTZ * temperature;
+    const double ccs_adjustment = sqrt(1 - exp(-2 * friction * dt));
+
+    std::vector<double> h_ccs(N_);
+    std::vector<double> h_cbs(N_);
+    for (int i = 0; i < N_; i++) {
+        h_cbs[i] = dt_ / masses[i];
+        h_ccs[i] = ccs_adjustment * sqrt(kT / masses[i]);
+    }
+
+    d_cbs_ = gpuErrchkCudaMallocAndCopy(h_cbs.data(), N_);
+    d_ccs_ = gpuErrchkCudaMallocAndCopy(h_ccs.data(), N_);
 
     curandErrchk(curandCreateGenerator(&cr_rng_, CURAND_RNG_PSEUDO_DEFAULT));
-    gpuErrchk(cudaMalloc(&d_noise_, round_up_even(N * 3) * sizeof(double)));
+    gpuErrchk(cudaMalloc(&d_noise_, round_up_even(N_ * 3) * sizeof(double)));
     curandErrchk(curandSetPseudoRandomGeneratorSeed(cr_rng_, seed));
 
-    gpuErrchk(cudaMalloc(&d_du_dx_, N * 3 * sizeof(*d_du_dx_)));
+    gpuErrchk(cudaMalloc(&d_du_dx_, N_ * 3 * sizeof(*d_du_dx_)));
 }
 
 LangevinIntegrator::~LangevinIntegrator() {

@@ -8,16 +8,15 @@ class LangevinIntegrator:
     def __init__(self, temperature, dt, friction, masses, seed):
 
         self.dt = dt
+        self.friction = friction
+        self.masses = masses
         self.seed = seed
+        self.temperature = temperature
 
-        ca, cb, cc = langevin_coefficients(temperature, dt, friction, masses)
-        cb *= -1
-        self.ca = ca
-        self.cbs = cb
-        self.ccs = cc
+        ca, cbs, ccs = langevin_coefficients(temperature, dt, friction, masses)
 
     def impl(self):
-        return custom_ops.LangevinIntegrator(self.dt, self.ca, self.cbs, self.ccs, self.seed)
+        return custom_ops.LangevinIntegrator(self.masses, self.temperature, self.dt, self.friction, self.seed)
 
 
 class VelocityVerletIntegrator:

@@ -28,7 +28,7 @@ __global__ void update_forward_baoab(
     int d_idx = blockIdx.y;
     int local_idx = atom_idx * D + d_idx;
 
-    RealType force = FIXED_TO_FLOAT<RealType>(du_dx[local_idx]);
+    RealType force = -FIXED_TO_FLOAT<RealType>(du_dx[local_idx]);
 
     // BAOAB (https://arxiv.org/abs/1203.5428), rotated by half a timestep
 

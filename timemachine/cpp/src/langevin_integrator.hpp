@@ -11,8 +11,10 @@ class LangevinIntegrator : public Integrator {
 
 private:
     const int N_;
+    const double temperature_;
     const double dt_;
-    const double ca_;
+    const double friction_;
+    double ca_;
     double *d_cbs_;
     double *d_ccs_;
     double *d_noise_;
@@ -21,7 +23,7 @@ private:
     curandGenerator_t cr_rng_;
 
 public:
-    LangevinIntegrator(int N, double dt, double ca, const double *h_cbs, const double *h_ccs, int seed);
+    LangevinIntegrator(int N, const double *masses, double temperature, double dt, double friction, int seed);
 
     virtual ~LangevinIntegrator();
 

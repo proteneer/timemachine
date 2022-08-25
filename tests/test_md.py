@@ -47,10 +47,9 @@ class TestContext(unittest.TestCase):
         temperature = 300
         dt = 2e-3
         friction = 0.0
-        ca, cbs, ccs = langevin_coefficients(temperature, dt, friction, masses)
 
         box = np.eye(3) * 3.0
-        intg = custom_ops.LangevinIntegrator(dt, ca, cbs, ccs, 1234)
+        intg = custom_ops.LangevinIntegrator(masses, temperature, dt, friction, 1234)
 
         bp = test_nrg.bind(params).bound_impl(precision=np.float64)
         bps = [bp]
@@ -112,10 +111,9 @@ class TestContext(unittest.TestCase):
         temperature = 300
         dt = 2e-3
         friction = 0.0
-        ca, cbs, ccs = langevin_coefficients(temperature, dt, friction, masses)
 
         box = np.eye(3) * 3.0
-        intg = custom_ops.LangevinIntegrator(dt, ca, cbs, ccs, 1234)
+        intg = custom_ops.LangevinIntegrator(masses, temperature, dt, friction, 1234)
 
         bp = test_nrg.bind(params).bound_impl(precision=np.float64)
         bps = [bp]
@@ -188,10 +186,9 @@ class TestContext(unittest.TestCase):
         temperature = 300
         dt = 2e-3
         friction = 0.0
-        ca, cbs, ccs = langevin_coefficients(temperature, dt, friction, masses)
 
         box = np.eye(3) * 3.0
-        intg = custom_ops.LangevinIntegrator(dt, ca, cbs, ccs, 1234)
+        intg = custom_ops.LangevinIntegrator(masses, temperature, dt, friction, 1234)
 
         bp = test_nrg.bind(params).bound_impl(precision=np.float64)
         bps = [bp]
@@ -242,7 +239,7 @@ class TestContext(unittest.TestCase):
 
         num_steps = 12
         temperature = 300
-        dt = 2e-3
+        dt = 1.5e-3
         friction = 0.0
         ca, cbs, ccs = langevin_coefficients(temperature, dt, friction, masses)
 
@@ -285,8 +282,8 @@ class TestContext(unittest.TestCase):
                 compute_reference_values()
 
                 noise = np.random.randn(*v_t.shape)
-
-                v_mid = v_t + np.expand_dims(cbs, axis=-1) * all_du_dxs[-1]
+                # Multiply by -1 to go from du_dx to force
+                v_mid = v_t + np.expand_dims(cbs, axis=-1) * -all_du_dxs[-1]
 
                 v_t = ca * v_mid + np.expand_dims(ccs, axis=-1) * noise
                 x_t += 0.5 * dt * (v_mid + v_t)
@@ -307,7 +304,7 @@ class TestContext(unittest.TestCase):
             ref_all_lambda_us,
         ) = integrate_once_through(x0, v0, box, params)
 
-        intg = custom_ops.LangevinIntegrator(dt, ca, cbs, ccs, 1234)
+        intg = custom_ops.LangevinIntegrator(masses, temperature, dt, friction, 1234)
 
         bp = test_nrg.bind(params).bound_impl(precision=np.float64)
         bps = [bp]
@@ -358,7 +355,7 @@ class TestContext(unittest.TestCase):
             lamb, num_steps, np.array([], dtype=np.float64), u_interval, x_interval
         )
 
-        assert test_us.shape == (num_steps / u_interval, 0)
+        assert test_us.shape == (num_steps // u_interval, 0)
 
     def test_local_md(self):
         mol, _ = get_biphenyl()
