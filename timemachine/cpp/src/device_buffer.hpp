@@ -3,7 +3,7 @@
 
 namespace timemachine {
 
-template <typename T> class DeviceBuffer {
+template <typename T, bool PINNED = false> class DeviceBuffer {
 public:
     DeviceBuffer(const size_t length);
 

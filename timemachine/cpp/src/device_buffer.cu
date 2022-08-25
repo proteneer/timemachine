@@ -4,34 +4,54 @@
 
 namespace timemachine {
 
-template <typename T> T *allocate(const std::size_t length) {
+template <typename T, bool PINNED> T *allocate(const std::size_t length) {
     if (length < 1) {
         throw std::runtime_error("device buffer length must at least be 1");
     }
     T *buffer;
-    gpuErrchk(cudaMalloc(&buffer, length * sizeof(T)));
+    if (PINNED) {
+        gpuErrchk(cudaMallocHost(&buffer, length * sizeof(T)));
+    } else {
+        gpuErrchk(cudaMalloc(&buffer, length * sizeof(T)));
+    }
     return buffer;
 }
 
-template <typename T>
-DeviceBuffer<T>::DeviceBuffer(const std::size_t length) : size(length * sizeof(T)), data(allocate<T>(length)) {}
+template <typename T, bool PINNED>
+DeviceBuffer<T, PINNED>::DeviceBuffer(const std::size_t length)
+    : size(length * sizeof(T)), data(allocate<T, PINNED>(length)) {}
 
-template <typename T> DeviceBuffer<T>::~DeviceBuffer() {
+template <typename T, bool PINNED> DeviceBuffer<T, PINNED>::~DeviceBuffer() {
     // TODO: the file/line context reported by gpuErrchk on failure is
     // not very useful when it's called from here. Is there a way to
     // report a stack trace?
-    gpuErrchk(cudaFree(data));
+    if (PINNED) {
+        gpuErrchk(cudaFreeHost(data));
+    } else {
+        gpuErrchk(cudaFree(data));
+    }
 }
 
-template <typename T> void DeviceBuffer<T>::copy_from(const T *host_buffer) const {
-    gpuErrchk(cudaMemcpy(data, host_buffer, size, cudaMemcpyHostToDevice));
+template <typename T, bool PINNED> void DeviceBuffer<T, PINNED>::copy_from(const T *host_buffer) const {
+    if (PINNED) {
+        memcpy(data, host_buffer, size);
+    } else {
+        gpuErrchk(cudaMemcpy(data, host_buffer, size, cudaMemcpyHostToDevice));
+    }
 }
 
-template <typename T> void DeviceBuffer<T>::copy_to(T *host_buffer) const {
-    gpuErrchk(cudaMemcpy(host_buffer, data, size, cudaMemcpyDeviceToHost));
+template <typename T, bool PINNED> void DeviceBuffer<T, PINNED>::copy_to(T *host_buffer) const {
+    if (PINNED) {
+        memcpy(host_buffer, data, size);
+    } else {
+        gpuErrchk(cudaMemcpy(host_buffer, data, size, cudaMemcpyDeviceToHost));
+    }
 }
 
-template class DeviceBuffer<double>;
-template class DeviceBuffer<unsigned int>;
-template class DeviceBuffer<unsigned long long>;
+template class DeviceBuffer<double, true>;
+template class DeviceBuffer<double, false>;
+template class DeviceBuffer<unsigned int, true>;
+template class DeviceBuffer<unsigned int, false>;
+template class DeviceBuffer<unsigned long long, true>;
+template class DeviceBuffer<unsigned long long, false>;
 } // namespace timemachine
