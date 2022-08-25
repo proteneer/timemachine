@@ -4,6 +4,11 @@
 #include <cstdio>
 #include <iostream>
 
+// round_up_even is important to generating random numbers with cuRand as the generators only generate
+// sets that are divisible by the dimension (typically 2) and will return error CURAND_STATUS_LENGTH_NOT_MULTIPLE.
+// https://docs.nvidia.com/cuda/curand/group__HOST.html#group__HOST_1gb94a31d5c165858c96b6c18b70644437
+int round_up_even(int count);
+
 curandStatus_t templateCurandNormal(curandGenerator_t generator, float *outputPtr, size_t n, float mean, float stddev);
 
 curandStatus_t

@@ -7,14 +7,6 @@
 
 namespace timemachine {
 
-int round_up_even(int count) {
-    if (count % 2 == 1) {
-        return count += 1;
-    } else {
-        return count;
-    }
-}
-
 LangevinIntegrator::LangevinIntegrator(int N, double dt, double ca, const double *h_cbs, const double *h_ccs, int seed)
     : N_(N), dt_(dt), ca_(ca) {
 
@@ -70,7 +62,7 @@ void LangevinIntegrator::step_fwd(
     curandErrchk(templateCurandNormal(cr_rng_, d_noise_, round_up_even(N_ * D), 0.0, 1.0));
 
     update_forward_baoab<double>
-        <<<dimGrid_dx, tpb, 0, stream>>>(N_, D, ca_,  d_idxs, d_cbs_, d_ccs_, d_noise_, d_x_t, d_v_t, d_du_dx_, dt_);
+        <<<dimGrid_dx, tpb, 0, stream>>>(N_, D, ca_, d_idxs, d_cbs_, d_ccs_, d_noise_, d_x_t, d_v_t, d_du_dx_, dt_);
 
     gpuErrchk(cudaPeekAtLastError());
 }
