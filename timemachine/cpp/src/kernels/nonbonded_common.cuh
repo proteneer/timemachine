@@ -43,8 +43,6 @@ float __device__ __forceinline__ real_es_factor(float real_beta, float dij, floa
     return -inv_d2ij * (static_cast<float>(TWO_OVER_SQRT_PI) * beta_dij * exp_beta_dij_2 + erfc_beta_dij);
 }
 
-void __global__ k_arange(int N, unsigned int *arr);
-
 // Compute the terms associated with electrostatics.
 // This is pulled out into a function to ensure that the same bit values
 // are computed to ensure that that the fixed point values are exactly the same regardless

@@ -199,6 +199,84 @@ void declare_context(py::module &m) {
 
     )pbdoc")
         .def(
+            "local_md",
+            [](timemachine::Context &ctxt,
+               const py::array_t<double, py::array::c_style> &lambda_schedule,
+               const int iterations,
+               const int global_steps,
+               const int local_steps,
+               const int store_x_interval,
+               const py::array_t<unsigned int, py::array::c_style> &local_idxs,
+               const double cutoff) -> py::tuple {
+                const int x_interval = (store_x_interval <= 0) ? iterations : store_x_interval;
+                if (lambda_schedule.size() != (global_steps + local_steps)) {
+                    throw std::runtime_error("Lambda_schedule length must equal global_steps + local_steps");
+                }
+
+                std::vector<double> vec_lambda_schedule(lambda_schedule.size());
+                std::memcpy(
+                    vec_lambda_schedule.data(), lambda_schedule.data(), vec_lambda_schedule.size() * sizeof(double));
+
+                std::vector<unsigned int> vec_local_idxs(local_idxs.size());
+                std::memcpy(vec_local_idxs.data(), local_idxs.data(), vec_local_idxs.size() * sizeof(unsigned int));
+
+                std::array<std::vector<double>, 2> result = ctxt.local_md(
+                    vec_lambda_schedule, iterations, global_steps, local_steps, x_interval, vec_local_idxs, cutoff);
+
+                const int N = ctxt.num_atoms();
+                const int D = 3;
+                const int F = result[0].size() / (N * D);
+                py::array_t<double, py::array::c_style> out_x_buffer({F, N, D});
+                std::memcpy(out_x_buffer.mutable_data(), result[0].data(), result[0].size() * sizeof(double));
+
+                py::array_t<double, py::array::c_style> box_buffer({F, D, D});
+                std::memcpy(box_buffer.mutable_data(), result[1].data(), result[1].size() * sizeof(double));
+                return py::make_tuple(out_x_buffer, box_buffer);
+            },
+            py::arg("lambda_schedule"),
+            py::arg("iterations"),
+            py::arg("global_steps"),
+            py::arg("local_steps"),
+            py::arg("store_x_interval"),
+            py::arg("local_idxs"),
+            py::arg("cutoff") = 1.2,
+            R"pbdoc(
+        Take multiple steps with a specified lambda value at each step, with a mix
+        of regular MD steps (the entire system is simulated) and local MD steps.
+
+        F = iterations / store_x_interval
+
+        Parameters
+        ----------
+        lambda_schedule: np.array
+            Lambda values to run each step at. Length must be global_steps + local_steps.
+
+        iterations: iteration
+            Number of rounds of global + local MD
+
+        global_steps: int
+            Number of steps of regular MD to run.
+
+        local_steps: int
+            Number of steps of local MD to run.
+
+        store_x_interval: int
+            How often we store the frames, store after every store_x_interval iterations
+
+        local_idxs: np.array of uint32
+            The idxs that defines the atoms to use as the region(s) to run local MD.
+
+        cutoff: float
+            The distance in nanometers from the local_idxs to simulate for local MD.
+
+        Returns
+        -------
+        2-tuple of coordinates, boxes
+            Coordinates have shape (F, N, 3)
+            Boxes have shape (F, 3, 3)
+
+    )pbdoc")
+        .def(
             "multiple_steps_U",
             [](timemachine::Context &ctxt,
                const double lambda,

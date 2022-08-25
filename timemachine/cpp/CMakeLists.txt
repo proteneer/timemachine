@@ -86,6 +86,7 @@ pybind11_add_module(${LIBRARY_NAME} SHARED NO_EXTRAS
   src/device_buffer.cu
   src/kernels/k_nonbonded.cu
   src/kernels/nonbonded_common.cu
+  src/kernels/k_indices.cu
 )
 
 include_directories(src/kernels)

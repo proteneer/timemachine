@@ -102,6 +102,8 @@ public:
         unsigned long long *d_u,
         cudaStream_t stream) override;
 
+    double get_cutoff() const { return cutoff_; };
+
     void set_atom_idxs(const std::vector<unsigned int> &atom_idxs);
     void set_atom_idxs_device(const int K, const unsigned int *d_atom_idxs, const cudaStream_t stream);
 

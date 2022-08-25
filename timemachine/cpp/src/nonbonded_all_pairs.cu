@@ -5,6 +5,7 @@
 #include "fixed_point.hpp"
 #include "gpu_utils.cuh"
 #include "kernel_utils.cuh"
+#include "kernels/k_indices.cuh"
 #include "nonbonded_all_pairs.hpp"
 #include "nonbonded_common.cuh"
 #include "vendored/hilbert.h"

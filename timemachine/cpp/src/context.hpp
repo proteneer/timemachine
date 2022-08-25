@@ -34,6 +34,15 @@ public:
         int store_u_interval,
         int store_x_interval);
 
+    std::array<std::vector<double>, 2> local_md(
+        const std::vector<double> &lambda_schedule,
+        const int iterations,
+        const int global_steps,
+        const int local_steps,
+        const int store_x_interval,
+        const std::vector<unsigned int> &local_idxs,
+        const double cutoff = 1.2);
+
     int num_atoms() const;
 
     void set_x_t(const double *in_buffer);

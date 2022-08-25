@@ -8,8 +8,12 @@ import jax
 import pytest
 from common import prepare_nb_system
 
+from timemachine.ff import Forcefield
 from timemachine.integrator import langevin_coefficients
-from timemachine.lib import custom_ops
+from timemachine.lib import LangevinIntegrator, custom_ops
+from timemachine.lib.potentials import SummedPotential
+from timemachine.md.enhanced import get_solvent_phase_system
+from timemachine.testsystems.ligands import get_biphenyl
 
 pytestmark = [pytest.mark.memcheck]
 
@@ -355,6 +359,86 @@ class TestContext(unittest.TestCase):
         )
 
         assert test_us.shape == (num_steps / u_interval, 0)
+
+    def test_local_md(self):
+        mol, _ = get_biphenyl()
+        ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
+
+        temperature = 300
+        dt = 1.5e-3
+        friction = 0.0
+        seed = 2022
+        radius = 1.2
+        num_steps = 500
+
+        unbound_potentials, sys_params, masses, coords, box = get_solvent_phase_system(mol, ff, minimize_energy=False)
+        # Select a single particle to use as the reference, will be frozen
+        local_idxs = np.array([len(coords) - 1], dtype=np.uint32)
+
+        indices_to_move = np.arange(len(coords) - mol.GetNumAtoms(), len(coords) - 1, dtype=np.uint32)
+
+        intg = LangevinIntegrator(temperature, dt, friction, masses, seed)
+
+        intg_impl = intg.impl()
+
+        v0 = np.zeros_like(coords)
+        bps = []
+        for p, bp in zip(sys_params, unbound_potentials):
+            bps.append(bp.bind(p).bound_impl(np.float32))
+
+        reference_values = []
+        for bp in bps:
+            reference_values.append(bp.execute(coords, box, 0.0))
+
+        # Construct context with no potentials, local MD should fail.
+        ctxt = custom_ops.Context(coords, v0, box, intg_impl, [])
+        with pytest.raises(RuntimeError) as e:
+            ctxt.local_md(np.zeros(100), local_idxs, radius=radius)
+        assert "unable to find a NonbondedAllPairs potential" == str(e.value)
+
+        # If you have multiple nonbonded potentials, should fail
+        ctxt = custom_ops.Context(coords, v0, box, intg_impl, bps * 2)
+        with pytest.raises(RuntimeError) as e:
+            ctxt.local_md(np.zeros(100), local_idxs, radius=radius)
+        assert "found multiple NonbondedAllPairs potentials" == str(e.value)
+
+        ctxt = custom_ops.Context(coords, v0, box, intg_impl, bps)
+        # Run steps of local MD
+        xs, boxes = ctxt.local_md(np.zeros(num_steps), local_idxs, radius=radius)
+
+        assert xs.shape[0] == 1
+        assert boxes.shape[0] == 1
+
+        # Indices in the local area should have moved
+        assert np.all(coords[indices_to_move] != xs[-1][indices_to_move])
+        # Indices not in the local area should match up, as there is no global MD
+        assert np.any(coords == xs[-1])
+
+        # Verify that the bound potentials haven't been changed, as local md modifies potentials
+        for ref_val, bp in zip(reference_values, bps):
+            ref_du_dx, ref_du_dl, ref_u = ref_val
+            test_du_dx, test_du_dl, test_u = bp.execute(coords, box, 0.0)
+            np.testing.assert_array_equal(ref_du_dx, test_du_dx)
+            np.testing.assert_equal(ref_du_dl, test_du_dl)
+            np.testing.assert_equal(ref_u, test_u)
+
+        summed_potential = SummedPotential(unbound_potentials, sys_params)
+        # Flatten the arrays so we can concatenate them.
+        summed_potential = summed_potential.bind(np.concatenate([p.reshape(-1) for p in sys_params]).reshape(-1))
+        bp = summed_potential.bound_impl(precision=np.float32)
+
+        intg_impl = intg.impl()
+
+        # Rerun with the summed potential
+        ctxt = custom_ops.Context(coords, v0, box, intg_impl, [bp])
+        summed_pot_xs, summed_pot_boxes = ctxt.local_md(np.zeros(num_steps), local_idxs, radius=radius)
+
+        assert summed_pot_xs.shape == xs.shape
+        assert summed_pot_boxes.shape == boxes.shape
+
+        # Results using a summed potential should be identical.
+        np.testing.assert_array_equal(summed_pot_xs, xs)
+        np.testing.assert_array_equal(summed_pot_boxes, boxes)
 
 
 if __name__ == "__main__":
