@@ -344,6 +344,11 @@ void NonbondedAllPairs<RealType, Interpolated>::execute_device(
         // this stream needs to be synchronized so we can be sure that p_ixn_count_ is properly set.
         gpuErrchk(cudaStreamSynchronize(stream));
 
+        // If there are no interactions, things have broken
+        if (p_ixn_count_[0] < 1) {
+            throw std::runtime_error("no nonbonded interactions, check system");
+        }
+
         // Verify that the cutoff and box size are valid together. If cutoff is greater than half the box
         // then a particle can interact with multiple periodic copies.
         const double db_cutoff = (cutoff_ + nblist_padding_) * 2;
