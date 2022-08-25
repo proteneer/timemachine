@@ -15,7 +15,7 @@ template <typename RealType, bool Interpolated> class NonbondedAllPairs : public
 
 private:
     const int N_; // total number of atoms, i.e. first dimension of input coords, params
-    const int K_; // number of interacting atoms, K_ <= N_
+    int K_;       // number of interacting atoms, K_ <= N_
 
     int *d_lambda_plane_idxs_;
     int *d_lambda_offset_idxs_;
@@ -64,14 +64,15 @@ private:
 
     bool disable_hilbert_;
 
-    void hilbert_sort(const double *d_x, const double *d_box, cudaStream_t stream);
-
     std::array<k_nonbonded_fn, 16> kernel_ptrs_;
 
     jitify::JitCache kernel_cache_;
     jitify::KernelInstantiation compute_w_coords_instance_;
     jitify::KernelInstantiation compute_gather_interpolated_;
     jitify::KernelInstantiation compute_add_du_dp_interpolated_;
+
+    void hilbert_sort(const double *d_x, const double *d_box, cudaStream_t stream);
+    void verify_atom_idxs(const std::vector<unsigned int> &atom_idxs);
 
 public:
     // these are marked public but really only intended for testing.
@@ -83,7 +84,7 @@ public:
         const std::vector<int> &lambda_offset_idxs, // N
         const double beta,
         const double cutoff,
-        const std::optional<std::set<int>> &atom_idxs,
+        const std::optional<std::set<unsigned int>> &atom_idxs,
         const std::string &kernel_src);
 
     ~NonbondedAllPairs();
@@ -100,6 +101,9 @@ public:
         unsigned long long *d_du_dl,
         unsigned long long *d_u,
         cudaStream_t stream) override;
+
+    void set_atom_idxs(const std::vector<unsigned int> &atom_idxs);
+    void set_atom_idxs_device(const int K, const unsigned int *d_atom_idxs, const cudaStream_t stream);
 
     void du_dp_fixed_to_float(const int N, const int P, const unsigned long long *du_dp, double *du_dp_float) override;
 };

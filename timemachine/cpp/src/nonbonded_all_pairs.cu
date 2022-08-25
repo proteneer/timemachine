@@ -1,8 +1,10 @@
 #include "vendored/jitify.hpp"
 #include <cub/cub.cuh>
 
+#include "device_buffer.hpp"
 #include "fixed_point.hpp"
 #include "gpu_utils.cuh"
+#include "kernel_utils.cuh"
 #include "nonbonded_all_pairs.hpp"
 #include "nonbonded_common.cuh"
 #include "vendored/hilbert.h"
@@ -20,7 +22,7 @@ NonbondedAllPairs<RealType, Interpolated>::NonbondedAllPairs(
     const std::vector<int> &lambda_offset_idxs, // [N]
     const double beta,
     const double cutoff,
-    const std::optional<std::set<int>> &atom_idxs,
+    const std::optional<std::set<unsigned int>> &atom_idxs,
     const std::string &kernel_src
     // const std::string &transform_lambda_charge,
     // const std::string &transform_lambda_sigma,
@@ -63,7 +65,6 @@ NonbondedAllPairs<RealType, Interpolated>::NonbondedAllPairs(
     if (lambda_offset_idxs.size() != lambda_plane_idxs.size()) {
         throw std::runtime_error("lambda offset idxs and plane idxs need to be equivalent");
     }
-
     gpuErrchk(cudaMalloc(&d_lambda_plane_idxs_, N_ * sizeof(*d_lambda_plane_idxs_)));
     gpuErrchk(cudaMemcpy(
         d_lambda_plane_idxs_, &lambda_plane_idxs[0], N_ * sizeof(*d_lambda_plane_idxs_), cudaMemcpyHostToDevice));
@@ -72,26 +73,22 @@ NonbondedAllPairs<RealType, Interpolated>::NonbondedAllPairs(
     gpuErrchk(cudaMemcpy(
         d_lambda_offset_idxs_, &lambda_offset_idxs[0], N_ * sizeof(*d_lambda_offset_idxs_), cudaMemcpyHostToDevice));
 
-    if (atom_idxs) {
-        gpuErrchk(cudaMalloc(&d_atom_idxs_, K_ * sizeof(*d_atom_idxs_)));
-        std::vector<int> atom_idxs_v(atom_idxs->begin(), atom_idxs->end());
-        gpuErrchk(cudaMemcpy(d_atom_idxs_, &atom_idxs_v[0], K_ * sizeof(*d_atom_idxs_), cudaMemcpyHostToDevice));
-    }
+    gpuErrchk(cudaMalloc(&d_atom_idxs_, N_ * sizeof(*d_atom_idxs_)));
 
-    gpuErrchk(cudaMalloc(&d_sorted_atom_idxs_, K_ * sizeof(*d_sorted_atom_idxs_)));
+    gpuErrchk(cudaMalloc(&d_sorted_atom_idxs_, N_ * sizeof(*d_sorted_atom_idxs_)));
 
-    gpuErrchk(cudaMalloc(&d_gathered_x_, K_ * 3 * sizeof(*d_gathered_x_)));
+    gpuErrchk(cudaMalloc(&d_gathered_x_, N_ * 3 * sizeof(*d_gathered_x_)));
 
     gpuErrchk(cudaMalloc(&d_w_, N_ * sizeof(*d_w_)));
     gpuErrchk(cudaMalloc(&d_dw_dl_, N_ * sizeof(*d_dw_dl_)));
 
-    gpuErrchk(cudaMalloc(&d_gathered_w_, K_ * sizeof(*d_gathered_w_)));
-    gpuErrchk(cudaMalloc(&d_gathered_dw_dl_, K_ * sizeof(*d_gathered_dw_dl_)));
+    gpuErrchk(cudaMalloc(&d_gathered_w_, N_ * sizeof(*d_gathered_w_)));
+    gpuErrchk(cudaMalloc(&d_gathered_dw_dl_, N_ * sizeof(*d_gathered_dw_dl_)));
 
-    gpuErrchk(cudaMalloc(&d_gathered_p_, K_ * 3 * sizeof(*d_gathered_p_)));         // interpolated
-    gpuErrchk(cudaMalloc(&d_gathered_dp_dl_, K_ * 3 * sizeof(*d_gathered_dp_dl_))); // interpolated
-    gpuErrchk(cudaMalloc(&d_gathered_du_dx_, K_ * 3 * sizeof(*d_gathered_du_dx_)));
-    gpuErrchk(cudaMalloc(&d_gathered_du_dp_, K_ * 3 * sizeof(*d_gathered_du_dp_)));
+    gpuErrchk(cudaMalloc(&d_gathered_p_, N_ * 3 * sizeof(*d_gathered_p_)));         // interpolated
+    gpuErrchk(cudaMalloc(&d_gathered_dp_dl_, N_ * 3 * sizeof(*d_gathered_dp_dl_))); // interpolated
+    gpuErrchk(cudaMalloc(&d_gathered_du_dx_, N_ * 3 * sizeof(*d_gathered_du_dx_)));
+    gpuErrchk(cudaMalloc(&d_gathered_du_dp_, N_ * 3 * sizeof(*d_gathered_du_dp_)));
 
     gpuErrchk(cudaMalloc(&d_du_dp_buffer_, N_ * 3 * sizeof(*d_du_dp_buffer_)));
 
@@ -104,9 +101,9 @@ NonbondedAllPairs<RealType, Interpolated>::NonbondedAllPairs(
     gpuErrchk(cudaMalloc(&d_rebuild_nblist_, 1 * sizeof(*d_rebuild_nblist_)));
     gpuErrchk(cudaMallocHost(&p_rebuild_nblist_, 1 * sizeof(*p_rebuild_nblist_)));
 
-    gpuErrchk(cudaMalloc(&d_sort_keys_in_, K_ * sizeof(d_sort_keys_in_)));
-    gpuErrchk(cudaMalloc(&d_sort_keys_out_, K_ * sizeof(d_sort_keys_out_)));
-    gpuErrchk(cudaMalloc(&d_sort_vals_in_, K_ * sizeof(d_sort_vals_in_)));
+    gpuErrchk(cudaMalloc(&d_sort_keys_in_, N_ * sizeof(d_sort_keys_in_)));
+    gpuErrchk(cudaMalloc(&d_sort_keys_out_, N_ * sizeof(d_sort_keys_out_)));
+    gpuErrchk(cudaMalloc(&d_sort_vals_in_, N_ * sizeof(d_sort_vals_in_)));
 
     // initialize hilbert curve
     std::vector<unsigned int> bin_to_idx(HILBERT_GRID_DIM * HILBERT_GRID_DIM * HILBERT_GRID_DIM);
@@ -139,6 +136,15 @@ NonbondedAllPairs<RealType, Interpolated>::NonbondedAllPairs(
 
     gpuErrchk(cudaPeekAtLastError());
     gpuErrchk(cudaMalloc(&d_sort_storage_, d_sort_storage_bytes_));
+
+    std::vector<unsigned int> atom_idxs_h;
+    if (atom_idxs) {
+        atom_idxs_h = std::vector<unsigned int>(atom_idxs->begin(), atom_idxs->end());
+    } else {
+        atom_idxs_h = std::vector<unsigned int>(N_);
+        std::iota(atom_idxs_h.begin(), atom_idxs_h.end(), 0);
+    }
+    this->set_atom_idxs(atom_idxs_h);
 };
 
 template <typename RealType, bool Interpolated> NonbondedAllPairs<RealType, Interpolated>::~NonbondedAllPairs() {
@@ -146,9 +152,7 @@ template <typename RealType, bool Interpolated> NonbondedAllPairs<RealType, Inte
     gpuErrchk(cudaFree(d_lambda_plane_idxs_));
     gpuErrchk(cudaFree(d_lambda_offset_idxs_));
 
-    if (d_atom_idxs_) {
-        gpuErrchk(cudaFree(d_atom_idxs_));
-    }
+    gpuErrchk(cudaFree(d_atom_idxs_));
 
     gpuErrchk(cudaFree(d_du_dp_buffer_));
     gpuErrchk(cudaFree(d_sorted_atom_idxs_));
@@ -179,6 +183,48 @@ template <typename RealType, bool Interpolated> NonbondedAllPairs<RealType, Inte
 };
 
 template <typename RealType, bool Interpolated>
+void NonbondedAllPairs<RealType, Interpolated>::verify_atom_idxs(const std::vector<unsigned int> &atom_idxs) {
+    if (atom_idxs.size() == 0) {
+        throw std::runtime_error("idxs can't be empty");
+    }
+    std::set<unsigned int> unique_idxs(atom_idxs.begin(), atom_idxs.end());
+    if (unique_idxs.size() != atom_idxs.size()) {
+        throw std::runtime_error("atom indices must be unique");
+    }
+    if (*std::max_element(atom_idxs.begin(), atom_idxs.end()) >= N_) {
+        throw std::runtime_error("indices values must be less than N");
+    }
+}
+
+// Set atom idxs upon which to compute the non-bonded potential. This will trigger a neighborlist rebuild.
+template <typename RealType, bool Interpolated>
+void NonbondedAllPairs<RealType, Interpolated>::set_atom_idxs(const std::vector<unsigned int> &atom_idxs) {
+    this->verify_atom_idxs(atom_idxs);
+    const cudaStream_t stream = static_cast<cudaStream_t>(0);
+    DeviceBuffer<unsigned int> atom_idxs_buffer(atom_idxs.size());
+    atom_idxs_buffer.copy_from(&atom_idxs[0]);
+    this->set_atom_idxs_device(atom_idxs.size(), atom_idxs_buffer.data, stream);
+    gpuErrchk(cudaStreamSynchronize(stream));
+}
+
+template <typename RealType, bool Interpolated>
+void NonbondedAllPairs<RealType, Interpolated>::set_atom_idxs_device(
+    const int K, const unsigned int *d_in_atom_idxs, const cudaStream_t stream) {
+    if (K < 1) {
+        throw std::runtime_error("K must be at least 1");
+    }
+    if (K > N_) {
+        throw std::runtime_error("number of idxs must be less than or equal to N");
+    }
+    gpuErrchk(
+        cudaMemcpyAsync(d_atom_idxs_, d_in_atom_idxs, K * sizeof(*d_atom_idxs_), cudaMemcpyDeviceToDevice, stream));
+    nblist_.resize_device(K, stream);
+    // Force the rebuild of the nblist
+    gpuErrchk(cudaMemsetAsync(d_rebuild_nblist_, 1, 1 * sizeof(*d_rebuild_nblist_), stream));
+    this->K_ = K;
+}
+
+template <typename RealType, bool Interpolated>
 void NonbondedAllPairs<RealType, Interpolated>::set_nblist_padding(double val) {
     nblist_padding_ = val;
 }
@@ -191,16 +237,11 @@ template <typename RealType, bool Interpolated>
 void NonbondedAllPairs<RealType, Interpolated>::hilbert_sort(
     const double *d_coords, const double *d_box, cudaStream_t stream) {
 
-    const int tpb = 32;
+    const int tpb = warp_size;
     const int B = ceil_divide(K_, tpb);
 
-    if (d_atom_idxs_) {
-        k_coords_to_kv_gather<<<B, tpb, 0, stream>>>(
-            K_, d_atom_idxs_, d_coords, d_box, d_bin_to_idx_, d_sort_keys_in_, d_sort_vals_in_);
-    } else {
-        // N_ == K_
-        k_coords_to_kv<<<B, tpb, 0, stream>>>(K_, d_coords, d_box, d_bin_to_idx_, d_sort_keys_in_, d_sort_vals_in_);
-    }
+    k_coords_to_kv_gather<<<B, tpb, 0, stream>>>(
+        K_, d_atom_idxs_, d_coords, d_box, d_bin_to_idx_, d_sort_keys_in_, d_sort_vals_in_);
 
     gpuErrchk(cudaPeekAtLastError());
 
@@ -266,16 +307,11 @@ void NonbondedAllPairs<RealType, Interpolated>::execute_device(
 
     // identify which tiles contain interpolated parameters
 
-    const int tpb = 32;
+    const int tpb = warp_size;
 
     // (ytz) see if we need to rebuild the neighborlist.
-    if (d_atom_idxs_) {
-        k_check_rebuild_coords_and_box_gather<RealType><<<ceil_divide(K_, tpb), tpb, 0, stream>>>(
-            K_, d_atom_idxs_, d_x, d_nblist_x_, d_box, d_nblist_box_, nblist_padding_, d_rebuild_nblist_);
-    } else {
-        k_check_rebuild_coords_and_box<RealType><<<ceil_divide(K_, tpb), tpb, 0, stream>>>(
-            K_, d_x, d_nblist_x_, d_box, d_nblist_box_, nblist_padding_, d_rebuild_nblist_);
-    }
+    k_check_rebuild_coords_and_box_gather<RealType><<<ceil_divide(K_, tpb), tpb, 0, stream>>>(
+        K_, d_atom_idxs_, d_x, d_nblist_x_, d_box, d_nblist_box_, nblist_padding_, d_rebuild_nblist_);
     gpuErrchk(cudaPeekAtLastError());
 
     // we can optimize this away by doing the check on the GPU directly.
@@ -290,14 +326,8 @@ void NonbondedAllPairs<RealType, Interpolated>::execute_device(
         if (!disable_hilbert_) {
             this->hilbert_sort(d_x, d_box, stream);
         } else {
-            if (d_atom_idxs_) {
-                gpuErrchk(cudaMemcpyAsync(
-                    d_sorted_atom_idxs_, d_atom_idxs_, K_ * sizeof(*d_atom_idxs_), cudaMemcpyDeviceToDevice, stream));
-                gpuErrchk(cudaPeekAtLastError());
-            } else {
-                // N_ == K_
-                k_arange<<<ceil_divide(K_, tpb), tpb, 0, stream>>>(K_, d_sorted_atom_idxs_);
-            }
+            gpuErrchk(cudaMemcpyAsync(
+                d_sorted_atom_idxs_, d_atom_idxs_, K_ * sizeof(*d_atom_idxs_), cudaMemcpyDeviceToDevice, stream));
         }
 
         // compute new coordinates, new lambda_idxs, new_plane_idxs

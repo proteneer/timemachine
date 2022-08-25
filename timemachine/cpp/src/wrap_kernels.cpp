@@ -925,6 +925,7 @@ template <typename RealType, bool Interpolated> void declare_nonbonded_all_pairs
     py::class_<Class, std::shared_ptr<Class>, timemachine::Potential>(
         m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
         .def("set_nblist_padding", &timemachine::NonbondedAllPairs<RealType, Interpolated>::set_nblist_padding)
+        .def("set_atom_idxs", &timemachine::NonbondedAllPairs<RealType, Interpolated>::set_atom_idxs)
         .def("disable_hilbert_sort", &timemachine::NonbondedAllPairs<RealType, Interpolated>::disable_hilbert_sort)
         .def(
             py::init([](const std::string &kernel_dir,
@@ -932,7 +933,7 @@ template <typename RealType, bool Interpolated> void declare_nonbonded_all_pairs
                         const py::array_t<int, py::array::c_style> &lambda_offset_idxs_i,
                         const double beta,
                         const double cutoff,
-                        const std::optional<py::array_t<int, py::array::c_style>> &atom_idxs_i,
+                        const std::optional<py::array_t<unsigned int, py::array::c_style>> &atom_idxs_i,
                         const std::string &transform_lambda_charge = "lambda",
                         const std::string &transform_lambda_sigma = "lambda",
                         const std::string &transform_lambda_epsilon = "lambda",
@@ -945,11 +946,11 @@ template <typename RealType, bool Interpolated> void declare_nonbonded_all_pairs
                 std::memcpy(
                     lambda_offset_idxs.data(), lambda_offset_idxs_i.data(), lambda_offset_idxs_i.size() * sizeof(int));
 
-                std::optional<std::set<int>> atom_idxs_h(std::nullopt);
+                std::optional<std::set<unsigned int>> atom_idxs_h(std::nullopt);
                 if (atom_idxs_i) {
-                    std::vector<int> atom_idxs(atom_idxs_i->size());
+                    std::vector<unsigned int> atom_idxs(atom_idxs_i->size());
                     std::memcpy(atom_idxs.data(), atom_idxs_i->data(), atom_idxs_i->size() * sizeof(int));
-                    atom_idxs_h.emplace(unique_idxs<int>(atom_idxs));
+                    atom_idxs_h.emplace(unique_idxs<unsigned int>(atom_idxs));
                 }
 
                 std::string src_path = kernel_dir + "/k_lambda_transformer_jit.cuh";

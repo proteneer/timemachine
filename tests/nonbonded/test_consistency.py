@@ -55,8 +55,8 @@ def test_nonbonded_consistency(
     lambda_plane_idxs = rng.integers(-2, 3, size=(num_atoms,), dtype=np.int32)
     lambda_offset_idxs = rng.integers(-2, 3, size=(num_atoms,), dtype=np.int32)
 
-    ligand_idxs = rng.choice(num_atoms, size=(num_atoms_ligand,), replace=False).astype(np.int32)
-    host_idxs = np.setdiff1d(np.arange(num_atoms), ligand_idxs).astype(np.int32)
+    ligand_idxs = rng.choice(num_atoms, size=(num_atoms_ligand,), replace=False).astype(np.uint32)
+    host_idxs = np.setdiff1d(np.arange(num_atoms), ligand_idxs).astype(np.uint32)
 
     make_ref_potential = NonbondedInterpolated if interpolated else Nonbonded
     ref_impl = make_ref_potential(
@@ -91,7 +91,7 @@ def test_nonbonded_consistency(
         [
             make_allpairs_potential(host_idxs),
             make_allpairs_potential(ligand_idxs),
-            make_ixngroup_potential(ligand_idxs),
+            make_ixngroup_potential(ligand_idxs.astype(np.int32)),
             make_pairlist_potential(exclusion_idxs, exclusion_scales),
         ]
     ).unbound_impl(precision)
