@@ -43,6 +43,7 @@ void LangevinIntegrator::step_fwd(
     double *d_v_t,
     double *d_box_t,
     unsigned long long *d_du_dl,
+    unsigned int *d_idxs,
     cudaStream_t stream) {
 
     gpuErrchk(cudaMemsetAsync(d_du_dx_, 0, N_ * 3 * sizeof(*d_du_dx_), stream));
@@ -69,7 +70,7 @@ void LangevinIntegrator::step_fwd(
     curandErrchk(templateCurandNormal(cr_rng_, d_noise_, round_up_even(N_ * D), 0.0, 1.0));
 
     update_forward_baoab<double>
-        <<<dimGrid_dx, tpb, 0, stream>>>(N_, D, ca_, d_cbs_, d_ccs_, d_noise_, d_x_t, d_v_t, d_du_dx_, dt_);
+        <<<dimGrid_dx, tpb, 0, stream>>>(N_, D, ca_,  d_idxs, d_cbs_, d_ccs_, d_noise_, d_x_t, d_v_t, d_du_dx_, dt_);
 
     gpuErrchk(cudaPeekAtLastError());
 }
@@ -80,6 +81,7 @@ void LangevinIntegrator::initialize(
     double *d_x_t,
     double *d_v_t,
     double *d_box_t,
+    unsigned int *d_idxs,
     cudaStream_t stream){};
 
 void LangevinIntegrator::finalize(
@@ -88,6 +90,7 @@ void LangevinIntegrator::finalize(
     double *d_x_t,
     double *d_v_t,
     double *d_box_t,
+    unsigned int *d_idxs,
     cudaStream_t stream){};
 
 } // end namespace timemachine

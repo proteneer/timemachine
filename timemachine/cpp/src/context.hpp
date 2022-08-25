@@ -55,6 +55,7 @@ private:
         std::vector<BoundPotential *> &bps,
         const double lambda,
         unsigned long long *du_dl_out,
+        unsigned int *atom_idxs,
         const cudaStream_t stream);
 
     int step_;
