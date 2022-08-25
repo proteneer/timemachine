@@ -3,6 +3,8 @@ import unittest
 import numpy as np
 from jax.config import config
 
+from timemachine.md.barostat.utils import get_bond_list, get_group_indices
+
 config.update("jax_enable_x64", True)
 import jax
 import pytest
@@ -10,7 +12,7 @@ from common import prepare_nb_system
 
 from timemachine.ff import Forcefield
 from timemachine.integrator import langevin_coefficients
-from timemachine.lib import LangevinIntegrator, custom_ops
+from timemachine.lib import LangevinIntegrator, MonteCarloBarostat, custom_ops
 from timemachine.lib.potentials import SummedPotential
 from timemachine.md.enhanced import get_solvent_phase_system
 from timemachine.testsystems.ligands import get_biphenyl
@@ -367,16 +369,11 @@ class TestContext(unittest.TestCase):
         seed = 2022
         radius = 1.2
         num_steps = 500
+        x_interval = 100
 
         unbound_potentials, sys_params, masses, coords, box = get_solvent_phase_system(mol, ff, minimize_energy=False)
         # Select a single particle to use as the reference, will be frozen
         local_idxs = np.array([len(coords) - 1], dtype=np.uint32)
-
-        indices_to_move = np.arange(len(coords) - mol.GetNumAtoms(), len(coords) - 1, dtype=np.uint32)
-
-        intg = LangevinIntegrator(temperature, dt, friction, masses, seed)
-
-        intg_impl = intg.impl()
 
         v0 = np.zeros_like(coords)
         bps = []
@@ -386,6 +383,16 @@ class TestContext(unittest.TestCase):
         reference_values = []
         for bp in bps:
             reference_values.append(bp.execute(coords, box, 0.0))
+
+        intg = LangevinIntegrator(temperature, dt, friction, masses, seed)
+
+        intg_impl = intg.impl()
+
+        # If the integrator is a thermostat and temperatures don't match should fail
+        ctxt = custom_ops.Context(coords, v0, box, intg_impl, bps * 2)
+        with pytest.raises(RuntimeError) as e:
+            ctxt.local_md(np.zeros(100), local_idxs, radius=radius, temperature=200.0)
+        assert "Local MD temperature didn't match Thermostat's temperature." == str(e.value)
 
         # Construct context with no potentials, local MD should fail.
         ctxt = custom_ops.Context(coords, v0, box, intg_impl, [])
@@ -401,15 +408,14 @@ class TestContext(unittest.TestCase):
 
         ctxt = custom_ops.Context(coords, v0, box, intg_impl, bps)
         # Run steps of local MD
-        xs, boxes = ctxt.local_md(np.zeros(num_steps), local_idxs, radius=radius)
+        xs, boxes = ctxt.local_md(np.zeros(num_steps), local_idxs, store_x_interval=x_interval, radius=radius)
 
-        assert xs.shape[0] == 1
-        assert boxes.shape[0] == 1
+        assert xs.shape[0] == num_steps // x_interval
+        assert boxes.shape[0] == num_steps // x_interval
 
-        # Indices in the local area should have moved
-        assert np.all(coords[indices_to_move] != xs[-1][indices_to_move])
-        # Indices not in the local area should match up, as there is no global MD
-        assert np.any(coords == xs[-1])
+        # Indices in mol that weren't the last atom should have moved
+        assert np.all(coords[:-1][-(mol.GetNumAtoms() - 1) :] != xs[-1][:-1][-(mol.GetNumAtoms() - 1) :])
+        assert np.any(coords[: -mol.GetNumAtoms()] == xs[-1][: -mol.GetNumAtoms()])
 
         # Verify that the bound potentials haven't been changed, as local md modifies potentials
         for ref_val, bp in zip(reference_values, bps):
@@ -418,6 +424,27 @@ class TestContext(unittest.TestCase):
             np.testing.assert_array_equal(ref_du_dx, test_du_dx)
             np.testing.assert_equal(ref_du_dl, test_du_dl)
             np.testing.assert_equal(ref_u, test_u)
+
+        group_idxs = get_group_indices(get_bond_list(unbound_potentials[0]))
+
+        pressure = 1.0
+
+        barostat = MonteCarloBarostat(coords.shape[0], pressure, temperature, group_idxs, 1, seed)
+        barostat_impl = barostat.impl(bps)
+
+        intg_impl = intg.impl()
+
+        ctxt = custom_ops.Context(coords, v0, box, intg_impl, bps, barostat=barostat_impl)
+        # Run steps of local MD
+        xs, boxes = ctxt.local_md(np.zeros(num_steps), local_idxs, store_x_interval=x_interval, radius=radius)
+
+        assert xs.shape[0] == num_steps // x_interval
+        assert boxes.shape[0] == num_steps // x_interval
+
+        # Running with Barostat should similarly not impact the positions of the global system, as it doesn't
+        # run during local MD
+        assert np.all(coords[:-1][-(mol.GetNumAtoms() - 1) :] != xs[-1][:-1][-(mol.GetNumAtoms() - 1) :])
+        assert np.any(coords[: -mol.GetNumAtoms()] == xs[-1][: -mol.GetNumAtoms()])
 
         summed_potential = SummedPotential(unbound_potentials, sys_params)
         # Flatten the arrays so we can concatenate them.
@@ -428,7 +455,9 @@ class TestContext(unittest.TestCase):
 
         # Rerun with the summed potential
         ctxt = custom_ops.Context(coords, v0, box, intg_impl, [bp])
-        summed_pot_xs, summed_pot_boxes = ctxt.local_md(np.zeros(num_steps), local_idxs, radius=radius)
+        summed_pot_xs, summed_pot_boxes = ctxt.local_md(
+            np.zeros(num_steps), local_idxs, store_x_interval=x_interval, radius=radius
+        )
 
         assert summed_pot_xs.shape == xs.shape
         assert summed_pot_boxes.shape == boxes.shape

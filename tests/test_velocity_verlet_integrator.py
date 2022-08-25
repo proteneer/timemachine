@@ -6,6 +6,7 @@ import pytest
 from timemachine.integrator import VelocityVerletIntegrator as ReferenceVelocityVerlet
 from timemachine.lib import VelocityVerletIntegrator, custom_ops
 from timemachine.lib.potentials import SummedPotential
+from timemachine.md import builders
 from timemachine.testsystems.relative import hif2a_ligand_pair
 
 
@@ -184,3 +185,25 @@ def test_initialization_and_finalization():
     with pytest.raises(RuntimeError) as e:
         ctxt.finalize(0.0)
     assert "not initialized" in str(e.value)
+
+
+def test_verlet_with_local_md():
+    """Ensure Local MD can be run with the Velocity Verlet integrator and can handle a temperature passed in"""
+    dt = 1.5e-3
+    solvent_system, solvent_coords, solvent_box, _ = builders.build_water_system(4.0)
+    rfe = hif2a_ligand_pair
+    unbound_potentials, sys_params, masses = rfe.prepare_host_edge(rfe.ff.get_ordered_params(), solvent_system)
+    coords = rfe.prepare_combined_coords(solvent_coords)
+    bound_potentials = [
+        ubp.bind(params).bound_impl(np.float32) for (ubp, params) in zip(unbound_potentials, sys_params)
+    ]
+
+    mol_a = rfe.mol_a
+
+    local_idxs = np.arange(len(coords) - mol_a.GetNumAtoms(), len(coords), dtype=np.uint32)
+
+    intg_impl, ctxt = setup_velocity_verlet(bound_potentials, coords, solvent_box, dt, masses)  # noqa
+
+    n_steps = 10
+
+    ctxt.local_md(np.ones(n_steps), local_idxs, temperature=100)

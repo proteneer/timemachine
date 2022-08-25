@@ -2,6 +2,11 @@ from jax import config, grad, jit
 from jax import numpy as jnp
 from jax import vmap
 
+from timemachine.ff import Forcefield
+from timemachine.lib import LangevinIntegrator, custom_ops
+from timemachine.md.enhanced import get_solvent_phase_system
+from timemachine.testsystems.ligands import get_biphenyl
+
 config.update("jax_enable_x64", True)
 
 from functools import partial
@@ -183,3 +188,53 @@ def test_ideal_gas():
     # expect failure with ablated version of local move
     with pytest.raises(RuntimeError):
         assert_correctness(incorrect_local_move)
+
+
+def test_local_md_particle_density():
+    mol, _ = get_biphenyl()
+    ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
+
+    temperature = 300
+    dt = 1.5e-3
+    friction = 0.0
+    seed = 2022
+    cutoff = 1.2
+
+    # Have to minimize, else there can be clashes and the local moves will cause crashes
+    unbound_potentials, sys_params, masses, coords, box = get_solvent_phase_system(mol, ff)
+
+    local_idxs = np.array([len(coords) - 1], dtype=np.uint32)
+    print(local_idxs[0])
+
+    nblist = custom_ops.Neighborlist_f32(coords.shape[0])
+    num_local_idxs = len(local_idxs)
+    num_host_atoms = len(coords) - num_local_idxs
+
+    # Construct list of atoms in the inner shell
+    nblist.set_row_idxs(np.arange(len(coords) - num_local_idxs, len(coords), dtype=np.uint32))
+
+    intg = LangevinIntegrator(temperature, dt, friction, masses, seed)
+
+    intg_impl = intg.impl()
+
+    v0 = np.zeros_like(coords)
+    bps = []
+    for p, bp in zip(sys_params, unbound_potentials):
+        bps.append(bp.bind(p).bound_impl(np.float32))
+
+    def observable(x):
+        ixns = nblist.get_nblist(coords, box, cutoff)
+        flattened = np.concatenate(ixns).reshape(-1)
+        inner_shell_idxs = np.unique(flattened)
+
+        # Combine all of the indices that are involved in the inner shell
+        subsystem_idxs = np.unique(np.concatenate([inner_shell_idxs, np.arange(num_host_atoms, len(coords))]))
+        return len(subsystem_idxs)
+
+    ctxt = custom_ops.Context(coords, v0, box, intg_impl, bps)
+
+    def local_move(x, steps=1, lamb=0.0):
+        xs, boxes = ctxt.local_md(np.ones(steps) * lamb, local_idxs)
+        return xs, boxes
+
+    expect_no_drift(coords, local_move, observable, n_local_resampling_iterations=50)

@@ -36,12 +36,12 @@ public:
 
     std::array<std::vector<double>, 2> local_md(
         const std::vector<double> &lambda_schedule,
-        const int iterations,
-        const int global_steps,
-        const int local_steps,
-        const int store_x_interval,
         const std::vector<unsigned int> &local_idxs,
-        const double cutoff = 1.2);
+        const int store_x_interval,
+        const double radius,
+        const double k,
+        const double temperature,
+        const int seed);
 
     int num_atoms() const;
 
@@ -66,6 +66,8 @@ private:
         unsigned long long *du_dl_out,
         unsigned int *atom_idxs,
         const cudaStream_t stream);
+
+    void _assert_temperature_matches(const double temperature);
 
     int step_;
 

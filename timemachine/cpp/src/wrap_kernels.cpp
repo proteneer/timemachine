@@ -202,16 +202,17 @@ void declare_context(py::module &m) {
             "local_md",
             [](timemachine::Context &ctxt,
                const py::array_t<double, py::array::c_style> &lambda_schedule,
-               const int iterations,
-               const int global_steps,
-               const int local_steps,
-               const int store_x_interval,
                const py::array_t<unsigned int, py::array::c_style> &local_idxs,
-               const double cutoff) -> py::tuple {
-                const int x_interval = (store_x_interval <= 0) ? iterations : store_x_interval;
-                if (lambda_schedule.size() != (global_steps + local_steps)) {
-                    throw std::runtime_error("Lambda_schedule length must equal global_steps + local_steps");
+               const int store_x_interval,
+               const double radius,
+               const double k,
+               const double temperature,
+               const int seed) -> py::tuple {
+                if (lambda_schedule.size() <= 0) {
+                    throw std::runtime_error("Lambda_schedule length must at least one");
                 }
+
+                const int x_interval = (store_x_interval <= 0) ? lambda_schedule.size() : store_x_interval;
 
                 std::vector<double> vec_lambda_schedule(lambda_schedule.size());
                 std::memcpy(
@@ -219,9 +220,10 @@ void declare_context(py::module &m) {
 
                 std::vector<unsigned int> vec_local_idxs(local_idxs.size());
                 std::memcpy(vec_local_idxs.data(), local_idxs.data(), vec_local_idxs.size() * sizeof(unsigned int));
-
-                std::array<std::vector<double>, 2> result = ctxt.local_md(
-                    vec_lambda_schedule, iterations, global_steps, local_steps, x_interval, vec_local_idxs, cutoff);
+                // Verify that local idxs are unique
+                unique_idxs<unsigned int>(vec_local_idxs);
+                std::array<std::vector<double>, 2> result =
+                    ctxt.local_md(vec_lambda_schedule, vec_local_idxs, x_interval, radius, k, temperature, seed);
 
                 const int N = ctxt.num_atoms();
                 const int D = 3;
@@ -234,40 +236,49 @@ void declare_context(py::module &m) {
                 return py::make_tuple(out_x_buffer, box_buffer);
             },
             py::arg("lambda_schedule"),
-            py::arg("iterations"),
-            py::arg("global_steps"),
-            py::arg("local_steps"),
-            py::arg("store_x_interval"),
             py::arg("local_idxs"),
-            py::arg("cutoff") = 1.2,
+            py::arg("store_x_interval") = 0,
+            py::arg("radius") = 1.2,
+            py::arg("k") = 10000.0,
+            py::arg("temperature") = 300.0,
+            py::arg("seed") = 2022,
             R"pbdoc(
-        Take multiple steps with a specified lambda value at each step, with a mix
-        of regular MD steps (the entire system is simulated) and local MD steps.
+        Take multiple steps with a specified lambda value at each step with local MD steps. Local MD selects
+        particles based on the log probability using a random particle from the local_idxs that is frozen for all steps.
+
+        Should NOT be called repeatedly without having a thousand or more steps between calls. Due to discretization
+        error calling things repeatedly will result in the particle density around the local indices to drop and in the
+        worst case will crash.
+
+        Running a barostat and local MD at the same time are not currently supported. If a barostat is
+        assigned to the context, the barostat won't run.
 
         F = iterations / store_x_interval
 
         Parameters
         ----------
         lambda_schedule: np.array
-            Lambda values to run each step at. Length must be global_steps + local_steps.
-
-        iterations: iteration
-            Number of rounds of global + local MD
-
-        global_steps: int
-            Number of steps of regular MD to run.
-
-        local_steps: int
-            Number of steps of local MD to run.
-
-        store_x_interval: int
-            How often we store the frames, store after every store_x_interval iterations
+            Lambda values to run each step at.
 
         local_idxs: np.array of uint32
-            The idxs that defines the atoms to use as the region(s) to run local MD.
+            The idxs that defines the atoms to use as the region(s) to run local MD. A random idx will be
+            selected to be frozen and used as the center of the shell of particles to be simulated.
 
-        cutoff: float
-            The distance in nanometers from the local_idxs to simulate for local MD.
+        store_x_interval: int
+            How often we store the frames, store after every store_x_interval iterations. Setting to zero collects frames
+            at the last step.
+
+        radius: float
+            The radius in nanometers from the selected idx to simulate for local MD.
+
+        k: float
+            The flat bottom restraint K value to use for selection and restraint of atoms within the inner shell.
+
+        temperature: float
+            The temperature to run the simulation at. The temperature must match the integrator's temperature if the integrator is a thermostat.
+
+        seed: int
+            The seed that is used to randomly select a particle to freeze.
 
         Returns
         -------

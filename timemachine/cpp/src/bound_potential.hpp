@@ -23,6 +23,8 @@ struct BoundPotential {
 
     int size() const;
 
+    void set_params_device(const std::vector<int> shape, const double *d_p, const cudaStream_t stream);
+
     void execute_host(
         const int N,
         const double *h_x,

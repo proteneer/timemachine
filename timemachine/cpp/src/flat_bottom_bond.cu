@@ -67,6 +67,13 @@ void FlatBottomBond<RealType>::execute_device(
     }
 };
 
+template <typename RealType>
+void FlatBottomBond<RealType>::set_bonds_device(const int num_bonds, const int *d_bonds, const cudaStream_t stream) {
+    gpuErrchk(cudaMemcpyAsync(
+        d_bond_idxs_, d_bonds, num_bonds * 2 * sizeof(*d_bond_idxs_), cudaMemcpyDeviceToDevice, stream));
+    B_ = num_bonds;
+}
+
 template class FlatBottomBond<double>;
 template class FlatBottomBond<float>;
 

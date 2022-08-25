@@ -45,6 +45,22 @@ void BoundPotential::execute_host(
     d_u.copy_to(h_u);
 };
 
+void BoundPotential::set_params_device(
+    const std::vector<int> device_shape, const double *d_new_params, const cudaStream_t stream) {
+    int updated_size = 1;
+    for (auto s : device_shape) {
+        updated_size *= s;
+    }
+    if (updated_size > 0) {
+        if (updated_size > this->size()) {
+            d_p.reset(new DeviceBuffer<double>(updated_size));
+        }
+        gpuErrchk(cudaMemcpyAsync(
+            d_p->data, d_new_params, updated_size * sizeof(*d_p->data), cudaMemcpyDeviceToDevice, stream));
+    }
+    shape = device_shape;
+}
+
 int BoundPotential::size() const {
     if (shape.size() == 0) {
         return 0;

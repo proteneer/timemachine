@@ -50,6 +50,8 @@ template <typename T, bool PINNED> void DeviceBuffer<T, PINNED>::copy_to(T *host
 
 template class DeviceBuffer<double, true>;
 template class DeviceBuffer<double, false>;
+template class DeviceBuffer<float, true>;
+template class DeviceBuffer<float, false>;
 template class DeviceBuffer<int, true>;
 template class DeviceBuffer<int, false>;
 template class DeviceBuffer<char, true>;

@@ -1,6 +1,64 @@
 #include "../fixed_point.hpp"
 #include "k_fixed_point.cuh"
 
+// branchless implementation of piecewise function
+template <typename RealType>
+RealType __device__ __forceinline__ compute_flat_bottom_energy(
+    RealType k, RealType r_lt_rmin, RealType r_gt_rmax, RealType r, RealType rmin, RealType rmax) {
+    return (k / 4) * (r_lt_rmin * (pow(r - rmin, 4)) + r_gt_rmax * (pow(r - rmax, 4)));
+}
+
+template <typename RealType>
+void __global__ k_log_probability_selection(
+    const int N,                             // Num atoms
+    const double kBt,                        // BOLTZ * temperature
+    const float radius,                      // Radius, corresponds to r_max for flat bottom
+    const float k,                           // Constant restraint value
+    const unsigned int reference_idx,        // Idx that the probability is specific to
+    const double *__restrict__ coords,       // [N, 3]
+    const double *__restrict__ box,          // [3, 3]
+    const float *__restrict__ probabilities, // [N] probabilities of selection
+    unsigned int *__restrict__ selected      // [N] idx array, N if idx is not selected, else idx of coordinate
+) {
+    const unsigned int idx = blockDim.x * blockIdx.x + threadIdx.x;
+    if (idx >= N) {
+        return;
+    }
+    const RealType bx = box[0 * 3 + 0];
+    const RealType by = box[1 * 3 + 1];
+    const RealType bz = box[2 * 3 + 2];
+
+    const RealType inv_bx = 1 / bx;
+    const RealType inv_by = 1 / by;
+    const RealType inv_bz = 1 / bz;
+
+    RealType atom_atom_dx = coords[idx * 3 + 0] - coords[reference_idx * 3 + 0];
+    RealType atom_atom_dy = coords[idx * 3 + 1] - coords[reference_idx * 3 + 1];
+    RealType atom_atom_dz = coords[idx * 3 + 2] - coords[reference_idx * 3 + 2];
+
+    atom_atom_dx -= bx * nearbyint(atom_atom_dx * inv_bx);
+    atom_atom_dy -= by * nearbyint(atom_atom_dy * inv_by);
+    atom_atom_dz -= bz * nearbyint(atom_atom_dz * inv_bz);
+
+    const RealType distance =
+        sqrt(atom_atom_dx * atom_atom_dx + atom_atom_dy * atom_atom_dy + atom_atom_dz * atom_atom_dz);
+
+    RealType prob = 1.0;
+    if (distance >= radius) {
+        RealType energy = compute_flat_bottom_energy<RealType>(
+            static_cast<RealType>(k),
+            static_cast<RealType>(0.0), // set to 0 to avoid using r_min length
+            static_cast<RealType>(1.0), // set to 1.0 to use r_max length
+            distance,
+            static_cast<RealType>(0.0), // Any value works just fine here
+            static_cast<RealType>(radius));
+
+        prob = exp(-energy / kBt);
+    }
+    // Exclude the reference idx, should be considered frozen
+    selected[idx] = (idx != reference_idx && prob >= probabilities[idx]) ? idx : N;
+}
+
 template <typename RealType>
 void __global__ k_flat_bottom_bond(
     const int B, // number of bonds
@@ -49,10 +107,8 @@ void __global__ k_flat_bottom_bond(
     // branches -> masks
     RealType r_gt_rmax = static_cast<RealType>(r > rmax);
     RealType r_lt_rmin = static_cast<RealType>(r < rmin);
-
     if (u) {
-        // branchless implementation of piecewise function
-        RealType u_real = (k / 4) * (r_lt_rmin * (pow(r - rmin, 4)) + r_gt_rmax * (pow(r - rmax, 4)));
+        RealType u_real = compute_flat_bottom_energy<RealType>(k, r_lt_rmin, r_gt_rmax, r, rmin, rmax);
 
         // cast float -> fixed
         auto sum_u = FLOAT_TO_FIXED_BONDED<RealType>(u_real);
