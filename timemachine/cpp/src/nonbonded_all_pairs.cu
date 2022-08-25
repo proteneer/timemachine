@@ -8,6 +8,7 @@
 #include "vendored/hilbert.h"
 
 #include "k_nonbonded.cuh"
+#include <numeric>
 
 #include <string>
 
@@ -27,7 +28,7 @@ NonbondedAllPairs<RealType, Interpolated>::NonbondedAllPairs(
     // const std::string &transform_lambda_w
     )
     : N_(lambda_offset_idxs.size()), K_(atom_idxs ? atom_idxs->size() : N_), beta_(beta), cutoff_(cutoff),
-      d_atom_idxs_(nullptr), nblist_(K_), nblist_padding_(0.1), d_sort_storage_(nullptr), d_sort_storage_bytes_(0),
+      d_atom_idxs_(nullptr), nblist_(N_), nblist_padding_(0.1), d_sort_storage_(nullptr), d_sort_storage_bytes_(0),
       disable_hilbert_(false),
 
       kernel_ptrs_({// enumerate over every possible kernel combination

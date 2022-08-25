@@ -9,6 +9,7 @@
 #include "kernel_utils.cuh"
 #include "nonbonded_common.cuh"
 #include "nonbonded_interaction_group.hpp"
+#include "set_utils.hpp"
 #include "vendored/hilbert.h"
 
 #include "k_nonbonded.cuh"

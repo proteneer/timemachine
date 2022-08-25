@@ -24,6 +24,7 @@
 #include "periodic_torsion.hpp"
 #include "potential.hpp"
 #include "rmsd_align.hpp"
+#include "set_utils.hpp"
 #include "summed_potential.hpp"
 #include "verlet_integrator.hpp"
 
@@ -917,14 +918,6 @@ template <typename RealType> void declare_periodic_torsion(py::module &m, const 
             py::arg("lamb_offset") = py::none());
 }
 
-std::set<int> unique_idxs(const std::vector<int> &idxs) {
-    std::set<int> unique_idxs(idxs.begin(), idxs.end());
-    if (unique_idxs.size() < idxs.size()) {
-        throw std::runtime_error("atom indices must be unique");
-    }
-    return unique_idxs;
-}
-
 template <typename RealType, bool Interpolated> void declare_nonbonded_all_pairs(py::module &m, const char *typestr) {
 
     using Class = timemachine::NonbondedAllPairs<RealType, Interpolated>;
@@ -952,11 +945,11 @@ template <typename RealType, bool Interpolated> void declare_nonbonded_all_pairs
                 std::memcpy(
                     lambda_offset_idxs.data(), lambda_offset_idxs_i.data(), lambda_offset_idxs_i.size() * sizeof(int));
 
-                std::optional<std::set<int>> unique_atom_idxs(std::nullopt);
+                std::optional<std::set<int>> atom_idxs_h(std::nullopt);
                 if (atom_idxs_i) {
                     std::vector<int> atom_idxs(atom_idxs_i->size());
                     std::memcpy(atom_idxs.data(), atom_idxs_i->data(), atom_idxs_i->size() * sizeof(int));
-                    unique_atom_idxs.emplace(unique_idxs(atom_idxs));
+                    atom_idxs_h.emplace(unique_idxs<int>(atom_idxs));
                 }
 
                 std::string src_path = kernel_dir + "/k_lambda_transformer_jit.cuh";
@@ -972,7 +965,7 @@ template <typename RealType, bool Interpolated> void declare_nonbonded_all_pairs
                 source_str = std::regex_replace(source_str, std::regex("CUSTOM_EXPRESSION_W"), transform_lambda_w);
 
                 return new timemachine::NonbondedAllPairs<RealType, Interpolated>(
-                    lambda_plane_idxs, lambda_offset_idxs, beta, cutoff, unique_atom_idxs, source_str);
+                    lambda_plane_idxs, lambda_offset_idxs, beta, cutoff, atom_idxs_h, source_str);
             }),
             py::arg("kernel_dir"),
             py::arg("lambda_plane_idxs_i"),
