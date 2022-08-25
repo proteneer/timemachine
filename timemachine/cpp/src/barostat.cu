@@ -1,4 +1,5 @@
 #include "barostat.hpp"
+#include "constants.hpp"
 #include "fixed_point.hpp"
 #include "gpu_utils.cuh"
 #include <algorithm>
@@ -7,9 +8,6 @@
 #include <stdio.h>
 
 #include "kernels/k_fixed_point.cuh"
-
-#define AVOGADRO 6.0221367e23
-#define BOLTZ 0.008314462618
 
 namespace timemachine {
 
