@@ -7,14 +7,6 @@
 
 namespace timemachine {
 
-int round_up_even(int count) {
-    if (count % 2 == 1) {
-        return count += 1;
-    } else {
-        return count;
-    }
-}
-
 LangevinIntegrator::LangevinIntegrator(int N, double dt, double ca, const double *h_cbs, const double *h_ccs, int seed)
     : N_(N), dt_(dt), ca_(ca) {
 
