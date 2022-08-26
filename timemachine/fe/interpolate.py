@@ -87,7 +87,7 @@ def align_idxs_and_params(
 
         def has_duplicates(x):
             x = list(x)
-            return len(set(x)) < len(x)
+            return len(set(to_hashable(x))) < len(x)
 
         if has_duplicates(k for k, _ in kvs):
             raise DuplicateAlignmentKeysError()
@@ -138,8 +138,8 @@ def align_chiral_bond_idxs_and_params(src_idxs, src_params, src_signs, dst_idxs,
             dst_idxs,
             zip(dst_signs, dst_params),
             make_default=lambda p: (p[0], 0),  # p[0] is sign, 0 is force constant
-            key=lambda idxs, p: (idxs, p[0]),  # use idxs and sign as key
-            get_idxs=lambda key: key[0],
+            key=lambda idxs, p: (tuple(idxs), p[0]),  # use idxs and sign as key
+            get_idxs=lambda key: tuple(key[0]),
         )
     }
 
