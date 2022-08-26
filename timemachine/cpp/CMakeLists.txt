@@ -113,7 +113,7 @@ if (NOT CUDA_ARCH)
     if (STATUS AND NOT STATUS EQUAL 0)
       message("Warning: failed to determine CUDA_ARCH automatically: ${SMI_OUTPUT}")
     else()
-      STRING(REPLACE "." "" SMI_OUTPUT ${CUDA_ARCH})
+      STRING(REPLACE "." "" CUDA_ARCH ${SMI_OUTPUT})
       # Verify that only one compute capability was returned
       STRING(REGEX MATCHALL "\n" NEW_LINES "${CUDA_ARCH}")
       # NUM_COMPUTE_CAPS is off by one, as there will be one less newline than there are compute capabilities
