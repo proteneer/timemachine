@@ -29,7 +29,7 @@ class CompareDistNonterminal(rdFMCS.MCSAtomCompare):
         x_j = mol2.GetConformer(0).GetPositions()[atom2]
 
         threshold = 1.0  # angstroms
-        return np.linalg.norm(x_i - x_j) <= threshold
+        return bool(np.linalg.norm(x_i - x_j) <= threshold)
 
 
 def mcs_map(a, b, threshold: float = 2.0, timeout: int = 5, smarts: Optional[str] = None):
