@@ -67,17 +67,6 @@ def mcs_map_graph_only_complete_rings(a, b, timeout: int = 3600, smarts: Optiona
     )
 
 
-def _check_core_map_distances(mol_a, mol_b, core, threshold=0.5) -> bool:
-    """compute vector of distances[i] = distance(conf_a[core_a[i]], conf_b[core_b[i]]),
-    check whether distances[i] <= threshold for all i"""
-
-    a, b = core[:, 0], core[:, 1]
-    conf_a = mol_a.GetConformer(0).GetPositions()
-    conf_b = mol_b.GetConformer(0).GetPositions()
-    distances = np.linalg.norm(conf_a[a] - conf_b[b], axis=1)
-    return (distances <= threshold).all()
-
-
 def get_core_by_mcs(mol_a, mol_b, query, threshold=0.5):
     """Return np integer array that can be passed to RelativeFreeEnergy constructor
 
@@ -116,7 +105,7 @@ def get_core_by_mcs(mol_a, mol_b, query, threshold=0.5):
         for j, b in enumerate(matches_b):
             # if a single pair is outside of threshold, we set the cost to inf
             dij = np.linalg.norm(conf_a[np.array(a)] - conf_b[np.array(b)], axis=1)
-            cost[i, j] = dij.sum() if np.all(dij < threshold) else np.inf
+            cost[i, j] = np.sum(np.where(dij < threshold, dij, +np.inf))
 
     # find (i,j) = argmin cost
     min_i, min_j = np.unravel_index(np.argmin(cost, axis=None), cost.shape)
@@ -125,7 +114,7 @@ def get_core_by_mcs(mol_a, mol_b, query, threshold=0.5):
     inds_a, inds_b = matches_a[min_i], matches_b[min_j]
     core = np.array([inds_a, inds_b]).T
 
-    if not _check_core_map_distances(mol_a, mol_b, core, threshold):
+    if np.isinf(cost[min_i, min_j]):
         raise AtomMappingError(f"not all mapped atoms are within {threshold:.3f}Å of each other")
 
     return core
