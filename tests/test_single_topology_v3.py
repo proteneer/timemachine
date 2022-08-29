@@ -5,6 +5,7 @@ import os
 from importlib import resources
 
 from timemachine.constants import DEFAULT_FF
+from timemachine.ff.handlers import openmm_deserializer
 
 os.environ["XLA_FLAGS"] = "--xla_force_host_platform_device_count=" + str(multiprocessing.cpu_count())
 
@@ -22,9 +23,10 @@ from timemachine.fe.single_topology_v3 import (
     canonicalize_improper_idxs,
     setup_dummy_interactions_from_ff,
 )
-from timemachine.fe.system import minimize_scipy, simulate_system
+from timemachine.fe.system import convert_bps_into_system, minimize_scipy, simulate_system
 from timemachine.fe.utils import get_mol_name, get_romol_conf
 from timemachine.ff import Forcefield
+from timemachine.md.builders import build_water_system
 from timemachine.potentials.jax_utils import distance
 
 
@@ -306,3 +308,20 @@ def test_jax_transform_intermediate_potential():
     lambdas = jnp.linspace(0, 1, 10)
     _ = jax.vmap(U)(confs, lambdas)
     _ = jax.jit(jax.vmap(U))(confs, lambdas)
+
+
+def test_combine_with_host():
+    """Verifies that combine_with_host correctly sets up all of the U functions"""
+    mol_a = Chem.MolFromSmiles("BrC1=CC=CC=C1")
+    mol_b = Chem.MolFromSmiles("C1=CN=CC=C1F")
+    core = np.array([[1, 0], [2, 1], [3, 2], [4, 3], [5, 4], [6, 5]])
+    ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
+
+    solvent_sys, _, _, _ = build_water_system(4.0)
+
+    host_bps, _ = openmm_deserializer.deserialize_system(solvent_sys, cutoff=1.2)
+
+    st = SingleTopologyV3(mol_a, mol_b, core, ff)
+    host_system = st.combine_with_host(convert_bps_into_system(host_bps), 0.5)
+    # Expect there to be 7 functions, including the chiral bond and chiral atom restraints
+    assert len(host_system.get_U_fns()) == 7

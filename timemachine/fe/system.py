@@ -183,9 +183,8 @@ class HostGuestSystem:
             self.bond,
             self.angle,
             self.torsion,
-            # chiral terms are intentionally disabled until MCS is fixed
-            # self.chiral_atom,
-            # self.chiral_bond,
+            self.chiral_atom,
+            self.chiral_bond,
             self.nonbonded_guest_pairs,
             self.nonbonded_host_guest,
         ]
