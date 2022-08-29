@@ -86,7 +86,6 @@ def mcs_map_graph_only_complete_rings(a, b, timeout: int = 3600, smarts: Optiona
     )
 
 
-# 4. Construct and serialize the relative transformations
 def _check_core_map_distances(mol_a, mol_b, core, threshold=0.5) -> bool:
     """compute vector of distances[i] = distance(conf_a[core_a[i]], conf_b[core_b[i]]),
     check whether distances[i] <= threshold for all i"""
@@ -140,11 +139,6 @@ def get_core_by_mcs(mol_a, mol_b, query, threshold=0.5):
 
     # find (i,j) = argmin cost
     min_i, min_j = np.unravel_index(np.argmin(cost, axis=None), cost.shape)
-    # print(f'argmin of {n_a} x {n_b} cost matrix: {(min_i, min_j)} ')
-    # TODO: maybe also print the difference between min(cost) and cost[0,0],
-    #   to see how big of a difference it made to pick the default
-
-    # TODO: is there a way to use the matching from MCS directly?
 
     # concatenate into (n_atoms, 2) array
     inds_a, inds_b = matches_a[min_i], matches_b[min_j]
