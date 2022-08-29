@@ -151,7 +151,7 @@ class InitialState:
 class SimulationResult:
     all_dGs: List[np.ndarray]
     all_errs: List[float]
-    plot_png: bytes
+    overlap_detail_png: bytes
     frames: List[np.ndarray]
     boxes: List[np.ndarray]
     initial_states: List[InitialState]
@@ -360,9 +360,17 @@ def estimate_free_energy_given_initial_states(initial_states, protocol, temperat
     buffer = io.BytesIO()
     plt.savefig(buffer, format="png")
     buffer.seek(0)
-    img_as_bytes = buffer.read()
+    overlap_detail_png = buffer.read()
 
-    return SimulationResult(all_dGs, all_errs, img_as_bytes, stored_frames, stored_boxes, initial_states, protocol)
+    return SimulationResult(
+        all_dGs,
+        all_errs,
+        overlap_detail_png,
+        stored_frames,
+        stored_boxes,
+        initial_states,
+        protocol,
+    )
 
 
 def estimate_relative_free_energy(

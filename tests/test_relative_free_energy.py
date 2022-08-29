@@ -64,7 +64,7 @@ def run_pair(mol_a, mol_b, core, forcefield, n_frames, protein_path):
         lambda_schedule=lambda_schedule,
     )
 
-    assert solvent_res.plot_png is not None
+    assert solvent_res.overlap_detail_png is not None
     assert abs(np.sum(solvent_res.all_dGs)) < 10.0
     assert np.linalg.norm(solvent_res.all_dGs) < 10.0
     assert len(solvent_res.frames[0] == n_frames)
@@ -90,7 +90,7 @@ def run_pair(mol_a, mol_b, core, forcefield, n_frames, protein_path):
         lambda_schedule=lambda_schedule,
     )
 
-    assert complex_res.plot_png is not None
+    assert complex_res.overlap_detail_png is not None
     assert abs(np.sum(complex_res.all_dGs)) < 10.0
     assert np.linalg.norm(complex_res.all_dGs) < 10.0
     assert len(complex_res.frames[0]) == n_frames
