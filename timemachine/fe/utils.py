@@ -1,5 +1,3 @@
-from typing import Any, List, Tuple
-
 import networkx as nx
 import numpy as np
 import simtk.unit
@@ -218,81 +216,6 @@ def plot_atom_mapping_grid(mol_a, mol_b, core, show_idxs=False):
         legends=[mol_a.GetProp("_Name"), mol_b.GetProp("_Name")],
         useSVG=True,
     )
-
-
-def get_connected_components(nodes, relative_inds, absolute_inds) -> List[List[Any]]:
-    """Construct a graph containing (len(nodes) + 1) nodes -- one for each original node, plus a new "reference" node.*
-
-    Add edges
-    * (i, j) in relative_inds,
-    * (i, "reference") for i in absolute_inds
-
-    And then return the connected components of this graph (omitting the "reference" node we added).*
-
-    * Unless "nodes" already contained something named "reference"!
-    """
-    g = nx.Graph()
-    g.add_nodes_from(nodes)
-
-    if "reference" not in nodes:
-        g.add_node("reference")
-
-    for (i, j) in relative_inds:
-        g.add_edge(i, j)
-
-    if len(absolute_inds) == 0:
-        absolute_inds = [0]
-
-    for i in absolute_inds:
-        g.add_edge(i, "reference")
-
-    # return list of lists of elements of the nodes
-    # we will remove the "reference" node we added
-    # however, if the user actually had a node named "reference", don't remove it
-
-    components: List[List[Any]] = list(map(list, list(nx.connected_components(g))))
-
-    if "reference" in nodes:
-        return components
-    else:
-        filtered_components = []
-
-        for component in components:
-            if "reference" in component:
-                component.remove("reference")
-            filtered_components.append(component)
-        return filtered_components
-
-
-def validate_map(n_nodes: int, relative_inds: List[Tuple[int, int]], absolute_inds: List[int]) -> bool:
-    """Construct a graph containing (n_nodes + 1) nodes -- one for each original node, plus a new "reference" node.
-
-    Add edges
-    * (i, j) in relative_inds,
-    * (i, "reference") for i in absolute_inds
-
-    And then return whether this graph is connected.
-
-    If no absolute_inds provided, treat node 0 as "reference".
-
-    Examples
-    --------
-
-    >>> validate_map(4, relative_inds=[[0,1], [2,3]], absolute_inds=[0])
-    False
-
-    >>> validate_map(4, relative_inds=[[0,1], [1,2], [2,3]], absolute_inds=[0])
-    True
-
-    >>> validate_map(4, relative_inds=[[0,1], [2,3]], absolute_inds=[0,2])
-    True
-    """
-
-    if len(absolute_inds) == 0:
-        absolute_inds = [0]
-
-    components = get_connected_components(list(range(n_nodes)), relative_inds, absolute_inds)
-    return len(components) == 1
 
 
 def get_romol_bonds(mol):
