@@ -1,4 +1,4 @@
-from timemachine.fe.atom_mapping import get_core_by_geometry, get_core_by_mcs, mcs_map
+from timemachine.fe.atom_mapping import get_core_by_mcs, mcs_map
 from timemachine.testsystems.relative import hif2a_ligand_pair
 
 
@@ -12,10 +12,4 @@ def test_get_core_by_mcs():
     mol_a, mol_b = hif2a_ligand_pair.mol_a, hif2a_ligand_pair.mol_b
     query = mcs_map(mol_a, mol_b).queryMol
     core = get_core_by_mcs(mol_a, mol_b, query)
-    assert core.shape[1] == 2
-
-
-def test_get_core_by_geometry():
-    mol_a, mol_b = hif2a_ligand_pair.mol_a, hif2a_ligand_pair.mol_b
-    core = get_core_by_geometry(mol_a, mol_b)
     assert core.shape[1] == 2
