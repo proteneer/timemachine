@@ -387,8 +387,9 @@ def estimate_free_energy_given_initial_states(initial_states, protocol, temperat
     ukln_by_term_lambda = np.array(ukln_by_lam_term).swapaxes(0, 1)  # (term, lambda, 2, 2, sample)
 
     def pair_overlap(u_kln):
+        assert u_kln.shape[:2] == (2, 2)
         u_kn = np.concatenate(u_kln, axis=1)
-        N_k = u_kln.shape[-1] * np.ones(u_kn.shape[0])
+        N_k = u_kln.shape[2] * np.ones(u_kn.shape[0])
         return pymbar.MBAR(u_kn, N_k).computeOverlap()["matrix"][0, 1]  # type: ignore
 
     lambdas = [s.lamb for s in initial_states]
