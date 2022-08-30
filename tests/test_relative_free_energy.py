@@ -5,7 +5,7 @@ from importlib import resources
 import numpy as np
 import pytest
 
-from timemachine.fe.rbfe import HostConfig, estimate_relative_free_energy, sample
+from timemachine.fe.rbfe import HostConfig, SimulationResult, estimate_relative_free_energy, sample
 from timemachine.md import builders
 from timemachine.testsystems.relative import get_hif2a_ligand_pair_single_topology
 
@@ -75,6 +75,15 @@ def run_pair(mol_a, mol_b, core, forcefield, n_frames, protein_path):
     assert [x.lamb for x in solvent_res.initial_states] == lambda_schedule
     assert solvent_res.protocol.n_frames == n_frames
 
+    def check_overlaps(result: SimulationResult):
+        assert result.overlaps_by_lambda.shape == (len(lambda_schedule) - 1,)
+        assert result.overlaps_by_term_lambda.shape[1] == len(lambda_schedule) - 1
+        for overlaps in [result.overlaps_by_lambda, result.overlaps_by_term_lambda]:
+            assert (0.0 < overlaps).all()
+            assert (overlaps < 0.5).all()
+
+    check_overlaps(solvent_res)
+
     seed = 2024
     complex_sys, complex_conf, _, _, complex_box, _ = builders.build_protein_system(protein_path)
     complex_box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes
@@ -101,6 +110,8 @@ def run_pair(mol_a, mol_b, core, forcefield, n_frames, protein_path):
     assert len(complex_res.boxes[-1]) == n_frames
     assert [x.lamb for x in complex_res.initial_states] == lambda_schedule
     assert complex_res.protocol.n_frames == n_frames
+
+    check_overlaps(complex_res)
 
 
 @pytest.mark.nightly(reason="Slow!")

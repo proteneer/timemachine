@@ -151,6 +151,8 @@ class InitialState:
 class SimulationResult:
     all_dGs: List[np.ndarray]
     all_errs: List[float]
+    overlaps_by_lambda: np.ndarray  # (L - 1,)
+    overlaps_by_term_lambda: np.ndarray  # (len(U_names), L - 1)
     overlap_summary_png: bytes
     overlap_detail_png: bytes
     frames: List[np.ndarray]
@@ -408,6 +410,8 @@ def estimate_free_energy_given_initial_states(initial_states, protocol, temperat
     return SimulationResult(
         all_dGs,
         all_errs,
+        overlaps_by_lambda,
+        overlaps_by_term_lambda,
         overlap_summary_png,
         overlap_detail_png,
         stored_frames,
