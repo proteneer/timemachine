@@ -1,3 +1,4 @@
+from copy import deepcopy
 from typing import Optional
 
 import numpy as np
@@ -32,8 +33,14 @@ class CompareDistNonterminal(rdFMCS.MCSAtomCompare):
         return bool(np.linalg.norm(x_i - x_j) <= threshold)
 
 
-def mcs_map(a, b, threshold: float = 2.0, timeout: int = 5, smarts: Optional[str] = None):
-    """Find the MCS map of going from A to B"""
+def mcs(a, b, threshold: float = 2.0, timeout: int = 5, smarts: Optional[str] = None):
+    """Find maximum common substructure between mols a and b
+    using reasonable settings for single topology:
+    * only match atoms within distance threshold
+        (assumes conformers are aligned)
+    * disallow partial ring matches
+    * disregard element identity and valence
+    """
     params = rdFMCS.MCSParameters()
     params.BondCompareParameters.CompleteRingsOnly = 1
     params.BondCompareParameters.RingMatchesRingOnly = 1
@@ -49,6 +56,39 @@ def mcs_map(a, b, threshold: float = 2.0, timeout: int = 5, smarts: Optional[str
     if smarts is not None:
         params.InitialSeed = smarts
     return rdFMCS.FindMCS([a, b], params)
+
+
+def mcs_map(a, b, threshold: float = 2.0, timeout: int = 5, smarts: Optional[str] = None):
+    """Compute maximum common substructure between mols a and b,
+    possibly reseeding with result of easier MCS(RemoveHs(a), RemoveHs(b))
+    """
+
+    result = mcs(a, b, threshold, timeout, smarts)
+
+    def unacceptable(result):
+        timed_out = result.canceled
+        trivial = result.numBonds < 2
+
+        return timed_out or trivial
+
+    if unacceptable(result) and smarts is None:
+        # try again, but seed with MCS computed without explicit hydrogens
+        a_without_hs = Chem.RemoveHs(deepcopy(a))
+        b_without_hs = Chem.RemoveHs(deepcopy(b))
+
+        heavy_atom_result = mcs(a_without_hs, b_without_hs, threshold, timeout, smarts)
+
+        result = mcs(a, b, threshold, timeout, heavy_atom_result.smartsString)
+
+    if unacceptable(result):
+        message = f"""MCS result unacceptable!
+            timed out: {result.canceled}
+            # atoms in MCS: {result.numAtoms}
+            # bonds in MCS: {result.numBonds}
+        """
+        raise AtomMappingError(message)
+
+    return result
 
 
 def mcs_map_graph_only_complete_rings(a, b, timeout: int = 3600, smarts: Optional[str] = None):
