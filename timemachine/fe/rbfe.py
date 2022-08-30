@@ -244,8 +244,8 @@ def plot_overlap_summary(ax, terms, lambdas, overlaps):
     for term, ys in zip(terms, overlaps):
         ax.plot(lambdas[:-1], ys, marker=".", label=term)
 
-    ax.set_xlabel(r"$\lambda$")
-    ax.set_ylabel("BAR overlap")
+    ax.set_xlabel(r"$\lambda_i$")
+    ax.set_ylabel(r"pair BAR overlap ($\lambda_i$, $\lambda_{i+1}$)")
     ax.legend()
 
 
@@ -389,17 +389,17 @@ def estimate_free_energy_given_initial_states(initial_states, protocol, temperat
         N_k = u_kln.shape[-1] * np.ones(u_kn.shape[0])
         return pymbar.MBAR(u_kn, N_k).computeOverlap()["matrix"][0, 1]  # type: ignore
 
+    lambdas = [s.lamb for s in initial_states]
+
+    _, (ax_top, ax_btm) = plt.subplots(2, 1, figsize=(7, 9))
+    overlaps_by_lambda = np.array([pair_overlap(u_kln) for u_kln in ukln_by_term_lambda.sum(axis=0)])
+    plot_overlap_summary(ax_top, ["Overall"], lambdas, [overlaps_by_lambda])
+
     overlaps_by_term_lambda = np.array(
         [[pair_overlap(u_kln) for u_kln in ukln_by_lambda] for ukln_by_lambda in ukln_by_term_lambda]
     )
+    plot_overlap_summary(ax_btm, U_names, lambdas, overlaps_by_term_lambda)
 
-    plt.figure()
-    plot_overlap_summary(
-        plt.gca(),
-        terms=U_names,
-        lambdas=[s.lamb for s in initial_states],
-        overlaps=overlaps_by_term_lambda,
-    )
     buffer = io.BytesIO()
     plt.savefig(buffer, format="png")
     buffer.seek(0)
