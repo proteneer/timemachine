@@ -66,10 +66,7 @@ def mcs_map(a, b, threshold: float = 2.0, timeout: int = 5, smarts: Optional[str
     result = mcs(a, b, threshold, timeout, smarts)
 
     def unacceptable(result):
-        timed_out = result.canceled
-        trivial = result.numBonds < 2
-
-        return timed_out or trivial
+        return result.numBonds < 2
 
     if unacceptable(result) and smarts is None:
         # try again, but seed with MCS computed without explicit hydrogens
