@@ -31,4 +31,4 @@ def test_ring_size_change():
     mol_b.Compute2DCoords()
 
     mcs_result = mcs_map(mol_a, mol_b)
-    assert mcs_result.numAtoms > 2
+    assert mcs_result.numBonds > 1
