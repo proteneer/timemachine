@@ -346,6 +346,7 @@ def estimate_free_energy_given_initial_states(initial_states, protocol, temperat
 
             # sanity check - I don't think the dG calculation commutes with its components, so we have to re-estimate
             # the dG from the sum of the delta_us as opposed to simply summing the component dGs
+            # (num components, energy fxn idx, sampled state idx, num samples)
             ukln_by_term = np.array(ukln_by_term, dtype=np.float64)
             total_fwd_delta_us = (ukln_by_term[:, 1, 0, :] - ukln_by_term[:, 0, 0, :]).sum(axis=0)
             total_rev_delta_us = (ukln_by_term[:, 0, 1, :] - ukln_by_term[:, 1, 1, :]).sum(axis=0)
