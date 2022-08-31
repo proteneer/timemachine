@@ -48,6 +48,10 @@ def test_setting_up_restraints_using_smarts():
 
     smarts = "[#6]-[#6]-[#6]-[#7,#8]-[#7]-[#7]"
 
+    # setup_relative_restraints_using_smarts assumes conformers approximately aligned
+    for mol in [mol_a, mol_b]:
+        mol.Compute2DCoords()
+
     core = setup_relative_restraints_using_smarts(mol_a, mol_b, smarts)
 
     expected_num_atoms = Chem.MolFromSmarts(smarts).GetNumAtoms()
