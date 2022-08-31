@@ -3,6 +3,7 @@ import simtk.unit
 from rdkit import Chem
 from rdkit.Chem import AllChem, Draw
 from rdkit.Chem.Draw import rdMolDraw2D
+from rdkit.Geometry import Point3D
 
 
 def to_md_units(q):
@@ -146,6 +147,16 @@ def get_romol_conf(mol):
     conformer = mol.GetConformer(0)
     guest_conf = np.array(conformer.GetPositions(), dtype=np.float64)
     return guest_conf / 10  # from angstroms to nm
+
+
+def set_romol_conf(mol, new_coords):
+    """Sets coordinates of mol's 0th confomrmer"""
+    assert new_coords.shape[0] == mol.GetNumAtoms()
+    # convert from nm to angstroms
+    angstrom_coords = new_coords * 10
+    conf = mol.GetConformer(0)
+    for i, (x, y, z) in enumerate(angstrom_coords):
+        conf.SetAtomPosition(i, Point3D(float(x), float(y), float(z)))
 
 
 def get_mol_masses(mol):

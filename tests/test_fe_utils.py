@@ -1,6 +1,7 @@
 import numpy as np
 import pytest
 from rdkit import Chem
+from rdkit.Chem import AllChem
 
 from timemachine.fe import utils
 from timemachine.fe.model_utils import image_molecule, verify_rabfe_pair
@@ -103,3 +104,22 @@ def test_get_mol_name():
 
     mol.SetProp("_Name", "test_name")
     assert utils.get_mol_name(mol) == "test_name"
+
+
+def test_set_mol_coords():
+    mol = Chem.AddHs(Chem.MolFromSmiles("c1ccccc1"))
+    AllChem.EmbedMolecule(mol)
+
+    x0 = utils.get_romol_conf(mol)
+
+    # Make some random move
+    x1 = x0 + np.random.randn(*x0.shape)
+
+    # This is lossy, rdkit stores things in float32
+    utils.set_romol_conf(mol, x1)
+
+    x1_copy = utils.get_romol_conf(mol)
+
+    # Won't be exact, but should be close
+    assert not np.all(x1 == x1_copy)
+    np.testing.assert_allclose(x1, x1_copy)
