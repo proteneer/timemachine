@@ -5,7 +5,7 @@ from importlib import resources
 import numpy as np
 import pytest
 
-from timemachine.fe.rbfe import HostConfig, estimate_relative_free_energy, sample
+from timemachine.fe.rbfe import HostConfig, SimulationResult, estimate_relative_free_energy, sample
 from timemachine.md import builders
 from timemachine.testsystems.relative import get_hif2a_ligand_pair_single_topology
 
@@ -65,7 +65,8 @@ def run_pair(mol_a, mol_b, core, forcefield, n_frames, protein_path, n_eq_steps)
         n_eq_steps=n_eq_steps,
     )
 
-    assert solvent_res.plot_png is not None
+    assert solvent_res.overlap_summary_png is not None
+    assert solvent_res.overlap_detail_png is not None
     assert abs(np.sum(solvent_res.all_dGs)) < 10.0
     assert np.linalg.norm(solvent_res.all_dGs) < 10.0
     assert len(solvent_res.frames[0] == n_frames)
@@ -75,6 +76,15 @@ def run_pair(mol_a, mol_b, core, forcefield, n_frames, protein_path, n_eq_steps)
     assert [x.lamb for x in solvent_res.initial_states] == lambda_schedule
     assert solvent_res.protocol.n_frames == n_frames
     assert solvent_res.protocol.n_eq_steps == n_eq_steps
+
+    def check_overlaps(result: SimulationResult):
+        assert result.overlaps_by_lambda.shape == (len(lambda_schedule) - 1,)
+        assert result.overlaps_by_lambda_by_component.shape[1] == len(lambda_schedule) - 1
+        for overlaps in [result.overlaps_by_lambda, result.overlaps_by_lambda_by_component]:
+            assert (0.0 < overlaps).all()
+            assert (overlaps < 0.5).all()
+
+    check_overlaps(solvent_res)
 
     seed = 2024
     complex_sys, complex_conf, _, _, complex_box, _ = builders.build_protein_system(protein_path)
@@ -93,7 +103,8 @@ def run_pair(mol_a, mol_b, core, forcefield, n_frames, protein_path, n_eq_steps)
         n_eq_steps=n_eq_steps,
     )
 
-    assert complex_res.plot_png is not None
+    assert solvent_res.overlap_summary_png is not None
+    assert complex_res.overlap_detail_png is not None
     assert abs(np.sum(complex_res.all_dGs)) < 10.0
     assert np.linalg.norm(complex_res.all_dGs) < 10.0
     assert len(complex_res.frames[0]) == n_frames
@@ -103,6 +114,8 @@ def run_pair(mol_a, mol_b, core, forcefield, n_frames, protein_path, n_eq_steps)
     assert [x.lamb for x in complex_res.initial_states] == lambda_schedule
     assert complex_res.protocol.n_frames == n_frames
     assert complex_res.protocol.n_eq_steps == n_eq_steps
+
+    check_overlaps(complex_res)
 
 
 @pytest.mark.nightly(reason="Slow!")
