@@ -58,7 +58,7 @@ def mcs(a, b, threshold: float = 2.0, timeout: int = 5, smarts: Optional[str] = 
     return rdFMCS.FindMCS([a, b], params)
 
 
-def mcs_map(a, b, threshold: float = 2.0, timeout: int = 5, smarts: Optional[str] = None):
+def mcs_conformer_aware(a, b, threshold: float = 2.0, timeout: int = 5, smarts: Optional[str] = None):
     """Compute maximum common substructure between mols a and b,
     possibly reseeding with result of easier MCS(RemoveHs(a), RemoveHs(b))
     """
