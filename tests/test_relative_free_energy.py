@@ -77,8 +77,8 @@ def run_pair(mol_a, mol_b, core, forcefield, n_frames, protein_path):
 
     def check_overlaps(result: SimulationResult):
         assert result.overlaps_by_lambda.shape == (len(lambda_schedule) - 1,)
-        assert result.overlaps_by_term_lambda.shape[1] == len(lambda_schedule) - 1
-        for overlaps in [result.overlaps_by_lambda, result.overlaps_by_term_lambda]:
+        assert result.overlaps_by_lambda_by_component.shape[1] == len(lambda_schedule) - 1
+        for overlaps in [result.overlaps_by_lambda, result.overlaps_by_lambda_by_component]:
             assert (0.0 < overlaps).all()
             assert (overlaps < 0.5).all()
 

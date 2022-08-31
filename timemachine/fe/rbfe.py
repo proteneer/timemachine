@@ -152,7 +152,7 @@ class SimulationResult:
     all_dGs: List[np.ndarray]
     all_errs: List[float]
     overlaps_by_lambda: np.ndarray  # (L - 1,)
-    overlaps_by_term_lambda: np.ndarray  # (len(U_names), L - 1)
+    overlaps_by_lambda_by_component: np.ndarray  # (len(U_names), L - 1)
     overlap_summary_png: bytes
     overlap_detail_png: bytes
     frames: List[np.ndarray]
@@ -242,9 +242,9 @@ class SimulationException(Exception):
         self.message = message
 
 
-def plot_overlap_summary(ax, terms, lambdas, overlaps):
-    for term, ys in zip(terms, overlaps):
-        ax.plot(lambdas[:-1], ys, marker=".", label=term)
+def plot_overlap_summary(ax, components, lambdas, overlaps):
+    for component, ys in zip(components, overlaps):
+        ax.plot(lambdas[:-1], ys, marker=".", label=component)
 
     ax.set_xlabel(r"$\lambda_i$")
     ax.set_ylabel(r"pair BAR overlap ($\lambda_i$, $\lambda_{i+1}$)")
@@ -312,7 +312,7 @@ def estimate_free_energy_given_initial_states(initial_states, protocol, temperat
     prev_batch_U_fns = None
 
     # u_kln matrix (2, 2, n_frames) for each pair of adjacent lambda windows and energy term
-    ukln_by_lam_term = []
+    ukln_by_component_by_lambda = []
 
     for lamb_idx, initial_state in enumerate(initial_states):
 
@@ -326,7 +326,7 @@ def estimate_free_energy_given_initial_states(initial_states, protocol, temperat
 
         if lamb_idx > 0:
 
-            ukln_by_term = []
+            ukln_by_component = []
 
             # loop over bond, angle, torsion, nonbonded terms etc.
             for u_idx, (prev_U_fn, cur_U_fn) in enumerate(zip(prev_batch_U_fns, cur_batch_U_fns)):
@@ -336,7 +336,7 @@ def estimate_free_energy_given_initial_states(initial_states, protocol, temperat
                 u_01 = beta * prev_U_fn(*x_cur)
                 u_10 = beta * cur_U_fn(*x_prev)
                 u_11 = beta * cur_U_fn(*x_cur)
-                ukln_by_term.append([[u_00, u_01], [u_10, u_11]])
+                ukln_by_component.append([[u_00, u_01], [u_10, u_11]])
 
                 fwd_delta_u = u_10 - u_00
                 rev_delta_u = u_01 - u_11
@@ -346,10 +346,11 @@ def estimate_free_energy_given_initial_states(initial_states, protocol, temperat
 
             # sanity check - I don't think the dG calculation commutes with its components, so we have to re-estimate
             # the dG from the sum of the delta_us as opposed to simply summing the component dGs
-            # (num components, energy fxn idx, sampled state idx, num samples)
-            ukln_by_term = np.array(ukln_by_term, dtype=np.float64)
-            total_fwd_delta_us = (ukln_by_term[:, 1, 0, :] - ukln_by_term[:, 0, 0, :]).sum(axis=0)
-            total_rev_delta_us = (ukln_by_term[:, 0, 1, :] - ukln_by_term[:, 1, 1, :]).sum(axis=0)
+
+            # (energy components, energy fxns = 2, sampled states = 2, frames)
+            ukln_by_component = np.array(ukln_by_component, dtype=np.float64)
+            total_fwd_delta_us = (ukln_by_component[:, 1, 0, :] - ukln_by_component[:, 0, 0, :]).sum(axis=0)
+            total_rev_delta_us = (ukln_by_component[:, 0, 1, :] - ukln_by_component[:, 1, 1, :]).sum(axis=0)
             total_df, total_df_err = pymbar.BAR(total_fwd_delta_us, total_rev_delta_us)
 
             plot_axis = all_axes[lamb_idx - 1][u_idx + 1]
@@ -368,7 +369,7 @@ def estimate_free_energy_given_initial_states(initial_states, protocol, temperat
 
             all_dGs.append(total_dG)
             all_errs.append(total_dG_err)
-            ukln_by_lam_term.append(ukln_by_term)
+            ukln_by_component_by_lambda.append(ukln_by_component)
 
             print(
                 f"{prefix} BAR: lambda {lamb_idx-1} -> {lamb_idx} dG: {total_dG:.3f} +- {total_dG_err:.3f} kJ/mol",
@@ -385,7 +386,8 @@ def estimate_free_energy_given_initial_states(initial_states, protocol, temperat
     buffer.seek(0)
     overlap_detail_png = buffer.read()
 
-    ukln_by_term_lambda = np.array(ukln_by_lam_term).swapaxes(0, 1)  # (term, lambda, 2, 2, sample)
+    # (energy components, lambdas, energy fxns = 2, sampled states = 2, frames)
+    ukln_by_lambda_by_component = np.array(ukln_by_component_by_lambda).swapaxes(0, 1)
 
     def pair_overlap(u_kln):
         assert u_kln.shape[:2] == (2, 2)
@@ -396,13 +398,13 @@ def estimate_free_energy_given_initial_states(initial_states, protocol, temperat
     lambdas = [s.lamb for s in initial_states]
 
     _, (ax_top, ax_btm) = plt.subplots(2, 1, figsize=(7, 9))
-    overlaps_by_lambda = np.array([pair_overlap(u_kln) for u_kln in ukln_by_term_lambda.sum(axis=0)])
+    overlaps_by_lambda = np.array([pair_overlap(u_kln) for u_kln in ukln_by_lambda_by_component.sum(axis=0)])
     plot_overlap_summary(ax_top, ["Overall"], lambdas, [overlaps_by_lambda])
 
-    overlaps_by_term_lambda = np.array(
-        [[pair_overlap(u_kln) for u_kln in ukln_by_lambda] for ukln_by_lambda in ukln_by_term_lambda]
+    overlaps_by_lambda_by_component = np.array(
+        [[pair_overlap(u_kln) for u_kln in ukln_by_lambda] for ukln_by_lambda in ukln_by_lambda_by_component]
     )
-    plot_overlap_summary(ax_btm, U_names, lambdas, overlaps_by_term_lambda)
+    plot_overlap_summary(ax_btm, U_names, lambdas, overlaps_by_lambda_by_component)
 
     buffer = io.BytesIO()
     plt.savefig(buffer, format="png")
@@ -413,7 +415,7 @@ def estimate_free_energy_given_initial_states(initial_states, protocol, temperat
         all_dGs,
         all_errs,
         overlaps_by_lambda,
-        overlaps_by_term_lambda,
+        overlaps_by_lambda_by_component,
         overlap_summary_png,
         overlap_detail_png,
         stored_frames,
