@@ -1,6 +1,6 @@
 from copy import deepcopy
 from functools import partial
-from typing import Callable, Optional
+from typing import Any, Callable, Optional
 
 import numpy as np
 from rdkit import Chem
@@ -35,12 +35,13 @@ class CompareDistNonterminal(rdFMCS.MCSAtomCompare):
 
 
 SmartsString = str
-MCSFxn = Callable[[Chem.Mol, Chem.Mol, Optional[SmartsString]], Chem.MCSResult]
+MCSResult = Any  # Chem.rdFMCS.MCSResult
+MCSFxn = Callable[[Chem.Mol, Chem.Mol, Optional[SmartsString]], MCSResult]
 
 
 def possibly_fallback_to_heavy_atom_mcs(
     mcs_fxn: MCSFxn, a: Chem.Mol, b: Chem.Mol, smarts: Optional[str] = None
-) -> Chem.MCSResult:
+) -> MCSResult:
     """if mcs_fxn(a, b, smarts) fails, try again with smarts from easier mcs_fxn(RemoveHs(a), RemoveHs(b))"""
 
     result = mcs_fxn(a, b, smarts)
