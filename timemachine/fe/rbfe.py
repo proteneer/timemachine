@@ -1,5 +1,6 @@
 import functools
 import io
+import pickle
 import warnings
 from dataclasses import dataclass
 from typing import List
@@ -101,7 +102,7 @@ def sample(initial_state, protocol):
     # burn-in
     ctxt.multiple_steps_U(
         lamb=initial_state.lamb,
-        n_steps=protocol.burn_in,
+        n_steps=protocol.n_eq_steps,
         lambda_windows=[initial_state.lamb],
         store_u_interval=0,
         store_x_interval=0,
@@ -126,7 +127,7 @@ def sample(initial_state, protocol):
 @dataclass
 class SimulationProtocol:
     n_frames: int
-    burn_in: int
+    n_eq_steps: int
     steps_per_frame: int
 
 
@@ -233,13 +234,6 @@ def plot_BAR(df, df_err, fwd_delta_u, rev_delta_u, title, axes):
     axes.hist(-rev_delta_u, alpha=0.5, label="-rev", density=True, bins=20)
     axes.set_xlabel("work (kTs)")
     axes.legend()
-
-
-class SimulationException(Exception):
-    def __init__(self, initial_states, protocol, message):
-        self.initial_states = initial_states
-        self.protocol = protocol
-        self.message = message
 
 
 def plot_overlap_summary(ax, components, lambdas, overlaps):
@@ -433,6 +427,7 @@ def estimate_relative_free_energy(
     prefix="",
     lambda_schedule=None,
     keep_idxs=None,
+    n_eq_steps=10000,
 ):
     """
     Estimate relative free energy between mol_a and mol_b. Molecules should be aligned to each
@@ -471,6 +466,9 @@ def estimate_relative_free_energy(
         If None, return only the end-state frames. Otherwise if not None, use only for debugging, and this
         will return the frames corresponding to the idxs of interest.
 
+    n_eq_steps: int
+        Number of equilibration steps for each window.
+
     Returns
     -------
     SimulationResult
@@ -488,38 +486,52 @@ def estimate_relative_free_energy(
 
     temperature = DEFAULT_TEMP
     initial_states = setup_initial_states(single_topology, host_config, temperature, lambda_schedule, seed)
-    protocol = SimulationProtocol(n_frames=n_frames, burn_in=10000, steps_per_frame=1000)
+    protocol = SimulationProtocol(n_frames=n_frames, n_eq_steps=n_eq_steps, steps_per_frame=1000)
 
     if keep_idxs is None:
         keep_idxs = [0, -1]  # keep first and last frames
     assert len(keep_idxs) <= len(lambda_schedule)
     combined_prefix = get_mol_name(mol_a) + "_" + get_mol_name(mol_b) + "_" + prefix
-
     try:
-
         return estimate_free_energy_given_initial_states(
             initial_states, protocol, temperature, combined_prefix, keep_idxs
         )
+    except Exception as err:
+        with open(f"failed_rbfe_result_{combined_prefix}.pkl", "wb") as fh:
+            pickle.dump((initial_states, protocol, err), fh)
+        raise err
 
-    except Exception as old_exc:
 
-        raise SimulationException(initial_states, protocol, combined_prefix) from old_exc
-
-
-def run_pair(mol_a, mol_b, core, forcefield, protein, n_frames, seed):
+def run_pair(mol_a, mol_b, core, forcefield, protein, n_frames, seed, n_eq_steps=10000):
     box_width = 4.0
     solvent_sys, solvent_conf, solvent_box, solvent_top = builders.build_water_system(box_width)
     solvent_box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes, deboggle later
     solvent_host_config = HostConfig(solvent_sys, solvent_conf, solvent_box)
     solvent_res = estimate_relative_free_energy(
-        mol_a, mol_b, core, forcefield, solvent_host_config, seed, n_frames=n_frames, prefix="solvent"
+        mol_a,
+        mol_b,
+        core,
+        forcefield,
+        solvent_host_config,
+        seed,
+        n_frames=n_frames,
+        prefix="solvent",
+        n_eq_steps=n_eq_steps,
     )
 
     complex_sys, complex_conf, _, _, complex_box, complex_top = builders.build_protein_system(protein)
     complex_box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes, deboggle later
     complex_host_config = HostConfig(complex_sys, complex_conf, complex_box)
     complex_res = estimate_relative_free_energy(
-        mol_a, mol_b, core, forcefield, complex_host_config, seed + 1, n_frames=n_frames, prefix="complex"
+        mol_a,
+        mol_b,
+        core,
+        forcefield,
+        complex_host_config,
+        seed + 1,
+        n_frames=n_frames,
+        prefix="complex",
+        n_eq_steps=n_eq_steps,
     )
 
     return solvent_res, solvent_top, complex_res, complex_top
