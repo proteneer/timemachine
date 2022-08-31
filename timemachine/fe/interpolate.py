@@ -1,5 +1,5 @@
 from functools import partial
-from typing import Any, Callable, Hashable, Set, Tuple
+from typing import Any, Callable, Iterable, Set, Tuple
 
 import numpy as np
 
@@ -80,14 +80,14 @@ def align_idxs_and_params(
 
     # used to convert arrays to a hashable type for use as dict keys and in sets
     def to_hashable(x):
-        return x if isinstance(x, Hashable) else tuple(x)
+        return tuple(to_hashable(e) for e in x) if isinstance(x, Iterable) else x
 
     def make_kv(all_idxs, all_params):
         kvs = [(to_hashable(key(idxs, params)), params) for idxs, params in zip(all_idxs, all_params)]
 
         def has_duplicates(x):
             x = list(x)
-            return len(set(to_hashable(x))) < len(x)
+            return len(set(x)) < len(x)
 
         if has_duplicates(k for k, _ in kvs):
             raise DuplicateAlignmentKeysError()
@@ -138,8 +138,8 @@ def align_chiral_bond_idxs_and_params(src_idxs, src_params, src_signs, dst_idxs,
             dst_idxs,
             zip(dst_signs, dst_params),
             make_default=lambda p: (p[0], 0),  # p[0] is sign, 0 is force constant
-            key=lambda idxs, p: (tuple(idxs), p[0]),  # use idxs and sign as key
-            get_idxs=lambda key: tuple(key[0]),
+            key=lambda idxs, p: (idxs, p[0]),  # use idxs and sign as key
+            get_idxs=lambda key: key[0],
         )
     }
 
