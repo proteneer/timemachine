@@ -2,7 +2,6 @@ import numpy as np
 from rdkit import Chem
 from rdkit.Chem import AllChem, rdFMCS
 
-from timemachine.fe.atom_mapping import CompareDistNonterminal
 from timemachine.fe.restraints import setup_relative_restraints_by_distance, setup_relative_restraints_using_smarts
 from timemachine.fe.utils import get_romol_conf
 
@@ -44,7 +43,7 @@ def test_setting_up_restraints_using_smarts():
     seed = 814
 
     mcs_params = rdFMCS.MCSParameters()
-    mcs_params.AtomTyper = CompareDistNonterminal()
+    mcs_params.AtomTyper = rdFMCS.AtomCompare.CompareAnyHeavyAtom
     mcs_params.BondTyper = rdFMCS.BondCompare.CompareAny
 
     smi_a = "CCCONNN"
