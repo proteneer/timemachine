@@ -1,5 +1,6 @@
 from copy import deepcopy
-from typing import Optional
+from functools import partial
+from typing import Callable, Optional
 
 import numpy as np
 from rdkit import Chem
@@ -33,7 +34,41 @@ class CompareDistNonterminal(rdFMCS.MCSAtomCompare):
         return bool(np.linalg.norm(x_i - x_j) <= threshold)
 
 
-def mcs(a, b, threshold: float = 2.0, timeout: int = 5, smarts: Optional[str] = None):
+SmartsString = str
+MCSFxn = Callable[[Chem.Mol, Chem.Mol, Optional[SmartsString]], Chem.MCSResult]
+
+
+def possibly_fallback_to_heavy_atom_mcs(
+    mcs_fxn: MCSFxn, a: Chem.Mol, b: Chem.Mol, smarts: Optional[str] = None
+) -> Chem.MCSResult:
+    """if mcs_fxn(a, b, smarts) fails, try again with smarts from easier mcs_fxn(RemoveHs(a), RemoveHs(b))"""
+
+    result = mcs_fxn(a, b, smarts)
+
+    def unacceptable(result):
+        return result.numBonds < 2
+
+    if unacceptable(result) and smarts is None:
+        # try again, but seed with MCS computed without explicit hydrogens
+        a_without_hs = Chem.RemoveHs(deepcopy(a))
+        b_without_hs = Chem.RemoveHs(deepcopy(b))
+
+        heavy_atom_result = mcs_fxn(a_without_hs, b_without_hs, None)
+
+        result = mcs_fxn(a, b, heavy_atom_result.smartsString)
+
+    if unacceptable(result):
+        message = f"""MCS result unacceptable!
+            timed out: {result.canceled}
+            # atoms in MCS: {result.numAtoms}
+            # bonds in MCS: {result.numBonds}
+        """
+        raise AtomMappingError(message)
+
+    return result
+
+
+def _mcs_conformer_aware(a, b, threshold: float = 2.0, timeout: int = 5, smarts: Optional[str] = None):
     """Find maximum common substructure between mols a and b
     using reasonable settings for single topology:
     * only match atoms within distance threshold
@@ -62,33 +97,11 @@ def mcs_conformer_aware(a, b, threshold: float = 2.0, timeout: int = 5, smarts: 
     """Compute maximum common substructure between mols a and b,
     possibly reseeding with result of easier MCS(RemoveHs(a), RemoveHs(b))
     """
-
-    result = mcs(a, b, threshold, timeout, smarts)
-
-    def unacceptable(result):
-        return result.numBonds < 2
-
-    if unacceptable(result) and smarts is None:
-        # try again, but seed with MCS computed without explicit hydrogens
-        a_without_hs = Chem.RemoveHs(deepcopy(a))
-        b_without_hs = Chem.RemoveHs(deepcopy(b))
-
-        heavy_atom_result = mcs(a_without_hs, b_without_hs, threshold, timeout, smarts)
-
-        result = mcs(a, b, threshold, timeout, heavy_atom_result.smartsString)
-
-    if unacceptable(result):
-        message = f"""MCS result unacceptable!
-            timed out: {result.canceled}
-            # atoms in MCS: {result.numAtoms}
-            # bonds in MCS: {result.numBonds}
-        """
-        raise AtomMappingError(message)
-
-    return result
+    mcs_fxn = partial(_mcs_conformer_aware, threshold=threshold, timeout=timeout)
+    return possibly_fallback_to_heavy_atom_mcs(mcs_fxn, a, b, smarts)
 
 
-def mcs_graph_only_complete_rings(a, b, timeout: int = 3600, smarts: Optional[str] = None):
+def _mcs_graph_only_complete_rings(a, b, timeout: int = 3600, smarts: Optional[str] = None):
     """Find the MCS of A and B, disregarding conformer information. This also ensures
     that core-core bonds are not broken."""
     return rdFMCS.FindMCS(
@@ -103,6 +116,14 @@ def mcs_graph_only_complete_rings(a, b, timeout: int = 3600, smarts: Optional[st
         bondCompare=Chem.rdFMCS.BondCompare.CompareAny,
         seedSmarts=smarts if type(smarts) == str else "",
     )
+
+
+def mcs_graph_only_complete_rings(a, b, timeout: int = 3600, smarts: Optional[str] = None):
+    """Find the MCS of A and B, disregarding conformer information. This also ensures
+    that core-core bonds are not broken.
+    Possibly reseeding with result of easier MCS(RemoveHs(a), RemoveHs(b))."""
+    mcs_fxn = partial(_mcs_graph_only_complete_rings, timeout=timeout)
+    return possibly_fallback_to_heavy_atom_mcs(mcs_fxn, a, b, smarts)
 
 
 def get_core_by_mcs(mol_a, mol_b, query, threshold=0.5):
