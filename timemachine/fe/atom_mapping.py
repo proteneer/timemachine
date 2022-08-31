@@ -1,6 +1,5 @@
 from copy import deepcopy
-from functools import partial
-from typing import Any, Callable, Optional
+from typing import Optional
 
 import numpy as np
 from rdkit import Chem
@@ -8,32 +7,58 @@ from rdkit.Chem import rdFMCS
 
 from timemachine.fe.topology import AtomMappingError
 
-SmartsString = str
-MCSResult = Any  # Chem.rdFMCS.MCSResult
-MCSFxn = Callable[[Chem.Mol, Chem.Mol, Optional[SmartsString]], MCSResult]
 
+def mcs(a, b, threshold: float = 2.0, timeout: int = 5, smarts: Optional[str] = None, conformer_aware=True, retry=True):
+    """Find maximum common substructure between mols a and b
+    using reasonable settings for single topology:
+    * disallow partial ring matches
+    * disregard element identity and valence
 
-def possibly_fallback_to_heavy_atom_mcs(
-    mcs_fxn: MCSFxn, a: Chem.Mol, b: Chem.Mol, smarts: Optional[str] = None
-) -> MCSResult:
-    """if mcs_fxn(a, b, smarts) fails, try again with smarts from easier mcs_fxn(RemoveHs(a), RemoveHs(b))"""
+    if conformer_aware=True, only match atoms within distance threshold
+        (assumes conformers are aligned)
 
-    result = mcs_fxn(a, b, smarts)
+    if retry=True, then reseed with result of easier MCS(RemoveHs(a), RemoveHs(b)) in case of failure
+    """
+    params = rdFMCS.MCSParameters()
 
-    def unacceptable(result):
-        return result.numBonds < 2
+    # bonds
+    params.BondCompareParameters.CompleteRingsOnly = 1
+    params.BondCompareParameters.RingMatchesRingOnly = 1
+    params.BondTyper = rdFMCS.BondCompare.CompareAny
 
-    if unacceptable(result) and smarts is None:
+    # atoms
+    params.AtomCompareParameters.CompleteRingsOnly = 1
+    params.AtomCompareParameters.RingMatchesRingOnly = 1
+    params.AtomCompareParameters.matchValences = 0
+    params.AtomCompareParameters.MatchChiralTag = 0
+    if conformer_aware:
+        params.AtomCompareParameters.MaxDistance = threshold
+    params.AtomTyper = rdFMCS.AtomCompare.CompareAny
+
+    # globals
+    params.Timeout = timeout
+    if smarts is not None:
+        params.InitialSeed = smarts
+
+    # try on given mols
+    result = rdFMCS.FindMCS([a, b], params)
+
+    # optional fallback
+    def is_trivial(mcs_result) -> bool:
+        return mcs_result.numBonds < 2
+
+    if retry and is_trivial(result) and smarts is None:
         # try again, but seed with MCS computed without explicit hydrogens
         a_without_hs = Chem.RemoveHs(deepcopy(a))
         b_without_hs = Chem.RemoveHs(deepcopy(b))
 
-        heavy_atom_result = mcs_fxn(a_without_hs, b_without_hs, None)
+        heavy_atom_result = rdFMCS.FindMCS([a_without_hs, b_without_hs], params)
+        params.InitialSeed = heavy_atom_result.smartsString
 
-        result = mcs_fxn(a, b, heavy_atom_result.smartsString)
+        result = rdFMCS.FindMCS([a, b], params)
 
-    if unacceptable(result):
-        message = f"""MCS result unacceptable!
+    if is_trivial(result):
+        message = f"""MCS result trivial!
             timed out: {result.canceled}
             # atoms in MCS: {result.numAtoms}
             # bonds in MCS: {result.numBonds}
@@ -41,64 +66,6 @@ def possibly_fallback_to_heavy_atom_mcs(
         raise AtomMappingError(message)
 
     return result
-
-
-def _mcs_conformer_aware(a, b, threshold: float = 2.0, timeout: int = 5, smarts: Optional[str] = None):
-    """Find maximum common substructure between mols a and b
-    using reasonable settings for single topology:
-    * only match atoms within distance threshold
-        (assumes conformers are aligned)
-    * disallow partial ring matches
-    * disregard element identity and valence
-    """
-    params = rdFMCS.MCSParameters()
-    params.BondCompareParameters.CompleteRingsOnly = 1
-    params.BondCompareParameters.RingMatchesRingOnly = 1
-    params.BondTyper = rdFMCS.BondCompare.CompareAny
-
-    params.AtomCompareParameters.CompleteRingsOnly = 1
-    params.AtomCompareParameters.RingMatchesRingOnly = 1
-    params.AtomCompareParameters.matchValences = 0
-    params.AtomCompareParameters.MaxDistance = threshold
-    params.AtomTyper = rdFMCS.AtomCompare.CompareAny
-
-    params.Timeout = timeout
-    if smarts is not None:
-        params.InitialSeed = smarts
-    return rdFMCS.FindMCS([a, b], params)
-
-
-def mcs_conformer_aware(a, b, threshold: float = 2.0, timeout: int = 5, smarts: Optional[str] = None):
-    """Compute maximum common substructure between mols a and b,
-    possibly reseeding with result of easier MCS(RemoveHs(a), RemoveHs(b))
-    """
-    mcs_fxn = partial(_mcs_conformer_aware, threshold=threshold, timeout=timeout)
-    return possibly_fallback_to_heavy_atom_mcs(mcs_fxn, a, b, smarts)
-
-
-def _mcs_graph_only_complete_rings(a, b, timeout: int = 60, smarts: Optional[str] = None):
-    """Find the MCS of A and B, disregarding conformer information. This also ensures
-    that core-core bonds are not broken."""
-    return rdFMCS.FindMCS(
-        [a, b],
-        maximizeBonds=True,
-        timeout=timeout,
-        matchValences=False,
-        ringMatchesRingOnly=True,
-        completeRingsOnly=True,
-        matchChiralTag=False,
-        atomCompare=Chem.rdFMCS.AtomCompare.CompareAny,
-        bondCompare=Chem.rdFMCS.BondCompare.CompareAny,
-        seedSmarts=smarts or "",
-    )
-
-
-def mcs_graph_only_complete_rings(a, b, timeout: int = 60, smarts: Optional[str] = None):
-    """Find the MCS of A and B, disregarding conformer information. This also ensures
-    that core-core bonds are not broken.
-    Possibly reseeding with result of easier MCS(RemoveHs(a), RemoveHs(b))."""
-    mcs_fxn = partial(_mcs_graph_only_complete_rings, timeout=timeout)
-    return possibly_fallback_to_heavy_atom_mcs(mcs_fxn, a, b, smarts)
 
 
 def get_core_by_mcs(mol_a, mol_b, query, threshold=0.5):

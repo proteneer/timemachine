@@ -65,7 +65,7 @@ def read_from_args():
 
             print(f"Submitting job for {mol_a_name} -> {mol_b_name}")
             mcs_threshold = 2.0
-            mcs_result = atom_mapping.mcs_conformer_aware(mol_a, mol_b, threshold=mcs_threshold)
+            mcs_result = atom_mapping.mcs(mol_a, mol_b, threshold=mcs_threshold)
             query_mol = Chem.MolFromSmarts(mcs_result.smartsString)
             core = atom_mapping.get_core_by_mcs(mol_a, mol_b, query_mol, threshold=mcs_threshold)
             fut = cpc.submit(run_pair, mol_a, mol_b, core, forcefield, protein, args.n_frames, args.seed + row_idx)
