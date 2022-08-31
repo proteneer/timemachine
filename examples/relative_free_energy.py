@@ -103,7 +103,7 @@ def read_from_args():
     mol_b = get_mol_by_name(mols, args.mol_b_name)  # 30 in test pair
 
     print("Searching for the maximum common substructure...")
-    mcs_result = atom_mapping.mcs_map_graph_only_complete_rings(mol_a, mol_b)
+    mcs_result = atom_mapping.mcs_graph_only_complete_rings(mol_a, mol_b)
     query_mol = Chem.MolFromSmarts(mcs_result.smartsString)
 
     print("mol_a SMILES:", Chem.MolToSmiles(mol_a, isomericSmiles=False))
