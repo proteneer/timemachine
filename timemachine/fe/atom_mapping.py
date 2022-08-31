@@ -102,7 +102,7 @@ def mcs_conformer_aware(a, b, threshold: float = 2.0, timeout: int = 5, smarts: 
     return possibly_fallback_to_heavy_atom_mcs(mcs_fxn, a, b, smarts)
 
 
-def _mcs_graph_only_complete_rings(a, b, timeout: int = 3600, smarts: Optional[str] = None):
+def _mcs_graph_only_complete_rings(a, b, timeout: int = 60, smarts: Optional[str] = None):
     """Find the MCS of A and B, disregarding conformer information. This also ensures
     that core-core bonds are not broken."""
     return rdFMCS.FindMCS(
@@ -119,7 +119,7 @@ def _mcs_graph_only_complete_rings(a, b, timeout: int = 3600, smarts: Optional[s
     )
 
 
-def mcs_graph_only_complete_rings(a, b, timeout: int = 3600, smarts: Optional[str] = None):
+def mcs_graph_only_complete_rings(a, b, timeout: int = 60, smarts: Optional[str] = None):
     """Find the MCS of A and B, disregarding conformer information. This also ensures
     that core-core bonds are not broken.
     Possibly reseeding with result of easier MCS(RemoveHs(a), RemoveHs(b))."""
