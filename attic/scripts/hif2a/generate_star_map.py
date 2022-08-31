@@ -15,7 +15,7 @@ from timemachine.fe.atom_mapping import (
     get_core_by_geometry,
     get_core_by_mcs,
     get_star_map,
-    mcs_conformer_aware,
+    mcs_map,
     transformation_size,
 )
 from timemachine.fe.free_energy import RelativeFreeEnergy
@@ -95,7 +95,7 @@ def _strip_invalid_keys(ref: Dict[Any, Any], keys=List[Any]) -> Dict[Any, Any]:
 
 core_strategies = {
     "mcs": lambda a, b, kwargs: get_core_by_mcs(
-        a, b, mcs_conformer_aware(a, b, **_strip_invalid_keys(kwargs, ["smarts"])).queryMol
+        a, b, mcs_map(a, b, **_strip_invalid_keys(kwargs, ["smarts"])).queryMol
     ),
     "any_mcs": lambda a, b, kwargs: get_core_by_permissive_mcs(a, b),
     "geometry": lambda a, b, kwargs: get_core_by_geometry(a, b, threshold=0.5),

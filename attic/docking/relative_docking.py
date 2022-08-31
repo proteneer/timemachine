@@ -12,7 +12,7 @@ from rdkit.Chem import rdFMCS
 
 from docking import report
 from timemachine.fe import free_energy, topology
-from timemachine.fe.atom_mapping import get_core_by_geometry, get_core_by_mcs, get_core_by_smarts, mcs_conformer_aware
+from timemachine.fe.atom_mapping import get_core_by_geometry, get_core_by_mcs, get_core_by_smarts, mcs_map
 from timemachine.ff import Forcefield
 from timemachine.lib import LangevinIntegrator, custom_ops
 from timemachine.md import builders, minimizer
@@ -292,7 +292,7 @@ def _get_core_by_smarts_wo_checking_uniqueness(mol_a, mol_b, core_smarts):
 def get_core(strategy, mol_a, mol_b, smarts=None):
     # adapted from timemachine/examples/hif2a/generate_star_map.py
     core_strategies = {
-        "custom_mcs": lambda a, b, s: get_core_by_mcs(a, b, mcs_conformer_aware(a, b).queryMol),
+        "custom_mcs": lambda a, b, s: get_core_by_mcs(a, b, mcs_map(a, b).queryMol),
         "any_mcs": lambda a, b, s: get_core_by_permissive_mcs(a, b),
         "geometry": lambda a, b, s: get_core_by_geometry(a, b, threshold=0.5),
         "smarts": lambda a, b, s: get_core_by_smarts(a, b, core_smarts=s),
