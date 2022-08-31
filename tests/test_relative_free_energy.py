@@ -43,7 +43,7 @@ def run_bitwise_reproducibility(mol_a, mol_b, core, forcefield, n_frames):
     np.testing.assert_equal(solvent_res.boxes, all_boxes)
 
 
-def run_pair(mol_a, mol_b, core, forcefield, n_frames, protein_path):
+def run_pair(mol_a, mol_b, core, forcefield, n_frames, protein_path, n_eq_steps):
 
     lambda_schedule = [0.01, 0.02, 0.03]
 
@@ -62,6 +62,7 @@ def run_pair(mol_a, mol_b, core, forcefield, n_frames, protein_path):
         n_frames=n_frames,
         prefix="solvent",
         lambda_schedule=lambda_schedule,
+        n_eq_steps=n_eq_steps,
     )
 
     assert solvent_res.plot_png is not None
@@ -73,6 +74,7 @@ def run_pair(mol_a, mol_b, core, forcefield, n_frames, protein_path):
     assert len(solvent_res.boxes[-1] == n_frames)
     assert [x.lamb for x in solvent_res.initial_states] == lambda_schedule
     assert solvent_res.protocol.n_frames == n_frames
+    assert solvent_res.protocol.n_eq_steps == n_eq_steps
 
     seed = 2024
     complex_sys, complex_conf, _, _, complex_box, _ = builders.build_protein_system(protein_path)
@@ -88,6 +90,7 @@ def run_pair(mol_a, mol_b, core, forcefield, n_frames, protein_path):
         n_frames=n_frames,
         prefix="complex",
         lambda_schedule=lambda_schedule,
+        n_eq_steps=n_eq_steps,
     )
 
     assert complex_res.plot_png is not None
@@ -99,6 +102,7 @@ def run_pair(mol_a, mol_b, core, forcefield, n_frames, protein_path):
     assert len(complex_res.boxes[-1]) == n_frames
     assert [x.lamb for x in complex_res.initial_states] == lambda_schedule
     assert complex_res.protocol.n_frames == n_frames
+    assert complex_res.protocol.n_eq_steps == n_eq_steps
 
 
 @pytest.mark.nightly(reason="Slow!")
@@ -111,7 +115,7 @@ def test_run_hif2a_test_system():
     forcefield = st.ff
 
     with resources.path("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as protein_path:
-        run_pair(mol_a, mol_b, core, forcefield, n_frames=100, protein_path=str(protein_path))
+        run_pair(mol_a, mol_b, core, forcefield, n_frames=100, protein_path=str(protein_path), n_eq_steps=1000)
     run_bitwise_reproducibility(mol_a, mol_b, core, forcefield, n_frames=100)
 
 
