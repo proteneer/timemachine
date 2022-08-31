@@ -292,10 +292,7 @@ def estimate_free_energy_given_initial_states(initial_states, protocol, temperat
     all_dGs = []
     all_errs = []
 
-    U_names = []
-    for U_fn in initial_states[0].potentials:
-        # convert from '<timemachine.lib.potentials.Nonbonded object at 0x7f7880b900b8>' -> Nonbonded
-        U_names.append(repr(U_fn).split(".")[-1].split()[0])
+    U_names = [type(U_fn).__name__ for U_fn in initial_states[0].potentials]
 
     num_rows = len(initial_states) - 1
     num_cols = len(U_names) + 1
