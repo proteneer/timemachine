@@ -1,5 +1,6 @@
 import functools
 import io
+import pickle
 import warnings
 from dataclasses import dataclass
 from typing import List
@@ -232,13 +233,6 @@ def plot_BAR(df, df_err, fwd_delta_u, rev_delta_u, title, axes):
     axes.legend()
 
 
-class SimulationException(Exception):
-    def __init__(self, initial_states, protocol, message):
-        self.initial_states = initial_states
-        self.protocol = protocol
-        self.message = message
-
-
 def estimate_free_energy_given_initial_states(initial_states, protocol, temperature, prefix, keep_idxs):
     """
     Estimate free energies given pre-generated samples. This implements the pair-BAR method, where
@@ -441,8 +435,14 @@ def estimate_relative_free_energy(
         keep_idxs = [0, -1]  # keep first and last frames
     assert len(keep_idxs) <= len(lambda_schedule)
     combined_prefix = get_mol_name(mol_a) + "_" + get_mol_name(mol_b) + "_" + prefix
-
-    return estimate_free_energy_given_initial_states(initial_states, protocol, temperature, combined_prefix, keep_idxs)
+    try:
+        return estimate_free_energy_given_initial_states(
+            initial_states, protocol, temperature, combined_prefix, keep_idxs
+        )
+    except Exception as err:
+        with open(f"failed_rbfe_result_{combined_prefix}.pkl", "wb") as fh:
+            pickle.dump((initial_states, protocol, err), fh)
+        raise err
 
 
 def run_pair(mol_a, mol_b, core, forcefield, protein, n_frames, seed, n_eq_steps=10000):

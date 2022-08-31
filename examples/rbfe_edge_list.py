@@ -12,7 +12,7 @@ from simtk.openmm import app
 
 from timemachine.constants import KCAL_TO_KJ
 from timemachine.fe import atom_mapping
-from timemachine.fe.rbfe import SimulationException, run_pair
+from timemachine.fe.rbfe import run_pair
 from timemachine.fe.utils import get_mol_name
 from timemachine.ff import Forcefield
 from timemachine.parallel.client import CUDAPoolClient
@@ -110,13 +110,11 @@ def read_from_args():
                 f"finished: {mol_a_name} -> {mol_b_name} (kJ/mol) | complex {complex_ddg:.2f} +- {complex_ddg_err:.2f} | solvent {solvent_ddg:.2f} +- {solvent_ddg_err:.2f} | tm_pred {tm_ddg:.2f} +- {tm_err:.2f} | exp_ddg {exp_ddg:.2f} | fep_ddg {fep_ddg:.2f} +- {fep_ddg_err:.2f}"
             )
 
-        except SimulationException as sim_exc:
+        except Exception as err:
             print(
-                f"failed: {mol_a_name} -> {mol_b_name} (kJ/mol) | complex {complex_ddg:.2f} +- {complex_ddg_err:.2f} | solvent {solvent_ddg:.2f} +- {solvent_ddg_err:.2f} | tm_pred {tm_ddg:.2f} +- {tm_err:.2f} | exp_ddg {exp_ddg:.2f} | fep_ddg {fep_ddg:.2f} +- {fep_ddg_err:.2f}"
+                f"failed: {err} {mol_a_name} -> {mol_b_name} (kJ/mol) | complex {complex_ddg:.2f} +- {complex_ddg_err:.2f} | solvent {solvent_ddg:.2f} +- {solvent_ddg_err:.2f} | tm_pred {tm_ddg:.2f} +- {tm_err:.2f} | exp_ddg {exp_ddg:.2f} | fep_ddg {fep_ddg:.2f} +- {fep_ddg_err:.2f}"
             )
             traceback.print_exc()
-            with open(f"failed_rbfe_result_{mol_a_name}_{mol_b_name}.pkl", "wb") as fh:
-                pickle.dump((sim_exc, meta), fh)
 
 
 if __name__ == "__main__":
