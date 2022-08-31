@@ -115,7 +115,7 @@ def _mcs_graph_only_complete_rings(a, b, timeout: int = 60, smarts: Optional[str
         matchChiralTag=False,
         atomCompare=Chem.rdFMCS.AtomCompare.CompareAny,
         bondCompare=Chem.rdFMCS.BondCompare.CompareAny,
-        seedSmarts=smarts if type(smarts) == str else "",
+        seedSmarts=smarts or "",
     )
 
 
