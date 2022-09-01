@@ -84,6 +84,13 @@ class _MockFuture:
         """
         return "1"
 
+    @property
+    def name(self) -> str:
+        """
+        Return the name as a str for this subjob
+        """
+        return "1"
+
 
 class WrappedFuture:
     def __init__(self, future, job_id: str):
@@ -99,6 +106,10 @@ class WrappedFuture:
     @property
     def id(self):
         return self._id
+
+    @property
+    def name(self):
+        return str(self._id)
 
 
 class SerialClient(AbstractClient):
@@ -204,6 +215,10 @@ class BinaryFutureWrapper:
     @property
     def id(self):
         return self._id
+
+    @property
+    def name(self):
+        return str(self._id)
 
 
 class GRPCClient(AbstractClient):
