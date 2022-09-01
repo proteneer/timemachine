@@ -206,9 +206,7 @@ def test_hif2a_end_state_stability(num_pairs_to_setup=25, num_pairs_to_simulate=
 
         print("Checking", get_mol_name(mol_a), "->", get_mol_name(mol_b))
         mcs_threshold = 2.0  # distance threshold, in nanometers
-        res = atom_mapping.mcs(mol_a, mol_b, mcs_threshold)
-        query = Chem.MolFromSmarts(res.smartsString)
-        core_pairs = atom_mapping.get_core_by_mcs(mol_a, mol_b, query, mcs_threshold)
+        core_pairs = atom_mapping.get_core_with_alignment(mol_a, mol_b, threshold=mcs_threshold)
         st = SingleTopologyV3(mol_a, mol_b, core_pairs, ff)
         x0 = st.combine_confs(get_romol_conf(mol_a), get_romol_conf(mol_b))
         systems = [st.src_system, st.dst_system]
