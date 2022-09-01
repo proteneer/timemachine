@@ -217,8 +217,8 @@ def test_intermediate_states(num_pairs_to_setup=10):
     for mol_a, mol_b in pairs[:num_pairs_to_setup]:
 
         print("Checking", mol_a.GetProp("_Name"), "->", mol_b.GetProp("_Name"))
-        mcs_threshold = 0.75  # distance threshold, in nanometers
-        res = atom_mapping.mcs_map(mol_a, mol_b, mcs_threshold)
+        mcs_threshold = 2.0  # distance threshold, in nanometers
+        res = atom_mapping.mcs(mol_a, mol_b, mcs_threshold)
         query = Chem.MolFromSmarts(res.smartsString)
         core_pairs = atom_mapping.get_core_by_mcs(mol_a, mol_b, query, mcs_threshold)
 

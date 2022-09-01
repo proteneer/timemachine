@@ -205,8 +205,8 @@ def test_hif2a_end_state_stability(num_pairs_to_setup=25, num_pairs_to_simulate=
     for pair_idx, (mol_a, mol_b) in enumerate(pairs[:num_pairs_to_setup]):
 
         print("Checking", get_mol_name(mol_a), "->", get_mol_name(mol_b))
-        mcs_threshold = 0.75  # distance threshold, in nanometers
-        res = atom_mapping.mcs_map(mol_a, mol_b, mcs_threshold)
+        mcs_threshold = 2.0  # distance threshold, in nanometers
+        res = atom_mapping.mcs(mol_a, mol_b, mcs_threshold)
         query = Chem.MolFromSmarts(res.smartsString)
         core_pairs = atom_mapping.get_core_by_mcs(mol_a, mol_b, query, mcs_threshold)
         st = SingleTopologyV3(mol_a, mol_b, core_pairs, ff)
@@ -287,8 +287,8 @@ def test_jax_transform_intermediate_potential():
         mol_a = mols["206"]
         mol_b = mols["57"]
 
-        mcs_threshold = 0.75
-        res = atom_mapping.mcs_map(mol_a, mol_b, mcs_threshold)
+        mcs_threshold = 2.0
+        res = atom_mapping.mcs(mol_a, mol_b, mcs_threshold)
         query = Chem.MolFromSmarts(res.smartsString)
         core_pairs = atom_mapping.get_core_by_mcs(mol_a, mol_b, query, mcs_threshold)
 
