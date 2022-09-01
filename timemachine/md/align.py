@@ -15,7 +15,7 @@ from timemachine.potentials import generic
 
 
 def align_mols_by_core(
-    mol_a: Chem.Mol, mol_b: Chem.Mol, core: NDArray, ff: Forcefield, n_steps: int = 100, k: float = 10000
+    mol_a: Chem.Mol, mol_b: Chem.Mol, core: NDArray, ff: Forcefield, n_steps: int = 200, k: float = 10000
 ) -> Tuple[NDArray, NDArray]:
     """
     Given two mols and a core mapping, simulate the mols in vacuum with harmonic bounds between them to get aligned poses.
@@ -79,9 +79,11 @@ def align_mols_by_core(
         du_dx = grad_fn(x)
         return -du_dx
 
+    friction = 10.0
     # TBD 1e-3 step size is arbitrary
-    intg = LangevinIntegrator(force_func, masses, 0.0, 1e-3, 0.0)
-    key = jax.random.PRNGKey(2022)  # seed value doesn't matter with no friction and 0 temp
+    dt = 1e-3
+    intg = LangevinIntegrator(force_func, masses, 0.0, dt, friction)
+    key = jax.random.PRNGKey(2022)
     xs, _ = intg.multiple_steps_lax(key, x0, np.zeros_like(x0), n_steps=n_steps)
     xs = np.array(xs)
 
