@@ -150,7 +150,7 @@ def get_romol_conf(mol):
 
 
 def set_romol_conf(mol, new_coords):
-    """Sets coordinates of mol's 0th confomrmer"""
+    """Sets coordinates of mol's 0th conformer"""
     assert new_coords.shape[0] == mol.GetNumAtoms()
     # convert from nm to angstroms
     angstrom_coords = new_coords * 10
