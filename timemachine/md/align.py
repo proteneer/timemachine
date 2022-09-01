@@ -18,7 +18,7 @@ def align_mols_by_core(
     mol_a: Chem.Mol, mol_b: Chem.Mol, core: NDArray, ff: Forcefield, n_steps: int = 200, k: float = 10000
 ) -> Tuple[NDArray, NDArray]:
     """
-    Given two mols and a core mapping, simulate the mols in vacuum with harmonic bounds between them to get aligned poses.
+    Given two mols and a core mapping, simulate the mols in vacuum with harmonic bonds between them to get aligned poses.
 
     Returns the poses with the lowest RMSD between the cores.
 

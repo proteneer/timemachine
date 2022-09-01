@@ -12,8 +12,6 @@ from timemachine.fe.utils import set_romol_conf
 from timemachine.ff import Forcefield
 from timemachine.md.align import align_mols_by_core
 
-# def heavy_atom_mcs(a, b, threshold)
-
 
 def mcs(a, b, threshold: float = 2.0, timeout: int = 5, smarts: Optional[str] = None, conformer_aware=True, retry=True):
     """Find maximum common substructure between mols a and b
@@ -132,7 +130,7 @@ def get_core_with_alignment(
     mol_a: Chem.Mol,
     mol_b: Chem.Mol,
     threshold: float = 2.0,
-    n_steps: int = 100,
+    n_steps: int = 200,
     k: float = 10000,
     ff: Optional[Forcefield] = None,
 ) -> NDArray:
