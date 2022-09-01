@@ -169,10 +169,10 @@ def test_align_chiral_bonds():
 
     a, b, c, d, e, f, g = np.random.rand(7)
 
-    src_idxs = [(0, 3, 4, 5), (0, 3, 4, 5), (0, 4, 3, 5), (4, 3, 5, 6)]
+    src_idxs = [np.array([0, 3, 4, 5]), np.array([0, 3, 4, 5]), np.array([0, 4, 3, 5]), np.array([4, 3, 5, 6])]
     src_params = [a, b, c, d]
     src_signs = [1, -1, 1, 1]
-    dst_idxs = [(4, 3, 5, 7), (0, 3, 4, 5), (4, 3, 5, 6)]
+    dst_idxs = [np.array([4, 3, 5, 7]), np.array([0, 3, 4, 5]), np.array([4, 3, 5, 6])]
     dst_params = [e, f, g]
     dst_signs = [1, -1, -1]
 
@@ -192,7 +192,9 @@ def test_align_chiral_bonds():
     assert test_set == ref_set
 
     src_signs[1] = 1
-    assert len(set(list(zip(src_idxs, src_signs))[:2])) == 1  # first 2 alignment keys are duplicates
+    assert (
+        len(set(list(zip([tuple(x) for x in src_idxs], src_signs))[:2])) == 1
+    )  # first 2 alignment keys are duplicates
     with pytest.raises(interpolate.DuplicateAlignmentKeysError):
         interpolate.align_chiral_bond_idxs_and_params(src_idxs, src_params, src_signs, dst_idxs, dst_params, dst_signs)
 
