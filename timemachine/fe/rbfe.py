@@ -306,7 +306,7 @@ def estimate_free_energy_given_initial_states(initial_states, protocol, temperat
     ukln_by_component_by_lambda = []
 
     for lamb_idx, initial_state in enumerate(initial_states):
-
+        print("LOOP", lamb_idx)
         cur_frames, cur_boxes = sample(initial_state, protocol)
         bound_impls = [p.bound_impl(np.float32) for p in initial_state.potentials]
         cur_batch_U_fns = get_batch_U_fns(bound_impls, initial_state.lamb)
@@ -340,6 +340,7 @@ def estimate_free_energy_given_initial_states(initial_states, protocol, temperat
 
             # (energy components, energy fxns = 2, sampled states = 2, frames)
             ukln_by_component = np.array(ukln_by_component, dtype=np.float64)
+            print("UKLN", ukln_by_component.shape)
             total_fwd_delta_us = (ukln_by_component[:, 1, 0, :] - ukln_by_component[:, 0, 0, :]).sum(axis=0)
             total_rev_delta_us = (ukln_by_component[:, 0, 1, :] - ukln_by_component[:, 1, 1, :]).sum(axis=0)
             total_df, total_df_err = pymbar.BAR(total_fwd_delta_us, total_rev_delta_us)
@@ -484,6 +485,7 @@ def estimate_relative_free_energy(
     else:
         warnings.warn("Warning: setting lambda_schedule manually, this argument may be removed in a future release.")
 
+    print("setup initial states")
     temperature = DEFAULT_TEMP
     initial_states = setup_initial_states(single_topology, host_config, temperature, lambda_schedule, seed)
     protocol = SimulationProtocol(n_frames=n_frames, n_eq_steps=n_eq_steps, steps_per_frame=1000)
