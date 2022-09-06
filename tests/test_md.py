@@ -452,7 +452,7 @@ class TestContext(unittest.TestCase):
 
         summed_potential = SummedPotential(unbound_potentials, sys_params)
         # Flatten the arrays so we can concatenate them.
-        summed_potential = summed_potential.bind(np.concatenate([p.reshape(-1) for p in sys_params]).reshape(-1))
+        summed_potential = summed_potential.bind(np.concatenate([p.reshape(-1) for p in sys_params]))
         bp = summed_potential.bound_impl(precision=np.float32)
 
         intg_impl = intg.impl()
