@@ -9,6 +9,7 @@
 #include "kernels/kernel_utils.cuh"
 #include "neighborlist.hpp"
 #include "nonbonded_all_pairs.hpp"
+#include "pinned_host_buffer.hpp"
 #include "set_utils.hpp"
 #include "summed_potential.hpp"
 #include "thermostat.hpp"
@@ -225,7 +226,7 @@ std::array<std::vector<double>, 2> Context::multiple_steps_local(
     DeviceBuffer<unsigned int> d_col_idxs(N_);
 
     // Pinned memory for getting lengths of indice arrays
-    DeviceBuffer<int, true> p_num_selected(1);
+    PinnedHostBuffer<int> p_num_selected(1);
     DeviceBuffer<int> num_selected_buffer(1);
     LessThan select_op(N_);
 
