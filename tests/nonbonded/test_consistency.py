@@ -91,7 +91,9 @@ def test_nonbonded_consistency(
         [
             make_allpairs_potential(host_idxs),
             make_allpairs_potential(ligand_idxs),
-            make_ixngroup_potential(ligand_idxs.astype(np.int32)),
+            make_ixngroup_potential(
+                ligand_idxs.astype(np.int32)
+            ),  # convert to int32 as ixn group uses different type than nonbonded
             make_pairlist_potential(exclusion_idxs, exclusion_scales),
         ]
     ).unbound_impl(precision)
