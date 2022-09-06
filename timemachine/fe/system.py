@@ -183,8 +183,10 @@ class HostGuestSystem:
             self.bond,
             self.angle,
             self.torsion,
-            self.chiral_atom,
-            self.chiral_bond,
+            # Chiral restraints are disabled until checks are added
+            # for consistency.
+            # self.chiral_atom,
+            # self.chiral_bond,
             self.nonbonded_guest_pairs,
             self.nonbonded_host_guest,
         ]
