@@ -3,11 +3,11 @@
 
 namespace timemachine {
 
-template <typename T> class DeviceBuffer {
+template <typename T> class PinnedHostBuffer {
 public:
-    DeviceBuffer(const size_t length);
+    PinnedHostBuffer(const size_t length);
 
-    ~DeviceBuffer();
+    ~PinnedHostBuffer();
 
     const size_t size;
 
