@@ -206,4 +206,7 @@ def test_verlet_with_multiple_steps_local():
 
     n_steps = 10
 
+    ctxt.multiple_steps_local(np.ones(n_steps), local_idxs)
+
+    # Uses non-default temperature as the integrator is not a thermostat, only changes the selection probabilities for local MD
     ctxt.multiple_steps_local(np.ones(n_steps), local_idxs, temperature=100)
