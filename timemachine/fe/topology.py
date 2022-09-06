@@ -652,85 +652,29 @@ class DualTopology(BaseTopology):
         except implemented as a pairlist.
         """
         NA = self.mol_a.GetNumAtoms()
-        NB = self.mol_b.GetNumAtoms()
-        N = NA + NB
 
-        # note: use same scale factor for electrostatics and vdw
-        # typically in protein ffs, gaff, the 1-4 ixns use different scale factors between vdw and electrostatics
-        exclusion_idxs_a, scale_factors_a = nonbonded.generate_exclusion_idxs(
-            self.mol_a, scale12=_SCALE_12, scale13=_SCALE_13, scale14=_SCALE_14
+        params_a, pairlist_a = BaseTopology(self.mol_a, self.ff).parameterize_nonbonded_pairlist(
+            ff_q_params, ff_lj_params
+        )
+        params_b, pairlist_b = BaseTopology(self.mol_b, self.ff).parameterize_nonbonded_pairlist(
+            ff_q_params, ff_lj_params
         )
 
-        exclusion_idxs_b, scale_factors_b = nonbonded.generate_exclusion_idxs(
-            self.mol_b, scale12=_SCALE_12, scale13=_SCALE_13, scale14=_SCALE_14
+        params = np.concatenate([params_a, params_b])
+
+        inclusions_a = pairlist_a.get_idxs()
+        inclusions_b = pairlist_b.get_idxs()
+        inclusions_b += NA
+        inclusion_idxs = np.concatenate([inclusions_a, inclusions_b])
+
+        assert pairlist_a.get_beta() == pairlist_b.get_beta()
+        assert pairlist_a.get_cutoff() == pairlist_b.get_cutoff()
+
+        offsets = np.concatenate([pairlist_a.get_offsets(), pairlist_b.get_offsets()])
+
+        return params, potentials.NonbondedPairListPrecomputed(
+            inclusion_idxs, offsets, pairlist_a.get_beta(), pairlist_a.get_beta()
         )
-        exclusion_idxs_b += NA
-
-        mutual_exclusions = []
-
-        for i in range(NA):
-            for j in range(NB):
-                mutual_exclusions.append([i, j + NA])
-
-        mutual_exclusions = np.array(mutual_exclusions)
-        mutual_scale_factors = np.ones(mutual_exclusions.shape[0])
-
-        exclusions_kv = dict()
-
-        def add_exclusions(idxs, scale_factors):
-            for (i, j), sf in zip(idxs, scale_factors):
-                assert i < j
-                exclusions_kv[(i, j)] = sf
-
-        add_exclusions(exclusion_idxs_a, scale_factors_a)
-        add_exclusions(exclusion_idxs_b, scale_factors_b)
-
-        add_exclusions(mutual_exclusions, mutual_scale_factors)
-
-        # loop over all pairs
-        inclusion_idxs, rescale_mask = [], []
-        for i in range(N):
-            for j in range(i + 1, N):
-                scale_factor = exclusions_kv.get((i, j), 0.0)
-                rescale_factor = 1 - scale_factor
-                # keep this ixn
-                if rescale_factor > 0:
-                    rescale_mask.append([rescale_factor, rescale_factor])
-                    inclusion_idxs.append([i, j])
-
-        inclusion_idxs = np.array(inclusion_idxs).reshape(-1, 2).astype(np.int32)
-
-        q_params_a = self.ff.q_handle.partial_parameterize(ff_q_params, self.mol_a)
-        lj_params_a = self.ff.lj_handle.partial_parameterize(ff_lj_params, self.mol_a)
-
-        q_params_b = self.ff.q_handle.partial_parameterize(ff_q_params, self.mol_b)
-        lj_params_b = self.ff.lj_handle.partial_parameterize(ff_lj_params, self.mol_b)
-
-        q_params = np.concatenate([q_params_a, q_params_b])
-        lj_params = np.concatenate([lj_params_a, lj_params_b])
-
-        sig_params = lj_params[:, 0]
-        eps_params = lj_params[:, 1]
-
-        l_idxs = inclusion_idxs[:, 0]
-        r_idxs = inclusion_idxs[:, 1]
-
-        q_ij = q_params[l_idxs] * q_params[r_idxs]
-        sig_ij = combining_rule_sigma(sig_params[l_idxs], sig_params[r_idxs])
-        eps_ij = combining_rule_epsilon(eps_params[l_idxs], eps_params[r_idxs])
-
-        params = []
-        for q, s, e, (sf_q, sf_lj) in zip(q_ij, sig_ij, eps_ij, rescale_mask):
-            params.append((q * sf_q, s, e * sf_lj))
-
-        params = np.array(params)
-
-        beta = _BETA
-        cutoff = _CUTOFF  # solve for this analytically later
-
-        offsets = np.zeros(len(inclusion_idxs))
-
-        return params, potentials.NonbondedPairListPrecomputed(inclusion_idxs, offsets, beta, cutoff)
 
     def _parameterize_bonded_term(self, ff_params, bonded_handle, potential):
         offset = self.mol_a.GetNumAtoms()
