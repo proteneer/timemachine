@@ -138,7 +138,7 @@ void Context::_assert_temperature_matches(const double temperature) {
     }
 }
 
-// Recursively flatten the potentials. Important to find specific NonbondedAllPairs potentials for local_md which
+// Recursively flatten the potentials. Important to find specific NonbondedAllPairs potentials for multiple_steps_local which
 // can be wrapped in FanoutSummedPotential or SummedPotential objects.
 void flatten_potentials(
     std::vector<std::shared_ptr<Potential>> input, std::vector<std::shared_ptr<Potential>> &flattened) {
@@ -157,7 +157,7 @@ void flatten_potentials(
     }
 }
 
-std::array<std::vector<double>, 2> Context::local_md(
+std::array<std::vector<double>, 2> Context::multiple_steps_local(
     const std::vector<double> &lambda_schedule,
     const std::vector<unsigned int> &local_idxs,
     const int store_x_interval,

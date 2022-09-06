@@ -199,7 +199,7 @@ void declare_context(py::module &m) {
 
     )pbdoc")
         .def(
-            "local_md",
+            "multiple_steps_local",
             [](timemachine::Context &ctxt,
                const py::array_t<double, py::array::c_style> &lambda_schedule,
                const py::array_t<unsigned int, py::array::c_style> &local_idxs,
@@ -222,8 +222,8 @@ void declare_context(py::module &m) {
                 std::memcpy(vec_local_idxs.data(), local_idxs.data(), vec_local_idxs.size() * sizeof(unsigned int));
                 // Verify that local idxs are unique
                 unique_idxs<unsigned int>(vec_local_idxs);
-                std::array<std::vector<double>, 2> result =
-                    ctxt.local_md(vec_lambda_schedule, vec_local_idxs, x_interval, radius, k, temperature, seed);
+                std::array<std::vector<double>, 2> result = ctxt.multiple_steps_local(
+                    vec_lambda_schedule, vec_local_idxs, x_interval, radius, k, temperature, seed);
 
                 const int N = ctxt.num_atoms();
                 const int D = 3;

@@ -34,7 +34,7 @@ public:
         int store_u_interval,
         int store_x_interval);
 
-    std::array<std::vector<double>, 2> local_md(
+    std::array<std::vector<double>, 2> multiple_steps_local(
         const std::vector<double> &lambda_schedule,
         const std::vector<unsigned int> &local_idxs,
         const int store_x_interval,

@@ -187,7 +187,7 @@ def test_initialization_and_finalization():
     assert "not initialized" in str(e.value)
 
 
-def test_verlet_with_local_md():
+def test_verlet_with_multiple_steps_local():
     """Ensure Local MD can be run with the Velocity Verlet integrator and can handle a temperature passed in"""
     dt = 1.5e-3
     solvent_system, solvent_coords, solvent_box, _ = builders.build_water_system(4.0)
@@ -206,4 +206,4 @@ def test_verlet_with_local_md():
 
     n_steps = 10
 
-    ctxt.local_md(np.ones(n_steps), local_idxs, temperature=100)
+    ctxt.multiple_steps_local(np.ones(n_steps), local_idxs, temperature=100)

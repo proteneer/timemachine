@@ -359,7 +359,7 @@ class TestContext(unittest.TestCase):
 
         assert test_us.shape == (num_steps // u_interval, 0)
 
-    def test_local_md(self):
+    def test_multiple_steps_local(self):
         mol, _ = get_biphenyl()
         ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
 
@@ -391,24 +391,26 @@ class TestContext(unittest.TestCase):
         # If the integrator is a thermostat and temperatures don't match should fail
         ctxt = custom_ops.Context(coords, v0, box, intg_impl, bps * 2)
         with pytest.raises(RuntimeError) as e:
-            ctxt.local_md(np.zeros(100), local_idxs, radius=radius, temperature=200.0)
+            ctxt.multiple_steps_local(np.zeros(100), local_idxs, radius=radius, temperature=200.0)
         assert "Local MD temperature didn't match Thermostat's temperature." == str(e.value)
 
         # Construct context with no potentials, local MD should fail.
         ctxt = custom_ops.Context(coords, v0, box, intg_impl, [])
         with pytest.raises(RuntimeError) as e:
-            ctxt.local_md(np.zeros(100), local_idxs, radius=radius)
+            ctxt.multiple_steps_local(np.zeros(100), local_idxs, radius=radius)
         assert "unable to find a NonbondedAllPairs potential" == str(e.value)
 
         # If you have multiple nonbonded potentials, should fail
         ctxt = custom_ops.Context(coords, v0, box, intg_impl, bps * 2)
         with pytest.raises(RuntimeError) as e:
-            ctxt.local_md(np.zeros(100), local_idxs, radius=radius)
+            ctxt.multiple_steps_local(np.zeros(100), local_idxs, radius=radius)
         assert "found multiple NonbondedAllPairs potentials" == str(e.value)
 
         ctxt = custom_ops.Context(coords, v0, box, intg_impl, bps)
         # Run steps of local MD
-        xs, boxes = ctxt.local_md(np.zeros(num_steps), local_idxs, store_x_interval=x_interval, radius=radius)
+        xs, boxes = ctxt.multiple_steps_local(
+            np.zeros(num_steps), local_idxs, store_x_interval=x_interval, radius=radius
+        )
 
         assert xs.shape[0] == num_steps // x_interval
         assert boxes.shape[0] == num_steps // x_interval
@@ -436,7 +438,9 @@ class TestContext(unittest.TestCase):
 
         ctxt = custom_ops.Context(coords, v0, box, intg_impl, bps, barostat=barostat_impl)
         # Run steps of local MD
-        xs, boxes = ctxt.local_md(np.zeros(num_steps), local_idxs, store_x_interval=x_interval, radius=radius)
+        xs, boxes = ctxt.multiple_steps_local(
+            np.zeros(num_steps), local_idxs, store_x_interval=x_interval, radius=radius
+        )
 
         assert xs.shape[0] == num_steps // x_interval
         assert boxes.shape[0] == num_steps // x_interval
@@ -455,7 +459,7 @@ class TestContext(unittest.TestCase):
 
         # Rerun with the summed potential
         ctxt = custom_ops.Context(coords, v0, box, intg_impl, [bp])
-        summed_pot_xs, summed_pot_boxes = ctxt.local_md(
+        summed_pot_xs, summed_pot_boxes = ctxt.multiple_steps_local(
             np.zeros(num_steps), local_idxs, store_x_interval=x_interval, radius=radius
         )
 
