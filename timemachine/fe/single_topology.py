@@ -728,48 +728,33 @@ def interpolate_periodic_torsion_params(src_params, dst_params, lamb, lambda_min
     return jnp.array([k, phase, src_period])
 
 
-class SingleTopologyV3:
-    def __init__(self, mol_a, mol_b, core, forcefield, lambda_angles=0.4, lambda_torsions=0.7):
-        """
-        SingleTopology combines two molecules through a common core. The combined mol has
-        atom indices laid out such that mol_a is identically mapped to the combined mol indices.
-        The atoms in the mol_b's R-group is then glued on to resulting molecule.
+class AtomMapMixin:
+    """
+    A Mixin class containing the atom_mapping information. This Mixin sets up the following
+    members:
 
-        Parameters
-        ----------
-        mol_a: ROMol
-            First guest
+    self.mol_a
+    self.mol_b
+    self.core
+    self.a_to_c
+    self.b_to_c
+    self.c_to_a
+    self.c_to_b
+    self.c_flags
+    """
 
-        mol_b: ROMol
-            Second guest
+    def __init__(self, mol_a, mol_b, core):
 
-        core: np.array (C, 2)
-            Atom mapping from mol_a to mol_b.
-
-        forcefield: ff.Forcefield
-            Forcefield to be used for parameterization.
-
-        lambda_angles, lambda_torsions: float
-            For ring opening/closing transformations, alchemical parameter values controlling the intervals over which
-            bonds, angles, and torsions are interpolated. Note that these have no effect on terms not involved in ring
-            opening/closing.
-
-            - Bonds are interpolated in the interval [0, lambda_angles]
-            - Angles are interpolated in the interval [lambda_angles, lambda_torsions]
-            - Torsions are interpolated in the interval [lambda_torsions, 1]
-        """
+        assert core.shape[1] == 2
         assert mol_a is not None
         assert mol_b is not None
+
         self.mol_a = mol_a
         self.mol_b = mol_b
         self.core = core
-        self.ff = forcefield
+        assert mol_a is not None
+        assert mol_b is not None
         assert core.shape[1] == 2
-
-        a_charge = Chem.GetFormalCharge(mol_a)
-        b_charge = Chem.GetFormalCharge(mol_b)
-        if a_charge != b_charge:
-            raise ChargePertubationError(f"mol a and mol b don't have the same charge: a: {a_charge} b: {b_charge}")
 
         # map into idxs in the combined molecule
 
@@ -799,6 +784,48 @@ class SingleTopologyV3:
         # setup reverse mappings
         self.c_to_a = {v: k for k, v in enumerate(self.a_to_c)}
         self.c_to_b = {v: k for k, v in enumerate(self.b_to_c)}
+
+
+class SingleTopology(AtomMapMixin):
+    def __init__(self, mol_a, mol_b, core, forcefield, lambda_angles=0.4, lambda_torsions=0.7):
+        """
+        SingleTopology combines two molecules through a common core. The combined mol has
+        atom indices laid out such that mol_a is identically mapped to the combined mol indices.
+        The atoms in the mol_b's R-group is then glued on to resulting molecule.
+
+        Parameters
+        ----------
+        mol_a: ROMol
+            First guest
+
+        mol_b: ROMol
+            Second guest
+
+        core: np.array (C, 2)
+            Atom mapping from mol_a to mol_b.
+
+        forcefield: ff.Forcefield
+            Forcefield to be used for parameterization.
+
+        lambda_angles, lambda_torsions: float
+            For ring opening/closing transformations, alchemical parameter values controlling the intervals over which
+            bonds, angles, and torsions are interpolated. Note that these have no effect on terms not involved in ring
+            opening/closing.
+
+            - Bonds are interpolated in the interval [0, lambda_angles]
+            - Angles are interpolated in the interval [lambda_angles, lambda_torsions]
+            - Torsions are interpolated in the interval [lambda_torsions, 1]
+        """
+        # initialize the mixin to get the a_to_c, b_to_c, c_to_a, c_to_b, and c_flags
+        super().__init__(self, mol_a, mol_b, core)
+
+        # store the forcefield
+        self.ff = forcefield
+
+        a_charge = Chem.GetFormalCharge(mol_a)
+        b_charge = Chem.GetFormalCharge(mol_b)
+        if a_charge != b_charge:
+            raise ChargePertubationError(f"mol a and mol b don't have the same charge: a: {a_charge} b: {b_charge}")
 
         # setup end states
         self.src_system = self._setup_end_state_src()
@@ -850,7 +877,7 @@ class SingleTopologyV3:
 
     def combine_masses(self):
         """
-        Combine masses between two end-states using linear interpolation.
+        Combine masses between two end-states by taking the heavier of the two core atoms.
 
         Returns
         -------

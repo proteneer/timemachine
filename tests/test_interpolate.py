@@ -8,7 +8,7 @@ import numpy as np
 import pytest
 from rdkit import Chem
 
-from timemachine.fe import atom_mapping, interpolate, single_topology_v3
+from timemachine.fe import atom_mapping, interpolate, single_topology
 from timemachine.fe.utils import get_romol_conf
 from timemachine.ff import Forcefield
 
@@ -222,7 +222,7 @@ def test_intermediate_states(num_pairs_to_setup=10):
         query = Chem.MolFromSmarts(res.smartsString)
         core_pairs = atom_mapping.get_core_by_mcs(mol_a, mol_b, query, mcs_threshold)
 
-        top = single_topology_v3.SingleTopologyV3(mol_a, mol_b, core_pairs, ff)
+        top = single_topology.SingleTopology(mol_a, mol_b, core_pairs, ff)
         x0 = top.combine_confs(get_romol_conf(mol_a), get_romol_conf(mol_b))
 
         # test end-states and check to see if the forces are the same

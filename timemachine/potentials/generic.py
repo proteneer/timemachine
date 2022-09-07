@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Any, Callable, Generic, Optional, Sequence, Type, TypeVar
+from typing import Any, Callable, Generic, Optional, Sequence, Type, TypeVar, runtime_checkable
 
 from typing_extensions import Protocol
 
@@ -22,6 +22,7 @@ GpuPotential = TypeVar("GpuPotential", bound=gpu.CustomOpWrapper)
 BondedGpuPotential = TypeVar("BondedGpuPotential", bound=gpu.BondedWrapper)
 
 
+@runtime_checkable
 class Potential(Protocol[GpuPotential]):
     @classmethod
     def from_gpu(cls: Type[GenericPotential], p: GpuPotential) -> GenericPotential:

@@ -21,13 +21,13 @@ from rdkit import Chem
 from rdkit.Chem import AllChem
 
 from timemachine.constants import DEFAULT_FF
-from timemachine.fe import atom_mapping, single_topology_v3
+from timemachine.fe import atom_mapping, single_topology
 from timemachine.fe.interpolate import linear_interpolation
-from timemachine.fe.single_topology_v3 import (
+from timemachine.fe.single_topology import (
     ChargePertubationError,
     CoreBondChangeWarning,
     MultipleAnchorWarning,
-    SingleTopologyV3,
+    SingleTopology,
     canonicalize_improper_idxs,
     cyclic_difference,
     handle_ring_opening_closing,
@@ -84,7 +84,7 @@ def test_phenol():
     assert set(angle_idxs) == set([(5, 6, 12)])
     assert set(improper_idxs) == set()
 
-    with pytest.raises(single_topology_v3.MissingAngleError):
+    with pytest.raises(single_topology.MissingAngleError):
         all_idxs, _ = setup_dummy_interactions_from_ff(ff, mol, dummy_group=[12], root_anchor_atom=6, nbr_anchor_atom=4)
 
 
@@ -97,7 +97,7 @@ def test_find_dummy_groups_and_anchors():
     mol_b = Chem.MolFromSmiles("CCCF")
     core_pairs = np.array([[1, 2], [2, 1], [3, 0]])
 
-    dgs, jks = single_topology_v3.find_dummy_groups_and_anchors(mol_a, mol_b, core_pairs[:, 0], core_pairs[:, 1])
+    dgs, jks = single_topology.find_dummy_groups_and_anchors(mol_a, mol_b, core_pairs[:, 0], core_pairs[:, 1])
     assert dgs == [{3}]
     assert jks == [(2, 1)]
 
@@ -105,7 +105,7 @@ def test_find_dummy_groups_and_anchors():
     core_pairs = np.array([[1, 2], [2, 0], [3, 1]])
 
     with pytest.warns(CoreBondChangeWarning):
-        dgs, jks = single_topology_v3.find_dummy_groups_and_anchors(mol_a, mol_b, core_pairs[:, 0], core_pairs[:, 1])
+        dgs, jks = single_topology.find_dummy_groups_and_anchors(mol_a, mol_b, core_pairs[:, 0], core_pairs[:, 1])
         assert dgs == [{3}]
         assert jks == [(2, None)]
 
@@ -118,19 +118,17 @@ def test_find_dummy_groups_and_anchors_multiple_angles():
     mol_b = Chem.MolFromSmiles("CC(C)C")
 
     core_pairs = np.array([[0, 2], [1, 1], [2, 3]])
-    dgs, jks = single_topology_v3.find_dummy_groups_and_anchors(mol_a, mol_b, core_pairs[:, 0], core_pairs[:, 1])
+    dgs, jks = single_topology.find_dummy_groups_and_anchors(mol_a, mol_b, core_pairs[:, 0], core_pairs[:, 1])
     assert dgs == [{0}]
     assert jks == [(1, 2)] or jks == [(1, 3)]
 
-    dgs_zero, jks_zero = single_topology_v3.find_dummy_groups_and_anchors(
-        mol_a, mol_b, core_pairs[:, 0], core_pairs[:, 1]
-    )
+    dgs_zero, jks_zero = single_topology.find_dummy_groups_and_anchors(mol_a, mol_b, core_pairs[:, 0], core_pairs[:, 1])
 
     # this code should be invariant to different random seeds and different ordering of core pairs
     for idx in range(100):
         np.random.seed(idx)
         core_pairs_shuffle = np.random.permutation(core_pairs)
-        dgs, jks = single_topology_v3.find_dummy_groups_and_anchors(
+        dgs, jks = single_topology.find_dummy_groups_and_anchors(
             mol_a, mol_b, core_pairs_shuffle[:, 0], core_pairs_shuffle[:, 1]
         )
         assert dgs == dgs_zero
@@ -147,18 +145,16 @@ def testing_find_dummy_groups_and_multiple_anchors():
     core_pairs = np.array([[1, 1], [2, 2]])
 
     with pytest.warns(MultipleAnchorWarning):
-        dgs, jks = single_topology_v3.find_dummy_groups_and_anchors(mol_a, mol_b, core_pairs[:, 0], core_pairs[:, 1])
+        dgs, jks = single_topology.find_dummy_groups_and_anchors(mol_a, mol_b, core_pairs[:, 0], core_pairs[:, 1])
         assert dgs == [{0}]
         assert jks == [(1, 2)] or jks == [(2, 1)]
 
     # test determinism, should be robust against seeds
-    dgs_zero, jks_zero = single_topology_v3.find_dummy_groups_and_anchors(
-        mol_a, mol_b, core_pairs[:, 0], core_pairs[:, 1]
-    )
+    dgs_zero, jks_zero = single_topology.find_dummy_groups_and_anchors(mol_a, mol_b, core_pairs[:, 0], core_pairs[:, 1])
     for idx in range(100):
         np.random.seed(idx)
         core_pairs_shuffle = np.random.permutation(core_pairs)
-        dgs, jks = single_topology_v3.find_dummy_groups_and_anchors(
+        dgs, jks = single_topology.find_dummy_groups_and_anchors(
             mol_a, mol_b, core_pairs_shuffle[:, 0], core_pairs_shuffle[:, 1]
         )
         assert dgs == dgs_zero
@@ -171,7 +167,7 @@ def testing_find_dummy_groups_and_multiple_anchors():
     core_b = [2, 1, 4, 3]
 
     with pytest.warns(MultipleAnchorWarning):
-        dgs, jks = single_topology_v3.find_dummy_groups_and_anchors(mol_a, mol_b, core_a, core_b)
+        dgs, jks = single_topology.find_dummy_groups_and_anchors(mol_a, mol_b, core_a, core_b)
         assert dgs == [{0}]
         assert jks == [(1, 2)]
 
@@ -182,12 +178,12 @@ def test_charge_perturbation_is_invalid():
 
     ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
 
-    core = np.zeros((mol_a.GetNumAtoms(), 2))
+    core = np.zeros((mol_a.GetNumAtoms(), 2), dtype=np.int32)
     core[:, 0] = np.arange(core.shape[0])
     core[:, 1] = core[:, 0]
 
     with pytest.raises(ChargePertubationError) as e:
-        SingleTopologyV3(mol_a, mol_b, core, ff)
+        SingleTopology(mol_a, mol_b, core, ff)
     assert str(e.value) == "mol a and mol b don't have the same charge: a: 0 b: 1"
 
 
@@ -234,7 +230,7 @@ def test_hif2a_end_state_stability(num_pairs_to_setup=25, num_pairs_to_simulate=
         print("Checking", get_mol_name(mol_a), "->", get_mol_name(mol_b))
         mcs_threshold = 2.0  # distance threshold, in nanometers
         core_pairs, _ = atom_mapping.get_core_with_alignment(mol_a, mol_b, threshold=mcs_threshold)
-        st = SingleTopologyV3(mol_a, mol_b, core_pairs, ff)
+        st = SingleTopology(mol_a, mol_b, core_pairs, ff)
         x0 = st.combine_confs(get_romol_conf(mol_a), get_romol_conf(mol_b))
         systems = [st.src_system, st.dst_system]
 
@@ -294,7 +290,7 @@ def test_combine_masses():
     core = np.array([[1, 0], [2, 1], [3, 2], [4, 3], [5, 4], [6, 5]])
     ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
 
-    st = SingleTopologyV3(mol_a, mol_b, core, ff)
+    st = SingleTopology(mol_a, mol_b, core, ff)
 
     test_masses = st.combine_masses()
     ref_masses = [Br_mass, C_mass, C_mass, max(C_mass, N_mass), C_mass, C_mass, C_mass, F_mass]
@@ -305,7 +301,7 @@ def test_combine_masses():
 def test_jax_transform_intermediate_potential():
     def setup_arbitary_transformation():
         # NOTE: test system can probably be simplified; we just need
-        # any SingleTopologyV3 and conformation
+        # any SingleTopology and conformation
         with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
             suppl = Chem.SDMolSupplier(str(path_to_ligand), removeHs=False)
             mols = {get_mol_name(mol): mol for mol in suppl}
@@ -319,7 +315,7 @@ def test_jax_transform_intermediate_potential():
         core_pairs = atom_mapping.get_core_by_mcs(mol_a, mol_b, query, mcs_threshold)
 
         ff = Forcefield.load_from_file(DEFAULT_FF)
-        st = SingleTopologyV3(mol_a, mol_b, core_pairs, ff)
+        st = SingleTopology(mol_a, mol_b, core_pairs, ff)
         conf = st.combine_confs(get_romol_conf(mol_a), get_romol_conf(mol_b))
         return st, conf
 
@@ -347,7 +343,7 @@ def test_combine_with_host():
 
     host_bps, _ = openmm_deserializer.deserialize_system(solvent_sys, cutoff=1.2)
 
-    st = SingleTopologyV3(mol_a, mol_b, core, ff)
+    st = SingleTopology(mol_a, mol_b, core, ff)
     host_system = st.combine_with_host(convert_bps_into_system(host_bps), 0.5)
     # Expect there to be 5 functions, excluding the chiral bond and chiral atom restraints
     # This should be updated when chiral restraints are re-enabled.
@@ -372,7 +368,7 @@ def test_no_chiral_atom_restraints():
     core = get_core_by_mcs(mol_a, mol_b)
 
     forcefield = Forcefield.load_from_file(DEFAULT_FF)
-    st = SingleTopologyV3(mol_a, mol_b, core, forcefield)
+    st = SingleTopology(mol_a, mol_b, core, forcefield)
     init_conf = st.combine_confs(get_romol_conf(mol_a), get_romol_conf(mol_b))
     state = st.setup_intermediate_state(0.1)
 
@@ -387,7 +383,7 @@ def test_no_chiral_bond_restraints():
     core = get_core_by_mcs(mol_a, mol_b)
 
     forcefield = Forcefield.load_from_file(DEFAULT_FF)
-    st = SingleTopologyV3(mol_a, mol_b, core, forcefield)
+    st = SingleTopology(mol_a, mol_b, core, forcefield)
     init_conf = st.combine_confs(get_romol_conf(mol_a), get_romol_conf(mol_b))
     state = st.setup_intermediate_state(0.1)
 

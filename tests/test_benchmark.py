@@ -7,11 +7,12 @@ from importlib import resources
 
 import numpy as np
 import pytest
+from scipy.spatial.distance import cdist
 
 from timemachine import constants
-from timemachine.fe import single_topology_v3
+from timemachine.fe import rbfe
 from timemachine.fe.model_utils import apply_hmr
-from timemachine.fe.rbfe import HostConfig, SimulationProtocol, sample, setup_initial_states
+from timemachine.fe.single_topology import SingleTopology
 from timemachine.fe.utils import to_md_units
 from timemachine.ff import Forcefield
 from timemachine.ff.handlers import openmm_deserializer
@@ -28,28 +29,64 @@ def hi2fa_test_frames():
     return generate_hif2a_frames(100, 1, seed=2022)
 
 
-def generate_hif2a_frames(n_frames: int, frame_interval: int, seed=None):
-    forcefield = Forcefield.load_from_file("smirnoff_1_1_0_ccc.py")
-    mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
-    rfe = single_topology_v3.SingleTopologyV3(mol_a, mol_b, core, forcefield)
+def generate_hif2a_frames(n_frames: int, frame_interval: int, seed=None, barostat_interval: int = 5, hmr: bool = True):
 
-    temperature = 300
-    lamb = 0.0
-    n_eq_steps = 1
+    mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
+    forcefield = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
+    st = SingleTopology(mol_a, mol_b, core, forcefield)
 
     # build the protein system.
     with resources.path("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as path_to_pdb:
         host_system, host_coords, _, _, host_box, _ = builders.build_protein_system(str(path_to_pdb))
 
-    host_config = HostConfig(host_system, host_coords, host_box)
-    initial_states = setup_initial_states(rfe, host_config, temperature, [lamb], seed)
-    protocol = SimulationProtocol(n_frames=n_frames, n_eq_steps=n_eq_steps, steps_per_frame=frame_interval)
-    coords, boxes = sample(initial_states[0], protocol)
+    initial_state = prepare_hif2a_initial_state(st, host_system, host_coords, host_box)
+
+    ligand_idxs = np.arange(len(host_coords), len(initial_state.x0), dtype=np.int32)
+
+    temperature = 300
+    pressure = 1.0
+    lamb = 0.0
+
+    harmonic_bond_potential = initial_state.potentials[0]
+    bond_list = get_bond_list(harmonic_bond_potential)
+    masses = initial_state.integrator.masses
+    if hmr:
+        dt = 2.5e-3
+        masses = apply_hmr(masses, bond_list)
+    if seed is None:
+        seed = np.random.randint(np.iinfo(np.int32).max)
+    intg = LangevinIntegrator(temperature, dt, 1.0, np.array(masses), seed).impl()
+
+    bps = []
+
+    for potential in initial_state.potentials:
+        bps.append(potential.bound_impl(precision=np.float32))  # get the bound implementation
+
+    baro_impl = None
+    if barostat_interval > 0:
+        group_idxs = get_group_indices(bond_list)
+        baro = MonteCarloBarostat(
+            initial_state.x0.shape[0],
+            pressure,
+            temperature,
+            group_idxs,
+            barostat_interval,
+            seed,
+        )
+        baro_impl = baro.impl(bps)
+
+    ctxt = custom_ops.Context(
+        initial_state.x0,
+        initial_state.v0,
+        host_box,
+        intg,
+        bps,
+        barostat=baro_impl,
+    )
+    steps = n_frames * frame_interval
+    _, coords, boxes = ctxt.multiple_steps(np.ones(steps) * lamb, 0, frame_interval)
     assert coords.shape[0] == n_frames, f"Got {coords.shape[0]} frames, expected {n_frames}"
-    ligand_idxs = np.array(initial_states[0].ligand_idxs, dtype=np.int32)
-    unbound_potentials = initial_states[0].potentials
-    sys_params = [u.params for u in unbound_potentials]
-    return unbound_potentials, sys_params, coords, boxes, ligand_idxs
+    return initial_state.potentials, coords, boxes, ligand_idxs
 
 
 def benchmark_potential(
@@ -252,11 +289,30 @@ def benchmark_dhfr(verbose=False, num_batches=100, steps_per_batch=1000):
     )
 
 
+def prepare_hif2a_initial_state(st, host_system, host_coords, host_box):
+    st = rbfe.SingleTopology(st.mol_a, st.mol_b, st.core, st.ff)
+    host_config = rbfe.HostConfig(host_system, host_coords, host_box)
+    temperature = 300.0
+    lamb = 0.1
+    initial_state = rbfe.setup_initial_states(st, host_config, temperature, [lamb], seed=2022)[0]
+    val_and_grad_fn = minimizer.get_val_and_grad_fn(initial_state.potentials, initial_state.box0, initial_state.lamb)
+    assert np.all(np.isfinite(initial_state.x0)), "Initial coordinates contain nan or inf"
+    ligand_coords = initial_state.x0[initial_state.ligand_idxs]
+    d_ij = cdist(ligand_coords, initial_state.x0)
+    # if any atom is within any of the ligand's atom's ixn radius, flag it for minimization
+    cutoff = 0.5  # in nanometers
+    free_idxs = np.where(np.any(d_ij < cutoff, axis=0))[0].tolist()
+    x0_min = minimizer.local_minimize(initial_state.x0, val_and_grad_fn, free_idxs)
+    initial_state.x0 = x0_min
+    return initial_state
+
+
 def benchmark_hif2a(verbose=False, num_batches=100, steps_per_batch=1000):
 
-    ff = Forcefield.load_from_file("smirnoff_1_1_0_ccc.py")
+    # we use simple charge "sc" to be able to run on machines that don't have openeye licenses.
     mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
-    rfe = single_topology_v3.SingleTopologyV3(mol_a, mol_b, core, ff)
+    forcefield = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
+    st = SingleTopology(mol_a, mol_b, core, forcefield)
 
     # build the protein system.
     with resources.path("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as path_to_pdb:
@@ -272,12 +328,11 @@ def benchmark_hif2a(verbose=False, num_batches=100, steps_per_batch=1000):
         host_fns, host_masses = openmm_deserializer.deserialize_system(host_system, cutoff=1.0)
 
         # resolve host clashes
-        min_host_coords = minimizer.minimize_host_4d([mol_a, mol_b], host_system, host_coords, ff, host_box)
+        min_host_coords = minimizer.minimize_host_4d([st.mol_a, st.mol_b], host_system, host_coords, st.ff, host_box)
 
         x0 = min_host_coords
         v0 = np.zeros_like(x0)
 
-        # lamb = 0.0
         benchmark(
             stage + "-apo",
             host_masses,
@@ -305,29 +360,16 @@ def benchmark_hif2a(verbose=False, num_batches=100, steps_per_batch=1000):
         )
 
         # RBFE
-        temperature = 300
-        seed = 2022
-        lam = 0.5
-        host_config = HostConfig(host_system, host_coords, host_box)
-        initial_states = setup_initial_states(rfe, host_config, temperature, [lam], seed)
-        unbound_potentials = initial_states[0].potentials
-        sys_params = [np.array(u.params, dtype=np.float64) for u in unbound_potentials]
-        masses = np.concatenate([host_masses, rfe.combine_masses()])
+        initial_state = prepare_hif2a_initial_state(st, host_system, host_coords, host_box)
 
-        bound_potentials = [x.bind(y) for (x, y) in zip(unbound_potentials, sys_params)]
-
-        x0 = initial_states[0].x0
-        v0 = np.zeros_like(x0)
-
-        # lamb = 0.5
         benchmark(
-            stage + "-rbfe-with-du-dp",
-            masses,
-            lam,
-            x0,
-            v0,
+            stage + "-rbfe",
+            initial_state.integrator.masses,
+            initial_state.lamb,
+            initial_state.x0,
+            initial_state.v0,
             host_box,
-            bound_potentials,
+            initial_state.potentials,
             verbose=verbose,
             num_batches=num_batches,
             steps_per_batch=steps_per_batch,
@@ -343,23 +385,22 @@ def test_hif2a():
 
 
 def test_nonbonded_interaction_group_potential(hi2fa_test_frames):
-    pots, sys_params, frames, boxes, ligand_idxs = hi2fa_test_frames
+    pots, frames, boxes, ligand_idxs = hi2fa_test_frames
     lambdas = np.array([0.0, 1.0])
-    U_names = [type(U_fn).__name__ for U_fn in pots]
-    nb_idx = U_names.index("Nonbonded")
-    nonbonded_pot = pots[nb_idx]
-    assert isinstance(nonbonded_pot, Nonbonded)
+    nonbonded_potential = next(p for p in pots if isinstance(p, Nonbonded))
+    assert nonbonded_potential is not None
+
     num_param_batches = 5
     beta = 1 / (constants.BOLTZ * 300)
     cutoff = 1.2
 
     precisions = [np.float32, np.float64]
-    nonbonded_params = np.stack([sys_params[nb_idx]] * num_param_batches)
+    nonbonded_params = np.stack([nonbonded_potential.params] * num_param_batches)
 
     potential = NonbondedInteractionGroup(
         ligand_idxs,
-        nonbonded_pot.get_lambda_plane_idxs(),
-        nonbonded_pot.get_lambda_offset_idxs(),
+        nonbonded_potential.get_lambda_plane_idxs(),
+        nonbonded_potential.get_lambda_offset_idxs(),
         beta,
         cutoff,
     )
@@ -378,16 +419,15 @@ def test_nonbonded_interaction_group_potential(hi2fa_test_frames):
 
 
 def test_nonbonded_potential(hi2fa_test_frames):
-    pots, sys_params, frames, boxes, _ = hi2fa_test_frames
-    U_names = [type(U_fn).__name__ for U_fn in pots]
-    nb_idx = U_names.index("Nonbonded")
-    nonbonded_pot = pots[nb_idx]
-    assert isinstance(nonbonded_pot, Nonbonded)
+    pots, frames, boxes, _ = hi2fa_test_frames
+
+    nonbonded_pot = next(p for p in pots if isinstance(p, Nonbonded))
+    assert nonbonded_pot is not None
     lambdas = np.array([0.0, 1.0])
 
     num_param_batches = 5
 
-    nonbonded_params = np.stack([sys_params[nb_idx]] * num_param_batches)
+    nonbonded_params = np.stack([nonbonded_pot.params] * num_param_batches)
 
     precisions = [np.float32, np.float64]
 
@@ -415,15 +455,12 @@ def test_nonbonded_potential(hi2fa_test_frames):
 
 
 def test_bonded_potentials(hi2fa_test_frames):
-    pots, sys_params, frames, boxes, _ = hi2fa_test_frames
+    pots, frames, boxes, _ = hi2fa_test_frames
 
     lambdas = np.array([0.0, 1.0])
-    # Drop the nonbonded potentials
-    for potential, params in zip(pots, sys_params):
+    for potential in pots[:-1]:
         class_name = potential.__class__.__name__
-        if class_name.startswith("Nonbonded"):
-            continue
-        params = np.expand_dims(params, axis=0)
+        params = np.expand_dims(potential.params, axis=0)
         for precision in [np.float32, np.float64]:
             benchmark_potential(
                 class_name,

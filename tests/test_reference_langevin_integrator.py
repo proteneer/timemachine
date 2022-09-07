@@ -10,9 +10,8 @@ from jax import grad, jit
 from jax import numpy as jnp
 
 from timemachine.constants import BOLTZ, DEFAULT_FF
-from timemachine.fe.rbfe import setup_initial_states
-from timemachine.fe.single_topology_v3 import SingleTopologyV3
-from timemachine.fe.utils import get_romol_conf
+from timemachine.fe import utils
+from timemachine.fe.single_topology import SingleTopology
 from timemachine.ff import Forcefield
 from timemachine.integrator import LangevinIntegrator
 from timemachine.testsystems.relative import get_hif2a_ligand_pair_single_topology
@@ -127,24 +126,23 @@ def test_reference_langevin_integrator_with_custom_ops():
 
     seed = 2021
     np.random.seed(seed)
-    lamb = 0.5
     temperature = 300
-
-    # define a force fxn using a mix of optimized custom_ops and prototype-friendly Jax
+    st = get_hif2a_ligand_pair_single_topology()
     mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
     forcefield = Forcefield.load_from_file(DEFAULT_FF)
-    rfe = SingleTopologyV3(mol_a, mol_b, core, forcefield)
-    masses = np.array(rfe.combine_masses())
-    coords = rfe.combine_confs(get_romol_conf(mol_a), get_romol_conf(mol_b))
-    host_config = None  # vacuum
-    initial_states = setup_initial_states(rfe, host_config, temperature, [lamb], seed)
-    unbound_potentials = initial_states[0].potentials
-    bound_potentials = [pot.bound_impl(precision=np.float32) for pot in unbound_potentials]
+    st = SingleTopology(mol_a, mol_b, core, forcefield)
+    vac_sys = st.setup_intermediate_state(0.5)
+    x_a = utils.get_romol_conf(st.mol_a)
+    x_b = utils.get_romol_conf(st.mol_b)
+    coords = st.combine_confs(x_a, x_b)
+    potentials = vac_sys.get_U_fns()
+    masses = np.array(st.combine_masses())
 
+    impls = [bp.bound_impl(np.float32) for bp in potentials]
     box = 100 * np.eye(3)
 
     def custom_op_force_component(coords):
-        du_dxs = np.array([bp.execute(coords, box, 0.5)[0] for bp in bound_potentials])
+        du_dxs = np.array([bp.execute(coords, box, 0.5)[0] for bp in impls])
         return -np.sum(du_dxs, 0)
 
     def jax_restraint(coords):
