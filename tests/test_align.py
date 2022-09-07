@@ -6,7 +6,7 @@ from rdkit import Chem
 from rdkit.Chem import AllChem
 
 from timemachine.constants import DEFAULT_FF
-from timemachine.fe.atom_mapping import get_core_by_mcs, mcs
+from timemachine.fe.atom_mapping import get_core_by_mcs, get_core_with_alignment, mcs
 from timemachine.fe.topology import AtomMappingError
 from timemachine.fe.utils import set_romol_conf
 from timemachine.ff import Forcefield
@@ -178,3 +178,12 @@ def test_align_core_different_size_mols():
 
     # The mapping should cover the entirety of the benzene minus the hydrogen covering the carbon linker
     assert len(core) == mol_a.GetNumAtoms() - 1
+
+
+def test_get_core_with_alignment():
+
+    mol_a, mol_b = get_cyclohexanes_different_confs()
+
+    core, _ = get_core_with_alignment(mol_a, mol_b)
+    assert len(core) == mol_a.GetNumAtoms()
+    assert len(core) == mol_b.GetNumAtoms()
