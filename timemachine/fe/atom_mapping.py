@@ -134,7 +134,7 @@ def get_core_with_alignment(
     k: float = 10000,
     ff: Optional[Forcefield] = None,
 ) -> Tuple[NDArray, str]:
-    """Selects a core betwen two molecules, by finding an initial core then aligning based on the core.
+    """Selects a core between two molecules, by finding an initial core then aligning based on the core.
 
     Parameters
     ----------
