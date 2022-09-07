@@ -5,7 +5,7 @@ from importlib import resources
 import numpy as np
 from rdkit import Chem
 
-from timemachine.fe import free_energy, single_topology_v3, topology
+from timemachine.fe import free_energy, single_topology_v3
 from timemachine.ff import Forcefield
 
 
@@ -59,7 +59,7 @@ def setup_hif2a_ligand_pair(ff="smirnoff_1_1_0_ccc.py"):
         ]
     )
 
-    single_topology = topology.SingleTopology(mol_a, mol_b, core, forcefield)
+    single_topology = single_topology_v3.SingleTopologyV3(mol_a, mol_b, core, forcefield)
     return free_energy.RelativeFreeEnergy(single_topology)
 
 

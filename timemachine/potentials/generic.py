@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from typing import Any, Callable, Generic, Optional, Sequence, Type, TypeVar
 
+import typing_extensions
 from typing_extensions import Protocol
 
 import timemachine.lib.potentials as gpu
@@ -22,6 +23,7 @@ GpuPotential = TypeVar("GpuPotential", bound=gpu.CustomOpWrapper)
 BondedGpuPotential = TypeVar("BondedGpuPotential", bound=gpu.BondedWrapper)
 
 
+@typing_extensions.runtime
 class Potential(Protocol[GpuPotential]):
     @classmethod
     def from_gpu(cls: Type[GenericPotential], p: GpuPotential) -> GenericPotential:

@@ -182,7 +182,7 @@ def test_charge_perturbation_is_invalid():
 
     ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
 
-    core = np.zeros((mol_a.GetNumAtoms(), 2))
+    core = np.zeros((mol_a.GetNumAtoms(), 2), dtype=np.int32)
     core[:, 0] = np.arange(core.shape[0])
     core[:, 1] = core[:, 0]
 

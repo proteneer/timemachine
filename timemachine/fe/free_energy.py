@@ -6,12 +6,12 @@ from rdkit import Chem
 config.update("jax_enable_x64", True)
 
 from dataclasses import asdict, dataclass, fields
-from typing import List, Tuple, Union
+from typing import List, Tuple
 
 import numpy as np
 from rdkit.Chem import MolToSmiles
 
-from timemachine.fe import topology
+from timemachine.fe import single_topology_v3, topology
 from timemachine.fe.utils import get_mol_masses, get_romol_conf
 from timemachine.ff.handlers import openmm_deserializer
 
@@ -250,7 +250,7 @@ class AbsoluteFreeEnergy(BaseFreeEnergy):
 
 # this class is serializable.
 class RelativeFreeEnergy(BaseFreeEnergy):
-    def __init__(self, top: Union[topology.SingleTopology, topology.DualTopology], label=None, complex_path=None):
+    def __init__(self, top: topology.DualTopology, label=None, complex_path=None):
         self.top = top
         self.label = label  # TODO: Do we need these?
         self.complex_path = complex_path
@@ -347,7 +347,7 @@ class RelativeFreeEnergy(BaseFreeEnergy):
         -------
             combined_values
         """
-        if isinstance(self.top, topology.SingleTopology):
+        if isinstance(self.top, single_topology_v3.SingleTopologyV3):
             ligand_values = [np.mean(self.top.interpolate_params(ligand_values_a, ligand_values_b), axis=0)]
         else:
             ligand_values = [ligand_values_a, ligand_values_b]

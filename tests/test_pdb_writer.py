@@ -4,7 +4,6 @@ import numpy as np
 import pytest
 
 from timemachine.fe.pdb_writer import PDBWriter, convert_single_topology_mols
-from timemachine.fe.topology import SingleTopology
 from timemachine.md import builders
 from timemachine.testsystems.relative import hif2a_ligand_pair
 
@@ -12,7 +11,6 @@ from timemachine.testsystems.relative import hif2a_ligand_pair
 @pytest.mark.nogpu
 def test_write_single_topology_frame():
     top = hif2a_ligand_pair.top
-    assert isinstance(top, SingleTopology)
 
     ff_params = hif2a_ligand_pair.top.ff.get_ordered_params()
 
