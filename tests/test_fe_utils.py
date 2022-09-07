@@ -107,6 +107,7 @@ def test_get_mol_name():
 
 
 def test_set_mol_coords():
+    np.random.seed(2022)
     mol = Chem.AddHs(Chem.MolFromSmiles("c1ccccc1"))
     AllChem.EmbedMolecule(mol)
 
