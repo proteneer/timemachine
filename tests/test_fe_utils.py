@@ -116,11 +116,12 @@ def test_set_mol_coords():
     # Make some random move
     x1 = x0 + np.random.randn(*x0.shape)
 
-    # This is lossy, rdkit stores things in float32
-    utils.set_romol_conf(mol, x1)
+    # This is lossy
+    for precision in [np.float32, np.float64]:
+        utils.set_romol_conf(mol, x1.astype(precision))
 
-    x1_copy = utils.get_romol_conf(mol)
+        x1_copy = utils.get_romol_conf(mol)
 
-    # Won't be exact, but should be close
-    assert not np.all(x1 == x1_copy)
-    np.testing.assert_allclose(x1, x1_copy)
+        # Won't be exact, but should be close
+        assert not np.all(x1 == x1_copy)
+        np.testing.assert_allclose(x1, x1_copy)
