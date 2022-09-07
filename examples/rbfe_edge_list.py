@@ -65,7 +65,7 @@ def read_from_args():
 
             print(f"Submitting job for {mol_a_name} -> {mol_b_name}")
             mcs_threshold = 2.0
-            core = atom_mapping.get_core_with_alignment(mol_a, mol_b, threshold=mcs_threshold)
+            core, smarts = atom_mapping.get_core_with_alignment(mol_a, mol_b, threshold=mcs_threshold)
             fut = cpc.submit(run_pair, mol_a, mol_b, core, forcefield, protein, args.n_frames, args.seed + row_idx)
             futures.append(fut)
 
@@ -73,6 +73,7 @@ def read_from_args():
                 (
                     mol_a,
                     mol_b,
+                    smarts,
                     core,
                     float(exp_ddg) * KCAL_TO_KJ,
                     float(fep_ddg) * KCAL_TO_KJ,

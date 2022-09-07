@@ -1,5 +1,5 @@
 from copy import deepcopy
-from typing import Optional
+from typing import Optional, Tuple
 
 import numpy as np
 from numpy.typing import NDArray
@@ -133,7 +133,7 @@ def get_core_with_alignment(
     n_steps: int = 200,
     k: float = 10000,
     ff: Optional[Forcefield] = None,
-) -> NDArray:
+) -> Tuple[NDArray, str]:
     """Selects a core betwen two molecules, by finding an initial core then aligning based on the core.
 
     Parameters
@@ -154,6 +154,7 @@ def get_core_with_alignment(
     Returns
     -------
     core : np.ndarray of ints, shape (n_MCS, 2)
+    smarts: SMARTS string used to find core
 
     Notes
     -----
@@ -175,13 +176,13 @@ def get_core_with_alignment(
         result = mcs(mol_a, mol_b, threshold=threshold)
         query_mol = Chem.MolFromSmarts(result.smartsString)
         core = get_core_by_mcs(mol_a, mol_b, query_mol, threshold=threshold)
-        return core
+        return core, result.smartsString
 
-    heavy_atom_core = setup_core(a_without_hs, b_without_hs)
+    heavy_atom_core, _ = setup_core(a_without_hs, b_without_hs)
 
     conf_a, conf_b = align_mols_by_core(mol_a, mol_b, heavy_atom_core, ff, n_steps=n_steps, k=k)
     set_romol_conf(a_copy, conf_a)
     set_romol_conf(b_copy, conf_b)
 
-    core = setup_core(a_copy, b_copy)
-    return core
+    core, smarts = setup_core(a_copy, b_copy)
+    return core, smarts
