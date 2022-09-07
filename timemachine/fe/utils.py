@@ -1,12 +1,9 @@
 import numpy as np
 import simtk.unit
-
 from jax import grad, jit
 from jax import numpy as jnp
 from jax import value_and_grad
-
 from numpy.typing import NDArray
-
 from rdkit import Chem
 from rdkit.Chem import AllChem, Draw
 from rdkit.Chem.Draw import rdMolDraw2D
