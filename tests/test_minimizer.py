@@ -2,15 +2,15 @@ from importlib import resources
 
 from rdkit import Chem
 
+from timemachine.constants import DEFAULT_FF
 from timemachine.ff import Forcefield
 from timemachine.md import builders, minimizer
 
 
 def test_minimizer():
 
-    complex_system, complex_coords, _, _, complex_box, _ = builders.build_protein_system(
-        "tests/data/hif2a_nowater_min.pdb"
-    )
+    with resources.path("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as path_to_pdb:
+        complex_system, complex_coords, _, _, complex_box, _ = builders.build_protein_system(str(path_to_pdb))
 
     with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
         suppl = Chem.SDMolSupplier(str(path_to_ligand), removeHs=False)
@@ -19,7 +19,7 @@ def test_minimizer():
     mol_a = all_mols[1]
     mol_b = all_mols[4]
 
-    ff = Forcefield.load_from_file("smirnoff_1_1_0_ccc.py")
+    ff = Forcefield.load_from_file(DEFAULT_FF)
 
     # these methods will throw if the minimization failed
     minimizer.minimize_host_4d([mol_a, mol_b], complex_system, complex_coords, ff, complex_box)
@@ -35,7 +35,7 @@ def test_equilibrate_host():
 
     mol = next(suppl)
 
-    ff = Forcefield.load_from_file("smirnoff_1_1_0_ccc.py")
+    ff = Forcefield.load_from_file(DEFAULT_FF)
 
     coords, box = minimizer.equilibrate_host(mol, host_system, host_coords, 300, 1.0, ff, host_box, 25, seed=2022)
     assert coords.shape[0] == host_coords.shape[0] + mol.GetNumAtoms()

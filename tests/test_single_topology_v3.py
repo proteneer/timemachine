@@ -5,6 +5,7 @@ import os
 from importlib import resources
 
 from timemachine.constants import DEFAULT_FF
+from timemachine.ff.handlers import openmm_deserializer
 
 os.environ["XLA_FLAGS"] = "--xla_force_host_platform_device_count=" + str(multiprocessing.cpu_count())
 
@@ -23,9 +24,10 @@ from timemachine.fe.single_topology_v3 import (
     canonicalize_improper_idxs,
     setup_dummy_interactions_from_ff,
 )
-from timemachine.fe.system import minimize_scipy, simulate_system
+from timemachine.fe.system import convert_bps_into_system, minimize_scipy, simulate_system
 from timemachine.fe.utils import get_mol_name, get_romol_conf
 from timemachine.ff import Forcefield
+from timemachine.md.builders import build_water_system
 from timemachine.potentials.jax_utils import distance
 
 
@@ -204,10 +206,8 @@ def test_hif2a_end_state_stability(num_pairs_to_setup=25, num_pairs_to_simulate=
     for pair_idx, (mol_a, mol_b) in enumerate(pairs[:num_pairs_to_setup]):
 
         print("Checking", get_mol_name(mol_a), "->", get_mol_name(mol_b))
-        mcs_threshold = 0.75  # distance threshold, in nanometers
-        res = atom_mapping.mcs_map(mol_a, mol_b, mcs_threshold)
-        query = Chem.MolFromSmarts(res.smartsString)
-        core_pairs = atom_mapping.get_core_by_mcs(mol_a, mol_b, query, mcs_threshold)
+        mcs_threshold = 2.0  # distance threshold, in nanometers
+        core_pairs, _ = atom_mapping.get_core_with_alignment(mol_a, mol_b, threshold=mcs_threshold)
         st = SingleTopologyV3(mol_a, mol_b, core_pairs, ff)
         x0 = st.combine_confs(get_romol_conf(mol_a), get_romol_conf(mol_b))
         systems = [st.src_system, st.dst_system]
@@ -286,8 +286,8 @@ def test_jax_transform_intermediate_potential():
         mol_a = mols["206"]
         mol_b = mols["57"]
 
-        mcs_threshold = 0.75
-        res = atom_mapping.mcs_map(mol_a, mol_b, mcs_threshold)
+        mcs_threshold = 2.0
+        res = atom_mapping.mcs(mol_a, mol_b, mcs_threshold)
         query = Chem.MolFromSmarts(res.smartsString)
         core_pairs = atom_mapping.get_core_by_mcs(mol_a, mol_b, query, mcs_threshold)
 
@@ -368,3 +368,21 @@ def test_resample_dummy_atoms_methane():
     combined_conf = combined_topology.combine_confs(conf_a, conf_b)
 
     assert_resample_dummy_atoms_moves_only_expected_atoms(combined_topology, combined_conf)
+
+
+def test_combine_with_host():
+    """Verifies that combine_with_host correctly sets up all of the U functions"""
+    mol_a = Chem.MolFromSmiles("BrC1=CC=CC=C1")
+    mol_b = Chem.MolFromSmiles("C1=CN=CC=C1F")
+    core = np.array([[1, 0], [2, 1], [3, 2], [4, 3], [5, 4], [6, 5]])
+    ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
+
+    solvent_sys, _, _, _ = build_water_system(4.0)
+
+    host_bps, _ = openmm_deserializer.deserialize_system(solvent_sys, cutoff=1.2)
+
+    st = SingleTopologyV3(mol_a, mol_b, core, ff)
+    host_system = st.combine_with_host(convert_bps_into_system(host_bps), 0.5)
+    # Expect there to be 5 functions, excluding the chiral bond and chiral atom restraints
+    # This should be updated when chiral restraints are re-enabled.
+    assert len(host_system.get_U_fns()) == 5

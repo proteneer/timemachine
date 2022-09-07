@@ -1,163 +1,76 @@
-from typing import Optional
+from copy import deepcopy
+from typing import Optional, Tuple
 
 import numpy as np
+from numpy.typing import NDArray
 from rdkit import Chem
 from rdkit.Chem import rdFMCS
 
+from timemachine.constants import DEFAULT_FF
 from timemachine.fe.topology import AtomMappingError
-from timemachine.fe.utils import core_from_distances, simple_geometry_mapping
+from timemachine.fe.utils import set_romol_conf
+from timemachine.ff import Forcefield
+from timemachine.md.align import align_mols_by_core
 
 
-class CompareDist(rdFMCS.MCSAtomCompare):
-    """Custom atom comparison: use positions within generated conformer"""
+def mcs(a, b, threshold: float = 2.0, timeout: int = 5, smarts: Optional[str] = None, conformer_aware=True, retry=True):
+    """Find maximum common substructure between mols a and b
+    using reasonable settings for single topology:
+    * disallow partial ring matches
+    * disregard element identity and valence
 
-    def __init__(self, threshold=0.5, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.threshold = threshold
+    if conformer_aware=True, only match atoms within distance threshold
+        (assumes conformers are aligned)
 
-    def compare(self, p, mol1, atom1, mol2, atom2):
-        """Atoms match if within 0.5 Å
-
-        Signature from super method:
-        (MCSAtomCompareParameters)parameters, (Mol)mol1, (int)atom1, (Mol)mol2, (int)atom2) -> bool
-        """
-        x_i = mol1.GetConformer(0).GetPositions()[atom1]
-        x_j = mol2.GetConformer(0).GetPositions()[atom2]
-        return bool(np.linalg.norm(x_i - x_j) <= self.threshold)  # must convert from np.bool_ to Python bool!
-
-
-class CompareDistNonterminal(rdFMCS.MCSAtomCompare):
+    if retry=True, then reseed with result of easier MCS(RemoveHs(a), RemoveHs(b)) in case of failure
     """
-    Custom comparator used in the FMCS code.
-    This allows two atoms to match if:
-        1. Neither atom is a terminal atom (H, F, Cl, Halogens etc.)
-        2. They are within 1 angstrom of each other.
-    """
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
-    def compare(self, p, mol1, atom1, mol2, atom2):
-
-        if mol1.GetAtomWithIdx(atom1).GetDegree() == 1:
-            return False
-        if mol2.GetAtomWithIdx(atom2).GetDegree() == 1:
-            return False
-
-        x_i = mol1.GetConformer(0).GetPositions()[atom1]
-        x_j = mol2.GetConformer(0).GetPositions()[atom2]
-        if np.linalg.norm(x_i - x_j) > 1.0:  # angstroms
-            return False
-        else:
-            return True
-
-
-def mcs_map(a, b, threshold: float = 2.0, timeout: int = 5, smarts: Optional[str] = None):
-    """Find the MCS map of going from A to B"""
     params = rdFMCS.MCSParameters()
+
+    # bonds
     params.BondCompareParameters.CompleteRingsOnly = 1
     params.BondCompareParameters.RingMatchesRingOnly = 1
     params.BondTyper = rdFMCS.BondCompare.CompareAny
 
+    # atoms
     params.AtomCompareParameters.CompleteRingsOnly = 1
     params.AtomCompareParameters.RingMatchesRingOnly = 1
     params.AtomCompareParameters.matchValences = 0
-    params.AtomCompareParameters.MaxDistance = threshold
+    params.AtomCompareParameters.MatchChiralTag = 0
+    if conformer_aware:
+        params.AtomCompareParameters.MaxDistance = threshold
     params.AtomTyper = rdFMCS.AtomCompare.CompareAny
 
+    # globals
     params.Timeout = timeout
     if smarts is not None:
         params.InitialSeed = smarts
-    return rdFMCS.FindMCS([a, b], params)
 
+    # try on given mols
+    result = rdFMCS.FindMCS([a, b], params)
 
-def mcs_map_graph_only_complete_rings(a, b, timeout: int = 3600, smarts: Optional[str] = None):
-    """Find the MCS map of going from A to B, disregarding conformer information. This also ensures
-    that core-core bonds are not broken."""
-    return rdFMCS.FindMCS(
-        [a, b],
-        maximizeBonds=True,
-        timeout=timeout,
-        matchValences=False,
-        ringMatchesRingOnly=True,
-        completeRingsOnly=True,
-        matchChiralTag=False,
-        atomCompare=Chem.rdFMCS.AtomCompare.CompareAny,
-        bondCompare=Chem.rdFMCS.BondCompare.CompareAny,
-    )
+    # optional fallback
+    def is_trivial(mcs_result) -> bool:
+        return mcs_result.numBonds < 2
 
+    if retry and is_trivial(result) and smarts is None:
+        # try again, but seed with MCS computed without explicit hydrogens
+        a_without_hs = Chem.RemoveHs(deepcopy(a))
+        b_without_hs = Chem.RemoveHs(deepcopy(b))
 
-def transformation_size(n_A, n_B, n_MCS):
-    """Heuristic size of transformation in terms of
-        the number of atoms in A, B, and MCS(A, B)
+        heavy_atom_result = rdFMCS.FindMCS([a_without_hs, b_without_hs], params)
+        params.InitialSeed = heavy_atom_result.smartsString
 
-    Notes
-    -----
-    * YTZ suggests (2021/01/26)
-        (n_A + n_B) - n_MCS
-        which is size-extensive
+        result = rdFMCS.FindMCS([a, b], params)
 
-    * JF modified (2021/01/27)
-        (n_A - n_MCS) + (n_B - n_MCS)
-        which is 0 when A = B
+    if is_trivial(result):
+        message = f"""MCS result trivial!
+            timed out: {result.canceled}
+            # atoms in MCS: {result.numAtoms}
+            # bonds in MCS: {result.numBonds}
+        """
+        raise AtomMappingError(message)
 
-    * Alternatives considered but not tried:
-        * min(n_A, n_B) - n_MCS
-        * max(n_A, n_B) - n_MCS
-        * 1.0 - (n_MCS / min(n_A, n_B))
-    """
-    return (n_A + n_B) - 2 * n_MCS
-
-
-def compute_all_pairs_mcs(mols, threshold: float = 0.5):
-    """Generate square matrix of MCS(mols[i], mols[j]) for all pairs i,j
-
-    Parameters
-    ----------
-    mols : iterable of RDKit Mols
-
-    Returns
-    -------
-    mcs_s : numpy.ndarray of rdkit.Chem.rdFMCS.MCSResult's, of shape (len(mols), len(mols))
-
-    Notes
-    -----
-    TODO: mcs_map should be symmetric, so only have to do the upper triangle of this matrix
-    """
-    mcs_s = np.zeros((len(mols), len(mols)), dtype=object)
-
-    for i in range(len(mols)):
-        for j in range(i, len(mols)):
-            mapped = mcs_map(mols[i], mols[j], threshold=threshold)
-            mcs_s[i, j] = mapped
-            mcs_s[j, i] = mapped
-    return mcs_s
-
-
-def compute_transformation_size_matrix(mols, mcs_s):
-    N = len(mols)
-    transformation_sizes = np.zeros((N, N))
-    for i in range(N):
-        for j in range(i, N):
-            n_i = mols[i].GetNumAtoms()
-            n_j = mols[j].GetNumAtoms()
-            n_mcs = mcs_s[i, j].numAtoms
-            transforms = transformation_size(n_i, n_j, n_mcs)
-            transformation_sizes[i, j] = transforms
-            transformation_sizes[j, i] = transforms
-    return transformation_sizes
-
-
-# 4. Construct and serialize the relative transformations
-def _check_core_map_distances(mol_a, mol_b, core, threshold=0.5) -> bool:
-    """compute vector of distances[i] = distance(conf_a[core_a[i]], conf_b[core_b[i]]),
-    check whether distances[i] <= threshold for all i"""
-
-    a, b = core[:, 0], core[:, 1]
-    conf_a = mol_a.GetConformer(0).GetPositions()
-    conf_b = mol_b.GetConformer(0).GetPositions()
-    distances = np.linalg.norm(conf_a[a] - conf_b[b], axis=1)
-    return (distances <= threshold).all()
+    return result
 
 
 def get_core_by_mcs(mol_a, mol_b, query, threshold=0.5):
@@ -198,88 +111,78 @@ def get_core_by_mcs(mol_a, mol_b, query, threshold=0.5):
         for j, b in enumerate(matches_b):
             # if a single pair is outside of threshold, we set the cost to inf
             dij = np.linalg.norm(conf_a[np.array(a)] - conf_b[np.array(b)], axis=1)
-            cost[i, j] = dij.sum() if np.all(dij < threshold) else np.inf
+            cost[i, j] = np.sum(np.where(dij < threshold, dij, +np.inf))
 
     # find (i,j) = argmin cost
     min_i, min_j = np.unravel_index(np.argmin(cost, axis=None), cost.shape)
-    # print(f'argmin of {n_a} x {n_b} cost matrix: {(min_i, min_j)} ')
-    # TODO: maybe also print the difference between min(cost) and cost[0,0],
-    #   to see how big of a difference it made to pick the default
-
-    # TODO: is there a way to use the matching from MCS directly?
 
     # concatenate into (n_atoms, 2) array
     inds_a, inds_b = matches_a[min_i], matches_b[min_j]
     core = np.array([inds_a, inds_b]).T
 
-    if not _check_core_map_distances(mol_a, mol_b, core, threshold):
+    if np.isinf(cost[min_i, min_j]):
         raise AtomMappingError(f"not all mapped atoms are within {threshold:.3f}Å of each other")
 
     return core
 
 
-def _assert_core_reasonableness(mol_a, mol_b, core):
-    # TODO move any useful run-time assertions from this script into tests/
+def get_core_with_alignment(
+    mol_a: Chem.Mol,
+    mol_b: Chem.Mol,
+    threshold: float = 2.0,
+    n_steps: int = 200,
+    k: float = 10000,
+    ff: Optional[Forcefield] = None,
+) -> Tuple[NDArray, str]:
+    """Selects a core between two molecules, by finding an initial core then aligning based on the core.
 
-    # bounds
-    assert max(core[:, 0]) < mol_a.GetNumAtoms()
-    assert max(core[:, 1]) < mol_b.GetNumAtoms()
+    Parameters
+    ----------
+    mol_a: RDKit Mol
 
-    # uniqueness
-    assert len(set(core[:, 0])) == len(core)
-    assert len(set(core[:, 1])) == len(core)
+    mol_b: RDKit Mol
 
+    threshold: float
+        Threshold between atoms in angstroms
 
-def get_core_by_matching(mol_a, mol_b, threshold=1.0):
-    """Only allow to map a pair of atoms together if their conformer coordinates are within threshold.
+    n_steps: float
+        number of steps to run for alignment
 
-    Of the allowable core mappings, return the maximum-weight matching of maximal-cardinality,
-        where weight(i,j) = threshold - distance(mol_a[i], mol_b[j])
+    ff: Forcefield or None
+        Forcefield to use for alignment, defaults to DEFAULT_FF forcefield if None
+
+    Returns
+    -------
+    core : np.ndarray of ints, shape (n_MCS, 2)
+    smarts: SMARTS string used to find core
+
+    Notes
+    -----
+    * Warning! The initial core can contain an incorrect mapping, in that case the
+        core returned will be the same as running mcs followed by get_core_by_mcs.
     """
-    core = core_from_distances(mol_a, mol_b, threshold)
-    _assert_core_reasonableness(mol_a, mol_b, core)
-    return core
+    # Copy mols so that when we change coordinates doesn't corrupt inputs
+    a_copy = deepcopy(mol_a)
+    b_copy = deepcopy(mol_b)
 
+    if ff is None:
+        ff = Forcefield.load_from_file(DEFAULT_FF)
 
-def get_core_by_geometry(mol_a, mol_b, threshold=0.5):
-    """Only allow to map a pair of atoms together if their conformer coordinates are within threshold.
+    # Remove hydrogens
+    a_without_hs = Chem.RemoveHs(deepcopy(a_copy))
+    b_without_hs = Chem.RemoveHs(deepcopy(b_copy))
 
-    Of the allowable core mappings, return the one that contains only atom pairs (i, j)
-    where i in mol_a has exactly one neighbor j in mol_b within threshold
-    """
-    core = simple_geometry_mapping(mol_a, mol_b, threshold)
-    _assert_core_reasonableness(mol_a, mol_b, core)
-    return core
+    def setup_core(mol_a, mol_b):
+        result = mcs(mol_a, mol_b, threshold=threshold)
+        query_mol = Chem.MolFromSmarts(result.smartsString)
+        core = get_core_by_mcs(mol_a, mol_b, query_mol, threshold=threshold)
+        return core, result.smartsString
 
+    heavy_atom_core, _ = setup_core(a_without_hs, b_without_hs)
 
-def _get_unique_match(mol, core):
-    matches = mol.GetSubstructMatches(core)
-    assert len(matches) == 1
-    return matches[0]
+    conf_a, conf_b = align_mols_by_core(mol_a, mol_b, heavy_atom_core, ff, n_steps=n_steps, k=k)
+    set_romol_conf(a_copy, conf_a)
+    set_romol_conf(b_copy, conf_b)
 
-
-def get_core_by_smarts(mol_a, mol_b, core_smarts):
-    """no atom mapping errors with this one, but the core size is smaller"""
-    query = Chem.MolFromSmarts(core_smarts)
-    return np.array([_get_unique_match(mol_a, query), _get_unique_match(mol_b, query)]).T
-
-
-# 3.1. Define a custom maximum common substructure search method
-
-
-def _identify_hub(transformation_sizes):
-    return int(np.argmin(transformation_sizes.sum(0)))
-
-
-def get_star_map(mols, threshold: float = 0.5):
-    mcs_s = compute_all_pairs_mcs(mols, threshold=threshold)
-    transformation_sizes = compute_transformation_size_matrix(mols, mcs_s)
-
-    hub_index = _identify_hub(transformation_sizes)
-    hub = mols[hub_index]
-
-    # for each "spoke" in the star map, construct serializable transformation "hub -> spoke"
-    others = list(mols)
-    others.pop(hub_index)
-
-    return hub, others
+    core, smarts = setup_core(a_copy, b_copy)
+    return core, smarts

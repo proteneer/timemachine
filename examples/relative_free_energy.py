@@ -39,7 +39,7 @@ def run_pair(mol_a, mol_b, core, forcefield, n_frames, protein_path, seed):
     )
 
     with open("solvent_overlap.png", "wb") as fh:
-        fh.write(solvent_res.plot_png)
+        fh.write(solvent_res.overlap_detail_png)
 
     # this st is only needed to deal with visualization jank
     write_trajectory_as_pdb(mol_a, mol_b, core, solvent_res.frames, solvent_top, "solvent_traj")
@@ -53,7 +53,7 @@ def run_pair(mol_a, mol_b, core, forcefield, n_frames, protein_path, seed):
         mol_a, mol_b, core, forcefield, complex_host_config, seed + 1, n_frames=n_frames, prefix="complex"
     )
     with open("complex_overlap.png", "wb") as fh:
-        fh.write(complex_res.plot_png)
+        fh.write(complex_res.overlap_detail_png)
     write_trajectory_as_pdb(mol_a, mol_b, core, complex_res.frames, complex_top, "complex_traj")
 
     print(f"complex dG: {np.sum(solvent_res.all_dGs):.3f} +- {np.linalg.norm(solvent_res.all_errs):.3f} kJ/mol")
@@ -66,7 +66,7 @@ def hif2a_pair():
     mol_b = st.mol_b
     core = st.core
     forcefield = st.ff
-    protein_path = "tests/data/hif2a_nowater_min.pdb"
+    protein_path = "timemachine/testsystems/data/hif2a_nowater_min.pdb"
 
     # fast
     seed = 2023
@@ -103,7 +103,7 @@ def read_from_args():
     mol_b = get_mol_by_name(mols, args.mol_b_name)  # 30 in test pair
 
     print("Searching for the maximum common substructure...")
-    mcs_result = atom_mapping.mcs_map_graph_only_complete_rings(mol_a, mol_b)
+    mcs_result = atom_mapping.mcs(mol_a, mol_b)
     query_mol = Chem.MolFromSmarts(mcs_result.smartsString)
 
     print("mol_a SMILES:", Chem.MolToSmiles(mol_a, isomericSmiles=False))

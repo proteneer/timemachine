@@ -1,11 +1,12 @@
-from typing import Any, List, Tuple
-
-import networkx as nx
 import numpy as np
 import simtk.unit
+
 from jax import grad, jit
 from jax import numpy as jnp
 from jax import value_and_grad
+
+from numpy.typing import NDArray
+
 from rdkit import Chem
 from rdkit.Chem import AllChem, Draw
 from rdkit.Chem.Draw import rdMolDraw2D
@@ -77,92 +78,6 @@ def convert_uM_to_kJ_per_mole(amount_in_uM):
     return 0.593 * np.log(amount_in_uM * 1e-6) * 4.18
 
 
-from scipy.spatial.distance import cdist
-
-
-def _weighted_adjacency_graph(conf_a, conf_b, threshold=1.0):
-    """construct a networkx graph with
-    nodes for atoms in conf_a, conf_b, and
-    weighted edges connecting (conf_a[i], conf_b[j])
-        if distance(conf_a[i], conf_b[j]) <= threshold,
-        with weight = threshold - distance(conf_a[i], conf_b[j])
-    """
-    distances = cdist(conf_a, conf_b)
-    within_threshold = distances <= threshold
-
-    g = nx.Graph()
-    for i in range(len(within_threshold)):
-        neighbors_of_i = np.where(within_threshold[i])[0]
-        for j in neighbors_of_i:
-            g.add_edge(f"conf_a[{i}]", f"conf_b[{j}]", weight=threshold - distances[i, j])
-    return g
-
-
-def _core_from_matching(matching):
-    """matching is a set of pairs of node names"""
-
-    # 'conf_b[9]' -> 9
-    ind_from_node_name = lambda name: int(name.split("[")[1].split("]")[0])
-
-    match_list = list(matching)
-
-    inds_a = [ind_from_node_name(u) for (u, _) in match_list]
-    inds_b = [ind_from_node_name(v) for (_, v) in match_list]
-
-    return np.array([inds_a, inds_b]).T
-
-
-def core_from_distances(mol_a, mol_b, threshold=1.0):
-    """
-    TODO: docstring
-    TODO: test
-    """
-    # fetch conformer, assumed aligned
-    conf_a = mol_a.GetConformer(0).GetPositions()
-    conf_b = mol_b.GetConformer(0).GetPositions()
-
-    g = _weighted_adjacency_graph(conf_a, conf_b, threshold)
-
-    matching = nx.algorithms.matching.max_weight_matching(g, maxcardinality=True)
-
-    return _core_from_matching(matching)
-
-
-def simple_geometry_mapping(mol_a, mol_b, threshold=0.5):
-    """For each atom i in conf_a, if there is exactly one atom j in conf_b
-    such that distance(i, j) <= threshold, add (i,j) to atom mapping
-
-    Notes
-    -----
-    * Warning! There are many situations where a pair of atoms that shouldn't be mapped together
-        could appear within distance threshold of each other in their respective conformers
-    """
-
-    # fetch conformer, assumed aligned
-    conf_a = mol_a.GetConformer(0).GetPositions()
-    conf_b = mol_b.GetConformer(0).GetPositions()
-    # TODO: perform initial alignment
-
-    within_threshold = cdist(conf_a, conf_b) <= threshold
-    num_neighbors = within_threshold.sum(1)
-    num_mappings_possible = np.prod(num_neighbors[num_neighbors > 0])
-
-    if max(num_neighbors) > 1:
-        print(
-            f"Warning! Multiple (~ {num_mappings_possible}) atom-mappings would be possible at threshold={threshold}Å."
-        )
-        print(f"Only mapping atoms that have exactly one neighbor within {threshold}Å.")
-        # TODO: print more information about difference between size of set returned and set possible
-        # TODO: also assert that only pairs of the same element will be mapped together
-
-    inds = []
-    for i in range(len(conf_a)):
-        if num_neighbors[i] == 1:
-            inds.append((i, np.argmax(within_threshold[i])))
-    core = np.array(inds)
-    return core
-
-
 # TODO: add a module for atom-mapping, with RDKit MCS based and other approaches
 
 # TODO: add a visualization module?
@@ -227,81 +142,6 @@ def plot_atom_mapping_grid(mol_a, mol_b, core, show_idxs=False):
     )
 
 
-def get_connected_components(nodes, relative_inds, absolute_inds) -> List[List[Any]]:
-    """Construct a graph containing (len(nodes) + 1) nodes -- one for each original node, plus a new "reference" node.*
-
-    Add edges
-    * (i, j) in relative_inds,
-    * (i, "reference") for i in absolute_inds
-
-    And then return the connected components of this graph (omitting the "reference" node we added).*
-
-    * Unless "nodes" already contained something named "reference"!
-    """
-    g = nx.Graph()
-    g.add_nodes_from(nodes)
-
-    if "reference" not in nodes:
-        g.add_node("reference")
-
-    for (i, j) in relative_inds:
-        g.add_edge(i, j)
-
-    if len(absolute_inds) == 0:
-        absolute_inds = [0]
-
-    for i in absolute_inds:
-        g.add_edge(i, "reference")
-
-    # return list of lists of elements of the nodes
-    # we will remove the "reference" node we added
-    # however, if the user actually had a node named "reference", don't remove it
-
-    components: List[List[Any]] = list(map(list, list(nx.connected_components(g))))
-
-    if "reference" in nodes:
-        return components
-    else:
-        filtered_components = []
-
-        for component in components:
-            if "reference" in component:
-                component.remove("reference")
-            filtered_components.append(component)
-        return filtered_components
-
-
-def validate_map(n_nodes: int, relative_inds: List[Tuple[int, int]], absolute_inds: List[int]) -> bool:
-    """Construct a graph containing (n_nodes + 1) nodes -- one for each original node, plus a new "reference" node.
-
-    Add edges
-    * (i, j) in relative_inds,
-    * (i, "reference") for i in absolute_inds
-
-    And then return whether this graph is connected.
-
-    If no absolute_inds provided, treat node 0 as "reference".
-
-    Examples
-    --------
-
-    >>> validate_map(4, relative_inds=[[0,1], [2,3]], absolute_inds=[0])
-    False
-
-    >>> validate_map(4, relative_inds=[[0,1], [1,2], [2,3]], absolute_inds=[0])
-    True
-
-    >>> validate_map(4, relative_inds=[[0,1], [2,3]], absolute_inds=[0,2])
-    True
-    """
-
-    if len(absolute_inds) == 0:
-        absolute_inds = [0]
-
-    components = get_connected_components(list(range(n_nodes)), relative_inds, absolute_inds)
-    return len(components) == 1
-
-
 def get_romol_bonds(mol):
     """
     Return bond idxs given a mol. These are not canonicalized.
@@ -312,11 +152,22 @@ def get_romol_bonds(mol):
     return bond_list
 
 
-def get_romol_conf(mol):
+def get_romol_conf(mol) -> NDArray:
     """Coordinates of mol's 0th conformer, in nanometers"""
     conformer = mol.GetConformer(0)
     guest_conf = np.array(conformer.GetPositions(), dtype=np.float64)
     return guest_conf / 10  # from angstroms to nm
+
+
+def set_romol_conf(mol, new_coords: NDArray):
+    """Sets coordinates of mol's 0th conformer. Expects coords in nanometers and converts to angstrom"""
+    assert new_coords.shape[0] == mol.GetNumAtoms()
+    # convert from nm to angstroms
+    angstrom_coords = new_coords * 10
+    angstrom_coords = angstrom_coords.astype(np.float64)  # Must be float64
+    conf = mol.GetConformer(0)
+    for i, pos in enumerate(angstrom_coords):
+        conf.SetAtomPosition(i, pos)
 
 
 def get_mol_masses(mol):

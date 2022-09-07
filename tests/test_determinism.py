@@ -1,3 +1,5 @@
+from importlib import resources
+
 import numpy as np
 
 from timemachine.ff import Forcefield
@@ -23,9 +25,8 @@ def test_deterministic_energies():
     ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
 
     # build the protein system.
-    complex_system, complex_coords, _, _, complex_box, _ = builders.build_protein_system(
-        "tests/data/hif2a_nowater_min.pdb"
-    )
+    with resources.path("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as path_to_pdb:
+        complex_system, complex_coords, _, _, complex_box, _ = builders.build_protein_system(str(path_to_pdb))
     host_fns, host_masses = openmm_deserializer.deserialize_system(complex_system, cutoff=1.0)
 
     # resolve host clashes
