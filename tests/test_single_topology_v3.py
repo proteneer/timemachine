@@ -321,5 +321,6 @@ def test_combine_with_host():
 
     st = SingleTopologyV3(mol_a, mol_b, core, ff)
     host_system = st.combine_with_host(convert_bps_into_system(host_bps), 0.5)
-    # Expect there to be 7 functions, including the chiral bond and chiral atom restraints
-    assert len(host_system.get_U_fns()) == 7
+    # Expect there to be 5 functions, excluding the chiral bond and chiral atom restraints
+    # This should be updated when chiral restraints are re-enabled.
+    assert len(host_system.get_U_fns()) == 5
