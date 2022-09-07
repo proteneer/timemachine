@@ -1,5 +1,6 @@
 import warnings
 from collections.abc import Iterable
+from functools import partial
 from typing import Tuple
 
 import jax.numpy as jnp
@@ -483,6 +484,51 @@ def find_dummy_groups_and_anchors(mol_a, mol_b, core_a, core_b):
     return dummy_groups_b, all_jks
 
 
+def interpolate_harmonic_force(src_params, dst_params, lamb, k_min):
+    """
+    Interpolate between harmonic force parameters using
+
+    - log-linear interpolation for force constants
+    - linear interpolation for equilibrium values
+
+    In the case of ring closing (opening), some initial (final) force constants will be zero. In this case the value
+    k_min is used instead of zero for interpolation, since zero is not in the range of the log-linear interpolation
+    function (but lambda=0 and lambda=1 still return exactly the end state parameters).
+
+    Parameters
+    ----------
+    src_params : ndarray, float, (N, 2)
+        parameters at lambda = 0
+
+    dst_params : ndarray, float, (N, 2)
+        parameters at lambda = 1
+
+    k_min : float, k_min > 0
+        minimum force constant for interpolation
+    """
+
+    k0, x0 = jnp.asarray(src_params).astype(jnp.float64)
+    k1, x1 = jnp.asarray(dst_params).astype(jnp.float64)
+
+    def f(k0, k1):
+        return jnp.array(
+            [
+                interpolate.log_linear_interpolation(k0, k1, lamb),
+                interpolate.linear_interpolation(x0, x1, lamb),
+            ]
+        )
+
+    return jnp.where(
+        lamb == 0.0,
+        jnp.array([k0, x0]),
+        jnp.where(
+            lamb == 1.0,
+            jnp.array([k1, x1]),
+            f(jnp.maximum(k0, k_min), jnp.maximum(k1, k_min)),
+        ),
+    )
+
+
 class SingleTopologyV3:
     def __init__(self, mol_a, mol_b, core, forcefield):
         """
@@ -783,10 +829,18 @@ class SingleTopologyV3:
 
         # tbd: use different interpolation functions later
         bond = self._setup_intermediate_bonded_term(
-            src_system.bond, dst_system.bond, lamb, interpolate.align_harmonic_bond_idxs_and_params, interpolate_fn
+            src_system.bond,
+            dst_system.bond,
+            lamb,
+            interpolate.align_harmonic_bond_idxs_and_params,
+            partial(interpolate_harmonic_force, k_min=0.1),  # ~ 5 nm at 300 K
         )
         angle = self._setup_intermediate_bonded_term(
-            src_system.angle, dst_system.angle, lamb, interpolate.align_harmonic_angle_idxs_and_params, interpolate_fn
+            src_system.angle,
+            dst_system.angle,
+            lamb,
+            interpolate.align_harmonic_angle_idxs_and_params,
+            partial(interpolate_harmonic_force, k_min=0.05),
         )
         torsion = self._setup_intermediate_bonded_term(
             src_system.torsion, dst_system.torsion, lamb, interpolate.align_torsion_idxs_and_params, interpolate_fn

@@ -1,7 +1,7 @@
 from functools import partial
 from typing import Any, Callable, Iterable, Set, Tuple
 
-import numpy as np
+import jax.numpy as jnp
 
 
 class DuplicateAlignmentKeysError(RuntimeError):
@@ -148,4 +148,11 @@ def linear_interpolation(src_params, dst_params, lamb):
     """
     Linearly interpolate between src and dst params
     """
-    return (1 - lamb) * np.array(src_params) + lamb * np.array(dst_params)
+    return (1 - lamb) * jnp.asarray(src_params) + lamb * jnp.asarray(dst_params)
+
+
+def log_linear_interpolation(src_params, dst_params, lamb):
+    """
+    Linear interpolation in log space
+    """
+    return jnp.exp(linear_interpolation(jnp.log(src_params), jnp.log(dst_params), lamb))

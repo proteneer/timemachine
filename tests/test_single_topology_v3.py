@@ -1,33 +1,38 @@
+import multiprocessing
+import os
+
+os.environ["XLA_FLAGS"] = "--xla_force_host_platform_device_count=" + str(multiprocessing.cpu_count())
+import jax
+
+jax.config.update("jax_enable_x64", True)
+
 # test that end-states are setup correctly in single topology calculations.
 import functools
-import multiprocessing
 import os
 from importlib import resources
 
-from timemachine.constants import DEFAULT_FF
-from timemachine.ff.handlers import openmm_deserializer
-
-os.environ["XLA_FLAGS"] = "--xla_force_host_platform_device_count=" + str(multiprocessing.cpu_count())
-
-import jax
 import jax.numpy as jnp
 import numpy as np
 import pytest
 from rdkit import Chem
 from rdkit.Chem import AllChem
 
+from timemachine.constants import DEFAULT_FF
 from timemachine.fe import atom_mapping, single_topology_v3
+from timemachine.fe.interpolate import linear_interpolation
 from timemachine.fe.single_topology_v3 import (
     ChargePertubationError,
     CoreBondChangeWarning,
     MultipleAnchorWarning,
     SingleTopologyV3,
     canonicalize_improper_idxs,
+    interpolate_harmonic_force,
     setup_dummy_interactions_from_ff,
 )
 from timemachine.fe.system import convert_bps_into_system, minimize_scipy, simulate_system
 from timemachine.fe.utils import get_mol_name, get_romol_conf
 from timemachine.ff import Forcefield
+from timemachine.ff.handlers import openmm_deserializer
 from timemachine.md.builders import build_water_system
 from timemachine.potentials.jax_utils import distance
 
@@ -383,3 +388,46 @@ def test_no_chiral_bond_restraints():
     assert len(state.chiral_bond.get_idxs()) == 0
     U = state.get_U_fn()
     _ = U(init_conf)
+
+
+def assert_interpolation_valid(f, a, b):
+    np.testing.assert_array_equal(f(a, b, 0.0), a)
+    np.testing.assert_array_equal(f(a, b, 1.0), b)
+
+    y = f(a, b, 0.1)
+    assert np.all(np.minimum(a, b) <= y)
+    assert np.all(y <= np.maximum(a, b))
+
+
+def test_interpolate_harmonic_force():
+
+    rng = np.random.default_rng(2022)
+
+    def random_harmonic_params():
+        return rng.uniform(1, 2, (2, 100))
+
+    src_params = random_harmonic_params()
+    dst_params = random_harmonic_params()
+
+    k_min = 0.1
+    assert (k_min < np.minimum(src_params, dst_params)).all()
+    f = functools.partial(interpolate_harmonic_force, k_min=k_min)
+    assert_interpolation_valid(f, src_params, dst_params)
+
+    # check for sublinearity
+    lam = 0.1
+    k_linear = linear_interpolation(src_params[0, :], dst_params[0, :], lam)
+    k_loglinear = f(src_params, dst_params, lam)[0, :]
+    assert np.all(k_loglinear < k_linear)
+
+    # check for JIT-compatibility
+    f = jax.jit(f)
+    f(src_params, dst_params, 0.1)
+
+    # check case where initial force constant is zero (e.g. ring closing)
+    src_params = random_harmonic_params()
+    src_params[0, :] = 0.0
+    assert_interpolation_valid(f, src_params, dst_params)
+    assert_interpolation_valid(f, dst_params, src_params)
+    assert (f(src_params, dst_params, 1e-5)[0, :] > k_min).all()
+    assert (f(dst_params, src_params, 1 - 1e-5)[0, :] > k_min).all()
