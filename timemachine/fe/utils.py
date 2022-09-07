@@ -1,5 +1,6 @@
 import numpy as np
 import simtk.unit
+from numpy.typing import NDArray
 from rdkit import Chem
 from rdkit.Chem import AllChem, Draw
 from rdkit.Chem.Draw import rdMolDraw2D
@@ -141,11 +142,22 @@ def get_romol_bonds(mol):
     return bond_list
 
 
-def get_romol_conf(mol):
+def get_romol_conf(mol) -> NDArray:
     """Coordinates of mol's 0th conformer, in nanometers"""
     conformer = mol.GetConformer(0)
     guest_conf = np.array(conformer.GetPositions(), dtype=np.float64)
     return guest_conf / 10  # from angstroms to nm
+
+
+def set_romol_conf(mol, new_coords: NDArray):
+    """Sets coordinates of mol's 0th conformer. Expects coords in nanometers and converts to angstrom"""
+    assert new_coords.shape[0] == mol.GetNumAtoms()
+    # convert from nm to angstroms
+    angstrom_coords = new_coords * 10
+    angstrom_coords = angstrom_coords.astype(np.float64)  # Must be float64
+    conf = mol.GetConformer(0)
+    for i, pos in enumerate(angstrom_coords):
+        conf.SetAtomPosition(i, pos)
 
 
 def get_mol_masses(mol):

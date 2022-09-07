@@ -629,8 +629,8 @@ class DualTopology(BaseTopology):
             ]
         ).astype(np.float64)
 
-        combined_lambda_plane_idxs = None
-        combined_lambda_offset_idxs = None
+        combined_lambda_plane_idxs = np.zeros(NA + NB, dtype=np.int32)
+        combined_lambda_offset_idxs = np.zeros_like(combined_lambda_plane_idxs, dtype=np.int32)
 
         beta = _BETA
         cutoff = _CUTOFF  # solve for this analytically later
@@ -644,6 +644,36 @@ class DualTopology(BaseTopology):
             combined_lambda_offset_idxs,
             beta,
             cutoff,
+        )
+
+    def parameterize_nonbonded_pairlist(self, ff_q_params, ff_lj_params):
+        """
+        Generate intramolecular nonbonded pairlist, and is mostly identical to the above
+        except implemented as a pairlist.
+        """
+        NA = self.mol_a.GetNumAtoms()
+
+        params_a, pairlist_a = BaseTopology(self.mol_a, self.ff).parameterize_nonbonded_pairlist(
+            ff_q_params, ff_lj_params
+        )
+        params_b, pairlist_b = BaseTopology(self.mol_b, self.ff).parameterize_nonbonded_pairlist(
+            ff_q_params, ff_lj_params
+        )
+
+        params = np.concatenate([params_a, params_b])
+
+        inclusions_a = pairlist_a.get_idxs()
+        inclusions_b = pairlist_b.get_idxs()
+        inclusions_b += NA
+        inclusion_idxs = np.concatenate([inclusions_a, inclusions_b])
+
+        assert pairlist_a.get_beta() == pairlist_b.get_beta()
+        assert pairlist_a.get_cutoff() == pairlist_b.get_cutoff()
+
+        offsets = np.concatenate([pairlist_a.get_offsets(), pairlist_b.get_offsets()])
+
+        return params, potentials.NonbondedPairListPrecomputed(
+            inclusion_idxs, offsets, pairlist_a.get_beta(), pairlist_a.get_beta()
         )
 
     def _parameterize_bonded_term(self, ff_params, bonded_handle, potential):
