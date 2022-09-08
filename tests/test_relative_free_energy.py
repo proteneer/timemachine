@@ -5,7 +5,13 @@ from importlib import resources
 import numpy as np
 import pytest
 
-from timemachine.fe.rbfe import HostConfig, SimulationResult, estimate_relative_free_energy, sample
+from timemachine.fe.rbfe import (
+    HostConfig,
+    SimulationResult,
+    estimate_relative_free_energy,
+    pair_overlap_from_ukln,
+    sample,
+)
 from timemachine.md import builders
 from timemachine.testsystems.relative import get_hif2a_ligand_pair_single_topology
 
@@ -136,3 +142,33 @@ if __name__ == "__main__":
     # convenience: so we can run this directly from python tests/test_relative_free_energy.py without
     # toggling the pytest marker
     test_run_hif2a_test_system()
+
+
+def test_pair_overlap_from_ukln():
+    def gaussian_overlap(p1, p2):
+        def make_gaussian(params):
+            mu, sigma = params
+
+            def u(x):
+                return (x - mu) ** 2 / (2 * sigma ** 2)
+
+            rng = np.random.default_rng(2022)
+            x = rng.normal(mu, sigma, 100)
+
+            return u, x
+
+        u1, x1 = make_gaussian(p1)
+        u2, x2 = make_gaussian(p2)
+
+        u_kln = np.array([[u1(x1), u1(x2)], [u2(x1), u2(x2)]])
+
+        return pair_overlap_from_ukln(u_kln)
+
+    # identical distributions
+    np.testing.assert_allclose(gaussian_overlap((0, 1), (0, 1)), 0.5)
+
+    # non-overlapping
+    assert gaussian_overlap((0, 0.01), (1, 0.01)) < 1e-10
+
+    # overlapping
+    assert gaussian_overlap((0, 0.1), (0.5, 0.2)) > 0.05
