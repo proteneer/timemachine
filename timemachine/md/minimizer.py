@@ -281,6 +281,10 @@ def equilibrate_host(
 
 
 def get_val_and_grad_fn(impls, box, lamb):
+    """
+    Convert impls, box, lamb into a function that only takes in coords.
+    """
+
     def val_and_grad_fn(coords):
         nrgs = []
         grads = []
@@ -320,12 +324,19 @@ def local_minimize(x0, val_and_grad_fn, local_idxs):
     assert len(local_idxs) == len(set(local_idxs))
 
     x_local_shape = (len(local_idxs), 3)
+    u_0, _ = val_and_grad_fn(x0)
 
-    # only perturb the local idxs
+    # deal with overflow
+    guard_threshold = 1e6
+
     def val_and_grad_fn_local(x_local):
         x_prime = x0.copy()
         x_prime[local_idxs] = x_local
         u_full, grad_full = val_and_grad_fn(x_prime)
+        # we minimized the energy too much, likely an overflow
+        if u_0 - u_full > guard_threshold:
+            u_full = np.inf
+            grad_full = np.nan * grad_full
         return u_full, grad_full[local_idxs]
 
     # deals with reshaping from (L,3) -> (Lx3,)
@@ -342,7 +353,6 @@ def local_minimize(x0, val_and_grad_fn, local_idxs):
     x_final = x0.copy()
     x_final[local_idxs] = res.x.reshape(x_local_shape)
 
-    u_0, _ = val_and_grad_fn(x0)
     u_final, _ = val_and_grad_fn(x_final)
 
     assert u_final < u_0, f"u_0: {u_0:.3f}, u_f: {u_final:.3f}"

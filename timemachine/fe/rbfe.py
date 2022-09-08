@@ -108,7 +108,6 @@ def sample(initial_state, protocol):
     free_idxs = np.where(np.any(d_ij < cutoff, axis=0))[0].tolist()
 
     val_and_grad_fn = minimizer.get_val_and_grad_fn(bound_impls, initial_state.box0, initial_state.lamb)
-
     x0_min = minimizer.local_minimize(initial_state.x0, val_and_grad_fn, free_idxs)
 
     # (ytz): re-use the initial states' v0?
