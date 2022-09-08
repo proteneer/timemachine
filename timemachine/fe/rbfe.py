@@ -12,6 +12,7 @@ from rdkit import Chem
 from rdkit.Chem import AllChem, Draw
 
 from timemachine.constants import BOLTZ, DEFAULT_TEMP
+from timemachine.fe import model_utils
 from timemachine.fe.single_topology_v3 import SingleTopologyV3
 from timemachine.fe.system import convert_bps_into_system
 from timemachine.fe.utils import get_mol_name, get_romol_conf
@@ -177,10 +178,36 @@ def setup_initial_states(st, host_config, temperature, lambda_schedule, seed):
 
     initial_states = []
 
+    # setup hmr masses in a lambda_independent way
+    combined_masses = np.concatenate([host_masses, st.combine_masses()])
+
+    last_hmr_masses = None
+
     for lamb_idx, lamb in enumerate(lambda_schedule):
         hgs = st.combine_with_host(convert_bps_into_system(host_bps), lamb=lamb)
         # minimize water box around the ligand by 4D-decoupling
         potentials = hgs.get_U_fns()
+
+        # hmr masses should be identical throughout the lambda schedule
+        # bond idxs should be the same at the two end-states, note that a possible corner
+        # case with bond breaking may seem to be problematic:
+
+        # 0 1 2    0 1 2
+        # C-O-C -> C.H-C
+
+        # but this isn't an issue, since hydrogens will only ever be terminal atoms
+        # and core hydrogens that are mapped to heavy atoms will take the mass of the
+        # heavy atom (thereby not triggering the mass repartitioning to begin with).
+
+        # but its reasonable to be skeptical, so we also assert consistency through the lambda
+        # schedule as an extra sanity check.
+        hmr_masses = model_utils.apply_hmr(combined_masses, potentials[0].get_idxs())
+        if last_hmr_masses is None:
+            last_hmr_masses = hmr_masses
+        else:
+            np.testing.assert_array_equal(last_hmr_masses, hmr_masses)
+            last_hmr_masses = hmr_masses
+
         mol_a_conf = get_romol_conf(st.mol_a)
         mol_b_conf = get_romol_conf(st.mol_b)
         ligand_conf = st.combine_confs(mol_a_conf, mol_b_conf)
@@ -190,11 +217,11 @@ def setup_initial_states(st, host_config, temperature, lambda_schedule, seed):
         box0 = host_config.box
         group_idxs = get_group_indices(get_bond_list(hgs.bond))
         run_seed = seed + lamb_idx
-        combined_masses = np.concatenate([host_masses, st.combine_masses()])
-        dt = 1e-3
+
+        dt = 2.5e-3
         friction = 1.0
-        intg = LangevinIntegrator(temperature, dt, friction, combined_masses, run_seed)
-        baro = MonteCarloBarostat(len(combined_masses), 1.0, temperature, group_idxs, 15, run_seed + 1)
+        intg = LangevinIntegrator(temperature, dt, friction, hmr_masses, run_seed)
+        baro = MonteCarloBarostat(len(hmr_masses), 1.0, temperature, group_idxs, 15, run_seed + 1)
         state = InitialState(potentials, intg, baro, x0, v0, box0, lamb)
         initial_states.append(state)
 
@@ -486,7 +513,7 @@ def estimate_relative_free_energy(
 
     temperature = DEFAULT_TEMP
     initial_states = setup_initial_states(single_topology, host_config, temperature, lambda_schedule, seed)
-    protocol = SimulationProtocol(n_frames=n_frames, n_eq_steps=n_eq_steps, steps_per_frame=1000)
+    protocol = SimulationProtocol(n_frames=n_frames, n_eq_steps=n_eq_steps, steps_per_frame=400)
 
     if keep_idxs is None:
         keep_idxs = [0, -1]  # keep first and last frames
