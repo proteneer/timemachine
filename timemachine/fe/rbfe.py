@@ -10,6 +10,7 @@ import numpy as np
 import pymbar
 from rdkit import Chem
 from rdkit.Chem import AllChem, Draw
+from scipy.spatial.distance import cdist
 
 from timemachine.constants import BOLTZ, DEFAULT_TEMP
 from timemachine.fe import model_utils
@@ -98,7 +99,20 @@ def sample(initial_state, protocol):
     intg_impl = initial_state.integrator.impl()
     baro_impl = initial_state.barostat.impl(bound_impls)
 
-    ctxt = custom_ops.Context(initial_state.x0, initial_state.v0, initial_state.box0, intg_impl, bound_impls, baro_impl)
+    # minimize the local region, removing clashes and unstretching some bonds
+    cutoff = 1.0  # in nanometers
+    # local minimize region around ligand
+    ligand_coords = initial_state.x0[initial_state.ligand_idxs]
+    d_ij = cdist(ligand_coords, initial_state.x0)
+    # if any atom is within any of the ligand's atom's ixn radius, flag it for minimization
+    free_idxs = np.where(np.any(d_ij < cutoff, axis=0))[0].tolist()
+
+    val_and_grad_fn = minimizer.get_val_and_grad_fn(bound_impls, initial_state.box0, initial_state.lamb)
+
+    x0_min = minimizer.local_minimize(initial_state.x0, val_and_grad_fn, free_idxs)
+
+    # (ytz): re-use the initial states' v0?
+    ctxt = custom_ops.Context(x0_min, initial_state.v0, initial_state.box0, intg_impl, bound_impls, baro_impl)
 
     # burn-in
     ctxt.multiple_steps_U(
@@ -147,6 +161,7 @@ class InitialState:
     v0: np.ndarray
     box0: np.ndarray
     lamb: float
+    ligand_idxs: np.ndarray
 
 
 @dataclass
@@ -213,7 +228,11 @@ def setup_initial_states(st, host_config, temperature, lambda_schedule, seed):
         ligand_conf = st.combine_confs(mol_a_conf, mol_b_conf)
         combined_conf = np.concatenate([host_conf, ligand_conf])
         x0 = combined_conf
-        v0 = np.zeros_like(x0)
+        v0 = np.zeros_like(x0)  # tbd resample from Maxwell-boltzman?
+        num_ligand_atoms = len(ligand_conf)
+        num_total_atoms = len(x0)
+        ligand_idxs = list(range(num_total_atoms - num_ligand_atoms, num_total_atoms))
+
         box0 = host_config.box
         group_idxs = get_group_indices(get_bond_list(hgs.bond))
         run_seed = seed + lamb_idx
@@ -222,7 +241,8 @@ def setup_initial_states(st, host_config, temperature, lambda_schedule, seed):
         friction = 1.0
         intg = LangevinIntegrator(temperature, dt, friction, hmr_masses, run_seed)
         baro = MonteCarloBarostat(len(hmr_masses), 1.0, temperature, group_idxs, 15, run_seed + 1)
-        state = InitialState(potentials, intg, baro, x0, v0, box0, lamb)
+
+        state = InitialState(potentials, intg, baro, x0, v0, box0, lamb, ligand_idxs)
         initial_states.append(state)
 
     return initial_states

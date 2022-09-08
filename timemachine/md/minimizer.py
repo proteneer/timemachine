@@ -1,6 +1,7 @@
 from typing import Any, List, Optional, Tuple
 
 import numpy as np
+import scipy.optimize
 from numpy.typing import NDArray
 from rdkit import Chem
 from simtk import openmm
@@ -277,3 +278,73 @@ def equilibrate_host(
     ctxt.multiple_steps(np.linspace(0.0, 0.0, n_steps))
 
     return ctxt.get_x_t(), ctxt.get_box()
+
+
+def get_val_and_grad_fn(impls, box, lamb):
+    def val_and_grad_fn(coords):
+        nrgs = []
+        grads = []
+        for impl in impls:
+            g, _, u = impl.execute(coords, box, lamb)
+            nrgs.append(u)
+            grads.append(g)
+        return np.sum(nrgs, axis=0), np.sum(grads, axis=0)
+
+    return val_and_grad_fn
+
+
+def local_minimize(x0, val_and_grad_fn, local_idxs):
+    """
+    Minimize a local region given selected idxs.
+
+    Parameters:
+    -----------
+    x0: np.array (N,3)
+        Coordinates
+
+    box0: np.array (3,3)
+        Frozen box
+
+    val_and_grad_fn: f: R^(Nx3,3x3) -> (R^1, R^Nx3)
+        Energy function
+
+    local_idxs: list of int
+        Unique idxs we allow to move.
+
+    Returns
+    -------
+    Optimized set of coordinates.
+
+    """
+
+    assert len(local_idxs) == len(set(local_idxs))
+
+    x_local_shape = (len(local_idxs), 3)
+
+    # only perturb the local idxs
+    def val_and_grad_fn_local(x_local):
+        x_prime = x0.copy()
+        x_prime[local_idxs] = x_local
+        u_full, grad_full = val_and_grad_fn(x_prime)
+        return u_full, grad_full[local_idxs]
+
+    # deals with reshaping from (L,3) -> (Lx3,)
+    def val_and_grad_fn_bfgs(x_local_flattened):
+        x_local = x_local_flattened.reshape(x_local_shape)
+        u, grad_full = val_and_grad_fn_local(x_local)
+        return u, grad_full.reshape(-1)
+
+    x_local_0 = x0[local_idxs]
+    x_local_0_flat = x_local_0.reshape(-1)
+
+    res = scipy.optimize.minimize(val_and_grad_fn_bfgs, x_local_0_flat, jac=True, options={"disp": True})
+
+    x_final = x0.copy()
+    x_final[local_idxs] = res.x.reshape(x_local_shape)
+
+    u_0, _ = val_and_grad_fn(x0)
+    u_final, _ = val_and_grad_fn(x_final)
+
+    assert u_final < u_0, f"u_0: {u_0:.3f}, u_f: {u_final:.3f}"
+
+    return x_final

@@ -1,9 +1,12 @@
 from importlib import resources
 
+import numpy as np
 from rdkit import Chem
 
 from timemachine.constants import DEFAULT_FF
+from timemachine.fe.utils import to_md_units
 from timemachine.ff import Forcefield
+from timemachine.ff.handlers import openmm_deserializer
 from timemachine.md import builders, minimizer
 
 
@@ -41,3 +44,32 @@ def test_equilibrate_host():
     assert coords.shape[0] == host_coords.shape[0] + mol.GetNumAtoms()
     assert coords.shape[1] == host_coords.shape[1]
     assert box.shape == host_box.shape
+
+
+def test_local_minimize_water_box():
+    """
+    Test that we can locally relax a box of water by selecting some random indices.
+
+    Furthermore, assert that we can
+    """
+
+    system, x0, box0, _ = builders.build_water_system(4.0)
+    x0 = to_md_units(x0)
+    lamb = 0.0
+    bps, _ = openmm_deserializer.deserialize_system(system, cutoff=1.2)
+    box0 += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes at the boundary
+
+    impls = []
+    for bp in bps:
+        impls.append(bp.bound_impl(np.float32))
+
+    val_and_grad_fn = minimizer.get_val_and_grad_fn(impls, box0, lamb)
+
+    free_idxs = [0, 2, 3, 6, 7, 9, 15, 16]
+    frozen_idxs = set(range(len(x0))).difference(set(free_idxs))
+    frozen_idxs = list(frozen_idxs)
+
+    x_opt = minimizer.local_minimize(x0, val_and_grad_fn, free_idxs)
+
+    np.testing.assert_array_equal(x0[frozen_idxs], x_opt[frozen_idxs])
+    assert np.linalg.norm(x0[free_idxs] - x_opt[free_idxs]) > 0.01
