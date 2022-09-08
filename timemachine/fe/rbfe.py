@@ -410,7 +410,8 @@ def estimate_free_energy_given_initial_states(initial_states, protocol, temperat
     def pair_overlap(u_kln):
         k, l, n = u_kln.shape
         assert k == l == 2
-        u_kn = u_kln.reshape(k, -1)  # (k, l * n)
+        u_kn = u_kln.reshape(k, -1)
+        assert u_kn.shape == (k, l * n)
         N_k = n * np.ones(l)
         return pymbar.MBAR(u_kn, N_k).computeOverlap()["matrix"][0, 1]  # type: ignore
 
