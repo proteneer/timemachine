@@ -510,7 +510,7 @@ def estimate_relative_free_energy(
     single_topology = SingleTopologyV3(mol_a, mol_b, core, ff)
 
     if lambda_schedule is None:
-        lambda_schedule = np.array([0.0, 0.01, 0.02, 0.04, 0.06, 0.08, 0.11, 0.15, 0.20, 0.32, 0.42])
+        lambda_schedule = np.array([0.0, 0.02, 0.06, 0.11, 0.15, 0.20, 0.32, 0.42])
         lambda_schedule = np.concatenate([lambda_schedule, (1 - lambda_schedule[::-1])])
     else:
         warnings.warn("Warning: setting lambda_schedule manually, this argument may be removed in a future release.")
