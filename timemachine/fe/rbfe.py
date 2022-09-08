@@ -108,7 +108,13 @@ def sample(initial_state, protocol):
     free_idxs = np.where(np.any(d_ij < cutoff, axis=0))[0].tolist()
 
     val_and_grad_fn = minimizer.get_val_and_grad_fn(bound_impls, initial_state.box0, initial_state.lamb)
+
+    # note, can't use np.any(np.isnan(initial_state.x0)) is False since np.any returns a bool type
+    assert not np.any(np.isnan(initial_state.x0)), "Initial coordinates contain nan"
+
     x0_min = minimizer.local_minimize(initial_state.x0, val_and_grad_fn, free_idxs)
+
+    assert not np.any(np.isnan(x0_min)), "Minimization resulted in a nan"
 
     # (ytz): re-use the initial states' v0?
     ctxt = custom_ops.Context(x0_min, initial_state.v0, initial_state.box0, intg_impl, bound_impls, baro_impl)
@@ -122,6 +128,8 @@ def sample(initial_state, protocol):
         store_x_interval=0,
     )
 
+    assert not np.any(np.isnan(ctxt.get_x_t())), "Equilibration resulted in a nan"
+
     # a crude, and probably not great, guess on the decorrelation time
     n_steps = protocol.n_frames * protocol.steps_per_frame
     all_nrgs, all_coords, all_boxes = ctxt.multiple_steps_U(
@@ -134,6 +142,8 @@ def sample(initial_state, protocol):
 
     assert all_coords.shape[0] == protocol.n_frames
     assert all_boxes.shape[0] == protocol.n_frames
+
+    assert not np.any(np.isnan(ctxt.get_x_t())), "Production resulted in a nan"
 
     return all_coords, all_boxes
 
