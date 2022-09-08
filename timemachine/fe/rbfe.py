@@ -116,7 +116,7 @@ def sample(initial_state, protocol):
         n_steps=n_steps,
         lambda_windows=[initial_state.lamb],
         store_u_interval=protocol.steps_per_frame,
-        store_x_interval=protocol.steps_per_frame,
+        store_x_interval=int(protocol.steps_per_frame / protocol.subsample_traj),
     )
 
     assert all_coords.shape[0] == protocol.n_frames
@@ -130,6 +130,7 @@ class SimulationProtocol:
     n_frames: int
     n_eq_steps: int
     steps_per_frame: int
+    subsample_traj: int
 
 
 @dataclass
@@ -456,6 +457,7 @@ def estimate_relative_free_energy(
     keep_idxs=None,
     n_eq_steps=10000,
     steps_per_frame=400,
+    subsample_traj=1,
 ):
     """
     Estimate relative free energy between mol_a and mol_b. Molecules should be aligned to each
@@ -500,6 +502,10 @@ def estimate_relative_free_energy(
     steps_per_frame: int
         Number of steps per frame. Total simulation time is n_frames * steps_per_frame.
 
+    subsample_traj: int
+        Number of frames to subsample. If subsample_traj=1, keep all frames. If subsample_traj > 1, will only include
+        every `subsample_traj`th frame.
+
     Returns
     -------
     SimulationResult
@@ -517,7 +523,9 @@ def estimate_relative_free_energy(
 
     temperature = DEFAULT_TEMP
     initial_states = setup_initial_states(single_topology, host_config, temperature, lambda_schedule, seed)
-    protocol = SimulationProtocol(n_frames=n_frames, n_eq_steps=n_eq_steps, steps_per_frame=steps_per_frame)
+    protocol = SimulationProtocol(
+        n_frames=n_frames, n_eq_steps=n_eq_steps, steps_per_frame=steps_per_frame, subsample_traj=subsample_traj
+    )
 
     if keep_idxs is None:
         keep_idxs = [0, -1]  # keep first and last frames
@@ -533,7 +541,9 @@ def estimate_relative_free_energy(
         raise err
 
 
-def run_pair(mol_a, mol_b, core, forcefield, protein, n_frames, seed, n_eq_steps=10000, steps_per_frame=400):
+def run_pair(
+    mol_a, mol_b, core, forcefield, protein, n_frames, seed, n_eq_steps=10000, steps_per_frame=400, subsample_traj=1
+):
     box_width = 4.0
     solvent_sys, solvent_conf, solvent_box, solvent_top = builders.build_water_system(box_width)
     solvent_box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes, deboggle later
@@ -549,6 +559,7 @@ def run_pair(mol_a, mol_b, core, forcefield, protein, n_frames, seed, n_eq_steps
         prefix="solvent",
         n_eq_steps=n_eq_steps,
         steps_per_frame=steps_per_frame,
+        subsample_traj=subsample_traj,
     )
 
     complex_sys, complex_conf, _, _, complex_box, complex_top = builders.build_protein_system(protein)
@@ -565,6 +576,7 @@ def run_pair(mol_a, mol_b, core, forcefield, protein, n_frames, seed, n_eq_steps
         prefix="complex",
         n_eq_steps=n_eq_steps,
         steps_per_frame=steps_per_frame,
+        subsample_traj=subsample_traj,
     )
 
     return solvent_res, solvent_top, complex_res, complex_top
