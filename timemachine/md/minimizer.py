@@ -317,7 +317,7 @@ def local_minimize(x0, val_and_grad_fn, local_idxs):
 
     Returns
     -------
-    Optimized set of coordinates.
+    Optimized set of coordinates (N,3)
 
     """
 
