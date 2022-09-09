@@ -306,9 +306,6 @@ def local_minimize(x0, val_and_grad_fn, local_idxs):
     x0: np.array (N,3)
         Coordinates
 
-    box0: np.array (3,3)
-        Frozen box
-
     val_and_grad_fn: f: R^(Nx3,3x3) -> (R^1, R^Nx3)
         Energy function
 
