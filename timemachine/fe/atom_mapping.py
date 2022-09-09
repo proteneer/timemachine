@@ -104,6 +104,8 @@ def get_core_by_mcs(mol_a, mol_b, query, threshold=0.5):
     conf_b = mol_b.GetConformer(0).GetPositions()
 
     # note that >1 match possible here -- must pick minimum-cost match
+    # TODO: possibly break this into two stages
+    #  following https://github.com/proteneer/timemachine/pull/819#discussion_r966130215
     max_matches = 10_000
     matches_a = mol_a.GetSubstructMatches(query, uniquify=False, maxMatches=max_matches)
     matches_b = mol_b.GetSubstructMatches(query, uniquify=False, maxMatches=max_matches)
