@@ -279,6 +279,7 @@ def plot_overlap_summary(ax, components, lambdas, overlaps):
     ax.set_xlabel(r"$\lambda_i$")
     ax.set_ylabel(r"pair BAR overlap ($\lambda_i$, $\lambda_{i+1}$)")
     ax.legend()
+    ax.ticklabel_format(useOffset=False)
 
 
 def estimate_free_energy_given_initial_states(initial_states, protocol, temperature, prefix, keep_idxs):
