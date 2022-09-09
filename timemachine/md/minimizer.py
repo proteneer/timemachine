@@ -11,6 +11,7 @@ from timemachine.fe.utils import get_romol_conf
 from timemachine.ff import Forcefield
 from timemachine.ff.handlers import openmm_deserializer
 from timemachine.lib import LangevinIntegrator, MonteCarloBarostat, custom_ops
+from timemachine.lib.potentials import SummedPotential
 from timemachine.md.barostat.utils import get_bond_list, get_group_indices
 from timemachine.md.fire import fire_descent
 
@@ -280,19 +281,21 @@ def equilibrate_host(
     return ctxt.get_x_t(), ctxt.get_box()
 
 
-def get_val_and_grad_fn(impls, box, lamb):
+def get_val_and_grad_fn(bps, box, lamb):
     """
     Convert impls, box, lamb into a function that only takes in coords.
     """
 
+    params = [np.array(bp.params) for bp in bps]
+    flat_params = np.concatenate([p.reshape(-1) for p in params])
+    sum_potential = SummedPotential(bps, params)
+    sum_potential.bind(flat_params)
+
+    impl = sum_potential.bound_impl(np.float32)
+
     def val_and_grad_fn(coords):
-        nrgs = []
-        grads = []
-        for impl in impls:
-            g, _, u = impl.execute(coords, box, lamb)
-            nrgs.append(u)
-            grads.append(g)
-        return np.sum(nrgs, axis=0), np.sum(grads, axis=0)
+        g, _, u = impl.execute(coords, box, lamb)
+        return u, g
 
     return val_and_grad_fn
 
