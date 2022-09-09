@@ -17,6 +17,7 @@ from rdkit import Chem
 
 from timemachine.fe import atom_mapping, single_topology_v3
 from timemachine.fe.single_topology_v3 import (
+    ChargePertubationError,
     CoreBondChangeWarning,
     MultipleAnchorWarning,
     SingleTopologyV3,
@@ -162,6 +163,21 @@ def testing_find_dummy_groups_and_multiple_anchors():
         dgs, jks = single_topology_v3.find_dummy_groups_and_anchors(mol_a, mol_b, core_a, core_b)
         assert dgs == [{0}]
         assert jks == [(1, 2)]
+
+
+def test_charge_perturbation_is_invalid():
+    mol_a = Chem.AddHs(Chem.MolFromSmiles("Cc1cc[nH]c1"))
+    mol_b = Chem.AddHs(Chem.MolFromSmiles("C[n+]1cc[nH]c1"))
+
+    ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
+
+    core = np.zeros((mol_a.GetNumAtoms(), 2))
+    core[:, 0] = np.arange(core.shape[0])
+    core[:, 1] = core[:, 0]
+
+    with pytest.raises(ChargePertubationError) as e:
+        SingleTopologyV3(mol_a, mol_b, core, ff)
+    assert str(e.value) == "mol a and mol b don't have the same charge: a: 0 b: 1"
 
 
 def assert_bond_idxs_are_canonical(all_idxs):
