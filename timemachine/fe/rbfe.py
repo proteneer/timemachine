@@ -113,9 +113,8 @@ def sample(initial_state, protocol):
 
     x0_min = minimizer.local_minimize(initial_state.x0, val_and_grad_fn, free_idxs)
 
-    assert not np.any(np.isnan(x0_min)), "Minimization resulted in a nan"
+    assert np.all(np.isfinite(x0_min)), "Minimization resulted in a nan"
 
-    # (ytz): re-use the initial states' v0?
     ctxt = custom_ops.Context(x0_min, initial_state.v0, initial_state.box0, intg_impl, bound_impls, baro_impl)
 
     # burn-in
@@ -127,7 +126,7 @@ def sample(initial_state, protocol):
         store_x_interval=0,
     )
 
-    assert not np.any(np.isnan(ctxt.get_x_t())), "Equilibration resulted in a nan"
+    assert np.all(np.isfinite(ctxt.get_x_t())), "Equilibration resulted in a nan"
 
     # a crude, and probably not great, guess on the decorrelation time
     n_steps = protocol.n_frames * protocol.steps_per_frame
@@ -142,7 +141,7 @@ def sample(initial_state, protocol):
     assert all_coords.shape[0] == protocol.n_frames
     assert all_boxes.shape[0] == protocol.n_frames
 
-    assert not np.any(np.isnan(ctxt.get_x_t())), "Production resulted in a nan"
+    assert np.all(np.isfinite(ctxt.get_x_t())), "Production resulted in a nan"
 
     return all_coords, all_boxes
 
@@ -239,7 +238,7 @@ def setup_initial_states(st, host_config, temperature, lambda_schedule, seed):
         v0 = np.zeros_like(x0)  # tbd resample from Maxwell-boltzman?
         num_ligand_atoms = len(ligand_conf)
         num_total_atoms = len(x0)
-        ligand_idxs = list(range(num_total_atoms - num_ligand_atoms, num_total_atoms))
+        ligand_idxs = np.arange(num_total_atoms - num_ligand_atoms, num_total_atoms)
 
         box0 = host_config.box
         group_idxs = get_group_indices(get_bond_list(hgs.bond))
