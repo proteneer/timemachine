@@ -30,9 +30,8 @@ def test_absolute_free_energy():
     all_mols = [x for x in suppl]
     mol = all_mols[1]
 
-    complex_system, complex_coords, _, _, complex_box, _ = builders.build_protein_system(
-        "tests/data/hif2a_nowater_min.pdb"
-    )
+    with resources.path("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as path_to_ligand:
+        complex_system, complex_coords, _, _, complex_box, _ = builders.build_protein_system(str(path_to_ligand))
 
     # build the water system.
     solvent_system, solvent_coords, solvent_box, _ = builders.build_water_system(4.0)
@@ -151,9 +150,8 @@ def test_relative_free_energy():
         ]
     )
 
-    complex_system, complex_coords, _, _, complex_box, _ = builders.build_protein_system(
-        "tests/data/hif2a_nowater_min.pdb"
-    )
+    with resources.path("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as path_to_ligand:
+        complex_system, complex_coords, _, _, complex_box, _ = builders.build_protein_system(str(path_to_ligand))
 
     # build the water system.
     solvent_system, solvent_coords, solvent_box, _ = builders.build_water_system(4.0)

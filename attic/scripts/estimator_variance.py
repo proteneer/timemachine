@@ -34,7 +34,7 @@ from timemachine.parallel.client import CUDAPoolClient
 from timemachine.parallel.utils import get_gpu_count
 
 root = Path(__file__).parent.parent
-path_to_protein = str(root.joinpath("tests/data/hif2a_nowater_min.pdb"))
+path_to_protein = str(root.joinpath("timemachine/testsystems/data/hif2a_nowater_min.pdb"))
 
 
 def wrap_method(args, fxn):

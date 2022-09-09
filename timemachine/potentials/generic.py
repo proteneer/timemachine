@@ -237,6 +237,36 @@ class Nonbonded:
 
 
 @dataclass
+class NonbondedPairListPrecomputed:
+    idxs: Array
+    offsets: Array
+    beta: float
+    cutoff: float
+
+    @classmethod
+    def from_gpu(cls, p: gpu.NonbondedPairListPrecomputed):
+        return cls(p.get_idxs(), p.get_offsets(), p.get_beta(), p.get_cutoff())
+
+    def to_reference(self):
+        def U(conf, params, box, _):
+            vdW, electrostatics = ref_nonbonded.nonbonded_v3_on_precomputed_pairs(
+                conf,
+                params,
+                box,
+                self.idxs,
+                self.offsets,
+                self.beta,
+                self.cutoff,
+            )
+            return vdW.sum() + electrostatics.sum()
+
+        return U
+
+    def to_gpu(self):
+        return gpu.NonbondedPairListPrecomputed(self.idxs, self.offsets, self.beta, self.cutoff)
+
+
+@dataclass
 class SummedPotential:
     potentials: Sequence[Potential]
     params_init: Sequence[Array]
@@ -285,5 +315,8 @@ def from_gpu(p: gpu.CustomOpWrapper) -> Optional[Potential]:
 
     if isinstance(p, gpu.Nonbonded):
         return Nonbonded.from_gpu(p)
+
+    if isinstance(p, gpu.NonbondedPairListPrecomputed):
+        return NonbondedPairListPrecomputed.from_gpu(p)
 
     return None

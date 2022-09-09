@@ -4,6 +4,7 @@ import pickle
 import subprocess
 import sys
 from glob import glob
+from importlib import resources
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
@@ -68,7 +69,8 @@ def test_relative_binding():
     """
     Test validate_relative_binding.py to ensure that it functions correctly
     """
-    protein_path = str(Path(__file__).resolve().parent / "data" / "hif2a_nowater_min.pdb")
+    with resources.path("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as pdb_path:
+        protein_path = str(pdb_path)
     temp_ligands = get_hif2a_ligands_as_sdf_file(1)
 
     # Any fewer windows and the lambda schedule validation will fail

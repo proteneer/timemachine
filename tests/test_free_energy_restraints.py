@@ -1,8 +1,7 @@
 import numpy as np
 from rdkit import Chem
-from rdkit.Chem import AllChem, rdFMCS
+from rdkit.Chem import AllChem
 
-from timemachine.fe.atom_mapping import CompareDistNonterminal
 from timemachine.fe.restraints import setup_relative_restraints_by_distance, setup_relative_restraints_using_smarts
 from timemachine.fe.utils import get_romol_conf
 
@@ -41,22 +40,20 @@ def test_setting_up_restraints_using_distance():
 
 
 def test_setting_up_restraints_using_smarts():
-    seed = 814
-
-    mcs_params = rdFMCS.MCSParameters()
-    mcs_params.AtomTyper = CompareDistNonterminal()
-    mcs_params.BondTyper = rdFMCS.BondCompare.CompareAny
 
     smi_a = "CCCONNN"
     smi_b = "CCCNNN"
-    mol_a = Chem.MolFromSmiles(smi_a)
-    mol_a = Chem.AddHs(mol_a)
-    mol_b = Chem.MolFromSmiles(smi_b)
-    mol_b = Chem.AddHs(mol_b)
+    mol_a = Chem.AddHs(Chem.MolFromSmiles(smi_a))
+    mol_b = Chem.AddHs(Chem.MolFromSmiles(smi_b))
+
+    smarts = "[#6]-[#6]-[#6]-[#7,#8]-[#7]-[#7]"
+
+    # setup_relative_restraints_using_smarts assumes conformers approximately aligned
     for mol in [mol_a, mol_b]:
-        AllChem.EmbedMolecule(mol, randomSeed=seed)
+        mol.Compute2DCoords()
 
-    result = rdFMCS.FindMCS([mol_a, mol_b], mcs_params)
+    core = setup_relative_restraints_using_smarts(mol_a, mol_b, smarts)
 
-    core = setup_relative_restraints_using_smarts(mol_a, mol_b, result.smartsString)
-    assert core.shape == (2, 2)
+    expected_num_atoms = Chem.MolFromSmarts(smarts).GetNumAtoms()
+
+    assert core.shape == (expected_num_atoms, 2)

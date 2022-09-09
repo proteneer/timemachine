@@ -310,7 +310,7 @@ def main():
     parser.add_argument(
         "-p",
         "--host_pdbfile",
-        default="tests/data/hif2a_nowater_min.pdb",
+        default="timemachine/testsystems/data/hif2a_nowater_min.pdb",
         help="host to dock into",
     )
     parser.add_argument(

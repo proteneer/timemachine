@@ -5,6 +5,7 @@ import os
 from importlib import resources
 
 from timemachine.constants import DEFAULT_FF
+from timemachine.ff.handlers import openmm_deserializer
 
 os.environ["XLA_FLAGS"] = "--xla_force_host_platform_device_count=" + str(multiprocessing.cpu_count())
 
@@ -16,15 +17,17 @@ from rdkit import Chem
 
 from timemachine.fe import atom_mapping, single_topology_v3
 from timemachine.fe.single_topology_v3 import (
+    ChargePertubationError,
     CoreBondChangeWarning,
     MultipleAnchorWarning,
     SingleTopologyV3,
     canonicalize_improper_idxs,
     setup_dummy_interactions_from_ff,
 )
-from timemachine.fe.system import minimize_scipy, simulate_system
+from timemachine.fe.system import convert_bps_into_system, minimize_scipy, simulate_system
 from timemachine.fe.utils import get_mol_name, get_romol_conf
 from timemachine.ff import Forcefield
+from timemachine.md.builders import build_water_system
 from timemachine.potentials.jax_utils import distance
 
 
@@ -162,6 +165,21 @@ def testing_find_dummy_groups_and_multiple_anchors():
         assert jks == [(1, 2)]
 
 
+def test_charge_perturbation_is_invalid():
+    mol_a = Chem.AddHs(Chem.MolFromSmiles("Cc1cc[nH]c1"))
+    mol_b = Chem.AddHs(Chem.MolFromSmiles("C[n+]1cc[nH]c1"))
+
+    ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
+
+    core = np.zeros((mol_a.GetNumAtoms(), 2))
+    core[:, 0] = np.arange(core.shape[0])
+    core[:, 1] = core[:, 0]
+
+    with pytest.raises(ChargePertubationError) as e:
+        SingleTopologyV3(mol_a, mol_b, core, ff)
+    assert str(e.value) == "mol a and mol b don't have the same charge: a: 0 b: 1"
+
+
 def assert_bond_idxs_are_canonical(all_idxs):
     for idxs in all_idxs:
         assert idxs[0] < idxs[-1]
@@ -203,10 +221,8 @@ def test_hif2a_end_state_stability(num_pairs_to_setup=25, num_pairs_to_simulate=
     for pair_idx, (mol_a, mol_b) in enumerate(pairs[:num_pairs_to_setup]):
 
         print("Checking", get_mol_name(mol_a), "->", get_mol_name(mol_b))
-        mcs_threshold = 0.75  # distance threshold, in nanometers
-        res = atom_mapping.mcs_map(mol_a, mol_b, mcs_threshold)
-        query = Chem.MolFromSmarts(res.smartsString)
-        core_pairs = atom_mapping.get_core_by_mcs(mol_a, mol_b, query, mcs_threshold)
+        mcs_threshold = 2.0  # distance threshold, in nanometers
+        core_pairs, _ = atom_mapping.get_core_with_alignment(mol_a, mol_b, threshold=mcs_threshold)
         st = SingleTopologyV3(mol_a, mol_b, core_pairs, ff)
         x0 = st.combine_confs(get_romol_conf(mol_a), get_romol_conf(mol_b))
         systems = [st.src_system, st.dst_system]
@@ -285,8 +301,8 @@ def test_jax_transform_intermediate_potential():
         mol_a = mols["206"]
         mol_b = mols["57"]
 
-        mcs_threshold = 0.75
-        res = atom_mapping.mcs_map(mol_a, mol_b, mcs_threshold)
+        mcs_threshold = 2.0
+        res = atom_mapping.mcs(mol_a, mol_b, mcs_threshold)
         query = Chem.MolFromSmarts(res.smartsString)
         core_pairs = atom_mapping.get_core_by_mcs(mol_a, mol_b, query, mcs_threshold)
 
@@ -306,3 +322,21 @@ def test_jax_transform_intermediate_potential():
     lambdas = jnp.linspace(0, 1, 10)
     _ = jax.vmap(U)(confs, lambdas)
     _ = jax.jit(jax.vmap(U))(confs, lambdas)
+
+
+def test_combine_with_host():
+    """Verifies that combine_with_host correctly sets up all of the U functions"""
+    mol_a = Chem.MolFromSmiles("BrC1=CC=CC=C1")
+    mol_b = Chem.MolFromSmiles("C1=CN=CC=C1F")
+    core = np.array([[1, 0], [2, 1], [3, 2], [4, 3], [5, 4], [6, 5]])
+    ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
+
+    solvent_sys, _, _, _ = build_water_system(4.0)
+
+    host_bps, _ = openmm_deserializer.deserialize_system(solvent_sys, cutoff=1.2)
+
+    st = SingleTopologyV3(mol_a, mol_b, core, ff)
+    host_system = st.combine_with_host(convert_bps_into_system(host_bps), 0.5)
+    # Expect there to be 5 functions, excluding the chiral bond and chiral atom restraints
+    # This should be updated when chiral restraints are re-enabled.
+    assert len(host_system.get_U_fns()) == 5

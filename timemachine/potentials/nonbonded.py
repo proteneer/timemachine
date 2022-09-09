@@ -192,6 +192,10 @@ def nonbonded_v3(
         assert (lj_rescale_mask == lj_rescale_mask.T).all()
 
     N = conf.shape[0]
+    if lambda_plane_idxs is None:
+        lambda_plane_idxs = np.zeros(N)
+    if lambda_offset_idxs is None:
+        lambda_offset_idxs = np.zeros(N)
 
     if conf.shape[-1] == 3:
         conf = convert_to_4d(conf, lamb, lambda_plane_idxs, lambda_offset_idxs, cutoff)

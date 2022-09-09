@@ -1,9 +1,17 @@
 # test that we can run relative free energy simulations in complex and in solvent
 # this doesn't test for accuracy, just that everything mechanically runs.
+from importlib import resources
+
 import numpy as np
 import pytest
 
-from timemachine.fe.rbfe import HostConfig, estimate_relative_free_energy, sample
+from timemachine.fe.rbfe import (
+    HostConfig,
+    SimulationResult,
+    estimate_relative_free_energy,
+    pair_overlap_from_ukln,
+    sample,
+)
 from timemachine.md import builders
 from timemachine.testsystems.relative import get_hif2a_ligand_pair_single_topology
 
@@ -41,7 +49,7 @@ def run_bitwise_reproducibility(mol_a, mol_b, core, forcefield, n_frames):
     np.testing.assert_equal(solvent_res.boxes, all_boxes)
 
 
-def run_pair(mol_a, mol_b, core, forcefield, n_frames, protein_path):
+def run_pair(mol_a, mol_b, core, forcefield, n_frames, protein_path, n_eq_steps):
 
     lambda_schedule = [0.01, 0.02, 0.03]
 
@@ -60,9 +68,11 @@ def run_pair(mol_a, mol_b, core, forcefield, n_frames, protein_path):
         n_frames=n_frames,
         prefix="solvent",
         lambda_schedule=lambda_schedule,
+        n_eq_steps=n_eq_steps,
     )
 
-    assert solvent_res.plot_png is not None
+    assert solvent_res.overlap_summary_png is not None
+    assert solvent_res.overlap_detail_png is not None
     assert abs(np.sum(solvent_res.all_dGs)) < 10.0
     assert np.linalg.norm(solvent_res.all_dGs) < 10.0
     assert len(solvent_res.frames[0] == n_frames)
@@ -71,6 +81,16 @@ def run_pair(mol_a, mol_b, core, forcefield, n_frames, protein_path):
     assert len(solvent_res.boxes[-1] == n_frames)
     assert [x.lamb for x in solvent_res.initial_states] == lambda_schedule
     assert solvent_res.protocol.n_frames == n_frames
+    assert solvent_res.protocol.n_eq_steps == n_eq_steps
+
+    def check_overlaps(result: SimulationResult):
+        assert result.overlaps_by_lambda.shape == (len(lambda_schedule) - 1,)
+        assert result.overlaps_by_lambda_by_component.shape[1] == len(lambda_schedule) - 1
+        for overlaps in [result.overlaps_by_lambda, result.overlaps_by_lambda_by_component]:
+            assert (0.0 < overlaps).all()
+            assert (overlaps < 0.5).all()
+
+    check_overlaps(solvent_res)
 
     seed = 2024
     complex_sys, complex_conf, _, _, complex_box, _ = builders.build_protein_system(protein_path)
@@ -86,9 +106,11 @@ def run_pair(mol_a, mol_b, core, forcefield, n_frames, protein_path):
         n_frames=n_frames,
         prefix="complex",
         lambda_schedule=lambda_schedule,
+        n_eq_steps=n_eq_steps,
     )
 
-    assert complex_res.plot_png is not None
+    assert solvent_res.overlap_summary_png is not None
+    assert complex_res.overlap_detail_png is not None
     assert abs(np.sum(complex_res.all_dGs)) < 10.0
     assert np.linalg.norm(complex_res.all_dGs) < 10.0
     assert len(complex_res.frames[0]) == n_frames
@@ -97,6 +119,9 @@ def run_pair(mol_a, mol_b, core, forcefield, n_frames, protein_path):
     assert len(complex_res.boxes[-1]) == n_frames
     assert [x.lamb for x in complex_res.initial_states] == lambda_schedule
     assert complex_res.protocol.n_frames == n_frames
+    assert complex_res.protocol.n_eq_steps == n_eq_steps
+
+    check_overlaps(complex_res)
 
 
 @pytest.mark.nightly(reason="Slow!")
@@ -108,8 +133,8 @@ def test_run_hif2a_test_system():
     core = st.core
     forcefield = st.ff
 
-    protein_path = "tests/data/hif2a_nowater_min.pdb"
-    run_pair(mol_a, mol_b, core, forcefield, n_frames=100, protein_path=protein_path)
+    with resources.path("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as protein_path:
+        run_pair(mol_a, mol_b, core, forcefield, n_frames=100, protein_path=str(protein_path), n_eq_steps=1000)
     run_bitwise_reproducibility(mol_a, mol_b, core, forcefield, n_frames=100)
 
 
@@ -117,3 +142,33 @@ if __name__ == "__main__":
     # convenience: so we can run this directly from python tests/test_relative_free_energy.py without
     # toggling the pytest marker
     test_run_hif2a_test_system()
+
+
+def test_pair_overlap_from_ukln():
+    def gaussian_overlap(p1, p2):
+        def make_gaussian(params):
+            mu, sigma = params
+
+            def u(x):
+                return (x - mu) ** 2 / (2 * sigma ** 2)
+
+            rng = np.random.default_rng(2022)
+            x = rng.normal(mu, sigma, 100)
+
+            return u, x
+
+        u1, x1 = make_gaussian(p1)
+        u2, x2 = make_gaussian(p2)
+
+        u_kln = np.array([[u1(x1), u1(x2)], [u2(x1), u2(x2)]])
+
+        return pair_overlap_from_ukln(u_kln)
+
+    # identical distributions
+    np.testing.assert_allclose(gaussian_overlap((0, 1), (0, 1)), 0.5)
+
+    # non-overlapping
+    assert gaussian_overlap((0, 0.01), (1, 0.01)) < 1e-10
+
+    # overlapping
+    assert gaussian_overlap((0, 0.1), (0.5, 0.2)) > 0.05

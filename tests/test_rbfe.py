@@ -1,4 +1,5 @@
 import os
+from importlib import resources
 from tempfile import TemporaryDirectory
 from unittest import TestCase
 
@@ -20,9 +21,8 @@ class TestRBFEModel(TestCase):
         # Use the Simple Charges to verify determinism of model. Needed as one endpoint uses the ff definition
         forcefield = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
 
-        complex_system, complex_coords, _, _, complex_box, _ = builders.build_protein_system(
-            os.path.join(DATA_DIR, "hif2a_nowater_min.pdb")
-        )
+        with resources.path("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as path_to_pdb:
+            complex_system, complex_coords, _, _, complex_box, _ = builders.build_protein_system(str(path_to_pdb))
 
         # build the water system
         solvent_system, solvent_coords, solvent_box, _ = builders.build_water_system(4.0)
@@ -55,9 +55,8 @@ class TestRBFEModel(TestCase):
 
     def test_pre_equilibration(self):
         """Verify that equilibration of edges up front functions as expected"""
-        complex_system, complex_coords, _, _, complex_box, _ = builders.build_protein_system(
-            os.path.join(DATA_DIR, "hif2a_nowater_min.pdb")
-        )
+        with resources.path("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as path_to_pdb:
+            complex_system, complex_coords, _, _, complex_box, _ = builders.build_protein_system(str(path_to_pdb))
 
         # build the water system
         solvent_system, solvent_coords, solvent_box, _ = builders.build_water_system(4.0)

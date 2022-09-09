@@ -1,5 +1,5 @@
 from functools import partial
-from typing import Any, Callable, Hashable, Set, Tuple
+from typing import Any, Callable, Iterable, Set, Tuple
 
 import numpy as np
 
@@ -80,7 +80,7 @@ def align_idxs_and_params(
 
     # used to convert arrays to a hashable type for use as dict keys and in sets
     def to_hashable(x):
-        return x if isinstance(x, Hashable) else tuple(x)
+        return tuple(to_hashable(e) for e in x) if isinstance(x, Iterable) else x
 
     def make_kv(all_idxs, all_params):
         kvs = [(to_hashable(key(idxs, params)), params) for idxs, params in zip(all_idxs, all_params)]

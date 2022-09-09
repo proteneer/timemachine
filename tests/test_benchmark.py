@@ -3,6 +3,7 @@ and running an intermediate lambda window "rbfe" MD for a
 relative binding free energy edge from the HIF2A test system"""
 
 import time
+from importlib import resources
 
 import numpy as np
 import pytest
@@ -34,7 +35,8 @@ def generate_hif2a_frames(n_frames: int, frame_interval: int, seed=None, barosta
     mol_a, mol_b = rfe.mol_a, rfe.mol_b
 
     # build the protein system.
-    host_system, host_coords, _, _, host_box, _ = builders.build_protein_system("tests/data/hif2a_nowater_min.pdb")
+    with resources.path("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as path_to_pdb:
+        host_system, host_coords, _, _, host_box, _ = builders.build_protein_system(str(path_to_pdb))
 
     unbound_potentials, sys_params, masses = rfe.prepare_host_edge(rfe.ff.get_ordered_params(), host_system)
     min_host_coords = minimizer.minimize_host_4d([mol_a, mol_b], host_system, host_coords, rfe.ff, host_box)
@@ -292,9 +294,8 @@ def benchmark_hif2a(verbose=False, num_batches=100, steps_per_batch=1000):
     mol_a, mol_b = rfe.mol_a, rfe.mol_b
 
     # build the protein system.
-    complex_system, complex_coords, _, _, complex_box, _ = builders.build_protein_system(
-        "tests/data/hif2a_nowater_min.pdb"
-    )
+    with resources.path("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as path_to_pdb:
+        complex_system, complex_coords, _, _, complex_box, _ = builders.build_protein_system(str(path_to_pdb))
 
     solvent_system, solvent_coords, solvent_box, _ = builders.build_water_system(4.0)
 

@@ -1,5 +1,6 @@
 import functools
 import io
+import pickle
 import warnings
 from dataclasses import dataclass
 from typing import List
@@ -11,6 +12,7 @@ from rdkit import Chem
 from rdkit.Chem import AllChem, Draw
 
 from timemachine.constants import BOLTZ, DEFAULT_TEMP
+from timemachine.fe import model_utils
 from timemachine.fe.single_topology_v3 import SingleTopologyV3
 from timemachine.fe.system import convert_bps_into_system
 from timemachine.fe.utils import get_mol_name, get_romol_conf
@@ -101,7 +103,7 @@ def sample(initial_state, protocol):
     # burn-in
     ctxt.multiple_steps_U(
         lamb=initial_state.lamb,
-        n_steps=protocol.burn_in,
+        n_steps=protocol.n_eq_steps,
         lambda_windows=[initial_state.lamb],
         store_u_interval=0,
         store_x_interval=0,
@@ -126,7 +128,7 @@ def sample(initial_state, protocol):
 @dataclass
 class SimulationProtocol:
     n_frames: int
-    burn_in: int
+    n_eq_steps: int
     steps_per_frame: int
 
 
@@ -151,7 +153,10 @@ class InitialState:
 class SimulationResult:
     all_dGs: List[np.ndarray]
     all_errs: List[float]
-    plot_png: bytes
+    overlaps_by_lambda: np.ndarray  # (L - 1,)
+    overlaps_by_lambda_by_component: np.ndarray  # (len(U_names), L - 1)
+    overlap_summary_png: bytes
+    overlap_detail_png: bytes
     frames: List[np.ndarray]
     boxes: List[np.ndarray]
     initial_states: List[InitialState]
@@ -173,10 +178,36 @@ def setup_initial_states(st, host_config, temperature, lambda_schedule, seed):
 
     initial_states = []
 
+    # setup hmr masses in a lambda_independent way
+    combined_masses = np.concatenate([host_masses, st.combine_masses()])
+
+    last_hmr_masses = None
+
     for lamb_idx, lamb in enumerate(lambda_schedule):
         hgs = st.combine_with_host(convert_bps_into_system(host_bps), lamb=lamb)
         # minimize water box around the ligand by 4D-decoupling
         potentials = hgs.get_U_fns()
+
+        # hmr masses should be identical throughout the lambda schedule
+        # bond idxs should be the same at the two end-states, note that a possible corner
+        # case with bond breaking may seem to be problematic:
+
+        # 0 1 2    0 1 2
+        # C-O-C -> C.H-C
+
+        # but this isn't an issue, since hydrogens will only ever be terminal atoms
+        # and core hydrogens that are mapped to heavy atoms will take the mass of the
+        # heavy atom (thereby not triggering the mass repartitioning to begin with).
+
+        # but its reasonable to be skeptical, so we also assert consistency through the lambda
+        # schedule as an extra sanity check.
+        hmr_masses = model_utils.apply_hmr(combined_masses, potentials[0].get_idxs())
+        if last_hmr_masses is None:
+            last_hmr_masses = hmr_masses
+        else:
+            np.testing.assert_array_equal(last_hmr_masses, hmr_masses)
+            last_hmr_masses = hmr_masses
+
         mol_a_conf = get_romol_conf(st.mol_a)
         mol_b_conf = get_romol_conf(st.mol_b)
         ligand_conf = st.combine_confs(mol_a_conf, mol_b_conf)
@@ -186,11 +217,11 @@ def setup_initial_states(st, host_config, temperature, lambda_schedule, seed):
         box0 = host_config.box
         group_idxs = get_group_indices(get_bond_list(hgs.bond))
         run_seed = seed + lamb_idx
-        combined_masses = np.concatenate([host_masses, st.combine_masses()])
-        dt = 1e-3
+
+        dt = 2.5e-3
         friction = 1.0
-        intg = LangevinIntegrator(temperature, dt, friction, combined_masses, run_seed)
-        baro = MonteCarloBarostat(len(combined_masses), 1.0, temperature, group_idxs, 15, run_seed + 1)
+        intg = LangevinIntegrator(temperature, dt, friction, hmr_masses, run_seed)
+        baro = MonteCarloBarostat(len(hmr_masses), 1.0, temperature, group_idxs, 15, run_seed + 1)
         state = InitialState(potentials, intg, baro, x0, v0, box0, lamb)
         initial_states.append(state)
 
@@ -232,11 +263,23 @@ def plot_BAR(df, df_err, fwd_delta_u, rev_delta_u, title, axes):
     axes.legend()
 
 
-class SimulationException(Exception):
-    def __init__(self, initial_states, protocol, message):
-        self.initial_states = initial_states
-        self.protocol = protocol
-        self.message = message
+def pair_overlap_from_ukln(u_kln):
+    k, l, n = u_kln.shape
+    assert k == l == 2
+    u_kn = u_kln.reshape(k, -1)
+    assert u_kn.shape == (k, l * n)
+    N_k = n * np.ones(l)
+    return pymbar.MBAR(u_kn, N_k).computeOverlap()["matrix"][0, 1]  # type: ignore
+
+
+def plot_overlap_summary(ax, components, lambdas, overlaps):
+    for component, ys in zip(components, overlaps):
+        ax.plot(lambdas[:-1], ys, marker=".", label=component)
+
+    ax.set_xlabel(r"$\lambda_i$")
+    ax.set_ylabel(r"pair BAR overlap ($\lambda_i$, $\lambda_{i+1}$)")
+    ax.legend()
+    ax.ticklabel_format(useOffset=False)
 
 
 def estimate_free_energy_given_initial_states(initial_states, protocol, temperature, prefix, keep_idxs):
@@ -280,10 +323,7 @@ def estimate_free_energy_given_initial_states(initial_states, protocol, temperat
     all_dGs = []
     all_errs = []
 
-    U_names = []
-    for U_fn in initial_states[0].potentials:
-        # convert from '<timemachine.lib.potentials.Nonbonded object at 0x7f7880b900b8>' -> Nonbonded
-        U_names.append(repr(U_fn).split(".")[-1].split()[0])
+    U_names = [type(U_fn).__name__ for U_fn in initial_states[0].potentials]
 
     num_rows = len(initial_states) - 1
     num_cols = len(U_names) + 1
@@ -299,6 +339,9 @@ def estimate_free_energy_given_initial_states(initial_states, protocol, temperat
     prev_frames, prev_boxes = None, None
     prev_batch_U_fns = None
 
+    # u_kln matrix (2, 2, n_frames) for each pair of adjacent lambda windows and energy term
+    ukln_by_component_by_lambda = []
+
     for lamb_idx, initial_state in enumerate(initial_states):
 
         cur_frames, cur_boxes = sample(initial_state, protocol)
@@ -311,23 +354,31 @@ def estimate_free_energy_given_initial_states(initial_states, protocol, temperat
 
         if lamb_idx > 0:
 
-            # loop over bond, angle, torsion, nonbonded terms etc.
-            all_fwd_delta_us = []
-            all_rev_delta_us = []
+            ukln_by_component = []
 
+            # loop over bond, angle, torsion, nonbonded terms etc.
             for u_idx, (prev_U_fn, cur_U_fn) in enumerate(zip(prev_batch_U_fns, cur_batch_U_fns)):
-                fwd_delta_u = beta * (cur_U_fn(prev_frames, prev_boxes) - prev_U_fn(prev_frames, prev_boxes))
-                rev_delta_u = beta * (prev_U_fn(cur_frames, cur_boxes) - cur_U_fn(cur_frames, cur_boxes))
+                x_cur = (cur_frames, cur_boxes)
+                x_prev = (prev_frames, prev_boxes)
+                u_00 = beta * prev_U_fn(*x_prev)
+                u_01 = beta * prev_U_fn(*x_cur)
+                u_10 = beta * cur_U_fn(*x_prev)
+                u_11 = beta * cur_U_fn(*x_cur)
+                ukln_by_component.append([[u_00, u_01], [u_10, u_11]])
+
+                fwd_delta_u = u_10 - u_00
+                rev_delta_u = u_01 - u_11
                 df, df_err = pymbar.BAR(fwd_delta_u, rev_delta_u)
                 plot_axis = all_axes[lamb_idx - 1][u_idx]
                 plot_BAR(df, df_err, fwd_delta_u, rev_delta_u, U_names[u_idx], plot_axis)
-                all_fwd_delta_us.append(fwd_delta_u)
-                all_rev_delta_us.append(rev_delta_u)
 
             # sanity check - I don't think the dG calculation commutes with its components, so we have to re-estimate
             # the dG from the sum of the delta_us as opposed to simply summing the component dGs
-            total_fwd_delta_us = np.sum(all_fwd_delta_us, axis=0)
-            total_rev_delta_us = np.sum(all_rev_delta_us, axis=0)
+
+            # (energy components, energy fxns = 2, sampled states = 2, frames)
+            ukln_by_component = np.array(ukln_by_component, dtype=np.float64)
+            total_fwd_delta_us = (ukln_by_component[:, 1, 0, :] - ukln_by_component[:, 0, 0, :]).sum(axis=0)
+            total_rev_delta_us = (ukln_by_component[:, 0, 1, :] - ukln_by_component[:, 1, 1, :]).sum(axis=0)
             total_df, total_df_err = pymbar.BAR(total_fwd_delta_us, total_rev_delta_us)
 
             plot_axis = all_axes[lamb_idx - 1][u_idx + 1]
@@ -346,6 +397,7 @@ def estimate_free_energy_given_initial_states(initial_states, protocol, temperat
 
             all_dGs.append(total_dG)
             all_errs.append(total_dG_err)
+            ukln_by_component_by_lambda.append(ukln_by_component)
 
             print(
                 f"{prefix} BAR: lambda {lamb_idx-1} -> {lamb_idx} dG: {total_dG:.3f} +- {total_dG_err:.3f} kJ/mol",
@@ -360,9 +412,39 @@ def estimate_free_energy_given_initial_states(initial_states, protocol, temperat
     buffer = io.BytesIO()
     plt.savefig(buffer, format="png")
     buffer.seek(0)
-    img_as_bytes = buffer.read()
+    overlap_detail_png = buffer.read()
 
-    return SimulationResult(all_dGs, all_errs, img_as_bytes, stored_frames, stored_boxes, initial_states, protocol)
+    # (energy components, lambdas, energy fxns = 2, sampled states = 2, frames)
+    ukln_by_lambda_by_component = np.array(ukln_by_component_by_lambda).swapaxes(0, 1)
+
+    lambdas = [s.lamb for s in initial_states]
+
+    _, (ax_top, ax_btm) = plt.subplots(2, 1, figsize=(7, 9))
+    overlaps_by_lambda = np.array([pair_overlap_from_ukln(u_kln) for u_kln in ukln_by_lambda_by_component.sum(axis=0)])
+    plot_overlap_summary(ax_top, ["Overall"], lambdas, [overlaps_by_lambda])
+
+    overlaps_by_lambda_by_component = np.array(
+        [[pair_overlap_from_ukln(u_kln) for u_kln in ukln_by_lambda] for ukln_by_lambda in ukln_by_lambda_by_component]
+    )
+    plot_overlap_summary(ax_btm, U_names, lambdas, overlaps_by_lambda_by_component)
+
+    buffer = io.BytesIO()
+    plt.savefig(buffer, format="png")
+    buffer.seek(0)
+    overlap_summary_png = buffer.read()
+
+    return SimulationResult(
+        all_dGs,
+        all_errs,
+        overlaps_by_lambda,
+        overlaps_by_lambda_by_component,
+        overlap_summary_png,
+        overlap_detail_png,
+        stored_frames,
+        stored_boxes,
+        initial_states,
+        protocol,
+    )
 
 
 def estimate_relative_free_energy(
@@ -376,6 +458,7 @@ def estimate_relative_free_energy(
     prefix="",
     lambda_schedule=None,
     keep_idxs=None,
+    n_eq_steps=10000,
 ):
     """
     Estimate relative free energy between mol_a and mol_b. Molecules should be aligned to each
@@ -414,6 +497,9 @@ def estimate_relative_free_energy(
         If None, return only the end-state frames. Otherwise if not None, use only for debugging, and this
         will return the frames corresponding to the idxs of interest.
 
+    n_eq_steps: int
+        Number of equilibration steps for each window.
+
     Returns
     -------
     SimulationResult
@@ -431,38 +517,52 @@ def estimate_relative_free_energy(
 
     temperature = DEFAULT_TEMP
     initial_states = setup_initial_states(single_topology, host_config, temperature, lambda_schedule, seed)
-    protocol = SimulationProtocol(n_frames=n_frames, burn_in=10000, steps_per_frame=1000)
+    protocol = SimulationProtocol(n_frames=n_frames, n_eq_steps=n_eq_steps, steps_per_frame=400)
 
     if keep_idxs is None:
         keep_idxs = [0, -1]  # keep first and last frames
     assert len(keep_idxs) <= len(lambda_schedule)
     combined_prefix = get_mol_name(mol_a) + "_" + get_mol_name(mol_b) + "_" + prefix
-
     try:
-
         return estimate_free_energy_given_initial_states(
             initial_states, protocol, temperature, combined_prefix, keep_idxs
         )
+    except Exception as err:
+        with open(f"failed_rbfe_result_{combined_prefix}.pkl", "wb") as fh:
+            pickle.dump((initial_states, protocol, err), fh)
+        raise err
 
-    except Exception as old_exc:
 
-        raise SimulationException(initial_states, protocol, combined_prefix) from old_exc
-
-
-def run_pair(mol_a, mol_b, core, forcefield, protein, n_frames, seed):
+def run_pair(mol_a, mol_b, core, forcefield, protein, n_frames, seed, n_eq_steps=10000):
     box_width = 4.0
     solvent_sys, solvent_conf, solvent_box, solvent_top = builders.build_water_system(box_width)
     solvent_box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes, deboggle later
     solvent_host_config = HostConfig(solvent_sys, solvent_conf, solvent_box)
     solvent_res = estimate_relative_free_energy(
-        mol_a, mol_b, core, forcefield, solvent_host_config, seed, n_frames=n_frames, prefix="solvent"
+        mol_a,
+        mol_b,
+        core,
+        forcefield,
+        solvent_host_config,
+        seed,
+        n_frames=n_frames,
+        prefix="solvent",
+        n_eq_steps=n_eq_steps,
     )
 
     complex_sys, complex_conf, _, _, complex_box, complex_top = builders.build_protein_system(protein)
     complex_box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes, deboggle later
     complex_host_config = HostConfig(complex_sys, complex_conf, complex_box)
     complex_res = estimate_relative_free_energy(
-        mol_a, mol_b, core, forcefield, complex_host_config, seed + 1, n_frames=n_frames, prefix="complex"
+        mol_a,
+        mol_b,
+        core,
+        forcefield,
+        complex_host_config,
+        seed + 1,
+        n_frames=n_frames,
+        prefix="complex",
+        n_eq_steps=n_eq_steps,
     )
 
     return solvent_res, solvent_top, complex_res, complex_top

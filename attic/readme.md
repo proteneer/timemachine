@@ -1,6 +1,7 @@
 Code, documentation, experiments we want to retain for reference, but that we're not currently maintaining.
 
 ### Contents
+* `atom_mapping/` -- distance-based atom comparison for rdFMCS
 * `docs/` -- write-up of initial vision for `timemachine`, involving efficient backpropagation through MD trajectories
 * `docking/` -- Docking module that docks uses non-equilibrium switching
 * `jax_tricks` -- misc. Jax functions
