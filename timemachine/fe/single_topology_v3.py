@@ -4,6 +4,7 @@ from typing import Tuple
 
 import jax.numpy as jnp
 import numpy as np
+from rdkit import Chem
 
 from timemachine.fe import interpolate, system, topology, utils
 from timemachine.fe.dummy import canonicalize_bond, identify_dummy_groups, identify_root_anchors
@@ -20,6 +21,10 @@ class CoreBondChangeWarning(UserWarning):
 
 
 class MissingAngleError(RuntimeError):
+    pass
+
+
+class ChargePertubationError(RuntimeError):
     pass
 
 
@@ -507,6 +512,11 @@ class SingleTopologyV3:
         self.core = core
         self.ff = forcefield
         assert core.shape[1] == 2
+
+        a_charge = Chem.GetFormalCharge(mol_a)
+        b_charge = Chem.GetFormalCharge(mol_b)
+        if a_charge != b_charge:
+            raise ChargePertubationError(f"mol a and mol b don't have the same charge: a: {a_charge} b: {b_charge}")
 
         # map into idxs in the combined molecule
 
