@@ -290,6 +290,15 @@ def plot_BAR(df, df_err, fwd_delta_u, rev_delta_u, title, axes):
     axes.legend()
 
 
+def pair_overlap_from_ukln(u_kln):
+    k, l, n = u_kln.shape
+    assert k == l == 2
+    u_kn = u_kln.reshape(k, -1)
+    assert u_kn.shape == (k, l * n)
+    N_k = n * np.ones(l)
+    return pymbar.MBAR(u_kn, N_k).computeOverlap()["matrix"][0, 1]  # type: ignore
+
+
 def plot_overlap_summary(ax, components, lambdas, overlaps):
     for component, ys in zip(components, overlaps):
         ax.plot(lambdas[:-1], ys, marker=".", label=component)
@@ -297,6 +306,7 @@ def plot_overlap_summary(ax, components, lambdas, overlaps):
     ax.set_xlabel(r"$\lambda_i$")
     ax.set_ylabel(r"pair BAR overlap ($\lambda_i$, $\lambda_{i+1}$)")
     ax.legend()
+    ax.ticklabel_format(useOffset=False)
 
 
 def estimate_free_energy_given_initial_states(initial_states, protocol, temperature, prefix, keep_idxs):
@@ -434,20 +444,14 @@ def estimate_free_energy_given_initial_states(initial_states, protocol, temperat
     # (energy components, lambdas, energy fxns = 2, sampled states = 2, frames)
     ukln_by_lambda_by_component = np.array(ukln_by_component_by_lambda).swapaxes(0, 1)
 
-    def pair_overlap(u_kln):
-        assert u_kln.shape[:2] == (2, 2)
-        u_kn = np.concatenate(u_kln, axis=1)
-        N_k = u_kln.shape[2] * np.ones(u_kn.shape[0])
-        return pymbar.MBAR(u_kn, N_k).computeOverlap()["matrix"][0, 1]  # type: ignore
-
     lambdas = [s.lamb for s in initial_states]
 
     _, (ax_top, ax_btm) = plt.subplots(2, 1, figsize=(7, 9))
-    overlaps_by_lambda = np.array([pair_overlap(u_kln) for u_kln in ukln_by_lambda_by_component.sum(axis=0)])
+    overlaps_by_lambda = np.array([pair_overlap_from_ukln(u_kln) for u_kln in ukln_by_lambda_by_component.sum(axis=0)])
     plot_overlap_summary(ax_top, ["Overall"], lambdas, [overlaps_by_lambda])
 
     overlaps_by_lambda_by_component = np.array(
-        [[pair_overlap(u_kln) for u_kln in ukln_by_lambda] for ukln_by_lambda in ukln_by_lambda_by_component]
+        [[pair_overlap_from_ukln(u_kln) for u_kln in ukln_by_lambda] for ukln_by_lambda in ukln_by_lambda_by_component]
     )
     plot_overlap_summary(ax_btm, U_names, lambdas, overlaps_by_lambda_by_component)
 
