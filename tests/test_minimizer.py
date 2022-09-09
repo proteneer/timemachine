@@ -49,8 +49,6 @@ def test_equilibrate_host():
 def test_local_minimize_water_box():
     """
     Test that we can locally relax a box of water by selecting some random indices.
-
-    Furthermore, assert that we can
     """
 
     system, x0, box0, _ = builders.build_water_system(4.0)
