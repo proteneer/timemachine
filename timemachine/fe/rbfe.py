@@ -109,8 +109,7 @@ def sample(initial_state, protocol):
 
     val_and_grad_fn = minimizer.get_val_and_grad_fn(bound_impls, initial_state.box0, initial_state.lamb)
 
-    # note, can't use np.any(np.isnan(initial_state.x0)) is False since np.any returns a bool type
-    assert not np.any(np.isnan(initial_state.x0)), "Initial coordinates contain nan"
+    assert np.all(np.isfinite(initial_state.x0)), "Initial coordinates contain nan or inf"
 
     x0_min = minimizer.local_minimize(initial_state.x0, val_and_grad_fn, free_idxs)
 
