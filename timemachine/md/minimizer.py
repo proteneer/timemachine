@@ -1,6 +1,7 @@
 from typing import Any, List, Optional, Tuple
 
 import numpy as np
+import scipy.optimize
 from numpy.typing import NDArray
 from rdkit import Chem
 from simtk import openmm
@@ -10,6 +11,7 @@ from timemachine.fe.utils import get_romol_conf
 from timemachine.ff import Forcefield
 from timemachine.ff.handlers import openmm_deserializer
 from timemachine.lib import LangevinIntegrator, MonteCarloBarostat, custom_ops
+from timemachine.lib.potentials import SummedPotential
 from timemachine.md.barostat.utils import get_bond_list, get_group_indices
 from timemachine.md.fire import fire_descent
 
@@ -277,3 +279,83 @@ def equilibrate_host(
     ctxt.multiple_steps(np.linspace(0.0, 0.0, n_steps))
 
     return ctxt.get_x_t(), ctxt.get_box()
+
+
+def get_val_and_grad_fn(bps, box, lamb):
+    """
+    Convert impls, box, lamb into a function that only takes in coords.
+    """
+
+    params = [np.array(bp.params) for bp in bps]
+    flat_params = np.concatenate([p.reshape(-1) for p in params])
+    sum_potential = SummedPotential(bps, params)
+    sum_potential.bind(flat_params)
+
+    impl = sum_potential.bound_impl(np.float32)
+
+    def val_and_grad_fn(coords):
+        g, _, u = impl.execute(coords, box, lamb)
+        return u, g
+
+    return val_and_grad_fn
+
+
+def local_minimize(x0, val_and_grad_fn, local_idxs):
+    """
+    Minimize a local region given selected idxs.
+
+    Parameters:
+    -----------
+    x0: np.array (N,3)
+        Coordinates
+
+    val_and_grad_fn: f: R^(Nx3,3x3) -> (R^1, R^Nx3)
+        Energy function
+
+    local_idxs: list of int
+        Unique idxs we allow to move.
+
+    Returns
+    -------
+    Optimized set of coordinates (N,3)
+
+    """
+
+    assert len(local_idxs) == len(set(local_idxs))
+
+    x_local_shape = (len(local_idxs), 3)
+    u_0, _ = val_and_grad_fn(x0)
+
+    # deal with overflow
+    guard_threshold = 1e6
+
+    def val_and_grad_fn_local(x_local):
+        x_prime = x0.copy()
+        x_prime[local_idxs] = x_local
+        u_full, grad_full = val_and_grad_fn(x_prime)
+        # avoid being trapped when overflows spuriously appear as large negative numbers
+        # remove after resolution of https://github.com/proteneer/timemachine/issues/481
+        if u_0 - u_full > guard_threshold:
+            u_full = np.inf
+            grad_full = np.nan * grad_full
+        return u_full, grad_full[local_idxs]
+
+    # deals with reshaping from (L,3) -> (Lx3,)
+    def val_and_grad_fn_bfgs(x_local_flattened):
+        x_local = x_local_flattened.reshape(x_local_shape)
+        u, grad_full = val_and_grad_fn_local(x_local)
+        return u, grad_full.reshape(-1)
+
+    x_local_0 = x0[local_idxs]
+    x_local_0_flat = x_local_0.reshape(-1)
+
+    res = scipy.optimize.minimize(val_and_grad_fn_bfgs, x_local_0_flat, jac=True, options={"disp": True})
+
+    x_final = x0.copy()
+    x_final[local_idxs] = res.x.reshape(x_local_shape)
+
+    u_final, _ = val_and_grad_fn(x_final)
+
+    assert u_final < u_0, f"u_0: {u_0:.3f}, u_f: {u_final:.3f}"
+
+    return x_final
