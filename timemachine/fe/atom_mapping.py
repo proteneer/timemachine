@@ -5,6 +5,7 @@ import numpy as np
 from numpy.typing import NDArray
 from rdkit import Chem
 from rdkit.Chem import rdFMCS
+from scipy.spatial.distance import cdist
 
 from timemachine.constants import DEFAULT_FF
 from timemachine.fe.topology import AtomMappingError
@@ -94,8 +95,8 @@ def get_core_by_mcs(mol_a, mol_b, query, threshold=0.5):
         the core indices can get flipped around,
         for example if the substructure match hits only part of an aromatic ring.
 
-        In some cases, this means that pairs of atoms that do not satisfy the
-        atom comparison function can be mapped together.
+        In some cases, this can fail to find a mapping that satisfies the distance
+        threshold, raising an AtomMappingError.
     """
 
     # fetch conformer, assumed aligned
@@ -103,15 +104,32 @@ def get_core_by_mcs(mol_a, mol_b, query, threshold=0.5):
     conf_b = mol_b.GetConformer(0).GetPositions()
 
     # note that >1 match possible here -- must pick minimum-cost match
-    matches_a = mol_a.GetSubstructMatches(query, uniquify=False)
-    matches_b = mol_b.GetSubstructMatches(query, uniquify=False)
+    # TODO: possibly break this into two stages
+    #  following https://github.com/proteneer/timemachine/pull/819#discussion_r966130215
+    max_matches = 10_000
+    matches_a = mol_a.GetSubstructMatches(query, uniquify=False, maxMatches=max_matches)
+    matches_b = mol_b.GetSubstructMatches(query, uniquify=False, maxMatches=max_matches)
+
+    # warn if this search won't be exhaustive
+    if len(matches_a) == max_matches or len(matches_b) == max_matches:
+        print("Warning: max_matches exceeded -- cannot guarantee to find a feasible core")
+
+    # once rather than in subsequent double for-loop
+    all_distances = cdist(conf_a, conf_b)
+    gt_threshold = all_distances > threshold
+
+    matches_a = [np.array(a) for a in matches_a]
+    matches_b = [np.array(b) for b in matches_b]
 
     cost = np.zeros((len(matches_a), len(matches_b)))
+
     for i, a in enumerate(matches_a):
         for j, b in enumerate(matches_b):
-            # if a single pair is outside of threshold, we set the cost to inf
-            dij = np.linalg.norm(conf_a[np.array(a)] - conf_b[np.array(b)], axis=1)
-            cost[i, j] = np.sum(np.where(dij < threshold, dij, +np.inf))
+            if np.any(gt_threshold[a, b]):
+                cost[i, j] = +np.inf
+            else:
+                dij = all_distances[a, b]
+                cost[i, j] = np.sum(dij)
 
     # find (i,j) = argmin cost
     min_i, min_j = np.unravel_index(np.argmin(cost, axis=None), cost.shape)
