@@ -5,6 +5,8 @@ from rdkit import Chem
 from rdkit.Chem import AllChem, Draw
 from rdkit.Chem.Draw import rdMolDraw2D
 
+from timemachine import constants
+
 
 def to_md_units(q):
     return q.value_in_unit_system(simtk.unit.md_unit_system)
@@ -43,21 +45,17 @@ def write(xyz, masses, recenter=True):
     return buf
 
 
-def convert_uIC50_to_kJ_per_mole(amount_in_uM):
-    """
-    TODO: more sig figs
-    """
-    return 0.593 * np.log(amount_in_uM * 1e-6) * 4.18
-
-
-def convert_uM_to_kJ_per_mole(amount_in_uM):
-    """
-    Convert a potency measurement in uM concentrations.
+def convert_uIC50_to_kJ_per_mole(amount_in_uM: float, experiment_temp: float = 298.15) -> float:
+    """Convert an IC50 measurement in uM concentrations to kJ/mol.
 
     Parameters
     ----------
+
     amount_in_uM: float
-        Binding potency in uM concentration.
+        Micro molar IC50
+
+    experiment_temp: float
+        Experiment temperature in Kelvin.
 
     Returns
     -------
@@ -65,7 +63,29 @@ def convert_uM_to_kJ_per_mole(amount_in_uM):
         Binding potency in kJ/mol.
 
     """
-    return 0.593 * np.log(amount_in_uM * 1e-6) * 4.18
+    RT = (constants.MOLAR_GAS_CONSTANT * experiment_temp) / (1000 * constants.KCAL_TO_KJ)
+    return RT * np.log(amount_in_uM * 1e-6) * constants.KCAL_TO_KJ
+
+
+def convert_uM_to_kJ_per_mole(amount_in_uM: float, experiment_temp: float = 298.15) -> float:
+    """
+    Convert a potency measurement in uM concentrations to kJ/mol.
+
+    Parameters
+    ----------
+    amount_in_uM: float
+        Binding potency in uM concentration.
+
+    experiment_temp: float
+        Experiment temperature in Kelvin.
+
+    Returns
+    -------
+    float
+        Binding potency in kJ/mol.
+
+    """
+    return convert_uIC50_to_kJ_per_mole(amount_in_uM, experiment_temp=experiment_temp)
 
 
 # TODO: add a module for atom-mapping, with RDKit MCS based and other approaches

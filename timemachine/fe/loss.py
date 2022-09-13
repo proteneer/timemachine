@@ -4,7 +4,7 @@ from jax import core
 from jax.interpreters import ad
 from simtk import unit
 
-from timemachine.constants import kB
+from timemachine.constants import KCAL_TO_KJ, kB
 from timemachine.fe import bar as tmbar
 from timemachine.fe import math_utils
 
@@ -116,7 +116,7 @@ def l1_loss(residual):
     return jnp.abs(residual)
 
 
-def pseudo_huber_loss(residual, threshold=4.184):
+def pseudo_huber_loss(residual, threshold=KCAL_TO_KJ):
     """loss = threshold * (sqrt(1 + (residual/threshold)^2) - 1)
 
     Reference : https://en.wikipedia.org/wiki/Huber_loss#Pseudo-Huber_loss_function
@@ -137,6 +137,6 @@ def pseudo_huber_loss(residual, threshold=4.184):
     return threshold * (jnp.sqrt(1 + (residual / threshold) ** 2) - 1)
 
 
-def flat_bottom_loss(residual, threshold=4.184):
+def flat_bottom_loss(residual, threshold=KCAL_TO_KJ):
     """loss = max(0, |residual| - threshold)"""
     return jnp.maximum(0, jnp.abs(residual) - threshold)

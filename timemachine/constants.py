@@ -1,5 +1,6 @@
 from simtk import unit
 
+MOLAR_GAS_CONSTANT = 8.314  # J/mol per kelvin
 BOLTZMANN = 1.380658e-23
 AVOGADRO = 6.0221367e23
 RGAS = BOLTZMANN * AVOGADRO
