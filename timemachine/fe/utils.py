@@ -45,7 +45,7 @@ def write(xyz, masses, recenter=True):
     return buf
 
 
-def convert_uIC50_to_kJ_per_mole(amount_in_uM: float, experiment_temp: float = 298.0) -> float:
+def convert_uIC50_to_kJ_per_mole(amount_in_uM: float, experiment_temp: float = 298.15) -> float:
     """Convert an IC50 measurement in uM concentrations to kJ/mol.
 
     Parameters
@@ -67,7 +67,7 @@ def convert_uIC50_to_kJ_per_mole(amount_in_uM: float, experiment_temp: float = 2
     return RT * np.log(amount_in_uM * 1e-6) * constants.KCAL_TO_KJ
 
 
-def convert_uM_to_kJ_per_mole(amount_in_uM: float, experiment_temp: float = 298.0) -> float:
+def convert_uM_to_kJ_per_mole(amount_in_uM: float, experiment_temp: float = 298.15) -> float:
     """
     Convert a potency measurement in uM concentrations to kJ/mol.
 
