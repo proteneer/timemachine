@@ -286,7 +286,7 @@ def plot_BAR(df, df_err, fwd_delta_u, rev_delta_u, title, axes):
     axes.set_title(f"{title}, dg: {df:.2f} +- {df_err:.2f} kTs")
     axes.hist(fwd_delta_u, alpha=0.5, label="fwd", density=True, bins=20)
     axes.hist(-rev_delta_u, alpha=0.5, label="-rev", density=True, bins=20)
-    axes.set_xlabel("work (kTs)")
+    axes.set_xlabel("work (kBTs)")
     axes.legend()
 
 
