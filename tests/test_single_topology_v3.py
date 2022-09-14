@@ -14,6 +14,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 from rdkit import Chem
+from rdkit.Chem import AllChem
 
 from timemachine.fe import atom_mapping, single_topology_v3
 from timemachine.fe.single_topology_v3 import (
@@ -340,3 +341,45 @@ def test_combine_with_host():
     # Expect there to be 5 functions, excluding the chiral bond and chiral atom restraints
     # This should be updated when chiral restraints are re-enabled.
     assert len(host_system.get_U_fns()) == 5
+
+
+def ligand_from_smiles(smiles):
+    mol = Chem.AddHs(Chem.MolFromSmiles(smiles))
+    AllChem.Compute2DCoords(mol)
+    return mol
+
+
+def get_core_by_mcs(mol_a, mol_b, mcs_threshold=2.0):
+    mcs_result = atom_mapping.mcs(mol_a, mol_b, threshold=mcs_threshold, conformer_aware=False)
+    query_mol = Chem.MolFromSmarts(mcs_result.smartsString)
+    return atom_mapping.get_core_by_mcs(mol_a, mol_b, query_mol, threshold=mcs_threshold)
+
+
+def test_no_chiral_atom_restraints():
+    mol_a = ligand_from_smiles("c1ccccc1")
+    mol_b = ligand_from_smiles("c1(I)ccccc1")
+    core = get_core_by_mcs(mol_a, mol_b)
+
+    forcefield = Forcefield.load_from_file(DEFAULT_FF)
+    st = SingleTopologyV3(mol_a, mol_b, core, forcefield)
+    init_conf = st.combine_confs(get_romol_conf(mol_a), get_romol_conf(mol_b))
+    state = st.setup_intermediate_state(0.1)
+
+    assert len(state.chiral_atom.get_idxs()) == 0
+    U = state.get_U_fn()
+    _ = U(init_conf)
+
+
+def test_no_chiral_bond_restraints():
+    mol_a = ligand_from_smiles("C")
+    mol_b = ligand_from_smiles("CI")
+    core = get_core_by_mcs(mol_a, mol_b)
+
+    forcefield = Forcefield.load_from_file(DEFAULT_FF)
+    st = SingleTopologyV3(mol_a, mol_b, core, forcefield)
+    init_conf = st.combine_confs(get_romol_conf(mol_a), get_romol_conf(mol_b))
+    state = st.setup_intermediate_state(0.1)
+
+    assert len(state.chiral_bond.get_idxs()) == 0
+    U = state.get_U_fn()
+    _ = U(init_conf)
