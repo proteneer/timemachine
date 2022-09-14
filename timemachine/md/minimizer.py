@@ -326,8 +326,8 @@ def local_minimize(x0, val_and_grad_fn, local_idxs):
     x_local_shape = (len(local_idxs), 3)
     u_0, _ = val_and_grad_fn(x0)
 
-    # deal with overflow
-    guard_threshold = 1e6
+    # deal with overflow, empirically obtained by testing on some real systems.
+    guard_threshold = 5e4
 
     def val_and_grad_fn_local(x_local):
         x_prime = x0.copy()
@@ -349,7 +349,7 @@ def local_minimize(x0, val_and_grad_fn, local_idxs):
     x_local_0 = x0[local_idxs]
     x_local_0_flat = x_local_0.reshape(-1)
 
-    res = scipy.optimize.minimize(val_and_grad_fn_bfgs, x_local_0_flat, jac=True, options={"disp": True})
+    res = scipy.optimize.minimize(val_and_grad_fn_bfgs, x_local_0_flat, method="BFGS", jac=True, options={"disp": True})
 
     x_final = x0.copy()
     x_final[local_idxs] = res.x.reshape(x_local_shape)
