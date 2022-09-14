@@ -16,7 +16,7 @@ Code, documentation, experiments we want to retain for reference, but that we're
    * `tests` -- deprecated tests
      * `test_shape.py` -- tests for potentials.shape
      * `dual_topology.py` -- test with TI and dual topology
-* `testsystems/` -- minimal LJ, electrostatics systems (using earlier versions `LennardJones`, `lennard_jones_v2`, ...)
+* `testsystems/` -- minimal systems to test potentials
 * `thermo_deriv/` -- numerical experiments with "thermodynamic derivative" estimators, adjusting LJ parameters to match observables
     * note: currently missing dependencies `thermo_deriv.lj_non_periodic.lennard_jones`, `thermo_deriv.lj.lennard_jones`.
     * note: `langevin_coefficients` dependency has since changed -- some scripts rely on a version of `langevin_coefficients` prior to PR #459
