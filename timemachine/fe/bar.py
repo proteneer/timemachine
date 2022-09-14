@@ -107,7 +107,7 @@ def bootstrap_bar(w_F, w_R, n_bootstrap=1000, timeout=10):
     w_R : array
         reverse works
     n_bootstrap : int
-        # boostrap samples
+        # bootstrap samples
     timeout : int
         in seconds
 
