@@ -123,7 +123,7 @@ def chiral_atom_restraint(conf, params, box, lamb, idxs):
     Flat-bottom chiral atom restraint
     """
     assert len(idxs) == len(params)
-    return jnp.sum(U_chiral_atom_batch_all(conf, idxs, params))
+    return jnp.sum(U_chiral_atom_batch_all(conf, idxs, params)) if len(idxs) else 0.0
 
 
 def chiral_bond_restraint(conf, params, box, lamb, idxs, signs):
@@ -132,4 +132,4 @@ def chiral_bond_restraint(conf, params, box, lamb, idxs, signs):
     """
     assert len(idxs) == len(params)
     assert len(idxs) == len(signs)
-    return jnp.sum(U_chiral_bond_batch_all(conf, idxs, params, signs))
+    return jnp.sum(U_chiral_bond_batch_all(conf, idxs, params, signs)) if len(idxs) else 0.0
