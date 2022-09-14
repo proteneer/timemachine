@@ -246,7 +246,6 @@ class GradientTest(unittest.TestCase):
         rtol: float,
         precision,
         atol: float = 1e-8,
-        benchmark: bool = False,
     ):
         """
         Compares the forces between a reference and a test potential.
