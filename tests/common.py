@@ -178,15 +178,6 @@ class GradientTest(unittest.TestCase):
 
         return x
 
-    def get_cdk8_coords(self, D, sort=False):
-        x = np.load("cdk8.npy").astype(np.float64)
-        print("num_atoms", x.shape[0])
-        if sort:
-            perm = hilbert_sort(x, D)
-            x = x[perm]
-
-        return x
-
     def assert_equal_vectors(self, truth, test, rtol):
         """
         OpenMM convention - errors are compared against norm of force vectors
