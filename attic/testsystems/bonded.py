@@ -46,3 +46,26 @@ def prepare_bonded_system(x, B, A, T, precision):
 
     return (bond_params, harmonic_bond_fn), custom_bonded
     # return params, [harmonic_bond_fn, harmonic_angle_fn, periodic_torsion_fn], [custom_bonded, custom_angles, custom_torsions]
+
+
+def prepare_restraints(x, B, precision):
+
+    assert x.ndim == 2
+    N = x.shape[0]
+    # D = x.shape[1]
+
+    atom_idxs = np.arange(N)
+
+    params = np.random.randn(B, 3).astype(np.float64)
+
+    bond_idxs = []
+    for _ in range(B):
+        bond_idxs.append(np.random.choice(atom_idxs, size=2, replace=False))
+    bond_idxs = np.array(bond_idxs, dtype=np.int32)
+
+    lambda_flags = np.random.randint(0, 2, size=(B,)).astype(np.int32)
+
+    custom_restraint = potentials.Restraint(bond_idxs, params, lambda_flags, precision=precision)
+    restraint_fn = functools.partial(bonded.restraint, box=None, lamb_flags=lambda_flags, bond_idxs=bond_idxs)
+
+    return (params, restraint_fn), custom_restraint
