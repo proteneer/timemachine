@@ -99,9 +99,9 @@ def sample(initial_state, protocol):
     intg_impl = initial_state.integrator.impl()
     baro_impl = initial_state.barostat.impl(bound_impls)
 
-    # minimize the local region, removing clashes and unstretching some bonds
-    cutoff = 1.0  # in nanometers
-    # local minimize region around ligand
+    cutoff = 0.5  # in nanometers
+    # local minimize region around ligand, should result in ~300 atoms
+
     ligand_coords = initial_state.x0[initial_state.ligand_idxs]
     d_ij = cdist(ligand_coords, initial_state.x0)
     # if any atom is within any of the ligand's atom's ixn radius, flag it for minimization
