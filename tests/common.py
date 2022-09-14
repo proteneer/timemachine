@@ -194,10 +194,10 @@ class GradientTest(unittest.TestCase):
         x = np.load("tests/data/water.npy").astype(np.float32).astype(np.float64)
         x = x[:, :D]
 
-        # x = (x).astype(np.float64)
-        # if sort:
-        # perm = hilbert_sort(x, D)
-        # x = x[perm]
+        if sort:
+            x = x.astype(np.float64)
+            perm = hilbert_sort(x, D)
+            x = x[perm]
 
         return x
 
