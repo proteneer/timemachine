@@ -151,8 +151,26 @@ def linear_interpolation(src_params, dst_params, lamb):
     return (1 - lamb) * jnp.asarray(src_params) + lamb * jnp.asarray(dst_params)
 
 
-def log_linear_interpolation(src_params, dst_params, lamb):
+def log_linear_interpolation(src_params, dst_params, lamb, min_value):
     """
     Linear interpolation in log space
     """
-    return jnp.exp(linear_interpolation(jnp.log(src_params), jnp.log(dst_params), lamb))
+    return jnp.exp(
+        linear_interpolation(
+            jnp.log(jnp.maximum(src_params, min_value)),
+            jnp.log(jnp.maximum(dst_params, min_value)),
+            lamb,
+        )
+    )
+
+
+def pad(f, src_params, dst_params, lamb, lambda_min, lambda_max):
+    return jnp.where(
+        lamb < lambda_min,
+        src_params,
+        jnp.where(
+            lambda_max < lamb,
+            dst_params,
+            f(src_params, dst_params, (lamb - lambda_min) / (lambda_max - lambda_min)),
+        ),
+    )

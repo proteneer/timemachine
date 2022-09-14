@@ -14,6 +14,7 @@ from importlib import resources
 import jax.numpy as jnp
 import numpy as np
 import pytest
+from jax import vmap
 from rdkit import Chem
 from rdkit.Chem import AllChem
 
@@ -26,8 +27,11 @@ from timemachine.fe.single_topology_v3 import (
     MultipleAnchorWarning,
     SingleTopologyV3,
     canonicalize_improper_idxs,
+    handle_ring_opening_closing,
     interpolate_harmonic_force,
+    interpolate_periodic_torsion,
     setup_dummy_interactions_from_ff,
+    standardize_angle_radians,
 )
 from timemachine.fe.system import convert_bps_into_system, minimize_scipy, simulate_system
 from timemachine.fe.utils import get_mol_name, get_romol_conf
@@ -391,27 +395,86 @@ def test_no_chiral_bond_restraints():
 
 
 def assert_interpolation_valid(f, a, b):
-    np.testing.assert_array_equal(f(a, b, 0.0), a)
-    np.testing.assert_array_equal(f(a, b, 1.0), b)
+    np.testing.assert_allclose(f(a, b, 0.0), a)
+    np.testing.assert_allclose(f(a, b, 1.0), b)
 
-    y = f(a, b, 0.1)
-    assert np.all(np.minimum(a, b) <= y)
-    assert np.all(y <= np.maximum(a, b))
+    rng = np.random.default_rng(2022)
+    lambdas = rng.uniform(0, 1, (30,))
+    ys = vmap(functools.partial(f, a, b))(lambdas)
+    assert np.all(np.minimum(a, b) <= ys)
+    assert np.all(ys <= np.maximum(a, b))
+
+
+def test_handle_ring_opening_closing():
+    rng = np.random.default_rng(2022)
+    n = 100
+    k = 20
+
+    def random_ks():
+        return rng.uniform(1, 2, (n,))
+
+    src_k = random_ks()
+    dst_k = random_ks()
+
+    idxs = rng.choice(n, k, replace=False)
+
+    closing_idxs = idxs[: k // 2]
+    opening_idxs = idxs[k // 2 :]
+
+    src_k[closing_idxs] = 0.0
+    dst_k[opening_idxs] = 0.0
+
+    lambda_min = 0.3
+    lambda_max = 0.7
+
+    f = functools.partial(
+        handle_ring_opening_closing,
+        linear_interpolation,
+        src_k,
+        dst_k,
+        lambda_min=lambda_min,
+        lambda_max=lambda_max,
+    )
+
+    # closing
+    # 0 < λ < λmin
+    ks = f(0.5 * lambda_min)
+    np.testing.assert_array_equal(ks[closing_idxs], 0.0)
+
+    # λmax < λ < 1
+    ks = f(0.5 * (1.0 + lambda_max))
+    np.testing.assert_array_equal(ks[closing_idxs], dst_k[closing_idxs])
+
+    # opening
+    # 1 - λmin < λ < 1
+    ks = f(0.5 * (2.0 - lambda_min))
+    np.testing.assert_array_equal(ks[opening_idxs], 0.0)
+
+    # 0 < λ < 1 - λmax
+    ks = f(0.5 * (1.0 - lambda_max))
+    np.testing.assert_array_equal(ks[opening_idxs], src_k[opening_idxs])
 
 
 def test_interpolate_harmonic_force():
 
     rng = np.random.default_rng(2022)
 
-    def random_harmonic_params():
+    def random_params():
         return rng.uniform(1, 2, (2, 100))
 
-    src_params = random_harmonic_params()
-    dst_params = random_harmonic_params()
+    src_params = random_params()
+    dst_params = random_params()
 
     k_min = 0.1
     assert (k_min < np.minimum(src_params, dst_params)).all()
-    f = functools.partial(interpolate_harmonic_force, k_min=k_min)
+
+    f = functools.partial(
+        interpolate_harmonic_force,
+        k_min=k_min,
+        lambda_min=0.0,
+        lambda_max=0.4,
+    )
+
     assert_interpolation_valid(f, src_params, dst_params)
 
     # check for sublinearity
@@ -424,10 +487,49 @@ def test_interpolate_harmonic_force():
     f = jax.jit(f)
     f(src_params, dst_params, 0.1)
 
-    # check case where initial force constant is zero (e.g. ring closing)
-    src_params = random_harmonic_params()
-    src_params[0, :] = 0.0
+
+def test_standardize_angle_radians():
+    f = standardize_angle_radians
+    assert np.allclose(f(0.0), 0.0)
+    assert np.allclose(f(2 * np.pi), 0.0)
+    assert np.allclose(f(3 * np.pi / 2), -np.pi / 2)
+
+
+def assert_linear(f, x1, x2, x3):
+    np.testing.assert_allclose(
+        (f(x2) - f(x1)) / (x2 - x1),
+        (f(x3) - f(x2)) / (x3 - x2),
+    )
+
+
+def test_interpolate_periodic_torsion():
+
+    rng = np.random.default_rng(2022)
+    n = 100
+    periods = rng.choice(4, (n,)).astype(np.int32)
+
+    def random_params():
+        return np.stack(
+            (
+                rng.uniform(1, 2, (n,)).astype(np.float64),
+                rng.uniform(-np.pi, np.pi, (n,)).astype(np.float64),
+                periods,
+            )
+        )
+
+    src_params = random_params()
+    dst_params = random_params()
+
+    f = functools.partial(interpolate_periodic_torsion, lambda_min=0.4, lambda_max=0.7)
     assert_interpolation_valid(f, src_params, dst_params)
-    assert_interpolation_valid(f, dst_params, src_params)
-    assert (f(src_params, dst_params, 1e-5)[0, :] > k_min).all()
-    assert (f(dst_params, src_params, 1 - 1e-5)[0, :] > k_min).all()
+
+    # check for JIT-compatibility
+    f = jax.jit(f)
+    f(random_params(), random_params(), 0.1)
+
+    # check that phases are standardized to the interval [-pi, pi] before interpolation
+    src_params = random_params()
+    dst_params = random_params()
+    src_params[1, :] += np.pi
+    dst_params[1, :] += np.pi
+    np.testing.assert_array_less(f(src_params, dst_params, 0.1)[1, :], np.pi)

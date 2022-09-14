@@ -484,12 +484,30 @@ def find_dummy_groups_and_anchors(mol_a, mol_b, core_a, core_b):
     return dummy_groups_b, all_jks
 
 
-def interpolate_harmonic_force(src_params, dst_params, lamb, k_min):
+def handle_ring_opening_closing(f, src_k, dst_k, lamb, lambda_min, lambda_max):
+    def ring_closing(src_k, dst_k, lamb):
+        return interpolate.pad(f, src_k, dst_k, lamb, lambda_min, lambda_max)
+
+    def ring_opening(src_k, dst_k, lamb):
+        return ring_closing(dst_k, src_k, 1.0 - lamb)
+
+    return jnp.where(
+        src_k == 0.0,
+        ring_closing(src_k, dst_k, lamb),
+        jnp.where(
+            dst_k == 0.0,
+            ring_opening(src_k, dst_k, lamb),
+            f(src_k, dst_k, lamb),
+        ),
+    )
+
+
+def interpolate_harmonic_force(src_params, dst_params, lamb, k_min, lambda_min, lambda_max):
     """
     Interpolate between harmonic force parameters using
 
-    - log-linear interpolation for force constants
-    - linear interpolation for equilibrium values
+    1. Log-linear interpolation for force constants
+    2. Linear interpolation for equilibrium values
 
     In the case of ring closing (opening), some initial (final) force constants will be zero. In this case the value
     k_min is used instead of zero for interpolation, since zero is not in the range of the log-linear interpolation
@@ -497,36 +515,93 @@ def interpolate_harmonic_force(src_params, dst_params, lamb, k_min):
 
     Parameters
     ----------
-    src_params : ndarray, float, (N, 2)
+    src_params : ndarray, float, (2,)
         parameters at lambda = 0
 
-    dst_params : ndarray, float, (N, 2)
+    dst_params : ndarray, float, (2,)
         parameters at lambda = 1
 
     k_min : float, k_min > 0
         minimum force constant for interpolation
+
+    lambda_min, lambda_max : float, in 0 < lambda_min < lambda_max < 1
+        values of the control parameter at which to begin and end interpolation, respectively. This is only relevant
+        when k=0 in the src or dst params. Note that if k=0 in the dst params (i.e. ring opening), the convention is
+        "flipped", i.e. interpolation "begins" at λ = 1 - λmin and "ends" at 1 - λmax.
     """
 
-    k0, x0 = jnp.asarray(src_params).astype(jnp.float64)
-    k1, x1 = jnp.asarray(dst_params).astype(jnp.float64)
+    src_k, src_x = src_params
+    dst_k, dst_x = dst_params
 
-    def f(k0, k1):
-        return jnp.array(
-            [
-                interpolate.log_linear_interpolation(k0, k1, lamb),
-                interpolate.linear_interpolation(x0, x1, lamb),
-            ]
-        )
-
-    return jnp.where(
+    k = jnp.where(
         lamb == 0.0,
-        jnp.array([k0, x0]),
+        src_k,
         jnp.where(
             lamb == 1.0,
-            jnp.array([k1, x1]),
-            f(jnp.maximum(k0, k_min), jnp.maximum(k1, k_min)),
+            dst_k,
+            handle_ring_opening_closing(
+                partial(interpolate.log_linear_interpolation, min_value=k_min),
+                src_k,
+                dst_k,
+                lamb,
+                lambda_min,
+                lambda_max,
+            ),
         ),
     )
+
+    x = interpolate.linear_interpolation(src_x, dst_x, lamb)
+
+    return jnp.array([k, x])
+
+
+def standardize_angle_radians(x):
+    """
+    Maps an angle in radians to an equivalent angle in [-pi, pi]
+    """
+
+    return jnp.arctan2(jnp.sin(x), jnp.cos(x))
+
+
+def interpolate_periodic_torsion(src_params, dst_params, lamb, lambda_min, lambda_max):
+    """
+    Interpolate between periodic torsion parameters using
+
+    1. Piecewise linear interpolation for force constants:
+       a. If k(0) = 0, then k(λ) = 0 if λ < λmin and linear for λmin < λ
+       b. Otherwise k(λ) is linear
+    2. Linear interpolation for angles, after standardizing (e.g. 3π/2 → -π/2).
+    3. No interpolation for periodicity (pinned to source value)
+
+    Motivation for (1) is to delay activating torsions until angle force constants are nonvanishing, thereby preventing
+    the numerical instabilities in the torsion terms that arise when atoms spanned by the torsion are nearly collinear.
+
+    Parameters
+    ----------
+    src_params : ndarray, float, (3,)
+        periodic torsion parameters at lambda = 0
+
+    dst_params : ndarray, float, (3,)
+        periodic torsion parameters at lambda = 1
+
+    lambda_min, lambda_max : float, in 0 < lambda_min < lambda_max < 1
+        values of the control parameter at which to begin and end interpolation, respectively. This is only relevant
+        when k=0 in the src or dst params. Note that if k=0 in the dst params (i.e. ring opening), the convention is
+        "flipped", i.e. interpolation "begins" at λ = 1 - λmin and "ends" at 1 - λmax.
+    """
+
+    src_k, src_phase, src_period = src_params
+    dst_k, dst_phase, _ = dst_params
+
+    k = handle_ring_opening_closing(interpolate.linear_interpolation, src_k, dst_k, lamb, lambda_min, lambda_max)
+
+    phase = interpolate.linear_interpolation(
+        standardize_angle_radians(src_phase),
+        standardize_angle_radians(dst_phase),
+        lamb,
+    )
+
+    return jnp.array([k, phase, src_period])
 
 
 class SingleTopologyV3:
@@ -825,42 +900,70 @@ class SingleTopologyV3:
         """
         src_system = self.src_system
         dst_system = self.dst_system
-        interpolate_fn = interpolate.linear_interpolation
 
-        # tbd: use different interpolation functions later
+        # parameters controlling when angles and torsions "turn on" for ring opening/closing transformations
+        lambda_angles = 0.4  # for angles, src_k = 0 => k(lamb) = 0 when lamb < lambda_angles
+        lambda_torsions = 0.7  # analogous for torsions
+
         bond = self._setup_intermediate_bonded_term(
             src_system.bond,
             dst_system.bond,
             lamb,
             interpolate.align_harmonic_bond_idxs_and_params,
-            partial(interpolate_harmonic_force, k_min=0.1),  # ~ 5 nm at 300 K
+            partial(
+                interpolate_harmonic_force,
+                k_min=0.1,  # ~ 5 nm at 300 K
+                lambda_min=0.0,
+                lambda_max=lambda_angles,
+            ),
         )
+
         angle = self._setup_intermediate_bonded_term(
             src_system.angle,
             dst_system.angle,
             lamb,
             interpolate.align_harmonic_angle_idxs_and_params,
-            partial(interpolate_harmonic_force, k_min=0.05),
+            partial(
+                interpolate_harmonic_force,
+                k_min=0.05,
+                lambda_min=lambda_angles,
+                lambda_max=lambda_torsions,
+            ),
         )
+
         torsion = self._setup_intermediate_bonded_term(
-            src_system.torsion, dst_system.torsion, lamb, interpolate.align_torsion_idxs_and_params, interpolate_fn
+            src_system.torsion,
+            dst_system.torsion,
+            lamb,
+            interpolate.align_torsion_idxs_and_params,
+            partial(
+                interpolate_periodic_torsion,
+                lambda_min=lambda_torsions,
+                lambda_max=1.0,
+            ),
         )
+
         nonbonded = self._setup_intermediate_nonbonded_term(
             src_system.nonbonded,
             dst_system.nonbonded,
             lamb,
             interpolate.align_nonbonded_idxs_and_params,
-            interpolate_fn,
+            interpolate.linear_interpolation,
         )
+
         chiral_atom = self._setup_intermediate_bonded_term(
             src_system.chiral_atom,
             dst_system.chiral_atom,
             lamb,
             interpolate.align_chiral_atom_idxs_and_params,
-            interpolate_fn,
+            interpolate.linear_interpolation,
         )
+
         chiral_bond = self._setup_intermediate_chiral_bond_term(
-            src_system.chiral_bond, dst_system.chiral_bond, lamb, interpolate_fn
+            src_system.chiral_bond,
+            dst_system.chiral_bond,
+            lamb,
+            interpolate.linear_interpolation,
         )
 
         return system.VacuumSystem(bond, angle, torsion, nonbonded, chiral_atom, chiral_bond)
