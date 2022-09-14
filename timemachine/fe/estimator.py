@@ -8,6 +8,7 @@ import pymbar
 from numpy.typing import NDArray
 
 from timemachine.fe import endpoint_correction, standard_state
+from timemachine.fe.bar import bar_with_bootstrapped_uncertainty
 from timemachine.fe.utils import extract_delta_Us_from_U_knk, sanitize_energies
 from timemachine.lib import LangevinIntegrator, MonteCarloBarostat, custom_ops, potentials
 from timemachine.md import minimizer
@@ -344,7 +345,8 @@ def deltaG_from_results(
         fwd_delta_u = model.beta * delta_Us[lambda_idx][0]
         rev_delta_u = model.beta * delta_Us[lambda_idx][1]
 
-        dG_exact, exact_bar_err = pymbar.BAR(fwd_delta_u, rev_delta_u)
+        dG_exact, exact_bar_err = bar_with_bootstrapped_uncertainty(fwd_delta_u, rev_delta_u)
+
         bar_dG += dG_exact / model.beta
         exact_bar_overlap = endpoint_correction.overlap_from_cdf(fwd_delta_u, rev_delta_u)
 
@@ -405,7 +407,9 @@ def deltaG_from_results(
             rhs_xs=results[-1].xs,
             seed=2021,
         )
-        dG_endpoint, endpoint_err = pymbar.BAR(model.beta * lhs_du, model.beta * np.array(rhs_du))
+        dG_endpoint, endpoint_err = bar_with_bootstrapped_uncertainty(
+            model.beta * lhs_du, model.beta * np.array(rhs_du)
+        )
         dG_endpoint = dG_endpoint / model.beta
         endpoint_err = endpoint_err / model.beta
         # compute standard state corrections for translation and rotation

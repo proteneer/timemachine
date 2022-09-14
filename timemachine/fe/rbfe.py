@@ -14,6 +14,7 @@ from scipy.spatial.distance import cdist
 
 from timemachine.constants import BOLTZ, DEFAULT_TEMP
 from timemachine.fe import model_utils
+from timemachine.fe.bar import bar_with_bootstrapped_uncertainty
 from timemachine.fe.single_topology_v3 import SingleTopologyV3
 from timemachine.fe.system import convert_bps_into_system
 from timemachine.fe.utils import get_mol_name, get_romol_conf
@@ -395,7 +396,7 @@ def estimate_free_energy_given_initial_states(initial_states, protocol, temperat
 
                 fwd_delta_u = u_10 - u_00
                 rev_delta_u = u_01 - u_11
-                df, df_err = pymbar.BAR(fwd_delta_u, rev_delta_u)
+                df, df_err = bar_with_bootstrapped_uncertainty(fwd_delta_u, rev_delta_u)
                 plot_axis = all_axes[lamb_idx - 1][u_idx]
                 plot_BAR(df, df_err, fwd_delta_u, rev_delta_u, U_names[u_idx], plot_axis)
 
@@ -406,7 +407,7 @@ def estimate_free_energy_given_initial_states(initial_states, protocol, temperat
             ukln_by_component = np.array(ukln_by_component, dtype=np.float64)
             total_fwd_delta_us = (ukln_by_component[:, 1, 0, :] - ukln_by_component[:, 0, 0, :]).sum(axis=0)
             total_rev_delta_us = (ukln_by_component[:, 0, 1, :] - ukln_by_component[:, 1, 1, :]).sum(axis=0)
-            total_df, total_df_err = pymbar.BAR(total_fwd_delta_us, total_rev_delta_us)
+            total_df, total_df_err = bar_with_bootstrapped_uncertainty(total_fwd_delta_us, total_rev_delta_us)
 
             plot_axis = all_axes[lamb_idx - 1][u_idx + 1]
 
