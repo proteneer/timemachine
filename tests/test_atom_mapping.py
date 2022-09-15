@@ -8,7 +8,12 @@ from timemachine.testsystems.relative import hif2a_ligand_pair
 def test_mcs():
     mcs_result = mcs(hif2a_ligand_pair.mol_a, hif2a_ligand_pair.mol_b, threshold=0.5)
     assert mcs_result.queryMol is not None
-    assert mcs_result.numAtoms > 1
+    assert mcs_result.numAtoms == 30
+
+    # Match but without any hydrogens, should expect fewer matches
+    mcs_result = mcs(hif2a_ligand_pair.mol_a, hif2a_ligand_pair.mol_b, threshold=0.5, match_hydrogens=False)
+    assert mcs_result.queryMol is not None
+    assert mcs_result.numAtoms == 23
 
 
 def test_get_core_by_mcs():
