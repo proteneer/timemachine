@@ -570,23 +570,6 @@ def estimate_relative_free_energy(
 
 def run_pair(mol_a, mol_b, core, forcefield, protein, n_frames, seed, n_eq_steps=10000):
 
-    # vacuum leg
-    vacuum_host_config = None
-    vacuum_res = estimate_relative_free_energy(
-        mol_a,
-        mol_b,
-        core,
-        forcefield,
-        vacuum_host_config,
-        seed,
-        n_frames=n_frames,
-        prefix="vacuum",
-        n_eq_steps=n_eq_steps,
-    )
-
-    # vacuum error should be below a threshold, otherwise this edge is likely problematic
-    assert np.linalg.norm(vacuum_res.all_errs) < 1.0
-
     box_width = 4.0
     solvent_sys, solvent_conf, solvent_box, solvent_top = builders.build_water_system(box_width)
     solvent_box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes, deboggle later
@@ -618,4 +601,4 @@ def run_pair(mol_a, mol_b, core, forcefield, protein, n_frames, seed, n_eq_steps
         n_eq_steps=n_eq_steps,
     )
 
-    return vacuum_res, solvent_res, solvent_top, complex_res, complex_top
+    return solvent_res, solvent_top, complex_res, complex_top
