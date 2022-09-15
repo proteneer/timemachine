@@ -70,7 +70,7 @@ def mcs(
     # try on given mols
     result = rdFMCS.FindMCS([a, b], params)
 
-    # optional fallbackmcs
+    # optional fallback
     def is_trivial(mcs_result) -> bool:
         return mcs_result.numBonds < 2
 
