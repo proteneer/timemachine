@@ -150,6 +150,7 @@ def test_align_mols_by_core():
     assert len(core) == mol_a.GetNumAtoms()
 
 
+@pytest.mark.nogpu
 def test_align_core_different_size_mols():
     """Verifies that this works as expected if the size of the molecules aren't the same."""
     mol_a = Chem.AddHs(Chem.MolFromSmiles("c1ccccc1"))  # benzene
@@ -180,10 +181,23 @@ def test_align_core_different_size_mols():
     assert len(core) == mol_a.GetNumAtoms() - 1
 
 
+@pytest.mark.nogpu
 def test_get_core_with_alignment():
-
+    np.random.seed(2022)
     mol_a, mol_b = get_cyclohexanes_different_confs()
 
     core, _ = get_core_with_alignment(mol_a, mol_b)
+    assert len(core) == mol_a.GetNumAtoms()
+    assert len(core) == mol_b.GetNumAtoms()
+
+    new_idxs = list(range(mol_a.GetNumAtoms()))
+    # Shuffle the indices so that not all of the hydrogens are at the end of the mol
+    np.random.shuffle(new_idxs)
+
+    mol_a_shuffled = Chem.RenumberAtoms(mol_a, new_idxs)
+    np.random.shuffle(new_idxs)
+    mol_b_shuffled = Chem.RenumberAtoms(mol_b, new_idxs)
+
+    shuffled_core, _ = get_core_with_alignment(mol_a_shuffled, mol_b_shuffled)
     assert len(core) == mol_a.GetNumAtoms()
     assert len(core) == mol_b.GetNumAtoms()

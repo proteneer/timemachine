@@ -14,7 +14,16 @@ from timemachine.ff import Forcefield
 from timemachine.md.align import align_mols_by_core
 
 
-def mcs(a, b, threshold: float = 2.0, timeout: int = 5, smarts: Optional[str] = None, conformer_aware=True, retry=True):
+def mcs(
+    a,
+    b,
+    threshold: float = 2.0,
+    timeout: int = 5,
+    smarts: Optional[str] = None,
+    conformer_aware: bool = True,
+    retry: bool = True,
+    match_hydrogens: bool = True,
+):
     """Find maximum common substructure between mols a and b
     using reasonable settings for single topology:
     * disallow partial ring matches
@@ -24,6 +33,8 @@ def mcs(a, b, threshold: float = 2.0, timeout: int = 5, smarts: Optional[str] = 
         (assumes conformers are aligned)
 
     if retry=True, then reseed with result of easier MCS(RemoveHs(a), RemoveHs(b)) in case of failure
+
+    if match_hydrogens=False, then do not match using hydrogens. Will not retry
     """
     params = rdFMCS.MCSParameters()
 
@@ -40,11 +51,21 @@ def mcs(a, b, threshold: float = 2.0, timeout: int = 5, smarts: Optional[str] = 
     if conformer_aware:
         params.AtomCompareParameters.MaxDistance = threshold
     params.AtomTyper = rdFMCS.AtomCompare.CompareAny
-
     # globals
     params.Timeout = timeout
     if smarts is not None:
         params.InitialSeed = smarts
+
+    def strip_hydrogens(mol):
+        """Strip hydrogens with deepcopy to be extra safe"""
+        return Chem.RemoveHs(deepcopy(mol))
+
+    if not match_hydrogens:
+        # Setting CompareAnyHeavyAtom doesn't handle this correctly, strip hydrogens explicitly
+        a = strip_hydrogens(a)
+        b = strip_hydrogens(b)
+        # Disable retrying, as it will compare original a and b
+        retry = False
 
     # try on given mols
     result = rdFMCS.FindMCS([a, b], params)
@@ -55,8 +76,8 @@ def mcs(a, b, threshold: float = 2.0, timeout: int = 5, smarts: Optional[str] = 
 
     if retry and is_trivial(result) and smarts is None:
         # try again, but seed with MCS computed without explicit hydrogens
-        a_without_hs = Chem.RemoveHs(deepcopy(a))
-        b_without_hs = Chem.RemoveHs(deepcopy(b))
+        a_without_hs = strip_hydrogens(a)
+        b_without_hs = strip_hydrogens(b)
 
         heavy_atom_result = rdFMCS.FindMCS([a_without_hs, b_without_hs], params)
         params.InitialSeed = heavy_atom_result.smartsString
@@ -186,21 +207,17 @@ def get_core_with_alignment(
     if ff is None:
         ff = Forcefield.load_from_file(DEFAULT_FF)
 
-    # Remove hydrogens
-    a_without_hs = Chem.RemoveHs(deepcopy(a_copy))
-    b_without_hs = Chem.RemoveHs(deepcopy(b_copy))
-
-    def setup_core(mol_a, mol_b):
-        result = mcs(mol_a, mol_b, threshold=threshold)
+    def setup_core(mol_a, mol_b, match_hydrogens):
+        result = mcs(mol_a, mol_b, threshold=threshold, match_hydrogens=match_hydrogens)
         query_mol = Chem.MolFromSmarts(result.smartsString)
         core = get_core_by_mcs(mol_a, mol_b, query_mol, threshold=threshold)
         return core, result.smartsString
 
-    heavy_atom_core, _ = setup_core(a_without_hs, b_without_hs)
+    heavy_atom_core, _ = setup_core(a_copy, b_copy, False)
 
     conf_a, conf_b = align_mols_by_core(mol_a, mol_b, heavy_atom_core, ff, n_steps=n_steps, k=k)
     set_romol_conf(a_copy, conf_a)
     set_romol_conf(b_copy, conf_b)
 
-    core, smarts = setup_core(a_copy, b_copy)
+    core, smarts = setup_core(a_copy, b_copy, True)
     return core, smarts
