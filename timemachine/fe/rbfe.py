@@ -98,7 +98,10 @@ def sample(initial_state, protocol):
 
     bound_impls = [p.bound_impl(np.float32) for p in initial_state.potentials]
     intg_impl = initial_state.integrator.impl()
-    baro_impl = initial_state.barostat.impl(bound_impls)
+    if initial_state.barostat:
+        baro_impl = initial_state.barostat.impl(bound_impls)
+    else:
+        baro_impl = None
 
     cutoff = 0.5  # in nanometers
     # local minimize region around ligand, should result in ~300 atoms
@@ -190,26 +193,46 @@ class SimulationResult:
 # to help us debug errors.
 def setup_initial_states(st, host_config, temperature, lambda_schedule, seed):
 
-    host_bps, host_masses = openmm_deserializer.deserialize_system(host_config.omm_system, cutoff=1.2)
-    host_conf = minimizer.minimize_host_4d(
-        [st.mol_a, st.mol_b],
-        host_config.omm_system,
-        host_config.conf,
-        st.ff,
-        host_config.box,
-    )
+    if host_config:
+        host_bps, host_masses = openmm_deserializer.deserialize_system(host_config.omm_system, cutoff=1.2)
+        host_conf = minimizer.minimize_host_4d(
+            [st.mol_a, st.mol_b],
+            host_config.omm_system,
+            host_config.conf,
+            st.ff,
+            host_config.box,
+        )
 
     initial_states = []
 
-    # setup hmr masses in a lambda_independent way
-    combined_masses = np.concatenate([host_masses, st.combine_masses()])
-
-    last_hmr_masses = None
-
     for lamb_idx, lamb in enumerate(lambda_schedule):
-        hgs = st.combine_with_host(convert_bps_into_system(host_bps), lamb=lamb)
+
+        mol_a_conf = get_romol_conf(st.mol_a)
+        mol_b_conf = get_romol_conf(st.mol_b)
+        ligand_conf = st.combine_confs(mol_a_conf, mol_b_conf)
+        run_seed = seed + lamb_idx
+
+        if host_config:
+            # run in an environment
+            system = st.combine_with_host(convert_bps_into_system(host_bps), lamb=lamb)
+            combined_masses = np.concatenate([host_masses, st.combine_masses()])
+            potentials = system.get_U_fns()
+            hmr_masses = model_utils.apply_hmr(combined_masses, potentials[0].get_idxs())
+            group_idxs = get_group_indices(get_bond_list(system.bond))
+            baro = MonteCarloBarostat(len(hmr_masses), 1.0, temperature, group_idxs, 15, run_seed + 1)
+            x0 = np.concatenate([host_conf, ligand_conf])
+            box0 = host_config.box
+        else:
+            # run a vacuum simulation
+            system = st.setup_intermediate_state(lamb)
+            combined_masses = np.array(st.combine_masses())
+            potentials = system.get_U_fns()
+            hmr_masses = model_utils.apply_hmr(combined_masses, potentials[0].get_idxs())
+            baro = None
+            x0 = ligand_conf
+            box0 = np.eye(3, dtype=np.float64) * 10  # make a large 10x10x10nm box
+
         # minimize water box around the ligand by 4D-decoupling
-        potentials = hgs.get_U_fns()
 
         # hmr masses should be identical throughout the lambda schedule
         # bond idxs should be the same at the two end-states, note that a possible corner
@@ -224,31 +247,15 @@ def setup_initial_states(st, host_config, temperature, lambda_schedule, seed):
 
         # but its reasonable to be skeptical, so we also assert consistency through the lambda
         # schedule as an extra sanity check.
-        hmr_masses = model_utils.apply_hmr(combined_masses, potentials[0].get_idxs())
-        if last_hmr_masses is None:
-            last_hmr_masses = hmr_masses
-        else:
-            np.testing.assert_array_equal(last_hmr_masses, hmr_masses)
-            last_hmr_masses = hmr_masses
 
-        mol_a_conf = get_romol_conf(st.mol_a)
-        mol_b_conf = get_romol_conf(st.mol_b)
-        ligand_conf = st.combine_confs(mol_a_conf, mol_b_conf)
-        combined_conf = np.concatenate([host_conf, ligand_conf])
-        x0 = combined_conf
         v0 = np.zeros_like(x0)  # tbd resample from Maxwell-boltzman?
         num_ligand_atoms = len(ligand_conf)
         num_total_atoms = len(x0)
         ligand_idxs = np.arange(num_total_atoms - num_ligand_atoms, num_total_atoms)
 
-        box0 = host_config.box
-        group_idxs = get_group_indices(get_bond_list(hgs.bond))
-        run_seed = seed + lamb_idx
-
         dt = 2.5e-3
         friction = 1.0
         intg = LangevinIntegrator(temperature, dt, friction, hmr_masses, run_seed)
-        baro = MonteCarloBarostat(len(hmr_masses), 1.0, temperature, group_idxs, 15, run_seed + 1)
 
         state = InitialState(potentials, intg, baro, x0, v0, box0, lamb, ligand_idxs)
         initial_states.append(state)
@@ -506,7 +513,7 @@ def estimate_relative_free_energy(
     ff: ff.Forcefield
         Forcefield to be used for the system
 
-    host_config: HostConfig
+    host_config: HostConfig or None
         Configuration for the host system.
 
     n_frames: int
@@ -562,6 +569,24 @@ def estimate_relative_free_energy(
 
 
 def run_pair(mol_a, mol_b, core, forcefield, protein, n_frames, seed, n_eq_steps=10000):
+
+    # vacuum leg
+    vacuum_host_config = None
+    vacuum_res = estimate_relative_free_energy(
+        mol_a,
+        mol_b,
+        core,
+        forcefield,
+        vacuum_host_config,
+        seed,
+        n_frames=n_frames,
+        prefix="vacuum",
+        n_eq_steps=n_eq_steps,
+    )
+
+    # vacuum error should be below a threshold, otherwise this edge is likely problematic
+    assert np.linalg.norm(vacuum_res.all_dGs) < 1.0
+
     box_width = 4.0
     solvent_sys, solvent_conf, solvent_box, solvent_top = builders.build_water_system(box_width)
     solvent_box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes, deboggle later
@@ -593,4 +618,4 @@ def run_pair(mol_a, mol_b, core, forcefield, protein, n_frames, seed, n_eq_steps
         n_eq_steps=n_eq_steps,
     )
 
-    return solvent_res, solvent_top, complex_res, complex_top
+    return vacuum_res, solvent_res, solvent_top, complex_res, complex_top

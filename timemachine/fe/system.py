@@ -163,6 +163,15 @@ class VacuumSystem:
 
         return U_fn
 
+    def get_U_fns(self):
+
+        return [
+            self.bond,
+            self.angle,
+            self.torsion,
+            self.nonbonded,
+        ]
+
 
 class HostGuestSystem:
 
