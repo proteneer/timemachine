@@ -514,7 +514,7 @@ def estimate_relative_free_energy(
         Forcefield to be used for the system
 
     host_config: HostConfig or None
-        Configuration for the host system.
+        Configuration for the host system. If None, then the vacuum leg is run.
 
     n_frames: int
         number of samples to generate for each lambda windows, where each sample is 1000 steps of MD.
