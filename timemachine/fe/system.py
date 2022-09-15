@@ -8,7 +8,10 @@ import scipy
 
 from timemachine.integrator import simulate
 from timemachine.lib import potentials
-from timemachine.potentials import bonded, chiral_restraints, nonbonded
+from timemachine.potentials import bonded, nonbonded
+
+# Chiral restraints are disabled until checks are added (see GH #815)
+# from timemachine.potentials import bonded, chiral_restraints, nonbonded
 
 
 def minimize_scipy(U_fn, x0, return_traj=False):
@@ -132,34 +135,37 @@ class VacuumSystem:
             cutoff=self.nonbonded.get_cutoff(),
         )
 
-        if self.chiral_atom:
-            chiral_atom_U = functools.partial(
-                chiral_restraints.chiral_atom_restraint,
-                params=jnp.array(self.chiral_atom.params),
-                box=None,
-                idxs=np.array(self.chiral_atom.get_idxs()),
-                lamb=0.0,
-            )
-        else:
-            chiral_atom_U = lambda _: 0
+        # Chiral restraints are disabled until checks are added (see GH #815)
+        # if self.chiral_atom:
+        #     chiral_atom_U = functools.partial(
+        #         chiral_restraints.chiral_atom_restraint,
+        #         params=jnp.array(self.chiral_atom.params),
+        #         box=None,
+        #         idxs=np.array(self.chiral_atom.get_idxs()),
+        #         lamb=0.0,
+        #     )
+        # else:
+        #     chiral_atom_U = lambda _: 0
 
-        if self.chiral_bond:
-            chiral_bond_U = functools.partial(
-                chiral_restraints.chiral_bond_restraint,
-                params=jnp.array(self.chiral_bond.params),
-                box=None,
-                idxs=np.array(self.chiral_bond.get_idxs()),
-                signs=np.array(self.chiral_bond.get_signs()),
-                lamb=0.0,
-            )
-        else:
-            chiral_bond_U = lambda _: 0
+        # if self.chiral_bond:
+        #     chiral_bond_U = functools.partial(
+        #         chiral_restraints.chiral_bond_restraint,
+        #         params=jnp.array(self.chiral_bond.params),
+        #         box=None,
+        #         idxs=np.array(self.chiral_bond.get_idxs()),
+        #         signs=np.array(self.chiral_bond.get_signs()),
+        #         lamb=0.0,
+        #     )
+        # else:
+        #     chiral_bond_U = lambda _: 0
 
         def U_fn(x):
             Us_vdw, Us_coulomb = nbpl_U(x)
-            chiral_U = chiral_atom_U(x) + chiral_bond_U(x)
 
-            return bond_U(x) + angle_U(x) + torsion_U(x) + jnp.sum(Us_vdw) + jnp.sum(Us_coulomb) + chiral_U
+            # Chiral restraints are disabled until checks are added (see GH #815)
+            # chiral_U = chiral_atom_U(x) + chiral_bond_U(x)
+
+            return bond_U(x) + angle_U(x) + torsion_U(x) + jnp.sum(Us_vdw) + jnp.sum(Us_coulomb)  # + chiral_U
 
         return U_fn
 
