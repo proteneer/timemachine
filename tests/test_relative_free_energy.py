@@ -49,11 +49,36 @@ def run_bitwise_reproducibility(mol_a, mol_b, core, forcefield, n_frames):
     np.testing.assert_equal(solvent_res.boxes, all_boxes)
 
 
-def run_pair(mol_a, mol_b, core, forcefield, n_frames, protein_path, n_eq_steps):
-
-    lambda_schedule = [0.01, 0.02, 0.03]
+def run_triple(mol_a, mol_b, core, forcefield, n_frames, protein_path, n_eq_steps):
 
     seed = 2023
+
+    lambda_schedule = [0.01, 0.02, 0.03]
+    vacuum_host_config = None
+    vacuum_res = estimate_relative_free_energy(
+        mol_a,
+        mol_b,
+        core,
+        forcefield,
+        vacuum_host_config,
+        seed,
+        n_frames=n_frames,
+        prefix="vacuum",
+        n_eq_steps=n_eq_steps,
+    )
+
+    assert vacuum_res.overlap_summary_png is not None
+    assert vacuum_res.overlap_detail_png is not None
+    assert abs(np.sum(vacuum_res.all_dGs)) < 10.0
+    assert np.linalg.norm(vacuum_res.all_dGs) < 10.0
+    assert len(vacuum_res.frames[0] == n_frames)
+    assert len(vacuum_res.frames[-1] == n_frames)
+    assert len(vacuum_res.boxes[0] == n_frames)
+    assert len(vacuum_res.boxes[-1] == n_frames)
+    assert [x.lamb for x in vacuum_res.initial_states] == lambda_schedule
+    assert vacuum_res.protocol.n_frames == n_frames
+    assert vacuum_res.protocol.n_eq_steps == n_eq_steps
+
     box_width = 4.0
     solvent_sys, solvent_conf, solvent_box, _ = builders.build_water_system(box_width)
     solvent_box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes
@@ -134,7 +159,7 @@ def test_run_hif2a_test_system():
     forcefield = st.ff
 
     with resources.path("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as protein_path:
-        run_pair(mol_a, mol_b, core, forcefield, n_frames=100, protein_path=str(protein_path), n_eq_steps=1000)
+        run_triple(mol_a, mol_b, core, forcefield, n_frames=100, protein_path=str(protein_path), n_eq_steps=1000)
     run_bitwise_reproducibility(mol_a, mol_b, core, forcefield, n_frames=100)
 
 
