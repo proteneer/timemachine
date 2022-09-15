@@ -585,7 +585,7 @@ def run_pair(mol_a, mol_b, core, forcefield, protein, n_frames, seed, n_eq_steps
     )
 
     # vacuum error should be below a threshold, otherwise this edge is likely problematic
-    assert np.linalg.norm(vacuum_res.all_dGs) < 1.0
+    assert np.linalg.norm(vacuum_res.all_errs) < 1.0
 
     box_width = 4.0
     solvent_sys, solvent_conf, solvent_box, solvent_top = builders.build_water_system(box_width)
