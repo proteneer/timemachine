@@ -70,7 +70,7 @@ def run_triple(mol_a, mol_b, core, forcefield, n_frames, protein_path, n_eq_step
 
     assert vacuum_res.overlap_summary_png is not None
     assert vacuum_res.overlap_detail_png is not None
-    assert np.linalg.norm(vacuum_res.all_errs) < 10.0
+    assert np.linalg.norm(vacuum_res.all_errs) < 0.1
     assert len(vacuum_res.frames[0] == n_frames)
     assert len(vacuum_res.frames[-1] == n_frames)
     assert len(vacuum_res.boxes[0] == n_frames)
