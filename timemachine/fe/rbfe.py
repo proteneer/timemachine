@@ -15,6 +15,7 @@ from scipy.spatial.distance import cdist
 from timemachine.constants import BOLTZ, DEFAULT_TEMP
 from timemachine.fe import model_utils
 from timemachine.fe.bar import bar_with_bootstrapped_uncertainty
+from timemachine.fe.lambda_schedule import interpolate_pre_optimized_protocol
 from timemachine.fe.single_topology_v3 import SingleTopologyV3
 from timemachine.fe.system import convert_bps_into_system
 from timemachine.fe.utils import get_mol_name, get_romol_conf
@@ -492,6 +493,7 @@ def estimate_relative_free_energy(
     n_frames=1000,
     prefix="",
     lambda_schedule=None,
+    n_windows=None,
     keep_idxs=None,
     n_eq_steps=10000,
 ):
@@ -528,6 +530,9 @@ def estimate_relative_free_energy(
     lambda_schedule: list of float
         This should only be set when debugging or unit testing. This argument may be removed later.
 
+    n_windows: None
+        Number of windows used for interpolating the the lambda schedule with additional windows.
+
     keep_idxs: list of int or None
         If None, return only the end-state frames. Otherwise if not None, use only for debugging, and this
         will return the frames corresponding to the idxs of interest.
@@ -545,9 +550,14 @@ def estimate_relative_free_energy(
     single_topology = SingleTopologyV3(mol_a, mol_b, core, ff)
 
     if lambda_schedule is None:
-        lambda_schedule = np.array([0.0, 0.01, 0.02, 0.04, 0.06, 0.08, 0.11, 0.15, 0.20, 0.32, 0.42])
+        lambda_schedule = np.array(
+            [0.0, 0.02, 0.04, 0.06, 0.07, 0.08, 0.11, 0.13, 0.15, 0.17, 0.18, 0.20, 0.25, 0.32, 0.42]
+        )
         lambda_schedule = np.concatenate([lambda_schedule, (1 - lambda_schedule[::-1])])
+        if n_windows:
+            lambda_schedule = interpolate_pre_optimized_protocol(lambda_schedule, n_windows)
     else:
+        assert n_windows is None
         warnings.warn("Warning: setting lambda_schedule manually, this argument may be removed in a future release.")
 
     temperature = DEFAULT_TEMP
@@ -568,7 +578,7 @@ def estimate_relative_free_energy(
         raise err
 
 
-def run_pair(mol_a, mol_b, core, forcefield, protein, n_frames, seed, n_eq_steps=10000):
+def run_pair(mol_a, mol_b, core, forcefield, protein, n_frames, seed, n_eq_steps=10000, n_windows=None):
 
     box_width = 4.0
     solvent_sys, solvent_conf, solvent_box, solvent_top = builders.build_water_system(box_width)
@@ -584,6 +594,7 @@ def run_pair(mol_a, mol_b, core, forcefield, protein, n_frames, seed, n_eq_steps
         n_frames=n_frames,
         prefix="solvent",
         n_eq_steps=n_eq_steps,
+        n_windows=n_windows,
     )
 
     complex_sys, complex_conf, _, _, complex_box, complex_top = builders.build_protein_system(protein)
@@ -599,6 +610,7 @@ def run_pair(mol_a, mol_b, core, forcefield, protein, n_frames, seed, n_eq_steps
         n_frames=n_frames,
         prefix="complex",
         n_eq_steps=n_eq_steps,
+        n_windows=n_windows,
     )
 
     return solvent_res, solvent_top, complex_res, complex_top
