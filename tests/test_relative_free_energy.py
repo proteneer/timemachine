@@ -64,6 +64,7 @@ def run_triple(mol_a, mol_b, core, forcefield, n_frames, protein_path, n_eq_step
         seed,
         n_frames=n_frames,
         prefix="vacuum",
+        lambda_schedule=lambda_schedule,
         n_eq_steps=n_eq_steps,
     )
 
