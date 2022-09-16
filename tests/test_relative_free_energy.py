@@ -64,13 +64,13 @@ def run_triple(mol_a, mol_b, core, forcefield, n_frames, protein_path, n_eq_step
         seed,
         n_frames=n_frames,
         prefix="vacuum",
+        lambda_schedule=lambda_schedule,
         n_eq_steps=n_eq_steps,
     )
 
     assert vacuum_res.overlap_summary_png is not None
     assert vacuum_res.overlap_detail_png is not None
-    assert abs(np.sum(vacuum_res.all_dGs)) < 10.0
-    assert np.linalg.norm(vacuum_res.all_dGs) < 10.0
+    assert np.linalg.norm(vacuum_res.all_errs) < 0.1
     assert len(vacuum_res.frames[0] == n_frames)
     assert len(vacuum_res.frames[-1] == n_frames)
     assert len(vacuum_res.boxes[0] == n_frames)
@@ -98,8 +98,7 @@ def run_triple(mol_a, mol_b, core, forcefield, n_frames, protein_path, n_eq_step
 
     assert solvent_res.overlap_summary_png is not None
     assert solvent_res.overlap_detail_png is not None
-    assert abs(np.sum(solvent_res.all_dGs)) < 10.0
-    assert np.linalg.norm(solvent_res.all_dGs) < 10.0
+    assert np.linalg.norm(solvent_res.all_errs) < 0.1
     assert len(solvent_res.frames[0] == n_frames)
     assert len(solvent_res.frames[-1] == n_frames)
     assert len(solvent_res.boxes[0] == n_frames)
@@ -136,8 +135,7 @@ def run_triple(mol_a, mol_b, core, forcefield, n_frames, protein_path, n_eq_step
 
     assert solvent_res.overlap_summary_png is not None
     assert complex_res.overlap_detail_png is not None
-    assert abs(np.sum(complex_res.all_dGs)) < 10.0
-    assert np.linalg.norm(complex_res.all_dGs) < 10.0
+    assert np.linalg.norm(complex_res.all_errs) < 0.1
     assert len(complex_res.frames[0]) == n_frames
     assert len(complex_res.frames[-1]) == n_frames
     assert len(complex_res.boxes[0]) == n_frames
