@@ -132,13 +132,16 @@ def bootstrap_bar(w_F, w_R, n_bootstrap=1000, timeout=10):
 
     t0 = time()
 
+    seed = 2022
+    rng = np.random.RandomState(seed)
+
     for _ in range(n_bootstrap):
         elapsed_time = time() - t0
         if elapsed_time > timeout:
             break
 
-        inds_F = np.random.randint(0, n_F, n_F)
-        inds_R = np.random.randint(0, n_R, n_R)
+        inds_F = rng.randint(0, n_F, n_F)
+        inds_R = rng.randint(0, n_R, n_R)
 
         bar_result = pymbar.BAR(
             w_F=w_F[inds_F],
