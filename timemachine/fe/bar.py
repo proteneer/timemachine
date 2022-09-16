@@ -140,8 +140,8 @@ def bootstrap_bar(w_F, w_R, n_bootstrap=1000, timeout=10):
         if elapsed_time > timeout:
             break
 
-        inds_F = rng.randint(0, n_F, n_F)
-        inds_R = rng.randint(0, n_R, n_R)
+        w_F_sample = rng.choice(w_F, replace=True)
+        w_R_sample = rng.choice(w_R, replace=True)
 
         bar_result = pymbar.BAR(
             w_F=w_F[inds_F],
