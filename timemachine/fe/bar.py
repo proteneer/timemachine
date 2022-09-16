@@ -133,7 +133,7 @@ def bootstrap_bar(w_F, w_R, n_bootstrap=1000, timeout=10):
     t0 = time()
 
     seed = 2022
-    rng = np.random.RandomState(seed)
+    rng = np.random.default_rng(seed)
 
     for _ in range(n_bootstrap):
         elapsed_time = time() - t0
