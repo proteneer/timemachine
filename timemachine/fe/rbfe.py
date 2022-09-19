@@ -312,6 +312,7 @@ def plot_overlap_summary(ax, components, lambdas, overlaps):
     for component, ys in zip(components, overlaps):
         ax.plot(lambdas[:-1], ys, marker=".", label=component)
 
+    ax.set_ylim(0, 1)
     ax.set_xlabel(r"$\lambda_i$")
     ax.set_ylabel(r"pair BAR overlap ($\lambda_i$, $\lambda_{i+1}$)")
     ax.legend()
