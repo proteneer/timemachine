@@ -112,7 +112,7 @@ def run_triple(mol_a, mol_b, core, forcefield, n_frames, protein_path, n_eq_step
         assert result.overlaps_by_lambda_by_component.shape[1] == len(lambda_schedule) - 1
         for overlaps in [result.overlaps_by_lambda, result.overlaps_by_lambda_by_component]:
             assert (0.0 < overlaps).all()
-            assert (overlaps < 0.5).all()
+            assert (overlaps < 1.0).all()
 
     check_overlaps(solvent_res)
 
