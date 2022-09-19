@@ -188,10 +188,10 @@ def test_pair_overlap_from_ukln():
         return pair_overlap_from_ukln(u_kln)
 
     # identical distributions
-    np.testing.assert_allclose(gaussian_overlap((0, 1), (0, 1)), 0.5)
+    np.testing.assert_allclose(gaussian_overlap((0, 1), (0, 1)), 1.0)
 
     # non-overlapping
     assert gaussian_overlap((0, 0.01), (1, 0.01)) < 1e-10
 
     # overlapping
-    assert gaussian_overlap((0, 0.1), (0.5, 0.2)) > 0.05
+    assert gaussian_overlap((0, 0.1), (0.5, 0.2)) > 0.1
