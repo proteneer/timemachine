@@ -1,3 +1,4 @@
+import logging
 from time import time
 
 import jax
@@ -6,6 +7,8 @@ import numpy as np
 import pymbar
 from jax.scipy.special import logsumexp
 from scipy.stats import normaltest
+
+logger = logging.getLogger(__name__)
 
 
 def EXP(w_raw):
@@ -163,7 +166,7 @@ def bar_with_bootstrapped_uncertainty(w_F, w_R, n_bootstrap=1000, timeout=10):
     normaltest_result = normaltest(bootstrap_dfs)
     pvalue_threshold = 1e-3  # arbitrary, small
     if normaltest_result.pvalue < pvalue_threshold:
-        print(f"bootstrapped errors non-normal: {normaltest_result}")
+        logger.warning(f"bootstrapped errors non-normal: {normaltest_result}")
 
     # regardless, summarize as if normal
     ddf = np.std(bootstrap_dfs)
