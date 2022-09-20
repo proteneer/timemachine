@@ -112,7 +112,7 @@ def run_triple(mol_a, mol_b, core, forcefield, n_frames, protein_path, n_eq_step
         assert result.overlaps_by_lambda_by_component.shape[1] == len(lambda_schedule) - 1
         for overlaps in [result.overlaps_by_lambda, result.overlaps_by_lambda_by_component]:
             assert (0.0 < overlaps).all()
-            assert (overlaps < 0.5).all()
+            assert (overlaps < 1.0).all()
 
     check_overlaps(solvent_res)
 
@@ -188,10 +188,10 @@ def test_pair_overlap_from_ukln():
         return pair_overlap_from_ukln(u_kln)
 
     # identical distributions
-    np.testing.assert_allclose(gaussian_overlap((0, 1), (0, 1)), 0.5)
+    np.testing.assert_allclose(gaussian_overlap((0, 1), (0, 1)), 1.0)
 
     # non-overlapping
     assert gaussian_overlap((0, 0.01), (1, 0.01)) < 1e-10
 
     # overlapping
-    assert gaussian_overlap((0, 0.1), (0.5, 0.2)) > 0.05
+    assert gaussian_overlap((0, 0.1), (0.5, 0.2)) > 0.1

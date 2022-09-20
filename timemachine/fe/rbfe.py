@@ -307,13 +307,14 @@ def pair_overlap_from_ukln(u_kln):
     u_kn = u_kln.reshape(k, -1)
     assert u_kn.shape == (k, l * n)
     N_k = n * np.ones(l)
-    return pymbar.MBAR(u_kn, N_k).computeOverlap()["matrix"][0, 1]  # type: ignore
+    return 2 * pymbar.MBAR(u_kn, N_k).computeOverlap()["matrix"][0, 1]  # type: ignore
 
 
 def plot_overlap_summary(ax, components, lambdas, overlaps):
     for component, ys in zip(components, overlaps):
         ax.plot(lambdas[:-1], ys, marker=".", label=component)
 
+    ax.set_ylim(0, 1)
     ax.set_xlabel(r"$\lambda_i$")
     ax.set_ylabel(r"pair BAR overlap ($\lambda_i$, $\lambda_{i+1}$)")
     ax.legend()
