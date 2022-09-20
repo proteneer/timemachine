@@ -370,6 +370,7 @@ class FileClient(AbstractFileClient):
 
     def store(self, path: str, data: bytes):
         full_path = Path(self.full_path(path))
+        full_path.parent.mkdir(parents=True, exist_ok=True)
         full_path.write_bytes(data)
 
     def load(self, path: str) -> bytes:
