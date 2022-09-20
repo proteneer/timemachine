@@ -14,6 +14,8 @@ from importlib import resources
 import jax.numpy as jnp
 import numpy as np
 import pytest
+from hypothesis import given
+from hypothesis.strategies import floats
 from jax import vmap
 from jax.experimental.checkify import checkify
 from rdkit import Chem
@@ -494,8 +496,25 @@ def test_cyclic_difference():
     assert cyclic_difference(0, 0, 3) == 0
     assert cyclic_difference(0, 1, 3) == 1
     assert cyclic_difference(0, 2, 3) == -1
-
     _ = jax.jit(cyclic_difference)(0, 1, 1)
+
+
+finite_floats = functools.partial(floats, allow_subnormal=False, allow_nan=False, allow_infinity=False)
+
+
+@given(finite_floats(-1e6, 1e6), finite_floats(-1e6, 1e6), finite_floats(min_value=0.0, exclude_min=True))
+def test_cyclic_difference_prop(a, b, period):
+    cdiff = cyclic_difference(a, b, period)
+
+    def assert_allclose_cyclic(a, b, **kwargs):
+        def f(x):
+            x_mod = x % period
+            return np.minimum(x_mod, period - x_mod)
+
+        return np.testing.assert_allclose(f(a), f(b), **kwargs)
+
+    assert_allclose_cyclic(a + cdiff, b, atol=1e-10)
+    assert_allclose_cyclic(np.abs(cdiff), np.abs(a - b), atol=1e-12)
 
 
 def assert_linear(f, x1, x2, x3):

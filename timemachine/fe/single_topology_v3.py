@@ -579,8 +579,12 @@ def interpolate_harmonic_bond_params(src_params, dst_params, lamb, k_min, lambda
 
 def cyclic_difference(a, b, period):
     """
-    For 0 < a, b < period, returns d such that (a + d) mod period = b and abs(d) is minimized. I.e. the minimum
-    displacement between two points, with periodic boundaries.
+    Returns the minimum difference between two points, with periodic boundaries.
+    I.e. the solution of ::
+
+        (a + d) % period = b % period
+
+    with minimum abs(d).
     """
 
     d = jnp.fmod(b - a, period)
