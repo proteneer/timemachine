@@ -309,14 +309,25 @@ def pair_overlap_from_ukln(u_kln):
 
 
 def plot_overlap_summary(ax, components, lambdas, overlaps):
+    # one line per energy component
     for component, ys in zip(components, overlaps):
-        ax.plot(lambdas[:-1], ys, marker=".", label=component)
+        percentages = 100 * ys
+        ax.plot(lambdas[:-1], percentages, marker=".", label=component)
 
-    ax.set_ylim(0, 1)
+    # min and max within axis limits
+    ax.set_ylim(-5, 105)
+    ax.hlines([0, 100], min(lambdas), max(lambdas), color="grey", linestyles="--")
+
+    # express in %
+    ticks = [0, 25, 50, 75, 100]
+    labels = [f"{t}%" for t in ticks]
+    ax.set_yticks(ticks)
+    ax.set_yticklabels(labels)
+
+    # labels and legends
     ax.set_xlabel(r"$\lambda_i$")
     ax.set_ylabel(r"pair BAR overlap ($\lambda_i$, $\lambda_{i+1}$)")
     ax.legend()
-    ax.ticklabel_format(useOffset=False)
 
 
 def estimate_free_energy_given_initial_states(initial_states, protocol, temperature, prefix, keep_idxs):
