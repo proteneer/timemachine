@@ -502,24 +502,21 @@ def handle_ring_opening_closing(f, src_k, dst_k, lamb, lambda_min, lambda_max):
     )
 
 
-def interpolate_harmonic_force(src_params, dst_params, lamb, k_min, lambda_min, lambda_max):
+def interpolate_harmonic_force_constant(src_k, dst_k, lamb, k_min, lambda_min, lambda_max):
     """
-    Interpolate between harmonic force parameters using
+    Interpolate between harmonic force parameters using a log-linear functional form.
 
-    1. Log-linear interpolation for force constants
-    2. Linear interpolation for equilibrium values
+    In the special case when src_k=0 or dst_k=0 (e.g. ring opening or closing transformations):
 
-    In the case of ring closing (opening), some initial (final) force constants will be zero. In this case the value
-    k_min is used instead of zero for interpolation, since zero is not in the range of the log-linear interpolation
-    function (but lambda=0 and lambda=1 still return exactly the end state parameters).
+    1. Intermediates are interpolated from k_min instead of zero (since 0 is not in the range of the interpolation
+       function)
+    2. Interpolation is restricted to the domain [lambda_min, lambda_max] and pinned to the end state values outside of
+       this range
 
     Parameters
     ----------
-    src_params : ndarray, float, (2,)
-        parameters at lambda = 0
-
-    dst_params : ndarray, float, (2,)
-        parameters at lambda = 1
+    src_k, dst_k : float, k >= 0
+        force constants at lambda=0 and lambda=1, respectively
 
     k_min : float, k_min > 0
         minimum force constant for interpolation
@@ -527,13 +524,9 @@ def interpolate_harmonic_force(src_params, dst_params, lamb, k_min, lambda_min, 
     lambda_min, lambda_max : float, in 0 < lambda_min < lambda_max < 1
         values of the control parameter at which to begin and end interpolation, respectively. This is only relevant
         when k=0 in the src or dst params. Note that if k=0 in the dst params (i.e. ring opening), the convention is
-        "flipped", i.e. interpolation "begins" at λ = 1 - λmin and "ends" at 1 - λmax.
+        "flipped", i.e. interpolation "begins" at lambda = 1 - lambda_min and "ends" at 1 - lambda_max.
     """
-
-    src_k, src_x = src_params
-    dst_k, dst_x = dst_params
-
-    k = jnp.where(
+    return jnp.where(
         lamb == 0.0,
         src_k,
         jnp.where(
@@ -550,44 +543,117 @@ def interpolate_harmonic_force(src_params, dst_params, lamb, k_min, lambda_min, 
         ),
     )
 
+
+def interpolate_harmonic_bond_params(src_params, dst_params, lamb, k_min, lambda_min, lambda_max):
+    """
+    Interpolate harmonic bond parameters using
+
+    1. Log-linear interpolation for force constants*
+    2. Linear interpolation for equilibrium bond lengths
+
+    * see note on special case when src_k=0 or dst_k=0 in the docstring of `interpolate_harmonic_force_constant`.
+
+    Parameters
+    ----------
+    src_params : array-like, float, (2,)
+        force constant and equilibrium length at lambda=0
+
+    dst_params : array-like, float, (2,)
+        force constant and equilibrium length at lambda=1
+
+    lamb : float
+        control parameter
+
+    k_min, lambda_min, lambda_max : float
+        see docstring of `interpolate_harmonic_force_constant` for documentation of these parameters
+    """
+
+    src_k, src_x = src_params
+    dst_k, dst_x = dst_params
+
+    k = interpolate_harmonic_force_constant(src_k, dst_k, lamb, k_min, lambda_min, lambda_max)
     x = interpolate.linear_interpolation(src_x, dst_x, lamb)
 
     return jnp.array([k, x])
 
 
-def standardize_angle_radians(x):
+def cyclic_difference(a, b, period):
     """
-    Maps an angle in radians to an equivalent angle in [-pi, pi]
+    For 0 < a, b < period, returns d such that (a + d) mod period = b and abs(d) is minimized. I.e. the minimum
+    displacement between two points, with periodic boundaries.
     """
 
-    return jnp.arctan2(jnp.sin(x), jnp.cos(x))
+    d = jnp.fmod(b - a, period)
+
+    def f(d):
+        return jnp.where(d <= period / 2, d, d - period)
+
+    return jnp.where(0 < d, f(d), -f(-d))
 
 
-def interpolate_periodic_torsion(src_params, dst_params, lamb, lambda_min, lambda_max):
+def interpolate_harmonic_angle_params(src_params, dst_params, lamb, k_min, lambda_min, lambda_max):
     """
-    Interpolate between periodic torsion parameters using
+    Interpolate harmonic angle parameters using
 
-    1. Piecewise linear interpolation for force constants:
-       a. If k(0) = 0, then k(λ) = 0 if λ < λmin and linear for λmin < λ
-       b. Otherwise k(λ) is linear
-    2. Linear interpolation for angles, after standardizing (e.g. 3π/2 → -π/2).
-    3. No interpolation for periodicity (pinned to source value)
+    1. Log-linear interpolation for force constants*
+    2. Shortest-path linear interpolation for equilibrium angles
 
-    Motivation for (1) is to delay activating torsions until angle force constants are nonvanishing, thereby preventing
-    the numerical instabilities in the torsion terms that arise when atoms spanned by the torsion are nearly collinear.
+    * see note on special case when src_k=0 or dst_k=0 in the docstring of `interpolate_harmonic_force_constant`.
 
     Parameters
     ----------
-    src_params : ndarray, float, (3,)
-        periodic torsion parameters at lambda = 0
+    src_params : array-like, float, (2,)
+        force constant and equilibrium angle at lambda=0
 
-    dst_params : ndarray, float, (3,)
-        periodic torsion parameters at lambda = 1
+    dst_params : array-like, float, (2,)
+        force constant and equilibrium angle at lambda=1
 
-    lambda_min, lambda_max : float, in 0 < lambda_min < lambda_max < 1
-        values of the control parameter at which to begin and end interpolation, respectively. This is only relevant
-        when k=0 in the src or dst params. Note that if k=0 in the dst params (i.e. ring opening), the convention is
-        "flipped", i.e. interpolation "begins" at λ = 1 - λmin and "ends" at 1 - λmax.
+    lamb : float
+        control parameter
+
+    k_min, lambda_min, lambda_max : float
+        see docstring of `interpolate_harmonic_force_constant` for documentation of these parameters
+    """
+
+    src_k, src_phase = src_params
+    dst_k, dst_phase = dst_params
+
+    k = interpolate_harmonic_force_constant(src_k, dst_k, lamb, k_min, lambda_min, lambda_max)
+
+    tau = 2 * np.pi
+    phase = interpolate.linear_interpolation(
+        src_phase,
+        src_phase + cyclic_difference(src_phase % tau, dst_phase % tau, tau),
+        lamb,
+    )
+
+    return jnp.array([k, phase])
+
+
+def interpolate_periodic_torsion_params(src_params, dst_params, lamb, lambda_min, lambda_max):
+    """
+    Interpolate periodic torsion parameters using
+
+    1. linear interpolation for force constants (see note on ring
+       closing in `interpolate_harmonic_bond_params` docstring)
+    2. linear interpolation for angles, using the shortest path
+    3. no interpolation for periodicity (pinned to source value)
+
+    * see note on special case when src_k=0 or dst_k=0 in the docstring of `interpolate_harmonic_force_constant`.
+
+    Parameters
+    ----------
+    src_params : array-like, float, (2,)
+        force constant, equilibrium dihedral angle, and periodicity at lambda=0
+
+    dst_params : array-like, float, (2,)
+        force constant and equilibrium dihedral angle, and periodicity at lambda=1
+
+    lamb : float
+        control parameter
+
+    k_min, lambda_min, lambda_max : float
+        see docstring of `interpolate_harmonic_force_constant` for documentation of these parameters
     """
 
     src_k, src_phase, src_period = src_params
@@ -595,9 +661,10 @@ def interpolate_periodic_torsion(src_params, dst_params, lamb, lambda_min, lambd
 
     k = handle_ring_opening_closing(interpolate.linear_interpolation, src_k, dst_k, lamb, lambda_min, lambda_max)
 
+    tau = 2 * np.pi
     phase = interpolate.linear_interpolation(
-        standardize_angle_radians(src_phase),
-        standardize_angle_radians(dst_phase),
+        src_phase,
+        src_phase + cyclic_difference(src_phase % tau, dst_phase % tau, tau),
         lamb,
     )
 
@@ -911,7 +978,7 @@ class SingleTopologyV3:
             lamb,
             interpolate.align_harmonic_bond_idxs_and_params,
             partial(
-                interpolate_harmonic_force,
+                interpolate_harmonic_bond_params,
                 k_min=0.1,  # ~ 5 nm at 300 K
                 lambda_min=0.0,
                 lambda_max=lambda_angles,
@@ -924,7 +991,7 @@ class SingleTopologyV3:
             lamb,
             interpolate.align_harmonic_angle_idxs_and_params,
             partial(
-                interpolate_harmonic_force,
+                interpolate_harmonic_angle_params,
                 k_min=0.05,
                 lambda_min=lambda_angles,
                 lambda_max=lambda_torsions,
@@ -937,7 +1004,7 @@ class SingleTopologyV3:
             lamb,
             interpolate.align_torsion_idxs_and_params,
             partial(
-                interpolate_periodic_torsion,
+                interpolate_periodic_torsion_params,
                 lambda_min=lambda_torsions,
                 lambda_max=1.0,
             ),

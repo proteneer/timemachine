@@ -15,6 +15,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 from jax import vmap
+from jax.experimental.checkify import checkify
 from rdkit import Chem
 from rdkit.Chem import AllChem
 
@@ -27,11 +28,10 @@ from timemachine.fe.single_topology_v3 import (
     MultipleAnchorWarning,
     SingleTopologyV3,
     canonicalize_improper_idxs,
+    cyclic_difference,
     handle_ring_opening_closing,
-    interpolate_harmonic_force,
-    interpolate_periodic_torsion,
+    interpolate_harmonic_force_constant,
     setup_dummy_interactions_from_ff,
-    standardize_angle_radians,
 )
 from timemachine.fe.system import convert_bps_into_system, minimize_scipy, simulate_system
 from timemachine.fe.utils import get_mol_name, get_romol_conf
@@ -326,7 +326,7 @@ def test_jax_transform_intermediate_potential():
     def U(x, lam):
         return st.setup_intermediate_state(lam).get_U_fn()(x)
 
-    _ = jax.jit(U)(conf, 0.1)
+    _ = jax.jit(checkify(U))(conf, 0.1)
 
     confs = jnp.array([conf for _ in range(10)])
     lambdas = jnp.linspace(0, 1, 10)
@@ -455,44 +455,47 @@ def test_handle_ring_opening_closing():
     np.testing.assert_array_equal(ks[opening_idxs], src_k[opening_idxs])
 
 
-def test_interpolate_harmonic_force():
+def test_interpolate_harmonic_force_constant():
 
     rng = np.random.default_rng(2022)
 
-    def random_params():
-        return rng.uniform(1, 2, (2, 100))
+    def random_ks():
+        return rng.uniform(1, 2, (100,))
 
-    src_params = random_params()
-    dst_params = random_params()
+    src_k = random_ks()
+    dst_k = random_ks()
 
     k_min = 0.1
-    assert (k_min < np.minimum(src_params, dst_params)).all()
+    assert (k_min < np.minimum(src_k, dst_k)).all()
 
     f = functools.partial(
-        interpolate_harmonic_force,
+        interpolate_harmonic_force_constant,
         k_min=k_min,
         lambda_min=0.0,
         lambda_max=0.4,
     )
 
-    assert_interpolation_valid(f, src_params, dst_params)
+    assert_interpolation_valid(f, src_k, dst_k)
 
     # check for sublinearity
     lam = 0.1
-    k_linear = linear_interpolation(src_params[0, :], dst_params[0, :], lam)
-    k_loglinear = f(src_params, dst_params, lam)[0, :]
+    k_linear = linear_interpolation(src_k, dst_k, lam)
+    k_loglinear = f(src_k, dst_k, lam)
     assert np.all(k_loglinear < k_linear)
 
     # check for JIT-compatibility
     f = jax.jit(f)
-    f(src_params, dst_params, 0.1)
+    _ = f(src_k, dst_k, 0.1)
 
 
-def test_standardize_angle_radians():
-    f = standardize_angle_radians
-    assert np.allclose(f(0.0), 0.0)
-    assert np.allclose(f(2 * np.pi), 0.0)
-    assert np.allclose(f(3 * np.pi / 2), -np.pi / 2)
+def test_cyclic_difference():
+    assert cyclic_difference(0, 0, 1) == 0
+    assert cyclic_difference(0, 1, 2) == 1  # arbitrary, positive by convention
+    assert cyclic_difference(0, 0, 3) == 0
+    assert cyclic_difference(0, 1, 3) == 1
+    assert cyclic_difference(0, 2, 3) == -1
+
+    _ = jax.jit(cyclic_difference)(0, 1, 1)
 
 
 def assert_linear(f, x1, x2, x3):
@@ -500,36 +503,3 @@ def assert_linear(f, x1, x2, x3):
         (f(x2) - f(x1)) / (x2 - x1),
         (f(x3) - f(x2)) / (x3 - x2),
     )
-
-
-def test_interpolate_periodic_torsion():
-
-    rng = np.random.default_rng(2022)
-    n = 100
-    periods = rng.choice(4, (n,)).astype(np.int32)
-
-    def random_params():
-        return np.stack(
-            (
-                rng.uniform(1, 2, (n,)).astype(np.float64),
-                rng.uniform(-np.pi, np.pi, (n,)).astype(np.float64),
-                periods,
-            )
-        )
-
-    src_params = random_params()
-    dst_params = random_params()
-
-    f = functools.partial(interpolate_periodic_torsion, lambda_min=0.4, lambda_max=0.7)
-    assert_interpolation_valid(f, src_params, dst_params)
-
-    # check for JIT-compatibility
-    f = jax.jit(f)
-    f(random_params(), random_params(), 0.1)
-
-    # check that phases are standardized to the interval [-pi, pi] before interpolation
-    src_params = random_params()
-    dst_params = random_params()
-    src_params[1, :] += np.pi
-    dst_params[1, :] += np.pi
-    np.testing.assert_array_less(f(src_params, dst_params, 0.1)[1, :], np.pi)
