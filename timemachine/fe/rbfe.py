@@ -406,9 +406,9 @@ def estimate_free_energy_given_initial_states(initial_states, protocol, temperat
 
                 fwd_delta_u = u_10 - u_00
                 rev_delta_u = u_01 - u_11
-                df, df_err = bar_with_bootstrapped_uncertainty(fwd_delta_u, rev_delta_u)
                 plot_axis = all_axes[lamb_idx - 1][u_idx]
-                plot_BAR(df, df_err, fwd_delta_u, rev_delta_u, U_names[u_idx], plot_axis)
+                plot_work(fwd_delta_u, rev_delta_u, plot_axis)
+                plot_axis.set_title(U_names[u_idx])
 
             # sanity check - I don't think the dG calculation commutes with its components, so we have to re-estimate
             # the dG from the sum of the delta_us as opposed to simply summing the component dGs
