@@ -285,9 +285,6 @@ def plot_BAR(df, df_err, fwd_delta_u, rev_delta_u, title, axes):
     title: str
         title to use
 
-    plot_idx: triple (n_row, n_col, n_pos)
-        where to place the subplot
-
     axes: matplotlib axis
         obj used to draw the figures
 
