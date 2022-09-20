@@ -264,6 +264,14 @@ def setup_initial_states(st, host_config, temperature, lambda_schedule, seed):
     return initial_states
 
 
+def plot_work(w_forward, w_reverse, axes):
+    """histograms of +forward and -reverse works"""
+    axes.hist(+w_forward, alpha=0.5, label="fwd", density=True, bins=20)
+    axes.hist(-w_reverse, alpha=0.5, label="-rev", density=True, bins=20)
+    axes.set_xlabel("work (kT)")
+    axes.legend()
+
+
 def plot_BAR(df, df_err, fwd_delta_u, rev_delta_u, title, axes):
     """
     Generate a subplot showing overlap for a particular pair of delta_us.
@@ -290,10 +298,7 @@ def plot_BAR(df, df_err, fwd_delta_u, rev_delta_u, title, axes):
 
     """
     axes.set_title(f"{title}, dg: {df:.2f} +- {df_err:.2f} kTs")
-    axes.hist(fwd_delta_u, alpha=0.5, label="fwd", density=True, bins=20)
-    axes.hist(-rev_delta_u, alpha=0.5, label="-rev", density=True, bins=20)
-    axes.set_xlabel("work (kTs)")
-    axes.legend()
+    plot_work(fwd_delta_u, rev_delta_u, axes)
 
 
 def pair_overlap_from_ukln(u_kln):
