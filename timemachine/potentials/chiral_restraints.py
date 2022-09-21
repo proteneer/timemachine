@@ -63,15 +63,10 @@ def torsion_volume(ci, cj, ck, cl):
     -------
     float
         A number between -1.0 < x < 1.0 denoting the normalized chirality
-
     """
-    rij = cj - ci
-    rkj = cj - ck
-    rkl = cl - ck
-
-    rij = rij / jnp.linalg.norm(rij)
-    rkj = rkj / jnp.linalg.norm(rkj)
-    rkl = rkl / jnp.linalg.norm(rkl)
+    rij = normalize(cj - ci)
+    rkj = normalize(cj - ck)
+    rkl = normalize(cl - ck)
 
     n1 = jnp.cross(rij, rkj)
     n2 = jnp.cross(rkj, rkl)
