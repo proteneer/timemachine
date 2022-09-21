@@ -497,6 +497,18 @@ def handle_ring_opening_closing(
 
     In the case where src_k = 0 or dst_k = 0 (e.g. ring closing and ring opening, respectively), restrict interpolation
     to the interval [lambda_min, lambda_max], and pin to the end state values outside of this range.
+
+    Parameters
+    ----------
+    f : callable, (src_k: float, dst_k: float, lam: float) -> float
+        interpolation function; should satisfy f(0) = src_k, f(1) = dst_k
+
+    src_k, dst_k : float, k >= 0
+        force constants at lambda=0 and lambda=1, respectively
+
+    lambda_min, lambda_max : float, in 0 < lambda_min < lambda_max < 1
+        interpolate in range [lambda_min, lambda_max] (pin to end states otherwise). Note that if dst_k=0, the
+        convention is flipped so that 1 - lambda_min corresponds to f(0) and 1 - lambda_max corresponds to f(1).
     """
 
     def ring_closing(src_k, dst_k, lamb):
@@ -536,10 +548,10 @@ def interpolate_harmonic_force_constant(src_k, dst_k, lamb, k_min, lambda_min, l
         minimum force constant for interpolation
 
     lambda_min, lambda_max : float, in 0 < lambda_min < lambda_max < 1
-        values of the control parameter at which to begin and end interpolation, respectively. This is only relevant
-        when k=0 in the src or dst params. Note that if k=0 in the dst params (i.e. ring opening), the convention is
-        "flipped", i.e. interpolation "begins" at lambda = 1 - lambda_min and "ends" at 1 - lambda_max.
+        interpolate in range [lambda_min, lambda_max] (pin to end states otherwise). Note that if dst_k=0, the
+        convention is flipped so that 1 - lambda_min corresponds to f(0) and 1 - lambda_max corresponds to f(1).
     """
+
     return jnp.where(
         lamb == 0.0,
         src_k,
