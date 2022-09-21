@@ -62,8 +62,8 @@ def restraint(conf, lamb, params, lamb_flags, box, bond_idxs):
     bond_idxs: [num_bonds, 2] np.array
         each element (src, dst) is a unique bond in the conformation
 
-    Notes:
-    ------
+    Notes
+    -----
     * box argument is unused
     """
     f_lambda = lamb * lamb_flags
@@ -114,8 +114,8 @@ def harmonic_bond(conf, params, box, lamb, bond_idxs, lamb_mult=None, lamb_offse
     bond_idxs: [num_bonds, 2] np.array
         each element (src, dst) is a unique bond in the conformation
 
-    Notes:
-    ------
+    Notes
+    -----
     * box argument is unused
     """
     assert params.shape == bond_idxs.shape
@@ -189,8 +189,8 @@ def harmonic_angle(conf, params, box, lamb, angle_idxs, lamb_mult=None, lamb_off
         if True, then this instead implements V(t) = k*(cos(t)-cos(t0))^2. This is far more
         numerically stable when the angle is pi.
 
-    Notes:
-    ------
+    Notes
+    -----
     * box argument unused
     """
     if angle_idxs.shape[0] == 0:
@@ -293,8 +293,8 @@ def periodic_torsion(conf, params, box, lamb, torsion_idxs, lamb_mult=None, lamb
     lamb_offset: None, or broadcastable to torsion_idxs.shape[0]
         prefactor = (lamb_offset + lamb_mult * lamb)
 
-    Notes:
-    ------
+    Notes
+    -----
     * box argument unused
     * if conf has more than 3 dimensions, this function only depends on the first 3
     """
