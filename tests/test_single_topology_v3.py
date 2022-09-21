@@ -6,7 +6,6 @@ import jax
 
 jax.config.update("jax_enable_x64", True)
 
-# test that end-states are setup correctly in single topology calculations.
 import functools
 import os
 from importlib import resources
