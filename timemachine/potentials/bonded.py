@@ -7,8 +7,8 @@ from timemachine.potentials.jax_utils import delta_r
 def centroid_restraint(conf, params, box, lamb, group_a_idxs, group_b_idxs, kb, b0):
     """Computes kb  * (r - b0)**2 where r is the distance between the centroids of group_a and group_b
 
-    Notes:
-    ------
+    Notes
+    -----
     * Geometric centroid, not mass-weighted centroid
     * Gradient undefined when `(r - b0) == 0` and `b0 != 0` (explicitly stabilized in case `b0 == 0`)
     * params, box, lamb unused
