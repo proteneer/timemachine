@@ -7,10 +7,11 @@ from timemachine.potentials.jax_utils import delta_r
 def centroid_restraint(conf, params, box, lamb, group_a_idxs, group_b_idxs, kb, b0):
     """Computes kb  * (r - b0)**2 where r is the distance between the centroids of group_a and group_b
 
-    Notes
+    Notes:
     ------
     * Geometric centroid, not mass-weighted centroid
     * Gradient undefined when `(r - b0) == 0` and `b0 != 0` (explicitly stabilized in case `b0 == 0`)
+    * params, box, lamb unused
     """
     xi = conf[group_a_idxs]
     xj = conf[group_b_idxs]
@@ -88,7 +89,7 @@ def harmonic_bond(conf, params, box, lamb, bond_idxs, lamb_mult=None, lamb_offse
     Compute the harmonic bond energy given a collection of molecules.
 
     This implements a harmonic bond potential:
-        V(conf) = \sum_bond kbs[bond] * (distance[bond] - r0s[bond])^2
+        V(conf) = 0.5 \sum_bond kbs[bond] * (distance[bond] - r0s[bond])^2
 
     Parameters:
     -----------
@@ -115,8 +116,7 @@ def harmonic_bond(conf, params, box, lamb, bond_idxs, lamb_mult=None, lamb_offse
 
     Notes:
     ------
-    * lamb argument is unused
-
+    * box argument is unused
     """
     assert params.shape == bond_idxs.shape
 
@@ -175,15 +175,15 @@ def harmonic_angle(conf, params, box, lamb, angle_idxs, lamb_mult=None, lamb_off
     lamb: float
         alchemical lambda parameter, linearly rescaled
 
+    angle_idxs: shape [num_angles, 3] np.array
+        each element (a, b, c) is a unique angle in the conformation. atom b is defined
+        to be the middle atom.
+
     lamb_mult: None, or broadcastable to angle_idxs.shape[0]
         prefactor = (lamb_offset + lamb_mult * lamb)
 
     lamb_offset: None, or broadcastable to angle_idxs.shape[0]
         prefactor = (lamb_offset + lamb_mult * lamb)
-
-    angle_idxs: shape [num_angles, 3] np.array
-        each element (a, b, c) is a unique angle in the conformation. atom b is defined
-        to be the middle atom.
 
     cos_angles: True (default)
         if True, then this instead implements V(t) = k*(cos(t)-cos(t0))^2. This is far more
@@ -191,7 +191,7 @@ def harmonic_angle(conf, params, box, lamb, angle_idxs, lamb_mult=None, lamb_off
 
     Notes:
     ------
-    * lamb argument unused
+    * box argument unused
     """
     if angle_idxs.shape[0] == 0:
         return 0.0
@@ -237,22 +237,13 @@ def signed_torsion_angle(ci, cj, ck, cl):
 
     Parameters
     ----------
-    ci: shape [num_torsions, 3] np.array
-        coordinates of the 1st atom in the 1-4 torsion angle
-
-    cj: shape [num_torsions, 3] np.array
-        coordinates of the 2nd atom in the 1-4 torsion angle
-
-    ck: shape [num_torsions, 3] np.array
-        coordinates of the 3rd atom in the 1-4 torsion angle
-
-    cl: shape [num_torsions, 3] np.array
-        coordinates of the 4th atom in the 1-4 torsion angle
+    ci, cj, ck, cl: shape [num_torsions, 3] np.arrays
+        atom coordinates defining torsion angle i-j-k-l
 
     Returns
     -------
     shape [num_torsions,] np.array
-        array of torsion angles.
+        array of torsion angles
     """
 
     # Taken from the wikipedia arctan2 implementation:
@@ -293,19 +284,18 @@ def periodic_torsion(conf, params, box, lamb, torsion_idxs, lamb_mult=None, lamb
     lamb: float
         alchemical lambda parameter, linearly rescaled
 
+    torsion_idxs: shape [num_torsions, 4] np.array
+        indices denoting the four atoms that define a torsion
+
     lamb_mult: None, or broadcastable to torsion_idxs.shape[0]
         prefactor = (lamb_offset + lamb_mult * lamb)
 
     lamb_offset: None, or broadcastable to torsion_idxs.shape[0]
         prefactor = (lamb_offset + lamb_mult * lamb)
 
-    torsion_idxs: shape [num_torsions, 4] np.array
-        indices denoting the four atoms that define a torsion
-
     Notes:
     ------
     * box argument unused
-    * lamb argument unused
     * if conf has more than 3 dimensions, this function only depends on the first 3
     """
     if torsion_idxs.shape[0] == 0:
