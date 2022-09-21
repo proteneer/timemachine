@@ -14,7 +14,6 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 from jax import vmap
-from jax.experimental.checkify import checkify
 from rdkit import Chem
 from rdkit.Chem import AllChem
 
@@ -325,7 +324,7 @@ def test_jax_transform_intermediate_potential():
     def U(x, lam):
         return st.setup_intermediate_state(lam).get_U_fn()(x)
 
-    _ = jax.jit(checkify(U))(conf, 0.1)
+    _ = jax.jit(U)(conf, 0.1)
 
     confs = jnp.array([conf for _ in range(10)])
     lambdas = jnp.linspace(0, 1, 10)
