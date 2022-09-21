@@ -485,6 +485,13 @@ def find_dummy_groups_and_anchors(mol_a, mol_b, core_a, core_b):
 
 
 def handle_ring_opening_closing(f, src_k, dst_k, lamb, lambda_min, lambda_max):
+    """
+    In the typical case (src_k != 0 and dst_k != 0), use the specified interpolation function, f.
+
+    In the case where src_k = 0 or dst_k = 0 (e.g. ring closing and ring opening, respectively), restrict interpolation
+    to the interval [lambda_min, lambda_max], and pin to the end state values outside of this range.
+    """
+
     def ring_closing(src_k, dst_k, lamb):
         return interpolate.pad(f, src_k, dst_k, lamb, lambda_min, lambda_max)
 
@@ -504,14 +511,14 @@ def handle_ring_opening_closing(f, src_k, dst_k, lamb, lambda_min, lambda_max):
 
 def interpolate_harmonic_force_constant(src_k, dst_k, lamb, k_min, lambda_min, lambda_max):
     """
-    Interpolate between harmonic force parameters using a log-linear functional form.
+    Interpolate between force constants using a log-linear functional form.
 
     In the special case when src_k=0 or dst_k=0 (e.g. ring opening or closing transformations):
 
     1. Intermediates are interpolated from k_min instead of zero (since 0 is not in the range of the interpolation
        function)
-    2. Interpolation is restricted to the domain [lambda_min, lambda_max] and pinned to the end state values outside of
-       this range
+    2. Interpolation is restricted to the interval [lambda_min, lambda_max] and pinned to the end state values outside
+       of this range
 
     Parameters
     ----------
