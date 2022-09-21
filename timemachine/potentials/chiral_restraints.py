@@ -2,6 +2,10 @@ import jax
 import jax.numpy as jnp
 
 
+def normalize(x):
+    return x / jnp.linalg.norm(x)
+
+
 def pyramidal_volume(xc, x1, x2, x3):
     """
     Compute the normalized pyramidal volume given four points. This is implemented
@@ -28,13 +32,9 @@ def pyramidal_volume(xc, x1, x2, x3):
 
     """
     # compute vectors
-    v0 = x1 - xc
-    v1 = x2 - xc
-    v2 = x3 - xc
-
-    v0 = v0 / jnp.linalg.norm(v0)
-    v1 = v1 / jnp.linalg.norm(v1)
-    v2 = v2 / jnp.linalg.norm(v2)
+    v0 = normalize(x1 - xc)
+    v1 = normalize(x2 - xc)
+    v2 = normalize(x3 - xc)
 
     # triple product
     return jnp.dot(jnp.cross(v0, v1), v2)
