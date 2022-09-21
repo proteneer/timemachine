@@ -1,7 +1,7 @@
 import warnings
 from collections.abc import Iterable
 from functools import partial
-from typing import Tuple
+from typing import Callable, Tuple
 
 import jax.numpy as jnp
 import numpy as np
@@ -484,7 +484,14 @@ def find_dummy_groups_and_anchors(mol_a, mol_b, core_a, core_b):
     return dummy_groups_b, all_jks
 
 
-def handle_ring_opening_closing(f, src_k, dst_k, lamb, lambda_min, lambda_max):
+def handle_ring_opening_closing(
+    f: Callable[[float, float, float], float],
+    src_k: float,
+    dst_k: float,
+    lamb: float,
+    lambda_min: float,
+    lambda_max: float,
+):
     """
     In the typical case (src_k != 0 and dst_k != 0), use the specified interpolation function, f.
 
