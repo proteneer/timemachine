@@ -638,10 +638,9 @@ def interpolate_harmonic_angle_params(src_params, dst_params, lamb, k_min, lambd
 
     k = interpolate_harmonic_force_constant(src_k, dst_k, lamb, k_min, lambda_min, lambda_max)
 
-    tau = 2 * np.pi
     phase = interpolate.linear_interpolation(
         src_phase,
-        src_phase + cyclic_difference(src_phase % tau, dst_phase % tau, tau),
+        src_phase + cyclic_difference(src_phase, dst_phase, period=2 * np.pi),
         lamb,
     )
 
@@ -679,10 +678,9 @@ def interpolate_periodic_torsion_params(src_params, dst_params, lamb, lambda_min
 
     k = handle_ring_opening_closing(interpolate.linear_interpolation, src_k, dst_k, lamb, lambda_min, lambda_max)
 
-    tau = 2 * np.pi
     phase = interpolate.linear_interpolation(
         src_phase,
-        src_phase + cyclic_difference(src_phase % tau, dst_phase % tau, tau),
+        src_phase + cyclic_difference(src_phase, dst_phase, period=2 * np.pi),
         lamb,
     )
 
