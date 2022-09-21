@@ -16,14 +16,8 @@ def pyramidal_volume(xc, x1, x2, x3):
     xc: np.array (3,)
         Center point
 
-    x1: np.array: (3,)
-        First point
-
-    x2: np.array: (3,)
-        Second point
-
-    x3: np.array: (3,)
-        Third point
+    x1, x2, x3: np.arrays of shape (3,)
+        Three points around center point
 
     Returns
     -------
@@ -47,17 +41,8 @@ def torsion_volume(ci, cj, ck, cl):
 
     Parameters
     ----------
-    np.array: (3,)
-        First point
-
-    np.array: (3,)
-        Second point
-
-    np.array: (3,)
-        Third point
-
-    np.array: (3,)
-        Fourth point
+    ci, cj, ck, cl: np.arrays of shape (3,)
+        four points
 
     Returns
     -------
