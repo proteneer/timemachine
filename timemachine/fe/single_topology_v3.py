@@ -588,7 +588,7 @@ def interpolate_harmonic_bond_params(src_params, dst_params, lamb, k_min, lambda
         force constant and equilibrium length at lambda=1
 
     lamb : float
-        control parameter
+        alchemical parameter
 
     k_min, lambda_min, lambda_max : float
         see docstring of `interpolate_harmonic_force_constant` for documentation of these parameters
@@ -608,9 +608,9 @@ def cyclic_difference(a, b, period):
     Returns the minimum difference between two points, with periodic boundaries.
     I.e. the solution of ::
 
-        (a + d) % period = b % period
+        (a + x) % period = b % period
 
-    with minimum abs(d).
+    with minimum abs(x).
     """
 
     d = jnp.fmod(b - a, period)
@@ -639,7 +639,7 @@ def interpolate_harmonic_angle_params(src_params, dst_params, lamb, k_min, lambd
         force constant and equilibrium angle at lambda=1
 
     lamb : float
-        control parameter
+        alchemical parameter
 
     k_min, lambda_min, lambda_max : float
         see docstring of `interpolate_harmonic_force_constant` for documentation of these parameters
@@ -663,10 +663,10 @@ def interpolate_periodic_torsion_params(src_params, dst_params, lamb, lambda_min
     """
     Interpolate periodic torsion parameters using
 
-    1. linear interpolation for force constants (see note on ring
+    1. Linear interpolation for force constants (see note on ring
        closing in `interpolate_harmonic_bond_params` docstring)
-    2. linear interpolation for angles, using the shortest path
-    3. no interpolation for periodicity (pinned to source value)
+    2. Linear interpolation for angles, using the shortest path
+    3. No interpolation for periodicity (pinned to source value)
 
     * see note on special case when src_k=0 or dst_k=0 in the docstring of `interpolate_harmonic_force_constant`.
 
@@ -679,7 +679,7 @@ def interpolate_periodic_torsion_params(src_params, dst_params, lamb, lambda_min
         force constant and equilibrium dihedral angle, and periodicity at lambda=1
 
     lamb : float
-        control parameter
+        alchemical parameter
 
     k_min, lambda_min, lambda_max : float
         see docstring of `interpolate_harmonic_force_constant` for documentation of these parameters
@@ -996,7 +996,8 @@ class SingleTopologyV3:
         src_system = self.src_system
         dst_system = self.dst_system
 
-        # parameters controlling when angles and torsions "turn on" for ring opening/closing transformations
+        # alchemical parameter values at which angle and torsion force constants transition from zero to nonzero for
+        # ring closing transformations
         lambda_angles = 0.4  # for angles, src_k = 0 => k(lamb) = 0 when lamb < lambda_angles
         lambda_torsions = 0.7  # analogous for torsions
 
