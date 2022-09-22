@@ -153,15 +153,18 @@ def linear_interpolation(src_params, dst_params, lamb):
 
 def log_linear_interpolation(src_params, dst_params, lamb, min_value):
     """
-    Linear interpolation in log space
+    Linear interpolation in log space.
+
+    Notes
+    ----
+    * f(0) = src_params, f(1) = dst_params only if src_params and dst_params are strictly positive, respectively.
     """
-    return jnp.exp(
-        linear_interpolation(
-            jnp.log(jnp.maximum(src_params, min_value)),
-            jnp.log(jnp.maximum(dst_params, min_value)),
-            lamb,
-        )
-    )
+
+    # clip to handle out-of-range end state values
+    src_params = jnp.maximum(src_params, min_value)
+    dst_params = jnp.maximum(dst_params, min_value)
+
+    return jnp.exp(linear_interpolation(jnp.log(src_params), jnp.log(dst_params), lamb))
 
 
 def pad(f, src_params, dst_params, lamb, lambda_min, lambda_max):
