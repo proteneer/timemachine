@@ -300,7 +300,7 @@ def get_val_and_grad_fn(bps, box, lamb):
     return val_and_grad_fn
 
 
-def local_minimize(x0, val_and_grad_fn, local_idxs):
+def local_minimize(x0, val_and_grad_fn, local_idxs, verbose=True):
     """
     Minimize a local region given selected idxs.
 
@@ -315,6 +315,9 @@ def local_minimize(x0, val_and_grad_fn, local_idxs):
     local_idxs: list of int
         Unique idxs we allow to move.
 
+    verbose: bool
+        Print internal scipy.optimize warnings + potential energy + gradient norm
+
     Returns
     -------
     Optimized set of coordinates (N,3)
@@ -322,8 +325,10 @@ def local_minimize(x0, val_and_grad_fn, local_idxs):
     """
 
     assert len(local_idxs) == len(set(local_idxs))
+    n_local = len(local_idxs)
+    n_frozen = len(x0) - n_local
 
-    x_local_shape = (len(local_idxs), 3)
+    x_local_shape = (n_local, 3)
     u_0, _ = val_and_grad_fn(x0)
 
     # deal with overflow, empirically obtained by testing on some real systems.
@@ -349,10 +354,36 @@ def local_minimize(x0, val_and_grad_fn, local_idxs):
     x_local_0 = x0[local_idxs]
     x_local_0_flat = x_local_0.reshape(-1)
 
-    res = scipy.optimize.minimize(val_and_grad_fn_bfgs, x_local_0_flat, method="BFGS", jac=True, options={"disp": True})
+    method = "BFGS"
+
+    if verbose:
+        print("-" * 70)
+        n_local = len(local_idxs)
+        n_frozen = len(x0) - n_local
+        print(f"performing {method} minimization on {n_local} atoms\n(holding the other {n_frozen} atoms frozen)")
+        U_0, grad_0 = val_and_grad_fn_bfgs(x_local_0_flat)
+        print(f"U(x_0) = {U_0:.3f} kJ/mol")
+        print(f"|force(x_0)| = {np.linalg.norm(grad_0):.3f} kJ/mol / nm^2")
+
+    res = scipy.optimize.minimize(
+        val_and_grad_fn_bfgs,
+        x_local_0_flat,
+        method=method,
+        jac=True,
+        options={"disp": verbose},
+    )
+
+    x_local_final_flat = res.x
+    x_local_final = x_local_final_flat.reshape(x_local_shape)
+
+    if verbose:
+        U_final, grad_final = val_and_grad_fn_bfgs(x_local_final_flat)
+        print(f"U(x_final) = {U_final:.3f} kJ/mol")
+        print(f"|force(x_final)| = {np.linalg.norm(grad_final):.3f} kJ/mol / nm^2")
+        print("-" * 70)
 
     x_final = x0.copy()
-    x_final[local_idxs] = res.x.reshape(x_local_shape)
+    x_final[local_idxs] = x_local_final
 
     u_final, _ = val_and_grad_fn(x_final)
 
