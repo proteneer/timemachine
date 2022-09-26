@@ -532,7 +532,7 @@ def lj_prefactor_on_atom(x_i, x_others, sig_i, sig_others, eps_others, box=None,
     sig_i: float
         Lennard-Jones sigma parameter of focus atom
     sig_others, eps_others: [N_env] arrays
-        Lennard-Jones sigma parameters of all other atoms (in environment)
+        Lennard-Jones parameters of all other atoms (in environment)
     box: optional diagonal [D, D] array
     cutoff: float
 
