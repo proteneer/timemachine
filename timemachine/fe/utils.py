@@ -107,33 +107,36 @@ def draw_mol(mol, highlightAtoms, highlightColors):
     # display(SVG(svg))
 
 
-def plot_atom_mapping(mol_a, mol_b, core):
-    """from YTZ, Feb 1, 2021
+def get_atom_map_colors(core, seed=2022):
+    rng = np.random.default_rng(seed)
 
-    TODO: move this into a SingleTopology.visualize() or SingleTopology.debug() method"""
-    print(repr(core))
     atom_colors_a = {}
     atom_colors_b = {}
-    for (a_idx, b_idx), rgb in zip(core, np.random.random((len(core), 3))):
+    # TODO: replace random colors with colormap?
+    for (a_idx, b_idx), rgb in zip(core, rng.random((len(core), 3))):
         atom_colors_a[int(a_idx)] = tuple(rgb.tolist())
         atom_colors_b[int(b_idx)] = tuple(rgb.tolist())
+
+    return atom_colors_a, atom_colors_b
+
+
+def plot_atom_mapping(mol_a, mol_b, core, seed=2022):
+    """TODO: move this into a SingleTopology.visualize() or SingleTopology.debug() method?"""
+
+    atom_colors_a, atom_colors_b = get_atom_map_colors(core, seed)
 
     draw_mol(mol_a, core[:, 0].tolist(), atom_colors_a)
     draw_mol(mol_b, core[:, 1].tolist(), atom_colors_b)
 
 
-def plot_atom_mapping_grid(mol_a, mol_b, core, show_idxs=False):
+def plot_atom_mapping_grid(mol_a, mol_b, core, show_idxs=False, seed=2022):
     mol_a_2d = Chem.Mol(mol_a)
     mol_b_2d = Chem.Mol(mol_b)
 
     AllChem.Compute2DCoords(mol_a_2d)
     AllChem.GenerateDepictionMatching2DStructure(mol_b_2d, mol_a_2d, atomMap=core.tolist())
 
-    atom_colors_a = {}
-    atom_colors_b = {}
-    for (a_idx, b_idx), rgb in zip(core, np.random.random((len(core), 3))):
-        atom_colors_a[int(a_idx)] = tuple(rgb.tolist())
-        atom_colors_b[int(b_idx)] = tuple(rgb.tolist())
+    atom_colors_a, atom_colors_b = get_atom_map_colors(core, seed=seed)
 
     if show_idxs:
         for atom in mol_a_2d.GetAtoms():
