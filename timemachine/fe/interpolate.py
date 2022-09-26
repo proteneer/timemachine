@@ -157,7 +157,7 @@ def log_linear_interpolation(src_params, dst_params, lamb, min_value):
 
     Notes
     ----
-    * f(0) = src_params, f(1) = dst_params only if src_params and dst_params are strictly positive, respectively.
+    * f(0) = src_params, f(1) = dst_params only if src_params and dst_params are > min_value, respectively.
     """
 
     # clip to handle out-of-range end state values
