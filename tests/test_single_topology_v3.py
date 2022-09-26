@@ -10,10 +10,11 @@ import functools
 import os
 from importlib import resources
 
+import hypothesis.strategies as st
 import jax.numpy as jnp
 import numpy as np
 import pytest
-from jax import vmap
+from hypothesis import given
 from rdkit import Chem
 from rdkit.Chem import AllChem
 
@@ -392,98 +393,83 @@ def test_no_chiral_bond_restraints():
     _ = U(init_conf)
 
 
-def assert_interpolation_valid(f, a, b):
-    np.testing.assert_allclose(f(a, b, 0.0), a)
-    np.testing.assert_allclose(f(a, b, 1.0), b)
+finite_floats = functools.partial(st.floats, allow_nan=False, allow_infinity=False, allow_subnormal=False)
 
-    rng = np.random.default_rng(2022)
-    lambdas = rng.uniform(0, 1, (30,))
-    ys = vmap(functools.partial(f, a, b))(lambdas)
-    assert np.all(np.minimum(a, b) <= ys)
-    assert np.all(ys <= np.maximum(a, b))
+nonzero_force_constants = finite_floats(1e-9, 1e9)
+
+lambdas = finite_floats(0.0, 1.0)
+
+open_lambda_intervals = st.lists(finite_floats(1e-9, 1.0 - 1e-9), min_size=2, max_size=2, unique=True).map(sorted)
 
 
-def test_handle_ring_opening_closing():
-    rng = np.random.default_rng(2022)
-    n = 100
-    k = 20
-
-    def random_ks():
-        return rng.uniform(1, 2, (n,))
-
-    src_k = random_ks()
-    dst_k = random_ks()
-
-    idxs = rng.choice(n, k, replace=False)
-
-    closing_idxs = idxs[: k // 2]
-    opening_idxs = idxs[k // 2 :]
-
-    src_k[closing_idxs] = 0.0
-    dst_k[opening_idxs] = 0.0
-
-    lambda_min = 0.3
-    lambda_max = 0.7
+@given(nonzero_force_constants, open_lambda_intervals, lambdas)
+def test_handle_ring_opening_closing_symmetry(k, lambda_interval, lam):
+    lambda_min, lambda_max = lambda_interval
 
     f = functools.partial(
         handle_ring_opening_closing,
         linear_interpolation,
-        src_k,
-        dst_k,
         lambda_min=lambda_min,
         lambda_max=lambda_max,
     )
 
-    # closing
-    # 0 < λ < λmin
-    ks = f(0.5 * lambda_min)
-    np.testing.assert_array_equal(ks[closing_idxs], 0.0)
-
-    # λmax < λ < 1
-    ks = f(0.5 * (1.0 + lambda_max))
-    np.testing.assert_array_equal(ks[closing_idxs], dst_k[closing_idxs])
-
-    # opening
-    # 1 - λmin < λ < 1
-    ks = f(0.5 * (2.0 - lambda_min))
-    np.testing.assert_array_equal(ks[opening_idxs], 0.0)
-
-    # 0 < λ < 1 - λmax
-    ks = f(0.5 * (1.0 - lambda_max))
-    np.testing.assert_array_equal(ks[opening_idxs], src_k[opening_idxs])
+    np.testing.assert_allclose(
+        f(0.0, k, lam),
+        f(k, 0.0, 1.0 - lam),
+        atol=1e-6,
+    )
 
 
-def test_interpolate_harmonic_force_constant():
-
-    rng = np.random.default_rng(2022)
-
-    def random_ks():
-        return rng.uniform(1, 2, (100,))
-
-    src_k = random_ks()
-    dst_k = random_ks()
-
-    k_min = 0.1
-    assert (k_min < np.minimum(src_k, dst_k)).all()
+@given(
+    nonzero_force_constants,
+    nonzero_force_constants,
+    nonzero_force_constants,
+    open_lambda_intervals,
+)
+def test_interpolate_harmonic_force_constant(src_k, dst_k, k_min, lambda_interval):
+    lambda_min, lambda_max = lambda_interval
 
     f = functools.partial(
         interpolate_harmonic_force_constant,
         k_min=k_min,
-        lambda_min=0.0,
-        lambda_max=0.4,
+        lambda_min=lambda_min,
+        lambda_max=lambda_max,
     )
 
-    assert_interpolation_valid(f, src_k, dst_k)
+    assert f(src_k, dst_k, 0.0) == src_k
+    assert f(src_k, dst_k, 1.0) == dst_k
 
-    # check for sublinearity
-    lam = 0.1
-    k_linear = linear_interpolation(src_k, dst_k, lam)
-    k_loglinear = f(src_k, dst_k, lam)
-    assert np.all(k_loglinear < k_linear)
+    lambdas = np.linspace(lambda_min, lambda_max, 10)
 
-    # check for JIT-compatibility
-    f = jax.jit(f)
-    _ = f(src_k, dst_k, 0.1)
+    def assert_nondecreasing(f):
+        y = f(lambdas)
+        np.testing.assert_array_less(y[:-1] / y[1:], 1.0 + 1e-9)
+
+    k1, k2 = sorted([src_k, dst_k])
+    assert_nondecreasing(lambda lam: f(k1, k2, lam))
+    assert_nondecreasing(lambda lam: f(k2, k1, 1.0 - lam))
+
+
+@given(
+    st.lists(
+        nonzero_force_constants,
+        min_size=2,
+        max_size=2,
+        unique=True,
+    ).filter(lambda ks: np.abs(ks[0] - ks[1]) / ks[1] > 1e-6)
+)
+def test_interpolate_harmonic_force_constant_sublinear(ks):
+    src_k, dst_k = ks
+    lambdas = np.arange(0.01, 1.0, 0.01)
+    np.testing.assert_array_less(
+        interpolate_harmonic_force_constant(src_k, dst_k, lambdas, 1e-12, 0.0, 1.0)
+        / linear_interpolation(src_k, dst_k, lambdas),
+        1.0,
+    )
+
+
+def test_interpolate_harmonic_force_constant_jax_transformable():
+    _ = jax.jit(interpolate_harmonic_force_constant)(0.0, 1.0, 0.1, 1e-12, 0.0, 1.0)
 
 
 def test_cyclic_difference():
@@ -503,3 +489,31 @@ def test_cyclic_difference():
 
     # jittable
     _ = jax.jit(cyclic_difference)(0, 1, 1)
+
+
+def assert_allclose_cyclic(a, b, period, **kwargs):
+    def f(x):
+        x_mod = x % period
+        return np.minimum(x_mod, period - x_mod)
+
+    return np.testing.assert_allclose(f(a), f(b), **kwargs)
+
+
+periods = finite_floats(1e-9, 1e9)
+bounded_floats = finite_floats(-1e9, 1e9)
+
+
+@given(bounded_floats, bounded_floats, periods)
+def test_cyclic_difference_inverse(a, b, period):
+    x = cyclic_difference(a, b, period)
+    assert_allclose_cyclic(a + x, b, period, atol=1e-6)
+
+
+@given(bounded_floats, bounded_floats, periods)
+def test_cyclic_difference_antisym(a, b, period):
+    np.testing.assert_allclose(cyclic_difference(a, b, period), -cyclic_difference(b, a, period))
+
+
+@given(bounded_floats, bounded_floats, bounded_floats, periods)
+def test_cyclic_difference_translation_invariance(a, b, t, period):
+    assert_allclose_cyclic(cyclic_difference(a + t, b + t, period), cyclic_difference(a, b, period), period, atol=1e-6)
