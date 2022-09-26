@@ -503,10 +503,3 @@ def test_cyclic_difference():
 
     # jittable
     _ = jax.jit(cyclic_difference)(0, 1, 1)
-
-
-def assert_linear(f, x1, x2, x3):
-    np.testing.assert_allclose(
-        (f(x2) - f(x1)) / (x2 - x1),
-        (f(x3) - f(x2)) / (x3 - x2),
-    )
