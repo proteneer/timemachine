@@ -12,7 +12,7 @@ from simtk.openmm import app
 
 from timemachine.constants import KCAL_TO_KJ
 from timemachine.fe import atom_mapping
-from timemachine.fe.rbfe import run_pair
+from timemachine.fe.rbfe import run_complex, run_solvent
 from timemachine.fe.utils import get_mol_name
 from timemachine.ff import Forcefield
 from timemachine.parallel.client import CUDAPoolClient
@@ -45,7 +45,8 @@ def read_from_args():
 
     mols = [mol for mol in Chem.SDMolSupplier(str(args.ligands), removeHs=False)]
 
-    futures = []
+    cfutures = []
+    sfutures = []
     metadata = []
 
     cpc = CUDAPoolClient(args.n_gpus)
@@ -66,8 +67,12 @@ def read_from_args():
             print(f"Submitting job for {mol_a_name} -> {mol_b_name}")
             mcs_threshold = 2.0
             core, smarts = atom_mapping.get_core_with_alignment(mol_a, mol_b, threshold=mcs_threshold)
-            fut = cpc.submit(run_pair, mol_a, mol_b, core, forcefield, protein, args.n_frames, args.seed + row_idx)
-            futures.append(fut)
+            cfutures.append(
+                cpc.submit(run_complex, mol_a, mol_b, core, forcefield, protein, args.n_frames, args.seed + row_idx)
+            )
+            sfutures.append(
+                cpc.submit(run_solvent, mol_a, mol_b, core, forcefield, protein, args.n_frames, args.seed + row_idx)
+            )
 
             metadata.append(
                 (
@@ -83,14 +88,14 @@ def read_from_args():
                 )
             )
 
-    for fut, meta in zip(futures, metadata):
-
+    for i, meta in enumerate(metadata):
         mol_a, mol_b, _, _, exp_ddg, fep_ddg, fep_ddg_err, ccc_ddg, ccc_ddg_err = meta
         mol_a_name = get_mol_name(mol_a)
         mol_b_name = get_mol_name(mol_b)
 
         try:
-            solvent_res, solvent_top, complex_res, complex_top = fut.result()
+            complex_res, complex_top = cfutures[i].result()
+            solvent_res, solvent_top = sfutures[i].result()
 
             with open(f"success_rbfe_result_{mol_a_name}_{mol_b_name}.pkl", "wb") as fh:
                 pkl_obj = (meta, solvent_res, solvent_top, complex_res, complex_top)
