@@ -491,7 +491,7 @@ def handle_ring_opening_closing(
     lamb: float,
     lambda_min: float,
     lambda_max: float,
-):
+) -> float:
     """
     In the typical case (src_k != 0 and dst_k != 0), use the specified interpolation function, f.
 
@@ -509,6 +509,11 @@ def handle_ring_opening_closing(
     lambda_min, lambda_max : float, in 0 < lambda_min < lambda_max < 1
         interpolate in range [lambda_min, lambda_max] (pin to end states otherwise). Note that if dst_k=0, the
         convention is flipped so that 1 - lambda_min corresponds to f(0) and 1 - lambda_max corresponds to f(1).
+
+    Returns
+    -------
+    float
+        interpolated force constant
     """
 
     def ring_closing(src_k, dst_k, lamb):
@@ -550,6 +555,11 @@ def interpolate_harmonic_force_constant(src_k, dst_k, lamb, k_min, lambda_min, l
     lambda_min, lambda_max : float, in 0 < lambda_min < lambda_max < 1
         interpolate in range [lambda_min, lambda_max] (pin to end states otherwise). Note that if dst_k=0, the
         convention is flipped so that 1 - lambda_min corresponds to f(0) and 1 - lambda_max corresponds to f(1).
+
+    Returns
+    -------
+    float
+        interpolated force constant
     """
 
     return jnp.where(
@@ -592,6 +602,11 @@ def interpolate_harmonic_bond_params(src_params, dst_params, lamb, k_min, lambda
 
     k_min, lambda_min, lambda_max : float
         see docstring of `interpolate_harmonic_force_constant` for documentation of these parameters
+
+    Returns
+    -------
+    array, float, (2,)
+        interpolated (force constant, equilibrium length)
     """
 
     src_k, src_x = src_params
@@ -643,6 +658,11 @@ def interpolate_harmonic_angle_params(src_params, dst_params, lamb, k_min, lambd
 
     k_min, lambda_min, lambda_max : float
         see docstring of `interpolate_harmonic_force_constant` for documentation of these parameters
+
+    Returns
+    -------
+    array, float, (2,)
+        interpolated (force constant, equilibrium phase)
     """
 
     src_k, src_phase = src_params
@@ -682,6 +702,11 @@ def interpolate_periodic_torsion_params(src_params, dst_params, lamb, lambda_min
 
     lambda_min, lambda_max : float
         see docstring of `interpolate_harmonic_force_constant` for documentation of these parameters
+
+    Returns
+    -------
+    array, float, (3,)
+        interpolated (force constant, equilibrium phase, periodicity)
     """
 
     src_k, src_phase, src_period = src_params
