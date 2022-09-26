@@ -663,8 +663,7 @@ def interpolate_periodic_torsion_params(src_params, dst_params, lamb, lambda_min
     """
     Interpolate periodic torsion parameters using
 
-    1. Linear interpolation for force constants (see note on ring
-       closing in `interpolate_harmonic_bond_params` docstring)
+    1. Linear interpolation for force constants*
     2. Linear interpolation for angles, using the shortest path
     3. No interpolation for periodicity (pinned to source value)
 
@@ -681,7 +680,7 @@ def interpolate_periodic_torsion_params(src_params, dst_params, lamb, lambda_min
     lamb : float
         alchemical parameter
 
-    k_min, lambda_min, lambda_max : float
+    lambda_min, lambda_max : float
         see docstring of `interpolate_harmonic_force_constant` for documentation of these parameters
     """
 
