@@ -1,7 +1,7 @@
 import warnings
 from collections.abc import Iterable
 from functools import partial
-from typing import Callable, Tuple
+from typing import Any, Callable, Optional, Tuple
 
 import jax.numpy as jnp
 import numpy as np
@@ -11,6 +11,10 @@ from timemachine.fe import interpolate, system, topology, utils
 from timemachine.fe.dummy import canonicalize_bond, identify_dummy_groups, identify_root_anchors
 from timemachine.fe.system import HostGuestSystem
 from timemachine.lib import potentials
+
+Array = Any
+Params = Array
+ParameterInterpolationFxn = Callable[[Params, Params, float], Params]
 
 
 class MultipleAnchorWarning(UserWarning):
@@ -724,7 +728,7 @@ def interpolate_periodic_torsion_params(src_params, dst_params, lamb, lambda_min
 
 
 class SingleTopologyV3:
-    def __init__(self, mol_a, mol_b, core, forcefield):
+    def __init__(self, mol_a, mol_b, core, forcefield, lambda_angles=0.4, lambda_torsions=0.7):
         """
         SingleTopology combines two molecules through a common core. The combined mol has
         atom indices laid out such that mol_a is identically mapped to the combined mol indices.
@@ -744,6 +748,14 @@ class SingleTopologyV3:
         forcefield: ff.Forcefield
             Forcefield to be used for parameterization.
 
+        lambda_angles, lambda_torsions: float
+            For ring opening/closing transformations, alchemical parameter values controlling the intervals over which
+            bonds, angles, and torsions are interpolated. Note that these have no effect on terms not involved in ring
+            opening/closing.
+
+            - Bonds are interpolated in the interval [0, lambda_angles]
+            - Angles are interpolated in the interval [lambda_angles, lambda_torsions]
+            - Torsions are interpolated in the interval [lambda_torsions, 1]
         """
         assert mol_a is not None
         assert mol_b is not None
@@ -790,6 +802,28 @@ class SingleTopologyV3:
         # setup end states
         self.src_system = self._setup_end_state_src()
         self.dst_system = self._setup_end_state_dst()
+
+        # setup default parameter interpolation functions
+        self.default_interpolate_harmonic_bond_params_fxn = partial(
+            interpolate_harmonic_bond_params,
+            k_min=0.1,  # ~ BOLTZ * (300 K) / (5 nm)^2
+            lambda_min=0.0,
+            lambda_max=lambda_angles,
+        )
+        self.default_interpolate_harmonic_angle_params_fxn = partial(
+            interpolate_harmonic_angle_params,
+            k_min=0.05,  # ~ BOLTZ * (300 K) / (2 * pi)^2
+            lambda_min=lambda_angles,
+            lambda_max=lambda_torsions,
+        )
+        self.default_interpolate_periodic_torsion_params_fxn = partial(
+            interpolate_periodic_torsion_params,
+            lambda_min=lambda_torsions,
+            lambda_max=1.0,
+        )
+        self.default_interpolate_nonbonded_params_fxn = interpolate.linear_interpolation
+        self.default_interpolate_chiral_atom_params_fxn = interpolate.linear_interpolation
+        self.default_interpolate_chiral_bond_params_fxn = interpolate.linear_interpolation
 
     def get_num_atoms(self):
         """
@@ -1013,29 +1047,28 @@ class SingleTopologyV3:
 
         return potentials.ChiralBondRestraint(chiral_bond_idxs, chiral_bond_signs).bind(chiral_bond_params)
 
-    def setup_intermediate_state(self, lamb):
+    def setup_intermediate_state(
+        self,
+        lamb,
+        interpolate_harmonic_bond_params_fxn: Optional[ParameterInterpolationFxn] = None,
+        interpolate_harmonic_angle_params_fxn: Optional[ParameterInterpolationFxn] = None,
+        interpolate_periodic_torsion_params_fxn: Optional[ParameterInterpolationFxn] = None,
+        interpolate_nonbonded_params_fxn: Optional[ParameterInterpolationFxn] = None,
+        interpolate_chiral_atom_params_fxn: Optional[ParameterInterpolationFxn] = None,
+        interpolate_chiral_bond_params_fxn: Optional[ParameterInterpolationFxn] = None,
+    ):
         """
         Setup intermediate states at some value of lambda.
         """
         src_system = self.src_system
         dst_system = self.dst_system
 
-        # alchemical parameter values at which angle and torsion force constants transition from zero to nonzero for
-        # ring closing transformations
-        lambda_angles = 0.4  # for angles, src_k = 0 => k(lamb) = 0 when lamb < lambda_angles
-        lambda_torsions = 0.7  # analogous for torsions
-
         bond = self._setup_intermediate_bonded_term(
             src_system.bond,
             dst_system.bond,
             lamb,
             interpolate.align_harmonic_bond_idxs_and_params,
-            partial(
-                interpolate_harmonic_bond_params,
-                k_min=0.1,  # ~ 5 nm at 300 K
-                lambda_min=0.0,
-                lambda_max=lambda_angles,
-            ),
+            interpolate_harmonic_bond_params_fxn or self.default_interpolate_harmonic_bond_params_fxn,
         )
 
         angle = self._setup_intermediate_bonded_term(
@@ -1043,12 +1076,7 @@ class SingleTopologyV3:
             dst_system.angle,
             lamb,
             interpolate.align_harmonic_angle_idxs_and_params,
-            partial(
-                interpolate_harmonic_angle_params,
-                k_min=0.05,
-                lambda_min=lambda_angles,
-                lambda_max=lambda_torsions,
-            ),
+            interpolate_harmonic_angle_params_fxn or self.default_interpolate_harmonic_angle_params_fxn,
         )
 
         torsion = self._setup_intermediate_bonded_term(
@@ -1056,11 +1084,7 @@ class SingleTopologyV3:
             dst_system.torsion,
             lamb,
             interpolate.align_torsion_idxs_and_params,
-            partial(
-                interpolate_periodic_torsion_params,
-                lambda_min=lambda_torsions,
-                lambda_max=1.0,
-            ),
+            interpolate_periodic_torsion_params_fxn or self.default_interpolate_periodic_torsion_params_fxn,
         )
 
         nonbonded = self._setup_intermediate_nonbonded_term(
@@ -1068,7 +1092,7 @@ class SingleTopologyV3:
             dst_system.nonbonded,
             lamb,
             interpolate.align_nonbonded_idxs_and_params,
-            interpolate.linear_interpolation,
+            interpolate_nonbonded_params_fxn or self.default_interpolate_nonbonded_params_fxn,
         )
 
         chiral_atom = self._setup_intermediate_bonded_term(
@@ -1076,14 +1100,14 @@ class SingleTopologyV3:
             dst_system.chiral_atom,
             lamb,
             interpolate.align_chiral_atom_idxs_and_params,
-            interpolate.linear_interpolation,
+            interpolate_chiral_atom_params_fxn or self.default_interpolate_chiral_atom_params_fxn,
         )
 
         chiral_bond = self._setup_intermediate_chiral_bond_term(
             src_system.chiral_bond,
             dst_system.chiral_bond,
             lamb,
-            interpolate.linear_interpolation,
+            interpolate_chiral_bond_params_fxn or self.default_interpolate_chiral_bond_params_fxn,
         )
 
         return system.VacuumSystem(bond, angle, torsion, nonbonded, chiral_atom, chiral_bond)
