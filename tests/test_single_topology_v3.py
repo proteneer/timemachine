@@ -492,6 +492,16 @@ def test_cyclic_difference():
     assert cyclic_difference(0, 0, 3) == 0
     assert cyclic_difference(0, 1, 3) == 1
     assert cyclic_difference(0, 2, 3) == -1
+
+    # antisymmetric
+    assert cyclic_difference(0, 1, 3) == -cyclic_difference(1, 0, 3)
+    assert cyclic_difference(0, 2, 3) == -cyclic_difference(2, 0, 3)
+
+    # translation invariant
+    assert cyclic_difference(0, 1, 3) == cyclic_difference(-1, 0, 3)
+    assert cyclic_difference(0, 4, 8) == cyclic_difference(-2, 2, 8) == cyclic_difference(-4, 0, 8)
+
+    # jittable
     _ = jax.jit(cyclic_difference)(0, 1, 1)
 
 
