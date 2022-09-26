@@ -88,7 +88,7 @@ class PDBWriter:
 
         Parameters
         ----------
-        obj: list of either Chem.Mol or app.Topoolgy types
+        objs: list of either Chem.Mol or app.Topoolgy types
             Molecules of interest
 
         out_filepath: str

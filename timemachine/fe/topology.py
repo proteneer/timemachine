@@ -801,7 +801,7 @@ class SingleTopology:
             Second ligand
 
         core: np.array (C, 2)
-            Atom mapping from mol_a to to mol_b
+            Atom mapping from mol_a to mol_b
 
         ff: ff.Forcefield
             Forcefield to be used for parameterization.

@@ -276,6 +276,8 @@ class RBFEModel:
 
         Parameters
         ----------
+        ff_params, mol_a, mol_b, core:
+            See predict() for details
         label_ddG: float
             Label ddG in kJ/mol of the alchemical transformation.
 

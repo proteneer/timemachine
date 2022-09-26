@@ -577,15 +577,10 @@ class SingleTopologyV3:
         """
         Combine masses between two end-states using linear interpolation.
 
-        Parameters
-        ----------
-        lamb: float
-            Lambda value
-
         Returns
         -------
-        np.array
-            shape of self.get_num_atoms()
+        masses: list
+            len(masses) == self.get_num_atoms()
         """
         mol_a_masses = utils.get_mol_masses(self.mol_a)
         mol_b_masses = utils.get_mol_masses(self.mol_b)
