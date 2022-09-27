@@ -455,7 +455,7 @@ def test_interpolate_harmonic_force_constant(src_k, dst_k, k_min, lambda_interva
 
     lambdas = np.arange(0.01, 1.0, 0.01)
 
-    # all interpolated values less than k_min
+    # all interpolated values >= k_min
     np.testing.assert_array_less(1.0, f(src_k, dst_k, lambdas) / k_min + 1e-9)
 
     def assert_nondecreasing(f):
