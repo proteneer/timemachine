@@ -94,8 +94,8 @@ def read_from_args():
         mol_b_name = get_mol_name(mol_b)
 
         try:
-            complex_res, complex_top = cfutures[i].result()
             solvent_res, solvent_top = sfutures[i].result()
+            complex_res, complex_top = cfutures[i].result()
 
             with open(f"success_rbfe_result_{mol_a_name}_{mol_b_name}.pkl", "wb") as fh:
                 pkl_obj = (meta, solvent_res, solvent_top, complex_res, complex_top)
