@@ -63,7 +63,7 @@ def convert_uIC50_to_kJ_per_mole(amount_in_uM: float, experiment_temp: float = 2
         Binding potency in kJ/mol.
 
     """
-    RT = (constants.MOLAR_GAS_CONSTANT * experiment_temp) / (1000 * constants.KCAL_TO_KJ)
+    RT = (constants.BOLTZ * experiment_temp) / constants.KCAL_TO_KJ
     return RT * np.log(amount_in_uM * 1e-6) * constants.KCAL_TO_KJ
 
 
