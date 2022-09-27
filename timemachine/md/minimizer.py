@@ -362,8 +362,8 @@ def local_minimize(x0, val_and_grad_fn, local_idxs, verbose=True):
         n_frozen = len(x0) - n_local
         print(f"performing {method} minimization on {n_local} atoms\n(holding the other {n_frozen} atoms frozen)")
         U_0, grad_0 = val_and_grad_fn_bfgs(x_local_0_flat)
-        print(f"U(x_0) = {U_0:.3f} kJ/mol")
-        print(f"|force(x_0)| = {np.linalg.norm(grad_0):.3f} kJ/mol / nm^2")
+        print(f"U(x_0) = {U_0:.3f}")
+        print(f"|force(x_0)| = {np.linalg.norm(grad_0):.3f}")
 
     res = scipy.optimize.minimize(
         val_and_grad_fn_bfgs,
@@ -378,8 +378,8 @@ def local_minimize(x0, val_and_grad_fn, local_idxs, verbose=True):
 
     if verbose:
         U_final, grad_final = val_and_grad_fn_bfgs(x_local_final_flat)
-        print(f"U(x_final) = {U_final:.3f} kJ/mol")
-        print(f"|force(x_final)| = {np.linalg.norm(grad_final):.3f} kJ/mol / nm^2")
+        print(f"U(x_final) = {U_final:.3f}")
+        print(f"|force(x_final)| = {np.linalg.norm(grad_final):.3f}")
         print("-" * 70)
 
     x_final = x0.copy()
