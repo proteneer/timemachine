@@ -421,6 +421,16 @@ def test_handle_ring_opening_closing_symmetric(k, lambda_interval, lam):
     )
 
 
+@given(nonzero_force_constants, st.lists(lambdas, min_size=3, max_size=3, unique=True).map(sorted))
+@seed(2022)
+def test_handle_ring_opening_closing_pin_to_end_states(k, lambdas):
+    lam, lambda_min, lambda_max = lambdas
+    assert handle_ring_opening_closing(linear_interpolation, 0.0, k, lam, lambda_min, lambda_max) == 0.0
+
+    lambda_min, lambda_max, lam = lambdas
+    assert handle_ring_opening_closing(linear_interpolation, 0.0, k, lam, lambda_min, lambda_max) == k
+
+
 @given(
     nonzero_force_constants,
     nonzero_force_constants,
@@ -517,6 +527,16 @@ def test_cyclic_difference_inverse(a, b, period):
 @seed(2022)
 def test_cyclic_difference_antisymmetric(a, b, period):
     assert cyclic_difference(a, b, period) + cyclic_difference(b, a, period) == 0
+
+
+@given(bounded_ints, bounded_ints, bounded_ints, bounded_ints, periods)
+@seed(2022)
+def test_cyclic_difference_shift_by_n_periods(a, b, m, n, period):
+    assert_equal_cyclic(
+        cyclic_difference(a + m * period, b + n * period, period),
+        cyclic_difference(a, b, period),
+        period,
+    )
 
 
 @given(bounded_ints, bounded_ints, bounded_ints, periods)
