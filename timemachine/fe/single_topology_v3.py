@@ -637,7 +637,7 @@ def cyclic_difference(a, b, period):
     def f(d):
         return jnp.where(d <= period / 2, d, d - period)
 
-    return jnp.where(0 < d, f(d), -f(-d))
+    return jnp.sign(d) * f(jnp.abs(d))
 
 
 def interpolate_harmonic_angle_params(src_params, dst_params, lamb, k_min, lambda_min, lambda_max):

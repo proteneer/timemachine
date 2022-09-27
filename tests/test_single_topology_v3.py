@@ -522,6 +522,7 @@ bounded_ints = st.integers(-int(1e9), int(1e9))
 @seed(2022)
 def test_cyclic_difference_inverse(a, b, period):
     x = cyclic_difference(a, b, period)
+    assert np.abs(x) <= period / 2
     assert_equal_cyclic(a + x, b, period)
 
 
