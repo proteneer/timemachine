@@ -439,7 +439,7 @@ def test_interpolate_harmonic_force_constant(src_k, dst_k, k_min, lambda_interva
     assert f(src_k, dst_k, 0.0) == src_k
     assert f(src_k, dst_k, 1.0) == dst_k
 
-    lambdas = np.linspace(lambda_min, lambda_max, 10)
+    lambdas = np.arange(0.01, 1.0, 0.01)
 
     def assert_nondecreasing(f):
         y = f(lambdas)
