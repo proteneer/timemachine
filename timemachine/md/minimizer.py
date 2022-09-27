@@ -361,7 +361,6 @@ def local_minimize(x0, val_and_grad_fn, local_idxs, verbose=True):
         print(f"performing {method} minimization on {n_local} atoms\n(holding the other {n_frozen} atoms frozen)")
         U_0, grad_0 = val_and_grad_fn_bfgs(x_local_0_flat)
         print(f"U(x_0) = {U_0:.3f}")
-        print(f"|force(x_0)| = {np.linalg.norm(grad_0):.3f}")
 
     res = scipy.optimize.minimize(
         val_and_grad_fn_bfgs,
@@ -377,7 +376,15 @@ def local_minimize(x0, val_and_grad_fn, local_idxs, verbose=True):
     if verbose:
         U_final, grad_final = val_and_grad_fn_bfgs(x_local_final_flat)
         print(f"U(x_final) = {U_final:.3f}")
-        print(f"|force(x_final)| = {np.linalg.norm(grad_final):.3f}")
+
+        # diagnose worst atom
+        forces = -grad_final.reshape(x_local_shape)
+        per_atom_force_norms = np.linalg.norm(forces, axis=1)
+        argmax_local = np.argmax(per_atom_force_norms)
+        worst_atom_idx = local_idxs[argmax_local]
+        print(f"atom with highest force norm after minimization: {worst_atom_idx}")
+        print(f"force(x_final)[{worst_atom_idx}] = {forces[argmax_local]}")
+
         print("-" * 70)
 
     x_final = x0.copy()
