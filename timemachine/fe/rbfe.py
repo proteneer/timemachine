@@ -592,8 +592,23 @@ def estimate_relative_free_energy(
         raise err
 
 
-def run_pair(mol_a, mol_b, core, forcefield, protein, n_frames, seed, n_eq_steps=10000, n_windows=None):
+def run_vacuum(mol_a, mol_b, core, forcefield, _, n_frames, seed, n_eq_steps=10000, n_windows=None):
+    vacuum_host_config = None
+    return estimate_relative_free_energy(
+        mol_a,
+        mol_b,
+        core,
+        forcefield,
+        vacuum_host_config,
+        seed,
+        n_frames=n_frames,
+        prefix="vacuum",
+        n_eq_steps=n_eq_steps,
+        n_windows=n_windows,
+    )
 
+
+def run_solvent(mol_a, mol_b, core, forcefield, _, n_frames, seed, n_eq_steps=10000, n_windows=None):
     box_width = 4.0
     solvent_sys, solvent_conf, solvent_box, solvent_top = builders.build_water_system(box_width)
     solvent_box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes, deboggle later
@@ -610,7 +625,10 @@ def run_pair(mol_a, mol_b, core, forcefield, protein, n_frames, seed, n_eq_steps
         n_eq_steps=n_eq_steps,
         n_windows=n_windows,
     )
+    return solvent_res, solvent_top
 
+
+def run_complex(mol_a, mol_b, core, forcefield, protein, n_frames, seed, n_eq_steps=10000, n_windows=None):
     complex_sys, complex_conf, _, _, complex_box, complex_top = builders.build_protein_system(protein)
     complex_box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes, deboggle later
     complex_host_config = HostConfig(complex_sys, complex_conf, complex_box)
@@ -620,11 +638,10 @@ def run_pair(mol_a, mol_b, core, forcefield, protein, n_frames, seed, n_eq_steps
         core,
         forcefield,
         complex_host_config,
-        seed + 1,
+        seed,
         n_frames=n_frames,
         prefix="complex",
         n_eq_steps=n_eq_steps,
         n_windows=n_windows,
     )
-
-    return solvent_res, solvent_top, complex_res, complex_top
+    return complex_res, complex_top
