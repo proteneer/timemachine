@@ -144,7 +144,7 @@ class ProcessPoolClient(AbstractClient):
         """
         See abstract class for documentation.
         """
-        future = self.executor.submit(task_fn, *args)
+        future = self.executor.submit(task_fn, *args, **kwargs)
         job_id = str(self._total_idx)
         self._total_idx += 1
         self._idx = (self._idx + 1) % self.max_workers
@@ -176,18 +176,18 @@ class CUDAPoolClient(ProcessPoolClient):
         super().__init__(max_workers)
 
     @staticmethod
-    def wrapper(max_workers, idx, fn, *args):
+    def wrapper(max_workers, idx, fn, *args, **kwargs):
         # for a single worker, do not overwrite CUDA_VISIBLE_DEVICES
         # so that multiple single gpu jobs can be run on the same node
         if max_workers > 1:
             os.environ["CUDA_VISIBLE_DEVICES"] = str(idx)
-        return fn(*args)
+        return fn(*args, **kwargs)
 
     def submit(self, task_fn, *args, **kwargs):
         """
         See abstract class for documentation.
         """
-        future = self.executor.submit(self.wrapper, self.max_workers, self._idx, task_fn, *args)
+        future = self.executor.submit(self.wrapper, self.max_workers, self._idx, task_fn, *args, **kwargs)
         job_id = str(self._total_idx)
         self._total_idx += 1
         self._idx = (self._idx + 1) % self.max_workers
@@ -370,6 +370,7 @@ class FileClient(AbstractFileClient):
 
     def store(self, path: str, data: bytes):
         full_path = Path(self.full_path(path))
+        full_path.parent.mkdir(parents=True, exist_ok=True)
         full_path.write_bytes(data)
 
     def load(self, path: str) -> bytes:

@@ -84,7 +84,7 @@ setup(
         "jaxlib>0.3.13",
         "networkx",
         "numpy",
-        "pymbar>3.0.4",
+        "pymbar>3.0.4,<4",
         "pyyaml",
         "scipy",
         "typing-extensions",

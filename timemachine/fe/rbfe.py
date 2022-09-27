@@ -264,6 +264,14 @@ def setup_initial_states(st, host_config, temperature, lambda_schedule, seed):
     return initial_states
 
 
+def plot_work(w_forward, w_reverse, axes):
+    """histograms of +forward and -reverse works"""
+    axes.hist(+w_forward, alpha=0.5, label="fwd", density=True, bins=20)
+    axes.hist(-w_reverse, alpha=0.5, label="-rev", density=True, bins=20)
+    axes.set_xlabel("work (kT)")
+    axes.legend()
+
+
 def plot_BAR(df, df_err, fwd_delta_u, rev_delta_u, title, axes):
     """
     Generate a subplot showing overlap for a particular pair of delta_us.
@@ -285,18 +293,12 @@ def plot_BAR(df, df_err, fwd_delta_u, rev_delta_u, title, axes):
     title: str
         title to use
 
-    plot_idx: triple (n_row, n_col, n_pos)
-        where to place the subplot
-
     axes: matplotlib axis
         obj used to draw the figures
 
     """
     axes.set_title(f"{title}, dg: {df:.2f} +- {df_err:.2f} kTs")
-    axes.hist(fwd_delta_u, alpha=0.5, label="fwd", density=True, bins=20)
-    axes.hist(-rev_delta_u, alpha=0.5, label="-rev", density=True, bins=20)
-    axes.set_xlabel("work (kTs)")
-    axes.legend()
+    plot_work(fwd_delta_u, rev_delta_u, axes)
 
 
 def pair_overlap_from_ukln(u_kln):
@@ -309,14 +311,25 @@ def pair_overlap_from_ukln(u_kln):
 
 
 def plot_overlap_summary(ax, components, lambdas, overlaps):
+    # one line per energy component
     for component, ys in zip(components, overlaps):
-        ax.plot(lambdas[:-1], ys, marker=".", label=component)
+        percentages = 100 * ys
+        ax.plot(lambdas[:-1], percentages, marker=".", label=component)
 
-    ax.set_ylim(0, 1)
+    # min and max within axis limits
+    ax.set_ylim(-5, 105)
+    ax.hlines([0, 100], min(lambdas), max(lambdas), color="grey", linestyles="--")
+
+    # express in %
+    ticks = [0, 25, 50, 75, 100]
+    labels = [f"{t}%" for t in ticks]
+    ax.set_yticks(ticks)
+    ax.set_yticklabels(labels)
+
+    # labels and legends
     ax.set_xlabel(r"$\lambda_i$")
     ax.set_ylabel(r"pair BAR overlap ($\lambda_i$, $\lambda_{i+1}$)")
     ax.legend()
-    ax.ticklabel_format(useOffset=False)
 
 
 def estimate_free_energy_given_initial_states(initial_states, protocol, temperature, prefix, keep_idxs):
@@ -405,9 +418,9 @@ def estimate_free_energy_given_initial_states(initial_states, protocol, temperat
 
                 fwd_delta_u = u_10 - u_00
                 rev_delta_u = u_01 - u_11
-                df, df_err = bar_with_bootstrapped_uncertainty(fwd_delta_u, rev_delta_u)
                 plot_axis = all_axes[lamb_idx - 1][u_idx]
-                plot_BAR(df, df_err, fwd_delta_u, rev_delta_u, U_names[u_idx], plot_axis)
+                plot_work(fwd_delta_u, rev_delta_u, plot_axis)
+                plot_axis.set_title(U_names[u_idx])
 
             # sanity check - I don't think the dG calculation commutes with its components, so we have to re-estimate
             # the dG from the sum of the delta_us as opposed to simply summing the component dGs

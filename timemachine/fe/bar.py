@@ -17,7 +17,7 @@ def EXP(w_raw):
 
     Parameters
     ----------
-    w : np.ndarray, float, (N)
+    w_raw : np.ndarray, float, (N)
         work for N frames
 
     Returns
