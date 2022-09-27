@@ -399,10 +399,10 @@ nonzero_force_constants = finite_floats(1e-9, 1e9)
 
 lambdas = finite_floats(0.0, 1.0)
 
-open_lambda_intervals = st.lists(finite_floats(1e-9, 1.0 - 1e-9), min_size=2, max_size=2, unique=True).map(sorted)
+lambda_intervals = st.lists(finite_floats(1e-9, 1.0 - 1e-9), min_size=2, max_size=2, unique=True).map(sorted)
 
 
-@given(nonzero_force_constants, open_lambda_intervals, lambdas)
+@given(nonzero_force_constants, lambda_intervals, lambdas)
 def test_handle_ring_opening_closing_symmetry(k, lambda_interval, lam):
     lambda_min, lambda_max = lambda_interval
 
@@ -424,7 +424,7 @@ def test_handle_ring_opening_closing_symmetry(k, lambda_interval, lam):
     nonzero_force_constants,
     nonzero_force_constants,
     nonzero_force_constants,
-    open_lambda_intervals,
+    lambda_intervals,
 )
 def test_interpolate_harmonic_force_constant(src_k, dst_k, k_min, lambda_interval):
     lambda_min, lambda_max = lambda_interval
