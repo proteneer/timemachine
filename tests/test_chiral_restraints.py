@@ -1,6 +1,8 @@
 import multiprocessing
 import os
 
+# NOTE: To have an effect, XLA_FLAGS must be set in the environment before loading JAX (whether directly or transitively
+# through another import)
 os.environ["XLA_FLAGS"] = "--xla_force_host_platform_device_count=" + str(multiprocessing.cpu_count())
 
 import jax.numpy as jnp
