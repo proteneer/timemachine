@@ -358,8 +358,6 @@ def local_minimize(x0, val_and_grad_fn, local_idxs, verbose=True):
 
     if verbose:
         print("-" * 70)
-        n_local = len(local_idxs)
-        n_frozen = len(x0) - n_local
         print(f"performing {method} minimization on {n_local} atoms\n(holding the other {n_frozen} atoms frozen)")
         U_0, grad_0 = val_and_grad_fn_bfgs(x_local_0_flat)
         print(f"U(x_0) = {U_0:.3f}")
