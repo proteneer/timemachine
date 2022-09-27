@@ -1,33 +1,43 @@
-# test that end-states are setup correctly in single topology calculations.
-import functools
 import multiprocessing
+import os
+
+# NOTE: To have an effect, XLA_FLAGS must be set in the environment before loading JAX (whether directly or transitively
+# through another import)
+os.environ["XLA_FLAGS"] = "--xla_force_host_platform_device_count=" + str(multiprocessing.cpu_count())
+import jax
+
+jax.config.update("jax_enable_x64", True)
+
+import functools
 import os
 from importlib import resources
 
-from timemachine.constants import DEFAULT_FF
-from timemachine.ff.handlers import openmm_deserializer
-
-os.environ["XLA_FLAGS"] = "--xla_force_host_platform_device_count=" + str(multiprocessing.cpu_count())
-
-import jax
+import hypothesis.strategies as st
 import jax.numpy as jnp
 import numpy as np
 import pytest
+from hypothesis import given, seed
 from rdkit import Chem
 from rdkit.Chem import AllChem
 
+from timemachine.constants import DEFAULT_FF
 from timemachine.fe import atom_mapping, single_topology_v3
+from timemachine.fe.interpolate import linear_interpolation
 from timemachine.fe.single_topology_v3 import (
     ChargePertubationError,
     CoreBondChangeWarning,
     MultipleAnchorWarning,
     SingleTopologyV3,
     canonicalize_improper_idxs,
+    cyclic_difference,
+    handle_ring_opening_closing,
+    interpolate_harmonic_force_constant,
     setup_dummy_interactions_from_ff,
 )
 from timemachine.fe.system import convert_bps_into_system, minimize_scipy, simulate_system
 from timemachine.fe.utils import get_mol_name, get_romol_conf
 from timemachine.ff import Forcefield
+from timemachine.ff.handlers import openmm_deserializer
 from timemachine.md.builders import build_water_system
 from timemachine.potentials.jax_utils import distance
 
@@ -383,3 +393,163 @@ def test_no_chiral_bond_restraints():
     assert len(state.chiral_bond.get_idxs()) == 0
     U = state.get_U_fn()
     _ = U(init_conf)
+
+
+finite_floats = functools.partial(st.floats, allow_nan=False, allow_infinity=False, allow_subnormal=False)
+
+nonzero_force_constants = finite_floats(1e-9, 1e9)
+
+lambdas = finite_floats(0.0, 1.0)
+
+lambda_intervals = st.lists(finite_floats(1e-9, 1.0 - 1e-9), min_size=2, max_size=2, unique=True).map(sorted)
+
+
+@given(nonzero_force_constants, lambda_intervals, lambdas)
+@seed(2022)
+def test_handle_ring_opening_closing_symmetric(k, lambda_interval, lam):
+    lambda_min, lambda_max = lambda_interval
+
+    f = functools.partial(
+        handle_ring_opening_closing,
+        linear_interpolation,
+        lambda_min=lambda_min,
+        lambda_max=lambda_max,
+    )
+
+    np.testing.assert_allclose(
+        f(0.0, k, lam),
+        f(k, 0.0, 1.0 - lam),
+        atol=1e-6,
+    )
+
+
+@given(nonzero_force_constants, st.lists(lambdas, min_size=3, max_size=3, unique=True).map(sorted))
+@seed(2022)
+def test_handle_ring_opening_closing_pin_to_end_states(k, lambdas):
+    lam, lambda_min, lambda_max = lambdas
+    assert handle_ring_opening_closing(linear_interpolation, 0.0, k, lam, lambda_min, lambda_max) == 0.0
+
+    lambda_min, lambda_max, lam = lambdas
+    assert handle_ring_opening_closing(linear_interpolation, 0.0, k, lam, lambda_min, lambda_max) == k
+
+
+@given(
+    nonzero_force_constants,
+    nonzero_force_constants,
+    nonzero_force_constants,
+    lambda_intervals,
+)
+@seed(2022)
+def test_interpolate_harmonic_force_constant(src_k, dst_k, k_min, lambda_interval):
+    lambda_min, lambda_max = lambda_interval
+
+    f = functools.partial(
+        interpolate_harmonic_force_constant,
+        k_min=k_min,
+        lambda_min=lambda_min,
+        lambda_max=lambda_max,
+    )
+
+    assert f(src_k, dst_k, 0.0) == src_k
+    assert f(src_k, dst_k, 1.0) == dst_k
+
+    lambdas = np.arange(0.01, 1.0, 0.01)
+
+    # all interpolated values >= k_min
+    np.testing.assert_array_less(1.0, f(src_k, dst_k, lambdas) / k_min + 1e-9)
+
+    def assert_nondecreasing(f):
+        y = f(lambdas)
+        np.testing.assert_array_less(y[:-1] / y[1:], 1.0 + 1e-9)
+
+    k1, k2 = sorted([src_k, dst_k])
+    assert_nondecreasing(lambda lam: f(k1, k2, lam))
+    assert_nondecreasing(lambda lam: f(k2, k1, 1.0 - lam))
+
+
+@given(
+    st.lists(
+        nonzero_force_constants,
+        min_size=2,
+        max_size=2,
+        unique=True,
+    ).filter(lambda ks: np.abs(ks[0] - ks[1]) / ks[1] > 1e-6)
+)
+@seed(2022)
+def test_interpolate_harmonic_force_constant_sublinear(ks):
+    src_k, dst_k = ks
+    lambdas = np.arange(0.01, 1.0, 0.01)
+    np.testing.assert_array_less(
+        interpolate_harmonic_force_constant(src_k, dst_k, lambdas, 1e-12, 0.0, 1.0)
+        / linear_interpolation(src_k, dst_k, lambdas),
+        1.0,
+    )
+
+
+def test_interpolate_harmonic_force_constant_jax_transformable():
+    _ = jax.jit(interpolate_harmonic_force_constant)(0.0, 1.0, 0.1, 1e-12, 0.0, 1.0)
+
+
+def test_cyclic_difference():
+    assert cyclic_difference(0, 0, 1) == 0
+    assert cyclic_difference(0, 1, 2) == 1  # arbitrary, positive by convention
+    assert cyclic_difference(0, 0, 3) == 0
+    assert cyclic_difference(0, 1, 3) == 1
+    assert cyclic_difference(0, 2, 3) == -1
+
+    # antisymmetric
+    assert cyclic_difference(0, 1, 3) == -cyclic_difference(1, 0, 3)
+    assert cyclic_difference(0, 2, 3) == -cyclic_difference(2, 0, 3)
+
+    # translation invariant
+    assert cyclic_difference(0, 1, 3) == cyclic_difference(-1, 0, 3)
+    assert cyclic_difference(0, 4, 8) == cyclic_difference(-2, 2, 8) == cyclic_difference(-4, 0, 8)
+
+    # jittable
+    _ = jax.jit(cyclic_difference)(0, 1, 1)
+
+
+def assert_equal_cyclic(a, b, period):
+    def f(x):
+        x_mod = x % period
+        return np.minimum(x_mod, period - x_mod)
+
+    assert f(a) == f(b)
+
+
+periods = st.integers(1, int(1e9))
+bounded_ints = st.integers(-int(1e9), int(1e9))
+
+
+@given(bounded_ints, bounded_ints, periods)
+@seed(2022)
+def test_cyclic_difference_inverse(a, b, period):
+    x = cyclic_difference(a, b, period)
+    assert np.abs(x) <= period / 2
+    assert_equal_cyclic(a + x, b, period)
+
+
+@given(bounded_ints, bounded_ints, periods)
+@seed(2022)
+def test_cyclic_difference_antisymmetric(a, b, period):
+    assert cyclic_difference(a, b, period) + cyclic_difference(b, a, period) == 0
+
+
+@given(bounded_ints, bounded_ints, bounded_ints, bounded_ints, periods)
+@seed(2022)
+def test_cyclic_difference_shift_by_n_periods(a, b, m, n, period):
+    assert_equal_cyclic(
+        cyclic_difference(a + m * period, b + n * period, period),
+        cyclic_difference(a, b, period),
+        period,
+    )
+
+
+@given(bounded_ints, bounded_ints, bounded_ints, periods)
+@seed(2022)
+def test_cyclic_difference_translation_invariant(a, b, t, period):
+    assert_equal_cyclic(
+        cyclic_difference(a + t, b + t, period),
+        cyclic_difference(a, b, period),
+        period,
+    )
