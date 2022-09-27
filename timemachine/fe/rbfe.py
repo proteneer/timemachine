@@ -638,7 +638,7 @@ def run_complex(mol_a, mol_b, core, forcefield, protein, n_frames, seed, n_eq_st
         core,
         forcefield,
         complex_host_config,
-        seed,  # this was seed + 1, why?
+        seed,
         n_frames=n_frames,
         prefix="complex",
         n_eq_steps=n_eq_steps,
