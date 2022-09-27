@@ -29,6 +29,10 @@ def mult(x, y):
     return x * y
 
 
+def sum(*args, **kwargs):
+    return args[0] + kwargs["key"]
+
+
 class TestProcessPool(unittest.TestCase):
     def setUp(self):
         max_workers = 10
@@ -56,6 +60,17 @@ class TestProcessPool(unittest.TestCase):
         assert test_names == expected_ids
 
         np.testing.assert_array_equal(test_res, arr * arr)
+
+    def test_submit_kwargs(self):
+        arr = np.linspace(0, 1.0, 5)
+
+        futures = []
+        for x in arr:
+            fut = self.cli.submit(sum, x, key=x)
+            futures.append(fut)
+
+        test_res = [f.result() for f in futures]
+        np.testing.assert_array_equal(test_res, arr + arr)
 
     def test_jax(self):
         # (ytz): test that jax code can be launched via multiprocessing
@@ -123,6 +138,17 @@ class TestCUDAPoolClient(unittest.TestCase):
         expected = [str(i % self.max_workers) for i in range(operations)]
 
         np.testing.assert_array_equal(test_res, expected)
+
+    def test_submit_kwargs(self):
+        arr = np.linspace(0, 1.0, 5)
+
+        futures = []
+        for x in arr:
+            fut = self.cli.submit(sum, x, key=x)
+            futures.append(fut)
+
+        test_res = [f.result() for f in futures]
+        np.testing.assert_array_equal(test_res, arr + arr)
 
     def test_too_many_workers(self):
         # I look forward to the day that we have 814 GPUs
@@ -270,7 +296,6 @@ def test_batch_list():
 
 def test_file_client(tmpdir):
     with tmpdir.as_cwd():
-        tmpdir.mkdir("subdir")
         fc = client.FileClient("subdir")
         fc.store("test", b"data")
         assert fc.exists("test")
