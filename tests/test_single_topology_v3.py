@@ -14,7 +14,7 @@ import hypothesis.strategies as st
 import jax.numpy as jnp
 import numpy as np
 import pytest
-from hypothesis import given
+from hypothesis import given, seed
 from rdkit import Chem
 from rdkit.Chem import AllChem
 
@@ -403,7 +403,8 @@ lambda_intervals = st.lists(finite_floats(1e-9, 1.0 - 1e-9), min_size=2, max_siz
 
 
 @given(nonzero_force_constants, lambda_intervals, lambdas)
-def test_handle_ring_opening_closing_symmetry(k, lambda_interval, lam):
+@seed(2022)
+def test_handle_ring_opening_closing_symmetric(k, lambda_interval, lam):
     lambda_min, lambda_max = lambda_interval
 
     f = functools.partial(
@@ -426,6 +427,7 @@ def test_handle_ring_opening_closing_symmetry(k, lambda_interval, lam):
     nonzero_force_constants,
     lambda_intervals,
 )
+@seed(2022)
 def test_interpolate_harmonic_force_constant(src_k, dst_k, k_min, lambda_interval):
     lambda_min, lambda_max = lambda_interval
 
@@ -458,6 +460,7 @@ def test_interpolate_harmonic_force_constant(src_k, dst_k, k_min, lambda_interva
         unique=True,
     ).filter(lambda ks: np.abs(ks[0] - ks[1]) / ks[1] > 1e-6)
 )
+@seed(2022)
 def test_interpolate_harmonic_force_constant_sublinear(ks):
     src_k, dst_k = ks
     lambdas = np.arange(0.01, 1.0, 0.01)
@@ -491,29 +494,36 @@ def test_cyclic_difference():
     _ = jax.jit(cyclic_difference)(0, 1, 1)
 
 
-def assert_allclose_cyclic(a, b, period, **kwargs):
+def assert_equal_cyclic(a, b, period):
     def f(x):
         x_mod = x % period
         return np.minimum(x_mod, period - x_mod)
 
-    return np.testing.assert_allclose(f(a), f(b), **kwargs)
+    assert f(a) == f(b)
 
 
-periods = finite_floats(1e-9, 1e9)
-bounded_floats = finite_floats(-1e9, 1e9)
+periods = st.integers(1, int(1e9))
+bounded_ints = st.integers(-int(1e9), int(1e9))
 
 
-@given(bounded_floats, bounded_floats, periods)
+@given(bounded_ints, bounded_ints, periods)
+@seed(2022)
 def test_cyclic_difference_inverse(a, b, period):
     x = cyclic_difference(a, b, period)
-    assert_allclose_cyclic(a + x, b, period, atol=1e-6)
+    assert_equal_cyclic(a + x, b, period)
 
 
-@given(bounded_floats, bounded_floats, periods)
-def test_cyclic_difference_antisym(a, b, period):
-    np.testing.assert_allclose(cyclic_difference(a, b, period), -cyclic_difference(b, a, period))
+@given(bounded_ints, bounded_ints, periods)
+@seed(2022)
+def test_cyclic_difference_antisymmetric(a, b, period):
+    assert cyclic_difference(a, b, period) + cyclic_difference(b, a, period) == 0
 
 
-@given(bounded_floats, bounded_floats, bounded_floats, periods)
-def test_cyclic_difference_translation_invariance(a, b, t, period):
-    assert_allclose_cyclic(cyclic_difference(a + t, b + t, period), cyclic_difference(a, b, period), period, atol=1e-6)
+@given(bounded_ints, bounded_ints, bounded_ints, periods)
+@seed(2022)
+def test_cyclic_difference_translation_invariant(a, b, t, period):
+    assert_equal_cyclic(
+        cyclic_difference(a + t, b + t, period),
+        cyclic_difference(a, b, period),
+        period,
+    )
