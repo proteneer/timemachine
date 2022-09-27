@@ -435,7 +435,7 @@ class TestRABFEModels(TestCase):
                 ordered_params, mol_b, solvent_x0, solvent_box, "prefix", core_idxs=core_idxs[:, 0], seed=2022
             )
             np.testing.assert_almost_equal(dG, 40.496133, decimal=5)
-            np.testing.assert_almost_equal(dG_err, np.nan)
+            np.testing.assert_almost_equal(dG_err, 0.0)
             created_files = os.listdir(temp_dir)
             # 2 npz, 1 pdb and 1 npy per mol due to a->b and b->a
             self.assertEqual(len(created_files), 4)
