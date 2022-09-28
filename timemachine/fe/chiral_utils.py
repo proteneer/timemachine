@@ -81,12 +81,13 @@ def setup_chiral_bond_restraints(mol, conf, src_idx, dst_idx):
     # build chiral restraints
     restr_idxs = []
     signs = []
+
+    # set up torsions a,b,c,d
+    b, c = src_idx, dst_idx
     for a in src_nbs:
-        for b in dst_nbs:
-            # set up torsion i,j,k,l
-            i, j, k, l = a, src_idx, dst_idx, b
-            vol = torsion_volume(conf[i], conf[j], conf[k], conf[l])
-            restr_idxs.append((i, j, k, l))
+        for d in dst_nbs:
+            vol = torsion_volume(conf[a], conf[b], conf[c], conf[d])
+            restr_idxs.append((a, b, c, d))
             if vol < 0:
                 # (jkaus): the restraints are turned on when the volume is positive
                 # so use the opposite sign here
@@ -99,7 +100,7 @@ def setup_chiral_bond_restraints(mol, conf, src_idx, dst_idx):
 
 def find_chiral_atoms(mol):
     """
-    Find chiral atoms in a molecule. Note that an atom is chiral if it has an non-invertible
+    Find chiral atoms in a molecule. Note that an atom is chiral if it has a non-invertible
     energy barrier. Even a center like methane is considered chiral.
 
     Parameters

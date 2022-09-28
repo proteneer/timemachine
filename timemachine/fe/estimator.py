@@ -393,7 +393,7 @@ def deltaG_from_results(
     if model.endpoint_correct:
         core_restr = bound_potentials[-1]
         # (ytz): tbd, automatically find optimal k_translation/k_rotation such that
-        # standard deviation and/or overlap is maximized
+        #   work standard deviation is minimized and/or overlap is maximized
         k_translation = 200.0
         k_rotation = 100.0
         start = time.time()

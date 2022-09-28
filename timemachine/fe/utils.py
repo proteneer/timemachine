@@ -12,39 +12,6 @@ def to_md_units(q):
     return q.value_in_unit_system(simtk.unit.md_unit_system)
 
 
-def write(xyz, masses, recenter=True):
-    if recenter:
-        xyz = xyz - np.mean(xyz, axis=0, keepdims=True)
-    buf = str(len(masses)) + "\n"
-    buf += "timemachine\n"
-    for m, (x, y, z) in zip(masses, xyz):
-        if int(round(m)) == 12:
-            symbol = "C"
-        elif int(round(m)) == 14:
-            symbol = "N"
-        elif int(round(m)) == 16:
-            symbol = "O"
-        elif int(round(m)) == 32:
-            symbol = "S"
-        elif int(round(m)) == 35:
-            symbol = "Cl"
-        elif int(round(m)) == 1:
-            symbol = "H"
-        elif int(round(m)) == 31:
-            symbol = "P"
-        elif int(round(m)) == 19:
-            symbol = "F"
-        elif int(round(m)) == 80:
-            symbol = "Br"
-        elif int(round(m)) == 127:
-            symbol = "I"
-        else:
-            raise Exception("Unknown mass:" + str(m))
-
-        buf += symbol + " " + str(round(x, 5)) + " " + str(round(y, 5)) + " " + str(round(z, 5)) + "\n"
-    return buf
-
-
 def convert_uIC50_to_kJ_per_mole(amount_in_uM: float, experiment_temp: float = 298.15) -> float:
     """Convert an IC50 measurement in uM concentrations to kJ/mol.
 
@@ -107,33 +74,36 @@ def draw_mol(mol, highlightAtoms, highlightColors):
     # display(SVG(svg))
 
 
-def plot_atom_mapping(mol_a, mol_b, core):
-    """from YTZ, Feb 1, 2021
+def get_atom_map_colors(core, seed=2022):
+    rng = np.random.default_rng(seed)
 
-    TODO: move this into a SingleTopology.visualize() or SingleTopology.debug() method"""
-    print(repr(core))
     atom_colors_a = {}
     atom_colors_b = {}
-    for (a_idx, b_idx), rgb in zip(core, np.random.random((len(core), 3))):
+    # TODO: replace random colors with colormap?
+    for (a_idx, b_idx), rgb in zip(core, rng.random((len(core), 3))):
         atom_colors_a[int(a_idx)] = tuple(rgb.tolist())
         atom_colors_b[int(b_idx)] = tuple(rgb.tolist())
+
+    return atom_colors_a, atom_colors_b
+
+
+def plot_atom_mapping(mol_a, mol_b, core, seed=2022):
+    """TODO: move this into a SingleTopology.visualize() or SingleTopology.debug() method?"""
+
+    atom_colors_a, atom_colors_b = get_atom_map_colors(core, seed)
 
     draw_mol(mol_a, core[:, 0].tolist(), atom_colors_a)
     draw_mol(mol_b, core[:, 1].tolist(), atom_colors_b)
 
 
-def plot_atom_mapping_grid(mol_a, mol_b, core, show_idxs=False):
+def plot_atom_mapping_grid(mol_a, mol_b, core, show_idxs=False, seed=2022):
     mol_a_2d = Chem.Mol(mol_a)
     mol_b_2d = Chem.Mol(mol_b)
 
     AllChem.Compute2DCoords(mol_a_2d)
     AllChem.GenerateDepictionMatching2DStructure(mol_b_2d, mol_a_2d, atomMap=core.tolist())
 
-    atom_colors_a = {}
-    atom_colors_b = {}
-    for (a_idx, b_idx), rgb in zip(core, np.random.random((len(core), 3))):
-        atom_colors_a[int(a_idx)] = tuple(rgb.tolist())
-        atom_colors_b[int(b_idx)] = tuple(rgb.tolist())
+    atom_colors_a, atom_colors_b = get_atom_map_colors(core, seed=seed)
 
     if show_idxs:
         for atom in mol_a_2d.GetAtoms():

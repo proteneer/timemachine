@@ -27,7 +27,7 @@ def sample_multiple_rotations(k: float, beta: float, size: int, seed: int = 0):
     for batch_attempt in range(num_batches):
         Rs = special_ortho_group.rvs(3, size=batch_size, random_state=state)
         tests = state.rand(batch_size)
-        M = np.pi ** 2  # volume of SO(3)
+        # M = np.pi ** 2  # volume of SO(3)
 
         # (detailed explanation by jfass re: normalizing comments)
         # In rejection sampling, we need an upper bound M on the ratio q_target(x) / q_proposal(x),
