@@ -2,6 +2,10 @@ import jax
 import jax.numpy as jnp
 
 
+def normalize(x):
+    return x / jnp.linalg.norm(x)
+
+
 def pyramidal_volume(xc, x1, x2, x3):
     """
     Compute the normalized pyramidal volume given four points. This is implemented
@@ -9,17 +13,11 @@ def pyramidal_volume(xc, x1, x2, x3):
 
     Parameters
     ----------
-    xc: np.array (3,)
+    xc: np.ndarray (3,)
         Center point
 
-    x1: np.array: (3,)
-        First point
-
-    x2: np.array: (3,)
-        Second point
-
-    x3: np.array: (3,)
-        Third point
+    x1, x2, x3: np.ndarrays of shape (3,)
+        Three points around center point
 
     Returns
     -------
@@ -28,13 +26,9 @@ def pyramidal_volume(xc, x1, x2, x3):
 
     """
     # compute vectors
-    v0 = x1 - xc
-    v1 = x2 - xc
-    v2 = x3 - xc
-
-    v0 = v0 / jnp.linalg.norm(v0)
-    v1 = v1 / jnp.linalg.norm(v1)
-    v2 = v2 / jnp.linalg.norm(v2)
+    v0 = normalize(x1 - xc)
+    v1 = normalize(x2 - xc)
+    v2 = normalize(x3 - xc)
 
     # triple product
     return jnp.dot(jnp.cross(v0, v1), v2)
@@ -47,31 +41,17 @@ def torsion_volume(ci, cj, ck, cl):
 
     Parameters
     ----------
-    np.array: (3,)
-        First point
-
-    np.array: (3,)
-        Second point
-
-    np.array: (3,)
-        Third point
-
-    np.array: (3,)
-        Fourth point
+    ci, cj, ck, cl: np.ndarrays of shape (3,)
+        four points
 
     Returns
     -------
     float
         A number between -1.0 < x < 1.0 denoting the normalized chirality
-
     """
-    rij = cj - ci
-    rkj = cj - ck
-    rkl = cl - ck
-
-    rij = rij / jnp.linalg.norm(rij)
-    rkj = rkj / jnp.linalg.norm(rkj)
-    rkl = rkl / jnp.linalg.norm(rkl)
+    rij = normalize(cj - ci)
+    rkj = normalize(cj - ck)
+    rkl = normalize(cl - ck)
 
     n1 = jnp.cross(rij, rkj)
     n2 = jnp.cross(rkj, rkl)
@@ -121,6 +101,10 @@ U_chiral_bond_batch_all = jax.vmap(U_chiral_bond, (None, 0, 0, 0), 0)
 def chiral_atom_restraint(conf, params, box, lamb, idxs):
     """
     Flat-bottom chiral atom restraint
+
+    Notes
+    -----
+    * box, lamb unused
     """
     assert len(idxs) == len(params)
     return jnp.sum(U_chiral_atom_batch_all(conf, idxs, params)) if len(idxs) else 0.0
@@ -129,6 +113,10 @@ def chiral_atom_restraint(conf, params, box, lamb, idxs):
 def chiral_bond_restraint(conf, params, box, lamb, idxs, signs):
     """
     Flat-bottom chiral bond restraint
+
+    Notes
+    -----
+    * box, lamb unused
     """
     assert len(idxs) == len(params)
     assert len(idxs) == len(signs)
