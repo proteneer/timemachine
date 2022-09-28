@@ -68,6 +68,7 @@ class TestInterpolatedPotential(GradientTest):
                 precision=precision,
             )
 
+    @pytest.mark.xfail()
     def test_nonbonded_advanced(self):
 
         # This test checks that we can supply arbitrary transformations of lambda to

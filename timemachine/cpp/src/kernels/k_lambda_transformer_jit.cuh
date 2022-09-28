@@ -7,19 +7,19 @@ jit_program
 
     template <typename NumericType>
     NumericType __device__ __forceinline__ transform_lambda_charge(NumericType lambda) {
-    return CUSTOM_EXPRESSION_CHARGE;
+    return lambda;
 }
 
 template <typename NumericType> NumericType __device__ __forceinline__ transform_lambda_sigma(NumericType lambda) {
-    return CUSTOM_EXPRESSION_SIGMA;
+    return lambda;
 }
 
 template <typename NumericType> NumericType __device__ __forceinline__ transform_lambda_epsilon(NumericType lambda) {
-    return CUSTOM_EXPRESSION_EPSILON;
+    return lambda;
 }
 
 template <typename NumericType> NumericType __device__ __forceinline__ transform_lambda_w(NumericType lambda) {
-    return CUSTOM_EXPRESSION_W;
+    return lambda;
 }
 
 void __global__ k_compute_w_coords(
