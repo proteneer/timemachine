@@ -369,7 +369,7 @@ class TestRABFEModels(TestCase):
                 ordered_params, mol_a, mol_b, core_idxs, solvent_x0, solvent_box, "prefix", seed=2022
             )
             # Since this is FF independent no issues around AM1BCC charge differences on OS/Conf
-            np.testing.assert_almost_equal(dG, -21.882374, decimal=5)
+            np.testing.assert_almost_equal(dG, -21.882389, decimal=5)
             np.testing.assert_almost_equal(dG_err, 0.0)
             created_files = os.listdir(temp_dir)
 

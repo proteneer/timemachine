@@ -125,3 +125,15 @@ def test_set_mol_coords():
         # Won't be exact, but should be close
         assert not np.all(x1 == x1_copy)
         np.testing.assert_allclose(x1, x1_copy)
+
+
+def test_experimental_conversions_to_kj():
+    rng = np.random.RandomState(2022)
+
+    experimental_values = rng.random(10)
+    # Verify that uM to kJ and uIC50 to Kj is identical
+    np.testing.assert_array_equal(
+        utils.convert_uM_to_kJ_per_mole(experimental_values), utils.convert_uIC50_to_kJ_per_mole(experimental_values)
+    )
+
+    np.testing.assert_allclose(utils.convert_uM_to_kJ_per_mole(0.15), -38.951164)
