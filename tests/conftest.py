@@ -3,9 +3,13 @@
 
 import gc
 
+import hypothesis
 import pytest
 
 from timemachine.lib import custom_ops
+
+# disable deadline in CI to avoid "Flaky" errors if the first example times out
+hypothesis.settings.register_profile("ci", deadline=None)
 
 
 @pytest.fixture(autouse=True)
