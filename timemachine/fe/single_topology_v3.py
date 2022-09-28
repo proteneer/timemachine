@@ -579,7 +579,7 @@ class SingleTopologyV3:
 
         Returns
         -------
-        masses: list
+        masses: list of float
             len(masses) == self.get_num_atoms()
         """
         mol_a_masses = utils.get_mol_masses(self.mol_a)
