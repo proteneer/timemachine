@@ -75,7 +75,7 @@ def nonbonded_block(xi, xj, box, params_i, params_j, beta, cutoff):
         Coordinates
     xj : (N,3) np.ndarray
         Coordinates
-    box : Optional 3x3 np.array
+    box : Optional 3x3 np.ndarray
         Periodic boundary conditions
     beta : float
         the charge product q_ij will be multiplied by erfc(beta*d_ij)
@@ -150,25 +150,25 @@ def nonbonded_v3(
 
     Parameters
     ----------
-    conf : (N, 3) or (N, 4) np.array
+    conf : (N, 3) or (N, 4) np.ndarray
         3D or 4D coordinates
         if 3D, will be converted to 4D using (x,y,z) -> (x,y,z,w)
             where w = cutoff * (lambda_plane_idxs + lambda_offset_idxs * lamb)
-    params : (N, 3) np.array
+    params : (N, 3) np.ndarray
         columns [charges, sigmas, epsilons], one row per particle
-    box : Optional 3x3 np.array
+    box : Optional 3x3 np.ndarray
     lamb : float
-    charge_rescale_mask : (N, N) np.array
+    charge_rescale_mask : (N, N) np.ndarray
         the Coulomb contribution of pair (i,j) will be multiplied by charge_rescale_mask[i,j]
-    lj_rescale_mask : (N, N) np.array
+    lj_rescale_mask : (N, N) np.ndarray
         the Lennard-Jones contribution of pair (i,j) will be multiplied by lj_rescale_mask[i,j]
     beta : float
         the charge product q_ij will be multiplied by erfc(beta*d_ij)
     cutoff : Optional float
         a pair of particles (i,j) will be considered non-interacting if the distance d_ij
         between their 4D coordinates exceeds cutoff
-    lambda_plane_idxs : Optional (N,) np.array
-    lambda_offset_idxs : Optional (N,) np.array
+    lambda_plane_idxs : Optional (N,) np.ndarray
+    lambda_offset_idxs : Optional (N,) np.ndarray
     runtime_validate: bool
         check whether beta is compatible with cutoff
         (if True, this function will currently not play nice with Jax JIT)

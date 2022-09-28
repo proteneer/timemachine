@@ -93,13 +93,13 @@ def harmonic_bond(conf, params, box, lamb, bond_idxs, lamb_mult=None, lamb_offse
 
     Parameters:
     -----------
-    conf: shape [num_atoms, 3] np.array
+    conf: shape [num_atoms, 3] np.ndarray
         atomic coordinates
 
-    params: shape [num_bonds, 2] np.array
+    params: shape [num_bonds, 2] np.ndarray
         parameters
 
-    box: shape [3, 3] np.array
+    box: shape [3, 3] np.ndarray
         periodic boundary vectors, if not None
 
     lamb: float
@@ -111,7 +111,7 @@ def harmonic_bond(conf, params, box, lamb, bond_idxs, lamb_mult=None, lamb_offse
     lamb_offset: None, or broadcastable to bond_idxs.shape[0]
         prefactor = (lamb_offset + lamb_mult * lamb)
 
-    bond_idxs: [num_bonds, 2] np.array
+    bond_idxs: [num_bonds, 2] np.ndarray
         each element (src, dst) is a unique bond in the conformation
 
     Notes
@@ -163,19 +163,19 @@ def harmonic_angle(conf, params, box, lamb, angle_idxs, lamb_mult=None, lamb_off
 
     Parameters:
     -----------
-    conf: shape [num_atoms, 3] np.array
+    conf: shape [num_atoms, 3] np.ndarray
         atomic coordinates
 
-    params: shape [num_angles, 2] np.array
+    params: shape [num_angles, 2] np.ndarray
         parameters
 
-    box: shape [3, 3] np.array
+    box: shape [3, 3] np.ndarray
         periodic boundary vectors, if not None
 
     lamb: float
         alchemical lambda parameter, linearly rescaled
 
-    angle_idxs: shape [num_angles, 3] np.array
+    angle_idxs: shape [num_angles, 3] np.ndarray
         each element (a, b, c) is a unique angle in the conformation. atom b is defined
         to be the middle atom.
 
@@ -237,12 +237,12 @@ def signed_torsion_angle(ci, cj, ck, cl):
 
     Parameters
     ----------
-    ci, cj, ck, cl: shape [num_torsions, 3] np.arrays
+    ci, cj, ck, cl: shape [num_torsions, 3] np.ndarrays
         atom coordinates defining torsion angle i-j-k-l
 
     Returns
     -------
-    shape [num_torsions,] np.array
+    shape [num_torsions,] np.ndarray
         array of torsion angles
     """
 
@@ -272,19 +272,19 @@ def periodic_torsion(conf, params, box, lamb, torsion_idxs, lamb_mult=None, lamb
 
     Parameters:
     -----------
-    conf: shape [num_atoms, 3] np.array
+    conf: shape [num_atoms, 3] np.ndarray
         atomic coordinates
 
-    params: shape [num_torsions, 3] np.array
+    params: shape [num_torsions, 3] np.ndarray
         parameters
 
-    box: shape [3, 3] np.array
+    box: shape [3, 3] np.ndarray
         periodic boundary vectors, if not None
 
     lamb: float
         alchemical lambda parameter, linearly rescaled
 
-    torsion_idxs: shape [num_torsions, 4] np.array
+    torsion_idxs: shape [num_torsions, 4] np.ndarray
         indices denoting the four atoms that define a torsion
 
     lamb_mult: None, or broadcastable to torsion_idxs.shape[0]

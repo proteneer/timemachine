@@ -43,13 +43,13 @@ def get_optimal_rotation_and_translation(x1, x2):
 
     Parameters
     ----------
-    x1: np.array (K,3)
+    x1: np.ndarray (K,3)
 
-    x2: np.array (K,3)
+    x2: np.ndarray (K,3)
 
     Returns
     -------
-    tuple (np.array, np.array)
+    tuple (np.ndarray, np.ndarray)
         Rotation translation pair
     """
     t = get_optimal_translation(x1, x2)
