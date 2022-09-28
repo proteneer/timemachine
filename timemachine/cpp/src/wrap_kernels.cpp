@@ -2,7 +2,6 @@
 #include <pybind11/numpy.h>
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
-#include <regex>
 
 #include "barostat.hpp"
 #include "bound_potential.hpp"
