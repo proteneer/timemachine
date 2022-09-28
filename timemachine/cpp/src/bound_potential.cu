@@ -37,9 +37,9 @@ void BoundPotential::execute_host(
     gpuErrchk(cudaMemset(d_du_dl.data, 0, d_du_dl.size));
     gpuErrchk(cudaMemset(d_u.data, 0, d_u.size));
 
-    this->execute_device(
-        N, d_x.data, d_box.data, lambda, d_du_dx.data, nullptr, d_du_dl.data, d_u.data, static_cast<cudaStream_t>(0));
-
+    cudaStream_t stream = static_cast<cudaStream_t>(0);
+    this->execute_device(N, d_x.data, d_box.data, lambda, d_du_dx.data, nullptr, d_du_dl.data, d_u.data, stream);
+    gpuErrchk(cudaStreamSynchronize(stream));
     d_du_dx.copy_to(h_du_dx);
     d_du_dl.copy_to(h_du_dl);
     d_u.copy_to(h_u);
