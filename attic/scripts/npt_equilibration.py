@@ -16,7 +16,9 @@ from timemachine.md.states import CoordsVelBox
 from timemachine.md.thermostat.moves import UnadjustedLangevinMove
 from timemachine.md.thermostat.utils import sample_velocities
 from timemachine.md.utils import simulate_npt_traj
-from timemachine.testsystems.relative import hif2a_ligand_pair
+from timemachine.testsystems.relative import get_hif2a_ligand_pair_single_topology
+from timemachine.constants import DEFAULT_FF
+from timemachine.ff import Forcefield
 
 # simulation parameters
 n_lambdas = 40
@@ -33,7 +35,8 @@ pressure = 1.013 * unit.bar
 lambdas = construct_lambda_schedule(n_lambdas)
 
 # build an alchemical ligand in a water box
-mol_a, ff = hif2a_ligand_pair.mol_a, hif2a_ligand_pair.ff
+mol_a, _, _ = get_hif2a_ligand_pair_single_topology()
+ff = Forcefield.load_from_file(DEFAULT_FF)
 unbound_potentials, sys_params, masses, coords, complex_box = enhanced.get_solvent_phase_system(mol_a, ff)
 
 # define NPT ensemble

@@ -9,7 +9,7 @@ from common import get_hif2a_ligands_as_sdf_file
 from importlib import resources
 
 from docking import dock_and_equilibrate, pose_dock, relative_docking, rigorous_work
-from timemachine.testsystems.relative import hif2a_ligand_pair
+from timemachine.testsystems.relative import get_hif2a_ligand_pair_single_topology
 
 
 class TestDocking(unittest.TestCase):
@@ -96,11 +96,7 @@ class TestDocking(unittest.TestCase):
     def test_relative_docking(self):
         """Tests basic functionality of relative_docking"""
         # fetch mol_a, mol_b, core, forcefield from testsystem
-        mol_a, mol_b, core = (
-            hif2a_ligand_pair.mol_a,
-            hif2a_ligand_pair.mol_b,
-            hif2a_ligand_pair.top.core,
-        )
+        mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
         with resources.path("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as pdb_path:
             host_pdbfile = str(pdb_path)
         num_switches = 10

@@ -28,7 +28,6 @@ def setup_system():
     mol_a = copy.deepcopy(all_mols[1])
 
     # test identity transformation
-    # mol_a, _, _, forcefield = relative.hif2a_ligand_pair
     mol_b = Chem.Mol(mol_a)
 
     # parameterize with bonds and angles

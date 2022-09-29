@@ -13,12 +13,15 @@ from timemachine import constants
 from timemachine.fe import estimator, free_energy, topology, utils
 from timemachine.fe.free_energy import RABFEResult
 from timemachine.fe.functional import construct_differentiable_interface, construct_differentiable_interface_fast
+from timemachine.fe.rbfe import setup_initial_states
+from timemachine.fe.single_topology_v3 import SingleTopologyV3
+from timemachine.fe.utils import get_romol_conf
 from timemachine.ff import Forcefield
 from timemachine.lib import LangevinIntegrator, MonteCarloBarostat
 from timemachine.md import builders, minimizer
 from timemachine.md.barostat.utils import get_bond_list, get_group_indices
 from timemachine.parallel.client import CUDAPoolClient
-from timemachine.testsystems.relative import hif2a_ligand_pair
+from timemachine.testsystems.relative import get_hif2a_ligand_pair_single_topology
 
 
 def test_absolute_free_energy():
@@ -103,170 +106,20 @@ def test_absolute_free_energy():
     assert np.abs(dG) < 1000.0
 
 
-def test_relative_free_energy():
-    # test that we can properly build a single topology host guest system and
-    # that we can run a few steps in a stable way. This tests runs both the complex
-    # and the solvent stages.
-
-    with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
-        suppl = Chem.SDMolSupplier(str(path_to_ligand), removeHs=False)
-
-    all_mols = [x for x in suppl]
-    mol_a = all_mols[1]
-    mol_b = all_mols[4]
-
-    core = np.array(
-        [
-            [0, 0],
-            [2, 2],
-            [1, 1],
-            [6, 6],
-            [5, 5],
-            [4, 4],
-            [3, 3],
-            [15, 16],
-            [16, 17],
-            [17, 18],
-            [18, 19],
-            [19, 20],
-            [20, 21],
-            [32, 30],
-            [26, 25],
-            [27, 26],
-            [7, 7],
-            [8, 8],
-            [9, 9],
-            [10, 10],
-            [29, 11],
-            [11, 12],
-            [12, 13],
-            [14, 15],
-            [31, 29],
-            [13, 14],
-            [23, 24],
-            [30, 28],
-            [28, 27],
-            [21, 22],
-        ]
-    )
-
-    with resources.path("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as path_to_ligand:
-        complex_system, complex_coords, _, _, complex_box, _ = builders.build_protein_system(str(path_to_ligand))
-
-    # build the water system.
-    solvent_system, solvent_coords, solvent_box, _ = builders.build_water_system(4.0)
-
+def get_relative_hif2a_in_vacuum():
+    mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
     ff = Forcefield.load_from_file("smirnoff_1_1_0_ccc.py")
+    rfe = SingleTopologyV3(mol_a, mol_b, core, ff)
 
-    ff_params = ff.get_ordered_params()
-
-    seed = 2021
-
-    lambda_schedule = np.linspace(0, 1.0, 4)
-    equil_steps = 1000
-    prod_steps = 1000
-
-    single_topology = topology.SingleTopology(mol_a, mol_b, core, ff)
-    rfe = free_energy.RelativeFreeEnergy(single_topology)
-
-    def vacuum_model(ff_params):
-
-        unbound_potentials, sys_params, masses = rfe.prepare_vacuum_edge(ff_params)
-        coords = rfe.prepare_combined_coords()
-
-        x0 = coords
-        v0 = np.zeros_like(coords)
-        client = CUDAPoolClient(1)
-        box = np.eye(3, dtype=np.float64) * 100
-
-        harmonic_bond_potential = unbound_potentials[0]
-        group_idxs = get_group_indices(get_bond_list(harmonic_bond_potential))
-
-        x0 = coords
-        v0 = np.zeros_like(coords)
-        client = CUDAPoolClient(1)
-        temperature = 300.0
-        pressure = 1.0
-        beta = 1 / (constants.BOLTZ * temperature)
-        endpoint_correct = False
-
-        integrator = LangevinIntegrator(temperature, 1.5e-3, 1.0, masses, seed)
-
-        barostat = MonteCarloBarostat(x0.shape[0], pressure, temperature, group_idxs, 25, seed)
-        model = estimator.FreeEnergyModel(
-            unbound_potentials,
-            endpoint_correct,
-            client,
-            box,
-            x0,
-            v0,
-            integrator,
-            barostat,
-            lambda_schedule,
-            equil_steps,
-            prod_steps,
-            beta,
-            "prefix",
-        )
-
-        return estimator.deltaG(model, sys_params, subsample_interval=100)[0]
-
-    dG = vacuum_model(ff_params)
-    assert np.abs(dG) < 1000.0
-
-    def binding_model(ff_params):
-        dGs = []
-
-        for host_system, host_coords, host_box in [
-            (complex_system, complex_coords, complex_box),
-            (solvent_system, solvent_coords, solvent_box),
-        ]:
-
-            # minimize the host to avoid clashes
-            host_coords = minimizer.minimize_host_4d([mol_a], host_system, host_coords, ff, host_box)
-
-            unbound_potentials, sys_params, masses = rfe.prepare_host_edge(ff_params, host_system)
-            coords = rfe.prepare_combined_coords(host_coords)
-
-            x0 = coords
-            v0 = np.zeros_like(coords)
-            client = CUDAPoolClient(1)
-
-            harmonic_bond_potential = unbound_potentials[0]
-            group_idxs = get_group_indices(get_bond_list(harmonic_bond_potential))
-
-            temperature = 300.0
-            pressure = 1.0
-            beta = 1 / (constants.BOLTZ * temperature)
-            endpoint_correct = False
-
-            integrator = LangevinIntegrator(temperature, 1.5e-3, 1.0, masses, seed)
-
-            barostat = MonteCarloBarostat(x0.shape[0], pressure, temperature, group_idxs, 25, seed)
-
-            model = estimator.FreeEnergyModel(
-                unbound_potentials,
-                endpoint_correct,
-                client,
-                host_box,
-                x0,
-                v0,
-                integrator,
-                barostat,
-                lambda_schedule,
-                equil_steps,
-                prod_steps,
-                beta,
-                "prefix",
-            )
-
-            dG, _, _ = estimator.deltaG(model, sys_params, subsample_interval=100)
-            dGs.append(dG)
-
-        return dGs[0] - dGs[1]
-
-    dG = binding_model(ff_params)
-    assert np.abs(dG) < 1000.0
+    temperature = 300
+    seed = 2022
+    lam = 0.5
+    host_config = None  # vacuum
+    initial_states = setup_initial_states(rfe, host_config, temperature, [lam], seed)
+    unbound_potentials = initial_states[0].potentials
+    sys_params = [np.array(u.params, dtype=np.float64) for u in unbound_potentials]
+    coords = rfe.combine_confs(get_romol_conf(mol_a), get_romol_conf(mol_b))
+    return unbound_potentials, sys_params, coords
 
 
 def assert_shapes_consistent(U, coords, sys_params, box, lam):
@@ -347,9 +200,8 @@ def test_functional():
     * requesting derivative w.r.t. box causes a runtime error
     """
 
-    rfe = hif2a_ligand_pair
-    unbound_potentials, sys_params, _ = rfe.prepare_vacuum_edge(rfe.ff.get_ordered_params())
-    coords = rfe.prepare_combined_coords()
+    unbound_potentials, sys_params, coords = get_relative_hif2a_in_vacuum()
+
     box = np.eye(3) * 100
     lam = 0.5
 
@@ -394,12 +246,10 @@ def test_construct_differentiable_interface_fast():
     """Assert that the computation of U and its derivatives using the
     C++ code path produces equivalent results to doing the
     summation in Python"""
+    unbound_potentials, sys_params, coords = get_relative_hif2a_in_vacuum()
 
-    rfe = hif2a_ligand_pair
-    unbound_potentials, sys_params, _ = rfe.prepare_vacuum_edge(rfe.ff.get_ordered_params())
-    coords = rfe.prepare_combined_coords()
-    box = np.eye(3) * 100
     lam = 0.5
+    box = np.eye(3) * 100
 
     for precision in [np.float32, np.float64]:
         U_ref = construct_differentiable_interface(unbound_potentials, precision)

@@ -12,7 +12,7 @@ from timemachine.md.barostat.utils import compute_box_center, compute_box_volume
 from timemachine.md.builders import build_water_system
 from timemachine.md.enhanced import get_solvent_phase_system
 from timemachine.md.thermostat.utils import sample_velocities
-from timemachine.testsystems.relative import hif2a_ligand_pair
+from timemachine.testsystems.relative import get_hif2a_ligand_pair_single_topology
 
 
 def test_barostat_zero_interval():
@@ -21,7 +21,7 @@ def test_barostat_zero_interval():
     seed = 2021
     np.random.seed(seed)
 
-    mol_a = hif2a_ligand_pair.mol_a
+    mol_a, _, _ = get_hif2a_ligand_pair_single_topology()
     ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
 
     unbound_potentials, sys_params, _, coords, _ = get_solvent_phase_system(mol_a, ff)
@@ -77,7 +77,7 @@ def test_barostat_partial_group_idxs():
     np.random.seed(seed)
 
     pressure = 1.0 * unit.atmosphere
-    mol_a = hif2a_ligand_pair.mol_a
+    mol_a, _, _ = get_hif2a_ligand_pair_single_topology()
     ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
     unbound_potentials, sys_params, masses, coords, complex_box = get_solvent_phase_system(mol_a, ff)
 
@@ -143,7 +143,7 @@ def test_barostat_is_deterministic():
 
     pressure = 1.0 * unit.atmosphere
 
-    mol_a = hif2a_ligand_pair.mol_a
+    mol_a, _, _ = get_hif2a_ligand_pair_single_topology()
     ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
 
     host_system, host_coords, host_box, host_top = build_water_system(3.0)
@@ -203,7 +203,7 @@ def test_barostat_varying_pressure():
 
     # Start out with a very large pressure
     pressure = 1000.0 * unit.atmosphere
-    mol_a = hif2a_ligand_pair.mol_a
+    mol_a, _, _ = get_hif2a_ligand_pair_single_topology()
     ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
     unbound_potentials, sys_params, masses, coords, complex_box = get_solvent_phase_system(mol_a, ff, margin=0.0)
 
@@ -282,7 +282,7 @@ def test_molecular_ideal_gas():
 
     # generate an alchemical system of a waterbox + alchemical ligand:
     # effectively discard ligands by running in AbsoluteFreeEnergy mode at lambda = 1.0
-    mol_a = hif2a_ligand_pair.mol_a
+    mol_a, _, _ = get_hif2a_ligand_pair_single_topology()
     ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
     _unbound_potentials, _sys_params, masses, coords, complex_box = get_solvent_phase_system(mol_a, ff, margin=0.0)
 
