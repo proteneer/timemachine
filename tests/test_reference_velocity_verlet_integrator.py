@@ -94,6 +94,7 @@ def test_reversibility_with_jax_potentials():
         assert_bitwise_reversiblility(x0, v0, jax_update)
 
 
+@pytest.mark.nightly(reason="Slow")
 def test_reversibility_with_custom_ops_potentials():
     """Check reversibility of "public" .step and .multiple_steps implementations when `force_fxn`
     is a custom_op potential"""
