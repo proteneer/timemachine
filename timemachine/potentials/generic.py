@@ -209,7 +209,7 @@ class Nonbonded:
         )
 
         def U(conf, params, box, lam):
-            return ref_nonbonded.nonbonded_v3(
+            return ref_nonbonded.nonbonded(
                 conf,
                 params,
                 box,
@@ -249,7 +249,7 @@ class NonbondedPairListPrecomputed:
 
     def to_reference(self):
         def U(conf, params, box, _):
-            vdW, electrostatics = ref_nonbonded.nonbonded_v3_on_precomputed_pairs(
+            vdW, electrostatics = ref_nonbonded.nonbonded_on_precomputed_pairs(
                 conf,
                 params,
                 box,

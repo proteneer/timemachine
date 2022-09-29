@@ -138,7 +138,7 @@ class VacuumState:
         # tbd: set to None
         box = np.eye(3) * 1000
 
-        return nonbonded.nonbonded_v3(
+        return nonbonded.nonbonded(
             x,
             nb_params,
             box,

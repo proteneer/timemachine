@@ -33,7 +33,7 @@ from timemachine.potentials.nonbonded import (
     convert_exclusions_to_rescale_masks,
     coulomb_interaction_group_energy,
     coulomb_prefactors_on_traj,
-    nonbonded_v3,
+    nonbonded,
 )
 
 # This is needed for pickled mols to have their properties preserved
@@ -580,7 +580,7 @@ def intramol_energy(ligand_charges: Array, traj: Samples, charge_rescale_mask: A
     lambda_offset_idxs = np.zeros(N, dtype=np.int32)
 
     def calc(coords):
-        return nonbonded_v3(
+        return nonbonded(
             coords,
             params,
             None,

@@ -234,7 +234,7 @@ def prepare_nb_system(x, E, lambda_plane_idxs, lambda_offset_idxs, p_scale, cuto
     charge_rescale_mask, lj_rescale_mask = nonbonded.convert_exclusions_to_rescale_masks(exclusion_idxs, scales, N)
 
     ref_total_energy = functools.partial(
-        nonbonded.nonbonded_v3,
+        nonbonded.nonbonded,
         charge_rescale_mask=charge_rescale_mask,
         lj_rescale_mask=lj_rescale_mask,
         beta=beta,

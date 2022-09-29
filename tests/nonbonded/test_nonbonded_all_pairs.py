@@ -51,12 +51,12 @@ def make_ref_potential(lambda_plane_idxs, lambda_offset_idxs, beta, cutoff, atom
 
     s = atom_idxs if atom_idxs is not None else slice(None)
 
-    @functools.wraps(nonbonded.nonbonded_v3)
+    @functools.wraps(nonbonded.nonbonded)
     def wrapped(conf, params, box, lamb):
         conf_ = conf[s, :]
         num_atoms, _ = conf_.shape
         no_rescale = np.ones((num_atoms, num_atoms))
-        return nonbonded.nonbonded_v3(
+        return nonbonded.nonbonded(
             conf_,
             params[s, :],
             box,

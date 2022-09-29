@@ -61,10 +61,11 @@ def direct_space_pme(dij, qij, beta):
 
 def nonbonded_block(xi, xj, box, params_i, params_j, beta, cutoff):
     """
-    This is a modified version of nonbonded_v3 that computes a block of
+    This is a modified version of `nonbonded` that computes a block of
     interactions between two sets of particles x_i and x_j. It is assumed that
     there are no exclusions between the two particle sets. Typical use cases
-    include computing the interaction energy between the environment and a ligand.
+    include computing the interaction energy between the environment and a
+    ligand.
 
     This is mainly used for testing, as it does not support 4D decoupling or
     alchemical semantics yet.
@@ -114,7 +115,7 @@ def nonbonded_block(xi, xj, box, params_i, params_j, beta, cutoff):
 
 
 def convert_exclusions_to_rescale_masks(exclusion_idxs, scales, N):
-    """Converts exclusions from list format used in Nonbonded to mask format used in nonbonded_v3"""
+    """Converts exclusions from list format used in Nonbonded to mask format used in `nonbonded`"""
 
     # process masks for exclusions properly
     charge_rescale_mask = np.ones((N, N))  # to support item assignment
@@ -130,7 +131,7 @@ def convert_exclusions_to_rescale_masks(exclusion_idxs, scales, N):
     return charge_rescale_mask, lj_rescale_mask
 
 
-def nonbonded_v3(
+def nonbonded(
     conf,
     params,
     box,
@@ -268,10 +269,10 @@ def nonbonded_v3(
     return jnp.sum(eij_total / 2)
 
 
-def nonbonded_v3_on_specific_pairs(
+def nonbonded_on_specific_pairs(
     conf, params, box, pairs, beta: float, cutoff: Optional[float] = None, rescale_mask=None
 ):
-    """See nonbonded_v3 docstring for more details
+    """See `nonbonded` docstring for more details
 
     Notes
     -----
@@ -319,7 +320,7 @@ def nonbonded_v3_on_specific_pairs(
     return vdW, electrostatics
 
 
-def nonbonded_v3_on_precomputed_pairs(
+def nonbonded_on_precomputed_pairs(
     conf,
     params,
     box,
@@ -377,15 +378,15 @@ def validate_interaction_group_idxs(n_atoms, a_idxs, b_idxs):
     assert len(b_idxs) == len(B)
 
 
-def nonbonded_v3_interaction_groups(conf, params, box, a_idxs, b_idxs, beta: float, cutoff: Optional[float] = None):
+def nonbonded_interaction_groups(conf, params, box, a_idxs, b_idxs, beta: float, cutoff: Optional[float] = None):
     """Nonbonded interactions between all pairs of atoms $(i, j)$
     where $i$ is in the first set and $j$ in the second.
 
-    See nonbonded_v3 docstring for more details
+    See `nonbonded` docstring for more details
     """
     validate_interaction_group_idxs(len(conf), a_idxs, b_idxs)
     pairs = pairs_from_interaction_groups(a_idxs, b_idxs)
-    vdW, electrostatics = nonbonded_v3_on_specific_pairs(conf, params, box, pairs, beta, cutoff)
+    vdW, electrostatics = nonbonded_on_specific_pairs(conf, params, box, pairs, beta, cutoff)
     return vdW, electrostatics
 
 
