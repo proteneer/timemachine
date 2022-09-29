@@ -21,8 +21,7 @@ from timemachine.datasets import fetch_freesolv
 from timemachine.fe import absolute_hydration, topology
 from timemachine.fe.reweighting import one_sided_exp
 from timemachine.fe.utils import get_mol_name
-from timemachine.ff import Forcefield
-from timemachine.ff.handlers import nonbonded, openmm_deserializer
+from timemachine.ff import Forcefield, handlers
 from timemachine.ff.handlers.serialize import serialize_handlers
 from timemachine.md.builders import build_water_system
 from timemachine.md.smc import Samples, effective_sample_size
@@ -137,7 +136,7 @@ def compute_ligand_charges(q_params: Array, mol: Chem.rdchem.Mol, ff: Forcefield
 
 def get_active_types(mol: Chem.rdchem.Mol, ff: Forcefield) -> ActiveTypesArray:
     # Return active BCC types for a single molecule.
-    _, bond_types = nonbonded.compute_or_load_bond_smirks_matches(mol, ff.q_handle.smirks)
+    _, bond_types = handlers.nonbonded.compute_or_load_bond_smirks_matches(mol, ff.q_handle.smirks)
     return np.array(sorted(set(bond_types)))
 
 
@@ -468,7 +467,7 @@ def ligand_only_traj(xvbs: List[CoordsVelBox], num_lig_atoms: int) -> List[Coord
 def get_water_charges() -> List[float]:
     # Return the O, H, H atomic partial charges for water.
     water_system, water_coords, water_box, water_top = build_water_system(0.5)
-    water_bps, water_masses = openmm_deserializer.deserialize_system(water_system, cutoff=1.2)
+    water_bps, water_masses = handlers.openmm_deserializer.deserialize_system(water_system, cutoff=1.2)
     water_top = topology.HostGuestTopology(water_bps, None)
     water_charges = water_top.host_nonbonded.params[:, 0][:3]
     return water_charges
@@ -526,7 +525,7 @@ def compute_prefactors(
         samples = EndpointSamples(endpoint_sample.samples_0, ligand_only_traj(endpoint_sample.samples_1, num_lig_atoms))
 
         # exclusions for intramolecular term
-        exclusion_idxs, scale_factors = nonbonded.generate_exclusion_idxs(
+        exclusion_idxs, scale_factors = handlers.nonbonded.generate_exclusion_idxs(
             mol, scale12=topology._SCALE_12, scale13=topology._SCALE_13, scale14=topology._SCALE_14
         )
         scale_factors = np.stack([scale_factors, scale_factors], axis=1)
