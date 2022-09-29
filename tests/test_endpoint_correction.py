@@ -7,6 +7,7 @@ from importlib import resources
 
 import jax
 import numpy as np
+import pytest
 from rdkit import Chem
 
 from timemachine import constants
@@ -15,6 +16,8 @@ from timemachine.fe.utils import get_romol_conf
 from timemachine.ff import Forcefield
 from timemachine.integrator import langevin_coefficients
 from timemachine.potentials import bonded
+
+pytestmark = [pytest.mark.nogpu]
 
 
 def setup_system():

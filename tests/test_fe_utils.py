@@ -6,6 +6,8 @@ from rdkit.Chem import AllChem
 from timemachine.fe import utils
 from timemachine.fe.model_utils import image_molecule, verify_rabfe_pair
 
+pytestmark = [pytest.mark.nogpu]
+
 
 def test_sanitize_energies():
 

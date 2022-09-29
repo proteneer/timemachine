@@ -1,4 +1,8 @@
+import pytest
+
 from timemachine.datasets import fetch_freesolv
+
+pytestmark = [pytest.mark.nogpu]
 
 
 def test_fetch_freesolv():

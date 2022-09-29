@@ -3,10 +3,13 @@ from jax.config import config
 config.update("jax_enable_x64", True)
 
 import numpy as np
+import pytest
 
 from timemachine.ff.handlers import bonded, nonbonded
 from timemachine.ff.handlers.deserialize import deserialize_handlers
 from timemachine.ff.handlers.serialize import bin_to_str
+
+pytestmark = [pytest.mark.nogpu]
 
 
 def test_harmonic_bond():

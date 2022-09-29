@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 from jax import config, grad, jit
 from jax import numpy as jnp
 
@@ -55,6 +56,7 @@ def assert_reversibility_using_step_implementations(intg, x0, v0, n_steps=1000):
     assert_bitwise_reversiblility(x0, v0, multiple_steps_update)
 
 
+@pytest.mark.nogpu
 def test_reversibility_with_jax_potentials():
     """On a simple jax-transformable potential (quartic oscillators)
     with randomized parameters and initial conditions

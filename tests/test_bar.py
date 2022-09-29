@@ -1,10 +1,12 @@
 import numpy as np
 import pymbar
+import pytest
 from pymbar.testsystems import gaussian_work_example
 
 from timemachine.fe.bar import bar_with_bootstrapped_uncertainty, bootstrap_bar
 
 
+@pytest.mark.nogpu
 def test_bootstrap_bar():
     np.random.seed(0)
     n_bootstrap = 1000
