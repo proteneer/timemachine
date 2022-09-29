@@ -75,7 +75,7 @@ def test_reversibility_with_jax_potentials():
         return -grad(U)(x)
 
     for n_steps in [1, 10, 100, 1000, 10000]:
-        n = np.random.randint(10, 10000)  # Unif[10, 10000]
+        n = np.random.randint(10, 200)  # Unif[10, 200]
         masses = np.random.rand(n) + 1  # Unif[1, 2]
         dt = 0.09 * np.random.rand() + 0.01  # Unif[0.01, 0.1]
         x0 = np.random.randn(n, 3)

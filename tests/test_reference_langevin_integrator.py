@@ -37,11 +37,11 @@ def test_reference_langevin_integrator(threshold=1e-4):
 
     for (temperature, friction, dt, mass) in settings:
         # generate n_production_steps * n_copies samples
-        n_copies = 10000
+        n_copies = 2500
         langevin = LangevinIntegrator(force_fxn, mass, temperature, dt, friction)
 
         x0, v0 = 0.1 * np.ones((2, n_copies))
-        xs, vs = langevin.multiple_steps(x0, v0, n_steps=5000)
+        xs, vs = langevin.multiple_steps(x0, v0, n_steps=2500)
         samples = xs[10:].flatten()
 
         # summarize using histogram
