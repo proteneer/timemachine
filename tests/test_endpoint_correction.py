@@ -14,7 +14,7 @@ from timemachine import constants
 from timemachine.fe import endpoint_correction
 from timemachine.fe.utils import get_romol_conf
 from timemachine.ff import Forcefield
-from timemachine.integrator import langevin_coefficients
+from timemachine.integrator import LangevinIntegrator
 from timemachine.potentials import bonded
 
 pytestmark = [pytest.mark.nogpu]
@@ -124,13 +124,6 @@ def test_endpoint_correction():
 
     beta = 1 / (constants.BOLTZ * temperature)
 
-    ca, cb, cc = langevin_coefficients(temperature, dt, friction, combined_mass)
-    cb = -1 * np.expand_dims(cb, axis=-1)
-    cc = np.expand_dims(cc, axis=-1)
-
-    x_t = combined_conf
-    v_t = np.zeros_like(x_t)
-
     n_steps = 50000
     equilibrium_steps = 5000
     sampling_frequency = 100
@@ -139,27 +132,24 @@ def test_endpoint_correction():
     # equilibrium_steps = 500
     # sampling_frequency = 100
 
+    # Change to use the Reference integrator if we can
     lhs_xs = []
     lhs_du_dx_fn = jax.jit(jax.grad(u_lhs_fn))
-    for step in range(n_steps):
-        du_dx = lhs_du_dx_fn(x_t)
-        v_t = ca * v_t + cb * du_dx + cc * np.random.normal(size=x_t.shape)
-        x_t = x_t + v_t * dt
-        if step % sampling_frequency == 0 and step > equilibrium_steps:
-            lhs_xs.append(x_t)
 
-    # reset x and v
-    x_t = combined_conf
-    v_t = np.zeros_like(x_t)
+    def generate_samples(du_dx_fn):
+        def force(x):
+            return -du_dx_fn(x)
 
-    rhs_xs = []
+        intg = LangevinIntegrator(force, combined_mass, temperature, dt, friction)
+        key = jax.random.PRNGKey(2022)
+        xs, _ = intg.multiple_steps_lax(key, combined_conf, np.zeros_like(combined_conf), n_steps=n_steps)
+        return xs[equilibrium_steps:][::sampling_frequency]
+
     rhs_du_dx_fn = jax.jit(jax.grad(u_rhs_fn))
-    for step in range(n_steps):
-        du_dx = rhs_du_dx_fn(x_t)
-        v_t = ca * v_t + cb * du_dx + cc * np.random.normal(size=x_t.shape)
-        x_t = x_t + v_t * dt
-        if step % sampling_frequency == 0 and step > equilibrium_steps:
-            rhs_xs.append(x_t)
+    lhs_du_dx_fn = jax.jit(jax.grad(u_lhs_fn))
+
+    lhs_xs = generate_samples(lhs_du_dx_fn)
+    rhs_xs = generate_samples(rhs_du_dx_fn)
 
     lhs_xs = np.array(lhs_xs)
     rhs_xs = np.array(rhs_xs)
