@@ -134,7 +134,7 @@ message("Cuda Arch: " ${CUDA_ARCH})
 set_property(TARGET ${LIBRARY_NAME} PROPERTY CUDA_ARCHITECTURES "${CUDA_ARCH}")
 unset(CUDA_ARCH CACHE)
 
-target_link_libraries(${LIBRARY_NAME} PRIVATE -lcurand -lcuda -lcudart -lcudadevrt -lnvrtc)
+target_link_libraries(${LIBRARY_NAME} PRIVATE -lcurand -lcudart -lcudadevrt)
 set_target_properties(${LIBRARY_NAME} PROPERTIES PREFIX "")
 
 add_custom_command(
