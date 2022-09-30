@@ -99,9 +99,9 @@ ARG CUDA_ARCH=75
 ENV CMAKE_ARGS -DCUDA_ARCH=${CUDA_ARCH}
 COPY . /code/timemachine/
 WORKDIR /code/timemachine/
-RUN pip install --no-cache-dir -e .[dev,test]
+RUN pip install --no-cache-dir -e . && rm -rf ./build
 
-# Container with only cuda runtime
+# Container with only cuda runtime, half the size of dev container
 FROM nvidia/cuda:11.6.0-runtime-ubuntu20.04 as timemachine
 COPY --from=timemachine_dev /opt/ /opt/
 COPY --from=timemachine_dev /code/ /code/
