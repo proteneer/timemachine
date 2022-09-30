@@ -18,7 +18,7 @@ from timemachine.lib import LangevinIntegrator, MonteCarloBarostat
 from timemachine.md import builders, minimizer
 from timemachine.md.barostat.utils import get_bond_list, get_group_indices
 from timemachine.parallel.client import CUDAPoolClient
-from timemachine.testsystems.relative import hif2a_ligand_pair
+from timemachine.testsystems.relative import get_hif2a_ligand_pair_single_topology
 
 
 def test_absolute_free_energy():
@@ -181,15 +181,20 @@ def test_functional():
     * requesting derivative w.r.t. box causes a runtime error
     """
 
-    rfe = hif2a_ligand_pair
-    unbound_potentials, sys_params, _ = rfe.prepare_vacuum_edge(rfe.ff.get_ordered_params())
-    coords = rfe.prepare_combined_coords()
+    st = get_hif2a_ligand_pair_single_topology()
+    vac_sys = st.setup_intermediate_state(0.5)
+    x_a = utils.get_romol_conf(st.mol_a)
+    x_b = utils.get_romol_conf(st.mol_b)
+    coords = st.combine_confs(x_a, x_b)
     box = np.eye(3) * 100
     lam = 0.5
 
+    potentials = vac_sys.get_U_fns()
+    sys_params = [np.array(bp.params) for bp in potentials]
+
     tol_at_precision = {np.float32: 2.5e-10, np.float64: 1e-10}
     for precision, tol in tol_at_precision.items():
-        U = construct_differentiable_interface(unbound_potentials, precision)
+        U = construct_differentiable_interface(potentials, precision)
 
         # U, grad(U) have the right shapes
         assert_shapes_consistent(U, coords, sys_params, box, lam)
@@ -229,15 +234,20 @@ def test_construct_differentiable_interface_fast():
     C++ code path produces equivalent results to doing the
     summation in Python"""
 
-    rfe = hif2a_ligand_pair
-    unbound_potentials, sys_params, _ = rfe.prepare_vacuum_edge(rfe.ff.get_ordered_params())
-    coords = rfe.prepare_combined_coords()
+    st = get_hif2a_ligand_pair_single_topology()
+    vac_sys = st.setup_intermediate_state(0.5)
+    x_a = utils.get_romol_conf(st.mol_a)
+    x_b = utils.get_romol_conf(st.mol_b)
+    coords = st.combine_confs(x_a, x_b)
     box = np.eye(3) * 100
     lam = 0.5
 
+    potentials = vac_sys.get_U_fns()
+    sys_params = [np.array(bp.params) for bp in potentials]
+
     for precision in [np.float32, np.float64]:
-        U_ref = construct_differentiable_interface(unbound_potentials, precision)
-        U = construct_differentiable_interface_fast(unbound_potentials, sys_params, precision)
+        U_ref = construct_differentiable_interface(potentials, precision)
+        U = construct_differentiable_interface_fast(potentials, sys_params, precision)
         args = (coords, sys_params, box, lam)
         np.testing.assert_array_equal(U(*args), U_ref(*args))
 
