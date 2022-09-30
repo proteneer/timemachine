@@ -92,7 +92,6 @@ def test_reversibility():
     """Check reversibility of "public" .step and .multiple_steps implementations for a Context using the VelocityVerlet integrator"""
 
     seed = 2022
-    np.random.seed(seed)
 
     # define a Python force fxn that calls custom_ops
     unbound_potentials, sys_params, coords, masses = get_relative_hif2a_in_vacuum()
@@ -104,7 +103,10 @@ def test_reversibility():
 
     # Is not infinitely reversible, will fail after 3000 steps due to accumulation of coords/vels in floating point
     for n_steps in [1, 10, 100, 500, 1000, 2000]:
-        print("n_steps", n_steps)
+        # Note: reversibility can fail depending on the
+        # range of values in the velocities. Setting the seed
+        # here keeps the range the same for all n_step values.
+        np.random.seed(seed)
         lamb_sched = np.linspace(0, 1, n_steps)
         v0 = np.random.randn(*coords.shape)
         intg, ctxt = setup_velocity_verlet(bound_potentials, coords, box, dt, masses)  # noqa
