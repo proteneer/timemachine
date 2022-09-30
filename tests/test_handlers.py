@@ -16,6 +16,8 @@ from timemachine.ff.charges import AM1CCC_CHARGES
 from timemachine.ff.handlers import bonded, nonbonded
 from timemachine.ff.handlers.deserialize import deserialize_handlers
 
+pytestmark = [pytest.mark.nogpu]
+
 
 def test_harmonic_bond():
 

@@ -1,9 +1,12 @@
 import unittest
 
 import numpy as np
+import pytest
 
 from timemachine.testsystems.relative import hif2a_ligand_pair
 from timemachine.training.dataset import Dataset
+
+pytestmark = [pytest.mark.nogpu]
 
 
 class TestDataset(unittest.TestCase):

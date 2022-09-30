@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 from common import get_110_ccc_ff
 from jax import config, grad
 from jax import numpy as jnp
@@ -9,6 +10,9 @@ from timemachine.optimize.step import truncated_step
 from timemachine.optimize.utils import flatten_and_unflatten
 
 config.update("jax_enable_x64", True)
+
+
+pytestmark = [pytest.mark.nogpu]
 
 
 def check_flatten_and_unflatten_roundtrip(example_pytree):

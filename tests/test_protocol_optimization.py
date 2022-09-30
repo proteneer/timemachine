@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 from pymbar import MBAR
 from pymbar.testsystems import HarmonicOscillatorsTestCase
 from scipy.special import logsumexp
@@ -11,6 +12,8 @@ from timemachine.optimize.protocol import (
 )
 
 np.random.seed(2021)
+
+pytestmark = [pytest.mark.nogpu]
 
 
 def test_rebalance_initial_protocol():
