@@ -91,14 +91,11 @@ def test_nonbonded_interaction_group_correctness(
     host_idxs = np.setdiff1d(np.arange(num_atoms), ligand_idxs)
 
     def ref_ixngroups(conf, params, box, lamb):
-
         # compute 4d coordinates
-        w = jax_utils.compute_lifting_parameter(lamb, lambda_plane_idxs, lambda_offset_idxs, cutoff)
-        conf_4d = jax_utils.augment_dim(conf, w)
-        box_4d = (1000 * jax.numpy.eye(4)).at[:3, :3].set(box)
+        w_coords = jax_utils.compute_lifting_parameter(lamb, lambda_plane_idxs, lambda_offset_idxs, cutoff)
 
         vdW, electrostatics = nonbonded.nonbonded_interaction_groups(
-            conf_4d, params, box_4d, ligand_idxs, host_idxs, beta, cutoff
+            conf, params, box, ligand_idxs, host_idxs, beta, cutoff, w_coords
         )
         return jax.numpy.sum(vdW + electrostatics)
 
@@ -155,14 +152,11 @@ def test_nonbonded_interaction_group_interpolated_correctness(
 
     @nonbonded.interpolated
     def ref_ixngroups(conf, params, box, lamb):
-
         # compute 4d coordinates
-        w = jax_utils.compute_lifting_parameter(lamb, lambda_plane_idxs, lambda_offset_idxs, cutoff)
-        conf_4d = jax_utils.augment_dim(conf, w)
-        box_4d = (1000 * jax.numpy.eye(4)).at[:3, :3].set(box)
+        w_coords = jax_utils.compute_lifting_parameter(lamb, lambda_plane_idxs, lambda_offset_idxs, cutoff)
 
         vdW, electrostatics = nonbonded.nonbonded_interaction_groups(
-            conf_4d, params, box_4d, ligand_idxs, host_idxs, beta, cutoff
+            conf, params, box, ligand_idxs, host_idxs, beta, cutoff, w_coords
         )
         return jax.numpy.sum(vdW + electrostatics)
 
