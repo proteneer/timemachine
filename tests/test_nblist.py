@@ -8,7 +8,7 @@ from numpy.typing import NDArray
 from timemachine.fe.utils import get_romol_conf
 from timemachine.lib import custom_ops
 from timemachine.md.builders import build_water_system
-from timemachine.testsystems.relative import hif2a_ligand_pair
+from timemachine.testsystems.relative import get_hif2a_ligand_pair_single_topology
 
 pytestmark = [pytest.mark.memcheck]
 
@@ -272,7 +272,7 @@ def test_neighborlist_invalid_row_idxs():
 
 
 def test_neighborlist_on_subset_of_system():
-    ligand = hif2a_ligand_pair.mol_a
+    ligand, _, _ = get_hif2a_ligand_pair_single_topology()
     ligand_coords = get_romol_conf(ligand)
 
     system, host_coords, box, top = build_water_system(4.0)

@@ -4,6 +4,7 @@ import sys
 import numpy as np
 from rdkit import Chem
 
+from timemachine.constants import DEFAULT_FF
 from timemachine.fe import atom_mapping, pdb_writer
 from timemachine.fe.rbfe import HostConfig, estimate_relative_free_energy, plot_atom_mapping_grid
 from timemachine.fe.single_topology_v3 import SingleTopologyV3
@@ -61,11 +62,8 @@ def run_pair(mol_a, mol_b, core, forcefield, n_frames, protein_path, seed):
 
 def hif2a_pair():
 
-    st = get_hif2a_ligand_pair_single_topology()
-    mol_a = st.mol_a
-    mol_b = st.mol_b
-    core = st.core
-    forcefield = st.ff
+    mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
+    forcefield = Forcefield.load_from_file(DEFAULT_FF)
     protein_path = "timemachine/testsystems/data/hif2a_nowater_min.pdb"
 
     # fast

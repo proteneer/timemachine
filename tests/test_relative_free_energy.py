@@ -5,6 +5,7 @@ from importlib import resources
 import numpy as np
 import pytest
 
+from timemachine.constants import DEFAULT_FF
 from timemachine.fe.rbfe import (
     HostConfig,
     SimulationResult,
@@ -12,6 +13,7 @@ from timemachine.fe.rbfe import (
     pair_overlap_from_ukln,
     sample,
 )
+from timemachine.ff import Forcefield
 from timemachine.md import builders
 from timemachine.testsystems.relative import get_hif2a_ligand_pair_single_topology
 
@@ -150,11 +152,8 @@ def run_triple(mol_a, mol_b, core, forcefield, n_frames, protein_path, n_eq_step
 @pytest.mark.nightly(reason="Slow!")
 def test_run_hif2a_test_system():
 
-    st = get_hif2a_ligand_pair_single_topology()
-    mol_a = st.mol_a
-    mol_b = st.mol_b
-    core = st.core
-    forcefield = st.ff
+    mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
+    forcefield = Forcefield.load_from_file(DEFAULT_FF)
 
     with resources.path("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as protein_path:
         run_triple(mol_a, mol_b, core, forcefield, n_frames=100, protein_path=str(protein_path), n_eq_steps=1000)
