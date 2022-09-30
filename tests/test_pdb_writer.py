@@ -4,27 +4,30 @@ import numpy as np
 import pytest
 
 from timemachine.fe.pdb_writer import PDBWriter, convert_single_topology_mols
+from timemachine.fe.utils import get_romol_conf
 from timemachine.md import builders
-from timemachine.testsystems.relative import hif2a_ligand_pair
+from timemachine.testsystems.relative import get_hif2a_ligand_pair_single_topology
 
 
 @pytest.mark.nogpu
 def test_write_single_topology_frame():
-    top = hif2a_ligand_pair.top
-
-    ff_params = hif2a_ligand_pair.top.ff.get_ordered_params()
-
+    st = get_hif2a_ligand_pair_single_topology()
     solvent_system, solvent_coords, solvent_box, solvent_top = builders.build_water_system(4.0)
 
-    unbound_potentials, sys_params, masses = hif2a_ligand_pair.prepare_host_edge(ff_params, solvent_system)
-    coords = hif2a_ligand_pair.prepare_combined_coords(solvent_coords)
-
-    coords *= 10  # nm to angstroms
     with NamedTemporaryFile(suffix=".pdb") as temp:
-        writer = PDBWriter([solvent_top, top.mol_a, top.mol_b], temp.name)
+        writer = PDBWriter([solvent_top, st.mol_a, st.mol_b], temp.name)
+
+        ligand_coords = st.combine_confs(get_romol_conf(st.mol_a), get_romol_conf(st.mol_b))
+
+        bad_coords = np.concatenate([solvent_coords, ligand_coords])
+
         with pytest.raises(ValueError):
             # Should fail, as incorrect number of coords
-            writer.write_frame(coords)
-        ligand_coords = convert_single_topology_mols(coords[len(solvent_coords) :], top)
-        writer.write_frame(np.concatenate((coords[: len(solvent_coords)], ligand_coords), axis=0))
+            bad_coords = bad_coords * 10
+            writer.write_frame(bad_coords)
+
+        good_coords = np.concatenate([solvent_coords, convert_single_topology_mols(ligand_coords, st)], axis=0)
+
+        # tbd replace with atom map mixin
+        writer.write_frame(good_coords)
         writer.close()
