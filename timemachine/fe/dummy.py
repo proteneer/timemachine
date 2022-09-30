@@ -552,12 +552,11 @@ def generate_optimal_dg_ag_pairs(core, valence_idxs):
 
     Parameters
     ----------
-    mol: Chem.Mol
-        Input molecule
+    core: sequence of int
         Indices for the core atom
 
     valence_idxs: list of list of int
-        list of 2-tuple, 3-tuple, 4-tuple used to generate
+        list of 2-tuple, 3-tuple, 4-tuple
 
     Returns
     -------
@@ -647,8 +646,11 @@ def flag_stable_dummy_ixns(
     torsion_idxs: list of 4-tuples
         (i,j,k,l) tuples where the torsion is defined over i-j-k-l
 
-    torsion_idxs: list of 3-tuples
+    torsion_params: list of 3-tuples
         (k, p, n) force constant, period, phase
+
+    min_bond_k, min_bond_l, min_angle_k, min_angle_offset: floats
+        thresholds determining which terms are considered numerically stable
 
     Returns
     -------

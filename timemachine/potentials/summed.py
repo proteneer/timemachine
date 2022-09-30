@@ -31,6 +31,9 @@ def summed_potential(
     box: array (3, 3)
         periodic box
 
+    lamb: float
+        alchemical parameter
+
     U_fns: list of functions with signature (conf, params, box, lambda) -> energy
         potential terms
 
