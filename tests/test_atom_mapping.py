@@ -4,6 +4,8 @@ from rdkit import Chem
 from timemachine.fe.atom_mapping import AtomMappingError, get_core_by_mcs, mcs
 from timemachine.testsystems.relative import get_hif2a_ligand_pair_single_topology
 
+pytestmark = [pytest.mark.nogpu]
+
 
 def test_mcs():
     mol_a, mol_b, _ = get_hif2a_ligand_pair_single_topology()

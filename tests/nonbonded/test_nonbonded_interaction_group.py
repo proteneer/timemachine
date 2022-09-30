@@ -97,7 +97,7 @@ def test_nonbonded_interaction_group_correctness(
         conf_4d = jax_utils.augment_dim(conf, w)
         box_4d = (1000 * jax.numpy.eye(4)).at[:3, :3].set(box)
 
-        vdW, electrostatics = nonbonded.nonbonded_v3_interaction_groups(
+        vdW, electrostatics = nonbonded.nonbonded_interaction_groups(
             conf_4d, params, box_4d, ligand_idxs, host_idxs, beta, cutoff
         )
         return jax.numpy.sum(vdW + electrostatics)
@@ -161,7 +161,7 @@ def test_nonbonded_interaction_group_interpolated_correctness(
         conf_4d = jax_utils.augment_dim(conf, w)
         box_4d = (1000 * jax.numpy.eye(4)).at[:3, :3].set(box)
 
-        vdW, electrostatics = nonbonded.nonbonded_v3_interaction_groups(
+        vdW, electrostatics = nonbonded.nonbonded_interaction_groups(
             conf_4d, params, box_4d, ligand_idxs, host_idxs, beta, cutoff
         )
         return jax.numpy.sum(vdW + electrostatics)
@@ -205,7 +205,7 @@ def test_nonbonded_interaction_group_consistency_allpairs_lambda_planes(
     example_box,
     rng: np.random.Generator,
 ):
-    """Compares with reference nonbonded_v3 potential, which computes
+    """Compares with reference nonbonded potential, which computes
     the sum of all pairwise interactions. This uses the identity
 
       U = U_A + U_B + U_AB
@@ -293,7 +293,7 @@ def test_nonbonded_interaction_group_consistency_allpairs_constant_shift(
     example_box,
     rng: np.random.Generator,
 ):
-    """Compares with reference nonbonded_v3 potential, which computes
+    """Compares with reference nonbonded potential, which computes
     the sum of all pairwise interactions. This uses the identity
 
       U(x') - U(x) = U_AB(x') - U_AB(x)

@@ -1,9 +1,12 @@
 import numpy as np
+import pytest
 from simtk import unit
 from simtk.unit import atmosphere, kelvin, kilojoule_per_mole, nanometer
 
 from timemachine.constants import DISTANCE_UNIT, ENERGY_UNIT
 from timemachine.md.ensembles import NPTEnsemble, NVTEnsemble
+
+pytestmark = [pytest.mark.nogpu]
 
 
 def _compute_reduced_potential(potential_energy, temperature, volume, pressure):

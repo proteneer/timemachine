@@ -160,12 +160,7 @@ def test_run_hif2a_test_system():
     run_bitwise_reproducibility(mol_a, mol_b, core, forcefield, n_frames=100)
 
 
-if __name__ == "__main__":
-    # convenience: so we can run this directly from python tests/test_relative_free_energy.py without
-    # toggling the pytest marker
-    test_run_hif2a_test_system()
-
-
+@pytest.mark.nogpu
 def test_pair_overlap_from_ukln():
     def gaussian_overlap(p1, p2):
         def make_gaussian(params):
@@ -194,3 +189,9 @@ def test_pair_overlap_from_ukln():
 
     # overlapping
     assert gaussian_overlap((0, 0.1), (0.5, 0.2)) > 0.1
+
+
+if __name__ == "__main__":
+    # convenience: so we can run this directly from python tests/test_relative_free_energy.py without
+    # toggling the pytest marker
+    test_run_hif2a_test_system()

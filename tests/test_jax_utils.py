@@ -3,6 +3,7 @@ import jax
 jax.config.update("jax_enable_x64", True)
 
 import numpy as np
+import pytest
 from jax import jit
 from jax import numpy as jnp
 from jax import vmap
@@ -18,6 +19,8 @@ from timemachine.potentials.jax_utils import (
     get_interacting_pair_indices_batch,
     pairs_from_interaction_groups,
 )
+
+pytestmark = [pytest.mark.nogpu]
 
 
 def test_delta_r():

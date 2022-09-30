@@ -1,10 +1,13 @@
 import functools
 
 import numpy as np
+import pytest
 import scipy.integrate
 
 from timemachine.fe import standard_state
 from timemachine.potentials import rmsd
+
+pytestmark = [pytest.mark.nogpu]
 
 
 def test_translational_restraint():

@@ -1,7 +1,11 @@
 from unittest import TestCase
 
+import pytest
+
 from timemachine.fe.estimator import SimulationResult
 from timemachine.fe.frames import all_frames, endpoint_frames_only, no_frames
+
+pytestmark = [pytest.mark.nogpu]
 
 
 def make_dummy_sim_result(val):

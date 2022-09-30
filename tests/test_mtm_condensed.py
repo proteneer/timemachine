@@ -112,9 +112,6 @@ def test_condensed_phase_mtm():
 
     print(f"Running a total of {num_batches*md_steps_per_move} md steps")
 
-    frozen_masses = np.copy(masses)
-    frozen_masses[-num_ligand_atoms:] = np.inf
-
     all_torsions = []
 
     num_equil_steps = 30000
@@ -123,40 +120,38 @@ def test_condensed_phase_mtm():
     )
 
     lamb = 0.0
-    # test with both frozen masses and free masses
-    for test_masses in [frozen_masses, masses]:
 
-        # (ytz): emprically scanning over multiple Ks seem to suggest 100 is a sweet spot
-        # leave this here for pedagogical purposes.
-        # for K in [1, 5, 10, 25, 50, 100, 200, 400]:
+    # (ytz): emprically scanning over multiple Ks seem to suggest 100 is a sweet spot
+    # leave this here for pedagogical purposes.
+    # for K in [1, 5, 10, 25, 50, 100, 200, 400]:
 
-        K = 100
+    K = 100
 
-        batch_proposal_coords_fn = functools.partial(
-            enhanced.jax_aligned_batch_propose_coords,
-            vacuum_samples=jnp.array(vacuum_samples),
-            vacuum_log_weights=jnp.array(vacuum_log_weights),
+    batch_proposal_coords_fn = functools.partial(
+        enhanced.jax_aligned_batch_propose_coords,
+        vacuum_samples=jnp.array(vacuum_samples),
+        vacuum_log_weights=jnp.array(vacuum_log_weights),
+    )
+
+    npt_mover = NPTMove(ubps, lamb, masses, temperature, pressure, n_steps=md_steps_per_move, seed=seed)
+    mtm_mover = OptimizedMTMMove(K, batch_proposal_coords_fn, batch_log_weights_fn, seed=seed)
+
+    enhanced_torsions = []
+
+    xvb_t = copy.deepcopy(xvb0)
+
+    for iteration in range(num_batches):
+
+        xvb_t = npt_mover.move(xvb_t)
+        solvent_torsion = get_torsion(xvb_t.coords[-num_ligand_atoms:])
+        enhanced_torsions.append(solvent_torsion)
+        xvb_t = mtm_mover.move(xvb_t)
+
+        print(
+            f"K {K} frame {iteration} acceptance rate {mtm_mover.n_accepted/mtm_mover.n_proposed} solvent_torsion {solvent_torsion}"
         )
 
-        npt_mover = NPTMove(ubps, lamb, test_masses, temperature, pressure, n_steps=md_steps_per_move, seed=seed)
-        mtm_mover = OptimizedMTMMove(K, batch_proposal_coords_fn, batch_log_weights_fn, seed=seed)
-
-        enhanced_torsions = []
-
-        xvb_t = copy.deepcopy(xvb0)
-
-        for iteration in range(num_batches):
-
-            xvb_t = npt_mover.move(xvb_t)
-            solvent_torsion = get_torsion(xvb_t.coords[-num_ligand_atoms:])
-            enhanced_torsions.append(solvent_torsion)
-            xvb_t = mtm_mover.move(xvb_t)
-
-            print(
-                f"K {K} frame {iteration} acceptance rate {mtm_mover.n_accepted/mtm_mover.n_proposed} solvent_torsion {solvent_torsion}"
-            )
-
-        all_torsions.append(np.asarray(enhanced_torsions))
+    all_torsions.append(np.asarray(enhanced_torsions))
 
     # lhs is (-np.pi, 0) and rhs is (0, np.pi)
     enhanced_torsions_lhs, _ = np.histogram(enhanced_torsions, bins=50, range=(-np.pi, 0), density=True)
@@ -167,7 +162,7 @@ def test_condensed_phase_mtm():
 
     vanilla_torsions = []
     xvb_t = copy.deepcopy(xvb0)
-    npt_mover = NPTMove(ubps, lamb, test_masses, temperature, pressure, n_steps=500, seed=seed)
+    npt_mover = NPTMove(ubps, lamb, masses, temperature, pressure, n_steps=500, seed=seed)
     for iteration in range(num_batches):
         solvent_torsion = get_torsion(xvb_t.coords[-num_ligand_atoms:])
         vanilla_torsions.append(solvent_torsion)

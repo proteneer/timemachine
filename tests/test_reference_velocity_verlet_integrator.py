@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 from jax import config, grad, jit
 from jax import numpy as jnp
 
@@ -60,6 +61,7 @@ def assert_reversibility_using_step_implementations(intg, x0, v0, n_steps=1000):
     assert_bitwise_reversiblility(x0, v0, multiple_steps_update)
 
 
+@pytest.mark.nogpu
 def test_reversibility_with_jax_potentials():
     """On a simple jax-transformable potential (quartic oscillators)
     with randomized parameters and initial conditions
@@ -78,7 +80,7 @@ def test_reversibility_with_jax_potentials():
         return -grad(U)(x)
 
     for n_steps in [1, 10, 100, 1000, 10000]:
-        n = np.random.randint(10, 10000)  # Unif[10, 10000]
+        n = np.random.randint(10, 200)  # Unif[10, 200]
         masses = np.random.rand(n) + 1  # Unif[1, 2]
         dt = 0.09 * np.random.rand() + 0.01  # Unif[0.01, 0.1]
         x0 = np.random.randn(n, 3)
@@ -97,6 +99,7 @@ def test_reversibility_with_jax_potentials():
         assert_bitwise_reversiblility(x0, v0, jax_update)
 
 
+@pytest.mark.nightly(reason="Slow")
 def test_reversibility_with_custom_ops_potentials():
     """Check reversibility of "public" .step and .multiple_steps implementations when `force_fxn`
     is a custom_op potential"""

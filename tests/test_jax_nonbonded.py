@@ -10,6 +10,7 @@ seed(2021)
 from functools import partial
 from typing import Callable, Tuple
 
+import pytest
 from jax import jit
 from jax import numpy as jnp
 from jax import value_and_grad, vmap
@@ -31,9 +32,9 @@ from timemachine.potentials.nonbonded import (
     coulomb_prefactors_on_traj,
     lj_interaction_group_energy,
     lj_prefactors_on_traj,
+    nonbonded,
     nonbonded_block,
-    nonbonded_v3,
-    nonbonded_v3_on_specific_pairs,
+    nonbonded_on_specific_pairs,
 )
 
 Conf = Params = Box = ChargeMask = LJMask = LambdaPlaneIdxs = LambdaOffsetIdxs = jnp.array
@@ -42,6 +43,8 @@ Lamb = Beta = Cutoff = Energy = float
 nonbonded_args = Conf, Params, Box, Lamb, ChargeMask, LJMask, Beta, Cutoff, LambdaPlaneIdxs, LambdaOffsetIdxs
 NonbondedArgs = Tuple[nonbonded_args]
 NonbondedFxn = Callable[[*nonbonded_args], Energy]
+
+pytestmark = [pytest.mark.nogpu]
 
 
 def resolve_clashes(x0, box0, min_dist=0.1):
@@ -226,7 +229,7 @@ def compare_two_potentials(u_a: NonbondedFxn, u_b: NonbondedFxn, args: Nonbonded
         np.testing.assert_allclose(g_a, g_b)
 
 
-def _nonbonded_v3_clone(
+def _nonbonded_clone(
     conf,
     params,
     box,
@@ -238,10 +241,10 @@ def _nonbonded_v3_clone(
     lambda_plane_idxs,
     lambda_offset_idxs,
 ):
-    """See docstring of nonbonded_v3 for more details
+    """See docstring of `nonbonded` for more details
 
-    This is here just for testing purposes, to mimic the signature of nonbonded_v3 but to use
-    nonbonded_v3_on_specific_pairs under the hood.
+    This is here just for testing purposes, to mimic the signature of `nonbonded` but to use
+    `nonbonded_on_specific_pairs` under the hood.
     """
 
     N = conf.shape[0]
@@ -264,7 +267,7 @@ def _nonbonded_v3_clone(
     #   up into more manageable blocks if n_interactions is large
     pairs = get_all_pairs_indices(N)
 
-    lj, coulomb = nonbonded_v3_on_specific_pairs(conf, params, box, pairs, beta, cutoff)
+    lj, coulomb = nonbonded_on_specific_pairs(conf, params, box, pairs, beta, cutoff)
 
     # keep only eps > 0
     inds_i, inds_j = pairs.T
@@ -278,12 +281,12 @@ def _nonbonded_v3_clone(
 
 
 def run_randomized_tests_of_jax_nonbonded(instance_generator, n_instances=10):
-    """Assert that nonbonded_v3 and _nonbonded_v3 agree on several random instances
+    """Assert that `nonbonded` and `_nonbonded_clone` agree on several random instances
 
     instance_generator(n_atoms, dim) -> NonbondedArgs
     """
-    jittable_nonbonded_v3 = partial(nonbonded_v3, runtime_validate=False)
-    u_a, u_b = jit(jittable_nonbonded_v3), jit(_nonbonded_v3_clone)
+    jittable_nonbonded = partial(nonbonded, runtime_validate=False)
+    u_a, u_b = jit(jittable_nonbonded), jit(_nonbonded_clone)
 
     min_size, max_size = 10, 50
 
@@ -296,8 +299,8 @@ def run_randomized_tests_of_jax_nonbonded(instance_generator, n_instances=10):
 
 
 def test_jax_nonbonded_waterbox():
-    jittable_nonbonded_v3 = partial(nonbonded_v3, runtime_validate=False)
-    u_a, u_b = jit(jittable_nonbonded_v3), jit(_nonbonded_v3_clone)
+    jittable_nonbonded = partial(nonbonded, runtime_validate=False)
+    u_a, u_b = jit(jittable_nonbonded), jit(_nonbonded_clone)
     compare_two_potentials(u_a, u_b, generate_waterbox_nb_args())
 
 
@@ -312,7 +315,7 @@ def test_jax_nonbonded(n_instances=10):
 
 
 def test_vmap():
-    """Can call jit(vmap(nonbonded_v3_on_specific_pairs))"""
+    """Can call jit(vmap(nonbonded_on_specific_pairs))"""
 
     # # atoms in "ligand" vs. "environment"
     n_ligand, n_environment = 50, 1000
@@ -328,7 +331,7 @@ def test_vmap():
     fixed_kwargs = dict(params=params, box=box, pairs=pairs, beta=beta, cutoff=cutoff)
 
     # signature: conf -> ljs, coulombs, where ljs.shape == (n_interactions, )
-    u_pairs = partial(nonbonded_v3_on_specific_pairs, **fixed_kwargs)
+    u_pairs = partial(nonbonded_on_specific_pairs, **fixed_kwargs)
     ljs, coulombs = u_pairs(conf)
     assert ljs.shape == (n_interactions,)
 
@@ -372,7 +375,7 @@ def test_jax_nonbonded_block():
     pairs = jnp.array([indices_left, indices_right]).T
 
     def u_b(x, box, params):
-        vdw, es = nonbonded_v3_on_specific_pairs(x, params, box, pairs, beta, cutoff)
+        vdw, es = nonbonded_on_specific_pairs(x, params, box, pairs, beta, cutoff)
 
         return jnp.sum(vdw + es)
 
@@ -406,7 +409,7 @@ def test_precomputation():
 
     # reference version: nonbonded_on_specific_pairs
     def u_ref(x, box, params):
-        vdw, es = nonbonded_v3_on_specific_pairs(x, params, box, pairs, beta, cutoff)
+        vdw, es = nonbonded_on_specific_pairs(x, params, box, pairs, beta, cutoff)
         return jnp.sum(vdw + es)
 
     @jit

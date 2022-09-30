@@ -5,6 +5,7 @@ import jax
 jax.config.update("jax_enable_x64", True)
 
 import numpy as np
+import pytest
 from jax import grad, jit
 from jax import numpy as jnp
 
@@ -17,6 +18,7 @@ from timemachine.integrator import LangevinIntegrator
 from timemachine.testsystems.relative import get_hif2a_ligand_pair_single_topology
 
 
+@pytest.mark.nogpu
 def test_reference_langevin_integrator(threshold=1e-4):
     """Assert approximately canonical sampling of e^{-x^4 / kBT},
     for various settings of temperature, friction, timestep, and mass"""
@@ -39,11 +41,11 @@ def test_reference_langevin_integrator(threshold=1e-4):
 
     for (temperature, friction, dt, mass) in settings:
         # generate n_production_steps * n_copies samples
-        n_copies = 10000
+        n_copies = 2500
         langevin = LangevinIntegrator(force_fxn, mass, temperature, dt, friction)
 
         x0, v0 = 0.1 * np.ones((2, n_copies))
-        xs, vs = langevin.multiple_steps(x0, v0, n_steps=5000)
+        xs, vs = langevin.multiple_steps(x0, v0, n_steps=2500)
         samples = xs[10:].flatten()
 
         # summarize using histogram
@@ -60,6 +62,7 @@ def test_reference_langevin_integrator(threshold=1e-4):
         assert histogram_mse < threshold
 
 
+@pytest.mark.nogpu
 def test_reference_langevin_integrator_deterministic():
     """Asserts that trajectories are deterministic given a seed value"""
     force_fxn = lambda x: -4 * x ** 3
@@ -83,6 +86,7 @@ def test_reference_langevin_integrator_deterministic():
     assert_deterministic(lambda seed: langevin.multiple_steps_lax(jax.random.PRNGKey(seed), x0, v0))
 
 
+@pytest.mark.nogpu
 def test_reference_langevin_integrator_consistent():
     """
     Asserts that the result of the implementation based on jax.lax
