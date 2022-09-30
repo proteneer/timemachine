@@ -84,6 +84,7 @@ pybind11_add_module(${LIBRARY_NAME} SHARED NO_EXTRAS
   src/summed_potential.cu
   src/fanout_summed_potential.cu
   src/device_buffer.cu
+  src/kernels/k_lambda_transformer.cu
   src/kernels/k_nonbonded.cu
   src/kernels/nonbonded_common.cu
 )
@@ -133,7 +134,7 @@ message("Cuda Arch: " ${CUDA_ARCH})
 set_property(TARGET ${LIBRARY_NAME} PROPERTY CUDA_ARCHITECTURES "${CUDA_ARCH}")
 unset(CUDA_ARCH CACHE)
 
-target_link_libraries(${LIBRARY_NAME} PRIVATE -lcurand -lcuda -lcudart -lcudadevrt -lnvrtc)
+target_link_libraries(${LIBRARY_NAME} PRIVATE -lcurand)
 set_target_properties(${LIBRARY_NAME} PROPERTIES PREFIX "")
 
 add_custom_command(

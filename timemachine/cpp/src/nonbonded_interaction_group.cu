@@ -1,7 +1,7 @@
-#include "vendored/jitify.hpp"
 #include <complex>
 #include <cub/cub.cuh>
 #include <set>
+#include <string>
 #include <vector>
 
 #include "fixed_point.hpp"
@@ -11,8 +11,8 @@
 #include "nonbonded_interaction_group.hpp"
 #include "vendored/hilbert.h"
 
+#include "k_lambda_transformer.cuh"
 #include "k_nonbonded.cuh"
-#include <string>
 
 namespace timemachine {
 
@@ -22,8 +22,7 @@ NonbondedInteractionGroup<RealType, Interpolated>::NonbondedInteractionGroup(
     const std::vector<int> &lambda_plane_idxs,  // [N]
     const std::vector<int> &lambda_offset_idxs, // [N]
     const double beta,
-    const double cutoff,
-    const std::string &kernel_src)
+    const double cutoff)
     : N_(lambda_offset_idxs.size()), NR_(row_atom_idxs.size()), NC_(N_ - NR_),
 
       kernel_ptrs_({// enumerate over every possible kernel combination
@@ -50,13 +49,7 @@ NonbondedInteractionGroup<RealType, Interpolated>::NonbondedInteractionGroup(
                     &k_nonbonded_unified<RealType, 1, 1, 1, 1>}),
 
       beta_(beta), cutoff_(cutoff), nblist_(N_), nblist_padding_(0.1), d_sort_storage_(nullptr),
-      d_sort_storage_bytes_(0), disable_hilbert_(false),
-
-      compute_w_coords_instance_(kernel_cache_.program(kernel_src.c_str()).kernel("k_compute_w_coords").instantiate()),
-      compute_gather_interpolated_(
-          kernel_cache_.program(kernel_src.c_str()).kernel("k_gather_interpolated").instantiate()),
-      compute_add_du_dp_interpolated_(
-          kernel_cache_.program(kernel_src.c_str()).kernel("k_add_du_dp_interpolated").instantiate()) {
+      d_sort_storage_bytes_(0), disable_hilbert_(false) {
 
     if (NR_ == 0) {
         throw std::runtime_error("row_atom_idxs must be nonempty");
@@ -356,11 +349,9 @@ void NonbondedInteractionGroup<RealType, Interpolated>::execute_device(
 
     // do parameter interpolation here
     if (Interpolated) {
-        CUresult result = compute_gather_interpolated_.configure(dimGrid, tpb, 0, stream)
-                              .launch(lambda, N, d_perm_, d_p, d_p + N * 3, d_sorted_p_, d_sorted_dp_dl_);
-        if (result != 0) {
-            throw std::runtime_error("Driver call to k_gather_interpolated failed");
-        }
+        k_gather_interpolated<<<dimGrid, tpb, 0, stream>>>(
+            lambda, N, d_perm_, d_p, d_p + N * 3, d_sorted_p_, d_sorted_dp_dl_);
+        gpuErrchk(cudaPeekAtLastError());
     } else {
         k_gather<<<dimGrid, tpb, 0, stream>>>(N, d_perm_, d_p, d_sorted_p_);
         gpuErrchk(cudaPeekAtLastError());
@@ -377,13 +368,10 @@ void NonbondedInteractionGroup<RealType, Interpolated>::execute_device(
 
     // update new w coordinates
     // (tbd): cache lambda value for equilibrium calculations
-    CUresult result = compute_w_coords_instance_.configure(B, tpb, 0, stream)
-                          .launch(N, lambda, cutoff_, d_lambda_plane_idxs_, d_lambda_offset_idxs_, d_w_, d_dw_dl_);
-    if (result != 0) {
-        throw std::runtime_error("Driver call to k_compute_w_coords");
-    }
-
+    k_compute_w_coords<<<B, tpb, 0, stream>>>(
+        N, lambda, cutoff_, d_lambda_plane_idxs_, d_lambda_offset_idxs_, d_w_, d_dw_dl_);
     gpuErrchk(cudaPeekAtLastError());
+
     k_gather_2x<<<B, tpb, 0, stream>>>(N, d_perm_, d_w_, d_dw_dl_, d_sorted_w_, d_sorted_dw_dl_);
     gpuErrchk(cudaPeekAtLastError());
 
@@ -431,15 +419,12 @@ void NonbondedInteractionGroup<RealType, Interpolated>::execute_device(
 
     if (d_du_dp) {
         if (Interpolated) {
-            CUresult result = compute_add_du_dp_interpolated_.configure(dimGrid, tpb, 0, stream)
-                                  .launch(lambda, N, d_du_dp_buffer_, d_du_dp);
-            if (result != 0) {
-                throw std::runtime_error("Driver call to k_add_du_dp_interpolated failed");
-            }
+            k_add_du_dp_interpolated<<<dimGrid, tpb, 0, stream>>>(lambda, N, d_du_dp_buffer_, d_du_dp);
+            gpuErrchk(cudaPeekAtLastError());
         } else {
             k_add_ull_to_ull<<<dimGrid, tpb, 0, stream>>>(N, d_du_dp_buffer_, d_du_dp);
+            gpuErrchk(cudaPeekAtLastError());
         }
-        gpuErrchk(cudaPeekAtLastError());
     }
 }
 

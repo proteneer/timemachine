@@ -1,7 +1,6 @@
 #pragma once
 
 #include "potential.hpp"
-#include "vendored/jitify.hpp"
 #include <vector>
 
 namespace timemachine {
@@ -26,14 +25,9 @@ private:
     double *d_p_interp_;
     double *d_dp_dl_;
 
-    int *d_perm_;
+    unsigned int *d_perm_;
 
     unsigned long long *d_du_dp_buffer_;
-
-    jitify::JitCache kernel_cache_;
-    jitify::KernelInstantiation compute_w_coords_instance_;
-    jitify::KernelInstantiation compute_gather_interpolated_;
-    jitify::KernelInstantiation compute_add_du_dp_interpolated_;
 
 public:
     NonbondedPairList(
@@ -42,8 +36,7 @@ public:
         const std::vector<int> &lambda_plane_idxs,  // [N]
         const std::vector<int> &lambda_offset_idxs, // [N]
         const double beta,
-        const double cutoff,
-        const std::string &kernel_src);
+        const double cutoff);
 
     ~NonbondedPairList();
 

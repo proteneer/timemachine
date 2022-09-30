@@ -3,7 +3,6 @@
 #include "neighborlist.hpp"
 #include "nonbonded_common.cuh"
 #include "potential.hpp"
-#include "vendored/jitify.hpp"
 #include <array>
 #include <optional>
 #include <set>
@@ -68,11 +67,6 @@ private:
 
     std::array<k_nonbonded_fn, 16> kernel_ptrs_;
 
-    jitify::JitCache kernel_cache_;
-    jitify::KernelInstantiation compute_w_coords_instance_;
-    jitify::KernelInstantiation compute_gather_interpolated_;
-    jitify::KernelInstantiation compute_add_du_dp_interpolated_;
-
 public:
     // these are marked public but really only intended for testing.
     void set_nblist_padding(double val);
@@ -83,8 +77,7 @@ public:
         const std::vector<int> &lambda_offset_idxs, // N
         const double beta,
         const double cutoff,
-        const std::optional<std::set<int>> &atom_idxs,
-        const std::string &kernel_src);
+        const std::optional<std::set<int>> &atom_idxs);
 
     ~NonbondedAllPairs();
 
