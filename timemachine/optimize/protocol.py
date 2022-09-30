@@ -40,11 +40,6 @@ References
         Gradient-based optimization of high-dimensional protocols, using a reweighting-based estimate of a
         a T.I.-tailored objective, stddev(du/dlambda).
 """
-
-import jax
-
-jax.config.update("jax_enable_x64", True)
-
 from typing import Any, Callable
 
 import numpy as np
