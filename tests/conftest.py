@@ -1,6 +1,21 @@
 # This file defines fixtures shared across multiple test modules.
 # https://docs.pytest.org/en/latest/how-to/fixtures.html#scope-sharing-fixtures-across-classes-modules-packages-or-session
 
+import multiprocessing
+import os
+
+# (ytz): not pretty, but this is needed to get XLA to be less stupid
+# see https://github.com/google/jax/issues/1408 for more information
+# needs to be set before xla/jax is initialized, and is set to a number
+# suitable for running on CI
+# NOTE: To have an effect, XLA_FLAGS must be set in the environment before loading JAX (whether directly or transitively
+# through another import)
+os.environ["XLA_FLAGS"] = "--xla_force_host_platform_device_count=" + str(multiprocessing.cpu_count())
+
+import jax
+
+jax.config.update("jax_enable_x64", True)
+
 import gc
 
 import hypothesis

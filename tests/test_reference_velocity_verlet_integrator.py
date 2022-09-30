@@ -1,9 +1,7 @@
 import numpy as np
 import pytest
-from jax import config, grad, jit
+from jax import grad, jit
 from jax import numpy as jnp
-
-config.update("jax_enable_x64", True)
 
 from timemachine.integrator import FIXED_TO_FLOAT, FLOAT_TO_FIXED, VelocityVerletIntegrator
 from timemachine.testsystems.relative import hif2a_ligand_pair

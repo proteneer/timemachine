@@ -1,13 +1,10 @@
-from jax import config, grad, jit
-from jax import numpy as jnp
-from jax import vmap
-
-config.update("jax_enable_x64", True)
-
 from functools import partial
 
 import numpy as np
 import pytest
+from jax import grad, jit
+from jax import numpy as jnp
+from jax import vmap
 
 from timemachine.integrator import VelocityVerletIntegrator
 from timemachine.md.local_resampling import local_resampling_move
