@@ -5,6 +5,12 @@ from importlib import resources
 import numpy as np
 from rdkit import Chem
 
+from timemachine.constants import DEFAULT_FF
+from timemachine.fe.rbfe import setup_initial_states
+from timemachine.fe.single_topology_v3 import SingleTopologyV3
+from timemachine.fe.utils import get_romol_conf
+from timemachine.ff import Forcefield
+
 
 def get_hif2a_ligand_pair_single_topology():
     """Return two ligands from hif2a and the manually specified atom mapping"""
@@ -51,3 +57,20 @@ def get_hif2a_ligand_pair_single_topology():
         ]
     )
     return mol_a, mol_b, core
+
+
+def get_relative_hif2a_in_vacuum():
+    mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
+    ff = Forcefield.load_from_file(DEFAULT_FF)
+    rfe = SingleTopologyV3(mol_a, mol_b, core, ff)
+
+    temperature = 300
+    seed = 2022
+    lam = 0.5
+    host_config = None  # vacuum
+    initial_states = setup_initial_states(rfe, host_config, temperature, [lam], seed)
+    unbound_potentials = initial_states[0].potentials
+    sys_params = [np.array(u.params, dtype=np.float64) for u in unbound_potentials]
+    coords = rfe.combine_confs(get_romol_conf(mol_a), get_romol_conf(mol_b))
+    masses = np.array(rfe.combine_masses())
+    return unbound_potentials, sys_params, coords, masses

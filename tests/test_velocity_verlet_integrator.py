@@ -7,15 +7,10 @@ from functools import partial
 import numpy as np
 import pytest
 
-from timemachine.constants import DEFAULT_FF
-from timemachine.fe.rbfe import setup_initial_states
-from timemachine.fe.single_topology_v3 import SingleTopologyV3
-from timemachine.fe.utils import get_romol_conf
-from timemachine.ff import Forcefield
 from timemachine.integrator import VelocityVerletIntegrator as ReferenceVelocityVerlet
 from timemachine.lib import VelocityVerletIntegrator, custom_ops
 from timemachine.lib.potentials import SummedPotential
-from timemachine.testsystems.relative import get_hif2a_ligand_pair_single_topology
+from timemachine.testsystems.relative import get_relative_hif2a_in_vacuum
 
 
 def setup_velocity_verlet(bps, x0, box, dt, masses):
@@ -24,23 +19,6 @@ def setup_velocity_verlet(bps, x0, box, dt, masses):
     intg = integrator.impl()
     context = custom_ops.Context(x0, np.zeros_like(x0), box, intg, bps)
     return intg, context
-
-
-def get_relative_hif2a_in_vacuum():
-    mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
-    ff = Forcefield.load_from_file(DEFAULT_FF)
-    rfe = SingleTopologyV3(mol_a, mol_b, core, ff)
-
-    temperature = 300
-    seed = 2022
-    lam = 0.5
-    host_config = None  # vacuum
-    initial_states = setup_initial_states(rfe, host_config, temperature, [lam], seed)
-    unbound_potentials = initial_states[0].potentials
-    sys_params = [np.array(u.params, dtype=np.float64) for u in unbound_potentials]
-    coords = rfe.combine_confs(get_romol_conf(mol_a), get_romol_conf(mol_b))
-    masses = np.array(rfe.combine_masses())
-    return unbound_potentials, sys_params, coords, masses
 
 
 def assert_reversible(x0, v0, update_fxn, lambdas, atol=1e-10):

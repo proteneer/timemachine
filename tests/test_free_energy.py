@@ -13,15 +13,12 @@ from timemachine import constants
 from timemachine.fe import estimator, free_energy, topology, utils
 from timemachine.fe.free_energy import RABFEResult
 from timemachine.fe.functional import construct_differentiable_interface, construct_differentiable_interface_fast
-from timemachine.fe.rbfe import setup_initial_states
-from timemachine.fe.single_topology_v3 import SingleTopologyV3
-from timemachine.fe.utils import get_romol_conf
 from timemachine.ff import Forcefield
 from timemachine.lib import LangevinIntegrator, MonteCarloBarostat
 from timemachine.md import builders, minimizer
 from timemachine.md.barostat.utils import get_bond_list, get_group_indices
 from timemachine.parallel.client import CUDAPoolClient
-from timemachine.testsystems.relative import get_hif2a_ligand_pair_single_topology
+from timemachine.testsystems.relative import get_relative_hif2a_in_vacuum
 
 
 def test_absolute_free_energy():
@@ -106,22 +103,6 @@ def test_absolute_free_energy():
     assert np.abs(dG) < 1000.0
 
 
-def get_relative_hif2a_in_vacuum():
-    mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
-    ff = Forcefield.load_from_file("smirnoff_1_1_0_ccc.py")
-    rfe = SingleTopologyV3(mol_a, mol_b, core, ff)
-
-    temperature = 300
-    seed = 2022
-    lam = 0.5
-    host_config = None  # vacuum
-    initial_states = setup_initial_states(rfe, host_config, temperature, [lam], seed)
-    unbound_potentials = initial_states[0].potentials
-    sys_params = [np.array(u.params, dtype=np.float64) for u in unbound_potentials]
-    coords = rfe.combine_confs(get_romol_conf(mol_a), get_romol_conf(mol_b))
-    return unbound_potentials, sys_params, coords
-
-
 def assert_shapes_consistent(U, coords, sys_params, box, lam):
     """assert U, grad(U) have the right shapes"""
     # can call U and get right shape
@@ -200,7 +181,7 @@ def test_functional():
     * requesting derivative w.r.t. box causes a runtime error
     """
 
-    unbound_potentials, sys_params, coords = get_relative_hif2a_in_vacuum()
+    unbound_potentials, sys_params, coords, _ = get_relative_hif2a_in_vacuum()
 
     box = np.eye(3) * 100
     lam = 0.5
@@ -246,7 +227,7 @@ def test_construct_differentiable_interface_fast():
     """Assert that the computation of U and its derivatives using the
     C++ code path produces equivalent results to doing the
     summation in Python"""
-    unbound_potentials, sys_params, coords = get_relative_hif2a_in_vacuum()
+    unbound_potentials, sys_params, coords, _ = get_relative_hif2a_in_vacuum()
 
     lam = 0.5
     box = np.eye(3) * 100
