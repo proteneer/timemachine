@@ -23,9 +23,9 @@ from timemachine.ff.handlers import openmm_deserializer
 from timemachine.md import builders
 from timemachine.potentials.jax_utils import (
     convert_to_4d,
-    distance,
     get_all_pairs_indices,
     pairs_from_interaction_groups,
+    pairwise_distances,
 )
 from timemachine.potentials.nonbonded import (
     coulomb_interaction_group_energy,
@@ -49,7 +49,7 @@ pytestmark = [pytest.mark.nogpu]
 
 def resolve_clashes(x0, box0, min_dist=0.1):
     def urt(x, box):
-        distance_matrix = distance(x, box)
+        distance_matrix = pairwise_distances(x, box)
         i, j = np.triu_indices(len(distance_matrix), k=1)
         return distance_matrix[i, j]
 
