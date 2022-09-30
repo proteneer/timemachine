@@ -126,7 +126,7 @@ class VacuumSystem:
             torsion_idxs=np.array(self.torsion.get_idxs()),
         )
         nbpl_U = functools.partial(
-            nonbonded.nonbonded_v3_on_precomputed_pairs,
+            nonbonded.nonbonded_on_precomputed_pairs,
             pairs=np.array(self.nonbonded.get_idxs()),
             offsets=jnp.array(self.nonbonded.get_offsets()),
             params=jnp.array(self.nonbonded.params),
