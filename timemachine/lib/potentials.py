@@ -1,6 +1,5 @@
 from typing import Sequence
 
-import importlib_resources as resources
 import numpy as np
 from numpy.typing import NDArray
 
@@ -285,22 +284,7 @@ class NonbondedImplWrapper(custom_ops.FanoutSummedPotential):
                 impl.set_nblist_padding(padding)
 
 
-class NonbondedCustomOpWrapper(CustomOpWrapper):
-    # override unbound_impl to pass kernel source directory as first ctor argument
-    def unbound_impl(self, precision):
-        cls_name_base = type(self).__name__
-        if precision == np.float64:
-            cls_name_base += "_f64"
-        else:
-            cls_name_base += "_f32"
-
-        custom_ctor = getattr(custom_ops, cls_name_base)
-
-        with resources.files("timemachine.cpp.src.kernels") as path:
-            return custom_ctor(str(path), *self.args)
-
-
-class Nonbonded(NonbondedCustomOpWrapper):
+class Nonbonded(CustomOpWrapper):
     def __init__(self, *args):
 
         # exclusion_idxs should be unique
@@ -402,7 +386,7 @@ class NonbondedInterpolated(Nonbonded):
         return NonbondedImplWrapper([all_pairs_impl, exclusions_impl])
 
 
-class NonbondedAllPairs(NonbondedCustomOpWrapper):
+class NonbondedAllPairs(CustomOpWrapper):
     pass
 
 
@@ -416,11 +400,10 @@ class NonbondedAllPairsInterpolated(NonbondedAllPairs):
 
         custom_ctor = getattr(custom_ops, cls_name_base)
 
-        with resources.files("timemachine.cpp.src.kernels") as path:
-            return custom_ctor(str(path), *self.args)
+        return custom_ctor(*self.args)
 
 
-class NonbondedInteractionGroup(NonbondedCustomOpWrapper):
+class NonbondedInteractionGroup(CustomOpWrapper):
     pass
 
 
@@ -434,11 +417,10 @@ class NonbondedInteractionGroupInterpolated(NonbondedInteractionGroup):
 
         custom_ctor = getattr(custom_ops, cls_name_base)
 
-        with resources.files("timemachine.cpp.src.kernels") as path:
-            return custom_ctor(str(path), *self.args)
+        return custom_ctor(*self.args)
 
 
-class NonbondedPairList(NonbondedCustomOpWrapper):
+class NonbondedPairList(CustomOpWrapper):
     def get_idxs(self):
         return self.args[0]
 
@@ -478,7 +460,7 @@ class NonbondedPairListPrecomputed(CustomOpWrapper):
         return self.args[3]
 
 
-class NonbondedPairListNegated(NonbondedCustomOpWrapper):
+class NonbondedPairListNegated(NonbondedPairList):
     def unbound_impl(self, precision):
         cls_name_base = "NonbondedPairList"
         if precision == np.float64:
@@ -488,8 +470,7 @@ class NonbondedPairListNegated(NonbondedCustomOpWrapper):
 
         custom_ctor = getattr(custom_ops, cls_name_base)
 
-        with resources.files("timemachine.cpp.src.kernels") as path:
-            return custom_ctor(str(path), *self.args)
+        return custom_ctor(*self.args)
 
 
 class NonbondedPairListInterpolated(NonbondedPairList):
@@ -502,11 +483,10 @@ class NonbondedPairListInterpolated(NonbondedPairList):
 
         custom_ctor = getattr(custom_ops, cls_name_base)
 
-        with resources.files("timemachine.cpp.src.kernels") as path:
-            return custom_ctor(str(path), *self.args)
+        return custom_ctor(*self.args)
 
 
-class NonbondedPairListNegatedInterpolated(NonbondedCustomOpWrapper):
+class NonbondedPairListNegatedInterpolated(NonbondedPairList):
     def unbound_impl(self, precision):
         cls_name_base = "NonbondedPairList"
         if precision == np.float64:
@@ -516,5 +496,4 @@ class NonbondedPairListNegatedInterpolated(NonbondedCustomOpWrapper):
 
         custom_ctor = getattr(custom_ops, cls_name_base)
 
-        with resources.files("timemachine.cpp.src.kernels") as path:
-            return custom_ctor(str(path), *self.args)
+        return custom_ctor(*self.args)

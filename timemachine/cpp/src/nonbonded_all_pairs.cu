@@ -1,5 +1,5 @@
-#include "vendored/jitify.hpp"
 #include <cub/cub.cuh>
+#include <string>
 
 #include "fixed_point.hpp"
 #include "gpu_utils.cuh"
@@ -7,9 +7,8 @@
 #include "nonbonded_common.cuh"
 #include "vendored/hilbert.h"
 
+#include "k_lambda_transformer.cuh"
 #include "k_nonbonded.cuh"
-
-#include <string>
 
 namespace timemachine {
 
@@ -19,13 +18,7 @@ NonbondedAllPairs<RealType, Interpolated>::NonbondedAllPairs(
     const std::vector<int> &lambda_offset_idxs, // [N]
     const double beta,
     const double cutoff,
-    const std::optional<std::set<int>> &atom_idxs,
-    const std::string &kernel_src
-    // const std::string &transform_lambda_charge,
-    // const std::string &transform_lambda_sigma,
-    // const std::string &transform_lambda_epsilon,
-    // const std::string &transform_lambda_w
-    )
+    const std::optional<std::set<int>> &atom_idxs)
     : N_(lambda_offset_idxs.size()), K_(atom_idxs ? atom_idxs->size() : N_), beta_(beta), cutoff_(cutoff),
       d_atom_idxs_(nullptr), nblist_(K_), nblist_padding_(0.1), d_sort_storage_(nullptr), d_sort_storage_bytes_(0),
       disable_hilbert_(false),
@@ -51,13 +44,7 @@ NonbondedAllPairs<RealType, Interpolated>::NonbondedAllPairs(
                     &k_nonbonded_unified<RealType, 1, 1, 0, 0>,
                     &k_nonbonded_unified<RealType, 1, 1, 0, 1>,
                     &k_nonbonded_unified<RealType, 1, 1, 1, 0>,
-                    &k_nonbonded_unified<RealType, 1, 1, 1, 1>}),
-
-      compute_w_coords_instance_(kernel_cache_.program(kernel_src.c_str()).kernel("k_compute_w_coords").instantiate()),
-      compute_gather_interpolated_(
-          kernel_cache_.program(kernel_src.c_str()).kernel("k_gather_interpolated").instantiate()),
-      compute_add_du_dp_interpolated_(
-          kernel_cache_.program(kernel_src.c_str()).kernel("k_add_du_dp_interpolated").instantiate()) {
+                    &k_nonbonded_unified<RealType, 1, 1, 1, 1>}) {
 
     if (lambda_offset_idxs.size() != lambda_plane_idxs.size()) {
         throw std::runtime_error("lambda offset idxs and plane idxs need to be equivalent");
@@ -338,12 +325,9 @@ void NonbondedAllPairs<RealType, Interpolated>::execute_device(
 
     // do parameter interpolation here
     if (Interpolated) {
-        CUresult result =
-            compute_gather_interpolated_.configure(dim3(ceil_divide(K_, tpb), 3, 1), tpb, 0, stream)
-                .launch(lambda, K_, d_sorted_atom_idxs_, d_p, d_p + N * 3, d_gathered_p_, d_gathered_dp_dl_);
-        if (result != 0) {
-            throw std::runtime_error("Driver call to k_gather_interpolated failed");
-        }
+        k_gather_interpolated<<<dim3(ceil_divide(K_, tpb), 3, 1), tpb, 0, stream>>>(
+            lambda, K_, d_sorted_atom_idxs_, d_p, d_p + N * 3, d_gathered_p_, d_gathered_dp_dl_);
+        gpuErrchk(cudaPeekAtLastError());
     } else {
         k_gather<<<dim3(ceil_divide(K_, tpb), 3, 1), tpb, 0, stream>>>(K_, d_sorted_atom_idxs_, d_p, d_gathered_p_);
         gpuErrchk(cudaPeekAtLastError());
@@ -360,13 +344,10 @@ void NonbondedAllPairs<RealType, Interpolated>::execute_device(
 
     // update new w coordinates
     // (tbd): cache lambda value for equilibrium calculations
-    CUresult result = compute_w_coords_instance_.configure(ceil_divide(N_, tpb), tpb, 0, stream)
-                          .launch(N, lambda, cutoff_, d_lambda_plane_idxs_, d_lambda_offset_idxs_, d_w_, d_dw_dl_);
-    if (result != 0) {
-        throw std::runtime_error("Driver call to k_compute_w_coords");
-    }
-
+    k_compute_w_coords<<<ceil_divide(N_, tpb), tpb, 0, stream>>>(
+        N, lambda, cutoff_, d_lambda_plane_idxs_, d_lambda_offset_idxs_, d_w_, d_dw_dl_);
     gpuErrchk(cudaPeekAtLastError());
+
     k_gather_2x<<<ceil_divide(K_, tpb), tpb, 0, stream>>>(
         K_, d_sorted_atom_idxs_, d_w_, d_dw_dl_, d_gathered_w_, d_gathered_dw_dl_);
     gpuErrchk(cudaPeekAtLastError());
@@ -419,16 +400,13 @@ void NonbondedAllPairs<RealType, Interpolated>::execute_device(
 
     if (d_du_dp) {
         if (Interpolated) {
-            CUresult result =
-                compute_add_du_dp_interpolated_.configure(dim3(ceil_divide(N_, tpb), 3, 1), tpb, 0, stream)
-                    .launch(lambda, N, d_du_dp_buffer_, d_du_dp);
-            if (result != 0) {
-                throw std::runtime_error("Driver call to k_add_du_dp_interpolated failed");
-            }
+            k_add_du_dp_interpolated<<<dim3(ceil_divide(N_, tpb), 3, 1), tpb, 0, stream>>>(
+                lambda, N, d_du_dp_buffer_, d_du_dp);
+            gpuErrchk(cudaPeekAtLastError());
         } else {
             k_add_ull_to_ull<<<dim3(ceil_divide(N_, tpb), 3, 1), tpb, 0, stream>>>(N, d_du_dp_buffer_, d_du_dp);
+            gpuErrchk(cudaPeekAtLastError());
         }
-        gpuErrchk(cudaPeekAtLastError());
     }
 }
 

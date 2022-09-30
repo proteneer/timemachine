@@ -1,4 +1,5 @@
 #include "gpu_utils.cuh"
+#include "k_lambda_transformer.cuh"
 #include "k_nonbonded_pair_list.cuh"
 #include "math_utils.cuh"
 #include "nonbonded_pair_list.hpp"
@@ -14,14 +15,8 @@ NonbondedPairList<RealType, Negated, Interpolated>::NonbondedPairList(
     const std::vector<int> &lambda_plane_idxs,  // [N]
     const std::vector<int> &lambda_offset_idxs, // [N]
     const double beta,
-    const double cutoff,
-    const std::string &kernel_src)
-    : N_(lambda_offset_idxs.size()), M_(pair_idxs.size() / 2), beta_(beta), cutoff_(cutoff),
-      compute_w_coords_instance_(kernel_cache_.program(kernel_src.c_str()).kernel("k_compute_w_coords").instantiate()),
-      compute_gather_interpolated_(
-          kernel_cache_.program(kernel_src.c_str()).kernel("k_gather_interpolated").instantiate()),
-      compute_add_du_dp_interpolated_(
-          kernel_cache_.program(kernel_src.c_str()).kernel("k_add_du_dp_interpolated").instantiate()) {
+    const double cutoff)
+    : N_(lambda_offset_idxs.size()), M_(pair_idxs.size() / 2), beta_(beta), cutoff_(cutoff) {
 
     if (pair_idxs.size() % 2 != 0) {
         throw std::runtime_error("pair_idxs.size() must be even, but got " + std::to_string(pair_idxs.size()));
@@ -110,18 +105,13 @@ void NonbondedPairList<RealType, Negated, Interpolated>::execute_device(
     int num_blocks = ceil_divide(N, tpb);
     dim3 dimGrid(num_blocks, 3, 1);
 
-    CUresult result = compute_w_coords_instance_.configure(dimGrid, tpb, 0, stream)
-                          .launch(N, lambda, cutoff_, d_lambda_plane_idxs_, d_lambda_offset_idxs_, d_w_, d_dw_dl_);
-    if (result != 0) {
-        throw std::runtime_error("Driver call to k_compute_w_coords");
-    }
+    k_compute_w_coords<<<dimGrid, tpb, 0, stream>>>(
+        N, lambda, cutoff_, d_lambda_plane_idxs_, d_lambda_offset_idxs_, d_w_, d_dw_dl_);
+    gpuErrchk(cudaPeekAtLastError());
 
     if (Interpolated) {
-        CUresult result = compute_gather_interpolated_.configure(dimGrid, tpb, 0, stream)
-                              .launch(lambda, N, d_perm_, d_p, d_p + N * 3, d_p_interp_, d_dp_dl_);
-        if (result != 0) {
-            throw std::runtime_error("Driver call to k_gather_interpolated failed");
-        }
+        k_gather_interpolated<<<dimGrid, tpb, 0, stream>>>(lambda, N, d_perm_, d_p, d_p + N * 3, d_p_interp_, d_dp_dl_);
+        gpuErrchk(cudaPeekAtLastError());
     } else {
         gpuErrchk(cudaMemsetAsync(d_dp_dl_, 0, N * 3 * sizeof(*d_dp_dl_), stream))
     }
@@ -153,15 +143,12 @@ void NonbondedPairList<RealType, Negated, Interpolated>::execute_device(
 
     if (d_du_dp) {
         if (Interpolated) {
-            CUresult result = compute_add_du_dp_interpolated_.configure(dimGrid, tpb, 0, stream)
-                                  .launch(lambda, N, d_du_dp_buffer_, d_du_dp);
-            if (result != 0) {
-                throw std::runtime_error("Driver call to k_add_du_dp_interpolated failed");
-            }
+            k_add_du_dp_interpolated<<<dimGrid, tpb, 0, stream>>>(lambda, N, d_du_dp_buffer_, d_du_dp);
+            gpuErrchk(cudaPeekAtLastError());
         } else {
             k_add_ull_to_ull<<<dimGrid, tpb, 0, stream>>>(N, d_du_dp_buffer_, d_du_dp);
+            gpuErrchk(cudaPeekAtLastError());
         }
-        gpuErrchk(cudaPeekAtLastError());
     }
 }
 

@@ -109,9 +109,6 @@ setup(
             "testsystems/data/ligands_40.sdf",
             "testsystems/data/mobley_820789.sdf",
             "testsystems/data/hif2a_nowater_min.pdb",
-            # NOTE: C++ sources used at runtime for JIT compilation
-            "cpp/src/*.hpp",
-            "cpp/src/kernels/*.cuh",
         ],
     },
     # entry_points={
