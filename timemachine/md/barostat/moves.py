@@ -1,12 +1,8 @@
-from jax import config
-from jax import numpy as jnp
-from jax.ops import segment_sum
-
-config.update("jax_enable_x64", True)
-
 from typing import Callable, Iterable, List, Tuple
 
 import numpy as np
+from jax import numpy as jnp
+from jax.ops import segment_sum
 
 from timemachine.md.barostat.utils import compute_box_center, compute_box_volume
 from timemachine.md.moves import MonteCarloMove

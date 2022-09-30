@@ -1,14 +1,9 @@
 import math
-
-from jax.config import config
-from rdkit import Chem
-
-config.update("jax_enable_x64", True)
-
 from dataclasses import asdict, dataclass, fields
 from typing import List, Tuple, Union
 
 import numpy as np
+from rdkit import Chem
 from rdkit.Chem import MolToSmiles
 
 from timemachine.fe import topology
