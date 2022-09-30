@@ -11,7 +11,6 @@ from jax import vmap
 np.random.seed(2021)
 
 from timemachine.potentials.jax_utils import (
-    augment_dim,
     compute_lifting_parameter,
     delta_r,
     distance_on_pairs,
@@ -100,18 +99,6 @@ def test_compute_lifting_parameter():
 
     w1 = compute_lifting_parameter(1.0, lambda_plane_idxs, lambda_offset_idxs, cutoff)
     np.testing.assert_allclose(w1, cutoff * (lambda_offset_idxs + lambda_plane_idxs))
-
-
-def test_augment_dim():
-    """check xyz -> xyzw stacking"""
-    for _ in range(5):
-        n = np.random.randint(5, 10)
-        xyz = np.random.randn(n, 3)
-        w = np.random.randn(n)
-
-        xyzw = augment_dim(xyz, w)
-        np.testing.assert_allclose(xyzw[:, :3], xyz)
-        np.testing.assert_allclose(xyzw[:, -1], w)
 
 
 def test_batched_neighbor_inds():

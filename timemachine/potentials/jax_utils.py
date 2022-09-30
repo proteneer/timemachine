@@ -50,24 +50,6 @@ def compute_lifting_parameter(lamb, lambda_plane_idxs, lambda_offset_idxs, cutof
     return w
 
 
-def augment_dim(x3: Array, w: Array) -> Array:
-    """(x,y,z) -> (x,y,z,w)"""
-
-    d4 = jnp.expand_dims(w, axis=-1)
-    x4 = jnp.concatenate((x3, d4), axis=1)
-
-    assert len(x4) == len(x3)
-    assert x4.shape[1] == 4
-
-    return x4
-
-
-def convert_to_4d(x3, lamb, lambda_plane_idxs, lambda_offset_idxs, cutoff):
-    """(x,y,z) -> (x,y,z,w) where w = cutoff * (lambda_plane_idxs + lambda_offset_idxs * lamb)"""
-    w = compute_lifting_parameter(lamb, lambda_plane_idxs, lambda_offset_idxs, cutoff)
-    return augment_dim(x3, w)
-
-
 def delta_r(ri, rj, box=None):
     diff = ri - rj  # this can be either N,N,3 or B,3
 
