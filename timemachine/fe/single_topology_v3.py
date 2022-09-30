@@ -876,7 +876,7 @@ class SingleTopologyV3(AtomMapMixin):
 
     def combine_masses(self):
         """
-        Combine masses between two end-states using linear interpolation.
+        Combine masses between two end-states by taking the heavier of the two core atoms.
 
         Returns
         -------

@@ -10,8 +10,9 @@ from jax import grad, jit
 from jax import numpy as jnp
 
 from timemachine.constants import BOLTZ
+from timemachine.fe import utils
 from timemachine.integrator import LangevinIntegrator
-from timemachine.testsystems.relative import hif2a_ligand_pair
+from timemachine.testsystems.relative import get_hif2a_ligand_pair_single_topology
 
 
 @pytest.mark.nogpu
@@ -124,16 +125,19 @@ def test_reference_langevin_integrator_with_custom_ops():
     np.random.seed(2021)
 
     # define a force fxn using a mix of optimized custom_ops and prototype-friendly Jax
-    rfe = hif2a_ligand_pair
-    unbound_potentials, sys_params, masses = rfe.prepare_vacuum_edge(rfe.ff.get_ordered_params())
-    coords = rfe.prepare_combined_coords()
-    bound_potentials = [
-        ubp.bind(params).bound_impl(np.float32) for (ubp, params) in zip(unbound_potentials, sys_params)
-    ]
+    st = get_hif2a_ligand_pair_single_topology()
+    vac_sys = st.setup_intermediate_state(0.5)
+    x_a = utils.get_romol_conf(st.mol_a)
+    x_b = utils.get_romol_conf(st.mol_b)
+    coords = st.combine_confs(x_a, x_b)
+    potentials = vac_sys.get_U_fns()
+    masses = np.array(st.combine_masses())
+
+    impls = [bp.bound_impl(np.float32) for bp in potentials]
     box = 100 * np.eye(3)
 
     def custom_op_force_component(coords):
-        du_dxs = np.array([bp.execute(coords, box, 0.5)[0] for bp in bound_potentials])
+        du_dxs = np.array([bp.execute(coords, box, 0.5)[0] for bp in impls])
         return -np.sum(du_dxs, 0)
 
     def jax_restraint(coords):
