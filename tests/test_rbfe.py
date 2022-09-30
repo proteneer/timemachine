@@ -3,13 +3,14 @@ from importlib import resources
 from tempfile import TemporaryDirectory
 from unittest import TestCase
 
+from timemachine.constants import DEFAULT_FF
 from timemachine.fe.lambda_schedule import construct_lambda_schedule
 from timemachine.fe.model import RBFEModel
 from timemachine.ff import Forcefield
 from timemachine.md import builders
 from timemachine.parallel.client import CUDAPoolClient
 from timemachine.parallel.utils import get_gpu_count
-from timemachine.testsystems.relative import hif2a_ligand_pair
+from timemachine.testsystems.relative import get_hif2a_ligand_pair_single_topology
 
 DATA_DIR = os.path.join(os.path.dirname(__file__), "..", "tests", "data")
 NUM_GPUS = get_gpu_count()
@@ -45,9 +46,7 @@ class TestRBFEModel(TestCase):
         )
 
         ordered_params = forcefield.get_ordered_params()
-        mol_a = hif2a_ligand_pair.mol_a
-        mol_b = hif2a_ligand_pair.mol_b
-        core = hif2a_ligand_pair.top.core
+        mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
 
         ddg, results = model.predict(ordered_params, mol_a, mol_b, core)
         self.assertEqual(len(results), 2)
@@ -61,10 +60,11 @@ class TestRBFEModel(TestCase):
         # build the water system
         solvent_system, solvent_coords, solvent_box, _ = builders.build_water_system(4.0)
         client = CUDAPoolClient(NUM_GPUS)
+        ff = Forcefield.load_from_file(DEFAULT_FF)
 
         model = RBFEModel(
             client=client,
-            ff=hif2a_ligand_pair.ff,
+            ff=ff,
             complex_system=complex_system,
             complex_coords=complex_coords,
             complex_box=complex_box,
@@ -77,9 +77,7 @@ class TestRBFEModel(TestCase):
             prod_steps=100,
         )
 
-        mol_a = hif2a_ligand_pair.mol_a
-        mol_b = hif2a_ligand_pair.mol_b
-        core = hif2a_ligand_pair.top.core
+        mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
         assert len(model._equil_cache) == 0
         with TemporaryDirectory() as tempdir:
             cache_path = os.path.join(tempdir, "equil_cache.pkl")

@@ -1,12 +1,21 @@
+import jax
+
+jax.config.update("jax_enable_x64", True)
+
 from functools import partial
 
 import numpy as np
 import pytest
 
+from timemachine.constants import DEFAULT_FF
+from timemachine.fe.rbfe import setup_initial_states
+from timemachine.fe.single_topology_v3 import SingleTopologyV3
+from timemachine.fe.utils import get_romol_conf
+from timemachine.ff import Forcefield
 from timemachine.integrator import VelocityVerletIntegrator as ReferenceVelocityVerlet
 from timemachine.lib import VelocityVerletIntegrator, custom_ops
 from timemachine.lib.potentials import SummedPotential
-from timemachine.testsystems.relative import hif2a_ligand_pair
+from timemachine.testsystems.relative import get_hif2a_ligand_pair_single_topology
 
 
 def setup_velocity_verlet(bps, x0, box, dt, masses):
@@ -15,6 +24,23 @@ def setup_velocity_verlet(bps, x0, box, dt, masses):
     intg = integrator.impl()
     context = custom_ops.Context(x0, np.zeros_like(x0), box, intg, bps)
     return intg, context
+
+
+def get_relative_hif2a_in_vacuum():
+    mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
+    ff = Forcefield.load_from_file(DEFAULT_FF)
+    rfe = SingleTopologyV3(mol_a, mol_b, core, ff)
+
+    temperature = 300
+    seed = 2022
+    lam = 0.5
+    host_config = None  # vacuum
+    initial_states = setup_initial_states(rfe, host_config, temperature, [lam], seed)
+    unbound_potentials = initial_states[0].potentials
+    sys_params = [np.array(u.params, dtype=np.float64) for u in unbound_potentials]
+    coords = rfe.combine_confs(get_romol_conf(mol_a), get_romol_conf(mol_b))
+    masses = np.array(rfe.combine_masses())
+    return unbound_potentials, sys_params, coords, masses
 
 
 def assert_reversible(x0, v0, update_fxn, lambdas, atol=1e-10):
@@ -87,21 +113,20 @@ def assert_reversibility_using_step_implementations(context, schedule, atol=1e-1
 def test_reversibility():
     """Check reversibility of "public" .step and .multiple_steps implementations for a Context using the VelocityVerlet integrator"""
 
-    np.random.seed(2022)
+    seed = 2022
+    np.random.seed(seed)
 
     # define a Python force fxn that calls custom_ops
-    rfe = hif2a_ligand_pair
-    unbound_potentials, sys_params, masses = rfe.prepare_vacuum_edge(rfe.ff.get_ordered_params())
-    coords = rfe.prepare_combined_coords()
-    bound_potentials = [
-        ubp.bind(params).bound_impl(np.float32) for (ubp, params) in zip(unbound_potentials, sys_params)
-    ]
+    unbound_potentials, sys_params, coords, masses = get_relative_hif2a_in_vacuum()
+    bound_potentials = [pot.bound_impl(precision=np.float32) for pot in unbound_potentials]
+
     box = 100 * np.eye(3)
 
     dt = 1.5e-3
 
-    # Is not infinitely reversible, will fail after 3000 steps due to accumulation of coords/velos in floating point
+    # Is not infinitely reversible, will fail after 3000 steps due to accumulation of coords/vels in floating point
     for n_steps in [1, 10, 100, 500, 1000, 2000]:
+        print("n_steps", n_steps)
         lamb_sched = np.linspace(0, 1, n_steps)
         v0 = np.random.randn(*coords.shape)
         intg, ctxt = setup_velocity_verlet(bound_potentials, coords, box, dt, masses)  # noqa
@@ -114,9 +139,7 @@ def test_reversibility():
 def test_matches_reference():
     np.random.seed(2022)
 
-    rfe = hif2a_ligand_pair
-    unbound_potentials, sys_params, masses = rfe.prepare_vacuum_edge(rfe.ff.get_ordered_params())
-    coords = rfe.prepare_combined_coords()
+    unbound_potentials, sys_params, coords, masses = get_relative_hif2a_in_vacuum()
     box = 100 * np.eye(3)
 
     dt = 1.5e-3
@@ -158,9 +181,7 @@ def test_initialization_and_finalization():
     np.random.seed(2022)
 
     # define a Python force fxn that calls custom_ops
-    rfe = hif2a_ligand_pair
-    unbound_potentials, sys_params, masses = rfe.prepare_vacuum_edge(rfe.ff.get_ordered_params())
-    coords = rfe.prepare_combined_coords()
+    unbound_potentials, sys_params, coords, masses = get_relative_hif2a_in_vacuum()
     bound_potentials = [
         ubp.bind(params).bound_impl(np.float32) for (ubp, params) in zip(unbound_potentials, sys_params)
     ]
