@@ -33,7 +33,7 @@ def test_nonbonded_pair_list_invalid_pair_idxs():
 
 
 def make_ref_potential(pair_idxs, scales, lambda_plane_idxs, lambda_offset_idxs, beta, cutoff):
-    @functools.wraps(nonbonded.nonbonded_v3_on_specific_pairs)
+    @functools.wraps(nonbonded.nonbonded_on_specific_pairs)
     def wrapped(conf, params, box, lamb):
 
         # compute 4d coordinates
@@ -41,7 +41,7 @@ def make_ref_potential(pair_idxs, scales, lambda_plane_idxs, lambda_offset_idxs,
         conf_4d = jax_utils.augment_dim(conf, w)
         box_4d = (1000 * jax.numpy.eye(4)).at[:3, :3].set(box)
 
-        vdW, electrostatics = nonbonded.nonbonded_v3_on_specific_pairs(conf_4d, params, box_4d, pair_idxs, beta, cutoff)
+        vdW, electrostatics = nonbonded.nonbonded_on_specific_pairs(conf_4d, params, box_4d, pair_idxs, beta, cutoff)
         return jax.numpy.sum(scales[:, 1] * vdW + scales[:, 0] * electrostatics)
 
     return wrapped
