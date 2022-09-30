@@ -1,9 +1,6 @@
-import numpy as np
-from jax.config import config
-
-config.update("jax_enable_x64", True)
 import functools
 
+import numpy as np
 import pytest
 from common import GradientTest
 

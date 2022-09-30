@@ -1,14 +1,4 @@
 # test importance sampling in the gas-phase.
-
-# (ytz): not pretty, but this is needed to get XLA to be less stupid
-# see https://github.com/google/jax/issues/1408 for more information
-# needs to be set before xla/jax is initialized, and is set to a number
-# suitable for running on CI
-# os.environ["XLA_FLAGS"] = "--xla_force_host_platform_device_count=12"
-
-from jax.config import config
-
-config.update("jax_enable_x64", True)
 import jax
 import numpy as np
 import pytest

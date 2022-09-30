@@ -1,11 +1,8 @@
-from jax import config, grad, jacfwd, jacrev, value_and_grad
-
-config.update("jax_enable_x64", True)
-
 from importlib import resources
 
 import numpy as np
 import pytest
+from jax import grad, jacfwd, jacrev, value_and_grad
 from rdkit import Chem
 from scipy.optimize import check_grad, minimize
 

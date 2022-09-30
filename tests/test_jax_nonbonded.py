@@ -1,19 +1,12 @@
-import jax
-
-jax.config.update("jax_enable_x64", True)
-
-import numpy as np
-from numpy.random import rand, randint, randn, seed
-
-seed(2021)
-
 from functools import partial
 from typing import Callable, Tuple
 
+import numpy as np
 import pytest
 from jax import jit
 from jax import numpy as jnp
 from jax import value_and_grad, vmap
+from numpy.random import rand, randint, randn, seed
 from scipy.optimize import minimize
 from simtk import unit
 
@@ -36,6 +29,8 @@ from timemachine.potentials.nonbonded import (
     nonbonded_block,
     nonbonded_on_specific_pairs,
 )
+
+seed(2021)
 
 Conf = Params = Box = ChargeMask = LJMask = LambdaPlaneIdxs = LambdaOffsetIdxs = jnp.array
 Lamb = Beta = Cutoff = Energy = float

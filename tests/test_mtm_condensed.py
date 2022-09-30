@@ -1,17 +1,13 @@
-import os
-import pickle
-
-from jax.config import config
-from scipy.special import logsumexp
-
-config.update("jax_enable_x64", True)
 import copy
 import functools
+import os
+import pickle
 
 import jax
 import jax.numpy as jnp
 import numpy as np
 import pytest
+from scipy.special import logsumexp
 
 from timemachine import testsystems
 from timemachine.constants import BOLTZ, DEFAULT_FF

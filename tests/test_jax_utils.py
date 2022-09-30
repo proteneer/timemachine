@@ -1,14 +1,8 @@
-import jax
-
-jax.config.update("jax_enable_x64", True)
-
 import numpy as np
 import pytest
 from jax import jit
 from jax import numpy as jnp
 from jax import vmap
-
-np.random.seed(2021)
 
 from timemachine.potentials.jax_utils import (
     augment_dim,
@@ -19,6 +13,8 @@ from timemachine.potentials.jax_utils import (
     get_interacting_pair_indices_batch,
     pairs_from_interaction_groups,
 )
+
+np.random.seed(2021)
 
 pytestmark = [pytest.mark.nogpu]
 
