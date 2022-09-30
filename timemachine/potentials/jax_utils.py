@@ -140,7 +140,7 @@ def get_interacting_pair_indices_batch(confs, boxes, pairs, cutoff=1.2):
     return batch_pairs
 
 
-def distance(x, box):
+def pairwise_distances(x, box):
     # nonbonded distances require the periodic box
     assert x.shape[1] == 3 or x.shape[1] == 4  # 3d or 4d
     ri = jnp.expand_dims(x, 0)

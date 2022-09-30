@@ -39,7 +39,7 @@ from timemachine.fe.utils import get_mol_name, get_romol_conf
 from timemachine.ff import Forcefield
 from timemachine.ff.handlers import openmm_deserializer
 from timemachine.md.builders import build_water_system
-from timemachine.potentials.jax_utils import distance
+from timemachine.potentials.jax_utils import pairwise_distances
 
 
 def test_phenol():
@@ -220,7 +220,7 @@ def test_hif2a_end_state_stability(num_pairs_to_setup=25, num_pairs_to_simulate=
     np.random.shuffle(pairs)
     ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
 
-    compute_distance_matrix = functools.partial(distance, box=None)
+    compute_distance_matrix = functools.partial(pairwise_distances, box=None)
 
     def get_max_distance(x0):
         dij = compute_distance_matrix(x0)

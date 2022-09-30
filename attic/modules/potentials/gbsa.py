@@ -3,7 +3,7 @@
 
 import jax.numpy as jnp
 
-from timemachine.potentials.jax_utils import convert_to_4d, distance
+from timemachine.potentials.jax_utils import convert_to_4d, pairwise_distances
 
 
 def step(x):
@@ -49,7 +49,7 @@ def gbsa_obc(
     ri = jnp.expand_dims(coords_4d, 0)
     rj = jnp.expand_dims(coords_4d, 1)
 
-    dij = distance(ri, rj, box)
+    dij = pairwise_distances(ri, rj, box)
 
     eye = jnp.eye(N, dtype=dij.dtype)
 

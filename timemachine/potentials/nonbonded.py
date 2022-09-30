@@ -9,11 +9,12 @@ from typing_extensions import TypeAlias
 
 from timemachine.potentials import jax_utils
 from timemachine.potentials.jax_utils import (
+    compute_lifting_parameter,
     convert_to_4d,
     delta_r,
-    distance,
     distance_on_pairs,
     pairs_from_interaction_groups,
+    pairwise_distances,
 )
 
 Array: TypeAlias = NDArray
@@ -223,10 +224,9 @@ def nonbonded(
 
     eps_i = jnp.expand_dims(eps, 0)
     eps_j = jnp.expand_dims(eps, 1)
-
     eps_ij = combining_rule_epsilon(eps_i, eps_j)
 
-    dij = distance(conf, box)
+    dij = pairwise_distances(conf, box)
 
     keep_mask = jnp.ones((N, N)) - jnp.eye(N)
     keep_mask = jnp.where(eps_ij != 0, keep_mask, 0)
