@@ -22,3 +22,8 @@
 
 # Licensing
 oe_license.txt
+
+Dockerfile
+
+# Files from tests
+*.svg
