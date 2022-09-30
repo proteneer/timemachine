@@ -10,7 +10,6 @@ from typing_extensions import TypeAlias
 from timemachine.potentials import jax_utils
 from timemachine.potentials.jax_utils import (
     compute_lifting_parameter,
-    convert_to_4d,
     delta_r,
     distance_on_pairs,
     pairs_from_interaction_groups,
@@ -199,20 +198,7 @@ def nonbonded(
     if lambda_offset_idxs is None:
         lambda_offset_idxs = np.zeros(N)
 
-    if conf.shape[-1] == 3:
-        conf = convert_to_4d(conf, lamb, lambda_plane_idxs, lambda_offset_idxs, cutoff)
-
-    # make 4th dimension of box large enough so its roughly aperiodic
-    if box is not None:
-        if box.shape[-1] == 3:
-            box_4d = jnp.eye(4) * 1000
-            box_4d = box_4d.at[:3, :3].set(box)
-        else:
-            box_4d = box
-    else:
-        box_4d = None
-
-    box = box_4d
+    w_coords = compute_lifting_parameter(lamb, lambda_plane_idxs, lambda_offset_idxs, cutoff)
 
     charges = params[:, 0]
     sig = params[:, 1]
@@ -226,7 +212,7 @@ def nonbonded(
     eps_j = jnp.expand_dims(eps, 1)
     eps_ij = combining_rule_epsilon(eps_i, eps_j)
 
-    dij = pairwise_distances(conf, box)
+    dij = pairwise_distances(conf, box, w_coords)
 
     keep_mask = jnp.ones((N, N)) - jnp.eye(N)
     keep_mask = jnp.where(eps_ij != 0, keep_mask, 0)
@@ -270,7 +256,14 @@ def nonbonded(
 
 
 def nonbonded_on_specific_pairs(
-    conf, params, box, pairs, beta: float, cutoff: Optional[float] = None, rescale_mask=None
+    conf,
+    params,
+    box,
+    pairs,
+    beta: float,
+    cutoff: Optional[float] = None,
+    w_coords: Optional[Array] = None,  # per-particle 4-d coordinate
+    rescale_mask=None,
 ):
     """See `nonbonded` docstring for more details
 
@@ -287,7 +280,8 @@ def nonbonded_on_specific_pairs(
     inds_l, inds_r = pairs.T
 
     # distances and cutoff
-    dij = distance_on_pairs(conf[inds_l], conf[inds_r], box)
+    w_offsets = w_coords[pairs[:, 0]] - w_coords[pairs[:, 1]] if w_coords is not None else None
+    dij = distance_on_pairs(conf[inds_l], conf[inds_r], box, w_offsets)
     if cutoff is None:
         cutoff = np.inf
     keep_mask = dij <= cutoff
@@ -378,7 +372,16 @@ def validate_interaction_group_idxs(n_atoms, a_idxs, b_idxs):
     assert len(b_idxs) == len(B)
 
 
-def nonbonded_interaction_groups(conf, params, box, a_idxs, b_idxs, beta: float, cutoff: Optional[float] = None):
+def nonbonded_interaction_groups(
+    conf,
+    params,
+    box,
+    a_idxs,
+    b_idxs,
+    beta: float,
+    cutoff: Optional[float] = None,
+    w_coords: Optional[Array] = None,  # per-particle 4-d coordinate
+):
     """Nonbonded interactions between all pairs of atoms $(i, j)$
     where $i$ is in the first set and $j$ in the second.
 
@@ -386,7 +389,7 @@ def nonbonded_interaction_groups(conf, params, box, a_idxs, b_idxs, beta: float,
     """
     validate_interaction_group_idxs(len(conf), a_idxs, b_idxs)
     pairs = pairs_from_interaction_groups(a_idxs, b_idxs)
-    vdW, electrostatics = nonbonded_on_specific_pairs(conf, params, box, pairs, beta, cutoff)
+    vdW, electrostatics = nonbonded_on_specific_pairs(conf, params, box, pairs, beta, cutoff, w_coords)
     return vdW, electrostatics
 
 

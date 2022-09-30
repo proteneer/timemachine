@@ -22,7 +22,7 @@ from timemachine.fe.reweighting import one_sided_exp
 from timemachine.ff.handlers import openmm_deserializer
 from timemachine.md import builders
 from timemachine.potentials.jax_utils import (
-    convert_to_4d,
+    compute_lifting_parameter,
     get_all_pairs_indices,
     pairs_from_interaction_groups,
     pairwise_distances,
@@ -248,26 +248,13 @@ def _nonbonded_clone(
     """
 
     N = conf.shape[0]
-
-    if conf.shape[-1] == 3:
-        conf = convert_to_4d(conf, lamb, lambda_plane_idxs, lambda_offset_idxs, cutoff)
-
-    # make 4th dimension of box large enough so its roughly aperiodic
-    if box is not None:
-        if box.shape[-1] == 3:
-            box_4d = jnp.eye(4) * 1000
-            box_4d = box_4d.at[:3, :3].set(box)
-        else:
-            box_4d = box
-    else:
-        box_4d = None
-    box = box_4d
+    w_coords = compute_lifting_parameter(lamb, lambda_plane_idxs, lambda_offset_idxs, cutoff)
 
     # TODO: len(pairs) == n_interactions -- may want to break this
     #   up into more manageable blocks if n_interactions is large
     pairs = get_all_pairs_indices(N)
 
-    lj, coulomb = nonbonded_on_specific_pairs(conf, params, box, pairs, beta, cutoff)
+    lj, coulomb = nonbonded_on_specific_pairs(conf, params, box, pairs, beta, cutoff, w_coords)
 
     # keep only eps > 0
     inds_i, inds_j = pairs.T

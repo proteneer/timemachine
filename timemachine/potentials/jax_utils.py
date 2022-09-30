@@ -78,7 +78,12 @@ def delta_r(ri, rj, box=None):
     return diff
 
 
-def distance_on_pairs(ri, rj, box=None, offsets=None):
+def distance_on_pairs(
+    ri,
+    rj,
+    box=None,
+    w_offsets=None,  # per-pair 4-d offset
+):
     """O(n) where n = len(ri) = len(rj)
 
     Notes
@@ -88,8 +93,8 @@ def distance_on_pairs(ri, rj, box=None, offsets=None):
     assert len(ri) == len(rj)
 
     diff = delta_r(ri, rj, box)
-    if offsets is not None:
-        diff = jnp.concatenate([diff, jnp.array(offsets).reshape(-1, 1)], axis=1)
+    if w_offsets is not None:
+        diff = jnp.concatenate([diff, jnp.array(w_offsets).reshape(-1, 1)], axis=1)
 
     dij = jnp.linalg.norm(diff, axis=-1)
 
@@ -140,16 +145,44 @@ def get_interacting_pair_indices_batch(confs, boxes, pairs, cutoff=1.2):
     return batch_pairs
 
 
-def pairwise_distances(x, box):
-    # nonbonded distances require the periodic box
-    assert x.shape[1] == 3 or x.shape[1] == 4  # 3d or 4d
-    ri = jnp.expand_dims(x, 0)
-    rj = jnp.expand_dims(x, 1)
-    d2ij = jnp.sum(jnp.power(delta_r(ri, rj, box), 2), axis=-1)
-    N = d2ij.shape[0]
-    d2ij = jnp.where(jnp.eye(N), 0, d2ij)
-    dij = jnp.where(jnp.eye(N), 0, jnp.sqrt(d2ij))
-    return dij
+def pairwise_distances(x, box, w=None):
+    """
+    Compute the (N, N) periodic distance matrix given an (N, D) array of
+    coordinates.
+
+    Optionally accepts an (N, 1) array of coordinates in the "lifting"
+    (typically 4th) dimension; if passed, computes distances assuming periodic
+    boundaries for the primary dimensions and aperiodicty in the lifting
+    dimension.
+
+    Parameters
+    ----------
+    x : ndarray (N, D)
+        input coordinates
+
+    box : ndarray (D, D)
+        dimensions of periodic box
+
+    w : ndarray (N, 1), optional
+        coordinates in aperiodic lifting dimension
+    """
+    n, d = x.shape
+    assert box.shape == (d, d)
+    if w is not None:
+        assert w.shape[0] == n
+
+    d_ijk = delta_r(x[:, None], x[None, :], box)  # (x_i, x_j, dimension)
+    d2_ij = jnp.sum(d_ijk ** 2, axis=2)
+
+    if w is not None:
+        dw_ij = w[:, None] - w[None, :]
+        d2_ij += dw_ij ** 2
+
+    # prevent nans in gradient
+    d2_ij = d2_ij.at[jnp.diag_indices_from(d2_ij)].set(0.0)
+
+    d_ij = jnp.sqrt(d2_ij)
+    return d_ij
 
 
 def distance_from_one_to_others(x_i, x_others, box=None, cutoff=jnp.inf):
