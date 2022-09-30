@@ -9,6 +9,8 @@ from common import temporary_working_dir
 from timemachine.ff import Forcefield
 from timemachine.ff.handlers.deserialize import deserialize_handlers
 
+pytestmark = [pytest.mark.nogpu]
+
 
 def test_serialization_of_ffs():
     for path in glob("timemachine/ff/params/smirnoff_*.py"):

@@ -30,6 +30,8 @@ from timemachine.ff.handlers.deserialize import deserialize_handlers
 # root-anchor - first atom in an anchor group, also the anchor atom that has direct 1-2 bonds to dummy atoms.
 # partition - only applies to dummy groups, as we require that dummy groups disjointly partition dummy atoms.
 
+pytestmark = [pytest.mark.nogpu]
+
 
 def get_bond_idxs(mol):
     # not necessarily canonicalized!

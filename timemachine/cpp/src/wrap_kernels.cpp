@@ -2,7 +2,6 @@
 #include <pybind11/numpy.h>
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
-#include <regex>
 
 #include "barostat.hpp"
 #include "bound_potential.hpp"
@@ -935,16 +934,11 @@ template <typename RealType, bool Interpolated> void declare_nonbonded_all_pairs
         .def("set_nblist_padding", &timemachine::NonbondedAllPairs<RealType, Interpolated>::set_nblist_padding)
         .def("disable_hilbert_sort", &timemachine::NonbondedAllPairs<RealType, Interpolated>::disable_hilbert_sort)
         .def(
-            py::init([](const std::string &kernel_dir,
-                        const py::array_t<int, py::array::c_style> &lambda_plane_idxs_i,
+            py::init([](const py::array_t<int, py::array::c_style> &lambda_plane_idxs_i,
                         const py::array_t<int, py::array::c_style> &lambda_offset_idxs_i,
                         const double beta,
                         const double cutoff,
-                        const std::optional<py::array_t<int, py::array::c_style>> &atom_idxs_i,
-                        const std::string &transform_lambda_charge = "lambda",
-                        const std::string &transform_lambda_sigma = "lambda",
-                        const std::string &transform_lambda_epsilon = "lambda",
-                        const std::string &transform_lambda_w = "lambda") {
+                        const std::optional<py::array_t<int, py::array::c_style>> &atom_idxs_i) {
                 std::vector<int> lambda_plane_idxs(lambda_plane_idxs_i.size());
                 std::memcpy(
                     lambda_plane_idxs.data(), lambda_plane_idxs_i.data(), lambda_plane_idxs_i.size() * sizeof(int));
@@ -960,31 +954,14 @@ template <typename RealType, bool Interpolated> void declare_nonbonded_all_pairs
                     unique_atom_idxs.emplace(unique_idxs(atom_idxs));
                 }
 
-                std::string src_path = kernel_dir + "/k_lambda_transformer_jit.cuh";
-                std::ifstream t(src_path);
-                std::string source_str((std::istreambuf_iterator<char>(t)), std::istreambuf_iterator<char>());
-                source_str = std::regex_replace(source_str, std::regex("KERNEL_DIR"), kernel_dir);
-                source_str =
-                    std::regex_replace(source_str, std::regex("CUSTOM_EXPRESSION_CHARGE"), transform_lambda_charge);
-                source_str =
-                    std::regex_replace(source_str, std::regex("CUSTOM_EXPRESSION_SIGMA"), transform_lambda_sigma);
-                source_str =
-                    std::regex_replace(source_str, std::regex("CUSTOM_EXPRESSION_EPSILON"), transform_lambda_epsilon);
-                source_str = std::regex_replace(source_str, std::regex("CUSTOM_EXPRESSION_W"), transform_lambda_w);
-
                 return new timemachine::NonbondedAllPairs<RealType, Interpolated>(
-                    lambda_plane_idxs, lambda_offset_idxs, beta, cutoff, unique_atom_idxs, source_str);
+                    lambda_plane_idxs, lambda_offset_idxs, beta, cutoff, unique_atom_idxs);
             }),
-            py::arg("kernel_dir"),
             py::arg("lambda_plane_idxs_i"),
             py::arg("lambda_offset_idxs_i"),
             py::arg("beta"),
             py::arg("cutoff"),
-            py::arg("atom_idxs_i") = py::none(),
-            py::arg("transform_lambda_charge") = "lambda",
-            py::arg("transform_lambda_sigma") = "lambda",
-            py::arg("transform_lambda_epsilon") = "lambda",
-            py::arg("transform_lambda_w") = "lambda");
+            py::arg("atom_idxs_i") = py::none());
 }
 
 template <typename RealType, bool Interpolated>
@@ -998,16 +975,11 @@ void declare_nonbonded_interaction_group(py::module &m, const char *typestr) {
             "disable_hilbert_sort",
             &timemachine::NonbondedInteractionGroup<RealType, Interpolated>::disable_hilbert_sort)
         .def(
-            py::init([](const std::string &kernel_dir,
-                        const py::array_t<int, py::array::c_style> &row_atom_idxs_i,
+            py::init([](const py::array_t<int, py::array::c_style> &row_atom_idxs_i,
                         const py::array_t<int, py::array::c_style> &lambda_plane_idxs_i,
                         const py::array_t<int, py::array::c_style> &lambda_offset_idxs_i,
                         const double beta,
-                        const double cutoff,
-                        const std::string &transform_lambda_charge = "lambda",
-                        const std::string &transform_lambda_sigma = "lambda",
-                        const std::string &transform_lambda_epsilon = "lambda",
-                        const std::string &transform_lambda_w = "lambda") {
+                        const double cutoff) {
                 std::vector<int> row_atom_idxs(row_atom_idxs_i.size());
                 std::memcpy(row_atom_idxs.data(), row_atom_idxs_i.data(), row_atom_idxs_i.size() * sizeof(int));
                 std::set<int> unique_row_atom_idxs(unique_idxs(row_atom_idxs));
@@ -1020,31 +992,14 @@ void declare_nonbonded_interaction_group(py::module &m, const char *typestr) {
                 std::memcpy(
                     lambda_offset_idxs.data(), lambda_offset_idxs_i.data(), lambda_offset_idxs_i.size() * sizeof(int));
 
-                std::string src_path = kernel_dir + "/k_lambda_transformer_jit.cuh";
-                std::ifstream t(src_path);
-                std::string source_str((std::istreambuf_iterator<char>(t)), std::istreambuf_iterator<char>());
-                source_str = std::regex_replace(source_str, std::regex("KERNEL_DIR"), kernel_dir);
-                source_str =
-                    std::regex_replace(source_str, std::regex("CUSTOM_EXPRESSION_CHARGE"), transform_lambda_charge);
-                source_str =
-                    std::regex_replace(source_str, std::regex("CUSTOM_EXPRESSION_SIGMA"), transform_lambda_sigma);
-                source_str =
-                    std::regex_replace(source_str, std::regex("CUSTOM_EXPRESSION_EPSILON"), transform_lambda_epsilon);
-                source_str = std::regex_replace(source_str, std::regex("CUSTOM_EXPRESSION_W"), transform_lambda_w);
-
                 return new timemachine::NonbondedInteractionGroup<RealType, Interpolated>(
-                    unique_row_atom_idxs, lambda_plane_idxs, lambda_offset_idxs, beta, cutoff, source_str);
+                    unique_row_atom_idxs, lambda_plane_idxs, lambda_offset_idxs, beta, cutoff);
             }),
-            py::arg("kernel_dir"),
             py::arg("row_atom_idxs_i"),
             py::arg("lambda_plane_idxs_i"),
             py::arg("lambda_offset_idxs_i"),
             py::arg("beta"),
-            py::arg("cutoff"),
-            py::arg("transform_lambda_charge") = "lambda",
-            py::arg("transform_lambda_sigma") = "lambda",
-            py::arg("transform_lambda_epsilon") = "lambda",
-            py::arg("transform_lambda_w") = "lambda");
+            py::arg("cutoff"));
 }
 
 template <typename RealType, bool Negated, bool Interpolated>
@@ -1054,17 +1009,12 @@ void declare_nonbonded_pair_list(py::module &m, const char *typestr) {
     py::class_<Class, std::shared_ptr<Class>, timemachine::Potential>(
         m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
         .def(
-            py::init([](const std::string &kernel_dir,
-                        const py::array_t<int, py::array::c_style> &pair_idxs_i,
+            py::init([](const py::array_t<int, py::array::c_style> &pair_idxs_i,
                         const py::array_t<double, py::array::c_style> &scales_i,
                         const py::array_t<int, py::array::c_style> &lambda_plane_idxs_i,
                         const py::array_t<int, py::array::c_style> &lambda_offset_idxs_i,
                         const double beta,
-                        const double cutoff,
-                        const std::string &transform_lambda_charge = "lambda",
-                        const std::string &transform_lambda_sigma = "lambda",
-                        const std::string &transform_lambda_epsilon = "lambda",
-                        const std::string &transform_lambda_w = "lambda") {
+                        const double cutoff) {
                 std::vector<int> pair_idxs(pair_idxs_i.size());
                 std::memcpy(pair_idxs.data(), pair_idxs_i.data(), pair_idxs_i.size() * sizeof(int));
 
@@ -1079,32 +1029,15 @@ void declare_nonbonded_pair_list(py::module &m, const char *typestr) {
                 std::memcpy(
                     lambda_offset_idxs.data(), lambda_offset_idxs_i.data(), lambda_offset_idxs_i.size() * sizeof(int));
 
-                std::string src_path = kernel_dir + "/k_lambda_transformer_jit.cuh";
-                std::ifstream t(src_path);
-                std::string source_str((std::istreambuf_iterator<char>(t)), std::istreambuf_iterator<char>());
-                source_str = std::regex_replace(source_str, std::regex("KERNEL_DIR"), kernel_dir);
-                source_str =
-                    std::regex_replace(source_str, std::regex("CUSTOM_EXPRESSION_CHARGE"), transform_lambda_charge);
-                source_str =
-                    std::regex_replace(source_str, std::regex("CUSTOM_EXPRESSION_SIGMA"), transform_lambda_sigma);
-                source_str =
-                    std::regex_replace(source_str, std::regex("CUSTOM_EXPRESSION_EPSILON"), transform_lambda_epsilon);
-                source_str = std::regex_replace(source_str, std::regex("CUSTOM_EXPRESSION_W"), transform_lambda_w);
-
                 return new timemachine::NonbondedPairList<RealType, Negated, Interpolated>(
-                    pair_idxs, scales, lambda_plane_idxs, lambda_offset_idxs, beta, cutoff, source_str);
+                    pair_idxs, scales, lambda_plane_idxs, lambda_offset_idxs, beta, cutoff);
             }),
-            py::arg("kernel_dir"),
             py::arg("pair_idxs_i"),
             py::arg("scales_i"),
             py::arg("lambda_plane_idxs_i"),
             py::arg("lambda_offset_idxs_i"),
             py::arg("beta"),
-            py::arg("cutoff"),
-            py::arg("transform_lambda_charge") = "lambda",
-            py::arg("transform_lambda_sigma") = "lambda",
-            py::arg("transform_lambda_epsilon") = "lambda",
-            py::arg("transform_lambda_w") = "lambda");
+            py::arg("cutoff"));
 }
 
 void declare_barostat(py::module &m) {

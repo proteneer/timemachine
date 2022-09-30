@@ -1,26 +1,6 @@
-jit_program
-
-#include "KERNEL_DIR/k_fixed_point.cuh"
-#include "KERNEL_DIR/surreal.cuh"
-
-#define PI 3.141592653589793115997963468544185161
-
-    template <typename NumericType>
-    NumericType __device__ __forceinline__ transform_lambda_charge(NumericType lambda) {
-    return CUSTOM_EXPRESSION_CHARGE;
-}
-
-template <typename NumericType> NumericType __device__ __forceinline__ transform_lambda_sigma(NumericType lambda) {
-    return CUSTOM_EXPRESSION_SIGMA;
-}
-
-template <typename NumericType> NumericType __device__ __forceinline__ transform_lambda_epsilon(NumericType lambda) {
-    return CUSTOM_EXPRESSION_EPSILON;
-}
-
-template <typename NumericType> NumericType __device__ __forceinline__ transform_lambda_w(NumericType lambda) {
-    return CUSTOM_EXPRESSION_W;
-}
+#include "k_fixed_point.cuh"
+#include "k_lambda_transformer.cuh"
+#include "surreal.cuh"
 
 void __global__ k_compute_w_coords(
     const int N,

@@ -1,9 +1,12 @@
 import numpy as np
+import pytest
 from rdkit import Chem
 from rdkit.Chem import AllChem
 
 from timemachine.fe import chiral_utils, utils
 from timemachine.potentials.chiral_restraints import U_chiral_atom_batch, U_chiral_bond_batch
+
+pytestmark = [pytest.mark.nogpu]
 
 
 def test_setup_chiral_atom_restraints():

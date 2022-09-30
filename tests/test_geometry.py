@@ -1,10 +1,12 @@
 # This file tests geometry classification for a wide variety of molecules,
 # selected from common drugs and baran's heterocyclic chemistry
-
+import pytest
 from rdkit import Chem
 
 from timemachine.fe import geometry
 from timemachine.fe.geometry import LocalGeometry as LG
+
+pytestmark = [pytest.mark.nogpu]
 
 
 def test_assign_aspirin():

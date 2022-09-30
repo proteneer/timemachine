@@ -9,6 +9,7 @@ from timemachine.md import builders
 from timemachine.testsystems.relative import hif2a_ligand_pair
 
 
+@pytest.mark.nogpu
 def test_write_single_topology_frame():
     top = hif2a_ligand_pair.top
     assert isinstance(top, SingleTopology)

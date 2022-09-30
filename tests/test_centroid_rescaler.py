@@ -1,9 +1,12 @@
 import numpy as np
+import pytest
 
 from timemachine.md.barostat.moves import CentroidRescaler
 from timemachine.md.barostat.utils import compute_intramolecular_distances
 
 np.random.seed(2021)
+
+pytestmark = [pytest.mark.nogpu]
 
 
 def _generate_random_instance():

@@ -10,6 +10,7 @@ seed(2021)
 from functools import partial
 from typing import Callable, Tuple
 
+import pytest
 from jax import jit
 from jax import numpy as jnp
 from jax import value_and_grad, vmap
@@ -42,6 +43,8 @@ Lamb = Beta = Cutoff = Energy = float
 nonbonded_args = Conf, Params, Box, Lamb, ChargeMask, LJMask, Beta, Cutoff, LambdaPlaneIdxs, LambdaOffsetIdxs
 NonbondedArgs = Tuple[nonbonded_args]
 NonbondedFxn = Callable[[*nonbonded_args], Energy]
+
+pytestmark = [pytest.mark.nogpu]
 
 
 def resolve_clashes(x0, box0, min_dist=0.1):

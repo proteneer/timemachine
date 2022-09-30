@@ -1,9 +1,12 @@
 import numpy as np
+import pytest
 from rdkit import Chem
 from rdkit.Chem import AllChem
 
 from timemachine.fe.restraints import setup_relative_restraints_by_distance, setup_relative_restraints_using_smarts
 from timemachine.fe.utils import get_romol_conf
+
+pytestmark = [pytest.mark.nogpu]
 
 
 def test_setting_up_restraints_using_distance():
