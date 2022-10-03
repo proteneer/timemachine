@@ -7,7 +7,7 @@ from rdkit import Chem
 from timemachine.constants import DEFAULT_FF
 from timemachine.fe import atom_mapping, pdb_writer
 from timemachine.fe.rbfe import HostConfig, estimate_relative_free_energy, plot_atom_mapping_grid
-from timemachine.fe.single_topology_v3 import SingleTopologyV3
+from timemachine.fe.single_topology import AtomMapMixin
 from timemachine.ff import Forcefield
 from timemachine.md import builders
 from timemachine.testsystems.relative import get_hif2a_ligand_pair_single_topology
@@ -15,15 +15,14 @@ from timemachine.testsystems.relative import get_hif2a_ligand_pair_single_topolo
 
 def write_trajectory_as_pdb(mol_a, mol_b, core, all_frames, host_topology, prefix):
 
-    dummy_st = SingleTopologyV3(mol_a, mol_b, core, None)
-
+    atom_map_mixin = AtomMapMixin(mol_a, mol_b, core)
     for window_idx, window_frames in enumerate(all_frames):
         out_path = f"{prefix}_{window_idx}.pdb"
-        writer = pdb_writer.PDBWriter([host_topology, dummy_st.mol_a, dummy_st.mol_b], out_path)
+        writer = pdb_writer.PDBWriter([host_topology, mol_a, mol_b], out_path)
         for frame in window_frames:
             host_frame = frame[: host_topology.getNumAtoms()]
             ligand_frame = frame[host_topology.getNumAtoms() :]
-            mol_ab_frame = pdb_writer.convert_single_topology_mols(ligand_frame, dummy_st)
+            mol_ab_frame = pdb_writer.convert_single_topology_mols(ligand_frame, atom_map_mixin)
             writer.write_frame(np.concatenate([host_frame, mol_ab_frame]) * 10)
         writer.close()
 

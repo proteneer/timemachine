@@ -7,7 +7,7 @@ config.update("jax_enable_x64", True)
 
 from timemachine.constants import DEFAULT_FF
 from timemachine.fe.rbfe import setup_initial_states
-from timemachine.fe.single_topology_v3 import SingleTopologyV3
+from timemachine.fe.single_topology import SingleTopology
 from timemachine.fe.utils import get_romol_conf
 from timemachine.ff import Forcefield
 from timemachine.integrator import FIXED_TO_FLOAT, FLOAT_TO_FIXED, VelocityVerletIntegrator
@@ -112,7 +112,7 @@ def test_reversibility_with_custom_ops_potentials():
     # define a Python force fxn that calls custom_ops
     mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
     forcefield = Forcefield.load_from_file(DEFAULT_FF)
-    rfe = SingleTopologyV3(mol_a, mol_b, core, forcefield)
+    rfe = SingleTopology(mol_a, mol_b, core, forcefield)
     masses = np.array(rfe.combine_masses())
     coords = rfe.combine_confs(get_romol_conf(mol_a), get_romol_conf(mol_b))
     host_config = None  # vacuum

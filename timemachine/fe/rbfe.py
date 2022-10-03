@@ -16,7 +16,7 @@ from timemachine.constants import BOLTZ, DEFAULT_TEMP
 from timemachine.fe import model_utils
 from timemachine.fe.bar import bar_with_bootstrapped_uncertainty
 from timemachine.fe.lambda_schedule import interpolate_pre_optimized_protocol
-from timemachine.fe.single_topology_v3 import SingleTopologyV3
+from timemachine.fe.single_topology import SingleTopology
 from timemachine.fe.system import convert_bps_into_system
 from timemachine.fe.utils import get_mol_name, get_romol_conf
 from timemachine.ff.handlers import openmm_deserializer
@@ -561,7 +561,7 @@ def estimate_relative_free_energy(
         from only the first and last window.
 
     """
-    single_topology = SingleTopologyV3(mol_a, mol_b, core, ff)
+    single_topology = SingleTopology(mol_a, mol_b, core, ff)
 
     if lambda_schedule is None:
         lambda_schedule = np.array(

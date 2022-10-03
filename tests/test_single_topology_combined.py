@@ -3,7 +3,7 @@
 import numpy as np
 
 from timemachine.constants import DEFAULT_FF
-from timemachine.fe.single_topology_v3 import SingleTopologyV3
+from timemachine.fe.single_topology import SingleTopology
 from timemachine.fe.system import convert_bps_into_system
 from timemachine.ff import Forcefield
 from timemachine.ff.handlers import openmm_deserializer
@@ -32,7 +32,7 @@ def _test_combined_parameters_impl_bonded(host_system_omm):
 
     mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
     forcefield = Forcefield.load_from_file(DEFAULT_FF)
-    st3 = SingleTopologyV3(mol_a, mol_b, core, forcefield)
+    st3 = SingleTopology(mol_a, mol_b, core, forcefield)
 
     host_bps, masses = openmm_deserializer.deserialize_system(host_system_omm, cutoff=1.2)
     num_host_atoms = len(masses)
@@ -81,7 +81,7 @@ def _test_combined_parameters_impl_nonbonded(host_system_omm):
 
     mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
     forcefield = Forcefield.load_from_file(DEFAULT_FF)
-    st3 = SingleTopologyV3(mol_a, mol_b, core, forcefield)
+    st3 = SingleTopology(mol_a, mol_b, core, forcefield)
 
     host_bps, masses = openmm_deserializer.deserialize_system(host_system_omm, cutoff=1.2)
     num_host_atoms = len(masses)
