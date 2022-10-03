@@ -1,9 +1,7 @@
 import numpy as np
 import pytest
-from simtk import unit
-from simtk.unit import atmosphere, kelvin, kilojoule_per_mole, nanometer
 
-from timemachine.constants import DISTANCE_UNIT, ENERGY_UNIT
+from timemachine.constants import AVOGADRO, BOLTZ
 from timemachine.md.ensembles import NPTEnsemble, NVTEnsemble
 
 pytestmark = [pytest.mark.nogpu]
@@ -14,17 +12,18 @@ def _compute_reduced_potential(potential_energy, temperature, volume, pressure):
     Copied from https://github.com/choderalab/openmmtools/blob/321b998fc5977a1f8893e4ad5700b1b3aef6101c/openmmtools/states.py#L1904-L1912
     """
 
-    beta = 1.0 / (unit.BOLTZMANN_CONSTANT_kB * temperature)
-    reduced_potential = potential_energy / unit.AVOGADRO_CONSTANT_NA
+    kBT = BOLTZ * temperature
+    beta = 1.0 / kBT
+    reduced_potential = potential_energy / AVOGADRO
     if pressure is not None:
         reduced_potential += pressure * volume
     return beta * reduced_potential
 
 
 def test_nvt():
-    npt = NVTEnsemble(potential_energy=None, temperature=300 * kelvin)
+    npt = NVTEnsemble(None, temperature=300)
 
-    U = (-100 * kilojoule_per_mole).value_in_unit(ENERGY_UNIT)
+    U = -100
     u_0 = npt.reduce(U)
 
     # check that reduced potential increases with increasing U
@@ -34,23 +33,23 @@ def test_nvt():
     n_trials = 100
 
     # random positive or negative
-    potential_energies = np.random.randn(n_trials) * 100 * unit.kilojoule_per_mole
+    potential_energies = np.random.randn(n_trials) * 100
 
     # uniform between 100 and 400 Kelvin
-    temperatures = (np.random.rand(n_trials) * 300 + 100) * unit.kelvin
+    temperatures = np.random.rand(n_trials) * 300 + 100
 
     for (U, T) in zip(potential_energies, temperatures):
         ref = _compute_reduced_potential(U, T, None, None)
-        nvt = NVTEnsemble(potential_energy=None, temperature=T)
-        actual = nvt.reduce(U.value_in_unit(ENERGY_UNIT))
+        nvt = NVTEnsemble(None, temperature=T)
+        actual = nvt.reduce(U)
         np.testing.assert_almost_equal(actual, ref)
 
 
 def test_npt():
-    npt = NPTEnsemble(potential_energy=None, temperature=300 * kelvin, pressure=1 * atmosphere)
+    npt = NPTEnsemble(potential_energy=None, temperature=300, pressure=1)
 
-    U = (-100 * kilojoule_per_mole).value_in_unit(ENERGY_UNIT)
-    volume = (4 * nanometer ** 3).value_in_unit(DISTANCE_UNIT ** 3)
+    U = -100
+    volume = 4
     u_0 = npt.reduce(U, volume)
 
     # check that reduced potential increases with increasing U or volume
@@ -61,20 +60,20 @@ def test_npt():
     n_trials = 100
 
     # random positive or negative
-    potential_energies = np.random.randn(n_trials) * 100 * unit.kilojoule_per_mole
+    potential_energies = np.random.randn(n_trials) * 100
 
     # uniform between 100 and 400 Kelvin
-    temperatures = (np.random.rand(n_trials) * 300 + 100) * unit.kelvin
+    temperatures = np.random.rand(n_trials) * 300 + 100
 
     # box lengths uniform between 1 and 4 nm
-    volumes = (np.random.rand(n_trials) * 3 + 1.0) ** 3 * unit.nanometer ** 3
+    volumes = (np.random.rand(n_trials) * 3 + 1.0) ** 3
 
     # uniform between 0.5 and 1.5 bar
-    pressures = (np.random.rand(n_trials) + 0.5) * unit.bar
+    pressures = np.random.rand(n_trials) + 0.5
 
     for (U, T, V, P) in zip(potential_energies, temperatures, volumes, pressures):
         ref = _compute_reduced_potential(U, T, V, P)
         npt = NPTEnsemble(potential_energy=None, temperature=T, pressure=P)
-        actual = npt.reduce(U.value_in_unit(ENERGY_UNIT), V.value_in_unit(DISTANCE_UNIT ** 3))
+        actual = npt.reduce(U, V)
 
         np.testing.assert_almost_equal(actual, ref)
