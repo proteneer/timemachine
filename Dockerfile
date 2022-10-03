@@ -93,9 +93,20 @@ RUN cd /code/timemachine && git init . && pre-commit install-hooks
 COPY ci/requirements.txt /code/timemachine/ci/requirements.txt
 RUN pip install --no-cache-dir -r timemachine/ci/requirements.txt
 
-FROM tm_base_env AS timemachine
+# Dev container that contains the cuda developer tools
+FROM tm_base_env AS timemachine_dev
 ARG CUDA_ARCH=75
 ENV CMAKE_ARGS -DCUDA_ARCH=${CUDA_ARCH}
 COPY . /code/timemachine/
 WORKDIR /code/timemachine/
-RUN CMAKE_BUILD_PARALLEL_LEVEL=$(nproc) pip install --no-cache-dir -e .[dev,test]
+RUN pip install --no-cache-dir -e .[test] && rm -rf ./build
+
+# Container with only cuda runtime, half the size of dev container
+FROM nvidia/cuda:11.6.0-runtime-ubuntu20.04 as timemachine
+COPY --from=timemachine_dev /opt/ /opt/
+COPY --from=timemachine_dev /code/ /code/
+COPY --from=timemachine_dev /root/.bashrc /root/.bashrc
+RUN ln -s /opt/conda/etc/profile.d/conda.sh /etc/profile.d/conda.sh
+ARG ENV_NAME=timemachine
+ENV PATH /opt/conda/envs/${ENV_NAME}/bin:$PATH
+ENV CONDA_DEFAULT_ENV ${ENV_NAME}
