@@ -12,7 +12,6 @@ from scipy.optimize import check_grad, minimize
 from timemachine import constants
 from timemachine.constants import DEFAULT_FF
 from timemachine.fe import estimator, free_energy, topology, utils
-from timemachine.fe.free_energy import RABFEResult
 from timemachine.fe.functional import construct_differentiable_interface, construct_differentiable_interface_fast
 from timemachine.fe.single_topology import SingleTopology
 from timemachine.ff import Forcefield
@@ -268,28 +267,6 @@ def test_construct_differentiable_interface_fast():
             np.testing.assert_array_equal(dU_dp, dU_dp_ref)
 
         np.testing.assert_array_equal(grad_U[2], grad_U_ref[2])
-
-
-def test_rabfe_result_to_from_mol():
-    """assert equality after round-trip to/from Mol SDF format"""
-    mol = Chem.MolFromSmiles("CCCONNN")
-
-    result = RABFEResult(
-        "my mol",
-        1.0,
-        float("nan"),
-        2.0,
-        2.1,
-        3.0,
-        3.1,
-        4.0,
-        4.1,
-    )
-
-    result.apply_to_mol(mol)
-
-    reconstructed = RABFEResult.from_mol(mol)
-    assert result == reconstructed
 
 
 def test_absolute_vacuum():
