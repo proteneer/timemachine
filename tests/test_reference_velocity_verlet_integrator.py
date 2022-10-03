@@ -1,9 +1,7 @@
 import numpy as np
 import pytest
-from jax import config, grad, jit
+from jax import grad, jit
 from jax import numpy as jnp
-
-config.update("jax_enable_x64", True)
 
 from timemachine.constants import DEFAULT_FF
 from timemachine.fe.rbfe import setup_initial_states
