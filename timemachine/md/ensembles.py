@@ -6,6 +6,8 @@ from timemachine.md.barostat.utils import compute_box_volume
 
 class PotentialEnergyModel:
     def __init__(self, sys_params, unbound_potentials, precision=np.float32, guard_threshold=1e6):
+        # TODO: refactor to use summed potential...
+
         self.sys_params = sys_params
         self.unbound_potentials = unbound_potentials
         self.all_impls = []
