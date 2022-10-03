@@ -817,7 +817,7 @@ class SingleTopology(AtomMapMixin):
             - Torsions are interpolated in the interval [lambda_torsions, 1]
         """
         # initialize the mixin to get the a_to_c, b_to_c, c_to_a, c_to_b, and c_flags
-        super().__init__(self, mol_a, mol_b, core)
+        super().__init__(mol_a, mol_b, core)
 
         # store the forcefield
         self.ff = forcefield
