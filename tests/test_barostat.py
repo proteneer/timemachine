@@ -1,8 +1,7 @@
 import numpy as np
 import pytest
-from simtk import unit
 
-from timemachine.constants import BOLTZ, DISTANCE_UNIT, ENERGY_UNIT
+from timemachine.constants import AVOGADRO, BOLTZ
 from timemachine.fe.free_energy import AbsoluteFreeEnergy
 from timemachine.fe.topology import BaseTopology
 from timemachine.ff import Forcefield
@@ -16,8 +15,8 @@ from timemachine.testsystems.relative import get_hif2a_ligand_pair_single_topolo
 
 
 def test_barostat_zero_interval():
-    pressure = 1.0 * unit.atmosphere
-    temperature = 300.0 * unit.kelvin
+    pressure = 1.013  # bar
+    temperature = 300.0  # kelvin
     seed = 2021
     np.random.seed(seed)
 
@@ -44,8 +43,8 @@ def test_barostat_zero_interval():
     with pytest.raises(RuntimeError):
         custom_ops.MonteCarloBarostat(
             coords.shape[0],
-            pressure.value_in_unit(unit.bar),
-            temperature.value_in_unit(unit.kelvin),
+            pressure,
+            temperature,
             group_indices,
             0,
             u_impls,
@@ -54,8 +53,8 @@ def test_barostat_zero_interval():
     # Setting it to 1 should be valid.
     baro = custom_ops.MonteCarloBarostat(
         coords.shape[0],
-        pressure.value_in_unit(unit.bar),
-        temperature.value_in_unit(unit.kelvin),
+        pressure,
+        temperature,
         group_indices,
         1,
         u_impls,
@@ -69,14 +68,15 @@ def test_barostat_zero_interval():
 def test_barostat_partial_group_idxs():
     """Verify that the barostat can handle a subset of the molecules
     rather than all of them. This test only verify that it runs, not the behavior"""
-    temperature = 300.0 * unit.kelvin
-    timestep = 1.5 * unit.femtosecond
-    barostat_interval = 3
-    collision_rate = 1.0 / unit.picosecond
+    temperature = 300.0  # kelvin
+    timestep = 1.5e-3  # picosecond
+    barostat_interval = 3  # step count
+    collision_rate = 1.0  # 1 / picosecond
+
     seed = 2021
     np.random.seed(seed)
 
-    pressure = 1.0 * unit.atmosphere
+    pressure = 1.013  # bar
     mol_a, _, _ = get_hif2a_ligand_pair_single_topology()
     ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
     unbound_potentials, sys_params, masses, coords, complex_box = get_solvent_phase_system(mol_a, ff)
@@ -101,20 +101,20 @@ def test_barostat_partial_group_idxs():
         u_impls.append(bp_impl)
 
     integrator = LangevinIntegrator(
-        temperature.value_in_unit(unit.kelvin),
-        timestep.value_in_unit(unit.picosecond),
-        collision_rate.value_in_unit(unit.picosecond ** -1),
+        temperature,
+        timestep,
+        collision_rate,
         masses,
         seed,
     )
     integrator_impl = integrator.impl()
 
-    v_0 = sample_velocities(masses * unit.amu, temperature)
+    v_0 = sample_velocities(masses, temperature)
 
     baro = custom_ops.MonteCarloBarostat(
         coords.shape[0],
-        pressure.value_in_unit(unit.bar),
-        temperature.value_in_unit(unit.kelvin),
+        pressure,
+        temperature,
         group_indices,
         barostat_interval,
         u_impls,
@@ -132,16 +132,16 @@ def test_barostat_is_deterministic():
     simulations
     """
     lam = 1.0
-    temperature = 300.0 * unit.kelvin
-    timestep = 1.5 * unit.femtosecond
+    temperature = 300.0
+    timestep = 1.5e-3
     barostat_interval = 3
-    collision_rate = 1.0 / unit.picosecond
+    collision_rate = 1.0
     seed = 2021
     np.random.seed(seed)
 
     box_vol = 26.89966
 
-    pressure = 1.0 * unit.atmosphere
+    pressure = 1.013
 
     mol_a, _, _ = get_hif2a_ligand_pair_single_topology()
     ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
@@ -165,20 +165,20 @@ def test_barostat_is_deterministic():
         u_impls.append(bp_impl)
 
     integrator = LangevinIntegrator(
-        temperature.value_in_unit(unit.kelvin),
-        timestep.value_in_unit(unit.picosecond),
-        collision_rate.value_in_unit(unit.picosecond ** -1),
+        temperature,
+        timestep,
+        collision_rate,
         masses,
         seed,
     )
     integrator_impl = integrator.impl()
 
-    v_0 = sample_velocities(masses * unit.amu, temperature)
+    v_0 = sample_velocities(masses, temperature)
 
     baro = custom_ops.MonteCarloBarostat(
         coords.shape[0],
-        pressure.value_in_unit(unit.bar),
-        temperature.value_in_unit(unit.kelvin),
+        pressure,
+        temperature,
         group_indices,
         barostat_interval,
         u_impls,
@@ -194,15 +194,15 @@ def test_barostat_is_deterministic():
 
 
 def test_barostat_varying_pressure():
-    temperature = 300.0 * unit.kelvin
-    timestep = 1.5 * unit.femtosecond
+    temperature = 300.0
+    timestep = 1.5e-3
     barostat_interval = 3
-    collision_rate = 1.0 / unit.picosecond
+    collision_rate = 1.0
     seed = 2021
     np.random.seed(seed)
 
     # Start out with a very large pressure
-    pressure = 1000.0 * unit.atmosphere
+    pressure = 1013.0
     mol_a, _, _ = get_hif2a_ligand_pair_single_topology()
     ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
     unbound_potentials, sys_params, masses, coords, complex_box = get_solvent_phase_system(mol_a, ff, margin=0.0)
@@ -221,20 +221,20 @@ def test_barostat_varying_pressure():
         u_impls.append(bp_impl)
 
     integrator = LangevinIntegrator(
-        temperature.value_in_unit(unit.kelvin),
-        timestep.value_in_unit(unit.picosecond),
-        collision_rate.value_in_unit(unit.picosecond ** -1),
+        temperature,
+        timestep,
+        collision_rate,
         masses,
         seed,
     )
     integrator_impl = integrator.impl()
 
-    v_0 = sample_velocities(masses * unit.amu, temperature)
+    v_0 = sample_velocities(masses, temperature)
 
     baro = custom_ops.MonteCarloBarostat(
         coords.shape[0],
-        pressure.value_in_unit(unit.bar),
-        temperature.value_in_unit(unit.kelvin),
+        pressure,
+        temperature,
         group_indices,
         barostat_interval,
         u_impls,
@@ -248,8 +248,8 @@ def test_barostat_varying_pressure():
     # Expect the box to shrink thanks to the barostat
     assert compute_box_volume(complex_box) - ten_atm_box_vol > 0.4
 
-    # Set the pressure to 1 bar
-    baro.set_pressure((1 * unit.atmosphere).value_in_unit(unit.bar))
+    # Set the pressure to 1 atm
+    baro.set_pressure(1.013)
     # Changing the barostat interval resets the barostat step.
     baro.set_interval(2)
 
@@ -270,15 +270,15 @@ def test_molecular_ideal_gas():
     """
 
     # simulation parameters
-    timestep = 1.5 * unit.femtosecond
-    collision_rate = 1.0 / unit.picosecond
+    timestep = 1.5e-3
+    collision_rate = 1.0
     n_moves = 10000
     barostat_interval = 5
     seed = 2021
 
     # thermodynamic parameters
-    temperatures = np.array([300, 600, 1000]) * unit.kelvin
-    pressure = 100.0 * unit.bar  # very high pressure, to keep the expected volume small
+    temperatures = np.array([300, 600, 1000])
+    pressure = 100.0  # very high pressure, to keep the expected volume small
 
     # generate an alchemical system of a waterbox + alchemical ligand:
     # effectively discard ligands by running in AbsoluteFreeEnergy mode at lambda = 1.0
@@ -311,24 +311,22 @@ def test_molecular_ideal_gas():
         u_impls.append(bp_impl)
 
     # expected volume
-    md_pressure_unit = ENERGY_UNIT / DISTANCE_UNIT ** 3
-    pressure_in_md = (pressure * unit.AVOGADRO_CONSTANT_NA).value_in_unit(md_pressure_unit)
     n_water_mols = len(group_indices) - 1  # 1 for the ligand
-    expected_volume_in_md = (n_water_mols + 1) * BOLTZ * temperatures.value_in_unit(unit.kelvin) / pressure_in_md
+    expected_volume_in_md = (n_water_mols + 1) * BOLTZ * temperatures / (pressure * AVOGADRO)
 
     for i, temperature in enumerate(temperatures):
 
         # define a thermostat
         integrator = LangevinIntegrator(
-            temperature.value_in_unit(unit.kelvin),
-            timestep.value_in_unit(unit.picosecond),
-            collision_rate.value_in_unit(unit.picosecond ** -1),
+            temperature,
+            timestep,
+            collision_rate,
             masses,
             seed,
         )
         integrator_impl = integrator.impl()
 
-        v_0 = sample_velocities(masses * unit.amu, temperature)
+        v_0 = sample_velocities(masses, temperature)
 
         # rescale the box to be approximately the desired box volume already
         rescaler = CentroidRescaler(group_indices)
@@ -342,8 +340,8 @@ def test_molecular_ideal_gas():
 
         baro = custom_ops.MonteCarloBarostat(
             new_coords.shape[0],
-            pressure.value_in_unit(unit.bar),
-            temperature.value_in_unit(unit.kelvin),
+            pressure,
+            temperature,
             group_indices,
             barostat_interval,
             u_impls,
