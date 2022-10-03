@@ -4,6 +4,7 @@ from unittest import TestCase
 import numpy as np
 from common import temporary_working_dir
 
+from timemachine.constants import DEFAULT_FF
 from timemachine.fe.frames import all_frames
 from timemachine.fe.free_energy import AbsoluteFreeEnergy, RelativeFreeEnergy, get_romol_conf
 from timemachine.fe.lambda_schedule import construct_lambda_schedule
@@ -20,7 +21,7 @@ from timemachine.md import builders, minimizer
 from timemachine.parallel.client import CUDAPoolClient
 from timemachine.parallel.utils import get_gpu_count
 from timemachine.potentials import rmsd
-from timemachine.testsystems.relative import hif2a_ligand_pair
+from timemachine.testsystems.relative import get_hif2a_ligand_pair_single_topology
 
 DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
 NUM_GPUS = get_gpu_count()
@@ -44,7 +45,8 @@ class TestRABFEModels(TestCase):
 
         num_host_atoms = host_coords.shape[0]
 
-        ff_params = hif2a_ligand_pair.ff.get_ordered_params()
+        mol_a, mol_b, _ = get_hif2a_ligand_pair_single_topology()
+        ff = Forcefield.load_from_file(DEFAULT_FF)
 
         temperature = 300.0
         pressure = 1.0
@@ -54,7 +56,7 @@ class TestRABFEModels(TestCase):
 
         decouple_model = RelativeBindingModel(
             client,
-            hif2a_ligand_pair.ff,
+            ff,
             host_system,
             construct_lambda_schedule(2),
             host_topology,
@@ -66,25 +68,22 @@ class TestRABFEModels(TestCase):
             frame_filter=all_frames,
         )
 
-        mol_a = hif2a_ligand_pair.mol_a
-        mol_b = hif2a_ligand_pair.mol_b
-
         # b is decoupled, a stays put
         decouple_ref_ab = RelativeFreeEnergy(decouple_model.setup_topology(mol_a, mol_b))
         decouple_unbound_potentials_ab, decouple_sys_params_ab, _ = decouple_ref_ab.prepare_host_edge(
-            ff_params, decouple_model.host_system
+            ff.get_ordered_params(), decouple_model.host_system
         )
 
         # a is decoupled, b stays put
         decouple_ref_ba = RelativeFreeEnergy(decouple_model.setup_topology(mol_b, mol_a))
         decouple_unbound_potentials_ba, decouple_sys_params_ba, _ = decouple_ref_ba.prepare_host_edge(
-            ff_params, decouple_model.host_system
+            ff.get_ordered_params(), decouple_model.host_system
         )
 
         # convert a charges into b charges
         conv_model_ab = RelativeConversionModel(
             client,
-            hif2a_ligand_pair.ff,
+            ff,
             host_system,
             construct_lambda_schedule(2),
             host_topology,
@@ -97,7 +96,9 @@ class TestRABFEModels(TestCase):
         )
 
         conv_ref = RelativeFreeEnergy(conv_model_ab.setup_topology(mol_a, mol_b))
-        conv_unbound_potentials, conv_sys_params, _ = conv_ref.prepare_host_edge(ff_params, conv_model_ab.host_system)
+        conv_unbound_potentials, conv_sys_params, _ = conv_ref.prepare_host_edge(
+            ff.get_ordered_params(), conv_model_ab.host_system
+        )
 
         assert len(conv_sys_params) == len(decouple_sys_params_ab)
         assert len(conv_sys_params) == len(decouple_sys_params_ba)
@@ -155,7 +156,8 @@ class TestRABFEModels(TestCase):
 
         num_host_atoms = host_coords.shape[0]
 
-        ff_params = hif2a_ligand_pair.ff.get_ordered_params()
+        ligand, _, _ = get_hif2a_ligand_pair_single_topology()
+        ff = Forcefield.load_from_file(DEFAULT_FF)
 
         temperature = 300.0
         pressure = 1.0
@@ -165,7 +167,7 @@ class TestRABFEModels(TestCase):
 
         decouple_model = AbsoluteDecouplingModel(
             client,
-            hif2a_ligand_pair.ff,
+            ff,
             host_system,
             construct_lambda_schedule(2),
             host_topology,
@@ -177,18 +179,16 @@ class TestRABFEModels(TestCase):
             frame_filter=all_frames,
         )
 
-        ligand = hif2a_ligand_pair.mol_b
-
         decouple_topo = decouple_model.setup_topology(ligand)
         decouple_ref = AbsoluteFreeEnergy(ligand, decouple_topo)
 
         decouple_unbound_potentials, decouple_sys_params, _ = decouple_ref.prepare_host_edge(
-            ff_params, decouple_model.host_system
+            ff.get_ordered_params(), decouple_model.host_system
         )
 
         conv_model = AbsoluteConversionModel(
             client,
-            hif2a_ligand_pair.ff,
+            ff,
             host_system,
             construct_lambda_schedule(2),
             host_topology,
@@ -203,7 +203,9 @@ class TestRABFEModels(TestCase):
         conv_topo = conv_model.setup_topology(ligand)
         conv_ref = AbsoluteFreeEnergy(ligand, conv_topo)
 
-        conv_unbound_potentials, conv_sys_params, _ = conv_ref.prepare_host_edge(ff_params, conv_model.host_system)
+        conv_unbound_potentials, conv_sys_params, _ = conv_ref.prepare_host_edge(
+            ff.get_ordered_params(), conv_model.host_system
+        )
 
         assert len(conv_sys_params) == len(decouple_sys_params)
         seen_nonbonded = False
@@ -244,6 +246,7 @@ class TestRABFEModels(TestCase):
         """Just to verify that we can handle the most basic decoupling RABFE prediction"""
         # Use the Simple Charges to verify determinism of model. Needed as one endpoint uses the ff definition
         forcefield = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
+        mol_a, mol_b, _ = get_hif2a_ligand_pair_single_topology()
         # build the water system
         solvent_system, solvent_coords, solvent_box, solvent_topology = builders.build_water_system(4.0)
 
@@ -266,9 +269,6 @@ class TestRABFEModels(TestCase):
             50,
             frame_filter=all_frames,
         )
-        mol_a = hif2a_ligand_pair.mol_a
-        mol_b = hif2a_ligand_pair.mol_b
-
         core_idxs = setup_relative_restraints_by_distance(mol_a, mol_b)
 
         ref_coords = get_romol_conf(mol_a)
@@ -316,6 +316,7 @@ class TestRABFEModels(TestCase):
         """
         # Use the Simple Charges to verify determinism of model. Needed as one endpoint uses the ff definition
         forcefield = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
+        mol_a, mol_b, _ = get_hif2a_ligand_pair_single_topology()
         # build the water system
         solvent_system, solvent_coords, solvent_box, solvent_topology = builders.build_water_system(4.0)
 
@@ -338,8 +339,6 @@ class TestRABFEModels(TestCase):
             50,
             frame_filter=all_frames,
         )
-        mol_a = hif2a_ligand_pair.mol_a
-        mol_b = hif2a_ligand_pair.mol_b
 
         core_idxs = setup_relative_restraints_by_distance(mol_a, mol_b)
 
@@ -386,7 +385,7 @@ class TestRABFEModels(TestCase):
         """
         # Use the Simple Charges to verify determinism of model. Needed as one endpoint uses the ff definition
         forcefield = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
-
+        mol_a, mol_b, _ = get_hif2a_ligand_pair_single_topology()
         # build the water system
         solvent_system, solvent_coords, solvent_box, solvent_topology = builders.build_water_system(4.0)
 
@@ -409,8 +408,6 @@ class TestRABFEModels(TestCase):
             50,
             frame_filter=all_frames,
         )
-        mol_a = hif2a_ligand_pair.mol_a
-        mol_b = hif2a_ligand_pair.mol_b
 
         core_idxs = setup_relative_restraints_by_distance(mol_a, mol_b)
 

@@ -8,7 +8,7 @@ from timemachine.integrator import FIXED_TO_FLOAT
 from timemachine.lib import LangevinIntegrator, MonteCarloBarostat, custom_ops
 from timemachine.md import builders, minimizer
 from timemachine.md.barostat.utils import get_bond_list, get_group_indices
-from timemachine.testsystems.relative import hif2a_ligand_pair as testsystem
+from timemachine.testsystems.relative import get_hif2a_ligand_pair_single_topology
 
 
 def test_deterministic_energies():
@@ -20,7 +20,7 @@ def test_deterministic_energies():
     temperature = 300
     pressure = 1.0
     barostat_interval = 25
-    mol_a, mol_b = testsystem.mol_a, testsystem.mol_b
+    mol_a, mol_b, _ = get_hif2a_ligand_pair_single_topology()
 
     ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
 

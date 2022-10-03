@@ -2,24 +2,25 @@ import pytest
 from rdkit import Chem
 
 from timemachine.fe.atom_mapping import AtomMappingError, get_core_by_mcs, mcs
-from timemachine.testsystems.relative import hif2a_ligand_pair
+from timemachine.testsystems.relative import get_hif2a_ligand_pair_single_topology
 
 pytestmark = [pytest.mark.nogpu]
 
 
 def test_mcs():
-    mcs_result = mcs(hif2a_ligand_pair.mol_a, hif2a_ligand_pair.mol_b, threshold=0.5)
+    mol_a, mol_b, _ = get_hif2a_ligand_pair_single_topology()
+    mcs_result = mcs(mol_a, mol_b, threshold=0.5)
     assert mcs_result.queryMol is not None
     assert mcs_result.numAtoms == 30
 
     # Match but without any hydrogens, should expect fewer matches
-    mcs_result = mcs(hif2a_ligand_pair.mol_a, hif2a_ligand_pair.mol_b, threshold=0.5, match_hydrogens=False)
+    mcs_result = mcs(mol_a, mol_b, threshold=0.5, match_hydrogens=False)
     assert mcs_result.queryMol is not None
     assert mcs_result.numAtoms == 23
 
 
 def test_get_core_by_mcs():
-    mol_a, mol_b = hif2a_ligand_pair.mol_a, hif2a_ligand_pair.mol_b
+    mol_a, mol_b, _ = get_hif2a_ligand_pair_single_topology()
     query = mcs(mol_a, mol_b).queryMol
     core = get_core_by_mcs(mol_a, mol_b, query)
     assert core.shape[1] == 2

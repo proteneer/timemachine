@@ -12,11 +12,12 @@ from rdkit import Chem
 
 from timemachine.constants import DEFAULT_FF
 from timemachine.fe import topology
+from timemachine.fe.single_topology_v3 import SingleTopologyV3
 from timemachine.fe.utils import get_romol_conf
 from timemachine.ff import Forcefield, combine_ordered_params
 from timemachine.ff.handlers import openmm_deserializer
 from timemachine.md import builders
-from timemachine.testsystems.relative import hif2a_ligand_pair
+from timemachine.testsystems.relative import get_hif2a_ligand_pair_single_topology
 
 
 class BenzenePhenolSparseTest(unittest.TestCase):
@@ -328,12 +329,17 @@ def test_component_idxs():
         0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 29, 11, 12, 13, 14, 15, 16,
         17, 18, 19, 20, 21, 34, 23, 26, 27, 28, 30, 31, 32], dtype=np.int32)
     # fmt: on
-    np.testing.assert_equal(hif2a_ligand_pair.top.get_component_idxs(), [mol_a_idxs, mol_b_idxs])
+
+    mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
+    forcefield = Forcefield.load_from_file(DEFAULT_FF)
+    top = SingleTopologyV3(mol_a, mol_b, core, forcefield)
+    np.testing.assert_equal(top.get_component_idxs(), [mol_a_idxs, mol_b_idxs])
 
     # single topology w/host
     solvent_system, coords, _, _ = builders.build_water_system(4.0)
     host_bps, _ = openmm_deserializer.deserialize_system(solvent_system, cutoff=1.2)
-    hgt_single = topology.HostGuestTopology(host_bps, hif2a_ligand_pair.top)
+
+    hgt_single = topology.HostGuestTopology(host_bps, top)
 
     num_solvent_atoms = coords.shape[0]
     solvent_idxs = np.arange(num_solvent_atoms)

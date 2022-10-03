@@ -2,7 +2,10 @@
 # and lambda configurations are correct
 import numpy as np
 
+from timemachine.constants import DEFAULT_FF
+from timemachine.fe.single_topology_v3 import SingleTopologyV3
 from timemachine.fe.system import convert_bps_into_system
+from timemachine.ff import Forcefield
 from timemachine.ff.handlers import openmm_deserializer
 from timemachine.md import builders
 from timemachine.testsystems.dhfr import get_dhfr_system
@@ -27,7 +30,10 @@ def _test_combined_parameters_impl_bonded(host_system_omm):
     # 2) we expected nonbonded lambda_idxs to be shifted
     # 3) we expected nonbonded parameters on the core to be linearly interpolated
 
-    st3 = get_hif2a_ligand_pair_single_topology()
+    mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
+    forcefield = Forcefield.load_from_file(DEFAULT_FF)
+    st3 = SingleTopologyV3(mol_a, mol_b, core, forcefield)
+
     host_bps, masses = openmm_deserializer.deserialize_system(host_system_omm, cutoff=1.2)
     num_host_atoms = len(masses)
     host_sys = convert_bps_into_system(host_bps)
@@ -73,7 +79,10 @@ def _test_combined_parameters_impl_nonbonded(host_system_omm):
     # 2) we expected nonbonded lambda_idxs to be shifted
     # 3) we expected nonbonded parameters on the core to be linearly interpolated
 
-    st3 = get_hif2a_ligand_pair_single_topology()
+    mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
+    forcefield = Forcefield.load_from_file(DEFAULT_FF)
+    st3 = SingleTopologyV3(mol_a, mol_b, core, forcefield)
+
     host_bps, masses = openmm_deserializer.deserialize_system(host_system_omm, cutoff=1.2)
     num_host_atoms = len(masses)
     host_sys = convert_bps_into_system(host_bps)

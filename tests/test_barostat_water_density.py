@@ -7,6 +7,8 @@ from functools import partial
 import numpy as np
 from simtk import unit
 
+from timemachine.constants import DEFAULT_FF
+from timemachine.ff import Forcefield
 from timemachine.lib import LangevinIntegrator
 from timemachine.md.barostat.moves import MonteCarloBarostat
 from timemachine.md.barostat.utils import get_bond_list, get_group_indices
@@ -16,7 +18,7 @@ from timemachine.md.states import CoordsVelBox
 from timemachine.md.thermostat.moves import UnadjustedLangevinMove
 from timemachine.md.thermostat.utils import sample_velocities
 from timemachine.md.utils import simulate_npt_traj
-from timemachine.testsystems.relative import hif2a_ligand_pair
+from timemachine.testsystems.relative import get_hif2a_ligand_pair_single_topology
 
 if __name__ == "__main__":
     # simulation parameters
@@ -34,7 +36,8 @@ if __name__ == "__main__":
 
     # generate an alchemical system of a waterbox + alchemical ligand:
     # effectively discard ligands by running in AbsoluteFreeEnergy mode at lambda = 1.0
-    mol_a, ff = hif2a_ligand_pair.mol_a, hif2a_ligand_pair.ff
+    mol_a, _, _ = get_hif2a_ligand_pair_single_topology()
+    ff = Forcefield.load_from_file(DEFAULT_FF)
     unbound_potentials, sys_params, masses, coords, complex_box = get_solvent_phase_system(mol_a, ff, margin=0.0)
 
     # define NPT ensemble

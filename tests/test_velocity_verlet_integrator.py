@@ -1,3 +1,7 @@
+import jax
+
+jax.config.update("jax_enable_x64", True)
+
 from functools import partial
 
 import numpy as np
@@ -6,7 +10,7 @@ import pytest
 from timemachine.integrator import VelocityVerletIntegrator as ReferenceVelocityVerlet
 from timemachine.lib import VelocityVerletIntegrator, custom_ops
 from timemachine.lib.potentials import SummedPotential
-from timemachine.testsystems.relative import hif2a_ligand_pair
+from timemachine.testsystems.relative import get_relative_hif2a_in_vacuum
 
 
 def setup_velocity_verlet(bps, x0, box, dt, masses):
@@ -87,21 +91,22 @@ def assert_reversibility_using_step_implementations(context, schedule, atol=1e-1
 def test_reversibility():
     """Check reversibility of "public" .step and .multiple_steps implementations for a Context using the VelocityVerlet integrator"""
 
-    np.random.seed(2022)
+    seed = 2022
 
     # define a Python force fxn that calls custom_ops
-    rfe = hif2a_ligand_pair
-    unbound_potentials, sys_params, masses = rfe.prepare_vacuum_edge(rfe.ff.get_ordered_params())
-    coords = rfe.prepare_combined_coords()
-    bound_potentials = [
-        ubp.bind(params).bound_impl(np.float32) for (ubp, params) in zip(unbound_potentials, sys_params)
-    ]
+    unbound_potentials, sys_params, coords, masses = get_relative_hif2a_in_vacuum()
+    bound_potentials = [pot.bound_impl(precision=np.float32) for pot in unbound_potentials]
+
     box = 100 * np.eye(3)
 
     dt = 1.5e-3
 
-    # Is not infinitely reversible, will fail after 3000 steps due to accumulation of coords/velos in floating point
+    # Is not infinitely reversible, will fail after 3000 steps due to accumulation of coords/vels in floating point
     for n_steps in [1, 10, 100, 500, 1000, 2000]:
+        # Note: reversibility can fail depending on the
+        # range of values in the velocities. Setting the seed
+        # here keeps the range the same for all n_step values.
+        np.random.seed(seed)
         lamb_sched = np.linspace(0, 1, n_steps)
         v0 = np.random.randn(*coords.shape)
         intg, ctxt = setup_velocity_verlet(bound_potentials, coords, box, dt, masses)  # noqa
@@ -114,9 +119,7 @@ def test_reversibility():
 def test_matches_reference():
     np.random.seed(2022)
 
-    rfe = hif2a_ligand_pair
-    unbound_potentials, sys_params, masses = rfe.prepare_vacuum_edge(rfe.ff.get_ordered_params())
-    coords = rfe.prepare_combined_coords()
+    unbound_potentials, sys_params, coords, masses = get_relative_hif2a_in_vacuum()
     box = 100 * np.eye(3)
 
     dt = 1.5e-3
@@ -158,9 +161,7 @@ def test_initialization_and_finalization():
     np.random.seed(2022)
 
     # define a Python force fxn that calls custom_ops
-    rfe = hif2a_ligand_pair
-    unbound_potentials, sys_params, masses = rfe.prepare_vacuum_edge(rfe.ff.get_ordered_params())
-    coords = rfe.prepare_combined_coords()
+    unbound_potentials, sys_params, coords, masses = get_relative_hif2a_in_vacuum()
     bound_potentials = [
         ubp.bind(params).bound_impl(np.float32) for (ubp, params) in zip(unbound_potentials, sys_params)
     ]
