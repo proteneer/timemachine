@@ -1,7 +1,7 @@
 from dataclasses import dataclass
-from typing import Any, Callable, Generic, Optional, Sequence, Type, TypeVar, runtime_checkable
+from typing import Any, Callable, Generic, Optional, Sequence, Type, TypeVar
 
-from typing_extensions import Protocol
+from typing_extensions import Protocol, runtime_checkable
 
 import timemachine.lib.potentials as gpu
 import timemachine.potentials.chiral_restraints as ref_chiral
