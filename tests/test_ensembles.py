@@ -21,7 +21,7 @@ def _compute_reduced_potential(potential_energy, temperature, volume, pressure):
 
 
 def test_nvt():
-    npt = NVTEnsemble(None, temperature=300)
+    npt = NVTEnsemble(potential_energy=None, temperature=300)
 
     U = -100
     u_0 = npt.reduce(U)
@@ -40,7 +40,7 @@ def test_nvt():
 
     for (U, T) in zip(potential_energies, temperatures):
         ref = _compute_reduced_potential(U, T, None, None)
-        nvt = NVTEnsemble(None, temperature=T)
+        nvt = NVTEnsemble(potential_energy=None, temperature=T)
         actual = nvt.reduce(U)
         np.testing.assert_almost_equal(actual, ref)
 
