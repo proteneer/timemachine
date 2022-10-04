@@ -3,12 +3,15 @@ import pprint
 
 import numpy as np
 
+from timemachine import constants
 from timemachine.ff.handlers.suffix import _SUFFIX
 
 
-def serialize_handlers(all_handlers):
+def serialize_handlers(all_handlers, protein_ff, water_model):
 
     final_ff = {}
+    final_ff[constants.PROTEIN_FF_TAG] = protein_ff
+    final_ff[constants.WATER_MODEL_TAG] = water_model
 
     for handler in all_handlers:
         ff_obj = handler.serialize()

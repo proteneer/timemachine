@@ -1,5 +1,6 @@
 import ast
 
+from timemachine import constants
 from timemachine.ff.handlers import bonded, nonbonded
 from timemachine.ff.handlers.suffix import _SUFFIX
 
@@ -20,7 +21,18 @@ def deserialize_handlers(obj):
 
     handlers = []
 
+    protein_ff = constants.DEFAULT_PROTEIN_FF
+    water_model = constants.WATER_MODEL_TAG
+
     for k, v in obj_dict.items():
+
+        if k == constants.PROTEIN_FF_TAG:
+            protein_ff = v
+            continue
+
+        if k == constants.WATER_MODEL_TAG:
+            water_model = v
+            continue
 
         cls_name = k + _SUFFIX
 
@@ -54,4 +66,4 @@ def deserialize_handlers(obj):
 
         handlers.append(ctor(smirks, params, props))
 
-    return handlers
+    return handlers, protein_ff, water_model

@@ -17,3 +17,8 @@ DEFAULT_KT = BOLTZ * DEFAULT_TEMP  # kJ/mol
 
 KCAL_TO_KJ = 4.184  # multiply to convert from kcal/mol to kJ/mol
 KCAL_TO_DEFAULT_KT = KCAL_TO_KJ / DEFAULT_KT
+
+DEFAULT_PROTEIN_FF = "amber99sbildn"
+DEFAULT_WATER_MODEL = "tip3p"
+PROTEIN_FF_TAG = "ProteinForcefield"
+WATER_MODEL_TAG = "WaterModel"

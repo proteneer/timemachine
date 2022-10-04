@@ -37,7 +37,7 @@ def generate_hif2a_frames(n_frames: int, frame_interval: int, seed=None, barosta
 
     # build the protein system.
     with resources.path("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as path_to_pdb:
-        host_system, host_coords, _, _, host_box, _ = builders.build_protein_system(str(path_to_pdb))
+        host_system, host_coords, _, _, host_box, _ = builders.build_protein_system(str(path_to_pdb), forcefield)
 
     initial_state = prepare_hif2a_initial_state(st, host_system, host_coords, host_box)
 
@@ -316,9 +316,9 @@ def benchmark_hif2a(verbose=False, num_batches=100, steps_per_batch=1000):
 
     # build the protein system.
     with resources.path("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as path_to_pdb:
-        complex_system, complex_coords, _, _, complex_box, _ = builders.build_protein_system(str(path_to_pdb))
+        complex_system, complex_coords, _, _, complex_box, _ = builders.build_protein_system(str(path_to_pdb), ff)
 
-    solvent_system, solvent_coords, solvent_box, _ = builders.build_water_system(4.0)
+    solvent_system, solvent_coords, solvent_box, _ = builders.build_water_system(4.0, ff)
 
     for stage, host_system, host_coords, host_box in [
         ("hif2a", complex_system, complex_coords, complex_box),

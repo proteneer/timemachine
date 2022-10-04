@@ -119,7 +119,7 @@ def run_triple(mol_a, mol_b, core, forcefield, n_frames, protein_path, n_eq_step
     check_overlaps(solvent_res)
 
     seed = 2024
-    complex_sys, complex_conf, _, _, complex_box, _ = builders.build_protein_system(protein_path)
+    complex_sys, complex_conf, _, _, complex_box, _ = builders.build_protein_system(protein_path, forcefield)
     complex_box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes
     complex_host_config = HostConfig(complex_sys, complex_conf, complex_box)
     complex_res = estimate_relative_free_energy(

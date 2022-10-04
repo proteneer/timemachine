@@ -4,12 +4,14 @@ import numpy as np
 from simtk import unit
 from simtk.openmm import Vec3, app
 
+from timemachine.ff import Forcefield
+
 
 def strip_units(coords):
     return unit.Quantity(np.array(coords / coords.unit), coords.unit)
 
 
-def build_protein_system(host_pdbfile):
+def build_protein_system(host_pdbfile, tm_ff: Forcefield):
     """
     Build a solvated protein system with a 10A padding.
 
@@ -19,7 +21,8 @@ def build_protein_system(host_pdbfile):
         PDB of the host structure
 
     """
-    host_ff = app.ForceField("amber99sbildn.xml", "tip3p.xml")
+
+    host_ff = app.ForceField(f"{tm_ff.protein_ff}.xml", f"{tm_ff.water_model}.xml")
     if isinstance(host_pdbfile, str):
         assert os.path.exists(host_pdbfile)
         host_pdb = app.PDBFile(host_pdbfile)
@@ -36,7 +39,9 @@ def build_protein_system(host_pdbfile):
     box_lengths = box_lengths + padding
     box = np.eye(3, dtype=np.float64) * box_lengths
 
-    modeller.addSolvent(host_ff, boxSize=np.diag(box) * unit.nanometers, neutralize=False)
+    modeller.addSolvent(
+        host_ff, boxSize=np.diag(box) * unit.nanometers, neutralize=False, model=tm_ff.sanitized_water_model
+    )
     solvated_host_coords = strip_units(modeller.positions)
 
     nha = host_coords.shape[0]
@@ -50,8 +55,8 @@ def build_protein_system(host_pdbfile):
     return solvated_host_system, solvated_host_coords, nwa, nha, box, modeller.topology
 
 
-def build_water_system(box_width):
-    ff = app.ForceField("tip3p.xml")
+def build_water_system(box_width, tm_ff: Forcefield):
+    ff = app.ForceField(f"{tm_ff.water_model}.xml")
 
     # Create empty topology and coordinates.
     top = app.Topology()
@@ -59,7 +64,7 @@ def build_water_system(box_width):
     m = app.Modeller(top, pos)
 
     boxSize = Vec3(box_width, box_width, box_width) * unit.nanometers
-    m.addSolvent(ff, boxSize=boxSize, model="tip3p")
+    m.addSolvent(ff, boxSize=boxSize, model=tm_ff.sanitized_water_model)
 
     system = ff.createSystem(m.getTopology(), nonbondedMethod=app.NoCutoff, constraints=None, rigidWater=False)
 

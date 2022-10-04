@@ -22,7 +22,6 @@ from timemachine.fe import absolute_hydration, topology
 from timemachine.fe.reweighting import one_sided_exp
 from timemachine.fe.utils import get_mol_name
 from timemachine.ff import Forcefield, handlers
-from timemachine.ff.handlers.serialize import serialize_handlers
 from timemachine.md.builders import build_water_system
 from timemachine.md.smc import Samples, effective_sample_size
 from timemachine.md.states import CoordsVelBox
@@ -752,7 +751,7 @@ def main():
         fit_q_params = expand(np.array(x))
         new_ff = Forcefield.load_from_file(cmd_args.ff)
         new_ff.q_handle.params = np.array(fit_q_params)
-        ff_str = serialize_handlers(new_ff.get_ordered_handles())
+        ff_str = new_ff.serialize()
         Path(f"fit_ffld_all_iter_{len(opt_traj)}.py").write_text(ff_str)
 
     # Used to pass the predictions back
@@ -791,7 +790,7 @@ def main():
         fit_q_params = expand(result.x)
         new_ff = Forcefield.load_from_file(cmd_args.ff)
         new_ff.q_handle.params = np.array(fit_q_params)
-        ff_str = serialize_handlers(new_ff.get_ordered_handles())
+        ff_str = new_ff.serialize()
         Path("fit_ffld_all_final.py").write_text(ff_str)
 
     # write out pred csv

@@ -213,10 +213,10 @@ if __name__ == "__main__":
 
     # build the protein system.
     complex_system, complex_coords, _, _, complex_box, complex_topology = builders.build_protein_system(
-        cmd_args.protein_pdb
+        cmd_args.protein_pdb, forcefield
     )
 
-    solvent_system, solvent_coords, solvent_box, solvent_topology = builders.build_water_system(4.0)
+    solvent_system, solvent_coords, solvent_box, solvent_topology = builders.build_water_system(4.0, forcefield)
 
     blocker_mol = None
 
