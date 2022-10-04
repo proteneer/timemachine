@@ -17,6 +17,18 @@ Code, documentation, experiments we want to retain for reference, but that we're
    * `tests` -- deprecated tests
      * `test_shape.py` -- tests for potentials.shape
      * `dual_topology.py` -- test with TI and dual topology
+* `rabfe` -- Code previous used in RABFE
+   * `free_energy.py` -- Free Energy classes for RABFE
+   * `model_rabfe.py` -- Models for performing stages of RABFE
+   * `test_rabfe_topology.py` -- Tests for rabfe topologies
+   * `test_rabfe.py` -- Test RABFE
+   * `topology.py` -- RABFE specific topology classes
+   * `lambda_schedule.py` -- Lambda schedules specific to RABFE
+   * `estimator.py` -- Estimating dGs for RABFE
+   * `restraints.py` -- Restraints specific to RABFE
+   * `test_restraints.py` -- Tests for restraints
+   * `endpoint_correction.py` -- Endpoint correction for RABFE
+   * `test_endpoint_correction.py` -- Tests for endpoint correction
 * `thermo_deriv/` -- numerical experiments with "thermodynamic derivative" estimators, adjusting LJ parameters to match observables
     * note: currently missing dependencies `thermo_deriv.lj_non_periodic.lennard_jones`, `thermo_deriv.lj.lennard_jones`.
     * note: `langevin_coefficients` dependency has since changed -- some scripts rely on a version of `langevin_coefficients` prior to PR #459
@@ -40,3 +52,4 @@ Code, documentation, experiments we want to retain for reference, but that we're
   * `overlap_test.py` tests two restraint types, one based on principal moments of inertia and one based on a measure of shape overlap.
   * `potential_energy.py` computes the potential energy of an "alchemical" system, as well as its derivatives w.r.t. coords, params, or lam
   * `run_smc_on_biphenyl.py` run smc on a biphenyl test system
+  * `validate_relative_binding.py` run RABFE protocol

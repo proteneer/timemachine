@@ -4,20 +4,17 @@ import pickle
 import subprocess
 import sys
 from glob import glob
-from importlib import resources
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 import pytest
-from common import get_hif2a_ligands_as_sdf_file, temporary_working_dir
+from common import temporary_working_dir
 from numpy.typing import NDArray as Array
-from rdkit import Chem
 from scipy.special import logsumexp
 
 from timemachine.constants import DEFAULT_KT, KCAL_TO_KJ
 from timemachine.datasets import fetch_freesolv
-from timemachine.fe.free_energy import RABFEResult
 from timemachine.fe.utils import get_mol_name
 
 # All examples are to be tested nightly
@@ -64,54 +61,6 @@ def run_example(
         cwd=cwd,
     )
     return proc
-
-
-def test_relative_binding():
-    """
-    Test validate_relative_binding.py to ensure that it functions correctly
-    """
-    with resources.path("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as pdb_path:
-        protein_path = str(pdb_path)
-    temp_ligands = get_hif2a_ligands_as_sdf_file(1)
-
-    # Any fewer windows and the lambda schedule validation will fail
-    windows = str(5)
-    steps = str(2000)
-    seed = str(2022)
-
-    output_path = "rabfe_results.sdf"
-    cli_args = [
-        "--blocker_name",
-        "338",
-        "--ligand_sdf",
-        temp_ligands.name,
-        "--protein_pdb",
-        protein_path,
-        "--num_complex_conv_windows",
-        windows,
-        "--num_complex_windows",
-        windows,
-        "--num_solvent_conv_windows",
-        windows,
-        "--num_solvent_windows",
-        windows,
-        "--num_solvent_prod_steps",
-        steps,
-        "--num_complex_prod_steps",
-        steps,
-        "--output_path",
-        output_path,
-        "--seed",
-        seed,
-    ]
-    with temporary_working_dir() as temp_dir:
-        _ = run_example("validate_relative_binding.py", cli_args, cwd=temp_dir)
-        sdf_output = Path(temp_dir) / output_path
-        assert sdf_output.is_file()
-        for mol in Chem.SDMolSupplier(str(sdf_output), removeHs=False):
-            result = RABFEResult.from_mol(mol)
-            assert isinstance(result.dG_bind, float)
-            assert isinstance(result.dG_bind_err, float)
 
 
 def get_cli_args(config: Dict) -> List[str]:
