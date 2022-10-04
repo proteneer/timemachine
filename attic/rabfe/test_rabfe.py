@@ -6,7 +6,7 @@ from common import temporary_working_dir
 
 from timemachine.constants import DEFAULT_FF
 from timemachine.fe.frames import all_frames
-from timemachine.fe.free_energy import AbsoluteFreeEnergy, RelativeFreeEnergy, get_romol_conf
+from timemachine.fe.free_energy import AbsoluteFreeEnergy, RelativeFreeEnergy, get_romol_conf, RABFEResult
 from timemachine.fe.lambda_schedule import construct_lambda_schedule
 from timemachine.fe.model_rabfe import (
     AbsoluteConversionModel,
@@ -439,3 +439,25 @@ class TestRABFEModels(TestCase):
             self.assertEqual(len([x for x in created_files if x.endswith(".pdb")]), 1)
             self.assertEqual(len([x for x in created_files if x.endswith(".npy")]), 1)
             self.assertEqual(len([x for x in created_files if x.endswith(".npz")]), 2)
+
+def test_rabfe_result_to_from_mol():
+    """assert equality after round-trip to/from Mol SDF format"""
+    mol = Chem.MolFromSmiles("CCCONNN")
+
+    result = RABFEResult(
+        "my mol",
+        1.0,
+        float("nan"),
+        2.0,
+        2.1,
+        3.0,
+        3.1,
+        4.0,
+        4.1,
+    )
+
+    result.apply_to_mol(mol)
+
+    reconstructed = RABFEResult.from_mol(mol)
+    assert result == reconstructed
+

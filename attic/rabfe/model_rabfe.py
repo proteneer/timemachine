@@ -874,3 +874,107 @@ class RelativeConversionModel:
         )
 
         return dG, dG_err
+
+# this class is serializable.
+class RelativeFreeEnergy(BaseFreeEnergy):
+    def __init__(self, top: topology.DualTopology, label=None, complex_path=None):
+        self.top = top
+        self.label = label  # TODO: Do we need these?
+        self.complex_path = complex_path
+
+    @property
+    def mol_a(self):
+        return self.top.mol_a
+
+    @property
+    def mol_b(self):
+        return self.top.mol_b
+
+    @property
+    def ff(self):
+        return self.top.ff
+
+    def prepare_host_edge(self, ff_params, host_system):
+        """
+        Prepares the host-guest system
+
+        Parameters
+        ----------
+        ff_params: tuple of np.array
+            Expected parameter ordering is bond_params, angle_params, proper_params, improper_params, charge_params, lj_params
+        host_system: Optional[openmm.System]
+            openmm System object to be deserialized.
+
+        Returns
+        -------
+        3-tuple
+            unbound_potentials, system_params, combined_masses
+
+        """
+        ligand_masses_a = get_mol_masses(self.mol_a)
+        ligand_masses_b = get_mol_masses(self.mol_b)
+
+        host_bps, host_masses = openmm_deserializer.deserialize_system(host_system, cutoff=1.2)
+        hgt = topology.HostGuestTopology(host_bps, self.top)
+
+        final_params, final_potentials = self._get_system_params_and_potentials(ff_params, hgt)
+
+        combined_masses = self._combine(ligand_masses_a, ligand_masses_b, host_masses)
+        return final_potentials, final_params, combined_masses
+
+    def prepare_vacuum_edge(self, ff_params):
+        """
+        Prepares the vacuum system
+
+        Parameters
+        ----------
+        ff_params: tuple of np.array
+            Expected parameter ordering is bond_params, angle_params, proper_params, improper_params, charge_params, lj_params
+
+        Returns
+        -------
+        3-tuple
+            unbound_potentials, system_params, combined_masses
+
+        """
+        ligand_masses_a = get_mol_masses(self.mol_a)
+        ligand_masses_b = get_mol_masses(self.mol_b)
+
+        final_params, final_potentials = self._get_system_params_and_potentials(ff_params, self.top)
+        combined_masses = self._combine(ligand_masses_a, ligand_masses_b)
+        return final_potentials, final_params, combined_masses
+
+    def prepare_combined_coords(self, host_coords=None):
+        """
+        Returns the combined coordinates.
+
+        Parameters
+        ----------
+        host_coords: Optional[np.array]
+            Nx3 array of atomic coordinates.
+            If None, return just the combined ligand coordinates.
+
+        Returns
+        -------
+            combined_coordinates
+        """
+        ligand_coords_a = get_romol_conf(self.mol_a)
+        ligand_coords_b = get_romol_conf(self.mol_b)
+
+        return self._combine(ligand_coords_a, ligand_coords_b, host_coords)
+
+    def _combine(self, ligand_values_a, ligand_values_b, host_values=None):
+        """
+        Combine the values along the 0th axis. The host values will be first, if given.
+        The ligand values will be combined in a way that matches the topology.
+        For single topology this means interpolating the ligand_values_a and
+        ligand_values_b. For dual topology this is just concatenation.
+
+        Returns
+        -------
+            combined_values
+        """
+        assert isinstance(self.top, topology.DualTopology)
+        ligand_values = [ligand_values_a, ligand_values_b]
+        all_values = [host_values] + ligand_values if host_values is not None else ligand_values
+        return np.concatenate(all_values)# this class is serializable.
