@@ -200,9 +200,9 @@ def test_vacuum_and_solvent_edge_types():
     with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
         mol = next(Chem.SDMolSupplier(str(path_to_ligand), removeHs=False))
 
-    solvent_system, solvent_coords, solvent_box, _ = builders.build_water_system(3.0)
-
     ff = Forcefield.load_from_file("smirnoff_1_1_0_ccc.py")
+    solvent_system, solvent_coords, solvent_box, _ = builders.build_water_system(3.0, ff)
+
     ff_params = ff.get_ordered_params()
 
     bt = topology.BaseTopology(mol, ff)

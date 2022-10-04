@@ -18,7 +18,7 @@ class TestJIT(TestCase):
                 # build a pair of alchemical ligands in a water box
                 mol_a, mol_b, _ = get_hif2a_ligand_pair_single_topology()
                 ff = Forcefield.load_from_file(DEFAULT_FF)
-                complex_system, complex_coords, complex_box, complex_top = build_water_system(2.6)
+                complex_system, complex_coords, complex_box, complex_top = build_water_system(2.6, ff)
 
                 # Creates a custom_ops.Context which triggers JIT
                 minimize_host_4d([mol_a, mol_b], complex_system, complex_coords, ff, complex_box)

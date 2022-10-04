@@ -455,7 +455,7 @@ def get_solvent_phase_system(mol, ff, box_width=3.0, margin=0.5, minimize_energy
     """
 
     # construct water box
-    water_system, water_coords, water_box, water_topology = builders.build_water_system(box_width)
+    water_system, water_coords, water_box, water_topology = builders.build_water_system(box_width, ff)
     water_box = water_box + np.eye(3) * margin  # add a small margin around the box for stability
 
     # construct alchemical system
@@ -502,7 +502,9 @@ def get_solvent_phase_system_parameter_changes(mol, ff0, ff1, box_width=3.0, mar
     """
 
     # construct water box
-    water_system, water_coords, water_box, water_topology = builders.build_water_system(box_width)
+    if ff0.water_model != ff1.water_model:
+        raise RuntimeError(f"Can not alchemically change the water model: {ff0.water_model} != {ff1.water_model}")
+    water_system, water_coords, water_box, water_topology = builders.build_water_system(box_width, ff0)
     water_box = water_box + np.eye(3) * margin  # add a small margin around the box for stability
 
     top = topology.RelativeFreeEnergyForcefield(mol, ff0, ff1)

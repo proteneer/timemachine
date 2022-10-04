@@ -146,7 +146,7 @@ def test_barostat_is_deterministic():
     mol_a, _, _ = get_hif2a_ligand_pair_single_topology()
     ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
 
-    host_system, host_coords, host_box, host_top = build_water_system(3.0)
+    host_system, host_coords, host_box, host_top = build_water_system(3.0, ff)
     bt = BaseTopology(mol_a, ff)
     afe = AbsoluteFreeEnergy(mol_a, bt)
 

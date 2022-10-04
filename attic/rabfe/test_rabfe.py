@@ -41,12 +41,12 @@ class TestRABFEModels(TestCase):
         Y is the conversion stages.
 
         """
-        host_system, host_coords, host_box, host_topology = builders.build_water_system(4.0)
+        ff = Forcefield.load_from_file(DEFAULT_FF)
+        host_system, host_coords, host_box, host_topology = builders.build_water_system(4.0, ff)
 
         num_host_atoms = host_coords.shape[0]
 
         mol_a, mol_b, _ = get_hif2a_ligand_pair_single_topology()
-        ff = Forcefield.load_from_file(DEFAULT_FF)
 
         temperature = 300.0
         pressure = 1.0
@@ -152,7 +152,8 @@ class TestRABFEModels(TestCase):
         Decouple: P_independent -> P_arbitrary
 
         """
-        host_system, host_coords, host_box, host_topology = builders.build_water_system(4.0)
+        ff = Forcefield.load_from_file(DEFAULT_FF)
+        host_system, host_coords, host_box, host_topology = builders.build_water_system(4.0, ff)
 
         num_host_atoms = host_coords.shape[0]
 
@@ -248,7 +249,7 @@ class TestRABFEModels(TestCase):
         forcefield = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
         mol_a, mol_b, _ = get_hif2a_ligand_pair_single_topology()
         # build the water system
-        solvent_system, solvent_coords, solvent_box, solvent_topology = builders.build_water_system(4.0)
+        solvent_system, solvent_coords, solvent_box, solvent_topology = builders.build_water_system(4.0, forcefield)
 
         temperature = 300.0
         pressure = 1.0
@@ -318,7 +319,7 @@ class TestRABFEModels(TestCase):
         forcefield = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
         mol_a, mol_b, _ = get_hif2a_ligand_pair_single_topology()
         # build the water system
-        solvent_system, solvent_coords, solvent_box, solvent_topology = builders.build_water_system(4.0)
+        solvent_system, solvent_coords, solvent_box, solvent_topology = builders.build_water_system(4.0, forcefield)
 
         temperature = 300.0
         pressure = 1.0

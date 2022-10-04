@@ -13,8 +13,9 @@ from jax import value_and_grad, vmap
 from scipy.optimize import minimize
 from simtk import unit
 
-from timemachine.constants import BOLTZ
+from timemachine.constants import BOLTZ, DEFAULT_FF
 from timemachine.fe.reweighting import one_sided_exp
+from timemachine.ff import Forcefield
 from timemachine.ff.handlers import openmm_deserializer
 from timemachine.md import builders
 from timemachine.potentials.jax_utils import (
@@ -108,8 +109,8 @@ difficult_instance_flags = {key: True for key in easy_instance_flags}
 
 
 def generate_waterbox_nb_args() -> NonbondedArgs:
-
-    system, positions, box, _ = builders.build_water_system(3.0)
+    ff = Forcefield.load_from_file(DEFAULT_FF)
+    system, positions, box, _ = builders.build_water_system(3.0, ff)
     bps, masses = openmm_deserializer.deserialize_system(system, cutoff=1.2)
     nb = bps[-1]
     params = nb.params
@@ -332,7 +333,8 @@ def test_vmap():
 
 def test_jax_nonbonded_block():
     """Assert that nonbonded_block and nonbonded_on_specific_pairs agree"""
-    system, positions, box, _ = builders.build_water_system(3.0)
+    ff = Forcefield.load_from_file(DEFAULT_FF)
+    system, positions, box, _ = builders.build_water_system(3.0, ff)
     bps, masses = openmm_deserializer.deserialize_system(system, cutoff=1.2)
     nb = bps[-1]
     params = nb.params
@@ -367,7 +369,8 @@ def test_jax_nonbonded_block():
 
 def test_precomputation():
     """Assert that nonbonded interaction groups using precomputation agree with reference nonbonded_on_specific_pairs"""
-    system, positions, box, _ = builders.build_water_system(3.0)
+    ff = Forcefield.load_from_file(DEFAULT_FF)
+    system, positions, box, _ = builders.build_water_system(3.0, ff)
     bps, masses = openmm_deserializer.deserialize_system(system, cutoff=1.2)
     nb = bps[-1]
     params = nb.params
