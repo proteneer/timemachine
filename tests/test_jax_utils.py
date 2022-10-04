@@ -3,7 +3,7 @@ from functools import partial
 import hypothesis.strategies as st
 import numpy as np
 import pytest
-from hypothesis import given, seed
+from hypothesis import example, given, seed
 from hypothesis.extra.numpy import array_shapes, arrays
 from jax import jit
 from jax import numpy as jnp
@@ -170,6 +170,8 @@ def coords_box_w_triples(draw):
 
 
 @given(coords_box_w_triples())
+@example((np.array([[0, 0], [0.5, 0]]), np.array([[1, 1]]), None))
+@example((np.array([[0, 0], [1.5, 0]]), np.array([[1, 1]]), None))
 @seed(2022)
 def test_pairwise_distances_periodic(coords_box_w):
     x, box_diag, _ = coords_box_w
@@ -181,6 +183,8 @@ def test_pairwise_distances_periodic(coords_box_w):
 
 
 @given(coords_box_w_triples())
+@example((np.array([[0, 0], [1.0, 0]]), np.array([[1, 1]]), np.array([0.0, 0.0])))
+@example((np.array([[0, 0], [1.0, 0]]), np.array([[1, 1]]), np.array([0.5, 0.5])))
 @seed(2022)
 def test_pairwise_distances_periodic_lifting(coords_box_w):
     x, box_diag, w = coords_box_w
@@ -189,3 +193,7 @@ def test_pairwise_distances_periodic_lifting(coords_box_w):
     dij = pairwise_distances(x, np.diagflat(box_diag), w)
     assert dij.shape == (n, n)
     assert (dij >= dij0).all()
+
+    # guard assertion to prevent spurious failure due to roundoff error
+    if np.std(w) / (1.0 + np.std(x)) > 1e-6:
+        assert dij.sum() > dij0.sum()
