@@ -74,10 +74,7 @@ template <typename RealType>
 void NonbondedPairListPrecomputed<RealType>::du_dp_fixed_to_float(
     const int N, const int P, const unsigned long long *du_dp, double *du_dp_float) {
 
-    // In the interpolated case we have derivatives for the initial and final parameters
-    const int num_tuples = B_;
-
-    for (int i = 0; i < num_tuples; i++) {
+    for (int i = 0; i < B_; i++) {
         const int idx_charge = i * 3 + 0;
         const int idx_sig = i * 3 + 1;
         const int idx_eps = i * 3 + 2;

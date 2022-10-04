@@ -1,6 +1,5 @@
 
 #include "../fixed_point.hpp"
-#include "surreal.cuh"
 
 __device__ const double PI = 3.14159265358979323846;
 

@@ -933,17 +933,14 @@ std::set<int> unique_idxs(const std::vector<int> &idxs) {
     return unique_idxs;
 }
 
-template <typename RealType, bool Interpolated> void declare_nonbonded_all_pairs(py::module &m, const char *typestr) {
+template <typename RealType> void declare_nonbonded_all_pairs(py::module &m, const char *typestr) {
 
-    using Class = timemachine::NonbondedAllPairs<RealType, Interpolated>;
+    using Class = timemachine::NonbondedAllPairs<RealType>;
     std::string pyclass_name = std::string("NonbondedAllPairs_") + typestr;
     py::class_<Class, std::shared_ptr<Class>, timemachine::Potential>(
         m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
-        .def(
-            "set_nblist_padding",
-            &timemachine::NonbondedAllPairs<RealType, Interpolated>::set_nblist_padding,
-            py::arg("val"))
-        .def("disable_hilbert_sort", &timemachine::NonbondedAllPairs<RealType, Interpolated>::disable_hilbert_sort)
+        .def("set_nblist_padding", &timemachine::NonbondedAllPairs<RealType>::set_nblist_padding, py::arg("val"))
+        .def("disable_hilbert_sort", &timemachine::NonbondedAllPairs<RealType>::disable_hilbert_sort)
         .def(
             py::init([](const py::array_t<int, py::array::c_style> &lambda_plane_idxs_i,
                         const py::array_t<int, py::array::c_style> &lambda_offset_idxs_i,
@@ -965,7 +962,7 @@ template <typename RealType, bool Interpolated> void declare_nonbonded_all_pairs
                     unique_atom_idxs.emplace(unique_idxs(atom_idxs));
                 }
 
-                return new timemachine::NonbondedAllPairs<RealType, Interpolated>(
+                return new timemachine::NonbondedAllPairs<RealType>(
                     lambda_plane_idxs, lambda_offset_idxs, beta, cutoff, unique_atom_idxs);
             }),
             py::arg("lambda_plane_idxs_i"),
@@ -975,19 +972,14 @@ template <typename RealType, bool Interpolated> void declare_nonbonded_all_pairs
             py::arg("atom_idxs_i") = py::none());
 }
 
-template <typename RealType, bool Interpolated>
-void declare_nonbonded_interaction_group(py::module &m, const char *typestr) {
-    using Class = timemachine::NonbondedInteractionGroup<RealType, Interpolated>;
+template <typename RealType> void declare_nonbonded_interaction_group(py::module &m, const char *typestr) {
+    using Class = timemachine::NonbondedInteractionGroup<RealType>;
     std::string pyclass_name = std::string("NonbondedInteractionGroup_") + typestr;
     py::class_<Class, std::shared_ptr<Class>, timemachine::Potential>(
         m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
         .def(
-            "set_nblist_padding",
-            &timemachine::NonbondedInteractionGroup<RealType, Interpolated>::set_nblist_padding,
-            py::arg("val"))
-        .def(
-            "disable_hilbert_sort",
-            &timemachine::NonbondedInteractionGroup<RealType, Interpolated>::disable_hilbert_sort)
+            "set_nblist_padding", &timemachine::NonbondedInteractionGroup<RealType>::set_nblist_padding, py::arg("val"))
+        .def("disable_hilbert_sort", &timemachine::NonbondedInteractionGroup<RealType>::disable_hilbert_sort)
         .def(
             py::init([](const py::array_t<int, py::array::c_style> &row_atom_idxs_i,
                         const py::array_t<int, py::array::c_style> &lambda_plane_idxs_i,
@@ -1006,7 +998,7 @@ void declare_nonbonded_interaction_group(py::module &m, const char *typestr) {
                 std::memcpy(
                     lambda_offset_idxs.data(), lambda_offset_idxs_i.data(), lambda_offset_idxs_i.size() * sizeof(int));
 
-                return new timemachine::NonbondedInteractionGroup<RealType, Interpolated>(
+                return new timemachine::NonbondedInteractionGroup<RealType>(
                     unique_row_atom_idxs, lambda_plane_idxs, lambda_offset_idxs, beta, cutoff);
             }),
             py::arg("row_atom_idxs_i"),
@@ -1016,9 +1008,8 @@ void declare_nonbonded_interaction_group(py::module &m, const char *typestr) {
             py::arg("cutoff"));
 }
 
-template <typename RealType, bool Negated, bool Interpolated>
-void declare_nonbonded_pair_list(py::module &m, const char *typestr) {
-    using Class = timemachine::NonbondedPairList<RealType, Negated, Interpolated>;
+template <typename RealType, bool Negated> void declare_nonbonded_pair_list(py::module &m, const char *typestr) {
+    using Class = timemachine::NonbondedPairList<RealType, Negated>;
     std::string pyclass_name = std::string("NonbondedPairList_") + typestr;
     py::class_<Class, std::shared_ptr<Class>, timemachine::Potential>(
         m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
@@ -1043,7 +1034,7 @@ void declare_nonbonded_pair_list(py::module &m, const char *typestr) {
                 std::memcpy(
                     lambda_offset_idxs.data(), lambda_offset_idxs_i.data(), lambda_offset_idxs_i.size() * sizeof(int));
 
-                return new timemachine::NonbondedPairList<RealType, Negated, Interpolated>(
+                return new timemachine::NonbondedPairList<RealType, Negated>(
                     pair_idxs, scales, lambda_plane_idxs, lambda_offset_idxs, beta, cutoff);
             }),
             py::arg("pair_idxs_i"),
@@ -1186,32 +1177,20 @@ PYBIND11_MODULE(custom_ops, m) {
     declare_periodic_torsion<double>(m, "f64");
     declare_periodic_torsion<float>(m, "f32");
 
-    declare_nonbonded_all_pairs<double, true>(m, "f64_interpolated");
-    declare_nonbonded_all_pairs<float, true>(m, "f32_interpolated");
+    declare_nonbonded_all_pairs<double>(m, "f64");
+    declare_nonbonded_all_pairs<float>(m, "f32");
 
-    declare_nonbonded_all_pairs<double, false>(m, "f64");
-    declare_nonbonded_all_pairs<float, false>(m, "f32");
-
-    declare_nonbonded_interaction_group<double, true>(m, "f64_interpolated");
-    declare_nonbonded_interaction_group<float, true>(m, "f32_interpolated");
-
-    declare_nonbonded_interaction_group<double, false>(m, "f64");
-    declare_nonbonded_interaction_group<float, false>(m, "f32");
+    declare_nonbonded_interaction_group<double>(m, "f64");
+    declare_nonbonded_interaction_group<float>(m, "f32");
 
     declare_nonbonded_precomputed<double>(m, "f64");
     declare_nonbonded_precomputed<float>(m, "f32");
 
-    declare_nonbonded_pair_list<double, false, false>(m, "f64");
-    declare_nonbonded_pair_list<float, false, false>(m, "f32");
+    declare_nonbonded_pair_list<double, false>(m, "f64");
+    declare_nonbonded_pair_list<float, false>(m, "f32");
 
-    declare_nonbonded_pair_list<double, false, true>(m, "f64_interpolated");
-    declare_nonbonded_pair_list<float, false, true>(m, "f32_interpolated");
-
-    declare_nonbonded_pair_list<double, true, false>(m, "f64_negated");
-    declare_nonbonded_pair_list<float, true, false>(m, "f32_negated");
-
-    declare_nonbonded_pair_list<double, true, true>(m, "f64_negated_interpolated");
-    declare_nonbonded_pair_list<float, true, true>(m, "f32_negated_interpolated");
+    declare_nonbonded_pair_list<double, true>(m, "f64_negated");
+    declare_nonbonded_pair_list<float, true>(m, "f32_negated");
 
     declare_context(m);
 }

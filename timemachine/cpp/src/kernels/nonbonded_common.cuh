@@ -12,9 +12,7 @@ typedef void (*k_nonbonded_fn)(
     const double *__restrict__ coords,
     const double *__restrict__ params, // [N]
     const double *__restrict__ box,
-    const double *__restrict__ dl_dp,
     const double *__restrict__ coords_w, // 4D coords
-    const double *__restrict__ dw_dl,    // 4D derivatives
     const double beta,
     const double cutoff,
     const unsigned int *__restrict__ row_idxs,
@@ -22,7 +20,6 @@ typedef void (*k_nonbonded_fn)(
     const unsigned int *__restrict__ ixn_atoms,
     unsigned long long *__restrict__ du_dx,
     unsigned long long *__restrict__ du_dp,
-    unsigned long long *__restrict__ du_dl_buffer,
     unsigned long long *__restrict__ u_buffer);
 
 #define PI 3.141592653589793115997963468544185161
