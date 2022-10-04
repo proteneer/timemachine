@@ -2,8 +2,13 @@ import jax
 
 jax.config.update("jax_enable_x64", True)
 
+from functools import partial
+
+import hypothesis.strategies as st
 import numpy as np
 import pytest
+from hypothesis import given, seed
+from hypothesis.extra.numpy import array_shapes, arrays
 from jax import jit
 from jax import numpy as jnp
 from jax import vmap
@@ -17,6 +22,7 @@ from timemachine.potentials.jax_utils import (
     get_all_pairs_indices,
     get_interacting_pair_indices_batch,
     pairs_from_interaction_groups,
+    pairwise_distances,
 )
 
 pytestmark = [pytest.mark.nogpu]
@@ -133,3 +139,57 @@ def test_batched_neighbor_inds():
 
     assert neighbor_distances.shape == (n_confs, n_neighbor_pairs)
     assert np.sum(neighbor_distances < cutoff) == np.sum(full_distances < cutoff)
+
+
+def test_pairwise_distances_assertions():
+    with pytest.raises(AssertionError):
+        pairwise_distances(np.empty((4, 3)), np.empty((1, 1)))  # inconsistent box shape
+    _ = pairwise_distances(np.empty((4, 3)), np.empty((3, 3)))  # ok
+
+    with pytest.raises(AssertionError):
+        pairwise_distances(np.empty((4, 3)), np.empty((3, 3)), np.empty((3,)))  # inconsistent w_coords shape
+    _ = pairwise_distances(np.empty((4, 3)), np.empty((3, 3)), np.empty((4,)))  # ok
+
+
+finite_floats = partial(st.floats, allow_nan=False, allow_infinity=False, allow_subnormal=False)
+coordinates = arrays(np.float64, array_shapes(min_dims=2, max_dims=2), elements=finite_floats(-1e6, 1e6))
+
+
+@given(coordinates)
+@seed(2022)
+def test_pairwise_distances(x):
+    n, _ = x.shape
+    dij = pairwise_distances(x)
+    assert dij.shape == (n, n)
+    assert (dij >= 0.0).all()
+
+
+@st.composite
+def coords_box_w_triples(draw):
+    x = draw(coordinates)
+    n, d = x.shape
+    box_diag = draw(arrays(np.float64, d, elements=finite_floats(1e-6, 1e6)))
+    w = draw(arrays(np.float64, n, elements=finite_floats(-1e6, 1e6)))
+    return x, box_diag, w
+
+
+@given(coords_box_w_triples())
+@seed(2022)
+def test_pairwise_distances_periodic(coords_box_w):
+    x, box_diag, _ = coords_box_w
+    n, _ = x.shape
+    dij = pairwise_distances(x, np.diagflat(box_diag))
+    assert dij.shape == (n, n)
+    assert (dij >= 0.0).all()
+    assert (dij <= box_diag.max()).all()
+
+
+@given(coords_box_w_triples())
+@seed(2022)
+def test_pairwise_distances_periodic_lifting(coords_box_w):
+    x, box_diag, w = coords_box_w
+    n, _ = x.shape
+    dij0 = pairwise_distances(x, np.diagflat(box_diag))
+    dij = pairwise_distances(x, np.diagflat(box_diag), w)
+    assert dij.shape == (n, n)
+    assert (dij >= dij0).all()

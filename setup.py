@@ -100,7 +100,12 @@ setup(
             "mypy==0.942",
             "pre-commit==2.17.0",
         ],
-        "test": ["pytest", "pytest-cov", "hilbertcurve==1.0.5", "hypothesis==6.54.6"],
+        "test": [
+            "pytest",
+            "pytest-cov",
+            "hilbertcurve==1.0.5",
+            "hypothesis[numpy]==6.54.6",
+        ],
     },
     package_data={
         "timemachine": [
