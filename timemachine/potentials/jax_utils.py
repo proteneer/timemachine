@@ -127,10 +127,10 @@ def get_interacting_pair_indices_batch(confs, boxes, pairs, cutoff=1.2):
     return batch_pairs
 
 
-def pairwise_distances(x, box, w=None):
+def pairwise_distances(x, box=None, w=None):
     """
-    Compute the (N, N) periodic distance matrix given an (N, D) array of
-    coordinates.
+    Compute the (N, N) distance matrix given an (N, D) array of coordinates. If
+    `box` is passed, computes nearest distances assuming periodic boundaries.
 
     Optionally accepts an (N, 1) array of coordinates in the "lifting"
     (typically 4th) dimension; if passed, computes distances assuming periodic
@@ -142,21 +142,21 @@ def pairwise_distances(x, box, w=None):
     x : ndarray (N, D)
         input coordinates
 
-    box : ndarray (D, D)
+    box : ndarray (D, D), optional
         dimensions of periodic box
 
     w : ndarray (N, 1), optional
         coordinates in aperiodic lifting dimension
     """
     n, d = x.shape
-    assert box.shape == (d, d)
-    if w is not None:
-        assert w.shape[0] == n
+    if box is not None:
+        assert box.shape == (d, d)
 
     d_ijk = delta_r(x[:, None], x[None, :], box)  # (x_i, x_j, dimension)
     d2_ij = jnp.sum(d_ijk ** 2, axis=2)
 
     if w is not None:
+        assert w.shape == (n,)
         dw_ij = w[:, None] - w[None, :]
         d2_ij += dw_ij ** 2
 
