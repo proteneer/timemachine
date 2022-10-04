@@ -316,9 +316,11 @@ def benchmark_hif2a(verbose=False, num_batches=100, steps_per_batch=1000):
 
     # build the protein system.
     with resources.path("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as path_to_pdb:
-        complex_system, complex_coords, _, _, complex_box, _ = builders.build_protein_system(str(path_to_pdb), ff)
+        complex_system, complex_coords, _, _, complex_box, _ = builders.build_protein_system(
+            str(path_to_pdb), forcefield
+        )
 
-    solvent_system, solvent_coords, solvent_box, _ = builders.build_water_system(4.0, ff)
+    solvent_system, solvent_coords, solvent_box, _ = builders.build_water_system(4.0, forcefield)
 
     for stage, host_system, host_coords, host_box in [
         ("hif2a", complex_system, complex_coords, complex_box),
