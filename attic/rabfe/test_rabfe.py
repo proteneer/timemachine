@@ -388,7 +388,7 @@ class TestRABFEModels(TestCase):
         forcefield = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
         mol_a, mol_b, _ = get_hif2a_ligand_pair_single_topology()
         # build the water system
-        solvent_system, solvent_coords, solvent_box, solvent_topology = builders.build_water_system(4.0)
+        solvent_system, solvent_coords, solvent_box, solvent_topology = builders.build_water_system(4.0, forcefield)
 
         temperature = 300.0
         pressure = 1.0
