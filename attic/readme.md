@@ -2,6 +2,8 @@ Code, documentation, experiments we want to retain for reference, but that we're
 
 ### Contents
 * `atom_mapping/` -- distance-based atom comparison for rdFMCS
+* `autodiff/` -- code related to automatic differentiation
+   * `surreal.cuh` -- implementation of forward-mode AD using complex step differentiation with operator overloading
 * `docs/` -- write-up of initial vision for `timemachine`, involving efficient backpropagation through MD trajectories
 * `docking/` -- Docking module that docks uses non-equilibrium switching
 * `gpu_tricks/` -- tricks and workarounds for GPU kernel code
