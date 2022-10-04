@@ -22,7 +22,7 @@ def deserialize_handlers(obj):
     handlers = []
 
     protein_ff = constants.DEFAULT_PROTEIN_FF
-    water_model = constants.WATER_MODEL_TAG
+    water_model = constants.DEFAULT_WATER_MODEL
 
     for k, v in obj_dict.items():
 
