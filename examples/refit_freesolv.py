@@ -463,9 +463,9 @@ def ligand_only_traj(xvbs: List[CoordsVelBox], num_lig_atoms: int) -> List[Coord
     return [CoordsVelBox(xvb.coords[-num_lig_atoms:], xvb.velocities[-num_lig_atoms:], xvb.box) for xvb in xvbs]
 
 
-def get_water_charges() -> List[float]:
+def get_water_charges(ff: Forcefield) -> List[float]:
     # Return the O, H, H atomic partial charges for water.
-    water_system, water_coords, water_box, water_top = build_water_system(0.5)
+    water_system, water_coords, water_box, water_top = build_water_system(0.5, ff)
     water_bps, water_masses = handlers.openmm_deserializer.deserialize_system(water_system, cutoff=1.2)
     water_top = topology.HostGuestTopology(water_bps, None)
     water_charges = water_top.host_nonbonded.params[:, 0][:3]
@@ -499,7 +499,7 @@ def compute_prefactors(
         Dict of molecule names to the corresponding prefactors.
     """
     prefactors = {}
-    water_charges = list(get_water_charges())
+    water_charges = list(get_water_charges(ff))
 
     for mol, endpoint_sample, ref_delta_f in zip(mols, endpoint_samples, ref_delta_fs):
 
