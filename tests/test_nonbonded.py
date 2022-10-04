@@ -1,9 +1,5 @@
 # (ytz): check test and run benchmark with pytest:
 # pytest -xsv tests/test_nonbonded.py::TestNonbonded::test_dhfr && nvprof pytest -xsv tests/test_nonbonded.py::TestNonbonded::test_benchmark
-from jax.config import config
-
-config.update("jax_enable_x64", True)
-
 import copy
 import gzip
 import itertools
