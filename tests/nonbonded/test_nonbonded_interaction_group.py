@@ -1,11 +1,9 @@
-import jax
 import numpy as np
 import pytest
 from common import GradientTest
-from parameter_interpolation import gen_params
 
-from timemachine.lib.potentials import NonbondedInteractionGroup, NonbondedInteractionGroupInterpolated
-from timemachine.potentials import generic, jax_utils, nonbonded
+from timemachine.lib.potentials import NonbondedInteractionGroup
+from timemachine.potentials import generic
 
 pytestmark = [pytest.mark.memcheck]
 
@@ -85,93 +83,23 @@ def test_nonbonded_interaction_group_correctness(
     lambda_offset_idxs = rng.integers(-2, 3, size=(num_atoms,), dtype=np.int32)
 
     ligand_idxs = rng.choice(num_atoms, size=(num_atoms_ligand,), replace=False).astype(np.int32)
-    host_idxs = np.setdiff1d(np.arange(num_atoms), ligand_idxs)
 
-    def ref_ixngroups(conf, params, box, lamb):
-        # compute 4d coordinates
-        w_coords = jax_utils.compute_lifting_parameter(lamb, lambda_plane_idxs, lambda_offset_idxs, cutoff)
-
-        vdW, electrostatics = nonbonded.nonbonded_interaction_groups(
-            conf, params, box, ligand_idxs, host_idxs, beta, cutoff, w_coords
-        )
-        return jax.numpy.sum(vdW + electrostatics)
-
-    test_ixngroups = NonbondedInteractionGroup(
+    potential = generic.NonbondedInteractionGroup(
         ligand_idxs,
         lambda_plane_idxs,
         lambda_offset_idxs,
         beta,
         cutoff,
     )
+
     lambda_vals = [0.0, 0.1]
-    GradientTest().compare_forces(
+
+    GradientTest().compare_forces_gpu_vs_reference(
         conf,
         params,
         example_box,
         lambda_vals,
-        ref_potential=ref_ixngroups,
-        test_potential=test_ixngroups,
-        rtol=rtol,
-        atol=atol,
-        precision=precision,
-    )
-
-
-@pytest.mark.parametrize("beta", [2.0])
-@pytest.mark.parametrize("cutoff", [1.1])
-@pytest.mark.parametrize("precision,rtol,atol", [(np.float64, 1e-8, 1e-8), (np.float32, 1e-4, 5e-4)])
-@pytest.mark.parametrize("num_atoms_ligand", [1, 15])
-@pytest.mark.parametrize("num_atoms", [33])
-def test_nonbonded_interaction_group_interpolated_correctness(
-    num_atoms,
-    num_atoms_ligand,
-    precision,
-    rtol,
-    atol,
-    cutoff,
-    beta,
-    example_nonbonded_potential,
-    example_conf,
-    example_box,
-    rng,
-):
-    "Compares with jax reference implementation, with parameter interpolation."
-
-    conf = example_conf[:num_atoms]
-    params_initial = example_nonbonded_potential.params[:num_atoms, :]
-    params = gen_params(params_initial, rng)
-
-    lambda_plane_idxs = rng.integers(-2, 3, size=(num_atoms,), dtype=np.int32)
-    lambda_offset_idxs = rng.integers(-2, 3, size=(num_atoms,), dtype=np.int32)
-
-    ligand_idxs = rng.choice(num_atoms, size=(num_atoms_ligand,), replace=False).astype(np.int32)
-    host_idxs = np.setdiff1d(np.arange(num_atoms), ligand_idxs)
-
-    @nonbonded.interpolated
-    def ref_ixngroups(conf, params, box, lamb):
-        # compute 4d coordinates
-        w_coords = jax_utils.compute_lifting_parameter(lamb, lambda_plane_idxs, lambda_offset_idxs, cutoff)
-
-        vdW, electrostatics = nonbonded.nonbonded_interaction_groups(
-            conf, params, box, ligand_idxs, host_idxs, beta, cutoff, w_coords
-        )
-        return jax.numpy.sum(vdW + electrostatics)
-
-    test_ixngroups = NonbondedInteractionGroupInterpolated(
-        ligand_idxs,
-        lambda_plane_idxs,
-        lambda_offset_idxs,
-        beta,
-        cutoff,
-    )
-    lambda_vals = [0.0, 0.1, 0.9, 1.0]
-    GradientTest().compare_forces(
-        conf,
-        params,
-        example_box,
-        lambda_vals,
-        ref_potential=ref_ixngroups,
-        test_potential=test_ixngroups,
+        potential,
         rtol=rtol,
         atol=atol,
         precision=precision,

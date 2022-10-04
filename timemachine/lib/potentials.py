@@ -312,7 +312,20 @@ class NonbondedInterpolated(Nonbonded):
 
 
 class NonbondedAllPairs(CustomOpWrapper):
-    pass
+    def get_lambda_plane_idxs(self):
+        return self.args[0]
+
+    def get_lambda_offset_idxs(self):
+        return self.args[1]
+
+    def get_beta(self):
+        return self.args[2]
+
+    def get_cutoff(self):
+        return self.args[3]
+
+    def get_atom_idxs(self):
+        return self.args[4]
 
 
 class NonbondedAllPairsInterpolated(NonbondedAllPairs):
@@ -329,7 +342,20 @@ class NonbondedAllPairsInterpolated(NonbondedAllPairs):
 
 
 class NonbondedInteractionGroup(CustomOpWrapper):
-    pass
+    def get_row_atom_idxs(self):
+        return self.args[0]
+
+    def get_lambda_plane_idxs(self):
+        return self.args[1]
+
+    def get_lambda_offset_idxs(self):
+        return self.args[2]
+
+    def get_beta(self):
+        return self.args[3]
+
+    def get_cutoff(self):
+        return self.args[4]
 
 
 class NonbondedInteractionGroupInterpolated(NonbondedInteractionGroup):
@@ -352,11 +378,17 @@ class NonbondedPairList(CustomOpWrapper):
     def get_rescale_mask(self):
         return self.args[1]
 
-    def get_beta(self):
+    def get_lambda_plane_idxs(self):
         return self.args[2]
 
-    def get_cutoff(self):
+    def get_lambda_offset_idxs(self):
         return self.args[3]
+
+    def get_beta(self):
+        return self.args[4]
+
+    def get_cutoff(self):
+        return self.args[5]
 
 
 class NonbondedPairListPrecomputed(CustomOpWrapper):
