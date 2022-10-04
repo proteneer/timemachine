@@ -310,7 +310,19 @@ class GradientTest(unittest.TestCase):
                 if compute_du_dx:
                     self.assert_equal_vectors(np.array(ref_du_dx), np.array(test_du_dx), rtol)
                 if compute_du_dl:
-                    np.testing.assert_allclose(ref_du_dl, test_du_dl, rtol=rtol)
+                    # NOTE: GPU nonbonded potentials currently return du_dl = 0
+                    if any(
+                        isinstance(test_potential, cls)
+                        for cls in [
+                            potentials.Nonbonded,
+                            potentials.NonbondedAllPairs,
+                            potentials.NonbondedInteractionGroup,
+                            potentials.NonbondedPairList,
+                        ]
+                    ):
+                        np.testing.assert_equal(0.0, test_du_dl)
+                    else:
+                        np.testing.assert_allclose(ref_du_dl, test_du_dl, rtol=rtol)
                 if compute_du_dp:
                     np.testing.assert_allclose(ref_du_dp, test_du_dp, rtol=rtol, atol=atol)
 

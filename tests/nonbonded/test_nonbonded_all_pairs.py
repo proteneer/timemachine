@@ -35,7 +35,7 @@ def test_nonbonded_all_pairs_invalid_num_params():
     with pytest.raises(RuntimeError) as e:
         potential.execute(np.zeros((1, 3)), np.zeros((2, 3)), np.eye(3), 0)
 
-    assert "NonbondedAllPairs::execute_device(): expected P == M*N_*3, got P=6, M*N_*3=3" in str(e)
+    assert "NonbondedAllPairs::execute_device(): expected P == N_*3, got P=6, N_*3=3" in str(e)
 
 
 def test_nonbonded_all_pairs_singleton_subset(rng: np.random.Generator):

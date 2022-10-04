@@ -1,9 +1,7 @@
 # (ytz): check test and run benchmark with pytest:
 # pytest -xsv tests/test_nonbonded.py::TestNonbonded::test_dhfr && nvprof pytest -xsv tests/test_nonbonded.py::TestNonbonded::test_benchmark
 import copy
-import gzip
 import itertools
-import pickle
 import unittest
 
 import numpy as np
@@ -281,47 +279,6 @@ class TestNonbondedWater(GradientTest):
 
 
 class TestNonbonded(GradientTest):
-    def test_non_zero_du_dl(self):
-        # du_dl should be zero for this test case.
-        fp = gzip.open("tests/data/bad_test_547.pkl.gz", "rb")
-        x_t, box, lamb, nb_bp = pickle.load(fp)
-
-        nb_bp.args = nb_bp.args[:-4]  # ignore any extra args from future PRs
-
-        for i, j in nb_bp.get_exclusion_idxs():
-            assert i < j
-
-        for precision in [np.float64, np.float32]:
-
-            impl = nb_bp.unbound_impl(precision)
-            du_dx, du_dp, du_dl, u = impl.execute(x_t, nb_bp.params, box, lamb)
-
-            print(du_dx, du_dp, du_dl, u)
-
-            assert du_dl == 0.0
-
-    def test_fma_compiler_bug(self):
-
-        # this test case deals with a rather annoying fma compiler bug in CUDA.
-        # see https://github.com/proteneer/timemachine/issues/386
-        fp = gzip.open("tests/data/repro.pkl.gz", "rb")  # This assumes that primes.data is already packed with gzip
-        x_t, box, lamb, nb_bp = pickle.load(fp)
-
-        for precision in [np.float32, np.float64]:
-
-            impl = nb_bp.unbound_impl(precision)
-            du_dx, du_dp, du_dl, u = impl.execute(x_t, nb_bp.params, box, lamb)
-
-            uimpl2 = nb_bp.unbound_impl(precision)
-
-            uimpl2.disable_hilbert_sort()
-            du_dx2, du_dp2, du_dl2, u2 = uimpl2.execute(x_t, nb_bp.params, box, lamb)
-
-            np.testing.assert_array_equal(u2, u)
-            np.testing.assert_array_equal(du_dx2, du_dx)
-            np.testing.assert_array_equal(du_dp2, du_dp)
-            np.testing.assert_array_equal(du_dl2, du_dl)  # this one fails without the patch.
-
     def test_exclusion(self):
 
         # This test verifies behavior when two particles are arbitrarily

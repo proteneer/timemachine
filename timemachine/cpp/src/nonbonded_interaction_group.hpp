@@ -9,14 +9,14 @@
 
 namespace timemachine {
 
-template <typename RealType, bool Interpolated> class NonbondedInteractionGroup : public Potential {
+template <typename RealType> class NonbondedInteractionGroup : public Potential {
 
 private:
     const int N_;  // N_ = NC_ + NR_
     const int NR_; // number of row atoms
     const int NC_; // number of column atoms
 
-    std::array<k_nonbonded_fn, 16> kernel_ptrs_;
+    std::array<k_nonbonded_fn, 8> kernel_ptrs_;
 
     unsigned int *d_col_atom_idxs_;
     unsigned int *d_row_atom_idxs_;
@@ -38,7 +38,6 @@ private:
     unsigned int *d_perm_; // hilbert curve permutation
 
     double *d_w_; // 4D coordinates
-    double *d_dw_dl_;
 
     // "sorted" means
     // - if hilbert sorting enabled, atoms are sorted into contiguous
@@ -48,9 +47,7 @@ private:
     //   interaction group, with arbitrary ordering within each block
     double *d_sorted_x_; // sorted coordinates
     double *d_sorted_w_; // sorted 4D coordinates
-    double *d_sorted_dw_dl_;
     double *d_sorted_p_; // sorted parameters
-    double *d_sorted_dp_dl_;
     unsigned long long *d_sorted_du_dx_;
     unsigned long long *d_sorted_du_dp_;
     unsigned long long *d_du_dp_buffer_;

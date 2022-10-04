@@ -10,7 +10,7 @@
 
 namespace timemachine {
 
-template <typename RealType, bool Interpolated> class NonbondedAllPairs : public Potential {
+template <typename RealType> class NonbondedAllPairs : public Potential {
 
 private:
     const int N_; // total number of atoms, i.e. first dimension of input coords, params
@@ -34,7 +34,6 @@ private:
     int *p_rebuild_nblist_; // pinned
 
     double *d_w_; // 4D coordinates
-    double *d_dw_dl_;
 
     // "gathered" arrays represent the subset of atoms specified by
     // atom_idxs (if the latter is specified, otherwise all atoms).
@@ -46,9 +45,7 @@ private:
     unsigned int *d_sorted_atom_idxs_; // [K_] indices of interacting atoms, sorted by hilbert curve index
     double *d_gathered_x_;             // sorted coordinates for subset of atoms
     double *d_gathered_w_;             // sorted 4D coordinates for subset of atoms
-    double *d_gathered_dw_dl_;
-    double *d_gathered_p_; // sorted parameters for subset of atoms
-    double *d_gathered_dp_dl_;
+    double *d_gathered_p_;             // sorted parameters for subset of atoms
     unsigned long long *d_gathered_du_dx_;
     unsigned long long *d_gathered_du_dp_;
     unsigned long long *d_du_dp_buffer_;
@@ -65,7 +62,7 @@ private:
 
     void hilbert_sort(const double *d_x, const double *d_box, cudaStream_t stream);
 
-    std::array<k_nonbonded_fn, 16> kernel_ptrs_;
+    std::array<k_nonbonded_fn, 8> kernel_ptrs_;
 
 public:
     // these are marked public but really only intended for testing.

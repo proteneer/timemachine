@@ -324,7 +324,11 @@ class TestContext(unittest.TestCase):
         test_du_dls, test_xs, test_boxes = ctxt_2.multiple_steps(lambda_schedule, du_dl_interval, x_interval)
         end_box = ctxt_2.get_box()
         # Need to offset by -1 as du_dl is computed on frame during step, not after step
-        np.testing.assert_allclose(test_du_dls, ref_all_du_dls[du_dl_interval - 1 :: du_dl_interval])
+
+        # NOTE: du_dl computation is deprecated and results are incorrect, since nonbonded potentials return du_dl = 0.
+        # An upcoming change will fully remove du_dl from the Potential API
+
+        # np.testing.assert_allclose(test_du_dls, ref_all_du_dls[du_dl_interval - 1 :: du_dl_interval])
 
         np.testing.assert_allclose(test_xs, ref_all_xs[x_interval::x_interval])
         np.testing.assert_array_equal(start_box, end_box)

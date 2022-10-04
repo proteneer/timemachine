@@ -12,8 +12,8 @@
 
 namespace timemachine {
 
-template <typename RealType, bool Interpolated>
-NonbondedAllPairs<RealType, Interpolated>::NonbondedAllPairs(
+template <typename RealType>
+NonbondedAllPairs<RealType>::NonbondedAllPairs(
     const std::vector<int> &lambda_plane_idxs,  // [N]
     const std::vector<int> &lambda_offset_idxs, // [N]
     const double beta,
@@ -25,26 +25,17 @@ NonbondedAllPairs<RealType, Interpolated>::NonbondedAllPairs(
 
       kernel_ptrs_({// enumerate over every possible kernel combination
                     // U: Compute U
-                    // X: Compute DU_DL
-                    // L: Compute DU_DX
+                    // X: Compute DU_DX
                     // P: Compute DU_DP
-                    //                             U  X  L  P
-                    &k_nonbonded_unified<RealType, 0, 0, 0, 0>,
-                    &k_nonbonded_unified<RealType, 0, 0, 0, 1>,
-                    &k_nonbonded_unified<RealType, 0, 0, 1, 0>,
-                    &k_nonbonded_unified<RealType, 0, 0, 1, 1>,
-                    &k_nonbonded_unified<RealType, 0, 1, 0, 0>,
-                    &k_nonbonded_unified<RealType, 0, 1, 0, 1>,
-                    &k_nonbonded_unified<RealType, 0, 1, 1, 0>,
-                    &k_nonbonded_unified<RealType, 0, 1, 1, 1>,
-                    &k_nonbonded_unified<RealType, 1, 0, 0, 0>,
-                    &k_nonbonded_unified<RealType, 1, 0, 0, 1>,
-                    &k_nonbonded_unified<RealType, 1, 0, 1, 0>,
-                    &k_nonbonded_unified<RealType, 1, 0, 1, 1>,
-                    &k_nonbonded_unified<RealType, 1, 1, 0, 0>,
-                    &k_nonbonded_unified<RealType, 1, 1, 0, 1>,
-                    &k_nonbonded_unified<RealType, 1, 1, 1, 0>,
-                    &k_nonbonded_unified<RealType, 1, 1, 1, 1>}) {
+                    //                             U  X  P
+                    &k_nonbonded_unified<RealType, 0, 0, 0>,
+                    &k_nonbonded_unified<RealType, 0, 0, 1>,
+                    &k_nonbonded_unified<RealType, 0, 1, 0>,
+                    &k_nonbonded_unified<RealType, 0, 1, 1>,
+                    &k_nonbonded_unified<RealType, 1, 0, 0>,
+                    &k_nonbonded_unified<RealType, 1, 0, 1>,
+                    &k_nonbonded_unified<RealType, 1, 1, 0>,
+                    &k_nonbonded_unified<RealType, 1, 1, 1>}) {
 
     if (lambda_offset_idxs.size() != lambda_plane_idxs.size()) {
         throw std::runtime_error("lambda offset idxs and plane idxs need to be equivalent");
@@ -69,13 +60,10 @@ NonbondedAllPairs<RealType, Interpolated>::NonbondedAllPairs(
     gpuErrchk(cudaMalloc(&d_gathered_x_, K_ * 3 * sizeof(*d_gathered_x_)));
 
     gpuErrchk(cudaMalloc(&d_w_, N_ * sizeof(*d_w_)));
-    gpuErrchk(cudaMalloc(&d_dw_dl_, N_ * sizeof(*d_dw_dl_)));
 
     gpuErrchk(cudaMalloc(&d_gathered_w_, K_ * sizeof(*d_gathered_w_)));
-    gpuErrchk(cudaMalloc(&d_gathered_dw_dl_, K_ * sizeof(*d_gathered_dw_dl_)));
 
-    gpuErrchk(cudaMalloc(&d_gathered_p_, K_ * 3 * sizeof(*d_gathered_p_)));         // interpolated
-    gpuErrchk(cudaMalloc(&d_gathered_dp_dl_, K_ * 3 * sizeof(*d_gathered_dp_dl_))); // interpolated
+    gpuErrchk(cudaMalloc(&d_gathered_p_, K_ * 3 * sizeof(*d_gathered_p_)));
     gpuErrchk(cudaMalloc(&d_gathered_du_dx_, K_ * 3 * sizeof(*d_gathered_du_dx_)));
     gpuErrchk(cudaMalloc(&d_gathered_du_dp_, K_ * 3 * sizeof(*d_gathered_du_dp_)));
 
@@ -127,7 +115,7 @@ NonbondedAllPairs<RealType, Interpolated>::NonbondedAllPairs(
     gpuErrchk(cudaMalloc(&d_sort_storage_, d_sort_storage_bytes_));
 };
 
-template <typename RealType, bool Interpolated> NonbondedAllPairs<RealType, Interpolated>::~NonbondedAllPairs() {
+template <typename RealType> NonbondedAllPairs<RealType>::~NonbondedAllPairs() {
 
     gpuErrchk(cudaFree(d_lambda_plane_idxs_));
     gpuErrchk(cudaFree(d_lambda_offset_idxs_));
@@ -143,11 +131,8 @@ template <typename RealType, bool Interpolated> NonbondedAllPairs<RealType, Inte
     gpuErrchk(cudaFree(d_gathered_x_));
 
     gpuErrchk(cudaFree(d_w_));
-    gpuErrchk(cudaFree(d_dw_dl_));
     gpuErrchk(cudaFree(d_gathered_w_));
-    gpuErrchk(cudaFree(d_gathered_dw_dl_));
     gpuErrchk(cudaFree(d_gathered_p_));
-    gpuErrchk(cudaFree(d_gathered_dp_dl_));
     gpuErrchk(cudaFree(d_gathered_du_dx_));
     gpuErrchk(cudaFree(d_gathered_du_dp_));
 
@@ -164,18 +149,12 @@ template <typename RealType, bool Interpolated> NonbondedAllPairs<RealType, Inte
     gpuErrchk(cudaFreeHost(p_rebuild_nblist_));
 };
 
-template <typename RealType, bool Interpolated>
-void NonbondedAllPairs<RealType, Interpolated>::set_nblist_padding(double val) {
-    nblist_padding_ = val;
-}
+template <typename RealType> void NonbondedAllPairs<RealType>::set_nblist_padding(double val) { nblist_padding_ = val; }
 
-template <typename RealType, bool Interpolated> void NonbondedAllPairs<RealType, Interpolated>::disable_hilbert_sort() {
-    disable_hilbert_ = true;
-}
+template <typename RealType> void NonbondedAllPairs<RealType>::disable_hilbert_sort() { disable_hilbert_ = true; }
 
-template <typename RealType, bool Interpolated>
-void NonbondedAllPairs<RealType, Interpolated>::hilbert_sort(
-    const double *d_coords, const double *d_box, cudaStream_t stream) {
+template <typename RealType>
+void NonbondedAllPairs<RealType>::hilbert_sort(const double *d_coords, const double *d_box, cudaStream_t stream) {
 
     const int tpb = 32;
     const int B = ceil_divide(K_, tpb);
@@ -206,8 +185,8 @@ void NonbondedAllPairs<RealType, Interpolated>::hilbert_sort(
     gpuErrchk(cudaPeekAtLastError());
 }
 
-template <typename RealType, bool Interpolated>
-void NonbondedAllPairs<RealType, Interpolated>::execute_device(
+template <typename RealType>
+void NonbondedAllPairs<RealType>::execute_device(
     const int N,
     const int P,
     const double *d_x,
@@ -242,15 +221,11 @@ void NonbondedAllPairs<RealType, Interpolated>::execute_device(
             ", N_=" + std::to_string(N_));
     }
 
-    const int M = Interpolated ? 2 : 1;
-
-    if (P != M * N_ * 3) {
+    if (P != N_ * 3) {
         throw std::runtime_error(
-            "NonbondedAllPairs::execute_device(): expected P == M*N_*3, got P=" + std::to_string(P) +
-            ", M*N_*3=" + std::to_string(M * N_ * 3));
+            "NonbondedAllPairs::execute_device(): expected P == N_*3, got P=" + std::to_string(P) +
+            ", N_*3=" + std::to_string(N_ * 3));
     }
-
-    // identify which tiles contain interpolated parameters
 
     const int tpb = 32;
 
@@ -324,15 +299,8 @@ void NonbondedAllPairs<RealType, Interpolated>::execute_device(
     }
 
     // do parameter interpolation here
-    if (Interpolated) {
-        k_gather_interpolated<<<dim3(ceil_divide(K_, tpb), 3, 1), tpb, 0, stream>>>(
-            lambda, K_, d_sorted_atom_idxs_, d_p, d_p + N * 3, d_gathered_p_, d_gathered_dp_dl_);
-        gpuErrchk(cudaPeekAtLastError());
-    } else {
-        k_gather<<<dim3(ceil_divide(K_, tpb), 3, 1), tpb, 0, stream>>>(K_, d_sorted_atom_idxs_, d_p, d_gathered_p_);
-        gpuErrchk(cudaPeekAtLastError());
-        gpuErrchk(cudaMemsetAsync(d_gathered_dp_dl_, 0, K_ * 3 * sizeof(*d_gathered_dp_dl_), stream))
-    }
+    k_gather<<<dim3(ceil_divide(K_, tpb), 3, 1), tpb, 0, stream>>>(K_, d_sorted_atom_idxs_, d_p, d_gathered_p_);
+    gpuErrchk(cudaPeekAtLastError());
 
     // reset buffers and sorted accumulators
     if (d_du_dx) {
@@ -345,19 +313,17 @@ void NonbondedAllPairs<RealType, Interpolated>::execute_device(
     // update new w coordinates
     // (tbd): cache lambda value for equilibrium calculations
     k_compute_w_coords<<<ceil_divide(N_, tpb), tpb, 0, stream>>>(
-        N, lambda, cutoff_, d_lambda_plane_idxs_, d_lambda_offset_idxs_, d_w_, d_dw_dl_);
+        N, lambda, cutoff_, d_lambda_plane_idxs_, d_lambda_offset_idxs_, d_w_);
     gpuErrchk(cudaPeekAtLastError());
 
-    k_gather_2x<<<ceil_divide(K_, tpb), tpb, 0, stream>>>(
-        K_, d_sorted_atom_idxs_, d_w_, d_dw_dl_, d_gathered_w_, d_gathered_dw_dl_);
+    k_gather<<<ceil_divide(K_, tpb), tpb, 0, stream>>>(K_, d_sorted_atom_idxs_, d_w_, d_gathered_w_);
     gpuErrchk(cudaPeekAtLastError());
 
     // look up which kernel we need for this computation
     int kernel_idx = 0;
     kernel_idx |= d_du_dp ? 1 << 0 : 0;
-    kernel_idx |= d_du_dl ? 1 << 1 : 0;
-    kernel_idx |= d_du_dx ? 1 << 2 : 0;
-    kernel_idx |= d_u ? 1 << 3 : 0;
+    kernel_idx |= d_du_dx ? 1 << 1 : 0;
+    kernel_idx |= d_u ? 1 << 2 : 0;
 
     kernel_ptrs_[kernel_idx]<<<p_ixn_count_[0], tpb, 0, stream>>>(
         K_,
@@ -365,9 +331,7 @@ void NonbondedAllPairs<RealType, Interpolated>::execute_device(
         d_gathered_x_,
         d_gathered_p_,
         d_box,
-        d_gathered_dp_dl_,
         d_gathered_w_,
-        d_gathered_dw_dl_,
         beta_,
         cutoff_,
         nblist_.get_row_idxs(),
@@ -375,8 +339,7 @@ void NonbondedAllPairs<RealType, Interpolated>::execute_device(
         nblist_.get_ixn_atoms(),
         d_gathered_du_dx_,
         d_gathered_du_dp_,
-        d_du_dl, // switch to nullptr if we don't request du_dl
-        d_u      // switch to nullptr if we don't request energies
+        d_u // switch to nullptr if we don't request energies
     );
 
     gpuErrchk(cudaPeekAtLastError());
@@ -399,25 +362,16 @@ void NonbondedAllPairs<RealType, Interpolated>::execute_device(
     }
 
     if (d_du_dp) {
-        if (Interpolated) {
-            k_add_du_dp_interpolated<<<dim3(ceil_divide(N_, tpb), 3, 1), tpb, 0, stream>>>(
-                lambda, N, d_du_dp_buffer_, d_du_dp);
-            gpuErrchk(cudaPeekAtLastError());
-        } else {
-            k_add_ull_to_ull<<<dim3(ceil_divide(N_, tpb), 3, 1), tpb, 0, stream>>>(N, d_du_dp_buffer_, d_du_dp);
-            gpuErrchk(cudaPeekAtLastError());
-        }
+        k_add_ull_to_ull<<<dim3(ceil_divide(N_, tpb), 3, 1), tpb, 0, stream>>>(N, d_du_dp_buffer_, d_du_dp);
+        gpuErrchk(cudaPeekAtLastError());
     }
 }
 
-template <typename RealType, bool Interpolated>
-void NonbondedAllPairs<RealType, Interpolated>::du_dp_fixed_to_float(
+template <typename RealType>
+void NonbondedAllPairs<RealType>::du_dp_fixed_to_float(
     const int N, const int P, const unsigned long long *du_dp, double *du_dp_float) {
 
-    // In the interpolated case we have derivatives for the initial and final parameters
-    const int num_tuples = Interpolated ? N * 2 : N;
-
-    for (int i = 0; i < num_tuples; i++) {
+    for (int i = 0; i < N; i++) {
         const int idx_charge = i * 3 + 0;
         const int idx_sig = i * 3 + 1;
         const int idx_eps = i * 3 + 2;
@@ -427,9 +381,7 @@ void NonbondedAllPairs<RealType, Interpolated>::du_dp_fixed_to_float(
     }
 }
 
-template class NonbondedAllPairs<double, true>;
-template class NonbondedAllPairs<float, true>;
-template class NonbondedAllPairs<double, false>;
-template class NonbondedAllPairs<float, false>;
+template class NonbondedAllPairs<double>;
+template class NonbondedAllPairs<float>;
 
 } // namespace timemachine

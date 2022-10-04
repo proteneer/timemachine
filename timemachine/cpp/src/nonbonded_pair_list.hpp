@@ -5,29 +5,20 @@
 
 namespace timemachine {
 
-template <typename RealType, bool Negated, bool Interpolated> class NonbondedPairList : public Potential {
+template <typename RealType, bool Negated> class NonbondedPairList : public Potential {
 
 private:
     const int N_; // number of atoms
     const int M_; // number of pairs
 
+    double beta_;
+    double cutoff_;
+
     int *d_pair_idxs_; // [M, 2]
     double *d_scales_; // [M, 2]
     int *d_lambda_plane_idxs_;
     int *d_lambda_offset_idxs_;
-
-    double beta_;
-    double cutoff_;
-
     double *d_w_;
-    double *d_dw_dl_;
-
-    double *d_p_interp_;
-    double *d_dp_dl_;
-
-    unsigned int *d_perm_;
-
-    unsigned long long *d_du_dp_buffer_;
 
 public:
     NonbondedPairList(

@@ -273,43 +273,6 @@ class Nonbonded(CustomOpWrapper):
     def get_cutoff(self):
         return self.args[5]
 
-    def interpolate(self):
-        """
-        Return an interpolated variant of this potential
-        """
-        return NonbondedInterpolated(
-            self.get_exclusion_idxs(),
-            self.get_scale_factors(),
-            self.get_lambda_plane_idxs(),
-            self.get_lambda_offset_idxs(),
-            self.get_beta(),
-            self.get_cutoff(),
-        )
-
-
-class NonbondedInterpolated(Nonbonded):
-    def unbound_impl(self, precision):
-        all_pairs_impl = NonbondedAllPairsInterpolated(
-            self.get_lambda_plane_idxs(),
-            self.get_lambda_offset_idxs(),
-            self.get_beta(),
-            self.get_cutoff(),
-            None,
-            *self.args[6:],  # remaining args are lambda transformation expressions
-        ).unbound_impl(precision)
-
-        exclusions_impl = NonbondedPairListNegatedInterpolated(
-            self.get_exclusion_idxs(),
-            self.get_scale_factors(),
-            self.get_lambda_plane_idxs(),
-            self.get_lambda_offset_idxs(),
-            self.get_beta(),
-            self.get_cutoff(),
-            *self.args[6:],  # remaining args are lambda transformation expressions
-        ).unbound_impl(precision)
-
-        return NonbondedImplWrapper([all_pairs_impl, exclusions_impl])
-
 
 class NonbondedAllPairs(CustomOpWrapper):
     def get_lambda_plane_idxs(self):
@@ -328,19 +291,6 @@ class NonbondedAllPairs(CustomOpWrapper):
         return self.args[4]
 
 
-class NonbondedAllPairsInterpolated(NonbondedAllPairs):
-    def unbound_impl(self, precision):
-        cls_name_base = "NonbondedAllPairs"
-        if precision == np.float64:
-            cls_name_base += "_f64_interpolated"
-        else:
-            cls_name_base += "_f32_interpolated"
-
-        custom_ctor = getattr(custom_ops, cls_name_base)
-
-        return custom_ctor(*self.args)
-
-
 class NonbondedInteractionGroup(CustomOpWrapper):
     def get_row_atom_idxs(self):
         return self.args[0]
@@ -356,19 +306,6 @@ class NonbondedInteractionGroup(CustomOpWrapper):
 
     def get_cutoff(self):
         return self.args[4]
-
-
-class NonbondedInteractionGroupInterpolated(NonbondedInteractionGroup):
-    def unbound_impl(self, precision):
-        cls_name_base = "NonbondedInteractionGroup"
-        if precision == np.float64:
-            cls_name_base += "_f64_interpolated"
-        else:
-            cls_name_base += "_f32_interpolated"
-
-        custom_ctor = getattr(custom_ops, cls_name_base)
-
-        return custom_ctor(*self.args)
 
 
 class NonbondedPairList(CustomOpWrapper):
@@ -424,32 +361,6 @@ class NonbondedPairListNegated(NonbondedPairList):
             cls_name_base += "_f64_negated"
         else:
             cls_name_base += "_f32_negated"
-
-        custom_ctor = getattr(custom_ops, cls_name_base)
-
-        return custom_ctor(*self.args)
-
-
-class NonbondedPairListInterpolated(NonbondedPairList):
-    def unbound_impl(self, precision):
-        cls_name_base = "NonbondedPairList"
-        if precision == np.float64:
-            cls_name_base += "_f64_interpolated"
-        else:
-            cls_name_base += "_f32_interpolated"
-
-        custom_ctor = getattr(custom_ops, cls_name_base)
-
-        return custom_ctor(*self.args)
-
-
-class NonbondedPairListNegatedInterpolated(NonbondedPairList):
-    def unbound_impl(self, precision):
-        cls_name_base = "NonbondedPairList"
-        if precision == np.float64:
-            cls_name_base += "_f64_negated_interpolated"
-        else:
-            cls_name_base += "_f32_negated_interpolated"
 
         custom_ctor = getattr(custom_ops, cls_name_base)
 
