@@ -195,5 +195,5 @@ def test_pairwise_distances_periodic_lifting(coords_box_w):
     assert (dij >= dij0).all()
 
     # guard assertion to prevent spurious failure due to roundoff error
-    if np.std(w) / (1.0 + np.std(x)) > 1e-6:
+    if np.std(w) / (1.0 + np.linalg.norm(x)) > 1e-6:
         assert dij.sum() > dij0.sum()
