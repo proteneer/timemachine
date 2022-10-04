@@ -3,6 +3,7 @@
 
 import multiprocessing
 import os
+import warnings
 
 # (ytz): not pretty, but this is needed to get XLA to be less stupid
 # see https://github.com/google/jax/issues/1408 for more information
@@ -11,9 +12,10 @@ import os
 # NOTE: To have an effect, XLA_FLAGS must be set in the environment before loading JAX (whether directly or transitively
 # through another import)
 if os.environ.get("XLA_FLAGS"):
-    raise RuntimeError("Tests will set XLA_FLAGS, please unset before running")
-
-os.environ["XLA_FLAGS"] = "--xla_force_host_platform_device_count=" + str(multiprocessing.cpu_count())
+    XLA_FLAGS = os.environ.get("XLA_FLAGS")
+    warnings.warn(f"Using XLA_FLAGS: {XLA_FLAGS}")
+else:
+    os.environ["XLA_FLAGS"] = "--xla_force_host_platform_device_count=" + str(multiprocessing.cpu_count())
 
 import jax
 
