@@ -1,4 +1,4 @@
-from typing import Any, List, Optional, Tuple
+from typing import Optional, Tuple
 
 import numpy as np
 import scipy.optimize
@@ -16,21 +16,16 @@ from timemachine.md.barostat.utils import get_bond_list, get_group_indices
 from timemachine.md.fire import fire_descent
 
 
-def bind_potentials(topo, ff):
+def bind_potentials(topo, ff: Forcefield):
     # setup the parameter handlers for the ligand
-    tuples = [
-        (topo.parameterize_harmonic_bond, [ff.hb_handle]),
-        (topo.parameterize_harmonic_angle, [ff.ha_handle]),
-        (topo.parameterize_periodic_torsion, [ff.pt_handle, ff.it_handle]),
-        (topo.parameterize_nonbonded, [ff.q_handle, ff.lj_handle]),
+    params_potential_pairs = [
+        topo.parameterize_harmonic_bond(ff.hb_handle.params),
+        topo.parameterize_harmonic_angle(ff.ha_handle.params),
+        topo.parameterize_periodic_torsion(ff.pt_handle.params, ff.it_handle.params),
+        topo.parameterize_nonbonded(ff.q_handle.params, ff.lj_handle.params),
     ]
+    u_impls = [potential.bind(params).bound_impl(precision=np.float32) for params, potential in params_potential_pairs]
 
-    u_impls = []
-
-    for fn, handles in tuples:
-        params, potential = fn(*[h.params for h in handles])
-        bp = potential.bind(params)
-        u_impls.append(bp.bound_impl(precision=np.float32))
     return u_impls
 
 
@@ -235,23 +230,17 @@ def equilibrate_host(
     hgt = topology.HostGuestTopology(host_bps, top)
 
     # setup the parameter handlers for the ligand
-    tuples: List[Tuple[Any, List[Any]]] = [
-        (hgt.parameterize_harmonic_bond, [ff.hb_handle]),
-        (hgt.parameterize_harmonic_angle, [ff.ha_handle]),
-        (hgt.parameterize_periodic_torsion, [ff.pt_handle, ff.it_handle]),
-        (hgt.parameterize_nonbonded, [ff.q_handle, ff.lj_handle]),
+    hb_params, hb_potential = hgt.parameterize_harmonic_bond(ff.hb_handle.params)
+
+    params_potential_pairs = [
+        (hb_params, hb_potential),
+        hgt.parameterize_harmonic_angle(ff.ha_handle.params),
+        hgt.parameterize_periodic_torsion(ff.pt_handle.params, ff.it_handle.params),
+        hgt.parameterize_nonbonded(ff.q_handle.params, ff.lj_handle.params),
     ]
 
-    u_impls = []
-    bound_potentials = []
-
-    for fn, handles in tuples:
-        params, potential = fn(*[h.params for h in handles])
-        bp = potential.bind(params)
-        bound_potentials.append(bp)
-        u_impls.append(bp.bound_impl(precision=np.float32))
-
-    bond_list = get_bond_list(bound_potentials[0])
+    u_impls = [pot.bind(params).bound_impl(precision=np.float32) for params, pot in params_potential_pairs]
+    bond_list = get_bond_list(hb_potential)
     combined_masses = model_utils.apply_hmr(combined_masses, bond_list)
 
     dt = 2.5e-3

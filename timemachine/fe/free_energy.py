@@ -8,23 +8,15 @@ from timemachine.ff.handlers import openmm_deserializer
 class BaseFreeEnergy:
     @staticmethod
     def _get_system_params_and_potentials(ff_params, topology):
-
-        ff_tuples = [
-            [topology.parameterize_harmonic_bond, (ff_params[0],)],
-            [topology.parameterize_harmonic_angle, (ff_params[1],)],
-            [topology.parameterize_periodic_torsion, (ff_params[2], ff_params[3])],
-            [topology.parameterize_nonbonded, (ff_params[4], ff_params[5])],
+        params_potential_pairs = [
+            topology.parameterize_harmonic_bond(ff_params[0]),
+            topology.parameterize_harmonic_angle(ff_params[1]),
+            topology.parameterize_periodic_torsion(ff_params[2], ff_params[3]),
+            topology.parameterize_nonbonded(ff_params[4], ff_params[5]),
         ]
 
-        final_params = []
-        final_potentials = []
-
-        for fn, params in ff_tuples:
-            combined_params, combined_potential = fn(*params)
-            final_potentials.append(combined_potential)
-            final_params.append(combined_params)
-
-        return final_params, final_potentials
+        params, potentials = zip(*params_potential_pairs)
+        return params, potentials
 
 
 # this class is serializable.
