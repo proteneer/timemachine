@@ -18,11 +18,12 @@ from timemachine.md.fire import fire_descent
 
 def bind_potentials(topo, ff: Forcefield):
     # setup the parameter handlers for the ligand
+    ff_params = ff.get_params()
     params_potential_pairs = [
-        topo.parameterize_harmonic_bond(ff.hb_handle.params),
-        topo.parameterize_harmonic_angle(ff.ha_handle.params),
-        topo.parameterize_periodic_torsion(ff.pt_handle.params, ff.it_handle.params),
-        topo.parameterize_nonbonded(ff.q_handle.params, ff.lj_handle.params),
+        topo.parameterize_harmonic_bond(ff_params.hb_params),
+        topo.parameterize_harmonic_angle(ff_params.ha_params),
+        topo.parameterize_periodic_torsion(ff_params.pt_params, ff_params.it_params),
+        topo.parameterize_nonbonded(ff_params.q_params, ff_params.lj_params),
     ]
     u_impls = [potential.bind(params).bound_impl(precision=np.float32) for params, potential in params_potential_pairs]
 
@@ -230,13 +231,14 @@ def equilibrate_host(
     hgt = topology.HostGuestTopology(host_bps, top)
 
     # setup the parameter handlers for the ligand
-    hb_params, hb_potential = hgt.parameterize_harmonic_bond(ff.hb_handle.params)
+    ff_params = ff.get_params()
+    hb_params, hb_potential = hgt.parameterize_harmonic_bond(ff_params.hb_params)
 
     params_potential_pairs = [
         (hb_params, hb_potential),
-        hgt.parameterize_harmonic_angle(ff.ha_handle.params),
-        hgt.parameterize_periodic_torsion(ff.pt_handle.params, ff.it_handle.params),
-        hgt.parameterize_nonbonded(ff.q_handle.params, ff.lj_handle.params),
+        hgt.parameterize_harmonic_angle(ff_params.ha_params),
+        hgt.parameterize_periodic_torsion(ff_params.pt_params, ff_params.it_params),
+        hgt.parameterize_nonbonded(ff_params.q_params, ff_params.lj_params),
     ]
 
     u_impls = [pot.bind(params).bound_impl(precision=np.float32) for params, pot in params_potential_pairs]

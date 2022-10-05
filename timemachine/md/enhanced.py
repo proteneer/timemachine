@@ -19,7 +19,7 @@ from timemachine import lib
 from timemachine.constants import BOLTZ
 from timemachine.fe import free_energy, topology
 from timemachine.fe.utils import get_romol_conf
-from timemachine.ff import combine_ordered_params
+from timemachine.ff import combine_params
 from timemachine.integrator import simulate
 from timemachine.lib import custom_ops
 from timemachine.md import builders, minimizer, moves
@@ -461,7 +461,7 @@ def get_solvent_phase_system(mol, ff, box_width=3.0, margin=0.5, minimize_energy
     # construct alchemical system
     bt = topology.BaseTopology(mol, ff)
     afe = free_energy.AbsoluteFreeEnergy(mol, bt)
-    ff_params = ff.get_ordered_params()
+    ff_params = ff.get_params()
     potentials, params, masses = afe.prepare_host_edge(ff_params, water_system)
 
     # concatenate (optionally minimized) water_coords and ligand_coords
@@ -507,7 +507,7 @@ def get_solvent_phase_system_parameter_changes(mol, ff0, ff1, box_width=3.0, mar
 
     top = topology.RelativeFreeEnergyForcefield(mol, ff0, ff1)
     afe = free_energy.AbsoluteFreeEnergy(mol, top)
-    combined_ff_params = combine_ordered_params(ff0, ff1)
+    combined_ff_params = combine_params(ff0.get_params(), ff1.get_params())
     potentials, params, masses = afe.prepare_host_edge(combined_ff_params, water_system)
 
     # concatenate water_coords and ligand_coords
@@ -534,7 +534,7 @@ def get_vacuum_phase_system_parameter_changes(mol, ff0, ff1):
     """
     top = topology.RelativeFreeEnergyForcefield(mol, ff0, ff1)
     afe = free_energy.AbsoluteFreeEnergy(mol, top)
-    combined_ff_params = combine_ordered_params(ff0, ff1)
+    combined_ff_params = combine_params(ff0.get_params(), ff1.get_params())
     potentials, params, masses = afe.prepare_vacuum_edge(combined_ff_params)
     coords = get_romol_conf(mol)
     return potentials, params, np.array(masses), coords
