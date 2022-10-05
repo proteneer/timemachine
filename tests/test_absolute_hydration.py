@@ -108,6 +108,7 @@ def test_smc_parameter_change_solvent():
     """
     seed = 2022
     np.random.seed(seed)
+
     # Reduce these so the test is faster
     num_batches = 20
     n_md_steps = 100
