@@ -20,10 +20,10 @@ def filter_valid_exclusions(
     return np.array(idxs, dtype=np.int32), np.array(scales)
 
 
-@pytest.mark.parametrize("beta", [2.0])
-@pytest.mark.parametrize("cutoff", [1.1])
+@pytest.mark.parametrize("beta", [1.0, 2.0])
+@pytest.mark.parametrize("cutoff", [0.7, 1.1])
 @pytest.mark.parametrize("precision", [np.float64, np.float32])
-@pytest.mark.parametrize("num_atoms,num_atoms_ligand", [(33, 1), (4080, 1050)])
+@pytest.mark.parametrize("num_atoms,num_atoms_ligand", [(33, 1), (231, 15), (4080, 1050)])
 def test_nonbonded_consistency(
     num_atoms_ligand,
     num_atoms,
