@@ -22,7 +22,7 @@ def deserialize_handlers(obj):
     handlers = []
 
     protein_ff = constants.DEFAULT_PROTEIN_FF
-    water_model = constants.DEFAULT_WATER_MODEL
+    water_ff = constants.DEFAULT_WATER_FF
 
     for k, v in obj_dict.items():
 
@@ -30,8 +30,8 @@ def deserialize_handlers(obj):
             protein_ff = v
             continue
 
-        if k == constants.WATER_MODEL_TAG:
-            water_model = v
+        if k == constants.WATER_FF_TAG:
+            water_ff = v
             continue
 
         cls_name = k + _SUFFIX
@@ -66,4 +66,4 @@ def deserialize_handlers(obj):
 
         handlers.append(ctor(smirks, params, props))
 
-    return handlers, protein_ff, water_model
+    return handlers, protein_ff, water_ff

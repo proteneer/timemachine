@@ -15,10 +15,10 @@ pytestmark = [pytest.mark.nogpu]
 
 def test_serialization_of_ffs():
     for path in glob("timemachine/ff/params/smirnoff_*.py"):
-        handlers, protein_ff, water_model = deserialize_handlers(open(path).read())
-        ff = Forcefield(handlers, protein_ff=protein_ff, water_model=water_model)
+        handlers, protein_ff, water_ff = deserialize_handlers(open(path).read())
+        ff = Forcefield(handlers, protein_ff=protein_ff, water_ff=water_ff)
         assert ff.protein_ff == constants.DEFAULT_PROTEIN_FF
-        assert ff.water_model == constants.DEFAULT_WATER_MODEL
+        assert ff.water_ff == constants.DEFAULT_WATER_FF
         for handle in ff.get_ordered_handles():
             assert handle is not None, f"{path} failed to deserialize correctly"
 

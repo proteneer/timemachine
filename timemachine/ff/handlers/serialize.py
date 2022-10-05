@@ -7,11 +7,11 @@ from timemachine import constants
 from timemachine.ff.handlers.suffix import _SUFFIX
 
 
-def serialize_handlers(all_handlers, protein_ff, water_model):
+def serialize_handlers(all_handlers, protein_ff, water_ff):
 
     final_ff = {}
     final_ff[constants.PROTEIN_FF_TAG] = protein_ff
-    final_ff[constants.WATER_MODEL_TAG] = water_model
+    final_ff[constants.WATER_FF_TAG] = water_ff
 
     for handler in all_handlers:
         ff_obj = handler.serialize()
