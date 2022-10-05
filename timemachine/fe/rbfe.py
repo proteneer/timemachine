@@ -580,7 +580,7 @@ def estimate_relative_free_energy(
 
 
 def run_pair(mol_a, mol_b, core, forcefield, protein, n_frames, seed, n_eq_steps=10000, n_windows=None):
-
+    """
     box_width = 4.0
     solvent_sys, solvent_conf, solvent_box, solvent_top = builders.build_water_system(box_width)
     solvent_box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes, deboggle later
@@ -597,6 +597,7 @@ def run_pair(mol_a, mol_b, core, forcefield, protein, n_frames, seed, n_eq_steps
         n_eq_steps=n_eq_steps,
         n_windows=n_windows,
     )
+    """
 
     complex_sys, complex_conf, _, _, complex_box, complex_top = builders.build_protein_system(protein)
     complex_box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes, deboggle later
@@ -614,4 +615,4 @@ def run_pair(mol_a, mol_b, core, forcefield, protein, n_frames, seed, n_eq_steps
         n_windows=n_windows,
     )
 
-    return solvent_res, solvent_top, complex_res, complex_top
+    return None, None, complex_res, complex_top
