@@ -100,25 +100,23 @@ class Forcefield:
             if isinstance(handle, bonded.HarmonicBondHandler):
                 assert hb_handle is None
                 hb_handle = handle
-            if isinstance(handle, bonded.HarmonicAngleHandler):
+            elif isinstance(handle, bonded.HarmonicAngleHandler):
                 assert ha_handle is None
                 ha_handle = handle
-            if isinstance(handle, bonded.ProperTorsionHandler):
+            elif isinstance(handle, bonded.ProperTorsionHandler):
                 assert pt_handle is None
                 pt_handle = handle
-            if isinstance(handle, bonded.ImproperTorsionHandler):
+            elif isinstance(handle, bonded.ImproperTorsionHandler):
                 assert it_handle is None
                 it_handle = handle
-            if isinstance(handle, nonbonded.LennardJonesHandler):
+            elif isinstance(handle, nonbonded.LennardJonesHandler):
                 assert lj_handle is None
                 lj_handle = handle
-            if isinstance(handle, nonbonded.AM1CCCHandler):
-                assert q_handle is None
-                q_handle = handle
-            if isinstance(handle, nonbonded.AM1BCCHandler):
-                assert q_handle is None
-                q_handle = handle
-            if isinstance(handle, nonbonded.SimpleChargeHandler):
+            elif (
+                isinstance(handle, nonbonded.AM1CCCHandler)
+                or isinstance(handle, nonbonded.AM1BCCHandler)
+                or isinstance(handle, nonbonded.SimpleChargeHandler)
+            ):
                 assert q_handle is None
                 q_handle = handle
 
