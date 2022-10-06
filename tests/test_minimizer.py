@@ -14,7 +14,9 @@ def test_minimizer():
     ff = Forcefield.load_from_file(DEFAULT_FF)
 
     with resources.path("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as path_to_pdb:
-        complex_system, complex_coords, _, _, complex_box, _ = builders.build_protein_system(str(path_to_pdb), ff)
+        complex_system, complex_coords, _, _, complex_box, _ = builders.build_protein_system(
+            str(path_to_pdb), ff.protein_ff, ff.water_ff
+        )
 
     with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
         suppl = Chem.SDMolSupplier(str(path_to_ligand), removeHs=False)
@@ -31,7 +33,7 @@ def test_minimizer():
 
 def test_equilibrate_host():
     ff = Forcefield.load_from_file(DEFAULT_FF)
-    host_system, host_coords, host_box, _ = builders.build_water_system(4.0, ff)
+    host_system, host_coords, host_box, _ = builders.build_water_system(4.0, ff.water_ff)
 
     with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
         suppl = Chem.SDMolSupplier(str(path_to_ligand), removeHs=False)
@@ -50,7 +52,7 @@ def test_local_minimize_water_box():
     """
     ff = Forcefield.load_from_file(DEFAULT_FF)
 
-    system, x0, box0, _ = builders.build_water_system(4.0, ff)
+    system, x0, box0, _ = builders.build_water_system(4.0, ff.water_ff)
     x0 = to_md_units(x0)
     lamb = 0.0
     bps, _ = openmm_deserializer.deserialize_system(system, cutoff=1.2)

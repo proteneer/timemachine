@@ -21,19 +21,10 @@ def deserialize_handlers(obj):
 
     handlers = []
 
-    protein_ff = constants.DEFAULT_PROTEIN_FF
-    water_ff = constants.DEFAULT_WATER_FF
+    protein_ff = obj_dict.pop(constants.PROTEIN_FF_TAG, constants.DEFAULT_PROTEIN_FF)
+    water_ff = obj_dict.pop(constants.WATER_FF_TAG, constants.DEFAULT_WATER_FF)
 
     for k, v in obj_dict.items():
-
-        if k == constants.PROTEIN_FF_TAG:
-            protein_ff = v
-            continue
-
-        if k == constants.WATER_FF_TAG:
-            water_ff = v
-            continue
-
         cls_name = k + _SUFFIX
 
         ctor = None

@@ -110,7 +110,7 @@ difficult_instance_flags = {key: True for key in easy_instance_flags}
 
 def generate_waterbox_nb_args() -> NonbondedArgs:
     ff = Forcefield.load_from_file(DEFAULT_FF)
-    system, positions, box, _ = builders.build_water_system(3.0, ff)
+    system, positions, box, _ = builders.build_water_system(3.0, ff.water_ff)
     bps, masses = openmm_deserializer.deserialize_system(system, cutoff=1.2)
     nb = bps[-1]
     params = nb.params
@@ -334,7 +334,7 @@ def test_vmap():
 def test_jax_nonbonded_block():
     """Assert that nonbonded_block and nonbonded_on_specific_pairs agree"""
     ff = Forcefield.load_from_file(DEFAULT_FF)
-    system, positions, box, _ = builders.build_water_system(3.0, ff)
+    system, positions, box, _ = builders.build_water_system(3.0, ff.water_ff)
     bps, masses = openmm_deserializer.deserialize_system(system, cutoff=1.2)
     nb = bps[-1]
     params = nb.params
@@ -370,7 +370,7 @@ def test_jax_nonbonded_block():
 def test_precomputation():
     """Assert that nonbonded interaction groups using precomputation agree with reference nonbonded_on_specific_pairs"""
     ff = Forcefield.load_from_file(DEFAULT_FF)
-    system, positions, box, _ = builders.build_water_system(3.0, ff)
+    system, positions, box, _ = builders.build_water_system(3.0, ff.water_ff)
     bps, masses = openmm_deserializer.deserialize_system(system, cutoff=1.2)
     nb = bps[-1]
     params = nb.params

@@ -14,7 +14,7 @@ from timemachine.testsystems.relative import get_hif2a_ligand_pair_single_topolo
 
 def test_combined_parameters_solvent():
     forcefield = Forcefield.load_from_file(DEFAULT_FF)
-    host_sys_omm, _, _, _ = builders.build_water_system(3.0, forcefield)
+    host_sys_omm, _, _, _ = builders.build_water_system(3.0, forcefield.water_ff)
     _test_combined_parameters_impl_bonded(host_sys_omm)
     _test_combined_parameters_impl_nonbonded(host_sys_omm)
 

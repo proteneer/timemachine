@@ -329,7 +329,7 @@ def test_combine_with_host():
     core = np.array([[1, 0], [2, 1], [3, 2], [4, 3], [5, 4], [6, 5]])
     ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
 
-    solvent_sys, _, _, _ = build_water_system(4.0, ff)
+    solvent_sys, _, _, _ = build_water_system(4.0, ff.water_ff)
 
     host_bps, _ = openmm_deserializer.deserialize_system(solvent_sys, cutoff=1.2)
 

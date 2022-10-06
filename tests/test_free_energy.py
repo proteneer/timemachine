@@ -201,7 +201,7 @@ def test_vacuum_and_solvent_edge_types():
         mol = next(Chem.SDMolSupplier(str(path_to_ligand), removeHs=False))
 
     ff = Forcefield.load_from_file("smirnoff_1_1_0_ccc.py")
-    solvent_system, solvent_coords, solvent_box, _ = builders.build_water_system(3.0, ff)
+    solvent_system, solvent_coords, solvent_box, _ = builders.build_water_system(3.0, ff.water_ff)
 
     ff_params = ff.get_ordered_params()
 

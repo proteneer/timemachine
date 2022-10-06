@@ -26,7 +26,9 @@ def test_deterministic_energies():
 
     # build the protein system.
     with resources.path("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as path_to_pdb:
-        complex_system, complex_coords, _, _, complex_box, _ = builders.build_protein_system(str(path_to_pdb), ff)
+        complex_system, complex_coords, _, _, complex_box, _ = builders.build_protein_system(
+            str(path_to_pdb), ff.protein_ff, ff.water_ff
+        )
     host_fns, host_masses = openmm_deserializer.deserialize_system(complex_system, cutoff=1.0)
 
     # resolve host clashes

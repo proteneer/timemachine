@@ -17,7 +17,7 @@ def test_write_single_topology_frame():
     mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
     forcefield = Forcefield.load_from_file(DEFAULT_FF)
     top = SingleTopology(mol_a, mol_b, core, forcefield)
-    _, solvent_coords, _, solvent_top = builders.build_water_system(4.0, forcefield)
+    _, solvent_coords, _, solvent_top = builders.build_water_system(4.0, forcefield.water_ff)
 
     with NamedTemporaryFile(suffix=".pdb") as temp:
         writer = PDBWriter([solvent_top, mol_a, mol_b], temp.name)

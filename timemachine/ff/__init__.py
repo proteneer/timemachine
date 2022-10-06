@@ -107,16 +107,6 @@ class Forcefield:
         return self._water_ff
 
     @property
-    def sanitized_water_ff(self):
-        water_ff = self._water_ff.split("/")[-1]
-        # Use consistent model name for the various water flavors
-        if water_ff.lower() in ["tip3p", "tip3pfb"]:
-            return "tip3p"
-        if water_ff.lower() in ["tip4p", "tip4pew", "tip4pfb"]:
-            return "tip4p"
-        return water_ff
-
-    @property
     def protein_ff(self) -> str:
         return self._protein_ff
 
@@ -126,3 +116,18 @@ class Forcefield:
 
 def combine_ordered_params(ff0: Forcefield, ff1: Forcefield):
     return list(zip(ff0.get_ordered_params(), ff1.get_ordered_params()))
+
+
+def sanitize_water_ff(water_ff: str) -> str:
+    """
+    Return the sanitized water name for the given water_ff.
+
+    For example tip3pfb -> tip3p.
+    """
+    water_ff = water_ff.split("/")[-1]
+    # Use consistent model name for the various water flavors
+    if water_ff.lower() in ["tip3p", "tip3pfb"]:
+        return "tip3p"
+    if water_ff.lower() in ["tip4p", "tip4pew", "tip4pfb"]:
+        return "tip4p"
+    return water_ff

@@ -24,7 +24,7 @@ def run_bitwise_reproducibility(mol_a, mol_b, core, forcefield, n_frames):
     lambda_schedule = [0.01, 0.02, 0.03]
     seed = 2023
     box_width = 4.0
-    solvent_sys, solvent_conf, solvent_box, _ = builders.build_water_system(box_width, forcefield)
+    solvent_sys, solvent_conf, solvent_box, _ = builders.build_water_system(box_width, forcefield.water_ff)
     solvent_box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes
     solvent_host_config = HostConfig(solvent_sys, solvent_conf, solvent_box)
     keep_idxs = [0, 1, 2]
@@ -82,7 +82,7 @@ def run_triple(mol_a, mol_b, core, forcefield, n_frames, protein_path, n_eq_step
     assert vacuum_res.protocol.n_eq_steps == n_eq_steps
 
     box_width = 4.0
-    solvent_sys, solvent_conf, solvent_box, _ = builders.build_water_system(box_width, forcefield)
+    solvent_sys, solvent_conf, solvent_box, _ = builders.build_water_system(box_width, forcefield.water_ff)
     solvent_box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes
     solvent_host_config = HostConfig(solvent_sys, solvent_conf, solvent_box)
     solvent_res = estimate_relative_free_energy(
@@ -119,7 +119,9 @@ def run_triple(mol_a, mol_b, core, forcefield, n_frames, protein_path, n_eq_step
     check_overlaps(solvent_res)
 
     seed = 2024
-    complex_sys, complex_conf, _, _, complex_box, _ = builders.build_protein_system(protein_path, forcefield)
+    complex_sys, complex_conf, _, _, complex_box, _ = builders.build_protein_system(
+        protein_path, forcefield.protein_ff, forcefield.water_ff
+    )
     complex_box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes
     complex_host_config = HostConfig(complex_sys, complex_conf, complex_box)
     complex_res = estimate_relative_free_energy(

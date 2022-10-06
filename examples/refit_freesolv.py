@@ -465,7 +465,7 @@ def ligand_only_traj(xvbs: List[CoordsVelBox], num_lig_atoms: int) -> List[Coord
 
 def get_water_charges(ff: Forcefield) -> List[float]:
     # Return the O, H, H atomic partial charges for water.
-    water_system, water_coords, water_box, water_top = build_water_system(0.5, ff)
+    water_system, water_coords, water_box, water_top = build_water_system(0.5, ff.water_ff)
     water_bps, water_masses = handlers.openmm_deserializer.deserialize_system(water_system, cutoff=1.2)
     water_top = topology.HostGuestTopology(water_bps, None)
     water_charges = water_top.host_nonbonded.params[:, 0][:3]

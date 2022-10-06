@@ -4,14 +4,14 @@ import numpy as np
 from simtk import unit
 from simtk.openmm import Vec3, app
 
-from timemachine.ff import Forcefield
+from timemachine.ff import sanitize_water_ff
 
 
 def strip_units(coords):
     return unit.Quantity(np.array(coords / coords.unit), coords.unit)
 
 
-def build_protein_system(host_pdbfile, tm_ff: Forcefield):
+def build_protein_system(host_pdbfile, protein_ff: str, water_ff: str):
     """
     Build a solvated protein system with a 10A padding.
 
@@ -22,7 +22,7 @@ def build_protein_system(host_pdbfile, tm_ff: Forcefield):
 
     """
 
-    host_ff = app.ForceField(f"{tm_ff.protein_ff}.xml", f"{tm_ff.water_ff}.xml")
+    host_ff = app.ForceField(f"{protein_ff}.xml", f"{water_ff}.xml")
     if isinstance(host_pdbfile, str):
         assert os.path.exists(host_pdbfile)
         host_pdb = app.PDBFile(host_pdbfile)
@@ -40,7 +40,7 @@ def build_protein_system(host_pdbfile, tm_ff: Forcefield):
     box = np.eye(3, dtype=np.float64) * box_lengths
 
     modeller.addSolvent(
-        host_ff, boxSize=np.diag(box) * unit.nanometers, neutralize=False, model=tm_ff.sanitized_water_ff
+        host_ff, boxSize=np.diag(box) * unit.nanometers, neutralize=False, model=sanitize_water_ff(water_ff)
     )
     solvated_host_coords = strip_units(modeller.positions)
 
@@ -55,8 +55,8 @@ def build_protein_system(host_pdbfile, tm_ff: Forcefield):
     return solvated_host_system, solvated_host_coords, nwa, nha, box, modeller.topology
 
 
-def build_water_system(box_width, tm_ff: Forcefield):
-    ff = app.ForceField(f"{tm_ff.water_ff}.xml")
+def build_water_system(box_width, water_ff: str):
+    ff = app.ForceField(f"{water_ff}.xml")
 
     # Create empty topology and coordinates.
     top = app.Topology()
@@ -64,7 +64,7 @@ def build_water_system(box_width, tm_ff: Forcefield):
     m = app.Modeller(top, pos)
 
     boxSize = Vec3(box_width, box_width, box_width) * unit.nanometers
-    m.addSolvent(ff, boxSize=boxSize, model=tm_ff.sanitized_water_ff)
+    m.addSolvent(ff, boxSize=boxSize, model=sanitize_water_ff(water_ff))
 
     system = ff.createSystem(m.getTopology(), nonbondedMethod=app.NoCutoff, constraints=None, rigidWater=False)
 

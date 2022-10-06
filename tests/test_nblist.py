@@ -278,7 +278,7 @@ def test_neighborlist_on_subset_of_system():
     ligand_coords = get_romol_conf(ligand)
     ff = Forcefield.load_from_file(DEFAULT_FF)
 
-    system, host_coords, box, top = build_water_system(4.0, ff)
+    system, host_coords, box, top = build_water_system(4.0, ff.water_ff)
     num_host_atoms = host_coords.shape[0]
     host_coords = np.array(host_coords)
 
