@@ -5,7 +5,9 @@ import pytest
 from common import hilbert_sort
 from numpy.typing import NDArray
 
+from timemachine.constants import DEFAULT_FF
 from timemachine.fe.utils import get_romol_conf
+from timemachine.ff import Forcefield
 from timemachine.lib import custom_ops
 from timemachine.md.builders import build_water_system
 from timemachine.testsystems.relative import get_hif2a_ligand_pair_single_topology
@@ -274,8 +276,9 @@ def test_neighborlist_invalid_row_idxs():
 def test_neighborlist_on_subset_of_system():
     ligand, _, _ = get_hif2a_ligand_pair_single_topology()
     ligand_coords = get_romol_conf(ligand)
+    ff = Forcefield.load_from_file(DEFAULT_FF)
 
-    system, host_coords, box, top = build_water_system(4.0)
+    system, host_coords, box, top = build_water_system(4.0, ff.water_ff)
     num_host_atoms = host_coords.shape[0]
     host_coords = np.array(host_coords)
 
