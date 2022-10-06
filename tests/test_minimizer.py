@@ -64,7 +64,15 @@ def test_local_minimize_water_box():
     frozen_idxs = set(range(len(x0))).difference(set(free_idxs))
     frozen_idxs = list(frozen_idxs)
 
+    u_init, g_init = val_and_grad_fn(x0)
+
     x_opt = minimizer.local_minimize(x0, val_and_grad_fn, free_idxs)
 
     np.testing.assert_array_equal(x0[frozen_idxs], x_opt[frozen_idxs])
     assert np.linalg.norm(x0[free_idxs] - x_opt[free_idxs]) > 0.01
+
+    # Verify that the value and grad return the exact same result even after
+    # being used for minimization
+    u_init_test, g_init_test = val_and_grad_fn(x0)
+    assert u_init == u_init_test
+    np.testing.assert_array_equal(g_init, g_init_test)
