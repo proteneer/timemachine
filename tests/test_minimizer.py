@@ -55,16 +55,25 @@ def test_local_minimize_water_box():
     system, x0, box0, _ = builders.build_water_system(4.0, ff.water_ff)
     x0 = to_md_units(x0)
     lamb = 0.0
-    bps, _ = openmm_deserializer.deserialize_system(system, cutoff=1.2)
+    host_fns, _ = openmm_deserializer.deserialize_system(system, cutoff=1.2)
     box0 += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes at the boundary
 
-    val_and_grad_fn = minimizer.get_val_and_grad_fn(bps, box0, lamb)
+    bound_impls = [p.bound_impl(np.float32) for p in host_fns]
+    val_and_grad_fn = minimizer.get_val_and_grad_fn(bound_impls, box0, lamb)
 
     free_idxs = [0, 2, 3, 6, 7, 9, 15, 16]
     frozen_idxs = set(range(len(x0))).difference(set(free_idxs))
     frozen_idxs = list(frozen_idxs)
 
+    u_init, g_init = val_and_grad_fn(x0)
+
     x_opt = minimizer.local_minimize(x0, val_and_grad_fn, free_idxs)
 
     np.testing.assert_array_equal(x0[frozen_idxs], x_opt[frozen_idxs])
     assert np.linalg.norm(x0[free_idxs] - x_opt[free_idxs]) > 0.01
+
+    # Verify that the value and grad return the exact same result even after
+    # being used for minimization
+    u_init_test, g_init_test = val_and_grad_fn(x0)
+    assert u_init == u_init_test
+    np.testing.assert_array_equal(g_init, g_init_test)
