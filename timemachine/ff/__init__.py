@@ -34,7 +34,7 @@ def combine_params(a: ForcefieldParams[_T], b: ForcefieldParams[_T]) -> Forcefie
     )
 
 
-@dataclass
+@dataclass(frozen=True)
 class Forcefield:
     """
     Utility class for wrapping around a list of ff_handlers
