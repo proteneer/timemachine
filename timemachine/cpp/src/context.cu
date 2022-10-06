@@ -71,8 +71,8 @@ Context::multiple_steps(const std::vector<double> &lambda_schedule, int store_du
     std::unique_ptr<DeviceBuffer<unsigned long long>> d_du_dl_buffer(nullptr);
     if (du_dl_buffer_size > 0) {
         d_du_dl_buffer.reset(new DeviceBuffer<unsigned long long>(du_dl_buffer_size));
+        gpuErrchk(cudaMemsetAsync(d_du_dl_buffer->data, 0, d_du_dl_buffer->size, stream));
     }
-    gpuErrchk(cudaMemsetAsync(d_du_dl_buffer->data, 0, d_du_dl_buffer->size, stream));
 
     intg_->initialize(bps_, lambda_schedule[0], d_x_t_, d_v_t_, d_box_t_, stream);
     for (int i = 1; i <= lambda_schedule.size(); i++) {
