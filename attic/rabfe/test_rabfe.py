@@ -460,4 +460,3 @@ def test_rabfe_result_to_from_mol():
 
     reconstructed = RABFEResult.from_mol(mol)
     assert result == reconstructed
-

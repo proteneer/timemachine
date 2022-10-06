@@ -571,7 +571,7 @@ def test_am1ccc_throws_error_on_phosphorus():
 def test_am1_differences():
 
     ff_raw = open("timemachine/ff/params/smirnoff_1_1_0_ccc.py").read()
-    ff_handlers = deserialize_handlers(ff_raw)
+    ff_handlers, _, _ = deserialize_handlers(ff_raw)
     for ccc in ff_handlers:
         if isinstance(ccc, nonbonded.AM1CCCHandler):
             break
