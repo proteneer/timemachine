@@ -10,7 +10,9 @@ import numpy as np
 import pytest
 from common import GradientTest, prepare_system_params, prepare_water_system
 
+from timemachine.constants import DEFAULT_FF
 from timemachine.fe.utils import to_md_units
+from timemachine.ff import Forcefield
 from timemachine.ff.handlers import openmm_deserializer
 from timemachine.lib import potentials
 from timemachine.md import builders
@@ -236,8 +238,9 @@ class TestNonbondedWater(GradientTest):
     def test_nblist_box_resize(self):
         # test that running the coordinates under two different boxes produces correct results
         # since we should be rebuilding the nblist when the box sizes change.
+        ff = Forcefield.load_from_file(DEFAULT_FF)
 
-        host_system, host_coords, box, _ = builders.build_water_system(3.0)
+        host_system, host_coords, box, _ = builders.build_water_system(3.0, ff.water_ff)
 
         host_fns, host_masses = openmm_deserializer.deserialize_system(host_system, cutoff=1.0)
 
@@ -374,8 +377,9 @@ class TestNonbonded(GradientTest):
     def test_nonbonded(self):
 
         np.random.seed(4321)
+        ff = Forcefield.load_from_file(DEFAULT_FF)
 
-        _, all_coords, box, _ = builders.build_water_system(3.0)
+        _, all_coords, box, _ = builders.build_water_system(3.0, ff.water_ff)
         all_coords = all_coords / all_coords.unit
         for size in [33, 231, 1050]:
 
@@ -412,8 +416,9 @@ class TestNonbonded(GradientTest):
         cutoff = 1
         size = 33
         padding = 0.1
+        ff = Forcefield.load_from_file(DEFAULT_FF)
 
-        _, coords, box, _ = builders.build_water_system(3.0)
+        _, coords, box, _ = builders.build_water_system(3.0, ff.water_ff)
         coords = coords / coords.unit
         coords = coords[:size]
 

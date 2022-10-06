@@ -5,8 +5,10 @@ from warnings import warn
 
 import importlib_resources as resources
 
+from timemachine.constants import DEFAULT_PROTEIN_FF, DEFAULT_WATER_FF
 from timemachine.ff.handlers import bonded, nonbonded
 from timemachine.ff.handlers.deserialize import deserialize_handlers
+from timemachine.ff.handlers.serialize import serialize_handlers
 
 _T = TypeVar("_T")
 
@@ -45,6 +47,9 @@ class Forcefield:
     q_handle: Optional[Union[nonbonded.SimpleChargeHandler, nonbonded.AM1BCCHandler, nonbonded.AM1CCCHandler]]
     lj_handle: Optional[nonbonded.LennardJonesHandler]
 
+    protein_ff: str
+    water_ff: str
+
     @classmethod
     def load_from_file(cls, path_or_str: Union[str, Path]) -> "Forcefield":
         """Load a forcefield from a path
@@ -73,40 +78,51 @@ class Forcefield:
             if not path.is_file():
                 raise ValueError(f"Unable to find {original_path} in file system or built in forcefields")
             with open(path, "r") as ifs:
-                handlers = deserialize_handlers(ifs.read())
+                handlers, protein_ff, water_ff = deserialize_handlers(ifs.read())
 
-        return cls.from_handlers(handlers)
+        return cls.from_handlers(handlers, protein_ff=protein_ff, water_ff=water_ff)
 
     @classmethod
-    def from_handlers(cls, ff_handlers: Iterable[Any]):
-        r = cls(None, None, None, None, None, None)
+    def from_handlers(
+        cls,
+        ff_handlers: Iterable[Any],
+        protein_ff: str = DEFAULT_PROTEIN_FF,
+        water_ff: str = DEFAULT_WATER_FF,
+    ):
+        hb_handle = None
+        ha_handle = None
+        pt_handle = None
+        it_handle = None
+        lj_handle = None
+        q_handle = None
+
         for handle in ff_handlers:
             if isinstance(handle, bonded.HarmonicBondHandler):
-                assert r.hb_handle is None
-                r.hb_handle = handle
+                assert hb_handle is None
+                hb_handle = handle
             if isinstance(handle, bonded.HarmonicAngleHandler):
-                assert r.ha_handle is None
-                r.ha_handle = handle
+                assert ha_handle is None
+                ha_handle = handle
             if isinstance(handle, bonded.ProperTorsionHandler):
-                assert r.pt_handle is None
-                r.pt_handle = handle
+                assert pt_handle is None
+                pt_handle = handle
             if isinstance(handle, bonded.ImproperTorsionHandler):
-                assert r.it_handle is None
-                r.it_handle = handle
+                assert it_handle is None
+                it_handle = handle
             if isinstance(handle, nonbonded.LennardJonesHandler):
-                assert r.lj_handle is None
-                r.lj_handle = handle
+                assert lj_handle is None
+                lj_handle = handle
             if isinstance(handle, nonbonded.AM1CCCHandler):
-                assert r.q_handle is None
-                r.q_handle = handle
+                assert q_handle is None
+                q_handle = handle
             if isinstance(handle, nonbonded.AM1BCCHandler):
-                assert r.q_handle is None
-                r.q_handle = handle
+                assert q_handle is None
+                q_handle = handle
             if isinstance(handle, nonbonded.SimpleChargeHandler):
-                assert r.q_handle is None
-                r.q_handle = handle
+                assert q_handle is None
+                q_handle = handle
 
-        return r
+        return cls(hb_handle, ha_handle, pt_handle, it_handle, q_handle, lj_handle, protein_ff, water_ff)
 
     def get_ordered_handles(self):
         """Returns a list of handlers with deterministic ordering."""
@@ -124,3 +140,21 @@ class Forcefield:
             params(self.q_handle),
             params(self.lj_handle),
         )
+
+    def serialize(self) -> str:
+        return serialize_handlers(self.get_ordered_handles(), protein_ff=self.protein_ff, water_ff=self.water_ff)
+
+
+def sanitize_water_ff(water_ff: str) -> str:
+    """
+    Return the sanitized water name for the given water_ff.
+
+    For example tip3pfb -> tip3p.
+    """
+    water_ff = water_ff.split("/")[-1]
+    # Use consistent model name for the various water flavors
+    if water_ff.lower() in ["tip3p", "tip3pfb"]:
+        return "tip3p"
+    if water_ff.lower() in ["tip4p", "tip4pew", "tip4pfb"]:
+        return "tip4p"
+    return water_ff

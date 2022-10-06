@@ -30,7 +30,7 @@ def write_trajectory_as_pdb(mol_a, mol_b, core, all_frames, host_topology, prefi
 def run_pair(mol_a, mol_b, core, forcefield, n_frames, protein_path, seed):
 
     box_width = 4.0
-    solvent_sys, solvent_conf, solvent_box, solvent_top = builders.build_water_system(box_width)
+    solvent_sys, solvent_conf, solvent_box, solvent_top = builders.build_water_system(box_width, forcefield.water_ff)
     solvent_box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes
     solvent_host_config = HostConfig(solvent_sys, solvent_conf, solvent_box)
 
@@ -46,7 +46,9 @@ def run_pair(mol_a, mol_b, core, forcefield, n_frames, protein_path, seed):
 
     print(f"solvent dG: {np.sum(solvent_res.all_dGs):.3f} +- {np.linalg.norm(solvent_res.all_errs):.3f} kJ/mol")
 
-    complex_sys, complex_conf, _, _, complex_box, complex_top = builders.build_protein_system(protein_path)
+    complex_sys, complex_conf, _, _, complex_box, complex_top = builders.build_protein_system(
+        protein_path, forcefield.protein_ff, forcefield.water_ff
+    )
     complex_box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes
     complex_host_config = HostConfig(complex_sys, complex_conf, complex_box)
     complex_res = estimate_relative_free_energy(

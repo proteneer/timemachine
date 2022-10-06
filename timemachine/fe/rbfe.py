@@ -112,7 +112,7 @@ def sample(initial_state, protocol):
     # if any atom is within any of the ligand's atom's ixn radius, flag it for minimization
     free_idxs = np.where(np.any(d_ij < cutoff, axis=0))[0].tolist()
 
-    val_and_grad_fn = minimizer.get_val_and_grad_fn(initial_state.potentials, initial_state.box0, initial_state.lamb)
+    val_and_grad_fn = minimizer.get_val_and_grad_fn(bound_impls, initial_state.box0, initial_state.lamb)
 
     assert np.all(np.isfinite(initial_state.x0)), "Initial coordinates contain nan or inf"
 
@@ -610,7 +610,7 @@ def run_vacuum(mol_a, mol_b, core, forcefield, _, n_frames, seed, n_eq_steps=100
 
 def run_solvent(mol_a, mol_b, core, forcefield, _, n_frames, seed, n_eq_steps=10000, n_windows=None):
     box_width = 4.0
-    solvent_sys, solvent_conf, solvent_box, solvent_top = builders.build_water_system(box_width)
+    solvent_sys, solvent_conf, solvent_box, solvent_top = builders.build_water_system(box_width, forcefield.water_ff)
     solvent_box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes, deboggle later
     solvent_host_config = HostConfig(solvent_sys, solvent_conf, solvent_box)
     solvent_res = estimate_relative_free_energy(
@@ -629,7 +629,9 @@ def run_solvent(mol_a, mol_b, core, forcefield, _, n_frames, seed, n_eq_steps=10
 
 
 def run_complex(mol_a, mol_b, core, forcefield, protein, n_frames, seed, n_eq_steps=10000, n_windows=None):
-    complex_sys, complex_conf, _, _, complex_box, complex_top = builders.build_protein_system(protein)
+    complex_sys, complex_conf, _, _, complex_box, complex_top = builders.build_protein_system(
+        protein, forcefield.protein_ff, forcefield.water_ff
+    )
     complex_box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes, deboggle later
     complex_host_config = HostConfig(complex_sys, complex_conf, complex_box)
     complex_res = estimate_relative_free_energy(

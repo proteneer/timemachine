@@ -624,8 +624,8 @@ def test_parameterize_and_draw_ixns():
     This isn't really tested, but is here to verify that drawing code at least runs.
     """
 
-    ff_handlers = deserialize_handlers(open("timemachine/ff/params/smirnoff_1_1_0_sc.py").read())
-    ff = Forcefield.from_handlers(ff_handlers)
+    ff_handlers, protein_ff, water_ff = deserialize_handlers(open("timemachine/ff/params/smirnoff_1_1_0_sc.py").read())
+    ff = Forcefield.from_handlers(ff_handlers, protein_ff=protein_ff, water_ff=water_ff)
 
     mol = Chem.MolFromSmiles("CC(=O)OC1=CC=CC=C1C(=O)O")
     core = [3, 4, 5, 6, 7, 8, 9, 10]
