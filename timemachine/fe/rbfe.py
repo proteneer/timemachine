@@ -112,7 +112,7 @@ def sample(initial_state, protocol):
     # if any atom is within any of the ligand's atom's ixn radius, flag it for minimization
     free_idxs = np.where(np.any(d_ij < cutoff, axis=0))[0].tolist()
 
-    val_and_grad_fn = minimizer.get_val_and_grad_fn(initial_state.potentials, initial_state.box0, initial_state.lamb)
+    val_and_grad_fn = minimizer.get_val_and_grad_fn(bound_impls, initial_state.box0, initial_state.lamb)
 
     assert np.all(np.isfinite(initial_state.x0)), "Initial coordinates contain nan or inf"
 
