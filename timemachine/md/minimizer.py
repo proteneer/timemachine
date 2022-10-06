@@ -11,7 +11,6 @@ from timemachine.fe.utils import get_romol_conf
 from timemachine.ff import Forcefield
 from timemachine.ff.handlers import openmm_deserializer
 from timemachine.lib import LangevinIntegrator, MonteCarloBarostat, custom_ops
-from timemachine.lib.potentials import SummedPotential
 from timemachine.md.barostat.utils import get_bond_list, get_group_indices
 from timemachine.md.fire import fire_descent
 
@@ -284,17 +283,28 @@ def equilibrate_host(
 def get_val_and_grad_fn(bps, box, lamb):
     """
     Convert impls, box, lamb into a function that only takes in coords.
+
+    Parameters
+    ----------
+    bps: List of BoundPotentials
+
+    box: np.array (3,3)
+
+    lamb: float
+
+    Returns
+    -------
+    Energy function with gradient
+        f: R^(Nx3) -> (R^1, R^Nx3)
     """
 
-    params = [np.array(bp.params) for bp in bps]
-    flat_params = np.concatenate([p.reshape(-1) for p in params])
-    sum_potential = SummedPotential(bps, params)
-    sum_potential.bind(flat_params)
-
-    impl = sum_potential.bound_impl(np.float32)
-
     def val_and_grad_fn(coords):
-        g, _, u = impl.execute(coords, box, lamb)
+        g = np.zeros_like(coords)
+        u = 0.0
+        for impl in bps:
+            g_bp, _, u_bp = impl.execute(coords, box, lamb)
+            g += g_bp
+            u += u_bp
         return u, g
 
     return val_and_grad_fn
@@ -309,7 +319,7 @@ def local_minimize(x0, val_and_grad_fn, local_idxs, verbose=True):
     x0: np.array (N,3)
         Coordinates
 
-    val_and_grad_fn: f: R^(Nx3,3x3) -> (R^1, R^Nx3)
+    val_and_grad_fn: f: R^(Nx3) -> (R^1, R^Nx3)
         Energy function
 
     local_idxs: list of int
