@@ -74,7 +74,7 @@ class CompoundMove(MonteCarloMove):
 class NVTMove(MonteCarloMove):
     def __init__(
         self,
-        ubps: List[potentials.CustomOpWrapper],
+        ubps: List[potentials.BoundCustomOp],
         lamb: float,
         masses: NDArray,
         temperature: float,
@@ -119,7 +119,7 @@ class NPTMove(NVTMove):
 
     def __init__(
         self,
-        ubps: List[potentials.CustomOpWrapper],
+        ubps: List[potentials.BoundCustomOp],
         lamb: float,
         masses: NDArray,
         temperature: float,

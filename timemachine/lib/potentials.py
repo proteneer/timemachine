@@ -13,12 +13,9 @@ class CustomOpWrapper:
     def __init__(self, *args):
         # needed in case we need to modify the args.
         self.args = list(args)
-        self.params = None
 
     def bind(self, params):
-        self.params = params
-        # return self is to allow chaining
-        return self
+        return BoundCustomOp(params, *self.args)
 
     def unbound_impl(self, precision):
         cls_name_base = type(self).__name__
@@ -31,10 +28,13 @@ class CustomOpWrapper:
 
         return custom_ctor(*self.args)
 
-    def bound_impl(self, precision):
-        if self.params is None:
-            raise ValueError("This op has not been bound to parameters.")
 
+class BoundCustomOp(CustomOpWrapper):
+    def __init__(self, params, *args):
+        self.params = params
+        super().__init__(*args)
+
+    def bound_impl(self, precision):
         return custom_ops.BoundPotential(self.unbound_impl(precision), self.params)
 
 

@@ -21,7 +21,7 @@ from timemachine.fe.system import convert_bps_into_system
 from timemachine.fe.utils import get_mol_name, get_romol_conf
 from timemachine.ff.handlers import openmm_deserializer
 from timemachine.lib import LangevinIntegrator, MonteCarloBarostat, custom_ops
-from timemachine.lib.potentials import CustomOpWrapper
+from timemachine.lib.potentials import BoundCustomOp
 from timemachine.md import builders, minimizer
 from timemachine.md.barostat.utils import get_bond_list, get_group_indices
 
@@ -166,7 +166,7 @@ class InitialState:
     This object can be pickled safely.
     """
 
-    potentials: List[CustomOpWrapper]
+    potentials: List[BoundCustomOp]
     integrator: LangevinIntegrator
     barostat: MonteCarloBarostat
     x0: np.ndarray
