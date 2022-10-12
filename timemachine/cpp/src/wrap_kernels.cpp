@@ -61,7 +61,10 @@ template <typename RealType> void declare_neighborlist(py::module &m, const char
                     N, coords.data(), box.data(), py_bb_ctrs.mutable_data(), py_bb_exts.mutable_data());
 
                 return py::make_tuple(py_bb_ctrs, py_bb_exts);
-            })
+            },
+            py::arg("coords"),
+            py::arg("box"),
+            py::arg("block_size"))
         .def(
             "get_nblist",
             [](timemachine::Neighborlist<RealType> &nblist,
@@ -876,17 +879,22 @@ template <typename RealType> void declare_centroid_restraint(py::module &m, cons
     std::string pyclass_name = std::string("CentroidRestraint_") + typestr;
     py::class_<Class, std::shared_ptr<Class>, timemachine::Potential>(
         m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
-        .def(py::init([](const py::array_t<int, py::array::c_style> &group_a_idxs,
-                         const py::array_t<int, py::array::c_style> &group_b_idxs,
-                         double kb,
-                         double b0) {
-            std::vector<int> vec_group_a_idxs(group_a_idxs.size());
-            std::memcpy(vec_group_a_idxs.data(), group_a_idxs.data(), vec_group_a_idxs.size() * sizeof(int));
-            std::vector<int> vec_group_b_idxs(group_b_idxs.size());
-            std::memcpy(vec_group_b_idxs.data(), group_b_idxs.data(), vec_group_b_idxs.size() * sizeof(int));
+        .def(
+            py::init([](const py::array_t<int, py::array::c_style> &group_a_idxs,
+                        const py::array_t<int, py::array::c_style> &group_b_idxs,
+                        double kb,
+                        double b0) {
+                std::vector<int> vec_group_a_idxs(group_a_idxs.size());
+                std::memcpy(vec_group_a_idxs.data(), group_a_idxs.data(), vec_group_a_idxs.size() * sizeof(int));
+                std::vector<int> vec_group_b_idxs(group_b_idxs.size());
+                std::memcpy(vec_group_b_idxs.data(), group_b_idxs.data(), vec_group_b_idxs.size() * sizeof(int));
 
-            return new timemachine::CentroidRestraint<RealType>(vec_group_a_idxs, vec_group_b_idxs, kb, b0);
-        }));
+                return new timemachine::CentroidRestraint<RealType>(vec_group_a_idxs, vec_group_b_idxs, kb, b0);
+            }),
+            py::arg("group_a_idxs"),
+            py::arg("group_b_idxs"),
+            py::arg("kb"),
+            py::arg("b0"));
 }
 
 template <typename RealType> void declare_periodic_torsion(py::module &m, const char *typestr) {
@@ -931,7 +939,10 @@ template <typename RealType, bool Interpolated> void declare_nonbonded_all_pairs
     std::string pyclass_name = std::string("NonbondedAllPairs_") + typestr;
     py::class_<Class, std::shared_ptr<Class>, timemachine::Potential>(
         m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
-        .def("set_nblist_padding", &timemachine::NonbondedAllPairs<RealType, Interpolated>::set_nblist_padding)
+        .def(
+            "set_nblist_padding",
+            &timemachine::NonbondedAllPairs<RealType, Interpolated>::set_nblist_padding,
+            py::arg("val"))
         .def("disable_hilbert_sort", &timemachine::NonbondedAllPairs<RealType, Interpolated>::disable_hilbert_sort)
         .def(
             py::init([](const py::array_t<int, py::array::c_style> &lambda_plane_idxs_i,
@@ -970,7 +981,10 @@ void declare_nonbonded_interaction_group(py::module &m, const char *typestr) {
     std::string pyclass_name = std::string("NonbondedInteractionGroup_") + typestr;
     py::class_<Class, std::shared_ptr<Class>, timemachine::Potential>(
         m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
-        .def("set_nblist_padding", &timemachine::NonbondedInteractionGroup<RealType, Interpolated>::set_nblist_padding)
+        .def(
+            "set_nblist_padding",
+            &timemachine::NonbondedInteractionGroup<RealType, Interpolated>::set_nblist_padding,
+            py::arg("val"))
         .def(
             "disable_hilbert_sort",
             &timemachine::NonbondedInteractionGroup<RealType, Interpolated>::disable_hilbert_sort)
@@ -1045,18 +1059,26 @@ void declare_barostat(py::module &m) {
     using Class = timemachine::MonteCarloBarostat;
     std::string pyclass_name = std::string("MonteCarloBarostat");
     py::class_<Class>(m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
-        .def(py::init([](const int N,
-                         const double pressure,
-                         const double temperature,
-                         std::vector<std::vector<int>> group_idxs,
-                         const int frequency,
-                         std::vector<timemachine::BoundPotential *> bps,
-                         const int seed) {
-            return new timemachine::MonteCarloBarostat(N, pressure, temperature, group_idxs, frequency, bps, seed);
-        }))
-        .def("set_interval", &timemachine::MonteCarloBarostat::set_interval)
+        .def(
+            py::init([](const int N,
+                        const double pressure,
+                        const double temperature,
+                        std::vector<std::vector<int>> group_idxs,
+                        const int frequency,
+                        std::vector<timemachine::BoundPotential *> bps,
+                        const int seed) {
+                return new timemachine::MonteCarloBarostat(N, pressure, temperature, group_idxs, frequency, bps, seed);
+            }),
+            py::arg("N"),
+            py::arg("pressure"),
+            py::arg("temperature"),
+            py::arg("group_idxs"),
+            py::arg("frequency"),
+            py::arg("bps"),
+            py::arg("seed"))
+        .def("set_interval", &timemachine::MonteCarloBarostat::set_interval, py::arg("interval"))
         .def("get_interval", &timemachine::MonteCarloBarostat::get_interval)
-        .def("set_pressure", &timemachine::MonteCarloBarostat::set_pressure);
+        .def("set_pressure", &timemachine::MonteCarloBarostat::set_pressure, py::arg("pressure"));
 }
 
 void declare_summed_potential(py::module &m) {
@@ -1127,7 +1149,7 @@ PYBIND11_MODULE(custom_ops, m) {
         &py_cuda_device_reset,
         "Destroy all allocations and reset all state on the current device in the current process.");
 
-    m.def("rmsd_align", &py_rmsd_align, "RMSD align two molecules");
+    m.def("rmsd_align", &py_rmsd_align, "RMSD align two molecules", py::arg("x1"), py::arg("x2"));
 
     declare_barostat(m);
 
