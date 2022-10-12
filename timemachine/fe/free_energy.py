@@ -2,29 +2,22 @@ import numpy as np
 
 from timemachine.fe import topology
 from timemachine.fe.utils import get_mol_masses, get_romol_conf
+from timemachine.ff import ForcefieldParams
 from timemachine.ff.handlers import openmm_deserializer
 
 
 class BaseFreeEnergy:
     @staticmethod
-    def _get_system_params_and_potentials(ff_params, topology):
-
-        ff_tuples = [
-            [topology.parameterize_harmonic_bond, (ff_params[0],)],
-            [topology.parameterize_harmonic_angle, (ff_params[1],)],
-            [topology.parameterize_periodic_torsion, (ff_params[2], ff_params[3])],
-            [topology.parameterize_nonbonded, (ff_params[4], ff_params[5])],
+    def _get_system_params_and_potentials(ff_params: ForcefieldParams, topology):
+        params_potential_pairs = [
+            topology.parameterize_harmonic_bond(ff_params.hb_params),
+            topology.parameterize_harmonic_angle(ff_params.ha_params),
+            topology.parameterize_periodic_torsion(ff_params.pt_params, ff_params.it_params),
+            topology.parameterize_nonbonded(ff_params.q_params, ff_params.lj_params),
         ]
 
-        final_params = []
-        final_potentials = []
-
-        for fn, params in ff_tuples:
-            combined_params, combined_potential = fn(*params)
-            final_potentials.append(combined_potential)
-            final_params.append(combined_params)
-
-        return final_params, final_potentials
+        params, potentials = zip(*params_potential_pairs)
+        return params, potentials
 
 
 # this class is serializable.
@@ -45,14 +38,14 @@ class AbsoluteFreeEnergy(BaseFreeEnergy):
         self.mol = mol
         self.top = top
 
-    def prepare_host_edge(self, ff_params, host_system):
+    def prepare_host_edge(self, ff_params: ForcefieldParams, host_system):
         """
         Prepares the host-guest system
 
         Parameters
         ----------
-        ff_params: tuple of np.array
-            Expected parameter ordering is bond_params, angle_params, proper_params, improper_params, charge_params, lj_params
+        ff_params: ForcefieldParams
+            forcefield parameters
 
         host_system: openmm.System
             openmm System object to be deserialized.
@@ -72,14 +65,14 @@ class AbsoluteFreeEnergy(BaseFreeEnergy):
         combined_masses = self._combine(ligand_masses, host_masses)
         return final_potentials, final_params, combined_masses
 
-    def prepare_vacuum_edge(self, ff_params):
+    def prepare_vacuum_edge(self, ff_params: ForcefieldParams):
         """
         Prepares the vacuum system
 
         Parameters
         ----------
-        ff_params: tuple of np.array
-            Expected parameter ordering is bond_params, angle_params, proper_params, improper_params, charge_params, lj_params
+        ff_params: ForcefieldParams
+            forcefield parameters
 
         Returns
         -------

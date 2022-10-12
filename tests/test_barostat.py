@@ -150,7 +150,7 @@ def test_barostat_is_deterministic():
     bt = BaseTopology(mol_a, ff)
     afe = AbsoluteFreeEnergy(mol_a, bt)
 
-    unbound_potentials, sys_params, masses = afe.prepare_host_edge(ff.get_ordered_params(), host_system)
+    unbound_potentials, sys_params, masses = afe.prepare_host_edge(ff.get_params(), host_system)
     coords = afe.prepare_combined_coords(host_coords=host_coords)
 
     # get list of molecules for barostat by looking at bond table
