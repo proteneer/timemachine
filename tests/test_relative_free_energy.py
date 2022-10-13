@@ -11,6 +11,7 @@ from timemachine.fe.rbfe import (
     SimulationResult,
     estimate_relative_free_energy,
     pair_overlap_from_ukln,
+    run_vacuum,
     sample,
 )
 from timemachine.ff import Forcefield
@@ -160,6 +161,26 @@ def test_run_hif2a_test_system():
     with resources.path("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as protein_path:
         run_triple(mol_a, mol_b, core, forcefield, n_frames=100, protein_path=str(protein_path), n_eq_steps=1000)
     run_bitwise_reproducibility(mol_a, mol_b, core, forcefield, n_frames=100)
+
+
+def test_steps_per_frames():
+    """Verifies that modifying steps per frames doesn't change result trajectory"""
+    mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
+    forcefield = Forcefield.load_from_file(DEFAULT_FF)
+    seed = 2022
+    frames = 5
+    res = run_vacuum(mol_a, mol_b, core, forcefield, None, frames, seed, n_eq_steps=10, steps_per_frame=2, n_windows=3)
+    assert res.frames[0].shape[0] == frames
+
+    frames = 2
+    test_res = run_vacuum(
+        mol_a, mol_b, core, forcefield, None, frames, seed, n_eq_steps=10, steps_per_frame=5, n_windows=3
+    )
+    assert test_res.frames[0].shape[0] == frames
+
+    # The last frame from the trajectories should match as num_frames * steps_per_frame are equal
+    for frame, test_frame in zip(res.frames, test_res.frames):
+        np.testing.assert_array_equal(frame[-1], test_frame[-1])
 
 
 @pytest.mark.nogpu
