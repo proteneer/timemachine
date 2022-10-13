@@ -510,6 +510,7 @@ def estimate_relative_free_energy(
     n_windows=None,
     keep_idxs=None,
     n_eq_steps=10000,
+    steps_per_frame=400,
 ):
     """
     Estimate relative free energy between mol_a and mol_b. Molecules should be aligned to each
@@ -554,6 +555,9 @@ def estimate_relative_free_energy(
     n_eq_steps: int
         Number of equilibration steps for each window.
 
+    steps_per_frame: int
+        The number of steps to take before collecting a frame
+
     Returns
     -------
     SimulationResult
@@ -576,7 +580,7 @@ def estimate_relative_free_energy(
 
     temperature = DEFAULT_TEMP
     initial_states = setup_initial_states(single_topology, host_config, temperature, lambda_schedule, seed)
-    protocol = SimulationProtocol(n_frames=n_frames, n_eq_steps=n_eq_steps, steps_per_frame=400)
+    protocol = SimulationProtocol(n_frames=n_frames, n_eq_steps=n_eq_steps, steps_per_frame=steps_per_frame)
 
     if keep_idxs is None:
         keep_idxs = [0, -1]  # keep first and last frames
@@ -592,7 +596,9 @@ def estimate_relative_free_energy(
         raise err
 
 
-def run_vacuum(mol_a, mol_b, core, forcefield, _, n_frames, seed, n_eq_steps=10000, n_windows=None):
+def run_vacuum(
+    mol_a, mol_b, core, forcefield, _, n_frames, seed, n_eq_steps=10000, steps_per_frame=400, n_windows=None
+):
     vacuum_host_config = None
     return estimate_relative_free_energy(
         mol_a,
@@ -605,10 +611,13 @@ def run_vacuum(mol_a, mol_b, core, forcefield, _, n_frames, seed, n_eq_steps=100
         prefix="vacuum",
         n_eq_steps=n_eq_steps,
         n_windows=n_windows,
+        steps_per_frame=steps_per_frame,
     )
 
 
-def run_solvent(mol_a, mol_b, core, forcefield, _, n_frames, seed, n_eq_steps=10000, n_windows=None):
+def run_solvent(
+    mol_a, mol_b, core, forcefield, _, n_frames, seed, n_eq_steps=10000, steps_per_frame=400, n_windows=None
+):
     box_width = 4.0
     solvent_sys, solvent_conf, solvent_box, solvent_top = builders.build_water_system(box_width, forcefield.water_ff)
     solvent_box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes, deboggle later
@@ -624,11 +633,14 @@ def run_solvent(mol_a, mol_b, core, forcefield, _, n_frames, seed, n_eq_steps=10
         prefix="solvent",
         n_eq_steps=n_eq_steps,
         n_windows=n_windows,
+        steps_per_frame=steps_per_frame,
     )
     return solvent_res, solvent_top
 
 
-def run_complex(mol_a, mol_b, core, forcefield, protein, n_frames, seed, n_eq_steps=10000, n_windows=None):
+def run_complex(
+    mol_a, mol_b, core, forcefield, protein, n_frames, seed, n_eq_steps=10000, steps_per_frame=400, n_windows=None
+):
     complex_sys, complex_conf, _, _, complex_box, complex_top = builders.build_protein_system(
         protein, forcefield.protein_ff, forcefield.water_ff
     )
@@ -645,5 +657,6 @@ def run_complex(mol_a, mol_b, core, forcefield, protein, n_frames, seed, n_eq_st
         prefix="complex",
         n_eq_steps=n_eq_steps,
         n_windows=n_windows,
+        steps_per_frame=steps_per_frame,
     )
     return complex_res, complex_top
