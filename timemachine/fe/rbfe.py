@@ -126,7 +126,7 @@ def sample(initial_state, protocol):
     ctxt.multiple_steps_U(
         lamb=initial_state.lamb,
         n_steps=protocol.n_eq_steps,
-        lambda_windows=[initial_state.lamb],
+        lambda_windows=[],
         store_u_interval=0,
         store_x_interval=0,
     )
@@ -135,18 +135,18 @@ def sample(initial_state, protocol):
 
     # a crude, and probably not great, guess on the decorrelation time
     n_steps = protocol.n_frames * protocol.steps_per_frame
-    all_nrgs, all_coords, all_boxes = ctxt.multiple_steps_U(
+    _, all_coords, all_boxes = ctxt.multiple_steps_U(
         lamb=initial_state.lamb,
         n_steps=n_steps,
-        lambda_windows=[initial_state.lamb],
-        store_u_interval=protocol.steps_per_frame,
+        lambda_windows=[],
+        store_u_interval=0,
         store_x_interval=protocol.steps_per_frame,
     )
 
     assert all_coords.shape[0] == protocol.n_frames
     assert all_boxes.shape[0] == protocol.n_frames
 
-    assert np.all(np.isfinite(ctxt.get_x_t())), "Production resulted in a nan"
+    assert np.all(np.isfinite(all_coords[-1])), "Production resulted in a nan"
 
     return all_coords, all_boxes
 
@@ -218,7 +218,7 @@ def setup_initial_states(st, host_config, temperature, lambda_schedule, seed):
             system = st.combine_with_host(convert_bps_into_system(host_bps), lamb=lamb)
             combined_masses = np.concatenate([host_masses, st.combine_masses()])
             potentials = system.get_U_fns()
-            hmr_masses = model_utils.apply_hmr(combined_masses, potentials[0].get_idxs())
+            hmr_masses = model_utils.apply_hmr(combined_masses, system.bond.get_idxs())
             group_idxs = get_group_indices(get_bond_list(system.bond))
             baro = MonteCarloBarostat(len(hmr_masses), 1.0, temperature, group_idxs, 15, run_seed + 1)
             x0 = np.concatenate([host_conf, ligand_conf])
@@ -228,7 +228,7 @@ def setup_initial_states(st, host_config, temperature, lambda_schedule, seed):
             system = st.setup_intermediate_state(lamb)
             combined_masses = np.array(st.combine_masses())
             potentials = system.get_U_fns()
-            hmr_masses = model_utils.apply_hmr(combined_masses, potentials[0].get_idxs())
+            hmr_masses = model_utils.apply_hmr(combined_masses, system.bond.get_idxs())
             baro = None
             x0 = ligand_conf
             box0 = np.eye(3, dtype=np.float64) * 10  # make a large 10x10x10nm box
@@ -393,7 +393,11 @@ def estimate_free_energy_given_initial_states(initial_states, protocol, temperat
     ukln_by_component_by_lambda = []
 
     for lamb_idx, initial_state in enumerate(initial_states):
-
+        # Clear any old references to avoid holding on to objects in memory we don't need.
+        cur_frames = None
+        cur_boxes = None
+        bound_impls = None
+        cur_batch_U_fns = None
         cur_frames, cur_boxes = sample(initial_state, protocol)
         bound_impls = [p.bound_impl(np.float32) for p in initial_state.potentials]
         cur_batch_U_fns = get_batch_U_fns(bound_impls, initial_state.lamb)
@@ -408,12 +412,10 @@ def estimate_free_energy_given_initial_states(initial_states, protocol, temperat
 
             # loop over bond, angle, torsion, nonbonded terms etc.
             for u_idx, (prev_U_fn, cur_U_fn) in enumerate(zip(prev_batch_U_fns, cur_batch_U_fns)):
-                x_cur = (cur_frames, cur_boxes)
-                x_prev = (prev_frames, prev_boxes)
-                u_00 = beta * prev_U_fn(*x_prev)
-                u_01 = beta * prev_U_fn(*x_cur)
-                u_10 = beta * cur_U_fn(*x_prev)
-                u_11 = beta * cur_U_fn(*x_cur)
+                u_00 = beta * prev_U_fn(prev_frames, prev_boxes)
+                u_01 = beta * prev_U_fn(cur_frames, cur_boxes)
+                u_10 = beta * cur_U_fn(prev_frames, prev_boxes)
+                u_11 = beta * cur_U_fn(cur_frames, cur_boxes)
                 ukln_by_component.append([[u_00, u_01], [u_10, u_11]])
 
                 fwd_delta_u = u_10 - u_00
