@@ -164,7 +164,6 @@ class VacuumSystem:
 
             # Chiral restraints are disabled until checks are added (see GH #815)
             # chiral_U = chiral_atom_U(x) + chiral_bond_U(x)
-
             return bond_U(x) + angle_U(x) + torsion_U(x) + jnp.sum(Us_vdw) + jnp.sum(Us_coulomb)  # + chiral_U
 
         return U_fn

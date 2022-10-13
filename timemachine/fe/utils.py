@@ -123,7 +123,7 @@ def plot_atom_mapping(mol_a, mol_b, core, seed=2022):
     draw_mol(mol_b, core[:, 1].tolist(), atom_colors_b)
 
 
-def plot_atom_mapping_grid(mol_a, mol_b, core_smarts, core, show_idxs=False):
+def plot_atom_mapping_grid(mol_a, mol_b, core_smarts, core, show_idxs=False, scale_factor=None):
     mol_a_2d = Chem.Mol(mol_a)
     mol_b_2d = Chem.Mol(mol_b)
     mol_q_2d = Chem.MolFromSmarts(core_smarts)
@@ -135,6 +135,10 @@ def plot_atom_mapping_grid(mol_a, mol_b, core_smarts, core, show_idxs=False):
 
     AllChem.GenerateDepictionMatching2DStructure(mol_a_2d, mol_q_2d, atomMap=q_to_a)
     AllChem.GenerateDepictionMatching2DStructure(mol_b_2d, mol_q_2d, atomMap=q_to_b)
+    if scale_factor:
+        AllChem.NormalizeDepiction(mol_a_2d, scaleFactor=scale_factor)
+        AllChem.NormalizeDepiction(mol_b_2d, scaleFactor=scale_factor)
+        AllChem.NormalizeDepiction(mol_q_2d, scaleFactor=scale_factor)
 
     atom_colors_a = {}
     atom_colors_b = {}
@@ -152,12 +156,13 @@ def plot_atom_mapping_grid(mol_a, mol_b, core_smarts, core, show_idxs=False):
         for atom in mol_q_2d.GetAtoms():
             atom.SetProp("molAtomMapNumber", str(atom.GetIdx()))
 
+    scale_factor = scale_factor or 1
     return Draw.MolsToGridImage(
         [mol_q_2d, mol_a_2d, mol_b_2d],
         molsPerRow=3,
         highlightAtomLists=[list(range(mol_q_2d.GetNumAtoms())), core[:, 0].tolist(), core[:, 1].tolist()],
         highlightAtomColors=[atom_colors_q, atom_colors_a, atom_colors_b],
-        subImgSize=(300, 300),
+        subImgSize=(int(300 * scale_factor), int(300 * scale_factor)),
         legends=["core", get_mol_name(mol_a), get_mol_name(mol_b)],
         useSVG=True,
     )
