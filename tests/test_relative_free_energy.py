@@ -183,6 +183,27 @@ def test_steps_per_frames():
         np.testing.assert_array_equal(frame[-1], test_frame[-1])
 
 
+def test_rbfe_with_1_window():
+    """Should not be able to run a relative free energy calculation with a single window"""
+    mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
+    forcefield = Forcefield.load_from_file(DEFAULT_FF)
+    seed = 2022
+    with pytest.raises(AssertionError):
+        estimate_relative_free_energy(
+            mol_a,
+            mol_b,
+            core,
+            forcefield,
+            None,
+            seed,
+            n_frames=1,
+            prefix="failure",
+            n_windows=1,
+            steps_per_frame=1,
+            n_eq_steps=10,
+        )
+
+
 @pytest.mark.nogpu
 def test_pair_overlap_from_ukln():
     def gaussian_overlap(p1, p2):
