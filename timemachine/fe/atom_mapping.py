@@ -46,7 +46,7 @@ def mcs(
     # atoms
     params.AtomCompareParameters.CompleteRingsOnly = 1
     params.AtomCompareParameters.RingMatchesRingOnly = 1
-    params.AtomCompareParameters.matchValences = 0
+    params.AtomCompareParameters.MatchValences = 0
     params.AtomCompareParameters.MatchChiralTag = 0
     if conformer_aware:
         params.AtomCompareParameters.MaxDistance = threshold
@@ -54,7 +54,11 @@ def mcs(
     # globals
     params.Timeout = timeout
     if smarts is not None:
-        params.InitialSeed = smarts
+        if match_hydrogens:
+            params.InitialSeed = smarts
+        else:
+            # need to remove Hs from the input smarts
+            params.InitialSeed = Chem.MolToSmarts(Chem.RemoveHs(Chem.MolFromSmarts(smarts)))
 
     def strip_hydrogens(mol):
         """Strip hydrogens with deepcopy to be extra safe"""
@@ -172,6 +176,7 @@ def get_core_with_alignment(
     n_steps: int = 200,
     k: float = 10000,
     ff: Optional[Forcefield] = None,
+    initial_smarts: Optional[str] = None,
 ) -> Tuple[NDArray, str]:
     """Selects a core between two molecules, by finding an initial core then aligning based on the core.
 
@@ -190,6 +195,10 @@ def get_core_with_alignment(
     ff: Forcefield or None
         Forcefield to use for alignment, defaults to DEFAULT_FF forcefield if None
 
+    initial_smarts: str or None
+        If set uses smarts as the initial seed to MCS and as a fallback
+        if mcs results in a trivial core.
+
     Returns
     -------
     core : np.ndarray of ints, shape (n_MCS, 2)
@@ -207,17 +216,27 @@ def get_core_with_alignment(
     if ff is None:
         ff = Forcefield.load_from_file(DEFAULT_FF)
 
-    def setup_core(mol_a, mol_b, match_hydrogens):
-        result = mcs(mol_a, mol_b, threshold=threshold, match_hydrogens=match_hydrogens)
+    def setup_core(mol_a, mol_b, match_hydrogens, initial_smarts):
+        result = mcs(mol_a, mol_b, threshold=threshold, match_hydrogens=match_hydrogens, smarts=initial_smarts)
         query_mol = Chem.MolFromSmarts(result.smartsString)
         core = get_core_by_mcs(mol_a, mol_b, query_mol, threshold=threshold)
         return core, result.smartsString
 
-    heavy_atom_core, _ = setup_core(a_copy, b_copy, False)
+    try:
+        heavy_atom_core, _ = setup_core(a_copy, b_copy, False, initial_smarts)
 
-    conf_a, conf_b = align_mols_by_core(mol_a, mol_b, heavy_atom_core, ff, n_steps=n_steps, k=k)
-    set_romol_conf(a_copy, conf_a)
-    set_romol_conf(b_copy, conf_b)
+        conf_a, conf_b = align_mols_by_core(mol_a, mol_b, heavy_atom_core, ff, n_steps=n_steps, k=k)
+        set_romol_conf(a_copy, conf_a)
+        set_romol_conf(b_copy, conf_b)
 
-    core, smarts = setup_core(a_copy, b_copy, True)
-    return core, smarts
+        core, smarts = setup_core(a_copy, b_copy, True, initial_smarts)
+        return core, smarts
+    except AtomMappingError as err:
+        # Fall back to user provided smarts
+        if initial_smarts is not None:
+            print(f"WARNING: Could not get atom mapping: {err}, falling back to user defined smarts: {initial_smarts}")
+            query_mol = Chem.MolFromSmarts(initial_smarts)
+            core = get_core_by_mcs(mol_a, mol_b, query_mol, threshold=threshold)
+            return core, initial_smarts
+
+        raise err
