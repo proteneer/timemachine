@@ -1,14 +1,58 @@
 import tempfile
+from typing import List, Optional
 
+import jax
 import numpy as np
 from rdkit import Chem
 from simtk.openmm import app
 
+from timemachine.fe.topology import BaseTopology
+from timemachine.fe.utils import get_romol_conf
+from timemachine.ff import Forcefield
 
-def assert_mol_has_all_hydrogens(mol: Chem.Mol):
+
+def mol_has_all_hydrogens(mol: Chem.Mol) -> bool:
     atoms = mol.GetNumAtoms()
     mol_copy = Chem.AddHs(mol)
-    assert atoms == mol_copy.GetNumAtoms(), "Hydrogens missing for mol"
+    return atoms == mol_copy.GetNumAtoms()
+
+
+def assert_mol_has_all_hydrogens(mol: Chem.Mol):
+    assert mol_has_all_hydrogens(mol), "Hydrogens missing for mol"
+
+
+def get_vacuum_val_and_grad_fn(mol: Chem.Mol, ff: Forcefield):
+    """
+    Return a function which returns the potential energy and gradients
+    at the coordinates for the molecule in vacuum.
+    """
+    top = BaseTopology(mol, ff)
+    vacuum_system = top.setup_end_state()
+    U = vacuum_system.get_U_fn()
+
+    grad_fn = jax.jit(jax.grad(U, argnums=(0)))
+
+    def val_and_grad_fn(x):
+        return U(x), grad_fn(x)
+
+    return val_and_grad_fn
+
+
+def get_strained_atoms(mol: Chem.Mol, ff: Forcefield, max_force: Optional[float] = 50000) -> List[float]:
+    """
+    Return a list of atom indices that are strained based on the max_force.
+
+    Parameters
+    ----------
+    max_force:
+        If the magnitude of the force on atom i is greater than max force,
+        consider this a clash.
+    """
+    x0 = get_romol_conf(mol)
+    val_and_grad_fn = get_vacuum_val_and_grad_fn(mol, ff)
+    _, grads = val_and_grad_fn(x0)
+    norm_grads = np.linalg.norm(grads, axis=1)
+    return [int(x) for x in np.arange(x0.shape[0])[norm_grads > max_force]]
 
 
 def apply_hmr(masses, bond_list, multiplier=2):

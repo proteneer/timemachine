@@ -1,3 +1,5 @@
+from typing import List, Optional
+
 import numpy as np
 import simtk.unit
 from numpy.typing import NDArray
@@ -74,6 +76,31 @@ def draw_mol(mol, highlightAtoms, highlightColors):
     # display(SVG(svg))
 
 
+def draw_mol_idx(mol, highlight: Optional[List[int]] = None, scale_factor=None):
+    """
+    Draw mol with atom indices labeled.
+
+    Pararmeters
+    -----------
+    highlight: List of int or None
+        If specified, highlight the given atom idxs.
+    """
+    mol2d = Chem.Mol(mol)
+    AllChem.Compute2DCoords(mol2d)
+    if scale_factor:
+        AllChem.NormalizeDepiction(mol2d, scaleFactor=scale_factor)
+    for atom in mol2d.GetAtoms():
+        atom.SetProp("molAtomMapNumber", str(atom.GetIdx()))
+    return Draw.MolsToGridImage(
+        [mol2d],
+        molsPerRow=1,
+        highlightAtomLists=[highlight] if highlight is not None else None,
+        subImgSize=(500, 500),
+        legends=[get_mol_name(mol2d)],
+        useSVG=True,
+    )
+
+
 def get_atom_map_colors(core, seed=2022):
     rng = np.random.default_rng(seed)
 
@@ -96,28 +123,42 @@ def plot_atom_mapping(mol_a, mol_b, core, seed=2022):
     draw_mol(mol_b, core[:, 1].tolist(), atom_colors_b)
 
 
-def plot_atom_mapping_grid(mol_a, mol_b, core, show_idxs=False, seed=2022):
+def plot_atom_mapping_grid(mol_a, mol_b, core_smarts, core, show_idxs=False):
     mol_a_2d = Chem.Mol(mol_a)
     mol_b_2d = Chem.Mol(mol_b)
+    mol_q_2d = Chem.MolFromSmarts(core_smarts)
 
-    AllChem.Compute2DCoords(mol_a_2d)
-    AllChem.GenerateDepictionMatching2DStructure(mol_b_2d, mol_a_2d, atomMap=core.tolist())
+    AllChem.Compute2DCoords(mol_q_2d)
 
-    atom_colors_a, atom_colors_b = get_atom_map_colors(core, seed=seed)
+    q_to_a = [[int(x[0]), int(x[1])] for x in enumerate(core[:, 0])]
+    q_to_b = [[int(x[0]), int(x[1])] for x in enumerate(core[:, 1])]
+
+    AllChem.GenerateDepictionMatching2DStructure(mol_a_2d, mol_q_2d, atomMap=q_to_a)
+    AllChem.GenerateDepictionMatching2DStructure(mol_b_2d, mol_q_2d, atomMap=q_to_b)
+
+    atom_colors_a = {}
+    atom_colors_b = {}
+    atom_colors_q = {}
+    for c_idx, ((a_idx, b_idx), rgb) in enumerate(zip(core, np.random.random((len(core), 3)))):
+        atom_colors_a[int(a_idx)] = tuple(rgb.tolist())
+        atom_colors_b[int(b_idx)] = tuple(rgb.tolist())
+        atom_colors_q[int(c_idx)] = tuple(rgb.tolist())
 
     if show_idxs:
         for atom in mol_a_2d.GetAtoms():
             atom.SetProp("molAtomMapNumber", str(atom.GetIdx()))
         for atom in mol_b_2d.GetAtoms():
             atom.SetProp("molAtomMapNumber", str(atom.GetIdx()))
+        for atom in mol_q_2d.GetAtoms():
+            atom.SetProp("molAtomMapNumber", str(atom.GetIdx()))
 
     return Draw.MolsToGridImage(
-        [mol_a_2d, mol_b_2d],
-        molsPerRow=2,
-        highlightAtomLists=[core[:, 0].tolist(), core[:, 1].tolist()],
-        highlightAtomColors=[atom_colors_a, atom_colors_b],
-        subImgSize=(400, 400),
-        legends=[mol_a.GetProp("_Name"), mol_b.GetProp("_Name")],
+        [mol_q_2d, mol_a_2d, mol_b_2d],
+        molsPerRow=3,
+        highlightAtomLists=[list(range(mol_q_2d.GetNumAtoms())), core[:, 0].tolist(), core[:, 1].tolist()],
+        highlightAtomColors=[atom_colors_q, atom_colors_a, atom_colors_b],
+        subImgSize=(300, 300),
+        legends=["core", get_mol_name(mol_a), get_mol_name(mol_b)],
         useSVG=True,
     )
 
