@@ -4,17 +4,18 @@ import jax
 import matplotlib.pyplot as plt
 import numpy as np
 import pymbar
-import pytest
+
+# import pytest
 from rdkit import Chem
 
 from timemachine.constants import BOLTZ
-from timemachine.fe import pdb_writer, single_topology, utils
+from timemachine.fe import atom_mapping, pdb_writer, single_topology, utils
 from timemachine.fe.system import simulate_system
 from timemachine.fe.utils import get_romol_conf
 from timemachine.ff import Forcefield
 
 
-@pytest.mark.skip(reason="This is currently too slow to run on CI")
+# @pytest.mark.skip(reason="This is currently too slow to run on CI")
 def test_hif2a_free_energy_estimates():
     # Test that we can estimate the free energy differences for some simple transformations
 
@@ -27,40 +28,11 @@ def test_hif2a_free_energy_estimates():
     mol_a = all_mols[1]
     mol_b = all_mols[4]
 
-    core = np.array(
-        [
-            [0, 0],
-            [2, 2],
-            [1, 1],
-            [6, 6],
-            [5, 5],
-            [4, 4],
-            [3, 3],
-            [15, 16],
-            [16, 17],
-            [17, 18],
-            [18, 19],
-            [19, 20],
-            [20, 21],
-            [32, 30],
-            [26, 25],
-            [27, 26],
-            [7, 7],
-            [8, 8],
-            [9, 9],
-            [10, 10],
-            [29, 11],
-            [11, 12],
-            [12, 13],
-            [14, 15],
-            [31, 29],
-            [13, 14],
-            [23, 24],
-            [30, 28],
-            [28, 27],
-            [21, 22],
-        ]
-    )
+    core_smarts = atom_mapping.mcs(mol_a, mol_b).smartsString
+    svg = utils.plot_atom_mapping_grid(mol_a, mol_b, core_smarts)
+    with open("atom_mapping.svg", "w") as fh:
+        fh.write(svg)
+    core = atom_mapping.get_core_by_mcs(mol_a, mol_b, core_smarts)
 
     st = single_topology.SingleTopology(mol_a, mol_b, core, forcefield)
 
@@ -76,10 +48,6 @@ def test_hif2a_free_energy_estimates():
 
     kT = BOLTZ * 300.0
     beta = 1 / kT
-
-    svg = utils.plot_atom_mapping_grid(mol_a, mol_b, core)
-    with open("atom_mapping.svg", "w") as fh:
-        fh.write(svg)
 
     for lambda_idx, U_fn in enumerate(U_fns):
         # print("lambda", lambda_schedule[lambda_idx], "U", U_fn(x0))

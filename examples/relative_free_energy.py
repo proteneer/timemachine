@@ -6,8 +6,9 @@ from rdkit import Chem
 
 from timemachine.constants import DEFAULT_FF
 from timemachine.fe import atom_mapping, pdb_writer
-from timemachine.fe.rbfe import HostConfig, estimate_relative_free_energy, plot_atom_mapping_grid
+from timemachine.fe.rbfe import HostConfig, estimate_relative_free_energy
 from timemachine.fe.single_topology import AtomMapMixin
+from timemachine.fe.utils import plot_atom_mapping_grid
 from timemachine.ff import Forcefield
 from timemachine.md import builders
 from timemachine.testsystems.relative import get_hif2a_ligand_pair_single_topology
