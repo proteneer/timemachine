@@ -67,7 +67,6 @@ exclude: >
   | \.xml$
   | /vendored/
   | ^attic/
-  | ^timemachine/parallel/grpc/
   | ^timemachine/ff/params/
   | ^timemachine/_vendored/
   | ^versioneer\.py$

@@ -3,8 +3,6 @@ from collections import defaultdict
 from subprocess import check_output
 from typing import List, Optional
 
-from timemachine.parallel.grpc.service_pb2 import StatusResponse
-
 
 def get_gpu_count() -> int:
     # Expected to return a line delimited summary of each GPU
@@ -20,22 +18,6 @@ def get_gpu_count() -> int:
         gpu_list = [gpu_list[i] for i in map(int, visible_devices.split(","))]
 
     return len(gpu_list)
-
-
-def get_worker_status() -> StatusResponse:  # type: ignore
-    try:
-        with open("/proc/driver/nvidia/version") as ifs:
-            nvidia_driver = ifs.read().strip()
-    except FileNotFoundError:
-        nvidia_driver = ""
-    try:
-        git_sha = check_output(["git", "rev-parse", "HEAD"]).strip()
-    except FileNotFoundError:
-        git_sha = b""
-    return StatusResponse(
-        nvidia_driver=nvidia_driver,
-        git_sha=git_sha,
-    )
 
 
 def batch_list(values: List, num_workers: Optional[int] = None) -> List[List]:
