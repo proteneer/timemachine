@@ -196,7 +196,7 @@ def get_core_with_alignment(
         Forcefield to use for alignment, defaults to DEFAULT_FF forcefield if None
 
     initial_smarts: str or None
-        If set use smarts as the initial seed to MCS and as a fallback
+        If set uses smarts as the initial seed to MCS and as a fallback
         if mcs results in a trivial core.
 
     Returns
