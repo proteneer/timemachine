@@ -19,10 +19,6 @@ build:
 clean:
 	cd $(CPP_DIR) && rm -rf build/ | true
 
-.PHONY: grpc
-grpc:
-	python -m grpc_tools.protoc -I grpc/ --python_out=. --grpc_python_out=. grpc/timemachine/parallel/grpc/service.proto
-
 .PHONY: verify
 verify:
 	pre-commit run --all-files --show-diff-on-failure --color=always
