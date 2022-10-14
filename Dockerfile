@@ -1,4 +1,4 @@
-FROM nvidia/cuda:11.6.0-devel-ubuntu20.04 AS tm_base_env
+FROM nvidia/cuda:11.7.1-devel-ubuntu20.04 AS tm_base_env
 
 # Copied out of anaconda's dockerfile
 ARG MINICONDA_VERSION=4.6.14
@@ -102,7 +102,7 @@ WORKDIR /code/timemachine/
 RUN pip install --no-cache-dir -e .[test] && rm -rf ./build
 
 # Container with only cuda runtime, half the size of dev container
-FROM nvidia/cuda:11.6.0-runtime-ubuntu20.04 as timemachine
+FROM nvidia/cuda:11.7.1-runtime-ubuntu20.04 as timemachine
 COPY --from=timemachine_dev /opt/ /opt/
 COPY --from=timemachine_dev /code/ /code/
 COPY --from=timemachine_dev /root/.bashrc /root/.bashrc
