@@ -23,8 +23,8 @@ def assert_mol_has_all_hydrogens(mol: Chem.Mol):
 
 def get_vacuum_val_and_grad_fn(mol: Chem.Mol, ff: Forcefield):
     """
-    Return a function which returns the potential energy and frcs
-    at the given coordinates for the molecule in vacuum.
+    Return a function which returns the potential energy and gradients
+    at the coordinates for the molecule in vacuum.
     """
     top = BaseTopology(mol, ff)
     vacuum_system = top.setup_end_state()
@@ -38,9 +38,9 @@ def get_vacuum_val_and_grad_fn(mol: Chem.Mol, ff: Forcefield):
     return val_and_grad_fn
 
 
-def get_clashing_atoms(mol: Chem.Mol, ff: Forcefield, max_force: Optional[float] = 50000) -> List[float]:
+def get_strained_atoms(mol: Chem.Mol, ff: Forcefield, max_force: Optional[float] = 50000) -> List[float]:
     """
-    Return a list of atom indices that are clashing based on the max_force.
+    Return a list of atom indices that are strained based on the max_force.
 
     Parameters
     ----------
@@ -50,9 +50,9 @@ def get_clashing_atoms(mol: Chem.Mol, ff: Forcefield, max_force: Optional[float]
     """
     x0 = get_romol_conf(mol)
     val_and_grad_fn = get_vacuum_val_and_grad_fn(mol, ff)
-    _, frcs = val_and_grad_fn(x0)
-    frcs = np.linalg.norm(frcs, axis=1)
-    return [int(x) for x in np.arange(x0.shape[0])[frcs > max_force]]
+    _, grads = val_and_grad_fn(x0)
+    norm_grads = np.linalg.norm(grads, axis=1)
+    return [int(x) for x in np.arange(x0.shape[0])[norm_grads > max_force]]
 
 
 def apply_hmr(masses, bond_list, multiplier=2):

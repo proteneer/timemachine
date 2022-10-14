@@ -119,15 +119,15 @@ def test_experimental_conversions_to_kj():
     np.testing.assert_allclose(utils.convert_uM_to_kJ_per_mole(0.15), -38.951164)
 
 
-def test_get_clashing_atoms():
+def test_get_strained_atoms():
     ff = Forcefield.load_from_file(DEFAULT_FF)
     np.random.seed(2022)
     mol = Chem.AddHs(Chem.MolFromSmiles("c1ccccc1"))
     AllChem.EmbedMolecule(mol)
-    assert model_utils.get_clashing_atoms(mol, ff) == []
+    assert model_utils.get_strained_atoms(mol, ff) == []
 
     # force a clash
     x0 = utils.get_romol_conf(mol)
-    x0[0, :] = x0[1, :] + 0.05
+    x0[-2, :] = x0[-1, :] + 0.01
     utils.set_romol_conf(mol, x0)
-    assert model_utils.get_clashing_atoms(mol, ff) == [0, 5, 6]
+    assert model_utils.get_strained_atoms(mol, ff) == [10, 11]
