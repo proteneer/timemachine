@@ -3,7 +3,6 @@ Code, documentation, experiments we want to retain for reference, but that we're
 ### Contents
 * `atom_mapping/` -- distance-based atom comparison for rdFMCS
 * `docs/` -- write-up of initial vision for `timemachine`, involving efficient backpropagation through MD trajectories
-* `grpc` -- code previously used for GRPC
 * `docking/` -- Docking module that docks uses non-equilibrium switching
 * `io/` -- Input/output utilities
 * `jax_tricks` -- misc. Jax functions
