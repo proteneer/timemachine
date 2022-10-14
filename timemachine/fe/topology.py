@@ -145,15 +145,7 @@ class HostGuestTopology:
         num_guest_atoms = self.guest_topology.get_num_atoms()
         guest_qlj, guest_p = self.guest_topology.parameterize_nonbonded(ff_q_params, ff_lj_params)
 
-        if isinstance(guest_p, potentials.NonbondedInterpolated):
-            assert guest_qlj.shape[0] == num_guest_atoms * 2
-            is_interpolated = True
-        else:
-            assert guest_qlj.shape[0] == num_guest_atoms
-            is_interpolated = False
-
-        # see if we're doing parameter interpolation
-        assert guest_qlj.shape[1] == 3
+        assert guest_qlj.shape == (num_guest_atoms, 3)
         assert guest_p.get_beta() == self.host_nonbonded.get_beta()
         assert guest_p.get_cutoff() == self.host_nonbonded.get_cutoff()
 
@@ -168,34 +160,16 @@ class HostGuestTopology:
             [self.host_nonbonded.get_lambda_plane_idxs(), guest_p.get_lambda_plane_idxs()]
         )
 
-        if is_interpolated:
-            # with parameter interpolation
-            hg_nb_params_src = jnp.concatenate([self.host_nonbonded.params, guest_qlj[:num_guest_atoms]])
-            hg_nb_params_dst = jnp.concatenate([self.host_nonbonded.params, guest_qlj[num_guest_atoms:]])
-            hg_nb_params = jnp.concatenate([hg_nb_params_src, hg_nb_params_dst])
+        hg_nb_params = jnp.concatenate([self.host_nonbonded.params, guest_qlj])
 
-            nb = potentials.NonbondedInterpolated(
-                hg_exclusion_idxs,
-                hg_scale_factors,
-                hg_lambda_plane_idxs,
-                hg_lambda_offset_idxs,
-                guest_p.get_beta(),
-                guest_p.get_cutoff(),
-            )
-
-            return hg_nb_params, nb
-        else:
-            # no parameter interpolation
-            hg_nb_params = jnp.concatenate([self.host_nonbonded.params, guest_qlj])
-
-            return hg_nb_params, potentials.Nonbonded(
-                hg_exclusion_idxs,
-                hg_scale_factors,
-                hg_lambda_plane_idxs,
-                hg_lambda_offset_idxs,
-                guest_p.get_beta(),
-                guest_p.get_cutoff(),
-            )
+        return hg_nb_params, potentials.Nonbonded(
+            hg_exclusion_idxs,
+            hg_scale_factors,
+            hg_lambda_plane_idxs,
+            hg_lambda_offset_idxs,
+            guest_p.get_beta(),
+            guest_p.get_cutoff(),
+        )
 
 
 class BaseTopology:
