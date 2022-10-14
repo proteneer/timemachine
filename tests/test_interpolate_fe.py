@@ -4,8 +4,7 @@ import jax
 import matplotlib.pyplot as plt
 import numpy as np
 import pymbar
-
-# import pytest
+import pytest
 from rdkit import Chem
 
 from timemachine.constants import BOLTZ
@@ -15,7 +14,7 @@ from timemachine.fe.utils import get_romol_conf
 from timemachine.ff import Forcefield
 
 
-# @pytest.mark.skip(reason="This is currently too slow to run on CI")
+@pytest.mark.skip(reason="This is currently too slow to run on CI")
 def test_hif2a_free_energy_estimates():
     # Test that we can estimate the free energy differences for some simple transformations
 
@@ -29,10 +28,11 @@ def test_hif2a_free_energy_estimates():
     mol_b = all_mols[4]
 
     core_smarts = atom_mapping.mcs(mol_a, mol_b).smartsString
-    svg = utils.plot_atom_mapping_grid(mol_a, mol_b, core_smarts)
+    query_mol = Chem.MolFromSmarts(core_smarts)
+    core = atom_mapping.get_core_by_mcs(mol_a, mol_b, query_mol)
+    svg = utils.plot_atom_mapping_grid(mol_a, mol_b, core_smarts, core)
     with open("atom_mapping.svg", "w") as fh:
         fh.write(svg)
-    core = atom_mapping.get_core_by_mcs(mol_a, mol_b, core_smarts)
 
     st = single_topology.SingleTopology(mol_a, mol_b, core, forcefield)
 
