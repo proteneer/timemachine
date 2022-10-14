@@ -234,7 +234,7 @@ def get_core_with_alignment(
     except AtomMappingError as err:
         # Fall back to user provided smarts
         if initial_smarts is not None:
-            print(f"WARNING: Could not get atom mapping: {err}, fall back to user defined smarts: {initial_smarts}")
+            print(f"WARNING: Could not get atom mapping: {err}, falling back to user defined smarts: {initial_smarts}")
             query_mol = Chem.MolFromSmarts(initial_smarts)
             core = get_core_by_mcs(mol_a, mol_b, query_mol, threshold=threshold)
             return core, initial_smarts
