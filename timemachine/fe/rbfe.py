@@ -8,8 +8,6 @@ from typing import List
 import matplotlib.pyplot as plt
 import numpy as np
 import pymbar
-from rdkit import Chem
-from rdkit.Chem import AllChem, Draw
 from scipy.spatial.distance import cdist
 
 from timemachine.constants import BOLTZ, DEFAULT_TEMP
@@ -24,46 +22,6 @@ from timemachine.lib import LangevinIntegrator, MonteCarloBarostat, custom_ops
 from timemachine.lib.potentials import CustomOpWrapper
 from timemachine.md import builders, minimizer
 from timemachine.md.barostat.utils import get_bond_list, get_group_indices
-
-
-def plot_atom_mapping_grid(mol_a, mol_b, core_smarts, core, show_idxs=False):
-    mol_a_2d = Chem.Mol(mol_a)
-    mol_b_2d = Chem.Mol(mol_b)
-    mol_q_2d = Chem.MolFromSmarts(core_smarts)
-
-    AllChem.Compute2DCoords(mol_q_2d)
-
-    q_to_a = [[int(x[0]), int(x[1])] for x in enumerate(core[:, 0])]
-    q_to_b = [[int(x[0]), int(x[1])] for x in enumerate(core[:, 1])]
-
-    AllChem.GenerateDepictionMatching2DStructure(mol_a_2d, mol_q_2d, atomMap=q_to_a)
-    AllChem.GenerateDepictionMatching2DStructure(mol_b_2d, mol_q_2d, atomMap=q_to_b)
-
-    atom_colors_a = {}
-    atom_colors_b = {}
-    atom_colors_q = {}
-    for c_idx, ((a_idx, b_idx), rgb) in enumerate(zip(core, np.random.random((len(core), 3)))):
-        atom_colors_a[int(a_idx)] = tuple(rgb.tolist())
-        atom_colors_b[int(b_idx)] = tuple(rgb.tolist())
-        atom_colors_q[int(c_idx)] = tuple(rgb.tolist())
-
-    if show_idxs:
-        for atom in mol_a_2d.GetAtoms():
-            atom.SetProp("molAtomMapNumber", str(atom.GetIdx()))
-        for atom in mol_b_2d.GetAtoms():
-            atom.SetProp("molAtomMapNumber", str(atom.GetIdx()))
-        for atom in mol_q_2d.GetAtoms():
-            atom.SetProp("molAtomMapNumber", str(atom.GetIdx()))
-
-    return Draw.MolsToGridImage(
-        [mol_q_2d, mol_a_2d, mol_b_2d],
-        molsPerRow=3,
-        highlightAtomLists=[list(range(mol_q_2d.GetNumAtoms())), core[:, 0].tolist(), core[:, 1].tolist()],
-        highlightAtomColors=[atom_colors_q, atom_colors_a, atom_colors_b],
-        subImgSize=(300, 300),
-        legends=["core", get_mol_name(mol_a), get_mol_name(mol_b)],
-        useSVG=True,
-    )
 
 
 def get_batch_U_fns(bps, lamb):
