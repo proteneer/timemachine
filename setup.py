@@ -78,7 +78,6 @@ setup(
     packages=find_packages(),
     python_requires=">=3.7",
     install_requires=[
-        "grpcio",
         "importlib-resources",
         "jax",
         "jaxlib>0.3.13",
@@ -95,7 +94,6 @@ setup(
             "black==21.10b0",
             "click==8.0.4",  # pinned due to https://github.com/psf/black/issues/2964 -- unpin if upgrading black
             "flake8==4.0.1",
-            "grpcio-tools==1.30.0",
             "isort==5.10.1",
             "mypy==0.942",
             "pre-commit==2.17.0",

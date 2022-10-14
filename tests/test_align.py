@@ -201,3 +201,33 @@ def test_get_core_with_alignment():
     shuffled_core, _ = get_core_with_alignment(mol_a_shuffled, mol_b_shuffled)
     assert len(core) == mol_a.GetNumAtoms()
     assert len(core) == mol_b.GetNumAtoms()
+
+
+@pytest.mark.nogpu
+def test_get_core_with_alignment_smarts():
+    seed = 2022
+    np.random.seed(seed)
+    mol_a = Chem.AddHs(Chem.MolFromSmiles("CC"))
+    mol_b = Chem.AddHs(Chem.MolFromSmiles("CCC"))
+    AllChem.EmbedMolecule(mol_a, randomSeed=seed)
+    AllChem.EmbedMolecule(mol_b, randomSeed=seed)
+
+    # Align based on the first ring in each
+    core = np.zeros((2, 2), dtype=int)
+    core[:, 0] = np.arange(2, dtype=int)
+    core[:, 1] = np.arange(2, dtype=int)
+
+    ff = Forcefield.load_from_file(DEFAULT_FF)
+
+    conf_a, conf_b = align.align_mols_by_core(mol_a, mol_b, core, ff)
+
+    set_romol_conf(mol_a, conf_a)
+    set_romol_conf(mol_b, conf_b)
+
+    with pytest.raises(AtomMappingError):
+        get_core_with_alignment(mol_a, mol_b)
+
+    # Not aligned so falls back to initial smarts
+    core_out, smarts = get_core_with_alignment(mol_a, mol_b, initial_smarts="CC", threshold=2)
+    assert (core == core_out).all()
+    assert smarts == "CC"

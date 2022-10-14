@@ -337,6 +337,8 @@ def estimate_free_energy_given_initial_states(initial_states, protocol, temperat
     num_cols = len(U_names) + 1
 
     figure, all_axes = plt.subplots(num_rows, num_cols, figsize=(num_cols * 5, num_rows * 3))
+    if num_rows == 1:
+        all_axes = [all_axes]
 
     stored_frames = []
     stored_boxes = []

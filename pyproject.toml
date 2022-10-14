@@ -4,7 +4,6 @@ extend-exclude = '''
 ^/( versioneer.py$
   | timemachine/_version.py$
   | timemachine/ff/params
-  | timemachine/parallel/grpc
   )
 '''
 
