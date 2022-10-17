@@ -1,11 +1,17 @@
+ARG LIBXRENDER_VERSION=1:0.9.10-*
+ARG LIBXEXT_VERSION=2:1.3.4-*
+
 FROM nvidia/cuda:11.6.0-devel-ubuntu20.04 AS tm_base_env
+ARG LIBXRENDER_VERSION
+ARG LIBXEXT_VERSION
 
 # Copied out of anaconda's dockerfile
 ARG MINICONDA_VERSION=4.6.14
 ARG MAKE_VERSION=4.2.1-1.2
 ARG GIT_VERSION=1:2.25.1-*
 ARG WGET_VERSION=1.20.3-1ubuntu2
-RUN apt-get update && apt-get install --no-install-recommends -y wget=${WGET_VERSION} git=${GIT_VERSION} make=${MAKE_VERSION} vim \
+RUN apt-get update && apt-get install --no-install-recommends -y \
+    wget=${WGET_VERSION} git=${GIT_VERSION} make=${MAKE_VERSION} libxrender1=${LIBXRENDER_VERSION} libxext-dev=${LIBXEXT_VERSION} vim \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 RUN wget --quiet https://repo.anaconda.com/miniconda/Miniconda3-${MINICONDA_VERSION}-Linux-x86_64.sh -O ~/miniconda.sh && \
@@ -103,6 +109,11 @@ RUN pip install --no-cache-dir -e .[test] && rm -rf ./build
 
 # Container with only cuda runtime, half the size of dev container
 FROM nvidia/cuda:11.6.0-runtime-ubuntu20.04 as timemachine
+ARG LIBXRENDER_VERSION
+ARG LIBXEXT_VERSION
+RUN apt-get update && apt-get install --no-install-recommends -y libxrender1=${LIBXRENDER_VERSION} libxext-dev=${LIBXEXT_VERSION} \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
 COPY --from=timemachine_dev /opt/ /opt/
 COPY --from=timemachine_dev /code/ /code/
 COPY --from=timemachine_dev /root/.bashrc /root/.bashrc
