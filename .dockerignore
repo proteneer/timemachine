@@ -1,11 +1,20 @@
-# Python Related
-*/__pycache__/*
-**/.Python/*
-**/build/*
-**/dist/*
-**/*.egg-info/*
-**/.coverage/*
-*/.ipynb_checkpoints*
+# Development Related
+**/__pycache__/
+**/.Python/
+**/build/
+**/dist/
+*.egg-info/
+**/.coverage/
+**/.ipynb_checkpoints*/
+**/attic/
+**/examples/
+**/coverage/
+**/.pytest*
+**/.mypy*
+**/.clang*
+Dockerfile
+.dockerignore
+
 
 # Git Files
 **/.git*
@@ -23,7 +32,7 @@
 # Licensing
 oe_license.txt
 
-Dockerfile
-
 # Files from tests
 *.svg
+*.pkl
+*.png
