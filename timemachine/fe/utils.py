@@ -136,9 +136,9 @@ def plot_atom_mapping_grid(mol_a, mol_b, core_smarts, core, show_idxs=False, sca
     AllChem.GenerateDepictionMatching2DStructure(mol_a_2d, mol_q_2d, atomMap=q_to_a)
     AllChem.GenerateDepictionMatching2DStructure(mol_b_2d, mol_q_2d, atomMap=q_to_b)
     if scale_factor:
-        AllChem.NormalizeDepiction(mol_a_2d, scaleFactor=scale_factor)
-        AllChem.NormalizeDepiction(mol_b_2d, scaleFactor=scale_factor)
-        AllChem.NormalizeDepiction(mol_q_2d, scaleFactor=scale_factor)
+        AllChem.NormalizeDepiction(mol_a_2d, scaleFactor=scale_factor, canonicalize=0)
+        AllChem.NormalizeDepiction(mol_b_2d, scaleFactor=scale_factor, canonicalize=0)
+        AllChem.NormalizeDepiction(mol_q_2d, scaleFactor=scale_factor, canonicalize=0)
 
     atom_colors_a = {}
     atom_colors_b = {}

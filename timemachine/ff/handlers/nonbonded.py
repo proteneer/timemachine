@@ -286,9 +286,9 @@ def apply_bond_charge_corrections(initial_charges, bond_idxs, deltas):
 
     net_charge = jnp.sum(initial_charges)
     final_net_charge = jnp.sum(final_charges)
-    net_charge_is_unchanged = jnp.isclose(final_net_charge, net_charge, atol=1e-5)
+    net_charge_is_unchanged = jnp.isclose(final_net_charge, net_charge, atol=1e-4)
 
-    assert net_charge_is_unchanged
+    assert net_charge_is_unchanged, f"{final_net_charge} != {net_charge}"
 
     # print some safety warnings
     directed_bonds = Counter([tuple(b) for b in bond_idxs])
