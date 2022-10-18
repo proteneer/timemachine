@@ -85,6 +85,7 @@ setup(
         "numpy",
         "pymbar>3.0.4,<4",
         "pyyaml",
+        "rdkit",
         "scipy",
         "typing-extensions",
         "matplotlib",
