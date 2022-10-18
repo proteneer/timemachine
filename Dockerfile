@@ -1,3 +1,4 @@
+# Libraries required by RDkit
 ARG LIBXRENDER_VERSION=1:0.9.10-*
 ARG LIBXEXT_VERSION=2:1.3.4-*
 
