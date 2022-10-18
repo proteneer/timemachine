@@ -101,6 +101,7 @@ setup(
         "test": [
             "pytest",
             "pytest-cov",
+            "pytest-xdist",
             "hilbertcurve==1.0.5",
             "hypothesis[numpy]==6.54.6",
         ],

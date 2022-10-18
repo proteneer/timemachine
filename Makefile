@@ -25,7 +25,7 @@ verify:
 
 .PHONY: nogpu_tests
 nogpu_tests:
-	pytest -m $(NOGPU_MARKER) $(PYTEST_CI_ARGS)
+	pytest -m $(NOGPU_MARKER) $(PYTEST_CI_ARGS) -n auto
 
 .PHONY: memcheck_tests
 memcheck_tests:
