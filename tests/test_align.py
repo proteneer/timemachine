@@ -4,12 +4,11 @@ import numpy as np
 import pytest
 from rdkit import Chem
 from rdkit.Chem import AllChem, rdMolTransforms
-from rdkit.Geometry import Point3D
 
 from timemachine.constants import DEFAULT_FF
 from timemachine.fe.atom_mapping import get_core_by_mcs, get_core_with_alignment, mcs
 from timemachine.fe.topology import AtomMappingError
-from timemachine.fe.utils import plot_atom_mapping_grid, set_romol_conf
+from timemachine.fe.utils import set_romol_conf
 from timemachine.ff import Forcefield
 from timemachine.md import align
 
@@ -292,15 +291,7 @@ def test_get_core_with_alignment_partial_ring_not_mapped():
     mol_q = get_mol_from_smiles(smi_q)
     mol_a = get_mol_from_smiles_and_core(smi_a, mol_q)
     mol_b = get_mol_from_smiles_and_core(smi_b, mol_q)
-    with open(f"/Users/jkaus/Documents/timemachine/mol_a.pdb", "w") as w:
-        w.write(Chem.MolToPDBBlock(mol_a))
-    with open(f"/Users/jkaus/Documents/timemachine/mol_b.pdb", "w") as w:
-        w.write(Chem.MolToPDBBlock(mol_b))
     core, core_smarts = get_core_with_alignment(mol_a, mol_b)
-
-    atom_mapping_svg = plot_atom_mapping_grid(mol_a, mol_b, core_smarts, core)
-    with open("/Users/jkaus/Documents/timemachine/am_test.svg", "w") as f:
-        f.write(atom_mapping_svg)
 
     assert len(core) == 10
     # the first one is returned when I ran the test but both are valid mappings
