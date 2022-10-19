@@ -1,5 +1,5 @@
 from copy import deepcopy
-from typing import Optional, Tuple
+from typing import List, Optional, Tuple
 
 import numpy as np
 from numpy.typing import NDArray
@@ -23,7 +23,7 @@ def mcs(
     conformer_aware: bool = True,
     retry: bool = True,
     match_hydrogens: bool = True,
-    complete_rings_only: bool = False,
+    ring_options: bool = True,
 ):
     """Find maximum common substructure between mols a and b
     using reasonable settings for single topology:
@@ -37,19 +37,19 @@ def mcs(
 
     if match_hydrogens=False, then do not match using hydrogens. Will not retry
 
-    if complete_rings_only = False, do not set complete rings only.
-        Note: If True, this may expose RDKIT bugs.
+    if ring_options = False, do not set complete rings only and ring matches ring only.
+        Note: If True, this may expose RDKIT bugs which can cause this function to hang.
     """
     params = rdFMCS.MCSParameters()
 
     # bonds
-    params.BondCompareParameters.CompleteRingsOnly = int(complete_rings_only)
-    params.BondCompareParameters.RingMatchesRingOnly = 1
+    params.BondCompareParameters.CompleteRingsOnly = int(ring_options)
+    params.BondCompareParameters.RingMatchesRingOnly = int(ring_options)
     params.BondTyper = rdFMCS.BondCompare.CompareAny
 
     # atoms
-    params.AtomCompareParameters.CompleteRingsOnly = int(complete_rings_only)
-    params.AtomCompareParameters.RingMatchesRingOnly = 1
+    params.AtomCompareParameters.CompleteRingsOnly = int(ring_options)
+    params.AtomCompareParameters.RingMatchesRingOnly = int(ring_options)
     params.AtomCompareParameters.MatchValences = 0
     params.AtomCompareParameters.MatchChiralTag = 0
     if conformer_aware:
@@ -76,6 +76,16 @@ def mcs(
         retry = False
 
     # try on given mols
+    from timemachine.fe.utils import draw_mol_idx, get_mol_name, get_romol_conf, plot_atom_mapping_grid, set_romol_conf
+
+    with open(f"/Users/jkaus/Documents/timemachine/mol_a.pdb", "w") as w:
+        w.write(Chem.MolToPDBBlock(a))
+    with open(f"/Users/jkaus/Documents/timemachine/mol_b.pdb", "w") as w:
+        w.write(Chem.MolToPDBBlock(b))
+    with open(f"/Users/jkaus/Documents/timemachine/mol_a.svg", "w") as w:
+        w.write(draw_mol_idx(a, scale_factor=1.5))
+    with open(f"/Users/jkaus/Documents/timemachine/mol_b.svg", "w") as w:
+        w.write(draw_mol_idx(b, scale_factor=1.5))
     result = rdFMCS.FindMCS([a, b], params)
 
     # optional fallback
@@ -142,6 +152,9 @@ def get_core_by_mcs(mol_a, mol_b, query, threshold=0.5):
     # warn if this search won't be exhaustive
     if len(matches_a) == max_matches or len(matches_b) == max_matches:
         print("Warning: max_matches exceeded -- cannot guarantee to find a feasible core")
+
+    if len(matches_a) == 0 or len(matches_b) == 0:
+        raise AtomMappingError(f"No matches {matches_a} {matches_b}")
 
     # once rather than in subsequent double for-loop
     all_distances = cdist(conf_a, conf_b)
@@ -227,9 +240,10 @@ def get_core_with_alignment(
             threshold=threshold,
             match_hydrogens=match_hydrogens,
             smarts=initial_smarts,
-            complete_rings_only=False,
+            ring_options=False,
         )
         query_mol = Chem.MolFromSmarts(result.smartsString)
+        print(result.smartsString)
         core = get_core_by_mcs(mol_a, mol_b, query_mol, threshold=threshold)
         return core, result.smartsString
 
@@ -242,6 +256,8 @@ def get_core_with_alignment(
 
         core, smarts = setup_core(a_copy, b_copy, True, initial_smarts)
         core, smarts = filter_partial_rings(a_copy, b_copy, core, smarts)
+        if len(core) <= 2:
+            raise AtomMappingError("Result is trivial after filtering rings")
         return core, smarts
     except AtomMappingError as err:
         # Fall back to user provided smarts
@@ -253,29 +269,24 @@ def get_core_with_alignment(
         raise err
 
 
-# def find_partial_matched_rings(mol, core_a, core_b):
-#     partial_map_idxs_in_mol = set()
-#     for ring_atoms in mol.GetRingInfo().AtomRings():
-#         ring_atoms_a_set = set(ring_atoms)
-#         matches = {}
-#         for a_idx in ring_atoms_set:
-#             if a_idx in core_a:
-#                 b_idx = core_b[list(core_a).index(a_idx)]
-#                 matches[a_idx] = b_idx
-#         if len(matches) == len(ring_atoms):
-#             print('all matched', matches, ring_atoms)
-#             continue
-#         else:
-#             # TODO: This does not exclude rings of different sizes
-#             # if all atoms in the ring are mapped
-#             partial_map_idxs_in_ring = set(matches.keys())
-#             print('not matched', matches, ring_atoms, partial_map_idxs_in_ring)
-#             partial_map_idxs_in_mol.update(partial_map_idxs_in_ring)
-#     return partial_map_idxs_in_mol
+def find_partial_matched_rings(mol_a: Chem.Mol, mol_b: Chem.Mol, core_a: NDArray, core_b: NDArray) -> List[int]:
+    """
+    Return a list of atom indicies that are partially mapped rings.
+    Note that partially mapped fused rings are allowed, as long as
+    the complete subring is mapped.
 
-
-def find_partial_matched_rings(mol_a, mol_b, core_a, core_b):
-    partial_map_idxs_in_mol = set()
+    Parameters
+    ----------
+    mol_a:
+        Return a list of partially mapped ring atom idxs for this mol.
+    mol_b:
+        Pair molecule used to determine ring mapping.
+    core_a:
+        mapped atom indicies in mol_a
+    core_b:
+        mapped atom indicies in mol_b
+    """
+    partial_map_idxs_in_mol_a = set()
     ring_info_a = mol_a.GetRingInfo()
     ring_info_b = mol_b.GetRingInfo()
     for ring_atoms_a in ring_info_a.AtomRings():
@@ -285,10 +296,8 @@ def find_partial_matched_rings(mol_a, mol_b, core_a, core_b):
         for a_idx in ring_atoms_a_set:
             if a_idx in core_a:
                 b_idx = core_b[list(core_a).index(a_idx)]
-                # ring matches ring
                 ring_a_sizes = ring_info_a.AtomRingSizes(int(a_idx))
                 ring_b_sizes = ring_info_b.AtomRingSizes(int(b_idx))
-                print("rmr", a_idx, ring_a_sizes, b_idx, ring_b_sizes)
                 if set(ring_a_sizes).intersection(set(ring_b_sizes)):
                     matches[a_idx] = b_idx
                     # if atom a belongs to a fused ring that is mapped,
@@ -301,95 +310,111 @@ def find_partial_matched_rings(mol_a, mol_b, core_a, core_b):
 
                     # Keep the shared atoms of the 6-membered ring
                     # even though the 5 -> 4 membered ring is not mapped
-                    # TODO: If there is say a fused 5-6 ring that goes to 6-5
-                    # sharing the same two atoms does this cause problems?
                     if len(ring_a_sizes) > 1 or len(ring_b_sizes) > 1:
                         keep_atoms_a.append(a_idx)
                 else:
                     pass
-                    print("rmr failed", set(ring_a_sizes).intersection(set(ring_b_sizes)))
+
         if len(matches) == len(ring_atoms_a):
-            print("all matched", matches, ring_atoms_a)
             continue
         else:
             # complete rings only
             partial_map_idxs = [a_idx for a_idx in ring_atoms_a_set - set(keep_atoms_a) if a_idx in core_a]
-            print("not matched", matches, ring_atoms_a, partial_map_idxs)
-            partial_map_idxs_in_mol.update(partial_map_idxs)
-    return partial_map_idxs_in_mol
+            partial_map_idxs_in_mol_a.update(partial_map_idxs)
+    return list(partial_map_idxs_in_mol_a)
 
 
-def get_core_unmatched(mol_to_core, unmatched_idxs):
-    core_unmatched = set()
-    for a_idx in unmatched_idxs:
+def get_core_atom_idxs(mol_to_core: NDArray, mol_atom_idxs: NDArray) -> List[int]:
+    """
+    Given a mapping to the core and a list of mol atom idxs,
+    return the corresponding core atom idxs.
+
+    Parameters
+    ----------
+    mol_to_core: np.ndarray of ints, shape (n_MCS, 2)
+        Maps from the molecule to the core indicies.
+    mol_atom_idxs: np.ndarray of ints, shape (n_MCS,)
+        List of atom idxs to convert.
+    """
+    core_atom_idxs = set()
+    for a_idx in mol_atom_idxs:
         ordered = list(mol_to_core[:, 0])
-        core_unmatched.add(mol_to_core[ordered.index(a_idx), 1])
-    return list(core_unmatched)
+        core_atom_idxs.add(mol_to_core[ordered.index(a_idx), 1])
+    return list(core_atom_idxs)
 
 
-def filter_partial_rings(mol_a, mol_b, core, smarts):
-    a_unmatched = find_partial_matched_rings(mol_a, mol_b, core[:, 0], core[:, 1])
-    b_unmatched = find_partial_matched_rings(mol_b, mol_a, core[:, 1], core[:, 0])
-    print("a_unmatched", a_unmatched, "b_unmatched", b_unmatched)
-    mol_q_2d = Chem.MolFromSmarts(smarts)
+def filter_partial_rings(mol_a: Chem.Mol, mol_b: Chem.Mol, core: NDArray, core_smarts: str):
+    """
+    Given a set of molecules and a MCS, remove partially mapped rings
+    and incomplete rings from the core/smarts.
+    """
+    # Find a list of partially mapped rings atoms for the mapping in each direction
+    a_partial_match = find_partial_matched_rings(mol_a, mol_b, core[:, 0], core[:, 1])
+    b_partial_match = find_partial_matched_rings(mol_b, mol_a, core[:, 1], core[:, 0])
+
+    # Get the corresponding core atoms for the partially mapped atoms
+    mol_q_2d = Chem.MolFromSmarts(core_smarts)
 
     a_to_q = np.array([[int(x[1]), int(x[0])] for x in enumerate(core[:, 0])])
     b_to_q = np.array([[int(x[1]), int(x[0])] for x in enumerate(core[:, 1])])
 
-    core_unmatched_idxs = []
-    core_unmatched_idxs.extend(get_core_unmatched(a_to_q, a_unmatched))
-    core_unmatched_idxs.extend(get_core_unmatched(b_to_q, b_unmatched))
-    core_unmatched_idxs = list(set(core_unmatched_idxs))
-    print("core_unmatched_idxs", core_unmatched_idxs)
+    core_to_remove_idxs = []
+    core_to_remove_idxs.extend(get_core_atom_idxs(a_to_q, a_partial_match))
+    core_to_remove_idxs.extend(get_core_atom_idxs(b_to_q, b_partial_match))
+    core_to_remove_idxs = list(set(core_to_remove_idxs))
 
+    # remove atoms that are no long matched from the core
     cut_core = deepcopy(mol_q_2d)
 
     # store original idx
     for a in cut_core.GetAtoms():
         a.SetProp("orig_idx", str(a.GetIdx()))
 
-    # remove atoms that are no long matched from the core
     cut_core = Chem.EditableMol(cut_core)
 
-    for a_idx in sorted(core_unmatched_idxs, reverse=True):
+    for a_idx in sorted(core_to_remove_idxs, reverse=True):
         cut_core.RemoveAtom(int(a_idx))
 
     cut_core = cut_core.GetMol()
 
     # Modified from RDKIT cookbook Index ID#: RDKitCB_31
     # Find the largest fragment and remove all other fragments
-    # from the core.
+    # from the core. This takes care of non-ring atoms that are
+    # no longer part of the MCS due to the removal of the
+    # partially mapped ring atoms.
     mol_frags = sorted(rdmolops.GetMolFrags(cut_core, asMols=False))
 
     mol_frag_sizes = [len(frag) for frag in mol_frags]
     keep_idx = mol_frag_sizes.index(max(mol_frag_sizes))
 
+    # keep only the largest fragment
     remove_core_atoms = []  # atom idxs in cut_core
     for i, mol_frag in enumerate(mol_frags):
         if i == keep_idx:
             continue
         remove_core_atoms.extend(mol_frag)
-    print("remove_core_atoms", remove_core_atoms)
 
+    # figure out which atoms have been removed in the original mol_q_2d core
     orig_removed_core_atoms = []  # atom idxs in the original core
     for a_idx in sorted(remove_core_atoms, reverse=True):
         a = cut_core.GetAtomWithIdx(int(a_idx))
         orig_removed_core_atoms.append(int(a.GetProp("orig_idx")))
 
+    # actually remove the atoms from the core
     cut_core = Chem.EditableMol(cut_core)
     for a_idx in sorted(remove_core_atoms, reverse=True):
         cut_core.RemoveAtom(int(a_idx))
+
+    # largest fragment is the new core
     largest_core_mol = cut_core.GetMol()
-
     largest_core_smarts = Chem.MolToSmarts(largest_core_mol)
-    print("largest_core_smarts", largest_core_smarts, largest_core_mol.GetNumAtoms())
 
+    # remove any atoms in the original core that are no longer mapped
     largest_core = []
     for i_row, row in enumerate(core):
-        if row[0] in a_unmatched or row[1] in b_unmatched:
+        if row[0] in a_partial_match or row[1] in b_partial_match:
             continue
         if i_row in orig_removed_core_atoms:
             continue
         largest_core.append(row)
-    largest_core = np.array(largest_core)
-    return largest_core, largest_core_smarts
+    return np.array(largest_core), largest_core_smarts

@@ -3,12 +3,13 @@ from copy import deepcopy
 import numpy as np
 import pytest
 from rdkit import Chem
-from rdkit.Chem import AllChem
+from rdkit.Chem import AllChem, rdMolTransforms
+from rdkit.Geometry import Point3D
 
 from timemachine.constants import DEFAULT_FF
 from timemachine.fe.atom_mapping import get_core_by_mcs, get_core_with_alignment, mcs
 from timemachine.fe.topology import AtomMappingError
-from timemachine.fe.utils import set_romol_conf
+from timemachine.fe.utils import plot_atom_mapping_grid, set_romol_conf
 from timemachine.ff import Forcefield
 from timemachine.md import align
 
@@ -231,3 +232,101 @@ def test_get_core_with_alignment_smarts():
     core_out, smarts = get_core_with_alignment(mol_a, mol_b, initial_smarts="CC", threshold=2)
     assert (core == core_out).all()
     assert smarts == "CC"
+
+
+def get_mol_from_smiles(smi: str, seed=2022) -> Chem.Mol:
+    mol = Chem.MolFromSmiles(smi)
+    mol.SetProp("_Name", smi)
+    AllChem.EmbedMolecule(mol, randomSeed=seed)
+    return mol
+
+
+def get_mol_from_smiles_and_core(smi: str, core: Chem.Mol, seed=2022):
+    mol = Chem.MolFromSmiles(smi)
+    mol.SetProp("_Name", smi)
+    AllChem.ConstrainedEmbed(mol, core, randomseed=seed)
+    mol = Chem.AddHs(mol, addCoords=True)
+    return mol
+
+
+@pytest.mark.nogpu
+def test_get_core_with_alignment_ring_size_change_not_mapped():
+    seed = 2022
+    np.random.seed(seed)
+    smi_q = "CC1=CC2=C(CCC2)C=C1"
+    smi_a = "C(C1CCCCC1)C1=CC2=C(CCC2)C=C1"
+    smi_b = "C(C1CCC1)C1=CC2=C(CCC2)C=C1"
+
+    mol_q = get_mol_from_smiles(smi_q)
+    mol_a = get_mol_from_smiles_and_core(smi_a, mol_q)
+    mol_b = get_mol_from_smiles_and_core(smi_b, mol_q)
+    core, _ = get_core_with_alignment(mol_a, mol_b)
+    assert len(core) == 21
+
+
+@pytest.mark.nogpu
+def test_get_core_with_alignment_partial_fused_ring_mapped():
+    seed = 2022
+    np.random.seed(seed)
+    smi_q = "C1=CC=CC=C1"
+    smi_a = "C1CC2=C1C=CC=C2"
+    smi_b = "C1CC2=C(C1)C=CC=C2"
+
+    mol_q = get_mol_from_smiles(smi_q)
+    mol_a = get_mol_from_smiles_and_core(smi_a, mol_q)
+    mol_b = get_mol_from_smiles_and_core(smi_b, mol_q)
+    core, core_smarts = get_core_with_alignment(mol_a, mol_b)
+
+    assert len(core) == 10
+    assert core_smarts == "[#6]1:[#6]:[#6](:[#6](:[#6](:[#6]:1-[#1])-[#1])-[#1])-[#1]"
+
+
+@pytest.mark.nogpu
+def test_get_core_with_alignment_partial_ring_not_mapped():
+    seed = 2022
+    np.random.seed(seed)
+    smi_q = "C1=CC=CC=C1"
+    smi_a = "C1CC2=C1C=CC=C2"
+    smi_b = "CC1=CC=CC=C1C"
+
+    mol_q = get_mol_from_smiles(smi_q)
+    mol_a = get_mol_from_smiles_and_core(smi_a, mol_q)
+    mol_b = get_mol_from_smiles_and_core(smi_b, mol_q)
+    with open(f"/Users/jkaus/Documents/timemachine/mol_a.pdb", "w") as w:
+        w.write(Chem.MolToPDBBlock(mol_a))
+    with open(f"/Users/jkaus/Documents/timemachine/mol_b.pdb", "w") as w:
+        w.write(Chem.MolToPDBBlock(mol_b))
+    core, core_smarts = get_core_with_alignment(mol_a, mol_b)
+
+    atom_mapping_svg = plot_atom_mapping_grid(mol_a, mol_b, core_smarts, core)
+    with open("/Users/jkaus/Documents/timemachine/am_test.svg", "w") as f:
+        f.write(atom_mapping_svg)
+
+    assert len(core) == 10
+    # the first one is returned when I ran the test but both are valid mappings
+    # due to symmetry
+    assert core_smarts in [
+        "[#6]1:[#6](:[#6](:[#6](:[#6](:[#6]:1)-[#1])-[#1])-[#1])-[#6,#1]",
+        "[#6]1:[#6]:[#6](:[#6](:[#6](:[#6]:1-[#1])-[#1])-[#1])-[#1]",
+    ]
+
+
+@pytest.mark.nogpu
+def test_get_core_with_alignment_partial_not_aligned_ring_not_mapped():
+    seed = 2022
+    np.random.seed(seed)
+    smi_q = "C1=CC=CC=C1"
+    smi_a = "C1CCC(CC1)C1=CC=CC=C1"
+    smi_b = "CC1CCC(CC1)C1=CC=CC=C1"
+
+    mol_q = get_mol_from_smiles(smi_q)
+    mol_a = get_mol_from_smiles_and_core(smi_a, mol_q)
+    mol_b = get_mol_from_smiles_and_core(smi_b, mol_q)
+    # now rotate the cyclohexyl of mol_b out so only a subset of atoms are mapped
+    conf = mol_b.GetConformer(0)
+    rdMolTransforms.SetDihedralDeg(conf, 12, 7, 4, 5, 0.0)
+    core, core_smarts = get_core_with_alignment(mol_a, mol_b)
+
+    # do not map cyclehexyl since only part of it can be found due to distance threshold
+    assert len(core) == 11
+    assert core_smarts == "[#6]1:[#6](:[#6](:[#6](:[#6](:[#6]:1-[#1])-[#1])-[#1])-[#1])-[#1]"
