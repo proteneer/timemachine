@@ -2,13 +2,16 @@
 and running an intermediate lambda window "rbfe" MD for a
 relative binding free energy edge from the HIF2A test system"""
 
+import json
 import time
 from importlib import resources
+from typing import List, NamedTuple
 
 import numpy as np
 import pytest
 from scipy.spatial.distance import cdist
 
+import timemachine
 from timemachine import constants
 from timemachine.fe import rbfe
 from timemachine.fe.model_utils import apply_hmr
@@ -91,6 +94,31 @@ def generate_hif2a_frames(n_frames: int, frame_interval: int, seed=None, barosta
     return initial_state.potentials, coords, boxes, ligand_idxs
 
 
+class BenchmarkPotentialResult(NamedTuple):
+    label: str
+    num_atoms: int
+    frames: int
+    param_batches: int
+    num_lambdas: int
+    runs_per_second: int
+    runs_per_batch: int
+    num_batches: int
+    duration: float
+
+    def summarize(self) -> str:
+        return " ".join(
+            [
+                self.label,
+                f"N={self.num_atoms}",
+                f"Frames={self.frames}",
+                f"Params={self.param_batches}",
+                f"Lambdas={self.num_lambdas}",
+                f"speed: {self.runs_per_second:.2f} executions/seconds",
+                f"(ran {self.runs_per_batch * self.num_batches} potentials in {self.duration:.2f}s)",
+            ]
+        )
+
+
 def benchmark_potential(
     label,
     potential,
@@ -105,7 +133,7 @@ def benchmark_potential(
     compute_du_dp=True,
     compute_du_dl=True,
     compute_u=True,
-):
+) -> BenchmarkPotentialResult:
     if precision == np.float32:
         label = label + "_f32"
     else:
@@ -117,6 +145,8 @@ def benchmark_potential(
     param_batches = params.shape[0]
     num_lambs = len(lambdas)
     runs_per_batch = frames * param_batches * num_lambs
+    runs_per_second = None
+
     for _ in range(num_batches):
         batch_start = time.time()
         _, _, _, _ = unbound.execute_selective_batch(
@@ -137,9 +167,44 @@ def benchmark_potential(
 
         if verbose:
             print(f"executions per second: {runs_per_second:.3f}")
-    print(
-        f"{label}: N={coords.shape[1]} Frames={frames} Params={param_batches} Lambdas={num_lambs} speed: {runs_per_second:.2f} executions/seconds (ran {runs_per_batch * num_batches} potentials in {(time.time() - start):.2f}s)"
+
+    assert runs_per_second is not None
+    result = BenchmarkPotentialResult(
+        label,
+        coords.shape[1],
+        frames,
+        param_batches,
+        num_lambs,
+        runs_per_second,
+        runs_per_batch,
+        num_batches,
+        time.time() - start,
     )
+
+    print(result.summarize())
+
+    return result
+
+
+class BenchmarkResult(NamedTuple):
+    label: str
+    num_atoms: int
+    ns_per_day: float
+    dt: float
+    steps_per_batch: int
+    num_batches: int
+    duration: float
+
+    def summarize(self) -> str:
+        return " ".join(
+            [
+                self.label,
+                f"N={self.num_atoms}",
+                f"speed: {self.ns_per_day:.2f}ns/day",
+                f"dt: {self.dt*1e3}fs",
+                f"(ran {self.steps_per_batch * self.num_batches} steps in {self.duration:.2f}s)",
+            ]
+        )
 
 
 def benchmark(
@@ -156,7 +221,7 @@ def benchmark(
     steps_per_batch=1000,
     compute_du_dl_interval=0,
     barostat_interval=0,
-):
+) -> BenchmarkResult:
     """
     TODO: configuration blob containing num_batches, steps_per_batch, and any other options
     """
@@ -209,12 +274,13 @@ def benchmark(
     ctxt.multiple_steps(lambda_schedule, compute_du_dl_interval)
 
     start = time.time()
+    ns_per_day = None
 
     for batch in range(num_batches):
 
         # time the current batch
         batch_start = time.time()
-        du_dls, _, _ = ctxt.multiple_steps(lambda_schedule, compute_du_dl_interval)
+        _, _, _ = ctxt.multiple_steps(lambda_schedule, compute_du_dl_interval)
         batch_end = time.time()
 
         delta = batch_end - batch_start
@@ -232,13 +298,24 @@ def benchmark(
             print(f"ns per day: {ns_per_day:.3f}")
 
     assert np.all(np.abs(ctxt.get_x_t()) < 1000)
+    assert ns_per_day is not None
 
-    print(
-        f"{label}: N={x0.shape[0]} speed: {ns_per_day:.2f}ns/day dt: {dt*1e3}fs (ran {steps_per_batch * num_batches} steps in {(time.time() - start):.2f}s)"
+    result = BenchmarkResult(
+        label,
+        x0.shape[0],
+        float(ns_per_day),
+        dt,
+        steps_per_batch,
+        num_batches,
+        time.time() - start,
     )
 
+    print(result.summarize())
 
-def benchmark_dhfr(verbose=False, num_batches=100, steps_per_batch=1000):
+    return result
+
+
+def benchmark_dhfr(verbose=False, num_batches=100, steps_per_batch=1000) -> List[BenchmarkResult]:
 
     host_fns, host_masses, host_coords, box = setup_dhfr()
 
@@ -250,45 +327,47 @@ def benchmark_dhfr(verbose=False, num_batches=100, steps_per_batch=1000):
     x0 = host_conf
     v0 = np.zeros_like(host_conf)
 
-    benchmark(
-        "dhfr-apo",
-        host_masses,
-        0.0,
-        x0,
-        v0,
-        box,
-        host_fns,
-        verbose=verbose,
-        num_batches=num_batches,
-        steps_per_batch=steps_per_batch,
-    )
-    benchmark(
-        "dhfr-apo-barostat-interval-25",
-        host_masses,
-        0.0,
-        x0,
-        v0,
-        box,
-        host_fns,
-        verbose=verbose,
-        num_batches=num_batches,
-        steps_per_batch=steps_per_batch,
-        barostat_interval=25,
-    )
-    benchmark(
-        "dhfr-apo-hmr-barostat-interval-25",
-        host_masses,
-        0.0,
-        x0,
-        v0,
-        box,
-        host_fns,
-        verbose=verbose,
-        hmr=True,
-        num_batches=num_batches,
-        steps_per_batch=steps_per_batch,
-        barostat_interval=25,
-    )
+    return [
+        benchmark(
+            "dhfr-apo",
+            host_masses,
+            0.0,
+            x0,
+            v0,
+            box,
+            host_fns,
+            verbose=verbose,
+            num_batches=num_batches,
+            steps_per_batch=steps_per_batch,
+        ),
+        benchmark(
+            "dhfr-apo-barostat-interval-25",
+            host_masses,
+            0.0,
+            x0,
+            v0,
+            box,
+            host_fns,
+            verbose=verbose,
+            num_batches=num_batches,
+            steps_per_batch=steps_per_batch,
+            barostat_interval=25,
+        ),
+        benchmark(
+            "dhfr-apo-hmr-barostat-interval-25",
+            host_masses,
+            0.0,
+            x0,
+            v0,
+            box,
+            host_fns,
+            verbose=verbose,
+            hmr=True,
+            num_batches=num_batches,
+            steps_per_batch=steps_per_batch,
+            barostat_interval=25,
+        ),
+    ]
 
 
 def prepare_hif2a_initial_state(st, host_system, host_coords, host_box):
@@ -310,7 +389,7 @@ def prepare_hif2a_initial_state(st, host_system, host_coords, host_box):
     return initial_state
 
 
-def benchmark_hif2a(verbose=False, num_batches=100, steps_per_batch=1000):
+def benchmark_hif2a(verbose=False, num_batches=100, steps_per_batch=1000) -> List[BenchmarkResult]:
 
     # we use simple charge "sc" to be able to run on machines that don't have openeye licenses.
     mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
@@ -325,6 +404,8 @@ def benchmark_hif2a(verbose=False, num_batches=100, steps_per_batch=1000):
 
     solvent_system, solvent_coords, solvent_box, _ = builders.build_water_system(4.0, forcefield.water_ff)
 
+    results = []
+
     for stage, host_system, host_coords, host_box in [
         ("hif2a", complex_system, complex_coords, complex_box),
         ("solvent", solvent_system, solvent_coords, solvent_box),
@@ -338,55 +419,64 @@ def benchmark_hif2a(verbose=False, num_batches=100, steps_per_batch=1000):
         x0 = min_host_coords
         v0 = np.zeros_like(x0)
 
-        benchmark(
-            stage + "-apo",
-            host_masses,
-            0.0,
-            x0,
-            v0,
-            host_box,
-            host_fns,
-            verbose=verbose,
-            num_batches=num_batches,
-            steps_per_batch=steps_per_batch,
-        )
-        benchmark(
-            stage + "-apo-barostat-interval-25",
-            host_masses,
-            0.0,
-            x0,
-            v0,
-            host_box,
-            host_fns,
-            verbose=verbose,
-            num_batches=num_batches,
-            steps_per_batch=steps_per_batch,
-            barostat_interval=25,
-        )
-
-        # RBFE
         initial_state = prepare_hif2a_initial_state(st, host_system, host_coords, host_box)
 
-        benchmark(
-            stage + "-rbfe",
-            initial_state.integrator.masses,
-            initial_state.lamb,
-            initial_state.x0,
-            initial_state.v0,
-            host_box,
-            initial_state.potentials,
-            verbose=verbose,
-            num_batches=num_batches,
-            steps_per_batch=steps_per_batch,
+        results.extend(
+            [
+                benchmark(
+                    stage + "-apo",
+                    host_masses,
+                    0.0,
+                    x0,
+                    v0,
+                    host_box,
+                    host_fns,
+                    verbose=verbose,
+                    num_batches=num_batches,
+                    steps_per_batch=steps_per_batch,
+                ),
+                benchmark(
+                    stage + "-apo-barostat-interval-25",
+                    host_masses,
+                    0.0,
+                    x0,
+                    v0,
+                    host_box,
+                    host_fns,
+                    verbose=verbose,
+                    num_batches=num_batches,
+                    steps_per_batch=steps_per_batch,
+                    barostat_interval=25,
+                ),
+                # RBFE
+                benchmark(
+                    stage + "-rbfe",
+                    initial_state.integrator.masses,
+                    initial_state.lamb,
+                    initial_state.x0,
+                    initial_state.v0,
+                    host_box,
+                    initial_state.potentials,
+                    verbose=verbose,
+                    num_batches=num_batches,
+                    steps_per_batch=steps_per_batch,
+                ),
+            ]
         )
+
+    return results
 
 
 def test_dhfr():
-    benchmark_dhfr(verbose=True, num_batches=2, steps_per_batch=100)
+    results = benchmark_dhfr(verbose=True, num_batches=2, steps_per_batch=100)
+    with open(f"benchmark_results__dhfr__{timemachine.__version__}.json", "w") as f:
+        json.dump([result._asdict() for result in results], f)
 
 
 def test_hif2a():
-    benchmark_hif2a(verbose=True, num_batches=2, steps_per_batch=100)
+    results = benchmark_hif2a(verbose=True, num_batches=2, steps_per_batch=100)
+    with open(f"benchmark_results__hif2a__{timemachine.__version__}.json", "w") as f:
+        json.dump([result._asdict() for result in results], f)
 
 
 def test_nonbonded_interaction_group_potential(hi2fa_test_frames):
@@ -410,17 +500,23 @@ def test_nonbonded_interaction_group_potential(hi2fa_test_frames):
         cutoff,
     )
     class_name = potential.__class__.__name__
+    results = []
     for precision in precisions:
-        benchmark_potential(
-            class_name,
-            potential,
-            precision,
-            nonbonded_params,
-            frames,
-            boxes,
-            lambdas,
-            verbose=False,
+        results.append(
+            benchmark_potential(
+                class_name,
+                potential,
+                precision,
+                nonbonded_params,
+                frames,
+                boxes,
+                lambdas,
+                verbose=False,
+            )
         )
+
+    with open(f"benchmark_potential_results__nonbonded_interaction_group__{timemachine.__version__}.json", "w") as f:
+        json.dump([result._asdict() for result in results], f)
 
 
 def test_nonbonded_potential(hi2fa_test_frames):
@@ -446,37 +542,49 @@ def test_nonbonded_potential(hi2fa_test_frames):
     )
 
     class_name = potential.__class__.__name__
+    results = []
     for precision in precisions:
-        benchmark_potential(
-            class_name,
-            potential,
-            precision,
-            nonbonded_params,
-            frames,
-            boxes,
-            lambdas,
-            verbose=False,
+        results.append(
+            benchmark_potential(
+                class_name,
+                potential,
+                precision,
+                nonbonded_params,
+                frames,
+                boxes,
+                lambdas,
+                verbose=False,
+            )
         )
+
+    with open(f"benchmark_potential_results__nonbonded__{timemachine.__version__}.json", "w") as f:
+        json.dump([result._asdict() for result in results], f)
 
 
 def test_bonded_potentials(hi2fa_test_frames):
     pots, frames, boxes, _ = hi2fa_test_frames
 
     lambdas = np.array([0.0, 1.0])
+    results = []
     for potential in pots[:-1]:
         class_name = potential.__class__.__name__
         params = np.expand_dims(potential.params, axis=0)
         for precision in [np.float32, np.float64]:
-            benchmark_potential(
-                class_name,
-                potential,
-                precision,
-                params,
-                frames,
-                boxes,
-                lambdas,
-                verbose=False,
+            results.append(
+                benchmark_potential(
+                    class_name,
+                    potential,
+                    precision,
+                    params,
+                    frames,
+                    boxes,
+                    lambdas,
+                    verbose=False,
+                )
             )
+
+    with open(f"benchmark_potential_results__bonded__{timemachine.__version__}.json", "w") as f:
+        json.dump([result._asdict() for result in results], f)
 
 
 if __name__ == "__main__":
