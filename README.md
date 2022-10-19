@@ -102,6 +102,22 @@ OE_DIR=~/.openeye PYTHONPATH=. pytest -xsv tests/
 
 Note: we currently only support and test on python 3.7, use other versions at your own peril.
 
+### Running benchmarks
+
+To run the benchmark suite
+
+```shell
+make benchmark
+```
+
+This produces JSON data files and summary plots in `./benchmark_results/`. Result data files are suffixed with the timemachine version, allowing comparison of benchmarks between multiple versions. In addition to plotting results from the current run, `make benchmark` plots results from previous runs found in `./benchmark_results/` for comparison.
+
+To regenerate the plots without running the benchmarks
+
+```shell
+python tests/compare_benchmarks.py
+```
+
 # Free Energy Methods
 
 ## Theory
