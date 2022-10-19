@@ -20,7 +20,13 @@ from timemachine.fe.utils import to_md_units
 from timemachine.ff import Forcefield
 from timemachine.ff.handlers import openmm_deserializer
 from timemachine.lib import LangevinIntegrator, MonteCarloBarostat, custom_ops
-from timemachine.lib.potentials import Nonbonded, NonbondedInteractionGroup
+from timemachine.lib.potentials import (
+    HarmonicAngle,
+    HarmonicBond,
+    Nonbonded,
+    NonbondedInteractionGroup,
+    PeriodicTorsion,
+)
 from timemachine.md import builders, minimizer
 from timemachine.md.barostat.utils import get_bond_list, get_group_indices
 from timemachine.testsystems.dhfr import setup_dhfr
@@ -570,8 +576,10 @@ def test_bonded_potentials(hi2fa_test_frames):
 
     lambdas = np.array([0.0, 1.0])
     results = []
-    for potential in pots[:-1]:
-        class_name = potential.__class__.__name__
+    for potential in pots:
+        if type(potential) not in {HarmonicAngle, HarmonicBond, PeriodicTorsion}:
+            continue
+        class_name = type(potential).__name__
         params = np.expand_dims(potential.params, axis=0)
         for precision in [np.float32, np.float64]:
             results.append(
