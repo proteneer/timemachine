@@ -39,5 +39,10 @@ unit_tests:
 nightly_tests:
 	pytest -m $(NIGHTLY_MARKER) $(PYTEST_CI_ARGS)
 
+.PHONY: benchmarks
+benchmarks: build
+	python tests/test_benchmark.py
+	python tests/compare_benchmarks.py
+
 .PHONY: ci
 ci: verify memcheck_tests unit_tests

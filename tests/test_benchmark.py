@@ -600,8 +600,8 @@ def test_bonded_potentials(hi2fa_test_frames):
 
 if __name__ == "__main__":
 
-    benchmark_dhfr(verbose=False, num_batches=100)
-    benchmark_hif2a(verbose=False, num_batches=100)
+    save_results("benchmark_results", "dhfr", benchmark_dhfr(verbose=False, num_batches=100))
+    save_results("benchmark_results", "hif2a", benchmark_hif2a(verbose=False, num_batches=100))
 
     hif2a_frames = generate_hif2a_frames(1000, 5, seed=2022)
     test_nonbonded_interaction_group_potential(hif2a_frames)
