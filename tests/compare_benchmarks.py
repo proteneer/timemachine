@@ -1,4 +1,5 @@
 from glob import glob
+from pathlib import Path
 from typing import List, Tuple, TypeAlias
 
 import matplotlib.pyplot as plt
@@ -49,13 +50,16 @@ def load_benchmark_results_json(filename: str) -> Tuple[Group, Version, pd.DataF
 
 
 if __name__ == "__main__":
+    dir = Path("benchmark_results")
+
     plot_benchmark_results(
-        [load_benchmark_results_json(f) for f in glob("benchmark_results__*__*.json")],
+        [load_benchmark_results_json(f) for f in glob(str(dir / "benchmark_results__*__*.json"))],
         metric="ns_per_day",
         file_prefix="benchmark_results",
     )
+
     plot_benchmark_results(
-        [load_benchmark_results_json(f) for f in glob("benchmark_potential_results__*__*.json")],
+        [load_benchmark_results_json(f) for f in glob(str(dir / "benchmark_potential_results__*__*.json"))],
         metric="runs_per_second",
         file_prefix="benchmark_potential_results",
     )

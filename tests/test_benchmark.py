@@ -5,6 +5,7 @@ relative binding free energy edge from the HIF2A test system"""
 import json
 import time
 from importlib import resources
+from pathlib import Path
 from typing import List, NamedTuple
 
 import numpy as np
@@ -473,11 +474,14 @@ def benchmark_hif2a(verbose=False, num_batches=100, steps_per_batch=1000) -> Lis
     return results
 
 
-def save_results(prefix, group, results):
+def save_results(prefix, group, results, dirname="benchmark_results"):
     version_info = timemachine._version.get_versions()
     rev = version_info["full-revisionid"][:7] + ("-dirty" if version_info["dirty"] else "")
-    filename = "__".join([prefix, group, rev]) + ".json"
-    with open(filename, "w") as f:
+    dir = Path(dirname)
+    dir.mkdir(exist_ok=True)
+    stem = "__".join([prefix, group, rev])
+    path = (dir / stem).with_suffix(".json")
+    with path.open("w") as f:
         json.dump([result._asdict() for result in results], f)
 
 
