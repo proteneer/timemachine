@@ -106,7 +106,7 @@ class BenchmarkPotentialResult(NamedTuple):
     frames: int
     param_batches: int
     num_lambdas: int
-    runs_per_second: int
+    runs_per_second: float
     runs_per_batch: int
     num_batches: int
     duration: float
