@@ -76,16 +76,6 @@ def mcs(
         retry = False
 
     # try on given mols
-    from timemachine.fe.utils import draw_mol_idx, get_mol_name, get_romol_conf, plot_atom_mapping_grid, set_romol_conf
-
-    with open(f"/Users/jkaus/Documents/timemachine/mol_a.pdb", "w") as w:
-        w.write(Chem.MolToPDBBlock(a))
-    with open(f"/Users/jkaus/Documents/timemachine/mol_b.pdb", "w") as w:
-        w.write(Chem.MolToPDBBlock(b))
-    with open(f"/Users/jkaus/Documents/timemachine/mol_a.svg", "w") as w:
-        w.write(draw_mol_idx(a, scale_factor=1.5))
-    with open(f"/Users/jkaus/Documents/timemachine/mol_b.svg", "w") as w:
-        w.write(draw_mol_idx(b, scale_factor=1.5))
     result = rdFMCS.FindMCS([a, b], params)
 
     # optional fallback
@@ -324,7 +314,7 @@ def find_partial_matched_rings(mol_a: Chem.Mol, mol_b: Chem.Mol, core_a: NDArray
     return list(partial_map_idxs_in_mol_a)
 
 
-def get_core_atom_idxs(mol_to_core: NDArray, mol_atom_idxs: NDArray) -> List[int]:
+def get_core_atom_idxs(mol_to_core: NDArray, mol_atom_idxs: List[int]) -> List[int]:
     """
     Given a mapping to the core and a list of mol atom idxs,
     return the corresponding core atom idxs.
