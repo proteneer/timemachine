@@ -98,6 +98,7 @@ setup(
             "isort==5.10.1",
             "mypy==0.942",
             "pre-commit==2.17.0",
+            "seaborn==0.12.1",  # for plotting benchmark results
         ],
         "test": [
             "pytest",
