@@ -467,16 +467,22 @@ def benchmark_hif2a(verbose=False, num_batches=100, steps_per_batch=1000) -> Lis
     return results
 
 
+def save_results(prefix, group, results):
+    version_info = timemachine._version.get_versions()
+    rev = version_info["full-revisionid"][:7] + ("-dirty" if version_info["dirty"] else "")
+    filename = "__".join([prefix, group, rev]) + ".json"
+    with open(filename, "w") as f:
+        json.dump([result._asdict() for result in results], f)
+
+
 def test_dhfr():
     results = benchmark_dhfr(verbose=True, num_batches=2, steps_per_batch=100)
-    with open(f"benchmark_results__dhfr__{timemachine.__version__}.json", "w") as f:
-        json.dump([result._asdict() for result in results], f)
+    save_results("benchmark_results", "dhfr", results)
 
 
 def test_hif2a():
     results = benchmark_hif2a(verbose=True, num_batches=2, steps_per_batch=100)
-    with open(f"benchmark_results__hif2a__{timemachine.__version__}.json", "w") as f:
-        json.dump([result._asdict() for result in results], f)
+    save_results("benchmark_results", "hif2a", results)
 
 
 def test_nonbonded_interaction_group_potential(hi2fa_test_frames):
@@ -515,8 +521,7 @@ def test_nonbonded_interaction_group_potential(hi2fa_test_frames):
             )
         )
 
-    with open(f"benchmark_potential_results__nonbonded_interaction_group__{timemachine.__version__}.json", "w") as f:
-        json.dump([result._asdict() for result in results], f)
+    save_results("benchmark_potential_results", "nonbonded_interaction_group", results)
 
 
 def test_nonbonded_potential(hi2fa_test_frames):
@@ -557,8 +562,7 @@ def test_nonbonded_potential(hi2fa_test_frames):
             )
         )
 
-    with open(f"benchmark_potential_results__nonbonded__{timemachine.__version__}.json", "w") as f:
-        json.dump([result._asdict() for result in results], f)
+    save_results("benchmark_potential_results", "nonbonded", results)
 
 
 def test_bonded_potentials(hi2fa_test_frames):
@@ -583,8 +587,7 @@ def test_bonded_potentials(hi2fa_test_frames):
                 )
             )
 
-    with open(f"benchmark_potential_results__bonded__{timemachine.__version__}.json", "w") as f:
-        json.dump([result._asdict() for result in results], f)
+    save_results("benchmark_potential_results", "bonded", results)
 
 
 if __name__ == "__main__":
