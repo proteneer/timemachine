@@ -80,7 +80,14 @@ def mcs(
 
     # optional fallback
     def is_trivial(mcs_result) -> bool:
-        return mcs_result.numBonds < 2
+        if mcs_result.numBonds < 2:
+            return True
+        query = Chem.MolFromSmarts(mcs_result.smartsString)
+        matches_a = a.GetSubstructMatches(query, uniquify=False, maxMatches=1)
+        matches_b = b.GetSubstructMatches(query, uniquify=False, maxMatches=1)
+        if len(matches_a) == 0 or len(matches_b) == 0:
+            return True
+        return False
 
     if retry and is_trivial(result) and smarts is None:
         # try again, but seed with MCS computed without explicit hydrogens
@@ -233,7 +240,6 @@ def get_core_with_alignment(
             ring_options=False,
         )
         query_mol = Chem.MolFromSmarts(result.smartsString)
-        print(result.smartsString)
         core = get_core_by_mcs(mol_a, mol_b, query_mol, threshold=threshold)
         return core, result.smartsString
 
@@ -243,7 +249,10 @@ def get_core_with_alignment(
         conf_a, conf_b = align_mols_by_core(mol_a, mol_b, heavy_atom_core, ff, n_steps=n_steps, k=k)
         set_romol_conf(a_copy, conf_a)
         set_romol_conf(b_copy, conf_b)
+    except AtomMappingError as err:
+        print(f"WARNING: Could not get heavy only atom mapping: {err}, skipping core alignment")
 
+    try:
         core, smarts = setup_core(a_copy, b_copy, True, initial_smarts)
         core, smarts = filter_partial_rings(a_copy, b_copy, core, smarts)
         if len(core) <= 2:
