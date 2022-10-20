@@ -113,7 +113,7 @@ def oe_assign_charges(mol, charge_model=AM1BCCELF10):
 
     # Verify that the charges sum up to an integer
     net_charge = np.sum(partial_charges)
-    net_charge_is_integral = np.isclose(net_charge, np.round(net_charge), atol=1e-4)
+    net_charge_is_integral = np.isclose(net_charge, np.round(net_charge), atol=1e-5)
     assert net_charge_is_integral, f"Charge is not an integer: {net_charge}"
 
     # https://github.com/proteneer/timemachine#forcefield-gotchas
@@ -286,7 +286,7 @@ def apply_bond_charge_corrections(initial_charges, bond_idxs, deltas):
 
     net_charge = jnp.sum(initial_charges)
     final_net_charge = jnp.sum(final_charges)
-    net_charge_is_unchanged = jnp.isclose(final_net_charge, net_charge, atol=1e-4)
+    net_charge_is_unchanged = jnp.isclose(final_net_charge, net_charge, atol=1e-5)
 
     assert net_charge_is_unchanged, f"{final_net_charge} != {net_charge}"
 
