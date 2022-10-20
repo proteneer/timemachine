@@ -8,7 +8,6 @@ from typing import List
 import matplotlib.pyplot as plt
 import numpy as np
 import pymbar
-from scipy.spatial.distance import cdist
 
 from timemachine.constants import BOLTZ, DEFAULT_TEMP
 from timemachine.fe import model_utils
@@ -22,6 +21,7 @@ from timemachine.lib import LangevinIntegrator, MonteCarloBarostat, custom_ops
 from timemachine.lib.potentials import CustomOpWrapper
 from timemachine.md import builders, minimizer
 from timemachine.md.barostat.utils import get_bond_list, get_group_indices
+from timemachine.potentials import jax_utils
 
 
 def get_batch_U_fns(bps, lamb):
@@ -62,23 +62,14 @@ def sample(initial_state, protocol):
     else:
         baro_impl = None
 
-    cutoff = 0.5  # in nanometers
-    # local minimize region around ligand, should result in ~300 atoms
-
-    ligand_coords = initial_state.x0[initial_state.ligand_idxs]
-    d_ij = cdist(ligand_coords, initial_state.x0)
-    # if any atom is within any of the ligand's atom's ixn radius, flag it for minimization
-    free_idxs = np.where(np.any(d_ij < cutoff, axis=0))[0].tolist()
-
-    val_and_grad_fn = minimizer.get_val_and_grad_fn(bound_impls, initial_state.box0, initial_state.lamb)
-
-    assert np.all(np.isfinite(initial_state.x0)), "Initial coordinates contain nan or inf"
-
-    x0_min = minimizer.local_minimize(initial_state.x0, val_and_grad_fn, free_idxs)
-
-    assert np.all(np.isfinite(x0_min)), "Minimization resulted in a nan"
-
-    ctxt = custom_ops.Context(x0_min, initial_state.v0, initial_state.box0, intg_impl, bound_impls, baro_impl)
+    ctxt = custom_ops.Context(
+        initial_state.x0,
+        initial_state.v0,
+        initial_state.box0,
+        intg_impl,
+        bound_impls,
+        baro_impl,
+    )
 
     # burn-in
     ctxt.multiple_steps_U(
@@ -151,6 +142,27 @@ class SimulationResult:
 # setup the initial state so we can (hopefully) bitwise recover the identical simulation
 # to help us debug errors.
 def setup_initial_states(st, host_config, temperature, lambda_schedule, seed):
+    """
+    Setup the initial states for a series of lambda values. It is assumed that the lambda schedule
+    is a monotonically increasing sequence in the closed interval [0,1].
+
+    Parameters
+    ----------
+    host_config: HostConfig or None
+        Configurations of the host. If None, then a vacuum state will be setup.
+
+    temperature: float
+        Temperature to run the simulation at.
+
+    lambda_schedule: list of float of length K
+        Lambda schedule.
+
+    Returns
+    -------
+    list of InitialStates
+        Returns an initial state for each value of lambda.
+
+    """
 
     if host_config:
         host_bps, host_masses = openmm_deserializer.deserialize_system(host_config.omm_system, cutoff=1.2)
@@ -164,11 +176,21 @@ def setup_initial_states(st, host_config, temperature, lambda_schedule, seed):
 
     initial_states = []
 
+    # check that the lambda schedule is monotonically increasing.
+    assert np.all(np.diff(lambda_schedule) > 0)
+
     for lamb_idx, lamb in enumerate(lambda_schedule):
 
         mol_a_conf = get_romol_conf(st.mol_a)
         mol_b_conf = get_romol_conf(st.mol_b)
-        ligand_conf = st.combine_confs(mol_a_conf, mol_b_conf)
+
+        assert lamb >= 0.0 or lamb <= 1.0
+
+        if lamb < 0.5:
+            ligand_conf = st.combine_confs_lhs(mol_a_conf, mol_b_conf)
+        else:
+            ligand_conf = st.combine_confs_rhs(mol_a_conf, mol_b_conf)
+
         run_seed = seed + lamb_idx
 
         if host_config:
@@ -218,6 +240,8 @@ def setup_initial_states(st, host_config, temperature, lambda_schedule, seed):
 
         state = InitialState(potentials, intg, baro, x0, v0, box0, lamb, ligand_idxs)
         initial_states.append(state)
+
+    optimize_coordinates(initial_states)
 
     return initial_states
 
@@ -457,6 +481,66 @@ def estimate_free_energy_given_initial_states(initial_states, protocol, temperat
         initial_states,
         protocol,
     )
+
+
+def _optimize_coords_along_states(initial_states):
+    # use the end-state to define the optimization settings
+    end_state = initial_states[0]
+    ligand_coords = end_state.x0[end_state.ligand_idxs]
+    r_i = np.expand_dims(ligand_coords, axis=1)
+    r_j = np.expand_dims(end_state.x0, axis=0)
+    d_ij = np.linalg.norm(jax_utils.delta_r(r_i, r_j, box=end_state.box0), axis=-1)
+    cutoff = 0.5  # in nanometers
+    free_idxs = np.where(np.any(d_ij < cutoff, axis=0))[0].tolist()
+    x_opt = end_state.x0
+    x_traj = []
+    for initial_state in initial_states:
+        bound_impls = [p.bound_impl(np.float32) for p in initial_state.potentials]
+        val_and_grad_fn = minimizer.get_val_and_grad_fn(bound_impls, initial_state.box0, initial_state.lamb)
+        assert np.all(np.isfinite(x_opt)), "Initial coordinates contain nan or inf"
+        x_opt = minimizer.local_minimize(x_opt, val_and_grad_fn, free_idxs)
+        x_traj.append(x_opt)
+        assert np.all(np.isfinite(x_opt)), "Minimization resulted in a nan"
+        del bound_impls
+
+    return x_traj
+
+
+def optimize_coordinates(initial_states):
+    """
+    Optimize geometries of the initial states. The initial states are modified in place.
+    """
+    all_xs = []
+    lambda_schedule = np.array([s.lamb for s in initial_states])
+
+    # check for monotonic, any subsequence of a monotonic sequence is also monotonic.
+    assert np.all(np.diff(lambda_schedule) > 0)
+
+    lhs_initial_states = []
+    rhs_initial_states = []
+
+    for state in initial_states:
+        if state.lamb < 0.5:
+            lhs_initial_states.append(state)
+        else:
+            rhs_initial_states.append(state)
+
+    # go from lambda 0 -> 0.5
+    if len(lhs_initial_states) > 0:
+        lhs_xs = _optimize_coords_along_states(lhs_initial_states)
+        for xs in lhs_xs:
+            all_xs.append(xs)
+
+    # go from lambda 1 -> 0.5 and reverse the coordinate trajectory and lambda schedule
+    if len(rhs_initial_states) > 0:
+        rhs_xs = _optimize_coords_along_states(lhs_initial_states)[::-1][::-1]
+        for xs in rhs_xs:
+            all_xs.append(xs)
+
+    for state, coords in zip(initial_states, all_xs):
+        # sanity check that no atom has moved more than 7 angstroms away (arbitrary)
+        assert np.amax(np.linalg.norm(state.x0 - coords, axis=1)) < 0.7
+        state.x0 = coords
 
 
 def estimate_relative_free_energy(

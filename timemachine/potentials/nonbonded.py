@@ -261,8 +261,8 @@ def nonbonded_on_specific_pairs(
     box,
     pairs,
     beta: float,
-    cutoff: Optional[float] = None,
-    w_coords: Optional[Array] = None,  # per-particle 4-d coordinate
+    cutoff=None,
+    w_coords=None,  # per-particle 4-d coordinate
     rescale_mask=None,
 ):
     """See `nonbonded` docstring for more details
@@ -379,8 +379,8 @@ def nonbonded_interaction_groups(
     a_idxs,
     b_idxs,
     beta: float,
-    cutoff: Optional[float] = None,
-    w_coords: Optional[Array] = None,  # per-particle 4-d coordinate
+    cutoff=None,
+    w_coords=None,  # per-particle 4-d coordinate
 ):
     """Nonbonded interactions between all pairs of atoms $(i, j)$
     where $i$ is in the first set and $j$ in the second.
