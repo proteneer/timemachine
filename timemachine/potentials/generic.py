@@ -169,7 +169,6 @@ class PeriodicTorsion(Bonded):
                 conf,
                 params,
                 box,
-                lam,
                 self.idxs,
             )
 
