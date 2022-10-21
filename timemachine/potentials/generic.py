@@ -97,7 +97,7 @@ class CentroidRestraint:
     def to_reference(self):
         def U(conf, params, box, lam):
             return ref_bonded.centroid_restraint(
-                conf, params, box, lam, self.group_a_idxs, self.group_b_idxs, self.kb, self.b0
+                conf, params, box, self.group_a_idxs, self.group_b_idxs, self.kb, self.b0
             )
 
         return U
