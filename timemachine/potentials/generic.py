@@ -41,8 +41,6 @@ class Potential(Protocol[GpuPotential]):
 @dataclass
 class Bonded(Generic[BondedGpuPotential]):
     idxs: Array
-    lambda_mult: Optional[Array] = None
-    lambda_offset: Optional[Array] = None
 
     @classmethod
     def from_gpu(cls, p: BondedGpuPotential):
