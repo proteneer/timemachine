@@ -60,8 +60,4 @@ void __global__ k_harmonic_bond(
     if (u) {
         atomicAdd(u + src_idx, FLOAT_TO_FIXED_BONDED<RealType>(kb / 2 * db * db));
     }
-
-    if (du_dl) {
-        atomicAdd(du_dl + src_idx, FLOAT_TO_FIXED_BONDED<RealType>(0.0));
-    }
 }

@@ -131,8 +131,4 @@ void __global__ k_periodic_torsion(
     if (u) {
         atomicAdd(u + i_idx, FLOAT_TO_FIXED_BONDED(kt * (1 + cos(period * angle - phase))));
     }
-
-    if (du_dl) {
-        atomicAdd(du_dl + i_idx, FLOAT_TO_FIXED_BONDED(0.0));
-    }
 }

@@ -81,8 +81,4 @@ void __global__ k_harmonic_angle(
     if (u) {
         atomicAdd(u + i_idx, FLOAT_TO_FIXED_BONDED(ka / 2 * delta * delta));
     }
-
-    if (du_dl) {
-        atomicAdd(du_dl + i_idx, FLOAT_TO_FIXED_BONDED(0.0));
-    }
 }
