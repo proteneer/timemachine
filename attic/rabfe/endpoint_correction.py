@@ -109,7 +109,7 @@ def estimate_delta_us(k_translation, k_rotation, core_idxs, core_params, beta, l
         seed = np.random.randint(np.iinfo(np.int32).max)
     state = np.random.RandomState(seed)
     box = np.eye(3) * 100.0
-    core_restr = functools.partial(bonded.harmonic_bond, bond_idxs=core_idxs, params=core_params, box=box)
+    core_restr = functools.partial(bonded.harmonic_bond, bond_idxs=core_idxs, params=core_params, box=box, lamb=None)
 
     # center of mass translational restraints
     restr_group_idxs_a = core_idxs[:, 0]
