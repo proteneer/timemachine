@@ -52,9 +52,9 @@ void __global__ k_nonbonded_pair_list(
     unsigned long long gi_y = 0;
     unsigned long long gi_z = 0;
 
-    int charge_param_idx_i = atom_i_idx * 3 + 0;
-    int lj_param_idx_sig_i = atom_i_idx * 3 + 1;
-    int lj_param_idx_eps_i = atom_i_idx * 3 + 2;
+    int charge_param_idx_i = atom_i_idx * PARAMS_PER_ATOM + PARAM_OFFSET_CHARGE;
+    int lj_param_idx_sig_i = atom_i_idx * PARAMS_PER_ATOM + PARAM_OFFSET_SIG;
+    int lj_param_idx_eps_i = atom_i_idx * PARAMS_PER_ATOM + PARAM_OFFSET_EPS;
 
     RealType qi = params[charge_param_idx_i];
     RealType sig_i = params[lj_param_idx_sig_i];
@@ -75,9 +75,9 @@ void __global__ k_nonbonded_pair_list(
     unsigned long long gj_y = 0;
     unsigned long long gj_z = 0;
 
-    int charge_param_idx_j = atom_j_idx * 3 + 0;
-    int lj_param_idx_sig_j = atom_j_idx * 3 + 1;
-    int lj_param_idx_eps_j = atom_j_idx * 3 + 2;
+    int charge_param_idx_j = atom_j_idx * PARAMS_PER_ATOM + PARAM_OFFSET_CHARGE;
+    int lj_param_idx_sig_j = atom_j_idx * PARAMS_PER_ATOM + PARAM_OFFSET_SIG;
+    int lj_param_idx_eps_j = atom_j_idx * PARAMS_PER_ATOM + PARAM_OFFSET_EPS;
 
     RealType qj = params[charge_param_idx_j];
     RealType sig_j = params[lj_param_idx_sig_j];

@@ -63,11 +63,11 @@ NonbondedAllPairs<RealType>::NonbondedAllPairs(
 
     gpuErrchk(cudaMalloc(&d_gathered_w_, K_ * sizeof(*d_gathered_w_)));
 
-    gpuErrchk(cudaMalloc(&d_gathered_p_, K_ * 3 * sizeof(*d_gathered_p_)));
+    gpuErrchk(cudaMalloc(&d_gathered_p_, K_ * PARAMS_PER_ATOM * sizeof(*d_gathered_p_)));
     gpuErrchk(cudaMalloc(&d_gathered_du_dx_, K_ * 3 * sizeof(*d_gathered_du_dx_)));
-    gpuErrchk(cudaMalloc(&d_gathered_du_dp_, K_ * 3 * sizeof(*d_gathered_du_dp_)));
+    gpuErrchk(cudaMalloc(&d_gathered_du_dp_, K_ * PARAMS_PER_ATOM * sizeof(*d_gathered_du_dp_)));
 
-    gpuErrchk(cudaMalloc(&d_du_dp_buffer_, N_ * 3 * sizeof(*d_du_dp_buffer_)));
+    gpuErrchk(cudaMalloc(&d_du_dp_buffer_, N_ * PARAMS_PER_ATOM * sizeof(*d_du_dp_buffer_)));
 
     gpuErrchk(cudaMallocHost(&p_ixn_count_, 1 * sizeof(*p_ixn_count_)));
 
@@ -190,7 +190,7 @@ void NonbondedAllPairs<RealType>::execute_device(
     const int N,
     const int P,
     const double *d_x,
-    const double *d_p,   // 2 * N * 3
+    const double *d_p,   // N * PARAMS_PER_ATOM
     const double *d_box, // 3 * 3
     const double lambda,
     unsigned long long *d_du_dx,
@@ -221,10 +221,10 @@ void NonbondedAllPairs<RealType>::execute_device(
             ", N_=" + std::to_string(N_));
     }
 
-    if (P != N_ * 3) {
+    if (P != N_ * PARAMS_PER_ATOM) {
         throw std::runtime_error(
-            "NonbondedAllPairs::execute_device(): expected P == N_*3, got P=" + std::to_string(P) +
-            ", N_*3=" + std::to_string(N_ * 3));
+            "NonbondedAllPairs::execute_device(): expected P == N_*" + std::to_string(PARAMS_PER_ATOM) + ", got P=" +
+            std::to_string(P) + ", N_*" + std::to_string(PARAMS_PER_ATOM) + "=" + std::to_string(N_ * PARAMS_PER_ATOM));
     }
 
     const int tpb = 32;
@@ -299,7 +299,8 @@ void NonbondedAllPairs<RealType>::execute_device(
     }
 
     // do parameter interpolation here
-    k_gather<<<dim3(ceil_divide(K_, tpb), 3, 1), tpb, 0, stream>>>(K_, d_sorted_atom_idxs_, d_p, d_gathered_p_);
+    k_gather<<<dim3(ceil_divide(K_, tpb), PARAMS_PER_ATOM, 1), tpb, 0, stream>>>(
+        K_, d_sorted_atom_idxs_, d_p, d_gathered_p_);
     gpuErrchk(cudaPeekAtLastError());
 
     // reset buffers and sorted accumulators
@@ -307,7 +308,7 @@ void NonbondedAllPairs<RealType>::execute_device(
         gpuErrchk(cudaMemsetAsync(d_gathered_du_dx_, 0, K_ * 3 * sizeof(*d_gathered_du_dx_), stream))
     }
     if (d_du_dp) {
-        gpuErrchk(cudaMemsetAsync(d_gathered_du_dp_, 0, K_ * 3 * sizeof(*d_gathered_du_dp_), stream))
+        gpuErrchk(cudaMemsetAsync(d_gathered_du_dp_, 0, K_ * PARAMS_PER_ATOM * sizeof(*d_gathered_du_dp_), stream))
     }
 
     // update new w coordinates
@@ -351,18 +352,19 @@ void NonbondedAllPairs<RealType>::execute_device(
         gpuErrchk(cudaPeekAtLastError());
     }
 
-    // params are N,3
+    // params are N, PARAMS_PER_ATOM
     // this needs to be an accumulated permute
     if (d_du_dp) {
         // scattered assignment updates K_ <= N_ elements; the rest should be 0
-        gpuErrchk(cudaMemsetAsync(d_du_dp_buffer_, 0, N_ * 3 * sizeof(*d_du_dp_buffer_), stream));
-        k_scatter_assign<<<dim3(ceil_divide(K_, tpb), 3, 1), tpb, 0, stream>>>(
+        gpuErrchk(cudaMemsetAsync(d_du_dp_buffer_, 0, N_ * PARAMS_PER_ATOM * sizeof(*d_du_dp_buffer_), stream));
+        k_scatter_assign<<<dim3(ceil_divide(K_, tpb), PARAMS_PER_ATOM, 1), tpb, 0, stream>>>(
             K_, d_sorted_atom_idxs_, d_gathered_du_dp_, d_du_dp_buffer_);
         gpuErrchk(cudaPeekAtLastError());
     }
 
     if (d_du_dp) {
-        k_add_ull_to_ull<<<dim3(ceil_divide(N_, tpb), 3, 1), tpb, 0, stream>>>(N, d_du_dp_buffer_, d_du_dp);
+        k_add_ull_to_ull<<<dim3(ceil_divide(N_, tpb), PARAMS_PER_ATOM, 1), tpb, 0, stream>>>(
+            N, d_du_dp_buffer_, d_du_dp);
         gpuErrchk(cudaPeekAtLastError());
     }
 }
@@ -372,9 +374,11 @@ void NonbondedAllPairs<RealType>::du_dp_fixed_to_float(
     const int N, const int P, const unsigned long long *du_dp, double *du_dp_float) {
 
     for (int i = 0; i < N; i++) {
-        const int idx_charge = i * 3 + 0;
-        const int idx_sig = i * 3 + 1;
-        const int idx_eps = i * 3 + 2;
+        const int offset = i * PARAMS_PER_ATOM;
+        const int idx_charge = offset + PARAM_OFFSET_CHARGE;
+        const int idx_sig = offset + PARAM_OFFSET_SIG;
+        const int idx_eps = offset + PARAM_OFFSET_EPS;
+
         du_dp_float[idx_charge] = FIXED_TO_FLOAT_DU_DP<double, FIXED_EXPONENT_DU_DCHARGE>(du_dp[idx_charge]);
         du_dp_float[idx_sig] = FIXED_TO_FLOAT_DU_DP<double, FIXED_EXPONENT_DU_DSIG>(du_dp[idx_sig]);
         du_dp_float[idx_eps] = FIXED_TO_FLOAT_DU_DP<double, FIXED_EXPONENT_DU_DEPS>(du_dp[idx_eps]);

@@ -2,6 +2,7 @@
 #include "k_nonbonded_precomputed.cuh"
 #include "kernel_utils.cuh"
 #include "math_utils.cuh"
+#include "nonbonded_common.cuh"
 #include "nonbonded_precomputed.hpp"
 #include <vector>
 
@@ -55,10 +56,11 @@ void NonbondedPairListPrecomputed<RealType>::execute_device(
     unsigned long long *d_u,
     cudaStream_t stream) {
 
-    if (P != 3 * B_) {
+    if (P != PARAMS_PER_PAIR * B_) {
         throw std::runtime_error(
-            "NonbondedPairListPrecomputed::execute_device(): expected P == 3*B, got P=" + std::to_string(P) +
-            ", 3*B=" + std::to_string(3 * B_));
+            "NonbondedPairListPrecomputed::execute_device(): expected P == " + std::to_string(PARAMS_PER_PAIR) +
+            "*B, got P=" + std::to_string(P) + ", " + std::to_string(PARAMS_PER_PAIR) +
+            "*B=" + std::to_string(PARAMS_PER_PAIR * B_));
     }
 
     if (B_ > 0) {
@@ -75,9 +77,10 @@ void NonbondedPairListPrecomputed<RealType>::du_dp_fixed_to_float(
     const int N, const int P, const unsigned long long *du_dp, double *du_dp_float) {
 
     for (int i = 0; i < B_; i++) {
-        const int idx_charge = i * 3 + 0;
-        const int idx_sig = i * 3 + 1;
-        const int idx_eps = i * 3 + 2;
+        const int offset = i * PARAMS_PER_PAIR;
+        const int idx_charge = offset + PARAM_OFFSET_CHARGE;
+        const int idx_sig = offset + PARAM_OFFSET_SIG;
+        const int idx_eps = offset + PARAM_OFFSET_EPS;
 
         du_dp_float[idx_charge] = FIXED_TO_FLOAT_DU_DP<double, FIXED_EXPONENT_DU_DCHARGE>(du_dp[idx_charge]);
         du_dp_float[idx_sig] = FIXED_TO_FLOAT_DU_DP<double, FIXED_EXPONENT_DU_DSIG>(du_dp[idx_sig]);

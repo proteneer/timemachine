@@ -2,6 +2,10 @@
 
 #include "nonbonded_common.cuh"
 
+// Shape of parameter array is identical to other nonbonded variants
+// except that rows map to pairs instead of individual atoms
+static const int PARAMS_PER_PAIR = PARAMS_PER_ATOM;
+
 template <typename RealType>
 void __global__ k_nonbonded_precomputed(
     const int M,                          // number of pairs
@@ -21,9 +25,9 @@ void __global__ k_nonbonded_precomputed(
         return;
     }
 
-    RealType q_ij = params[pair_idx * 3 + 0];
-    RealType sig_ij = params[pair_idx * 3 + 1];
-    RealType eps_ij = params[pair_idx * 3 + 2];
+    RealType q_ij = params[pair_idx * PARAMS_PER_PAIR + PARAM_OFFSET_CHARGE];
+    RealType sig_ij = params[pair_idx * PARAMS_PER_PAIR + PARAM_OFFSET_SIG];
+    RealType eps_ij = params[pair_idx * PARAMS_PER_PAIR + PARAM_OFFSET_EPS];
 
     unsigned long long g_q_ij = 0;
     unsigned long long g_sig_ij = 0;
@@ -125,9 +129,9 @@ void __global__ k_nonbonded_precomputed(
     }
 
     if (du_dp) {
-        atomicAdd(du_dp + pair_idx * 3 + 0, g_q_ij);
-        atomicAdd(du_dp + pair_idx * 3 + 1, g_sig_ij);
-        atomicAdd(du_dp + pair_idx * 3 + 2, g_eps_ij);
+        atomicAdd(du_dp + pair_idx * PARAMS_PER_PAIR + PARAM_OFFSET_CHARGE, g_q_ij);
+        atomicAdd(du_dp + pair_idx * PARAMS_PER_PAIR + PARAM_OFFSET_SIG, g_sig_ij);
+        atomicAdd(du_dp + pair_idx * PARAMS_PER_PAIR + PARAM_OFFSET_EPS, g_eps_ij);
     }
 
     if (du_dx) {

@@ -79,9 +79,8 @@ void NonbondedPairList<RealType, Negated>::execute_device(
     const int tpb = 32;
 
     int num_blocks = ceil_divide(N, tpb);
-    dim3 dimGrid(num_blocks, 3, 1);
 
-    k_compute_w_coords<<<dimGrid, tpb, 0, stream>>>(
+    k_compute_w_coords<<<dim3(num_blocks, 3, 1), tpb, 0, stream>>>(
         N, lambda, cutoff_, d_lambda_plane_idxs_, d_lambda_offset_idxs_, d_w_);
     gpuErrchk(cudaPeekAtLastError());
 
@@ -99,9 +98,11 @@ void NonbondedPairList<RealType, Negated>::du_dp_fixed_to_float(
     const int N, const int P, const unsigned long long *du_dp, double *du_dp_float) {
 
     for (int i = 0; i < N; i++) {
-        const int idx_charge = i * 3 + 0;
-        const int idx_sig = i * 3 + 1;
-        const int idx_eps = i * 3 + 2;
+        const int offset = i * PARAMS_PER_ATOM;
+        const int idx_charge = offset + PARAM_OFFSET_CHARGE;
+        const int idx_sig = offset + PARAM_OFFSET_SIG;
+        const int idx_eps = offset + PARAM_OFFSET_EPS;
+
         du_dp_float[idx_charge] = FIXED_TO_FLOAT_DU_DP<double, FIXED_EXPONENT_DU_DCHARGE>(du_dp[idx_charge]);
         du_dp_float[idx_sig] = FIXED_TO_FLOAT_DU_DP<double, FIXED_EXPONENT_DU_DSIG>(du_dp[idx_sig]);
         du_dp_float[idx_eps] = FIXED_TO_FLOAT_DU_DP<double, FIXED_EXPONENT_DU_DEPS>(du_dp[idx_eps]);

@@ -76,10 +76,10 @@ NonbondedInteractionGroup<RealType>::NonbondedInteractionGroup(
     gpuErrchk(cudaMalloc(&d_w_, N_ * sizeof(*d_w_)));
     gpuErrchk(cudaMalloc(&d_sorted_w_, N_ * sizeof(*d_sorted_w_)));
 
-    gpuErrchk(cudaMalloc(&d_sorted_p_, N_ * 3 * sizeof(*d_sorted_p_)));
+    gpuErrchk(cudaMalloc(&d_sorted_p_, N_ * PARAMS_PER_ATOM * sizeof(*d_sorted_p_)));
     gpuErrchk(cudaMalloc(&d_sorted_du_dx_, N_ * 3 * sizeof(*d_sorted_du_dx_)));
-    gpuErrchk(cudaMalloc(&d_sorted_du_dp_, N_ * 3 * sizeof(*d_sorted_du_dp_)));
-    gpuErrchk(cudaMalloc(&d_du_dp_buffer_, N_ * 3 * sizeof(*d_du_dp_buffer_)));
+    gpuErrchk(cudaMalloc(&d_sorted_du_dp_, N_ * PARAMS_PER_ATOM * sizeof(*d_sorted_du_dp_)));
+    gpuErrchk(cudaMalloc(&d_du_dp_buffer_, N_ * PARAMS_PER_ATOM * sizeof(*d_du_dp_buffer_)));
 
     gpuErrchk(cudaMallocHost(&p_ixn_count_, 1 * sizeof(*p_ixn_count_)));
 
@@ -215,7 +215,7 @@ void NonbondedInteractionGroup<RealType>::execute_device(
     const int N,
     const int P,
     const double *d_x,
-    const double *d_p,   // 2 * N * 3
+    const double *d_p,   // N * PARAMS_PER_ATOM
     const double *d_box, // 3 * 3
     const double lambda,
     unsigned long long *d_du_dx,
@@ -246,10 +246,11 @@ void NonbondedInteractionGroup<RealType>::execute_device(
             ", N_=" + std::to_string(N_));
     }
 
-    if (P != N_ * 3) {
+    if (P != N_ * PARAMS_PER_ATOM) {
         throw std::runtime_error(
-            "NonbondedInteractionGroup::execute_device(): expected P == N_*3, got P=" + std::to_string(P) +
-            ", N_*3=" + std::to_string(N_ * 3));
+            "NonbondedInteractionGroup::execute_device(): expected P == N_*" + std::to_string(PARAMS_PER_ATOM) +
+            ", got P=" + std::to_string(P) + ", N_*" + std::to_string(PARAMS_PER_ATOM) + "=" +
+            std::to_string(N_ * PARAMS_PER_ATOM));
     }
 
     const int tpb = warp_size;
@@ -266,8 +267,6 @@ void NonbondedInteractionGroup<RealType>::execute_device(
         p_rebuild_nblist_, d_rebuild_nblist_, 1 * sizeof(*p_rebuild_nblist_), cudaMemcpyDeviceToHost, stream));
     gpuErrchk(cudaStreamSynchronize(stream)); // slow!
 
-    dim3 dimGrid(B, 3, 1);
-
     if (p_rebuild_nblist_[0] > 0) {
 
         // (ytz): update the permutation index before building neighborlist, as the neighborlist is tied
@@ -283,7 +282,7 @@ void NonbondedInteractionGroup<RealType>::execute_device(
         }
 
         // compute new coordinates, new lambda_idxs, new_plane_idxs
-        k_gather<<<dimGrid, tpb, 0, stream>>>(N_, d_perm_, d_x, d_sorted_x_);
+        k_gather<<<dim3(B, 3, 1), tpb, 0, stream>>>(N_, d_perm_, d_x, d_sorted_x_);
         gpuErrchk(cudaPeekAtLastError());
 
         nblist_.build_nblist_device(N_, d_sorted_x_, d_box, cutoff_ + nblist_padding_, stream);
@@ -316,7 +315,7 @@ void NonbondedInteractionGroup<RealType>::execute_device(
         gpuErrchk(cudaMemcpyAsync(d_nblist_x_, d_x, N * 3 * sizeof(*d_x), cudaMemcpyDeviceToDevice, stream));
         gpuErrchk(cudaMemcpyAsync(d_nblist_box_, d_box, 3 * 3 * sizeof(*d_box), cudaMemcpyDeviceToDevice, stream));
     } else {
-        k_gather<<<dimGrid, tpb, 0, stream>>>(N, d_perm_, d_x, d_sorted_x_);
+        k_gather<<<dim3(B, 3, 1), tpb, 0, stream>>>(N, d_perm_, d_x, d_sorted_x_);
         gpuErrchk(cudaPeekAtLastError());
     }
 
@@ -325,7 +324,7 @@ void NonbondedInteractionGroup<RealType>::execute_device(
         return;
     }
 
-    k_gather<<<dimGrid, tpb, 0, stream>>>(N, d_perm_, d_p, d_sorted_p_);
+    k_gather<<<dim3(B, PARAMS_PER_ATOM, 1), tpb, 0, stream>>>(N, d_perm_, d_p, d_sorted_p_);
     gpuErrchk(cudaPeekAtLastError());
 
     // reset buffers and sorted accumulators
@@ -333,7 +332,7 @@ void NonbondedInteractionGroup<RealType>::execute_device(
         gpuErrchk(cudaMemsetAsync(d_sorted_du_dx_, 0, N * 3 * sizeof(*d_sorted_du_dx_), stream))
     }
     if (d_du_dp) {
-        gpuErrchk(cudaMemsetAsync(d_sorted_du_dp_, 0, N * 3 * sizeof(*d_sorted_du_dp_), stream))
+        gpuErrchk(cudaMemsetAsync(d_sorted_du_dp_, 0, N * PARAMS_PER_ATOM * sizeof(*d_sorted_du_dp_), stream))
     }
 
     // update new w coordinates
@@ -371,19 +370,19 @@ void NonbondedInteractionGroup<RealType>::execute_device(
 
     // coords are N,3
     if (d_du_dx) {
-        k_scatter_accum<<<dimGrid, tpb, 0, stream>>>(N, d_perm_, d_sorted_du_dx_, d_du_dx);
+        k_scatter_accum<<<dim3(B, 3, 1), tpb, 0, stream>>>(N, d_perm_, d_sorted_du_dx_, d_du_dx);
         gpuErrchk(cudaPeekAtLastError());
     }
 
-    // params are N,3
+    // params are N, PARAMS_PER_ATOM
     // this needs to be an accumulated permute
     if (d_du_dp) {
-        k_scatter_assign<<<dimGrid, tpb, 0, stream>>>(N, d_perm_, d_sorted_du_dp_, d_du_dp_buffer_);
+        k_scatter_assign<<<dim3(B, PARAMS_PER_ATOM, 1), tpb, 0, stream>>>(N, d_perm_, d_sorted_du_dp_, d_du_dp_buffer_);
         gpuErrchk(cudaPeekAtLastError());
     }
 
     if (d_du_dp) {
-        k_add_ull_to_ull<<<dimGrid, tpb, 0, stream>>>(N, d_du_dp_buffer_, d_du_dp);
+        k_add_ull_to_ull<<<dim3(B, PARAMS_PER_ATOM, 1), tpb, 0, stream>>>(N, d_du_dp_buffer_, d_du_dp);
         gpuErrchk(cudaPeekAtLastError());
     }
 }
@@ -393,9 +392,11 @@ void NonbondedInteractionGroup<RealType>::du_dp_fixed_to_float(
     const int N, const int P, const unsigned long long *du_dp, double *du_dp_float) {
 
     for (int i = 0; i < N; i++) {
-        const int idx_charge = i * 3 + 0;
-        const int idx_sig = i * 3 + 1;
-        const int idx_eps = i * 3 + 2;
+      const int offset = i * PARAMS_PER_ATOM;
+        const int idx_charge = offset + PARAM_OFFSET_CHARGE;
+        const int idx_sig = offset + PARAM_OFFSET_SIG;
+        const int idx_eps = offset + PARAM_OFFSET_EPS;
+
         du_dp_float[idx_charge] = FIXED_TO_FLOAT_DU_DP<double, FIXED_EXPONENT_DU_DCHARGE>(du_dp[idx_charge]);
         du_dp_float[idx_sig] = FIXED_TO_FLOAT_DU_DP<double, FIXED_EXPONENT_DU_DSIG>(du_dp[idx_sig]);
         du_dp_float[idx_eps] = FIXED_TO_FLOAT_DU_DP<double, FIXED_EXPONENT_DU_DEPS>(du_dp[idx_eps]);

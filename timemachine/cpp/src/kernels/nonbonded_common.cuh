@@ -6,6 +6,9 @@
 #include <set>
 #include <vector>
 
+// each atom parameterized by a 4-tuple: charge, lj sigma, lj epsilon
+enum { PARAM_OFFSET_CHARGE = 0, PARAM_OFFSET_SIG, PARAM_OFFSET_EPS, PARAMS_PER_ATOM };
+
 typedef void (*k_nonbonded_fn)(
     const int N,
     const int NR,
