@@ -77,7 +77,7 @@ def harmonic_bond(conf, params, box, bond_idxs):
     return jnp.sum(energy)
 
 
-def harmonic_angle(conf, params, box, lamb, angle_idxs, lamb_mult=None, lamb_offset=None, cos_angles=True):
+def harmonic_angle(conf, params, box, angle_idxs, cos_angles=True):
     """
     Compute the harmonic angle energy given a collection of molecules.
 
@@ -95,23 +95,15 @@ def harmonic_angle(conf, params, box, lamb, angle_idxs, lamb_mult=None, lamb_off
         atomic coordinates
 
     params: shape [num_angles, 2] np.ndarray
-        parameters
+        force constants, eq angles
+        (kas, a0s = params.T)
 
     box: shape [3, 3] np.ndarray
         periodic boundary vectors, if not None
 
-    lamb: float
-        alchemical lambda parameter, linearly rescaled
-
     angle_idxs: shape [num_angles, 3] np.ndarray
         each element (a, b, c) is a unique angle in the conformation. atom b is defined
         to be the middle atom.
-
-    lamb_mult: None, or broadcastable to angle_idxs.shape[0]
-        prefactor = (lamb_offset + lamb_mult * lamb)
-
-    lamb_offset: None, or broadcastable to angle_idxs.shape[0]
-        prefactor = (lamb_offset + lamb_mult * lamb)
 
     cos_angles: True (default)
         if True, then this instead implements V(t) = k*(cos(t)-cos(t0))^2. This is far more
@@ -123,15 +115,6 @@ def harmonic_angle(conf, params, box, lamb, angle_idxs, lamb_mult=None, lamb_off
     """
     if angle_idxs.shape[0] == 0:
         return 0.0
-
-    if lamb_mult is None or lamb_offset is None or lamb is None:
-        assert lamb_mult is None
-        assert lamb_offset is None
-        prefactor = 1.0
-    else:
-        assert lamb_mult is not None
-        assert lamb_offset is not None
-        prefactor = lamb_offset + lamb_mult * lamb
 
     ci = conf[angle_idxs[:, 0]]
     cj = conf[angle_idxs[:, 1]]
@@ -150,10 +133,10 @@ def harmonic_angle(conf, params, box, lamb, angle_idxs, lamb_mult=None, lamb_off
 
     # (ytz): we use the squared version so that the energy is strictly positive
     if cos_angles:
-        energies = prefactor * kas / 2 * jnp.power(tb - jnp.cos(a0s), 2)
+        energies = kas / 2 * jnp.power(tb - jnp.cos(a0s), 2)
     else:
         angle = jnp.arccos(tb)
-        energies = prefactor * kas / 2 * jnp.power(angle - a0s, 2)
+        energies = kas / 2 * jnp.power(angle - a0s, 2)
 
     return jnp.sum(energies, -1)  # reduce over all angles
 
