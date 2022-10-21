@@ -210,7 +210,9 @@ def test_vacuum_and_solvent_edge_types():
 
     vacuum_unbound_potentials, vacuum_sys_params, vacuum_masses = afe.prepare_vacuum_edge(ff_params)
 
-    solvent_unbound_potentials, solvent_sys_params, solvent_masses = afe.prepare_host_edge(ff_params, solvent_system)
+    solvent_unbound_potentials, solvent_sys_params, solvent_masses = afe.prepare_host_edge(
+        ff_params, solvent_system, 0.0
+    )
 
     assert type(vacuum_unbound_potentials) == type(solvent_unbound_potentials)
     assert type(vacuum_sys_params) == type(solvent_sys_params)

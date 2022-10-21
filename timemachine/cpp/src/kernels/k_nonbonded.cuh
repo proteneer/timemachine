@@ -266,9 +266,6 @@ void __device__ v_nonbonded_unified(
     const double *__restrict__ coords,
     const double *__restrict__ params, // [N]
     const double *__restrict__ box,
-    const double *__restrict__ coords_w, // 4D coords
-    // const int * __restrict__ lambda_plane_idxs, // 0 or 1, shift
-    // const int * __restrict__ lambda_offset_idxs, // 0 or 1, how much we offset from the plane by cutoff
     const double beta,
     const double cutoff,
     const unsigned int *__restrict__ row_idxs,
@@ -292,13 +289,12 @@ void __device__ v_nonbonded_unified(
 
     const int index = row_block_idx * 32 + threadIdx.x;
     const unsigned int atom_i_idx = index < NR ? row_idxs[index] : N;
-    // int lambda_offset_i = atom_i_idx < N ? lambda_offset_idxs[atom_i_idx] : 0;
-    // int lambda_plane_i = atom_i_idx < N ? lambda_plane_idxs[atom_i_idx] : 0;
 
     RealType ci_x = atom_i_idx < N ? coords[atom_i_idx * 3 + 0] : 0;
     RealType ci_y = atom_i_idx < N ? coords[atom_i_idx * 3 + 1] : 0;
     RealType ci_z = atom_i_idx < N ? coords[atom_i_idx * 3 + 2] : 0;
-    RealType ci_w = atom_i_idx < N ? coords_w[atom_i_idx] : 0;
+
+    RealType ci_w = atom_i_idx < N ? params[atom_i_idx * PARAMS_PER_ATOM + PARAM_OFFSET_W] : 0;
 
     unsigned long long gi_x = 0;
     unsigned long long gi_y = 0;
@@ -318,13 +314,12 @@ void __device__ v_nonbonded_unified(
 
     // i idx is contiguous but j is not, so we should swap them to avoid having to shuffle atom_j_idx
     int atom_j_idx = ixn_atoms[tile_idx * 32 + threadIdx.x];
-    // int lambda_offset_j = atom_j_idx < N ? lambda_offset_idxs[atom_j_idx] : 0;
-    // int lambda_plane_j = atom_j_idx < N ? lambda_plane_idxs[atom_j_idx] : 0;
 
     RealType cj_x = atom_j_idx < N ? coords[atom_j_idx * 3 + 0] : 0;
     RealType cj_y = atom_j_idx < N ? coords[atom_j_idx * 3 + 1] : 0;
     RealType cj_z = atom_j_idx < N ? coords[atom_j_idx * 3 + 2] : 0;
-    RealType cj_w = atom_j_idx < N ? coords_w[atom_j_idx] : 0;
+
+    RealType cj_w = atom_j_idx < N ? params[atom_j_idx * PARAMS_PER_ATOM + PARAM_OFFSET_W] : 0;
 
     unsigned long long gj_x = 0;
     unsigned long long gj_y = 0;
@@ -366,7 +361,6 @@ void __device__ v_nonbonded_unified(
 
         if (ALCHEMICAL) {
             // (ytz): we are guaranteed that delta_w is zero if ALCHEMICAL == false
-            // delta_w = (lambda_plane_i - lambda_plane_j)*real_cutoff + (lambda_offset_i - lambda_offset_j)*real_lambda*real_cutoff;
             delta_w = ci_w - cj_w;
             d2ij += delta_w * delta_w;
         }
@@ -494,7 +488,6 @@ void __global__ k_nonbonded_unified(
     const double *__restrict__ coords,
     const double *__restrict__ params, // [N]
     const double *__restrict__ box,
-    const double *__restrict__ coords_w, // 4D coords
     const double beta,
     const double cutoff,
     const unsigned int *__restrict__ row_idxs,
@@ -509,11 +502,11 @@ void __global__ k_nonbonded_unified(
     int index = row_block_idx * 32 + threadIdx.x;
     const unsigned int atom_i_idx = index < NR ? row_idxs[index] : N;
 
-    RealType cw_i = atom_i_idx < N ? coords_w[atom_i_idx] : 0;
+    RealType cw_i = atom_i_idx < N ? params[atom_i_idx * PARAMS_PER_ATOM + PARAM_OFFSET_W] : 0;
 
     int atom_j_idx = ixn_atoms[tile_idx * 32 + threadIdx.x];
 
-    RealType cw_j = atom_j_idx < N ? coords_w[atom_j_idx] : 0;
+    RealType cw_j = atom_j_idx < N ? params[atom_j_idx * PARAMS_PER_ATOM + PARAM_OFFSET_W] : 0;
 
     int is_vanilla = cw_i == 0 && cw_j == 0;
 
@@ -521,9 +514,9 @@ void __global__ k_nonbonded_unified(
 
     if (tile_is_vanilla) {
         v_nonbonded_unified<RealType, 0, COMPUTE_U, COMPUTE_DU_DX, COMPUTE_DU_DP>(
-            N, NR, coords, params, box, coords_w, beta, cutoff, row_idxs, ixn_tiles, ixn_atoms, du_dx, du_dp, u_buffer);
+            N, NR, coords, params, box, beta, cutoff, row_idxs, ixn_tiles, ixn_atoms, du_dx, du_dp, u_buffer);
     } else {
         v_nonbonded_unified<RealType, 1, COMPUTE_U, COMPUTE_DU_DX, COMPUTE_DU_DP>(
-            N, NR, coords, params, box, coords_w, beta, cutoff, row_idxs, ixn_tiles, ixn_atoms, du_dx, du_dp, u_buffer);
+            N, NR, coords, params, box, beta, cutoff, row_idxs, ixn_tiles, ixn_atoms, du_dx, du_dp, u_buffer);
     };
 }

@@ -2,6 +2,7 @@ import numpy as np
 import pytest
 from common import GradientTest
 
+from tests.nonbonded import gen_params_with_4d_offsets
 from timemachine.lib.potentials import NonbondedPairListPrecomputed
 from timemachine.potentials import generic
 
@@ -11,19 +12,14 @@ pytestmark = [pytest.mark.memcheck]
 def test_nonbonded_precomputed_pair_list_invalid_pair_idxs():
 
     with pytest.raises(RuntimeError) as e:
-        NonbondedPairListPrecomputed([0], [0], 2.0, 1.1).unbound_impl(np.float32)
+        NonbondedPairListPrecomputed([0], 2.0, 1.1).unbound_impl(np.float32)
 
     assert "idxs.size() must be exactly 2*B" in str(e)
 
     with pytest.raises(RuntimeError) as e:
-        NonbondedPairListPrecomputed([(0, 0)], [0.3], 2.0, 1.1).unbound_impl(np.float32)
+        NonbondedPairListPrecomputed([(0, 0)], 2.0, 1.1).unbound_impl(np.float32)
 
     assert "illegal pair with src == dst: 0, 0" in str(e)
-
-    with pytest.raises(RuntimeError) as e:
-        NonbondedPairListPrecomputed([(0, 1)], [0.3, 0.4], 2.0, 1.1).unbound_impl(np.float32)
-
-    assert "offset size does not match idxs size" in str(e)
 
 
 @pytest.mark.parametrize("beta", [2.0])
@@ -49,12 +45,9 @@ def test_nonbonded_pair_list_precomputed_correctness(
     pair_idxs = np.array(pair_idxs, dtype=np.int32)
     num_pairs, _ = pair_idxs.shape
 
-    params = rng.uniform(0, 1, size=(num_pairs, 3))
+    params = rng.uniform(0, 1, size=(num_pairs, 4))
     params[:, 0] -= 0.5  # get some positive and negative charges
     params[:, 1] /= 5  # shrink lj sigma to avoid huge repulsive forces
-
-    w_offsets = rng.uniform(0, 1, size=num_pairs) / 4
-    w_offsets = w_offsets.astype(np.float64)
 
     conf = rng.uniform(0, 1, size=(num_atoms, 3)) * 3
 
@@ -62,13 +55,12 @@ def test_nonbonded_pair_list_precomputed_correctness(
         1 + rng.uniform(0, 1, size=3) * 3
     )  # box should be fully ignored tbh (just like all other bonded forces)
 
-    potential = generic.NonbondedPairListPrecomputed(pair_idxs, w_offsets, beta, cutoff)
+    potential = generic.NonbondedPairListPrecomputed(pair_idxs, beta, cutoff)
 
     GradientTest().compare_forces_gpu_vs_reference(
         conf,
-        params,
+        gen_params_with_4d_offsets(rng, params, 0, 0.25, 3),
         box,
-        [0.0],
         potential,
         precision=precision,
         rtol=rtol,

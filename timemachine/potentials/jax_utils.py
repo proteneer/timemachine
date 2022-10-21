@@ -30,26 +30,6 @@ def pairs_from_interaction_groups(group_a_indices: Array, group_b_indices: Array
     return pairs
 
 
-def compute_lifting_parameter(lamb, lambda_plane_idxs, lambda_offset_idxs, cutoff):
-    """One way to compute a per-particle "4D" offset in terms of an adjustable lamb and
-    constant per-particle parameters.
-
-    Notes
-    -----
-    (ytz): this initializes the 4th dimension to a fixed plane adjust by an offset
-    followed by a scaling by cutoff.
-
-    lambda_plane_idxs are typically 0 or 1 and allows us to turn off an interaction
-    independent of the lambda value.
-
-    lambda_offset_idxs are typically 0 and 1, and allows us to adjust the w coordinate
-    in a lambda-dependent way.
-    """
-
-    w = cutoff * (lambda_plane_idxs + lambda_offset_idxs * lamb)
-    return w
-
-
 def delta_r(ri, rj, box=None):
     diff = ri - rj  # this can be either N,N,3 or B,3
 

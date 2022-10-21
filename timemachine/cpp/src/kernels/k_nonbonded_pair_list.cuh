@@ -6,7 +6,6 @@
 // using this kernel.
 
 #include "../fixed_point.hpp"
-#include "kernel_utils.cuh"
 #include "nonbonded_common.cuh"
 
 template <bool Negated>
@@ -20,9 +19,8 @@ void __global__ k_nonbonded_pair_list(
     const double *__restrict__ coords,
     const double *__restrict__ params,
     const double *__restrict__ box,
-    const double *__restrict__ coords_w, // 4D coords
-    const int *__restrict__ pair_idxs,   // [M, 2] pair-list of atoms
-    const double *__restrict__ scales,   // [M]
+    const int *__restrict__ pair_idxs, // [M, 2] pair-list of atoms
+    const double *__restrict__ scales, // [M]
     const double beta,
     const double cutoff,
     unsigned long long *__restrict__ du_dx,
@@ -46,7 +44,8 @@ void __global__ k_nonbonded_pair_list(
     RealType ci_x = coords[atom_i_idx * 3 + 0];
     RealType ci_y = coords[atom_i_idx * 3 + 1];
     RealType ci_z = coords[atom_i_idx * 3 + 2];
-    RealType ci_w = coords_w[atom_i_idx];
+
+    RealType ci_w = params[atom_i_idx * PARAMS_PER_ATOM + PARAM_OFFSET_W];
 
     unsigned long long gi_x = 0;
     unsigned long long gi_y = 0;
@@ -69,7 +68,8 @@ void __global__ k_nonbonded_pair_list(
     RealType cj_x = coords[atom_j_idx * 3 + 0];
     RealType cj_y = coords[atom_j_idx * 3 + 1];
     RealType cj_z = coords[atom_j_idx * 3 + 2];
-    RealType cj_w = coords_w[atom_j_idx];
+
+    RealType cj_w = params[atom_j_idx * PARAMS_PER_ATOM + PARAM_OFFSET_W];
 
     unsigned long long gj_x = 0;
     unsigned long long gj_y = 0;

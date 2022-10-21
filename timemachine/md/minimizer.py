@@ -11,21 +11,25 @@ from timemachine.fe.utils import get_romol_conf
 from timemachine.ff import Forcefield
 from timemachine.ff.handlers import openmm_deserializer
 from timemachine.lib import LangevinIntegrator, MonteCarloBarostat, custom_ops
+from timemachine.lib.potentials import HarmonicBond
 from timemachine.md.barostat.utils import get_bond_list, get_group_indices
 from timemachine.md.fire import fire_descent
 
 
-def bind_potentials(topo, ff: Forcefield):
+def parameterize_system(topo, ff: Forcefield, lamb: float):
     # setup the parameter handlers for the ligand
     ff_params = ff.get_params()
     params_potential_pairs = [
         topo.parameterize_harmonic_bond(ff_params.hb_params),
         topo.parameterize_harmonic_angle(ff_params.ha_params),
         topo.parameterize_periodic_torsion(ff_params.pt_params, ff_params.it_params),
-        topo.parameterize_nonbonded(ff_params.q_params, ff_params.lj_params),
+        topo.parameterize_nonbonded(ff_params.q_params, ff_params.lj_params, lamb),
     ]
-    u_impls = [potential.bind(params).bound_impl(precision=np.float32) for params, potential in params_potential_pairs]
+    return params_potential_pairs
 
+
+def bind_potentials(params_potential_pairs):
+    u_impls = [potential.bind(params).bound_impl(precision=np.float32) for params, potential in params_potential_pairs]
     return u_impls
 
 
@@ -135,8 +139,6 @@ def minimize_host_4d(mols, host_system, host_coords, ff, box, mol_coords=None) -
 
     hgt = topology.HostGuestTopology(host_bps, top)
 
-    u_impls = bind_potentials(hgt, ff)
-
     # this value doesn't matter since we will turn off the noise.
     seed = 0
 
@@ -145,12 +147,18 @@ def minimize_host_4d(mols, host_system, host_coords, ff, box, mol_coords=None) -
     x0 = combined_coords
     v0 = np.zeros_like(x0)
 
-    x0 = fire_minimize(x0, u_impls, box, np.ones(50))
-    # context components: positions, velocities, box, integrator, energy fxns
-    ctxt = custom_ops.Context(x0, v0, box, intg, u_impls)
-    _, xs, _ = ctxt.multiple_steps(np.linspace(1.0, 0, 1000))
+    u_impls = bind_potentials(parameterize_system(hgt, ff, 1.0))
+    x = fire_minimize(x0, u_impls, box, np.ones(50))
 
-    final_coords = fire_minimize(xs[-1], u_impls, box, np.zeros(50))
+    for lamb in np.linspace(1.0, 0, 50):
+        u_impls = bind_potentials(parameterize_system(hgt, ff, lamb))
+        # context components: positions, velocities, box, integrator, energy fxns
+        ctxt = custom_ops.Context(x, v0, box, intg, u_impls)
+        _, xs, _ = ctxt.multiple_steps(lamb * np.ones(50))
+        x = xs[-1]
+
+    u_impls = bind_potentials(parameterize_system(hgt, ff, 0.0))
+    final_coords = fire_minimize(x, u_impls, box, np.zeros(50))
     for impl in u_impls:
         du_dx, _, _ = impl.execute(final_coords, box, 0.0)
         norm = np.linalg.norm(du_dx, axis=-1)
@@ -230,19 +238,14 @@ def equilibrate_host(
     hgt = topology.HostGuestTopology(host_bps, top)
 
     # setup the parameter handlers for the ligand
-    ff_params = ff.get_params()
-    hb_params, hb_potential = hgt.parameterize_harmonic_bond(ff_params.hb_params)
+    params_potential_pairs = parameterize_system(hgt, ff, 1.0)
 
-    params_potential_pairs = [
-        (hb_params, hb_potential),
-        hgt.parameterize_harmonic_angle(ff_params.ha_params),
-        hgt.parameterize_periodic_torsion(ff_params.pt_params, ff_params.it_params),
-        hgt.parameterize_nonbonded(ff_params.q_params, ff_params.lj_params),
-    ]
+    x0 = combined_coords
 
-    u_impls = [pot.bind(params).bound_impl(precision=np.float32) for params, pot in params_potential_pairs]
-    bond_list = get_bond_list(hb_potential)
-    combined_masses = model_utils.apply_hmr(combined_masses, bond_list)
+    # Re-minimize with the mol being flexible
+    u_impls = bind_potentials(params_potential_pairs)  # lambda=1
+    x0 = fire_minimize(x0, u_impls, box, np.ones(50))
+    v0 = np.zeros_like(x0)
 
     dt = 2.5e-3
     friction = 1.0
@@ -252,21 +255,26 @@ def equilibrate_host(
 
     integrator = LangevinIntegrator(temperature, dt, friction, combined_masses, seed).impl()
 
-    x0 = combined_coords
-    v0 = np.zeros_like(x0)
-
+    hb_potential = next(p for _, p in params_potential_pairs if isinstance(p, HarmonicBond))
+    bond_list = get_bond_list(hb_potential)
+    combined_masses = model_utils.apply_hmr(combined_masses, bond_list)
     group_indices = get_group_indices(bond_list)
-    barostat_interval = 5
-    barostat = MonteCarloBarostat(x0.shape[0], pressure, temperature, group_indices, barostat_interval, seed).impl(
-        u_impls
-    )
 
-    # Re-minimize with the mol being flexible
-    x0 = fire_minimize(x0, u_impls, box, np.ones(50))
+    barostat_interval = 5
+    u_impls = bind_potentials(parameterize_system(hgt, ff, 0.0))  # lambda=0
+    barostat = MonteCarloBarostat(
+        x0.shape[0],
+        pressure,
+        temperature,
+        group_indices,
+        barostat_interval,
+        seed,
+    ).impl(u_impls)
+
     # context components: positions, velocities, box, integrator, energy fxns
     ctxt = custom_ops.Context(x0, v0, box, integrator, u_impls, barostat)
 
-    ctxt.multiple_steps(np.linspace(0.0, 0.0, n_steps))
+    ctxt.multiple_steps(np.zeros(n_steps))
 
     return ctxt.get_x_t(), ctxt.get_box()
 

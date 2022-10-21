@@ -24,7 +24,7 @@ def test_barostat_zero_interval():
     mol_a, _, _ = get_hif2a_ligand_pair_single_topology()
     ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
 
-    unbound_potentials, sys_params, _, coords, _ = get_solvent_phase_system(mol_a, ff)
+    unbound_potentials, sys_params, _, coords, _ = get_solvent_phase_system(mol_a, ff, 0.0)
 
     # get list of molecules for barostat by looking at bond table
     harmonic_bond_potential = unbound_potentials[0]
@@ -79,7 +79,7 @@ def test_barostat_partial_group_idxs():
     pressure = 1.0 * unit.atmosphere
     mol_a, _, _ = get_hif2a_ligand_pair_single_topology()
     ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
-    unbound_potentials, sys_params, masses, coords, complex_box = get_solvent_phase_system(mol_a, ff)
+    unbound_potentials, sys_params, masses, coords, complex_box = get_solvent_phase_system(mol_a, ff, 0.0)
 
     # get list of molecules for barostat by looking at bond table
     harmonic_bond_potential = unbound_potentials[0]
@@ -205,7 +205,7 @@ def test_barostat_varying_pressure():
     pressure = 1000.0 * unit.atmosphere
     mol_a, _, _ = get_hif2a_ligand_pair_single_topology()
     ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
-    unbound_potentials, sys_params, masses, coords, complex_box = get_solvent_phase_system(mol_a, ff, margin=0.0)
+    unbound_potentials, sys_params, masses, coords, complex_box = get_solvent_phase_system(mol_a, ff, 0.0, margin=0.0)
 
     # get list of molecules for barostat by looking at bond table
     harmonic_bond_potential = unbound_potentials[0]
@@ -284,7 +284,7 @@ def test_molecular_ideal_gas():
     # effectively discard ligands by running in AbsoluteFreeEnergy mode at lambda = 1.0
     mol_a, _, _ = get_hif2a_ligand_pair_single_topology()
     ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
-    _unbound_potentials, _sys_params, masses, coords, complex_box = get_solvent_phase_system(mol_a, ff, margin=0.0)
+    _unbound_potentials, _sys_params, masses, coords, complex_box = get_solvent_phase_system(mol_a, ff, 0.0, margin=0.0)
 
     # drop the nonbonded potential
     unbound_potentials = _unbound_potentials[:-1]

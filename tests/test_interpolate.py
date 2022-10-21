@@ -113,21 +113,27 @@ def test_align_nonbonded():
     Test that we can align idxs and parameters for nonbonded forces. For decoupled
     nonbonded interactions, we should set q_ij, s_ij, and e_ij all to zero.
     """
-    a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r = np.random.rand(18)
+
+    rng = np.random.default_rng(2022)
+
+    def p():
+        return tuple(rng.random(4))
 
     src_idxs = [(0, 3), (0, 2), (2, 3), (2, 4)]
-    src_params = [(a, b, c), (d, e, f), (g, h, i), (j, k, l)]
     dst_idxs = [(0, 2), (4, 5)]
-    dst_params = [(m, n, o), (p, q, r)]
 
-    test_set = interpolate.align_nonbonded_idxs_and_params(src_idxs, src_params, dst_idxs, dst_params)
+    src = {idxs: p() for idxs in src_idxs}
+    dst = {idxs: p() for idxs in dst_idxs}
 
+    test_set = interpolate.align_nonbonded_idxs_and_params(src_idxs, src.values(), dst_idxs, dst.values())
+
+    zeros = (0, 0, 0, 0)
     ref_set = {
-        ((0, 3), (a, b, c), (0, 0, 0)),
-        ((0, 2), (d, e, f), (m, n, o)),
-        ((2, 3), (g, h, i), (0, 0, 0)),
-        ((2, 4), (j, k, l), (0, 0, 0)),
-        ((4, 5), (0, 0, 0), (p, q, r)),
+        ((0, 3), src[(0, 3)], zeros),
+        ((0, 2), src[(0, 2)], dst[(0, 2)]),
+        ((2, 3), src[(2, 3)], zeros),
+        ((2, 4), src[(2, 4)], zeros),
+        ((4, 5), zeros, dst[(4, 5)]),
     }
 
     assert test_set == ref_set

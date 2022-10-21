@@ -87,10 +87,13 @@ class VacuumState:
             self.improper_torsion_params,
             self.it_potential,
         ) = bt.parameterize_improper_torsion(ff.it_handle.params)
-        self.nb_params, self.nb_potential = bt.parameterize_nonbonded(ff.q_handle.params, ff.lj_handle.params)
+
+        self.lamb = 0.0
+        self.nb_params, self.nb_potential = bt.parameterize_nonbonded(
+            ff.q_handle.params, ff.lj_handle.params, self.lamb
+        )
 
         self.box = None
-        self.lamb = 0.0
 
     def _harmonic_bond_nrg(self, x):
         return bonded.harmonic_bond(x, self.bond_params, self.box, self.hb_potential.get_idxs())
@@ -129,8 +132,6 @@ class VacuumState:
 
         beta = self.nb_potential.get_beta()
         cutoff = self.nb_potential.get_cutoff()
-        lambda_plane_idxs = np.zeros(N)
-        lambda_offset_idxs = np.zeros(N)
 
         # tbd: set to None
         box = np.eye(3) * 1000
@@ -144,8 +145,6 @@ class VacuumState:
             lj_rescale_mask,
             beta,
             cutoff,
-            lambda_plane_idxs,
-            lambda_offset_idxs,
             runtime_validate=False,
         )
 
@@ -428,7 +427,7 @@ def jax_sample_from_log_weights(weighted_samples, log_weights, size, key):
     return weighted_samples[idxs]
 
 
-def get_solvent_phase_system(mol, ff, box_width=3.0, margin=0.5, minimize_energy=True):
+def get_solvent_phase_system(mol, ff, lamb: float, box_width=3.0, margin=0.5, minimize_energy=True):
     """
     Given a mol and forcefield return a solvated system where the
     solvent has (optionally) been minimized.
@@ -457,7 +456,7 @@ def get_solvent_phase_system(mol, ff, box_width=3.0, margin=0.5, minimize_energy
     bt = topology.BaseTopology(mol, ff)
     afe = free_energy.AbsoluteFreeEnergy(mol, bt)
     ff_params = ff.get_params()
-    potentials, params, masses = afe.prepare_host_edge(ff_params, water_system)
+    potentials, params, masses = afe.prepare_host_edge(ff_params, water_system, lamb)
 
     # concatenate (optionally minimized) water_coords and ligand_coords
     ligand_coords = get_romol_conf(mol)
@@ -571,9 +570,17 @@ def jax_aligned_batch_propose_coords(x, K, key, vacuum_samples, vacuum_log_weigh
 
 
 def pregenerate_samples(
-    mol, ff, seed, n_solvent_samples=1000, n_ligand_batches=30000, temperature=300.0, pressure=1.0, num_workers=None
+    mol,
+    ff,
+    lamb,
+    seed,
+    n_solvent_samples=1000,
+    n_ligand_batches=30000,
+    temperature=300.0,
+    pressure=1.0,
+    num_workers=None,
 ):
-    potentials, params, masses, coords, box = get_solvent_phase_system(mol, ff)
+    potentials, params, masses, coords, box = get_solvent_phase_system(mol, ff, lamb)
     print(f"Generating {n_solvent_samples} solvent samples")
     solvent_xvbs = generate_solvent_samples(
         coords, box, masses, potentials, params, temperature, pressure, seed, n_solvent_samples, num_workers

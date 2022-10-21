@@ -8,12 +8,11 @@ static const int PARAMS_PER_PAIR = PARAMS_PER_ATOM;
 
 template <typename RealType>
 void __global__ k_nonbonded_precomputed(
-    const int M,                          // number of pairs
-    const double *__restrict__ coords,    // [N, 3] coordinates
-    const double *__restrict__ params,    // [M, 3] q_ij, s_ij, e_ij
-    const double *__restrict__ box,       // box vectors
-    const double *__restrict__ w_offsets, // [M] for vdw and electrostatics
-    const int *__restrict__ pair_idxs,    // [M, 2] pair-list of atoms
+    const int M,                       // number of pairs
+    const double *__restrict__ coords, // [N, 3] coordinates
+    const double *__restrict__ params, // [M, 4] q_ij, s_ij, e_ij, w_offset_ij
+    const double *__restrict__ box,    // box vectors
+    const int *__restrict__ pair_idxs, // [M, 2] pair-list of atoms
     const double beta,
     const double cutoff,
     unsigned long long *__restrict__ du_dx,
@@ -75,7 +74,7 @@ void __global__ k_nonbonded_precomputed(
 
     unsigned long long energy = 0;
 
-    RealType delta_w = w_offsets[pair_idx];
+    RealType delta_w = params[pair_idx * PARAMS_PER_PAIR + PARAM_OFFSET_W];
 
     RealType d_ij = sqrt(delta_x * delta_x + delta_y * delta_y + delta_z * delta_z + delta_w * delta_w);
 

@@ -21,8 +21,6 @@ private:
     unsigned int *d_col_atom_idxs_;
     unsigned int *d_row_atom_idxs_;
 
-    int *d_lambda_plane_idxs_;
-    int *d_lambda_offset_idxs_;
     int *p_ixn_count_; // pinned memory
 
     double beta_;
@@ -37,8 +35,6 @@ private:
 
     unsigned int *d_perm_; // hilbert curve permutation
 
-    double *d_w_; // 4D coordinates
-
     // "sorted" means
     // - if hilbert sorting enabled, atoms are sorted into contiguous
     //   blocks by interaction group, and each block is hilbert-sorted
@@ -46,7 +42,6 @@ private:
     // - otherwise, atoms are sorted into contiguous blocks by
     //   interaction group, with arbitrary ordering within each block
     double *d_sorted_x_; // sorted coordinates
-    double *d_sorted_w_; // sorted 4D coordinates
     double *d_sorted_p_; // sorted parameters
     unsigned long long *d_sorted_du_dx_;
     unsigned long long *d_sorted_du_dp_;
@@ -75,12 +70,7 @@ public:
     void set_nblist_padding(double val);
     void disable_hilbert_sort();
 
-    NonbondedInteractionGroup(
-        const std::set<int> &row_atom_idxs,
-        const std::vector<int> &lambda_plane_idxs,  // N
-        const std::vector<int> &lambda_offset_idxs, // N
-        const double beta,
-        const double cutoff);
+    NonbondedInteractionGroup(const int N, const std::set<int> &row_atom_idxs, const double beta, const double cutoff);
 
     ~NonbondedInteractionGroup();
 

@@ -49,7 +49,7 @@ def test_optimized_MTM():
 
     # discard velocities: (x, v) -> x
     vacuum_samples = _vacuum_xv_samples[:, 0, :]
-    ubps, params, masses, coords, box = enhanced.get_solvent_phase_system(mol, ff)
+    ubps, params, masses, coords, box = enhanced.get_solvent_phase_system(mol, ff, 0.0)
 
     nb_potential = ubps[-1]
     beta = nb_potential.get_beta()

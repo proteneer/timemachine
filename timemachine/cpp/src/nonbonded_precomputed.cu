@@ -10,7 +10,7 @@ namespace timemachine {
 
 template <typename RealType>
 NonbondedPairListPrecomputed<RealType>::NonbondedPairListPrecomputed(
-    const std::vector<int> &idxs, const std::vector<double> &w_offsets, const double beta, const double cutoff)
+    const std::vector<int> &idxs, const double beta, const double cutoff)
     : B_(idxs.size() / 2), beta_(beta), cutoff_(cutoff) {
 
     if (idxs.size() % 2 != 0) {
@@ -26,20 +26,12 @@ NonbondedPairListPrecomputed<RealType>::NonbondedPairListPrecomputed(
         }
     }
 
-    if (w_offsets.size() != B_) {
-        throw std::runtime_error("offset size does not match idxs size");
-    }
-
     gpuErrchk(cudaMalloc(&d_idxs_, B_ * 2 * sizeof(*d_idxs_)));
     gpuErrchk(cudaMemcpy(d_idxs_, &idxs[0], B_ * 2 * sizeof(*d_idxs_), cudaMemcpyHostToDevice));
-
-    gpuErrchk(cudaMalloc(&d_w_offsets_, B_ * sizeof(*d_w_offsets_)));
-    gpuErrchk(cudaMemcpy(d_w_offsets_, &w_offsets[0], B_ * sizeof(*d_w_offsets_), cudaMemcpyHostToDevice));
 };
 
 template <typename RealType> NonbondedPairListPrecomputed<RealType>::~NonbondedPairListPrecomputed() {
     gpuErrchk(cudaFree(d_idxs_));
-    gpuErrchk(cudaFree(d_w_offsets_));
 };
 
 template <typename RealType>
@@ -67,8 +59,8 @@ void NonbondedPairListPrecomputed<RealType>::execute_device(
         const int tpb = warp_size;
         const int blocks = ceil_divide(B_, tpb);
 
-        k_nonbonded_precomputed<RealType><<<blocks, tpb, 0, stream>>>(
-            B_, d_x, d_p, d_box, d_w_offsets_, d_idxs_, beta_, cutoff_, d_du_dx, d_du_dp, d_u);
+        k_nonbonded_precomputed<RealType>
+            <<<blocks, tpb, 0, stream>>>(B_, d_x, d_p, d_box, d_idxs_, beta_, cutoff_, d_du_dx, d_du_dp, d_u);
     }
 };
 
@@ -81,10 +73,12 @@ void NonbondedPairListPrecomputed<RealType>::du_dp_fixed_to_float(
         const int idx_charge = offset + PARAM_OFFSET_CHARGE;
         const int idx_sig = offset + PARAM_OFFSET_SIG;
         const int idx_eps = offset + PARAM_OFFSET_EPS;
+        const int idx_w = offset + PARAM_OFFSET_W;
 
         du_dp_float[idx_charge] = FIXED_TO_FLOAT_DU_DP<double, FIXED_EXPONENT_DU_DCHARGE>(du_dp[idx_charge]);
         du_dp_float[idx_sig] = FIXED_TO_FLOAT_DU_DP<double, FIXED_EXPONENT_DU_DSIG>(du_dp[idx_sig]);
         du_dp_float[idx_eps] = FIXED_TO_FLOAT_DU_DP<double, FIXED_EXPONENT_DU_DEPS>(du_dp[idx_eps]);
+        du_dp_float[idx_w] = FIXED_TO_FLOAT_DU_DP<double, FIXED_EXPONENT_DU_DEPS>(du_dp[idx_w]);
     }
 };
 

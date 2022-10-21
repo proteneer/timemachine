@@ -38,7 +38,7 @@ if __name__ == "__main__":
     # effectively discard ligands by running in AbsoluteFreeEnergy mode at lambda = 1.0
     mol_a, _, _ = get_hif2a_ligand_pair_single_topology()
     ff = Forcefield.load_from_file(DEFAULT_FF)
-    unbound_potentials, sys_params, masses, coords, complex_box = get_solvent_phase_system(mol_a, ff, margin=0.0)
+    unbound_potentials, sys_params, masses, coords, complex_box = get_solvent_phase_system(mol_a, ff, 0.0, margin=0.0)
 
     # define NPT ensemble
     potential_energy_model = PotentialEnergyModel(sys_params, unbound_potentials)

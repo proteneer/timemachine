@@ -5,7 +5,7 @@ import os
 import unittest
 from importlib import resources
 from tempfile import NamedTemporaryFile, TemporaryDirectory
-from typing import List
+from typing import Iterable
 
 import jax
 import numpy as np
@@ -260,15 +260,13 @@ class GradientTest(unittest.TestCase):
     def compare_forces(
         self,
         x: NDArray,
-        params: NDArray,
+        params_arrays: Iterable[NDArray],
         box: NDArray,
-        lambdas: List[float],
         ref_potential,
         test_potential,
         rtol: float,
         precision,
         atol: float = 1e-8,
-        benchmark: bool = False,
     ):
         """
         Compares the forces between a reference and a test potential.
@@ -276,24 +274,26 @@ class GradientTest(unittest.TestCase):
 
         Note
         ----
-        Preferable to pass a list of lambdas to this function than run this function
-        repeatedly, as this function constructs an unbound impl for the test_potential
-        which can be expensive relative to the time it takes to compute the forces/energies/etc.
+        Preferable to pass an iterable of parameters to this function than run this function repeatedly, as this
+        function constructs an unbound impl for the test_potential which can be expensive relative to the time it takes
+        to compute the forces/energies/etc.
 
         """
         test_impl = test_potential.unbound_impl(precision)
 
         x = (x.astype(np.float32)).astype(np.float64)
-        params = (params.astype(np.float32)).astype(np.float64)
 
         assert x.ndim == 2
         # N = x.shape[0]
         # D = x.shape[1]
 
         assert x.dtype == np.float64
-        assert params.dtype == np.float64
 
-        for lamb in lambdas:
+        lamb = 0.0  # TODO: remove; lambda dependence is deprecated
+
+        for params in params_arrays:
+            params = (params.astype(np.float32)).astype(np.float64)
+            assert params.dtype == np.float64
             ref_u = ref_potential(x, params, box, lamb)
             grad_fn = jax.grad(ref_potential, argnums=(0, 1, 3))
             ref_du_dx, ref_du_dp, ref_du_dl = grad_fn(x, params, box, lamb)
@@ -324,7 +324,20 @@ class GradientTest(unittest.TestCase):
                     else:
                         np.testing.assert_allclose(ref_du_dl, test_du_dl, rtol=rtol)
                 if compute_du_dp:
-                    np.testing.assert_allclose(ref_du_dp, test_du_dp, rtol=rtol, atol=atol)
+                    # TODO: remove when du_dw is implemented
+                    if any(
+                        isinstance(test_potential, cls)
+                        for cls in [
+                            potentials.Nonbonded,
+                            potentials.NonbondedAllPairs,
+                            potentials.NonbondedInteractionGroup,
+                            potentials.NonbondedPairList,
+                            potentials.NonbondedPairListPrecomputed,
+                        ]
+                    ):
+                        np.testing.assert_allclose(ref_du_dp[:, :3], test_du_dp[:, :3], rtol=rtol, atol=atol)
+                    else:
+                        np.testing.assert_allclose(ref_du_dp, test_du_dp, rtol=rtol, atol=atol)
 
                 test_du_dx_2, test_du_dp_2, test_du_dl_2, test_u_2 = test_impl.execute_selective(
                     x, params, box, lamb, compute_du_dx, compute_du_dp, compute_du_dl, compute_u
@@ -340,14 +353,13 @@ class GradientTest(unittest.TestCase):
     def compare_forces_gpu_vs_reference(
         self,
         x: NDArray,
-        params: NDArray,
+        params_arrays: Iterable[NDArray],
         box: NDArray,
-        lambdas: List[float],
         potential: generic.Potential,
         rtol: float,
         precision,
         atol: float = 1e-8,
     ):
         return self.compare_forces(
-            x, params, box, lambdas, potential.to_reference(), potential.to_gpu(), rtol, precision, atol
+            x, params_arrays, box, potential.to_reference(), potential.to_gpu(), rtol, precision, atol
         )

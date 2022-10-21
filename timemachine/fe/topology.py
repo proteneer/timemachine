@@ -65,7 +65,8 @@ class HostGuestTopology:
             else:
                 raise UnsupportedPotential("Unsupported host potential")
 
-        self.num_host_atoms = len(self.host_nonbonded.get_lambda_plane_idxs())
+        assert self.host_nonbonded is not None
+        self.num_host_atoms = self.host_nonbonded.get_num_atoms()
 
     def get_num_atoms(self):
         return self.num_host_atoms + self.guest_topology.get_num_atoms()
@@ -126,34 +127,28 @@ class HostGuestTopology:
         )
         return self._parameterize_bonded_term(guest_params, guest_potential, self.host_periodic_torsion)
 
-    def parameterize_nonbonded(self, ff_q_params, ff_lj_params):
+    def parameterize_nonbonded(self, ff_q_params, ff_lj_params, lamb: float):
         num_guest_atoms = self.guest_topology.get_num_atoms()
-        guest_qlj, guest_p = self.guest_topology.parameterize_nonbonded(ff_q_params, ff_lj_params)
+        guest_params, guest_pot = self.guest_topology.parameterize_nonbonded(ff_q_params, ff_lj_params, lamb)
 
-        assert guest_qlj.shape == (num_guest_atoms, 3)
-        assert guest_p.get_beta() == self.host_nonbonded.get_beta()
-        assert guest_p.get_cutoff() == self.host_nonbonded.get_cutoff()
+        assert guest_params.shape == (num_guest_atoms, 4)
+        assert self.host_nonbonded is not None
+        assert guest_pot.get_beta() == self.host_nonbonded.get_beta()
+        assert guest_pot.get_cutoff() == self.host_nonbonded.get_cutoff()
 
         hg_exclusion_idxs = np.concatenate(
-            [self.host_nonbonded.get_exclusion_idxs(), guest_p.get_exclusion_idxs() + self.num_host_atoms]
+            [self.host_nonbonded.get_exclusion_idxs(), guest_pot.get_exclusion_idxs() + self.num_host_atoms]
         )
-        hg_scale_factors = np.concatenate([self.host_nonbonded.get_scale_factors(), guest_p.get_scale_factors()])
-        hg_lambda_offset_idxs = np.concatenate(
-            [self.host_nonbonded.get_lambda_offset_idxs(), guest_p.get_lambda_offset_idxs()]
-        )
-        hg_lambda_plane_idxs = np.concatenate(
-            [self.host_nonbonded.get_lambda_plane_idxs(), guest_p.get_lambda_plane_idxs()]
-        )
+        hg_scale_factors = np.concatenate([self.host_nonbonded.get_scale_factors(), guest_pot.get_scale_factors()])
 
-        hg_nb_params = jnp.concatenate([self.host_nonbonded.params, guest_qlj])
+        hg_nb_params = jnp.concatenate([self.host_nonbonded.params, guest_params])
 
         return hg_nb_params, potentials.Nonbonded(
+            self.num_host_atoms + num_guest_atoms,
             hg_exclusion_idxs,
             hg_scale_factors,
-            hg_lambda_plane_idxs,
-            hg_lambda_offset_idxs,
-            guest_p.get_beta(),
-            guest_p.get_cutoff(),
+            guest_pot.get_beta(),
+            guest_pot.get_cutoff(),
         )
 
 
@@ -184,7 +179,7 @@ class BaseTopology:
         """
         return [np.arange(self.get_num_atoms())]
 
-    def parameterize_nonbonded(self, ff_q_params, ff_lj_params):
+    def parameterize_nonbonded(self, ff_q_params, ff_lj_params, lamb: float):
         q_params = self.ff.q_handle.partial_parameterize(ff_q_params, self.mol)
         lj_params = self.ff.lj_handle.partial_parameterize(ff_lj_params, self.mol)
 
@@ -194,17 +189,15 @@ class BaseTopology:
 
         scale_factors = np.stack([scale_factors, scale_factors], axis=1)
 
-        N = len(q_params)
-
-        lambda_plane_idxs = np.zeros(N, dtype=np.int32)
-        lambda_offset_idxs = np.ones(N, dtype=np.int32)
-
         beta = _BETA
         cutoff = _CUTOFF  # solve for this analytically later
 
-        nb = potentials.Nonbonded(exclusion_idxs, scale_factors, lambda_plane_idxs, lambda_offset_idxs, beta, cutoff)
+        N = len(q_params)
 
-        params = jnp.concatenate([jnp.reshape(q_params, (-1, 1)), jnp.reshape(lj_params, (-1, 2))], axis=1)
+        nb = potentials.Nonbonded(N, exclusion_idxs, scale_factors, beta, cutoff)
+
+        w_coords = lamb * cutoff * jnp.ones((N, 1))
+        params = jnp.concatenate([jnp.reshape(q_params, (-1, 1)), jnp.reshape(lj_params, (-1, 2)), w_coords], axis=1)
 
         return params, nb
 
@@ -253,16 +246,21 @@ class BaseTopology:
 
         params = []
         for q, s, e, (sf_q, sf_lj) in zip(q_ij, sig_ij, eps_ij, rescale_mask):
-            params.append((q * sf_q, s, e * sf_lj))
+            params.append(
+                (
+                    q * sf_q,
+                    s,
+                    e * sf_lj,
+                    0.0,  # w offset
+                )
+            )
 
         params = np.array(params)
 
         beta = _BETA
         cutoff = _CUTOFF  # solve for this analytically later
 
-        offsets = np.zeros(len(inclusion_idxs))
-
-        return params, potentials.NonbondedPairListPrecomputed(inclusion_idxs, offsets, beta, cutoff)
+        return params, potentials.NonbondedPairListPrecomputed(inclusion_idxs, beta, cutoff)
 
     def parameterize_harmonic_bond(self, ff_params):
         params, idxs = self.ff.hb_handle.partial_parameterize(ff_params, self.mol)
@@ -410,7 +408,9 @@ class DualTopology(BaseTopology):
         num_b_atoms = self.mol_b.GetNumAtoms()
         return [np.arange(num_a_atoms), num_a_atoms + np.arange(num_b_atoms)]
 
-    def parameterize_nonbonded(self, ff_q_params, ff_lj_params):
+    def parameterize_nonbonded(self, ff_q_params, ff_lj_params, lamb: float):
+        # NOTE: lamb is unused here, but is used by the subclass DualTopologyMinimization
+        del lamb
 
         # dummy is either "a or "b"
         q_params_a = self.ff.q_handle.partial_parameterize(ff_q_params, self.mol_a)
@@ -455,19 +455,20 @@ class DualTopology(BaseTopology):
             ]
         ).astype(np.float64)
 
-        combined_lambda_plane_idxs = np.zeros(NA + NB, dtype=np.int32)
-        combined_lambda_offset_idxs = np.zeros_like(combined_lambda_plane_idxs, dtype=np.int32)
+        N = NA + NB
+        w_coords = jnp.zeros((N, 1))
 
         beta = _BETA
         cutoff = _CUTOFF  # solve for this analytically later
 
-        qlj_params = jnp.concatenate([jnp.reshape(q_params, (-1, 1)), jnp.reshape(lj_params, (-1, 2))], axis=1)
+        qlj_params = jnp.concatenate(
+            [jnp.reshape(q_params, (-1, 1)), jnp.reshape(lj_params, (-1, 2)), w_coords], axis=1
+        )
 
         return qlj_params, potentials.Nonbonded(
+            N,
             combined_exclusion_idxs,
             combined_scale_factors,
-            combined_lambda_plane_idxs,
-            combined_lambda_offset_idxs,
             beta,
             cutoff,
         )
@@ -496,10 +497,8 @@ class DualTopology(BaseTopology):
         assert pairlist_a.get_beta() == pairlist_b.get_beta()
         assert pairlist_a.get_cutoff() == pairlist_b.get_cutoff()
 
-        offsets = np.concatenate([pairlist_a.get_offsets(), pairlist_b.get_offsets()])
-
         return params, potentials.NonbondedPairListPrecomputed(
-            inclusion_idxs, offsets, pairlist_a.get_beta(), pairlist_a.get_beta()
+            inclusion_idxs, pairlist_a.get_beta(), pairlist_a.get_beta()
         )
 
     def _parameterize_bonded_term(self, ff_params, bonded_handle, potential):
@@ -537,17 +536,13 @@ class DualTopology(BaseTopology):
 
 
 class DualTopologyMinimization(DualTopology):
-    def parameterize_nonbonded(self, ff_q_params, ff_lj_params):
+    def parameterize_nonbonded(self, ff_q_params, ff_lj_params, lamb: float):
 
         # both mol_a and mol_b are standardized.
         # we don't actually need derivatives for this stage.
-        qlj_params, nb_potential = super().parameterize_nonbonded(ff_q_params, ff_lj_params)
 
-        N_A, N_B = self.mol_a.GetNumAtoms(), self.mol_b.GetNumAtoms()
-        combined_lambda_plane_idxs = np.zeros(N_A + N_B, dtype=np.int32)
-        combined_lambda_offset_idxs = np.ones(N_A + N_B, dtype=np.int32)
+        params, nb_potential = super().parameterize_nonbonded(ff_q_params, ff_lj_params, lamb)
+        cutoff = nb_potential.get_cutoff()
+        params_with_offsets = jnp.asarray(params).at[:, 3].set(lamb * cutoff)
 
-        nb_potential.set_lambda_offset_idxs(combined_lambda_offset_idxs)
-        nb_potential.set_lambda_plane_idxs(combined_lambda_plane_idxs)
-
-        return qlj_params, nb_potential
+        return params_with_offsets, nb_potential

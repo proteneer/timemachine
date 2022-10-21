@@ -2,6 +2,7 @@ import numpy as np
 import pytest
 from common import GradientTest
 
+from tests.nonbonded import gen_params_with_4d_offsets
 from timemachine.lib.potentials import NonbondedPairList
 from timemachine.potentials import generic
 
@@ -10,17 +11,17 @@ pytestmark = [pytest.mark.memcheck]
 
 def test_nonbonded_pair_list_invalid_pair_idxs():
     with pytest.raises(RuntimeError) as e:
-        NonbondedPairList([0], [0], [0], [0], 2.0, 1.1).unbound_impl(np.float32)
+        NonbondedPairList([0], [0], 2.0, 1.1).unbound_impl(np.float32)
 
     assert "pair_idxs.size() must be even, but got 1" in str(e)
 
     with pytest.raises(RuntimeError) as e:
-        NonbondedPairList([(0, 0)], [(1, 1)], [0], [0], 2.0, 1.1).unbound_impl(np.float32)
+        NonbondedPairList([(0, 0)], [(1, 1)], 2.0, 1.1).unbound_impl(np.float32)
 
     assert "illegal pair with src == dst: 0, 0" in str(e)
 
     with pytest.raises(RuntimeError) as e:
-        NonbondedPairList([(0, 1)], [(1, 1), (2, 2)], [0], [0], 2.0, 1.1).unbound_impl(np.float32)
+        NonbondedPairList([(0, 1)], [(1, 1), (2, 2)], 2.0, 1.1).unbound_impl(np.float32)
 
     assert "expected same number of pairs and scale tuples, but got 1 != 2" in str(e)
 
@@ -53,16 +54,11 @@ def test_nonbonded_pair_list_correctness(
 
     rescale_mask = rng.uniform(0, 1, size=(num_pairs, 2))
 
-    lambda_plane_idxs = rng.integers(-2, 3, size=(num_atoms,), dtype=np.int32)
-    lambda_offset_idxs = rng.integers(-2, 3, size=(num_atoms,), dtype=np.int32)
-
-    potential = generic.NonbondedPairList(pair_idxs, rescale_mask, lambda_plane_idxs, lambda_offset_idxs, beta, cutoff)
-    lambda_vals = [0.0, 0.1]
+    potential = generic.NonbondedPairList(pair_idxs, rescale_mask, beta, cutoff)
     GradientTest().compare_forces_gpu_vs_reference(
         example_conf,
-        example_nonbonded_potential.params,
+        gen_params_with_4d_offsets(rng, example_nonbonded_potential.params, -2 * cutoff, 2 * cutoff, 3),
         example_box,
-        lambda_vals,
         potential,
         precision=precision,
         rtol=rtol,

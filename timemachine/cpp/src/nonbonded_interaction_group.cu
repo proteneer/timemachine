@@ -11,19 +11,14 @@
 #include "nonbonded_interaction_group.hpp"
 #include "vendored/hilbert.h"
 
-#include "k_lambda_transformer.cuh"
 #include "k_nonbonded.cuh"
 
 namespace timemachine {
 
 template <typename RealType>
 NonbondedInteractionGroup<RealType>::NonbondedInteractionGroup(
-    const std::set<int> &row_atom_idxs,
-    const std::vector<int> &lambda_plane_idxs,  // [N]
-    const std::vector<int> &lambda_offset_idxs, // [N]
-    const double beta,
-    const double cutoff)
-    : N_(lambda_offset_idxs.size()), NR_(row_atom_idxs.size()), NC_(N_ - NR_),
+    const int N, const std::set<int> &row_atom_idxs, const double beta, const double cutoff)
+    : N_(N), NR_(row_atom_idxs.size()), NC_(N_ - NR_),
 
       kernel_ptrs_({// enumerate over every possible kernel combination
                     // U: Compute U
@@ -46,10 +41,6 @@ NonbondedInteractionGroup<RealType>::NonbondedInteractionGroup(
         throw std::runtime_error("row_atom_idxs must be nonempty");
     }
 
-    if (lambda_offset_idxs.size() != lambda_plane_idxs.size()) {
-        throw std::runtime_error("lambda offset idxs and plane idxs need to be equivalent");
-    }
-
     // compute set of column atoms as set difference
     std::vector<int> col_atom_idxs_v = get_indices_difference(N_, row_atom_idxs);
     gpuErrchk(cudaMalloc(&d_col_atom_idxs_, NC_ * sizeof(*d_col_atom_idxs_)));
@@ -61,20 +52,9 @@ NonbondedInteractionGroup<RealType>::NonbondedInteractionGroup(
     gpuErrchk(
         cudaMemcpy(d_row_atom_idxs_, &row_atom_idxs_v[0], NR_ * sizeof(*d_row_atom_idxs_), cudaMemcpyHostToDevice));
 
-    gpuErrchk(cudaMalloc(&d_lambda_plane_idxs_, N_ * sizeof(*d_lambda_plane_idxs_)));
-    gpuErrchk(cudaMemcpy(
-        d_lambda_plane_idxs_, &lambda_plane_idxs[0], N_ * sizeof(*d_lambda_plane_idxs_), cudaMemcpyHostToDevice));
-
-    gpuErrchk(cudaMalloc(&d_lambda_offset_idxs_, N_ * sizeof(*d_lambda_offset_idxs_)));
-    gpuErrchk(cudaMemcpy(
-        d_lambda_offset_idxs_, &lambda_offset_idxs[0], N_ * sizeof(*d_lambda_offset_idxs_), cudaMemcpyHostToDevice));
-
     gpuErrchk(cudaMalloc(&d_perm_, N_ * sizeof(*d_perm_)));
 
     gpuErrchk(cudaMalloc(&d_sorted_x_, N_ * 3 * sizeof(*d_sorted_x_)));
-
-    gpuErrchk(cudaMalloc(&d_w_, N_ * sizeof(*d_w_)));
-    gpuErrchk(cudaMalloc(&d_sorted_w_, N_ * sizeof(*d_sorted_w_)));
 
     gpuErrchk(cudaMalloc(&d_sorted_p_, N_ * PARAMS_PER_ATOM * sizeof(*d_sorted_p_)));
     gpuErrchk(cudaMalloc(&d_sorted_du_dx_, N_ * 3 * sizeof(*d_sorted_du_dx_)));
@@ -142,16 +122,12 @@ template <typename RealType> NonbondedInteractionGroup<RealType>::~NonbondedInte
     gpuErrchk(cudaFree(d_col_atom_idxs_));
     gpuErrchk(cudaFree(d_row_atom_idxs_));
 
-    gpuErrchk(cudaFree(d_lambda_plane_idxs_));
-    gpuErrchk(cudaFree(d_lambda_offset_idxs_));
     gpuErrchk(cudaFree(d_du_dp_buffer_));
     gpuErrchk(cudaFree(d_perm_));
 
     gpuErrchk(cudaFree(d_bin_to_idx_));
     gpuErrchk(cudaFree(d_sorted_x_));
 
-    gpuErrchk(cudaFree(d_w_));
-    gpuErrchk(cudaFree(d_sorted_w_));
     gpuErrchk(cudaFree(d_sorted_p_));
     gpuErrchk(cudaFree(d_sorted_du_dx_));
     gpuErrchk(cudaFree(d_sorted_du_dp_));
@@ -231,7 +207,7 @@ void NonbondedInteractionGroup<RealType>::execute_device(
     //     - look up which cell each particle belongs to, and its linear index along the hilbert curve.
     //     - use radix pair sort keyed on the hilbert index with values equal to the atomic index
     //     - resulting sorted values is the permutation array.
-    //     - permute lambda plane/offsets, coords
+    //     - permute coords
     // b. else:
     //     - permute new coords
     // c. permute parameters
@@ -281,7 +257,7 @@ void NonbondedInteractionGroup<RealType>::execute_device(
                 d_perm_ + NR_, d_col_atom_idxs_, NC_ * sizeof(*d_col_atom_idxs_), cudaMemcpyDeviceToDevice, stream));
         }
 
-        // compute new coordinates, new lambda_idxs, new_plane_idxs
+        // compute new coordinates
         k_gather<<<dim3(B, 3, 1), tpb, 0, stream>>>(N_, d_perm_, d_x, d_sorted_x_);
         gpuErrchk(cudaPeekAtLastError());
 
@@ -335,12 +311,6 @@ void NonbondedInteractionGroup<RealType>::execute_device(
         gpuErrchk(cudaMemsetAsync(d_sorted_du_dp_, 0, N * PARAMS_PER_ATOM * sizeof(*d_sorted_du_dp_), stream))
     }
 
-    // update new w coordinates
-    // (tbd): cache lambda value for equilibrium calculations
-    k_compute_w_coords<<<B, tpb, 0, stream>>>(N, lambda, cutoff_, d_lambda_plane_idxs_, d_lambda_offset_idxs_, d_w_);
-    gpuErrchk(cudaPeekAtLastError());
-
-    k_gather<<<B, tpb, 0, stream>>>(N, d_perm_, d_w_, d_sorted_w_);
     gpuErrchk(cudaPeekAtLastError());
 
     // look up which kernel we need for this computation
@@ -355,7 +325,6 @@ void NonbondedInteractionGroup<RealType>::execute_device(
         d_sorted_x_,
         d_sorted_p_,
         d_box,
-        d_sorted_w_,
         beta_,
         cutoff_,
         nblist_.get_row_idxs(),
@@ -392,14 +361,16 @@ void NonbondedInteractionGroup<RealType>::du_dp_fixed_to_float(
     const int N, const int P, const unsigned long long *du_dp, double *du_dp_float) {
 
     for (int i = 0; i < N; i++) {
-      const int offset = i * PARAMS_PER_ATOM;
+        const int offset = i * PARAMS_PER_ATOM;
         const int idx_charge = offset + PARAM_OFFSET_CHARGE;
         const int idx_sig = offset + PARAM_OFFSET_SIG;
         const int idx_eps = offset + PARAM_OFFSET_EPS;
+        const int idx_w = offset + PARAM_OFFSET_W;
 
         du_dp_float[idx_charge] = FIXED_TO_FLOAT_DU_DP<double, FIXED_EXPONENT_DU_DCHARGE>(du_dp[idx_charge]);
         du_dp_float[idx_sig] = FIXED_TO_FLOAT_DU_DP<double, FIXED_EXPONENT_DU_DSIG>(du_dp[idx_sig]);
         du_dp_float[idx_eps] = FIXED_TO_FLOAT_DU_DP<double, FIXED_EXPONENT_DU_DEPS>(du_dp[idx_eps]);
+        du_dp_float[idx_w] = FIXED_TO_FLOAT_DU_DP<double, FIXED_EXPONENT_DU_DEPS>(du_dp[idx_w]);
     }
 }
 

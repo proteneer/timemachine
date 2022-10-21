@@ -193,7 +193,7 @@ class Nonbonded(CustomOpWrapper):
     def __init__(self, *args):
 
         # exclusion_idxs should be unique
-        exclusion_idxs = args[0]
+        exclusion_idxs = args[1]
         exclusion_set = set()
 
         for src, dst in exclusion_idxs:
@@ -206,8 +206,7 @@ class Nonbonded(CustomOpWrapper):
 
     def unbound_impl(self, precision):
         all_pairs_impl = NonbondedAllPairs(
-            self.get_lambda_plane_idxs(),
-            self.get_lambda_offset_idxs(),
+            self.get_num_atoms(),
             self.get_beta(),
             self.get_cutoff(),
         ).unbound_impl(precision)
@@ -215,77 +214,60 @@ class Nonbonded(CustomOpWrapper):
         exclusions_impl = NonbondedPairListNegated(
             self.get_exclusion_idxs(),
             self.get_scale_factors(),
-            self.get_lambda_plane_idxs(),
-            self.get_lambda_offset_idxs(),
             self.get_beta(),
             self.get_cutoff(),
         ).unbound_impl(precision)
 
         return NonbondedImplWrapper([all_pairs_impl, exclusions_impl])
 
-    def set_exclusion_idxs(self, x):
-        self.args[0] = x
-
-    def get_exclusion_idxs(self):
+    def get_num_atoms(self):
         return self.args[0]
 
-    def set_scale_factors(self, x):
+    def set_exclusion_idxs(self, x):
         self.args[1] = x
 
-    def get_scale_factors(self):
+    def get_exclusion_idxs(self):
         return self.args[1]
 
-    def get_lambda_plane_idxs(self):
+    def set_scale_factors(self, x):
+        self.args[2] = x
+
+    def get_scale_factors(self):
         return self.args[2]
 
-    def get_lambda_offset_idxs(self):
+    def get_beta(self):
         return self.args[3]
 
-    def set_lambda_plane_idxs(self, val):
-        self.args[2] = val
-
-    def set_lambda_offset_idxs(self, val):
-        self.args[3] = val
-
-    def get_beta(self):
-        return self.args[4]
-
     def get_cutoff(self):
-        return self.args[5]
+        return self.args[4]
 
 
 class NonbondedAllPairs(CustomOpWrapper):
-    def get_lambda_plane_idxs(self):
+    def get_num_atoms(self):
         return self.args[0]
 
-    def get_lambda_offset_idxs(self):
+    def get_beta(self):
         return self.args[1]
 
-    def get_beta(self):
+    def get_cutoff(self):
         return self.args[2]
 
-    def get_cutoff(self):
-        return self.args[3]
-
     def get_atom_idxs(self):
-        return self.args[4]
+        return self.args[3]
 
 
 class NonbondedInteractionGroup(CustomOpWrapper):
-    def get_row_atom_idxs(self):
+    def get_num_atoms(self):
         return self.args[0]
 
-    def get_lambda_plane_idxs(self):
+    def get_row_atom_idxs(self):
         return self.args[1]
 
-    def get_lambda_offset_idxs(self):
+    def get_beta(self):
         return self.args[2]
 
-    def get_beta(self):
-        return self.args[3]
-
     def get_cutoff(self):
-        return self.args[4]
+        return self.args[3]
 
 
 class NonbondedPairList(CustomOpWrapper):
@@ -295,24 +277,18 @@ class NonbondedPairList(CustomOpWrapper):
     def get_rescale_mask(self):
         return self.args[1]
 
-    def get_lambda_plane_idxs(self):
+    def get_beta(self):
         return self.args[2]
 
-    def get_lambda_offset_idxs(self):
-        return self.args[3]
-
-    def get_beta(self):
-        return self.args[4]
-
     def get_cutoff(self):
-        return self.args[5]
+        return self.args[3]
 
 
 class NonbondedPairListPrecomputed(CustomOpWrapper):
     """
-    This implements a pairlist with precomputed parameters. It differs from
-    the regular NonbondedPairlist in that it expects params of the form s0*q_ij, s_ij, and s1*e_ij
-    where s are the scaling factor and combining rules have already been applied.
+    This implements a pairlist with precomputed parameters. It differs from the regular NonbondedPairlist in that it
+    expects params of the form s0*q_ij, s_ij, s1*e_ij, and w_offsets, where s are the scaling factors and combining
+    rules have already been applied.
 
     Note that you should not use this class to implement exclusions (that are later cancelled out by AllPairs)
     since the floating point operations are different in python vs C++.
@@ -324,14 +300,11 @@ class NonbondedPairListPrecomputed(CustomOpWrapper):
     def set_idxs(self, idxs):
         self.args[0] = idxs
 
-    def get_offsets(self):
+    def get_beta(self):
         return self.args[1]
 
-    def get_beta(self):
-        return self.args[2]
-
     def get_cutoff(self):
-        return self.args[3]
+        return self.args[2]
 
 
 class NonbondedPairListNegated(NonbondedPairList):
