@@ -13,9 +13,7 @@ def get_harmonic_bond(n_atoms, n_bonds):
     for _ in range(n_bonds):
         bond_idxs.append(np.random.choice(atom_idxs, size=2, replace=False))
     bond_idxs = np.array(bond_idxs, dtype=np.int32)
-    lamb_mult = np.random.randint(-5, 5, size=n_bonds, dtype=np.int32)
-    lamb_offset = np.random.randint(-5, 5, size=n_bonds, dtype=np.int32)
-    return potentials.HarmonicBond(bond_idxs, lamb_mult, lamb_offset), params
+    return potentials.HarmonicBond(bond_idxs), params
 
 
 def get_harmonic_angle(n_atoms, n_bonds):
@@ -25,9 +23,7 @@ def get_harmonic_angle(n_atoms, n_bonds):
     for _ in range(n_bonds):
         bond_idxs.append(np.random.choice(atom_idxs, size=3, replace=False))
     bond_idxs = np.array(bond_idxs, dtype=np.int32)
-    lamb_mult = np.random.randint(-5, 5, size=n_bonds, dtype=np.int32)
-    lamb_offset = np.random.randint(-5, 5, size=n_bonds, dtype=np.int32)
-    return potentials.HarmonicAngle(bond_idxs, lamb_mult, lamb_offset), params
+    return potentials.HarmonicAngle(bond_idxs), params
 
 
 def get_harmonic_restraints(n_atoms, n_restraints):
@@ -43,9 +39,7 @@ def get_harmonic_restraints(n_atoms, n_restraints):
     bond_idxs_dst = np.random.choice(atom_idxs_dst, size=n_restraints, replace=False)
 
     bond_idxs = np.array([bond_idxs_src, bond_idxs_dst], dtype=np.int32).T
-    lamb_mult = np.random.randint(-5, 5, size=n_restraints, dtype=np.int32)
-    lamb_offset = np.random.randint(-5, 5, size=n_restraints, dtype=np.int32)
-    return potentials.HarmonicBond(bond_idxs, lamb_mult, lamb_offset), params
+    return potentials.HarmonicBond(bond_idxs), params
 
 
 def test_free_energy_estimator():

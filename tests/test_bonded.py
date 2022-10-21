@@ -148,18 +148,16 @@ class TestBonded(GradientTest):
         for precision, rtol in relative_tolerance_at_precision.items():
             self.compare_forces_gpu_vs_reference(x, params, box, [lamb], potential, rtol, precision=precision)
 
-        lamb_mult = np.random.randint(-5, 5, size=n_bonds, dtype=np.int32)
-        lamb_offset = np.random.randint(-5, 5, size=n_bonds, dtype=np.int32)
         lamb = 0.35
 
-        potential = generic.HarmonicBond(bond_idxs, lamb_mult, lamb_offset)
+        potential = generic.HarmonicBond(bond_idxs)
 
         for precision, rtol in relative_tolerance_at_precision.items():
             self.compare_forces_gpu_vs_reference(x, params, box, [lamb], potential, rtol, precision=precision)
 
             # test bitwise commutativity
-            test_potential = potentials.HarmonicBond(bond_idxs, lamb_mult, lamb_offset)
-            test_potential_rev = potentials.HarmonicBond(bond_idxs[:, ::-1], lamb_mult, lamb_offset)
+            test_potential = potentials.HarmonicBond(bond_idxs)
+            test_potential_rev = potentials.HarmonicBond(bond_idxs[:, ::-1])
 
             test_potential_impl = test_potential.unbound_impl(precision)
             test_potential_rev_impl = test_potential_rev.unbound_impl(precision)
@@ -280,17 +278,15 @@ class TestBonded(GradientTest):
         for precision, rtol in relative_tolerance_at_precision.items():
             self.compare_forces_gpu_vs_reference(x, params, box, [lamb], potential, rtol, precision=precision)
 
-        lamb_mult = np.random.randint(-5, 5, size=n_angles, dtype=np.int32)
-        lamb_offset = np.random.randint(-5, 5, size=n_angles, dtype=np.int32)
         lamb = 0.35
 
-        potential = generic.HarmonicAngle(angle_idxs, lamb_mult, lamb_offset)
+        potential = generic.HarmonicAngle(angle_idxs)
         for precision, rtol in relative_tolerance_at_precision.items():
             self.compare_forces_gpu_vs_reference(x, params, box, [lamb], potential, rtol, precision=precision)
 
             # test bitwise commutativity
-            test_potential = potentials.HarmonicAngle(angle_idxs, lamb_mult, lamb_offset)
-            test_potential_rev = potentials.HarmonicAngle(angle_idxs[:, ::-1], lamb_mult, lamb_offset)
+            test_potential = potentials.HarmonicAngle(angle_idxs)
+            test_potential_rev = potentials.HarmonicAngle(angle_idxs[:, ::-1])
 
             test_potential_impl = test_potential.unbound_impl(precision)
             test_potential_rev_impl = test_potential_rev.unbound_impl(precision)
@@ -332,17 +328,15 @@ class TestBonded(GradientTest):
         for precision, rtol in relative_tolerance_at_precision.items():
             self.compare_forces_gpu_vs_reference(x, params, box, [lamb], potential, rtol, precision=precision)
 
-        lamb_mult = np.random.randint(-5, 5, size=n_torsions, dtype=np.int32)
-        lamb_offset = np.random.randint(-5, 5, size=n_torsions, dtype=np.int32)
         lamb = 0.35
 
-        potential = generic.PeriodicTorsion(torsion_idxs, lamb_mult, lamb_offset)
+        potential = generic.PeriodicTorsion(torsion_idxs)
         for precision, rtol in relative_tolerance_at_precision.items():
             self.compare_forces_gpu_vs_reference(x, params, box, [lamb], potential, rtol, precision=precision)
 
             # test bitwise commutativity
-            test_potential = potentials.PeriodicTorsion(torsion_idxs, lamb_mult, lamb_offset)
-            test_potential_rev = potentials.PeriodicTorsion(torsion_idxs[:, ::-1], lamb_mult, lamb_offset)
+            test_potential = potentials.PeriodicTorsion(torsion_idxs)
+            test_potential_rev = potentials.PeriodicTorsion(torsion_idxs[:, ::-1])
 
             test_potential_impl = test_potential.unbound_impl(precision)
             test_potential_rev_impl = test_potential_rev.unbound_impl(precision)

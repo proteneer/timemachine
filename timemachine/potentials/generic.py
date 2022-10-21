@@ -46,13 +46,14 @@ class Bonded(Generic[BondedGpuPotential]):
 
     @classmethod
     def from_gpu(cls, p: BondedGpuPotential):
-        return cls(p.get_idxs(), p.get_lambda_mult(), p.get_lambda_offset())
+        return cls(p.get_idxs())
 
 
 @dataclass
 class HarmonicBond(Bonded):
     def to_reference(self):
         def U(conf, params, box, lam):
+            # TODO: remove unused lam
             return ref_bonded.harmonic_bond(
                 conf,
                 params,
@@ -69,7 +70,8 @@ class HarmonicBond(Bonded):
 @dataclass
 class HarmonicAngle(Bonded):
     def to_reference(self):
-        def U(conf, params, box):
+        def U(conf, params, box, lam):
+            # TODO: remove unused lam
             return ref_bonded.harmonic_angle(
                 conf,
                 params,
@@ -171,14 +173,12 @@ class PeriodicTorsion(Bonded):
                 box,
                 lam,
                 self.idxs,
-                self.lambda_mult,
-                self.lambda_offset,
             )
 
         return U
 
     def to_gpu(self):
-        return gpu.PeriodicTorsion(self.idxs, self.lambda_mult, self.lambda_offset)
+        return gpu.PeriodicTorsion(self.idxs)
 
 
 @dataclass
