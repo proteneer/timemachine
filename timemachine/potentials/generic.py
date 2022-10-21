@@ -96,6 +96,7 @@ class CentroidRestraint:
 
     def to_reference(self):
         def U(conf, params, box, lam):
+            # TODO: remove unused lam
             return ref_bonded.centroid_restraint(
                 conf, params, box, self.group_a_idxs, self.group_b_idxs, self.kb, self.b0
             )
@@ -152,7 +153,8 @@ class FlatBottomBond:
         return cls(p.get_idxs())
 
     def to_reference(self):
-        def U(conf, params, box, _):
+        def U(conf, params, box, lam):
+            # TODO: remove unused lam
             return ref_bonded.flat_bottom_bond(conf, params, box, self.idxs)
 
         return U
@@ -165,6 +167,7 @@ class FlatBottomBond:
 class PeriodicTorsion(Bonded):
     def to_reference(self):
         def U(conf, params, box, lam):
+            # TODO: remove unused lam
             return ref_bonded.periodic_torsion(
                 conf,
                 params,
