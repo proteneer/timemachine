@@ -50,15 +50,3 @@ template <typename T> void __global__ k_initialize_array(int count, T *array, T 
 
     array[idx] = val;
 }
-
-template <typename T> void initializeArray(int count, T *array, T val) {
-
-    int tpb = 32;
-    int B = (count + tpb - 1) / tpb; // total number of blocks we need to process
-    // Nothing to allocate
-    if (count == 0) {
-        return;
-    }
-    k_initialize_array<<<B, tpb, 0>>>(count, array, val);
-    gpuErrchk(cudaPeekAtLastError());
-}
