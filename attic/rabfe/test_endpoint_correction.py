@@ -44,7 +44,6 @@ def setup_system():
         bond_idxs=np.concatenate([bond_idxs_a, bond_idxs_b + mol_a.GetNumAtoms()]),
         params=np.concatenate([bond_params_a, bond_params_b]),
         box=box,
-        lamb=None,
     )
 
     angle_fn = functools.partial(
@@ -52,7 +51,6 @@ def setup_system():
         angle_idxs=np.concatenate([angle_idxs_a, angle_idxs_b + mol_a.GetNumAtoms()]),
         params=np.concatenate([angle_params_a, angle_params_b]),
         box=box,
-        lamb=None,
     )
 
     core_idxs = []
@@ -68,7 +66,7 @@ def setup_system():
     core_idxs = np.array(core_idxs, dtype=np.int32)
     core_params = np.array(core_params, dtype=np.float64)
 
-    core_restr = functools.partial(bonded.harmonic_bond, bond_idxs=core_idxs, params=core_params, box=box, lamb=None)
+    core_restr = functools.partial(bonded.harmonic_bond, bond_idxs=core_idxs, params=core_params, box=box)
 
     # left hand state has intractable restraints turned on.
     def u_lhs_fn(x_t):

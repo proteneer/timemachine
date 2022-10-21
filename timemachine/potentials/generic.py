@@ -57,36 +57,30 @@ class HarmonicBond(Bonded):
                 conf,
                 params,
                 box,
-                lam,
                 self.idxs,
-                self.lambda_mult,
-                self.lambda_offset,
             )
 
         return U
 
     def to_gpu(self):
-        return gpu.HarmonicBond(self.idxs, self.lambda_mult, self.lambda_offset)
+        return gpu.HarmonicBond(self.idxs)
 
 
 @dataclass
 class HarmonicAngle(Bonded):
     def to_reference(self):
-        def U(conf, params, box, lam):
+        def U(conf, params, box):
             return ref_bonded.harmonic_angle(
                 conf,
                 params,
                 box,
-                lam,
                 self.idxs,
-                self.lambda_mult,
-                self.lambda_offset,
             )
 
         return U
 
     def to_gpu(self):
-        return gpu.HarmonicAngle(self.idxs, self.lambda_mult, self.lambda_offset)
+        return gpu.HarmonicAngle(self.idxs)
 
 
 @dataclass
