@@ -241,6 +241,13 @@ def sanitize_energies(full_us, lamb_idx, cutoff=10000):
     return np.where(abs_us < cutoff, full_us, np.inf)
 
 
+def read_sdf(fname: str) -> List[Chem.Mol]:
+    """Read list of mols from an SDF (without discarding hydrogens!)"""
+    supplier = Chem.SDMolSupplier(str(fname), removeHs=False)
+    mols = [mol for mol in supplier]
+    return mols
+
+
 def extract_delta_Us_from_U_knk(U_knk):
     """
     Generate delta_Us from the U_knk matrix for use with BAR.
