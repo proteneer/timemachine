@@ -8,9 +8,8 @@
 namespace timemachine {
 
 template <typename RealType>
-HarmonicAngle<RealType>::HarmonicAngle(
-    const std::vector<int> &angle_idxs // [A, 3]
-    )
+HarmonicAngle<RealType>::HarmonicAngle(const std::vector<int> &angle_idxs // [A, 3]
+                                       )
     : A_(angle_idxs.size() / 3) {
 
     if (angle_idxs.size() % 3 != 0) {
@@ -30,9 +29,7 @@ HarmonicAngle<RealType>::HarmonicAngle(
     gpuErrchk(cudaMemcpy(d_angle_idxs_, &angle_idxs[0], A_ * 3 * sizeof(*d_angle_idxs_), cudaMemcpyHostToDevice));
 };
 
-template <typename RealType> HarmonicAngle<RealType>::~HarmonicAngle() {
-    gpuErrchk(cudaFree(d_angle_idxs_));
-};
+template <typename RealType> HarmonicAngle<RealType>::~HarmonicAngle() { gpuErrchk(cudaFree(d_angle_idxs_)); };
 
 template <typename RealType>
 void HarmonicAngle<RealType>::execute_device(
@@ -58,8 +55,8 @@ void HarmonicAngle<RealType>::execute_device(
                 "HarmonicAngle::execute_device(): expected P == 2*A_, got P=" + std::to_string(P) +
                 ", 2*A_=" + std::to_string(2 * A_));
         }
-        k_harmonic_angle<RealType, 3><<<blocks, tpb, 0, stream>>>(
-            A_, d_x, d_p, lambda, d_angle_idxs_, d_du_dx, d_du_dp, d_du_dl, d_u);
+        k_harmonic_angle<RealType, 3>
+            <<<blocks, tpb, 0, stream>>>(A_, d_x, d_p, lambda, d_angle_idxs_, d_du_dx, d_du_dp, d_du_dl, d_u);
         gpuErrchk(cudaPeekAtLastError());
     }
 }

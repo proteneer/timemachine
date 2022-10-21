@@ -15,8 +15,7 @@ private:
 public:
     int num_bonds() const { return B_; }
 
-    HarmonicBond(
-        const std::vector<int> &bond_idxs    // [B, 2]
+    HarmonicBond(const std::vector<int> &bond_idxs // [B, 2]
     );
 
     ~HarmonicBond();

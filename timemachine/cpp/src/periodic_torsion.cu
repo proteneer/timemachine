@@ -8,9 +8,8 @@
 namespace timemachine {
 
 template <typename RealType>
-PeriodicTorsion<RealType>::PeriodicTorsion(
-    const std::vector<int> &torsion_idxs // [A, 4]
-    )
+PeriodicTorsion<RealType>::PeriodicTorsion(const std::vector<int> &torsion_idxs // [A, 4]
+                                           )
     : T_(torsion_idxs.size() / 4) {
 
     if (torsion_idxs.size() % 4 != 0) {
@@ -31,9 +30,7 @@ PeriodicTorsion<RealType>::PeriodicTorsion(
     gpuErrchk(cudaMemcpy(d_torsion_idxs_, &torsion_idxs[0], T_ * 4 * sizeof(*d_torsion_idxs_), cudaMemcpyHostToDevice));
 };
 
-template <typename RealType> PeriodicTorsion<RealType>::~PeriodicTorsion() {
-    gpuErrchk(cudaFree(d_torsion_idxs_));
-};
+template <typename RealType> PeriodicTorsion<RealType>::~PeriodicTorsion() { gpuErrchk(cudaFree(d_torsion_idxs_)); };
 
 template <typename RealType>
 void PeriodicTorsion<RealType>::execute_device(
@@ -60,8 +57,8 @@ void PeriodicTorsion<RealType>::execute_device(
                 "PeriodicTorsion::execute_device(): expected P == 3*T_, got P=" + std::to_string(P) +
                 ", 3*T_=" + std::to_string(3 * T_));
         }
-        k_periodic_torsion<RealType, D><<<blocks, tpb, 0, stream>>>(
-            T_, d_x, d_p, lambda, d_torsion_idxs_, d_du_dx, d_du_dp, d_du_dl, d_u);
+        k_periodic_torsion<RealType, D>
+            <<<blocks, tpb, 0, stream>>>(T_, d_x, d_p, lambda, d_torsion_idxs_, d_du_dx, d_du_dp, d_du_dl, d_u);
         gpuErrchk(cudaPeekAtLastError());
     }
 };

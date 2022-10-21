@@ -13,8 +13,7 @@ private:
     const int A_;
 
 public:
-    HarmonicAngle(
-        const std::vector<int> &angle_idxs);
+    HarmonicAngle(const std::vector<int> &angle_idxs);
 
     ~HarmonicAngle();
 

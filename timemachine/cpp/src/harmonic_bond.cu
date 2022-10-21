@@ -8,9 +8,7 @@
 namespace timemachine {
 
 template <typename RealType>
-HarmonicBond<RealType>::HarmonicBond(
-    const std::vector<int> &bond_idxs)
-    : B_(bond_idxs.size() / 2) {
+HarmonicBond<RealType>::HarmonicBond(const std::vector<int> &bond_idxs) : B_(bond_idxs.size() / 2) {
 
     if (bond_idxs.size() % 2 != 0) {
         throw std::runtime_error("bond_idxs.size() must be exactly 2*k!");
@@ -28,9 +26,7 @@ HarmonicBond<RealType>::HarmonicBond(
     gpuErrchk(cudaMemcpy(d_bond_idxs_, &bond_idxs[0], B_ * 2 * sizeof(*d_bond_idxs_), cudaMemcpyHostToDevice));
 };
 
-template <typename RealType> HarmonicBond<RealType>::~HarmonicBond() {
-    gpuErrchk(cudaFree(d_bond_idxs_));
-};
+template <typename RealType> HarmonicBond<RealType>::~HarmonicBond() { gpuErrchk(cudaFree(d_bond_idxs_)); };
 
 template <typename RealType>
 void HarmonicBond<RealType>::execute_device(
@@ -56,8 +52,8 @@ void HarmonicBond<RealType>::execute_device(
         const int tpb = warp_size;
         const int blocks = ceil_divide(B_, tpb);
 
-        k_harmonic_bond<RealType><<<blocks, tpb, 0, stream>>>(
-            B_, d_x, d_p, lambda, d_bond_idxs_, d_du_dx, d_du_dp, d_du_dl, d_u);
+        k_harmonic_bond<RealType>
+            <<<blocks, tpb, 0, stream>>>(B_, d_x, d_p, lambda, d_bond_idxs_, d_du_dx, d_du_dp, d_du_dl, d_u);
         gpuErrchk(cudaPeekAtLastError());
     }
 };
