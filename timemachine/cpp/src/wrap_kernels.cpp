@@ -756,24 +756,11 @@ template <typename RealType> void declare_harmonic_bond(py::module &m, const cha
     py::class_<Class, std::shared_ptr<Class>, timemachine::Potential>(
         m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
         .def(
-            py::init([](const py::array_t<int, py::array::c_style> &bond_idxs,
-                        std::optional<py::array_t<int, py::array::c_style>> lamb_mult,
-                        std::optional<py::array_t<int, py::array::c_style>> lamb_offset) {
+            py::init([](const py::array_t<int, py::array::c_style> &bond_idxs) {
                 std::vector<int> vec_bond_idxs(bond_idxs.data(), bond_idxs.data() + bond_idxs.size());
-                std::vector<int> vec_lamb_mult;
-                std::vector<int> vec_lamb_offset;
-                if (lamb_mult.has_value()) {
-                    vec_lamb_mult.assign(lamb_mult.value().data(), lamb_mult.value().data() + lamb_mult.value().size());
-                }
-                if (lamb_offset.has_value()) {
-                    vec_lamb_offset.assign(
-                        lamb_offset.value().data(), lamb_offset.value().data() + lamb_offset.value().size());
-                }
-                return new timemachine::HarmonicBond<RealType>(vec_bond_idxs, vec_lamb_mult, vec_lamb_offset);
+                return new timemachine::HarmonicBond<RealType>(vec_bond_idxs);
             }),
-            py::arg("bond_idxs"),
-            py::arg("lamb_mult") = py::none(),
-            py::arg("lamb_offset") = py::none());
+            py::arg("bond_idxs"));
 }
 
 template <typename RealType> void declare_flat_bottom_bond(py::module &m, const char *typestr) {
@@ -852,25 +839,12 @@ template <typename RealType> void declare_harmonic_angle(py::module &m, const ch
     py::class_<Class, std::shared_ptr<Class>, timemachine::Potential>(
         m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
         .def(
-            py::init([](const py::array_t<int, py::array::c_style> &angle_idxs,
-                        std::optional<py::array_t<int, py::array::c_style>> lamb_mult,
-                        std::optional<py::array_t<int, py::array::c_style>> lamb_offset) {
+            py::init([](const py::array_t<int, py::array::c_style> &angle_idxs) {
                 std::vector<int> vec_angle_idxs(angle_idxs.size());
                 std::memcpy(vec_angle_idxs.data(), angle_idxs.data(), vec_angle_idxs.size() * sizeof(int));
-                std::vector<int> vec_lamb_mult;
-                std::vector<int> vec_lamb_offset;
-                if (lamb_mult.has_value()) {
-                    vec_lamb_mult.assign(lamb_mult.value().data(), lamb_mult.value().data() + lamb_mult.value().size());
-                }
-                if (lamb_offset.has_value()) {
-                    vec_lamb_offset.assign(
-                        lamb_offset.value().data(), lamb_offset.value().data() + lamb_offset.value().size());
-                }
-                return new timemachine::HarmonicAngle<RealType>(vec_angle_idxs, vec_lamb_mult, vec_lamb_offset);
+                return new timemachine::HarmonicAngle<RealType>(vec_angle_idxs);
             }),
-            py::arg("angle_idxs"),
-            py::arg("lamb_mult") = py::none(),
-            py::arg("lamb_offset") = py::none());
+            py::arg("angle_idxs"));
 }
 
 template <typename RealType> void declare_centroid_restraint(py::module &m, const char *typestr) {
@@ -904,25 +878,12 @@ template <typename RealType> void declare_periodic_torsion(py::module &m, const 
     py::class_<Class, std::shared_ptr<Class>, timemachine::Potential>(
         m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
         .def(
-            py::init([](const py::array_t<int, py::array::c_style> &torsion_idxs,
-                        std::optional<py::array_t<int, py::array::c_style>> lamb_mult,
-                        std::optional<py::array_t<int, py::array::c_style>> lamb_offset) {
+            py::init([](const py::array_t<int, py::array::c_style> &torsion_idxs) {
                 std::vector<int> vec_torsion_idxs(torsion_idxs.size());
                 std::memcpy(vec_torsion_idxs.data(), torsion_idxs.data(), vec_torsion_idxs.size() * sizeof(int));
-                std::vector<int> vec_lamb_mult;
-                std::vector<int> vec_lamb_offset;
-                if (lamb_mult.has_value()) {
-                    vec_lamb_mult.assign(lamb_mult.value().data(), lamb_mult.value().data() + lamb_mult.value().size());
-                }
-                if (lamb_offset.has_value()) {
-                    vec_lamb_offset.assign(
-                        lamb_offset.value().data(), lamb_offset.value().data() + lamb_offset.value().size());
-                }
-                return new timemachine::PeriodicTorsion<RealType>(vec_torsion_idxs, vec_lamb_mult, vec_lamb_offset);
+                return new timemachine::PeriodicTorsion<RealType>(vec_torsion_idxs);
             }),
-            py::arg("angle_idxs"),
-            py::arg("lamb_mult") = py::none(),
-            py::arg("lamb_offset") = py::none());
+            py::arg("angle_idxs"));
 }
 
 std::set<int> unique_idxs(const std::vector<int> &idxs) {

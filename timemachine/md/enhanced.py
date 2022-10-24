@@ -93,17 +93,16 @@ class VacuumState:
         self.lamb = 0.0
 
     def _harmonic_bond_nrg(self, x):
-        return bonded.harmonic_bond(x, self.bond_params, self.box, self.lamb, self.hb_potential.get_idxs())
+        return bonded.harmonic_bond(x, self.bond_params, self.box, self.hb_potential.get_idxs())
 
     def _harmonic_angle_nrg(self, x):
-        return bonded.harmonic_angle(x, self.angle_params, self.box, self.lamb, self.ha_potential.get_idxs())
+        return bonded.harmonic_angle(x, self.angle_params, self.box, self.ha_potential.get_idxs())
 
     def _proper_torsion_nrg(self, x):
         return bonded.periodic_torsion(
             x,
             self.proper_torsion_params,
             self.box,
-            self.lamb,
             self.pt_potential.get_idxs(),
         )
 
@@ -112,7 +111,6 @@ class VacuumState:
             x,
             self.improper_torsion_params,
             self.box,
-            self.lamb,
             self.it_potential.get_idxs(),
         )
 
@@ -185,9 +183,7 @@ class VacuumState:
         easy_proper_torsion_idxs = np.array(easy_proper_torsion_idxs, dtype=np.int32)
         easy_proper_torsion_params = np.array(easy_proper_torsion_params, dtype=np.float64)
 
-        proper_torsion_nrg = bonded.periodic_torsion(
-            x, easy_proper_torsion_params, self.box, self.lamb, easy_proper_torsion_idxs
-        )
+        proper_torsion_nrg = bonded.periodic_torsion(x, easy_proper_torsion_params, self.box, easy_proper_torsion_idxs)
 
         return (
             self._harmonic_bond_nrg(x)

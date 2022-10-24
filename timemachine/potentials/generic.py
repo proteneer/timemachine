@@ -41,52 +41,46 @@ class Potential(Protocol[GpuPotential]):
 @dataclass
 class Bonded(Generic[BondedGpuPotential]):
     idxs: Array
-    lambda_mult: Optional[Array] = None
-    lambda_offset: Optional[Array] = None
 
     @classmethod
     def from_gpu(cls, p: BondedGpuPotential):
-        return cls(p.get_idxs(), p.get_lambda_mult(), p.get_lambda_offset())
+        return cls(p.get_idxs())
 
 
 @dataclass
 class HarmonicBond(Bonded):
     def to_reference(self):
         def U(conf, params, box, lam):
+            # TODO: remove unused lam
             return ref_bonded.harmonic_bond(
                 conf,
                 params,
                 box,
-                lam,
                 self.idxs,
-                self.lambda_mult,
-                self.lambda_offset,
             )
 
         return U
 
     def to_gpu(self):
-        return gpu.HarmonicBond(self.idxs, self.lambda_mult, self.lambda_offset)
+        return gpu.HarmonicBond(self.idxs)
 
 
 @dataclass
 class HarmonicAngle(Bonded):
     def to_reference(self):
         def U(conf, params, box, lam):
+            # TODO: remove unused lam
             return ref_bonded.harmonic_angle(
                 conf,
                 params,
                 box,
-                lam,
                 self.idxs,
-                self.lambda_mult,
-                self.lambda_offset,
             )
 
         return U
 
     def to_gpu(self):
-        return gpu.HarmonicAngle(self.idxs, self.lambda_mult, self.lambda_offset)
+        return gpu.HarmonicAngle(self.idxs)
 
 
 @dataclass
@@ -102,8 +96,9 @@ class CentroidRestraint:
 
     def to_reference(self):
         def U(conf, params, box, lam):
+            # TODO: remove unused lam
             return ref_bonded.centroid_restraint(
-                conf, params, box, lam, self.group_a_idxs, self.group_b_idxs, self.kb, self.b0
+                conf, params, box, self.group_a_idxs, self.group_b_idxs, self.kb, self.b0
             )
 
         return U
@@ -158,7 +153,8 @@ class FlatBottomBond:
         return cls(p.get_idxs())
 
     def to_reference(self):
-        def U(conf, params, box, _):
+        def U(conf, params, box, lam):
+            # TODO: remove unused lam
             return ref_bonded.flat_bottom_bond(conf, params, box, self.idxs)
 
         return U
@@ -171,20 +167,18 @@ class FlatBottomBond:
 class PeriodicTorsion(Bonded):
     def to_reference(self):
         def U(conf, params, box, lam):
+            # TODO: remove unused lam
             return ref_bonded.periodic_torsion(
                 conf,
                 params,
                 box,
-                lam,
                 self.idxs,
-                self.lambda_mult,
-                self.lambda_offset,
             )
 
         return U
 
     def to_gpu(self):
-        return gpu.PeriodicTorsion(self.idxs, self.lambda_mult, self.lambda_offset)
+        return gpu.PeriodicTorsion(self.idxs)
 
 
 @dataclass

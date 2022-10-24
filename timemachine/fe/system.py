@@ -108,21 +108,18 @@ class VacuumSystem:
             bonded.harmonic_bond,
             params=jnp.array(self.bond.params),
             box=None,
-            lamb=0.0,
             bond_idxs=np.array(self.bond.get_idxs()),
         )
         angle_U = functools.partial(
             bonded.harmonic_angle,
             params=jnp.array(self.angle.params),
             box=None,
-            lamb=0.0,
             angle_idxs=np.array(self.angle.get_idxs()),
         )
         torsion_U = functools.partial(
             bonded.periodic_torsion,
             params=jnp.array(self.torsion.params),
             box=None,
-            lamb=0.0,
             torsion_idxs=np.array(self.torsion.get_idxs()),
         )
         nbpl_U = functools.partial(

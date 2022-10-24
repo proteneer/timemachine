@@ -297,7 +297,7 @@ void Neighborlist<RealType>::set_idxs_device(
         d_column_idxs_, d_in_column_idxs, NC * sizeof(*d_column_idxs_), cudaMemcpyDeviceToDevice, stream));
     gpuErrchk(cudaMemcpyAsync(d_row_idxs_, d_in_row_idxs, NR * sizeof(*d_row_idxs_), cudaMemcpyDeviceToDevice, stream));
 
-    // Fill in the rest of values with N, potentially redudant
+    // Fill in the rest of values with N, potentially redundant
     k_initialize_array<unsigned int><<<ceil_divide(N_ - NC, tpb), tpb, 0, stream>>>(N_ - NC, d_column_idxs_ + NC, N_);
     gpuErrchk(cudaPeekAtLastError());
     k_initialize_array<unsigned int><<<ceil_divide(N_ - NR, tpb), tpb, 0, stream>>>(N_ - NR, d_row_idxs_ + NR, N_);

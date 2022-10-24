@@ -9,14 +9,11 @@ template <typename RealType> class HarmonicAngle : public Potential {
 
 private:
     int *d_angle_idxs_;
-    int *d_lambda_mult_;
-    int *d_lambda_offset_;
 
     const int A_;
 
 public:
-    HarmonicAngle(
-        const std::vector<int> &angle_idxs, const std::vector<int> &lambda_mult, const std::vector<int> &lambda_offset);
+    HarmonicAngle(const std::vector<int> &angle_idxs);
 
     ~HarmonicAngle();
 
