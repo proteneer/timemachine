@@ -194,8 +194,6 @@ class TestNonbondedDHFR(GradientTest):
         This is mainly for benchmarking nonbonded computations on the initial state.
         """
 
-        N = self.host_conf.shape[0]
-
         precision = np.float32
 
         nb_fn = copy.deepcopy(self.nonbonded_fn)
@@ -320,8 +318,6 @@ class TestNonbonded(GradientTest):
 
             coords = all_coords[:size]
 
-            N = coords.shape[0]
-
             for cutoff in [1.0]:
                 # E = 0 # DEBUG!
                 charge_params, potential = prepare_water_system(coords, p_scale=5.0, cutoff=cutoff)
@@ -352,8 +348,6 @@ class TestNonbonded(GradientTest):
         _, coords, box, _ = builders.build_water_system(3.0, ff.water_ff)
         coords = coords / coords.unit
         coords = coords[:size]
-
-        N = coords.shape[0]
 
         # Down shift box size to be only a portion of the cutoff
         charge_params, potential = prepare_water_system(coords, p_scale=1.0, cutoff=cutoff)
