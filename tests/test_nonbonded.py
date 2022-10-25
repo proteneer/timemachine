@@ -382,7 +382,7 @@ class TestNonbonded(GradientTest):
         run_nonbonded(test_impl, coords, box, charge_params, 0.0)
 
         # Non Orth Box, should fail
-        box = np.ones_like(box) * (db_cutoff**2)
+        box = np.ones_like(box) * (db_cutoff ** 2)
         with self.assertRaises(RuntimeError) as raised:
             run_nonbonded(test_impl, coords, box, charge_params, 0.0)
         assert "non-ortholinear box" in str(raised.exception)

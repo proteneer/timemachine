@@ -38,7 +38,6 @@ class TestBonded(GradientTest):
             )
 
             params = np.array([], dtype=np.float64)
-            lamb = 0.3  # doesn't matter
 
             self.compare_forces_gpu_vs_reference(x_primal, [params], box, potential, rtol, precision=precision)
 
@@ -69,7 +68,6 @@ class TestBonded(GradientTest):
                 potential = generic.CentroidRestraint(gai, gbi, kb, b0)
 
                 params = np.array([], dtype=np.float64)
-                lamb = 0.3  # doesn't matter
 
                 self.compare_forces_gpu_vs_reference(coords, [params], box, potential, rtol, precision=precision)
 
@@ -106,7 +104,6 @@ class TestBonded(GradientTest):
 
                 params = np.array([], dtype=np.float64)
                 k = 1.35
-                lamb = 0.0
 
                 for precision, rtol, atol in [(np.float64, 1e-6, 1e-6), (np.float32, 1e-4, 1e-6)]:
 
@@ -228,7 +225,6 @@ class TestBonded(GradientTest):
         params = np.array([[2.0, 0.0]], dtype=np.float64)
         bond_idxs = np.array([[0, 1]], dtype=np.int32)
 
-        lamb = 0.0
         box = np.eye(3) * 100
 
         # specific to harmonic bond force
@@ -371,7 +367,6 @@ class TestBonded(GradientTest):
 
         restr_idxs = np.array(restr_idxs, dtype=np.int32) if n_restraints else np.zeros((0, 4), dtype=np.int32)
 
-        lamb = 0.0
         box = np.eye(3) * 100
 
         relative_tolerance_at_precision = {np.float64: 1e-9, np.float32: 1e-6}
@@ -405,7 +400,6 @@ class TestBonded(GradientTest):
         restr_idxs = np.array(restr_idxs, dtype=np.int32) if n_restraints else np.zeros((0, 4), dtype=np.int32)
         signs = np.array(signs, dtype=np.int32)
 
-        lamb = 0.0
         box = np.eye(3) * 100
 
         relative_tolerance_at_precision = {np.float64: 1e-9, np.float32: 1e-6}
