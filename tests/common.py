@@ -8,6 +8,7 @@ from tempfile import NamedTemporaryFile, TemporaryDirectory
 from typing import Iterable
 
 import jax
+import jax.numpy as jnp
 import numpy as np
 from hilbertcurve.hilbertcurve import HilbertCurve
 from numpy.typing import NDArray
@@ -48,7 +49,7 @@ def get_hif2a_ligands_as_sdf_file(num_mols: int) -> NamedTemporaryFile:
     return temp_sdf
 
 
-def prepare_system_params(x: NDArray, sigma_scale: float = 5.0) -> NDArray:
+def prepare_system_params(x: NDArray, cutoff: float, sigma_scale: float = 5.0) -> NDArray:
     """
     Prepares random parameters given a set of coordinates. The parameters are adjusted to be the correct
     order of magnitude.
@@ -72,6 +73,7 @@ def prepare_system_params(x: NDArray, sigma_scale: float = 5.0) -> NDArray:
             (np.random.rand(N).astype(np.float64) - 0.5) * np.sqrt(ONE_4PI_EPS0),  # q
             np.random.rand(N).astype(np.float64) / sigma_scale,  # sig
             np.random.rand(N).astype(np.float64),  # eps
+            np.random.rand(N).astype(np.float64) * 2 * cutoff,  # w
         ],
         axis=1,
     )
@@ -81,7 +83,7 @@ def prepare_system_params(x: NDArray, sigma_scale: float = 5.0) -> NDArray:
     return params
 
 
-def prepare_water_system(x, lambda_plane_idxs, lambda_offset_idxs, p_scale, cutoff):
+def prepare_water_system(x, p_scale, cutoff):
 
     assert x.ndim == 2
     N = x.shape[0]
@@ -89,7 +91,7 @@ def prepare_water_system(x, lambda_plane_idxs, lambda_offset_idxs, p_scale, cuto
 
     assert N % 3 == 0
 
-    params = prepare_system_params(x, sigma_scale=p_scale)
+    params = prepare_system_params(x, cutoff, sigma_scale=p_scale)
 
     scales = []
     exclusion_idxs = []
@@ -110,18 +112,23 @@ def prepare_water_system(x, lambda_plane_idxs, lambda_offset_idxs, p_scale, cuto
 
     beta = 2.0
 
-    potential = generic.Nonbonded(exclusion_idxs, scales, lambda_plane_idxs, lambda_offset_idxs, beta, cutoff)
+    potential = generic.Nonbonded(N, exclusion_idxs, scales, beta, cutoff)
 
     return params, potential
 
 
-def prepare_nb_system(x, E, lambda_plane_idxs, lambda_offset_idxs, p_scale, cutoff):  # number of exclusions
+def prepare_nb_system(
+    x,
+    E,  # number of exclusions
+    p_scale,
+    cutoff,
+):
 
     assert x.ndim == 2
     N = x.shape[0]
     # D = x.shape[1]
 
-    params = prepare_system_params(x, sigma_scale=p_scale)
+    params = prepare_system_params(x, cutoff, sigma_scale=p_scale)
 
     atom_idxs = np.arange(N)
 
@@ -132,7 +139,7 @@ def prepare_nb_system(x, E, lambda_plane_idxs, lambda_offset_idxs, p_scale, cuto
 
     beta = 2.0
 
-    test_potential = potentials.Nonbonded(exclusion_idxs, scales, lambda_plane_idxs, lambda_offset_idxs, beta, cutoff)
+    test_potential = potentials.Nonbonded(N, exclusion_idxs, scales, beta, cutoff)
 
     charge_rescale_mask, lj_rescale_mask = nonbonded.convert_exclusions_to_rescale_masks(exclusion_idxs, scales, N)
 
@@ -142,8 +149,6 @@ def prepare_nb_system(x, E, lambda_plane_idxs, lambda_offset_idxs, p_scale, cuto
         lj_rescale_mask=lj_rescale_mask,
         beta=beta,
         cutoff=cutoff,
-        lambda_plane_idxs=lambda_plane_idxs,
-        lambda_offset_idxs=lambda_offset_idxs,
         runtime_validate=False,
     )
 
@@ -363,3 +368,9 @@ class GradientTest(unittest.TestCase):
         return self.compare_forces(
             x, params_arrays, box, potential.to_reference(), potential.to_gpu(), rtol, precision, atol
         )
+
+
+def gen_params_with_4d_offsets(rng: np.random.Generator, params, w_min, w_max, n):
+    for _ in range(n):
+        w_coords = rng.uniform(w_min, w_max, (params.shape[0],))
+        yield jnp.asarray(params).at[:, 3].set(w_coords)

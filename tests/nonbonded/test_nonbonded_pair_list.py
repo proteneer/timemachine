@@ -1,7 +1,6 @@
 import numpy as np
 import pytest
-from common import GradientTest
-from nonbonded import gen_params_with_4d_offsets
+from common import GradientTest, gen_params_with_4d_offsets
 
 from timemachine.lib.potentials import NonbondedPairList
 from timemachine.potentials import generic

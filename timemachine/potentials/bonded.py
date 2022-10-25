@@ -26,7 +26,7 @@ def centroid_restraint(conf, params, box, group_a_idxs, group_b_idxs, kb, b0):
     delta = dij - b0
 
     # when b0 == 0 and dij == 0
-    return jnp.where(b0 == 0, kb * d2ij, kb * delta ** 2)
+    return jnp.where(b0 == 0, kb * d2ij, kb * delta**2)
 
 
 def harmonic_bond(conf, params, box, bond_idxs):
