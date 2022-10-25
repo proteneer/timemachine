@@ -334,8 +334,8 @@ class GradientTest(unittest.TestCase):
                         isinstance(test_potential, cls)
                         for cls in [
                             potentials.Nonbonded,
-                            potentials.NonbondedAllPairs,
-                            potentials.NonbondedInteractionGroup,
+                            # potentials.NonbondedAllPairs,
+                            # potentials.NonbondedInteractionGroup,
                             potentials.NonbondedPairList,
                             potentials.NonbondedPairListPrecomputed,
                         ]
