@@ -1,6 +1,7 @@
 import numpy as np
 import pytest
 from common import GradientTest
+from nonbonded import gen_params_with_4d_offsets
 
 from timemachine.lib.potentials import NonbondedAllPairs
 from timemachine.potentials import generic
@@ -110,16 +111,9 @@ def test_nonbonded_all_pairs_correctness(
 
     potential = generic.NonbondedAllPairs(num_atoms, beta, cutoff, atom_idxs)
 
-    def gen_params(n):
-        for _ in range(n):
-            w_coords = rng.uniform(-2, 2, (num_atoms,)) * cutoff
-            params_ = params.copy()
-            params_[:, 3] = w_coords
-            yield params_
-
     GradientTest().compare_forces_gpu_vs_reference(
         conf,
-        gen_params(3),
+        gen_params_with_4d_offsets(rng, params, -2 * cutoff, 2 * cutoff, 3),
         example_box,
         potential,
         precision=precision,

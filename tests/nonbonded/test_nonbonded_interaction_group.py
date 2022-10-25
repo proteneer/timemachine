@@ -2,8 +2,8 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 from common import GradientTest
+from nonbonded import gen_params_with_4d_offsets
 
-from tests.nonbonded import gen_params_with_4d_offsets
 from timemachine.lib.potentials import NonbondedInteractionGroup
 from timemachine.potentials import generic
 
