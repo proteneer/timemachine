@@ -45,8 +45,6 @@ void __global__ k_nonbonded_pair_list(
     RealType ci_y = coords[atom_i_idx * 3 + 1];
     RealType ci_z = coords[atom_i_idx * 3 + 2];
 
-    RealType ci_w = params[atom_i_idx * PARAMS_PER_ATOM + PARAM_OFFSET_W];
-
     unsigned long long gi_x = 0;
     unsigned long long gi_y = 0;
     unsigned long long gi_z = 0;
@@ -54,22 +52,23 @@ void __global__ k_nonbonded_pair_list(
     int charge_param_idx_i = atom_i_idx * PARAMS_PER_ATOM + PARAM_OFFSET_CHARGE;
     int lj_param_idx_sig_i = atom_i_idx * PARAMS_PER_ATOM + PARAM_OFFSET_SIG;
     int lj_param_idx_eps_i = atom_i_idx * PARAMS_PER_ATOM + PARAM_OFFSET_EPS;
+    int w_param_idx_i = atom_i_idx * PARAMS_PER_ATOM + PARAM_OFFSET_W;
 
     RealType qi = params[charge_param_idx_i];
     RealType sig_i = params[lj_param_idx_sig_i];
     RealType eps_i = params[lj_param_idx_eps_i];
+    RealType w_i = params[w_param_idx_i];
 
     unsigned long long g_qi = 0;
     unsigned long long g_sigi = 0;
     unsigned long long g_epsi = 0;
+    unsigned long long g_wi = 0;
 
     int atom_j_idx = pair_idxs[pair_idx * 2 + 1];
 
     RealType cj_x = coords[atom_j_idx * 3 + 0];
     RealType cj_y = coords[atom_j_idx * 3 + 1];
     RealType cj_z = coords[atom_j_idx * 3 + 2];
-
-    RealType cj_w = params[atom_j_idx * PARAMS_PER_ATOM + PARAM_OFFSET_W];
 
     unsigned long long gj_x = 0;
     unsigned long long gj_y = 0;
@@ -78,14 +77,17 @@ void __global__ k_nonbonded_pair_list(
     int charge_param_idx_j = atom_j_idx * PARAMS_PER_ATOM + PARAM_OFFSET_CHARGE;
     int lj_param_idx_sig_j = atom_j_idx * PARAMS_PER_ATOM + PARAM_OFFSET_SIG;
     int lj_param_idx_eps_j = atom_j_idx * PARAMS_PER_ATOM + PARAM_OFFSET_EPS;
+    int w_param_idx_j = atom_j_idx * PARAMS_PER_ATOM + PARAM_OFFSET_W;
 
     RealType qj = params[charge_param_idx_j];
     RealType sig_j = params[lj_param_idx_sig_j];
     RealType eps_j = params[lj_param_idx_eps_j];
+    RealType w_j = params[w_param_idx_j];
 
     unsigned long long g_qj = 0;
     unsigned long long g_sigj = 0;
     unsigned long long g_epsj = 0;
+    unsigned long long g_wj = 0;
 
     RealType real_beta = static_cast<RealType>(beta);
 
@@ -111,7 +113,7 @@ void __global__ k_nonbonded_pair_list(
     delta_y -= box_y * nearbyint(delta_y * inv_box_y);
     delta_z -= box_z * nearbyint(delta_z * inv_box_z);
 
-    RealType delta_w = ci_w - cj_w;
+    RealType delta_w = w_i - w_j;
     RealType d2ij = delta_x * delta_x + delta_y * delta_y + delta_z * delta_z + delta_w * delta_w;
 
     unsigned long long energy = 0;
@@ -156,6 +158,9 @@ void __global__ k_nonbonded_pair_list(
         g_qi += FLOAT_TO_FIXED_DU_DP<RealType, FIXED_EXPONENT_DU_DCHARGE>(charge_scale * qj * inv_dij * ebd);
         g_qj += FLOAT_TO_FIXED_DU_DP<RealType, FIXED_EXPONENT_DU_DCHARGE>(charge_scale * qi * inv_dij * ebd);
 
+        g_wi += FLOAT_TO_FIXED_NONBONDED(delta_prefactor * delta_w);
+        g_wj += FLOAT_TO_FIXED_NONBONDED(-delta_prefactor * delta_w);
+
         if (du_dx) {
             accumulate<Negated>(du_dx + atom_i_idx * 3 + 0, gi_x);
             accumulate<Negated>(du_dx + atom_i_idx * 3 + 1, gi_y);
@@ -175,6 +180,9 @@ void __global__ k_nonbonded_pair_list(
 
             accumulate<Negated>(du_dp + lj_param_idx_sig_j, g_sigj);
             accumulate<Negated>(du_dp + lj_param_idx_eps_j, g_epsj);
+
+            accumulate<Negated>(du_dp + w_param_idx_i, g_wi);
+            accumulate<Negated>(du_dp + w_param_idx_j, g_wj);
         }
 
         if (u_buffer) {

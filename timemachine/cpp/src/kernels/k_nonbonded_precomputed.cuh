@@ -31,6 +31,7 @@ void __global__ k_nonbonded_precomputed(
     unsigned long long g_q_ij = 0;
     unsigned long long g_sig_ij = 0;
     unsigned long long g_eps_ij = 0;
+    unsigned long long g_dw_ij = 0;
 
     int atom_i_idx = pair_idxs[pair_idx * 2 + 0];
 
@@ -102,6 +103,7 @@ void __global__ k_nonbonded_precomputed(
 
         // du/dp
         g_q_ij += FLOAT_TO_FIXED_DU_DP<RealType, FIXED_EXPONENT_DU_DCHARGE>(erfc(beta * d_ij) / d_ij);
+        g_dw_ij += FLOAT_TO_FIXED_DU_DP<RealType, FIXED_EXPONENT_DU_DCHARGE>(du_dr * delta_w / d_ij);
     }
 
     if (eps_ij != 0 && sig_ij != 0) {
@@ -125,12 +127,14 @@ void __global__ k_nonbonded_precomputed(
 
         g_eps_ij += FLOAT_TO_FIXED_DU_DP<RealType, FIXED_EXPONENT_DU_DEPS>(du_de);
         g_sig_ij += FLOAT_TO_FIXED_DU_DP<RealType, FIXED_EXPONENT_DU_DSIG>(du_ds);
+        g_dw_ij += FLOAT_TO_FIXED_DU_DP<RealType, FIXED_EXPONENT_DU_DCHARGE>(du_dr * delta_w / d_ij);
     }
 
     if (du_dp) {
         atomicAdd(du_dp + pair_idx * PARAMS_PER_PAIR + PARAM_OFFSET_CHARGE, g_q_ij);
         atomicAdd(du_dp + pair_idx * PARAMS_PER_PAIR + PARAM_OFFSET_SIG, g_sig_ij);
         atomicAdd(du_dp + pair_idx * PARAMS_PER_PAIR + PARAM_OFFSET_EPS, g_eps_ij);
+        atomicAdd(du_dp + pair_idx * PARAMS_PER_PAIR + PARAM_OFFSET_W, g_dw_ij);
     }
 
     if (du_dx) {

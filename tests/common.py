@@ -329,20 +329,7 @@ class GradientTest(unittest.TestCase):
                     else:
                         np.testing.assert_allclose(ref_du_dl, test_du_dl, rtol=rtol)
                 if compute_du_dp:
-                    # TODO: remove when du_dw is implemented
-                    if any(
-                        isinstance(test_potential, cls)
-                        for cls in [
-                            potentials.Nonbonded,
-                            # potentials.NonbondedAllPairs,
-                            # potentials.NonbondedInteractionGroup,
-                            potentials.NonbondedPairList,
-                            potentials.NonbondedPairListPrecomputed,
-                        ]
-                    ):
-                        np.testing.assert_allclose(ref_du_dp[:, :3], test_du_dp[:, :3], rtol=rtol, atol=atol)
-                    else:
-                        np.testing.assert_allclose(ref_du_dp, test_du_dp, rtol=rtol, atol=atol)
+                    np.testing.assert_allclose(ref_du_dp, test_du_dp, rtol=rtol, atol=atol)
 
                 test_du_dx_2, test_du_dp_2, test_du_dl_2, test_u_2 = test_impl.execute_selective(
                     x, params, box, lamb, compute_du_dx, compute_du_dp, compute_du_dl, compute_u
