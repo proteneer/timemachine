@@ -429,19 +429,19 @@ class DualTopology(BaseTopology):
             self.mol_b, scale12=_SCALE_12, scale13=_SCALE_13, scale14=_SCALE_14
         )
 
-        mutual_exclusions = []
-        mutual_scale_factors = []
+        mutual_exclusions_ = []
+        mutual_scale_factors_ = []
 
         NA = self.mol_a.GetNumAtoms()
         NB = self.mol_b.GetNumAtoms()
 
         for i in range(NA):
             for j in range(NB):
-                mutual_exclusions.append([i, j + NA])
-                mutual_scale_factors.append([1.0, 1.0])
+                mutual_exclusions_.append([i, j + NA])
+                mutual_scale_factors_.append([1.0, 1.0])
 
-        mutual_exclusions = np.array(mutual_exclusions)
-        mutual_scale_factors = np.array(mutual_scale_factors)
+        mutual_exclusions = np.array(mutual_exclusions_)
+        mutual_scale_factors = np.array(mutual_scale_factors_)
 
         combined_exclusion_idxs = np.concatenate([exclusion_idxs_a, exclusion_idxs_b + NA, mutual_exclusions]).astype(
             np.int32
