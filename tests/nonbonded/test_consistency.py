@@ -2,8 +2,8 @@ from typing import Iterable, Tuple
 
 import numpy as np
 import pytest
+from common import gen_nonbonded_params_with_4d_offsets
 
-from tests.common import gen_nonbonded_params_with_4d_offsets
 from timemachine.lib.potentials import (
     FanoutSummedPotential,
     Nonbonded,
