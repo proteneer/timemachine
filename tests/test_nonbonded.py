@@ -6,7 +6,7 @@ import unittest
 
 import numpy as np
 import pytest
-from common import GradientTest, gen_params_with_4d_offsets, prepare_system_params, prepare_water_system
+from common import GradientTest, gen_nonbonded_params_with_4d_offsets, prepare_system_params, prepare_water_system
 
 from timemachine.constants import DEFAULT_FF
 from timemachine.fe.utils import to_md_units
@@ -325,8 +325,8 @@ class TestNonbonded(GradientTest):
 
                     self.compare_forces_gpu_vs_reference(
                         coords,
-                        gen_params_with_4d_offsets(
-                            np.random.default_rng(2022), charge_params, -2 * cutoff, 2 * cutoff, 3
+                        gen_nonbonded_params_with_4d_offsets(
+                            np.random.default_rng(2022), charge_params, -2 * cutoff, 2 * cutoff
                         ),
                         box,
                         potential,

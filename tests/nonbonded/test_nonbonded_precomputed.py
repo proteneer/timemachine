@@ -1,6 +1,6 @@
 import numpy as np
 import pytest
-from common import GradientTest, gen_params_with_4d_offsets
+from common import GradientTest, gen_nonbonded_params_with_4d_offsets
 
 from timemachine.lib.potentials import NonbondedPairListPrecomputed
 from timemachine.potentials import generic
@@ -58,7 +58,7 @@ def test_nonbonded_pair_list_precomputed_correctness(
 
     GradientTest().compare_forces_gpu_vs_reference(
         conf,
-        gen_params_with_4d_offsets(rng, params, 0, 0.25, 3),
+        gen_nonbonded_params_with_4d_offsets(rng, params, 0, 0.25),
         box,
         potential,
         precision=precision,

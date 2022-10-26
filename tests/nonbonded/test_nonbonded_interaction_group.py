@@ -1,7 +1,7 @@
 import jax.numpy as jnp
 import numpy as np
 import pytest
-from common import GradientTest, gen_params_with_4d_offsets
+from common import GradientTest, gen_nonbonded_params_with_4d_offsets
 
 from timemachine.lib.potentials import NonbondedInteractionGroup
 from timemachine.potentials import generic
@@ -73,7 +73,7 @@ def test_nonbonded_interaction_group_correctness(
 
     GradientTest().compare_forces_gpu_vs_reference(
         conf,
-        gen_params_with_4d_offsets(rng, params, -2 * cutoff, 2 * cutoff, 3),
+        gen_nonbonded_params_with_4d_offsets(rng, params, -2 * cutoff, 2 * cutoff),
         example_box,
         potential,
         rtol=rtol,
@@ -149,7 +149,7 @@ def test_nonbonded_interaction_group_consistency_allpairs_4d_decoupled(
 
     GradientTest().compare_forces(
         conf,
-        gen_params_with_4d_offsets(rng, params, -cutoff, cutoff, 3),
+        gen_nonbonded_params_with_4d_offsets(rng, params, -cutoff, cutoff),
         example_box,
         ref_potential=ref_ixngroups,
         test_potential=test_ixngroups,
@@ -217,7 +217,7 @@ def test_nonbonded_interaction_group_consistency_allpairs_constant_shift(
     conf_prime = np.array(conf)
     conf_prime[ligand_idxs] += rng.normal(0, 0.01, size=(3,))
 
-    for params in gen_params_with_4d_offsets(rng, params, -2 * cutoff, 2 * cutoff, 3):
+    for params in gen_nonbonded_params_with_4d_offsets(rng, params, -2 * cutoff, 2 * cutoff):
         ref_delta = ref_allpairs(conf_prime) - ref_allpairs(conf)
         test_delta = test_ixngroups(conf_prime) - test_ixngroups(conf)
         np.testing.assert_allclose(ref_delta, test_delta, rtol=rtol, atol=atol)

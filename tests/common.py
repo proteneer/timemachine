@@ -346,7 +346,27 @@ class GradientTest(unittest.TestCase):
         )
 
 
-def gen_params_with_4d_offsets(rng: np.random.Generator, params, w_min, w_max, n):
-    for _ in range(n):
-        w_coords = rng.uniform(w_min, w_max, (params.shape[0],))
-        yield jnp.asarray(params).at[:, 3].set(w_coords)
+def gen_nonbonded_params_with_4d_offsets(rng: np.random.Generator, params, w_min: float, w_max: float):
+    num_atoms, _ = params.shape
+
+    def params_with_w_coords(w_coords):
+        return jnp.asarray(params).at[:, 3].set(w_coords)
+
+    # all zero
+    yield params_with_w_coords(0.0)
+
+    # all w_max
+    yield params_with_w_coords(w_max)
+
+    # half zero, half w_max
+    w_coords = jnp.zeros(num_atoms)
+    w_coords = w_coords.at[-num_atoms // 2 :].set(w_max)
+    yield params_with_w_coords(w_coords)
+
+    # random uniform from {0, w_max}
+    w_coords = rng.choice([0.0, w_max], (num_atoms,))
+    yield params_with_w_coords(w_coords)
+
+    # random uniform between w_min, w_max
+    w_coords = rng.uniform(w_min, w_max, (num_atoms,))
+    yield params_with_w_coords(w_coords)
