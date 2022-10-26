@@ -3,6 +3,7 @@ from typing import Iterable, Tuple
 import numpy as np
 import pytest
 
+from tests.common import gen_params_with_4d_offsets
 from timemachine.lib.potentials import (
     FanoutSummedPotential,
     Nonbonded,
@@ -68,10 +69,9 @@ def test_nonbonded_consistency(
     ).unbound_impl(precision)
 
     def test():
-        for w_coords in rng.uniform(-2, 2, (5, num_atoms)) * cutoff:
-            params[:, 3] = w_coords
-            du_dx_ref, du_dp_ref, du_dl_ref, u_ref = ref_impl.execute(conf, params, example_box, 0.0)
-            du_dx_test, du_dp_test, du_dl_test, u_test = test_impl.execute(conf, params, example_box, 0.0)
+        for params_ in gen_params_with_4d_offsets(rng, params, -2 * cutoff, 2 * cutoff, 3):
+            du_dx_ref, du_dp_ref, du_dl_ref, u_ref = ref_impl.execute(conf, params_, example_box, 0.0)
+            du_dx_test, du_dp_test, du_dl_test, u_test = test_impl.execute(conf, params_, example_box, 0.0)
 
             np.testing.assert_array_equal(du_dx_test, du_dx_ref)
             np.testing.assert_array_equal(du_dp_test, du_dp_ref)
