@@ -339,11 +339,11 @@ void NonbondedAllPairs<RealType>::du_dp_fixed_to_float(
     const int N, const int P, const unsigned long long *du_dp, double *du_dp_float) {
 
     for (int i = 0; i < N; i++) {
-        const int offset = i * PARAMS_PER_ATOM;
-        const int idx_charge = offset + PARAM_OFFSET_CHARGE;
-        const int idx_sig = offset + PARAM_OFFSET_SIG;
-        const int idx_eps = offset + PARAM_OFFSET_EPS;
-        const int idx_w = offset + PARAM_OFFSET_W;
+        const int idx = i * PARAMS_PER_ATOM;
+        const int idx_charge = idx + PARAM_OFFSET_CHARGE;
+        const int idx_sig = idx + PARAM_OFFSET_SIG;
+        const int idx_eps = idx + PARAM_OFFSET_EPS;
+        const int idx_w = idx + PARAM_OFFSET_W;
 
         du_dp_float[idx_charge] = FIXED_TO_FLOAT_DU_DP<double, FIXED_EXPONENT_DU_DCHARGE>(du_dp[idx_charge]);
         du_dp_float[idx_sig] = FIXED_TO_FLOAT_DU_DP<double, FIXED_EXPONENT_DU_DSIG>(du_dp[idx_sig]);
