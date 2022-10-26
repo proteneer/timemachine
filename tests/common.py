@@ -73,7 +73,7 @@ def prepare_system_params(x: NDArray, cutoff: float, sigma_scale: float = 5.0) -
             (np.random.rand(N).astype(np.float64) - 0.5) * np.sqrt(ONE_4PI_EPS0),  # q
             np.random.rand(N).astype(np.float64) / sigma_scale,  # sig
             np.random.rand(N).astype(np.float64),  # eps
-            np.random.rand(N).astype(np.float64) * 2 * cutoff,  # w
+            (2 * np.random.rand(N).astype(np.float64) - 1) * cutoff,  # w
         ],
         axis=1,
     )
