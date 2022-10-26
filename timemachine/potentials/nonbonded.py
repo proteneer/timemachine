@@ -1,11 +1,10 @@
 import functools
+from typing import Any
 
 import jax.numpy as jnp
 import numpy as np
 from jax import vmap
 from jax.scipy.special import erfc
-from numpy.typing import NDArray
-from typing_extensions import TypeAlias
 
 from timemachine.potentials import jax_utils
 from timemachine.potentials.jax_utils import (
@@ -16,7 +15,7 @@ from timemachine.potentials.jax_utils import (
     pairwise_distances,
 )
 
-Array: TypeAlias = NDArray
+Array = Any
 
 
 def switch_fn(dij, cutoff):
@@ -261,8 +260,8 @@ def nonbonded_on_specific_pairs(
     box,
     pairs,
     beta: float,
-    cutoff=None,
-    w_coords=None,  # per-particle 4-d coordinate
+    cutoff: Optional[float] = None,
+    w_coords: Optional[Array] = None,  # per-particle 4-d coordinate
     rescale_mask=None,
 ):
     """See `nonbonded` docstring for more details
@@ -379,8 +378,8 @@ def nonbonded_interaction_groups(
     a_idxs,
     b_idxs,
     beta: float,
-    cutoff=None,
-    w_coords=None,  # per-particle 4-d coordinate
+    cutoff: Optional[float] = None,
+    w_coords: Optional[Array] = None,  # per-particle 4-d coordinate
 ):
     """Nonbonded interactions between all pairs of atoms $(i, j)$
     where $i$ is in the first set and $j$ in the second.
