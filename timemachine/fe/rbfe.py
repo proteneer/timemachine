@@ -12,7 +12,7 @@ import pymbar
 from timemachine.constants import BOLTZ, DEFAULT_TEMP
 from timemachine.fe import model_utils
 from timemachine.fe.bar import bar_with_bootstrapped_uncertainty
-from timemachine.fe.lambda_schedule import interpolate_pre_optimized_protocol
+from timemachine.fe.lambda_schedule import construct_pre_optimized_relative_lambda_schedule
 from timemachine.fe.single_topology import SingleTopology
 from timemachine.fe.system import convert_bps_into_system
 from timemachine.fe.utils import get_mol_name, get_romol_conf
@@ -160,6 +160,9 @@ def setup_initial_states(st, host_config, temperature, lambda_schedule, seed):
     lambda_schedule: list of float of length K
         Lambda schedule.
 
+    seed: int
+        Random number seed
+
     Returns
     -------
     list of InitialStates
@@ -187,7 +190,7 @@ def setup_initial_states(st, host_config, temperature, lambda_schedule, seed):
         mol_a_conf = get_romol_conf(st.mol_a)
         mol_b_conf = get_romol_conf(st.mol_b)
 
-        assert lamb >= 0.0 or lamb <= 1.0
+        assert lamb >= 0.0 and lamb <= 1.0
 
         if lamb < 0.5:
             ligand_conf = st.combine_confs_lhs(mol_a_conf, mol_b_conf)
@@ -244,7 +247,9 @@ def setup_initial_states(st, host_config, temperature, lambda_schedule, seed):
         state = InitialState(potentials, intg, baro, x0, v0, box0, lamb, ligand_idxs)
         initial_states.append(state)
 
-    optimize_coordinates(initial_states)
+    all_coords = optimize_coordinates(initial_states)
+    for state, coords in zip(initial_states, all_coords):
+        state.x0 = coords
 
     return initial_states
 
@@ -511,7 +516,17 @@ def _optimize_coords_along_states(initial_states):
 
 def optimize_coordinates(initial_states):
     """
-    Optimize geometries of the initial states. The initial states are modified in place.
+    Optimize geometries of the initial states.
+
+    Parameters
+    ----------
+    initial_states: list of InitialState
+
+    Returns
+    -------
+    list of np.array
+        Optimized coordinates
+
     """
     all_xs = []
     lambda_schedule = np.array([s.lamb for s in initial_states])
@@ -540,10 +555,14 @@ def optimize_coordinates(initial_states):
         for xs in rhs_xs:
             all_xs.append(xs)
 
+    all_coords = []
+
     for state, coords in zip(initial_states, all_xs):
         # sanity check that no atom has moved more than 7 angstroms away (arbitrary)
         assert np.amax(np.linalg.norm(state.x0 - coords, axis=1)) < 0.7
-        state.x0 = coords
+        all_coords.append(coords)
+
+    return all_coords
 
 
 def estimate_relative_free_energy(
@@ -617,12 +636,7 @@ def estimate_relative_free_energy(
     single_topology = SingleTopology(mol_a, mol_b, core, ff)
 
     if lambda_schedule is None:
-        lambda_schedule = np.array(
-            [0.0, 0.02, 0.04, 0.06, 0.07, 0.08, 0.11, 0.13, 0.15, 0.17, 0.18, 0.20, 0.25, 0.32, 0.42]
-        )
-        lambda_schedule = np.concatenate([lambda_schedule, (1 - lambda_schedule[::-1])])
-        if n_windows:
-            lambda_schedule = interpolate_pre_optimized_protocol(lambda_schedule, n_windows)
+        lambda_schedule = construct_pre_optimized_relative_lambda_schedule(n_windows)
     else:
         assert n_windows is None
         warnings.warn("Warning: setting lambda_schedule manually, this argument may be removed in a future release.")
