@@ -1,11 +1,10 @@
 import functools
+from typing import Any
 
 import jax.numpy as jnp
 import numpy as np
 from jax import vmap
 from jax.scipy.special import erfc
-from numpy.typing import NDArray
-from typing_extensions import TypeAlias
 
 from timemachine.potentials import jax_utils
 from timemachine.potentials.jax_utils import (
@@ -16,7 +15,7 @@ from timemachine.potentials.jax_utils import (
     pairwise_distances,
 )
 
-Array: TypeAlias = NDArray
+Array = Any
 
 
 def switch_fn(dij, cutoff):
