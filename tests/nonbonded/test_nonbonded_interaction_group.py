@@ -113,8 +113,8 @@ def test_nonbonded_interaction_group_consistency_allpairs_4d_decoupled(
       pairwise interactions (a, b) where "a" is in A and "b" is in B
 
     * U is computed using the reference potential over all atoms
-    * U_A + U_B is computed using the reference potential over all atoms
-      separated into 2 noninteracting groups in the w coordinate
+    * U_A + U_B is computed using the reference potential over all atoms,
+      separated into 2 noninteracting groups in the 4th dimension
     """
 
     conf = example_conf[:num_atoms]
@@ -177,8 +177,8 @@ def test_nonbonded_interaction_group_consistency_allpairs_constant_shift(
     example_box,
     rng: np.random.Generator,
 ):
-    """Compares with reference nonbonded potential, which computes
-    the sum of all pairwise interactions. This uses the identity
+    """Compares with reference nonbonded potential, which computes the sum of
+    all pairwise interactions. This uses the identity
 
       U(x') - U(x) = U_AB(x') - U_AB(x)
 
