@@ -101,7 +101,7 @@ def setup_absolute_hydration_with_endpoint_samples(
 
     # set up potentials
     ff = ff or Forcefield.load_from_file(DEFAULT_FF)
-    potentials, params, masses, _, _ = enhanced.get_solvent_phase_system(mol, ff, 0.0)
+    potentials, params, masses, _, _ = enhanced.get_solvent_phase_system(mol, ff)
 
     U_fn = functional.construct_differentiable_interface_fast(potentials, params)
     kBT = BOLTZ * temperature
@@ -116,7 +116,7 @@ def setup_absolute_hydration_with_endpoint_samples(
 
     # combine solvent and ligand samples
     solvent_xvbs, ligand_samples, ligand_log_weights = enhanced.pregenerate_samples(
-        mol, ff, 1.0, seed, temperature=temperature, pressure=pressure, num_workers=num_workers
+        mol, ff, seed, temperature=temperature, pressure=pressure, num_workers=num_workers
     )
     n_endstate_samples = 5000  # TODO: expose this parameter?
     num_ligand_atoms = mol.GetNumAtoms()
