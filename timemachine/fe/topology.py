@@ -245,12 +245,12 @@ class BaseTopology:
         eps_ij = combining_rule_epsilon(eps_params[l_idxs], eps_params[r_idxs])
 
         params = []
-        for q, s, e, (sf_q, sf_lj) in zip(q_ij, sig_ij, eps_ij, rescale_mask):
+        for q, sig, eps, (sf_q, sf_lj) in zip(q_ij, sig_ij, eps_ij, rescale_mask):
             params.append(
                 (
                     q * sf_q,
-                    s,
-                    e * sf_lj,
+                    sig,
+                    eps * sf_lj,
                     0.0,  # w offset
                 )
             )
