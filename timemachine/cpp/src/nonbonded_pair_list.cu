@@ -1,5 +1,4 @@
 #include "gpu_utils.cuh"
-#include "k_lambda_transformer.cuh"
 #include "k_nonbonded_pair_list.cuh"
 #include "math_utils.cuh"
 #include "nonbonded_pair_list.hpp"
