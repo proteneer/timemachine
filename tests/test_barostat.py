@@ -24,7 +24,7 @@ def test_barostat_zero_interval():
     mol_a, _, _ = get_hif2a_ligand_pair_single_topology()
     ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
 
-    unbound_potentials, sys_params, _, coords, _ = get_solvent_phase_system(mol_a, ff, 0.0)
+    unbound_potentials, sys_params, _, coords, _ = get_solvent_phase_system(mol_a, ff, lamb=0.0)
 
     # get list of molecules for barostat by looking at bond table
     harmonic_bond_potential = unbound_potentials[0]
@@ -69,6 +69,7 @@ def test_barostat_zero_interval():
 def test_barostat_partial_group_idxs():
     """Verify that the barostat can handle a subset of the molecules
     rather than all of them. This test only verify that it runs, not the behavior"""
+    lam = 1.0
     temperature = 300.0 * unit.kelvin
     timestep = 1.5 * unit.femtosecond
     barostat_interval = 3
@@ -79,7 +80,7 @@ def test_barostat_partial_group_idxs():
     pressure = 1.0 * unit.atmosphere
     mol_a, _, _ = get_hif2a_ligand_pair_single_topology()
     ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
-    unbound_potentials, sys_params, masses, coords, complex_box = get_solvent_phase_system(mol_a, ff, 0.0)
+    unbound_potentials, sys_params, masses, coords, complex_box = get_solvent_phase_system(mol_a, ff, lam)
 
     # get list of molecules for barostat by looking at bond table
     harmonic_bond_potential = unbound_potentials[0]
@@ -88,7 +89,6 @@ def test_barostat_partial_group_idxs():
 
     # Cut the number of groups in half
     group_indices = group_indices[len(group_indices) // 2 :]
-    lam = 1.0
 
     bound_potentials = []
     for params, unbound_pot in zip(sys_params, unbound_potentials):
@@ -194,6 +194,7 @@ def test_barostat_is_deterministic():
 
 
 def test_barostat_varying_pressure():
+    lam = 1.0
     temperature = 300.0 * unit.kelvin
     timestep = 1.5 * unit.femtosecond
     barostat_interval = 3
@@ -205,14 +206,12 @@ def test_barostat_varying_pressure():
     pressure = 1000.0 * unit.atmosphere
     mol_a, _, _ = get_hif2a_ligand_pair_single_topology()
     ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
-    unbound_potentials, sys_params, masses, coords, complex_box = get_solvent_phase_system(mol_a, ff, 0.0, margin=0.0)
+    unbound_potentials, sys_params, masses, coords, complex_box = get_solvent_phase_system(mol_a, ff, lam, margin=0.0)
 
     # get list of molecules for barostat by looking at bond table
     harmonic_bond_potential = unbound_potentials[0]
     bond_list = get_bond_list(harmonic_bond_potential)
     group_indices = get_group_indices(bond_list)
-
-    lam = 1.0
 
     u_impls = []
     for params, unbound_pot in zip(sys_params, unbound_potentials):
@@ -284,7 +283,9 @@ def test_molecular_ideal_gas():
     # effectively discard ligands by running in AbsoluteFreeEnergy mode at lambda = 1.0
     mol_a, _, _ = get_hif2a_ligand_pair_single_topology()
     ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
-    _unbound_potentials, _sys_params, masses, coords, complex_box = get_solvent_phase_system(mol_a, ff, 0.0, margin=0.0)
+    _unbound_potentials, _sys_params, masses, coords, complex_box = get_solvent_phase_system(
+        mol_a, ff, lamb=1.0, margin=0.0
+    )
 
     # drop the nonbonded potential
     unbound_potentials = _unbound_potentials[:-1]
