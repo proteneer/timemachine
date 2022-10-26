@@ -785,6 +785,28 @@ class AtomMapMixin:
         self.c_to_a = {v: k for k, v in enumerate(self.a_to_c)}
         self.c_to_b = {v: k for k, v in enumerate(self.b_to_c)}
 
+    def get_num_atoms(self):
+        """
+        Get the total number of atoms in the alchemical hybrid.
+
+        Returns
+        -------
+        int
+            Total number of atoms.
+        """
+        return self.mol_a.GetNumAtoms() + self.mol_b.GetNumAtoms() - len(self.core)
+
+    def get_num_dummy_atoms(self):
+        """
+        Get the total number of dummy atoms in the alchemical hybrid.
+
+        Returns
+        -------
+        int
+            Total number of atoms.
+        """
+        return self.mol_a.GetNumAtoms() + self.mol_b.GetNumAtoms() - len(self.core) - len(self.core)
+
 
 class SingleTopology(AtomMapMixin):
     def __init__(self, mol_a, mol_b, core, forcefield, lambda_angles=0.4, lambda_torsions=0.7):
@@ -853,28 +875,6 @@ class SingleTopology(AtomMapMixin):
         self.default_interpolate_chiral_atom_params_fxn = interpolate.linear_interpolation
         self.default_interpolate_chiral_bond_params_fxn = interpolate.linear_interpolation
 
-    def get_num_atoms(self):
-        """
-        Get the total number of atoms in the alchemical hybrid.
-
-        Returns
-        -------
-        int
-            Total number of atoms.
-        """
-        return self.mol_a.GetNumAtoms() + self.mol_b.GetNumAtoms() - len(self.core)
-
-    def get_num_dummy_atoms(self):
-        """
-        Get the total number of dummy atoms in the alchemical hybrid.
-
-        Returns
-        -------
-        int
-            Total number of atoms.
-        """
-        return self.mol_a.GetNumAtoms() + self.mol_b.GetNumAtoms() - len(self.core) - len(self.core)
-
     def combine_masses(self):
         """
         Combine masses between two end-states by taking the heavier of the two core atoms.
@@ -925,7 +925,14 @@ class SingleTopology(AtomMapMixin):
             Combined conformation
 
         """
-        # tbd: allow input to take lambda schedule and return an array for each value of lambda
+        warnings.warn("combine confs is deprecated for SingleTopology", DeprecationWarning)
+        return self.combine_confs_rhs(x_a, x_b)
+
+    def combine_confs_rhs(self, x_a, x_b):
+        """
+        Combine x_a and x_b conformations for lambda=1
+        """
+        # place a first, then b overrides a
         assert x_a.shape == (self.mol_a.GetNumAtoms(), 3)
         assert x_b.shape == (self.mol_b.GetNumAtoms(), 3)
         x0 = np.zeros((self.get_num_atoms(), 3))
@@ -933,6 +940,22 @@ class SingleTopology(AtomMapMixin):
             x0[dst] = x_a[src]
         for src, dst in enumerate(self.b_to_c):
             x0[dst] = x_b[src]
+
+        return x0
+
+    def combine_confs_lhs(self, x_a, x_b):
+        """
+        Combine x_a and x_b conformations for lambda=0
+        """
+        # place b first, then a overrides b
+        assert x_a.shape == (self.mol_a.GetNumAtoms(), 3)
+        assert x_b.shape == (self.mol_b.GetNumAtoms(), 3)
+        x0 = np.zeros((self.get_num_atoms(), 3))
+        for src, dst in enumerate(self.b_to_c):
+            x0[dst] = x_b[src]
+        for src, dst in enumerate(self.a_to_c):
+            x0[dst] = x_a[src]
+
         return x0
 
     def _setup_end_state_src(self):
