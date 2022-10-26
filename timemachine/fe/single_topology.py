@@ -933,6 +933,8 @@ class SingleTopology(AtomMapMixin):
         Combine x_a and x_b conformations for lambda=1
         """
         # place a first, then b overrides a
+        assert x_a.shape == (self.mol_a.GetNumAtoms(), 3)
+        assert x_b.shape == (self.mol_b.GetNumAtoms(), 3)
         x0 = np.zeros((self.get_num_atoms(), 3))
         for src, dst in enumerate(self.a_to_c):
             x0[dst] = x_a[src]
