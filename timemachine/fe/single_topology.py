@@ -1206,18 +1206,14 @@ class SingleTopology(AtomMapMixin):
                 q = guest_a_q[a_idx]
                 sig = guest_a_lj[a_idx, 0]
                 eps = guest_a_lj[a_idx, 1]
-
-                # w: 0 -> cutoff
-                w_coords = lamb * cutoff
+                w_coords = interpolate.linear_interpolation(0.0, cutoff, lamb)
 
             elif membership == 2:  # dummy_B
                 b_idx = self.c_to_b[idx]
                 q = guest_b_q[b_idx]
                 sig = guest_b_lj[b_idx, 0]
                 eps = guest_b_lj[b_idx, 1]
-
-                # w: -cutoff -> 0
-                w_coords = (lamb - 1.0) * cutoff
+                w_coords = interpolate.linear_interpolation(-cutoff, 0.0, lamb)
 
             else:
                 assert 0
