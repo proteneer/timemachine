@@ -438,6 +438,8 @@ def get_solvent_phase_system(mol, ff, lamb: float, box_width=3.0, margin=0.5, mi
 
     ff: Forcefield
 
+    lamb: float
+
     box_width: float
         water box initial width in nm
 
