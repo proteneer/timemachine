@@ -17,7 +17,7 @@ from rdkit import Chem
 from timemachine.constants import ONE_4PI_EPS0
 from timemachine.ff import Forcefield
 from timemachine.lib import potentials
-from timemachine.potentials import bonded, generic, nonbonded
+from timemachine.potentials import bonded, generic
 
 
 @contextlib.contextmanager
