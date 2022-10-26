@@ -170,7 +170,7 @@ def generate_random_inputs(n_atoms, dim, instance_flags=difficult_instance_flags
     if instance_flags["randomize_epsilon"]:
         eps = rand(n_atoms)
     if instance_flags["randomize_w_coords"]:
-        w_coords = 2 * cutoff * rand(n_atoms)
+        w_coords = 2 * cutoff * (2 * rand(n_atoms) - 1)  # [-2 * cutoff, 2 * cutoff]
 
     params = jnp.array([charges, sig, eps, w_coords]).T
 
