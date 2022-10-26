@@ -632,7 +632,7 @@ def estimate_relative_free_energy(
     protocol = SimulationProtocol(n_frames=n_frames, n_eq_steps=n_eq_steps, steps_per_frame=steps_per_frame)
 
     if keep_idxs is None:
-        keep_idxs = [0, -1]  # keep first and last frames
+        keep_idxs = [0, len(initial_states) - 1]  # keep first and last frames
     assert len(keep_idxs) <= len(lambda_schedule)
     combined_prefix = get_mol_name(mol_a) + "_" + get_mol_name(mol_b) + "_" + prefix
     try:
@@ -709,3 +709,4 @@ def run_complex(
         steps_per_frame=steps_per_frame,
     )
     return complex_res, complex_top
+
