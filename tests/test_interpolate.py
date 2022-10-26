@@ -5,7 +5,7 @@ import pytest
 from rdkit import Chem
 
 from timemachine.fe import atom_mapping, interpolate, single_topology
-from timemachine.fe.utils import get_romol_conf
+from timemachine.fe.utils import get_romol_conf, read_sdf
 from timemachine.ff import Forcefield
 
 
@@ -202,8 +202,7 @@ def test_intermediate_states(num_pairs_to_setup=10):
     """
 
     with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
-        suppl = Chem.SDMolSupplier(str(path_to_ligand), removeHs=False)
-        mols = [m for m in suppl]
+        mols = read_sdf(path_to_ligand)
 
     pairs = [(mol_a, mol_b) for mol_a in mols for mol_b in mols]
     np.random.seed(2023)

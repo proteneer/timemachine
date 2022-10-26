@@ -3,7 +3,7 @@
 import pytest
 from rdkit import Chem
 
-from timemachine.fe import geometry
+from timemachine.fe import geometry, utils
 from timemachine.fe.geometry import LocalGeometry as LG
 
 pytestmark = [pytest.mark.nogpu]
@@ -135,8 +135,8 @@ def test_assign_truncated_sildenafil():
 
 def test_hif2a_set():
     # test that we can successfully assign all of the hif2a set without assertions
-    suppl = Chem.SDMolSupplier("timemachine/testsystems/data/ligands_40.sdf", removeHs=False)
-    for mol in suppl:
+    mols = utils.read_sdf("timemachine/testsystems/data/ligands_40.sdf")
+    for mol in mols:
         geometry.classify_geometry(mol)
 
 
