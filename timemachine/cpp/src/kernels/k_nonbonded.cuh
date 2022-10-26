@@ -511,14 +511,12 @@ void __global__ k_nonbonded_unified(
     int row_block_idx = ixn_tiles[tile_idx];
     int index = row_block_idx * 32 + threadIdx.x;
     const unsigned int atom_i_idx = index < NR ? row_idxs[index] : N;
-
-    RealType cw_i = atom_i_idx < N ? params[atom_i_idx * PARAMS_PER_ATOM + PARAM_OFFSET_W] : 0;
-
     int atom_j_idx = ixn_atoms[tile_idx * 32 + threadIdx.x];
 
-    RealType cw_j = atom_j_idx < N ? params[atom_j_idx * PARAMS_PER_ATOM + PARAM_OFFSET_W] : 0;
+    RealType w_i = atom_i_idx < N ? params[atom_i_idx * PARAMS_PER_ATOM + PARAM_OFFSET_W] : 0;
+    RealType w_j = atom_j_idx < N ? params[atom_j_idx * PARAMS_PER_ATOM + PARAM_OFFSET_W] : 0;
 
-    int is_vanilla = cw_i == 0 && cw_j == 0;
+    int is_vanilla = w_i == 0 && w_j == 0;
 
     bool tile_is_vanilla = __all_sync(0xffffffff, is_vanilla);
 

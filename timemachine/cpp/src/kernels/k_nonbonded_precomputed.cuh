@@ -27,6 +27,7 @@ void __global__ k_nonbonded_precomputed(
     RealType q_ij = params[pair_idx * PARAMS_PER_PAIR + PARAM_OFFSET_CHARGE];
     RealType sig_ij = params[pair_idx * PARAMS_PER_PAIR + PARAM_OFFSET_SIG];
     RealType eps_ij = params[pair_idx * PARAMS_PER_PAIR + PARAM_OFFSET_EPS];
+    RealType delta_w = params[pair_idx * PARAMS_PER_PAIR + PARAM_OFFSET_W];
 
     unsigned long long g_q_ij = 0;
     unsigned long long g_sig_ij = 0;
@@ -74,8 +75,6 @@ void __global__ k_nonbonded_precomputed(
     delta_z -= box_z * nearbyint(delta_z * inv_box_z);
 
     unsigned long long energy = 0;
-
-    RealType delta_w = params[pair_idx * PARAMS_PER_PAIR + PARAM_OFFSET_W];
 
     RealType d_ij = sqrt(delta_x * delta_x + delta_y * delta_y + delta_z * delta_z + delta_w * delta_w);
 
