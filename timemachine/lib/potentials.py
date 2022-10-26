@@ -287,7 +287,7 @@ class NonbondedPairList(CustomOpWrapper):
 class NonbondedPairListPrecomputed(CustomOpWrapper):
     """
     This implements a pairlist with precomputed parameters. It differs from the regular NonbondedPairlist in that it
-    expects params of the form s0*q_ij, s_ij, s1*e_ij, and w_offsets, where s are the scaling factors and combining
+    expects params of the form s0*q_ij, s_ij, s1*e_ij, and w_offsets_ij, where s are the scaling factors and combining
     rules have already been applied.
 
     Note that you should not use this class to implement exclusions (that are later cancelled out by AllPairs)
