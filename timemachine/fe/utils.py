@@ -123,9 +123,25 @@ def plot_atom_mapping(mol_a, mol_b, core, seed=2022):
     draw_mol(mol_b, core[:, 1].tolist(), atom_colors_b)
 
 
+def recenter_mol(mol):
+    mol_copy = Chem.Mol(mol)
+    conf = mol.GetConformer(0).GetPositions()
+    center_conf = conf - np.mean(conf, axis=0)
+    new_conf = Chem.Conformer(mol.GetNumAtoms())
+    for idx, pos in enumerate(np.asarray(center_conf)):
+        new_conf.SetAtomPosition(idx, (float(pos[0]), float(pos[1]), float(pos[2])))
+    mol_copy.RemoveAllConformers()
+    mol_copy.AddConformer(new_conf)
+    return mol_copy
+
+
 def plot_atom_mapping_grid(mol_a, mol_b, core_smarts, core, show_idxs=False):
-    mol_a_2d = Chem.Mol(mol_a)
-    mol_b_2d = Chem.Mol(mol_b)
+
+    mol_a_3d = recenter_mol(mol_a)
+    mol_b_3d = recenter_mol(mol_b)
+
+    mol_a_2d = Chem.Mol(mol_a_3d)
+    mol_b_2d = Chem.Mol(mol_b_3d)
     mol_q_2d = Chem.MolFromSmarts(core_smarts)
 
     AllChem.Compute2DCoords(mol_q_2d)
@@ -149,16 +165,32 @@ def plot_atom_mapping_grid(mol_a, mol_b, core_smarts, core, show_idxs=False):
             atom.SetProp("molAtomMapNumber", str(atom.GetIdx()))
         for atom in mol_b_2d.GetAtoms():
             atom.SetProp("molAtomMapNumber", str(atom.GetIdx()))
+        for atom in mol_a_3d.GetAtoms():
+            atom.SetProp("molAtomMapNumber", str(atom.GetIdx()))
+        for atom in mol_b_3d.GetAtoms():
+            atom.SetProp("molAtomMapNumber", str(atom.GetIdx()))
         for atom in mol_q_2d.GetAtoms():
             atom.SetProp("molAtomMapNumber", str(atom.GetIdx()))
 
     return Draw.MolsToGridImage(
-        [mol_q_2d, mol_a_2d, mol_b_2d],
-        molsPerRow=3,
-        highlightAtomLists=[list(range(mol_q_2d.GetNumAtoms())), core[:, 0].tolist(), core[:, 1].tolist()],
-        highlightAtomColors=[atom_colors_q, atom_colors_a, atom_colors_b],
-        subImgSize=(300, 300),
-        legends=["core", get_mol_name(mol_a), get_mol_name(mol_b)],
+        [mol_q_2d, mol_a_2d, mol_b_2d, mol_a_3d, mol_b_3d],
+        molsPerRow=5,
+        highlightAtomLists=[
+            list(range(mol_q_2d.GetNumAtoms())),
+            core[:, 0].tolist(),
+            core[:, 1].tolist(),
+            core[:, 0].tolist(),
+            core[:, 1].tolist(),
+        ],
+        highlightAtomColors=[atom_colors_q, atom_colors_a, atom_colors_b, atom_colors_a, atom_colors_b],
+        subImgSize=(600, 400),
+        legends=[
+            "core",
+            get_mol_name(mol_a) + " (2D)",
+            get_mol_name(mol_b) + " (2D)",
+            get_mol_name(mol_a) + " (3D)",
+            get_mol_name(mol_b) + " (3D)",
+        ],
         useSVG=True,
     )
 
