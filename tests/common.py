@@ -139,20 +139,9 @@ def prepare_nb_system(
 
     beta = 2.0
 
-    test_potential = potentials.Nonbonded(N, exclusion_idxs, scales, beta, cutoff)
+    potential = generic.Nonbonded(N, exclusion_idxs, scales, beta, cutoff)
 
-    charge_rescale_mask, lj_rescale_mask = nonbonded.convert_exclusions_to_rescale_masks(exclusion_idxs, scales, N)
-
-    ref_total_energy = functools.partial(
-        nonbonded.nonbonded,
-        charge_rescale_mask=charge_rescale_mask,
-        lj_rescale_mask=lj_rescale_mask,
-        beta=beta,
-        cutoff=cutoff,
-        runtime_validate=False,
-    )
-
-    return params, ref_total_energy, test_potential
+    return params, potential
 
 
 def prepare_bonded_system(x, B, A, T, precision):

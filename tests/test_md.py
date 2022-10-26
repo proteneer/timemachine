@@ -22,7 +22,8 @@ class TestContext(unittest.TestCase):
 
         E = 2
 
-        params, _, test_nrg = prepare_nb_system(x0, E, p_scale=3.0, cutoff=1.0)
+        params, potential = prepare_nb_system(x0, E, p_scale=3.0, cutoff=1.0)
+        test_nrg = potential.to_gpu()
 
         masses = np.random.rand(N)
         v0 = np.random.rand(x0.shape[0], x0.shape[1])
@@ -77,7 +78,8 @@ class TestContext(unittest.TestCase):
 
         E = 2
 
-        params, _, test_nrg = prepare_nb_system(x0, E, p_scale=3.0, cutoff=1.0)
+        params, potential = prepare_nb_system(x0, E, p_scale=3.0, cutoff=1.0)
+        test_nrg = potential.to_gpu()
 
         masses = np.random.rand(N)
         v0 = np.random.rand(x0.shape[0], x0.shape[1])
@@ -142,7 +144,8 @@ class TestContext(unittest.TestCase):
 
         E = 2
 
-        params, _, test_nrg = prepare_nb_system(x0, E, p_scale=3.0, cutoff=1.0)
+        params, potential = prepare_nb_system(x0, E, p_scale=3.0, cutoff=1.0)
+        test_nrg = potential.to_gpu()
 
         masses = np.random.rand(N)
         v0 = np.random.rand(x0.shape[0], x0.shape[1])
@@ -184,13 +187,15 @@ class TestContext(unittest.TestCase):
 
         E = 2
 
-        params, ref_nrg_fn, test_nrg = prepare_nb_system(
+        params, potential = prepare_nb_system(
             x0,
             E,
             p_scale=3.0,
             # cutoff=0.5,
             cutoff=1.0,
         )
+        ref_nrg_fn = potential.to_reference()
+        test_nrg = potential.to_gpu()
 
         masses = np.random.rand(N)
 
