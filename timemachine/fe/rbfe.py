@@ -148,6 +148,9 @@ def setup_initial_states(st, host_config, temperature, lambda_schedule, seed):
 
     Parameters
     ----------
+    st: SingleTopology
+        A single topology object
+
     host_config: HostConfig or None
         Configurations of the host. If None, then a vacuum state will be setup.
 
@@ -533,7 +536,7 @@ def optimize_coordinates(initial_states):
 
     # go from lambda 1 -> 0.5 and reverse the coordinate trajectory and lambda schedule
     if len(rhs_initial_states) > 0:
-        rhs_xs = _optimize_coords_along_states(rhs_initial_states)[::-1][::-1]
+        rhs_xs = _optimize_coords_along_states(rhs_initial_states[::-1])[::-1]
         for xs in rhs_xs:
             all_xs.append(xs)
 
