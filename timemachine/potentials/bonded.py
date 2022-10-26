@@ -1,17 +1,17 @@
 import jax.numpy as jnp
-import numpy as np
 
 from timemachine.potentials.jax_utils import delta_r
 
 
-def centroid_restraint(conf, params, box, lamb, group_a_idxs, group_b_idxs, kb, b0):
+def centroid_restraint(conf, params, box, group_a_idxs, group_b_idxs, kb, b0):
     """Computes kb  * (r - b0)**2 where r is the distance between the centroids of group_a and group_b
 
     Notes
     -----
     * Geometric centroid, not mass-weighted centroid
     * Gradient undefined when `(r - b0) == 0` and `b0 != 0` (explicitly stabilized in case `b0 == 0`)
-    * params, box, lamb unused
+    * params, box unused
+    * `kb` not `kb/2`
     """
     xi = conf[group_a_idxs]
     xj = conf[group_b_idxs]
@@ -29,8 +29,7 @@ def centroid_restraint(conf, params, box, lamb, group_a_idxs, group_b_idxs, kb, 
     return jnp.where(b0 == 0, kb * d2ij, kb * delta ** 2)
 
 
-# lamb is *not used* it is used in the alchemical stuff after
-def harmonic_bond(conf, params, box, lamb, bond_idxs, lamb_mult=None, lamb_offset=None):
+def harmonic_bond(conf, params, box, bond_idxs):
     r"""
     Compute the harmonic bond energy given a collection of molecules.
 
@@ -43,40 +42,23 @@ def harmonic_bond(conf, params, box, lamb, bond_idxs, lamb_mult=None, lamb_offse
         atomic coordinates
 
     params: shape [num_bonds, 2] np.ndarray
-        parameters
+        force constants, eq lengths
+        (kbs, r0s = params.T)
 
     box: shape [3, 3] np.ndarray
         periodic boundary vectors, if not None
-
-    lamb: float
-        alchemical lambda parameter, linearly rescaled
-
-    lamb_mult: None, or broadcastable to bond_idxs.shape[0]
-        prefactor = (lamb_offset + lamb_mult * lamb)
-
-    lamb_offset: None, or broadcastable to bond_idxs.shape[0]
-        prefactor = (lamb_offset + lamb_mult * lamb)
 
     bond_idxs: [num_bonds, 2] np.ndarray
         each element (src, dst) is a unique bond in the conformation
 
     Notes
     -----
-    * box argument is unused
+    * box argument unused
     """
     assert params.shape == bond_idxs.shape
 
     if bond_idxs.shape[0] == 0:
         return 0.0
-
-    if lamb_mult is None or lamb_offset is None or lamb is None:
-        assert lamb_mult is None
-        assert lamb_offset is None
-        prefactor = 1.0
-    else:
-        assert lamb_mult is not None
-        assert lamb_offset is not None
-        prefactor = lamb_offset + lamb_mult * lamb
 
     ci = conf[bond_idxs[:, 0]]
     cj = conf[bond_idxs[:, 1]]
@@ -90,12 +72,12 @@ def harmonic_bond(conf, params, box, lamb, bond_idxs, lamb_mult=None, lamb_offse
 
     # this is here to prevent a numerical instability
     # when b0 == 0 and dij == 0
-    energy = jnp.where(r0s == 0, prefactor * kbs / 2 * d2ij, prefactor * kbs / 2 * jnp.power(dij - r0s, 2.0))
+    energy = jnp.where(r0s == 0, kbs / 2 * d2ij, kbs / 2 * jnp.power(dij - r0s, 2.0))
 
     return jnp.sum(energy)
 
 
-def harmonic_angle(conf, params, box, lamb, angle_idxs, lamb_mult=None, lamb_offset=None, cos_angles=True):
+def harmonic_angle(conf, params, box, angle_idxs, cos_angles=True):
     """
     Compute the harmonic angle energy given a collection of molecules.
 
@@ -113,23 +95,15 @@ def harmonic_angle(conf, params, box, lamb, angle_idxs, lamb_mult=None, lamb_off
         atomic coordinates
 
     params: shape [num_angles, 2] np.ndarray
-        parameters
+        force constants, eq angles
+        (kas, a0s = params.T)
 
     box: shape [3, 3] np.ndarray
         periodic boundary vectors, if not None
 
-    lamb: float
-        alchemical lambda parameter, linearly rescaled
-
     angle_idxs: shape [num_angles, 3] np.ndarray
         each element (a, b, c) is a unique angle in the conformation. atom b is defined
         to be the middle atom.
-
-    lamb_mult: None, or broadcastable to angle_idxs.shape[0]
-        prefactor = (lamb_offset + lamb_mult * lamb)
-
-    lamb_offset: None, or broadcastable to angle_idxs.shape[0]
-        prefactor = (lamb_offset + lamb_mult * lamb)
 
     cos_angles: True (default)
         if True, then this instead implements V(t) = k*(cos(t)-cos(t0))^2. This is far more
@@ -141,15 +115,6 @@ def harmonic_angle(conf, params, box, lamb, angle_idxs, lamb_mult=None, lamb_off
     """
     if angle_idxs.shape[0] == 0:
         return 0.0
-
-    if lamb_mult is None or lamb_offset is None or lamb is None:
-        assert lamb_mult is None
-        assert lamb_offset is None
-        prefactor = 1.0
-    else:
-        assert lamb_mult is not None
-        assert lamb_offset is not None
-        prefactor = lamb_offset + lamb_mult * lamb
 
     ci = conf[angle_idxs[:, 0]]
     cj = conf[angle_idxs[:, 1]]
@@ -168,10 +133,10 @@ def harmonic_angle(conf, params, box, lamb, angle_idxs, lamb_mult=None, lamb_off
 
     # (ytz): we use the squared version so that the energy is strictly positive
     if cos_angles:
-        energies = prefactor * kas / 2 * jnp.power(tb - jnp.cos(a0s), 2)
+        energies = kas / 2 * jnp.power(tb - jnp.cos(a0s), 2)
     else:
         angle = jnp.arccos(tb)
-        energies = prefactor * kas / 2 * jnp.power(angle - a0s, 2)
+        energies = kas / 2 * jnp.power(angle - a0s, 2)
 
     return jnp.sum(energies, -1)  # reduce over all angles
 
@@ -212,7 +177,7 @@ def signed_torsion_angle(ci, cj, ck, cl):
     return jnp.arctan2(y, x)
 
 
-def periodic_torsion(conf, params, box, lamb, torsion_idxs, lamb_mult=None, lamb_offset=None):
+def periodic_torsion(conf, params, box, torsion_idxs):
     """
     Compute the periodic torsional energy.
 
@@ -227,17 +192,8 @@ def periodic_torsion(conf, params, box, lamb, torsion_idxs, lamb_mult=None, lamb
     box: shape [3, 3] np.ndarray
         periodic boundary vectors, if not None
 
-    lamb: float
-        alchemical lambda parameter, linearly rescaled
-
     torsion_idxs: shape [num_torsions, 4] np.ndarray
         indices denoting the four atoms that define a torsion
-
-    lamb_mult: None, or broadcastable to torsion_idxs.shape[0]
-        prefactor = (lamb_offset + lamb_mult * lamb)
-
-    lamb_offset: None, or broadcastable to torsion_idxs.shape[0]
-        prefactor = (lamb_offset + lamb_mult * lamb)
 
     Notes
     -----
@@ -246,11 +202,6 @@ def periodic_torsion(conf, params, box, lamb, torsion_idxs, lamb_mult=None, lamb
     """
     if torsion_idxs.shape[0] == 0:
         return 0.0
-
-    if lamb_mult is None:
-        lamb_mult = np.zeros(torsion_idxs.shape[0])
-    if lamb_offset is None:
-        lamb_offset = np.ones(torsion_idxs.shape[0])
 
     conf = conf[:, :3]  # this is defined only in 3d
 
@@ -264,10 +215,8 @@ def periodic_torsion(conf, params, box, lamb, torsion_idxs, lamb_mult=None, lamb
     period = params[:, 2]
     angle = signed_torsion_angle(ci, cj, ck, cl)
 
-    prefactor = lamb_offset + lamb_mult * lamb
-
     nrg = ks * (1 + jnp.cos(period * angle - phase))
-    return jnp.sum(prefactor * nrg, axis=-1)
+    return jnp.sum(nrg, axis=-1)
 
 
 def flat_bottom_bond(conf, params, box, bond_idxs):

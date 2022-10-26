@@ -97,35 +97,20 @@ class HostGuestTopology:
 
         guest_idxs = guest_potential.get_idxs() + self.num_host_atoms
 
-        guest_lambda_mult = guest_potential.get_lambda_mult()
-        guest_lambda_offset = guest_potential.get_lambda_offset()
-
-        if guest_lambda_mult is None:
-            guest_lambda_mult = np.zeros(len(guest_params))
-        if guest_lambda_offset is None:
-            guest_lambda_offset = np.ones(len(guest_params))
-
         if host_potential is not None:
             # the host is always on.
             host_params = host_potential.params
             host_idxs = host_potential.get_idxs()
-            host_lambda_mult = np.zeros(len(host_idxs), dtype=np.int32)
-            host_lambda_offset = np.ones(len(host_idxs), dtype=np.int32)
         else:
             # (ytz): this extra jank is to work around jnp.concatenate not supporting empty lists.
             host_params = np.array([], dtype=guest_params.dtype).reshape((-1, guest_params.shape[1]))
             host_idxs = np.array([], dtype=guest_idxs.dtype).reshape((-1, guest_idxs.shape[1]))
-            host_lambda_mult = []
-            host_lambda_offset = []
 
         combined_params = jnp.concatenate([host_params, guest_params])
         combined_idxs = np.concatenate([host_idxs, guest_idxs])
-        combined_lambda_mult = np.concatenate([host_lambda_mult, guest_lambda_mult]).astype(np.int32)
-        combined_lambda_offset = np.concatenate([host_lambda_offset, guest_lambda_offset]).astype(np.int32)
-
         ctor = type(guest_potential)
 
-        return combined_params, ctor(combined_idxs, combined_lambda_mult, combined_lambda_offset)
+        return combined_params, ctor(combined_idxs)
 
     def parameterize_harmonic_bond(self, ff_params):
         guest_params, guest_potential = self.guest_topology.parameterize_harmonic_bond(ff_params)
@@ -303,27 +288,7 @@ class BaseTopology:
         improper_params, improper_potential = self.parameterize_improper_torsion(improper_params)
         combined_params = jnp.concatenate([proper_params, improper_params])
         combined_idxs = np.concatenate([proper_potential.get_idxs(), improper_potential.get_idxs()])
-
-        proper_lambda_mult = proper_potential.get_lambda_mult()
-        proper_lambda_offset = proper_potential.get_lambda_offset()
-
-        if proper_lambda_mult is None:
-            proper_lambda_mult = np.zeros(len(proper_params))
-        if proper_lambda_offset is None:
-            proper_lambda_offset = np.ones(len(proper_params))
-
-        improper_lambda_mult = improper_potential.get_lambda_mult()
-        improper_lambda_offset = improper_potential.get_lambda_offset()
-
-        if improper_lambda_mult is None:
-            improper_lambda_mult = np.zeros(len(improper_params))
-        if improper_lambda_offset is None:
-            improper_lambda_offset = np.ones(len(improper_params))
-
-        combined_lambda_mult = np.concatenate([proper_lambda_mult, improper_lambda_mult]).astype(np.int32)
-        combined_lambda_offset = np.concatenate([proper_lambda_offset, improper_lambda_offset]).astype(np.int32)
-
-        combined_potential = potentials.PeriodicTorsion(combined_idxs, combined_lambda_mult, combined_lambda_offset)
+        combined_potential = potentials.PeriodicTorsion(combined_idxs)
         return combined_params, combined_potential
 
     # def setup_chiral_restraints(self, restraint_k=1000.0):
@@ -561,26 +526,7 @@ class DualTopology(BaseTopology):
         combined_params = jnp.concatenate([proper_params, improper_params])
         combined_idxs = np.concatenate([proper_potential.get_idxs(), improper_potential.get_idxs()])
 
-        proper_lambda_mult = proper_potential.get_lambda_mult()
-        proper_lambda_offset = proper_potential.get_lambda_offset()
-
-        if proper_lambda_mult is None:
-            proper_lambda_mult = np.zeros(len(proper_params))
-        if proper_lambda_offset is None:
-            proper_lambda_offset = np.ones(len(proper_params))
-
-        improper_lambda_mult = improper_potential.get_lambda_mult()
-        improper_lambda_offset = improper_potential.get_lambda_offset()
-
-        if improper_lambda_mult is None:
-            improper_lambda_mult = np.zeros(len(improper_params))
-        if improper_lambda_offset is None:
-            improper_lambda_offset = np.ones(len(improper_params))
-
-        combined_lambda_mult = np.concatenate([proper_lambda_mult, improper_lambda_mult]).astype(np.int32)
-        combined_lambda_offset = np.concatenate([proper_lambda_offset, improper_lambda_offset]).astype(np.int32)
-
-        combined_potential = potentials.PeriodicTorsion(combined_idxs, combined_lambda_mult, combined_lambda_offset)
+        combined_potential = potentials.PeriodicTorsion(combined_idxs)
         return combined_params, combined_potential
 
     def parameterize_proper_torsion(self, ff_params):

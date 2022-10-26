@@ -9,18 +9,13 @@ template <typename RealType> class PeriodicTorsion : public Potential {
 
 private:
     int *d_torsion_idxs_;
-    int *d_lambda_mult_;
-    int *d_lambda_offset_;
 
     const int T_;
 
 public:
     int num_torsions() const { return T_; }
 
-    PeriodicTorsion(
-        const std::vector<int> &torsion_idxs,
-        const std::vector<int> &lambda_mult,
-        const std::vector<int> &lambda_offset);
+    PeriodicTorsion(const std::vector<int> &torsion_idxs);
 
     ~PeriodicTorsion();
 
