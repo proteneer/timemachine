@@ -15,6 +15,9 @@ from timemachine.lib import LangevinIntegrator, MonteCarloBarostat, custom_ops
 from timemachine.md.barostat.utils import get_bond_list, get_group_indices
 from timemachine.md.fire import fire_descent
 
+# used to check norms in the gradient computations
+MAX_FORCE_NORM = 25000
+
 
 class MinimizationWarning(UserWarning):
     pass
@@ -159,7 +162,7 @@ def minimize_host_4d(mols, host_system, host_coords, ff, box, mol_coords=None) -
     for impl in u_impls:
         du_dx, _, _ = impl.execute(final_coords, box, 0.0)
         norm = np.linalg.norm(du_dx, axis=-1)
-        assert np.all(norm < 25000)
+        assert np.all(norm < MAX_FORCE_NORM)
 
     return final_coords[:num_host_atoms]
 
@@ -382,19 +385,21 @@ def local_minimize(x0, val_and_grad_fn, local_idxs, verbose=True, assert_energy_
     x_local_final_flat = res.x
     x_local_final = x_local_final_flat.reshape(x_local_shape)
 
-    if verbose:
-        U_final, grad_final = val_and_grad_fn_bfgs(x_local_final_flat)
-        print(f"U(x_final) = {U_final:.3f}")
+    U_final, grad_final = val_and_grad_fn_bfgs(x_local_final_flat)
+    forces = -grad_final.reshape(x_local_shape)
+    per_atom_force_norms = np.linalg.norm(forces, axis=1)
 
+    if verbose:
+        print(f"U(x_final) = {U_final:.3f}")
         # diagnose worst atom
-        forces = -grad_final.reshape(x_local_shape)
-        per_atom_force_norms = np.linalg.norm(forces, axis=1)
         argmax_local = np.argmax(per_atom_force_norms)
         worst_atom_idx = local_idxs[argmax_local]
         print(f"atom with highest force norm after minimization: {worst_atom_idx}")
         print(f"force(x_final)[{worst_atom_idx}] = {forces[argmax_local]}")
-
         print("-" * 70)
+
+    # note that this over the local atoms only, as this function is not concerned
+    assert np.amax(per_atom_force_norms) < MAX_FORCE_NORM
 
     x_final = x0.copy()
     x_final[local_idxs] = x_local_final
