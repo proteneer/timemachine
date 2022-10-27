@@ -6,7 +6,7 @@
 #include <set>
 #include <vector>
 
-// each atom parameterized by a 4-tuple: charge, lj sigma, lj epsilon
+// each atom parameterized by a 4-tuple: charge, lj sigma, lj epsilon, 4D coordinate w
 enum { PARAM_OFFSET_CHARGE = 0, PARAM_OFFSET_SIG, PARAM_OFFSET_EPS, PARAM_OFFSET_W, PARAMS_PER_ATOM };
 
 typedef void (*k_nonbonded_fn)(
