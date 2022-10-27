@@ -103,7 +103,7 @@ void __global__ k_nonbonded_precomputed(
 
         // du/dp
         g_q_ij += FLOAT_TO_FIXED_DU_DP<RealType, FIXED_EXPONENT_DU_DCHARGE>(erfc(beta * d_ij) / d_ij);
-        g_dw_ij += FLOAT_TO_FIXED_DU_DP<RealType, FIXED_EXPONENT_DU_DCHARGE>(du_dr * delta_w / d_ij);
+        g_dw_ij += FLOAT_TO_FIXED_DU_DP<RealType, FIXED_EXPONENT_DU_DW>(du_dr * delta_w / d_ij);
     }
 
     if (eps_ij != 0 && sig_ij != 0) {
@@ -127,7 +127,7 @@ void __global__ k_nonbonded_precomputed(
 
         g_eps_ij += FLOAT_TO_FIXED_DU_DP<RealType, FIXED_EXPONENT_DU_DEPS>(du_de);
         g_sig_ij += FLOAT_TO_FIXED_DU_DP<RealType, FIXED_EXPONENT_DU_DSIG>(du_ds);
-        g_dw_ij += FLOAT_TO_FIXED_DU_DP<RealType, FIXED_EXPONENT_DU_DCHARGE>(du_dr * delta_w / d_ij);
+        g_dw_ij += FLOAT_TO_FIXED_DU_DP<RealType, FIXED_EXPONENT_DU_DW>(du_dr * delta_w / d_ij);
     }
 
     if (du_dp) {

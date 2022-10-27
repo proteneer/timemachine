@@ -420,8 +420,8 @@ void __device__ v_nonbonded_unified(
                 g_qj += FLOAT_TO_FIXED_DU_DP<RealType, FIXED_EXPONENT_DU_DCHARGE>(qi * inv_dij * ebd);
 
                 if (ALCHEMICAL) {
-                    g_wi += FLOAT_TO_FIXED_NONBONDED(delta_prefactor * delta_w);
-                    g_wj += FLOAT_TO_FIXED_NONBONDED(-delta_prefactor * delta_w);
+                    g_wi += FLOAT_TO_FIXED_DU_DP<RealType, FIXED_EXPONENT_DU_DW>(delta_prefactor * delta_w);
+                    g_wj += FLOAT_TO_FIXED_DU_DP<RealType, FIXED_EXPONENT_DU_DW>(-delta_prefactor * delta_w);
                 }
             }
 

@@ -160,8 +160,8 @@ void __global__ k_nonbonded_pair_list(
         g_qi += FLOAT_TO_FIXED_DU_DP<RealType, FIXED_EXPONENT_DU_DCHARGE>(charge_scale * qj * inv_dij * ebd);
         g_qj += FLOAT_TO_FIXED_DU_DP<RealType, FIXED_EXPONENT_DU_DCHARGE>(charge_scale * qi * inv_dij * ebd);
 
-        g_wi += FLOAT_TO_FIXED_NONBONDED(delta_prefactor * delta_w);
-        g_wj += FLOAT_TO_FIXED_NONBONDED(-delta_prefactor * delta_w);
+        g_wi += FLOAT_TO_FIXED_DU_DP<RealType, FIXED_EXPONENT_DU_DW>(delta_prefactor * delta_w);
+        g_wj += FLOAT_TO_FIXED_DU_DP<RealType, FIXED_EXPONENT_DU_DW>(-delta_prefactor * delta_w);
 
         if (du_dx) {
             accumulate<Negated>(du_dx + atom_i_idx * 3 + 0, gi_x);

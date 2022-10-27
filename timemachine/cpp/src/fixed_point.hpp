@@ -6,6 +6,7 @@
 #define FIXED_EXPONENT_DU_DCHARGE 0x1000000000
 #define FIXED_EXPONENT_DU_DSIG 0x2000000000
 #define FIXED_EXPONENT_DU_DEPS 0x4000000000 // this is just getting silly
+#define FIXED_EXPONENT_DU_DW FIXED_EXPONENT
 
 template <typename RealType, unsigned long long EXPONENT>
 RealType __host__ __device__ __forceinline__ FIXED_TO_FLOAT_DU_DP(unsigned long long v) {
