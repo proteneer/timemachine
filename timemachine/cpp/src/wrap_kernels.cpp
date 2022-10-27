@@ -784,17 +784,11 @@ template <typename RealType> void declare_nonbonded_precomputed(py::module &m, c
     py::class_<Class, std::shared_ptr<Class>, timemachine::Potential>(
         m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
         .def(
-            py::init([](const py::array_t<int, py::array::c_style> &pair_idxs,
-                        const py::array_t<double, py::array::c_style> &w_offsets,
-                        double beta,
-                        double cutoff) {
+            py::init([](const py::array_t<int, py::array::c_style> &pair_idxs, double beta, double cutoff) {
                 std::vector<int> vec_pair_idxs(pair_idxs.data(), pair_idxs.data() + pair_idxs.size());
-                std::vector<double> vec_w_offsets(w_offsets.data(), w_offsets.data() + w_offsets.size());
-                return new timemachine::NonbondedPairListPrecomputed<RealType>(
-                    vec_pair_idxs, vec_w_offsets, beta, cutoff);
+                return new timemachine::NonbondedPairListPrecomputed<RealType>(vec_pair_idxs, beta, cutoff);
             }),
             py::arg("pair_idxs"),
-            py::arg("w_offsets"),
             py::arg("beta"),
             py::arg("cutoff"));
 }
@@ -903,19 +897,10 @@ template <typename RealType> void declare_nonbonded_all_pairs(py::module &m, con
         .def("set_nblist_padding", &timemachine::NonbondedAllPairs<RealType>::set_nblist_padding, py::arg("val"))
         .def("disable_hilbert_sort", &timemachine::NonbondedAllPairs<RealType>::disable_hilbert_sort)
         .def(
-            py::init([](const py::array_t<int, py::array::c_style> &lambda_plane_idxs_i,
-                        const py::array_t<int, py::array::c_style> &lambda_offset_idxs_i,
+            py::init([](const int N,
                         const double beta,
                         const double cutoff,
                         const std::optional<py::array_t<int, py::array::c_style>> &atom_idxs_i) {
-                std::vector<int> lambda_plane_idxs(lambda_plane_idxs_i.size());
-                std::memcpy(
-                    lambda_plane_idxs.data(), lambda_plane_idxs_i.data(), lambda_plane_idxs_i.size() * sizeof(int));
-
-                std::vector<int> lambda_offset_idxs(lambda_offset_idxs_i.size());
-                std::memcpy(
-                    lambda_offset_idxs.data(), lambda_offset_idxs_i.data(), lambda_offset_idxs_i.size() * sizeof(int));
-
                 std::optional<std::set<int>> unique_atom_idxs(std::nullopt);
                 if (atom_idxs_i) {
                     std::vector<int> atom_idxs(atom_idxs_i->size());
@@ -923,11 +908,9 @@ template <typename RealType> void declare_nonbonded_all_pairs(py::module &m, con
                     unique_atom_idxs.emplace(unique_idxs(atom_idxs));
                 }
 
-                return new timemachine::NonbondedAllPairs<RealType>(
-                    lambda_plane_idxs, lambda_offset_idxs, beta, cutoff, unique_atom_idxs);
+                return new timemachine::NonbondedAllPairs<RealType>(N, beta, cutoff, unique_atom_idxs);
             }),
-            py::arg("lambda_plane_idxs_i"),
-            py::arg("lambda_offset_idxs_i"),
+            py::arg("num_atoms"),
             py::arg("beta"),
             py::arg("cutoff"),
             py::arg("atom_idxs_i") = py::none());
@@ -942,29 +925,18 @@ template <typename RealType> void declare_nonbonded_interaction_group(py::module
             "set_nblist_padding", &timemachine::NonbondedInteractionGroup<RealType>::set_nblist_padding, py::arg("val"))
         .def("disable_hilbert_sort", &timemachine::NonbondedInteractionGroup<RealType>::disable_hilbert_sort)
         .def(
-            py::init([](const py::array_t<int, py::array::c_style> &row_atom_idxs_i,
-                        const py::array_t<int, py::array::c_style> &lambda_plane_idxs_i,
-                        const py::array_t<int, py::array::c_style> &lambda_offset_idxs_i,
+            py::init([](const int N,
+                        const py::array_t<int, py::array::c_style> &row_atom_idxs_i,
                         const double beta,
                         const double cutoff) {
                 std::vector<int> row_atom_idxs(row_atom_idxs_i.size());
                 std::memcpy(row_atom_idxs.data(), row_atom_idxs_i.data(), row_atom_idxs_i.size() * sizeof(int));
                 std::set<int> unique_row_atom_idxs(unique_idxs(row_atom_idxs));
 
-                std::vector<int> lambda_plane_idxs(lambda_plane_idxs_i.size());
-                std::memcpy(
-                    lambda_plane_idxs.data(), lambda_plane_idxs_i.data(), lambda_plane_idxs_i.size() * sizeof(int));
-
-                std::vector<int> lambda_offset_idxs(lambda_offset_idxs_i.size());
-                std::memcpy(
-                    lambda_offset_idxs.data(), lambda_offset_idxs_i.data(), lambda_offset_idxs_i.size() * sizeof(int));
-
-                return new timemachine::NonbondedInteractionGroup<RealType>(
-                    unique_row_atom_idxs, lambda_plane_idxs, lambda_offset_idxs, beta, cutoff);
+                return new timemachine::NonbondedInteractionGroup<RealType>(N, unique_row_atom_idxs, beta, cutoff);
             }),
+            py::arg("num_atoms"),
             py::arg("row_atom_idxs_i"),
-            py::arg("lambda_plane_idxs_i"),
-            py::arg("lambda_offset_idxs_i"),
             py::arg("beta"),
             py::arg("cutoff"));
 }
@@ -977,8 +949,6 @@ template <typename RealType, bool Negated> void declare_nonbonded_pair_list(py::
         .def(
             py::init([](const py::array_t<int, py::array::c_style> &pair_idxs_i,
                         const py::array_t<double, py::array::c_style> &scales_i,
-                        const py::array_t<int, py::array::c_style> &lambda_plane_idxs_i,
-                        const py::array_t<int, py::array::c_style> &lambda_offset_idxs_i,
                         const double beta,
                         const double cutoff) {
                 std::vector<int> pair_idxs(pair_idxs_i.size());
@@ -987,21 +957,10 @@ template <typename RealType, bool Negated> void declare_nonbonded_pair_list(py::
                 std::vector<double> scales(scales_i.size());
                 std::memcpy(scales.data(), scales_i.data(), scales_i.size() * sizeof(double));
 
-                std::vector<int> lambda_plane_idxs(lambda_plane_idxs_i.size());
-                std::memcpy(
-                    lambda_plane_idxs.data(), lambda_plane_idxs_i.data(), lambda_plane_idxs_i.size() * sizeof(int));
-
-                std::vector<int> lambda_offset_idxs(lambda_offset_idxs_i.size());
-                std::memcpy(
-                    lambda_offset_idxs.data(), lambda_offset_idxs_i.data(), lambda_offset_idxs_i.size() * sizeof(int));
-
-                return new timemachine::NonbondedPairList<RealType, Negated>(
-                    pair_idxs, scales, lambda_plane_idxs, lambda_offset_idxs, beta, cutoff);
+                return new timemachine::NonbondedPairList<RealType, Negated>(pair_idxs, scales, beta, cutoff);
             }),
             py::arg("pair_idxs_i"),
             py::arg("scales_i"),
-            py::arg("lambda_plane_idxs_i"),
-            py::arg("lambda_offset_idxs_i"),
             py::arg("beta"),
             py::arg("cutoff"));
 }

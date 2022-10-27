@@ -12,7 +12,6 @@ from jax import vmap
 np.random.seed(2021)
 
 from timemachine.potentials.jax_utils import (
-    compute_lifting_parameter,
     delta_r,
     distance_on_pairs,
     get_all_pairs_indices,
@@ -86,21 +85,6 @@ def test_get_pairs_from_interaction_groups_indices():
         assert set(pairs[:, 1]) == set(group_b_indices)
 
         assert len(pairs) == n * m
-
-
-def test_compute_lifting_parameter():
-    """check expected behavior at lambda=0, lambda=1 for combinations of
-    lambda_plane_idx, lambda_offset_idxs in [-1, 0, +1]"""
-    cutoff = 5.0
-
-    lambda_plane_idxs = jnp.array([-1, -1, -1, 0, 0, 0, 1, 1, 1])
-    lambda_offset_idxs = jnp.array([-1, 0, 1, -1, 0, 1, -1, 0, 1])
-
-    w0 = compute_lifting_parameter(0.0, lambda_plane_idxs, lambda_offset_idxs, cutoff)
-    np.testing.assert_allclose(w0, cutoff * lambda_plane_idxs)
-
-    w1 = compute_lifting_parameter(1.0, lambda_plane_idxs, lambda_offset_idxs, cutoff)
-    np.testing.assert_allclose(w1, cutoff * (lambda_offset_idxs + lambda_plane_idxs))
 
 
 def test_batched_neighbor_inds():

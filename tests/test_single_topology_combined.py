@@ -1,6 +1,7 @@
 # test code for combining host guest systems and ensuring that parameters
 # and lambda configurations are correct
 import numpy as np
+import pytest
 
 from timemachine.constants import DEFAULT_FF
 from timemachine.fe.single_topology import SingleTopology
@@ -82,7 +83,7 @@ def _test_combined_parameters_impl_nonbonded(host_system_omm):
 
     mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
     forcefield = Forcefield.load_from_file(DEFAULT_FF)
-    st3 = SingleTopology(mol_a, mol_b, core, forcefield)
+    st = SingleTopology(mol_a, mol_b, core, forcefield)
 
     host_bps, masses = openmm_deserializer.deserialize_system(host_system_omm, cutoff=1.2)
     num_host_atoms = len(masses)
@@ -90,7 +91,7 @@ def _test_combined_parameters_impl_nonbonded(host_system_omm):
 
     for lamb in [0.0, 1.0]:
 
-        hgs = st3.combine_with_host(host_sys, lamb=lamb)
+        hgs = st.combine_with_host(host_sys, lamb=lamb)
         # check nonbonded terms
         # 1) exclusions
         # exclusions should be set for all ligand ixns in hgs.nonbonded_host_guest
@@ -103,55 +104,59 @@ def _test_combined_parameters_impl_nonbonded(host_system_omm):
 
         expected_guest_idxs = set()
 
-        for i in range(st3.get_num_atoms()):
-            for j in range(st3.get_num_atoms()):
+        for i in range(st.get_num_atoms()):
+            for j in range(st.get_num_atoms()):
                 if i < j:
                     expected_guest_idxs.add((i + num_host_atoms, j + num_host_atoms))
 
         assert hgs_exc_guest_idxs == expected_guest_idxs
 
         # 2) decoupling parameters for host-guest interactions
-        # 2a) lambda offset and plane parameters
-        hgs_lambda_offset_idxs = hgs.nonbonded_host_guest.get_lambda_offset_idxs()
-        hgs_lambda_plane_idxs = hgs.nonbonded_host_guest.get_lambda_plane_idxs()
+        # 2a) w offsets
+        assert hgs.nonbonded_host_guest.params is not None
+        w_coords = hgs.nonbonded_host_guest.params[:, 3]
+        cutoff = hgs.nonbonded_host_guest.get_cutoff()
 
-        for a_idx, (offset_idx, plane_idx) in enumerate(zip(hgs_lambda_offset_idxs, hgs_lambda_plane_idxs)):
+        for a_idx, w in enumerate(w_coords):
             if a_idx < num_host_atoms:
-                assert offset_idx == 0
-                assert plane_idx == 0
+                # host atom
+                assert w == 0.0
             else:
                 # guest atom
                 guest_atom_idx = a_idx - num_host_atoms
-                indicator = st3.c_flags[guest_atom_idx]
+                indicator = st.c_flags[guest_atom_idx]
                 if indicator == 0:
                     # core
-                    assert offset_idx == 0
-                    assert plane_idx == 0
+                    assert w == 0.0
                 elif indicator == 1:
                     # mol_a dummy
-                    assert offset_idx == 1
-                    assert plane_idx == 0
+                    if lamb == 0.0:
+                        assert w == 0.0
+                    elif lamb == 1.0:
+                        assert w == pytest.approx(cutoff)
                 elif indicator == 2:
                     # mol_b dummy
-                    assert offset_idx == 1
-                    assert plane_idx == -1
+                    if lamb == 0.0:
+                        assert w == pytest.approx(-cutoff)
+                    elif lamb == 1.0:
+                        assert w == 0.0
                 else:
                     assert 0
 
         # 2b) nonbonded parameter interpolation checks
-        mol_a_charges = st3.ff.q_handle.parameterize(st3.mol_a)
-        mol_a_sig_eps = st3.ff.lj_handle.parameterize(st3.mol_a)
+        mol_a_charges = st.ff.q_handle.parameterize(st.mol_a)
+        mol_a_sig_eps = st.ff.lj_handle.parameterize(st.mol_a)
 
-        mol_b_charges = st3.ff.q_handle.parameterize(st3.mol_b)
-        mol_b_sig_eps = st3.ff.lj_handle.parameterize(st3.mol_b)
+        mol_b_charges = st.ff.q_handle.parameterize(st.mol_b)
+        mol_b_sig_eps = st.ff.lj_handle.parameterize(st.mol_b)
 
-        for a_idx, (test_q, test_sig, test_eps) in enumerate(hgs.nonbonded_host_guest.params):
+        for a_idx, (test_q, test_sig, test_eps, _) in enumerate(hgs.nonbonded_host_guest.params):
 
             if a_idx < num_host_atoms:
                 continue
 
             guest_atom_idx = a_idx - num_host_atoms
-            indicator = st3.c_flags[guest_atom_idx]
+            indicator = st.c_flags[guest_atom_idx]
 
             # dummy atom qlj parameters are arbitrary (since they will be decoupled via lambda parameters)
             if indicator != 0:
@@ -159,8 +164,8 @@ def _test_combined_parameters_impl_nonbonded(host_system_omm):
 
             if lamb == 0.0:
                 # should resemble mol_a at lambda=0
-                ref_q = mol_a_charges[st3.c_to_a[guest_atom_idx]]
-                ref_sig, ref_eps = mol_a_sig_eps[st3.c_to_a[guest_atom_idx]]
+                ref_q = mol_a_charges[st.c_to_a[guest_atom_idx]]
+                ref_sig, ref_eps = mol_a_sig_eps[st.c_to_a[guest_atom_idx]]
 
                 assert ref_q == test_q
                 assert test_sig == ref_sig
@@ -168,8 +173,8 @@ def _test_combined_parameters_impl_nonbonded(host_system_omm):
 
             elif lamb == 1.0:
                 # should resemble mol_b at lambda=1
-                ref_q = mol_b_charges[st3.c_to_b[guest_atom_idx]]
-                ref_sig, ref_eps = mol_b_sig_eps[st3.c_to_b[guest_atom_idx]]
+                ref_q = mol_b_charges[st.c_to_b[guest_atom_idx]]
+                ref_sig, ref_eps = mol_b_sig_eps[st.c_to_b[guest_atom_idx]]
 
                 assert ref_q == test_q
                 assert test_sig == ref_sig

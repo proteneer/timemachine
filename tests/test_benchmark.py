@@ -403,9 +403,8 @@ def test_nonbonded_interaction_group_potential(hi2fa_test_frames):
     nonbonded_params = np.stack([nonbonded_potential.params] * num_param_batches)
 
     potential = NonbondedInteractionGroup(
+        nonbonded_potential.get_num_atoms(),
         ligand_idxs,
-        nonbonded_potential.get_lambda_plane_idxs(),
-        nonbonded_potential.get_lambda_offset_idxs(),
         beta,
         cutoff,
     )
@@ -437,10 +436,9 @@ def test_nonbonded_potential(hi2fa_test_frames):
     precisions = [np.float32, np.float64]
 
     potential = Nonbonded(
+        nonbonded_pot.get_num_atoms(),
         nonbonded_pot.get_exclusion_idxs(),
         nonbonded_pot.get_scale_factors(),
-        nonbonded_pot.get_lambda_plane_idxs(),
-        nonbonded_pot.get_lambda_offset_idxs(),
         nonbonded_pot.get_beta(),
         nonbonded_pot.get_cutoff(),
     )

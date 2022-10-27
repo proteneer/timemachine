@@ -9,7 +9,6 @@ template <typename RealType> class NonbondedPairListPrecomputed : public Potenti
 
 private:
     int *d_idxs_;
-    double *d_w_offsets_;
     const int B_;
 
     double beta_;
@@ -19,8 +18,7 @@ public:
     int num_bonds() const { return B_; }
 
     NonbondedPairListPrecomputed(
-        const std::vector<int> &pair_idxs,    // [B, 2]
-        const std::vector<double> &w_offsets, // [B]
+        const std::vector<int> &pair_idxs, // [B, 2]
         const double beta,
         const double cutoff);
 

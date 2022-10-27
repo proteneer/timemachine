@@ -5,9 +5,10 @@ import os
 import unittest
 from importlib import resources
 from tempfile import NamedTemporaryFile, TemporaryDirectory
-from typing import List
+from typing import Iterable, Optional
 
 import jax
+import jax.numpy as jnp
 import numpy as np
 from hilbertcurve.hilbertcurve import HilbertCurve
 from numpy.typing import NDArray
@@ -16,7 +17,7 @@ from rdkit import Chem
 from timemachine.constants import ONE_4PI_EPS0
 from timemachine.ff import Forcefield
 from timemachine.lib import potentials
-from timemachine.potentials import bonded, generic, nonbonded
+from timemachine.potentials import bonded, generic
 
 
 @contextlib.contextmanager
@@ -48,7 +49,7 @@ def get_hif2a_ligands_as_sdf_file(num_mols: int) -> NamedTemporaryFile:
     return temp_sdf
 
 
-def prepare_system_params(x: NDArray, sigma_scale: float = 5.0) -> NDArray:
+def prepare_system_params(x: NDArray, cutoff: float, sigma_scale: float = 5.0) -> NDArray:
     """
     Prepares random parameters given a set of coordinates. The parameters are adjusted to be the correct
     order of magnitude.
@@ -72,6 +73,7 @@ def prepare_system_params(x: NDArray, sigma_scale: float = 5.0) -> NDArray:
             (np.random.rand(N).astype(np.float64) - 0.5) * np.sqrt(ONE_4PI_EPS0),  # q
             np.random.rand(N).astype(np.float64) / sigma_scale,  # sig
             np.random.rand(N).astype(np.float64),  # eps
+            (2 * np.random.rand(N).astype(np.float64) - 1) * cutoff,  # w
         ],
         axis=1,
     )
@@ -81,7 +83,7 @@ def prepare_system_params(x: NDArray, sigma_scale: float = 5.0) -> NDArray:
     return params
 
 
-def prepare_water_system(x, lambda_plane_idxs, lambda_offset_idxs, p_scale, cutoff):
+def prepare_water_system(x, p_scale, cutoff):
 
     assert x.ndim == 2
     N = x.shape[0]
@@ -89,7 +91,7 @@ def prepare_water_system(x, lambda_plane_idxs, lambda_offset_idxs, p_scale, cuto
 
     assert N % 3 == 0
 
-    params = prepare_system_params(x, sigma_scale=p_scale)
+    params = prepare_system_params(x, cutoff, sigma_scale=p_scale)
 
     scales = []
     exclusion_idxs = []
@@ -110,18 +112,23 @@ def prepare_water_system(x, lambda_plane_idxs, lambda_offset_idxs, p_scale, cuto
 
     beta = 2.0
 
-    potential = generic.Nonbonded(exclusion_idxs, scales, lambda_plane_idxs, lambda_offset_idxs, beta, cutoff)
+    potential = generic.Nonbonded(N, exclusion_idxs, scales, beta, cutoff)
 
     return params, potential
 
 
-def prepare_nb_system(x, E, lambda_plane_idxs, lambda_offset_idxs, p_scale, cutoff):  # number of exclusions
+def prepare_nb_system(
+    x,
+    E,  # number of exclusions
+    p_scale,
+    cutoff,
+):
 
     assert x.ndim == 2
     N = x.shape[0]
     # D = x.shape[1]
 
-    params = prepare_system_params(x, sigma_scale=p_scale)
+    params = prepare_system_params(x, cutoff, sigma_scale=p_scale)
 
     atom_idxs = np.arange(N)
 
@@ -132,22 +139,9 @@ def prepare_nb_system(x, E, lambda_plane_idxs, lambda_offset_idxs, p_scale, cuto
 
     beta = 2.0
 
-    test_potential = potentials.Nonbonded(exclusion_idxs, scales, lambda_plane_idxs, lambda_offset_idxs, beta, cutoff)
+    potential = generic.Nonbonded(N, exclusion_idxs, scales, beta, cutoff)
 
-    charge_rescale_mask, lj_rescale_mask = nonbonded.convert_exclusions_to_rescale_masks(exclusion_idxs, scales, N)
-
-    ref_total_energy = functools.partial(
-        nonbonded.nonbonded,
-        charge_rescale_mask=charge_rescale_mask,
-        lj_rescale_mask=lj_rescale_mask,
-        beta=beta,
-        cutoff=cutoff,
-        lambda_plane_idxs=lambda_plane_idxs,
-        lambda_offset_idxs=lambda_offset_idxs,
-        runtime_validate=False,
-    )
-
-    return params, ref_total_energy, test_potential
+    return params, potential
 
 
 def prepare_bonded_system(x, B, A, T, precision):
@@ -260,15 +254,13 @@ class GradientTest(unittest.TestCase):
     def compare_forces(
         self,
         x: NDArray,
-        params: NDArray,
+        params_arrays: Iterable[NDArray],
         box: NDArray,
-        lambdas: List[float],
         ref_potential,
         test_potential,
         rtol: float,
         precision,
         atol: float = 1e-8,
-        benchmark: bool = False,
     ):
         """
         Compares the forces between a reference and a test potential.
@@ -276,24 +268,26 @@ class GradientTest(unittest.TestCase):
 
         Note
         ----
-        Preferable to pass a list of lambdas to this function than run this function
-        repeatedly, as this function constructs an unbound impl for the test_potential
-        which can be expensive relative to the time it takes to compute the forces/energies/etc.
+        Preferable to pass an iterable of parameters to this function than run this function repeatedly, as this
+        function constructs an unbound impl for the test_potential which can be expensive relative to the time it takes
+        to compute the forces/energies/etc.
 
         """
         test_impl = test_potential.unbound_impl(precision)
 
         x = (x.astype(np.float32)).astype(np.float64)
-        params = (params.astype(np.float32)).astype(np.float64)
 
         assert x.ndim == 2
         # N = x.shape[0]
         # D = x.shape[1]
 
         assert x.dtype == np.float64
-        assert params.dtype == np.float64
 
-        for lamb in lambdas:
+        lamb = 0.0  # TODO: remove; lambda dependence is deprecated
+
+        for params in params_arrays:
+            params = (params.astype(np.float32)).astype(np.float64)
+            assert params.dtype == np.float64
             ref_u = ref_potential(x, params, box, lamb)
             grad_fn = jax.grad(ref_potential, argnums=(0, 1, 3))
             ref_du_dx, ref_du_dp, ref_du_dl = grad_fn(x, params, box, lamb)
@@ -340,14 +334,44 @@ class GradientTest(unittest.TestCase):
     def compare_forces_gpu_vs_reference(
         self,
         x: NDArray,
-        params: NDArray,
+        params_arrays: Iterable[NDArray],
         box: NDArray,
-        lambdas: List[float],
         potential: generic.Potential,
         rtol: float,
         precision,
         atol: float = 1e-8,
     ):
         return self.compare_forces(
-            x, params, box, lambdas, potential.to_reference(), potential.to_gpu(), rtol, precision, atol
+            x, params_arrays, box, potential.to_reference(), potential.to_gpu(), rtol, precision, atol
         )
+
+
+def gen_nonbonded_params_with_4d_offsets(rng: np.random.Generator, params, w_max: float, w_min: Optional[float] = None):
+
+    if w_min is None:
+        w_min = -w_max
+
+    num_atoms, _ = params.shape
+
+    def params_with_w_coords(w_coords):
+        return jnp.asarray(params).at[:, 3].set(w_coords)
+
+    # all zero
+    yield params_with_w_coords(0.0)
+
+    # all w_max
+    yield params_with_w_coords(w_max)
+
+    # half zero, half w_max
+    w_coords = jnp.zeros(num_atoms)
+    w_coords = w_coords.at[-num_atoms // 2 :].set(w_max)
+    yield params_with_w_coords(w_coords)
+
+    # random uniform in [w_min, w_max]
+    w_coords = rng.uniform(w_min, w_max, (num_atoms,))
+    yield params_with_w_coords(w_coords)
+
+    # sparse with half zero
+    zero_idxs = rng.choice(num_atoms, (num_atoms // 2,), replace=False)
+    w_coords[zero_idxs] = 0.0
+    yield params_with_w_coords(w_coords)

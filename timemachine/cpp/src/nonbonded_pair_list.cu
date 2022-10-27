@@ -1,5 +1,4 @@
 #include "gpu_utils.cuh"
-#include "k_lambda_transformer.cuh"
 #include "k_nonbonded_pair_list.cuh"
 #include "math_utils.cuh"
 #include "nonbonded_pair_list.hpp"
@@ -10,13 +9,11 @@ namespace timemachine {
 
 template <typename RealType, bool Negated>
 NonbondedPairList<RealType, Negated>::NonbondedPairList(
-    const std::vector<int> &pair_idxs,          // [M, 2]
-    const std::vector<double> &scales,          // [M, 2]
-    const std::vector<int> &lambda_plane_idxs,  // [N]
-    const std::vector<int> &lambda_offset_idxs, // [N]
+    const std::vector<int> &pair_idxs, // [M, 2]
+    const std::vector<double> &scales, // [M, 2]
     const double beta,
     const double cutoff)
-    : N_(lambda_offset_idxs.size()), M_(pair_idxs.size() / 2), beta_(beta), cutoff_(cutoff) {
+    : M_(pair_idxs.size() / 2), beta_(beta), cutoff_(cutoff) {
 
     if (pair_idxs.size() % 2 != 0) {
         throw std::runtime_error("pair_idxs.size() must be even, but got " + std::to_string(pair_idxs.size()));
@@ -40,16 +37,6 @@ NonbondedPairList<RealType, Negated>::NonbondedPairList(
     gpuErrchk(cudaMalloc(&d_pair_idxs_, M_ * 2 * sizeof(*d_pair_idxs_)));
     gpuErrchk(cudaMemcpy(d_pair_idxs_, &pair_idxs[0], M_ * 2 * sizeof(*d_pair_idxs_), cudaMemcpyHostToDevice));
 
-    gpuErrchk(cudaMalloc(&d_lambda_plane_idxs_, N_ * sizeof(*d_lambda_plane_idxs_)));
-    gpuErrchk(cudaMemcpy(
-        d_lambda_plane_idxs_, &lambda_plane_idxs[0], N_ * sizeof(*d_lambda_plane_idxs_), cudaMemcpyHostToDevice));
-
-    gpuErrchk(cudaMalloc(&d_lambda_offset_idxs_, N_ * sizeof(*d_lambda_offset_idxs_)));
-    gpuErrchk(cudaMemcpy(
-        d_lambda_offset_idxs_, &lambda_offset_idxs[0], N_ * sizeof(*d_lambda_offset_idxs_), cudaMemcpyHostToDevice));
-
-    gpuErrchk(cudaMalloc(&d_w_, N_ * sizeof(*d_w_)));
-
     gpuErrchk(cudaMalloc(&d_scales_, M_ * 2 * sizeof(*d_scales_)));
     gpuErrchk(cudaMemcpy(d_scales_, &scales[0], M_ * 2 * sizeof(*d_scales_), cudaMemcpyHostToDevice));
 };
@@ -57,9 +44,6 @@ NonbondedPairList<RealType, Negated>::NonbondedPairList(
 template <typename RealType, bool Negated> NonbondedPairList<RealType, Negated>::~NonbondedPairList() {
     gpuErrchk(cudaFree(d_pair_idxs_));
     gpuErrchk(cudaFree(d_scales_));
-    gpuErrchk(cudaFree(d_lambda_plane_idxs_));
-    gpuErrchk(cudaFree(d_lambda_offset_idxs_));
-    gpuErrchk(cudaFree(d_w_));
 };
 
 template <typename RealType, bool Negated>
@@ -77,18 +61,10 @@ void NonbondedPairList<RealType, Negated>::execute_device(
     cudaStream_t stream) {
 
     const int tpb = 32;
-
-    int num_blocks = ceil_divide(N, tpb);
-    dim3 dimGrid(num_blocks, 3, 1);
-
-    k_compute_w_coords<<<dimGrid, tpb, 0, stream>>>(
-        N, lambda, cutoff_, d_lambda_plane_idxs_, d_lambda_offset_idxs_, d_w_);
-    gpuErrchk(cudaPeekAtLastError());
-
-    int num_blocks_pairs = ceil_divide(M_, tpb);
+    const int num_blocks_pairs = ceil_divide(M_, tpb);
 
     k_nonbonded_pair_list<RealType, Negated><<<num_blocks_pairs, tpb, 0, stream>>>(
-        M_, d_x, d_p, d_box, d_w_, d_pair_idxs_, d_scales_, beta_, cutoff_, d_du_dx, d_du_dp, d_u);
+        M_, d_x, d_p, d_box, d_pair_idxs_, d_scales_, beta_, cutoff_, d_du_dx, d_du_dp, d_u);
 
     gpuErrchk(cudaPeekAtLastError());
 }
@@ -99,12 +75,16 @@ void NonbondedPairList<RealType, Negated>::du_dp_fixed_to_float(
     const int N, const int P, const unsigned long long *du_dp, double *du_dp_float) {
 
     for (int i = 0; i < N; i++) {
-        const int idx_charge = i * 3 + 0;
-        const int idx_sig = i * 3 + 1;
-        const int idx_eps = i * 3 + 2;
+        const int idx = i * PARAMS_PER_ATOM;
+        const int idx_charge = idx + PARAM_OFFSET_CHARGE;
+        const int idx_sig = idx + PARAM_OFFSET_SIG;
+        const int idx_eps = idx + PARAM_OFFSET_EPS;
+        const int idx_w = idx + PARAM_OFFSET_W;
+
         du_dp_float[idx_charge] = FIXED_TO_FLOAT_DU_DP<double, FIXED_EXPONENT_DU_DCHARGE>(du_dp[idx_charge]);
         du_dp_float[idx_sig] = FIXED_TO_FLOAT_DU_DP<double, FIXED_EXPONENT_DU_DSIG>(du_dp[idx_sig]);
         du_dp_float[idx_eps] = FIXED_TO_FLOAT_DU_DP<double, FIXED_EXPONENT_DU_DEPS>(du_dp[idx_eps]);
+        du_dp_float[idx_w] = FIXED_TO_FLOAT_DU_DP<double, FIXED_EXPONENT_DU_DW>(du_dp[idx_w]);
     }
 }
 

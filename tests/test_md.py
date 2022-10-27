@@ -22,17 +22,8 @@ class TestContext(unittest.TestCase):
 
         E = 2
 
-        lambda_plane_idxs = np.random.randint(low=0, high=2, size=N, dtype=np.int32)
-        lambda_offset_idxs = np.random.randint(low=0, high=2, size=N, dtype=np.int32)
-
-        params, _, test_nrg = prepare_nb_system(
-            x0,
-            E,
-            lambda_plane_idxs,
-            lambda_offset_idxs,
-            p_scale=3.0,
-            cutoff=1.0,
-        )
+        params, potential = prepare_nb_system(x0, E, p_scale=3.0, cutoff=1.0)
+        test_nrg = potential.to_gpu()
 
         masses = np.random.rand(N)
         v0 = np.random.rand(x0.shape[0], x0.shape[1])
@@ -76,6 +67,7 @@ class TestContext(unittest.TestCase):
         _, test_frame_du_dl, _ = bps[0].execute(test_xs[0], test_boxes[0], 0.0)
         np.testing.assert_array_equal(test_du_dls[0], test_frame_du_dl)
 
+    @pytest.mark.skip("multiple_steps_U is deprecated")
     def test_multiple_steps_U_store_interval(self):
         np.random.seed(2022)
 
@@ -86,17 +78,8 @@ class TestContext(unittest.TestCase):
 
         E = 2
 
-        lambda_plane_idxs = np.random.randint(low=0, high=2, size=N, dtype=np.int32)
-        lambda_offset_idxs = np.random.randint(low=0, high=2, size=N, dtype=np.int32)
-
-        params, _, test_nrg = prepare_nb_system(
-            x0,
-            E,
-            lambda_plane_idxs,
-            lambda_offset_idxs,
-            p_scale=3.0,
-            cutoff=1.0,
-        )
+        params, potential = prepare_nb_system(x0, E, p_scale=3.0, cutoff=1.0)
+        test_nrg = potential.to_gpu()
 
         masses = np.random.rand(N)
         v0 = np.random.rand(x0.shape[0], x0.shape[1])
@@ -161,17 +144,8 @@ class TestContext(unittest.TestCase):
 
         E = 2
 
-        lambda_plane_idxs = np.random.randint(low=0, high=2, size=N, dtype=np.int32)
-        lambda_offset_idxs = np.random.randint(low=0, high=2, size=N, dtype=np.int32)
-
-        params, _, test_nrg = prepare_nb_system(
-            x0,
-            E,
-            lambda_plane_idxs,
-            lambda_offset_idxs,
-            p_scale=3.0,
-            cutoff=1.0,
-        )
+        params, potential = prepare_nb_system(x0, E, p_scale=3.0, cutoff=1.0)
+        test_nrg = potential.to_gpu()
 
         masses = np.random.rand(N)
         v0 = np.random.rand(x0.shape[0], x0.shape[1])
@@ -213,18 +187,15 @@ class TestContext(unittest.TestCase):
 
         E = 2
 
-        lambda_plane_idxs = np.random.randint(low=0, high=2, size=N, dtype=np.int32)
-        lambda_offset_idxs = np.random.randint(low=0, high=2, size=N, dtype=np.int32)
-
-        params, ref_nrg_fn, test_nrg = prepare_nb_system(
+        params, potential = prepare_nb_system(
             x0,
             E,
-            lambda_plane_idxs,
-            lambda_offset_idxs,
             p_scale=3.0,
             # cutoff=0.5,
             cutoff=1.0,
         )
+        ref_nrg_fn = potential.to_reference()
+        test_nrg = potential.to_gpu()
 
         masses = np.random.rand(N)
 
