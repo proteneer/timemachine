@@ -502,11 +502,17 @@ def _optimize_coords_along_states(initial_states):
     free_idxs = np.where(np.any(d_ij < cutoff, axis=0))[0].tolist()
     x_opt = end_state.x0
     x_traj = []
-    for initial_state in initial_states:
+    for idx, initial_state in enumerate(initial_states):
+        print(initial_state.lamb)
         bound_impls = [p.bound_impl(np.float32) for p in initial_state.potentials]
         val_and_grad_fn = minimizer.get_val_and_grad_fn(bound_impls, initial_state.box0, initial_state.lamb)
         assert np.all(np.isfinite(x_opt)), "Initial coordinates contain nan or inf"
-        x_opt = minimizer.local_minimize(x_opt, val_and_grad_fn, free_idxs)
+        # assert that the energy decreases only at the end-state.z
+        if idx == 0:
+            check_nrg = True
+        else:
+            check_nrg = False
+        x_opt = minimizer.local_minimize(x_opt, val_and_grad_fn, free_idxs, assert_energy_decreased=check_nrg)
         x_traj.append(x_opt)
         assert np.all(np.isfinite(x_opt)), "Minimization resulted in a nan"
         del bound_impls
@@ -555,14 +561,11 @@ def optimize_coordinates(initial_states):
         for xs in rhs_xs:
             all_xs.append(xs)
 
-    all_coords = []
-
     for state, coords in zip(initial_states, all_xs):
         # sanity check that no atom has moved more than 7 angstroms away (arbitrary)
         assert np.amax(np.linalg.norm(state.x0 - coords, axis=1)) < 0.7
-        all_coords.append(coords)
 
-    return all_coords
+    return all_xs
 
 
 def estimate_relative_free_energy(

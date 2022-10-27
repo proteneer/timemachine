@@ -1,3 +1,4 @@
+import warnings
 from typing import Optional, Tuple
 
 import numpy as np
@@ -13,6 +14,10 @@ from timemachine.ff.handlers import openmm_deserializer
 from timemachine.lib import LangevinIntegrator, MonteCarloBarostat, custom_ops
 from timemachine.md.barostat.utils import get_bond_list, get_group_indices
 from timemachine.md.fire import fire_descent
+
+
+class MinimizationWarning(UserWarning):
+    pass
 
 
 def bind_potentials(topo, ff: Forcefield):
@@ -301,7 +306,7 @@ def get_val_and_grad_fn(bps, box, lamb):
     return val_and_grad_fn
 
 
-def local_minimize(x0, val_and_grad_fn, local_idxs, verbose=True):
+def local_minimize(x0, val_and_grad_fn, local_idxs, verbose=True, assert_energy_decreased=True):
     """
     Minimize a local region given selected idxs.
 
@@ -318,6 +323,9 @@ def local_minimize(x0, val_and_grad_fn, local_idxs, verbose=True):
 
     verbose: bool
         Print internal scipy.optimize warnings + potential energy + gradient norm
+
+    assert_energy_decreased: bool
+        Throw an assertion if the energy does not decrease
 
     Returns
     -------
@@ -393,6 +401,9 @@ def local_minimize(x0, val_and_grad_fn, local_idxs, verbose=True):
 
     u_final, _ = val_and_grad_fn(x_final)
 
-    assert u_final < u_0, f"u_0: {u_0:.3f}, u_f: {u_final:.3f}"
+    if assert_energy_decreased:
+        assert u_final < u_0, f"u_0: {u_0:.3f}, u_f: {u_final:.3f}"
+    elif u_final >= u_0:
+        warnings.warn(f"WARNING: Energy did not decrease: u_0: {u_0:.3f}, u_f: {u_final:.3f}", MinimizationWarning)
 
     return x_final

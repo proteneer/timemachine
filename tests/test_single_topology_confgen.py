@@ -45,20 +45,20 @@ def run_edge(mol_a, mol_b, protein_path, n_windows):
     seed = 2023
 
     # solvent
-    box_width = 4.0
-    solvent_sys, solvent_conf, solvent_box, solvent_top = builders.build_water_system(box_width, ff.water_ff)
-    solvent_box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes
-    solvent_host_config = HostConfig(solvent_sys, solvent_conf, solvent_box)
-    initial_states = setup_initial_states(st, solvent_host_config, DEFAULT_TEMP, lambda_schedule, seed)
-    all_frames = [state.x0 for state in initial_states]
-    write_trajectory_as_pdb(
-        mol_a,
-        mol_b,
-        core,
-        all_frames,
-        solvent_top,
-        f"solvent_{get_mol_name(mol_a)}_{get_mol_name(mol_b)}.pdb",
-    )
+    # box_width = 4.0
+    # solvent_sys, solvent_conf, solvent_box, solvent_top = builders.build_water_system(box_width, ff.water_ff)
+    # solvent_box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes
+    # solvent_host_config = HostConfig(solvent_sys, solvent_conf, solvent_box)
+    # initial_states = setup_initial_states(st, solvent_host_config, DEFAULT_TEMP, lambda_schedule, seed)
+    # all_frames = [state.x0 for state in initial_states]
+    # write_trajectory_as_pdb(
+    #     mol_a,
+    #     mol_b,
+    #     core,
+    #     all_frames,
+    #     solvent_top,
+    #     f"solvent_{get_mol_name(mol_a)}_{get_mol_name(mol_b)}.pdb",
+    # )
 
     # complex
     complex_sys, complex_conf, _, _, complex_box, complex_top = builders.build_protein_system(
@@ -67,6 +67,7 @@ def run_edge(mol_a, mol_b, protein_path, n_windows):
     complex_box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes
     complex_host_config = HostConfig(complex_sys, complex_conf, complex_box)
     initial_states = setup_initial_states(st, complex_host_config, DEFAULT_TEMP, lambda_schedule, seed)
+
     all_frames = [state.x0 for state in initial_states]
     write_trajectory_as_pdb(
         mol_a,
@@ -96,7 +97,6 @@ def test_confgen_hard_edges():
         ("289", "224"),  # failure, A-ring, 6->5 member
         ("165", "42"),  # failure, B-ring, core-hopping,
         ("7b", "42"),  # failure, B-ring, core-hopping,
-        ("35", "84"),  # failure, B-ring, core-hopping into oxazole,
         ("252", "290"),  # failure, should be a simple transformation
         ("290", "84"),  # failure, B-ring, core-hopping into oxazole
         ("290", "256"),  # failure, should be a simple transformation
@@ -107,7 +107,7 @@ def test_confgen_hard_edges():
     ligands = "timemachine/datasets/fep_benchmark/hif2a/ligands.sdf"
     mols = [mol for mol in Chem.SDMolSupplier(ligands, removeHs=False)]
 
-    n_windows = 16
+    n_windows = 12
 
     for src, dst in edges:
         print("\nProcessing", src, "->", dst, "\n")
@@ -116,3 +116,22 @@ def test_confgen_hard_edges():
         # try both directions
         run_edge(mol_a, mol_b, protein_path, n_windows)
         run_edge(mol_b, mol_a, protein_path, n_windows)
+
+
+def test_confgen_spot_edges():
+    # spot check so we have something in unit testing.
+    edges = [
+        ("35", "84"),  # failure, B-ring, core-hopping into oxazole, <-- this fails
+    ]
+
+    protein_path = "timemachine/testsystems/data/hif2a_nowater_min.pdb"
+    ligands = "timemachine/datasets/fep_benchmark/hif2a/ligands.sdf"
+    mols = [mol for mol in Chem.SDMolSupplier(ligands, removeHs=False)]
+
+    n_windows = 12
+
+    for src, dst in edges:
+        print("\nProcessing", src, "->", dst, "\n")
+        mol_a = get_mol_by_name(mols, src)
+        mol_b = get_mol_by_name(mols, dst)
+        run_edge(mol_a, mol_b, protein_path, n_windows)
