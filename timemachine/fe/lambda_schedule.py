@@ -94,8 +94,8 @@ def construct_pre_optimized_relative_lambda_schedule(n_windows):
 
     Parameters
     ----------
-    n_windows: int
-        Number of lambda windows
+    n_windows: int, optional
+        Number of lambda windows. If None this will return default to 30 windows.
 
     Returns
     -------
