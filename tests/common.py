@@ -368,6 +368,6 @@ def gen_nonbonded_params_with_4d_offsets(rng: np.random.Generator, params, w_min
     yield params_with_w_coords(w_coords)
 
     # sparse with half zero
-    zero_idxs = rng.choice(num_atoms, (num_atoms // 2,))
+    zero_idxs = rng.choice(num_atoms, (num_atoms // 2,), replace=False)
     w_coords[zero_idxs] = 0.0
     yield params_with_w_coords(w_coords)
