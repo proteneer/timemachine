@@ -24,10 +24,11 @@ void __global__ k_nonbonded_precomputed(
         return;
     }
 
-    RealType q_ij = params[pair_idx * PARAMS_PER_PAIR + PARAM_OFFSET_CHARGE];
-    RealType sig_ij = params[pair_idx * PARAMS_PER_PAIR + PARAM_OFFSET_SIG];
-    RealType eps_ij = params[pair_idx * PARAMS_PER_PAIR + PARAM_OFFSET_EPS];
-    RealType delta_w = params[pair_idx * PARAMS_PER_PAIR + PARAM_OFFSET_W];
+    int params_ij_idx = pair_idx * PARAMS_PER_PAIR;
+    RealType q_ij = params[params_ij_idx + PARAM_OFFSET_CHARGE];
+    RealType sig_ij = params[params_ij_idx + PARAM_OFFSET_SIG];
+    RealType eps_ij = params[params_ij_idx + PARAM_OFFSET_EPS];
+    RealType delta_w = params[params_ij_idx + PARAM_OFFSET_W];
 
     unsigned long long g_q_ij = 0;
     unsigned long long g_sig_ij = 0;
@@ -130,10 +131,10 @@ void __global__ k_nonbonded_precomputed(
     }
 
     if (du_dp) {
-        atomicAdd(du_dp + pair_idx * PARAMS_PER_PAIR + PARAM_OFFSET_CHARGE, g_q_ij);
-        atomicAdd(du_dp + pair_idx * PARAMS_PER_PAIR + PARAM_OFFSET_SIG, g_sig_ij);
-        atomicAdd(du_dp + pair_idx * PARAMS_PER_PAIR + PARAM_OFFSET_EPS, g_eps_ij);
-        atomicAdd(du_dp + pair_idx * PARAMS_PER_PAIR + PARAM_OFFSET_W, g_dw_ij);
+        atomicAdd(du_dp + params_ij_idx + PARAM_OFFSET_CHARGE, g_q_ij);
+        atomicAdd(du_dp + params_ij_idx + PARAM_OFFSET_SIG, g_sig_ij);
+        atomicAdd(du_dp + params_ij_idx + PARAM_OFFSET_EPS, g_eps_ij);
+        atomicAdd(du_dp + params_ij_idx + PARAM_OFFSET_W, g_dw_ij);
     }
 
     if (du_dx) {

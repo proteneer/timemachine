@@ -298,10 +298,11 @@ void __device__ v_nonbonded_unified(
     unsigned long long gi_y = 0;
     unsigned long long gi_z = 0;
 
-    int charge_param_idx_i = atom_i_idx * PARAMS_PER_ATOM + PARAM_OFFSET_CHARGE;
-    int lj_param_idx_sig_i = atom_i_idx * PARAMS_PER_ATOM + PARAM_OFFSET_SIG;
-    int lj_param_idx_eps_i = atom_i_idx * PARAMS_PER_ATOM + PARAM_OFFSET_EPS;
-    int w_param_idx_i = atom_i_idx * PARAMS_PER_ATOM + PARAM_OFFSET_W;
+    int params_i_idx = atom_i_idx * PARAMS_PER_ATOM;
+    int charge_param_idx_i = params_i_idx + PARAM_OFFSET_CHARGE;
+    int lj_param_idx_sig_i = params_i_idx + PARAM_OFFSET_SIG;
+    int lj_param_idx_eps_i = params_i_idx + PARAM_OFFSET_EPS;
+    int w_param_idx_i = params_i_idx + PARAM_OFFSET_W;
 
     RealType qi = atom_i_idx < N ? params[charge_param_idx_i] : 0;
     RealType sig_i = atom_i_idx < N ? params[lj_param_idx_sig_i] : 0;
@@ -324,10 +325,11 @@ void __device__ v_nonbonded_unified(
     unsigned long long gj_y = 0;
     unsigned long long gj_z = 0;
 
-    int charge_param_idx_j = atom_j_idx * PARAMS_PER_ATOM + PARAM_OFFSET_CHARGE;
-    int lj_param_idx_sig_j = atom_j_idx * PARAMS_PER_ATOM + PARAM_OFFSET_SIG;
-    int lj_param_idx_eps_j = atom_j_idx * PARAMS_PER_ATOM + PARAM_OFFSET_EPS;
-    int w_param_idx_j = atom_j_idx * PARAMS_PER_ATOM + PARAM_OFFSET_W;
+    int params_j_idx = atom_j_idx * PARAMS_PER_ATOM;
+    int charge_param_idx_j = params_j_idx + PARAM_OFFSET_CHARGE;
+    int lj_param_idx_sig_j = params_j_idx + PARAM_OFFSET_SIG;
+    int lj_param_idx_eps_j = params_j_idx + PARAM_OFFSET_EPS;
+    int w_param_idx_j = params_j_idx + PARAM_OFFSET_W;
 
     RealType qj = atom_j_idx < N ? params[charge_param_idx_j] : 0;
     RealType sig_j = atom_j_idx < N ? params[lj_param_idx_sig_j] : 0;
