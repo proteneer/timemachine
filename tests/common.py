@@ -363,10 +363,11 @@ def gen_nonbonded_params_with_4d_offsets(rng: np.random.Generator, params, w_min
     w_coords = w_coords.at[-num_atoms // 2 :].set(w_max)
     yield params_with_w_coords(w_coords)
 
-    # discrete random uniform in {0, w_max}
-    w_coords = rng.choice([0.0, w_max], (num_atoms,))
+    # random uniform in [w_min, w_max]
+    w_coords = rng.uniform(w_min, w_max, (num_atoms,))
     yield params_with_w_coords(w_coords)
 
-    # continuous random uniform in [w_min, w_max]
-    w_coords = rng.uniform(w_min, w_max, (num_atoms,))
+    # sparse with half zero
+    zero_idxs = rng.choice(num_atoms, (num_atoms // 2,))
+    w_coords[zero_idxs] = 0.0
     yield params_with_w_coords(w_coords)
