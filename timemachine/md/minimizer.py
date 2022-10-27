@@ -152,7 +152,8 @@ def minimize_host_4d(mols, host_system, host_coords, ff, box, mol_coords=None) -
 
     for lamb in np.linspace(1.0, 0, 50):
         u_impls = bind_potentials(parameterize_system(hgt, ff, lamb))
-        # context components: positions, velocities, box, integrator, energy fxns
+        # NOTE: we don't save velocities between trajectories at different lambda windows; empirically this seems to
+        # reduce the efficiency of the optimization, with more windows being required to achieve an equivalent result
         ctxt = custom_ops.Context(x, v0, box, intg, u_impls)
         _, xs, _ = ctxt.multiple_steps(lamb * np.ones(50))
         x = xs[-1]
