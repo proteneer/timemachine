@@ -3,14 +3,12 @@
 
 template <typename RealType, int D>
 void __global__ k_harmonic_angle(
-    const int A,                       // number of bonds
-    const double *__restrict__ coords, // [N, 3]
-    const double *__restrict__ params, // [P, 2]
-    const double lambda,
+    const int A,                        // number of bonds
+    const double *__restrict__ coords,  // [N, 3]
+    const double *__restrict__ params,  // [P, 2]
     const int *__restrict__ angle_idxs, // [A, 3]
     unsigned long long *__restrict__ du_dx,
     unsigned long long *__restrict__ du_dp,
-    unsigned long long *__restrict__ du_dl,
     unsigned long long *__restrict__ u) {
 
     const auto a_idx = blockDim.x * blockIdx.x + threadIdx.x;

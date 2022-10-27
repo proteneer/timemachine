@@ -39,10 +39,8 @@ void PeriodicTorsion<RealType>::execute_device(
     const double *d_x,
     const double *d_p,
     const double *d_box,
-    const double lambda,
     unsigned long long *d_du_dx,
     unsigned long long *d_du_dp,
-    unsigned long long *d_du_dl,
     unsigned long long *d_u,
     cudaStream_t stream) {
 
@@ -58,7 +56,7 @@ void PeriodicTorsion<RealType>::execute_device(
                 ", 3*T_=" + std::to_string(3 * T_));
         }
         k_periodic_torsion<RealType, D>
-            <<<blocks, tpb, 0, stream>>>(T_, d_x, d_p, lambda, d_torsion_idxs_, d_du_dx, d_du_dp, d_du_dl, d_u);
+            <<<blocks, tpb, 0, stream>>>(T_, d_x, d_p, d_torsion_idxs_, d_du_dx, d_du_dp, d_u);
         gpuErrchk(cudaPeekAtLastError());
     }
 };

@@ -17,14 +17,11 @@ public:
         const int N,
         const int param_batch_size,
         const int P,
-        const int lambda_batch_size,
         const double *h_x,
         const double *h_p,
         const double *h_box,
-        const double *lambdas,
         unsigned long long *h_du_dx,
         unsigned long long *h_du_dp,
-        unsigned long long *h_du_dl,
         unsigned long long *h_u);
 
     void execute_host(
@@ -33,10 +30,8 @@ public:
         const double *h_x,
         const double *h_p,
         const double *h_box,
-        const double lambda, // lambda
         unsigned long long *h_du_dx,
         unsigned long long *h_du_dp,
-        unsigned long long *h_du_dl,
         unsigned long long *h_u);
 
     void execute_host_du_dx(
@@ -45,7 +40,6 @@ public:
         const double *h_x,
         const double *h_p,
         const double *h_box,
-        const double lambda, // lambda
         unsigned long long *h_du_dx);
 
     virtual void execute_device(
@@ -54,10 +48,8 @@ public:
         const double *d_x,
         const double *d_p,
         const double *d_box,
-        const double lambda,
         unsigned long long *d_du_dx,
         unsigned long long *d_du_dp,
-        unsigned long long *d_du_dl,
         unsigned long long *d_u,
         cudaStream_t stream) = 0;
 
