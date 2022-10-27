@@ -325,9 +325,7 @@ class TestNonbonded(GradientTest):
 
                     self.compare_forces_gpu_vs_reference(
                         coords,
-                        gen_nonbonded_params_with_4d_offsets(
-                            np.random.default_rng(2022), charge_params, -2 * cutoff, 2 * cutoff
-                        ),
+                        gen_nonbonded_params_with_4d_offsets(np.random.default_rng(2022), charge_params, cutoff),
                         box,
                         potential,
                         rtol=rtol,

@@ -5,7 +5,7 @@ import os
 import unittest
 from importlib import resources
 from tempfile import NamedTemporaryFile, TemporaryDirectory
-from typing import Iterable
+from typing import Iterable, Optional
 
 import jax
 import jax.numpy as jnp
@@ -346,7 +346,11 @@ class GradientTest(unittest.TestCase):
         )
 
 
-def gen_nonbonded_params_with_4d_offsets(rng: np.random.Generator, params, w_min: float, w_max: float):
+def gen_nonbonded_params_with_4d_offsets(rng: np.random.Generator, params, w_max: float, w_min: Optional[float] = None):
+
+    if w_min is None:
+        w_min = -w_max
+
     num_atoms, _ = params.shape
 
     def params_with_w_coords(w_coords):

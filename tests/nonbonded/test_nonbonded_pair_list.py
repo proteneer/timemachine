@@ -56,7 +56,7 @@ def test_nonbonded_pair_list_correctness(
     potential = generic.NonbondedPairList(pair_idxs, rescale_mask, beta, cutoff)
     GradientTest().compare_forces_gpu_vs_reference(
         example_conf,
-        gen_nonbonded_params_with_4d_offsets(rng, example_nonbonded_potential.params, -2 * cutoff, 2 * cutoff),
+        gen_nonbonded_params_with_4d_offsets(rng, example_nonbonded_potential.params, cutoff),
         example_box,
         potential,
         precision=precision,

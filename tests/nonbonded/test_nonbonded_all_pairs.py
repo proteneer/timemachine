@@ -112,7 +112,7 @@ def test_nonbonded_all_pairs_correctness(
 
     GradientTest().compare_forces_gpu_vs_reference(
         conf,
-        gen_nonbonded_params_with_4d_offsets(rng, params, -2 * cutoff, 2 * cutoff),
+        gen_nonbonded_params_with_4d_offsets(rng, params, cutoff),
         example_box,
         potential,
         precision=precision,

@@ -58,7 +58,7 @@ def test_nonbonded_pair_list_precomputed_correctness(
 
     GradientTest().compare_forces_gpu_vs_reference(
         conf,
-        gen_nonbonded_params_with_4d_offsets(rng, params, 0, 0.25),
+        gen_nonbonded_params_with_4d_offsets(rng, params, cutoff, w_min=0.0),  # delta_w positive by convention
         box,
         potential,
         precision=precision,
