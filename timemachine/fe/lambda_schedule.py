@@ -105,5 +105,6 @@ def construct_pre_optimized_relative_lambda_schedule(n_windows):
         [0.0, 0.02, 0.04, 0.06, 0.07, 0.08, 0.11, 0.13, 0.15, 0.17, 0.18, 0.20, 0.25, 0.32, 0.42]
     )
     lambda_schedule = np.concatenate([lambda_schedule, (1 - lambda_schedule[::-1])])
-    lambda_schedule = interpolate_pre_optimized_protocol(lambda_schedule, n_windows)
+    if n_windows:
+        lambda_schedule = interpolate_pre_optimized_protocol(lambda_schedule, n_windows)
     return lambda_schedule
