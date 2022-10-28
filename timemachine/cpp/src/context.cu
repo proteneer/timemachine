@@ -24,7 +24,7 @@ Context::Context(
     unsigned long long *d_in_tmp = nullptr;  // dummy
     unsigned long long *d_out_tmp = nullptr; // dummy
 
-    // Compute the storage size necessary to reduce du_dl
+    // Compute the storage size necessary to reduce energies
     cub::DeviceReduce::Sum(d_sum_storage_, d_sum_storage_bytes_, d_in_tmp, d_out_tmp, N_);
     gpuErrchk(cudaPeekAtLastError());
     gpuErrchk(cudaMalloc(&d_sum_storage_, d_sum_storage_bytes_));
