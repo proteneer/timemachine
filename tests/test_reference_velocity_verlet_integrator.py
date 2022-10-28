@@ -120,7 +120,7 @@ def test_reversibility_with_custom_ops_potentials():
     box = 100 * np.eye(3)
 
     def force(coords):
-        du_dxs = np.array([bp.execute(coords, box, lamb)[0] for bp in bound_potentials])
+        du_dxs = np.array([bp.execute(coords, box)[0] for bp in bound_potentials])
         return -np.sum(du_dxs, 0)
 
     dt = 1.5e-3

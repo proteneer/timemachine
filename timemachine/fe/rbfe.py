@@ -24,7 +24,7 @@ from timemachine.md.barostat.utils import get_bond_list, get_group_indices
 from timemachine.potentials import jax_utils
 
 
-def get_batch_U_fns(bps, lamb):
+def get_batch_U_fns(bps):
     # return a function that takes in coords, boxes, lambda
     all_U_fns = []
     for bp in bps:
@@ -33,7 +33,7 @@ def get_batch_U_fns(bps, lamb):
             Us = []
             for x, box in zip(xs, boxes):
                 # tbd optimize to "selective" later
-                _, _, U = bp_impl.execute(x, box, lamb)
+                _, U = bp_impl.execute(x, box)
                 Us.append(U)
             return np.array(Us)
 
@@ -73,9 +73,7 @@ def sample(initial_state, protocol):
 
     # burn-in
     ctxt.multiple_steps_U(
-        lamb=initial_state.lamb,
         n_steps=protocol.n_eq_steps,
-        lambda_windows=[],
         store_u_interval=0,
         store_x_interval=0,
     )
@@ -85,9 +83,7 @@ def sample(initial_state, protocol):
     # a crude, and probably not great, guess on the decorrelation time
     n_steps = protocol.n_frames * protocol.steps_per_frame
     _, all_coords, all_boxes = ctxt.multiple_steps_U(
-        lamb=initial_state.lamb,
         n_steps=n_steps,
-        lambda_windows=[],
         store_u_interval=0,
         store_x_interval=protocol.steps_per_frame,
     )
@@ -392,7 +388,7 @@ def estimate_free_energy_given_initial_states(initial_states, protocol, temperat
         cur_batch_U_fns = None
         cur_frames, cur_boxes = sample(initial_state, protocol)
         bound_impls = [p.bound_impl(np.float32) for p in initial_state.potentials]
-        cur_batch_U_fns = get_batch_U_fns(bound_impls, initial_state.lamb)
+        cur_batch_U_fns = get_batch_U_fns(bound_impls)
 
         if lamb_idx in keep_idxs:
             stored_frames.append(cur_frames)

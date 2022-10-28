@@ -23,7 +23,6 @@ def test_nonbonded_interaction_group_zero_interactions(rng: np.random.Generator)
     num_atoms = 33
     num_atoms_ligand = 15
     beta = 2.0
-    lamb = 0.1
     cutoff = 1.1
     box = 10.0 * np.eye(3)
     conf = rng.uniform(0, 1, size=(num_atoms, 3))
@@ -36,11 +35,10 @@ def test_nonbonded_interaction_group_zero_interactions(rng: np.random.Generator)
 
     potential = NonbondedInteractionGroup(num_atoms, ligand_idxs, beta, cutoff)
 
-    du_dx, du_dp, du_dl, u = potential.unbound_impl(np.float64).execute(conf, params, box, lamb)
+    du_dx, du_dp, u = potential.unbound_impl(np.float64).execute(conf, params, box)
 
     assert (du_dx == 0).all()
     assert (du_dp == 0).all()
-    assert du_dl == 0
     assert u == 0
 
 
@@ -137,9 +135,9 @@ def test_nonbonded_interaction_group_consistency_allpairs_4d_decoupled(
         # i.e. (w - cutoff) - cutoff > cutoff => w > 3 * cutoff
         w_offsets[ligand_idxs] = 3.01 * cutoff
 
-        def ref_ixngroups(coords, params, box, lam):
-            U = ref_allpairs(coords, params, box, lam)
-            UA_plus_UB = ref_allpairs(coords, jnp.asarray(params).at[:, 3].add(w_offsets), box, lam)
+        def ref_ixngroups(coords, params, box):
+            U = ref_allpairs(coords, params, box)
+            UA_plus_UB = ref_allpairs(coords, jnp.asarray(params).at[:, 3].add(w_offsets), box)
             return U - UA_plus_UB
 
         return ref_ixngroups
@@ -204,14 +202,14 @@ def test_nonbonded_interaction_group_consistency_allpairs_constant_shift(
             cutoff=cutoff,
         ).to_reference()
 
-        return U_ref(conf, params, example_box, 0.0)
+        return U_ref(conf, params, example_box)
 
     ligand_idxs = rng.choice(num_atoms, size=(num_atoms_ligand,), replace=False).astype(np.int32)
 
     test_impl = NonbondedInteractionGroup(num_atoms, ligand_idxs, beta, cutoff).unbound_impl(precision)
 
     def test_ixngroups(conf):
-        _, _, _, u = test_impl.execute(conf, params, example_box, 0.0)
+        _, _, u = test_impl.execute(conf, params, example_box)
         return u
 
     conf_prime = np.array(conf)

@@ -35,13 +35,12 @@ Params = Array
 Box = Array
 ChargeMask = Array
 LJMask = Array
-Lamb = float
 Beta = float
 Cutoff = float
 Energy = float
 
-NonbondedArgs = Tuple[Conf, Params, Box, Lamb, ChargeMask, LJMask, Beta, Cutoff]
-NonbondedFxn = Callable[[Conf, Params, Box, Lamb, ChargeMask, LJMask, Beta, Cutoff], Energy]
+NonbondedArgs = Tuple[Conf, Params, Box, ChargeMask, LJMask, Beta, Cutoff]
+NonbondedFxn = Callable[[Conf, Params, Box, ChargeMask, LJMask, Beta, Cutoff], Energy]
 
 pytestmark = [pytest.mark.nogpu]
 
@@ -98,7 +97,6 @@ easy_instance_flags = dict(
     randomize_charges=False,
     randomize_sigma=False,
     randomize_epsilon=False,
-    randomize_lamb=False,
     randomize_charge_rescale_mask=False,
     randomize_lj_rescale_mask=False,
     randomize_w_coords=False,
@@ -122,7 +120,6 @@ def generate_waterbox_nb_args() -> NonbondedArgs:
     beta = nb.get_beta()
     cutoff = nb.get_cutoff()
 
-    lamb = 0.0
     charge_rescale_mask = np.ones((N, N))
     lj_rescale_mask = np.ones((N, N))
 
@@ -130,7 +127,6 @@ def generate_waterbox_nb_args() -> NonbondedArgs:
         conf,
         params,
         box,
-        lamb,
         charge_rescale_mask,
         lj_rescale_mask,
         beta,
@@ -174,9 +170,6 @@ def generate_random_inputs(n_atoms, dim, instance_flags=difficult_instance_flags
 
     params = jnp.array([charges, sig, eps, w_coords]).T
 
-    lamb = 0.0
-    if instance_flags["randomize_lamb"]:
-        lamb = rand()
     charge_rescale_mask = np.ones((n_atoms, n_atoms))
     lj_rescale_mask = np.ones((n_atoms, n_atoms))
 
@@ -191,12 +184,12 @@ def generate_random_inputs(n_atoms, dim, instance_flags=difficult_instance_flags
     if instance_flags["randomize_beta"]:
         beta += rand()
 
-    args = (conf, params, box, lamb, charge_rescale_mask, lj_rescale_mask, beta, cutoff)
+    args = (conf, params, box, charge_rescale_mask, lj_rescale_mask, beta, cutoff)
 
     return args
 
 
-def compare_two_potentials(u_a: NonbondedFxn, u_b: NonbondedFxn, args: NonbondedArgs, differentiate_wrt=(0, 1, 3)):
+def compare_two_potentials(u_a: NonbondedFxn, u_b: NonbondedFxn, args: NonbondedArgs, differentiate_wrt=(0, 1, 2)):
     """Assert that energies and derivatives w.r.t. request argnums are close"""
     value_and_grads = partial(value_and_grad, argnums=differentiate_wrt)
     energy_a, gradients_a = value_and_grads(u_a)(*args)
@@ -211,7 +204,6 @@ def _nonbonded_clone(
     conf,
     params,
     box,
-    lamb,
     charge_rescale_mask,
     lj_rescale_mask,
     beta,
@@ -282,7 +274,7 @@ def test_vmap():
     # # atoms in "ligand" vs. "environment"
     n_ligand, n_environment = 50, 1000
     n_total = n_ligand + n_environment
-    conf, params, box, lamb, _, _, beta, cutoff = generate_random_inputs(n_total, 3)
+    conf, params, box, _, _, beta, cutoff = generate_random_inputs(n_total, 3)
 
     ligand_indices = np.arange(n_ligand)
     environment_indices = np.arange(n_environment) + n_ligand

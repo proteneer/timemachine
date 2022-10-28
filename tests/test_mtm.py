@@ -128,9 +128,8 @@ def test_optimized_MTM():
         vacuum_log_weights=jnp.array(vacuum_log_weights),
     )
 
-    lamb = 0.0
     # we should initialize new instances of this
-    npt_mover = NPTMove(ubps, lamb, masses, temperature, pressure, n_steps=1000, seed=seed)
+    npt_mover = NPTMove(ubps, masses, temperature, pressure, n_steps=1000, seed=seed)
 
     K = 100
     # note that these seeds aren't actually used, since we feed in explicit keys to acceptance_probability

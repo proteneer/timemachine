@@ -15,18 +15,17 @@ from timemachine.md import builders
 from timemachine.testsystems.relative import get_hif2a_ligand_pair_single_topology
 
 
-def assert_shapes_consistent(U, coords, sys_params, box, lam):
+def assert_shapes_consistent(U, coords, sys_params, box):
     """assert U, grad(U) have the right shapes"""
     # can call U and get right shape
-    energy = U(coords, sys_params, box, lam)
+    energy = U(coords, sys_params, box)
     assert energy.shape == ()
 
     # can call grad(U) and get right shape
-    du_dx, du_dp, du_dl = grad(U, argnums=(0, 1, 3))(coords, sys_params, box, lam)
+    du_dx, du_dp = grad(U, argnums=(0, 1))(coords, sys_params, box)
     assert du_dx.shape == coords.shape
     for (p, p_prime) in zip(sys_params, du_dp):
         assert p.shape == p_prime.shape
-    assert du_dl.shape == ()
 
 
 def assert_fwd_rev_consistent(f, x):
@@ -55,7 +54,7 @@ def assert_no_second_derivative(f, x):
     assert type(problem) == TypeError
 
 
-def assert_ff_optimizable(U, coords, sys_params, box, lam, tol=1e-10):
+def assert_ff_optimizable(U, coords, sys_params, box, tol=1e-10):
     """define a differentiable loss function in terms of U, assert it can be minimized,
     and return initial params, optimized params, and the loss function"""
 
@@ -64,7 +63,7 @@ def assert_ff_optimizable(U, coords, sys_params, box, lam, tol=1e-10):
 
     def loss(nb_params):
         concat_params = sys_params[:-1] + [nb_params]
-        return (U(coords, concat_params, box, lam) - 666) ** 2
+        return (U(coords, concat_params, box) - 666) ** 2
 
     x_0 = nb_params.flatten()
 
@@ -85,7 +84,7 @@ def assert_ff_optimizable(U, coords, sys_params, box, lam, tol=1e-10):
 
 def test_functional():
     """Assert that
-    * derivatives of U w.r.t. x, params, and lam accessible by grad(U) are of the correct shape,
+    * derivatives of U w.r.t. x and params accessible by grad(U) are of the correct shape,
     * a differentiable loss function in terms of U can be minimized,
     * forward-mode and reverse-mode differentiation of loss agree,
     * an exception is raised if we try to do something that requires second derivatives,
@@ -102,7 +101,6 @@ def test_functional():
     x_b = utils.get_romol_conf(st.mol_b)
     coords = st.combine_confs(x_a, x_b)
     box = np.eye(3) * 100
-    lam = 0.5
 
     potentials = vac_sys.get_U_fns()
     sys_params = [np.array(bp.params) for bp in potentials]
@@ -112,10 +110,10 @@ def test_functional():
         U = construct_differentiable_interface(potentials, precision)
 
         # U, grad(U) have the right shapes
-        assert_shapes_consistent(U, coords, sys_params, box, lam)
+        assert_shapes_consistent(U, coords, sys_params, box)
 
         # can scipy.optimize a differentiable Jax function that calls U
-        x_0, x_opt, flat_loss = assert_ff_optimizable(U, coords, sys_params, box, lam, tol)
+        x_0, x_opt, flat_loss = assert_ff_optimizable(U, coords, sys_params, box, tol)
 
         # jacfwd agrees with jacrev
         assert_fwd_rev_consistent(flat_loss, x_0)
@@ -140,7 +138,7 @@ def test_functional():
 
         # grad w.r.t. box shouldn't be allowed
         with pytest.raises(RuntimeError) as e:
-            _ = grad(U, argnums=2)(coords, sys_params, box, lam)
+            _ = grad(U, argnums=2)(coords, sys_params, box)
         assert "box" in str(e).lower()
 
 
@@ -156,7 +154,6 @@ def test_construct_differentiable_interface_fast():
     x_b = utils.get_romol_conf(st.mol_b)
     coords = st.combine_confs(x_a, x_b)
     box = np.eye(3) * 100
-    lam = 0.5
 
     potentials = vac_sys.get_U_fns()
     sys_params = [np.array(bp.params) for bp in potentials]
@@ -164,12 +161,11 @@ def test_construct_differentiable_interface_fast():
     for precision in [np.float32, np.float64]:
         U_ref = construct_differentiable_interface(potentials, precision)
         U = construct_differentiable_interface_fast(potentials, sys_params, precision)
-        args = (coords, sys_params, box, lam)
+        args = (coords, sys_params, box)
         np.testing.assert_array_equal(U(*args), U_ref(*args))
 
-        argnums = (0, 1, 3)
-        grad_U_ref = grad(U_ref, argnums=argnums)(*args)
-        grad_U = grad(U, argnums=argnums)(*args)
+        grad_U_ref = grad(U_ref)(*args)
+        grad_U = grad(U)(*args)
 
         np.testing.assert_array_equal(grad_U[0], grad_U_ref[0])
 

@@ -38,7 +38,6 @@ class TestNonbondedDHFR(GradientTest):
 
         self.beta = 2.0
         self.cutoff = 1.1
-        self.lamb = 0.1
 
     def test_nblist_hilbert(self):
         """
@@ -72,20 +71,15 @@ class TestNonbondedDHFR(GradientTest):
             # under pure fixed point accumulation the results should be identical.
             for x_idx, x in enumerate(xs):
 
-                ref_du_dx, ref_du_dp, ref_du_dl, ref_u = ref_nonbonded_impl.execute(
-                    x, self.nonbonded_fn.params, self.box, 0.0
-                )
-                test_du_dx, test_du_dp, test_du_dl, test_u = test_nonbonded_impl.execute(
-                    x, self.nonbonded_fn.params, self.box, 0.0
-                )
+                ref_du_dx, ref_du_dp, ref_u = ref_nonbonded_impl.execute(x, self.nonbonded_fn.params, self.box)
+                test_du_dx, test_du_dp, test_u = test_nonbonded_impl.execute(x, self.nonbonded_fn.params, self.box)
 
                 np.testing.assert_array_equal(ref_du_dx, test_du_dx)
                 np.testing.assert_array_equal(ref_du_dp, test_du_dp)
-                np.testing.assert_array_equal(ref_du_dl, test_du_dl)
                 np.testing.assert_array_equal(ref_u, test_u)
 
-                ref_du_dx = ref_nonbonded_impl.execute_du_dx(x, self.nonbonded_fn.params, self.box, 0.0)
-                test_du_dx = test_nonbonded_impl.execute_du_dx(x, self.nonbonded_fn.params, self.box, 0.0)
+                ref_du_dx = ref_nonbonded_impl.execute_du_dx(x, self.nonbonded_fn.params, self.box)
+                test_du_dx = test_nonbonded_impl.execute_du_dx(x, self.nonbonded_fn.params, self.box)
 
                 for idx, (a, b) in enumerate(zip(ref_du_dx, test_du_dx)):
                     if np.linalg.norm(a - b) != 0:
@@ -127,20 +121,15 @@ class TestNonbondedDHFR(GradientTest):
 
         # under pure fixed point accumulation the results should be identical.
         for x_idx, x in enumerate(xs):
-            ref_du_dx, ref_du_dp, ref_du_dl, ref_u = ref_nonbonded_impl.execute(
-                x, self.nonbonded_fn.params, self.box, 0.0
-            )
-            test_du_dx, test_du_dp, test_du_dl, test_u = test_nonbonded_impl.execute(
-                x, self.nonbonded_fn.params, self.box, 0.0
-            )
+            ref_du_dx, ref_du_dp, ref_u = ref_nonbonded_impl.execute(x, self.nonbonded_fn.params, self.box)
+            test_du_dx, test_du_dp, test_u = test_nonbonded_impl.execute(x, self.nonbonded_fn.params, self.box)
 
             np.testing.assert_array_equal(ref_du_dx, test_du_dx)
             np.testing.assert_array_equal(ref_du_dp, test_du_dp)
-            np.testing.assert_array_equal(ref_du_dl, test_du_dl)
             np.testing.assert_array_equal(ref_u, test_u)
 
-            ref_du_dx = ref_nonbonded_impl.execute_du_dx(x, self.nonbonded_fn.params, self.box, 0.0)
-            test_du_dx = test_nonbonded_impl.execute_du_dx(x, self.nonbonded_fn.params, self.box, 0.0)
+            ref_du_dx = ref_nonbonded_impl.execute_du_dx(x, self.nonbonded_fn.params, self.box)
+            test_du_dx = test_nonbonded_impl.execute_du_dx(x, self.nonbonded_fn.params, self.box)
 
             for idx, (a, b) in enumerate(zip(ref_du_dx, test_du_dx)):
                 if np.linalg.norm(a - b) != 0:
@@ -202,17 +191,16 @@ class TestNonbondedDHFR(GradientTest):
 
         for combo in itertools.product([False, True], repeat=4):
 
-            (compute_du_dx, compute_du_dp, compute_du_dl, compute_u) = combo
+            compute_du_dx, compute_du_dp, compute_u = combo
 
             for trip in range(50):
 
-                test_du_dx, test_du_dp, test_du_dl, test_u = impl.execute_selective(
+                test_du_dx, test_du_dp, test_u = impl.execute_selective(
                     self.host_conf,
                     [self.nonbonded_fn.params],
                     self.box,
                     compute_du_dx,
                     compute_du_dp,
-                    compute_du_dl,
                     compute_u,
                 )
 
@@ -350,7 +338,7 @@ class TestNonbonded(GradientTest):
         # Down shift box size to be only a portion of the cutoff
         charge_params, potential = prepare_water_system(coords, p_scale=1.0, cutoff=cutoff)
 
-        def run_nonbonded(potential, x, box, params, lamb, steps=100):
+        def run_nonbonded(potential, x, box, params, steps=100):
 
             x = (x.astype(np.float32)).astype(np.float64)
             params = (params.astype(np.float32)).astype(np.float64)
@@ -360,28 +348,28 @@ class TestNonbonded(GradientTest):
             assert params.dtype == np.float64
 
             for _ in range(steps):
-                _ = potential.execute_selective(x, params, box, lamb, True, True, True, True)
+                _ = potential.execute_selective(x, params, box, True, True, True)
 
         test_impl = potential.to_gpu().unbound_impl(precision)
 
         # With the default box, all is well
-        run_nonbonded(test_impl, coords, box, charge_params, 0.0, steps=2)
+        run_nonbonded(test_impl, coords, box, charge_params, steps=2)
 
         db_cutoff = (cutoff + padding) * 2
 
         # Make box with diagonals right at the limit
         box = np.eye(3) * db_cutoff
-        run_nonbonded(test_impl, coords, box, charge_params, 0.0)
+        run_nonbonded(test_impl, coords, box, charge_params)
 
         # Non Orth Box, should fail
         box = np.ones_like(box) * (db_cutoff ** 2)
         with self.assertRaises(RuntimeError) as raised:
-            run_nonbonded(test_impl, coords, box, charge_params, 0.0)
+            run_nonbonded(test_impl, coords, box, charge_params)
         assert "non-ortholinear box" in str(raised.exception)
         # Only populate the diag with values that are too low
         box = np.eye(3) * (db_cutoff * 0.3)
         with self.assertRaises(RuntimeError) as raised:
-            run_nonbonded(test_impl, coords, box, charge_params, 0.0)
+            run_nonbonded(test_impl, coords, box, charge_params)
         assert "more than half" in str(raised.exception)
 
 
