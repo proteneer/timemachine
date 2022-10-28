@@ -164,16 +164,15 @@ def test_construct_differentiable_interface_fast():
         args = (coords, sys_params, box)
         np.testing.assert_array_equal(U(*args), U_ref(*args))
 
-        grad_U_ref = grad(U_ref)(*args)
-        grad_U = grad(U)(*args)
+        argnums = (0, 1)
+        dU_dx_ref, dU_dps_ref = grad(U_ref, argnums)(*args)
+        dU_dx, dU_dps = grad(U, argnums)(*args)
 
-        np.testing.assert_array_equal(grad_U[0], grad_U_ref[0])
+        np.testing.assert_array_equal(dU_dx, dU_dx_ref)
 
-        assert len(grad_U[1]) == len(grad_U_ref[1])
-        for dU_dp, dU_dp_ref in zip(grad_U[1], grad_U_ref[1]):
+        assert len(dU_dps) == len(dU_dps_ref)
+        for dU_dp, dU_dp_ref in zip(dU_dps, dU_dps_ref):
             np.testing.assert_array_equal(dU_dp, dU_dp_ref)
-
-        np.testing.assert_array_equal(grad_U[2], grad_U_ref[2])
 
 
 def test_absolute_vacuum():
