@@ -288,17 +288,15 @@ def equilibrate_host(
     return ctxt.get_x_t(), ctxt.get_box()
 
 
-def get_val_and_grad_fn(bps, box, lamb):
+def get_val_and_grad_fn(bps, box):
     """
-    Convert impls, box, lamb into a function that only takes in coords.
+    Convert impls, box into a function that only takes in coords.
 
     Parameters
     ----------
     bps: List of BoundPotentials
 
     box: np.array (3,3)
-
-    lamb: float
 
     Returns
     -------
