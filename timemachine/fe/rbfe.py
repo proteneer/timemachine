@@ -25,7 +25,7 @@ from timemachine.potentials import jax_utils
 
 
 def get_batch_U_fns(bps):
-    # return a function that takes in coords, boxes, lambda
+    # return a function that takes in coords, boxes
     all_U_fns = []
     for bp in bps:
 
