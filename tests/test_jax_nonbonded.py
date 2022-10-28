@@ -189,7 +189,7 @@ def generate_random_inputs(n_atoms, dim, instance_flags=difficult_instance_flags
     return args
 
 
-def compare_two_potentials(u_a: NonbondedFxn, u_b: NonbondedFxn, args: NonbondedArgs, differentiate_wrt=(0, 1, 2)):
+def compare_two_potentials(u_a: NonbondedFxn, u_b: NonbondedFxn, args: NonbondedArgs, differentiate_wrt=(0, 1)):
     """Assert that energies and derivatives w.r.t. request argnums are close"""
     value_and_grads = partial(value_and_grad, argnums=differentiate_wrt)
     energy_a, gradients_a = value_and_grads(u_a)(*args)
