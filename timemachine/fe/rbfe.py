@@ -501,7 +501,7 @@ def _optimize_coords_along_states(initial_states):
     for idx, initial_state in enumerate(initial_states):
         print(initial_state.lamb)
         bound_impls = [p.bound_impl(np.float32) for p in initial_state.potentials]
-        val_and_grad_fn = minimizer.get_val_and_grad_fn(bound_impls, initial_state.box0, initial_state.lamb)
+        val_and_grad_fn = minimizer.get_val_and_grad_fn(bound_impls, initial_state.box0)
         assert np.all(np.isfinite(x_opt)), "Initial coordinates contain nan or inf"
         # assert that the energy decreases only at the end-state.z
         if idx == 0:

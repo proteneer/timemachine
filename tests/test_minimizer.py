@@ -59,7 +59,7 @@ def test_local_minimize_water_box():
     box0 += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes at the boundary
 
     bound_impls = [p.bound_impl(np.float32) for p in host_fns]
-    val_and_grad_fn = minimizer.get_val_and_grad_fn(bound_impls, box0, lamb)
+    val_and_grad_fn = minimizer.get_val_and_grad_fn(bound_impls, box0)
 
     free_idxs = [0, 2, 3, 6, 7, 9, 15, 16]
     frozen_idxs = set(range(len(x0))).difference(set(free_idxs))
