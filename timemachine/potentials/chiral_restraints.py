@@ -104,7 +104,7 @@ def chiral_atom_restraint(conf, params, box, idxs):
 
     Notes
     -----
-    * box, lamb unused
+    * box unused
     """
     assert len(idxs) == len(params)
     return jnp.sum(U_chiral_atom_batch_all(conf, idxs, params)) if len(idxs) else 0.0
@@ -116,7 +116,7 @@ def chiral_bond_restraint(conf, params, box, idxs, signs):
 
     Notes
     -----
-    * box, lamb unused
+    * box unused
     """
     assert len(idxs) == len(params)
     assert len(idxs) == len(signs)
