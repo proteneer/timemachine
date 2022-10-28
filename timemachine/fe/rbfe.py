@@ -730,4 +730,3 @@ def run_complex(
         steps_per_frame=steps_per_frame,
     )
     return complex_res, complex_top
-
