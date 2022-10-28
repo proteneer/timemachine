@@ -266,9 +266,6 @@ void __device__ v_nonbonded_unified(
     const double *__restrict__ coords,
     const double *__restrict__ params, // [N]
     const double *__restrict__ box,
-    const double *__restrict__ coords_w, // 4D coords
-    // const int * __restrict__ lambda_plane_idxs, // 0 or 1, shift
-    // const int * __restrict__ lambda_offset_idxs, // 0 or 1, how much we offset from the plane by cutoff
     const double beta,
     const double cutoff,
     const unsigned int *__restrict__ row_idxs,
@@ -292,55 +289,57 @@ void __device__ v_nonbonded_unified(
 
     const int index = row_block_idx * 32 + threadIdx.x;
     const unsigned int atom_i_idx = index < NR ? row_idxs[index] : N;
-    // int lambda_offset_i = atom_i_idx < N ? lambda_offset_idxs[atom_i_idx] : 0;
-    // int lambda_plane_i = atom_i_idx < N ? lambda_plane_idxs[atom_i_idx] : 0;
 
     RealType ci_x = atom_i_idx < N ? coords[atom_i_idx * 3 + 0] : 0;
     RealType ci_y = atom_i_idx < N ? coords[atom_i_idx * 3 + 1] : 0;
     RealType ci_z = atom_i_idx < N ? coords[atom_i_idx * 3 + 2] : 0;
-    RealType ci_w = atom_i_idx < N ? coords_w[atom_i_idx] : 0;
 
     unsigned long long gi_x = 0;
     unsigned long long gi_y = 0;
     unsigned long long gi_z = 0;
 
-    int charge_param_idx_i = atom_i_idx * 3 + 0;
-    int lj_param_idx_sig_i = atom_i_idx * 3 + 1;
-    int lj_param_idx_eps_i = atom_i_idx * 3 + 2;
+    int params_i_idx = atom_i_idx * PARAMS_PER_ATOM;
+    int charge_param_idx_i = params_i_idx + PARAM_OFFSET_CHARGE;
+    int lj_param_idx_sig_i = params_i_idx + PARAM_OFFSET_SIG;
+    int lj_param_idx_eps_i = params_i_idx + PARAM_OFFSET_EPS;
+    int w_param_idx_i = params_i_idx + PARAM_OFFSET_W;
 
     RealType qi = atom_i_idx < N ? params[charge_param_idx_i] : 0;
     RealType sig_i = atom_i_idx < N ? params[lj_param_idx_sig_i] : 0;
     RealType eps_i = atom_i_idx < N ? params[lj_param_idx_eps_i] : 0;
+    RealType w_i = atom_i_idx < N ? params[w_param_idx_i] : 0;
 
     unsigned long long g_qi = 0;
     unsigned long long g_sigi = 0;
     unsigned long long g_epsi = 0;
+    unsigned long long g_wi = 0;
 
     // i idx is contiguous but j is not, so we should swap them to avoid having to shuffle atom_j_idx
     int atom_j_idx = ixn_atoms[tile_idx * 32 + threadIdx.x];
-    // int lambda_offset_j = atom_j_idx < N ? lambda_offset_idxs[atom_j_idx] : 0;
-    // int lambda_plane_j = atom_j_idx < N ? lambda_plane_idxs[atom_j_idx] : 0;
 
     RealType cj_x = atom_j_idx < N ? coords[atom_j_idx * 3 + 0] : 0;
     RealType cj_y = atom_j_idx < N ? coords[atom_j_idx * 3 + 1] : 0;
     RealType cj_z = atom_j_idx < N ? coords[atom_j_idx * 3 + 2] : 0;
-    RealType cj_w = atom_j_idx < N ? coords_w[atom_j_idx] : 0;
 
     unsigned long long gj_x = 0;
     unsigned long long gj_y = 0;
     unsigned long long gj_z = 0;
 
-    int charge_param_idx_j = atom_j_idx * 3 + 0;
-    int lj_param_idx_sig_j = atom_j_idx * 3 + 1;
-    int lj_param_idx_eps_j = atom_j_idx * 3 + 2;
+    int params_j_idx = atom_j_idx * PARAMS_PER_ATOM;
+    int charge_param_idx_j = params_j_idx + PARAM_OFFSET_CHARGE;
+    int lj_param_idx_sig_j = params_j_idx + PARAM_OFFSET_SIG;
+    int lj_param_idx_eps_j = params_j_idx + PARAM_OFFSET_EPS;
+    int w_param_idx_j = params_j_idx + PARAM_OFFSET_W;
 
     RealType qj = atom_j_idx < N ? params[charge_param_idx_j] : 0;
     RealType sig_j = atom_j_idx < N ? params[lj_param_idx_sig_j] : 0;
     RealType eps_j = atom_j_idx < N ? params[lj_param_idx_eps_j] : 0;
+    RealType w_j = atom_j_idx < N ? params[w_param_idx_j] : 0;
 
     unsigned long long g_qj = 0;
     unsigned long long g_sigj = 0;
     unsigned long long g_epsj = 0;
+    unsigned long long g_wj = 0;
 
     RealType real_cutoff = static_cast<RealType>(cutoff);
     RealType cutoff_squared = real_cutoff * real_cutoff;
@@ -366,8 +365,7 @@ void __device__ v_nonbonded_unified(
 
         if (ALCHEMICAL) {
             // (ytz): we are guaranteed that delta_w is zero if ALCHEMICAL == false
-            // delta_w = (lambda_plane_i - lambda_plane_j)*real_cutoff + (lambda_offset_i - lambda_offset_j)*real_lambda*real_cutoff;
-            delta_w = ci_w - cj_w;
+            delta_w = w_i - w_j;
             d2ij += delta_w * delta_w;
         }
 
@@ -420,6 +418,11 @@ void __device__ v_nonbonded_unified(
             if (COMPUTE_DU_DP) {
                 g_qi += FLOAT_TO_FIXED_DU_DP<RealType, FIXED_EXPONENT_DU_DCHARGE>(qj * inv_dij * ebd);
                 g_qj += FLOAT_TO_FIXED_DU_DP<RealType, FIXED_EXPONENT_DU_DCHARGE>(qi * inv_dij * ebd);
+
+                if (ALCHEMICAL) {
+                    g_wi += FLOAT_TO_FIXED_DU_DP<RealType, FIXED_EXPONENT_DU_DW>(delta_prefactor * delta_w);
+                    g_wj += FLOAT_TO_FIXED_DU_DP<RealType, FIXED_EXPONENT_DU_DW>(-delta_prefactor * delta_w);
+                }
             }
 
             if (COMPUTE_U) {
@@ -437,7 +440,7 @@ void __device__ v_nonbonded_unified(
         cj_z = __shfl_sync(0xffffffff, cj_z, srcLane);
 
         if (ALCHEMICAL) {
-            cj_w = __shfl_sync(0xffffffff, cj_w, srcLane); // this also can be optimized away
+            w_j = __shfl_sync(0xffffffff, w_j, srcLane); // this also can be optimized away
         }
 
         if (COMPUTE_DU_DX) {
@@ -450,6 +453,7 @@ void __device__ v_nonbonded_unified(
             g_qj = __shfl_sync(0xffffffff, g_qj, srcLane);
             g_sigj = __shfl_sync(0xffffffff, g_sigj, srcLane);
             g_epsj = __shfl_sync(0xffffffff, g_epsj, srcLane);
+            g_wj = __shfl_sync(0xffffffff, g_wj, srcLane);
         }
     }
 
@@ -471,12 +475,14 @@ void __device__ v_nonbonded_unified(
             atomicAdd(du_dp + charge_param_idx_i, g_qi);
             atomicAdd(du_dp + lj_param_idx_sig_i, g_sigi);
             atomicAdd(du_dp + lj_param_idx_eps_i, g_epsi);
+            atomicAdd(du_dp + w_param_idx_i, g_wi);
         }
 
         if (atom_j_idx < N) {
             atomicAdd(du_dp + charge_param_idx_j, g_qj);
             atomicAdd(du_dp + lj_param_idx_sig_j, g_sigj);
             atomicAdd(du_dp + lj_param_idx_eps_j, g_epsj);
+            atomicAdd(du_dp + w_param_idx_j, g_wj);
         }
     }
 
@@ -494,7 +500,6 @@ void __global__ k_nonbonded_unified(
     const double *__restrict__ coords,
     const double *__restrict__ params, // [N]
     const double *__restrict__ box,
-    const double *__restrict__ coords_w, // 4D coords
     const double beta,
     const double cutoff,
     const unsigned int *__restrict__ row_idxs,
@@ -508,22 +513,20 @@ void __global__ k_nonbonded_unified(
     int row_block_idx = ixn_tiles[tile_idx];
     int index = row_block_idx * 32 + threadIdx.x;
     const unsigned int atom_i_idx = index < NR ? row_idxs[index] : N;
-
-    RealType cw_i = atom_i_idx < N ? coords_w[atom_i_idx] : 0;
-
     int atom_j_idx = ixn_atoms[tile_idx * 32 + threadIdx.x];
 
-    RealType cw_j = atom_j_idx < N ? coords_w[atom_j_idx] : 0;
+    RealType w_i = atom_i_idx < N ? params[atom_i_idx * PARAMS_PER_ATOM + PARAM_OFFSET_W] : 0;
+    RealType w_j = atom_j_idx < N ? params[atom_j_idx * PARAMS_PER_ATOM + PARAM_OFFSET_W] : 0;
 
-    int is_vanilla = cw_i == 0 && cw_j == 0;
+    int is_vanilla = w_i == 0 && w_j == 0;
 
     bool tile_is_vanilla = __all_sync(0xffffffff, is_vanilla);
 
     if (tile_is_vanilla) {
         v_nonbonded_unified<RealType, 0, COMPUTE_U, COMPUTE_DU_DX, COMPUTE_DU_DP>(
-            N, NR, coords, params, box, coords_w, beta, cutoff, row_idxs, ixn_tiles, ixn_atoms, du_dx, du_dp, u_buffer);
+            N, NR, coords, params, box, beta, cutoff, row_idxs, ixn_tiles, ixn_atoms, du_dx, du_dp, u_buffer);
     } else {
         v_nonbonded_unified<RealType, 1, COMPUTE_U, COMPUTE_DU_DX, COMPUTE_DU_DP>(
-            N, NR, coords, params, box, coords_w, beta, cutoff, row_idxs, ixn_tiles, ixn_atoms, du_dx, du_dp, u_buffer);
+            N, NR, coords, params, box, beta, cutoff, row_idxs, ixn_tiles, ixn_atoms, du_dx, du_dp, u_buffer);
     };
 }

@@ -6,7 +6,7 @@ import unittest
 
 import numpy as np
 import pytest
-from common import GradientTest, prepare_system_params, prepare_water_system
+from common import GradientTest, gen_nonbonded_params_with_4d_offsets, prepare_system_params, prepare_water_system
 
 from timemachine.constants import DEFAULT_FF
 from timemachine.fe.utils import to_md_units
@@ -174,20 +174,14 @@ class TestNonbondedDHFR(GradientTest):
             test_scales = np.array(test_scales, dtype=np.float64)
             test_params = self.nonbonded_fn.params[:N, :]
 
-            test_lambda_plane_idxs = np.random.randint(low=-2, high=2, size=N, dtype=np.int32)
-            test_lambda_offset_idxs = np.random.randint(low=-2, high=2, size=N, dtype=np.int32)
-
-            potential = generic.Nonbonded(
-                test_exclusions, test_scales, test_lambda_plane_idxs, test_lambda_offset_idxs, self.beta, self.cutoff
-            )
+            potential = generic.Nonbonded(N, test_exclusions, test_scales, self.beta, self.cutoff)
 
             for precision, rtol, atol in [(np.float64, 1e-8, 1e-8), (np.float32, 1e-4, 5e-4)]:
 
                 self.compare_forces_gpu_vs_reference(
                     test_conf,
-                    test_params,
+                    [test_params],
                     self.box,
-                    [self.lamb],
                     potential,
                     rtol=rtol,
                     atol=atol,
@@ -200,17 +194,9 @@ class TestNonbondedDHFR(GradientTest):
         This is mainly for benchmarking nonbonded computations on the initial state.
         """
 
-        N = self.host_conf.shape[0]
-
         precision = np.float32
 
         nb_fn = copy.deepcopy(self.nonbonded_fn)
-
-        test_lambda_plane_idxs = np.random.randint(low=-2, high=2, size=N, dtype=np.int32)
-        test_lambda_offset_idxs = np.random.randint(low=-2, high=2, size=N, dtype=np.int32)
-
-        nb_fn.set_lambda_plane_idxs(test_lambda_plane_idxs)
-        nb_fn.set_lambda_offset_idxs(test_lambda_offset_idxs)
 
         impl = nb_fn.unbound_impl(precision)
 
@@ -222,9 +208,8 @@ class TestNonbondedDHFR(GradientTest):
 
                 test_du_dx, test_du_dp, test_du_dl, test_u = impl.execute_selective(
                     self.host_conf,
-                    self.nonbonded_fn.params,
+                    [self.nonbonded_fn.params],
                     self.box,
-                    [self.lamb],
                     compute_du_dx,
                     compute_du_dp,
                     compute_du_dl,
@@ -254,8 +239,6 @@ class TestNonbondedWater(GradientTest):
             host_conf.append([to_md_units(x), to_md_units(y), to_md_units(z)])
         host_conf = np.array(host_conf)
 
-        lamb = 0.1
-
         potential = generic.Nonbonded.from_gpu(test_nonbonded_fn)
 
         big_box = box + np.eye(3) * 1000
@@ -268,9 +251,8 @@ class TestNonbondedWater(GradientTest):
 
                 self.compare_forces_gpu_vs_reference(
                     host_conf,
-                    test_nonbonded_fn.params,
+                    [test_nonbonded_fn.params],
                     test_box,
-                    [lamb],
                     potential,
                     rtol=rtol,
                     atol=atol,
@@ -299,7 +281,7 @@ class TestNonbonded(GradientTest):
 
         # pick a set of atoms that will be mutually excluded from each other.
         # we will need to set their exclusions manually
-        exclusion_atoms = np.random.choice(atom_idxs, size=(EA), replace=False)
+        exclusion_atoms = np.random.choice(atom_idxs, size=EA, replace=False)
         exclusion_idxs = []
 
         for idx, i in enumerate(exclusion_atoms):
@@ -315,21 +297,15 @@ class TestNonbonded(GradientTest):
             test_system[idx] = np.zeros(3) + np.random.rand() / 1000 + 2
 
         beta = 2.0
-
-        lambda_plane_idxs = np.random.randint(low=0, high=2, size=N, dtype=np.int32)
-        lambda_offset_idxs = np.random.randint(low=0, high=2, size=N, dtype=np.int32)
-
         cutoff = 1.0
 
-        potential = generic.Nonbonded(exclusion_idxs, scales, lambda_plane_idxs, lambda_offset_idxs, beta, cutoff)
+        potential = generic.Nonbonded(N, exclusion_idxs, scales, beta, cutoff)
 
         for precision, rtol in [(np.float64, 1e-8), (np.float32, 1e-4)]:
 
-            lamb = 0.0
+            params = prepare_system_params(test_system, cutoff)
 
-            params = prepare_system_params(test_system)
-
-            self.compare_forces_gpu_vs_reference(test_system, params, box, [lamb], potential, rtol, precision=precision)
+            self.compare_forces_gpu_vs_reference(test_system, [params], box, potential, rtol, precision=precision)
 
     def test_nonbonded(self):
 
@@ -342,23 +318,15 @@ class TestNonbonded(GradientTest):
 
             coords = all_coords[:size]
 
-            N = coords.shape[0]
-
-            lambda_plane_idxs = np.random.randint(low=-2, high=2, size=N, dtype=np.int32)
-            lambda_offset_idxs = np.random.randint(low=-2, high=2, size=N, dtype=np.int32)
-
             for cutoff in [1.0]:
                 # E = 0 # DEBUG!
-                charge_params, potential = prepare_water_system(
-                    coords, lambda_plane_idxs, lambda_offset_idxs, p_scale=5.0, cutoff=cutoff
-                )
+                charge_params, potential = prepare_water_system(coords, p_scale=5.0, cutoff=cutoff)
                 for precision, rtol, atol in [(np.float64, 1e-8, 1e-8), (np.float32, 1e-4, 5e-4)]:
 
                     self.compare_forces_gpu_vs_reference(
                         coords,
-                        charge_params,
+                        gen_nonbonded_params_with_4d_offsets(np.random.default_rng(2022), charge_params, cutoff),
                         box,
-                        [0.0, 0.1, 0.2],
                         potential,
                         rtol=rtol,
                         atol=atol,
@@ -379,15 +347,8 @@ class TestNonbonded(GradientTest):
         coords = coords / coords.unit
         coords = coords[:size]
 
-        N = coords.shape[0]
-
-        lambda_plane_idxs = np.random.randint(low=-2, high=2, size=N, dtype=np.int32)
-        lambda_offset_idxs = np.random.randint(low=-2, high=2, size=N, dtype=np.int32)
-
         # Down shift box size to be only a portion of the cutoff
-        charge_params, potential = prepare_water_system(
-            coords, lambda_plane_idxs, lambda_offset_idxs, p_scale=1.0, cutoff=cutoff
-        )
+        charge_params, potential = prepare_water_system(coords, p_scale=1.0, cutoff=cutoff)
 
         def run_nonbonded(potential, x, box, params, lamb, steps=100):
 

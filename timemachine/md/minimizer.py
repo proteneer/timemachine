@@ -1,3 +1,4 @@
+import warnings
 from typing import Optional, Tuple
 
 import numpy as np
@@ -11,21 +12,32 @@ from timemachine.fe.utils import get_romol_conf
 from timemachine.ff import Forcefield
 from timemachine.ff.handlers import openmm_deserializer
 from timemachine.lib import LangevinIntegrator, MonteCarloBarostat, custom_ops
+from timemachine.lib.potentials import HarmonicBond
 from timemachine.md.barostat.utils import get_bond_list, get_group_indices
 from timemachine.md.fire import fire_descent
 
+# used to check norms in the gradient computations
+MAX_FORCE_NORM = 25000
 
-def bind_potentials(topo, ff: Forcefield):
+
+class MinimizationWarning(UserWarning):
+    pass
+
+
+def parameterize_system(topo, ff: Forcefield, lamb: float):
     # setup the parameter handlers for the ligand
     ff_params = ff.get_params()
     params_potential_pairs = [
         topo.parameterize_harmonic_bond(ff_params.hb_params),
         topo.parameterize_harmonic_angle(ff_params.ha_params),
         topo.parameterize_periodic_torsion(ff_params.pt_params, ff_params.it_params),
-        topo.parameterize_nonbonded(ff_params.q_params, ff_params.lj_params),
+        topo.parameterize_nonbonded(ff_params.q_params, ff_params.lj_params, lamb),
     ]
-    u_impls = [potential.bind(params).bound_impl(precision=np.float32) for params, potential in params_potential_pairs]
+    return params_potential_pairs
 
+
+def bind_potentials(params_potential_pairs):
+    u_impls = [potential.bind(params).bound_impl(precision=np.float32) for params, potential in params_potential_pairs]
     return u_impls
 
 
@@ -135,8 +147,6 @@ def minimize_host_4d(mols, host_system, host_coords, ff, box, mol_coords=None) -
 
     hgt = topology.HostGuestTopology(host_bps, top)
 
-    u_impls = bind_potentials(hgt, ff)
-
     # this value doesn't matter since we will turn off the noise.
     seed = 0
 
@@ -145,16 +155,23 @@ def minimize_host_4d(mols, host_system, host_coords, ff, box, mol_coords=None) -
     x0 = combined_coords
     v0 = np.zeros_like(x0)
 
-    x0 = fire_minimize(x0, u_impls, box, np.ones(50))
-    # context components: positions, velocities, box, integrator, energy fxns
-    ctxt = custom_ops.Context(x0, v0, box, intg, u_impls)
-    _, xs, _ = ctxt.multiple_steps(np.linspace(1.0, 0, 1000))
+    u_impls = bind_potentials(parameterize_system(hgt, ff, 1.0))
+    x = fire_minimize(x0, u_impls, box, np.ones(50))
 
-    final_coords = fire_minimize(xs[-1], u_impls, box, np.zeros(50))
+    for lamb in np.linspace(1.0, 0, 50):
+        u_impls = bind_potentials(parameterize_system(hgt, ff, lamb))
+        # NOTE: we don't save velocities between trajectories at different lambda windows; empirically this seems to
+        # reduce the efficiency of the optimization, with more windows being required to achieve an equivalent result
+        ctxt = custom_ops.Context(x, v0, box, intg, u_impls)
+        _, xs, _ = ctxt.multiple_steps(lamb * np.ones(50))
+        x = xs[-1]
+
+    u_impls = bind_potentials(parameterize_system(hgt, ff, 0.0))
+    final_coords = fire_minimize(x, u_impls, box, np.zeros(50))
     for impl in u_impls:
         du_dx, _, _ = impl.execute(final_coords, box, 0.0)
         norm = np.linalg.norm(du_dx, axis=-1)
-        assert np.all(norm < 25000)
+        assert np.all(norm < MAX_FORCE_NORM)
 
     return final_coords[:num_host_atoms]
 
@@ -230,19 +247,14 @@ def equilibrate_host(
     hgt = topology.HostGuestTopology(host_bps, top)
 
     # setup the parameter handlers for the ligand
-    ff_params = ff.get_params()
-    hb_params, hb_potential = hgt.parameterize_harmonic_bond(ff_params.hb_params)
+    params_potential_pairs = parameterize_system(hgt, ff, 1.0)
 
-    params_potential_pairs = [
-        (hb_params, hb_potential),
-        hgt.parameterize_harmonic_angle(ff_params.ha_params),
-        hgt.parameterize_periodic_torsion(ff_params.pt_params, ff_params.it_params),
-        hgt.parameterize_nonbonded(ff_params.q_params, ff_params.lj_params),
-    ]
+    x0 = combined_coords
 
-    u_impls = [pot.bind(params).bound_impl(precision=np.float32) for params, pot in params_potential_pairs]
-    bond_list = get_bond_list(hb_potential)
-    combined_masses = model_utils.apply_hmr(combined_masses, bond_list)
+    # Re-minimize with the mol being flexible
+    u_impls = bind_potentials(params_potential_pairs)  # lambda=1
+    x0 = fire_minimize(x0, u_impls, box, np.ones(50))
+    v0 = np.zeros_like(x0)
 
     dt = 2.5e-3
     friction = 1.0
@@ -252,21 +264,26 @@ def equilibrate_host(
 
     integrator = LangevinIntegrator(temperature, dt, friction, combined_masses, seed).impl()
 
-    x0 = combined_coords
-    v0 = np.zeros_like(x0)
-
+    hb_potential = next(p for _, p in params_potential_pairs if isinstance(p, HarmonicBond))
+    bond_list = get_bond_list(hb_potential)
+    combined_masses = model_utils.apply_hmr(combined_masses, bond_list)
     group_indices = get_group_indices(bond_list)
-    barostat_interval = 5
-    barostat = MonteCarloBarostat(x0.shape[0], pressure, temperature, group_indices, barostat_interval, seed).impl(
-        u_impls
-    )
 
-    # Re-minimize with the mol being flexible
-    x0 = fire_minimize(x0, u_impls, box, np.ones(50))
+    barostat_interval = 5
+    u_impls = bind_potentials(parameterize_system(hgt, ff, 0.0))  # lambda=0
+    barostat = MonteCarloBarostat(
+        x0.shape[0],
+        pressure,
+        temperature,
+        group_indices,
+        barostat_interval,
+        seed,
+    ).impl(u_impls)
+
     # context components: positions, velocities, box, integrator, energy fxns
     ctxt = custom_ops.Context(x0, v0, box, integrator, u_impls, barostat)
 
-    ctxt.multiple_steps(np.linspace(0.0, 0.0, n_steps))
+    ctxt.multiple_steps(np.zeros(n_steps))
 
     return ctxt.get_x_t(), ctxt.get_box()
 
@@ -301,7 +318,7 @@ def get_val_and_grad_fn(bps, box, lamb):
     return val_and_grad_fn
 
 
-def local_minimize(x0, val_and_grad_fn, local_idxs, verbose=True):
+def local_minimize(x0, val_and_grad_fn, local_idxs, verbose=True, assert_energy_decreased=True):
     """
     Minimize a local region given selected idxs.
 
@@ -318,6 +335,9 @@ def local_minimize(x0, val_and_grad_fn, local_idxs, verbose=True):
 
     verbose: bool
         Print internal scipy.optimize warnings + potential energy + gradient norm
+
+    assert_energy_decreased: bool
+        Throw an assertion if the energy does not decrease
 
     Returns
     -------
@@ -374,25 +394,30 @@ def local_minimize(x0, val_and_grad_fn, local_idxs, verbose=True):
     x_local_final_flat = res.x
     x_local_final = x_local_final_flat.reshape(x_local_shape)
 
-    if verbose:
-        U_final, grad_final = val_and_grad_fn_bfgs(x_local_final_flat)
-        print(f"U(x_final) = {U_final:.3f}")
+    U_final, grad_final = val_and_grad_fn_bfgs(x_local_final_flat)
+    forces = -grad_final.reshape(x_local_shape)
+    per_atom_force_norms = np.linalg.norm(forces, axis=1)
 
+    if verbose:
+        print(f"U(x_final) = {U_final:.3f}")
         # diagnose worst atom
-        forces = -grad_final.reshape(x_local_shape)
-        per_atom_force_norms = np.linalg.norm(forces, axis=1)
         argmax_local = np.argmax(per_atom_force_norms)
         worst_atom_idx = local_idxs[argmax_local]
         print(f"atom with highest force norm after minimization: {worst_atom_idx}")
         print(f"force(x_final)[{worst_atom_idx}] = {forces[argmax_local]}")
-
         print("-" * 70)
+
+    # note that this over the local atoms only, as this function is not concerned
+    assert np.amax(per_atom_force_norms) < MAX_FORCE_NORM
 
     x_final = x0.copy()
     x_final[local_idxs] = x_local_final
 
     u_final, _ = val_and_grad_fn(x_final)
 
-    assert u_final < u_0, f"u_0: {u_0:.3f}, u_f: {u_final:.3f}"
+    if assert_energy_decreased:
+        assert u_final < u_0, f"u_0: {u_0:.3f}, u_f: {u_final:.3f}"
+    elif u_final >= u_0:
+        warnings.warn(f"WARNING: Energy did not decrease: u_0: {u_0:.3f}, u_f: {u_final:.3f}", MinimizationWarning)
 
     return x_final

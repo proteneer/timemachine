@@ -119,7 +119,7 @@ align_harmonic_bond_idxs_and_params = partial(
     align_harmonic_bond_or_angle_idxs_and_params, validate_idxs=assert_canonical_bond
 )
 align_harmonic_angle_idxs_and_params = align_harmonic_bond_or_angle_idxs_and_params
-align_nonbonded_idxs_and_params = partial(align_idxs_and_params, make_default=lambda _: (0, 0, 0))
+align_nonbonded_idxs_and_params = partial(align_idxs_and_params, make_default=lambda _: (0, 0, 0, 0))
 align_chiral_atom_idxs_and_params = partial(align_idxs_and_params, make_default=lambda _: 0)
 align_torsion_idxs_and_params = partial(
     align_idxs_and_params,

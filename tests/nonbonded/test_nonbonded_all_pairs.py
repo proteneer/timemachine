@@ -1,6 +1,6 @@
 import numpy as np
 import pytest
-from common import GradientTest
+from common import GradientTest, gen_nonbonded_params_with_4d_offsets
 
 from timemachine.lib.potentials import NonbondedAllPairs
 from timemachine.potentials import generic
@@ -8,22 +8,15 @@ from timemachine.potentials import generic
 pytestmark = [pytest.mark.memcheck]
 
 
-def test_nonbonded_all_pairs_invalid_planes_offsets():
-    with pytest.raises(RuntimeError) as e:
-        NonbondedAllPairs([0], [0, 0], 2.0, 1.1).unbound_impl(np.float32)
-
-    assert "lambda offset idxs and plane idxs need to be equivalent" in str(e)
-
-
 def test_nonbonded_all_pairs_invalid_atom_idxs():
     with pytest.raises(RuntimeError) as e:
-        NonbondedAllPairs([0, 1], [0], 2.0, 1.1, [0, 0]).unbound_impl(np.float32)
+        NonbondedAllPairs(2, 2.0, 1.1, [0, 0]).unbound_impl(np.float32)
 
     assert "atom indices must be unique" in str(e)
 
 
 def test_nonbonded_all_pairs_invalid_num_atoms():
-    potential = NonbondedAllPairs([0], [0], 2.0, 1.1).unbound_impl(np.float32)
+    potential = NonbondedAllPairs(1, 2.0, 1.1).unbound_impl(np.float32)
     with pytest.raises(RuntimeError) as e:
         potential.execute(np.zeros((2, 3)), np.zeros((1, 3)), np.eye(3), 0)
 
@@ -31,11 +24,11 @@ def test_nonbonded_all_pairs_invalid_num_atoms():
 
 
 def test_nonbonded_all_pairs_invalid_num_params():
-    potential = NonbondedAllPairs([0], [0], 2.0, 1.1).unbound_impl(np.float32)
+    potential = NonbondedAllPairs(1, 2.0, 1.1).unbound_impl(np.float32)
     with pytest.raises(RuntimeError) as e:
         potential.execute(np.zeros((1, 3)), np.zeros((2, 3)), np.eye(3), 0)
 
-    assert "NonbondedAllPairs::execute_device(): expected P == N_*3, got P=6, N_*3=3" in str(e)
+    assert "NonbondedAllPairs::execute_device(): expected P == N_*4, got P=6, N_*4=4" in str(e)
 
 
 def test_nonbonded_all_pairs_singleton_subset(rng: np.random.Generator):
@@ -46,14 +39,11 @@ def test_nonbonded_all_pairs_singleton_subset(rng: np.random.Generator):
     cutoff = 1.1
     box = 3.0 * np.eye(3)
     conf = rng.uniform(0, 1, size=(num_atoms, 3))
-    params = rng.uniform(0, 1, size=(num_atoms, 3))
-
-    lambda_plane_idxs = rng.integers(-2, 3, size=(num_atoms,), dtype=np.int32)
-    lambda_offset_idxs = rng.integers(-2, 3, size=(num_atoms,), dtype=np.int32)
+    params = rng.uniform(0, 1, size=(num_atoms, 4))
 
     for idx in rng.choice(num_atoms, size=(10,)):
         atom_idxs = np.array([idx], dtype=np.int32)
-        potential = NonbondedAllPairs(lambda_plane_idxs, lambda_offset_idxs, beta, cutoff, atom_idxs)
+        potential = NonbondedAllPairs(num_atoms, beta, cutoff, atom_idxs)
         du_dx, du_dp, du_dl, u = potential.unbound_impl(np.float64).execute(conf, params, box, lamb)
 
         assert (du_dx == 0).all()
@@ -73,14 +63,11 @@ def test_nonbonded_all_pairs_improper_subset(rng: np.random.Generator):
     cutoff = 1.1
     box = 3.0 * np.eye(3)
     conf = rng.uniform(0, 1, size=(num_atoms, 3))
-    params = rng.uniform(0, 1, size=(num_atoms, 3))
-
-    lambda_plane_idxs = rng.integers(-2, 3, size=(num_atoms,), dtype=np.int32)
-    lambda_offset_idxs = rng.integers(-2, 3, size=(num_atoms,), dtype=np.int32)
+    params = rng.uniform(0, 1, size=(num_atoms, 4))
 
     def test_impl(atom_idxs):
         return (
-            NonbondedAllPairs(lambda_plane_idxs, lambda_offset_idxs, beta, cutoff, atom_idxs)
+            NonbondedAllPairs(num_atoms, beta, cutoff, atom_idxs)
             .unbound_impl(np.float64)
             .execute(conf, params, box, lamb)
         )
@@ -117,20 +104,16 @@ def test_nonbonded_all_pairs_correctness(
     conf = example_conf[:num_atoms]
     params = example_nonbonded_potential.params[:num_atoms, :]
 
-    lambda_plane_idxs = rng.integers(-2, 3, size=(num_atoms,), dtype=np.int32)
-    lambda_offset_idxs = rng.integers(-2, 3, size=(num_atoms,), dtype=np.int32)
-
     atom_idxs = (
         rng.choice(num_atoms, size=(num_atoms_subset,), replace=False).astype(np.int32) if num_atoms_subset else None
     )
 
-    potential = generic.NonbondedAllPairs(lambda_plane_idxs, lambda_offset_idxs, beta, cutoff, atom_idxs)
-    lambda_values = [0.0, 0.1]
+    potential = generic.NonbondedAllPairs(num_atoms, beta, cutoff, atom_idxs)
+
     GradientTest().compare_forces_gpu_vs_reference(
         conf,
-        params,
+        gen_nonbonded_params_with_4d_offsets(rng, params, cutoff),
         example_box,
-        lambda_values,
         potential,
         precision=precision,
         rtol=rtol,

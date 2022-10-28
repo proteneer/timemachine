@@ -1,11 +1,10 @@
-import csv
-
 import numpy as np
 import pytest
 from rdkit import Chem
 
 from timemachine.constants import DEFAULT_FF, DEFAULT_TEMP
 from timemachine.fe import atom_mapping, pdb_writer, utils
+from timemachine.fe.lambda_schedule import construct_pre_optimized_relative_lambda_schedule
 from timemachine.fe.rbfe import HostConfig, setup_initial_states
 from timemachine.fe.single_topology import AtomMapMixin, SingleTopology
 from timemachine.fe.utils import get_mol_name
@@ -31,7 +30,7 @@ def write_trajectory_as_pdb(mol_a, mol_b, core, all_frames, host_topology, out_p
     writer.close()
 
 
-def run_edge(mol_a, mol_b, protein_path):
+def run_edge(mol_a, mol_b, protein_path, n_windows):
 
     threshold = 2.0
     core, smarts = atom_mapping.get_core_with_alignment(mol_a, mol_b, threshold=threshold)
@@ -42,7 +41,7 @@ def run_edge(mol_a, mol_b, protein_path):
     ff = Forcefield.load_from_file(DEFAULT_FF)
     st = SingleTopology(mol_a, mol_b, core, ff)
 
-    lambda_schedule = np.linspace(0, 1, 12)
+    lambda_schedule = construct_pre_optimized_relative_lambda_schedule(n_windows)
     seed = 2023
 
     # solvent
@@ -68,6 +67,7 @@ def run_edge(mol_a, mol_b, protein_path):
     complex_box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes
     complex_host_config = HostConfig(complex_sys, complex_conf, complex_box)
     initial_states = setup_initial_states(st, complex_host_config, DEFAULT_TEMP, lambda_schedule, seed)
+
     all_frames = [state.x0 for state in initial_states]
     write_trajectory_as_pdb(
         mol_a,
@@ -80,21 +80,58 @@ def run_edge(mol_a, mol_b, protein_path):
 
 
 @pytest.mark.nightly(reason="Takes a while to run")
-def test_confgen():
+def test_confgen_hard_edges():
+    # 1) cherry pick a couple of edges that are hard to setup initial geometries
+    # 2) failures come from failed edges in the original hif2a set
+    edges = [
+        ("30", "25"),  # core-hopping B-ring
+        ("227", "266"),  # core-hopping A-ring, bicycle
+        ("7a", "224"),  # core-hopping A-ring, 6->5 member,
+        ("227", "256"),  # stereo close-proximity down H with up H on B-ring,
+        ("289", "61"),  # stereo close-proximity down H with up H on B-ring,
+        ("266", "165"),  # core-hopping A-ring, and stereo close-proximity Hs on B-ring,
+        ("234", "227"),  # failure, stereo close proximity
+        ("1", "155"),  # failure, single nitrile mutation
+        ("1", "7a"),  # failure, methyl extension on B-ring
+        ("266", "156"),  # failure, A-ring corehopping unicycle -> bicycle, B ring double fluorination
+        ("289", "224"),  # failure, A-ring, 6->5 member
+        ("165", "42"),  # failure, B-ring, core-hopping,
+        ("7b", "42"),  # failure, B-ring, core-hopping,
+        ("252", "290"),  # failure, should be a simple transformation
+        ("290", "84"),  # failure, B-ring, core-hopping into oxazole
+        ("290", "256"),  # failure, should be a simple transformation
+        ("164", "163"),  # failure, B-ring has a different conformation
+    ]
 
     protein_path = "timemachine/testsystems/data/hif2a_nowater_min.pdb"
     ligands = "timemachine/datasets/fep_benchmark/hif2a/ligands.sdf"
     mols = [mol for mol in Chem.SDMolSupplier(ligands, removeHs=False)]
 
-    results_csv = "timemachine/datasets/fep_benchmark/hif2a/results_edges_5ns.csv"
-    with open(results_csv) as csvfile:
-        reader = csv.reader(csvfile, delimiter=",")
-        next(reader)
-        rows = [row for row in reader]
-        for row_idx, row in enumerate(rows):
-            mol_a_name, mol_b_name, exp_ddg, fep_ddg, fep_ddg_err, ccc_ddg, ccc_ddg_err = row
-            print("Processing", mol_a_name, "->", mol_b_name)
-            mol_a = get_mol_by_name(mols, mol_a_name)
-            mol_b = get_mol_by_name(mols, mol_b_name)
+    n_windows = 12
 
-            run_edge(mol_a, mol_b, protein_path)
+    for src, dst in edges:
+        print("\nProcessing", src, "->", dst, "\n")
+        mol_a = get_mol_by_name(mols, src)
+        mol_b = get_mol_by_name(mols, dst)
+        # try both directions
+        run_edge(mol_a, mol_b, protein_path, n_windows)
+        run_edge(mol_b, mol_a, protein_path, n_windows)
+
+
+def test_confgen_spot_edges():
+    # spot check so we have something in unit testing.
+    edges = [
+        ("35", "84"),  # failure, B-ring, core-hopping into oxazole, <-- this fails
+    ]
+
+    protein_path = "timemachine/testsystems/data/hif2a_nowater_min.pdb"
+    ligands = "timemachine/datasets/fep_benchmark/hif2a/ligands.sdf"
+    mols = [mol for mol in Chem.SDMolSupplier(ligands, removeHs=False)]
+
+    n_windows = 12
+
+    for src, dst in edges:
+        print("\nProcessing", src, "->", dst, "\n")
+        mol_a = get_mol_by_name(mols, src)
+        mol_b = get_mol_by_name(mols, dst)
+        run_edge(mol_a, mol_b, protein_path, n_windows)

@@ -10,10 +10,9 @@ def test_generic_nonbonded_jittable(rng: np.random.Generator):
     N = 30
 
     potential = generic.Nonbonded(
+        N,
         exclusion_idxs=jnp.zeros((0,)),
         scale_factors=jnp.zeros((0, 1)),
-        lambda_plane_idxs=jnp.zeros(N),
-        lambda_offset_idxs=jnp.zeros(N),
         beta=1.0,
         cutoff=0.1,
     )

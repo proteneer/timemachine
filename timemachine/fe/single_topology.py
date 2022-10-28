@@ -1045,25 +1045,20 @@ class SingleTopology(AtomMapMixin):
         )
         pair_idxs = []
         pair_params = []
-        pair_offsets = []
         for idxs, src_params, dst_params in pair_idxs_and_params:
 
-            if src_params == (0, 0, 0):
-                new_params = dst_params
-                offset = (1 - lamb) * cutoff
-            elif dst_params == (0, 0, 0):
-                new_params = src_params
-                offset = lamb * cutoff
+            if src_params == (0, 0, 0, 0):  # i.e. excluded in src state
+                new_params = (*dst_params[:3], (1 - lamb) * cutoff)
+            elif dst_params == (0, 0, 0, 0):
+                new_params = (*src_params[:3], lamb * cutoff)
             else:
                 new_params = interpolate_fn(src_params, dst_params, lamb)
-                offset = 0
 
             pair_idxs.append(idxs)
             pair_params.append(new_params)
-            pair_offsets.append(offset)
 
         return potentials.NonbondedPairListPrecomputed(
-            np.array(pair_idxs), jnp.array(pair_offsets), src_nonbonded.get_beta(), src_nonbonded.get_cutoff()
+            np.array(pair_idxs), src_nonbonded.get_beta(), src_nonbonded.get_cutoff()
         ).bind(pair_params)
 
     def _setup_intermediate_chiral_bond_term(self, src_bond, dst_bond, lamb, interpolate_fn):
@@ -1178,13 +1173,13 @@ class SingleTopology(AtomMapMixin):
         combined_exclusion_idxs = np.concatenate([host_nonbonded.get_exclusion_idxs(), guest_exclusions])
         combined_scale_factors = np.concatenate([host_nonbonded.get_scale_factors(), guest_scale_factors])
 
-        host_qlj = host_nonbonded.params
+        host_params = host_nonbonded.params
+        cutoff = host_nonbonded.get_cutoff()
 
         guest_charges = []
         guest_sigmas = []
         guest_epsilons = []
-        guest_lambda_plane_idxs = []
-        guest_lambda_offset_idxs = []
+        guest_w_coords = []
 
         # generate charges and lj parameters for each guest
         guest_a_q = self.ff.q_handle.parameterize(self.mol_a)
@@ -1197,55 +1192,49 @@ class SingleTopology(AtomMapMixin):
             if membership == 0:  # core atom
                 a_idx = self.c_to_a[idx]
                 b_idx = self.c_to_b[idx]
-                plane = 0
-                offset = 0
+
                 # interpolate charges when in common-core
                 q = (1 - lamb) * guest_a_q[a_idx] + lamb * guest_b_q[b_idx]
                 sig = (1 - lamb) * guest_a_lj[a_idx, 0] + lamb * guest_b_lj[b_idx, 0]
                 eps = (1 - lamb) * guest_a_lj[a_idx, 1] + lamb * guest_b_lj[b_idx, 1]
+
+                # fixed at w = 0
+                w_coords = 0.0
+
             elif membership == 1:  # dummy_A
                 a_idx = self.c_to_a[idx]
-                plane = 0
-                offset = 1
                 q = guest_a_q[a_idx]
                 sig = guest_a_lj[a_idx, 0]
                 eps = guest_a_lj[a_idx, 1]
+                w_coords = interpolate.linear_interpolation(0.0, cutoff, lamb)
+
             elif membership == 2:  # dummy_B
                 b_idx = self.c_to_b[idx]
-                plane = -1
-                offset = 1
                 q = guest_b_q[b_idx]
                 sig = guest_b_lj[b_idx, 0]
                 eps = guest_b_lj[b_idx, 1]
+                w_coords = interpolate.linear_interpolation(-cutoff, 0.0, lamb)
+
             else:
                 assert 0
 
-            guest_lambda_plane_idxs.append(plane)
-            guest_lambda_offset_idxs.append(offset)
             guest_charges.append(q)
             guest_sigmas.append(sig)
             guest_epsilons.append(eps)
+            guest_w_coords.append(w_coords)
 
-        np.testing.assert_equal(host_nonbonded.get_lambda_plane_idxs(), np.zeros(num_host_atoms))
-        np.testing.assert_equal(host_nonbonded.get_lambda_offset_idxs(), np.zeros(num_host_atoms))
-
-        combined_lambda_plane_idxs = np.concatenate(
-            [host_nonbonded.get_lambda_plane_idxs(), guest_lambda_plane_idxs]
-        ).astype(np.int32)
-        combined_lambda_offset_idxs = np.concatenate(
-            [host_nonbonded.get_lambda_offset_idxs(), guest_lambda_offset_idxs]
-        ).astype(np.int32)
-
-        combined_charges = np.concatenate([host_qlj[:, 0], guest_charges])
-        combined_sigmas = np.concatenate([host_qlj[:, 1], guest_sigmas])
-        combined_epsilons = np.concatenate([host_qlj[:, 2], guest_epsilons])
-        combined_nonbonded_params = np.stack([combined_charges, combined_sigmas, combined_epsilons], axis=1)
+        combined_charges = np.concatenate([host_params[:, 0], guest_charges])
+        combined_sigmas = np.concatenate([host_params[:, 1], guest_sigmas])
+        combined_epsilons = np.concatenate([host_params[:, 2], guest_epsilons])
+        combined_w_coords = np.concatenate([host_params[:, 3], guest_w_coords])
+        combined_nonbonded_params = np.stack(
+            [combined_charges, combined_sigmas, combined_epsilons, combined_w_coords], axis=1
+        )
 
         combined_nonbonded = potentials.Nonbonded(
+            num_host_atoms + num_guest_atoms,
             combined_exclusion_idxs,
             combined_scale_factors,
-            combined_lambda_plane_idxs,
-            combined_lambda_offset_idxs,
             host_nonbonded.get_beta(),
             host_nonbonded.get_cutoff(),
         ).bind(combined_nonbonded_params)

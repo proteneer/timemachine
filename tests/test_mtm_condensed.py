@@ -57,7 +57,7 @@ def test_condensed_phase_mtm():
     with open(cache_path, "rb") as fh:
         vacuum_samples, vacuum_log_weights = pickle.load(fh)
 
-    ubps, params, masses, coords, box = enhanced.get_solvent_phase_system(mol, ff)
+    ubps, params, masses, coords, box = enhanced.get_solvent_phase_system(mol, ff, 0.0)
 
     nb_potential = ubps[-1]
     beta = nb_potential.get_beta()
@@ -180,7 +180,7 @@ def test_nvt_box():
     mol, _ = testsystems.ligands.get_biphenyl()
     ff = Forcefield.load_from_file(DEFAULT_FF)
 
-    ubps, params, masses, coords, box = enhanced.get_solvent_phase_system(mol, ff)
+    ubps, params, masses, coords, box = enhanced.get_solvent_phase_system(mol, ff, 0.0)
     bps = []
     for p, bp in zip(params, ubps):
         bps.append(bp.bind(p))

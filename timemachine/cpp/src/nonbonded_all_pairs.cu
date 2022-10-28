@@ -7,21 +7,15 @@
 #include "nonbonded_common.cuh"
 #include "vendored/hilbert.h"
 
-#include "k_lambda_transformer.cuh"
 #include "k_nonbonded.cuh"
 
 namespace timemachine {
 
 template <typename RealType>
 NonbondedAllPairs<RealType>::NonbondedAllPairs(
-    const std::vector<int> &lambda_plane_idxs,  // [N]
-    const std::vector<int> &lambda_offset_idxs, // [N]
-    const double beta,
-    const double cutoff,
-    const std::optional<std::set<int>> &atom_idxs)
-    : N_(lambda_offset_idxs.size()), K_(atom_idxs ? atom_idxs->size() : N_), beta_(beta), cutoff_(cutoff),
-      d_atom_idxs_(nullptr), nblist_(K_), nblist_padding_(0.1), d_sort_storage_(nullptr), d_sort_storage_bytes_(0),
-      disable_hilbert_(false),
+    const int N, const double beta, const double cutoff, const std::optional<std::set<int>> &atom_idxs)
+    : N_(N), K_(atom_idxs ? atom_idxs->size() : N_), beta_(beta), cutoff_(cutoff), d_atom_idxs_(nullptr), nblist_(K_),
+      nblist_padding_(0.1), d_sort_storage_(nullptr), d_sort_storage_bytes_(0), disable_hilbert_(false),
 
       kernel_ptrs_({// enumerate over every possible kernel combination
                     // U: Compute U
@@ -37,18 +31,6 @@ NonbondedAllPairs<RealType>::NonbondedAllPairs(
                     &k_nonbonded_unified<RealType, 1, 1, 0>,
                     &k_nonbonded_unified<RealType, 1, 1, 1>}) {
 
-    if (lambda_offset_idxs.size() != lambda_plane_idxs.size()) {
-        throw std::runtime_error("lambda offset idxs and plane idxs need to be equivalent");
-    }
-
-    gpuErrchk(cudaMalloc(&d_lambda_plane_idxs_, N_ * sizeof(*d_lambda_plane_idxs_)));
-    gpuErrchk(cudaMemcpy(
-        d_lambda_plane_idxs_, &lambda_plane_idxs[0], N_ * sizeof(*d_lambda_plane_idxs_), cudaMemcpyHostToDevice));
-
-    gpuErrchk(cudaMalloc(&d_lambda_offset_idxs_, N_ * sizeof(*d_lambda_offset_idxs_)));
-    gpuErrchk(cudaMemcpy(
-        d_lambda_offset_idxs_, &lambda_offset_idxs[0], N_ * sizeof(*d_lambda_offset_idxs_), cudaMemcpyHostToDevice));
-
     if (atom_idxs) {
         gpuErrchk(cudaMalloc(&d_atom_idxs_, K_ * sizeof(*d_atom_idxs_)));
         std::vector<int> atom_idxs_v(atom_idxs->begin(), atom_idxs->end());
@@ -59,15 +41,11 @@ NonbondedAllPairs<RealType>::NonbondedAllPairs(
 
     gpuErrchk(cudaMalloc(&d_gathered_x_, K_ * 3 * sizeof(*d_gathered_x_)));
 
-    gpuErrchk(cudaMalloc(&d_w_, N_ * sizeof(*d_w_)));
-
-    gpuErrchk(cudaMalloc(&d_gathered_w_, K_ * sizeof(*d_gathered_w_)));
-
-    gpuErrchk(cudaMalloc(&d_gathered_p_, K_ * 3 * sizeof(*d_gathered_p_)));
+    gpuErrchk(cudaMalloc(&d_gathered_p_, K_ * PARAMS_PER_ATOM * sizeof(*d_gathered_p_)));
     gpuErrchk(cudaMalloc(&d_gathered_du_dx_, K_ * 3 * sizeof(*d_gathered_du_dx_)));
-    gpuErrchk(cudaMalloc(&d_gathered_du_dp_, K_ * 3 * sizeof(*d_gathered_du_dp_)));
+    gpuErrchk(cudaMalloc(&d_gathered_du_dp_, K_ * PARAMS_PER_ATOM * sizeof(*d_gathered_du_dp_)));
 
-    gpuErrchk(cudaMalloc(&d_du_dp_buffer_, N_ * 3 * sizeof(*d_du_dp_buffer_)));
+    gpuErrchk(cudaMalloc(&d_du_dp_buffer_, N_ * PARAMS_PER_ATOM * sizeof(*d_du_dp_buffer_)));
 
     gpuErrchk(cudaMallocHost(&p_ixn_count_, 1 * sizeof(*p_ixn_count_)));
 
@@ -117,9 +95,6 @@ NonbondedAllPairs<RealType>::NonbondedAllPairs(
 
 template <typename RealType> NonbondedAllPairs<RealType>::~NonbondedAllPairs() {
 
-    gpuErrchk(cudaFree(d_lambda_plane_idxs_));
-    gpuErrchk(cudaFree(d_lambda_offset_idxs_));
-
     if (d_atom_idxs_) {
         gpuErrchk(cudaFree(d_atom_idxs_));
     }
@@ -130,8 +105,6 @@ template <typename RealType> NonbondedAllPairs<RealType>::~NonbondedAllPairs() {
     gpuErrchk(cudaFree(d_bin_to_idx_));
     gpuErrchk(cudaFree(d_gathered_x_));
 
-    gpuErrchk(cudaFree(d_w_));
-    gpuErrchk(cudaFree(d_gathered_w_));
     gpuErrchk(cudaFree(d_gathered_p_));
     gpuErrchk(cudaFree(d_gathered_du_dx_));
     gpuErrchk(cudaFree(d_gathered_du_dp_));
@@ -190,7 +163,7 @@ void NonbondedAllPairs<RealType>::execute_device(
     const int N,
     const int P,
     const double *d_x,
-    const double *d_p,   // 2 * N * 3
+    const double *d_p,   // N * PARAMS_PER_ATOM
     const double *d_box, // 3 * 3
     const double lambda,
     unsigned long long *d_du_dx,
@@ -206,7 +179,7 @@ void NonbondedAllPairs<RealType>::execute_device(
     //     - look up which cell each particle belongs to, and its linear index along the hilbert curve.
     //     - use radix pair sort keyed on the hilbert index with values equal to the atomic index
     //     - resulting sorted values is the permutation array.
-    //     - permute lambda plane/offsets, coords
+    //     - permute coords
     // b. else:
     //     - permute new coords
     // c. permute parameters
@@ -221,10 +194,10 @@ void NonbondedAllPairs<RealType>::execute_device(
             ", N_=" + std::to_string(N_));
     }
 
-    if (P != N_ * 3) {
+    if (P != N_ * PARAMS_PER_ATOM) {
         throw std::runtime_error(
-            "NonbondedAllPairs::execute_device(): expected P == N_*3, got P=" + std::to_string(P) +
-            ", N_*3=" + std::to_string(N_ * 3));
+            "NonbondedAllPairs::execute_device(): expected P == N_*" + std::to_string(PARAMS_PER_ATOM) + ", got P=" +
+            std::to_string(P) + ", N_*" + std::to_string(PARAMS_PER_ATOM) + "=" + std::to_string(N_ * PARAMS_PER_ATOM));
     }
 
     const int tpb = 32;
@@ -261,7 +234,7 @@ void NonbondedAllPairs<RealType>::execute_device(
             }
         }
 
-        // compute new coordinates, new lambda_idxs, new_plane_idxs
+        // compute new coordinates
         k_gather<<<dim3(ceil_divide(K_, tpb), 3, 1), tpb, 0, stream>>>(K_, d_sorted_atom_idxs_, d_x, d_gathered_x_);
         gpuErrchk(cudaPeekAtLastError());
         nblist_.build_nblist_device(K_, d_gathered_x_, d_box, cutoff_ + nblist_padding_, stream);
@@ -299,7 +272,8 @@ void NonbondedAllPairs<RealType>::execute_device(
     }
 
     // do parameter interpolation here
-    k_gather<<<dim3(ceil_divide(K_, tpb), 3, 1), tpb, 0, stream>>>(K_, d_sorted_atom_idxs_, d_p, d_gathered_p_);
+    k_gather<<<dim3(ceil_divide(K_, tpb), PARAMS_PER_ATOM, 1), tpb, 0, stream>>>(
+        K_, d_sorted_atom_idxs_, d_p, d_gathered_p_);
     gpuErrchk(cudaPeekAtLastError());
 
     // reset buffers and sorted accumulators
@@ -307,16 +281,9 @@ void NonbondedAllPairs<RealType>::execute_device(
         gpuErrchk(cudaMemsetAsync(d_gathered_du_dx_, 0, K_ * 3 * sizeof(*d_gathered_du_dx_), stream))
     }
     if (d_du_dp) {
-        gpuErrchk(cudaMemsetAsync(d_gathered_du_dp_, 0, K_ * 3 * sizeof(*d_gathered_du_dp_), stream))
+        gpuErrchk(cudaMemsetAsync(d_gathered_du_dp_, 0, K_ * PARAMS_PER_ATOM * sizeof(*d_gathered_du_dp_), stream))
     }
 
-    // update new w coordinates
-    // (tbd): cache lambda value for equilibrium calculations
-    k_compute_w_coords<<<ceil_divide(N_, tpb), tpb, 0, stream>>>(
-        N, lambda, cutoff_, d_lambda_plane_idxs_, d_lambda_offset_idxs_, d_w_);
-    gpuErrchk(cudaPeekAtLastError());
-
-    k_gather<<<ceil_divide(K_, tpb), tpb, 0, stream>>>(K_, d_sorted_atom_idxs_, d_w_, d_gathered_w_);
     gpuErrchk(cudaPeekAtLastError());
 
     // look up which kernel we need for this computation
@@ -331,7 +298,6 @@ void NonbondedAllPairs<RealType>::execute_device(
         d_gathered_x_,
         d_gathered_p_,
         d_box,
-        d_gathered_w_,
         beta_,
         cutoff_,
         nblist_.get_row_idxs(),
@@ -351,18 +317,19 @@ void NonbondedAllPairs<RealType>::execute_device(
         gpuErrchk(cudaPeekAtLastError());
     }
 
-    // params are N,3
+    // params are N, PARAMS_PER_ATOM
     // this needs to be an accumulated permute
     if (d_du_dp) {
         // scattered assignment updates K_ <= N_ elements; the rest should be 0
-        gpuErrchk(cudaMemsetAsync(d_du_dp_buffer_, 0, N_ * 3 * sizeof(*d_du_dp_buffer_), stream));
-        k_scatter_assign<<<dim3(ceil_divide(K_, tpb), 3, 1), tpb, 0, stream>>>(
+        gpuErrchk(cudaMemsetAsync(d_du_dp_buffer_, 0, N_ * PARAMS_PER_ATOM * sizeof(*d_du_dp_buffer_), stream));
+        k_scatter_assign<<<dim3(ceil_divide(K_, tpb), PARAMS_PER_ATOM, 1), tpb, 0, stream>>>(
             K_, d_sorted_atom_idxs_, d_gathered_du_dp_, d_du_dp_buffer_);
         gpuErrchk(cudaPeekAtLastError());
     }
 
     if (d_du_dp) {
-        k_add_ull_to_ull<<<dim3(ceil_divide(N_, tpb), 3, 1), tpb, 0, stream>>>(N, d_du_dp_buffer_, d_du_dp);
+        k_add_ull_to_ull<<<dim3(ceil_divide(N_, tpb), PARAMS_PER_ATOM, 1), tpb, 0, stream>>>(
+            N, d_du_dp_buffer_, d_du_dp);
         gpuErrchk(cudaPeekAtLastError());
     }
 }
@@ -372,12 +339,16 @@ void NonbondedAllPairs<RealType>::du_dp_fixed_to_float(
     const int N, const int P, const unsigned long long *du_dp, double *du_dp_float) {
 
     for (int i = 0; i < N; i++) {
-        const int idx_charge = i * 3 + 0;
-        const int idx_sig = i * 3 + 1;
-        const int idx_eps = i * 3 + 2;
+        const int idx = i * PARAMS_PER_ATOM;
+        const int idx_charge = idx + PARAM_OFFSET_CHARGE;
+        const int idx_sig = idx + PARAM_OFFSET_SIG;
+        const int idx_eps = idx + PARAM_OFFSET_EPS;
+        const int idx_w = idx + PARAM_OFFSET_W;
+
         du_dp_float[idx_charge] = FIXED_TO_FLOAT_DU_DP<double, FIXED_EXPONENT_DU_DCHARGE>(du_dp[idx_charge]);
         du_dp_float[idx_sig] = FIXED_TO_FLOAT_DU_DP<double, FIXED_EXPONENT_DU_DSIG>(du_dp[idx_sig]);
         du_dp_float[idx_eps] = FIXED_TO_FLOAT_DU_DP<double, FIXED_EXPONENT_DU_DEPS>(du_dp[idx_eps]);
+        du_dp_float[idx_w] = FIXED_TO_FLOAT_DU_DP<double, FIXED_EXPONENT_DU_DW>(du_dp[idx_w]);
     }
 }
 
