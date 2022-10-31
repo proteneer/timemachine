@@ -1159,19 +1159,19 @@ class SingleTopology(AtomMapMixin):
     def _parameterize_host_guest_nonbonded(self, lamb, host_nonbonded, interpolate_w_fn: ParameterInterpolationFxn):
         # Parameterize nonbonded potential for the host guest interaction
 
-        guest_exclusions = []
-        guest_scale_factors = []
+        guest_exclusions_ = []
+        guest_scale_factors_ = []
 
         num_host_atoms = host_nonbonded.params.shape[0]
         num_guest_atoms = self.get_num_atoms()
 
         for i in range(num_guest_atoms):
             for j in range(i + 1, num_guest_atoms):
-                guest_exclusions.append((i, j))
-                guest_scale_factors.append((1.0, 1.0))
+                guest_exclusions_.append((i, j))
+                guest_scale_factors_.append((1.0, 1.0))
 
-        guest_exclusions = np.array(guest_exclusions, dtype=np.int32) + num_host_atoms
-        guest_scale_factors = np.array(guest_scale_factors, dtype=np.float64)
+        guest_exclusions = np.array(guest_exclusions_, dtype=np.int32) + num_host_atoms
+        guest_scale_factors = np.array(guest_scale_factors_, dtype=np.float64)
 
         combined_exclusion_idxs = np.concatenate([host_nonbonded.get_exclusion_idxs(), guest_exclusions])
         combined_scale_factors = np.concatenate([host_nonbonded.get_scale_factors(), guest_scale_factors])
