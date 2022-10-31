@@ -10,6 +10,7 @@ from rdkit import Chem
 
 from timemachine.fe import interpolate, system, topology, utils
 from timemachine.fe.dummy import canonicalize_bond, identify_dummy_groups, identify_root_anchors
+from timemachine.fe.lambda_schedule import construct_pre_optimized_relative_lambda_schedule
 from timemachine.fe.system import HostGuestSystem
 from timemachine.lib import potentials
 
@@ -876,7 +877,16 @@ class SingleTopology(AtomMapMixin):
         self.default_interpolate_chiral_bond_params_fxn = interpolate.linear_interpolation
 
         # 4D coordinate (w) schedule used for de/coupling dummy atoms in host-guest nonbonded ixns
-        self.default_interpolate_dummy_w_fxn = interpolate.linear_interpolation  # TODO: replace with optimized schedule
+        def make_default_interpolate_dummy_w_fxn():
+            lambda_schedule = construct_pre_optimized_relative_lambda_schedule(None)
+            x = jnp.linspace(0.0, 1.0, len(lambda_schedule))
+
+            def f(w0, w1, lamb):
+                return interpolate.linear_interpolation(w0, w1, jnp.interp(lamb, x, lambda_schedule))
+
+            return f
+
+        self.default_interpolate_dummy_w_fxn = make_default_interpolate_dummy_w_fxn()
 
     def combine_masses(self):
         """

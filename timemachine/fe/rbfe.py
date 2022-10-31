@@ -12,7 +12,6 @@ import pymbar
 from timemachine.constants import BOLTZ, DEFAULT_TEMP
 from timemachine.fe import model_utils
 from timemachine.fe.bar import bar_with_bootstrapped_uncertainty
-from timemachine.fe.lambda_schedule import construct_pre_optimized_relative_lambda_schedule
 from timemachine.fe.single_topology import SingleTopology
 from timemachine.fe.system import convert_bps_into_system
 from timemachine.fe.utils import get_mol_name, get_romol_conf
@@ -635,7 +634,7 @@ def estimate_relative_free_energy(
     single_topology = SingleTopology(mol_a, mol_b, core, ff)
 
     if lambda_schedule is None:
-        lambda_schedule = construct_pre_optimized_relative_lambda_schedule(n_windows)
+        lambda_schedule = np.linspace(0, 1, n_windows or 30)
     else:
         assert n_windows is None
         warnings.warn("Warning: setting lambda_schedule manually, this argument may be removed in a future release.")
