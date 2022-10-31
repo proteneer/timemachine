@@ -34,7 +34,7 @@ def _test_combined_parameters_impl_bonded(host_system_omm):
 
     mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
     forcefield = Forcefield.load_from_file(DEFAULT_FF)
-    st3 = SingleTopology(mol_a, mol_b, core, forcefield)
+    st = SingleTopology(mol_a, mol_b, core, forcefield)
 
     host_bps, masses = openmm_deserializer.deserialize_system(host_system_omm, cutoff=1.2)
     num_host_atoms = len(masses)
@@ -51,7 +51,7 @@ def _test_combined_parameters_impl_bonded(host_system_omm):
     for lamb in [0.0, 1.0]:
 
         # generate host guest system
-        hgs = st3.combine_with_host(host_sys, lamb=lamb)
+        hgs = st.combine_with_host(host_sys, lamb=lamb)
 
         # check bonds
         check_bonded_idxs_consistency(hgs.bond.get_idxs(), len(host_sys.bond.get_idxs()))
