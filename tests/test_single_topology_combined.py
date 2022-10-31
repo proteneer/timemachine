@@ -137,7 +137,7 @@ def _test_combined_parameters_impl_nonbonded(host_system_omm):
                 elif indicator == 2:
                     # mol_b dummy
                     if lamb == 0.0:
-                        assert w == pytest.approx(-cutoff)
+                        assert w == pytest.approx(cutoff)
                     elif lamb == 1.0:
                         assert w == 0.0
                 else:

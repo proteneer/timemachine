@@ -875,6 +875,9 @@ class SingleTopology(AtomMapMixin):
         self.default_interpolate_chiral_atom_params_fxn = interpolate.linear_interpolation
         self.default_interpolate_chiral_bond_params_fxn = interpolate.linear_interpolation
 
+        # 4D coordinate (w) schedule used for de/coupling dummy atoms in host-guest nonbonded ixns
+        self.default_interpolate_dummy_w_fxn = interpolate.linear_interpolation  # TODO: replace with optimized schedule
+
     def combine_masses(self):
         """
         Combine masses between two end-states by taking the heavier of the two core atoms.
@@ -1153,7 +1156,7 @@ class SingleTopology(AtomMapMixin):
 
         return system.VacuumSystem(bond, angle, torsion, nonbonded, chiral_atom, chiral_bond)
 
-    def _parameterize_host_guest_nonbonded(self, lamb, host_nonbonded):
+    def _parameterize_host_guest_nonbonded(self, lamb, host_nonbonded, interpolate_w_fn: ParameterInterpolationFxn):
         # Parameterize nonbonded potential for the host guest interaction
 
         guest_exclusions = []
@@ -1199,29 +1202,33 @@ class SingleTopology(AtomMapMixin):
                 eps = (1 - lamb) * guest_a_lj[a_idx, 1] + lamb * guest_b_lj[b_idx, 1]
 
                 # fixed at w = 0
-                w_coords = 0.0
+                w = 0.0
 
             elif membership == 1:  # dummy_A
                 a_idx = self.c_to_a[idx]
                 q = guest_a_q[a_idx]
                 sig = guest_a_lj[a_idx, 0]
                 eps = guest_a_lj[a_idx, 1]
-                w_coords = interpolate.linear_interpolation(0.0, cutoff, lamb)
+
+                # Lift dummy A out of plane as lambda goes from 0 to 1
+                w = interpolate_w_fn(0.0, cutoff, lamb)
 
             elif membership == 2:  # dummy_B
                 b_idx = self.c_to_b[idx]
                 q = guest_b_q[b_idx]
                 sig = guest_b_lj[b_idx, 0]
                 eps = guest_b_lj[b_idx, 1]
-                w_coords = interpolate.linear_interpolation(-cutoff, 0.0, lamb)
 
+                # Lower dummy B into plane as lambda goes from 0 to 1
+                # NOTE: this is only for host-guest nonbonded ixns (there is no clash between A and B at lambda = 0.5)
+                w = interpolate_w_fn(cutoff, 0.0, lamb)
             else:
                 assert 0
 
             guest_charges.append(q)
             guest_sigmas.append(sig)
             guest_epsilons.append(eps)
-            guest_w_coords.append(w_coords)
+            guest_w_coords.append(w)
 
         combined_charges = np.concatenate([host_params[:, 0], guest_charges])
         combined_sigmas = np.concatenate([host_params[:, 1], guest_sigmas])
@@ -1241,11 +1248,7 @@ class SingleTopology(AtomMapMixin):
 
         return combined_nonbonded
 
-    def combine_with_host(
-        self,
-        host_system,
-        lamb,
-    ):
+    def combine_with_host(self, host_system, lamb, interpolate_dummy_w_fxn: Optional[ParameterInterpolationFxn] = None):
         """
         Setup host guest system. Bonds, angles, torsions, chiral_atom, chiral_bond and nonbonded terms are
         combined. In particular:
@@ -1314,7 +1317,11 @@ class SingleTopology(AtomMapMixin):
 
         # concatenate guest charges with host charges
 
-        combined_nonbonded = self._parameterize_host_guest_nonbonded(lamb, host_system.nonbonded)
+        combined_nonbonded = self._parameterize_host_guest_nonbonded(
+            lamb,
+            host_system.nonbonded,
+            interpolate_dummy_w_fxn if interpolate_dummy_w_fxn is not None else self.default_interpolate_dummy_w_fxn,
+        )
 
         return HostGuestSystem(
             combined_bond,
