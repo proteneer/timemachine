@@ -4,6 +4,7 @@ import numpy as np
 import pytest
 
 from timemachine.constants import DEFAULT_FF
+from timemachine.fe.interpolate import linear_interpolation
 from timemachine.fe.single_topology import SingleTopology
 from timemachine.fe.system import convert_bps_into_system
 from timemachine.ff import Forcefield
@@ -13,32 +14,42 @@ from timemachine.testsystems.dhfr import get_dhfr_system
 from timemachine.testsystems.relative import get_hif2a_ligand_pair_single_topology
 
 
-def test_combined_parameters_solvent():
+@pytest.fixture(scope="module")
+def hif2a_ligand_pair_single_topology():
+    mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
+    forcefield = Forcefield.load_from_file(DEFAULT_FF)
+    return SingleTopology(mol_a, mol_b, core, forcefield)
+
+
+def convert_omm_system(omm_system):
+    bps, masses = openmm_deserializer.deserialize_system(omm_system, cutoff=1.2)
+    num_atoms = len(masses)
+    system = convert_bps_into_system(bps)
+    return system, num_atoms
+
+
+@pytest.fixture(scope="module")
+def complex_host_system():
+    host_sys_omm = get_dhfr_system()
+    return convert_omm_system(host_sys_omm)
+
+
+@pytest.fixture(scope="module")
+def solvent_host_system():
     forcefield = Forcefield.load_from_file(DEFAULT_FF)
     host_sys_omm, _, _, _ = builders.build_water_system(3.0, forcefield.water_ff)
-    _test_combined_parameters_impl_bonded(host_sys_omm)
-    _test_combined_parameters_impl_nonbonded(host_sys_omm)
+    return convert_omm_system(host_sys_omm)
 
 
-def test_combined_parameters_complex():
-    host_sys_omm = get_dhfr_system()
-    _test_combined_parameters_impl_bonded(host_sys_omm)
-    _test_combined_parameters_impl_nonbonded(host_sys_omm)
-
-
-def _test_combined_parameters_impl_bonded(host_system_omm):
+@pytest.mark.parametrize("host_system_fixture", ["solvent_host_system", "complex_host_system"])
+def test_combined_parameters_bonded(host_system_fixture, hif2a_ligand_pair_single_topology, request):
     # test bonded and nonbonded parameters are correct at the end-states.
     # 1) we expected bonded idxs in the ligand to be shifted by num_host_atoms
     # 2) we expected nonbonded lambda_idxs to be shifted
     # 3) we expected nonbonded parameters on the core to be linearly interpolated
 
-    mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
-    forcefield = Forcefield.load_from_file(DEFAULT_FF)
-    st = SingleTopology(mol_a, mol_b, core, forcefield)
-
-    host_bps, masses = openmm_deserializer.deserialize_system(host_system_omm, cutoff=1.2)
-    num_host_atoms = len(masses)
-    host_sys = convert_bps_into_system(host_bps)
+    st = hif2a_ligand_pair_single_topology
+    host_sys, num_host_atoms = request.getfixturevalue(host_system_fixture)
 
     def check_bonded_idxs_consistency(bonded_idxs, num_host_idxs):
 
@@ -75,19 +86,15 @@ def _test_combined_parameters_impl_bonded(host_system_omm):
         check_bonded_idxs_consistency(hgs.nonbonded_guest_pairs.get_idxs(), 0)
 
 
-def _test_combined_parameters_impl_nonbonded(host_system_omm):
+@pytest.mark.parametrize("host_system_fixture", ["solvent_host_system", "complex_host_system"])
+def test_combined_parameters_nonbonded(host_system_fixture, hif2a_ligand_pair_single_topology, request):
     # test bonded and nonbonded parameters are correct at the end-states.
     # 1) we expected bonded idxs in the ligand to be shifted by num_host_atoms
     # 2) we expected nonbonded lambda_idxs to be shifted
     # 3) we expected nonbonded parameters on the core to be linearly interpolated
 
-    mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
-    forcefield = Forcefield.load_from_file(DEFAULT_FF)
-    st = SingleTopology(mol_a, mol_b, core, forcefield)
-
-    host_bps, masses = openmm_deserializer.deserialize_system(host_system_omm, cutoff=1.2)
-    num_host_atoms = len(masses)
-    host_sys = convert_bps_into_system(host_bps)
+    st = hif2a_ligand_pair_single_topology
+    host_sys, num_host_atoms = request.getfixturevalue(host_system_fixture)
 
     for lamb in [0.0, 1.0]:
 
@@ -179,3 +186,38 @@ def _test_combined_parameters_impl_nonbonded(host_system_omm):
                 assert ref_q == test_q
                 assert test_sig == ref_sig
                 assert test_eps == ref_eps
+
+
+@pytest.mark.parametrize("host_system_fixture", ["solvent_host_system", "complex_host_system"])
+def test_combined_parameters_nonbonded_intermediate(
+    host_system_fixture, hif2a_ligand_pair_single_topology: SingleTopology, request
+):
+    st = hif2a_ligand_pair_single_topology
+    host_sys, num_host_atoms = request.getfixturevalue(host_system_fixture)
+
+    rng = np.random.default_rng(2022)
+
+    # generate an arbitrary interpolation function
+    def gen_arbitrary_interpolation_fxn(rng):
+        salt = rng.uniform(0, 1)
+
+        def interpolate_fxn(a, b, x):
+            y = linear_interpolation(a, b, x)
+            return y if x in {0.0, 1.0} else float(hash(float(y) * salt))
+
+        return interpolate_fxn
+
+    for lamb in rng.uniform(0, 1, (10,)):
+        f = gen_arbitrary_interpolation_fxn(rng)
+        hgs = st.combine_with_host(host_sys, lamb=lamb, interpolate_dummy_w_fxn=f)
+        cutoff = hgs.nonbonded_host_guest.get_cutoff()
+
+        assert hgs.nonbonded_host_guest.params is not None
+        guest_params = hgs.nonbonded_host_guest.params[num_host_atoms:]
+        w_core = [w for flag, (_, _, _, w) in zip(st.c_flags, guest_params) if flag == 0]
+        w_a = [w for flag, (_, _, _, w) in zip(st.c_flags, guest_params) if flag == 1]
+        w_b = [w for flag, (_, _, _, w) in zip(st.c_flags, guest_params) if flag == 2]
+
+        assert all(w == 0.0 for w in w_core)
+        assert all(w == f(0.0, cutoff, lamb) for w in w_a)
+        assert all(w == f(cutoff, 0.0, lamb) for w in w_b)
