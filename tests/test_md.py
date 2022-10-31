@@ -39,35 +39,29 @@ class TestContext(unittest.TestCase):
         bps = [bp]
 
         ctxt = custom_ops.Context(x0, v0, box, intg, bps)
-        test_du_dls, test_xs, test_boxes = ctxt.multiple_steps(np.zeros(10), 10, 10)
+        test_xs, test_boxes = ctxt.multiple_steps(10, 10)
         assert len(test_xs) == 1
-        assert len(test_du_dls) == 1
         assert len(test_xs) == len(test_boxes)
         # We should not get out the input frame
         assert np.any(np.not_equal(x0, test_xs[0]))
 
         # The current coordinates should match, as the number of steps and the interval match
         np.testing.assert_array_equal(test_xs[0], ctxt.get_x_t())
-        _, test_frame_du_dl, _ = bps[0].execute(test_xs[0], test_boxes[0], 0.0)
-        np.testing.assert_array_equal(test_du_dls[0], test_frame_du_dl)
+        _, _ = bps[0].execute(test_xs[0], test_boxes[0])
 
         # Given an interval greater than the number of steps, return empty arrays
-        test_du_dls, test_xs, test_boxes = ctxt.multiple_steps(np.zeros(10), 100, 100)
+        test_xs, test_boxes = ctxt.multiple_steps(10, 100)
         assert len(test_xs) == 0
-        assert len(test_du_dls) == 0
         assert len(test_boxes) == 0
 
         # Given interval of 0, return the last frame
-        test_du_dls, test_xs, test_boxes = ctxt.multiple_steps(np.zeros(10), 0, 0)
+        test_xs, test_boxes = ctxt.multiple_steps(10, 0)
         assert len(test_xs) == 1
-        assert len(test_du_dls) == 1
         assert len(test_boxes) == 1
 
         np.testing.assert_array_equal(test_xs[0], ctxt.get_x_t())
-        _, test_frame_du_dl, _ = bps[0].execute(test_xs[0], test_boxes[0], 0.0)
-        np.testing.assert_array_equal(test_du_dls[0], test_frame_du_dl)
+        _, _ = bps[0].execute(test_xs[0], test_boxes[0])
 
-    @pytest.mark.skip("multiple_steps_U is deprecated")
     def test_multiple_steps_U_store_interval(self):
         np.random.seed(2022)
 
@@ -94,41 +88,34 @@ class TestContext(unittest.TestCase):
         bp = test_nrg.bind(params).bound_impl(precision=np.float64)
         bps = [bp]
 
-        lamb = 0.0
-        lamb_sched = np.linspace(0.0, 1.0, 5)
-
         ctxt = custom_ops.Context(x0, v0, box, intg, bps)
-        test_us, test_xs, test_boxes = ctxt.multiple_steps_U(lamb, 10, lamb_sched, 10, 10)
+        test_us, test_xs, test_boxes = ctxt.multiple_steps_U(10, 10, 10)
         assert len(test_xs) == 1
-        assert test_us.shape[0] == 1
-        assert test_us.shape[1] == len(lamb_sched)
+        assert test_us.shape == (1,)
         assert len(test_xs) == len(test_boxes)
         # We should not get out the input frame
         assert np.any(np.not_equal(x0, test_xs[0]))
 
         # The current coordinates should match, as the number of steps and the interval match
         np.testing.assert_array_equal(test_xs[0], ctxt.get_x_t())
-        for i, window in enumerate(lamb_sched):
-            _, _, test_frame_u = bps[0].execute(test_xs[0], test_boxes[0], window)
-            np.testing.assert_array_equal(test_us[0][i], test_frame_u)
+        _, test_frame_u = bps[0].execute(test_xs[0], test_boxes[0])
+        np.testing.assert_array_equal(test_us[0], test_frame_u)
 
         # Given an interval greater than the number of steps, return empty arrays
-        test_us, test_xs, test_boxes = ctxt.multiple_steps_U(lamb, 10, lamb_sched, 100, 100)
+        test_us, test_xs, test_boxes = ctxt.multiple_steps_U(10, 100, 100)
         assert len(test_xs) == 0
         assert len(test_us) == 0
         assert len(test_boxes) == 0
 
         # Given interval of 0, return the last frame
-        test_us, test_xs, test_boxes = ctxt.multiple_steps_U(lamb, 10, lamb_sched, 0, 0)
+        test_us, test_xs, test_boxes = ctxt.multiple_steps_U(10, 0, 0)
         assert len(test_xs) == 1
-        assert test_us.shape[0] == 1
-        assert test_us.shape[1] == len(lamb_sched)
+        assert test_us.shape == (1,)
         assert len(test_boxes) == 1
 
         np.testing.assert_array_equal(test_xs[0], ctxt.get_x_t())
-        for i, window in enumerate(lamb_sched):
-            _, _, test_frame_u = bps[0].execute(test_xs[0], test_boxes[0], window)
-            np.testing.assert_array_equal(test_us[0][i], test_frame_u)
+        _, test_frame_u = bps[0].execute(test_xs[0], test_boxes[0])
+        np.testing.assert_array_equal(test_us[0], test_frame_u)
 
     def test_set_and_get(self):
         """
@@ -210,37 +197,24 @@ class TestContext(unittest.TestCase):
         # not convenient to simulate identical trajectories otherwise
         assert (ccs == 0).all()
 
-        lamb = np.random.rand()
-        lambda_windows = np.array([lamb + 0.05, lamb, lamb - 0.05])
-
         def integrate_once_through(x_t, v_t, box, params):
 
             dU_dx_fn = jax.grad(ref_nrg_fn, argnums=(0,))
             dU_dp_fn = jax.grad(ref_nrg_fn, argnums=(1,))
-            dU_dl_fn = jax.grad(ref_nrg_fn, argnums=(3,))
 
-            all_du_dls = []
             all_du_dps = []
             all_xs = []
             all_du_dxs = []
             all_us = []
-            all_lambda_us = []
 
             def compute_reference_values():
-                u = ref_nrg_fn(x_t, params, box, lamb)
+                u = ref_nrg_fn(x_t, params, box)
                 all_us.append(u)
-                du_dl = dU_dl_fn(x_t, params, box, lamb)[0]
-                all_du_dls.append(du_dl)
-                du_dp = dU_dp_fn(x_t, params, box, lamb)[0]
+                du_dp = dU_dp_fn(x_t, params, box)[0]
                 all_du_dps.append(du_dp)
-                du_dx = dU_dx_fn(x_t, params, box, lamb)[0]
+                du_dx = dU_dx_fn(x_t, params, box)[0]
                 all_du_dxs.append(du_dx)
                 all_xs.append(x_t)
-
-                lus = []
-                for lamb_u in lambda_windows:
-                    lus.append(ref_nrg_fn(x_t, params, box, lamb_u))
-                all_lambda_us.append(lus)
 
             for step in range(num_steps):
                 compute_reference_values()
@@ -254,19 +228,12 @@ class TestContext(unittest.TestCase):
 
             # Compute them for the last set of coords
             compute_reference_values()
-            return all_xs, all_du_dxs, all_du_dps, all_du_dls, all_us, all_lambda_us
+            return all_xs, all_du_dxs, all_du_dps, all_us
 
         box = np.eye(3) * 3.0
 
         # when we have multiple parameters, we need to set this up correctly
-        (
-            ref_all_xs,
-            ref_all_du_dxs,
-            ref_all_du_dps,
-            ref_all_du_dls,
-            ref_all_us,
-            ref_all_lambda_us,
-        ) = integrate_once_through(x0, v0, box, params)
+        ref_all_xs, ref_all_du_dxs, ref_all_du_dps, ref_all_us = integrate_once_through(x0, v0, box, params)
 
         intg = custom_ops.LangevinIntegrator(masses, temperature, dt, friction, 1234)
 
@@ -274,32 +241,23 @@ class TestContext(unittest.TestCase):
         bps = [bp]
 
         ctxt = custom_ops.Context(x0, v0, box, intg, bps)
-        ctxt.initialize(lamb)
+        ctxt.initialize()
         for step in range(num_steps):
             print("comparing step", step)
             test_x_t = ctxt.get_x_t()
             np.testing.assert_allclose(test_x_t, ref_all_xs[step])
-            test_du_dx_t, _, _ = bp.execute(test_x_t, box, lamb)
-            ctxt.step(lamb)
+            test_du_dx_t, _ = bp.execute(test_x_t, box)
+            ctxt.step()
             # np.testing.assert_allclose(test_u_t, ref_all_us[step])
             np.testing.assert_allclose(test_du_dx_t, ref_all_du_dxs[step])
-        ctxt.finalize(lamb)
+        ctxt.finalize()
         # test the multiple_steps method
         ctxt_2 = custom_ops.Context(x0, v0, box, intg, bps)
 
-        lambda_schedule = np.ones(num_steps) * lamb
-
-        du_dl_interval = 3
         x_interval = 2
         start_box = ctxt_2.get_box()
-        test_du_dls, test_xs, test_boxes = ctxt_2.multiple_steps(lambda_schedule, du_dl_interval, x_interval)
+        test_xs, test_boxes = ctxt_2.multiple_steps(num_steps, x_interval)
         end_box = ctxt_2.get_box()
-        # Need to offset by -1 as du_dl is computed on frame during step, not after step
-
-        # NOTE: du_dl computation is deprecated and results are incorrect, since nonbonded potentials return du_dl = 0.
-        # An upcoming change will fully remove du_dl from the Potential API
-
-        # np.testing.assert_allclose(test_du_dls, ref_all_du_dls[du_dl_interval - 1 :: du_dl_interval])
 
         np.testing.assert_allclose(test_xs, ref_all_xs[x_interval::x_interval])
         np.testing.assert_array_equal(start_box, end_box)
@@ -314,16 +272,10 @@ class TestContext(unittest.TestCase):
 
         u_interval = 3
 
-        test_us, test_xs, test_boxes = ctxt_3.multiple_steps_U(lamb, num_steps, lambda_windows, u_interval, x_interval)
-        np.testing.assert_array_almost_equal(ref_all_lambda_us[u_interval::u_interval], test_us)
+        test_us, test_xs, test_boxes = ctxt_3.multiple_steps_U(num_steps, u_interval, x_interval)
+        np.testing.assert_array_almost_equal(ref_all_us[u_interval::u_interval], test_us)
 
         np.testing.assert_array_almost_equal(ref_all_xs[x_interval::x_interval], test_xs)
-
-        test_us, test_xs, test_boxes = ctxt_3.multiple_steps_U(
-            lamb, num_steps, np.array([], dtype=np.float64), u_interval, x_interval
-        )
-
-        assert test_us.shape == (num_steps // u_interval, 0)
 
 
 if __name__ == "__main__":

@@ -8,18 +8,6 @@
 
 namespace timemachine {
 
-//class Barostat {
-//
-//public:
-//
-//    virtual void inplace_move(
-//        double *d_x,
-//        double *d_box,
-//        const double lambda
-//    );
-//
-//};
-
 class MonteCarloBarostat {
 
 public:
@@ -35,7 +23,7 @@ public:
     ~MonteCarloBarostat();
 
     // inplace_move() may modify d_x and d_box
-    void inplace_move(double *d_x, double *d_box, const double lambda, cudaStream_t stream);
+    void inplace_move(double *d_x, double *d_box, cudaStream_t stream);
 
     void set_interval(const int interval);
 

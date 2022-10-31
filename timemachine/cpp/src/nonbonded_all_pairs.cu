@@ -165,10 +165,8 @@ void NonbondedAllPairs<RealType>::execute_device(
     const double *d_x,
     const double *d_p,   // N * PARAMS_PER_ATOM
     const double *d_box, // 3 * 3
-    const double lambda,
     unsigned long long *d_du_dx,
     unsigned long long *d_du_dp,
-    unsigned long long *d_du_dl,
     unsigned long long *d_u,
     cudaStream_t stream) {
 
@@ -185,8 +183,7 @@ void NonbondedAllPairs<RealType>::execute_device(
     // c. permute parameters
     // d. compute the nonbonded interactions using the neighborlist
     // e. inverse permute the forces, du/dps into the original index.
-    // f. u and du/dl is buffered into a per-particle array, and then reduced.
-    // g. note that du/dl is not an exact per-particle du/dl - it is only used for reduction purposes.
+    // f. u is buffered into a per-particle array, and then reduced.
 
     if (N != N_) {
         throw std::runtime_error(

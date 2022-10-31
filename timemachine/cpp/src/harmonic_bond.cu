@@ -35,10 +35,8 @@ void HarmonicBond<RealType>::execute_device(
     const double *d_x,
     const double *d_p,
     const double *d_box,
-    const double lambda,
     unsigned long long *d_du_dx,
     unsigned long long *d_du_dp,
-    unsigned long long *d_du_dl,
     unsigned long long *d_u,
     cudaStream_t stream) {
 
@@ -52,8 +50,7 @@ void HarmonicBond<RealType>::execute_device(
         const int tpb = warp_size;
         const int blocks = ceil_divide(B_, tpb);
 
-        k_harmonic_bond<RealType>
-            <<<blocks, tpb, 0, stream>>>(B_, d_x, d_p, lambda, d_bond_idxs_, d_du_dx, d_du_dp, d_du_dl, d_u);
+        k_harmonic_bond<RealType><<<blocks, tpb, 0, stream>>>(B_, d_x, d_p, d_bond_idxs_, d_du_dx, d_du_dp, d_u);
         gpuErrchk(cudaPeekAtLastError());
     }
 };

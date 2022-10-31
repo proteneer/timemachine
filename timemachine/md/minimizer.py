@@ -41,7 +41,7 @@ def bind_potentials(params_potential_pairs):
     return u_impls
 
 
-def fire_minimize(x0: NDArray, u_impls, box: NDArray, lamb_sched: NDArray) -> NDArray:
+def fire_minimize(x0: NDArray, u_impls, box: NDArray, n_steps: int) -> NDArray:
     """
     Minimize coordinates using the FIRE algorithm
 
@@ -55,8 +55,8 @@ def fire_minimize(x0: NDArray, u_impls, box: NDArray, lamb_sched: NDArray) -> ND
     box: np.ndarray [3,3]
         Box matrix for periodic boundary conditions. units of nanometers.
 
-    lamb_sched: np.array [N]
-        Array of lambda for each step of the optimization.
+    n_steps: int
+        Number of steps
 
     Returns
     -------
@@ -65,20 +65,20 @@ def fire_minimize(x0: NDArray, u_impls, box: NDArray, lamb_sched: NDArray) -> ND
 
     """
 
-    def force(coords, lamb: float = 1.0, **kwargs):
+    def force(coords):
         forces = np.zeros_like(coords)
         for impl in u_impls:
-            du_dx, _, _ = impl.execute(coords, box, lamb)
+            du_dx, _ = impl.execute(coords, box)
             forces -= du_dx
         return forces
 
-    def shift(d, dr, **kwargs):
+    def shift(d, dr):
         return d + dr
 
     init, f = fire_descent(force, shift)
-    opt_state = init(x0, lamb=lamb_sched[0])
-    for lamb in lamb_sched[1:]:
-        opt_state = f(opt_state, lamb=lamb)
+    opt_state = init(x0)
+    for _ in range(n_steps):
+        opt_state = f(opt_state)
     return np.asarray(opt_state.position)
 
 
@@ -156,20 +156,20 @@ def minimize_host_4d(mols, host_system, host_coords, ff, box, mol_coords=None) -
     v0 = np.zeros_like(x0)
 
     u_impls = bind_potentials(parameterize_system(hgt, ff, 1.0))
-    x = fire_minimize(x0, u_impls, box, np.ones(50))
+    x = fire_minimize(x0, u_impls, box, 50)
 
     for lamb in np.linspace(1.0, 0, 50):
         u_impls = bind_potentials(parameterize_system(hgt, ff, lamb))
         # NOTE: we don't save velocities between trajectories at different lambda windows; empirically this seems to
         # reduce the efficiency of the optimization, with more windows being required to achieve an equivalent result
         ctxt = custom_ops.Context(x, v0, box, intg, u_impls)
-        _, xs, _ = ctxt.multiple_steps(lamb * np.ones(50))
+        xs, _ = ctxt.multiple_steps(50)
         x = xs[-1]
 
     u_impls = bind_potentials(parameterize_system(hgt, ff, 0.0))
-    final_coords = fire_minimize(x, u_impls, box, np.zeros(50))
+    final_coords = fire_minimize(x, u_impls, box, 50)
     for impl in u_impls:
-        du_dx, _, _ = impl.execute(final_coords, box, 0.0)
+        du_dx, _ = impl.execute(final_coords, box)
         norm = np.linalg.norm(du_dx, axis=-1)
         assert np.all(norm < MAX_FORCE_NORM)
 
@@ -253,7 +253,7 @@ def equilibrate_host(
 
     # Re-minimize with the mol being flexible
     u_impls = bind_potentials(params_potential_pairs)  # lambda=1
-    x0 = fire_minimize(x0, u_impls, box, np.ones(50))
+    x0 = fire_minimize(x0, u_impls, box, 50)
     v0 = np.zeros_like(x0)
 
     dt = 2.5e-3
@@ -283,22 +283,20 @@ def equilibrate_host(
     # context components: positions, velocities, box, integrator, energy fxns
     ctxt = custom_ops.Context(x0, v0, box, integrator, u_impls, barostat)
 
-    ctxt.multiple_steps(np.zeros(n_steps))
+    ctxt.multiple_steps(n_steps)
 
     return ctxt.get_x_t(), ctxt.get_box()
 
 
-def get_val_and_grad_fn(bps, box, lamb):
+def get_val_and_grad_fn(bps, box):
     """
-    Convert impls, box, lamb into a function that only takes in coords.
+    Convert impls, box into a function that only takes in coords.
 
     Parameters
     ----------
     bps: List of BoundPotentials
 
     box: np.array (3,3)
-
-    lamb: float
 
     Returns
     -------
@@ -310,7 +308,7 @@ def get_val_and_grad_fn(bps, box, lamb):
         g = np.zeros_like(coords)
         u = 0.0
         for impl in bps:
-            g_bp, _, u_bp = impl.execute(coords, box, lamb)
+            g_bp, u_bp = impl.execute(coords, box)
             g += g_bp
             u += u_bp
         return u, g

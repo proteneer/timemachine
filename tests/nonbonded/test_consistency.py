@@ -70,12 +70,11 @@ def test_nonbonded_consistency(
 
     def test():
         for params_ in gen_nonbonded_params_with_4d_offsets(rng, params, cutoff):
-            du_dx_ref, du_dp_ref, du_dl_ref, u_ref = ref_impl.execute(conf, params_, example_box, 0.0)
-            du_dx_test, du_dp_test, du_dl_test, u_test = test_impl.execute(conf, params_, example_box, 0.0)
+            du_dx_ref, du_dp_ref, u_ref = ref_impl.execute(conf, params_, example_box)
+            du_dx_test, du_dp_test, u_test = test_impl.execute(conf, params_, example_box)
 
             np.testing.assert_array_equal(du_dx_test, du_dx_ref)
             np.testing.assert_array_equal(du_dp_test, du_dp_ref)
-            np.testing.assert_array_equal(du_dl_test, du_dl_ref)
             assert u_test == u_ref
 
     test()

@@ -15,8 +15,7 @@ Array = Any
 Conf = Array
 Params = Array
 Box = Array
-Lambda = float
-PotentialFxn = Callable[[Conf, Params, Box, Lambda], float]
+PotentialFxn = Callable[[Conf, Params, Box], float]
 
 
 GenericPotential = TypeVar("GenericPotential", bound="Potential")
@@ -49,8 +48,7 @@ class Bonded(Generic[BondedGpuPotential]):
 @dataclass
 class HarmonicBond(Bonded):
     def to_reference(self):
-        def U(conf, params, box, lam):
-            # TODO: remove unused lam
+        def U(conf, params, box):
             return ref_bonded.harmonic_bond(
                 conf,
                 params,
@@ -67,8 +65,7 @@ class HarmonicBond(Bonded):
 @dataclass
 class HarmonicAngle(Bonded):
     def to_reference(self):
-        def U(conf, params, box, lam):
-            # TODO: remove unused lam
+        def U(conf, params, box):
             return ref_bonded.harmonic_angle(
                 conf,
                 params,
@@ -94,8 +91,7 @@ class CentroidRestraint:
         return cls(p.get_a_idxs(), p.get_b_idxs(), p.get_kb(), p.get_b0())
 
     def to_reference(self):
-        def U(conf, params, box, lam):
-            # TODO: remove unused lam
+        def U(conf, params, box):
             return ref_bonded.centroid_restraint(
                 conf, params, box, self.group_a_idxs, self.group_b_idxs, self.kb, self.b0
             )
@@ -115,8 +111,8 @@ class ChiralAtomRestraint:
         return cls(p.get_idxs())
 
     def to_reference(self):
-        def U(conf, params, box, lam):
-            return ref_chiral.chiral_atom_restraint(conf, params, box, lam, self.idxs)
+        def U(conf, params, box):
+            return ref_chiral.chiral_atom_restraint(conf, params, box, self.idxs)
 
         return U
 
@@ -134,8 +130,8 @@ class ChiralBondRestraint:
         return cls(p.get_idxs(), p.get_signs())
 
     def to_reference(self):
-        def U(conf, params, box, lam):
-            return ref_chiral.chiral_bond_restraint(conf, params, box, lam, self.idxs, self.signs)
+        def U(conf, params, box):
+            return ref_chiral.chiral_bond_restraint(conf, params, box, self.idxs, self.signs)
 
         return U
 
@@ -152,8 +148,7 @@ class FlatBottomBond:
         return cls(p.get_idxs())
 
     def to_reference(self):
-        def U(conf, params, box, lam):
-            # TODO: remove unused lam
+        def U(conf, params, box):
             return ref_bonded.flat_bottom_bond(conf, params, box, self.idxs)
 
         return U
@@ -165,8 +160,7 @@ class FlatBottomBond:
 @dataclass
 class PeriodicTorsion(Bonded):
     def to_reference(self):
-        def U(conf, params, box, lam):
-            # TODO: remove unused lam
+        def U(conf, params, box):
             return ref_bonded.periodic_torsion(
                 conf,
                 params,
@@ -203,12 +197,11 @@ class Nonbonded:
             self.exclusion_idxs, self.scale_factors, self.num_atoms
         )
 
-        def U(conf, params, box, lam):
+        def U(conf, params, box):
             return ref_nonbonded.nonbonded(
                 conf,
                 params,
                 box,
-                lam,
                 charge_rescale_mask,
                 lj_rescale_mask,
                 self.beta,
@@ -247,7 +240,7 @@ class NonbondedAllPairs:
     def to_reference(self):
         s = self.atom_idxs if self.atom_idxs is not None else slice(None)
 
-        def U(conf, params, box, lam):
+        def U(conf, params, box):
             conf = conf[s, :]
             num_atoms, _ = conf.shape
             no_rescale = jnp.ones((num_atoms, num_atoms))
@@ -255,7 +248,6 @@ class NonbondedAllPairs:
                 conf,
                 params[s, :],
                 box,
-                lam,
                 no_rescale,
                 no_rescale,
                 self.beta,
@@ -291,7 +283,7 @@ class NonbondedInteractionGroup:
         )
 
     def to_reference(self):
-        def U(conf, params, box, lam):
+        def U(conf, params, box):
             num_atoms, _ = conf.shape
 
             vdW, electrostatics = ref_nonbonded.nonbonded_interaction_groups(
@@ -333,7 +325,7 @@ class NonbondedPairList:
         )
 
     def to_reference(self):
-        def U(conf, params, box, lam):
+        def U(conf, params, box):
             vdW, electrostatics = ref_nonbonded.nonbonded_on_specific_pairs(
                 conf,
                 params,
@@ -367,7 +359,7 @@ class NonbondedPairListPrecomputed:
         return cls(p.get_idxs(), p.get_beta(), p.get_cutoff())
 
     def to_reference(self):
-        def U(conf, params, box, _):
+        def U(conf, params, box):
             vdW, electrostatics = ref_nonbonded.nonbonded_on_precomputed_pairs(
                 conf,
                 params,
@@ -399,8 +391,8 @@ class SummedPotential:
         U_fns = [p.to_reference() for p in self.potentials]
         shapes = [ps.shape for ps in self.params_init]
 
-        def U(conf, params, box, lam):
-            return ref_summed.summed_potential(conf, params, box, lam, U_fns, shapes)
+        def U(conf, params, box):
+            return ref_summed.summed_potential(conf, params, box, U_fns, shapes)
 
         return U
 

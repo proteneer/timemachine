@@ -98,25 +98,25 @@ U_chiral_atom_batch_all = jax.vmap(U_chiral_atom, (None, 0, 0), 0)
 U_chiral_bond_batch_all = jax.vmap(U_chiral_bond, (None, 0, 0, 0), 0)
 
 
-def chiral_atom_restraint(conf, params, box, lamb, idxs):
+def chiral_atom_restraint(conf, params, box, idxs):
     """
     Flat-bottom chiral atom restraint
 
     Notes
     -----
-    * box, lamb unused
+    * box unused
     """
     assert len(idxs) == len(params)
     return jnp.sum(U_chiral_atom_batch_all(conf, idxs, params)) if len(idxs) else 0.0
 
 
-def chiral_bond_restraint(conf, params, box, lamb, idxs, signs):
+def chiral_bond_restraint(conf, params, box, idxs, signs):
     """
     Flat-bottom chiral bond restraint
 
     Notes
     -----
-    * box, lamb unused
+    * box unused
     """
     assert len(idxs) == len(params)
     assert len(idxs) == len(signs)

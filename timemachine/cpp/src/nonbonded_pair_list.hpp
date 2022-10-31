@@ -31,10 +31,8 @@ public:
         const double *d_x,
         const double *d_p,
         const double *d_box,
-        const double lambda,
         unsigned long long *d_du_dx,
         unsigned long long *d_du_dp,
-        unsigned long long *d_du_dl,
         unsigned long long *d_u,
         cudaStream_t stream) override;
 

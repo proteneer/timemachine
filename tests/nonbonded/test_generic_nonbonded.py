@@ -24,5 +24,4 @@ def test_generic_nonbonded_jittable(rng: np.random.Generator):
         conf=rng.uniform(0, 1, size=(N, 3)),
         params=rng.uniform(0, 1, size=(N, 3)),
         box=10.0 * np.eye(3),
-        lam=0.1,
     )

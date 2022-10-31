@@ -140,7 +140,6 @@ class VacuumState:
             x,
             nb_params,
             box,
-            self.lamb,
             charge_rescale_mask,
             lj_rescale_mask,
             beta,
@@ -508,11 +507,8 @@ def equilibrate_solvent_phase(
     # equilibration/minimization doesn't need a barostat
     equil_ctxt = custom_ops.Context(coords, np.zeros_like(coords), box, intg_equil_impl, all_impls, barostat_impl)
 
-    lamb = 0.0
-
     # TODO: revert to 50k
-    equil_schedule = np.ones(num_steps) * lamb
-    equil_ctxt.multiple_steps(equil_schedule)
+    equil_ctxt.multiple_steps(num_steps)
 
     x0 = equil_ctxt.get_x_t()
 
@@ -614,8 +610,7 @@ def generate_solvent_samples(
         potentials, params, masses, coords, box, temperature, pressure, num_equil_steps, seed
     )
 
-    lamb = 1.0  # non-interacting state
-    npt_mover = moves.NPTMove(potentials, lamb, masses, temperature, pressure, n_steps=md_steps_per_move, seed=seed)
+    npt_mover = moves.NPTMove(potentials, masses, temperature, pressure, n_steps=md_steps_per_move, seed=seed)
 
     xvbs = [xvb0]
     for _ in range(n_samples):

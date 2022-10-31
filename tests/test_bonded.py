@@ -154,18 +154,15 @@ class TestBonded(GradientTest):
             test_potential_impl = test_potential.unbound_impl(precision)
             test_potential_rev_impl = test_potential_rev.unbound_impl(precision)
 
-            test_du_dx, test_du_dp, test_du_dl, test_u = test_potential_impl.execute_selective(
-                x, params, box, 0.0, 1, 1, 1, 1
-            )
+            test_du_dx, test_du_dp, test_u = test_potential_impl.execute_selective(x, params, box, 1, 1, 1)
 
-            test_du_dx_rev, test_du_dp_rev, test_du_dl_rev, test_u_rev = test_potential_rev_impl.execute_selective(
-                x, params, box, 0.0, 1, 1, 1, 1
+            test_du_dx_rev, test_du_dp_rev, test_u_rev = test_potential_rev_impl.execute_selective(
+                x, params, box, 1, 1, 1
             )
 
             np.testing.assert_array_equal(test_u, test_u_rev)
             np.testing.assert_array_equal(test_du_dx, test_du_dx_rev)
             np.testing.assert_array_equal(test_du_dp, test_du_dp_rev)
-            np.testing.assert_array_equal(test_du_dl, test_du_dl_rev)
 
     def test_flat_bottom_bond(self, n_particles=64, n_bonds=35, dim=3):
         """Randomly connect pairs of particles, then validate the resulting FlatBottomBond force"""
@@ -204,10 +201,10 @@ class TestBonded(GradientTest):
             test_potential_impl = test_potential.unbound_impl(precision)
             test_potential_rev_impl = test_potential_rev.unbound_impl(precision)
 
-            test_du_dx, test_du_dp, _, test_u = test_potential_impl.execute_selective(x, params, box, 0.0, 1, 1, 0, 1)
+            test_du_dx, test_du_dp, test_u = test_potential_impl.execute_selective(x, params, box, 1, 1, 1)
 
-            test_du_dx_rev, test_du_dp_rev, _, test_u_rev = test_potential_rev_impl.execute_selective(
-                x, params, box, 0.0, 1, 1, 0, 1
+            test_du_dx_rev, test_du_dp_rev, test_u_rev = test_potential_rev_impl.execute_selective(
+                x, params, box, 1, 1, 1
             )
 
             np.testing.assert_array_equal(test_u, test_u_rev)
@@ -278,18 +275,15 @@ class TestBonded(GradientTest):
             test_potential_impl = test_potential.unbound_impl(precision)
             test_potential_rev_impl = test_potential_rev.unbound_impl(precision)
 
-            test_du_dx, test_du_dp, test_du_dl, test_u = test_potential_impl.execute_selective(
-                x, params, box, 0.0, 1, 1, 1, 1
-            )
+            test_du_dx, test_du_dp, test_u = test_potential_impl.execute_selective(x, params, box, 1, 1, 1)
 
-            test_du_dx_rev, test_du_dp_rev, test_du_dl_rev, test_u_rev = test_potential_rev_impl.execute_selective(
-                x, params, box, 0.0, 1, 1, 1, 1
+            test_du_dx_rev, test_du_dp_rev, test_u_rev = test_potential_rev_impl.execute_selective(
+                x, params, box, 1, 1, 1
             )
 
             np.testing.assert_array_equal(test_u, test_u_rev)
             np.testing.assert_array_equal(test_du_dx, test_du_dx_rev)
             np.testing.assert_array_equal(test_du_dp, test_du_dp_rev)
-            np.testing.assert_array_equal(test_du_dl, test_du_dl_rev)
 
     def test_periodic_torsion(self, n_particles=64, n_torsions=25, dim=3):
         """Randomly connect quadruples of particles, then validate the resulting PeriodicTorsion force"""
@@ -325,18 +319,15 @@ class TestBonded(GradientTest):
             test_potential_impl = test_potential.unbound_impl(precision)
             test_potential_rev_impl = test_potential_rev.unbound_impl(precision)
 
-            test_du_dx, test_du_dp, test_du_dl, test_u = test_potential_impl.execute_selective(
-                x, params, box, 0.0, 1, 1, 1, 1
-            )
+            test_du_dx, test_du_dp, test_u = test_potential_impl.execute_selective(x, params, box, 1, 1, 1)
 
-            test_du_dx_rev, test_du_dp_rev, test_du_dl_rev, test_u_rev = test_potential_rev_impl.execute_selective(
-                x, params, box, 0.0, 1, 1, 1, 1
+            test_du_dx_rev, test_du_dp_rev, test_u_rev = test_potential_rev_impl.execute_selective(
+                x, params, box, 1, 1, 1
             )
 
             np.testing.assert_array_equal(test_u, test_u_rev)
             np.testing.assert_array_equal(test_du_dx, test_du_dx_rev)
             np.testing.assert_array_equal(test_du_dp, test_du_dp_rev)
-            np.testing.assert_array_equal(test_du_dl, test_du_dl_rev)
 
     def test_empty_potentials(self):
         # Check that no error is given if the terms are empty
