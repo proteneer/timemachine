@@ -12,7 +12,7 @@ VelocityVerletIntegrator::VelocityVerletIntegrator(int N, double dt, const doubl
     : N_(N), dt_(dt), initialized_(false) {
 
     d_cbs_ = gpuErrchkCudaMallocAndCopy(h_cbs, N);
-    gpuErrchk(cudaMalloc(&d_du_dx_, N * 3 * sizeof(*d_du_dx_)));
+    cudaSafeMalloc(&d_du_dx_, N * 3 * sizeof(*d_du_dx_));
 }
 
 VelocityVerletIntegrator::~VelocityVerletIntegrator() {
