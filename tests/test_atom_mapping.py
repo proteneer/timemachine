@@ -19,12 +19,12 @@ def test_mcs():
     assert mcs_result.numAtoms == 23
 
 
-def test_get_core_by_mcs():
+@pytest.mark.parametrize("conformer_aware", [True, False])
+def test_get_core_by_mcs(conformer_aware):
     mol_a, mol_b, _ = get_hif2a_ligand_pair_single_topology()
     query = mcs(mol_a, mol_b).queryMol
-    for conformer_aware in [True, False]:
-        core = get_core_by_mcs(mol_a, mol_b, query, conformer_aware=conformer_aware)
-        assert core.shape[1] == 2
+    core = get_core_by_mcs(mol_a, mol_b, query, conformer_aware=conformer_aware)
+    assert core.shape[1] == 2
 
 
 def test_ring_size_change():
