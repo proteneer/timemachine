@@ -344,7 +344,7 @@ def estimate_free_energy_given_initial_states(initial_states, protocol, temperat
         A prefix that we append to the BAR overlap figures
 
     keep_idxs: list of int
-        Which states we keep samples for.
+        Which states we keep samples for. Must be positive.
 
     Return
     ------
@@ -379,6 +379,10 @@ def estimate_free_energy_given_initial_states(initial_states, protocol, temperat
 
     # u_kln matrix (2, 2, n_frames) for each pair of adjacent lambda windows and energy term
     ukln_by_component_by_lambda = []
+
+    keep_idxs = keep_idxs or []
+    if keep_idxs:
+        assert all(np.array(keep_idxs) >= 0)
 
     for lamb_idx, initial_state in enumerate(initial_states):
         # Clear any old references to avoid holding on to objects in memory we don't need.
@@ -645,7 +649,7 @@ def estimate_relative_free_energy(
     protocol = SimulationProtocol(n_frames=n_frames, n_eq_steps=n_eq_steps, steps_per_frame=steps_per_frame)
 
     if keep_idxs is None:
-        keep_idxs = [0, -1]  # keep first and last frames
+        keep_idxs = [0, len(initial_states) - 1]  # keep first and last frames
     assert len(keep_idxs) <= len(lambda_schedule)
     combined_prefix = get_mol_name(mol_a) + "_" + get_mol_name(mol_b) + "_" + prefix
     try:
