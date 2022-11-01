@@ -39,11 +39,11 @@ inline void curandAssert(curandStatus_t code, const char *file, int line, bool a
 */
 #define cudaSafeMalloc(ptr, size)                                                                                      \
     ({                                                                                                                 \
+        const int cudaSafeMalloc__line = __LINE__;                                                                     \
         if (size > (1 << 30)) {                                                                                        \
-            fprintf(stderr, "cudaSafeMalloc: allocation larger than 1GiB %s %d\n", __FILE__, __LINE__);                \
+            fprintf(stderr, "cudaSafeMalloc: allocation larger than 1GiB %s %d\n", __FILE__, cudaSafeMalloc__line);    \
         }                                                                                                              \
-        cudaError_t code = cudaMalloc(ptr, size);                                                                      \
-        gpuAssert(code, __FILE__, __LINE__, true);                                                                     \
+        gpuAssert(cudaMalloc(ptr, size), __FILE__, cudaSafeMalloc__line, true);                                        \
     })
 
 // safe is for use of gpuErrchk
