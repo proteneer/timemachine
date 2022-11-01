@@ -284,7 +284,6 @@ void MonteCarloBarostat::reset_counters() {
 void MonteCarloBarostat::inplace_move(
     double *d_x,   // [N*3]
     double *d_box, // [3*3]
-    const double lambda,
     cudaStream_t stream) {
     step_++;
     if (step_ % interval_ != 0) {
@@ -301,7 +300,7 @@ void MonteCarloBarostat::inplace_move(
     gpuErrchk(cudaMemsetAsync(d_u_after_buffer_, 0, N_ * sizeof(*d_u_after_buffer_), stream));
 
     for (int i = 0; i < bps_.size(); i++) {
-        bps_[i]->execute_device(N_, d_x, d_box, lambda, nullptr, nullptr, nullptr, d_u_buffer_, stream);
+        bps_[i]->execute_device(N_, d_x, d_box, nullptr, nullptr, d_u_buffer_, stream);
     }
 
     cub::DeviceReduce::Sum(d_sum_storage_, d_sum_storage_bytes_, d_u_buffer_, d_init_u_, N_, stream);
@@ -338,8 +337,7 @@ void MonteCarloBarostat::inplace_move(
     gpuErrchk(cudaPeekAtLastError());
 
     for (int i = 0; i < bps_.size(); i++) {
-        bps_[i]->execute_device(
-            N_, d_x_after_, d_box_after_, lambda, nullptr, nullptr, nullptr, d_u_after_buffer_, stream);
+        bps_[i]->execute_device(N_, d_x_after_, d_box_after_, nullptr, nullptr, d_u_after_buffer_, stream);
     }
 
     cub::DeviceReduce::Sum(d_sum_storage_, d_sum_storage_bytes_, d_u_after_buffer_, d_final_u_, N_, stream);

@@ -283,49 +283,32 @@ class GradientTest(unittest.TestCase):
 
         assert x.dtype == np.float64
 
-        lamb = 0.0  # TODO: remove; lambda dependence is deprecated
-
         for params in params_arrays:
             params = (params.astype(np.float32)).astype(np.float64)
             assert params.dtype == np.float64
-            ref_u = ref_potential(x, params, box, lamb)
-            grad_fn = jax.grad(ref_potential, argnums=(0, 1, 3))
-            ref_du_dx, ref_du_dp, ref_du_dl = grad_fn(x, params, box, lamb)
-            for combo in itertools.product([False, True], repeat=4):
+            ref_u = ref_potential(x, params, box)
+            grad_fn = jax.grad(ref_potential, argnums=(0, 1))
+            ref_du_dx, ref_du_dp = grad_fn(x, params, box)
+            for combo in itertools.product([False, True], repeat=3):
 
-                (compute_du_dx, compute_du_dp, compute_du_dl, compute_u) = combo
+                compute_du_dx, compute_du_dp, compute_u = combo
 
                 # do each computation twice to check determinism
-                test_du_dx, test_du_dp, test_du_dl, test_u = test_impl.execute_selective(
-                    x, params, box, lamb, compute_du_dx, compute_du_dp, compute_du_dl, compute_u
+                test_du_dx, test_du_dp, test_u = test_impl.execute_selective(
+                    x, params, box, compute_du_dx, compute_du_dp, compute_u
                 )
                 if compute_u:
                     np.testing.assert_allclose(ref_u, test_u, rtol=rtol, atol=atol)
                 if compute_du_dx:
                     self.assert_equal_vectors(np.array(ref_du_dx), np.array(test_du_dx), rtol)
-                if compute_du_dl:
-                    # NOTE: GPU nonbonded potentials currently return du_dl = 0
-                    if any(
-                        isinstance(test_potential, cls)
-                        for cls in [
-                            potentials.Nonbonded,
-                            potentials.NonbondedAllPairs,
-                            potentials.NonbondedInteractionGroup,
-                            potentials.NonbondedPairList,
-                        ]
-                    ):
-                        np.testing.assert_equal(0.0, test_du_dl)
-                    else:
-                        np.testing.assert_allclose(ref_du_dl, test_du_dl, rtol=rtol)
                 if compute_du_dp:
                     np.testing.assert_allclose(ref_du_dp, test_du_dp, rtol=rtol, atol=atol)
 
-                test_du_dx_2, test_du_dp_2, test_du_dl_2, test_u_2 = test_impl.execute_selective(
-                    x, params, box, lamb, compute_du_dx, compute_du_dp, compute_du_dl, compute_u
+                test_du_dx_2, test_du_dp_2, test_u_2 = test_impl.execute_selective(
+                    x, params, box, compute_du_dx, compute_du_dp, compute_u
                 )
 
             np.testing.assert_array_equal(test_du_dx, test_du_dx_2)
-            np.testing.assert_array_equal(test_du_dl, test_du_dl_2)
             np.testing.assert_array_equal(test_u, test_u_2)
 
             if isinstance(test_potential, potentials.Nonbonded):

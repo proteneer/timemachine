@@ -1,4 +1,3 @@
-import functools
 from typing import Any
 
 import jax.numpy as jnp
@@ -133,7 +132,6 @@ def nonbonded(
     conf,
     params,
     box,
-    lamb,
     charge_rescale_mask,
     lj_rescale_mask,
     beta,
@@ -152,7 +150,6 @@ def nonbonded(
     params : (N, 3) np.ndarray
         columns [charges, sigmas, epsilons, w_coords], one row per particle
     box : Optional 3x3 np.ndarray
-    lamb : float
     charge_rescale_mask : (N, N) np.ndarray
         the Coulomb contribution of pair (i,j) will be multiplied by charge_rescale_mask[i,j]
     lj_rescale_mask : (N, N) np.ndarray
@@ -375,22 +372,6 @@ def nonbonded_interaction_groups(
     pairs = pairs_from_interaction_groups(a_idxs, b_idxs)
     vdW, electrostatics = nonbonded_on_specific_pairs(conf, params, box, pairs, beta, cutoff)
     return vdW, electrostatics
-
-
-def interpolated(u_fn):
-    @functools.wraps(u_fn)
-    def wrapper(conf, params, box, lamb):
-
-        # params is expected to be the concatenation of initial
-        # (lambda = 0) and final (lambda = 1) parameters, each of
-        # length num_atoms
-        assert params.size % 2 == 0
-        num_atoms = params.shape[0] // 2
-
-        new_params = (1 - lamb) * params[:num_atoms] + lamb * params[num_atoms:]
-        return u_fn(conf, new_params, box, lamb)
-
-    return wrapper
 
 
 def validate_coulomb_cutoff(cutoff=1.0, beta=2.0, threshold=1e-2):

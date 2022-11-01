@@ -115,8 +115,6 @@ def test_condensed_phase_mtm():
         ubps, params, masses, coords, box, temperature, pressure, num_equil_steps, seed
     )
 
-    lamb = 0.0
-
     # (ytz): emprically scanning over multiple Ks seem to suggest 100 is a sweet spot
     # leave this here for pedagogical purposes.
     # for K in [1, 5, 10, 25, 50, 100, 200, 400]:
@@ -129,7 +127,7 @@ def test_condensed_phase_mtm():
         vacuum_log_weights=jnp.array(vacuum_log_weights),
     )
 
-    npt_mover = NPTMove(ubps, lamb, masses, temperature, pressure, n_steps=md_steps_per_move, seed=seed)
+    npt_mover = NPTMove(ubps, masses, temperature, pressure, n_steps=md_steps_per_move, seed=seed)
     mtm_mover = OptimizedMTMMove(K, batch_proposal_coords_fn, batch_log_weights_fn, seed=seed)
 
     enhanced_torsions = []
@@ -158,7 +156,7 @@ def test_condensed_phase_mtm():
 
     vanilla_torsions = []
     xvb_t = copy.deepcopy(xvb0)
-    npt_mover = NPTMove(ubps, lamb, masses, temperature, pressure, n_steps=500, seed=seed)
+    npt_mover = NPTMove(ubps, masses, temperature, pressure, n_steps=500, seed=seed)
     for iteration in range(num_batches):
         solvent_torsion = get_torsion(xvb_t.coords[-num_ligand_atoms:])
         vanilla_torsions.append(solvent_torsion)
@@ -187,7 +185,7 @@ def test_nvt_box():
 
     temperature = 300.0
     n_steps = 100
-    mover = NVTMove(ubps, 0, masses, temperature, n_steps, seed)
+    mover = NVTMove(ubps, masses, temperature, n_steps, seed)
     v0 = np.zeros_like(coords)
     xvb0 = CoordsVelBox(coords, v0, box)
     xvb = mover.move(xvb0)

@@ -30,11 +30,9 @@ public:
         const double *d_x,
         const double *d_p,
         const double *d_box,
-        const double lambda,
         unsigned long long *d_du_dx, // buffered
         unsigned long long *d_du_dp,
-        unsigned long long *d_du_dl, // buffered
-        unsigned long long *d_u,     // buffered
+        unsigned long long *d_u, // buffered
         cudaStream_t stream) override;
 
     void du_dp_fixed_to_float(const int N, const int P, const unsigned long long *du_dp, double *du_dp_float) override;

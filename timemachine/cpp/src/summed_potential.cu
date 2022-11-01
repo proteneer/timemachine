@@ -22,10 +22,8 @@ void SummedPotential::execute_device(
     const double *d_x,
     const double *d_p,
     const double *d_box,
-    const double lambda,
     unsigned long long *d_du_dx,
     unsigned long long *d_du_dp,
-    unsigned long long *d_du_dl,
     unsigned long long *d_u,
     cudaStream_t stream) {
 
@@ -45,10 +43,8 @@ void SummedPotential::execute_device(
             d_x,
             d_p + offset,
             d_box,
-            lambda,
             d_du_dx,
             d_du_dp == nullptr ? nullptr : d_du_dp + offset,
-            d_du_dl,
             d_u,
             stream);
 

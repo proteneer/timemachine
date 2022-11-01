@@ -130,97 +130,66 @@ void declare_context(py::module &m) {
         .def(
             "step",
             &timemachine::Context::step,
-            py::arg("lamb"),
             R"pbdoc(
-        Take a single step at a value of lambda.
+        Take a single step.
 
         Note: Must call `initialize` before stepping and `finalize` after stepping to ensure the correct velocities and positions to be returned by `get_x_t()` and `get_v_t()`,.
         )pbdoc")
-        .def("finalize", &timemachine::Context::finalize, py::arg("lamb"))
-        .def("initialize", &timemachine::Context::initialize, py::arg("lamb"))
+        .def("finalize", &timemachine::Context::finalize)
+        .def("initialize", &timemachine::Context::initialize)
         .def(
             "multiple_steps",
-            [](timemachine::Context &ctxt,
-               const py::array_t<double, py::array::c_style> &lambda_schedule,
-               int store_du_dl_interval,
-               int store_x_interval) -> py::tuple {
+            [](timemachine::Context &ctxt, const int n_steps, int store_x_interval) -> py::tuple {
                 // (ytz): I hate C++
-                std::vector<double> vec_lambda_schedule(lambda_schedule.size());
-                std::memcpy(
-                    vec_lambda_schedule.data(), lambda_schedule.data(), vec_lambda_schedule.size() * sizeof(double));
-
-                int du_dl_interval = (store_du_dl_interval <= 0) ? lambda_schedule.size() : store_du_dl_interval;
-                int x_interval = (store_x_interval <= 0) ? lambda_schedule.size() : store_x_interval;
-                std::array<std::vector<double>, 3> result =
-                    ctxt.multiple_steps(vec_lambda_schedule, du_dl_interval, x_interval);
-
-                py::array_t<double, py::array::c_style> out_du_dl_buffer(result[0].size());
-                std::memcpy(out_du_dl_buffer.mutable_data(), result[0].data(), result[0].size() * sizeof(double));
+                int x_interval = (store_x_interval <= 0) ? n_steps : store_x_interval;
+                std::array<std::vector<double>, 2> result = ctxt.multiple_steps(n_steps, x_interval);
 
                 int N = ctxt.num_atoms();
                 int D = 3;
-                int F = result[1].size() / (N * D);
+                int F = result[0].size() / (N * D);
                 py::array_t<double, py::array::c_style> out_x_buffer({F, N, D});
-                std::memcpy(out_x_buffer.mutable_data(), result[1].data(), result[1].size() * sizeof(double));
+                std::memcpy(out_x_buffer.mutable_data(), result[0].data(), result[0].size() * sizeof(double));
 
                 py::array_t<double, py::array::c_style> box_buffer({F, D, D});
-                std::memcpy(box_buffer.mutable_data(), result[2].data(), result[2].size() * sizeof(double));
+                std::memcpy(box_buffer.mutable_data(), result[1].data(), result[1].size() * sizeof(double));
 
-                return py::make_tuple(out_du_dl_buffer, out_x_buffer, box_buffer);
+                return py::make_tuple(out_x_buffer, box_buffer);
             },
-            py::arg("lambda_schedule"),
-            py::arg("store_du_dl_interval") = 0,
+            py::arg("n_steps"),
             py::arg("store_x_interval") = 0,
             R"pbdoc(
-        Take multiple steps with a specified lambda value at each step.
+        Take multiple steps.
 
-        For store_du_dl_interval and store_x_interval, the values are stored after having
-        taken the number of steps specified by the interval. IE if the store_du_dl_interval is
-        5, then on the 5th step the du_dl will be stored.
+        Frames are stored after having taken the number of steps specified by store_x_interval. E.g. if
+        store_x_interval is 5, then on the 5th step the frame will be stored.
 
         Parameters
         ----------
-        lambda_schedule: list of floats
-            Lambda value for each step, length of schedule is number of steps taken
-
-        store_du_dl_interval: int
-            How often we store the du_dl, stores on every store_du_dl_interval steps
+        n_steps: int
+            Number of steps
 
         store_x_interval: int
             How often we store the frames, stores after every store_x_interval steps
 
         Returns
         -------
-        3-tuple of du_dls, coordinates, boxes
-            F = floor(len(lambda_schedule)/store_x_interval).
-            K = floor(len(lambda_schedule)/store_u_interval).
-            du_dls have shape (K)
+        2-tuple of coordinates, boxes
+            F = floor(n_steps/store_x_interval).
             Coordinates have shape (F, N, 3)
             Boxes have shape (F, 3, 3)
 
     )pbdoc")
         .def(
             "multiple_steps_U",
-            [](timemachine::Context &ctxt,
-               const double lambda,
-               const int n_steps,
-               const py::array_t<double, py::array::c_style> &lambda_windows,
-               int store_u_interval,
-               int store_x_interval) -> py::tuple {
-                std::vector<double> vec_lambda_windows(lambda_windows.size());
-                std::memcpy(
-                    vec_lambda_windows.data(), lambda_windows.data(), vec_lambda_windows.size() * sizeof(double));
-
+            [](timemachine::Context &ctxt, const int n_steps, int store_u_interval, int store_x_interval) -> py::tuple {
                 int u_interval = (store_u_interval <= 0) ? n_steps : store_u_interval;
                 int x_interval = (store_x_interval <= 0) ? n_steps : store_x_interval;
 
-                std::array<std::vector<double>, 3> result =
-                    ctxt.multiple_steps_U(lambda, n_steps, vec_lambda_windows, u_interval, x_interval);
+                std::array<std::vector<double>, 3> result = ctxt.multiple_steps_U(n_steps, u_interval, x_interval);
 
                 int UF = n_steps / u_interval;
-                int UW = lambda_windows.size();
 
-                py::array_t<double, py::array::c_style> out_u_buffer({UF, UW});
+                py::array_t<double, py::array::c_style> out_u_buffer(UF);
                 std::memcpy(out_u_buffer.mutable_data(), result[0].data(), result[0].size() * sizeof(double));
 
                 int N = ctxt.num_atoms();
@@ -234,30 +203,16 @@ void declare_context(py::module &m) {
 
                 return py::make_tuple(out_u_buffer, out_x_buffer, box_buffer);
             },
-            py::arg("lamb"),
             py::arg("n_steps"),
-            py::arg("lambda_windows"),
             py::arg("store_u_interval"),
             py::arg("store_x_interval"),
             R"pbdoc(
-        Compute energies across multiple lambda windows while simulating
-        at a single fixed lambda window.
-
-        Let lambda_windows have shape [K].
-        F = floor(n_steps/store_u_interval).
-
-        The returned U matrix has F rows and K columns.
+        Take multiple steps; store energies in addition to frames.
 
         Parameters
         ----------
-        lambda: float
-            Lambda window we run the simulation at
-
         n_steps: int
             Number of steps to run.
-
-        lambda_windows: np.array, of shape K
-            Lambda values to evaluate energies at
 
         store_u_interval: int
             How often we store the energies, store after every store_u_interval steps
@@ -268,7 +223,7 @@ void declare_context(py::module &m) {
         Returns
         -------
         3-tuple of energies, coordinates, boxes
-            Energies have shape (F, K)
+            Energies have shape (F,)
             Coordinates have shape (F, N, 3)
             Boxes have shape (F, 3, 3)
 
@@ -368,8 +323,7 @@ void declare_potential(py::module &m) {
             [](timemachine::Potential &pot,
                const py::array_t<double, py::array::c_style> &coords,
                const py::array_t<double, py::array::c_style> &params,
-               const py::array_t<double, py::array::c_style> &box,
-               double lambda) -> py::tuple {
+               const py::array_t<double, py::array::c_style> &box) -> py::tuple {
                 const long unsigned int N = coords.shape()[0];
                 const long unsigned int D = coords.shape()[1];
                 const long unsigned int P = params.size();
@@ -377,11 +331,9 @@ void declare_potential(py::module &m) {
                 // initialize with fixed garbage values for debugging convenience (these should be overwritten by `execute_host`)
                 std::vector<unsigned long long> du_dx(N * D, 9999);
                 std::vector<unsigned long long> du_dp(P, 9999);
-                std::vector<unsigned long long> du_dl(N, 9999);
                 std::vector<unsigned long long> u(N, 9999);
 
-                pot.execute_host(
-                    N, P, coords.data(), params.data(), box.data(), lambda, &du_dx[0], &du_dp[0], &du_dl[0], &u[0]);
+                pot.execute_host(N, P, coords.data(), params.data(), box.data(), &du_dx[0], &du_dp[0], &u[0]);
 
                 py::array_t<double, py::array::c_style> py_du_dx({N, D});
                 for (unsigned int i = 0; i < du_dx.size(); i++) {
@@ -394,27 +346,21 @@ void declare_potential(py::module &m) {
                 py::array_t<double, py::array::c_style> py_du_dp(pshape);
                 pot.du_dp_fixed_to_float(N, P, &du_dp[0], py_du_dp.mutable_data());
 
-                unsigned long long du_dl_sum =
-                    std::accumulate(du_dl.begin(), du_dl.end(), decltype(du_dl)::value_type(0));
                 unsigned long long u_sum = std::accumulate(u.begin(), u.end(), decltype(u)::value_type(0));
 
-                return py::make_tuple(
-                    py_du_dx, py_du_dp, FIXED_TO_FLOAT<double>(du_dl_sum), FIXED_TO_FLOAT<double>(u_sum));
+                return py::make_tuple(py_du_dx, py_du_dp, FIXED_TO_FLOAT<double>(u_sum));
             },
             py::arg("coords"),
             py::arg("params"),
-            py::arg("box"),
-            py::arg("lam"))
+            py::arg("box"))
         .def(
             "execute_selective_batch",
             [](timemachine::Potential &pot,
                const py::array_t<double, py::array::c_style> &coords,
                const py::array_t<double, py::array::c_style> &params,
                const py::array_t<double, py::array::c_style> &boxes,
-               const py::array_t<double, py::array::c_style> &lambdas,
                const bool compute_du_dx,
                const bool compute_du_dp,
-               const bool compute_du_dl,
                const bool compute_u) -> py::tuple {
                 if (coords.ndim() != 3 && boxes.ndim() != 3) {
                     throw std::runtime_error("coords and boxes must have 3 dimensions");
@@ -425,9 +371,6 @@ void declare_potential(py::module &m) {
                 if (params.ndim() < 2) {
                     throw std::runtime_error("parameters must have at least 2 dimensions");
                 }
-                if (lambdas.size() < 1) {
-                    throw std::runtime_error("lambdas must have at least 1 value");
-                }
                 const long unsigned int coord_batches = coords.shape()[0];
                 const long unsigned int N = coords.shape()[1];
                 const long unsigned int D = coords.shape()[2];
@@ -435,9 +378,7 @@ void declare_potential(py::module &m) {
                 const long unsigned int param_batches = params.shape()[0];
                 const long unsigned int P = params.size() / param_batches;
 
-                const long unsigned int lambda_batches = lambdas.size();
-
-                const long unsigned int total_executions = coord_batches * param_batches * lambda_batches;
+                const long unsigned int total_executions = coord_batches * param_batches;
 
                 // initialize with fixed garbage values for debugging convenience (these should be overwritten by `execute_batch_host`)
                 // Only initialize memory when needed, as buffers can be quite large
@@ -448,10 +389,6 @@ void declare_potential(py::module &m) {
                 std::vector<unsigned long long> du_dp;
                 if (compute_du_dp) {
                     du_dp.resize(total_executions * P, 9999);
-                }
-                std::vector<unsigned long long> du_dl;
-                if (compute_du_dl) {
-                    du_dl.resize(total_executions * N, 9999);
                 }
                 std::vector<unsigned long long> u;
                 if (compute_u) {
@@ -464,20 +401,16 @@ void declare_potential(py::module &m) {
                     N,
                     param_batches,
                     P,
-                    lambda_batches,
                     coords.data(),
                     params.data(),
                     boxes.data(),
-                    lambdas.data(),
                     compute_du_dx ? du_dx.data() : nullptr,
                     compute_du_dp ? du_dp.data() : nullptr,
-                    compute_du_dl ? du_dl.data() : nullptr,
                     compute_u ? u.data() : nullptr);
 
-                auto result = py::make_tuple(py::none(), py::none(), py::none(), py::none());
+                auto result = py::make_tuple(py::none(), py::none(), py::none());
                 if (compute_du_dx) {
-                    py::array_t<double, py::array::c_style> py_du_dx(
-                        {coord_batches, param_batches, lambda_batches, N, D});
+                    py::array_t<double, py::array::c_style> py_du_dx({coord_batches, param_batches, N, D});
                     for (unsigned int i = 0; i < du_dx.size(); i++) {
                         py_du_dx.mutable_data()[i] = FIXED_TO_FLOAT<double>(du_dx[i]);
                     }
@@ -489,8 +422,8 @@ void declare_potential(py::module &m) {
                     // Remove the first dimension of the parameters shape to be consistent in ordering of return values
                     pshape.erase(pshape.begin());
                     // Append the new dimensions for the du_dps
-                    unsigned long int shape[] = {coord_batches, param_batches, lambda_batches};
-                    pshape.insert(pshape.begin(), shape, shape + 3);
+                    unsigned long int shape[] = {coord_batches, param_batches};
+                    pshape.insert(pshape.begin(), shape, shape + 2);
 
                     py::array_t<double, py::array::c_style> py_du_dp(pshape);
                     for (unsigned int i = 0; i < total_executions; i++) {
@@ -499,24 +432,14 @@ void declare_potential(py::module &m) {
                     result[1] = py_du_dp;
                 }
 
-                if (compute_du_dl) {
-                    py::array_t<double, py::array::c_style> py_du_dl({coord_batches, param_batches, lambda_batches});
-                    for (unsigned int i = 0; i < total_executions; i++) {
-                        unsigned long long du_dl_sum = std::accumulate(
-                            &du_dl[0] + (i * N), &du_dl[0] + ((i + 1) * N), decltype(du_dl)::value_type(0));
-                        py_du_dl.mutable_data()[i] = FIXED_TO_FLOAT<double>(du_dl_sum);
-                    }
-                    result[2] = py_du_dl;
-                }
-
                 if (compute_u) {
-                    py::array_t<double, py::array::c_style> py_u({coord_batches, param_batches, lambda_batches});
+                    py::array_t<double, py::array::c_style> py_u({coord_batches, param_batches});
                     for (unsigned int i = 0; i < total_executions; i++) {
                         unsigned long long u_sum =
                             std::accumulate(&u[0] + (i * N), &u[0] + ((i + 1) * N), decltype(u)::value_type(0));
                         py_u.mutable_data()[i] = FIXED_TO_FLOAT<double>(u_sum);
                     }
-                    result[3] = py_u;
+                    result[2] = py_u;
                 }
 
                 return result;
@@ -524,14 +447,12 @@ void declare_potential(py::module &m) {
             py::arg("coords"),
             py::arg("params"),
             py::arg("boxes"),
-            py::arg("lambs"),
             py::arg("compute_du_dx"),
             py::arg("compute_du_dp"),
-            py::arg("compute_du_dl"),
             py::arg("compute_u"),
             R"pbdoc(
-        Execute the potential over a batch of coords, parameters and lambdas. The total number
-        of executions of the potential is num_coord_batches * num_param_batches * num_lambda.
+        Execute the potential over a batch of coords and parameters. The total number of executions of the potential is
+        num_coord_batches * num_param_batches.
 
         Note: This function allocates memory for all of the inputs on the GPU. This may lead to OOMs.
 
@@ -548,17 +469,11 @@ void declare_potential(py::module &m) {
         boxes: NDArray
             A three dimensional array containing a batch of boxes.
 
-        lambdas: NDArray
-            An array of lambda values.
-
         compute_du_dx: bool
             Indicates to compute du_dx, else returns None for du_dx.
 
         compute_du_dp: bool
             Indicates to compute du_dp, else returns None for du_dp.
-
-        compute_du_dl: bool
-            Indicates to compute du_dl, else returns None for du_dl.
 
         compute_u: bool
             Indicates to compute u, else returns None for u.
@@ -566,14 +481,12 @@ void declare_potential(py::module &m) {
 
         Returns
         -------
-        4-tuple of du_dx, du_dp, du_dl, u
+        3-tuple of du_dx, du_dp, u
             coord_batch_size = coords.shape[0]
             param_batch_size = params.shape[0]
-            lambda_batch_size = lambda.size()
-            du_dx has shape (coords_batch_size, param_batch_size, lambda_batch_size, N, 3)
-            du_dp has shape (coords_batch_size, param_batch_size, lambda_batch_size, P)
-            du_dl has shape (coords_batch_size, param_batch_size, lambda_batch_size)
-            u has shape (coords_batch_size, param_batch_size, lambda_batch_size)
+            du_dx has shape (coords_batch_size, param_batch_size, N, 3)
+            du_dp has shape (coords_batch_size, param_batch_size, P)
+            u has shape (coords_batch_size, param_batch_size)
 
     )pbdoc")
         .def(
@@ -582,10 +495,8 @@ void declare_potential(py::module &m) {
                const py::array_t<double, py::array::c_style> &coords,
                const py::array_t<double, py::array::c_style> &params,
                const py::array_t<double, py::array::c_style> &box,
-               double lambda,
                bool compute_du_dx,
                bool compute_du_dp,
-               bool compute_du_dl,
                bool compute_u) -> py::tuple {
                 const long unsigned int N = coords.shape()[0];
                 const long unsigned int D = coords.shape()[1];
@@ -595,7 +506,6 @@ void declare_potential(py::module &m) {
                 std::vector<unsigned long long> du_dx(N * D, 9999);
                 std::vector<unsigned long long> du_dp(P, 9999);
 
-                std::vector<unsigned long long> du_dl(N, 9999);
                 std::vector<unsigned long long> u(N, 9999);
 
                 pot.execute_host(
@@ -604,10 +514,8 @@ void declare_potential(py::module &m) {
                     coords.data(),
                     params.data(),
                     box.data(),
-                    lambda,
                     compute_du_dx ? &du_dx[0] : nullptr,
                     compute_du_dp ? &du_dp[0] : nullptr,
-                    compute_du_dl ? &du_dl[0] : nullptr,
                     compute_u ? &u[0] : nullptr);
 
                 py::array_t<double, py::array::c_style> py_du_dx({N, D});
@@ -620,12 +528,9 @@ void declare_potential(py::module &m) {
                 py::array_t<double, py::array::c_style> py_du_dp(pshape);
                 pot.du_dp_fixed_to_float(N, P, &du_dp[0], py_du_dp.mutable_data());
 
-                unsigned long long du_dl_sum =
-                    std::accumulate(du_dl.begin(), du_dl.end(), decltype(du_dl)::value_type(0));
                 unsigned long long u_sum = std::accumulate(u.begin(), u.end(), decltype(u)::value_type(0));
 
-                auto result = py::make_tuple(
-                    py_du_dx, py_du_dp, FIXED_TO_FLOAT<double>(du_dl_sum), FIXED_TO_FLOAT<double>(u_sum));
+                auto result = py::make_tuple(py_du_dx, py_du_dp, FIXED_TO_FLOAT<double>(u_sum));
 
                 if (!compute_du_dx) {
                     result[0] = py::none();
@@ -633,11 +538,8 @@ void declare_potential(py::module &m) {
                 if (!compute_du_dp) {
                     result[1] = py::none();
                 }
-                if (!compute_du_dl) {
-                    result[2] = py::none();
-                }
                 if (!compute_u) {
-                    result[3] = py::none();
+                    result[2] = py::none();
                 }
 
                 return result;
@@ -645,25 +547,22 @@ void declare_potential(py::module &m) {
             py::arg("coords"),
             py::arg("params"),
             py::arg("box"),
-            py::arg("lam"),
             py::arg("compute_du_dx"),
             py::arg("compute_du_dp"),
-            py::arg("compute_du_dl"),
             py::arg("compute_u"))
         .def(
             "execute_du_dx",
             [](timemachine::Potential &pot,
                const py::array_t<double, py::array::c_style> &coords,
                const py::array_t<double, py::array::c_style> &params,
-               const py::array_t<double, py::array::c_style> &box,
-               double lambda) -> py::array_t<double, py::array::c_style> {
+               const py::array_t<double, py::array::c_style> &box) -> py::array_t<double, py::array::c_style> {
                 const long unsigned int N = coords.shape()[0];
                 const long unsigned int D = coords.shape()[1];
                 const long unsigned int P = params.size();
 
                 std::vector<unsigned long long> du_dx(N * D);
 
-                pot.execute_host_du_dx(N, P, coords.data(), params.data(), box.data(), lambda, &du_dx[0]);
+                pot.execute_host_du_dx(N, P, coords.data(), params.data(), box.data(), &du_dx[0]);
 
                 py::array_t<double, py::array::c_style> py_du_dx({N, D});
                 for (unsigned int i = 0; i < du_dx.size(); i++) {
@@ -674,8 +573,7 @@ void declare_potential(py::module &m) {
             },
             py::arg("coords"),
             py::arg("params"),
-            py::arg("box"),
-            py::arg("lam"));
+            py::arg("box"));
 }
 
 void declare_bound_potential(py::module &m) {
@@ -698,46 +596,39 @@ void declare_bound_potential(py::module &m) {
             "execute",
             [](timemachine::BoundPotential &bp,
                const py::array_t<double, py::array::c_style> &coords,
-               const py::array_t<double, py::array::c_style> &box,
-               double lambda) -> py::tuple {
+               const py::array_t<double, py::array::c_style> &box) -> py::tuple {
                 const long unsigned int N = coords.shape()[0];
                 const long unsigned int D = coords.shape()[1];
 
                 std::vector<unsigned long long> du_dx(N * D);
-                std::vector<unsigned long long> du_dl(N, 0);
                 std::vector<unsigned long long> u(N, 0);
 
-                bp.execute_host(N, coords.data(), box.data(), lambda, &du_dx[0], &du_dl[0], &u[0]);
+                bp.execute_host(N, coords.data(), box.data(), &du_dx[0], &u[0]);
 
                 py::array_t<double, py::array::c_style> py_du_dx({N, D});
                 for (unsigned int i = 0; i < du_dx.size(); i++) {
                     py_du_dx.mutable_data()[i] = FIXED_TO_FLOAT<double>(du_dx[i]);
                 }
 
-                unsigned long long du_dl_sum =
-                    std::accumulate(du_dl.begin(), du_dl.end(), decltype(du_dl)::value_type(0));
                 unsigned long long u_sum = std::accumulate(u.begin(), u.end(), decltype(u)::value_type(0));
 
-                return py::make_tuple(py_du_dx, FIXED_TO_FLOAT<double>(du_dl_sum), FIXED_TO_FLOAT<double>(u_sum));
+                return py::make_tuple(py_du_dx, FIXED_TO_FLOAT<double>(u_sum));
             },
             py::arg("coords"),
-            py::arg("box"),
-            py::arg("lam"))
+            py::arg("box"))
         .def(
             "execute_fixed",
             [](timemachine::BoundPotential &bp,
                const py::array_t<double, py::array::c_style> &coords,
-               const py::array_t<double, py::array::c_style> &box,
-               double lambda) -> const py::array_t<uint64_t, py::array::c_style> {
+               const py::array_t<double, py::array::c_style> &box) -> const py::array_t<uint64_t, py::array::c_style> {
                 const long unsigned int N = coords.shape()[0];
                 const long unsigned int D = coords.shape()[1];
 
-                // du_dx and du_dl are computed, but not used
+                // du_dx is computed, but not used
                 std::vector<unsigned long long> du_dx(N * D);
-                std::vector<unsigned long long> du_dl(N, 0);
                 std::vector<unsigned long long> u(N, 0);
 
-                bp.execute_host(N, coords.data(), box.data(), lambda, &du_dx[0], &du_dl[0], &u[0]);
+                bp.execute_host(N, coords.data(), box.data(), &du_dx[0], &u[0]);
 
                 uint64_t u_sum = std::accumulate(u.begin(), u.end(), decltype(u)::value_type(0));
                 py::array_t<uint64_t, py::array::c_style> py_u(1);
@@ -745,8 +636,7 @@ void declare_bound_potential(py::module &m) {
                 return py_u;
             },
             py::arg("coords"),
-            py::arg("box"),
-            py::arg("lam"));
+            py::arg("box"));
 }
 
 template <typename RealType> void declare_harmonic_bond(py::module &m, const char *typestr) {
@@ -772,7 +662,7 @@ template <typename RealType> void declare_flat_bottom_bond(py::module &m, const 
         .def(
             py::init([](const py::array_t<int, py::array::c_style> &bond_idxs) {
                 std::vector<int> vec_bond_idxs(bond_idxs.data(), bond_idxs.data() + bond_idxs.size());
-                return new Class(vec_bond_idxs);
+                return new timemachine::FlatBottomBond<RealType>(vec_bond_idxs);
             }),
             py::arg("bond_idxs"));
 }

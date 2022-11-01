@@ -122,7 +122,7 @@ def test_barostat_partial_group_idxs():
     )
 
     ctxt = custom_ops.Context(coords, v_0, complex_box, integrator_impl, u_impls, barostat=baro)
-    ctxt.multiple_steps(np.ones(1000) * lam)
+    ctxt.multiple_steps(1000)
 
 
 @pytest.mark.memcheck
@@ -186,7 +186,7 @@ def test_barostat_is_deterministic():
     )
 
     ctxt = custom_ops.Context(coords, v_0, host_box, integrator_impl, u_impls, barostat=baro)
-    ctxt.multiple_steps(np.ones(15) * lam)
+    ctxt.multiple_steps(15)
     atm_box = ctxt.get_box()
     # Verify that the volume of the box has changed
     assert compute_box_volume(atm_box) != compute_box_volume(host_box)
@@ -241,7 +241,7 @@ def test_barostat_varying_pressure():
     )
 
     ctxt = custom_ops.Context(coords, v_0, complex_box, integrator_impl, u_impls, barostat=baro)
-    ctxt.multiple_steps(np.ones(1000) * lam)
+    ctxt.multiple_steps(1000)
     ten_atm_box = ctxt.get_box()
     ten_atm_box_vol = compute_box_volume(ten_atm_box)
     # Expect the box to shrink thanks to the barostat
@@ -252,7 +252,7 @@ def test_barostat_varying_pressure():
     # Changing the barostat interval resets the barostat step.
     baro.set_interval(2)
 
-    ctxt.multiple_steps(np.ones(2000) * lam)
+    ctxt.multiple_steps(2000)
     atm_box = ctxt.get_box()
     # Box will grow thanks to the lower pressure
     assert compute_box_volume(atm_box) > ten_atm_box_vol
@@ -354,7 +354,7 @@ def test_molecular_ideal_gas():
         ctxt = custom_ops.Context(new_coords, v_0, new_box, integrator_impl, u_impls, barostat=baro)
         vols = []
         for move in range(n_moves // barostat_interval):
-            ctxt.multiple_steps(np.ones(barostat_interval))
+            ctxt.multiple_steps(barostat_interval)
             new_box = ctxt.get_box()
             volume = np.linalg.det(new_box)
             vols.append(volume)
