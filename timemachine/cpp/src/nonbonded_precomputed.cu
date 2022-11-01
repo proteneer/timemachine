@@ -26,7 +26,7 @@ NonbondedPairListPrecomputed<RealType>::NonbondedPairListPrecomputed(
         }
     }
 
-    gpuErrchk(cudaMalloc(&d_idxs_, B_ * 2 * sizeof(*d_idxs_)));
+    cudaSafeMalloc(&d_idxs_, B_ * 2 * sizeof(*d_idxs_));
     gpuErrchk(cudaMemcpy(d_idxs_, &idxs[0], B_ * 2 * sizeof(*d_idxs_), cudaMemcpyHostToDevice));
 };
 
