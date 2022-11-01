@@ -35,26 +35,26 @@ MonteCarloBarostat::MonteCarloBarostat(
     }
 
     curandErrchk(curandCreateGenerator(&cr_rng_, CURAND_RNG_PSEUDO_DEFAULT));
-    gpuErrchk(cudaMalloc(&d_rand_, 2 * sizeof(double)));
+    cudaSafeMalloc(&d_rand_, 2 * sizeof(double));
     curandErrchk(curandSetPseudoRandomGeneratorSeed(cr_rng_, seed_));
 
     const int num_mols = group_idxs_.size();
 
-    gpuErrchk(cudaMalloc(&d_x_after_, N_ * 3 * sizeof(*d_x_after_)));
-    gpuErrchk(cudaMalloc(&d_box_after_, 3 * 3 * sizeof(*d_box_after_)));
-    gpuErrchk(cudaMalloc(&d_u_buffer_, N_ * sizeof(*d_u_buffer_)));
-    gpuErrchk(cudaMalloc(&d_u_after_buffer_, N_ * sizeof(*d_u_after_buffer_)));
+    cudaSafeMalloc(&d_x_after_, N_ * 3 * sizeof(*d_x_after_));
+    cudaSafeMalloc(&d_box_after_, 3 * 3 * sizeof(*d_box_after_));
+    cudaSafeMalloc(&d_u_buffer_, N_ * sizeof(*d_u_buffer_));
+    cudaSafeMalloc(&d_u_after_buffer_, N_ * sizeof(*d_u_after_buffer_));
 
-    gpuErrchk(cudaMalloc(&d_init_u_, 1 * sizeof(*d_init_u_)));
-    gpuErrchk(cudaMalloc(&d_final_u_, 1 * sizeof(*d_final_u_)));
+    cudaSafeMalloc(&d_init_u_, 1 * sizeof(*d_init_u_));
+    cudaSafeMalloc(&d_final_u_, 1 * sizeof(*d_final_u_));
 
-    gpuErrchk(cudaMalloc(&d_num_accepted_, 1 * sizeof(*d_num_accepted_)));
-    gpuErrchk(cudaMalloc(&d_num_attempted_, 1 * sizeof(*d_num_attempted_)));
+    cudaSafeMalloc(&d_num_accepted_, 1 * sizeof(*d_num_accepted_));
+    cudaSafeMalloc(&d_num_attempted_, 1 * sizeof(*d_num_attempted_));
 
-    gpuErrchk(cudaMalloc(&d_volume_, 1 * sizeof(*d_volume_)));
-    gpuErrchk(cudaMalloc(&d_length_scale_, 1 * sizeof(*d_length_scale_)));
-    gpuErrchk(cudaMalloc(&d_volume_scale_, 1 * sizeof(*d_volume_scale_)));
-    gpuErrchk(cudaMalloc(&d_volume_delta_, 1 * sizeof(*d_volume_delta_)));
+    cudaSafeMalloc(&d_volume_, 1 * sizeof(*d_volume_));
+    cudaSafeMalloc(&d_length_scale_, 1 * sizeof(*d_length_scale_));
+    cudaSafeMalloc(&d_volume_scale_, 1 * sizeof(*d_volume_scale_));
+    cudaSafeMalloc(&d_volume_delta_, 1 * sizeof(*d_volume_delta_));
 
     gpuErrchk(cudaMemset(d_volume_scale_, 0, 1 * sizeof(*d_volume_scale_)));
 
@@ -76,10 +76,10 @@ MonteCarloBarostat::MonteCarloBarostat(
         throw std::runtime_error("All grouped indices must be unique");
     }
 
-    gpuErrchk(cudaMalloc(&d_centroids_, num_mols * 3 * sizeof(*d_centroids_)));
-    gpuErrchk(cudaMalloc(&d_atom_idxs_, num_grouped_atoms_ * sizeof(*d_atom_idxs_)));
-    gpuErrchk(cudaMalloc(&d_mol_idxs_, num_grouped_atoms_ * sizeof(*d_mol_idxs_)));
-    gpuErrchk(cudaMalloc(&d_mol_offsets_, (num_mols + 1) * sizeof(*d_mol_offsets_)));
+    cudaSafeMalloc(&d_centroids_, num_mols * 3 * sizeof(*d_centroids_));
+    cudaSafeMalloc(&d_atom_idxs_, num_grouped_atoms_ * sizeof(*d_atom_idxs_));
+    cudaSafeMalloc(&d_mol_idxs_, num_grouped_atoms_ * sizeof(*d_mol_idxs_));
+    cudaSafeMalloc(&d_mol_offsets_, (num_mols + 1) * sizeof(*d_mol_offsets_));
 
     int offset = 0;
     int mol_offsets[num_mols + 1];
@@ -108,7 +108,7 @@ MonteCarloBarostat::MonteCarloBarostat(
     // Compute amount of space to reduce energies
     cub::DeviceReduce::Sum(d_sum_storage_, d_sum_storage_bytes_, d_in_tmp, d_out_tmp, N_);
     gpuErrchk(cudaPeekAtLastError());
-    gpuErrchk(cudaMalloc(&d_sum_storage_, d_sum_storage_bytes_));
+    cudaSafeMalloc(&d_sum_storage_, d_sum_storage_bytes_);
     this->reset_counters();
 };
 
