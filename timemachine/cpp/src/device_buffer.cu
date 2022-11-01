@@ -9,7 +9,7 @@ template <typename T> T *allocate(const std::size_t length) {
         throw std::runtime_error("device buffer length must at least be 1");
     }
     T *buffer;
-    gpuErrchk(cudaMalloc(&buffer, length * sizeof(T)));
+    cudaSafeMalloc(&buffer, length * sizeof(T));
     return buffer;
 }
 

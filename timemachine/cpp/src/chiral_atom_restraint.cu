@@ -14,7 +14,7 @@ ChiralAtomRestraint<RealType>::ChiralAtomRestraint(const std::vector<int> &idxs)
         throw std::runtime_error("idxs.size() must be exactly 4*k!");
     }
 
-    gpuErrchk(cudaMalloc(&d_idxs_, R_ * 4 * sizeof(*d_idxs_)));
+    cudaSafeMalloc(&d_idxs_, R_ * 4 * sizeof(*d_idxs_));
     gpuErrchk(cudaMemcpy(d_idxs_, &idxs[0], R_ * 4 * sizeof(*d_idxs_), cudaMemcpyHostToDevice));
 };
 

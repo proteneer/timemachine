@@ -34,10 +34,22 @@ inline void curandAssert(curandStatus_t code, const char *file, int line, bool a
     }
 }
 
+/* cudaSafeMalloc is equivalent to gpuErrchk(cudaMalloc(...)) except that it prints a warning message if the
+* allocation is greater than a GiB.
+*/
+#define cudaSafeMalloc(ptr, size)                                                                                      \
+    ({                                                                                                                 \
+        const int cudaSafeMalloc__line = __LINE__;                                                                     \
+        if (size > (1 << 30)) {                                                                                        \
+            fprintf(stderr, "cudaSafeMalloc: allocation larger than 1GiB %s %d\n", __FILE__, cudaSafeMalloc__line);    \
+        }                                                                                                              \
+        gpuAssert(cudaMalloc(ptr, size), __FILE__, cudaSafeMalloc__line, true);                                        \
+    })
+
 // safe is for use of gpuErrchk
 template <typename T> T *gpuErrchkCudaMallocAndCopy(const T *host_array, int count) {
     T *device_array;
-    gpuErrchk(cudaMalloc(&device_array, count * sizeof(*host_array)));
+    cudaSafeMalloc(&device_array, count * sizeof(*host_array));
     gpuErrchk(cudaMemcpy(device_array, host_array, count * sizeof(*host_array), cudaMemcpyHostToDevice));
     return device_array;
 }

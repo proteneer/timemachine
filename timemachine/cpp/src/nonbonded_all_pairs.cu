@@ -32,33 +32,33 @@ NonbondedAllPairs<RealType>::NonbondedAllPairs(
                     &k_nonbonded_unified<RealType, 1, 1, 1>}) {
 
     if (atom_idxs) {
-        gpuErrchk(cudaMalloc(&d_atom_idxs_, K_ * sizeof(*d_atom_idxs_)));
+        cudaSafeMalloc(&d_atom_idxs_, K_ * sizeof(*d_atom_idxs_));
         std::vector<int> atom_idxs_v(atom_idxs->begin(), atom_idxs->end());
         gpuErrchk(cudaMemcpy(d_atom_idxs_, &atom_idxs_v[0], K_ * sizeof(*d_atom_idxs_), cudaMemcpyHostToDevice));
     }
 
-    gpuErrchk(cudaMalloc(&d_sorted_atom_idxs_, K_ * sizeof(*d_sorted_atom_idxs_)));
+    cudaSafeMalloc(&d_sorted_atom_idxs_, K_ * sizeof(*d_sorted_atom_idxs_));
 
-    gpuErrchk(cudaMalloc(&d_gathered_x_, K_ * 3 * sizeof(*d_gathered_x_)));
+    cudaSafeMalloc(&d_gathered_x_, K_ * 3 * sizeof(*d_gathered_x_));
 
-    gpuErrchk(cudaMalloc(&d_gathered_p_, K_ * PARAMS_PER_ATOM * sizeof(*d_gathered_p_)));
-    gpuErrchk(cudaMalloc(&d_gathered_du_dx_, K_ * 3 * sizeof(*d_gathered_du_dx_)));
-    gpuErrchk(cudaMalloc(&d_gathered_du_dp_, K_ * PARAMS_PER_ATOM * sizeof(*d_gathered_du_dp_)));
+    cudaSafeMalloc(&d_gathered_p_, K_ * PARAMS_PER_ATOM * sizeof(*d_gathered_p_));
+    cudaSafeMalloc(&d_gathered_du_dx_, K_ * 3 * sizeof(*d_gathered_du_dx_));
+    cudaSafeMalloc(&d_gathered_du_dp_, K_ * PARAMS_PER_ATOM * sizeof(*d_gathered_du_dp_));
 
-    gpuErrchk(cudaMalloc(&d_du_dp_buffer_, N_ * PARAMS_PER_ATOM * sizeof(*d_du_dp_buffer_)));
+    cudaSafeMalloc(&d_du_dp_buffer_, N_ * PARAMS_PER_ATOM * sizeof(*d_du_dp_buffer_));
 
     gpuErrchk(cudaMallocHost(&p_ixn_count_, 1 * sizeof(*p_ixn_count_)));
 
-    gpuErrchk(cudaMalloc(&d_nblist_x_, N_ * 3 * sizeof(*d_nblist_x_)));
+    cudaSafeMalloc(&d_nblist_x_, N_ * 3 * sizeof(*d_nblist_x_));
     gpuErrchk(cudaMemset(d_nblist_x_, 0, N_ * 3 * sizeof(*d_nblist_x_))); // set non-sensical positions
-    gpuErrchk(cudaMalloc(&d_nblist_box_, 3 * 3 * sizeof(*d_nblist_x_)));
+    cudaSafeMalloc(&d_nblist_box_, 3 * 3 * sizeof(*d_nblist_x_));
     gpuErrchk(cudaMemset(d_nblist_box_, 0, 3 * 3 * sizeof(*d_nblist_x_)));
-    gpuErrchk(cudaMalloc(&d_rebuild_nblist_, 1 * sizeof(*d_rebuild_nblist_)));
+    cudaSafeMalloc(&d_rebuild_nblist_, 1 * sizeof(*d_rebuild_nblist_));
     gpuErrchk(cudaMallocHost(&p_rebuild_nblist_, 1 * sizeof(*p_rebuild_nblist_)));
 
-    gpuErrchk(cudaMalloc(&d_sort_keys_in_, K_ * sizeof(d_sort_keys_in_)));
-    gpuErrchk(cudaMalloc(&d_sort_keys_out_, K_ * sizeof(d_sort_keys_out_)));
-    gpuErrchk(cudaMalloc(&d_sort_vals_in_, K_ * sizeof(d_sort_vals_in_)));
+    cudaSafeMalloc(&d_sort_keys_in_, K_ * sizeof(d_sort_keys_in_));
+    cudaSafeMalloc(&d_sort_keys_out_, K_ * sizeof(d_sort_keys_out_));
+    cudaSafeMalloc(&d_sort_vals_in_, K_ * sizeof(d_sort_vals_in_));
 
     // initialize hilbert curve
     std::vector<unsigned int> bin_to_idx(HILBERT_GRID_DIM * HILBERT_GRID_DIM * HILBERT_GRID_DIM);
@@ -77,8 +77,7 @@ NonbondedAllPairs<RealType>::NonbondedAllPairs(
         }
     }
 
-    gpuErrchk(
-        cudaMalloc(&d_bin_to_idx_, HILBERT_GRID_DIM * HILBERT_GRID_DIM * HILBERT_GRID_DIM * sizeof(*d_bin_to_idx_)));
+    cudaSafeMalloc(&d_bin_to_idx_, HILBERT_GRID_DIM * HILBERT_GRID_DIM * HILBERT_GRID_DIM * sizeof(*d_bin_to_idx_));
     gpuErrchk(cudaMemcpy(
         d_bin_to_idx_,
         &bin_to_idx[0],
@@ -90,7 +89,7 @@ NonbondedAllPairs<RealType>::NonbondedAllPairs(
         nullptr, d_sort_storage_bytes_, d_sort_keys_in_, d_sort_keys_out_, d_sort_vals_in_, d_sorted_atom_idxs_, K_);
 
     gpuErrchk(cudaPeekAtLastError());
-    gpuErrchk(cudaMalloc(&d_sort_storage_, d_sort_storage_bytes_));
+    cudaSafeMalloc(&d_sort_storage_, d_sort_storage_bytes_);
 };
 
 template <typename RealType> NonbondedAllPairs<RealType>::~NonbondedAllPairs() {
