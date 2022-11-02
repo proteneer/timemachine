@@ -34,10 +34,10 @@ NonbondedPairList<RealType, Negated>::NonbondedPairList(
             " != " + std::to_string(scales.size() / 2));
     }
 
-    gpuErrchk(cudaMalloc(&d_pair_idxs_, M_ * 2 * sizeof(*d_pair_idxs_)));
+    cudaSafeMalloc(&d_pair_idxs_, M_ * 2 * sizeof(*d_pair_idxs_));
     gpuErrchk(cudaMemcpy(d_pair_idxs_, &pair_idxs[0], M_ * 2 * sizeof(*d_pair_idxs_), cudaMemcpyHostToDevice));
 
-    gpuErrchk(cudaMalloc(&d_scales_, M_ * 2 * sizeof(*d_scales_)));
+    cudaSafeMalloc(&d_scales_, M_ * 2 * sizeof(*d_scales_));
     gpuErrchk(cudaMemcpy(d_scales_, &scales[0], M_ * 2 * sizeof(*d_scales_), cudaMemcpyHostToDevice));
 };
 
