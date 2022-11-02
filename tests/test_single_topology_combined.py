@@ -139,11 +139,11 @@ def test_combined_parameters_nonbonded(host_system_fixture, hif2a_ligand_pair_si
                     if lamb == 0.0:
                         assert w == 0.0
                     elif lamb == 1.0:
-                        assert w == pytest.approx(cutoff)
+                        assert w == cutoff
                 elif indicator == 2:
                     # mol_b dummy
                     if lamb == 0.0:
-                        assert w == pytest.approx(cutoff)
+                        assert w == cutoff
                     elif lamb == 1.0:
                         assert w == 0.0
                 else:
