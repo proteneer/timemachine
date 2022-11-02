@@ -211,10 +211,10 @@ def test_combined_parameters_nonbonded_intermediate(
         assert all(w == 0.0 for w in ws_core)
 
         # dummy groups have consistent w coords
-        assert len(np.unique(ws_a)) == 1
-        assert len(np.unique(ws_b)) == 1
-        w_a = np.unique(ws_a)[0]
-        w_b = np.unique(ws_b)[0]
+        assert len(set(ws_a)) == 1
+        assert len(set(ws_b)) == 1
+        (w_a,) = set(ws_a)
+        (w_b,) = set(ws_b)
 
         # w in [0, cutoff]
         assert 0 < w_a < cutoff
