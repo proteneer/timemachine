@@ -10,8 +10,6 @@ from simtk.openmm import app
 
 from timemachine.constants import BOLTZ, DEFAULT_FF, DEFAULT_TEMP
 from timemachine.fe import functional, model_utils
-
-# TODO: move common functions
 from timemachine.fe.free_energy import (
     AbsoluteFreeEnergy,
     HostConfig,
