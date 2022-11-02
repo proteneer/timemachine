@@ -13,7 +13,7 @@ from timemachine.constants import BOLTZ, DEFAULT_TEMP
 from timemachine.fe import model_utils
 from timemachine.fe.bar import bar_with_bootstrapped_uncertainty
 from timemachine.fe.single_topology import SingleTopology
-from timemachine.fe.system import convert_bps_into_system
+from timemachine.fe.system import convert_bps_into_system, convert_omm_system
 from timemachine.fe.utils import get_mol_name, get_romol_conf
 from timemachine.ff.handlers import openmm_deserializer
 from timemachine.lib import LangevinIntegrator, MonteCarloBarostat, custom_ops
@@ -165,8 +165,9 @@ def setup_initial_states(st, host_config, temperature, lambda_schedule, seed):
 
     """
 
+    host = None
     if host_config:
-        host_bps, host_masses = openmm_deserializer.deserialize_system(host_config.omm_system, cutoff=1.2)
+        host_system, host_masses = convert_omm_system(host_config.omm_system)
         host_conf = minimizer.minimize_host_4d(
             [st.mol_a, st.mol_b],
             host_config.omm_system,
@@ -174,6 +175,7 @@ def setup_initial_states(st, host_config, temperature, lambda_schedule, seed):
             st.ff,
             host_config.box,
         )
+        host = (host_system, host_masses, host_conf)
 
     initial_states = []
 
@@ -194,9 +196,10 @@ def setup_initial_states(st, host_config, temperature, lambda_schedule, seed):
 
         run_seed = seed + lamb_idx
 
-        if host_config:
+        if host is not None:
             # run in an environment
-            system = st.combine_with_host(convert_bps_into_system(host_bps), lamb=lamb)
+            host_system, host_masses, host_conf = host
+            system = st.combine_with_host(host_system, lamb=lamb)
             combined_masses = np.concatenate([host_masses, st.combine_masses()])
             potentials = system.get_U_fns()
             hmr_masses = model_utils.apply_hmr(combined_masses, system.bond.get_idxs())
