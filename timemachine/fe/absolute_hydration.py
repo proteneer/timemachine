@@ -148,7 +148,6 @@ def set_up_ahfe_system_for_smc(
     mol, n_walkers, n_windows, n_md_steps, resample_thresh, seed=2022, ff=None, num_workers=None
 ):
     """define initial samples, lambdas schedule, propagate fxn, log_prob fxn, resample fxn"""
-    n_windows = n_windows or 16
     reduced_potential, mover, initial_samples = setup_absolute_hydration_with_endpoint_samples(
         mol, n_steps=n_md_steps, seed=seed, ff=ff, num_workers=num_workers
     )
@@ -264,7 +263,7 @@ def setup_initial_states(
 ) -> List[InitialState]:
     """
     Setup the initial states for a series of lambda values. It is assumed that the lambda schedule
-    is a monotonically increasing sequence in the closed interval [0, 1].
+    is a monotonically decreasing sequence in the closed interval [0, 1].
 
     Parameters
     ----------
@@ -337,7 +336,7 @@ def setup_initial_states(
 
 
 def run_solvent(
-    mol, forcefield, _, n_frames, seed, n_eq_steps=10000, steps_per_frame=400, n_windows=None
+    mol, forcefield, _, n_frames, seed, n_eq_steps=10000, steps_per_frame=400, n_windows=16
 ) -> Tuple[SimulationResult, app.topology.Topology]:
     box_width = 4.0
     solvent_sys, solvent_conf, solvent_box, solvent_top = builders.build_water_system(box_width, forcefield.water_ff)
