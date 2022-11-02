@@ -16,7 +16,6 @@ from timemachine.lib import potentials
 
 Array = Any
 Params = Array
-ParameterInterpolationFxn = Callable[[Params, Params, float], Params]
 
 
 class MultipleAnchorWarning(UserWarning):
@@ -1142,7 +1141,7 @@ class SingleTopology(AtomMapMixin):
 
         return system.VacuumSystem(bond, angle, torsion, nonbonded, chiral_atom, chiral_bond)
 
-    def _parameterize_host_guest_nonbonded(self, lamb, host_nonbonded, interpolate_w_fn: ParameterInterpolationFxn):
+    def _parameterize_host_guest_nonbonded(self, lamb, host_nonbonded):
         # Parameterize nonbonded potential for the host guest interaction
 
         guest_exclusions_ = []
@@ -1177,6 +1176,13 @@ class SingleTopology(AtomMapMixin):
         guest_b_q = self.ff.q_handle.parameterize(self.mol_b)
         guest_b_lj = self.ff.lj_handle.parameterize(self.mol_b)
 
+        # define interpolation function for dummy 4D coordinates
+        lambda_schedule = construct_pre_optimized_relative_lambda_schedule(None)
+        x = jnp.linspace(0.0, 1.0, len(lambda_schedule))
+
+        def interpolate_w(w0, w1, lamb):
+            return interpolate.linear_interpolation(w0, w1, jnp.interp(lamb, x, lambda_schedule))
+
         for idx, membership in enumerate(self.c_flags):
             if membership == 0:  # core atom
                 a_idx = self.c_to_a[idx]
@@ -1196,8 +1202,8 @@ class SingleTopology(AtomMapMixin):
                 sig = guest_a_lj[a_idx, 0]
                 eps = guest_a_lj[a_idx, 1]
 
-                # Lift dummy A out of plane as lambda goes from 0 to 1
-                w = interpolate_w_fn(0.0, cutoff, lamb)
+                # Decouple dummy group A as lambda goes from 0 to 1
+                w = interpolate_w(0.0, cutoff, lamb)
 
             elif membership == 2:  # dummy_B
                 b_idx = self.c_to_b[idx]
@@ -1205,9 +1211,9 @@ class SingleTopology(AtomMapMixin):
                 sig = guest_b_lj[b_idx, 0]
                 eps = guest_b_lj[b_idx, 1]
 
-                # Lower dummy B into plane as lambda goes from 0 to 1
+                # Couple dummy group B as lambda goes from 0 to 1
                 # NOTE: this is only for host-guest nonbonded ixns (there is no clash between A and B at lambda = 0.5)
-                w = interpolate_w_fn(cutoff, 0.0, lamb)
+                w = interpolate_w(cutoff, 0.0, lamb)
             else:
                 assert 0
 
@@ -1301,22 +1307,8 @@ class SingleTopology(AtomMapMixin):
 
         combined_torsion = potentials.PeriodicTorsion(combined_torsion_idxs).bind(combined_torsion_params)
 
-        # define interpolation function for dummy 4D coordinates
-        def make_interpolate_dummy_w_fxn():
-            lambda_schedule = construct_pre_optimized_relative_lambda_schedule(None)
-            x = jnp.linspace(0.0, 1.0, len(lambda_schedule))
-
-            def f(w0, w1, lamb):
-                return interpolate.linear_interpolation(w0, w1, jnp.interp(lamb, x, lambda_schedule))
-
-            return f
-
-        interpolate_dummy_w_fxn = make_interpolate_dummy_w_fxn()
-
         # concatenate guest charges with host charges
-        combined_nonbonded = self._parameterize_host_guest_nonbonded(
-            lamb, host_system.nonbonded, interpolate_dummy_w_fxn
-        )
+        combined_nonbonded = self._parameterize_host_guest_nonbonded(lamb, host_system.nonbonded)
 
         return HostGuestSystem(
             combined_bond,
