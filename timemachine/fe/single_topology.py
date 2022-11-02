@@ -810,7 +810,7 @@ class AtomMapMixin:
 
 
 class SingleTopology(AtomMapMixin):
-    def __init__(self, mol_a, mol_b, core, forcefield, lambda_angles=0.4, lambda_torsions=0.7):
+    def __init__(self, mol_a, mol_b, core, forcefield):
         """
         SingleTopology combines two molecules through a common core. The combined mol has
         atom indices laid out such that mol_a is identically mapped to the combined mol indices.
@@ -853,40 +853,6 @@ class SingleTopology(AtomMapMixin):
         # setup end states
         self.src_system = self._setup_end_state_src()
         self.dst_system = self._setup_end_state_dst()
-
-        # setup default parameter interpolation functions
-        self.default_interpolate_harmonic_bond_params_fxn = partial(
-            interpolate_harmonic_bond_params,
-            k_min=0.1,  # ~ BOLTZ * (300 K) / (5 nm)^2
-            lambda_min=0.0,
-            lambda_max=lambda_angles,
-        )
-        self.default_interpolate_harmonic_angle_params_fxn = partial(
-            interpolate_harmonic_angle_params,
-            k_min=0.05,  # ~ BOLTZ * (300 K) / (2 * pi)^2
-            lambda_min=lambda_angles,
-            lambda_max=lambda_torsions,
-        )
-        self.default_interpolate_periodic_torsion_params_fxn = partial(
-            interpolate_periodic_torsion_params,
-            lambda_min=lambda_torsions,
-            lambda_max=1.0,
-        )
-        self.default_interpolate_nonbonded_params_fxn = interpolate.linear_interpolation
-        self.default_interpolate_chiral_atom_params_fxn = interpolate.linear_interpolation
-        self.default_interpolate_chiral_bond_params_fxn = interpolate.linear_interpolation
-
-        # 4D coordinate (w) schedule used for de/coupling dummy atoms in host-guest nonbonded ixns
-        def make_default_interpolate_dummy_w_fxn():
-            lambda_schedule = construct_pre_optimized_relative_lambda_schedule(None)
-            x = jnp.linspace(0.0, 1.0, len(lambda_schedule))
-
-            def f(w0, w1, lamb):
-                return interpolate.linear_interpolation(w0, w1, jnp.interp(lamb, x, lambda_schedule))
-
-            return f
-
-        self.default_interpolate_dummy_w_fxn = make_default_interpolate_dummy_w_fxn()
 
     def combine_masses(self):
         """
@@ -1104,12 +1070,8 @@ class SingleTopology(AtomMapMixin):
     def setup_intermediate_state(
         self,
         lamb,
-        interpolate_harmonic_bond_params_fxn: Optional[ParameterInterpolationFxn] = None,
-        interpolate_harmonic_angle_params_fxn: Optional[ParameterInterpolationFxn] = None,
-        interpolate_periodic_torsion_params_fxn: Optional[ParameterInterpolationFxn] = None,
-        interpolate_nonbonded_params_fxn: Optional[ParameterInterpolationFxn] = None,
-        interpolate_chiral_atom_params_fxn: Optional[ParameterInterpolationFxn] = None,
-        interpolate_chiral_bond_params_fxn: Optional[ParameterInterpolationFxn] = None,
+        lambda_angles=0.4,
+        lambda_torsions=0.7,
     ):
         """
         Setup intermediate states at some value of lambda.
@@ -1122,7 +1084,12 @@ class SingleTopology(AtomMapMixin):
             dst_system.bond,
             lamb,
             interpolate.align_harmonic_bond_idxs_and_params,
-            interpolate_harmonic_bond_params_fxn or self.default_interpolate_harmonic_bond_params_fxn,
+            partial(
+                interpolate_harmonic_bond_params,
+                k_min=0.1,  # ~ BOLTZ * (300 K) / (5 nm)^2
+                lambda_min=0.0,
+                lambda_max=lambda_angles,
+            ),
         )
 
         angle = self._setup_intermediate_bonded_term(
@@ -1130,7 +1097,12 @@ class SingleTopology(AtomMapMixin):
             dst_system.angle,
             lamb,
             interpolate.align_harmonic_angle_idxs_and_params,
-            interpolate_harmonic_angle_params_fxn or self.default_interpolate_harmonic_angle_params_fxn,
+            partial(
+                interpolate_harmonic_angle_params,
+                k_min=0.05,  # ~ BOLTZ * (300 K) / (2 * pi)^2
+                lambda_min=lambda_angles,
+                lambda_max=lambda_torsions,
+            ),
         )
 
         torsion = self._setup_intermediate_bonded_term(
@@ -1138,7 +1110,11 @@ class SingleTopology(AtomMapMixin):
             dst_system.torsion,
             lamb,
             interpolate.align_torsion_idxs_and_params,
-            interpolate_periodic_torsion_params_fxn or self.default_interpolate_periodic_torsion_params_fxn,
+            partial(
+                interpolate_periodic_torsion_params,
+                lambda_min=lambda_torsions,
+                lambda_max=1.0,
+            ),
         )
 
         nonbonded = self._setup_intermediate_nonbonded_term(
@@ -1146,7 +1122,7 @@ class SingleTopology(AtomMapMixin):
             dst_system.nonbonded,
             lamb,
             interpolate.align_nonbonded_idxs_and_params,
-            interpolate_nonbonded_params_fxn or self.default_interpolate_nonbonded_params_fxn,
+            interpolate.linear_interpolation,
         )
 
         chiral_atom = self._setup_intermediate_bonded_term(
@@ -1154,14 +1130,14 @@ class SingleTopology(AtomMapMixin):
             dst_system.chiral_atom,
             lamb,
             interpolate.align_chiral_atom_idxs_and_params,
-            interpolate_chiral_atom_params_fxn or self.default_interpolate_chiral_atom_params_fxn,
+            interpolate.linear_interpolation,
         )
 
         chiral_bond = self._setup_intermediate_chiral_bond_term(
             src_system.chiral_bond,
             dst_system.chiral_bond,
             lamb,
-            interpolate_chiral_bond_params_fxn or self.default_interpolate_chiral_bond_params_fxn,
+            interpolate.linear_interpolation,
         )
 
         return system.VacuumSystem(bond, angle, torsion, nonbonded, chiral_atom, chiral_bond)
@@ -1258,7 +1234,7 @@ class SingleTopology(AtomMapMixin):
 
         return combined_nonbonded
 
-    def combine_with_host(self, host_system, lamb, interpolate_dummy_w_fxn: Optional[ParameterInterpolationFxn] = None):
+    def combine_with_host(self, host_system, lamb):
         """
         Setup host guest system. Bonds, angles, torsions, chiral_atom, chiral_bond and nonbonded terms are
         combined. In particular:
@@ -1325,12 +1301,21 @@ class SingleTopology(AtomMapMixin):
 
         combined_torsion = potentials.PeriodicTorsion(combined_torsion_idxs).bind(combined_torsion_params)
 
-        # concatenate guest charges with host charges
+        # define interpolation function for dummy 4D coordinates
+        def make_interpolate_dummy_w_fxn():
+            lambda_schedule = construct_pre_optimized_relative_lambda_schedule(None)
+            x = jnp.linspace(0.0, 1.0, len(lambda_schedule))
 
+            def f(w0, w1, lamb):
+                return interpolate.linear_interpolation(w0, w1, jnp.interp(lamb, x, lambda_schedule))
+
+            return f
+
+        interpolate_dummy_w_fxn = make_interpolate_dummy_w_fxn()
+
+        # concatenate guest charges with host charges
         combined_nonbonded = self._parameterize_host_guest_nonbonded(
-            lamb,
-            host_system.nonbonded,
-            interpolate_dummy_w_fxn if interpolate_dummy_w_fxn is not None else self.default_interpolate_dummy_w_fxn,
+            lamb, host_system.nonbonded, interpolate_dummy_w_fxn
         )
 
         return HostGuestSystem(

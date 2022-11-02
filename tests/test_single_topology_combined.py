@@ -197,27 +197,30 @@ def test_combined_parameters_nonbonded_intermediate(
 
     rng = np.random.default_rng(2022)
 
-    # generate an arbitrary interpolation function
-    def gen_arbitrary_interpolation_fxn(rng):
-        salt = rng.uniform(0, 1)
-
-        def interpolate_fxn(a, b, x):
-            y = linear_interpolation(a, b, x)
-            return y if x in {0.0, 1.0} else float(hash(float(y) * salt))
-
-        return interpolate_fxn
-
-    for lamb in rng.uniform(0, 1, (10,)):
-        f = gen_arbitrary_interpolation_fxn(rng)
-        hgs = st.combine_with_host(host_sys, lamb=lamb, interpolate_dummy_w_fxn=f)
+    for lamb in rng.uniform(0.01, 0.99, (10,)):
+        hgs = st.combine_with_host(host_sys, lamb=lamb)
         cutoff = hgs.nonbonded_host_guest.get_cutoff()
 
         assert hgs.nonbonded_host_guest.params is not None
         guest_params = hgs.nonbonded_host_guest.params[num_host_atoms:]
-        w_core = [w for flag, (_, _, _, w) in zip(st.c_flags, guest_params) if flag == 0]
-        w_a = [w for flag, (_, _, _, w) in zip(st.c_flags, guest_params) if flag == 1]
-        w_b = [w for flag, (_, _, _, w) in zip(st.c_flags, guest_params) if flag == 2]
+        ws_core = [w for flag, (_, _, _, w) in zip(st.c_flags, guest_params) if flag == 0]
+        ws_a = [w for flag, (_, _, _, w) in zip(st.c_flags, guest_params) if flag == 1]
+        ws_b = [w for flag, (_, _, _, w) in zip(st.c_flags, guest_params) if flag == 2]
 
-        assert all(w == 0.0 for w in w_core)
-        assert all(w == f(0.0, cutoff, lamb) for w in w_a)
-        assert all(w == f(cutoff, 0.0, lamb) for w in w_b)
+        # core atoms fixed at w = 0
+        assert all(w == 0.0 for w in ws_core)
+
+        # dummy groups have consistent w coords
+        assert len(np.unique(ws_a)) == 1
+        assert len(np.unique(ws_b)) == 1
+        w_a = np.unique(ws_a)[0]
+        w_b = np.unique(ws_b)[0]
+
+        # w in [0, cutoff]
+        assert 0 < w_a < cutoff
+        assert 0 < w_b < cutoff
+
+        if lamb < 0.5:
+            assert w_a < w_b
+        else:
+            assert w_b < w_a
