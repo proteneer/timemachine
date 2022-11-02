@@ -1074,6 +1074,9 @@ class SingleTopology(AtomMapMixin):
             - Angles are interpolated in the interval [lambda_angles, lambda_torsions]
             - Torsions are interpolated in the interval [lambda_torsions, 1]
         """
+
+        assert 0.0 < lambda_angles < lambda_torsions < 1.0
+
         src_system = self.src_system
         dst_system = self.dst_system
 
