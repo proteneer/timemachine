@@ -983,31 +983,6 @@ class SingleTopology(AtomMapMixin):
         new_core = np.stack([self.core[:, 1], self.core[:, 0]], axis=1)
         return setup_end_state(self.ff, self.mol_b, self.mol_a, new_core, self.b_to_c, self.a_to_c)
 
-    def get_U_fn(self, lamb):
-        """
-        Get a jax compatible energy function parameterized at some value of lambda, using linear
-        energy interpolation.
-
-        Parameters
-        ----------
-        lamb: float
-            0 <= lamb <= 1
-
-        Returns
-        -------
-        Callable:
-            An energy function f: R^(NCx3) -> R^1
-
-        """
-        U0_fn = self.src_system.get_U_fn()
-        U1_fn = self.dst_system.get_U_fn()
-
-        # revisit more efficient methods later
-        def U_fn(x):
-            return (1 - lamb) * U0_fn(x) + lamb * U1_fn(x)
-
-        return U_fn
-
     def _setup_intermediate_bonded_term(self, src_bond, dst_bond, lamb, align_fn, interpolate_fn):
 
         src_cls_bond = type(src_bond)
