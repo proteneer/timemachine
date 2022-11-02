@@ -178,8 +178,8 @@ def setup_initial_states(st, host_config, temperature, lambda_schedule, seed):
 
     initial_states = []
 
-    # check that the lambda schedule is monotonically increasing or decreasing.
-    assert np.all(np.diff(lambda_schedule) > 0) or np.all(np.diff(lambda_schedule) < 0)
+    # check that the lambda schedule is monotonically increasing.
+    assert np.all(np.diff(lambda_schedule) > 0)
 
     for lamb_idx, lamb in enumerate(lambda_schedule):
 

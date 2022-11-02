@@ -158,8 +158,7 @@ def set_up_ahfe_system_for_smc(
     samples = [initial_samples[i] for i in sample_inds]
 
     # note: tm convention lambda=1 means "decoupled", lambda=0 means "coupled"
-    lambdas = construct_pre_optimized_absolute_lambda_schedule_solvent(n_windows)[::-1]
-    assert np.isclose(lambdas[0], 1.0) and np.isclose(lambdas[-1], 0.0)
+    lambdas = construct_pre_optimized_absolute_lambda_schedule_solvent(n_windows)
 
     def propagate(xs, lam):
         mover.lamb = lam
@@ -272,14 +271,16 @@ def setup_initial_states(
     afe: AbsoluteFreeEnergy
         An AbsoluteFreeEnergy object which contains the mol structure
 
+    ff: ff.Forcefield
+        Forcefield to be used for the system
+
     host_config: HostConfig
         Configurations of the host.
 
     temperature: float
         Temperature to run the simulation at.
 
-    lambda_schedule: list of float of length K
-        Lambda schedule.
+    lambda_schedule: list of float
 
     seed: int
         Random number seed
