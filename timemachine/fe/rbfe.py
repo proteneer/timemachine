@@ -2,8 +2,6 @@ import functools
 import io
 import pickle
 import warnings
-from dataclasses import dataclass
-from typing import List
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -12,13 +10,13 @@ import pymbar
 from timemachine.constants import BOLTZ, DEFAULT_TEMP
 from timemachine.fe import model_utils
 from timemachine.fe.bar import bar_with_bootstrapped_uncertainty
+from timemachine.fe.free_energy import HostConfig, InitialState, SimulationProtocol, SimulationResult
 from timemachine.fe.lambda_schedule import construct_pre_optimized_relative_lambda_schedule
 from timemachine.fe.single_topology import SingleTopology
 from timemachine.fe.system import convert_bps_into_system
 from timemachine.fe.utils import get_mol_name, get_romol_conf
 from timemachine.ff.handlers import openmm_deserializer
 from timemachine.lib import LangevinIntegrator, MonteCarloBarostat, custom_ops
-from timemachine.lib.potentials import CustomOpWrapper
 from timemachine.md import builders, minimizer
 from timemachine.md.barostat.utils import get_bond_list, get_group_indices
 from timemachine.potentials import jax_utils
@@ -41,13 +39,6 @@ def get_batch_U_fns(bps):
         all_U_fns.append(functools.partial(batch_U_fn, bp_impl=bp))
 
     return all_U_fns
-
-
-class HostConfig:
-    def __init__(self, omm_system, conf, box):
-        self.omm_system = omm_system
-        self.conf = conf
-        self.box = box
 
 
 def sample(initial_state, protocol):
@@ -94,45 +85,6 @@ def sample(initial_state, protocol):
     assert np.all(np.isfinite(all_coords[-1])), "Production resulted in a nan"
 
     return all_coords, all_boxes
-
-
-@dataclass
-class SimulationProtocol:
-    n_frames: int
-    n_eq_steps: int
-    steps_per_frame: int
-
-
-@dataclass
-class InitialState:
-    """
-    An initial contains everything that is needed to bitwise reproduce a trajectory given a SimulationProtocol
-
-    This object can be pickled safely.
-    """
-
-    potentials: List[CustomOpWrapper]
-    integrator: LangevinIntegrator
-    barostat: MonteCarloBarostat
-    x0: np.ndarray
-    v0: np.ndarray
-    box0: np.ndarray
-    lamb: float
-    ligand_idxs: np.ndarray
-
-
-@dataclass
-class SimulationResult:
-    all_dGs: List[np.ndarray]
-    all_errs: List[float]
-    overlaps_by_lambda: np.ndarray  # (L - 1,)
-    overlaps_by_lambda_by_component: np.ndarray  # (len(U_names), L - 1)
-    overlap_summary_png: bytes
-    overlap_detail_png: bytes
-    frames: List[np.ndarray]
-    boxes: List[np.ndarray]
-    initial_states: List[InitialState]
-    protocol: SimulationProtocol
 
 
 # setup the initial state so we can (hopefully) bitwise recover the identical simulation
