@@ -13,9 +13,8 @@ from timemachine.constants import BOLTZ, DEFAULT_TEMP
 from timemachine.fe import model_utils
 from timemachine.fe.bar import bar_with_bootstrapped_uncertainty
 from timemachine.fe.single_topology import SingleTopology
-from timemachine.fe.system import convert_bps_into_system, convert_omm_system
+from timemachine.fe.system import convert_omm_system
 from timemachine.fe.utils import get_mol_name, get_romol_conf
-from timemachine.ff.handlers import openmm_deserializer
 from timemachine.lib import LangevinIntegrator, MonteCarloBarostat, custom_ops
 from timemachine.lib.potentials import CustomOpWrapper
 from timemachine.md import builders, minimizer
