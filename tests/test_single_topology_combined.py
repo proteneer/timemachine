@@ -5,9 +5,8 @@ import pytest
 
 from timemachine.constants import DEFAULT_FF
 from timemachine.fe.single_topology import SingleTopology
-from timemachine.fe.system import convert_bps_into_system
+from timemachine.fe.system import convert_omm_system
 from timemachine.ff import Forcefield
-from timemachine.ff.handlers import openmm_deserializer
 from timemachine.md import builders
 from timemachine.testsystems.dhfr import get_dhfr_system
 from timemachine.testsystems.relative import get_hif2a_ligand_pair_single_topology
@@ -18,13 +17,6 @@ def hif2a_ligand_pair_single_topology():
     mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
     forcefield = Forcefield.load_from_file(DEFAULT_FF)
     return SingleTopology(mol_a, mol_b, core, forcefield)
-
-
-def convert_omm_system(omm_system):
-    bps, masses = openmm_deserializer.deserialize_system(omm_system, cutoff=1.2)
-    num_atoms = len(masses)
-    system = convert_bps_into_system(bps)
-    return system, num_atoms
 
 
 @pytest.fixture(scope="module")
@@ -48,7 +40,8 @@ def test_combined_parameters_bonded(host_system_fixture, hif2a_ligand_pair_singl
     # 3) we expected nonbonded parameters on the core to be linearly interpolated
 
     st = hif2a_ligand_pair_single_topology
-    host_sys, num_host_atoms = request.getfixturevalue(host_system_fixture)
+    host_sys, host_masses = request.getfixturevalue(host_system_fixture)
+    num_host_atoms = len(host_masses)
 
     def check_bonded_idxs_consistency(bonded_idxs, num_host_idxs):
 
@@ -93,7 +86,8 @@ def test_combined_parameters_nonbonded(host_system_fixture, hif2a_ligand_pair_si
     # 3) we expected nonbonded parameters on the core to be linearly interpolated
 
     st = hif2a_ligand_pair_single_topology
-    host_sys, num_host_atoms = request.getfixturevalue(host_system_fixture)
+    host_sys, host_masses = request.getfixturevalue(host_system_fixture)
+    num_host_atoms = len(host_masses)
 
     for lamb in [0.0, 1.0]:
 
@@ -192,7 +186,8 @@ def test_combined_parameters_nonbonded_intermediate(
     host_system_fixture, hif2a_ligand_pair_single_topology: SingleTopology, request
 ):
     st = hif2a_ligand_pair_single_topology
-    host_sys, num_host_atoms = request.getfixturevalue(host_system_fixture)
+    host_sys, host_masses = request.getfixturevalue(host_system_fixture)
+    num_host_atoms = len(host_masses)
 
     rng = np.random.default_rng(2022)
 
