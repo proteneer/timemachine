@@ -5,8 +5,8 @@ from typing import List, Tuple
 import jax
 import jax.numpy as jnp
 import numpy as np
-import openmm
 import scipy
+from simtk import openmm
 
 from timemachine.ff.handlers import openmm_deserializer
 from timemachine.integrator import simulate
