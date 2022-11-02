@@ -828,15 +828,6 @@ class SingleTopology(AtomMapMixin):
 
         forcefield: ff.Forcefield
             Forcefield to be used for parameterization.
-
-        lambda_angles, lambda_torsions: float
-            For ring opening/closing transformations, alchemical parameter values controlling the intervals over which
-            bonds, angles, and torsions are interpolated. Note that these have no effect on terms not involved in ring
-            opening/closing.
-
-            - Bonds are interpolated in the interval [0, lambda_angles]
-            - Angles are interpolated in the interval [lambda_angles, lambda_torsions]
-            - Torsions are interpolated in the interval [lambda_torsions, 1]
         """
         # initialize the mixin to get the a_to_c, b_to_c, c_to_a, c_to_b, and c_flags
         super().__init__(mol_a, mol_b, core)
@@ -1066,14 +1057,22 @@ class SingleTopology(AtomMapMixin):
 
         return potentials.ChiralBondRestraint(chiral_bond_idxs, chiral_bond_signs).bind(chiral_bond_params)
 
-    def setup_intermediate_state(
-        self,
-        lamb,
-        lambda_angles=0.4,
-        lambda_torsions=0.7,
-    ):
+    def setup_intermediate_state(self, lamb, lambda_angles=0.4, lambda_torsions=0.7):
         """
         Setup intermediate states at some value of lambda.
+
+        Parameters
+        ----------
+        lamb: float
+
+        lambda_angles, lambda_torsions: float
+            For ring opening/closing transformations, alchemical parameter values controlling the intervals over which
+            bonds, angles, and torsions are interpolated. Note that these have no effect on terms not involved in ring
+            opening/closing.
+
+            - Bonds are interpolated in the interval [0, lambda_angles]
+            - Angles are interpolated in the interval [lambda_angles, lambda_torsions]
+            - Torsions are interpolated in the interval [lambda_torsions, 1]
         """
         src_system = self.src_system
         dst_system = self.dst_system
