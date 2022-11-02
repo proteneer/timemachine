@@ -1,3 +1,5 @@
+from typing import List, Tuple
+
 import numpy as np
 from simtk import openmm as mm
 from simtk import unit
@@ -10,7 +12,7 @@ def value(quantity):
     return quantity.value_in_unit_system(unit.md_unit_system)
 
 
-def deserialize_system(system, cutoff):
+def deserialize_system(system: mm.System, cutoff: float) -> Tuple[List[potentials.CustomOpWrapper], List[float]]:
     """
     Deserialize an OpenMM XML file
 
