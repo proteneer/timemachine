@@ -1,7 +1,7 @@
 import warnings
 from collections.abc import Iterable
 from functools import partial
-from typing import Any, Callable, List, Optional, Tuple
+from typing import Any, Callable, List, Tuple
 
 import jax.numpy as jnp
 import numpy as np

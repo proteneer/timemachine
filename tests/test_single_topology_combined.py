@@ -4,7 +4,6 @@ import numpy as np
 import pytest
 
 from timemachine.constants import DEFAULT_FF
-from timemachine.fe.interpolate import linear_interpolation
 from timemachine.fe.single_topology import SingleTopology
 from timemachine.fe.system import convert_bps_into_system
 from timemachine.ff import Forcefield
