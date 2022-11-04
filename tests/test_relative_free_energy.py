@@ -6,18 +6,11 @@ import numpy as np
 import pytest
 
 from timemachine.constants import DEFAULT_FF
-from timemachine.fe.free_energy import image_frames
-from timemachine.fe.rbfe import (
-    HostConfig,
-    SimulationResult,
-    estimate_relative_free_energy,
-    pair_overlap_from_ukln,
-    run_solvent,
-    run_vacuum,
-    sample,
-)
+from timemachine.fe.free_energy import HostConfig, SimulationResult, image_frames
+from timemachine.fe.rbfe import estimate_relative_free_energy, pair_overlap_from_ukln, run_solvent, run_vacuum, sample
 from timemachine.ff import Forcefield
 from timemachine.md import builders
+from timemachine.md.barostat.utils import compute_box_center
 from timemachine.testsystems.relative import get_hif2a_ligand_pair_single_topology
 
 
@@ -213,20 +206,26 @@ def test_imaging_frames():
 
     # A buffer, as imaging doesn't ensure everything is perfectly in the box
     padding = 0.3
-
     for i in range(len(res.frames)):
+        initial_state = res.initial_states[keep_idxs[i]]
+        box_center = compute_box_center(res.boxes[i][0])
         box_extents = np.max(res.boxes[i], axis=(0, 1))
 
         # Verify that coordinates are either outside of the box or below zero
         assert np.any(np.abs(np.max(res.frames[i], axis=(0, 1))) > box_extents + padding) or np.any(
             np.min(res.frames[i], axis=(0, 1)) < -padding
         )
-        imaged = image_frames(res.initial_states[keep_idxs[i]], res.frames[i], res.boxes[i])
+        # Ligand won't be near center of box
+        assert not np.allclose(np.mean(res.frames[i][0][initial_state.ligand_idxs], axis=0), box_center)
+
+        imaged = image_frames(initial_state, res.frames[i], res.boxes[i])
 
         # Verify that after imaged, coordinates are within padding of the box extents
         assert np.all(np.abs(np.max(imaged, axis=(0, 1))) <= box_extents + padding) and np.any(
             np.min(imaged, axis=(0, 1)) >= -padding
         )
+        # Verify that ligand was centered in the box
+        np.testing.assert_allclose(np.mean(imaged[0][initial_state.ligand_idxs], axis=0), box_center)
 
 
 def test_rbfe_with_1_window():
