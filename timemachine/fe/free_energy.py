@@ -86,8 +86,7 @@ def image_frames(initial_state: InitialState, frames: np.ndarray, boxes: np.ndar
     group_indices = get_group_indices(get_bond_list(hb_potential))
     imaged_frames = np.empty_like(frames)
     for i, frame in enumerate(frames):
-        imaged_coords = model_utils.image_frame(group_indices, frame, boxes[i])
-        imaged_frames[i] = imaged_coords
+        imaged_frames[i] = model_utils.image_frame(group_indices, frame, boxes[i])
     return np.array(imaged_frames)
 
 
