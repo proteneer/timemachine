@@ -5,7 +5,7 @@ from rdkit.Chem import AllChem
 
 from timemachine.constants import DEFAULT_FF
 from timemachine.fe import model_utils, utils
-from timemachine.fe.model_utils import image_molecule
+from timemachine.fe.model_utils import image_frame, image_molecule
 from timemachine.ff import Forcefield
 
 pytestmark = [pytest.mark.nogpu]
@@ -41,6 +41,36 @@ def test_extract_delta_Us_from_U_knk():
     )
 
     np.testing.assert_almost_equal(expected_delta_Us, test_delta_Us)
+
+
+def test_image_frame():
+    rng = np.random.default_rng(2022)
+
+    coords = rng.random((90, 3))
+
+    max_dimensions = np.max(coords, axis=0)
+
+    # Add a random buffer to the dimensions of the box
+    box = np.eye(3) * (max_dimensions + rng.random(max_dimensions.shape))
+    group_indices = np.arange(len(coords)).reshape((-1, 3))
+
+    box_diag = np.diagonal(box)
+
+    imaged_coords = image_frame(group_indices, coords, box)
+    np.testing.assert_allclose(coords, imaged_coords)
+
+    for _ in range(100):
+        new_coords = coords.copy()
+
+        for group in group_indices:
+            # shift each direction randomly, need to go beyond one image since waters can float very far away
+            x_shift, y_shift, z_shift = rng.integers(-5, 5, size=3)
+
+            offset = np.array([x_shift * box_diag[0], y_shift * box_diag[1], z_shift * box_diag[2]])
+            offset = np.expand_dims(offset, axis=0)  # make this broad castable to [N,3]
+            new_coords[group] += offset
+        imaged_coords = image_frame(group_indices, new_coords, box)
+        np.testing.assert_allclose(coords, imaged_coords)
 
 
 def test_image_molecules():
