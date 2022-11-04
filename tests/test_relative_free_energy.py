@@ -6,11 +6,13 @@ import numpy as np
 import pytest
 
 from timemachine.constants import DEFAULT_FF
+from timemachine.fe.free_energy import image_frames
 from timemachine.fe.rbfe import (
     HostConfig,
     SimulationResult,
     estimate_relative_free_energy,
     pair_overlap_from_ukln,
+    run_solvent,
     run_vacuum,
     sample,
 )
@@ -45,7 +47,8 @@ def run_bitwise_reproducibility(mol_a, mol_b, core, forcefield, n_frames):
     all_frames, all_boxes = [], []
     for state in solvent_res.initial_states:
         frames, boxes = sample(state, solvent_res.protocol)
-        all_frames.append(frames)
+        imaged_frames = image_frames(state, frames, boxes)
+        all_frames.append(imaged_frames)
         all_boxes.append(boxes)
 
     np.testing.assert_equal(solvent_res.frames, all_frames)
@@ -181,6 +184,49 @@ def test_steps_per_frames():
     # The last frame from the trajectories should match as num_frames * steps_per_frame are equal
     for frame, test_frame in zip(res.frames, test_res.frames):
         np.testing.assert_array_equal(frame[-1], test_frame[-1])
+
+
+def test_imaging_frames():
+    """Should not be able to run a relative free energy calculation with a single window"""
+    mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
+    forcefield = Forcefield.load_from_file(DEFAULT_FF)
+    seed = 2022
+    frames = 1
+    steps_per_frame = 100
+    equil_steps = 1
+    windows = 2
+    res, _ = run_solvent(
+        mol_a,
+        mol_b,
+        core,
+        forcefield,
+        None,
+        frames,
+        seed,
+        n_eq_steps=equil_steps,
+        steps_per_frame=steps_per_frame,
+        n_windows=windows,
+        image_traj=False,
+    )
+    keep_idxs = [0, len(res.initial_states) - 1]
+    assert len(keep_idxs) == len(res.frames)
+
+    # A buffer, as imaging doesn't ensure everything is perfectly in the box
+    padding = 0.3
+
+    for i in range(len(res.frames)):
+        box_extents = np.max(res.boxes[i], axis=(0, 1))
+
+        # Verify that coordinates are either outside of the box or below zero
+        assert np.any(np.abs(np.max(res.frames[i], axis=(0, 1))) > box_extents + padding) or np.any(
+            np.min(res.frames[i], axis=(0, 1)) < -padding
+        )
+        imaged = image_frames(res.initial_states[keep_idxs[i]], res.frames[i], res.boxes[i])
+
+        # Verify that after imaged, coordinates are within padding of the box extents
+        assert np.all(np.abs(np.max(imaged, axis=(0, 1))) <= box_extents + padding) and np.any(
+            np.min(imaged, axis=(0, 1)) >= -padding
+        )
 
 
 def test_rbfe_with_1_window():

@@ -10,7 +10,7 @@ import pymbar
 from timemachine.constants import BOLTZ, DEFAULT_TEMP
 from timemachine.fe import model_utils
 from timemachine.fe.bar import bar_with_bootstrapped_uncertainty
-from timemachine.fe.free_energy import HostConfig, InitialState, SimulationProtocol, SimulationResult
+from timemachine.fe.free_energy import HostConfig, InitialState, SimulationProtocol, SimulationResult, image_frames
 from timemachine.fe.lambda_schedule import construct_pre_optimized_relative_lambda_schedule
 from timemachine.fe.single_topology import SingleTopology
 from timemachine.fe.system import convert_bps_into_system
@@ -534,6 +534,7 @@ def estimate_relative_free_energy(
     keep_idxs=None,
     n_eq_steps=10000,
     steps_per_frame=400,
+    image_traj=True,
 ):
     """
     Estimate relative free energy between mol_a and mol_b. Molecules should be aligned to each
@@ -581,11 +582,14 @@ def estimate_relative_free_energy(
     steps_per_frame: int
         The number of steps to take before collecting a frame
 
+    image_traj: bool
+        Images the trajectories returned with the SimulationResult
+
     Returns
     -------
     SimulationResult
-        Collected data from the simulation (see class for storage information). We currently return frames
-        from only the first and last window.
+        Collected data from the simulation (see class for storage information). Returned frames and boxes
+        are defined by keep_idxs.
 
     """
     single_topology = SingleTopology(mol_a, mol_b, core, ff)
@@ -605,9 +609,13 @@ def estimate_relative_free_energy(
     assert len(keep_idxs) <= len(lambda_schedule)
     combined_prefix = get_mol_name(mol_a) + "_" + get_mol_name(mol_b) + "_" + prefix
     try:
-        return estimate_free_energy_given_initial_states(
+        res = estimate_free_energy_given_initial_states(
             initial_states, protocol, temperature, combined_prefix, keep_idxs
         )
+        if image_traj:
+            for i, idx in enumerate(keep_idxs):
+                res.frames[i] = image_frames(res.initial_states[idx], res.frames[i], res.boxes[i])
+        return res
     except Exception as err:
         with open(f"failed_rbfe_result_{combined_prefix}.pkl", "wb") as fh:
             pickle.dump((initial_states, protocol, err), fh)
@@ -615,7 +623,17 @@ def estimate_relative_free_energy(
 
 
 def run_vacuum(
-    mol_a, mol_b, core, forcefield, _, n_frames, seed, n_eq_steps=10000, steps_per_frame=400, n_windows=None
+    mol_a,
+    mol_b,
+    core,
+    forcefield,
+    _,
+    n_frames,
+    seed,
+    n_eq_steps=10000,
+    steps_per_frame=400,
+    n_windows=None,
+    image_traj=True,
 ):
     vacuum_host_config = None
     return estimate_relative_free_energy(
@@ -630,11 +648,22 @@ def run_vacuum(
         n_eq_steps=n_eq_steps,
         n_windows=n_windows,
         steps_per_frame=steps_per_frame,
+        image_traj=image_traj,
     )
 
 
 def run_solvent(
-    mol_a, mol_b, core, forcefield, _, n_frames, seed, n_eq_steps=10000, steps_per_frame=400, n_windows=None
+    mol_a,
+    mol_b,
+    core,
+    forcefield,
+    _,
+    n_frames,
+    seed,
+    n_eq_steps=10000,
+    steps_per_frame=400,
+    n_windows=None,
+    image_traj=True,
 ):
     box_width = 4.0
     solvent_sys, solvent_conf, solvent_box, solvent_top = builders.build_water_system(box_width, forcefield.water_ff)
@@ -652,12 +681,23 @@ def run_solvent(
         n_eq_steps=n_eq_steps,
         n_windows=n_windows,
         steps_per_frame=steps_per_frame,
+        image_traj=image_traj,
     )
     return solvent_res, solvent_top
 
 
 def run_complex(
-    mol_a, mol_b, core, forcefield, protein, n_frames, seed, n_eq_steps=10000, steps_per_frame=400, n_windows=None
+    mol_a,
+    mol_b,
+    core,
+    forcefield,
+    protein,
+    n_frames,
+    seed,
+    n_eq_steps=10000,
+    steps_per_frame=400,
+    n_windows=None,
+    image_traj=True,
 ):
     complex_sys, complex_conf, _, _, complex_box, complex_top = builders.build_protein_system(
         protein, forcefield.protein_ff, forcefield.water_ff
@@ -676,5 +716,6 @@ def run_complex(
         n_eq_steps=n_eq_steps,
         n_windows=n_windows,
         steps_per_frame=steps_per_frame,
+        image_traj=image_traj,
     )
     return complex_res, complex_top

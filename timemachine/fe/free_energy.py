@@ -3,12 +3,13 @@ from typing import List
 
 import numpy as np
 
-from timemachine.fe import topology
+from timemachine.fe import model_utils, topology
 from timemachine.fe.utils import get_mol_masses, get_romol_conf
 from timemachine.ff import ForcefieldParams
 from timemachine.ff.handlers import openmm_deserializer
 from timemachine.lib import LangevinIntegrator, MonteCarloBarostat
-from timemachine.lib.potentials import CustomOpWrapper
+from timemachine.lib.potentials import CustomOpWrapper, HarmonicBond
+from timemachine.md.barostat.utils import get_bond_list, get_group_indices
 
 
 class HostConfig:
@@ -55,6 +56,39 @@ class SimulationResult:
     boxes: List[np.ndarray]
     initial_states: List[InitialState]
     protocol: SimulationProtocol
+
+
+def image_frames(initial_state: InitialState, frames: np.ndarray, boxes: np.ndarray) -> np.ndarray:
+    """Images a set of frames within the periodic box given an Initial state
+
+    Parameters
+    ----------
+
+    initial_state: InitialState
+        State that the frames came from
+
+    frames: np.ndarray of coordinates
+        Coordinates to image, shape (K, N, 3)
+
+    boxes: list of boxes
+        Boxes to image coordinates into, shape (K, 3, 3)
+
+    Returns
+    -------
+        imaged_coordinates
+    """
+    assert len(frames.shape) == 3, "Must be a 3 dimensional set of frames"
+    assert frames.shape[-1] == 3, "Frame coordinates are not 3D"
+    assert boxes.shape[1:] == (3, 3), "Boxes are not 3x3"
+    assert len(frames) == len(boxes), "Number of frames and boxes don't match"
+
+    hb_potential = next(p for p in initial_state.potentials if isinstance(p, HarmonicBond))
+    group_indices = get_group_indices(get_bond_list(hb_potential))
+    imaged_frames = np.empty_like(frames)
+    for i, frame in enumerate(frames):
+        imaged_coords = model_utils.image_frame(group_indices, frame, boxes[i])
+        imaged_frames[i] = imaged_coords
+    return np.array(imaged_frames)
 
 
 class BaseFreeEnergy:
