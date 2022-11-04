@@ -25,7 +25,7 @@ HarmonicAngle<RealType>::HarmonicAngle(const std::vector<int> &angle_idxs // [A,
         }
     }
 
-    gpuErrchk(cudaMalloc(&d_angle_idxs_, A_ * 3 * sizeof(*d_angle_idxs_)));
+    cudaSafeMalloc(&d_angle_idxs_, A_ * 3 * sizeof(*d_angle_idxs_));
     gpuErrchk(cudaMemcpy(d_angle_idxs_, &angle_idxs[0], A_ * 3 * sizeof(*d_angle_idxs_), cudaMemcpyHostToDevice));
 };
 

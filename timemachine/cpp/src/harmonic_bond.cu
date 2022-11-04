@@ -22,7 +22,7 @@ HarmonicBond<RealType>::HarmonicBond(const std::vector<int> &bond_idxs) : B_(bon
         }
     }
 
-    gpuErrchk(cudaMalloc(&d_bond_idxs_, B_ * 2 * sizeof(*d_bond_idxs_)));
+    cudaSafeMalloc(&d_bond_idxs_, B_ * 2 * sizeof(*d_bond_idxs_));
     gpuErrchk(cudaMemcpy(d_bond_idxs_, &bond_idxs[0], B_ * 2 * sizeof(*d_bond_idxs_), cudaMemcpyHostToDevice));
 };
 

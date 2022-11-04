@@ -25,10 +25,10 @@ ChiralBondRestraint<RealType>::ChiralBondRestraint(const std::vector<int> &idxs,
         }
     }
 
-    gpuErrchk(cudaMalloc(&d_idxs_, R_ * 4 * sizeof(*d_idxs_)));
+    cudaSafeMalloc(&d_idxs_, R_ * 4 * sizeof(*d_idxs_));
     gpuErrchk(cudaMemcpy(d_idxs_, &idxs[0], R_ * 4 * sizeof(*d_idxs_), cudaMemcpyHostToDevice));
 
-    gpuErrchk(cudaMalloc(&d_signs_, R_ * sizeof(*d_signs_)));
+    cudaSafeMalloc(&d_signs_, R_ * sizeof(*d_signs_));
     gpuErrchk(cudaMemcpy(d_signs_, &signs[0], R_ * sizeof(*d_signs_), cudaMemcpyHostToDevice));
 };
 

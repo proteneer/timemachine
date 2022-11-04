@@ -99,13 +99,32 @@ def mcs(
     return result
 
 
-def get_core_by_mcs(mol_a, mol_b, query, threshold=0.5):
+def _get_core_conf_oblivious(mol_a, mol_b, query_mol):
+    core = np.array(
+        [
+            np.array(mol_a.GetSubstructMatch(query_mol)),
+            np.array(mol_b.GetSubstructMatch(query_mol)),
+        ]
+    ).T
+    return core
+
+
+def get_core_by_mcs(
+    mol_a,
+    mol_b,
+    query,
+    threshold=0.5,
+    conformer_aware: bool = True,
+):
     """Return np integer array that can be passed to RelativeFreeEnergy constructor
 
     Parameters
     ----------
     mol_a, mol_b, query : RDKit molecules
     threshold : float, in angstroms
+    conformer_aware: bool
+        if True, only match atoms within distance threshold
+        (assumes conformers are aligned)
 
     Returns
     -------
@@ -123,6 +142,8 @@ def get_core_by_mcs(mol_a, mol_b, query, threshold=0.5):
         In some cases, this can fail to find a mapping that satisfies the distance
         threshold, raising an AtomMappingError.
     """
+    if not conformer_aware:
+        return _get_core_conf_oblivious(mol_a, mol_b, query)
 
     # fetch conformer, assumed aligned
     conf_a = mol_a.GetConformer(0).GetPositions()
