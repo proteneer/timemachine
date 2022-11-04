@@ -108,11 +108,11 @@ setup(
     },
     package_data={
         "timemachine": [
-            "datasets/freesolv/freesolv.sdf",
-            "testsystems/data/5dfr_solv_equil.pdb",
-            "testsystems/data/ligands_40.sdf",
-            "testsystems/data/mobley_820789.sdf",
-            "testsystems/data/hif2a_nowater_min.pdb",
+            "datasets/**/*.csv",
+            "datasets/**/*.pdb",
+            "datasets/**/*.sdf",
+            "testsystems/data/**/*.pdb",
+            "testsystems/data/**/*.sdf",
         ],
     },
     # entry_points={
