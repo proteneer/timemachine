@@ -26,7 +26,7 @@ PeriodicTorsion<RealType>::PeriodicTorsion(const std::vector<int> &torsion_idxs 
         }
     }
 
-    gpuErrchk(cudaMalloc(&d_torsion_idxs_, T_ * 4 * sizeof(*d_torsion_idxs_)));
+    cudaSafeMalloc(&d_torsion_idxs_, T_ * 4 * sizeof(*d_torsion_idxs_));
     gpuErrchk(cudaMemcpy(d_torsion_idxs_, &torsion_idxs[0], T_ * 4 * sizeof(*d_torsion_idxs_), cudaMemcpyHostToDevice));
 };
 

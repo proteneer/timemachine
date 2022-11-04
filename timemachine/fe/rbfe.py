@@ -2,8 +2,6 @@ import functools
 import io
 import pickle
 import warnings
-from dataclasses import dataclass
-from typing import List
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -12,11 +10,11 @@ import pymbar
 from timemachine.constants import BOLTZ, DEFAULT_TEMP
 from timemachine.fe import model_utils
 from timemachine.fe.bar import bar_with_bootstrapped_uncertainty
+from timemachine.fe.free_energy import HostConfig, InitialState, SimulationProtocol, SimulationResult
 from timemachine.fe.single_topology import SingleTopology
 from timemachine.fe.system import convert_omm_system
 from timemachine.fe.utils import get_mol_name, get_romol_conf
 from timemachine.lib import LangevinIntegrator, MonteCarloBarostat, custom_ops
-from timemachine.lib.potentials import CustomOpWrapper
 from timemachine.md import builders, minimizer
 from timemachine.md.barostat.utils import get_bond_list, get_group_indices
 from timemachine.potentials import jax_utils
@@ -39,13 +37,6 @@ def get_batch_U_fns(bps):
         all_U_fns.append(functools.partial(batch_U_fn, bp_impl=bp))
 
     return all_U_fns
-
-
-class HostConfig:
-    def __init__(self, omm_system, conf, box):
-        self.omm_system = omm_system
-        self.conf = conf
-        self.box = box
 
 
 def sample(initial_state, protocol):
@@ -92,45 +83,6 @@ def sample(initial_state, protocol):
     assert np.all(np.isfinite(all_coords[-1])), "Production resulted in a nan"
 
     return all_coords, all_boxes
-
-
-@dataclass
-class SimulationProtocol:
-    n_frames: int
-    n_eq_steps: int
-    steps_per_frame: int
-
-
-@dataclass
-class InitialState:
-    """
-    An initial contains everything that is needed to bitwise reproduce a trajectory given a SimulationProtocol
-
-    This object can be pickled safely.
-    """
-
-    potentials: List[CustomOpWrapper]
-    integrator: LangevinIntegrator
-    barostat: MonteCarloBarostat
-    x0: np.ndarray
-    v0: np.ndarray
-    box0: np.ndarray
-    lamb: float
-    ligand_idxs: np.ndarray
-
-
-@dataclass
-class SimulationResult:
-    all_dGs: List[np.ndarray]
-    all_errs: List[float]
-    overlaps_by_lambda: np.ndarray  # (L - 1,)
-    overlaps_by_lambda_by_component: np.ndarray  # (len(U_names), L - 1)
-    overlap_summary_png: bytes
-    overlap_detail_png: bytes
-    frames: List[np.ndarray]
-    boxes: List[np.ndarray]
-    initial_states: List[InitialState]
-    protocol: SimulationProtocol
 
 
 # setup the initial state so we can (hopefully) bitwise recover the identical simulation
@@ -345,7 +297,7 @@ def estimate_free_energy_given_initial_states(initial_states, protocol, temperat
         A prefix that we append to the BAR overlap figures
 
     keep_idxs: list of int
-        Which states we keep samples for.
+        Which states we keep samples for. Must be positive.
 
     Return
     ------
@@ -380,6 +332,10 @@ def estimate_free_energy_given_initial_states(initial_states, protocol, temperat
 
     # u_kln matrix (2, 2, n_frames) for each pair of adjacent lambda windows and energy term
     ukln_by_component_by_lambda = []
+
+    keep_idxs = keep_idxs or []
+    if keep_idxs:
+        assert all(np.array(keep_idxs) >= 0)
 
     for lamb_idx, initial_state in enumerate(initial_states):
         # Clear any old references to avoid holding on to objects in memory we don't need.
@@ -646,7 +602,7 @@ def estimate_relative_free_energy(
     protocol = SimulationProtocol(n_frames=n_frames, n_eq_steps=n_eq_steps, steps_per_frame=steps_per_frame)
 
     if keep_idxs is None:
-        keep_idxs = [0, -1]  # keep first and last frames
+        keep_idxs = [0, len(initial_states) - 1]  # keep first and last frames
     assert len(keep_idxs) <= len(lambda_schedule)
     combined_prefix = get_mol_name(mol_a) + "_" + get_mol_name(mol_b) + "_" + prefix
     try:
