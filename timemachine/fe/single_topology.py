@@ -521,18 +521,18 @@ def handle_ring_opening_closing(
         interpolated force constant
     """
 
-    def ring_closing(src_k, dst_k, lamb):
-        return interpolate.pad(f, src_k, dst_k, lamb, lambda_min, lambda_max)
+    def ring_closing(dst_k, lamb):
+        return interpolate.pad(f, 0.0, dst_k, lamb, lambda_min, lambda_max)
 
-    def ring_opening(src_k, dst_k, lamb):
-        return ring_closing(dst_k, src_k, 1.0 - lamb)
+    def ring_opening(src_k, lamb):
+        return ring_closing(src_k, 1.0 - lamb)
 
     return jnp.where(
         src_k == 0.0,
-        ring_closing(src_k, dst_k, lamb),
+        ring_closing(dst_k, lamb),
         jnp.where(
             dst_k == 0.0,
-            ring_opening(src_k, dst_k, lamb),
+            ring_opening(src_k, lamb),
             f(src_k, dst_k, lamb),
         ),
     )
