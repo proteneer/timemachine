@@ -1070,9 +1070,9 @@ class SingleTopology(AtomMapMixin):
             bonds, angles, and torsions are interpolated. Note that these have no effect on terms not involved in ring
             opening/closing.
 
-            - Bonds are interpolated in the interval [0, lambda_angles]
-            - Angles are interpolated in the interval [lambda_angles, lambda_torsions]
-            - Torsions are interpolated in the interval [lambda_torsions, 1]
+            - Bonds are interpolated in the interval 0 <= lamb <= lambda_angles
+            - Angles are interpolated in the interval lambda_angles <= lamb <= lambda_torsions
+            - Torsions are interpolated in the interval lambda_torsions <= lamb <= 1
 
             Note: must satisfy 0 < lambda_angles < lambda_torsions < 1
         """
