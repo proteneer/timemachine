@@ -74,10 +74,10 @@ def run_triple(mol_a, mol_b, core, forcefield, n_frames, protein_path, n_eq_step
     assert vacuum_res.overlap_summary_png is not None
     assert vacuum_res.overlap_detail_png is not None
     assert np.linalg.norm(vacuum_res.all_errs) < 0.1
-    assert len(vacuum_res.frames[0] == n_frames)
-    assert len(vacuum_res.frames[-1] == n_frames)
-    assert len(vacuum_res.boxes[0] == n_frames)
-    assert len(vacuum_res.boxes[-1] == n_frames)
+    assert len(vacuum_res.frames[0]) == n_frames
+    assert len(vacuum_res.frames[-1]) == n_frames
+    assert len(vacuum_res.boxes[0]) == n_frames
+    assert len(vacuum_res.boxes[-1]) == n_frames
     assert [x.lamb for x in vacuum_res.initial_states] == lambda_schedule
     assert vacuum_res.protocol.n_frames == n_frames
     assert vacuum_res.protocol.n_eq_steps == n_eq_steps
@@ -102,10 +102,10 @@ def run_triple(mol_a, mol_b, core, forcefield, n_frames, protein_path, n_eq_step
     assert solvent_res.overlap_summary_png is not None
     assert solvent_res.overlap_detail_png is not None
     assert np.linalg.norm(solvent_res.all_errs) < 0.1
-    assert len(solvent_res.frames[0] == n_frames)
-    assert len(solvent_res.frames[-1] == n_frames)
-    assert len(solvent_res.boxes[0] == n_frames)
-    assert len(solvent_res.boxes[-1] == n_frames)
+    assert len(solvent_res.frames[0]) == n_frames
+    assert len(solvent_res.frames[-1]) == n_frames
+    assert len(solvent_res.boxes[0]) == n_frames
+    assert len(solvent_res.boxes[-1]) == n_frames
     assert [x.lamb for x in solvent_res.initial_states] == lambda_schedule
     assert solvent_res.protocol.n_frames == n_frames
     assert solvent_res.protocol.n_eq_steps == n_eq_steps
