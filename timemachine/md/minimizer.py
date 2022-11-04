@@ -7,6 +7,7 @@ from numpy.typing import NDArray
 from rdkit import Chem
 from simtk import openmm
 
+from timemachine.constants import MAX_FORCE_NORM
 from timemachine.fe import model_utils, topology
 from timemachine.fe.utils import get_romol_conf
 from timemachine.ff import Forcefield
@@ -16,11 +17,12 @@ from timemachine.lib.potentials import HarmonicBond
 from timemachine.md.barostat.utils import get_bond_list, get_group_indices
 from timemachine.md.fire import fire_descent
 
-# used to check norms in the gradient computations
-MAX_FORCE_NORM = 25000
-
 
 class MinimizationWarning(UserWarning):
+    pass
+
+
+class MinimizationError(Exception):
     pass
 
 
@@ -171,7 +173,10 @@ def minimize_host_4d(mols, host_system, host_coords, ff, box, mol_coords=None) -
     for impl in u_impls:
         du_dx, _ = impl.execute(final_coords, box)
         norm = np.linalg.norm(du_dx, axis=-1)
-        assert np.all(norm < MAX_FORCE_NORM)
+        if not np.all(norm < MAX_FORCE_NORM):
+            raise MinimizationError(
+                f"Minimization failed to reduce large forces below threshold: |frc| = {norm} > {MAX_FORCE_NORM}"
+            )
 
     return final_coords[:num_host_atoms]
 
@@ -406,7 +411,11 @@ def local_minimize(x0, val_and_grad_fn, local_idxs, verbose=True, assert_energy_
         print("-" * 70)
 
     # note that this over the local atoms only, as this function is not concerned
-    assert np.amax(per_atom_force_norms) < MAX_FORCE_NORM
+    max_frc = np.amax(per_atom_force_norms)
+    if not max_frc < MAX_FORCE_NORM:
+        raise MinimizationError(
+            f"Minimization failed to reduce large forces below threshold: |frc| = {max_frc} > {MAX_FORCE_NORM}"
+        )
 
     x_final = x0.copy()
     x_final[local_idxs] = x_local_final
