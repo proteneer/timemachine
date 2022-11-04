@@ -270,7 +270,9 @@ def plot_overlap_summary(ax, components, lambdas, overlaps):
     ax.legend()
 
 
-def estimate_free_energy_given_initial_states(initial_states, protocol, temperature, prefix, keep_idxs):
+def estimate_free_energy_given_initial_states(
+    initial_states, protocol, temperature, prefix, keep_idxs, image_traj=True
+):
     """
     Estimate free energies given pre-generated samples. This implements the pair-BAR method, where
     windows assumed to be ordered with good overlap, with the final free energy being a sum
@@ -297,6 +299,9 @@ def estimate_free_energy_given_initial_states(initial_states, protocol, temperat
 
     keep_idxs: list of int
         Which states we keep samples for. Must be positive.
+
+    image_traj: bool
+        Whether or not to image frames that are stored
 
     Return
     ------
@@ -428,6 +433,10 @@ def estimate_free_energy_given_initial_states(initial_states, protocol, temperat
     plt.savefig(buffer, format="png")
     buffer.seek(0)
     overlap_summary_png = buffer.read()
+
+    if image_traj:
+        for i, idx in enumerate(keep_idxs):
+            stored_frames[i] = image_frames(initial_states[idx], stored_frames[i], stored_boxes[i])
 
     return SimulationResult(
         all_dGs,
@@ -609,13 +618,9 @@ def estimate_relative_free_energy(
     assert len(keep_idxs) <= len(lambda_schedule)
     combined_prefix = get_mol_name(mol_a) + "_" + get_mol_name(mol_b) + "_" + prefix
     try:
-        res = estimate_free_energy_given_initial_states(
-            initial_states, protocol, temperature, combined_prefix, keep_idxs
+        return estimate_free_energy_given_initial_states(
+            initial_states, protocol, temperature, combined_prefix, keep_idxs, image_traj=image_traj
         )
-        if image_traj:
-            for i, idx in enumerate(keep_idxs):
-                res.frames[i] = image_frames(res.initial_states[idx], res.frames[i], res.boxes[i])
-        return res
     except Exception as err:
         with open(f"failed_rbfe_result_{combined_prefix}.pkl", "wb") as fh:
             pickle.dump((initial_states, protocol, err), fh)
