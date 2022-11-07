@@ -4,6 +4,7 @@ from rdkit import Chem
 from rdkit.Chem import AllChem
 
 from timemachine.fe import chiral_utils, utils
+from timemachine.fe.chiral_utils import ChiralRestrIdxSet, find_atom_map_chiral_conflicts
 from timemachine.potentials.chiral_restraints import U_chiral_atom_batch, U_chiral_bond_batch
 
 pytestmark = [pytest.mark.nogpu]
@@ -138,3 +139,47 @@ def test_find_chiral_bonds():
     mol = Chem.AddHs(Chem.MolFromSmiles(r"N(C)C(C)=O"))
     res = chiral_utils.find_chiral_bonds(mol)
     assert res == set([(0, 2)])
+
+
+def test_chiral_flip_check():
+
+    # test maps that can swap "chirality of methane"
+    mol_a = Chem.AddHs(Chem.MolFromSmiles("C"))
+    mol_b = Chem.AddHs(Chem.MolFromSmiles("C"))
+
+    AllChem.EmbedMolecule(mol_a, randomSeed=0)
+    AllChem.EmbedMolecule(mol_b, randomSeed=0)
+
+    conf_a = mol_a.GetConformer(0).GetPositions()
+    conf_b = mol_b.GetConformer(0).GetPositions()
+
+    chiral_set_a = ChiralRestrIdxSet.from_mol(mol_a, conf_a)
+    chiral_set_b = ChiralRestrIdxSet.from_mol(mol_b, conf_b)
+
+    assert len(chiral_set_a.restr_idxs) == 4
+    assert len(chiral_set_b.restr_idxs) == 4
+
+    identity_map = np.array([(i, i) for i in range(len(conf_a))])
+
+    swap_map = np.array(identity_map)
+    swap_map[1, 1] = 2
+    swap_map[2, 1] = 1
+
+    identity_conflicts = find_atom_map_chiral_conflicts(identity_map, chiral_set_a, chiral_set_b)
+    assert len(identity_conflicts) == 0
+
+    swap_conflicts = find_atom_map_chiral_conflicts(swap_map, chiral_set_a, chiral_set_b)
+    assert len(swap_conflicts) == 8  # TODO: deduplicate idxs?
+    assert all("flipped" in msg for msg in swap_conflicts)
+
+    # test maps where atom chirality is defined in one endstate, undefined in other
+    mol_b = Chem.AddHs(Chem.MolFromSmiles("N"))
+    AllChem.EmbedMolecule(mol_b, randomSeed=0)
+    conf_b = mol_b.GetConformer(0).GetPositions()
+    chiral_set_b = ChiralRestrIdxSet.from_mol(mol_b, conf_b)
+    assert len(chiral_set_b.restr_idxs) == 0
+
+    partial_map = identity_map[:4]
+    partial_conflicts = find_atom_map_chiral_conflicts(partial_map, chiral_set_a, chiral_set_b)
+    assert len(partial_conflicts) > 0
+    assert all("undefined" in msg for msg in partial_conflicts)
