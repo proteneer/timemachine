@@ -3,12 +3,11 @@
 from importlib import resources
 
 import numpy as np
-from rdkit import Chem
 
 from timemachine.constants import DEFAULT_FF
 from timemachine.fe.rbfe import setup_initial_states
 from timemachine.fe.single_topology import SingleTopology
-from timemachine.fe.utils import get_romol_conf
+from timemachine.fe.utils import get_romol_conf, read_sdf
 from timemachine.ff import Forcefield
 
 
@@ -16,9 +15,8 @@ def get_hif2a_ligand_pair_single_topology():
     """Return two ligands from hif2a and the manually specified atom mapping"""
 
     with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
-        suppl = Chem.SDMolSupplier(str(path_to_ligand), removeHs=False)
+        all_mols = read_sdf(str(path_to_ligand))
 
-    all_mols = [x for x in suppl]
     mol_a = all_mols[1]
     mol_b = all_mols[4]
 
