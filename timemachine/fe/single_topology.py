@@ -728,6 +728,22 @@ def interpolate_periodic_torsion_params(src_params, dst_params, lamb, lambda_min
     return jnp.array([k, phase, src_period])
 
 
+def interpolate_w_coord(w0: float, w1: float, lamb: float):
+    """Interpolate 4D coordinate using pre-optimized schedule for relative free energy calculations
+
+    Parameters
+    ----------
+    w0, w1 : float
+        w coordinates at lambda = 0 and 1 respectively
+
+    lamb : float
+        alchemical parameter
+    """
+    lambdas = construct_pre_optimized_relative_lambda_schedule(None)
+    x = jnp.linspace(0.0, 1.0, len(lambdas))
+    return interpolate.linear_interpolation(w0, w1, jnp.interp(lamb, x, lambdas))
+
+
 class AtomMapMixin:
     """
     A Mixin class containing the atom_mapping information. This Mixin sets up the following
@@ -974,7 +990,7 @@ class SingleTopology(AtomMapMixin):
 
         return src_cls_bond(np.array(bond_idxs)).bind(bond_params)
 
-    def _setup_intermediate_nonbonded_term(self, src_nonbonded, dst_nonbonded, lamb, align_fn, interpolate_fn):
+    def _setup_intermediate_nonbonded_term(self, src_nonbonded, dst_nonbonded, lamb, align_fn, interpolate_qlj_fn):
 
         assert src_nonbonded.get_beta() == dst_nonbonded.get_beta()
         assert src_nonbonded.get_cutoff() == dst_nonbonded.get_cutoff()
@@ -990,13 +1006,18 @@ class SingleTopology(AtomMapMixin):
         pair_idxs = []
         pair_params = []
         for idxs, src_params, dst_params in pair_idxs_and_params:
+            src_qlj, src_w = src_params[:3], src_params[3]
+            dst_qlj, dst_w = dst_params[:3], dst_params[3]
 
-            if src_params == (0, 0, 0, 0):  # i.e. excluded in src state
-                new_params = (*dst_params[:3], (1 - lamb) * cutoff)
-            elif dst_params == (0, 0, 0, 0):
-                new_params = (*src_params[:3], lamb * cutoff)
+            if src_qlj == (0, 0, 0):  # i.e. excluded in src state
+                new_params = (*dst_qlj, interpolate_w_coord(cutoff, 0, lamb))
+            elif dst_qlj == (0, 0, 0):
+                new_params = (*src_qlj, interpolate_w_coord(0, cutoff, lamb))
             else:
-                new_params = interpolate_fn(src_params, dst_params, lamb)
+                new_params = (
+                    *interpolate_qlj_fn(src_qlj, dst_qlj, lamb),
+                    interpolate_w_coord(src_w, dst_w, lamb),
+                )
 
             pair_idxs.append(idxs)
             pair_params.append(new_params)
@@ -1155,13 +1176,6 @@ class SingleTopology(AtomMapMixin):
         guest_b_q = self.ff.q_handle.parameterize(self.mol_b)
         guest_b_lj = self.ff.lj_handle.parameterize(self.mol_b)
 
-        # define interpolation function for dummy 4D coordinates
-        lambda_schedule = construct_pre_optimized_relative_lambda_schedule(None)
-        x = jnp.linspace(0.0, 1.0, len(lambda_schedule))
-
-        def interpolate_w(w0, w1, lamb):
-            return interpolate.linear_interpolation(w0, w1, jnp.interp(lamb, x, lambda_schedule))
-
         for idx, membership in enumerate(self.c_flags):
             if membership == 0:  # core atom
                 a_idx = self.c_to_a[idx]
@@ -1182,7 +1196,7 @@ class SingleTopology(AtomMapMixin):
                 eps = guest_a_lj[a_idx, 1]
 
                 # Decouple dummy group A as lambda goes from 0 to 1
-                w = interpolate_w(0.0, cutoff, lamb)
+                w = interpolate_w_coord(0.0, cutoff, lamb)
 
             elif membership == 2:  # dummy_B
                 b_idx = self.c_to_b[idx]
@@ -1192,7 +1206,7 @@ class SingleTopology(AtomMapMixin):
 
                 # Couple dummy group B as lambda goes from 0 to 1
                 # NOTE: this is only for host-guest nonbonded ixns (there is no clash between A and B at lambda = 0.5)
-                w = interpolate_w(cutoff, 0.0, lamb)
+                w = interpolate_w_coord(cutoff, 0.0, lamb)
             else:
                 assert 0
 
