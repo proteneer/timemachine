@@ -16,7 +16,7 @@ def test_dual_topology_nonbonded_pairlist():
     ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
     dt = topology.DualTopology(mol_a, mol_b, ff)
 
-    nb_params, nb = dt.parameterize_nonbonded(ff.q_handle.params, ff.lj_handle.params)
+    nb_params, nb = dt.parameterize_nonbonded(ff.q_handle.params, ff.lj_handle.params, 0.0)
 
     nb_pairlist_params, nb_pairlist = dt.parameterize_nonbonded_pairlist(ff.q_handle.params, ff.lj_handle.params)
 
@@ -28,18 +28,13 @@ def test_dual_topology_nonbonded_pairlist():
         nb_unbound = nb.unbound_impl(precision)
         nb_pairlist_unbound = nb_pairlist.unbound_impl(precision)
 
-        for lamb in [0.0, 1.0]:
+        du_dx, du_dp, u = nb_unbound.execute(x0, nb_params, box)
 
-            du_dx, du_dp, du_dl, u = nb_unbound.execute(x0, nb_params, box, lamb)
+        pairlist_du_dx, pairlist_du_dp, pairlist_u = nb_pairlist_unbound.execute(x0, nb_pairlist_params, box)
 
-            pairlist_du_dx, pairlist_du_dp, pairlist_du_dl, pairlist_u = nb_pairlist_unbound.execute(
-                x0, nb_pairlist_params, box, lamb
-            )
+        np.testing.assert_allclose(du_dx, pairlist_du_dx, atol=atol, rtol=rtol)
 
-            np.testing.assert_allclose(du_dx, pairlist_du_dx, atol=atol, rtol=rtol)
+        # Different parameters, and so no expectation of shapes agreeing
+        assert du_dp.shape != pairlist_du_dp.shape
 
-            # Different parameters, and so no expectation of shapes agreeing
-            assert du_dp.shape != pairlist_du_dp.shape
-
-            np.testing.assert_allclose(du_dl, pairlist_du_dl, atol=atol, rtol=rtol)
-            np.testing.assert_allclose(u, pairlist_u, atol=atol, rtol=rtol)
+        np.testing.assert_allclose(u, pairlist_u, atol=atol, rtol=rtol)

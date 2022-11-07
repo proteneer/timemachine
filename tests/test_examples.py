@@ -122,6 +122,7 @@ def get_smc_free_solv_results(result_path: str) -> Tuple[Array, Array]:
     return dG_preds, dG_expts
 
 
+@pytest.mark.skip("needs update since removal of lambda dependence in nonbonded potentials")
 def test_smc_freesolv(smc_free_solv_path):
     """run_smc_on_freesolv.py with reasonable settings on a small subset of FreeSolv, and expect
     * output in summary_smc_result_*.pkl

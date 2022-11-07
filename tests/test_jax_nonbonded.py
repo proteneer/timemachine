@@ -4,7 +4,7 @@ from numpy.random import rand, randint, randn, seed
 seed(2021)
 
 from functools import partial
-from typing import Callable, Tuple
+from typing import Any, Callable, Tuple
 
 import pytest
 from jax import jit
@@ -18,12 +18,7 @@ from timemachine.fe.reweighting import one_sided_exp
 from timemachine.ff import Forcefield
 from timemachine.ff.handlers import openmm_deserializer
 from timemachine.md import builders
-from timemachine.potentials.jax_utils import (
-    compute_lifting_parameter,
-    get_all_pairs_indices,
-    pairs_from_interaction_groups,
-    pairwise_distances,
-)
+from timemachine.potentials.jax_utils import get_all_pairs_indices, pairs_from_interaction_groups, pairwise_distances
 from timemachine.potentials.nonbonded import (
     coulomb_interaction_group_energy,
     coulomb_prefactors_on_traj,
@@ -34,12 +29,18 @@ from timemachine.potentials.nonbonded import (
     nonbonded_on_specific_pairs,
 )
 
-Conf = Params = Box = ChargeMask = LJMask = LambdaPlaneIdxs = LambdaOffsetIdxs = jnp.array
-Lamb = Beta = Cutoff = Energy = float
+Array = Any
+Conf = Array
+Params = Array
+Box = Array
+ChargeMask = Array
+LJMask = Array
+Beta = float
+Cutoff = float
+Energy = float
 
-nonbonded_args = Conf, Params, Box, Lamb, ChargeMask, LJMask, Beta, Cutoff, LambdaPlaneIdxs, LambdaOffsetIdxs
-NonbondedArgs = Tuple[nonbonded_args]
-NonbondedFxn = Callable[[*nonbonded_args], Energy]
+NonbondedArgs = Tuple[Conf, Params, Box, ChargeMask, LJMask, Beta, Cutoff]
+NonbondedFxn = Callable[[Conf, Params, Box, ChargeMask, LJMask, Beta, Cutoff], Energy]
 
 pytestmark = [pytest.mark.nogpu]
 
@@ -96,11 +97,9 @@ easy_instance_flags = dict(
     randomize_charges=False,
     randomize_sigma=False,
     randomize_epsilon=False,
-    randomize_lamb=False,
     randomize_charge_rescale_mask=False,
     randomize_lj_rescale_mask=False,
-    randomize_lambda_plane_idxs=False,
-    randomize_lambda_offset_idxs=False,
+    randomize_w_coords=False,
     randomize_beta=False,
     randomize_cutoff=False,
 )
@@ -121,23 +120,17 @@ def generate_waterbox_nb_args() -> NonbondedArgs:
     beta = nb.get_beta()
     cutoff = nb.get_cutoff()
 
-    lamb = 0.0
     charge_rescale_mask = np.ones((N, N))
     lj_rescale_mask = np.ones((N, N))
-    lambda_plane_idxs = np.zeros(N, dtype=int)
-    lambda_offset_idxs = np.zeros(N, dtype=int)
 
     args = (
         conf,
         params,
         box,
-        lamb,
         charge_rescale_mask,
         lj_rescale_mask,
         beta,
         cutoff,
-        lambda_plane_idxs,
-        lambda_offset_idxs,
     )
 
     return args
@@ -158,21 +151,25 @@ def generate_random_inputs(n_atoms, dim, instance_flags=difficult_instance_flags
     min_dist = 0.1
     conf, box = resolve_clashes(conf, box, min_dist=min_dist)
 
+    cutoff = 1.2
+    if instance_flags["randomize_cutoff"]:
+        cutoff += rand()
+
     charges = jnp.zeros(n_atoms)
     sig = min_dist * jnp.ones(n_atoms)
     eps = jnp.ones(n_atoms)
+    w_coords = jnp.zeros(n_atoms)
     if instance_flags["randomize_charges"]:
         charges = randn(n_atoms)
     if instance_flags["randomize_sigma"]:
         sig = min_dist * rand(n_atoms)
     if instance_flags["randomize_epsilon"]:
         eps = rand(n_atoms)
+    if instance_flags["randomize_w_coords"]:
+        w_coords = 2 * cutoff * (2 * rand(n_atoms) - 1)  # [-2 * cutoff, 2 * cutoff]
 
-    params = jnp.array([charges, sig, eps]).T
+    params = jnp.array([charges, sig, eps, w_coords]).T
 
-    lamb = 0.0
-    if instance_flags["randomize_lamb"]:
-        lamb = rand()
     charge_rescale_mask = np.ones((n_atoms, n_atoms))
     lj_rescale_mask = np.ones((n_atoms, n_atoms))
 
@@ -186,36 +183,13 @@ def generate_random_inputs(n_atoms, dim, instance_flags=difficult_instance_flags
     beta = 2.0
     if instance_flags["randomize_beta"]:
         beta += rand()
-    cutoff = 1.2
-    if instance_flags["randomize_cutoff"]:
-        cutoff += rand()
 
-    lambda_plane_idxs = np.zeros(n_atoms, dtype=int)
-    lambda_offset_idxs = np.zeros(n_atoms, dtype=int)
-
-    if instance_flags["randomize_lambda_plane_idxs"]:
-        lambda_plane_idxs = randint(low=-2, high=2, size=n_atoms)
-
-    if instance_flags["randomize_lambda_offset_idxs"]:
-        lambda_offset_idxs = randint(low=-2, high=2, size=n_atoms)
-
-    args = (
-        conf,
-        params,
-        box,
-        lamb,
-        charge_rescale_mask,
-        lj_rescale_mask,
-        beta,
-        cutoff,
-        lambda_plane_idxs,
-        lambda_offset_idxs,
-    )
+    args = (conf, params, box, charge_rescale_mask, lj_rescale_mask, beta, cutoff)
 
     return args
 
 
-def compare_two_potentials(u_a: NonbondedFxn, u_b: NonbondedFxn, args: NonbondedArgs, differentiate_wrt=(0, 1, 3)):
+def compare_two_potentials(u_a: NonbondedFxn, u_b: NonbondedFxn, args: NonbondedArgs, differentiate_wrt=(0, 1)):
     """Assert that energies and derivatives w.r.t. request argnums are close"""
     value_and_grads = partial(value_and_grad, argnums=differentiate_wrt)
     energy_a, gradients_a = value_and_grads(u_a)(*args)
@@ -230,13 +204,10 @@ def _nonbonded_clone(
     conf,
     params,
     box,
-    lamb,
     charge_rescale_mask,
     lj_rescale_mask,
     beta,
     cutoff,
-    lambda_plane_idxs,
-    lambda_offset_idxs,
 ):
     """See docstring of `nonbonded` for more details
 
@@ -245,13 +216,12 @@ def _nonbonded_clone(
     """
 
     N = conf.shape[0]
-    w_coords = compute_lifting_parameter(lamb, lambda_plane_idxs, lambda_offset_idxs, cutoff)
 
     # TODO: len(pairs) == n_interactions -- may want to break this
     #   up into more manageable blocks if n_interactions is large
     pairs = get_all_pairs_indices(N)
 
-    lj, coulomb = nonbonded_on_specific_pairs(conf, params, box, pairs, beta, cutoff, w_coords)
+    lj, coulomb = nonbonded_on_specific_pairs(conf, params, box, pairs, beta, cutoff)
 
     # keep only eps > 0
     inds_i, inds_j = pairs.T
@@ -304,7 +274,7 @@ def test_vmap():
     # # atoms in "ligand" vs. "environment"
     n_ligand, n_environment = 50, 1000
     n_total = n_ligand + n_environment
-    conf, params, box, lamb, _, _, beta, cutoff, _, _ = generate_random_inputs(n_total, 3)
+    conf, params, box, _, _, beta, cutoff = generate_random_inputs(n_total, 3)
 
     ligand_indices = np.arange(n_ligand)
     environment_indices = np.arange(n_environment) + n_ligand
@@ -409,7 +379,7 @@ def test_precomputation():
         return vmap(f)(traj, boxes)
 
     # test version: with precomputation
-    charges, sigmas, epsilons = params.T
+    charges, sigmas, epsilons, _ = params.T
     eps_prefactors = lj_prefactors_on_traj(traj, boxes, sigmas, epsilons, ligand_idx, env_idx, cutoff)
     q_prefactors = coulomb_prefactors_on_traj(traj, boxes, charges, ligand_idx, env_idx, beta, cutoff)
 

@@ -8,7 +8,6 @@ namespace timemachine {
 template <typename RealType, bool Negated> class NonbondedPairList : public Potential {
 
 private:
-    const int N_; // number of atoms
     const int M_; // number of pairs
 
     double beta_;
@@ -16,16 +15,11 @@ private:
 
     int *d_pair_idxs_; // [M, 2]
     double *d_scales_; // [M, 2]
-    int *d_lambda_plane_idxs_;
-    int *d_lambda_offset_idxs_;
-    double *d_w_;
 
 public:
     NonbondedPairList(
-        const std::vector<int> &pair_idxs,          // [M, 2]
-        const std::vector<double> &scales,          // [M, 2]
-        const std::vector<int> &lambda_plane_idxs,  // [N]
-        const std::vector<int> &lambda_offset_idxs, // [N]
+        const std::vector<int> &pair_idxs, // [M, 2]
+        const std::vector<double> &scales, // [M, 2]
         const double beta,
         const double cutoff);
 
@@ -37,10 +31,8 @@ public:
         const double *d_x,
         const double *d_p,
         const double *d_box,
-        const double lambda,
         unsigned long long *d_du_dx,
         unsigned long long *d_du_dp,
-        unsigned long long *d_du_dl,
         unsigned long long *d_u,
         cudaStream_t stream) override;
 

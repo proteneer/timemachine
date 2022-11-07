@@ -2,30 +2,28 @@ import functools
 import io
 import pickle
 import warnings
-from dataclasses import dataclass
-from typing import List
 
 import matplotlib.pyplot as plt
 import numpy as np
 import pymbar
-from scipy.spatial.distance import cdist
 
 from timemachine.constants import BOLTZ, DEFAULT_TEMP
 from timemachine.fe import model_utils
 from timemachine.fe.bar import bar_with_bootstrapped_uncertainty
-from timemachine.fe.lambda_schedule import interpolate_pre_optimized_protocol
+from timemachine.fe.free_energy import HostConfig, InitialState, SimulationProtocol, SimulationResult
+from timemachine.fe.lambda_schedule import construct_pre_optimized_relative_lambda_schedule
 from timemachine.fe.single_topology import SingleTopology
 from timemachine.fe.system import convert_bps_into_system
 from timemachine.fe.utils import get_mol_name, get_romol_conf
 from timemachine.ff.handlers import openmm_deserializer
 from timemachine.lib import LangevinIntegrator, MonteCarloBarostat, custom_ops
-from timemachine.lib.potentials import CustomOpWrapper
 from timemachine.md import builders, minimizer
 from timemachine.md.barostat.utils import get_bond_list, get_group_indices
+from timemachine.potentials import jax_utils
 
 
-def get_batch_U_fns(bps, lamb):
-    # return a function that takes in coords, boxes, lambda
+def get_batch_U_fns(bps):
+    # return a function that takes in coords, boxes
     all_U_fns = []
     for bp in bps:
 
@@ -33,7 +31,7 @@ def get_batch_U_fns(bps, lamb):
             Us = []
             for x, box in zip(xs, boxes):
                 # tbd optimize to "selective" later
-                _, _, U = bp_impl.execute(x, box, lamb)
+                _, U = bp_impl.execute(x, box)
                 Us.append(U)
             return np.array(Us)
 
@@ -41,13 +39,6 @@ def get_batch_U_fns(bps, lamb):
         all_U_fns.append(functools.partial(batch_U_fn, bp_impl=bp))
 
     return all_U_fns
-
-
-class HostConfig:
-    def __init__(self, omm_system, conf, box):
-        self.omm_system = omm_system
-        self.conf = conf
-        self.box = box
 
 
 def sample(initial_state, protocol):
@@ -62,29 +53,18 @@ def sample(initial_state, protocol):
     else:
         baro_impl = None
 
-    cutoff = 0.5  # in nanometers
-    # local minimize region around ligand, should result in ~300 atoms
-
-    ligand_coords = initial_state.x0[initial_state.ligand_idxs]
-    d_ij = cdist(ligand_coords, initial_state.x0)
-    # if any atom is within any of the ligand's atom's ixn radius, flag it for minimization
-    free_idxs = np.where(np.any(d_ij < cutoff, axis=0))[0].tolist()
-
-    val_and_grad_fn = minimizer.get_val_and_grad_fn(bound_impls, initial_state.box0, initial_state.lamb)
-
-    assert np.all(np.isfinite(initial_state.x0)), "Initial coordinates contain nan or inf"
-
-    x0_min = minimizer.local_minimize(initial_state.x0, val_and_grad_fn, free_idxs)
-
-    assert np.all(np.isfinite(x0_min)), "Minimization resulted in a nan"
-
-    ctxt = custom_ops.Context(x0_min, initial_state.v0, initial_state.box0, intg_impl, bound_impls, baro_impl)
+    ctxt = custom_ops.Context(
+        initial_state.x0,
+        initial_state.v0,
+        initial_state.box0,
+        intg_impl,
+        bound_impls,
+        baro_impl,
+    )
 
     # burn-in
     ctxt.multiple_steps_U(
-        lamb=initial_state.lamb,
         n_steps=protocol.n_eq_steps,
-        lambda_windows=[],
         store_u_interval=0,
         store_x_interval=0,
     )
@@ -94,9 +74,7 @@ def sample(initial_state, protocol):
     # a crude, and probably not great, guess on the decorrelation time
     n_steps = protocol.n_frames * protocol.steps_per_frame
     _, all_coords, all_boxes = ctxt.multiple_steps_U(
-        lamb=initial_state.lamb,
         n_steps=n_steps,
-        lambda_windows=[],
         store_u_interval=0,
         store_x_interval=protocol.steps_per_frame,
     )
@@ -109,48 +87,36 @@ def sample(initial_state, protocol):
     return all_coords, all_boxes
 
 
-@dataclass
-class SimulationProtocol:
-    n_frames: int
-    n_eq_steps: int
-    steps_per_frame: int
-
-
-@dataclass
-class InitialState:
-    """
-    An initial contains everything that is needed to bitwise reproduce a trajectory given a SimulationProtocol
-
-    This object can be pickled safely.
-    """
-
-    potentials: List[CustomOpWrapper]
-    integrator: LangevinIntegrator
-    barostat: MonteCarloBarostat
-    x0: np.ndarray
-    v0: np.ndarray
-    box0: np.ndarray
-    lamb: float
-    ligand_idxs: np.ndarray
-
-
-@dataclass
-class SimulationResult:
-    all_dGs: List[np.ndarray]
-    all_errs: List[float]
-    overlaps_by_lambda: np.ndarray  # (L - 1,)
-    overlaps_by_lambda_by_component: np.ndarray  # (len(U_names), L - 1)
-    overlap_summary_png: bytes
-    overlap_detail_png: bytes
-    frames: List[np.ndarray]
-    boxes: List[np.ndarray]
-    initial_states: List[InitialState]
-    protocol: SimulationProtocol
-
-
 # setup the initial state so we can (hopefully) bitwise recover the identical simulation
 # to help us debug errors.
 def setup_initial_states(st, host_config, temperature, lambda_schedule, seed):
+    """
+    Setup the initial states for a series of lambda values. It is assumed that the lambda schedule
+    is a monotonically increasing sequence in the closed interval [0,1].
+
+    Parameters
+    ----------
+    st: SingleTopology
+        A single topology object
+
+    host_config: HostConfig or None
+        Configurations of the host. If None, then a vacuum state will be setup.
+
+    temperature: float
+        Temperature to run the simulation at.
+
+    lambda_schedule: list of float of length K
+        Lambda schedule.
+
+    seed: int
+        Random number seed
+
+    Returns
+    -------
+    list of InitialStates
+        Returns an initial state for each value of lambda.
+
+    """
 
     if host_config:
         host_bps, host_masses = openmm_deserializer.deserialize_system(host_config.omm_system, cutoff=1.2)
@@ -164,11 +130,21 @@ def setup_initial_states(st, host_config, temperature, lambda_schedule, seed):
 
     initial_states = []
 
+    # check that the lambda schedule is monotonically increasing.
+    assert np.all(np.diff(lambda_schedule) > 0)
+
     for lamb_idx, lamb in enumerate(lambda_schedule):
 
         mol_a_conf = get_romol_conf(st.mol_a)
         mol_b_conf = get_romol_conf(st.mol_b)
-        ligand_conf = st.combine_confs(mol_a_conf, mol_b_conf)
+
+        assert lamb >= 0.0 and lamb <= 1.0
+
+        if lamb < 0.5:
+            ligand_conf = st.combine_confs_lhs(mol_a_conf, mol_b_conf)
+        else:
+            ligand_conf = st.combine_confs_rhs(mol_a_conf, mol_b_conf)
+
         run_seed = seed + lamb_idx
 
         if host_config:
@@ -218,6 +194,10 @@ def setup_initial_states(st, host_config, temperature, lambda_schedule, seed):
 
         state = InitialState(potentials, intg, baro, x0, v0, box0, lamb, ligand_idxs)
         initial_states.append(state)
+
+    all_coords = optimize_coordinates(initial_states)
+    for state, coords in zip(initial_states, all_coords):
+        state.x0 = coords
 
     return initial_states
 
@@ -316,7 +296,7 @@ def estimate_free_energy_given_initial_states(initial_states, protocol, temperat
         A prefix that we append to the BAR overlap figures
 
     keep_idxs: list of int
-        Which states we keep samples for.
+        Which states we keep samples for. Must be positive.
 
     Return
     ------
@@ -352,6 +332,10 @@ def estimate_free_energy_given_initial_states(initial_states, protocol, temperat
     # u_kln matrix (2, 2, n_frames) for each pair of adjacent lambda windows and energy term
     ukln_by_component_by_lambda = []
 
+    keep_idxs = keep_idxs or []
+    if keep_idxs:
+        assert all(np.array(keep_idxs) >= 0)
+
     for lamb_idx, initial_state in enumerate(initial_states):
         # Clear any old references to avoid holding on to objects in memory we don't need.
         cur_frames = None
@@ -360,7 +344,7 @@ def estimate_free_energy_given_initial_states(initial_states, protocol, temperat
         cur_batch_U_fns = None
         cur_frames, cur_boxes = sample(initial_state, protocol)
         bound_impls = [p.bound_impl(np.float32) for p in initial_state.potentials]
-        cur_batch_U_fns = get_batch_U_fns(bound_impls, initial_state.lamb)
+        cur_batch_U_fns = get_batch_U_fns(bound_impls)
 
         if lamb_idx in keep_idxs:
             stored_frames.append(cur_frames)
@@ -459,6 +443,83 @@ def estimate_free_energy_given_initial_states(initial_states, protocol, temperat
     )
 
 
+def _optimize_coords_along_states(initial_states):
+    # use the end-state to define the optimization settings
+    end_state = initial_states[0]
+    ligand_coords = end_state.x0[end_state.ligand_idxs]
+    r_i = np.expand_dims(ligand_coords, axis=1)
+    r_j = np.expand_dims(end_state.x0, axis=0)
+    d_ij = np.linalg.norm(jax_utils.delta_r(r_i, r_j, box=end_state.box0), axis=-1)
+    cutoff = 0.5  # in nanometers
+    free_idxs = np.where(np.any(d_ij < cutoff, axis=0))[0].tolist()
+    x_opt = end_state.x0
+    x_traj = []
+    for idx, initial_state in enumerate(initial_states):
+        print(initial_state.lamb)
+        bound_impls = [p.bound_impl(np.float32) for p in initial_state.potentials]
+        val_and_grad_fn = minimizer.get_val_and_grad_fn(bound_impls, initial_state.box0)
+        assert np.all(np.isfinite(x_opt)), "Initial coordinates contain nan or inf"
+        # assert that the energy decreases only at the end-state.z
+        if idx == 0:
+            check_nrg = True
+        else:
+            check_nrg = False
+        x_opt = minimizer.local_minimize(x_opt, val_and_grad_fn, free_idxs, assert_energy_decreased=check_nrg)
+        x_traj.append(x_opt)
+        assert np.all(np.isfinite(x_opt)), "Minimization resulted in a nan"
+        del bound_impls
+
+    return x_traj
+
+
+def optimize_coordinates(initial_states):
+    """
+    Optimize geometries of the initial states.
+
+    Parameters
+    ----------
+    initial_states: list of InitialState
+
+    Returns
+    -------
+    list of np.array
+        Optimized coordinates
+
+    """
+    all_xs = []
+    lambda_schedule = np.array([s.lamb for s in initial_states])
+
+    # check for monotonic, any subsequence of a monotonic sequence is also monotonic.
+    assert np.all(np.diff(lambda_schedule) > 0)
+
+    lhs_initial_states = []
+    rhs_initial_states = []
+
+    for state in initial_states:
+        if state.lamb < 0.5:
+            lhs_initial_states.append(state)
+        else:
+            rhs_initial_states.append(state)
+
+    # go from lambda 0 -> 0.5
+    if len(lhs_initial_states) > 0:
+        lhs_xs = _optimize_coords_along_states(lhs_initial_states)
+        for xs in lhs_xs:
+            all_xs.append(xs)
+
+    # go from lambda 1 -> 0.5 and reverse the coordinate trajectory and lambda schedule
+    if len(rhs_initial_states) > 0:
+        rhs_xs = _optimize_coords_along_states(rhs_initial_states[::-1])[::-1]
+        for xs in rhs_xs:
+            all_xs.append(xs)
+
+    for state, coords in zip(initial_states, all_xs):
+        # sanity check that no atom has moved more than 7 angstroms away (arbitrary)
+        assert np.amax(np.linalg.norm(state.x0 - coords, axis=1)) < 0.7
+
+    return all_xs
+
+
 def estimate_relative_free_energy(
     mol_a,
     mol_b,
@@ -530,12 +591,7 @@ def estimate_relative_free_energy(
     single_topology = SingleTopology(mol_a, mol_b, core, ff)
 
     if lambda_schedule is None:
-        lambda_schedule = np.array(
-            [0.0, 0.02, 0.04, 0.06, 0.07, 0.08, 0.11, 0.13, 0.15, 0.17, 0.18, 0.20, 0.25, 0.32, 0.42]
-        )
-        lambda_schedule = np.concatenate([lambda_schedule, (1 - lambda_schedule[::-1])])
-        if n_windows:
-            lambda_schedule = interpolate_pre_optimized_protocol(lambda_schedule, n_windows)
+        lambda_schedule = construct_pre_optimized_relative_lambda_schedule(n_windows)
     else:
         assert n_windows is None
         warnings.warn("Warning: setting lambda_schedule manually, this argument may be removed in a future release.")
@@ -545,7 +601,7 @@ def estimate_relative_free_energy(
     protocol = SimulationProtocol(n_frames=n_frames, n_eq_steps=n_eq_steps, steps_per_frame=steps_per_frame)
 
     if keep_idxs is None:
-        keep_idxs = [0, -1]  # keep first and last frames
+        keep_idxs = [0, len(initial_states) - 1]  # keep first and last frames
     assert len(keep_idxs) <= len(lambda_schedule)
     combined_prefix = get_mol_name(mol_a) + "_" + get_mol_name(mol_b) + "_" + prefix
     try:

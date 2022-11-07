@@ -20,19 +20,13 @@ public:
 
     ~Context();
 
-    void step(double lambda);
-    void initialize(double lambda);
-    void finalize(double lambda);
+    void step();
+    void initialize();
+    void finalize();
 
-    std::array<std::vector<double>, 3>
-    multiple_steps(const std::vector<double> &lambda_schedule, int store_du_dl_interval, int store_x_interval);
+    std::array<std::vector<double>, 2> multiple_steps(const int n_steps, int store_x_interval);
 
-    std::array<std::vector<double>, 3> multiple_steps_U(
-        const double lambda,
-        const int n_steps,
-        const std::vector<double> &lambda_windows, // which lambda windows we want to evaluate U at
-        int store_u_interval,
-        int store_x_interval);
+    std::array<std::vector<double>, 3> multiple_steps_U(const int n_steps, int store_u_interval, int store_x_interval);
 
     int num_atoms() const;
 
@@ -51,11 +45,7 @@ private:
 
     MonteCarloBarostat *barostat_;
 
-    void _step(
-        std::vector<BoundPotential *> &bps,
-        const double lambda,
-        unsigned long long *du_dl_out,
-        const cudaStream_t stream);
+    void _step(std::vector<BoundPotential *> &bps, const cudaStream_t stream);
 
     int step_;
 
@@ -63,9 +53,8 @@ private:
     double *d_v_t_;   // velocities
     double *d_box_t_; // box vectors
 
-    unsigned long long *d_du_dx_t_;      // du/dx [N,3]
-    unsigned long long *d_du_dl_buffer_; // du/dl [N]
-    unsigned long long *d_u_buffer_;     // u [N]
+    unsigned long long *d_du_dx_t_;  // du/dx [N,3]
+    unsigned long long *d_u_buffer_; // u [N]
     double *d_sum_storage_;
     size_t d_sum_storage_bytes_;
 

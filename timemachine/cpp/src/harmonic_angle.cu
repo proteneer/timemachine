@@ -25,7 +25,7 @@ HarmonicAngle<RealType>::HarmonicAngle(const std::vector<int> &angle_idxs // [A,
         }
     }
 
-    gpuErrchk(cudaMalloc(&d_angle_idxs_, A_ * 3 * sizeof(*d_angle_idxs_)));
+    cudaSafeMalloc(&d_angle_idxs_, A_ * 3 * sizeof(*d_angle_idxs_));
     gpuErrchk(cudaMemcpy(d_angle_idxs_, &angle_idxs[0], A_ * 3 * sizeof(*d_angle_idxs_), cudaMemcpyHostToDevice));
 };
 
@@ -38,10 +38,8 @@ void HarmonicAngle<RealType>::execute_device(
     const double *d_x,
     const double *d_p,
     const double *d_box,
-    const double lambda,
     unsigned long long *d_du_dx,
     unsigned long long *d_du_dp,
-    unsigned long long *d_du_dl,
     unsigned long long *d_u,
     cudaStream_t stream) {
 
@@ -55,8 +53,7 @@ void HarmonicAngle<RealType>::execute_device(
                 "HarmonicAngle::execute_device(): expected P == 2*A_, got P=" + std::to_string(P) +
                 ", 2*A_=" + std::to_string(2 * A_));
         }
-        k_harmonic_angle<RealType, 3>
-            <<<blocks, tpb, 0, stream>>>(A_, d_x, d_p, lambda, d_angle_idxs_, d_du_dx, d_du_dp, d_du_dl, d_u);
+        k_harmonic_angle<RealType, 3><<<blocks, tpb, 0, stream>>>(A_, d_x, d_p, d_angle_idxs_, d_du_dx, d_du_dp, d_u);
         gpuErrchk(cudaPeekAtLastError());
     }
 }

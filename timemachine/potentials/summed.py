@@ -6,15 +6,13 @@ Array = Any
 Conf = Array
 Params = Array
 Box = Array
-Lambda = float
-PotentialFxn = Callable[[Conf, Params, Box, Lambda], float]
+PotentialFxn = Callable[[Conf, Params, Box], float]
 
 
 def summed_potential(
     conf: Array,
     params: Array,
     box: Array,
-    lamb: float,
     U_fns: Sequence[PotentialFxn],
     shapes: Sequence[Tuple],
 ):
@@ -31,10 +29,7 @@ def summed_potential(
     box: array (3, 3)
         periodic box
 
-    lamb: float
-        alchemical parameter
-
-    U_fns: list of functions with signature (conf, params, box, lambda) -> energy
+    U_fns: list of functions with signature (conf, params, box) -> energy
         potential terms
 
     shapes: list of tuple
@@ -43,4 +38,4 @@ def summed_potential(
     assert len(U_fns) == len(shapes)
     sizes = np.prod(shapes, axis=1)
     paramss = [ps.reshape(shape) for ps, shape in zip(np.split(params, sizes[:-1]), shapes)]
-    return sum(U_fn(conf, ps, box, lamb) for U_fn, ps in zip(U_fns, paramss))
+    return sum(U_fn(conf, ps, box) for U_fn, ps in zip(U_fns, paramss))

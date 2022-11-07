@@ -75,7 +75,6 @@ class NVTMove(MonteCarloMove):
     def __init__(
         self,
         ubps: List[potentials.CustomOpWrapper],
-        lamb: float,
         masses: NDArray,
         temperature: float,
         n_steps: int,
@@ -88,7 +87,6 @@ class NVTMove(MonteCarloMove):
         all_impls = [bp.bound_impl(np.float32) for bp in ubps]
 
         self.bound_impls = all_impls
-        self.lamb = lamb
         self.n_steps = n_steps
 
     def move(self, x: CoordsVelBox) -> CoordsVelBox:
@@ -97,8 +95,7 @@ class NVTMove(MonteCarloMove):
         return self._steps(ctxt)
 
     def _steps(self, ctxt: "custom_ops.Context") -> CoordsVelBox:
-        # arguments: lambda_schedule, du_dl_interval, x_interval
-        _, xs, boxes = ctxt.multiple_steps(self.lamb * np.ones(self.n_steps), 0, 0)
+        xs, boxes = ctxt.multiple_steps(self.n_steps, 0)
         x_t = xs[0]
         v_t = ctxt.get_v_t()
         box = boxes[0]
@@ -120,7 +117,6 @@ class NPTMove(NVTMove):
     def __init__(
         self,
         ubps: List[potentials.CustomOpWrapper],
-        lamb: float,
         masses: NDArray,
         temperature: float,
         pressure: float,
@@ -130,7 +126,7 @@ class NPTMove(NVTMove):
         friction: float = 1.0,
         barostat_interval: int = 5,
     ):
-        super().__init__(ubps, lamb, masses, temperature, n_steps, seed, dt=dt, friction=friction)
+        super().__init__(ubps, masses, temperature, n_steps, seed, dt=dt, friction=friction)
 
         assert isinstance(ubps[0], potentials.HarmonicBond), "First potential must be of type HarmonicBond"
 

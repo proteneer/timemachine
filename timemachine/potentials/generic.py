@@ -10,14 +10,12 @@ import timemachine.potentials.chiral_restraints as ref_chiral
 from timemachine.potentials import bonded as ref_bonded
 from timemachine.potentials import nonbonded as ref_nonbonded
 from timemachine.potentials import summed as ref_summed
-from timemachine.potentials.jax_utils import compute_lifting_parameter
 
 Array = Any
 Conf = Array
 Params = Array
 Box = Array
-Lambda = float
-PotentialFxn = Callable[[Conf, Params, Box, Lambda], float]
+PotentialFxn = Callable[[Conf, Params, Box], float]
 
 
 GenericPotential = TypeVar("GenericPotential", bound="Potential")
@@ -50,8 +48,7 @@ class Bonded(Generic[BondedGpuPotential]):
 @dataclass
 class HarmonicBond(Bonded):
     def to_reference(self):
-        def U(conf, params, box, lam):
-            # TODO: remove unused lam
+        def U(conf, params, box):
             return ref_bonded.harmonic_bond(
                 conf,
                 params,
@@ -68,8 +65,7 @@ class HarmonicBond(Bonded):
 @dataclass
 class HarmonicAngle(Bonded):
     def to_reference(self):
-        def U(conf, params, box, lam):
-            # TODO: remove unused lam
+        def U(conf, params, box):
             return ref_bonded.harmonic_angle(
                 conf,
                 params,
@@ -95,8 +91,7 @@ class CentroidRestraint:
         return cls(p.get_a_idxs(), p.get_b_idxs(), p.get_kb(), p.get_b0())
 
     def to_reference(self):
-        def U(conf, params, box, lam):
-            # TODO: remove unused lam
+        def U(conf, params, box):
             return ref_bonded.centroid_restraint(
                 conf, params, box, self.group_a_idxs, self.group_b_idxs, self.kb, self.b0
             )
@@ -116,8 +111,8 @@ class ChiralAtomRestraint:
         return cls(p.get_idxs())
 
     def to_reference(self):
-        def U(conf, params, box, lam):
-            return ref_chiral.chiral_atom_restraint(conf, params, box, lam, self.idxs)
+        def U(conf, params, box):
+            return ref_chiral.chiral_atom_restraint(conf, params, box, self.idxs)
 
         return U
 
@@ -135,8 +130,8 @@ class ChiralBondRestraint:
         return cls(p.get_idxs(), p.get_signs())
 
     def to_reference(self):
-        def U(conf, params, box, lam):
-            return ref_chiral.chiral_bond_restraint(conf, params, box, lam, self.idxs, self.signs)
+        def U(conf, params, box):
+            return ref_chiral.chiral_bond_restraint(conf, params, box, self.idxs, self.signs)
 
         return U
 
@@ -153,8 +148,7 @@ class FlatBottomBond:
         return cls(p.get_idxs())
 
     def to_reference(self):
-        def U(conf, params, box, lam):
-            # TODO: remove unused lam
+        def U(conf, params, box):
             return ref_bonded.flat_bottom_bond(conf, params, box, self.idxs)
 
         return U
@@ -166,8 +160,7 @@ class FlatBottomBond:
 @dataclass
 class PeriodicTorsion(Bonded):
     def to_reference(self):
-        def U(conf, params, box, lam):
-            # TODO: remove unused lam
+        def U(conf, params, box):
             return ref_bonded.periodic_torsion(
                 conf,
                 params,
@@ -183,41 +176,36 @@ class PeriodicTorsion(Bonded):
 
 @dataclass
 class Nonbonded:
+    num_atoms: int
     exclusion_idxs: Array
     scale_factors: Array
-    lambda_plane_idxs: Array
-    lambda_offset_idxs: Array
     beta: float
     cutoff: float
 
     @classmethod
     def from_gpu(cls, p: gpu.Nonbonded):
         return cls(
+            p.get_num_atoms(),
             p.get_exclusion_idxs(),
             p.get_scale_factors(),
-            p.get_lambda_plane_idxs(),
-            p.get_lambda_offset_idxs(),
             p.get_beta(),
             p.get_cutoff(),
         )
 
     def to_reference(self):
         charge_rescale_mask, lj_rescale_mask = ref_nonbonded.convert_exclusions_to_rescale_masks(
-            self.exclusion_idxs, self.scale_factors, len(self.lambda_plane_idxs)
+            self.exclusion_idxs, self.scale_factors, self.num_atoms
         )
 
-        def U(conf, params, box, lam):
+        def U(conf, params, box):
             return ref_nonbonded.nonbonded(
                 conf,
                 params,
                 box,
-                lam,
                 charge_rescale_mask,
                 lj_rescale_mask,
                 self.beta,
                 self.cutoff,
-                self.lambda_plane_idxs,
-                self.lambda_offset_idxs,
                 runtime_validate=False,  # needed for this to be JAX-transformable
             )
 
@@ -225,10 +213,9 @@ class Nonbonded:
 
     def to_gpu(self):
         return gpu.Nonbonded(
+            self.num_atoms,
             self.exclusion_idxs,
             self.scale_factors,
-            self.lambda_plane_idxs,
-            self.lambda_offset_idxs,
             self.beta,
             self.cutoff,
         )
@@ -236,8 +223,7 @@ class Nonbonded:
 
 @dataclass
 class NonbondedAllPairs:
-    lambda_plane_idxs: Array
-    lambda_offset_idxs: Array
+    num_atoms: int
     beta: float
     cutoff: float
     atom_idxs: Optional[Array] = None
@@ -245,8 +231,7 @@ class NonbondedAllPairs:
     @classmethod
     def from_gpu(cls, p: gpu.NonbondedAllPairs):
         return cls(
-            p.get_lambda_plane_idxs(),
-            p.get_lambda_offset_idxs(),
+            p.get_num_atoms(),
             p.get_beta(),
             p.get_cutoff(),
             p.get_atom_idxs(),
@@ -255,7 +240,7 @@ class NonbondedAllPairs:
     def to_reference(self):
         s = self.atom_idxs if self.atom_idxs is not None else slice(None)
 
-        def U(conf, params, box, lam):
+        def U(conf, params, box):
             conf = conf[s, :]
             num_atoms, _ = conf.shape
             no_rescale = jnp.ones((num_atoms, num_atoms))
@@ -263,13 +248,10 @@ class NonbondedAllPairs:
                 conf,
                 params[s, :],
                 box,
-                lam,
                 no_rescale,
                 no_rescale,
                 self.beta,
                 self.cutoff,
-                self.lambda_plane_idxs[s],
-                self.lambda_offset_idxs[s],
                 runtime_validate=False,  # needed for this to be JAX-transformable
             )
 
@@ -277,8 +259,7 @@ class NonbondedAllPairs:
 
     def to_gpu(self):
         return gpu.NonbondedAllPairs(
-            self.lambda_plane_idxs,
-            self.lambda_offset_idxs,
+            self.num_atoms,
             self.beta,
             self.cutoff,
             self.atom_idxs,
@@ -287,25 +268,22 @@ class NonbondedAllPairs:
 
 @dataclass
 class NonbondedInteractionGroup:
+    num_atoms: int
     row_atom_idxs: Array
-    lambda_plane_idxs: Array
-    lambda_offset_idxs: Array
     beta: float
     cutoff: float
 
     @classmethod
     def from_gpu(cls, p: gpu.NonbondedInteractionGroup):
         return cls(
+            p.get_num_atoms(),
             p.get_row_atom_idxs(),
-            p.get_lambda_plane_idxs(),
-            p.get_lambda_offset_idxs(),
             p.get_beta(),
             p.get_cutoff(),
         )
 
     def to_reference(self):
-        def U(conf, params, box, lam):
-            w_coords = compute_lifting_parameter(lam, self.lambda_plane_idxs, self.lambda_offset_idxs, self.cutoff)
+        def U(conf, params, box):
             num_atoms, _ = conf.shape
 
             vdW, electrostatics = ref_nonbonded.nonbonded_interaction_groups(
@@ -316,7 +294,6 @@ class NonbondedInteractionGroup:
                 np.setdiff1d(jnp.arange(num_atoms), self.row_atom_idxs),
                 self.beta,
                 self.cutoff,
-                w_coords,
             )
             return jnp.sum(vdW + electrostatics)
 
@@ -324,9 +301,8 @@ class NonbondedInteractionGroup:
 
     def to_gpu(self):
         return gpu.NonbondedInteractionGroup(
+            self.num_atoms,
             self.row_atom_idxs,
-            self.lambda_plane_idxs,
-            self.lambda_offset_idxs,
             self.beta,
             self.cutoff,
         )
@@ -336,8 +312,6 @@ class NonbondedInteractionGroup:
 class NonbondedPairList:
     idxs: Array
     rescale_mask: Array
-    lambda_plane_idxs: Array
-    lambda_offset_idxs: Array
     beta: float
     cutoff: float
 
@@ -346,15 +320,12 @@ class NonbondedPairList:
         return cls(
             p.get_idxs(),
             p.get_rescale_mask(),
-            p.get_lambda_plane_idxs(),
-            p.get_lambda_offset_idxs(),
             p.get_beta(),
             p.get_cutoff(),
         )
 
     def to_reference(self):
-        def U(conf, params, box, lam):
-            w_coords = compute_lifting_parameter(lam, self.lambda_plane_idxs, self.lambda_offset_idxs, self.cutoff)
+        def U(conf, params, box):
             vdW, electrostatics = ref_nonbonded.nonbonded_on_specific_pairs(
                 conf,
                 params,
@@ -362,7 +333,6 @@ class NonbondedPairList:
                 self.idxs,
                 self.beta,
                 self.cutoff,
-                w_coords,
                 self.rescale_mask,
             )
             return vdW.sum() + electrostatics.sum()
@@ -373,8 +343,6 @@ class NonbondedPairList:
         return gpu.NonbondedPairList(
             self.idxs,
             self.rescale_mask,
-            self.lambda_plane_idxs,
-            self.lambda_offset_idxs,
             self.beta,
             self.cutoff,
         )
@@ -383,22 +351,20 @@ class NonbondedPairList:
 @dataclass
 class NonbondedPairListPrecomputed:
     idxs: Array
-    offsets: Array
     beta: float
     cutoff: float
 
     @classmethod
     def from_gpu(cls, p: gpu.NonbondedPairListPrecomputed):
-        return cls(p.get_idxs(), p.get_offsets(), p.get_beta(), p.get_cutoff())
+        return cls(p.get_idxs(), p.get_beta(), p.get_cutoff())
 
     def to_reference(self):
-        def U(conf, params, box, _):
+        def U(conf, params, box):
             vdW, electrostatics = ref_nonbonded.nonbonded_on_precomputed_pairs(
                 conf,
                 params,
                 box,
                 self.idxs,
-                self.offsets,
                 self.beta,
                 self.cutoff,
             )
@@ -407,7 +373,7 @@ class NonbondedPairListPrecomputed:
         return U
 
     def to_gpu(self):
-        return gpu.NonbondedPairListPrecomputed(self.idxs, self.offsets, self.beta, self.cutoff)
+        return gpu.NonbondedPairListPrecomputed(self.idxs, self.beta, self.cutoff)
 
 
 @dataclass
@@ -425,8 +391,8 @@ class SummedPotential:
         U_fns = [p.to_reference() for p in self.potentials]
         shapes = [ps.shape for ps in self.params_init]
 
-        def U(conf, params, box, lam):
-            return ref_summed.summed_potential(conf, params, box, lam, U_fns, shapes)
+        def U(conf, params, box):
+            return ref_summed.summed_potential(conf, params, box, U_fns, shapes)
 
         return U
 

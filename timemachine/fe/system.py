@@ -125,7 +125,6 @@ class VacuumSystem:
         nbpl_U = functools.partial(
             nonbonded.nonbonded_on_precomputed_pairs,
             pairs=np.array(self.nonbonded.get_idxs()),
-            offsets=jnp.array(self.nonbonded.get_offsets()),
             params=jnp.array(self.nonbonded.params),
             box=None,
             beta=self.nonbonded.get_beta(),

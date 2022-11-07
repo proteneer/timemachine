@@ -2,14 +2,17 @@
 
 #include "nonbonded_common.cuh"
 
+// Shape of parameter array is identical to other nonbonded variants
+// except that rows map to pairs instead of individual atoms
+static const int PARAMS_PER_PAIR = PARAMS_PER_ATOM;
+
 template <typename RealType>
 void __global__ k_nonbonded_precomputed(
-    const int M,                          // number of pairs
-    const double *__restrict__ coords,    // [N, 3] coordinates
-    const double *__restrict__ params,    // [M, 3] q_ij, s_ij, e_ij
-    const double *__restrict__ box,       // box vectors
-    const double *__restrict__ w_offsets, // [M] for vdw and electrostatics
-    const int *__restrict__ pair_idxs,    // [M, 2] pair-list of atoms
+    const int M,                       // number of pairs
+    const double *__restrict__ coords, // [N, 3] coordinates
+    const double *__restrict__ params, // [M, 4] q_ij, s_ij, e_ij, w_offset_ij
+    const double *__restrict__ box,    // box vectors
+    const int *__restrict__ pair_idxs, // [M, 2] pair-list of atoms
     const double beta,
     const double cutoff,
     unsigned long long *__restrict__ du_dx,
@@ -21,13 +24,16 @@ void __global__ k_nonbonded_precomputed(
         return;
     }
 
-    RealType q_ij = params[pair_idx * 3 + 0];
-    RealType sig_ij = params[pair_idx * 3 + 1];
-    RealType eps_ij = params[pair_idx * 3 + 2];
+    int params_ij_idx = pair_idx * PARAMS_PER_PAIR;
+    RealType q_ij = params[params_ij_idx + PARAM_OFFSET_CHARGE];
+    RealType sig_ij = params[params_ij_idx + PARAM_OFFSET_SIG];
+    RealType eps_ij = params[params_ij_idx + PARAM_OFFSET_EPS];
+    RealType delta_w = params[params_ij_idx + PARAM_OFFSET_W];
 
     unsigned long long g_q_ij = 0;
     unsigned long long g_sig_ij = 0;
     unsigned long long g_eps_ij = 0;
+    unsigned long long g_dw_ij = 0;
 
     int atom_i_idx = pair_idxs[pair_idx * 2 + 0];
 
@@ -71,8 +77,6 @@ void __global__ k_nonbonded_precomputed(
 
     unsigned long long energy = 0;
 
-    RealType delta_w = w_offsets[pair_idx];
-
     RealType d_ij = sqrt(delta_x * delta_x + delta_y * delta_y + delta_z * delta_z + delta_w * delta_w);
 
     if (d_ij >= cutoff) {
@@ -99,6 +103,7 @@ void __global__ k_nonbonded_precomputed(
 
         // du/dp
         g_q_ij += FLOAT_TO_FIXED_DU_DP<RealType, FIXED_EXPONENT_DU_DCHARGE>(erfc(beta * d_ij) / d_ij);
+        g_dw_ij += FLOAT_TO_FIXED_DU_DP<RealType, FIXED_EXPONENT_DU_DW>(du_dr * delta_w / d_ij);
     }
 
     if (eps_ij != 0 && sig_ij != 0) {
@@ -122,12 +127,14 @@ void __global__ k_nonbonded_precomputed(
 
         g_eps_ij += FLOAT_TO_FIXED_DU_DP<RealType, FIXED_EXPONENT_DU_DEPS>(du_de);
         g_sig_ij += FLOAT_TO_FIXED_DU_DP<RealType, FIXED_EXPONENT_DU_DSIG>(du_ds);
+        g_dw_ij += FLOAT_TO_FIXED_DU_DP<RealType, FIXED_EXPONENT_DU_DW>(du_dr * delta_w / d_ij);
     }
 
     if (du_dp) {
-        atomicAdd(du_dp + pair_idx * 3 + 0, g_q_ij);
-        atomicAdd(du_dp + pair_idx * 3 + 1, g_sig_ij);
-        atomicAdd(du_dp + pair_idx * 3 + 2, g_eps_ij);
+        atomicAdd(du_dp + params_ij_idx + PARAM_OFFSET_CHARGE, g_q_ij);
+        atomicAdd(du_dp + params_ij_idx + PARAM_OFFSET_SIG, g_sig_ij);
+        atomicAdd(du_dp + params_ij_idx + PARAM_OFFSET_EPS, g_eps_ij);
+        atomicAdd(du_dp + params_ij_idx + PARAM_OFFSET_W, g_dw_ij);
     }
 
     if (du_dx) {

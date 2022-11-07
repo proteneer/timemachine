@@ -139,7 +139,7 @@ def test_reference_langevin_integrator_with_custom_ops():
     box = 100 * np.eye(3)
 
     def custom_op_force_component(coords):
-        du_dxs = np.array([bp.execute(coords, box, 0.5)[0] for bp in impls])
+        du_dxs = np.array([bp.execute(coords, box)[0] for bp in impls])
         return -np.sum(du_dxs, 0)
 
     def jax_restraint(coords):

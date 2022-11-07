@@ -67,7 +67,6 @@ def align_mols_by_core(
         fb.to_reference(),
         params=jnp.array(restraint_params),
         box=None,
-        lam=0.0,
     )
 
     def combined_U(x):

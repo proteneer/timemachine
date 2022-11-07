@@ -19,20 +19,20 @@ template <typename RealType> Neighborlist<RealType>::Neighborlist(const int N) :
     const unsigned long long MAX_ATOM_BUFFER = MAX_TILE_BUFFER * tpb;
 
     // interaction buffers
-    gpuErrchk(cudaMalloc(&d_ixn_count_, 1 * sizeof(*d_ixn_count_)));
-    gpuErrchk(cudaMalloc(&d_ixn_tiles_, MAX_TILE_BUFFER * sizeof(*d_ixn_tiles_)));
-    gpuErrchk(cudaMalloc(&d_ixn_atoms_, MAX_ATOM_BUFFER * sizeof(*d_ixn_atoms_)));
-    gpuErrchk(cudaMalloc(&d_trim_atoms_, column_blocks * Y * tpb * sizeof(*d_trim_atoms_)));
+    cudaSafeMalloc(&d_ixn_count_, 1 * sizeof(*d_ixn_count_));
+    cudaSafeMalloc(&d_ixn_tiles_, MAX_TILE_BUFFER * sizeof(*d_ixn_tiles_));
+    cudaSafeMalloc(&d_ixn_atoms_, MAX_ATOM_BUFFER * sizeof(*d_ixn_atoms_));
+    cudaSafeMalloc(&d_trim_atoms_, column_blocks * Y * tpb * sizeof(*d_trim_atoms_));
 
     // bounding box buffers
-    gpuErrchk(cudaMalloc(&d_row_block_bounds_ctr_, column_blocks * 3 * sizeof(*d_row_block_bounds_ctr_)));
-    gpuErrchk(cudaMalloc(&d_row_block_bounds_ext_, column_blocks * 3 * sizeof(*d_row_block_bounds_ext_)));
-    gpuErrchk(cudaMalloc(&d_column_block_bounds_ctr_, column_blocks * 3 * sizeof(*d_column_block_bounds_ctr_)));
-    gpuErrchk(cudaMalloc(&d_column_block_bounds_ext_, column_blocks * 3 * sizeof(*d_column_block_bounds_ext_)));
+    cudaSafeMalloc(&d_row_block_bounds_ctr_, column_blocks * 3 * sizeof(*d_row_block_bounds_ctr_));
+    cudaSafeMalloc(&d_row_block_bounds_ext_, column_blocks * 3 * sizeof(*d_row_block_bounds_ext_));
+    cudaSafeMalloc(&d_column_block_bounds_ctr_, column_blocks * 3 * sizeof(*d_column_block_bounds_ctr_));
+    cudaSafeMalloc(&d_column_block_bounds_ext_, column_blocks * 3 * sizeof(*d_column_block_bounds_ext_));
 
     // Row and column indice arrays
-    gpuErrchk(cudaMalloc(&d_column_idxs_, max_size_ * sizeof(*d_column_idxs_)));
-    gpuErrchk(cudaMalloc(&d_row_idxs_, max_size_ * sizeof(*d_row_idxs_)));
+    cudaSafeMalloc(&d_column_idxs_, max_size_ * sizeof(*d_column_idxs_));
+    cudaSafeMalloc(&d_row_idxs_, max_size_ * sizeof(*d_row_idxs_));
 
     this->reset_row_idxs();
 }

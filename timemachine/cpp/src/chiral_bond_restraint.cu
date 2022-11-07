@@ -25,10 +25,10 @@ ChiralBondRestraint<RealType>::ChiralBondRestraint(const std::vector<int> &idxs,
         }
     }
 
-    gpuErrchk(cudaMalloc(&d_idxs_, R_ * 4 * sizeof(*d_idxs_)));
+    cudaSafeMalloc(&d_idxs_, R_ * 4 * sizeof(*d_idxs_));
     gpuErrchk(cudaMemcpy(d_idxs_, &idxs[0], R_ * 4 * sizeof(*d_idxs_), cudaMemcpyHostToDevice));
 
-    gpuErrchk(cudaMalloc(&d_signs_, R_ * sizeof(*d_signs_)));
+    cudaSafeMalloc(&d_signs_, R_ * sizeof(*d_signs_));
     gpuErrchk(cudaMemcpy(d_signs_, &signs[0], R_ * sizeof(*d_signs_), cudaMemcpyHostToDevice));
 };
 
@@ -44,10 +44,8 @@ void ChiralBondRestraint<RealType>::execute_device(
     const double *d_x,
     const double *d_p,
     const double *d_box,
-    const double lambda,
     unsigned long long *d_du_dx,
     unsigned long long *d_du_dp,
-    unsigned long long *d_du_dl,
     unsigned long long *d_u,
     cudaStream_t stream) {
 
@@ -62,7 +60,7 @@ void ChiralBondRestraint<RealType>::execute_device(
         const int blocks = ceil_divide(R_, tpb);
 
         k_chiral_bond_restraint<RealType>
-            <<<blocks, tpb, 0, stream>>>(R_, d_x, d_p, d_idxs_, d_signs_, d_du_dx, d_du_dp, d_du_dl, d_u);
+            <<<blocks, tpb, 0, stream>>>(R_, d_x, d_p, d_idxs_, d_signs_, d_du_dx, d_du_dp, d_u);
         gpuErrchk(cudaPeekAtLastError());
     }
 };

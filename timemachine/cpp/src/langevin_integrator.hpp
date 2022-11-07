@@ -27,30 +27,17 @@ public:
 
     virtual ~LangevinIntegrator();
 
-    virtual void step_fwd(
-        std::vector<BoundPotential *> &bps,
-        double lamb,
-        double *d_x_t,
-        double *d_v_t,
-        double *d_box_t_,
-        unsigned long long *d_du_dl,
-        cudaStream_t stream) override;
+    virtual void
+    step_fwd(std::vector<BoundPotential *> &bps, double *d_x_t, double *d_v_t, double *d_box_t_, cudaStream_t stream)
+        override;
 
-    virtual void initialize(
-        std::vector<BoundPotential *> &bps,
-        double lamb,
-        double *d_x_t,
-        double *d_v_t,
-        double *d_box_t,
-        cudaStream_t stream) override;
+    virtual void
+    initialize(std::vector<BoundPotential *> &bps, double *d_x_t, double *d_v_t, double *d_box_t, cudaStream_t stream)
+        override;
 
-    virtual void finalize(
-        std::vector<BoundPotential *> &bps,
-        double lamb,
-        double *d_x_t,
-        double *d_v_t,
-        double *d_box_t,
-        cudaStream_t stream) override;
+    virtual void
+    finalize(std::vector<BoundPotential *> &bps, double *d_x_t, double *d_v_t, double *d_box_t, cudaStream_t stream)
+        override;
 };
 
 } // end namespace timemachine

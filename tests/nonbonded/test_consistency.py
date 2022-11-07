@@ -2,6 +2,7 @@ from typing import Iterable, Tuple
 
 import numpy as np
 import pytest
+from common import gen_nonbonded_params_with_4d_offsets
 
 from timemachine.lib.potentials import (
     FanoutSummedPotential,
@@ -44,38 +45,19 @@ def test_nonbonded_consistency(
         example_nonbonded_potential.get_scale_factors(),
     )
 
-    lambda_plane_idxs = rng.integers(-2, 3, size=(num_atoms,), dtype=np.int32)
-    lambda_offset_idxs = rng.integers(-2, 3, size=(num_atoms,), dtype=np.int32)
-
     ligand_idxs = rng.choice(num_atoms, size=(num_atoms_ligand,), replace=False).astype(np.int32)
     host_idxs = np.setdiff1d(np.arange(num_atoms), ligand_idxs).astype(np.int32)
 
-    ref_impl = Nonbonded(
-        exclusion_idxs, exclusion_scales, lambda_plane_idxs, lambda_offset_idxs, beta, cutoff
-    ).unbound_impl(precision)
+    ref_impl = Nonbonded(num_atoms, exclusion_idxs, exclusion_scales, beta, cutoff).unbound_impl(precision)
 
     def make_allpairs_potential(atom_idxs):
-        return NonbondedAllPairs(
-            lambda_plane_idxs,
-            lambda_offset_idxs,
-            beta,
-            cutoff,
-            atom_idxs,
-        )
+        return NonbondedAllPairs(num_atoms, beta, cutoff, atom_idxs)
 
     def make_ixngroup_potential(ligand_idxs):
-        return NonbondedInteractionGroup(
-            ligand_idxs,
-            lambda_plane_idxs,
-            lambda_offset_idxs,
-            beta,
-            cutoff,
-        )
+        return NonbondedInteractionGroup(num_atoms, ligand_idxs, beta, cutoff)
 
     def make_pairlist_potential(exclusion_idxs, exclusion_scales):
-        return NonbondedPairListNegated(
-            exclusion_idxs, exclusion_scales, lambda_plane_idxs, lambda_offset_idxs, beta, cutoff
-        )
+        return NonbondedPairListNegated(exclusion_idxs, exclusion_scales, beta, cutoff)
 
     test_impl = FanoutSummedPotential(
         [
@@ -87,13 +69,12 @@ def test_nonbonded_consistency(
     ).unbound_impl(precision)
 
     def test():
-        for lam in [0.0, 0.1]:
-            du_dx_ref, du_dp_ref, du_dl_ref, u_ref = ref_impl.execute(conf, params, example_box, lam)
-            du_dx_test, du_dp_test, du_dl_test, u_test = test_impl.execute(conf, params, example_box, lam)
+        for params_ in gen_nonbonded_params_with_4d_offsets(rng, params, cutoff):
+            du_dx_ref, du_dp_ref, u_ref = ref_impl.execute(conf, params_, example_box)
+            du_dx_test, du_dp_test, u_test = test_impl.execute(conf, params_, example_box)
 
             np.testing.assert_array_equal(du_dx_test, du_dx_ref)
             np.testing.assert_array_equal(du_dp_test, du_dp_ref)
-            np.testing.assert_array_equal(du_dl_test, du_dl_ref)
             assert u_test == u_ref
 
     test()

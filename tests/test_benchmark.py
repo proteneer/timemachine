@@ -47,7 +47,6 @@ def generate_hif2a_frames(n_frames: int, frame_interval: int, seed=None, barosta
 
     temperature = 300
     pressure = 1.0
-    lamb = 0.0
 
     harmonic_bond_potential = initial_state.potentials[0]
     bond_list = get_bond_list(harmonic_bond_potential)
@@ -86,7 +85,7 @@ def generate_hif2a_frames(n_frames: int, frame_interval: int, seed=None, barosta
         barostat=baro_impl,
     )
     steps = n_frames * frame_interval
-    _, coords, boxes = ctxt.multiple_steps(np.ones(steps) * lamb, 0, frame_interval)
+    coords, boxes = ctxt.multiple_steps(steps, frame_interval)
     assert coords.shape[0] == n_frames, f"Got {coords.shape[0]} frames, expected {n_frames}"
     return initial_state.potentials, coords, boxes, ligand_idxs
 
@@ -103,7 +102,6 @@ def benchmark_potential(
     num_batches=5,
     compute_du_dx=True,
     compute_du_dp=True,
-    compute_du_dl=True,
     compute_u=True,
 ):
     if precision == np.float32:
@@ -119,14 +117,12 @@ def benchmark_potential(
     runs_per_batch = frames * param_batches * num_lambs
     for _ in range(num_batches):
         batch_start = time.time()
-        _, _, _, _ = unbound.execute_selective_batch(
+        _, _, _ = unbound.execute_selective_batch(
             coords,
             params,
             boxes,
-            lambdas,
             compute_du_dx,
             compute_du_dp,
-            compute_du_dl,
             compute_u,
         )
         batch_end = time.time()
@@ -145,7 +141,6 @@ def benchmark_potential(
 def benchmark(
     label,
     masses,
-    lamb,
     x0,
     v0,
     box,
@@ -154,7 +149,6 @@ def benchmark(
     verbose=True,
     num_batches=100,
     steps_per_batch=1000,
-    compute_du_dl_interval=0,
     barostat_interval=0,
 ):
     """
@@ -203,10 +197,8 @@ def benchmark(
 
     batch_times = []
 
-    lambda_schedule = np.ones(steps_per_batch) * lamb
-
     # run once before timer starts
-    ctxt.multiple_steps(lambda_schedule, compute_du_dl_interval)
+    ctxt.multiple_steps(steps_per_batch)
 
     start = time.time()
 
@@ -214,7 +206,7 @@ def benchmark(
 
         # time the current batch
         batch_start = time.time()
-        du_dls, _, _ = ctxt.multiple_steps(lambda_schedule, compute_du_dl_interval)
+        _, _ = ctxt.multiple_steps(steps_per_batch)
         batch_end = time.time()
 
         delta = batch_end - batch_start
@@ -253,7 +245,6 @@ def benchmark_dhfr(verbose=False, num_batches=100, steps_per_batch=1000):
     benchmark(
         "dhfr-apo",
         host_masses,
-        0.0,
         x0,
         v0,
         box,
@@ -265,7 +256,6 @@ def benchmark_dhfr(verbose=False, num_batches=100, steps_per_batch=1000):
     benchmark(
         "dhfr-apo-barostat-interval-25",
         host_masses,
-        0.0,
         x0,
         v0,
         box,
@@ -278,7 +268,6 @@ def benchmark_dhfr(verbose=False, num_batches=100, steps_per_batch=1000):
     benchmark(
         "dhfr-apo-hmr-barostat-interval-25",
         host_masses,
-        0.0,
         x0,
         v0,
         box,
@@ -298,7 +287,7 @@ def prepare_hif2a_initial_state(st, host_system, host_coords, host_box):
     lamb = 0.1
     initial_state = rbfe.setup_initial_states(st, host_config, temperature, [lamb], seed=2022)[0]
     bound_impls = [p.bound_impl(np.float32) for p in initial_state.potentials]
-    val_and_grad_fn = minimizer.get_val_and_grad_fn(bound_impls, initial_state.box0, initial_state.lamb)
+    val_and_grad_fn = minimizer.get_val_and_grad_fn(bound_impls, initial_state.box0)
     assert np.all(np.isfinite(initial_state.x0)), "Initial coordinates contain nan or inf"
     ligand_coords = initial_state.x0[initial_state.ligand_idxs]
     d_ij = cdist(ligand_coords, initial_state.x0)
@@ -341,7 +330,6 @@ def benchmark_hif2a(verbose=False, num_batches=100, steps_per_batch=1000):
         benchmark(
             stage + "-apo",
             host_masses,
-            0.0,
             x0,
             v0,
             host_box,
@@ -353,7 +341,6 @@ def benchmark_hif2a(verbose=False, num_batches=100, steps_per_batch=1000):
         benchmark(
             stage + "-apo-barostat-interval-25",
             host_masses,
-            0.0,
             x0,
             v0,
             host_box,
@@ -370,7 +357,6 @@ def benchmark_hif2a(verbose=False, num_batches=100, steps_per_batch=1000):
         benchmark(
             stage + "-rbfe",
             initial_state.integrator.masses,
-            initial_state.lamb,
             initial_state.x0,
             initial_state.v0,
             host_box,
@@ -403,9 +389,8 @@ def test_nonbonded_interaction_group_potential(hi2fa_test_frames):
     nonbonded_params = np.stack([nonbonded_potential.params] * num_param_batches)
 
     potential = NonbondedInteractionGroup(
+        nonbonded_potential.get_num_atoms(),
         ligand_idxs,
-        nonbonded_potential.get_lambda_plane_idxs(),
-        nonbonded_potential.get_lambda_offset_idxs(),
         beta,
         cutoff,
     )
@@ -437,10 +422,9 @@ def test_nonbonded_potential(hi2fa_test_frames):
     precisions = [np.float32, np.float64]
 
     potential = Nonbonded(
+        nonbonded_pot.get_num_atoms(),
         nonbonded_pot.get_exclusion_idxs(),
         nonbonded_pot.get_scale_factors(),
-        nonbonded_pot.get_lambda_plane_idxs(),
-        nonbonded_pot.get_lambda_offset_idxs(),
         nonbonded_pot.get_beta(),
         nonbonded_pot.get_cutoff(),
     )

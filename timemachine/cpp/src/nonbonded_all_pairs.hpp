@@ -16,9 +16,6 @@ private:
     const int N_; // total number of atoms, i.e. first dimension of input coords, params
     const int K_; // number of interacting atoms, K_ <= N_
 
-    int *d_lambda_plane_idxs_;
-    int *d_lambda_offset_idxs_;
-
     double beta_;
     double cutoff_;
 
@@ -33,8 +30,6 @@ private:
     int *d_rebuild_nblist_; // whether or not we have to rebuild the nblist
     int *p_rebuild_nblist_; // pinned
 
-    double *d_w_; // 4D coordinates
-
     // "gathered" arrays represent the subset of atoms specified by
     // atom_idxs (if the latter is specified, otherwise all atoms).
     //
@@ -44,7 +39,6 @@ private:
     // specified)
     unsigned int *d_sorted_atom_idxs_; // [K_] indices of interacting atoms, sorted by hilbert curve index
     double *d_gathered_x_;             // sorted coordinates for subset of atoms
-    double *d_gathered_w_;             // sorted 4D coordinates for subset of atoms
     double *d_gathered_p_;             // sorted parameters for subset of atoms
     unsigned long long *d_gathered_du_dx_;
     unsigned long long *d_gathered_du_dp_;
@@ -70,11 +64,7 @@ public:
     void disable_hilbert_sort();
 
     NonbondedAllPairs(
-        const std::vector<int> &lambda_plane_idxs,  // N
-        const std::vector<int> &lambda_offset_idxs, // N
-        const double beta,
-        const double cutoff,
-        const std::optional<std::set<int>> &atom_idxs);
+        const int N, const double beta, const double cutoff, const std::optional<std::set<int>> &atom_idxs);
 
     ~NonbondedAllPairs();
 
@@ -84,10 +74,8 @@ public:
         const double *d_x,
         const double *d_p,
         const double *d_box,
-        const double lambda,
         unsigned long long *d_du_dx,
         unsigned long long *d_du_dp,
-        unsigned long long *d_du_dl,
         unsigned long long *d_u,
         cudaStream_t stream) override;
 

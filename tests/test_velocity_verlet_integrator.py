@@ -21,22 +21,22 @@ def setup_velocity_verlet(bps, x0, box, dt, masses):
     return intg, context
 
 
-def assert_reversible(x0, v0, update_fxn, lambdas, atol=1e-10):
+def assert_reversible(x0, v0, update_fxn, atol=1e-10):
     """Define a fxn self_inverse as composition of flip_velocities and update_fxn,
     then assert that
     * self_inverse is its own inverse
     * self_inverse is not trivial (aka not the identity function)
     """
 
-    def self_inverse(x, v, lamb_sched):
+    def self_inverse(x, v):
         """integrate forward in time, flip v
         (expected to be an "involution" i.e. its own inverse)"""
-        x_next, v_next = update_fxn(x, v, lamb_sched)
-        return x_next, -v_next, lamb_sched[::-1]
+        x_next, v_next = update_fxn(x, v)
+        return x_next, -v_next
 
     # assert "self_inverse" is really its own inverse
-    x1, v1, rev_lamb = self_inverse(x0, v0, lambdas)
-    x0_, v0_, _ = self_inverse(x1, v1, rev_lamb)
+    x1, v1 = self_inverse(x0, v0)
+    x0_, v0_ = self_inverse(x1, v1)
 
     np.testing.assert_allclose(x0_, x0, atol=atol)
     np.testing.assert_allclose(v0_, v0, atol=atol)
@@ -46,46 +46,46 @@ def assert_reversible(x0, v0, update_fxn, lambdas, atol=1e-10):
     assert (not close(x1, x0)) and (not close(v1, v0))
 
 
-def assert_reversibility_using_step_implementations(context, schedule, atol=1e-10):
+def assert_reversibility_using_step_implementations(context, n_steps, atol=1e-10):
     """Assert reversibility of .step and .multiple_steps implementations"""
 
     x0 = context.get_x_t()
     v0 = context.get_v_t()
 
     # check step implementation
-    def step_update(x, v, lamb_sched):
+    def step_update(x, v):
         context.set_x_t(x)
         context.set_v_t(v)
-        context.initialize(lamb_sched[0])
-        for lamb in lamb_sched:
-            context.step(lamb)
+        context.initialize()
+        for _ in range(n_steps):
+            context.step()
         # Must call finalize in case of using step
-        context.finalize(lamb_sched[-1])
+        context.finalize()
         x = context.get_x_t()
         v = context.get_v_t()
         return x, v
 
-    assert_reversible(x0, v0, step_update, schedule, atol=atol)
+    assert_reversible(x0, v0, step_update, atol=atol)
 
     # check multiple_steps implementation
-    def multiple_steps_update(x, v, lamb_sched):
+    def multiple_steps_update(x, v):
         context.set_x_t(x)
         context.set_v_t(v)
-        _, xs, _ = context.multiple_steps(lamb_sched)
+        xs, _ = context.multiple_steps(n_steps)
         v = context.get_v_t()
         return xs[-1], v
 
-    assert_reversible(x0, v0, multiple_steps_update, schedule, atol=atol)
+    assert_reversible(x0, v0, multiple_steps_update, atol=atol)
 
-    def multiple_steps_U_update(x, v, lamb_sched):
+    def multiple_steps_U_update(x, v):
         # Doesn't use the lamb sched, as multiple_steps_U is always run as a equilibrium simulation
         context.set_x_t(x)
         context.set_v_t(v)
-        _, xs, _ = context.multiple_steps_U(0.0, len(lamb_sched), [], 0, 0)
+        _, xs, _ = context.multiple_steps_U(n_steps, 0, 0)
         v = context.get_v_t()
         return xs[-1], v
 
-    assert_reversible(x0, v0, multiple_steps_U_update, schedule, atol=atol)
+    assert_reversible(x0, v0, multiple_steps_U_update, atol=atol)
 
 
 def test_reversibility():
@@ -107,13 +107,12 @@ def test_reversibility():
         # range of values in the velocities. Setting the seed
         # here keeps the range the same for all n_step values.
         np.random.seed(seed)
-        lamb_sched = np.linspace(0, 1, n_steps)
         v0 = np.random.randn(*coords.shape)
         intg, ctxt = setup_velocity_verlet(bound_potentials, coords, box, dt, masses)  # noqa
         ctxt.set_v_t(v0)
 
         # check "public" .step and .multiple_steps implementations
-        assert_reversibility_using_step_implementations(ctxt, lamb_sched, atol=1e-10)
+        assert_reversibility_using_step_implementations(ctxt, n_steps, atol=1e-10)
 
 
 def test_matches_reference():
@@ -124,14 +123,12 @@ def test_matches_reference():
 
     dt = 1.5e-3
 
-    lamb = 0.0
-
     summed_potential = SummedPotential(unbound_potentials, sys_params)
     summed_potential.bind(np.concatenate([param.reshape(-1) for param in sys_params]))
     bound_summed = summed_potential.bound_impl(np.float32)
 
     def force(coords):
-        du_dxs = bound_summed.execute(coords, box, lamb)[0]
+        du_dxs = bound_summed.execute(coords, box)[0]
         return -du_dxs
 
     intg = ReferenceVelocityVerlet(force, masses, dt)
@@ -149,7 +146,7 @@ def test_matches_reference():
     np.testing.assert_allclose(ref_xs[0], coords, atol=1e-10)
     np.testing.assert_allclose(ref_xs[0], ctxt.get_x_t(), atol=1e-10)
 
-    _, xs, _ = ctxt.multiple_steps(np.ones(n_steps) * lamb, 0, 1)
+    xs, _ = ctxt.multiple_steps(n_steps, 1)
     assert xs.shape[0] == n_steps
     v1 = ctxt.get_v_t()
     atol = 1e-5
@@ -171,17 +168,17 @@ def test_initialization_and_finalization():
 
     intg, ctxt = setup_velocity_verlet(bound_potentials, coords, box, dt, masses)  # noqa
     with pytest.raises(RuntimeError) as e:
-        ctxt.finalize(0.0)
+        ctxt.finalize()
     assert "not initialized" in str(e.value)
 
-    ctxt.initialize(0.0)
+    ctxt.initialize()
 
     with pytest.raises(RuntimeError) as e:
-        ctxt.initialize(0.0)
+        ctxt.initialize()
     assert "initialized twice" in str(e.value)
 
-    ctxt.finalize(0.0)
+    ctxt.finalize()
 
     with pytest.raises(RuntimeError) as e:
-        ctxt.finalize(0.0)
+        ctxt.finalize()
     assert "not initialized" in str(e.value)

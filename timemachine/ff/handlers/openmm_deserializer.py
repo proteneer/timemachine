@@ -178,12 +178,16 @@ def deserialize_system(system, cutoff):
 
             exclusion_idxs = np.array(exclusion_idxs, dtype=np.int32)
 
-            lambda_plane_idxs = np.zeros(N, dtype=np.int32)
-            lambda_offset_idxs = np.zeros(N, dtype=np.int32)
-
             # cutoff = 1000.0
 
-            nb_params = np.concatenate([np.expand_dims(charge_params, axis=1), lj_params], axis=1)
+            nb_params = np.concatenate(
+                [
+                    np.expand_dims(charge_params, axis=1),
+                    lj_params,
+                    np.zeros((N, 1)),  # 4D coordinates
+                ],
+                axis=1,
+            )
 
             # optimizations
             nb_params[:, 1] = nb_params[:, 1] / 2
@@ -194,11 +198,7 @@ def deserialize_system(system, cutoff):
             # use the same scale factors for electrostatics and lj
             scale_factors = np.stack([scale_factors, scale_factors], axis=1)
 
-            bps.append(
-                potentials.Nonbonded(
-                    exclusion_idxs, scale_factors, lambda_plane_idxs, lambda_offset_idxs, beta, cutoff
-                ).bind(nb_params)
-            )
+            bps.append(potentials.Nonbonded(N, exclusion_idxs, scale_factors, beta, cutoff).bind(nb_params))
 
             # nrg_fns.append(('Exclusions', (exclusion_idxs, scale_factors, es_scale_factors)))
 

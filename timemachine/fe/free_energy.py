@@ -1,19 +1,70 @@
+from dataclasses import dataclass
+from typing import List
+
 import numpy as np
 
 from timemachine.fe import topology
 from timemachine.fe.utils import get_mol_masses, get_romol_conf
 from timemachine.ff import ForcefieldParams
 from timemachine.ff.handlers import openmm_deserializer
+from timemachine.lib import LangevinIntegrator, MonteCarloBarostat
+from timemachine.lib.potentials import CustomOpWrapper
+
+
+class HostConfig:
+    def __init__(self, omm_system, conf, box):
+        self.omm_system = omm_system
+        self.conf = conf
+        self.box = box
+
+
+@dataclass
+class SimulationProtocol:
+    n_frames: int
+    n_eq_steps: int
+    steps_per_frame: int
+
+
+@dataclass
+class InitialState:
+    """
+    An initial contains everything that is needed to bitwise reproduce a trajectory given a SimulationProtocol
+
+    This object can be pickled safely.
+    """
+
+    potentials: List[CustomOpWrapper]
+    integrator: LangevinIntegrator
+    barostat: MonteCarloBarostat
+    x0: np.ndarray
+    v0: np.ndarray
+    box0: np.ndarray
+    lamb: float
+    ligand_idxs: np.ndarray
+
+
+@dataclass
+class SimulationResult:
+    all_dGs: List[np.ndarray]
+    all_errs: List[float]
+    overlaps_by_lambda: np.ndarray  # (L - 1,)
+    overlaps_by_lambda_by_component: np.ndarray  # (len(U_names), L - 1)
+    overlap_summary_png: bytes
+    overlap_detail_png: bytes
+    frames: List[np.ndarray]
+    boxes: List[np.ndarray]
+    initial_states: List[InitialState]
+    protocol: SimulationProtocol
 
 
 class BaseFreeEnergy:
     @staticmethod
-    def _get_system_params_and_potentials(ff_params: ForcefieldParams, topology):
+    def _get_system_params_and_potentials(ff_params: ForcefieldParams, topology, lamb: float):
         params_potential_pairs = [
             topology.parameterize_harmonic_bond(ff_params.hb_params),
             topology.parameterize_harmonic_angle(ff_params.ha_params),
             topology.parameterize_periodic_torsion(ff_params.pt_params, ff_params.it_params),
-            topology.parameterize_nonbonded(ff_params.q_params, ff_params.lj_params),
+            topology.parameterize_nonbonded(ff_params.q_params, ff_params.lj_params, lamb),
         ]
 
         params, potentials = zip(*params_potential_pairs)
@@ -38,7 +89,7 @@ class AbsoluteFreeEnergy(BaseFreeEnergy):
         self.mol = mol
         self.top = top
 
-    def prepare_host_edge(self, ff_params: ForcefieldParams, host_system):
+    def prepare_host_edge(self, ff_params: ForcefieldParams, host_system, lamb: float):
         """
         Prepares the host-guest system
 
@@ -49,6 +100,9 @@ class AbsoluteFreeEnergy(BaseFreeEnergy):
 
         host_system: openmm.System
             openmm System object to be deserialized.
+
+        lamb: float
+            alchemical parameter controlling 4D decoupling
 
         Returns
         -------
@@ -61,7 +115,7 @@ class AbsoluteFreeEnergy(BaseFreeEnergy):
         host_bps, host_masses = openmm_deserializer.deserialize_system(host_system, cutoff=1.2)
         hgt = topology.HostGuestTopology(host_bps, self.top)
 
-        final_params, final_potentials = self._get_system_params_and_potentials(ff_params, hgt)
+        final_params, final_potentials = self._get_system_params_and_potentials(ff_params, hgt, lamb)
         combined_masses = self._combine(ligand_masses, host_masses)
         return final_potentials, final_params, combined_masses
 
@@ -81,7 +135,7 @@ class AbsoluteFreeEnergy(BaseFreeEnergy):
 
         """
         ligand_masses = get_mol_masses(self.mol)
-        final_params, final_potentials = self._get_system_params_and_potentials(ff_params, self.top)
+        final_params, final_potentials = self._get_system_params_and_potentials(ff_params, self.top, 0.0)
         return final_potentials, final_params, ligand_masses
 
     def prepare_combined_coords(self, host_coords=None):
