@@ -3,7 +3,6 @@ from importlib import resources
 import numpy as np
 import pytest
 from jax import grad, jacfwd, jacrev, value_and_grad
-from rdkit import Chem
 from scipy.optimize import check_grad, minimize
 
 from timemachine.constants import DEFAULT_FF
@@ -177,7 +176,8 @@ def test_construct_differentiable_interface_fast():
 
 def test_absolute_vacuum():
     with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
-        mol = next(Chem.SDMolSupplier(str(path_to_ligand), removeHs=False))
+        mols = utils.read_sdf(path_to_ligand)
+    mol = mols[0]
 
     ff = Forcefield.load_from_file("smirnoff_1_1_0_ccc.py")
     ff_params = ff.get_params()
@@ -193,7 +193,8 @@ def test_absolute_vacuum():
 def test_vacuum_and_solvent_edge_types():
     """Ensure that the values returned by the vacuum and solvent edges are all of the same type."""
     with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
-        mol = next(Chem.SDMolSupplier(str(path_to_ligand), removeHs=False))
+        mols = utils.read_sdf(path_to_ligand)
+    mol = mols[0]
 
     ff = Forcefield.load_from_file("smirnoff_1_1_0_ccc.py")
     solvent_system, solvent_coords, solvent_box, _ = builders.build_water_system(3.0, ff.water_ff)

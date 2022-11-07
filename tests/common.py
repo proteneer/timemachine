@@ -15,6 +15,7 @@ from numpy.typing import NDArray
 from rdkit import Chem
 
 from timemachine.constants import ONE_4PI_EPS0
+from timemachine.fe.utils import read_sdf
 from timemachine.ff import Forcefield
 from timemachine.lib import potentials
 from timemachine.potentials import bonded, generic
@@ -37,11 +38,8 @@ def get_110_ccc_ff():
 
 
 def get_hif2a_ligands_as_sdf_file(num_mols: int) -> NamedTemporaryFile:
-    mols = []
     with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
-        suppl = Chem.SDMolSupplier(str(path_to_ligand), removeHs=False)
-        for _ in range(num_mols):
-            mols.append(next(suppl))
+        mols = read_sdf(path_to_ligand)
     temp_sdf = NamedTemporaryFile(suffix=".sdf")
     with Chem.SDWriter(temp_sdf.name) as writer:
         for mol in mols:

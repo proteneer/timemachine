@@ -1,10 +1,9 @@
 from importlib import resources
 
 import numpy as np
-from rdkit import Chem
 
 from timemachine.constants import DEFAULT_FF
-from timemachine.fe.utils import to_md_units
+from timemachine.fe.utils import read_sdf, to_md_units
 from timemachine.ff import Forcefield
 from timemachine.ff.handlers import openmm_deserializer
 from timemachine.md import builders, minimizer
@@ -19,9 +18,7 @@ def test_minimizer():
         )
 
     with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
-        suppl = Chem.SDMolSupplier(str(path_to_ligand), removeHs=False)
-
-    all_mols = [x for x in suppl]
+        all_mols = read_sdf(path_to_ligand)
     mol_a = all_mols[1]
     mol_b = all_mols[4]
 
@@ -36,9 +33,9 @@ def test_equilibrate_host():
     host_system, host_coords, host_box, _ = builders.build_water_system(4.0, ff.water_ff)
 
     with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
-        suppl = Chem.SDMolSupplier(str(path_to_ligand), removeHs=False)
+        mols = read_sdf(path_to_ligand)
 
-    mol = next(suppl)
+    mol = mols[0]
 
     coords, box = minimizer.equilibrate_host(mol, host_system, host_coords, 300, 1.0, ff, host_box, 25, seed=2022)
     assert coords.shape[0] == host_coords.shape[0] + mol.GetNumAtoms()

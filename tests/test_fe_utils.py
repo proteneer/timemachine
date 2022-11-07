@@ -44,8 +44,7 @@ def test_extract_delta_Us_from_U_knk():
 
 
 def test_image_molecules():
-    suppl = Chem.SDMolSupplier("tests/data/benzene_fluorinated.sdf", removeHs=False)
-    all_mols = [x for x in suppl]
+    all_mols = utils.read_sdf("tests/data/benzene_fluorinated.sdf")
     mol = all_mols[0]
     mol_coords = utils.get_romol_conf(mol)
 
@@ -130,4 +129,4 @@ def test_get_strained_atoms():
     x0 = utils.get_romol_conf(mol)
     x0[-2, :] = x0[-1, :] + 0.01
     utils.set_romol_conf(mol, x0)
-    assert model_utils.get_strained_atoms(mol, ff) == [10, 11]
+    assert model_utils.get_strained_atoms(mol, ff) == [4, 10, 11]

@@ -26,7 +26,7 @@ from timemachine.fe.single_topology import (
     setup_dummy_interactions_from_ff,
 )
 from timemachine.fe.system import convert_bps_into_system, minimize_scipy, simulate_system
-from timemachine.fe.utils import get_mol_name, get_romol_conf
+from timemachine.fe.utils import get_mol_name, get_romol_conf, read_sdf
 from timemachine.ff import Forcefield
 from timemachine.ff.handlers import openmm_deserializer
 from timemachine.md.builders import build_water_system
@@ -198,8 +198,7 @@ def test_hif2a_end_state_stability(num_pairs_to_setup=25, num_pairs_to_simulate=
     """
 
     with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
-        suppl = Chem.SDMolSupplier(str(path_to_ligand), removeHs=False)
-        mols = [m for m in suppl]
+        mols = read_sdf(path_to_ligand)
 
     pairs = [(mol_a, mol_b) for mol_a in mols for mol_b in mols]
 
@@ -294,8 +293,7 @@ def test_jax_transform_intermediate_potential():
         # NOTE: test system can probably be simplified; we just need
         # any SingleTopology and conformation
         with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
-            suppl = Chem.SDMolSupplier(str(path_to_ligand), removeHs=False)
-            mols = {get_mol_name(mol): mol for mol in suppl}
+            mols = {get_mol_name(mol): mol for mol in read_sdf(path_to_ligand)}
 
         mol_a = mols["206"]
         mol_b = mols["57"]
