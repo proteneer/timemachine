@@ -1,7 +1,7 @@
 import warnings
 from collections.abc import Iterable
 from functools import partial
-from typing import Any, Callable, List, Optional, Tuple
+from typing import Any, Callable, List, Tuple
 
 import jax.numpy as jnp
 import numpy as np
@@ -10,12 +10,12 @@ from rdkit import Chem
 
 from timemachine.fe import interpolate, system, topology, utils
 from timemachine.fe.dummy import canonicalize_bond, identify_dummy_groups, identify_root_anchors
+from timemachine.fe.lambda_schedule import construct_pre_optimized_relative_lambda_schedule
 from timemachine.fe.system import HostGuestSystem
 from timemachine.lib import potentials
 
 Array = Any
 Params = Array
-ParameterInterpolationFxn = Callable[[Params, Params, float], Params]
 
 
 class MultipleAnchorWarning(UserWarning):
@@ -521,18 +521,18 @@ def handle_ring_opening_closing(
         interpolated force constant
     """
 
-    def ring_closing(src_k, dst_k, lamb):
-        return interpolate.pad(f, src_k, dst_k, lamb, lambda_min, lambda_max)
+    def ring_closing(dst_k, lamb):
+        return interpolate.pad(f, 0.0, dst_k, lamb, lambda_min, lambda_max)
 
-    def ring_opening(src_k, dst_k, lamb):
-        return ring_closing(dst_k, src_k, 1.0 - lamb)
+    def ring_opening(src_k, lamb):
+        return ring_closing(src_k, 1.0 - lamb)
 
     return jnp.where(
         src_k == 0.0,
-        ring_closing(src_k, dst_k, lamb),
+        ring_closing(dst_k, lamb),
         jnp.where(
             dst_k == 0.0,
-            ring_opening(src_k, dst_k, lamb),
+            ring_opening(src_k, lamb),
             f(src_k, dst_k, lamb),
         ),
     )
@@ -728,6 +728,22 @@ def interpolate_periodic_torsion_params(src_params, dst_params, lamb, lambda_min
     return jnp.array([k, phase, src_period])
 
 
+def interpolate_w_coord(w0: float, w1: float, lamb: float):
+    """Interpolate 4D coordinate using schedule optimized for RBFE calculations.
+
+    Parameters
+    ----------
+    w0, w1 : float
+        w coordinates at lambda = 0 and 1 respectively
+
+    lamb : float
+        alchemical parameter
+    """
+    lambdas = construct_pre_optimized_relative_lambda_schedule(None)
+    x = jnp.linspace(0.0, 1.0, len(lambdas))
+    return interpolate.linear_interpolation(w0, w1, jnp.interp(lamb, x, lambdas))
+
+
 class AtomMapMixin:
     """
     A Mixin class containing the atom_mapping information. This Mixin sets up the following
@@ -809,7 +825,7 @@ class AtomMapMixin:
 
 
 class SingleTopology(AtomMapMixin):
-    def __init__(self, mol_a, mol_b, core, forcefield, lambda_angles=0.4, lambda_torsions=0.7):
+    def __init__(self, mol_a, mol_b, core, forcefield):
         """
         SingleTopology combines two molecules through a common core. The combined mol has
         atom indices laid out such that mol_a is identically mapped to the combined mol indices.
@@ -828,15 +844,6 @@ class SingleTopology(AtomMapMixin):
 
         forcefield: ff.Forcefield
             Forcefield to be used for parameterization.
-
-        lambda_angles, lambda_torsions: float
-            For ring opening/closing transformations, alchemical parameter values controlling the intervals over which
-            bonds, angles, and torsions are interpolated. Note that these have no effect on terms not involved in ring
-            opening/closing.
-
-            - Bonds are interpolated in the interval [0, lambda_angles]
-            - Angles are interpolated in the interval [lambda_angles, lambda_torsions]
-            - Torsions are interpolated in the interval [lambda_torsions, 1]
         """
         # initialize the mixin to get the a_to_c, b_to_c, c_to_a, c_to_b, and c_flags
         super().__init__(mol_a, mol_b, core)
@@ -852,28 +859,6 @@ class SingleTopology(AtomMapMixin):
         # setup end states
         self.src_system = self._setup_end_state_src()
         self.dst_system = self._setup_end_state_dst()
-
-        # setup default parameter interpolation functions
-        self.default_interpolate_harmonic_bond_params_fxn = partial(
-            interpolate_harmonic_bond_params,
-            k_min=0.1,  # ~ BOLTZ * (300 K) / (5 nm)^2
-            lambda_min=0.0,
-            lambda_max=lambda_angles,
-        )
-        self.default_interpolate_harmonic_angle_params_fxn = partial(
-            interpolate_harmonic_angle_params,
-            k_min=0.05,  # ~ BOLTZ * (300 K) / (2 * pi)^2
-            lambda_min=lambda_angles,
-            lambda_max=lambda_torsions,
-        )
-        self.default_interpolate_periodic_torsion_params_fxn = partial(
-            interpolate_periodic_torsion_params,
-            lambda_min=lambda_torsions,
-            lambda_max=1.0,
-        )
-        self.default_interpolate_nonbonded_params_fxn = interpolate.linear_interpolation
-        self.default_interpolate_chiral_atom_params_fxn = interpolate.linear_interpolation
-        self.default_interpolate_chiral_bond_params_fxn = interpolate.linear_interpolation
 
     def combine_masses(self):
         """
@@ -1005,7 +990,7 @@ class SingleTopology(AtomMapMixin):
 
         return src_cls_bond(np.array(bond_idxs)).bind(bond_params)
 
-    def _setup_intermediate_nonbonded_term(self, src_nonbonded, dst_nonbonded, lamb, align_fn, interpolate_fn):
+    def _setup_intermediate_nonbonded_term(self, src_nonbonded, dst_nonbonded, lamb, align_fn, interpolate_qlj_fn):
 
         assert src_nonbonded.get_beta() == dst_nonbonded.get_beta()
         assert src_nonbonded.get_cutoff() == dst_nonbonded.get_cutoff()
@@ -1021,13 +1006,18 @@ class SingleTopology(AtomMapMixin):
         pair_idxs = []
         pair_params = []
         for idxs, src_params, dst_params in pair_idxs_and_params:
+            src_qlj, src_w = src_params[:3], src_params[3]
+            dst_qlj, dst_w = dst_params[:3], dst_params[3]
 
-            if src_params == (0, 0, 0, 0):  # i.e. excluded in src state
-                new_params = (*dst_params[:3], (1 - lamb) * cutoff)
-            elif dst_params == (0, 0, 0, 0):
-                new_params = (*src_params[:3], lamb * cutoff)
+            if src_qlj == (0, 0, 0):  # i.e. excluded in src state
+                new_params = (*dst_qlj, interpolate_w_coord(cutoff, 0, lamb))
+            elif dst_qlj == (0, 0, 0):
+                new_params = (*src_qlj, interpolate_w_coord(0, cutoff, lamb))
             else:
-                new_params = interpolate_fn(src_params, dst_params, lamb)
+                new_params = (
+                    *interpolate_qlj_fn(src_qlj, dst_qlj, lamb),
+                    interpolate_w_coord(src_w, dst_w, lamb),
+                )
 
             pair_idxs.append(idxs)
             pair_params.append(new_params)
@@ -1063,19 +1053,28 @@ class SingleTopology(AtomMapMixin):
 
         return potentials.ChiralBondRestraint(chiral_bond_idxs, chiral_bond_signs).bind(chiral_bond_params)
 
-    def setup_intermediate_state(
-        self,
-        lamb,
-        interpolate_harmonic_bond_params_fxn: Optional[ParameterInterpolationFxn] = None,
-        interpolate_harmonic_angle_params_fxn: Optional[ParameterInterpolationFxn] = None,
-        interpolate_periodic_torsion_params_fxn: Optional[ParameterInterpolationFxn] = None,
-        interpolate_nonbonded_params_fxn: Optional[ParameterInterpolationFxn] = None,
-        interpolate_chiral_atom_params_fxn: Optional[ParameterInterpolationFxn] = None,
-        interpolate_chiral_bond_params_fxn: Optional[ParameterInterpolationFxn] = None,
-    ):
+    def setup_intermediate_state(self, lamb, lambda_angles=0.4, lambda_torsions=0.7):
         """
         Setup intermediate states at some value of lambda.
+
+        Parameters
+        ----------
+        lamb: float
+
+        lambda_angles, lambda_torsions: float
+            For ring opening/closing transformations, alchemical parameter values controlling the intervals over which
+            bonds, angles, and torsions are interpolated. Note that these have no effect on terms not involved in ring
+            opening/closing.
+
+            - Bonds are interpolated in the interval 0 <= lamb <= lambda_angles
+            - Angles are interpolated in the interval lambda_angles <= lamb <= lambda_torsions
+            - Torsions are interpolated in the interval lambda_torsions <= lamb <= 1
+
+            Note: must satisfy 0 < lambda_angles < lambda_torsions < 1
         """
+
+        assert 0.0 < lambda_angles < lambda_torsions < 1.0
+
         src_system = self.src_system
         dst_system = self.dst_system
 
@@ -1084,7 +1083,12 @@ class SingleTopology(AtomMapMixin):
             dst_system.bond,
             lamb,
             interpolate.align_harmonic_bond_idxs_and_params,
-            interpolate_harmonic_bond_params_fxn or self.default_interpolate_harmonic_bond_params_fxn,
+            partial(
+                interpolate_harmonic_bond_params,
+                k_min=0.1,  # ~ BOLTZ * (300 K) / (5 nm)^2
+                lambda_min=0.0,
+                lambda_max=lambda_angles,
+            ),
         )
 
         angle = self._setup_intermediate_bonded_term(
@@ -1092,7 +1096,12 @@ class SingleTopology(AtomMapMixin):
             dst_system.angle,
             lamb,
             interpolate.align_harmonic_angle_idxs_and_params,
-            interpolate_harmonic_angle_params_fxn or self.default_interpolate_harmonic_angle_params_fxn,
+            partial(
+                interpolate_harmonic_angle_params,
+                k_min=0.05,  # ~ BOLTZ * (300 K) / (2 * pi)^2
+                lambda_min=lambda_angles,
+                lambda_max=lambda_torsions,
+            ),
         )
 
         torsion = self._setup_intermediate_bonded_term(
@@ -1100,7 +1109,11 @@ class SingleTopology(AtomMapMixin):
             dst_system.torsion,
             lamb,
             interpolate.align_torsion_idxs_and_params,
-            interpolate_periodic_torsion_params_fxn or self.default_interpolate_periodic_torsion_params_fxn,
+            partial(
+                interpolate_periodic_torsion_params,
+                lambda_min=lambda_torsions,
+                lambda_max=1.0,
+            ),
         )
 
         nonbonded = self._setup_intermediate_nonbonded_term(
@@ -1108,7 +1121,7 @@ class SingleTopology(AtomMapMixin):
             dst_system.nonbonded,
             lamb,
             interpolate.align_nonbonded_idxs_and_params,
-            interpolate_nonbonded_params_fxn or self.default_interpolate_nonbonded_params_fxn,
+            interpolate.linear_interpolation,
         )
 
         chiral_atom = self._setup_intermediate_bonded_term(
@@ -1116,14 +1129,14 @@ class SingleTopology(AtomMapMixin):
             dst_system.chiral_atom,
             lamb,
             interpolate.align_chiral_atom_idxs_and_params,
-            interpolate_chiral_atom_params_fxn or self.default_interpolate_chiral_atom_params_fxn,
+            interpolate.linear_interpolation,
         )
 
         chiral_bond = self._setup_intermediate_chiral_bond_term(
             src_system.chiral_bond,
             dst_system.chiral_bond,
             lamb,
-            interpolate_chiral_bond_params_fxn or self.default_interpolate_chiral_bond_params_fxn,
+            interpolate.linear_interpolation,
         )
 
         return system.VacuumSystem(bond, angle, torsion, nonbonded, chiral_atom, chiral_bond)
@@ -1174,29 +1187,33 @@ class SingleTopology(AtomMapMixin):
                 eps = (1 - lamb) * guest_a_lj[a_idx, 1] + lamb * guest_b_lj[b_idx, 1]
 
                 # fixed at w = 0
-                w_coords = 0.0
+                w = 0.0
 
             elif membership == 1:  # dummy_A
                 a_idx = self.c_to_a[idx]
                 q = guest_a_q[a_idx]
                 sig = guest_a_lj[a_idx, 0]
                 eps = guest_a_lj[a_idx, 1]
-                w_coords = interpolate.linear_interpolation(0.0, cutoff, lamb)
+
+                # Decouple dummy group A as lambda goes from 0 to 1
+                w = interpolate_w_coord(0.0, cutoff, lamb)
 
             elif membership == 2:  # dummy_B
                 b_idx = self.c_to_b[idx]
                 q = guest_b_q[b_idx]
                 sig = guest_b_lj[b_idx, 0]
                 eps = guest_b_lj[b_idx, 1]
-                w_coords = interpolate.linear_interpolation(-cutoff, 0.0, lamb)
 
+                # Couple dummy group B as lambda goes from 0 to 1
+                # NOTE: this is only for host-guest nonbonded ixns (there is no clash between A and B at lambda = 0.5)
+                w = interpolate_w_coord(cutoff, 0.0, lamb)
             else:
                 assert 0
 
             guest_charges.append(q)
             guest_sigmas.append(sig)
             guest_epsilons.append(eps)
-            guest_w_coords.append(w_coords)
+            guest_w_coords.append(w)
 
         combined_charges = np.concatenate([host_params[:, 0], guest_charges])
         combined_sigmas = np.concatenate([host_params[:, 1], guest_sigmas])
@@ -1216,11 +1233,7 @@ class SingleTopology(AtomMapMixin):
 
         return combined_nonbonded
 
-    def combine_with_host(
-        self,
-        host_system,
-        lamb,
-    ):
+    def combine_with_host(self, host_system, lamb):
         """
         Setup host guest system. Bonds, angles, torsions, chiral_atom, chiral_bond and nonbonded terms are
         combined. In particular:
@@ -1288,7 +1301,6 @@ class SingleTopology(AtomMapMixin):
         combined_torsion = potentials.PeriodicTorsion(combined_torsion_idxs).bind(combined_torsion_params)
 
         # concatenate guest charges with host charges
-
         combined_nonbonded = self._parameterize_host_guest_nonbonded(lamb, host_system.nonbonded)
 
         return HostGuestSystem(

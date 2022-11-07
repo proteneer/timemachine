@@ -22,6 +22,7 @@ from timemachine.fe.single_topology import (
     cyclic_difference,
     handle_ring_opening_closing,
     interpolate_harmonic_force_constant,
+    interpolate_w_coord,
     setup_dummy_interactions_from_ff,
 )
 from timemachine.fe.system import convert_bps_into_system, minimize_scipy, simulate_system
@@ -386,7 +387,12 @@ nonzero_force_constants = finite_floats(1e-9, 1e9)
 
 lambdas = finite_floats(0.0, 1.0)
 
-lambda_intervals = st.lists(finite_floats(1e-9, 1.0 - 1e-9), min_size=2, max_size=2, unique=True).map(sorted)
+
+def pairs(elem, unique=False):
+    return st.lists(elem, min_size=2, max_size=2, unique=unique)
+
+
+lambda_intervals = pairs(finite_floats(1e-9, 1.0 - 1e-9), unique=True).map(sorted)
 
 
 @given(nonzero_force_constants, lambda_intervals, lambdas)
@@ -452,14 +458,7 @@ def test_interpolate_harmonic_force_constant(src_k, dst_k, k_min, lambda_interva
     assert_nondecreasing(lambda lam: f(k2, k1, 1.0 - lam))
 
 
-@given(
-    st.lists(
-        nonzero_force_constants,
-        min_size=2,
-        max_size=2,
-        unique=True,
-    ).filter(lambda ks: np.abs(ks[0] - ks[1]) / ks[1] > 1e-6)
-)
+@given(pairs(nonzero_force_constants, unique=True).filter(lambda ks: np.abs(ks[0] - ks[1]) / ks[1] > 1e-6))
 @seed(2022)
 def test_interpolate_harmonic_force_constant_sublinear(ks):
     src_k, dst_k = ks
@@ -538,3 +537,20 @@ def test_cyclic_difference_translation_invariant(a, b, t, period):
         cyclic_difference(a, b, period),
         period,
     )
+
+
+@given(pairs(finite_floats()))
+def test_interpolate_w_coord_valid_at_end_states(end_states):
+    f = interpolate_w_coord
+    a, b = end_states
+    assert f(a, b, 0.0) == a
+    assert f(a, b, 1.0) == b
+
+
+@given(pairs(finite_floats()).map(sorted), pairs(lambdas).map(sorted))
+def test_interpolate_w_coord_monotonic(end_states, lambdas):
+    f = interpolate_w_coord
+    a, b = end_states
+    l1, l2 = lambdas
+    assert f(a, b, 0.0) <= f(a, b, l1) <= f(a, b, l2) <= f(a, b, 1.0)
+    assert f(b, a, 1.0) <= f(b, a, l2) <= f(b, a, l1) <= f(b, a, 0.0)
