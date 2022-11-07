@@ -175,11 +175,13 @@ def get_core_by_mcs(
         num_flips = sum("flipped" in msg.lower() for msg in conflicts.values())
         num_undefineds = sum("undefined" in msg.lower() for msg in conflicts.values())
 
-        if (not allow_chiral_atom_flips) and (num_flips > 0):
-            return False
+        # TODO: de-DeMorgan-ify
+        invalid_due_to_flips = (not allow_chiral_atom_flips) and (num_flips > 0)
+        invalid_due_to_undefineds = (not allow_chiral_atom_undefined) and (num_undefineds > 0)
+        invalid = invalid_due_to_flips or invalid_due_to_undefineds
+        valid = not invalid
 
-        if (not allow_chiral_atom_undefined) and (num_undefineds > 0):
-            return False
+        return valid
 
     for i, a in enumerate(matches_a):
         for j, b in enumerate(matches_b):
