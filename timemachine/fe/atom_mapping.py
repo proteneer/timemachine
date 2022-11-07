@@ -101,7 +101,12 @@ def mcs(
 
 
 def get_core_by_mcs(
-    mol_a, mol_b, query, threshold=0.5, allow_chiral_atom_flips=False, allow_chiral_atom_undefined=False
+    mol_a,
+    mol_b,
+    query,
+    threshold=0.5,
+    allow_chiral_atom_flips=False,
+    allow_chiral_atom_undefined=False,
 ):
     """Return np integer array that can be passed to RelativeFreeEnergy constructor
 
@@ -167,13 +172,13 @@ def get_core_by_mcs(
         conflicts = find_atom_map_chiral_conflicts(trial_core, chiral_set_a, chiral_set_b)
 
         # TODO: refactor to use boolean flags instead of strings
-        any_flips = any("flipped" in msg.lower() for msg in conflicts.values())
-        any_undefined = any("undefined" in msg.lower() for msg in conflicts.values())
+        num_flips = sum("flipped" in msg.lower() for msg in conflicts.values())
+        num_undefineds = sum("undefined" in msg.lower() for msg in conflicts.values())
 
-        if (not allow_chiral_atom_flips) and any_flips:
+        if (not allow_chiral_atom_flips) and (num_flips > 0):
             return False
 
-        if (not allow_chiral_atom_undefined) and any_undefined:
+        if (not allow_chiral_atom_undefined) and (num_undefineds > 0):
             return False
 
     for i, a in enumerate(matches_a):
