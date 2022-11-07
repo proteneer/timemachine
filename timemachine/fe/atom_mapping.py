@@ -8,6 +8,7 @@ from rdkit.Chem import rdFMCS
 from scipy.spatial.distance import cdist
 
 from timemachine.constants import DEFAULT_FF
+from timemachine.fe.chiral_utils import ChiralRestrIdxSet, find_atom_map_chiral_conflicts
 from timemachine.fe.topology import AtomMappingError
 from timemachine.fe.utils import set_romol_conf
 from timemachine.ff import Forcefield
@@ -99,13 +100,21 @@ def mcs(
     return result
 
 
-def get_core_by_mcs(mol_a, mol_b, query, threshold=0.5):
+def get_core_by_mcs(
+    mol_a, mol_b, query, threshold=0.5, allow_chiral_atom_flips=False, allow_chiral_atom_undefined=False
+):
     """Return np integer array that can be passed to RelativeFreeEnergy constructor
 
     Parameters
     ----------
     mol_a, mol_b, query : RDKit molecules
     threshold : float, in angstroms
+    allow_chiral_atom_flips: bool
+        allow mappings that flip the sign of chiral atom restraints
+    allow_chiral_atom_undefined: bool
+        allow mappings where a chiral atom restraint
+        is defined for (c, i, j, k) in A (resp. B)
+        but undefined for (m(c), m(i), m(j), m(k)) in B (resp. A)
 
     Returns
     -------
@@ -148,9 +157,32 @@ def get_core_by_mcs(mol_a, mol_b, query, threshold=0.5):
 
     cost = np.zeros((len(matches_a), len(matches_b)))
 
+    chiral_set_a = ChiralRestrIdxSet.from_mol(mol_a, conf_a)
+    chiral_set_b = ChiralRestrIdxSet.from_mol(mol_b, conf_b)
+
+    def valid_chiral_atoms(trial_core):
+        if allow_chiral_atom_flips and allow_chiral_atom_undefined:
+            return True
+
+        conflicts = find_atom_map_chiral_conflicts(trial_core, chiral_set_a, chiral_set_b)
+
+        # TODO: refactor to use boolean flags instead of strings
+        any_flips = any("flipped" in msg.lower() for msg in conflicts.values())
+        any_undefined = any("undefined" in msg.lower() for msg in conflicts.values())
+
+        if (not allow_chiral_atom_flips) and any_flips:
+            return False
+
+        if (not allow_chiral_atom_undefined) and any_undefined:
+            return False
+
     for i, a in enumerate(matches_a):
         for j, b in enumerate(matches_b):
+            trial_core = np.array([a, b]).T
+
             if np.any(gt_threshold[a, b]):
+                cost[i, j] = +np.inf
+            elif not valid_chiral_atoms(trial_core):
                 cost[i, j] = +np.inf
             else:
                 dij = all_distances[a, b]
@@ -164,7 +196,7 @@ def get_core_by_mcs(mol_a, mol_b, query, threshold=0.5):
     core = np.array([inds_a, inds_b]).T
 
     if np.isinf(cost[min_i, min_j]):
-        raise AtomMappingError(f"not all mapped atoms are within {threshold:.3f}Å of each other")
+        raise AtomMappingError("not all mapped atoms satisfy feasibility conditions")
 
     return core
 
@@ -191,6 +223,9 @@ def get_core_with_alignment(
 
     n_steps: float
         number of steps to run for alignment
+
+    k: float
+        force constant for harmonic bond restraints on core
 
     ff: Forcefield or None
         Forcefield to use for alignment, defaults to DEFAULT_FF forcefield if None
