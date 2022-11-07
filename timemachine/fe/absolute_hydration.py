@@ -221,7 +221,8 @@ def estimate_absolute_free_energy(
         The number of steps to take before collecting a frame
 
     image_traj: bool
-        Images the trajectories returned with the SimulationResult
+        Images the trajectories returned with the SimulationResult. Recenters
+        frames around the ligand and then wraps the coordinates into the box.
 
     Returns
     -------
