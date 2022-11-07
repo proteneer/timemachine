@@ -729,7 +729,7 @@ def interpolate_periodic_torsion_params(src_params, dst_params, lamb, lambda_min
 
 
 def interpolate_w_coord(w0: float, w1: float, lamb: float):
-    """Interpolate 4D coordinate using pre-optimized schedule for relative free energy calculations
+    """Interpolate 4D coordinate using schedule optimized for RBFE calculations.
 
     Parameters
     ----------
