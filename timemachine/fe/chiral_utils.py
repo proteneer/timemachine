@@ -214,8 +214,10 @@ def find_atom_map_chiral_conflicts(
     Returns
     -------
     conflicts
-        dictionary whose keys are paired idx tuples
-        and whose values are descriptions of whether the
+        dictionary whose
+            keys are paired idx tuples, and whose
+            values are descriptions of the inconsistency
+            ("flipped" vs. partially "undefined")
 
     TODO: refactor conflicts.values() to be flag values instead of strings
     """
