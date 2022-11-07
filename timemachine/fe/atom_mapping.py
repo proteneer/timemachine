@@ -134,7 +134,7 @@ def get_core_by_mcs(
         allow mappings where a chiral atom restraint
         is defined for (c, i, j, k) in A (resp. B)
         but undefined for (m(c), m(i), m(j), m(k)) in B (resp. A)
-    
+
     Returns
     -------
     core : np.ndarray of ints, shape (n_MCS, 2)
