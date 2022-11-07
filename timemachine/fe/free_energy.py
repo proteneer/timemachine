@@ -1,9 +1,60 @@
+from dataclasses import dataclass
+from typing import List
+
 import numpy as np
 
 from timemachine.fe import topology
 from timemachine.fe.utils import get_mol_masses, get_romol_conf
 from timemachine.ff import ForcefieldParams
 from timemachine.ff.handlers import openmm_deserializer
+from timemachine.lib import LangevinIntegrator, MonteCarloBarostat
+from timemachine.lib.potentials import CustomOpWrapper
+
+
+class HostConfig:
+    def __init__(self, omm_system, conf, box):
+        self.omm_system = omm_system
+        self.conf = conf
+        self.box = box
+
+
+@dataclass
+class SimulationProtocol:
+    n_frames: int
+    n_eq_steps: int
+    steps_per_frame: int
+
+
+@dataclass
+class InitialState:
+    """
+    An initial contains everything that is needed to bitwise reproduce a trajectory given a SimulationProtocol
+
+    This object can be pickled safely.
+    """
+
+    potentials: List[CustomOpWrapper]
+    integrator: LangevinIntegrator
+    barostat: MonteCarloBarostat
+    x0: np.ndarray
+    v0: np.ndarray
+    box0: np.ndarray
+    lamb: float
+    ligand_idxs: np.ndarray
+
+
+@dataclass
+class SimulationResult:
+    all_dGs: List[np.ndarray]
+    all_errs: List[float]
+    overlaps_by_lambda: np.ndarray  # (L - 1,)
+    overlaps_by_lambda_by_component: np.ndarray  # (len(U_names), L - 1)
+    overlap_summary_png: bytes
+    overlap_detail_png: bytes
+    frames: List[np.ndarray]
+    boxes: List[np.ndarray]
+    initial_states: List[InitialState]
+    protocol: SimulationProtocol
 
 
 class BaseFreeEnergy:

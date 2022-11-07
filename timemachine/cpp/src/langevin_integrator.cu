@@ -28,10 +28,10 @@ LangevinIntegrator::LangevinIntegrator(
     d_ccs_ = gpuErrchkCudaMallocAndCopy(h_ccs.data(), N_);
 
     curandErrchk(curandCreateGenerator(&cr_rng_, CURAND_RNG_PSEUDO_DEFAULT));
-    gpuErrchk(cudaMalloc(&d_noise_, round_up_even(N_ * 3) * sizeof(double)));
+    cudaSafeMalloc(&d_noise_, round_up_even(N_ * 3) * sizeof(double));
     curandErrchk(curandSetPseudoRandomGeneratorSeed(cr_rng_, seed));
 
-    gpuErrchk(cudaMalloc(&d_du_dx_, N_ * 3 * sizeof(*d_du_dx_)));
+    cudaSafeMalloc(&d_du_dx_, N_ * 3 * sizeof(*d_du_dx_));
 }
 
 LangevinIntegrator::~LangevinIntegrator() {

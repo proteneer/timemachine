@@ -6,6 +6,7 @@ import numpy as np
 from rdkit import Chem
 from simtk.openmm import app
 
+from timemachine.constants import MAX_FORCE_NORM
 from timemachine.fe.topology import BaseTopology
 from timemachine.fe.utils import get_romol_conf
 from timemachine.ff import Forcefield
@@ -38,7 +39,7 @@ def get_vacuum_val_and_grad_fn(mol: Chem.Mol, ff: Forcefield):
     return val_and_grad_fn
 
 
-def get_strained_atoms(mol: Chem.Mol, ff: Forcefield, max_force: Optional[float] = 50000) -> List[float]:
+def get_strained_atoms(mol: Chem.Mol, ff: Forcefield, max_force: Optional[float] = MAX_FORCE_NORM) -> List[float]:
     """
     Return a list of atom indices that are strained based on the max_force.
 

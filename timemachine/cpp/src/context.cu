@@ -19,7 +19,7 @@ Context::Context(
     d_x_t_ = gpuErrchkCudaMallocAndCopy(x_0, N * 3);
     d_v_t_ = gpuErrchkCudaMallocAndCopy(v_0, N * 3);
     d_box_t_ = gpuErrchkCudaMallocAndCopy(box_0, 3 * 3);
-    gpuErrchk(cudaMalloc(&d_u_buffer_, N * sizeof(*d_u_buffer_)));
+    cudaSafeMalloc(&d_u_buffer_, N * sizeof(*d_u_buffer_));
 
     unsigned long long *d_in_tmp = nullptr;  // dummy
     unsigned long long *d_out_tmp = nullptr; // dummy
@@ -27,7 +27,7 @@ Context::Context(
     // Compute the storage size necessary to reduce energies
     cub::DeviceReduce::Sum(d_sum_storage_, d_sum_storage_bytes_, d_in_tmp, d_out_tmp, N_);
     gpuErrchk(cudaPeekAtLastError());
-    gpuErrchk(cudaMalloc(&d_sum_storage_, d_sum_storage_bytes_));
+    cudaSafeMalloc(&d_sum_storage_, d_sum_storage_bytes_);
 };
 
 Context::~Context() {

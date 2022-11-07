@@ -22,3 +22,7 @@ DEFAULT_PROTEIN_FF = "amber99sbildn"
 DEFAULT_WATER_FF = "tip3p"
 PROTEIN_FF_TAG = "ProteinForcefield"
 WATER_FF_TAG = "WaterForcefield"
+
+
+# used to check norms in the gradient computations
+MAX_FORCE_NORM = 25000

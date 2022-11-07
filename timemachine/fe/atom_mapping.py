@@ -100,11 +100,22 @@ def mcs(
     return result
 
 
+def _get_core_conf_oblivious(mol_a, mol_b, query_mol):
+    core = np.array(
+        [
+            np.array(mol_a.GetSubstructMatch(query_mol)),
+            np.array(mol_b.GetSubstructMatch(query_mol)),
+        ]
+    ).T
+    return core
+
+
 def get_core_by_mcs(
     mol_a,
     mol_b,
     query,
     threshold=0.5,
+    conformer_aware: bool = True,
     allow_chiral_atom_flips=False,
     allow_chiral_atom_undefined=False,
 ):
@@ -114,13 +125,16 @@ def get_core_by_mcs(
     ----------
     mol_a, mol_b, query : RDKit molecules
     threshold : float, in angstroms
+    conformer_aware: bool
+        if True, only match atoms within distance threshold
+        (assumes conformers are aligned)
     allow_chiral_atom_flips: bool
         allow mappings that flip the sign of chiral atom restraints
     allow_chiral_atom_undefined: bool
         allow mappings where a chiral atom restraint
         is defined for (c, i, j, k) in A (resp. B)
         but undefined for (m(c), m(i), m(j), m(k)) in B (resp. A)
-
+    
     Returns
     -------
     core : np.ndarray of ints, shape (n_MCS, 2)
@@ -137,6 +151,8 @@ def get_core_by_mcs(
         In some cases, this can fail to find a mapping that satisfies the distance
         threshold, raising an AtomMappingError.
     """
+    if not conformer_aware:
+        return _get_core_conf_oblivious(mol_a, mol_b, query)
 
     # fetch conformer, assumed aligned
     conf_a = mol_a.GetConformer(0).GetPositions()
