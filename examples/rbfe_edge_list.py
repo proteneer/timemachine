@@ -13,7 +13,7 @@ from simtk.openmm import app
 from timemachine.constants import KCAL_TO_KJ
 from timemachine.fe import atom_mapping
 from timemachine.fe.rbfe import run_complex, run_solvent
-from timemachine.fe.utils import get_mol_name
+from timemachine.fe.utils import get_mol_name, read_sdf
 from timemachine.ff import Forcefield
 from timemachine.parallel.client import CUDAPoolClient
 
@@ -43,7 +43,7 @@ def read_from_args():
 
     args = parser.parse_args()
 
-    mols = [mol for mol in Chem.SDMolSupplier(str(args.ligands), removeHs=False)]
+    mols = read_sdf(str(args.ligands))
 
     cfutures = []
     sfutures = []

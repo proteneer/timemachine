@@ -1,13 +1,12 @@
 import numpy as np
 import pytest
-from rdkit import Chem
 
 from timemachine.constants import DEFAULT_FF, DEFAULT_TEMP
 from timemachine.fe import atom_mapping, pdb_writer, utils
 from timemachine.fe.lambda_schedule import construct_pre_optimized_relative_lambda_schedule
 from timemachine.fe.rbfe import HostConfig, setup_initial_states
 from timemachine.fe.single_topology import AtomMapMixin, SingleTopology
-from timemachine.fe.utils import get_mol_name
+from timemachine.fe.utils import get_mol_name, read_sdf
 from timemachine.ff import Forcefield
 from timemachine.md import builders
 
@@ -105,7 +104,7 @@ def test_confgen_hard_edges():
 
     protein_path = "timemachine/testsystems/data/hif2a_nowater_min.pdb"
     ligands = "timemachine/datasets/fep_benchmark/hif2a/ligands.sdf"
-    mols = [mol for mol in Chem.SDMolSupplier(ligands, removeHs=False)]
+    mols = read_sdf(ligands)
 
     n_windows = 12
 
@@ -126,7 +125,7 @@ def test_confgen_spot_edges():
 
     protein_path = "timemachine/testsystems/data/hif2a_nowater_min.pdb"
     ligands = "timemachine/datasets/fep_benchmark/hif2a/ligands.sdf"
-    mols = [mol for mol in Chem.SDMolSupplier(ligands, removeHs=False)]
+    mols = read_sdf(ligands)
 
     n_windows = 12
 
