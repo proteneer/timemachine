@@ -52,7 +52,11 @@ def test_image_frame():
 
     # Add a random buffer to the dimensions of the box
     box = np.eye(3) * (max_dimensions + rng.random(max_dimensions.shape))
-    group_indices = np.arange(len(coords)).reshape((-1, 3))
+    idxs = np.arange(len(coords))
+    group_indices = []
+    group_indices.extend(list(idxs[:30].reshape(-1, 3)))
+    group_indices.extend(list(idxs[30:].reshape(-1, 5)))
+    group_indices.append(np.array([], dtype=idxs.dtype))
 
     box_diag = np.diagonal(box)
 

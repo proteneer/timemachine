@@ -180,7 +180,7 @@ def test_steps_per_frames():
 
 
 def test_imaging_frames():
-    """Should not be able to run a relative free energy calculation with a single window"""
+    """Verify that imaging frames places ligand at center and all coordinates are close to being within the box."""
     mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
     forcefield = Forcefield.load_from_file(DEFAULT_FF)
     seed = 2022
@@ -212,7 +212,7 @@ def test_imaging_frames():
         box_extents = np.max(res.boxes[i], axis=(0, 1))
 
         # Verify that coordinates are either outside of the box or below zero
-        assert np.any(np.abs(np.max(res.frames[i], axis=(0, 1))) > box_extents + padding) or np.any(
+        assert np.any(np.max(res.frames[i], axis=(0, 1)) > box_extents + padding) or np.any(
             np.min(res.frames[i], axis=(0, 1)) < -padding
         )
         # Ligand won't be near center of box
@@ -221,7 +221,7 @@ def test_imaging_frames():
         imaged = image_frames(initial_state, res.frames[i], res.boxes[i])
 
         # Verify that after imaged, coordinates are within padding of the box extents
-        assert np.all(np.abs(np.max(imaged, axis=(0, 1))) <= box_extents + padding) and np.any(
+        assert np.all(np.max(imaged, axis=(0, 1)) <= box_extents + padding) and np.all(
             np.min(imaged, axis=(0, 1)) >= -padding
         )
         # Verify that ligand was centered in the box
