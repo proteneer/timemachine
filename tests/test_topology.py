@@ -1,18 +1,16 @@
 from importlib import resources
 
 import numpy as np
-from rdkit import Chem
 
 from timemachine.fe import topology
-from timemachine.fe.utils import get_romol_conf
+from timemachine.fe.utils import get_romol_conf, read_sdf
 from timemachine.ff import Forcefield
 
 
 def test_dual_topology_nonbonded_pairlist():
     with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
-        suppl = Chem.SDMolSupplier(str(path_to_ligand), removeHs=False)
+        all_mols = read_sdf(path_to_ligand)
 
-    all_mols = [x for x in suppl]
     mol_a = all_mols[1]
     mol_b = all_mols[4]
     ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")

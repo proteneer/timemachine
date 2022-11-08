@@ -8,6 +8,7 @@ from rdkit import Chem
 from rdkit.Chem import AllChem, rdmolops
 
 from timemachine.constants import DEFAULT_FF, ONE_4PI_EPS0
+from timemachine.fe import utils
 from timemachine.ff import Forcefield
 from timemachine.ff.charges import AM1CCC_CHARGES
 from timemachine.ff.handlers import bonded, nonbonded
@@ -611,9 +612,9 @@ def test_am1_differences():
 
 def test_am1elf10_conformer_independence():
     with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
-        suppl = Chem.SDMolSupplier(str(path_to_ligand), removeHs=False)
+        mols = utils.read_sdf(path_to_ligand)
+
     # Pick a subset of molecules with chiral centers
-    mols = [mol for mol in suppl]
     mols = [mols[0], mols[2], mols[3]]
 
     # need to assign so embedded molecules generated below
@@ -639,8 +640,8 @@ def test_trans_carboxlic_acid():
     # Test fallback to turn off hydrogen sampling if charge generation failed
     # due to trans-COOH
     with resources.path("timemachine.testsystems.data", "mobley_820789.sdf") as path_to_ligand:
-        suppl = Chem.SDMolSupplier(str(path_to_ligand), removeHs=False)
-    mol = next(suppl)
+        mols = utils.read_sdf(path_to_ligand)
+    mol = mols[0]
     rdmolops.AssignStereochemistryFrom3D(mol, confId=0, replaceExistingTags=True)
     am1elf10_charges = nonbonded.oe_assign_charges(mol, charge_model=nonbonded.AM1ELF10)
 
@@ -657,9 +658,9 @@ def test_compute_or_load_am1_charges():
     # get some molecules
     cache_key = nonbonded.AM1ELF10_CHARGE_CACHE
     with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
-        suppl = Chem.SDMolSupplier(str(path_to_ligand), removeHs=False)
+        mols = utils.read_sdf(path_to_ligand)
 
-    mols = [mol for mol in suppl][:5]  # truncate so that whole test is ~ 10 seconds
+    mols = mols[:5]  # truncate so that whole test is ~ 10 seconds
 
     # don't expect AM1 cache yet
     for mol in mols:
@@ -682,9 +683,7 @@ def test_compute_or_load_am1_charges():
 def mol_with_precomputed_charges():
     """Provide a test mol with partial charges precomputed on two different versions of Ubuntu"""
     with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
-        suppl = Chem.SDMolSupplier(str(path_to_ligand), removeHs=False)
-
-    mols = [mol for mol in suppl]
+        mols = utils.read_sdf(path_to_ligand)
     test_mol = mols[0]
 
     # fmt: off
@@ -759,9 +758,7 @@ def test_compute_or_load_bond_smirks_matches():
     match_cache_key = nonbonded.BOND_SMIRK_MATCH_CACHE
 
     with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
-        suppl = Chem.SDMolSupplier(str(path_to_ligand), removeHs=False)
-
-    all_mols = [mol for mol in suppl]
+        all_mols = utils.read_sdf(path_to_ligand)
 
     # get some bond smirks
     smirks_list = [smirks for (smirks, param) in AM1CCC_CHARGES["patterns"]]

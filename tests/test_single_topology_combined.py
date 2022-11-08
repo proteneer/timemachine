@@ -5,40 +5,43 @@ import pytest
 
 from timemachine.constants import DEFAULT_FF
 from timemachine.fe.single_topology import SingleTopology
-from timemachine.fe.system import convert_bps_into_system
+from timemachine.fe.system import convert_omm_system
 from timemachine.ff import Forcefield
-from timemachine.ff.handlers import openmm_deserializer
 from timemachine.md import builders
 from timemachine.testsystems.dhfr import get_dhfr_system
 from timemachine.testsystems.relative import get_hif2a_ligand_pair_single_topology
 
 
-def test_combined_parameters_solvent():
+@pytest.fixture(scope="module")
+def hif2a_ligand_pair_single_topology():
+    mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
+    forcefield = Forcefield.load_from_file(DEFAULT_FF)
+    return SingleTopology(mol_a, mol_b, core, forcefield)
+
+
+@pytest.fixture(scope="module")
+def complex_host_system():
+    host_sys_omm = get_dhfr_system()
+    return convert_omm_system(host_sys_omm)
+
+
+@pytest.fixture(scope="module")
+def solvent_host_system():
     forcefield = Forcefield.load_from_file(DEFAULT_FF)
     host_sys_omm, _, _, _ = builders.build_water_system(3.0, forcefield.water_ff)
-    _test_combined_parameters_impl_bonded(host_sys_omm)
-    _test_combined_parameters_impl_nonbonded(host_sys_omm)
+    return convert_omm_system(host_sys_omm)
 
 
-def test_combined_parameters_complex():
-    host_sys_omm = get_dhfr_system()
-    _test_combined_parameters_impl_bonded(host_sys_omm)
-    _test_combined_parameters_impl_nonbonded(host_sys_omm)
-
-
-def _test_combined_parameters_impl_bonded(host_system_omm):
+@pytest.mark.parametrize("host_system_fixture", ["solvent_host_system", "complex_host_system"])
+def test_combined_parameters_bonded(host_system_fixture, hif2a_ligand_pair_single_topology, request):
     # test bonded and nonbonded parameters are correct at the end-states.
     # 1) we expected bonded idxs in the ligand to be shifted by num_host_atoms
     # 2) we expected nonbonded lambda_idxs to be shifted
     # 3) we expected nonbonded parameters on the core to be linearly interpolated
 
-    mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
-    forcefield = Forcefield.load_from_file(DEFAULT_FF)
-    st3 = SingleTopology(mol_a, mol_b, core, forcefield)
-
-    host_bps, masses = openmm_deserializer.deserialize_system(host_system_omm, cutoff=1.2)
-    num_host_atoms = len(masses)
-    host_sys = convert_bps_into_system(host_bps)
+    st = hif2a_ligand_pair_single_topology
+    host_sys, host_masses = request.getfixturevalue(host_system_fixture)
+    num_host_atoms = len(host_masses)
 
     def check_bonded_idxs_consistency(bonded_idxs, num_host_idxs):
 
@@ -51,7 +54,7 @@ def _test_combined_parameters_impl_bonded(host_system_omm):
     for lamb in [0.0, 1.0]:
 
         # generate host guest system
-        hgs = st3.combine_with_host(host_sys, lamb=lamb)
+        hgs = st.combine_with_host(host_sys, lamb=lamb)
 
         # check bonds
         check_bonded_idxs_consistency(hgs.bond.get_idxs(), len(host_sys.bond.get_idxs()))
@@ -75,19 +78,16 @@ def _test_combined_parameters_impl_bonded(host_system_omm):
         check_bonded_idxs_consistency(hgs.nonbonded_guest_pairs.get_idxs(), 0)
 
 
-def _test_combined_parameters_impl_nonbonded(host_system_omm):
+@pytest.mark.parametrize("host_system_fixture", ["solvent_host_system", "complex_host_system"])
+def test_combined_parameters_nonbonded(host_system_fixture, hif2a_ligand_pair_single_topology, request):
     # test bonded and nonbonded parameters are correct at the end-states.
     # 1) we expected bonded idxs in the ligand to be shifted by num_host_atoms
     # 2) we expected nonbonded lambda_idxs to be shifted
     # 3) we expected nonbonded parameters on the core to be linearly interpolated
 
-    mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
-    forcefield = Forcefield.load_from_file(DEFAULT_FF)
-    st = SingleTopology(mol_a, mol_b, core, forcefield)
-
-    host_bps, masses = openmm_deserializer.deserialize_system(host_system_omm, cutoff=1.2)
-    num_host_atoms = len(masses)
-    host_sys = convert_bps_into_system(host_bps)
+    st = hif2a_ligand_pair_single_topology
+    host_sys, host_masses = request.getfixturevalue(host_system_fixture)
+    num_host_atoms = len(host_masses)
 
     for lamb in [0.0, 1.0]:
 
@@ -133,11 +133,11 @@ def _test_combined_parameters_impl_nonbonded(host_system_omm):
                     if lamb == 0.0:
                         assert w == 0.0
                     elif lamb == 1.0:
-                        assert w == pytest.approx(cutoff)
+                        assert w == cutoff
                 elif indicator == 2:
                     # mol_b dummy
                     if lamb == 0.0:
-                        assert w == pytest.approx(-cutoff)
+                        assert w == cutoff
                     elif lamb == 1.0:
                         assert w == 0.0
                 else:
@@ -179,3 +179,42 @@ def _test_combined_parameters_impl_nonbonded(host_system_omm):
                 assert ref_q == test_q
                 assert test_sig == ref_sig
                 assert test_eps == ref_eps
+
+
+@pytest.mark.parametrize("host_system_fixture", ["solvent_host_system", "complex_host_system"])
+def test_combined_parameters_nonbonded_intermediate(
+    host_system_fixture, hif2a_ligand_pair_single_topology: SingleTopology, request
+):
+    st = hif2a_ligand_pair_single_topology
+    host_sys, host_masses = request.getfixturevalue(host_system_fixture)
+    num_host_atoms = len(host_masses)
+
+    rng = np.random.default_rng(2022)
+
+    for lamb in rng.uniform(0.01, 0.99, (10,)):
+        hgs = st.combine_with_host(host_sys, lamb=lamb)
+        cutoff = hgs.nonbonded_host_guest.get_cutoff()
+
+        assert hgs.nonbonded_host_guest.params is not None
+        guest_params = hgs.nonbonded_host_guest.params[num_host_atoms:]
+        ws_core = [w for flag, (_, _, _, w) in zip(st.c_flags, guest_params) if flag == 0]
+        ws_a = [w for flag, (_, _, _, w) in zip(st.c_flags, guest_params) if flag == 1]
+        ws_b = [w for flag, (_, _, _, w) in zip(st.c_flags, guest_params) if flag == 2]
+
+        # core atoms fixed at w = 0
+        assert all(w == 0.0 for w in ws_core)
+
+        # dummy groups have consistent w coords
+        assert len(set(ws_a)) == 1
+        assert len(set(ws_b)) == 1
+        (w_a,) = set(ws_a)
+        (w_b,) = set(ws_b)
+
+        # w in [0, cutoff]
+        assert 0 < w_a < cutoff
+        assert 0 < w_b < cutoff
+
+        if lamb < 0.5:
+            assert w_a < w_b
+        else:
+            assert w_b < w_a
