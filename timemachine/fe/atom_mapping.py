@@ -117,7 +117,7 @@ def get_core_by_mcs(
     threshold=0.5,
     conformer_aware: bool = True,
     allow_chiral_atom_flips=False,
-    allow_chiral_atom_undefined=False,
+    allow_chiral_atom_undefined=True,
 ):
     """Return np integer array that can be passed to RelativeFreeEnergy constructor
 
