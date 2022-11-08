@@ -207,8 +207,8 @@ def test_get_core_with_alignment():
     mol_b_shuffled = Chem.RenumberAtoms(mol_b, new_idxs)
 
     shuffled_core, _ = get_core_with_alignment(mol_a_shuffled, mol_b_shuffled)
-    assert len(core) == mol_a.GetNumAtoms()
-    assert len(core) == mol_b.GetNumAtoms()
+    assert len(shuffled_core) == mol_a.GetNumAtoms()
+    assert len(shuffled_core) == mol_b.GetNumAtoms()
 
 
 @pytest.mark.nogpu
