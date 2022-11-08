@@ -165,12 +165,15 @@ def test_chiral_flip_check():
     swap_map[1, 1] = 2
     swap_map[2, 1] = 1
 
-    identity_conflicts = find_atom_map_chiral_conflicts(identity_map, chiral_set_a, chiral_set_b)
-    assert len(identity_conflicts) == 0
+    identity_flips = find_atom_map_chiral_conflicts(identity_map, chiral_set_a, chiral_set_b, mode="flip")
+    identity_undefineds = find_atom_map_chiral_conflicts(identity_map, chiral_set_a, chiral_set_b, mode="undefined")
+    assert len(identity_flips) == 0
+    assert len(identity_undefineds) == 0
 
-    swap_conflicts = find_atom_map_chiral_conflicts(swap_map, chiral_set_a, chiral_set_b)
-    assert len(swap_conflicts) == 8  # TODO: deduplicate idxs?
-    assert all("flipped" in msg.lower() for msg in swap_conflicts)
+    swap_map_flips = find_atom_map_chiral_conflicts(swap_map, chiral_set_a, chiral_set_b, mode="flip")
+    swap_map_undefineds = find_atom_map_chiral_conflicts(swap_map, chiral_set_a, chiral_set_b, mode="undefined")
+    assert len(swap_map_flips) == 8  # TODO: deduplicate idxs?
+    assert len(swap_map_undefineds) == 0
 
     # test maps where atom chirality is defined in one endstate, undefined in other
     mol_b = Chem.AddHs(Chem.MolFromSmiles("N"))
@@ -180,6 +183,7 @@ def test_chiral_flip_check():
     assert len(chiral_set_b.restr_idxs) == 0
 
     partial_map = identity_map[:4]
-    partial_conflicts = find_atom_map_chiral_conflicts(partial_map, chiral_set_a, chiral_set_b)
-    assert len(partial_conflicts) > 0
-    assert all("undefined" in msg.lower() for msg in partial_conflicts)
+    partial_map_flips = find_atom_map_chiral_conflicts(partial_map, chiral_set_a, chiral_set_b, mode="flip")
+    partial_map_undefineds = find_atom_map_chiral_conflicts(partial_map, chiral_set_a, chiral_set_b, mode="undefined")
+    assert len(partial_map_flips) == 0
+    assert len(partial_map_undefineds) > 0

@@ -185,11 +185,11 @@ def get_core_by_mcs(
         if allow_chiral_atom_flips and allow_chiral_atom_undefined:
             return True
 
-        conflicts = find_atom_map_chiral_conflicts(trial_core, chiral_set_a, chiral_set_b)
+        flips = find_atom_map_chiral_conflicts(trial_core, chiral_set_a, chiral_set_b, mode="flip")
+        undefineds = find_atom_map_chiral_conflicts(trial_core, chiral_set_a, chiral_set_b, mode="undefined")
 
-        # TODO: refactor to use boolean flags instead of strings
-        num_flips = sum("flipped" in msg.lower() for msg in conflicts.values())
-        num_undefineds = sum("undefined" in msg.lower() for msg in conflicts.values())
+        num_flips = len(flips)
+        num_undefineds = len(undefineds)
 
         # TODO: de-DeMorgan-ify
         invalid_due_to_flips = (not allow_chiral_atom_flips) and (num_flips > 0)

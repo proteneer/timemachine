@@ -1,6 +1,6 @@
 import itertools
 from dataclasses import dataclass
-from typing import Dict, List, Set, Tuple
+from typing import List, Set, Tuple
 
 import numpy as np
 from rdkit import Chem
@@ -194,75 +194,75 @@ class ChiralRestrIdxSet:
         return trial_tuple in self.disallowed_set
 
 
+def _find_atom_map_chiral_conflicts_one_direction(
+    core: np.ndarray,
+    chiral_set_a: ChiralRestrIdxSet,
+    chiral_set_b: ChiralRestrIdxSet,
+    mode="flip",
+):
+    # parse mode
+    if mode == "flip":
+        conflict_condition_fxn = chiral_set_b.disallows
+    elif mode == "undefined":
+        conflict_condition_fxn = lambda mapped_tuple_b: not chiral_set_b.defines(mapped_tuple_b)
+    else:
+        raise ValueError("invalid mode -- must be one of 'flip' or 'undefined")
+
+    # initialize convenient representations
+    mapped_set_a = set(core[:, 0])
+    conflicts = set()
+    restr_tuples_a = [(int(c), int(i), int(j), int(k)) for (c, i, j, k) in chiral_set_a.restr_idxs]
+    mapping_a_to_b = {int(a_i): int(b_i) for (a_i, b_i) in core}
+
+    def apply_mapping(c, i, j, k):
+        return mapping_a_to_b[c], mapping_a_to_b[i], mapping_a_to_b[j], mapping_a_to_b[k]
+
+    # iterate over restraints defined in A, searching for possible conflicts
+    for restr_tuple_a in restr_tuples_a:
+        if set(restr_tuple_a).issubset(mapped_set_a):
+            mapped_tuple_b = apply_mapping(*restr_tuple_a)
+
+            if conflict_condition_fxn(mapped_tuple_b):
+                conflicts.add((restr_tuple_a, mapped_tuple_b))
+
+    return conflicts
+
+
 def find_atom_map_chiral_conflicts(
     core: np.ndarray,
     chiral_set_a: ChiralRestrIdxSet,
     chiral_set_b: ChiralRestrIdxSet,
-) -> Dict[Tuple[FourTuple, FourTuple], str]:
+    mode="flip",
+) -> Set[Tuple[FourTuple, FourTuple]]:
     """
 
     Parameters
     ----------
     core
         atom map, establishing correspondences
-            mol_a[a_i] <--> mol_b[b_i]
+            mol_a[a_i] <-> mol_b[b_i]
         for (a_i, b_i) in core
 
     chiral_set_a, chiral_set_b
         chiral restraint sets for mols a and b
 
+    mode : str, one of "flip" or "undefined"
+        "flip" : find cases where chiral atom restraints are defined for both a and b with opposite signs
+        "undefined" : find cases where chiral atom restraints are defined for a (resp. b) but not b (resp. a)
+
     Returns
     -------
     conflicts
-        dictionary whose
-            keys are paired idx tuples, and whose
-            values are descriptions of the inconsistency
-            ("flipped" vs. partially "undefined")
-
-    TODO: refactor conflicts.values() to be flag values instead of strings
+        set of conflicting pairs of 4-tuples
+        ((a_c, a_i, a_j, a_k), (b_c, b_i, b_j, b_k))
     """
-    K = len(core)
-    assert core.shape == (K, 2)
+    conflicts_fwd = _find_atom_map_chiral_conflicts_one_direction(core, chiral_set_a, chiral_set_b, mode)
+    conflicts_rev = _find_atom_map_chiral_conflicts_one_direction(core[:, ::-1], chiral_set_b, chiral_set_a, mode)
 
-    mapped_set_a = set(core[:, 0])
-    mapped_set_b = set(core[:, 1])
+    # swap order of each 2-tuple in conflicts_rev
+    conflicts_rev_ordered = set((a, b) for (b, a) in conflicts_rev)
 
-    conflicts = {}
-
-    # mypy
-    restr_tuples_a = [(int(c), int(i), int(j), int(k)) for (c, i, j, k) in chiral_set_a.restr_idxs]
-    restr_tuples_b = [(int(c), int(i), int(j), int(k)) for (c, i, j, k) in chiral_set_b.restr_idxs]
-
-    mapping_a_to_b = {int(a_i): int(b_i) for (a_i, b_i) in core}
-    mapping_b_to_a = {int(b_i): int(a_i) for (a_i, b_i) in core}
-
-    # A -> B
-    for restr_tuple_a in restr_tuples_a:
-        c, i, j, k = restr_tuple_a
-        if set(restr_tuple_a).issubset(mapped_set_a):
-            mapped_tuple_b = (mapping_a_to_b[c], mapping_a_to_b[i], mapping_a_to_b[j], mapping_a_to_b[k])
-            key = (restr_tuple_a, mapped_tuple_b)
-
-            if chiral_set_b.disallows(mapped_tuple_b):
-                conflicts[key] = "FLIPPED -- chiral restraints have opposite signs in A and B"
-
-            if not chiral_set_b.defines(mapped_tuple_b):
-                conflicts[key] = "UNDEFINED -- chiral restraints defined in A but undefined in B"
-
-    # B -> A
-    for restr_tuple_b in restr_tuples_b:
-        c, i, j, k = restr_tuple_b
-        if set(restr_tuple_b).issubset(mapped_set_b):
-            mapped_tuple_a = (mapping_b_to_a[c], mapping_b_to_a[i], mapping_b_to_a[j], mapping_b_to_a[k])
-            key = (mapped_tuple_a, restr_tuple_b)
-
-            if chiral_set_a.disallows(mapped_tuple_a):
-                conflicts[key] = "FLIPPED -- chiral restraints have opposite signs in A and B"
-
-            if not chiral_set_a.defines(mapped_tuple_a):
-                conflicts[key] = "UNDEFINED -- chiral restraints defined in B but undefined in A"
-
-    # TODO: reduce 2x duplication between A -> B and B -> A checks
+    conflicts = conflicts_fwd.union(conflicts_rev_ordered)
 
     return conflicts
 
