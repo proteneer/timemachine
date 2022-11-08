@@ -109,11 +109,19 @@ $$$$""",
     return mol_a, mol_b
 
 
-def get_core(mol_a, mol_b, threshold=2.0):
+def get_core(mol_a, mol_b, threshold=2.0, skip_chiral_checks=False):
     """Simple utility that finds a core by using the conformers with a threshold"""
     mcs_result = mcs(mol_a, mol_b, threshold=threshold)
     query = Chem.MolFromSmarts(mcs_result.smartsString)
-    return get_core_by_mcs(mol_a, mol_b, query, threshold=threshold)
+    core = get_core_by_mcs(
+        mol_a,
+        mol_b,
+        query,
+        threshold=threshold,
+        allow_chiral_atom_flips=skip_chiral_checks,
+        allow_chiral_atom_undefined=skip_chiral_checks,
+    )
+    return core
 
 
 @pytest.mark.nogpu
@@ -125,7 +133,7 @@ def test_align_mols_by_core():
 
     assert mol_a.GetNumAtoms() == mol_b.GetNumAtoms()
 
-    core = get_core(mol_a, mol_b)
+    core = get_core(mol_a, mol_b, skip_chiral_checks=True)
 
     # The difference in conformer prevents a complete mapping
     assert len(core) != mol_a.GetNumAtoms()
