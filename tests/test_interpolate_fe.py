@@ -29,7 +29,7 @@ def test_hif2a_free_energy_estimates():
     core_smarts = atom_mapping.mcs(mol_a, mol_b).smartsString
     query_mol = Chem.MolFromSmarts(core_smarts)
     core = atom_mapping.get_core_by_mcs(mol_a, mol_b, query_mol)
-    svg = utils.plot_atom_mapping_grid(mol_a, mol_b, core_smarts, core)
+    svg = utils.plot_atom_mapping_grid(mol_a, mol_b, core)
     with open("atom_mapping.svg", "w") as fh:
         fh.write(svg)
 

@@ -7,6 +7,7 @@ from numpy.typing import NDArray
 from rdkit import Chem
 from rdkit.Chem import AllChem, Draw
 from rdkit.Chem.Draw import rdMolDraw2D
+from scipy.stats import special_ortho_group
 
 from timemachine import constants
 
@@ -136,62 +137,95 @@ def recenter_mol(mol):
     return mol_copy
 
 
-def plot_atom_mapping_grid(mol_a, mol_b, core_smarts, core, show_idxs=False):
+def score_2d(conf, norm=2):
+    # get the goodness of a 2D depiction
+    # low_score = good, high_score = bad
 
+    score = 0
+    for idx, (x0, y0, _) in enumerate(conf):
+        for x1, y1, _ in conf[idx + 1 :]:
+            score += 1 / ((x0 - x1) ** norm + (y0 - y1) ** norm)
+
+    return score / len(conf)
+
+
+def generate_good_rotations(mol_a, mol_b, num_rotations=3, max_rotations=1000):
+    assert num_rotations < max_rotations
+
+    # generate some good rotations so that the viewing angle is pleasant, (so clashes are minimized):
+    conf_a = get_romol_conf(mol_a)
+    conf_b = get_romol_conf(mol_b)
+
+    scores = []
+    rotations = []
+    for _ in range(max_rotations):
+        r = special_ortho_group.rvs(3)
+        score_a = score_2d(conf_a @ r.T)
+        score_b = score_2d(conf_b @ r.T)
+        # take the bigger of the two scores
+        scores.append(max(score_a, score_b))
+        rotations.append(r)
+
+    perm = np.argsort(scores)
+    return np.array(rotations)[perm][:num_rotations]
+
+
+def rotate_mol(mol, rotation_matrix):
+    mol = recenter_mol(mol)
+    conf = mol.GetConformer(0).GetPositions()
+
+    new_conf = Chem.Conformer(mol.GetNumAtoms())
+    for idx, pos in enumerate(np.asarray(conf)):
+        rot_pos = rotation_matrix @ pos
+        new_conf.SetAtomPosition(idx, (float(rot_pos[0]), float(rot_pos[1]), float(rot_pos[2])))
+
+    mol_copy = Chem.Mol(mol)
+    mol_copy.RemoveAllConformers()
+    mol_copy.AddConformer(new_conf)
+    return mol_copy
+
+
+def plot_atom_mapping_grid(mol_a, mol_b, core, num_rotations=5):
     mol_a_3d = recenter_mol(mol_a)
     mol_b_3d = recenter_mol(mol_b)
 
-    mol_a_2d = Chem.Mol(mol_a_3d)
-    mol_b_2d = Chem.Mol(mol_b_3d)
-    mol_q_2d = Chem.MolFromSmarts(core_smarts)
+    extra_rotations = generate_good_rotations(mol_a, mol_b, num_rotations)
 
-    AllChem.Compute2DCoords(mol_q_2d)
-
-    q_to_a = [[int(x[0]), int(x[1])] for x in enumerate(core[:, 0])]
-    q_to_b = [[int(x[0]), int(x[1])] for x in enumerate(core[:, 1])]
-
-    AllChem.GenerateDepictionMatching2DStructure(mol_a_2d, mol_q_2d, atomMap=q_to_a)
-    AllChem.GenerateDepictionMatching2DStructure(mol_b_2d, mol_q_2d, atomMap=q_to_b)
+    extra_mols = []
 
     atom_colors_a = {}
     atom_colors_b = {}
-    atom_colors_q = {}
-    for c_idx, ((a_idx, b_idx), rgb) in enumerate(zip(core, np.random.random((len(core), 3)))):
+    for (a_idx, b_idx), rgb in zip(core, np.random.random((len(core), 3))):
         atom_colors_a[int(a_idx)] = tuple(rgb.tolist())
         atom_colors_b[int(b_idx)] = tuple(rgb.tolist())
-        atom_colors_q[int(c_idx)] = tuple(rgb.tolist())
 
-    if show_idxs:
-        for atom in mol_a_2d.GetAtoms():
-            atom.SetProp("molAtomMapNumber", str(atom.GetIdx()))
-        for atom in mol_b_2d.GetAtoms():
-            atom.SetProp("molAtomMapNumber", str(atom.GetIdx()))
-        for atom in mol_a_3d.GetAtoms():
-            atom.SetProp("molAtomMapNumber", str(atom.GetIdx()))
-        for atom in mol_b_3d.GetAtoms():
-            atom.SetProp("molAtomMapNumber", str(atom.GetIdx()))
-        for atom in mol_q_2d.GetAtoms():
-            atom.SetProp("molAtomMapNumber", str(atom.GetIdx()))
+    hals = [core[:, 0].tolist(), core[:, 1].tolist()]
+    hacs = [atom_colors_a, atom_colors_b]
+
+    for rot in extra_rotations:
+        extra_mols.append(rotate_mol(mol_a_3d, rot))
+        extra_mols.append(rotate_mol(mol_b_3d, rot))
+        hals.append(core[:, 0].tolist())
+        hals.append(core[:, 1].tolist())
+        hacs.append(atom_colors_a)
+        hacs.append(atom_colors_b)
+
+    num_mols = len(extra_mols) + 2
+
+    all_mols = [mol_a_3d, mol_b_3d, *extra_mols]
+
+    legends = []
+    while len(legends) < num_mols:
+        legends.append(get_mol_name(mol_a) + " (3D)")
+        legends.append(get_mol_name(mol_b) + " (3D)")
 
     return Draw.MolsToGridImage(
-        [mol_q_2d, mol_a_2d, mol_b_2d, mol_a_3d, mol_b_3d],
-        molsPerRow=5,
-        highlightAtomLists=[
-            list(range(mol_q_2d.GetNumAtoms())),
-            core[:, 0].tolist(),
-            core[:, 1].tolist(),
-            core[:, 0].tolist(),
-            core[:, 1].tolist(),
-        ],
-        highlightAtomColors=[atom_colors_q, atom_colors_a, atom_colors_b, atom_colors_a, atom_colors_b],
-        subImgSize=(600, 400),
-        legends=[
-            "core",
-            get_mol_name(mol_a) + " (2D)",
-            get_mol_name(mol_b) + " (2D)",
-            get_mol_name(mol_a) + " (3D)",
-            get_mol_name(mol_b) + " (3D)",
-        ],
+        all_mols,
+        molsPerRow=num_mols,
+        highlightAtomLists=hals,
+        highlightAtomColors=hacs,
+        subImgSize=(25 * num_mols, 300),
+        legends=legends,
         useSVG=True,
     )
 

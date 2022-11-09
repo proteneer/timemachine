@@ -113,7 +113,7 @@ def read_from_args():
     core = atom_mapping.get_core_by_mcs(mol_a, mol_b, query_mol, threshold=2.0)
     print("core mapping:", core.tolist())
 
-    res = plot_atom_mapping_grid(mol_a, mol_b, mcs_result.smartsString, core)
+    res = plot_atom_mapping_grid(mol_a, mol_b, core)
     with open(f"atom_mapping_{args.mol_a_name}_to_{args.mol_b_name}.svg", "w") as fh:
         fh.write(res)
 
