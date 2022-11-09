@@ -277,6 +277,10 @@ def test_combine_masses():
 
     mol_a = Chem.MolFromSmiles("BrC1=CC=CC=C1")
     mol_b = Chem.MolFromSmiles("C1=CN=CC=C1F")
+
+    AllChem.EmbedMolecule(mol_a, seed=2022)
+    AllChem.EmbedMolecule(mol_b, seed=2022)
+
     core = np.array([[1, 0], [2, 1], [3, 2], [4, 3], [5, 4], [6, 5]])
     ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
 
