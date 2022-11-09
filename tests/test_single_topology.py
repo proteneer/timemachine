@@ -548,11 +548,7 @@ def test_interpolate_w_coord_valid_at_end_states(end_states):
     assert f(a, b, 1.0) == b
 
 
-@given(pairs(finite_floats(-1e9, 1e9)).map(sorted), pairs(lambdas).map(sorted))
-@seed(2022)
-def test_interpolate_w_coord_monotonic(end_states, lambdas):
-    f = interpolate_w_coord
-    a, b = end_states
-    l1, l2 = lambdas
-    assert f(a, b, 0.0) <= f(a, b, l1) <= f(a, b, l2) <= f(a, b, 1.0)
-    assert f(b, a, 1.0) <= f(b, a, l2) <= f(b, a, l1) <= f(b, a, 0.0)
+def test_interpolate_w_coord_monotonic():
+    lambdas = np.linspace(0.0, 1.0, 100)
+    ws = interpolate_w_coord(0.0, 1.0, lambdas)
+    assert np.all(np.diff(ws) >= 0.0)
