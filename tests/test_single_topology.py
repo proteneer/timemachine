@@ -540,6 +540,7 @@ def test_cyclic_difference_translation_invariant(a, b, t, period):
 
 
 @given(pairs(finite_floats()))
+@seed(2022)
 def test_interpolate_w_coord_valid_at_end_states(end_states):
     f = interpolate_w_coord
     a, b = end_states
@@ -548,6 +549,7 @@ def test_interpolate_w_coord_valid_at_end_states(end_states):
 
 
 @given(pairs(finite_floats()).map(sorted), pairs(lambdas).map(sorted))
+@seed(2022)
 def test_interpolate_w_coord_monotonic(end_states, lambdas):
     f = interpolate_w_coord
     a, b = end_states
