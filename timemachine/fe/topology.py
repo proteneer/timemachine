@@ -304,7 +304,6 @@ class BaseTopology:
             Returns a ChiralAtomRestraint and a ChiralBondRestraint
 
         """
-        _ = chiral_utils.find_chiral_atoms(self.mol)
         chiral_bonds = chiral_utils.find_chiral_bonds(self.mol)
 
         chiral_atom_restr_idxs = chiral_utils.setup_all_chiral_atom_restr_idxs(self.mol, get_romol_conf(self.mol))
