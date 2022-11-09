@@ -542,10 +542,10 @@ def test_cyclic_difference_translation_invariant(a, b, t, period):
 @given(pairs(finite_floats()))
 @seed(2022)
 def test_interpolate_w_coord_valid_at_end_states(end_states):
-    f = interpolate_w_coord
     a, b = end_states
-    assert f(a, b, 0.0) == a
-    assert f(a, b, 1.0) == b
+    f = functools.partial(interpolate_w_coord, a, b)
+    assert f(0.0) == a
+    assert f(1.0) == b
 
 
 def test_interpolate_w_coord_monotonic():
