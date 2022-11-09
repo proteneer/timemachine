@@ -33,7 +33,7 @@ def run_edge(mol_a, mol_b, protein_path, n_windows):
 
     threshold = 2.0
     core, smarts = atom_mapping.get_core_with_alignment(mol_a, mol_b, threshold=threshold)
-    res = utils.plot_atom_mapping_grid(mol_a, mol_b, smarts, core)
+    res = utils.plot_atom_mapping_grid(mol_a, mol_b, core)
     with open(f"edge_map_{get_mol_name(mol_a)}_{get_mol_name(mol_b)}.svg", "w") as fh:
         fh.write(res)
 

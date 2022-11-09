@@ -136,22 +136,17 @@ def recenter_mol(mol):
     return mol_copy
 
 
-def plot_atom_mapping_grid(mol_a, mol_b, core_smarts, core, show_idxs=False):
+def plot_atom_mapping_grid(mol_a, mol_b, core, show_idxs=False):
 
     mol_a_3d = recenter_mol(mol_a)
     mol_b_3d = recenter_mol(mol_b)
 
     mol_a_2d = Chem.Mol(mol_a_3d)
     mol_b_2d = Chem.Mol(mol_b_3d)
-    mol_q_2d = Chem.MolFromSmarts(core_smarts)
 
-    AllChem.Compute2DCoords(mol_q_2d)
+    b_to_a = [[int(b), int(a)] for (a, b) in core]
 
-    q_to_a = [[int(x[0]), int(x[1])] for x in enumerate(core[:, 0])]
-    q_to_b = [[int(x[0]), int(x[1])] for x in enumerate(core[:, 1])]
-
-    AllChem.GenerateDepictionMatching2DStructure(mol_a_2d, mol_q_2d, atomMap=q_to_a)
-    AllChem.GenerateDepictionMatching2DStructure(mol_b_2d, mol_q_2d, atomMap=q_to_b)
+    AllChem.GenerateDepictionMatching2DStructure(mol_b_2d, mol_a_2d, atomMap=b_to_a)
 
     atom_colors_a = {}
     atom_colors_b = {}
@@ -170,14 +165,11 @@ def plot_atom_mapping_grid(mol_a, mol_b, core_smarts, core, show_idxs=False):
             atom.SetProp("molAtomMapNumber", str(atom.GetIdx()))
         for atom in mol_b_3d.GetAtoms():
             atom.SetProp("molAtomMapNumber", str(atom.GetIdx()))
-        for atom in mol_q_2d.GetAtoms():
-            atom.SetProp("molAtomMapNumber", str(atom.GetIdx()))
 
     return Draw.MolsToGridImage(
-        [mol_q_2d, mol_a_2d, mol_b_2d, mol_a_3d, mol_b_3d],
+        [mol_a_2d, mol_b_2d, mol_a_3d, mol_b_3d],
         molsPerRow=5,
         highlightAtomLists=[
-            list(range(mol_q_2d.GetNumAtoms())),
             core[:, 0].tolist(),
             core[:, 1].tolist(),
             core[:, 0].tolist(),
