@@ -22,10 +22,11 @@ from timemachine.fe.single_topology import (
     cyclic_difference,
     handle_ring_opening_closing,
     interpolate_harmonic_force_constant,
+    interpolate_w_coord,
     setup_dummy_interactions_from_ff,
 )
 from timemachine.fe.system import convert_bps_into_system, minimize_scipy, simulate_system
-from timemachine.fe.utils import get_mol_name, get_romol_conf
+from timemachine.fe.utils import get_mol_name, get_romol_conf, read_sdf
 from timemachine.ff import Forcefield
 from timemachine.ff.handlers import openmm_deserializer
 from timemachine.md.builders import build_water_system
@@ -197,8 +198,7 @@ def test_hif2a_end_state_stability(num_pairs_to_setup=25, num_pairs_to_simulate=
     """
 
     with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
-        suppl = Chem.SDMolSupplier(str(path_to_ligand), removeHs=False)
-        mols = [m for m in suppl]
+        mols = read_sdf(path_to_ligand)
 
     pairs = [(mol_a, mol_b) for mol_a in mols for mol_b in mols]
 
@@ -293,8 +293,7 @@ def test_jax_transform_intermediate_potential():
         # NOTE: test system can probably be simplified; we just need
         # any SingleTopology and conformation
         with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
-            suppl = Chem.SDMolSupplier(str(path_to_ligand), removeHs=False)
-            mols = {get_mol_name(mol): mol for mol in suppl}
+            mols = {get_mol_name(mol): mol for mol in read_sdf(path_to_ligand)}
 
         mol_a = mols["206"]
         mol_b = mols["57"]
@@ -388,7 +387,12 @@ nonzero_force_constants = finite_floats(1e-9, 1e9)
 
 lambdas = finite_floats(0.0, 1.0)
 
-lambda_intervals = st.lists(finite_floats(1e-9, 1.0 - 1e-9), min_size=2, max_size=2, unique=True).map(sorted)
+
+def pairs(elem, unique=False):
+    return st.lists(elem, min_size=2, max_size=2, unique=unique)
+
+
+lambda_intervals = pairs(finite_floats(1e-9, 1.0 - 1e-9), unique=True).map(sorted)
 
 
 @given(nonzero_force_constants, lambda_intervals, lambdas)
@@ -454,14 +458,7 @@ def test_interpolate_harmonic_force_constant(src_k, dst_k, k_min, lambda_interva
     assert_nondecreasing(lambda lam: f(k2, k1, 1.0 - lam))
 
 
-@given(
-    st.lists(
-        nonzero_force_constants,
-        min_size=2,
-        max_size=2,
-        unique=True,
-    ).filter(lambda ks: np.abs(ks[0] - ks[1]) / ks[1] > 1e-6)
-)
+@given(pairs(nonzero_force_constants, unique=True).filter(lambda ks: np.abs(ks[0] - ks[1]) / ks[1] > 1e-6))
 @seed(2022)
 def test_interpolate_harmonic_force_constant_sublinear(ks):
     src_k, dst_k = ks
@@ -540,3 +537,18 @@ def test_cyclic_difference_translation_invariant(a, b, t, period):
         cyclic_difference(a, b, period),
         period,
     )
+
+
+@given(pairs(finite_floats()))
+@seed(2022)
+def test_interpolate_w_coord_valid_at_end_states(end_states):
+    a, b = end_states
+    f = functools.partial(interpolate_w_coord, a, b)
+    assert f(0.0) == a
+    assert f(1.0) == b
+
+
+def test_interpolate_w_coord_monotonic():
+    lambdas = np.linspace(0.0, 1.0, 100)
+    ws = interpolate_w_coord(0.0, 1.0, lambdas)
+    assert np.all(np.diff(ws) >= 0.0)

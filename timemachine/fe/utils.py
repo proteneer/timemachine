@@ -1,4 +1,5 @@
-from typing import List, Optional
+from pathlib import Path
+from typing import List, Optional, Union
 
 import numpy as np
 import simtk.unit
@@ -271,6 +272,13 @@ def sanitize_energies(full_us, lamb_idx, cutoff=10000):
     ref_us = np.expand_dims(full_us[:, lamb_idx], axis=1)
     abs_us = np.abs(full_us - ref_us)
     return np.where(abs_us < cutoff, full_us, np.inf)
+
+
+def read_sdf(fname: Union[str, Path]) -> List[Chem.Mol]:
+    """Read list of mols from an SDF (without discarding hydrogens!)"""
+    supplier = Chem.SDMolSupplier(str(fname), removeHs=False)
+    mols = [mol for mol in supplier]
+    return mols
 
 
 def extract_delta_Us_from_U_knk(U_knk):

@@ -1,11 +1,14 @@
 import functools
 import multiprocessing
+from typing import List, Tuple
 
 import jax
 import jax.numpy as jnp
 import numpy as np
 import scipy
+from simtk import openmm
 
+from timemachine.ff.handlers import openmm_deserializer
 from timemachine.integrator import simulate
 from timemachine.lib import potentials
 from timemachine.potentials import bonded, nonbonded
@@ -86,6 +89,12 @@ def convert_bps_into_system(bps):
             assert 0, "Unknown potential"
 
     return system
+
+
+def convert_omm_system(omm_system: openmm.System) -> Tuple["VacuumSystem", List[float]]:
+    bps, masses = openmm_deserializer.deserialize_system(omm_system, cutoff=1.2)
+    system = convert_bps_into_system(bps)
+    return system, masses
 
 
 class VacuumSystem:

@@ -21,9 +21,8 @@ def test_hif2a_free_energy_estimates():
     forcefield = Forcefield.load_from_file("smirnoff_1_1_0_ccc.py")
 
     with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
-        suppl = Chem.SDMolSupplier(str(path_to_ligand), removeHs=False)
+        all_mols = utils.read_sdf(path_to_ligand)
 
-    all_mols = [x for x in suppl]
     mol_a = all_mols[1]
     mol_b = all_mols[4]
 

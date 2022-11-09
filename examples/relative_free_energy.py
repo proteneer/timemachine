@@ -8,7 +8,7 @@ from timemachine.constants import DEFAULT_FF
 from timemachine.fe import atom_mapping, pdb_writer
 from timemachine.fe.rbfe import HostConfig, estimate_relative_free_energy
 from timemachine.fe.single_topology import AtomMapMixin
-from timemachine.fe.utils import plot_atom_mapping_grid
+from timemachine.fe.utils import plot_atom_mapping_grid, read_sdf
 from timemachine.ff import Forcefield
 from timemachine.md import builders
 from timemachine.testsystems.relative import get_hif2a_ligand_pair_single_topology
@@ -98,7 +98,7 @@ def read_from_args():
     parser.add_argument("--seed", type=int, help="Random number seed", required=True)
 
     args = parser.parse_args()
-    mols = [mol for mol in Chem.SDMolSupplier(str(args.ligands), removeHs=False)]
+    mols = read_sdf(str(args.ligands))
     mol_a = get_mol_by_name(mols, args.mol_a_name)  # 43 in test pair
     mol_b = get_mol_by_name(mols, args.mol_b_name)  # 30 in test pair
 
