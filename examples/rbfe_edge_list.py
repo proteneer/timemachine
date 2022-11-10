@@ -26,6 +26,65 @@ def get_mol_by_name(mols, name):
     assert 0, "Mol not found"
 
 
+def run_edge_and_save_results(
+    run_complex_leg_fn,
+    run_solvent_leg_fn,
+    mol_a,
+    mol_b,
+    core,
+    forcefield,
+    protein,
+    n_frames,
+    seed,
+    smarts,
+    exp_ddg,
+    fep_ddg,
+    fep_ddg_err,
+    ccc_ddg,
+    ccc_ddg_err,
+):
+    mol_a_name = get_mol_name(mol_a)
+    mol_b_name = get_mol_name(mol_b)
+    args = mol_a, mol_b, core, forcefield, protein, n_frames, seed
+
+    try:
+        complex_res, complex_top = run_complex_leg_fn(*args)
+        solvent_res, solvent_top = run_solvent_leg_fn(*args)
+
+        meta = (
+            mol_a,
+            mol_b,
+            smarts,
+            core,
+            float(exp_ddg) * KCAL_TO_KJ,
+            float(fep_ddg) * KCAL_TO_KJ,
+            float(fep_ddg_err) * KCAL_TO_KJ,
+            float(ccc_ddg) * KCAL_TO_KJ,
+            float(ccc_ddg_err) * KCAL_TO_KJ,
+        )
+
+        with open(f"success_rbfe_result_{mol_a_name}_{mol_b_name}.pkl", "wb") as fh:
+            pkl_obj = (meta, solvent_res, solvent_top, complex_res, complex_top)
+            pickle.dump(pkl_obj, fh)
+
+        solvent_ddg = np.sum(solvent_res.all_dGs)
+        solvent_ddg_err = np.linalg.norm(solvent_res.all_errs)
+        complex_ddg = np.sum(complex_res.all_dGs)
+        complex_ddg_err = np.linalg.norm(complex_res.all_errs)
+
+        tm_ddg = complex_ddg - solvent_ddg
+        tm_err = np.linalg.norm([complex_ddg_err, solvent_ddg_err])
+
+        print(
+            f"finished: {mol_a_name} -> {mol_b_name} (kJ/mol) | complex {complex_ddg:.2f} +- {complex_ddg_err:.2f} | solvent {solvent_ddg:.2f} +- {solvent_ddg_err:.2f} | tm_pred {tm_ddg:.2f} +- {tm_err:.2f} | exp_ddg {exp_ddg:.2f} | fep_ddg {fep_ddg:.2f} +- {fep_ddg_err:.2f}"
+        )
+    except Exception as err:
+        print(
+            f"failed: {err} {mol_a_name} -> {mol_b_name} (kJ/mol) | exp_ddg {exp_ddg:.2f} | fep_ddg {fep_ddg:.2f} +- {fep_ddg_err:.2f}"
+        )
+        traceback.print_exc()
+
+
 def read_from_args():
 
     parser = argparse.ArgumentParser(
@@ -45,10 +104,6 @@ def read_from_args():
 
     mols = read_sdf(str(args.ligands))
 
-    cfutures = []
-    sfutures = []
-    metadata = []
-
     cpc = CUDAPoolClient(args.n_gpus)
     cpc.verify()
 
@@ -59,65 +114,33 @@ def read_from_args():
         reader = csv.reader(csvfile, delimiter=",")
         next(reader)
         rows = [row for row in reader]
-        for row_idx, row in enumerate(rows):
+        for row in rows:
             mol_a_name, mol_b_name, exp_ddg, fep_ddg, fep_ddg_err, ccc_ddg, ccc_ddg_err = row
             mol_a = get_mol_by_name(mols, mol_a_name)
             mol_b = get_mol_by_name(mols, mol_b_name)
 
-            print(f"Submitting job for {mol_a_name} -> {mol_b_name}")
             mcs_threshold = 2.0
             core, smarts = atom_mapping.get_core_with_alignment(mol_a, mol_b, threshold=mcs_threshold)
-            cfutures.append(
-                cpc.submit(run_complex, mol_a, mol_b, core, forcefield, protein, args.n_frames, args.seed + row_idx)
+
+            print(f"Submitting job for {mol_a_name} -> {mol_b_name}")
+            cpc.submit(
+                run_edge_and_save_results,
+                run_complex,
+                run_solvent,
+                mol_a,
+                mol_b,
+                core,
+                forcefield,
+                protein,
+                args.n_frames,
+                args.seed,
+                smarts,
+                exp_ddg,
+                fep_ddg,
+                fep_ddg_err,
+                ccc_ddg,
+                ccc_ddg_err,
             )
-            sfutures.append(
-                cpc.submit(run_solvent, mol_a, mol_b, core, forcefield, protein, args.n_frames, args.seed + row_idx)
-            )
-
-            metadata.append(
-                (
-                    mol_a,
-                    mol_b,
-                    smarts,
-                    core,
-                    float(exp_ddg) * KCAL_TO_KJ,
-                    float(fep_ddg) * KCAL_TO_KJ,
-                    float(fep_ddg_err) * KCAL_TO_KJ,
-                    float(ccc_ddg) * KCAL_TO_KJ,
-                    float(ccc_ddg_err) * KCAL_TO_KJ,
-                )
-            )
-
-    for i, meta in enumerate(metadata):
-        mol_a, mol_b, _, _, exp_ddg, fep_ddg, fep_ddg_err, ccc_ddg, ccc_ddg_err = meta
-        mol_a_name = get_mol_name(mol_a)
-        mol_b_name = get_mol_name(mol_b)
-
-        try:
-            solvent_res, solvent_top = sfutures[i].result()
-            complex_res, complex_top = cfutures[i].result()
-
-            with open(f"success_rbfe_result_{mol_a_name}_{mol_b_name}.pkl", "wb") as fh:
-                pkl_obj = (meta, solvent_res, solvent_top, complex_res, complex_top)
-                pickle.dump(pkl_obj, fh)
-
-            solvent_ddg = np.sum(solvent_res.all_dGs)
-            solvent_ddg_err = np.linalg.norm(solvent_res.all_errs)
-            complex_ddg = np.sum(complex_res.all_dGs)
-            complex_ddg_err = np.linalg.norm(complex_res.all_errs)
-
-            tm_ddg = complex_ddg - solvent_ddg
-            tm_err = np.linalg.norm([complex_ddg_err, solvent_ddg_err])
-
-            print(
-                f"finished: {mol_a_name} -> {mol_b_name} (kJ/mol) | complex {complex_ddg:.2f} +- {complex_ddg_err:.2f} | solvent {solvent_ddg:.2f} +- {solvent_ddg_err:.2f} | tm_pred {tm_ddg:.2f} +- {tm_err:.2f} | exp_ddg {exp_ddg:.2f} | fep_ddg {fep_ddg:.2f} +- {fep_ddg_err:.2f}"
-            )
-
-        except Exception as err:
-            print(
-                f"failed: {err} {mol_a_name} -> {mol_b_name} (kJ/mol) | exp_ddg {exp_ddg:.2f} | fep_ddg {fep_ddg:.2f} +- {fep_ddg_err:.2f}"
-            )
-            traceback.print_exc()
 
 
 if __name__ == "__main__":
