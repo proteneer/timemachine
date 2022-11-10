@@ -43,11 +43,10 @@ def run_edge_and_save_results(
 ):
     mol_a_name = get_mol_name(mol_a)
     mol_b_name = get_mol_name(mol_b)
-    args = mol_a, mol_b, core, forcefield, protein, n_frames, seed
 
     try:
-        complex_res, complex_top = run_complex(*args)
-        solvent_res, solvent_top = run_solvent(*args)
+        complex_res, complex_top = run_complex(mol_a, mol_b, core, forcefield, protein, n_frames, seed)
+        solvent_res, solvent_top = run_solvent(mol_a, mol_b, core, forcefield, protein, n_frames, seed)
 
         meta = (
             mol_a,
