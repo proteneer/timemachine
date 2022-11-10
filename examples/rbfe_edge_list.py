@@ -27,8 +27,6 @@ def get_mol_by_name(mols, name):
 
 
 def run_edge_and_save_results(
-    run_complex_leg_fn,
-    run_solvent_leg_fn,
     mol_a,
     mol_b,
     core,
@@ -48,8 +46,8 @@ def run_edge_and_save_results(
     args = mol_a, mol_b, core, forcefield, protein, n_frames, seed
 
     try:
-        complex_res, complex_top = run_complex_leg_fn(*args)
-        solvent_res, solvent_top = run_solvent_leg_fn(*args)
+        complex_res, complex_top = run_complex(*args)
+        solvent_res, solvent_top = run_solvent(*args)
 
         meta = (
             mol_a,
@@ -125,8 +123,6 @@ def read_from_args():
             print(f"Submitting job for {mol_a_name} -> {mol_b_name}")
             cpc.submit(
                 run_edge_and_save_results,
-                run_complex,
-                run_solvent,
                 mol_a,
                 mol_b,
                 core,
