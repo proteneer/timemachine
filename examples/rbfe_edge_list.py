@@ -112,7 +112,7 @@ def read_from_args():
         reader = csv.reader(csvfile, delimiter=",")
         next(reader)
         rows = [row for row in reader]
-        for row in rows:
+        for row_idx, row in enumerate(rows):
             mol_a_name, mol_b_name, exp_ddg, fep_ddg, fep_ddg_err, ccc_ddg, ccc_ddg_err = row
             mol_a = get_mol_by_name(mols, mol_a_name)
             mol_b = get_mol_by_name(mols, mol_b_name)
@@ -129,7 +129,7 @@ def read_from_args():
                 forcefield,
                 protein,
                 args.n_frames,
-                args.seed,
+                args.seed + row_idx,
                 smarts,
                 exp_ddg,
                 fep_ddg,
