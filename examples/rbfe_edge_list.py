@@ -82,7 +82,7 @@ def run_edge_and_save_results(
         traceback.print_exc()
 
 
-def read_from_args():
+def parse_args():
 
     parser = argparse.ArgumentParser(
         description="Estimate relative free energy difference between complex and solvent given a results csv file."
@@ -97,17 +97,19 @@ def read_from_args():
     parser.add_argument("--n_gpus", type=int, help="number of gpus", required=True)
     parser.add_argument("--seed", type=int, help="random seed for the runs", required=True)
 
-    args = parser.parse_args()
+    return parser.parse_args()
 
-    mols = read_sdf(str(args.ligands))
 
-    cpc = CUDAPoolClient(args.n_gpus)
+def run_parallel(n_frames, ligands, results_csv, forcefield, protein, n_gpus, seed):
+    mols = read_sdf(str(ligands))
+
+    cpc = CUDAPoolClient(n_gpus)
     cpc.verify()
 
-    forcefield = Forcefield.load_from_file(args.forcefield)
-    protein = app.PDBFile(args.protein)
+    ff = Forcefield.load_from_file(forcefield)
+    protein = app.PDBFile(protein)
 
-    with open(args.results_csv) as csvfile:
+    with open(results_csv) as csvfile:
         reader = csv.reader(csvfile, delimiter=",")
         next(reader)
         rows = [row for row in reader]
@@ -146,5 +148,13 @@ def read_from_args():
 
 
 if __name__ == "__main__":
-
-    read_from_args()
+    args = parse_args()
+    run_parallel(
+        args.n_frames,
+        args.ligands,
+        args.results_csv,
+        args.forcefield,
+        args.protein,
+        args.n_gpus,
+        args.seed,
+    )
