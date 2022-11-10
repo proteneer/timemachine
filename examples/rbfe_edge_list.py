@@ -111,6 +111,7 @@ def read_from_args():
         reader = csv.reader(csvfile, delimiter=",")
         next(reader)
         rows = [row for row in reader]
+        futures = []
         for row_idx, row in enumerate(rows):
             mol_a_name, mol_b_name, exp_ddg, fep_ddg, fep_ddg_err, ccc_ddg, ccc_ddg_err = row
             mol_a = get_mol_by_name(mols, mol_a_name)
@@ -120,22 +121,28 @@ def read_from_args():
             core, smarts = atom_mapping.get_core_with_alignment(mol_a, mol_b, threshold=mcs_threshold)
 
             print(f"Submitting job for {mol_a_name} -> {mol_b_name}")
-            cpc.submit(
-                run_edge_and_save_results,
-                mol_a,
-                mol_b,
-                core,
-                forcefield,
-                protein,
-                args.n_frames,
-                args.seed + row_idx,
-                smarts,
-                exp_ddg,
-                fep_ddg,
-                fep_ddg_err,
-                ccc_ddg,
-                ccc_ddg_err,
+            futures.append(
+                cpc.submit(
+                    run_edge_and_save_results,
+                    mol_a,
+                    mol_b,
+                    core,
+                    forcefield,
+                    protein,
+                    args.n_frames,
+                    args.seed + row_idx,
+                    smarts,
+                    exp_ddg,
+                    fep_ddg,
+                    fep_ddg_err,
+                    ccc_ddg,
+                    ccc_ddg_err,
+                )
             )
+
+        # Block until subprocesses finish (possibly redundant; included to be explicit)
+        for future in futures:
+            _ = future.result()
 
 
 if __name__ == "__main__":
