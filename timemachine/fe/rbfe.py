@@ -756,7 +756,7 @@ def run_edge_and_save_results(
     return path
 
 
-def run_parallel(
+def run_edges_parallel(
     n_frames: int,
     ligands: Sequence[Chem.rdchem.Mol],
     edges: Sequence[Edge],

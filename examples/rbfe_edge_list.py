@@ -58,7 +58,7 @@ if __name__ == "__main__":
     forcefield = Forcefield.load_from_file(args.forcefield)
     protein = app.PDBFile(str(args.protein))
 
-    paths = rbfe.run_parallel(
+    paths = rbfe.run_edges_parallel(
         args.n_frames,
         ligands,
         edges,
