@@ -779,10 +779,10 @@ def run_edges_parallel(
     # Without this get_mol_name(mol) will fail on roundtripped mol
     Chem.SetDefaultPickleProperties(Chem.PropertyPickleOptions.AllProps)
 
-    jobs = []
+    jobs = set()
     for edge_idx, edge in enumerate(edges):
         print(f"Submitting job for {edge.mol_a_name} -> {edge.mol_b_name}")
-        jobs.append(
+        jobs.add(
             pool_client.submit(
                 run_edge_and_save_results,
                 mols,
@@ -797,8 +797,8 @@ def run_edges_parallel(
 
     # Block until jobs finish
     paths = []
-    for fut in futures.as_completed(jobs):
-        paths.append(fut.result())
-        del fut  # allow future to be GC'd
+    for job in futures.as_completed(jobs):
+        paths.append(job.result())
+        jobs.remove(job)  # allow future object to be GC'd
 
     return paths
