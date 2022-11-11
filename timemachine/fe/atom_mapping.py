@@ -182,20 +182,16 @@ def get_core_by_mcs(
     chiral_set_b = ChiralRestrIdxSet.from_mol(mol_b, conf_b)
 
     def valid_chiral_atoms(trial_core):
-        if allow_chiral_atom_flips and allow_chiral_atom_undefined:
-            return True
-
-        flips = find_atom_map_chiral_conflicts(trial_core, chiral_set_a, chiral_set_b, mode="flip")
-        undefineds = find_atom_map_chiral_conflicts(trial_core, chiral_set_a, chiral_set_b, mode="undefined")
-
-        num_flips = len(flips)
-        num_undefineds = len(undefineds)
-
-        # TODO: de-DeMorgan-ify
-        invalid_due_to_flips = (not allow_chiral_atom_flips) and (num_flips > 0)
-        invalid_due_to_undefineds = (not allow_chiral_atom_undefined) and (num_undefineds > 0)
-        invalid = invalid_due_to_flips or invalid_due_to_undefineds
-        valid = not invalid
+        # return False if either active filter is violated
+        valid = True
+        if not allow_chiral_atom_flips:
+            n_flips = len(find_atom_map_chiral_conflicts(trial_core, chiral_set_a, chiral_set_b, mode="flip"))
+            if n_flips > 0:
+                valid = False
+        if valid and (not allow_chiral_atom_undefined):
+            n_undefined = len(find_atom_map_chiral_conflicts(trial_core, chiral_set_a, chiral_set_b, mode="undefined"))
+            if n_undefined > 0:
+                valid = False
 
         return valid
 
