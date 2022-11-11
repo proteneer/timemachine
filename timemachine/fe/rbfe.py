@@ -3,8 +3,7 @@ import io
 import pickle
 import traceback
 import warnings
-from pathlib import Path
-from typing import Any, Dict, NamedTuple, Optional, Sequence, Union
+from typing import Any, Dict, NamedTuple, Optional, Sequence
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -697,10 +696,10 @@ class Edge(NamedTuple):
 def run_edge_and_save_results(
     mols: Dict[str, Chem.rdchem.Mol],
     edge: Edge,
-    forcefield,
-    protein,
-    n_frames,
-    seed,
+    forcefield: Forcefield,
+    protein: app.PDBFile,
+    n_frames: int,
+    seed: int,
     file_client: AbstractFileClient,
 ):
     try:
@@ -762,7 +761,7 @@ def run_parallel(
     ligands: Sequence[Chem.rdchem.Mol],
     edges: Sequence[Edge],
     ff: Forcefield,
-    protein_pdb: Union[Path, str],
+    protein: app.PDBFile,
     n_gpus: int,
     seed: int,
     pool_client: Optional[AbstractClient] = None,
@@ -774,8 +773,6 @@ def run_parallel(
     pool_client.verify()
 
     file_client = file_client or FileClient()
-
-    protein = app.PDBFile(str(protein_pdb))
 
     # Ensure that all mol props (e.g. _Name) are included in pickles
     # Without this get_mol_name(mol) will fail on roundtripped mol

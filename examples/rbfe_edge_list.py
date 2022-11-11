@@ -4,6 +4,7 @@ from typing import List
 
 # HACK: import rdkit first to work around free(): invalid pointer
 import rdkit  # noqa: F401
+from simtk.openmm import app
 
 from timemachine.constants import KCAL_TO_KJ
 from timemachine.fe import rbfe
@@ -55,6 +56,7 @@ if __name__ == "__main__":
     ligands = read_sdf(args.ligands)
     edges = read_edges_csv(args.results_csv)
     forcefield = Forcefield.load_from_file(args.forcefield)
+    protein = app.PDBFile(str(args.protein))
 
     paths = rbfe.run_parallel(
         args.n_frames,
