@@ -94,12 +94,6 @@ class WrappedFuture:
         self._future = future
         self._id = job_id
 
-    def result(self):
-        return self._future.result()
-
-    def done(self):
-        return self._future.done()
-
     @property
     def id(self):
         return self._id
@@ -107,6 +101,9 @@ class WrappedFuture:
     @property
     def name(self):
         return str(self._id)
+
+    def __getattr__(self, attr):
+        return getattr(self._future, attr)
 
 
 class SerialClient(AbstractClient):
