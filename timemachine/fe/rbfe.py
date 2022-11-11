@@ -3,7 +3,6 @@ import io
 import pickle
 import traceback
 import warnings
-from concurrent import futures
 from typing import Any, Dict, NamedTuple, Optional, Sequence
 
 import matplotlib.pyplot as plt
@@ -795,5 +794,5 @@ def run_edges_parallel(
         for edge_idx, edge in enumerate(edges)
     )
 
-    paths = [job.result() for job in futures.as_completed(jobs)]
+    paths = [job.result() for job in jobs]
     return paths
