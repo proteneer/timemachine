@@ -5,7 +5,7 @@ import pickle
 import traceback
 import warnings
 from pathlib import Path
-from typing import Union
+from typing import Optional, Union
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -24,7 +24,7 @@ from timemachine.ff import Forcefield
 from timemachine.lib import LangevinIntegrator, MonteCarloBarostat, custom_ops
 from timemachine.md import builders, minimizer
 from timemachine.md.barostat.utils import get_bond_list, get_group_indices
-from timemachine.parallel.client import CUDAPoolClient
+from timemachine.parallel.client import AbstractClient, AbstractFileClient, CUDAPoolClient, FileClient
 from timemachine.potentials import jax_utils
 
 
@@ -703,6 +703,7 @@ def run_edge_and_save_results(
     fep_ddg_err,
     ccc_ddg,
     ccc_ddg_err,
+    file_client: AbstractFileClient,
 ):
     mol_a_name = get_mol_name(mol_a)
     mol_b_name = get_mol_name(mol_b)
@@ -723,9 +724,9 @@ def run_edge_and_save_results(
             float(ccc_ddg_err) * KCAL_TO_KJ,
         )
 
-        with open(f"success_rbfe_result_{mol_a_name}_{mol_b_name}.pkl", "wb") as fh:
-            pkl_obj = (meta, solvent_res, solvent_top, complex_res, complex_top)
-            pickle.dump(pkl_obj, fh)
+        path = f"success_rbfe_result_{mol_a_name}_{mol_b_name}.pkl"
+        pkl_obj = (meta, solvent_res, solvent_top, complex_res, complex_top)
+        file_client.store(path, pickle.dumps(pkl_obj))
 
         solvent_ddg = np.sum(solvent_res.all_dGs)
         solvent_ddg_err = np.linalg.norm(solvent_res.all_errs)
@@ -738,6 +739,9 @@ def run_edge_and_save_results(
         print(
             f"finished: {mol_a_name} -> {mol_b_name} (kJ/mol) | complex {complex_ddg:.2f} +- {complex_ddg_err:.2f} | solvent {solvent_ddg:.2f} +- {solvent_ddg_err:.2f} | tm_pred {tm_ddg:.2f} +- {tm_err:.2f} | exp_ddg {exp_ddg:.2f} | fep_ddg {fep_ddg:.2f} +- {fep_ddg_err:.2f}"
         )
+
+        return path
+
     except Exception as err:
         print(
             f"failed: {err} {mol_a_name} -> {mol_b_name} (kJ/mol) | exp_ddg {exp_ddg:.2f} | fep_ddg {fep_ddg:.2f} +- {fep_ddg_err:.2f}"
@@ -753,11 +757,15 @@ def run_parallel(
     protein_pdb: Union[Path, str],
     n_gpus: int,
     seed: int,
+    pool_client: Optional[AbstractClient] = None,
+    file_client: Optional[AbstractFileClient] = None,
 ):
     mols = {get_mol_name(mol): mol for mol in read_sdf(str(ligands))}
 
-    cpc = CUDAPoolClient(n_gpus)
-    cpc.verify()
+    pool_client = pool_client or CUDAPoolClient(n_gpus)
+    pool_client.verify()
+
+    file_client = file_client or FileClient()
 
     ff = Forcefield.load_from_file(forcefield)
     protein = app.PDBFile(str(protein_pdb))
@@ -782,7 +790,7 @@ def run_parallel(
 
             print(f"Submitting job for {mol_a_name} -> {mol_b_name}")
             futures.append(
-                cpc.submit(
+                pool_client.submit(
                     run_edge_and_save_results,
                     mol_a,
                     mol_b,
@@ -797,9 +805,11 @@ def run_parallel(
                     fep_ddg_err,
                     ccc_ddg,
                     ccc_ddg_err,
+                    file_client,
                 )
             )
 
-        # Block until subprocesses finish (possibly redundant; included to be explicit)
-        for future in futures:
-            _ = future.result()
+        # Block until subprocesses finish
+        paths = [fut.result() for fut in futures]
+
+        return paths

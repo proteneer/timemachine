@@ -23,7 +23,7 @@ def parse_args():
 
 if __name__ == "__main__":
     args = parse_args()
-    rbfe.run_parallel(
+    paths = rbfe.run_parallel(
         args.n_frames,
         args.ligands,
         args.results_csv,
@@ -32,3 +32,5 @@ if __name__ == "__main__":
         args.n_gpus,
         args.seed,
     )
+    for path in paths:
+        print(path)
