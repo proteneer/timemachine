@@ -1,6 +1,14 @@
 import argparse
+import csv
+from typing import List
 
+# HACK: import rdkit first to work around free(): invalid pointer
+import rdkit  # noqa: F401
+
+from timemachine.constants import KCAL_TO_KJ
 from timemachine.fe import rbfe
+from timemachine.fe.utils import read_sdf
+from timemachine.ff import Forcefield
 
 
 def parse_args():
@@ -21,13 +29,38 @@ def parse_args():
     return parser.parse_args()
 
 
+def read_edges_csv(csv_file: str) -> List[rbfe.Edge]:
+    with open(args.results_csv) as csvfile:
+        reader = csv.reader(csvfile, delimiter=",")
+        next(reader, None)  # skip header
+        return [
+            rbfe.Edge(
+                mol_a_name,
+                mol_b_name,
+                {
+                    "exp_ddg_kcal": float(exp_ddg) * KCAL_TO_KJ,
+                    "fep_ddg_kcal": float(fep_ddg) * KCAL_TO_KJ,
+                    "fep_ddg_err_kcal": float(fep_ddg_err) * KCAL_TO_KJ,
+                    "ccc_ddg_kcal": float(ccc_ddg) * KCAL_TO_KJ,
+                    "ccc_ddg_err_kcal": float(ccc_ddg_err) * KCAL_TO_KJ,
+                },
+            )
+            for mol_a_name, mol_b_name, exp_ddg, fep_ddg, fep_ddg_err, ccc_ddg, ccc_ddg_err in reader
+        ]
+
+
 if __name__ == "__main__":
     args = parse_args()
+
+    ligands = read_sdf(args.ligands)
+    edges = read_edges_csv(args.results_csv)
+    forcefield = Forcefield.load_from_file(args.forcefield)
+
     paths = rbfe.run_parallel(
         args.n_frames,
-        args.ligands,
-        args.results_csv,
-        args.forcefield,
+        ligands,
+        edges,
+        forcefield,
         args.protein,
         args.n_gpus,
         args.seed,

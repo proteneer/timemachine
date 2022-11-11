@@ -1,11 +1,10 @@
-import csv
 import functools
 import io
 import pickle
 import traceback
 import warnings
 from pathlib import Path
-from typing import Optional, Union
+from typing import Any, Dict, NamedTuple, Optional, Sequence, Union
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -13,13 +12,13 @@ import pymbar
 from rdkit import Chem
 from simtk.openmm import app
 
-from timemachine.constants import BOLTZ, DEFAULT_TEMP, KCAL_TO_KJ
+from timemachine.constants import BOLTZ, DEFAULT_TEMP
 from timemachine.fe import atom_mapping, model_utils
 from timemachine.fe.bar import bar_with_bootstrapped_uncertainty
 from timemachine.fe.free_energy import HostConfig, InitialState, SimulationProtocol, SimulationResult
 from timemachine.fe.single_topology import SingleTopology
 from timemachine.fe.system import convert_omm_system
-from timemachine.fe.utils import get_mol_name, get_romol_conf, read_sdf
+from timemachine.fe.utils import get_mol_name, get_romol_conf
 from timemachine.ff import Forcefield
 from timemachine.lib import LangevinIntegrator, MonteCarloBarostat, custom_ops
 from timemachine.md import builders, minimizer
@@ -689,6 +688,12 @@ def run_complex(
     return complex_res, complex_top
 
 
+class Edge(NamedTuple):
+    mol_a_name: str
+    mol_b_name: str
+    metadata: Dict[str, Any]
+
+
 def run_edge_and_save_results(
     mol_a,
     mol_b,
@@ -698,11 +703,7 @@ def run_edge_and_save_results(
     n_frames,
     seed,
     smarts,
-    exp_ddg,
-    fep_ddg,
-    fep_ddg_err,
-    ccc_ddg,
-    ccc_ddg_err,
+    metadata: Dict[str, str],
     file_client: AbstractFileClient,
 ):
     mol_a_name = get_mol_name(mol_a)
@@ -712,104 +713,103 @@ def run_edge_and_save_results(
         complex_res, complex_top = run_complex(mol_a, mol_b, core, forcefield, protein, n_frames, seed)
         solvent_res, solvent_top = run_solvent(mol_a, mol_b, core, forcefield, protein, n_frames, seed)
 
-        meta = (
-            mol_a,
-            mol_b,
-            smarts,
-            core,
-            float(exp_ddg) * KCAL_TO_KJ,
-            float(fep_ddg) * KCAL_TO_KJ,
-            float(fep_ddg_err) * KCAL_TO_KJ,
-            float(ccc_ddg) * KCAL_TO_KJ,
-            float(ccc_ddg_err) * KCAL_TO_KJ,
-        )
-
-        path = f"success_rbfe_result_{mol_a_name}_{mol_b_name}.pkl"
-        pkl_obj = (meta, solvent_res, solvent_top, complex_res, complex_top)
-        file_client.store(path, pickle.dumps(pkl_obj))
-
-        solvent_ddg = np.sum(solvent_res.all_dGs)
-        solvent_ddg_err = np.linalg.norm(solvent_res.all_errs)
-        complex_ddg = np.sum(complex_res.all_dGs)
-        complex_ddg_err = np.linalg.norm(complex_res.all_errs)
-
-        tm_ddg = complex_ddg - solvent_ddg
-        tm_err = np.linalg.norm([complex_ddg_err, solvent_ddg_err])
-
-        print(
-            f"finished: {mol_a_name} -> {mol_b_name} (kJ/mol) | complex {complex_ddg:.2f} +- {complex_ddg_err:.2f} | solvent {solvent_ddg:.2f} +- {solvent_ddg_err:.2f} | tm_pred {tm_ddg:.2f} +- {tm_err:.2f} | exp_ddg {exp_ddg:.2f} | fep_ddg {fep_ddg:.2f} +- {fep_ddg_err:.2f}"
-        )
-
-        return path
-
     except Exception as err:
         print(
-            f"failed: {err} {mol_a_name} -> {mol_b_name} (kJ/mol) | exp_ddg {exp_ddg:.2f} | fep_ddg {fep_ddg:.2f} +- {fep_ddg_err:.2f}"
+            "failed:",
+            " | ".join(
+                [
+                    f"{mol_a_name} -> {mol_b_name} (kJ/mol)",
+                    f"exp_ddg {metadata['exp_ddg_kcal']:.2f}" if "exp_ddg_kcal" in metadata else "",
+                    f"fep_ddg {metadata['fep_ddg_kcal']:.2f} +- {metadata['fep_ddg_err_kcal']:.2f}",
+                ]
+            ),
         )
+        print(err)
         traceback.print_exc()
+        return None
+
+    path = f"success_rbfe_result_{mol_a_name}_{mol_b_name}.pkl"
+    pkl_obj = (mol_a, mol_b, metadata, smarts, core, solvent_res, solvent_top, complex_res, complex_top)
+    file_client.store(path, pickle.dumps(pkl_obj))
+
+    solvent_ddg = np.sum(solvent_res.all_dGs)
+    solvent_ddg_err = np.linalg.norm(solvent_res.all_errs)
+    complex_ddg = np.sum(complex_res.all_dGs)
+    complex_ddg_err = np.linalg.norm(complex_res.all_errs)
+
+    tm_ddg = complex_ddg - solvent_ddg
+    tm_err = np.linalg.norm([complex_ddg_err, solvent_ddg_err])
+
+    print(
+        "finished:",
+        " | ".join(
+            [
+                f"{mol_a_name} -> {mol_b_name} (kJ/mol)",
+                f"complex {complex_ddg:.2f} +- {complex_ddg_err:.2f}",
+                f"solvent {solvent_ddg:.2f} +- {solvent_ddg_err:.2f}",
+                f"tm_pred {tm_ddg:.2f} +- {tm_err:.2f}",
+                f"exp_ddg {metadata['exp_ddg_kcal']:.2f}" if "exp_ddg_kcal" in metadata else "",
+                f"fep_ddg {metadata['fep_ddg_kcal']:.2f} +- {metadata['fep_ddg_err_kcal']:.2f}"
+                if "fep_ddg_kcal" in metadata and "fep_ddg_err_kcal" in metadata
+                else "",
+            ]
+        ),
+    )
+
+    return path
 
 
 def run_parallel(
     n_frames: int,
-    ligands: Union[Path, str],
-    results_csv: Union[Path, str],
-    forcefield: Union[Path, str],
+    ligands: Sequence[Chem.rdchem.Mol],
+    edges: Sequence[Edge],
+    ff: Forcefield,
     protein_pdb: Union[Path, str],
     n_gpus: int,
     seed: int,
     pool_client: Optional[AbstractClient] = None,
     file_client: Optional[AbstractFileClient] = None,
 ):
-    mols = {get_mol_name(mol): mol for mol in read_sdf(str(ligands))}
+    mols = {get_mol_name(mol): mol for mol in ligands}
 
     pool_client = pool_client or CUDAPoolClient(n_gpus)
     pool_client.verify()
 
     file_client = file_client or FileClient()
 
-    ff = Forcefield.load_from_file(forcefield)
     protein = app.PDBFile(str(protein_pdb))
 
     # Ensure that all mol props (e.g. _Name) are included in pickles
     # Without this get_mol_name(mol) will fail on roundtripped mol
     Chem.SetDefaultPickleProperties(Chem.PropertyPickleOptions.AllProps)
 
-    with open(results_csv) as csvfile:
-        reader = csv.reader(csvfile, delimiter=",")
-        next(reader)
-        rows = [row for row in reader]
-        futures = []
+    futures = []
+    for edge_idx, edge in enumerate(edges):
 
-        for row_idx, row in enumerate(rows):
-            mol_a_name, mol_b_name, exp_ddg, fep_ddg, fep_ddg_err, ccc_ddg, ccc_ddg_err = row
-            mol_a = mols[mol_a_name]
-            mol_b = mols[mol_b_name]
+        mol_a = mols[edge.mol_a_name]
+        mol_b = mols[edge.mol_b_name]
 
-            mcs_threshold = 2.0
-            core, smarts = atom_mapping.get_core_with_alignment(mol_a, mol_b, threshold=mcs_threshold)
+        mcs_threshold = 2.0
+        core, smarts = atom_mapping.get_core_with_alignment(mol_a, mol_b, threshold=mcs_threshold)
 
-            print(f"Submitting job for {mol_a_name} -> {mol_b_name}")
-            futures.append(
-                pool_client.submit(
-                    run_edge_and_save_results,
-                    mol_a,
-                    mol_b,
-                    core,
-                    ff,
-                    protein,
-                    n_frames,
-                    seed + row_idx,
-                    smarts,
-                    exp_ddg,
-                    fep_ddg,
-                    fep_ddg_err,
-                    ccc_ddg,
-                    ccc_ddg_err,
-                    file_client,
-                )
+        print(f"Submitting job for {edge.mol_a_name} -> {edge.mol_b_name}")
+        futures.append(
+            pool_client.submit(
+                run_edge_and_save_results,
+                mol_a,
+                mol_b,
+                core,
+                ff,
+                protein,
+                n_frames,
+                seed + edge_idx,
+                smarts,
+                edge.metadata,
+                file_client,
             )
+        )
 
-        # Block until subprocesses finish
-        paths = [fut.result() for fut in futures]
+    # Block until subprocesses finish
+    paths = [fut.result() for fut in futures]
 
-        return paths
+    return paths
