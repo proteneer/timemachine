@@ -141,9 +141,9 @@ def test_find_chiral_bonds():
     assert res == set([(0, 2)])
 
 
-def test_chiral_flip_check():
+def test_chiral_conflict_flip():
+    # exercise case of no conflicts or a flip conflict
 
-    # test maps that can swap "chirality of methane"
     mol_a = Chem.AddHs(Chem.MolFromSmiles("C"))
     mol_b = Chem.AddHs(Chem.MolFromSmiles("C"))
 
@@ -175,15 +175,57 @@ def test_chiral_flip_check():
     assert len(swap_map_flips) == 8  # TODO: deduplicate idxs?
     assert len(swap_map_undefineds) == 0
 
-    # test maps where atom chirality is defined in one endstate, undefined in other
+
+def test_chiral_conflict_undefined():
+    # exercise case where atom chirality is defined in one endstate, undefined in other
+
+    mol_a = Chem.AddHs(Chem.MolFromSmiles("C"))
     mol_b = Chem.AddHs(Chem.MolFromSmiles("N"))
+
+    AllChem.EmbedMolecule(mol_a, randomSeed=0)
     AllChem.EmbedMolecule(mol_b, randomSeed=0)
+
+    conf_a = mol_a.GetConformer(0).GetPositions()
     conf_b = mol_b.GetConformer(0).GetPositions()
+
+    chiral_set_a = ChiralRestrIdxSet.from_mol(mol_a, conf_a)
     chiral_set_b = ChiralRestrIdxSet.from_mol(mol_b, conf_b)
+
+    assert len(chiral_set_a.restr_idxs) == 4
     assert len(chiral_set_b.restr_idxs) == 0
 
-    partial_map = identity_map[:4]
+    partial_map = np.array([(i, i) for i in range(4)])
     partial_map_flips = find_atom_map_chiral_conflicts(partial_map, chiral_set_a, chiral_set_b, mode="flip")
     partial_map_undefineds = find_atom_map_chiral_conflicts(partial_map, chiral_set_a, chiral_set_b, mode="undefined")
     assert len(partial_map_flips) == 0
     assert len(partial_map_undefineds) == 1
+
+
+def test_chiral_conflict_mixed():
+    # test case containing both a flip and a partial undefined
+
+    mol_a = Chem.AddHs(Chem.MolFromSmiles("CC"))
+    mol_b = Chem.AddHs(Chem.MolFromSmiles("CN"))
+
+    AllChem.EmbedMolecule(mol_a, randomSeed=0)
+    AllChem.EmbedMolecule(mol_b, randomSeed=0)
+
+    conf_a = mol_a.GetConformer(0).GetPositions()
+    conf_b = mol_b.GetConformer(0).GetPositions()
+
+    chiral_set_a = ChiralRestrIdxSet.from_mol(mol_a, conf_a)
+    chiral_set_b = ChiralRestrIdxSet.from_mol(mol_b, conf_b)
+
+    assert len(chiral_set_a.restr_idxs) == 8
+    assert len(chiral_set_b.restr_idxs) == 4
+
+    mixed_map = np.array([[i, i] for i in range(mol_b.GetNumAtoms())])
+
+    mixed_map[2, 0] = 3
+    mixed_map[3, 0] = 2
+
+    mixed_map_flips = find_atom_map_chiral_conflicts(mixed_map, chiral_set_a, chiral_set_b, mode="flip")
+    mixed_map_undefineds = find_atom_map_chiral_conflicts(mixed_map, chiral_set_a, chiral_set_b, mode="undefined")
+
+    assert len(mixed_map_flips) == 8
+    assert len(mixed_map_undefineds) == 1
