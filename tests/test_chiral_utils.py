@@ -186,4 +186,4 @@ def test_chiral_flip_check():
     partial_map_flips = find_atom_map_chiral_conflicts(partial_map, chiral_set_a, chiral_set_b, mode="flip")
     partial_map_undefineds = find_atom_map_chiral_conflicts(partial_map, chiral_set_a, chiral_set_b, mode="undefined")
     assert len(partial_map_flips) == 0
-    assert len(partial_map_undefineds) > 0
+    assert len(partial_map_undefineds) == 1
