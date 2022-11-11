@@ -695,21 +695,19 @@ class Edge(NamedTuple):
 
 
 def run_edge_and_save_results(
-    mol_a,
-    mol_b,
-    core,
+    mols: Dict[str, Chem.rdchem.Mol],
+    edge: Edge,
     forcefield,
     protein,
     n_frames,
     seed,
-    smarts,
-    metadata: Dict[str, str],
     file_client: AbstractFileClient,
 ):
-    mol_a_name = get_mol_name(mol_a)
-    mol_b_name = get_mol_name(mol_b)
-
     try:
+        mol_a = mols[edge.mol_a_name]
+        mol_b = mols[edge.mol_b_name]
+        core, smarts = atom_mapping.get_core_with_alignment(mol_a, mol_b, threshold=2.0)
+
         complex_res, complex_top = run_complex(mol_a, mol_b, core, forcefield, protein, n_frames, seed)
         solvent_res, solvent_top = run_solvent(mol_a, mol_b, core, forcefield, protein, n_frames, seed)
 
@@ -718,9 +716,9 @@ def run_edge_and_save_results(
             "failed:",
             " | ".join(
                 [
-                    f"{mol_a_name} -> {mol_b_name} (kJ/mol)",
-                    f"exp_ddg {metadata['exp_ddg_kcal']:.2f}" if "exp_ddg_kcal" in metadata else "",
-                    f"fep_ddg {metadata['fep_ddg_kcal']:.2f} +- {metadata['fep_ddg_err_kcal']:.2f}",
+                    f"{edge.mol_a_name} -> {edge.mol_b_name} (kJ/mol)",
+                    f"exp_ddg {edge.metadata['exp_ddg_kcal']:.2f}" if "exp_ddg_kcal" in edge.metadata else "",
+                    f"fep_ddg {edge.metadata['fep_ddg_kcal']:.2f} +- {edge.metadata['fep_ddg_err_kcal']:.2f}",
                 ]
             ),
         )
@@ -728,8 +726,8 @@ def run_edge_and_save_results(
         traceback.print_exc()
         return None
 
-    path = f"success_rbfe_result_{mol_a_name}_{mol_b_name}.pkl"
-    pkl_obj = (mol_a, mol_b, metadata, smarts, core, solvent_res, solvent_top, complex_res, complex_top)
+    path = f"success_rbfe_result_{edge.mol_a_name}_{edge.mol_b_name}.pkl"
+    pkl_obj = (mol_a, mol_b, edge.metadata, smarts, core, solvent_res, solvent_top, complex_res, complex_top)
     file_client.store(path, pickle.dumps(pkl_obj))
 
     solvent_ddg = np.sum(solvent_res.all_dGs)
@@ -744,13 +742,13 @@ def run_edge_and_save_results(
         "finished:",
         " | ".join(
             [
-                f"{mol_a_name} -> {mol_b_name} (kJ/mol)",
+                f"{edge.mol_a_name} -> {edge.mol_b_name} (kJ/mol)",
                 f"complex {complex_ddg:.2f} +- {complex_ddg_err:.2f}",
                 f"solvent {solvent_ddg:.2f} +- {solvent_ddg_err:.2f}",
                 f"tm_pred {tm_ddg:.2f} +- {tm_err:.2f}",
-                f"exp_ddg {metadata['exp_ddg_kcal']:.2f}" if "exp_ddg_kcal" in metadata else "",
-                f"fep_ddg {metadata['fep_ddg_kcal']:.2f} +- {metadata['fep_ddg_err_kcal']:.2f}"
-                if "fep_ddg_kcal" in metadata and "fep_ddg_err_kcal" in metadata
+                f"exp_ddg {edge.metadata['exp_ddg_kcal']:.2f}" if "exp_ddg_kcal" in edge.metadata else "",
+                f"fep_ddg {edge.metadata['fep_ddg_kcal']:.2f} +- {edge.metadata['fep_ddg_err_kcal']:.2f}"
+                if "fep_ddg_kcal" in edge.metadata and "fep_ddg_err_kcal" in edge.metadata
                 else "",
             ]
         ),
@@ -785,26 +783,16 @@ def run_parallel(
 
     futures = []
     for edge_idx, edge in enumerate(edges):
-
-        mol_a = mols[edge.mol_a_name]
-        mol_b = mols[edge.mol_b_name]
-
-        mcs_threshold = 2.0
-        core, smarts = atom_mapping.get_core_with_alignment(mol_a, mol_b, threshold=mcs_threshold)
-
         print(f"Submitting job for {edge.mol_a_name} -> {edge.mol_b_name}")
         futures.append(
             pool_client.submit(
                 run_edge_and_save_results,
-                mol_a,
-                mol_b,
-                core,
+                mols,
+                edge,
                 ff,
                 protein,
                 n_frames,
                 seed + edge_idx,
-                smarts,
-                edge.metadata,
                 file_client,
             )
         )
