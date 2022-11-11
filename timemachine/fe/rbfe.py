@@ -695,8 +695,8 @@ class Edge(NamedTuple):
 
 
 def run_edge_and_save_results(
-    mols: Dict[str, Chem.rdchem.Mol],
     edge: Edge,
+    mols: Dict[str, Chem.rdchem.Mol],
     forcefield: Forcefield,
     protein: app.PDBFile,
     n_frames: int,
@@ -758,11 +758,11 @@ def run_edge_and_save_results(
 
 
 def run_edges_parallel(
-    n_frames: int,
     ligands: Sequence[Chem.rdchem.Mol],
     edges: Sequence[Edge],
     ff: Forcefield,
     protein: app.PDBFile,
+    n_frames: int,
     n_gpus: int,
     seed: int,
     pool_client: Optional[AbstractClient] = None,
@@ -784,8 +784,8 @@ def run_edges_parallel(
     jobs = (
         pool_client.submit(
             run_edge_and_save_results,
-            mols,
             edge,
+            mols,
             ff,
             protein,
             n_frames,

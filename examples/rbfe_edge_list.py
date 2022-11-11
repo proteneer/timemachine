@@ -57,11 +57,11 @@ if __name__ == "__main__":
     protein = app.PDBFile(str(args.protein))
 
     paths = rbfe.run_edges_parallel(
-        args.n_frames,
         ligands,
         edges,
         forcefield,
         args.protein,
+        args.n_frames,
         args.n_gpus,
         args.seed,
     )
