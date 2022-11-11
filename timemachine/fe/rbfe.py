@@ -794,7 +794,7 @@ def run_parallel(
             )
         )
 
-    # Block until subprocesses finish
+    # Block until jobs finish
     paths = [fut.result() for fut in futures]
 
     return paths
