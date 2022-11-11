@@ -2,8 +2,6 @@ import argparse
 import csv
 from typing import List
 
-# HACK: import rdkit first to work around free(): invalid pointer
-import rdkit  # noqa: F401
 from simtk.openmm import app
 
 from timemachine.constants import KCAL_TO_KJ
