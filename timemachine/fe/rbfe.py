@@ -3,6 +3,7 @@ import io
 import pickle
 import traceback
 import warnings
+from concurrent import futures
 from typing import Any, Dict, NamedTuple, Optional, Sequence
 
 import matplotlib.pyplot as plt
@@ -778,10 +779,10 @@ def run_edges_parallel(
     # Without this get_mol_name(mol) will fail on roundtripped mol
     Chem.SetDefaultPickleProperties(Chem.PropertyPickleOptions.AllProps)
 
-    futures = []
+    jobs = []
     for edge_idx, edge in enumerate(edges):
         print(f"Submitting job for {edge.mol_a_name} -> {edge.mol_b_name}")
-        futures.append(
+        jobs.append(
             pool_client.submit(
                 run_edge_and_save_results,
                 mols,
@@ -795,6 +796,9 @@ def run_edges_parallel(
         )
 
     # Block until jobs finish
-    paths = [fut.result() for fut in futures]
+    paths = []
+    for fut in futures.as_completed(jobs):
+        paths.append(fut.result())
+        del fut  # allow future to be GC'd
 
     return paths
