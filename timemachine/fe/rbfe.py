@@ -721,9 +721,15 @@ def run_edge_and_save_results(
                 ]
             ),
         )
+
+        path = f"failure_rbfe_result_{edge.mol_a_name}_{edge.mol_b_name}.pkl"
+        pkl_obj = (edge, err)
+        file_client.store(path, pickle.dumps(pkl_obj))
+
         print(err)
         traceback.print_exc()
-        return None
+
+        return path
 
     path = f"success_rbfe_result_{edge.mol_a_name}_{edge.mol_b_name}.pkl"
     pkl_obj = (mol_a, mol_b, edge.metadata, smarts, core, solvent_res, solvent_top, complex_res, complex_top)
