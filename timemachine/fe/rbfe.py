@@ -724,8 +724,7 @@ def run_edge_and_save_results(
 
         path = f"failure_rbfe_result_{edge.mol_a_name}_{edge.mol_b_name}.pkl"
         tb = traceback.format_exception(None, err, err.__traceback__)
-        pkl_obj = (edge, err, tb)
-        file_client.store(path, pickle.dumps(pkl_obj))
+        file_client.store(path, pickle.dumps((edge, err, tb)))
 
         print(err)
         traceback.print_exc()
