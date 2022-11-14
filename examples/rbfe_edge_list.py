@@ -53,7 +53,7 @@ if __name__ == "__main__":
     edges = read_edges_csv(args.results_csv)
     forcefield = Forcefield.load_from_file(args.forcefield)
 
-    paths = rbfe.run_edges_parallel(
+    _ = rbfe.run_edges_parallel(
         ligands,
         edges,
         forcefield,
@@ -62,5 +62,3 @@ if __name__ == "__main__":
         args.n_gpus,
         args.seed,
     )
-    for path in paths:
-        print(path)
