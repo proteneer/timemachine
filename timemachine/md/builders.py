@@ -33,7 +33,7 @@ def build_protein_system(host_pdbfile: Union[app.PDBFile, PathLike], protein_ff:
     elif isinstance(host_pdbfile, app.PDBFile):
         host_pdb = host_pdbfile
     else:
-        raise TypeError("host_pdb must be a path or a openmm PDBFile object")
+        raise TypeError("host_pdb must be a path or an openmm PDBFile object")
 
     modeller = app.Modeller(host_pdb.topology, host_pdb.positions)
     host_coords = strip_units(host_pdb.positions)
