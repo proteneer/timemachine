@@ -28,9 +28,9 @@ def parse_args():
     return parser.parse_args()
 
 
-def read_edges_csv(csv_file: str) -> List[rbfe.Edge]:
-    with open(args.results_csv) as csvfile:
-        reader = csv.reader(csvfile, delimiter=",")
+def read_edges_csv(path: str) -> List[rbfe.Edge]:
+    with open(path) as fp:
+        reader = csv.reader(fp, delimiter=",")
         next(reader, None)  # skip header
         return [
             rbfe.Edge(
