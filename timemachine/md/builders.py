@@ -1,4 +1,6 @@
 import os
+from pathlib import Path
+from typing import Union
 
 import numpy as np
 from simtk import unit
@@ -6,12 +8,14 @@ from simtk.openmm import Vec3, app
 
 from timemachine.ff import sanitize_water_ff
 
+PathLike = Union[str, Path]
+
 
 def strip_units(coords):
     return unit.Quantity(np.array(coords / coords.unit), coords.unit)
 
 
-def build_protein_system(host_pdbfile, protein_ff: str, water_ff: str):
+def build_protein_system(host_pdbfile: Union[app.PDBFile, str], protein_ff: str, water_ff: str):
     """
     Build a solvated protein system with a 10A padding.
 
@@ -23,11 +27,13 @@ def build_protein_system(host_pdbfile, protein_ff: str, water_ff: str):
     """
 
     host_ff = app.ForceField(f"{protein_ff}.xml", f"{water_ff}.xml")
-    if isinstance(host_pdbfile, str):
+    if isinstance(host_pdbfile, PathLike):
         assert os.path.exists(host_pdbfile)
-        host_pdb = app.PDBFile(host_pdbfile)
+        host_pdb = app.PDBFile(str(host_pdbfile))
     elif isinstance(host_pdbfile, app.PDBFile):
         host_pdb = host_pdbfile
+    else:
+        raise TypeError("host_pdb must be a path or a openmm PDBFile object")
 
     modeller = app.Modeller(host_pdb.topology, host_pdb.positions)
     host_coords = strip_units(host_pdb.positions)
