@@ -60,7 +60,7 @@ if __name__ == "__main__":
         ligands,
         edges,
         forcefield,
-        args.protein,
+        protein,
         args.n_frames,
         args.n_gpus,
         args.seed,
