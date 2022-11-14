@@ -37,14 +37,22 @@ def read_edges_csv(path: str) -> List[rbfe.Edge]:
                 mol_a_name,
                 mol_b_name,
                 {
-                    "exp_ddg_kcal": float(exp_ddg) * KCAL_TO_KJ,
-                    "fep_ddg_kcal": float(fep_ddg) * KCAL_TO_KJ,
-                    "fep_ddg_err_kcal": float(fep_ddg_err) * KCAL_TO_KJ,
-                    "ccc_ddg_kcal": float(ccc_ddg) * KCAL_TO_KJ,
-                    "ccc_ddg_err_kcal": float(ccc_ddg_err) * KCAL_TO_KJ,
+                    "exp_ddg": float(exp_ddg_kcal) * KCAL_TO_KJ,
+                    "fep_ddg": float(fep_ddg_kcal) * KCAL_TO_KJ,
+                    "fep_ddg_err": float(fep_ddg_err_kcal) * KCAL_TO_KJ,
+                    "ccc_ddg": float(ccc_ddg_kcal) * KCAL_TO_KJ,
+                    "ccc_ddg_err": float(ccc_ddg_err_kcal) * KCAL_TO_KJ,
                 },
             )
-            for mol_a_name, mol_b_name, exp_ddg, fep_ddg, fep_ddg_err, ccc_ddg, ccc_ddg_err in reader
+            for (
+                mol_a_name,
+                mol_b_name,
+                exp_ddg_kcal,
+                fep_ddg_kcal,
+                fep_ddg_err_kcal,
+                ccc_ddg_kcal,
+                ccc_ddg_err_kcal,
+            ) in reader
         ]
 
 
