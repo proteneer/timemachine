@@ -8,14 +8,12 @@ from simtk.openmm import Vec3, app
 
 from timemachine.ff import sanitize_water_ff
 
-PathLike = Union[str, Path]
-
 
 def strip_units(coords):
     return unit.Quantity(np.array(coords / coords.unit), coords.unit)
 
 
-def build_protein_system(host_pdbfile: Union[app.PDBFile, PathLike], protein_ff: str, water_ff: str):
+def build_protein_system(host_pdbfile: Union[app.PDBFile, str, Path], protein_ff: str, water_ff: str):
     """
     Build a solvated protein system with a 10A padding.
 
@@ -27,7 +25,7 @@ def build_protein_system(host_pdbfile: Union[app.PDBFile, PathLike], protein_ff:
     """
 
     host_ff = app.ForceField(f"{protein_ff}.xml", f"{water_ff}.xml")
-    if isinstance(host_pdbfile, PathLike):
+    if isinstance(host_pdbfile, str) or isinstance(host_pdbfile, Path):
         assert os.path.exists(host_pdbfile)
         host_pdb = app.PDBFile(str(host_pdbfile))
     elif isinstance(host_pdbfile, app.PDBFile):
