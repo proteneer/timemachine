@@ -2,6 +2,8 @@ import argparse
 import csv
 from typing import List
 
+from simtk.openmm import app
+
 from timemachine.constants import KCAL_TO_KJ
 from timemachine.fe import rbfe
 from timemachine.fe.utils import read_sdf
@@ -52,6 +54,7 @@ if __name__ == "__main__":
     ligands = read_sdf(args.ligands)
     edges = read_edges_csv(args.results_csv)
     forcefield = Forcefield.load_from_file(args.forcefield)
+    protein = app.PDBFile(str(args.protein))
 
     _ = rbfe.run_edges_parallel(
         ligands,
