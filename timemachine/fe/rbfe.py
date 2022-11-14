@@ -9,7 +9,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pymbar
 from rdkit import Chem
-from simtk.openmm import app
 
 from timemachine.constants import BOLTZ, DEFAULT_TEMP
 from timemachine.fe import atom_mapping, model_utils
@@ -697,7 +696,7 @@ def run_edge_and_save_results(
     edge: Edge,
     mols: Dict[str, Chem.rdchem.Mol],
     forcefield: Forcefield,
-    protein: app.PDBFile,
+    protein_path: str,
     n_frames: int,
     seed: int,
     file_client: AbstractFileClient,
@@ -707,8 +706,8 @@ def run_edge_and_save_results(
         mol_b = mols[edge.mol_b_name]
         core, smarts = atom_mapping.get_core_with_alignment(mol_a, mol_b, threshold=2.0)
 
-        complex_res, complex_top = run_complex(mol_a, mol_b, core, forcefield, protein, n_frames, seed)
-        solvent_res, solvent_top = run_solvent(mol_a, mol_b, core, forcefield, protein, n_frames, seed)
+        complex_res, complex_top = run_complex(mol_a, mol_b, core, forcefield, protein_path, n_frames, seed)
+        solvent_res, solvent_top = run_solvent(mol_a, mol_b, core, forcefield, protein_path, n_frames, seed)
 
     except Exception as err:
         print(
@@ -766,7 +765,7 @@ def run_edges_parallel(
     ligands: Sequence[Chem.rdchem.Mol],
     edges: Sequence[Edge],
     ff: Forcefield,
-    protein: app.PDBFile,
+    protein_path: str,
     n_frames: int,
     n_gpus: int,
     seed: int,
@@ -792,7 +791,7 @@ def run_edges_parallel(
             edge,
             mols,
             ff,
-            protein,
+            protein_path,
             n_frames,
             seed + edge_idx,
             file_client,
