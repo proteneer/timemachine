@@ -15,7 +15,7 @@ def strip_units(coords):
     return unit.Quantity(np.array(coords / coords.unit), coords.unit)
 
 
-def build_protein_system(host_pdbfile: Union[app.PDBFile, str], protein_ff: str, water_ff: str):
+def build_protein_system(host_pdbfile: Union[app.PDBFile, PathLike], protein_ff: str, water_ff: str):
     """
     Build a solvated protein system with a 10A padding.
 
