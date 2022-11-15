@@ -119,7 +119,6 @@ def get_core(mol_a, mol_b, threshold=2.0, skip_chiral_checks=False):
         query,
         threshold=threshold,
         allow_chiral_atom_flips=skip_chiral_checks,
-        allow_chiral_atom_undefined=skip_chiral_checks,
     )
     return core
 

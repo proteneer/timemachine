@@ -1,5 +1,6 @@
 import itertools
 from dataclasses import dataclass
+from enum import Enum
 from typing import List, Set, Tuple
 
 import numpy as np
@@ -8,6 +9,11 @@ from rdkit import Chem
 from timemachine.potentials.chiral_restraints import pyramidal_volume, torsion_volume
 
 FourTuple = Tuple[int, int, int, int]
+
+
+class ChiralCheckMode(Enum):
+    FLIP = 1
+    UNDEFINED = 2
 
 
 def setup_chiral_atom_restraints(mol, conf, a_idx):
@@ -198,15 +204,15 @@ def _find_atom_map_chiral_conflicts_one_direction(
     core: np.ndarray,
     chiral_set_a: ChiralRestrIdxSet,
     chiral_set_b: ChiralRestrIdxSet,
-    mode="flip",
+    mode: ChiralCheckMode = ChiralCheckMode.FLIP,
 ):
     # parse mode
-    if mode == "flip":
+    if mode == ChiralCheckMode.FLIP:
         conflict_condition_fxn = chiral_set_b.disallows
-    elif mode == "undefined":
+    elif mode == ChiralCheckMode.UNDEFINED:
         conflict_condition_fxn = lambda mapped_tuple_b: not chiral_set_b.defines(mapped_tuple_b)
     else:
-        raise ValueError("invalid mode -- must be one of 'flip' or 'undefined")
+        raise ValueError("invalid chiral check mode")
 
     # initialize convenient representations
     mapped_set_a = set(core[:, 0])
@@ -232,7 +238,7 @@ def find_atom_map_chiral_conflicts(
     core: np.ndarray,
     chiral_set_a: ChiralRestrIdxSet,
     chiral_set_b: ChiralRestrIdxSet,
-    mode="flip",
+    mode: ChiralCheckMode = ChiralCheckMode.FLIP,
 ) -> Set[Tuple[FourTuple, FourTuple]]:
     """
 
@@ -246,10 +252,10 @@ def find_atom_map_chiral_conflicts(
     chiral_set_a, chiral_set_b
         chiral restraint sets for mols a and b
 
-    mode : str, one of "flip" or "undefined"
-        "flip" : find cases where chiral atom restraints are defined
+    mode : ChiralCheckMode
+        FLIP : find cases where chiral atom restraints are defined
             for both mols a and b with opposite signs
-        "undefined" : find cases where chiral atom restraints are defined
+        UNDEFINED: find cases where chiral atom restraints are defined
             for mol a (resp. b) but not mol b (resp. a)
 
     Returns

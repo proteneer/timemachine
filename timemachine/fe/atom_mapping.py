@@ -8,7 +8,7 @@ from rdkit.Chem import rdFMCS
 from scipy.spatial.distance import cdist
 
 from timemachine.constants import DEFAULT_FF
-from timemachine.fe.chiral_utils import ChiralRestrIdxSet, find_atom_map_chiral_conflicts
+from timemachine.fe.chiral_utils import ChiralCheckMode, ChiralRestrIdxSet, find_atom_map_chiral_conflicts
 from timemachine.fe.topology import AtomMappingError
 from timemachine.fe.utils import set_romol_conf
 from timemachine.ff import Forcefield
@@ -117,7 +117,6 @@ def get_core_by_mcs(
     threshold=0.5,
     conformer_aware: bool = True,
     allow_chiral_atom_flips=False,
-    allow_chiral_atom_undefined=True,
 ):
     """Return np integer array that can be passed to RelativeFreeEnergy constructor
 
@@ -130,10 +129,6 @@ def get_core_by_mcs(
         (assumes conformers are aligned)
     allow_chiral_atom_flips: bool
         allow mappings that flip the sign of chiral atom restraints
-    allow_chiral_atom_undefined: bool
-        allow mappings where a chiral atom restraint
-        is defined for (c, i, j, k) in A (resp. B)
-        but undefined for (m(c), m(i), m(j), m(k)) in B (resp. A)
 
     Returns
     -------
@@ -182,15 +177,13 @@ def get_core_by_mcs(
     chiral_set_b = ChiralRestrIdxSet.from_mol(mol_b, conf_b)
 
     def valid_chiral_atoms(trial_core):
-        # return False if either active filter is violated
+        # return False if chiral atom chick is active and a conflict is found
         valid = True
         if not allow_chiral_atom_flips:
-            n_flips = len(find_atom_map_chiral_conflicts(trial_core, chiral_set_a, chiral_set_b, mode="flip"))
+            n_flips = len(
+                find_atom_map_chiral_conflicts(trial_core, chiral_set_a, chiral_set_b, mode=ChiralCheckMode.FLIP)
+            )
             if n_flips > 0:
-                valid = False
-        if valid and (not allow_chiral_atom_undefined):
-            n_undefined = len(find_atom_map_chiral_conflicts(trial_core, chiral_set_a, chiral_set_b, mode="undefined"))
-            if n_undefined > 0:
                 valid = False
 
         return valid

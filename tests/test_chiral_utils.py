@@ -4,7 +4,7 @@ from rdkit import Chem
 from rdkit.Chem import AllChem
 
 from timemachine.fe import chiral_utils, utils
-from timemachine.fe.chiral_utils import ChiralRestrIdxSet, find_atom_map_chiral_conflicts
+from timemachine.fe.chiral_utils import ChiralCheckMode, ChiralRestrIdxSet, find_atom_map_chiral_conflicts
 from timemachine.potentials.chiral_restraints import U_chiral_atom_batch, U_chiral_bond_batch
 
 pytestmark = [pytest.mark.nogpu]
@@ -239,13 +239,17 @@ def test_chiral_conflict_flip():
     swap_map[1, 1] = 2
     swap_map[2, 1] = 1
 
-    identity_flips = find_atom_map_chiral_conflicts(identity_map, chiral_set_a, chiral_set_b, mode="flip")
-    identity_undefineds = find_atom_map_chiral_conflicts(identity_map, chiral_set_a, chiral_set_b, mode="undefined")
+    identity_flips = find_atom_map_chiral_conflicts(identity_map, chiral_set_a, chiral_set_b, mode=ChiralCheckMode.FLIP)
+    identity_undefineds = find_atom_map_chiral_conflicts(
+        identity_map, chiral_set_a, chiral_set_b, mode=ChiralCheckMode.UNDEFINED
+    )
     assert len(identity_flips) == 0
     assert len(identity_undefineds) == 0
 
-    swap_map_flips = find_atom_map_chiral_conflicts(swap_map, chiral_set_a, chiral_set_b, mode="flip")
-    swap_map_undefineds = find_atom_map_chiral_conflicts(swap_map, chiral_set_a, chiral_set_b, mode="undefined")
+    swap_map_flips = find_atom_map_chiral_conflicts(swap_map, chiral_set_a, chiral_set_b, mode=ChiralCheckMode.FLIP)
+    swap_map_undefineds = find_atom_map_chiral_conflicts(
+        swap_map, chiral_set_a, chiral_set_b, mode=ChiralCheckMode.UNDEFINED
+    )
     assert len(swap_map_flips) == 8  # TODO: deduplicate idxs?
     assert len(swap_map_undefineds) == 0
 
@@ -266,8 +270,12 @@ def test_chiral_conflict_undefined():
     assert len(chiral_set_b.restr_idxs) == 0
 
     partial_map = np.array([(i, i) for i in range(4)])
-    partial_map_flips = find_atom_map_chiral_conflicts(partial_map, chiral_set_a, chiral_set_b, mode="flip")
-    partial_map_undefineds = find_atom_map_chiral_conflicts(partial_map, chiral_set_a, chiral_set_b, mode="undefined")
+    partial_map_flips = find_atom_map_chiral_conflicts(
+        partial_map, chiral_set_a, chiral_set_b, mode=ChiralCheckMode.FLIP
+    )
+    partial_map_undefineds = find_atom_map_chiral_conflicts(
+        partial_map, chiral_set_a, chiral_set_b, mode=ChiralCheckMode.UNDEFINED
+    )
     assert len(partial_map_flips) == 0
     assert len(partial_map_undefineds) == 1
 
@@ -293,8 +301,10 @@ def test_chiral_conflict_mixed():
     mixed_map[2, 0] = 3
     mixed_map[3, 0] = 2
 
-    mixed_map_flips = find_atom_map_chiral_conflicts(mixed_map, chiral_set_a, chiral_set_b, mode="flip")
-    mixed_map_undefineds = find_atom_map_chiral_conflicts(mixed_map, chiral_set_a, chiral_set_b, mode="undefined")
+    mixed_map_flips = find_atom_map_chiral_conflicts(mixed_map, chiral_set_a, chiral_set_b, mode=ChiralCheckMode.FLIP)
+    mixed_map_undefineds = find_atom_map_chiral_conflicts(
+        mixed_map, chiral_set_a, chiral_set_b, mode=ChiralCheckMode.UNDEFINED
+    )
 
     assert len(mixed_map_flips) == 8
     assert len(mixed_map_undefineds) == 1
