@@ -234,6 +234,7 @@ def test_chiral_conflict_flip():
 
     identity_map = np.array([(i, i) for i in range(len(conf_a))])
 
+    # swap any pair of atoms around a tetrahedral center to flip chirality
     swap_map = np.array(identity_map)
     swap_map[1, 1] = 2
     swap_map[2, 1] = 1
@@ -288,6 +289,7 @@ def test_chiral_conflict_mixed():
 
     mixed_map = np.array([[i, i] for i in range(mol_b.GetNumAtoms())])
 
+    # swap any pair of atoms around a tetrahedral center to flip chirality
     mixed_map[2, 0] = 3
     mixed_map[3, 0] = 2
 
