@@ -176,14 +176,15 @@ def get_core_by_mcs(
     chiral_set_a = ChiralRestrIdxSet.from_mol(mol_a, conf_a)
     chiral_set_b = ChiralRestrIdxSet.from_mol(mol_b, conf_b)
 
-    def valid_chiral_atoms(trial_core):
-        # return False if chiral atom chick is active and a conflict is found
+    def chiral_atoms_valid(trial_core):
+
+        # skip search for conflicts unless needed
         valid = True
         if not allow_chiral_atom_flips:
-            n_flips = len(
-                find_atom_map_chiral_conflicts(trial_core, chiral_set_a, chiral_set_b, mode=ChiralCheckMode.FLIP)
+            conflicts = find_atom_map_chiral_conflicts(
+                trial_core, chiral_set_a, chiral_set_b, mode=ChiralCheckMode.FLIP
             )
-            if n_flips > 0:
+            if len(conflicts) > 0:
                 valid = False
 
         return valid
@@ -194,7 +195,7 @@ def get_core_by_mcs(
 
             if np.any(gt_threshold[a, b]):
                 cost[i, j] = +np.inf
-            elif not valid_chiral_atoms(trial_core):
+            elif not chiral_atoms_valid(trial_core):
                 cost[i, j] = +np.inf
             else:
                 dij = all_distances[a, b]
