@@ -1,5 +1,4 @@
 import itertools
-from dataclasses import dataclass
 from enum import Enum
 from typing import List, Set, Tuple
 
@@ -160,11 +159,12 @@ def setup_all_chiral_atom_restr_idxs(mol, conf) -> List[FourTuple]:
     return chiral_atom_restr_idxs
 
 
-@dataclass
 class ChiralRestrIdxSet:
-    """Support fast checks of whether a given 4-tuple is disallowed"""
+    """Support fast checks of whether a trial 4-tuple is consistent with a set of chiral atom idxs"""
 
-    restr_idxs: List[FourTuple]
+    def __init__(self, restr_idxs: List[FourTuple]):
+        self.restr_idxs = restr_idxs
+        self.allowed_set, self.disallowed_set = self.expand_symmetries()
 
     @classmethod
     def from_mol(cls, mol, conf):
@@ -189,9 +189,6 @@ class ChiralRestrIdxSet:
         assert allowed_set.isdisjoint(disallowed_set)
 
         return allowed_set, disallowed_set
-
-    def __post_init__(self):
-        self.allowed_set, self.disallowed_set = self.expand_symmetries()
 
     def defines(self, trial_tuple: FourTuple) -> bool:
         return (trial_tuple in self.allowed_set) or (trial_tuple in self.disallowed_set)
