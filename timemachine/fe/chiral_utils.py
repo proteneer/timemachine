@@ -247,14 +247,21 @@ def find_atom_map_chiral_conflicts(
         chiral restraint sets for mols a and b
 
     mode : str, one of "flip" or "undefined"
-        "flip" : find cases where chiral atom restraints are defined for both a and b with opposite signs
-        "undefined" : find cases where chiral atom restraints are defined for a (resp. b) but not b (resp. a)
+        "flip" : find cases where chiral atom restraints are defined
+            for both mols a and b with opposite signs
+        "undefined" : find cases where chiral atom restraints are defined
+            for mol a (resp. b) but not mol b (resp. a)
 
     Returns
     -------
     conflicts
         set of conflicting pairs of 4-tuples
         ((a_c, a_i, a_j, a_k), (b_c, b_i, b_j, b_k))
+
+    See Also
+    --------
+    * find_chiral_atoms -- definition of atom chirality used here -- notably: hydrogens are distinguishable
+        (see additional motivation in https://github.com/proteneer/timemachine/pull/754 and related PR discussion)
     """
     conflicts_fwd = _find_atom_map_chiral_conflicts_one_direction(core, chiral_set_a, chiral_set_b, mode)
     conflicts_rev = _find_atom_map_chiral_conflicts_one_direction(core[:, ::-1], chiral_set_b, chiral_set_a, mode)
