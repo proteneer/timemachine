@@ -1,22 +1,28 @@
 import functools
 import io
 import pickle
+import traceback
 import warnings
+from typing import Any, Dict, NamedTuple, Optional, Sequence
 
 import matplotlib.pyplot as plt
 import numpy as np
 import pymbar
+from rdkit import Chem
+from simtk.openmm import app
 
 from timemachine.constants import BOLTZ, DEFAULT_TEMP
-from timemachine.fe import model_utils
+from timemachine.fe import atom_mapping, model_utils
 from timemachine.fe.bar import bar_with_bootstrapped_uncertainty
 from timemachine.fe.free_energy import HostConfig, InitialState, SimulationProtocol, SimulationResult
 from timemachine.fe.single_topology import SingleTopology
 from timemachine.fe.system import convert_omm_system
 from timemachine.fe.utils import get_mol_name, get_romol_conf
+from timemachine.ff import Forcefield
 from timemachine.lib import LangevinIntegrator, MonteCarloBarostat, custom_ops
 from timemachine.md import builders, minimizer
 from timemachine.md.barostat.utils import get_bond_list, get_group_indices
+from timemachine.parallel.client import AbstractClient, AbstractFileClient, CUDAPoolClient, FileClient
 from timemachine.potentials import jax_utils
 
 
@@ -679,3 +685,120 @@ def run_complex(
         steps_per_frame=steps_per_frame,
     )
     return complex_res, complex_top
+
+
+class Edge(NamedTuple):
+    mol_a_name: str
+    mol_b_name: str
+    metadata: Dict[str, Any]
+
+
+def run_edge_and_save_results(
+    edge: Edge,
+    mols: Dict[str, Chem.rdchem.Mol],
+    forcefield: Forcefield,
+    protein: app.PDBFile,
+    n_frames: int,
+    seed: int,
+    file_client: AbstractFileClient,
+):
+    try:
+        mol_a = mols[edge.mol_a_name]
+        mol_b = mols[edge.mol_b_name]
+        core, smarts = atom_mapping.get_core_with_alignment(mol_a, mol_b, threshold=2.0)
+
+        complex_res, complex_top = run_complex(mol_a, mol_b, core, forcefield, protein, n_frames, seed)
+        solvent_res, solvent_top = run_solvent(mol_a, mol_b, core, forcefield, protein, n_frames, seed)
+
+    except Exception as err:
+        print(
+            "failed:",
+            " | ".join(
+                [
+                    f"{edge.mol_a_name} -> {edge.mol_b_name} (kJ/mol)",
+                    f"exp_ddg {edge.metadata['exp_ddg_kcal']:.2f}" if "exp_ddg_kcal" in edge.metadata else "",
+                    f"fep_ddg {edge.metadata['fep_ddg_kcal']:.2f} +- {edge.metadata['fep_ddg_err_kcal']:.2f}",
+                ]
+            ),
+        )
+
+        path = f"failure_rbfe_result_{edge.mol_a_name}_{edge.mol_b_name}.pkl"
+        tb = traceback.format_exception(None, err, err.__traceback__)
+        file_client.store(path, pickle.dumps((edge, err, tb)))
+
+        print(err)
+        traceback.print_exc()
+
+        return path
+
+    path = f"success_rbfe_result_{edge.mol_a_name}_{edge.mol_b_name}.pkl"
+    pkl_obj = (mol_a, mol_b, edge.metadata, smarts, core, solvent_res, solvent_top, complex_res, complex_top)
+    file_client.store(path, pickle.dumps(pkl_obj))
+
+    solvent_ddg = np.sum(solvent_res.all_dGs)
+    solvent_ddg_err = np.linalg.norm(solvent_res.all_errs)
+    complex_ddg = np.sum(complex_res.all_dGs)
+    complex_ddg_err = np.linalg.norm(complex_res.all_errs)
+
+    tm_ddg = complex_ddg - solvent_ddg
+    tm_err = np.linalg.norm([complex_ddg_err, solvent_ddg_err])
+
+    print(
+        "finished:",
+        " | ".join(
+            [
+                f"{edge.mol_a_name} -> {edge.mol_b_name} (kJ/mol)",
+                f"complex {complex_ddg:.2f} +- {complex_ddg_err:.2f}",
+                f"solvent {solvent_ddg:.2f} +- {solvent_ddg_err:.2f}",
+                f"tm_pred {tm_ddg:.2f} +- {tm_err:.2f}",
+                f"exp_ddg {edge.metadata['exp_ddg_kcal']:.2f}" if "exp_ddg_kcal" in edge.metadata else "",
+                f"fep_ddg {edge.metadata['fep_ddg_kcal']:.2f} +- {edge.metadata['fep_ddg_err_kcal']:.2f}"
+                if "fep_ddg_kcal" in edge.metadata and "fep_ddg_err_kcal" in edge.metadata
+                else "",
+            ]
+        ),
+    )
+
+    return path
+
+
+def run_edges_parallel(
+    ligands: Sequence[Chem.rdchem.Mol],
+    edges: Sequence[Edge],
+    ff: Forcefield,
+    protein: app.PDBFile,
+    n_frames: int,
+    n_gpus: int,
+    seed: int,
+    pool_client: Optional[AbstractClient] = None,
+    file_client: Optional[AbstractFileClient] = None,
+):
+    mols = {get_mol_name(mol): mol for mol in ligands}
+
+    pool_client = pool_client or CUDAPoolClient(n_gpus)
+    pool_client.verify()
+
+    file_client = file_client or FileClient()
+
+    # Ensure that all mol props (e.g. _Name) are included in pickles
+    # Without this get_mol_name(mol) will fail on roundtripped mol
+    Chem.SetDefaultPickleProperties(Chem.PropertyPickleOptions.AllProps)
+
+    # NOTE: using a generator expression here ensures that no references are kept to future objects after we've
+    # retrieved their results
+    jobs = (
+        pool_client.submit(
+            run_edge_and_save_results,
+            edge,
+            mols,
+            ff,
+            protein,
+            n_frames,
+            seed + edge_idx,
+            file_client,
+        )
+        for edge_idx, edge in enumerate(edges)
+    )
+
+    paths = [job.result() for job in jobs]
+    return paths
