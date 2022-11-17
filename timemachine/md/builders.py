@@ -1,4 +1,5 @@
 import os
+from typing import Union
 
 import numpy as np
 from simtk import unit
@@ -11,7 +12,7 @@ def strip_units(coords):
     return unit.Quantity(np.array(coords / coords.unit), coords.unit)
 
 
-def build_protein_system(host_pdbfile, protein_ff: str, water_ff: str):
+def build_protein_system(host_pdbfile: Union[app.PDBFile, str], protein_ff: str, water_ff: str):
     """
     Build a solvated protein system with a 10A padding.
 
@@ -28,6 +29,8 @@ def build_protein_system(host_pdbfile, protein_ff: str, water_ff: str):
         host_pdb = app.PDBFile(host_pdbfile)
     elif isinstance(host_pdbfile, app.PDBFile):
         host_pdb = host_pdbfile
+    else:
+        raise TypeError("host_pdbfile must be a string or an openmm PDBFile object")
 
     modeller = app.Modeller(host_pdb.topology, host_pdb.positions)
     host_coords = strip_units(host_pdb.positions)
