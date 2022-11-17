@@ -702,6 +702,10 @@ def run_edge_and_save_results(
     seed: int,
     file_client: AbstractFileClient,
 ):
+    # Ensure that all mol props (e.g. _Name) are included in pickles
+    # Without this get_mol_name(mol) will fail on roundtripped mol
+    Chem.SetDefaultPickleProperties(Chem.PropertyPickleOptions.AllProps)
+
     try:
         mol_a = mols[edge.mol_a_name]
         mol_b = mols[edge.mol_b_name]
