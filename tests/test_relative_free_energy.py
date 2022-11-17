@@ -207,20 +207,19 @@ def test_imaging_frames():
 
     # A buffer, as imaging doesn't ensure everything is perfectly in the box
     padding = 0.3
-    rtol = 3e-4
-    for i in range(len(res.frames)):
+    for i, (frames, boxes) in enumerate(zip(res.frames, res.boxes)):
         initial_state = res.initial_states[keep_idxs[i]]
-        box_center = compute_box_center(res.boxes[i][0])
-        box_extents = np.max(res.boxes[i], axis=(0, 1))
+        box_center = compute_box_center(boxes[0])
+        box_extents = np.max(boxes, axis=(0, 1))
 
         # Verify that coordinates are either outside of the box or below zero
-        assert np.any(np.max(res.frames[i], axis=(0, 1)) > box_extents + padding) or np.any(
-            np.min(res.frames[i], axis=(0, 1)) < -padding
+        assert np.any(np.max(frames, axis=(0, 1)) > box_extents + padding) or np.any(
+            np.min(frames, axis=(0, 1)) < -padding
         )
         # Ligand won't be near center of box
-        assert not np.allclose(np.mean(res.frames[i][0][initial_state.ligand_idxs], axis=0), box_center)
+        assert not np.allclose(np.mean(frames[0][initial_state.ligand_idxs], axis=0), box_center)
 
-        imaged = image_frames(initial_state, res.frames[i], res.boxes[i])
+        imaged = image_frames(initial_state, frames, boxes)
 
         # Verify that after imaged, coordinates are within padding of the box extents
         assert np.all(np.max(imaged, axis=(0, 1)) <= box_extents + padding) and np.all(
@@ -229,14 +228,32 @@ def test_imaging_frames():
         # Verify that ligand was centered in the box
         np.testing.assert_allclose(np.mean(imaged[0][initial_state.ligand_idxs], axis=0), box_center)
 
-        for potential in initial_state.potentials:
-            bound_pot = potential.bound_impl(np.float32)
-            for j in range(len(res.frames[i])):
-                assert len(res.frames[i]) == len(imaged)
-                ref_du_dx, ref_u = bound_pot.execute(res.frames[i][j], res.boxes[i])
-                test_du_dx, test_u = bound_pot.execute(imaged[j], res.boxes[i])
-                GradientTest().assert_equal_vectors(ref_du_dx, test_du_dx, rtol=rtol)
-                np.testing.assert_allclose(ref_u, test_u, rtol=rtol)
+        for precision, rtol, atol in [(np.float64, 1e-8, 1e-8), (np.float32, 7e-3, 5e-4)]:
+            for potential in initial_state.potentials:
+                unbound = potential.unbound_impl(precision)
+                for j in range(len(frames)):
+                    assert len(frames) == len(imaged)
+                    ref_du_dx, ref_du_dp, ref_u = unbound.execute_selective(
+                        frames[j], potential.params, boxes[j], True, True, True
+                    )
+                    test_du_dx, test_du_dp, test_u = unbound.execute_selective(
+                        imaged[j], potential.params, boxes[j], True, True, True
+                    )
+                    GradientTest().assert_equal_vectors(ref_du_dx, test_du_dx, rtol=rtol)
+                    np.testing.assert_allclose(
+                        ref_du_dp,
+                        test_du_dp,
+                        atol=atol,
+                        rtol=rtol,
+                        err_msg=f"Failed on potential {type(potential)}, precision {precision}",
+                    )
+                    np.testing.assert_allclose(
+                        ref_u,
+                        test_u,
+                        atol=atol,
+                        rtol=rtol,
+                        err_msg=f"Failed on potential {type(potential)}, precision {precision}",
+                    )
 
 
 def test_rbfe_with_1_window():
