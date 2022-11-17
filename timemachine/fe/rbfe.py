@@ -716,8 +716,10 @@ def run_edge_and_save_results(
             " | ".join(
                 [
                     f"{edge.mol_a_name} -> {edge.mol_b_name} (kJ/mol)",
-                    f"exp_ddg {edge.metadata['exp_ddg_kcal']:.2f}" if "exp_ddg_kcal" in edge.metadata else "",
-                    f"fep_ddg {edge.metadata['fep_ddg_kcal']:.2f} +- {edge.metadata['fep_ddg_err_kcal']:.2f}",
+                    f"exp_ddg {edge.metadata['exp_ddg']:.2f}" if "exp_ddg" in edge.metadata else "",
+                    f"fep_ddg {edge.metadata['fep_ddg']:.2f} +- {edge.metadata['fep_ddg_err']:.2f}"
+                    if "fep_ddg" in edge.metadata and "fep_ddg_err" in edge.metadata
+                    else "",
                 ]
             ),
         )
@@ -751,9 +753,9 @@ def run_edge_and_save_results(
                 f"complex {complex_ddg:.2f} +- {complex_ddg_err:.2f}",
                 f"solvent {solvent_ddg:.2f} +- {solvent_ddg_err:.2f}",
                 f"tm_pred {tm_ddg:.2f} +- {tm_err:.2f}",
-                f"exp_ddg {edge.metadata['exp_ddg_kcal']:.2f}" if "exp_ddg_kcal" in edge.metadata else "",
-                f"fep_ddg {edge.metadata['fep_ddg_kcal']:.2f} +- {edge.metadata['fep_ddg_err_kcal']:.2f}"
-                if "fep_ddg_kcal" in edge.metadata and "fep_ddg_err_kcal" in edge.metadata
+                f"exp_ddg {edge.metadata['exp_ddg']:.2f}" if "exp_ddg" in edge.metadata else "",
+                f"fep_ddg {edge.metadata['fep_ddg']:.2f} +- {edge.metadata['fep_ddg_err']:.2f}"
+                if "fep_ddg" in edge.metadata and "fep_ddg_err" in edge.metadata
                 else "",
             ]
         ),
