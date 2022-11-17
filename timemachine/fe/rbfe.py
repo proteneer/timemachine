@@ -800,6 +800,10 @@ def run_edges_parallel(
         for edge_idx, edge in enumerate(edges)
     ]
 
+    # Remove references to completed jobs to allow garbage collection.
+    # TODO: The current approach uses O(edges) memory in the worst case (e.g. if the first job gets stuck). Ideally we
+    # should process and remove references to jobs in the order they complete, but this would require an interface
+    # presently not implemented in our custom future classes.
     paths = []
     while jobs:
         job = jobs.pop(0)
