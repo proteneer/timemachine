@@ -4,6 +4,7 @@ from importlib import resources
 
 import numpy as np
 import pytest
+from common import GradientTest
 
 from timemachine.constants import DEFAULT_FF
 from timemachine.fe.free_energy import HostConfig, SimulationResult, image_frames
@@ -206,6 +207,7 @@ def test_imaging_frames():
 
     # A buffer, as imaging doesn't ensure everything is perfectly in the box
     padding = 0.3
+    rtol = 3e-4
     for i in range(len(res.frames)):
         initial_state = res.initial_states[keep_idxs[i]]
         box_center = compute_box_center(res.boxes[i][0])
@@ -226,6 +228,15 @@ def test_imaging_frames():
         )
         # Verify that ligand was centered in the box
         np.testing.assert_allclose(np.mean(imaged[0][initial_state.ligand_idxs], axis=0), box_center)
+
+        for potential in initial_state.potentials:
+            bound_pot = potential.bound_impl(np.float32)
+            for j in range(len(res.frames[i])):
+                assert len(res.frames[i]) == len(imaged)
+                ref_du_dx, ref_u = bound_pot.execute(res.frames[i][j], res.boxes[i])
+                test_du_dx, test_u = bound_pot.execute(imaged[j], res.boxes[i])
+                GradientTest().assert_equal_vectors(ref_du_dx, test_du_dx, rtol=rtol)
+                np.testing.assert_allclose(ref_u, test_u, rtol=rtol)
 
 
 def test_rbfe_with_1_window():
