@@ -4,6 +4,7 @@
 #include "device_buffer.hpp"
 #include "gpu_utils.cuh"
 #include "k_neighborlist.cuh"
+#include "kernels/k_indices.cuh"
 #include "neighborlist.hpp"
 #include "nonbonded_common.cuh"
 #include "set_utils.hpp"

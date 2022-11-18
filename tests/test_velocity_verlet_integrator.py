@@ -1,15 +1,14 @@
-import jax
-
-jax.config.update("jax_enable_x64", True)
-
 from functools import partial
 
 import numpy as np
 import pytest
 
+from timemachine.ff import Forcefield
 from timemachine.integrator import VelocityVerletIntegrator as ReferenceVelocityVerlet
 from timemachine.lib import VelocityVerletIntegrator, custom_ops
 from timemachine.lib.potentials import SummedPotential
+from timemachine.md.enhanced import get_solvent_phase_system
+from timemachine.testsystems.ligands import get_biphenyl
 from timemachine.testsystems.relative import get_relative_hif2a_in_vacuum
 
 
@@ -182,3 +181,33 @@ def test_initialization_and_finalization():
     with pytest.raises(RuntimeError) as e:
         ctxt.finalize()
     assert "not initialized" in str(e.value)
+
+
+def test_verlet_with_multiple_steps_local():
+    """Ensure Local MD can be run with the Velocity Verlet integrator and can handle a temperature passed in"""
+    np.random.seed(2022)
+
+    mol, _ = get_biphenyl()
+    ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
+
+    dt = 1.5e-3
+
+    # Have to minimize, else there can be clashes and the local moves will cause crashes
+    unbound_potentials, sys_params, masses, coords, box = get_solvent_phase_system(mol, ff, 0.0)
+    bound_potentials = [
+        ubp.bind(params).bound_impl(np.float32) for (ubp, params) in zip(unbound_potentials, sys_params)
+    ]
+    box = 100 * np.eye(3)
+
+    dt = 1.5e-3
+
+    local_idxs = np.arange(len(coords) // 2, len(coords), dtype=np.int32)
+
+    intg_impl, ctxt = setup_velocity_verlet(bound_potentials, coords, box, dt, masses)  # noqa
+
+    n_steps = 10
+
+    ctxt.multiple_steps_local(n_steps, local_idxs)
+
+    # Uses non-default temperature as the integrator is not a thermostat, only changes the selection probabilities for local MD
+    ctxt.multiple_steps_local(n_steps, local_idxs, temperature=100)

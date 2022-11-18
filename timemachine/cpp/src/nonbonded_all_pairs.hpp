@@ -80,7 +80,10 @@ public:
         unsigned long long *d_u,
         cudaStream_t stream) override;
 
+    double get_cutoff() const { return cutoff_; };
+
     void set_atom_idxs(const std::vector<int> &atom_idxs);
+
     void set_atom_idxs_device(const int K, const unsigned int *d_atom_idxs, const cudaStream_t stream);
 
     void du_dp_fixed_to_float(const int N, const int P, const unsigned long long *du_dp, double *du_dp_float) override;

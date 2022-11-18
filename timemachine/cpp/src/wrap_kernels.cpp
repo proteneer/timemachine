@@ -181,6 +181,87 @@ void declare_context(py::module &m) {
 
     )pbdoc")
         .def(
+            "multiple_steps_local",
+            [](timemachine::Context &ctxt,
+               const int local_steps,
+               const py::array_t<int, py::array::c_style> &local_idxs,
+               const int store_x_interval,
+               const double radius,
+               const double k,
+               const double temperature,
+               const int seed) -> py::tuple {
+                if (local_steps <= 0) {
+                    throw std::runtime_error("local steps must be at least one");
+                }
+
+                const int x_interval = (store_x_interval <= 0) ? local_steps : store_x_interval;
+
+                std::vector<int> vec_local_idxs(local_idxs.size());
+                std::memcpy(vec_local_idxs.data(), local_idxs.data(), vec_local_idxs.size() * sizeof(int));
+                // Verify that local idxs are unique
+                unique_idxs<int>(vec_local_idxs);
+                std::array<std::vector<double>, 2> result =
+                    ctxt.multiple_steps_local(local_steps, vec_local_idxs, x_interval, radius, k, temperature, seed);
+
+                const int N = ctxt.num_atoms();
+                const int D = 3;
+                const int F = result[0].size() / (N * D);
+                py::array_t<double, py::array::c_style> out_x_buffer({F, N, D});
+                std::memcpy(out_x_buffer.mutable_data(), result[0].data(), result[0].size() * sizeof(double));
+
+                py::array_t<double, py::array::c_style> box_buffer({F, D, D});
+                std::memcpy(box_buffer.mutable_data(), result[1].data(), result[1].size() * sizeof(double));
+                return py::make_tuple(out_x_buffer, box_buffer);
+            },
+            py::arg("local_steps"),
+            py::arg("local_idxs"),
+            py::arg("store_x_interval") = 0,
+            py::arg("radius") = 1.2,
+            py::arg("k") = 10000.0,
+            py::arg("temperature") = 300.0,
+            py::arg("seed") = 2022,
+            R"pbdoc(
+        Take multiple steps using particles selected based on the log probability using a random particle from the local_idxs,
+        the random particle is frozen for all steps.
+
+        Running a barostat and local MD at the same time are not currently supported. If a barostat is
+        assigned to the context, the barostat won't run.
+
+        F = iterations / store_x_interval
+
+        Parameters
+        ----------
+        local_steps: int
+            Number of steps to run.
+
+        local_idxs: np.array of int32
+            The idxs that defines the atoms to use as the region(s) to run local MD. A random idx will be
+            selected to be frozen and used as the center of the shell of particles to be simulated.
+
+        store_x_interval: int
+            How often we store the frames, store after every store_x_interval iterations. Setting to zero collects frames
+            at the last step.
+
+        radius: float
+            The radius in nanometers from the selected idx to simulate for local MD.
+
+        k: float
+            The flat bottom restraint K value to use for selection and restraint of atoms within the inner shell.
+
+        temperature: float
+            The temperature to run the simulation at. The temperature must match the integrator's temperature if the integrator is a thermostat.
+
+        seed: int
+            The seed that is used to randomly select a particle to freeze.
+
+        Returns
+        -------
+        2-tuple of coordinates, boxes
+            Coordinates have shape (F, N, 3)
+            Boxes have shape (F, 3, 3)
+
+    )pbdoc")
+        .def(
             "multiple_steps_U",
             [](timemachine::Context &ctxt, const int n_steps, int store_u_interval, int store_x_interval) -> py::tuple {
                 int u_interval = (store_u_interval <= 0) ? n_steps : store_u_interval;
