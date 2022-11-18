@@ -14,7 +14,7 @@ template <typename RealType> class NonbondedAllPairs : public Potential {
 
 private:
     const int N_; // total number of atoms, i.e. first dimension of input coords, params
-    const int K_; // number of interacting atoms, K_ <= N_
+    int K_;       // number of interacting atoms, K_ <= N_
 
     double beta_;
     double cutoff_;
@@ -54,9 +54,10 @@ private:
 
     bool disable_hilbert_;
 
-    void hilbert_sort(const double *d_x, const double *d_box, cudaStream_t stream);
-
     std::array<k_nonbonded_fn, 8> kernel_ptrs_;
+
+    void hilbert_sort(const double *d_x, const double *d_box, cudaStream_t stream);
+    void verify_atom_idxs(const std::vector<int> &atom_idxs);
 
 public:
     // these are marked public but really only intended for testing.
@@ -78,6 +79,9 @@ public:
         unsigned long long *d_du_dp,
         unsigned long long *d_u,
         cudaStream_t stream) override;
+
+    void set_atom_idxs(const std::vector<int> &atom_idxs);
+    void set_atom_idxs_device(const int K, const unsigned int *d_atom_idxs, const cudaStream_t stream);
 
     void du_dp_fixed_to_float(const int N, const int P, const unsigned long long *du_dp, double *du_dp_float) override;
 };

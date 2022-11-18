@@ -779,6 +779,7 @@ template <typename RealType> void declare_nonbonded_all_pairs(py::module &m, con
         m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
         .def("set_nblist_padding", &timemachine::NonbondedAllPairs<RealType>::set_nblist_padding, py::arg("val"))
         .def("disable_hilbert_sort", &timemachine::NonbondedAllPairs<RealType>::disable_hilbert_sort)
+        .def("set_atom_idxs", &timemachine::NonbondedAllPairs<RealType>::set_atom_idxs)
         .def(
             py::init([](const int N,
                         const double beta,
