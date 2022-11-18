@@ -28,7 +28,7 @@ LangevinIntegrator::LangevinIntegrator(
     d_ccs_ = gpuErrchkCudaMallocAndCopy(h_ccs.data(), N_);
 
     curandErrchk(curandCreateGenerator(&cr_rng_, CURAND_RNG_PSEUDO_DEFAULT));
-    cudaSafeMalloc(&d_noise_, round_up_even(N_ * 3) * sizeof(double));
+    cudaSafeMalloc(&d_noise_, round_up_even(N_ * 3) * sizeof(*d_noise_));
     curandErrchk(curandSetPseudoRandomGeneratorSeed(cr_rng_, seed));
 
     cudaSafeMalloc(&d_du_dx_, N_ * 3 * sizeof(*d_du_dx_));
@@ -43,9 +43,15 @@ LangevinIntegrator::~LangevinIntegrator() {
 }
 
 void LangevinIntegrator::step_fwd(
-    std::vector<BoundPotential *> &bps, double *d_x_t, double *d_v_t, double *d_box_t, cudaStream_t stream) {
+    std::vector<BoundPotential *> &bps,
+    double *d_x_t,
+    double *d_v_t,
+    double *d_box_t,
+    unsigned int *d_idxs,
+    cudaStream_t stream) {
+    const int D = 3;
 
-    gpuErrchk(cudaMemsetAsync(d_du_dx_, 0, N_ * 3 * sizeof(*d_du_dx_), stream));
+    gpuErrchk(cudaMemsetAsync(d_du_dx_, 0, N_ * D * sizeof(*d_du_dx_), stream));
 
     for (int i = 0; i < bps.size(); i++) {
         bps[i]->execute_device(
@@ -58,7 +64,6 @@ void LangevinIntegrator::step_fwd(
             stream);
     }
 
-    const int D = 3;
     size_t tpb = warp_size;
     size_t n_blocks = ceil_divide(N_, tpb);
     dim3 dimGrid_dx(n_blocks, D);
@@ -67,15 +72,25 @@ void LangevinIntegrator::step_fwd(
     curandErrchk(templateCurandNormal(cr_rng_, d_noise_, round_up_even(N_ * D), 0.0, 1.0));
 
     update_forward_baoab<double>
-        <<<dimGrid_dx, tpb, 0, stream>>>(N_, D, ca_, d_cbs_, d_ccs_, d_noise_, d_x_t, d_v_t, d_du_dx_, dt_);
+        <<<dimGrid_dx, tpb, 0, stream>>>(N_, D, ca_, d_idxs, d_cbs_, d_ccs_, d_noise_, d_x_t, d_v_t, d_du_dx_, dt_);
 
     gpuErrchk(cudaPeekAtLastError());
 }
 
 void LangevinIntegrator::initialize(
-    std::vector<BoundPotential *> &bps, double *d_x_t, double *d_v_t, double *d_box_t, cudaStream_t stream){};
+    std::vector<BoundPotential *> &bps,
+    double *d_x_t,
+    double *d_v_t,
+    double *d_box_t,
+    unsigned int *d_idxs,
+    cudaStream_t stream){};
 
 void LangevinIntegrator::finalize(
-    std::vector<BoundPotential *> &bps, double *d_x_t, double *d_v_t, double *d_box_t, cudaStream_t stream){};
+    std::vector<BoundPotential *> &bps,
+    double *d_x_t,
+    double *d_v_t,
+    double *d_box_t,
+    unsigned int *d_idxs,
+    cudaStream_t stream){};
 
 } // end namespace timemachine

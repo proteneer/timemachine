@@ -45,7 +45,7 @@ private:
 
     MonteCarloBarostat *barostat_;
 
-    void _step(std::vector<BoundPotential *> &bps, const cudaStream_t stream);
+    void _step(std::vector<BoundPotential *> &bps, unsigned int *d_atom_idxs, const cudaStream_t stream);
 
     int step_;
 

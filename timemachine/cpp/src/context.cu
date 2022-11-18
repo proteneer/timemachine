@@ -57,9 +57,9 @@ std::array<std::vector<double>, 2> Context::multiple_steps(const int n_steps, in
         d_box_buffer.reset(new DeviceBuffer<double>(box_buffer_size));
     }
 
-    intg_->initialize(bps_, d_x_t_, d_v_t_, d_box_t_, stream);
+    intg_->initialize(bps_, d_x_t_, d_v_t_, d_box_t_, nullptr, stream);
     for (int i = 1; i <= n_steps; i++) {
-        this->_step(bps_, stream);
+        this->_step(bps_, nullptr, stream);
 
         if (i % store_x_interval == 0) {
             gpuErrchk(cudaMemcpyAsync(
@@ -76,7 +76,7 @@ std::array<std::vector<double>, 2> Context::multiple_steps(const int n_steps, in
                 stream));
         }
     }
-    intg_->finalize(bps_, d_x_t_, d_v_t_, d_box_t_, stream);
+    intg_->finalize(bps_, d_x_t_, d_v_t_, d_box_t_, nullptr, stream);
 
     gpuErrchk(cudaStreamSynchronize(stream));
 
@@ -124,10 +124,10 @@ Context::multiple_steps_U(const int n_steps, int store_u_interval, int store_x_i
         gpuErrchk(cudaMemsetAsync(d_u_traj->data, 0, d_u_traj->size, stream));
     }
 
-    intg_->initialize(bps_, d_x_t_, d_v_t_, d_box_t_, stream);
+    intg_->initialize(bps_, d_x_t_, d_v_t_, d_box_t_, nullptr, stream);
     for (int step = 1; step <= n_steps; step++) {
 
-        this->_step(bps_, stream);
+        this->_step(bps_, nullptr, stream);
 
         if (step % store_x_interval == 0) {
             gpuErrchk(cudaMemcpyAsync(
@@ -156,7 +156,7 @@ Context::multiple_steps_U(const int n_steps, int store_u_interval, int store_x_i
             gpuErrchk(cudaPeekAtLastError());
         }
     }
-    intg_->finalize(bps_, d_x_t_, d_v_t_, d_box_t_, stream);
+    intg_->finalize(bps_, d_x_t_, d_v_t_, d_box_t_, nullptr, stream);
 
     gpuErrchk(cudaStreamSynchronize(stream));
 
@@ -179,27 +179,28 @@ Context::multiple_steps_U(const int n_steps, int store_u_interval, int store_x_i
 
 void Context::step() {
     cudaStream_t stream = static_cast<cudaStream_t>(0);
-    this->_step(bps_, stream);
-    gpuErrchk(cudaDeviceSynchronize());
+    this->_step(bps_, nullptr, stream);
+    gpuErrchk(cudaStreamSynchronize(stream));
 }
 
 void Context::finalize() {
     cudaStream_t stream = static_cast<cudaStream_t>(0);
-    intg_->finalize(bps_, d_x_t_, d_v_t_, d_box_t_, stream);
+    intg_->finalize(bps_, d_x_t_, d_v_t_, d_box_t_, nullptr, stream);
     gpuErrchk(cudaStreamSynchronize(stream));
 }
 
 void Context::initialize() {
     cudaStream_t stream = static_cast<cudaStream_t>(0);
-    intg_->initialize(bps_, d_x_t_, d_v_t_, d_box_t_, stream);
+    intg_->initialize(bps_, d_x_t_, d_v_t_, d_box_t_, nullptr, stream);
     gpuErrchk(cudaStreamSynchronize(stream));
 }
 
-void Context::_step(std::vector<BoundPotential *> &bps, const cudaStream_t stream) {
+void Context::_step(std::vector<BoundPotential *> &bps, unsigned int *d_atom_idxs, const cudaStream_t stream) {
+    intg_->step_fwd(bps, d_x_t_, d_v_t_, d_box_t_, d_atom_idxs, stream);
 
-    intg_->step_fwd(bps, d_x_t_, d_v_t_, d_box_t_, stream);
-
-    if (barostat_) {
+    // If atom idxs are passed, indicates that only a subset of the system should move. Don't
+    // run the barostat in this situation.
+    if (d_atom_idxs == nullptr && barostat_) {
         // May modify coords, du_dx and box size
         barostat_->inplace_move(d_x_t_, d_box_t_, stream);
     }

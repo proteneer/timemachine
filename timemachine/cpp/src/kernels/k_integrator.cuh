@@ -5,6 +5,7 @@ __global__ void update_forward_baoab(
     const int N,
     const int D,
     const RealType ca,
+    const unsigned int *__restrict__ idxs,
     const RealType *__restrict__ cbs,   // N
     const RealType *__restrict__ ccs,   // N
     const RealType *__restrict__ noise, // N x 3
@@ -16,6 +17,12 @@ __global__ void update_forward_baoab(
     int atom_idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (atom_idx >= N) {
         return;
+    }
+    if (idxs) {
+        atom_idx = idxs[atom_idx];
+        if (atom_idx >= N) {
+            return;
+        }
     }
 
     int d_idx = blockIdx.y;
@@ -38,6 +45,7 @@ template <typename RealType, bool UPDATE_X>
 __global__ void half_step_velocity_verlet(
     const int N,
     const int D,
+    const unsigned int *__restrict__ idxs,
     const RealType *__restrict__ cbs, // N, dt / mass
     RealType *__restrict__ x_t,
     RealType *__restrict__ v_t,
@@ -46,6 +54,12 @@ __global__ void half_step_velocity_verlet(
     int atom_idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (atom_idx >= N) {
         return;
+    }
+    if (idxs) {
+        atom_idx = idxs[atom_idx];
+        if (atom_idx >= N) {
+            return;
+        }
     }
 
     int d_idx = blockIdx.y;
@@ -63,6 +77,7 @@ template <typename RealType>
 __global__ void update_forward_velocity_verlet(
     const int N,
     const int D,
+    const unsigned int *__restrict__ idxs,
     const RealType *__restrict__ cbs, // N, dt / mass
     RealType *__restrict__ x_t,
     RealType *__restrict__ v_t,
@@ -71,6 +86,12 @@ __global__ void update_forward_velocity_verlet(
     int atom_idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (atom_idx >= N) {
         return;
+    }
+    if (idxs) {
+        atom_idx = idxs[atom_idx];
+        if (atom_idx >= N) {
+            return;
+        }
     }
 
     int d_idx = blockIdx.y;
