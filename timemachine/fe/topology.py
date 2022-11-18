@@ -289,7 +289,6 @@ class BaseTopology:
         combined_potential = potentials.PeriodicTorsion(combined_idxs)
         return combined_params, combined_potential
 
-    # def setup_chiral_restraints(self, restraint_k=1000.0):
     def setup_chiral_restraints(self, restraint_k=1000.0):
         """
         Create chiral atom and bond potentials.
@@ -305,16 +304,12 @@ class BaseTopology:
             Returns a ChiralAtomRestraint and a ChiralBondRestraint
 
         """
-        chiral_atoms = chiral_utils.find_chiral_atoms(self.mol)
         chiral_bonds = chiral_utils.find_chiral_bonds(self.mol)
 
-        chiral_atom_restr_idxs = []
+        chiral_atom_restr_idxs = chiral_utils.setup_all_chiral_atom_restr_idxs(self.mol, get_romol_conf(self.mol))
+
         chiral_atom_params = []
-        for a_idx in chiral_atoms:
-            idxs = chiral_utils.setup_chiral_atom_restraints(self.mol, get_romol_conf(self.mol), a_idx)
-            for ii in idxs:
-                assert ii not in chiral_atom_restr_idxs
-            chiral_atom_restr_idxs.extend(idxs)
+        for idxs in chiral_atom_restr_idxs:
             chiral_atom_params.extend(restraint_k for _ in idxs)
 
         chiral_atom_params = np.array(chiral_atom_params)

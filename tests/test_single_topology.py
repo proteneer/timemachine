@@ -39,6 +39,8 @@ def test_phenol():
     are present when either a single root anchor is provided, or when a root anchor and a neighbor anchor is provided.
     """
     mol = Chem.AddHs(Chem.MolFromSmiles("c1ccccc1O"))
+    AllChem.EmbedMolecule(mol, randomSeed=2022)
+
     ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
 
     # set [O,H] as the dummy group
@@ -86,6 +88,10 @@ def test_find_dummy_groups_and_anchors():
     """
     mol_a = Chem.MolFromSmiles("OCCC")
     mol_b = Chem.MolFromSmiles("CCCF")
+
+    AllChem.EmbedMolecule(mol_a, randomSeed=2022)
+    AllChem.EmbedMolecule(mol_b, randomSeed=2022)
+
     core_pairs = np.array([[1, 2], [2, 1], [3, 0]])
 
     dgs, jks = single_topology.find_dummy_groups_and_anchors(mol_a, mol_b, core_pairs[:, 0], core_pairs[:, 1])
@@ -107,6 +113,9 @@ def test_find_dummy_groups_and_anchors_multiple_angles():
     """
     mol_a = Chem.MolFromSmiles("CCC")
     mol_b = Chem.MolFromSmiles("CC(C)C")
+
+    AllChem.EmbedMolecule(mol_a, randomSeed=2022)
+    AllChem.EmbedMolecule(mol_b, randomSeed=2022)
 
     core_pairs = np.array([[0, 2], [1, 1], [2, 3]])
     dgs, jks = single_topology.find_dummy_groups_and_anchors(mol_a, mol_b, core_pairs[:, 0], core_pairs[:, 1])
@@ -133,6 +142,10 @@ def testing_find_dummy_groups_and_multiple_anchors():
     """
     mol_a = Chem.MolFromSmiles("OCC")
     mol_b = Chem.MolFromSmiles("O1CC1")
+
+    AllChem.EmbedMolecule(mol_a, randomSeed=2022)
+    AllChem.EmbedMolecule(mol_b, randomSeed=2022)
+
     core_pairs = np.array([[1, 1], [2, 2]])
 
     with pytest.warns(MultipleAnchorWarning):
@@ -154,6 +167,9 @@ def testing_find_dummy_groups_and_multiple_anchors():
     mol_a = Chem.MolFromSmiles("C(C)(C)C")
     mol_b = Chem.MolFromSmiles("O1CCCC1")
 
+    AllChem.EmbedMolecule(mol_a, randomSeed=2022)
+    AllChem.EmbedMolecule(mol_b, randomSeed=2022)
+
     core_a = [0, 1, 2, 3]
     core_b = [2, 1, 4, 3]
 
@@ -166,6 +182,9 @@ def testing_find_dummy_groups_and_multiple_anchors():
 def test_charge_perturbation_is_invalid():
     mol_a = Chem.AddHs(Chem.MolFromSmiles("Cc1cc[nH]c1"))
     mol_b = Chem.AddHs(Chem.MolFromSmiles("C[n+]1cc[nH]c1"))
+
+    AllChem.EmbedMolecule(mol_a, randomSeed=2022)
+    AllChem.EmbedMolecule(mol_b, randomSeed=2022)
 
     ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
 
@@ -277,6 +296,10 @@ def test_combine_masses():
 
     mol_a = Chem.MolFromSmiles("BrC1=CC=CC=C1")
     mol_b = Chem.MolFromSmiles("C1=CN=CC=C1F")
+
+    AllChem.EmbedMolecule(mol_a, randomSeed=2022)
+    AllChem.EmbedMolecule(mol_b, randomSeed=2022)
+
     core = np.array([[1, 0], [2, 1], [3, 2], [4, 3], [5, 4], [6, 5]])
     ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
 
@@ -325,6 +348,10 @@ def test_combine_with_host():
     """Verifies that combine_with_host correctly sets up all of the U functions"""
     mol_a = Chem.MolFromSmiles("BrC1=CC=CC=C1")
     mol_b = Chem.MolFromSmiles("C1=CN=CC=C1F")
+
+    AllChem.EmbedMolecule(mol_a, randomSeed=2022)
+    AllChem.EmbedMolecule(mol_b, randomSeed=2022)
+
     core = np.array([[1, 0], [2, 1], [3, 2], [4, 3], [5, 4], [6, 5]])
     ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
 

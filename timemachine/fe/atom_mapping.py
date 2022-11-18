@@ -8,6 +8,7 @@ from rdkit.Chem import rdFMCS
 from scipy.spatial.distance import cdist
 
 from timemachine.constants import DEFAULT_FF
+from timemachine.fe.chiral_utils import ChiralCheckMode, ChiralRestrIdxSet, find_atom_map_chiral_conflicts
 from timemachine.fe.topology import AtomMappingError
 from timemachine.fe.utils import set_romol_conf
 from timemachine.ff import Forcefield
@@ -115,6 +116,7 @@ def get_core_by_mcs(
     query,
     threshold=0.5,
     conformer_aware: bool = True,
+    allow_chiral_atom_flips=False,
 ):
     """Return np integer array that can be passed to RelativeFreeEnergy constructor
 
@@ -125,6 +127,8 @@ def get_core_by_mcs(
     conformer_aware: bool
         if True, only match atoms within distance threshold
         (assumes conformers are aligned)
+    allow_chiral_atom_flips: bool
+        allow mappings that flip the sign of chiral atom restraints
 
     Returns
     -------
@@ -169,9 +173,29 @@ def get_core_by_mcs(
 
     cost = np.zeros((len(matches_a), len(matches_b)))
 
+    chiral_set_a = ChiralRestrIdxSet.from_mol(mol_a, conf_a)
+    chiral_set_b = ChiralRestrIdxSet.from_mol(mol_b, conf_b)
+
+    def chiral_atoms_valid(trial_core):
+
+        # skip search for conflicts unless needed
+        valid = True
+        if not allow_chiral_atom_flips:
+            conflicts = find_atom_map_chiral_conflicts(
+                trial_core, chiral_set_a, chiral_set_b, mode=ChiralCheckMode.FLIP
+            )
+            if len(conflicts) > 0:
+                valid = False
+
+        return valid
+
     for i, a in enumerate(matches_a):
         for j, b in enumerate(matches_b):
+            trial_core = np.array([a, b]).T
+
             if np.any(gt_threshold[a, b]):
+                cost[i, j] = +np.inf
+            elif not chiral_atoms_valid(trial_core):
                 cost[i, j] = +np.inf
             else:
                 dij = all_distances[a, b]
@@ -185,7 +209,7 @@ def get_core_by_mcs(
     core = np.array([inds_a, inds_b]).T
 
     if np.isinf(cost[min_i, min_j]):
-        raise AtomMappingError(f"not all mapped atoms are within {threshold:.3f}Å of each other")
+        raise AtomMappingError("not all mapped atoms satisfy feasibility conditions")
 
     return core
 
@@ -212,6 +236,9 @@ def get_core_with_alignment(
 
     n_steps: float
         number of steps to run for alignment
+
+    k: float
+        force constant for harmonic bond restraints on core
 
     ff: Forcefield or None
         Forcefield to use for alignment, defaults to DEFAULT_FF forcefield if None
