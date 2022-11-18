@@ -6,6 +6,7 @@
 #include "k_neighborlist.cuh"
 #include "neighborlist.hpp"
 #include "nonbonded_common.cuh"
+#include "set_utils.hpp"
 
 namespace timemachine {
 

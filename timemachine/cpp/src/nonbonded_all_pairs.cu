@@ -8,6 +8,7 @@
 #include "vendored/hilbert.h"
 
 #include "k_nonbonded.cuh"
+#include <numeric>
 
 namespace timemachine {
 

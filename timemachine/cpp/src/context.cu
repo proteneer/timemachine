@@ -1,7 +1,6 @@
 #include "context.hpp"
 #include "fixed_point.hpp"
 #include "gpu_utils.cuh"
-#include <chrono>
 #include <cub/cub.cuh>
 #include <iostream>
 

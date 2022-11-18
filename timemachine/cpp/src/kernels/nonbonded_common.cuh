@@ -1,10 +1,6 @@
 #pragma once
 
 #include "k_fixed_point.cuh"
-#include <algorithm>
-#include <numeric>
-#include <set>
-#include <vector>
 
 // each atom parameterized by a 4-tuple: charge, lj sigma, lj epsilon, 4D coordinate w
 enum { PARAM_OFFSET_CHARGE = 0, PARAM_OFFSET_SIG, PARAM_OFFSET_EPS, PARAM_OFFSET_W, PARAMS_PER_ATOM };
@@ -47,28 +43,6 @@ float __device__ __forceinline__ real_es_factor(float real_beta, float dij, floa
 }
 
 void __global__ k_arange(int N, unsigned int *arr);
-
-template <typename T> std::vector<T> set_to_vector(const std::set<T> &s) {
-    std::vector<T> v(s.begin(), s.end());
-    return v;
-}
-
-// Provided a number of indices and a subset of indices, construct
-// the indices from the complete set of indices
-template <typename T> std::vector<T> get_indices_difference(const size_t N, const std::set<T> initial_idxs) {
-    std::vector<T> all_idxs(N);
-    std::iota(all_idxs.begin(), all_idxs.end(), 0);
-    std::set<T> difference;
-    std::set_difference(
-        all_idxs.begin(),
-        all_idxs.end(),
-        initial_idxs.begin(),
-        initial_idxs.end(),
-        std::inserter(difference, difference.end()));
-
-    std::vector<T> dif_vect(set_to_vector(difference));
-    return dif_vect;
-}
 
 // Compute the terms associated with electrostatics.
 // This is pulled out into a function to ensure that the same bit values

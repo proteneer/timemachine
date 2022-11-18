@@ -23,6 +23,7 @@
 #include "periodic_torsion.hpp"
 #include "potential.hpp"
 #include "rmsd_align.hpp"
+#include "set_utils.hpp"
 #include "summed_potential.hpp"
 #include "verlet_integrator.hpp"
 
@@ -770,14 +771,6 @@ template <typename RealType> void declare_periodic_torsion(py::module &m, const 
             py::arg("angle_idxs"));
 }
 
-std::set<int> unique_idxs(const std::vector<int> &idxs) {
-    std::set<int> unique_idxs(idxs.begin(), idxs.end());
-    if (unique_idxs.size() < idxs.size()) {
-        throw std::runtime_error("atom indices must be unique");
-    }
-    return unique_idxs;
-}
-
 template <typename RealType> void declare_nonbonded_all_pairs(py::module &m, const char *typestr) {
 
     using Class = timemachine::NonbondedAllPairs<RealType>;
@@ -795,7 +788,7 @@ template <typename RealType> void declare_nonbonded_all_pairs(py::module &m, con
                 if (atom_idxs_i) {
                     std::vector<int> atom_idxs(atom_idxs_i->size());
                     std::memcpy(atom_idxs.data(), atom_idxs_i->data(), atom_idxs_i->size() * sizeof(int));
-                    unique_atom_idxs.emplace(unique_idxs(atom_idxs));
+                    unique_atom_idxs.emplace(unique_idxs<int>(atom_idxs));
                 }
 
                 return new timemachine::NonbondedAllPairs<RealType>(N, beta, cutoff, unique_atom_idxs);
