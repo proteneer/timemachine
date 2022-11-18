@@ -702,6 +702,10 @@ def run_edge_and_save_results(
     seed: int,
     file_client: AbstractFileClient,
 ):
+    # Ensure that all mol props (e.g. _Name) are included in pickles
+    # Without this get_mol_name(mol) will fail on roundtripped mol
+    Chem.SetDefaultPickleProperties(Chem.PropertyPickleOptions.AllProps)
+
     try:
         mol_a = mols[edge.mol_a_name]
         mol_b = mols[edge.mol_b_name]
@@ -716,8 +720,10 @@ def run_edge_and_save_results(
             " | ".join(
                 [
                     f"{edge.mol_a_name} -> {edge.mol_b_name} (kJ/mol)",
-                    f"exp_ddg {edge.metadata['exp_ddg_kcal']:.2f}" if "exp_ddg_kcal" in edge.metadata else "",
-                    f"fep_ddg {edge.metadata['fep_ddg_kcal']:.2f} +- {edge.metadata['fep_ddg_err_kcal']:.2f}",
+                    f"exp_ddg {edge.metadata['exp_ddg']:.2f}" if "exp_ddg" in edge.metadata else "",
+                    f"fep_ddg {edge.metadata['fep_ddg']:.2f} +- {edge.metadata['fep_ddg_err']:.2f}"
+                    if "fep_ddg" in edge.metadata and "fep_ddg_err" in edge.metadata
+                    else "",
                 ]
             ),
         )
@@ -751,9 +757,9 @@ def run_edge_and_save_results(
                 f"complex {complex_ddg:.2f} +- {complex_ddg_err:.2f}",
                 f"solvent {solvent_ddg:.2f} +- {solvent_ddg_err:.2f}",
                 f"tm_pred {tm_ddg:.2f} +- {tm_err:.2f}",
-                f"exp_ddg {edge.metadata['exp_ddg_kcal']:.2f}" if "exp_ddg_kcal" in edge.metadata else "",
-                f"fep_ddg {edge.metadata['fep_ddg_kcal']:.2f} +- {edge.metadata['fep_ddg_err_kcal']:.2f}"
-                if "fep_ddg_kcal" in edge.metadata and "fep_ddg_err_kcal" in edge.metadata
+                f"exp_ddg {edge.metadata['exp_ddg']:.2f}" if "exp_ddg" in edge.metadata else "",
+                f"fep_ddg {edge.metadata['fep_ddg']:.2f} +- {edge.metadata['fep_ddg_err']:.2f}"
+                if "fep_ddg" in edge.metadata and "fep_ddg_err" in edge.metadata
                 else "",
             ]
         ),
@@ -784,9 +790,7 @@ def run_edges_parallel(
     # Without this get_mol_name(mol) will fail on roundtripped mol
     Chem.SetDefaultPickleProperties(Chem.PropertyPickleOptions.AllProps)
 
-    # NOTE: using a generator expression here ensures that no references are kept to future objects after we've
-    # retrieved their results
-    jobs = (
+    jobs = [
         pool_client.submit(
             run_edge_and_save_results,
             edge,
@@ -798,7 +802,15 @@ def run_edges_parallel(
             file_client,
         )
         for edge_idx, edge in enumerate(edges)
-    )
+    ]
 
-    paths = [job.result() for job in jobs]
+    # Remove references to completed jobs to allow garbage collection.
+    # TODO: The current approach uses O(edges) memory in the worst case (e.g. if the first job gets stuck). Ideally we
+    # should process and remove references to jobs in the order they complete, but this would require an interface
+    # presently not implemented in our custom future classes.
+    paths = []
+    while jobs:
+        job = jobs.pop(0)
+        paths.append(job.result())
+
     return paths
