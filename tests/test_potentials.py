@@ -37,6 +37,41 @@ def test_bound_potential_get_potential(harmonic_bond):
     assert unbound_impl is bound_impl.get_potential()
 
 
+def test_bound_potential_execute_validation(harmonic_bond):
+    bound_impl = harmonic_bond.bound_impl(np.float32)
+
+    with pytest.raises(RuntimeError, match="coords must have at least 2 dimensions"):
+        bound_impl.execute(np.zeros(1), np.ones((3, 3)))
+
+    with pytest.raises(RuntimeError, match="coords must have a shape that is 3 dimensional"):
+        bound_impl.execute(np.zeros((1, 4)), np.ones((3, 3)))
+
+    with pytest.raises(RuntimeError, match="box dimensions must be 2"):
+        bound_impl.execute(np.zeros((1, 3)), np.ones((3)))
+
+    with pytest.raises(RuntimeError, match="box must be 3x3"):
+        bound_impl.execute(np.zeros((1, 3)), np.ones((2, 2)))
+
+
+def test_unbound_potential_execute_validation(harmonic_bond):
+    unbound_impl = harmonic_bond.unbound_impl(np.float32)
+
+    for execute_method, extra_params in zip(
+        [unbound_impl.execute, unbound_impl.execute_selective], [(), (True, True, True)]
+    ):
+        with pytest.raises(RuntimeError, match="coords must have at least 2 dimensions"):
+            execute_method(np.zeros(1), harmonic_bond.params, np.ones((3, 3)), *extra_params)
+
+        with pytest.raises(RuntimeError, match="coords must have a shape that is 3 dimensional"):
+            execute_method(np.zeros((1, 4)), harmonic_bond.params, np.ones((3, 3)), *extra_params)
+
+        with pytest.raises(RuntimeError, match="box dimensions must be 2"):
+            execute_method(np.zeros((1, 3)), harmonic_bond.params, np.ones((3)), *extra_params)
+
+        with pytest.raises(RuntimeError, match="box must be 3x3"):
+            execute_method(np.zeros((1, 3)), harmonic_bond.params, np.ones((2, 2)), *extra_params)
+
+
 def test_summed_potential_raises_on_inconsistent_lengths(harmonic_bond):
     with pytest.raises(ValueError) as excinfo:
         SummedPotential([harmonic_bond], [])
