@@ -68,6 +68,9 @@ public:
     // get max number of row blocks
     int num_row_blocks() const;
 
+    // get max number of interactions
+    int max_ixn_count() const;
+
 private:
     // Indicates that should only compute the upper triangle of the interactions matrix, otherwise
     // will compute the entire matrix.
