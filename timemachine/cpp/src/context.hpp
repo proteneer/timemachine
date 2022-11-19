@@ -29,7 +29,7 @@ public:
     std::array<std::vector<double>, 3> multiple_steps_U(const int n_steps, int store_u_interval, int store_x_interval);
 
     std::array<std::vector<double>, 2> multiple_steps_local(
-        const int local_steps,
+        const int n_steps,
         const std::vector<int> &local_idxs,
         const int store_x_interval,
         const double radius,

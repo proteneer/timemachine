@@ -119,7 +119,7 @@ void Context::_assert_temperature_matches(const double temperature) {
 }
 
 std::array<std::vector<double>, 2> Context::multiple_steps_local(
-    const int local_steps,
+    const int n_steps,
     const std::vector<int> &local_idxs,
     const int store_x_interval,
     const double radius,
@@ -131,7 +131,7 @@ std::array<std::vector<double>, 2> Context::multiple_steps_local(
     }
     this->_assert_temperature_matches(temperature);
 
-    const int x_buffer_size = local_steps / store_x_interval;
+    const int x_buffer_size = n_steps / store_x_interval;
 
     const int box_buffer_size = x_buffer_size * 3 * 3;
 
@@ -332,7 +332,7 @@ std::array<std::vector<double>, 2> Context::multiple_steps_local(
         // Set the nonbonded potential to compute forces of inner+outer shell.
         set_nonbonded_potential_idxs(nonbonded_potential, p_num_selected.data[0], d_row_idxs.data, stream);
 
-        for (int i = 1; i <= local_steps; i++) {
+        for (int i = 1; i <= n_steps; i++) {
             this->_step(bps_, d_shell_idxs_inner.data, stream);
             if (i % store_x_interval == 0) {
                 gpuErrchk(cudaMemcpyAsync(

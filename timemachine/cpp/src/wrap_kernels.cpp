@@ -183,25 +183,25 @@ void declare_context(py::module &m) {
         .def(
             "multiple_steps_local",
             [](timemachine::Context &ctxt,
-               const int local_steps,
+               const int n_steps,
                const py::array_t<int, py::array::c_style> &local_idxs,
                const int store_x_interval,
                const double radius,
                const double k,
                const double temperature,
                const int seed) -> py::tuple {
-                if (local_steps <= 0) {
+                if (n_steps <= 0) {
                     throw std::runtime_error("local steps must be at least one");
                 }
 
-                const int x_interval = (store_x_interval <= 0) ? local_steps : store_x_interval;
+                const int x_interval = (store_x_interval <= 0) ? n_steps : store_x_interval;
 
                 std::vector<int> vec_local_idxs(local_idxs.size());
                 std::memcpy(vec_local_idxs.data(), local_idxs.data(), vec_local_idxs.size() * sizeof(int));
                 // Verify that local idxs are unique
                 unique_idxs<int>(vec_local_idxs);
                 std::array<std::vector<double>, 2> result =
-                    ctxt.multiple_steps_local(local_steps, vec_local_idxs, x_interval, radius, k, temperature, seed);
+                    ctxt.multiple_steps_local(n_steps, vec_local_idxs, x_interval, radius, k, temperature, seed);
 
                 const int N = ctxt.num_atoms();
                 const int D = 3;
@@ -213,7 +213,7 @@ void declare_context(py::module &m) {
                 std::memcpy(box_buffer.mutable_data(), result[1].data(), result[1].size() * sizeof(double));
                 return py::make_tuple(out_x_buffer, box_buffer);
             },
-            py::arg("local_steps"),
+            py::arg("n_steps"),
             py::arg("local_idxs"),
             py::arg("store_x_interval") = 0,
             py::arg("radius") = 1.2,
@@ -231,7 +231,7 @@ void declare_context(py::module &m) {
 
         Parameters
         ----------
-        local_steps: int
+        n_steps: int
             Number of steps to run.
 
         local_idxs: np.array of int32
