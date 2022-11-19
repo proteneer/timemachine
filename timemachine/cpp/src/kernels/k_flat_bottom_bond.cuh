@@ -11,7 +11,7 @@ RealType __device__ __forceinline__ compute_flat_bottom_energy(
 template <typename RealType>
 void __global__ k_log_probability_selection(
     const int N,                             // Num atoms
-    const double kBt,                        // BOLTZ * temperature
+    const double kBT,                        // BOLTZ * temperature
     const float radius,                      // Radius, corresponds to r_max for flat bottom
     const float k,                           // Constant restraint value
     const unsigned int reference_idx,        // Idx that the probability is specific to
@@ -54,7 +54,7 @@ void __global__ k_log_probability_selection(
             static_cast<RealType>(0.0), // Any value works just fine here
             static_cast<RealType>(radius));
 
-        prob = exp(-energy / kBt);
+        prob = exp(-energy / kBT);
     }
     // Exclude the reference idx, should be considered frozen
     selected[idx] = (idx != reference_idx && prob >= probabilities[idx]) ? idx : N;

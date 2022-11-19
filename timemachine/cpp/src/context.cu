@@ -209,7 +209,7 @@ std::array<std::vector<double>, 2> Context::multiple_steps_local(
     std::vector<BoundPotential *> local_bps = bps_;
     local_bps.push_back(&bound_shell_restraint);
 
-    const double kBt = BOLTZ * temperature;
+    const double kBT = BOLTZ * temperature;
 
     cudaStream_t stream;
     // Create stream that doesn't sync with the default stream
@@ -232,7 +232,7 @@ std::array<std::vector<double>, 2> Context::multiple_steps_local(
         unsigned int reference_idx = local_idxs[random_dist(rng)];
 
         k_log_probability_selection<double><<<ceil_divide(N_, tpb), tpb, 0, stream>>>(
-            N_, kBt, radius, k, reference_idx, d_x_t_, d_box_t_, probability_buffer.data, d_shell_idxs_inner.data);
+            N_, kBT, radius, k, reference_idx, d_x_t_, d_box_t_, probability_buffer.data, d_shell_idxs_inner.data);
         gpuErrchk(cudaPeekAtLastError());
 
         // Partition the valid row indices to the front of the array, defines the complete inner shell
