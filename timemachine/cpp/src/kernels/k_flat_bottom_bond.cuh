@@ -3,8 +3,9 @@
 
 // branchless implementation of piecewise function
 template <typename RealType>
-RealType __device__ __forceinline__ compute_flat_bottom_energy(
-    RealType k, RealType r_lt_rmin, RealType r_gt_rmax, RealType r, RealType rmin, RealType rmax) {
+RealType __device__ __forceinline__ compute_flat_bottom_energy(RealType k, RealType r, RealType rmin, RealType rmax) {
+    RealType r_gt_rmax = static_cast<RealType>(r > rmax);
+    RealType r_lt_rmin = static_cast<RealType>(r < rmin);
     return (k / 4) * (r_lt_rmin * (pow(r - rmin, 4)) + r_gt_rmax * (pow(r - rmax, 4)));
 }
 
@@ -48,8 +49,6 @@ void __global__ k_log_probability_selection(
     if (distance_sq >= radius_sq) {
         RealType energy = compute_flat_bottom_energy<RealType>(
             static_cast<RealType>(k),
-            static_cast<RealType>(0.0), // set to 0 to avoid using r_min length
-            static_cast<RealType>(1.0), // set to 1.0 to use r_max length
             sqrt(distance_sq),
             static_cast<RealType>(0.0), // Any value works just fine here
             static_cast<RealType>(radius));
@@ -109,7 +108,7 @@ void __global__ k_flat_bottom_bond(
     RealType r_gt_rmax = static_cast<RealType>(r > rmax);
     RealType r_lt_rmin = static_cast<RealType>(r < rmin);
     if (u) {
-        RealType u_real = compute_flat_bottom_energy<RealType>(k, r_lt_rmin, r_gt_rmax, r, rmin, rmax);
+        RealType u_real = compute_flat_bottom_energy<RealType>(k, r, rmin, rmax);
 
         // cast float -> fixed
         auto sum_u = FLOAT_TO_FIXED_BONDED<RealType>(u_real);
