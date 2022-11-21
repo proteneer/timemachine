@@ -85,7 +85,7 @@ def test_unbound_potential_execute_validation(harmonic_bond):
         with pytest.raises(RuntimeError, match="box must have positive values along diagonal"):
             execute_method(np.zeros((1, 3)), harmonic_bond.params, np.eye(3) * 0.0, *extra_params)
 
-        execute_method(np.zeros((1, 3)), harmonic_bond.params, np.eye(3), *extra_params)
+        execute_method(np.zeros((3, 3)), harmonic_bond.params, np.eye(3), *extra_params)
 
 
 def test_summed_potential_raises_on_inconsistent_lengths(harmonic_bond):
