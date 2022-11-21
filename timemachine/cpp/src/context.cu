@@ -189,6 +189,8 @@ std::array<std::vector<double>, 2> Context::multiple_steps_local(
     std::size_t temp_storage_bytes = 0;
     cub::DevicePartition::If(
         nullptr, temp_storage_bytes, d_shell_idxs_inner.data, d_row_idxs.data, num_selected_buffer.data, N_, select_op);
+    // Allocate char as temp_storage_bytes is in raw bytes and the type doesn't matter in practice.
+    // Equivalent to DeviceBuffer<int> buf(temp_storage_bytes / sizeof(int))
     DeviceBuffer<char> d_temp_storage_buffer(temp_storage_bytes);
 
     const double outer_cutoff = get_nonbonded_potential_cutoff(nonbonded_potential);
