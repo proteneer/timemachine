@@ -40,7 +40,7 @@ def test_bound_potential_get_potential(harmonic_bond):
 def test_bound_potential_execute_validation(harmonic_bond):
     bound_impl = harmonic_bond.bound_impl(np.float32)
 
-    with pytest.raises(RuntimeError, match="coords must have at least 2 dimensions"):
+    with pytest.raises(RuntimeError, match="coords dimensions must be 2"):
         bound_impl.execute(np.zeros(1), np.ones((3, 3)))
 
     with pytest.raises(RuntimeError, match="coords must have a shape that is 3 dimensional"):
@@ -59,7 +59,7 @@ def test_unbound_potential_execute_validation(harmonic_bond):
     for execute_method, extra_params in zip(
         [unbound_impl.execute, unbound_impl.execute_selective], [(), (True, True, True)]
     ):
-        with pytest.raises(RuntimeError, match="coords must have at least 2 dimensions"):
+        with pytest.raises(RuntimeError, match="coords dimensions must be 2"):
             execute_method(np.zeros(1), harmonic_bond.params, np.ones((3, 3)), *extra_params)
 
         with pytest.raises(RuntimeError, match="coords must have a shape that is 3 dimensional"):

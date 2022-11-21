@@ -34,8 +34,8 @@ namespace py = pybind11;
 void verify_coords_and_box(
     const py::array_t<double, py::array::c_style> &coords, const py::array_t<double, py::array::c_style> &box) {
     size_t coord_dimensions = coords.ndim();
-    if (coord_dimensions < 2) {
-        throw std::runtime_error("coords must have at least 2 dimensions");
+    if (coord_dimensions != 2) {
+        throw std::runtime_error("coords dimensions must be 2");
     }
     if (coords.shape(coord_dimensions - 1) != 3) {
         throw std::runtime_error("coords must have a shape that is 3 dimensional");
