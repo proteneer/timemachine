@@ -48,6 +48,7 @@ NonbondedAllPairs<RealType>::NonbondedAllPairs(
     cudaSafeMalloc(&d_du_dp_buffer_, N_ * PARAMS_PER_ATOM * sizeof(*d_du_dp_buffer_));
 
     gpuErrchk(cudaMallocHost(&p_ixn_count_, 1 * sizeof(*p_ixn_count_)));
+    gpuErrchk(cudaMallocHost(&p_box_, 3 * 3 * sizeof(*p_box_)));
 
     cudaSafeMalloc(&d_nblist_x_, N_ * 3 * sizeof(*d_nblist_x_));
     gpuErrchk(cudaMemset(d_nblist_x_, 0, N_ * 3 * sizeof(*d_nblist_x_))); // set non-sensical positions
@@ -114,6 +115,7 @@ template <typename RealType> NonbondedAllPairs<RealType>::~NonbondedAllPairs() {
     gpuErrchk(cudaFree(d_sort_storage_));
 
     gpuErrchk(cudaFreeHost(p_ixn_count_));
+    gpuErrchk(cudaFreeHost(p_box_));
 
     gpuErrchk(cudaFree(d_nblist_x_));
     gpuErrchk(cudaFree(d_nblist_box_));
@@ -237,8 +239,7 @@ void NonbondedAllPairs<RealType>::execute_device(
         gpuErrchk(cudaMemcpyAsync(
             p_ixn_count_, nblist_.get_ixn_count(), 1 * sizeof(*p_ixn_count_), cudaMemcpyDeviceToHost, stream));
 
-        std::vector<double> h_box(9);
-        gpuErrchk(cudaMemcpyAsync(&h_box[0], d_box, 3 * 3 * sizeof(*d_box), cudaMemcpyDeviceToHost, stream));
+        gpuErrchk(cudaMemcpyAsync(&p_box_[0], d_box, 3 * 3 * sizeof(*d_box), cudaMemcpyDeviceToHost, stream));
 
         // this stream needs to be synchronized so we can be sure that p_ixn_count_ is properly set.
         gpuErrchk(cudaStreamSynchronize(stream));
@@ -248,14 +249,10 @@ void NonbondedAllPairs<RealType>::execute_device(
         const double db_cutoff = (cutoff_ + nblist_padding_) * 2;
 
         // Verify that box is orthogonal and the width of the box in all dimensions is greater than twice the cutoff
-        for (int i = 0; i < 9; i++) {
-            if (i == 0 || i == 4 || i == 8) {
-                if (h_box[i] < db_cutoff) {
-                    throw std::runtime_error(
-                        "Cutoff with padding is more than half of the box width, neighborlist is no longer reliable");
-                }
-            } else if (h_box[i] != 0.0) {
-                throw std::runtime_error("Provided non-ortholinear box, unable to compute nonbonded energy");
+        for (int i = 0; i < 3; i++) {
+            if (p_box_[i * 3 + i] < db_cutoff) {
+                throw std::runtime_error(
+                    "Cutoff with padding is more than half of the box width, neighborlist is no longer reliable");
             }
         }
 
