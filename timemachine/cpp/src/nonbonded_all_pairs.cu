@@ -239,7 +239,7 @@ void NonbondedAllPairs<RealType>::execute_device(
         gpuErrchk(cudaMemcpyAsync(
             p_ixn_count_, nblist_.get_ixn_count(), 1 * sizeof(*p_ixn_count_), cudaMemcpyDeviceToHost, stream));
 
-        gpuErrchk(cudaMemcpyAsync(&p_box_[0], d_box, 3 * 3 * sizeof(*d_box), cudaMemcpyDeviceToHost, stream));
+        gpuErrchk(cudaMemcpyAsync(p_box_, d_box, 3 * 3 * sizeof(*d_box), cudaMemcpyDeviceToHost, stream));
 
         // this stream needs to be synchronized so we can be sure that p_ixn_count_ is properly set.
         gpuErrchk(cudaStreamSynchronize(stream));
@@ -248,7 +248,7 @@ void NonbondedAllPairs<RealType>::execute_device(
         // then a particle can interact with multiple periodic copies.
         const double db_cutoff = (cutoff_ + nblist_padding_) * 2;
 
-        // Verify that box is orthogonal and the width of the box in all dimensions is greater than twice the cutoff
+        // Verify the width of the box in all dimensions is greater than twice the cutoff
         for (int i = 0; i < 3; i++) {
             if (p_box_[i * 3 + i] < db_cutoff) {
                 throw std::runtime_error(
