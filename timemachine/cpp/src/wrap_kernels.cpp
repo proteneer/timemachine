@@ -47,6 +47,16 @@ void verify_coords_and_box(
     if (box.shape(0) != 3 || box.shape(1) != 3) {
         throw std::runtime_error("box must be 3x3");
     }
+    auto box_data = box.data();
+    for (int i = 0; i < box.size(); i++) {
+        if (i == 0 || i == 4 || i == 8) {
+            if (box_data[i] <= 0.0) {
+                throw std::runtime_error("box must have positive values along diagonal");
+            }
+        } else if (box_data[i] != 0.0) {
+            throw std::runtime_error("box must be ortholinear");
+        }
+    }
 }
 
 template <typename RealType> void declare_neighborlist(py::module &m, const char *typestr) {
