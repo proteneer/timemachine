@@ -103,18 +103,26 @@ def read_from_args():
     mol_b = get_mol_by_name(mols, args.mol_b_name)  # 30 in test pair
 
     print("Searching for the maximum common substructure...")
-    mcs_result = atom_mapping.mcs(mol_a, mol_b)
-    query_mol = Chem.MolFromSmarts(mcs_result.smartsString)
-
     print("mol_a SMILES:", Chem.MolToSmiles(mol_a, isomericSmiles=False))
     print("mol_b SMILES:", Chem.MolToSmiles(mol_b, isomericSmiles=False))
-    print("core SMARTS:", mcs_result.smartsString)
 
-    core = atom_mapping.get_core_by_mcs(mol_a, mol_b, query_mol, threshold=2.0)
-    print("core mapping:", core.tolist())
+    all_cores = atom_mapping.get_cores(
+        mol_a,
+        mol_b,
+        ring_cutoff=0.12,
+        chain_cutoff=0.2,
+        max_visits=1e7,
+        connected_core=True,
+        max_cores=1e6,
+        enforce_core_core=True,
+        complete_rings=True,
+    )
 
+    core = all_cores[0]
     res = plot_atom_mapping_grid(mol_a, mol_b, core)
-    with open(f"atom_mapping_{args.mol_a_name}_to_{args.mol_b_name}.svg", "w") as fh:
+    fpath = f"atom_mapping_{args.mol_a_name}_to_{args.mol_b_name}.svg"
+    print("core mapping written to", fpath)
+    with open(fpath, "w") as fh:
         fh.write(res)
 
     forcefield = Forcefield.load_from_file(args.forcefield)
