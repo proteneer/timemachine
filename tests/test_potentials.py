@@ -7,6 +7,7 @@ from common import GradientTest
 from timemachine.lib import custom_ops
 from timemachine.lib.potentials import FanoutSummedPotential, HarmonicBond, SummedPotential
 from timemachine.potentials import generic
+from timemachine.testsystems.relative import get_relative_hif2a_in_vacuum
 
 pytestmark = [pytest.mark.memcheck]
 
@@ -243,3 +244,26 @@ def test_fanout_summed_potential_consistency(harmonic_bond_test_system):
     np.testing.assert_array_equal(du_dx_ref, du_dx_test)
     np.testing.assert_allclose(np.sum(du_dps_ref, axis=0), du_dp_test, rtol=1e-8, atol=1e-8)
     assert u_ref == u_test
+
+
+@pytest.mark.parametrize("precision,rtol,atol", [(np.float64, 1e-8, 1e-8), (np.float32, 1e-4, 5e-4)])
+def test_impact_of_drift_on_precision(precision, rtol, atol):
+    unbound_potentials, sys_params, coords, masses = get_relative_hif2a_in_vacuum()
+    params = [np.array(x.params) for x in unbound_potentials]
+    summed_pot = SummedPotential(
+        unbound_potentials,
+        params,
+    )
+    unbound = summed_pot.unbound_impl(precision)
+    pot_params = np.concatenate([x.reshape(-1) for x in params])
+
+    box = 5 * np.eye(3)
+
+    ref_du_dx, ref_du_dp, ref_u = unbound.execute_selective(coords, pot_params, box, True, True, True)
+    for shift in [0.25, 0.5, 1, 3, 4, 10, 20, 40, 100]:
+        print(shift)
+        new_coords = coords.copy() + np.diag(box * shift)
+        test_du_dx, test_du_dp, test_u = unbound.execute_selective(new_coords, pot_params, box, True, True, True)
+        GradientTest().assert_equal_vectors(ref_du_dx, test_du_dx, rtol)
+        np.testing.assert_allclose(ref_du_dp, test_du_dp, rtol=rtol, atol=atol)
+        np.testing.assert_allclose(ref_u, test_u, rtol=rtol, atol=atol)
