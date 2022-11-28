@@ -5,7 +5,7 @@ import time
 import numpy as np
 
 
-def arcs_left(marcs):
+def _arcs_left(marcs):
     num_row_edges = np.sum(np.any(marcs, 1))
     num_col_edges = np.sum(np.any(marcs, 0))
     return min(num_row_edges, num_col_edges)
@@ -14,7 +14,7 @@ def arcs_left(marcs):
 UNMAPPED = -1
 
 
-def initialize_marcs_given_predicate(g1, g2, predicate):
+def _initialize_marcs_given_predicate(g1, g2, predicate):
     num_a_edges = g1.n_edges
     num_b_edges = g2.n_edges
     marcs = np.ones((num_a_edges, num_b_edges), dtype=np.byte)
@@ -49,7 +49,7 @@ def _verify_core_impl(g1, g2, new_v1, map_1_to_2):
     return True
 
 
-def verify_core_is_connected(g1, g2, new_v1, new_v2, map_1_to_2, map_2_to_1):
+def _verify_core_is_connected(g1, g2, new_v1, new_v2, map_1_to_2, map_2_to_1):
     # incremental checks
     if _verify_core_impl(g1, g2, new_v1, map_1_to_2):
         return _verify_core_impl(g2, g1, new_v2, map_2_to_1)
@@ -92,14 +92,6 @@ class MCSResult:
         self.nodes_visited = 0
 
 
-def convert_matrix_to_bits(arr):
-    res = []
-    for row in arr:
-        seq = "".join([str(x) for x in row.tolist()])
-        res.append(int(seq, 2))
-    return res
-
-
 class Graph:
     def __init__(self, n_vertices, edges):
         self.n_vertices = n_vertices
@@ -135,9 +127,6 @@ class Graph:
             for edge_idx in edges:
                 self.ve_matrix[vertex_idx][edge_idx] = 1
 
-        # boolean version of ve_matrix
-        self.ve_bits = convert_matrix_to_bits(self.ve_matrix)
-
     def get_neighbors(self, vertex):
         return self.lol_vertices[vertex]
 
@@ -146,9 +135,6 @@ class Graph:
 
     def get_edges_as_vector(self, vertex):
         return self.ve_matrix[vertex]
-
-    def get_edges_as_int(self, vertex):
-        return self.ve_bits[vertex]
 
 
 def max_tree_size(priority_list):
@@ -181,14 +167,13 @@ def mcs(n_a, n_b, priority_idxs, bonds_a, bonds_b, max_visits, max_cores, enforc
     g_b = Graph(n_b, bonds_b)
 
     predicate = build_predicate_matrix(n_a, n_b, priority_idxs)
-    marcs = initialize_marcs_given_predicate(g_a, g_b, predicate)
+    marcs = _initialize_marcs_given_predicate(g_a, g_b, predicate)
 
     priority_idxs = tuple(tuple(x) for x in priority_idxs)
-    # marcs = convert_matrix_to_bits(marcs)
     start_time = time.time()
 
     # run in reverse by guessing max # of edges to avoid getting stuck in minima.
-    max_threshold = arcs_left(marcs)
+    max_threshold = _arcs_left(marcs)
     for idx in range(max_threshold):
         cur_threshold = max_threshold - idx
         map_a_to_b = [UNMAPPED] * n_a
@@ -236,21 +221,6 @@ def mcs(n_a, n_b, priority_idxs, bonds_a, bonds_b, max_visits, max_cores, enforc
         core = np.array(sorted(core))
         all_cores.append(core)
 
-    # all_bond_cores = []
-    # for marcs in mcs_result.all_marcs:
-    #     num_a_edges = g_a.n_edges
-    #     num_b_edges = g_b.n_edges
-    #     bond_core = {}
-    #     for e_a in range(num_a_edges):
-    #         src_a, dst_a = g_a.edges[e_a]
-    #         for e_b in range(num_b_edges):
-    #             src_b, dst_b = g_b.edges[e_b]
-    #             if marcs[e_a][e_b]:
-    #                 assert (src_a, dst_a) not in bond_core
-    #                 assert (dst_a, src_a) not in bond_core
-    #                 bond_core[(src_a, dst_a)] = (src_b, dst_b)
-    #     all_bond_cores.append(bond_core)
-
     return all_cores, mcs_result.all_marcs
 
 
@@ -287,7 +257,7 @@ def recursion(
     if len(mcs_result.all_maps) == max_cores:
         return
 
-    num_edges = arcs_left(marcs)
+    num_edges = _arcs_left(marcs)
     if num_edges < threshold:
         return
 
@@ -306,7 +276,9 @@ def recursion(
         if atom_map_2_to_1[jdx] == UNMAPPED:  # optimize later
 
             atom_map_add(atom_map_1_to_2, atom_map_2_to_1, layer, jdx)
-            if enforce_core_core and not verify_core_is_connected(g1, g2, layer, jdx, atom_map_1_to_2, atom_map_2_to_1):
+            if enforce_core_core and not _verify_core_is_connected(
+                g1, g2, layer, jdx, atom_map_1_to_2, atom_map_2_to_1
+            ):
                 pass
             else:
                 new_marcs = refine_marcs(g1, g2, layer, jdx, marcs)
