@@ -447,7 +447,11 @@ def remove_chiral_flips(mol_a, conf_a, mol_b, conf_b, all_cores):
     def chiral_filter(trial_core):
         return not has_chiral_atom_flips(trial_core, chiral_set_a, chiral_set_b)
 
-    return list(filter(chiral_filter, all_cores))
+    assert len(all_cores) > 0
+    filtered_cores = list(filter(chiral_filter, all_cores))
+    assert len(filtered_cores) > 0
+
+    return filtered_cores
 
 
 def remove_cores_smaller_than_largest(cores):
