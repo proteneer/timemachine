@@ -114,8 +114,6 @@ def get_cores(
     assert max_cores > 0
 
     core_kwargs = dict(
-        mol_a=mol_a,
-        mol_b=mol_b,
         ring_cutoff=ring_cutoff,
         chain_cutoff=chain_cutoff,
         max_visits=max_visits,
@@ -128,14 +126,14 @@ def get_cores(
 
     # we require that mol_a.GetNumAtoms() <= mol_b.GetNumAtoms()
     if mol_a.GetNumAtoms() > mol_b.GetNumAtoms():
-        all_cores = _get_cores_impl(**core_kwargs)
+        all_cores = _get_cores_impl(mol_b, mol_a, **core_kwargs)
         new_cores = []
         for core in all_cores:
             core = np.array([(x[1], x[0]) for x in core], dtype=core.dtype)
             new_cores.append(core)
         return new_cores
     else:
-        all_cores = _get_cores_impl(**core_kwargs)
+        all_cores = _get_cores_impl(mol_a, mol_b, **core_kwargs)
         return all_cores
 
 
