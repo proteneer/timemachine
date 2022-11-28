@@ -292,13 +292,10 @@ def find_atom_map_chiral_conflicts(
     * find_chiral_atoms -- definition of atom chirality used here -- notably: hydrogens are distinguishable
         (see additional motivation in https://github.com/proteneer/timemachine/pull/754 and related PR discussion)
     """
-    conflicts_fwd = _find_atom_map_chiral_conflicts_one_direction(core, chiral_set_a, chiral_set_b, mode)
-    conflicts_rev = _find_atom_map_chiral_conflicts_one_direction(core[:, ::-1], chiral_set_b, chiral_set_a, mode)
+    conflicts_a2b = _find_atom_map_chiral_conflicts_one_direction(core, chiral_set_a, chiral_set_b, mode)
+    conflicts_b2a = _find_atom_map_chiral_conflicts_one_direction(core[:, ::-1], chiral_set_b, chiral_set_a, mode)
 
-    # swap order of each 2-tuple in conflicts_rev
-    conflicts_rev_ordered = set((a, b) for (b, a) in conflicts_rev)
-
-    conflicts = conflicts_fwd.union(conflicts_rev_ordered)
+    conflicts = conflicts_a2b.union(set((a, b) for (b, a) in conflicts_b2a))
 
     return conflicts
 
