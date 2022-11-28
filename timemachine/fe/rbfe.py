@@ -709,7 +709,19 @@ def run_edge_and_save_results(
     try:
         mol_a = mols[edge.mol_a_name]
         mol_b = mols[edge.mol_b_name]
-        core, smarts = atom_mapping.get_core_with_alignment(mol_a, mol_b, threshold=2.0)
+
+        all_cores = atom_mapping.get_cores(
+            mol_a,
+            mol_b,
+            ring_cutoff=0.12,
+            chain_cutoff=0.2,
+            max_visits=1e7,
+            connected_core=True,
+            max_cores=1e6,
+            enforce_core_core=True,
+            complete_rings=True,
+        )
+        core = all_cores[0]
 
         complex_res, complex_top = run_complex(mol_a, mol_b, core, forcefield, protein, n_frames, seed)
         solvent_res, solvent_top = run_solvent(mol_a, mol_b, core, forcefield, protein, n_frames, seed)
@@ -738,7 +750,7 @@ def run_edge_and_save_results(
         return path
 
     path = f"success_rbfe_result_{edge.mol_a_name}_{edge.mol_b_name}.pkl"
-    pkl_obj = (mol_a, mol_b, edge.metadata, smarts, core, solvent_res, solvent_top, complex_res, complex_top)
+    pkl_obj = (mol_a, mol_b, edge.metadata, core, solvent_res, solvent_top, complex_res, complex_top)
     file_client.store(path, pickle.dumps(pkl_obj))
 
     solvent_ddg = np.sum(solvent_res.all_dGs)

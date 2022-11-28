@@ -2,7 +2,6 @@ from importlib import resources
 
 import numpy as np
 import pytest
-from rdkit import Chem
 
 from timemachine.fe import atom_mapping, interpolate, single_topology
 from timemachine.fe.utils import get_romol_conf, read_sdf
@@ -218,12 +217,21 @@ def test_intermediate_states(num_pairs_to_setup=10):
     for mol_a, mol_b in pairs[:num_pairs_to_setup]:
 
         print("Checking", mol_a.GetProp("_Name"), "->", mol_b.GetProp("_Name"))
-        mcs_threshold = 2.0  # distance threshold, in nanometers
-        res = atom_mapping.mcs(mol_a, mol_b, mcs_threshold)
-        query = Chem.MolFromSmarts(res.smartsString)
-        core_pairs = atom_mapping.get_core_by_mcs(mol_a, mol_b, query, mcs_threshold)
+        all_cores = atom_mapping.get_cores(
+            mol_a,
+            mol_b,
+            ring_cutoff=0.12,
+            chain_cutoff=0.2,
+            max_visits=1e7,
+            connected_core=True,
+            max_cores=1e6,
+            enforce_core_core=True,
+            complete_rings=True,
+        )
 
-        top = single_topology.SingleTopology(mol_a, mol_b, core_pairs, ff)
+        core = all_cores[0]
+
+        top = single_topology.SingleTopology(mol_a, mol_b, core, ff)
         x0 = top.combine_confs(get_romol_conf(mol_a), get_romol_conf(mol_b))
 
         # test end-states and check to see if the forces are the same
