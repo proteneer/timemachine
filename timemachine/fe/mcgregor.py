@@ -159,7 +159,9 @@ class MaxVisitsError(Exception):
     pass
 
 
-def mcs(n_a, n_b, priority_idxs, bonds_a, bonds_b, max_visits, max_cores, enforce_core_core):
+def mcs(
+    n_a, n_b, priority_idxs, bonds_a, bonds_b, max_visits, max_cores, enforce_core_core, filter_fxn=(lambda core: True)
+):
 
     assert n_a <= n_b
 
@@ -193,6 +195,7 @@ def mcs(n_a, n_b, priority_idxs, bonds_a, bonds_b, max_visits, max_cores, enforc
             max_cores,
             cur_threshold,
             enforce_core_core,
+            filter_fxn,
         )
 
         if mcs_result.timed_out:
@@ -248,6 +251,7 @@ def recursion(
     max_cores,
     threshold,
     enforce_core_core,
+    filter_fxn,
 ):
 
     if mcs_result.nodes_visited > max_visits:
@@ -280,6 +284,8 @@ def recursion(
                 g1, g2, layer, jdx, atom_map_1_to_2, atom_map_2_to_1
             ):
                 pass
+            elif not filter_fxn(atom_map_1_to_2):
+                pass
             else:
                 new_marcs = refine_marcs(g1, g2, layer, jdx, marcs)
                 recursion(
@@ -296,6 +302,7 @@ def recursion(
                     max_cores,
                     threshold,
                     enforce_core_core,
+                    filter_fxn,
                 )
             atom_map_pop(atom_map_1_to_2, atom_map_2_to_1, layer, jdx)
 
@@ -316,4 +323,5 @@ def recursion(
         max_cores,
         threshold,
         enforce_core_core,
+        filter_fxn,
     )

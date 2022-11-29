@@ -338,9 +338,33 @@ def _get_cores_impl(
     n_a = len(conf_a)
     n_b = len(conf_b)
 
+    chiral_set_a = ChiralRestrIdxSet.from_mol(mol_a, conf_a)
+    chiral_set_b = ChiralRestrIdxSet.from_mol(mol_b, conf_b)
+
+    def chiral_filter(trial_core):
+        # TODO: avoid conversion
+        np_core = np.array([(i, trial_core[i]) for i in range(len(trial_core)) if trial_core[i] != -1])
+        passed = not has_chiral_atom_flips(np_core, chiral_set_a, chiral_set_b)
+        return passed
+
+    if enforce_chiral:
+        filter_fxn = chiral_filter
+    else:
+        filter_fxn = lambda core: True
+
     all_cores, all_marcs = mcgregor.mcs(
-        n_a, n_b, priority_idxs, bonds_a, bonds_b, max_visits, max_cores, enforce_core_core
+        n_a,
+        n_b,
+        priority_idxs,
+        bonds_a,
+        bonds_b,
+        max_visits,
+        max_cores,
+        enforce_core_core,
+        filter_fxn=filter_fxn,
     )
+    # print('\ttime spent in chiral filter: ', chiral_filter_time)
+    # print('\tnum chiral filter calls: ', chiral_filter_call_count)
 
     if connected_core:
         all_cores = remove_disconnected_components(mol_a, mol_b, all_cores, all_marcs)
@@ -349,9 +373,6 @@ def _get_cores_impl(
         assert connected_core
         all_cores, all_marcs = remove_incomplete_rings(mol_a, mol_b, all_marcs, all_cores)
         all_cores = remove_disconnected_components(mol_a, mol_b, all_cores, all_marcs)
-
-    if enforce_chiral:
-        all_cores = remove_chiral_flips(mol_a, conf_a, mol_b, conf_b, all_cores)
 
     all_cores = remove_cores_smaller_than_largest(all_cores)
     all_cores = _deduplicate_all_cores(all_cores)
@@ -435,21 +456,6 @@ def remove_disconnected_components(mol_a, mol_b, all_cores, all_marcs):
 
         filtered_cores.append(new_core)
         filtered_bond_cores.append(new_bond_core)
-
-    return filtered_cores
-
-
-def remove_chiral_flips(mol_a, conf_a, mol_b, conf_b, all_cores):
-    """remove any core that has chiral atom flips"""
-    chiral_set_a = ChiralRestrIdxSet.from_mol(mol_a, conf_a)
-    chiral_set_b = ChiralRestrIdxSet.from_mol(mol_b, conf_b)
-
-    def chiral_filter(trial_core):
-        return not has_chiral_atom_flips(trial_core, chiral_set_a, chiral_set_b)
-
-    assert len(all_cores) > 0
-    filtered_cores = list(filter(chiral_filter, all_cores))
-    assert len(filtered_cores) > 0
 
     return filtered_cores
 
