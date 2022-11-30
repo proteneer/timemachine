@@ -363,8 +363,6 @@ def _get_cores_impl(
         enforce_core_core,
         filter_fxn=filter_fxn,
     )
-    # print('\ttime spent in chiral filter: ', chiral_filter_time)
-    # print('\tnum chiral filter calls: ', chiral_filter_call_count)
 
     if connected_core:
         all_cores = remove_disconnected_components(mol_a, mol_b, all_cores, all_marcs)
