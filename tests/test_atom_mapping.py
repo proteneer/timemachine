@@ -490,5 +490,4 @@ def test_cyclohexane_stereo():
     all_cores_fzset = get_all_cores_fzset(all_cores)
     assert tuples_to_set(expected_core) in all_cores_fzset
 
-    # TBD: if we have check_chiral == True then we should expect length of all_cores == 1
-    # and the only valid result is the one equal to expected.
+    assert len(all_cores) == 1
