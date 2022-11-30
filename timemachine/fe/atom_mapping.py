@@ -44,7 +44,16 @@ from timemachine.fe.utils import get_romol_bonds, get_romol_conf
 
 
 def get_cores(
-    mol_a, mol_b, ring_cutoff, chain_cutoff, max_visits, connected_core, max_cores, enforce_core_core, complete_rings
+    mol_a,
+    mol_b,
+    ring_cutoff,
+    chain_cutoff,
+    max_visits,
+    connected_core,
+    max_cores,
+    enforce_core_core,
+    complete_rings,
+    ring_matches_ring_only=False,
 ):
     """
     Finds set of cores between two molecules that maximizes the number of common edges.
@@ -92,6 +101,10 @@ def get_cores(
         If we require mapped atoms that are in a ring to be complete.
         If True then connected_core must also be True.
 
+    ring_matches_ring_only: bool
+        atom i in mol A can match atom j in mol B
+        only if in_ring(i, A) == in_ring(j, B)
+
     Returns
     -------
     Returns a list of all_cores
@@ -112,6 +125,7 @@ def get_cores(
             max_cores,
             enforce_core_core,
             complete_rings,
+            ring_matches_ring_only,
         )
         new_cores = []
         for core in all_cores:
@@ -129,6 +143,7 @@ def get_cores(
             max_cores,
             enforce_core_core,
             complete_rings,
+            ring_matches_ring_only,
         )
         return all_cores
 
@@ -287,7 +302,16 @@ def _deduplicate_all_cores(all_cores):
 
 
 def _get_cores_impl(
-    mol_a, mol_b, ring_cutoff, chain_cutoff, max_visits, connected_core, max_cores, enforce_core_core, complete_rings
+    mol_a,
+    mol_b,
+    ring_cutoff,
+    chain_cutoff,
+    max_visits,
+    connected_core,
+    max_cores,
+    enforce_core_core,
+    complete_rings,
+    ring_matches_ring_only,
 ):
     mol_a, perm = reorder_atoms_by_degree(mol_a)  # UNINVERT
 
@@ -308,12 +332,13 @@ def _get_cores_impl(
             atom_j = mol_b.GetAtomWithIdx(jdx)
             dij = np.linalg.norm(a_xyz - b_xyz)
             dijs.append(dij)
-            if atom_i.IsInRing() or atom_j.IsInRing():
-                if dij < ring_cutoff:
-                    allowed_idxs.add(jdx)
-            else:
-                if dij < chain_cutoff:
-                    allowed_idxs.add(jdx)
+
+            if ring_matches_ring_only and (atom_i.IsInRing() != atom_j.IsInRing()):
+                continue
+
+            cutoff = ring_cutoff if (atom_i.IsInRing() or atom_j.IsInRing()) else chain_cutoff
+            if dij < cutoff:
+                allowed_idxs.add(jdx)
 
         final_idxs = []
         for idx in np.argsort(dijs):
