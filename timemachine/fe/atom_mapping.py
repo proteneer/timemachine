@@ -202,6 +202,24 @@ def induce_subgraphs_given_marcs(mol_a, mol_b, core, marcs):
     return sg_a, sg_b
 
 
+def induce_subgraphs_given_bond_core(mol_a, mol_b, core, bond_core):
+    sg_a = nx.Graph()
+    sg_b = nx.Graph()
+    for a in core[:, 0]:
+        sg_a.add_node(a)
+    for b in core[:, 1]:
+        sg_b.add_node(b)
+
+    # edges_a = get_edges(mol_a)
+    # edges_b = get_edges(mol_b)
+    for e1, e2 in bond_core.items():
+        src_a, dst_a = e1
+        src_b, dst_b = e2
+        sg_a.add_edge(src_a, dst_a)
+        sg_b.add_edge(src_b, dst_b)
+    return sg_a, sg_b
+
+
 def _to_networkx_graph(mol):
     g = nx.Graph()
     for atom in mol.GetAtoms():
@@ -213,11 +231,11 @@ def _to_networkx_graph(mol):
     return g
 
 
-def _remove_incomplete_rings(mol_a, mol_b, core, marcs):
+def _remove_incomplete_rings(mol_a, mol_b, core, bond_core):
 
     # to networkx
     g_a, g_b = _to_networkx_graph(mol_a), _to_networkx_graph(mol_b)
-    sg_a, sg_b = induce_subgraphs_given_marcs(mol_a, mol_b, core, marcs)
+    sg_a, sg_b = induce_subgraphs_given_bond_core(mol_a, mol_b, core, bond_core)
 
     a_cycles = find_cycles(g_a)
     b_cycles = find_cycles(g_b)
@@ -225,10 +243,6 @@ def _remove_incomplete_rings(mol_a, mol_b, core, marcs):
     sg_b_cycles = find_cycles(sg_b)
 
     new_core = []
-    new_marcs = marcs.copy()
-
-    mcg_a = mcgregor.Graph(mol_a.GetNumAtoms(), get_edges(mol_a))
-    mcg_b = mcgregor.Graph(mol_b.GetNumAtoms(), get_edges(mol_b))
 
     for a, b in core:
         pred_sgg_a = a_cycles[a] == sg_a_cycles[a]
@@ -239,25 +253,20 @@ def _remove_incomplete_rings(mol_a, mol_b, core, marcs):
         # all four have to be consistent
         if pred_sgg_a and pred_sgg_b and pred_sg_ab and pred_g_ab:
             new_core.append([a, b])
-        else:
-            # disable the edge-mapping for all edges associated with
-            # a and b
-            for e in mcg_a.get_edges(a):
-                new_marcs[e, :] = 0
-            for e in mcg_b.get_edges(b):
-                new_marcs[:, e] = 0
 
-    return np.array(new_core), new_marcs
+    final_core = np.array(new_core)
+    final_bond_core = update_bond_core(final_core, bond_core)
+    return final_core, final_bond_core
 
 
-def remove_incomplete_rings(mol_a, mol_b, all_marcs, all_cores):
+def remove_incomplete_rings(mol_a, mol_b, all_cores, all_bond_cores):
     new_cores = []
-    new_marcs = []
-    for marcs, cores in zip(all_marcs, all_cores):
-        nc, nm = _remove_incomplete_rings(mol_a, mol_b, cores, marcs)
+    new_bond_cores = []
+    for cores, bond_cores in zip(all_cores, all_bond_cores):
+        nc, nbc = _remove_incomplete_rings(mol_a, mol_b, cores, bond_cores)
         new_cores.append(nc)
-        new_marcs.append(nm)
-    return new_cores, new_marcs
+        new_bond_cores.append(nbc)
+    return new_cores, new_bond_cores
 
 
 def _compute_bond_cores(mol_a, mol_b, marcs):
@@ -364,13 +373,16 @@ def _get_cores_impl(
         filter_fxn=filter_fxn,
     )
 
-    if connected_core:
-        all_cores = remove_disconnected_components(mol_a, mol_b, all_cores, all_marcs)
+    all_bond_cores = [_compute_bond_cores(mol_a, mol_b, marcs) for marcs in all_marcs]
 
-    if complete_rings:
-        assert connected_core
-        all_cores, all_marcs = remove_incomplete_rings(mol_a, mol_b, all_marcs, all_cores)
-        all_cores = remove_disconnected_components(mol_a, mol_b, all_cores, all_marcs)
+    if connected_core and complete_rings:
+        all_cores, all_bond_cores = remove_disconnected_components(mol_a, mol_b, all_cores, all_bond_cores)
+        all_cores, all_bond_cores = remove_incomplete_rings(mol_a, mol_b, all_cores, all_bond_cores)
+        all_cores, all_bond_cores = remove_disconnected_components(mol_a, mol_b, all_cores, all_bond_cores)
+    elif connected_core and not complete_rings:
+        all_cores, all_bond_cores = remove_disconnected_components(mol_a, mol_b, all_cores, all_bond_cores)
+    elif not connected_core and complete_rings:
+        all_cores, all_bond_cores = remove_incomplete_rings(mol_a, mol_b, all_cores, all_bond_cores)
 
     all_cores = remove_cores_smaller_than_largest(all_cores)
     all_cores = _deduplicate_all_cores(all_cores)
@@ -398,7 +410,7 @@ def _get_cores_impl(
 
 
 # maintainer: jkaus
-def remove_disconnected_components(mol_a, mol_b, all_cores, all_marcs):
+def remove_disconnected_components(mol_a, mol_b, all_cores, all_bond_cores):
     """
     This will remove all but the largest connected component from each core map.
     Even if two adjacent atoms are both mapped, their bond may not be present in
@@ -406,11 +418,9 @@ def remove_disconnected_components(mol_a, mol_b, all_cores, all_marcs):
     components from each mapping, until both molecules have only a single
     connected component in their maps.
     """
-    all_bond_cores = [_compute_bond_cores(mol_a, mol_b, marcs) for marcs in all_marcs]
     filtered_cores = []
     filtered_bond_cores = []
     for core, bond_core in zip(all_cores, all_bond_cores):
-
         new_core = core
         new_bond_core = bond_core
         # Need to run it once through even if fully connected
@@ -432,6 +442,10 @@ def remove_disconnected_components(mol_a, mol_b, all_cores, all_marcs):
             # stop when the core is fully connected
             if not first and len(cc_a) == 1 and len(cc_b) == 1:
                 break
+            # No atoms left to map
+            elif len(cc_a) == 0 or len(cc_b) == 0:
+                new_core = []
+                break
 
             largest_cc_a = max(cc_a, key=len)
             largest_cc_b = max(cc_b, key=len)
@@ -452,10 +466,12 @@ def remove_disconnected_components(mol_a, mol_b, all_cores, all_marcs):
             new_bond_core = update_bond_core(new_core, new_bond_core)
             first = False
 
+        if len(new_core) == 0:
+            continue
         filtered_cores.append(new_core)
         filtered_bond_cores.append(new_bond_core)
 
-    return filtered_cores
+    return filtered_cores, filtered_bond_cores
 
 
 def remove_cores_smaller_than_largest(cores):
@@ -470,6 +486,10 @@ def remove_cores_smaller_than_largest(cores):
 
 
 def update_bond_core(core, bond_core):
+    """
+    bond_core: dictionary mapping atoms (i,j) of mol a
+    to (k, l) of mol b.
+    """
     new_bond_core = {}
     core_a = list(core[:, 0])
     core_b = list(core[:, 1])
