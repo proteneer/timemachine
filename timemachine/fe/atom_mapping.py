@@ -54,7 +54,7 @@ def get_cores(
     max_cores,
     enforce_core_core,
     complete_rings,
-    enforce_chiral=True,
+    enforce_chiral,
 ):
     """
     Finds set of cores between two molecules that maximizes the number of common edges.
