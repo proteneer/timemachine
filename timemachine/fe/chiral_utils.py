@@ -40,7 +40,6 @@ def setup_chiral_atom_restraints(mol, conf, a_idx):
         (c0, i0, j0, k0), (c0, i1, j1, k1), ...
 
     """
-    chiral_vol_threshold = 0.1  # don't infer a restraint unless abs(chiral_vol) >= threshold
 
     nbs = mol.GetAtomWithIdx(a_idx).GetNeighbors()
     restr_idxs = []
@@ -48,10 +47,6 @@ def setup_chiral_atom_restraints(mol, conf, a_idx):
         i, j, k = a_i.GetIdx(), a_j.GetIdx(), a_k.GetIdx()
         vol = pyramidal_volume(conf[a_idx], conf[i], conf[j], conf[k])
         # vol may be >0 or <0, our chiral restraint always enforces vol < 0.
-
-        if abs(vol) < chiral_vol_threshold:
-            print(f"skipping chiral atom restraint on {a_idx}, |chiral_vol| = {abs(vol)} < {chiral_vol_threshold}")
-            continue
 
         if vol < 0:
             restr_idxs.append((a_idx, i, j, k))
