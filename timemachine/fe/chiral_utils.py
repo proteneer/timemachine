@@ -137,7 +137,7 @@ def find_chiral_atoms(mol):
     chiral_patterns = [
         "[X4:1]",  # any tetrahedral atom
         "[#16X3,#15X3:1]",  # trivalent sulfur, phosphorous are assumed to be non-invertible
-        "[#7X3:1](~[R])(~[R])~[R]",  # nitrogen directly bonded to three ring atoms
+        # "[#7X3:1](~[R])(~[R])~[R]",  # nitrogen directly bonded to three ring atoms  # TODO: handle pyramidal nitrogen
     ]
 
     chiral_atoms = set()
