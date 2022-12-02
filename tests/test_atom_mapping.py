@@ -47,6 +47,7 @@ def test_all_pairs(filepath):
                 max_cores=1000,
                 enforce_core_core=True,
                 complete_rings=False,
+                enforce_chiral=True,
             )
 
             # useful for visualization
@@ -96,6 +97,7 @@ def test_complete_rings_only():
         max_cores=1000,
         enforce_core_core=True,
         complete_rings=True,
+        enforce_chiral=True,
     )
 
     assert len(all_cores) == 1
@@ -231,6 +233,7 @@ $$$$""",
         max_cores=1000000,
         enforce_core_core=False,
         complete_rings=False,
+        enforce_chiral=True,
     )
 
     assert len(all_cores) == 1
@@ -250,6 +253,7 @@ $$$$""",
         max_cores=1000000,
         enforce_core_core=True,
         complete_rings=False,
+        enforce_chiral=True,
     )
 
     # 2 possible matches, returned core ordering is fully determined
@@ -271,6 +275,7 @@ $$$$""",
         max_cores=1000000,
         enforce_core_core=True,
         complete_rings=False,
+        enforce_chiral=True,
     )
 
     # 2 possible matches, if we do not allow for connected_core but do
@@ -399,6 +404,7 @@ def test_hif2a_failure():
         max_cores=1e6,
         enforce_core_core=True,
         complete_rings=True,
+        enforce_chiral=True,
     )
 
     expected_core = np.array(
@@ -453,6 +459,7 @@ def test_cyclohexane_stereo():
         max_cores=100000,
         enforce_core_core=True,
         complete_rings=True,
+        enforce_chiral=True,
     )
 
     for core_idx, core in enumerate(all_cores[:1]):
