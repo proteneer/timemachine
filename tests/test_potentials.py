@@ -37,26 +37,29 @@ def test_bound_potential_get_potential(harmonic_bond):
     assert unbound_impl is bound_impl.get_potential()
 
 
-def test_bound_potential_execute_validation(harmonic_bond):
-    bound_impl = harmonic_bond.bound_impl(np.float32)
-
+def verify_potential_validation(potential):
     with pytest.raises(RuntimeError, match="coords dimensions must be 2"):
-        bound_impl.execute(np.zeros(1), np.ones((3, 3)))
+        potential(np.zeros(1), np.ones((3, 3)))
 
     with pytest.raises(RuntimeError, match="coords must have a shape that is 3 dimensional"):
-        bound_impl.execute(np.zeros((1, 4)), np.ones((3, 3)))
-
-    with pytest.raises(RuntimeError, match="box dimensions must be 2"):
-        bound_impl.execute(np.zeros((1, 3)), np.ones((3)))
+        potential(np.zeros((1, 4)), np.ones((3, 3)))
 
     with pytest.raises(RuntimeError, match="box must be 3x3"):
-        bound_impl.execute(np.zeros((1, 3)), np.ones((2, 2)))
+        potential(np.zeros((1, 3)), np.ones((3)))
+
+    with pytest.raises(RuntimeError, match="box must be 3x3"):
+        potential(np.zeros((1, 3)), np.ones((2, 2)))
 
     with pytest.raises(RuntimeError, match="box must be ortholinear"):
-        bound_impl.execute(np.zeros((1, 3)), np.ones((3, 3)))
+        potential(np.zeros((1, 3)), np.ones((3, 3)))
 
     with pytest.raises(RuntimeError, match="box must have positive values along diagonal"):
-        bound_impl.execute(np.zeros((1, 3)), np.eye(3) * 0.0)
+        potential(np.zeros((1, 3)), np.eye(3) * 0.0)
+
+
+def test_bound_potential_execute_validation(harmonic_bond):
+    bound_impl = harmonic_bond.bound_impl(np.float32)
+    verify_potential_validation(bound_impl.execute)
 
     execute_bound_impl(bound_impl)
 
@@ -67,23 +70,11 @@ def test_unbound_potential_execute_validation(harmonic_bond):
     for execute_method, extra_params in zip(
         [unbound_impl.execute, unbound_impl.execute_selective], [(), (True, True, True)]
     ):
-        with pytest.raises(RuntimeError, match="coords dimensions must be 2"):
-            execute_method(np.zeros(1), harmonic_bond.params, np.ones((3, 3)), *extra_params)
 
-        with pytest.raises(RuntimeError, match="coords must have a shape that is 3 dimensional"):
-            execute_method(np.zeros((1, 4)), harmonic_bond.params, np.ones((3, 3)), *extra_params)
+        def func(coords, box):
+            return execute_method(coords, harmonic_bond.params, box, *extra_params)
 
-        with pytest.raises(RuntimeError, match="box dimensions must be 2"):
-            execute_method(np.zeros((1, 3)), harmonic_bond.params, np.ones((3)), *extra_params)
-
-        with pytest.raises(RuntimeError, match="box must be 3x3"):
-            execute_method(np.zeros((1, 3)), harmonic_bond.params, np.ones((2, 2)), *extra_params)
-
-        with pytest.raises(RuntimeError, match="box must be ortholinear"):
-            execute_method(np.zeros((1, 3)), harmonic_bond.params, np.ones((3, 3)), *extra_params)
-
-        with pytest.raises(RuntimeError, match="box must have positive values along diagonal"):
-            execute_method(np.zeros((1, 3)), harmonic_bond.params, np.eye(3) * 0.0, *extra_params)
+        verify_potential_validation(func)
 
         execute_method(np.zeros((3, 3)), harmonic_bond.params, np.eye(3), *extra_params)
 
