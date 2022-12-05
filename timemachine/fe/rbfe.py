@@ -249,7 +249,7 @@ def plot_BAR(df, df_err, fwd_delta_u, rev_delta_u, title, axes):
     plot_work(fwd_delta_u, rev_delta_u, axes)
 
 
-def dG_err_from_ukln(u_kln):
+def df_err_from_ukln(u_kln):
     k, l, _ = u_kln.shape
     assert k == l == 2
     w_fwd = u_kln[1, 0, :] - u_kln[0, 0, :]
@@ -264,7 +264,7 @@ def plot_dG_errs(ax, components, lambdas, dG_errs):
         ax.plot(lambdas[:-1], ys, marker=".", label=component)
 
     ax.set_xlabel(r"$\lambda_i$")
-    ax.set_ylabel(r"$\Delta G$ error ($\lambda_i$, $\lambda_{i+1}$)")
+    ax.set_ylabel(r"$\Delta G$ error ($\lambda_i$, $\lambda_{i+1}$) / (kJ / mol)")
     ax.legend()
 
 
@@ -465,7 +465,7 @@ def estimate_free_energy_given_initial_states(initial_states, protocol, temperat
     lambdas = [s.lamb for s in initial_states]
     overlaps_by_lambda = np.array([pair_overlap_from_ukln(u_kln) for u_kln in ukln_by_lambda_by_component.sum(axis=0)])
     dG_errs_by_lambda_by_component = np.array(
-        [[dG_err_from_ukln(u_kln) for u_kln in ukln_by_lambda] for ukln_by_lambda in ukln_by_lambda_by_component]
+        [[df_err_from_ukln(u_kln) / beta for u_kln in ukln_by_lambda] for ukln_by_lambda in ukln_by_lambda_by_component]
     )
     overlaps_by_lambda_by_component = np.array(
         [[pair_overlap_from_ukln(u_kln) for u_kln in ukln_by_lambda] for ukln_by_lambda in ukln_by_lambda_by_component]
