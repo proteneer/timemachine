@@ -6,8 +6,6 @@ from rdkit.Chem import AllChem
 from timemachine.fe import atom_mapping
 from timemachine.fe.utils import plot_atom_mapping_grid
 
-pytestmark = [pytest.mark.nogpu]
-
 hif2a_set = "timemachine/datasets/fep_benchmark/hif2a/ligands.sdf"
 eg5_set = "timemachine/datasets/fep_benchmark/eg5/ligands.sdf"
 
@@ -387,6 +385,7 @@ $$$$""",
     return mol_a, mol_b
 
 
+@pytest.mark.nogpu
 def test_hif2a_failure():
     # special failure with error message:
     # pred_sgg_a = a_cycles[a] == sg_a_cycles[a], KeyError: 18
@@ -445,6 +444,7 @@ def test_hif2a_failure():
     #         fh.write(res)
 
 
+@pytest.mark.nogpu
 def test_cyclohexane_stereo():
     # test that cyclohexane in two different conformations has a core alignment that is stereo correct. Note that this needs a
     # larger than typical cutoff.
@@ -500,6 +500,7 @@ def test_cyclohexane_stereo():
     assert len(all_cores) == 1
 
 
+@pytest.mark.nogpu
 def test_chiral_atom_map():
     mol_a = Chem.AddHs(Chem.MolFromSmiles("C"))
     mol_b = Chem.AddHs(Chem.MolFromSmiles("C"))
