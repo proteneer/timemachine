@@ -29,6 +29,7 @@ private:
     double *d_nblist_box_;  // box which was used to rebuild the nblist
     int *d_rebuild_nblist_; // whether or not we have to rebuild the nblist
     int *p_rebuild_nblist_; // pinned
+    double *p_box_;         // pinned
 
     // "gathered" arrays represent the subset of atoms specified by
     // atom_idxs (if the latter is specified, otherwise all atoms).
