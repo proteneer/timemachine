@@ -340,7 +340,7 @@ class TestContext(unittest.TestCase):
 
         # Indices in mol that weren't the last atom should have moved
         assert np.all(coords[:-1][-(mol.GetNumAtoms() - 1) :] != xs[-1][:-1][-(mol.GetNumAtoms() - 1) :])
-        assert np.any(coords[: -mol.GetNumAtoms()] == xs[-1][: -mol.GetNumAtoms()])
+        assert np.any(coords[local_idxs] == xs[-1][local_idxs])
 
         # Verify that the bound potentials haven't been changed, as local md modifies potentials
         for ref_val, bp in zip(reference_values, bps):
