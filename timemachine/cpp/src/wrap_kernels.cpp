@@ -40,11 +40,7 @@ void verify_coords_and_box(
     if (coords.shape(coord_dimensions - 1) != 3) {
         throw std::runtime_error("coords must have a shape that is 3 dimensional");
     }
-    if (box.ndim() != 2) {
-        throw std::runtime_error("box dimensions must be 2");
-    }
-
-    if (box.shape(0) != 3 || box.shape(1) != 3) {
+    if (box.ndim() != 2 || box.shape(0) != 3 || box.shape(1) != 3) {
         throw std::runtime_error("box must be 3x3");
     }
     auto box_data = box.data();
