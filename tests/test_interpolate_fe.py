@@ -5,7 +5,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pymbar
 import pytest
-from rdkit import Chem
 
 from timemachine.constants import BOLTZ
 from timemachine.fe import atom_mapping, pdb_writer, single_topology, utils
@@ -26,9 +25,19 @@ def test_hif2a_free_energy_estimates():
     mol_a = all_mols[1]
     mol_b = all_mols[4]
 
-    core_smarts = atom_mapping.mcs(mol_a, mol_b).smartsString
-    query_mol = Chem.MolFromSmarts(core_smarts)
-    core = atom_mapping.get_core_by_mcs(mol_a, mol_b, query_mol)
+    all_cores = atom_mapping.get_cores(
+        mol_a,
+        mol_b,
+        ring_cutoff=0.12,
+        chain_cutoff=0.2,
+        max_visits=1e7,
+        connected_core=True,
+        max_cores=1e6,
+        enforce_core_core=True,
+        complete_rings=True,
+        enforce_chiral=True,
+    )
+    core = all_cores[0]
     svg = utils.plot_atom_mapping_grid(mol_a, mol_b, core)
     with open("atom_mapping.svg", "w") as fh:
         fh.write(svg)

@@ -237,9 +237,8 @@ def test_hif2a_end_state_stability(num_pairs_to_setup=25, num_pairs_to_simulate=
     for pair_idx, (mol_a, mol_b) in enumerate(pairs[:num_pairs_to_setup]):
 
         print("Checking", get_mol_name(mol_a), "->", get_mol_name(mol_b))
-        mcs_threshold = 2.0  # distance threshold, in nanometers
-        core_pairs, _ = atom_mapping.get_core_with_alignment(mol_a, mol_b, threshold=mcs_threshold)
-        st = SingleTopology(mol_a, mol_b, core_pairs, ff)
+        core = _get_core_by_mcs(mol_a, mol_b)
+        st = SingleTopology(mol_a, mol_b, core, ff)
         x0 = st.combine_confs(get_romol_conf(mol_a), get_romol_conf(mol_b))
         systems = [st.src_system, st.dst_system]
 
@@ -321,13 +320,9 @@ def test_jax_transform_intermediate_potential():
         mol_a = mols["206"]
         mol_b = mols["57"]
 
-        mcs_threshold = 2.0
-        res = atom_mapping.mcs(mol_a, mol_b, mcs_threshold)
-        query = Chem.MolFromSmarts(res.smartsString)
-        core_pairs = atom_mapping.get_core_by_mcs(mol_a, mol_b, query, mcs_threshold)
-
+        core = _get_core_by_mcs(mol_a, mol_b)
         ff = Forcefield.load_from_file(DEFAULT_FF)
-        st = SingleTopology(mol_a, mol_b, core_pairs, ff)
+        st = SingleTopology(mol_a, mol_b, core, ff)
         conf = st.combine_confs(get_romol_conf(mol_a), get_romol_conf(mol_b))
         return st, conf
 
@@ -372,16 +367,28 @@ def ligand_from_smiles(smiles):
     return mol
 
 
-def get_core_by_mcs(mol_a, mol_b, mcs_threshold=2.0):
-    mcs_result = atom_mapping.mcs(mol_a, mol_b, threshold=mcs_threshold, conformer_aware=False)
-    query_mol = Chem.MolFromSmarts(mcs_result.smartsString)
-    return atom_mapping.get_core_by_mcs(mol_a, mol_b, query_mol, threshold=mcs_threshold)
+def _get_core_by_mcs(mol_a, mol_b):
+    all_cores = atom_mapping.get_cores(
+        mol_a,
+        mol_b,
+        ring_cutoff=0.12,
+        chain_cutoff=0.2,
+        max_visits=1e7,
+        connected_core=True,
+        max_cores=1e6,
+        enforce_core_core=True,
+        complete_rings=True,
+        enforce_chiral=True,
+    )
+
+    core = all_cores[0]
+    return core
 
 
 def test_no_chiral_atom_restraints():
     mol_a = ligand_from_smiles("c1ccccc1")
     mol_b = ligand_from_smiles("c1(I)ccccc1")
-    core = get_core_by_mcs(mol_a, mol_b)
+    core = _get_core_by_mcs(mol_a, mol_b)
 
     forcefield = Forcefield.load_from_file(DEFAULT_FF)
     st = SingleTopology(mol_a, mol_b, core, forcefield)
@@ -396,7 +403,7 @@ def test_no_chiral_atom_restraints():
 def test_no_chiral_bond_restraints():
     mol_a = ligand_from_smiles("C")
     mol_b = ligand_from_smiles("CI")
-    core = get_core_by_mcs(mol_a, mol_b)
+    core = _get_core_by_mcs(mol_a, mol_b)
 
     forcefield = Forcefield.load_from_file(DEFAULT_FF)
     st = SingleTopology(mol_a, mol_b, core, forcefield)
