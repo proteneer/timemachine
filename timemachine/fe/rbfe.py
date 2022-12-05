@@ -263,6 +263,7 @@ def plot_dG_errs(ax, components, lambdas, dG_errs):
     for component, ys in zip(components, dG_errs):
         ax.plot(lambdas[:-1], ys, marker=".", label=component)
 
+    ax.set_ylim(bottom=0.0)
     ax.set_xlabel(r"$\lambda_i$")
     ax.set_ylabel(r"$\Delta G$ error ($\lambda_i$, $\lambda_{i+1}$) / (kJ / mol)")
     ax.legend()
