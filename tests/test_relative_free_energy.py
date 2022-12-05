@@ -4,7 +4,6 @@ from importlib import resources
 
 import numpy as np
 import pytest
-from common import GradientTest
 
 from timemachine.constants import DEFAULT_FF
 from timemachine.fe.free_energy import HostConfig, SimulationResult, image_frames
@@ -41,8 +40,7 @@ def run_bitwise_reproducibility(mol_a, mol_b, core, forcefield, n_frames):
     all_frames, all_boxes = [], []
     for state in solvent_res.initial_states:
         frames, boxes = sample(state, solvent_res.protocol)
-        imaged_frames = image_frames(state, frames, boxes)
-        all_frames.append(imaged_frames)
+        all_frames.append(frames)
         all_boxes.append(boxes)
 
     np.testing.assert_equal(solvent_res.frames, all_frames)
@@ -181,12 +179,14 @@ def test_steps_per_frames():
 
 
 def test_imaging_frames():
-    """Verify that imaging frames places ligand at center and all coordinates are close to being within the box."""
+    """Verify that imaging frames places ligand at center and all coordinates are close to being within the box.
+
+    Does not check precision, as it is known to be lossy. Only to be used for post-processing/visualization."""
     mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
     forcefield = Forcefield.load_from_file(DEFAULT_FF)
     seed = 2022
     frames = 1
-    steps_per_frame = 100
+    steps_per_frame = 1
     equil_steps = 1
     windows = 2
     res, _ = run_solvent(
@@ -200,7 +200,6 @@ def test_imaging_frames():
         n_eq_steps=equil_steps,
         steps_per_frame=steps_per_frame,
         n_windows=windows,
-        image_traj=False,
     )
     keep_idxs = [0, len(res.initial_states) - 1]
     assert len(keep_idxs) == len(res.frames)
@@ -227,33 +226,6 @@ def test_imaging_frames():
         )
         # Verify that ligand was centered in the box
         np.testing.assert_allclose(np.mean(imaged[0][initial_state.ligand_idxs], axis=0), box_center)
-
-        for precision, rtol, atol in [(np.float64, 1e-8, 1e-8), (np.float32, 7e-3, 5e-4)]:
-            for potential in initial_state.potentials:
-                unbound = potential.unbound_impl(precision)
-                for j in range(len(frames)):
-                    assert len(frames) == len(imaged)
-                    ref_du_dx, ref_du_dp, ref_u = unbound.execute_selective(
-                        frames[j], potential.params, boxes[j], True, True, True
-                    )
-                    test_du_dx, test_du_dp, test_u = unbound.execute_selective(
-                        imaged[j], potential.params, boxes[j], True, True, True
-                    )
-                    GradientTest().assert_equal_vectors(ref_du_dx, test_du_dx, rtol=rtol)
-                    np.testing.assert_allclose(
-                        ref_du_dp,
-                        test_du_dp,
-                        atol=atol,
-                        rtol=rtol,
-                        err_msg=f"Failed on potential {type(potential)}, precision {precision}",
-                    )
-                    np.testing.assert_allclose(
-                        ref_u,
-                        test_u,
-                        atol=atol,
-                        rtol=rtol,
-                        err_msg=f"Failed on potential {type(potential)}, precision {precision}",
-                    )
 
 
 def test_rbfe_with_1_window():

@@ -62,6 +62,9 @@ def image_frames(initial_state: InitialState, frames: np.ndarray, boxes: np.ndar
     """Images a set of frames within the periodic box given an Initial state. Recenters the simulation
     around the centroid of the coordinates specified by initial_state.ligand_idxs prior to imaging.
 
+    Calling this function on a set of frames will NOT produce identical energies/du_dp/du_dx. Should only
+    be used for visualization convenience.
+
     Parameters
     ----------
 

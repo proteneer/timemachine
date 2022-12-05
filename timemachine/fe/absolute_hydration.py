@@ -182,7 +182,6 @@ def estimate_absolute_free_energy(
     keep_idxs=None,
     n_eq_steps=10000,
     steps_per_frame=400,
-    image_traj=True,
 ):
     """
     Estimate the absolute hydration free energy for the given mol.
@@ -220,10 +219,6 @@ def estimate_absolute_free_energy(
     steps_per_frame: int
         The number of steps to take before collecting a frame
 
-    image_traj: bool
-        Images the trajectories returned with the SimulationResult. Recenters
-        frames around the ligand and then wraps the coordinates into the box.
-
     Returns
     -------
     SimulationResult
@@ -248,7 +243,7 @@ def estimate_absolute_free_energy(
     combined_prefix = get_mol_name(mol) + "_" + prefix
     try:
         return estimate_free_energy_given_initial_states(
-            initial_states, protocol, temperature, combined_prefix, keep_idxs, image_traj=image_traj
+            initial_states, protocol, temperature, combined_prefix, keep_idxs
         )
     except Exception as err:
         with open(f"failed_ahfe_result_{combined_prefix}.pkl", "wb") as fh:
