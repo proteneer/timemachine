@@ -378,6 +378,7 @@ def _get_core_by_mcs(mol_a, mol_b):
         max_cores=1e6,
         enforce_core_core=True,
         complete_rings=True,
+        enforce_chiral=True,
     )
 
     core = all_cores[0]

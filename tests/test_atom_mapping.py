@@ -1,6 +1,7 @@
 import numpy as np
 import pytest
 from rdkit import Chem
+from rdkit.Chem import AllChem
 
 from timemachine.fe import atom_mapping
 from timemachine.fe.utils import plot_atom_mapping_grid
@@ -47,6 +48,7 @@ def test_all_pairs(filepath):
                 max_cores=1000,
                 enforce_core_core=True,
                 complete_rings=False,
+                enforce_chiral=True,
             )
 
             # useful for visualization
@@ -96,6 +98,7 @@ def test_complete_rings_only():
         max_cores=1000,
         enforce_core_core=True,
         complete_rings=True,
+        enforce_chiral=True,
     )
 
     assert len(all_cores) == 1
@@ -231,6 +234,7 @@ $$$$""",
         max_cores=1000000,
         enforce_core_core=False,
         complete_rings=False,
+        enforce_chiral=True,
     )
 
     assert len(all_cores) == 1
@@ -250,6 +254,7 @@ $$$$""",
         max_cores=1000000,
         enforce_core_core=True,
         complete_rings=False,
+        enforce_chiral=True,
     )
 
     # 2 possible matches, returned core ordering is fully determined
@@ -271,6 +276,7 @@ $$$$""",
         max_cores=1000000,
         enforce_core_core=True,
         complete_rings=False,
+        enforce_chiral=True,
     )
 
     # 2 possible matches, if we do not allow for connected_core but do
@@ -399,6 +405,7 @@ def test_hif2a_failure():
         max_cores=1e6,
         enforce_core_core=True,
         complete_rings=True,
+        enforce_chiral=True,
     )
 
     expected_core = np.array(
@@ -453,6 +460,7 @@ def test_cyclohexane_stereo():
         max_cores=100000,
         enforce_core_core=True,
         complete_rings=True,
+        enforce_chiral=True,
     )
 
     for core_idx, core in enumerate(all_cores[:1]):
@@ -491,3 +499,31 @@ def test_cyclohexane_stereo():
     assert tuples_to_set(expected_core) in all_cores_fzset
 
     assert len(all_cores) == 1
+
+
+def test_chiral_atom_map():
+    mol_a = Chem.AddHs(Chem.MolFromSmiles("C"))
+    mol_b = Chem.AddHs(Chem.MolFromSmiles("C"))
+
+    AllChem.EmbedMolecule(mol_a, randomSeed=0)
+    AllChem.EmbedMolecule(mol_b, randomSeed=0)
+
+    core_kwargs = dict(
+        ring_cutoff=np.inf,
+        chain_cutoff=np.inf,
+        max_visits=1e7,
+        connected_core=True,
+        max_cores=1e6,
+        enforce_core_core=True,
+        complete_rings=True,
+    )
+
+    chiral_aware_cores = atom_mapping.get_cores(mol_a, mol_b, enforce_chiral=True, **core_kwargs)
+    chiral_oblivious_cores = atom_mapping.get_cores(mol_a, mol_b, enforce_chiral=False, **core_kwargs)
+
+    assert len(chiral_oblivious_cores) == 4 * 3 * 2 * 1, "expected all hydrogen permutations to be valid"
+    assert len(chiral_aware_cores) == (len(chiral_oblivious_cores) // 2), "expected only rotations to be valid"
+
+    for (key, val) in chiral_aware_cores[0]:
+        assert key == val, "expected first core to be identity map"
+    assert len(chiral_aware_cores[0]) == 5

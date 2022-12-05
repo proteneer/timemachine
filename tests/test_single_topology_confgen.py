@@ -41,6 +41,7 @@ def run_edge(mol_a, mol_b, protein_path, n_windows):
         max_cores=1e6,
         enforce_core_core=True,
         complete_rings=True,
+        enforce_chiral=True,
     )
     core = all_cores[0]
     res = utils.plot_atom_mapping_grid(mol_a, mol_b, core)

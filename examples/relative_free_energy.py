@@ -116,6 +116,7 @@ def read_from_args():
         max_cores=1e6,
         enforce_core_core=True,
         complete_rings=True,
+        enforce_chiral=True,
     )
 
     core = all_cores[0]
