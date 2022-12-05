@@ -227,6 +227,9 @@ void declare_context(py::module &m) {
         Running a barostat and local MD at the same time are not currently supported. If a barostat is
         assigned to the context, the barostat won't run.
 
+        Note: Running this multiple times with small number of steps (< 100) may result in a vacuum around the local idxs due to
+        discretization error caused by switching on the restraint after a particle has moved beyond the radius.
+
         F = iterations / store_x_interval
 
         Parameters
