@@ -768,6 +768,7 @@ def run_edge_and_save_results(
             max_cores=1e6,
             enforce_core_core=True,
             complete_rings=True,
+            enforce_chiral=True,
         )
         core = all_cores[0]
 

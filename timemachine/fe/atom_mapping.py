@@ -5,6 +5,7 @@ import numpy as np
 from rdkit import Chem
 
 from timemachine.fe import mcgregor
+from timemachine.fe.chiral_utils import ChiralRestrIdxSet, has_chiral_atom_flips
 from timemachine.fe.utils import get_romol_bonds, get_romol_conf
 
 # (ytz): Just like how one should never re-write an MD engine, one should never rewrite an MCS library.
@@ -44,7 +45,16 @@ from timemachine.fe.utils import get_romol_bonds, get_romol_conf
 
 
 def get_cores(
-    mol_a, mol_b, ring_cutoff, chain_cutoff, max_visits, connected_core, max_cores, enforce_core_core, complete_rings
+    mol_a,
+    mol_b,
+    ring_cutoff,
+    chain_cutoff,
+    max_visits,
+    connected_core,
+    max_cores,
+    enforce_core_core,
+    complete_rings,
+    enforce_chiral,
 ):
     """
     Finds set of cores between two molecules that maximizes the number of common edges.
@@ -92,6 +102,9 @@ def get_cores(
         If we require mapped atoms that are in a ring to be complete.
         If True then connected_core must also be True.
 
+    enforce_chiral: bool
+        Filter out cores that would flip atom chirality
+
     Returns
     -------
     Returns a list of all_cores
@@ -100,36 +113,27 @@ def get_cores(
 
     assert max_cores > 0
 
+    core_kwargs = dict(
+        ring_cutoff=ring_cutoff,
+        chain_cutoff=chain_cutoff,
+        max_visits=max_visits,
+        connected_core=connected_core,
+        max_cores=max_cores,
+        enforce_core_core=enforce_core_core,
+        complete_rings=complete_rings,
+        enforce_chiral=enforce_chiral,
+    )
+
     # we require that mol_a.GetNumAtoms() <= mol_b.GetNumAtoms()
     if mol_a.GetNumAtoms() > mol_b.GetNumAtoms():
-        all_cores = _get_cores_impl(
-            mol_b,
-            mol_a,
-            ring_cutoff,
-            chain_cutoff,
-            max_visits,
-            connected_core,
-            max_cores,
-            enforce_core_core,
-            complete_rings,
-        )
+        all_cores = _get_cores_impl(mol_b, mol_a, **core_kwargs)
         new_cores = []
         for core in all_cores:
             core = np.array([(x[1], x[0]) for x in core], dtype=core.dtype)
             new_cores.append(core)
         return new_cores
     else:
-        all_cores = _get_cores_impl(
-            mol_a,
-            mol_b,
-            ring_cutoff,
-            chain_cutoff,
-            max_visits,
-            connected_core,
-            max_cores,
-            enforce_core_core,
-            complete_rings,
-        )
+        all_cores = _get_cores_impl(mol_a, mol_b, **core_kwargs)
         return all_cores
 
 
@@ -287,7 +291,16 @@ def _deduplicate_all_cores(all_cores):
 
 
 def _get_cores_impl(
-    mol_a, mol_b, ring_cutoff, chain_cutoff, max_visits, connected_core, max_cores, enforce_core_core, complete_rings
+    mol_a,
+    mol_b,
+    ring_cutoff,
+    chain_cutoff,
+    max_visits,
+    connected_core,
+    max_cores,
+    enforce_core_core,
+    complete_rings,
+    enforce_chiral,
 ):
     mol_a, perm = reorder_atoms_by_degree(mol_a)  # UNINVERT
 
@@ -325,8 +338,30 @@ def _get_cores_impl(
     n_a = len(conf_a)
     n_b = len(conf_b)
 
+    chiral_set_a = ChiralRestrIdxSet.from_mol(mol_a, conf_a)
+    chiral_set_b = ChiralRestrIdxSet.from_mol(mol_b, conf_b)
+
+    def chiral_filter(trial_core):
+        # TODO: avoid conversion
+        np_core = np.array([(i, trial_core[i]) for i in range(len(trial_core)) if trial_core[i] != -1])
+        passed = not has_chiral_atom_flips(np_core, chiral_set_a, chiral_set_b)
+        return passed
+
+    if enforce_chiral:
+        filter_fxn = chiral_filter
+    else:
+        filter_fxn = lambda core: True
+
     all_cores, all_marcs = mcgregor.mcs(
-        n_a, n_b, priority_idxs, bonds_a, bonds_b, max_visits, max_cores, enforce_core_core
+        n_a,
+        n_b,
+        priority_idxs,
+        bonds_a,
+        bonds_b,
+        max_visits,
+        max_cores,
+        enforce_core_core,
+        filter_fxn=filter_fxn,
     )
 
     if connected_core:
@@ -337,10 +372,10 @@ def _get_cores_impl(
         all_cores, all_marcs = remove_incomplete_rings(mol_a, mol_b, all_marcs, all_cores)
         all_cores = remove_disconnected_components(mol_a, mol_b, all_cores, all_marcs)
 
+    all_cores = remove_cores_smaller_than_largest(all_cores)
     all_cores = _deduplicate_all_cores(all_cores)
 
     dists = []
-    # rmsd, note that len(core) is not the same, only the number of edges is
     for core in all_cores:
         r_i = conf_a[core[:, 0]]
         r_j = conf_b[core[:, 1]]
@@ -420,13 +455,18 @@ def remove_disconnected_components(mol_a, mol_b, all_cores, all_marcs):
         filtered_cores.append(new_core)
         filtered_bond_cores.append(new_bond_core)
 
-    filtered_cores_by_size = defaultdict(list)
-    for core in filtered_cores:
-        filtered_cores_by_size[len(core)].append(core)
+    return filtered_cores
+
+
+def remove_cores_smaller_than_largest(cores):
+    """measured by # mapped atoms"""
+    cores_by_size = defaultdict(list)
+    for core in cores:
+        cores_by_size[len(core)].append(core)
 
     # Return the largest core(s)
-    max_core_size = max(filtered_cores_by_size.keys())
-    return filtered_cores_by_size[max_core_size]
+    max_core_size = max(cores_by_size.keys())
+    return cores_by_size[max_core_size]
 
 
 def update_bond_core(core, bond_core):
