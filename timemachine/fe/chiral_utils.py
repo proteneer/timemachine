@@ -9,6 +9,8 @@ from timemachine.potentials.chiral_restraints import pyramidal_volume, torsion_v
 
 FourTuple = Tuple[int, int, int, int]
 
+ChiralConflict = Tuple[FourTuple, FourTuple]
+
 
 class ChiralCheckMode(Enum):
     FLIP = 1
@@ -38,6 +40,7 @@ def setup_chiral_atom_restraints(mol, conf, a_idx):
         (c0, i0, j0, k0), (c0, i1, j1, k1), ...
 
     """
+
     nbs = mol.GetAtomWithIdx(a_idx).GetNeighbors()
     restr_idxs = []
     for a_i, a_j, a_k in itertools.combinations(nbs, 3):
@@ -134,7 +137,7 @@ def find_chiral_atoms(mol):
     chiral_patterns = [
         "[X4:1]",  # any tetrahedral atom
         "[#16X3,#15X3:1]",  # trivalent sulfur, phosphorous are assumed to be non-invertible
-        "[#7X3:1](~[R])(~[R])~[R]",  # nitrogen directly bonded to three ring atoms
+        # "[#7X3:1](~[R])(~[R])~[R]",  # nitrogen directly bonded to three ring atoms  # TODO: handle pyramidal nitrogen
     ]
 
     chiral_atoms = set()
@@ -163,7 +166,7 @@ class ChiralRestrIdxSet:
     """Support fast checks of whether a trial 4-tuple is consistent with a set of chiral atom idxs"""
 
     def __init__(self, restr_idxs: List[FourTuple]):
-        self.restr_idxs = restr_idxs
+        self.restr_idxs = [(int(c), int(i), int(j), int(k)) for (c, i, j, k) in restr_idxs]
         self.allowed_set, self.disallowed_set = self.expand_symmetries()
 
     @classmethod
@@ -202,8 +205,7 @@ def _find_atom_map_chiral_conflicts_one_direction(
     chiral_set_a: ChiralRestrIdxSet,
     chiral_set_b: ChiralRestrIdxSet,
     mode: ChiralCheckMode = ChiralCheckMode.FLIP,
-):
-    # parse mode
+) -> Set[ChiralConflict]:
     if mode == ChiralCheckMode.FLIP:
         conflict_condition_fxn = chiral_set_b.disallows
     elif mode == ChiralCheckMode.UNDEFINED:
@@ -214,14 +216,13 @@ def _find_atom_map_chiral_conflicts_one_direction(
     # initialize convenient representations
     mapped_set_a = set(core[:, 0])
     conflicts = set()
-    restr_tuples_a = [(int(c), int(i), int(j), int(k)) for (c, i, j, k) in chiral_set_a.restr_idxs]
     mapping_a_to_b = {int(a_i): int(b_i) for (a_i, b_i) in core}
 
     def apply_mapping(c, i, j, k):
         return mapping_a_to_b[c], mapping_a_to_b[i], mapping_a_to_b[j], mapping_a_to_b[k]
 
     # iterate over restraints defined in A, searching for possible conflicts
-    for restr_tuple_a in restr_tuples_a:
+    for restr_tuple_a in chiral_set_a.restr_idxs:
         if set(restr_tuple_a).issubset(mapped_set_a):
             mapped_tuple_b = apply_mapping(*restr_tuple_a)
 
@@ -231,12 +232,38 @@ def _find_atom_map_chiral_conflicts_one_direction(
     return conflicts
 
 
+def _has_chiral_atom_map_flips_one_direction(
+    core: np.ndarray,
+    chiral_set_a: ChiralRestrIdxSet,
+    chiral_set_b: ChiralRestrIdxSet,
+) -> bool:
+    # _find_atom_map_chiral_conflicts_one_direction, except (1) return bool not set, (2) hard-code mode = FLIP
+
+    conflict_condition_fxn = chiral_set_b.disallows
+
+    # initialize convenient representations
+    mapped_set_a = set(core[:, 0])
+    mapping_a_to_b = {int(a_i): int(b_i) for (a_i, b_i) in core}
+
+    def apply_mapping(c, i, j, k):
+        return mapping_a_to_b[c], mapping_a_to_b[i], mapping_a_to_b[j], mapping_a_to_b[k]
+
+    # iterate over restraints defined in A, searching for possible conflicts
+    for restr_tuple_a in chiral_set_a.restr_idxs:
+        if set(restr_tuple_a).issubset(mapped_set_a):
+            mapped_tuple_b = apply_mapping(*restr_tuple_a)
+
+            if conflict_condition_fxn(mapped_tuple_b):
+                return True
+    return False
+
+
 def find_atom_map_chiral_conflicts(
     core: np.ndarray,
     chiral_set_a: ChiralRestrIdxSet,
     chiral_set_b: ChiralRestrIdxSet,
     mode: ChiralCheckMode = ChiralCheckMode.FLIP,
-) -> Set[Tuple[FourTuple, FourTuple]]:
+) -> Set[ChiralConflict]:
     """
 
     Parameters
@@ -266,15 +293,22 @@ def find_atom_map_chiral_conflicts(
     * find_chiral_atoms -- definition of atom chirality used here -- notably: hydrogens are distinguishable
         (see additional motivation in https://github.com/proteneer/timemachine/pull/754 and related PR discussion)
     """
-    conflicts_fwd = _find_atom_map_chiral_conflicts_one_direction(core, chiral_set_a, chiral_set_b, mode)
-    conflicts_rev = _find_atom_map_chiral_conflicts_one_direction(core[:, ::-1], chiral_set_b, chiral_set_a, mode)
+    conflicts_a2b = _find_atom_map_chiral_conflicts_one_direction(core, chiral_set_a, chiral_set_b, mode)
+    conflicts_b2a = _find_atom_map_chiral_conflicts_one_direction(core[:, ::-1], chiral_set_b, chiral_set_a, mode)
 
-    # swap order of each 2-tuple in conflicts_rev
-    conflicts_rev_ordered = set((a, b) for (b, a) in conflicts_rev)
-
-    conflicts = conflicts_fwd.union(conflicts_rev_ordered)
+    conflicts = conflicts_a2b.union(set((a, b) for (b, a) in conflicts_b2a))
 
     return conflicts
+
+
+def has_chiral_atom_flips(core, chiral_set_a, chiral_set_b) -> bool:
+    """find_atom_map_chiral_conflicts, except (1) return bool not set, (2) hard-code mode = FLIP"""
+    # both directions
+    if _has_chiral_atom_map_flips_one_direction(core, chiral_set_a, chiral_set_b):
+        return True
+    if _has_chiral_atom_map_flips_one_direction(core[:, ::-1], chiral_set_b, chiral_set_a):
+        return True
+    return False
 
 
 def find_chiral_bonds(mol):
