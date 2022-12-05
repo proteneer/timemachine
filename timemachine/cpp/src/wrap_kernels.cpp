@@ -236,7 +236,8 @@ void declare_context(py::module &m) {
 
         local_idxs: np.array of int32
             The idxs that defines the atoms to use as the region(s) to run local MD. A random idx will be
-            selected to be frozen and used as the center of the shell of particles to be simulated.
+            selected to be frozen and used as the center of the shell of particles to be simulated. The selected
+            idx is constant across all steps.
 
         store_x_interval: int
             How often we store the frames, store after every store_x_interval iterations. Setting to zero collects frames
