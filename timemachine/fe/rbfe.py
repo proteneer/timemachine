@@ -254,8 +254,8 @@ def df_err_from_ukln(u_kln):
     assert k == l == 2
     w_fwd = u_kln[1, 0, :] - u_kln[0, 0, :]
     w_rev = u_kln[0, 1, :] - u_kln[1, 1, :]
-    _, dG_err = bar_with_bootstrapped_uncertainty(w_fwd, w_rev)
-    return dG_err
+    _, df_err = bar_with_bootstrapped_uncertainty(w_fwd, w_rev)
+    return df_err
 
 
 def plot_dG_errs(ax, components, lambdas, dG_errs):
