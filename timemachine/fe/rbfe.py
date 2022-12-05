@@ -660,7 +660,14 @@ def estimate_relative_free_energy(
         keep_idxs = [0, len(initial_states) - 1]  # keep first and last frames
     assert len(keep_idxs) <= len(lambda_schedule)
     combined_prefix = get_mol_name(mol_a) + "_" + get_mol_name(mol_b) + "_" + prefix
-    return estimate_free_energy_given_initial_states(initial_states, protocol, temperature, combined_prefix, keep_idxs)
+    try:
+        return estimate_free_energy_given_initial_states(
+            initial_states, protocol, temperature, combined_prefix, keep_idxs
+        )
+    except Exception as err:
+        with open(f"failed_rbfe_result_{combined_prefix}.pkl", "wb") as fh:
+            pickle.dump((initial_states, protocol, err), fh)
+        raise err
 
 
 def run_vacuum(
