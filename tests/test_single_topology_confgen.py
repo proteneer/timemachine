@@ -31,8 +31,19 @@ def write_trajectory_as_pdb(mol_a, mol_b, core, all_frames, host_topology, out_p
 
 def run_edge(mol_a, mol_b, protein_path, n_windows):
 
-    threshold = 2.0
-    core, smarts = atom_mapping.get_core_with_alignment(mol_a, mol_b, threshold=threshold)
+    all_cores = atom_mapping.get_cores(
+        mol_a,
+        mol_b,
+        ring_cutoff=0.12,
+        chain_cutoff=0.2,
+        max_visits=1e7,
+        connected_core=True,
+        max_cores=1e6,
+        enforce_core_core=True,
+        complete_rings=True,
+        enforce_chiral=True,
+    )
+    core = all_cores[0]
     res = utils.plot_atom_mapping_grid(mol_a, mol_b, core)
     with open(f"edge_map_{get_mol_name(mol_a)}_{get_mol_name(mol_b)}.svg", "w") as fh:
         fh.write(res)

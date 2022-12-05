@@ -93,7 +93,7 @@ def sample(initial_state, protocol):
 
 # setup the initial state so we can (hopefully) bitwise recover the identical simulation
 # to help us debug errors.
-def setup_initial_states(st, host_config, temperature, lambda_schedule, seed):
+def setup_initial_states(st, host_config, temperature, lambda_schedule, seed, min_cutoff=0.7):
     """
     Setup the initial states for a series of lambda values. It is assumed that the lambda schedule
     is a monotonically increasing sequence in the closed interval [0,1].
@@ -114,6 +114,9 @@ def setup_initial_states(st, host_config, temperature, lambda_schedule, seed):
 
     seed: int
         Random number seed
+
+    min_cutoff: float
+        throw error if any atom moves more than this distance (nm) after minimization
 
     Returns
     -------
@@ -202,7 +205,7 @@ def setup_initial_states(st, host_config, temperature, lambda_schedule, seed):
         state = InitialState(potentials, intg, baro, x0, v0, box0, lamb, ligand_idxs)
         initial_states.append(state)
 
-    all_coords = optimize_coordinates(initial_states)
+    all_coords = optimize_coordinates(initial_states, min_cutoff=min_cutoff)
     for state, coords in zip(initial_states, all_coords):
         state.x0 = coords
 
@@ -479,13 +482,16 @@ def _optimize_coords_along_states(initial_states):
     return x_traj
 
 
-def optimize_coordinates(initial_states):
+def optimize_coordinates(initial_states, min_cutoff=0.7):
     """
     Optimize geometries of the initial states.
 
     Parameters
     ----------
     initial_states: list of InitialState
+
+    min_cutoff: float
+        throw error if any atom moves more than this distance (nm) after minimization
 
     Returns
     -------
@@ -521,8 +527,10 @@ def optimize_coordinates(initial_states):
             all_xs.append(xs)
 
     for state, coords in zip(initial_states, all_xs):
-        # sanity check that no atom has moved more than 7 angstroms away (arbitrary)
-        assert np.amax(np.linalg.norm(state.x0 - coords, axis=1)) < 0.7
+        # sanity check that no atom has moved more than `min_cutoff` nm away
+        assert (
+            np.amax(np.linalg.norm(state.x0 - coords, axis=1)) < min_cutoff
+        ), f"λ = {state.lamb} has minimized atom > {min_cutoff*10} Å from initial state"
 
     return all_xs
 
@@ -541,6 +549,7 @@ def estimate_relative_free_energy(
     keep_idxs=None,
     n_eq_steps=10000,
     steps_per_frame=400,
+    min_cutoff=0.7,
 ):
     """
     Estimate relative free energy between mol_a and mol_b. Molecules should be aligned to each
@@ -588,6 +597,9 @@ def estimate_relative_free_energy(
     steps_per_frame: int
         The number of steps to take before collecting a frame
 
+    min_cutoff: float
+        throw error if any atom moves more than this distance (nm) after minimization
+
     Returns
     -------
     SimulationResult
@@ -604,7 +616,9 @@ def estimate_relative_free_energy(
         warnings.warn("Warning: setting lambda_schedule manually, this argument may be removed in a future release.")
 
     temperature = DEFAULT_TEMP
-    initial_states = setup_initial_states(single_topology, host_config, temperature, lambda_schedule, seed)
+    initial_states = setup_initial_states(
+        single_topology, host_config, temperature, lambda_schedule, seed, min_cutoff=min_cutoff
+    )
     protocol = SimulationProtocol(n_frames=n_frames, n_eq_steps=n_eq_steps, steps_per_frame=steps_per_frame)
 
     if keep_idxs is None:
@@ -622,8 +636,19 @@ def estimate_relative_free_energy(
 
 
 def run_vacuum(
-    mol_a, mol_b, core, forcefield, _, n_frames, seed, n_eq_steps=10000, steps_per_frame=400, n_windows=None
+    mol_a,
+    mol_b,
+    core,
+    forcefield,
+    _,
+    n_frames,
+    seed,
+    n_eq_steps=10000,
+    steps_per_frame=400,
+    n_windows=None,
+    min_cutoff=1.5,
 ):
+    # min_cutoff defaults to 15 Å since there is no environment to prevent conformational changes in the ligand
     vacuum_host_config = None
     return estimate_relative_free_energy(
         mol_a,
@@ -637,11 +662,22 @@ def run_vacuum(
         n_eq_steps=n_eq_steps,
         n_windows=n_windows,
         steps_per_frame=steps_per_frame,
+        min_cutoff=min_cutoff,
     )
 
 
 def run_solvent(
-    mol_a, mol_b, core, forcefield, _, n_frames, seed, n_eq_steps=10000, steps_per_frame=400, n_windows=None
+    mol_a,
+    mol_b,
+    core,
+    forcefield,
+    _,
+    n_frames,
+    seed,
+    n_eq_steps=10000,
+    steps_per_frame=400,
+    n_windows=None,
+    min_cutoff=0.7,
 ):
     box_width = 4.0
     solvent_sys, solvent_conf, solvent_box, solvent_top = builders.build_water_system(box_width, forcefield.water_ff)
@@ -659,12 +695,23 @@ def run_solvent(
         n_eq_steps=n_eq_steps,
         n_windows=n_windows,
         steps_per_frame=steps_per_frame,
+        min_cutoff=min_cutoff,
     )
     return solvent_res, solvent_top
 
 
 def run_complex(
-    mol_a, mol_b, core, forcefield, protein, n_frames, seed, n_eq_steps=10000, steps_per_frame=400, n_windows=None
+    mol_a,
+    mol_b,
+    core,
+    forcefield,
+    protein,
+    n_frames,
+    seed,
+    n_eq_steps=10000,
+    steps_per_frame=400,
+    n_windows=None,
+    min_cutoff=0.7,
 ):
     complex_sys, complex_conf, _, _, complex_box, complex_top = builders.build_protein_system(
         protein, forcefield.protein_ff, forcefield.water_ff
@@ -683,6 +730,7 @@ def run_complex(
         n_eq_steps=n_eq_steps,
         n_windows=n_windows,
         steps_per_frame=steps_per_frame,
+        min_cutoff=min_cutoff,
     )
     return complex_res, complex_top
 
@@ -709,7 +757,20 @@ def run_edge_and_save_results(
     try:
         mol_a = mols[edge.mol_a_name]
         mol_b = mols[edge.mol_b_name]
-        core, smarts = atom_mapping.get_core_with_alignment(mol_a, mol_b, threshold=2.0)
+
+        all_cores = atom_mapping.get_cores(
+            mol_a,
+            mol_b,
+            ring_cutoff=0.12,
+            chain_cutoff=0.2,
+            max_visits=1e7,
+            connected_core=True,
+            max_cores=1e6,
+            enforce_core_core=True,
+            complete_rings=True,
+            enforce_chiral=True,
+        )
+        core = all_cores[0]
 
         complex_res, complex_top = run_complex(mol_a, mol_b, core, forcefield, protein, n_frames, seed)
         solvent_res, solvent_top = run_solvent(mol_a, mol_b, core, forcefield, protein, n_frames, seed)
@@ -738,7 +799,7 @@ def run_edge_and_save_results(
         return path
 
     path = f"success_rbfe_result_{edge.mol_a_name}_{edge.mol_b_name}.pkl"
-    pkl_obj = (mol_a, mol_b, edge.metadata, smarts, core, solvent_res, solvent_top, complex_res, complex_top)
+    pkl_obj = (mol_a, mol_b, edge.metadata, core, solvent_res, solvent_top, complex_res, complex_top)
     file_client.store(path, pickle.dumps(pkl_obj))
 
     solvent_ddg = np.sum(solvent_res.all_dGs)
