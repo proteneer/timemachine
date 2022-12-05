@@ -181,43 +181,13 @@ def get_edges(mol):
     return [(bond.GetBeginAtomIdx(), bond.GetEndAtomIdx()) for bond in mol.GetBonds()]
 
 
-def induce_subgraphs_given_marcs(mol_a, mol_b, core, marcs):
+def induce_mol_subgraph(mol_a, core_a, bond_core_a):
     sg_a = nx.Graph()
-    sg_b = nx.Graph()
-    for a in core[:, 0]:
+    for a in core_a:
         sg_a.add_node(a)
-    for b in core[:, 1]:
-        sg_b.add_node(b)
-
-    edges_a = get_edges(mol_a)
-    edges_b = get_edges(mol_b)
-    for e1 in range(marcs.shape[0]):
-        src_a, dst_a = edges_a[e1]
-        for e2 in range(marcs.shape[1]):
-            src_b, dst_b = edges_b[e2]
-            if marcs[e1][e2]:
-                sg_a.add_edge(src_a, dst_a)
-                sg_b.add_edge(src_b, dst_b)
-
-    return sg_a, sg_b
-
-
-def induce_subgraphs_given_bond_core(mol_a, mol_b, core, bond_core):
-    sg_a = nx.Graph()
-    sg_b = nx.Graph()
-    for a in core[:, 0]:
-        sg_a.add_node(a)
-    for b in core[:, 1]:
-        sg_b.add_node(b)
-
-    # edges_a = get_edges(mol_a)
-    # edges_b = get_edges(mol_b)
-    for e1, e2 in bond_core.items():
-        src_a, dst_a = e1
-        src_b, dst_b = e2
-        sg_a.add_edge(src_a, dst_a)
-        sg_b.add_edge(src_b, dst_b)
-    return sg_a, sg_b
+    for e1 in bond_core_a:
+        sg_a.add_edge(*e1)
+    return sg_a
 
 
 def _to_networkx_graph(mol):
@@ -235,7 +205,8 @@ def _remove_incomplete_rings(mol_a, mol_b, core, bond_core):
 
     # to networkx
     g_a, g_b = _to_networkx_graph(mol_a), _to_networkx_graph(mol_b)
-    sg_a, sg_b = induce_subgraphs_given_bond_core(mol_a, mol_b, core, bond_core)
+    sg_a = induce_mol_subgraph(mol_a, core[:, 0], list(bond_core.keys()))
+    sg_b = induce_mol_subgraph(mol_b, core[:, 1], list(bond_core.values()))
 
     a_cycles = find_cycles(g_a)
     b_cycles = find_cycles(g_b)
@@ -376,6 +347,10 @@ def _get_cores_impl(
     all_bond_cores = [_compute_bond_cores(mol_a, mol_b, marcs) for marcs in all_marcs]
 
     if connected_core and complete_rings:
+        # 1) remove any disconnected components or lone atoms in the mapping
+        # so disconnected regions are not considered as part of the incomplete rings check.
+        # 2) remove any incomplete rings
+        # 3) remove any disconnections created by removing the incomplete rings.
         all_cores, all_bond_cores = remove_disconnected_components(mol_a, mol_b, all_cores, all_bond_cores)
         all_cores, all_bond_cores = remove_incomplete_rings(mol_a, mol_b, all_cores, all_bond_cores)
         all_cores, all_bond_cores = remove_disconnected_components(mol_a, mol_b, all_cores, all_bond_cores)
