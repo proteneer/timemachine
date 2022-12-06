@@ -7,7 +7,7 @@ from common import prepare_nb_system
 
 from timemachine.ff import Forcefield
 from timemachine.integrator import langevin_coefficients
-from timemachine.lib import LangevinIntegrator, MonteCarloBarostat, custom_ops
+from timemachine.lib import LangevinIntegrator, MonteCarloBarostat, VelocityVerletIntegrator, custom_ops
 from timemachine.lib.potentials import SummedPotential
 from timemachine.md.barostat.utils import get_bond_list, get_group_indices
 from timemachine.md.enhanced import get_solvent_phase_system
@@ -322,10 +322,13 @@ class TestContext(unittest.TestCase):
 
         intg_impl = intg.impl()
 
-        # If the integrator is a thermostat and temperatures don't match should fail
-        ctxt = custom_ops.Context(coords, v0, box, intg_impl, bps)
-        with pytest.raises(RuntimeError, match="Local MD temperature didn't match Thermostat's temperature."):
-            ctxt.multiple_steps_local(100, local_idxs, radius=radius, temperature=200.0)
+        verlet = VelocityVerletIntegrator(dt, masses)
+        verlet_impl = verlet.impl()
+
+        # If the integrator is not a thermostat, should fail
+        ctxt = custom_ops.Context(coords, v0, box, verlet_impl, bps)
+        with pytest.raises(RuntimeError, match="integrator provided has no temperature"):
+            ctxt.multiple_steps_local(100, local_idxs, radius=radius)
 
         # Construct context with no potentials, local MD should fail.
         ctxt = custom_ops.Context(coords, v0, box, intg_impl, [])

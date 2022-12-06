@@ -211,7 +211,6 @@ void declare_context(py::module &m) {
                const int store_x_interval,
                const double radius,
                const double k,
-               const double temperature,
                const int seed) -> py::tuple {
                 if (n_steps <= 0) {
                     throw std::runtime_error("local steps must be at least one");
@@ -236,8 +235,8 @@ void declare_context(py::module &m) {
 
                 // Verify that local idxs are unique
                 unique_idxs<int>(vec_local_idxs);
-                std::array<std::vector<double>, 2> result = ctxt.multiple_steps_local(
-                    n_steps, vec_local_idxs, burn_in, x_interval, radius, k, temperature, seed);
+                std::array<std::vector<double>, 2> result =
+                    ctxt.multiple_steps_local(n_steps, vec_local_idxs, burn_in, x_interval, radius, k, seed);
                 const int D = 3;
                 const int F = result[0].size() / (N * D);
                 py::array_t<double, py::array::c_style> out_x_buffer({F, N, D});
@@ -253,7 +252,6 @@ void declare_context(py::module &m) {
             py::arg("store_x_interval") = 0,
             py::arg("radius") = 1.2,
             py::arg("k") = 10000.0,
-            py::arg("temperature") = 300.0,
             py::arg("seed") = 2022,
             R"pbdoc(
         Take multiple steps using particles selected based on the log probability using a random particle from the local_idxs,
@@ -290,9 +288,6 @@ void declare_context(py::module &m) {
 
         k: float
             The flat bottom restraint K value to use for selection and restraint of atoms within the inner shell.
-
-        temperature: float
-            The temperature to run the simulation at. The temperature must match the integrator's temperature if the integrator is a thermostat.
 
         seed: int
             The seed that is used to randomly select a particle to freeze.

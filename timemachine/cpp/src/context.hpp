@@ -35,7 +35,6 @@ public:
         const int store_x_interval,
         const double radius,
         const double k,
-        const double temperature,
         const int seed);
 
     int num_atoms() const;
@@ -57,7 +56,7 @@ private:
 
     void _step(std::vector<BoundPotential *> &bps, unsigned int *d_atom_idxs, const cudaStream_t stream);
 
-    void _assert_temperature_matches(const double temperature);
+    double _get_temperature();
 
     int step_;
 

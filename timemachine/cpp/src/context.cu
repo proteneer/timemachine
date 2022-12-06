@@ -110,11 +110,11 @@ void flatten_potentials(
     }
 }
 
-void Context::_assert_temperature_matches(const double temperature) {
+double Context::_get_temperature() {
     if (Thermostat *thermostat = dynamic_cast<Thermostat *>(intg_); thermostat != nullptr) {
-        if (thermostat->get_temperature() != temperature) {
-            throw std::runtime_error("Local MD temperature didn't match Thermostat's temperature.");
-        }
+        return thermostat->get_temperature();
+    } else {
+        throw std::runtime_error("integrator provided has no temperature.");
     }
 }
 
@@ -125,12 +125,11 @@ std::array<std::vector<double>, 2> Context::multiple_steps_local(
     const int store_x_interval,
     const double radius,
     const double k,
-    const double temperature,
     const int seed) {
     if (store_x_interval <= 0) {
         throw std::runtime_error("store_x_interval <= 0");
     }
-    this->_assert_temperature_matches(temperature);
+    const double temperature = this->_get_temperature();
 
     const int x_buffer_size = n_steps / store_x_interval;
 
