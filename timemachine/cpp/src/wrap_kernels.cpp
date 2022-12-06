@@ -31,6 +31,31 @@
 
 namespace py = pybind11;
 
+// A utility to make sure that the coords and box shapes are correct
+void verify_coords_and_box(
+    const py::array_t<double, py::array::c_style> &coords, const py::array_t<double, py::array::c_style> &box) {
+    size_t coord_dimensions = coords.ndim();
+    if (coord_dimensions != 2) {
+        throw std::runtime_error("coords dimensions must be 2");
+    }
+    if (coords.shape(coord_dimensions - 1) != 3) {
+        throw std::runtime_error("coords must have a shape that is 3 dimensional");
+    }
+    if (box.ndim() != 2 || box.shape(0) != 3 || box.shape(1) != 3) {
+        throw std::runtime_error("box must be 3x3");
+    }
+    auto box_data = box.data();
+    for (int i = 0; i < box.size(); i++) {
+        if (i == 0 || i == 4 || i == 8) {
+            if (box_data[i] <= 0.0) {
+                throw std::runtime_error("box must have positive values along diagonal");
+            }
+        } else if (box_data[i] != 0.0) {
+            throw std::runtime_error("box must be ortholinear");
+        }
+    }
+}
+
 template <typename RealType> void declare_neighborlist(py::module &m, const char *typestr) {
 
     using Class = timemachine::Neighborlist<RealType>;
@@ -47,12 +72,9 @@ template <typename RealType> void declare_neighborlist(py::module &m, const char
                     // The neighborlist kernel implementation assumes that block size is fixed to the CUDA warpSize
                     throw std::runtime_error("Block size must be 32.");
                 }
-
+                verify_coords_and_box(coords, box);
                 int N = coords.shape()[0];
                 int D = coords.shape()[1];
-                if (D != 3) {
-                    throw std::runtime_error("Dimensions must be 3");
-                }
                 int B = (N + block_size - 1) / block_size;
 
                 py::array_t<double, py::array::c_style> py_bb_ctrs({B, D});
@@ -73,7 +95,7 @@ template <typename RealType> void declare_neighborlist(py::module &m, const char
                const py::array_t<double, py::array::c_style> &box,
                const double cutoff) -> std::vector<std::vector<int>> {
                 int N = coords.shape()[0];
-
+                verify_coords_and_box(coords, box);
                 std::vector<std::vector<int>> ixn_list = nblist.get_nblist_host(N, coords.data(), box.data(), cutoff);
 
                 return ixn_list;
@@ -108,7 +130,7 @@ void declare_context(py::module &m) {
                         std::optional<timemachine::MonteCarloBarostat *> barostat) {
                 int N = x0.shape()[0];
                 int D = x0.shape()[1];
-
+                verify_coords_and_box(x0, box0);
                 if (N != v0.shape()[0]) {
                     throw std::runtime_error("v0 N != x0 N");
                 }
@@ -413,7 +435,7 @@ void declare_potential(py::module &m) {
                 const long unsigned int N = coords.shape()[0];
                 const long unsigned int D = coords.shape()[1];
                 const long unsigned int P = params.size();
-
+                verify_coords_and_box(coords, box);
                 // initialize with fixed garbage values for debugging convenience (these should be overwritten by `execute_host`)
                 std::vector<unsigned long long> du_dx(N * D, 9999);
                 std::vector<unsigned long long> du_dp(P, 9999);
@@ -587,7 +609,7 @@ void declare_potential(py::module &m) {
                 const long unsigned int N = coords.shape()[0];
                 const long unsigned int D = coords.shape()[1];
                 const long unsigned int P = params.size();
-
+                verify_coords_and_box(coords, box);
                 // initialize with fixed garbage values for debugging convenience (these should be overwritten by `execute_host`)
                 std::vector<unsigned long long> du_dx(N * D, 9999);
                 std::vector<unsigned long long> du_dp(P, 9999);
@@ -645,6 +667,7 @@ void declare_potential(py::module &m) {
                 const long unsigned int N = coords.shape()[0];
                 const long unsigned int D = coords.shape()[1];
                 const long unsigned int P = params.size();
+                verify_coords_and_box(coords, box);
 
                 std::vector<unsigned long long> du_dx(N * D);
 
@@ -685,7 +708,7 @@ void declare_bound_potential(py::module &m) {
                const py::array_t<double, py::array::c_style> &box) -> py::tuple {
                 const long unsigned int N = coords.shape()[0];
                 const long unsigned int D = coords.shape()[1];
-
+                verify_coords_and_box(coords, box);
                 std::vector<unsigned long long> du_dx(N * D);
                 std::vector<unsigned long long> u(N, 0);
 
@@ -709,7 +732,7 @@ void declare_bound_potential(py::module &m) {
                const py::array_t<double, py::array::c_style> &box) -> const py::array_t<uint64_t, py::array::c_style> {
                 const long unsigned int N = coords.shape()[0];
                 const long unsigned int D = coords.shape()[1];
-
+                verify_coords_and_box(coords, box);
                 // du_dx is computed, but not used
                 std::vector<unsigned long long> du_dx(N * D);
                 std::vector<unsigned long long> u(N, 0);
