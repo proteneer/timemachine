@@ -121,6 +121,7 @@ void Context::_assert_temperature_matches(const double temperature) {
 std::array<std::vector<double>, 2> Context::multiple_steps_local(
     const int n_steps,
     const std::vector<int> &local_idxs,
+    const int burn_in,
     const int store_x_interval,
     const double radius,
     const double k,
@@ -333,7 +334,9 @@ std::array<std::vector<double>, 2> Context::multiple_steps_local(
 
         // Set the nonbonded potential to compute forces of inner+outer shell.
         set_nonbonded_potential_idxs(nonbonded_potential, p_num_selected.data[0], d_row_idxs.data, stream);
-
+        for (int i = 0; i < burn_in; i++) {
+            this->_step(bps_, d_shell_idxs_inner.data, stream);
+        }
         for (int i = 1; i <= n_steps; i++) {
             this->_step(bps_, d_shell_idxs_inner.data, stream);
             if (i % store_x_interval == 0) {

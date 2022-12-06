@@ -351,6 +351,65 @@ class TestContext(unittest.TestCase):
         with pytest.raises(RuntimeError, match="atom indices must be unique"):
             ctxt.multiple_steps_local(100, np.array([1, 1], dtype=np.int32), radius=radius)
 
+        with pytest.raises(RuntimeError, match="burn in steps must be greater than zero"):
+            ctxt.multiple_steps_local(100, np.array([1], dtype=np.int32), radius=radius, burn_in=-5)
+
+    def test_multiple_steps_local_burn_in(self):
+        """Verify that burn in steps are identical to regular steps"""
+        seed = 2022
+        np.random.seed(seed)
+
+        N = 8
+        D = 3
+
+        coords = np.random.rand(N, D).astype(dtype=np.float64) * 2
+        box = np.eye(3) * 3.0
+        masses = np.random.rand(N)
+
+        E = 2
+
+        params, potential = prepare_nb_system(
+            coords,
+            E,
+            p_scale=3.0,
+            cutoff=1.0,
+        )
+        nb_pot = potential.to_gpu()
+
+        temperature = 300
+        dt = 1.5e-3
+        friction = 0.0
+        radius = 1.2
+
+        # Select a single particle to use as the reference, will be frozen
+        local_idxs = np.array([len(coords) - 1], dtype=np.int32)
+
+        v0 = np.zeros_like(coords)
+        bps = [nb_pot.bind(params).bound_impl(np.float32)]
+
+        reference_values = []
+        for bp in bps:
+            reference_values.append(bp.execute(coords, box))
+
+        intg = LangevinIntegrator(temperature, dt, friction, masses, seed)
+
+        intg_impl = intg.impl()
+
+        steps = 100
+        burn_in = 100
+
+        ctxt = custom_ops.Context(coords, v0, box, intg_impl, bps)
+        ref_xs, ref_boxes = ctxt.multiple_steps_local(steps, local_idxs, radius=radius, burn_in=burn_in)
+
+        intg_impl = intg.impl()
+
+        ctxt = custom_ops.Context(coords, v0, box, intg_impl, bps)
+        comp_xs, comp_boxes = ctxt.multiple_steps_local(steps + burn_in, local_idxs, radius=radius, burn_in=0)
+
+        # Final frame should be identical
+        np.testing.assert_array_equal(ref_xs, comp_xs)
+        np.testing.assert_array_equal(ref_boxes, comp_boxes)
+
     def test_multiple_steps_local_consistency(self):
         """Verify that running multiple_steps_local is consistent.
 

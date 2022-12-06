@@ -207,6 +207,7 @@ void declare_context(py::module &m) {
             [](timemachine::Context &ctxt,
                const int n_steps,
                const py::array_t<int, py::array::c_style> &local_idxs,
+               const int burn_in,
                const int store_x_interval,
                const double radius,
                const double k,
@@ -214,6 +215,9 @@ void declare_context(py::module &m) {
                const int seed) -> py::tuple {
                 if (n_steps <= 0) {
                     throw std::runtime_error("local steps must be at least one");
+                }
+                if (burn_in < 0) {
+                    throw std::runtime_error("burn in steps must be greater than zero");
                 }
                 const int N = ctxt.num_atoms();
                 const int x_interval = (store_x_interval <= 0) ? n_steps : store_x_interval;
@@ -232,8 +236,8 @@ void declare_context(py::module &m) {
 
                 // Verify that local idxs are unique
                 unique_idxs<int>(vec_local_idxs);
-                std::array<std::vector<double>, 2> result =
-                    ctxt.multiple_steps_local(n_steps, vec_local_idxs, x_interval, radius, k, temperature, seed);
+                std::array<std::vector<double>, 2> result = ctxt.multiple_steps_local(
+                    n_steps, vec_local_idxs, burn_in, x_interval, radius, k, temperature, seed);
                 const int D = 3;
                 const int F = result[0].size() / (N * D);
                 py::array_t<double, py::array::c_style> out_x_buffer({F, N, D});
@@ -245,6 +249,7 @@ void declare_context(py::module &m) {
             },
             py::arg("n_steps"),
             py::arg("local_idxs"),
+            py::arg("burn_in") = 500, // This is arbitrarily selected as a default, TODO make informed choice
             py::arg("store_x_interval") = 0,
             py::arg("radius") = 1.2,
             py::arg("k") = 10000.0,
@@ -271,6 +276,10 @@ void declare_context(py::module &m) {
             The idxs that defines the atoms to use as the region(s) to run local MD. A random idx will be
             selected to be frozen and used as the center of the shell of particles to be simulated. The selected
             idx is constant across all steps.
+
+        burn_in: int
+            How many steps to run prior to storing frames. This is to handle the fact that the local simulation applies a
+            restraint, and burn in helps equilibrate the local simulation. Running with small numbers of steps (< 10) is not recommended.
 
         store_x_interval: int
             How often we store the frames, store after every store_x_interval iterations. Setting to zero collects frames
