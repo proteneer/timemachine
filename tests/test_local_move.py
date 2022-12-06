@@ -209,11 +209,9 @@ def test_local_md_particle_density():
     local_idxs = np.array([len(coords) - 1], dtype=np.int32)
 
     nblist = custom_ops.Neighborlist_f32(coords.shape[0])
-    num_local_idxs = len(local_idxs)
-    num_host_atoms = len(coords) - num_local_idxs
 
     # Construct list of atoms in the inner shell
-    nblist.set_row_idxs(np.arange(len(coords) - num_local_idxs, len(coords), dtype=np.uint32))
+    nblist.set_row_idxs(local_idxs.astype(np.uint32))
 
     intg = LangevinIntegrator(temperature, dt, friction, masses, seed)
 
@@ -230,7 +228,7 @@ def test_local_md_particle_density():
         inner_shell_idxs = np.unique(flattened)
 
         # Combine all of the indices that are involved in the inner shell
-        subsystem_idxs = np.unique(np.concatenate([inner_shell_idxs, np.arange(num_host_atoms, len(coords))]))
+        subsystem_idxs = np.unique(np.concatenate([inner_shell_idxs, local_idxs]))
         return len(subsystem_idxs)
 
     ctxt = custom_ops.Context(coords, v0, box, intg_impl, bps)
