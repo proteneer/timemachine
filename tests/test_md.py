@@ -282,7 +282,83 @@ class TestContext(unittest.TestCase):
 
         np.testing.assert_array_almost_equal(ref_all_xs[x_interval::x_interval], test_xs)
 
-    def test_multiple_steps_local(self):
+    def test_multiple_steps_local_validation(self):
+        seed = 2022
+        np.random.seed(seed)
+
+        N = 8
+        D = 3
+
+        coords = np.random.rand(N, D).astype(dtype=np.float64) * 2
+        box = np.eye(3) * 3.0
+        masses = np.random.rand(N)
+
+        E = 2
+
+        params, potential = prepare_nb_system(
+            coords,
+            E,
+            p_scale=3.0,
+            cutoff=1.0,
+        )
+        nb_pot = potential.to_gpu()
+
+        temperature = 300
+        dt = 1.5e-3
+        friction = 0.0
+        radius = 1.2
+
+        # Select a single particle to use as the reference, will be frozen
+        local_idxs = np.array([len(coords) - 1], dtype=np.int32)
+
+        v0 = np.zeros_like(coords)
+        bps = [nb_pot.bind(params).bound_impl(np.float32)]
+
+        reference_values = []
+        for bp in bps:
+            reference_values.append(bp.execute(coords, box))
+
+        intg = LangevinIntegrator(temperature, dt, friction, masses, seed)
+
+        intg_impl = intg.impl()
+
+        # If the integrator is a thermostat and temperatures don't match should fail
+        ctxt = custom_ops.Context(coords, v0, box, intg_impl, bps)
+        with pytest.raises(RuntimeError, match="Local MD temperature didn't match Thermostat's temperature."):
+            ctxt.multiple_steps_local(100, local_idxs, radius=radius, temperature=200.0)
+
+        # Construct context with no potentials, local MD should fail.
+        ctxt = custom_ops.Context(coords, v0, box, intg_impl, [])
+        with pytest.raises(RuntimeError, match="unable to find a NonbondedAllPairs potential"):
+            ctxt.multiple_steps_local(100, local_idxs, radius=radius)
+
+        # If you have multiple nonbonded potentials, should fail
+        ctxt = custom_ops.Context(coords, v0, box, intg_impl, bps * 2)
+        with pytest.raises(RuntimeError, match="found multiple NonbondedAllPairs potentials"):
+            ctxt.multiple_steps_local(100, local_idxs, radius=radius)
+
+        # Verify that indices are correctly checked
+        ctxt = custom_ops.Context(coords, v0, box, intg_impl, bps)
+        with pytest.raises(RuntimeError, match="indices values must be less than N"):
+            ctxt.multiple_steps_local(100, np.array([N * 2], dtype=np.int32), radius=radius)
+
+        with pytest.raises(RuntimeError, match="indices values must be greater than or equal to 0"):
+            ctxt.multiple_steps_local(100, np.array([-1], dtype=np.int32), radius=radius)
+
+        with pytest.raises(RuntimeError, match="number of idxs must be less than N"):
+            ctxt.multiple_steps_local(100, np.array([5] * N * 2, dtype=np.int32), radius=radius)
+
+        with pytest.raises(RuntimeError, match="atom indices must be unique"):
+            ctxt.multiple_steps_local(100, np.array([1, 1], dtype=np.int32), radius=radius)
+
+    def test_multiple_steps_local_consistency(self):
+        """Verify that running multiple_steps_local is consistent.
+
+        - Assert that particles nearby the local idxs move, particles far away do not
+        - Assert that potentials used to run local md do return bit wise identical results.
+          As multiple_steps_local modifies the potentials
+        - Assert that running with a Barostat returns identical frames
+        - Assert that wrapping potentials within a SummedPotential returns identical frames"""
         mol, _ = get_biphenyl()
         ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
 
@@ -297,9 +373,6 @@ class TestContext(unittest.TestCase):
         unbound_potentials, sys_params, masses, coords, box = get_solvent_phase_system(
             mol, ff, 0.0, minimize_energy=False
         )
-        # Select a single particle to use as the reference, will be frozen
-        local_idxs = np.array([len(coords) - 1], dtype=np.int32)
-
         v0 = np.zeros_like(coords)
         bps = []
         for p, bp in zip(sys_params, unbound_potentials):
@@ -309,27 +382,12 @@ class TestContext(unittest.TestCase):
         for bp in bps:
             reference_values.append(bp.execute(coords, box))
 
+        # Select the molecule as the local idxs
+        local_idxs = np.arange(len(coords) - mol.GetNumAtoms(), len(coords), dtype=np.int32)
+
         intg = LangevinIntegrator(temperature, dt, friction, masses, seed)
 
         intg_impl = intg.impl()
-
-        # If the integrator is a thermostat and temperatures don't match should fail
-        ctxt = custom_ops.Context(coords, v0, box, intg_impl, bps)
-        with pytest.raises(RuntimeError) as e:
-            ctxt.multiple_steps_local(100, local_idxs, radius=radius, temperature=200.0)
-        assert "Local MD temperature didn't match Thermostat's temperature." == str(e.value)
-
-        # Construct context with no potentials, local MD should fail.
-        ctxt = custom_ops.Context(coords, v0, box, intg_impl, [])
-        with pytest.raises(RuntimeError) as e:
-            ctxt.multiple_steps_local(100, local_idxs, radius=radius)
-        assert "unable to find a NonbondedAllPairs potential" == str(e.value)
-
-        # If you have multiple nonbonded potentials, should fail
-        ctxt = custom_ops.Context(coords, v0, box, intg_impl, bps * 2)
-        with pytest.raises(RuntimeError) as e:
-            ctxt.multiple_steps_local(100, local_idxs, radius=radius)
-        assert "found multiple NonbondedAllPairs potentials" == str(e.value)
 
         ctxt = custom_ops.Context(coords, v0, box, intg_impl, bps)
         # Run steps of local MD
@@ -338,9 +396,23 @@ class TestContext(unittest.TestCase):
         assert xs.shape[0] == num_steps // x_interval
         assert boxes.shape[0] == num_steps // x_interval
 
-        # Indices in mol that weren't the last atom should have moved
-        assert np.all(coords[:-1][-(mol.GetNumAtoms() - 1) :] != xs[-1][:-1][-(mol.GetNumAtoms() - 1) :])
-        assert np.any(coords[local_idxs] == xs[-1][local_idxs])
+        # Indices in local idxs should have moved, except for the one selected as frozen
+        moved_coords = np.sum(coords[local_idxs] != xs[-1][local_idxs])
+        assert (moved_coords // 3) == len(local_idxs) - 1
+
+        # Get the particles within a certain distance of local idxs
+        nblist = custom_ops.Neighborlist_f32(len(coords))
+        nblist.set_row_idxs(local_idxs.astype(np.uint32))
+        # Add padding to the radius to account for probablistic selection
+        ixn_list = nblist.get_nblist(coords, box, radius + 0.2)
+        potential_selected_particles = np.concatenate(ixn_list)
+
+        moving_idxs = np.concatenate([local_idxs, potential_selected_particles.reshape(-1)])
+        assert np.any(coords[moving_idxs] != xs[-1][moving_idxs])
+
+        frozen_idxs = np.delete(np.arange(0, len(coords)), moving_idxs)
+        assert len(frozen_idxs) > 0
+        assert np.all(coords[frozen_idxs] == xs[-1][frozen_idxs])
 
         # Verify that the bound potentials haven't been changed, as local md modifies potentials
         for ref_val, bp in zip(reference_values, bps):
@@ -349,6 +421,7 @@ class TestContext(unittest.TestCase):
             np.testing.assert_array_equal(ref_du_dx, test_du_dx)
             np.testing.assert_equal(ref_u, test_u)
 
+        # Verify that running with a barostat doesn't change the results
         group_idxs = get_group_indices(get_bond_list(unbound_potentials[0]))
 
         pressure = 1.0
@@ -359,17 +432,18 @@ class TestContext(unittest.TestCase):
         intg_impl = intg.impl()
 
         ctxt = custom_ops.Context(coords, v0, box, intg_impl, bps, barostat=barostat_impl)
-        # Run steps of local MD
-        xs, boxes = ctxt.multiple_steps_local(num_steps, local_idxs, store_x_interval=x_interval, radius=radius)
+        baro_xs, baro_boxes = ctxt.multiple_steps_local(
+            num_steps, local_idxs, store_x_interval=x_interval, radius=radius
+        )
 
-        assert xs.shape[0] == num_steps // x_interval
-        assert boxes.shape[0] == num_steps // x_interval
+        assert baro_xs.shape == xs.shape
+        assert baro_boxes.shape == boxes.shape
 
-        # Running with Barostat should similarly not impact the positions of the global system, as it doesn't
-        # run during local MD
-        assert np.all(coords[:-1][-(mol.GetNumAtoms() - 1) :] != xs[-1][:-1][-(mol.GetNumAtoms() - 1) :])
-        assert np.any(coords[: -mol.GetNumAtoms()] == xs[-1][: -mol.GetNumAtoms()])
+        # Results using a barostat should be identical.
+        np.testing.assert_array_equal(baro_xs, xs)
+        np.testing.assert_array_equal(baro_boxes, boxes)
 
+        # Verify that wrapping up the potentials in a summed potential is identical
         summed_potential = SummedPotential(unbound_potentials, sys_params)
         # Flatten the arrays so we can concatenate them.
         summed_potential = summed_potential.bind(np.concatenate([p.reshape(-1) for p in sys_params]))

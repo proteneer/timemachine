@@ -215,17 +215,25 @@ void declare_context(py::module &m) {
                 if (n_steps <= 0) {
                     throw std::runtime_error("local steps must be at least one");
                 }
-
+                const int N = ctxt.num_atoms();
                 const int x_interval = (store_x_interval <= 0) ? n_steps : store_x_interval;
 
                 std::vector<int> vec_local_idxs(local_idxs.size());
                 std::memcpy(vec_local_idxs.data(), local_idxs.data(), vec_local_idxs.size() * sizeof(int));
+                if (vec_local_idxs.size() >= (long unsigned int)N) {
+                    throw std::runtime_error("number of idxs must be less than N");
+                }
+                if (*std::max_element(vec_local_idxs.begin(), vec_local_idxs.end()) >= N) {
+                    throw std::runtime_error("indices values must be less than N");
+                }
+                if (*std::min_element(vec_local_idxs.begin(), vec_local_idxs.end()) < 0) {
+                    throw std::runtime_error("indices values must be greater than or equal to 0");
+                }
+
                 // Verify that local idxs are unique
                 unique_idxs<int>(vec_local_idxs);
                 std::array<std::vector<double>, 2> result =
                     ctxt.multiple_steps_local(n_steps, vec_local_idxs, x_interval, radius, k, temperature, seed);
-
-                const int N = ctxt.num_atoms();
                 const int D = 3;
                 const int F = result[0].size() / (N * D);
                 py::array_t<double, py::array::c_style> out_x_buffer({F, N, D});
