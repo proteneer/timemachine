@@ -188,6 +188,12 @@ def test_ideal_gas():
 
 
 def test_local_md_particle_density():
+    """Verify that the average particle density around a single particle is stable.
+
+    In the naive implementation of local md, a vacuum can appear around the local idxs. See naive_local_resampling_move
+    for what the incorrect implementation looks like. The vacuume is introduced due to discretization error where in a step
+    a particle moves away from the local idxs and is frozen in the next round of local MD.
+    """
     mol, _ = get_biphenyl()
     ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
 
