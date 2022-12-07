@@ -13,16 +13,7 @@ static const int HILBERT_MAX_GRID_DIM = 1 << HILBERT_N_BITS;
 static_assert(HILBERT_N_BITS == 8);
 static_assert(HILBERT_GRID_DIM <= HILBERT_MAX_GRID_DIM);
 
-// generate kv values from coordinates to be radix sorted
-void __global__ k_coords_to_kv(
-    const int N,
-    const double *coords,
-    const double *box,
-    const unsigned int *bin_to_idx,
-    unsigned int *keys,
-    unsigned int *vals);
-
-// variant of k_coords_to_kv allowing the selection of a subset of coordinates
+// generate kv values from coordinates to be radix sorted allowing the selection of a subset of coordinates
 void __global__ k_coords_to_kv_gather(
     const int N,                   // number of atoms in selection
     const unsigned int *atom_idxs, // [N] indices of atoms to select

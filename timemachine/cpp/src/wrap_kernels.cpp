@@ -23,6 +23,7 @@
 #include "periodic_torsion.hpp"
 #include "potential.hpp"
 #include "rmsd_align.hpp"
+#include "set_utils.hpp"
 #include "summed_potential.hpp"
 #include "verlet_integrator.hpp"
 
@@ -197,6 +198,106 @@ void declare_context(py::module &m) {
         -------
         2-tuple of coordinates, boxes
             F = floor(n_steps/store_x_interval).
+            Coordinates have shape (F, N, 3)
+            Boxes have shape (F, 3, 3)
+
+    )pbdoc")
+        .def(
+            "multiple_steps_local",
+            [](timemachine::Context &ctxt,
+               const int n_steps,
+               const py::array_t<int, py::array::c_style> &local_idxs,
+               const int burn_in,
+               const int store_x_interval,
+               const double radius,
+               const double k,
+               const int seed) -> py::tuple {
+                if (n_steps <= 0) {
+                    throw std::runtime_error("local steps must be at least one");
+                }
+                if (burn_in < 0) {
+                    throw std::runtime_error("burn in steps must be greater than zero");
+                }
+                const int N = ctxt.num_atoms();
+                const int x_interval = (store_x_interval <= 0) ? n_steps : store_x_interval;
+
+                std::vector<int> vec_local_idxs(local_idxs.size());
+                std::memcpy(vec_local_idxs.data(), local_idxs.data(), vec_local_idxs.size() * sizeof(int));
+                if (vec_local_idxs.size() < 1) {
+                    throw std::runtime_error("number of idxs must be at least 1");
+                }
+                if (vec_local_idxs.size() >= (long unsigned int)N) {
+                    throw std::runtime_error("number of idxs must be less than N");
+                }
+                if (*std::max_element(vec_local_idxs.begin(), vec_local_idxs.end()) >= N) {
+                    throw std::runtime_error("indices values must be less than N");
+                }
+                if (*std::min_element(vec_local_idxs.begin(), vec_local_idxs.end()) < 0) {
+                    throw std::runtime_error("indices values must be greater than or equal to 0");
+                }
+
+                // Verify that local idxs are unique
+                unique_idxs<int>(vec_local_idxs);
+                std::array<std::vector<double>, 2> result =
+                    ctxt.multiple_steps_local(n_steps, vec_local_idxs, burn_in, x_interval, radius, k, seed);
+                const int D = 3;
+                const int F = result[0].size() / (N * D);
+                py::array_t<double, py::array::c_style> out_x_buffer({F, N, D});
+                std::memcpy(out_x_buffer.mutable_data(), result[0].data(), result[0].size() * sizeof(double));
+
+                py::array_t<double, py::array::c_style> box_buffer({F, D, D});
+                std::memcpy(box_buffer.mutable_data(), result[1].data(), result[1].size() * sizeof(double));
+                return py::make_tuple(out_x_buffer, box_buffer);
+            },
+            py::arg("n_steps"),
+            py::arg("local_idxs"),
+            py::arg("burn_in") = 500, // This is arbitrarily selected as a default, TODO make informed choice
+            py::arg("store_x_interval") = 0,
+            py::arg("radius") = 1.2,
+            py::arg("k") = 10000.0,
+            py::arg("seed") = 2022,
+            R"pbdoc(
+        Take multiple steps using particles selected based on the log probability using a random particle from the local_idxs,
+        the random particle is frozen for all steps.
+
+        Running a barostat and local MD at the same time are not currently supported. If a barostat is
+        assigned to the context, the barostat won't run.
+
+        Note: Running this multiple times with small number of steps (< 100) may result in a vacuum around the local idxs due to
+        discretization error caused by switching on the restraint after a particle has moved beyond the radius.
+
+        F = iterations / store_x_interval
+
+        Parameters
+        ----------
+        n_steps: int
+            Number of steps to run.
+
+        local_idxs: np.array of int32
+            The idxs that defines the atoms to use as the region(s) to run local MD. A random idx will be
+            selected to be frozen and used as the center of the shell of particles to be simulated. The selected
+            idx is constant across all steps.
+
+        burn_in: int
+            How many steps to run prior to storing frames. This is to handle the fact that the local simulation applies a
+            restraint, and burn in helps equilibrate the local simulation. Running with small numbers of steps (< 100) is not recommended.
+
+        store_x_interval: int
+            How often we store the frames, store after every store_x_interval iterations. Setting to zero collects frames
+            at the last step.
+
+        radius: float
+            The radius in nanometers from the selected idx to simulate for local MD.
+
+        k: float
+            The flat bottom restraint K value to use for selection and restraint of atoms within the inner shell.
+
+        seed: int
+            The seed that is used to randomly select a particle to freeze.
+
+        Returns
+        -------
+        2-tuple of coordinates, boxes
             Coordinates have shape (F, N, 3)
             Boxes have shape (F, 3, 3)
 
@@ -793,14 +894,6 @@ template <typename RealType> void declare_periodic_torsion(py::module &m, const 
             py::arg("angle_idxs"));
 }
 
-std::set<int> unique_idxs(const std::vector<int> &idxs) {
-    std::set<int> unique_idxs(idxs.begin(), idxs.end());
-    if (unique_idxs.size() < idxs.size()) {
-        throw std::runtime_error("atom indices must be unique");
-    }
-    return unique_idxs;
-}
-
 template <typename RealType> void declare_nonbonded_all_pairs(py::module &m, const char *typestr) {
 
     using Class = timemachine::NonbondedAllPairs<RealType>;
@@ -809,6 +902,7 @@ template <typename RealType> void declare_nonbonded_all_pairs(py::module &m, con
         m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
         .def("set_nblist_padding", &timemachine::NonbondedAllPairs<RealType>::set_nblist_padding, py::arg("val"))
         .def("disable_hilbert_sort", &timemachine::NonbondedAllPairs<RealType>::disable_hilbert_sort)
+        .def("set_atom_idxs", &timemachine::NonbondedAllPairs<RealType>::set_atom_idxs, py::arg("atom_idxs"))
         .def(
             py::init([](const int N,
                         const double beta,
@@ -818,7 +912,7 @@ template <typename RealType> void declare_nonbonded_all_pairs(py::module &m, con
                 if (atom_idxs_i) {
                     std::vector<int> atom_idxs(atom_idxs_i->size());
                     std::memcpy(atom_idxs.data(), atom_idxs_i->data(), atom_idxs_i->size() * sizeof(int));
-                    unique_atom_idxs.emplace(unique_idxs(atom_idxs));
+                    unique_atom_idxs.emplace(unique_idxs<int>(atom_idxs));
                 }
 
                 return new timemachine::NonbondedAllPairs<RealType>(N, beta, cutoff, unique_atom_idxs);

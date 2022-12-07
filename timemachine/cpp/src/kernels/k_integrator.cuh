@@ -5,6 +5,7 @@ __global__ void update_forward_baoab(
     const int N,
     const int D,
     const RealType ca,
+    const unsigned int *__restrict__ idxs,
     const RealType *__restrict__ cbs,   // N
     const RealType *__restrict__ ccs,   // N
     const RealType *__restrict__ noise, // N x 3
@@ -13,7 +14,16 @@ __global__ void update_forward_baoab(
     const unsigned long long *__restrict__ du_dx,
     const RealType dt) {
 
-    int atom_idx = blockIdx.x * blockDim.x + threadIdx.x;
+    int kernel_idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (kernel_idx >= N) {
+        return;
+    }
+    int atom_idx;
+    if (idxs) {
+        atom_idx = idxs[kernel_idx];
+    } else {
+        atom_idx = kernel_idx;
+    }
     if (atom_idx >= N) {
         return;
     }
@@ -38,12 +48,22 @@ template <typename RealType, bool UPDATE_X>
 __global__ void half_step_velocity_verlet(
     const int N,
     const int D,
+    const unsigned int *__restrict__ idxs,
     const RealType *__restrict__ cbs, // N, dt / mass
     RealType *__restrict__ x_t,
     RealType *__restrict__ v_t,
     const unsigned long long *__restrict__ du_dx,
     const RealType dt) {
-    int atom_idx = blockIdx.x * blockDim.x + threadIdx.x;
+    int kernel_idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (kernel_idx >= N) {
+        return;
+    }
+    int atom_idx;
+    if (idxs) {
+        atom_idx = idxs[kernel_idx];
+    } else {
+        atom_idx = kernel_idx;
+    }
     if (atom_idx >= N) {
         return;
     }
@@ -63,12 +83,22 @@ template <typename RealType>
 __global__ void update_forward_velocity_verlet(
     const int N,
     const int D,
+    const unsigned int *__restrict__ idxs,
     const RealType *__restrict__ cbs, // N, dt / mass
     RealType *__restrict__ x_t,
     RealType *__restrict__ v_t,
     const unsigned long long *__restrict__ du_dx,
     const RealType dt) {
-    int atom_idx = blockIdx.x * blockDim.x + threadIdx.x;
+    int kernel_idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (kernel_idx >= N) {
+        return;
+    }
+    int atom_idx;
+    if (idxs) {
+        atom_idx = idxs[kernel_idx];
+    } else {
+        atom_idx = kernel_idx;
+    }
     if (atom_idx >= N) {
         return;
     }

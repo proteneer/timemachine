@@ -10,12 +10,14 @@ template <typename RealType> class FlatBottomBond : public Potential {
 private:
     int *d_bond_idxs_;
 
-    const int B_;
+    int B_;
 
 public:
     int num_bonds() const { return B_; }
 
     FlatBottomBond(const std::vector<int> &bond_idxs); // [B, 2]
+
+    void set_bonds_device(const int num_bonds, const int *d_bonds, const cudaStream_t stream);
 
     ~FlatBottomBond();
 
