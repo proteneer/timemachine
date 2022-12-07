@@ -14,15 +14,18 @@ __global__ void update_forward_baoab(
     const unsigned long long *__restrict__ du_dx,
     const RealType dt) {
 
-    int atom_idx = blockIdx.x * blockDim.x + threadIdx.x;
-    if (atom_idx >= N) {
+    int kernel_idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (kernel_idx >= N) {
         return;
     }
+    int atom_idx;
     if (idxs) {
-        atom_idx = idxs[atom_idx];
-        if (atom_idx >= N) {
-            return;
-        }
+        atom_idx = idxs[kernel_idx];
+    } else {
+        atom_idx = kernel_idx;
+    }
+    if (atom_idx >= N) {
+        return;
     }
 
     int d_idx = blockIdx.y;
@@ -51,15 +54,18 @@ __global__ void half_step_velocity_verlet(
     RealType *__restrict__ v_t,
     const unsigned long long *__restrict__ du_dx,
     const RealType dt) {
-    int atom_idx = blockIdx.x * blockDim.x + threadIdx.x;
-    if (atom_idx >= N) {
+    int kernel_idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (kernel_idx >= N) {
         return;
     }
+    int atom_idx;
     if (idxs) {
-        atom_idx = idxs[atom_idx];
-        if (atom_idx >= N) {
-            return;
-        }
+        atom_idx = idxs[kernel_idx];
+    } else {
+        atom_idx = kernel_idx;
+    }
+    if (atom_idx >= N) {
+        return;
     }
 
     int d_idx = blockIdx.y;
@@ -83,15 +89,18 @@ __global__ void update_forward_velocity_verlet(
     RealType *__restrict__ v_t,
     const unsigned long long *__restrict__ du_dx,
     const RealType dt) {
-    int atom_idx = blockIdx.x * blockDim.x + threadIdx.x;
-    if (atom_idx >= N) {
+    int kernel_idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (kernel_idx >= N) {
         return;
     }
+    int atom_idx;
     if (idxs) {
-        atom_idx = idxs[atom_idx];
-        if (atom_idx >= N) {
-            return;
-        }
+        atom_idx = idxs[kernel_idx];
+    } else {
+        atom_idx = kernel_idx;
+    }
+    if (atom_idx >= N) {
+        return;
     }
 
     int d_idx = blockIdx.y;
