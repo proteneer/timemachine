@@ -280,7 +280,7 @@ void declare_context(py::module &m) {
 
         burn_in: int
             How many steps to run prior to storing frames. This is to handle the fact that the local simulation applies a
-            restraint, and burn in helps equilibrate the local simulation. Running with small numbers of steps (< 10) is not recommended.
+            restraint, and burn in helps equilibrate the local simulation. Running with small numbers of steps (< 100) is not recommended.
 
         store_x_interval: int
             How often we store the frames, store after every store_x_interval iterations. Setting to zero collects frames
