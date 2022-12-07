@@ -48,8 +48,10 @@ class InitialState:
 class SimulationResult:
     all_dGs: List[np.ndarray]
     all_errs: List[float]
+    dG_errs_by_lambda_by_component: np.ndarray  # (len(U_names), L - 1)
     overlaps_by_lambda: np.ndarray  # (L - 1,)
     overlaps_by_lambda_by_component: np.ndarray  # (len(U_names), L - 1)
+    dG_errs_png: bytes
     overlap_summary_png: bytes
     overlap_detail_png: bytes
     frames: List[np.ndarray]

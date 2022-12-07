@@ -361,11 +361,6 @@ class TestNonbonded(GradientTest):
         box = np.eye(3) * db_cutoff
         run_nonbonded(test_impl, coords, box, charge_params)
 
-        # Non Orth Box, should fail
-        box = np.ones_like(box) * (db_cutoff ** 2)
-        with self.assertRaises(RuntimeError) as raised:
-            run_nonbonded(test_impl, coords, box, charge_params)
-        assert "non-ortholinear box" in str(raised.exception)
         # Only populate the diag with values that are too low
         box = np.eye(3) * (db_cutoff * 0.3)
         with self.assertRaises(RuntimeError) as raised:

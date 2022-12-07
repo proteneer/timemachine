@@ -249,6 +249,36 @@ def plot_BAR(df, df_err, fwd_delta_u, rev_delta_u, title, axes):
     plot_work(fwd_delta_u, rev_delta_u, axes)
 
 
+def df_err_from_ukln(u_kln):
+    k, l, _ = u_kln.shape
+    assert k == l == 2
+    w_fwd = u_kln[1, 0, :] - u_kln[0, 0, :]
+    w_rev = u_kln[0, 1, :] - u_kln[1, 1, :]
+    _, df_err = bar_with_bootstrapped_uncertainty(w_fwd, w_rev)
+    return df_err
+
+
+def plot_dG_errs(ax, components, lambdas, dG_errs):
+    # one line per energy component
+    for component, ys in zip(components, dG_errs):
+        ax.plot(lambdas[:-1], ys, marker=".", label=component)
+
+    ax.set_ylim(bottom=0.0)
+    ax.set_xlabel(r"$\lambda_i$")
+    ax.set_ylabel(r"$\Delta G$ error ($\lambda_i$, $\lambda_{i+1}$) / (kJ / mol)")
+    ax.legend()
+
+
+def make_dG_errs_figure(components, lambdas, dG_errs_by_lambda, dG_errs_by_lambda_by_component):
+    _, (ax_top, ax_btm) = plt.subplots(2, 1, figsize=(7, 9))
+    plot_dG_errs(ax_top, ["Overall"], lambdas, [dG_errs_by_lambda])
+    plot_dG_errs(ax_btm, components, lambdas, dG_errs_by_lambda_by_component)
+    buffer = io.BytesIO()
+    plt.savefig(buffer, format="png")
+    buffer.seek(0)
+    return buffer.read()
+
+
 def pair_overlap_from_ukln(u_kln):
     k, l, n = u_kln.shape
     assert k == l == 2
@@ -278,6 +308,16 @@ def plot_overlap_summary(ax, components, lambdas, overlaps):
     ax.set_xlabel(r"$\lambda_i$")
     ax.set_ylabel(r"pair BAR overlap ($\lambda_i$, $\lambda_{i+1}$)")
     ax.legend()
+
+
+def make_overlap_summary_figure(components, lambdas, overlaps_by_lambda, overlaps_by_lambda_by_component):
+    _, (ax_top, ax_btm) = plt.subplots(2, 1, figsize=(7, 9))
+    plot_overlap_summary(ax_top, ["Overall"], lambdas, [overlaps_by_lambda])
+    plot_overlap_summary(ax_btm, components, lambdas, overlaps_by_lambda_by_component)
+    buffer = io.BytesIO()
+    plt.savefig(buffer, format="png")
+    buffer.seek(0)
+    return buffer.read()
 
 
 def estimate_free_energy_given_initial_states(initial_states, protocol, temperature, prefix, keep_idxs):
@@ -424,27 +464,22 @@ def estimate_free_energy_given_initial_states(initial_states, protocol, temperat
     ukln_by_lambda_by_component = np.array(ukln_by_component_by_lambda).swapaxes(0, 1)
 
     lambdas = [s.lamb for s in initial_states]
-
-    _, (ax_top, ax_btm) = plt.subplots(2, 1, figsize=(7, 9))
     overlaps_by_lambda = np.array([pair_overlap_from_ukln(u_kln) for u_kln in ukln_by_lambda_by_component.sum(axis=0)])
-    plot_overlap_summary(ax_top, ["Overall"], lambdas, [overlaps_by_lambda])
-
+    dG_errs_by_lambda_by_component = np.array(
+        [[df_err_from_ukln(u_kln) / beta for u_kln in ukln_by_lambda] for ukln_by_lambda in ukln_by_lambda_by_component]
+    )
     overlaps_by_lambda_by_component = np.array(
         [[pair_overlap_from_ukln(u_kln) for u_kln in ukln_by_lambda] for ukln_by_lambda in ukln_by_lambda_by_component]
     )
-    plot_overlap_summary(ax_btm, U_names, lambdas, overlaps_by_lambda_by_component)
-
-    buffer = io.BytesIO()
-    plt.savefig(buffer, format="png")
-    buffer.seek(0)
-    overlap_summary_png = buffer.read()
 
     return SimulationResult(
         all_dGs,
         all_errs,
+        dG_errs_by_lambda_by_component,
         overlaps_by_lambda,
         overlaps_by_lambda_by_component,
-        overlap_summary_png,
+        make_dG_errs_figure(U_names, lambdas, all_errs, dG_errs_by_lambda_by_component),
+        make_overlap_summary_figure(U_names, lambdas, overlaps_by_lambda, overlaps_by_lambda_by_component),
         overlap_detail_png,
         stored_frames,
         stored_boxes,
