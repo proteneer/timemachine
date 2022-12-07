@@ -327,7 +327,7 @@ class TestContext(unittest.TestCase):
 
         # If the integrator is not a thermostat, should fail
         ctxt = custom_ops.Context(coords, v0, box, verlet_impl, bps)
-        with pytest.raises(RuntimeError, match="integrator provided has no temperature"):
+        with pytest.raises(RuntimeError, match="integrator must be LangevinIntegrator."):
             ctxt.multiple_steps_local(100, local_idxs, radius=radius)
 
         # Construct context with no potentials, local MD should fail.

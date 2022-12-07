@@ -3,11 +3,11 @@
 #include <vector>
 
 #include "bound_potential.hpp"
-#include "thermostat.hpp"
+#include "integrator.hpp"
 
 namespace timemachine {
 
-class LangevinIntegrator : public Thermostat {
+class LangevinIntegrator : public Integrator {
 
 private:
     const int N_;
@@ -27,7 +27,7 @@ public:
 
     virtual ~LangevinIntegrator();
 
-    virtual double get_temperature() override;
+    double get_temperature();
 
     virtual void step_fwd(
         std::vector<BoundPotential *> &bps,

@@ -8,12 +8,12 @@
 #include "kernels/k_indices.cuh"
 #include "kernels/k_local_md.cuh"
 #include "kernels/kernel_utils.cuh"
+#include "langevin_integrator.hpp"
 #include "neighborlist.hpp"
 #include "nonbonded_all_pairs.hpp"
 #include "pinned_host_buffer.hpp"
 #include "set_utils.hpp"
 #include "summed_potential.hpp"
-#include "thermostat.hpp"
 #include <cub/cub.cuh>
 #include <memory>
 #include <random>
@@ -111,10 +111,10 @@ void flatten_potentials(
 }
 
 double Context::_get_temperature() {
-    if (Thermostat *thermostat = dynamic_cast<Thermostat *>(intg_); thermostat != nullptr) {
-        return thermostat->get_temperature();
+    if (LangevinIntegrator *langevin = dynamic_cast<LangevinIntegrator *>(intg_); langevin != nullptr) {
+        return langevin->get_temperature();
     } else {
-        throw std::runtime_error("integrator provided has no temperature.");
+        throw std::runtime_error("integrator must be LangevinIntegrator.");
     }
 }
 
