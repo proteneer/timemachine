@@ -3,12 +3,13 @@ from typing import List
 
 import numpy as np
 
-from timemachine.fe import topology
+from timemachine.fe import model_utils, topology
 from timemachine.fe.utils import get_mol_masses, get_romol_conf
 from timemachine.ff import ForcefieldParams
 from timemachine.ff.handlers import openmm_deserializer
 from timemachine.lib import LangevinIntegrator, MonteCarloBarostat
-from timemachine.lib.potentials import CustomOpWrapper
+from timemachine.lib.potentials import CustomOpWrapper, HarmonicBond
+from timemachine.md.barostat.utils import compute_box_center, get_bond_list, get_group_indices
 
 
 class HostConfig:
@@ -57,6 +58,48 @@ class SimulationResult:
     boxes: List[np.ndarray]
     initial_states: List[InitialState]
     protocol: SimulationProtocol
+
+
+def image_frames(initial_state: InitialState, frames: np.ndarray, boxes: np.ndarray) -> np.ndarray:
+    """Images a set of frames within the periodic box given an Initial state. Recenters the simulation
+    around the centroid of the coordinates specified by initial_state.ligand_idxs prior to imaging.
+
+    Calling this function on a set of frames will NOT produce identical energies/du_dp/du_dx. Should only
+    be used for visualization convenience.
+
+    Parameters
+    ----------
+
+    initial_state: InitialState
+        State that the frames came from
+
+    frames: np.ndarray of coordinates
+        Coordinates to image, shape (K, N, 3)
+
+    boxes: list of boxes
+        Boxes to image coordinates into, shape (K, 3, 3)
+
+    Returns
+    -------
+        imaged_coordinates
+    """
+    assert len(frames.shape) == 3, "Must be a 3 dimensional set of frames"
+    assert frames.shape[-1] == 3, "Frame coordinates are not 3D"
+    assert boxes.shape[1:] == (3, 3), "Boxes are not 3x3"
+    assert len(frames) == len(boxes), "Number of frames and boxes don't match"
+
+    hb_potential = next(p for p in initial_state.potentials if isinstance(p, HarmonicBond))
+    group_indices = get_group_indices(get_bond_list(hb_potential))
+    imaged_frames = np.empty_like(frames)
+    for i, (frame, box) in enumerate(zip(frames, boxes)):
+        # Recenter the frame around the centroid of the ligand
+        ligand_centroid = np.mean(frame[initial_state.ligand_idxs], axis=0)
+        center = compute_box_center(box)
+        offset = ligand_centroid + center
+        centered_frames = frame - offset
+
+        imaged_frames[i] = model_utils.image_frame(group_indices, centered_frames, box)
+    return np.array(imaged_frames)
 
 
 class BaseFreeEnergy:
