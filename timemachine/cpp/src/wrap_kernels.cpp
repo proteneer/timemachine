@@ -223,6 +223,9 @@ void declare_context(py::module &m) {
 
                 std::vector<int> vec_local_idxs(local_idxs.size());
                 std::memcpy(vec_local_idxs.data(), local_idxs.data(), vec_local_idxs.size() * sizeof(int));
+                if (vec_local_idxs.size() < 1) {
+                    throw std::runtime_error("number of idxs must be at least 1");
+                }
                 if (vec_local_idxs.size() >= (long unsigned int)N) {
                     throw std::runtime_error("number of idxs must be less than N");
                 }
