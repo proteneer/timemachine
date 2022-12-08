@@ -166,7 +166,7 @@ def generate_good_rotations(mol_a, mol_b, num_rotations=3, max_rotations=1000):
         scores.append(max(score_a, score_b))
         rotations.append(r)
 
-    perm = np.argsort(scores)
+    perm = np.argsort(scores, kind="stable")
     return np.array(rotations)[perm][:num_rotations]
 
 

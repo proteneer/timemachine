@@ -107,7 +107,7 @@ def build_reference_ixn_list_with_subset(
 
     # Verify that the row_idxs and col_idxs are unique
     np.testing.assert_array_equal(
-        np.sort(np.concatenate([col_idxs, row_idxs])),
+        np.sort(np.concatenate([col_idxs, row_idxs]), kind="stable"),
         identity_idxs,
     )
 

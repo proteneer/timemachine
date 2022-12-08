@@ -99,7 +99,7 @@ def get_interacting_pair_indices_batch(confs, boxes, pairs, cutoff=1.2):
     assert max_n_neighbors > 0
 
     # sorting in order of [falses, ..., trues]
-    keep_inds = np.argsort(neighbor_masks, axis=1)[:, -max_n_neighbors:]
+    keep_inds = np.argsort(neighbor_masks, kind="stable", axis=1)[:, -max_n_neighbors:]
     batch_pairs = pairs[keep_inds]
 
     assert batch_pairs.shape == (len(confs), max_n_neighbors, 2)

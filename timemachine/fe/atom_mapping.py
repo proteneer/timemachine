@@ -158,7 +158,7 @@ def bfs(g, atom):
 
 def reorder_atoms_by_degree(mol):
     degrees = [len(a.GetNeighbors()) for a in mol.GetAtoms()]
-    perm = np.argsort(degrees)[::-1]
+    perm = np.argsort(degrees, kind="stable")[::-1]
     new_mol = Chem.RenumberAtoms(mol, perm.tolist())
     return new_mol, perm
 
@@ -263,11 +263,14 @@ def _uniquify_core(core):
 
 
 def _deduplicate_all_cores(all_cores):
-    all_cores_set = set()
+    unique_cores = {}
     for core in all_cores:
-        all_cores_set.add(_uniquify_core(core))
+        # Be careful with the unique core here, list -> set -> list is not consistent
+        # across versions of python, use the frozen as as the key, but return the untouched
+        # cores
+        unique_cores[_uniquify_core(core)] = core
 
-    return [np.array(list(core)) for core in all_cores_set]
+    return [np.array(core) for core in unique_cores.values()]
 
 
 def _get_cores_impl(
@@ -309,7 +312,7 @@ def _get_cores_impl(
                     allowed_idxs.add(jdx)
 
         final_idxs = []
-        for idx in np.argsort(dijs):
+        for idx in np.argsort(dijs, kind="stable"):
             if idx in allowed_idxs:
                 final_idxs.append(idx)
 
@@ -371,7 +374,7 @@ def _get_cores_impl(
         dists.append(rmsd)
 
     sorted_cores = []
-    for p in np.argsort(dists):
+    for p in np.argsort(dists, kind="stable"):
         sorted_cores.append(all_cores[p])
 
     # undo the sort
