@@ -263,15 +263,14 @@ def _uniquify_core(core):
 
 
 def _deduplicate_all_cores(all_cores):
-    all_cores_set = set()
-    unique_cores = []
+    unique_cores = {}
     for core in all_cores:
-        unique_core = _uniquify_core(core)
-        if unique_core not in all_cores_set:
-            all_cores_set.add(unique_core)
-            unique_cores.append(np.array(core))
+        # Be careful with the unique core here, list -> set -> list is not consistent
+        # across versions of python, use the frozen as as the key, but return the untouched
+        # cores
+        unique_cores[_uniquify_core(core)] = core
 
-    return unique_cores
+    return [np.array(core) for core in unique_cores.values()]
 
 
 def _get_cores_impl(
