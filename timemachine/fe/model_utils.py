@@ -87,7 +87,7 @@ def apply_hmr(masses, bond_list, multiplier=2):
         return np.abs(masses[i] - 1.00794) < 1e-3
 
     for i, j in bond_list:
-        i, j = np.array([i, j])[np.argsort([masses[i], masses[j]])]
+        i, j = np.array([i, j])[np.argsort([masses[i], masses[j]], kind="stable")]
         if is_hydrogen(i):
             if is_hydrogen(j):
                 # H-H, skip
