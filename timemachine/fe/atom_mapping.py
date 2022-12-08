@@ -158,7 +158,7 @@ def bfs(g, atom):
 
 def reorder_atoms_by_degree(mol):
     degrees = [len(a.GetNeighbors()) for a in mol.GetAtoms()]
-    perm = np.argsort(degrees)[::-1]
+    perm = np.argsort(degrees, kind="stable")[::-1]
     new_mol = Chem.RenumberAtoms(mol, perm.tolist())
     return new_mol, perm
 
@@ -309,7 +309,7 @@ def _get_cores_impl(
                     allowed_idxs.add(jdx)
 
         final_idxs = []
-        for idx in np.argsort(dijs):
+        for idx in np.argsort(dijs, kind="stable"):
             if idx in allowed_idxs:
                 final_idxs.append(idx)
 
@@ -371,7 +371,7 @@ def _get_cores_impl(
         dists.append(rmsd)
 
     sorted_cores = []
-    for p in np.argsort(dists):
+    for p in np.argsort(dists, kind="stable"):
         sorted_cores.append(all_cores[p])
 
     # undo the sort
