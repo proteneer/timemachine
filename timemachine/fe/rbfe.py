@@ -638,8 +638,8 @@ def estimate_relative_free_energy(
     Returns
     -------
     SimulationResult
-        Collected data from the simulation (see class for storage information). We currently return frames
-        from only the first and last window.
+        Collected data from the simulation (see class for storage information). Returned frames and boxes
+        are defined by keep_idxs.
 
     """
     single_topology = SingleTopology(mol_a, mol_b, core, ff)

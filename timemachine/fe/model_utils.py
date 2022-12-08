@@ -3,6 +3,7 @@ from typing import List, Optional
 
 import jax
 import numpy as np
+from numpy.typing import NDArray
 from rdkit import Chem
 from simtk.openmm import app
 
@@ -101,6 +102,32 @@ def apply_hmr(masses, bond_list, multiplier=2):
             continue
 
     return masses
+
+
+def image_frame(group_idxs: List[NDArray], coords: NDArray, box: NDArray) -> NDArray:
+    """Given a set group indices, the coordinates of a frame and the box, will return
+    the coordinates wrapped into the periodic box.
+
+    Parameters
+    ----------
+    group_idxs: np.ndarray
+        Array of group indices that represent each mol in the system.
+
+    coords: np.ndarray
+        List of coordinates that make up a frame
+
+    box: np.ndarray
+        Periodic box, expected to be 3x3
+
+    Returns
+    -------
+    np.ndarray
+        Coordinates imaged into box
+    """
+    imaged_coords = coords.copy()
+    for mol_indices in group_idxs:
+        imaged_coords[mol_indices] = image_molecule(coords[mol_indices], box)
+    return imaged_coords
 
 
 def image_molecule(mol_coords, box):

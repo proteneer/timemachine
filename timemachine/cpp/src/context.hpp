@@ -28,6 +28,15 @@ public:
 
     std::array<std::vector<double>, 3> multiple_steps_U(const int n_steps, int store_u_interval, int store_x_interval);
 
+    std::array<std::vector<double>, 2> multiple_steps_local(
+        const int n_steps,
+        const std::vector<int> &local_idxs,
+        const int burn_in,
+        const int store_x_interval,
+        const double radius,
+        const double k,
+        const int seed);
+
     int num_atoms() const;
 
     void set_x_t(const double *in_buffer);
@@ -45,7 +54,9 @@ private:
 
     MonteCarloBarostat *barostat_;
 
-    void _step(std::vector<BoundPotential *> &bps, const cudaStream_t stream);
+    void _step(std::vector<BoundPotential *> &bps, unsigned int *d_atom_idxs, const cudaStream_t stream);
+
+    double _get_temperature();
 
     int step_;
 

@@ -6,16 +6,11 @@ import numpy as np
 import pytest
 
 from timemachine.constants import DEFAULT_FF
-from timemachine.fe.rbfe import (
-    HostConfig,
-    SimulationResult,
-    estimate_relative_free_energy,
-    pair_overlap_from_ukln,
-    run_vacuum,
-    sample,
-)
+from timemachine.fe.free_energy import HostConfig, SimulationResult, image_frames
+from timemachine.fe.rbfe import estimate_relative_free_energy, pair_overlap_from_ukln, run_solvent, run_vacuum, sample
 from timemachine.ff import Forcefield
 from timemachine.md import builders
+from timemachine.md.barostat.utils import compute_box_center
 from timemachine.testsystems.relative import get_hif2a_ligand_pair_single_topology
 
 
@@ -74,10 +69,10 @@ def run_triple(mol_a, mol_b, core, forcefield, n_frames, protein_path, n_eq_step
     assert vacuum_res.overlap_summary_png is not None
     assert vacuum_res.overlap_detail_png is not None
     assert np.linalg.norm(vacuum_res.all_errs) < 0.1
-    assert len(vacuum_res.frames[0] == n_frames)
-    assert len(vacuum_res.frames[-1] == n_frames)
-    assert len(vacuum_res.boxes[0] == n_frames)
-    assert len(vacuum_res.boxes[-1] == n_frames)
+    assert len(vacuum_res.frames[0]) == n_frames
+    assert len(vacuum_res.frames[-1]) == n_frames
+    assert len(vacuum_res.boxes[0]) == n_frames
+    assert len(vacuum_res.boxes[-1]) == n_frames
     assert [x.lamb for x in vacuum_res.initial_states] == lambda_schedule
     assert vacuum_res.protocol.n_frames == n_frames
     assert vacuum_res.protocol.n_eq_steps == n_eq_steps
@@ -102,10 +97,10 @@ def run_triple(mol_a, mol_b, core, forcefield, n_frames, protein_path, n_eq_step
     assert solvent_res.overlap_summary_png is not None
     assert solvent_res.overlap_detail_png is not None
     assert np.linalg.norm(solvent_res.all_errs) < 0.1
-    assert len(solvent_res.frames[0] == n_frames)
-    assert len(solvent_res.frames[-1] == n_frames)
-    assert len(solvent_res.boxes[0] == n_frames)
-    assert len(solvent_res.boxes[-1] == n_frames)
+    assert len(solvent_res.frames[0]) == n_frames
+    assert len(solvent_res.frames[-1]) == n_frames
+    assert len(solvent_res.boxes[0]) == n_frames
+    assert len(solvent_res.boxes[-1]) == n_frames
     assert [x.lamb for x in solvent_res.initial_states] == lambda_schedule
     assert solvent_res.protocol.n_frames == n_frames
     assert solvent_res.protocol.n_eq_steps == n_eq_steps
@@ -181,6 +176,56 @@ def test_steps_per_frames():
     # The last frame from the trajectories should match as num_frames * steps_per_frame are equal
     for frame, test_frame in zip(res.frames, test_res.frames):
         np.testing.assert_array_equal(frame[-1], test_frame[-1])
+
+
+def test_imaging_frames():
+    """Verify that imaging frames places ligand at center and all coordinates are close to being within the box.
+
+    Does not check precision, as it is known to be lossy. Only to be used for post-processing/visualization."""
+    mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
+    forcefield = Forcefield.load_from_file(DEFAULT_FF)
+    seed = 2022
+    frames = 1
+    steps_per_frame = 1
+    equil_steps = 1
+    windows = 2
+    res, _ = run_solvent(
+        mol_a,
+        mol_b,
+        core,
+        forcefield,
+        None,
+        frames,
+        seed,
+        n_eq_steps=equil_steps,
+        steps_per_frame=steps_per_frame,
+        n_windows=windows,
+    )
+    keep_idxs = [0, len(res.initial_states) - 1]
+    assert len(keep_idxs) == len(res.frames)
+
+    # A buffer, as imaging doesn't ensure everything is perfectly in the box
+    padding = 0.3
+    for i, (frames, boxes) in enumerate(zip(res.frames, res.boxes)):
+        initial_state = res.initial_states[keep_idxs[i]]
+        box_center = compute_box_center(boxes[0])
+        box_extents = np.max(boxes, axis=(0, 1))
+
+        # Verify that coordinates are either outside of the box or below zero
+        assert np.any(np.max(frames, axis=(0, 1)) > box_extents + padding) or np.any(
+            np.min(frames, axis=(0, 1)) < -padding
+        )
+        # Ligand won't be near center of box
+        assert not np.allclose(np.mean(frames[0][initial_state.ligand_idxs], axis=0), box_center)
+
+        imaged = image_frames(initial_state, frames, boxes)
+
+        # Verify that after imaged, coordinates are within padding of the box extents
+        assert np.all(np.max(imaged, axis=(0, 1)) <= box_extents + padding) and np.all(
+            np.min(imaged, axis=(0, 1)) >= -padding
+        )
+        # Verify that ligand was centered in the box
+        np.testing.assert_allclose(np.mean(imaged[0][initial_state.ligand_idxs], axis=0), box_center)
 
 
 def test_rbfe_with_1_window():

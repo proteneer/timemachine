@@ -1,7 +1,3 @@
-import jax
-
-jax.config.update("jax_enable_x64", True)
-
 from functools import partial
 
 import numpy as np
