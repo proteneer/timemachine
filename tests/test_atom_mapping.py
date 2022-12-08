@@ -101,7 +101,7 @@ def test_complete_rings_only():
     assert len(all_cores) == 1
     core = all_cores[0]
 
-    np.testing.assert_array_equal(
+    assert_cores_are_equal(
         np.array(
             [
                 [20, 20],
