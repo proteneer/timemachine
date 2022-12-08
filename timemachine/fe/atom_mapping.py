@@ -264,10 +264,14 @@ def _uniquify_core(core):
 
 def _deduplicate_all_cores(all_cores):
     all_cores_set = set()
+    unique_cores = []
     for core in all_cores:
-        all_cores_set.add(_uniquify_core(core))
+        unique_core = _uniquify_core(core)
+        if unique_core not in all_cores_set:
+            all_cores_set.add(unique_core)
+            unique_cores.append(np.array(core))
 
-    return [np.array(list(core)) for core in all_cores_set]
+    return unique_cores
 
 
 def _get_cores_impl(
