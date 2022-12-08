@@ -91,10 +91,10 @@ def test_complete_rings_only():
         ring_cutoff=0.1,
         chain_cutoff=0.2,
         max_visits=1e7,  # 10 million max nodes to visit
-        connected_core=False,
+        connected_core=True,
         max_cores=1000,
         enforce_core_core=True,
-        complete_rings=False,
+        complete_rings=True,
         enforce_chiral=True,
     )
 
@@ -123,8 +123,8 @@ def test_complete_rings_only():
     comp_core = list(sorted(comp_core, key=lambda x: x[0]))
     np.testing.assert_array_equal(core, comp_core)
     # assert np.all(core == comp_core)
-      # print(np.array(
-      #   ) == core)
+    # print(np.array(
+    #   ) == core)
 
 
 def tuples_to_set(arr):
