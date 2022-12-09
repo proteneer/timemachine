@@ -254,7 +254,7 @@ void declare_context(py::module &m) {
             py::arg("burn_in") = 500, // This is arbitrarily selected as a default, TODO make informed choice
             py::arg("store_x_interval") = 0,
             py::arg("radius") = 1.2,
-            py::arg("k") = 10000.0,
+            py::arg("k") = 100.0,
             py::arg("seed") = 2022,
             R"pbdoc(
         Take multiple steps using particles selected based on the log probability using a random particle from the local_idxs,
