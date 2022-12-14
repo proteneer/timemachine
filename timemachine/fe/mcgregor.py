@@ -211,7 +211,7 @@ def mcs(
 
         # If timed out and no maps found, raise exception.
         if mcs_result.timed_out:
-            raise MaxVisitsError()
+            raise MaxVisitsError(f"Reached max number of visits: {max_visits}")
 
     assert len(mcs_result.all_maps) > 0
 
