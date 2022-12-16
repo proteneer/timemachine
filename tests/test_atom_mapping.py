@@ -4,7 +4,7 @@ from rdkit import Chem
 from rdkit.Chem import AllChem
 
 from timemachine.fe import atom_mapping
-from timemachine.fe.mcgregor import MaxVisitsError
+from timemachine.fe.mcgregor import MaxVisitsError, NoMappingError
 from timemachine.fe.utils import plot_atom_mapping_grid
 
 hif2a_set = "timemachine/datasets/fep_benchmark/hif2a/ligands.sdf"
@@ -47,6 +47,7 @@ def test_all_pairs(filepath):
                 enforce_core_core=True,
                 complete_rings=False,
                 enforce_chiral=True,
+                min_threshold=0,
             )
 
             # useful for visualization
@@ -97,6 +98,7 @@ def test_complete_rings_only():
         enforce_core_core=True,
         complete_rings=True,
         enforce_chiral=True,
+        min_threshold=0,
     )
 
     assert len(all_cores) == 1
@@ -232,6 +234,7 @@ $$$$""",
         enforce_core_core=False,
         complete_rings=False,
         enforce_chiral=True,
+        min_threshold=0,
     )
 
     assert len(all_cores) == 1
@@ -252,6 +255,7 @@ $$$$""",
         enforce_core_core=True,
         complete_rings=False,
         enforce_chiral=True,
+        min_threshold=0,
     )
 
     # 2 possible matches, returned core ordering is fully determined
@@ -274,6 +278,7 @@ $$$$""",
         enforce_core_core=True,
         complete_rings=False,
         enforce_chiral=True,
+        min_threshold=0,
     )
 
     # 2 possible matches, if we do not allow for connected_core but do
@@ -404,6 +409,7 @@ def test_hif2a_failure():
         enforce_core_core=True,
         complete_rings=True,
         enforce_chiral=True,
+        min_threshold=0,
     )
 
     expected_core = np.array(
@@ -460,6 +466,7 @@ def test_cyclohexane_stereo():
         enforce_core_core=True,
         complete_rings=True,
         enforce_chiral=True,
+        min_threshold=0,
     )
 
     for core_idx, core in enumerate(all_cores[:1]):
@@ -516,6 +523,7 @@ def test_chiral_atom_map():
         max_cores=1e6,
         enforce_core_core=True,
         complete_rings=True,
+        min_threshold=0,
     )
 
     chiral_aware_cores = atom_mapping.get_cores(mol_a, mol_b, enforce_chiral=True, **core_kwargs)
@@ -540,9 +548,28 @@ def test_max_visits_exception():
         enforce_core_core=True,
         complete_rings=False,
         enforce_chiral=True,
+        min_threshold=0,
     )
     cores = atom_mapping.get_cores(mol_a, mol_b, **core_kwargs, max_visits=10000)
     assert len(cores) > 0
 
     with pytest.raises(MaxVisitsError, match="Reached max number of visits: 1"):
         atom_mapping.get_cores(mol_a, mol_b, **core_kwargs, max_visits=1)
+
+
+@pytest.mark.nogpu
+def test_min_threshold():
+    mol_a, mol_b = get_cyclohexanes_different_confs()
+    core_kwargs = dict(
+        ring_cutoff=0.1,
+        chain_cutoff=0.2,
+        connected_core=False,
+        max_cores=1000,
+        enforce_core_core=True,
+        complete_rings=False,
+        enforce_chiral=True,
+        min_threshold=mol_a.GetNumAtoms(),
+    )
+
+    with pytest.raises(NoMappingError, match="Unable to find mapping with at least 18 atoms"):
+        atom_mapping.get_cores(mol_a, mol_b, **core_kwargs, max_visits=10000)

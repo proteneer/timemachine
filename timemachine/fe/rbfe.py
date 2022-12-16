@@ -804,6 +804,7 @@ def run_edge_and_save_results(
             enforce_core_core=True,
             complete_rings=True,
             enforce_chiral=True,
+            min_threshold=0,
         )
         core = all_cores[0]
 

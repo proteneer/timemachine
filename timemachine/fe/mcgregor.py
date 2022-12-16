@@ -159,8 +159,21 @@ class MaxVisitsError(Exception):
     pass
 
 
+class NoMappingError(Exception):
+    pass
+
+
 def mcs(
-    n_a, n_b, priority_idxs, bonds_a, bonds_b, max_visits, max_cores, enforce_core_core, filter_fxn=(lambda core: True)
+    n_a,
+    n_b,
+    priority_idxs,
+    bonds_a,
+    bonds_b,
+    max_visits,
+    max_cores,
+    enforce_core_core,
+    min_threshold,
+    filter_fxn=(lambda core: True),
 ):
 
     assert n_a <= n_b
@@ -179,6 +192,8 @@ def mcs(
     max_threshold = _arcs_left(marcs)
     for idx in range(max_threshold):
         cur_threshold = max_threshold - idx
+        if cur_threshold < min_threshold:
+            raise NoMappingError(f"Unable to find mapping with at least {min_threshold} atoms")
         map_a_to_b = [UNMAPPED] * n_a
         map_b_to_a = [UNMAPPED] * n_b
         mcs_result = MCSResult()
@@ -213,7 +228,8 @@ def mcs(
         if mcs_result.timed_out:
             raise MaxVisitsError(f"Reached max number of visits: {max_visits}")
 
-    assert len(mcs_result.all_maps) > 0
+    if len(mcs_result.all_maps) <= 0:
+        raise NoMappingError("Unable to find mapping")
 
     all_cores = []
 

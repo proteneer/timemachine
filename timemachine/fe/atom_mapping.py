@@ -55,6 +55,7 @@ def get_cores(
     enforce_core_core,
     complete_rings,
     enforce_chiral,
+    min_threshold,
 ):
     """
     Finds set of cores between two molecules that maximizes the number of common edges.
@@ -105,10 +106,19 @@ def get_cores(
     enforce_chiral: bool
         Filter out cores that would flip atom chirality
 
+    min_threshold: int
+        Number of atoms to require for a valid mapping
+
     Returns
     -------
     Returns a list of all_cores
 
+    Raises
+    ------
+    timemachine.fe.mcgregor.NoMappingError
+        If no mapping is found
+    timemachine.fe.mcgregor.MaxVisitsError
+        If max_visits is exceeding to find a mapping
     """
 
     assert max_cores > 0
@@ -122,6 +132,7 @@ def get_cores(
         enforce_core_core=enforce_core_core,
         complete_rings=complete_rings,
         enforce_chiral=enforce_chiral,
+        min_threshold=min_threshold,
     )
 
     # we require that mol_a.GetNumAtoms() <= mol_b.GetNumAtoms()
@@ -284,6 +295,7 @@ def _get_cores_impl(
     enforce_core_core,
     complete_rings,
     enforce_chiral,
+    min_threshold,
 ):
     mol_a, perm = reorder_atoms_by_degree(mol_a)  # UNINVERT
 
@@ -344,6 +356,7 @@ def _get_cores_impl(
         max_visits,
         max_cores,
         enforce_core_core,
+        min_threshold,
         filter_fxn=filter_fxn,
     )
 
