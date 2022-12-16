@@ -172,7 +172,8 @@ def mcs(
     marcs = _initialize_marcs_given_predicate(g_a, g_b, predicate)
 
     priority_idxs = tuple(tuple(x) for x in priority_idxs)
-    start_time = time.time()
+    # Keep start time for debugging purposes below
+    start_time = time.time()  # noqa
 
     # run in reverse by guessing max # of edges to avoid getting stuck in minima.
     max_threshold = _arcs_left(marcs)
@@ -190,7 +191,6 @@ def mcs(
             marcs,
             mcs_result,
             priority_idxs,
-            start_time,
             max_visits,
             max_cores,
             cur_threshold,
@@ -247,7 +247,6 @@ def recursion(
     marcs,
     mcs_result,
     priority_idxs,
-    start_time,
     max_visits,
     max_cores,
     threshold,
@@ -298,7 +297,6 @@ def recursion(
                     new_marcs,
                     mcs_result,
                     priority_idxs,
-                    start_time,
                     max_visits,
                     max_cores,
                     threshold,
@@ -319,7 +317,6 @@ def recursion(
         new_marcs,
         mcs_result,
         priority_idxs,
-        start_time,
         max_visits,
         max_cores,
         threshold,
