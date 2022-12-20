@@ -831,7 +831,7 @@ def run_edge_and_save_results(
         print(err)
         traceback.print_exc()
 
-        return path
+        return file_client.full_path(path)
 
     path = f"success_rbfe_result_{edge.mol_a_name}_{edge.mol_b_name}.pkl"
     pkl_obj = (mol_a, mol_b, edge.metadata, core, solvent_res, solvent_top, complex_res, complex_top)
@@ -861,7 +861,7 @@ def run_edge_and_save_results(
         ),
     )
 
-    return path
+    return file_client.full_path(path)
 
 
 def run_edges_parallel(
