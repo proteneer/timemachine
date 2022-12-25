@@ -25,4 +25,4 @@ WATER_FF_TAG = "WaterForcefield"
 
 
 # used to check norms in the gradient computations
-MAX_FORCE_NORM = 25000
+MAX_FORCE_NORM = 50000
