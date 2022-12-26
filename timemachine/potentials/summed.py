@@ -37,5 +37,8 @@ def summed_potential(
     """
     assert len(U_fns) == len(shapes)
     sizes = np.prod(shapes, axis=1)
+    # np.split expects indices, must increment sizes to be indices
+    for i in range(len(sizes) - 1):
+        sizes[i + 1] += sizes[i]
     paramss = [ps.reshape(shape) for ps, shape in zip(np.split(params, sizes[:-1]), shapes)]
     return sum(U_fn(conf, ps, box) for U_fn, ps in zip(U_fns, paramss))
