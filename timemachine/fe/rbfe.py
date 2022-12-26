@@ -5,6 +5,7 @@ import traceback
 import warnings
 from typing import Any, Dict, NamedTuple, Optional, Sequence
 
+import jax
 import matplotlib.pyplot as plt
 import numpy as np
 import pymbar
@@ -20,10 +21,11 @@ from timemachine.fe.system import convert_omm_system
 from timemachine.fe.utils import get_mol_name, get_romol_conf
 from timemachine.ff import Forcefield
 from timemachine.lib import LangevinIntegrator, MonteCarloBarostat, custom_ops
+from timemachine.lib.potentials import SummedPotential
 from timemachine.md import builders, minimizer
 from timemachine.md.barostat.utils import get_bond_list, get_group_indices
 from timemachine.parallel.client import AbstractClient, AbstractFileClient, CUDAPoolClient, FileClient
-from timemachine.potentials import jax_utils
+from timemachine.potentials import generic, jax_utils
 
 
 def get_batch_U_fns(bps):
@@ -499,10 +501,25 @@ def _optimize_coords_along_states(initial_states):
     free_idxs = np.where(np.any(d_ij < cutoff, axis=0))[0].tolist()
     x_opt = end_state.x0
     x_traj = []
+    gpu = False
     for idx, initial_state in enumerate(initial_states):
         print(initial_state.lamb)
-        bound_impls = [p.bound_impl(np.float32) for p in initial_state.potentials]
-        val_and_grad_fn = minimizer.get_val_and_grad_fn(bound_impls, initial_state.box0)
+        params = [np.array(pot.params) for pot in initial_state.potentials]
+        summed_pot = SummedPotential(initial_state.potentials, params)
+        flattened_params = np.concatenate([p.reshape(-1) for p in params])
+        if gpu:
+            summed_pot.bind(flattened_params)
+            bound_impls = [summed_pot.bound_impl(np.float32)]
+            val_and_grad_fn = minimizer.get_val_and_grad_fn(bound_impls, initial_state.box0)
+        else:
+            generic_summed = generic.from_gpu(summed_pot).to_reference()
+            u_fn = functools.partial(generic_summed, params=flattened_params, box=initial_state.box0)
+            func = jax.jit(jax.value_and_grad(u_fn, argnums=(0,)))
+
+            def val_and_grad_fn(coords):
+                u, grad = func(coords)
+                return u, np.array(grad[0])
+
         assert np.all(np.isfinite(x_opt)), "Initial coordinates contain nan or inf"
         # assert that the energy decreases only at the end-state.z
         if idx == 0:
