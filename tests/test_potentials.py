@@ -249,15 +249,22 @@ def harmonic_bond_test_system():
 
 def test_summed_potential(harmonic_bond_test_system):
     """Assert FanoutSummedPotential consistent with SummedPotential on
-    a harmonic bond instance"""
+    a harmonic bond instance."""
 
     harmonic_bond_1, harmonic_bond_2, params_1, params_2, coords = harmonic_bond_test_system
 
-    potential = generic.SummedPotential([harmonic_bond_1, harmonic_bond_2], [params_1, params_2])
+    potential = generic.SummedPotential(
+        [harmonic_bond_1, harmonic_bond_2, harmonic_bond_2], [params_1, params_2, params_2]
+    )
 
     box = 3.0 * np.eye(3)
 
-    params = np.concatenate((params_1.reshape(-1), params_2.reshape(-1)))
+    params = np.concatenate(
+        (
+            params_1.reshape(-1),
+            params_2.reshape(-1),
+        )
+    )
 
     for rtol, precision in [(1e-6, np.float32), (1e-10, np.float64)]:
         GradientTest().compare_forces_gpu_vs_reference(coords, [params], box, potential, rtol, precision)
