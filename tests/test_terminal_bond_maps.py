@@ -87,7 +87,11 @@ def get_vacuum_u_fxn(mol, temperature=300.0):
 
 
 def test_on_methane():
-    """Test TerminalBondMaps on methane <-> halogen-substituted methane"""
+    """Test TerminalBondMaps on methane <-> halogen-substituted methane.
+
+    Note: The terminal bond map only adjusts bond lengths, but the system also contains changing angle terms,
+    so the map does not reduce work standard deviation to 0.
+    """
     np.random.seed(2022)
 
     parser_params = Chem.SmilesParserParams()
