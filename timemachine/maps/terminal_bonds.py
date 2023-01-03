@@ -230,7 +230,7 @@ def states_to_conf_map_params(src: TerminalMappableState, dst: TerminalMappableS
     -------
     bond_idxs : int array, [K, 2]
     conf_map_params : float array, [K, 4]
-        where K = num terminal bonds in common
+        where K = num terminal bonds whose parameters change between src and dst
     """
 
     # find bond idxs in common
@@ -239,24 +239,28 @@ def states_to_conf_map_params(src: TerminalMappableState, dst: TerminalMappableS
     bonds_in_common = src_bonds.intersection(dst_bonds)
 
     bond_idxs = np.array(list(bonds_in_common))
-    assert len(bond_idxs) > 0 and bond_idxs.shape[1] == 2 and len(bond_idxs.shape) == 2
+    if len(bond_idxs) == 0:
+        assert bond_idxs.shape[1] == 2 and len(bond_idxs.shape) == 2
 
+    mapped_bond_list = []
     params_list = []
 
     for (a, b) in bond_idxs:
         src_interval = [interval for (idx, interval) in zip(src.idxs, src.intervals) if tuple(idx) == (a, b)][0]
         dst_interval = [interval for (idx, interval) in zip(dst.idxs, dst.intervals) if tuple(idx) == (a, b)][0]
 
-        params_list.append((src_interval.lower, src_interval.upper, dst_interval.lower, dst_interval.upper))
+        # oOnly produce parameters for bonds whose length distribution is different between src and dst
+        if src_interval != dst_interval:
+            mapped_bond_list.append((a, b))
+            params_list.append((src_interval.lower, src_interval.upper, dst_interval.lower, dst_interval.upper))
 
-        # TODO: skip adjusting bonds with identical distributions in src and dst?
-
+    bond_idxs = np.array(mapped_bond_list)
     params = np.array(params_list)
 
     return bond_idxs, params
 
 
-@dataclass()
+@dataclass
 class TerminalBondMap:
     mapped_bond_idxs: Array
     map_params: Array
