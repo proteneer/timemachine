@@ -43,13 +43,13 @@ def get_optimal_rotation_and_translation(x1, x2):
 
     Parameters
     ----------
-    x1: np.array (K,3)
+    x1: np.ndarray (K,3)
 
-    x2: np.array (K,3)
+    x2: np.ndarray (K,3)
 
     Returns
     -------
-    tuple (np.array, np.array)
+    tuple (np.ndarray, np.ndarray)
         Rotation translation pair
     """
     t = get_optimal_translation(x1, x2)
@@ -136,7 +136,7 @@ def rmsd_align(x1, x2):
     return xa, xb
 
 
-def rmsd_restraint(conf, params, box, lamb, group_a_idxs, group_b_idxs, k):
+def rmsd_restraint(conf, params, box, group_a_idxs, group_b_idxs, k):
     """
     Compute a rigid RMSD restraint using two groups of atoms. group_a_idxs and group_b_idxs
     must have the same size. a and b can have duplicate indices and need not be necessarily
@@ -156,9 +156,6 @@ def rmsd_restraint(conf, params, box, lamb, group_a_idxs, group_b_idxs, k):
         Unused dummy variable for API consistency
 
     box: Any
-        Unused dummy variable for API consistency
-
-    lamb: Any
         Unused dummy variable for API consistency
 
     group_a_idxs: list of int

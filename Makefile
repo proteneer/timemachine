@@ -2,7 +2,7 @@
 MKFILE_DIR := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
 CPP_DIR := $(MKFILE_DIR)timemachine/cpp/
 INSTALL_PREFIX := $(MKFILE_DIR)timemachine/
-PYTEST_CI_ARGS := --color=yes --cov=. --cov-report=html:coverage/ --cov-append --durations=100
+PYTEST_CI_ARGS := --color=yes --cov=. --cov-report=html:coverage/ --cov-append --durations=100 --hypothesis-profile ci
 
 NOGPU_MARKER := nogpu
 MEMCHECK_MARKER := memcheck
@@ -18,10 +18,6 @@ build:
 
 clean:
 	cd $(CPP_DIR) && rm -rf build/ | true
-
-.PHONY: grpc
-grpc:
-	python -m grpc_tools.protoc -I grpc/ --python_out=. --grpc_python_out=. grpc/timemachine/parallel/grpc/service.proto
 
 .PHONY: verify
 verify:

@@ -7,7 +7,7 @@ import numpy as np
 from rdkit import Chem
 from scipy.special import logsumexp
 
-from timemachine.constants import BOLTZ, DEFAULT_FF
+from timemachine.constants import BOLTZ, DEFAULT_FF, KCAL_TO_KJ
 from timemachine.datasets import fetch_freesolv
 from timemachine.fe.absolute_hydration import set_up_ahfe_system_for_smc
 from timemachine.fe.utils import get_mol_name
@@ -159,7 +159,7 @@ def run_on_freesolv_mol(
     log_weights = smc_result["log_weights_traj"][-1]
     reduced_dG = -logsumexp(log_weights - np.log(len(log_weights)))
     dG_kJmol = reduced_dG * (BOLTZ * temperature)
-    dG = dG_kJmol / 4.184
+    dG = dG_kJmol / KCAL_TO_KJ
 
     print(f"predicted: {dG:.3f} kcal/mol")
     print(f"experimental: {props['dG']:.3f} kcal/mol")

@@ -28,7 +28,7 @@ FlatBottomBond<RealType>::FlatBottomBond(const std::vector<int> &bond_idxs) : B_
     }
 
     // copy idxs to device
-    gpuErrchk(cudaMalloc(&d_bond_idxs_, B_ * 2 * sizeof(*d_bond_idxs_)));
+    cudaSafeMalloc(&d_bond_idxs_, B_ * 2 * sizeof(*d_bond_idxs_));
     gpuErrchk(cudaMemcpy(d_bond_idxs_, &bond_idxs[0], B_ * 2 * sizeof(*d_bond_idxs_), cudaMemcpyHostToDevice));
 };
 
@@ -41,10 +41,8 @@ void FlatBottomBond<RealType>::execute_device(
     const double *d_x,
     const double *d_p,
     const double *d_box,
-    const double lambda,
     unsigned long long *d_du_dx,
     unsigned long long *d_du_dp,
-    unsigned long long *d_du_dl,
     unsigned long long *d_u,
     cudaStream_t stream) {
 
@@ -66,6 +64,13 @@ void FlatBottomBond<RealType>::execute_device(
         gpuErrchk(cudaPeekAtLastError());
     }
 };
+
+template <typename RealType>
+void FlatBottomBond<RealType>::set_bonds_device(const int num_bonds, const int *d_bonds, const cudaStream_t stream) {
+    gpuErrchk(cudaMemcpyAsync(
+        d_bond_idxs_, d_bonds, num_bonds * 2 * sizeof(*d_bond_idxs_), cudaMemcpyDeviceToDevice, stream));
+    B_ = num_bonds;
+}
 
 template class FlatBottomBond<double>;
 template class FlatBottomBond<float>;

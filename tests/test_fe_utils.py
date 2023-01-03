@@ -3,8 +3,12 @@ import pytest
 from rdkit import Chem
 from rdkit.Chem import AllChem
 
-from timemachine.fe import utils
-from timemachine.fe.model_utils import image_molecule, verify_rabfe_pair
+from timemachine.constants import DEFAULT_FF
+from timemachine.fe import model_utils, utils
+from timemachine.fe.model_utils import image_frame, image_molecule
+from timemachine.ff import Forcefield
+
+pytestmark = [pytest.mark.nogpu]
 
 
 def test_sanitize_energies():
@@ -39,9 +43,42 @@ def test_extract_delta_Us_from_U_knk():
     np.testing.assert_almost_equal(expected_delta_Us, test_delta_Us)
 
 
+def test_image_frame():
+    rng = np.random.default_rng(2022)
+
+    coords = rng.random((90, 3))
+
+    max_dimensions = np.max(coords, axis=0)
+
+    # Add a random buffer to the dimensions of the box
+    box = np.eye(3) * (max_dimensions + rng.random(max_dimensions.shape))
+    idxs = np.arange(len(coords))
+    group_indices = []
+    group_indices.extend(list(idxs[:30].reshape(-1, 3)))
+    group_indices.extend(list(idxs[30:].reshape(-1, 5)))
+    group_indices.append(np.array([], dtype=idxs.dtype))
+
+    box_diag = np.diagonal(box)
+
+    imaged_coords = image_frame(group_indices, coords, box)
+    np.testing.assert_allclose(coords, imaged_coords)
+
+    for _ in range(100):
+        new_coords = coords.copy()
+
+        for group in group_indices:
+            # shift each direction randomly, need to go beyond one image since waters can float very far away
+            x_shift, y_shift, z_shift = rng.integers(-5, 5, size=3)
+
+            offset = np.array([x_shift * box_diag[0], y_shift * box_diag[1], z_shift * box_diag[2]])
+            offset = np.expand_dims(offset, axis=0)  # make this broad castable to [N,3]
+            new_coords[group] += offset
+        imaged_coords = image_frame(group_indices, new_coords, box)
+        np.testing.assert_allclose(coords, imaged_coords)
+
+
 def test_image_molecules():
-    suppl = Chem.SDMolSupplier("tests/data/benzene_fluorinated.sdf", removeHs=False)
-    all_mols = [x for x in suppl]
+    all_mols = utils.read_sdf("tests/data/benzene_fluorinated.sdf")
     mol = all_mols[0]
     mol_coords = utils.get_romol_conf(mol)
 
@@ -73,30 +110,6 @@ def test_image_molecules():
         np.testing.assert_array_almost_equal(imaged_mol, mol_coords)
 
 
-def test_verify_rabfe_pair():
-    hydrogen_less_mol = Chem.MolFromSmiles("c1ccccc1")
-    blocker_mol = Chem.AddHs(hydrogen_less_mol)
-
-    with pytest.raises(AssertionError) as e:
-        verify_rabfe_pair(hydrogen_less_mol, blocker_mol)
-    assert "Hydrogens missing for mol" in str(e.value)
-
-    # Verify ordering doesn't matter to pick up missing hydrogens
-    with pytest.raises(AssertionError) as e:
-        verify_rabfe_pair(blocker_mol, hydrogen_less_mol)
-    assert "Hydrogens missing for mol" in str(e.value)
-
-    ligand = Chem.AddHs(hydrogen_less_mol)
-    verify_rabfe_pair(ligand, blocker_mol)
-
-    charged_ligand = Chem.AddHs(Chem.MolFromSmiles("C[n+]1cc[nH]c1"))
-    with pytest.raises(AssertionError) as e:
-        verify_rabfe_pair(charged_ligand, blocker_mol)
-    err_msg = str(e.value)
-    assert err_msg.startswith("Formal charge disagrees:")
-    assert "ligand: 1" in err_msg
-
-
 def test_get_mol_name():
     mol = Chem.MolFromSmiles("c1ccccc1")
     with pytest.raises(KeyError):
@@ -125,3 +138,29 @@ def test_set_mol_coords():
         # Won't be exact, but should be close
         assert not np.all(x1 == x1_copy)
         np.testing.assert_allclose(x1, x1_copy)
+
+
+def test_experimental_conversions_to_kj():
+    rng = np.random.RandomState(2022)
+
+    experimental_values = rng.random(10)
+    # Verify that uM to kJ and uIC50 to Kj is identical
+    np.testing.assert_array_equal(
+        utils.convert_uM_to_kJ_per_mole(experimental_values), utils.convert_uIC50_to_kJ_per_mole(experimental_values)
+    )
+
+    np.testing.assert_allclose(utils.convert_uM_to_kJ_per_mole(0.15), -38.951164)
+
+
+def test_get_strained_atoms():
+    ff = Forcefield.load_from_file(DEFAULT_FF)
+    np.random.seed(2022)
+    mol = Chem.AddHs(Chem.MolFromSmiles("c1ccccc1"))
+    AllChem.EmbedMolecule(mol)
+    assert model_utils.get_strained_atoms(mol, ff) == []
+
+    # force a clash
+    x0 = utils.get_romol_conf(mol)
+    x0[-2, :] = x0[-1, :] + 0.01
+    utils.set_romol_conf(mol, x0)
+    assert model_utils.get_strained_atoms(mol, ff) == [10, 11]

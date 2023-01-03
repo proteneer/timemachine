@@ -1,17 +1,13 @@
-import os
-import pickle
-
-from jax.config import config
-from scipy.special import logsumexp
-
-config.update("jax_enable_x64", True)
 import copy
 import functools
+import os
+import pickle
 
 import jax
 import jax.numpy as jnp
 import numpy as np
 import pytest
+from scipy.special import logsumexp
 
 from timemachine import testsystems
 from timemachine.constants import BOLTZ, DEFAULT_FF
@@ -61,7 +57,7 @@ def test_condensed_phase_mtm():
     with open(cache_path, "rb") as fh:
         vacuum_samples, vacuum_log_weights = pickle.load(fh)
 
-    ubps, params, masses, coords, box = enhanced.get_solvent_phase_system(mol, ff)
+    ubps, params, masses, coords, box = enhanced.get_solvent_phase_system(mol, ff, 0.0)
 
     nb_potential = ubps[-1]
     beta = nb_potential.get_beta()
@@ -112,9 +108,6 @@ def test_condensed_phase_mtm():
 
     print(f"Running a total of {num_batches*md_steps_per_move} md steps")
 
-    frozen_masses = np.copy(masses)
-    frozen_masses[-num_ligand_atoms:] = np.inf
-
     all_torsions = []
 
     num_equil_steps = 30000
@@ -122,41 +115,37 @@ def test_condensed_phase_mtm():
         ubps, params, masses, coords, box, temperature, pressure, num_equil_steps, seed
     )
 
-    lamb = 0.0
-    # test with both frozen masses and free masses
-    for test_masses in [frozen_masses, masses]:
+    # (ytz): emprically scanning over multiple Ks seem to suggest 100 is a sweet spot
+    # leave this here for pedagogical purposes.
+    # for K in [1, 5, 10, 25, 50, 100, 200, 400]:
 
-        # (ytz): emprically scanning over multiple Ks seem to suggest 100 is a sweet spot
-        # leave this here for pedagogical purposes.
-        # for K in [1, 5, 10, 25, 50, 100, 200, 400]:
+    K = 100
 
-        K = 100
+    batch_proposal_coords_fn = functools.partial(
+        enhanced.jax_aligned_batch_propose_coords,
+        vacuum_samples=jnp.array(vacuum_samples),
+        vacuum_log_weights=jnp.array(vacuum_log_weights),
+    )
 
-        batch_proposal_coords_fn = functools.partial(
-            enhanced.jax_aligned_batch_propose_coords,
-            vacuum_samples=jnp.array(vacuum_samples),
-            vacuum_log_weights=jnp.array(vacuum_log_weights),
+    npt_mover = NPTMove(ubps, masses, temperature, pressure, n_steps=md_steps_per_move, seed=seed)
+    mtm_mover = OptimizedMTMMove(K, batch_proposal_coords_fn, batch_log_weights_fn, seed=seed)
+
+    enhanced_torsions = []
+
+    xvb_t = copy.deepcopy(xvb0)
+
+    for iteration in range(num_batches):
+
+        xvb_t = npt_mover.move(xvb_t)
+        solvent_torsion = get_torsion(xvb_t.coords[-num_ligand_atoms:])
+        enhanced_torsions.append(solvent_torsion)
+        xvb_t = mtm_mover.move(xvb_t)
+
+        print(
+            f"K {K} frame {iteration} acceptance rate {mtm_mover.n_accepted/mtm_mover.n_proposed} solvent_torsion {solvent_torsion}"
         )
 
-        npt_mover = NPTMove(ubps, lamb, test_masses, temperature, pressure, n_steps=md_steps_per_move, seed=seed)
-        mtm_mover = OptimizedMTMMove(K, batch_proposal_coords_fn, batch_log_weights_fn, seed=seed)
-
-        enhanced_torsions = []
-
-        xvb_t = copy.deepcopy(xvb0)
-
-        for iteration in range(num_batches):
-
-            xvb_t = npt_mover.move(xvb_t)
-            solvent_torsion = get_torsion(xvb_t.coords[-num_ligand_atoms:])
-            enhanced_torsions.append(solvent_torsion)
-            xvb_t = mtm_mover.move(xvb_t)
-
-            print(
-                f"K {K} frame {iteration} acceptance rate {mtm_mover.n_accepted/mtm_mover.n_proposed} solvent_torsion {solvent_torsion}"
-            )
-
-        all_torsions.append(np.asarray(enhanced_torsions))
+    all_torsions.append(np.asarray(enhanced_torsions))
 
     # lhs is (-np.pi, 0) and rhs is (0, np.pi)
     enhanced_torsions_lhs, _ = np.histogram(enhanced_torsions, bins=50, range=(-np.pi, 0), density=True)
@@ -167,7 +156,7 @@ def test_condensed_phase_mtm():
 
     vanilla_torsions = []
     xvb_t = copy.deepcopy(xvb0)
-    npt_mover = NPTMove(ubps, lamb, test_masses, temperature, pressure, n_steps=500, seed=seed)
+    npt_mover = NPTMove(ubps, masses, temperature, pressure, n_steps=500, seed=seed)
     for iteration in range(num_batches):
         solvent_torsion = get_torsion(xvb_t.coords[-num_ligand_atoms:])
         vanilla_torsions.append(solvent_torsion)
@@ -189,14 +178,14 @@ def test_nvt_box():
     mol, _ = testsystems.ligands.get_biphenyl()
     ff = Forcefield.load_from_file(DEFAULT_FF)
 
-    ubps, params, masses, coords, box = enhanced.get_solvent_phase_system(mol, ff)
+    ubps, params, masses, coords, box = enhanced.get_solvent_phase_system(mol, ff, 0.0)
     bps = []
     for p, bp in zip(params, ubps):
         bps.append(bp.bind(p))
 
     temperature = 300.0
     n_steps = 100
-    mover = NVTMove(ubps, 0, masses, temperature, n_steps, seed)
+    mover = NVTMove(ubps, masses, temperature, n_steps, seed)
     v0 = np.zeros_like(coords)
     xvb0 = CoordsVelBox(coords, v0, box)
     xvb = mover.move(xvb0)

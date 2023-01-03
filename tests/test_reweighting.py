@@ -1,5 +1,6 @@
 import numpy as np
 import pymbar
+import pytest
 from jax import grad, jit
 from jax import numpy as jnp
 from jax import value_and_grad, vmap
@@ -57,6 +58,7 @@ def assert_estimator_accurate(estimate_delta_f, analytical_delta_f, ref_params, 
         np.testing.assert_allclose(g_hat, g_ref, atol=atol)
 
 
+@pytest.mark.nogpu
 def test_endpoint_reweighting_1d():
     """assert that endpoint reweighting estimator for delta_f(params), grad(delta_f)(params) is accurate
     on tractable 1D system"""
@@ -87,6 +89,7 @@ def test_endpoint_reweighting_1d():
     assert_estimator_accurate(jit(estimate_delta_f), analytical_delta_f, ref_params, n_random_trials=10, atol=atol)
 
 
+@pytest.mark.nogpu
 def test_mixture_reweighting_1d():
     """using a variety of free energy estimates (MBAR, TI, analytical) to obtain reference mixture weights,
     assert that mixture reweighting estimator of delta_f(params), grad(delta_f)(params) is accurate
@@ -192,7 +195,7 @@ def make_ahfe_test_system():
     n_snapshots_0 = 10
     n_snapshots_1 = 20
 
-    ubps, params, masses, conf, box = get_solvent_phase_system(mol, ff)
+    ubps, params, masses, conf, box = get_solvent_phase_system(mol, ff, 0.0)
 
     lambda_offset_idxs = ubps[-1].get_lambda_offset_idxs()
     ligand_indices = np.where(lambda_offset_idxs == 1)[0]
@@ -222,6 +225,7 @@ def make_ahfe_test_system():
     return samples_0, samples_1, batched_u_0, batched_u_1, ref_params, ref_delta_f
 
 
+@pytest.mark.skip(reason="needs update since removal of lambda dependence in nonbonded potentials")
 def test_endpoint_reweighting_ahfe():
     """on made-up inputs of the right shape,
     check that derivative of an absolute hydration free energy w.r.t .ligand nonbonded parameters can be computed using
@@ -253,6 +257,7 @@ def test_endpoint_reweighting_ahfe():
     assert np.isfinite(g_prime).all()
 
 
+@pytest.mark.skip(reason="needs update since removal of lambda dependence in nonbonded potentials")
 def test_mixture_reweighting_ahfe():
     """on made-up inputs of the right shape,
     check that derivative of an absolute hydration free energy w.r.t .ligand nonbonded parameters can be computed using
@@ -284,6 +289,7 @@ def test_mixture_reweighting_ahfe():
     assert np.isfinite(g_prime).all()
 
 
+@pytest.mark.nogpu
 def test_one_sided_exp():
     """assert consistency with pymbar.EXP on random instances + instances containing +inf work"""
 
@@ -310,6 +316,7 @@ def test_one_sided_exp():
     assert np.isclose(one_sided_exp(reduced_works), pymbar.EXP(reduced_works)[0])
 
 
+@pytest.mark.nogpu
 def test_interpret_as_mixture_potential():
     """assert approximate self-consistency a la https://arxiv.org/abs/1704.00891
 

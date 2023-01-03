@@ -19,7 +19,6 @@ from timemachine import lib
 from timemachine.constants import BOLTZ
 from timemachine.fe import free_energy, topology
 from timemachine.fe.utils import get_romol_conf
-from timemachine.ff import combine_ordered_params
 from timemachine.integrator import simulate
 from timemachine.lib import custom_ops
 from timemachine.md import builders, minimizer, moves
@@ -88,23 +87,25 @@ class VacuumState:
             self.improper_torsion_params,
             self.it_potential,
         ) = bt.parameterize_improper_torsion(ff.it_handle.params)
-        self.nb_params, self.nb_potential = bt.parameterize_nonbonded(ff.q_handle.params, ff.lj_handle.params)
+
+        self.lamb = 0.0
+        self.nb_params, self.nb_potential = bt.parameterize_nonbonded(
+            ff.q_handle.params, ff.lj_handle.params, self.lamb
+        )
 
         self.box = None
-        self.lamb = 0.0
 
     def _harmonic_bond_nrg(self, x):
-        return bonded.harmonic_bond(x, self.bond_params, self.box, self.lamb, self.hb_potential.get_idxs())
+        return bonded.harmonic_bond(x, self.bond_params, self.box, self.hb_potential.get_idxs())
 
     def _harmonic_angle_nrg(self, x):
-        return bonded.harmonic_angle(x, self.angle_params, self.box, self.lamb, self.ha_potential.get_idxs())
+        return bonded.harmonic_angle(x, self.angle_params, self.box, self.ha_potential.get_idxs())
 
     def _proper_torsion_nrg(self, x):
         return bonded.periodic_torsion(
             x,
             self.proper_torsion_params,
             self.box,
-            self.lamb,
             self.pt_potential.get_idxs(),
         )
 
@@ -113,7 +114,6 @@ class VacuumState:
             x,
             self.improper_torsion_params,
             self.box,
-            self.lamb,
             self.it_potential.get_idxs(),
         )
 
@@ -132,23 +132,18 @@ class VacuumState:
 
         beta = self.nb_potential.get_beta()
         cutoff = self.nb_potential.get_cutoff()
-        lambda_plane_idxs = np.zeros(N)
-        lambda_offset_idxs = np.zeros(N)
 
         # tbd: set to None
         box = np.eye(3) * 1000
 
-        return nonbonded.nonbonded_v3(
+        return nonbonded.nonbonded(
             x,
             nb_params,
             box,
-            self.lamb,
             charge_rescale_mask,
             lj_rescale_mask,
             beta,
             cutoff,
-            lambda_plane_idxs,
-            lambda_offset_idxs,
             runtime_validate=False,
         )
 
@@ -186,9 +181,7 @@ class VacuumState:
         easy_proper_torsion_idxs = np.array(easy_proper_torsion_idxs, dtype=np.int32)
         easy_proper_torsion_params = np.array(easy_proper_torsion_params, dtype=np.float64)
 
-        proper_torsion_nrg = bonded.periodic_torsion(
-            x, easy_proper_torsion_params, self.box, self.lamb, easy_proper_torsion_idxs
-        )
+        proper_torsion_nrg = bonded.periodic_torsion(x, easy_proper_torsion_params, self.box, easy_proper_torsion_idxs)
 
         return (
             self._harmonic_bond_nrg(x)
@@ -249,7 +242,6 @@ class VacuumState:
 # (ytz): in order for XLA's pmap to properly parallelize over multiple CPU devices, we need to
 # set this explicitly via a magical command line arg. This should be ran in a subprocess
 def _wrap_simulate(args):
-    print("IN WRAP SIMULATE")
     (
         mol,
         U_proposal,
@@ -434,7 +426,7 @@ def jax_sample_from_log_weights(weighted_samples, log_weights, size, key):
     return weighted_samples[idxs]
 
 
-def get_solvent_phase_system(mol, ff, box_width=3.0, margin=0.5, minimize_energy=True):
+def get_solvent_phase_system(mol, ff, lamb: float, box_width=3.0, margin=0.5, minimize_energy=True):
     """
     Given a mol and forcefield return a solvated system where the
     solvent has (optionally) been minimized.
@@ -445,6 +437,8 @@ def get_solvent_phase_system(mol, ff, box_width=3.0, margin=0.5, minimize_energy
 
     ff: Forcefield
 
+    lamb: float
+
     box_width: float
         water box initial width in nm
 
@@ -456,14 +450,14 @@ def get_solvent_phase_system(mol, ff, box_width=3.0, margin=0.5, minimize_energy
     """
 
     # construct water box
-    water_system, water_coords, water_box, water_topology = builders.build_water_system(box_width)
+    water_system, water_coords, water_box, water_topology = builders.build_water_system(box_width, ff.water_ff)
     water_box = water_box + np.eye(3) * margin  # add a small margin around the box for stability
 
     # construct alchemical system
     bt = topology.BaseTopology(mol, ff)
     afe = free_energy.AbsoluteFreeEnergy(mol, bt)
-    ff_params = ff.get_ordered_params()
-    potentials, params, masses = afe.prepare_host_edge(ff_params, water_system)
+    ff_params = ff.get_params()
+    potentials, params, masses = afe.prepare_host_edge(ff_params, water_system, lamb)
 
     # concatenate (optionally minimized) water_coords and ligand_coords
     ligand_coords = get_romol_conf(mol)
@@ -474,71 +468,6 @@ def get_solvent_phase_system(mol, ff, box_width=3.0, margin=0.5, minimize_energy
         coords = np.concatenate([water_coords, ligand_coords])
 
     return potentials, params, masses, coords, water_box
-
-
-def get_solvent_phase_system_parameter_changes(mol, ff0, ff1, box_width=3.0, margin=0.5):
-    """
-    Given a mol and a pair of forcefields return a solvated system.
-    The system is set up to determine the relative free energy of
-    changing the forcefield parameters.
-
-    Parameters
-    ----------
-    mol: Chem.Mol
-
-    ff0: Forcefield
-        Effective forcefield at lambda = 0.
-
-    ff1: Forcefield
-        Effective forcefield at lambda = 1.
-
-    box_width: float
-        water box initial width in nm
-
-    margin: Optional, float
-        Box margin in nm, default is 0.5 nm.
-
-    minimize_energy: bool
-        whether to apply minimize_host_4d
-    """
-
-    # construct water box
-    water_system, water_coords, water_box, water_topology = builders.build_water_system(box_width)
-    water_box = water_box + np.eye(3) * margin  # add a small margin around the box for stability
-
-    top = topology.RelativeFreeEnergyForcefield(mol, ff0, ff1)
-    afe = free_energy.AbsoluteFreeEnergy(mol, top)
-    combined_ff_params = combine_ordered_params(ff0, ff1)
-    potentials, params, masses = afe.prepare_host_edge(combined_ff_params, water_system)
-
-    # concatenate water_coords and ligand_coords
-    ligand_coords = get_romol_conf(mol)
-    coords = np.concatenate([water_coords, ligand_coords])
-
-    return potentials, params, np.array(masses), coords, water_box
-
-
-def get_vacuum_phase_system_parameter_changes(mol, ff0, ff1):
-    """
-    Given a mol and a pair of forcefields return a vacuum system set up
-    to determine the free energy of changing the forcefield params.
-
-    Parameters
-    ----------
-    mol: Chem.Mol
-
-    ff0: Forcefield
-        Effective forcefield at lambda = 0.
-
-    ff1: Forcefield
-        Effective forcefield at lambda = 1.
-    """
-    top = topology.RelativeFreeEnergyForcefield(mol, ff0, ff1)
-    afe = free_energy.AbsoluteFreeEnergy(mol, top)
-    combined_ff_params = combine_ordered_params(ff0, ff1)
-    potentials, params, masses = afe.prepare_vacuum_edge(combined_ff_params)
-    coords = get_romol_conf(mol)
-    return potentials, params, np.array(masses), coords
 
 
 def equilibrate_solvent_phase(
@@ -578,11 +507,8 @@ def equilibrate_solvent_phase(
     # equilibration/minimization doesn't need a barostat
     equil_ctxt = custom_ops.Context(coords, np.zeros_like(coords), box, intg_equil_impl, all_impls, barostat_impl)
 
-    lamb = 0.0
-
     # TODO: revert to 50k
-    equil_schedule = np.ones(num_steps) * lamb
-    equil_ctxt.multiple_steps(equil_schedule)
+    equil_ctxt.multiple_steps(num_steps)
 
     x0 = equil_ctxt.get_x_t()
 
@@ -642,9 +568,17 @@ def jax_aligned_batch_propose_coords(x, K, key, vacuum_samples, vacuum_log_weigh
 
 
 def pregenerate_samples(
-    mol, ff, seed, n_solvent_samples=1000, n_ligand_batches=30000, temperature=300.0, pressure=1.0, num_workers=None
+    mol,
+    ff,
+    lamb,
+    seed,
+    n_solvent_samples=1000,
+    n_ligand_batches=30000,
+    temperature=300.0,
+    pressure=1.0,
+    num_workers=None,
 ):
-    potentials, params, masses, coords, box = get_solvent_phase_system(mol, ff)
+    potentials, params, masses, coords, box = get_solvent_phase_system(mol, ff, lamb)
     print(f"Generating {n_solvent_samples} solvent samples")
     solvent_xvbs = generate_solvent_samples(
         coords, box, masses, potentials, params, temperature, pressure, seed, n_solvent_samples, num_workers
@@ -676,8 +610,7 @@ def generate_solvent_samples(
         potentials, params, masses, coords, box, temperature, pressure, num_equil_steps, seed
     )
 
-    lamb = 1.0  # non-interacting state
-    npt_mover = moves.NPTMove(potentials, lamb, masses, temperature, pressure, n_steps=md_steps_per_move, seed=seed)
+    npt_mover = moves.NPTMove(potentials, masses, temperature, pressure, n_steps=md_steps_per_move, seed=seed)
 
     xvbs = [xvb0]
     for _ in range(n_samples):

@@ -15,9 +15,7 @@ void BoundPotential::execute_host(
     const int N,
     const double *h_x,           // [N,3]
     const double *h_box,         // [3, 3]
-    const double lambda,         // [1]
     unsigned long long *h_du_dx, // [N,3]
-    unsigned long long *h_du_dl, //
     unsigned long long *h_u) {
 
     const int D = 3;
@@ -29,21 +27,34 @@ void BoundPotential::execute_host(
     d_box.copy_from(h_box);
 
     DeviceBuffer<unsigned long long> d_du_dx(N * D);
-    DeviceBuffer<unsigned long long> d_du_dl(N);
     DeviceBuffer<unsigned long long> d_u(N);
 
     // very important that these are initialized to zero since the kernels themselves just accumulate
     gpuErrchk(cudaMemset(d_du_dx.data, 0, d_du_dx.size));
-    gpuErrchk(cudaMemset(d_du_dl.data, 0, d_du_dl.size));
     gpuErrchk(cudaMemset(d_u.data, 0, d_u.size));
 
-    this->execute_device(
-        N, d_x.data, d_box.data, lambda, d_du_dx.data, nullptr, d_du_dl.data, d_u.data, static_cast<cudaStream_t>(0));
-
+    cudaStream_t stream = static_cast<cudaStream_t>(0);
+    this->execute_device(N, d_x.data, d_box.data, d_du_dx.data, nullptr, d_u.data, stream);
+    gpuErrchk(cudaStreamSynchronize(stream));
     d_du_dx.copy_to(h_du_dx);
-    d_du_dl.copy_to(h_du_dl);
     d_u.copy_to(h_u);
 };
+
+void BoundPotential::set_params_device(
+    const std::vector<int> device_shape, const double *d_new_params, const cudaStream_t stream) {
+    int updated_size = 1;
+    for (auto s : device_shape) {
+        updated_size *= s;
+    }
+    if (updated_size > 0) {
+        if (updated_size > this->size()) {
+            d_p.reset(new DeviceBuffer<double>(updated_size));
+        }
+        gpuErrchk(cudaMemcpyAsync(
+            d_p->data, d_new_params, updated_size * sizeof(*d_p->data), cudaMemcpyDeviceToDevice, stream));
+    }
+    shape = device_shape;
+}
 
 int BoundPotential::size() const {
     if (shape.size() == 0) {

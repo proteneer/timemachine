@@ -1,52 +1,53 @@
-import jax
-
-jax.config.update("jax_enable_x64", True)
-
 import numpy as np
 from numpy.random import rand, randint, randn, seed
 
 seed(2021)
 
 from functools import partial
-from typing import Callable, Tuple
+from typing import Any, Callable, Tuple
 
+import pytest
 from jax import jit
 from jax import numpy as jnp
 from jax import value_and_grad, vmap
 from scipy.optimize import minimize
 from simtk import unit
 
-from timemachine.constants import BOLTZ
+from timemachine.constants import BOLTZ, DEFAULT_FF
 from timemachine.fe.reweighting import one_sided_exp
+from timemachine.ff import Forcefield
 from timemachine.ff.handlers import openmm_deserializer
 from timemachine.md import builders
-from timemachine.potentials.jax_utils import (
-    convert_to_4d,
-    distance,
-    get_all_pairs_indices,
-    pairs_from_interaction_groups,
-)
+from timemachine.potentials.jax_utils import get_all_pairs_indices, pairs_from_interaction_groups, pairwise_distances
 from timemachine.potentials.nonbonded import (
     coulomb_interaction_group_energy,
     coulomb_prefactors_on_traj,
     lj_interaction_group_energy,
     lj_prefactors_on_traj,
+    nonbonded,
     nonbonded_block,
-    nonbonded_v3,
-    nonbonded_v3_on_specific_pairs,
+    nonbonded_on_specific_pairs,
 )
 
-Conf = Params = Box = ChargeMask = LJMask = LambdaPlaneIdxs = LambdaOffsetIdxs = jnp.array
-Lamb = Beta = Cutoff = Energy = float
+Array = Any
+Conf = Array
+Params = Array
+Box = Array
+ChargeMask = Array
+LJMask = Array
+Beta = float
+Cutoff = float
+Energy = float
 
-nonbonded_args = Conf, Params, Box, Lamb, ChargeMask, LJMask, Beta, Cutoff, LambdaPlaneIdxs, LambdaOffsetIdxs
-NonbondedArgs = Tuple[nonbonded_args]
-NonbondedFxn = Callable[[*nonbonded_args], Energy]
+NonbondedArgs = Tuple[Conf, Params, Box, ChargeMask, LJMask, Beta, Cutoff]
+NonbondedFxn = Callable[[Conf, Params, Box, ChargeMask, LJMask, Beta, Cutoff], Energy]
+
+pytestmark = [pytest.mark.nogpu]
 
 
 def resolve_clashes(x0, box0, min_dist=0.1):
     def urt(x, box):
-        distance_matrix = distance(x, box)
+        distance_matrix = pairwise_distances(x, box)
         i, j = np.triu_indices(len(distance_matrix), k=1)
         return distance_matrix[i, j]
 
@@ -96,11 +97,9 @@ easy_instance_flags = dict(
     randomize_charges=False,
     randomize_sigma=False,
     randomize_epsilon=False,
-    randomize_lamb=False,
     randomize_charge_rescale_mask=False,
     randomize_lj_rescale_mask=False,
-    randomize_lambda_plane_idxs=False,
-    randomize_lambda_offset_idxs=False,
+    randomize_w_coords=False,
     randomize_beta=False,
     randomize_cutoff=False,
 )
@@ -109,8 +108,8 @@ difficult_instance_flags = {key: True for key in easy_instance_flags}
 
 
 def generate_waterbox_nb_args() -> NonbondedArgs:
-
-    system, positions, box, _ = builders.build_water_system(3.0)
+    ff = Forcefield.load_from_file(DEFAULT_FF)
+    system, positions, box, _ = builders.build_water_system(3.0, ff.water_ff)
     bps, masses = openmm_deserializer.deserialize_system(system, cutoff=1.2)
     nb = bps[-1]
     params = nb.params
@@ -121,23 +120,17 @@ def generate_waterbox_nb_args() -> NonbondedArgs:
     beta = nb.get_beta()
     cutoff = nb.get_cutoff()
 
-    lamb = 0.0
     charge_rescale_mask = np.ones((N, N))
     lj_rescale_mask = np.ones((N, N))
-    lambda_plane_idxs = np.zeros(N, dtype=int)
-    lambda_offset_idxs = np.zeros(N, dtype=int)
 
     args = (
         conf,
         params,
         box,
-        lamb,
         charge_rescale_mask,
         lj_rescale_mask,
         beta,
         cutoff,
-        lambda_plane_idxs,
-        lambda_offset_idxs,
     )
 
     return args
@@ -158,21 +151,25 @@ def generate_random_inputs(n_atoms, dim, instance_flags=difficult_instance_flags
     min_dist = 0.1
     conf, box = resolve_clashes(conf, box, min_dist=min_dist)
 
+    cutoff = 1.2
+    if instance_flags["randomize_cutoff"]:
+        cutoff += rand()
+
     charges = jnp.zeros(n_atoms)
     sig = min_dist * jnp.ones(n_atoms)
     eps = jnp.ones(n_atoms)
+    w_coords = jnp.zeros(n_atoms)
     if instance_flags["randomize_charges"]:
         charges = randn(n_atoms)
     if instance_flags["randomize_sigma"]:
         sig = min_dist * rand(n_atoms)
     if instance_flags["randomize_epsilon"]:
         eps = rand(n_atoms)
+    if instance_flags["randomize_w_coords"]:
+        w_coords = 2 * cutoff * (2 * rand(n_atoms) - 1)  # [-2 * cutoff, 2 * cutoff]
 
-    params = jnp.array([charges, sig, eps]).T
+    params = jnp.array([charges, sig, eps, w_coords]).T
 
-    lamb = 0.0
-    if instance_flags["randomize_lamb"]:
-        lamb = rand()
     charge_rescale_mask = np.ones((n_atoms, n_atoms))
     lj_rescale_mask = np.ones((n_atoms, n_atoms))
 
@@ -186,36 +183,13 @@ def generate_random_inputs(n_atoms, dim, instance_flags=difficult_instance_flags
     beta = 2.0
     if instance_flags["randomize_beta"]:
         beta += rand()
-    cutoff = 1.2
-    if instance_flags["randomize_cutoff"]:
-        cutoff += rand()
 
-    lambda_plane_idxs = np.zeros(n_atoms, dtype=int)
-    lambda_offset_idxs = np.zeros(n_atoms, dtype=int)
-
-    if instance_flags["randomize_lambda_plane_idxs"]:
-        lambda_plane_idxs = randint(low=-2, high=2, size=n_atoms)
-
-    if instance_flags["randomize_lambda_offset_idxs"]:
-        lambda_offset_idxs = randint(low=-2, high=2, size=n_atoms)
-
-    args = (
-        conf,
-        params,
-        box,
-        lamb,
-        charge_rescale_mask,
-        lj_rescale_mask,
-        beta,
-        cutoff,
-        lambda_plane_idxs,
-        lambda_offset_idxs,
-    )
+    args = (conf, params, box, charge_rescale_mask, lj_rescale_mask, beta, cutoff)
 
     return args
 
 
-def compare_two_potentials(u_a: NonbondedFxn, u_b: NonbondedFxn, args: NonbondedArgs, differentiate_wrt=(0, 1, 3)):
+def compare_two_potentials(u_a: NonbondedFxn, u_b: NonbondedFxn, args: NonbondedArgs, differentiate_wrt=(0, 1)):
     """Assert that energies and derivatives w.r.t. request argnums are close"""
     value_and_grads = partial(value_and_grad, argnums=differentiate_wrt)
     energy_a, gradients_a = value_and_grads(u_a)(*args)
@@ -226,45 +200,28 @@ def compare_two_potentials(u_a: NonbondedFxn, u_b: NonbondedFxn, args: Nonbonded
         np.testing.assert_allclose(g_a, g_b)
 
 
-def _nonbonded_v3_clone(
+def _nonbonded_clone(
     conf,
     params,
     box,
-    lamb,
     charge_rescale_mask,
     lj_rescale_mask,
     beta,
     cutoff,
-    lambda_plane_idxs,
-    lambda_offset_idxs,
 ):
-    """See docstring of nonbonded_v3 for more details
+    """See docstring of `nonbonded` for more details
 
-    This is here just for testing purposes, to mimic the signature of nonbonded_v3 but to use
-    nonbonded_v3_on_specific_pairs under the hood.
+    This is here just for testing purposes, to mimic the signature of `nonbonded` but to use
+    `nonbonded_on_specific_pairs` under the hood.
     """
 
     N = conf.shape[0]
-
-    if conf.shape[-1] == 3:
-        conf = convert_to_4d(conf, lamb, lambda_plane_idxs, lambda_offset_idxs, cutoff)
-
-    # make 4th dimension of box large enough so its roughly aperiodic
-    if box is not None:
-        if box.shape[-1] == 3:
-            box_4d = jnp.eye(4) * 1000
-            box_4d = box_4d.at[:3, :3].set(box)
-        else:
-            box_4d = box
-    else:
-        box_4d = None
-    box = box_4d
 
     # TODO: len(pairs) == n_interactions -- may want to break this
     #   up into more manageable blocks if n_interactions is large
     pairs = get_all_pairs_indices(N)
 
-    lj, coulomb = nonbonded_v3_on_specific_pairs(conf, params, box, pairs, beta, cutoff)
+    lj, coulomb = nonbonded_on_specific_pairs(conf, params, box, pairs, beta, cutoff)
 
     # keep only eps > 0
     inds_i, inds_j = pairs.T
@@ -278,12 +235,12 @@ def _nonbonded_v3_clone(
 
 
 def run_randomized_tests_of_jax_nonbonded(instance_generator, n_instances=10):
-    """Assert that nonbonded_v3 and _nonbonded_v3 agree on several random instances
+    """Assert that `nonbonded` and `_nonbonded_clone` agree on several random instances
 
     instance_generator(n_atoms, dim) -> NonbondedArgs
     """
-    jittable_nonbonded_v3 = partial(nonbonded_v3, runtime_validate=False)
-    u_a, u_b = jit(jittable_nonbonded_v3), jit(_nonbonded_v3_clone)
+    jittable_nonbonded = partial(nonbonded, runtime_validate=False)
+    u_a, u_b = jit(jittable_nonbonded), jit(_nonbonded_clone)
 
     min_size, max_size = 10, 50
 
@@ -296,8 +253,8 @@ def run_randomized_tests_of_jax_nonbonded(instance_generator, n_instances=10):
 
 
 def test_jax_nonbonded_waterbox():
-    jittable_nonbonded_v3 = partial(nonbonded_v3, runtime_validate=False)
-    u_a, u_b = jit(jittable_nonbonded_v3), jit(_nonbonded_v3_clone)
+    jittable_nonbonded = partial(nonbonded, runtime_validate=False)
+    u_a, u_b = jit(jittable_nonbonded), jit(_nonbonded_clone)
     compare_two_potentials(u_a, u_b, generate_waterbox_nb_args())
 
 
@@ -312,12 +269,12 @@ def test_jax_nonbonded(n_instances=10):
 
 
 def test_vmap():
-    """Can call jit(vmap(nonbonded_v3_on_specific_pairs))"""
+    """Can call jit(vmap(nonbonded_on_specific_pairs))"""
 
     # # atoms in "ligand" vs. "environment"
     n_ligand, n_environment = 50, 1000
     n_total = n_ligand + n_environment
-    conf, params, box, lamb, _, _, beta, cutoff, _, _ = generate_random_inputs(n_total, 3)
+    conf, params, box, _, _, beta, cutoff = generate_random_inputs(n_total, 3)
 
     ligand_indices = np.arange(n_ligand)
     environment_indices = np.arange(n_environment) + n_ligand
@@ -328,7 +285,7 @@ def test_vmap():
     fixed_kwargs = dict(params=params, box=box, pairs=pairs, beta=beta, cutoff=cutoff)
 
     # signature: conf -> ljs, coulombs, where ljs.shape == (n_interactions, )
-    u_pairs = partial(nonbonded_v3_on_specific_pairs, **fixed_kwargs)
+    u_pairs = partial(nonbonded_on_specific_pairs, **fixed_kwargs)
     ljs, coulombs = u_pairs(conf)
     assert ljs.shape == (n_interactions,)
 
@@ -346,7 +303,8 @@ def test_vmap():
 
 def test_jax_nonbonded_block():
     """Assert that nonbonded_block and nonbonded_on_specific_pairs agree"""
-    system, positions, box, _ = builders.build_water_system(3.0)
+    ff = Forcefield.load_from_file(DEFAULT_FF)
+    system, positions, box, _ = builders.build_water_system(3.0, ff.water_ff)
     bps, masses = openmm_deserializer.deserialize_system(system, cutoff=1.2)
     nb = bps[-1]
     params = nb.params
@@ -372,7 +330,7 @@ def test_jax_nonbonded_block():
     pairs = jnp.array([indices_left, indices_right]).T
 
     def u_b(x, box, params):
-        vdw, es = nonbonded_v3_on_specific_pairs(x, params, box, pairs, beta, cutoff)
+        vdw, es = nonbonded_on_specific_pairs(x, params, box, pairs, beta, cutoff)
 
         return jnp.sum(vdw + es)
 
@@ -381,7 +339,8 @@ def test_jax_nonbonded_block():
 
 def test_precomputation():
     """Assert that nonbonded interaction groups using precomputation agree with reference nonbonded_on_specific_pairs"""
-    system, positions, box, _ = builders.build_water_system(3.0)
+    ff = Forcefield.load_from_file(DEFAULT_FF)
+    system, positions, box, _ = builders.build_water_system(3.0, ff.water_ff)
     bps, masses = openmm_deserializer.deserialize_system(system, cutoff=1.2)
     nb = bps[-1]
     params = nb.params
@@ -406,7 +365,7 @@ def test_precomputation():
 
     # reference version: nonbonded_on_specific_pairs
     def u_ref(x, box, params):
-        vdw, es = nonbonded_v3_on_specific_pairs(x, params, box, pairs, beta, cutoff)
+        vdw, es = nonbonded_on_specific_pairs(x, params, box, pairs, beta, cutoff)
         return jnp.sum(vdw + es)
 
     @jit
@@ -420,7 +379,7 @@ def test_precomputation():
         return vmap(f)(traj, boxes)
 
     # test version: with precomputation
-    charges, sigmas, epsilons = params.T
+    charges, sigmas, epsilons, _ = params.T
     eps_prefactors = lj_prefactors_on_traj(traj, boxes, sigmas, epsilons, ligand_idx, env_idx, cutoff)
     q_prefactors = coulomb_prefactors_on_traj(traj, boxes, charges, ligand_idx, env_idx, beta, cutoff)
 

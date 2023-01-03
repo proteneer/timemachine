@@ -23,27 +23,26 @@ public:
 
     virtual void step_fwd(
         std::vector<BoundPotential *> &bps,
-        double lamb,
         double *d_x_t,
         double *d_v_t,
         double *d_box_t_,
-        unsigned long long *d_du_dl,
+        unsigned int *d_idxs,
         cudaStream_t stream) override;
 
     virtual void initialize(
         std::vector<BoundPotential *> &bps,
-        double lamb,
         double *d_x_t,
         double *d_v_t,
         double *d_box_t,
+        unsigned int *d_idxs,
         cudaStream_t stream) override;
 
     virtual void finalize(
         std::vector<BoundPotential *> &bps,
-        double lamb,
         double *d_x_t,
         double *d_v_t,
         double *d_box_t,
+        unsigned int *d_idxs,
         cudaStream_t stream) override;
 };
 

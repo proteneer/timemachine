@@ -1,32 +1,21 @@
-import jax
-
-jax.config.update("jax_enable_x64", True)
-
+import jax.numpy as jnp
 import numpy as np
 import pytest
-from common import GradientTest
-from parameter_interpolation import gen_params
+from common import GradientTest, gen_nonbonded_params_with_4d_offsets
 
-from timemachine.lib.potentials import NonbondedInteractionGroup, NonbondedInteractionGroupInterpolated
-from timemachine.potentials import generic, jax_utils, nonbonded
+from timemachine.lib.potentials import NonbondedInteractionGroup
+from timemachine.potentials import generic
 
 pytestmark = [pytest.mark.memcheck]
 
 
 def test_nonbonded_interaction_group_invalid_indices():
-    def make_potential(ligand_idxs, num_atoms):
-        lambda_plane_idxs = [0] * num_atoms
-        lambda_offset_idxs = [0] * num_atoms
-        return NonbondedInteractionGroup(ligand_idxs, lambda_plane_idxs, lambda_offset_idxs, 1.0, 1.0).unbound_impl(
-            np.float64
-        )
-
     with pytest.raises(RuntimeError) as e:
-        make_potential([], 1)
+        NonbondedInteractionGroup(1, [], 1.0, 1.0).unbound_impl(np.float64)
     assert "row_atom_idxs must be nonempty" in str(e)
 
     with pytest.raises(RuntimeError) as e:
-        make_potential([1, 1], 3)
+        NonbondedInteractionGroup(3, [1, 1], 1.0, 1.0).unbound_impl(np.float64)
     assert "atom indices must be unique" in str(e)
 
 
@@ -34,7 +23,6 @@ def test_nonbonded_interaction_group_zero_interactions(rng: np.random.Generator)
     num_atoms = 33
     num_atoms_ligand = 15
     beta = 2.0
-    lamb = 0.1
     cutoff = 1.1
     box = 10.0 * np.eye(3)
     conf = rng.uniform(0, 1, size=(num_atoms, 3))
@@ -43,21 +31,14 @@ def test_nonbonded_interaction_group_zero_interactions(rng: np.random.Generator)
     # shift ligand atoms in x by twice the cutoff
     conf[ligand_idxs, 0] += 2 * cutoff
 
-    params = rng.uniform(0, 1, size=(num_atoms, 3))
+    params = rng.uniform(0, 1, size=(num_atoms, 4))
 
-    potential = NonbondedInteractionGroup(
-        ligand_idxs,
-        np.zeros(num_atoms, dtype=np.int32),
-        np.zeros(num_atoms, dtype=np.int32),
-        beta,
-        cutoff,
-    )
+    potential = NonbondedInteractionGroup(num_atoms, ligand_idxs, beta, cutoff)
 
-    du_dx, du_dp, du_dl, u = potential.unbound_impl(np.float64).execute(conf, params, box, lamb)
+    du_dx, du_dp, u = potential.unbound_impl(np.float64).execute(conf, params, box)
 
     assert (du_dx == 0).all()
     assert (du_dp == 0).all()
-    assert du_dl == 0
     assert u == 0
 
 
@@ -84,103 +65,15 @@ def test_nonbonded_interaction_group_correctness(
     conf = example_conf[:num_atoms]
     params = example_nonbonded_potential.params[:num_atoms, :]
 
-    lambda_plane_idxs = rng.integers(-2, 3, size=(num_atoms,), dtype=np.int32)
-    lambda_offset_idxs = rng.integers(-2, 3, size=(num_atoms,), dtype=np.int32)
-
     ligand_idxs = rng.choice(num_atoms, size=(num_atoms_ligand,), replace=False).astype(np.int32)
-    host_idxs = np.setdiff1d(np.arange(num_atoms), ligand_idxs)
 
-    def ref_ixngroups(conf, params, box, lamb):
+    potential = generic.NonbondedInteractionGroup(num_atoms, ligand_idxs, beta, cutoff)
 
-        # compute 4d coordinates
-        w = jax_utils.compute_lifting_parameter(lamb, lambda_plane_idxs, lambda_offset_idxs, cutoff)
-        conf_4d = jax_utils.augment_dim(conf, w)
-        box_4d = (1000 * jax.numpy.eye(4)).at[:3, :3].set(box)
-
-        vdW, electrostatics = nonbonded.nonbonded_v3_interaction_groups(
-            conf_4d, params, box_4d, ligand_idxs, host_idxs, beta, cutoff
-        )
-        return jax.numpy.sum(vdW + electrostatics)
-
-    test_ixngroups = NonbondedInteractionGroup(
-        ligand_idxs,
-        lambda_plane_idxs,
-        lambda_offset_idxs,
-        beta,
-        cutoff,
-    )
-    lambda_vals = [0.0, 0.1]
-    GradientTest().compare_forces(
+    GradientTest().compare_forces_gpu_vs_reference(
         conf,
-        params,
+        gen_nonbonded_params_with_4d_offsets(rng, params, cutoff),
         example_box,
-        lambda_vals,
-        ref_potential=ref_ixngroups,
-        test_potential=test_ixngroups,
-        rtol=rtol,
-        atol=atol,
-        precision=precision,
-    )
-
-
-@pytest.mark.parametrize("beta", [2.0])
-@pytest.mark.parametrize("cutoff", [1.1])
-@pytest.mark.parametrize("precision,rtol,atol", [(np.float64, 1e-8, 1e-8), (np.float32, 1e-4, 5e-4)])
-@pytest.mark.parametrize("num_atoms_ligand", [1, 15])
-@pytest.mark.parametrize("num_atoms", [33])
-def test_nonbonded_interaction_group_interpolated_correctness(
-    num_atoms,
-    num_atoms_ligand,
-    precision,
-    rtol,
-    atol,
-    cutoff,
-    beta,
-    example_nonbonded_potential,
-    example_conf,
-    example_box,
-    rng,
-):
-    "Compares with jax reference implementation, with parameter interpolation."
-
-    conf = example_conf[:num_atoms]
-    params_initial = example_nonbonded_potential.params[:num_atoms, :]
-    params = gen_params(params_initial, rng)
-
-    lambda_plane_idxs = rng.integers(-2, 3, size=(num_atoms,), dtype=np.int32)
-    lambda_offset_idxs = rng.integers(-2, 3, size=(num_atoms,), dtype=np.int32)
-
-    ligand_idxs = rng.choice(num_atoms, size=(num_atoms_ligand,), replace=False).astype(np.int32)
-    host_idxs = np.setdiff1d(np.arange(num_atoms), ligand_idxs)
-
-    @nonbonded.interpolated
-    def ref_ixngroups(conf, params, box, lamb):
-
-        # compute 4d coordinates
-        w = jax_utils.compute_lifting_parameter(lamb, lambda_plane_idxs, lambda_offset_idxs, cutoff)
-        conf_4d = jax_utils.augment_dim(conf, w)
-        box_4d = (1000 * jax.numpy.eye(4)).at[:3, :3].set(box)
-
-        vdW, electrostatics = nonbonded.nonbonded_v3_interaction_groups(
-            conf_4d, params, box_4d, ligand_idxs, host_idxs, beta, cutoff
-        )
-        return jax.numpy.sum(vdW + electrostatics)
-
-    test_ixngroups = NonbondedInteractionGroupInterpolated(
-        ligand_idxs,
-        lambda_plane_idxs,
-        lambda_offset_idxs,
-        beta,
-        cutoff,
-    )
-    lambda_vals = [0.0, 0.1, 0.9, 1.0]
-    GradientTest().compare_forces(
-        conf,
-        params,
-        example_box,
-        lambda_vals,
-        ref_potential=ref_ixngroups,
-        test_potential=test_ixngroups,
+        potential,
         rtol=rtol,
         atol=atol,
         precision=precision,
@@ -192,7 +85,7 @@ def test_nonbonded_interaction_group_interpolated_correctness(
 @pytest.mark.parametrize("precision,rtol,atol", [(np.float64, 1e-8, 1e-8), (np.float32, 1e-4, 5e-4)])
 @pytest.mark.parametrize("num_atoms_ligand", [1, 15])
 @pytest.mark.parametrize("num_atoms", [33, 231, 1050])
-def test_nonbonded_interaction_group_consistency_allpairs_lambda_planes(
+def test_nonbonded_interaction_group_consistency_allpairs_4d_decoupled(
     num_atoms,
     num_atoms_ligand,
     precision,
@@ -205,68 +98,57 @@ def test_nonbonded_interaction_group_consistency_allpairs_lambda_planes(
     example_box,
     rng: np.random.Generator,
 ):
-    """Compares with reference nonbonded_v3 potential, which computes
-    the sum of all pairwise interactions. This uses the identity
+    """Compares with reference nonbonded potential, which computes the sum of
+    all pairwise interactions. This uses the identity
 
       U = U_A + U_B + U_AB
 
     where
-    - U is the all-pairs potential over all atoms
-    - U_A, U_B are all-pairs potentials for interacting groups A and
+    * U is the all-pairs potential over all atoms
+    * U_A, U_B are all-pairs potentials for interacting groups A and
       B, respectively
-    - U_AB is the "interaction group" potential, i.e. the sum of
+    * U_AB is the "interaction group" potential, i.e. the sum of
       pairwise interactions (a, b) where "a" is in A and "b" is in B
 
-    U is computed using the reference potential over all atoms, and
-    U_A + U_B computed using the reference potential over all atoms
-    separated into 2 lambda planes according to which interacting
-    group they belong
+    * U is computed using the reference potential over all atoms
+    * U_A + U_B is computed using the reference potential over all atoms,
+      separated into 2 noninteracting groups in the 4th dimension
     """
 
     conf = example_conf[:num_atoms]
     params = example_nonbonded_potential.params[:num_atoms, :]
 
-    max_abs_offset_idx = 2  # i.e., lambda_offset_idxs in {-2, -1, 0, 1, 2}
-    lambda_offset_idxs = rng.integers(-max_abs_offset_idx, max_abs_offset_idx + 1, size=(num_atoms,), dtype=np.int32)
-
-    def make_reference_nonbonded(lambda_plane_idxs):
-        return generic.Nonbonded(
-            exclusion_idxs=np.array([], dtype=np.int32),
-            scale_factors=np.zeros((0, 2), dtype=np.float64),
-            lambda_plane_idxs=lambda_plane_idxs,
-            lambda_offset_idxs=lambda_offset_idxs,
-            beta=beta,
-            cutoff=cutoff,
-        ).to_reference()
-
-    ref_allpairs = make_reference_nonbonded(np.zeros(num_atoms, dtype=np.int32))
+    ref_allpairs = generic.Nonbonded(
+        num_atoms,
+        exclusion_idxs=np.array([], dtype=np.int32),
+        scale_factors=np.zeros((0, 2), dtype=np.float64),
+        beta=beta,
+        cutoff=cutoff,
+    ).to_reference()
 
     ligand_idxs = rng.choice(num_atoms, size=(num_atoms_ligand,), replace=False).astype(np.int32)
 
-    # for reference U_A + U_B computation, ensure minimum distance
-    # between a host and ligand atom is at least one cutoff distance
-    # when lambda = 1
-    lambda_plane_idxs = np.zeros(num_atoms, dtype=np.int32)
-    lambda_plane_idxs[ligand_idxs] = 2 * max_abs_offset_idx + 1
+    def make_ref_ixngroups():
+        w_offsets = np.zeros(num_atoms)
 
-    ref_allpairs_minus_ixngroups = make_reference_nonbonded(lambda_plane_idxs)
+        # ensure minimum distance between a host and ligand atom is >= cutoff
+        # i.e. (w - cutoff) - cutoff > cutoff => w > 3 * cutoff
+        w_offsets[ligand_idxs] = 3.01 * cutoff
 
-    def ref_ixngroups(*args):
-        return ref_allpairs(*args) - ref_allpairs_minus_ixngroups(*args)
+        def ref_ixngroups(coords, params, box):
+            U = ref_allpairs(coords, params, box)
+            UA_plus_UB = ref_allpairs(coords, jnp.asarray(params).at[:, 3].add(w_offsets), box)
+            return U - UA_plus_UB
 
-    test_ixngroups = NonbondedInteractionGroup(
-        ligand_idxs,
-        np.zeros(num_atoms, dtype=np.int32),  # lambda plane indices
-        lambda_offset_idxs,
-        beta,
-        cutoff,
-    )
-    lambda_vals = [0.0, 0.1]
+        return ref_ixngroups
+
+    ref_ixngroups = make_ref_ixngroups()
+    test_ixngroups = NonbondedInteractionGroup(num_atoms, ligand_idxs, beta, cutoff)
+
     GradientTest().compare_forces(
         conf,
-        params,
+        gen_nonbonded_params_with_4d_offsets(rng, params, cutoff),
         example_box,
-        lambda_vals,
         ref_potential=ref_ixngroups,
         test_potential=test_ixngroups,
         rtol=rtol,
@@ -293,57 +175,47 @@ def test_nonbonded_interaction_group_consistency_allpairs_constant_shift(
     example_box,
     rng: np.random.Generator,
 ):
-    """Compares with reference nonbonded_v3 potential, which computes
-    the sum of all pairwise interactions. This uses the identity
+    """Compares with reference nonbonded potential, which computes the sum of
+    all pairwise interactions. This uses the identity
 
       U(x') - U(x) = U_AB(x') - U_AB(x)
 
     where
-    - U is the all-pairs potential over all atoms
-    - U_A, U_B are all-pairs potentials for interacting groups A and
+    * U is the all-pairs potential over all atoms
+    * U_A, U_B are all-pairs potentials for interacting groups A and
       B, respectively
-    - U_AB is the "interaction group" potential, i.e. the sum of
+    * U_AB is the "interaction group" potential, i.e. the sum of
       pairwise interactions (a, b) where "a" is in A and "b" is in B
-    - the transformation x -> x' does not affect U_A or U_B (e.g. a
+    * the transformation x -> x' does not affect U_A or U_B (e.g. a
       constant translation applied to each atom in one group)
     """
 
     conf = example_conf[:num_atoms]
     params = example_nonbonded_potential.params[:num_atoms, :]
 
-    lambda_plane_idxs = rng.integers(-2, 3, size=(num_atoms,), dtype=np.int32)
-    lambda_offset_idxs = rng.integers(-2, 3, size=(num_atoms,), dtype=np.int32)
-
-    def ref_allpairs(conf, lamb):
+    def ref_allpairs(conf):
         U_ref = generic.Nonbonded(
+            num_atoms,
             exclusion_idxs=np.array([], dtype=np.int32),
             scale_factors=np.zeros((0, 2), dtype=np.float64),
-            lambda_plane_idxs=lambda_plane_idxs,
-            lambda_offset_idxs=lambda_offset_idxs,
             beta=beta,
             cutoff=cutoff,
         ).to_reference()
 
-        return U_ref(conf, params, example_box, lamb)
+        return U_ref(conf, params, example_box)
 
     ligand_idxs = rng.choice(num_atoms, size=(num_atoms_ligand,), replace=False).astype(np.int32)
 
-    test_impl = NonbondedInteractionGroup(
-        ligand_idxs,
-        lambda_plane_idxs,
-        lambda_offset_idxs,
-        beta,
-        cutoff,
-    ).unbound_impl(precision)
+    test_impl = NonbondedInteractionGroup(num_atoms, ligand_idxs, beta, cutoff).unbound_impl(precision)
 
-    def test_ixngroups(conf, lamb):
-        _, _, _, u = test_impl.execute(conf, params, example_box, lamb)
+    def test_ixngroups(conf):
+        _, _, u = test_impl.execute(conf, params, example_box)
         return u
 
     conf_prime = np.array(conf)
     conf_prime[ligand_idxs] += rng.normal(0, 0.01, size=(3,))
 
-    for lam in [0.0, 0.1]:
-        ref_delta = ref_allpairs(conf_prime, lam) - ref_allpairs(conf, lam)
-        test_delta = test_ixngroups(conf_prime, lam) - test_ixngroups(conf, lam)
+    for params in gen_nonbonded_params_with_4d_offsets(rng, params, cutoff):
+        ref_delta = ref_allpairs(conf_prime) - ref_allpairs(conf)
+        test_delta = test_ixngroups(conf_prime) - test_ixngroups(conf)
         np.testing.assert_allclose(ref_delta, test_delta, rtol=rtol, atol=atol)

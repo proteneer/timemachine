@@ -1,188 +1,477 @@
-from copy import deepcopy
-from typing import Optional, Tuple
+from collections import defaultdict
 
+import networkx as nx
 import numpy as np
-from numpy.typing import NDArray
 from rdkit import Chem
-from rdkit.Chem import rdFMCS
 
-from timemachine.constants import DEFAULT_FF
-from timemachine.fe.topology import AtomMappingError
-from timemachine.fe.utils import set_romol_conf
-from timemachine.ff import Forcefield
-from timemachine.md.align import align_mols_by_core
+from timemachine.fe import mcgregor
+from timemachine.fe.chiral_utils import ChiralRestrIdxSet, has_chiral_atom_flips
+from timemachine.fe.utils import get_romol_bonds, get_romol_conf
+
+# (ytz): Just like how one should never re-write an MD engine, one should never rewrite an MCS library.
+# Unless you have to. And now we have to. If you want to understand what this code is doing, it
+# is strongly recommended that the reader reads:
+
+# Backtrack search algorithms and the maximal common subgraph problem
+# James J McGregor,  January 1982, https://doi.org/10.1002/spe.4380120103
+
+# Theoretical Tricks
+# ------------------
+# Historically, MCS methods have relied on finding the largest core as soon as possible. However, this can pose difficulties
+# since we may get stuck in a local region of poor quality (that end up having far smaller than the optimal). Our algorithm
+# has several clever tricks up its sleeve in that we:
+
+# - designed the method for free energy methods where the provided two molecules are aligned.
+# - refine the row/cols of marcs (edge-edge mapping matrix) when a new atom-atom mapping is proposed
+# - prune by looking at maximum number of row edges and column edges, i.e. arcs_left min(max_row_edges, max_col_edges)
+# - only generate an atom-mapping between two mols, whereas RDKit generates a common substructure between N mols
+# - operate on anonymous graphs whose atom-atom compatibility depends on a predicates matrix, such that a 1 is when
+#   if atom i in mol_a is compatible with atom j in mol_b, and 0 otherwise. We do not implement a bond-bond compatibility matrix.
+# - allow for the generation of disconnected atom-mappings, which is very useful for linker changes etc.
+# - re-order the vertices in graph based on the degree, this penalizes None mapping by the degree of the vertex
+# - provide a hard guarantee for timeout, i.e. completion of the algorithm implies global optimum(s) have been found
+# - when searching for atoms in mol_b to map, we prioritize based on distance
+# - runs the recursive algorithm in iterations with thresholds, which avoids us getting stuck in a branch with a low
+#   max_num_edges. we've seen cases where we get stuck in an edge size of 45 but optimal edge mapping has 52 edges.
+# - termination guarantees correctness. otherwise an assertion is thrown since the distance (in terms of # of edges mapped)
+#   is unknown relative to optimal.
+
+# Engineering Tricks
+# ------------------
+# This is entirely written in python, which lends to its ease of use and modifiability. The following optimizations were
+# implemented (without changing the number of nodes visited):
+# - multiple representations of graph structures to improve efficiency
+# - refinement of marcs matrix is done on uint8 arrays
 
 
-def mcs(a, b, threshold: float = 2.0, timeout: int = 5, smarts: Optional[str] = None, conformer_aware=True, retry=True):
-    """Find maximum common substructure between mols a and b
-    using reasonable settings for single topology:
-    * disallow partial ring matches
-    * disregard element identity and valence
-
-    if conformer_aware=True, only match atoms within distance threshold
-        (assumes conformers are aligned)
-
-    if retry=True, then reseed with result of easier MCS(RemoveHs(a), RemoveHs(b)) in case of failure
+def get_cores(
+    mol_a,
+    mol_b,
+    ring_cutoff,
+    chain_cutoff,
+    max_visits,
+    connected_core,
+    max_cores,
+    enforce_core_core,
+    complete_rings,
+    enforce_chiral,
+):
     """
-    params = rdFMCS.MCSParameters()
+    Finds set of cores between two molecules that maximizes the number of common edges.
 
-    # bonds
-    params.BondCompareParameters.CompleteRingsOnly = 1
-    params.BondCompareParameters.RingMatchesRingOnly = 1
-    params.BondTyper = rdFMCS.BondCompare.CompareAny
+    If either atom i or atom j is in a ring then the dist(i,j) < ring_cutoff, otherwise dist(i,j) < chain_cutoff
 
-    # atoms
-    params.AtomCompareParameters.CompleteRingsOnly = 1
-    params.AtomCompareParameters.RingMatchesRingOnly = 1
-    params.AtomCompareParameters.matchValences = 0
-    params.AtomCompareParameters.MatchChiralTag = 0
-    if conformer_aware:
-        params.AtomCompareParameters.MaxDistance = threshold
-    params.AtomTyper = rdFMCS.AtomCompare.CompareAny
-
-    # globals
-    params.Timeout = timeout
-    if smarts is not None:
-        params.InitialSeed = smarts
-
-    # try on given mols
-    result = rdFMCS.FindMCS([a, b], params)
-
-    # optional fallback
-    def is_trivial(mcs_result) -> bool:
-        return mcs_result.numBonds < 2
-
-    if retry and is_trivial(result) and smarts is None:
-        # try again, but seed with MCS computed without explicit hydrogens
-        a_without_hs = Chem.RemoveHs(deepcopy(a))
-        b_without_hs = Chem.RemoveHs(deepcopy(b))
-
-        heavy_atom_result = rdFMCS.FindMCS([a_without_hs, b_without_hs], params)
-        params.InitialSeed = heavy_atom_result.smartsString
-
-        result = rdFMCS.FindMCS([a, b], params)
-
-    if is_trivial(result):
-        message = f"""MCS result trivial!
-            timed out: {result.canceled}
-            # atoms in MCS: {result.numAtoms}
-            # bonds in MCS: {result.numBonds}
-        """
-        raise AtomMappingError(message)
-
-    return result
-
-
-def get_core_by_mcs(mol_a, mol_b, query, threshold=0.5):
-    """Return np integer array that can be passed to RelativeFreeEnergy constructor
+    Additional notes
+    ----------------
+    1) The returned cores are sorted in increasing order based on the rmsd of the alignment.
+    2) The number of cores atoms may vary slightly, but the number of mapped edges are the same.
+    3) If a time-out has occured due to max_visits, then an exception is thrown.
 
     Parameters
     ----------
-    mol_a, mol_b, query : RDKit molecules
-    threshold : float, in angstroms
+    mol_a: Chem.Mol
+        Input molecule a. Must have a conformation.
+
+    mol_b: Chem.Mol
+        Input molecule b. Must have a conformation.
+
+    ring_cutoff: float
+        The distance cutoff that ring atoms must satisfy.
+
+    chain_cutoff: float
+        The distance cutoff that non-ring atoms must satisfy.
+
+    max_visits: int
+        Maximum number of nodes we can visit for a given threshold.
+
+    connected_core: bool
+        Set to True to only keep the largest connected
+        subgraph in the mapping. The definition of connected
+        here is different from McGregor. Here it means there
+        is a way to reach the mapped atom without traversing
+        over a non-mapped atom.
+
+    max_cores: int or float
+        maximum number of maximal cores to store, this can be an +np.inf if you want
+        every core - when set to 1 this enables a faster predicate that allows for more pruning.
+
+    enforce_core_core: bool
+        If we allow core-core bonds to be broken. This may be deprecated later on.
+
+    complete_rings: bool
+        If we require mapped atoms that are in a ring to be complete.
+        If True then connected_core must also be True.
+
+    enforce_chiral: bool
+        Filter out cores that would flip atom chirality
 
     Returns
     -------
-    core : np.ndarray of ints, shape (n_MCS, 2)
+    Returns a list of all_cores
 
-    Notes
-    -----
-    * Warning! Some atoms that intuitively should be mapped together are not,
-        when threshold=0.5 Å in custom atom comparison, because conformers aren't
-        quite aligned enough.
-    * Warning! Because of the intermediate representation of a substructure query,
-        the core indices can get flipped around,
-        for example if the substructure match hits only part of an aromatic ring.
-
-        In some cases, this means that pairs of atoms that do not satisfy the
-        atom comparison function can be mapped together.
     """
 
-    # fetch conformer, assumed aligned
-    conf_a = mol_a.GetConformer(0).GetPositions()
-    conf_b = mol_b.GetConformer(0).GetPositions()
+    assert max_cores > 0
 
-    # note that >1 match possible here -- must pick minimum-cost match
-    matches_a = mol_a.GetSubstructMatches(query, uniquify=False)
-    matches_b = mol_b.GetSubstructMatches(query, uniquify=False)
+    core_kwargs = dict(
+        ring_cutoff=ring_cutoff,
+        chain_cutoff=chain_cutoff,
+        max_visits=max_visits,
+        connected_core=connected_core,
+        max_cores=max_cores,
+        enforce_core_core=enforce_core_core,
+        complete_rings=complete_rings,
+        enforce_chiral=enforce_chiral,
+    )
 
-    cost = np.zeros((len(matches_a), len(matches_b)))
-    for i, a in enumerate(matches_a):
-        for j, b in enumerate(matches_b):
-            # if a single pair is outside of threshold, we set the cost to inf
-            dij = np.linalg.norm(conf_a[np.array(a)] - conf_b[np.array(b)], axis=1)
-            cost[i, j] = np.sum(np.where(dij < threshold, dij, +np.inf))
-
-    # find (i,j) = argmin cost
-    min_i, min_j = np.unravel_index(np.argmin(cost, axis=None), cost.shape)
-
-    # concatenate into (n_atoms, 2) array
-    inds_a, inds_b = matches_a[min_i], matches_b[min_j]
-    core = np.array([inds_a, inds_b]).T
-
-    if np.isinf(cost[min_i, min_j]):
-        raise AtomMappingError(f"not all mapped atoms are within {threshold:.3f}Å of each other")
-
-    return core
+    # we require that mol_a.GetNumAtoms() <= mol_b.GetNumAtoms()
+    if mol_a.GetNumAtoms() > mol_b.GetNumAtoms():
+        all_cores = _get_cores_impl(mol_b, mol_a, **core_kwargs)
+        new_cores = []
+        for core in all_cores:
+            core = np.array([(x[1], x[0]) for x in core], dtype=core.dtype)
+            new_cores.append(core)
+        return new_cores
+    else:
+        all_cores = _get_cores_impl(mol_a, mol_b, **core_kwargs)
+        return all_cores
 
 
-def get_core_with_alignment(
-    mol_a: Chem.Mol,
-    mol_b: Chem.Mol,
-    threshold: float = 2.0,
-    n_steps: int = 200,
-    k: float = 10000,
-    ff: Optional[Forcefield] = None,
-) -> Tuple[NDArray, str]:
-    """Selects a core between two molecules, by finding an initial core then aligning based on the core.
+def bfs(g, atom):
+    depth = 0
+    cur_layer = [atom]
+    levels = {}
+    while len(levels) != g.GetNumAtoms():
+        next_layer = []
+        for layer_atom in cur_layer:
+            levels[layer_atom.GetIdx()] = depth
+            for nb_atom in layer_atom.GetNeighbors():
+                if nb_atom.GetIdx() not in levels:
+                    next_layer.append(nb_atom)
+        cur_layer = next_layer
+        depth += 1
+    levels_array = [-1] * g.GetNumAtoms()
+    for i, l in levels.items():
+        levels_array[i] = l
+    return levels_array
 
-    Parameters
-    ----------
-    mol_a: RDKit Mol
 
-    mol_b: RDKit Mol
+def reorder_atoms_by_degree(mol):
+    degrees = [len(a.GetNeighbors()) for a in mol.GetAtoms()]
+    perm = np.argsort(degrees, kind="stable")[::-1]
+    new_mol = Chem.RenumberAtoms(mol, perm.tolist())
+    return new_mol, perm
 
-    threshold: float
-        Threshold between atoms in angstroms
 
-    n_steps: float
-        number of steps to run for alignment
+def find_cycles(g: nx.Graph):
+    # return the indices of nxg that are in a cycle
+    # 1) find and remove bridges
+    # 2) if atom has > 1 neighbor then it is in a cycle.
+    edges = nx.bridges(g)
+    for e in edges:
+        g.remove_edge(*e)
+    cycle_dict = {}
+    for node in g.nodes:
+        # print(list(g[node]))
+        cycle_dict[node] = len(list(g.neighbors(node))) > 0
+    return cycle_dict
 
-    ff: Forcefield or None
-        Forcefield to use for alignment, defaults to DEFAULT_FF forcefield if None
 
-    Returns
-    -------
-    core : np.ndarray of ints, shape (n_MCS, 2)
-    smarts: SMARTS string used to find core
+def get_edges(mol):
+    return [(bond.GetBeginAtomIdx(), bond.GetEndAtomIdx()) for bond in mol.GetBonds()]
 
-    Notes
-    -----
-    * Warning! The initial core can contain an incorrect mapping, in that case the
-        core returned will be the same as running mcs followed by get_core_by_mcs.
+
+def induce_mol_subgraph(mol_a, core_a, bond_core_a):
+    sg_a = nx.Graph()
+    for a in core_a:
+        sg_a.add_node(a)
+    for e1 in bond_core_a:
+        sg_a.add_edge(*e1)
+    return sg_a
+
+
+def _to_networkx_graph(mol):
+    g = nx.Graph()
+    for atom in mol.GetAtoms():
+        g.add_node(atom.GetIdx())
+
+    for bond in mol.GetBonds():
+        src, dst = bond.GetBeginAtomIdx(), bond.GetEndAtomIdx()
+        g.add_edge(src, dst)
+    return g
+
+
+def _remove_incomplete_rings(mol_a, mol_b, core, bond_core):
+
+    # to networkx
+    g_a, g_b = _to_networkx_graph(mol_a), _to_networkx_graph(mol_b)
+    sg_a = induce_mol_subgraph(mol_a, core[:, 0], list(bond_core.keys()))
+    sg_b = induce_mol_subgraph(mol_b, core[:, 1], list(bond_core.values()))
+
+    a_cycles = find_cycles(g_a)
+    b_cycles = find_cycles(g_b)
+    sg_a_cycles = find_cycles(sg_a)
+    sg_b_cycles = find_cycles(sg_b)
+
+    new_core = []
+
+    for a, b in core:
+        pred_sgg_a = a_cycles[a] == sg_a_cycles[a]
+        pred_sgg_b = b_cycles[b] == sg_b_cycles[b]
+        # a and b are consistent
+        pred_sg_ab = sg_a_cycles[a] == sg_b_cycles[b]
+        pred_g_ab = a_cycles[a] == b_cycles[b]
+        # all four have to be consistent
+        if pred_sgg_a and pred_sgg_b and pred_sg_ab and pred_g_ab:
+            new_core.append([a, b])
+
+    final_core = np.array(new_core)
+    final_bond_core = update_bond_core(final_core, bond_core)
+    return final_core, final_bond_core
+
+
+def remove_incomplete_rings(mol_a, mol_b, all_cores, all_bond_cores):
+    new_cores = []
+    new_bond_cores = []
+    for cores, bond_cores in zip(all_cores, all_bond_cores):
+        nc, nbc = _remove_incomplete_rings(mol_a, mol_b, cores, bond_cores)
+        new_cores.append(nc)
+        new_bond_cores.append(nbc)
+    return new_cores, new_bond_cores
+
+
+def _compute_bond_cores(mol_a, mol_b, marcs):
+    a_edges = get_edges(mol_a)
+    b_edges = get_edges(mol_b)
+    bond_core = {}
+    for e_a in range(len(a_edges)):
+        src_a, dst_a = a_edges[e_a]
+        for e_b in range(len(b_edges)):
+            src_b, dst_b = b_edges[e_b]
+            if marcs[e_a][e_b]:
+                assert (src_a, dst_a) not in bond_core
+                assert (dst_a, src_a) not in bond_core
+                bond_core[(src_a, dst_a)] = (src_b, dst_b)
+    return bond_core
+
+
+def _uniquify_core(core):
+    core_list = []
+    for a, b in core:
+        core_list.append((a, b))
+    return frozenset(core_list)
+
+
+def _deduplicate_all_cores(all_cores):
+    unique_cores = {}
+    for core in all_cores:
+        # Be careful with the unique core here, list -> set -> list is not consistent
+        # across versions of python, use the frozen as as the key, but return the untouched
+        # cores
+        unique_cores[_uniquify_core(core)] = core
+
+    return [np.array(core) for core in unique_cores.values()]
+
+
+def _get_cores_impl(
+    mol_a,
+    mol_b,
+    ring_cutoff,
+    chain_cutoff,
+    max_visits,
+    connected_core,
+    max_cores,
+    enforce_core_core,
+    complete_rings,
+    enforce_chiral,
+):
+    mol_a, perm = reorder_atoms_by_degree(mol_a)  # UNINVERT
+
+    bonds_a = get_romol_bonds(mol_a)
+    bonds_b = get_romol_bonds(mol_b)
+    conf_a = get_romol_conf(mol_a)
+    conf_b = get_romol_conf(mol_b)
+
+    priority_idxs = []  # ordered list of atoms to consider
+
+    # setup co-domain for each atom in mol_a
+    for idx, a_xyz in enumerate(conf_a):
+        atom_i = mol_a.GetAtomWithIdx(idx)
+        dijs = []
+
+        allowed_idxs = set()
+        for jdx, b_xyz in enumerate(conf_b):
+            atom_j = mol_b.GetAtomWithIdx(jdx)
+            dij = np.linalg.norm(a_xyz - b_xyz)
+            dijs.append(dij)
+            if atom_i.IsInRing() or atom_j.IsInRing():
+                if dij < ring_cutoff:
+                    allowed_idxs.add(jdx)
+            else:
+                if dij < chain_cutoff:
+                    allowed_idxs.add(jdx)
+
+        final_idxs = []
+        for idx in np.argsort(dijs, kind="stable"):
+            if idx in allowed_idxs:
+                final_idxs.append(idx)
+
+        priority_idxs.append(final_idxs)
+
+    n_a = len(conf_a)
+    n_b = len(conf_b)
+
+    chiral_set_a = ChiralRestrIdxSet.from_mol(mol_a, conf_a)
+    chiral_set_b = ChiralRestrIdxSet.from_mol(mol_b, conf_b)
+
+    def chiral_filter(trial_core):
+        # TODO: avoid conversion
+        np_core = np.array([(i, trial_core[i]) for i in range(len(trial_core)) if trial_core[i] != -1])
+        passed = not has_chiral_atom_flips(np_core, chiral_set_a, chiral_set_b)
+        return passed
+
+    if enforce_chiral:
+        filter_fxn = chiral_filter
+    else:
+        filter_fxn = lambda core: True
+
+    all_cores, all_marcs = mcgregor.mcs(
+        n_a,
+        n_b,
+        priority_idxs,
+        bonds_a,
+        bonds_b,
+        max_visits,
+        max_cores,
+        enforce_core_core,
+        filter_fxn=filter_fxn,
+    )
+
+    all_bond_cores = [_compute_bond_cores(mol_a, mol_b, marcs) for marcs in all_marcs]
+
+    if connected_core and complete_rings:
+        # 1) remove any disconnected components or lone atoms in the mapping
+        # so disconnected regions are not considered as part of the incomplete rings check.
+        # 2) remove any incomplete rings
+        # 3) remove any disconnections created by removing the incomplete rings.
+        all_cores, all_bond_cores = remove_disconnected_components(mol_a, mol_b, all_cores, all_bond_cores)
+        all_cores, all_bond_cores = remove_incomplete_rings(mol_a, mol_b, all_cores, all_bond_cores)
+        all_cores, all_bond_cores = remove_disconnected_components(mol_a, mol_b, all_cores, all_bond_cores)
+    elif connected_core and not complete_rings:
+        all_cores, all_bond_cores = remove_disconnected_components(mol_a, mol_b, all_cores, all_bond_cores)
+    elif not connected_core and complete_rings:
+        all_cores, all_bond_cores = remove_incomplete_rings(mol_a, mol_b, all_cores, all_bond_cores)
+
+    all_cores = remove_cores_smaller_than_largest(all_cores)
+    all_cores = _deduplicate_all_cores(all_cores)
+
+    dists = []
+    for core in all_cores:
+        r_i = conf_a[core[:, 0]]
+        r_j = conf_b[core[:, 1]]
+        r2_ij = np.sum(np.power(r_i - r_j, 2))
+        rmsd = np.sqrt(r2_ij / len(core))
+        dists.append(rmsd)
+
+    sorted_cores = []
+    for p in np.argsort(dists, kind="stable"):
+        sorted_cores.append(all_cores[p])
+
+    # undo the sort
+    for core in sorted_cores:
+        inv_core = []
+        for atom in core[:, 0]:
+            inv_core.append(perm[atom])
+        core[:, 0] = inv_core
+
+    return sorted_cores
+
+
+# maintainer: jkaus
+def remove_disconnected_components(mol_a, mol_b, all_cores, all_bond_cores):
     """
-    # Copy mols so that when we change coordinates doesn't corrupt inputs
-    a_copy = deepcopy(mol_a)
-    b_copy = deepcopy(mol_b)
+    This will remove all but the largest connected component from each core map.
+    Even if two adjacent atoms are both mapped, their bond may not be present in
+    bond_cores, indicating a disconnection. This will iteratively remove the smaller
+    components from each mapping, until both molecules have only a single
+    connected component in their maps.
+    """
+    filtered_cores = []
+    filtered_bond_cores = []
+    for core, bond_core in zip(all_cores, all_bond_cores):
+        new_core = core
+        new_bond_core = bond_core
+        # Need to run it once through even if fully connected
+        # to remove stray atoms that are not included in the bond_core
+        first = True
+        while True:
+            core_a = list(new_core[:, 0])
+            core_b = list(new_core[:, 1])
 
-    if ff is None:
-        ff = Forcefield.load_from_file(DEFAULT_FF)
+            g_mol_a = nx.Graph()
+            g_mol_b = nx.Graph()
+            for bond_a, bond_b in new_bond_core.items():
+                g_mol_a.add_edge(*bond_a)
+                g_mol_b.add_edge(*bond_b)
 
-    # Remove hydrogens
-    a_without_hs = Chem.RemoveHs(deepcopy(a_copy))
-    b_without_hs = Chem.RemoveHs(deepcopy(b_copy))
+            cc_a = list(nx.connected_components(g_mol_a))
+            cc_b = list(nx.connected_components(g_mol_b))
 
-    def setup_core(mol_a, mol_b):
-        result = mcs(mol_a, mol_b, threshold=threshold)
-        query_mol = Chem.MolFromSmarts(result.smartsString)
-        core = get_core_by_mcs(mol_a, mol_b, query_mol, threshold=threshold)
-        return core, result.smartsString
+            # stop when the core is fully connected
+            if not first and len(cc_a) == 1 and len(cc_b) == 1:
+                break
+            # No atoms left to map
+            elif len(cc_a) == 0 or len(cc_b) == 0:
+                new_core = []
+                break
 
-    heavy_atom_core, _ = setup_core(a_without_hs, b_without_hs)
+            largest_cc_a = max(cc_a, key=len)
+            largest_cc_b = max(cc_b, key=len)
 
-    conf_a, conf_b = align_mols_by_core(mol_a, mol_b, heavy_atom_core, ff, n_steps=n_steps, k=k)
-    set_romol_conf(a_copy, conf_a)
-    set_romol_conf(b_copy, conf_b)
+            new_core_idxs = []
+            if len(largest_cc_a) < len(largest_cc_b):
+                # mol_a has the smaller cc
+                for atom_idx in largest_cc_a:
+                    core_idx = core_a.index(atom_idx)
+                    new_core_idxs.append(core_idx)
+            else:
+                # mol_b has the smaller cc
+                for atom_idx in largest_cc_b:
+                    core_idx = core_b.index(atom_idx)
+                    new_core_idxs.append(core_idx)
 
-    core, smarts = setup_core(a_copy, b_copy)
-    return core, smarts
+            new_core = new_core[new_core_idxs]
+            new_bond_core = update_bond_core(new_core, new_bond_core)
+            first = False
+
+        if len(new_core) == 0:
+            continue
+        filtered_cores.append(new_core)
+        filtered_bond_cores.append(new_bond_core)
+
+    return filtered_cores, filtered_bond_cores
+
+
+def remove_cores_smaller_than_largest(cores):
+    """measured by # mapped atoms"""
+    cores_by_size = defaultdict(list)
+    for core in cores:
+        cores_by_size[len(core)].append(core)
+
+    # Return the largest core(s)
+    max_core_size = max(cores_by_size.keys())
+    return cores_by_size[max_core_size]
+
+
+def update_bond_core(core, bond_core):
+    """
+    bond_core: dictionary mapping atoms (i,j) of mol a
+    to (k, l) of mol b.
+    """
+    new_bond_core = {}
+    core_a = list(core[:, 0])
+    core_b = list(core[:, 1])
+    for bond_a, bond_b in bond_core.items():
+        if bond_a[0] in core_a and bond_a[1] in core_a and bond_b[0] in core_b and bond_b[1] in core_b:
+            new_bond_core[bond_a] = bond_b
+    return new_bond_core

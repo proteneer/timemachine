@@ -4,6 +4,11 @@
 #include <cstdio>
 #include <iostream>
 
+// round_up_even is important to generating random numbers with cuRand as the generators only generate
+// sets that are divisible by the dimension (typically 2) and will return error CURAND_STATUS_LENGTH_NOT_MULTIPLE.
+// https://docs.nvidia.com/cuda/curand/group__HOST.html#group__HOST_1gb94a31d5c165858c96b6c18b70644437
+int round_up_even(int count);
+
 curandStatus_t templateCurandNormal(curandGenerator_t generator, float *outputPtr, size_t n, float mean, float stddev);
 
 curandStatus_t
@@ -29,10 +34,22 @@ inline void curandAssert(curandStatus_t code, const char *file, int line, bool a
     }
 }
 
+/* cudaSafeMalloc is equivalent to gpuErrchk(cudaMalloc(...)) except that it prints a warning message if the
+* allocation is greater than a GiB.
+*/
+#define cudaSafeMalloc(ptr, size)                                                                                      \
+    ({                                                                                                                 \
+        const int cudaSafeMalloc__line = __LINE__;                                                                     \
+        if (size > (1 << 30)) {                                                                                        \
+            fprintf(stderr, "cudaSafeMalloc: allocation larger than 1GiB %s %d\n", __FILE__, cudaSafeMalloc__line);    \
+        }                                                                                                              \
+        gpuAssert(cudaMalloc(ptr, size), __FILE__, cudaSafeMalloc__line, true);                                        \
+    })
+
 // safe is for use of gpuErrchk
 template <typename T> T *gpuErrchkCudaMallocAndCopy(const T *host_array, int count) {
     T *device_array;
-    gpuErrchk(cudaMalloc(&device_array, count * sizeof(*host_array)));
+    cudaSafeMalloc(&device_array, count * sizeof(*host_array));
     gpuErrchk(cudaMemcpy(device_array, host_array, count * sizeof(*host_array), cudaMemcpyHostToDevice));
     return device_array;
 }

@@ -2,11 +2,9 @@ import jax.numpy as jnp
 import pymbar
 from jax import core
 from jax.interpreters import ad
-from simtk import unit
 
-from timemachine.constants import kB
+from timemachine.constants import KCAL_TO_KJ
 from timemachine.fe import bar as tmbar
-from timemachine.fe import math_utils
 
 
 # (ytz): the AD override trick is taken from:
@@ -30,62 +28,57 @@ mybar_p.def_impl(mybar_impl)
 ad.defjvp(mybar_p, mybar_jvp)
 
 
-def BAR_leg(insertion_du_dls, deletion_du_dls, lambda_schedule):
-    insertion_W = math_utils.trapz(insertion_du_dls, lambda_schedule)
-    deletion_W = math_utils.trapz(deletion_du_dls, lambda_schedule)
+def BAR_leg(w_insert, w_delete):
+    """
 
-    return mybar(jnp.stack([insertion_W, deletion_W]))
+    Parameters
+    ----------
+    w_insert, w_delete: arrays
+        works in reduced units
+
+    Returns
+    -------
+    dG : float
+    """
+    return mybar(jnp.stack([w_insert, w_delete]))
 
 
 def BAR_loss(
-    complex_insertion_du_dls,  # [C, N]
-    complex_deletion_du_dls,  # [C, N]
-    solvent_insertion_du_dls,  # [C, N]
-    solvent_deletion_du_dls,  # [C, N]
-    lambda_schedule,
-    true_dG,
+    complex_w_insert,
+    complex_w_delete,
+    solvent_w_insert,
+    solvent_w_delete,
+    true_delta_f,
 ):
+    """
 
-    complex_dG = BAR_leg(complex_insertion_du_dls, complex_deletion_du_dls, lambda_schedule)
-    solvent_dG = BAR_leg(solvent_insertion_du_dls, solvent_deletion_du_dls, lambda_schedule)
+    Parameters
+    ----------
+    complex_w_insert, complex_w_delete, solvent_w_insert, solvent_w_delete
+        work arrays (in reduced units)
+    true_delta_f : float
+        in reduced units
 
-    pred_dG = solvent_dG - complex_dG
-    loss = jnp.power(true_dG - pred_dG, 2)
+    Returns
+    -------
+    squared_loss : float
+    """
+
+    complex_delta_f = BAR_leg(complex_w_insert, complex_w_delete)
+    solvent_delta_f = BAR_leg(solvent_w_insert, solvent_w_delete)
+
+    pred_delta_f = solvent_delta_f - complex_delta_f
+    loss = (true_delta_f - pred_delta_f) ** 2
 
     return loss
 
 
-def EXP_from_du_dls(all_du_dls, lambda_schedule, kT):
-    """
-    Run exponential averaging on a list of du_dls that may contain None elements.
+def EXP_loss(complex_w_insert, solvent_w_insert, true_delta_f):
+    complex_delta_f = tmbar.EXP(complex_w_insert)
+    solvent_delta_f = tmbar.EXP(solvent_w_insert)
 
-    The inputs for du_dls should be in units of 1/kT
-    """
-    proper_du_dls = []
-
-    for d in all_du_dls:
-        if d is not None:
-            proper_du_dls.append(d)
-
-    proper_du_dls = jnp.array(proper_du_dls)
-
-    work_array = math_utils.trapz(proper_du_dls, lambda_schedule)
-    work_array = work_array / kT
-
-    return tmbar.EXP(work_array) * kT
-
-
-def EXP_loss(
-    complex_du_dls, solvent_du_dls, lambda_schedule, true_dG, temperature=300 * unit.kelvin  # [C, N]  # [C, N]
-):
-
-    kT = kB * temperature
-
-    complex_dG = EXP_from_du_dls(complex_du_dls, lambda_schedule, kT)
-    solvent_dG = EXP_from_du_dls(solvent_du_dls, lambda_schedule, kT)
-
-    pred_dG = solvent_dG - complex_dG
-    loss = jnp.power(true_dG - pred_dG, 2)
+    pred_delta_f = solvent_delta_f - complex_delta_f
+    loss = (true_delta_f - pred_delta_f) ** 2
 
     return loss
 
@@ -116,7 +109,7 @@ def l1_loss(residual):
     return jnp.abs(residual)
 
 
-def pseudo_huber_loss(residual, threshold=4.184):
+def pseudo_huber_loss(residual, threshold=KCAL_TO_KJ):
     """loss = threshold * (sqrt(1 + (residual/threshold)^2) - 1)
 
     Reference : https://en.wikipedia.org/wiki/Huber_loss#Pseudo-Huber_loss_function
@@ -137,6 +130,6 @@ def pseudo_huber_loss(residual, threshold=4.184):
     return threshold * (jnp.sqrt(1 + (residual / threshold) ** 2) - 1)
 
 
-def flat_bottom_loss(residual, threshold=4.184):
+def flat_bottom_loss(residual, threshold=KCAL_TO_KJ):
     """loss = max(0, |residual| - threshold)"""
     return jnp.maximum(0, jnp.abs(residual) - threshold)

@@ -1,22 +1,19 @@
-import functools
+from typing import Any
 
 import jax.numpy as jnp
 import numpy as np
 from jax import vmap
 from jax.scipy.special import erfc
-from numpy.typing import NDArray
-from typing_extensions import TypeAlias
 
 from timemachine.potentials import jax_utils
 from timemachine.potentials.jax_utils import (
-    convert_to_4d,
     delta_r,
-    distance,
     distance_on_pairs,
     pairs_from_interaction_groups,
+    pairwise_distances,
 )
 
-Array: TypeAlias = NDArray
+Array = Any
 
 
 def switch_fn(dij, cutoff):
@@ -61,10 +58,11 @@ def direct_space_pme(dij, qij, beta):
 
 def nonbonded_block(xi, xj, box, params_i, params_j, beta, cutoff):
     """
-    This is a modified version of nonbonded_v3 that computes a block of
+    This is a modified version of `nonbonded` that computes a block of
     interactions between two sets of particles x_i and x_j. It is assumed that
     there are no exclusions between the two particle sets. Typical use cases
-    include computing the interaction energy between the environment and a ligand.
+    include computing the interaction energy between the environment and a
+    ligand.
 
     This is mainly used for testing, as it does not support 4D decoupling or
     alchemical semantics yet.
@@ -75,7 +73,7 @@ def nonbonded_block(xi, xj, box, params_i, params_j, beta, cutoff):
         Coordinates
     xj : (N,3) np.ndarray
         Coordinates
-    box : Optional 3x3 np.array
+    box : Optional 3x3 np.ndarray
         Periodic boundary conditions
     beta : float
         the charge product q_ij will be multiplied by erfc(beta*d_ij)
@@ -114,7 +112,7 @@ def nonbonded_block(xi, xj, box, params_i, params_j, beta, cutoff):
 
 
 def convert_exclusions_to_rescale_masks(exclusion_idxs, scales, N):
-    """Converts exclusions from list format used in Nonbonded to mask format used in nonbonded_v3"""
+    """Converts exclusions from list format used in Nonbonded to mask format used in `nonbonded`"""
 
     # process masks for exclusions properly
     charge_rescale_mask = np.ones((N, N))  # to support item assignment
@@ -130,45 +128,37 @@ def convert_exclusions_to_rescale_masks(exclusion_idxs, scales, N):
     return charge_rescale_mask, lj_rescale_mask
 
 
-def nonbonded_v3(
+def nonbonded(
     conf,
     params,
     box,
-    lamb,
     charge_rescale_mask,
     lj_rescale_mask,
     beta,
     cutoff,
-    lambda_plane_idxs,
-    lambda_offset_idxs,
     runtime_validate=True,
 ):
     """Lennard-Jones + Coulomb, with a few important twists:
-    * distances are computed in 4D, controlled by lambda, lambda_plane_idxs, lambda_offset_idxs
+    * distances are computed in 4D using coordinates in params
     * each pairwise LJ and Coulomb term can be multiplied by an adjustable rescale_mask parameter
     * Coulomb terms are multiplied by erfc(beta * distance)
 
     Parameters
     ----------
-    conf : (N, 3) or (N, 4) np.array
-        3D or 4D coordinates
-        if 3D, will be converted to 4D using (x,y,z) -> (x,y,z,w)
-            where w = cutoff * (lambda_plane_idxs + lambda_offset_idxs * lamb)
-    params : (N, 3) np.array
-        columns [charges, sigmas, epsilons], one row per particle
-    box : Optional 3x3 np.array
-    lamb : float
-    charge_rescale_mask : (N, N) np.array
+    conf : (N, 3) np.ndarray
+        3D coordinates
+    params : (N, 3) np.ndarray
+        columns [charges, sigmas, epsilons, w_coords], one row per particle
+    box : Optional 3x3 np.ndarray
+    charge_rescale_mask : (N, N) np.ndarray
         the Coulomb contribution of pair (i,j) will be multiplied by charge_rescale_mask[i,j]
-    lj_rescale_mask : (N, N) np.array
+    lj_rescale_mask : (N, N) np.ndarray
         the Lennard-Jones contribution of pair (i,j) will be multiplied by lj_rescale_mask[i,j]
     beta : float
         the charge product q_ij will be multiplied by erfc(beta*d_ij)
     cutoff : Optional float
         a pair of particles (i,j) will be considered non-interacting if the distance d_ij
         between their 4D coordinates exceeds cutoff
-    lambda_plane_idxs : Optional (N,) np.array
-    lambda_offset_idxs : Optional (N,) np.array
     runtime_validate: bool
         check whether beta is compatible with cutoff
         (if True, this function will currently not play nice with Jax JIT)
@@ -192,29 +182,11 @@ def nonbonded_v3(
         assert (lj_rescale_mask == lj_rescale_mask.T).all()
 
     N = conf.shape[0]
-    if lambda_plane_idxs is None:
-        lambda_plane_idxs = np.zeros(N)
-    if lambda_offset_idxs is None:
-        lambda_offset_idxs = np.zeros(N)
-
-    if conf.shape[-1] == 3:
-        conf = convert_to_4d(conf, lamb, lambda_plane_idxs, lambda_offset_idxs, cutoff)
-
-    # make 4th dimension of box large enough so its roughly aperiodic
-    if box is not None:
-        if box.shape[-1] == 3:
-            box_4d = jnp.eye(4) * 1000
-            box_4d = box_4d.at[:3, :3].set(box)
-        else:
-            box_4d = box
-    else:
-        box_4d = None
-
-    box = box_4d
 
     charges = params[:, 0]
     sig = params[:, 1]
     eps = params[:, 2]
+    w_coords = params[:, 3]
 
     sig_i = jnp.expand_dims(sig, 0)
     sig_j = jnp.expand_dims(sig, 1)
@@ -222,10 +194,9 @@ def nonbonded_v3(
 
     eps_i = jnp.expand_dims(eps, 0)
     eps_j = jnp.expand_dims(eps, 1)
-
     eps_ij = combining_rule_epsilon(eps_i, eps_j)
 
-    dij = distance(conf, box)
+    dij = pairwise_distances(conf, box, w_coords)
 
     keep_mask = jnp.ones((N, N)) - jnp.eye(N)
     keep_mask = jnp.where(eps_ij != 0, keep_mask, 0)
@@ -268,10 +239,16 @@ def nonbonded_v3(
     return jnp.sum(eij_total / 2)
 
 
-def nonbonded_v3_on_specific_pairs(
-    conf, params, box, pairs, beta: float, cutoff: Optional[float] = None, rescale_mask=None
+def nonbonded_on_specific_pairs(
+    conf,
+    params,
+    box,
+    pairs,
+    beta: float,
+    cutoff: Optional[float] = None,
+    rescale_mask=None,
 ):
-    """See nonbonded_v3 docstring for more details
+    """See `nonbonded` docstring for more details
 
     Notes
     -----
@@ -285,16 +262,17 @@ def nonbonded_v3_on_specific_pairs(
 
     inds_l, inds_r = pairs.T
 
+    charges, sig, eps, w_coords = params.T
+
     # distances and cutoff
-    dij = distance_on_pairs(conf[inds_l], conf[inds_r], box)
+    w_offsets = w_coords[pairs[:, 0]] - w_coords[pairs[:, 1]] if w_coords is not None else None
+    dij = distance_on_pairs(conf[inds_l], conf[inds_r], box, w_offsets)
     if cutoff is None:
         cutoff = np.inf
     keep_mask = dij <= cutoff
 
     def apply_cutoff(x):
         return jnp.where(keep_mask, x, 0)
-
-    charges, sig, eps = params.T
 
     # vdW by Lennard-Jones
     sig_ij = combining_rule_sigma(sig[inds_l], sig[inds_r])
@@ -319,12 +297,11 @@ def nonbonded_v3_on_specific_pairs(
     return vdW, electrostatics
 
 
-def nonbonded_v3_on_precomputed_pairs(
+def nonbonded_on_precomputed_pairs(
     conf,
     params,
     box,
     pairs,
-    offsets,
     beta: float,
     cutoff: Optional[float] = None,
 ):
@@ -336,9 +313,8 @@ def nonbonded_v3_on_precomputed_pairs(
     3) Apply rescale_mask to combined q_ij and eps_ij
 
     conf: N,3
-    params: P,3 (q_ij, s_ij, e_ij)
+    params: P,4 (q_ij, s_ij, e_ij, w_offset_ij)
     pairs: P,2 (i,j)
-    offsets: P (w,) distance offsets for electrostatic and lj interactions
     """
 
     if len(pairs) == 0:
@@ -347,6 +323,7 @@ def nonbonded_v3_on_precomputed_pairs(
     inds_l, inds_r = pairs.T
 
     # distances and cutoff
+    q_ij, sig_ij, eps_ij, offsets = params.T
     dij = distance_on_pairs(conf[inds_l], conf[inds_r], box, offsets)
     if cutoff is None:
         cutoff = np.inf
@@ -356,9 +333,9 @@ def nonbonded_v3_on_precomputed_pairs(
     def apply_cutoff(x):
         return jnp.where(keep_mask, x, 0)
 
-    q_ij = apply_cutoff(params[:, 0])
-    sig_ij = apply_cutoff(params[:, 1])
-    eps_ij = apply_cutoff(params[:, 2])
+    q_ij = apply_cutoff(q_ij)
+    sig_ij = apply_cutoff(sig_ij)
+    eps_ij = apply_cutoff(eps_ij)
 
     vdW = jnp.where(eps_ij != 0, lennard_jones(dij, sig_ij, eps_ij), 0)
     electrostatics = jnp.where(q_ij != 0, direct_space_pme(dij, q_ij, beta), 0)
@@ -377,32 +354,24 @@ def validate_interaction_group_idxs(n_atoms, a_idxs, b_idxs):
     assert len(b_idxs) == len(B)
 
 
-def nonbonded_v3_interaction_groups(conf, params, box, a_idxs, b_idxs, beta: float, cutoff: Optional[float] = None):
+def nonbonded_interaction_groups(
+    conf,
+    params,
+    box,
+    a_idxs,
+    b_idxs,
+    beta: float,
+    cutoff: Optional[float] = None,
+):
     """Nonbonded interactions between all pairs of atoms $(i, j)$
     where $i$ is in the first set and $j$ in the second.
 
-    See nonbonded_v3 docstring for more details
+    See `nonbonded` docstring for more details
     """
     validate_interaction_group_idxs(len(conf), a_idxs, b_idxs)
     pairs = pairs_from_interaction_groups(a_idxs, b_idxs)
-    vdW, electrostatics = nonbonded_v3_on_specific_pairs(conf, params, box, pairs, beta, cutoff)
+    vdW, electrostatics = nonbonded_on_specific_pairs(conf, params, box, pairs, beta, cutoff)
     return vdW, electrostatics
-
-
-def interpolated(u_fn):
-    @functools.wraps(u_fn)
-    def wrapper(conf, params, box, lamb):
-
-        # params is expected to be the concatenation of initial
-        # (lambda = 0) and final (lambda = 1) parameters, each of
-        # length num_atoms
-        assert params.size % 2 == 0
-        num_atoms = params.shape[0] // 2
-
-        new_params = (1 - lamb) * params[:num_atoms] + lamb * params[num_atoms:]
-        return u_fn(conf, new_params, box, lamb)
-
-    return wrapper
 
 
 def validate_coulomb_cutoff(cutoff=1.0, beta=2.0, threshold=1e-2):
@@ -531,10 +500,9 @@ def lj_prefactor_on_atom(x_i, x_others, sig_i, sig_others, eps_others, box=None,
         positions of all other atoms (in environment)
     sig_i: float
         Lennard-Jones sigma parameter of focus atom
-    sig_others: [N_env] array
-        Lennard-Jones sigma parameters of all other atoms (in environment)
+    sig_others, eps_others: [N_env] arrays
+        Lennard-Jones parameters of all other atoms (in environment)
     box: optional diagonal [D, D] array
-    beta: float
     cutoff: float
 
     Returns

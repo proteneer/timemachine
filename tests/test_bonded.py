@@ -1,9 +1,6 @@
-import numpy as np
-from jax.config import config
-
-config.update("jax_enable_x64", True)
 import functools
 
+import numpy as np
 import pytest
 from common import GradientTest
 
@@ -41,9 +38,8 @@ class TestBonded(GradientTest):
             )
 
             params = np.array([], dtype=np.float64)
-            lamb = 0.3  # doesn't matter
 
-            self.compare_forces_gpu_vs_reference(x_primal, params, box, [lamb], potential, rtol, precision=precision)
+            self.compare_forces_gpu_vs_reference(x_primal, [params], box, potential, rtol, precision=precision)
 
     def test_centroid_restraint_singularity(self):
         # test singularity is stable when dij=0 and b0 = 0
@@ -72,9 +68,8 @@ class TestBonded(GradientTest):
                 potential = generic.CentroidRestraint(gai, gbi, kb, b0)
 
                 params = np.array([], dtype=np.float64)
-                lamb = 0.3  # doesn't matter
 
-                self.compare_forces_gpu_vs_reference(coords, params, box, [lamb], potential, rtol, precision=precision)
+                self.compare_forces_gpu_vs_reference(coords, [params], box, potential, rtol, precision=precision)
 
     @pytest.mark.skip("Currently not needed")
     def test_rmsd_restraint(self):
@@ -109,7 +104,6 @@ class TestBonded(GradientTest):
 
                 params = np.array([], dtype=np.float64)
                 k = 1.35
-                lamb = 0.0
 
                 for precision, rtol, atol in [(np.float64, 1e-6, 1e-6), (np.float32, 1e-4, 1e-6)]:
 
@@ -123,9 +117,7 @@ class TestBonded(GradientTest):
                     # this is due to fixed point accumulation of energy wipes out
                     # the low magnitude energies as some of test cases have
                     # an infinitesmally small absolute error (on the order of 1e-12)
-                    self.compare_forces(
-                        coords, params, box, [lamb], ref_u, test_u, rtol, atol=atol, precision=precision
-                    )
+                    self.compare_forces(coords, [params], box, ref_u, test_u, rtol, atol=atol, precision=precision)
 
     def test_harmonic_bond(self, n_particles=64, n_bonds=35, dim=3):
         """Randomly connect pairs of particles, then validate the resulting HarmonicBond force"""
@@ -141,7 +133,6 @@ class TestBonded(GradientTest):
             bond_idxs.append(np.random.choice(atom_idxs, size=2, replace=False))
         bond_idxs = np.array(bond_idxs, dtype=np.int32) if n_bonds else np.zeros((0, 2), dtype=np.int32)
 
-        lamb = 0.0
         box = np.eye(3) * 100
 
         # specific to harmonic bond force
@@ -149,36 +140,29 @@ class TestBonded(GradientTest):
 
         potential = generic.HarmonicBond(bond_idxs)
         for precision, rtol in relative_tolerance_at_precision.items():
-            self.compare_forces_gpu_vs_reference(x, params, box, [lamb], potential, rtol, precision=precision)
+            self.compare_forces_gpu_vs_reference(x, [params], box, potential, rtol, precision=precision)
 
-        lamb_mult = np.random.randint(-5, 5, size=n_bonds, dtype=np.int32)
-        lamb_offset = np.random.randint(-5, 5, size=n_bonds, dtype=np.int32)
-        lamb = 0.35
-
-        potential = generic.HarmonicBond(bond_idxs, lamb_mult, lamb_offset)
+        potential = generic.HarmonicBond(bond_idxs)
 
         for precision, rtol in relative_tolerance_at_precision.items():
-            self.compare_forces_gpu_vs_reference(x, params, box, [lamb], potential, rtol, precision=precision)
+            self.compare_forces_gpu_vs_reference(x, [params], box, potential, rtol, precision=precision)
 
             # test bitwise commutativity
-            test_potential = potentials.HarmonicBond(bond_idxs, lamb_mult, lamb_offset)
-            test_potential_rev = potentials.HarmonicBond(bond_idxs[:, ::-1], lamb_mult, lamb_offset)
+            test_potential = potentials.HarmonicBond(bond_idxs)
+            test_potential_rev = potentials.HarmonicBond(bond_idxs[:, ::-1])
 
             test_potential_impl = test_potential.unbound_impl(precision)
             test_potential_rev_impl = test_potential_rev.unbound_impl(precision)
 
-            test_du_dx, test_du_dp, test_du_dl, test_u = test_potential_impl.execute_selective(
-                x, params, box, lamb, 1, 1, 1, 1
-            )
+            test_du_dx, test_du_dp, test_u = test_potential_impl.execute_selective(x, params, box, 1, 1, 1)
 
-            test_du_dx_rev, test_du_dp_rev, test_du_dl_rev, test_u_rev = test_potential_rev_impl.execute_selective(
-                x, params, box, lamb, 1, 1, 1, 1
+            test_du_dx_rev, test_du_dp_rev, test_u_rev = test_potential_rev_impl.execute_selective(
+                x, params, box, 1, 1, 1
             )
 
             np.testing.assert_array_equal(test_u, test_u_rev)
             np.testing.assert_array_equal(test_du_dx, test_du_dx_rev)
             np.testing.assert_array_equal(test_du_dp, test_du_dp_rev)
-            np.testing.assert_array_equal(test_du_dl, test_du_dl_rev)
 
     def test_flat_bottom_bond(self, n_particles=64, n_bonds=35, dim=3):
         """Randomly connect pairs of particles, then validate the resulting FlatBottomBond force"""
@@ -205,11 +189,10 @@ class TestBonded(GradientTest):
         x[bond_idxs[:, 1][: n_bonds // 2]] += np.diagonal(box)
 
         relative_tolerance_at_precision = {np.float64: 1e-7, np.float32: 2e-5}
-        lamb = 0.0
 
         potential = generic.FlatBottomBond(bond_idxs)
         for precision, rtol in relative_tolerance_at_precision.items():
-            self.compare_forces_gpu_vs_reference(x, params, box, [lamb], potential, rtol, precision=precision)
+            self.compare_forces_gpu_vs_reference(x, [params], box, potential, rtol, precision=precision)
 
             # test bitwise commutativity
             test_potential = potentials.FlatBottomBond(bond_idxs)
@@ -218,10 +201,10 @@ class TestBonded(GradientTest):
             test_potential_impl = test_potential.unbound_impl(precision)
             test_potential_rev_impl = test_potential_rev.unbound_impl(precision)
 
-            test_du_dx, test_du_dp, _, test_u = test_potential_impl.execute_selective(x, params, box, lamb, 1, 1, 0, 1)
+            test_du_dx, test_du_dp, test_u = test_potential_impl.execute_selective(x, params, box, 1, 1, 1)
 
-            test_du_dx_rev, test_du_dp_rev, _, test_u_rev = test_potential_rev_impl.execute_selective(
-                x, params, box, lamb, 1, 1, 0, 1
+            test_du_dx_rev, test_du_dp_rev, test_u_rev = test_potential_rev_impl.execute_selective(
+                x, params, box, 1, 1, 1
             )
 
             np.testing.assert_array_equal(test_u, test_u_rev)
@@ -235,7 +218,6 @@ class TestBonded(GradientTest):
         params = np.array([[2.0, 0.0]], dtype=np.float64)
         bond_idxs = np.array([[0, 1]], dtype=np.int32)
 
-        lamb = 0.0
         box = np.eye(3) * 100
 
         # specific to harmonic bond force
@@ -244,7 +226,7 @@ class TestBonded(GradientTest):
         potential = generic.HarmonicBond(bond_idxs)
         for precision, rtol in relative_tolerance_at_precision.items():
             # we assert finite-ness of the forces.
-            self.compare_forces_gpu_vs_reference(x, params, box, [lamb], potential, rtol, precision=precision)
+            self.compare_forces_gpu_vs_reference(x, [params], box, potential, rtol, precision=precision)
 
         # test with both zero and non zero terms
         x = np.array([[0.0, 0.0, 0.0], [0.0, 0.0, 0.0], [1.0, 0.0, 0.0]], dtype=np.float64)
@@ -258,7 +240,7 @@ class TestBonded(GradientTest):
         potential = generic.HarmonicBond(bond_idxs)
         for precision, rtol in relative_tolerance_at_precision.items():
             # we assert finite-ness of the forces.
-            self.compare_forces_gpu_vs_reference(x, params, box, [lamb], potential, rtol, precision=precision)
+            self.compare_forces_gpu_vs_reference(x, [params], box, potential, rtol, precision=precision)
 
     def test_harmonic_angle(self, n_particles=64, n_angles=25, dim=3):
         """Randomly connect triples of particles, then validate the resulting HarmonicAngle force"""
@@ -273,7 +255,6 @@ class TestBonded(GradientTest):
             angle_idxs.append(np.random.choice(atom_idxs, size=3, replace=False))
         angle_idxs = np.array(angle_idxs, dtype=np.int32) if n_angles else np.zeros((0, 3), dtype=np.int32)
 
-        lamb = 0.0
         box = np.eye(3) * 100
 
         # specific to harmonic angle force
@@ -281,35 +262,28 @@ class TestBonded(GradientTest):
 
         potential = generic.HarmonicAngle(angle_idxs)
         for precision, rtol in relative_tolerance_at_precision.items():
-            self.compare_forces_gpu_vs_reference(x, params, box, [lamb], potential, rtol, precision=precision)
+            self.compare_forces_gpu_vs_reference(x, [params], box, potential, rtol, precision=precision)
 
-        lamb_mult = np.random.randint(-5, 5, size=n_angles, dtype=np.int32)
-        lamb_offset = np.random.randint(-5, 5, size=n_angles, dtype=np.int32)
-        lamb = 0.35
-
-        potential = generic.HarmonicAngle(angle_idxs, lamb_mult, lamb_offset)
+        potential = generic.HarmonicAngle(angle_idxs)
         for precision, rtol in relative_tolerance_at_precision.items():
-            self.compare_forces_gpu_vs_reference(x, params, box, [lamb], potential, rtol, precision=precision)
+            self.compare_forces_gpu_vs_reference(x, [params], box, potential, rtol, precision=precision)
 
             # test bitwise commutativity
-            test_potential = potentials.HarmonicAngle(angle_idxs, lamb_mult, lamb_offset)
-            test_potential_rev = potentials.HarmonicAngle(angle_idxs[:, ::-1], lamb_mult, lamb_offset)
+            test_potential = potentials.HarmonicAngle(angle_idxs)
+            test_potential_rev = potentials.HarmonicAngle(angle_idxs[:, ::-1])
 
             test_potential_impl = test_potential.unbound_impl(precision)
             test_potential_rev_impl = test_potential_rev.unbound_impl(precision)
 
-            test_du_dx, test_du_dp, test_du_dl, test_u = test_potential_impl.execute_selective(
-                x, params, box, lamb, 1, 1, 1, 1
-            )
+            test_du_dx, test_du_dp, test_u = test_potential_impl.execute_selective(x, params, box, 1, 1, 1)
 
-            test_du_dx_rev, test_du_dp_rev, test_du_dl_rev, test_u_rev = test_potential_rev_impl.execute_selective(
-                x, params, box, lamb, 1, 1, 1, 1
+            test_du_dx_rev, test_du_dp_rev, test_u_rev = test_potential_rev_impl.execute_selective(
+                x, params, box, 1, 1, 1
             )
 
             np.testing.assert_array_equal(test_u, test_u_rev)
             np.testing.assert_array_equal(test_du_dx, test_du_dx_rev)
             np.testing.assert_array_equal(test_du_dp, test_du_dp_rev)
-            np.testing.assert_array_equal(test_du_dl, test_du_dl_rev)
 
     def test_periodic_torsion(self, n_particles=64, n_torsions=25, dim=3):
         """Randomly connect quadruples of particles, then validate the resulting PeriodicTorsion force"""
@@ -325,7 +299,6 @@ class TestBonded(GradientTest):
 
         torsion_idxs = np.array(torsion_idxs, dtype=np.int32) if n_torsions else np.zeros((0, 4), dtype=np.int32)
 
-        lamb = 0.0
         box = np.eye(3) * 100
 
         # specific to periodic torsion force
@@ -333,35 +306,28 @@ class TestBonded(GradientTest):
 
         potential = generic.PeriodicTorsion(torsion_idxs)
         for precision, rtol in relative_tolerance_at_precision.items():
-            self.compare_forces_gpu_vs_reference(x, params, box, [lamb], potential, rtol, precision=precision)
+            self.compare_forces_gpu_vs_reference(x, [params], box, potential, rtol, precision=precision)
 
-        lamb_mult = np.random.randint(-5, 5, size=n_torsions, dtype=np.int32)
-        lamb_offset = np.random.randint(-5, 5, size=n_torsions, dtype=np.int32)
-        lamb = 0.35
-
-        potential = generic.PeriodicTorsion(torsion_idxs, lamb_mult, lamb_offset)
+        potential = generic.PeriodicTorsion(torsion_idxs)
         for precision, rtol in relative_tolerance_at_precision.items():
-            self.compare_forces_gpu_vs_reference(x, params, box, [lamb], potential, rtol, precision=precision)
+            self.compare_forces_gpu_vs_reference(x, [params], box, potential, rtol, precision=precision)
 
             # test bitwise commutativity
-            test_potential = potentials.PeriodicTorsion(torsion_idxs, lamb_mult, lamb_offset)
-            test_potential_rev = potentials.PeriodicTorsion(torsion_idxs[:, ::-1], lamb_mult, lamb_offset)
+            test_potential = potentials.PeriodicTorsion(torsion_idxs)
+            test_potential_rev = potentials.PeriodicTorsion(torsion_idxs[:, ::-1])
 
             test_potential_impl = test_potential.unbound_impl(precision)
             test_potential_rev_impl = test_potential_rev.unbound_impl(precision)
 
-            test_du_dx, test_du_dp, test_du_dl, test_u = test_potential_impl.execute_selective(
-                x, params, box, lamb, 1, 1, 1, 1
-            )
+            test_du_dx, test_du_dp, test_u = test_potential_impl.execute_selective(x, params, box, 1, 1, 1)
 
-            test_du_dx_rev, test_du_dp_rev, test_du_dl_rev, test_u_rev = test_potential_rev_impl.execute_selective(
-                x, params, box, lamb, 1, 1, 1, 1
+            test_du_dx_rev, test_du_dp_rev, test_u_rev = test_potential_rev_impl.execute_selective(
+                x, params, box, 1, 1, 1
             )
 
             np.testing.assert_array_equal(test_u, test_u_rev)
             np.testing.assert_array_equal(test_du_dx, test_du_dx_rev)
             np.testing.assert_array_equal(test_du_dp, test_du_dp_rev)
-            np.testing.assert_array_equal(test_du_dl, test_du_dl_rev)
 
     def test_empty_potentials(self):
         # Check that no error is given if the terms are empty
@@ -382,14 +348,13 @@ class TestBonded(GradientTest):
 
         restr_idxs = np.array(restr_idxs, dtype=np.int32) if n_restraints else np.zeros((0, 4), dtype=np.int32)
 
-        lamb = 0.0
         box = np.eye(3) * 100
 
         relative_tolerance_at_precision = {np.float64: 1e-9, np.float32: 1e-6}
 
         potential = generic.ChiralAtomRestraint(restr_idxs)
         for precision, rtol in relative_tolerance_at_precision.items():
-            self.compare_forces_gpu_vs_reference(x, params, box, [lamb], potential, rtol, precision=precision)
+            self.compare_forces_gpu_vs_reference(x, [params], box, potential, rtol, precision=precision)
 
             with self.assertRaises(Exception):
                 # wrong length
@@ -416,14 +381,13 @@ class TestBonded(GradientTest):
         restr_idxs = np.array(restr_idxs, dtype=np.int32) if n_restraints else np.zeros((0, 4), dtype=np.int32)
         signs = np.array(signs, dtype=np.int32)
 
-        lamb = 0.0
         box = np.eye(3) * 100
 
         relative_tolerance_at_precision = {np.float64: 1e-9, np.float32: 1e-6}
 
         potential = generic.ChiralBondRestraint(restr_idxs, signs)
         for precision, rtol in relative_tolerance_at_precision.items():
-            self.compare_forces_gpu_vs_reference(x, params, box, [lamb], potential, rtol, precision=precision)
+            self.compare_forces_gpu_vs_reference(x, [params], box, potential, rtol, precision=precision)
 
             with self.assertRaises(RuntimeError):
                 # wrong length idxs

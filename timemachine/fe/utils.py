@@ -1,63 +1,32 @@
+from pathlib import Path
+from typing import List, Optional, Union
+
 import numpy as np
 import simtk.unit
 from numpy.typing import NDArray
 from rdkit import Chem
 from rdkit.Chem import AllChem, Draw
 from rdkit.Chem.Draw import rdMolDraw2D
+from scipy.stats import special_ortho_group
+
+from timemachine import constants
 
 
 def to_md_units(q):
     return q.value_in_unit_system(simtk.unit.md_unit_system)
 
 
-def write(xyz, masses, recenter=True):
-    if recenter:
-        xyz = xyz - np.mean(xyz, axis=0, keepdims=True)
-    buf = str(len(masses)) + "\n"
-    buf += "timemachine\n"
-    for m, (x, y, z) in zip(masses, xyz):
-        if int(round(m)) == 12:
-            symbol = "C"
-        elif int(round(m)) == 14:
-            symbol = "N"
-        elif int(round(m)) == 16:
-            symbol = "O"
-        elif int(round(m)) == 32:
-            symbol = "S"
-        elif int(round(m)) == 35:
-            symbol = "Cl"
-        elif int(round(m)) == 1:
-            symbol = "H"
-        elif int(round(m)) == 31:
-            symbol = "P"
-        elif int(round(m)) == 19:
-            symbol = "F"
-        elif int(round(m)) == 80:
-            symbol = "Br"
-        elif int(round(m)) == 127:
-            symbol = "I"
-        else:
-            raise Exception("Unknown mass:" + str(m))
-
-        buf += symbol + " " + str(round(x, 5)) + " " + str(round(y, 5)) + " " + str(round(z, 5)) + "\n"
-    return buf
-
-
-def convert_uIC50_to_kJ_per_mole(amount_in_uM):
-    """
-    TODO: more sig figs
-    """
-    return 0.593 * np.log(amount_in_uM * 1e-6) * 4.18
-
-
-def convert_uM_to_kJ_per_mole(amount_in_uM):
-    """
-    Convert a potency measurement in uM concentrations.
+def convert_uIC50_to_kJ_per_mole(amount_in_uM: float, experiment_temp: float = 298.15) -> float:
+    """Convert an IC50 measurement in uM concentrations to kJ/mol.
 
     Parameters
     ----------
+
     amount_in_uM: float
-        Binding potency in uM concentration.
+        Micro molar IC50
+
+    experiment_temp: float
+        Experiment temperature in Kelvin.
 
     Returns
     -------
@@ -65,7 +34,29 @@ def convert_uM_to_kJ_per_mole(amount_in_uM):
         Binding potency in kJ/mol.
 
     """
-    return 0.593 * np.log(amount_in_uM * 1e-6) * 4.18
+    RT = (constants.BOLTZ * experiment_temp) / constants.KCAL_TO_KJ
+    return RT * np.log(amount_in_uM * 1e-6) * constants.KCAL_TO_KJ
+
+
+def convert_uM_to_kJ_per_mole(amount_in_uM: float, experiment_temp: float = 298.15) -> float:
+    """
+    Convert a potency measurement in uM concentrations to kJ/mol.
+
+    Parameters
+    ----------
+    amount_in_uM: float
+        Binding potency in uM concentration.
+
+    experiment_temp: float
+        Experiment temperature in Kelvin.
+
+    Returns
+    -------
+    float
+        Binding potency in kJ/mol.
+
+    """
+    return convert_uIC50_to_kJ_per_mole(amount_in_uM, experiment_temp=experiment_temp)
 
 
 # TODO: add a module for atom-mapping, with RDKit MCS based and other approaches
@@ -87,27 +78,120 @@ def draw_mol(mol, highlightAtoms, highlightColors):
     # display(SVG(svg))
 
 
-def plot_atom_mapping(mol_a, mol_b, core):
-    """from YTZ, Feb 1, 2021
+def draw_mol_idx(mol, highlight: Optional[List[int]] = None, scale_factor=None):
+    """
+    Draw mol with atom indices labeled.
 
-    TODO: move this into a SingleTopology.visualize() or SingleTopology.debug() method"""
-    print(repr(core))
+    Pararmeters
+    -----------
+    highlight: List of int or None
+        If specified, highlight the given atom idxs.
+    """
+    mol2d = Chem.Mol(mol)
+    AllChem.Compute2DCoords(mol2d)
+    if scale_factor:
+        AllChem.NormalizeDepiction(mol2d, scaleFactor=scale_factor)
+    for atom in mol2d.GetAtoms():
+        atom.SetProp("molAtomMapNumber", str(atom.GetIdx()))
+    return Draw.MolsToGridImage(
+        [mol2d],
+        molsPerRow=1,
+        highlightAtomLists=[highlight] if highlight is not None else None,
+        subImgSize=(500, 500),
+        legends=[get_mol_name(mol2d)],
+        useSVG=True,
+    )
+
+
+def get_atom_map_colors(core, seed=2022):
+    rng = np.random.default_rng(seed)
+
     atom_colors_a = {}
     atom_colors_b = {}
-    for (a_idx, b_idx), rgb in zip(core, np.random.random((len(core), 3))):
+    # TODO: replace random colors with colormap?
+    for (a_idx, b_idx), rgb in zip(core, rng.random((len(core), 3))):
         atom_colors_a[int(a_idx)] = tuple(rgb.tolist())
         atom_colors_b[int(b_idx)] = tuple(rgb.tolist())
+
+    return atom_colors_a, atom_colors_b
+
+
+def plot_atom_mapping(mol_a, mol_b, core, seed=2022):
+    """TODO: move this into a SingleTopology.visualize() or SingleTopology.debug() method?"""
+
+    atom_colors_a, atom_colors_b = get_atom_map_colors(core, seed)
 
     draw_mol(mol_a, core[:, 0].tolist(), atom_colors_a)
     draw_mol(mol_b, core[:, 1].tolist(), atom_colors_b)
 
 
-def plot_atom_mapping_grid(mol_a, mol_b, core, show_idxs=False):
-    mol_a_2d = Chem.Mol(mol_a)
-    mol_b_2d = Chem.Mol(mol_b)
+def recenter_mol(mol):
+    mol_copy = Chem.Mol(mol)
+    conf = mol.GetConformer(0).GetPositions()
+    center_conf = conf - np.mean(conf, axis=0)
+    new_conf = Chem.Conformer(mol.GetNumAtoms())
+    for idx, pos in enumerate(np.asarray(center_conf)):
+        new_conf.SetAtomPosition(idx, (float(pos[0]), float(pos[1]), float(pos[2])))
+    mol_copy.RemoveAllConformers()
+    mol_copy.AddConformer(new_conf)
+    return mol_copy
 
-    AllChem.Compute2DCoords(mol_a_2d)
-    AllChem.GenerateDepictionMatching2DStructure(mol_b_2d, mol_a_2d, atomMap=core.tolist())
+
+def score_2d(conf, norm=2):
+    # get the goodness of a 2D depiction
+    # low_score = good, high_score = bad
+
+    score = 0
+    for idx, (x0, y0, _) in enumerate(conf):
+        for x1, y1, _ in conf[idx + 1 :]:
+            score += 1 / ((x0 - x1) ** norm + (y0 - y1) ** norm)
+
+    return score / len(conf)
+
+
+def generate_good_rotations(mol_a, mol_b, num_rotations=3, max_rotations=1000):
+    assert num_rotations < max_rotations
+
+    # generate some good rotations so that the viewing angle is pleasant, (so clashes are minimized):
+    conf_a = get_romol_conf(mol_a)
+    conf_b = get_romol_conf(mol_b)
+
+    scores = []
+    rotations = []
+    for _ in range(max_rotations):
+        r = special_ortho_group.rvs(3)
+        score_a = score_2d(conf_a @ r.T)
+        score_b = score_2d(conf_b @ r.T)
+        # take the bigger of the two scores
+        scores.append(max(score_a, score_b))
+        rotations.append(r)
+
+    perm = np.argsort(scores, kind="stable")
+    return np.array(rotations)[perm][:num_rotations]
+
+
+def rotate_mol(mol, rotation_matrix):
+    mol = recenter_mol(mol)
+    conf = mol.GetConformer(0).GetPositions()
+
+    new_conf = Chem.Conformer(mol.GetNumAtoms())
+    for idx, pos in enumerate(np.asarray(conf)):
+        rot_pos = rotation_matrix @ pos
+        new_conf.SetAtomPosition(idx, (float(rot_pos[0]), float(rot_pos[1]), float(rot_pos[2])))
+
+    mol_copy = Chem.Mol(mol)
+    mol_copy.RemoveAllConformers()
+    mol_copy.AddConformer(new_conf)
+    return mol_copy
+
+
+def plot_atom_mapping_grid(mol_a, mol_b, core, num_rotations=5):
+    mol_a_3d = recenter_mol(mol_a)
+    mol_b_3d = recenter_mol(mol_b)
+
+    extra_rotations = generate_good_rotations(mol_a, mol_b, num_rotations)
+
+    extra_mols = []
 
     atom_colors_a = {}
     atom_colors_b = {}
@@ -115,19 +199,33 @@ def plot_atom_mapping_grid(mol_a, mol_b, core, show_idxs=False):
         atom_colors_a[int(a_idx)] = tuple(rgb.tolist())
         atom_colors_b[int(b_idx)] = tuple(rgb.tolist())
 
-    if show_idxs:
-        for atom in mol_a_2d.GetAtoms():
-            atom.SetProp("molAtomMapNumber", str(atom.GetIdx()))
-        for atom in mol_b_2d.GetAtoms():
-            atom.SetProp("molAtomMapNumber", str(atom.GetIdx()))
+    hals = [core[:, 0].tolist(), core[:, 1].tolist()]
+    hacs = [atom_colors_a, atom_colors_b]
+
+    for rot in extra_rotations:
+        extra_mols.append(rotate_mol(mol_a_3d, rot))
+        extra_mols.append(rotate_mol(mol_b_3d, rot))
+        hals.append(core[:, 0].tolist())
+        hals.append(core[:, 1].tolist())
+        hacs.append(atom_colors_a)
+        hacs.append(atom_colors_b)
+
+    num_mols = len(extra_mols) + 2
+
+    all_mols = [mol_a_3d, mol_b_3d, *extra_mols]
+
+    legends = []
+    while len(legends) < num_mols:
+        legends.append(get_mol_name(mol_a) + " (3D)")
+        legends.append(get_mol_name(mol_b) + " (3D)")
 
     return Draw.MolsToGridImage(
-        [mol_a_2d, mol_b_2d],
-        molsPerRow=2,
-        highlightAtomLists=[core[:, 0].tolist(), core[:, 1].tolist()],
-        highlightAtomColors=[atom_colors_a, atom_colors_b],
-        subImgSize=(400, 400),
-        legends=[mol_a.GetProp("_Name"), mol_b.GetProp("_Name")],
+        all_mols,
+        molsPerRow=num_mols,
+        highlightAtomLists=hals,
+        highlightAtomColors=hacs,
+        subImgSize=(25 * num_mols, 300),
+        legends=legends,
         useSVG=True,
     )
 
@@ -208,6 +306,13 @@ def sanitize_energies(full_us, lamb_idx, cutoff=10000):
     ref_us = np.expand_dims(full_us[:, lamb_idx], axis=1)
     abs_us = np.abs(full_us - ref_us)
     return np.where(abs_us < cutoff, full_us, np.inf)
+
+
+def read_sdf(fname: Union[str, Path]) -> List[Chem.Mol]:
+    """Read list of mols from an SDF (without discarding hydrogens!)"""
+    supplier = Chem.SDMolSupplier(str(fname), removeHs=False)
+    mols = [mol for mol in supplier]
+    return mols
 
 
 def extract_delta_Us_from_U_knk(U_knk):

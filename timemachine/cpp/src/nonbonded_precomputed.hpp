@@ -9,7 +9,6 @@ template <typename RealType> class NonbondedPairListPrecomputed : public Potenti
 
 private:
     int *d_idxs_;
-    double *d_w_offsets_;
     const int B_;
 
     double beta_;
@@ -19,8 +18,7 @@ public:
     int num_bonds() const { return B_; }
 
     NonbondedPairListPrecomputed(
-        const std::vector<int> &pair_idxs,    // [B, 2]
-        const std::vector<double> &w_offsets, // [B]
+        const std::vector<int> &pair_idxs, // [B, 2]
         const double beta,
         const double cutoff);
 
@@ -32,11 +30,9 @@ public:
         const double *d_x,
         const double *d_p,
         const double *d_box,
-        const double lambda,
         unsigned long long *d_du_dx, // buffered
         unsigned long long *d_du_dp,
-        unsigned long long *d_du_dl, // buffered
-        unsigned long long *d_u,     // buffered
+        unsigned long long *d_u, // buffered
         cudaStream_t stream) override;
 
     void du_dp_fixed_to_float(const int N, const int P, const unsigned long long *du_dp, double *du_dp_float) override;

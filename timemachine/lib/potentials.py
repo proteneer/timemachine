@@ -1,6 +1,5 @@
 from typing import Sequence
 
-import importlib_resources as resources
 import numpy as np
 from numpy.typing import NDArray
 
@@ -64,81 +63,6 @@ class FanoutSummedPotential(CustomOpWrapper):
         return custom_ops.FanoutSummedPotential(impls)
 
 
-# should not be used for Nonbonded Potentials
-# class InterpolatedPotential(CustomOpWrapper):
-
-#     def bind(self, params):
-#         assert self.get_u_fn().params is None
-#         self.params = params
-#         return self
-
-#     def get_u_fn(self):
-#         return self.args[0]
-
-#     def unbound_impl(self, precision):
-#         return custom_ops.InterpolatedPotential(
-#             self.get_u_fn().unbound_impl(precision),
-#             self.args[1],
-#             self.args[2]
-#         )
-
-#     def bound_impl(self, precision):
-#         return custom_ops.BoundPotential(
-#             self.unbound_impl(precision),
-#             self.params
-#         )
-
-# class LambdaPotential(CustomOpWrapper):
-
-#     def bind(self, params):
-#         assert self.get_u_fn().params is None
-#         self.params = params
-#         return self
-
-#     # pass through so we can use the underlying methods
-#     def __getattr__(self, attr):
-#         return getattr(self.args[0], attr)
-
-#     def get_u_fn(self):
-#         return self.args[0]
-
-#     def set_N(self, N):
-#         self.args[1] = N
-
-#     def get_N(self):
-#         return self.args[1]
-
-#     def get_multiplier(self):
-#         return self.args[3]
-
-#     def get_offset(self):
-#         return self.args[4]
-
-#     def unbound_impl(self, precision):
-#         return custom_ops.LambdaPotential(
-#             self.args[0].unbound_impl(precision),
-#             *self.args[1:]
-#         )
-
-#     def bound_impl(self, precision):
-#         u_params = self.get_u_fn().params
-#         return custom_ops.BoundPotential(
-#             self.unbound_impl(precision),
-#             self.params
-#         )
-
-# class Shape(CustomOpWrapper):
-
-#     def get_N(self):
-#         return self.args[0]
-
-#     def get_a_idxs(self):
-#         return self.args[1]
-
-#     def get_b_idxs(self):
-#         return self.args[2]
-
-
 class RMSDRestraint(CustomOpWrapper):
     pass
 
@@ -149,26 +73,6 @@ class BondedWrapper(CustomOpWrapper):
 
     def set_idxs(self, new_idxs):
         self.args[0] = new_idxs
-
-    def get_lambda_mult(self):
-        if len(self.args) > 1:
-            return self.args[1]
-        else:
-            return None
-
-    def get_lambda_offset(self):
-        if len(self.args) > 1:
-            return self.args[2]
-        else:
-            return None
-
-    def set_lambda_mult_and_offset(self, mult, offset):
-        if len(self.args) > 1:
-            self.args[1] = mult
-            self.args[2] = offset
-        else:
-            self.args.append(mult)
-            self.args.append(offset)
 
 
 class ChiralAtomRestraint(BondedWrapper):
@@ -285,26 +189,11 @@ class NonbondedImplWrapper(custom_ops.FanoutSummedPotential):
                 impl.set_nblist_padding(padding)
 
 
-class NonbondedCustomOpWrapper(CustomOpWrapper):
-    # override unbound_impl to pass kernel source directory as first ctor argument
-    def unbound_impl(self, precision):
-        cls_name_base = type(self).__name__
-        if precision == np.float64:
-            cls_name_base += "_f64"
-        else:
-            cls_name_base += "_f32"
-
-        custom_ctor = getattr(custom_ops, cls_name_base)
-
-        with resources.files("timemachine.cpp.src.kernels") as path:
-            return custom_ctor(str(path), *self.args)
-
-
-class Nonbonded(NonbondedCustomOpWrapper):
+class Nonbonded(CustomOpWrapper):
     def __init__(self, *args):
 
         # exclusion_idxs should be unique
-        exclusion_idxs = args[0]
+        exclusion_idxs = args[1]
         exclusion_set = set()
 
         for src, dst in exclusion_idxs:
@@ -317,8 +206,7 @@ class Nonbonded(NonbondedCustomOpWrapper):
 
     def unbound_impl(self, precision):
         all_pairs_impl = NonbondedAllPairs(
-            self.get_lambda_plane_idxs(),
-            self.get_lambda_offset_idxs(),
+            self.get_num_atoms(),
             self.get_beta(),
             self.get_cutoff(),
         ).unbound_impl(precision)
@@ -326,119 +214,63 @@ class Nonbonded(NonbondedCustomOpWrapper):
         exclusions_impl = NonbondedPairListNegated(
             self.get_exclusion_idxs(),
             self.get_scale_factors(),
-            self.get_lambda_plane_idxs(),
-            self.get_lambda_offset_idxs(),
             self.get_beta(),
             self.get_cutoff(),
         ).unbound_impl(precision)
 
         return NonbondedImplWrapper([all_pairs_impl, exclusions_impl])
 
-    def set_exclusion_idxs(self, x):
-        self.args[0] = x
-
-    def get_exclusion_idxs(self):
+    def get_num_atoms(self):
         return self.args[0]
 
-    def set_scale_factors(self, x):
+    def set_exclusion_idxs(self, x):
         self.args[1] = x
 
-    def get_scale_factors(self):
+    def get_exclusion_idxs(self):
         return self.args[1]
 
-    def get_lambda_plane_idxs(self):
+    def set_scale_factors(self, x):
+        self.args[2] = x
+
+    def get_scale_factors(self):
         return self.args[2]
 
-    def get_lambda_offset_idxs(self):
+    def get_beta(self):
         return self.args[3]
 
-    def set_lambda_plane_idxs(self, val):
-        self.args[2] = val
-
-    def set_lambda_offset_idxs(self, val):
-        self.args[3] = val
-
-    def get_beta(self):
+    def get_cutoff(self):
         return self.args[4]
 
+
+class NonbondedAllPairs(CustomOpWrapper):
+    def get_num_atoms(self):
+        return self.args[0]
+
+    def get_beta(self):
+        return self.args[1]
+
     def get_cutoff(self):
-        return self.args[5]
+        return self.args[2]
 
-    def interpolate(self):
-        """
-        Return an interpolated variant of this potential
-        """
-        return NonbondedInterpolated(
-            self.get_exclusion_idxs(),
-            self.get_scale_factors(),
-            self.get_lambda_plane_idxs(),
-            self.get_lambda_offset_idxs(),
-            self.get_beta(),
-            self.get_cutoff(),
-        )
+    def get_atom_idxs(self):
+        return self.args[3]
 
 
-class NonbondedInterpolated(Nonbonded):
-    def unbound_impl(self, precision):
-        all_pairs_impl = NonbondedAllPairsInterpolated(
-            self.get_lambda_plane_idxs(),
-            self.get_lambda_offset_idxs(),
-            self.get_beta(),
-            self.get_cutoff(),
-            None,
-            *self.args[6:],  # remaining args are lambda transformation expressions
-        ).unbound_impl(precision)
+class NonbondedInteractionGroup(CustomOpWrapper):
+    def get_num_atoms(self):
+        return self.args[0]
 
-        exclusions_impl = NonbondedPairListNegatedInterpolated(
-            self.get_exclusion_idxs(),
-            self.get_scale_factors(),
-            self.get_lambda_plane_idxs(),
-            self.get_lambda_offset_idxs(),
-            self.get_beta(),
-            self.get_cutoff(),
-            *self.args[6:],  # remaining args are lambda transformation expressions
-        ).unbound_impl(precision)
+    def get_row_atom_idxs(self):
+        return self.args[1]
 
-        return NonbondedImplWrapper([all_pairs_impl, exclusions_impl])
+    def get_beta(self):
+        return self.args[2]
+
+    def get_cutoff(self):
+        return self.args[3]
 
 
-class NonbondedAllPairs(NonbondedCustomOpWrapper):
-    pass
-
-
-class NonbondedAllPairsInterpolated(NonbondedAllPairs):
-    def unbound_impl(self, precision):
-        cls_name_base = "NonbondedAllPairs"
-        if precision == np.float64:
-            cls_name_base += "_f64_interpolated"
-        else:
-            cls_name_base += "_f32_interpolated"
-
-        custom_ctor = getattr(custom_ops, cls_name_base)
-
-        with resources.files("timemachine.cpp.src.kernels") as path:
-            return custom_ctor(str(path), *self.args)
-
-
-class NonbondedInteractionGroup(NonbondedCustomOpWrapper):
-    pass
-
-
-class NonbondedInteractionGroupInterpolated(NonbondedInteractionGroup):
-    def unbound_impl(self, precision):
-        cls_name_base = "NonbondedInteractionGroup"
-        if precision == np.float64:
-            cls_name_base += "_f64_interpolated"
-        else:
-            cls_name_base += "_f32_interpolated"
-
-        custom_ctor = getattr(custom_ops, cls_name_base)
-
-        with resources.files("timemachine.cpp.src.kernels") as path:
-            return custom_ctor(str(path), *self.args)
-
-
-class NonbondedPairList(NonbondedCustomOpWrapper):
+class NonbondedPairList(CustomOpWrapper):
     def get_idxs(self):
         return self.args[0]
 
@@ -454,9 +286,9 @@ class NonbondedPairList(NonbondedCustomOpWrapper):
 
 class NonbondedPairListPrecomputed(CustomOpWrapper):
     """
-    This implements a pairlist with precomputed parameters. It differs from
-    the regular NonbondedPairlist in that it expects params of the form s0*q_ij, s_ij, and s1*e_ij
-    where s are the scaling factor and combining rules have already been applied.
+    This implements a pairlist with precomputed parameters. It differs from the regular NonbondedPairlist in that it
+    expects params of the form s0*q_ij, s_ij, s1*e_ij, and w_offsets_ij, where s are the scaling factors and combining
+    rules have already been applied.
 
     Note that you should not use this class to implement exclusions (that are later cancelled out by AllPairs)
     since the floating point operations are different in python vs C++.
@@ -468,17 +300,14 @@ class NonbondedPairListPrecomputed(CustomOpWrapper):
     def set_idxs(self, idxs):
         self.args[0] = idxs
 
-    def get_offsets(self):
+    def get_beta(self):
         return self.args[1]
 
-    def get_beta(self):
+    def get_cutoff(self):
         return self.args[2]
 
-    def get_cutoff(self):
-        return self.args[3]
 
-
-class NonbondedPairListNegated(NonbondedCustomOpWrapper):
+class NonbondedPairListNegated(NonbondedPairList):
     def unbound_impl(self, precision):
         cls_name_base = "NonbondedPairList"
         if precision == np.float64:
@@ -488,33 +317,4 @@ class NonbondedPairListNegated(NonbondedCustomOpWrapper):
 
         custom_ctor = getattr(custom_ops, cls_name_base)
 
-        with resources.files("timemachine.cpp.src.kernels") as path:
-            return custom_ctor(str(path), *self.args)
-
-
-class NonbondedPairListInterpolated(NonbondedPairList):
-    def unbound_impl(self, precision):
-        cls_name_base = "NonbondedPairList"
-        if precision == np.float64:
-            cls_name_base += "_f64_interpolated"
-        else:
-            cls_name_base += "_f32_interpolated"
-
-        custom_ctor = getattr(custom_ops, cls_name_base)
-
-        with resources.files("timemachine.cpp.src.kernels") as path:
-            return custom_ctor(str(path), *self.args)
-
-
-class NonbondedPairListNegatedInterpolated(NonbondedCustomOpWrapper):
-    def unbound_impl(self, precision):
-        cls_name_base = "NonbondedPairList"
-        if precision == np.float64:
-            cls_name_base += "_f64_negated_interpolated"
-        else:
-            cls_name_base += "_f32_negated_interpolated"
-
-        custom_ctor = getattr(custom_ops, cls_name_base)
-
-        with resources.files("timemachine.cpp.src.kernels") as path:
-            return custom_ctor(str(path), *self.args)
+        return custom_ctor(*self.args)

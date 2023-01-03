@@ -1,15 +1,10 @@
-from jax.config import config
-
-config.update("jax_enable_x64", True)
-
 from importlib import resources
 
 import numpy as np
 import pytest
-from rdkit import Chem
 
-from timemachine.fe import atom_mapping, interpolate, single_topology_v3
-from timemachine.fe.utils import get_romol_conf
+from timemachine.fe import atom_mapping, interpolate, single_topology
+from timemachine.fe.utils import get_romol_conf, read_sdf
 from timemachine.ff import Forcefield
 
 
@@ -117,21 +112,27 @@ def test_align_nonbonded():
     Test that we can align idxs and parameters for nonbonded forces. For decoupled
     nonbonded interactions, we should set q_ij, s_ij, and e_ij all to zero.
     """
-    a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r = np.random.rand(18)
+
+    rng = np.random.default_rng(2022)
+
+    def p():
+        return tuple(rng.random(4))
 
     src_idxs = [(0, 3), (0, 2), (2, 3), (2, 4)]
-    src_params = [(a, b, c), (d, e, f), (g, h, i), (j, k, l)]
     dst_idxs = [(0, 2), (4, 5)]
-    dst_params = [(m, n, o), (p, q, r)]
 
-    test_set = interpolate.align_nonbonded_idxs_and_params(src_idxs, src_params, dst_idxs, dst_params)
+    src = {idxs: p() for idxs in src_idxs}
+    dst = {idxs: p() for idxs in dst_idxs}
 
+    test_set = interpolate.align_nonbonded_idxs_and_params(src_idxs, src.values(), dst_idxs, dst.values())
+
+    zeros = (0, 0, 0, 0)
     ref_set = {
-        ((0, 3), (a, b, c), (0, 0, 0)),
-        ((0, 2), (d, e, f), (m, n, o)),
-        ((2, 3), (g, h, i), (0, 0, 0)),
-        ((2, 4), (j, k, l), (0, 0, 0)),
-        ((4, 5), (0, 0, 0), (p, q, r)),
+        ((0, 3), src[(0, 3)], zeros),
+        ((0, 2), src[(0, 2)], dst[(0, 2)]),
+        ((2, 3), src[(2, 3)], zeros),
+        ((2, 4), src[(2, 4)], zeros),
+        ((4, 5), zeros, dst[(4, 5)]),
     }
 
     assert test_set == ref_set
@@ -206,8 +207,7 @@ def test_intermediate_states(num_pairs_to_setup=10):
     """
 
     with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
-        suppl = Chem.SDMolSupplier(str(path_to_ligand), removeHs=False)
-        mols = [m for m in suppl]
+        mols = read_sdf(path_to_ligand)
 
     pairs = [(mol_a, mol_b) for mol_a in mols for mol_b in mols]
     np.random.seed(2023)
@@ -217,12 +217,22 @@ def test_intermediate_states(num_pairs_to_setup=10):
     for mol_a, mol_b in pairs[:num_pairs_to_setup]:
 
         print("Checking", mol_a.GetProp("_Name"), "->", mol_b.GetProp("_Name"))
-        mcs_threshold = 2.0  # distance threshold, in nanometers
-        res = atom_mapping.mcs(mol_a, mol_b, mcs_threshold)
-        query = Chem.MolFromSmarts(res.smartsString)
-        core_pairs = atom_mapping.get_core_by_mcs(mol_a, mol_b, query, mcs_threshold)
+        all_cores = atom_mapping.get_cores(
+            mol_a,
+            mol_b,
+            ring_cutoff=0.12,
+            chain_cutoff=0.2,
+            max_visits=1e7,
+            connected_core=True,
+            max_cores=1e6,
+            enforce_core_core=True,
+            complete_rings=True,
+            enforce_chiral=True,
+        )
 
-        top = single_topology_v3.SingleTopologyV3(mol_a, mol_b, core_pairs, ff)
+        core = all_cores[0]
+
+        top = single_topology.SingleTopology(mol_a, mol_b, core, ff)
         x0 = top.combine_confs(get_romol_conf(mol_a), get_romol_conf(mol_b))
 
         # test end-states and check to see if the forces are the same

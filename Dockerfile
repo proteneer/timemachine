@@ -1,11 +1,18 @@
-FROM nvidia/cuda:11.6.0-devel-ubuntu20.04 AS tm_base_env
+# Libraries required by RDkit
+ARG LIBXRENDER_VERSION=1:0.9.10-*
+ARG LIBXEXT_VERSION=2:1.3.4-*
+
+FROM nvidia/cuda:11.7.1-devel-ubuntu20.04 AS tm_base_env
+ARG LIBXRENDER_VERSION
+ARG LIBXEXT_VERSION
 
 # Copied out of anaconda's dockerfile
 ARG MINICONDA_VERSION=4.6.14
 ARG MAKE_VERSION=4.2.1-1.2
 ARG GIT_VERSION=1:2.25.1-*
 ARG WGET_VERSION=1.20.3-1ubuntu2
-RUN apt-get update && apt-get install --no-install-recommends -y wget=${WGET_VERSION} git=${GIT_VERSION} make=${MAKE_VERSION} vim \
+RUN apt-get update && apt-get install --no-install-recommends -y \
+    wget=${WGET_VERSION} git=${GIT_VERSION} make=${MAKE_VERSION} libxrender1=${LIBXRENDER_VERSION} libxext-dev=${LIBXEXT_VERSION} vim \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 RUN wget --quiet https://repo.anaconda.com/miniconda/Miniconda3-${MINICONDA_VERSION}-Linux-x86_64.sh -O ~/miniconda.sh && \
@@ -32,6 +39,7 @@ ARG ENV_NAME=timemachine
 # Create Timemachine Env
 RUN . /opt/conda/etc/profile.d/conda.sh && \
     conda env create -n "${ENV_NAME}" --force -f environment.yml && \
+    conda clean -a && \
     conda activate ${ENV_NAME}
 ENV PATH /opt/conda/envs/${ENV_NAME}/bin:$PATH
 
@@ -44,7 +52,9 @@ ARG DOXYGEN_VERSION=1.9.1
 ARG CYTHON_VERSION=0.29.26
 ARG SWIG_VERSION=3.0.12
 
-RUN . /opt/conda/etc/profile.d/conda.sh && conda install -y -c conda-forge swig=${SWIG_VERSION} doxygen=${DOXYGEN_VERSION} cython=${CYTHON_VERSION}
+RUN . /opt/conda/etc/profile.d/conda.sh && \
+    conda install -y -c conda-forge swig=${SWIG_VERSION} doxygen=${DOXYGEN_VERSION} cython=${CYTHON_VERSION} && \
+    conda clean -a
 
 WORKDIR /code/
 RUN git clone https://github.com/openmm/openmm.git --branch "${OPENMM_VERSION}" && \
@@ -90,9 +100,25 @@ RUN cd /code/timemachine && git init . && pre-commit install-hooks
 COPY ci/requirements.txt /code/timemachine/ci/requirements.txt
 RUN pip install --no-cache-dir -r timemachine/ci/requirements.txt
 
-FROM tm_base_env AS timemachine
+# Dev container that contains the cuda developer tools
+FROM tm_base_env AS timemachine_dev
 ARG CUDA_ARCH=75
 ENV CMAKE_ARGS -DCUDA_ARCH=${CUDA_ARCH}
 COPY . /code/timemachine/
 WORKDIR /code/timemachine/
-RUN CMAKE_BUILD_PARALLEL_LEVEL=$(nproc) pip install --no-cache-dir -e .[dev,test]
+RUN pip install --no-cache-dir -e .[test] && rm -rf ./build
+
+# Container with only cuda runtime, half the size of dev container
+FROM nvidia/cuda:11.7.1-runtime-ubuntu20.04 as timemachine
+ARG LIBXRENDER_VERSION
+ARG LIBXEXT_VERSION
+RUN apt-get update && apt-get install --no-install-recommends -y libxrender1=${LIBXRENDER_VERSION} libxext-dev=${LIBXEXT_VERSION} \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+COPY --from=timemachine_dev /opt/ /opt/
+COPY --from=timemachine_dev /code/ /code/
+COPY --from=timemachine_dev /root/.bashrc /root/.bashrc
+RUN ln -s /opt/conda/etc/profile.d/conda.sh /etc/profile.d/conda.sh
+ARG ENV_NAME=timemachine
+ENV PATH /opt/conda/envs/${ENV_NAME}/bin:$PATH
+ENV CONDA_DEFAULT_ENV ${ENV_NAME}

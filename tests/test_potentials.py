@@ -1,7 +1,3 @@
-import jax
-
-jax.config.update("jax_enable_x64", True)
-
 import itertools
 
 import numpy as np
@@ -25,8 +21,7 @@ def harmonic_bond():
 def execute_bound_impl(bp):
     coords = np.zeros(shape=(3, 3), dtype=np.float32)
     box = np.diag(np.ones(3))
-    lam = 1
-    bp.execute(coords, box, lam)
+    bp.execute(coords, box)
 
 
 def test_bound_potential_keeps_referenced_potential_alive(harmonic_bond):
@@ -40,6 +35,48 @@ def test_bound_potential_get_potential(harmonic_bond):
     unbound_impl = harmonic_bond.unbound_impl(np.float32)
     bound_impl = custom_ops.BoundPotential(unbound_impl, harmonic_bond.params)
     assert unbound_impl is bound_impl.get_potential()
+
+
+def verify_potential_validation(potential):
+    with pytest.raises(RuntimeError, match="coords dimensions must be 2"):
+        potential(np.zeros(1), np.ones((3, 3)))
+
+    with pytest.raises(RuntimeError, match="coords must have a shape that is 3 dimensional"):
+        potential(np.zeros((1, 4)), np.ones((3, 3)))
+
+    with pytest.raises(RuntimeError, match="box must be 3x3"):
+        potential(np.zeros((1, 3)), np.ones((3)))
+
+    with pytest.raises(RuntimeError, match="box must be 3x3"):
+        potential(np.zeros((1, 3)), np.ones((2, 2)))
+
+    with pytest.raises(RuntimeError, match="box must be ortholinear"):
+        potential(np.zeros((1, 3)), np.ones((3, 3)))
+
+    with pytest.raises(RuntimeError, match="box must have positive values along diagonal"):
+        potential(np.zeros((1, 3)), np.eye(3) * 0.0)
+
+
+def test_bound_potential_execute_validation(harmonic_bond):
+    bound_impl = harmonic_bond.bound_impl(np.float32)
+    verify_potential_validation(bound_impl.execute)
+
+    execute_bound_impl(bound_impl)
+
+
+def test_unbound_potential_execute_validation(harmonic_bond):
+    unbound_impl = harmonic_bond.unbound_impl(np.float32)
+
+    for execute_method, extra_params in zip(
+        [unbound_impl.execute, unbound_impl.execute_selective], [(), (True, True, True)]
+    ):
+
+        def func(coords, box):
+            return execute_method(coords, harmonic_bond.params, box, *extra_params)
+
+        verify_potential_validation(func)
+
+        execute_method(np.zeros((3, 3)), harmonic_bond.params, np.eye(3), *extra_params)
 
 
 def test_summed_potential_raises_on_inconsistent_lengths(harmonic_bond):
@@ -78,25 +115,21 @@ def test_summed_potential_invalid_parameters_size(harmonic_bond):
     )
 
 
-def reference_execute_over_batch(unbound, coords, boxes, params, lambdas):
+def reference_execute_over_batch(unbound, coords, boxes, params):
     coord_batches = coords.shape[0]
     param_batches = params.shape[0]
-    lambda_batches = lambdas.size
     N = coords.shape[1]
     D = coords.shape[2]
-    du_dx = np.empty((coord_batches, param_batches, lambda_batches, N, D))
-    du_dp = np.empty((coord_batches, param_batches, lambda_batches, *params.shape[1:]))
-    du_dl = np.empty((coord_batches, param_batches, lambda_batches))
-    u = np.empty((coord_batches, param_batches, lambda_batches))
+    du_dx = np.empty((coord_batches, param_batches, N, D))
+    du_dp = np.empty((coord_batches, param_batches, *params.shape[1:]))
+    u = np.empty((coord_batches, param_batches))
     for i in range(coord_batches):
         for j in range(param_batches):
-            for k in range(lambda_batches):
-                ref_du_dx, ref_du_dp, ref_du_dl, ref_u = unbound.execute(coords[i], params[j], boxes[i], lambdas[k])
-                du_dx[i][j][k] = ref_du_dx
-                du_dp[i][j][k] = ref_du_dp
-                du_dl[i][j][k] = ref_du_dl
-                u[i][j][k] = ref_u
-    return du_dx, du_dp, du_dl, u
+            ref_du_dx, ref_du_dp, ref_u = unbound.execute(coords[i], params[j], boxes[i])
+            du_dx[i][j] = ref_du_dx
+            du_dp[i][j] = ref_du_dp
+            u[i][j] = ref_u
+    return du_dx, du_dp, u
 
 
 def test_execute_selective_batch(harmonic_bond):
@@ -119,13 +152,9 @@ def test_execute_selective_batch(harmonic_bond):
 
     params_batch = np.stack([params, random_params] * num_param_batches)
 
-    lambdas = np.array([0.0, 1.0])
-
     unbound_impl = harmonic_bond.unbound_impl(np.float32)
 
-    ref_du_dx, ref_du_dp, ref_du_dl, ref_u = reference_execute_over_batch(
-        unbound_impl, coords_batch, boxes_batch, params_batch, lambdas
-    )
+    ref_du_dx, ref_du_dp, ref_u = reference_execute_over_batch(unbound_impl, coords_batch, boxes_batch, params_batch)
 
     # Verify that number of boxes and coords match
     with pytest.raises(RuntimeError) as e:
@@ -133,8 +162,6 @@ def test_execute_selective_batch(harmonic_bond):
             coords_batch,
             params_batch,
             boxes_batch[:num_coord_batches],
-            lambdas,
-            True,
             True,
             True,
             True,
@@ -147,8 +174,6 @@ def test_execute_selective_batch(harmonic_bond):
             coords,
             params_batch,
             box,
-            lambdas,
-            True,
             True,
             True,
             True,
@@ -161,26 +186,22 @@ def test_execute_selective_batch(harmonic_bond):
             coords_batch,
             np.ones(3),
             boxes_batch,
-            lambdas,
-            True,
             True,
             True,
             True,
         )
     assert str(e.value) == "parameters must have at least 2 dimensions"
 
-    shape_prefix = (len(coords_batch), len(params_batch), len(lambdas))
+    shape_prefix = (len(coords_batch), len(params_batch))
 
-    for combo in itertools.product([False, True], repeat=4):
-        compute_du_dx, compute_du_dp, compute_du_dl, compute_u = combo
-        batch_du_dx, batch_du_dp, batch_du_dl, batch_u = unbound_impl.execute_selective_batch(
+    for combo in itertools.product([False, True], repeat=3):
+        compute_du_dx, compute_du_dp, compute_u = combo
+        batch_du_dx, batch_du_dp, batch_u = unbound_impl.execute_selective_batch(
             coords_batch,
             params_batch,
             boxes_batch,
-            lambdas,
             compute_du_dx,
             compute_du_dp,
-            compute_du_dl,
             compute_u,
         )
         if compute_du_dx:
@@ -191,10 +212,6 @@ def test_execute_selective_batch(harmonic_bond):
             assert batch_du_dp.shape == (*shape_prefix, *harmonic_bond.params.shape)
         else:
             assert batch_du_dp is None
-        if compute_du_dl:
-            assert batch_du_dl.shape == (*shape_prefix,)
-        else:
-            assert batch_du_dl is None
         if compute_u:
             assert batch_u.shape == (*shape_prefix,)
         else:
@@ -203,8 +220,6 @@ def test_execute_selective_batch(harmonic_bond):
             np.testing.assert_array_equal(batch_du_dx, ref_du_dx)
         if compute_du_dp:
             np.testing.assert_array_equal(batch_du_dp, ref_du_dp)
-        if compute_du_dl:
-            np.testing.assert_array_equal(batch_du_dl, ref_du_dl)
         if compute_u:
             np.testing.assert_array_equal(batch_u, ref_u)
 
@@ -241,12 +256,11 @@ def test_summed_potential(harmonic_bond_test_system):
     potential = generic.SummedPotential([harmonic_bond_1, harmonic_bond_2], [params_1, params_2])
 
     box = 3.0 * np.eye(3)
-    lamb = 0.1
 
     params = np.concatenate((params_1.reshape(-1), params_2.reshape(-1)))
 
     for rtol, precision in [(1e-6, np.float32), (1e-10, np.float64)]:
-        GradientTest().compare_forces_gpu_vs_reference(coords, params, box, [lamb], potential, rtol, precision)
+        GradientTest().compare_forces_gpu_vs_reference(coords, [params], box, potential, rtol, precision)
 
 
 def test_fanout_summed_potential_consistency(harmonic_bond_test_system):
@@ -263,17 +277,11 @@ def test_fanout_summed_potential_consistency(harmonic_bond_test_system):
     fanout_summed_potential = FanoutSummedPotential([harmonic_bond_1.to_gpu(), harmonic_bond_2.to_gpu()])
 
     box = 3.0 * np.eye(3)
-    lamb = 0.1
 
-    du_dx_ref, du_dps_ref, du_dl_ref, u_ref = summed_potential.unbound_impl(np.float32).execute(
-        coords, [params, params], box, lamb
-    )
+    du_dx_ref, du_dps_ref, u_ref = summed_potential.unbound_impl(np.float32).execute(coords, [params, params], box)
 
-    du_dx_test, du_dp_test, du_dl_test, u_test = fanout_summed_potential.unbound_impl(np.float32).execute(
-        coords, params, box, lamb
-    )
+    du_dx_test, du_dp_test, u_test = fanout_summed_potential.unbound_impl(np.float32).execute(coords, params, box)
 
     np.testing.assert_array_equal(du_dx_ref, du_dx_test)
     np.testing.assert_allclose(np.sum(du_dps_ref, axis=0), du_dp_test, rtol=1e-8, atol=1e-8)
-    assert du_dl_ref == du_dl_test
     assert u_ref == u_test

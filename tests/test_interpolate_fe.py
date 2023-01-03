@@ -1,9 +1,3 @@
-# test that we can estimate free energies reliably using pair bar.
-import multiprocessing
-import os
-
-os.environ["XLA_FLAGS"] = "--xla_force_host_platform_device_count=" + str(multiprocessing.cpu_count())
-
 from importlib import resources
 
 import jax
@@ -11,10 +5,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pymbar
 import pytest
-from rdkit import Chem
 
 from timemachine.constants import BOLTZ
-from timemachine.fe import pdb_writer, single_topology_v3, utils
+from timemachine.fe import atom_mapping, pdb_writer, single_topology, utils
 from timemachine.fe.system import simulate_system
 from timemachine.fe.utils import get_romol_conf
 from timemachine.ff import Forcefield
@@ -27,48 +20,29 @@ def test_hif2a_free_energy_estimates():
     forcefield = Forcefield.load_from_file("smirnoff_1_1_0_ccc.py")
 
     with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
-        suppl = Chem.SDMolSupplier(str(path_to_ligand), removeHs=False)
+        all_mols = utils.read_sdf(path_to_ligand)
 
-    all_mols = [x for x in suppl]
     mol_a = all_mols[1]
     mol_b = all_mols[4]
 
-    core = np.array(
-        [
-            [0, 0],
-            [2, 2],
-            [1, 1],
-            [6, 6],
-            [5, 5],
-            [4, 4],
-            [3, 3],
-            [15, 16],
-            [16, 17],
-            [17, 18],
-            [18, 19],
-            [19, 20],
-            [20, 21],
-            [32, 30],
-            [26, 25],
-            [27, 26],
-            [7, 7],
-            [8, 8],
-            [9, 9],
-            [10, 10],
-            [29, 11],
-            [11, 12],
-            [12, 13],
-            [14, 15],
-            [31, 29],
-            [13, 14],
-            [23, 24],
-            [30, 28],
-            [28, 27],
-            [21, 22],
-        ]
+    all_cores = atom_mapping.get_cores(
+        mol_a,
+        mol_b,
+        ring_cutoff=0.12,
+        chain_cutoff=0.2,
+        max_visits=1e7,
+        connected_core=True,
+        max_cores=1e6,
+        enforce_core_core=True,
+        complete_rings=True,
+        enforce_chiral=True,
     )
+    core = all_cores[0]
+    svg = utils.plot_atom_mapping_grid(mol_a, mol_b, core)
+    with open("atom_mapping.svg", "w") as fh:
+        fh.write(svg)
 
-    st = single_topology_v3.SingleTopologyV3(mol_a, mol_b, core, forcefield)
+    st = single_topology.SingleTopology(mol_a, mol_b, core, forcefield)
 
     lambda_schedule = np.linspace(0.0, 1.0, 12)
     systems = [st.setup_intermediate_state(lamb) for lamb in lambda_schedule]
@@ -82,10 +56,6 @@ def test_hif2a_free_energy_estimates():
 
     kT = BOLTZ * 300.0
     beta = 1 / kT
-
-    svg = utils.plot_atom_mapping_grid(mol_a, mol_b, core)
-    with open("atom_mapping.svg", "w") as fh:
-        fh.write(svg)
 
     for lambda_idx, U_fn in enumerate(U_fns):
         # print("lambda", lambda_schedule[lambda_idx], "U", U_fn(x0))

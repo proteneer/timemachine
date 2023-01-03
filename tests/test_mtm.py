@@ -1,6 +1,3 @@
-from jax.config import config
-
-config.update("jax_enable_x64", True)
 import copy
 import functools
 from typing import List
@@ -52,7 +49,7 @@ def test_optimized_MTM():
 
     # discard velocities: (x, v) -> x
     vacuum_samples = _vacuum_xv_samples[:, 0, :]
-    ubps, params, masses, coords, box = enhanced.get_solvent_phase_system(mol, ff)
+    ubps, params, masses, coords, box = enhanced.get_solvent_phase_system(mol, ff, 0.0)
 
     nb_potential = ubps[-1]
     beta = nb_potential.get_beta()
@@ -131,9 +128,8 @@ def test_optimized_MTM():
         vacuum_log_weights=jnp.array(vacuum_log_weights),
     )
 
-    lamb = 0.0
     # we should initialize new instances of this
-    npt_mover = NPTMove(ubps, lamb, masses, temperature, pressure, n_steps=1000, seed=seed)
+    npt_mover = NPTMove(ubps, masses, temperature, pressure, n_steps=1000, seed=seed)
 
     K = 100
     # note that these seeds aren't actually used, since we feed in explicit keys to acceptance_probability

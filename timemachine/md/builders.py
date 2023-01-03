@@ -1,15 +1,18 @@
 import os
+from typing import Union
 
 import numpy as np
 from simtk import unit
 from simtk.openmm import Vec3, app
+
+from timemachine.ff import sanitize_water_ff
 
 
 def strip_units(coords):
     return unit.Quantity(np.array(coords / coords.unit), coords.unit)
 
 
-def build_protein_system(host_pdbfile):
+def build_protein_system(host_pdbfile: Union[app.PDBFile, str], protein_ff: str, water_ff: str):
     """
     Build a solvated protein system with a 10A padding.
 
@@ -19,12 +22,15 @@ def build_protein_system(host_pdbfile):
         PDB of the host structure
 
     """
-    host_ff = app.ForceField("amber99sbildn.xml", "tip3p.xml")
+
+    host_ff = app.ForceField(f"{protein_ff}.xml", f"{water_ff}.xml")
     if isinstance(host_pdbfile, str):
         assert os.path.exists(host_pdbfile)
         host_pdb = app.PDBFile(host_pdbfile)
     elif isinstance(host_pdbfile, app.PDBFile):
         host_pdb = host_pdbfile
+    else:
+        raise TypeError("host_pdbfile must be a string or an openmm PDBFile object")
 
     modeller = app.Modeller(host_pdb.topology, host_pdb.positions)
     host_coords = strip_units(host_pdb.positions)
@@ -36,7 +42,9 @@ def build_protein_system(host_pdbfile):
     box_lengths = box_lengths + padding
     box = np.eye(3, dtype=np.float64) * box_lengths
 
-    modeller.addSolvent(host_ff, boxSize=np.diag(box) * unit.nanometers, neutralize=False)
+    modeller.addSolvent(
+        host_ff, boxSize=np.diag(box) * unit.nanometers, neutralize=False, model=sanitize_water_ff(water_ff)
+    )
     solvated_host_coords = strip_units(modeller.positions)
 
     nha = host_coords.shape[0]
@@ -50,8 +58,8 @@ def build_protein_system(host_pdbfile):
     return solvated_host_system, solvated_host_coords, nwa, nha, box, modeller.topology
 
 
-def build_water_system(box_width):
-    ff = app.ForceField("tip3p.xml")
+def build_water_system(box_width, water_ff: str):
+    ff = app.ForceField(f"{water_ff}.xml")
 
     # Create empty topology and coordinates.
     top = app.Topology()
@@ -59,7 +67,7 @@ def build_water_system(box_width):
     m = app.Modeller(top, pos)
 
     boxSize = Vec3(box_width, box_width, box_width) * unit.nanometers
-    m.addSolvent(ff, boxSize=boxSize, model="tip3p")
+    m.addSolvent(ff, boxSize=boxSize, model=sanitize_water_ff(water_ff))
 
     system = ff.createSystem(m.getTopology(), nonbondedMethod=app.NoCutoff, constraints=None, rigidWater=False)
 

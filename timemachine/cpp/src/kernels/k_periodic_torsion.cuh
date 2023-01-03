@@ -20,16 +20,12 @@ inline __device__ void cross_product(const RealType a[3], const RealType b[3], R
 
 template <typename RealType, int D>
 void __global__ k_periodic_torsion(
-    const int T,                       // number of bonds
-    const double *__restrict__ coords, // [n, 3]
-    const double *__restrict__ params, // [p, 3]
-    const double lambda,
-    const int *__restrict__ lambda_mult,
-    const int *__restrict__ lambda_offset,
+    const int T,                          // number of bonds
+    const double *__restrict__ coords,    // [n, 3]
+    const double *__restrict__ params,    // [p, 3]
     const int *__restrict__ torsion_idxs, // [b, 4]
     unsigned long long *__restrict__ du_dx,
     unsigned long long *__restrict__ du_dp,
-    unsigned long long *__restrict__ du_dl,
     unsigned long long *__restrict__ u) {
 
     const auto t_idx = blockDim.x * blockIdx.x + threadIdx.x;
@@ -110,18 +106,13 @@ void __global__ k_periodic_torsion(
     RealType period = params[period_idx];
 
     RealType prefactor = kt * sin(period * angle - phase) * period;
-    RealType lambda_prefactor = lambda_offset[t_idx] + lambda_mult[t_idx] * lambda;
 
     if (du_dx) {
         for (int d = 0; d < 3; d++) {
-            atomicAdd(
-                du_dx + i_idx * D + d, FLOAT_TO_FIXED_BONDED<RealType>(d_angle_dR0[d] * prefactor * lambda_prefactor));
-            atomicAdd(
-                du_dx + j_idx * D + d, FLOAT_TO_FIXED_BONDED<RealType>(d_angle_dR1[d] * prefactor * lambda_prefactor));
-            atomicAdd(
-                du_dx + k_idx * D + d, FLOAT_TO_FIXED_BONDED<RealType>(d_angle_dR2[d] * prefactor * lambda_prefactor));
-            atomicAdd(
-                du_dx + l_idx * D + d, FLOAT_TO_FIXED_BONDED<RealType>(d_angle_dR3[d] * prefactor * lambda_prefactor));
+            atomicAdd(du_dx + i_idx * D + d, FLOAT_TO_FIXED_BONDED<RealType>(d_angle_dR0[d] * prefactor));
+            atomicAdd(du_dx + j_idx * D + d, FLOAT_TO_FIXED_BONDED<RealType>(d_angle_dR1[d] * prefactor));
+            atomicAdd(du_dx + k_idx * D + d, FLOAT_TO_FIXED_BONDED<RealType>(d_angle_dR2[d] * prefactor));
+            atomicAdd(du_dx + l_idx * D + d, FLOAT_TO_FIXED_BONDED<RealType>(d_angle_dR3[d] * prefactor));
         }
     }
 
@@ -130,17 +121,12 @@ void __global__ k_periodic_torsion(
         RealType du_dphase = kt * sin(period * angle - phase);
         RealType du_dperiod = -kt * sin(period * angle - phase) * angle;
 
-        atomicAdd(du_dp + kt_idx, FLOAT_TO_FIXED_BONDED(du_dkt * lambda_prefactor));
-        atomicAdd(du_dp + phase_idx, FLOAT_TO_FIXED_BONDED(du_dphase * lambda_prefactor));
-        atomicAdd(du_dp + period_idx, FLOAT_TO_FIXED_BONDED(du_dperiod * lambda_prefactor));
+        atomicAdd(du_dp + kt_idx, FLOAT_TO_FIXED_BONDED(du_dkt));
+        atomicAdd(du_dp + phase_idx, FLOAT_TO_FIXED_BONDED(du_dphase));
+        atomicAdd(du_dp + period_idx, FLOAT_TO_FIXED_BONDED(du_dperiod));
     }
 
     if (u) {
-        // printf("%f\n", lambda_prefactor*kt*(1+cos(period*angle - phase)));
-        atomicAdd(u + i_idx, FLOAT_TO_FIXED_BONDED(lambda_prefactor * kt * (1 + cos(period * angle - phase))));
-    }
-
-    if (du_dl) {
-        atomicAdd(du_dl + i_idx, FLOAT_TO_FIXED_BONDED(lambda_mult[t_idx] * kt * (1 + cos(period * angle - phase))));
+        atomicAdd(u + i_idx, FLOAT_TO_FIXED_BONDED(kt * (1 + cos(period * angle - phase))));
     }
 }

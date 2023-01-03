@@ -1,3 +1,5 @@
+from typing import List, Tuple
+
 import numpy as np
 from simtk import openmm as mm
 from simtk import unit
@@ -10,7 +12,7 @@ def value(quantity):
     return quantity.value_in_unit_system(unit.md_unit_system)
 
 
-def deserialize_system(system, cutoff):
+def deserialize_system(system: mm.System, cutoff: float) -> Tuple[List[potentials.CustomOpWrapper], List[float]]:
     """
     Deserialize an OpenMM XML file
 
@@ -44,25 +46,25 @@ def deserialize_system(system, cutoff):
     for force in system.getForces():
 
         if isinstance(force, mm.HarmonicBondForce):
-            bond_idxs = []
-            bond_params = []
+            bond_idxs_ = []
+            bond_params_ = []
 
             for b_idx in range(force.getNumBonds()):
                 src_idx, dst_idx, length, k = force.getBondParameters(b_idx)
                 length = value(length)
                 k = value(k)
 
-                bond_idxs.append([src_idx, dst_idx])
-                bond_params.append((k, length))
+                bond_idxs_.append([src_idx, dst_idx])
+                bond_params_.append((k, length))
 
-            bond_idxs = np.array(bond_idxs, dtype=np.int32)
-            bond_params = np.array(bond_params, dtype=np.float64)
+            bond_idxs = np.array(bond_idxs_, dtype=np.int32)
+            bond_params = np.array(bond_params_, dtype=np.float64)
             bps.append(potentials.HarmonicBond(bond_idxs).bind(bond_params))
 
         if isinstance(force, mm.HarmonicAngleForce):
 
-            angle_idxs = []
-            angle_params = []
+            angle_idxs_ = []
+            angle_params_ = []
 
             for a_idx in range(force.getNumAngles()):
 
@@ -70,18 +72,18 @@ def deserialize_system(system, cutoff):
                 angle = value(angle)
                 k = value(k)
 
-                angle_idxs.append([src_idx, mid_idx, dst_idx])
-                angle_params.append((k, angle))
+                angle_idxs_.append([src_idx, mid_idx, dst_idx])
+                angle_params_.append((k, angle))
 
-            angle_idxs = np.array(angle_idxs, dtype=np.int32)
-            angle_params = np.array(angle_params, dtype=np.float64)
+            angle_idxs = np.array(angle_idxs_, dtype=np.int32)
+            angle_params = np.array(angle_params_, dtype=np.float64)
 
             bps.append(potentials.HarmonicAngle(angle_idxs).bind(angle_params))
 
         if isinstance(force, mm.PeriodicTorsionForce):
 
-            torsion_idxs = []
-            torsion_params = []
+            torsion_idxs_ = []
+            torsion_params_ = []
 
             for t_idx in range(force.getNumTorsions()):
                 a_idx, b_idx, c_idx, d_idx, period, phase, k = force.getTorsionParameters(t_idx)
@@ -89,19 +91,19 @@ def deserialize_system(system, cutoff):
                 phase = value(phase)
                 k = value(k)
 
-                torsion_params.append((k, phase, period))
-                torsion_idxs.append([a_idx, b_idx, c_idx, d_idx])
+                torsion_params_.append((k, phase, period))
+                torsion_idxs_.append([a_idx, b_idx, c_idx, d_idx])
 
-            torsion_idxs = np.array(torsion_idxs, dtype=np.int32)
-            torsion_params = np.array(torsion_params, dtype=np.float64)
+            torsion_idxs = np.array(torsion_idxs_, dtype=np.int32)
+            torsion_params = np.array(torsion_params_, dtype=np.float64)
             bps.append(potentials.PeriodicTorsion(torsion_idxs).bind(torsion_params))
 
         if isinstance(force, mm.NonbondedForce):
 
             num_atoms = force.getNumParticles()
 
-            charge_params = []
-            lj_params = []
+            charge_params_ = []
+            lj_params_ = []
 
             for a_idx in range(num_atoms):
 
@@ -120,13 +122,13 @@ def deserialize_system(system, cutoff):
                 # eps += 1e-3
 
                 # charge_params.append(charge_idx)
-                charge_params.append(charge)
-                lj_params.append((sig, eps))
+                charge_params_.append(charge)
+                lj_params_.append((sig, eps))
 
-            charge_params = np.array(charge_params, dtype=np.float64)
+            charge_params = np.array(charge_params_, dtype=np.float64)
 
             # print("Protein net charge:", np.sum(np.array(global_params)[charge_param_idxs]))
-            lj_params = np.array(lj_params, dtype=np.float64)
+            lj_params = np.array(lj_params_, dtype=np.float64)
 
             # 1 here means we fully remove the interaction
             # 1-2, 1-3
@@ -135,8 +137,8 @@ def deserialize_system(system, cutoff):
             # 1-4, remove half of the interaction
             # scale_half = insert_parameters(0.5, 21)
 
-            exclusion_idxs = []
-            scale_factors = []
+            exclusion_idxs_ = []
+            scale_factors_ = []
 
             all_sig = lj_params[:, 0]
             all_eps = lj_params[:, 1]
@@ -157,7 +159,7 @@ def deserialize_system(system, cutoff):
                 expected_sig = (src_sig + dst_sig) / 2
                 expected_eps = np.sqrt(src_eps * dst_eps)
 
-                exclusion_idxs.append([src, dst])
+                exclusion_idxs_.append([src, dst])
 
                 # sanity check this (expected_eps can be zero), redo this thing
 
@@ -170,20 +172,24 @@ def deserialize_system(system, cutoff):
                 else:
                     lj_scale_factor = 1 - new_eps / expected_eps
 
-                scale_factors.append(lj_scale_factor)
+                scale_factors_.append(lj_scale_factor)
 
                 # tbd fix charge_scale_factors using new_cp
                 if new_eps != 0:
                     np.testing.assert_almost_equal(expected_sig, new_sig)
 
-            exclusion_idxs = np.array(exclusion_idxs, dtype=np.int32)
-
-            lambda_plane_idxs = np.zeros(N, dtype=np.int32)
-            lambda_offset_idxs = np.zeros(N, dtype=np.int32)
+            exclusion_idxs = np.array(exclusion_idxs_, dtype=np.int32)
 
             # cutoff = 1000.0
 
-            nb_params = np.concatenate([np.expand_dims(charge_params, axis=1), lj_params], axis=1)
+            nb_params = np.concatenate(
+                [
+                    np.expand_dims(charge_params, axis=1),
+                    lj_params,
+                    np.zeros((N, 1)),  # 4D coordinates
+                ],
+                axis=1,
+            )
 
             # optimizations
             nb_params[:, 1] = nb_params[:, 1] / 2
@@ -192,13 +198,9 @@ def deserialize_system(system, cutoff):
             beta = 2.0  # erfc correction
 
             # use the same scale factors for electrostatics and lj
-            scale_factors = np.stack([scale_factors, scale_factors], axis=1)
+            scale_factors = np.stack([scale_factors_, scale_factors_], axis=1)
 
-            bps.append(
-                potentials.Nonbonded(
-                    exclusion_idxs, scale_factors, lambda_plane_idxs, lambda_offset_idxs, beta, cutoff
-                ).bind(nb_params)
-            )
+            bps.append(potentials.Nonbonded(N, exclusion_idxs, scale_factors, beta, cutoff).bind(nb_params))
 
             # nrg_fns.append(('Exclusions', (exclusion_idxs, scale_factors, es_scale_factors)))
 

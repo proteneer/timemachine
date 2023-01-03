@@ -8,7 +8,7 @@ from timemachine.integrator import FIXED_TO_FLOAT
 from timemachine.lib import LangevinIntegrator, MonteCarloBarostat, custom_ops
 from timemachine.md import builders, minimizer
 from timemachine.md.barostat.utils import get_bond_list, get_group_indices
-from timemachine.testsystems.relative import hif2a_ligand_pair as testsystem
+from timemachine.testsystems.relative import get_hif2a_ligand_pair_single_topology
 
 
 def test_deterministic_energies():
@@ -20,13 +20,15 @@ def test_deterministic_energies():
     temperature = 300
     pressure = 1.0
     barostat_interval = 25
-    mol_a, mol_b = testsystem.mol_a, testsystem.mol_b
+    mol_a, mol_b, _ = get_hif2a_ligand_pair_single_topology()
 
     ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
 
     # build the protein system.
     with resources.path("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as path_to_pdb:
-        complex_system, complex_coords, _, _, complex_box, _ = builders.build_protein_system(str(path_to_pdb))
+        complex_system, complex_coords, _, _, complex_box, _ = builders.build_protein_system(
+            str(path_to_pdb), ff.protein_ff, ff.water_ff
+        )
     host_fns, host_masses = openmm_deserializer.deserialize_system(complex_system, cutoff=1.0)
 
     # resolve host clashes
@@ -59,23 +61,20 @@ def test_deterministic_energies():
 
         for barostat in [None, baro.impl(bps)]:
             ctxt = custom_ops.Context(x0, v0, complex_box, intg, bps, barostat=barostat)
-            for lamb in [0.0, 0.4, 1.0]:
-                us, xs, boxes = ctxt.multiple_steps_U(lamb, 200, np.array([lamb]), 10, 10)
+            us, xs, boxes = ctxt.multiple_steps_U(200, 10, 10)
 
-                for ref_U, x, b in zip(us, xs, boxes):
-                    test_u = 0.0
-                    test_u_selective = 0.0
-                    test_U_fixed = np.uint64(0)
-                    for fn, unbound, bp in zip(host_fns, unbound_bps, bps):
-                        U_fixed = bp.execute_fixed(x, b, lamb)
-                        test_U_fixed += U_fixed
-                        _, _, U = bp.execute(x, b, lamb)
-                        test_u += U
-                        _, _, _, U_selective = unbound.execute_selective(
-                            x, fn.params, b, lamb, False, False, False, True
-                        )
-                        test_u_selective += U_selective
-                    assert ref_U == FIXED_TO_FLOAT(test_U_fixed)
-                    assert test_u == test_u_selective
-                    np.testing.assert_almost_equal(ref_U, test_u, decimal=decimals)
-                    np.testing.assert_almost_equal(ref_U, test_u_selective, decimal=decimals)
+            for ref_U, x, b in zip(us, xs, boxes):
+                test_u = 0.0
+                test_u_selective = 0.0
+                test_U_fixed = np.uint64(0)
+                for fn, unbound, bp in zip(host_fns, unbound_bps, bps):
+                    U_fixed = bp.execute_fixed(x, b)
+                    test_U_fixed += U_fixed
+                    _, U = bp.execute(x, b)
+                    test_u += U
+                    _, _, U_selective = unbound.execute_selective(x, fn.params, b, False, False, True)
+                    test_u_selective += U_selective
+                assert ref_U == FIXED_TO_FLOAT(test_U_fixed)
+                assert test_u == test_u_selective
+                np.testing.assert_almost_equal(ref_U, test_u, decimal=decimals)
+                np.testing.assert_almost_equal(ref_U, test_u_selective, decimal=decimals)

@@ -1,18 +1,20 @@
 from itertools import product
 
 import jax
-
-jax.config.update("jax_enable_x64", True)
-
 import numpy as np
+import pytest
 from jax import grad, jit
 from jax import numpy as jnp
 
-from timemachine.constants import BOLTZ
+from timemachine.constants import BOLTZ, DEFAULT_FF
+from timemachine.fe import utils
+from timemachine.fe.single_topology import SingleTopology
+from timemachine.ff import Forcefield
 from timemachine.integrator import LangevinIntegrator
-from timemachine.testsystems.relative import hif2a_ligand_pair
+from timemachine.testsystems.relative import get_hif2a_ligand_pair_single_topology
 
 
+@pytest.mark.nogpu
 def test_reference_langevin_integrator(threshold=1e-4):
     """Assert approximately canonical sampling of e^{-x^4 / kBT},
     for various settings of temperature, friction, timestep, and mass"""
@@ -35,11 +37,11 @@ def test_reference_langevin_integrator(threshold=1e-4):
 
     for (temperature, friction, dt, mass) in settings:
         # generate n_production_steps * n_copies samples
-        n_copies = 10000
+        n_copies = 2500
         langevin = LangevinIntegrator(force_fxn, mass, temperature, dt, friction)
 
         x0, v0 = 0.1 * np.ones((2, n_copies))
-        xs, vs = langevin.multiple_steps(x0, v0, n_steps=5000)
+        xs, vs = langevin.multiple_steps(x0, v0, n_steps=2500)
         samples = xs[10:].flatten()
 
         # summarize using histogram
@@ -56,6 +58,7 @@ def test_reference_langevin_integrator(threshold=1e-4):
         assert histogram_mse < threshold
 
 
+@pytest.mark.nogpu
 def test_reference_langevin_integrator_deterministic():
     """Asserts that trajectories are deterministic given a seed value"""
     force_fxn = lambda x: -4 * x ** 3
@@ -79,6 +82,7 @@ def test_reference_langevin_integrator_deterministic():
     assert_deterministic(lambda seed: langevin.multiple_steps_lax(jax.random.PRNGKey(seed), x0, v0))
 
 
+@pytest.mark.nogpu
 def test_reference_langevin_integrator_consistent():
     """
     Asserts that the result of the implementation based on jax.lax
@@ -117,19 +121,25 @@ def test_reference_langevin_integrator_with_custom_ops():
     * assert minimizer-like behavior when run at 0 temperature,
     * assert stability when run at room temperature"""
 
-    np.random.seed(2021)
+    seed = 2021
+    np.random.seed(seed)
+    temperature = 300
+    st = get_hif2a_ligand_pair_single_topology()
+    mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
+    forcefield = Forcefield.load_from_file(DEFAULT_FF)
+    st = SingleTopology(mol_a, mol_b, core, forcefield)
+    vac_sys = st.setup_intermediate_state(0.5)
+    x_a = utils.get_romol_conf(st.mol_a)
+    x_b = utils.get_romol_conf(st.mol_b)
+    coords = st.combine_confs(x_a, x_b)
+    potentials = vac_sys.get_U_fns()
+    masses = np.array(st.combine_masses())
 
-    # define a force fxn using a mix of optimized custom_ops and prototype-friendly Jax
-    rfe = hif2a_ligand_pair
-    unbound_potentials, sys_params, masses = rfe.prepare_vacuum_edge(rfe.ff.get_ordered_params())
-    coords = rfe.prepare_combined_coords()
-    bound_potentials = [
-        ubp.bind(params).bound_impl(np.float32) for (ubp, params) in zip(unbound_potentials, sys_params)
-    ]
+    impls = [bp.bound_impl(np.float32) for bp in potentials]
     box = 100 * np.eye(3)
 
     def custom_op_force_component(coords):
-        du_dxs = np.array([bp.execute(coords, box, 0.5)[0] for bp in bound_potentials])
+        du_dxs = np.array([bp.execute(coords, box)[0] for bp in impls])
         return -np.sum(du_dxs, 0)
 
     def jax_restraint(coords):

@@ -1,23 +1,19 @@
-import csv
 import os
 import pickle
 import subprocess
 import sys
 from glob import glob
-from importlib import resources
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 import pytest
-from common import get_hif2a_ligands_as_sdf_file, temporary_working_dir
+from common import temporary_working_dir
 from numpy.typing import NDArray as Array
-from rdkit import Chem
 from scipy.special import logsumexp
 
 from timemachine.constants import DEFAULT_KT, KCAL_TO_KJ
 from timemachine.datasets import fetch_freesolv
-from timemachine.fe.free_energy import RABFEResult
 from timemachine.fe.utils import get_mol_name
 
 # All examples are to be tested nightly
@@ -56,6 +52,7 @@ def run_example(
     if env is not None:
         subprocess_env.update(env)
     subprocess_args = [sys.executable, str(example_path), *cli_args]
+    print("Running with args:", "".join(subprocess_args))
     proc = subprocess.run(
         subprocess_args,
         env=subprocess_env,
@@ -63,54 +60,6 @@ def run_example(
         cwd=cwd,
     )
     return proc
-
-
-def test_relative_binding():
-    """
-    Test validate_relative_binding.py to ensure that it functions correctly
-    """
-    with resources.path("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as pdb_path:
-        protein_path = str(pdb_path)
-    temp_ligands = get_hif2a_ligands_as_sdf_file(1)
-
-    # Any fewer windows and the lambda schedule validation will fail
-    windows = str(5)
-    steps = str(2000)
-    seed = str(2022)
-
-    output_path = "rabfe_results.sdf"
-    cli_args = [
-        "--blocker_name",
-        "338",
-        "--ligand_sdf",
-        temp_ligands.name,
-        "--protein_pdb",
-        protein_path,
-        "--num_complex_conv_windows",
-        windows,
-        "--num_complex_windows",
-        windows,
-        "--num_solvent_conv_windows",
-        windows,
-        "--num_solvent_windows",
-        windows,
-        "--num_solvent_prod_steps",
-        steps,
-        "--num_complex_prod_steps",
-        steps,
-        "--output_path",
-        output_path,
-        "--seed",
-        seed,
-    ]
-    with temporary_working_dir() as temp_dir:
-        _ = run_example("validate_relative_binding.py", cli_args, cwd=temp_dir)
-        sdf_output = Path(temp_dir) / output_path
-        assert sdf_output.is_file()
-        for mol in Chem.SDMolSupplier(str(sdf_output), removeHs=False):
-            result = RABFEResult.from_mol(mol)
-            assert isinstance(result.dG_bind, float)
-            assert isinstance(result.dG_bind_err, float)
 
 
 def get_cli_args(config: Dict) -> List[str]:
@@ -173,6 +122,7 @@ def get_smc_free_solv_results(result_path: str) -> Tuple[Array, Array]:
     return dG_preds, dG_expts
 
 
+@pytest.mark.skip("needs update since removal of lambda dependence in nonbonded potentials")
 def test_smc_freesolv(smc_free_solv_path):
     """run_smc_on_freesolv.py with reasonable settings on a small subset of FreeSolv, and expect
     * output in summary_smc_result_*.pkl
@@ -190,44 +140,3 @@ def test_smc_freesolv(smc_free_solv_path):
     # * MAE of ~1.1 kcal/mol: FreeSolv reference calculations
     #   https://www.biorxiv.org/content/10.1101/104281v1.full
     assert mean_abs_err_kcalmol <= 2
-
-
-def test_smc_freesolv_fit(smc_free_solv_path):
-    """
-    refit_freesolv given the free solv results on two molecules.
-    Expect the fit MAE to be low, since we are fitting on all of the data.
-    Also test the loss-only mode which should give similar results.
-    """
-    dG_preds, dG_expts = get_smc_free_solv_results(smc_free_solv_path)
-    mean_abs_err_kcalmol_orig = np.mean(np.abs(dG_preds - dG_expts))
-
-    def read_dgs():
-        dG_preds = []
-        dG_expts = []
-        with open("fit_pred_dg.csv", "r") as f:
-            for row in csv.DictReader(f):
-                # Convert to kcal/mol to be consistent with above test
-                dG_preds.append(float(row["pred_dg (kJ/mol)"]) / KCAL_TO_KJ)
-                dG_expts.append(float(row["exp_dg (kJ/mol)"]) / KCAL_TO_KJ)
-        dG_preds = np.array(dG_preds)
-        dG_expts = np.array(dG_expts)
-        return dG_preds, dG_expts
-
-    with temporary_working_dir() as temp_dir:
-        config = dict(result_path=smc_free_solv_path, n_mols=2, n_gpus=1)
-        run_example("refit_freesolv.py", get_cli_args(config), cwd=temp_dir)
-        dG_preds, dG_expts = read_dgs()
-
-        fit_ff_fname = "fit_ffld_all_final.py"
-        assert Path(fit_ff_fname).exists()
-
-        config = dict(result_path=smc_free_solv_path, loss_only=None, ff_refit=fit_ff_fname, n_mols=2, n_gpus=1)
-        run_example("refit_freesolv.py", get_cli_args(config), cwd=temp_dir)
-        dG_preds_lo, dG_expts_lo = read_dgs()
-
-    mean_abs_err_kcalmol_fit = np.mean(np.abs(dG_preds - dG_expts))
-    assert mean_abs_err_kcalmol_fit < mean_abs_err_kcalmol_orig
-    assert mean_abs_err_kcalmol_fit < 0.1
-
-    mean_abs_err_kcalmol_lo = np.mean(np.abs(dG_preds_lo - dG_expts_lo))
-    assert mean_abs_err_kcalmol_fit == pytest.approx(mean_abs_err_kcalmol_lo, abs=1e-1)

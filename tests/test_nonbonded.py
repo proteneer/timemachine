@@ -1,20 +1,16 @@
 # (ytz): check test and run benchmark with pytest:
 # pytest -xsv tests/test_nonbonded.py::TestNonbonded::test_dhfr && nvprof pytest -xsv tests/test_nonbonded.py::TestNonbonded::test_benchmark
-from jax.config import config
-
-config.update("jax_enable_x64", True)
-
 import copy
-import gzip
 import itertools
-import pickle
 import unittest
 
 import numpy as np
 import pytest
-from common import GradientTest, prepare_system_params, prepare_water_system
+from common import GradientTest, gen_nonbonded_params_with_4d_offsets, prepare_system_params, prepare_water_system
 
+from timemachine.constants import DEFAULT_FF
 from timemachine.fe.utils import to_md_units
+from timemachine.ff import Forcefield
 from timemachine.ff.handlers import openmm_deserializer
 from timemachine.lib import potentials
 from timemachine.md import builders
@@ -42,7 +38,6 @@ class TestNonbondedDHFR(GradientTest):
 
         self.beta = 2.0
         self.cutoff = 1.1
-        self.lamb = 0.1
 
     def test_nblist_hilbert(self):
         """
@@ -76,20 +71,15 @@ class TestNonbondedDHFR(GradientTest):
             # under pure fixed point accumulation the results should be identical.
             for x_idx, x in enumerate(xs):
 
-                ref_du_dx, ref_du_dp, ref_du_dl, ref_u = ref_nonbonded_impl.execute(
-                    x, self.nonbonded_fn.params, self.box, 0.0
-                )
-                test_du_dx, test_du_dp, test_du_dl, test_u = test_nonbonded_impl.execute(
-                    x, self.nonbonded_fn.params, self.box, 0.0
-                )
+                ref_du_dx, ref_du_dp, ref_u = ref_nonbonded_impl.execute(x, self.nonbonded_fn.params, self.box)
+                test_du_dx, test_du_dp, test_u = test_nonbonded_impl.execute(x, self.nonbonded_fn.params, self.box)
 
                 np.testing.assert_array_equal(ref_du_dx, test_du_dx)
                 np.testing.assert_array_equal(ref_du_dp, test_du_dp)
-                np.testing.assert_array_equal(ref_du_dl, test_du_dl)
                 np.testing.assert_array_equal(ref_u, test_u)
 
-                ref_du_dx = ref_nonbonded_impl.execute_du_dx(x, self.nonbonded_fn.params, self.box, 0.0)
-                test_du_dx = test_nonbonded_impl.execute_du_dx(x, self.nonbonded_fn.params, self.box, 0.0)
+                ref_du_dx = ref_nonbonded_impl.execute_du_dx(x, self.nonbonded_fn.params, self.box)
+                test_du_dx = test_nonbonded_impl.execute_du_dx(x, self.nonbonded_fn.params, self.box)
 
                 for idx, (a, b) in enumerate(zip(ref_du_dx, test_du_dx)):
                     if np.linalg.norm(a - b) != 0:
@@ -131,20 +121,15 @@ class TestNonbondedDHFR(GradientTest):
 
         # under pure fixed point accumulation the results should be identical.
         for x_idx, x in enumerate(xs):
-            ref_du_dx, ref_du_dp, ref_du_dl, ref_u = ref_nonbonded_impl.execute(
-                x, self.nonbonded_fn.params, self.box, 0.0
-            )
-            test_du_dx, test_du_dp, test_du_dl, test_u = test_nonbonded_impl.execute(
-                x, self.nonbonded_fn.params, self.box, 0.0
-            )
+            ref_du_dx, ref_du_dp, ref_u = ref_nonbonded_impl.execute(x, self.nonbonded_fn.params, self.box)
+            test_du_dx, test_du_dp, test_u = test_nonbonded_impl.execute(x, self.nonbonded_fn.params, self.box)
 
             np.testing.assert_array_equal(ref_du_dx, test_du_dx)
             np.testing.assert_array_equal(ref_du_dp, test_du_dp)
-            np.testing.assert_array_equal(ref_du_dl, test_du_dl)
             np.testing.assert_array_equal(ref_u, test_u)
 
-            ref_du_dx = ref_nonbonded_impl.execute_du_dx(x, self.nonbonded_fn.params, self.box, 0.0)
-            test_du_dx = test_nonbonded_impl.execute_du_dx(x, self.nonbonded_fn.params, self.box, 0.0)
+            ref_du_dx = ref_nonbonded_impl.execute_du_dx(x, self.nonbonded_fn.params, self.box)
+            test_du_dx = test_nonbonded_impl.execute_du_dx(x, self.nonbonded_fn.params, self.box)
 
             for idx, (a, b) in enumerate(zip(ref_du_dx, test_du_dx)):
                 if np.linalg.norm(a - b) != 0:
@@ -178,20 +163,14 @@ class TestNonbondedDHFR(GradientTest):
             test_scales = np.array(test_scales, dtype=np.float64)
             test_params = self.nonbonded_fn.params[:N, :]
 
-            test_lambda_plane_idxs = np.random.randint(low=-2, high=2, size=N, dtype=np.int32)
-            test_lambda_offset_idxs = np.random.randint(low=-2, high=2, size=N, dtype=np.int32)
-
-            potential = generic.Nonbonded(
-                test_exclusions, test_scales, test_lambda_plane_idxs, test_lambda_offset_idxs, self.beta, self.cutoff
-            )
+            potential = generic.Nonbonded(N, test_exclusions, test_scales, self.beta, self.cutoff)
 
             for precision, rtol, atol in [(np.float64, 1e-8, 1e-8), (np.float32, 1e-4, 5e-4)]:
 
                 self.compare_forces_gpu_vs_reference(
                     test_conf,
-                    test_params,
+                    [test_params],
                     self.box,
-                    [self.lamb],
                     potential,
                     rtol=rtol,
                     atol=atol,
@@ -204,34 +183,24 @@ class TestNonbondedDHFR(GradientTest):
         This is mainly for benchmarking nonbonded computations on the initial state.
         """
 
-        N = self.host_conf.shape[0]
-
         precision = np.float32
 
         nb_fn = copy.deepcopy(self.nonbonded_fn)
-
-        test_lambda_plane_idxs = np.random.randint(low=-2, high=2, size=N, dtype=np.int32)
-        test_lambda_offset_idxs = np.random.randint(low=-2, high=2, size=N, dtype=np.int32)
-
-        nb_fn.set_lambda_plane_idxs(test_lambda_plane_idxs)
-        nb_fn.set_lambda_offset_idxs(test_lambda_offset_idxs)
 
         impl = nb_fn.unbound_impl(precision)
 
         for combo in itertools.product([False, True], repeat=4):
 
-            (compute_du_dx, compute_du_dp, compute_du_dl, compute_u) = combo
+            compute_du_dx, compute_du_dp, compute_u = combo
 
             for trip in range(50):
 
-                test_du_dx, test_du_dp, test_du_dl, test_u = impl.execute_selective(
+                test_du_dx, test_du_dp, test_u = impl.execute_selective(
                     self.host_conf,
-                    self.nonbonded_fn.params,
+                    [self.nonbonded_fn.params],
                     self.box,
-                    [self.lamb],
                     compute_du_dx,
                     compute_du_dp,
-                    compute_du_dl,
                     compute_u,
                 )
 
@@ -240,8 +209,9 @@ class TestNonbondedWater(GradientTest):
     def test_nblist_box_resize(self):
         # test that running the coordinates under two different boxes produces correct results
         # since we should be rebuilding the nblist when the box sizes change.
+        ff = Forcefield.load_from_file(DEFAULT_FF)
 
-        host_system, host_coords, box, _ = builders.build_water_system(3.0)
+        host_system, host_coords, box, _ = builders.build_water_system(3.0, ff.water_ff)
 
         host_fns, host_masses = openmm_deserializer.deserialize_system(host_system, cutoff=1.0)
 
@@ -257,8 +227,6 @@ class TestNonbondedWater(GradientTest):
             host_conf.append([to_md_units(x), to_md_units(y), to_md_units(z)])
         host_conf = np.array(host_conf)
 
-        lamb = 0.1
-
         potential = generic.Nonbonded.from_gpu(test_nonbonded_fn)
 
         big_box = box + np.eye(3) * 1000
@@ -271,9 +239,8 @@ class TestNonbondedWater(GradientTest):
 
                 self.compare_forces_gpu_vs_reference(
                     host_conf,
-                    test_nonbonded_fn.params,
+                    [test_nonbonded_fn.params],
                     test_box,
-                    [lamb],
                     potential,
                     rtol=rtol,
                     atol=atol,
@@ -282,47 +249,6 @@ class TestNonbondedWater(GradientTest):
 
 
 class TestNonbonded(GradientTest):
-    def test_non_zero_du_dl(self):
-        # du_dl should be zero for this test case.
-        fp = gzip.open("tests/data/bad_test_547.pkl.gz", "rb")
-        x_t, box, lamb, nb_bp = pickle.load(fp)
-
-        nb_bp.args = nb_bp.args[:-4]  # ignore any extra args from future PRs
-
-        for i, j in nb_bp.get_exclusion_idxs():
-            assert i < j
-
-        for precision in [np.float64, np.float32]:
-
-            impl = nb_bp.unbound_impl(precision)
-            du_dx, du_dp, du_dl, u = impl.execute(x_t, nb_bp.params, box, lamb)
-
-            print(du_dx, du_dp, du_dl, u)
-
-            assert du_dl == 0.0
-
-    def test_fma_compiler_bug(self):
-
-        # this test case deals with a rather annoying fma compiler bug in CUDA.
-        # see https://github.com/proteneer/timemachine/issues/386
-        fp = gzip.open("tests/data/repro.pkl.gz", "rb")  # This assumes that primes.data is already packed with gzip
-        x_t, box, lamb, nb_bp = pickle.load(fp)
-
-        for precision in [np.float32, np.float64]:
-
-            impl = nb_bp.unbound_impl(precision)
-            du_dx, du_dp, du_dl, u = impl.execute(x_t, nb_bp.params, box, lamb)
-
-            uimpl2 = nb_bp.unbound_impl(precision)
-
-            uimpl2.disable_hilbert_sort()
-            du_dx2, du_dp2, du_dl2, u2 = uimpl2.execute(x_t, nb_bp.params, box, lamb)
-
-            np.testing.assert_array_equal(u2, u)
-            np.testing.assert_array_equal(du_dx2, du_dx)
-            np.testing.assert_array_equal(du_dp2, du_dp)
-            np.testing.assert_array_equal(du_dl2, du_dl)  # this one fails without the patch.
-
     def test_exclusion(self):
 
         # This test verifies behavior when two particles are arbitrarily
@@ -343,7 +269,7 @@ class TestNonbonded(GradientTest):
 
         # pick a set of atoms that will be mutually excluded from each other.
         # we will need to set their exclusions manually
-        exclusion_atoms = np.random.choice(atom_idxs, size=(EA), replace=False)
+        exclusion_atoms = np.random.choice(atom_idxs, size=EA, replace=False)
         exclusion_idxs = []
 
         for idx, i in enumerate(exclusion_atoms):
@@ -359,49 +285,36 @@ class TestNonbonded(GradientTest):
             test_system[idx] = np.zeros(3) + np.random.rand() / 1000 + 2
 
         beta = 2.0
-
-        lambda_plane_idxs = np.random.randint(low=0, high=2, size=N, dtype=np.int32)
-        lambda_offset_idxs = np.random.randint(low=0, high=2, size=N, dtype=np.int32)
-
         cutoff = 1.0
 
-        potential = generic.Nonbonded(exclusion_idxs, scales, lambda_plane_idxs, lambda_offset_idxs, beta, cutoff)
+        potential = generic.Nonbonded(N, exclusion_idxs, scales, beta, cutoff)
 
         for precision, rtol in [(np.float64, 1e-8), (np.float32, 1e-4)]:
 
-            lamb = 0.0
+            params = prepare_system_params(test_system, cutoff)
 
-            params = prepare_system_params(test_system)
-
-            self.compare_forces_gpu_vs_reference(test_system, params, box, [lamb], potential, rtol, precision=precision)
+            self.compare_forces_gpu_vs_reference(test_system, [params], box, potential, rtol, precision=precision)
 
     def test_nonbonded(self):
 
         np.random.seed(4321)
+        ff = Forcefield.load_from_file(DEFAULT_FF)
 
-        _, all_coords, box, _ = builders.build_water_system(3.0)
+        _, all_coords, box, _ = builders.build_water_system(3.0, ff.water_ff)
         all_coords = all_coords / all_coords.unit
         for size in [33, 231, 1050]:
 
             coords = all_coords[:size]
 
-            N = coords.shape[0]
-
-            lambda_plane_idxs = np.random.randint(low=-2, high=2, size=N, dtype=np.int32)
-            lambda_offset_idxs = np.random.randint(low=-2, high=2, size=N, dtype=np.int32)
-
             for cutoff in [1.0]:
                 # E = 0 # DEBUG!
-                charge_params, potential = prepare_water_system(
-                    coords, lambda_plane_idxs, lambda_offset_idxs, p_scale=5.0, cutoff=cutoff
-                )
+                charge_params, potential = prepare_water_system(coords, p_scale=5.0, cutoff=cutoff)
                 for precision, rtol, atol in [(np.float64, 1e-8, 1e-8), (np.float32, 1e-4, 5e-4)]:
 
                     self.compare_forces_gpu_vs_reference(
                         coords,
-                        charge_params,
+                        gen_nonbonded_params_with_4d_offsets(np.random.default_rng(2022), charge_params, cutoff),
                         box,
-                        [0.0, 0.1, 0.2],
                         potential,
                         rtol=rtol,
                         atol=atol,
@@ -416,22 +329,16 @@ class TestNonbonded(GradientTest):
         cutoff = 1
         size = 33
         padding = 0.1
+        ff = Forcefield.load_from_file(DEFAULT_FF)
 
-        _, coords, box, _ = builders.build_water_system(3.0)
+        _, coords, box, _ = builders.build_water_system(3.0, ff.water_ff)
         coords = coords / coords.unit
         coords = coords[:size]
 
-        N = coords.shape[0]
-
-        lambda_plane_idxs = np.random.randint(low=-2, high=2, size=N, dtype=np.int32)
-        lambda_offset_idxs = np.random.randint(low=-2, high=2, size=N, dtype=np.int32)
-
         # Down shift box size to be only a portion of the cutoff
-        charge_params, potential = prepare_water_system(
-            coords, lambda_plane_idxs, lambda_offset_idxs, p_scale=1.0, cutoff=cutoff
-        )
+        charge_params, potential = prepare_water_system(coords, p_scale=1.0, cutoff=cutoff)
 
-        def run_nonbonded(potential, x, box, params, lamb, steps=100):
+        def run_nonbonded(potential, x, box, params, steps=100):
 
             x = (x.astype(np.float32)).astype(np.float64)
             params = (params.astype(np.float32)).astype(np.float64)
@@ -441,28 +348,23 @@ class TestNonbonded(GradientTest):
             assert params.dtype == np.float64
 
             for _ in range(steps):
-                _ = potential.execute_selective(x, params, box, lamb, True, True, True, True)
+                _ = potential.execute_selective(x, params, box, True, True, True)
 
         test_impl = potential.to_gpu().unbound_impl(precision)
 
         # With the default box, all is well
-        run_nonbonded(test_impl, coords, box, charge_params, 0.0, steps=2)
+        run_nonbonded(test_impl, coords, box, charge_params, steps=2)
 
         db_cutoff = (cutoff + padding) * 2
 
         # Make box with diagonals right at the limit
         box = np.eye(3) * db_cutoff
-        run_nonbonded(test_impl, coords, box, charge_params, 0.0)
+        run_nonbonded(test_impl, coords, box, charge_params)
 
-        # Non Orth Box, should fail
-        box = np.ones_like(box) * (db_cutoff ** 2)
-        with self.assertRaises(RuntimeError) as raised:
-            run_nonbonded(test_impl, coords, box, charge_params, 0.0)
-        assert "non-ortholinear box" in str(raised.exception)
         # Only populate the diag with values that are too low
         box = np.eye(3) * (db_cutoff * 0.3)
         with self.assertRaises(RuntimeError) as raised:
-            run_nonbonded(test_impl, coords, box, charge_params, 0.0)
+            run_nonbonded(test_impl, coords, box, charge_params)
         assert "more than half" in str(raised.exception)
 
 

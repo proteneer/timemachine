@@ -1,7 +1,7 @@
 from functools import partial
 from typing import Any, Callable, Iterable, Set, Tuple
 
-import numpy as np
+import jax.numpy as jnp
 
 
 class DuplicateAlignmentKeysError(RuntimeError):
@@ -119,7 +119,7 @@ align_harmonic_bond_idxs_and_params = partial(
     align_harmonic_bond_or_angle_idxs_and_params, validate_idxs=assert_canonical_bond
 )
 align_harmonic_angle_idxs_and_params = align_harmonic_bond_or_angle_idxs_and_params
-align_nonbonded_idxs_and_params = partial(align_idxs_and_params, make_default=lambda _: (0, 0, 0))
+align_nonbonded_idxs_and_params = partial(align_idxs_and_params, make_default=lambda _: (0, 0, 0, 0))
 align_chiral_atom_idxs_and_params = partial(align_idxs_and_params, make_default=lambda _: 0)
 align_torsion_idxs_and_params = partial(
     align_idxs_and_params,
@@ -148,4 +148,36 @@ def linear_interpolation(src_params, dst_params, lamb):
     """
     Linearly interpolate between src and dst params
     """
-    return (1 - lamb) * np.array(src_params) + lamb * np.array(dst_params)
+    return (1 - lamb) * jnp.asarray(src_params) + lamb * jnp.asarray(dst_params)
+
+
+def log_linear_interpolation(src_params, dst_params, lamb, min_value):
+    """
+    Linear interpolation in log space.
+
+    Notes
+    ----
+    * f(0) = src_params, f(1) = dst_params only if src_params and dst_params are > min_value, respectively.
+    """
+
+    # clip to handle out-of-range end state values
+    src_params = jnp.maximum(src_params, min_value)
+    dst_params = jnp.maximum(dst_params, min_value)
+
+    return jnp.exp(linear_interpolation(jnp.log(src_params), jnp.log(dst_params), lamb))
+
+
+def pad(f, src_params, dst_params, lamb, lambda_min, lambda_max):
+    """
+    Use the specified interpolation function in the interval [lambda_min, lambda_max], otherwise pin to the end-state
+    values.
+    """
+    return jnp.where(
+        lamb < lambda_min,
+        src_params,
+        jnp.where(
+            lambda_max < lamb,
+            dst_params,
+            f(src_params, dst_params, (lamb - lambda_min) / (lambda_max - lambda_min)),
+        ),
+    )

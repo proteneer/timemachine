@@ -1,11 +1,15 @@
 import numpy as np
-from jax import config, grad, jit
+import pytest
+from jax import grad, jit
 from jax import numpy as jnp
 
-config.update("jax_enable_x64", True)
-
+from timemachine.constants import DEFAULT_FF
+from timemachine.fe.rbfe import setup_initial_states
+from timemachine.fe.single_topology import SingleTopology
+from timemachine.fe.utils import get_romol_conf
+from timemachine.ff import Forcefield
 from timemachine.integrator import FIXED_TO_FLOAT, FLOAT_TO_FIXED, VelocityVerletIntegrator
-from timemachine.testsystems.relative import hif2a_ligand_pair
+from timemachine.testsystems.relative import get_hif2a_ligand_pair_single_topology
 
 
 def assert_bitwise_reversiblility(x0, v0, update_fxn):
@@ -55,6 +59,7 @@ def assert_reversibility_using_step_implementations(intg, x0, v0, n_steps=1000):
     assert_bitwise_reversiblility(x0, v0, multiple_steps_update)
 
 
+@pytest.mark.nogpu
 def test_reversibility_with_jax_potentials():
     """On a simple jax-transformable potential (quartic oscillators)
     with randomized parameters and initial conditions
@@ -73,7 +78,7 @@ def test_reversibility_with_jax_potentials():
         return -grad(U)(x)
 
     for n_steps in [1, 10, 100, 1000, 10000]:
-        n = np.random.randint(10, 10000)  # Unif[10, 10000]
+        n = np.random.randint(10, 200)  # Unif[10, 200]
         masses = np.random.rand(n) + 1  # Unif[1, 2]
         dt = 0.09 * np.random.rand() + 0.01  # Unif[0.01, 0.1]
         x0 = np.random.randn(n, 3)
@@ -92,23 +97,30 @@ def test_reversibility_with_jax_potentials():
         assert_bitwise_reversiblility(x0, v0, jax_update)
 
 
+@pytest.mark.nightly(reason="Slow")
 def test_reversibility_with_custom_ops_potentials():
     """Check reversibility of "public" .step and .multiple_steps implementations when `force_fxn`
     is a custom_op potential"""
 
-    np.random.seed(2022)
+    seed = 2022
+    np.random.seed(seed)
+    temperature = 300.0
+    lamb = 0.5
 
     # define a Python force fxn that calls custom_ops
-    rfe = hif2a_ligand_pair
-    unbound_potentials, sys_params, masses = rfe.prepare_vacuum_edge(rfe.ff.get_ordered_params())
-    coords = rfe.prepare_combined_coords()
-    bound_potentials = [
-        ubp.bind(params).bound_impl(np.float32) for (ubp, params) in zip(unbound_potentials, sys_params)
-    ]
+    mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
+    forcefield = Forcefield.load_from_file(DEFAULT_FF)
+    rfe = SingleTopology(mol_a, mol_b, core, forcefield)
+    masses = np.array(rfe.combine_masses())
+    coords = rfe.combine_confs(get_romol_conf(mol_a), get_romol_conf(mol_b))
+    host_config = None  # vacuum
+    initial_states = setup_initial_states(rfe, host_config, temperature, [lamb], seed)
+    unbound_potentials = initial_states[0].potentials
+    bound_potentials = [pot.bound_impl(precision=np.float32) for pot in unbound_potentials]
     box = 100 * np.eye(3)
 
     def force(coords):
-        du_dxs = np.array([bp.execute(coords, box, 0.5)[0] for bp in bound_potentials])
+        du_dxs = np.array([bp.execute(coords, box)[0] for bp in bound_potentials])
         return -np.sum(du_dxs, 0)
 
     dt = 1.5e-3

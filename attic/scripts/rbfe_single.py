@@ -18,7 +18,9 @@ from timemachine.optimize.step import truncated_step
 from timemachine.optimize.utils import flatten_and_unflatten
 from timemachine.parallel.client import CUDAPoolClient
 from timemachine.parallel.utils import get_gpu_count
-from timemachine.testsystems.relative import hif2a_ligand_pair
+from timemachine.testsystems.relative import get_hif2a_ligand_pair_single_topology
+from timemachine.constants import DEFAULT_FF
+from timemachine.ff import Forcefield
 
 if __name__ == "__main__":
 
@@ -46,8 +48,8 @@ if __name__ == "__main__":
     client = CUDAPoolClient(max_workers=cmd_args.num_gpus)
 
     # fetch mol_a, mol_b, core, forcefield from testsystem
-    mol_a, mol_b, core = hif2a_ligand_pair.mol_a, hif2a_ligand_pair.mol_b, hif2a_ligand_pair.top.core
-    forcefield = hif2a_ligand_pair.ff
+    mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
+    forcefield = Forcefield.load_from_file(DEFAULT_FF)
 
     # compute ddG label from mol_a, mol_b
     # TODO: add label upon testsystem construction
@@ -58,8 +60,6 @@ if __name__ == "__main__":
 
     print("binding dG_a", label_dG_a)
     print("binding dG_b", label_dG_b)
-
-    hif2a_ligand_pair.label = label_ddG
 
     # construct lambda schedules for complex and solvent
     complex_schedule = construct_lambda_schedule(cmd_args.num_complex_windows)

@@ -1,7 +1,14 @@
+import logging
+from time import time
+
 import jax
 import jax.numpy as jnp
+import numpy as np
 import pymbar
 from jax.scipy.special import logsumexp
+from scipy.stats import normaltest
+
+logger = logging.getLogger(__name__)
 
 
 def EXP(w_raw):
@@ -10,7 +17,7 @@ def EXP(w_raw):
 
     Parameters
     ----------
-    w : np.ndarray, float, (N)
+    w_raw : np.ndarray, float, (N)
         work for N frames
 
     Returns
@@ -88,3 +95,79 @@ def dG_dw(w):
     dBAR_dA = jax.grad(BARzero, argnums=(1,))
     dG_dw = -dBAR_dw(w, dG)[0] / dBAR_dA(w, dG)[0]
     return dG_dw
+
+
+def bootstrap_bar(w_F, w_R, n_bootstrap=1000, timeout=10):
+    """Subsample w_F, w_R with replacement and re-run BAR many times
+
+    Parameters
+    ----------
+    w_F : array
+        forward works
+    w_R : array
+        reverse works
+    n_bootstrap : int
+        # bootstrap samples
+    timeout : int
+        in seconds
+
+    Returns
+    -------
+    best_estimate : float
+        BAR(w_F, w_R, computeUncertainty=False)
+    bootstrap_samples: array
+        length <= n_bootstrap
+        (length < n_bootstrap if timed out)
+
+    Notes
+    -----
+    * TODO[deboggle] -- upgrade from pymbar3 to pymbar4 and remove this
+    * TODO[performance] -- multiprocessing, if needed?
+    """
+    full_bar_result = pymbar.BAR(w_F, w_R, compute_uncertainty=False)
+
+    n_F, n_R = len(w_F), len(w_R)
+
+    bootstrap_samples = []
+
+    t0 = time()
+
+    seed = 2022
+    rng = np.random.default_rng(seed)
+
+    for _ in range(n_bootstrap):
+        elapsed_time = time() - t0
+        if elapsed_time > timeout:
+            break
+
+        w_F_sample = rng.choice(w_F, size=(n_F,), replace=True)
+        w_R_sample = rng.choice(w_R, size=(n_R,), replace=True)
+
+        bar_result = pymbar.BAR(
+            w_F=w_F_sample,
+            w_R=w_R_sample,
+            DeltaF=full_bar_result,  # warm start
+            compute_uncertainty=False,
+            relative_tolerance=1e-6,  # reduce cost
+        )
+
+        bootstrap_samples.append(bar_result)
+
+    return full_bar_result, np.array(bootstrap_samples)
+
+
+def bar_with_bootstrapped_uncertainty(w_F, w_R, n_bootstrap=1000, timeout=10):
+    """Drop-in replacement for pymbar.BAR(w_F, w_R) -> (df, ddf)
+    where first return is forwarded from pymbar.BAR but second return is computed by bootstrapping"""
+
+    df, bootstrap_dfs = bootstrap_bar(w_F, w_R, n_bootstrap=n_bootstrap, timeout=timeout)
+
+    # warn if bootstrap distribution deviates significantly from normality
+    normaltest_result = normaltest(bootstrap_dfs)
+    pvalue_threshold = 1e-3  # arbitrary, small
+    if normaltest_result.pvalue < pvalue_threshold:
+        logger.warning(f"bootstrapped errors non-normal: {normaltest_result}")
+
+    # regardless, summarize as if normal
+    ddf = np.std(bootstrap_dfs)
+    return df, ddf

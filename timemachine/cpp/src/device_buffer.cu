@@ -9,7 +9,7 @@ template <typename T> T *allocate(const std::size_t length) {
         throw std::runtime_error("device buffer length must at least be 1");
     }
     T *buffer;
-    gpuErrchk(cudaMalloc(&buffer, length * sizeof(T)));
+    cudaSafeMalloc(&buffer, length * sizeof(T));
     return buffer;
 }
 
@@ -32,6 +32,9 @@ template <typename T> void DeviceBuffer<T>::copy_to(T *host_buffer) const {
 }
 
 template class DeviceBuffer<double>;
+template class DeviceBuffer<float>;
+template class DeviceBuffer<int>;
+template class DeviceBuffer<char>;
 template class DeviceBuffer<unsigned int>;
 template class DeviceBuffer<unsigned long long>;
 } // namespace timemachine

@@ -4,8 +4,10 @@
 #include "device_buffer.hpp"
 #include "gpu_utils.cuh"
 #include "k_neighborlist.cuh"
+#include "kernels/k_indices.cuh"
 #include "neighborlist.hpp"
 #include "nonbonded_common.cuh"
+#include "set_utils.hpp"
 
 namespace timemachine {
 
@@ -16,23 +18,23 @@ template <typename RealType> Neighborlist<RealType>::Neighborlist(const int N) :
     const int Y = this->Y();
 
     const unsigned long long MAX_TILE_BUFFER = row_blocks * column_blocks;
-    const unsigned long long MAX_ATOM_BUFFER = MAX_TILE_BUFFER * tpb;
+    const unsigned long long MAX_ATOM_BUFFER = this->max_ixn_count();
 
     // interaction buffers
-    gpuErrchk(cudaMalloc(&d_ixn_count_, 1 * sizeof(*d_ixn_count_)));
-    gpuErrchk(cudaMalloc(&d_ixn_tiles_, MAX_TILE_BUFFER * sizeof(*d_ixn_tiles_)));
-    gpuErrchk(cudaMalloc(&d_ixn_atoms_, MAX_ATOM_BUFFER * sizeof(*d_ixn_atoms_)));
-    gpuErrchk(cudaMalloc(&d_trim_atoms_, column_blocks * Y * tpb * sizeof(*d_trim_atoms_)));
+    cudaSafeMalloc(&d_ixn_count_, 1 * sizeof(*d_ixn_count_));
+    cudaSafeMalloc(&d_ixn_tiles_, MAX_TILE_BUFFER * sizeof(*d_ixn_tiles_));
+    cudaSafeMalloc(&d_ixn_atoms_, MAX_ATOM_BUFFER * sizeof(*d_ixn_atoms_));
+    cudaSafeMalloc(&d_trim_atoms_, column_blocks * Y * tpb * sizeof(*d_trim_atoms_));
 
     // bounding box buffers
-    gpuErrchk(cudaMalloc(&d_row_block_bounds_ctr_, column_blocks * 3 * sizeof(*d_row_block_bounds_ctr_)));
-    gpuErrchk(cudaMalloc(&d_row_block_bounds_ext_, column_blocks * 3 * sizeof(*d_row_block_bounds_ext_)));
-    gpuErrchk(cudaMalloc(&d_column_block_bounds_ctr_, column_blocks * 3 * sizeof(*d_column_block_bounds_ctr_)));
-    gpuErrchk(cudaMalloc(&d_column_block_bounds_ext_, column_blocks * 3 * sizeof(*d_column_block_bounds_ext_)));
+    cudaSafeMalloc(&d_row_block_bounds_ctr_, row_blocks * 3 * sizeof(*d_row_block_bounds_ctr_));
+    cudaSafeMalloc(&d_row_block_bounds_ext_, row_blocks * 3 * sizeof(*d_row_block_bounds_ext_));
+    cudaSafeMalloc(&d_column_block_bounds_ctr_, column_blocks * 3 * sizeof(*d_column_block_bounds_ctr_));
+    cudaSafeMalloc(&d_column_block_bounds_ext_, column_blocks * 3 * sizeof(*d_column_block_bounds_ext_));
 
     // Row and column indice arrays
-    gpuErrchk(cudaMalloc(&d_column_idxs_, max_size_ * sizeof(*d_column_idxs_)));
-    gpuErrchk(cudaMalloc(&d_row_idxs_, max_size_ * sizeof(*d_row_idxs_)));
+    cudaSafeMalloc(&d_column_idxs_, max_size_ * sizeof(*d_column_idxs_));
+    cudaSafeMalloc(&d_row_idxs_, max_size_ * sizeof(*d_row_idxs_));
 
     this->reset_row_idxs();
 }
@@ -99,7 +101,7 @@ Neighborlist<RealType>::get_nblist_host(int N, const double *h_coords, const dou
     const int row_blocks = this->num_row_blocks();
 
     unsigned long long MAX_TILE_BUFFER = row_blocks * column_blocks;
-    unsigned long long MAX_ATOM_BUFFER = MAX_TILE_BUFFER * tpb;
+    unsigned long long MAX_ATOM_BUFFER = this->max_ixn_count();
 
     unsigned int h_ixn_count;
     gpuErrchk(cudaMemcpy(&h_ixn_count, d_ixn_count_, 1 * sizeof(*d_ixn_count_), cudaMemcpyDeviceToHost));
@@ -290,6 +292,9 @@ void Neighborlist<RealType>::set_idxs_device(
     if (NC + NR != N_) {
         throw std::runtime_error("Total of indices must equal N");
     }
+    if (NC == 0 || NR == 0) {
+        throw std::runtime_error("Number of column and row indices must be non-zero");
+    }
     const size_t tpb = warp_size;
 
     // The indices must already be on the GPU and are copied into the neighborlist buffers.
@@ -297,15 +302,20 @@ void Neighborlist<RealType>::set_idxs_device(
         d_column_idxs_, d_in_column_idxs, NC * sizeof(*d_column_idxs_), cudaMemcpyDeviceToDevice, stream));
     gpuErrchk(cudaMemcpyAsync(d_row_idxs_, d_in_row_idxs, NR * sizeof(*d_row_idxs_), cudaMemcpyDeviceToDevice, stream));
 
-    // Fill in the rest of values with N, potentially redudant
-    k_initialize_array<unsigned int><<<ceil_divide(N_ - NC, tpb), tpb, 0, stream>>>(N_ - NC, d_column_idxs_ + NC, N_);
+    // Fill in the rest of values with N, potentially redundant
+    k_initialize_array<unsigned int><<<ceil_divide(NR, tpb), tpb, 0, stream>>>(NR, d_column_idxs_ + NC, N_);
     gpuErrchk(cudaPeekAtLastError());
-    k_initialize_array<unsigned int><<<ceil_divide(N_ - NR, tpb), tpb, 0, stream>>>(N_ - NR, d_row_idxs_ + NR, N_);
+    k_initialize_array<unsigned int><<<ceil_divide(NC, tpb), tpb, 0, stream>>>(NC, d_row_idxs_ + NR, N_);
     gpuErrchk(cudaPeekAtLastError());
 
     // Update the row and column counts
     this->NR_ = NR;
     this->NC_ = NC;
+
+    // Clear the atom ixns, to avoid reuse
+    unsigned long long MAX_ATOM_BUFFER = this->max_ixn_count();
+    // Set to max value, ie greater than N. Note that Memset is on bytes, which is why it is UCHAR_MAX
+    gpuErrchk(cudaMemsetAsync(d_ixn_atoms_, UCHAR_MAX, MAX_ATOM_BUFFER * sizeof(*d_ixn_atoms_), stream));
 }
 
 template <typename RealType> bool Neighborlist<RealType>::compute_upper_triangular() const {
@@ -321,6 +331,10 @@ template <typename RealType> int Neighborlist<RealType>::Y() const {
 };
 
 template <typename RealType> int Neighborlist<RealType>::num_row_blocks() const { return ceil_divide(NR_, tile_size); }
+
+template <typename RealType> int Neighborlist<RealType>::max_ixn_count() const {
+    return num_column_blocks() * num_row_blocks() * warp_size;
+}
 
 template class Neighborlist<double>;
 template class Neighborlist<float>;

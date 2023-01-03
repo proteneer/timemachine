@@ -1,24 +1,38 @@
 """Absolute hydration free energies"""
 
+import pickle
 from functools import partial
-from typing import List, Sequence
+from typing import List, Sequence, Tuple
 
 import numpy as np
 from numpy.typing import NDArray as Array
-from rdkit import Chem
+from simtk.openmm import app
 
-from timemachine.constants import BOLTZ, DEFAULT_FF
-from timemachine.fe import functional
+from timemachine.constants import BOLTZ, DEFAULT_FF, DEFAULT_TEMP
+from timemachine.fe import functional, model_utils
+from timemachine.fe.free_energy import (
+    AbsoluteFreeEnergy,
+    HostConfig,
+    InitialState,
+    SimulationProtocol,
+    SimulationResult,
+)
 from timemachine.fe.lambda_schedule import construct_pre_optimized_absolute_lambda_schedule_solvent
+from timemachine.fe.rbfe import estimate_free_energy_given_initial_states
+from timemachine.fe.topology import BaseTopology
+from timemachine.fe.utils import get_mol_name, get_romol_conf
 from timemachine.ff import Forcefield
-from timemachine.md import enhanced, moves, smc
+from timemachine.ff.handlers import openmm_deserializer
+from timemachine.lib import LangevinIntegrator, MonteCarloBarostat, potentials
+from timemachine.md import builders, enhanced, minimizer, moves, smc
+from timemachine.md.barostat.utils import get_bond_list, get_group_indices
 from timemachine.md.states import CoordsVelBox
 
 
 def generate_endstate_samples(
     num_samples: int,
     solvent_samples: Sequence[CoordsVelBox],
-    ligand_samples: Sequence[CoordsVelBox],
+    ligand_samples: Sequence,
     ligand_log_weights: Array,
     num_ligand_atoms: int,
 ) -> List[CoordsVelBox]:
@@ -141,8 +155,7 @@ def set_up_ahfe_system_for_smc(
     samples = [initial_samples[i] for i in sample_inds]
 
     # note: tm convention lambda=1 means "decoupled", lambda=0 means "coupled"
-    lambdas = construct_pre_optimized_absolute_lambda_schedule_solvent(n_windows)[::-1]
-    assert np.isclose(lambdas[0], 1.0) and np.isclose(lambdas[-1], 0.0)
+    lambdas = construct_pre_optimized_absolute_lambda_schedule_solvent(n_windows)
 
     def propagate(xs, lam):
         mover.lamb = lam
@@ -158,170 +171,184 @@ def set_up_ahfe_system_for_smc(
     return samples, lambdas, propagate, log_prob, resample
 
 
-def set_up_smc_parameter_changes_at_endstates(
+def estimate_absolute_free_energy(
     mol,
-    temperature=300.0,
-    pressure=1.0,
-    n_steps=1000,
-    seed=2022,
-    ff0=None,
-    ff1=None,
-    is_vacuum=False,
+    ff: Forcefield,
+    host_config: HostConfig,
+    seed: int,
+    n_frames=1000,
+    prefix="",
+    n_windows=None,
+    keep_idxs=None,
+    n_eq_steps=10000,
+    steps_per_frame=400,
 ):
     """
-    Prepare a system for using SMC to generate samples under
-    different forcefields at each endstate.
+    Estimate the absolute hydration free energy for the given mol.
 
     Parameters
     ----------
-    is_vacuum: bool
-        Set to True to set up the vacuum leg, using NVT.
-        Set to False to set up the solvent leg, using NPT.
+    mol: Chem.Mol
+        molecule
 
-    Returns
-    -------
-    * reduced_potential_fxn
-    * mover with lamb=None. The mover.lamb attribute must be set before use.
-    """
-    if type(seed) != int:
-        seed = np.random.randint(1000)
-        print(f"setting seed randomly to {seed}")
-    else:
-        print(f"setting seed to {seed}")
+    ff: ff.Forcefield
+        Forcefield to be used for the system
 
-    np.random.seed(seed)
+    host_config: HostConfig
+        Configuration for the host system.
 
-    # set up potentials
-    ff0 = ff0 or Forcefield.load_from_file(DEFAULT_FF)
-    ff1 = ff1 or Forcefield.load_from_file(DEFAULT_FF)
+    n_frames: int
+        number of samples to generate for each lambda window, where each sample is `steps_per_frame` steps of MD.
 
-    if is_vacuum:
-        potentials, params, masses, _ = enhanced.get_vacuum_phase_system_parameter_changes(mol, ff0, ff1)
-    else:
-        potentials, params, masses, _, _ = enhanced.get_solvent_phase_system_parameter_changes(mol, ff0, ff1)
+    prefix: str
+        A prefix to append to figures
 
-    U_fn = functional.construct_differentiable_interface_fast(potentials, params)
-    kBT = BOLTZ * temperature
-
-    def reduced_potential_fxn(xvb, lam):
-        return U_fn(xvb.coords, params, xvb.box, lam) / kBT
-
-    for U, p in zip(potentials, params):
-        U.bind(p)
-
-    if is_vacuum:
-        mover = moves.NVTMove(potentials, None, masses, temperature, n_steps, seed)
-    else:
-        mover = moves.NPTMove(potentials, None, masses, temperature, pressure, n_steps, seed)
-    return reduced_potential_fxn, mover
-
-
-def set_up_ahfe_system_for_smc_parameter_changes(
-    mol,
-    n_walkers,
-    n_md_steps,
-    resample_thresh,
-    initial_samples,
-    seed=2022,
-    ff0=None,
-    ff1=None,
-    n_windows=10,
-    is_vacuum=False,
-):
-    """
-    Set up an absolute hydration free energy system such that
-    the samples can be propagated using different forcefields
-    at the end states.
-
-    Parameters
-    ----------
-    mol:
-        Molecule to use to generate samples.
-    n_walkers: int
-        Number of walkers to use
-    n_md_steps: int
-        Number of MD steps per walker
-    resample_thresh: float
-        Resample when the fraction ess falls below this value.
-    initial_samples: Samples
-        Initial set of unweighted samples generated using the initial forcefield.
     seed: int
-        Random seed.
-    ff0: Forcefield
-        Initial forcefield (lam=0)
-    ff1: Forcefield
-        New forcefield (lam=1)
-    n_windows: int
-        Number of windows to use for parameter change.
-    is_vacuum: bool
-        True if this should be the vacuum leg or False for the solvent leg.
+        Random seed to use for the simulations.
+
+    n_windows: None
+        Number of windows used for interpolating the the lambda schedule with additional windows.
+
+    keep_idxs: list of int or None
+        If None, return only the end-state frames. Otherwise if not None, use only for debugging, and this
+        will return the frames corresponding to the idxs of interest.
+
+    n_eq_steps: int
+        Number of equilibration steps for each window.
+
+    steps_per_frame: int
+        The number of steps to take before collecting a frame
 
     Returns
     -------
-        initial samples
-        lambdas schedule
-        propagate fxn
-        log_prob fxn
-        resample fxn
+    SimulationResult
+        Collected data from the simulation (see class for storage information). We currently return frames
+        from only the first and last window.
     """
-    reduced_potential, mover = set_up_smc_parameter_changes_at_endstates(
-        mol, n_steps=n_md_steps, seed=seed, ff0=ff0, ff1=ff1, is_vacuum=is_vacuum
+    bt = BaseTopology(mol, ff)
+    afe = AbsoluteFreeEnergy(mol, bt)
+
+    # note: tm convention lambda=1 means "decoupled", lambda=0 means "coupled"
+    lambda_schedule = construct_pre_optimized_absolute_lambda_schedule_solvent(n_windows)[::-1]
+    assert np.isclose(lambda_schedule[0], 1.0) and np.isclose(lambda_schedule[-1], 0.0)
+
+    temperature = DEFAULT_TEMP
+    initial_states = setup_initial_states(afe, ff, host_config, temperature, lambda_schedule, seed)
+    protocol = SimulationProtocol(n_frames=n_frames, n_eq_steps=n_eq_steps, steps_per_frame=steps_per_frame)
+
+    if keep_idxs is None:
+        keep_idxs = [0, len(initial_states) - 1]  # keep first and last windows
+    assert len(keep_idxs) <= len(lambda_schedule)
+
+    combined_prefix = get_mol_name(mol) + "_" + prefix
+    try:
+        return estimate_free_energy_given_initial_states(
+            initial_states, protocol, temperature, combined_prefix, keep_idxs
+        )
+    except Exception as err:
+        with open(f"failed_ahfe_result_{combined_prefix}.pkl", "wb") as fh:
+            pickle.dump((initial_states, protocol, err), fh)
+        raise err
+
+
+def setup_initial_states(
+    afe: AbsoluteFreeEnergy,
+    ff: Forcefield,
+    host_config: HostConfig,
+    temperature: float,
+    lambda_schedule: Array,
+    seed: int,
+) -> List[InitialState]:
+    """
+    Setup the initial states for a series of lambda values. It is assumed that the lambda schedule
+    is a monotonically decreasing sequence in the closed interval [0, 1].
+
+    Parameters
+    ----------
+    afe: AbsoluteFreeEnergy
+        An AbsoluteFreeEnergy object which contains the mol structure
+
+    ff: ff.Forcefield
+        Forcefield to be used for the system
+
+    host_config: HostConfig
+        Configurations of the host.
+
+    temperature: float
+        Temperature to run the simulation at.
+
+    lambda_schedule: list of float
+
+    seed: int
+        Random number seed
+
+    Returns
+    -------
+    list of InitialStates
+        Returns an initial state for each value of lambda.
+
+    """
+    host_bps, host_masses = openmm_deserializer.deserialize_system(host_config.omm_system, cutoff=1.2)
+    host_conf = minimizer.minimize_host_4d(
+        [afe.mol],
+        host_config.omm_system,
+        host_config.conf,
+        ff,
+        host_config.box,
     )
-    np.random.seed(seed)
 
-    sample_inds = np.random.choice(np.arange(len(initial_samples)), size=n_walkers, replace=True)
-    samples = [initial_samples[i] for i in sample_inds]
-    lambdas = np.linspace(0.0, 1.0, n_windows, endpoint=True)
+    initial_states = []
 
-    def propagate(xs, lam):
-        mover.lamb = lam
-        xs_next = [mover.move(x) for x in xs]
-        return xs_next
+    # check that the lambda schedule is monotonically decreasing.
+    assert np.all(np.diff(lambda_schedule) < 0)
 
-    def log_prob(xs, lam):
-        u_s = np.array([reduced_potential(x, lam) for x in xs])
-        return -u_s
+    for lamb_idx, lamb in enumerate(lambda_schedule):
+        ligand_conf = get_romol_conf(afe.mol)
 
-    resample = partial(smc.conditional_multinomial_resample, thresh=resample_thresh)
+        ubps, params, masses = afe.prepare_host_edge(ff.get_params(), host_config.omm_system, lamb)
+        x0 = afe.prepare_combined_coords(host_coords=host_conf)
+        bps = []
+        for ubp, param in zip(ubps, params):
+            bp = ubp.bind(param)
+            bps.append(bp)
 
-    return samples, lambdas, propagate, log_prob, resample
+        bond_potential = ubps[0]
+        assert isinstance(bond_potential, potentials.HarmonicBond)
+        hmr_masses = model_utils.apply_hmr(masses, bond_potential.get_idxs())
+        group_idxs = get_group_indices(get_bond_list(bond_potential))
+        baro = MonteCarloBarostat(len(hmr_masses), 1.0, temperature, group_idxs, 15, seed)
+        box0 = host_config.box
+
+        v0 = np.zeros_like(x0)  # tbd resample from Maxwell-boltzman?
+        num_ligand_atoms = len(ligand_conf)
+        num_total_atoms = len(x0)
+        ligand_idxs = np.arange(num_total_atoms - num_ligand_atoms, num_total_atoms)
+
+        dt = 2.5e-3
+        friction = 1.0
+        intg = LangevinIntegrator(temperature, dt, friction, hmr_masses, seed)
+
+        state = InitialState(bps, intg, baro, x0, v0, box0, lamb, ligand_idxs)
+        initial_states.append(state)
+    return initial_states
 
 
-def generate_samples_for_smc_parameter_changes(
-    mol: Chem.rdchem.Mol,
-    ff0: Forcefield,
-    ff1: Forcefield,
-    initial_samples: smc.Samples,
-    n_windows=10,
-    is_vacuum=False,
-    n_walkers=100,
-    n_md_steps=100,
-    seed=2022,
-) -> smc.Samples:
-    """
-    Generate new samples under a modified potential.
-    See `set_up_ahfe_system_for_smc_parameter_changes` for parameters.
-
-    Returns
-    -------
-    New samples generated using ff1.
-    """
-    samples, lambdas, propagate, log_prob, resample = set_up_ahfe_system_for_smc_parameter_changes(
+def run_solvent(
+    mol, forcefield, _, n_frames, seed, n_eq_steps=10000, steps_per_frame=400, n_windows=16
+) -> Tuple[SimulationResult, app.topology.Topology]:
+    box_width = 4.0
+    solvent_sys, solvent_conf, solvent_box, solvent_top = builders.build_water_system(box_width, forcefield.water_ff)
+    solvent_box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes, deboggle later
+    solvent_host_config = HostConfig(solvent_sys, solvent_conf, solvent_box)
+    solvent_res = estimate_absolute_free_energy(
         mol,
-        n_walkers=n_walkers,
-        n_md_steps=n_md_steps,
-        resample_thresh=0.6,
-        initial_samples=initial_samples,
-        ff0=ff0,
-        ff1=ff1,
-        is_vacuum=is_vacuum,
+        forcefield,
+        solvent_host_config,
+        seed,
+        prefix="solvent",
+        n_frames=n_frames,
+        n_eq_steps=n_eq_steps,
         n_windows=n_windows,
-        seed=seed,
+        steps_per_frame=steps_per_frame,
     )
-
-    if is_vacuum:
-        smc_result = smc.sequential_monte_carlo(initial_samples, lambdas, propagate, log_prob, resample)
-        return smc.refine_samples(smc_result["traj"][-1], smc_result["log_weights_traj"][-1], propagate, lambdas[-1])
-    else:
-        smc_result = smc.sequential_monte_carlo(samples, lambdas, propagate, log_prob, resample)
-        return smc.refine_samples(smc_result["traj"][-1], smc_result["log_weights_traj"][-1], propagate, lambdas[-1])
+    return solvent_res, solvent_top

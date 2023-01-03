@@ -1,10 +1,6 @@
-import multiprocessing
-import os
-
-os.environ["XLA_FLAGS"] = "--xla_force_host_platform_device_count=" + str(multiprocessing.cpu_count())
-
 import jax.numpy as jnp
 import numpy as np
+import pytest
 import scipy
 from rdkit import Chem
 
@@ -417,6 +413,8 @@ $$$$""",
     assert ks < 0.05 or pv > 0.10
 
 
+# Expected to fail until chiral restraints are re-enabled for vacuum simulations
+@pytest.mark.xfail
 def test_chiral_topology():
     # test adding chiral restraints to the base topology
     # this molecule has several chiral atoms and bonds

@@ -1,22 +1,60 @@
 import tempfile
+from typing import List, Optional
 
+import jax
 import numpy as np
+from numpy.typing import NDArray
 from rdkit import Chem
 from simtk.openmm import app
 
+from timemachine.constants import MAX_FORCE_NORM
+from timemachine.fe.topology import BaseTopology
+from timemachine.fe.utils import get_romol_conf
+from timemachine.ff import Forcefield
 
-def assert_mol_has_all_hydrogens(mol: Chem.Mol):
+
+def mol_has_all_hydrogens(mol: Chem.Mol) -> bool:
     atoms = mol.GetNumAtoms()
     mol_copy = Chem.AddHs(mol)
-    assert atoms == mol_copy.GetNumAtoms(), "Hydrogens missing for mol"
+    return atoms == mol_copy.GetNumAtoms()
 
 
-def verify_rabfe_pair(mol: Chem.Mol, blocker: Chem.Mol):
-    assert_mol_has_all_hydrogens(mol)
-    assert_mol_has_all_hydrogens(blocker)
-    mol_charge = Chem.GetFormalCharge(mol)
-    blocker_charge = Chem.GetFormalCharge(blocker)
-    assert mol_charge == blocker_charge, f"Formal charge disagrees: blocker: {blocker_charge:d} ligand: {mol_charge:d}"
+def assert_mol_has_all_hydrogens(mol: Chem.Mol):
+    assert mol_has_all_hydrogens(mol), "Hydrogens missing for mol"
+
+
+def get_vacuum_val_and_grad_fn(mol: Chem.Mol, ff: Forcefield):
+    """
+    Return a function which returns the potential energy and gradients
+    at the coordinates for the molecule in vacuum.
+    """
+    top = BaseTopology(mol, ff)
+    vacuum_system = top.setup_end_state()
+    U = vacuum_system.get_U_fn()
+
+    grad_fn = jax.jit(jax.grad(U, argnums=(0)))
+
+    def val_and_grad_fn(x):
+        return U(x), grad_fn(x)
+
+    return val_and_grad_fn
+
+
+def get_strained_atoms(mol: Chem.Mol, ff: Forcefield, max_force: Optional[float] = MAX_FORCE_NORM) -> List[float]:
+    """
+    Return a list of atom indices that are strained based on the max_force.
+
+    Parameters
+    ----------
+    max_force:
+        If the magnitude of the force on atom i is greater than max force,
+        consider this a clash.
+    """
+    x0 = get_romol_conf(mol)
+    val_and_grad_fn = get_vacuum_val_and_grad_fn(mol, ff)
+    _, grads = val_and_grad_fn(x0)
+    norm_grads = np.linalg.norm(grads, axis=1)
+    return [int(x) for x in np.arange(x0.shape[0])[norm_grads > max_force]]
 
 
 def apply_hmr(masses, bond_list, multiplier=2):
@@ -49,7 +87,7 @@ def apply_hmr(masses, bond_list, multiplier=2):
         return np.abs(masses[i] - 1.00794) < 1e-3
 
     for i, j in bond_list:
-        i, j = np.array([i, j])[np.argsort([masses[i], masses[j]])]
+        i, j = np.array([i, j])[np.argsort([masses[i], masses[j]], kind="stable")]
         if is_hydrogen(i):
             if is_hydrogen(j):
                 # H-H, skip
@@ -64,6 +102,32 @@ def apply_hmr(masses, bond_list, multiplier=2):
             continue
 
     return masses
+
+
+def image_frame(group_idxs: List[NDArray], coords: NDArray, box: NDArray) -> NDArray:
+    """Given a set group indices, the coordinates of a frame and the box, will return
+    the coordinates wrapped into the periodic box.
+
+    Parameters
+    ----------
+    group_idxs: np.ndarray
+        Array of group indices that represent each mol in the system.
+
+    coords: np.ndarray
+        List of coordinates that make up a frame
+
+    box: np.ndarray
+        Periodic box, expected to be 3x3
+
+    Returns
+    -------
+    np.ndarray
+        Coordinates imaged into box
+    """
+    imaged_coords = coords.copy()
+    for mol_indices in group_idxs:
+        imaged_coords[mol_indices] = image_molecule(coords[mol_indices], box)
+    return imaged_coords
 
 
 def image_molecule(mol_coords, box):

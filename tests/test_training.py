@@ -1,9 +1,12 @@
 import unittest
 
 import numpy as np
+import pytest
 
-from timemachine.testsystems.relative import hif2a_ligand_pair
+from timemachine.testsystems.relative import get_hif2a_ligand_pair_single_topology
 from timemachine.training.dataset import Dataset
+
+pytestmark = [pytest.mark.nogpu]
 
 
 class TestDataset(unittest.TestCase):
@@ -75,7 +78,8 @@ class TestDataset(unittest.TestCase):
         self.assertEqual(len(rhs), len(rhs))
 
     def test_dataset_data_is_a_copy(self):
-        data = [hif2a_ligand_pair.mol_a, hif2a_ligand_pair.mol_b]
+        mol_a, mol_b, _ = get_hif2a_ligand_pair_single_topology()
+        data = [mol_a, mol_b]
         ds = Dataset(data)
         data.pop(0)
         self.assertEqual(len(data), 1)

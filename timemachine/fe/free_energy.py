@@ -1,150 +1,119 @@
-import math
-
-from jax.config import config
-from rdkit import Chem
-
-config.update("jax_enable_x64", True)
-
-from dataclasses import asdict, dataclass, fields
-from typing import List, Tuple, Union
+from dataclasses import dataclass
+from typing import List
 
 import numpy as np
-from rdkit.Chem import MolToSmiles
 
-from timemachine.fe import topology
+from timemachine.fe import model_utils, topology
 from timemachine.fe.utils import get_mol_masses, get_romol_conf
+from timemachine.ff import ForcefieldParams
 from timemachine.ff.handlers import openmm_deserializer
+from timemachine.lib import LangevinIntegrator, MonteCarloBarostat
+from timemachine.lib.potentials import CustomOpWrapper, HarmonicBond
+from timemachine.md.barostat.utils import compute_box_center, get_bond_list, get_group_indices
 
 
-@dataclass(eq=False)
-class RABFEResult:
-    mol_name: str
-    dG_complex_conversion: float
-    dG_complex_conversion_error: float
-    dG_complex_decouple: float
-    dG_complex_decouple_error: float
-    dG_solvent_conversion: float
-    dG_solvent_conversion_error: float
-    dG_solvent_decouple: float
-    dG_solvent_decouple_error: float
+class HostConfig:
+    def __init__(self, omm_system, conf, box):
+        self.omm_system = omm_system
+        self.conf = conf
+        self.box = box
 
-    def log(self):
-        """print stage summary"""
-        print(
-            "stage summary for mol:",
-            self.mol_name,
-            "dG_complex_conversion (K complex)",
-            self.dG_complex_conversion,
-            "dG_complex_conversion_err",
-            self.dG_complex_conversion_error,
-            "dG_complex_decouple (E0 + A0 + A1 + E1)",
-            self.dG_complex_decouple,
-            "dG_complex_decouple_err",
-            self.dG_complex_decouple_error,
-            "dG_solvent_conversion (K solvent)",
-            self.dG_solvent_conversion,
-            "dG_solvent_conversion_err",
-            self.dG_solvent_conversion_error,
-            "dG_solvent_decouple (D)",
-            self.dG_solvent_decouple,
-            "dG_solvent_decouple_err",
-            self.dG_solvent_decouple_error,
-        )
 
-    def __eq__(self, other: object) -> bool:
-        if not isinstance(other, RABFEResult):
-            return NotImplemented
-        equal = True
-        for field in fields(self):
-            self_val = getattr(self, field.name)
-            other_val = getattr(other, field.name)
-            # Python doesn't consider nan == nan to be true
-            if field.type is float and math.isnan(self_val) and math.isnan(other_val):
-                continue
-            equal &= self_val == other_val
-        return equal
+@dataclass
+class SimulationProtocol:
+    n_frames: int
+    n_eq_steps: int
+    steps_per_frame: int
 
-    @classmethod
-    def _convert_field_to_sdf_field(cls, field_name: str) -> str:
-        if field_name == "mol_name":
-            cleaned_name = "_Name"
-        else:
-            cleaned_name = field_name.replace("_", " ")
-        return cleaned_name
 
-    @classmethod
-    def from_mol(cls, mol: Chem.Mol):
-        field_names = fields(cls)
+@dataclass
+class InitialState:
+    """
+    An initial contains everything that is needed to bitwise reproduce a trajectory given a SimulationProtocol
 
-        kwargs = {}
-        for field in field_names:
-            field_name = cls._convert_field_to_sdf_field(field.name)
-            val = mol.GetProp(field_name)
-            val = field.type(val)
-            kwargs[field.name] = val
-        return RABFEResult(**kwargs)
+    This object can be pickled safely.
+    """
 
-    def apply_to_mol(self, mol: Chem.Mol):
-        results_dict = asdict(self)
-        results_dict.update(
-            {
-                "dG_bind": self.dG_bind,
-                "dG_bind_err": self.dG_bind_err,
-            }
-        )
-        for field, val in results_dict.items():
-            field_name = self._convert_field_to_sdf_field(field)
-            mol.SetProp(field_name, str(val))
+    potentials: List[CustomOpWrapper]
+    integrator: LangevinIntegrator
+    barostat: MonteCarloBarostat
+    x0: np.ndarray
+    v0: np.ndarray
+    box0: np.ndarray
+    lamb: float
+    ligand_idxs: np.ndarray
 
-    @property
-    def dG_complex(self):
-        """effective free energy of removing from complex"""
-        return self.dG_complex_conversion + self.dG_complex_decouple
 
-    @property
-    def dG_solvent(self):
-        """effective free energy of removing from solvent"""
-        return self.dG_solvent_conversion + self.dG_solvent_decouple
+@dataclass
+class SimulationResult:
+    all_dGs: List[np.ndarray]
+    all_errs: List[float]
+    dG_errs_by_lambda_by_component: np.ndarray  # (len(U_names), L - 1)
+    overlaps_by_lambda: np.ndarray  # (L - 1,)
+    overlaps_by_lambda_by_component: np.ndarray  # (len(U_names), L - 1)
+    dG_errs_png: bytes
+    overlap_summary_png: bytes
+    overlap_detail_png: bytes
+    frames: List[np.ndarray]
+    boxes: List[np.ndarray]
+    initial_states: List[InitialState]
+    protocol: SimulationProtocol
 
-    @property
-    def dG_bind(self):
-        """the final value we seek is the free energy of moving
-        from the solvent into the complex"""
-        return self.dG_solvent - self.dG_complex
 
-    @property
-    def dG_bind_err(self):
-        errors = np.asarray(
-            [
-                self.dG_complex_conversion_error,
-                self.dG_complex_decouple_error,
-                self.dG_solvent_conversion_error,
-                self.dG_solvent_decouple_error,
-            ]
-        )
-        return np.sqrt(np.sum(errors ** 2))
+def image_frames(initial_state: InitialState, frames: np.ndarray, boxes: np.ndarray) -> np.ndarray:
+    """Images a set of frames within the periodic box given an Initial state. Recenters the simulation
+    around the centroid of the coordinates specified by initial_state.ligand_idxs prior to imaging.
+
+    Calling this function on a set of frames will NOT produce identical energies/du_dp/du_dx. Should only
+    be used for visualization convenience.
+
+    Parameters
+    ----------
+
+    initial_state: InitialState
+        State that the frames came from
+
+    frames: np.ndarray of coordinates
+        Coordinates to image, shape (K, N, 3)
+
+    boxes: list of boxes
+        Boxes to image coordinates into, shape (K, 3, 3)
+
+    Returns
+    -------
+        imaged_coordinates
+    """
+    assert len(frames.shape) == 3, "Must be a 3 dimensional set of frames"
+    assert frames.shape[-1] == 3, "Frame coordinates are not 3D"
+    assert boxes.shape[1:] == (3, 3), "Boxes are not 3x3"
+    assert len(frames) == len(boxes), "Number of frames and boxes don't match"
+
+    hb_potential = next(p for p in initial_state.potentials if isinstance(p, HarmonicBond))
+    group_indices = get_group_indices(get_bond_list(hb_potential))
+    imaged_frames = np.empty_like(frames)
+    for i, (frame, box) in enumerate(zip(frames, boxes)):
+        # Recenter the frame around the centroid of the ligand
+        ligand_centroid = np.mean(frame[initial_state.ligand_idxs], axis=0)
+        center = compute_box_center(box)
+        offset = ligand_centroid + center
+        centered_frames = frame - offset
+
+        imaged_frames[i] = model_utils.image_frame(group_indices, centered_frames, box)
+    return np.array(imaged_frames)
 
 
 class BaseFreeEnergy:
     @staticmethod
-    def _get_system_params_and_potentials(ff_params, topology):
-
-        ff_tuples = [
-            [topology.parameterize_harmonic_bond, (ff_params[0],)],
-            [topology.parameterize_harmonic_angle, (ff_params[1],)],
-            [topology.parameterize_periodic_torsion, (ff_params[2], ff_params[3])],
-            [topology.parameterize_nonbonded, (ff_params[4], ff_params[5])],
+    def _get_system_params_and_potentials(ff_params: ForcefieldParams, topology, lamb: float):
+        params_potential_pairs = [
+            topology.parameterize_harmonic_bond(ff_params.hb_params),
+            topology.parameterize_harmonic_angle(ff_params.ha_params),
+            topology.parameterize_periodic_torsion(ff_params.pt_params, ff_params.it_params),
+            topology.parameterize_nonbonded(ff_params.q_params, ff_params.lj_params, lamb),
         ]
 
-        final_params = []
-        final_potentials = []
-
-        for fn, params in ff_tuples:
-            combined_params, combined_potential = fn(*params)
-            final_potentials.append(combined_potential)
-            final_params.append(combined_params)
-
-        return final_params, final_potentials
+        params, potentials = zip(*params_potential_pairs)
+        return params, potentials
 
 
 # this class is serializable.
@@ -165,17 +134,20 @@ class AbsoluteFreeEnergy(BaseFreeEnergy):
         self.mol = mol
         self.top = top
 
-    def prepare_host_edge(self, ff_params, host_system):
+    def prepare_host_edge(self, ff_params: ForcefieldParams, host_system, lamb: float):
         """
         Prepares the host-guest system
 
         Parameters
         ----------
-        ff_params: tuple of np.array
-            Expected parameter ordering is bond_params, angle_params, proper_params, improper_params, charge_params, lj_params
+        ff_params: ForcefieldParams
+            forcefield parameters
 
         host_system: openmm.System
             openmm System object to be deserialized.
+
+        lamb: float
+            alchemical parameter controlling 4D decoupling
 
         Returns
         -------
@@ -188,18 +160,18 @@ class AbsoluteFreeEnergy(BaseFreeEnergy):
         host_bps, host_masses = openmm_deserializer.deserialize_system(host_system, cutoff=1.2)
         hgt = topology.HostGuestTopology(host_bps, self.top)
 
-        final_params, final_potentials = self._get_system_params_and_potentials(ff_params, hgt)
+        final_params, final_potentials = self._get_system_params_and_potentials(ff_params, hgt, lamb)
         combined_masses = self._combine(ligand_masses, host_masses)
         return final_potentials, final_params, combined_masses
 
-    def prepare_vacuum_edge(self, ff_params):
+    def prepare_vacuum_edge(self, ff_params: ForcefieldParams):
         """
         Prepares the vacuum system
 
         Parameters
         ----------
-        ff_params: tuple of np.array
-            Expected parameter ordering is bond_params, angle_params, proper_params, improper_params, charge_params, lj_params
+        ff_params: ForcefieldParams
+            forcefield parameters
 
         Returns
         -------
@@ -208,7 +180,7 @@ class AbsoluteFreeEnergy(BaseFreeEnergy):
 
         """
         ligand_masses = get_mol_masses(self.mol)
-        final_params, final_potentials = self._get_system_params_and_potentials(ff_params, self.top)
+        final_params, final_potentials = self._get_system_params_and_potentials(ff_params, self.top, 0.0)
         return final_potentials, final_params, ligand_masses
 
     def prepare_combined_coords(self, host_coords=None):
@@ -246,133 +218,3 @@ class AbsoluteFreeEnergy(BaseFreeEnergy):
         if host_values is None:
             return ligand_values
         return np.concatenate([host_values, ligand_values])
-
-
-# this class is serializable.
-class RelativeFreeEnergy(BaseFreeEnergy):
-    def __init__(self, top: Union[topology.SingleTopology, topology.DualTopology], label=None, complex_path=None):
-        self.top = top
-        self.label = label  # TODO: Do we need these?
-        self.complex_path = complex_path
-
-    @property
-    def mol_a(self):
-        return self.top.mol_a
-
-    @property
-    def mol_b(self):
-        return self.top.mol_b
-
-    @property
-    def ff(self):
-        return self.top.ff
-
-    def prepare_host_edge(self, ff_params, host_system):
-        """
-        Prepares the host-guest system
-
-        Parameters
-        ----------
-        ff_params: tuple of np.array
-            Expected parameter ordering is bond_params, angle_params, proper_params, improper_params, charge_params, lj_params
-        host_system: Optional[openmm.System]
-            openmm System object to be deserialized.
-
-        Returns
-        -------
-        3-tuple
-            unbound_potentials, system_params, combined_masses
-
-        """
-        ligand_masses_a = get_mol_masses(self.mol_a)
-        ligand_masses_b = get_mol_masses(self.mol_b)
-
-        host_bps, host_masses = openmm_deserializer.deserialize_system(host_system, cutoff=1.2)
-        hgt = topology.HostGuestTopology(host_bps, self.top)
-
-        final_params, final_potentials = self._get_system_params_and_potentials(ff_params, hgt)
-
-        combined_masses = self._combine(ligand_masses_a, ligand_masses_b, host_masses)
-        return final_potentials, final_params, combined_masses
-
-    def prepare_vacuum_edge(self, ff_params):
-        """
-        Prepares the vacuum system
-
-        Parameters
-        ----------
-        ff_params: tuple of np.array
-            Expected parameter ordering is bond_params, angle_params, proper_params, improper_params, charge_params, lj_params
-
-        Returns
-        -------
-        3-tuple
-            unbound_potentials, system_params, combined_masses
-
-        """
-        ligand_masses_a = get_mol_masses(self.mol_a)
-        ligand_masses_b = get_mol_masses(self.mol_b)
-
-        final_params, final_potentials = self._get_system_params_and_potentials(ff_params, self.top)
-        combined_masses = self._combine(ligand_masses_a, ligand_masses_b)
-        return final_potentials, final_params, combined_masses
-
-    def prepare_combined_coords(self, host_coords=None):
-        """
-        Returns the combined coordinates.
-
-        Parameters
-        ----------
-        host_coords: Optional[np.array]
-            Nx3 array of atomic coordinates.
-            If None, return just the combined ligand coordinates.
-
-        Returns
-        -------
-            combined_coordinates
-        """
-        ligand_coords_a = get_romol_conf(self.mol_a)
-        ligand_coords_b = get_romol_conf(self.mol_b)
-
-        return self._combine(ligand_coords_a, ligand_coords_b, host_coords)
-
-    def _combine(self, ligand_values_a, ligand_values_b, host_values=None):
-        """
-        Combine the values along the 0th axis. The host values will be first, if given.
-        The ligand values will be combined in a way that matches the topology.
-        For single topology this means interpolating the ligand_values_a and
-        ligand_values_b. For dual topology this is just concatenation.
-
-        Returns
-        -------
-            combined_values
-        """
-        if isinstance(self.top, topology.SingleTopology):
-            ligand_values = [np.mean(self.top.interpolate_params(ligand_values_a, ligand_values_b), axis=0)]
-        else:
-            ligand_values = [ligand_values_a, ligand_values_b]
-        all_values = [host_values] + ligand_values if host_values is not None else ligand_values
-        return np.concatenate(all_values)
-
-
-class RBFETransformIndex:
-    """Builds an index of relative free energy transformations."""
-
-    def __len__(self):
-        return len(self._indices)
-
-    def __init__(self):
-        self._indices = {}
-
-    def build(self, refs: List[RelativeFreeEnergy]):
-        for ref in refs:
-            self.get_transform_indices(ref)
-
-    def get_transform_indices(self, ref: RelativeFreeEnergy) -> Tuple[int, int]:
-        return self.get_mol_idx(ref.mol_a), self.get_mol_idx(ref.mol_b)
-
-    def get_mol_idx(self, mol) -> int:
-        hashed = MolToSmiles(mol)
-        if hashed not in self._indices:
-            self._indices[hashed] = len(self._indices)
-        return self._indices[hashed]
