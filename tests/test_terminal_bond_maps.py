@@ -14,7 +14,7 @@ from pymbar import BAR, EXP, MBAR
 from rdkit import Chem
 from rdkit.Chem import AllChem
 
-from timemachine.constants import BOLTZ, DEFAULT_FF
+from timemachine.constants import BOLTZ, DEFAULT_FF, DEFAULT_TEMP
 from timemachine.ff import Forcefield
 from timemachine.maps.estimators import compute_mapped_reduced_work, compute_mapped_u_kn
 from timemachine.maps.terminal_bonds import Interval, TerminalBondMap, TerminalMappableState, interval_map
@@ -65,7 +65,7 @@ def test_invertibility_of_interval_maps():
 def collect_samples(mol):
     ff = Forcefield.load_from_file(DEFAULT_FF)
     AllChem.EmbedMolecule(mol)
-    samples = generate_ligand_samples(1000, mol, ff, 300.0, 2022)[0][:, 0]
+    samples = generate_ligand_samples(1000, mol, ff, DEFAULT_TEMP, 2022)[0][:, 0]
     return samples - samples[:, 0, np.newaxis]  # center first atom, for ease of visualization
 
 
@@ -75,7 +75,7 @@ def get_hb_params(mol):
     return params, bond_idxs
 
 
-def get_vacuum_u_fxn(mol, temperature=300.0):
+def get_vacuum_u_fxn(mol, temperature=DEFAULT_TEMP):
     ff = Forcefield.load_from_file(DEFAULT_FF)
     U_fxn = jit(VacuumState(mol, ff).U_full)
     kBT = BOLTZ * temperature
