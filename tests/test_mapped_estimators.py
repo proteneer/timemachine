@@ -78,7 +78,7 @@ def test_one_sided_estimates():
         estimated_delta_f = EXP(mapped_w_F)[0]
         exact_delta_f = dst_state.reduced_free_energy - src_state.reduced_free_energy
 
-        np.testing.assert_almost_equal(estimated_delta_f, exact_delta_f)
+        np.testing.assert_allclose(estimated_delta_f, exact_delta_f)
 
 
 def test_two_sided_estimates():
@@ -105,7 +105,7 @@ def test_two_sided_estimates():
 
         exact_delta_f = state_b.reduced_free_energy - state_a.reduced_free_energy
 
-        np.testing.assert_almost_equal(estimated_delta_f, exact_delta_f)
+        np.testing.assert_allclose(estimated_delta_f, exact_delta_f)
 
 
 def test_multistate_estimates():
