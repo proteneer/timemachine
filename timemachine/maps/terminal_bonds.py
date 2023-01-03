@@ -240,7 +240,8 @@ def states_to_conf_map_params(src: TerminalMappableState, dst: TerminalMappableS
 
     bond_idxs = np.array(list(bonds_in_common))
     if len(bond_idxs) == 0:
-        assert bond_idxs.shape[1] == 2 and len(bond_idxs.shape) == 2
+        assert bond_idxs.shape[1] == 2
+        assert len(bond_idxs.shape) == 2
 
     mapped_bond_list = []
     params_list = []
