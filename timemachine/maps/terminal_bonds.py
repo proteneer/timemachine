@@ -117,15 +117,19 @@ apply_conf_map_to_traj = jit(vmap(conf_map, in_axes=(0, None, None)))
 
 def apply_conf_maps_to_traj(xs, bond_idxs, params) -> Tuple[Array, Array]:
     """Apply maps to several bonds in a trajectory of conformers xs, return (updated xs, logdetjacs)"""
-    xs_traj, logdetjac_increments_traj = [jnp.array(xs)], [np.zeros(len(xs))]
+    xs_shape = xs.shape
+
+    xs = jnp.array(xs)
+    logdetjacs = np.zeros(len(xs))
 
     for (bond, param) in zip(bond_idxs, params):  # TODO: jax.lax for-loop?
-        xs_updated, logdetjac_increments = apply_conf_map_to_traj(xs_traj[-1], bond, param)
+        xs, logdetjac_increments = apply_conf_map_to_traj(xs, bond, param)
+        logdetjacs += logdetjac_increments
 
-        xs_traj.append(xs_updated)
-        logdetjac_increments_traj.append(logdetjac_increments)
+    assert xs.shape == xs_shape
+    assert logdetjacs.shape == (len(xs),)
 
-    return xs_traj[-1], np.sum(logdetjac_increments_traj, axis=0)
+    return xs, logdetjacs
 
 
 # utilities for getting terminal bonds
