@@ -250,7 +250,7 @@ def states_to_conf_map_params(src: TerminalMappableState, dst: TerminalMappableS
         src_interval = [interval for (idx, interval) in zip(src.idxs, src.intervals) if tuple(idx) == (a, b)][0]
         dst_interval = [interval for (idx, interval) in zip(dst.idxs, dst.intervals) if tuple(idx) == (a, b)][0]
 
-        # oOnly produce parameters for bonds whose length distribution is different between src and dst
+        # only produce parameters for bonds whose length distribution is different between src and dst
         if src_interval != dst_interval:
             mapped_bond_list.append((a, b))
             params_list.append((src_interval.lower, src_interval.upper, dst_interval.lower, dst_interval.upper))
