@@ -30,6 +30,13 @@ def compute_mapped_u_kn(sample_lists, reduced_energy_fxns, map_fxns):
     ----------
     [Paliwal, Shirts, 2013] Multistate reweighting and configuration mapping ...
         https://aip.scitation.org/doi/abs/10.1063/1.4801332
+
+    Notes
+    -----
+    This function assumes (without verifying) that:
+        (1) the inverse of map_fxns[i, j] is map_fxns[j, i],
+        (2) the domain of map_fxns[i, j] is the support of state i,
+        (3) the codomain of map_fxns[i, j] is the support of state j.
     """
 
     K = len(sample_lists)
