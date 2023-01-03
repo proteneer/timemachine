@@ -64,8 +64,12 @@ def conf_map(x, bond, param) -> Tuple[Array, Array]:
     a, b = bond
     dim = 3
 
-    def f(xy, param):
-        """R^[2 x dim] -> R^[2 x dim]"""
+    def apply_map_to_atom_pair(xy, param):
+        """R^[2 x dim] -> R^[2 x dim]
+
+        accepts a concatenated atom pair xy = (x, y),
+        and returns a concatenated atom pair xy_prime (x, y_prime)
+        """
         x, y = xy[:dim], xy[dim:]
         src_lb, src_ub, dst_lb, dst_ub = param
 
@@ -80,10 +84,10 @@ def conf_map(x, bond, param) -> Tuple[Array, Array]:
 
     def map_and_logdetjac(x, y, param):
         xy = jnp.hstack([x, y])
-        xy_prime = f(xy, param)
+        xy_prime = apply_map_to_atom_pair(xy, param)
         y_prime = xy_prime[dim:]
 
-        jac = jacobian(f)(xy, param)
+        jac = jacobian(apply_map_to_atom_pair)(xy, param)
         sign, logdet = jnp.linalg.slogdet(jac)
 
         # negative det would be unexpected --> nan-poison if detected
