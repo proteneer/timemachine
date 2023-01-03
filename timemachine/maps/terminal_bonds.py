@@ -1,4 +1,11 @@
-"""Summarize HarmonicBonds as Intervals in R+, construct maps between Intervals, & apply these maps to bond lengths"""
+"""Summarize HarmonicBonds as Intervals in R+, construct maps between Intervals, & apply these maps to bond lengths.
+
+This can be used to improve precision of free energy estimates between states with different HarmonicBond parameters.
+
+Examples:
+* single topology relative binding and relative hydration calculations
+* reweighting to a molecule with the same topology but different atom types
+"""
 
 from dataclasses import dataclass
 from typing import Tuple
