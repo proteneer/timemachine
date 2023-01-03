@@ -219,6 +219,20 @@ class TerminalMappableState:
 
 
 def states_to_conf_map_params(src: TerminalMappableState, dst: TerminalMappableState):
+    """Identify bonds in common between src and dst states, then
+    extract parameters that can be used to map their bond lengths.
+
+    Parameters
+    ----------
+    src, dst : TerminalMappableState
+
+    Returns
+    -------
+    bond_idxs : int array, [K, 2]
+    conf_map_params : float array, [K, 4]
+        where K = num terminal bonds in common
+    """
+
     # find bond idxs in common
     src_bonds = set(tuple(b) for b in src.idxs)
     dst_bonds = set(tuple(b) for b in dst.idxs)
@@ -234,6 +248,8 @@ def states_to_conf_map_params(src: TerminalMappableState, dst: TerminalMappableS
         dst_interval = [interval for (idx, interval) in zip(dst.idxs, dst.intervals) if tuple(idx) == (a, b)][0]
 
         params_list.append((src_interval.lower, src_interval.upper, dst_interval.lower, dst_interval.upper))
+
+        # TODO: skip adjusting bonds with identical distributions in src and dst?
 
     params = np.array(params_list)
 
