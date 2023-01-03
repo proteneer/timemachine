@@ -17,6 +17,10 @@ import networkx as nx
 
 from timemachine.constants import BOLTZ, DEFAULT_TEMP
 
+# Assume support(Gaussian(mu, sig)) ~= interval(mu - k*sig, mu + k*sig)
+# where k = DEFAULT_SIGMA_THRESH
+DEFAULT_SIGMA_THRESH = 20
+
 
 @dataclass
 class Interval:
@@ -37,7 +41,7 @@ class Gaussian:
     mean: float
     stddev: float
 
-    def to_interval(self, sigma_thresh=20) -> Interval:
+    def to_interval(self, sigma_thresh=DEFAULT_SIGMA_THRESH) -> Interval:
         r = self.stddev * sigma_thresh
         interval = Interval(self.mean - r, self.mean + r)
         return interval
@@ -139,7 +143,7 @@ def get_terminal_bonds(bond_idxs) -> List[Tuple]:
 
 
 class TerminalMappableState:
-    def __init__(self, terminal_bond_idxs, ks, eq_lengths, temperature=DEFAULT_TEMP, sigma_thresh=20):
+    def __init__(self, terminal_bond_idxs, ks, eq_lengths, temperature=DEFAULT_TEMP, sigma_thresh=DEFAULT_SIGMA_THRESH):
         """
         for each (a, b) in terminal_bond_idxs,
         prepare to construct a map that moves b -> b', conditioned on a
@@ -192,7 +196,7 @@ class TerminalMappableState:
         return jnp.array(bond_valid).all()
 
     @classmethod
-    def from_harmonic_bond_params(cls, bond_idxs, params, temperature=DEFAULT_TEMP, sigma_thresh=20):
+    def from_harmonic_bond_params(cls, bond_idxs, params, temperature=DEFAULT_TEMP, sigma_thresh=DEFAULT_SIGMA_THRESH):
         # bond (i, j) -> (k, eq_length)
         param_dict = dict(zip(map(tuple, bond_idxs), params))  # bond idxs may be in arbitrary order
 
