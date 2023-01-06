@@ -228,7 +228,7 @@ def mcs(
         if mcs_result.timed_out:
             raise MaxVisitsError(f"Reached max number of visits: {max_visits}")
 
-    if len(mcs_result.all_maps) <= 0:
+    if len(mcs_result.all_maps) == 0:
         raise NoMappingError("Unable to find mapping")
 
     all_cores = []
