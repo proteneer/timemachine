@@ -4,6 +4,7 @@ import jax.numpy as jnp
 import numpy as np
 from jax import vmap
 from jax.scipy.special import erfc
+from scipy.special import binom
 
 from timemachine.potentials import jax_utils
 from timemachine.potentials.jax_utils import (
@@ -593,3 +594,36 @@ def lj_interaction_group_energy(eps_ligand, eps_prefactors):
     """
 
     return jnp.dot(eps_prefactors, eps_ligand)
+
+
+def basis_expand_sigma(sig_env: Array, r_env: Array, power: int = 12) -> Array:
+    """
+
+    Parameters
+    ----------
+    sig_env : [N_env,] array
+        sigma parameters of environment atoms
+    r_env : [N_env,] array
+        distances from trial atom to all environment atoms
+    power : int
+        6 or 12
+
+    Returns
+    -------
+    h_n : [power + 1,] array
+
+    References
+    ----------
+    eq. C.1 of Levi Naden's thesis
+    """
+
+    r_inv_pow = r_env ** -power
+
+    exponents = power - np.arange(power + 1)
+    coeffs = binom(power, exponents)
+
+    raised = sig_env ** np.expand_dims(exponents, 1)
+    h_n_i = r_inv_pow * raised * np.expand_dims(coeffs, 1)
+
+    h_n = np.sum(h_n_i, 1)
+    return h_n
