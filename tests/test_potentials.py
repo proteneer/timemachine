@@ -263,7 +263,6 @@ def test_summed_potential(harmonic_bond_test_system):
         (
             params_1.reshape(-1),
             params_2.reshape(-1),
-            params_2.reshape(-1),
         )
     )
 
