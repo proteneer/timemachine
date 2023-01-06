@@ -263,6 +263,23 @@ def test_summed_potential(harmonic_bond_test_system):
         GradientTest().compare_forces_gpu_vs_reference(coords, [params], box, potential, rtol, precision)
 
 
+@pytest.mark.parametrize("num_potentials", [1, 2, 5])
+def test_summed_potential_supports_arbitrary_number_of_potentials(num_potentials, harmonic_bond_test_system):
+    """Verifies that summed potential can handle various numbers of potentials. Previously bug
+    only allowed 1 or 2 potentials."""
+
+    harmonic_bond, _, params, _, coords = harmonic_bond_test_system
+
+    box = 3.0 * np.eye(3)
+    params_list = [params] * num_potentials
+    potential = generic.SummedPotential([harmonic_bond] * num_potentials, params_list)
+
+    flat_params = np.concatenate([p.reshape(-1) for p in params_list])
+
+    for rtol, precision in [(1e-6, np.float32), (1e-10, np.float64)]:
+        GradientTest().compare_forces_gpu_vs_reference(coords, [flat_params], box, potential, rtol, precision)
+
+
 def test_fanout_summed_potential_consistency(harmonic_bond_test_system):
     """Assert FanoutSummedPotential consistent with SummedPotential on
     a harmonic bond instance"""
