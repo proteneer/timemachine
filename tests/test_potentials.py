@@ -265,7 +265,7 @@ def test_summed_potential(harmonic_bond_test_system):
 
 @pytest.mark.parametrize("num_potentials", [1, 2, 5])
 def test_summed_potential_supports_arbitrary_number_of_potentials(num_potentials, harmonic_bond_test_system):
-    """Verifies that summed potential can handle various numbers of potentials. Previously bug
+    """Verifies that summed potential can handle various numbers of potentials. Previously bug in reference summed potential
     only allowed 1 or 2 potentials."""
 
     harmonic_bond, _, params, _, coords = harmonic_bond_test_system
