@@ -213,6 +213,12 @@ def mcs(
             filter_fxn,
         )
 
+        # If timed out and no maps found, raise exception.
+        if mcs_result.timed_out:
+            raise MaxVisitsError(
+                f"Reached max number of visits: {max_visits}, found {len(mcs_result.all_maps)} matches"
+            )
+
         if len(mcs_result.all_maps) > 0:
             # don't remove this comment and the one below, useful for debugging!
             # print(
@@ -223,10 +229,6 @@ def mcs(
         # print(
         # f"==FAILED==[NODES VISITED {mcs_result.nodes_visited} | time taken: {time.time()-start_time} | time out? {mcs_result.timed_out}]====="
         # )
-
-        # If timed out and no maps found, raise exception.
-        if mcs_result.timed_out:
-            raise MaxVisitsError(f"Reached max number of visits: {max_visits}")
 
     if len(mcs_result.all_maps) == 0:
         raise NoMappingError("Unable to find mapping")

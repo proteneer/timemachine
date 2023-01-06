@@ -92,7 +92,7 @@ def test_complete_rings_only():
         mol_b,
         ring_cutoff=0.1,
         chain_cutoff=0.2,
-        max_visits=100,  # 100 max nodes to visit
+        max_visits=1e7,  # 10 million max nodes to visit
         connected_core=True,
         max_cores=1000,
         enforce_core_core=True,
