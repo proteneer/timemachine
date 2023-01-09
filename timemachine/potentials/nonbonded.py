@@ -492,6 +492,10 @@ def coulomb_interaction_group_energy(q_ligand: Array, q_prefactors: Array) -> fl
 
 def _basis_expand_lj_term(sig_env, eps_env, r_env, power):
     """
+    Compute expansion of
+        sum_i (4 * eps * eps_env[i] * (sig_env[i] / r_env[i])^power)
+
+    (called by basis_expand_lj with power=12 and power=6)
 
     Parameters
     ----------
@@ -523,14 +527,18 @@ def _basis_expand_lj_term(sig_env, eps_env, r_env, power):
 
 
 def basis_expand_lj(sig_env, eps_env, r_env):
-    """
+    """Precomputed part of basis expansion that allows fast computation of
+
+    f(sig, eps)
+        = sum_i LJ(r_env[i]; sig + sig_env[i], eps * eps_env[i])
+        = dot(project_lj(sig, eps), basis_expand_lj(sig_env, eps_env, r_env))
 
     Parameters
     ----------
     sig_env, eps_env : [N_env] arrays
         sigma, epsilon parameters of environment atoms
     r_env : [N_env] array
-        distances from trial atom to all environment atoms
+        distances from variable atom to all environment atoms
 
     Returns
     -------
@@ -544,12 +552,16 @@ def basis_expand_lj(sig_env, eps_env, r_env):
 
 
 def project_lj(sig: float, eps: float) -> Array:
-    """
+    """Variable part of basis expansion that allows fast computation of
+
+    f(sig, eps)
+        = sum_i LJ(r_env[i]; sig + sig_env[i], eps * eps_env[i])
+        = dot(project_lj(sig, eps), basis_expand_lj(sig_env, eps_env, r_env))
 
     Parameters
     ----------
     sig, eps : floats
-        trial parameters
+        LJ parameters of variable atom
 
     Returns
     -------
