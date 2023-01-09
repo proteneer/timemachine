@@ -403,8 +403,9 @@ def test_precomputation():
         return jnp.sum(vdw + es)
 
     @jit
-    def u_batch_ref(eps_ligand, q_ligand):
+    def u_batch_ref(sig_ligand, eps_ligand, q_ligand):
         new_params = jnp.array(params).at[ligand_idx, 0].set(q_ligand)
+        new_params = new_params.at[ligand_idx, 1].set(sig_ligand)
         new_params = new_params.at[ligand_idx, 2].set(eps_ligand)
 
         def f(x, box):
