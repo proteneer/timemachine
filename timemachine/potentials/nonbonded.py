@@ -516,13 +516,13 @@ def _basis_expand_lj_term(sig_env, eps_env, r_env, power):
     """
     r_inv_pow = r_env ** -power
 
-    exponents = power - np.arange(power + 1)
+    exponents = power - jnp.arange(power + 1)
     coeffs = binom(power, exponents)
 
-    raised = sig_env ** np.expand_dims(exponents, 1)
-    h_n_i = r_inv_pow * raised * np.expand_dims(coeffs, 1) * np.expand_dims(eps_env, 0)
+    raised = sig_env ** jnp.expand_dims(exponents, 1)
+    h_n_i = r_inv_pow * raised * jnp.expand_dims(coeffs, 1) * jnp.expand_dims(eps_env, 0)
 
-    h_n = np.sum(4 * h_n_i, 1)
+    h_n = jnp.sum(4 * h_n_i, 1)
     return h_n
 
 
@@ -548,7 +548,7 @@ def basis_expand_lj(sig_env, eps_env, r_env):
     """
     h_n_12 = _basis_expand_lj_term(sig_env, eps_env, r_env, 12)
     h_n_6 = -_basis_expand_lj_term(sig_env, eps_env, r_env, 6)
-    return np.hstack([h_n_12, h_n_6])
+    return jnp.hstack([h_n_12, h_n_6])
 
 
 def project_lj(sig: float, eps: float) -> Array:
