@@ -13,7 +13,7 @@ from jax import value_and_grad, vmap
 from scipy.optimize import minimize
 from simtk import unit
 
-from timemachine.constants import BOLTZ, DEFAULT_FF
+from timemachine.constants import BOLTZ, DEFAULT_FF, DEFAULT_TEMP
 from timemachine.fe.reweighting import one_sided_exp
 from timemachine.ff import Forcefield
 from timemachine.ff.handlers import openmm_deserializer
@@ -380,27 +380,28 @@ def test_precomputation():
 
     # test version: with precomputation
     charges, sigmas, epsilons, _ = params.T
-    eps_prefactors = lj_prefactors_on_traj(traj, boxes, sigmas, epsilons, ligand_idx, env_idx, cutoff)
+    lj_prefactors = lj_prefactors_on_traj(traj, boxes, sigmas, epsilons, ligand_idx, env_idx, cutoff)
     q_prefactors = coulomb_prefactors_on_traj(traj, boxes, charges, ligand_idx, env_idx, beta, cutoff)
 
     @jit
-    def u_batch_test(eps_ligand, q_ligand):
-        vdw = lj_interaction_group_energy(eps_ligand, eps_prefactors)
+    def u_batch_test(sig_ligand, eps_ligand, q_ligand):
+        vdw = lj_interaction_group_energy(sig_ligand, eps_ligand, lj_prefactors)
         es = coulomb_interaction_group_energy(q_ligand, q_prefactors)
         return vdw + es
 
     # generate many sets of ligand parameters to test on
+    sig_ligand_0 = sigmas[ligand_idx]
     eps_ligand_0 = epsilons[ligand_idx]
     q_ligand_0 = charges[ligand_idx]
 
-    temperature = 300
+    temperature = DEFAULT_TEMP
     kBT = BOLTZ * temperature
 
     def make_reweighter(u_batch_fxn):
-        u_0 = u_batch_fxn(eps_ligand_0, q_ligand_0)
+        u_0 = u_batch_fxn(sig_ligand_0, eps_ligand_0, q_ligand_0)
 
-        def reweight(eps_ligand, q_ligand):
-            delta_us = (u_batch_fxn(eps_ligand, q_ligand) - u_0) / kBT
+        def reweight(sig_ligand, eps_ligand, q_ligand):
+            delta_us = (u_batch_fxn(sig_ligand, eps_ligand, q_ligand) - u_0) / kBT
             return one_sided_exp(delta_us)
 
         return reweight
@@ -409,18 +410,20 @@ def test_precomputation():
     reweight_test = jit(make_reweighter(u_batch_test))
 
     for _ in range(5):
-        eps_ligand = jnp.abs(eps_ligand_0 + (0.2 * np.random.rand(n_ligand) - 0.1))  # abs() so eps will be non-negative
+        # abs() so sig, eps will be non-negative
+        sig_ligand = jnp.abs(sig_ligand_0 + (0.2 * np.random.randn(n_ligand) - 0.1))
+        eps_ligand = jnp.abs(eps_ligand_0 + (0.2 * np.random.rand(n_ligand) - 0.1))
         q_ligand = q_ligand_0 + np.random.randn(n_ligand)
 
-        expected = u_batch_ref(eps_ligand, q_ligand)
-        actual = u_batch_test(eps_ligand, q_ligand)
+        expected = u_batch_ref(sig_ligand, eps_ligand, q_ligand)
+        actual = u_batch_test(sig_ligand, eps_ligand, q_ligand)
 
         # test array of energies is ~equal to reference
         np.testing.assert_array_almost_equal(actual, expected)
 
         # test that reweighting estimates and gradients are ~equal to reference
-        v_ref, gs_ref = value_and_grad(reweight_ref, argnums=(0, 1))(eps_ligand, q_ligand)
-        v_test, gs_test = value_and_grad(reweight_test, argnums=(0, 1))(eps_ligand, q_ligand)
+        v_ref, gs_ref = value_and_grad(reweight_ref, argnums=(0, 1, 2))(sig_ligand, eps_ligand, q_ligand)
+        v_test, gs_test = value_and_grad(reweight_test, argnums=(0, 1, 2))(sig_ligand, eps_ligand, q_ligand)
 
         np.testing.assert_almost_equal(v_ref, v_test)
         np.testing.assert_array_almost_equal(gs_ref, gs_test)
