@@ -195,7 +195,7 @@ def compare_two_potentials(u_a: NonbondedFxn, u_b: NonbondedFxn, args: Nonbonded
     energy_a, gradients_a = value_and_grads(u_a)(*args)
     energy_b, gradients_b = value_and_grads(u_b)(*args)
 
-    np.testing.assert_almost_equal(energy_a, energy_b)
+    np.testing.assert_allclose(energy_a, energy_b)
     for (g_a, g_b) in zip(gradients_a, gradients_b):
         np.testing.assert_allclose(g_a, g_b)
 
@@ -334,7 +334,7 @@ def test_jax_nonbonded_block():
 
         return jnp.sum(vdw + es)
 
-    np.testing.assert_almost_equal(u_a(conf, box, params), u_b(conf, box, params))
+    np.testing.assert_allclose(u_a(conf, box, params), u_b(conf, box, params))
 
 
 def test_precomputation():
@@ -419,11 +419,11 @@ def test_precomputation():
         actual = u_batch_test(sig_ligand, eps_ligand, q_ligand)
 
         # test array of energies is ~equal to reference
-        np.testing.assert_array_almost_equal(actual, expected)
+        np.testing.assert_allclose(actual, expected)
 
         # test that reweighting estimates and gradients are ~equal to reference
         v_ref, gs_ref = value_and_grad(reweight_ref, argnums=(0, 1, 2))(sig_ligand, eps_ligand, q_ligand)
         v_test, gs_test = value_and_grad(reweight_test, argnums=(0, 1, 2))(sig_ligand, eps_ligand, q_ligand)
 
-        np.testing.assert_almost_equal(v_ref, v_test)
-        np.testing.assert_array_almost_equal(gs_ref, gs_test)
+        np.testing.assert_allclose(v_ref, v_test)
+        np.testing.assert_allclose(gs_ref, gs_test)
