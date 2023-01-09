@@ -363,7 +363,7 @@ def test_lj_basis():
 
     for _ in range(100):
         sig = 1 + (0.1 * np.random.rand())
-        eps = 100 + (5 * np.random.rand(n_env))
+        eps = 100 + (5 * np.random.rand())
 
         u_ref = lj_ref(sig, eps)
         u_test = lj_basis(sig, eps)
