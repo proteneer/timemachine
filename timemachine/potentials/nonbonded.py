@@ -557,7 +557,7 @@ def project_lj(sig: float, eps: float) -> Array:
         can be dotted with output of basis_expand_lj(sig_env, eps_env, r_env)
         to compute energy of one atom interacting with all environment atoms
     """
-    exponents = np.hstack([np.arange(12 + 1), np.arange(6 + 1)])
+    exponents = jnp.hstack([jnp.arange(12 + 1), jnp.arange(6 + 1)])
     return eps * (sig ** exponents)
 
 
@@ -661,5 +661,5 @@ def lj_interaction_group_energy(sig_ligand, eps_ligand, lj_prefactors):
     energy: float
     """
 
-    projection = vmap(project_lj, (0, 0))(sig_ligand, eps_ligand)
+    projection = vmap(project_lj)(sig_ligand, eps_ligand)
     return jnp.dot(projection, lj_prefactors)
