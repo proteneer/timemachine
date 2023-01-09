@@ -228,6 +228,7 @@ def test_intermediate_states(num_pairs_to_setup=10):
             enforce_core_core=True,
             complete_rings=True,
             enforce_chiral=True,
+            min_threshold=0,
         )
 
         core = all_cores[0]
