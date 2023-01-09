@@ -159,8 +159,21 @@ class MaxVisitsError(Exception):
     pass
 
 
+class NoMappingError(Exception):
+    pass
+
+
 def mcs(
-    n_a, n_b, priority_idxs, bonds_a, bonds_b, max_visits, max_cores, enforce_core_core, filter_fxn=(lambda core: True)
+    n_a,
+    n_b,
+    priority_idxs,
+    bonds_a,
+    bonds_b,
+    max_visits,
+    max_cores,
+    enforce_core_core,
+    min_threshold,
+    filter_fxn=(lambda core: True),
 ):
 
     assert n_a <= n_b
@@ -172,12 +185,15 @@ def mcs(
     marcs = _initialize_marcs_given_predicate(g_a, g_b, predicate)
 
     priority_idxs = tuple(tuple(x) for x in priority_idxs)
-    start_time = time.time()
+    # Keep start time for debugging purposes below
+    start_time = time.time()  # noqa
 
     # run in reverse by guessing max # of edges to avoid getting stuck in minima.
     max_threshold = _arcs_left(marcs)
     for idx in range(max_threshold):
         cur_threshold = max_threshold - idx
+        if cur_threshold < min_threshold:
+            raise NoMappingError(f"Unable to find mapping with at least {min_threshold} atoms")
         map_a_to_b = [UNMAPPED] * n_a
         map_b_to_a = [UNMAPPED] * n_b
         mcs_result = MCSResult()
@@ -190,7 +206,6 @@ def mcs(
             marcs,
             mcs_result,
             priority_idxs,
-            start_time,
             max_visits,
             max_cores,
             cur_threshold,
@@ -198,8 +213,11 @@ def mcs(
             filter_fxn,
         )
 
+        # If timed out and no maps found, raise exception.
         if mcs_result.timed_out:
-            raise MaxVisitsError()
+            raise MaxVisitsError(
+                f"Reached max number of visits: {max_visits}, found {len(mcs_result.all_maps)} matches"
+            )
 
         if len(mcs_result.all_maps) > 0:
             # don't remove this comment and the one below, useful for debugging!
@@ -212,7 +230,8 @@ def mcs(
         # f"==FAILED==[NODES VISITED {mcs_result.nodes_visited} | time taken: {time.time()-start_time} | time out? {mcs_result.timed_out}]====="
         # )
 
-    assert len(mcs_result.all_maps) > 0
+    if len(mcs_result.all_maps) == 0:
+        raise NoMappingError("Unable to find mapping")
 
     all_cores = []
 
@@ -246,7 +265,6 @@ def recursion(
     marcs,
     mcs_result,
     priority_idxs,
-    start_time,
     max_visits,
     max_cores,
     threshold,
@@ -297,7 +315,6 @@ def recursion(
                     new_marcs,
                     mcs_result,
                     priority_idxs,
-                    start_time,
                     max_visits,
                     max_cores,
                     threshold,
@@ -318,7 +335,6 @@ def recursion(
         new_marcs,
         mcs_result,
         priority_idxs,
-        start_time,
         max_visits,
         max_cores,
         threshold,

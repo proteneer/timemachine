@@ -117,6 +117,7 @@ def read_from_args():
         enforce_core_core=True,
         complete_rings=True,
         enforce_chiral=True,
+        min_threshold=0,
     )
 
     core = all_cores[0]
