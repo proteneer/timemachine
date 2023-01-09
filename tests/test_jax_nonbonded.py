@@ -20,13 +20,16 @@ from timemachine.ff.handlers import openmm_deserializer
 from timemachine.md import builders
 from timemachine.potentials.jax_utils import get_all_pairs_indices, pairs_from_interaction_groups, pairwise_distances
 from timemachine.potentials.nonbonded import (
+    basis_expand_lj,
     coulomb_interaction_group_energy,
     coulomb_prefactors_on_traj,
+    lennard_jones,
     lj_interaction_group_energy,
     lj_prefactors_on_traj,
     nonbonded,
     nonbonded_block,
     nonbonded_on_specific_pairs,
+    project_lj,
 )
 
 Array = Any
@@ -335,6 +338,37 @@ def test_jax_nonbonded_block():
         return jnp.sum(vdw + es)
 
     np.testing.assert_allclose(u_a(conf, box, params), u_b(conf, box, params))
+
+
+def test_lj_basis():
+    """Randomized test that LJ(sig, eps) computed via basis expansion matches reference"""
+
+    np.random.seed(2023)
+
+    n_env = 10_000
+    r_i = np.linspace(1.9, 8.0, n_env)
+
+    # other particles have random params
+    sig_i = 1 + (0.1 * np.random.rand(n_env))
+    eps_i = 100 + (5 * np.random.rand(n_env))
+
+    def lj_ref(sig, eps):
+        return np.sum(lennard_jones(r_i, sig_i + sig, eps_i * eps))
+
+    lj_prefactors = basis_expand_lj(sig_i, eps_i, r_i)
+
+    def lj_basis(sig, eps):
+        projection = project_lj(sig, eps)
+        return jnp.dot(projection, lj_prefactors)
+
+    for _ in range(100):
+        sig = 1 + (0.1 * np.random.rand())
+        eps = 100 + (5 * np.random.rand(n_env))
+
+        u_ref = lj_ref(sig, eps)
+        u_test = lj_basis(sig, eps)
+
+        np.testing.assert_allclose(u_test, u_ref)
 
 
 def test_precomputation():
