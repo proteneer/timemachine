@@ -429,4 +429,7 @@ def from_gpu(p: gpu.CustomOpWrapper) -> Optional[Potential]:
     if isinstance(p, gpu.NonbondedPairListPrecomputed):
         return NonbondedPairListPrecomputed.from_gpu(p)
 
+    if isinstance(p, gpu.SummedPotential):
+        return SummedPotential.from_gpu(p)
+
     return None
