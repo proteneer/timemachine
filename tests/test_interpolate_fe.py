@@ -36,6 +36,7 @@ def test_hif2a_free_energy_estimates():
         enforce_core_core=True,
         complete_rings=True,
         enforce_chiral=True,
+        min_threshold=0,
     )
     core = all_cores[0]
     svg = utils.plot_atom_mapping_grid(mol_a, mol_b, core)
