@@ -8,7 +8,7 @@ from typing_extensions import TypeAlias
 Array: TypeAlias = NDArray
 
 
-DEFAULT_CHUNK_SIZE = 256
+DEFAULT_CHUNK_SIZE = 200
 
 
 def get_all_pairs_indices(n: int) -> Array:
