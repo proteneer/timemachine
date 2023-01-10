@@ -18,6 +18,7 @@ from timemachine.potentials.jax_utils import (
     get_interacting_pair_indices_batch,
     pairs_from_interaction_groups,
     pairwise_distances,
+    process_traj_in_chunks,
 )
 
 pytestmark = [pytest.mark.nogpu]
@@ -181,3 +182,23 @@ def test_pairwise_distances_periodic_lifting(coords_box_w):
     # guard assertion to prevent spurious failure due to roundoff error
     if np.std(w) / (1.0 + np.linalg.norm(x)) > 1e-6:
         assert dij.sum() > dij0.sum()
+
+
+def test_process_traj_in_chunks():
+    """process_traj_in_chunks should be a drop-in replacement for vmap"""
+
+    np.random.seed(2023)
+
+    T = 10000  # large num snapshots
+    N = 100
+
+    traj = np.random.randn(T, N, 3)
+    boxes = np.random.randn(T, 3, 3)
+
+    def f_snapshot(x, box):
+        return jnp.sum(x ** 2) + jnp.sum(box ** 3)  # arbitrary fxn
+
+    reference = vmap(f_snapshot)(traj, boxes)
+    actual = process_traj_in_chunks(f_snapshot, traj, boxes)
+
+    np.testing.assert_allclose(actual, reference)

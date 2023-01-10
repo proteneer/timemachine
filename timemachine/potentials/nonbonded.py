@@ -8,10 +8,12 @@ from scipy.special import binom
 
 from timemachine.potentials import jax_utils
 from timemachine.potentials.jax_utils import (
+    DEFAULT_CHUNK_SIZE,
     delta_r,
     distance_on_pairs,
     pairs_from_interaction_groups,
     pairwise_distances,
+    process_traj_in_chunks,
 )
 
 Array = Any
@@ -437,7 +439,9 @@ def coulomb_prefactors_on_snapshot(x_ligand, x_env, q_env, box=None, beta=2.0, c
     return vmap(f_atom)(x_ligand)
 
 
-def coulomb_prefactors_on_traj(traj, boxes, charges, ligand_indices, env_indices, beta=2.0, cutoff=jnp.inf):
+def coulomb_prefactors_on_traj(
+    traj, boxes, charges, ligand_indices, env_indices, beta=2.0, cutoff=jnp.inf, chunk_size=DEFAULT_CHUNK_SIZE
+):
     """Map coulomb_prefactors_on_snapshot over snapshots in a trajectory
 
     Parameters
@@ -449,6 +453,8 @@ def coulomb_prefactors_on_traj(traj, boxes, charges, ligand_indices, env_indices
     env_indices: [N_env] array of ints
     beta: float
     cutoff: float
+    chunk_size: int
+        process traj in ceil(T / chunk_size) chunks, to limit memory consumption
 
     Returns
     -------
@@ -464,7 +470,7 @@ def coulomb_prefactors_on_traj(traj, boxes, charges, ligand_indices, env_indices
         x_env = coords[env_indices]
         return coulomb_prefactors_on_snapshot(x_ligand, x_env, q_env, box, beta, cutoff)
 
-    return vmap(f_snapshot)(traj, boxes)
+    return process_traj_in_chunks(f_snapshot, traj, boxes, chunk_size)
 
 
 def coulomb_interaction_group_energy(q_ligand: Array, q_prefactors: Array) -> float:
@@ -628,7 +634,9 @@ def lj_prefactors_on_snapshot(x_ligand, x_env, sig_env, eps_env, box=None, cutof
     return vmap(f_atom)(x_ligand)
 
 
-def lj_prefactors_on_traj(traj, boxes, sigmas, epsilons, ligand_indices, env_indices, cutoff=jnp.inf):
+def lj_prefactors_on_traj(
+    traj, boxes, sigmas, epsilons, ligand_indices, env_indices, cutoff=jnp.inf, chunk_size=DEFAULT_CHUNK_SIZE
+):
     """Map lj_prefactors_on_snapshot over snapshots in a trajectory
 
     Parameters
@@ -640,6 +648,8 @@ def lj_prefactors_on_traj(traj, boxes, sigmas, epsilons, ligand_indices, env_ind
     ligand_indices: [N_lig] array of ints
     env_indices: [N_env] array of ints
     cutoff: float
+    chunk_size: int
+        process traj in ceil(T / chunk_size) chunks, to limit memory consumption
 
     Returns
     -------
@@ -656,7 +666,7 @@ def lj_prefactors_on_traj(traj, boxes, sigmas, epsilons, ligand_indices, env_ind
         x_env = coords[env_indices]
         return lj_prefactors_on_snapshot(x_ligand, x_env, sig_env, eps_env, box, cutoff)
 
-    return vmap(f_snapshot)(traj, boxes)
+    return process_traj_in_chunks(f_snapshot, traj, boxes, chunk_size)
 
 
 def lj_interaction_group_energy(sig_ligand, eps_ligand, lj_prefactors):
