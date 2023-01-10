@@ -205,4 +205,4 @@ def test_process_traj_in_chunks():
     for chunk_size in [1, (T // 7) + 1, DEFAULT_CHUNK_SIZE, T]:
         actual = process_traj_in_chunks(f_snapshot, traj, boxes, chunk_size)
 
-        np.testing.assert_allclose(actual, reference)
+        np.testing.assert_array_equal(actual, reference)
