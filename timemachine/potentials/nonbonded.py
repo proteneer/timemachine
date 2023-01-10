@@ -4,13 +4,16 @@ import jax.numpy as jnp
 import numpy as np
 from jax import vmap
 from jax.scipy.special import erfc
+from scipy.special import binom
 
 from timemachine.potentials import jax_utils
 from timemachine.potentials.jax_utils import (
+    DEFAULT_CHUNK_SIZE,
     delta_r,
     distance_on_pairs,
     pairs_from_interaction_groups,
     pairwise_distances,
+    process_traj_in_chunks,
 )
 
 Array = Any
@@ -436,7 +439,9 @@ def coulomb_prefactors_on_snapshot(x_ligand, x_env, q_env, box=None, beta=2.0, c
     return vmap(f_atom)(x_ligand)
 
 
-def coulomb_prefactors_on_traj(traj, boxes, charges, ligand_indices, env_indices, beta=2.0, cutoff=jnp.inf):
+def coulomb_prefactors_on_traj(
+    traj, boxes, charges, ligand_indices, env_indices, beta=2.0, cutoff=jnp.inf, chunk_size=DEFAULT_CHUNK_SIZE
+):
     """Map coulomb_prefactors_on_snapshot over snapshots in a trajectory
 
     Parameters
@@ -448,6 +453,8 @@ def coulomb_prefactors_on_traj(traj, boxes, charges, ligand_indices, env_indices
     env_indices: [N_env] array of ints
     beta: float
     cutoff: float
+    chunk_size: int
+        process traj in ceil(T / chunk_size) chunks, to limit memory consumption
 
     Returns
     -------
@@ -463,7 +470,7 @@ def coulomb_prefactors_on_traj(traj, boxes, charges, ligand_indices, env_indices
         x_env = coords[env_indices]
         return coulomb_prefactors_on_snapshot(x_ligand, x_env, q_env, box, beta, cutoff)
 
-    return vmap(f_snapshot)(traj, boxes)
+    return process_traj_in_chunks(f_snapshot, traj, boxes, chunk_size)
 
 
 def coulomb_interaction_group_energy(q_ligand: Array, q_prefactors: Array) -> float:
@@ -483,23 +490,113 @@ def coulomb_interaction_group_energy(q_ligand: Array, q_prefactors: Array) -> fl
     return jnp.dot(q_prefactors, q_ligand)
 
 
-# utilities for efficiently recomputing energy as a function of ligand epsilon parameters
-#   (where x_ligand, x_environment, eps_environment are all constant, but eps_ligand is variable)
-#   exploiting the fact that nonbonded_interaction_group(eps_ligand) is a linear function of sqrt(eps_ligand)
+# utilities for efficiently recomputing energy as a function of ligand LJ parameters
+#   (where (x_ligand, x_env, sig_env, eps_env) are all constant, but (sig_ligand, eps_ligand) are variable)
+#   using [Naden, Shirts]'s linear basis-function approach
 #   TODO: avoid repetition between this and coulomb
 
 
-def lj_prefactor_on_atom(x_i, x_others, sig_i, sig_others, eps_others, box=None, cutoff=jnp.inf):
-    """Precompute part of sum_j LennardJones(x_i, x_j; (sig_i, eps_i), (sig_j, eps_j)) that does not depend on eps_i
+def _basis_expand_lj_term(sig_env, eps_env, r_env, power):
+    """
+    Compute expansion of
+        sum_i (4 * eps * eps_env[i] * (sig_env[i] / r_env[i])^power)
+
+    (called by basis_expand_lj_atom with power=12 and power=6)
 
     Parameters
     ----------
-    x_i : [D] array
+    sig_env, eps_env : [N_env] arrays
+        sigma, epsilon parameters of environment atoms
+    r_env : [N_env] array
+        distances from trial atom to all environment atoms
+    power : int
+        12 or 6
+
+    Returns
+    -------
+    h_n : [power + 1] array
+
+    References
+    ----------
+    eq. C.1 of Levi Naden's thesis
+    """
+    r_inv_pow = r_env ** -power
+
+    exponents = power - jnp.arange(power + 1)
+    coeffs = binom(power, exponents)
+
+    raised = sig_env ** jnp.expand_dims(exponents, 1)
+    h_n_i = r_inv_pow * raised * jnp.expand_dims(coeffs, 1) * jnp.expand_dims(eps_env, 0)
+
+    h_n = jnp.sum(4 * h_n_i, 1)
+    return h_n
+
+
+def basis_expand_lj_atom(sig_env, eps_env, r_env):
+    """Precomputed part of basis expansion that allows fast computation of
+
+    f(sig, eps)
+        = sum_i LJ(r_env[i]; sig + sig_env[i], eps * eps_env[i])
+        = dot(
+            basis_expand_lj_env(sig, eps),
+            basis_expand_lj_atom(sig_env, eps_env, r_env)
+        )
+    Parameters
+    ----------
+    sig_env, eps_env : [N_env] arrays
+        sigma, epsilon parameters of environment atoms
+    r_env : [N_env] array
+        distances from variable atom to all environment atoms
+
+    Returns
+    -------
+    h_n : [20] array
+        can be dotted with output of basis_expand_lj_env(sig, eps)
+        to compute energy of one atom interacting with all environment atoms
+    """
+    h_n_12 = _basis_expand_lj_term(sig_env, eps_env, r_env, 12)
+    h_n_6 = -_basis_expand_lj_term(sig_env, eps_env, r_env, 6)
+    return jnp.hstack([h_n_12, h_n_6])
+
+
+def basis_expand_lj_env(sig: float, eps: float) -> Array:
+    """Variable part of basis expansion that allows fast computation of
+
+    f(sig, eps)
+        = sum_i LJ(r_env[i]; sig + sig_env[i], eps * eps_env[i])
+        = dot(
+            basis_expand_lj_env(sig, eps),
+            basis_expand_lj_atom(sig_env, eps_env, r_env)
+        )
+
+    Parameters
+    ----------
+    sig, eps : floats
+        LJ parameters of variable atom
+
+    Returns
+    -------
+    projection : [20] array
+        can be dotted with output of basis_expand_lj_atom(sig_env, eps_env, r_env)
+        to compute energy of one atom interacting with all environment atoms
+    """
+    exponents = jnp.hstack([jnp.arange(12 + 1), jnp.arange(6 + 1)])
+    return eps * (sig ** exponents)
+
+
+def lj_prefactors_on_atom(x, x_others, sig_others, eps_others, box=None, cutoff=jnp.inf):
+    """Precompute part of
+
+        sum_j LennardJones(x_i, x_j; (sig_i, eps_i), (sig_j, eps_j))
+
+    that does not depend on (sig_i, eps_i)
+
+    Parameters
+    ----------
+    x : [D] array
         position of focus atom (in ligand)
     x_others: [N_env, D] array
         positions of all other atoms (in environment)
-    sig_i: float
-        Lennard-Jones sigma parameter of focus atom
     sig_others, eps_others: [N_env] arrays
         Lennard-Jones parameters of all other atoms (in environment)
     box: optional diagonal [D, D] array
@@ -507,27 +604,24 @@ def lj_prefactor_on_atom(x_i, x_others, sig_i, sig_others, eps_others, box=None,
 
     Returns
     -------
-    prefactor_i : float
-        sum_j 4 * sqrt(eps_j) * ((sig_ij/r_ij)**12 - (sig_ij/r_ij)**6)
+    prefactors : [20] array
+
+    See Also
+    --------
+    basis_expand_lj_env : computes a basis expansion of (sig, eps) that can be dotted with these prefactors
     """
-    d_ij = jax_utils.distance_from_one_to_others(x_i, x_others, box, cutoff)
-
-    sig_ij = combining_rule_sigma(sig_i, sig_others)
-    sig6 = (sig_ij / d_ij) ** 6
-    sig12 = sig6 ** 2
-    # note: eps_others rather than sqrt(eps_others) -- see `combining_rule_epsilon`
-    prefactor_i = jnp.sum(4 * eps_others * (sig12 - sig6))
-    return prefactor_i
+    r_env = jax_utils.distance_from_one_to_others(x, x_others, box, cutoff)
+    prefactors = basis_expand_lj_atom(sig_others, eps_others, r_env)
+    return prefactors
 
 
-def lj_prefactors_on_snapshot(x_ligand, x_env, sig_ligand, sig_env, eps_env, box=None, cutoff=jnp.inf):
+def lj_prefactors_on_snapshot(x_ligand, x_env, sig_env, eps_env, box=None, cutoff=jnp.inf):
     """Map lj_prefactor_on_atom over atoms in x_ligand
 
     Parameters
     ----------
     x_ligand: [N_lig, D] array
     x_env: [N_env, D] array
-    sig_ligand: [N_lig] array
     sig_env: [N_env] array
     eps_env: [N_env] array
     box: optional diagonal [D, D] array
@@ -539,13 +633,15 @@ def lj_prefactors_on_snapshot(x_ligand, x_env, sig_ligand, sig_env, eps_env, box
         prefactors[i] = lj_prefactor_on_atom(x_ligand[i], ...)
     """
 
-    def f_atom(x_i, sig_i):
-        return lj_prefactor_on_atom(x_i, x_env, sig_i, sig_env, eps_env, box, cutoff)
+    def f_atom(x_i):
+        return lj_prefactors_on_atom(x_i, x_env, sig_env, eps_env, box, cutoff)
 
-    return vmap(f_atom)(x_ligand, sig_ligand)
+    return vmap(f_atom)(x_ligand)
 
 
-def lj_prefactors_on_traj(traj, boxes, sigmas, epsilons, ligand_indices, env_indices, cutoff=jnp.inf):
+def lj_prefactors_on_traj(
+    traj, boxes, sigmas, epsilons, ligand_indices, env_indices, cutoff=jnp.inf, chunk_size=DEFAULT_CHUNK_SIZE
+):
     """Map lj_prefactors_on_snapshot over snapshots in a trajectory
 
     Parameters
@@ -557,6 +653,8 @@ def lj_prefactors_on_traj(traj, boxes, sigmas, epsilons, ligand_indices, env_ind
     ligand_indices: [N_lig] array of ints
     env_indices: [N_env] array of ints
     cutoff: float
+    chunk_size: int
+        process traj in ceil(T / chunk_size) chunks, to limit memory consumption
 
     Returns
     -------
@@ -565,31 +663,30 @@ def lj_prefactors_on_traj(traj, boxes, sigmas, epsilons, ligand_indices, env_ind
     """
     validate_interaction_group_idxs(len(traj[0]), ligand_indices, env_indices)
 
-    sig_ligand = sigmas[ligand_indices]
-
     eps_env = epsilons[env_indices]
     sig_env = sigmas[env_indices]
 
     def f_snapshot(coords, box):
         x_ligand = coords[ligand_indices]
         x_env = coords[env_indices]
-        return lj_prefactors_on_snapshot(x_ligand, x_env, sig_ligand, sig_env, eps_env, box, cutoff)
+        return lj_prefactors_on_snapshot(x_ligand, x_env, sig_env, eps_env, box, cutoff)
 
-    return vmap(f_snapshot)(traj, boxes)
+    return process_traj_in_chunks(f_snapshot, traj, boxes, chunk_size)
 
 
-def lj_interaction_group_energy(eps_ligand, eps_prefactors):
-    """Assuming eps_prefactors = lj_prefactors_on_snapshot(x_ligand, ...),
+def lj_interaction_group_energy(sig_ligand, eps_ligand, lj_prefactors):
+    """Assuming lj_prefactors = lj_prefactors_on_snapshot(x_ligand, ...),
     cheaply compute the energy of ligand-environment interaction group
 
     Parameters
     ----------
-    eps_ligand: [N_lig] array
-    eps_prefactors: [N_lig] array
+    sig_ligand, eps_ligand: [N_lig] arrays
+    lj_prefactors: [N_lig, 20] array
 
     Returns
     -------
     energy: float
     """
 
-    return jnp.dot(eps_prefactors, eps_ligand)
+    projection = vmap(basis_expand_lj_env)(sig_ligand, eps_ligand)
+    return jnp.sum(projection * lj_prefactors)

@@ -8,6 +8,9 @@ from typing_extensions import TypeAlias
 Array: TypeAlias = NDArray
 
 
+DEFAULT_CHUNK_SIZE = 200
+
+
 def get_all_pairs_indices(n: int) -> Array:
     """all indices i, j such that i < j < n"""
     n_interactions = n * (n - 1) / 2
@@ -185,3 +188,18 @@ def bernoulli_logpdf(log_p_i, z_i) -> float:
     log_1_minus_p_i = logsumexp(a=a, b=b, axis=0)
 
     return jnp.sum(jnp.where(z_i, log_p_i, log_1_minus_p_i))
+
+
+def process_traj_in_chunks(f_snapshot, xs, boxes, chunk_size=DEFAULT_CHUNK_SIZE):
+    """drop-in replacement for jax.vmap(f_snapshot)(xs, boxes)
+
+    intent: limit memory consumption when len(xs) is large"""
+
+    n_chunks = int(np.ceil(len(xs) / chunk_size))
+
+    def process_chunk(i):
+        start = i * chunk_size
+        stop = (i + 1) * chunk_size
+        return vmap(f_snapshot)(xs[start:stop], boxes[start:stop])
+
+    return jnp.concatenate([process_chunk(i) for i in range(n_chunks)])
