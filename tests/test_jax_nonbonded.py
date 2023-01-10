@@ -346,11 +346,12 @@ def test_lj_basis():
     np.random.seed(2023)
 
     n_env = 10_000
-    r_i = np.linspace(1.9, 8.0, n_env)
+
+    r_i = 5 * np.random.rand(n_env)  # r_i > 0, should exercise both (r_i << sig + sig_i) and (r >> sig + sig_i)
 
     # other particles have random params
-    sig_i = 1 + (0.1 * np.random.rand(n_env))
-    eps_i = 100 + (5 * np.random.rand(n_env))
+    sig_i = np.random.rand(n_env)
+    eps_i = np.random.rand(n_env)
 
     def lj_ref(sig, eps):
         return np.sum(lennard_jones(r_i, sig_i + sig, eps_i * eps))
@@ -362,8 +363,8 @@ def test_lj_basis():
         return jnp.dot(projection, lj_prefactors)
 
     for _ in range(100):
-        sig = 1 + (0.1 * np.random.rand())
-        eps = 100 + (5 * np.random.rand())
+        sig = np.random.rand()
+        eps = np.random.rand()
 
         u_ref = lj_ref(sig, eps)
         u_test = lj_basis(sig, eps)
