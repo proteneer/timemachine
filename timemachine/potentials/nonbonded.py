@@ -666,7 +666,7 @@ def lj_interaction_group_energy(sig_ligand, eps_ligand, lj_prefactors):
     Parameters
     ----------
     sig_ligand, eps_ligand: [N_lig] arrays
-    lj_prefactors: [N_lig] array
+    lj_prefactors: [N_lig, 20] array
 
     Returns
     -------
@@ -674,4 +674,4 @@ def lj_interaction_group_energy(sig_ligand, eps_ligand, lj_prefactors):
     """
 
     projection = vmap(project_lj)(sig_ligand, eps_ligand)
-    return jnp.dot(projection, lj_prefactors)
+    return jnp.sum(projection * lj_prefactors)

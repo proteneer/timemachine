@@ -420,7 +420,7 @@ def test_precomputation():
 
     @jit
     def u_batch_test(sig_ligand, eps_ligand, q_ligand):
-        vdw = lj_interaction_group_energy(sig_ligand, eps_ligand, lj_prefactors)
+        vdw = vmap(lj_interaction_group_energy, (None, None, 0))(sig_ligand, eps_ligand, lj_prefactors)
         es = coulomb_interaction_group_energy(q_ligand, q_prefactors)
         return vdw + es
 
