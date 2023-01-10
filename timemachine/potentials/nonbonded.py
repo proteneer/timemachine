@@ -501,7 +501,7 @@ def _basis_expand_lj_term(sig_env, eps_env, r_env, power):
     Compute expansion of
         sum_i (4 * eps * eps_env[i] * (sig_env[i] / r_env[i])^power)
 
-    (called by basis_expand_lj with power=12 and power=6)
+    (called by basis_expand_lj_atom with power=12 and power=6)
 
     Parameters
     ----------
@@ -532,13 +532,15 @@ def _basis_expand_lj_term(sig_env, eps_env, r_env, power):
     return h_n
 
 
-def basis_expand_lj(sig_env, eps_env, r_env):
+def basis_expand_lj_atom(sig_env, eps_env, r_env):
     """Precomputed part of basis expansion that allows fast computation of
 
     f(sig, eps)
         = sum_i LJ(r_env[i]; sig + sig_env[i], eps * eps_env[i])
-        = dot(project_lj(sig, eps), basis_expand_lj(sig_env, eps_env, r_env))
-
+        = dot(
+            basis_expand_lj_env(sig, eps),
+            basis_expand_lj_atom(sig_env, eps_env, r_env)
+        )
     Parameters
     ----------
     sig_env, eps_env : [N_env] arrays
@@ -549,7 +551,7 @@ def basis_expand_lj(sig_env, eps_env, r_env):
     Returns
     -------
     h_n : [20] array
-        can be dotted with output of project_lj(sig, eps)
+        can be dotted with output of basis_expand_lj_env(sig, eps)
         to compute energy of one atom interacting with all environment atoms
     """
     h_n_12 = _basis_expand_lj_term(sig_env, eps_env, r_env, 12)
@@ -557,12 +559,15 @@ def basis_expand_lj(sig_env, eps_env, r_env):
     return jnp.hstack([h_n_12, h_n_6])
 
 
-def project_lj(sig: float, eps: float) -> Array:
+def basis_expand_lj_env(sig: float, eps: float) -> Array:
     """Variable part of basis expansion that allows fast computation of
 
     f(sig, eps)
         = sum_i LJ(r_env[i]; sig + sig_env[i], eps * eps_env[i])
-        = dot(project_lj(sig, eps), basis_expand_lj(sig_env, eps_env, r_env))
+        = dot(
+            basis_expand_lj_env(sig, eps),
+            basis_expand_lj_atom(sig_env, eps_env, r_env)
+        )
 
     Parameters
     ----------
@@ -572,7 +577,7 @@ def project_lj(sig: float, eps: float) -> Array:
     Returns
     -------
     projection : [20] array
-        can be dotted with output of basis_expand_lj(sig_env, eps_env, r_env)
+        can be dotted with output of basis_expand_lj_atom(sig_env, eps_env, r_env)
         to compute energy of one atom interacting with all environment atoms
     """
     exponents = jnp.hstack([jnp.arange(12 + 1), jnp.arange(6 + 1)])
@@ -603,10 +608,10 @@ def lj_prefactors_on_atom(x, x_others, sig_others, eps_others, box=None, cutoff=
 
     See Also
     --------
-    project_lj : computes a projection of (sig, eps) that can be dotted with these prefactors
+    basis_expand_lj_env : computes a basis expansion of (sig, eps) that can be dotted with these prefactors
     """
     r_env = jax_utils.distance_from_one_to_others(x, x_others, box, cutoff)
-    prefactors = basis_expand_lj(sig_others, eps_others, r_env)
+    prefactors = basis_expand_lj_atom(sig_others, eps_others, r_env)
     return prefactors
 
 
@@ -683,5 +688,5 @@ def lj_interaction_group_energy(sig_ligand, eps_ligand, lj_prefactors):
     energy: float
     """
 
-    projection = vmap(project_lj)(sig_ligand, eps_ligand)
+    projection = vmap(basis_expand_lj_env)(sig_ligand, eps_ligand)
     return jnp.sum(projection * lj_prefactors)

@@ -20,7 +20,8 @@ from timemachine.ff.handlers import openmm_deserializer
 from timemachine.md import builders
 from timemachine.potentials.jax_utils import get_all_pairs_indices, pairs_from_interaction_groups, pairwise_distances
 from timemachine.potentials.nonbonded import (
-    basis_expand_lj,
+    basis_expand_lj_atom,
+    basis_expand_lj_env,
     coulomb_interaction_group_energy,
     coulomb_prefactors_on_traj,
     lennard_jones,
@@ -29,7 +30,6 @@ from timemachine.potentials.nonbonded import (
     nonbonded,
     nonbonded_block,
     nonbonded_on_specific_pairs,
-    project_lj,
 )
 
 Array = Any
@@ -356,10 +356,10 @@ def test_lj_basis():
     def lj_ref(sig, eps):
         return np.sum(lennard_jones(r_i, sig_i + sig, eps_i * eps))
 
-    lj_prefactors = basis_expand_lj(sig_i, eps_i, r_i)
+    lj_prefactors = basis_expand_lj_atom(sig_i, eps_i, r_i)
 
     def lj_basis(sig, eps):
-        projection = project_lj(sig, eps)
+        projection = basis_expand_lj_env(sig, eps)
         return jnp.dot(projection, lj_prefactors)
 
     for _ in range(100):
