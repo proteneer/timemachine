@@ -1,0 +1,23 @@
+{
+  "exclude": ["timemachine/cpp/build", "**/__pycache__"],
+
+  "include": ["timemachine", "tests"],
+
+  "useLibraryCodeForTypes": false,
+
+  "reportAny": false,
+  "reportDeprecated": false,
+  "reportImplicitOverride": false,
+  "reportMissingParameterType": false,
+  "reportMissingTypeArgument": false,
+  "reportMissingTypeStubs": false,
+  "reportUnknownArgumentType": false,
+  "reportUnknownLambdaType": false,
+  "reportUnknownMemberType": false,
+  "reportUnknownParameterType": false,
+  "reportUnknownVariableType": false,
+  "reportUntypedFunctionDecorator": false,
+
+  "reportUnusedImport": "warning",
+  "reportUnusedCallResult": "warning"
+}

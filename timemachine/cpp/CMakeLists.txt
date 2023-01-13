@@ -6,8 +6,12 @@ set(PYBIND11_PYTHON_VERSION 3.10 CACHE STRING "Which version of python we're bui
 
 project(timemachine LANGUAGES CXX CUDA)
 
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
 find_package(PythonInterp 3.10 REQUIRED)
 find_package(PythonLibs 3.10 REQUIRED)
+find_package(Eigen3 3.4 REQUIRED NO_MODULE)
+find_package(pybind11)
 
 set(DEBUG_BUILD "$ENV{DEBUG_BUILD}")
 
@@ -19,7 +23,6 @@ else()
 endif()
 
 
-string(APPEND CMAKE_CXX_FLAGS "${COMMON_COMPILER_FLAGS} -Werror")
 string(APPEND CMAKE_CUDA_FLAGS "${COMMON_COMPILER_FLAGS}")
 
 string(APPEND CMAKE_CUDA_FLAGS
@@ -41,19 +44,6 @@ if (CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
 endif()
 
 set(LIBRARY_NAME custom_ops)
-set(PYBIND_SRC_DIR pybind11)
-
-if(NOT EXISTS ${PYBIND_SRC_DIR})
-  execute_process(COMMAND git clone --depth 1 --branch v2.9.2 https://github.com/pybind/pybind11.git ${PYBIND_SRC_DIR})
-endif()
-
-set(EIGEN_SRC_DIR eigen)
-if(NOT EXISTS ${EIGEN_SRC_DIR})
-  execute_process(COMMAND git clone --depth 1 --branch 3.3.9 https://gitlab.com/libeigen/eigen.git ${EIGEN_SRC_DIR})
-endif()
-
-add_subdirectory(${CMAKE_CURRENT_BINARY_DIR}/${PYBIND_SRC_DIR} ${CMAKE_CURRENT_BINARY_DIR}/${PYBIND_SRC_DIR})
-
 
 # Disable warnings on vendored files
 file(
@@ -128,7 +118,7 @@ pybind11_add_module(${LIBRARY_NAME} SHARED NO_EXTRAS
 
 include_directories(src/kernels)
 include_directories(SYSTEM ${CMAKE_CUDA_TOOLKIT_INCLUDE_DIRECTORIES})
-include_directories(SYSTEM ${CMAKE_CURRENT_BINARY_DIR}/${EIGEN_SRC_DIR})
+include_directories(${EIGEN3_INCLUDE_DIRS})
 include_directories(SYSTEM ${CMAKE_CURRENT_BINARY_DIR}/${CUB_SRC_DIR})
 
 set_property(TARGET ${LIBRARY_NAME} PROPERTY CUDA_STANDARD 17)
