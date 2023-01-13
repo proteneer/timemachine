@@ -1,5 +1,6 @@
 [tool.black]
 line-length = 120
+target-version = ["py310"]
 extend-exclude = '''
 ^/( versioneer.py$
   | timemachine/_version.py$
@@ -18,6 +19,7 @@ multi_line_output = 3  # https://pycqa.github.io/isort/docs/configuration/multi_
 plugins = ["numpy.typing.mypy_plugin"]
 ignore_missing_imports = true
 check_untyped_defs = false
+no_implicit_optional = false
 
 [[tool.mypy.overrides]]
 module = "timemachine._vendored.fire"

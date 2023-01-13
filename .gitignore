@@ -7,6 +7,7 @@ timemachine/cpp/build/
 oe_license.txt
 *.swp
 .ipynb_checkpoints/
+.cache/
 build/
 *.egg-info/
 .coverage*
@@ -15,3 +16,5 @@ build/
 # Nsys profiling files
 *.sqlite
 *.nsys-rep
+
+.direnv/

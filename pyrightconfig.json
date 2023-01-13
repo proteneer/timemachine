@@ -1,0 +1,4 @@
+{
+    "exclude": ["_build", "build", ".direnv", ".pytest-cache", "attic", "examples", "timemachine/cpp/build"],
+    "useLibraryCodeForTypes": false
+}

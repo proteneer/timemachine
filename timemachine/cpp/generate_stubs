@@ -7,4 +7,8 @@ stubgen --output . --module "$MODULE"
 
 # Workaround for
 # > error: "ndarray" expects 2 type arguments, but 1 given
-sed -i 's/numpy\.ndarray\[\([^]]*\)\]/numpy.typing.NDArray[\1]/g' "${MODULE}.pyi"
+sed -i \
+    -e 's/numpy\.ndarray\[\([^]]*\)\]/numpy.typing.NDArray[\1]/g' \
+    -e 's/\blist\b/List/g' \
+    -e 's/from typing import Optional/from typing import List, Optional/g' \
+    "${MODULE}.pyi"
