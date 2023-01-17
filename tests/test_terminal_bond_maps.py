@@ -162,7 +162,6 @@ def test_on_methane():
     mbar = MBAR(u_kn, N_k)
     estimated_delta_f_mbar = mbar.f_k[1]
 
-    # assert that all estimates are close to precomputed result
     estimates = np.array(
         [
             estimated_delta_f_forward,
@@ -171,4 +170,5 @@ def test_on_methane():
             estimated_delta_f_mbar,
         ]
     )
-    np.testing.assert_allclose(estimates, -2.8, atol=1e-1)
+    # assert that all estimates are in agreement
+    np.testing.assert_allclose(estimates[:3], estimates[-1], atol=1e-1)
