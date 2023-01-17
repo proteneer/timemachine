@@ -12,7 +12,6 @@ from timemachine.fe import utils
 from timemachine.ff import Forcefield
 from timemachine.ff.charges import AM1CCC_CHARGES
 from timemachine.ff.handlers import bonded, nonbonded
-from timemachine.ff.handlers.deserialize import deserialize_handlers
 
 pytestmark = [pytest.mark.nogpu]
 
@@ -558,7 +557,7 @@ def test_gbsa_handler():
 
 def test_am1ccc_throws_error_on_phosphorus():
     """Temporary, until phosphorus patterns are added to AM1CCC port"""
-    ff = Forcefield.load_from_file("smirnoff_1_1_0_ccc.py")
+    ff = Forcefield.load_from_file(DEFAULT_FF)
 
     # contains phosphorus
     smi = "[H]c1c(OP(=S)(OC([H])([H])C([H])([H])[H])OC([H])([H])C([H])([H])[H])nc(C([H])(C([H])([H])[H])C([H])([H])[H])nc1C([H])([H])[H]"
@@ -570,12 +569,10 @@ def test_am1ccc_throws_error_on_phosphorus():
 
 
 def test_am1_differences():
+    ff = Forcefield.load_from_file(DEFAULT_FF)
 
-    ff_raw = open("timemachine/ff/params/smirnoff_1_1_0_ccc.py").read()
-    ff_handlers, _, _ = deserialize_handlers(ff_raw)
-    for ccc in ff_handlers:
-        if isinstance(ccc, nonbonded.AM1CCCHandler):
-            break
+    ccc = ff.q_handle
+    assert isinstance(ccc, nonbonded.AM1CCCHandler)
 
     smi = "Clc1c(Cl)c(Cl)c(-c2c(Cl)c(Cl)c(Cl)c(Cl)c2Cl)c(Cl)c1Cl"
     mol = Chem.MolFromSmiles(smi)
