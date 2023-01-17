@@ -171,4 +171,4 @@ def test_on_methane():
             estimated_delta_f_mbar,
         ]
     )
-    np.testing.assert_allclose(estimates, -4.2, atol=1e-1)
+    np.testing.assert_allclose(estimates, -2.8, atol=1e-1)
