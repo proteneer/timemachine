@@ -176,7 +176,7 @@ def estimate_free_energy_given_initial_states(
     initial_states: list of InitialState
         Initial state objects
 
-    protocol: Protocol
+    protocol: SimulationProtocol
         Detailing specifics of each simulation
 
     temperature: float
