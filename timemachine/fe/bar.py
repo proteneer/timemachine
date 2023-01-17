@@ -171,3 +171,21 @@ def bar_with_bootstrapped_uncertainty(w_F, w_R, n_bootstrap=1000, timeout=10):
     # regardless, summarize as if normal
     ddf = np.std(bootstrap_dfs)
     return df, ddf
+
+
+def df_err_from_ukln(u_kln):
+    k, l, _ = u_kln.shape
+    assert k == l == 2
+    w_fwd = u_kln[1, 0, :] - u_kln[0, 0, :]
+    w_rev = u_kln[0, 1, :] - u_kln[1, 1, :]
+    _, df_err = bar_with_bootstrapped_uncertainty(w_fwd, w_rev)
+    return df_err
+
+
+def pair_overlap_from_ukln(u_kln):
+    k, l, n = u_kln.shape
+    assert k == l == 2
+    u_kn = u_kln.reshape(k, -1)
+    assert u_kn.shape == (k, l * n)
+    N_k = n * np.ones(l)
+    return 2 * pymbar.MBAR(u_kn, N_k).computeOverlap()["matrix"][0, 1]  # type: ignore

@@ -1,4 +1,3 @@
-import functools
 import io
 import pickle
 import traceback
@@ -7,13 +6,13 @@ from typing import Any, Dict, NamedTuple, Optional, Sequence
 
 import matplotlib.pyplot as plt
 import numpy as np
-import pymbar
 from rdkit import Chem
 from simtk.openmm import app
 
 from timemachine.constants import BOLTZ, DEFAULT_TEMP
 from timemachine.fe import atom_mapping, model_utils
-from timemachine.fe.bar import bar_with_bootstrapped_uncertainty
+from timemachine.fe.bar import bar_with_bootstrapped_uncertainty, df_err_from_ukln, pair_overlap_from_ukln
+from timemachine.fe.energy_decomposition import get_batch_U_fns
 from timemachine.fe.free_energy import HostConfig, InitialState, SimulationProtocol, SimulationResult
 from timemachine.fe.plots import make_dG_errs_figure, make_overlap_summary_figure, plot_BAR, plot_work
 from timemachine.fe.single_topology import SingleTopology
@@ -25,25 +24,6 @@ from timemachine.md import builders, minimizer
 from timemachine.md.barostat.utils import get_bond_list, get_group_indices
 from timemachine.parallel.client import AbstractClient, AbstractFileClient, CUDAPoolClient, FileClient
 from timemachine.potentials import jax_utils
-
-
-def get_batch_U_fns(bps):
-    # return a function that takes in coords, boxes
-    all_U_fns = []
-    for bp in bps:
-
-        def batch_U_fn(xs, boxes, bp_impl):
-            Us = []
-            for x, box in zip(xs, boxes):
-                # tbd optimize to "selective" later
-                _, U = bp_impl.execute(x, box)
-                Us.append(U)
-            return np.array(Us)
-
-        # extra functools.partial is needed to deal with closure jank
-        all_U_fns.append(functools.partial(batch_U_fn, bp_impl=bp))
-
-    return all_U_fns
 
 
 def sample(initial_state, protocol):
@@ -211,24 +191,6 @@ def setup_initial_states(st, host_config, temperature, lambda_schedule, seed, mi
         state.x0 = coords
 
     return initial_states
-
-
-def df_err_from_ukln(u_kln):
-    k, l, _ = u_kln.shape
-    assert k == l == 2
-    w_fwd = u_kln[1, 0, :] - u_kln[0, 0, :]
-    w_rev = u_kln[0, 1, :] - u_kln[1, 1, :]
-    _, df_err = bar_with_bootstrapped_uncertainty(w_fwd, w_rev)
-    return df_err
-
-
-def pair_overlap_from_ukln(u_kln):
-    k, l, n = u_kln.shape
-    assert k == l == 2
-    u_kn = u_kln.reshape(k, -1)
-    assert u_kn.shape == (k, l * n)
-    N_k = n * np.ones(l)
-    return 2 * pymbar.MBAR(u_kn, N_k).computeOverlap()["matrix"][0, 1]  # type: ignore
 
 
 def estimate_free_energy_given_initial_states(initial_states, protocol, temperature, prefix, keep_idxs):
@@ -814,8 +776,8 @@ def run_edges_parallel(
 
     # Remove references to completed jobs to allow garbage collection.
     # TODO: The current approach uses O(edges) memory in the worst case (e.g. if the first job gets stuck). Ideally we
-    # should process and remove references to jobs in the order they complete, but this would require an interface
-    # presently not implemented in our custom future classes.
+    #   should process and remove references to jobs in the order they complete, but this would require an interface
+    #   presently not implemented in our custom future classes.
     paths = []
     while jobs:
         job = jobs.pop(0)
