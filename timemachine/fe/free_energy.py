@@ -44,6 +44,22 @@ class InitialState:
     ligand_idxs: np.ndarray
 
 
+class LambdaSelectorBase:
+    def select_next_lam(self, prev_state: InitialState):
+        raise NotImplementedError
+
+
+class PrescheduledLambdaSelector(LambdaSelectorBase):
+    def __init__(self, lambda_schedule):
+        self.lambda_schedule = np.array(lambda_schedule)
+        if len(set(self.lambda_schedule)) < len(self.lambda_schedule):
+            raise RuntimeError("repeated values of lambda!")
+
+    def select_next_lam(self, prev_state: InitialState):
+        i = np.argmin(np.abs(self.lambda_schedule - prev_state.lamb))
+        return self.lambda_schedule[i + 1]
+
+
 @dataclass
 class SimulationResult:
     all_dGs: List[np.ndarray]
