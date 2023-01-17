@@ -3,7 +3,7 @@ from typing import List, Optional
 
 import numpy as np
 
-from timemachine.fe import model_utils, topology
+from timemachine.fe import model_utils, system, topology
 from timemachine.fe.utils import get_mol_masses, get_romol_conf
 from timemachine.ff import ForcefieldParams
 from timemachine.ff.handlers import openmm_deserializer
@@ -12,11 +12,11 @@ from timemachine.lib.potentials import CustomOpWrapper, HarmonicBond
 from timemachine.md.barostat.utils import compute_box_center, get_bond_list, get_group_indices
 
 
+@dataclass
 class HostConfig:
-    def __init__(self, omm_system, conf, box):
-        self.omm_system = omm_system
-        self.conf = conf
-        self.box = box
+    omm_system: system.VacuumSystem  # TODO: rename to TimemachineSystem? (not OpenMM, not vacuum)
+    conf: np.ndarray
+    box: np.ndarray
 
 
 @dataclass
