@@ -13,84 +13,31 @@ from timemachine.constants import BOLTZ, DEFAULT_TEMP
 from timemachine.fe import atom_mapping, model_utils
 from timemachine.fe.bar import bar_with_bootstrapped_uncertainty, df_err_from_ukln, pair_overlap_from_ukln
 from timemachine.fe.energy_decomposition import get_batch_U_fns
-from timemachine.fe.free_energy import HostConfig, InitialState, SimulationProtocol, SimulationResult
+from timemachine.fe.free_energy import HostConfig, InitialState, SimulationProtocol, SimulationResult, sample
 from timemachine.fe.plots import make_dG_errs_figure, make_overlap_summary_figure, plot_BAR, plot_work
 from timemachine.fe.single_topology import SingleTopology
 from timemachine.fe.system import convert_omm_system
 from timemachine.fe.utils import get_mol_name, get_romol_conf
 from timemachine.ff import Forcefield
-from timemachine.lib import LangevinIntegrator, MonteCarloBarostat, custom_ops
+from timemachine.lib import LangevinIntegrator, MonteCarloBarostat
 from timemachine.md import builders, minimizer
 from timemachine.md.barostat.utils import get_bond_list, get_group_indices
 from timemachine.parallel.client import AbstractClient, AbstractFileClient, CUDAPoolClient, FileClient
 from timemachine.potentials import jax_utils
 
 
-def sample(initial_state: InitialState, protocol: SimulationProtocol):
-    """Generate a trajectory given an initial state and a simulation protocol
-
-    Parameters
-    ----------
-    initial_state: InitialState
-        (contains potentials, integrator, optional barostat)
-    protocol: SimulationProtocol
-        (specifies x0, v0, box0, number of MD steps, thinning interval, etc...)
-
-    Returns
-    -------
-    xs, boxes: np.arrays with .shape[0] = protocol.n_frames
-
-    Notes
-    -----
-    * Assertion error if coords become NaN
-    """
-
-    bound_impls = [p.bound_impl(np.float32) for p in initial_state.potentials]
-    intg_impl = initial_state.integrator.impl()
-    if initial_state.barostat:
-        baro_impl = initial_state.barostat.impl(bound_impls)
-    else:
-        baro_impl = None
-
-    ctxt = custom_ops.Context(
-        initial_state.x0,
-        initial_state.v0,
-        initial_state.box0,
-        intg_impl,
-        bound_impls,
-        baro_impl,
-    )
-
-    # burn-in
-    ctxt.multiple_steps_U(
-        n_steps=protocol.n_eq_steps,
-        store_u_interval=0,
-        store_x_interval=0,
-    )
-
-    assert np.all(np.isfinite(ctxt.get_x_t())), "Equilibration resulted in a nan"
-
-    # a crude, and probably not great, guess on the decorrelation time
-    n_steps = protocol.n_frames * protocol.steps_per_frame
-    _, all_coords, all_boxes = ctxt.multiple_steps_U(
-        n_steps=n_steps,
-        store_u_interval=0,
-        store_x_interval=protocol.steps_per_frame,
-    )
-
-    assert all_coords.shape[0] == protocol.n_frames
-    assert all_boxes.shape[0] == protocol.n_frames
-
-    assert np.all(np.isfinite(all_coords[-1])), "Production resulted in a nan"
-
-    return all_coords, all_boxes
-
-
 # setup the initial state so we can (hopefully) bitwise recover the identical simulation
 # to help us debug errors.
-def setup_initial_states_upfront(st, host_config, temperature, lambda_schedule, seed, min_cutoff=0.7):
+def setup_initial_states_upfront(
+    st,
+    host_config,
+    temperature,
+    lambda_schedule,
+    seed,
+    min_cutoff,
+):
     """
-    Setup the initial states for a series of lambda values. It is assumed that the lambda schedule
+    Set up the initial states for a series of lambda values. It is assumed that the lambda schedule
     is a monotonically increasing sequence in the closed interval [0,1].
 
     Parameters
@@ -142,7 +89,7 @@ def setup_initial_states_upfront(st, host_config, temperature, lambda_schedule, 
         mol_a_conf = get_romol_conf(st.mol_a)
         mol_b_conf = get_romol_conf(st.mol_b)
 
-        assert lamb >= 0.0 and lamb <= 1.0
+        assert 0 <= lamb <= 1.0
 
         if lamb < 0.5:
             ligand_conf = st.combine_confs_lhs(mol_a_conf, mol_b_conf)
@@ -207,7 +154,13 @@ def setup_initial_states_upfront(st, host_config, temperature, lambda_schedule, 
     return initial_states
 
 
-def estimate_free_energy_given_initial_states(initial_states, protocol, temperature, prefix, keep_idxs):
+def estimate_free_energy_given_initial_states(
+    initial_states,
+    protocol,
+    temperature,
+    prefix,
+    keep_idxs,
+):
     """
     Estimate free energies given pre-generated samples. This implements the pair-BAR method, where
     windows assumed to be ordered with good overlap, with the final free energy being a sum
@@ -260,9 +213,11 @@ def estimate_free_energy_given_initial_states(initial_states, protocol, temperat
     stored_frames = []
     stored_boxes = []
 
-    # memory complexity should be no more than that of 2-states worth of frames when generating samples needed to estimate the free energy.
-    # appending too many idxs to keep_idxs may blow this up, so best to keep to first and last states in keep_idxs. when we change to multi-state
-    # approaches later on this may need to change.
+    # memory complexity should be no more than that of 2-states worth of frames
+    # when generating samples needed to estimate the free energy.
+    # appending too many idxs to keep_idxs may blow this up,
+    # so best to keep to first and last states in keep_idxs.
+    # when we change to multi-state approaches later on this may need to change.
     prev_frames, prev_boxes = None, None
     prev_batch_U_fns = None
 

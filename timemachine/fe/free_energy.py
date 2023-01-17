@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import List
+from typing import List, Optional
 
 import numpy as np
 
@@ -7,7 +7,7 @@ from timemachine.fe import model_utils, topology
 from timemachine.fe.utils import get_mol_masses, get_romol_conf
 from timemachine.ff import ForcefieldParams
 from timemachine.ff.handlers import openmm_deserializer
-from timemachine.lib import LangevinIntegrator, MonteCarloBarostat
+from timemachine.lib import LangevinIntegrator, MonteCarloBarostat, custom_ops
 from timemachine.lib.potentials import CustomOpWrapper, HarmonicBond
 from timemachine.md.barostat.utils import compute_box_center, get_bond_list, get_group_indices
 
@@ -36,7 +36,7 @@ class InitialState:
 
     potentials: List[CustomOpWrapper]
     integrator: LangevinIntegrator
-    barostat: MonteCarloBarostat
+    barostat: Optional[MonteCarloBarostat]
     x0: np.ndarray
     v0: np.ndarray
     box0: np.ndarray
@@ -218,3 +218,63 @@ class AbsoluteFreeEnergy(BaseFreeEnergy):
         if host_values is None:
             return ligand_values
         return np.concatenate([host_values, ligand_values])
+
+
+def sample(initial_state: InitialState, protocol: SimulationProtocol):
+    """Generate a trajectory given an initial state and a simulation protocol
+
+    Parameters
+    ----------
+    initial_state: InitialState
+        (contains potentials, integrator, optional barostat)
+    protocol: SimulationProtocol
+        (specifies x0, v0, box0, number of MD steps, thinning interval, etc...)
+
+    Returns
+    -------
+    xs, boxes: np.arrays with .shape[0] = protocol.n_frames
+
+    Notes
+    -----
+    * Assertion error if coords become NaN
+    """
+
+    bound_impls = [p.bound_impl(np.float32) for p in initial_state.potentials]
+    intg_impl = initial_state.integrator.impl()
+    if initial_state.barostat:
+        baro_impl = initial_state.barostat.impl(bound_impls)
+    else:
+        baro_impl = None
+
+    ctxt = custom_ops.Context(
+        initial_state.x0,
+        initial_state.v0,
+        initial_state.box0,
+        intg_impl,
+        bound_impls,
+        baro_impl,
+    )
+
+    # burn-in
+    ctxt.multiple_steps_U(
+        n_steps=protocol.n_eq_steps,
+        store_u_interval=0,
+        store_x_interval=0,
+    )
+
+    assert np.all(np.isfinite(ctxt.get_x_t())), "Equilibration resulted in a nan"
+
+    # a crude, and probably not great, guess on the decorrelation time
+    n_steps = protocol.n_frames * protocol.steps_per_frame
+    _, all_coords, all_boxes = ctxt.multiple_steps_U(
+        n_steps=n_steps,
+        store_u_interval=0,
+        store_x_interval=protocol.steps_per_frame,
+    )
+
+    assert all_coords.shape[0] == protocol.n_frames
+    assert all_boxes.shape[0] == protocol.n_frames
+
+    assert np.all(np.isfinite(all_coords[-1])), "Production resulted in a nan"
+
+    return all_coords, all_boxes
