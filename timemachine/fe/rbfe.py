@@ -43,6 +43,20 @@ def setup_host(st: SingleTopology, host_config: Optional[HostConfig]):
     return host
 
 
+def setup_ligand_conf(st: SingleTopology, lamb: float):
+    assert 0 <= lamb <= 1.0
+
+    mol_a_conf = get_romol_conf(st.mol_a)
+    mol_b_conf = get_romol_conf(st.mol_b)
+
+    if lamb < 0.5:
+        ligand_conf = st.combine_confs_lhs(mol_a_conf, mol_b_conf)
+    else:
+        ligand_conf = st.combine_confs_rhs(mol_a_conf, mol_b_conf)
+
+    return ligand_conf
+
+
 # setup the initial state so we can (hopefully) bitwise recover the identical simulation
 # to help us debug errors.
 def setup_initial_states_upfront(
@@ -92,16 +106,7 @@ def setup_initial_states_upfront(
     assert np.all(np.diff(lambda_schedule) > 0)
 
     for lamb_idx, lamb in enumerate(lambda_schedule):
-
-        mol_a_conf = get_romol_conf(st.mol_a)
-        mol_b_conf = get_romol_conf(st.mol_b)
-
-        assert 0 <= lamb <= 1.0
-
-        if lamb < 0.5:
-            ligand_conf = st.combine_confs_lhs(mol_a_conf, mol_b_conf)
-        else:
-            ligand_conf = st.combine_confs_rhs(mol_a_conf, mol_b_conf)
+        ligand_conf = setup_ligand_conf(st, lamb)
 
         run_seed = seed + lamb_idx
 
