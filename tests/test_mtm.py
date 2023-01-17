@@ -8,7 +8,7 @@ import jax.random as jrandom
 import numpy as np
 
 from timemachine import testsystems
-from timemachine.constants import BOLTZ
+from timemachine.constants import BOLTZ, DEFAULT_FF
 from timemachine.ff import Forcefield
 from timemachine.md import enhanced
 from timemachine.md.moves import NPTMove, OptimizedMTMMove, ReferenceMTMMove
@@ -17,7 +17,7 @@ from timemachine.potentials import nonbonded
 
 
 def get_ff_am1ccc():
-    ff = Forcefield.load_from_file("smirnoff_1_1_0_ccc.py")
+    ff = Forcefield.load_from_file(DEFAULT_FF)
     return ff
 
 

@@ -179,7 +179,7 @@ def test_absolute_vacuum():
         mols = utils.read_sdf(path_to_ligand)
     mol = mols[0]
 
-    ff = Forcefield.load_from_file("smirnoff_1_1_0_ccc.py")
+    ff = Forcefield.load_from_file(DEFAULT_FF)
     ff_params = ff.get_params()
 
     bt = topology.BaseTopology(mol, ff)
@@ -196,7 +196,7 @@ def test_vacuum_and_solvent_edge_types():
         mols = utils.read_sdf(path_to_ligand)
     mol = mols[0]
 
-    ff = Forcefield.load_from_file("smirnoff_1_1_0_ccc.py")
+    ff = Forcefield.load_from_file(DEFAULT_FF)
     solvent_system, solvent_coords, solvent_box, _ = builders.build_water_system(3.0, ff.water_ff)
 
     ff_params = ff.get_params()

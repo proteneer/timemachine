@@ -5,13 +5,14 @@ import numpy as np
 import pytest
 
 from timemachine import testsystems
+from timemachine.constants import DEFAULT_FF
 from timemachine.ff import Forcefield
 from timemachine.md import enhanced
 from timemachine.potentials import bonded
 
 
 def get_ff_am1ccc():
-    ff = Forcefield.load_from_file("smirnoff_1_1_0_ccc.py")
+    ff = Forcefield.load_from_file(DEFAULT_FF)
     return ff
 
 
