@@ -88,7 +88,7 @@ def sample(initial_state: InitialState, protocol: SimulationProtocol):
 
 # setup the initial state so we can (hopefully) bitwise recover the identical simulation
 # to help us debug errors.
-def setup_initial_states(st, host_config, temperature, lambda_schedule, seed, min_cutoff=0.7):
+def setup_initial_states_upfront(st, host_config, temperature, lambda_schedule, seed, min_cutoff=0.7):
     """
     Setup the initial states for a series of lambda values. It is assumed that the lambda schedule
     is a monotonically increasing sequence in the closed interval [0,1].
@@ -538,7 +538,7 @@ def estimate_relative_free_energy(
         warnings.warn("Warning: setting lambda_schedule manually, this argument may be removed in a future release.")
 
     temperature = DEFAULT_TEMP
-    initial_states = setup_initial_states(
+    initial_states = setup_initial_states_upfront(
         single_topology, host_config, temperature, lambda_schedule, seed, min_cutoff=min_cutoff
     )
     protocol = SimulationProtocol(n_frames=n_frames, n_eq_steps=n_eq_steps, steps_per_frame=steps_per_frame)

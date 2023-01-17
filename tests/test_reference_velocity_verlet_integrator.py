@@ -4,7 +4,7 @@ from jax import grad, jit
 from jax import numpy as jnp
 
 from timemachine.constants import DEFAULT_FF
-from timemachine.fe.rbfe import setup_initial_states
+from timemachine.fe.rbfe import setup_initial_states_upfront
 from timemachine.fe.single_topology import SingleTopology
 from timemachine.fe.utils import get_romol_conf
 from timemachine.ff import Forcefield
@@ -114,7 +114,7 @@ def test_reversibility_with_custom_ops_potentials():
     masses = np.array(rfe.combine_masses())
     coords = rfe.combine_confs(get_romol_conf(mol_a), get_romol_conf(mol_b))
     host_config = None  # vacuum
-    initial_states = setup_initial_states(rfe, host_config, temperature, [lamb], seed)
+    initial_states = setup_initial_states_upfront(rfe, host_config, temperature, [lamb], seed)
     unbound_potentials = initial_states[0].potentials
     bound_potentials = [pot.bound_impl(precision=np.float32) for pot in unbound_potentials]
     box = 100 * np.eye(3)
