@@ -9,7 +9,7 @@ import numpy as np
 from rdkit import Chem
 from simtk.openmm import app
 
-from timemachine.constants import BOLTZ, DEFAULT_TEMP
+from timemachine.constants import BOLTZ, DEFAULT_PRESSURE, DEFAULT_TEMP
 from timemachine.fe import atom_mapping, model_utils
 from timemachine.fe.bar import bar_with_bootstrapped_uncertainty, df_err_from_ukln, pair_overlap_from_ukln
 from timemachine.fe.energy_decomposition import get_batch_U_fns
@@ -43,7 +43,9 @@ def setup_host(st: SingleTopology, host_config: Optional[HostConfig]):
     return host
 
 
-def setup_ligand_conf(st: SingleTopology, lamb: float):
+def combine_ligand_confs(st: SingleTopology, lamb: float):
+    # TODO: just add an optional `lamb` argument to existing function `st.combine_confs`?
+
     assert 0 <= lamb <= 1.0
 
     mol_a_conf = get_romol_conf(st.mol_a)
@@ -57,6 +59,41 @@ def setup_ligand_conf(st: SingleTopology, lamb: float):
     return ligand_conf
 
 
+def setup_in_vacuum(st, ligand_conf, lamb):
+
+    system = st.setup_intermediate_state(lamb)
+    combined_masses = np.array(st.combine_masses())
+
+    potentials = system.get_U_fns()
+    hmr_masses = model_utils.apply_hmr(combined_masses, system.bond.get_idxs())
+    baro = None
+
+    x0 = ligand_conf
+    box0 = np.eye(3, dtype=np.float64) * 10  # make a large 10x10x10nm box
+
+    return x0, box0, hmr_masses, potentials, baro
+
+
+def setup_in_env(st, host, host_config, ligand_conf, lamb, temperature, run_seed):
+
+    host_system, host_masses, host_conf = host
+
+    # minimize water box around the ligand by 4D-decoupling
+    system = st.combine_with_host(host_system, lamb=lamb)
+    combined_masses = np.concatenate([host_masses, st.combine_masses()])
+
+    potentials = system.get_U_fns()
+    hmr_masses = model_utils.apply_hmr(combined_masses, system.bond.get_idxs())
+
+    group_idxs = get_group_indices(get_bond_list(system.bond))
+    baro = MonteCarloBarostat(len(hmr_masses), DEFAULT_PRESSURE, temperature, group_idxs, 15, run_seed + 1)
+
+    x0 = np.concatenate([host_conf, ligand_conf])
+    box0 = host_config.box
+
+    return x0, box0, hmr_masses, potentials, baro
+
+
 # setup the initial state so we can (hopefully) bitwise recover the identical simulation
 # to help us debug errors.
 def setup_initial_states_upfront(
@@ -65,7 +102,7 @@ def setup_initial_states_upfront(
     temperature,
     lambda_schedule,
     seed,
-    min_cutoff,
+    minimizer_distance_cutoff,
 ):
     """
     Set up the initial states for a series of lambda values. It is assumed that the lambda schedule
@@ -88,14 +125,13 @@ def setup_initial_states_upfront(
     seed: int
         Random number seed
 
-    min_cutoff: float
+    minimizer_distance_cutoff: float
         throw error if any atom moves more than this distance (nm) after minimization
 
     Returns
     -------
     list of InitialStates
         Returns an initial state for each value of lambda.
-
     """
 
     host = setup_host(st, host_config)
@@ -106,32 +142,16 @@ def setup_initial_states_upfront(
     assert np.all(np.diff(lambda_schedule) > 0)
 
     for lamb_idx, lamb in enumerate(lambda_schedule):
-        ligand_conf = setup_ligand_conf(st, lamb)
+        ligand_conf = combine_ligand_confs(st, lamb)
 
         run_seed = seed + lamb_idx
 
-        if host is not None:
-            # run in an environment
-            host_system, host_masses, host_conf = host
-            system = st.combine_with_host(host_system, lamb=lamb)
-            combined_masses = np.concatenate([host_masses, st.combine_masses()])
-            potentials = system.get_U_fns()
-            hmr_masses = model_utils.apply_hmr(combined_masses, system.bond.get_idxs())
-            group_idxs = get_group_indices(get_bond_list(system.bond))
-            baro = MonteCarloBarostat(len(hmr_masses), 1.0, temperature, group_idxs, 15, run_seed + 1)
-            x0 = np.concatenate([host_conf, ligand_conf])
-            box0 = host_config.box
+        if host is None:
+            x0, box0, hmr_masses, potentials, baro = setup_in_vacuum(st, ligand_conf, lamb)
         else:
-            # run a vacuum simulation
-            system = st.setup_intermediate_state(lamb)
-            combined_masses = np.array(st.combine_masses())
-            potentials = system.get_U_fns()
-            hmr_masses = model_utils.apply_hmr(combined_masses, system.bond.get_idxs())
-            baro = None
-            x0 = ligand_conf
-            box0 = np.eye(3, dtype=np.float64) * 10  # make a large 10x10x10nm box
-
-        # minimize water box around the ligand by 4D-decoupling
+            x0, box0, hmr_masses, potentials, baro = setup_in_env(
+                st, host, host_config, ligand_conf, lamb, temperature, run_seed
+            )
 
         # hmr masses should be identical throughout the lambda schedule
         # bond idxs should be the same at the two end-states, note that a possible corner
@@ -147,21 +167,31 @@ def setup_initial_states_upfront(
         # but its reasonable to be skeptical, so we also assert consistency through the lambda
         # schedule as an extra sanity check.
 
+        # TODO: re-introduce the assertion described above?
+
+        # initialize velocities
         v0 = np.zeros_like(x0)  # tbd resample from Maxwell-boltzman?
+
+        # determine ligand idxs
         num_ligand_atoms = len(ligand_conf)
         num_total_atoms = len(x0)
         ligand_idxs = np.arange(num_total_atoms - num_ligand_atoms, num_total_atoms)
 
+        # initialize Langevin integrator
         dt = 2.5e-3
         friction = 1.0
         intg = LangevinIntegrator(temperature, dt, friction, hmr_masses, run_seed)
 
+        # pack into state
         state = InitialState(potentials, intg, baro, x0, v0, box0, lamb, ligand_idxs)
         initial_states.append(state)
 
-    all_coords = optimize_coordinates(initial_states, min_cutoff=min_cutoff)
-    for state, coords in zip(initial_states, all_coords):
-        state.x0 = coords
+    # optimization introduces dependencies among states with lam < 0.5, and among states with lam >= 0.5
+    optimized_x0s = optimize_coordinates(initial_states, min_cutoff=minimizer_distance_cutoff)
+
+    # update initial states in-place
+    for state, x0 in zip(initial_states, optimized_x0s):
+        state.x0 = x0
 
     return initial_states
 
@@ -506,7 +536,7 @@ def estimate_relative_free_energy(
 
     temperature = DEFAULT_TEMP
     initial_states = setup_initial_states_upfront(
-        single_topology, host_config, temperature, lambda_schedule, seed, min_cutoff=min_cutoff
+        single_topology, host_config, temperature, lambda_schedule, seed, minimizer_distance_cutoff=min_cutoff
     )
     protocol = SimulationProtocol(n_frames=n_frames, n_eq_steps=n_eq_steps, steps_per_frame=steps_per_frame)
 
