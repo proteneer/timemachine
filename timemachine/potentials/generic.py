@@ -89,7 +89,7 @@ class HarmonicAngleStable(Bonded):
         return U
 
     def to_gpu(self):
-        return gpu.HarmonicAngle(self.idxs)
+        return gpu.HarmonicAngleStable(self.idxs)
 
 
 @dataclass
