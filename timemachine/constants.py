@@ -11,7 +11,7 @@ ENERGY_UNIT = unit.kilojoule_per_mole
 DISTANCE_UNIT = unit.nanometer
 
 kB = unit.BOLTZMANN_CONSTANT_kB * unit.AVOGADRO_CONSTANT_NA
-DEFAULT_FF = "smirnoff_1_1_0_ccc.py"
+DEFAULT_FF = "smirnoff_2_0_0_ccc.py"
 DEFAULT_TEMP = 300  # kelvin
 DEFAULT_PRESSURE = 1.0  # atmospheres
 DEFAULT_KT = BOLTZ * DEFAULT_TEMP  # kJ/mol
