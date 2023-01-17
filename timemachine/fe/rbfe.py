@@ -26,9 +26,23 @@ from timemachine.parallel.client import AbstractClient, AbstractFileClient, CUDA
 from timemachine.potentials import jax_utils
 
 
-def sample(initial_state, protocol):
-    """
-    Generate a trajectory given an initial state and a simulation protocol
+def sample(initial_state: InitialState, protocol: SimulationProtocol):
+    """Generate a trajectory given an initial state and a simulation protocol
+
+    Parameters
+    ----------
+    initial_state: InitialState
+        (contains potentials, integrator, optional barostat)
+    protocol: SimulationProtocol
+        (specifies x0, v0, box0, number of MD steps, thinning interval, etc...)
+
+    Returns
+    -------
+    xs, boxes: np.arrays with .shape[0] = protocol.n_frames
+
+    Notes
+    -----
+    * Assertion error if coords become NaN
     """
 
     bound_impls = [p.bound_impl(np.float32) for p in initial_state.potentials]
