@@ -26,6 +26,23 @@ from timemachine.parallel.client import AbstractClient, AbstractFileClient, CUDA
 from timemachine.potentials import jax_utils
 
 
+def setup_host(st: SingleTopology, host_config: Optional[HostConfig]):
+    if host_config:
+        host_system, host_masses = convert_omm_system(host_config.omm_system)
+        host_conf = minimizer.minimize_host_4d(
+            [st.mol_a, st.mol_b],
+            host_config.omm_system,
+            host_config.conf,
+            st.ff,
+            host_config.box,
+        )
+        host = (host_system, host_masses, host_conf)
+    else:
+        host = None
+
+    return host
+
+
 # setup the initial state so we can (hopefully) bitwise recover the identical simulation
 # to help us debug errors.
 def setup_initial_states_upfront(
@@ -67,17 +84,7 @@ def setup_initial_states_upfront(
 
     """
 
-    host = None
-    if host_config:
-        host_system, host_masses = convert_omm_system(host_config.omm_system)
-        host_conf = minimizer.minimize_host_4d(
-            [st.mol_a, st.mol_b],
-            host_config.omm_system,
-            host_config.conf,
-            st.ff,
-            host_config.box,
-        )
-        host = (host_system, host_masses, host_conf)
+    host = setup_host(st, host_config)
 
     initial_states = []
 
