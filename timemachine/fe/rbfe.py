@@ -121,7 +121,7 @@ def setup_initial_states(
     temperature,
     lambda_schedule,
     seed,
-    minimizer_distance_cutoff,
+    min_cutoff,
 ):
     """
     Set up the initial states for a series of lambda values. It is assumed that the lambda schedule
@@ -144,7 +144,7 @@ def setup_initial_states(
     seed: int
         Random number seed
 
-    minimizer_distance_cutoff: float
+    min_cutoff: float
         throw error if any atom moves more than this distance (nm) after minimization
 
     Returns
@@ -190,7 +190,7 @@ def setup_initial_states(
         initial_states.append(state)
 
     # optimization introduces dependencies among states with lam < 0.5, and among states with lam >= 0.5
-    optimized_x0s = optimize_coordinates(initial_states, min_cutoff=minimizer_distance_cutoff)
+    optimized_x0s = optimize_coordinates(initial_states, min_cutoff=min_cutoff)
 
     # update initial states in-place
     for state, x0 in zip(initial_states, optimized_x0s):
@@ -578,7 +578,7 @@ def estimate_relative_free_energy(
 
     temperature = DEFAULT_TEMP
     initial_states = setup_initial_states(
-        single_topology, host_config, temperature, lambda_schedule, seed, minimizer_distance_cutoff=min_cutoff
+        single_topology, host_config, temperature, lambda_schedule, seed, min_cutoff=min_cutoff
     )
     protocol = SimulationProtocol(n_frames=n_frames, n_eq_steps=n_eq_steps, steps_per_frame=steps_per_frame)
 
