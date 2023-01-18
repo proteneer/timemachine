@@ -47,11 +47,10 @@ def harmonic_angle_stable(conf, params, angle_idxs, cos_angles=True):
 
     tb = top / bot
 
-    # (ytz): we use the squared version so that the energy is strictly positive
     if cos_angles:
         energies = kas / 2 * (tb - jnp.cos(a0s)) ** 2
     else:
         angle = jnp.arccos(tb)
         energies = kas / 2 * (angle - a0s) ** 2
 
-    return jnp.sum(energies, -1)  # reduce over all angles
+    return jnp.sum(energies, -1)

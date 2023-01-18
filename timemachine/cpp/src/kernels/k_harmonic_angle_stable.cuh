@@ -75,7 +75,7 @@ void __global__ k_harmonic_angle_stable(
         atomicAdd(du_dp + ka_idx, FLOAT_TO_FIXED_BONDED(dka_grad));
         RealType da0_grad = ka * delta * sin(a0);
         atomicAdd(du_dp + a0_idx, FLOAT_TO_FIXED_BONDED(da0_grad));
-        RealType deps_grad = ka * delta * eps * (2.0 - ckj - cij) / norm;
+        RealType deps_grad = ka * delta * eps * (2 - ckj - cij) / norm;
         atomicAdd(du_dp + eps_idx, FLOAT_TO_FIXED_BONDED(deps_grad));
     }
 
