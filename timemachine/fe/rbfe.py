@@ -141,8 +141,6 @@ def setup_initial_states_upfront(
     # check that the lambda schedule is monotonically increasing.
     assert np.all(np.diff(lambda_schedule) > 0)
 
-    last_hmr_masses = None  # to assert constant w.r.t. lam
-
     for lamb_idx, lamb in enumerate(lambda_schedule):
         ligand_conf = combine_ligand_confs(st, lamb)
 
@@ -154,25 +152,6 @@ def setup_initial_states_upfront(
             x0, box0, hmr_masses, potentials, baro = setup_in_env(
                 st, host, host_config, ligand_conf, lamb, temperature, run_seed
             )
-
-        # hmr masses should be identical throughout the lambda schedule
-        # bond idxs should be the same at the two end-states, note that a possible corner
-        # case with bond breaking may seem to be problematic:
-
-        # 0 1 2    0 1 2
-        # C-O-C -> C.H-C
-
-        # but this isn't an issue, since hydrogens will only ever be terminal atoms
-        # and core hydrogens that are mapped to heavy atoms will take the mass of the
-        # heavy atom (thereby not triggering the mass repartitioning to begin with).
-
-        # but it's reasonable to be skeptical, so we also assert consistency through the lambda
-        # schedule as an extra sanity check.
-        if last_hmr_masses is None:
-            last_hmr_masses = hmr_masses
-        else:
-            np.testing.assert_array_equal(last_hmr_masses, hmr_masses)
-            last_hmr_masses = hmr_masses
 
         # initialize velocities
         v0 = np.zeros_like(x0)  # tbd resample from Maxwell-boltzman?
@@ -197,6 +176,22 @@ def setup_initial_states_upfront(
     # update initial states in-place
     for state, x0 in zip(initial_states, optimized_x0s):
         state.x0 = x0
+
+    # hmr masses should be identical throughout the lambda schedule
+    # bond idxs should be the same at the two end-states, note that a possible corner
+    # case with bond breaking may seem to be problematic:
+
+    # 0 1 2    0 1 2
+    # C-O-C -> C.H-C
+
+    # but this isn't an issue, since hydrogens will only ever be terminal atoms
+    # and core hydrogens that are mapped to heavy atoms will take the mass of the
+    # heavy atom (thereby not triggering the mass repartitioning to begin with).
+
+    # but it's reasonable to be skeptical, so we also assert consistency through the lambda
+    # schedule as an extra sanity check.
+    hmr_masses_by_window = np.array([s.integrator.masses for s in initial_states])
+    np.testing.assert_array_equal(hmr_masses_by_window.std(0), 0)
 
     return initial_states
 
