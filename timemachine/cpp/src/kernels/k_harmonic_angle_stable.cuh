@@ -52,9 +52,10 @@ void __global__ k_harmonic_angle_stable(
     RealType norm = sqrt(rij_dot_rij * rkj_dot_rkj);
     RealType delta = rij_dot_rkj / norm - cos(a0);
 
+    RealType cij = rij_dot_rkj / rij_dot_rij;
+    RealType ckj = rij_dot_rkj / rkj_dot_rkj;
+
     if (du_dx) {
-        RealType cij = rij_dot_rkj / rij_dot_rij;
-        RealType ckj = rij_dot_rkj / rkj_dot_rkj;
         RealType c = ka * delta / norm;
 
         for (int d = 0; d < 3; d++) {
@@ -72,9 +73,9 @@ void __global__ k_harmonic_angle_stable(
     if (du_dp) {
         RealType dka_grad = delta * delta / 2;
         atomicAdd(du_dp + ka_idx, FLOAT_TO_FIXED_BONDED(dka_grad));
-        RealType da0_grad = delta * ka * sin(a0);
+        RealType da0_grad = ka * delta * sin(a0);
         atomicAdd(du_dp + a0_idx, FLOAT_TO_FIXED_BONDED(da0_grad));
-        RealType deps_grad = 0.0;
+        RealType deps_grad = ka * delta * eps * (2.0 - ckj - cij) / norm;
         atomicAdd(du_dp + eps_idx, FLOAT_TO_FIXED_BONDED(deps_grad));
     }
 
