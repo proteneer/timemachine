@@ -94,6 +94,25 @@ def setup_in_env(st, host, host_config, ligand_conf, lamb, temperature, run_seed
     return x0, box0, hmr_masses, potentials, baro
 
 
+def assert_all_states_have_same_masses(initial_states: List[InitialState]):
+    # hmr masses should be identical throughout the lambda schedule
+    # bond idxs should be the same at the two end-states, note that a possible corner
+    # case with bond breaking may seem to be problematic:
+
+    # 0 1 2    0 1 2
+    # C-O-C -> C.H-C
+
+    # but this isn't an issue, since hydrogens will only ever be terminal atoms
+    # and core hydrogens that are mapped to heavy atoms will take the mass of the
+    # heavy atom (thereby not triggering the mass repartitioning to begin with).
+
+    # but it's reasonable to be skeptical, so we also assert consistency through the lambda
+    # schedule as an extra sanity check.
+    masses = np.array([s.integrator.masses for s in initial_states])
+    deviation_among_windows = masses.std(0)
+    np.testing.assert_array_equal(deviation_among_windows, 0)
+
+
 # setup the initial state so we can (hopefully) bitwise recover the identical simulation
 # to help us debug errors.
 def setup_initial_states_upfront(
@@ -177,21 +196,8 @@ def setup_initial_states_upfront(
     for state, x0 in zip(initial_states, optimized_x0s):
         state.x0 = x0
 
-    # hmr masses should be identical throughout the lambda schedule
-    # bond idxs should be the same at the two end-states, note that a possible corner
-    # case with bond breaking may seem to be problematic:
-
-    # 0 1 2    0 1 2
-    # C-O-C -> C.H-C
-
-    # but this isn't an issue, since hydrogens will only ever be terminal atoms
-    # and core hydrogens that are mapped to heavy atoms will take the mass of the
-    # heavy atom (thereby not triggering the mass repartitioning to begin with).
-
-    # but it's reasonable to be skeptical, so we also assert consistency through the lambda
-    # schedule as an extra sanity check.
-    hmr_masses_by_window = np.array([s.integrator.masses for s in initial_states])
-    np.testing.assert_array_equal(hmr_masses_by_window.std(0), 0)
+    # perform any concluding sanity-checks
+    assert_all_states_have_same_masses(initial_states)
 
     return initial_states
 
