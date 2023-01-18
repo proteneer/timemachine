@@ -141,6 +141,8 @@ def setup_initial_states_upfront(
     # check that the lambda schedule is monotonically increasing.
     assert np.all(np.diff(lambda_schedule) > 0)
 
+    last_hmr_masses = None  # to assert constant w.r.t. lam
+
     for lamb_idx, lamb in enumerate(lambda_schedule):
         ligand_conf = combine_ligand_confs(st, lamb)
 
@@ -164,10 +166,13 @@ def setup_initial_states_upfront(
         # and core hydrogens that are mapped to heavy atoms will take the mass of the
         # heavy atom (thereby not triggering the mass repartitioning to begin with).
 
-        # but its reasonable to be skeptical, so we also assert consistency through the lambda
+        # but it's reasonable to be skeptical, so we also assert consistency through the lambda
         # schedule as an extra sanity check.
-
-        # TODO: re-introduce the assertion described above?
+        if last_hmr_masses is None:
+            last_hmr_masses = hmr_masses
+        else:
+            np.testing.assert_array_equal(last_hmr_masses, hmr_masses)
+            last_hmr_masses = hmr_masses
 
         # initialize velocities
         v0 = np.zeros_like(x0)  # tbd resample from Maxwell-boltzman?
