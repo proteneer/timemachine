@@ -55,7 +55,7 @@ void HarmonicAngleStable<RealType>::execute_device(
                 "HarmonicAngleStable::execute_device(): expected P == 3*A_, got P=" + std::to_string(P) +
                 ", 3*A_=" + std::to_string(3 * A_));
         }
-        k_harmonic_angle_stable<RealType, 3>
+        k_harmonic_angle_stable<RealType>
             <<<blocks, tpb, 0, stream>>>(A_, d_x, d_p, d_angle_idxs_, d_du_dx, d_du_dp, d_u);
         gpuErrchk(cudaPeekAtLastError());
     }
