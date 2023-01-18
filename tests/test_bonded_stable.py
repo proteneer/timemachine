@@ -41,9 +41,5 @@ def test_harmonic_angle_stable(n_particles, n_angles):
         test_du_dx_rev, test_du_dp_rev, test_u_rev = test_potential_rev_impl.execute_selective(x, params, box, 1, 1, 1)
 
         np.testing.assert_array_equal(test_u, test_u_rev)
-
-        # TODO: figure out why this fails and reenable
-        # np.testing.assert_array_equal(test_du_dx, test_du_dx_rev)
-
-        # TODO: implement
-        # np.testing.assert_array_equal(test_du_dp, test_du_dp_rev)
+        np.testing.assert_array_equal(test_du_dx, test_du_dx_rev)
+        np.testing.assert_array_equal(test_du_dp, test_du_dp_rev)

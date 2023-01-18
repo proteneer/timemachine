@@ -55,17 +55,17 @@ void __global__ k_harmonic_angle_stable(
     RealType cij = rij_dot_rkj / rij_dot_rij;
     RealType ckj = rij_dot_rkj / rkj_dot_rkj;
 
-    if (du_dx) {
-        RealType c = ka * delta / norm;
+    RealType c = ka * delta / norm;
 
+    if (du_dx) {
         for (int d = 0; d < 3; d++) {
-            RealType g_i = cij * rij[d] - rkj[d];
+            RealType g_i = __dsub_rd(cij * rij[d], rkj[d]);
             atomicAdd(du_dx + i_idx * 3 + d, FLOAT_TO_FIXED_BONDED<RealType>(c * g_i));
 
-            RealType g_j = (1 - cij) * rij[d] + (1 - ckj) * rkj[d];
+            RealType g_j = __dadd_rd((1 - cij) * rij[d], (1 - ckj) * rkj[d]);
             atomicAdd(du_dx + j_idx * 3 + d, FLOAT_TO_FIXED_BONDED<RealType>(c * g_j));
 
-            RealType g_k = ckj * rkj[d] - rij[d];
+            RealType g_k = __dsub_rd(ckj * rkj[d], rij[d]);
             atomicAdd(du_dx + k_idx * 3 + d, FLOAT_TO_FIXED_BONDED<RealType>(c * g_k));
         }
     }
@@ -73,9 +73,12 @@ void __global__ k_harmonic_angle_stable(
     if (du_dp) {
         RealType dka_grad = delta * delta / 2;
         atomicAdd(du_dp + ka_idx, FLOAT_TO_FIXED_BONDED(dka_grad));
+
         RealType da0_grad = ka * delta * sin(a0);
         atomicAdd(du_dp + a0_idx, FLOAT_TO_FIXED_BONDED(da0_grad));
-        RealType deps_grad = ka * delta * eps * (2 - ckj - cij) / norm;
+
+        RealType d = c * eps;
+        RealType deps_grad = 2 * d - __dadd_rd(d * ckj, d * cij);
         atomicAdd(du_dp + eps_idx, FLOAT_TO_FIXED_BONDED(deps_grad));
     }
 
