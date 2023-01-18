@@ -43,6 +43,28 @@ def delta_r(ri, rj, box=None):
     return diff
 
 
+def idxs_within_cutoff(x, x_lig, box, cutoff=0.5):
+    """Indices of particles in x that are within
+        cutoff of at least one particle in x_lig
+
+    Parameters
+    ----------
+    x: [N, 3] array
+    x_lig: [N_lig, 3] array
+    box: [3,3] array
+    cutoff: float (nm)
+
+    Returns
+    -------
+    idxs : int array
+    """
+
+    def within_cutoff(point):
+        return jnp.any(distance_from_one_to_others(point, x_lig, box) < cutoff)
+
+    return jnp.where(vmap(within_cutoff)(x))[0]
+
+
 def distance_on_pairs(
     ri,
     rj,

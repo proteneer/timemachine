@@ -2,7 +2,7 @@ import io
 import pickle
 import traceback
 import warnings
-from typing import Any, Dict, NamedTuple, Optional, Sequence
+from typing import Any, Dict, List, NamedTuple, Optional, Sequence
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -372,28 +372,30 @@ def estimate_free_energy_given_initial_states(
     )
 
 
-def _optimize_coords_along_states(initial_states):
+def _optimize_coords_along_states(initial_states: List[InitialState]) -> List[np.ndarray]:
+
     # use the end-state to define the optimization settings
     end_state = initial_states[0]
-    ligand_coords = end_state.x0[end_state.ligand_idxs]
-    r_i = np.expand_dims(ligand_coords, axis=1)
-    r_j = np.expand_dims(end_state.x0, axis=0)
-    d_ij = np.linalg.norm(jax_utils.delta_r(r_i, r_j, box=end_state.box0), axis=-1)
-    cutoff = 0.5  # in nanometers
-    free_idxs = np.where(np.any(d_ij < cutoff, axis=0))[0].tolist()
+
+    # select particles within cutoff of ligand
     x_opt = end_state.x0
+    x_lig = x_opt[end_state.ligand_idxs]
+    box = end_state.box0
+
+    free_idxs = jax_utils.idxs_within_cutoff(x_opt, x_lig, box, cutoff=0.5).tolist()
+
     x_traj = []
     for idx, initial_state in enumerate(initial_states):
         print(initial_state.lamb)
         bound_impls = [p.bound_impl(np.float32) for p in initial_state.potentials]
         val_and_grad_fn = minimizer.get_val_and_grad_fn(bound_impls, initial_state.box0)
         assert np.all(np.isfinite(x_opt)), "Initial coordinates contain nan or inf"
-        # assert that the energy decreases only at the end-state.z
-        if idx == 0:
-            check_nrg = True
-        else:
-            check_nrg = False
+
+        # only assert that the energy decreases at the end-state
+        check_nrg = idx == 0
+
         x_opt = minimizer.local_minimize(x_opt, val_and_grad_fn, free_idxs, assert_energy_decreased=check_nrg)
+
         x_traj.append(x_opt)
         assert np.all(np.isfinite(x_opt)), "Minimization resulted in a nan"
         del bound_impls
@@ -401,7 +403,7 @@ def _optimize_coords_along_states(initial_states):
     return x_traj
 
 
-def optimize_coordinates(initial_states, min_cutoff=0.7):
+def optimize_coordinates(initial_states, min_cutoff=0.7) -> List[np.ndarray]:
     """
     Optimize geometries of the initial states.
 
@@ -543,11 +545,14 @@ def estimate_relative_free_energy(
     if keep_idxs is None:
         keep_idxs = [0, len(initial_states) - 1]  # keep first and last frames
     assert len(keep_idxs) <= len(lambda_schedule)
+
+    # TODO: rename prefix to postfix, or move to beginning of combined_prefix?
     combined_prefix = get_mol_name(mol_a) + "_" + get_mol_name(mol_b) + "_" + prefix
     try:
-        return estimate_free_energy_given_initial_states(
+        sim_result = estimate_free_energy_given_initial_states(
             initial_states, protocol, temperature, combined_prefix, keep_idxs
         )
+        return sim_result
     except Exception as err:
         with open(f"failed_rbfe_result_{combined_prefix}.pkl", "wb") as fh:
             pickle.dump((initial_states, protocol, err), fh)
