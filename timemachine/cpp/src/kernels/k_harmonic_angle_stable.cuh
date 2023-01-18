@@ -59,13 +59,13 @@ void __global__ k_harmonic_angle_stable(
 
     if (du_dx) {
         for (int d = 0; d < 3; d++) {
-            RealType g_i = __dsub_rd(cij * rij[d], rkj[d]);
+            RealType g_i = cij * rij[d] - rkj[d];
             atomicAdd(du_dx + i_idx * 3 + d, FLOAT_TO_FIXED_BONDED<RealType>(c * g_i));
 
             RealType g_j = __dadd_rd((1 - cij) * rij[d], (1 - ckj) * rkj[d]);
             atomicAdd(du_dx + j_idx * 3 + d, FLOAT_TO_FIXED_BONDED<RealType>(c * g_j));
 
-            RealType g_k = __dsub_rd(ckj * rkj[d], rij[d]);
+            RealType g_k = ckj * rkj[d] - rij[d];
             atomicAdd(du_dx + k_idx * 3 + d, FLOAT_TO_FIXED_BONDED<RealType>(c * g_k));
         }
     }
