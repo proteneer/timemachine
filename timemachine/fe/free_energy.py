@@ -44,12 +44,12 @@ class InitialState:
     ligand_idxs: np.ndarray
 
 
-class LambdaSelectorBase:
+class ForwardLambdaSelectorBase:
     def select_next_lam(self, prev_state: InitialState):
         raise NotImplementedError
 
 
-class PrescheduledLambdaSelector(LambdaSelectorBase):
+class PrescheduledLambdaSelector(ForwardLambdaSelectorBase):
     def __init__(self, lambda_schedule):
         self.lambda_schedule = np.array(lambda_schedule)
         if len(set(self.lambda_schedule)) < len(self.lambda_schedule):
@@ -58,6 +58,10 @@ class PrescheduledLambdaSelector(LambdaSelectorBase):
     def select_next_lam(self, prev_state: InitialState):
         i = np.argmin(np.abs(self.lambda_schedule - prev_state.lamb))
         return self.lambda_schedule[i + 1]
+
+
+# TODO: PairwiseLambdaSelector, e.g. for bisection
+#   (difficulty: limiting memory demand, since samples from > 2 states will need to be kept)
 
 
 @dataclass
