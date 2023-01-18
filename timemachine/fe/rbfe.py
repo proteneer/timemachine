@@ -202,6 +202,71 @@ def setup_initial_states(
     return initial_states
 
 
+def run_sequential_sims_given_initial_states(
+    initial_states,
+    protocol,
+    temperature,
+    keep_idxs,
+):
+    """Sequentially run simulations at each state in initial_states,
+    returning summaries that can be used for pair BAR, energy decomposition, and other diagnostics
+
+    Returns
+    -------
+    decomposed_u_klns: [n_lams - 1, n_components, 2, 2, n_frames] array
+    stored_frames: coord trajectories, one for each state in keep_idxs
+    stored_boxes: box trajectories, one for each state in keep_idxs
+
+    Notes
+    -----
+    * Memory complexity:
+        Memory demand should be no more than that of 2 states worth of frames.
+
+        Requesting too many states in keep_idxs may blow this up,
+        so best to keep to first and last states in keep_idxs.
+
+        This restriction may need to be relaxed in the future if:
+        * We decide to use MBAR(states) rather than sum_i BAR(states[i], states[i+1])
+        * We use online protocol optimization approaches that require more states to be kept on-hand
+    """
+    stored_frames = []
+    stored_boxes = []
+
+    prev_state = None
+
+    # u_kln matrix (2, 2, n_frames) for each pair of adjacent lambda windows and energy term
+    u_kln_by_component_by_lambda = []
+
+    keep_idxs = keep_idxs or []
+    if keep_idxs:
+        assert all(np.array(keep_idxs) >= 0)
+
+    # run simulations, only keeping the current and previous sampled state in memory at once
+    for lamb_idx, initial_state in enumerate(initial_states):
+        # Clear any old references to avoid holding on to objects in memory we don't need.
+        cur_frames = None
+        cur_boxes = None
+        bound_impls = None
+        cur_batch_U_fns = None
+        cur_frames, cur_boxes = sample(initial_state, protocol)
+        bound_impls = [p.bound_impl(np.float32) for p in initial_state.potentials]
+        cur_batch_U_fns = get_batch_u_fns(bound_impls, temperature)
+
+        cur_state = EnergyDecomposedState(cur_frames, cur_boxes, cur_batch_U_fns)
+
+        if lamb_idx in keep_idxs:
+            stored_frames.append(cur_frames)
+            stored_boxes.append(cur_boxes)
+
+        if lamb_idx > 0:
+            u_kln_by_component = compute_energy_decomposed_u_kln(prev_state, cur_state)
+            u_kln_by_component_by_lambda.append(u_kln_by_component)
+
+            prev_state = EnergyDecomposedState(cur_frames, cur_boxes, cur_batch_U_fns)
+
+    return np.array(u_kln_by_component_by_lambda), stored_frames, stored_boxes
+
+
 def estimate_free_energy_given_initial_states(
     initial_states,
     protocol,
@@ -242,66 +307,32 @@ def estimate_free_energy_given_initial_states(
         object containing results of the simulation
 
     """
-    # assume pair-BAR format
-    kT = BOLTZ * temperature
-    beta = 1 / kT
 
-    all_dGs = []
-    all_errs = []
+    # run n_lambdas simulations in sequence
+    u_kln_by_component_by_lambda, stored_frames, stored_boxes = run_sequential_sims_given_initial_states(
+        initial_states, protocol, temperature, keep_idxs
+    )
 
+    # perform analysis + generate figures
     U_names = [type(U_fn).__name__ for U_fn in initial_states[0].potentials]
+    num_energy_components = len(U_names)
+    assert num_energy_components == u_kln_by_component_by_lambda[0].shape[0]
 
-    num_rows = len(initial_states) - 1
-    num_cols = len(U_names) + 1
+    num_lambdas = len(initial_states)
 
-    stored_frames = []
-    stored_boxes = []
+    num_rows = num_lambdas - 1  # one per adjacent pair
+    num_cols = num_energy_components + 1  # one per component + one for overall energy
 
-    # memory complexity should be no more than that of 2-states worth of frames
-    # when generating samples needed to estimate the free energy.
-    # appending too many idxs to keep_idxs may blow this up,
-    # so best to keep to first and last states in keep_idxs.
-    # when we change to multi-state approaches later on this may need to change.
-    prev_state = None
-
-    # u_kln matrix (2, 2, n_frames) for each pair of adjacent lambda windows and energy term
-    u_kln_by_component_by_lambda = []
-
-    keep_idxs = keep_idxs or []
-    if keep_idxs:
-        assert all(np.array(keep_idxs) >= 0)
-
-    # run simulations, only keeping the current and previous sampled state in memory at once
-    for lamb_idx, initial_state in enumerate(initial_states):
-        # Clear any old references to avoid holding on to objects in memory we don't need.
-        cur_frames = None
-        cur_boxes = None
-        bound_impls = None
-        cur_batch_U_fns = None
-        cur_frames, cur_boxes = sample(initial_state, protocol)
-        bound_impls = [p.bound_impl(np.float32) for p in initial_state.potentials]
-        cur_batch_U_fns = get_batch_u_fns(bound_impls, DEFAULT_TEMP)
-
-        cur_state = EnergyDecomposedState(cur_frames, cur_boxes, cur_batch_U_fns)
-
-        if lamb_idx in keep_idxs:
-            stored_frames.append(cur_frames)
-            stored_boxes.append(cur_boxes)
-
-        if lamb_idx > 0:
-            u_kln_by_component = compute_energy_decomposed_u_kln(prev_state, cur_state)
-            u_kln_by_component_by_lambda.append(u_kln_by_component)
-
-            prev_state = EnergyDecomposedState(cur_frames, cur_boxes, cur_batch_U_fns)
-
-    num_energy_components = u_kln_by_component_by_lambda[0].shape[0]
-
-    # analysis + figure generation for pair BAR
     figure, all_axes = plt.subplots(num_rows, num_cols, figsize=(num_cols * 5, num_rows * 3))
     if num_rows == 1:
         all_axes = [all_axes]
 
-    # compute free energy using pair BAR
+    # free energy analysis + plots (not relying on energy decomposition)
+    kBT = BOLTZ * temperature
+    beta = 1 / kBT
+
+    all_dGs = []
+    all_errs = []
     for lamb_idx, u_kln_by_component in enumerate(u_kln_by_component_by_lambda):
         u_kln = u_kln_by_component.sum(0)
 
@@ -326,7 +357,7 @@ def estimate_free_energy_given_initial_states(
         message = f"{prefix} BAR: lambda {lamb_idx - 1} -> {lamb_idx} dG: {dG:.3f} +- {dG_err:.3f} kJ/mol"
         print(message, flush=True)
 
-    # generate [n_lambdas x num_energy_components] work plots
+    # [n_lambdas x num_energy_components] plots (relying on energy decomposition)
     for lamb_idx, u_kln_by_component in enumerate(u_kln_by_component_by_lambda):
         w_fwd_by_component = u_kln_by_component[:, 1, 0] - u_kln_by_component[:, 0, 0]
         w_rev_by_component = u_kln_by_component[:, 0, 1] - u_kln_by_component[:, 1, 1]
