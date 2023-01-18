@@ -66,11 +66,10 @@ def compute_energy_decomposed_u_kln(state_0: EnergyDecomposedState, state_1: Ene
     states = [state_0, state_1]
     u_kln_by_component = np.zeros((n_components, 2, 2, n_frames))
     for comp in range(n_components):
-        for src in range(2):
-            xs, boxes = states[src].frames, states[src].boxes
-            for dst in range(2):
-                u_fxn = states[dst].batch_u_fns[comp]
-
-                u_kln_by_component[comp, src, dst] = u_fxn(xs, boxes)
+        for k in range(2):
+            u_fxn = states[k].batch_u_fns[comp]
+            for l in range(2):
+                xs, boxes = states[l].frames, states[l].boxes
+                u_kln_by_component[comp, k, l] = u_fxn(xs, boxes)
 
     return u_kln_by_component
