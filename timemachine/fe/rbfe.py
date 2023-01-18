@@ -115,7 +115,7 @@ def assert_all_states_have_same_masses(initial_states: List[InitialState]):
 
 # setup the initial state so we can (hopefully) bitwise recover the identical simulation
 # to help us debug errors.
-def setup_initial_states_upfront(
+def setup_initial_states(
     st,
     host_config,
     temperature,
@@ -546,7 +546,7 @@ def estimate_relative_free_energy(
         warnings.warn("Warning: setting lambda_schedule manually, this argument may be removed in a future release.")
 
     temperature = DEFAULT_TEMP
-    initial_states = setup_initial_states_upfront(
+    initial_states = setup_initial_states(
         single_topology, host_config, temperature, lambda_schedule, seed, minimizer_distance_cutoff=min_cutoff
     )
     protocol = SimulationProtocol(n_frames=n_frames, n_eq_steps=n_eq_steps, steps_per_frame=steps_per_frame)
