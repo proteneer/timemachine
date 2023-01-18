@@ -447,11 +447,12 @@ def optimize_coordinates(initial_states, min_cutoff=0.7) -> List[np.ndarray]:
         for xs in rhs_xs:
             all_xs.append(xs)
 
+    # sanity check that no atom has moved more than `min_cutoff` nm away
     for state, coords in zip(initial_states, all_xs):
-        # sanity check that no atom has moved more than `min_cutoff` nm away
+        displacement_distances = jax_utils.distance_on_pairs(state.x0, coords, box=state.box0)
         assert (
-            np.amax(np.linalg.norm(state.x0 - coords, axis=1)) < min_cutoff
-        ), f"λ = {state.lamb} has minimized atom > {min_cutoff*10} Å from initial state"
+            displacement_distances < min_cutoff
+        ).all(), f"λ = {state.lamb} moved an atom > {min_cutoff*10} Å from initial state during minimization"
 
     return all_xs
 
