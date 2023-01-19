@@ -262,7 +262,7 @@ def run_sequential_sims_given_initial_states(
             u_kln_by_component = compute_energy_decomposed_u_kln(prev_state, cur_state)
             u_kln_by_component_by_lambda.append(u_kln_by_component)
 
-            prev_state = EnergyDecomposedState(cur_frames, cur_boxes, cur_batch_U_fns)
+        prev_state = EnergyDecomposedState(cur_frames, cur_boxes, cur_batch_U_fns)
 
     return np.array(u_kln_by_component_by_lambda), stored_frames, stored_boxes
 
