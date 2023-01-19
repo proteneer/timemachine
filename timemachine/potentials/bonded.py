@@ -106,7 +106,7 @@ def harmonic_angle(conf, params, box, angle_idxs, cos_angles=True):
         to be the middle atom.
 
     cos_angles: True (default)
-        if True, then this instead implements V(t) = k*(cos(t)-cos(t0))^2. This is far more
+        if True, then this instead implements V(t) = k/2*(cos(t)-cos(t0))^2. This is far more
         numerically stable when the angle is pi.
 
     Notes

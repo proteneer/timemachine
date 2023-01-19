@@ -14,6 +14,7 @@ def harmonic_angle_stable(conf, params, angle_idxs, cos_angles=True):
 
     This reduces to the exact expression when :math:`\epsilon = 0`; When :math:`\epsilon > 0`, this avoids the
     singularities in the exact expression as :math:`r_{ij}` or :math:`r_{kj}` approach zero.
+    (Note: this approximation is applied for either setting of `cos_angles`)
 
     Parameters:
     -----------
@@ -29,7 +30,7 @@ def harmonic_angle_stable(conf, params, angle_idxs, cos_angles=True):
         to be the middle atom.
 
     cos_angles: True (default)
-        if True, then this instead implements V(t) = k*(cos(t)-cos(t0))^2. This is far more
+        if True, then this instead implements V(t) = k/2*(cos(t)-cos(t0))^2. This is far more
         numerically stable when the angle is pi.
     """
 
