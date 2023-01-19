@@ -29,7 +29,7 @@ def test_condensed_phase_mtm():
     np.random.seed(seed)
 
     mol, torsion_idxs = testsystems.ligands.get_biphenyl()
-    ff = Forcefield.load_from_file("smirnoff_1_1_0_ccc.py")
+    ff = Forcefield.load_from_file(DEFAULT_FF)
 
     masses = get_mol_masses(mol)
     num_ligand_atoms = len(masses)
