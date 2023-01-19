@@ -80,8 +80,13 @@ def test_harmonic_angle_stable_reduces_to_harmonic_angle(n_particles, n_angles, 
 @pytest.mark.parametrize(
     "potential,params",
     [
-        pytest.param(HarmonicAngle, [(1, 1)], marks=pytest.mark.xfail(reason="expect singularity")),
+        pytest.param(HarmonicAngle, [(1, 1)], marks=pytest.mark.xfail(reason="expect singularity", strict=True)),
         pytest.param(HarmonicAngleStable, [(1, 1, 1)]),
+        pytest.param(
+            HarmonicAngleStable,
+            [(1, 1, 0)],
+            marks=pytest.mark.xfail(reason="expect singularity when eps=0", strict=True),
+        ),
     ],
 )
 @pytest.mark.parametrize("precision", [np.float32, np.float64])
