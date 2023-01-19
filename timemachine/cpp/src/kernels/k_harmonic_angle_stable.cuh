@@ -62,6 +62,9 @@ void __global__ k_harmonic_angle_stable(
             RealType g_i = cij * rij[d] - rkj[d];
             atomicAdd(du_dx + i_idx * 3 + d, FLOAT_TO_FIXED_BONDED<RealType>(c * g_i));
 
+            // Use __dadd_rd instead of (+) operator to prevent FMA
+            // optimization, which breaks bitwise equivalence for the
+            // symmetry (i, j, k) -> (k, j, i).
             RealType g_j = __dadd_rd((1 - cij) * rij[d], (1 - ckj) * rkj[d]);
             atomicAdd(du_dx + j_idx * 3 + d, FLOAT_TO_FIXED_BONDED<RealType>(c * g_j));
 
