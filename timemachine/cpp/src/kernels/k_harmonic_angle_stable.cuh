@@ -1,4 +1,5 @@
 #include "../fixed_point.hpp"
+#include "../gpu_utils.cuh"
 #include "k_fixed_point.cuh"
 
 template <typename RealType>
@@ -62,10 +63,10 @@ void __global__ k_harmonic_angle_stable(
             RealType g_i = cij * rij[d] - rkj[d];
             atomicAdd(du_dx + i_idx * 3 + d, FLOAT_TO_FIXED_BONDED<RealType>(c * g_i));
 
-            // Use __dadd_rd instead of (+) operator to prevent FMA
+            // Use radd_rn instead of (+) operator to prevent FMA
             // optimization, which breaks bitwise equivalence for the
             // symmetry (i, j, k) -> (k, j, i).
-            RealType g_j = __dadd_rd((1 - cij) * rij[d], (1 - ckj) * rkj[d]);
+            RealType g_j = radd_rn((1 - cij) * rij[d], (1 - ckj) * rkj[d]);
             atomicAdd(du_dx + j_idx * 3 + d, FLOAT_TO_FIXED_BONDED<RealType>(c * g_j));
 
             RealType g_k = ckj * rkj[d] - rij[d];
@@ -81,7 +82,7 @@ void __global__ k_harmonic_angle_stable(
         atomicAdd(du_dp + a0_idx, FLOAT_TO_FIXED_BONDED(da0_grad));
 
         RealType d = c * eps;
-        RealType deps_grad = 2 * d - __dadd_rd(d * ckj, d * cij);
+        RealType deps_grad = 2 * d - radd_rn(d * ckj, d * cij);
         atomicAdd(du_dp + eps_idx, FLOAT_TO_FIXED_BONDED(deps_grad));
     }
 

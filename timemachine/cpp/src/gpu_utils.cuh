@@ -74,3 +74,11 @@ template <typename T> void initializeArray(int count, T *array, T val) {
     k_initialize_array<<<B, tpb, 0>>>(count, array, val);
     gpuErrchk(cudaPeekAtLastError());
 }
+
+float __device__ __forceinline__ rmul_rn(float a, float b) { return __fmul_rn(a, b); }
+
+double __device__ __forceinline__ rmul_rn(double a, double b) { return __dmul_rn(a, b); }
+
+float __device__ __forceinline__ radd_rn(float a, float b) { return __fadd_rn(a, b); }
+
+double __device__ __forceinline__ radd_rn(double a, double b) { return __dadd_rn(a, b); }
