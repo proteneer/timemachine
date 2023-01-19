@@ -81,8 +81,7 @@ void __global__ k_harmonic_angle_stable(
         RealType da0_grad = ka * delta * sin(a0);
         atomicAdd(du_dp + a0_idx, FLOAT_TO_FIXED_BONDED(da0_grad));
 
-        RealType d = c * eps;
-        RealType deps_grad = 2 * d - radd_rn(d * ckj, d * cij);
+        RealType deps_grad = c * eps * (2 - radd_rn(ckj, cij));
         atomicAdd(du_dp + eps_idx, FLOAT_TO_FIXED_BONDED(deps_grad));
     }
 
