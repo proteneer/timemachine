@@ -351,7 +351,7 @@ def setup_end_state(ff, mol_a, mol_b, core, a_to_c, b_to_c):
 
     # canonicalize angles
     mol_c_angle_idxs_canon = [canonicalize_bond(idxs) for idxs in mol_c_angle_idxs]
-    angle_potential = potentials.HarmonicAngle(mol_c_angle_idxs_canon).bind(mol_c_angle_params)
+    angle_potential = potentials.HarmonicAngleStable(mol_c_angle_idxs_canon).bind(mol_c_angle_params)
 
     # canonicalize torsions with idxs[0] < idxs[-1] check
     mol_c_torsion_idxs_canon = [canonicalize_bond(idxs) for idxs in mol_c_torsion_idxs]
@@ -681,7 +681,9 @@ def interpolate_harmonic_angle_params(src_params, dst_params, lamb, k_min, lambd
         lamb,
     )
 
-    return jnp.array([k, phase])
+    eps = jnp.where((lamb == 0.0) | (lamb == 1.0), 0.0, 1e-3)
+
+    return jnp.array([k, phase, eps])
 
 
 def interpolate_periodic_torsion_params(src_params, dst_params, lamb, lambda_min, lambda_max):
@@ -1284,8 +1286,14 @@ class SingleTopology(AtomMapMixin):
         combined_angle_idxs = np.concatenate(
             [host_system.angle.get_idxs(), guest_system.angle.get_idxs() + num_host_atoms]
         )
-        combined_angle_params = np.concatenate([host_system.angle.params, guest_system.angle.params])
-        combined_angle = potentials.HarmonicAngle(combined_angle_idxs).bind(combined_angle_params)
+        host_angle_params = np.hstack(
+            [
+                host_system.angle.params,
+                np.zeros((host_system.angle.params.shape[0], 1)),  # eps = 0
+            ]
+        )
+        combined_angle_params = np.concatenate([host_angle_params, guest_system.angle.params])
+        combined_angle = potentials.HarmonicAngleStable(combined_angle_idxs).bind(combined_angle_params)
 
         # complex proteins have torsions
         if host_system.torsion:
