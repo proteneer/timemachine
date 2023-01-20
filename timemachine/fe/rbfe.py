@@ -259,7 +259,7 @@ def run_sequential_sims_given_initial_states(
             stored_boxes.append(cur_boxes)
 
         if lamb_idx > 0:
-            u_kln_by_component = compute_energy_decomposed_u_kln(prev_state, cur_state)
+            u_kln_by_component = compute_energy_decomposed_u_kln([prev_state, cur_state])
             u_kln_by_component_by_lambda.append(u_kln_by_component)
 
         prev_state = EnergyDecomposedState(cur_frames, cur_boxes, cur_batch_U_fns)

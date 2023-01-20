@@ -1,6 +1,6 @@
 import functools
 from dataclasses import dataclass
-from typing import Callable, Sequence
+from typing import Callable, List, Sequence
 
 import numpy as np
 
@@ -37,38 +37,36 @@ def get_batch_u_fns(bps, temperature=DEFAULT_TEMP):
     return batch_u_fns
 
 
-# TODO: generalize to list of >= 2 states
-
-
-def compute_energy_decomposed_u_kln(state_0: EnergyDecomposedState, state_1: EnergyDecomposedState) -> np.ndarray:
+def compute_energy_decomposed_u_kln(states: List[EnergyDecomposedState]) -> np.ndarray:
     """
 
     Parameters
     ----------
-    state_0, state_1: EnergyDecomposedStates
+    states: [K] list of EnergyDecomposedStates
         each contains samples (frames, boxes) and a list of energy functions
 
     Returns
     -------
-    u_kln_by_component : [n_components, 2, 2, n_frames]
+    u_kln_by_component : [n_components, K, K, n_frames]
 
         u_kln_by_component[comp, k, l, n] =
             state k energy component comp,
             evaluated on sample n from state l
     """
 
-    n_frames = state_0.frames.shape[0]
-    n_components = len(state_0.batch_u_fns)
+    K = len(states)
+    n_frames = states[0].frames.shape[0]
+    n_components = len(states[0].batch_u_fns)
 
-    assert state_1.frames.shape[0] == n_frames
-    assert len(state_1.batch_u_fns) == n_components
+    for state in states:
+        assert state.frames.shape[0] == n_frames
+        assert len(state.batch_u_fns) == n_components
 
-    states = [state_0, state_1]
-    u_kln_by_component = np.zeros((n_components, 2, 2, n_frames))
+    u_kln_by_component = np.zeros((n_components, K, K, n_frames))
     for comp in range(n_components):
-        for k in range(2):
+        for k in range(K):
             u_fxn = states[k].batch_u_fns[comp]
-            for l in range(2):
+            for l in range(K):
                 xs, boxes = states[l].frames, states[l].boxes
                 u_kln_by_component[comp, k, l] = u_fxn(xs, boxes)
 
