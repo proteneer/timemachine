@@ -1055,27 +1055,14 @@ class SingleTopology(AtomMapMixin):
 
         return potentials.ChiralBondRestraint(chiral_bond_idxs, chiral_bond_signs).bind(chiral_bond_params)
 
-    def setup_intermediate_state(self, lamb, lambda_angles=0.4, lambda_torsions=0.7):
-        """
+    def setup_intermediate_state(self, lamb):
+        r"""
         Setup intermediate states at some value of lambda.
 
         Parameters
         ----------
         lamb: float
-
-        lambda_angles, lambda_torsions: float
-            For ring opening/closing transformations, alchemical parameter values controlling the intervals over which
-            bonds, angles, and torsions are interpolated. Note that these have no effect on terms not involved in ring
-            opening/closing.
-
-            - Bonds are interpolated in the interval 0 <= lamb <= lambda_angles
-            - Angles are interpolated in the interval lambda_angles <= lamb <= lambda_torsions
-            - Torsions are interpolated in the interval lambda_torsions <= lamb <= 1
-
-            Note: must satisfy 0 < lambda_angles < lambda_torsions < 1
         """
-
-        assert 0.0 < lambda_angles < lambda_torsions < 1.0
 
         src_system = self.src_system
         dst_system = self.dst_system
@@ -1089,7 +1076,7 @@ class SingleTopology(AtomMapMixin):
                 interpolate_harmonic_bond_params,
                 k_min=0.1,  # ~ BOLTZ * (300 K) / (5 nm)^2
                 lambda_min=0.0,
-                lambda_max=lambda_angles,
+                lambda_max=0.7,
             ),
         )
 
@@ -1101,8 +1088,8 @@ class SingleTopology(AtomMapMixin):
             partial(
                 interpolate_harmonic_angle_params,
                 k_min=0.05,  # ~ BOLTZ * (300 K) / (2 * pi)^2
-                lambda_min=lambda_angles,
-                lambda_max=lambda_torsions,
+                lambda_min=0.0,
+                lambda_max=0.7,
             ),
         )
 
@@ -1111,11 +1098,7 @@ class SingleTopology(AtomMapMixin):
             dst_system.torsion,
             lamb,
             interpolate.align_torsion_idxs_and_params,
-            partial(
-                interpolate_periodic_torsion_params,
-                lambda_min=lambda_torsions,
-                lambda_max=1.0,
-            ),
+            partial(interpolate_periodic_torsion_params, lambda_min=0.7, lambda_max=1.0),
         )
 
         nonbonded = self._setup_intermediate_nonbonded_term(
