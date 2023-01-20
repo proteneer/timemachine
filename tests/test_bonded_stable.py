@@ -63,7 +63,7 @@ def test_harmonic_angle_stable_reduces_to_harmonic_angle(n_particles, n_angles, 
     "Check that the stable functional form is equivalent to the standard one at eps = 0"
 
     angle_idxs, coords, params = generate_system(n_particles, n_angles, seed)
-    params[:, 2] = 0.0
+    params[:, 2] = 0.0  # param idx 2 is eps
 
     impl = HarmonicAngle(angle_idxs).to_gpu().unbound_impl(precision)
     impl_stable = HarmonicAngleStable(angle_idxs).to_gpu().unbound_impl(precision)

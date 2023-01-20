@@ -26,7 +26,7 @@ def harmonic_angle_stable(conf, params, angle_idxs, cos_angles=True):
         (kas, a0s, epsilons = params.T)
 
     angle_idxs: shape [num_angles, 3] np.ndarray
-        each element (a, b, c) is a unique angle in the conformation. atom b is defined
+        each element (i, j, k) is a unique angle in the conformation. Atom j is defined
         to be the middle atom.
 
     cos_angles: True (default)

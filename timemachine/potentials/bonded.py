@@ -102,7 +102,7 @@ def harmonic_angle(conf, params, box, angle_idxs, cos_angles=True):
         periodic boundary vectors, if not None
 
     angle_idxs: shape [num_angles, 3] np.ndarray
-        each element (a, b, c) is a unique angle in the conformation. atom b is defined
+        each element (i, j, k) is a unique angle in the conformation. Atom j is defined
         to be the middle atom.
 
     cos_angles: True (default)
