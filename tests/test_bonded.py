@@ -264,10 +264,6 @@ class TestBonded(GradientTest):
         for precision, rtol in relative_tolerance_at_precision.items():
             self.compare_forces_gpu_vs_reference(x, [params], box, potential, rtol, precision=precision)
 
-        potential = generic.HarmonicAngle(angle_idxs)
-        for precision, rtol in relative_tolerance_at_precision.items():
-            self.compare_forces_gpu_vs_reference(x, [params], box, potential, rtol, precision=precision)
-
             # test bitwise commutativity
             test_potential = potentials.HarmonicAngle(angle_idxs)
             test_potential_rev = potentials.HarmonicAngle(angle_idxs[:, ::-1])
