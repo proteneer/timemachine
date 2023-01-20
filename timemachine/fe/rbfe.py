@@ -232,7 +232,7 @@ def run_sequential_sims_given_initial_states(
     stored_frames = []
     stored_boxes = []
 
-    prev_state = None
+    tmp_states = [None] * len(initial_states)
 
     # u_kln matrix (2, 2, n_frames) for each pair of adjacent lambda windows and energy term
     u_kln_by_component_by_lambda = []
@@ -241,28 +241,31 @@ def run_sequential_sims_given_initial_states(
     if keep_idxs:
         assert all(np.array(keep_idxs) >= 0)
 
-    # run simulations, only keeping the current and previous sampled state in memory at once
     for lamb_idx, initial_state in enumerate(initial_states):
-        # Clear any old references to avoid holding on to objects in memory we don't need.
-        cur_frames = None
-        cur_boxes = None
-        bound_impls = None
-        cur_batch_U_fns = None
+
+        # run simulation
         cur_frames, cur_boxes = sample(initial_state, protocol)
-        bound_impls = [p.bound_impl(np.float32) for p in initial_state.potentials]
-        cur_batch_U_fns = get_batch_u_fns(bound_impls, temperature)
 
-        cur_state = EnergyDecomposedState(cur_frames, cur_boxes, cur_batch_U_fns)
-
+        # keep samples from any requested states in memory
         if lamb_idx in keep_idxs:
             stored_frames.append(cur_frames)
             stored_boxes.append(cur_boxes)
 
-        if lamb_idx > 0:
-            u_kln_by_component = compute_energy_decomposed_u_kln([prev_state, cur_state])
-            u_kln_by_component_by_lambda.append(u_kln_by_component)
+        # construct EnergyDecomposedState for current lamb_idx,
+        # but keep no more than 2 of these states in memory at once
+        if lamb_idx >= 2:
+            tmp_states[lamb_idx - 2] = None
 
-        prev_state = EnergyDecomposedState(cur_frames, cur_boxes, cur_batch_U_fns)
+        bound_impls = [p.bound_impl(np.float32) for p in initial_state.potentials]
+        cur_batch_U_fns = get_batch_u_fns(bound_impls, temperature)
+
+        tmp_states[lamb_idx] = EnergyDecomposedState(cur_frames, cur_boxes, cur_batch_U_fns)
+
+        # analysis that depends on current and previous state
+        if lamb_idx > 0:
+            state_pair = [tmp_states[lamb_idx - 1], tmp_states[lamb_idx]]
+            u_kln_by_component = compute_energy_decomposed_u_kln(state_pair)
+            u_kln_by_component_by_lambda.append(u_kln_by_component)
 
     return np.array(u_kln_by_component_by_lambda), stored_frames, stored_boxes
 
