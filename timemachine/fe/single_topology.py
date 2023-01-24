@@ -1066,7 +1066,7 @@ class SingleTopology(AtomMapMixin):
         Notes
         -----
         For transformations involving formation or deletion of valence terms (i.e., having force constants equal to zero
-        in the :math:`lambda=0` or :math:`\lambda=1` state), harmonic bond and angle terms are activated before
+        in the :math:`\lambda=0` or :math:`\lambda=1` state), harmonic bond and angle terms are activated before
         torsions. This is to avoid a potential numerical instability in the torsion functional form when three atoms are
         collinear.
 
