@@ -1057,7 +1057,22 @@ class SingleTopology(AtomMapMixin):
 
     def setup_intermediate_state(self, lamb):
         r"""
-        Setup intermediate states at some value of lambda.
+        Set up intermediate states at some value of the alchemical parameter :math:`\lambda`.
+
+        Notes
+        -----
+        For transformations involving formation or deletion of valence terms (i.e., having force constants equal to zero
+        in the :math:`lambda=0` or :math:`\lambda=1` state), harmonic bond and angle terms are activated before
+        torsions. This is to avoid a potential numerical instability in the torsion functional form when three atoms are
+        collinear.
+
+        - Bonds and angles with :math:`k=0` at :math:`\lambda=0` are activated in the interval :math:`0 \leq \lambda \leq 0.7`
+        - Torsions with :math:`k=0` at :math:`\lambda=0` are activated in the interval :math:`0.7 \leq \lambda \leq 1.0`
+
+        (and similarly for terms with :math:`k=0` at :math:`\lambda=0`, taking :math:`\lambda \to 1-\lambda` in the above.)
+
+        Note that the above only applies to the interactions whose force constant is zero in one end state; otherwise,
+        valence terms are interpolated simultaneously in the interval :math:`0 \leq \lambda \leq 1`)
 
         Parameters
         ----------
