@@ -681,6 +681,10 @@ def interpolate_harmonic_angle_params(src_params, dst_params, lamb, k_min, lambd
         lamb,
     )
 
+    # Use a stable functional form with small, finite `eps` for intermediate states only. The value of `eps` for
+    # intermedates was chosen to be sufficiently large that no numerical instabilities were observed in testing (even
+    # with bond force constants approximately zero), and sufficiently small to have negligible impact on the overlap of
+    # the end states with neighboring intermediates.
     eps = jnp.where((lamb == 0.0) | (lamb == 1.0), 0.0, 1e-3)
 
     return jnp.array([k, phase, eps])
