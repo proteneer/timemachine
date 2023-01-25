@@ -104,3 +104,96 @@ def infer_node_vals(edge_idxs, edge_diffs, edge_stddevs):
 
     # arbitrary additive constant
     return result - result[0]
+
+
+def _bootstrap_node_vals(
+    edge_idxs,
+    edge_diffs,
+    edge_stddevs,
+    ref_node_idxs,
+    ref_node_vals,
+    ref_node_stddevs,
+    n_bootstrap=100,
+    seed=0,
+):
+    """call infer_node_vals multiple times with Gaussian bootstrapped edge_diffs, ref_node_vals"""
+
+    if len(ref_node_idxs) == 0:
+        print("no reference node values: picking node 0 as arbitrary reference")
+        ref_node_idxs = np.array([0], dtype=int)
+        ref_node_vals = np.array([0], dtype=float)
+        ref_node_stddevs = np.array([0], dtype=float)
+
+    n_edges = len(edge_idxs)
+    n_nodes = len(set(edge_idxs.flatten()))
+    n_refs = len(ref_node_idxs)
+
+    rng = np.random.default_rng(seed)
+
+    def estimate_node_val_w_offset(edge_vals, node_vals):
+        estimated_node_vals = infer_node_vals(edge_idxs, edge_vals, edge_stddevs)
+        estimated_node_offset = np.mean(node_vals - estimated_node_vals[ref_node_idxs])
+        return estimated_node_vals + estimated_node_offset
+
+    bootstrap_estimates = np.zeros((n_bootstrap, n_nodes))
+
+    for i in range(n_bootstrap):
+        noisy_edge_diffs = edge_diffs + rng.standard_normal(n_edges) * edge_stddevs
+        noisy_node_refs = ref_node_vals + rng.standard_normal(n_refs) * ref_node_stddevs
+
+        bootstrap_estimates[i] = estimate_node_val_w_offset(noisy_edge_diffs, noisy_node_refs)
+
+    return bootstrap_estimates
+
+
+def infer_node_vals_and_errs(
+    edge_idxs,
+    edge_diffs,
+    edge_stddevs,
+    ref_node_idxs,
+    ref_node_vals,
+    ref_node_stddevs,
+    n_bootstrap=100,
+    seed=0,
+):
+    """
+    Given pairwise comparisons involving K states,
+    return a length-K vector of underlying absolute values
+    by finding node_vals that maximize likelihood of edge_diffs.
+
+    Reference node vals influence result via a single additive offset
+
+    Parameters
+    ----------
+    edge_idxs: [E, 2] array, where the values are in range(K).
+    edge_diffs: [E] array, relative values
+    edge_stddevs: [E] array, positive
+
+    ref_node_idxs: [N_ref] int array
+    ref_node_vals: [N_ref] array
+    ref_node_stddevs: [N_ref] array
+
+    n_bootstrap: int
+    seed: int
+
+    Returns
+    -------
+    dg, dg_err
+        [K] arrays
+        inferred absolute values and associated errors
+        (empirical mean, empirical stddev over bootstrap samples)
+    """
+
+    bootstrap_estimates = _bootstrap_node_vals(
+        edge_idxs,
+        edge_diffs,
+        edge_stddevs,
+        ref_node_idxs,
+        ref_node_vals,
+        ref_node_stddevs,
+        n_bootstrap,
+        seed,
+    )
+    dg = bootstrap_estimates.mean(0)
+    dg_err = bootstrap_estimates.std(0)
+    return dg, dg_err

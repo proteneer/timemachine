@@ -1,13 +1,14 @@
 import networkx as nx
 import numpy as np
 import pytest
+from scipy.stats import linregress
 
-from timemachine.fe.mle import infer_node_vals
+from timemachine.fe.mle import infer_node_vals, infer_node_vals_and_errs
 
 pytestmark = [pytest.mark.nogpu]
 
 
-def generate_and_solve_instance(g: nx.Graph, edge_noise_stddev=0.0):
+def generate_instance(g: nx.Graph, edge_noise_stddev=0.0):
     K = g.number_of_nodes()
     E = g.number_of_edges()
 
@@ -23,6 +24,12 @@ def generate_and_solve_instance(g: nx.Graph, edge_noise_stddev=0.0):
     noise = edge_noise_stddev * np.random.randn(E)
     obs_edge_diffs = true_edge_diffs + noise
     edge_stddevs = edge_noise_stddev * np.ones(E)
+
+    return node_vals, edge_idxs, obs_edge_diffs, edge_stddevs
+
+
+def generate_and_solve_instance(g: nx.Graph, edge_noise_stddev=0.0):
+    node_vals, edge_idxs, obs_edge_diffs, edge_stddevs = generate_instance(g, edge_noise_stddev)
 
     # infer node vals
     est_node_vals = infer_node_vals(edge_idxs, obs_edge_diffs, edge_stddevs)
@@ -137,3 +144,34 @@ def test_random_graphs_containing_cycles_with_edge_noise():
         #   in terms of all-pairs shortest path lengths,
         #   not just in terms of E or K...
         assert np.std(residuals) < np.log(K) * sigma
+
+
+def test_infer_node_dgs_w_error():
+
+    np.random.seed(0)
+
+    for _ in range(5):
+        edge_noise_stddev = np.random.rand()
+        g = generate_random_valid_regular_graph()
+        n_nodes = g.number_of_nodes()
+
+        node_vals, edge_idxs, obs_edge_diffs, edge_stddevs = generate_instance(g, edge_noise_stddev)
+
+        num_refs = np.random.randint(n_nodes)
+        ref_node_idxs = np.random.choice(np.arange(n_nodes), num_refs, replace=False)
+        ref_node_vals = node_vals[ref_node_idxs]
+        ref_node_stddevs = 0.01 * np.ones(num_refs)
+
+        dg, dg_err = infer_node_vals_and_errs(
+            edge_idxs,
+            obs_edge_diffs,
+            edge_stddevs,
+            ref_node_idxs,
+            ref_node_vals,
+            ref_node_stddevs,
+            seed=np.random.randint(1000),
+        )
+        assert (dg_err > 0).all()
+
+        res = linregress(dg, node_vals)
+        assert res.rvalue > 0.9
