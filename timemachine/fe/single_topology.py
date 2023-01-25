@@ -1063,6 +1063,10 @@ class SingleTopology(AtomMapMixin):
         r"""
         Set up intermediate states at some value of the alchemical parameter :math:`\lambda`.
 
+        Parameters
+        ----------
+        lamb: float
+
         Notes
         -----
         For transformations involving formation or deletion of valence terms (i.e., having force constants equal to zero
@@ -1077,10 +1081,6 @@ class SingleTopology(AtomMapMixin):
 
         Note that the above only applies to the interactions whose force constant is zero in one end state; otherwise,
         valence terms are interpolated simultaneously in the interval :math:`0 \leq \lambda \leq 1`)
-
-        Parameters
-        ----------
-        lamb: float
         """
 
         src_system = self.src_system
