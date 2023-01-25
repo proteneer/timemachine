@@ -6,13 +6,13 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 import pytest
-from hypothesis import given, seed
+from hypothesis import assume, given, seed
 from rdkit import Chem
 from rdkit.Chem import AllChem
 
 from timemachine.constants import DEFAULT_FF
 from timemachine.fe import atom_mapping, single_topology
-from timemachine.fe.interpolate import linear_interpolation
+from timemachine.fe.interpolate import linear_interpolation, log_linear_interpolation
 from timemachine.fe.single_topology import (
     ChargePertubationError,
     CoreBondChangeWarning,
@@ -424,20 +424,30 @@ lambdas = finite_floats(0.0, 1.0)
 
 
 def pairs(elem, unique=False):
-    return st.lists(elem, min_size=2, max_size=2, unique=unique)
+    return st.lists(elem, min_size=2, max_size=2, unique=unique).map(tuple)
 
 
 lambda_intervals = pairs(finite_floats(1e-9, 1.0 - 1e-9), unique=True).map(sorted)
 
 
+@pytest.mark.parametrize(
+    "interpolation_fn",
+    [
+        linear_interpolation,
+        functools.partial(log_linear_interpolation, min_value=0.01),
+    ],
+)
 @given(nonzero_force_constants, lambda_intervals, lambdas)
-@seed(2022)
-def test_handle_ring_opening_closing_symmetric(k, lambda_interval, lam):
+@seed(2023)
+def test_handle_ring_opening_closing_symmetric(interpolation_fn, k, lambda_interval, lam):
     lambda_min, lambda_max = lambda_interval
+
+    # avoid spurious failure due to loss of precision
+    assume((lam <= lambda_min) == (lam <= 1 - (1 - lambda_min)))
 
     f = functools.partial(
         handle_ring_opening_closing,
-        linear_interpolation,
+        interpolation_fn,
         lambda_min=lambda_min,
         lambda_max=lambda_max,
     )
