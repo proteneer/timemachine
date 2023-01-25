@@ -163,14 +163,22 @@ def setup_initial_states(
     for lamb_idx, lamb in enumerate(lambda_schedule):
         ligand_conf = combine_ligand_confs(st, lamb)
 
-        run_seed = seed + lamb_idx
+        # use a different seed to initialize every window,
+        # but in a way that should be symmetric for
+        # A -> B vs. B -> A edge definitions
+        init_seed = seed + hash(ligand_conf.tobytes())
 
         if host is None:
             x0, box0, hmr_masses, potentials, baro = setup_in_vacuum(st, ligand_conf, lamb)
         else:
             x0, box0, hmr_masses, potentials, baro = setup_in_env(
-                st, host, host_config, ligand_conf, lamb, temperature, run_seed
+                st, host, host_config, ligand_conf, lamb, temperature, init_seed
             )
+
+        # provide a different run_seed for every lambda window,
+        # but in a way that should be symmetric for
+        # A -> B vs. B -> A edge definitions
+        run_seed = seed + hash(bytes().join([p.params.tobytes() for p in potentials]))
 
         # initialize velocities
         v0 = np.zeros_like(x0)  # tbd resample from Maxwell-boltzman?
