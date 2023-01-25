@@ -351,7 +351,7 @@ def setup_end_state(ff, mol_a, mol_b, core, a_to_c, b_to_c):
 
     # canonicalize angles
     mol_c_angle_idxs_canon = [canonicalize_bond(idxs) for idxs in mol_c_angle_idxs]
-    angle_potential = potentials.HarmonicAngle(mol_c_angle_idxs_canon).bind(mol_c_angle_params)
+    angle_potential = potentials.HarmonicAngleStable(mol_c_angle_idxs_canon).bind(mol_c_angle_params)
 
     # canonicalize torsions with idxs[0] < idxs[-1] check
     mol_c_torsion_idxs_canon = [canonicalize_bond(idxs) for idxs in mol_c_torsion_idxs]
@@ -681,7 +681,13 @@ def interpolate_harmonic_angle_params(src_params, dst_params, lamb, k_min, lambd
         lamb,
     )
 
-    return jnp.array([k, phase])
+    # Use a stable functional form with small, finite `eps` for intermediate states only. The value of `eps` for
+    # intermedates was chosen to be sufficiently large that no numerical instabilities were observed in testing (even
+    # with bond force constants approximately zero), and sufficiently small to have negligible impact on the overlap of
+    # the end states with neighboring intermediates.
+    eps = jnp.where((lamb == 0.0) | (lamb == 1.0), 0.0, 1e-3)
+
+    return jnp.array([k, phase, eps])
 
 
 def interpolate_periodic_torsion_params(src_params, dst_params, lamb, lambda_min, lambda_max):
@@ -1053,27 +1059,29 @@ class SingleTopology(AtomMapMixin):
 
         return potentials.ChiralBondRestraint(chiral_bond_idxs, chiral_bond_signs).bind(chiral_bond_params)
 
-    def setup_intermediate_state(self, lamb, lambda_angles=0.4, lambda_torsions=0.7):
-        """
-        Setup intermediate states at some value of lambda.
+    def setup_intermediate_state(self, lamb):
+        r"""
+        Set up intermediate states at some value of the alchemical parameter :math:`\lambda`.
 
         Parameters
         ----------
         lamb: float
 
-        lambda_angles, lambda_torsions: float
-            For ring opening/closing transformations, alchemical parameter values controlling the intervals over which
-            bonds, angles, and torsions are interpolated. Note that these have no effect on terms not involved in ring
-            opening/closing.
+        Notes
+        -----
+        For transformations involving formation or deletion of valence terms (i.e., having force constants equal to zero
+        in the :math:`\lambda=0` or :math:`\lambda=1` state), harmonic bond and angle terms are activated before
+        torsions. This is to avoid a potential numerical instability in the torsion functional form when three atoms are
+        collinear.
 
-            - Bonds are interpolated in the interval 0 <= lamb <= lambda_angles
-            - Angles are interpolated in the interval lambda_angles <= lamb <= lambda_torsions
-            - Torsions are interpolated in the interval lambda_torsions <= lamb <= 1
+        - Bonds and angles with :math:`k=0` at :math:`\lambda=0` are activated in the interval :math:`0 \leq \lambda \leq 0.7`
+        - Torsions with :math:`k=0` at :math:`\lambda=0` are activated in the interval :math:`0.7 \leq \lambda \leq 1.0`
 
-            Note: must satisfy 0 < lambda_angles < lambda_torsions < 1
+        (and similarly for terms with :math:`k=0` at :math:`\lambda=0`, taking :math:`\lambda \to 1-\lambda` in the above.)
+
+        Note that the above only applies to the interactions whose force constant is zero in one end state; otherwise,
+        valence terms are interpolated simultaneously in the interval :math:`0 \leq \lambda \leq 1`)
         """
-
-        assert 0.0 < lambda_angles < lambda_torsions < 1.0
 
         src_system = self.src_system
         dst_system = self.dst_system
@@ -1087,7 +1095,7 @@ class SingleTopology(AtomMapMixin):
                 interpolate_harmonic_bond_params,
                 k_min=0.1,  # ~ BOLTZ * (300 K) / (5 nm)^2
                 lambda_min=0.0,
-                lambda_max=lambda_angles,
+                lambda_max=0.7,
             ),
         )
 
@@ -1099,8 +1107,8 @@ class SingleTopology(AtomMapMixin):
             partial(
                 interpolate_harmonic_angle_params,
                 k_min=0.05,  # ~ BOLTZ * (300 K) / (2 * pi)^2
-                lambda_min=lambda_angles,
-                lambda_max=lambda_torsions,
+                lambda_min=0.0,
+                lambda_max=0.7,
             ),
         )
 
@@ -1109,11 +1117,7 @@ class SingleTopology(AtomMapMixin):
             dst_system.torsion,
             lamb,
             interpolate.align_torsion_idxs_and_params,
-            partial(
-                interpolate_periodic_torsion_params,
-                lambda_min=lambda_torsions,
-                lambda_max=1.0,
-            ),
+            partial(interpolate_periodic_torsion_params, lambda_min=0.7, lambda_max=1.0),
         )
 
         nonbonded = self._setup_intermediate_nonbonded_term(
@@ -1284,8 +1288,14 @@ class SingleTopology(AtomMapMixin):
         combined_angle_idxs = np.concatenate(
             [host_system.angle.get_idxs(), guest_system.angle.get_idxs() + num_host_atoms]
         )
-        combined_angle_params = np.concatenate([host_system.angle.params, guest_system.angle.params])
-        combined_angle = potentials.HarmonicAngle(combined_angle_idxs).bind(combined_angle_params)
+        host_angle_params = np.hstack(
+            [
+                host_system.angle.params,
+                np.zeros((host_system.angle.params.shape[0], 1)),  # eps = 0
+            ]
+        )
+        combined_angle_params = np.concatenate([host_angle_params, guest_system.angle.params])
+        combined_angle = potentials.HarmonicAngleStable(combined_angle_idxs).bind(combined_angle_params)
 
         # complex proteins have torsions
         if host_system.torsion:

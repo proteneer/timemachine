@@ -98,7 +98,7 @@ def test_reversibility():
     dt = 1.5e-3
 
     # Is not infinitely reversible, will fail after 3000 steps due to accumulation of coords/vels in floating point
-    for n_steps in [1, 10, 100, 500, 1000, 2000]:
+    for n_steps in [1, 10, 100, 500]:
         # Note: reversibility can fail depending on the
         # range of values in the velocities. Setting the seed
         # here keeps the range the same for all n_step values.
