@@ -124,6 +124,10 @@ class HarmonicAngle(BondedWrapper):
     pass
 
 
+class HarmonicAngleStable(BondedWrapper):
+    pass
+
+
 class PeriodicTorsion(BondedWrapper):
     pass
 

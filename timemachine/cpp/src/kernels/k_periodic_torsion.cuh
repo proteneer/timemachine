@@ -1,13 +1,10 @@
 #include "../fixed_point.hpp"
+#include "../gpu_utils.cuh"
 #include "k_fixed_point.cuh"
 
 template <typename RealType> inline __device__ RealType dot_product(const RealType a[3], const RealType b[3]) {
     return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
 }
-
-__device__ float rmul_rn(float a, float b) { return __fmul_rn(a, b); }
-
-__device__ double rmul_rn(double a, double b) { return __dmul_rn(a, b); }
 
 template <typename RealType>
 inline __device__ void cross_product(const RealType a[3], const RealType b[3], RealType c[3]) {

@@ -8,6 +8,7 @@ from typing_extensions import Protocol, runtime_checkable
 import timemachine.lib.potentials as gpu
 import timemachine.potentials.chiral_restraints as ref_chiral
 from timemachine.potentials import bonded as ref_bonded
+from timemachine.potentials import bonded_stable as ref_bonded_stable
 from timemachine.potentials import nonbonded as ref_nonbonded
 from timemachine.potentials import summed as ref_summed
 
@@ -77,6 +78,18 @@ class HarmonicAngle(Bonded):
 
     def to_gpu(self):
         return gpu.HarmonicAngle(self.idxs)
+
+
+@dataclass
+class HarmonicAngleStable(Bonded):
+    def to_reference(self):
+        def U(conf, params, box):
+            return ref_bonded_stable.harmonic_angle_stable(conf, params, self.idxs)
+
+        return U
+
+    def to_gpu(self):
+        return gpu.HarmonicAngleStable(self.idxs)
 
 
 @dataclass
