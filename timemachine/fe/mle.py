@@ -70,13 +70,13 @@ def wrap_for_scipy_optimize(f):
     return wrapped
 
 
-def infer_node_vals(edge_idxs, edge_diffs, edge_stddevs):
+def infer_node_vals(edge_idxs, edge_diffs, edge_stddevs, ref_node_idxs, ref_node_vals):
     """
     Given pairwise comparisons involving K states,
     return a length-K vector of underlying absolute values
     by finding node_vals that maximizing likelihood of edge_diffs.
-    The result is determined up to an arbitrary additive constant --
-    by convention this function sets result[0] = 0.0.
+
+    Reference node vals influence result via a single additive offset.
 
     Parameters
     ----------
@@ -84,26 +84,36 @@ def infer_node_vals(edge_idxs, edge_diffs, edge_stddevs):
     edge_diffs: [E] array, relative values
     edge_stddevs: [E] array, positive
 
+    ref_node_idxs: [N_ref] int array
+    ref_node_vals: [N_ref] array
+
+    TODO: incorporate ref_node_stddevs here?
+
     Returns
     -------
-        [K] array, inferred absolute values (up to arbitrary constant)
+        [K] array, inferred absolute values
     """
 
     # check shapes
     assert len(edge_diffs) == len(edge_idxs), f"{len(edge_diffs)} != {len(edge_idxs)}"
     _assert_edges_valid(edge_idxs)
 
-    # maximize likelihood of observed edge diffs
+    # maximize likelihood of observed edge diffs, up to arbitrary offset
     @wrap_for_scipy_optimize
     def loss(x):
+        # TODO: incorporate offset here?
         return -gaussian_log_likelihood(x, edge_idxs, edge_diffs, edge_stddevs)
 
     K = np.max(edge_idxs) + 1
     x0 = np.zeros(K)  # maybe initialize smarter, e.g. using random spanning tree?
     result = minimize(loss, x0, jac=True, tol=0).x
 
-    # arbitrary additive constant
-    return result - result[0]
+    centered_node_vals = result - result[0]
+
+    # ref node vals only used to inform a single additive offset
+    offset = np.mean(ref_node_vals - centered_node_vals[ref_node_idxs])
+
+    return centered_node_vals + offset
 
 
 def _bootstrap_node_vals(
@@ -118,12 +128,6 @@ def _bootstrap_node_vals(
 ):
     """call infer_node_vals multiple times with Gaussian bootstrapped edge_diffs, ref_node_vals"""
 
-    if len(ref_node_idxs) == 0:
-        print("no reference node values: picking node 0 as arbitrary reference")
-        ref_node_idxs = np.array([0], dtype=int)
-        ref_node_vals = np.array([0], dtype=float)
-        ref_node_stddevs = np.array([0], dtype=float)
-
     n_edges = len(edge_idxs)
     n_nodes = len(set(edge_idxs.flatten()))
     n_refs = len(ref_node_idxs)
@@ -131,9 +135,7 @@ def _bootstrap_node_vals(
     rng = np.random.default_rng(seed)
 
     def estimate_node_val_w_offset(edge_vals, node_vals):
-        estimated_node_vals = infer_node_vals(edge_idxs, edge_vals, edge_stddevs)
-        estimated_node_offset = np.mean(node_vals - estimated_node_vals[ref_node_idxs])
-        return estimated_node_vals + estimated_node_offset
+        return infer_node_vals(edge_idxs, edge_vals, edge_stddevs, ref_node_idxs, node_vals)
 
     bootstrap_estimates = np.zeros((n_bootstrap, n_nodes))
 
@@ -161,7 +163,7 @@ def infer_node_vals_and_errs(
     return a length-K vector of underlying absolute values
     by finding node_vals that maximize likelihood of edge_diffs.
 
-    Reference node vals influence result via a single additive offset
+    Reference node vals influence result via a single additive offset.
 
     Parameters
     ----------
@@ -178,22 +180,24 @@ def infer_node_vals_and_errs(
 
     Returns
     -------
-    dg, dg_err
-        [K] arrays
-        inferred absolute values and associated errors
-        (empirical mean, empirical stddev over bootstrap samples)
+    dg: [K] array
+        inferred absolute values
+    dg_err : [K] array
+        associated errors (empirical stddev over bootstrap samples)
     """
 
+    if len(ref_node_idxs) == 0:
+        print("no reference node values: picking node 0 as arbitrary reference")
+        ref_node_idxs = np.array([0], dtype=int)
+        ref_node_vals = np.array([0], dtype=float)
+        ref_node_stddevs = np.array([0], dtype=float)
+
+    dg = infer_node_vals(edge_idxs, edge_diffs, edge_stddevs, ref_node_idxs, ref_node_vals)
+
+    # empirical stddev
     bootstrap_estimates = _bootstrap_node_vals(
-        edge_idxs,
-        edge_diffs,
-        edge_stddevs,
-        ref_node_idxs,
-        ref_node_vals,
-        ref_node_stddevs,
-        n_bootstrap,
-        seed,
+        edge_idxs, edge_diffs, edge_stddevs, ref_node_idxs, ref_node_vals, ref_node_stddevs, n_bootstrap, seed
     )
-    dg = bootstrap_estimates.mean(0)
     dg_err = bootstrap_estimates.std(0)
+
     return dg, dg_err
