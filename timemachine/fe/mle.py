@@ -87,8 +87,6 @@ def infer_node_vals(edge_idxs, edge_diffs, edge_stddevs, ref_node_idxs=tuple(), 
     ref_node_idxs: [N_ref] int array
     ref_node_vals: [N_ref] array
 
-    TODO: incorporate ref_node_stddevs here?
-
     Returns
     -------
         [K] array, inferred absolute values
