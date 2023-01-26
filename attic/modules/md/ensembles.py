@@ -1,6 +1,6 @@
 import numpy as np
 
-from timemachine.constants import AVOGADRO, BOLTZ
+from timemachine.constants import BOLTZ, AVOGADRO
 from timemachine.md.barostat.utils import compute_box_volume
 
 
@@ -95,7 +95,7 @@ class NPTEnsemble:
         self.beta = 1.0 / (BOLTZ * self.temperature)
 
     def reduce(self, U: float, volume: float):
-        """u_npt = beta * (U + pressure * volume)
+        """u_npt = beta * (U + pressure * volume * avogadro)
 
         Parameters
         ----------
@@ -117,7 +117,7 @@ class NPTEnsemble:
         potential_energy = U
 
         reduced_u = self.beta * potential_energy
-        reduced_pv = (self.beta / AVOGADRO) * self.pressure * volume
+        reduced_pv = self.beta * self.pressure * volume * AVOGADRO
 
         return reduced_u + reduced_pv
 

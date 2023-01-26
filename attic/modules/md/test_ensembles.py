@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from timemachine.constants import AVOGADRO, BOLTZ
+from timemachine.constants import BOLTZ, AVOGADRO
 from timemachine.md.ensembles import NPTEnsemble, NVTEnsemble
 
 pytestmark = [pytest.mark.nogpu]
@@ -10,13 +10,14 @@ pytestmark = [pytest.mark.nogpu]
 def _compute_reduced_potential(potential_energy, temperature, volume, pressure):
     """Convert potential energy into reduced potential.
     Copied from https://github.com/choderalab/openmmtools/blob/321b998fc5977a1f8893e4ad5700b1b3aef6101c/openmmtools/states.py#L1904-L1912
+    and differs due to beta being defined differently in openmm and timemachine, with timemachine uses a beta reduced by AVOGADRO
     """
 
     kBT = BOLTZ * temperature
     beta = 1.0 / kBT
-    reduced_potential = potential_energy / AVOGADRO
+    reduced_potential = potential_energy
     if pressure is not None:
-        reduced_potential += pressure * volume
+        reduced_potential += pressure * volume * AVOGADRO
     return beta * reduced_potential
 
 
