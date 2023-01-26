@@ -4,7 +4,7 @@ RGAS = BOLTZMANN * AVOGADRO  # J/mol per kelvin
 BOLTZ = RGAS / 1000  # kJ/mol per kelvin
 ONE_4PI_EPS0 = 138.935456
 VIBRATIONAL_CONSTANT = 1302.79  # http://openmopac.net/manual/Hessian_Matrix.html
-
+BAR_TO_MD_PRESSURE = 1e-25  # kJ/nm
 
 DEFAULT_FF = "smirnoff_2_0_0_ccc.py"
 DEFAULT_TEMP = 300  # kelvin

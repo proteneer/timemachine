@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from timemachine.constants import AVOGADRO, BOLTZ
+from timemachine.constants import AVOGADRO, BAR_TO_MD_PRESSURE, BOLTZ
 from timemachine.fe.free_energy import AbsoluteFreeEnergy
 from timemachine.fe.topology import BaseTopology
 from timemachine.ff import Forcefield
@@ -313,7 +313,7 @@ def test_molecular_ideal_gas():
 
     # expected volume
     n_water_mols = len(group_indices) - 1  # 1 for the ligand
-    expected_volume_in_md = (n_water_mols + 1) * BOLTZ * temperatures / (pressure * AVOGADRO)
+    expected_volume_in_md = (n_water_mols + 1) * BOLTZ * temperatures / (pressure * AVOGADRO * BAR_TO_MD_PRESSURE)
 
     for i, temperature in enumerate(temperatures):
 
