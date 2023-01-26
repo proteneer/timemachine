@@ -70,7 +70,7 @@ def wrap_for_scipy_optimize(f):
     return wrapped
 
 
-def infer_node_vals(edge_idxs, edge_diffs, edge_stddevs, ref_node_idxs, ref_node_vals):
+def infer_node_vals(edge_idxs, edge_diffs, edge_stddevs, ref_node_idxs=[], ref_node_vals=[]):
     """
     Given pairwise comparisons involving K states,
     return a length-K vector of underlying absolute values
@@ -97,6 +97,11 @@ def infer_node_vals(edge_idxs, edge_diffs, edge_stddevs, ref_node_idxs, ref_node
     # check shapes
     assert len(edge_diffs) == len(edge_idxs), f"{len(edge_diffs)} != {len(edge_idxs)}"
     _assert_edges_valid(edge_idxs)
+
+    if len(ref_node_idxs) == 0:
+        print("no reference node values: picking node 0 as arbitrary reference")
+        ref_node_idxs = np.array([0], dtype=int)
+        ref_node_vals = np.array([0], dtype=float)
 
     # maximize likelihood of observed edge diffs, up to arbitrary offset
     @wrap_for_scipy_optimize
@@ -152,9 +157,9 @@ def infer_node_vals_and_errs(
     edge_idxs,
     edge_diffs,
     edge_stddevs,
-    ref_node_idxs,
-    ref_node_vals,
-    ref_node_stddevs,
+    ref_node_idxs=[],
+    ref_node_vals=[],
+    ref_node_stddevs=[],
     n_bootstrap=100,
     seed=0,
 ):
