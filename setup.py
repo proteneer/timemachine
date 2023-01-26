@@ -15,6 +15,24 @@ from setuptools.command.build_ext import build_ext
 import versioneer
 
 
+def install_custom_ops() -> bool:
+    """Determine if we should install the custom ops.
+
+    If it is not a linux machine and doesn't have at least nvidia-smi we skip it. Can
+    still use the reference platform if needed in such cases.
+    """
+    if os.environ.get("SKIP_CUSTOM_OPS"):
+        return False
+    if "linux" not in sys.platform:
+        return False
+    try:
+        subprocess.check_call(["nvidia-smi"])
+    except FileNotFoundError:
+        return False
+
+    return True
+
+
 # CMake configuration adapted from https://github.com/pybind/cmake_example
 class CMakeExtension(Extension):
     def __init__(self, name, sourcedir=""):
@@ -57,6 +75,10 @@ long_description = (here / "README.md").read_text(encoding="utf-8")
 cmdclass = versioneer.get_cmdclass()
 cmdclass.update(build_ext=CMakeBuild)
 
+external_modules = None
+if install_custom_ops():
+    external_modules = [CMakeExtension("timemachine.lib.custom_ops", "timemachine/cpp")]
+
 setup(
     name="timemachine",
     version=versioneer.get_version(),
@@ -72,9 +94,7 @@ setup(
         "Programming Language :: Python :: 3",
     ],
     keywords="molecular dynamics",
-    ext_modules=[CMakeExtension("timemachine.lib.custom_ops", "timemachine/cpp")]
-    if not os.environ.get("SKIP_CUSTOM_OPS")
-    else [],
+    ext_modules=external_modules,
     packages=find_packages(),
     python_requires=">=3.7",
     install_requires=[

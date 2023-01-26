@@ -45,20 +45,11 @@ conda install openmm=7.5.1 -c conda-forge # only if using openmm from conda
 
 ### Install Time Machine
 
-#### Linux
+The CUDA extension module implementing custom ops is only supported on Linux, but partial functionality is still available on non-Linux OSes.
 
 ```shell
 pip install -r requirements.txt
 pip install .
-```
-
-#### Non-Linux
-
-The CUDA extension module implementing custom ops is only supported on Linux, but partial functionality is still available on non-Linux OSes. To install without the extension:
-
-```shell
-pip install -r requirements.txt
-SKIP_CUSTOM_OPS=1 pip install .
 ```
 
 ## Developing Time Machine
@@ -75,10 +66,7 @@ Possible variants of the last step include
 ```shell
 pip install -e .[dev,test]                 # optionally install dev and test dependencies
 CMAKE_ARGS=-DCUDA_ARCH=86 pip install -e . # override CUDA_ARCH
-SKIP_CUSTOM_OPS=1 pip install -e .         # skip building CUDA extension (non-Linux)
-
-# use parallel CMake build with `nproc` threads
-CMAKE_BUILD_PARALLEL_LEVEL=$(nproc) pip install -e .
+SKIP_CUSTOM_OPS=1 pip install -e .         # skip building CUDA extension
 ```
 
 To rebuild the extension module after making changes to the C++/CUDA code, either rerun
