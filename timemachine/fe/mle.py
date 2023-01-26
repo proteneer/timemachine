@@ -70,7 +70,7 @@ def wrap_for_scipy_optimize(f):
     return wrapped
 
 
-def infer_node_vals(edge_idxs, edge_diffs, edge_stddevs, ref_node_idxs=[], ref_node_vals=[]):
+def infer_node_vals(edge_idxs, edge_diffs, edge_stddevs, ref_node_idxs=tuple(), ref_node_vals=tuple()):
     """
     Given pairwise comparisons involving K states,
     return a length-K vector of underlying absolute values
@@ -157,9 +157,9 @@ def infer_node_vals_and_errs(
     edge_idxs,
     edge_diffs,
     edge_stddevs,
-    ref_node_idxs=[],
-    ref_node_vals=[],
-    ref_node_stddevs=[],
+    ref_node_idxs=tuple(),
+    ref_node_vals=tuple(),
+    ref_node_stddevs=tuple(),
     n_bootstrap=100,
     seed=0,
 ):
