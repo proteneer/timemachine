@@ -37,6 +37,7 @@ def gaussian_log_likelihood(
     implied_diffs = node_vals[dst_idxs] - node_vals[src_idxs]
 
     # Note: can swap in other likelihood functions here besides norm.logpdf
+    # (if we update the edge likelihood model, update bootstrapping as well)
     sanitized_edge_stddevs = make_stddevs_finite(edge_stddevs)
     edge_lls = norm.logpdf(x=edge_diffs, loc=implied_diffs, scale=sanitized_edge_stddevs)
 
@@ -143,6 +144,7 @@ def _bootstrap_node_vals(
     bootstrap_estimates = np.zeros((n_bootstrap, n_nodes))
 
     for i in range(n_bootstrap):
+        # if we switch the edge likelihood model, update this line too
         noisy_edge_diffs = edge_diffs + rng.standard_normal(n_edges) * edge_stddevs
         noisy_node_refs = ref_node_vals + rng.standard_normal(n_refs) * ref_node_stddevs
 
