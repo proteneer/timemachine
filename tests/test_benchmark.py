@@ -13,7 +13,6 @@ from timemachine import constants
 from timemachine.fe import rbfe
 from timemachine.fe.model_utils import apply_hmr
 from timemachine.fe.single_topology import SingleTopology
-from timemachine.fe.utils import to_md_units
 from timemachine.ff import Forcefield
 from timemachine.ff.handlers import openmm_deserializer
 from timemachine.lib import LangevinIntegrator, MonteCarloBarostat, custom_ops
@@ -232,12 +231,7 @@ def benchmark(
 
 def benchmark_dhfr(verbose=False, num_batches=100, steps_per_batch=1000):
 
-    host_fns, host_masses, host_coords, box = setup_dhfr()
-
-    host_conf = []
-    for x, y, z in host_coords:
-        host_conf.append([to_md_units(x), to_md_units(y), to_md_units(z)])
-    host_conf = np.array(host_conf)
+    host_fns, host_masses, host_conf, box = setup_dhfr()
 
     x0 = host_conf
     v0 = np.zeros_like(host_conf)
