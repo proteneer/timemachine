@@ -18,7 +18,7 @@ import versioneer
 def install_custom_ops() -> bool:
     """Determine if we should install the custom ops.
 
-    If it is not a linux machine and doesn't have at least nvidia-smi we skip it. Can
+    If it is not a linux machine and doesn't have at least nvcc we skip it. Can
     still use the reference platform if needed in such cases.
     """
     if os.environ.get("SKIP_CUSTOM_OPS"):
@@ -26,7 +26,7 @@ def install_custom_ops() -> bool:
     if "linux" not in sys.platform:
         return False
     try:
-        subprocess.check_call(["nvidia-smi"])
+        subprocess.check_call(["nvcc"])
     except FileNotFoundError:
         return False
 
@@ -75,9 +75,9 @@ long_description = (here / "README.md").read_text(encoding="utf-8")
 cmdclass = versioneer.get_cmdclass()
 cmdclass.update(build_ext=CMakeBuild)
 
-external_modules = None
+ext_modules = None
 if install_custom_ops():
-    external_modules = [CMakeExtension("timemachine.lib.custom_ops", "timemachine/cpp")]
+    ext_modules = [CMakeExtension("timemachine.lib.custom_ops", "timemachine/cpp")]
 
 setup(
     name="timemachine",
@@ -94,7 +94,7 @@ setup(
         "Programming Language :: Python :: 3",
     ],
     keywords="molecular dynamics",
-    ext_modules=external_modules,
+    ext_modules=ext_modules,
     packages=find_packages(),
     python_requires=">=3.7",
     install_requires=[

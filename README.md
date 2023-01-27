@@ -66,7 +66,7 @@ Possible variants of the last step include
 ```shell
 pip install -e .[dev,test]                 # optionally install dev and test dependencies
 CMAKE_ARGS=-DCUDA_ARCH=86 pip install -e . # override CUDA_ARCH
-SKIP_CUSTOM_OPS=1 pip install -e .         # skip building CUDA extension
+SKIP_CUSTOM_OPS=1 pip install -e .         # skip building CUDA extension, no effect on non-Linux OSes
 ```
 
 To rebuild the extension module after making changes to the C++/CUDA code, either rerun
