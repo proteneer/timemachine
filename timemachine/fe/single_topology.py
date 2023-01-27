@@ -896,7 +896,7 @@ class SingleTopology(AtomMapMixin):
 
         return mol_c_masses
 
-    def combine_confs(self, x_a, x_b):
+    def combine_confs(self, x_a, x_b, lamb=1.0):
         """
         Combine conformations of two molecules.
 
@@ -916,8 +916,10 @@ class SingleTopology(AtomMapMixin):
             Combined conformation
 
         """
-        warnings.warn("combine confs is deprecated for SingleTopology", DeprecationWarning)
-        return self.combine_confs_rhs(x_a, x_b)
+        if lamb < 0.5:
+            return self.combine_confs_lhs(x_a, x_b)
+        else:
+            return self.combine_confs_rhs(x_a, x_b)
 
     def combine_confs_rhs(self, x_a, x_b):
         """

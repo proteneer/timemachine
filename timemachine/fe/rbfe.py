@@ -26,37 +26,18 @@ from timemachine.parallel.client import AbstractClient, AbstractFileClient, CUDA
 from timemachine.potentials import jax_utils
 
 
-def setup_host(st: SingleTopology, host_config: Optional[HostConfig]):
-    if host_config:
-        host_system, host_masses = convert_omm_system(host_config.omm_system)
-        host_conf = minimizer.minimize_host_4d(
-            [st.mol_a, st.mol_b],
-            host_config.omm_system,
-            host_config.conf,
-            st.ff,
-            host_config.box,
-        )
-        host = (host_system, host_masses, host_conf)
-    else:
-        host = None
+def setup_host(st: SingleTopology, host_config: HostConfig):
 
+    host_system, host_masses = convert_omm_system(host_config.omm_system)
+    host_conf = minimizer.minimize_host_4d(
+        [st.mol_a, st.mol_b],
+        host_config.omm_system,
+        host_config.conf,
+        st.ff,
+        host_config.box,
+    )
+    host = (host_system, host_masses, host_conf)
     return host
-
-
-def combine_ligand_confs(st: SingleTopology, lamb: float):
-    # TODO: just add an optional `lamb` argument to existing function `st.combine_confs`?
-
-    assert 0 <= lamb <= 1.0
-
-    mol_a_conf = get_romol_conf(st.mol_a)
-    mol_b_conf = get_romol_conf(st.mol_b)
-
-    if lamb < 0.5:
-        ligand_conf = st.combine_confs_lhs(mol_a_conf, mol_b_conf)
-    else:
-        ligand_conf = st.combine_confs_rhs(mol_a_conf, mol_b_conf)
-
-    return ligand_conf
 
 
 def setup_in_vacuum(st, ligand_conf, lamb):
@@ -153,15 +134,21 @@ def setup_initial_states(
         Returns an initial state for each value of lambda.
     """
 
-    host = setup_host(st, host_config)
+    if host_config:
+        host = setup_host(st, host_config)
+    else:
+        host = None
 
     initial_states = []
 
     # check that the lambda schedule is monotonically increasing.
     assert np.all(np.diff(lambda_schedule) > 0)
 
+    conf_a = get_romol_conf(st.mol_a)
+    conf_b = get_romol_conf(st.mol_b)
+
     for lamb_idx, lamb in enumerate(lambda_schedule):
-        ligand_conf = combine_ligand_confs(st, lamb)
+        ligand_conf = st.combine_ligand_confs(conf_a, conf_b, lamb)
 
         # use a different seed to initialize every window,
         # but in a way that should be symmetric for
