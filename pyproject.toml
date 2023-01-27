@@ -25,7 +25,8 @@ follow_imports = "silent"
 
 [build-system]
 requires = [
-  "cmake==3.22.1",
+  # Don't need cmake if not on linux
+  "cmake==3.22.1; sys_platform == 'linux'",
   "mypy==0.942",
   "setuptools >= 43.0.0, < 64.0.0",
   "wheel",
