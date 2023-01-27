@@ -26,7 +26,7 @@ def install_custom_ops() -> bool:
     if "linux" not in sys.platform:
         return False
     try:
-        subprocess.check_call(["nvcc"])
+        subprocess.check_call(["nvcc", "--version"])
     except FileNotFoundError:
         return False
 
