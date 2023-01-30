@@ -94,25 +94,25 @@ def run_triple(mol_a, mol_b, core, forcefield, n_frames, protein_path, n_eq_step
         n_eq_steps=n_eq_steps,
     )
 
-    assert solvent_res.overlap_summary_png is not None
-    assert solvent_res.overlap_detail_png is not None
-    assert np.linalg.norm(solvent_res.all_errs) < 0.1
-    assert len(solvent_res.frames[0]) == n_frames
-    assert len(solvent_res.frames[-1]) == n_frames
-    assert len(solvent_res.boxes[0]) == n_frames
-    assert len(solvent_res.boxes[-1]) == n_frames
-    assert [x.lamb for x in solvent_res.initial_states] == lambda_schedule
-    assert solvent_res.protocol.n_frames == n_frames
-    assert solvent_res.protocol.n_eq_steps == n_eq_steps
+    def check_result(result: SimulationResult):
+        assert result.overlap_summary_png is not None
+        assert result.overlap_detail_png is not None
+        assert np.linalg.norm(result.all_errs) < 0.1
+        assert len(result.frames[0]) == n_frames
+        assert len(result.frames[-1]) == n_frames
+        assert len(result.boxes[0]) == n_frames
+        assert len(result.boxes[-1]) == n_frames
+        assert [x.lamb for x in result.initial_states] == lambda_schedule
+        assert result.protocol.n_frames == n_frames
+        assert result.protocol.n_eq_steps == n_eq_steps
 
-    def check_overlaps(result: SimulationResult):
         assert result.overlaps_by_lambda.shape == (len(lambda_schedule) - 1,)
         assert result.overlaps_by_lambda_by_component.shape[1] == len(lambda_schedule) - 1
         for overlaps in [result.overlaps_by_lambda, result.overlaps_by_lambda_by_component]:
             assert (0.0 < overlaps).all()
             assert (overlaps < 1.0).all()
 
-    check_overlaps(solvent_res)
+    check_result(solvent_res)
 
     seed = 2024
     complex_sys, complex_conf, _, _, complex_box, _ = builders.build_protein_system(
@@ -133,18 +133,7 @@ def run_triple(mol_a, mol_b, core, forcefield, n_frames, protein_path, n_eq_step
         n_eq_steps=n_eq_steps,
     )
 
-    assert solvent_res.overlap_summary_png is not None
-    assert complex_res.overlap_detail_png is not None
-    assert np.linalg.norm(complex_res.all_errs) < 0.1
-    assert len(complex_res.frames[0]) == n_frames
-    assert len(complex_res.frames[-1]) == n_frames
-    assert len(complex_res.boxes[0]) == n_frames
-    assert len(complex_res.boxes[-1]) == n_frames
-    assert [x.lamb for x in complex_res.initial_states] == lambda_schedule
-    assert complex_res.protocol.n_frames == n_frames
-    assert complex_res.protocol.n_eq_steps == n_eq_steps
-
-    check_overlaps(complex_res)
+    check_result(complex_res)
 
 
 @pytest.mark.nightly(reason="Slow!")
