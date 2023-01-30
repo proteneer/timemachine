@@ -148,7 +148,7 @@ def setup_initial_states(
     conf_b = get_romol_conf(st.mol_b)
 
     for lamb_idx, lamb in enumerate(lambda_schedule):
-        ligand_conf = st.combine_ligand_confs(conf_a, conf_b, lamb)
+        ligand_conf = st.combine_confs(conf_a, conf_b, lamb)
 
         # use a different seed to initialize every window,
         # but in a way that should be symmetric for
