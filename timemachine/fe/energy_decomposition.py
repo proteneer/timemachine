@@ -38,7 +38,7 @@ def get_batch_u_fns(bps, temperature=DEFAULT_TEMP):
 
 
 def compute_energy_decomposed_u_kln(states: List[EnergyDecomposedState]) -> np.ndarray:
-    """
+    """Compute a stack of u_kln matrices, one per energy component
 
     Parameters
     ----------
