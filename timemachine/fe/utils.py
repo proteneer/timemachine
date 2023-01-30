@@ -2,7 +2,6 @@ from pathlib import Path
 from typing import List, Optional, Union
 
 import numpy as np
-import simtk.unit
 from numpy.typing import NDArray
 from rdkit import Chem
 from rdkit.Chem import AllChem, Draw
@@ -10,10 +9,6 @@ from rdkit.Chem.Draw import rdMolDraw2D
 from scipy.stats import special_ortho_group
 
 from timemachine import constants
-
-
-def to_md_units(q):
-    return q.value_in_unit_system(simtk.unit.md_unit_system)
 
 
 def convert_uIC50_to_kJ_per_mole(amount_in_uM: float, experiment_temp: float = 298.15) -> float:
