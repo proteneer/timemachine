@@ -1,7 +1,6 @@
 import numpy as np
 import pytest
 
-from timemachine.fe.utils import to_md_units
 from timemachine.lib import potentials
 from timemachine.testsystems.dhfr import setup_dhfr
 
@@ -31,7 +30,7 @@ def example_nonbonded_potential(_example_system):
 @pytest.fixture()
 def example_conf(_example_system):
     _, _, host_conf, _ = _example_system
-    return np.array([[to_md_units(x), to_md_units(y), to_md_units(z)] for x, y, z in host_conf])
+    return host_conf
 
 
 @pytest.fixture()

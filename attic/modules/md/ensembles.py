@@ -1,17 +1,13 @@
-from typing import Union
-
 import numpy as np
-from jax import numpy as jnp
-from simtk import unit
 
-from timemachine.constants import DISTANCE_UNIT, ENERGY_UNIT, kB
+from timemachine.constants import BOLTZ, AVOGADRO
 from timemachine.md.barostat.utils import compute_box_volume
-
-non_unitted = Union[float, np.ndarray, jnp.ndarray]  # raw value without simtk unit attached
 
 
 class PotentialEnergyModel:
     def __init__(self, sys_params, unbound_potentials, precision=np.float32, guard_threshold=1e6):
+        # TODO: refactor to use summed potential...
+
         self.sys_params = sys_params
         self.unbound_potentials = unbound_potentials
         self.all_impls = []
@@ -44,70 +40,107 @@ class PotentialEnergyModel:
 
 
 class NVTEnsemble:
-    def __init__(self, potential_energy: PotentialEnergyModel, temperature: unit.Quantity):
+    def __init__(self, potential_energy: PotentialEnergyModel, temperature: float):
         self.potential_energy = potential_energy
         self.temperature = temperature
-        self.beta = 1.0 / (kB * self.temperature)
+        self.beta = 1.0 / (BOLTZ * temperature)
 
-        # given a value assumed to be in units of ENERGY_UNIT, multiply by this to get unitless reduced potential energy
-        self._prefactor = self.beta * ENERGY_UNIT
+    def reduce(self, U: float):
+        """Convert to reduced units
 
-    def reduce(self, U: non_unitted):
-        """u_nvt = beta * U
+        Parameters
+        ----------
+        U: float
+            in kJ/mol
 
-        U assumed to be in units of ENERGY_UNIT (kJ/mol), but without simtk unit attached"""
-        return self._prefactor * U
+        Returns
+        -------
+        u_nvt: float
+            reduced units
+        """
+        return self.beta * U
 
     def reduced_potential_and_gradient(self, x, box, lam):
+        """
+
+        Parameters
+        ----------
+        x : array
+        box : array
+        lam : float
+
+        Returns
+        -------
+        u : float
+            unitless
+        du_dx : array
+            units of 1 / nm
+        """
         U, dU_dx = self.potential_energy.energy_and_gradient(x, box, lam)
 
         # reduced potential u
-        #   (unitless)
         u = self.reduce(U)
 
         # d reduced potential / dx
-        #   (units of 1 / nm, but returned without units, since (x, box) don't have units either)
         du_dx = self.reduce(dU_dx)
 
         return u, du_dx
 
 
 class NPTEnsemble:
-    def __init__(self, potential_energy: PotentialEnergyModel, temperature: unit.Quantity, pressure: unit.Quantity):
+    def __init__(self, potential_energy: PotentialEnergyModel, temperature: float, pressure: float):
         self.potential_energy = potential_energy
         self.temperature = temperature
         self.pressure = pressure
-        self.beta = 1.0 / (kB * self.temperature)
+        self.beta = 1.0 / (BOLTZ * self.temperature)
 
-    def reduce(self, U: non_unitted, volume: non_unitted):
-        """u_npt = beta * (U + pressure * volume)
+    def reduce(self, U: float, volume: float):
+        """u_npt = beta * (U + pressure * volume * avogadro)
 
-        U assumed to be in units of ENERGY_UNIT (kJ/mol), but without simtk unit attached
-        volume assumed to be in units of DISTANCE_UNIT^3 (nm^3), but without simtk unit attached
+        Parameters
+        ----------
+        U : float
+            kJ/mol
+        volume : float
+            nm^3
+
+        Returns
+        -------
+        u_npt : float
+            reduced units
 
         Reference
         ---------
         OpenMMTools thermodynamic states
             https://github.com/choderalab/openmmtools/blob/321b998fc5977a1f8893e4ad5700b1b3aef6101c/openmmtools/states.py#L1904-L1912
         """
-        potential_energy = U * ENERGY_UNIT
-        volume = volume * DISTANCE_UNIT ** 3
+        potential_energy = U
 
         reduced_u = self.beta * potential_energy
-        reduced_pv = self.beta * self.pressure * volume * unit.AVOGADRO_CONSTANT_NA
+        reduced_pv = self.beta * self.pressure * volume * AVOGADRO
 
         return reduced_u + reduced_pv
 
     def reduced_potential_and_gradient(self, x, box, lam):
+        """
+
+        Parameters
+        ----------
+        x : array
+        box : array
+        lam : float
+
+        Returns
+        -------
+        u : float
+            unitless
+        du_dx : array
+            units of 1 / nm
+        """
         U, dU_dx = self.potential_energy.energy_and_gradient(x, box, lam)
         volume = compute_box_volume(box)
 
-        # reduced potential u
-        #   (unitless)
         u = self.reduce(U, volume)
-
-        # d reduced potential / dx
-        #   (units of 1 / nm, but returned without units, since (x, box) don't have units either)
         du_dx = self.reduce(dU_dx, volume)
 
         return u, du_dx

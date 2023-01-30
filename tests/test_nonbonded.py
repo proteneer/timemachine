@@ -9,7 +9,6 @@ import pytest
 from common import GradientTest, gen_nonbonded_params_with_4d_offsets, prepare_system_params, prepare_water_system
 
 from timemachine.constants import DEFAULT_FF
-from timemachine.fe.utils import to_md_units
 from timemachine.ff import Forcefield
 from timemachine.ff.handlers import openmm_deserializer
 from timemachine.lib import potentials
@@ -31,11 +30,7 @@ class TestNonbondedDHFR(GradientTest):
             if isinstance(f, potentials.Nonbonded):
                 self.nonbonded_fn = f
 
-        host_conf = []
-        for x, y, z in host_coords:
-            host_conf.append([to_md_units(x), to_md_units(y), to_md_units(z)])
-        self.host_conf = np.array(host_conf)
-
+        self.host_conf = host_coords
         self.beta = 2.0
         self.cutoff = 1.1
 
@@ -211,7 +206,7 @@ class TestNonbondedWater(GradientTest):
         # since we should be rebuilding the nblist when the box sizes change.
         ff = Forcefield.load_from_file(DEFAULT_FF)
 
-        host_system, host_coords, box, _ = builders.build_water_system(3.0, ff.water_ff)
+        host_system, host_conf, box, _ = builders.build_water_system(3.0, ff.water_ff)
 
         host_fns, host_masses = openmm_deserializer.deserialize_system(host_system, cutoff=1.0)
 
@@ -221,11 +216,6 @@ class TestNonbondedWater(GradientTest):
                 test_nonbonded_fn = f
         assert test_nonbonded_fn is not None
         assert test_nonbonded_fn.params is not None
-
-        host_conf = []
-        for x, y, z in host_coords:
-            host_conf.append([to_md_units(x), to_md_units(y), to_md_units(z)])
-        host_conf = np.array(host_conf)
 
         potential = generic.Nonbonded.from_gpu(test_nonbonded_fn)
 
