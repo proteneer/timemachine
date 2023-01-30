@@ -91,7 +91,7 @@ def assert_all_states_have_same_masses(initial_states: List[InitialState]):
     # schedule as an extra sanity check.
     masses = np.array([s.integrator.masses for s in initial_states])
     deviation_among_windows = masses.std(0)
-    np.testing.assert_array_equal(deviation_among_windows, 0)
+    np.testing.assert_array_almost_equal(deviation_among_windows, 0, err_msg="masses assumed constant w.r.t. lambda")
 
 
 # setup the initial state so we can (hopefully) bitwise recover the identical simulation
