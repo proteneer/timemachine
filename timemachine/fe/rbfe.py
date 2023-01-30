@@ -165,7 +165,7 @@ def setup_initial_states(
         # provide a different run_seed for every lambda window,
         # but in a way that should be symmetric for
         # A -> B vs. B -> A edge definitions
-        run_seed = seed + hash(bytes().join([p.params.tobytes() for p in potentials]))
+        run_seed = seed + hash(bytes().join([np.array(p.params).tobytes() for p in potentials]))
 
         # initialize velocities
         v0 = np.zeros_like(x0)  # tbd resample from Maxwell-boltzman?
