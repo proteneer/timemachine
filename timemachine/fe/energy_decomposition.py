@@ -6,12 +6,17 @@ import numpy as np
 
 from timemachine.constants import BOLTZ, DEFAULT_TEMP
 
+Frames = np.ndarray
+Boxes = np.ndarray
+ReducedEnergies = np.ndarray
+Batch_u_fn = Callable[[Frames, Boxes], ReducedEnergies]
+
 
 @dataclass
 class EnergyDecomposedState:
     frames: np.ndarray
     boxes: np.ndarray
-    batch_u_fns: Sequence[Callable]  # u_fn : (frames, boxes) -> reduced_energies
+    batch_u_fns: Sequence[Batch_u_fn]  # u_fn : (frames, boxes) -> reduced_energies
 
 
 def get_batch_u_fns(bps, temperature=DEFAULT_TEMP):
