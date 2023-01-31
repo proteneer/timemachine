@@ -372,7 +372,7 @@ def estimate_free_energy_given_initial_states(
 
     # compute more diagnostics
     lambdas = [s.lamb for s in initial_states]
-    overlaps_by_lambda = np.array([pair_overlap_from_ukln(u_kln) for u_kln in ukln_by_lambda_by_component.sum(axis=0)])
+    overlaps_by_lambda = [pair_overlap_from_ukln(u_kln) for u_kln in ukln_by_lambda_by_component.sum(axis=0)]
     dG_errs_by_lambda_by_component = np.array(
         [[df_err_from_ukln(u_kln) / beta for u_kln in ukln_by_lambda] for ukln_by_lambda in ukln_by_lambda_by_component]
     )
