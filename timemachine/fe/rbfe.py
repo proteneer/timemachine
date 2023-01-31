@@ -291,7 +291,7 @@ def pair_overlap_from_ukln(u_kln):
 def plot_overlap_summary(ax, components, lambdas, overlaps):
     # one line per energy component
     for component, ys in zip(components, overlaps):
-        percentages = 100 * ys
+        percentages = 100 * np.asarray(ys)
         ax.plot(lambdas[:-1], percentages, marker=".", label=component)
 
     # min and max within axis limits
