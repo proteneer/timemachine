@@ -900,7 +900,7 @@ class SingleTopology(AtomMapMixin):
         """
         Combine conformations of two molecules.
 
-        TBD: interpolate confs based on the lambda value.
+        TODO: interpolate confs based on the lambda value?
 
         Parameters
         ----------
@@ -909,6 +909,10 @@ class SingleTopology(AtomMapMixin):
 
         x_b: np.array of shape (N_B,3)
             Second conformation
+
+        lamb: optional float
+            if lamb > 0.5, map atoms from x_a first, then overwrite with x_b,
+            otherwise use opposite order
 
         Returns
         -------
