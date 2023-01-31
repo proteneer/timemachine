@@ -95,9 +95,6 @@ def run_triple(mol_a, mol_b, core, forcefield, n_frames, protein_path, n_eq_step
     )
 
     def check_result(result: SimulationResult):
-        assert result.overlap_summary_png is not None
-        assert result.overlap_detail_png is not None
-
         n_pairs = len(lambda_schedule) - 1
         assert len(result.all_dGs) == n_pairs
 
@@ -107,6 +104,17 @@ def run_triple(mol_a, mol_b, core, forcefield, n_frames, protein_path, n_eq_step
             assert np.all(0.0 < np.asarray(dg_errs))
             assert np.linalg.norm(dg_errs) < 0.1
 
+        assert len(result.overlaps_by_lambda) == n_pairs
+        assert result.overlaps_by_lambda_by_component.shape[0] == result.dG_errs_by_lambda_by_component.shape[0]
+        assert result.overlaps_by_lambda_by_component.shape[1] == n_pairs
+        for overlaps in [result.overlaps_by_lambda, result.overlaps_by_lambda_by_component]:
+            assert np.all(0.0 < np.asarray(overlaps))
+            assert (overlaps < 1.0).all()
+
+        assert result.dG_errs_png is not None
+        assert result.overlap_summary_png is not None
+        assert result.overlap_detail_png is not None
+
         assert len(result.frames[0]) == n_frames
         assert len(result.frames[-1]) == n_frames
         assert len(result.boxes[0]) == n_frames
@@ -114,13 +122,6 @@ def run_triple(mol_a, mol_b, core, forcefield, n_frames, protein_path, n_eq_step
         assert [x.lamb for x in result.initial_states] == lambda_schedule
         assert result.protocol.n_frames == n_frames
         assert result.protocol.n_eq_steps == n_eq_steps
-
-        assert len(result.overlaps_by_lambda) == n_pairs
-        assert result.overlaps_by_lambda_by_component.shape[0] == result.dG_errs_by_lambda_by_component.shape[0]
-        assert result.overlaps_by_lambda_by_component.shape[1] == n_pairs
-        for overlaps in [result.overlaps_by_lambda, result.overlaps_by_lambda_by_component]:
-            assert np.all(0.0 < np.asarray(overlaps))
-            assert (overlaps < 1.0).all()
 
     check_result(solvent_res)
 
