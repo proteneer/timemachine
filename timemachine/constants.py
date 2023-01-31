@@ -8,7 +8,7 @@ BAR_TO_KJ_PER_NM3 = 1e-25  # kJ/nm^3
 
 DEFAULT_FF = "smirnoff_2_0_0_ccc.py"
 DEFAULT_TEMP = 300  # kelvin
-DEFAULT_PRESSURE = 1.0  # atmospheres
+DEFAULT_PRESSURE = 1.013  # bar
 DEFAULT_KT = BOLTZ * DEFAULT_TEMP  # kJ/mol
 
 KCAL_TO_KJ = 4.184  # multiply to convert from kcal/mol to kJ/mol
