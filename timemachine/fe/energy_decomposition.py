@@ -22,8 +22,17 @@ class EnergyDecomposedState:
 
 
 def get_batch_u_fns(bps, temperature=DEFAULT_TEMP):
-    # return a list of functions that take in (coords, boxes), return reduced_potentials
+    """Get a list of functions that take in (coords, boxes), return reduced_potentials
 
+    Parameters
+    ----------
+    bps: list of bound potential impls
+    temperature: float
+
+    Returns
+    -------
+    list of Batch_u_fn 's
+    """
     kBT = temperature * BOLTZ
 
     batch_u_fns = []
