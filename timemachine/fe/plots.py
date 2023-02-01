@@ -104,7 +104,7 @@ def make_overlap_detail_figure(components, u_kln_by_component_by_lambda, tempera
     ----------
     components : list of strings
         component names
-    u_kln_by_component_by_lambda: [2,2,N,n_components,K] array
+    u_kln_by_component_by_lambda: [L,P,2,2,T] array
     temperature: float
         kelvin
     prefix: string
