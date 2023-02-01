@@ -16,8 +16,8 @@ Batch_u_fn = Callable[[Frames, Boxes], ReducedEnergies]
 class EnergyDecomposedState:
     """contains samples (frames, boxes) and a list of reduced energy functions"""
 
-    frames: np.ndarray
-    boxes: np.ndarray
+    frames: Frames
+    boxes: Boxes
     batch_u_fns: Sequence[Batch_u_fn]  # u_fn : (frames, boxes) -> reduced_energies
 
 
