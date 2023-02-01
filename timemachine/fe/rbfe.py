@@ -1,20 +1,18 @@
-import io
 import pickle
 import traceback
 import warnings
 from typing import Any, Dict, List, NamedTuple, Optional, Sequence
 
-import matplotlib.pyplot as plt
 import numpy as np
 from rdkit import Chem
 from simtk.openmm import app
 
 from timemachine.constants import BOLTZ, DEFAULT_PRESSURE, DEFAULT_TEMP
 from timemachine.fe import atom_mapping, model_utils
-from timemachine.fe.bar import bar_with_bootstrapped_uncertainty, df_err_from_ukln, pair_overlap_from_ukln
+from timemachine.fe.bar import bar_with_bootstrapped_uncertainty
 from timemachine.fe.energy_decomposition import EnergyDecomposedState, compute_energy_decomposed_u_kln, get_batch_u_fns
 from timemachine.fe.free_energy import HostConfig, InitialState, SimulationProtocol, SimulationResult, sample
-from timemachine.fe.plots import make_dG_errs_figure, make_overlap_summary_figure, plot_BAR, plot_work
+from timemachine.fe.plots import make_dG_errs_figure, make_overlap_detail_figure, make_overlap_summary_figure
 from timemachine.fe.single_topology import SingleTopology
 from timemachine.fe.system import convert_omm_system
 from timemachine.fe.utils import get_mol_name, get_romol_conf
@@ -311,83 +309,37 @@ def estimate_free_energy_given_initial_states(
         initial_states, protocol, temperature, keep_idxs
     )
 
-    # perform analysis + generate figures
-    U_names = [type(U_fn).__name__ for U_fn in initial_states[0].potentials]
-    num_energy_components = len(U_names)
-    assert num_energy_components == u_kln_by_component_by_lambda[0].shape[0]
+    # sum over components
+    u_kln_by_lambda = u_kln_by_component_by_lambda.sum(-2)
 
-    num_lambdas = len(initial_states)
-
-    num_rows = num_lambdas - 1  # one per adjacent pair
-    num_cols = num_energy_components + 1  # one per component + one for overall energy
-
-    figure, all_axes = plt.subplots(num_rows, num_cols, figsize=(num_cols * 5, num_rows * 3))
-    if num_rows == 1:
-        all_axes = [all_axes]
-
-    # free energy analysis + plots (not relying on energy decomposition)
+    # "pair BAR" free energy analysis
     kBT = BOLTZ * temperature
     beta = 1 / kBT
 
     all_dGs = []
     all_errs = []
     for lamb_idx, u_kln_by_component in enumerate(u_kln_by_component_by_lambda):
-        u_kln = u_kln_by_component.sum(0)
+        u_kln = u_kln_by_lambda[lamb_idx]
 
         w_fwd = u_kln[1, 0] - u_kln[0, 0]
         w_rev = u_kln[0, 1] - u_kln[1, 1]
 
-        # reduced units
-        df, df_err = bar_with_bootstrapped_uncertainty(w_fwd, w_rev)
-
-        # kJ/mol
-        dG, dG_err = df / beta, df_err / beta
+        df, df_err = bar_with_bootstrapped_uncertainty(w_fwd, w_rev)  # reduced units
+        dG, dG_err = df / beta, df_err / beta  # kJ/mol
 
         all_dGs.append(dG)
         all_errs.append(dG_err)
 
-        # add to plot
-        plot_axis = all_axes[lamb_idx - 1][num_energy_components]
-        plot_title = f"{prefix}_{lamb_idx - 1}_to_{lamb_idx}"
-        plot_BAR(df, df_err, w_fwd, w_rev, plot_title, plot_axis)
-
-        # TODO: should this print be moved back into simulation loop?
-        message = f"{prefix} BAR: lambda {lamb_idx - 1} -> {lamb_idx} dG: {dG:.3f} +- {dG_err:.3f} kJ/mol"
-        print(message, flush=True)
-
-    # [n_lambdas x num_energy_components] plots (relying on energy decomposition)
-    for lamb_idx, u_kln_by_component in enumerate(u_kln_by_component_by_lambda):
-        w_fwd_by_component = u_kln_by_component[:, 1, 0] - u_kln_by_component[:, 0, 0]
-        w_rev_by_component = u_kln_by_component[:, 0, 1] - u_kln_by_component[:, 1, 1]
-
-        # loop over bond, angle, torsion, nonbonded terms etc.
-        for u_idx in range(num_energy_components):
-            plot_axis = all_axes[lamb_idx - 1][u_idx]
-
-            plot_work(w_fwd_by_component[u_idx], w_rev_by_component[u_idx], plot_axis)
-            plot_axis.set_title(U_names[u_idx])
-
-    # (energy components, lambdas, energy fxns = 2, sampled states = 2, frames)
-    ukln_by_lambda_by_component = np.array(u_kln_by_component_by_lambda).swapaxes(0, 1)
-
-    # compute more diagnostics
+    # perform analysis + generate figures
+    U_names = [type(U_fn).__name__ for U_fn in initial_states[0].potentials]
     lambdas = [s.lamb for s in initial_states]
-    overlaps_by_lambda = [pair_overlap_from_ukln(u_kln) for u_kln in ukln_by_lambda_by_component.sum(axis=0)]
-    dG_errs_by_lambda_by_component = np.array(
-        [[df_err_from_ukln(u_kln) / beta for u_kln in ukln_by_lambda] for ukln_by_lambda in ukln_by_lambda_by_component]
-    )
-    overlaps_by_lambda_by_component = np.array(
-        [[pair_overlap_from_ukln(u_kln) for u_kln in ukln_by_lambda] for ukln_by_lambda in ukln_by_lambda_by_component]
-    )
 
-    # detail plot as png
-    plt.tight_layout()
-    buffer = io.BytesIO()
-    plt.savefig(buffer, format="png")
-    buffer.seek(0)
-    overlap_detail_png = buffer.read()
-
-    # summary plots as pngs
+    (
+        overlap_detail_png,
+        overlaps_by_lambda,
+        dG_errs_by_lambda_by_component,
+        overlaps_by_lambda_by_component,
+    ) = make_overlap_detail_figure(U_names, u_kln_by_component_by_lambda, temperature, prefix)
     dG_errs_png = make_dG_errs_figure(U_names, lambdas, all_errs, dG_errs_by_lambda_by_component)
     overlap_summary_png = make_overlap_summary_figure(
         U_names, lambdas, overlaps_by_lambda, overlaps_by_lambda_by_component
