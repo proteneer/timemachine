@@ -654,13 +654,6 @@ class Edge(NamedTuple):
     mol_b_name: str
     metadata: Dict[str, Any]
 
-    def __str__(self):
-        name = f"{self.mol_a_name} -> {self.mol_b_name} (kJ/mol)"
-        exp_ddg = f"exp_ddg {self.metadata['exp_ddg']:.2f}" if "exp_ddg" in self.metadata else ""
-        fep_ddg = f"fep_ddg {self.metadata['fep_ddg']:.2f}" if "fep_ddg" in self.metadata else ""
-        fep_ddg += f" +- {self.metadata['fep_ddg_err']:.2f}" if "fep_ddg_err" in self.metadata else ""
-        return " | ".join([name, exp_ddg, fep_ddg])
-
 
 def run_edge_and_save_results(
     edge: Edge,
@@ -698,7 +691,18 @@ def run_edge_and_save_results(
         solvent_res, solvent_top = run_solvent(mol_a, mol_b, core, forcefield, protein, n_frames, seed)
 
     except Exception as err:
-        print(f"failed: {edge}")
+        print(
+            "failed:",
+            " | ".join(
+                [
+                    f"{edge.mol_a_name} -> {edge.mol_b_name} (kJ/mol)",
+                    f"exp_ddg {edge.metadata['exp_ddg']:.2f}" if "exp_ddg" in edge.metadata else "",
+                    f"fep_ddg {edge.metadata['fep_ddg']:.2f} +- {edge.metadata['fep_ddg_err']:.2f}"
+                    if "fep_ddg" in edge.metadata and "fep_ddg_err" in edge.metadata
+                    else "",
+                ]
+            ),
+        )
 
         path = f"failure_rbfe_result_{edge.mol_a_name}_{edge.mol_b_name}.pkl"
         tb = traceback.format_exception(None, err, err.__traceback__)
