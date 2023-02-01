@@ -164,6 +164,8 @@ def setup_initial_states(
         # but in a way that should be symmetric for
         # A -> B vs. B -> A edge definitions
         run_seed = int(seed + hash(bytes().join([np.array(p.params).tobytes() for p in potentials]))) % 10000
+        # the constant is arbitrary, but see
+        # https://github.com/proteneer/timemachine/commit/e1f7328f01f427534d8744aab6027338e116ad09
 
         # initialize velocities
         v0 = np.zeros_like(x0)  # tbd resample from Maxwell-boltzman?
