@@ -109,7 +109,7 @@ def run_triple(mol_a, mol_b, core, forcefield, n_frames, protein_path, n_eq_step
         assert result.overlaps_by_lambda_by_component.shape[1] == n_pairs
         for overlaps in [result.overlaps_by_lambda, result.overlaps_by_lambda_by_component]:
             assert np.all(0.0 < np.asarray(overlaps))
-            assert (overlaps < 1.0).all()
+            assert np.all(np.asarray(overlaps) < 1.0)
 
         assert result.dG_errs_png is not None
         assert result.overlap_summary_png is not None
