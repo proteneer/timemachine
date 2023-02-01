@@ -57,7 +57,6 @@ def setup_in_env(st, host, host_config, ligand_conf, lamb, temperature, run_seed
 
     host_system, host_masses, host_conf = host
 
-    # minimize water box around the ligand by 4D-decoupling
     system = st.combine_with_host(host_system, lamb=lamb)
     combined_masses = np.concatenate([host_masses, st.combine_masses()])
 
@@ -184,6 +183,7 @@ def setup_initial_states(
         state = InitialState(potentials, intg, baro, x0, v0, box0, lamb, ligand_idxs)
         initial_states.append(state)
 
+    # minimize environment atoms within min_cutoff of the ligand
     # optimization introduces dependencies among states with lam < 0.5, and among states with lam >= 0.5
     optimized_x0s = optimize_coordinates(initial_states, min_cutoff=min_cutoff)
 
