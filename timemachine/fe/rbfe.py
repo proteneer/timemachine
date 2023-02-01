@@ -91,8 +91,6 @@ def assert_all_states_have_same_masses(initial_states: List[InitialState]):
     np.testing.assert_array_almost_equal(deviation_among_windows, 0, err_msg="masses assumed constant w.r.t. lambda")
 
 
-# setup the initial state so we can (hopefully) bitwise recover the identical simulation
-# to help us debug errors.
 def setup_initial_states(
     st,
     host_config,
@@ -102,8 +100,10 @@ def setup_initial_states(
     min_cutoff=np.inf,
 ):
     """
-    Set up the initial states for a series of lambda values. It is assumed that the lambda schedule
-    is a monotonically increasing sequence in the closed interval [0,1].
+    Set up the initial states for a series of lambda values,
+    so we can (hopefully) bitwise recover the identical simulation to debug errors.
+
+    Assumes lambda schedule is a monotonically increasing sequence in the closed interval [0,1].
 
     Parameters
     ----------
