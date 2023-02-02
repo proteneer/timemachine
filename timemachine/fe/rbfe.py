@@ -311,9 +311,6 @@ def estimate_free_energy_given_initial_states(
         initial_states, protocol, temperature, keep_idxs
     )
 
-    # sum over components
-    u_kln_by_lambda = u_kln_by_component_by_lambda.sum(-2)
-
     # "pair BAR" free energy analysis
     kBT = BOLTZ * temperature
     beta = 1 / kBT
@@ -321,7 +318,7 @@ def estimate_free_energy_given_initial_states(
     all_dGs = []
     all_errs = []
     for lamb_idx, u_kln_by_component in enumerate(u_kln_by_component_by_lambda):
-        u_kln = u_kln_by_lambda[lamb_idx]
+        u_kln = u_kln_by_component.sum(0)
 
         w_fwd = u_kln[1, 0] - u_kln[0, 0]
         w_rev = u_kln[0, 1] - u_kln[1, 1]
