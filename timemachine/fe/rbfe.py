@@ -97,7 +97,7 @@ def setup_initial_states(
     temperature,
     lambda_schedule,
     seed,
-    min_cutoff=np.inf,
+    min_cutoff=0.7,
 ):
     """
     Set up the initial states for a series of lambda values,
