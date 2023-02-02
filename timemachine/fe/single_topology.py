@@ -12,6 +12,7 @@ from timemachine.fe import interpolate, system, topology, utils
 from timemachine.fe.dummy import canonicalize_bond, identify_dummy_groups, identify_root_anchors
 from timemachine.fe.lambda_schedule import construct_pre_optimized_relative_lambda_schedule
 from timemachine.fe.system import HostGuestSystem
+from timemachine.fe.topology import exclude_all_ligand_ligand_ixns
 from timemachine.lib import potentials
 
 Array = Any
@@ -296,7 +297,9 @@ def setup_end_state(ff, mol_a, mol_b, core, a_to_c, b_to_c):
     mol_a_angle_params, mol_a_ha = mol_a_top.parameterize_harmonic_angle(ff.ha_handle.params)
     mol_a_proper_params, mol_a_pt = mol_a_top.parameterize_proper_torsion(ff.pt_handle.params)
     mol_a_improper_params, mol_a_it = mol_a_top.parameterize_improper_torsion(ff.it_handle.params)
-    mol_a_nbpl_params, mol_a_nbpl = mol_a_top.parameterize_nonbonded_pairlist(ff.q_handle.params, ff.lj_handle.params)
+    mol_a_nbpl_params, mol_a_nbpl = mol_a_top.parameterize_nonbonded_pairlist(
+        ff.q_handle.params, ff.lj_handle.params, intramol_params=True
+    )
     mol_a_chiral_atom, mol_a_chiral_bond = mol_a_top.setup_chiral_restraints()
 
     mol_a_bond_params = mol_a_bond_params.tolist()
@@ -1147,20 +1150,10 @@ class SingleTopology(AtomMapMixin):
 
     def _parameterize_host_guest_nonbonded(self, lamb, host_nonbonded):
         # Parameterize nonbonded potential for the host guest interaction
-
-        guest_exclusions = []
-        guest_scale_factors = []
-
         num_host_atoms = host_nonbonded.params.shape[0]
         num_guest_atoms = self.get_num_atoms()
 
-        for i in range(num_guest_atoms):
-            for j in range(i + 1, num_guest_atoms):
-                guest_exclusions.append((i, j))
-                guest_scale_factors.append((1.0, 1.0))
-
-        guest_exclusions = np.array(guest_exclusions, dtype=np.int32) + num_host_atoms
-        guest_scale_factors = np.array(guest_scale_factors, dtype=np.float64)
+        guest_exclusions, guest_scale_factors = exclude_all_ligand_ligand_ixns(num_host_atoms, num_guest_atoms)
 
         combined_exclusion_idxs = np.concatenate([host_nonbonded.get_exclusion_idxs(), guest_exclusions])
         combined_scale_factors = np.concatenate([host_nonbonded.get_scale_factors(), guest_scale_factors])
@@ -1174,10 +1167,10 @@ class SingleTopology(AtomMapMixin):
         guest_w_coords = []
 
         # generate charges and lj parameters for each guest
-        guest_a_q = self.ff.q_handle.parameterize(self.mol_a)
+        guest_a_q = self.ff.q_handle.parameterize(self.mol_a, intramol_params=False)
         guest_a_lj = self.ff.lj_handle.parameterize(self.mol_a)
 
-        guest_b_q = self.ff.q_handle.parameterize(self.mol_b)
+        guest_b_q = self.ff.q_handle.parameterize(self.mol_b, intramol_params=False)
         guest_b_lj = self.ff.lj_handle.parameterize(self.mol_b)
 
         for idx, membership in enumerate(self.c_flags):

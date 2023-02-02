@@ -44,7 +44,14 @@ class Forcefield:
     ha_handle: Optional[bonded.HarmonicAngleHandler]
     pt_handle: Optional[bonded.ProperTorsionHandler]
     it_handle: Optional[bonded.ImproperTorsionHandler]
-    q_handle: Optional[Union[nonbonded.SimpleChargeHandler, nonbonded.AM1BCCHandler, nonbonded.AM1CCCHandler]]
+    q_handle: Optional[
+        Union[
+            nonbonded.SimpleChargeHandler,
+            nonbonded.AM1BCCHandler,
+            nonbonded.AM1CCCHandler,
+            nonbonded.AM1CCCSplitHandler,
+        ]
+    ]
     lj_handle: Optional[nonbonded.LennardJonesHandler]
 
     protein_ff: str
@@ -114,6 +121,7 @@ class Forcefield:
                 lj_handle = handle
             elif (
                 isinstance(handle, nonbonded.AM1CCCHandler)
+                or isinstance(handle, nonbonded.AM1CCCSplitHandler)
                 or isinstance(handle, nonbonded.AM1BCCHandler)
                 or isinstance(handle, nonbonded.SimpleChargeHandler)
             ):

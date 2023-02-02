@@ -320,14 +320,14 @@ class NonbondedHandler(SerializableMixIn):
         self.params = np.array(params, dtype=np.float64)
         self.props = props
 
-    def partial_parameterize(self, params, mol):
-        return self.static_parameterize(params, self.smirks, mol)
+    def partial_parameterize(self, params, mol, **kwargs):
+        return self.static_parameterize(params, self.smirks, mol, **kwargs)
 
-    def parameterize(self, mol):
-        return self.static_parameterize(self.params, self.smirks, mol)
+    def parameterize(self, mol, **kwargs):
+        return self.static_parameterize(self.params, self.smirks, mol, **kwargs)
 
     @staticmethod
-    def static_parameterize(params, smirks, mol):
+    def static_parameterize(params, smirks, mol, **kwargs):
         """
         Carry out parameterization of given molecule, with an option to attach additional parameters
         via concatenation. Typically aux_params are protein charges etc.
@@ -355,7 +355,7 @@ class SimpleChargeHandler(NonbondedHandler):
 
 class LennardJonesHandler(NonbondedHandler):
     @staticmethod
-    def static_parameterize(params, smirks, mol):
+    def static_parameterize(params, smirks, mol, **kwargs):
         """
         Parameters
         ----------
@@ -406,14 +406,14 @@ class AM1Handler(SerializableMixIn):
         assert len(params) == 0
         assert props is None
 
-    def partial_parameterize(self, mol):
-        return self.static_parameterize(self.smirks, mol)
+    def partial_parameterize(self, mol, **kwargs):
+        return self.static_parameterize(self.smirks, mol, **kwargs)
 
-    def parameterize(self, mol):
-        return self.static_parameterize(mol)
+    def parameterize(self, mol, **kwargs):
+        return self.static_parameterize(mol, **kwargs)
 
     @staticmethod
-    def static_parameterize(mol):
+    def static_parameterize(mol, **kwargs):
         """
         Parameters
         ----------
@@ -447,14 +447,14 @@ class AM1BCCHandler(SerializableMixIn):
         self.params = []
         self.props = None
 
-    def partial_parameterize(self, mol):
-        return self.static_parameterize(mol)
+    def partial_parameterize(self, mol, **kwargs):
+        return self.static_parameterize(mol, **kwargs)
 
-    def parameterize(self, mol):
-        return self.static_parameterize(mol)
+    def parameterize(self, mol, **kwargs):
+        return self.static_parameterize(mol, **kwargs)
 
     @staticmethod
-    def static_parameterize(mol):
+    def static_parameterize(mol, **kwargs):
         """
         Parameters
         ----------
@@ -512,15 +512,15 @@ class AM1CCCHandler(SerializableMixIn):
         if not elements.issubset(self.supported_elements):
             raise RuntimeError("mol contains unsupported elements: ", elements - self.supported_elements)
 
-    def partial_parameterize(self, params, mol):
+    def partial_parameterize(self, params, mol, **kwargs):
         self.validate_input(mol)
-        return self.static_parameterize(params, self.smirks, mol)
+        return self.static_parameterize(params, self.smirks, mol, **kwargs)
 
-    def parameterize(self, mol):
-        return self.partial_parameterize(self.params, mol)
+    def parameterize(self, mol, **kwargs):
+        return self.partial_parameterize(self.params, mol, **kwargs)
 
     @staticmethod
-    def static_parameterize(params, smirks, mol):
+    def static_parameterize(params, smirks, mol, **kwargs):
         """
         Parameters
         ----------
@@ -541,3 +541,15 @@ class AM1CCCHandler(SerializableMixIn):
         assert q_params.shape[0] == mol.GetNumAtoms()  # check that return shape is consistent with input mol
 
         return q_params
+
+
+class AM1CCCSplitHandler(AM1CCCHandler):
+    """
+    The Split handler has 2 sets of parameters. One for the intermolecular
+    terms and another for the intramolecular terms.
+    """
+
+    @staticmethod
+    def static_parameterize(params, smirks, mol, intramol_params=False):
+        idx = 0 if intramol_params else 1
+        return AM1CCCHandler.static_parameterize(params[idx], smirks[idx], mol)

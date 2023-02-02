@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Tuple
 
 import jax.numpy as jnp
 import numpy as np
@@ -129,27 +129,46 @@ class HostGuestTopology:
 
     def parameterize_nonbonded(self, ff_q_params, ff_lj_params, lamb: float):
         num_guest_atoms = self.guest_topology.get_num_atoms()
-        guest_params, guest_pot = self.guest_topology.parameterize_nonbonded(ff_q_params, ff_lj_params, lamb)
+        guest_params, guest_pot = self.guest_topology.parameterize_nonbonded(
+            ff_q_params, ff_lj_params, lamb, intramol_params=False
+        )
 
         assert guest_params.shape == (num_guest_atoms, 4)
         assert self.host_nonbonded is not None
         assert guest_pot.get_beta() == self.host_nonbonded.get_beta()
         assert guest_pot.get_cutoff() == self.host_nonbonded.get_cutoff()
 
-        hg_exclusion_idxs = np.concatenate(
-            [self.host_nonbonded.get_exclusion_idxs(), guest_pot.get_exclusion_idxs() + self.num_host_atoms]
-        )
-        hg_scale_factors = np.concatenate([self.host_nonbonded.get_scale_factors(), guest_pot.get_scale_factors()])
+        # Exclude all ligand-lignad interactions which will be computed using a pairlist instead
+        guest_exclusions, guest_scale_factors = exclude_all_ligand_ligand_ixns(self.num_host_atoms, num_guest_atoms)
+
+        hg_exclusion_idxs = np.concatenate([self.host_nonbonded.get_exclusion_idxs(), guest_exclusions])
+        hg_scale_factors = np.concatenate([self.host_nonbonded.get_scale_factors(), guest_scale_factors])
 
         hg_nb_params = jnp.concatenate([self.host_nonbonded.params, guest_params])
 
-        return hg_nb_params, potentials.Nonbonded(
+        host_guest_pot = potentials.Nonbonded(
             self.num_host_atoms + num_guest_atoms,
             hg_exclusion_idxs,
             hg_scale_factors,
             guest_pot.get_beta(),
             guest_pot.get_cutoff(),
         )
+
+        # ligand intramolecular interactions
+        guest_intra_params, guest_intra_pot = self.guest_topology.parameterize_nonbonded_pairlist(
+            ff_q_params, ff_lj_params, intramol_params=True
+        )
+        # shift idxs because of the host
+        guest_intra_pot.set_idxs(guest_intra_pot.get_idxs() + self.num_host_atoms)
+
+        # total potential = host_guest_pot + guest_intra_pot
+        total_pot = potentials.SummedPotential(
+            [host_guest_pot, guest_intra_pot],
+            [hg_nb_params, guest_intra_params],
+        )
+
+        nb_params = jnp.concatenate([hg_nb_params, guest_intra_params])
+        return nb_params, total_pot
 
 
 class BaseTopology:
@@ -179,8 +198,8 @@ class BaseTopology:
         """
         return [np.arange(self.get_num_atoms())]
 
-    def parameterize_nonbonded(self, ff_q_params, ff_lj_params, lamb: float):
-        q_params = self.ff.q_handle.partial_parameterize(ff_q_params, self.mol)
+    def parameterize_nonbonded(self, ff_q_params, ff_lj_params, lamb: float, intramol_params=True):
+        q_params = self.ff.q_handle.partial_parameterize(ff_q_params, self.mol, intramol_params=intramol_params)
         lj_params = self.ff.lj_handle.partial_parameterize(ff_lj_params, self.mol)
 
         exclusion_idxs, scale_factors = nonbonded.generate_exclusion_idxs(
@@ -201,7 +220,7 @@ class BaseTopology:
 
         return params, nb
 
-    def parameterize_nonbonded_pairlist(self, ff_q_params, ff_lj_params):
+    def parameterize_nonbonded_pairlist(self, ff_q_params, ff_lj_params, intramol_params=True):
         """
         Generate intramolecular nonbonded pairlist, and is mostly identical to the above
         except implemented as a pairlist.
@@ -231,7 +250,7 @@ class BaseTopology:
 
         inclusion_idxs = np.array(inclusion_idxs).reshape(-1, 2).astype(np.int32)
 
-        q_params = self.ff.q_handle.partial_parameterize(ff_q_params, self.mol)
+        q_params = self.ff.q_handle.partial_parameterize(ff_q_params, self.mol, intramol_params=intramol_params)
         lj_params = self.ff.lj_handle.partial_parameterize(ff_lj_params, self.mol)
 
         sig_params = lj_params[:, 0]
@@ -244,6 +263,9 @@ class BaseTopology:
         sig_ij = combining_rule_sigma(sig_params[l_idxs], sig_params[r_idxs])
         eps_ij = combining_rule_epsilon(eps_params[l_idxs], eps_params[r_idxs])
 
+        beta = _BETA
+        cutoff = _CUTOFF  # solve for this analytically later
+
         params = []
         for q, sig, eps, (sf_q, sf_lj) in zip(q_ij, sig_ij, eps_ij, rescale_mask):
             params.append(
@@ -251,14 +273,10 @@ class BaseTopology:
                     q * sf_q,
                     sig,
                     eps * sf_lj,
-                    0.0,  # w offset
+                    0.0,  # w offset for intramolecular term
                 )
             )
-
         params = np.array(params)
-
-        beta = _BETA
-        cutoff = _CUTOFF  # solve for this analytically later
 
         return params, potentials.NonbondedPairListPrecomputed(inclusion_idxs, beta, cutoff)
 
@@ -354,7 +372,7 @@ class BaseTopology:
         mol_proper_params, mol_pt = self.parameterize_proper_torsion(self.ff.pt_handle.params)
         mol_improper_params, mol_it = self.parameterize_improper_torsion(self.ff.it_handle.params)
         mol_nbpl_params, mol_nbpl = self.parameterize_nonbonded_pairlist(
-            self.ff.q_handle.params, self.ff.lj_handle.params
+            self.ff.q_handle.params, self.ff.lj_handle.params, intramol_params=True
         )
         bond_potential = mol_hb.bind(mol_bond_params)
         angle_potential = mol_ha.bind(mol_angle_params)
@@ -403,13 +421,13 @@ class DualTopology(BaseTopology):
         num_b_atoms = self.mol_b.GetNumAtoms()
         return [np.arange(num_a_atoms), num_a_atoms + np.arange(num_b_atoms)]
 
-    def parameterize_nonbonded(self, ff_q_params, ff_lj_params, lamb: float):
+    def parameterize_nonbonded(self, ff_q_params, ff_lj_params, lamb: float, intramol_params=True):
         # NOTE: lamb is unused here, but is used by the subclass DualTopologyMinimization
         del lamb
 
         # dummy is either "a or "b"
-        q_params_a = self.ff.q_handle.partial_parameterize(ff_q_params, self.mol_a)
-        q_params_b = self.ff.q_handle.partial_parameterize(ff_q_params, self.mol_b)
+        q_params_a = self.ff.q_handle.partial_parameterize(ff_q_params, self.mol_a, intramol_params=intramol_params)
+        q_params_b = self.ff.q_handle.partial_parameterize(ff_q_params, self.mol_b, intramol_params=intramol_params)
         lj_params_a = self.ff.lj_handle.partial_parameterize(ff_lj_params, self.mol_a)
         lj_params_b = self.ff.lj_handle.partial_parameterize(ff_lj_params, self.mol_b)
 
@@ -468,7 +486,7 @@ class DualTopology(BaseTopology):
             cutoff,
         )
 
-    def parameterize_nonbonded_pairlist(self, ff_q_params, ff_lj_params):
+    def parameterize_nonbonded_pairlist(self, ff_q_params, ff_lj_params, intramol_params=True):
         """
         Generate intramolecular nonbonded pairlist, and is mostly identical to the above
         except implemented as a pairlist.
@@ -476,10 +494,10 @@ class DualTopology(BaseTopology):
         NA = self.mol_a.GetNumAtoms()
 
         params_a, pairlist_a = BaseTopology(self.mol_a, self.ff).parameterize_nonbonded_pairlist(
-            ff_q_params, ff_lj_params
+            ff_q_params, ff_lj_params, intramol_params=intramol_params
         )
         params_b, pairlist_b = BaseTopology(self.mol_b, self.ff).parameterize_nonbonded_pairlist(
-            ff_q_params, ff_lj_params
+            ff_q_params, ff_lj_params, intramol_params=intramol_params
         )
 
         params = np.concatenate([params_a, params_b])
@@ -531,13 +549,34 @@ class DualTopology(BaseTopology):
 
 
 class DualTopologyMinimization(DualTopology):
-    def parameterize_nonbonded(self, ff_q_params, ff_lj_params, lamb: float):
+    def parameterize_nonbonded(self, ff_q_params, ff_lj_params, lamb: float, intramol_params=True):
 
         # both mol_a and mol_b are standardized.
         # we don't actually need derivatives for this stage.
 
-        params, nb_potential = super().parameterize_nonbonded(ff_q_params, ff_lj_params, lamb)
+        params, nb_potential = super().parameterize_nonbonded(
+            ff_q_params, ff_lj_params, lamb, intramol_params=intramol_params
+        )
         cutoff = nb_potential.get_cutoff()
         params_with_offsets = jnp.asarray(params).at[:, 3].set(lamb * cutoff)
 
         return params_with_offsets, nb_potential
+
+
+def exclude_all_ligand_ligand_ixns(num_host_atoms: int, num_guest_atoms: int) -> Tuple[NDArray, NDArray]:
+    """
+    Return a tuple of the ligand exclusions and scale factors which exclude
+    all ligand-ligand interactions. This is done to mask out these interactions
+    so they can be calculated using the pairlist.
+    """
+    guest_exclusions_ = []
+    guest_scale_factors_ = []
+
+    for i in range(num_guest_atoms):
+        for j in range(i + 1, num_guest_atoms):
+            guest_exclusions_.append((i, j))
+            guest_scale_factors_.append((1.0, 1.0))
+
+    guest_exclusions = np.array(guest_exclusions_, dtype=np.int32) + num_host_atoms
+    guest_scale_factors = np.array(guest_scale_factors_, dtype=np.float64)
+    return guest_exclusions, guest_scale_factors
