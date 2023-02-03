@@ -407,7 +407,7 @@ class AM1Handler(SerializableMixIn):
         assert props is None
 
     def partial_parameterize(self, mol, **kwargs):
-        return self.static_parameterize(self.smirks, mol, **kwargs)
+        return self.static_parameterize(mol, **kwargs)
 
     def parameterize(self, mol, **kwargs):
         return self.static_parameterize(mol, **kwargs)
@@ -423,6 +423,12 @@ class AM1Handler(SerializableMixIn):
 
         """
         return oe_assign_charges(mol, "AM1")
+
+    def get_smirks(self, **kwargs):
+        return []
+
+    def get_params(self, **kwargs):
+        return []
 
 
 class AM1BCCHandler(SerializableMixIn):
@@ -464,6 +470,12 @@ class AM1BCCHandler(SerializableMixIn):
 
         """
         return oe_assign_charges(mol, "AM1BCCELF10")
+
+    def get_smirks(self, **kwargs):
+        return self.smirks
+
+    def get_params(self, **kwargs):
+        return self.params
 
 
 class AM1CCCHandler(SerializableMixIn):
@@ -542,6 +554,12 @@ class AM1CCCHandler(SerializableMixIn):
 
         return q_params
 
+    def get_smirks(self, **kwargs):
+        return self.smirks
+
+    def get_params(self, **kwargs):
+        return self.params
+
 
 class AM1CCCSplitHandler(AM1CCCHandler):
     """
@@ -553,3 +571,12 @@ class AM1CCCSplitHandler(AM1CCCHandler):
     def static_parameterize(params, smirks, mol, intramol_params=False):
         idx = 0 if intramol_params else 1
         return AM1CCCHandler.static_parameterize(params[idx], smirks[idx], mol)
+
+    def _get_idx(self, intramol_params):
+        return 0 if intramol_params else 1
+
+    def get_smirks(self, intramol_params=False):
+        return self.smirks[self._get_idx(intramol_params)]
+
+    def get_params(self, intramol_params=False):
+        return self.params[self._get_idx(intramol_params)]
