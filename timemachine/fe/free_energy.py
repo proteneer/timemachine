@@ -220,7 +220,17 @@ class AbsoluteFreeEnergy(BaseFreeEnergy):
         return np.concatenate([host_values, ligand_values])
 
 
-def sample(initial_state: InitialState, protocol: SimulationProtocol):
+def batches(n, batch_size):
+    while True:
+        if n <= batch_size:
+            yield n
+            break
+        else:
+            yield batch_size
+            n -= batch_size
+
+
+def sample(initial_state: InitialState, protocol: SimulationProtocol, max_buffer_frames=1000):
     """Generate a trajectory given an initial state and a simulation protocol
 
     Parameters
@@ -264,13 +274,20 @@ def sample(initial_state: InitialState, protocol: SimulationProtocol):
 
     assert np.all(np.isfinite(ctxt.get_x_t())), "Equilibration resulted in a nan"
 
-    # a crude, and probably not great, guess on the decorrelation time
-    n_steps = protocol.n_frames * protocol.steps_per_frame
-    _, all_coords, all_boxes = ctxt.multiple_steps_U(
-        n_steps=n_steps,
-        store_u_interval=0,
-        store_x_interval=protocol.steps_per_frame,
-    )
+    all_coords_ = []
+    all_boxes_ = []
+
+    for n_frames in batches(protocol.n_frames, max_buffer_frames):
+        _, batch_coords, batch_boxes = ctxt.multiple_steps_U(
+            n_steps=n_frames * protocol.steps_per_frame,
+            store_u_interval=0,
+            store_x_interval=protocol.steps_per_frame,
+        )
+        all_coords_.extend(batch_coords)
+        all_boxes_.extend(batch_boxes)
+
+    all_coords = np.array(all_coords_)
+    all_boxes = np.array(all_boxes_)
 
     assert all_coords.shape[0] == protocol.n_frames
     assert all_boxes.shape[0] == protocol.n_frames
