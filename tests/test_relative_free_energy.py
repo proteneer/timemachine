@@ -166,13 +166,13 @@ def test_steps_per_frames():
     seed = 2022
     frames = 5
     res = run_vacuum(mol_a, mol_b, core, forcefield, None, frames, seed, n_eq_steps=10, steps_per_frame=2, n_windows=2)
-    assert res.frames[0].shape[0] == frames
+    assert len(res.frames[0]) == frames
 
     frames = 2
     test_res = run_vacuum(
         mol_a, mol_b, core, forcefield, None, frames, seed, n_eq_steps=10, steps_per_frame=5, n_windows=2
     )
-    assert test_res.frames[0].shape[0] == frames
+    assert len(test_res.frames[0]) == frames
     assert len(test_res.frames) == 2
     # The last frame from the trajectories should match as num_frames * steps_per_frame are equal
     for frame, test_frame in zip(res.frames, test_res.frames):
