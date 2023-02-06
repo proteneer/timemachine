@@ -109,15 +109,17 @@ class BaseTopologyRescaledCharges(topology.BaseTopology):
         self.scale = scale
         super().__init__(*args, **kwargs)
 
-    def parameterize_nonbonded(self, ff_q_params, ff_q_params_intra, ff_lj_params):
-        params, nb = topology.BaseTopology.parameterize_nonbonded(self, ff_q_params, ff_q_params_intra, ff_lj_params)
+    def parameterize_nonbonded(self, ff_q_params, ff_q_params_intra, ff_lj_params, intramol_params=True):
+        params, nb = topology.BaseTopology.parameterize_nonbonded(
+            self, ff_q_params, ff_q_params_intra, ff_lj_params, intramol_params=intramol_params
+        )
         charge_indices = jnp.index_exp[:, 0]
         new_params = jnp.asarray(params).at[charge_indices].multiply(self.scale)
         return new_params, nb
 
-    def parameterize_nonbonded_pairlist(self, ff_q_params, ff_q_params_intra, ff_lj_params):
+    def parameterize_nonbonded_pairlist(self, ff_q_params, ff_q_params_intra, ff_lj_params, intramol_params=True):
         params, nb = topology.BaseTopology.parameterize_nonbonded_pairlist(
-            self, ff_q_params, ff_q_params_intra, ff_lj_params
+            self, ff_q_params, ff_q_params_intra, ff_lj_params, intramol_params=intramol_params
         )
         charge_indices = jnp.index_exp[:, 0]
         new_params = jnp.asarray(params).at[charge_indices].multiply(self.scale)
