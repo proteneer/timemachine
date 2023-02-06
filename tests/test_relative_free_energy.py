@@ -4,10 +4,12 @@ from importlib import resources
 
 import numpy as np
 import pytest
+from hypothesis import given, seed
+from hypothesis.strategies import integers
 
 from timemachine.constants import DEFAULT_FF
 from timemachine.fe.bar import pair_overlap_from_ukln
-from timemachine.fe.free_energy import HostConfig, SimulationResult, image_frames, sample
+from timemachine.fe.free_energy import HostConfig, SimulationResult, batches, image_frames, sample
 from timemachine.fe.rbfe import estimate_relative_free_energy, run_solvent, run_vacuum
 from timemachine.ff import Forcefield
 from timemachine.md import builders
@@ -279,6 +281,21 @@ def test_pair_overlap_from_ukln():
 
     # overlapping
     assert gaussian_overlap((0, 0.1), (0.5, 0.2)) > 0.1
+
+
+@given(integers(min_value=1))
+@seed(2023)
+def test_batches_of_nothing(batch_size):
+    assert list(batches(0, batch_size)) == []
+
+
+@given(integers(min_value=1, max_value=1000), integers(min_value=1))
+@seed(2023)
+def test_batches(n, batch_size):
+    assert sum(batches(n, batch_size)) == n
+    assert all(batch == batch_size for batch in list(batches(n, batch_size))[:-1])
+    *_, last = batches(n, batch_size)
+    assert 0 < last <= batch_size
 
 
 if __name__ == "__main__":

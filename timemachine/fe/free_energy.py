@@ -222,13 +222,13 @@ class AbsoluteFreeEnergy(BaseFreeEnergy):
 
 
 def batches(n: int, batch_size: int) -> Iterable[int]:
-    while True:
-        if n <= batch_size:
-            yield n
-            break
-        else:
-            yield batch_size
-            n -= batch_size
+    assert n >= 0
+    assert batch_size > 0
+    quot, rem = divmod(n, batch_size)
+    for _ in range(quot):
+        yield batch_size
+    if rem:
+        yield rem
 
 
 def sample(
