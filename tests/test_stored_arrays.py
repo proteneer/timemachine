@@ -1,4 +1,8 @@
+import gc
+import weakref
+
 import numpy as np
+import pytest
 from hypothesis import given, seed
 from hypothesis.extra.numpy import array_shapes, arrays, floating_dtypes
 from hypothesis.strategies import composite, integers, lists
@@ -45,3 +49,23 @@ def test_stored_arrays_getitem(chunks_index):
 
     ref = [arr for chunk in chunks for arr in chunk]
     np.testing.assert_array_equal(sas[ix], ref[ix])
+
+
+@pytest.mark.parametrize(
+    "ctor",
+    [
+        pytest.param(list, marks=pytest.mark.xfail(reason="expect list to hold refs", strict=True)),
+        pytest.param(StoredArrays),
+    ],
+)
+def test_stored_arrays_doesnt_hold_references(ctor):
+    xs = ctor()
+    data = np.arange(10)
+    xs.extend([data])
+
+    ref = weakref.ref(data)
+    del data
+    gc.collect()
+
+    # data should have been GC'd
+    assert ref() is None
