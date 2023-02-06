@@ -348,6 +348,15 @@ class NonbondedHandler(SerializableMixIn):
         param_idxs = generate_nonbonded_idxs(mol, smirks)
         return params[param_idxs]
 
+    def get_smirks(self, **kwargs):
+        return self.smirks
+
+    def get_params(self, **kwargs):
+        return self.params
+
+    def set_params(self, params, **kwargs):
+        self.params = params
+
 
 class SimpleChargeHandler(NonbondedHandler):
     pass
@@ -430,6 +439,9 @@ class AM1Handler(SerializableMixIn):
     def get_params(self, **kwargs):
         return []
 
+    def set_params(self, params, **kwargs):
+        pass
+
 
 class AM1BCCHandler(SerializableMixIn):
     """The AM1BCCHandler generates charges for molecules using OpenEye's AM1BCCELF10[1] protocol. Note that
@@ -476,6 +488,9 @@ class AM1BCCHandler(SerializableMixIn):
 
     def get_params(self, **kwargs):
         return self.params
+
+    def set_params(self, params, **kwargs):
+        self.params = params
 
 
 class AM1CCCHandler(SerializableMixIn):
@@ -560,6 +575,9 @@ class AM1CCCHandler(SerializableMixIn):
     def get_params(self, **kwargs):
         return self.params
 
+    def set_params(self, params, **kwargs):
+        self.params = params
+
 
 class AM1CCCSplitHandler(AM1CCCHandler):
     """
@@ -596,3 +614,11 @@ class AM1CCCSplitHandler(AM1CCCHandler):
         Use the `params` attribute directly if you need both.
         """
         return self.params[self._get_idx(intramol_params)]
+
+    def set_params(self, params, intramol_params=False):
+        """
+        Set the single set of params for either the
+        intramolecular or intermolecular parameters.
+        Use the `params` attribute directly if you need both.
+        """
+        return self.params.at(self._get_idx(intramol_params)).set(params)
