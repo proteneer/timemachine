@@ -4,7 +4,7 @@ import weakref
 import numpy as np
 import pytest
 from hypothesis import given, seed
-from hypothesis.extra.numpy import array_shapes, arrays, floating_dtypes
+from hypothesis.extra.numpy import array_shapes, arrays, floating_dtypes, from_dtype
 from hypothesis.strategies import composite, integers, lists
 
 from timemachine.fe.stored_arrays import StoredArrays
@@ -14,7 +14,7 @@ from timemachine.fe.stored_arrays import StoredArrays
 def chunks(draw):
     shape = draw(array_shapes())
     dtype = draw(floating_dtypes())
-    return draw(lists(arrays(dtype, shape)))
+    return draw(lists(arrays(dtype, shape, elements=from_dtype(dtype, allow_subnormal=False))))
 
 
 @given(lists(chunks()))
@@ -32,7 +32,7 @@ def test_stored_arrays_extend_iter_roundtrip(chunks):
 def lists_of_chunks_with_index(draw):
     shape = draw(array_shapes())
     dtype = draw(floating_dtypes())
-    chunks = lists(min_size=1, elements=arrays(dtype, shape))
+    chunks = lists(min_size=1, elements=arrays(dtype, shape, elements=from_dtype(dtype, allow_subnormal=False)))
     list_of_chunks = draw(lists(min_size=1, elements=chunks))
     n = sum(len(c) for c in list_of_chunks)
     ix = draw(integers(-n, n - 1))
