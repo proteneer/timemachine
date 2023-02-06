@@ -132,19 +132,21 @@ class Forcefield:
                 assert lj_handle is None
                 lj_handle = handle
             elif (
+                isinstance(handle, nonbonded.AM1CCCIntraHandler)
+                or isinstance(handle, nonbonded.AM1BCCIntraHandler)
+                or isinstance(handle, nonbonded.SimpleChargeIntraHandler)
+            ):
+                # Need to be checked first since they are also subclasses
+                # of the non-intra handlers
+                assert q_handle_intra is None
+                q_handle_intra = handle
+            elif (
                 isinstance(handle, nonbonded.AM1CCCHandler)
                 or isinstance(handle, nonbonded.AM1BCCHandler)
                 or isinstance(handle, nonbonded.SimpleChargeHandler)
             ):
                 assert q_handle is None
                 q_handle = handle
-            elif (
-                isinstance(handle, nonbonded.AM1CCCIntraHandler)
-                or isinstance(handle, nonbonded.AM1BCCIntraHandler)
-                or isinstance(handle, nonbonded.SimpleChargeIntraHandler)
-            ):
-                assert q_handle_intra is None
-                q_handle_intra = handle
 
         if q_handle_intra is None:
             # Copy the forcefield parameters to the intramolecular term if not
