@@ -371,8 +371,8 @@ def test_nonbonded_split(precision, rtol, atol):
     mol_b = mols["43"]
     core = _get_core_by_mcs(mol_a, mol_b)
 
-    ff_ref, ff_split, ff_scaled, ff_inter_scaled = load_split_forcefields()
-    solvent_sys, solvent_conf, solvent_box, solvent_top = build_water_system(4.0, ff_ref.water_ff)
+    ffs = load_split_forcefields()
+    solvent_sys, solvent_conf, solvent_box, solvent_top = build_water_system(4.0, ffs.ref.water_ff)
     solvent_bps, _ = openmm_deserializer.deserialize_system(solvent_sys, cutoff=1.2)
 
     def get_vacuum_solvent_u_grads(ff, lamb):
@@ -396,12 +396,12 @@ def test_nonbonded_split(precision, rtol, atol):
     n_lambdas = 3
     for lamb in np.linspace(0, 1, n_lambdas):
         # Compute the grads, potential with the ref ff
-        vacuum_grad_ref, vacuum_u_ref, solvent_grad_ref, solvent_u_ref = get_vacuum_solvent_u_grads(ff_ref, lamb)
+        vacuum_grad_ref, vacuum_u_ref, solvent_grad_ref, solvent_u_ref = get_vacuum_solvent_u_grads(ffs.ref, lamb)
 
         # Compute the grads, potential using the ff where both
         # intermol and intramol terms have the same parameters
         vacuum_grad_split, vacuum_u_split, solvent_grad_split, solvent_u_split = get_vacuum_solvent_u_grads(
-            ff_split, lamb
+            ffs.split, lamb
         )
 
         # They should be equal
@@ -413,7 +413,7 @@ def test_nonbonded_split(precision, rtol, atol):
 
         # Compute the grads, potential with the scaled ff
         vacuum_grad_scaled, vacuum_u_scaled, solvent_grad_scaled, solvent_u_scaled = get_vacuum_solvent_u_grads(
-            ff_scaled, lamb
+            ffs.scaled, lamb
         )
 
         # Compute the grads, potential with the intermol scaled ff
@@ -422,7 +422,7 @@ def test_nonbonded_split(precision, rtol, atol):
             vacuum_u_inter_scaled,
             solvent_grad_inter_scaled,
             solvent_u_inter_scaled,
-        ) = get_vacuum_solvent_u_grads(ff_inter_scaled, lamb)
+        ) = get_vacuum_solvent_u_grads(ffs.inter_scaled, lamb)
 
         # Compute the expected intermol scaled potential
         expected_inter_scaled_u = solvent_u_scaled - vacuum_u_scaled + vacuum_u_ref
@@ -433,11 +433,11 @@ def test_nonbonded_split(precision, rtol, atol):
         expected_inter_scaled_grad = solvent_grad_scaled - vacuum_grad_scaled_padded + vacuum_grad_ref_padded
 
         # They should be equal
-        assert expected_inter_scaled_u == pytest.approx(solvent_u_inter_scaled)
+        assert expected_inter_scaled_u == pytest.approx(solvent_u_inter_scaled, rel=rtol, abs=atol)
         np.testing.assert_allclose(expected_inter_scaled_grad, solvent_grad_inter_scaled, rtol=rtol, atol=atol)
 
         # The vacuum term should be the same as the ref
-        assert vacuum_u_inter_scaled == pytest.approx(vacuum_u_ref)
+        assert vacuum_u_inter_scaled == pytest.approx(vacuum_u_ref, rel=rtol, abs=atol)
         np.testing.assert_allclose(vacuum_grad_ref, vacuum_grad_inter_scaled, rtol=rtol, atol=atol)
 
 

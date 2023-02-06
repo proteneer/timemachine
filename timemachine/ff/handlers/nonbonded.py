@@ -569,14 +569,30 @@ class AM1CCCSplitHandler(AM1CCCHandler):
 
     @staticmethod
     def static_parameterize(params, smirks, mol, intramol_params=False):
+        # If params/smirks is taken from the original handler, both
+        # parameters are the same.
         idx = 0 if intramol_params else 1
+        if len(params) != 2:
+            params = [params, params]
+        if len(smirks) != 2:
+            smirks = [smirks, smirks]
         return AM1CCCHandler.static_parameterize(params[idx], smirks[idx], mol)
 
     def _get_idx(self, intramol_params):
         return 0 if intramol_params else 1
 
     def get_smirks(self, intramol_params=False):
+        """
+        Return the single set of smirks for either the
+        intramolecular or intermolecular parameters.
+        Use the `smirks` attribute directly if you need both.
+        """
         return self.smirks[self._get_idx(intramol_params)]
 
     def get_params(self, intramol_params=False):
+        """
+        Return the single set of params for either the
+        intramolecular or intermolecular parameters.
+        Use the `params` attribute directly if you need both.
+        """
         return self.params[self._get_idx(intramol_params)]

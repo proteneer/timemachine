@@ -3,6 +3,7 @@ import functools
 import itertools
 import os
 import unittest
+from dataclasses import dataclass
 from importlib import resources
 from tempfile import NamedTemporaryFile, TemporaryDirectory
 from typing import Iterable, Optional, Tuple
@@ -358,6 +359,14 @@ def gen_nonbonded_params_with_4d_offsets(rng: np.random.Generator, params, w_max
     yield params_with_w_coords(w_coords)
 
 
+@dataclass
+class SplitForcefield:
+    ref: Forcefield  # ref ff
+    split: Forcefield  # split intramolecular and intermolecular charge terms (same charge terms as ref)
+    scaled: Forcefield  # all charge terms scaled by 10x
+    inter_scaled: Forcefield  # intermolecular charge terms scaled by 10x
+
+
 def load_split_forcefields() -> Tuple[Forcefield, Forcefield, Forcefield, Forcefield]:
     """
     Returns the
@@ -370,4 +379,4 @@ def load_split_forcefields() -> Tuple[Forcefield, Forcefield, Forcefield, Forcef
     ff_split = Forcefield.load_from_file("tests/data/smirnoff_2_0_0_ccc_split.py")
     ff_scaled = Forcefield.load_from_file("tests/data/smirnoff_2_0_0_ccc_scaled.py")
     ff_inter_scaled = Forcefield.load_from_file("tests/data/smirnoff_2_0_0_ccc_inter_scaled.py")
-    return ff_ref, ff_split, ff_scaled, ff_inter_scaled
+    return SplitForcefield(ff_ref, ff_split, ff_scaled, ff_inter_scaled)
