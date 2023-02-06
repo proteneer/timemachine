@@ -362,7 +362,6 @@ def gen_nonbonded_params_with_4d_offsets(rng: np.random.Generator, params, w_max
 @dataclass
 class SplitForcefield:
     ref: Forcefield  # ref ff
-    split: Forcefield  # split intramolecular and intermolecular charge terms (same charge terms as ref)
     scaled: Forcefield  # all charge terms scaled by 10x
     inter_scaled: Forcefield  # intermolecular charge terms scaled by 10x
 
@@ -371,12 +370,15 @@ def load_split_forcefields() -> SplitForcefield:
     """
     Returns:
         OpenFF 2.0.0 ff,
-        OpenFF 2.0.0 ff with split intramolecular and intermolecular charge terms,
         OpenFF 2.0.0 ff with all charge terms scaled by 10x,
         OpenFF 2.0.0 ff with only intermolecular charge terms scaled by 10x.
     """
     ff_ref = Forcefield.load_from_file("smirnoff_2_0_0_ccc.py")
-    ff_split = Forcefield.load_from_file("tests/data/smirnoff_2_0_0_ccc_split.py")
-    ff_scaled = Forcefield.load_from_file("tests/data/smirnoff_2_0_0_ccc_scaled.py")
-    ff_inter_scaled = Forcefield.load_from_file("tests/data/smirnoff_2_0_0_ccc_inter_scaled.py")
-    return SplitForcefield(ff_ref, ff_split, ff_scaled, ff_inter_scaled)
+
+    ff_scaled = Forcefield.load_from_file("smirnoff_2_0_0_ccc.py")
+    ff_scaled.q_handle.params *= 10
+    ff_scaled.q_handle_intra.params *= 10
+
+    ff_inter_scaled = Forcefield.load_from_file("smirnoff_2_0_0_ccc.py")
+    ff_inter_scaled.q_handle.params *= 10
+    return SplitForcefield(ff_ref, ff_scaled, ff_inter_scaled)

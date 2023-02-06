@@ -24,9 +24,11 @@ def test_dual_topology_nonbonded_pairlist():
     ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
     dt = topology.DualTopology(mol_a, mol_b, ff)
 
-    nb_params, nb = dt.parameterize_nonbonded(ff.q_handle.params, ff.lj_handle.params, 0.0)
+    nb_params, nb = dt.parameterize_nonbonded(ff.q_handle.params, ff.q_handle_intra.params, ff.lj_handle.params, 0.0)
 
-    nb_pairlist_params, nb_pairlist = dt.parameterize_nonbonded_pairlist(ff.q_handle.params, ff.lj_handle.params)
+    nb_pairlist_params, nb_pairlist = dt.parameterize_nonbonded_pairlist(
+        ff.q_handle.params, ff.q_handle_intra.params, ff.lj_handle.params
+    )
 
     x0 = np.concatenate([get_romol_conf(mol_a), get_romol_conf(mol_b)])
     box = np.eye(3) * 4.0
@@ -48,10 +50,14 @@ def test_dual_topology_nonbonded_pairlist():
         np.testing.assert_allclose(u, pairlist_u, atol=atol, rtol=rtol)
 
 
-def parameterize_nonbonded_full(hgt: topology.HostGuestTopology, ff_q_params, ff_lj_params, lamb: float):
+def parameterize_nonbonded_full(
+    hgt: topology.HostGuestTopology, ff_q_params, ff_q_params_intra, ff_lj_params, lamb: float
+):
     # Implements the full NB potential for the host guest system
     num_guest_atoms = hgt.guest_topology.get_num_atoms()
-    guest_params, guest_pot = hgt.guest_topology.parameterize_nonbonded(ff_q_params, ff_lj_params, lamb)
+    guest_params, guest_pot = hgt.guest_topology.parameterize_nonbonded(
+        ff_q_params, ff_q_params_intra, ff_lj_params, lamb
+    )
     hg_exclusion_idxs = np.concatenate(
         [hgt.host_nonbonded.get_exclusion_idxs(), guest_pot.get_exclusion_idxs() + hgt.num_host_atoms]
     )
@@ -73,7 +79,9 @@ def test_host_guest_nonbonded(ctor, precision, rtol, atol):
         # Use the original code to compute the nb grads and potential
         bt = Topology(ff)
         hgt = topology.HostGuestTopology(host_bps, bt)
-        params, potentials = parameterize_nonbonded_full(hgt, ff.q_handle.params, ff.lj_handle.params, lamb=lamb)
+        params, potentials = parameterize_nonbonded_full(
+            hgt, ff.q_handle.params, ff.q_handle_intra.params, ff.lj_handle.params, lamb=lamb
+        )
         u_impl = potentials.bind(params).bound_impl(precision=precision)
         return u_impl.execute(x0, solvent_box)
 
@@ -81,14 +89,18 @@ def test_host_guest_nonbonded(ctor, precision, rtol, atol):
         # Use the updated topology code to compute the nb grads and potential
         bt = Topology(ff)
         hgt = topology.HostGuestTopology(host_bps, bt)
-        params, potentials = hgt.parameterize_nonbonded(ff.q_handle.params, ff.lj_handle.params, lamb=lamb)
+        params, potentials = hgt.parameterize_nonbonded(
+            ff.q_handle.params, ff.q_handle_intra.params, ff.lj_handle.params, lamb=lamb
+        )
         u_impl = potentials.bind(params).bound_impl(precision=precision)
         return u_impl.execute(x0, solvent_box)
 
     def compute_vacuum_grad_u(ff: Forcefield, precision, x0, lamb):
         # Compute the vacuum nb grads and potential
         bt = Topology(ff)
-        params, potentials = bt.parameterize_nonbonded(ff.q_handle.params, ff.lj_handle.params, lamb=lamb)
+        params, potentials = bt.parameterize_nonbonded(
+            ff.q_handle.params, ff.q_handle_intra.params, ff.lj_handle.params, lamb=lamb
+        )
         u_impl = potentials.bind(params).bound_impl(precision=precision)
         return u_impl.execute(x0, solvent_box)
 
@@ -121,18 +133,6 @@ def test_host_guest_nonbonded(ctor, precision, rtol, atol):
         # Compute the grads, potential with the ref ff
         vacuum_grad_ref, vacuum_u_ref = compute_vacuum_grad_u(ffs.ref, precision, ligand_conf, lamb)
         solvent_grad_ref, solvent_u_ref = compute_ref_grad_u(ffs.ref, precision, coords0, lamb)
-
-        # Compute the grads, potential using the ff where both
-        # intermol and intramol terms have the same parameters
-        vacuum_grad_split, vacuum_u_split = compute_vacuum_grad_u(ffs.split, precision, ligand_conf, lamb)
-        solvent_grad_split, solvent_u_split = compute_split_grad_u(ffs.split, precision, coords0, lamb)
-
-        # They should be equal
-        assert vacuum_u_ref == pytest.approx(vacuum_u_split, rel=rtol, abs=atol)
-        np.testing.assert_allclose(vacuum_grad_ref, vacuum_grad_split, rtol=rtol, atol=atol)
-
-        assert solvent_u_ref == pytest.approx(solvent_u_split, rel=rtol, abs=atol)
-        np.testing.assert_allclose(solvent_grad_ref, solvent_grad_split, rtol=rtol, atol=atol)
 
         # Compute the grads, potential with the scaled ff
         vacuum_grad_scaled, vacuum_u_scaled = compute_vacuum_grad_u(ffs.scaled, precision, ligand_conf, lamb)

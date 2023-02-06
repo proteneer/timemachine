@@ -364,13 +364,13 @@ def test_combine_with_host():
 
 @pytest.mark.parametrize("precision, rtol, atol", [(np.float64, 1e-8, 1e-8), (np.float32, 1e-4, 5e-4)])
 def test_nonbonded_split(precision, rtol, atol):
-    # split forcefield has different parameters for intramol and intermol terms
     with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
         mols = {get_mol_name(mol): mol for mol in read_sdf(path_to_ligand)}
     mol_a = mols["338"]
     mol_b = mols["43"]
     core = _get_core_by_mcs(mol_a, mol_b)
 
+    # split forcefield has different parameters for intramol and intermol terms
     ffs = load_split_forcefields()
     solvent_sys, solvent_conf, solvent_box, solvent_top = build_water_system(4.0, ffs.ref.water_ff)
     solvent_bps, _ = openmm_deserializer.deserialize_system(solvent_sys, cutoff=1.2)
@@ -397,19 +397,6 @@ def test_nonbonded_split(precision, rtol, atol):
     for lamb in np.linspace(0, 1, n_lambdas):
         # Compute the grads, potential with the ref ff
         vacuum_grad_ref, vacuum_u_ref, solvent_grad_ref, solvent_u_ref = get_vacuum_solvent_u_grads(ffs.ref, lamb)
-
-        # Compute the grads, potential using the ff where both
-        # intermol and intramol terms have the same parameters
-        vacuum_grad_split, vacuum_u_split, solvent_grad_split, solvent_u_split = get_vacuum_solvent_u_grads(
-            ffs.split, lamb
-        )
-
-        # They should be equal
-        assert vacuum_u_ref == vacuum_u_split
-        np.testing.assert_allclose(vacuum_grad_ref, vacuum_grad_split, rtol=rtol, atol=atol)
-
-        assert solvent_u_ref == solvent_u_split
-        np.testing.assert_allclose(solvent_grad_ref, solvent_grad_split, rtol=rtol, atol=atol)
 
         # Compute the grads, potential with the scaled ff
         vacuum_grad_scaled, vacuum_u_scaled, solvent_grad_scaled, solvent_u_scaled = get_vacuum_solvent_u_grads(

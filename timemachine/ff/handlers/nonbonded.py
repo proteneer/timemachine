@@ -348,17 +348,12 @@ class NonbondedHandler(SerializableMixIn):
         param_idxs = generate_nonbonded_idxs(mol, smirks)
         return params[param_idxs]
 
-    def get_smirks(self, **kwargs):
-        return self.smirks
-
-    def get_params(self, **kwargs):
-        return self.params
-
-    def set_params(self, params, **kwargs):
-        self.params = params
-
 
 class SimpleChargeHandler(NonbondedHandler):
+    pass
+
+
+class SimpleChargeIntraHandler(SimpleChargeHandler):
     pass
 
 
@@ -433,15 +428,6 @@ class AM1Handler(SerializableMixIn):
         """
         return oe_assign_charges(mol, "AM1")
 
-    def get_smirks(self, **kwargs):
-        return []
-
-    def get_params(self, **kwargs):
-        return []
-
-    def set_params(self, params, **kwargs):
-        pass
-
 
 class AM1BCCHandler(SerializableMixIn):
     """The AM1BCCHandler generates charges for molecules using OpenEye's AM1BCCELF10[1] protocol. Note that
@@ -483,14 +469,9 @@ class AM1BCCHandler(SerializableMixIn):
         """
         return oe_assign_charges(mol, "AM1BCCELF10")
 
-    def get_smirks(self, **kwargs):
-        return self.smirks
 
-    def get_params(self, **kwargs):
-        return self.params
-
-    def set_params(self, params, **kwargs):
-        self.params = params
+class AM1BCCIntraHandler(AM1BCCHandler):
+    pass
 
 
 class AM1CCCHandler(SerializableMixIn):
@@ -569,57 +550,6 @@ class AM1CCCHandler(SerializableMixIn):
 
         return q_params
 
-    def get_smirks(self, **kwargs):
-        return self.smirks
 
-    def get_params(self, **kwargs):
-        return self.params
-
-    def set_params(self, params, **kwargs):
-        self.params = params
-
-
-class AM1CCCSplitHandler(AM1CCCHandler):
-    """
-    The Split handler has 2 sets of parameters. One for the intermolecular
-    terms and another for the intramolecular terms.
-    """
-
-    @staticmethod
-    def static_parameterize(params, smirks, mol, intramol_params=False):
-        # If params/smirks is taken from the original handler, both
-        # parameters are the same.
-        idx = 0 if intramol_params else 1
-        if len(params) != 2:
-            expanded_params = jnp.expand_dims(params)
-            params = jnp.concatenate([expanded_params, expanded_params])
-        if len(smirks) != 2:
-            smirks = [smirks, smirks]
-        return AM1CCCHandler.static_parameterize(params[idx], smirks[idx], mol)
-
-    def _get_idx(self, intramol_params):
-        return 0 if intramol_params else 1
-
-    def get_smirks(self, intramol_params=False):
-        """
-        Return the single set of smirks for either the
-        intramolecular or intermolecular parameters.
-        Use the `smirks` attribute directly if you need both.
-        """
-        return self.smirks[self._get_idx(intramol_params)]
-
-    def get_params(self, intramol_params=False):
-        """
-        Return the single set of params for either the
-        intramolecular or intermolecular parameters.
-        Use the `params` attribute directly if you need both.
-        """
-        return self.params[self._get_idx(intramol_params)]
-
-    def set_params(self, params, intramol_params=False):
-        """
-        Set the single set of params for either the
-        intramolecular or intermolecular parameters.
-        Use the `params` attribute directly if you need both.
-        """
-        self.params = self.params.at[self._get_idx(intramol_params)].set(params)
+class AM1CCCIntraHandler(AM1CCCHandler):
+    pass
