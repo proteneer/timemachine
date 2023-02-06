@@ -38,6 +38,8 @@ class StoredArrays(Sequence[NDArray]):
         if isinstance(key, int):
             if key < -len(self) or key >= len(self):
                 raise IndexError(f"index {key} out of range for sequence of length {len(self)}")
+            if key < 0:
+                key += len(self)
             for block, size in enumerate(self._block_sizes):
                 if key < size:
                     return np.load(self._get_path(block))[key]
