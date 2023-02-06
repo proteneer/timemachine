@@ -56,18 +56,18 @@ class SimulationResult:
     dG_errs_png: bytes
     overlap_summary_png: bytes
     overlap_detail_png: bytes
-    frames: List[np.ndarray]
+    frames: List[Sequence[np.ndarray]]  # (len(keep_idxs), n_frames, N, 3)
     boxes: List[np.ndarray]
     initial_states: List[InitialState]
     protocol: SimulationProtocol
 
 
 def image_frames(initial_state: InitialState, frames: Sequence[np.ndarray], boxes: np.ndarray) -> np.ndarray:
-    """Images a set of frames within the periodic box given an Initial state. Recenters the simulation
-    around the centroid of the coordinates specified by initial_state.ligand_idxs prior to imaging.
+    """Images a sequence of frames within the periodic box given an Initial state. Recenters the simulation around the
+    centroid of the coordinates specified by initial_state.ligand_idxs prior to imaging.
 
-    Calling this function on a set of frames will NOT produce identical energies/du_dp/du_dx. Should only
-    be used for visualization convenience.
+    Calling this function on a sequence of frames will NOT produce identical energies/du_dp/du_dx. Should only be used
+    for visualization convenience.
 
     Parameters
     ----------
@@ -75,11 +75,11 @@ def image_frames(initial_state: InitialState, frames: Sequence[np.ndarray], boxe
     initial_state: InitialState
         State that the frames came from
 
-    frames: np.ndarray of coordinates
-        Coordinates to image, shape (K, N, 3)
+    frames: sequence of np.ndarray of coordinates
+        Coordinates to image, sequence of K arrays with shape (N, 3)
 
     boxes: list of boxes
-        Boxes to image coordinates into, shape (K, 3, 3)
+        Boxes to image coordinates into, list of K arrays with shape (3, 3)
 
     Returns
     -------
