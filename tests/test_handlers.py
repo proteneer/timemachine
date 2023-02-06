@@ -423,6 +423,7 @@ $$$$
 
     # if a parameter is > 99 then its adjoint should be zero (converse isn't necessarily true since)
     mask = np.argwhere(params > 90)
+    print("adjoints", adjoints.shape, mask.shape, adjoints[mask].shape)
     assert np.all(adjoints[mask] == 0.0)
 
     import time
@@ -436,6 +437,26 @@ $$$$
 
     # should be *exactly* identical since we're loading from cache
     np.testing.assert_array_equal(es_params_from_cache, es_params)
+
+    # Test the split handler
+    expand_params = np.expand_dims(params, 0)
+    split_params = np.concatenate([expand_params, expand_params])
+    am1splith = nonbonded.AM1CCCSplitHandler([smirks, smirks], split_params, props)
+    es_params = am1splith.parameterize(mol)
+    np.testing.assert_almost_equal(es_params, ligand_params, decimal=5)
+
+    new_es_params, es_vjp_fn = jax.vjp(functools.partial(am1splith.partial_parameterize, mol=mol), split_params)
+    np.testing.assert_array_equal(es_params, new_es_params)
+    es_params_adjoints = np.random.randn(*es_params.shape)
+    adjoints = es_vjp_fn(es_params_adjoints)[0]
+
+    # if a parameter is > 99 then its adjoint should be zero (converse isn't necessarily true)
+    # idx == 0 means intramol params, 1 means intermol params
+    mask = np.argwhere(split_params[0] > 90)
+    assert np.all(adjoints[0][mask] == 0.0)
+
+    mask = np.argwhere(split_params[1] > 90)
+    assert np.all(adjoints[1][mask] == 0.0)
 
 
 def test_simple_charge_handler():

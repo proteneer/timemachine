@@ -591,7 +591,8 @@ class AM1CCCSplitHandler(AM1CCCHandler):
         # parameters are the same.
         idx = 0 if intramol_params else 1
         if len(params) != 2:
-            params = [params, params]
+            expanded_params = jnp.expand_dims(params)
+            params = jnp.concatenate([expanded_params, expanded_params])
         if len(smirks) != 2:
             smirks = [smirks, smirks]
         return AM1CCCHandler.static_parameterize(params[idx], smirks[idx], mol)
@@ -621,4 +622,4 @@ class AM1CCCSplitHandler(AM1CCCHandler):
         intramolecular or intermolecular parameters.
         Use the `params` attribute directly if you need both.
         """
-        return self.params.at(self._get_idx(intramol_params)).set(params)
+        self.params = self.params.at[self._get_idx(intramol_params)].set(params)

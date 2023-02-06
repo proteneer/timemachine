@@ -6,7 +6,7 @@ import unittest
 from dataclasses import dataclass
 from importlib import resources
 from tempfile import NamedTemporaryFile, TemporaryDirectory
-from typing import Iterable, Optional, Tuple
+from typing import Iterable, Optional
 
 import jax
 import jax.numpy as jnp
@@ -367,9 +367,9 @@ class SplitForcefield:
     inter_scaled: Forcefield  # intermolecular charge terms scaled by 10x
 
 
-def load_split_forcefields() -> Tuple[Forcefield, Forcefield, Forcefield, Forcefield]:
+def load_split_forcefields() -> SplitForcefield:
     """
-    Returns the
+    Returns:
         OpenFF 2.0.0 ff,
         OpenFF 2.0.0 ff with split intramolecular and intermolecular charge terms,
         OpenFF 2.0.0 ff with all charge terms scaled by 10x,
