@@ -269,9 +269,6 @@ class BaseTopology:
         sig_ij = combining_rule_sigma(sig_params[l_idxs], sig_params[r_idxs])
         eps_ij = combining_rule_epsilon(eps_params[l_idxs], eps_params[r_idxs])
 
-        beta = _BETA
-        cutoff = _CUTOFF  # solve for this analytically later
-
         params = []
         for q, sig, eps, (sf_q, sf_lj) in zip(q_ij, sig_ij, eps_ij, rescale_mask):
             params.append(
@@ -283,6 +280,9 @@ class BaseTopology:
                 )
             )
         params = np.array(params)
+
+        beta = _BETA
+        cutoff = _CUTOFF  # solve for this analytically later
 
         return params, potentials.NonbondedPairListPrecomputed(inclusion_idxs, beta, cutoff)
 

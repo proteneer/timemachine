@@ -55,9 +55,6 @@ class Forcefield:
     ]
     q_handle_intra: Optional[
         Union[
-            nonbonded.SimpleChargeHandler,
-            nonbonded.AM1BCCHandler,
-            nonbonded.AM1CCCHandler,
             nonbonded.SimpleChargeIntraHandler,
             nonbonded.AM1BCCIntraHandler,
             nonbonded.AM1CCCIntraHandler,
