@@ -26,7 +26,7 @@ verify:
 
 .PHONY: nogpu_tests
 nogpu_tests:
-	pytest -m $(NOGPU_MARKER) $(PYTEST_CI_ARGS)
+	pytest -m '$(NOGPU_MARKER) and not $(NIGHTLY_MARKER)' $(PYTEST_CI_ARGS)
 
 .PHONY: memcheck_tests
 memcheck_tests:
@@ -38,7 +38,11 @@ unit_tests:
 
 .PHONY: nightly_tests
 nightly_tests:
-	pytest -m $(NIGHTLY_MARKER) $(PYTEST_CI_ARGS)
+	pytest -m '$(NIGHTLY_MARKER) and not $(NOGPU_MARKER)' $(PYTEST_CI_ARGS)
+
+.PHONY: nogpu_nightly_tests
+nogpu_nightly_tests:
+	pytest -m '$(NIGHTLY_MARKER) and $(NOGPU_MARKER)' $(PYTEST_CI_ARGS)
 
 .PHONY: ci
 ci: verify memcheck_tests unit_tests
