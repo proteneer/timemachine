@@ -100,8 +100,6 @@ def make_overlap_detail_figure(
     components,
     dGs,
     dG_errs,
-    overlaps_by_lambda,
-    overlaps_by_lambda_by_component,
     u_kln_by_component_by_lambda,
     temperature,
     prefix,
@@ -114,9 +112,6 @@ def make_overlap_detail_figure(
         component names
     dGs: (n_lambdas - 1) floats
     dG_errs: (n_lambdas - 1) floats
-    overlaps_by_lambda: list of floats
-    dG_errs_by_lambda_by_component: array
-    overlaps_by_lambda_by_component: array
     u_kln_by_component_by_lambda: [L,P,2,2,T] array
     temperature: float
         kelvin
@@ -136,9 +131,7 @@ def make_overlap_detail_figure(
     num_energy_components = len(components)
     assert num_energy_components == u_kln_by_component_by_lambda[0].shape[0]
 
-    num_lambdas = len(u_kln_by_component_by_lambda)
-
-    num_rows = num_lambdas - 1  # one per adjacent pair
+    num_rows = len(u_kln_by_component_by_lambda)  # L - 1 adjacent pairs
     num_cols = num_energy_components + 1  # one per component + one for overall energy
 
     figure, all_axes = plt.subplots(num_rows, num_cols, figsize=(num_cols * 5, num_rows * 3))

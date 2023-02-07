@@ -355,8 +355,6 @@ def estimate_free_energy_given_initial_states(
         U_names,
         all_dGs,
         all_errs,
-        overlaps_by_lambda,
-        overlaps_by_lambda_by_component,
         u_kln_by_component_by_lambda,
         temperature,
         prefix,
