@@ -50,13 +50,13 @@ def test_all_pairs(filepath):
                 min_threshold=0,
             )
 
-            # useful for visualization
-            for core_idx, core in enumerate(all_cores[:1]):
-                res = plot_atom_mapping_grid(mol_a, mol_b, core, num_rotations=5)
-                with open(
-                    f"atom_mapping_{get_mol_name(mol_a)}_to_{get_mol_name(mol_b)}_core_{core_idx}.svg", "w"
-                ) as fh:
-                    fh.write(res)
+            # # useful for visualization
+            # for core_idx, core in enumerate(all_cores[:1]):
+            #     res = plot_atom_mapping_grid(mol_a, mol_b, core, num_rotations=5)
+            #     with open(
+            #         f"atom_mapping_{get_mol_name(mol_a)}_to_{get_mol_name(mol_b)}_core_{core_idx}.svg", "w"
+            #     ) as fh:
+            #         fh.write(res)
 
             # note that this is probably the bottleneck for hif2a
             for core in all_cores:
