@@ -893,8 +893,25 @@ def test_max_visits_exception():
     cores = atom_mapping.get_cores(mol_a, mol_b, **core_kwargs, max_visits=10000)
     assert len(cores) > 0
 
-    with pytest.raises(MaxVisitsError, match="Reached max number of visits: 1"):
+    with pytest.raises(MaxVisitsError, match="Reached max number of visits/cores: 0 cores with 2 nodes visited"):
         atom_mapping.get_cores(mol_a, mol_b, **core_kwargs, max_visits=1)
+
+
+@pytest.mark.nogpu
+def test_max_cores_exception():
+    mol_a, mol_b = get_cyclohexanes_different_confs()
+    core_kwargs = dict(
+        ring_cutoff=0.1,
+        chain_cutoff=0.2,
+        connected_core=False,
+        enforce_core_core=True,
+        complete_rings=False,
+        enforce_chiral=True,
+        min_threshold=0,
+        max_visits=1e7,
+    )
+    with pytest.raises(MaxVisitsError, match="Reached max number of visits/cores: 2 cores"):
+        atom_mapping.get_cores(mol_a, mol_b, **core_kwargs, max_cores=1)
 
 
 @pytest.mark.nogpu
