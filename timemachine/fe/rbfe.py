@@ -9,7 +9,7 @@ from simtk.openmm import app
 
 from timemachine.constants import BOLTZ, DEFAULT_PRESSURE, DEFAULT_TEMP
 from timemachine.fe import atom_mapping, model_utils
-from timemachine.fe.bar import bar_with_bootstrapped_uncertainty
+from timemachine.fe.bar import bar_with_bootstrapped_uncertainty, df_err_from_ukln, pair_overlap_from_ukln
 from timemachine.fe.energy_decomposition import EnergyDecomposedState, compute_energy_decomposed_u_kln, get_batch_u_fns
 from timemachine.fe.free_energy import HostConfig, InitialState, SimulationProtocol, SimulationResult, sample
 from timemachine.fe.plots import make_dG_errs_figure, make_overlap_detail_figure, make_overlap_summary_figure
@@ -240,6 +240,7 @@ def run_sequential_sims_given_initial_states(
 
         # run simulation
         cur_frames, cur_boxes = sample(initial_state, protocol)
+        print(f"completed simulation at lambda={initial_state.lamb}!")
 
         # keep samples from any requested states in memory
         if lamb_idx in keep_idxs:
@@ -318,6 +319,7 @@ def estimate_free_energy_given_initial_states(
     all_dGs = []
     all_errs = []
     for lamb_idx, u_kln_by_component in enumerate(u_kln_by_component_by_lambda):
+        # pair BAR
         u_kln = u_kln_by_component.sum(0)
 
         w_fwd = u_kln[1, 0] - u_kln[0, 0]
@@ -326,19 +328,39 @@ def estimate_free_energy_given_initial_states(
         df, df_err = bar_with_bootstrapped_uncertainty(w_fwd, w_rev)  # reduced units
         dG, dG_err = df / beta, df_err / beta  # kJ/mol
 
+        message = f"{prefix} BAR: lambda {lamb_idx - 1} -> {lamb_idx} dG: {dG:.3f} +- {dG_err:.3f} kJ/mol"
+        print(message, flush=True)
+
         all_dGs.append(dG)
         all_errs.append(dG_err)
 
-    # perform analysis + generate figures
+    # (energy components, lambdas, energy fxns = 2, sampled states = 2, frames)
+    ukln_by_lambda_by_component = np.array(u_kln_by_component_by_lambda).swapaxes(0, 1)
+
+    # compute more diagnostics
+    overlaps_by_lambda = [pair_overlap_from_ukln(u_kln) for u_kln in ukln_by_lambda_by_component.sum(axis=0)]
+
+    dG_errs_by_lambda_by_component = np.array(
+        [[df_err_from_ukln(u_kln) / beta for u_kln in ukln_by_lambda] for ukln_by_lambda in ukln_by_lambda_by_component]
+    )
+    overlaps_by_lambda_by_component = np.array(
+        [[pair_overlap_from_ukln(u_kln) for u_kln in ukln_by_lambda] for ukln_by_lambda in ukln_by_lambda_by_component]
+    )
+
+    # generate figures
     U_names = [type(U_fn).__name__ for U_fn in initial_states[0].potentials]
     lambdas = [s.lamb for s in initial_states]
 
-    (
-        overlap_detail_png,
+    overlap_detail_png = make_overlap_detail_figure(
+        U_names,
+        all_dGs,
+        all_errs,
         overlaps_by_lambda,
-        dG_errs_by_lambda_by_component,
         overlaps_by_lambda_by_component,
-    ) = make_overlap_detail_figure(U_names, u_kln_by_component_by_lambda, temperature, prefix)
+        u_kln_by_component_by_lambda,
+        temperature,
+        prefix,
+    )
     dG_errs_png = make_dG_errs_figure(U_names, lambdas, all_errs, dG_errs_by_lambda_by_component)
     overlap_summary_png = make_overlap_summary_figure(
         U_names, lambdas, overlaps_by_lambda, overlaps_by_lambda_by_component

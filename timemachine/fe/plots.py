@@ -4,7 +4,6 @@ import numpy as np
 from matplotlib import pyplot as plt
 
 from timemachine.constants import BOLTZ
-from timemachine.fe.bar import bar_with_bootstrapped_uncertainty, df_err_from_ukln, pair_overlap_from_ukln
 
 
 def plot_work(w_forward, w_reverse, axes):
@@ -97,13 +96,27 @@ def make_overlap_summary_figure(components, lambdas, overlaps_by_lambda, overlap
     return buffer.read()
 
 
-def make_overlap_detail_figure(components, u_kln_by_component_by_lambda, temperature, prefix):
+def make_overlap_detail_figure(
+    components,
+    dGs,
+    dG_errs,
+    overlaps_by_lambda,
+    overlaps_by_lambda_by_component,
+    u_kln_by_component_by_lambda,
+    temperature,
+    prefix,
+):
     """Make (n_lambdas - 1) x (n_components + 1) overlap plots, and return related diagnostics
 
     Parameters
     ----------
-    components : list of strings
+    components : n_components list of strings
         component names
+    dGs: (n_lambdas - 1) floats
+    dG_errs: (n_lambdas - 1) floats
+    overlaps_by_lambda: list of floats
+    dG_errs_by_lambda_by_component: array
+    overlaps_by_lambda_by_component: array
     u_kln_by_component_by_lambda: [L,P,2,2,T] array
     temperature: float
         kelvin
@@ -113,9 +126,7 @@ def make_overlap_detail_figure(components, u_kln_by_component_by_lambda, tempera
     Returns
     -------
     overlap_detail_png: bytes
-    overlaps_by_lambda: list of floats
-    dG_errs_by_lambda_by_component: array
-    overlaps_by_lambda_by_component: array
+
 
     Notes
     -----
@@ -138,30 +149,19 @@ def make_overlap_detail_figure(components, u_kln_by_component_by_lambda, tempera
     kBT = BOLTZ * temperature
     beta = 1 / kBT
 
-    all_dGs = []
-    all_errs = []
     for lamb_idx, u_kln_by_component in enumerate(u_kln_by_component_by_lambda):
         u_kln = u_kln_by_component.sum(0)
 
         w_fwd = u_kln[1, 0] - u_kln[0, 0]
         w_rev = u_kln[0, 1] - u_kln[1, 1]
 
-        # BAR
-        df, df_err = bar_with_bootstrapped_uncertainty(w_fwd, w_rev)  # reduced units
-        dG, dG_err = df / beta, df_err / beta  # kJ/mol
-        # TODO: possibly accept list of dG, dG_err as input, instead of computing on the fly?
-
-        all_dGs.append(dG)
-        all_errs.append(dG_err)
+        df = beta * dGs[lamb_idx]
+        df_err = beta * dG_errs[lamb_idx]
 
         # add to plot
         plot_axis = all_axes[lamb_idx - 1][num_energy_components]
         plot_title = f"{prefix}_{lamb_idx - 1}_to_{lamb_idx}"
         plot_BAR(df, df_err, w_fwd, w_rev, plot_title, plot_axis)
-
-        # TODO: should this print be moved back into simulation loop?
-        message = f"{prefix} BAR: lambda {lamb_idx - 1} -> {lamb_idx} dG: {dG:.3f} +- {dG_err:.3f} kJ/mol"
-        print(message, flush=True)
 
     # [n_lambdas x num_energy_components] plots (relying on energy decomposition)
     for lamb_idx, u_kln_by_component in enumerate(u_kln_by_component_by_lambda):
@@ -175,18 +175,6 @@ def make_overlap_detail_figure(components, u_kln_by_component_by_lambda, tempera
             plot_work(w_fwd_by_component[u_idx], w_rev_by_component[u_idx], plot_axis)
             plot_axis.set_title(components[u_idx])
 
-    # (energy components, lambdas, energy fxns = 2, sampled states = 2, frames)
-    ukln_by_lambda_by_component = np.array(u_kln_by_component_by_lambda).swapaxes(0, 1)
-
-    # compute more diagnostics
-    overlaps_by_lambda = [pair_overlap_from_ukln(u_kln) for u_kln in ukln_by_lambda_by_component.sum(axis=0)]
-    dG_errs_by_lambda_by_component = np.array(
-        [[df_err_from_ukln(u_kln) / beta for u_kln in ukln_by_lambda] for ukln_by_lambda in ukln_by_lambda_by_component]
-    )
-    overlaps_by_lambda_by_component = np.array(
-        [[pair_overlap_from_ukln(u_kln) for u_kln in ukln_by_lambda] for ukln_by_lambda in ukln_by_lambda_by_component]
-    )
-
     # detail plot as png
     plt.tight_layout()
     buffer = io.BytesIO()
@@ -194,4 +182,4 @@ def make_overlap_detail_figure(components, u_kln_by_component_by_lambda, tempera
     buffer.seek(0)
     overlap_detail_png = buffer.read()
 
-    return overlap_detail_png, overlaps_by_lambda, dG_errs_by_lambda_by_component, overlaps_by_lambda_by_component
+    return overlap_detail_png
