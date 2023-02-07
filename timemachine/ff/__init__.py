@@ -20,6 +20,7 @@ class ForcefieldParams(Generic[_T]):
     pt_params: _T
     it_params: _T
     q_params: _T
+    q_params_intra: _T
     lj_params: _T
 
 
@@ -30,6 +31,7 @@ def combine_params(a: ForcefieldParams[_T], b: ForcefieldParams[_T]) -> Forcefie
         (a.pt_params, b.pt_params),
         (a.it_params, b.it_params),
         (a.q_params, b.q_params),
+        (a.q_params_intra, b.q_params_intra),
         (a.lj_params, b.lj_params),
     )
 
@@ -44,7 +46,20 @@ class Forcefield:
     ha_handle: Optional[bonded.HarmonicAngleHandler]
     pt_handle: Optional[bonded.ProperTorsionHandler]
     it_handle: Optional[bonded.ImproperTorsionHandler]
-    q_handle: Optional[Union[nonbonded.SimpleChargeHandler, nonbonded.AM1BCCHandler, nonbonded.AM1CCCHandler]]
+    q_handle: Optional[
+        Union[
+            nonbonded.SimpleChargeHandler,
+            nonbonded.AM1BCCHandler,
+            nonbonded.AM1CCCHandler,
+        ]
+    ]
+    q_handle_intra: Optional[
+        Union[
+            nonbonded.SimpleChargeIntraHandler,
+            nonbonded.AM1BCCIntraHandler,
+            nonbonded.AM1CCCIntraHandler,
+        ]
+    ]
     lj_handle: Optional[nonbonded.LennardJonesHandler]
 
     protein_ff: str
@@ -95,6 +110,7 @@ class Forcefield:
         it_handle = None
         lj_handle = None
         q_handle = None
+        q_handle_intra = None
 
         for handle in ff_handlers:
             if isinstance(handle, bonded.HarmonicBondHandler):
@@ -113,6 +129,15 @@ class Forcefield:
                 assert lj_handle is None
                 lj_handle = handle
             elif (
+                isinstance(handle, nonbonded.AM1CCCIntraHandler)
+                or isinstance(handle, nonbonded.AM1BCCIntraHandler)
+                or isinstance(handle, nonbonded.SimpleChargeIntraHandler)
+            ):
+                # Need to be checked first since they are also subclasses
+                # of the non-intra handlers
+                assert q_handle_intra is None
+                q_handle_intra = handle
+            elif (
                 isinstance(handle, nonbonded.AM1CCCHandler)
                 or isinstance(handle, nonbonded.AM1BCCHandler)
                 or isinstance(handle, nonbonded.SimpleChargeHandler)
@@ -120,11 +145,33 @@ class Forcefield:
                 assert q_handle is None
                 q_handle = handle
 
-        return cls(hb_handle, ha_handle, pt_handle, it_handle, q_handle, lj_handle, protein_ff, water_ff)
+        if q_handle_intra is None:
+            # Copy the forcefield parameters to the intramolecular term if not
+            # already handled.
+            if isinstance(q_handle, nonbonded.AM1CCCHandler):
+                q_handle_intra = nonbonded.AM1CCCIntraHandler(q_handle.smirks, q_handle.params, q_handle.props)
+            elif isinstance(q_handle, nonbonded.AM1BCCHandler):
+                q_handle_intra = nonbonded.AM1BCCIntraHandler(q_handle.smirks, q_handle.params, q_handle.props)
+            elif isinstance(q_handle, nonbonded.SimpleChargeHandler):
+                q_handle_intra = nonbonded.SimpleChargeIntraHandler(q_handle.smirks, q_handle.params, q_handle.props)
+            else:
+                raise ValueError(f"Unsupported charge handler {q_handle}")
+
+        return cls(
+            hb_handle, ha_handle, pt_handle, it_handle, q_handle, q_handle_intra, lj_handle, protein_ff, water_ff
+        )
 
     def get_ordered_handles(self):
         """Returns a list of handlers with deterministic ordering."""
-        return [self.hb_handle, self.ha_handle, self.pt_handle, self.it_handle, self.q_handle, self.lj_handle]
+        return [
+            self.hb_handle,
+            self.ha_handle,
+            self.pt_handle,
+            self.it_handle,
+            self.q_handle,
+            self.q_handle_intra,
+            self.lj_handle,
+        ]
 
     def get_params(self) -> ForcefieldParams:
         def params(x):
@@ -136,6 +183,7 @@ class Forcefield:
             params(self.pt_handle),
             params(self.it_handle),
             params(self.q_handle),
+            params(self.q_handle_intra),
             params(self.lj_handle),
         )
 
