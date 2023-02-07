@@ -3,7 +3,7 @@ import weakref
 
 import numpy as np
 import pytest
-from hypothesis import given, seed
+from hypothesis import assume, given, seed
 from hypothesis.extra.numpy import array_shapes, arrays, floating_dtypes, from_dtype
 from hypothesis.strategies import composite, integers, lists
 
@@ -14,7 +14,7 @@ from timemachine.fe.stored_arrays import StoredArrays
 def chunks(draw):
     shape = draw(array_shapes())
     dtype = draw(floating_dtypes())
-    return draw(lists(arrays(dtype, shape, elements=from_dtype(dtype, allow_subnormal=False))))
+    return draw(lists(arrays(dtype, shape, elements=from_dtype(dtype, allow_subnormal=False)), max_size=3))
 
 
 @given(lists(chunks()))
@@ -69,3 +69,29 @@ def test_stored_arrays_doesnt_hold_references(ctor):
 
     # data should have been GC'd
     assert ref() is None
+
+
+@given(lists(chunks()))
+@seed(2023)
+def test_stored_arrays_eq(chunks):
+    a = StoredArrays()
+    b = StoredArrays()
+    for chunk in chunks:
+        a.extend(chunk)
+        b.extend(chunk)
+
+    assert a is not b
+    assert a == b
+
+
+@given(lists(chunks(), max_size=3), lists(chunks(), max_size=3))
+@seed(2023)
+def test_stored_arrays_neq(chunks1, chunks2):
+    assume(not all(np.array_equal(a, b, equal_nan=True) for a, b in zip(chunks1, chunks2)))
+    a = StoredArrays()
+    for chunk in chunks1:
+        a.extend(chunk)
+    b = StoredArrays()
+    for chunk in chunks2:
+        b.extend(chunk)
+    assert a != b
