@@ -118,7 +118,7 @@ def get_cores(
     timemachine.fe.mcgregor.NoMappingError
         If no mapping is found
     timemachine.fe.mcgregor.MaxVisitsError
-        If max_visits is exceeded while finding a mapping
+        If max_visits or max_cores is exceeded while finding a mapping
     """
 
     assert max_cores > 0
