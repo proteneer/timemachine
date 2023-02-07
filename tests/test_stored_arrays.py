@@ -3,7 +3,7 @@ import weakref
 
 import numpy as np
 import pytest
-from hypothesis import assume, given, seed
+from hypothesis import assume, example, given, seed
 from hypothesis.extra.numpy import array_shapes, arrays, floating_dtypes, from_dtype
 from hypothesis.strategies import composite, integers, lists
 
@@ -86,6 +86,7 @@ def test_stored_arrays_eq(chunks):
 
 @given(lists(chunks(), max_size=3), lists(chunks(), max_size=3))
 @seed(2023)
+@example([np.array([]), np.array([1])], [np.array([1])])
 def test_stored_arrays_neq(chunks1, chunks2):
     assume(not all(np.array_equal(a, b, equal_nan=True) for a, b in zip(chunks1, chunks2)))
     a = StoredArrays()

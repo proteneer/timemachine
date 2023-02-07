@@ -54,4 +54,6 @@ class StoredArrays(Sequence[NDArray]):
         return (self._path / f"{block}").with_suffix(".npy")
 
     def __eq__(self, other):
-        return len(self) == len(other) and all(np.array_equal(a, b, equal_nan=True) for a, b in zip(self, other))
+        return self._block_sizes == other._block_sizes and all(
+            np.array_equal(a, b, equal_nan=True) for a, b in zip(self, other)
+        )
