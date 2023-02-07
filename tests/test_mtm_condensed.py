@@ -59,10 +59,12 @@ def test_condensed_phase_mtm():
 
     ubps, params, masses, coords, box = enhanced.get_solvent_phase_system(mol, ff, 0.0)
 
-    nb_potential = ubps[-1]
+    # Unwrap SummedPotential to get intermolecular potential
+    nb_potential = ubps[-1]._potentials[0]
+    nb_params = ubps[-1]._params_init[0]
+
     beta = nb_potential.get_beta()
     cutoff = nb_potential.get_cutoff()
-    nb_params = params[-1]
 
     params_i = nb_params[-num_ligand_atoms:]  # ligand params
     params_j = nb_params[:-num_ligand_atoms]  # water params
