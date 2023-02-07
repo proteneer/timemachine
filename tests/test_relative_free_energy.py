@@ -7,10 +7,12 @@ import pytest
 from hypothesis import given, seed
 from hypothesis.strategies import integers
 
-from timemachine.constants import DEFAULT_FF
+from timemachine.constants import DEFAULT_FF, DEFAULT_TEMP
 from timemachine.fe.bar import pair_overlap_from_ukln
-from timemachine.fe.free_energy import HostConfig, SimulationResult, batches, image_frames, sample
-from timemachine.fe.rbfe import estimate_relative_free_energy, run_solvent, run_vacuum
+from timemachine.fe.free_energy import HostConfig, SimulationProtocol, SimulationResult, batches, image_frames, sample
+from timemachine.fe.rbfe import estimate_relative_free_energy, run_solvent, run_vacuum, setup_initial_states
+from timemachine.fe.single_topology import SingleTopology
+from timemachine.fe.stored_arrays import StoredArrays
 from timemachine.ff import Forcefield
 from timemachine.md import builders
 from timemachine.md.barostat.utils import compute_box_center
@@ -296,6 +298,28 @@ def test_batches(n, batch_size):
     assert all(batch == batch_size for batch in list(batches(n, batch_size))[:-1])
     *_, last = batches(n, batch_size)
     assert 0 < last <= batch_size
+
+
+@pytest.fixture(scope="module")
+def hif2a_ligand_pair_single_topology_lam0_state():
+    mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
+    forcefield = Forcefield.load_from_file(DEFAULT_FF)
+    st = SingleTopology(mol_a, mol_b, core, forcefield)
+    [state] = setup_initial_states(st, None, DEFAULT_TEMP, [0.0], 2023)
+    return state
+
+
+@pytest.mark.parametrize("n_frames,max_buffer_frames,result_type", [(1, 1, StoredArrays), (1, None, list)])
+def test_sample_max_buffer_frames_result_type(
+    hif2a_ligand_pair_single_topology_lam0_state,
+    n_frames,
+    max_buffer_frames,
+    result_type,
+):
+    """Expect `sample` to return `StoredArrays` if `max_buffer_frames` is specified, list otherwise"""
+    protocol = SimulationProtocol(n_frames, 1, 1)
+    frames, _ = sample(hif2a_ligand_pair_single_topology_lam0_state, protocol, max_buffer_frames=max_buffer_frames)
+    assert isinstance(frames, result_type)
 
 
 if __name__ == "__main__":
