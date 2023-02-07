@@ -18,6 +18,7 @@ datasets = [
 ]
 
 
+@pytest.mark.nogpu
 @pytest.mark.nightly(reason="Slow")
 def test_connected_core_and_complete_rings_with_large_numbers_of_cores():
     """The following tests that for two mols that have a large number of matching
@@ -368,6 +369,7 @@ def get_mol_name(mol) -> str:
 # CHEMBL1077227 -> CHEMBL1083836 has 14976 cores of size 48
 # CHEMBL1086410 -> CHEMBL1083836 has 10752 cores of size 52
 # CHEMBL1086410 -> CHEMBL1084935 has 6912 cores of size 60
+@pytest.mark.nogpu
 @pytest.mark.parametrize("filepath", datasets)
 @pytest.mark.nightly(reason="Slow")
 def test_all_pairs(filepath):
