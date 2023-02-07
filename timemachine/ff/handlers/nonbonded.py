@@ -320,14 +320,14 @@ class NonbondedHandler(SerializableMixIn):
         self.params = np.array(params, dtype=np.float64)
         self.props = props
 
-    def partial_parameterize(self, params, mol, **kwargs):
-        return self.static_parameterize(params, self.smirks, mol, **kwargs)
+    def partial_parameterize(self, params, mol):
+        return self.static_parameterize(params, self.smirks, mol)
 
-    def parameterize(self, mol, **kwargs):
-        return self.static_parameterize(self.params, self.smirks, mol, **kwargs)
+    def parameterize(self, mol):
+        return self.static_parameterize(self.params, self.smirks, mol)
 
     @staticmethod
-    def static_parameterize(params, smirks, mol, **kwargs):
+    def static_parameterize(params, smirks, mol):
         """
         Carry out parameterization of given molecule, with an option to attach additional parameters
         via concatenation. Typically aux_params are protein charges etc.
@@ -359,7 +359,7 @@ class SimpleChargeIntraHandler(SimpleChargeHandler):
 
 class LennardJonesHandler(NonbondedHandler):
     @staticmethod
-    def static_parameterize(params, smirks, mol, **kwargs):
+    def static_parameterize(params, smirks, mol):
         """
         Parameters
         ----------
@@ -410,14 +410,14 @@ class AM1Handler(SerializableMixIn):
         assert len(params) == 0
         assert props is None
 
-    def partial_parameterize(self, mol, **kwargs):
-        return self.static_parameterize(mol, **kwargs)
+    def partial_parameterize(self, mol):
+        return self.static_parameterize(mol)
 
-    def parameterize(self, mol, **kwargs):
-        return self.static_parameterize(mol, **kwargs)
+    def parameterize(self, mol):
+        return self.static_parameterize(mol)
 
     @staticmethod
-    def static_parameterize(mol, **kwargs):
+    def static_parameterize(mol):
         """
         Parameters
         ----------
@@ -451,14 +451,14 @@ class AM1BCCHandler(SerializableMixIn):
         self.params = []
         self.props = None
 
-    def partial_parameterize(self, mol, **kwargs):
-        return self.static_parameterize(mol, **kwargs)
+    def partial_parameterize(self, mol):
+        return self.static_parameterize(mol)
 
-    def parameterize(self, mol, **kwargs):
-        return self.static_parameterize(mol, **kwargs)
+    def parameterize(self, mol):
+        return self.static_parameterize(mol)
 
     @staticmethod
-    def static_parameterize(mol, **kwargs):
+    def static_parameterize(mol):
         """
         Parameters
         ----------
@@ -520,15 +520,15 @@ class AM1CCCHandler(SerializableMixIn):
         if not elements.issubset(self.supported_elements):
             raise RuntimeError("mol contains unsupported elements: ", elements - self.supported_elements)
 
-    def partial_parameterize(self, params, mol, **kwargs):
+    def partial_parameterize(self, params, mol):
         self.validate_input(mol)
-        return self.static_parameterize(params, self.smirks, mol, **kwargs)
+        return self.static_parameterize(params, self.smirks, mol)
 
-    def parameterize(self, mol, **kwargs):
-        return self.partial_parameterize(self.params, mol, **kwargs)
+    def parameterize(self, mol):
+        return self.partial_parameterize(self.params, mol)
 
     @staticmethod
-    def static_parameterize(params, smirks, mol, **kwargs):
+    def static_parameterize(params, smirks, mol):
         """
         Parameters
         ----------
