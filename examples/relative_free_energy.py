@@ -59,7 +59,7 @@ def run_pair(mol_a, mol_b, core, forcefield, n_frames, protein_path, seed):
         fh.write(complex_res.overlap_detail_png)
     write_trajectory_as_pdb(mol_a, mol_b, core, complex_res.frames, complex_top, "complex_traj")
 
-    print(f"complex dG: {np.sum(solvent_res.all_dGs):.3f} +- {np.linalg.norm(solvent_res.all_errs):.3f} kJ/mol")
+    print(f"complex dG: {np.sum(complex_res.all_dGs):.3f} +- {np.linalg.norm(complex_res.all_errs):.3f} kJ/mol")
 
 
 def hif2a_pair():
