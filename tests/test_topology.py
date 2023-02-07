@@ -161,3 +161,33 @@ def test_host_guest_nonbonded(ctor, precision, rtol, atol):
         # The vacuum term should be the same as the ref
         assert vacuum_u_inter_scaled == pytest.approx(vacuum_u_ref, rel=rtol, abs=atol)
         np.testing.assert_allclose(vacuum_grad_ref, vacuum_grad_inter_scaled, rtol=rtol, atol=atol)
+
+
+def test_exclude_all_ligand_ligand_ixns():
+    num_host_atoms = 0
+    num_guest_atoms = 3
+    num_terms = num_guest_atoms * (num_guest_atoms - 1) // 2
+    guest_exclusions, guest_scale_factors = topology.exclude_all_ligand_ligand_ixns(num_host_atoms, num_guest_atoms)
+    assert (guest_exclusions == [[0, 1], [0, 2], [1, 2]]).all()
+    assert (guest_scale_factors == np.ones((num_terms, 2))).all()
+
+    num_host_atoms = 5
+    num_guest_atoms = 3
+    num_terms = num_guest_atoms * (num_guest_atoms - 1) // 2
+    guest_exclusions, guest_scale_factors = topology.exclude_all_ligand_ligand_ixns(num_host_atoms, num_guest_atoms)
+    assert (guest_exclusions == [[5, 6], [5, 7], [6, 7]]).all()
+    assert (guest_scale_factors == np.ones((num_terms, 2))).all()
+
+    num_host_atoms = 1
+    num_guest_atoms = 5
+    num_terms = num_guest_atoms * (num_guest_atoms - 1) // 2
+    guest_exclusions, guest_scale_factors = topology.exclude_all_ligand_ligand_ixns(num_host_atoms, num_guest_atoms)
+    assert (guest_exclusions == [[1, 2], [1, 3], [1, 4], [1, 5], [2, 3], [2, 4], [2, 5], [3, 4], [3, 5], [4, 5]]).all()
+    assert (guest_scale_factors == np.ones((num_terms, 2))).all()
+
+    num_host_atoms = 1
+    num_guest_atoms = 0
+    num_terms = num_guest_atoms * (num_guest_atoms - 1) // 2
+    guest_exclusions, guest_scale_factors = topology.exclude_all_ligand_ligand_ixns(num_host_atoms, num_guest_atoms)
+    assert guest_exclusions.shape == (0,)
+    assert guest_scale_factors.shape == (0,)
