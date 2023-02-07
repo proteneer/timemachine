@@ -118,7 +118,7 @@ def get_cores(
     timemachine.fe.mcgregor.NoMappingError
         If no mapping is found
     timemachine.fe.mcgregor.MaxVisitsError
-        If max_visits is exceeded while finding a mapping
+        If max_visits or max_cores is exceeded while finding a mapping
     """
 
     assert max_cores > 0
@@ -273,15 +273,20 @@ def _uniquify_core(core):
     return frozenset(core_list)
 
 
-def _deduplicate_all_cores(all_cores):
+def _deduplicate_all_cores_and_bonds(all_cores, all_bonds):
     unique_cores = {}
-    for core in all_cores:
+    for core, bond in zip(all_cores, all_bonds):
         # Be careful with the unique core here, list -> set -> list is not consistent
-        # across versions of python, use the frozen as as the key, but return the untouched
+        # across versions of python, use the frozen as the key, but return the untouched
         # cores
-        unique_cores[_uniquify_core(core)] = core
+        unique_cores[_uniquify_core(core)] = (core, bond)
 
-    return [np.array(core) for core in unique_cores.values()]
+    cores = []
+    bonds = []
+    for core, bond_core in unique_cores.values():
+        cores.append(np.array(core))
+        bonds.append(bond_core)
+    return cores, bonds
 
 
 def _get_cores_impl(
@@ -365,10 +370,16 @@ def _get_cores_impl(
     if connected_core and complete_rings:
         # 1) remove any disconnected components or lone atoms in the mapping
         # so disconnected regions are not considered as part of the incomplete rings check.
-        # 2) remove any incomplete rings
-        # 3) remove any disconnections created by removing the incomplete rings.
+        # 2) deduplicate cores, to avoid checking incomplete rings on the same core
+        # 3) remove any incomplete rings
+        # 4) deduplicate cores, to avoid removing disconnections on the same core
+        # 5) remove any disconnections created by removing the incomplete rings.
         all_cores, all_bond_cores = remove_disconnected_components(mol_a, mol_b, all_cores, all_bond_cores)
+        all_cores, all_bond_cores = _deduplicate_all_cores_and_bonds(all_cores, all_bond_cores)
+
         all_cores, all_bond_cores = remove_incomplete_rings(mol_a, mol_b, all_cores, all_bond_cores)
+        all_cores, all_bond_cores = _deduplicate_all_cores_and_bonds(all_cores, all_bond_cores)
+
         all_cores, all_bond_cores = remove_disconnected_components(mol_a, mol_b, all_cores, all_bond_cores)
     elif connected_core and not complete_rings:
         all_cores, all_bond_cores = remove_disconnected_components(mol_a, mol_b, all_cores, all_bond_cores)
@@ -376,7 +387,7 @@ def _get_cores_impl(
         all_cores, all_bond_cores = remove_incomplete_rings(mol_a, mol_b, all_cores, all_bond_cores)
 
     all_cores = remove_cores_smaller_than_largest(all_cores)
-    all_cores = _deduplicate_all_cores(all_cores)
+    all_cores, _ = _deduplicate_all_cores_and_bonds(all_cores, all_bond_cores)
 
     dists = []
     for core in all_cores:
