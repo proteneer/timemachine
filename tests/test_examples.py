@@ -54,7 +54,7 @@ def run_example(
     if env is not None:
         subprocess_env.update(env)
     subprocess_args = [sys.executable, str(example_path), *cli_args]
-    print("Running with args:", "".join(subprocess_args))
+    print("Running with args:", " ".join(subprocess_args))
     proc = subprocess.run(
         subprocess_args,
         env=subprocess_env,
