@@ -214,7 +214,7 @@ def test_rbfe_edge_list_hif2a(rbfe_edge_list_hif2a_path):
             N, _ = result.frames[0][0].shape
             assert N > 0
             assert all(
-                frame.ndims == 2 and frame.shape[0] == N and frame.shape[1] == 3
+                frame.ndim == 2 and frame.shape[0] == N and frame.shape[1] == 3
                 for frames in result.frames
                 for frame in frames
             )
