@@ -210,15 +210,16 @@ def test_rbfe_edge_list_hif2a(rbfe_edge_list_hif2a_path):
             assert isinstance(result, SimulationResult)
             assert isinstance(result.frames, list)
             assert len(result.frames) == 2
-            assert all(len(frames) == config["n_frames"] for frames in result.frames)
+            for frames in result.frames:
+                assert len(frames) == config["n_frames"]
 
             N, _ = result.frames[0][0].shape
             assert N > 0
-            assert all(
-                frame.ndim == 2 and frame.shape[0] == N and frame.shape[1] == 3
-                for frames in result.frames
-                for frame in frames
-            )
+
+            for frames in result.frames:
+                for frame in frames:
+                    assert frame.ndim == 2
+                    assert frame.shape == (N, 3)
 
     for mol_a_name, mol_b_name in edges:
         check_results(path / f"success_rbfe_result_{mol_a_name}_{mol_b_name}.pkl")
