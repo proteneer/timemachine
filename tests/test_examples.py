@@ -147,7 +147,7 @@ def test_smc_freesolv(smc_free_solv_path):
 @pytest.fixture(scope="module")
 def rbfe_edge_list_hif2a_path():
     def run(results_csv, temp_dir):
-        # expect running this script to write summary_result_result_{mol_name}_*.pkl files
+        # expect running this script to write success_rbfe_result_{mol_a_name}_{mol_b_name}.pkl files
         output_path = str(Path(temp_dir) / "success_rbfe_result*.pkl")
         assert len(glob(output_path)) == 0
         config = dict(results_csv=results_csv, **base_config)
