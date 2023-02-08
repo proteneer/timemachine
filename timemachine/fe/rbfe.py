@@ -682,7 +682,6 @@ def run_edge_and_save_results(
     n_frames: int,
     seed: int,
     file_client: AbstractFileClient,
-    n_eq_steps=10000,
     n_windows: Optional[int] = None,
 ):
     # Ensure that all mol props (e.g. _Name) are included in pickles
@@ -709,10 +708,10 @@ def run_edge_and_save_results(
         core = all_cores[0]
 
         complex_res, complex_top = run_complex(
-            mol_a, mol_b, core, forcefield, protein, n_frames, seed, n_eq_steps=n_eq_steps, n_windows=n_windows
+            mol_a, mol_b, core, forcefield, protein, n_frames, seed, n_windows=n_windows
         )
         solvent_res, solvent_top = run_solvent(
-            mol_a, mol_b, core, forcefield, protein, n_frames, seed, n_eq_steps=n_eq_steps, n_windows=n_windows
+            mol_a, mol_b, core, forcefield, protein, n_frames, seed, n_windows=n_windows
         )
 
     except Exception as err:
@@ -779,7 +778,6 @@ def run_edges_parallel(
     seed: int,
     pool_client: Optional[AbstractClient] = None,
     file_client: Optional[AbstractFileClient] = None,
-    n_eq_steps: Optional[int] = None,
     n_windows: Optional[int] = None,
 ):
     mols = {get_mol_name(mol): mol for mol in ligands}
@@ -803,7 +801,6 @@ def run_edges_parallel(
             n_frames,
             seed + edge_idx,
             file_client,
-            n_eq_steps,
             n_windows,
         )
         for edge_idx, edge in enumerate(edges)
