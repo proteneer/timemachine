@@ -177,7 +177,8 @@ def setup_initial_states(
         state = InitialState(potentials, intg, baro, x0, v0, box0, lamb, ligand_idxs)
         initial_states.append(state)
 
-    # minimize environment atoms within min_cutoff of the ligand
+    # minimize ligand and environment atoms within min_cutoff of the ligand
+
     # optimization introduces dependencies among states with lam < 0.5, and among states with lam >= 0.5
     optimized_x0s = optimize_coordinates(initial_states, min_cutoff=min_cutoff)
 
