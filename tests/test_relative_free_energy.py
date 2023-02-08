@@ -6,8 +6,9 @@ import numpy as np
 import pytest
 
 from timemachine.constants import DEFAULT_FF
-from timemachine.fe.free_energy import HostConfig, SimulationResult, image_frames
-from timemachine.fe.rbfe import estimate_relative_free_energy, pair_overlap_from_ukln, run_solvent, run_vacuum, sample
+from timemachine.fe.bar import pair_overlap_from_ukln
+from timemachine.fe.free_energy import HostConfig, SimulationResult, image_frames, sample
+from timemachine.fe.rbfe import estimate_relative_free_energy, run_solvent, run_vacuum
 from timemachine.ff import Forcefield
 from timemachine.md import builders
 from timemachine.md.barostat.utils import compute_box_center

@@ -1,102 +1,100 @@
-import functools
-import io
 import pickle
 import traceback
 import warnings
-from typing import Any, Dict, NamedTuple, Optional, Sequence
+from typing import Any, Dict, List, NamedTuple, Optional, Sequence
 
-import matplotlib.pyplot as plt
 import numpy as np
-import pymbar
 from rdkit import Chem
 from simtk.openmm import app
 
-from timemachine.constants import BOLTZ, DEFAULT_TEMP
+from timemachine.constants import BOLTZ, DEFAULT_PRESSURE, DEFAULT_TEMP
 from timemachine.fe import atom_mapping, model_utils
-from timemachine.fe.bar import bar_with_bootstrapped_uncertainty
-from timemachine.fe.free_energy import HostConfig, InitialState, SimulationProtocol, SimulationResult
+from timemachine.fe.bar import bar_with_bootstrapped_uncertainty, df_err_from_ukln, pair_overlap_from_ukln
+from timemachine.fe.energy_decomposition import EnergyDecomposedState, compute_energy_decomposed_u_kln, get_batch_u_fns
+from timemachine.fe.free_energy import HostConfig, InitialState, SimulationProtocol, SimulationResult, sample
+from timemachine.fe.plots import make_dG_errs_figure, make_overlap_detail_figure, make_overlap_summary_figure
 from timemachine.fe.single_topology import SingleTopology
 from timemachine.fe.system import convert_omm_system
 from timemachine.fe.utils import get_mol_name, get_romol_conf
 from timemachine.ff import Forcefield
-from timemachine.lib import LangevinIntegrator, MonteCarloBarostat, custom_ops
+from timemachine.lib import LangevinIntegrator, MonteCarloBarostat
 from timemachine.md import builders, minimizer
 from timemachine.md.barostat.utils import get_bond_list, get_group_indices
 from timemachine.parallel.client import AbstractClient, AbstractFileClient, CUDAPoolClient, FileClient
 from timemachine.potentials import jax_utils
 
 
-def get_batch_U_fns(bps):
-    # return a function that takes in coords, boxes
-    all_U_fns = []
-    for bp in bps:
+def setup_in_vacuum(st, ligand_conf, lamb):
+    """Prepare potentials, initial coords, large 10x10x10nm box, and HMR masses"""
 
-        def batch_U_fn(xs, boxes, bp_impl):
-            Us = []
-            for x, box in zip(xs, boxes):
-                # tbd optimize to "selective" later
-                _, U = bp_impl.execute(x, box)
-                Us.append(U)
-            return np.array(Us)
+    system = st.setup_intermediate_state(lamb)
+    combined_masses = np.array(st.combine_masses())
 
-        # extra functools.partial is needed to deal with closure jank
-        all_U_fns.append(functools.partial(batch_U_fn, bp_impl=bp))
+    potentials = system.get_U_fns()
+    hmr_masses = model_utils.apply_hmr(combined_masses, system.bond.get_idxs())
+    baro = None
 
-    return all_U_fns
+    x0 = ligand_conf
+    box0 = np.eye(3, dtype=np.float64) * 10  # make a large 10x10x10nm box
+
+    return x0, box0, hmr_masses, potentials, baro
 
 
-def sample(initial_state, protocol):
+def setup_in_env(st, host, host_config, ligand_conf, lamb, temperature, run_seed):
+    """Prepare potentials, concatenate environment and ligand coords, apply HMR, and construct barostat"""
+
+    host_system, host_masses, host_conf = host
+
+    system = st.combine_with_host(host_system, lamb=lamb)
+    combined_masses = np.concatenate([host_masses, st.combine_masses()])
+
+    potentials = system.get_U_fns()
+    hmr_masses = model_utils.apply_hmr(combined_masses, system.bond.get_idxs())
+
+    group_idxs = get_group_indices(get_bond_list(system.bond))
+    baro = MonteCarloBarostat(len(hmr_masses), DEFAULT_PRESSURE, temperature, group_idxs, 15, run_seed + 1)
+
+    x0 = np.concatenate([host_conf, ligand_conf])
+    box0 = host_config.box
+
+    return x0, box0, hmr_masses, potentials, baro
+
+
+def assert_all_states_have_same_masses(initial_states: List[InitialState]):
     """
-    Generate a trajectory given an initial state and a simulation protocol
+    hmr masses should be identical throughout the lambda schedule
+    bond idxs should be the same at the two end-states, note that a possible corner
+    case with bond breaking may seem to be problematic:
+
+    0 1 2    0 1 2
+    C-O-C -> C.H-C
+
+    but this isn't an issue, since hydrogens will only ever be terminal atoms
+    and core hydrogens that are mapped to heavy atoms will take the mass of the
+    heavy atom (thereby not triggering the mass repartitioning to begin with).
+
+    but it's reasonable to be skeptical, so we also assert consistency through the lambda
+    schedule as an extra sanity check.
     """
 
-    bound_impls = [p.bound_impl(np.float32) for p in initial_state.potentials]
-    intg_impl = initial_state.integrator.impl()
-    if initial_state.barostat:
-        baro_impl = initial_state.barostat.impl(bound_impls)
-    else:
-        baro_impl = None
-
-    ctxt = custom_ops.Context(
-        initial_state.x0,
-        initial_state.v0,
-        initial_state.box0,
-        intg_impl,
-        bound_impls,
-        baro_impl,
-    )
-
-    # burn-in
-    ctxt.multiple_steps_U(
-        n_steps=protocol.n_eq_steps,
-        store_u_interval=0,
-        store_x_interval=0,
-    )
-
-    assert np.all(np.isfinite(ctxt.get_x_t())), "Equilibration resulted in a nan"
-
-    # a crude, and probably not great, guess on the decorrelation time
-    n_steps = protocol.n_frames * protocol.steps_per_frame
-    _, all_coords, all_boxes = ctxt.multiple_steps_U(
-        n_steps=n_steps,
-        store_u_interval=0,
-        store_x_interval=protocol.steps_per_frame,
-    )
-
-    assert all_coords.shape[0] == protocol.n_frames
-    assert all_boxes.shape[0] == protocol.n_frames
-
-    assert np.all(np.isfinite(all_coords[-1])), "Production resulted in a nan"
-
-    return all_coords, all_boxes
+    masses = np.array([s.integrator.masses for s in initial_states])
+    deviation_among_windows = masses.std(0)
+    np.testing.assert_array_almost_equal(deviation_among_windows, 0, err_msg="masses assumed constant w.r.t. lambda")
 
 
-# setup the initial state so we can (hopefully) bitwise recover the identical simulation
-# to help us debug errors.
-def setup_initial_states(st, host_config, temperature, lambda_schedule, seed, min_cutoff=0.7):
+def setup_initial_states(
+    st,
+    host_config,
+    temperature,
+    lambda_schedule,
+    seed,
+    min_cutoff=0.7,
+):
     """
-    Setup the initial states for a series of lambda values. It is assumed that the lambda schedule
-    is a monotonically increasing sequence in the closed interval [0,1].
+    Set up the initial states for a series of lambda values,
+    so we can (hopefully) bitwise recover the identical simulation to debug errors.
+
+    Assumes lambda schedule is a monotonically increasing sequence in the closed interval [0,1].
 
     Parameters
     ----------
@@ -122,10 +120,8 @@ def setup_initial_states(st, host_config, temperature, lambda_schedule, seed, mi
     -------
     list of InitialStates
         Returns an initial state for each value of lambda.
-
     """
 
-    host = None
     if host_config:
         host_system, host_masses = convert_omm_system(host_config.omm_system)
         host_conf = minimizer.minimize_host_4d(
@@ -136,191 +132,147 @@ def setup_initial_states(st, host_config, temperature, lambda_schedule, seed, mi
             host_config.box,
         )
         host = (host_system, host_masses, host_conf)
+    else:
+        host = None
 
     initial_states = []
 
     # check that the lambda schedule is monotonically increasing.
     assert np.all(np.diff(lambda_schedule) > 0)
 
+    conf_a = get_romol_conf(st.mol_a)
+    conf_b = get_romol_conf(st.mol_b)
+
     for lamb_idx, lamb in enumerate(lambda_schedule):
+        ligand_conf = st.combine_confs(conf_a, conf_b, lamb)
 
-        mol_a_conf = get_romol_conf(st.mol_a)
-        mol_b_conf = get_romol_conf(st.mol_b)
+        # use a different seed to initialize every window,
+        # but in a way that should be symmetric for
+        # A -> B vs. B -> A edge definitions
+        init_seed = int(seed + hash(ligand_conf.tobytes())) % 10000
 
-        assert lamb >= 0.0 and lamb <= 1.0
-
-        if lamb < 0.5:
-            ligand_conf = st.combine_confs_lhs(mol_a_conf, mol_b_conf)
+        if host is None:
+            x0, box0, hmr_masses, potentials, baro = setup_in_vacuum(st, ligand_conf, lamb)
         else:
-            ligand_conf = st.combine_confs_rhs(mol_a_conf, mol_b_conf)
+            x0, box0, hmr_masses, potentials, baro = setup_in_env(
+                st, host, host_config, ligand_conf, lamb, temperature, init_seed
+            )
 
-        run_seed = seed + lamb_idx
+        # provide a different run_seed for every lambda window,
+        # but in a way that should be symmetric for
+        # A -> B vs. B -> A edge definitions
+        run_seed = int(seed + hash(bytes().join([np.array(p.params).tobytes() for p in potentials]))) % 10000
+        # the constant is arbitrary, but see
+        # https://github.com/proteneer/timemachine/commit/e1f7328f01f427534d8744aab6027338e116ad09
 
-        if host is not None:
-            # run in an environment
-            host_system, host_masses, host_conf = host
-            system = st.combine_with_host(host_system, lamb=lamb)
-            combined_masses = np.concatenate([host_masses, st.combine_masses()])
-            potentials = system.get_U_fns()
-            hmr_masses = model_utils.apply_hmr(combined_masses, system.bond.get_idxs())
-            group_idxs = get_group_indices(get_bond_list(system.bond))
-            baro = MonteCarloBarostat(len(hmr_masses), 1.0, temperature, group_idxs, 15, run_seed + 1)
-            x0 = np.concatenate([host_conf, ligand_conf])
-            box0 = host_config.box
-        else:
-            # run a vacuum simulation
-            system = st.setup_intermediate_state(lamb)
-            combined_masses = np.array(st.combine_masses())
-            potentials = system.get_U_fns()
-            hmr_masses = model_utils.apply_hmr(combined_masses, system.bond.get_idxs())
-            baro = None
-            x0 = ligand_conf
-            box0 = np.eye(3, dtype=np.float64) * 10  # make a large 10x10x10nm box
-
-        # minimize water box around the ligand by 4D-decoupling
-
-        # hmr masses should be identical throughout the lambda schedule
-        # bond idxs should be the same at the two end-states, note that a possible corner
-        # case with bond breaking may seem to be problematic:
-
-        # 0 1 2    0 1 2
-        # C-O-C -> C.H-C
-
-        # but this isn't an issue, since hydrogens will only ever be terminal atoms
-        # and core hydrogens that are mapped to heavy atoms will take the mass of the
-        # heavy atom (thereby not triggering the mass repartitioning to begin with).
-
-        # but its reasonable to be skeptical, so we also assert consistency through the lambda
-        # schedule as an extra sanity check.
-
+        # initialize velocities
         v0 = np.zeros_like(x0)  # tbd resample from Maxwell-boltzman?
+
+        # determine ligand idxs
         num_ligand_atoms = len(ligand_conf)
         num_total_atoms = len(x0)
         ligand_idxs = np.arange(num_total_atoms - num_ligand_atoms, num_total_atoms)
 
+        # initialize Langevin integrator
         dt = 2.5e-3
         friction = 1.0
         intg = LangevinIntegrator(temperature, dt, friction, hmr_masses, run_seed)
 
+        # pack into state
         state = InitialState(potentials, intg, baro, x0, v0, box0, lamb, ligand_idxs)
         initial_states.append(state)
 
-    all_coords = optimize_coordinates(initial_states, min_cutoff=min_cutoff)
-    for state, coords in zip(initial_states, all_coords):
-        state.x0 = coords
+    # minimize ligand and environment atoms within min_cutoff of the ligand
+
+    # optimization introduces dependencies among states with lam < 0.5, and among states with lam >= 0.5
+    optimized_x0s = optimize_coordinates(initial_states, min_cutoff=min_cutoff)
+
+    # update initial states in-place
+    for state, x0 in zip(initial_states, optimized_x0s):
+        state.x0 = x0
+
+    # perform any concluding sanity-checks
+    assert_all_states_have_same_masses(initial_states)
 
     return initial_states
 
 
-def plot_work(w_forward, w_reverse, axes):
-    """histograms of +forward and -reverse works"""
-    axes.hist(+w_forward, alpha=0.5, label="fwd", density=True, bins=20)
-    axes.hist(-w_reverse, alpha=0.5, label="-rev", density=True, bins=20)
-    axes.set_xlabel("work (kT)")
-    axes.legend()
+def run_sequential_sims_given_initial_states(
+    initial_states,
+    protocol,
+    temperature,
+    keep_idxs,
+):
+    """Sequentially run simulations at each state in initial_states,
+    returning summaries that can be used for pair BAR, energy decomposition, and other diagnostics
 
+    Returns
+    -------
+    decomposed_u_klns: [n_lams - 1, n_components, 2, 2, n_frames] array
+    stored_frames: coord trajectories, one for each state in keep_idxs
+    stored_boxes: box trajectories, one for each state in keep_idxs
 
-def plot_BAR(df, df_err, fwd_delta_u, rev_delta_u, title, axes):
+    Notes
+    -----
+    * Memory complexity:
+        Memory demand should be no more than that of 2 states worth of frames.
+
+        Requesting too many states in keep_idxs may blow this up,
+        so best to keep to first and last states in keep_idxs.
+
+        This restriction may need to be relaxed in the future if:
+        * We decide to use MBAR(states) rather than sum_i BAR(states[i], states[i+1])
+        * We use online protocol optimization approaches that require more states to be kept on-hand
     """
-    Generate a subplot showing overlap for a particular pair of delta_us.
+    stored_frames = []
+    stored_boxes = []
 
-    Parameters
-    ----------
-    df: float
-        reduced free energy
+    tmp_states = [None] * len(initial_states)
 
-    df_err: float
-        reduced free energy error
+    # u_kln matrix (2, 2, n_frames) for each pair of adjacent lambda windows and energy term
+    u_kln_by_component_by_lambda = []
 
-    fwd_delta_u: array
-        reduced works
+    keep_idxs = keep_idxs or []
+    if keep_idxs:
+        assert all(np.array(keep_idxs) >= 0)
 
-    rev_delta_u: array
-        reduced reverse works
+    for lamb_idx, initial_state in enumerate(initial_states):
 
-    title: str
-        title to use
+        # run simulation
+        cur_frames, cur_boxes = sample(initial_state, protocol)
+        print(f"completed simulation at lambda={initial_state.lamb}!")
 
-    axes: matplotlib axis
-        obj used to draw the figures
+        # keep samples from any requested states in memory
+        if lamb_idx in keep_idxs:
+            stored_frames.append(cur_frames)
+            stored_boxes.append(cur_boxes)
 
-    """
-    axes.set_title(f"{title}, dg: {df:.2f} +- {df_err:.2f} kTs")
-    plot_work(fwd_delta_u, rev_delta_u, axes)
+        # construct EnergyDecomposedState for current lamb_idx,
+        # but keep no more than 2 of these states in memory at once
+        if lamb_idx >= 2:
+            tmp_states[lamb_idx - 2] = None
 
+        bound_impls = [p.bound_impl(np.float32) for p in initial_state.potentials]
+        cur_batch_U_fns = get_batch_u_fns(bound_impls, temperature)
 
-def df_err_from_ukln(u_kln):
-    k, l, _ = u_kln.shape
-    assert k == l == 2
-    w_fwd = u_kln[1, 0, :] - u_kln[0, 0, :]
-    w_rev = u_kln[0, 1, :] - u_kln[1, 1, :]
-    _, df_err = bar_with_bootstrapped_uncertainty(w_fwd, w_rev)
-    return df_err
+        tmp_states[lamb_idx] = EnergyDecomposedState(cur_frames, cur_boxes, cur_batch_U_fns)
 
+        # analysis that depends on current and previous state
+        if lamb_idx > 0:
+            state_pair = [tmp_states[lamb_idx - 1], tmp_states[lamb_idx]]
+            u_kln_by_component = compute_energy_decomposed_u_kln(state_pair)
+            u_kln_by_component_by_lambda.append(u_kln_by_component)
 
-def plot_dG_errs(ax, components, lambdas, dG_errs):
-    # one line per energy component
-    for component, ys in zip(components, dG_errs):
-        ax.plot(lambdas[:-1], ys, marker=".", label=component)
-
-    ax.set_ylim(bottom=0.0)
-    ax.set_xlabel(r"$\lambda_i$")
-    ax.set_ylabel(r"$\Delta G$ error ($\lambda_i$, $\lambda_{i+1}$) / (kJ / mol)")
-    ax.legend()
+    return np.array(u_kln_by_component_by_lambda), stored_frames, stored_boxes
 
 
-def make_dG_errs_figure(components, lambdas, dG_errs_by_lambda, dG_errs_by_lambda_by_component):
-    _, (ax_top, ax_btm) = plt.subplots(2, 1, figsize=(7, 9))
-    plot_dG_errs(ax_top, ["Overall"], lambdas, [dG_errs_by_lambda])
-    plot_dG_errs(ax_btm, components, lambdas, dG_errs_by_lambda_by_component)
-    buffer = io.BytesIO()
-    plt.savefig(buffer, format="png")
-    buffer.seek(0)
-    return buffer.read()
-
-
-def pair_overlap_from_ukln(u_kln):
-    k, l, n = u_kln.shape
-    assert k == l == 2
-    u_kn = u_kln.reshape(k, -1)
-    assert u_kn.shape == (k, l * n)
-    N_k = n * np.ones(l)
-    return 2 * pymbar.MBAR(u_kn, N_k).computeOverlap()["matrix"][0, 1]  # type: ignore
-
-
-def plot_overlap_summary(ax, components, lambdas, overlaps):
-    # one line per energy component
-    for component, ys in zip(components, overlaps):
-        percentages = 100 * np.asarray(ys)
-        ax.plot(lambdas[:-1], percentages, marker=".", label=component)
-
-    # min and max within axis limits
-    ax.set_ylim(-5, 105)
-    ax.hlines([0, 100], min(lambdas), max(lambdas), color="grey", linestyles="--")
-
-    # express in %
-    ticks = [0, 25, 50, 75, 100]
-    labels = [f"{t}%" for t in ticks]
-    ax.set_yticks(ticks)
-    ax.set_yticklabels(labels)
-
-    # labels and legends
-    ax.set_xlabel(r"$\lambda_i$")
-    ax.set_ylabel(r"pair BAR overlap ($\lambda_i$, $\lambda_{i+1}$)")
-    ax.legend()
-
-
-def make_overlap_summary_figure(components, lambdas, overlaps_by_lambda, overlaps_by_lambda_by_component):
-    _, (ax_top, ax_btm) = plt.subplots(2, 1, figsize=(7, 9))
-    plot_overlap_summary(ax_top, ["Overall"], lambdas, [overlaps_by_lambda])
-    plot_overlap_summary(ax_btm, components, lambdas, overlaps_by_lambda_by_component)
-    buffer = io.BytesIO()
-    plt.savefig(buffer, format="png")
-    buffer.seek(0)
-    return buffer.read()
-
-
-def estimate_free_energy_given_initial_states(initial_states, protocol, temperature, prefix, keep_idxs):
+def estimate_free_energy_given_initial_states(
+    initial_states,
+    protocol,
+    temperature,
+    prefix,
+    keep_idxs,
+):
     """
     Estimate free energies given pre-generated samples. This implements the pair-BAR method, where
     windows assumed to be ordered with good overlap, with the final free energy being a sum
@@ -336,7 +288,7 @@ def estimate_free_energy_given_initial_states(initial_states, protocol, temperat
     initial_states: list of InitialState
         Initial state objects
 
-    protocol: Protocol
+    protocol: SimulationProtocol
         Detailing specifics of each simulation
 
     temperature: float
@@ -354,122 +306,62 @@ def estimate_free_energy_given_initial_states(initial_states, protocol, temperat
         object containing results of the simulation
 
     """
-    # assume pair-BAR format
-    kT = BOLTZ * temperature
-    beta = 1 / kT
+
+    # run n_lambdas simulations in sequence
+    u_kln_by_component_by_lambda, stored_frames, stored_boxes = run_sequential_sims_given_initial_states(
+        initial_states, protocol, temperature, keep_idxs
+    )
+
+    # "pair BAR" free energy analysis
+    kBT = BOLTZ * temperature
+    beta = 1 / kBT
 
     all_dGs = []
     all_errs = []
+    for lamb_idx, u_kln_by_component in enumerate(u_kln_by_component_by_lambda):
+        # pair BAR
+        u_kln = u_kln_by_component.sum(0)
 
-    U_names = [type(U_fn).__name__ for U_fn in initial_states[0].potentials]
+        w_fwd = u_kln[1, 0] - u_kln[0, 0]
+        w_rev = u_kln[0, 1] - u_kln[1, 1]
 
-    num_rows = len(initial_states) - 1
-    num_cols = len(U_names) + 1
+        df, df_err = bar_with_bootstrapped_uncertainty(w_fwd, w_rev)  # reduced units
+        dG, dG_err = df / beta, df_err / beta  # kJ/mol
 
-    figure, all_axes = plt.subplots(num_rows, num_cols, figsize=(num_cols * 5, num_rows * 3))
-    if num_rows == 1:
-        all_axes = [all_axes]
+        message = f"{prefix} BAR: lambda {lamb_idx - 1} -> {lamb_idx} dG: {dG:.3f} +- {dG_err:.3f} kJ/mol"
+        print(message, flush=True)
 
-    stored_frames = []
-    stored_boxes = []
-
-    # memory complexity should be no more than that of 2-states worth of frames when generating samples needed to estimate the free energy.
-    # appending too many idxs to keep_idxs may blow this up, so best to keep to first and last states in keep_idxs. when we change to multi-state
-    # approaches later on this may need to change.
-    prev_frames, prev_boxes = None, None
-    prev_batch_U_fns = None
-
-    # u_kln matrix (2, 2, n_frames) for each pair of adjacent lambda windows and energy term
-    ukln_by_component_by_lambda = []
-
-    keep_idxs = keep_idxs or []
-    if keep_idxs:
-        assert all(np.array(keep_idxs) >= 0)
-
-    for lamb_idx, initial_state in enumerate(initial_states):
-        # Clear any old references to avoid holding on to objects in memory we don't need.
-        cur_frames = None
-        cur_boxes = None
-        bound_impls = None
-        cur_batch_U_fns = None
-        cur_frames, cur_boxes = sample(initial_state, protocol)
-        bound_impls = [p.bound_impl(np.float32) for p in initial_state.potentials]
-        cur_batch_U_fns = get_batch_U_fns(bound_impls)
-
-        if lamb_idx in keep_idxs:
-            stored_frames.append(cur_frames)
-            stored_boxes.append(cur_boxes)
-
-        if lamb_idx > 0:
-
-            ukln_by_component = []
-
-            # loop over bond, angle, torsion, nonbonded terms etc.
-            for u_idx, (prev_U_fn, cur_U_fn) in enumerate(zip(prev_batch_U_fns, cur_batch_U_fns)):
-                u_00 = beta * prev_U_fn(prev_frames, prev_boxes)
-                u_01 = beta * prev_U_fn(cur_frames, cur_boxes)
-                u_10 = beta * cur_U_fn(prev_frames, prev_boxes)
-                u_11 = beta * cur_U_fn(cur_frames, cur_boxes)
-                ukln_by_component.append([[u_00, u_01], [u_10, u_11]])
-
-                fwd_delta_u = u_10 - u_00
-                rev_delta_u = u_01 - u_11
-                plot_axis = all_axes[lamb_idx - 1][u_idx]
-                plot_work(fwd_delta_u, rev_delta_u, plot_axis)
-                plot_axis.set_title(U_names[u_idx])
-
-            # sanity check - I don't think the dG calculation commutes with its components, so we have to re-estimate
-            # the dG from the sum of the delta_us as opposed to simply summing the component dGs
-
-            # (energy components, energy fxns = 2, sampled states = 2, frames)
-            ukln_by_component = np.array(ukln_by_component, dtype=np.float64)
-            total_fwd_delta_us = (ukln_by_component[:, 1, 0, :] - ukln_by_component[:, 0, 0, :]).sum(axis=0)
-            total_rev_delta_us = (ukln_by_component[:, 0, 1, :] - ukln_by_component[:, 1, 1, :]).sum(axis=0)
-            total_df, total_df_err = bar_with_bootstrapped_uncertainty(total_fwd_delta_us, total_rev_delta_us)
-
-            plot_axis = all_axes[lamb_idx - 1][u_idx + 1]
-
-            plot_BAR(
-                total_df,
-                total_df_err,
-                total_fwd_delta_us,
-                total_rev_delta_us,
-                f"{prefix}_{lamb_idx-1}_to_{lamb_idx}",
-                plot_axis,
-            )
-
-            total_dG = total_df / beta
-            total_dG_err = total_df_err / beta
-
-            all_dGs.append(total_dG)
-            all_errs.append(total_dG_err)
-            ukln_by_component_by_lambda.append(ukln_by_component)
-
-            print(
-                f"{prefix} BAR: lambda {lamb_idx-1} -> {lamb_idx} dG: {total_dG:.3f} +- {total_dG_err:.3f} kJ/mol",
-                flush=True,
-            )
-
-        prev_frames = cur_frames
-        prev_boxes = cur_boxes
-        prev_batch_U_fns = cur_batch_U_fns
-
-    plt.tight_layout()
-    buffer = io.BytesIO()
-    plt.savefig(buffer, format="png")
-    buffer.seek(0)
-    overlap_detail_png = buffer.read()
+        all_dGs.append(dG)
+        all_errs.append(dG_err)
 
     # (energy components, lambdas, energy fxns = 2, sampled states = 2, frames)
-    ukln_by_lambda_by_component = np.array(ukln_by_component_by_lambda).swapaxes(0, 1)
+    ukln_by_lambda_by_component = np.array(u_kln_by_component_by_lambda).swapaxes(0, 1)
 
-    lambdas = [s.lamb for s in initial_states]
+    # compute more diagnostics
     overlaps_by_lambda = [pair_overlap_from_ukln(u_kln) for u_kln in ukln_by_lambda_by_component.sum(axis=0)]
+
     dG_errs_by_lambda_by_component = np.array(
         [[df_err_from_ukln(u_kln) / beta for u_kln in ukln_by_lambda] for ukln_by_lambda in ukln_by_lambda_by_component]
     )
     overlaps_by_lambda_by_component = np.array(
         [[pair_overlap_from_ukln(u_kln) for u_kln in ukln_by_lambda] for ukln_by_lambda in ukln_by_lambda_by_component]
+    )
+
+    # generate figures
+    U_names = [type(U_fn).__name__ for U_fn in initial_states[0].potentials]
+    lambdas = [s.lamb for s in initial_states]
+
+    overlap_detail_png = make_overlap_detail_figure(
+        U_names,
+        all_dGs,
+        all_errs,
+        u_kln_by_component_by_lambda,
+        temperature,
+        prefix,
+    )
+    dG_errs_png = make_dG_errs_figure(U_names, lambdas, all_errs, dG_errs_by_lambda_by_component)
+    overlap_summary_png = make_overlap_summary_figure(
+        U_names, lambdas, overlaps_by_lambda, overlaps_by_lambda_by_component
     )
 
     return SimulationResult(
@@ -478,8 +370,8 @@ def estimate_free_energy_given_initial_states(initial_states, protocol, temperat
         dG_errs_by_lambda_by_component,
         overlaps_by_lambda,
         overlaps_by_lambda_by_component,
-        make_dG_errs_figure(U_names, lambdas, all_errs, dG_errs_by_lambda_by_component),
-        make_overlap_summary_figure(U_names, lambdas, overlaps_by_lambda, overlaps_by_lambda_by_component),
+        dG_errs_png,
+        overlap_summary_png,
         overlap_detail_png,
         stored_frames,
         stored_boxes,
@@ -488,28 +380,30 @@ def estimate_free_energy_given_initial_states(initial_states, protocol, temperat
     )
 
 
-def _optimize_coords_along_states(initial_states):
+def _optimize_coords_along_states(initial_states: List[InitialState]) -> List[np.ndarray]:
+
     # use the end-state to define the optimization settings
     end_state = initial_states[0]
-    ligand_coords = end_state.x0[end_state.ligand_idxs]
-    r_i = np.expand_dims(ligand_coords, axis=1)
-    r_j = np.expand_dims(end_state.x0, axis=0)
-    d_ij = np.linalg.norm(jax_utils.delta_r(r_i, r_j, box=end_state.box0), axis=-1)
-    cutoff = 0.5  # in nanometers
-    free_idxs = np.where(np.any(d_ij < cutoff, axis=0))[0].tolist()
+
+    # select particles within cutoff of ligand
     x_opt = end_state.x0
+    x_lig = x_opt[end_state.ligand_idxs]
+    box = end_state.box0
+
+    free_idxs = jax_utils.idxs_within_cutoff(x_opt, x_lig, box, cutoff=0.5).tolist()
+
     x_traj = []
     for idx, initial_state in enumerate(initial_states):
         print(initial_state.lamb)
         bound_impls = [p.bound_impl(np.float32) for p in initial_state.potentials]
         val_and_grad_fn = minimizer.get_val_and_grad_fn(bound_impls, initial_state.box0)
         assert np.all(np.isfinite(x_opt)), "Initial coordinates contain nan or inf"
-        # assert that the energy decreases only at the end-state.z
-        if idx == 0:
-            check_nrg = True
-        else:
-            check_nrg = False
+
+        # only assert that the energy decreases at the end-state
+        check_nrg = idx == 0
+
         x_opt = minimizer.local_minimize(x_opt, val_and_grad_fn, free_idxs, assert_energy_decreased=check_nrg)
+
         x_traj.append(x_opt)
         assert np.all(np.isfinite(x_opt)), "Minimization resulted in a nan"
         del bound_impls
@@ -517,7 +411,7 @@ def _optimize_coords_along_states(initial_states):
     return x_traj
 
 
-def optimize_coordinates(initial_states, min_cutoff=0.7):
+def optimize_coordinates(initial_states, min_cutoff=0.7) -> List[np.ndarray]:
     """
     Optimize geometries of the initial states.
 
@@ -561,11 +455,12 @@ def optimize_coordinates(initial_states, min_cutoff=0.7):
         for xs in rhs_xs:
             all_xs.append(xs)
 
+    # sanity check that no atom has moved more than `min_cutoff` nm away
     for state, coords in zip(initial_states, all_xs):
-        # sanity check that no atom has moved more than `min_cutoff` nm away
+        displacement_distances = jax_utils.distance_on_pairs(state.x0, coords, box=state.box0)
         assert (
-            np.amax(np.linalg.norm(state.x0 - coords, axis=1)) < min_cutoff
-        ), f"λ = {state.lamb} has minimized atom > {min_cutoff*10} Å from initial state"
+            displacement_distances < min_cutoff
+        ).all(), f"λ = {state.lamb} moved an atom > {min_cutoff*10} Å from initial state during minimization"
 
     return all_xs
 
@@ -659,11 +554,14 @@ def estimate_relative_free_energy(
     if keep_idxs is None:
         keep_idxs = [0, len(initial_states) - 1]  # keep first and last frames
     assert len(keep_idxs) <= len(lambda_schedule)
+
+    # TODO: rename prefix to postfix, or move to beginning of combined_prefix?
     combined_prefix = get_mol_name(mol_a) + "_" + get_mol_name(mol_b) + "_" + prefix
     try:
-        return estimate_free_energy_given_initial_states(
+        sim_result = estimate_free_energy_given_initial_states(
             initial_states, protocol, temperature, combined_prefix, keep_idxs
         )
+        return sim_result
     except Exception as err:
         with open(f"failed_rbfe_result_{combined_prefix}.pkl", "wb") as fh:
             pickle.dump((initial_states, protocol, err), fh)
@@ -903,8 +801,8 @@ def run_edges_parallel(
 
     # Remove references to completed jobs to allow garbage collection.
     # TODO: The current approach uses O(edges) memory in the worst case (e.g. if the first job gets stuck). Ideally we
-    # should process and remove references to jobs in the order they complete, but this would require an interface
-    # presently not implemented in our custom future classes.
+    #   should process and remove references to jobs in the order they complete, but this would require an interface
+    #   presently not implemented in our custom future classes.
     paths = []
     while jobs:
         job = jobs.pop(0)
