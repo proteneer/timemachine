@@ -328,7 +328,7 @@ def estimate_free_energy_given_initial_states(
         df, df_err = bar_with_bootstrapped_uncertainty(w_fwd, w_rev)  # reduced units
         dG, dG_err = df / beta, df_err / beta  # kJ/mol
 
-        message = f"{prefix} BAR: lambda {lamb_idx - 1} -> {lamb_idx} dG: {dG:.3f} +- {dG_err:.3f} kJ/mol"
+        message = f"{prefix} BAR: lambda {lamb_idx} -> {lamb_idx + 1} dG: {dG:.3f} +- {dG_err:.3f} kJ/mol"
         print(message, flush=True)
 
         all_dGs.append(dG)
