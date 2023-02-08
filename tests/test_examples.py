@@ -162,6 +162,7 @@ def rbfe_edge_list_hif2a_path():
             protein=hif2a_data / "5tbm_prepared.pdb",
             n_gpus=1,
             seed=2023,
+            n_eq_steps=2,
             n_windows=3,
         )
 
