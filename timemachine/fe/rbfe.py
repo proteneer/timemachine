@@ -25,6 +25,7 @@ from timemachine.potentials import jax_utils
 
 
 def setup_in_vacuum(st, ligand_conf, lamb):
+    """Prepare potentials, initial coords, large 10x10x10nm box, and HMR masses"""
 
     system = st.setup_intermediate_state(lamb)
     combined_masses = np.array(st.combine_masses())
@@ -40,6 +41,7 @@ def setup_in_vacuum(st, ligand_conf, lamb):
 
 
 def setup_in_env(st, host, host_config, ligand_conf, lamb, temperature, run_seed):
+    """Prepare potentials, concatenate environment and ligand coords, apply HMR, and construct barostat"""
 
     host_system, host_masses, host_conf = host
 
@@ -59,19 +61,22 @@ def setup_in_env(st, host, host_config, ligand_conf, lamb, temperature, run_seed
 
 
 def assert_all_states_have_same_masses(initial_states: List[InitialState]):
-    # hmr masses should be identical throughout the lambda schedule
-    # bond idxs should be the same at the two end-states, note that a possible corner
-    # case with bond breaking may seem to be problematic:
+    """
+    hmr masses should be identical throughout the lambda schedule
+    bond idxs should be the same at the two end-states, note that a possible corner
+    case with bond breaking may seem to be problematic:
 
-    # 0 1 2    0 1 2
-    # C-O-C -> C.H-C
+    0 1 2    0 1 2
+    C-O-C -> C.H-C
 
-    # but this isn't an issue, since hydrogens will only ever be terminal atoms
-    # and core hydrogens that are mapped to heavy atoms will take the mass of the
-    # heavy atom (thereby not triggering the mass repartitioning to begin with).
+    but this isn't an issue, since hydrogens will only ever be terminal atoms
+    and core hydrogens that are mapped to heavy atoms will take the mass of the
+    heavy atom (thereby not triggering the mass repartitioning to begin with).
 
-    # but it's reasonable to be skeptical, so we also assert consistency through the lambda
-    # schedule as an extra sanity check.
+    but it's reasonable to be skeptical, so we also assert consistency through the lambda
+    schedule as an extra sanity check.
+    """
+
     masses = np.array([s.integrator.masses for s in initial_states])
     deviation_among_windows = masses.std(0)
     np.testing.assert_array_almost_equal(deviation_among_windows, 0, err_msg="masses assumed constant w.r.t. lambda")
