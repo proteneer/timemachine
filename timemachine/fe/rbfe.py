@@ -24,20 +24,6 @@ from timemachine.parallel.client import AbstractClient, AbstractFileClient, CUDA
 from timemachine.potentials import jax_utils
 
 
-def setup_host(st: SingleTopology, host_config: HostConfig):
-
-    host_system, host_masses = convert_omm_system(host_config.omm_system)
-    host_conf = minimizer.minimize_host_4d(
-        [st.mol_a, st.mol_b],
-        host_config.omm_system,
-        host_config.conf,
-        st.ff,
-        host_config.box,
-    )
-    host = (host_system, host_masses, host_conf)
-    return host
-
-
 def setup_in_vacuum(st, ligand_conf, lamb):
 
     system = st.setup_intermediate_state(lamb)
@@ -132,7 +118,15 @@ def setup_initial_states(
     """
 
     if host_config:
-        host = setup_host(st, host_config)
+        host_system, host_masses = convert_omm_system(host_config.omm_system)
+        host_conf = minimizer.minimize_host_4d(
+            [st.mol_a, st.mol_b],
+            host_config.omm_system,
+            host_config.conf,
+            st.ff,
+            host_config.box,
+        )
+        host = (host_system, host_masses, host_conf)
     else:
         host = None
 
