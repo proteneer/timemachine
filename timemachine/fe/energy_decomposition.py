@@ -71,11 +71,11 @@ def compute_energy_decomposed_u_kln(states: List[EnergyDecomposedState]) -> np.n
     """
 
     K = len(states)
-    n_frames = states[0].frames.shape[0]
+    n_frames = len(states[0].frames)
     n_components = len(states[0].batch_u_fns)
 
     for state in states:
-        assert state.frames.shape[0] == n_frames
+        assert len(state.frames) == n_frames
         assert len(state.batch_u_fns) == n_components
 
     u_kln_by_component = np.zeros((n_components, K, K, n_frames))
