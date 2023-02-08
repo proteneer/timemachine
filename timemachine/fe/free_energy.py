@@ -2,7 +2,6 @@ from dataclasses import dataclass
 from typing import List, Optional
 
 import numpy as np
-from simtk import openmm
 
 from timemachine.fe import model_utils, topology
 from timemachine.fe.utils import get_mol_masses, get_romol_conf
@@ -13,11 +12,11 @@ from timemachine.lib.potentials import CustomOpWrapper, HarmonicBond
 from timemachine.md.barostat.utils import compute_box_center, get_bond_list, get_group_indices
 
 
-@dataclass
 class HostConfig:
-    omm_system: openmm.System
-    conf: np.ndarray
-    box: np.ndarray
+    def __init__(self, omm_system, conf, box):
+        self.omm_system = omm_system
+        self.conf = conf
+        self.box = box
 
 
 @dataclass
