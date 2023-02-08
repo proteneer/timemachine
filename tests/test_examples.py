@@ -52,8 +52,8 @@ def run_example(
     assert example_path.is_file(), f"No such example {example_path}"
     subprocess_env = os.environ.copy()
 
-    # Without this, "." in PYTHONPATH expands to the current working directory, which may not coincide with the
-    # timemachine path if temporary_working_dir is used below
+    # Avoids potential confusion due to "." in PYTHONPATH expanding to a temporary directory path e.g. when called
+    # inside `temporary_working_dir`
     subprocess_env["PYTHONPATH"] = os.pathsep.join(sys.path)
 
     if env is not None:
