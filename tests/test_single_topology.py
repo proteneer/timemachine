@@ -363,11 +363,17 @@ def test_combine_with_host():
 
 
 @pytest.mark.parametrize("precision, rtol, atol", [(np.float64, 1e-8, 1e-8), (np.float32, 1e-4, 5e-4)])
-def test_nonbonded_split(precision, rtol, atol):
-    with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
-        mols = {get_mol_name(mol): mol for mol in read_sdf(path_to_ligand)}
-    mol_a = mols["338"]
-    mol_b = mols["43"]
+@pytest.mark.parametrize("use_tiny_mol", [True, False])
+def test_nonbonded_split(precision, rtol, atol, use_tiny_mol):
+
+    if use_tiny_mol:
+        mol_a = ligand_from_smiles("S")
+        mol_b = ligand_from_smiles("O")
+    else:
+        with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
+            mols = {get_mol_name(mol): mol for mol in read_sdf(path_to_ligand)}
+        mol_a = mols["338"]
+        mol_b = mols["43"]
     core = _get_core_by_mcs(mol_a, mol_b)
 
     # split forcefield has different parameters for intramol and intermol terms

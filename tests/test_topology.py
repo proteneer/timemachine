@@ -5,6 +5,8 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 from common import load_split_forcefields
+from rdkit import Chem
+from rdkit.Chem import AllChem
 
 from timemachine.fe import topology
 from timemachine.fe.topology import BaseTopology, DualTopology, DualTopologyMinimization
@@ -74,7 +76,8 @@ def parameterize_nonbonded_full(
 
 @pytest.mark.parametrize("precision, rtol, atol", [(np.float64, 1e-8, 1e-8), (np.float32, 1e-4, 5e-4)])
 @pytest.mark.parametrize("ctor", [BaseTopology, DualTopology, DualTopologyMinimization])
-def test_host_guest_nonbonded(ctor, precision, rtol, atol):
+@pytest.mark.parametrize("use_tiny_mol", [True, False])
+def test_host_guest_nonbonded(ctor, precision, rtol, atol, use_tiny_mol):
     def compute_ref_grad_u(ff: Forcefield, precision, x0, lamb):
         # Use the original code to compute the nb grads and potential
         bt = Topology(ff)
@@ -114,14 +117,26 @@ def test_host_guest_nonbonded(ctor, precision, rtol, atol):
     with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
         mols_by_name = {get_mol_name(mol): mol for mol in read_sdf(path_to_ligand)}
 
+    if use_tiny_mol:
+        mol_h2s = Chem.AddHs(Chem.MolFromSmiles("S"))
+        AllChem.EmbedMolecule(mol_h2s, randomSeed=2023)
+        mols_by_name["H2S"] = mol_h2s
+
     if ctor == BaseTopology:
-        mol = mols_by_name["43"]
+        if use_tiny_mol:
+            mol = mols_by_name["H2S"]
+        else:
+            mol = mols_by_name["43"]
         ligand_conf = get_romol_conf(mol)
         coords0 = np.concatenate([solvent_conf, ligand_conf])
         Topology = partial(ctor, mol)
     elif ctor in [DualTopology, DualTopologyMinimization]:
-        mol_a = mols_by_name["43"]
-        mol_b = mols_by_name["30"]
+        if use_tiny_mol:
+            mol_a = mols_by_name["H2S"]
+            mol_b = mols_by_name["30"]
+        else:
+            mol_a = mols_by_name["43"]
+            mol_b = mols_by_name["30"]
         ligand_conf = np.concatenate([get_romol_conf(mol_a), get_romol_conf(mol_b)])
         coords0 = np.concatenate([solvent_conf, ligand_conf])
         Topology = partial(ctor, mol_a, mol_b)
