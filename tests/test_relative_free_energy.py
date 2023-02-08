@@ -4,7 +4,7 @@ from importlib import resources
 
 import numpy as np
 import pytest
-from hypothesis import given, seed
+from hypothesis import example, given, seed
 from hypothesis.strategies import integers
 
 from timemachine.constants import DEFAULT_FF, DEFAULT_TEMP
@@ -309,17 +309,22 @@ def hif2a_ligand_pair_single_topology_lam0_state():
     return state
 
 
-@pytest.mark.parametrize("n_frames,max_buffer_frames,result_type", [(1, 1, StoredArrays), (1, None, list)])
-def test_sample_max_buffer_frames_result_type(
-    hif2a_ligand_pair_single_topology_lam0_state,
-    n_frames,
-    max_buffer_frames,
-    result_type,
-):
-    """Expect `sample` to return `StoredArrays` if `max_buffer_frames` is specified, list otherwise"""
+@given(integers(1, 100), integers(1, 100))
+@seed(2023)
+@example(10, 3)
+@example(10, 1)
+@example(1, 10)
+def test_sample_max_buffer_frames(hif2a_ligand_pair_single_topology_lam0_state, n_frames, max_buffer_frames):
     protocol = SimulationProtocol(n_frames, 1, 1)
-    frames, _ = sample(hif2a_ligand_pair_single_topology_lam0_state, protocol, max_buffer_frames=max_buffer_frames)
-    assert isinstance(frames, result_type)
+    frames_ref, _ = sample(hif2a_ligand_pair_single_topology_lam0_state, protocol, max_buffer_frames=None)
+    frames_test, _ = sample(hif2a_ligand_pair_single_topology_lam0_state, protocol, max_buffer_frames=max_buffer_frames)
+
+    assert isinstance(frames_ref, list)
+    assert isinstance(frames_test, StoredArrays)
+    assert len(frames_ref) == len(frames_test)
+
+    for frame_ref, frame_test in zip(frames_ref, frames_test):
+        np.testing.assert_array_equal(frame_ref, frame_test)
 
 
 if __name__ == "__main__":
