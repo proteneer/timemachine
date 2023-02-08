@@ -24,6 +24,8 @@ def parse_args():
     parser.add_argument("--protein", type=str, help="PDB of the protein complex", required=True)
     parser.add_argument("--n_gpus", type=int, help="number of gpus", required=True)
     parser.add_argument("--seed", type=int, help="random seed for the runs", required=True)
+    parser.add_argument("--n_eq_steps", type=int, help="number of steps used for equilibration", required=False)
+    parser.add_argument("--n_windows", type=int, help="number of lambda windows", required=False)
 
     return parser.parse_args()
 
@@ -72,4 +74,6 @@ if __name__ == "__main__":
         args.n_frames,
         args.n_gpus,
         args.seed,
+        n_eq_steps=args.n_eq_steps,
+        n_windows=args.n_windows,
     )
