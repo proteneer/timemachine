@@ -630,7 +630,7 @@ def run_solvent(
         steps_per_frame=steps_per_frame,
         min_cutoff=min_cutoff,
     )
-    return solvent_res, solvent_top
+    return solvent_res, solvent_top, solvent_host_config
 
 
 def run_complex(
@@ -665,7 +665,7 @@ def run_complex(
         steps_per_frame=steps_per_frame,
         min_cutoff=min_cutoff,
     )
-    return complex_res, complex_top
+    return complex_res, complex_top, complex_host_config
 
 
 class Edge(NamedTuple):
@@ -706,8 +706,8 @@ def run_edge_and_save_results(
         )
         core = all_cores[0]
 
-        complex_res, complex_top = run_complex(mol_a, mol_b, core, forcefield, protein, n_frames, seed)
-        solvent_res, solvent_top = run_solvent(mol_a, mol_b, core, forcefield, protein, n_frames, seed)
+        complex_res, complex_top, _ = run_complex(mol_a, mol_b, core, forcefield, protein, n_frames, seed)
+        solvent_res, solvent_top, _ = run_solvent(mol_a, mol_b, core, forcefield, protein, n_frames, seed)
 
     except Exception as err:
         print(
