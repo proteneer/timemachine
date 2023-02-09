@@ -1,5 +1,8 @@
 import gc
+import tempfile
 import weakref
+from contextlib import contextmanager
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -7,7 +10,9 @@ from hypothesis import assume, example, given, seed
 from hypothesis.extra.numpy import array_shapes, arrays, floating_dtypes, from_dtype
 from hypothesis.strategies import composite, integers, lists
 
+from timemachine.fe import stored_arrays
 from timemachine.fe.stored_arrays import StoredArrays
+from timemachine.parallel.client import FileClient
 
 
 @composite
@@ -17,14 +22,18 @@ def chunks(draw):
     return draw(lists(arrays(dtype, shape, elements=from_dtype(dtype, allow_subnormal=False)), max_size=3))
 
 
+def stored_arrays_from_chunks(chunks):
+    sa = StoredArrays()
+    for chunk in chunks:
+        sa.extend(chunk)
+    return sa
+
+
 @given(lists(chunks()))
 @seed(2023)
-def test_stored_arrays_extend_iter_roundtrip(chunks):
-    sas = StoredArrays()
-    for chunk in chunks:
-        sas.extend(chunk)
-
-    for actual, expected in zip(sas, (arr for chunk in chunks for arr in chunk)):
+def test_stored_arrays_extend_iter(chunks):
+    sa = stored_arrays_from_chunks(chunks)
+    for actual, expected in zip(sa, (arr for chunk in chunks for arr in chunk)):
         np.testing.assert_array_equal(actual, expected)
 
 
@@ -43,12 +52,9 @@ def lists_of_chunks_with_index(draw):
 @seed(2023)
 def test_stored_arrays_getitem(chunks_index):
     chunks, ix = chunks_index
-    sas = StoredArrays()
-    for chunk in chunks:
-        sas.extend(chunk)
-
+    sa = stored_arrays_from_chunks(chunks)
     ref = [arr for chunk in chunks for arr in chunk]
-    np.testing.assert_array_equal(sas[ix], ref[ix])
+    np.testing.assert_array_equal(sa[ix], ref[ix])
 
 
 @pytest.mark.parametrize(
@@ -96,3 +102,43 @@ def test_stored_arrays_neq(chunks1, chunks2):
     for chunk in chunks2:
         b.extend(chunk)
     assert a != b
+
+
+def test_stored_arrays_cleanup():
+    sa = StoredArrays()
+    sa.extend([np.array([1, 2, 3])])
+    path = sa._dir
+    assert path.exists()
+
+    del sa
+    gc.collect()
+    assert not path.exists()
+
+
+stored_arrays_instances = lists(chunks()).map(stored_arrays_from_chunks)
+
+
+@contextmanager
+def file_client():
+    with tempfile.TemporaryDirectory() as temp_dir:
+        yield FileClient(Path(temp_dir))
+
+
+@given(stored_arrays_instances)
+@seed(2023)
+def test_stored_arrays_store_load_roundtrip(sa_ref):
+    with file_client() as fc:
+        stored_arrays.store(sa_ref, fc)
+        sa_test = stored_arrays.load(fc)
+    assert sa_ref == sa_test
+
+
+def test_stored_arrays_store_raises_on_file_collision():
+    with file_client() as fc:
+        sa = stored_arrays_from_chunks([np.array([1, 2, 3])])
+        stored_arrays.store(sa, fc)
+
+        with pytest.raises(FileExistsError):
+            stored_arrays.store(sa, fc)
+
+        stored_arrays.store(sa, fc, prefix=Path("subdir"))  # no collision
