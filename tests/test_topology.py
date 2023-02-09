@@ -117,6 +117,7 @@ def test_host_guest_nonbonded(ctor, precision, rtol, atol, use_tiny_mol):
     with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
         mols_by_name = {get_mol_name(mol): mol for mol in read_sdf(path_to_ligand)}
 
+    # mol with no intramolecular NB terms and no dihedrals
     if use_tiny_mol:
         mol_h2s = Chem.AddHs(Chem.MolFromSmiles("S"))
         AllChem.EmbedMolecule(mol_h2s, randomSeed=2023)
