@@ -69,6 +69,8 @@ def test_stored_arrays_doesnt_hold_references(ctor):
     xs.extend([data])
 
     ref = weakref.ref(data)
+    assert ref() is not None
+
     del data
     gc.collect()
 
