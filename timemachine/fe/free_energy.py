@@ -245,7 +245,7 @@ def sample(initial_state: InitialState, md_params: MDParams, max_buffer_frames: 
     ...
 
 
-def sample(initial_state: InitialState, md_params: MDParams, max_buffer_frames: Optional[int] = None):
+def sample(initial_state: InitialState, md_params: MDParams, max_buffer_frames: Optional[int] = 1000):
     """Generate a trajectory given an initial state and a simulation protocol
 
     Parameters
