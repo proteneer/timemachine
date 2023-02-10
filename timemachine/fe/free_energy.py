@@ -232,7 +232,7 @@ def batches(n: int, batch_size: int) -> Iterable[int]:
 
 
 def sample(
-    initial_state: InitialState, protocol: SimulationProtocol, max_buffer_frames: Optional[int] = 1000
+    initial_state: InitialState, protocol: SimulationProtocol, max_buffer_frames: Optional[int] = None
 ) -> Tuple[Sequence[NDArray], List[NDArray]]:
     """Generate a trajectory given an initial state and a simulation protocol
 
