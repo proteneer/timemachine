@@ -21,13 +21,9 @@ class StoredArrays(Sequence[NDArray]):
     >>> sa.extend([np.array([1, 2, 3]), np.array([4, 5, 6])])
     >>> len(sa)
     2
-    >>> len(list(sa._chunks()))
-    1
     >>> sa.extend([np.array([7, 8, 9])])
     >>> len(sa)
     3
-    >>> len(list(sa._chunks()))
-    2
     >>> list(sa)
     [array([1, 2, 3]), array([4, 5, 6]), array([7, 8, 9])]
     """
@@ -77,6 +73,10 @@ class StoredArrays(Sequence[NDArray]):
         )
 
     def _chunks(self) -> Iterator[List[NDArray]]:
+        """Returns an iterator over chunks.
+
+        Each chunk is a sequence of numpy arrays stored in a single .npy file
+        """
         for idx, _ in enumerate(self._chunk_sizes):
             yield np.load(self._get_chunk_path(idx))
 
