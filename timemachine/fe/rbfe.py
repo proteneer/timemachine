@@ -1,6 +1,7 @@
 import pickle
 import traceback
 import warnings
+from pathlib import Path
 from typing import Any, Dict, List, NamedTuple, Optional, Sequence
 
 import numpy as np
@@ -9,8 +10,15 @@ from simtk.openmm import app
 
 from timemachine.constants import DEFAULT_PRESSURE, DEFAULT_TEMP
 from timemachine.fe import atom_mapping, model_utils
-from timemachine.fe.free_energy import HostConfig, InitialState, MDParams, estimate_free_energy_given_initial_states
+from timemachine.fe.free_energy import (
+    HostConfig,
+    InitialState,
+    MDParams,
+    SimulationResult,
+    estimate_free_energy_given_initial_states,
+)
 from timemachine.fe.single_topology import SingleTopology
+from timemachine.fe.stored_arrays import StoredArrays
 from timemachine.fe.system import convert_omm_system
 from timemachine.fe.utils import get_mol_name, get_romol_conf
 from timemachine.ff import Forcefield
@@ -555,6 +563,15 @@ def run_edge_and_save_results(
     path = f"success_rbfe_result_{edge.mol_a_name}_{edge.mol_b_name}.pkl"
     pkl_obj = (mol_a, mol_b, edge.metadata, core, solvent_res, solvent_top, complex_res, complex_top)
     file_client.store(path, pickle.dumps(pkl_obj))
+
+    def store_frames(res: SimulationResult, prefix: str):
+        for idx, frames in enumerate(res.frames):
+            if isinstance(frames, StoredArrays):
+                frames.store(file_client, Path(f"{prefix}_{idx}"))
+
+    frames_path = "_".join(["frames", edge.mol_a_name, edge.mol_b_name])
+    store_frames(solvent_res, frames_path + "_solvent")
+    store_frames(complex_res, frames_path + "_complex")
 
     solvent_ddg = np.sum(solvent_res.all_dGs)
     solvent_ddg_err = np.linalg.norm(solvent_res.all_errs)

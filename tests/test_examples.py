@@ -16,7 +16,9 @@ from scipy.special import logsumexp
 from timemachine.constants import DEFAULT_FF, DEFAULT_KT, KCAL_TO_KJ
 from timemachine.datasets import fetch_freesolv
 from timemachine.fe.free_energy import SimulationResult
+from timemachine.fe.stored_arrays import StoredArrays
 from timemachine.fe.utils import get_mol_name
+from timemachine.parallel.client import FileClient
 
 # All examples are to be tested nightly
 pytestmark = [pytest.mark.nightly]
@@ -183,13 +185,9 @@ def rbfe_edge_list_hif2a_path():
 def test_rbfe_edge_list_hif2a(rbfe_edge_list_hif2a_path):
     path, config, edges = rbfe_edge_list_hif2a_path
 
-    def check_results(results_path):
-        # Just check that results are present and have the expected shape
-        # (we don't do enough sampling here for statistical checks)
-
-        # NOTE: We're mainly interested in checking that simulation frames have been serialized properly; we already
-        # have more exhaustive checks in test_relative_free_energy.py
-
+    def check_results(results_path: Path):
+        # Just check that results are present and have the expected type
+        # (We already have more exhaustive checks in test_relative_free_energy.py)
         assert results_path.exists()
 
         with results_path.open("rb") as fp:
@@ -208,18 +206,19 @@ def test_rbfe_edge_list_hif2a(rbfe_edge_list_hif2a_path):
 
         for result in solvent_res, complex_res:
             assert isinstance(result, SimulationResult)
-            assert isinstance(result.frames, list)
-            assert len(result.frames) == 2
-            for frames in result.frames:
-                assert len(frames) == config["n_frames"]
 
-            N, _ = result.frames[0][0].shape
-            assert N > 0
+    file_client = FileClient(path)
 
-            for frames in result.frames:
-                for frame in frames:
-                    assert frame.ndim == 2
-                    assert frame.shape == (N, 3)
+    def check_frames(frames_path):
+        assert frames_path.exists()
+        frames = StoredArrays.load(file_client, frames_path)
+        assert len(frames) == config["n_frames"]
+
+        N, _ = frames[0].shape
+        assert N > 0
 
     for mol_a_name, mol_b_name in edges:
         check_results(path / f"success_rbfe_result_{mol_a_name}_{mol_b_name}.pkl")
+        for leg in ["complex", "solvent"]:
+            for idx in [0, 1]:
+                check_frames(Path(f"{path}/frames_{mol_a_name}_{mol_b_name}_{leg}_{idx}"))
