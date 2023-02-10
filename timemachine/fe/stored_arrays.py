@@ -13,8 +13,7 @@ from timemachine.parallel.client import AbstractFileClient
 
 
 class StoredArrays(Sequence[NDArray]):
-    """
-    Sequence of numpy arrays using O(1) memory, backed by disk storage.
+    """Sequence of numpy arrays using O(1) memory, backed by disk storage.
 
     Data is stored in a temporary directory that is cleaned when the `StoredArrays` object is finalized.
 
