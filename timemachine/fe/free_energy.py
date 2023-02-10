@@ -85,7 +85,6 @@ def image_frames(initial_state: InitialState, frames: Sequence[np.ndarray], boxe
     -------
         imaged_coordinates
     """
-    assert all(frame.ndim == 2 and frame.shape[-1] == 3 for frame in frames), "All frames must have shape (N, 3)"
     assert np.array(boxes).shape[1:] == (3, 3), "Boxes are not 3x3"
     assert len(frames) == len(boxes), "Number of frames and boxes don't match"
 
@@ -93,6 +92,7 @@ def image_frames(initial_state: InitialState, frames: Sequence[np.ndarray], boxe
     group_indices = get_group_indices(get_bond_list(hb_potential))
     imaged_frames = np.empty_like(frames)
     for i, (frame, box) in enumerate(zip(frames, boxes)):
+        assert frame.ndim == 2 and frame.shape[-1] == 3, "frames must have shape (N, 3)"
         # Recenter the frame around the centroid of the ligand
         ligand_centroid = np.mean(frame[initial_state.ligand_idxs], axis=0)
         center = compute_box_center(box)
