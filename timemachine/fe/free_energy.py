@@ -22,7 +22,7 @@ class HostConfig:
 
 
 @dataclass
-class SimulationProtocol:
+class MDParams:
     n_frames: int
     n_eq_steps: int
     steps_per_frame: int
@@ -31,7 +31,7 @@ class SimulationProtocol:
 @dataclass
 class InitialState:
     """
-    An initial contains everything that is needed to bitwise reproduce a trajectory given a SimulationProtocol
+    An initial contains everything that is needed to bitwise reproduce a trajectory given MDParams
 
     This object can be pickled safely.
     """
@@ -59,7 +59,7 @@ class SimulationResult:
     frames: List[Union[np.ndarray, StoredArrays]]  # (len(keep_idxs), n_frames, N, 3)
     boxes: List[np.ndarray]
     initial_states: List[InitialState]
-    protocol: SimulationProtocol
+    md_params: MDParams
 
 
 def image_frames(initial_state: InitialState, frames: Sequence[np.ndarray], boxes: np.ndarray) -> np.ndarray:
@@ -232,32 +232,28 @@ def batches(n: int, batch_size: int) -> Iterable[int]:
 
 
 @overload
-def sample(
-    initial_state: InitialState, protocol: SimulationProtocol, max_buffer_frames: None
-) -> Tuple[NDArray, NDArray]:
+def sample(initial_state: InitialState, md_params: MDParams) -> Tuple[NDArray, NDArray]:
     ...
 
 
 @overload
-def sample(
-    initial_state: InitialState, protocol: SimulationProtocol, max_buffer_frames: int
-) -> Tuple[StoredArrays, NDArray]:
+def sample(initial_state: InitialState, md_params: MDParams, max_buffer_frames: int) -> Tuple[StoredArrays, NDArray]:
     ...
 
 
-def sample(initial_state: InitialState, protocol: SimulationProtocol, max_buffer_frames: Optional[int] = None):
+def sample(initial_state: InitialState, md_params: MDParams, max_buffer_frames: Optional[int] = None):
     """Generate a trajectory given an initial state and a simulation protocol
 
     Parameters
     ----------
     initial_state: InitialState
         (contains potentials, integrator, optional barostat)
-    protocol: SimulationProtocol
+    md_params: MDParams
         (specifies x0, v0, box0, number of MD steps, thinning interval, etc...)
 
     Returns
     -------
-    xs, boxes: np.arrays with .shape[0] = protocol.n_frames
+    xs, boxes: np.arrays with .shape[0] = md_params.n_frames
 
     Notes
     -----
@@ -282,7 +278,7 @@ def sample(initial_state: InitialState, protocol: SimulationProtocol, max_buffer
 
     # burn-in
     ctxt.multiple_steps_U(
-        n_steps=protocol.n_eq_steps,
+        n_steps=md_params.n_eq_steps,
         store_u_interval=0,
         store_x_interval=0,
     )
@@ -293,7 +289,7 @@ def sample(initial_state: InitialState, protocol: SimulationProtocol, max_buffer
         _, coords, boxes = ctxt.multiple_steps_U(
             n_steps=n_steps,
             store_u_interval=0,
-            store_x_interval=protocol.steps_per_frame,
+            store_x_interval=md_params.steps_per_frame,
         )
         return coords, boxes
 
@@ -302,16 +298,16 @@ def sample(initial_state: InitialState, protocol: SimulationProtocol, max_buffer
     if max_buffer_frames:
         all_coords = StoredArrays()
         all_boxes_: List[NDArray] = []
-        for n_frames in batches(protocol.n_frames, max_buffer_frames):
-            batch_coords, batch_boxes = run_production_steps(n_frames * protocol.steps_per_frame)
+        for n_frames in batches(md_params.n_frames, max_buffer_frames):
+            batch_coords, batch_boxes = run_production_steps(n_frames * md_params.steps_per_frame)
             all_coords.extend(batch_coords)
             all_boxes_.extend(batch_boxes)
         all_boxes = np.array(all_boxes_)
     else:
-        all_coords, all_boxes = run_production_steps(protocol.n_frames * protocol.steps_per_frame)
+        all_coords, all_boxes = run_production_steps(md_params.n_frames * md_params.steps_per_frame)
 
-    assert len(all_coords) == protocol.n_frames
-    assert len(all_boxes) == protocol.n_frames
+    assert len(all_coords) == md_params.n_frames
+    assert len(all_boxes) == md_params.n_frames
 
     assert np.all(np.isfinite(all_coords[-1])), "Production resulted in a nan"
 
