@@ -19,7 +19,7 @@ class StoredArrays(Sequence[NDArray]):
         self._finalizer = weakref.finalize(self, shutil.rmtree, self._dir)
 
     def __iter__(self) -> Iterator[NDArray]:
-        for chunk in self.chunks():
+        for chunk in self._chunks():
             for array in chunk:
                 yield array
 
@@ -58,7 +58,7 @@ class StoredArrays(Sequence[NDArray]):
             np.array_equal(a, b, equal_nan=True) for a, b in zip(self, other)
         )
 
-    def chunks(self) -> Iterator[List[NDArray]]:
+    def _chunks(self) -> Iterator[List[NDArray]]:
         for idx, _ in enumerate(self._chunk_sizes):
             yield np.load(self._get_chunk_path(idx))
 
@@ -69,6 +69,27 @@ class StoredArrays(Sequence[NDArray]):
     @staticmethod
     def get_chunk_path(path: Path, idx: int) -> Path:
         return (path / str(idx)).with_suffix(".npy")
+
+    def store(self, client: AbstractFileClient, prefix: Optional[Path] = None):
+        for idx, chunk in enumerate(self._chunks()):
+            serialized_array = serialize_array(np.array(chunk))
+            path = StoredArrays.get_chunk_path(prefix or Path("."), idx)
+            if client.exists(str(path)):
+                raise FileExistsError(f"file already exists: {path}")
+            client.store(str(path), serialized_array)
+
+    @classmethod
+    def load(cls, client: AbstractFileClient, prefix: Optional[Path] = None) -> "StoredArrays":
+        sa = cls()
+        for idx in count():
+            path = cls.get_chunk_path(prefix or Path("."), idx)
+            if client.exists(str(path)):
+                bs = client.load(str(path))
+                chunk = list(deserialize_array(bs))
+                sa.extend(chunk)
+            else:
+                break
+        return sa
 
 
 def serialize_array(array: NDArray) -> bytes:
@@ -82,25 +103,3 @@ def deserialize_array(bs: bytes) -> NDArray:
     fp = io.BytesIO(bs)
     array = np.load(fp)
     return array
-
-
-def store(sa: StoredArrays, client: AbstractFileClient, prefix: Optional[Path] = None):
-    for idx, chunk in enumerate(sa.chunks()):
-        serialized_array = serialize_array(np.array(chunk))
-        path = StoredArrays.get_chunk_path(prefix or Path("."), idx)
-        if client.exists(str(path)):
-            raise FileExistsError(f"file already exists: {path}")
-        client.store(str(path), serialized_array)
-
-
-def load(client: AbstractFileClient, prefix: Optional[Path] = None) -> StoredArrays:
-    sa = StoredArrays()
-    for idx in count():
-        path = StoredArrays.get_chunk_path(prefix or Path("."), idx)
-        if client.exists(str(path)):
-            bs = client.load(str(path))
-            chunk = list(deserialize_array(bs))
-            sa.extend(chunk)
-        else:
-            break
-    return sa
