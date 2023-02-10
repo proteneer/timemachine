@@ -4,7 +4,7 @@ import tempfile
 import weakref
 from itertools import count
 from pathlib import Path
-from typing import Iterator, List, NoReturn, Optional, Sequence, overload
+from typing import Iterator, List, NoReturn, Sequence, overload
 
 import numpy as np
 from numpy.typing import ArrayLike, NDArray
@@ -92,7 +92,7 @@ class StoredArrays(Sequence[NDArray]):
     def get_chunk_path(path: Path, idx: int) -> Path:
         return (path / str(idx)).with_suffix(".npy")
 
-    def store(self, client: AbstractFileClient, prefix: Optional[Path] = None):
+    def store(self, client: AbstractFileClient, prefix: Path = Path(".")):
         """Save to persistent storage.
 
         Uses O(1) memory.
@@ -109,16 +109,16 @@ class StoredArrays(Sequence[NDArray]):
         """
         for idx, chunk in enumerate(self._chunks()):
             serialized_array = serialize_array(np.array(chunk))
-            path = StoredArrays.get_chunk_path(prefix or Path("."), idx)
+            path = StoredArrays.get_chunk_path(prefix, idx)
             if client.exists(str(path)):
                 raise FileExistsError(f"file already exists: {path}")
             client.store(str(path), serialized_array)
 
     @classmethod
-    def load(cls, client: AbstractFileClient, prefix: Optional[Path] = None) -> "StoredArrays":
+    def load(cls, client: AbstractFileClient, prefix: Path = Path(".")) -> "StoredArrays":
         sa = cls()
         for idx in count():
-            path = cls.get_chunk_path(prefix or Path("."), idx)
+            path = cls.get_chunk_path(prefix, idx)
             if client.exists(str(path)):
                 bs = client.load(str(path))
                 chunk = list(deserialize_array(bs))
