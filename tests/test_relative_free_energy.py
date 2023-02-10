@@ -194,7 +194,7 @@ def test_imaging_frames():
     steps_per_frame = 1
     equil_steps = 1
     windows = 2
-    res, _ = run_solvent(
+    res, _, _ = run_solvent(
         mol_a,
         mol_b,
         core,

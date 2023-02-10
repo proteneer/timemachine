@@ -335,7 +335,7 @@ def setup_initial_states(
 
 def run_solvent(
     mol, forcefield, _, n_frames, seed, n_eq_steps=10000, steps_per_frame=400, n_windows=16
-) -> Tuple[SimulationResult, app.topology.Topology]:
+) -> Tuple[SimulationResult, app.topology.Topology, HostConfig]:
     box_width = 4.0
     solvent_sys, solvent_conf, solvent_box, solvent_top = builders.build_water_system(box_width, forcefield.water_ff)
     solvent_box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes, deboggle later
@@ -351,4 +351,4 @@ def run_solvent(
         n_windows=n_windows,
         steps_per_frame=steps_per_frame,
     )
-    return solvent_res, solvent_top
+    return solvent_res, solvent_top, solvent_host_config

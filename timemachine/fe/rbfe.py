@@ -328,7 +328,7 @@ def estimate_free_energy_given_initial_states(
         df, df_err = bar_with_bootstrapped_uncertainty(w_fwd, w_rev)  # reduced units
         dG, dG_err = df / beta, df_err / beta  # kJ/mol
 
-        message = f"{prefix} BAR: lambda {lamb_idx - 1} -> {lamb_idx} dG: {dG:.3f} +- {dG_err:.3f} kJ/mol"
+        message = f"{prefix} BAR: lambda {lamb_idx} -> {lamb_idx + 1} dG: {dG:.3f} +- {dG_err:.3f} kJ/mol"
         print(message, flush=True)
 
         all_dGs.append(dG)
@@ -607,7 +607,7 @@ def run_solvent(
     _,
     n_frames,
     seed,
-    n_eq_steps=10000,
+    n_eq_steps=None,
     steps_per_frame=400,
     n_windows=None,
     min_cutoff=0.7,
@@ -625,12 +625,12 @@ def run_solvent(
         seed,
         n_frames=n_frames,
         prefix="solvent",
-        n_eq_steps=n_eq_steps,
+        n_eq_steps=n_eq_steps or 10000,
         n_windows=n_windows,
         steps_per_frame=steps_per_frame,
         min_cutoff=min_cutoff,
     )
-    return solvent_res, solvent_top
+    return solvent_res, solvent_top, solvent_host_config
 
 
 def run_complex(
@@ -641,7 +641,7 @@ def run_complex(
     protein,
     n_frames,
     seed,
-    n_eq_steps=10000,
+    n_eq_steps=None,
     steps_per_frame=400,
     n_windows=None,
     min_cutoff=0.7,
@@ -660,12 +660,12 @@ def run_complex(
         seed,
         n_frames=n_frames,
         prefix="complex",
-        n_eq_steps=n_eq_steps,
+        n_eq_steps=n_eq_steps or 10000,
         n_windows=n_windows,
         steps_per_frame=steps_per_frame,
         min_cutoff=min_cutoff,
     )
-    return complex_res, complex_top
+    return complex_res, complex_top, complex_host_config
 
 
 class Edge(NamedTuple):
@@ -682,6 +682,8 @@ def run_edge_and_save_results(
     n_frames: int,
     seed: int,
     file_client: AbstractFileClient,
+    n_eq_steps: Optional[int],
+    n_windows: Optional[int],
 ):
     # Ensure that all mol props (e.g. _Name) are included in pickles
     # Without this get_mol_name(mol) will fail on roundtripped mol
@@ -706,8 +708,12 @@ def run_edge_and_save_results(
         )
         core = all_cores[0]
 
-        complex_res, complex_top = run_complex(mol_a, mol_b, core, forcefield, protein, n_frames, seed)
-        solvent_res, solvent_top = run_solvent(mol_a, mol_b, core, forcefield, protein, n_frames, seed)
+        complex_res, complex_top, _ = run_complex(
+            mol_a, mol_b, core, forcefield, protein, n_frames, seed, n_eq_steps=n_eq_steps, n_windows=n_windows
+        )
+        solvent_res, solvent_top, _ = run_solvent(
+            mol_a, mol_b, core, forcefield, protein, n_frames, seed, n_eq_steps=n_eq_steps, n_windows=n_windows
+        )
 
     except Exception as err:
         print(
@@ -773,6 +779,8 @@ def run_edges_parallel(
     seed: int,
     pool_client: Optional[AbstractClient] = None,
     file_client: Optional[AbstractFileClient] = None,
+    n_eq_steps: Optional[int] = None,
+    n_windows: Optional[int] = None,
 ):
     mols = {get_mol_name(mol): mol for mol in ligands}
 
@@ -795,6 +803,8 @@ def run_edges_parallel(
             n_frames,
             seed + edge_idx,
             file_client,
+            n_eq_steps,
+            n_windows,
         )
         for edge_idx, edge in enumerate(edges)
     ]

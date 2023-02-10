@@ -161,14 +161,20 @@ class HostGuestTopology:
         # shift idxs because of the host
         guest_intra_pot.set_idxs(guest_intra_pot.get_idxs() + self.num_host_atoms)
 
+        # If the molecule has < 4 atoms there may not be any intramolecular terms
+        # so they should be ignored here
+        has_intra_terms = guest_intra_params.shape[0] > 0
+
         # total potential = host_guest_pot + guest_intra_pot
-        total_pot = potentials.SummedPotential(
-            [host_guest_pot, guest_intra_pot],
-            [hg_nb_params, guest_intra_params],
+        hg_total_pot = [host_guest_pot, guest_intra_pot] if has_intra_terms else [host_guest_pot]
+        hg_total_params = [hg_nb_params, guest_intra_params] if has_intra_terms else [hg_nb_params]
+        sum_pot = potentials.SummedPotential(
+            hg_total_pot,
+            hg_total_params,
         )
 
-        nb_params = jnp.concatenate([hg_nb_params, guest_intra_params])
-        return nb_params, total_pot
+        sum_params = jnp.concatenate(hg_total_params)
+        return sum_params, sum_pot
 
 
 class BaseTopology:
@@ -280,6 +286,10 @@ class BaseTopology:
                 )
             )
         params = np.array(params)
+
+        # corner case for molecule without nb terms (everything excluded)
+        if params.shape[0] == 0:
+            params = np.reshape(params, (0, 4))
 
         beta = _BETA
         cutoff = _CUTOFF  # solve for this analytically later
@@ -521,7 +531,7 @@ class DualTopology(BaseTopology):
         assert pairlist_a.get_cutoff() == pairlist_b.get_cutoff()
 
         return params, potentials.NonbondedPairListPrecomputed(
-            inclusion_idxs, pairlist_a.get_beta(), pairlist_a.get_beta()
+            inclusion_idxs, pairlist_a.get_beta(), pairlist_a.get_cutoff()
         )
 
     def _parameterize_bonded_term(self, ff_params, bonded_handle, potential):
