@@ -13,6 +13,28 @@ from timemachine.parallel.client import AbstractFileClient
 
 
 class StoredArrays(Sequence[NDArray]):
+    """
+    Sequence of numpy arrays using O(1) memory, backed by disk storage.
+
+    Data is stored in a temporary directory that is cleaned when the `StoredArrays` object is finalized.
+
+    Examples
+    --------
+    >>> sa = StoredArrays()
+    >>> sa.extend([np.array([1, 2, 3]), np.array([4, 5, 6])])
+    >>> len(sa)
+    2
+    >>> len(list(sa._chunks()))
+    1
+    >>> sa.extend([np.array([7, 8, 9])])
+    >>> len(sa)
+    3
+    >>> len(list(sa._chunks()))
+    2
+    >>> list(sa)
+    [array([1, 2, 3]), array([4, 5, 6]), array([7, 8, 9])]
+    """
+
     def __init__(self):
         self._chunk_sizes: List[int] = []
         self._dir = Path(tempfile.mkdtemp())
@@ -71,6 +93,20 @@ class StoredArrays(Sequence[NDArray]):
         return (path / str(idx)).with_suffix(".npy")
 
     def store(self, client: AbstractFileClient, prefix: Optional[Path] = None):
+        """Save to persistent storage.
+
+        Uses O(1) memory.
+
+        Examples
+        --------
+        >>> sa = StoredArrays()
+        >>> sa.extend([np.array([1, 2, 3])])
+        >>> from timemachine.parallel.client import FileClient
+        >>> fc = FileClient(Path("."))
+        >>> sa.store(fc)
+        >>> StoredArrays.load(fc) == sa
+        True
+        """
         for idx, chunk in enumerate(self._chunks()):
             serialized_array = serialize_array(np.array(chunk))
             path = StoredArrays.get_chunk_path(prefix or Path("."), idx)
