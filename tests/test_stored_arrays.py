@@ -10,7 +10,6 @@ from hypothesis import assume, example, given, seed
 from hypothesis.extra.numpy import array_shapes, arrays, floating_dtypes, from_dtype
 from hypothesis.strategies import composite, integers, lists
 
-from timemachine.fe import stored_arrays
 from timemachine.fe.stored_arrays import StoredArrays
 from timemachine.parallel.client import FileClient
 
@@ -128,17 +127,17 @@ def file_client():
 @seed(2023)
 def test_stored_arrays_store_load_roundtrip(sa_ref):
     with file_client() as fc:
-        stored_arrays.store(sa_ref, fc)
-        sa_test = stored_arrays.load(fc)
+        sa_ref.store(fc)
+        sa_test = StoredArrays.load(fc)
     assert sa_ref == sa_test
 
 
 def test_stored_arrays_store_raises_on_file_collision():
     with file_client() as fc:
         sa = stored_arrays_from_chunks([np.array([1, 2, 3])])
-        stored_arrays.store(sa, fc)
+        sa.store(fc)
 
         with pytest.raises(FileExistsError):
-            stored_arrays.store(sa, fc)
+            sa.store(fc)
 
-        stored_arrays.store(sa, fc, prefix=Path("subdir"))  # no collision
+        sa.store(fc, prefix=Path("subdir"))  # no collision
