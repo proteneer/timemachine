@@ -106,7 +106,7 @@ def test_stored_arrays_neq(chunks1, chunks2):
 def test_stored_arrays_cleanup():
     sa = StoredArrays()
     sa.extend([np.array([1, 2, 3])])
-    path = sa._dir
+    path = sa._path()
     assert path.exists()
 
     del sa

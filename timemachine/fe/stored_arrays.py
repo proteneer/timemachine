@@ -1,7 +1,5 @@
 import io
-import shutil
 import tempfile
-import weakref
 from itertools import count
 from pathlib import Path
 from typing import Iterator, List, NoReturn, Sequence, overload
@@ -36,8 +34,7 @@ class StoredArrays(Sequence[NDArray]):
 
     def __init__(self):
         self._chunk_sizes: List[int] = []
-        self._dir = Path(tempfile.mkdtemp())
-        self._finalizer = weakref.finalize(self, shutil.rmtree, self._dir)
+        self._dir = tempfile.TemporaryDirectory()
 
     def __iter__(self) -> Iterator[NDArray]:
         for chunk in self._chunks():
@@ -72,7 +69,7 @@ class StoredArrays(Sequence[NDArray]):
             raise ValueError("invalid subscript")
 
     def _get_chunk_path(self, idx: int) -> Path:
-        return StoredArrays.get_chunk_path(self._dir, idx)
+        return StoredArrays.get_chunk_path(self._path(), idx)
 
     def __eq__(self, other) -> bool:
         return self._chunk_sizes == other._chunk_sizes and all(
@@ -82,6 +79,9 @@ class StoredArrays(Sequence[NDArray]):
     def _chunks(self) -> Iterator[List[NDArray]]:
         for idx, _ in enumerate(self._chunk_sizes):
             yield np.load(self._get_chunk_path(idx))
+
+    def _path(self) -> Path:
+        return Path(self._dir.name)
 
     def extend(self, xs: Sequence[ArrayLike]):
         np.save(self._get_chunk_path(len(self._chunk_sizes)), np.array(xs))
