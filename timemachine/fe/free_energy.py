@@ -1,9 +1,11 @@
 from dataclasses import dataclass
-from typing import List, Optional
+from typing import Iterable, List, Optional, Sequence, Tuple, Union, overload
 
 import numpy as np
+from numpy.typing import NDArray
 
 from timemachine.fe import model_utils, topology
+from timemachine.fe.stored_arrays import StoredArrays
 from timemachine.fe.utils import get_mol_masses, get_romol_conf
 from timemachine.ff import ForcefieldParams
 from timemachine.ff.handlers import openmm_deserializer
@@ -54,18 +56,18 @@ class SimulationResult:
     dG_errs_png: bytes
     overlap_summary_png: bytes
     overlap_detail_png: bytes
-    frames: List[np.ndarray]
+    frames: List[Union[np.ndarray, StoredArrays]]  # (len(keep_idxs), n_frames, N, 3)
     boxes: List[np.ndarray]
     initial_states: List[InitialState]
     protocol: SimulationProtocol
 
 
-def image_frames(initial_state: InitialState, frames: np.ndarray, boxes: np.ndarray) -> np.ndarray:
-    """Images a set of frames within the periodic box given an Initial state. Recenters the simulation
-    around the centroid of the coordinates specified by initial_state.ligand_idxs prior to imaging.
+def image_frames(initial_state: InitialState, frames: Sequence[np.ndarray], boxes: np.ndarray) -> np.ndarray:
+    """Images a sequence of frames within the periodic box given an Initial state. Recenters the simulation around the
+    centroid of the coordinates specified by initial_state.ligand_idxs prior to imaging.
 
-    Calling this function on a set of frames will NOT produce identical energies/du_dp/du_dx. Should only
-    be used for visualization convenience.
+    Calling this function on a sequence of frames will NOT produce identical energies/du_dp/du_dx. Should only be used
+    for visualization convenience.
 
     Parameters
     ----------
@@ -73,25 +75,24 @@ def image_frames(initial_state: InitialState, frames: np.ndarray, boxes: np.ndar
     initial_state: InitialState
         State that the frames came from
 
-    frames: np.ndarray of coordinates
-        Coordinates to image, shape (K, N, 3)
+    frames: sequence of np.ndarray of coordinates
+        Coordinates to image, sequence of K arrays with shape (N, 3)
 
     boxes: list of boxes
-        Boxes to image coordinates into, shape (K, 3, 3)
+        Boxes to image coordinates into, list of K arrays with shape (3, 3)
 
     Returns
     -------
         imaged_coordinates
     """
-    assert len(frames.shape) == 3, "Must be a 3 dimensional set of frames"
-    assert frames.shape[-1] == 3, "Frame coordinates are not 3D"
-    assert boxes.shape[1:] == (3, 3), "Boxes are not 3x3"
+    assert np.array(boxes).shape[1:] == (3, 3), "Boxes are not 3x3"
     assert len(frames) == len(boxes), "Number of frames and boxes don't match"
 
     hb_potential = next(p for p in initial_state.potentials if isinstance(p, HarmonicBond))
     group_indices = get_group_indices(get_bond_list(hb_potential))
     imaged_frames = np.empty_like(frames)
     for i, (frame, box) in enumerate(zip(frames, boxes)):
+        assert frame.ndim == 2 and frame.shape[-1] == 3, "frames must have shape (N, 3)"
         # Recenter the frame around the centroid of the ligand
         ligand_centroid = np.mean(frame[initial_state.ligand_idxs], axis=0)
         center = compute_box_center(box)
@@ -220,7 +221,31 @@ class AbsoluteFreeEnergy(BaseFreeEnergy):
         return np.concatenate([host_values, ligand_values])
 
 
-def sample(initial_state: InitialState, protocol: SimulationProtocol):
+def batches(n: int, batch_size: int) -> Iterable[int]:
+    assert n >= 0
+    assert batch_size > 0
+    quot, rem = divmod(n, batch_size)
+    for _ in range(quot):
+        yield batch_size
+    if rem:
+        yield rem
+
+
+@overload
+def sample(
+    initial_state: InitialState, protocol: SimulationProtocol, max_buffer_frames: None
+) -> Tuple[NDArray, NDArray]:
+    ...
+
+
+@overload
+def sample(
+    initial_state: InitialState, protocol: SimulationProtocol, max_buffer_frames: int
+) -> Tuple[StoredArrays, NDArray]:
+    ...
+
+
+def sample(initial_state: InitialState, protocol: SimulationProtocol, max_buffer_frames: Optional[int] = None):
     """Generate a trajectory given an initial state and a simulation protocol
 
     Parameters
@@ -264,16 +289,29 @@ def sample(initial_state: InitialState, protocol: SimulationProtocol):
 
     assert np.all(np.isfinite(ctxt.get_x_t())), "Equilibration resulted in a nan"
 
-    # a crude, and probably not great, guess on the decorrelation time
-    n_steps = protocol.n_frames * protocol.steps_per_frame
-    _, all_coords, all_boxes = ctxt.multiple_steps_U(
-        n_steps=n_steps,
-        store_u_interval=0,
-        store_x_interval=protocol.steps_per_frame,
-    )
+    def run_production_steps(n_steps: int) -> Tuple[NDArray, NDArray]:
+        _, coords, boxes = ctxt.multiple_steps_U(
+            n_steps=n_steps,
+            store_u_interval=0,
+            store_x_interval=protocol.steps_per_frame,
+        )
+        return coords, boxes
 
-    assert all_coords.shape[0] == protocol.n_frames
-    assert all_boxes.shape[0] == protocol.n_frames
+    all_coords: Union[NDArray, StoredArrays]
+
+    if max_buffer_frames:
+        all_coords = StoredArrays()
+        all_boxes_: List[NDArray] = []
+        for n_frames in batches(protocol.n_frames, max_buffer_frames):
+            batch_coords, batch_boxes = run_production_steps(n_frames * protocol.steps_per_frame)
+            all_coords.extend(batch_coords)
+            all_boxes_.extend(batch_boxes)
+        all_boxes = np.array(all_boxes_)
+    else:
+        all_coords, all_boxes = run_production_steps(protocol.n_frames * protocol.steps_per_frame)
+
+    assert len(all_coords) == protocol.n_frames
+    assert len(all_boxes) == protocol.n_frames
 
     assert np.all(np.isfinite(all_coords[-1])), "Production resulted in a nan"
 

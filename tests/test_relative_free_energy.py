@@ -4,11 +4,15 @@ from importlib import resources
 
 import numpy as np
 import pytest
+from hypothesis import example, given, seed
+from hypothesis.strategies import integers
 
-from timemachine.constants import DEFAULT_FF
+from timemachine.constants import DEFAULT_FF, DEFAULT_TEMP
 from timemachine.fe.bar import pair_overlap_from_ukln
-from timemachine.fe.free_energy import HostConfig, SimulationResult, image_frames, sample
-from timemachine.fe.rbfe import estimate_relative_free_energy, run_solvent, run_vacuum
+from timemachine.fe.free_energy import HostConfig, SimulationProtocol, SimulationResult, batches, image_frames, sample
+from timemachine.fe.rbfe import estimate_relative_free_energy, run_solvent, run_vacuum, setup_initial_states
+from timemachine.fe.single_topology import SingleTopology
+from timemachine.fe.stored_arrays import StoredArrays
 from timemachine.ff import Forcefield
 from timemachine.md import builders
 from timemachine.md.barostat.utils import compute_box_center
@@ -166,13 +170,13 @@ def test_steps_per_frames():
     seed = 2022
     frames = 5
     res = run_vacuum(mol_a, mol_b, core, forcefield, None, frames, seed, n_eq_steps=10, steps_per_frame=2, n_windows=2)
-    assert res.frames[0].shape[0] == frames
+    assert len(res.frames[0]) == frames
 
     frames = 2
     test_res = run_vacuum(
         mol_a, mol_b, core, forcefield, None, frames, seed, n_eq_steps=10, steps_per_frame=5, n_windows=2
     )
-    assert test_res.frames[0].shape[0] == frames
+    assert len(test_res.frames[0]) == frames
     assert len(test_res.frames) == 2
     # The last frame from the trajectories should match as num_frames * steps_per_frame are equal
     for frame, test_frame in zip(res.frames, test_res.frames):
@@ -279,6 +283,48 @@ def test_pair_overlap_from_ukln():
 
     # overlapping
     assert gaussian_overlap((0, 0.1), (0.5, 0.2)) > 0.1
+
+
+@given(integers(min_value=1))
+@seed(2023)
+def test_batches_of_nothing(batch_size):
+    assert list(batches(0, batch_size)) == []
+
+
+@given(integers(min_value=1, max_value=1000), integers(min_value=1))
+@seed(2023)
+def test_batches(n, batch_size):
+    assert sum(batches(n, batch_size)) == n
+    assert all(batch == batch_size for batch in list(batches(n, batch_size))[:-1])
+    *_, last = batches(n, batch_size)
+    assert 0 < last <= batch_size
+
+
+@pytest.fixture(scope="module")
+def hif2a_ligand_pair_single_topology_lam0_state():
+    mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
+    forcefield = Forcefield.load_from_file(DEFAULT_FF)
+    st = SingleTopology(mol_a, mol_b, core, forcefield)
+    state = setup_initial_states(st, None, DEFAULT_TEMP, [0.0], 2023)[0]
+    return state
+
+
+@given(integers(1, 100), integers(1, 100))
+@seed(2023)
+@example(10, 3)
+@example(10, 1)
+@example(1, 10)
+def test_sample_max_buffer_frames(hif2a_ligand_pair_single_topology_lam0_state, n_frames, max_buffer_frames):
+    protocol = SimulationProtocol(n_frames, 1, 1)
+    frames_ref, _ = sample(hif2a_ligand_pair_single_topology_lam0_state, protocol, max_buffer_frames=None)
+    frames_test, _ = sample(hif2a_ligand_pair_single_topology_lam0_state, protocol, max_buffer_frames=max_buffer_frames)
+
+    assert isinstance(frames_ref, np.ndarray)
+    assert isinstance(frames_test, StoredArrays)
+    assert len(frames_ref) == len(frames_test)
+
+    for frame_ref, frame_test in zip(frames_ref, frames_test):
+        np.testing.assert_array_equal(frame_ref, frame_test)
 
 
 if __name__ == "__main__":
