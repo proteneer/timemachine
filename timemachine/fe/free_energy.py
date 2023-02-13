@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Iterable, List, Optional, Sequence, Tuple, Union
+from typing import Iterable, List, Optional, Sequence, Tuple, Union, overload
 
 import numpy as np
 from numpy.typing import NDArray
@@ -56,7 +56,7 @@ class SimulationResult:
     dG_errs_png: bytes
     overlap_summary_png: bytes
     overlap_detail_png: bytes
-    frames: List[Sequence[np.ndarray]]  # (len(keep_idxs), n_frames, N, 3)
+    frames: List[Union[np.ndarray, StoredArrays]]  # (len(keep_idxs), n_frames, N, 3)
     boxes: List[np.ndarray]
     initial_states: List[InitialState]
     protocol: SimulationProtocol
@@ -231,9 +231,21 @@ def batches(n: int, batch_size: int) -> Iterable[int]:
         yield rem
 
 
+@overload
 def sample(
-    initial_state: InitialState, protocol: SimulationProtocol, max_buffer_frames: Optional[int] = None
-) -> Tuple[Sequence[NDArray], List[NDArray]]:
+    initial_state: InitialState, protocol: SimulationProtocol, max_buffer_frames: None
+) -> Tuple[NDArray, NDArray]:
+    ...
+
+
+@overload
+def sample(
+    initial_state: InitialState, protocol: SimulationProtocol, max_buffer_frames: int
+) -> Tuple[StoredArrays, NDArray]:
+    ...
+
+
+def sample(initial_state: InitialState, protocol: SimulationProtocol, max_buffer_frames: Optional[int] = None):
     """Generate a trajectory given an initial state and a simulation protocol
 
     Parameters
@@ -277,20 +289,26 @@ def sample(
 
     assert np.all(np.isfinite(ctxt.get_x_t())), "Equilibration resulted in a nan"
 
-    all_coords: Union[StoredArrays, List[NDArray]]
-    all_coords = StoredArrays() if max_buffer_frames else []
-    all_boxes = []
-
-    batch_size = max_buffer_frames or protocol.n_frames
-
-    for n_frames in batches(protocol.n_frames, batch_size):
-        _, batch_coords, batch_boxes = ctxt.multiple_steps_U(
-            n_steps=n_frames * protocol.steps_per_frame,
+    def run_production_steps(n_steps: int) -> Tuple[NDArray, NDArray]:
+        _, coords, boxes = ctxt.multiple_steps_U(
+            n_steps=n_steps,
             store_u_interval=0,
             store_x_interval=protocol.steps_per_frame,
         )
-        all_coords.extend(batch_coords)
-        all_boxes.extend(batch_boxes)
+        return coords, boxes
+
+    all_coords: Union[NDArray, StoredArrays]
+
+    if max_buffer_frames:
+        all_coords = StoredArrays()
+        all_boxes_: List[NDArray] = []
+        for n_frames in batches(protocol.n_frames, max_buffer_frames):
+            batch_coords, batch_boxes = run_production_steps(n_frames * protocol.steps_per_frame)
+            all_coords.extend(batch_coords)
+            all_boxes_.extend(batch_boxes)
+        all_boxes = np.array(all_boxes_)
+    else:
+        all_coords, all_boxes = run_production_steps(protocol.n_frames * protocol.steps_per_frame)
 
     assert len(all_coords) == protocol.n_frames
     assert len(all_boxes) == protocol.n_frames

@@ -2,7 +2,7 @@ import io
 import tempfile
 from itertools import count
 from pathlib import Path
-from typing import Iterator, List, NoReturn, Sequence, overload
+from typing import Collection, Iterator, List, NoReturn, Sequence, overload
 
 import numpy as np
 from numpy.typing import ArrayLike, NDArray
@@ -83,7 +83,7 @@ class StoredArrays(Sequence[NDArray]):
     def _path(self) -> Path:
         return Path(self._dir.name)
 
-    def extend(self, xs: Sequence[ArrayLike]):
+    def extend(self, xs: Collection[ArrayLike]):
         np.save(self._get_chunk_path(len(self._chunk_sizes)), np.array(xs))
         self._chunk_sizes.append(len(xs))
 

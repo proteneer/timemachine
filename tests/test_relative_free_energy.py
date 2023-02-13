@@ -319,7 +319,7 @@ def test_sample_max_buffer_frames(hif2a_ligand_pair_single_topology_lam0_state, 
     frames_ref, _ = sample(hif2a_ligand_pair_single_topology_lam0_state, protocol, max_buffer_frames=None)
     frames_test, _ = sample(hif2a_ligand_pair_single_topology_lam0_state, protocol, max_buffer_frames=max_buffer_frames)
 
-    assert isinstance(frames_ref, list)
+    assert isinstance(frames_ref, np.ndarray)
     assert isinstance(frames_test, StoredArrays)
     assert len(frames_ref) == len(frames_test)
 
