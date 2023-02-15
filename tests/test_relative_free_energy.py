@@ -9,7 +9,7 @@ from hypothesis.strategies import integers
 
 from timemachine.constants import DEFAULT_FF, DEFAULT_TEMP
 from timemachine.fe.bar import pair_overlap_from_ukln
-from timemachine.fe.free_energy import HostConfig, SimulationProtocol, SimulationResult, batches, image_frames, sample
+from timemachine.fe.free_energy import HostConfig, MDParams, SimulationResult, batches, image_frames, sample
 from timemachine.fe.rbfe import estimate_relative_free_energy, run_solvent, run_vacuum, setup_initial_states
 from timemachine.fe.single_topology import SingleTopology
 from timemachine.fe.stored_arrays import StoredArrays
@@ -44,7 +44,7 @@ def run_bitwise_reproducibility(mol_a, mol_b, core, forcefield, n_frames):
 
     all_frames, all_boxes = [], []
     for state in solvent_res.initial_states:
-        frames, boxes = sample(state, solvent_res.protocol)
+        frames, boxes = sample(state, solvent_res.md_params)
         all_frames.append(frames)
         all_boxes.append(boxes)
 
@@ -79,8 +79,8 @@ def run_triple(mol_a, mol_b, core, forcefield, n_frames, protein_path, n_eq_step
     assert len(vacuum_res.boxes[0]) == n_frames
     assert len(vacuum_res.boxes[-1]) == n_frames
     assert [x.lamb for x in vacuum_res.initial_states] == lambda_schedule
-    assert vacuum_res.protocol.n_frames == n_frames
-    assert vacuum_res.protocol.n_eq_steps == n_eq_steps
+    assert vacuum_res.md_params.n_frames == n_frames
+    assert vacuum_res.md_params.n_eq_steps == n_eq_steps
 
     box_width = 4.0
     solvent_sys, solvent_conf, solvent_box, _ = builders.build_water_system(box_width, forcefield.water_ff)
@@ -125,8 +125,8 @@ def run_triple(mol_a, mol_b, core, forcefield, n_frames, protein_path, n_eq_step
         assert len(result.boxes[0]) == n_frames
         assert len(result.boxes[-1]) == n_frames
         assert [x.lamb for x in result.initial_states] == lambda_schedule
-        assert result.protocol.n_frames == n_frames
-        assert result.protocol.n_eq_steps == n_eq_steps
+        assert result.md_params.n_frames == n_frames
+        assert result.md_params.n_eq_steps == n_eq_steps
 
     check_result(solvent_res)
 
@@ -315,9 +315,11 @@ def hif2a_ligand_pair_single_topology_lam0_state():
 @example(10, 1)
 @example(1, 10)
 def test_sample_max_buffer_frames(hif2a_ligand_pair_single_topology_lam0_state, n_frames, max_buffer_frames):
-    protocol = SimulationProtocol(n_frames, 1, 1)
-    frames_ref, _ = sample(hif2a_ligand_pair_single_topology_lam0_state, protocol, max_buffer_frames=None)
-    frames_test, _ = sample(hif2a_ligand_pair_single_topology_lam0_state, protocol, max_buffer_frames=max_buffer_frames)
+    md_params = MDParams(n_frames, 1, 1)
+    frames_ref, _ = sample(hif2a_ligand_pair_single_topology_lam0_state, md_params, max_buffer_frames=None)
+    frames_test, _ = sample(
+        hif2a_ligand_pair_single_topology_lam0_state, md_params, max_buffer_frames=max_buffer_frames
+    )
 
     assert isinstance(frames_ref, np.ndarray)
     assert isinstance(frames_test, StoredArrays)

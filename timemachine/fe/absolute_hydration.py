@@ -10,13 +10,7 @@ from simtk.openmm import app
 
 from timemachine.constants import BOLTZ, DEFAULT_FF, DEFAULT_TEMP
 from timemachine.fe import functional, model_utils
-from timemachine.fe.free_energy import (
-    AbsoluteFreeEnergy,
-    HostConfig,
-    InitialState,
-    SimulationProtocol,
-    SimulationResult,
-)
+from timemachine.fe.free_energy import AbsoluteFreeEnergy, HostConfig, InitialState, MDParams, SimulationResult
 from timemachine.fe.lambda_schedule import construct_pre_optimized_absolute_lambda_schedule_solvent
 from timemachine.fe.rbfe import estimate_free_energy_given_initial_states
 from timemachine.fe.topology import BaseTopology
@@ -234,7 +228,7 @@ def estimate_absolute_free_energy(
 
     temperature = DEFAULT_TEMP
     initial_states = setup_initial_states(afe, ff, host_config, temperature, lambda_schedule, seed)
-    protocol = SimulationProtocol(n_frames=n_frames, n_eq_steps=n_eq_steps, steps_per_frame=steps_per_frame)
+    md_params = MDParams(n_frames=n_frames, n_eq_steps=n_eq_steps, steps_per_frame=steps_per_frame)
 
     if keep_idxs is None:
         keep_idxs = [0, len(initial_states) - 1]  # keep first and last windows
@@ -243,11 +237,11 @@ def estimate_absolute_free_energy(
     combined_prefix = get_mol_name(mol) + "_" + prefix
     try:
         return estimate_free_energy_given_initial_states(
-            initial_states, protocol, temperature, combined_prefix, keep_idxs
+            initial_states, md_params, temperature, combined_prefix, keep_idxs
         )
     except Exception as err:
         with open(f"failed_ahfe_result_{combined_prefix}.pkl", "wb") as fh:
-            pickle.dump((initial_states, protocol, err), fh)
+            pickle.dump((initial_states, md_params, err), fh)
         raise err
 
 

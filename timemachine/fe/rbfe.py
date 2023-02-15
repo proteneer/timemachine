@@ -11,7 +11,7 @@ from timemachine.constants import BOLTZ, DEFAULT_PRESSURE, DEFAULT_TEMP
 from timemachine.fe import atom_mapping, model_utils
 from timemachine.fe.bar import bar_with_bootstrapped_uncertainty, df_err_from_ukln, pair_overlap_from_ukln
 from timemachine.fe.energy_decomposition import EnergyDecomposedState, compute_energy_decomposed_u_kln, get_batch_u_fns
-from timemachine.fe.free_energy import HostConfig, InitialState, SimulationProtocol, SimulationResult, sample
+from timemachine.fe.free_energy import HostConfig, InitialState, MDParams, SimulationResult, sample
 from timemachine.fe.plots import make_dG_errs_figure, make_overlap_detail_figure, make_overlap_summary_figure
 from timemachine.fe.single_topology import SingleTopology
 from timemachine.fe.system import convert_omm_system
@@ -199,7 +199,7 @@ def setup_initial_states(
 
 def run_sequential_sims_given_initial_states(
     initial_states,
-    protocol,
+    md_params,
     temperature,
     keep_idxs,
 ):
@@ -239,7 +239,7 @@ def run_sequential_sims_given_initial_states(
     for lamb_idx, initial_state in enumerate(initial_states):
 
         # run simulation
-        cur_frames, cur_boxes = sample(initial_state, protocol)
+        cur_frames, cur_boxes = sample(initial_state, md_params)
         print(f"completed simulation at lambda={initial_state.lamb}!")
 
         # keep samples from any requested states in memory
@@ -268,7 +268,7 @@ def run_sequential_sims_given_initial_states(
 
 def estimate_free_energy_given_initial_states(
     initial_states,
-    protocol,
+    md_params,
     temperature,
     prefix,
     keep_idxs,
@@ -288,7 +288,7 @@ def estimate_free_energy_given_initial_states(
     initial_states: list of InitialState
         Initial state objects
 
-    protocol: SimulationProtocol
+    md_params: MDParams
         Detailing specifics of each simulation
 
     temperature: float
@@ -309,7 +309,7 @@ def estimate_free_energy_given_initial_states(
 
     # run n_lambdas simulations in sequence
     u_kln_by_component_by_lambda, stored_frames, stored_boxes = run_sequential_sims_given_initial_states(
-        initial_states, protocol, temperature, keep_idxs
+        initial_states, md_params, temperature, keep_idxs
     )
 
     # "pair BAR" free energy analysis
@@ -376,7 +376,7 @@ def estimate_free_energy_given_initial_states(
         stored_frames,
         stored_boxes,
         initial_states,
-        protocol,
+        md_params,
     )
 
 
@@ -549,7 +549,7 @@ def estimate_relative_free_energy(
     initial_states = setup_initial_states(
         single_topology, host_config, temperature, lambda_schedule, seed, min_cutoff=min_cutoff
     )
-    protocol = SimulationProtocol(n_frames=n_frames, n_eq_steps=n_eq_steps, steps_per_frame=steps_per_frame)
+    md_params = MDParams(n_frames=n_frames, n_eq_steps=n_eq_steps, steps_per_frame=steps_per_frame)
 
     if keep_idxs is None:
         keep_idxs = [0, len(initial_states) - 1]  # keep first and last frames
@@ -559,12 +559,12 @@ def estimate_relative_free_energy(
     combined_prefix = get_mol_name(mol_a) + "_" + get_mol_name(mol_b) + "_" + prefix
     try:
         sim_result = estimate_free_energy_given_initial_states(
-            initial_states, protocol, temperature, combined_prefix, keep_idxs
+            initial_states, md_params, temperature, combined_prefix, keep_idxs
         )
         return sim_result
     except Exception as err:
         with open(f"failed_rbfe_result_{combined_prefix}.pkl", "wb") as fh:
-            pickle.dump((initial_states, protocol, err), fh)
+            pickle.dump((initial_states, md_params, err), fh)
         raise err
 
 
