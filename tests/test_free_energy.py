@@ -2,13 +2,18 @@ from importlib import resources
 
 import numpy as np
 import pytest
+from hypothesis import example, given, seed
+from hypothesis.strategies import integers
 from jax import grad, jacfwd, jacrev, value_and_grad
 from scipy.optimize import check_grad, minimize
 
-from timemachine.constants import DEFAULT_FF
+from timemachine.constants import DEFAULT_FF, DEFAULT_TEMP
 from timemachine.fe import free_energy, topology, utils
+from timemachine.fe.free_energy import MDParams, batches, sample
 from timemachine.fe.functional import construct_differentiable_interface, construct_differentiable_interface_fast
+from timemachine.fe.rbfe import setup_initial_states
 from timemachine.fe.single_topology import SingleTopology
+from timemachine.fe.stored_arrays import StoredArrays
 from timemachine.ff import Forcefield
 from timemachine.md import builders
 from timemachine.testsystems.relative import get_hif2a_ligand_pair_single_topology
@@ -213,3 +218,47 @@ def test_vacuum_and_solvent_edge_types():
     assert type(vacuum_unbound_potentials) == type(solvent_unbound_potentials)
     assert type(vacuum_sys_params) == type(solvent_sys_params)
     assert type(vacuum_masses) == type(solvent_masses)
+
+
+@given(integers(min_value=1))
+@seed(2023)
+def test_batches_of_nothing(batch_size):
+    assert list(batches(0, batch_size)) == []
+
+
+@given(integers(min_value=1, max_value=1000), integers(min_value=1))
+@seed(2023)
+def test_batches(n, batch_size):
+    assert sum(batches(n, batch_size)) == n
+    assert all(batch == batch_size for batch in list(batches(n, batch_size))[:-1])
+    *_, last = batches(n, batch_size)
+    assert 0 < last <= batch_size
+
+
+@pytest.fixture(scope="module")
+def hif2a_ligand_pair_single_topology_lam0_state():
+    mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
+    forcefield = Forcefield.load_from_file(DEFAULT_FF)
+    st = SingleTopology(mol_a, mol_b, core, forcefield)
+    state = setup_initial_states(st, None, DEFAULT_TEMP, [0.0], 2023)[0]
+    return state
+
+
+@given(integers(1, 100), integers(1, 100))
+@seed(2023)
+@example(10, 3)
+@example(10, 1)
+@example(1, 10)
+def test_sample_max_buffer_frames(hif2a_ligand_pair_single_topology_lam0_state, n_frames, max_buffer_frames):
+    md_params = MDParams(n_frames, 1, 1)
+    frames_ref, _ = sample(hif2a_ligand_pair_single_topology_lam0_state, md_params)
+    frames_test, _ = sample(
+        hif2a_ligand_pair_single_topology_lam0_state, md_params, max_buffer_frames=max_buffer_frames
+    )
+
+    assert isinstance(frames_ref, np.ndarray)
+    assert isinstance(frames_test, StoredArrays)
+    assert len(frames_ref) == len(frames_test)
+
+    for frame_ref, frame_test in zip(frames_ref, frames_test):
+        np.testing.assert_array_equal(frame_ref, frame_test)

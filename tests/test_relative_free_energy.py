@@ -4,15 +4,10 @@ from importlib import resources
 
 import numpy as np
 import pytest
-from hypothesis import example, given, seed
-from hypothesis.strategies import integers
 
-from timemachine.constants import DEFAULT_FF, DEFAULT_TEMP
-from timemachine.fe.bar import pair_overlap_from_ukln
-from timemachine.fe.free_energy import HostConfig, MDParams, SimulationResult, batches, image_frames, sample
-from timemachine.fe.rbfe import estimate_relative_free_energy, run_solvent, run_vacuum, setup_initial_states
-from timemachine.fe.single_topology import SingleTopology
-from timemachine.fe.stored_arrays import StoredArrays
+from timemachine.constants import DEFAULT_FF
+from timemachine.fe.free_energy import HostConfig, SimulationResult, image_frames, sample
+from timemachine.fe.rbfe import estimate_relative_free_energy, run_solvent, run_vacuum
 from timemachine.ff import Forcefield
 from timemachine.md import builders
 from timemachine.md.barostat.utils import compute_box_center
@@ -252,81 +247,6 @@ def test_rbfe_with_1_window():
             steps_per_frame=1,
             n_eq_steps=10,
         )
-
-
-@pytest.mark.nogpu
-def test_pair_overlap_from_ukln():
-    def gaussian_overlap(p1, p2):
-        def make_gaussian(params):
-            mu, sigma = params
-
-            def u(x):
-                return (x - mu) ** 2 / (2 * sigma ** 2)
-
-            rng = np.random.default_rng(2022)
-            x = rng.normal(mu, sigma, 100)
-
-            return u, x
-
-        u1, x1 = make_gaussian(p1)
-        u2, x2 = make_gaussian(p2)
-
-        u_kln = np.array([[u1(x1), u1(x2)], [u2(x1), u2(x2)]])
-
-        return pair_overlap_from_ukln(u_kln)
-
-    # identical distributions
-    np.testing.assert_allclose(gaussian_overlap((0, 1), (0, 1)), 1.0)
-
-    # non-overlapping
-    assert gaussian_overlap((0, 0.01), (1, 0.01)) < 1e-10
-
-    # overlapping
-    assert gaussian_overlap((0, 0.1), (0.5, 0.2)) > 0.1
-
-
-@given(integers(min_value=1))
-@seed(2023)
-def test_batches_of_nothing(batch_size):
-    assert list(batches(0, batch_size)) == []
-
-
-@given(integers(min_value=1, max_value=1000), integers(min_value=1))
-@seed(2023)
-def test_batches(n, batch_size):
-    assert sum(batches(n, batch_size)) == n
-    assert all(batch == batch_size for batch in list(batches(n, batch_size))[:-1])
-    *_, last = batches(n, batch_size)
-    assert 0 < last <= batch_size
-
-
-@pytest.fixture(scope="module")
-def hif2a_ligand_pair_single_topology_lam0_state():
-    mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
-    forcefield = Forcefield.load_from_file(DEFAULT_FF)
-    st = SingleTopology(mol_a, mol_b, core, forcefield)
-    state = setup_initial_states(st, None, DEFAULT_TEMP, [0.0], 2023)[0]
-    return state
-
-
-@given(integers(1, 100), integers(1, 100))
-@seed(2023)
-@example(10, 3)
-@example(10, 1)
-@example(1, 10)
-def test_sample_max_buffer_frames(hif2a_ligand_pair_single_topology_lam0_state, n_frames, max_buffer_frames):
-    md_params = MDParams(n_frames, 1, 1)
-    frames_ref, _ = sample(hif2a_ligand_pair_single_topology_lam0_state, md_params, max_buffer_frames=None)
-    frames_test, _ = sample(
-        hif2a_ligand_pair_single_topology_lam0_state, md_params, max_buffer_frames=max_buffer_frames
-    )
-
-    assert isinstance(frames_ref, np.ndarray)
-    assert isinstance(frames_test, StoredArrays)
-    assert len(frames_ref) == len(frames_test)
-
-    for frame_ref, frame_test in zip(frames_ref, frames_test):
-        np.testing.assert_array_equal(frame_ref, frame_test)
 
 
 if __name__ == "__main__":
