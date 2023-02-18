@@ -60,8 +60,8 @@ class SimulationResult:
     dG_errs_png: bytes
     overlap_summary_png: bytes
     overlap_detail_png: bytes
-    frames: List[Union[np.ndarray, StoredArrays]]  # (len(keep_idxs), n_frames, N, 3)
-    boxes: List[np.ndarray]
+    frames: List[NDArray]  # (len(keep_idxs), n_frames, N, 3)
+    boxes: List[NDArray]
     initial_states: List[InitialState]
     md_params: MDParams
 
@@ -319,12 +319,12 @@ def sample(initial_state: InitialState, md_params: MDParams, max_buffer_frames: 
 
 
 def estimate_free_energy_given_initial_states(
-    initial_states,
-    md_params,
-    temperature,
-    prefix,
-    keep_idxs,
-):
+    initial_states: List[InitialState],
+    md_params: MDParams,
+    temperature: float,
+    prefix: str,
+    keep_idxs: List[int],
+) -> SimulationResult:
     """
     Estimate free energies given pre-generated samples. This implements the pair-BAR method, where
     windows assumed to be ordered with good overlap, with the final free energy being a sum
@@ -433,11 +433,11 @@ def estimate_free_energy_given_initial_states(
 
 
 def run_sequential_sims_given_initial_states(
-    initial_states,
-    md_params,
-    temperature,
-    keep_idxs,
-):
+    initial_states: Sequence[InitialState],
+    md_params: MDParams,
+    temperature: float,
+    keep_idxs: List[int],
+) -> Tuple[NDArray, List[NDArray], List[NDArray]]:
     """Sequentially run simulations at each state in initial_states,
     returning summaries that can be used for pair BAR, energy decomposition, and other diagnostics
 
@@ -462,7 +462,8 @@ def run_sequential_sims_given_initial_states(
     stored_frames = []
     stored_boxes = []
 
-    tmp_states = [None] * len(initial_states)
+    # keep no more than 2 states in memory at once
+    prev_state: Optional[EnergyDecomposedState] = None
 
     # u_kln matrix (2, 2, n_frames) for each pair of adjacent lambda windows and energy term
     u_kln_by_component_by_lambda = []
@@ -482,20 +483,17 @@ def run_sequential_sims_given_initial_states(
             stored_frames.append(cur_frames)
             stored_boxes.append(cur_boxes)
 
-        # construct EnergyDecomposedState for current lamb_idx,
-        # but keep no more than 2 of these states in memory at once
-        if lamb_idx >= 2:
-            tmp_states[lamb_idx - 2] = None
-
         bound_impls = [p.bound_impl(np.float32) for p in initial_state.potentials]
         cur_batch_U_fns = get_batch_u_fns(bound_impls, temperature)
 
-        tmp_states[lamb_idx] = EnergyDecomposedState(cur_frames, cur_boxes, cur_batch_U_fns)
+        state = EnergyDecomposedState(cur_frames, cur_boxes, cur_batch_U_fns)
 
         # analysis that depends on current and previous state
-        if lamb_idx > 0:
-            state_pair = [tmp_states[lamb_idx - 1], tmp_states[lamb_idx]]
+        if prev_state:
+            state_pair = [prev_state, state]
             u_kln_by_component = compute_energy_decomposed_u_kln(state_pair)
             u_kln_by_component_by_lambda.append(u_kln_by_component)
+
+        prev_state = state
 
     return np.array(u_kln_by_component_by_lambda), stored_frames, stored_boxes
