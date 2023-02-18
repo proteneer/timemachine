@@ -318,12 +318,14 @@ def sample(initial_state: InitialState, md_params: MDParams, max_buffer_frames: 
     return all_coords, all_boxes
 
 
-def estimate_free_energy_given_initial_states(
+def estimate_free_energy_pair_bar(
+    u_kln_by_component_by_lambda: NDArray,
+    stored_frames: List[NDArray],
+    stored_boxes: List[NDArray],
     initial_states: List[InitialState],
     md_params: MDParams,
     temperature: float,
     prefix: str,
-    keep_idxs: List[int],
 ) -> SimulationResult:
     """
     Estimate free energies given pre-generated samples. This implements the pair-BAR method, where
@@ -358,11 +360,6 @@ def estimate_free_energy_given_initial_states(
         object containing results of the simulation
 
     """
-
-    # run n_lambdas simulations in sequence
-    u_kln_by_component_by_lambda, stored_frames, stored_boxes = run_sequential_sims_given_initial_states(
-        initial_states, md_params, temperature, keep_idxs
-    )
 
     # "pair BAR" free energy analysis
     kBT = BOLTZ * temperature
