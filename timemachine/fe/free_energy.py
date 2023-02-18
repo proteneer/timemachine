@@ -51,15 +51,27 @@ class InitialState:
 
 
 @dataclass
-class SimulationResult:
+class PairBarResult:
+    initial_states: List[InitialState]
     all_dGs: List[float]  # L - 1
     all_errs: List[float]  # L - 1
-    dG_errs_by_lambda_by_component: np.ndarray  # (len(U_names), L - 1)
+    dG_errs_by_lambda_by_component: NDArray  # (len(U_names), L - 1)
     overlaps_by_lambda: List[float]  # L - 1
-    overlaps_by_lambda_by_component: np.ndarray  # (len(U_names), L - 1)
+    overlaps_by_lambda_by_component: NDArray  # (len(U_names), L - 1)
+    u_kln_by_lambda_by_component: NDArray
+
+
+@dataclass
+class PairBarPlots:
     dG_errs_png: bytes
     overlap_summary_png: bytes
     overlap_detail_png: bytes
+
+
+@dataclass
+class SimulationResult:
+    results: List[PairBarResult]
+    plots: PairBarPlots
     frames: List[NDArray]  # (len(keep_idxs), n_frames, N, 3)
     boxes: List[NDArray]
     initial_states: List[InitialState]
@@ -319,14 +331,11 @@ def sample(initial_state: InitialState, md_params: MDParams, max_buffer_frames: 
 
 
 def estimate_free_energy_pair_bar(
-    u_kln_by_component_by_lambda: NDArray,
-    stored_frames: List[NDArray],
-    stored_boxes: List[NDArray],
     initial_states: List[InitialState],
-    md_params: MDParams,
+    u_kln_by_component_by_lambda: NDArray,
     temperature: float,
     prefix: str,
-) -> SimulationResult:
+) -> PairBarResult:
     """
     Estimate free energies given pre-generated samples. This implements the pair-BAR method, where
     windows assumed to be ordered with good overlap, with the final free energy being a sum
@@ -396,37 +405,37 @@ def estimate_free_energy_pair_bar(
         [[pair_overlap_from_ukln(u_kln) for u_kln in ukln_by_lambda] for ukln_by_lambda in ukln_by_lambda_by_component]
     )
 
-    # generate figures
-    U_names = [type(U_fn).__name__ for U_fn in initial_states[0].potentials]
-    lambdas = [s.lamb for s in initial_states]
-
-    overlap_detail_png = make_overlap_detail_figure(
-        U_names,
-        all_dGs,
-        all_errs,
-        u_kln_by_component_by_lambda,
-        temperature,
-        prefix,
-    )
-    dG_errs_png = make_dG_errs_figure(U_names, lambdas, all_errs, dG_errs_by_lambda_by_component)
-    overlap_summary_png = make_overlap_summary_figure(
-        U_names, lambdas, overlaps_by_lambda, overlaps_by_lambda_by_component
-    )
-
-    return SimulationResult(
+    return PairBarResult(
+        initial_states,
         all_dGs,
         all_errs,
         dG_errs_by_lambda_by_component,
         overlaps_by_lambda,
         overlaps_by_lambda_by_component,
-        dG_errs_png,
-        overlap_summary_png,
-        overlap_detail_png,
-        stored_frames,
-        stored_boxes,
-        initial_states,
-        md_params,
+        ukln_by_lambda_by_component,
     )
+
+
+def make_pair_bar_plots(result: PairBarResult, temperature: float, prefix: str) -> PairBarPlots:
+    U_names = [type(U_fn).__name__ for U_fn in result.initial_states[0].potentials]
+    lambdas = [s.lamb for s in result.initial_states]
+
+    overlap_detail_png = make_overlap_detail_figure(
+        U_names,
+        result.all_dGs,
+        result.all_errs,
+        result.u_kln_by_lambda_by_component.swapaxes(0, 1),
+        temperature,
+        prefix,
+    )
+
+    dG_errs_png = make_dG_errs_figure(U_names, lambdas, result.all_errs, result.dG_errs_by_lambda_by_component)
+
+    overlap_summary_png = make_overlap_summary_figure(
+        U_names, lambdas, result.overlaps_by_lambda, result.overlaps_by_lambda_by_component
+    )
+
+    return PairBarPlots(dG_errs_png, overlap_summary_png, overlap_detail_png)
 
 
 def run_sequential_sims_given_initial_states(
