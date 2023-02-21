@@ -1,12 +1,13 @@
 # test that we can run relative free energy simulations in complex and in solvent
 # this doesn't test for accuracy, just that everything mechanically runs.
 from importlib import resources
+from typing import Sequence
 
 import numpy as np
 import pytest
 
 from timemachine.constants import DEFAULT_FF
-from timemachine.fe.free_energy import HostConfig, SimulationResult, image_frames, sample
+from timemachine.fe.free_energy import HostConfig, InitialState, PairBarResult, SimulationResult, image_frames, sample
 from timemachine.fe.rbfe import estimate_relative_free_energy, run_solvent, run_vacuum
 from timemachine.ff import Forcefield
 from timemachine.md import builders
@@ -51,6 +52,41 @@ def run_triple(mol_a, mol_b, core, forcefield, n_frames, protein_path, n_eq_step
 
     seed = 2023
 
+    def check_sim_result(sim_res: SimulationResult):
+        assert [x.lamb for x in sim_res.initial_states] == lambda_schedule
+
+        assert sim_res.plots.dG_errs_png is not None
+        assert sim_res.plots.overlap_summary_png is not None
+        assert sim_res.plots.overlap_detail_png is not None
+
+        assert len(sim_res.frames[0]) == n_frames
+        assert len(sim_res.frames[-1]) == n_frames
+        assert len(sim_res.boxes[0]) == n_frames
+        assert len(sim_res.boxes[-1]) == n_frames
+        assert sim_res.md_params.n_frames == n_frames
+        assert sim_res.md_params.n_eq_steps == n_eq_steps
+
+        def check_pair_bar_result(initial_states: Sequence[InitialState], bar_res: PairBarResult):
+            n_pairs = len(initial_states) - 1
+            assert len(bar_res.all_dGs) == n_pairs
+
+            assert len(bar_res.all_errs) == n_pairs
+            assert bar_res.dG_errs_by_lambda_by_component.shape[1] == n_pairs
+            for dg_errs in [bar_res.all_errs, bar_res.dG_errs_by_lambda_by_component]:
+                assert np.all(0.0 < np.asarray(dg_errs))
+                assert np.linalg.norm(dg_errs) < 0.1
+
+            assert len(bar_res.overlaps_by_lambda) == n_pairs
+            assert bar_res.overlaps_by_lambda_by_component.shape[0] == bar_res.dG_errs_by_lambda_by_component.shape[0]
+            assert bar_res.overlaps_by_lambda_by_component.shape[1] == n_pairs
+            for overlaps in [bar_res.overlaps_by_lambda, bar_res.overlaps_by_lambda_by_component]:
+                assert np.all(0.0 < np.asarray(overlaps))
+                assert np.all(np.asarray(overlaps) < 1.0)
+
+        check_pair_bar_result(sim_res.initial_states, sim_res.result)
+        for initial_states, res in sim_res.intermediate_results:
+            check_pair_bar_result(initial_states, res)
+
     lambda_schedule = [0.01, 0.02, 0.03]
     vacuum_host_config = None
     vacuum_res = estimate_relative_free_energy(
@@ -66,16 +102,7 @@ def run_triple(mol_a, mol_b, core, forcefield, n_frames, protein_path, n_eq_step
         n_eq_steps=n_eq_steps,
     )
 
-    assert vacuum_res.overlap_summary_png is not None
-    assert vacuum_res.overlap_detail_png is not None
-    assert np.linalg.norm(vacuum_res.all_errs) < 0.1
-    assert len(vacuum_res.frames[0]) == n_frames
-    assert len(vacuum_res.frames[-1]) == n_frames
-    assert len(vacuum_res.boxes[0]) == n_frames
-    assert len(vacuum_res.boxes[-1]) == n_frames
-    assert [x.lamb for x in vacuum_res.initial_states] == lambda_schedule
-    assert vacuum_res.md_params.n_frames == n_frames
-    assert vacuum_res.md_params.n_eq_steps == n_eq_steps
+    check_sim_result(vacuum_res)
 
     box_width = 4.0
     solvent_sys, solvent_conf, solvent_box, _ = builders.build_water_system(box_width, forcefield.water_ff)
@@ -94,36 +121,7 @@ def run_triple(mol_a, mol_b, core, forcefield, n_frames, protein_path, n_eq_step
         n_eq_steps=n_eq_steps,
     )
 
-    def check_result(result: SimulationResult):
-        n_pairs = len(lambda_schedule) - 1
-        assert len(result.all_dGs) == n_pairs
-
-        assert len(result.all_errs) == n_pairs
-        assert result.dG_errs_by_lambda_by_component.shape[1] == n_pairs
-        for dg_errs in [result.all_errs, result.dG_errs_by_lambda_by_component]:
-            assert np.all(0.0 < np.asarray(dg_errs))
-            assert np.linalg.norm(dg_errs) < 0.1
-
-        assert len(result.overlaps_by_lambda) == n_pairs
-        assert result.overlaps_by_lambda_by_component.shape[0] == result.dG_errs_by_lambda_by_component.shape[0]
-        assert result.overlaps_by_lambda_by_component.shape[1] == n_pairs
-        for overlaps in [result.overlaps_by_lambda, result.overlaps_by_lambda_by_component]:
-            assert np.all(0.0 < np.asarray(overlaps))
-            assert np.all(np.asarray(overlaps) < 1.0)
-
-        assert result.dG_errs_png is not None
-        assert result.overlap_summary_png is not None
-        assert result.overlap_detail_png is not None
-
-        assert len(result.frames[0]) == n_frames
-        assert len(result.frames[-1]) == n_frames
-        assert len(result.boxes[0]) == n_frames
-        assert len(result.boxes[-1]) == n_frames
-        assert [x.lamb for x in result.initial_states] == lambda_schedule
-        assert result.md_params.n_frames == n_frames
-        assert result.md_params.n_eq_steps == n_eq_steps
-
-    check_result(solvent_res)
+    check_sim_result(solvent_res)
 
     seed = 2024
     complex_sys, complex_conf, _, _, complex_box, _ = builders.build_protein_system(
@@ -144,7 +142,7 @@ def run_triple(mol_a, mol_b, core, forcefield, n_frames, protein_path, n_eq_step
         n_eq_steps=n_eq_steps,
     )
 
-    check_result(complex_res)
+    check_sim_result(complex_res)
 
 
 @pytest.mark.nightly(reason="Slow!")

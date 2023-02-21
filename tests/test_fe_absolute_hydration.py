@@ -17,9 +17,9 @@ def test_run_solvent():
         mol, ff, None, n_frames, seed, n_eq_steps=n_eq_steps, n_windows=n_windows
     )
 
-    assert res.overlap_summary_png is not None
-    assert res.overlap_detail_png is not None
-    assert np.linalg.norm(res.all_errs) < 10
+    assert res.plots.overlap_summary_png is not None
+    assert res.plots.overlap_detail_png is not None
+    assert np.linalg.norm(res.result.all_errs) < 10
     assert len(res.frames) == 2
     assert len(res.boxes) == 2
     assert len(res.frames[0]) == n_frames

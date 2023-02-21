@@ -9,7 +9,15 @@ from simtk.openmm import app
 
 from timemachine.constants import DEFAULT_PRESSURE, DEFAULT_TEMP
 from timemachine.fe import atom_mapping, model_utils
-from timemachine.fe.free_energy import HostConfig, InitialState, MDParams, estimate_free_energy_given_initial_states
+from timemachine.fe.free_energy import (
+    HostConfig,
+    InitialState,
+    MDParams,
+    SimulationResult,
+    estimate_free_energy_pair_bar,
+    make_pair_bar_plots,
+    run_sequential_sims_given_initial_states,
+)
 from timemachine.fe.single_topology import SingleTopology
 from timemachine.fe.system import convert_omm_system
 from timemachine.fe.utils import get_mol_name, get_romol_conf
@@ -372,10 +380,20 @@ def estimate_relative_free_energy(
     # TODO: rename prefix to postfix, or move to beginning of combined_prefix?
     combined_prefix = get_mol_name(mol_a) + "_" + get_mol_name(mol_b) + "_" + prefix
     try:
-        sim_result = estimate_free_energy_given_initial_states(
-            initial_states, md_params, temperature, combined_prefix, keep_idxs
+        u_kln_by_component_by_lambda, stored_frames, stored_boxes = run_sequential_sims_given_initial_states(
+            initial_states, md_params, temperature, keep_idxs
         )
-        return sim_result
+        pair_bar_result = estimate_free_energy_pair_bar(u_kln_by_component_by_lambda, temperature, combined_prefix)
+        plots = make_pair_bar_plots(initial_states, pair_bar_result, temperature, combined_prefix)
+        return SimulationResult(
+            initial_states,
+            pair_bar_result,
+            plots,
+            stored_frames,
+            stored_boxes,
+            md_params,
+            [(initial_states, pair_bar_result)],
+        )
     except Exception as err:
         with open(f"failed_rbfe_result_{combined_prefix}.pkl", "wb") as fh:
             pickle.dump((initial_states, md_params, err), fh)

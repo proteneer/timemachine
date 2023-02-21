@@ -16,7 +16,9 @@ from timemachine.fe.free_energy import (
     InitialState,
     MDParams,
     SimulationResult,
-    estimate_free_energy_given_initial_states,
+    estimate_free_energy_pair_bar,
+    make_pair_bar_plots,
+    run_sequential_sims_given_initial_states,
 )
 from timemachine.fe.lambda_schedule import construct_pre_optimized_absolute_lambda_schedule_solvent
 from timemachine.fe.topology import BaseTopology
@@ -242,8 +244,19 @@ def estimate_absolute_free_energy(
 
     combined_prefix = get_mol_name(mol) + "_" + prefix
     try:
-        return estimate_free_energy_given_initial_states(
-            initial_states, md_params, temperature, combined_prefix, keep_idxs
+        u_kln_by_component_by_lambda, stored_frames, stored_boxes = run_sequential_sims_given_initial_states(
+            initial_states, md_params, temperature, keep_idxs
+        )
+        pair_bar_result = estimate_free_energy_pair_bar(u_kln_by_component_by_lambda, temperature, combined_prefix)
+        plots = make_pair_bar_plots(initial_states, pair_bar_result, temperature, combined_prefix)
+        return SimulationResult(
+            initial_states,
+            pair_bar_result,
+            plots,
+            stored_frames,
+            stored_boxes,
+            md_params,
+            [(initial_states, pair_bar_result)],
         )
     except Exception as err:
         with open(f"failed_ahfe_result_{combined_prefix}.pkl", "wb") as fh:
