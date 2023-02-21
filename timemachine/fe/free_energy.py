@@ -331,9 +331,7 @@ def sample(initial_state: InitialState, md_params: MDParams, max_buffer_frames: 
 
 
 def estimate_free_energy_pair_bar(
-    u_kln_by_component_by_lambda: NDArray,
-    temperature: float,
-    prefix: str,
+    u_kln_by_component_by_lambda: NDArray, temperature: float, prefix: str
 ) -> PairBarResult:
     """
     Estimate free energies given pre-generated samples. This implements the pair-BAR method, where
