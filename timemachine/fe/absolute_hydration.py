@@ -10,9 +10,15 @@ from simtk.openmm import app
 
 from timemachine.constants import BOLTZ, DEFAULT_FF, DEFAULT_TEMP
 from timemachine.fe import functional, model_utils
-from timemachine.fe.free_energy import AbsoluteFreeEnergy, HostConfig, InitialState, MDParams, SimulationResult
+from timemachine.fe.free_energy import (
+    AbsoluteFreeEnergy,
+    HostConfig,
+    InitialState,
+    MDParams,
+    SimulationResult,
+    estimate_free_energy_given_initial_states,
+)
 from timemachine.fe.lambda_schedule import construct_pre_optimized_absolute_lambda_schedule_solvent
-from timemachine.fe.rbfe import estimate_free_energy_given_initial_states
 from timemachine.fe.topology import BaseTopology
 from timemachine.fe.utils import get_mol_name, get_romol_conf
 from timemachine.ff import Forcefield
