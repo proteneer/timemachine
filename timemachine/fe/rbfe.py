@@ -1,7 +1,7 @@
 import pickle
 import traceback
 import warnings
-from typing import Any, Dict, List, NamedTuple, Optional, Sequence
+from typing import Any, Dict, List, NamedTuple, Optional, Sequence, Union
 
 import numpy as np
 from numpy.typing import NDArray
@@ -95,11 +95,66 @@ def assert_all_states_have_same_masses(initial_states: List[InitialState]):
     np.testing.assert_array_almost_equal(deviation_among_windows, 0, err_msg="masses assumed constant w.r.t. lambda")
 
 
+def setup_initial_state(
+    st: SingleTopology,
+    lamb: float,
+    host_config: Optional[HostConfig],
+    temperature: float,
+    seed: int,
+) -> InitialState:
+    conf_a = get_romol_conf(st.mol_a)
+    conf_b = get_romol_conf(st.mol_b)
+
+    ligand_conf = st.combine_confs(conf_a, conf_b, lamb)
+
+    # use a different seed to initialize every window,
+    # but in a way that should be symmetric for
+    # A -> B vs. B -> A edge definitions
+    init_seed = int(seed + hash(ligand_conf.tobytes())) % 10000
+
+    if host_config:
+        host_system, host_masses = convert_omm_system(host_config.omm_system)
+        host_conf = minimizer.minimize_host_4d(
+            [st.mol_a, st.mol_b],
+            host_config.omm_system,
+            host_config.conf,
+            st.ff,
+            host_config.box,
+        )
+        x0, box0, hmr_masses, potentials, baro = setup_in_env(
+            st, host_system, host_masses, host_conf, host_config, ligand_conf, lamb, temperature, init_seed
+        )
+    else:
+        x0, box0, hmr_masses, potentials, baro = setup_in_vacuum(st, ligand_conf, lamb)
+
+    # provide a different run_seed for every lambda window,
+    # but in a way that should be symmetric for
+    # A -> B vs. B -> A edge definitions
+    run_seed = int(seed + hash(bytes().join([np.array(p.params).tobytes() for p in potentials]))) % 10000
+    # the constant is arbitrary, but see
+    # https://github.com/proteneer/timemachine/commit/e1f7328f01f427534d8744aab6027338e116ad09
+
+    # initialize velocities
+    v0 = np.zeros_like(x0)  # tbd resample from Maxwell-boltzman?
+
+    # determine ligand idxs
+    num_ligand_atoms = len(ligand_conf)
+    num_total_atoms = len(x0)
+    ligand_idxs = np.arange(num_total_atoms - num_ligand_atoms, num_total_atoms)
+
+    # initialize Langevin integrator
+    dt = 2.5e-3
+    friction = 1.0
+    intg = LangevinIntegrator(temperature, dt, friction, hmr_masses, run_seed)
+
+    return InitialState(potentials, intg, baro, x0, v0, box0, lamb, ligand_idxs)
+
+
 def setup_initial_states(
     st: SingleTopology,
     host_config: Optional[HostConfig],
     temperature: float,
-    lambda_schedule: List[float],
+    lambda_schedule: Union[NDArray, Sequence[float]],
     seed: int,
     min_cutoff: float = 0.7,
 ) -> List[InitialState]:
@@ -140,55 +195,7 @@ def setup_initial_states(
     # check that the lambda schedule is monotonically increasing.
     assert np.all(np.diff(lambda_schedule) > 0)
 
-    conf_a = get_romol_conf(st.mol_a)
-    conf_b = get_romol_conf(st.mol_b)
-
-    for lamb_idx, lamb in enumerate(lambda_schedule):
-        ligand_conf = st.combine_confs(conf_a, conf_b, lamb)
-
-        # use a different seed to initialize every window,
-        # but in a way that should be symmetric for
-        # A -> B vs. B -> A edge definitions
-        init_seed = int(seed + hash(ligand_conf.tobytes())) % 10000
-
-        if host_config:
-            host_system, host_masses = convert_omm_system(host_config.omm_system)
-            host_conf = minimizer.minimize_host_4d(
-                [st.mol_a, st.mol_b],
-                host_config.omm_system,
-                host_config.conf,
-                st.ff,
-                host_config.box,
-            )
-            x0, box0, hmr_masses, potentials, baro = setup_in_env(
-                st, host_system, host_masses, host_conf, host_config, ligand_conf, lamb, temperature, init_seed
-            )
-        else:
-            x0, box0, hmr_masses, potentials, baro = setup_in_vacuum(st, ligand_conf, lamb)
-
-        # provide a different run_seed for every lambda window,
-        # but in a way that should be symmetric for
-        # A -> B vs. B -> A edge definitions
-        run_seed = int(seed + hash(bytes().join([np.array(p.params).tobytes() for p in potentials]))) % 10000
-        # the constant is arbitrary, but see
-        # https://github.com/proteneer/timemachine/commit/e1f7328f01f427534d8744aab6027338e116ad09
-
-        # initialize velocities
-        v0 = np.zeros_like(x0)  # tbd resample from Maxwell-boltzman?
-
-        # determine ligand idxs
-        num_ligand_atoms = len(ligand_conf)
-        num_total_atoms = len(x0)
-        ligand_idxs = np.arange(num_total_atoms - num_ligand_atoms, num_total_atoms)
-
-        # initialize Langevin integrator
-        dt = 2.5e-3
-        friction = 1.0
-        intg = LangevinIntegrator(temperature, dt, friction, hmr_masses, run_seed)
-
-        # pack into state
-        state = InitialState(potentials, intg, baro, x0, v0, box0, lamb, ligand_idxs)
-        initial_states.append(state)
+    initial_states = [setup_initial_state(st, lamb, host_config, temperature, seed) for lamb in lambda_schedule]
 
     # minimize ligand and environment atoms within min_cutoff of the ligand
 
