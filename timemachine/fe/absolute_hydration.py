@@ -254,7 +254,7 @@ def estimate_absolute_free_energy(
             combined_prefix,
         )
         plots = make_pair_bar_plots(pair_bar_result, temperature, combined_prefix)
-        return SimulationResult([pair_bar_result], plots, stored_frames, stored_boxes, initial_states, md_params)
+        return SimulationResult([pair_bar_result], plots, stored_frames, stored_boxes, md_params)
     except Exception as err:
         with open(f"failed_ahfe_result_{combined_prefix}.pkl", "wb") as fh:
             pickle.dump((initial_states, md_params, err), fh)

@@ -74,7 +74,6 @@ class SimulationResult:
     plots: PairBarPlots
     frames: List[NDArray]  # (len(keep_idxs), n_frames, N, 3)
     boxes: List[NDArray]
-    initial_states: List[InitialState]
     md_params: MDParams
 
 

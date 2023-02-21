@@ -6,7 +6,7 @@ import numpy as np
 import pytest
 
 from timemachine.constants import DEFAULT_FF
-from timemachine.fe.free_energy import HostConfig, SimulationResult, image_frames, sample
+from timemachine.fe.free_energy import HostConfig, PairBarResult, SimulationResult, image_frames, sample
 from timemachine.fe.rbfe import estimate_relative_free_energy, run_solvent, run_vacuum
 from timemachine.ff import Forcefield
 from timemachine.md import builders
@@ -38,7 +38,7 @@ def run_bitwise_reproducibility(mol_a, mol_b, core, forcefield, n_frames):
     )
 
     all_frames, all_boxes = [], []
-    for state in solvent_res.initial_states:
+    for state in solvent_res.results[-1].initial_states:
         frames, boxes = sample(state, solvent_res.md_params)
         all_frames.append(frames)
         all_boxes.append(boxes)
@@ -50,6 +50,40 @@ def run_bitwise_reproducibility(mol_a, mol_b, core, forcefield, n_frames):
 def run_triple(mol_a, mol_b, core, forcefield, n_frames, protein_path, n_eq_steps):
 
     seed = 2023
+
+    def check_sim_result(sim: SimulationResult):
+
+        assert sim.plots.dG_errs_png is not None
+        assert sim.plots.overlap_summary_png is not None
+        assert sim.plots.overlap_detail_png is not None
+
+        assert len(sim.frames[0]) == n_frames
+        assert len(sim.frames[-1]) == n_frames
+        assert len(sim.boxes[0]) == n_frames
+        assert len(sim.boxes[-1]) == n_frames
+        assert sim.md_params.n_frames == n_frames
+        assert sim.md_params.n_eq_steps == n_eq_steps
+
+        def check_pair_bar_result(bar: PairBarResult):
+            n_pairs = len(lambda_schedule) - 1
+            assert len(bar.all_dGs) == n_pairs
+
+            assert len(bar.all_errs) == n_pairs
+            assert bar.dG_errs_by_lambda_by_component.shape[1] == n_pairs
+            for dg_errs in [bar.all_errs, bar.dG_errs_by_lambda_by_component]:
+                assert np.all(0.0 < np.asarray(dg_errs))
+                assert np.linalg.norm(dg_errs) < 0.1
+
+            assert len(bar.overlaps_by_lambda) == n_pairs
+            assert bar.overlaps_by_lambda_by_component.shape[0] == bar.dG_errs_by_lambda_by_component.shape[0]
+            assert bar.overlaps_by_lambda_by_component.shape[1] == n_pairs
+            for overlaps in [bar.overlaps_by_lambda, bar.overlaps_by_lambda_by_component]:
+                assert np.all(0.0 < np.asarray(overlaps))
+                assert np.all(np.asarray(overlaps) < 1.0)
+            assert [x.lamb for x in bar.initial_states] == lambda_schedule
+
+        for r in sim.results:
+            check_pair_bar_result(r)
 
     lambda_schedule = [0.01, 0.02, 0.03]
     vacuum_host_config = None
@@ -66,16 +100,7 @@ def run_triple(mol_a, mol_b, core, forcefield, n_frames, protein_path, n_eq_step
         n_eq_steps=n_eq_steps,
     )
 
-    assert vacuum_res.overlap_summary_png is not None
-    assert vacuum_res.overlap_detail_png is not None
-    assert np.linalg.norm(vacuum_res.all_errs) < 0.1
-    assert len(vacuum_res.frames[0]) == n_frames
-    assert len(vacuum_res.frames[-1]) == n_frames
-    assert len(vacuum_res.boxes[0]) == n_frames
-    assert len(vacuum_res.boxes[-1]) == n_frames
-    assert [x.lamb for x in vacuum_res.initial_states] == lambda_schedule
-    assert vacuum_res.md_params.n_frames == n_frames
-    assert vacuum_res.md_params.n_eq_steps == n_eq_steps
+    check_sim_result(vacuum_res)
 
     box_width = 4.0
     solvent_sys, solvent_conf, solvent_box, _ = builders.build_water_system(box_width, forcefield.water_ff)
@@ -94,36 +119,7 @@ def run_triple(mol_a, mol_b, core, forcefield, n_frames, protein_path, n_eq_step
         n_eq_steps=n_eq_steps,
     )
 
-    def check_result(result: SimulationResult):
-        n_pairs = len(lambda_schedule) - 1
-        assert len(result.all_dGs) == n_pairs
-
-        assert len(result.all_errs) == n_pairs
-        assert result.dG_errs_by_lambda_by_component.shape[1] == n_pairs
-        for dg_errs in [result.all_errs, result.dG_errs_by_lambda_by_component]:
-            assert np.all(0.0 < np.asarray(dg_errs))
-            assert np.linalg.norm(dg_errs) < 0.1
-
-        assert len(result.overlaps_by_lambda) == n_pairs
-        assert result.overlaps_by_lambda_by_component.shape[0] == result.dG_errs_by_lambda_by_component.shape[0]
-        assert result.overlaps_by_lambda_by_component.shape[1] == n_pairs
-        for overlaps in [result.overlaps_by_lambda, result.overlaps_by_lambda_by_component]:
-            assert np.all(0.0 < np.asarray(overlaps))
-            assert np.all(np.asarray(overlaps) < 1.0)
-
-        assert result.dG_errs_png is not None
-        assert result.overlap_summary_png is not None
-        assert result.overlap_detail_png is not None
-
-        assert len(result.frames[0]) == n_frames
-        assert len(result.frames[-1]) == n_frames
-        assert len(result.boxes[0]) == n_frames
-        assert len(result.boxes[-1]) == n_frames
-        assert [x.lamb for x in result.initial_states] == lambda_schedule
-        assert result.md_params.n_frames == n_frames
-        assert result.md_params.n_eq_steps == n_eq_steps
-
-    check_result(solvent_res)
+    check_sim_result(solvent_res)
 
     seed = 2024
     complex_sys, complex_conf, _, _, complex_box, _ = builders.build_protein_system(
@@ -144,7 +140,7 @@ def run_triple(mol_a, mol_b, core, forcefield, n_frames, protein_path, n_eq_step
         n_eq_steps=n_eq_steps,
     )
 
-    check_result(complex_res)
+    check_sim_result(complex_res)
 
 
 @pytest.mark.nightly(reason="Slow!")
@@ -201,13 +197,13 @@ def test_imaging_frames():
         steps_per_frame=steps_per_frame,
         n_windows=windows,
     )
-    keep_idxs = [0, len(res.initial_states) - 1]
+    keep_idxs = [0, len(res.results[-1].initial_states) - 1]
     assert len(keep_idxs) == len(res.frames)
 
     # A buffer, as imaging doesn't ensure everything is perfectly in the box
     padding = 0.3
     for i, (frames, boxes) in enumerate(zip(res.frames, res.boxes)):
-        initial_state = res.initial_states[keep_idxs[i]]
+        initial_state = res.results[-1].initial_states[keep_idxs[i]]
         box_center = compute_box_center(boxes[0])
         box_extents = np.max(boxes, axis=(0, 1))
 
