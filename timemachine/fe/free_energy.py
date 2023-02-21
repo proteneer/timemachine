@@ -422,6 +422,7 @@ def make_pair_bar_plots(
         U_names,
         result.all_dGs,
         result.all_errs,
+        # u_kln_by_lambda_by_component -> u_kln_by_component_by_lambda
         result.u_kln_by_lambda_by_component.swapaxes(0, 1),
         temperature,
         prefix,
