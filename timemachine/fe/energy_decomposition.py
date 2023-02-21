@@ -1,19 +1,20 @@
 import functools
 from dataclasses import dataclass
-from typing import Callable, List, Sequence
+from typing import Callable, Generic, Iterable, List, Sequence, TypeVar
 
 import numpy as np
 
 from timemachine.constants import BOLTZ, DEFAULT_TEMP
+from timemachine.lib.custom_ops import BoundPotential
 
-Frames = np.ndarray
+Frames = TypeVar("Frames")
 Boxes = np.ndarray
 ReducedEnergies = np.ndarray
 Batch_u_fn = Callable[[Frames, Boxes], ReducedEnergies]
 
 
 @dataclass
-class EnergyDecomposedState:
+class EnergyDecomposedState(Generic[Frames]):
     """contains samples (frames, boxes) and a list of reduced energy functions"""
 
     frames: Frames
@@ -21,7 +22,7 @@ class EnergyDecomposedState:
     batch_u_fns: Sequence[Batch_u_fn]  # u_fn : (frames, boxes) -> reduced_energies
 
 
-def get_batch_u_fns(bps, temperature=DEFAULT_TEMP):
+def get_batch_u_fns(bps: Iterable[BoundPotential], temperature: float = DEFAULT_TEMP) -> List[Batch_u_fn]:
     """Get a list of functions that take in (coords, boxes), return reduced_potentials
 
     Parameters
@@ -35,7 +36,7 @@ def get_batch_u_fns(bps, temperature=DEFAULT_TEMP):
     """
     kBT = temperature * BOLTZ
 
-    batch_u_fns = []
+    batch_u_fns: List[Batch_u_fn] = []
     for bp in bps:
 
         def batch_u_fn(xs, boxes, bp_impl):
