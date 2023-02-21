@@ -338,27 +338,16 @@ def estimate_free_energy_pair_bar(
     windows assumed to be ordered with good overlap, with the final free energy being a sum
     of the components. The constants below are:
 
-    L: the number of lambda windows
-    T: the number of samples
-    N: the number of atoms
-    P: the number of components in the energy function.
-
     Parameters
     ----------
-    initial_states: list of InitialState
-        Initial state objects
-
-    md_params: MDParams
-        Detailing specifics of each simulation
+    u_kln_by_component_by_lambda: array
+        For each energy component and lambda pair, u_kln in pymbar format, where k = l = 2
 
     temperature: float
         Temperature the system was run at
 
     prefix: str
         A prefix that we append to the BAR overlap figures
-
-    keep_idxs: list of int
-        Which states we keep samples for. Must be positive.
 
     Return
     ------
