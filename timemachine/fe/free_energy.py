@@ -52,7 +52,6 @@ class InitialState:
 
 @dataclass
 class PairBarResult:
-    initial_states: List[InitialState]
     all_dGs: List[float]  # L - 1
     all_errs: List[float]  # L - 1
     dG_errs_by_lambda_by_component: NDArray  # (len(U_names), L - 1)
@@ -70,11 +69,13 @@ class PairBarPlots:
 
 @dataclass
 class SimulationResult:
-    results: List[PairBarResult]
+    initial_states: List[InitialState]
+    result: PairBarResult
     plots: PairBarPlots
     frames: List[NDArray]  # (len(keep_idxs), n_frames, N, 3)
     boxes: List[NDArray]
     md_params: MDParams
+    intermediate_results: List[Tuple[List[InitialState], PairBarResult]]
 
 
 def image_frames(initial_state: InitialState, frames: Sequence[np.ndarray], boxes: np.ndarray) -> np.ndarray:
@@ -330,7 +331,6 @@ def sample(initial_state: InitialState, md_params: MDParams, max_buffer_frames: 
 
 
 def estimate_free_energy_pair_bar(
-    initial_states: List[InitialState],
     u_kln_by_component_by_lambda: NDArray,
     temperature: float,
     prefix: str,
@@ -405,7 +405,6 @@ def estimate_free_energy_pair_bar(
     )
 
     return PairBarResult(
-        initial_states,
         all_dGs,
         all_errs,
         dG_errs_by_lambda_by_component,
@@ -415,9 +414,11 @@ def estimate_free_energy_pair_bar(
     )
 
 
-def make_pair_bar_plots(result: PairBarResult, temperature: float, prefix: str) -> PairBarPlots:
-    U_names = [type(U_fn).__name__ for U_fn in result.initial_states[0].potentials]
-    lambdas = [s.lamb for s in result.initial_states]
+def make_pair_bar_plots(
+    initial_states: List[InitialState], result: PairBarResult, temperature: float, prefix: str
+) -> PairBarPlots:
+    U_names = [type(U_fn).__name__ for U_fn in initial_states[0].potentials]
+    lambdas = [s.lamb for s in initial_states]
 
     overlap_detail_png = make_overlap_detail_figure(
         U_names,
