@@ -437,7 +437,7 @@ def make_pair_bar_plots(
     return PairBarPlots(dG_errs_png, overlap_summary_png, overlap_detail_png)
 
 
-def run_sequential_sims_given_initial_states(
+def run_sims_sequential(
     initial_states: Sequence[InitialState],
     md_params: MDParams,
     temperature: float,

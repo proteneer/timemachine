@@ -16,7 +16,7 @@ from timemachine.fe.free_energy import (
     SimulationResult,
     estimate_free_energy_pair_bar,
     make_pair_bar_plots,
-    run_sequential_sims_given_initial_states,
+    run_sims_sequential,
 )
 from timemachine.fe.single_topology import SingleTopology
 from timemachine.fe.system import convert_omm_system
@@ -380,7 +380,7 @@ def estimate_relative_free_energy(
     # TODO: rename prefix to postfix, or move to beginning of combined_prefix?
     combined_prefix = get_mol_name(mol_a) + "_" + get_mol_name(mol_b) + "_" + prefix
     try:
-        u_kln_by_component_by_lambda, stored_frames, stored_boxes = run_sequential_sims_given_initial_states(
+        u_kln_by_component_by_lambda, stored_frames, stored_boxes = run_sims_sequential(
             initial_states, md_params, temperature, keep_idxs
         )
         pair_bar_result = estimate_free_energy_pair_bar(u_kln_by_component_by_lambda, temperature, combined_prefix)
