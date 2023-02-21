@@ -19,6 +19,7 @@ from timemachine.fe.free_energy import (
     estimate_free_energy_pair_bar,
     make_pair_bar_plots,
     run_sims_sequential,
+    run_sims_with_greedy_bisection,
 )
 from timemachine.fe.single_topology import SingleTopology
 from timemachine.fe.system import VacuumSystem, convert_omm_system
@@ -349,8 +350,8 @@ def estimate_relative_free_energy(
     min_cutoff=0.7,
 ):
     """
-    Estimate relative free energy between mol_a and mol_b. Molecules should be aligned to each
-    other and within the host environment.
+    Estimate relative free energy between mol_a and mol_b via independent simulations with a predetermined lambda
+    schedule. Molecules should be aligned to each other and within the host environment.
 
     Parameters
     ----------
@@ -439,6 +440,114 @@ def estimate_relative_free_energy(
             md_params,
             [(initial_states, pair_bar_result)],
         )
+    except Exception as err:
+        with open(f"failed_rbfe_result_{combined_prefix}.pkl", "wb") as fh:
+            pickle.dump((initial_states, md_params, err), fh)
+        raise err
+
+
+def estimate_relative_free_energy_via_greedy_bisection(
+    mol_a,
+    mol_b,
+    core: NDArray,
+    ff: Forcefield,
+    host_config: Optional[HostConfig],
+    seed: int,
+    n_frames: int = 1000,
+    prefix: str = "",
+    n_windows: Optional[int] = None,
+    n_eq_steps: int = 10000,
+    steps_per_frame: int = 400,
+    min_cutoff: float = 0.7,
+) -> SimulationResult:
+    """
+    Estimate relative free energy between mol_a and mol_b via independent simulations with a dynamic lambda schedule
+    determined by successively bisecting the lambda interval between the pair of states with the worst overlap.
+    Molecules should be aligned to each other and within the host environment.
+
+    Parameters
+    ----------
+    mol_a: Chem.Mol
+        initial molecule
+
+    mol_b: Chem.Mol
+        target molecule
+
+    core: list of 2-tuples
+        atom_mapping of atoms in mol_a into atoms in mol_b
+
+    ff: ff.Forcefield
+        Forcefield to be used for the system
+
+    host_config: HostConfig or None
+        Configuration for the host system. If None, then the vacuum leg is run.
+
+    n_frames: int
+        number of samples to generate for each lambda windows, where each sample is 1000 steps of MD.
+
+    prefix: str
+        A prefix to append to figures
+
+    seed: int
+        Random seed to use for the simulations.
+
+    n_windows: None
+        Number of windows used for interpolating the the lambda schedule with additional windows.
+
+    n_eq_steps: int
+        Number of equilibration steps for each window.
+
+    steps_per_frame: int
+        The number of steps to take before collecting a frame
+
+    min_cutoff: float
+        throw error if any atom moves more than this distance (nm) after minimization
+
+    Returns
+    -------
+    SimulationResult
+        Collected data from the simulation (see class for storage information). Returned frames and boxes
+        are defined by keep_idxs.
+    """
+    single_topology = SingleTopology(mol_a, mol_b, core, ff)
+
+    initial_lambda_schedule = np.linspace(0, 1, n_windows or 30)
+
+    temperature = DEFAULT_TEMP
+
+    initial_states, make_optimized_initial_state = setup_initial_states(
+        single_topology, host_config, temperature, initial_lambda_schedule, seed, min_cutoff=min_cutoff
+    )
+
+    md_params = MDParams(n_frames=n_frames, n_eq_steps=n_eq_steps, steps_per_frame=steps_per_frame)
+
+    # TODO: rename prefix to postfix, or move to beginning of combined_prefix?
+    combined_prefix = get_mol_name(mol_a) + "_" + get_mol_name(mol_b) + "_" + prefix
+
+    try:
+        raw_results, stored_frames, stored_boxes = run_sims_with_greedy_bisection(
+            initial_states, make_optimized_initial_state, md_params, temperature
+        )
+
+        results = [
+            (initial_states, estimate_free_energy_pair_bar(u_kln_by_component_by_lambda, temperature, combined_prefix))
+            for initial_states, u_kln_by_component_by_lambda in raw_results
+        ]
+
+        initial_states, pair_bar_result = results[-1]
+
+        plots = make_pair_bar_plots(initial_states, pair_bar_result, temperature, combined_prefix)
+
+        return SimulationResult(
+            initial_states,
+            pair_bar_result,
+            plots,
+            stored_frames,
+            stored_boxes,
+            md_params,
+            results,
+        )
+
     except Exception as err:
         with open(f"failed_rbfe_result_{combined_prefix}.pkl", "wb") as fh:
             pickle.dump((initial_states, md_params, err), fh)

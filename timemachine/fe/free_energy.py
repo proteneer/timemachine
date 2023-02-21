@@ -1,5 +1,6 @@
 from dataclasses import dataclass
-from typing import Iterable, List, Optional, Sequence, Tuple, Union, overload
+from functools import cache
+from typing import Callable, Generic, Iterable, List, Optional, Sequence, Tuple, TypeVar, Union, overload
 
 import numpy as np
 from numpy.typing import NDArray
@@ -9,6 +10,7 @@ from timemachine.fe import model_utils, topology
 from timemachine.fe.bar import bar_with_bootstrapped_uncertainty, df_err_from_ukln, pair_overlap_from_ukln
 from timemachine.fe.energy_decomposition import EnergyDecomposedState, compute_energy_decomposed_u_kln, get_batch_u_fns
 from timemachine.fe.plots import make_dG_errs_figure, make_overlap_detail_figure, make_overlap_summary_figure
+from timemachine.fe.protocol_refinement import greedy_bisection_step
 from timemachine.fe.stored_arrays import StoredArrays
 from timemachine.fe.utils import get_mol_masses, get_romol_conf
 from timemachine.ff import ForcefieldParams
@@ -67,12 +69,15 @@ class PairBarPlots:
     overlap_detail_png: bytes
 
 
+Frames = TypeVar("Frames")
+
+
 @dataclass
-class SimulationResult:
+class SimulationResult(Generic[Frames]):
     initial_states: List[InitialState]
     result: PairBarResult
     plots: PairBarPlots
-    frames: List[NDArray]  # (len(keep_idxs), n_frames, N, 3)
+    frames: List[Frames]
     boxes: List[NDArray]
     md_params: MDParams
     intermediate_results: List[Tuple[List[InitialState], PairBarResult]]
@@ -491,3 +496,68 @@ def run_sims_sequential(
         prev_state = state
 
     return np.array(u_kln_by_component_by_lambda), stored_frames, stored_boxes
+
+
+def sample_state(
+    initial_state: InitialState, md_params: MDParams, temperature: float
+) -> EnergyDecomposedState[StoredArrays]:
+    frames, boxes = sample(initial_state, md_params, max_buffer_frames=1000)
+    bound_impls = [p.bound_impl(np.float32) for p in initial_state.potentials]
+    batch_u_fns = get_batch_u_fns(bound_impls, temperature)
+    return EnergyDecomposedState(frames, boxes, batch_u_fns)
+
+
+def compute_bar_error(s1: EnergyDecomposedState, s2: EnergyDecomposedState) -> float:
+    u_kln = compute_energy_decomposed_u_kln([s1, s2]).sum(axis=0)  # sum over components
+    assert u_kln.shape[:2] == (2, 2)
+    w_f = u_kln[1, 0] - u_kln[0, 0]
+    w_r = u_kln[0, 1] - u_kln[1, 1]
+    _, df_err = bar_with_bootstrapped_uncertainty(w_f, w_r)
+    return df_err
+
+
+def run_sims_with_greedy_bisection(
+    initial_states: Sequence[InitialState],
+    make_initial_state: Callable[[float], InitialState],
+    md_params: MDParams,
+    temperature: float,
+) -> Tuple[List[Tuple[List[InitialState], NDArray]], List[StoredArrays], List[NDArray]]:
+
+    assert len(initial_states) >= 2
+
+    get_initial_state = cache(make_initial_state)
+
+    @cache
+    def get_state(lamb: float) -> EnergyDecomposedState[StoredArrays]:
+        initial_state = get_initial_state(lamb)
+        return sample_state(initial_state, md_params, temperature)
+
+    @cache
+    def bar_error(lamb1: float, lamb2: float) -> float:
+        return compute_bar_error(get_state(lamb1), get_state(lamb2))
+
+    def midpoint(x1, x2):
+        return (x1 + x2) / 2.0
+
+    lambdas = [initial_states[0].lamb, initial_states[-1].lamb]
+    n_states_remaining = len(initial_states) - len(lambdas)
+    results = []
+
+    for _ in range(n_states_remaining):
+
+        lambdas = greedy_bisection_step(lambdas, bar_error, midpoint)
+
+        u_kln_by_component_by_lambda = np.array(
+            [
+                compute_energy_decomposed_u_kln([get_state(lamb1), get_state(lamb2)])
+                for lamb1, lamb2 in zip(lambdas, lambdas[1:])
+            ]
+        )
+
+        refined_initial_states = [get_initial_state(lamb) for lamb in lambdas]
+        results.append((refined_initial_states, u_kln_by_component_by_lambda))
+
+    frames = [get_state(lamb).frames for lamb in lambdas]
+    boxes = [get_state(lamb).boxes for lamb in lambdas]
+
+    return results, frames, boxes
