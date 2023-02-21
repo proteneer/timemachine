@@ -1,5 +1,6 @@
 import logging
 from time import time
+from typing import Tuple
 
 import jax
 import jax.numpy as jnp
@@ -156,7 +157,7 @@ def bootstrap_bar(w_F, w_R, n_bootstrap=1000, timeout=10):
     return full_bar_result, np.array(bootstrap_samples)
 
 
-def bar_with_bootstrapped_uncertainty(w_F, w_R, n_bootstrap=1000, timeout=10):
+def bar_with_bootstrapped_uncertainty(w_F, w_R, n_bootstrap=1000, timeout=10) -> Tuple[float, float]:
     """Drop-in replacement for pymbar.BAR(w_F, w_R) -> (df, ddf)
     where first return is forwarded from pymbar.BAR but second return is computed by bootstrapping"""
 
