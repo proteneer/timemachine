@@ -240,8 +240,8 @@ def hif2a_ligand_pair_single_topology_lam0_state():
     mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
     forcefield = Forcefield.load_from_file(DEFAULT_FF)
     st = SingleTopology(mol_a, mol_b, core, forcefield)
-    state = setup_initial_states(st, None, DEFAULT_TEMP, [0.0], 2023)[0]
-    return state
+    initial_states, _ = setup_initial_states(st, None, DEFAULT_TEMP, [0.0], 2023)
+    return initial_states[0]
 
 
 @given(integers(1, 100), integers(1, 100))

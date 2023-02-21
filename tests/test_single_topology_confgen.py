@@ -60,7 +60,7 @@ def run_edge(mol_a, mol_b, protein_path, n_windows):
     solvent_sys, solvent_conf, solvent_box, solvent_top = builders.build_water_system(box_width, ff.water_ff)
     solvent_box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes
     solvent_host_config = HostConfig(solvent_sys, solvent_conf, solvent_box)
-    initial_states = setup_initial_states(st, solvent_host_config, DEFAULT_TEMP, lambda_schedule, seed)
+    initial_states, _ = setup_initial_states(st, solvent_host_config, DEFAULT_TEMP, lambda_schedule, seed)
     all_frames = [state.x0 for state in initial_states]
     write_trajectory_as_pdb(
         mol_a,
@@ -77,7 +77,7 @@ def run_edge(mol_a, mol_b, protein_path, n_windows):
     )
     complex_box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes
     complex_host_config = HostConfig(complex_sys, complex_conf, complex_box)
-    initial_states = setup_initial_states(st, complex_host_config, DEFAULT_TEMP, lambda_schedule, seed)
+    initial_states, _ = setup_initial_states(st, complex_host_config, DEFAULT_TEMP, lambda_schedule, seed)
 
     all_frames = [state.x0 for state in initial_states]
     write_trajectory_as_pdb(

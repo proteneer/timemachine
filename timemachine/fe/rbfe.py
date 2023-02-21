@@ -1,7 +1,8 @@
 import pickle
 import traceback
 import warnings
-from typing import Any, Dict, Iterable, List, NamedTuple, Optional, Sequence, Union
+from functools import partial
+from typing import Any, Callable, Dict, Iterable, List, NamedTuple, Optional, Sequence, Tuple, Union
 
 import numpy as np
 from numpy.typing import NDArray
@@ -158,7 +159,7 @@ def setup_initial_states(
     lambda_schedule: Union[NDArray, Sequence[float]],
     seed: int,
     min_cutoff: float = 0.7,
-) -> List[InitialState]:
+) -> Tuple[List[InitialState], Callable[[float], InitialState]]:
     """
     Set up the initial states for a series of lambda values,
     so we can (hopefully) bitwise recover the identical simulation to debug errors.
@@ -187,7 +188,7 @@ def setup_initial_states(
 
     Returns
     -------
-    list of InitialStates
+    (list of InitialStates, callable to construct a new optimized state given lambda)
         Returns an initial state for each value of lambda.
     """
 
@@ -196,7 +197,8 @@ def setup_initial_states(
     # check that the lambda schedule is monotonically increasing.
     assert np.all(np.diff(lambda_schedule) > 0)
 
-    initial_states = [setup_initial_state(st, lamb, host_config, temperature, seed) for lamb in lambda_schedule]
+    make_initial_state = partial(setup_initial_state, st, host_config=host_config, temperature=temperature, seed=seed)
+    initial_states = [make_initial_state(lamb) for lamb in lambda_schedule]
 
     # minimize ligand and environment atoms within min_cutoff of the ligand
 
@@ -210,7 +212,29 @@ def setup_initial_states(
     # perform any concluding sanity-checks
     assert_all_states_have_same_masses(initial_states)
 
-    return initial_states
+    def make_optimized_initial_state(lamb: float) -> InitialState:
+        initial_state = make_initial_state(lamb)
+
+        # use pre-optimized initial state with the closest value of lambda as a starting point for optimization
+        nearest_optimized = min(initial_states, key=lambda s: abs(lamb - s.lamb))
+
+        free_idxs = get_free_idxs(nearest_optimized)
+        x_opt = (
+            optimize_coords_state(
+                initial_state.potentials,
+                nearest_optimized.x0,
+                initial_state.box0,
+                free_idxs,
+                # assertion can lead to spurious errors when new state is close to an existing one
+                assert_energy_decreased=False,
+            )
+            if lamb != nearest_optimized.lamb
+            else nearest_optimized.x0
+        )
+        initial_state.x0 = x_opt
+        return initial_state
+
+    return initial_states, make_optimized_initial_state
 
 
 def optimize_coords_state(
@@ -389,7 +413,7 @@ def estimate_relative_free_energy(
         warnings.warn("Warning: setting lambda_schedule manually, this argument may be removed in a future release.")
 
     temperature = DEFAULT_TEMP
-    initial_states = setup_initial_states(
+    initial_states, _ = setup_initial_states(
         single_topology, host_config, temperature, lambda_schedule, seed, min_cutoff=min_cutoff
     )
     md_params = MDParams(n_frames=n_frames, n_eq_steps=n_eq_steps, steps_per_frame=steps_per_frame)
