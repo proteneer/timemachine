@@ -385,7 +385,15 @@ def estimate_relative_free_energy(
         )
         pair_bar_result = estimate_free_energy_pair_bar(u_kln_by_component_by_lambda, temperature, combined_prefix)
         plots = make_pair_bar_plots(initial_states, pair_bar_result, temperature, combined_prefix)
-        return SimulationResult(initial_states, pair_bar_result, plots, stored_frames, stored_boxes, md_params, [])
+        return SimulationResult(
+            initial_states,
+            pair_bar_result,
+            plots,
+            stored_frames,
+            stored_boxes,
+            md_params,
+            [(initial_states, pair_bar_result)],
+        )
     except Exception as err:
         with open(f"failed_rbfe_result_{combined_prefix}.pkl", "wb") as fh:
             pickle.dump((initial_states, md_params, err), fh)
