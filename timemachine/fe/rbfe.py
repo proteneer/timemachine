@@ -1,7 +1,7 @@
 import pickle
 import traceback
 import warnings
-from typing import Any, Dict, List, NamedTuple, Optional, Sequence, Union
+from typing import Any, Dict, Iterable, List, NamedTuple, Optional, Sequence, Union
 
 import numpy as np
 from numpy.typing import NDArray
@@ -24,6 +24,7 @@ from timemachine.fe.system import VacuumSystem, convert_omm_system
 from timemachine.fe.utils import get_mol_name, get_romol_conf
 from timemachine.ff import Forcefield
 from timemachine.lib import LangevinIntegrator, MonteCarloBarostat
+from timemachine.lib.potentials import CustomOpWrapper
 from timemachine.md import builders, minimizer
 from timemachine.md.barostat.utils import get_bond_list, get_group_indices
 from timemachine.parallel.client import AbstractClient, AbstractFileClient, CUDAPoolClient, FileClient
@@ -212,33 +213,43 @@ def setup_initial_states(
     return initial_states
 
 
-def _optimize_coords_along_states(initial_states: List[InitialState]) -> List[np.ndarray]:
+def optimize_coords_state(
+    potentials: Iterable[CustomOpWrapper],
+    x0: NDArray,
+    box: NDArray,
+    free_idxs: List[int],
+    assert_energy_decreased: bool,
+) -> NDArray:
+    bound_impls = [p.bound_impl(np.float32) for p in potentials]
+    val_and_grad_fn = minimizer.get_val_and_grad_fn(bound_impls, box)
+    assert np.all(np.isfinite(x0)), "Initial coordinates contain nan or inf"
+    x_opt = minimizer.local_minimize(x0, val_and_grad_fn, free_idxs, assert_energy_decreased=assert_energy_decreased)
+    assert np.all(np.isfinite(x_opt)), "Minimization resulted in a nan"
+    return x_opt
 
+
+def get_free_idxs(initial_state: InitialState) -> List[int]:
+    """Select particles within cutoff of ligand"""
+    x = initial_state.x0
+    x_lig = x[initial_state.ligand_idxs]
+    box = initial_state.box0
+    free_idxs = jax_utils.idxs_within_cutoff(x, x_lig, box, cutoff=0.5).tolist()
+    return free_idxs
+
+
+def _optimize_coords_along_states(initial_states: List[InitialState]) -> List[np.ndarray]:
     # use the end-state to define the optimization settings
     end_state = initial_states[0]
-
-    # select particles within cutoff of ligand
+    free_idxs = get_free_idxs(end_state)
     x_opt = end_state.x0
-    x_lig = x_opt[end_state.ligand_idxs]
-    box = end_state.box0
-
-    free_idxs = jax_utils.idxs_within_cutoff(x_opt, x_lig, box, cutoff=0.5).tolist()
 
     x_traj = []
     for idx, initial_state in enumerate(initial_states):
-        print(initial_state.lamb)
-        bound_impls = [p.bound_impl(np.float32) for p in initial_state.potentials]
-        val_and_grad_fn = minimizer.get_val_and_grad_fn(bound_impls, initial_state.box0)
-        assert np.all(np.isfinite(x_opt)), "Initial coordinates contain nan or inf"
-
-        # only assert that the energy decreases at the end-state
-        check_nrg = idx == 0
-
-        x_opt = minimizer.local_minimize(x_opt, val_and_grad_fn, free_idxs, assert_energy_decreased=check_nrg)
-
+        print(f"Optimizing initial state at λ={initial_state.lamb}")
+        x_opt = optimize_coords_state(
+            initial_state.potentials, x_opt, initial_state.box0, free_idxs, assert_energy_decreased=idx == 0
+        )
         x_traj.append(x_opt)
-        assert np.all(np.isfinite(x_opt)), "Minimization resulted in a nan"
-        del bound_impls
 
     return x_traj
 
