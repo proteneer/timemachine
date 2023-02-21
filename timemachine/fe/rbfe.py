@@ -4,6 +4,7 @@ import warnings
 from typing import Any, Dict, List, NamedTuple, Optional, Sequence
 
 import numpy as np
+from numpy.typing import NDArray
 from rdkit import Chem
 from simtk.openmm import app
 
@@ -19,7 +20,7 @@ from timemachine.fe.free_energy import (
     run_sims_sequential,
 )
 from timemachine.fe.single_topology import SingleTopology
-from timemachine.fe.system import convert_omm_system
+from timemachine.fe.system import VacuumSystem, convert_omm_system
 from timemachine.fe.utils import get_mol_name, get_romol_conf
 from timemachine.ff import Forcefield
 from timemachine.lib import LangevinIntegrator, MonteCarloBarostat
@@ -45,10 +46,18 @@ def setup_in_vacuum(st, ligand_conf, lamb):
     return x0, box0, hmr_masses, potentials, baro
 
 
-def setup_in_env(st, host, host_config, ligand_conf, lamb, temperature, run_seed):
+def setup_in_env(
+    st: SingleTopology,
+    host_system: VacuumSystem,
+    host_masses: List[float],
+    host_conf: NDArray,
+    host_config: HostConfig,
+    ligand_conf: NDArray,
+    lamb: float,
+    temperature: float,
+    run_seed: int,
+):
     """Prepare potentials, concatenate environment and ligand coords, apply HMR, and construct barostat"""
-
-    host_system, host_masses, host_conf = host
 
     system = st.combine_with_host(host_system, lamb=lamb)
     combined_masses = np.concatenate([host_masses, st.combine_masses()])
@@ -60,9 +69,8 @@ def setup_in_env(st, host, host_config, ligand_conf, lamb, temperature, run_seed
     baro = MonteCarloBarostat(len(hmr_masses), DEFAULT_PRESSURE, temperature, group_idxs, 15, run_seed + 1)
 
     x0 = np.concatenate([host_conf, ligand_conf])
-    box0 = host_config.box
 
-    return x0, box0, hmr_masses, potentials, baro
+    return x0, host_config.box, hmr_masses, potentials, baro
 
 
 def assert_all_states_have_same_masses(initial_states: List[InitialState]):
@@ -88,13 +96,13 @@ def assert_all_states_have_same_masses(initial_states: List[InitialState]):
 
 
 def setup_initial_states(
-    st,
-    host_config,
-    temperature,
-    lambda_schedule,
-    seed,
-    min_cutoff=0.7,
-):
+    st: SingleTopology,
+    host_config: Optional[HostConfig],
+    temperature: float,
+    lambda_schedule: List[float],
+    seed: int,
+    min_cutoff: float = 0.7,
+) -> List[InitialState]:
     """
     Set up the initial states for a series of lambda values,
     so we can (hopefully) bitwise recover the identical simulation to debug errors.
@@ -127,19 +135,6 @@ def setup_initial_states(
         Returns an initial state for each value of lambda.
     """
 
-    if host_config:
-        host_system, host_masses = convert_omm_system(host_config.omm_system)
-        host_conf = minimizer.minimize_host_4d(
-            [st.mol_a, st.mol_b],
-            host_config.omm_system,
-            host_config.conf,
-            st.ff,
-            host_config.box,
-        )
-        host = (host_system, host_masses, host_conf)
-    else:
-        host = None
-
     initial_states = []
 
     # check that the lambda schedule is monotonically increasing.
@@ -156,12 +151,20 @@ def setup_initial_states(
         # A -> B vs. B -> A edge definitions
         init_seed = int(seed + hash(ligand_conf.tobytes())) % 10000
 
-        if host is None:
-            x0, box0, hmr_masses, potentials, baro = setup_in_vacuum(st, ligand_conf, lamb)
-        else:
-            x0, box0, hmr_masses, potentials, baro = setup_in_env(
-                st, host, host_config, ligand_conf, lamb, temperature, init_seed
+        if host_config:
+            host_system, host_masses = convert_omm_system(host_config.omm_system)
+            host_conf = minimizer.minimize_host_4d(
+                [st.mol_a, st.mol_b],
+                host_config.omm_system,
+                host_config.conf,
+                st.ff,
+                host_config.box,
             )
+            x0, box0, hmr_masses, potentials, baro = setup_in_env(
+                st, host_system, host_masses, host_conf, host_config, ligand_conf, lamb, temperature, init_seed
+            )
+        else:
+            x0, box0, hmr_masses, potentials, baro = setup_in_vacuum(st, ligand_conf, lamb)
 
         # provide a different run_seed for every lambda window,
         # but in a way that should be symmetric for
