@@ -336,19 +336,19 @@ def optimize_coordinates(initial_states, min_cutoff=0.7) -> List[np.ndarray]:
 def estimate_relative_free_energy(
     mol_a,
     mol_b,
-    core,
-    ff,
-    host_config,
-    seed,
-    n_frames=1000,
-    prefix="",
-    lambda_schedule=None,
-    n_windows=None,
-    keep_idxs=None,
-    n_eq_steps=10000,
-    steps_per_frame=400,
-    min_cutoff=0.7,
-):
+    core: NDArray,
+    ff: Forcefield,
+    host_config: Optional[HostConfig],
+    seed: int,
+    n_frames: int = 1000,
+    prefix: str = "",
+    lambda_schedule: Optional[Union[NDArray, Sequence[float]]] = None,
+    n_windows: Optional[int] = None,
+    keep_idxs: Optional[List[int]] = None,
+    n_eq_steps: int = 10000,
+    steps_per_frame: int = 400,
+    min_cutoff: float = 0.7,
+) -> SimulationResult:
     """
     Estimate relative free energy between mol_a and mol_b via independent simulations with a predetermined lambda
     schedule. Molecules should be aligned to each other and within the host environment.
@@ -370,22 +370,22 @@ def estimate_relative_free_energy(
     host_config: HostConfig or None
         Configuration for the host system. If None, then the vacuum leg is run.
 
+    seed: int
+        Random seed to use for the simulations.
+
     n_frames: int
         number of samples to generate for each lambda windows, where each sample is 1000 steps of MD.
 
     prefix: str
         A prefix to append to figures
 
-    seed: int
-        Random seed to use for the simulations.
-
     lambda_schedule: list of float
         This should only be set when debugging or unit testing. This argument may be removed later.
 
-    n_windows: None
+    n_windows: int or None, optional
         Number of windows used for interpolating the the lambda schedule with additional windows.
 
-    keep_idxs: list of int or None
+    keep_idxs: list of int or None, optional
         If None, return only the end-state frames. Otherwise if not None, use only for debugging, and this
         will return the frames corresponding to the idxs of interest.
 
