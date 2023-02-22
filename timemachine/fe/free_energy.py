@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from functools import cache
+from functools import lru_cache
 from typing import Callable, Generic, Iterable, List, Optional, Sequence, Tuple, TypeVar, Union, overload
 
 import numpy as np
@@ -525,6 +525,8 @@ def run_sims_with_greedy_bisection(
 ) -> Tuple[List[Tuple[List[InitialState], NDArray]], List[StoredArrays], List[NDArray]]:
 
     assert len(initial_states) >= 2
+
+    cache = lru_cache(maxsize=None)
 
     get_initial_state = cache(make_initial_state)
 
