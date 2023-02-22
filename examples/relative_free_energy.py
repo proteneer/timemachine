@@ -40,12 +40,14 @@ def run_pair(mol_a, mol_b, core, forcefield, n_frames, protein_path, seed):
     )
 
     with open("solvent_overlap.png", "wb") as fh:
-        fh.write(solvent_res.overlap_detail_png)
+        fh.write(solvent_res.plots.overlap_detail_png)
 
     # this st is only needed to deal with visualization jank
     write_trajectory_as_pdb(mol_a, mol_b, core, solvent_res.frames, solvent_top, "solvent_traj")
 
-    print(f"solvent dG: {np.sum(solvent_res.all_dGs):.3f} +- {np.linalg.norm(solvent_res.all_errs):.3f} kJ/mol")
+    print(
+        f"solvent dG: {np.sum(solvent_res.result.all_dGs):.3f} +- {np.linalg.norm(solvent_res.result.all_errs):.3f} kJ/mol"
+    )
 
     complex_sys, complex_conf, _, _, complex_box, complex_top = builders.build_protein_system(
         protein_path, forcefield.protein_ff, forcefield.water_ff
@@ -56,10 +58,12 @@ def run_pair(mol_a, mol_b, core, forcefield, n_frames, protein_path, seed):
         mol_a, mol_b, core, forcefield, complex_host_config, seed + 1, n_frames=n_frames, prefix="complex"
     )
     with open("complex_overlap.png", "wb") as fh:
-        fh.write(complex_res.overlap_detail_png)
+        fh.write(complex_res.plots.overlap_detail_png)
     write_trajectory_as_pdb(mol_a, mol_b, core, complex_res.frames, complex_top, "complex_traj")
 
-    print(f"complex dG: {np.sum(complex_res.all_dGs):.3f} +- {np.linalg.norm(complex_res.all_errs):.3f} kJ/mol")
+    print(
+        f"complex dG: {np.sum(complex_res.result.all_dGs):.3f} +- {np.linalg.norm(complex_res.result.all_errs):.3f} kJ/mol"
+    )
 
 
 def hif2a_pair():
