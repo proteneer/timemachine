@@ -175,3 +175,59 @@ def test_infer_node_dgs_w_error():
 
         res = linregress(dg, node_vals)
         assert res.rvalue > 0.9
+
+
+def test_infer_node_vals_incorrect_sizes():
+    """Verify that infer_node_vals correctly asserts that the length of arrays are the same"""
+    g = generate_random_valid_regular_graph()
+    n_nodes = g.number_of_nodes()
+
+    node_vals, edge_idxs, obs_edge_diffs, edge_stddevs = generate_instance(g, 1.0)
+    num_refs = np.random.randint(n_nodes)
+    ref_node_idxs = np.random.choice(np.arange(n_nodes), num_refs, replace=False)
+    ref_node_vals = node_vals[ref_node_idxs]
+
+    with pytest.raises(AssertionError):
+        infer_node_vals(
+            edge_idxs,
+            obs_edge_diffs,
+            edge_stddevs,
+            ref_node_idxs,
+            [],
+        )
+    infer_node_vals(
+        edge_idxs,
+        obs_edge_diffs,
+        edge_stddevs,
+        ref_node_idxs,
+        ref_node_vals,
+    )
+
+
+def test_infer_node_vals_and_errs_incorrect_sizes():
+    """Verify that infer_node_vals_and_errs correctly asserts that the length of arrays are the same"""
+    g = generate_random_valid_regular_graph()
+    n_nodes = g.number_of_nodes()
+
+    node_vals, edge_idxs, obs_edge_diffs, edge_stddevs = generate_instance(g, 1.0)
+    num_refs = np.random.randint(n_nodes)
+    ref_node_idxs = np.random.choice(np.arange(n_nodes), num_refs, replace=False)
+    ref_node_vals = node_vals[ref_node_idxs]
+    ref_node_stddevs = 0.01 * np.ones(num_refs)
+    with pytest.raises(AssertionError):
+        infer_node_vals_and_errs(
+            edge_idxs,
+            obs_edge_diffs,
+            edge_stddevs,
+            ref_node_idxs,
+            [],
+            [],
+        )
+    infer_node_vals_and_errs(
+        edge_idxs,
+        obs_edge_diffs,
+        edge_stddevs,
+        ref_node_idxs,
+        ref_node_vals,
+        ref_node_stddevs,
+    )

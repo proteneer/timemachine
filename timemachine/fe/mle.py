@@ -102,6 +102,8 @@ def infer_node_vals(edge_idxs, edge_diffs, edge_stddevs, ref_node_idxs=tuple(), 
         ref_node_idxs = np.array([0], dtype=int)
         ref_node_vals = np.array([0], dtype=float)
 
+    assert len(ref_node_idxs) == len(ref_node_vals), "Ref node idxs and ref node values must be of same length"
+
     # maximize likelihood of observed edge diffs, up to arbitrary offset
     @wrap_for_scipy_optimize
     def loss(x):
@@ -196,6 +198,10 @@ def infer_node_vals_and_errs(
         ref_node_idxs = np.array([0], dtype=int)
         ref_node_vals = np.array([0], dtype=float)
         ref_node_stddevs = np.array([0], dtype=float)
+
+    assert (
+        len(ref_node_idxs) == len(ref_node_vals) == len(ref_node_stddevs)
+    ), "Ref node idxs, ref node values and ref std devs must be of same length"
 
     dg = infer_node_vals(edge_idxs, edge_diffs, edge_stddevs, ref_node_idxs, ref_node_vals)
 
