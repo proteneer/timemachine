@@ -1,6 +1,5 @@
 import pickle
 import traceback
-import warnings
 from functools import partial
 from typing import Any, Callable, Dict, Iterable, List, NamedTuple, Optional, Sequence, Tuple, Union
 
@@ -342,7 +341,7 @@ def estimate_relative_free_energy(
     seed: int,
     n_frames: int = 1000,
     prefix: str = "",
-    lambda_schedule: Optional[Union[NDArray, Sequence[float]]] = None,
+    lambda_interval: Optional[Tuple[float, float]] = None,
     n_windows: Optional[int] = None,
     keep_idxs: Optional[List[int]] = None,
     n_eq_steps: int = 10000,
@@ -379,8 +378,9 @@ def estimate_relative_free_energy(
     prefix: str
         A prefix to append to figures
 
-    lambda_schedule: list of float
-        This should only be set when debugging or unit testing. This argument may be removed later.
+    lambda_interval: (float, float) or None, optional
+        Minimum and maximum value of lambda for the transformation; typically (0, 1), but sometimes useful to choose
+        other values for testing.
 
     n_windows: int or None, optional
         Number of windows used for interpolating the the lambda schedule with additional windows.
@@ -407,11 +407,8 @@ def estimate_relative_free_energy(
     """
     single_topology = SingleTopology(mol_a, mol_b, core, ff)
 
-    if lambda_schedule is None:
-        lambda_schedule = np.linspace(0, 1, n_windows or 30)
-    else:
-        assert n_windows is None
-        warnings.warn("Warning: setting lambda_schedule manually, this argument may be removed in a future release.")
+    lambda_min, lambda_max = lambda_interval or (0.0, 1.0)
+    lambda_schedule = np.linspace(lambda_min, lambda_max, n_windows or 30)
 
     temperature = DEFAULT_TEMP
     initial_states, _ = setup_initial_states(
@@ -455,6 +452,7 @@ def estimate_relative_free_energy_via_greedy_bisection(
     seed: int,
     n_frames: int = 1000,
     prefix: str = "",
+    lambda_interval: Optional[Tuple[float, float]] = None,
     n_windows: Optional[int] = None,
     n_eq_steps: int = 10000,
     steps_per_frame: int = 400,
@@ -491,6 +489,10 @@ def estimate_relative_free_energy_via_greedy_bisection(
     seed: int
         Random seed to use for the simulations.
 
+    lambda_interval: (float, float) or None, optional
+        Minimum and maximum value of lambda for the transformation; typically (0, 1), but sometimes useful to choose
+        other values for testing.
+
     n_windows: None
         Number of windows used for interpolating the the lambda schedule with additional windows.
 
@@ -509,9 +511,11 @@ def estimate_relative_free_energy_via_greedy_bisection(
         Collected data from the simulation (see class for storage information). Returned frames and boxes
         are defined by keep_idxs.
     """
+
     single_topology = SingleTopology(mol_a, mol_b, core, ff)
 
-    initial_lambda_schedule = np.linspace(0, 1, n_windows or 30)
+    lambda_min, lambda_max = lambda_interval or (0.0, 1.0)
+    initial_lambda_schedule = np.linspace(lambda_min, lambda_max, n_windows or 30)
 
     temperature = DEFAULT_TEMP
 
