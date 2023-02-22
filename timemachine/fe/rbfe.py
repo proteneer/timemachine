@@ -261,7 +261,7 @@ def get_free_idxs(initial_state: InitialState) -> List[int]:
     return free_idxs
 
 
-def _optimize_coords_along_states(initial_states: List[InitialState]) -> List[np.ndarray]:
+def _optimize_coords_along_states(initial_states: List[InitialState]) -> List[NDArray]:
     # use the end-state to define the optimization settings
     end_state = initial_states[0]
     free_idxs = get_free_idxs(end_state)
@@ -278,7 +278,7 @@ def _optimize_coords_along_states(initial_states: List[InitialState]) -> List[np
     return x_traj
 
 
-def optimize_coordinates(initial_states, min_cutoff=0.7) -> List[np.ndarray]:
+def optimize_coordinates(initial_states, min_cutoff=0.7) -> List[NDArray]:
     """
     Optimize geometries of the initial states.
 
