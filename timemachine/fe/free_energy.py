@@ -503,6 +503,7 @@ def sample_state(
 ) -> EnergyDecomposedState[StoredArrays]:
     frames, boxes = sample(initial_state, md_params, max_buffer_frames=1000)
     bound_impls = [p.bound_impl(np.float32) for p in initial_state.potentials]
+    assert initial_state.barostat is None or initial_state.barostat.temperature == temperature
     batch_u_fns = get_batch_u_fns(bound_impls, temperature)
     return EnergyDecomposedState(frames, boxes, batch_u_fns)
 
