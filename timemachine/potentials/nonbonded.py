@@ -629,7 +629,7 @@ def lj_prefactors_on_snapshot(x_ligand, x_env, sig_env, eps_env, box=None, cutof
 
     Returns
     -------
-    prefactors: [N_lig] array
+    prefactors: [N_lig, 20] array
         prefactors[i] = lj_prefactor_on_atom(x_ligand[i], ...)
     """
 
@@ -658,7 +658,7 @@ def lj_prefactors_on_traj(
 
     Returns
     -------
-    traj_prefactors: [T, N_lig] array
+    traj_prefactors: [T, N_lig, 20] array
         traj_prefactors[t] = lj_prefactors_on_snapshot(traj[t][ligand_indices], ...)
     """
     validate_interaction_group_idxs(len(traj[0]), ligand_indices, env_indices)
