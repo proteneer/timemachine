@@ -264,12 +264,12 @@ def get_free_idxs(initial_state: InitialState) -> List[int]:
 def _optimize_coords_along_states(initial_states: List[InitialState]) -> List[NDArray]:
     # use the end-state to define the optimization settings
     end_state = initial_states[0]
-    free_idxs = get_free_idxs(end_state)
     x_opt = end_state.x0
 
     x_traj = []
     for idx, initial_state in enumerate(initial_states):
         print(f"Optimizing initial state at λ={initial_state.lamb}")
+        free_idxs = get_free_idxs(initial_state)
         x_opt = optimize_coords_state(
             initial_state.potentials, x_opt, initial_state.box0, free_idxs, assert_energy_decreased=idx == 0
         )
