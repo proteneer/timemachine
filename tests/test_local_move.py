@@ -6,6 +6,7 @@ from jax import grad, jit
 from jax import numpy as jnp
 from jax import vmap
 
+from timemachine import constants
 from timemachine.ff import Forcefield
 from timemachine.integrator import VelocityVerletIntegrator
 from timemachine.lib import LangevinIntegrator, custom_ops
@@ -46,7 +47,10 @@ def make_hmc_mover(x, logpdf_fxn, dt=0.1, n_steps=100):
     return hmc_move
 
 
-def expect_no_drift(x0, move_fxn, observable_fxn, n_local_resampling_iterations=100):
+def expect_no_drift(x0, move_fxn, observable_fxn, n_local_resampling_iterations=100, n_samples=10, threshold=0.5):
+    assert n_local_resampling_iterations > 2 * n_samples, "Need iterations to be 2x n_samples"
+    assert 0.0 <= threshold <= 1.0, "Threshold must be in interval [0.0, 1.0]"
+
     traj = [jnp.array(x0)]
     aux_traj = []
 
@@ -58,15 +62,14 @@ def expect_no_drift(x0, move_fxn, observable_fxn, n_local_resampling_iterations=
 
     expected_selection_fraction_traj = np.array([observable_fxn(x) for x in traj])
 
-    # TODO: don't hard-code T, thresholds, etc.
-    T = 10
-    assert n_local_resampling_iterations > 2 * T
-    avg_at_start = np.mean(expected_selection_fraction_traj[:T])
-    avg_at_end = np.mean(expected_selection_fraction_traj[-T:])
+    avg_at_start = np.mean(expected_selection_fraction_traj[:n_samples])
+    avg_at_end = np.mean(expected_selection_fraction_traj[-n_samples:])
+    if avg_at_start == avg_at_end:
+        if np.all(expected_selection_fraction_traj == avg_at_end):
+            print("WARNING: All values identical, test may be invalid")
 
-    ratio = avg_at_end / avg_at_start
-    deviated_by_50percent_or_more = ratio <= 0.5 or ratio >= 1.5
-    if deviated_by_50percent_or_more:
+    percent_diff = np.abs(((avg_at_start - avg_at_end) / avg_at_start))
+    if percent_diff > threshold:
         msg = f"""
             observable avg over start frames = {avg_at_start:.3f}
             observable avg over end frames = {avg_at_end:.3f}
@@ -187,7 +190,8 @@ def test_ideal_gas():
         assert_correctness(incorrect_local_move)
 
 
-def test_local_md_particle_density():
+@pytest.mark.parametrize("k", [1.0, 1000.0, 10000.0])
+def test_local_md_particle_density(k):
     """Verify that the average particle density around a single particle is stable.
 
     In the naive implementation of local md, a vacuum can appear around the local idxs. See naive_local_resampling_move
@@ -197,14 +201,14 @@ def test_local_md_particle_density():
     mol, _ = get_biphenyl()
     ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
 
-    temperature = 300
+    temperature = constants.DEFAULT_TEMP
     dt = 1.5e-3
-    friction = 0.0
+    friction = 1.0
     seed = 2022
     cutoff = 1.2
 
     # Have to minimize, else there can be clashes and the local moves will cause crashes
-    unbound_potentials, sys_params, masses, coords, box = get_solvent_phase_system(mol, ff, 0.0)
+    unbound_potentials, sys_params, masses, coords, box = get_solvent_phase_system(mol, ff, 0.0, box_width=4.0)
 
     local_idxs = np.array([len(coords) - 1], dtype=np.int32)
 
@@ -223,7 +227,9 @@ def test_local_md_particle_density():
         bps.append(bp.bind(p).bound_impl(np.float32))
 
     def observable(x):
-        ixns = nblist.get_nblist(coords, box, cutoff)
+        # x has shape (1, *coords.shape), reshape to be the same as coords
+        reshaped_x = x.reshape(coords.shape)
+        ixns = nblist.get_nblist(reshaped_x, box, cutoff)
         flattened = np.concatenate(ixns).reshape(-1)
         inner_shell_idxs = np.unique(flattened)
 
@@ -232,9 +238,14 @@ def test_local_md_particle_density():
         return len(subsystem_idxs)
 
     ctxt = custom_ops.Context(coords, v0, box, intg_impl, bps)
+    # Equilibrate using global steps to start off from a reasonable place
+    x0, _ = ctxt.multiple_steps(1000)
 
-    def local_move(x, steps=1):
-        xs, boxes = ctxt.multiple_steps_local(steps, local_idxs)
+    rng = np.random.default_rng(seed)
+
+    def local_move(x, steps=500):
+        local_seed = rng.integers(np.iinfo(np.int32).max)
+        xs, boxes = ctxt.multiple_steps_local(steps, local_idxs, burn_in=0, k=k, seed=local_seed)
         return xs, boxes
 
-    expect_no_drift(coords, local_move, observable, n_local_resampling_iterations=50)
+    expect_no_drift(x0[-1], local_move, observable, n_local_resampling_iterations=250, threshold=0.05)
