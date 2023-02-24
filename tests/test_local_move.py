@@ -47,11 +47,13 @@ def make_hmc_mover(x, logpdf_fxn, dt=0.1, n_steps=100):
     return hmc_move
 
 
-def expect_no_drift(x0, move_fxn, observable_fxn, n_local_resampling_iterations=100, n_samples=10, threshold=0.5):
+def expect_no_drift(
+    init_args, move_fxn, observable_fxn, n_local_resampling_iterations=100, n_samples=10, threshold=0.5
+):
     assert n_local_resampling_iterations > 2 * n_samples, "Need iterations to be 2x n_samples"
     assert 0.0 <= threshold <= 1.0, "Threshold must be in interval [0.0, 1.0]"
 
-    traj = [jnp.array(x0)]
+    traj = [init_args]
     aux_traj = []
 
     for _ in range(n_local_resampling_iterations):
@@ -171,7 +173,7 @@ def test_ideal_gas():
     def assert_correctness(local_move):
         # primary assertion: expect no drift in % of particles in resampled region
         traj, aux_traj = expect_no_drift(
-            x0, local_move, observable_fxn=particle_frac_near_center, n_local_resampling_iterations=100
+            jnp.array(x0), local_move, observable_fxn=particle_frac_near_center, n_local_resampling_iterations=100
         )
 
         # secondary assertion: confirm move was not trivial
@@ -208,9 +210,11 @@ def test_local_md_particle_density(k):
     cutoff = 1.2
 
     # Have to minimize, else there can be clashes and the local moves will cause crashes
-    unbound_potentials, sys_params, masses, coords, box = get_solvent_phase_system(mol, ff, 0.0, box_width=4.0)
+    unbound_potentials, sys_params, masses, coords, box = get_solvent_phase_system(
+        mol, ff, 0.0, box_width=4.0, margin=0.1
+    )
 
-    local_idxs = np.array([len(coords) - 1], dtype=np.int32)
+    local_idxs = np.arange(len(coords) - mol.GetNumAtoms(), len(coords), dtype=np.int32)
 
     nblist = custom_ops.Neighborlist_f32(coords.shape[0])
 
@@ -226,10 +230,12 @@ def test_local_md_particle_density(k):
     for p, bp in zip(sys_params, unbound_potentials):
         bps.append(bp.bind(p).bound_impl(np.float32))
 
-    def observable(x):
-        # x has shape (1, *coords.shape), reshape to be the same as coords
-        reshaped_x = x.reshape(coords.shape)
-        ixns = nblist.get_nblist(reshaped_x, box, cutoff)
+    def observable(pair):
+        new_coords, new_box = pair
+        assert coords.shape == new_coords.shape
+        assert box.shape == new_box.shape
+
+        ixns = nblist.get_nblist(new_coords, new_box, cutoff)
         flattened = np.concatenate(ixns).reshape(-1)
         inner_shell_idxs = np.unique(flattened)
 
@@ -239,13 +245,13 @@ def test_local_md_particle_density(k):
 
     ctxt = custom_ops.Context(coords, v0, box, intg_impl, bps)
     # Equilibrate using global steps to start off from a reasonable place
-    x0, _ = ctxt.multiple_steps(1000)
+    x0, boxes = ctxt.multiple_steps(1000)
 
     rng = np.random.default_rng(seed)
 
-    def local_move(x, steps=500):
+    def local_move(_, steps=500):
         local_seed = rng.integers(np.iinfo(np.int32).max)
         xs, boxes = ctxt.multiple_steps_local(steps, local_idxs, burn_in=0, k=k, seed=local_seed)
-        return xs, boxes
+        return (xs[-1], boxes[-1]), None
 
-    expect_no_drift(x0[-1], local_move, observable, n_local_resampling_iterations=250, threshold=0.05)
+    expect_no_drift((x0[-1], boxes[-1]), local_move, observable, n_local_resampling_iterations=250, threshold=0.05)
