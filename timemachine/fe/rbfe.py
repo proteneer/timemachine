@@ -71,8 +71,9 @@ def setup_in_env(
     baro = MonteCarloBarostat(len(hmr_masses), DEFAULT_PRESSURE, temperature, group_idxs, 15, run_seed + 1)
 
     x0 = np.concatenate([host_conf, ligand_conf])
+    box0 = host_config.box
 
-    return x0, host_config.box, hmr_masses, potentials, baro
+    return x0, box0, hmr_masses, potentials, baro
 
 
 def assert_all_states_have_same_masses(initial_states: List[InitialState]):
