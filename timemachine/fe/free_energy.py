@@ -523,6 +523,7 @@ def run_sims_with_greedy_bisection(
     md_params: MDParams,
     n_bisections: int,
     temperature: float,
+    verbose: bool = True,
 ) -> Tuple[List[Tuple[List[InitialState], NDArray]], List[StoredArrays], List[NDArray]]:
     r"""Starting from a specified lambda schedule, successively bisect the lambda interval between the pair of states
     with the largest BAR :math:`\Delta G` error and sample the new state with MD.
@@ -543,6 +544,9 @@ def run_sims_with_greedy_bisection(
 
     temperature: float
         Temperature in K
+
+    verbose: bool
+        Whether to print diagnostic information
     """
 
     assert len(initial_lambdas) >= 2
@@ -551,6 +555,11 @@ def run_sims_with_greedy_bisection(
     cache = lru_cache(maxsize=None)
 
     get_initial_state = cache(make_initial_state)
+
+    def log(bar_error: float, lamb1: float, lamb2: float, lamb_next: float):
+        if verbose:
+            print(f"Maximum BAR ΔG error {bar_error:.3f} between states with λ={lamb1:.3f} and λ={lamb2:.3f}")
+            print(f"Sampling new state at λ={lamb_next:.3f}…")
 
     @cache
     def get_state(lamb: float) -> EnergyDecomposedState[StoredArrays]:
@@ -569,7 +578,7 @@ def run_sims_with_greedy_bisection(
 
     for _ in range(n_bisections):
 
-        lambdas = greedy_bisection_step(lambdas, bar_error, midpoint)
+        lambdas = greedy_bisection_step(lambdas, bar_error, midpoint, callback=log)
 
         u_kln_by_component_by_lambda = np.array(
             [
