@@ -578,14 +578,13 @@ def run_vacuum(
     min_cutoff=1.5,
 ):
     # min_cutoff defaults to 15 Å since there is no environment to prevent conformational changes in the ligand
-    vacuum_host_config = None
-    return estimate_relative_free_energy(
+    return estimate_relative_free_energy_via_greedy_bisection(
         mol_a,
         mol_b,
         core,
         forcefield,
-        vacuum_host_config,
-        seed,
+        host_config=None,
+        seed=seed,
         n_frames=n_frames,
         prefix="vacuum",
         n_eq_steps=n_eq_steps,
@@ -612,7 +611,7 @@ def run_solvent(
     solvent_sys, solvent_conf, solvent_box, solvent_top = builders.build_water_system(box_width, forcefield.water_ff)
     solvent_box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes, deboggle later
     solvent_host_config = HostConfig(solvent_sys, solvent_conf, solvent_box)
-    solvent_res = estimate_relative_free_energy(
+    solvent_res = estimate_relative_free_energy_via_greedy_bisection(
         mol_a,
         mol_b,
         core,
@@ -647,7 +646,7 @@ def run_complex(
     )
     complex_box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes, deboggle later
     complex_host_config = HostConfig(complex_sys, complex_conf, complex_box)
-    complex_res = estimate_relative_free_energy(
+    complex_res = estimate_relative_free_energy_via_greedy_bisection(
         mol_a,
         mol_b,
         core,
