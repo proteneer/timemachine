@@ -524,8 +524,29 @@ def run_sims_with_greedy_bisection(
     n_bisections: int,
     temperature: float,
 ) -> Tuple[List[Tuple[List[InitialState], NDArray]], List[StoredArrays], List[NDArray]]:
+    r"""Starting from a specified lambda schedule, successively bisect the lambda interval between the pair of states
+    with the largest BAR :math:`\Delta G` error and sample the new state with MD.
+
+    Parameters
+    ----------
+    initial_lambdas: sequence of float, length >= 2, monotonically increasing
+        Initial protocol; starting point for bisection.
+
+    make_initial_state: callable
+        Function returning an InitialState (i.e., starting point for MD) given lambda
+
+    md_params: MDParams
+        Parameters used to simulate new states
+
+    n_bisections: int
+        Number of bisection steps to perform
+
+    temperature: float
+        Temperature in K
+    """
 
     assert len(initial_lambdas) >= 2
+    assert np.all(np.diff(initial_lambdas) > 0), "initial lambda schedule must be monotonically increasing"
 
     cache = lru_cache(maxsize=None)
 
