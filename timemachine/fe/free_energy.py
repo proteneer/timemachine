@@ -587,22 +587,17 @@ def run_sims_with_greedy_bisection(
     def midpoint(x1, x2):
         return (x1 + x2) / 2.0
 
-    lambdas = list(initial_lambdas)
-    results = []
-
-    for _ in range(n_bisections):
-
-        lambdas = greedy_bisection_step(lambdas, bar_error, midpoint, callback=log)
-
-        u_kln_by_component_by_lambda = np.array(
-            [
-                compute_energy_decomposed_u_kln([get_state(lamb1), get_state(lamb2)])
-                for lamb1, lamb2 in zip(lambdas, lambdas[1:])
-            ]
-        )
-
+    def compute_result(lambdas):
+        pairs = [[get_state(lamb1), get_state(lamb2)] for lamb1, lamb2 in zip(lambdas, lambdas[1:])]
+        u_kln_by_component_by_lambda = np.array([compute_energy_decomposed_u_kln(pair) for pair in pairs])
         refined_initial_states = [get_initial_state(lamb) for lamb in lambdas]
-        results.append((refined_initial_states, u_kln_by_component_by_lambda))
+        return refined_initial_states, u_kln_by_component_by_lambda
+
+    lambdas = list(initial_lambdas)
+    results = [compute_result(lambdas)]
+    for _ in range(n_bisections):
+        lambdas = greedy_bisection_step(lambdas, bar_error, midpoint, callback=log)
+        results.append(compute_result(lambdas))
 
     frames = [get_state(lamb).frames for lamb in lambdas]
     boxes = [get_state(lamb).boxes for lamb in lambdas]
