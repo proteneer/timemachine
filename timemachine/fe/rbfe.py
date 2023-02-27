@@ -458,10 +458,9 @@ def estimate_relative_free_energy_via_greedy_bisection(
     steps_per_frame: int = 400,
     min_cutoff: float = 0.7,
 ) -> SimulationResult:
-    """
-    Estimate relative free energy between mol_a and mol_b via independent simulations with a dynamic lambda schedule
-    determined by successively bisecting the lambda interval between the pair of states with the worst overlap.
-    Molecules should be aligned to each other and within the host environment.
+    r"""Estimate relative free energy between mol_a and mol_b via independent simulations with a dynamic lambda schedule
+    determined by successively bisecting the lambda interval between the pair of states with the greatest BAR
+    :math:`\Delta G` error. Molecules should be aligned to each other and within the host environment.
 
     Parameters
     ----------
