@@ -20,6 +20,12 @@ VelocityVerletIntegrator::~VelocityVerletIntegrator() {
     gpuErrchk(cudaFree(d_du_dx_));
 }
 
+std::vector<double> VelocityVerletIntegrator::get_last_du_dx() {
+    std::vector<double> h_du_dx(N_ * 3);
+    gpuErrchk(cudaMemcpy(&h_du_dx[0], d_du_dx_, N_ * 3 * sizeof(*d_du_dx_), cudaMemcpyDeviceToHost));
+    return h_du_dx;
+}
+
 void VelocityVerletIntegrator::step_fwd(
     std::vector<std::shared_ptr<BoundPotential>> &bps,
     double *d_x_t,

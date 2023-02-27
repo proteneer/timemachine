@@ -64,7 +64,6 @@ private:
     double *d_v_t_;   // velocities
     double *d_box_t_; // box vectors
 
-    unsigned long long *d_du_dx_t_;  // du/dx [N,3]
     unsigned long long *d_u_buffer_; // u [N]
     double *d_sum_storage_;
     size_t d_sum_storage_bytes_;

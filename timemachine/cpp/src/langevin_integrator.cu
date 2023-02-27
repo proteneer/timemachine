@@ -1,4 +1,5 @@
 #include "constants.hpp"
+#include "device_buffer.hpp"
 #include "gpu_utils.cuh"
 #include "kernel_utils.cuh"
 #include "langevin_integrator.hpp"
@@ -43,6 +44,26 @@ LangevinIntegrator::~LangevinIntegrator() {
 }
 
 double LangevinIntegrator::get_temperature() { return this->temperature_; }
+
+void __global__ k_convert_to_float(int N, unsigned long long *src, double *dest) {
+
+    auto idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= N) {
+        return;
+    }
+    dest[idx] = FIXED_TO_FLOAT<double>(src[idx]);
+}
+
+std::vector<double> LangevinIntegrator::get_last_du_dx() {
+    std::vector<double> h_du_dx(N_ * 3);
+    DeviceBuffer<double> buff(h_du_dx.size());
+    k_convert_to_float<<<N_ * 3, 1, 0>>>(N_ * 3, d_du_dx_, buff.data);
+    gpuErrchk(cudaPeekAtLastError());
+    gpuErrchk(cudaDeviceSynchronize());
+    buff.copy_to(&h_du_dx[0]);
+    // gpuErrchk(cudaMemcpy(&h_du_dx[0], d_du_dx_, N_ * 3 * sizeof(*d_du_dx_), cudaMemcpyDeviceToHost));
+    return h_du_dx;
+}
 
 void LangevinIntegrator::step_fwd(
     std::vector<std::shared_ptr<BoundPotential>> &bps,

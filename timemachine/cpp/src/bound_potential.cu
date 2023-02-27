@@ -1,6 +1,12 @@
 #include "bound_potential.hpp"
 #include "gpu_utils.cuh"
 
+#include "fanout_summed_potential.hpp"
+#include "nonbonded_all_pairs.hpp"
+#include "nonbonded_pair_list.hpp"
+#include "summed_potential.hpp"
+#include <typeinfo>
+
 namespace timemachine {
 
 BoundPotential::BoundPotential(std::shared_ptr<Potential> potential, std::vector<int> shape, const double *h_p)

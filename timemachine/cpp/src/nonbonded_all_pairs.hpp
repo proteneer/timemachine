@@ -82,6 +82,8 @@ public:
 
     double get_cutoff() const { return cutoff_; };
 
+    double get_beta() const { return beta_; };
+
     void set_atom_idxs(const std::vector<int> &atom_idxs);
 
     void set_atom_idxs_device(const int K, const unsigned int *d_atom_idxs, const cudaStream_t stream);

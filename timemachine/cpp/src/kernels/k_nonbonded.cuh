@@ -280,6 +280,7 @@ void __device__ v_nonbonded_unified(
 
     const int index = row_block_idx * 32 + threadIdx.x;
     const unsigned int atom_i_idx = index < NR ? row_idxs[index] : N;
+    // const bool val = index == atom_i_idx;
 
     RealType ci_x = atom_i_idx < N ? coords[atom_i_idx * 3 + 0] : 0;
     RealType ci_y = atom_i_idx < N ? coords[atom_i_idx * 3 + 1] : 0;
@@ -486,7 +487,7 @@ void __device__ v_nonbonded_unified(
 
 template <typename RealType, bool COMPUTE_U, bool COMPUTE_DU_DX, bool COMPUTE_DU_DP>
 void __global__ k_nonbonded_unified(
-    const int N,
+    const int N,  // Number of atoms
     const int NR, // Number of row indices
     const double *__restrict__ coords,
     const double *__restrict__ params, // [N]

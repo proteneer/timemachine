@@ -25,6 +25,10 @@ public:
 
     ~NonbondedPairList();
 
+    const int *get_pairs() { return d_pair_idxs_; }
+
+    int num_pairs() { return M_; }
+
     virtual void execute_device(
         const int N,
         const int P,

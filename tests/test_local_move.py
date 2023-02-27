@@ -209,7 +209,7 @@ def test_local_md_particle_density(k):
     cutoff = 1.2
 
     # Have to minimize, else there can be clashes and the local moves will cause crashes
-    unbound_potentials, sys_params, masses, coords, box = get_solvent_phase_system(
+    unbound_potentials, sys_params, masses, coords, box, _ = get_solvent_phase_system(
         mol, ff, 0.0, box_width=4.0, margin=0.1
     )
 

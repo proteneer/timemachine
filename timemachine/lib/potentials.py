@@ -257,6 +257,9 @@ class NonbondedAllPairs(CustomOpWrapper):
         return self.args[2]
 
     def get_atom_idxs(self):
+        print(len(self.args))
+        if len(self.args) <= 3:
+            return None
         return self.args[3]
 
 

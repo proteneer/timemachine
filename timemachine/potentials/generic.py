@@ -255,7 +255,9 @@ class NonbondedAllPairs:
 
         def U(conf, params, box):
             conf = conf[s, :]
+            print("ALL PAIRS", s)
             num_atoms, _ = conf.shape
+            print(self.num_atoms, num_atoms)
             no_rescale = jnp.ones((num_atoms, num_atoms))
             return ref_nonbonded.nonbonded(
                 conf,
@@ -438,6 +440,12 @@ def from_gpu(p: gpu.CustomOpWrapper) -> Optional[Potential]:
 
     if isinstance(p, gpu.Nonbonded):
         return Nonbonded.from_gpu(p)
+
+    if isinstance(p, gpu.NonbondedAllPairs):
+        return NonbondedAllPairs.from_gpu(p)
+
+    if isinstance(p, gpu.NonbondedPairList):
+        return NonbondedPairList.from_gpu(p)
 
     if isinstance(p, gpu.NonbondedPairListPrecomputed):
         return NonbondedPairListPrecomputed.from_gpu(p)

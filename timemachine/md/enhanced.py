@@ -467,7 +467,7 @@ def get_solvent_phase_system(mol, ff, lamb: float, box_width=3.0, margin=0.5, mi
     else:
         coords = np.concatenate([water_coords, ligand_coords])
 
-    return potentials, params, masses, coords, water_box
+    return potentials, params, masses, coords, water_box, water_topology
 
 
 def equilibrate_solvent_phase(

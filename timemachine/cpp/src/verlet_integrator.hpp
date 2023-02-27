@@ -21,6 +21,8 @@ public:
 
     virtual ~VelocityVerletIntegrator();
 
+    virtual std::vector<double> get_last_du_dx() override;
+
     virtual void step_fwd(
         std::vector<std::shared_ptr<BoundPotential>> &bps,
         double *d_x_t,

@@ -16,6 +16,8 @@ SummedPotential::SummedPotential(
 
 const std::vector<std::shared_ptr<Potential>> &SummedPotential::get_potentials() { return potentials_; }
 
+const std::vector<int> &SummedPotential::get_parameter_sizes() { return params_sizes_; }
+
 void SummedPotential::execute_device(
     const int N,
     const int P,
