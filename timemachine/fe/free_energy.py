@@ -572,7 +572,7 @@ def run_sims_with_greedy_bisection(
 
     def log(bar_error: float, lamb1: float, lamb2: float, lamb_next: float):
         if verbose:
-            print(f"Maximum BAR ΔG error {bar_error:.3f} between states with λ={lamb1:.3f} and λ={lamb2:.3f}")
+            print(f"Maximum BAR ΔG error {bar_error:.3f} between states at λ={lamb1:.3f} and λ={lamb2:.3f}")
             print(f"Sampling new state at λ={lamb_next:.3f}…")
 
     @cache

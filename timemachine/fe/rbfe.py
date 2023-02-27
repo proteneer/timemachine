@@ -532,7 +532,7 @@ def estimate_relative_free_energy_via_greedy_bisection(
 
     try:
         raw_results, stored_frames, stored_boxes = run_sims_with_greedy_bisection(
-            [0.0, 1.0],
+            [lambda_min, lambda_max],
             make_optimized_initial_state,
             md_params,
             n_bisections=len(lambda_grid) - 2,
