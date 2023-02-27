@@ -512,15 +512,17 @@ def estimate_relative_free_energy_via_greedy_bisection(
         are defined by keep_idxs.
     """
 
+    assert n_windows is None or n_windows >= 2
+
     single_topology = SingleTopology(mol_a, mol_b, core, ff)
 
     lambda_min, lambda_max = lambda_interval or (0.0, 1.0)
-    initial_lambda_schedule = np.linspace(lambda_min, lambda_max, n_windows or 30)
+    lambda_grid = np.linspace(lambda_min, lambda_max, n_windows or 30)
 
     temperature = DEFAULT_TEMP
 
-    initial_states, make_optimized_initial_state = setup_initial_states(
-        single_topology, host_config, temperature, initial_lambda_schedule, seed, min_cutoff=min_cutoff
+    _, make_optimized_initial_state = setup_initial_states(
+        single_topology, host_config, temperature, lambda_grid, seed, min_cutoff=min_cutoff
     )
 
     md_params = MDParams(n_frames=n_frames, n_eq_steps=n_eq_steps, steps_per_frame=steps_per_frame)
@@ -530,7 +532,11 @@ def estimate_relative_free_energy_via_greedy_bisection(
 
     try:
         raw_results, stored_frames, stored_boxes = run_sims_with_greedy_bisection(
-            initial_states, make_optimized_initial_state, md_params, temperature
+            [0.0, 1.0],
+            make_optimized_initial_state,
+            md_params,
+            n_bisections=len(lambda_grid) - 2,
+            temperature=temperature,
         )
 
         results = [
@@ -554,7 +560,7 @@ def estimate_relative_free_energy_via_greedy_bisection(
 
     except Exception as err:
         with open(f"failed_rbfe_result_{combined_prefix}.pkl", "wb") as fh:
-            pickle.dump((initial_states, md_params, err), fh)
+            pickle.dump((md_params, err), fh)
         raise err
 
 

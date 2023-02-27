@@ -518,13 +518,14 @@ def compute_bar_error(s1: EnergyDecomposedState, s2: EnergyDecomposedState) -> f
 
 
 def run_sims_with_greedy_bisection(
-    initial_states: Sequence[InitialState],
+    initial_lambdas: Sequence[float],
     make_initial_state: Callable[[float], InitialState],
     md_params: MDParams,
+    n_bisections: int,
     temperature: float,
 ) -> Tuple[List[Tuple[List[InitialState], NDArray]], List[StoredArrays], List[NDArray]]:
 
-    assert len(initial_states) >= 2
+    assert len(initial_lambdas) >= 2
 
     cache = lru_cache(maxsize=None)
 
@@ -542,11 +543,10 @@ def run_sims_with_greedy_bisection(
     def midpoint(x1, x2):
         return (x1 + x2) / 2.0
 
-    lambdas = [initial_states[0].lamb, initial_states[-1].lamb]
-    n_states_remaining = len(initial_states) - len(lambdas)
+    lambdas = list(initial_lambdas)
     results = []
 
-    for _ in range(n_states_remaining):
+    for _ in range(n_bisections):
 
         lambdas = greedy_bisection_step(lambdas, bar_error, midpoint)
 
