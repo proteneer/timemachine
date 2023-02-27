@@ -218,9 +218,11 @@ def setup_initial_states(
         # use pre-optimized initial state with the closest value of lambda as a starting point for optimization
         nearest_optimized = min(initial_states, key=lambda s: abs(lamb - s.lamb))
 
-        free_idxs = get_free_idxs(nearest_optimized)
-        x_opt = (
-            optimize_coords_state(
+        if lamb == nearest_optimized.lamb:
+            x_opt = nearest_optimized.x0
+        else:
+            free_idxs = get_free_idxs(nearest_optimized)
+            x_opt = optimize_coords_state(
                 initial_state.potentials,
                 nearest_optimized.x0,
                 initial_state.box0,
@@ -228,9 +230,7 @@ def setup_initial_states(
                 # assertion can lead to spurious errors when new state is close to an existing one
                 assert_energy_decreased=False,
             )
-            if lamb != nearest_optimized.lamb
-            else nearest_optimized.x0
-        )
+
         initial_state.x0 = x_opt
         return initial_state
 
