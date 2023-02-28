@@ -214,16 +214,16 @@ def setup_initial_states(
     assert_all_states_have_same_masses(initial_states)
 
     def make_optimized_initial_state(lamb: float) -> InitialState:
-        initial_state = make_initial_state(lamb)
 
         # use pre-optimized initial state with the closest value of lambda as a starting point for optimization
         nearest_optimized = min(initial_states, key=lambda s: abs(lamb - s.lamb))
 
         if lamb == nearest_optimized.lamb:
-            x_opt = nearest_optimized.x0
+            return nearest_optimized
         else:
+            initial_state = make_initial_state(lamb)
             free_idxs = get_free_idxs(nearest_optimized)
-            x_opt = optimize_coords_state(
+            initial_state.x0 = optimize_coords_state(
                 initial_state.potentials,
                 nearest_optimized.x0,
                 initial_state.box0,
@@ -231,9 +231,7 @@ def setup_initial_states(
                 # assertion can lead to spurious errors when new state is close to an existing one
                 assert_energy_decreased=False,
             )
-
-        initial_state.x0 = x_opt
-        return initial_state
+            return initial_state
 
     return initial_states, make_optimized_initial_state
 
