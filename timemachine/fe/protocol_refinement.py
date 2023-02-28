@@ -8,6 +8,28 @@ def greedy_bisection_step(
     local_cost: Callable[[_T, _T], float],
     make_intermediate: Callable[[_T, _T], _T],
 ) -> Tuple[List[_T], Tuple[List[float], int, _T]]:
+    r"""Perform a single step of greedy bisection.
+
+    Parameters
+    ----------
+    protocol: list
+        Initial list of states
+
+    local_cost: callable
+        Function to use for computing the cost of adjacent pairs of states. The pair with the largest cost will be
+        bisected. For free energy calculations using pair BAR, reasonable choices include BAR :math:`\Delta G` error and
+        the inverse of the BAR overlap.
+
+    make_intermediate: callable
+        Function to use for instantiating a new state "between" a given pair. For states parameterized by a scalar lambda,
+        a reasonable choice is the midpoint function. Note: since this function is polymorphic in the type of the state,
+        this can in principle make use of other data attached to the state, e.g. samples for reweighting.
+
+    Returns
+    -------
+    tuple of (list, tuple)
+        Pair of (refined list of states, diagnostic info).
+    """
     assert len(protocol) >= 2
 
     pairs = zip(protocol, protocol[1:])
