@@ -1,5 +1,6 @@
 # test that we can run relative free energy simulations in complex and in solvent
 # this doesn't test for accuracy, just that everything mechanically runs.
+from functools import partial
 from importlib import resources
 from typing import Sequence
 
@@ -20,7 +21,7 @@ from timemachine.md.barostat.utils import compute_box_center
 from timemachine.testsystems.relative import get_hif2a_ligand_pair_single_topology
 
 
-def run_bitwise_reproducibility(mol_a, mol_b, core, forcefield, n_frames, estimate_relative_free_energy_fn):
+def run_bitwise_reproducibility(mol_a, mol_b, core, forcefield, n_frames, n_windows, estimate_relative_free_energy_fn):
     # test that we can bitwise reproduce our trajectory using the initial state information
 
     seed = 2023
@@ -38,7 +39,7 @@ def run_bitwise_reproducibility(mol_a, mol_b, core, forcefield, n_frames, estima
         n_frames=n_frames,
         prefix="solvent",
         lambda_interval=(0.01, 0.03),
-        n_windows=4,
+        n_windows=n_windows,
     )
 
     all_frames, all_boxes = [], []
@@ -51,11 +52,12 @@ def run_bitwise_reproducibility(mol_a, mol_b, core, forcefield, n_frames, estima
     np.testing.assert_equal(solvent_res.boxes, all_boxes)
 
 
-def run_triple(mol_a, mol_b, core, forcefield, n_frames, protein_path, n_eq_steps, estimate_relative_free_energy_fn):
+def run_triple(
+    mol_a, mol_b, core, forcefield, n_frames, n_windows, protein_path, n_eq_steps, estimate_relative_free_energy_fn
+):
 
     seed = 2023
     lambda_interval = [0.01, 0.03]
-    n_windows = 4
 
     def check_sim_result(sim_res: SimulationResult):
         assert len(sim_res.initial_states) == n_windows
@@ -155,10 +157,13 @@ def run_triple(mol_a, mol_b, core, forcefield, n_frames, protein_path, n_eq_step
 
 @pytest.mark.nightly(reason="Slow!")
 @pytest.mark.parametrize(
-    "estimate_relative_free_energy_fn",
-    [estimate_relative_free_energy, estimate_relative_free_energy_via_greedy_bisection],
+    "estimate_relative_free_energy_fn,n_windows",
+    [
+        (partial(estimate_relative_free_energy, keep_idxs=range(3)), 3),
+        (estimate_relative_free_energy_via_greedy_bisection, 4),
+    ],
 )
-def test_run_hif2a_test_system(estimate_relative_free_energy_fn):
+def test_run_hif2a_test_system(estimate_relative_free_energy_fn, n_windows):
 
     mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
     forcefield = Forcefield.load_from_file(DEFAULT_FF)
@@ -170,12 +175,19 @@ def test_run_hif2a_test_system(estimate_relative_free_energy_fn):
             core,
             forcefield,
             n_frames=100,
+            n_windows=n_windows,
             protein_path=str(protein_path),
             n_eq_steps=1000,
             estimate_relative_free_energy_fn=estimate_relative_free_energy_fn,
         )
     run_bitwise_reproducibility(
-        mol_a, mol_b, core, forcefield, n_frames=100, estimate_relative_free_energy_fn=estimate_relative_free_energy_fn
+        mol_a,
+        mol_b,
+        core,
+        forcefield,
+        n_frames=100,
+        n_windows=n_windows,
+        estimate_relative_free_energy_fn=estimate_relative_free_energy_fn,
     )
 
 
@@ -277,5 +289,5 @@ def test_rbfe_with_1_window(estimate_relative_free_energy_fn):
 if __name__ == "__main__":
     # convenience: so we can run this directly from python tests/test_relative_free_energy.py without
     # toggling the pytest marker
-    test_run_hif2a_test_system(estimate_relative_free_energy)
-    test_run_hif2a_test_system(estimate_relative_free_energy_via_greedy_bisection)
+    test_run_hif2a_test_system(partial(estimate_relative_free_energy, keep_idxs=range(3)), 3)
+    test_run_hif2a_test_system(estimate_relative_free_energy_via_greedy_bisection, 4)
