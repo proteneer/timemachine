@@ -479,7 +479,7 @@ def estimate_relative_free_energy_via_greedy_bisection(
         Configuration for the host system. If None, then the vacuum leg is run.
 
     n_frames: int
-        number of samples to generate for each lambda windows, where each sample is 1000 steps of MD.
+        number of samples to generate for each lambda windows, where each sample is `steps_per_frame` steps of MD.
 
     prefix: str
         A prefix to append to figures
