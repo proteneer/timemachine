@@ -539,8 +539,11 @@ def estimate_relative_free_energy_via_greedy_bisection(
         )
 
         results = [
-            (initial_states, estimate_free_energy_pair_bar(u_kln_by_component_by_lambda, temperature, combined_prefix))
-            for initial_states, u_kln_by_component_by_lambda in raw_results
+            (
+                res.initial_states,
+                estimate_free_energy_pair_bar(res.u_kln_by_component_by_lambda, temperature, combined_prefix),
+            )
+            for res in raw_results
         ]
 
         initial_states, pair_bar_result = results[-1]

@@ -517,6 +517,16 @@ def compute_bar_error(u_kln: NDArray) -> float:
     return df_err
 
 
+@dataclass
+class IntermediateResult:
+    """Initial states and (L-1, C, 2, 2, F) array of energy-decomposed u_kln matrices for each pair of states, where L
+    is the number of lambda windows, C is the number of energy components, and F is the number of frames per window.
+    """
+
+    initial_states: List[InitialState]
+    u_kln_by_component_by_lambda: NDArray
+
+
 def run_sims_with_greedy_bisection(
     initial_lambdas: Sequence[float],
     make_initial_state: Callable[[float], InitialState],
@@ -524,7 +534,7 @@ def run_sims_with_greedy_bisection(
     n_bisections: int,
     temperature: float,
     verbose: bool = True,
-) -> Tuple[List[Tuple[List[InitialState], NDArray]], List[StoredArrays], List[NDArray]]:
+) -> Tuple[List[IntermediateResult], List[StoredArrays], List[NDArray]]:
     r"""Starting from a specified lambda schedule, successively bisect the lambda interval between the pair of states
     with the largest BAR :math:`\Delta G` error and sample the new state with MD.
 
@@ -550,11 +560,9 @@ def run_sims_with_greedy_bisection(
 
     Returns
     -------
-    results: list of tuples of (list of InitialState, NDArray)
-        Results from each iteration of bisction. The first element of the nth tuple is the list of InitialState objects
-        specifying the protocol after the nth iteration of bisection; the second element is a (L-1, C, 2, 2, F) array of
-        u_kln matrices for each pair of adjacent windows, where L is the number of lambda windows, C is the number of
-        energy components, and F is the number of frames per window.
+    results: list of IntermediateResult
+        For each iteration of bisection, object containing the current list of states and array of energy-decomposed
+        u_kln matrices.
 
     frames: list of StoredArrays
         Frames from the final iteration of bisection. Shape (L, F, N, 3) where N is the number of atoms.
