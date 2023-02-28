@@ -492,7 +492,7 @@ def estimate_relative_free_energy_via_greedy_bisection(
         other values for testing.
 
     n_windows: None
-        Number of windows used for interpolating the the lambda schedule with additional windows.
+        Number of windows used for interpolating the the lambda schedule with additional windows. Defaults to 30 windows.
 
     n_eq_steps: int
         Number of equilibration steps for each window.
