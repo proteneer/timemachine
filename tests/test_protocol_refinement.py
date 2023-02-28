@@ -1,4 +1,4 @@
-from hypothesis import given
+from hypothesis import given, seed
 from hypothesis.strategies import composite, floats, lists, sampled_from
 
 from timemachine.fe.protocol_refinement import greedy_bisection_step
@@ -24,6 +24,7 @@ def greedy_bisection_step_args_instances(draw):
 
 
 @given(greedy_bisection_step_args_instances())
+@seed(2023)
 def test_greedy_bisection_step(args):
     protocol, local_cost, make_intermediate = args
     refined_protocol, _ = greedy_bisection_step(protocol, local_cost, make_intermediate)
