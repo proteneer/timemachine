@@ -251,12 +251,12 @@ def optimize_coords_state(
     return x_opt
 
 
-def get_free_idxs(initial_state: InitialState) -> List[int]:
+def get_free_idxs(initial_state: InitialState, cutoff: float = 0.5) -> List[int]:
     """Select particles within cutoff of ligand"""
     x = initial_state.x0
     x_lig = x[initial_state.ligand_idxs]
     box = initial_state.box0
-    free_idxs = jax_utils.idxs_within_cutoff(x, x_lig, box, cutoff=0.5).tolist()
+    free_idxs = jax_utils.idxs_within_cutoff(x, x_lig, box, cutoff=cutoff).tolist()
     return free_idxs
 
 
