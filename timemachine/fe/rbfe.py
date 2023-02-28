@@ -233,7 +233,10 @@ def setup_initial_states(
             )
             return initial_state
 
-    return initial_states, make_optimized_initial_state
+    return (
+        initial_states.copy(),  # NOTE: return a copy to prevent mutation of initial_states referenced in the closure
+        make_optimized_initial_state,
+    )
 
 
 def optimize_coords_state(
