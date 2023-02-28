@@ -552,9 +552,9 @@ def run_sims_with_greedy_bisection(
     -------
     results: list of tuples of (list of InitialState, NDArray)
         Results from each iteration of bisction. The first element of the nth tuple is the list of InitialState objects
-        specifying the protocol after the nth iteration of bisection; the second element is a (L-1, 2, 2, F) array of
-        u_kln matrices for each pair of adjacent windows, where L is the number of lambda windows and F is the number of
-        frames per window.
+        specifying the protocol after the nth iteration of bisection; the second element is a (L-1, C, 2, 2, F) array of
+        u_kln matrices for each pair of adjacent windows, where L is the number of lambda windows, C is the number of
+        energy components, and F is the number of frames per window.
 
     frames: list of StoredArrays
         Frames from the final iteration of bisection. Shape (L, F, N, 3) where N is the number of atoms.

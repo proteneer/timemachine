@@ -364,7 +364,7 @@ def estimate_relative_free_energy(
     core: list of 2-tuples
         atom_mapping of atoms in mol_a into atoms in mol_b
 
-    ff: ff.Forcefield
+    ff: Forcefield
         Forcefield to be used for the system
 
     host_config: HostConfig or None
@@ -474,7 +474,7 @@ def estimate_relative_free_energy_via_greedy_bisection(
     core: list of 2-tuples
         atom_mapping of atoms in mol_a into atoms in mol_b
 
-    ff: ff.Forcefield
+    ff: Forcefield
         Forcefield to be used for the system
 
     host_config: HostConfig or None
