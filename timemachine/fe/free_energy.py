@@ -624,7 +624,7 @@ def run_sims_with_greedy_bisection(
             max_bar_error = max(costs)
             lamb1 = lambdas[left_idx]
             lamb2 = lambdas[left_idx + 1]
-            print(f"Maximum BAR ΔG error {max_bar_error:.3f} between states at λ={lamb1:.3f} and λ={lamb2:.3f}")
+            print(f"Maximum BAR ΔG error {max_bar_error:.3g} between states at λ={lamb1:.3g} and λ={lamb2:.3g}")
             print(f"Sampling new state at λ={lamb_new:.3f}…")
 
         lambdas = lambdas_new
