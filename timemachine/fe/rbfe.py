@@ -372,7 +372,7 @@ def estimate_relative_free_energy(
         Random seed to use for the simulations.
 
     n_frames: int
-        number of samples to generate for each lambda windows, where each sample is 1000 steps of MD.
+        number of samples to generate for each lambda windows, where each sample is `steps_per_frame` steps of MD.
 
     prefix: str
         A prefix to append to figures
