@@ -601,7 +601,7 @@ def run_sims_with_greedy_bisection(
         u_kln_by_component_by_lambda = np.array(
             [get_u_kln_by_component(lamb1, lamb2) for lamb1, lamb2 in zip(lambdas, lambdas[1:])]
         )
-        return refined_initial_states, u_kln_by_component_by_lambda
+        return IntermediateResult(refined_initial_states, u_kln_by_component_by_lambda)
 
     lambdas = list(initial_lambdas)
     results = [compute_intermediate_result(lambdas)]
