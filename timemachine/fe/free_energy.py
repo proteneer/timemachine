@@ -570,11 +570,6 @@ def run_sims_with_greedy_bisection(
 
     get_initial_state = cache(make_initial_state)
 
-    def log(bar_error: float, lamb1: float, lamb2: float, lamb_next: float):
-        if verbose:
-            print(f"Maximum BAR ΔG error {bar_error:.3f} between states at λ={lamb1:.3f} and λ={lamb2:.3f}")
-            print(f"Sampling new state at λ={lamb_next:.3f}…")
-
     @cache
     def get_state(lamb: float) -> EnergyDecomposedState[StoredArrays]:
         initial_state = get_initial_state(lamb)
@@ -596,7 +591,17 @@ def run_sims_with_greedy_bisection(
     lambdas = list(initial_lambdas)
     results = [compute_result(lambdas)]
     for _ in range(n_bisections):
-        lambdas = greedy_bisection_step(lambdas, bar_error, midpoint, callback=log)
+        lambdas_new, info = greedy_bisection_step(lambdas, bar_error, midpoint)
+
+        if verbose:
+            costs, left_idx, lamb_new = info
+            max_bar_error = max(costs)
+            lamb1 = lambdas[left_idx]
+            lamb2 = lambdas[left_idx + 1]
+            print(f"Maximum BAR ΔG error {max_bar_error:.3f} between states at λ={lamb1:.3f} and λ={lamb2:.3f}")
+            print(f"Sampling new state at λ={lamb_new:.3f}…")
+
+        lambdas = lambdas_new
         results.append(compute_result(lambdas))
 
     frames = [get_state(lamb).frames for lamb in lambdas]

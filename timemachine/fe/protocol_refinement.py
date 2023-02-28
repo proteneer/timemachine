@@ -1,4 +1,4 @@
-from typing import Callable, List, Optional, TypeVar
+from typing import Callable, List, Tuple, TypeVar
 
 _T = TypeVar("_T")
 
@@ -7,20 +7,17 @@ def greedy_bisection_step(
     protocol: List[_T],
     local_cost: Callable[[_T, _T], float],
     make_intermediate: Callable[[_T, _T], _T],
-    callback: Optional[Callable[[float, _T, _T, _T], None]] = None,
-) -> List[_T]:
+) -> Tuple[List[_T], Tuple[List[float], int, _T]]:
     assert len(protocol) >= 2
 
-    adjacent_pairs = zip(protocol, protocol[1:])
-    max_cost, s1_idx, (s1, s2) = max((local_cost(s1, s2), idx, (s1, s2)) for idx, (s1, s2) in enumerate(adjacent_pairs))
-    new_state = make_intermediate(s1, s2)
+    pairs = zip(protocol, protocol[1:])
+    costs = [local_cost(left, right) for left, right in pairs]
+    pairs_by_cost = [(cost, left_idx, pair) for left_idx, (pair, cost) in enumerate(zip(pairs, costs))]
+    _, left_idx, (left, right) = max(pairs_by_cost)
+    new_state = make_intermediate(left, right)
+    refined_protocol = insert(protocol, left_idx + 1, new_state)
 
-    if callback:
-        callback(max_cost, s1, s2, new_state)
-
-    refined_protocol = insert(protocol, s1_idx + 1, new_state)  # insert to the right of s1
-
-    return refined_protocol
+    return refined_protocol, (costs, left_idx, new_state)
 
 
 def insert(xs: List[_T], idx: int, x: _T) -> List[_T]:
