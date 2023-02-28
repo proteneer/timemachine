@@ -32,7 +32,7 @@ def greedy_bisection_step(
     """
     assert len(protocol) >= 2
 
-    pairs = zip(protocol, protocol[1:])
+    pairs = list(zip(protocol, protocol[1:]))
     costs = [local_cost(left, right) for left, right in pairs]
     pairs_by_cost = [(cost, left_idx, pair) for left_idx, (pair, cost) in enumerate(zip(pairs, costs))]
     _, left_idx, (left, right) = max(pairs_by_cost)

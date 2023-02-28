@@ -26,7 +26,7 @@ def greedy_bisection_step_args_instances(draw):
 @given(greedy_bisection_step_args_instances())
 def test_greedy_bisection_step(args):
     protocol, local_cost, make_intermediate = args
-    refined_protocol = greedy_bisection_step(protocol, local_cost, make_intermediate)
+    refined_protocol, _ = greedy_bisection_step(protocol, local_cost, make_intermediate)
     assert len(refined_protocol) == len(protocol) + 1
     assert set(refined_protocol).issuperset(set(protocol))
     assert refined_protocol == sorted(refined_protocol)
