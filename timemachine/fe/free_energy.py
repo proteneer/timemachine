@@ -508,8 +508,8 @@ def sample_state(
     return EnergyDecomposedState(frames, boxes, batch_u_fns)
 
 
-def compute_bar_error(s1: EnergyDecomposedState, s2: EnergyDecomposedState) -> float:
-    u_kln = compute_energy_decomposed_u_kln([s1, s2]).sum(axis=0)  # sum over components
+def compute_bar_error(u_kln: NDArray) -> float:
+    assert u_kln.ndim == 3
     assert u_kln.shape[:2] == (2, 2)
     w_f = u_kln[1, 0] - u_kln[0, 0]
     w_r = u_kln[0, 1] - u_kln[1, 1]
@@ -576,22 +576,29 @@ def run_sims_with_greedy_bisection(
         return sample_state(initial_state, md_params, temperature)
 
     @cache
-    def bar_error(lamb1: float, lamb2: float) -> float:
-        return compute_bar_error(get_state(lamb1), get_state(lamb2))
+    def get_u_kln_by_component(lamb1: float, lamb2: float) -> NDArray:
+        return compute_energy_decomposed_u_kln([get_state(lamb1), get_state(lamb2)])
 
-    def midpoint(x1, x2):
+    @cache
+    def get_bar_error(lamb1: float, lamb2: float) -> float:
+        u_kln_by_component = get_u_kln_by_component(lamb1, lamb2)
+        u_kln = u_kln_by_component.sum(axis=0)  # sum over components
+        return compute_bar_error(u_kln)
+
+    def midpoint(x1: float, x2: float):
         return (x1 + x2) / 2.0
 
-    def compute_result(lambdas):
-        pairs = [[get_state(lamb1), get_state(lamb2)] for lamb1, lamb2 in zip(lambdas, lambdas[1:])]
-        u_kln_by_component_by_lambda = np.array([compute_energy_decomposed_u_kln(pair) for pair in pairs])
+    def compute_intermediate_result(lambdas: Sequence[float]):
         refined_initial_states = [get_initial_state(lamb) for lamb in lambdas]
+        u_kln_by_component_by_lambda = np.array(
+            [get_u_kln_by_component(lamb1, lamb2) for lamb1, lamb2 in zip(lambdas, lambdas[1:])]
+        )
         return refined_initial_states, u_kln_by_component_by_lambda
 
     lambdas = list(initial_lambdas)
-    results = [compute_result(lambdas)]
+    results = [compute_intermediate_result(lambdas)]
     for _ in range(n_bisections):
-        lambdas_new, info = greedy_bisection_step(lambdas, bar_error, midpoint)
+        lambdas_new, info = greedy_bisection_step(lambdas, get_bar_error, midpoint)
 
         if verbose:
             costs, left_idx, lamb_new = info
@@ -602,7 +609,7 @@ def run_sims_with_greedy_bisection(
             print(f"Sampling new state at λ={lamb_new:.3f}…")
 
         lambdas = lambdas_new
-        results.append(compute_result(lambdas))
+        results.append(compute_intermediate_result(lambdas))
 
     frames = [get_state(lamb).frames for lamb in lambdas]
     boxes = [get_state(lamb).boxes for lamb in lambdas]
