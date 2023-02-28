@@ -8,7 +8,12 @@ from numpy.typing import NDArray
 from timemachine.constants import BOLTZ
 from timemachine.fe import model_utils, topology
 from timemachine.fe.bar import bar_with_bootstrapped_uncertainty, df_err_from_ukln, pair_overlap_from_ukln
-from timemachine.fe.energy_decomposition import EnergyDecomposedState, compute_energy_decomposed_u_kln, get_batch_u_fns
+from timemachine.fe.energy_decomposition import (
+    Batch_u_fn,
+    EnergyDecomposedState,
+    compute_energy_decomposed_u_kln,
+    get_batch_u_fns,
+)
 from timemachine.fe.plots import make_dG_errs_figure, make_overlap_detail_figure, make_overlap_summary_figure
 from timemachine.fe.protocol_refinement import greedy_bisection_step
 from timemachine.fe.stored_arrays import StoredArrays
@@ -498,14 +503,10 @@ def run_sims_sequential(
     return np.array(u_kln_by_component_by_lambda), stored_frames, stored_boxes
 
 
-def sample_state(
-    initial_state: InitialState, md_params: MDParams, temperature: float
-) -> EnergyDecomposedState[StoredArrays]:
-    frames, boxes = sample(initial_state, md_params, max_buffer_frames=1000)
-    bound_impls = [p.bound_impl(np.float32) for p in initial_state.potentials]
+def make_batch_u_fns(initial_state: InitialState, temperature: float) -> List[Batch_u_fn]:
     assert initial_state.barostat is None or initial_state.barostat.temperature == temperature
-    batch_u_fns = get_batch_u_fns(bound_impls, temperature)
-    return EnergyDecomposedState(frames, boxes, batch_u_fns)
+    bound_impls = [p.bound_impl(np.float32) for p in initial_state.potentials]
+    return get_batch_u_fns(bound_impls, temperature)
 
 
 def compute_bar_error(u_kln: NDArray) -> float:
@@ -579,9 +580,19 @@ def run_sims_with_greedy_bisection(
     get_initial_state = cache(make_initial_state)
 
     @cache
+    def get_samples(lamb: float) -> Tuple[StoredArrays, NDArray]:
+        initial_state = get_initial_state(lamb)
+        frames, boxes = sample(initial_state, md_params, max_buffer_frames=1000)
+        return frames, boxes
+
+    # NOTE: we don't cache get_state to avoid holding BoundPotentials in memory since they
+    # 1. can use significant GPU memory
+    # 2. can be reconstructed relatively quickly
     def get_state(lamb: float) -> EnergyDecomposedState[StoredArrays]:
         initial_state = get_initial_state(lamb)
-        return sample_state(initial_state, md_params, temperature)
+        frames, boxes = get_samples(lamb)
+        batch_u_fns = make_batch_u_fns(initial_state, temperature)
+        return EnergyDecomposedState(frames, boxes, batch_u_fns)
 
     @cache
     def get_u_kln_by_component(lamb1: float, lamb2: float) -> NDArray:
