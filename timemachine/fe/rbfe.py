@@ -372,7 +372,7 @@ def estimate_relative_free_energy(
         Random seed to use for the simulations.
 
     n_frames: int
-        number of samples to generate for each lambda windows, where each sample is `steps_per_frame` steps of MD.
+        number of samples to generate for each lambda window, where each sample is `steps_per_frame` steps of MD.
 
     prefix: str
         A prefix to append to figures
@@ -382,7 +382,7 @@ def estimate_relative_free_energy(
         other values for testing.
 
     n_windows: int or None, optional
-        Number of windows used for interpolating the the lambda schedule with additional windows.
+        Number of windows used for interpolating the lambda schedule with additional windows. Defaults to 30 windows.
 
     keep_idxs: list of int or None, optional
         If None, return only the end-state frames. Otherwise if not None, use only for debugging, and this
@@ -479,7 +479,7 @@ def estimate_relative_free_energy_via_greedy_bisection(
         Configuration for the host system. If None, then the vacuum leg is run.
 
     n_frames: int
-        number of samples to generate for each lambda windows, where each sample is `steps_per_frame` steps of MD.
+        number of samples to generate for each lambda window, where each sample is `steps_per_frame` steps of MD.
 
     prefix: str
         A prefix to append to figures
@@ -491,8 +491,9 @@ def estimate_relative_free_energy_via_greedy_bisection(
         Minimum and maximum value of lambda for the transformation; typically (0, 1), but sometimes useful to choose
         other values for testing.
 
-    n_windows: None
-        Number of windows used for interpolating the the lambda schedule with additional windows. Defaults to 30 windows.
+    n_windows: int or None, optional
+        Number of windows used for interpolating the lambda schedule with additional windows. Additionally controls
+        the number of evenly-spaced lambda windows used for initial conformer optimization. Defaults to 30 windows.
 
     n_eq_steps: int
         Number of equilibration steps for each window.
