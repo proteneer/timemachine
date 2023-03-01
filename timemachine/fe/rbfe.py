@@ -53,7 +53,6 @@ def setup_in_env(
     host_system: VacuumSystem,
     host_masses: List[float],
     host_conf: NDArray,
-    host_config: HostConfig,
     ligand_conf: NDArray,
     lamb: float,
     temperature: float,
@@ -71,9 +70,8 @@ def setup_in_env(
     baro = MonteCarloBarostat(len(hmr_masses), DEFAULT_PRESSURE, temperature, group_idxs, 15, run_seed + 1)
 
     x0 = np.concatenate([host_conf, ligand_conf])
-    box0 = host_config.box
 
-    return x0, box0, hmr_masses, potentials, baro
+    return x0, hmr_masses, potentials, baro
 
 
 def assert_all_states_have_same_masses(initial_states: List[InitialState]):
@@ -124,8 +122,9 @@ def setup_initial_state(
             st.ff,
             host_config.box,
         )
-        x0, box0, hmr_masses, potentials, baro = setup_in_env(
-            st, host_system, host_masses, host_conf, host_config, ligand_conf, lamb, temperature, init_seed
+        box0 = host_config.box
+        x0, hmr_masses, potentials, baro = setup_in_env(
+            st, host_system, host_masses, host_conf, ligand_conf, lamb, temperature, init_seed
         )
     else:
         x0, box0, hmr_masses, potentials, baro = setup_in_vacuum(st, ligand_conf, lamb)
