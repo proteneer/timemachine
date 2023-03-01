@@ -2,7 +2,7 @@ import io
 import tempfile
 from itertools import count
 from pathlib import Path
-from typing import Collection, Iterator, List, NoReturn, Sequence, overload
+from typing import Collection, Iterator, List, Sequence, overload
 
 import numpy as np
 from numpy.typing import ArrayLike, NDArray
@@ -45,10 +45,10 @@ class StoredArrays(Sequence[NDArray]):
         ...
 
     @overload
-    def __getitem__(self, key: slice) -> NoReturn:
+    def __getitem__(self, key: slice) -> "StoredArrays":
         ...
 
-    def __getitem__(self, key) -> NDArray:
+    def __getitem__(self, key):
         if isinstance(key, int):
             if key < -len(self) or key >= len(self):
                 raise IndexError(f"index {key} out of range for sequence of length {len(self)}")
@@ -59,8 +59,14 @@ class StoredArrays(Sequence[NDArray]):
                     return np.load(self._get_chunk_path(idx))[key]
                 key -= size
             assert False, "should not get here"
+
         elif isinstance(key, slice):
-            raise NotImplementedError("slices are not implemented")
+            # inefficient implementation, but should be sufficient for current use cases
+            sa = StoredArrays()
+            idxs = range(len(self))
+            for idx in idxs.__getitem__(key):
+                sa.extend([self[idx]])
+            return sa
         else:
             raise ValueError("invalid subscript")
 

@@ -8,7 +8,7 @@ import numpy as np
 import pytest
 from hypothesis import assume, example, given, seed
 from hypothesis.extra.numpy import array_shapes, arrays, floating_dtypes, from_dtype
-from hypothesis.strategies import composite, integers, lists
+from hypothesis.strategies import composite, integers, lists, none, one_of
 
 from timemachine.fe.stored_arrays import StoredArrays
 from timemachine.parallel.client import FileClient
@@ -49,11 +49,38 @@ def lists_of_chunks_with_index(draw):
 
 @given(lists_of_chunks_with_index())
 @seed(2023)
-def test_stored_arrays_getitem(chunks_index):
+def test_stored_arrays_getitem_index(chunks_index):
     chunks, ix = chunks_index
     sa = stored_arrays_from_chunks(chunks)
     ref = [arr for chunk in chunks for arr in chunk]
     np.testing.assert_array_equal(sa[ix], ref[ix])
+
+
+@composite
+def lists_of_chunks_with_slice(draw):
+    shape = draw(array_shapes())
+    dtype = draw(floating_dtypes())
+    chunks = lists(min_size=1, elements=arrays(dtype, shape, elements=from_dtype(dtype, allow_subnormal=False)))
+    list_of_chunks = draw(lists(min_size=1, elements=chunks))
+    n = sum(len(c) for c in list_of_chunks)
+    idx = integers(-n, n - 1)
+    start = draw(one_of(idx, none()))
+    stop = draw(one_of(idx, none()))
+    step = draw(one_of(integers().filter(lambda n: n != 0), none()))
+    return list_of_chunks, slice(start, stop, step)
+
+
+@given(lists_of_chunks_with_slice())
+@example(([np.array([1, 2, 3]), np.array([4, 5, 6])], slice(None)))
+@example(([np.array([1, 2, 3]), np.array([4, 5, 6])], slice(1)))
+@example(([np.array([1, 2, 3]), np.array([4, 5, 6])], slice(2, 4)))
+@example(([np.array([1, 2, 3]), np.array([4, 5, 6])], slice(None, None, 2)))
+@seed(2023)
+def test_stored_arrays_getitem_slice(chunks_slice):
+    chunks, slc = chunks_slice
+    sa = stored_arrays_from_chunks(chunks)
+    ref = [arr for chunk in chunks for arr in chunk]
+    np.testing.assert_array_equal(sa[slc], ref[slc])
 
 
 @pytest.mark.parametrize(
