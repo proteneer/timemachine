@@ -5,6 +5,7 @@ import numpy as np
 import pytest
 from common import prepare_nb_system
 
+from timemachine import constants
 from timemachine.ff import Forcefield
 from timemachine.integrator import langevin_coefficients
 from timemachine.lib import LangevinIntegrator, MonteCarloBarostat, VelocityVerletIntegrator, custom_ops
@@ -528,6 +529,56 @@ class TestContext(unittest.TestCase):
         # Results using a summed potential should be identical.
         np.testing.assert_array_equal(summed_pot_xs, xs)
         np.testing.assert_array_equal(summed_pot_boxes, boxes)
+
+    def test_setup_context_with_references(self):
+        mol, _ = get_biphenyl()
+        ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
+
+        temperature = 300
+        dt = 1.5e-3
+        friction = 0.0
+        seed = 2022
+        pressure = constants.DEFAULT_PRESSURE
+
+        unbound_potentials, sys_params, masses, coords, box = get_solvent_phase_system(
+            mol, ff, 0.0, minimize_energy=False
+        )
+        v0 = np.zeros_like(coords)
+
+        def build_context(barostat_interval):
+            """The context returned will segfault if any of the objects get cleaned up"""
+
+            bps = []
+            for p, bp in zip(sys_params, unbound_potentials):
+                bps.append(bp.bind(p).bound_impl(np.float32))
+
+            intg = LangevinIntegrator(temperature, dt, friction, masses, seed)
+
+            barostat_impl = None
+            if barostat_interval > 0:
+                group_idxs = get_group_indices(get_bond_list(unbound_potentials[0]))
+
+                barostat = MonteCarloBarostat(coords.shape[0], pressure, temperature, group_idxs, 1, seed)
+                barostat_impl = barostat.impl(bps)
+
+            return custom_ops.Context(coords, v0, box, intg.impl(), bps, barostat=barostat_impl)
+
+        # Without barostat
+        ctxt = build_context(0)
+        xs, boxes = ctxt.multiple_steps(100)
+        assert np.all(np.isfinite(xs))
+        assert np.all(np.isfinite(boxes))
+        assert np.all(xs[-1] != coords)
+        assert np.all(boxes[-1] == box)
+
+        # With Barostat
+        ctxt = build_context(10)
+        xs, boxes = ctxt.multiple_steps(100)
+        assert np.all(np.isfinite(xs))
+        assert np.all(np.isfinite(boxes))
+        assert np.all(xs[-1] != coords)
+        # Barostat should change box size
+        assert np.all(np.diagonal(boxes[-1]) != np.diagonal(box))
 
 
 if __name__ == "__main__":

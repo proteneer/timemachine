@@ -126,9 +126,9 @@ void declare_context(py::module &m) {
             py::init([](const py::array_t<double, py::array::c_style> &x0,
                         const py::array_t<double, py::array::c_style> &v0,
                         const py::array_t<double, py::array::c_style> &box0,
-                        timemachine::Integrator *intg,
-                        std::vector<timemachine::BoundPotential *> bps,
-                        std::optional<timemachine::MonteCarloBarostat *> barostat) {
+                        std::shared_ptr<timemachine::Integrator> intg,
+                        std::vector<std::shared_ptr<timemachine::BoundPotential>> bps,
+                        std::optional<std::shared_ptr<timemachine::MonteCarloBarostat>> barostat) {
                 int N = x0.shape()[0];
                 int D = x0.shape()[1];
                 verify_coords_and_box(x0, box0);
@@ -401,14 +401,15 @@ void declare_integrator(py::module &m) {
 
     using Class = timemachine::Integrator;
     std::string pyclass_name = std::string("Integrator");
-    py::class_<Class>(m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr());
+    py::class_<Class, std::shared_ptr<Class>>(m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr());
 }
 
 void declare_langevin_integrator(py::module &m) {
 
     using Class = timemachine::LangevinIntegrator;
     std::string pyclass_name = std::string("LangevinIntegrator");
-    py::class_<Class, timemachine::Integrator>(m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
+    py::class_<Class, std::shared_ptr<Class>, timemachine::Integrator>(
+        m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
         .def(
             py::init([](const py::array_t<double, py::array::c_style> &masses,
                         double temperature,
@@ -429,7 +430,8 @@ void declare_velocity_verlet_integrator(py::module &m) {
 
     using Class = timemachine::VelocityVerletIntegrator;
     std::string pyclass_name = std::string("VelocityVerletIntegrator");
-    py::class_<Class, timemachine::Integrator>(m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
+    py::class_<Class, std::shared_ptr<Class>, timemachine::Integrator>(
+        m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
         .def(
             py::init([](double dt, const py::array_t<double, py::array::c_style> &cbs) {
                 return new timemachine::VelocityVerletIntegrator(cbs.size(), dt, cbs.data());
@@ -706,7 +708,7 @@ void declare_bound_potential(py::module &m) {
 
     using Class = timemachine::BoundPotential;
     std::string pyclass_name = std::string("BoundPotential");
-    py::class_<Class>(m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
+    py::class_<Class, std::shared_ptr<Class>>(m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
         .def(
             py::init([](std::shared_ptr<timemachine::Potential> potential,
                         const py::array_t<double, py::array::c_style> &params) {
@@ -993,7 +995,7 @@ void declare_barostat(py::module &m) {
 
     using Class = timemachine::MonteCarloBarostat;
     std::string pyclass_name = std::string("MonteCarloBarostat");
-    py::class_<Class>(m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
+    py::class_<Class, std::shared_ptr<Class>>(m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
         .def(
             py::init([](const int N,
                         const double pressure,

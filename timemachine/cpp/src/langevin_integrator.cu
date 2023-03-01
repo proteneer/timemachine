@@ -45,7 +45,7 @@ LangevinIntegrator::~LangevinIntegrator() {
 double LangevinIntegrator::get_temperature() { return this->temperature_; }
 
 void LangevinIntegrator::step_fwd(
-    std::vector<BoundPotential *> &bps,
+    std::vector<std::shared_ptr<BoundPotential>> &bps,
     double *d_x_t,
     double *d_v_t,
     double *d_box_t,
@@ -80,7 +80,7 @@ void LangevinIntegrator::step_fwd(
 }
 
 void LangevinIntegrator::initialize(
-    std::vector<BoundPotential *> &bps,
+    std::vector<std::shared_ptr<BoundPotential>> &bps,
     double *d_x_t,
     double *d_v_t,
     double *d_box_t,
@@ -88,7 +88,7 @@ void LangevinIntegrator::initialize(
     cudaStream_t stream){};
 
 void LangevinIntegrator::finalize(
-    std::vector<BoundPotential *> &bps,
+    std::vector<std::shared_ptr<BoundPotential>> &bps,
     double *d_x_t,
     double *d_v_t,
     double *d_box_t,
