@@ -31,6 +31,8 @@ from timemachine.md.barostat.utils import get_bond_list, get_group_indices
 from timemachine.parallel.client import AbstractClient, AbstractFileClient, CUDAPoolClient, FileClient
 from timemachine.potentials import jax_utils
 
+DEFAULT_NUM_WINDOWS = 30
+
 
 def setup_in_vacuum(st, ligand_conf, lamb):
     """Prepare potentials, initial coords, large 10x10x10nm box, and HMR masses"""
@@ -392,7 +394,8 @@ def estimate_relative_free_energy(
         other values for testing.
 
     n_windows: int or None, optional
-        Number of windows used for interpolating the lambda schedule with additional windows. Defaults to 30 windows.
+        Number of windows used for interpolating the lambda schedule with additional windows. Defaults to
+        `DEFAULT_NUM_WINDOWS` windows.
 
     keep_idxs: list of int or None, optional
         If None, return only the end-state frames. Otherwise if not None, use only for debugging, and this
@@ -417,7 +420,7 @@ def estimate_relative_free_energy(
     single_topology = SingleTopology(mol_a, mol_b, core, ff)
 
     lambda_min, lambda_max = lambda_interval or (0.0, 1.0)
-    lambda_schedule = np.linspace(lambda_min, lambda_max, n_windows or 30)
+    lambda_schedule = np.linspace(lambda_min, lambda_max, n_windows or DEFAULT_NUM_WINDOWS)
 
     temperature = DEFAULT_TEMP
     initial_states, _ = setup_initial_states(
@@ -502,8 +505,9 @@ def estimate_relative_free_energy_via_greedy_bisection(
         other values for testing.
 
     n_windows: int or None, optional
-        Number of windows used for interpolating the lambda schedule with additional windows. Additionally controls
-        the number of evenly-spaced lambda windows used for initial conformer optimization. Defaults to 30 windows.
+        Number of windows used for interpolating the lambda schedule with additional windows. Additionally controls the
+        number of evenly-spaced lambda windows used for initial conformer optimization. Defaults to
+        `DEFAULT_NUM_WINDOWS` windows.
 
     n_eq_steps: int
         Number of equilibration steps for each window.
@@ -526,7 +530,7 @@ def estimate_relative_free_energy_via_greedy_bisection(
     single_topology = SingleTopology(mol_a, mol_b, core, ff)
 
     lambda_min, lambda_max = lambda_interval or (0.0, 1.0)
-    lambda_grid = np.linspace(lambda_min, lambda_max, n_windows or 30)
+    lambda_grid = np.linspace(lambda_min, lambda_max, n_windows or DEFAULT_NUM_WINDOWS)
 
     temperature = DEFAULT_TEMP
 
