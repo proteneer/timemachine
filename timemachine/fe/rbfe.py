@@ -223,7 +223,7 @@ def setup_initial_states(
     return initial_states
 
 
-def make_optimized_initial_state(
+def setup_optimized_initial_state(
     st: SingleTopology,
     lamb: float,
     host_config: Optional[HostConfig],
@@ -541,8 +541,8 @@ def estimate_relative_free_energy_via_greedy_bisection(
         single_topology, host_config, temperature, lambda_grid, seed, min_cutoff=min_cutoff
     )
 
-    make_optimized_initial_state_ = partial(
-        make_optimized_initial_state,
+    make_optimized_initial_state = partial(
+        setup_optimized_initial_state,
         single_topology,
         host_config=host_config,
         optimized_initial_states=initial_states,
@@ -558,7 +558,7 @@ def estimate_relative_free_energy_via_greedy_bisection(
     try:
         raw_results, stored_frames, stored_boxes = run_sims_with_greedy_bisection(
             [lambda_min, lambda_max],
-            make_optimized_initial_state_,
+            make_optimized_initial_state,
             md_params,
             n_bisections=len(lambda_grid) - 2,
             temperature=temperature,
