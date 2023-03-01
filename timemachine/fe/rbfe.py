@@ -238,7 +238,7 @@ def select_nearest_state(
 
     (d1, s1), (d2, s2) = sorted((abs(lamb - get_lambda(s)), s) for s in states)[:2]
 
-    if np.isclose(d2, d1):
+    if np.isclose(d1, d2):
         # Case when d1 == d2, i.e. lamb is the midpoint of 2 pre-optimized states. We bias selection toward the
         # closer end state; this is possibly preferable to always selecting the left of the 2 nearest states.
         lambda_mid = (lambda_min + lambda_max) / 2.0
