@@ -1,7 +1,7 @@
 import pickle
 import traceback
 from functools import partial
-from typing import Any, Callable, Dict, Iterable, List, NamedTuple, Optional, Sequence, Tuple, TypeVar, Union
+from typing import Any, Dict, Iterable, List, NamedTuple, Optional, Sequence, Tuple, Union
 
 import numpy as np
 from numpy.typing import NDArray
@@ -217,44 +217,17 @@ def setup_initial_states(
     return initial_states
 
 
-_T = TypeVar("_T")
-
-
-def select_nearest_state(
-    lamb: float,
-    states: Sequence[_T],
-    get_lambda: Callable[[_T], float],
-    lambda_min: float,
-    lambda_max: float,
-) -> _T:
-    """Given a sequence of pre-optimized states, select the one with lambda closest to `lamb`. Break ties by preferring
-    the state closer to the lambda_min end state when `lamb <= (lambda_min + lambda_max) / 2`."""
-
-    (d1, s1), (d2, s2) = sorted((abs(lamb - get_lambda(s)), s) for s in states)[:2]
-
-    if np.isclose(d2, d1):
-        # Case when d1 == d2, i.e. lamb is the midpoint of 2 pre-optimized states. We bias selection toward the
-        # closer end state; this is possibly preferable to always selecting the left of the 2 nearest states.
-        lambda_mid = (lambda_min + lambda_max) / 2.0
-        return min(s1, s2, key=get_lambda) if lamb <= lambda_mid else max(s1, s2, key=get_lambda)
-    else:
-        return s1
-
-
 def setup_optimized_initial_state(
     st: SingleTopology,
     lamb: float,
     host_config: Optional[HostConfig],
     optimized_initial_states: Sequence[InitialState],
-    lambda_min: float,
-    lambda_max: float,
     temperature: float,
     seed: int,
 ) -> InitialState:
 
-    assert len(optimized_initial_states) >= 2
-
-    nearest_optimized = select_nearest_state(lamb, optimized_initial_states, lambda s: s.lamb, lambda_min, lambda_max)
+    # use pre-optimized initial state with the closest value of lambda as a starting point for optimization
+    nearest_optimized = min(optimized_initial_states, key=lambda s: abs(lamb - s.lamb))
 
     if lamb == nearest_optimized.lamb:
         return nearest_optimized
@@ -567,8 +540,6 @@ def estimate_relative_free_energy_via_greedy_bisection(
         single_topology,
         host_config=host_config,
         optimized_initial_states=initial_states,
-        lambda_min=lambda_min,
-        lambda_max=lambda_max,
         temperature=temperature,
         seed=seed,
     )
