@@ -1,7 +1,7 @@
 import pickle
 import traceback
 from functools import partial
-from typing import Any, Callable, Dict, Iterable, List, NamedTuple, Optional, Sequence, Tuple, Union
+from typing import Any, Dict, Iterable, List, NamedTuple, Optional, Sequence, Tuple, Union
 
 import numpy as np
 from numpy.typing import NDArray
@@ -161,10 +161,9 @@ def setup_initial_states(
     lambda_schedule: Union[NDArray, Sequence[float]],
     seed: int,
     min_cutoff: float = 0.7,
-) -> Tuple[List[InitialState], Callable[[float], InitialState]]:
+) -> List[InitialState]:
     """
-    Given a sequence of lambda values, return a list of initial states and a function that can be used to construct a
-    new optimized state.
+    Given a sequence of lambda values, return a list of initial states.
 
     Assumes lambda schedule is a monotonically increasing sequence in the closed interval [0, 1].
 
@@ -198,20 +197,19 @@ def setup_initial_states(
 
     Returns
     -------
-    (list of InitialStates, callable to construct a new optimized state given lambda)
-        Returns an initial state for each value of lambda.
+    list of InitialState
+        Initial state for each value of lambda.
     """
-
-    initial_states = []
 
     # check that the lambda schedule is monotonically increasing.
     assert np.all(np.diff(lambda_schedule) > 0)
 
-    make_initial_state = partial(setup_initial_state, st, host_config=host_config, temperature=temperature, seed=seed)
-    initial_states = [make_initial_state(lamb) for lamb in lambda_schedule]
+    initial_states = [
+        setup_initial_state(st, lamb, host_config=host_config, temperature=temperature, seed=seed)
+        for lamb in lambda_schedule
+    ]
 
     # minimize ligand and environment atoms within min_cutoff of the ligand
-
     # optimization introduces dependencies among states with lam < 0.5, and among states with lam >= 0.5
     optimized_x0s = optimize_coordinates(initial_states, min_cutoff=min_cutoff)
 
@@ -222,30 +220,35 @@ def setup_initial_states(
     # perform any concluding sanity-checks
     assert_all_states_have_same_masses(initial_states)
 
-    def make_optimized_initial_state(lamb: float) -> InitialState:
+    return initial_states
 
-        # use pre-optimized initial state with the closest value of lambda as a starting point for optimization
-        nearest_optimized = min(initial_states, key=lambda s: abs(lamb - s.lamb))
 
-        if lamb == nearest_optimized.lamb:
-            return nearest_optimized
-        else:
-            initial_state = make_initial_state(lamb)
-            free_idxs = get_free_idxs(nearest_optimized)
-            initial_state.x0 = optimize_coords_state(
-                initial_state.potentials,
-                nearest_optimized.x0,
-                initial_state.box0,
-                free_idxs,
-                # assertion can lead to spurious errors when new state is close to an existing one
-                assert_energy_decreased=False,
-            )
-            return initial_state
+def make_optimized_initial_state(
+    st: SingleTopology,
+    lamb: float,
+    host_config: Optional[HostConfig],
+    optimized_initial_states: Sequence[InitialState],
+    temperature: float,
+    seed: int,
+) -> InitialState:
 
-    return (
-        initial_states.copy(),  # NOTE: return a copy to prevent mutation of initial_states referenced in the closure
-        make_optimized_initial_state,
-    )
+    # use pre-optimized initial state with the closest value of lambda as a starting point for optimization
+    nearest_optimized = min(optimized_initial_states, key=lambda s: abs(lamb - s.lamb))
+
+    if lamb == nearest_optimized.lamb:
+        return nearest_optimized
+    else:
+        initial_state = setup_initial_state(st, lamb, host_config=host_config, temperature=temperature, seed=seed)
+        free_idxs = get_free_idxs(nearest_optimized)
+        initial_state.x0 = optimize_coords_state(
+            initial_state.potentials,
+            nearest_optimized.x0,
+            initial_state.box0,
+            free_idxs,
+            # assertion can lead to spurious errors when new state is close to an existing one
+            assert_energy_decreased=False,
+        )
+        return initial_state
 
 
 def optimize_coords_state(
@@ -423,7 +426,7 @@ def estimate_relative_free_energy(
     lambda_schedule = np.linspace(lambda_min, lambda_max, n_windows or DEFAULT_NUM_WINDOWS)
 
     temperature = DEFAULT_TEMP
-    initial_states, _ = setup_initial_states(
+    initial_states = setup_initial_states(
         single_topology, host_config, temperature, lambda_schedule, seed, min_cutoff=min_cutoff
     )
     md_params = MDParams(n_frames=n_frames, n_eq_steps=n_eq_steps, steps_per_frame=steps_per_frame)
@@ -534,8 +537,17 @@ def estimate_relative_free_energy_via_greedy_bisection(
 
     temperature = DEFAULT_TEMP
 
-    _, make_optimized_initial_state = setup_initial_states(
+    initial_states = setup_initial_states(
         single_topology, host_config, temperature, lambda_grid, seed, min_cutoff=min_cutoff
+    )
+
+    make_optimized_initial_state_ = partial(
+        make_optimized_initial_state,
+        single_topology,
+        host_config=host_config,
+        optimized_initial_states=initial_states,
+        temperature=temperature,
+        seed=seed,
     )
 
     md_params = MDParams(n_frames=n_frames, n_eq_steps=n_eq_steps, steps_per_frame=steps_per_frame)
@@ -546,7 +558,7 @@ def estimate_relative_free_energy_via_greedy_bisection(
     try:
         raw_results, stored_frames, stored_boxes = run_sims_with_greedy_bisection(
             [lambda_min, lambda_max],
-            make_optimized_initial_state,
+            make_optimized_initial_state_,
             md_params,
             n_bisections=len(lambda_grid) - 2,
             temperature=temperature,
