@@ -14,6 +14,7 @@ from timemachine.fe.rbfe import (
     estimate_relative_free_energy_via_greedy_bisection,
     run_solvent,
     run_vacuum,
+    select_nearest_state,
 )
 from timemachine.ff import Forcefield
 from timemachine.md import builders
@@ -284,6 +285,12 @@ def test_rbfe_with_1_window(estimate_relative_free_energy_fn):
             steps_per_frame=1,
             n_eq_steps=10,
         )
+
+
+def test_select_nearest_state():
+    assert select_nearest_state(0.5, [0.0, 1.0], lambda x: x, 0.0, 1.0) == 0.0
+    assert select_nearest_state(0.4, [0.0, 0.3, 0.5, 1.0], lambda x: x, 0.0, 1.0) == 0.3
+    assert select_nearest_state(0.6, [0.0, 0.5, 0.7, 1.0], lambda x: x, 0.0, 1.0) == 0.7
 
 
 if __name__ == "__main__":
