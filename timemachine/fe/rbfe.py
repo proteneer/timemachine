@@ -165,15 +165,9 @@ def setup_initial_states(
     """
     Given a sequence of lambda values, return a list of initial states.
 
+    The InitialState objects can be used to recover a bitwise-identical simulation for debugging.
+
     Assumes lambda schedule is a monotonically increasing sequence in the closed interval [0, 1].
-
-    Notes
-    -----
-    * The InitialState objects can be used to recover a bitwise-identical simulation for debugging
-
-    * The returned function for constructing new optimized states uses pre-optimized states generated according to the
-      specified lambda schedule to seed optimization, using the optimized conformer for the closest lambda value in
-      `lambda_schedule` for the initial coordinates.
 
     Parameters
     ----------
