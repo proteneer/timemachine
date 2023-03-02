@@ -4,6 +4,7 @@ import tempfile
 import weakref
 from contextlib import contextmanager
 from pathlib import Path
+from unittest.mock import patch
 
 import numpy as np
 import pytest
@@ -82,6 +83,17 @@ def test_stored_arrays_getitem_slice(chunks_slice):
     sa = stored_arrays_from_chunks(chunks)
     ref = [arr for chunk in chunks for arr in chunk]
     np.testing.assert_array_equal(sa[slc], ref[slc])
+
+
+@patch("numpy.load")
+def test_stored_arrays_getitem_slice_avoids_redundant_loads(mock_load):
+    n_chunks = 2
+    chunk = [1, 1, 1]
+    mock_load.return_value = np.array(chunk)
+    sa = stored_arrays_from_chunks([chunk] * n_chunks)
+    assert len(sa) > n_chunks  # ensure assertion is not trivial
+    _ = sa[:]  # naive implementation calls np.load len(sa) times, but only need n_chunks loads
+    assert mock_load.call_count == n_chunks
 
 
 @pytest.mark.parametrize(
