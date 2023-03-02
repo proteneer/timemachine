@@ -1,5 +1,6 @@
 import io
 import tempfile
+from functools import lru_cache, partial
 from itertools import count
 from pathlib import Path
 from typing import Collection, Iterator, List, Sequence, overload
@@ -32,6 +33,9 @@ class StoredArrays(Sequence[NDArray]):
         self._chunk_sizes: List[int] = []
         self._dir = tempfile.TemporaryDirectory()
 
+        # Each instance caches a single chunk. This simplifies the efficient implementation of slicing.
+        self._load_chunk = lru_cache(maxsize=1)(partial(load_chunk, self._path()))
+
     def __iter__(self) -> Iterator[NDArray]:
         for chunk in self._chunks():
             for array in chunk:
@@ -56,7 +60,7 @@ class StoredArrays(Sequence[NDArray]):
                 key += len(self)
             for idx, size in enumerate(self._chunk_sizes):
                 if key < size:
-                    return np.load(self._get_chunk_path(idx))[key]
+                    return self._load_chunk(idx)[key]
                 key -= size
             assert False, "should not get here"
 
@@ -78,13 +82,13 @@ class StoredArrays(Sequence[NDArray]):
             np.array_equal(a, b, equal_nan=True) for a, b in zip(self, other)
         )
 
-    def _chunks(self) -> Iterator[List[NDArray]]:
+    def _chunks(self) -> Iterator[NDArray]:
         """Returns an iterator over chunks.
 
         Each chunk is a sequence of numpy arrays stored in a single .npy file
         """
         for idx, _ in enumerate(self._chunk_sizes):
-            yield np.load(self._get_chunk_path(idx))
+            yield self._load_chunk(idx)
 
     def _path(self) -> Path:
         return Path(self._dir.name)
@@ -134,6 +138,10 @@ class StoredArrays(Sequence[NDArray]):
 
 def get_chunk_path(path: Path, idx: int) -> Path:
     return (path / str(idx)).with_suffix(".npy")
+
+
+def load_chunk(path: Path, idx: int) -> NDArray:
+    return np.load(get_chunk_path(path, idx))
 
 
 def serialize_array(array: NDArray) -> bytes:
