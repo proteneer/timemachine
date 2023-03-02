@@ -230,9 +230,6 @@ def setup_optimized_initial_state(
 
     # NOTE: The current approach for generating optimized conformations in `optimize_coordinates` creates a
     # discontinuity at lambda=0.5. Ensure that we pick a pre-optimized state on the same side of 0.5 as `lamb`:
-    assert any(s.lamb <= 0.5 for s in optimized_initial_states)
-    assert any(s.lamb > 0.5 for s in optimized_initial_states)
-
     states_subset = [s for s in optimized_initial_states if (s.lamb <= 0.5) == (lamb <= 0.5)]
     nearest_optimized = min(states_subset, key=lambda s: abs(lamb - s.lamb))
 
