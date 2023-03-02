@@ -430,7 +430,7 @@ def estimate_relative_free_energy(
     md_params = MDParams(n_frames=n_frames, n_eq_steps=n_eq_steps, steps_per_frame=steps_per_frame)
 
     if keep_idxs is None:
-        keep_idxs = [0, len(initial_states) - 1]  # keep first and last frames
+        keep_idxs = [0, len(initial_states) - 1]  # keep frames from first and last windows
     assert len(keep_idxs) <= len(lambda_schedule)
 
     # TODO: rename prefix to postfix, or move to beginning of combined_prefix?
@@ -531,12 +531,14 @@ def estimate_relative_free_energy_via_greedy_bisection(
         are defined by keep_idxs.
     """
 
-    assert n_windows is None or n_windows >= 2
+    if n_windows is None:
+        n_windows = DEFAULT_NUM_WINDOWS
+    assert n_windows >= 2
 
     single_topology = SingleTopology(mol_a, mol_b, core, ff)
 
     lambda_min, lambda_max = lambda_interval or (0.0, 1.0)
-    lambda_grid = np.linspace(lambda_min, lambda_max, n_windows or DEFAULT_NUM_WINDOWS)
+    lambda_grid = np.linspace(lambda_min, lambda_max, n_windows)
 
     temperature = DEFAULT_TEMP
 
@@ -556,7 +558,8 @@ def estimate_relative_free_energy_via_greedy_bisection(
     md_params = MDParams(n_frames=n_frames, n_eq_steps=n_eq_steps, steps_per_frame=steps_per_frame)
 
     if keep_idxs is None:
-        keep_idxs = [0, len(initial_states) - 1]  # keep first and last frames
+        keep_idxs = [0, len(initial_states) - 1]  # keep frames from first and last windows
+    assert len(keep_idxs) <= n_windows
 
     # TODO: rename prefix to postfix, or move to beginning of combined_prefix?
     combined_prefix = get_mol_name(mol_a) + "_" + get_mol_name(mol_b) + "_" + prefix
