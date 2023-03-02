@@ -71,7 +71,7 @@ class StoredArrays(Sequence[NDArray]):
             raise ValueError("invalid subscript")
 
     def _get_chunk_path(self, idx: int) -> Path:
-        return StoredArrays.get_chunk_path(self._path(), idx)
+        return get_chunk_path(self._path(), idx)
 
     def __eq__(self, other) -> bool:
         return self._chunk_sizes == other._chunk_sizes and all(
@@ -93,10 +93,6 @@ class StoredArrays(Sequence[NDArray]):
         np.save(self._get_chunk_path(len(self._chunk_sizes)), np.array(xs))
         self._chunk_sizes.append(len(xs))
 
-    @staticmethod
-    def get_chunk_path(path: Path, idx: int) -> Path:
-        return (path / str(idx)).with_suffix(".npy")
-
     def __reduce__(self):
         raise NotImplementedError(f"pickling not implemented for {type(self)}")
 
@@ -117,7 +113,7 @@ class StoredArrays(Sequence[NDArray]):
         """
         for idx, chunk in enumerate(self._chunks()):
             serialized_array = serialize_array(np.array(chunk))
-            path = StoredArrays.get_chunk_path(prefix, idx)
+            path = get_chunk_path(prefix, idx)
             if client.exists(str(path)):
                 raise FileExistsError(f"file already exists: {path}")
             client.store(str(path), serialized_array)
@@ -126,7 +122,7 @@ class StoredArrays(Sequence[NDArray]):
     def load(cls, client: AbstractFileClient, prefix: Path = Path(".")) -> "StoredArrays":
         sa = cls()
         for idx in count():
-            path = cls.get_chunk_path(prefix, idx)
+            path = get_chunk_path(prefix, idx)
             if client.exists(str(path)):
                 bs = client.load(str(path))
                 chunk = list(deserialize_array(bs))
@@ -134,6 +130,10 @@ class StoredArrays(Sequence[NDArray]):
             else:
                 break
         return sa
+
+
+def get_chunk_path(path: Path, idx: int) -> Path:
+    return (path / str(idx)).with_suffix(".npy")
 
 
 def serialize_array(array: NDArray) -> bytes:
