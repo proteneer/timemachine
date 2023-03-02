@@ -209,7 +209,7 @@ def test_rbfe_edge_list_hif2a(rbfe_edge_list_hif2a_path):
         for result in solvent_res, complex_res:
             assert isinstance(result, SimulationResult)
             assert isinstance(result.frames, list)
-            assert len(result.frames) == 2
+            assert len(result.frames) == config["n_windows"]
             for frames in result.frames:
                 assert len(frames) == config["n_frames"]
 
