@@ -1,4 +1,5 @@
 import gc
+import pickle
 import tempfile
 import weakref
 from contextlib import contextmanager
@@ -136,3 +137,10 @@ def test_stored_arrays_store_raises_on_file_collision():
             sa.store(fc)
 
         sa.store(fc, prefix=Path("subdir"))  # no collision
+
+
+def test_stored_arrays_raises_on_pickling_attempt():
+    sa = StoredArrays()
+    with pytest.raises(NotImplementedError) as e:
+        _ = pickle.dumps(sa)
+    assert "pickling not implemented" in str(e)
