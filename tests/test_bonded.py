@@ -3,13 +3,78 @@ import functools
 import numpy as np
 import pytest
 from common import GradientTest
+from numpy.typing import NDArray
+from rdkit import Chem
+from rdkit.Chem import AllChem
 
+from timemachine.constants import DEFAULT_TEMP
+from timemachine.ff import Forcefield
 from timemachine.lib import potentials
+from timemachine.md.enhanced import generate_ligand_samples
 from timemachine.potentials import generic, rmsd
 
-pytestmark = [pytest.mark.memcheck]
+
+def analyze_angles(mol: Chem.rdchem.Mol, angle_idxs: NDArray, frames: NDArray):
+    angles = []
+    for ifr, frame in enumerate(frames):
+        ci = frame[angle_idxs[:, 0]]
+        cj = frame[angle_idxs[:, 1]]
+        ck = frame[angle_idxs[:, 2]]
+
+        vij = ci - cj
+        vjk = ck - cj
+
+        top = np.sum(np.multiply(vij, vjk), -1)
+        bot = np.linalg.norm(vij, axis=-1) * np.linalg.norm(vjk, axis=-1)
+
+        tb = top / bot
+        # clip for numerical stability
+        tb = np.clip(tb, a_min=-1, a_max=1)
+        angle = np.rad2deg(np.arccos(tb))
+        angles.append(angle)
+
+    angles = np.array(angles).T
+    return angles
 
 
+def test_refit_angle_k():
+    # propyne
+    mol = Chem.AddHs(Chem.MolFromSmiles("[H]C#CC([H])([H])[H]"))
+    AllChem.EmbedMolecule(mol)
+    n_samples = 10000
+    seed = 2023
+
+    # Don't use DEFAULT_FF here since we'll change it
+    orig_ff_name = "smirnoff_2_0_0_ccc.py"
+    new_ff_name = "smirnoff_2_0_0_ccc_cos_angle.py"
+    ff = Forcefield.load_from_file(new_ff_name)
+    coords = generate_ligand_samples(n_samples, mol, ff, DEFAULT_TEMP, seed)[0][:, 0]
+    ff_default = Forcefield.load_from_file(orig_ff_name)
+    coords_default = generate_ligand_samples(n_samples, mol, ff_default, DEFAULT_TEMP, seed)[0][:, 0]
+
+    params, angle_idxs = ff.ha_handle.parameterize(mol)
+    angles = analyze_angles(mol, angle_idxs, coords)
+    angles_default = analyze_angles(mol, angle_idxs, coords_default)
+
+    for i, angle in enumerate(angles):
+        _, a0 = params[i]
+        a0 = np.rad2deg(a0)
+        angle_default = angles_default[i]
+
+        # 5 degree cut-off comes from comparing to cos_angle=False run
+        assert np.std(angle) < 5
+
+        # The values shouldn't change much except for a0 = π
+        if a0 < 175.0:
+            assert np.mean(angle) == pytest.approx(np.mean(angle_default), abs=1.0)
+            assert np.std(angle) == pytest.approx(np.std(angle_default), abs=2.0)
+        else:
+            # 10 degree cut-off comes from comparing to cos_angle=False run
+            assert np.abs(np.mean(angle) - a0) < 10.0
+            assert np.mean(angle) > np.mean(angles_default)
+
+
+@pytest.mark.memcheck
 class TestBonded(GradientTest):
     def test_centroid_restraint(self, n_particles=10, n_A=4, n_B=3, kb=5.4, b0=2.3):
         """Randomly define subsets A and B of a larger collection of particles,

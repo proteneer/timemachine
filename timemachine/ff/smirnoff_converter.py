@@ -3,14 +3,20 @@ import ast
 import operator as op
 import pprint
 from argparse import ArgumentParser
-from typing import Any, Dict
+from typing import Any, Callable, Dict
 from xml.dom import minidom
 
+import jax.numpy as jnp
 import numpy as np
+from jax.config import config
+from numpy.typing import NDArray
+from scipy.optimize import minimize_scalar
 from simtk import unit
 
+from timemachine.constants import DEFAULT_KT
 from timemachine.ff.charges import AM1CCC_CHARGES
 
+config.update("jax_enable_x64", True)
 
 # (ytz): lol i think i wrote this originally
 def _ast_eval(node):
@@ -84,6 +90,106 @@ def parse_quantity(number_string):
     return to_md_units(quantity)
 
 
+def U_angle_cos(cos_theta, k=1.0, theta_0=0, cos_angles=True) -> float:
+    """
+    Return the angle potential energy (kJ/mol).
+
+    Parameters
+    ----------
+    cos_theta:
+        cos(theta)
+
+    k:
+        Force constant in (kJ/mol)/rad**2
+
+    theta_0:
+        Equilibrium value in rad.
+
+    cos_angles:
+        Set to True to return the cos angles version of the angle potential energy.
+        Otherwise return the standard form.
+    """
+    if cos_angles:
+        return 0.5 * k * (cos_theta - jnp.cos(theta_0)) ** 2
+    else:
+        return 0.5 * k * (jnp.arccos(cos_theta) - theta_0) ** 2
+
+
+def get_pdf(x_grid: NDArray, k: float, theta_0: float, cos_angles: bool) -> NDArray:
+    """
+    Return the normalized probability as a function of cos(theta).
+
+    Parameters
+    ----------
+    x_grid:
+        Grid from -1 to +1. Should be fine to accuately compute the normalization constant.
+
+    k:
+        Force constant in (kJ/mol)/rad**2
+
+    theta_0:
+        Equilibrium value in rad.
+
+    cos_angles:
+        Set to True to return the cos angles version of the angle potential energy.
+        Otherwise return the standard form.
+    """
+    q_ref = jnp.exp(-U_angle_cos(x_grid, k=k, theta_0=theta_0, cos_angles=cos_angles)) / DEFAULT_KT
+    Z_ref = jnp.trapz(q_ref, x_grid)
+    return q_ref / Z_ref
+
+
+def kl_divergence(x_grid: NDArray, pdf_a: NDArray, pdf_b: NDArray) -> float:
+    """
+    Return the Kullback-:eibler divergence between two pdfs.
+    NOTE: This is asymmetric, d(a, b) != d(b, a).
+    """
+    integrand = jnp.nan_to_num(pdf_a * (jnp.log(pdf_a) - jnp.log(pdf_b)), nan=0)
+    return jnp.trapz(integrand, x_grid)
+
+
+def js_divergence(x_grid: NDArray, pdf_a: NDArray, pdf_b: NDArray) -> float:
+    """
+    Return the Jensen–Shannon divergence between the two pdfs.
+
+    NOTE: This is symmetric, d(a, b) = d(b, a).
+    """
+    pdf_mid = 0.5 * (pdf_a + pdf_b)
+    return 0.5 * (kl_divergence(x_grid, pdf_a, pdf_mid) + kl_divergence(x_grid, pdf_b, pdf_mid))
+
+
+def make_cos_angle_loss_fxn(x_grid: NDArray, k: float, theta_0: float) -> Callable[[float], float]:
+    """
+    Return a loss function used to minimize the JS divergence bewteen the
+    original and cos angle pdfs.
+    """
+    pdf_ref = get_pdf(x_grid, k, theta_0, cos_angles=False)
+
+    def loss_fxn(k_prime):
+        pdf_test = get_pdf(x_grid, k_prime, theta_0, cos_angles=True)
+        distance = js_divergence(x_grid, pdf_ref, pdf_test)
+        return distance
+
+    return loss_fxn
+
+
+def scale_angle_params(k: float, a0: float) -> float:
+    """
+    Scale the force constant for the angle term to account for the cos angle
+    fucntional form: V(t) = k*(cos(t)-cos(a0))^2 compared to the original functional
+    form V(t) = k*(t - a0)^2.
+
+    Based on jfass's optimization code.
+    """
+    # Vacuum simulation of propyne is unstable
+    # if the angle k is above 25k, set below for some buffer.
+    MAX_ANGLE_K = 15000.0  # (kJ/mol)/rad**2
+    x_grid = np.linspace(-1, +1, 10000, dtype=np.float64)
+    loss_fxn = make_cos_angle_loss_fxn(x_grid, k, a0)
+    optimize_result = minimize_scalar(loss_fxn, method="bounded", bounds=(0, MAX_ANGLE_K))
+    return float(optimize_result.x)
+
+
 BOND_TAG = "Bond"
 ANGLE_TAG = "Angle"
 PROPER_TAG = "Proper"
@@ -97,6 +203,12 @@ if __name__ == "__main__":
     parser = ArgumentParser(description="Convert an openforcefield XML FF to a timemachine FF")
     parser.add_argument("input_path", help="Path to XML ff")
     parser.add_argument("--add_am1ccc_charges", default=False, action="store_true")
+    parser.add_argument(
+        "--scale_angle_k",
+        default=False,
+        action="store_true",
+        help="Set to scale the angle force constants to account for the cos_angle functional form.",
+    )
     parser.add_argument("--output_path", help="Path to write FF file", default=None)
     args = parser.parse_args()
 
@@ -123,6 +235,8 @@ if __name__ == "__main__":
                 patt = s.attributes["smirks"].value
                 a0 = parse_quantity(s.attributes["angle"].value)
                 ka = parse_quantity(s.attributes["k"].value)
+                if args.scale_angle_k:
+                    ka = scale_angle_params(ka, a0)
                 params.append([patt, ka, a0])
             angles = {
                 "patterns": params,
