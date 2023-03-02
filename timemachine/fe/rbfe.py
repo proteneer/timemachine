@@ -467,6 +467,7 @@ def estimate_relative_free_energy_via_greedy_bisection(
     prefix: str = "",
     lambda_interval: Optional[Tuple[float, float]] = None,
     n_windows: Optional[int] = None,
+    keep_idxs: Optional[List[int]] = None,
     n_eq_steps: int = 10000,
     steps_per_frame: int = 400,
     min_cutoff: float = 0.7,
@@ -510,6 +511,10 @@ def estimate_relative_free_energy_via_greedy_bisection(
         number of evenly-spaced lambda windows used for initial conformer optimization. Defaults to
         `DEFAULT_NUM_WINDOWS` windows.
 
+    keep_idxs: list of int or None, optional
+        If None, return only the end-state frames. Otherwise if not None, use only for debugging, and this
+        will return the frames corresponding to the idxs of interest.
+
     n_eq_steps: int
         Number of equilibration steps for each window.
 
@@ -550,11 +555,14 @@ def estimate_relative_free_energy_via_greedy_bisection(
 
     md_params = MDParams(n_frames=n_frames, n_eq_steps=n_eq_steps, steps_per_frame=steps_per_frame)
 
+    if keep_idxs is None:
+        keep_idxs = [0, len(initial_states) - 1]  # keep first and last frames
+
     # TODO: rename prefix to postfix, or move to beginning of combined_prefix?
     combined_prefix = get_mol_name(mol_a) + "_" + get_mol_name(mol_b) + "_" + prefix
 
     try:
-        raw_results, stored_frames, stored_boxes = run_sims_with_greedy_bisection(
+        raw_results, frames, boxes = run_sims_with_greedy_bisection(
             [lambda_min, lambda_max],
             make_optimized_initial_state,
             md_params,
@@ -573,6 +581,9 @@ def estimate_relative_free_energy_via_greedy_bisection(
         initial_states, pair_bar_result = results[-1]
 
         plots = make_pair_bar_plots(initial_states, pair_bar_result, temperature, combined_prefix)
+
+        stored_frames = [np.array(frames[i]) for i in keep_idxs]
+        stored_boxes = [boxes[i] for i in keep_idxs]
 
         return SimulationResult(
             initial_states,

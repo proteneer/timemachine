@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from functools import lru_cache
-from typing import Callable, Generic, Iterable, List, Optional, Sequence, Tuple, TypeVar, Union, overload
+from typing import Callable, Iterable, List, Optional, Sequence, Tuple, Union, overload
 
 import numpy as np
 from numpy.typing import NDArray
@@ -74,21 +74,18 @@ class PairBarPlots:
     overlap_detail_png: bytes
 
 
-Frames = TypeVar("Frames")
-
-
 @dataclass
-class SimulationResult(Generic[Frames]):
+class SimulationResult:
     initial_states: List[InitialState]
     result: PairBarResult
     plots: PairBarPlots
-    frames: List[Frames]
+    frames: List[NDArray]  # (len(keep_idxs), n_frames, N, 3)
     boxes: List[NDArray]
     md_params: MDParams
     intermediate_results: List[Tuple[List[InitialState], PairBarResult]]
 
 
-def image_frames(initial_state: InitialState, frames: Sequence[np.ndarray], boxes: np.ndarray) -> np.ndarray:
+def image_frames(initial_state: InitialState, frames: np.ndarray, boxes: np.ndarray) -> np.ndarray:
     """Images a sequence of frames within the periodic box given an Initial state. Recenters the simulation around the
     centroid of the coordinates specified by initial_state.ligand_idxs prior to imaging.
 
@@ -361,8 +358,8 @@ def estimate_free_energy_pair_bar(
 
     Return
     ------
-    SimulationResult
-        object containing results of the simulation
+    PairBarResult
+        results from BAR computation
 
     """
 

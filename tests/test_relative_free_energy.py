@@ -1,6 +1,5 @@
 # test that we can run relative free energy simulations in complex and in solvent
 # this doesn't test for accuracy, just that everything mechanically runs.
-from functools import partial
 from importlib import resources
 from typing import Sequence
 
@@ -21,14 +20,17 @@ from timemachine.md.barostat.utils import compute_box_center
 from timemachine.testsystems.relative import get_hif2a_ligand_pair_single_topology
 
 
-def run_bitwise_reproducibility(mol_a, mol_b, core, forcefield, n_frames, n_windows, estimate_relative_free_energy_fn):
+def run_bitwise_reproducibility(mol_a, mol_b, core, forcefield, n_frames, estimate_relative_free_energy_fn):
     # test that we can bitwise reproduce our trajectory using the initial state information
 
     seed = 2023
     box_width = 4.0
+    n_windows = 4
     solvent_sys, solvent_conf, solvent_box, _ = builders.build_water_system(box_width, forcefield.water_ff)
     solvent_box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes
     solvent_host_config = HostConfig(solvent_sys, solvent_conf, solvent_box)
+    keep_idxs = list(range(n_windows))
+
     solvent_res = estimate_relative_free_energy_fn(
         mol_a,
         mol_b,
@@ -40,6 +42,7 @@ def run_bitwise_reproducibility(mol_a, mol_b, core, forcefield, n_frames, n_wind
         prefix="solvent",
         lambda_interval=(0.01, 0.03),
         n_windows=n_windows,
+        keep_idxs=keep_idxs,
     )
 
     all_frames, all_boxes = [], []
@@ -52,12 +55,11 @@ def run_bitwise_reproducibility(mol_a, mol_b, core, forcefield, n_frames, n_wind
     np.testing.assert_equal(solvent_res.boxes, all_boxes)
 
 
-def run_triple(
-    mol_a, mol_b, core, forcefield, n_frames, n_windows, protein_path, n_eq_steps, estimate_relative_free_energy_fn
-):
+def run_triple(mol_a, mol_b, core, forcefield, n_frames, protein_path, n_eq_steps, estimate_relative_free_energy_fn):
 
     seed = 2023
     lambda_interval = [0.01, 0.03]
+    n_windows = 3
 
     def check_sim_result(sim_res: SimulationResult):
         assert len(sim_res.initial_states) == n_windows
@@ -157,13 +159,10 @@ def run_triple(
 
 @pytest.mark.nightly(reason="Slow!")
 @pytest.mark.parametrize(
-    "estimate_relative_free_energy_fn,n_windows",
-    [
-        (partial(estimate_relative_free_energy, keep_idxs=range(3)), 3),
-        (estimate_relative_free_energy_via_greedy_bisection, 4),
-    ],
+    "estimate_relative_free_energy_fn",
+    [estimate_relative_free_energy, estimate_relative_free_energy_via_greedy_bisection],
 )
-def test_run_hif2a_test_system(estimate_relative_free_energy_fn, n_windows):
+def test_run_hif2a_test_system(estimate_relative_free_energy_fn):
 
     mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
     forcefield = Forcefield.load_from_file(DEFAULT_FF)
@@ -175,7 +174,6 @@ def test_run_hif2a_test_system(estimate_relative_free_energy_fn, n_windows):
             core,
             forcefield,
             n_frames=100,
-            n_windows=n_windows,
             protein_path=str(protein_path),
             n_eq_steps=1000,
             estimate_relative_free_energy_fn=estimate_relative_free_energy_fn,
@@ -186,7 +184,6 @@ def test_run_hif2a_test_system(estimate_relative_free_energy_fn, n_windows):
         core,
         forcefield,
         n_frames=100,
-        n_windows=n_windows,
         estimate_relative_free_energy_fn=estimate_relative_free_energy_fn,
     )
 
@@ -289,5 +286,5 @@ def test_rbfe_with_1_window(estimate_relative_free_energy_fn):
 if __name__ == "__main__":
     # convenience: so we can run this directly from python tests/test_relative_free_energy.py without
     # toggling the pytest marker
-    test_run_hif2a_test_system(partial(estimate_relative_free_energy, keep_idxs=range(3)), 3)
-    test_run_hif2a_test_system(estimate_relative_free_energy_via_greedy_bisection, 4)
+    test_run_hif2a_test_system(estimate_relative_free_energy)
+    test_run_hif2a_test_system(estimate_relative_free_energy_via_greedy_bisection)
