@@ -8,24 +8,30 @@ import pytest
 
 from timemachine.constants import DEFAULT_FF
 from timemachine.fe.free_energy import HostConfig, InitialState, PairBarResult, SimulationResult, image_frames, sample
-from timemachine.fe.rbfe import estimate_relative_free_energy, run_solvent, run_vacuum
+from timemachine.fe.rbfe import (
+    estimate_relative_free_energy,
+    estimate_relative_free_energy_via_greedy_bisection,
+    run_solvent,
+    run_vacuum,
+)
 from timemachine.ff import Forcefield
 from timemachine.md import builders
 from timemachine.md.barostat.utils import compute_box_center
 from timemachine.testsystems.relative import get_hif2a_ligand_pair_single_topology
 
 
-def run_bitwise_reproducibility(mol_a, mol_b, core, forcefield, n_frames):
+def run_bitwise_reproducibility(mol_a, mol_b, core, forcefield, n_frames, estimate_relative_free_energy_fn):
     # test that we can bitwise reproduce our trajectory using the initial state information
 
-    lambda_schedule = [0.01, 0.02, 0.03]
     seed = 2023
     box_width = 4.0
+    n_windows = 4
     solvent_sys, solvent_conf, solvent_box, _ = builders.build_water_system(box_width, forcefield.water_ff)
     solvent_box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes
     solvent_host_config = HostConfig(solvent_sys, solvent_conf, solvent_box)
-    keep_idxs = [0, 1, 2]
-    solvent_res = estimate_relative_free_energy(
+    keep_idxs = list(range(n_windows))
+
+    solvent_res = estimate_relative_free_energy_fn(
         mol_a,
         mol_b,
         core,
@@ -34,7 +40,8 @@ def run_bitwise_reproducibility(mol_a, mol_b, core, forcefield, n_frames):
         seed,
         n_frames=n_frames,
         prefix="solvent",
-        lambda_schedule=lambda_schedule,
+        lambda_interval=(0.01, 0.03),
+        n_windows=n_windows,
         keep_idxs=keep_idxs,
     )
 
@@ -48,12 +55,16 @@ def run_bitwise_reproducibility(mol_a, mol_b, core, forcefield, n_frames):
     np.testing.assert_equal(solvent_res.boxes, all_boxes)
 
 
-def run_triple(mol_a, mol_b, core, forcefield, n_frames, protein_path, n_eq_steps):
+def run_triple(mol_a, mol_b, core, forcefield, n_frames, protein_path, n_eq_steps, estimate_relative_free_energy_fn):
 
     seed = 2023
+    lambda_interval = [0.01, 0.03]
+    n_windows = 3
 
     def check_sim_result(sim_res: SimulationResult):
-        assert [x.lamb for x in sim_res.initial_states] == lambda_schedule
+        assert len(sim_res.initial_states) == n_windows
+        assert sim_res.initial_states[0].lamb == lambda_interval[0]
+        assert sim_res.initial_states[-1].lamb == lambda_interval[1]
 
         assert sim_res.plots.dG_errs_png is not None
         assert sim_res.plots.overlap_summary_png is not None
@@ -87,18 +98,17 @@ def run_triple(mol_a, mol_b, core, forcefield, n_frames, protein_path, n_eq_step
         for initial_states, res in sim_res.intermediate_results:
             check_pair_bar_result(initial_states, res)
 
-    lambda_schedule = [0.01, 0.02, 0.03]
-    vacuum_host_config = None
-    vacuum_res = estimate_relative_free_energy(
+    vacuum_res = estimate_relative_free_energy_fn(
         mol_a,
         mol_b,
         core,
         forcefield,
-        vacuum_host_config,
-        seed,
+        host_config=None,
+        seed=seed,
         n_frames=n_frames,
         prefix="vacuum",
-        lambda_schedule=lambda_schedule,
+        lambda_interval=lambda_interval,
+        n_windows=n_windows,
         n_eq_steps=n_eq_steps,
     )
 
@@ -108,7 +118,7 @@ def run_triple(mol_a, mol_b, core, forcefield, n_frames, protein_path, n_eq_step
     solvent_sys, solvent_conf, solvent_box, _ = builders.build_water_system(box_width, forcefield.water_ff)
     solvent_box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes
     solvent_host_config = HostConfig(solvent_sys, solvent_conf, solvent_box)
-    solvent_res = estimate_relative_free_energy(
+    solvent_res = estimate_relative_free_energy_fn(
         mol_a,
         mol_b,
         core,
@@ -117,7 +127,8 @@ def run_triple(mol_a, mol_b, core, forcefield, n_frames, protein_path, n_eq_step
         seed,
         n_frames=n_frames,
         prefix="solvent",
-        lambda_schedule=lambda_schedule,
+        lambda_interval=lambda_interval,
+        n_windows=n_windows,
         n_eq_steps=n_eq_steps,
     )
 
@@ -129,7 +140,7 @@ def run_triple(mol_a, mol_b, core, forcefield, n_frames, protein_path, n_eq_step
     )
     complex_box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes
     complex_host_config = HostConfig(complex_sys, complex_conf, complex_box)
-    complex_res = estimate_relative_free_energy(
+    complex_res = estimate_relative_free_energy_fn(
         mol_a,
         mol_b,
         core,
@@ -138,7 +149,8 @@ def run_triple(mol_a, mol_b, core, forcefield, n_frames, protein_path, n_eq_step
         seed,
         n_frames=n_frames,
         prefix="complex",
-        lambda_schedule=lambda_schedule,
+        lambda_interval=lambda_interval,
+        n_windows=n_windows,
         n_eq_steps=n_eq_steps,
     )
 
@@ -146,14 +158,34 @@ def run_triple(mol_a, mol_b, core, forcefield, n_frames, protein_path, n_eq_step
 
 
 @pytest.mark.nightly(reason="Slow!")
-def test_run_hif2a_test_system():
+@pytest.mark.parametrize(
+    "estimate_relative_free_energy_fn",
+    [estimate_relative_free_energy, estimate_relative_free_energy_via_greedy_bisection],
+)
+def test_run_hif2a_test_system(estimate_relative_free_energy_fn):
 
     mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
     forcefield = Forcefield.load_from_file(DEFAULT_FF)
 
     with resources.path("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as protein_path:
-        run_triple(mol_a, mol_b, core, forcefield, n_frames=100, protein_path=str(protein_path), n_eq_steps=1000)
-    run_bitwise_reproducibility(mol_a, mol_b, core, forcefield, n_frames=100)
+        run_triple(
+            mol_a,
+            mol_b,
+            core,
+            forcefield,
+            n_frames=100,
+            protein_path=str(protein_path),
+            n_eq_steps=1000,
+            estimate_relative_free_energy_fn=estimate_relative_free_energy_fn,
+        )
+    run_bitwise_reproducibility(
+        mol_a,
+        mol_b,
+        core,
+        forcefield,
+        n_frames=100,
+        estimate_relative_free_energy_fn=estimate_relative_free_energy_fn,
+    )
 
 
 def test_steps_per_frames():
@@ -226,13 +258,17 @@ def test_imaging_frames():
         np.testing.assert_allclose(np.mean(imaged[0][initial_state.ligand_idxs], axis=0), box_center)
 
 
-def test_rbfe_with_1_window():
+@pytest.mark.parametrize(
+    "estimate_relative_free_energy_fn",
+    [estimate_relative_free_energy, estimate_relative_free_energy_via_greedy_bisection],
+)
+def test_rbfe_with_1_window(estimate_relative_free_energy_fn):
     """Should not be able to run a relative free energy calculation with a single window"""
     mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
     forcefield = Forcefield.load_from_file(DEFAULT_FF)
     seed = 2022
     with pytest.raises(AssertionError):
-        estimate_relative_free_energy(
+        estimate_relative_free_energy_fn(
             mol_a,
             mol_b,
             core,
@@ -250,4 +286,5 @@ def test_rbfe_with_1_window():
 if __name__ == "__main__":
     # convenience: so we can run this directly from python tests/test_relative_free_energy.py without
     # toggling the pytest marker
-    test_run_hif2a_test_system()
+    test_run_hif2a_test_system(estimate_relative_free_energy)
+    test_run_hif2a_test_system(estimate_relative_free_energy_via_greedy_bisection)

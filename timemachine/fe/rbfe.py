@@ -1,9 +1,10 @@
 import pickle
 import traceback
-import warnings
-from typing import Any, Dict, List, NamedTuple, Optional, Sequence
+from functools import partial
+from typing import Any, Dict, Iterable, List, NamedTuple, Optional, Sequence, Tuple, Union
 
 import numpy as np
+from numpy.typing import NDArray
 from rdkit import Chem
 from simtk.openmm import app
 
@@ -16,17 +17,21 @@ from timemachine.fe.free_energy import (
     SimulationResult,
     estimate_free_energy_pair_bar,
     make_pair_bar_plots,
-    run_sequential_sims_given_initial_states,
+    run_sims_sequential,
+    run_sims_with_greedy_bisection,
 )
 from timemachine.fe.single_topology import SingleTopology
-from timemachine.fe.system import convert_omm_system
+from timemachine.fe.system import VacuumSystem, convert_omm_system
 from timemachine.fe.utils import get_mol_name, get_romol_conf
 from timemachine.ff import Forcefield
 from timemachine.lib import LangevinIntegrator, MonteCarloBarostat
+from timemachine.lib.potentials import CustomOpWrapper
 from timemachine.md import builders, minimizer
 from timemachine.md.barostat.utils import get_bond_list, get_group_indices
 from timemachine.parallel.client import AbstractClient, AbstractFileClient, CUDAPoolClient, FileClient
 from timemachine.potentials import jax_utils
+
+DEFAULT_NUM_WINDOWS = 30
 
 
 def setup_in_vacuum(st, ligand_conf, lamb):
@@ -45,10 +50,17 @@ def setup_in_vacuum(st, ligand_conf, lamb):
     return x0, box0, hmr_masses, potentials, baro
 
 
-def setup_in_env(st, host, host_config, ligand_conf, lamb, temperature, run_seed):
+def setup_in_env(
+    st: SingleTopology,
+    host_system: VacuumSystem,
+    host_masses: List[float],
+    host_conf: NDArray,
+    ligand_conf: NDArray,
+    lamb: float,
+    temperature: float,
+    run_seed: int,
+):
     """Prepare potentials, concatenate environment and ligand coords, apply HMR, and construct barostat"""
-
-    host_system, host_masses, host_conf = host
 
     system = st.combine_with_host(host_system, lamb=lamb)
     combined_masses = np.concatenate([host_masses, st.combine_masses()])
@@ -60,9 +72,8 @@ def setup_in_env(st, host, host_config, ligand_conf, lamb, temperature, run_seed
     baro = MonteCarloBarostat(len(hmr_masses), DEFAULT_PRESSURE, temperature, group_idxs, 15, run_seed + 1)
 
     x0 = np.concatenate([host_conf, ligand_conf])
-    box0 = host_config.box
 
-    return x0, box0, hmr_masses, potentials, baro
+    return x0, hmr_masses, potentials, baro
 
 
 def assert_all_states_have_same_masses(initial_states: List[InitialState]):
@@ -87,19 +98,76 @@ def assert_all_states_have_same_masses(initial_states: List[InitialState]):
     np.testing.assert_array_almost_equal(deviation_among_windows, 0, err_msg="masses assumed constant w.r.t. lambda")
 
 
-def setup_initial_states(
-    st,
-    host_config,
-    temperature,
-    lambda_schedule,
-    seed,
-    min_cutoff=0.7,
-):
-    """
-    Set up the initial states for a series of lambda values,
-    so we can (hopefully) bitwise recover the identical simulation to debug errors.
+def setup_initial_state(
+    st: SingleTopology,
+    lamb: float,
+    host_config: Optional[HostConfig],
+    temperature: float,
+    seed: int,
+) -> InitialState:
+    conf_a = get_romol_conf(st.mol_a)
+    conf_b = get_romol_conf(st.mol_b)
 
-    Assumes lambda schedule is a monotonically increasing sequence in the closed interval [0,1].
+    ligand_conf = st.combine_confs(conf_a, conf_b, lamb)
+
+    # use a different seed to initialize every window,
+    # but in a way that should be symmetric for
+    # A -> B vs. B -> A edge definitions
+    init_seed = int(seed + hash(ligand_conf.tobytes())) % 10000
+
+    if host_config:
+        host_system, host_masses = convert_omm_system(host_config.omm_system)
+        host_conf = minimizer.minimize_host_4d(
+            [st.mol_a, st.mol_b],
+            host_config.omm_system,
+            host_config.conf,
+            st.ff,
+            host_config.box,
+        )
+        box0 = host_config.box
+        x0, hmr_masses, potentials, baro = setup_in_env(
+            st, host_system, host_masses, host_conf, ligand_conf, lamb, temperature, init_seed
+        )
+    else:
+        x0, box0, hmr_masses, potentials, baro = setup_in_vacuum(st, ligand_conf, lamb)
+
+    # provide a different run_seed for every lambda window,
+    # but in a way that should be symmetric for
+    # A -> B vs. B -> A edge definitions
+    run_seed = int(seed + hash(bytes().join([np.array(p.params).tobytes() for p in potentials]))) % 10000
+    # the constant is arbitrary, but see
+    # https://github.com/proteneer/timemachine/commit/e1f7328f01f427534d8744aab6027338e116ad09
+
+    # initialize velocities
+    v0 = np.zeros_like(x0)  # tbd resample from Maxwell-boltzman?
+
+    # determine ligand idxs
+    num_ligand_atoms = len(ligand_conf)
+    num_total_atoms = len(x0)
+    ligand_idxs = np.arange(num_total_atoms - num_ligand_atoms, num_total_atoms)
+
+    # initialize Langevin integrator
+    dt = 2.5e-3
+    friction = 1.0
+    intg = LangevinIntegrator(temperature, dt, friction, hmr_masses, run_seed)
+
+    return InitialState(potentials, intg, baro, x0, v0, box0, lamb, ligand_idxs)
+
+
+def setup_initial_states(
+    st: SingleTopology,
+    host_config: Optional[HostConfig],
+    temperature: float,
+    lambda_schedule: Union[NDArray, Sequence[float]],
+    seed: int,
+    min_cutoff: float = 0.7,
+) -> List[InitialState]:
+    """
+    Given a sequence of lambda values, return a list of initial states.
+
+    The InitialState objects can be used to recover a bitwise-identical simulation for debugging.
+
+    Assumes lambda schedule is a monotonically increasing sequence in the closed interval [0, 1].
 
     Parameters
     ----------
@@ -123,72 +191,19 @@ def setup_initial_states(
 
     Returns
     -------
-    list of InitialStates
-        Returns an initial state for each value of lambda.
+    list of InitialState
+        Initial state for each value of lambda.
     """
-
-    if host_config:
-        host_system, host_masses = convert_omm_system(host_config.omm_system)
-        host_conf = minimizer.minimize_host_4d(
-            [st.mol_a, st.mol_b],
-            host_config.omm_system,
-            host_config.conf,
-            st.ff,
-            host_config.box,
-        )
-        host = (host_system, host_masses, host_conf)
-    else:
-        host = None
-
-    initial_states = []
 
     # check that the lambda schedule is monotonically increasing.
     assert np.all(np.diff(lambda_schedule) > 0)
 
-    conf_a = get_romol_conf(st.mol_a)
-    conf_b = get_romol_conf(st.mol_b)
-
-    for lamb_idx, lamb in enumerate(lambda_schedule):
-        ligand_conf = st.combine_confs(conf_a, conf_b, lamb)
-
-        # use a different seed to initialize every window,
-        # but in a way that should be symmetric for
-        # A -> B vs. B -> A edge definitions
-        init_seed = int(seed + hash(ligand_conf.tobytes())) % 10000
-
-        if host is None:
-            x0, box0, hmr_masses, potentials, baro = setup_in_vacuum(st, ligand_conf, lamb)
-        else:
-            x0, box0, hmr_masses, potentials, baro = setup_in_env(
-                st, host, host_config, ligand_conf, lamb, temperature, init_seed
-            )
-
-        # provide a different run_seed for every lambda window,
-        # but in a way that should be symmetric for
-        # A -> B vs. B -> A edge definitions
-        run_seed = int(seed + hash(bytes().join([np.array(p.params).tobytes() for p in potentials]))) % 10000
-        # the constant is arbitrary, but see
-        # https://github.com/proteneer/timemachine/commit/e1f7328f01f427534d8744aab6027338e116ad09
-
-        # initialize velocities
-        v0 = np.zeros_like(x0)  # tbd resample from Maxwell-boltzman?
-
-        # determine ligand idxs
-        num_ligand_atoms = len(ligand_conf)
-        num_total_atoms = len(x0)
-        ligand_idxs = np.arange(num_total_atoms - num_ligand_atoms, num_total_atoms)
-
-        # initialize Langevin integrator
-        dt = 2.5e-3
-        friction = 1.0
-        intg = LangevinIntegrator(temperature, dt, friction, hmr_masses, run_seed)
-
-        # pack into state
-        state = InitialState(potentials, intg, baro, x0, v0, box0, lamb, ligand_idxs)
-        initial_states.append(state)
+    initial_states = [
+        setup_initial_state(st, lamb, host_config=host_config, temperature=temperature, seed=seed)
+        for lamb in lambda_schedule
+    ]
 
     # minimize ligand and environment atoms within min_cutoff of the ligand
-
     # optimization introduces dependencies among states with lam < 0.5, and among states with lam >= 0.5
     optimized_x0s = optimize_coordinates(initial_states, min_cutoff=min_cutoff)
 
@@ -202,38 +217,80 @@ def setup_initial_states(
     return initial_states
 
 
-def _optimize_coords_along_states(initial_states: List[InitialState]) -> List[np.ndarray]:
+def setup_optimized_initial_state(
+    st: SingleTopology,
+    lamb: float,
+    host_config: Optional[HostConfig],
+    optimized_initial_states: Sequence[InitialState],
+    temperature: float,
+    seed: int,
+) -> InitialState:
 
+    # Use pre-optimized initial state with the closest value of lambda as a starting point for optimization.
+
+    # NOTE: The current approach for generating optimized conformations in `optimize_coordinates` creates a
+    # discontinuity at lambda=0.5. Ensure that we pick a pre-optimized state on the same side of 0.5 as `lamb`:
+    states_subset = [s for s in optimized_initial_states if (s.lamb <= 0.5) == (lamb <= 0.5)]
+    nearest_optimized = min(states_subset, key=lambda s: abs(lamb - s.lamb))
+
+    if lamb == nearest_optimized.lamb:
+        return nearest_optimized
+    else:
+        initial_state = setup_initial_state(st, lamb, host_config=host_config, temperature=temperature, seed=seed)
+        free_idxs = get_free_idxs(nearest_optimized)
+        initial_state.x0 = optimize_coords_state(
+            initial_state.potentials,
+            nearest_optimized.x0,
+            initial_state.box0,
+            free_idxs,
+            # assertion can lead to spurious errors when new state is close to an existing one
+            assert_energy_decreased=False,
+        )
+        return initial_state
+
+
+def optimize_coords_state(
+    potentials: Iterable[CustomOpWrapper],
+    x0: NDArray,
+    box: NDArray,
+    free_idxs: List[int],
+    assert_energy_decreased: bool,
+) -> NDArray:
+    bound_impls = [p.bound_impl(np.float32) for p in potentials]
+    val_and_grad_fn = minimizer.get_val_and_grad_fn(bound_impls, box)
+    assert np.all(np.isfinite(x0)), "Initial coordinates contain nan or inf"
+    x_opt = minimizer.local_minimize(x0, val_and_grad_fn, free_idxs, assert_energy_decreased=assert_energy_decreased)
+    assert np.all(np.isfinite(x_opt)), "Minimization resulted in a nan"
+    return x_opt
+
+
+def get_free_idxs(initial_state: InitialState, cutoff: float = 0.5) -> List[int]:
+    """Select particles within cutoff of ligand"""
+    x = initial_state.x0
+    x_lig = x[initial_state.ligand_idxs]
+    box = initial_state.box0
+    free_idxs = jax_utils.idxs_within_cutoff(x, x_lig, box, cutoff=cutoff).tolist()
+    return free_idxs
+
+
+def _optimize_coords_along_states(initial_states: List[InitialState]) -> List[NDArray]:
     # use the end-state to define the optimization settings
     end_state = initial_states[0]
-
-    # select particles within cutoff of ligand
     x_opt = end_state.x0
-    x_lig = x_opt[end_state.ligand_idxs]
-    box = end_state.box0
-
-    free_idxs = jax_utils.idxs_within_cutoff(x_opt, x_lig, box, cutoff=0.5).tolist()
 
     x_traj = []
     for idx, initial_state in enumerate(initial_states):
-        print(initial_state.lamb)
-        bound_impls = [p.bound_impl(np.float32) for p in initial_state.potentials]
-        val_and_grad_fn = minimizer.get_val_and_grad_fn(bound_impls, initial_state.box0)
-        assert np.all(np.isfinite(x_opt)), "Initial coordinates contain nan or inf"
-
-        # only assert that the energy decreases at the end-state
-        check_nrg = idx == 0
-
-        x_opt = minimizer.local_minimize(x_opt, val_and_grad_fn, free_idxs, assert_energy_decreased=check_nrg)
-
+        print(f"Optimizing initial state at λ={initial_state.lamb}")
+        free_idxs = get_free_idxs(initial_state)
+        x_opt = optimize_coords_state(
+            initial_state.potentials, x_opt, initial_state.box0, free_idxs, assert_energy_decreased=idx == 0
+        )
         x_traj.append(x_opt)
-        assert np.all(np.isfinite(x_opt)), "Minimization resulted in a nan"
-        del bound_impls
 
     return x_traj
 
 
-def optimize_coordinates(initial_states, min_cutoff=0.7) -> List[np.ndarray]:
+def optimize_coordinates(initial_states, min_cutoff=0.7) -> List[NDArray]:
     """
     Optimize geometries of the initial states.
 
@@ -290,22 +347,22 @@ def optimize_coordinates(initial_states, min_cutoff=0.7) -> List[np.ndarray]:
 def estimate_relative_free_energy(
     mol_a,
     mol_b,
-    core,
-    ff,
-    host_config,
-    seed,
-    n_frames=1000,
-    prefix="",
-    lambda_schedule=None,
-    n_windows=None,
-    keep_idxs=None,
-    n_eq_steps=10000,
-    steps_per_frame=400,
-    min_cutoff=0.7,
-):
+    core: NDArray,
+    ff: Forcefield,
+    host_config: Optional[HostConfig],
+    seed: int,
+    n_frames: int = 1000,
+    prefix: str = "",
+    lambda_interval: Optional[Tuple[float, float]] = None,
+    n_windows: Optional[int] = None,
+    keep_idxs: Optional[List[int]] = None,
+    n_eq_steps: int = 10000,
+    steps_per_frame: int = 400,
+    min_cutoff: float = 0.7,
+) -> SimulationResult:
     """
-    Estimate relative free energy between mol_a and mol_b. Molecules should be aligned to each
-    other and within the host environment.
+    Estimate relative free energy between mol_a and mol_b via independent simulations with a predetermined lambda
+    schedule. Molecules should be aligned to each other and within the host environment.
 
     Parameters
     ----------
@@ -318,28 +375,30 @@ def estimate_relative_free_energy(
     core: list of 2-tuples
         atom_mapping of atoms in mol_a into atoms in mol_b
 
-    ff: ff.Forcefield
+    ff: Forcefield
         Forcefield to be used for the system
 
     host_config: HostConfig or None
         Configuration for the host system. If None, then the vacuum leg is run.
 
+    seed: int
+        Random seed to use for the simulations.
+
     n_frames: int
-        number of samples to generate for each lambda windows, where each sample is 1000 steps of MD.
+        number of samples to generate for each lambda window, where each sample is `steps_per_frame` steps of MD.
 
     prefix: str
         A prefix to append to figures
 
-    seed: int
-        Random seed to use for the simulations.
+    lambda_interval: (float, float) or None, optional
+        Minimum and maximum value of lambda for the transformation; typically (0, 1), but sometimes useful to choose
+        other values for testing.
 
-    lambda_schedule: list of float
-        This should only be set when debugging or unit testing. This argument may be removed later.
+    n_windows: int or None, optional
+        Number of windows used for interpolating the lambda schedule with additional windows. Defaults to
+        `DEFAULT_NUM_WINDOWS` windows.
 
-    n_windows: None
-        Number of windows used for interpolating the the lambda schedule with additional windows.
-
-    keep_idxs: list of int or None
+    keep_idxs: list of int or None, optional
         If None, return only the end-state frames. Otherwise if not None, use only for debugging, and this
         will return the frames corresponding to the idxs of interest.
 
@@ -361,11 +420,8 @@ def estimate_relative_free_energy(
     """
     single_topology = SingleTopology(mol_a, mol_b, core, ff)
 
-    if lambda_schedule is None:
-        lambda_schedule = np.linspace(0, 1, n_windows or 30)
-    else:
-        assert n_windows is None
-        warnings.warn("Warning: setting lambda_schedule manually, this argument may be removed in a future release.")
+    lambda_min, lambda_max = lambda_interval or (0.0, 1.0)
+    lambda_schedule = np.linspace(lambda_min, lambda_max, n_windows or DEFAULT_NUM_WINDOWS)
 
     temperature = DEFAULT_TEMP
     initial_states = setup_initial_states(
@@ -374,13 +430,13 @@ def estimate_relative_free_energy(
     md_params = MDParams(n_frames=n_frames, n_eq_steps=n_eq_steps, steps_per_frame=steps_per_frame)
 
     if keep_idxs is None:
-        keep_idxs = [0, len(initial_states) - 1]  # keep first and last frames
+        keep_idxs = [0, len(initial_states) - 1]  # keep frames from first and last windows
     assert len(keep_idxs) <= len(lambda_schedule)
 
     # TODO: rename prefix to postfix, or move to beginning of combined_prefix?
     combined_prefix = get_mol_name(mol_a) + "_" + get_mol_name(mol_b) + "_" + prefix
     try:
-        u_kln_by_component_by_lambda, stored_frames, stored_boxes = run_sequential_sims_given_initial_states(
+        u_kln_by_component_by_lambda, stored_frames, stored_boxes = run_sims_sequential(
             initial_states, md_params, temperature, keep_idxs
         )
         pair_bar_result = estimate_free_energy_pair_bar(u_kln_by_component_by_lambda, temperature, combined_prefix)
@@ -400,6 +456,154 @@ def estimate_relative_free_energy(
         raise err
 
 
+def estimate_relative_free_energy_via_greedy_bisection(
+    mol_a,
+    mol_b,
+    core: NDArray,
+    ff: Forcefield,
+    host_config: Optional[HostConfig],
+    seed: int,
+    n_frames: int = 1000,
+    prefix: str = "",
+    lambda_interval: Optional[Tuple[float, float]] = None,
+    n_windows: Optional[int] = None,
+    keep_idxs: Optional[List[int]] = None,
+    n_eq_steps: int = 10000,
+    steps_per_frame: int = 400,
+    min_cutoff: float = 0.7,
+) -> SimulationResult:
+    r"""Estimate relative free energy between mol_a and mol_b via independent simulations with a dynamic lambda schedule
+    determined by successively bisecting the lambda interval between the pair of states with the greatest BAR
+    :math:`\Delta G` error. Molecules should be aligned to each other and within the host environment.
+
+    Parameters
+    ----------
+    mol_a: Chem.Mol
+        initial molecule
+
+    mol_b: Chem.Mol
+        target molecule
+
+    core: list of 2-tuples
+        atom_mapping of atoms in mol_a into atoms in mol_b
+
+    ff: Forcefield
+        Forcefield to be used for the system
+
+    host_config: HostConfig or None
+        Configuration for the host system. If None, then the vacuum leg is run.
+
+    n_frames: int
+        number of samples to generate for each lambda window, where each sample is `steps_per_frame` steps of MD.
+
+    prefix: str
+        A prefix to append to figures
+
+    seed: int
+        Random seed to use for the simulations.
+
+    lambda_interval: (float, float) or None, optional
+        Minimum and maximum value of lambda for the transformation; typically (0, 1), but sometimes useful to choose
+        other values for testing.
+
+    n_windows: int or None, optional
+        Number of windows used for interpolating the lambda schedule with additional windows. Additionally controls the
+        number of evenly-spaced lambda windows used for initial conformer optimization. Defaults to
+        `DEFAULT_NUM_WINDOWS` windows.
+
+    keep_idxs: list of int or None, optional
+        If None, return only the end-state frames. Otherwise if not None, use only for debugging, and this
+        will return the frames corresponding to the idxs of interest.
+
+    n_eq_steps: int
+        Number of equilibration steps for each window.
+
+    steps_per_frame: int
+        The number of steps to take before collecting a frame
+
+    min_cutoff: float
+        throw error if any atom moves more than this distance (nm) after minimization
+
+    Returns
+    -------
+    SimulationResult
+        Collected data from the simulation (see class for storage information). Returned frames and boxes
+        are defined by keep_idxs.
+    """
+
+    if n_windows is None:
+        n_windows = DEFAULT_NUM_WINDOWS
+    assert n_windows >= 2
+
+    single_topology = SingleTopology(mol_a, mol_b, core, ff)
+
+    lambda_min, lambda_max = lambda_interval or (0.0, 1.0)
+    lambda_grid = np.linspace(lambda_min, lambda_max, n_windows)
+
+    temperature = DEFAULT_TEMP
+
+    initial_states = setup_initial_states(
+        single_topology, host_config, temperature, lambda_grid, seed, min_cutoff=min_cutoff
+    )
+
+    make_optimized_initial_state = partial(
+        setup_optimized_initial_state,
+        single_topology,
+        host_config=host_config,
+        optimized_initial_states=initial_states,
+        temperature=temperature,
+        seed=seed,
+    )
+
+    md_params = MDParams(n_frames=n_frames, n_eq_steps=n_eq_steps, steps_per_frame=steps_per_frame)
+
+    if keep_idxs is None:
+        keep_idxs = [0, len(initial_states) - 1]  # keep frames from first and last windows
+    assert len(keep_idxs) <= n_windows
+
+    # TODO: rename prefix to postfix, or move to beginning of combined_prefix?
+    combined_prefix = get_mol_name(mol_a) + "_" + get_mol_name(mol_b) + "_" + prefix
+
+    try:
+        raw_results, frames, boxes = run_sims_with_greedy_bisection(
+            [lambda_min, lambda_max],
+            make_optimized_initial_state,
+            md_params,
+            n_bisections=len(lambda_grid) - 2,
+            temperature=temperature,
+        )
+
+        results = [
+            (
+                res.initial_states,
+                estimate_free_energy_pair_bar(res.u_kln_by_component_by_lambda, temperature, combined_prefix),
+            )
+            for res in raw_results
+        ]
+
+        initial_states, pair_bar_result = results[-1]
+
+        plots = make_pair_bar_plots(initial_states, pair_bar_result, temperature, combined_prefix)
+
+        stored_frames = [np.array(frames[i]) for i in keep_idxs]
+        stored_boxes = [boxes[i] for i in keep_idxs]
+
+        return SimulationResult(
+            initial_states,
+            pair_bar_result,
+            plots,
+            stored_frames,
+            stored_boxes,
+            md_params,
+            results,
+        )
+
+    except Exception as err:
+        with open(f"failed_rbfe_result_{combined_prefix}.pkl", "wb") as fh:
+            pickle.dump((md_params, err), fh)
+        raise err
+
+
 def run_vacuum(
     mol_a,
     mol_b,
@@ -414,14 +618,13 @@ def run_vacuum(
     min_cutoff=1.5,
 ):
     # min_cutoff defaults to 15 Å since there is no environment to prevent conformational changes in the ligand
-    vacuum_host_config = None
-    return estimate_relative_free_energy(
+    return estimate_relative_free_energy_via_greedy_bisection(
         mol_a,
         mol_b,
         core,
         forcefield,
-        vacuum_host_config,
-        seed,
+        host_config=None,
+        seed=seed,
         n_frames=n_frames,
         prefix="vacuum",
         n_eq_steps=n_eq_steps,
@@ -448,7 +651,7 @@ def run_solvent(
     solvent_sys, solvent_conf, solvent_box, solvent_top = builders.build_water_system(box_width, forcefield.water_ff)
     solvent_box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes, deboggle later
     solvent_host_config = HostConfig(solvent_sys, solvent_conf, solvent_box)
-    solvent_res = estimate_relative_free_energy(
+    solvent_res = estimate_relative_free_energy_via_greedy_bisection(
         mol_a,
         mol_b,
         core,
@@ -483,7 +686,7 @@ def run_complex(
     )
     complex_box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes, deboggle later
     complex_host_config = HostConfig(complex_sys, complex_conf, complex_box)
-    complex_res = estimate_relative_free_energy(
+    complex_res = estimate_relative_free_energy_via_greedy_bisection(
         mol_a,
         mol_b,
         core,

@@ -18,7 +18,7 @@ from timemachine.fe.free_energy import (
     SimulationResult,
     estimate_free_energy_pair_bar,
     make_pair_bar_plots,
-    run_sequential_sims_given_initial_states,
+    run_sims_sequential,
 )
 from timemachine.fe.lambda_schedule import construct_pre_optimized_absolute_lambda_schedule_solvent
 from timemachine.fe.topology import BaseTopology
@@ -244,7 +244,7 @@ def estimate_absolute_free_energy(
 
     combined_prefix = get_mol_name(mol) + "_" + prefix
     try:
-        u_kln_by_component_by_lambda, stored_frames, stored_boxes = run_sequential_sims_given_initial_states(
+        u_kln_by_component_by_lambda, stored_frames, stored_boxes = run_sims_sequential(
             initial_states, md_params, temperature, keep_idxs
         )
         pair_bar_result = estimate_free_energy_pair_bar(u_kln_by_component_by_lambda, temperature, combined_prefix)

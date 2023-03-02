@@ -1,5 +1,6 @@
 from dataclasses import dataclass
-from typing import Iterable, List, Optional, Sequence, Tuple, Union, overload
+from functools import lru_cache
+from typing import Callable, Iterable, List, Optional, Sequence, Tuple, Union, overload
 
 import numpy as np
 from numpy.typing import NDArray
@@ -7,8 +8,14 @@ from numpy.typing import NDArray
 from timemachine.constants import BOLTZ
 from timemachine.fe import model_utils, topology
 from timemachine.fe.bar import bar_with_bootstrapped_uncertainty, df_err_from_ukln, pair_overlap_from_ukln
-from timemachine.fe.energy_decomposition import EnergyDecomposedState, compute_energy_decomposed_u_kln, get_batch_u_fns
+from timemachine.fe.energy_decomposition import (
+    Batch_u_fn,
+    EnergyDecomposedState,
+    compute_energy_decomposed_u_kln,
+    get_batch_u_fns,
+)
 from timemachine.fe.plots import make_dG_errs_figure, make_overlap_detail_figure, make_overlap_summary_figure
+from timemachine.fe.protocol_refinement import greedy_bisection_step
 from timemachine.fe.stored_arrays import StoredArrays
 from timemachine.fe.utils import get_mol_masses, get_romol_conf
 from timemachine.ff import ForcefieldParams
@@ -78,7 +85,7 @@ class SimulationResult:
     intermediate_results: List[Tuple[List[InitialState], PairBarResult]]
 
 
-def image_frames(initial_state: InitialState, frames: Sequence[np.ndarray], boxes: np.ndarray) -> np.ndarray:
+def image_frames(initial_state: InitialState, frames: np.ndarray, boxes: np.ndarray) -> np.ndarray:
     """Images a sequence of frames within the periodic box given an Initial state. Recenters the simulation around the
     centroid of the coordinates specified by initial_state.ligand_idxs prior to imaging.
 
@@ -338,18 +345,10 @@ def estimate_free_energy_pair_bar(
     windows assumed to be ordered with good overlap, with the final free energy being a sum
     of the components. The constants below are:
 
-    L: the number of lambda windows
-    T: the number of samples
-    N: the number of atoms
-    P: the number of components in the energy function.
-
     Parameters
     ----------
-    initial_states: list of InitialState
-        Initial state objects
-
-    md_params: MDParams
-        Detailing specifics of each simulation
+    u_kln_by_component_by_lambda: array
+        For each energy component and lambda pair, u_kln in pymbar format, where k = l = 2
 
     temperature: float
         Temperature the system was run at
@@ -357,13 +356,10 @@ def estimate_free_energy_pair_bar(
     prefix: str
         A prefix that we append to the BAR overlap figures
 
-    keep_idxs: list of int
-        Which states we keep samples for. Must be positive.
-
     Return
     ------
-    SimulationResult
-        object containing results of the simulation
+    PairBarResult
+        results from BAR computation
 
     """
 
@@ -437,7 +433,7 @@ def make_pair_bar_plots(
     return PairBarPlots(dG_errs_png, overlap_summary_png, overlap_detail_png)
 
 
-def run_sequential_sims_given_initial_states(
+def run_sims_sequential(
     initial_states: Sequence[InitialState],
     md_params: MDParams,
     temperature: float,
@@ -502,3 +498,136 @@ def run_sequential_sims_given_initial_states(
         prev_state = state
 
     return np.array(u_kln_by_component_by_lambda), stored_frames, stored_boxes
+
+
+def make_batch_u_fns(initial_state: InitialState, temperature: float) -> List[Batch_u_fn]:
+    assert initial_state.barostat is None or initial_state.barostat.temperature == temperature
+    bound_impls = [p.bound_impl(np.float32) for p in initial_state.potentials]
+    return get_batch_u_fns(bound_impls, temperature)
+
+
+def compute_bar_error(u_kln: NDArray) -> float:
+    assert u_kln.ndim == 3
+    assert u_kln.shape[:2] == (2, 2)
+    w_f = u_kln[1, 0] - u_kln[0, 0]
+    w_r = u_kln[0, 1] - u_kln[1, 1]
+    _, df_err = bar_with_bootstrapped_uncertainty(w_f, w_r)
+    return df_err
+
+
+@dataclass
+class IntermediateResult:
+    """Initial states and (L-1, C, 2, 2, F) array of energy-decomposed u_kln matrices for each pair of states, where L
+    is the number of lambda windows, C is the number of energy components, and F is the number of frames per window.
+    """
+
+    initial_states: List[InitialState]
+    u_kln_by_component_by_lambda: NDArray
+
+
+def run_sims_with_greedy_bisection(
+    initial_lambdas: Sequence[float],
+    make_initial_state: Callable[[float], InitialState],
+    md_params: MDParams,
+    n_bisections: int,
+    temperature: float,
+    verbose: bool = True,
+) -> Tuple[List[IntermediateResult], List[StoredArrays], List[NDArray]]:
+    r"""Starting from a specified lambda schedule, successively bisect the lambda interval between the pair of states
+    with the largest BAR :math:`\Delta G` error and sample the new state with MD.
+
+    Parameters
+    ----------
+    initial_lambdas: sequence of float, length >= 2, monotonically increasing
+        Initial protocol; starting point for bisection.
+
+    make_initial_state: callable
+        Function returning an InitialState (i.e., starting point for MD) given lambda
+
+    md_params: MDParams
+        Parameters used to simulate new states
+
+    n_bisections: int
+        Number of bisection steps to perform
+
+    temperature: float
+        Temperature in K
+
+    verbose: bool
+        Whether to print diagnostic information
+
+    Returns
+    -------
+    results: list of IntermediateResult
+        For each iteration of bisection, object containing the current list of states and array of energy-decomposed
+        u_kln matrices.
+
+    frames: list of StoredArrays
+        Frames from the final iteration of bisection. Shape (L, F, N, 3) where N is the number of atoms.
+
+    boxes: list of NDArray
+        Boxes from the final iteration of bisection. Shape (L, F, 3, 3).
+    """
+
+    assert len(initial_lambdas) >= 2
+    assert np.all(np.diff(initial_lambdas) > 0), "initial lambda schedule must be monotonically increasing"
+
+    cache = lru_cache(maxsize=None)
+
+    get_initial_state = cache(make_initial_state)
+
+    @cache
+    def get_samples(lamb: float) -> Tuple[StoredArrays, NDArray]:
+        initial_state = get_initial_state(lamb)
+        frames, boxes = sample(initial_state, md_params, max_buffer_frames=1000)
+        return frames, boxes
+
+    # NOTE: we don't cache get_state to avoid holding BoundPotentials in memory since they
+    # 1. can use significant GPU memory
+    # 2. can be reconstructed relatively quickly
+    def get_state(lamb: float) -> EnergyDecomposedState[StoredArrays]:
+        initial_state = get_initial_state(lamb)
+        frames, boxes = get_samples(lamb)
+        batch_u_fns = make_batch_u_fns(initial_state, temperature)
+        return EnergyDecomposedState(frames, boxes, batch_u_fns)
+
+    @cache
+    def get_u_kln_by_component(lamb1: float, lamb2: float) -> NDArray:
+        return compute_energy_decomposed_u_kln([get_state(lamb1), get_state(lamb2)])
+
+    @cache
+    def get_bar_error(lamb1: float, lamb2: float) -> float:
+        u_kln_by_component = get_u_kln_by_component(lamb1, lamb2)
+        u_kln = u_kln_by_component.sum(axis=0)  # sum over components
+        return compute_bar_error(u_kln)
+
+    def midpoint(x1: float, x2: float):
+        return (x1 + x2) / 2.0
+
+    def compute_intermediate_result(lambdas: Sequence[float]):
+        refined_initial_states = [get_initial_state(lamb) for lamb in lambdas]
+        u_kln_by_component_by_lambda = np.array(
+            [get_u_kln_by_component(lamb1, lamb2) for lamb1, lamb2 in zip(lambdas, lambdas[1:])]
+        )
+        return IntermediateResult(refined_initial_states, u_kln_by_component_by_lambda)
+
+    lambdas = list(initial_lambdas)
+    results = [compute_intermediate_result(lambdas)]
+    for _ in range(n_bisections):
+        lambdas_new, info = greedy_bisection_step(lambdas, get_bar_error, midpoint)
+
+        if verbose:
+            costs, left_idx, lamb_new = info
+            max_bar_error = max(costs)
+            lamb1 = lambdas[left_idx]
+            lamb2 = lambdas[left_idx + 1]
+            print(f"Maximum BAR ΔG error {max_bar_error:.3g} between states at λ={lamb1:.3g} and λ={lamb2:.3g}")
+            print(f"Sampling new state at λ={lamb_new:.3g}…")
+
+        lambdas = lambdas_new
+        results.append(compute_intermediate_result(lambdas))
+
+    frames = [get_state(lamb).frames for lamb in lambdas]
+    boxes = [get_state(lamb).boxes for lamb in lambdas]
+
+    return results, frames, boxes

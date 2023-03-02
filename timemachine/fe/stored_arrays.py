@@ -97,6 +97,9 @@ class StoredArrays(Sequence[NDArray]):
     def get_chunk_path(path: Path, idx: int) -> Path:
         return (path / str(idx)).with_suffix(".npy")
 
+    def __reduce__(self):
+        raise NotImplementedError(f"pickling not implemented for {type(self)}")
+
     def store(self, client: AbstractFileClient, prefix: Path = Path(".")):
         """Save to persistent storage.
 
