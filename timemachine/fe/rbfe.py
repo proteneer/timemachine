@@ -102,7 +102,7 @@ def assert_all_states_have_same_masses(initial_states: List[InitialState]):
 @dataclass
 class Host:
     system: VacuumSystem
-    masses: List[float]
+    physical_masses: List[float]
     conf: NDArray
     box: NDArray
 
@@ -126,7 +126,7 @@ def setup_initial_state(
 
     if host:
         x0, hmr_masses, potentials, baro = setup_in_env(
-            st, host.system, host.masses, host.conf, ligand_conf, lamb, temperature, init_seed
+            st, host.system, host.physical_masses, host.conf, ligand_conf, lamb, temperature, init_seed
         )
         box0 = host.box
     else:
