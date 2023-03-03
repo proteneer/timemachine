@@ -62,7 +62,7 @@ def prepare_system_params(x: NDArray, cutoff: float, sigma_scale: float = 5.0) -
 
     Returns
     -------
-    (N, 3) np.ndarray containing charges, sigmas and epsilons respectively.
+    (N, 4) np.ndarray containing charges, sigmas, epsilons and w coordinates respectively.
     """
     assert x.ndim == 2
     N = x.shape[0]
@@ -307,11 +307,11 @@ class GradientTest(unittest.TestCase):
                     x, params, box, compute_du_dx, compute_du_dp, compute_u
                 )
 
-            np.testing.assert_array_equal(test_du_dx, test_du_dx_2)
-            np.testing.assert_array_equal(test_u, test_u_2)
+                np.testing.assert_array_equal(test_du_dx, test_du_dx_2)
+                np.testing.assert_array_equal(test_u, test_u_2)
 
-            if isinstance(test_potential, potentials.Nonbonded):
-                np.testing.assert_array_equal(test_du_dp, test_du_dp_2)
+                if isinstance(test_potential, potentials.Nonbonded):
+                    np.testing.assert_array_equal(test_du_dp, test_du_dp_2)
 
     def compare_forces_gpu_vs_reference(
         self,
