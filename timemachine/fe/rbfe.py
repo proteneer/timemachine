@@ -1,5 +1,6 @@
 import pickle
 import traceback
+from dataclasses import dataclass
 from functools import partial
 from typing import Any, Dict, Iterable, List, NamedTuple, Optional, Sequence, Tuple, Union
 
@@ -98,10 +99,18 @@ def assert_all_states_have_same_masses(initial_states: List[InitialState]):
     np.testing.assert_array_almost_equal(deviation_among_windows, 0, err_msg="masses assumed constant w.r.t. lambda")
 
 
+@dataclass
+class Host:
+    system: VacuumSystem
+    physical_masses: List[float]
+    conf: NDArray
+    box: NDArray
+
+
 def setup_initial_state(
     st: SingleTopology,
     lamb: float,
-    host_config: Optional[HostConfig],
+    host: Optional[Host],
     temperature: float,
     seed: int,
 ) -> InitialState:
@@ -115,19 +124,11 @@ def setup_initial_state(
     # A -> B vs. B -> A edge definitions
     init_seed = int(seed + hash(ligand_conf.tobytes())) % 10000
 
-    if host_config:
-        host_system, host_masses = convert_omm_system(host_config.omm_system)
-        host_conf = minimizer.minimize_host_4d(
-            [st.mol_a, st.mol_b],
-            host_config.omm_system,
-            host_config.conf,
-            st.ff,
-            host_config.box,
-        )
-        box0 = host_config.box
+    if host:
         x0, hmr_masses, potentials, baro = setup_in_env(
-            st, host_system, host_masses, host_conf, ligand_conf, lamb, temperature, init_seed
+            st, host.system, host.physical_masses, host.conf, ligand_conf, lamb, temperature, init_seed
         )
+        box0 = host.box
     else:
         x0, box0, hmr_masses, potentials, baro = setup_in_vacuum(st, ligand_conf, lamb)
 
@@ -154,9 +155,22 @@ def setup_initial_state(
     return InitialState(potentials, intg, baro, x0, v0, box0, lamb, ligand_idxs)
 
 
+def setup_optimized_host(st: SingleTopology, config: HostConfig) -> Host:
+    system, masses = convert_omm_system(config.omm_system)
+    conf = minimizer.minimize_host_4d(
+        [st.mol_a, st.mol_b],
+        config.omm_system,
+        config.conf,
+        st.ff,
+        config.box,
+    )
+    box = config.box
+    return Host(system, masses, conf, box)
+
+
 def setup_initial_states(
     st: SingleTopology,
-    host_config: Optional[HostConfig],
+    host: Optional[Host],
     temperature: float,
     lambda_schedule: Union[NDArray, Sequence[float]],
     seed: int,
@@ -174,8 +188,8 @@ def setup_initial_states(
     st: SingleTopology
         A single topology object
 
-    host_config: HostConfig or None
-        Configurations of the host. If None, then a vacuum state will be setup.
+    host: Host or None
+        Pre-optimized host configuration, generated using `setup_optimized_host`. If None, return vacuum states.
 
     temperature: float
         Temperature to run the simulation at.
@@ -198,10 +212,7 @@ def setup_initial_states(
     # check that the lambda schedule is monotonically increasing.
     assert np.all(np.diff(lambda_schedule) > 0)
 
-    initial_states = [
-        setup_initial_state(st, lamb, host_config=host_config, temperature=temperature, seed=seed)
-        for lamb in lambda_schedule
-    ]
+    initial_states = [setup_initial_state(st, lamb, host, temperature, seed) for lamb in lambda_schedule]
 
     # minimize ligand and environment atoms within min_cutoff of the ligand
     # optimization introduces dependencies among states with lam < 0.5, and among states with lam >= 0.5
@@ -220,7 +231,7 @@ def setup_initial_states(
 def setup_optimized_initial_state(
     st: SingleTopology,
     lamb: float,
-    host_config: Optional[HostConfig],
+    host: Optional[Host],
     optimized_initial_states: Sequence[InitialState],
     temperature: float,
     seed: int,
@@ -236,7 +247,7 @@ def setup_optimized_initial_state(
     if lamb == nearest_optimized.lamb:
         return nearest_optimized
     else:
-        initial_state = setup_initial_state(st, lamb, host_config=host_config, temperature=temperature, seed=seed)
+        initial_state = setup_initial_state(st, lamb, host, temperature, seed)
         free_idxs = get_free_idxs(nearest_optimized)
         initial_state.x0 = optimize_coords_state(
             initial_state.potentials,
@@ -424,8 +435,11 @@ def estimate_relative_free_energy(
     lambda_schedule = np.linspace(lambda_min, lambda_max, n_windows or DEFAULT_NUM_WINDOWS)
 
     temperature = DEFAULT_TEMP
+
+    host = setup_optimized_host(single_topology, host_config) if host_config else None
+
     initial_states = setup_initial_states(
-        single_topology, host_config, temperature, lambda_schedule, seed, min_cutoff=min_cutoff
+        single_topology, host, temperature, lambda_schedule, seed, min_cutoff=min_cutoff
     )
     md_params = MDParams(n_frames=n_frames, n_eq_steps=n_eq_steps, steps_per_frame=steps_per_frame)
 
@@ -542,14 +556,14 @@ def estimate_relative_free_energy_via_greedy_bisection(
 
     temperature = DEFAULT_TEMP
 
-    initial_states = setup_initial_states(
-        single_topology, host_config, temperature, lambda_grid, seed, min_cutoff=min_cutoff
-    )
+    host = setup_optimized_host(single_topology, host_config) if host_config else None
+
+    initial_states = setup_initial_states(single_topology, host, temperature, lambda_grid, seed, min_cutoff=min_cutoff)
 
     make_optimized_initial_state = partial(
         setup_optimized_initial_state,
         single_topology,
-        host_config=host_config,
+        host=host,
         optimized_initial_states=initial_states,
         temperature=temperature,
         seed=seed,
