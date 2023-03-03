@@ -110,7 +110,7 @@ def nonbonded_block(xi, xj, box, params_i, params_j, beta, cutoff):
     es = direct_space_pme(dij, qij, beta)
     lj = lennard_jones(dij, sig_ij, eps_ij)
 
-    nrg = jnp.where(dij > cutoff, 0, es + lj)
+    nrg = jnp.where(dij < cutoff, es + lj, 0)
     return jnp.sum(nrg)
 
 
