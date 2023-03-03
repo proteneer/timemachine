@@ -113,8 +113,8 @@ def test_reversibility_with_custom_ops_potentials():
     rfe = SingleTopology(mol_a, mol_b, core, forcefield)
     masses = np.array(rfe.combine_masses())
     coords = rfe.combine_confs(get_romol_conf(mol_a), get_romol_conf(mol_b))
-    host_config = None  # vacuum
-    initial_states = setup_initial_states(rfe, host_config, temperature, [lamb], seed)
+    host = None  # vacuum
+    initial_states = setup_initial_states(rfe, host, temperature, [lamb], seed)
     unbound_potentials = initial_states[0].potentials
     bound_potentials = [pot.bound_impl(precision=np.float32) for pot in unbound_potentials]
     box = 100 * np.eye(3)
