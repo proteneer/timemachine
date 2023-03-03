@@ -110,7 +110,7 @@ def nonbonded_block(xi, xj, box, params_i, params_j, beta, cutoff):
     es = direct_space_pme(dij, qij, beta)
     lj = lennard_jones(dij, sig_ij, eps_ij)
 
-    nrg = jnp.where(dij > cutoff, 0, es + lj)
+    nrg = jnp.where(dij < cutoff, es + lj, 0)
     return jnp.sum(nrg)
 
 
@@ -235,7 +235,7 @@ def nonbonded(
     # funny enough lim_{x->0} erfc(x)/x = 0
     eij_charge = jnp.where(keep_mask, qij * erfc(beta * dij) * inv_dij, 0)  # zero out diagonals
     if cutoff is not None:
-        eij_charge = jnp.where(dij > cutoff, 0, eij_charge)
+        eij_charge = jnp.where(dij < cutoff, eij_charge, 0)
 
     eij_total = eij_lj * lj_rescale_mask + eij_charge * charge_rescale_mask
 
