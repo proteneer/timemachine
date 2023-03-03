@@ -182,8 +182,8 @@ def scale_angle_params(k: float, a0: float) -> float:
     Based on jfass's optimization code.
     """
     # Vacuum simulation of propyne is unstable
-    # if the angle k is above 25k, set below for some buffer.
-    MAX_ANGLE_K = 15000.0  # (kJ/mol)/rad**2
+    # if the angle k is above 12k, set below for some buffer.
+    MAX_ANGLE_K = 10000.0  # (kJ/mol)/rad**2
     x_grid = np.linspace(-1, +1, 10000, dtype=np.float64)
     loss_fxn = make_cos_angle_loss_fxn(x_grid, k, a0)
     optimize_result = minimize_scalar(loss_fxn, method="bounded", bounds=(0, MAX_ANGLE_K))
