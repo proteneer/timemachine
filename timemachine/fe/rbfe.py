@@ -189,7 +189,7 @@ def setup_initial_states(
         A single topology object
 
     host: Host or None
-        Pre-optimized host configuration. If None, then a vacuum state will be setup.
+        Pre-optimized host configuration, generated using `setup_optimized_host`. If None, return vacuum states.
 
     temperature: float
         Temperature to run the simulation at.
