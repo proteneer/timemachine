@@ -62,7 +62,7 @@ def prepare_system_params(x: NDArray, cutoff: float, sigma_scale: float = 5.0) -
 
     Returns
     -------
-    (N, 3) np.ndarray containing charges, sigmas and epsilons respectively.
+    (N, 4) np.ndarray containing charges, sigmas, epsilons and w coordinates respectively.
     """
     assert x.ndim == 2
     N = x.shape[0]
