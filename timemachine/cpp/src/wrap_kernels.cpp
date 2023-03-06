@@ -294,7 +294,8 @@ void declare_context(py::module &m) {
             The flat bottom restraint K value to use for selection and restraint of atoms within the inner shell.
 
         seed: int
-            The seed that is used to randomly select a particle to freeze.
+            The seed that is used to randomly select a particle to freeze and for the probabilistic selection of
+            free particles.
 
         Returns
         -------

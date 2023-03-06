@@ -332,12 +332,15 @@ std::array<std::vector<double>, 2> Context::multiple_steps_local(
         gpuErrchk(cudaStreamSynchronize(stream));
 
         // Set the nonbonded potential to compute forces of inner+outer shell.
-        set_nonbonded_potential_idxs(nonbonded_potential, p_num_selected.data[0], d_row_idxs.data, stream);
+        // Commented out as if a particle moves away from the ligand, it may have interactions with
+        // particles that aren't included in frozen
+        // set_nonbonded_potential_idxs(nonbonded_potential, p_num_selected.data[0], d_row_idxs.data, stream);
+        intg_->initialize(bps_, d_x_t_, d_v_t_, d_box_t_, nullptr, stream);
         for (int i = 0; i < burn_in; i++) {
-            this->_step(bps_, d_shell_idxs_inner.data, stream);
+            this->_step(local_bps, d_shell_idxs_inner.data, stream);
         }
         for (int i = 1; i <= n_steps; i++) {
-            this->_step(bps_, d_shell_idxs_inner.data, stream);
+            this->_step(local_bps, d_shell_idxs_inner.data, stream);
             if (i % store_x_interval == 0) {
                 gpuErrchk(cudaMemcpyAsync(
                     &h_x_buffer[0] + ((i / store_x_interval) - 1) * N_ * 3,
@@ -353,6 +356,7 @@ std::array<std::vector<double>, 2> Context::multiple_steps_local(
                     stream));
             }
         }
+        intg_->finalize(bps_, d_x_t_, d_v_t_, d_box_t_, nullptr, stream);
         // Set the row indices back to the identity.
         k_arange<<<ceil_divide(N_, tpb), tpb, 0, stream>>>(N_, d_row_idxs.data);
         gpuErrchk(cudaPeekAtLastError());
