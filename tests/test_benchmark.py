@@ -252,6 +252,8 @@ def benchmark_local(
     friction = 1.0
     seconds_per_day = 86400
 
+    rng = np.random.default_rng(seed)
+
     harmonic_bond_potential = bound_potentials[0]
     bond_list = get_bond_list(harmonic_bond_potential)
     if hmr:
@@ -283,9 +285,10 @@ def benchmark_local(
 
     for batch in range(num_batches):
 
+        local_seed = rng.integers(np.iinfo(np.int32).max)
         # time the current batch
         batch_start = time.time()
-        _, _ = ctxt.multiple_steps_local(steps_per_batch, ligand_idxs, burn_in=0)
+        _, _ = ctxt.multiple_steps_local(steps_per_batch, ligand_idxs, seed=local_seed, burn_in=0)
         batch_end = time.time()
 
         delta = batch_end - batch_start

@@ -295,7 +295,7 @@ void declare_context(py::module &m) {
 
         seed: int
             The seed that is used to randomly select a particle to freeze and for the probabilistic selection of
-            free particles.
+            free particles. It is recommended to provide a unique seed at each call to `multiple_steps_local`.
 
         Returns
         -------
