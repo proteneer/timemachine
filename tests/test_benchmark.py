@@ -44,8 +44,8 @@ def generate_hif2a_frames(n_frames: int, frame_interval: int, seed=None, barosta
 
     ligand_idxs = np.arange(len(host_coords), len(initial_state.x0), dtype=np.int32)
 
-    temperature = 300
-    pressure = 1.0
+    temperature = constants.DEFAULT_TEMP
+    pressure = constants.DEFAULT_PRESSURE
 
     harmonic_bond_potential = initial_state.potentials[0]
     bond_list = get_bond_list(harmonic_bond_potential)
@@ -156,8 +156,8 @@ def benchmark(
 
     seed = 1234
     dt = 1.5e-3
-    temperature = 300
-    pressure = 1.0
+    temperature = constants.DEFAULT_TEMP
+    pressure = constants.DEFAULT_PRESSURE
     seconds_per_day = 86400
 
     harmonic_bond_potential = bound_potentials[0]
@@ -357,7 +357,7 @@ def benchmark_dhfr(verbose=False, num_batches=100, steps_per_batch=1000):
 def prepare_hif2a_initial_state(st, host_system, host_coords, host_box):
     st = rbfe.SingleTopology(st.mol_a, st.mol_b, st.core, st.ff)
     host_config = rbfe.HostConfig(host_system, host_coords, host_box)
-    temperature = 300.0
+    temperature = constants.DEFAULT_TEMP
     lamb = 0.1
     host = rbfe.setup_optimized_host(st, host_config)
     initial_state = rbfe.setup_initial_states(st, host, temperature, [lamb], seed=2022)[0]
@@ -394,7 +394,7 @@ def benchmark_hif2a(verbose=False, num_batches=100, steps_per_batch=1000):
         ("solvent", solvent_system, solvent_coords, solvent_box),
     ]:
 
-        host_fns, host_masses = openmm_deserializer.deserialize_system(host_system, cutoff=1.0)
+        host_fns, host_masses = openmm_deserializer.deserialize_system(host_system, cutoff=1.2)
 
         # resolve host clashes
         min_host_coords = minimizer.minimize_host_4d([st.mol_a, st.mol_b], host_system, host_coords, st.ff, host_box)
