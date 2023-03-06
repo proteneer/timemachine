@@ -229,6 +229,86 @@ def benchmark(
     )
 
 
+def benchmark_local(
+    label,
+    masses,
+    x0,
+    v0,
+    box,
+    bound_potentials,
+    ligand_idxs,
+    hmr=False,
+    verbose=True,
+    num_batches=100,
+    steps_per_batch=1000,
+):
+    """
+    TODO: configuration blob containing num_batches, steps_per_batch, and any other options
+    """
+
+    seed = 1234
+    dt = 1.5e-3
+    temperature = constants.DEFAULT_TEMP
+    friction = 1.0
+    seconds_per_day = 86400
+
+    harmonic_bond_potential = bound_potentials[0]
+    bond_list = get_bond_list(harmonic_bond_potential)
+    if hmr:
+        dt = 2.5e-3
+        masses = apply_hmr(masses, bond_list)
+    intg = LangevinIntegrator(temperature, dt, friction, np.array(masses), seed).impl()
+
+    bps = []
+
+    for potential in bound_potentials:
+        bps.append(potential.bound_impl(precision=np.float32))  # get the bound implementation
+
+    ctxt = custom_ops.Context(
+        x0,
+        v0,
+        box,
+        intg,
+        bps,
+    )
+
+    batch_times = []
+
+    ligand_idxs = ligand_idxs.astype(np.int32)
+
+    # run once before timer starts
+    ctxt.multiple_steps_local(steps_per_batch, ligand_idxs, burn_in=0)
+
+    start = time.time()
+
+    for batch in range(num_batches):
+
+        # time the current batch
+        batch_start = time.time()
+        _, _ = ctxt.multiple_steps_local(steps_per_batch, ligand_idxs, burn_in=0)
+        batch_end = time.time()
+
+        delta = batch_end - batch_start
+
+        batch_times.append(delta)
+
+        steps_per_second = steps_per_batch / np.mean(batch_times)
+        steps_per_day = steps_per_second * seconds_per_day
+
+        ps_per_day = dt * steps_per_day
+        ns_per_day = ps_per_day * 1e-3
+
+        if verbose:
+            print(f"steps per second: {steps_per_second:.3f}")
+            print(f"ns per day: {ns_per_day:.3f}")
+
+    assert np.all(np.abs(ctxt.get_x_t()) < 1000)
+
+    print(
+        f"{label}: N={x0.shape[0]} speed: {ns_per_day:.2f}ns/day dt: {dt*1e3}fs (ran {steps_per_batch * num_batches} steps in {(time.time() - start):.2f}s)"
+    )
+
+
 def benchmark_dhfr(verbose=False, num_batches=100, steps_per_batch=1000):
 
     host_fns, host_masses, host_conf, box = setup_dhfr()
@@ -356,6 +436,19 @@ def benchmark_hif2a(verbose=False, num_batches=100, steps_per_batch=1000):
             initial_state.v0,
             host_box,
             initial_state.potentials,
+            verbose=verbose,
+            num_batches=num_batches,
+            steps_per_batch=steps_per_batch,
+        )
+
+        benchmark_local(
+            stage + "-rbfe-local",
+            initial_state.integrator.masses,
+            initial_state.x0,
+            initial_state.v0,
+            host_box,
+            initial_state.potentials,
+            initial_state.ligand_idxs,
             verbose=verbose,
             num_batches=num_batches,
             steps_per_batch=steps_per_batch,
