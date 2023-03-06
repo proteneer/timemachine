@@ -22,6 +22,8 @@ from timemachine.md.barostat.utils import get_bond_list, get_group_indices
 from timemachine.testsystems.dhfr import setup_dhfr
 from timemachine.testsystems.relative import get_hif2a_ligand_pair_single_topology
 
+SECONDS_PER_DAY = 24 * 60 * 60
+
 
 @pytest.fixture(scope="module")
 def hi2fa_test_frames():
@@ -158,7 +160,6 @@ def benchmark(
     dt = 1.5e-3
     temperature = constants.DEFAULT_TEMP
     pressure = constants.DEFAULT_PRESSURE
-    seconds_per_day = 86400
 
     harmonic_bond_potential = bound_potentials[0]
     bond_list = get_bond_list(harmonic_bond_potential)
@@ -213,7 +214,7 @@ def benchmark(
         batch_times.append(delta)
 
         steps_per_second = steps_per_batch / np.mean(batch_times)
-        steps_per_day = steps_per_second * seconds_per_day
+        steps_per_day = steps_per_second * SECONDS_PER_DAY
 
         ps_per_day = dt * steps_per_day
         ns_per_day = ps_per_day * 1e-3
@@ -250,7 +251,6 @@ def benchmark_local(
     dt = 1.5e-3
     temperature = constants.DEFAULT_TEMP
     friction = 1.0
-    seconds_per_day = 86400
 
     rng = np.random.default_rng(seed)
 
@@ -296,7 +296,7 @@ def benchmark_local(
         batch_times.append(delta)
 
         steps_per_second = steps_per_batch / np.mean(batch_times)
-        steps_per_day = steps_per_second * seconds_per_day
+        steps_per_day = steps_per_second * SECONDS_PER_DAY
 
         ps_per_day = dt * steps_per_day
         ns_per_day = ps_per_day * 1e-3
