@@ -6,14 +6,16 @@ from glob import glob
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
+import importlib_resources as resources
 import numpy as np
 import pytest
 from common import temporary_working_dir
 from numpy.typing import NDArray as Array
 from scipy.special import logsumexp
 
-from timemachine.constants import DEFAULT_KT, KCAL_TO_KJ
+from timemachine.constants import DEFAULT_FF, DEFAULT_KT, KCAL_TO_KJ
 from timemachine.datasets import fetch_freesolv
+from timemachine.fe.free_energy import SimulationResult
 from timemachine.fe.utils import get_mol_name
 
 # All examples are to be tested nightly
@@ -52,7 +54,7 @@ def run_example(
     if env is not None:
         subprocess_env.update(env)
     subprocess_args = [sys.executable, str(example_path), *cli_args]
-    print("Running with args:", "".join(subprocess_args))
+    print("Running with args:", " ".join(subprocess_args))
     proc = subprocess.run(
         subprocess_args,
         env=subprocess_env,
@@ -140,3 +142,84 @@ def test_smc_freesolv(smc_free_solv_path):
     # * MAE of ~1.1 kcal/mol: FreeSolv reference calculations
     #   https://www.biorxiv.org/content/10.1101/104281v1.full
     assert mean_abs_err_kcalmol <= 2
+
+
+@pytest.fixture(scope="module")
+def rbfe_edge_list_hif2a_path():
+    def run(results_csv, temp_dir):
+        # expect running this script to write success_rbfe_result_{mol_a_name}_{mol_b_name}.pkl files
+        output_path = str(Path(temp_dir) / "success_rbfe_result*.pkl")
+        assert len(glob(output_path)) == 0
+        config = dict(results_csv=results_csv, **base_config)
+        _ = run_example("rbfe_edge_list.py", get_cli_args(config), cwd=temp_dir)
+        return Path(temp_dir)
+
+    with resources.as_file(resources.files("timemachine.datasets.fep_benchmark.hif2a")) as hif2a_data:
+        base_config = dict(
+            n_frames=2,
+            ligands=hif2a_data / "ligands.sdf",
+            forcefield=DEFAULT_FF,
+            protein=hif2a_data / "5tbm_prepared.pdb",
+            n_gpus=1,
+            seed=2023,
+            n_eq_steps=2,
+            n_windows=3,
+        )
+
+        with open(hif2a_data / "results_edges_5ns.csv", "r") as fp:
+            edges_rows = fp.readlines()
+
+        edges_rows_sample = edges_rows[:3]  # keep header and first 2 edges (338 -> 165, 338 -> 215)
+        edges = [("338", "165"), ("338", "215")]
+
+        with temporary_working_dir() as temp_dir:
+            with (Path(temp_dir) / "edges.csv").open("w") as fp:
+                fp.writelines(edges_rows_sample)
+                fp.flush()
+                path = run(fp.name, temp_dir)
+            yield path, base_config, edges
+
+
+def test_rbfe_edge_list_hif2a(rbfe_edge_list_hif2a_path):
+    path, config, edges = rbfe_edge_list_hif2a_path
+
+    def check_results(results_path):
+        # Just check that results are present and have the expected shape
+        # (we don't do enough sampling here for statistical checks)
+
+        # NOTE: We're mainly interested in checking that simulation frames have been serialized properly; we already
+        # have more exhaustive checks in test_relative_free_energy.py
+
+        assert results_path.exists()
+
+        with results_path.open("rb") as fp:
+            results = pickle.load(fp)
+
+        (
+            _,  # mol_a
+            _,  # mol_b
+            _,  # edge_metadata
+            _,  # core,
+            solvent_res,
+            _,  # solvent_top,
+            complex_res,
+            _,  # complex_top,
+        ) = results
+
+        for result in solvent_res, complex_res:
+            assert isinstance(result, SimulationResult)
+            assert isinstance(result.frames, list)
+            assert len(result.frames) == 2  # frames from first and last windows
+            for frames in result.frames:
+                assert len(frames) == config["n_frames"]
+
+            N, _ = result.frames[0][0].shape
+            assert N > 0
+
+            for frames in result.frames:
+                for frame in frames:
+                    assert frame.ndim == 2
+                    assert frame.shape == (N, 3)
+
+    for mol_a_name, mol_b_name in edges:
+        check_results(path / f"success_rbfe_result_{mol_a_name}_{mol_b_name}.pkl")

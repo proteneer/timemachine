@@ -10,7 +10,7 @@ def harmonic_angle_stable(conf, params, angle_idxs, cos_angles=True):
 
     :math::
 
-        \cos(\theta) \approx \frac{r_{ij} \cdot r_{kj} + \epsilon^2}{\sqrt{(r_{ij}^2 + \epsilon^2) (r_{kj}^2 + \epsilon^2)}}
+        \cos(\theta) \approx \frac{r_{ij} \cdot r_{kj}}{\sqrt{(r_{ij}^2 + \epsilon^2) (r_{kj}^2 + \epsilon^2)}}
 
     This reduces to the exact expression when :math:`\epsilon = 0`; When :math:`\epsilon > 0`, this avoids the
     singularities in the exact expression as :math:`r_{ij}` or :math:`r_{kj}` approach zero.
@@ -43,7 +43,7 @@ def harmonic_angle_stable(conf, params, angle_idxs, cos_angles=True):
     vij = ci - cj
     vkj = ck - cj
 
-    top = jnp.sum(vij * vkj, -1) + eps ** 2
+    top = jnp.sum(vij * vkj, -1)
     bot = jnp.sqrt((jnp.sum(vij * vij, axis=-1) + eps ** 2) * (jnp.sum(vkj * vkj, axis=-1) + eps ** 2))
 
     tb = top / bot

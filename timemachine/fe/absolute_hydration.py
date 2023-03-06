@@ -14,11 +14,13 @@ from timemachine.fe.free_energy import (
     AbsoluteFreeEnergy,
     HostConfig,
     InitialState,
-    SimulationProtocol,
+    MDParams,
     SimulationResult,
+    estimate_free_energy_pair_bar,
+    make_pair_bar_plots,
+    run_sims_sequential,
 )
 from timemachine.fe.lambda_schedule import construct_pre_optimized_absolute_lambda_schedule_solvent
-from timemachine.fe.rbfe import estimate_free_energy_given_initial_states
 from timemachine.fe.topology import BaseTopology
 from timemachine.fe.utils import get_mol_name, get_romol_conf
 from timemachine.ff import Forcefield
@@ -234,7 +236,7 @@ def estimate_absolute_free_energy(
 
     temperature = DEFAULT_TEMP
     initial_states = setup_initial_states(afe, ff, host_config, temperature, lambda_schedule, seed)
-    protocol = SimulationProtocol(n_frames=n_frames, n_eq_steps=n_eq_steps, steps_per_frame=steps_per_frame)
+    md_params = MDParams(n_frames=n_frames, n_eq_steps=n_eq_steps, steps_per_frame=steps_per_frame)
 
     if keep_idxs is None:
         keep_idxs = [0, len(initial_states) - 1]  # keep first and last windows
@@ -242,12 +244,23 @@ def estimate_absolute_free_energy(
 
     combined_prefix = get_mol_name(mol) + "_" + prefix
     try:
-        return estimate_free_energy_given_initial_states(
-            initial_states, protocol, temperature, combined_prefix, keep_idxs
+        u_kln_by_component_by_lambda, stored_frames, stored_boxes = run_sims_sequential(
+            initial_states, md_params, temperature, keep_idxs
+        )
+        pair_bar_result = estimate_free_energy_pair_bar(u_kln_by_component_by_lambda, temperature, combined_prefix)
+        plots = make_pair_bar_plots(initial_states, pair_bar_result, temperature, combined_prefix)
+        return SimulationResult(
+            initial_states,
+            pair_bar_result,
+            plots,
+            stored_frames,
+            stored_boxes,
+            md_params,
+            [(initial_states, pair_bar_result)],
         )
     except Exception as err:
         with open(f"failed_ahfe_result_{combined_prefix}.pkl", "wb") as fh:
-            pickle.dump((initial_states, protocol, err), fh)
+            pickle.dump((initial_states, md_params, err), fh)
         raise err
 
 
@@ -335,7 +348,7 @@ def setup_initial_states(
 
 def run_solvent(
     mol, forcefield, _, n_frames, seed, n_eq_steps=10000, steps_per_frame=400, n_windows=16
-) -> Tuple[SimulationResult, app.topology.Topology]:
+) -> Tuple[SimulationResult, app.topology.Topology, HostConfig]:
     box_width = 4.0
     solvent_sys, solvent_conf, solvent_box, solvent_top = builders.build_water_system(box_width, forcefield.water_ff)
     solvent_box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes, deboggle later
@@ -351,4 +364,4 @@ def run_solvent(
         n_windows=n_windows,
         steps_per_frame=steps_per_frame,
     )
-    return solvent_res, solvent_top
+    return solvent_res, solvent_top, solvent_host_config

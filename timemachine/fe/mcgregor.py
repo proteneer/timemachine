@@ -213,10 +213,10 @@ def mcs(
             filter_fxn,
         )
 
-        # If timed out and no maps found, raise exception.
+        # If timed out, either due to max_visits or max_cores, raise exception.
         if mcs_result.timed_out:
             raise MaxVisitsError(
-                f"Reached max number of visits: {max_visits}, found {len(mcs_result.all_maps)} matches"
+                f"Reached max number of visits/cores: {len(mcs_result.all_maps)} cores with {mcs_result.nodes_visited} nodes visited"
             )
 
         if len(mcs_result.all_maps) > 0:
@@ -276,7 +276,8 @@ def recursion(
         mcs_result.timed_out = True
         return
 
-    if len(mcs_result.all_maps) == max_cores:
+    if len(mcs_result.all_maps) > max_cores:
+        mcs_result.timed_out = True
         return
 
     num_edges = _arcs_left(marcs)

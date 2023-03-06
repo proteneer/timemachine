@@ -175,13 +175,9 @@ class VacuumSystem:
         return U_fn
 
     def get_U_fns(self):
-
-        return [
-            self.bond,
-            self.angle,
-            self.torsion,
-            self.nonbonded,
-        ]
+        # For molecules too small for to have certain terms,
+        # skip when no params are present
+        return [p for p in [self.bond, self.angle, self.torsion, self.nonbonded] if len(p.params) > 0]
 
 
 class HostGuestSystem:

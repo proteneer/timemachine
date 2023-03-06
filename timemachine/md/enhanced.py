@@ -90,7 +90,7 @@ class VacuumState:
 
         self.lamb = 0.0
         self.nb_params, self.nb_potential = bt.parameterize_nonbonded(
-            ff.q_handle.params, ff.lj_handle.params, self.lamb
+            ff.q_handle.params, ff.q_handle_intra.params, ff.lj_handle.params, self.lamb
         )
 
         self.box = None
@@ -347,7 +347,7 @@ def generate_log_weighted_samples(
     if num_workers is None:
         num_workers = os.cpu_count()
 
-    burn_in_batches = 1000
+    burn_in_batches = 2000
 
     # wraps a callable fn so it runs in a subprocess with the device_count set explicitly
     with multiprocessing.get_context("spawn").Pool(1, init_env, [num_workers]) as pool:

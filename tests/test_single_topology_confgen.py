@@ -4,7 +4,7 @@ import pytest
 from timemachine.constants import DEFAULT_FF, DEFAULT_TEMP
 from timemachine.fe import atom_mapping, pdb_writer, utils
 from timemachine.fe.lambda_schedule import construct_pre_optimized_relative_lambda_schedule
-from timemachine.fe.rbfe import HostConfig, setup_initial_states
+from timemachine.fe.rbfe import HostConfig, setup_initial_states, setup_optimized_host
 from timemachine.fe.single_topology import AtomMapMixin, SingleTopology
 from timemachine.fe.utils import get_mol_name, read_sdf
 from timemachine.ff import Forcefield
@@ -60,7 +60,8 @@ def run_edge(mol_a, mol_b, protein_path, n_windows):
     solvent_sys, solvent_conf, solvent_box, solvent_top = builders.build_water_system(box_width, ff.water_ff)
     solvent_box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes
     solvent_host_config = HostConfig(solvent_sys, solvent_conf, solvent_box)
-    initial_states = setup_initial_states(st, solvent_host_config, DEFAULT_TEMP, lambda_schedule, seed)
+    solvent_host = setup_optimized_host(st, solvent_host_config)
+    initial_states = setup_initial_states(st, solvent_host, DEFAULT_TEMP, lambda_schedule, seed)
     all_frames = [state.x0 for state in initial_states]
     write_trajectory_as_pdb(
         mol_a,
@@ -77,7 +78,8 @@ def run_edge(mol_a, mol_b, protein_path, n_windows):
     )
     complex_box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes
     complex_host_config = HostConfig(complex_sys, complex_conf, complex_box)
-    initial_states = setup_initial_states(st, complex_host_config, DEFAULT_TEMP, lambda_schedule, seed)
+    complex_host = setup_optimized_host(st, complex_host_config)
+    initial_states = setup_initial_states(st, complex_host, DEFAULT_TEMP, lambda_schedule, seed)
 
     all_frames = [state.x0 for state in initial_states]
     write_trajectory_as_pdb(

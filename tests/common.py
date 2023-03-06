@@ -3,6 +3,7 @@ import functools
 import itertools
 import os
 import unittest
+from dataclasses import dataclass
 from importlib import resources
 from tempfile import NamedTemporaryFile, TemporaryDirectory
 from typing import Iterable, Optional
@@ -61,7 +62,7 @@ def prepare_system_params(x: NDArray, cutoff: float, sigma_scale: float = 5.0) -
 
     Returns
     -------
-    (N, 3) np.ndarray containing charges, sigmas and epsilons respectively.
+    (N, 4) np.ndarray containing charges, sigmas, epsilons and w coordinates respectively.
     """
     assert x.ndim == 2
     N = x.shape[0]
@@ -306,11 +307,11 @@ class GradientTest(unittest.TestCase):
                     x, params, box, compute_du_dx, compute_du_dp, compute_u
                 )
 
-            np.testing.assert_array_equal(test_du_dx, test_du_dx_2)
-            np.testing.assert_array_equal(test_u, test_u_2)
+                np.testing.assert_array_equal(test_du_dx, test_du_dx_2)
+                np.testing.assert_array_equal(test_u, test_u_2)
 
-            if isinstance(test_potential, potentials.Nonbonded):
-                np.testing.assert_array_equal(test_du_dp, test_du_dp_2)
+                if isinstance(test_potential, potentials.Nonbonded):
+                    np.testing.assert_array_equal(test_du_dp, test_du_dp_2)
 
     def compare_forces_gpu_vs_reference(
         self,
@@ -356,3 +357,28 @@ def gen_nonbonded_params_with_4d_offsets(rng: np.random.Generator, params, w_max
     zero_idxs = rng.choice(num_atoms, (num_atoms // 2,), replace=False)
     w_coords[zero_idxs] = 0.0
     yield params_with_w_coords(w_coords)
+
+
+@dataclass
+class SplitForcefield:
+    ref: Forcefield  # ref ff
+    scaled: Forcefield  # all charge terms scaled by 10x
+    inter_scaled: Forcefield  # intermolecular charge terms scaled by 10x
+
+
+def load_split_forcefields() -> SplitForcefield:
+    """
+    Returns:
+        OpenFF 2.0.0 ff,
+        OpenFF 2.0.0 ff with all charge terms scaled by 10x,
+        OpenFF 2.0.0 ff with only intermolecular charge terms scaled by 10x.
+    """
+    ff_ref = Forcefield.load_from_file("smirnoff_2_0_0_ccc.py")
+
+    ff_scaled = Forcefield.load_from_file("smirnoff_2_0_0_ccc.py")
+    ff_scaled.q_handle.params *= 10
+    ff_scaled.q_handle_intra.params *= 10
+
+    ff_inter_scaled = Forcefield.load_from_file("smirnoff_2_0_0_ccc.py")
+    ff_inter_scaled.q_handle.params *= 10
+    return SplitForcefield(ff_ref, ff_scaled, ff_inter_scaled)

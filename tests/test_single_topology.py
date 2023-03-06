@@ -6,13 +6,14 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 import pytest
-from hypothesis import given, seed
+from common import load_split_forcefields
+from hypothesis import assume, given, seed
 from rdkit import Chem
 from rdkit.Chem import AllChem
 
 from timemachine.constants import DEFAULT_FF
 from timemachine.fe import atom_mapping, single_topology
-from timemachine.fe.interpolate import linear_interpolation
+from timemachine.fe.interpolate import linear_interpolation, log_linear_interpolation
 from timemachine.fe.single_topology import (
     ChargePertubationError,
     CoreBondChangeWarning,
@@ -29,6 +30,7 @@ from timemachine.fe.system import convert_bps_into_system, minimize_scipy, simul
 from timemachine.fe.utils import get_mol_name, get_romol_conf, read_sdf
 from timemachine.ff import Forcefield
 from timemachine.ff.handlers import openmm_deserializer
+from timemachine.md import minimizer
 from timemachine.md.builders import build_water_system
 from timemachine.potentials.jax_utils import pairwise_distances
 
@@ -351,7 +353,6 @@ def test_combine_with_host():
     ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
 
     solvent_sys, _, _, _ = build_water_system(4.0, ff.water_ff)
-
     host_bps, _ = openmm_deserializer.deserialize_system(solvent_sys, cutoff=1.2)
 
     st = SingleTopology(mol_a, mol_b, core, ff)
@@ -359,6 +360,79 @@ def test_combine_with_host():
     # Expect there to be 5 functions, excluding the chiral bond and chiral atom restraints
     # This should be updated when chiral restraints are re-enabled.
     assert len(host_system.get_U_fns()) == 5
+
+
+@pytest.mark.parametrize("precision, rtol, atol", [(np.float64, 1e-8, 1e-8), (np.float32, 1e-4, 5e-4)])
+@pytest.mark.parametrize("use_tiny_mol", [True, False])
+def test_nonbonded_split(precision, rtol, atol, use_tiny_mol):
+
+    # mol with no intramolecular NB terms and no dihedrals
+    if use_tiny_mol:
+        mol_a = ligand_from_smiles("S")
+        mol_b = ligand_from_smiles("O")
+    else:
+        with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
+            mols = {get_mol_name(mol): mol for mol in read_sdf(path_to_ligand)}
+        mol_a = mols["338"]
+        mol_b = mols["43"]
+    core = _get_core_by_mcs(mol_a, mol_b)
+
+    # split forcefield has different parameters for intramol and intermol terms
+    ffs = load_split_forcefields()
+    solvent_sys, solvent_conf, solvent_box, solvent_top = build_water_system(4.0, ffs.ref.water_ff)
+    solvent_bps, _ = openmm_deserializer.deserialize_system(solvent_sys, cutoff=1.2)
+
+    def get_vacuum_solvent_u_grads(ff, lamb):
+        st = SingleTopology(mol_a, mol_b, core, ff)
+        ligand_conf = st.combine_confs(get_romol_conf(mol_a), get_romol_conf(mol_b))  # TODO put lamb here w/Josh's fix
+        combined_conf = np.concatenate([solvent_conf, ligand_conf])
+
+        vacuum_system = st.setup_intermediate_state(lamb)
+        vacuum_potentials = vacuum_system.get_U_fns()
+        vacuum_impls = [p.bound_impl(precision) for p in vacuum_potentials]
+        val_and_grad_fn = minimizer.get_val_and_grad_fn(vacuum_impls, solvent_box)
+        vacuum_u, vacuum_grad = val_and_grad_fn(ligand_conf)
+
+        solvent_system = st.combine_with_host(convert_bps_into_system(solvent_bps), lamb)
+        solvent_potentials = solvent_system.get_U_fns()
+        solvent_impls = [p.bound_impl(precision) for p in solvent_potentials]
+        val_and_grad_fn = minimizer.get_val_and_grad_fn(solvent_impls, solvent_box)
+        solvent_u, solvent_grad = val_and_grad_fn(combined_conf)
+        return vacuum_grad, vacuum_u, solvent_grad, solvent_u
+
+    n_lambdas = 3
+    for lamb in np.linspace(0, 1, n_lambdas):
+        # Compute the grads, potential with the ref ff
+        vacuum_grad_ref, vacuum_u_ref, solvent_grad_ref, solvent_u_ref = get_vacuum_solvent_u_grads(ffs.ref, lamb)
+
+        # Compute the grads, potential with the scaled ff
+        vacuum_grad_scaled, vacuum_u_scaled, solvent_grad_scaled, solvent_u_scaled = get_vacuum_solvent_u_grads(
+            ffs.scaled, lamb
+        )
+
+        # Compute the grads, potential with the intermol scaled ff
+        (
+            vacuum_grad_inter_scaled,
+            vacuum_u_inter_scaled,
+            solvent_grad_inter_scaled,
+            solvent_u_inter_scaled,
+        ) = get_vacuum_solvent_u_grads(ffs.inter_scaled, lamb)
+
+        # Compute the expected intermol scaled potential
+        expected_inter_scaled_u = solvent_u_scaled - vacuum_u_scaled + vacuum_u_ref
+
+        # Pad gradients for the solvent
+        vacuum_grad_scaled_padded = np.concatenate([np.zeros(solvent_conf.shape), vacuum_grad_scaled])
+        vacuum_grad_ref_padded = np.concatenate([np.zeros(solvent_conf.shape), vacuum_grad_ref])
+        expected_inter_scaled_grad = solvent_grad_scaled - vacuum_grad_scaled_padded + vacuum_grad_ref_padded
+
+        # They should be equal
+        assert expected_inter_scaled_u == pytest.approx(solvent_u_inter_scaled, rel=rtol, abs=atol)
+        np.testing.assert_allclose(expected_inter_scaled_grad, solvent_grad_inter_scaled, rtol=rtol, atol=atol)
+
+        # The vacuum term should be the same as the ref
+        assert vacuum_u_inter_scaled == pytest.approx(vacuum_u_ref, rel=rtol, abs=atol)
+        np.testing.assert_allclose(vacuum_grad_ref, vacuum_grad_inter_scaled, rtol=rtol, atol=atol)
 
 
 def ligand_from_smiles(smiles):
@@ -424,20 +498,30 @@ lambdas = finite_floats(0.0, 1.0)
 
 
 def pairs(elem, unique=False):
-    return st.lists(elem, min_size=2, max_size=2, unique=unique)
+    return st.lists(elem, min_size=2, max_size=2, unique=unique).map(tuple)
 
 
 lambda_intervals = pairs(finite_floats(1e-9, 1.0 - 1e-9), unique=True).map(sorted)
 
 
+@pytest.mark.parametrize(
+    "interpolation_fn",
+    [
+        linear_interpolation,
+        functools.partial(log_linear_interpolation, min_value=0.01),
+    ],
+)
 @given(nonzero_force_constants, lambda_intervals, lambdas)
-@seed(2022)
-def test_handle_ring_opening_closing_symmetric(k, lambda_interval, lam):
+@seed(2023)
+def test_handle_ring_opening_closing_symmetric(interpolation_fn, k, lambda_interval, lam):
     lambda_min, lambda_max = lambda_interval
+
+    # avoid spurious failure due to loss of precision
+    assume((lam <= lambda_min) == (lam <= 1 - (1 - lambda_min)))
 
     f = functools.partial(
         handle_ring_opening_closing,
-        linear_interpolation,
+        interpolation_fn,
         lambda_min=lambda_min,
         lambda_max=lambda_max,
     )

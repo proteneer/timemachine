@@ -45,20 +45,11 @@ conda install openmm=7.5.1 -c conda-forge # only if using openmm from conda
 
 ### Install Time Machine
 
-#### Linux
+The CUDA extension module implementing custom ops is only supported on Linux, but partial functionality is still available on non-Linux OSes.
 
 ```shell
 pip install -r requirements.txt
 pip install .
-```
-
-#### Non-Linux
-
-The CUDA extension module implementing custom ops is only supported on Linux, but partial functionality is still available on non-Linux OSes. To install without the extension:
-
-```shell
-pip install -r requirements.txt
-SKIP_CUSTOM_OPS=1 pip install .
 ```
 
 ## Developing Time Machine
@@ -75,10 +66,7 @@ Possible variants of the last step include
 ```shell
 pip install -e .[dev,test]                 # optionally install dev and test dependencies
 CMAKE_ARGS=-DCUDA_ARCH=86 pip install -e . # override CUDA_ARCH
-SKIP_CUSTOM_OPS=1 pip install -e .         # skip building CUDA extension (non-Linux)
-
-# use parallel CMake build with `nproc` threads
-CMAKE_BUILD_PARALLEL_LEVEL=$(nproc) pip install -e .
+SKIP_CUSTOM_OPS=1 pip install -e .         # skip building CUDA extension, no effect on non-Linux OSes
 ```
 
 To rebuild the extension module after making changes to the C++/CUDA code, either rerun
@@ -92,12 +80,12 @@ make build  # Must have installed dev dependencies for this to work
 
 ### Running Tests
 
-Note that `PYTHONPATH` must be set to include the `timemachine` repo root. To run tests that use `openeye`, ensure that either `OE_LICENSE` or `OE_DIR` are set appropriately.
+To run tests that use `openeye`, ensure that either `OE_LICENSE` or `OE_DIR` are set appropriately.
 
 For example, starting from a clean environment with the openeye license file in `~/.openeye`:
 
 ```shell
-OE_DIR=~/.openeye PYTHONPATH=. pytest -xsv tests/
+OE_DIR=~/.openeye pytest -xsv tests/
 ```
 
 Note: we currently only support and test on python 3.7, use other versions at your own peril.

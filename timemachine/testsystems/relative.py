@@ -65,8 +65,8 @@ def get_relative_hif2a_in_vacuum():
     temperature = 300
     seed = 2022
     lam = 0.5
-    host_config = None  # vacuum
-    initial_states = setup_initial_states(rfe, host_config, temperature, [lam], seed)
+    host = None  # vacuum
+    initial_states = setup_initial_states(rfe, host, temperature, [lam], seed)
     unbound_potentials = initial_states[0].potentials
     sys_params = [np.array(u.params, dtype=np.float64) for u in unbound_potentials]
     coords = rfe.combine_confs(get_romol_conf(mol_a), get_romol_conf(mol_b))

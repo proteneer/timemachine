@@ -353,6 +353,10 @@ class SimpleChargeHandler(NonbondedHandler):
     pass
 
 
+class SimpleChargeIntraHandler(SimpleChargeHandler):
+    pass
+
+
 class LennardJonesHandler(NonbondedHandler):
     @staticmethod
     def static_parameterize(params, smirks, mol):
@@ -407,7 +411,7 @@ class AM1Handler(SerializableMixIn):
         assert props is None
 
     def partial_parameterize(self, mol):
-        return self.static_parameterize(self.smirks, mol)
+        return self.static_parameterize(mol)
 
     def parameterize(self, mol):
         return self.static_parameterize(mol)
@@ -464,6 +468,10 @@ class AM1BCCHandler(SerializableMixIn):
 
         """
         return oe_assign_charges(mol, "AM1BCCELF10")
+
+
+class AM1BCCIntraHandler(AM1BCCHandler):
+    pass
 
 
 class AM1CCCHandler(SerializableMixIn):
@@ -541,3 +549,7 @@ class AM1CCCHandler(SerializableMixIn):
         assert q_params.shape[0] == mol.GetNumAtoms()  # check that return shape is consistent with input mol
 
         return q_params
+
+
+class AM1CCCIntraHandler(AM1CCCHandler):
+    pass
