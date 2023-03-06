@@ -4,6 +4,7 @@
 #include <string>
 #include <vector>
 
+#include "device_buffer.hpp"
 #include "fixed_point.hpp"
 #include "gpu_utils.cuh"
 #include "kernel_utils.cuh"
@@ -19,7 +20,7 @@ namespace timemachine {
 
 template <typename RealType>
 NonbondedInteractionGroup<RealType>::NonbondedInteractionGroup(
-    const int N, const std::set<int> &row_atom_idxs, const double beta, const double cutoff)
+    const int N, const std::vector<int> &row_atom_idxs, const double beta, const double cutoff)
     : N_(N), NR_(row_atom_idxs.size()), NC_(N_ - NR_),
 
       kernel_ptrs_({// enumerate over every possible kernel combination
@@ -43,16 +44,8 @@ NonbondedInteractionGroup<RealType>::NonbondedInteractionGroup(
         throw std::runtime_error("row_atom_idxs must be nonempty");
     }
 
-    // compute set of column atoms as set difference
-    std::vector<int> col_atom_idxs_v = get_indices_difference(N_, row_atom_idxs);
-    cudaSafeMalloc(&d_col_atom_idxs_, NC_ * sizeof(*d_col_atom_idxs_));
-    gpuErrchk(
-        cudaMemcpy(d_col_atom_idxs_, &col_atom_idxs_v[0], NC_ * sizeof(*d_col_atom_idxs_), cudaMemcpyHostToDevice));
-
-    std::vector<int> row_atom_idxs_v(set_to_vector(row_atom_idxs));
-    cudaSafeMalloc(&d_row_atom_idxs_, NR_ * sizeof(*d_row_atom_idxs_));
-    gpuErrchk(
-        cudaMemcpy(d_row_atom_idxs_, &row_atom_idxs_v[0], NR_ * sizeof(*d_row_atom_idxs_), cudaMemcpyHostToDevice));
+    cudaSafeMalloc(&d_col_atom_idxs_, N_ * sizeof(*d_col_atom_idxs_));
+    cudaSafeMalloc(&d_row_atom_idxs_, N_ * sizeof(*d_row_atom_idxs_));
 
     cudaSafeMalloc(&d_perm_, N_ * sizeof(*d_perm_));
 
@@ -113,11 +106,7 @@ NonbondedInteractionGroup<RealType>::NonbondedInteractionGroup(
 
     gpuErrchk(cudaPeekAtLastError());
     cudaSafeMalloc(&d_sort_storage_, d_sort_storage_bytes_);
-    // We will sort so that the row atoms are always first for the nblist. Cheaper to set once than to
-    // recompute the idxs from the permuation
-    std::vector<unsigned int> row_atoms(NR_);
-    std::iota(row_atoms.begin(), row_atoms.end(), 0);
-    nblist_.set_row_idxs(row_atoms);
+    this->set_atom_idxs(row_atom_idxs);
 };
 
 template <typename RealType> NonbondedInteractionGroup<RealType>::~NonbondedInteractionGroup() {
@@ -349,6 +338,64 @@ void NonbondedInteractionGroup<RealType>::execute_device(
         k_add_ull_to_ull<<<dim3(B, PARAMS_PER_ATOM, 1), tpb, 0, stream>>>(N, d_du_dp_buffer_, d_du_dp);
         gpuErrchk(cudaPeekAtLastError());
     }
+}
+
+template <typename RealType>
+void NonbondedInteractionGroup<RealType>::set_atom_idxs(const std::vector<int> &atom_idxs) {
+    std::vector<unsigned int> unsigned_idxs = std::vector<unsigned int>(atom_idxs.begin(), atom_idxs.end());
+
+    std::set<unsigned int> unique_row_atom_idxs(unique_idxs(unsigned_idxs));
+    // compute set of column atoms as set difference
+    std::vector<unsigned int> col_atom_idxs_v = get_indices_difference(N_, unique_row_atom_idxs);
+    std::vector<unsigned int> row_atom_idxs_v(set_to_vector(unique_row_atom_idxs));
+    DeviceBuffer<unsigned int> d_col(col_atom_idxs_v.size());
+    DeviceBuffer<unsigned int> d_row(row_atom_idxs_v.size());
+    d_col.copy_from(&col_atom_idxs_v[0]);
+    d_row.copy_from(&row_atom_idxs_v[0]);
+
+    cudaStream_t stream = static_cast<cudaStream_t>(0);
+    this->set_atom_idxs_device(col_atom_idxs_v.size(), row_atom_idxs_v.size(), d_col.data, d_row.data, stream);
+    gpuErrchk(cudaStreamSynchronize(stream));
+}
+
+// set_idxs_device is for use when idxs exist on the GPU already and are used as the new idxs to compute the neighborlist on.
+template <typename RealType>
+void NonbondedInteractionGroup<RealType>::set_atom_idxs_device(
+    const int NC,
+    const int NR,
+    unsigned int *d_in_column_idxs,
+    unsigned int *d_in_row_idxs,
+    const cudaStream_t stream) {
+    if (NC + NR != N_) {
+        throw std::runtime_error("Total of indices must equal N");
+    }
+    const size_t tpb = warp_size;
+
+    // The indices must already be on the GPU and are copied into the potential's buffers.
+    gpuErrchk(cudaMemcpyAsync(
+        d_col_atom_idxs_, d_in_column_idxs, NC * sizeof(*d_col_atom_idxs_), cudaMemcpyDeviceToDevice, stream));
+    gpuErrchk(cudaMemcpyAsync(
+        d_row_atom_idxs_, d_in_row_idxs, NR * sizeof(*d_row_atom_idxs_), cudaMemcpyDeviceToDevice, stream));
+
+    // The neighborlist does not use the indices directly, rather it takes a continuous set of indices and the ixn group
+    // potential will resort the correct particles into the corresponding arrays. We can use the leftover spaces in the
+    // two d_*_atom_idxs_ arrays to store these nblist indices.
+    // NOTE: The leftover column indices will store the row indices and vice versa.
+
+    k_arange<<<ceil_divide(NR, tpb), tpb, 0, stream>>>(NR, d_col_atom_idxs_ + NC);
+    gpuErrchk(cudaPeekAtLastError());
+    k_arange<<<ceil_divide(NC, tpb), tpb, 0, stream>>>(NC, d_row_atom_idxs_ + NR, NR);
+    gpuErrchk(cudaPeekAtLastError());
+
+    // Force a NBlist rebuild
+    gpuErrchk(cudaMemsetAsync(d_rebuild_nblist_, 1, 1 * sizeof(*d_rebuild_nblist_), stream));
+
+    // Offset into the ends of the arrays that now contain the row and column indices for the nblist
+    nblist_.set_idxs_device(NC, NR, d_row_atom_idxs_ + NR, d_col_atom_idxs_ + NC, stream);
+
+    // Update the row and column counts
+    this->NR_ = NR;
+    this->NC_ = NC;
 }
 
 template <typename RealType>

@@ -4,7 +4,6 @@
 #include "nonbonded_common.cuh"
 #include "potential.hpp"
 #include <array>
-#include <set>
 #include <vector>
 
 namespace timemachine {
@@ -12,9 +11,9 @@ namespace timemachine {
 template <typename RealType> class NonbondedInteractionGroup : public Potential {
 
 private:
-    const int N_;  // N_ = NC_ + NR_
-    const int NR_; // number of row atoms
-    const int NC_; // number of column atoms
+    const int N_; // N_ = NC_ + NR_
+    int NR_;      // number of row atoms
+    int NC_;      // number of column atoms
 
     std::array<k_nonbonded_fn, 8> kernel_ptrs_;
 
@@ -71,7 +70,13 @@ public:
     void set_nblist_padding(double val);
     void disable_hilbert_sort();
 
-    NonbondedInteractionGroup(const int N, const std::set<int> &row_atom_idxs, const double beta, const double cutoff);
+    void set_atom_idxs_device(
+        const int NC, const int NR, unsigned int *d_column_idxs, unsigned int *d_row_idxs, const cudaStream_t stream);
+
+    void set_atom_idxs(const std::vector<int> &atom_idxs);
+
+    NonbondedInteractionGroup(
+        const int N, const std::vector<int> &row_atom_idxs, const double beta, const double cutoff);
 
     ~NonbondedInteractionGroup();
 
