@@ -230,7 +230,7 @@ def test_local_md_particle_density(k):
     for p, bp in zip(sys_params, unbound_potentials):
         bps.append(bp.bind(p).bound_impl(np.float32))
 
-    def observable(pair):
+    def num_particles_near_ligand(pair):
         new_coords, new_box = pair
         assert coords.shape == new_coords.shape
         assert box.shape == new_box.shape
@@ -254,4 +254,6 @@ def test_local_md_particle_density(k):
         xs, boxes = ctxt.multiple_steps_local(steps, local_idxs, burn_in=0, k=k, seed=local_seed)
         return (xs[-1], boxes[-1]), None
 
-    expect_no_drift((x0[-1], boxes[-1]), local_move, observable, n_local_resampling_iterations=250, threshold=0.05)
+    expect_no_drift(
+        (x0[-1], boxes[-1]), local_move, num_particles_near_ligand, n_local_resampling_iterations=250, threshold=0.05
+    )
