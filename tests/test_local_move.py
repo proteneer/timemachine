@@ -47,7 +47,7 @@ def make_hmc_mover(x, logpdf_fxn, dt=0.1, n_steps=100):
     return hmc_move
 
 
-def expect_no_drift(
+def assert_no_drift(
     init_args, move_fxn, observable_fxn, n_local_resampling_iterations=100, n_samples=10, threshold=0.5
 ):
     assert n_local_resampling_iterations > 2 * n_samples, "Need iterations to be 2x n_samples"
@@ -67,8 +67,7 @@ def expect_no_drift(
     avg_at_start = np.mean(expected_selection_fraction_traj[:n_samples])
     avg_at_end = np.mean(expected_selection_fraction_traj[-n_samples:])
     if avg_at_start == avg_at_end:
-        if np.all(expected_selection_fraction_traj == avg_at_end):
-            print("WARNING: All values identical, test may be invalid")
+        assert not np.all(expected_selection_fraction_traj == avg_at_end), "Observable values all identical"
 
     percent_diff = np.abs(((avg_at_start - avg_at_end) / avg_at_start))
     if percent_diff > threshold:
@@ -77,7 +76,7 @@ def expect_no_drift(
             observable avg over end frames = {avg_at_end:.3f}
             but averages of this (and all other observables) should be constant over time
         """
-        raise RuntimeError(msg)
+        assert percent_diff <= threshold, msg
 
     return traj, aux_traj
 
@@ -172,7 +171,7 @@ def test_ideal_gas():
 
     def assert_correctness(local_move):
         # primary assertion: expect no drift in % of particles in resampled region
-        traj, aux_traj = expect_no_drift(
+        traj, aux_traj = assert_no_drift(
             jnp.array(x0), local_move, observable_fxn=particle_frac_near_center, n_local_resampling_iterations=100
         )
 
@@ -188,7 +187,7 @@ def test_ideal_gas():
     assert_correctness(correct_local_move)
 
     # expect failure with ablated version of local move
-    with pytest.raises(RuntimeError):
+    with pytest.raises(AssertionError):
         assert_correctness(incorrect_local_move)
 
 
@@ -254,6 +253,6 @@ def test_local_md_particle_density(k):
         xs, boxes = ctxt.multiple_steps_local(steps, local_idxs, burn_in=0, k=k, seed=local_seed)
         return (xs[-1], boxes[-1]), None
 
-    expect_no_drift(
+    assert_no_drift(
         (x0[-1], boxes[-1]), local_move, num_particles_near_ligand, n_local_resampling_iterations=250, threshold=0.05
     )
