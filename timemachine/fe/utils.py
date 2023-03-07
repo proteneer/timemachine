@@ -1,6 +1,8 @@
+from itertools import cycle
 from pathlib import Path
 from typing import List, Optional, Union
 
+import matplotlib.pyplot as plt
 import numpy as np
 from numpy.typing import NDArray
 from rdkit import Chem
@@ -223,6 +225,56 @@ def plot_atom_mapping_grid(mol_a, mol_b, core, num_rotations=5):
         legends=legends,
         useSVG=True,
     )
+
+
+def view_atom_mapping_3d(
+    mol_a,
+    mol_b,
+    core=None,
+    colors=plt.rcParams["axes.prop_cycle"].by_key()["color"],
+    show_idxs=False,
+    width=800,
+    height=500,
+):
+    try:
+        import py3Dmol
+    except ImportError:
+        raise ValueError("requires py3Dmol to be installed")
+
+    # show dummy atoms in white
+    make_style = lambda props: {"stick": props}
+    atom_style = lambda color: make_style({"color": color})
+    dummy_style = atom_style("white")
+
+    view = py3Dmol.view(viewergrid=(1, 2) if core is None else (2, 2), width=width, height=height)
+
+    def add_mol(mol, viewer):
+        view.addModel(Chem.MolToMolBlock(mol), "mol", viewer=viewer)
+
+    add_mol(mol_a, viewer=(0, 0))
+    add_mol(mol_b, viewer=(0, 1))
+
+    # second row (colored according to mapping)
+    if core is not None:
+        add_mol(mol_a, viewer=(1, 0))
+        add_mol(mol_b, viewer=(1, 1))
+
+    view.setStyle(make_style({}))
+
+    if core is not None:
+        view.setStyle(dummy_style, viewer=(1, 0))
+        view.setStyle(dummy_style, viewer=(1, 1))
+
+        for (ia, ib), color in zip(core.tolist(), cycle(colors)):
+            view.setStyle({"serial": ia}, atom_style(color), viewer=(1, 0))
+            view.setStyle({"serial": ib}, atom_style(color), viewer=(1, 1))
+
+    view.zoomTo()
+
+    if show_idxs:
+        view.addPropertyLabels("serial", "", {"alignment": "center", "fontSize": 10})
+
+    return view
 
 
 def get_romol_bonds(mol):
