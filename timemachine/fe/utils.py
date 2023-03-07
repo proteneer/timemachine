@@ -276,13 +276,13 @@ def view_atom_mapping_3d(
     def add_mol(mol, viewer):
         view.addModel(Chem.MolToMolBlock(mol), "mol", viewer=viewer)
 
-    add_mol(mol_a, viewer=(0, 0))
-    add_mol(mol_b, viewer=(0, 1))
+    add_mol(mol_a, (0, 0))
+    add_mol(mol_b, (0, 1))
 
     # second row (colored according to mapping)
     if core is not None:
-        add_mol(mol_a, viewer=(1, 0))
-        add_mol(mol_b, viewer=(1, 1))
+        add_mol(mol_a, (1, 0))
+        add_mol(mol_b, (1, 1))
 
     view.setStyle(make_style({}))
 
