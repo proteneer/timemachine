@@ -280,7 +280,7 @@ std::array<std::vector<double>, 2> Context::multiple_steps_local(
         default_bonds[i * 2 + 0] = 0;
         default_bonds[i * 2 + 1] = i + 1;
     }
-    std::shared_ptr<FlatBottomBond<double>> restraint_ptr(new FlatBottomBond<double>(default_bonds));
+    std::shared_ptr<FlatBottomBond<float>> restraint_ptr(new FlatBottomBond<float>(default_bonds));
     // Construct a bound potential with 0 params
     std::shared_ptr<BoundPotential> bound_shell_restraint(
         new BoundPotential(restraint_ptr, std::vector<int>({0}), nullptr));
@@ -315,7 +315,7 @@ std::array<std::vector<double>, 2> Context::multiple_steps_local(
         unsigned int reference_idx = local_idxs[random_dist(rng)];
 
         // Select all of the particles that will be free
-        k_log_probability_selection<double><<<ceil_divide(N_, tpb), tpb, 0, stream>>>(
+        k_log_probability_selection<float><<<ceil_divide(N_, tpb), tpb, 0, stream>>>(
             N_, kBT, radius, k, reference_idx, d_x_t_, d_box_t_, probability_buffer.data, d_free_indices.data);
         gpuErrchk(cudaPeekAtLastError());
 
