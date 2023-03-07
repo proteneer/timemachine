@@ -6,6 +6,7 @@ from jax import grad, jit
 from jax import numpy as jnp
 from jax import vmap
 
+from timemachine import constants
 from timemachine.ff import Forcefield
 from timemachine.integrator import VelocityVerletIntegrator
 from timemachine.lib import LangevinIntegrator, custom_ops
@@ -46,8 +47,13 @@ def make_hmc_mover(x, logpdf_fxn, dt=0.1, n_steps=100):
     return hmc_move
 
 
-def expect_no_drift(x0, move_fxn, observable_fxn, n_local_resampling_iterations=100):
-    traj = [jnp.array(x0)]
+def assert_no_drift(
+    init_args, move_fxn, observable_fxn, n_local_resampling_iterations=100, n_samples=10, threshold=0.5
+):
+    assert n_local_resampling_iterations > 2 * n_samples, "Need iterations to be 2x n_samples"
+    assert 0.0 <= threshold <= 1.0, "Threshold must be in interval [0.0, 1.0]"
+
+    traj = [init_args]
     aux_traj = []
 
     for _ in range(n_local_resampling_iterations):
@@ -58,21 +64,19 @@ def expect_no_drift(x0, move_fxn, observable_fxn, n_local_resampling_iterations=
 
     expected_selection_fraction_traj = np.array([observable_fxn(x) for x in traj])
 
-    # TODO: don't hard-code T, thresholds, etc.
-    T = 10
-    assert n_local_resampling_iterations > 2 * T
-    avg_at_start = np.mean(expected_selection_fraction_traj[:T])
-    avg_at_end = np.mean(expected_selection_fraction_traj[-T:])
+    avg_at_start = np.mean(expected_selection_fraction_traj[:n_samples])
+    avg_at_end = np.mean(expected_selection_fraction_traj[-n_samples:])
+    if avg_at_start == avg_at_end:
+        assert not np.all(expected_selection_fraction_traj == avg_at_end), "Observable values all identical"
 
-    ratio = avg_at_end / avg_at_start
-    deviated_by_50percent_or_more = ratio <= 0.5 or ratio >= 1.5
-    if deviated_by_50percent_or_more:
+    percent_diff = np.abs(((avg_at_start - avg_at_end) / avg_at_start))
+    if percent_diff > threshold:
         msg = f"""
             observable avg over start frames = {avg_at_start:.3f}
             observable avg over end frames = {avg_at_end:.3f}
             but averages of this (and all other observables) should be constant over time
         """
-        raise RuntimeError(msg)
+        assert percent_diff <= threshold, msg
 
     return traj, aux_traj
 
@@ -167,8 +171,8 @@ def test_ideal_gas():
 
     def assert_correctness(local_move):
         # primary assertion: expect no drift in % of particles in resampled region
-        traj, aux_traj = expect_no_drift(
-            x0, local_move, observable_fxn=particle_frac_near_center, n_local_resampling_iterations=100
+        traj, aux_traj = assert_no_drift(
+            jnp.array(x0), local_move, observable_fxn=particle_frac_near_center, n_local_resampling_iterations=100
         )
 
         # secondary assertion: confirm move was not trivial
@@ -183,11 +187,12 @@ def test_ideal_gas():
     assert_correctness(correct_local_move)
 
     # expect failure with ablated version of local move
-    with pytest.raises(RuntimeError):
+    with pytest.raises(AssertionError):
         assert_correctness(incorrect_local_move)
 
 
-def test_local_md_particle_density():
+@pytest.mark.parametrize("k", [1.0, 1000.0, 10000.0])
+def test_local_md_particle_density(k):
     """Verify that the average particle density around a single particle is stable.
 
     In the naive implementation of local md, a vacuum can appear around the local idxs. See naive_local_resampling_move
@@ -197,16 +202,18 @@ def test_local_md_particle_density():
     mol, _ = get_biphenyl()
     ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
 
-    temperature = 300
+    temperature = constants.DEFAULT_TEMP
     dt = 1.5e-3
-    friction = 0.0
+    friction = 1.0
     seed = 2022
     cutoff = 1.2
 
     # Have to minimize, else there can be clashes and the local moves will cause crashes
-    unbound_potentials, sys_params, masses, coords, box = get_solvent_phase_system(mol, ff, 0.0)
+    unbound_potentials, sys_params, masses, coords, box = get_solvent_phase_system(
+        mol, ff, 0.0, box_width=4.0, margin=0.1
+    )
 
-    local_idxs = np.array([len(coords) - 1], dtype=np.int32)
+    local_idxs = np.arange(len(coords) - mol.GetNumAtoms(), len(coords), dtype=np.int32)
 
     nblist = custom_ops.Neighborlist_f32(coords.shape[0])
 
@@ -222,8 +229,12 @@ def test_local_md_particle_density():
     for p, bp in zip(sys_params, unbound_potentials):
         bps.append(bp.bind(p).bound_impl(np.float32))
 
-    def observable(x):
-        ixns = nblist.get_nblist(coords, box, cutoff)
+    def num_particles_near_ligand(pair):
+        new_coords, new_box = pair
+        assert coords.shape == new_coords.shape
+        assert box.shape == new_box.shape
+
+        ixns = nblist.get_nblist(new_coords, new_box, cutoff)
         flattened = np.concatenate(ixns).reshape(-1)
         inner_shell_idxs = np.unique(flattened)
 
@@ -232,9 +243,16 @@ def test_local_md_particle_density():
         return len(subsystem_idxs)
 
     ctxt = custom_ops.Context(coords, v0, box, intg_impl, bps)
+    # Equilibrate using global steps to start off from a reasonable place
+    x0, boxes = ctxt.multiple_steps(1000)
 
-    def local_move(x, steps=1):
-        xs, boxes = ctxt.multiple_steps_local(steps, local_idxs)
-        return xs, boxes
+    rng = np.random.default_rng(seed)
 
-    expect_no_drift(coords, local_move, observable, n_local_resampling_iterations=50)
+    def local_move(_, steps=500):
+        local_seed = rng.integers(np.iinfo(np.int32).max)
+        xs, boxes = ctxt.multiple_steps_local(steps, local_idxs, burn_in=0, k=k, seed=local_seed)
+        return (xs[-1], boxes[-1]), None
+
+    assert_no_drift(
+        (x0[-1], boxes[-1]), local_move, num_particles_near_ligand, n_local_resampling_iterations=250, threshold=0.05
+    )
