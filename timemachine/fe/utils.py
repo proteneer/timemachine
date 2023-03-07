@@ -236,8 +236,7 @@ def view_atom_mapping_3d(
     width=800,
     height=500,
 ):
-    """
-    Produce a 3D rotatable view of a pair of molecules using py3Dmol. If `core` is specified, displays a second row
+    """Produce a 3D rotatable view of a pair of molecules using py3Dmol. If `core` is specified, displays a second row
     where the atoms are colored according to the atom mapping.
 
     Parameters
