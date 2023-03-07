@@ -125,6 +125,7 @@ setup(
             "hilbertcurve==1.0.5",
             "hypothesis[numpy]==6.54.6",
         ],
+        "vis": ["py3Dmol"],
     },
     package_data={
         "timemachine": [
