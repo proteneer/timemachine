@@ -232,10 +232,36 @@ def view_atom_mapping_3d(
     mol_b,
     core=None,
     colors=plt.rcParams["axes.prop_cycle"].by_key()["color"],
-    show_idxs=False,
+    show_idx_labels=False,
     width=800,
     height=500,
 ):
+    """
+    Produce a 3D rotatable view of a pair of molecules using py3Dmol. If `core` is specified, displays a second row
+    where the atoms are colored according to the atom mapping.
+
+    Parameters
+    ----------
+    mol_a, mol_b : rdkit mols
+        Input mols
+
+    core : ndarray or list of list of int or None, optional
+        Atom mapping. If passed, display a second row with atoms color-coded according to mapping
+
+    colors : list of str, optional
+        Colors to use for highlighting atoms by mapping
+
+    show_idx_labels : bool, optional
+        Whether to display atom indices
+
+    width, height : int
+        Dimensions of the view
+
+    Returns
+    -------
+    py3Dmol.view
+    """
+
     try:
         import py3Dmol
     except ImportError:
@@ -271,7 +297,7 @@ def view_atom_mapping_3d(
 
     view.zoomTo()
 
-    if show_idxs:
+    if show_idx_labels:
         view.addPropertyLabels("serial", "", {"alignment": "center", "fontSize": 10})
 
     return view
