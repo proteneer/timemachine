@@ -43,6 +43,7 @@ NonbondedInteractionGroup<RealType>::NonbondedInteractionGroup(
     if (NR_ == 0) {
         throw std::runtime_error("row_atom_idxs must be nonempty");
     }
+    this->verify_row_indices(row_atom_idxs);
 
     cudaSafeMalloc(&d_col_atom_idxs_, N_ * sizeof(*d_col_atom_idxs_));
     cudaSafeMalloc(&d_row_atom_idxs_, N_ * sizeof(*d_row_atom_idxs_));
@@ -341,7 +342,25 @@ void NonbondedInteractionGroup<RealType>::execute_device(
 }
 
 template <typename RealType>
+void NonbondedInteractionGroup<RealType>::verify_row_indices(const std::vector<int> &row_indices) {
+    if (row_indices.size() == 0) {
+        throw std::runtime_error("idxs can't be empty");
+    }
+    std::set<int> unique_idxs(row_indices.begin(), row_indices.end());
+    if (unique_idxs.size() != row_indices.size()) {
+        throw std::runtime_error("atom indices must be unique");
+    }
+    if (*std::max_element(row_indices.begin(), row_indices.end()) >= N_) {
+        throw std::runtime_error("indices values must be less than N");
+    }
+    if (*std::min_element(row_indices.begin(), row_indices.end()) < 0) {
+        throw std::runtime_error("indices values must be greater or equal to zero");
+    }
+}
+
+template <typename RealType>
 void NonbondedInteractionGroup<RealType>::set_atom_idxs(const std::vector<int> &atom_idxs) {
+    this->verify_row_indices(atom_idxs);
     std::vector<unsigned int> unsigned_idxs = std::vector<unsigned int>(atom_idxs.begin(), atom_idxs.end());
 
     std::set<unsigned int> unique_row_atom_idxs(unique_idxs(unsigned_idxs));

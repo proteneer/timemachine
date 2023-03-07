@@ -65,6 +65,8 @@ private:
         unsigned int *d_perm,
         cudaStream_t stream);
 
+    void verify_row_indices(const std::vector<int> &atom_idxs);
+
 public:
     // these are marked public but really only intended for testing.
     void set_nblist_padding(double val);
