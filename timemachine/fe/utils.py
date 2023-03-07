@@ -267,7 +267,6 @@ def view_atom_mapping_3d(
     except ImportError:
         raise ValueError("requires py3Dmol to be installed")
 
-    # show dummy atoms in white
     make_style = lambda props: {"stick": props}
     atom_style = lambda color: make_style({"color": color})
     dummy_style = atom_style("white")
