@@ -67,6 +67,11 @@ void FlatBottomBond<RealType>::execute_device(
 
 template <typename RealType>
 void FlatBottomBond<RealType>::set_bonds_device(const int num_bonds, const int *d_bonds, const cudaStream_t stream) {
+    if (num_bonds > B_) {
+        throw std::runtime_error(
+            "FlatBottomBond::set_bonds_device(): Num bonds (" + std::to_string(num_bonds) + ") greater then B (" +
+            std::to_string(B_) + ")");
+    }
     gpuErrchk(cudaMemcpyAsync(
         d_bond_idxs_, d_bonds, num_bonds * 2 * sizeof(*d_bond_idxs_), cudaMemcpyDeviceToDevice, stream));
     B_ = num_bonds;

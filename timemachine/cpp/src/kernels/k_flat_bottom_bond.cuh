@@ -102,11 +102,14 @@ void __global__ k_flat_bottom_bond(
         dx[d] = delta;
         r2 += delta * delta;
     }
-    RealType r = sqrt(r2);
 
     // branches -> masks
-    RealType r_gt_rmax = static_cast<RealType>(r > rmax);
-    RealType r_lt_rmin = static_cast<RealType>(r < rmin);
+    RealType r_gt_rmax = static_cast<RealType>(r2 > (rmax * rmax));
+    RealType r_lt_rmin = static_cast<RealType>(r2 < (rmin * rmin));
+    if (r_gt_rmax == 0.0 && r_lt_rmin == 0.0) {
+        return;
+    }
+    RealType r = sqrt(r2);
     if (u) {
         RealType u_real = compute_flat_bottom_energy<RealType>(k, r, rmin, rmax);
 
