@@ -113,21 +113,12 @@ void set_nonbonded_ixn_potential_idxs(
     }
 }
 
-<<<<<<< HEAD
-BoundPotential
-construct_ixn_group_potential(const int N, std::shared_ptr<Potential> pot, const int p_count, const double *params) {
-    std::vector<double> h_params(p_count);
-    gpuErrchk(cudaMemcpy(&h_params[0], params, p_count * sizeof(*params), cudaMemcpyDeviceToHost));
-    std::vector<int> dummy_idxs{0};
-    std::vector<int> shape{p_count};
-=======
 std::shared_ptr<BoundPotential>
 construct_ixn_group_potential(const int N, std::shared_ptr<Potential> pot, const int P, const double *d_params) {
     std::vector<double> h_params(P);
     gpuErrchk(cudaMemcpy(&h_params[0], d_params, P * sizeof(*d_params), cudaMemcpyDeviceToHost));
     std::vector<int> dummy_idxs{0};
     std::vector<int> shape{P};
->>>>>>> 4823bfd0 (Local MD with Ixn group)
 
     if (std::shared_ptr<NonbondedAllPairs<float>> nb_pot = std::dynamic_pointer_cast<NonbondedAllPairs<float>>(pot);
         nb_pot) {
@@ -257,8 +248,6 @@ std::array<std::vector<double>, 2> Context::multiple_steps_local(
 
     DeviceBuffer<unsigned int> d_row_idxs(N_);
     DeviceBuffer<unsigned int> d_col_idxs(N_);
-    // d_temp_idxs is used repeatedly for different purposes. This is done to avoid having to allocate more buffers.
-    DeviceBuffer<unsigned int> d_temp_idxs(N_);
 
     // Pinned memory for getting lengths of indice arrays
     PinnedHostBuffer<int> p_num_selected(1);
@@ -280,13 +269,11 @@ std::array<std::vector<double>, 2> Context::multiple_steps_local(
         default_bonds[i * 2 + 0] = 0;
         default_bonds[i * 2 + 1] = i + 1;
     }
-    std::shared_ptr<FlatBottomBond<float>> restraint_ptr(new FlatBottomBond<float>(default_bonds));
+    std::shared_ptr<FlatBottomBond<double>> restraint_ptr(new FlatBottomBond<double>(default_bonds));
     // Construct a bound potential with 0 params
     std::shared_ptr<BoundPotential> bound_shell_restraint(
         new BoundPotential(restraint_ptr, std::vector<int>({0}), nullptr));
 
-    // Copy constructor to get new vector to avoid modifying bps_
-    std::vector<std::shared_ptr<BoundPotential>> local_bps = bps_;
     // Add the restraint potential aand ixn group potential
     local_bps.push_back(bound_shell_restraint);
     local_bps.push_back(ixn_group);
@@ -318,7 +305,6 @@ std::array<std::vector<double>, 2> Context::multiple_steps_local(
         k_log_probability_selection<float><<<ceil_divide(N_, tpb), tpb, 0, stream>>>(
             N_, kBT, radius, k, reference_idx, d_x_t_, d_box_t_, probability_buffer.data, d_free_indices.data);
         gpuErrchk(cudaPeekAtLastError());
-
 
         // Partition the free indices plus any exclusions into the row indices
         gpuErrchk(cub::DevicePartition::If(
@@ -352,26 +338,19 @@ std::array<std::vector<double>, 2> Context::multiple_steps_local(
         // Setup the flat bottom restraints
         bound_shell_restraint->set_params_device(std::vector<int>({num_row_indices, 3}), bond_params.data, stream);
         restraint_ptr->set_bonds_device(num_row_indices, restraints.data, stream);
-        // Invert to get the column indices
-        k_invert_indices<<<ceil_divide(N_, tpb), tpb, 0, stream>>>(N_, d_shell_idxs_inner.data);
-        gpuErrchk(cudaPeekAtLastError());
 
         // Set the nonbonded potential to compute forces of free particles
         set_nonbonded_potential_idxs(nonbonded_bp->potential, num_row_indices, d_row_idxs.data, stream);
 
-        // Duplicate the free particles to the d_temp_idxs to invert to get column indices
-        gpuErrchk(
-            cudaMemcpyAsync(d_temp_idxs.data, d_free_indices.data, d_temp_idxs.size, cudaMemcpyDeviceToDevice, stream));
-
         // Invert to get column indices
-        k_invert_indices<<<ceil_divide(N_, tpb), tpb, 0, stream>>>(N_, d_temp_idxs.data);
+        k_invert_indices<<<ceil_divide(N_, tpb), tpb, 0, stream>>>(N_, d_free_indices.data);
         gpuErrchk(cudaPeekAtLastError());
 
         // Partition the column indices to the column buffer to setup the interaction group
         gpuErrchk(cub::DevicePartition::If(
             d_temp_storage_buffer.data,
             temp_storage_bytes,
-            d_temp_idxs.data,
+            d_free_indices.data,
             d_col_idxs.data,
             num_selected_buffer.data,
             N_,
@@ -382,12 +361,12 @@ std::array<std::vector<double>, 2> Context::multiple_steps_local(
         set_nonbonded_ixn_potential_idxs(
             ixn_group->potential, num_col_indices, num_row_indices, d_col_idxs.data, d_row_idxs.data, stream);
 
-        intg_->initialize(local_bps, d_x_t_, d_v_t_, d_box_t_, d_free_indices.data, stream);
+        intg_->initialize(local_bps, d_x_t_, d_v_t_, d_box_t_, d_row_idxs.data, stream);
         for (int i = 0; i < burn_in; i++) {
-            this->_step(local_bps, d_free_indices.data, stream);
+            this->_step(local_bps, d_row_idxs.data, stream);
         }
         for (int i = 1; i <= n_steps; i++) {
-            this->_step(local_bps, d_free_indices.data, stream);
+            this->_step(local_bps, d_row_idxs.data, stream);
             if (i % store_x_interval == 0) {
                 gpuErrchk(cudaMemcpyAsync(
                     &h_x_buffer[0] + ((i / store_x_interval) - 1) * N_ * 3,
@@ -403,7 +382,7 @@ std::array<std::vector<double>, 2> Context::multiple_steps_local(
                     stream));
             }
         }
-        intg_->finalize(local_bps, d_x_t_, d_v_t_, d_box_t_, d_free_indices.data, stream);
+        intg_->finalize(local_bps, d_x_t_, d_v_t_, d_box_t_, d_row_idxs.data, stream);
 
         // Set the row indices back to the identity.
         k_arange<<<ceil_divide(N_, tpb), tpb, 0, stream>>>(N_, d_row_idxs.data);
