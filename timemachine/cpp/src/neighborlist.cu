@@ -12,6 +12,9 @@
 namespace timemachine {
 
 template <typename RealType> Neighborlist<RealType>::Neighborlist(const int N) : max_size_(N), N_(N), NC_(N), NR_(N) {
+    if (N == 0) {
+        throw std::runtime_error("Neighborlist N must be at least 1");
+    }
     const int tpb = warp_size;
     const int column_blocks = this->num_column_blocks();
     const int row_blocks = this->num_row_blocks();
