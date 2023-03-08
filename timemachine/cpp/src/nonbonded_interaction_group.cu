@@ -362,7 +362,7 @@ void NonbondedInteractionGroup<RealType>::set_atom_idxs(const std::vector<int> &
     gpuErrchk(cudaStreamSynchronize(stream));
 }
 
-// set_idxs_device is for use when idxs exist on the GPU already and are used as the new idxs to compute the neighborlist on.
+// set_atom_idxs_device is for use when idxs exist on the GPU already and are used as the new idxs to compute the neighborlist on.
 template <typename RealType>
 void NonbondedInteractionGroup<RealType>::set_atom_idxs_device(
     const int NC,
