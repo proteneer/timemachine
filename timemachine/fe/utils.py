@@ -232,7 +232,7 @@ def view_atom_mapping_3d(
     mol_b,
     core=None,
     colors=plt.rcParams["axes.prop_cycle"].by_key()["color"],
-    show_idx_labels=False,
+    show_atom_idx_labels=False,
     width=800,
     height=500,
 ):
@@ -250,7 +250,7 @@ def view_atom_mapping_3d(
     colors : list of str, optional
         Colors to use for highlighting atoms by mapping
 
-    show_idx_labels : bool, optional
+    show_atom_idx_labels : bool, optional
         Whether to display atom indices
 
     width, height : int
@@ -295,7 +295,7 @@ def view_atom_mapping_3d(
 
     view.zoomTo()
 
-    if show_idx_labels:
+    if show_atom_idx_labels:
         view.addPropertyLabels("serial", "", {"alignment": "center", "fontSize": 10})
 
     return view
