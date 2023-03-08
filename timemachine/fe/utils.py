@@ -263,8 +263,8 @@ def view_atom_mapping_3d(
 
     try:
         import py3Dmol
-    except ImportError:
-        raise ValueError("requires py3Dmol to be installed")
+    except ImportError as e:
+        raise RuntimeError("requires py3Dmol to be installed") from e
 
     make_style = lambda props: {"stick": props}
     atom_style = lambda color: make_style({"color": color})
