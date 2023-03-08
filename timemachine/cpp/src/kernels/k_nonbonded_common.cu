@@ -1,4 +1,4 @@
-#include "nonbonded_common.cuh"
+#include "k_nonbonded_common.cuh"
 
 void __global__
 k_add_ull_to_ull(const int N, const unsigned long long *__restrict__ src, unsigned long long *__restrict__ dest) {

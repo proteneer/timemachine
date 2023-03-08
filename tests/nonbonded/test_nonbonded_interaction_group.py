@@ -10,13 +10,21 @@ pytestmark = [pytest.mark.memcheck]
 
 
 def test_nonbonded_interaction_group_invalid_indices():
-    with pytest.raises(RuntimeError) as e:
+    with pytest.raises(RuntimeError, match="row_atom_idxs must be nonempty"):
         NonbondedInteractionGroup(1, [], 1.0, 1.0).unbound_impl(np.float64)
-    assert "row_atom_idxs must be nonempty" in str(e)
+
+    with pytest.raises(RuntimeError, match="atom indices must be unique"):
+        NonbondedInteractionGroup(3, [1, 1], 1.0, 1.0).unbound_impl(np.float64)
+
+    with pytest.raises(RuntimeError, match="indice values must be greater or equal to zero"):
+        NonbondedInteractionGroup(3, [1, -1], 1.0, 1.0).unbound_impl(np.float64)
+
+    with pytest.raises(RuntimeError, match="indice values must be less than N"):
+        NonbondedInteractionGroup(3, [1, 100], 1.0, 1.0).unbound_impl(np.float64)
 
     with pytest.raises(RuntimeError) as e:
-        NonbondedInteractionGroup(3, [1, 1], 1.0, 1.0).unbound_impl(np.float64)
-    assert "atom indices must be unique" in str(e)
+        NonbondedInteractionGroup(3, [0, 1, 2], 1.0, 1.0).unbound_impl(np.float64)
+    assert "must be less then N(3) indices" == str(e.value)
 
 
 def test_nonbonded_interaction_group_zero_interactions(rng: np.random.Generator):
@@ -219,3 +227,69 @@ def test_nonbonded_interaction_group_consistency_allpairs_constant_shift(
         ref_delta = ref_allpairs(conf_prime) - ref_allpairs(conf)
         test_delta = test_ixngroups(conf_prime) - test_ixngroups(conf)
         np.testing.assert_allclose(ref_delta, test_delta, rtol=rtol, atol=atol)
+
+
+@pytest.mark.parametrize("beta", [2.0])
+@pytest.mark.parametrize("cutoff", [1.1])
+@pytest.mark.parametrize("precision", [np.float64, np.float32])
+@pytest.mark.parametrize("num_atoms_ligand", [1, 15])
+@pytest.mark.parametrize("num_atoms", [33, 231])
+def test_nonbonded_interaction_group_set_atom_idxs(
+    num_atoms, num_atoms_ligand, precision, cutoff, beta, rng: np.random.Generator
+):
+    box = 3.0 * np.eye(3)
+    conf = rng.uniform(0, cutoff * 10, size=(num_atoms, 3))
+    params = rng.uniform(0, 1, size=(num_atoms, 4))
+
+    ligand_idxs = rng.choice(num_atoms, size=(num_atoms_ligand,), replace=False).astype(np.int32)
+    other_idxs = np.setdiff1d(np.arange(num_atoms), ligand_idxs)
+
+    # Pick a subset to compare against, should produce different values
+    secondary_ligand_set = rng.choice(other_idxs, size=(1), replace=False).astype(np.int32)
+
+    potential = NonbondedInteractionGroup(num_atoms, ligand_idxs, beta, cutoff)
+    unbound_pot = potential.unbound_impl(precision)
+
+    ref_du_dx, ref_du_dp, ref_u = unbound_pot.execute(
+        conf,
+        params,
+        box,
+    )
+
+    # Set to first particle not in ligand_idxs, should produce different values
+    unbound_pot.set_atom_idxs(secondary_ligand_set)
+
+    diff_du_dx, diff_du_dp, diff_u = unbound_pot.execute(
+        conf,
+        params,
+        box,
+    )
+    assert np.any(diff_du_dx != ref_du_dx)
+    assert np.any(diff_du_dp != ref_du_dp)
+    assert not np.allclose(ref_u, diff_u)
+
+    # Reconstructing an Ixn group with the other set of atoms should be identical.
+    potential2 = NonbondedInteractionGroup(num_atoms, secondary_ligand_set, beta, cutoff)
+    unbound_pot2 = potential2.unbound_impl(precision)
+
+    diff_ref_du_dx, diff_ref_du_dp, diff_ref_u = unbound_pot2.execute(
+        conf,
+        params,
+        box,
+    )
+    np.testing.assert_array_equal(diff_ref_du_dx, diff_du_dx)
+    np.testing.assert_array_equal(diff_ref_du_dp, diff_du_dp)
+    np.testing.assert_equal(diff_ref_u, diff_u)
+
+    # Set back to the indices, but shuffled, should be identical to reference
+    rng.shuffle(ligand_idxs)
+    unbound_pot.set_atom_idxs(ligand_idxs)
+
+    test_du_dx, test_du_dp, test_u = unbound_pot.execute(
+        conf,
+        params,
+        box,
+    )
+    np.testing.assert_array_equal(test_du_dx, ref_du_dx)
+    np.testing.assert_array_equal(test_du_dp, ref_du_dp)
+    np.testing.assert_equal(test_u, ref_u)

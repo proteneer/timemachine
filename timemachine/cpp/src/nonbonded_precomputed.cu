@@ -1,8 +1,8 @@
 #include "gpu_utils.cuh"
 #include "k_nonbonded_precomputed.cuh"
 #include "kernel_utils.cuh"
+#include "kernels/k_nonbonded_common.cuh"
 #include "math_utils.cuh"
-#include "nonbonded_common.cuh"
 #include "nonbonded_precomputed.hpp"
 #include <vector>
 

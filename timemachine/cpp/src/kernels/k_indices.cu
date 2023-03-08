@@ -29,10 +29,10 @@ void __global__ k_invert_indices(const int N, unsigned int *__restrict__ arr) {
     arr[idx] = arr[idx] >= N ? idx : N;
 }
 
-void __global__ k_arange(const int N, unsigned int *__restrict__ arr) {
+void __global__ k_arange(const int N, unsigned int *__restrict__ arr, unsigned int offset) {
     const int atom_idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (atom_idx >= N) {
         return;
     }
-    arr[atom_idx] = atom_idx;
+    arr[atom_idx] = atom_idx + offset;
 }

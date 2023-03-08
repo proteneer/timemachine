@@ -1,7 +1,7 @@
 #pragma once
 
+#include "kernels/k_nonbonded_common.cuh"
 #include "neighborlist.hpp"
-#include "nonbonded_common.cuh"
 #include "potential.hpp"
 #include <array>
 #include <optional>
@@ -58,7 +58,6 @@ private:
     std::array<k_nonbonded_fn, 8> kernel_ptrs_;
 
     void hilbert_sort(const double *d_x, const double *d_box, cudaStream_t stream);
-    void verify_atom_idxs(const std::vector<int> &atom_idxs);
 
 public:
     // these are marked public but really only intended for testing.
