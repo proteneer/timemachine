@@ -22,4 +22,4 @@ void __global__ k_unique_indices(
 // otherwise the inversion may contain values that were in the input.
 void __global__ k_invert_indices(const int N, unsigned int *__restrict__ arr);
 
-void __global__ k_arange(const int N, unsigned int *__restrict__ arr);
+void __global__ k_arange(const int N, unsigned int *__restrict__ arr, unsigned int offset = 0);

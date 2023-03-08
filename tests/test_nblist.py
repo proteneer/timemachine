@@ -15,6 +15,11 @@ from timemachine.testsystems.relative import get_hif2a_ligand_pair_single_topolo
 pytestmark = [pytest.mark.memcheck]
 
 
+def test_empty_neighborlist():
+    with pytest.raises(RuntimeError, match="Neighborlist N must be at least 1"):
+        custom_ops.Neighborlist_f32(0)
+
+
 def test_block_bounds():
     np.random.seed(2020)
     sizes = [128, 156, 298]

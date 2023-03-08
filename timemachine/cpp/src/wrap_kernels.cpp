@@ -948,6 +948,7 @@ template <typename RealType> void declare_nonbonded_interaction_group(py::module
         .def(
             "set_nblist_padding", &timemachine::NonbondedInteractionGroup<RealType>::set_nblist_padding, py::arg("val"))
         .def("disable_hilbert_sort", &timemachine::NonbondedInteractionGroup<RealType>::disable_hilbert_sort)
+        .def("set_atom_idxs", &timemachine::NonbondedInteractionGroup<RealType>::set_atom_idxs, py::arg("atom_idxs"))
         .def(
             py::init([](const int N,
                         const py::array_t<int, py::array::c_style> &row_atom_idxs_i,
@@ -955,9 +956,8 @@ template <typename RealType> void declare_nonbonded_interaction_group(py::module
                         const double cutoff) {
                 std::vector<int> row_atom_idxs(row_atom_idxs_i.size());
                 std::memcpy(row_atom_idxs.data(), row_atom_idxs_i.data(), row_atom_idxs_i.size() * sizeof(int));
-                std::set<int> unique_row_atom_idxs(unique_idxs(row_atom_idxs));
 
-                return new timemachine::NonbondedInteractionGroup<RealType>(N, unique_row_atom_idxs, beta, cutoff);
+                return new timemachine::NonbondedInteractionGroup<RealType>(N, row_atom_idxs, beta, cutoff);
             }),
             py::arg("num_atoms"),
             py::arg("row_atom_idxs_i"),

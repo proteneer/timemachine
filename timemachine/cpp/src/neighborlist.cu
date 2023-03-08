@@ -3,15 +3,18 @@
 
 #include "device_buffer.hpp"
 #include "gpu_utils.cuh"
-#include "k_neighborlist.cuh"
 #include "kernels/k_indices.cuh"
+#include "kernels/k_neighborlist.cuh"
+#include "kernels/k_nonbonded_common.cuh"
 #include "neighborlist.hpp"
-#include "nonbonded_common.cuh"
 #include "set_utils.hpp"
 
 namespace timemachine {
 
 template <typename RealType> Neighborlist<RealType>::Neighborlist(const int N) : max_size_(N), N_(N), NC_(N), NR_(N) {
+    if (N == 0) {
+        throw std::runtime_error("Neighborlist N must be at least 1");
+    }
     const int tpb = warp_size;
     const int column_blocks = this->num_column_blocks();
     const int row_blocks = this->num_row_blocks();

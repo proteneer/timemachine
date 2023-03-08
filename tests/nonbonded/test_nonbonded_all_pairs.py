@@ -9,26 +9,31 @@ pytestmark = [pytest.mark.memcheck]
 
 
 def test_nonbonded_all_pairs_invalid_atom_idxs():
-    with pytest.raises(RuntimeError) as e:
-        NonbondedAllPairs(2, 2.0, 1.1, [0, 0]).unbound_impl(np.float32)
+    with pytest.raises(RuntimeError, match="Neighborlist N must be at least 1"):
+        NonbondedAllPairs(3, 2.0, 1.1, []).unbound_impl(np.float64)
 
-    assert "atom indices must be unique" in str(e)
+    with pytest.raises(RuntimeError, match="atom indices must be unique"):
+        NonbondedAllPairs(3, 2.0, 1.1, [0, 0]).unbound_impl(np.float64)
+
+    with pytest.raises(RuntimeError, match="indice values must be greater or equal to zero"):
+        NonbondedAllPairs(3, 2.0, 1.1, [0, -1]).unbound_impl(np.float64)
+
+    with pytest.raises(RuntimeError, match="indice values must be less than N"):
+        NonbondedAllPairs(3, 2.0, 1.1, [0, 100]).unbound_impl(np.float64)
 
 
 def test_nonbonded_all_pairs_invalid_num_atoms():
     potential = NonbondedAllPairs(1, 2.0, 1.1).unbound_impl(np.float32)
     with pytest.raises(RuntimeError) as e:
         potential.execute(np.zeros((2, 3)), np.zeros((1, 3)), np.eye(3))
-
-    assert "NonbondedAllPairs::execute_device(): expected N == N_, got N=2, N_=1" in str(e)
+    assert "NonbondedAllPairs::execute_device(): expected N == N_, got N=2, N_=1" == str(e.value)
 
 
 def test_nonbonded_all_pairs_invalid_num_params():
     potential = NonbondedAllPairs(1, 2.0, 1.1).unbound_impl(np.float32)
     with pytest.raises(RuntimeError) as e:
         potential.execute(np.zeros((1, 3)), np.zeros((2, 3)), np.eye(3))
-
-    assert "NonbondedAllPairs::execute_device(): expected P == N_*4, got P=6, N_*4=4" in str(e)
+    assert "NonbondedAllPairs::execute_device(): expected P == N_*4, got P=6, N_*4=4" == str(e.value)
 
 
 def test_nonbonded_all_pairs_singleton_subset(rng: np.random.Generator):

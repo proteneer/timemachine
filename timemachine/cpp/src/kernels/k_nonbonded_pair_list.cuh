@@ -6,7 +6,7 @@
 // using this kernel.
 
 #include "../fixed_point.hpp"
-#include "nonbonded_common.cuh"
+#include "k_nonbonded_common.cuh"
 
 template <bool Negated>
 void __device__ __forceinline__ accumulate(unsigned long long *__restrict acc, unsigned long long val) {
