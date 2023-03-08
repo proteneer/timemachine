@@ -1,4 +1,6 @@
+import gc
 import unittest
+import weakref
 
 import jax
 import numpy as np
@@ -548,9 +550,12 @@ class TestContext(unittest.TestCase):
         def build_context(barostat_interval):
             """The context returned will segfault if any of the objects get cleaned up"""
 
+            weak_refs = []
             bps = []
             for p, bp in zip(sys_params, unbound_potentials):
-                bps.append(bp.bind(p).bound_impl(np.float32))
+                bound_impl = bp.bind(p).bound_impl(np.float32)
+                bps.append(bound_impl)
+                weak_refs.append(weakref.ref(bound_impl))
 
             intg = LangevinIntegrator(temperature, dt, friction, masses, seed)
 
@@ -560,25 +565,39 @@ class TestContext(unittest.TestCase):
 
                 barostat = MonteCarloBarostat(coords.shape[0], pressure, temperature, group_idxs, 1, seed)
                 barostat_impl = barostat.impl(bps)
+                weak_refs.append(weakref.ref(barostat_impl))
 
-            return custom_ops.Context(coords, v0, box, intg.impl(), bps, barostat=barostat_impl)
+            intg_impl = intg.impl()
+            weak_refs.append(weakref.ref(intg_impl))
+
+            return custom_ops.Context(coords, v0, box, intg_impl, bps, barostat=barostat_impl), weak_refs
 
         # Without barostat
-        ctxt = build_context(0)
+        ctxt, reffed_objs = build_context(0)
         xs, boxes = ctxt.multiple_steps(100)
         assert np.all(np.isfinite(xs))
         assert np.all(np.isfinite(boxes))
         assert np.all(xs[-1] != coords)
         assert np.all(boxes[-1] == box)
 
+        del ctxt
+        gc.collect()
+        for ref in reffed_objs:
+            assert ref() is None
+
         # With Barostat
-        ctxt = build_context(10)
+        ctxt, reffed_objs = build_context(10)
         xs, boxes = ctxt.multiple_steps(100)
         assert np.all(np.isfinite(xs))
         assert np.all(np.isfinite(boxes))
         assert np.all(xs[-1] != coords)
         # Barostat should change box size
         assert np.all(np.diagonal(boxes[-1]) != np.diagonal(box))
+
+        del ctxt
+        gc.collect()
+        for ref in reffed_objs:
+            assert ref() is None
 
 
 if __name__ == "__main__":
