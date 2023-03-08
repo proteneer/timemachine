@@ -1,8 +1,8 @@
 #pragma once
 
 #include "../fixed_point.hpp"
+#include "k_nonbonded_common.cuh"
 #include "kernel_utils.cuh"
-#include "nonbonded_common.cuh"
 
 // Divide [0,1]^3 box into HILBERT_GRID_DIM^3 voxels for Hilbert sort
 static const int HILBERT_GRID_DIM = 128;

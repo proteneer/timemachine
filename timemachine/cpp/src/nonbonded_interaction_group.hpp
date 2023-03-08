@@ -1,7 +1,7 @@
 #pragma once
 
+#include "kernels/k_nonbonded_common.cuh"
 #include "neighborlist.hpp"
-#include "nonbonded_common.cuh"
 #include "potential.hpp"
 #include <array>
 #include <vector>
@@ -64,8 +64,6 @@ private:
         const double *d_box,
         unsigned int *d_perm,
         cudaStream_t stream);
-
-    void verify_row_indices(const std::vector<int> &atom_idxs);
 
 public:
     // these are marked public but really only intended for testing.

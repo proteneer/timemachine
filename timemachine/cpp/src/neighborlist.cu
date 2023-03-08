@@ -3,10 +3,10 @@
 
 #include "device_buffer.hpp"
 #include "gpu_utils.cuh"
-#include "k_neighborlist.cuh"
 #include "kernels/k_indices.cuh"
+#include "kernels/k_neighborlist.cuh"
+#include "kernels/k_nonbonded_common.cuh"
 #include "neighborlist.hpp"
-#include "nonbonded_common.cuh"
 #include "set_utils.hpp"
 
 namespace timemachine {

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "nonbonded_common.cuh"
+#include "k_nonbonded_common.cuh"
 
 // Shape of parameter array is identical to other nonbonded variants
 // except that rows map to pairs instead of individual atoms

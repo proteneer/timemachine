@@ -10,21 +10,21 @@ pytestmark = [pytest.mark.memcheck]
 
 
 def test_nonbonded_interaction_group_invalid_indices():
-    with pytest.raises(RuntimeError) as e:
+    with pytest.raises(RuntimeError, match="row_atom_idxs must be nonempty"):
         NonbondedInteractionGroup(1, [], 1.0, 1.0).unbound_impl(np.float64)
-    assert "row_atom_idxs must be nonempty" in str(e)
 
-    with pytest.raises(RuntimeError) as e:
+    with pytest.raises(RuntimeError, match="atom indices must be unique"):
         NonbondedInteractionGroup(3, [1, 1], 1.0, 1.0).unbound_impl(np.float64)
-    assert "atom indices must be unique" in str(e)
 
-    with pytest.raises(RuntimeError) as e:
+    with pytest.raises(RuntimeError, match="indice values must be greater or equal to zero"):
         NonbondedInteractionGroup(3, [1, -1], 1.0, 1.0).unbound_impl(np.float64)
-    assert "indices values must be greater or equal to zero" in str(e)
+
+    with pytest.raises(RuntimeError, match="indice values must be less than N"):
+        NonbondedInteractionGroup(3, [1, 100], 1.0, 1.0).unbound_impl(np.float64)
 
     with pytest.raises(RuntimeError) as e:
-        NonbondedInteractionGroup(3, [1, 100], 1.0, 1.0).unbound_impl(np.float64)
-    assert "indices values must be less than N" in str(e)
+        NonbondedInteractionGroup(3, [0, 1, 2], 1.0, 1.0).unbound_impl(np.float64)
+    assert "must be less then N(3) indices" == str(e.value)
 
 
 def test_nonbonded_interaction_group_zero_interactions(rng: np.random.Generator):

@@ -4,13 +4,14 @@
 #include "device_buffer.hpp"
 #include "fixed_point.hpp"
 #include "gpu_utils.cuh"
-#include "kernel_utils.cuh"
 #include "kernels/k_indices.cuh"
+#include "kernels/k_nonbonded.cuh"
+#include "kernels/k_nonbonded_common.cuh"
+#include "kernels/kernel_utils.cuh"
 #include "nonbonded_all_pairs.hpp"
-#include "nonbonded_common.cuh"
+#include "nonbonded_common.hpp"
 #include "vendored/hilbert.h"
 
-#include "k_nonbonded.cuh"
 #include <numeric>
 
 namespace timemachine {
@@ -18,7 +19,7 @@ namespace timemachine {
 template <typename RealType>
 NonbondedAllPairs<RealType>::NonbondedAllPairs(
     const int N, const double beta, const double cutoff, const std::optional<std::set<int>> &atom_idxs)
-    : N_(N), K_(atom_idxs ? atom_idxs->size() : N_), beta_(beta), cutoff_(cutoff), d_atom_idxs_(nullptr), nblist_(K_),
+    : N_(N), K_(atom_idxs ? atom_idxs->size() : N_), beta_(beta), cutoff_(cutoff), d_atom_idxs_(nullptr), nblist_(N_),
       nblist_padding_(0.1), d_sort_storage_(nullptr), d_sort_storage_bytes_(0), disable_hilbert_(false),
 
       kernel_ptrs_({// enumerate over every possible kernel combination
@@ -34,6 +35,15 @@ NonbondedAllPairs<RealType>::NonbondedAllPairs(
                     &k_nonbonded_unified<RealType, 1, 0, 1>,
                     &k_nonbonded_unified<RealType, 1, 1, 0>,
                     &k_nonbonded_unified<RealType, 1, 1, 1>}) {
+
+    std::vector<int> atom_idxs_h;
+    if (atom_idxs) {
+        atom_idxs_h = std::vector<int>(atom_idxs->begin(), atom_idxs->end());
+    } else {
+        atom_idxs_h = std::vector<int>(N_);
+        std::iota(atom_idxs_h.begin(), atom_idxs_h.end(), 0);
+    }
+    verify_atom_idxs(N_, atom_idxs_h);
 
     cudaSafeMalloc(&d_atom_idxs_, N_ * sizeof(*d_atom_idxs_));
 
@@ -93,13 +103,6 @@ NonbondedAllPairs<RealType>::NonbondedAllPairs(
 
     cudaSafeMalloc(&d_sort_storage_, d_sort_storage_bytes_);
 
-    std::vector<int> atom_idxs_h;
-    if (atom_idxs) {
-        atom_idxs_h = std::vector<int>(atom_idxs->begin(), atom_idxs->end());
-    } else {
-        atom_idxs_h = std::vector<int>(N_);
-        std::iota(atom_idxs_h.begin(), atom_idxs_h.end(), 0);
-    }
     this->set_atom_idxs(atom_idxs_h);
 };
 
@@ -133,25 +136,9 @@ template <typename RealType> NonbondedAllPairs<RealType>::~NonbondedAllPairs() {
 
 template <typename RealType> void NonbondedAllPairs<RealType>::set_nblist_padding(double val) { nblist_padding_ = val; }
 
-template <typename RealType> void NonbondedAllPairs<RealType>::verify_atom_idxs(const std::vector<int> &atom_idxs) {
-    if (atom_idxs.size() == 0) {
-        throw std::runtime_error("idxs can't be empty");
-    }
-    std::set<int> unique_idxs(atom_idxs.begin(), atom_idxs.end());
-    if (unique_idxs.size() != atom_idxs.size()) {
-        throw std::runtime_error("atom indices must be unique");
-    }
-    if (*std::max_element(atom_idxs.begin(), atom_idxs.end()) >= N_) {
-        throw std::runtime_error("indices values must be less than N");
-    }
-    if (*std::min_element(atom_idxs.begin(), atom_idxs.end()) < 0) {
-        throw std::runtime_error("indices values must be greater or equal to zero");
-    }
-}
-
 // Set atom idxs upon which to compute the non-bonded potential. This will trigger a neighborlist rebuild.
 template <typename RealType> void NonbondedAllPairs<RealType>::set_atom_idxs(const std::vector<int> &atom_idxs) {
-    this->verify_atom_idxs(atom_idxs);
+    verify_atom_idxs(N_, atom_idxs);
     const cudaStream_t stream = static_cast<cudaStream_t>(0);
     std::vector<unsigned int> unsigned_idxs = std::vector<unsigned int>(atom_idxs.begin(), atom_idxs.end());
     DeviceBuffer<unsigned int> atom_idxs_buffer(atom_idxs.size());
