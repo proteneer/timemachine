@@ -396,7 +396,7 @@ void NonbondedInteractionGroup<RealType>::set_atom_idxs_device(
     gpuErrchk(cudaMemcpyAsync(
         d_row_atom_idxs_, d_in_row_idxs, NR * sizeof(*d_row_atom_idxs_), cudaMemcpyDeviceToDevice, stream));
 
-    // The neighborlist does not use the indices directly, rather it takes a continuous set of indices and the ixn group
+    // The neighborlist does not use the indices directly, rather it takes a contiguous set of indices and the ixn group
     // potential will resort the correct particles into the corresponding arrays. We can use the leftover spaces in the
     // two d_*_atom_idxs_ arrays to store these nblist indices.
     // NOTE: The leftover column indices will store the row indices and vice versa.
