@@ -19,7 +19,7 @@ namespace timemachine {
 template <typename RealType>
 NonbondedAllPairs<RealType>::NonbondedAllPairs(
     const int N, const double beta, const double cutoff, const std::optional<std::set<int>> &atom_idxs)
-    : N_(N), K_(atom_idxs ? atom_idxs->size() : N_), beta_(beta), cutoff_(cutoff), d_atom_idxs_(nullptr), nblist_(N_),
+    : N_(N), K_(atom_idxs ? atom_idxs->size() : N_), beta_(beta), cutoff_(cutoff), d_atom_idxs_(nullptr), nblist_(K_),
       nblist_padding_(0.1), d_sort_storage_(nullptr), d_sort_storage_bytes_(0), disable_hilbert_(false),
 
       kernel_ptrs_({// enumerate over every possible kernel combination
