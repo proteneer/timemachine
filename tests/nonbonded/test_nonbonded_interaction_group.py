@@ -244,6 +244,9 @@ def test_nonbonded_interaction_group_set_atom_idxs(
     ligand_idxs = rng.choice(num_atoms, size=(num_atoms_ligand,), replace=False).astype(np.int32)
     other_idxs = np.setdiff1d(np.arange(num_atoms), ligand_idxs)
 
+    # Pick a subset to compare against, should produce different values
+    secondary_ligand_set = rng.choice(other_idxs, size=(1), replace=False).astype(np.int32)
+
     potential = NonbondedInteractionGroup(num_atoms, ligand_idxs, beta, cutoff)
     unbound_pot = potential.unbound_impl(precision)
 
@@ -254,7 +257,7 @@ def test_nonbonded_interaction_group_set_atom_idxs(
     )
 
     # Set to first particle not in ligand_idxs, should produce different values
-    unbound_pot.set_atom_idxs(other_idxs[:1])
+    unbound_pot.set_atom_idxs(secondary_ligand_set)
 
     diff_du_dx, diff_du_dp, diff_u = unbound_pot.execute(
         conf,
@@ -264,6 +267,19 @@ def test_nonbonded_interaction_group_set_atom_idxs(
     assert np.any(diff_du_dx != ref_du_dx)
     assert np.any(diff_du_dp != ref_du_dp)
     assert not np.allclose(ref_u, diff_u)
+
+    # Reconstructing an Ixn group with the other set of atoms should be identical.
+    potential2 = NonbondedInteractionGroup(num_atoms, secondary_ligand_set, beta, cutoff)
+    unbound_pot2 = potential2.unbound_impl(precision)
+
+    diff_ref_du_dx, diff_ref_du_dp, diff_ref_u = unbound_pot2.execute(
+        conf,
+        params,
+        box,
+    )
+    np.testing.assert_array_equal(diff_ref_du_dx, diff_du_dx)
+    np.testing.assert_array_equal(diff_ref_du_dp, diff_du_dp)
+    np.testing.assert_equal(diff_ref_u, diff_u)
 
     # Set back to the indices, but shuffled, should be identical to reference
     rng.shuffle(ligand_idxs)
