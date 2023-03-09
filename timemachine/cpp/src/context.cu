@@ -26,9 +26,9 @@ Context::Context(
     const double *x_0,
     const double *v_0,
     const double *box_0,
-    Integrator *intg,
-    std::vector<BoundPotential *> bps,
-    MonteCarloBarostat *barostat)
+    std::shared_ptr<Integrator> intg,
+    std::vector<std::shared_ptr<BoundPotential>> bps,
+    std::shared_ptr<MonteCarloBarostat> barostat)
     : N_(N), barostat_(barostat), step_(0), d_sum_storage_(nullptr), d_sum_storage_bytes_(0), intg_(intg), bps_(bps) {
     d_x_t_ = gpuErrchkCudaMallocAndCopy(x_0, N * 3);
     d_v_t_ = gpuErrchkCudaMallocAndCopy(v_0, N * 3);
@@ -111,7 +111,8 @@ void flatten_potentials(
 }
 
 double Context::_get_temperature() {
-    if (LangevinIntegrator *langevin = dynamic_cast<LangevinIntegrator *>(intg_); langevin != nullptr) {
+    if (std::shared_ptr<LangevinIntegrator> langevin = std::dynamic_pointer_cast<LangevinIntegrator>(intg_);
+        langevin != nullptr) {
         return langevin->get_temperature();
     } else {
         throw std::runtime_error("integrator must be LangevinIntegrator.");
@@ -137,7 +138,7 @@ std::array<std::vector<double>, 2> Context::multiple_steps_local(
 
     std::vector<std::shared_ptr<Potential>> initial_potentials(bps_.size());
 
-    for (BoundPotential *pot : bps_) {
+    for (auto pot : bps_) {
         initial_potentials.push_back(pot->potential);
     }
     std::vector<std::shared_ptr<Potential>> flattened_potentials;
@@ -205,11 +206,12 @@ std::array<std::vector<double>, 2> Context::multiple_steps_local(
     }
     std::shared_ptr<FlatBottomBond<double>> restraint_ptr(new FlatBottomBond<double>(default_bonds));
     // Construct a bound potential with 0 params
-    BoundPotential bound_shell_restraint(restraint_ptr, std::vector<int>({0}), nullptr);
+    std::shared_ptr<BoundPotential> bound_shell_restraint(
+        new BoundPotential(restraint_ptr, std::vector<int>({0}), nullptr));
 
     // Copy constructor to get new set of bound potentials
-    std::vector<BoundPotential *> local_bps = bps_;
-    local_bps.push_back(&bound_shell_restraint);
+    std::vector<std::shared_ptr<BoundPotential>> local_bps = bps_;
+    local_bps.push_back(bound_shell_restraint);
 
     const double kBT = BOLTZ * temperature;
 
@@ -268,7 +270,7 @@ std::array<std::vector<double>, 2> Context::multiple_steps_local(
             num_row_indices, N_, reference_idx, k, 0.0, radius, d_row_idxs.data, restraints.data, bond_params.data);
         gpuErrchk(cudaPeekAtLastError());
         // Setup the flat bottom restraints
-        bound_shell_restraint.set_params_device(std::vector<int>({num_row_indices, 3}), bond_params.data, stream);
+        bound_shell_restraint->set_params_device(std::vector<int>({num_row_indices, 3}), bond_params.data, stream);
         restraint_ptr->set_bonds_device(num_row_indices, restraints.data, stream);
         // Invert to get the column indices
         k_invert_indices<<<ceil_divide(N_, tpb), tpb, 0, stream>>>(N_, d_shell_idxs_inner.data);
@@ -538,7 +540,8 @@ void Context::initialize() {
     gpuErrchk(cudaStreamSynchronize(stream));
 }
 
-void Context::_step(std::vector<BoundPotential *> &bps, unsigned int *d_atom_idxs, const cudaStream_t stream) {
+void Context::_step(
+    std::vector<std::shared_ptr<BoundPotential>> &bps, unsigned int *d_atom_idxs, const cudaStream_t stream) {
     intg_->step_fwd(bps, d_x_t_, d_v_t_, d_box_t_, d_atom_idxs, stream);
 
     // If atom idxs are passed, indicates that only a subset of the system should move. Don't

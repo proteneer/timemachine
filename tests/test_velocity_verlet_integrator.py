@@ -14,7 +14,7 @@ def setup_velocity_verlet(bps, x0, box, dt, masses):
     # return integrator impl to avoid deallocating
     intg = integrator.impl()
     context = custom_ops.Context(x0, np.zeros_like(x0), box, intg, bps)
-    return intg, context
+    return context
 
 
 def assert_reversible(x0, v0, update_fxn, atol=1e-10):
@@ -104,7 +104,7 @@ def test_reversibility():
         # here keeps the range the same for all n_step values.
         np.random.seed(seed)
         v0 = np.random.randn(*coords.shape)
-        intg, ctxt = setup_velocity_verlet(bound_potentials, coords, box, dt, masses)  # noqa
+        ctxt = setup_velocity_verlet(bound_potentials, coords, box, dt, masses)
         ctxt.set_v_t(v0)
 
         # check "public" .step and .multiple_steps implementations
@@ -131,7 +131,7 @@ def test_matches_reference():
 
     v0 = np.random.randn(*coords.shape)
 
-    intg_impl, ctxt = setup_velocity_verlet([bound_summed], coords, box, dt, masses)  # noqa
+    ctxt = setup_velocity_verlet([bound_summed], coords, box, dt, masses)
 
     ctxt.set_v_t(v0)
 
@@ -162,7 +162,7 @@ def test_initialization_and_finalization():
 
     dt = 1.5e-3
 
-    intg, ctxt = setup_velocity_verlet(bound_potentials, coords, box, dt, masses)  # noqa
+    ctxt = setup_velocity_verlet(bound_potentials, coords, box, dt, masses)
     with pytest.raises(RuntimeError) as e:
         ctxt.finalize()
     assert "not initialized" in str(e.value)

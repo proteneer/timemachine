@@ -22,7 +22,7 @@ public:
     virtual ~VelocityVerletIntegrator();
 
     virtual void step_fwd(
-        std::vector<BoundPotential *> &bps,
+        std::vector<std::shared_ptr<BoundPotential>> &bps,
         double *d_x_t,
         double *d_v_t,
         double *d_box_t_,
@@ -30,7 +30,7 @@ public:
         cudaStream_t stream) override;
 
     virtual void initialize(
-        std::vector<BoundPotential *> &bps,
+        std::vector<std::shared_ptr<BoundPotential>> &bps,
         double *d_x_t,
         double *d_v_t,
         double *d_box_t,
@@ -38,7 +38,7 @@ public:
         cudaStream_t stream) override;
 
     virtual void finalize(
-        std::vector<BoundPotential *> &bps,
+        std::vector<std::shared_ptr<BoundPotential>> &bps,
         double *d_x_t,
         double *d_v_t,
         double *d_box_t,

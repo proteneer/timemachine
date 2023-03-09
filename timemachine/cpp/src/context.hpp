@@ -14,9 +14,9 @@ public:
         const double *x_0,
         const double *v_0,
         const double *box_0,
-        Integrator *intg,
-        std::vector<BoundPotential *> bps,
-        MonteCarloBarostat *barostat = nullptr);
+        std::shared_ptr<Integrator> intg,
+        std::vector<std::shared_ptr<BoundPotential>> bps,
+        std::shared_ptr<MonteCarloBarostat> barostat = nullptr);
 
     ~Context();
 
@@ -52,9 +52,9 @@ public:
 private:
     int N_; // number of particles
 
-    MonteCarloBarostat *barostat_;
+    std::shared_ptr<MonteCarloBarostat> barostat_;
 
-    void _step(std::vector<BoundPotential *> &bps, unsigned int *d_atom_idxs, const cudaStream_t stream);
+    void _step(std::vector<std::shared_ptr<BoundPotential>> &bps, unsigned int *d_atom_idxs, const cudaStream_t stream);
 
     double _get_temperature();
 
@@ -69,8 +69,8 @@ private:
     double *d_sum_storage_;
     size_t d_sum_storage_bytes_;
 
-    Integrator *intg_;
-    std::vector<BoundPotential *> bps_;
+    std::shared_ptr<Integrator> intg_;
+    std::vector<std::shared_ptr<BoundPotential>> bps_;
 };
 
 } // namespace timemachine
