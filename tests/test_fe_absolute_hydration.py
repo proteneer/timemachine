@@ -19,7 +19,7 @@ def test_run_solvent():
 
     assert res.plots.overlap_summary_png is not None
     assert res.plots.overlap_detail_png is not None
-    assert np.linalg.norm(res.result.all_errs) < 10
+    assert np.linalg.norm([r.dG_err for r in res.pair_bar_results]) < 10
     assert len(res.frames) == 2
     assert len(res.boxes) == 2
     assert len(res.frames[0]) == n_frames

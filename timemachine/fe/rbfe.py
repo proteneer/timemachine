@@ -784,10 +784,10 @@ def run_edge_and_save_results(
     pkl_obj = (mol_a, mol_b, edge.metadata, core, solvent_res, solvent_top, complex_res, complex_top)
     file_client.store(path, pickle.dumps(pkl_obj))
 
-    solvent_ddg = np.sum(solvent_res.result.all_dGs)
-    solvent_ddg_err = np.linalg.norm(solvent_res.result.all_errs)
-    complex_ddg = np.sum(complex_res.result.all_dGs)
-    complex_ddg_err = np.linalg.norm(complex_res.result.all_errs)
+    solvent_ddg = sum(r.dG for r in solvent_res.pair_bar_results)
+    solvent_ddg_err = np.linalg.norm([r.dG_err for r in solvent_res.pair_bar_results])
+    complex_ddg = sum(r.dG for r in complex_res.pair_bar_results)
+    complex_ddg_err = np.linalg.norm([r.dG_err for r in complex_res.pair_bar_results])
 
     tm_ddg = complex_ddg - solvent_ddg
     tm_err = np.linalg.norm([complex_ddg_err, solvent_ddg_err])

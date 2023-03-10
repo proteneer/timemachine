@@ -77,26 +77,29 @@ def run_triple(mol_a, mol_b, core, forcefield, n_frames, protein_path, n_eq_step
         assert sim_res.md_params.n_frames == n_frames
         assert sim_res.md_params.n_eq_steps == n_eq_steps
 
-        def check_pair_bar_result(initial_states: Sequence[InitialState], bar_res: PairBarResult):
+        def check_pair_bar_results(initial_states: Sequence[InitialState], results: Sequence[PairBarResult]):
             n_pairs = len(initial_states) - 1
-            assert len(bar_res.all_dGs) == n_pairs
+            assert len(results) == n_pairs
 
-            assert len(bar_res.all_errs) == n_pairs
-            assert bar_res.dG_errs_by_lambda_by_component.shape[1] == n_pairs
-            for dg_errs in [bar_res.all_errs, bar_res.dG_errs_by_lambda_by_component]:
+            dG_errs = np.array([r.dG_err for r in results])
+            dG_errs_by_component_by_lambda = np.array([r.dG_err_by_component for r in results])
+
+            for dg_errs in [dG_errs, dG_errs_by_component_by_lambda]:
                 assert np.all(0.0 < np.asarray(dg_errs))
                 assert np.linalg.norm(dg_errs) < 0.1
 
-            assert len(bar_res.overlaps_by_lambda) == n_pairs
-            assert bar_res.overlaps_by_lambda_by_component.shape[0] == bar_res.dG_errs_by_lambda_by_component.shape[0]
-            assert bar_res.overlaps_by_lambda_by_component.shape[1] == n_pairs
-            for overlaps in [bar_res.overlaps_by_lambda, bar_res.overlaps_by_lambda_by_component]:
+            overlaps = np.array([r.overlap for r in results])
+            overlaps_by_component_by_lambda = np.array([r.overlap_by_component for r in results])
+
+            assert overlaps_by_component_by_lambda.shape[0] == n_pairs
+            assert overlaps_by_component_by_lambda.shape[1] == dG_errs_by_component_by_lambda.shape[1]
+            for overlaps in [overlaps, overlaps_by_component_by_lambda]:
                 assert np.all(0.0 < np.asarray(overlaps))
                 assert np.all(np.asarray(overlaps) < 1.0)
 
-        check_pair_bar_result(sim_res.initial_states, sim_res.result)
-        for initial_states, res in sim_res.intermediate_results:
-            check_pair_bar_result(initial_states, res)
+        check_pair_bar_results(sim_res.initial_states, sim_res.pair_bar_results)
+        for res in sim_res.intermediate_results:
+            check_pair_bar_results(res.initial_states, res.pair_bar_results)
 
     vacuum_res = estimate_relative_free_energy_fn(
         mol_a,
