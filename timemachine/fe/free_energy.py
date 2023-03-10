@@ -75,6 +75,12 @@ class PairBarPlots:
 
 
 @dataclass
+class IntermediateResult:
+    initial_states: List[InitialState]
+    result: PairBarResult
+
+
+@dataclass
 class SimulationResult:
     initial_states: List[InitialState]
     result: PairBarResult
@@ -82,7 +88,7 @@ class SimulationResult:
     frames: List[NDArray]  # (len(keep_idxs), n_frames, N, 3)
     boxes: List[NDArray]
     md_params: MDParams
-    intermediate_results: List[Tuple[List[InitialState], PairBarResult]]
+    intermediate_results: List[IntermediateResult]
 
 
 def image_frames(initial_state: InitialState, frames: np.ndarray, boxes: np.ndarray) -> np.ndarray:
@@ -337,9 +343,7 @@ def sample(initial_state: InitialState, md_params: MDParams, max_buffer_frames: 
     return all_coords, all_boxes
 
 
-def estimate_free_energy_pair_bar(
-    u_kln_by_component_by_lambda: NDArray, temperature: float, prefix: str
-) -> PairBarResult:
+def estimate_free_energy_pair_bar(u_kln_by_component_by_lambda: NDArray, temperature: float) -> PairBarResult:
     """
     Estimate free energies given pre-generated samples. This implements the pair-BAR method, where
     windows assumed to be ordered with good overlap, with the final free energy being a sum
@@ -352,9 +356,6 @@ def estimate_free_energy_pair_bar(
 
     temperature: float
         Temperature the system was run at
-
-    prefix: str
-        A prefix that we append to the BAR overlap figures
 
     Return
     ------
@@ -378,9 +379,6 @@ def estimate_free_energy_pair_bar(
 
         df, df_err = bar_with_bootstrapped_uncertainty(w_fwd, w_rev)  # reduced units
         dG, dG_err = df / beta, df_err / beta  # kJ/mol
-
-        message = f"{prefix} BAR: lambda {lamb_idx} -> {lamb_idx + 1} dG: {dG:.3f} +- {dG_err:.3f} kJ/mol"
-        print(message, flush=True)
 
         all_dGs.append(dG)
         all_errs.append(dG_err)
@@ -515,16 +513,6 @@ def compute_bar_error(u_kln: NDArray) -> float:
     return df_err
 
 
-@dataclass
-class IntermediateResult:
-    """Initial states and (L-1, C, 2, 2, F) array of energy-decomposed u_kln matrices for each pair of states, where L
-    is the number of lambda windows, C is the number of energy components, and F is the number of frames per window.
-    """
-
-    initial_states: List[InitialState]
-    u_kln_by_component_by_lambda: NDArray
-
-
 def run_sims_with_greedy_bisection(
     initial_lambdas: Sequence[float],
     make_initial_state: Callable[[float], InitialState],
@@ -601,15 +589,16 @@ def run_sims_with_greedy_bisection(
         u_kln = u_kln_by_component.sum(axis=0)  # sum over components
         return compute_bar_error(u_kln)
 
-    def midpoint(x1: float, x2: float):
+    def midpoint(x1: float, x2: float) -> float:
         return (x1 + x2) / 2.0
 
-    def compute_intermediate_result(lambdas: Sequence[float]):
+    def compute_intermediate_result(lambdas: Sequence[float]) -> IntermediateResult:
         refined_initial_states = [get_initial_state(lamb) for lamb in lambdas]
         u_kln_by_component_by_lambda = np.array(
             [get_u_kln_by_component(lamb1, lamb2) for lamb1, lamb2 in zip(lambdas, lambdas[1:])]
         )
-        return IntermediateResult(refined_initial_states, u_kln_by_component_by_lambda)
+        result = estimate_free_energy_pair_bar(u_kln_by_component_by_lambda, temperature)
+        return IntermediateResult(refined_initial_states, result)
 
     lambdas = list(initial_lambdas)
     results = [compute_intermediate_result(lambdas)]
