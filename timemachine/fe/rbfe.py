@@ -454,16 +454,20 @@ def estimate_relative_free_energy(
         u_kln_by_component_by_lambda, stored_frames, stored_boxes = run_sims_sequential(
             initial_states, md_params, temperature, keep_idxs
         )
-        pair_bar_result = estimate_free_energy_pair_bar(u_kln_by_component_by_lambda, temperature)
-        plots = make_pair_bar_plots(initial_states, pair_bar_result, temperature, combined_prefix)
+        pair_bar_results = [
+            estimate_free_energy_pair_bar(u_kln_by_component, temperature)
+            for u_kln_by_component in u_kln_by_component_by_lambda
+        ]
+        result = IntermediateResult(initial_states, pair_bar_results)
+        plots = make_pair_bar_plots(result, temperature, combined_prefix)
+
         return SimulationResult(
-            initial_states,
-            pair_bar_result,
+            result,
             plots,
             stored_frames,
             stored_boxes,
             md_params,
-            [IntermediateResult(initial_states, pair_bar_result)],
+            [result],
         )
     except Exception as err:
         with open(f"failed_rbfe_result_{combined_prefix}.pkl", "wb") as fh:
@@ -588,16 +592,15 @@ def estimate_relative_free_energy_via_greedy_bisection(
             temperature=temperature,
         )
 
-        final = results[-1]
+        final_result = results[-1]
 
-        plots = make_pair_bar_plots(initial_states, final.result, temperature, combined_prefix)
+        plots = make_pair_bar_plots(final_result, temperature, combined_prefix)
 
         stored_frames = [np.array(frames[i]) for i in keep_idxs]
         stored_boxes = [boxes[i] for i in keep_idxs]
 
         return SimulationResult(
-            initial_states,
-            final.result,
+            final_result,
             plots,
             stored_frames,
             stored_boxes,
@@ -784,10 +787,10 @@ def run_edge_and_save_results(
     pkl_obj = (mol_a, mol_b, edge.metadata, core, solvent_res, solvent_top, complex_res, complex_top)
     file_client.store(path, pickle.dumps(pkl_obj))
 
-    solvent_ddg = sum(r.dG for r in solvent_res.pair_bar_results)
-    solvent_ddg_err = np.linalg.norm([r.dG_err for r in solvent_res.pair_bar_results])
-    complex_ddg = sum(r.dG for r in complex_res.pair_bar_results)
-    complex_ddg_err = np.linalg.norm([r.dG_err for r in complex_res.pair_bar_results])
+    solvent_ddg = sum(r.dG for r in solvent_res.final_result.pair_bar_results)
+    solvent_ddg_err = np.linalg.norm([r.dG_err for r in solvent_res.final_result.pair_bar_results])
+    complex_ddg = sum(r.dG for r in complex_res.final_result.pair_bar_results)
+    complex_ddg_err = np.linalg.norm([r.dG_err for r in complex_res.final_result.pair_bar_results])
 
     tm_ddg = complex_ddg - solvent_ddg
     tm_err = np.linalg.norm([complex_ddg_err, solvent_ddg_err])

@@ -82,8 +82,7 @@ class IntermediateResult:
 
 @dataclass
 class SimulationResult:
-    initial_states: List[InitialState]
-    pair_bar_results: List[PairBarResult]
+    final_result: IntermediateResult
     plots: PairBarPlots
     frames: List[NDArray]  # (len(keep_idxs), n_frames, N, 3)
     boxes: List[NDArray]
@@ -343,19 +342,17 @@ def sample(initial_state: InitialState, md_params: MDParams, max_buffer_frames: 
     return all_coords, all_boxes
 
 
-def estimate_free_energy_pair_bar(u_kln_by_component_by_lambda: NDArray, temperature: float) -> List[PairBarResult]:
+def estimate_free_energy_pair_bar(u_kln_by_component: NDArray, temperature: float) -> PairBarResult:
     """
-    Estimate free energies given pre-generated samples. This implements the pair-BAR method, where
-    windows assumed to be ordered with good overlap, with the final free energy being a sum
-    of the components. The constants below are:
+    Estimate free energy difference for a pair of states given pre-generated samples.
 
     Parameters
     ----------
-    u_kln_by_component_by_lambda: array
-        For each energy component and lambda pair, u_kln in pymbar format, where k = l = 2
+    u_kln_by_component: array
+        u_kln in pymbar format (k = l = 2) for each energy component
 
     temperature: float
-        Temperature the system was run at
+        Temperature
 
     Return
     ------
@@ -363,50 +360,40 @@ def estimate_free_energy_pair_bar(u_kln_by_component_by_lambda: NDArray, tempera
         results from BAR computation
 
     """
+    u_kln = u_kln_by_component.sum(0)
 
-    # "pair BAR" free energy analysis
+    w_fwd = u_kln[1, 0] - u_kln[0, 0]
+    w_rev = u_kln[0, 1] - u_kln[1, 1]
+
+    df, df_err = bar_with_bootstrapped_uncertainty(w_fwd, w_rev)  # reduced units
+
     kBT = BOLTZ * temperature
-    beta = 1 / kBT
+    dG, dG_err = df * kBT, df_err * kBT  # kJ/mol
 
-    results = []
-    for u_kln_by_component in u_kln_by_component_by_lambda:
-        # pair BAR
-        u_kln = u_kln_by_component.sum(0)
+    dG_err_by_component = np.array([df_err_from_ukln(u_kln) * kBT for u_kln in u_kln_by_component])
+    overlap = pair_overlap_from_ukln(u_kln_by_component.sum(axis=0))
+    overlap_by_component = np.array([pair_overlap_from_ukln(u_kln) for u_kln in u_kln_by_component])
 
-        w_fwd = u_kln[1, 0] - u_kln[0, 0]
-        w_rev = u_kln[0, 1] - u_kln[1, 1]
-
-        df, df_err = bar_with_bootstrapped_uncertainty(w_fwd, w_rev)  # reduced units
-        dG, dG_err = df / beta, df_err / beta  # kJ/mol
-
-        dG_err_by_component = np.array([df_err_from_ukln(u_kln) / beta for u_kln in u_kln_by_component])
-        overlap = pair_overlap_from_ukln(u_kln_by_component.sum(axis=0))
-        overlap_by_component = np.array([pair_overlap_from_ukln(u_kln) for u_kln in u_kln_by_component])
-        result = PairBarResult(dG, dG_err, dG_err_by_component, overlap, overlap_by_component, u_kln_by_component)
-        results.append(result)
-
-    return results
+    return PairBarResult(dG, dG_err, dG_err_by_component, overlap, overlap_by_component, u_kln_by_component)
 
 
-def make_pair_bar_plots(
-    initial_states: List[InitialState], results: List[PairBarResult], temperature: float, prefix: str
-) -> PairBarPlots:
-    U_names = [type(U_fn).__name__ for U_fn in initial_states[0].potentials]
-    lambdas = [s.lamb for s in initial_states]
+def make_pair_bar_plots(res: IntermediateResult, temperature: float, prefix: str) -> PairBarPlots:
+    U_names = [type(U_fn).__name__ for U_fn in res.initial_states[0].potentials]
+    lambdas = [s.lamb for s in res.initial_states]
 
-    dGs = np.array([r.dG for r in results])
-    dG_errs = np.array([r.dG_err for r in results])
-    u_kln_by_component_by_lambda = np.array([r.u_kln_by_component for r in results])
+    dGs = np.array([r.dG for r in res.pair_bar_results])
+    dG_errs = np.array([r.dG_err for r in res.pair_bar_results])
+    u_kln_by_component_by_lambda = np.array([r.u_kln_by_component for r in res.pair_bar_results])
 
     overlap_detail_png = make_overlap_detail_figure(
         U_names, dGs, dG_errs, u_kln_by_component_by_lambda, temperature, prefix
     )
 
-    dG_errs_by_lambda_by_component = np.array([r.dG_err_by_component for r in results]).T
+    dG_errs_by_lambda_by_component = np.array([r.dG_err_by_component for r in res.pair_bar_results]).T
     dG_errs_png = make_dG_errs_figure(U_names, lambdas, dG_errs, dG_errs_by_lambda_by_component)
 
-    overlaps = np.array([r.overlap for r in results])
-    overlaps_by_lambda_by_component = np.array([r.overlap_by_component for r in results]).T
+    overlaps = np.array([r.overlap for r in res.pair_bar_results])
+    overlaps_by_lambda_by_component = np.array([r.overlap_by_component for r in res.pair_bar_results]).T
     overlap_summary_png = make_overlap_summary_figure(U_names, lambdas, overlaps, overlaps_by_lambda_by_component)
 
     return PairBarPlots(dG_errs_png, overlap_summary_png, overlap_detail_png)
@@ -485,15 +472,6 @@ def make_batch_u_fns(initial_state: InitialState, temperature: float) -> List[Ba
     return get_batch_u_fns(bound_impls, temperature)
 
 
-def compute_bar_error(u_kln: NDArray) -> float:
-    assert u_kln.ndim == 3
-    assert u_kln.shape[:2] == (2, 2)
-    w_f = u_kln[1, 0] - u_kln[0, 0]
-    w_r = u_kln[0, 1] - u_kln[1, 1]
-    _, df_err = bar_with_bootstrapped_uncertainty(w_f, w_r)
-    return df_err
-
-
 def run_sims_with_greedy_bisection(
     initial_lambdas: Sequence[float],
     make_initial_state: Callable[[float], InitialState],
@@ -561,30 +539,25 @@ def run_sims_with_greedy_bisection(
         return EnergyDecomposedState(frames, boxes, batch_u_fns)
 
     @cache
-    def get_u_kln_by_component(lamb1: float, lamb2: float) -> NDArray:
-        return compute_energy_decomposed_u_kln([get_state(lamb1), get_state(lamb2)])
+    def get_pair_bar_result(lamb1: float, lamb2: float) -> PairBarResult:
+        u_kln_by_component = compute_energy_decomposed_u_kln([get_state(lamb1), get_state(lamb2)])
+        return estimate_free_energy_pair_bar(u_kln_by_component, temperature)
 
-    @cache
-    def get_bar_error(lamb1: float, lamb2: float) -> float:
-        u_kln_by_component = get_u_kln_by_component(lamb1, lamb2)
-        u_kln = u_kln_by_component.sum(axis=0)  # sum over components
-        return compute_bar_error(u_kln)
+    def bar_error(lamb1: float, lamb2: float) -> float:
+        return get_pair_bar_result(lamb1, lamb2).dG_err
 
     def midpoint(x1: float, x2: float) -> float:
         return (x1 + x2) / 2.0
 
     def compute_intermediate_result(lambdas: Sequence[float]) -> IntermediateResult:
         refined_initial_states = [get_initial_state(lamb) for lamb in lambdas]
-        u_kln_by_component_by_lambda = np.array(
-            [get_u_kln_by_component(lamb1, lamb2) for lamb1, lamb2 in zip(lambdas, lambdas[1:])]
-        )
-        pair_bar_results = estimate_free_energy_pair_bar(u_kln_by_component_by_lambda, temperature)
+        pair_bar_results = [get_pair_bar_result(lamb1, lamb2) for lamb1, lamb2 in zip(lambdas, lambdas[1:])]
         return IntermediateResult(refined_initial_states, pair_bar_results)
 
     lambdas = list(initial_lambdas)
     results = [compute_intermediate_result(lambdas)]
     for _ in range(n_bisections):
-        lambdas_new, info = greedy_bisection_step(lambdas, get_bar_error, midpoint)
+        lambdas_new, info = greedy_bisection_step(lambdas, bar_error, midpoint)
 
         if verbose:
             costs, left_idx, lamb_new = info
