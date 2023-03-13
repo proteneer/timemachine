@@ -14,10 +14,10 @@ from timemachine.fe import atom_mapping, model_utils
 from timemachine.fe.free_energy import (
     HostConfig,
     InitialState,
-    IntermediateResult,
     MDParams,
+    PairBarResult,
     SimulationResult,
-    estimate_free_energy_pair_bar,
+    estimate_free_energy_bar,
     make_pair_bar_plots,
     run_sims_sequential,
     run_sims_with_greedy_bisection,
@@ -454,11 +454,11 @@ def estimate_relative_free_energy(
         u_kln_by_component_by_lambda, stored_frames, stored_boxes = run_sims_sequential(
             initial_states, md_params, temperature, keep_idxs
         )
-        pair_bar_results = [
-            estimate_free_energy_pair_bar(u_kln_by_component, temperature)
+        bar_results = [
+            estimate_free_energy_bar(u_kln_by_component, temperature)
             for u_kln_by_component in u_kln_by_component_by_lambda
         ]
-        result = IntermediateResult(initial_states, pair_bar_results)
+        result = PairBarResult(initial_states, bar_results)
         plots = make_pair_bar_plots(result, temperature, combined_prefix)
 
         return SimulationResult(
@@ -787,10 +787,10 @@ def run_edge_and_save_results(
     pkl_obj = (mol_a, mol_b, edge.metadata, core, solvent_res, solvent_top, complex_res, complex_top)
     file_client.store(path, pickle.dumps(pkl_obj))
 
-    solvent_ddg = sum(r.dG for r in solvent_res.final_result.pair_bar_results)
-    solvent_ddg_err = np.linalg.norm([r.dG_err for r in solvent_res.final_result.pair_bar_results])
-    complex_ddg = sum(r.dG for r in complex_res.final_result.pair_bar_results)
-    complex_ddg_err = np.linalg.norm([r.dG_err for r in complex_res.final_result.pair_bar_results])
+    solvent_ddg = sum(r.dG for r in solvent_res.final_result.bar_results)
+    solvent_ddg_err = np.linalg.norm([r.dG_err for r in solvent_res.final_result.bar_results])
+    complex_ddg = sum(r.dG for r in complex_res.final_result.bar_results)
+    complex_ddg_err = np.linalg.norm([r.dG_err for r in complex_res.final_result.bar_results])
 
     tm_ddg = complex_ddg - solvent_ddg
     tm_err = np.linalg.norm([complex_ddg_err, solvent_ddg_err])

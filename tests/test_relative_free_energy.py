@@ -6,7 +6,7 @@ import numpy as np
 import pytest
 
 from timemachine.constants import DEFAULT_FF
-from timemachine.fe.free_energy import HostConfig, IntermediateResult, SimulationResult, image_frames, sample
+from timemachine.fe.free_energy import HostConfig, PairBarResult, SimulationResult, image_frames, sample
 from timemachine.fe.rbfe import (
     estimate_relative_free_energy,
     estimate_relative_free_energy_via_greedy_bisection,
@@ -76,19 +76,19 @@ def run_triple(mol_a, mol_b, core, forcefield, n_frames, protein_path, n_eq_step
         assert sim_res.md_params.n_frames == n_frames
         assert sim_res.md_params.n_eq_steps == n_eq_steps
 
-        def check_result(res: IntermediateResult):
+        def check_pair_bar_result(res: PairBarResult):
             n_pairs = len(res.initial_states) - 1
-            assert len(res.pair_bar_results) == n_pairs
+            assert len(res.bar_results) == n_pairs
 
-            dG_errs = np.array([r.dG_err for r in res.pair_bar_results])
-            dG_errs_by_component_by_lambda = np.array([r.dG_err_by_component for r in res.pair_bar_results])
+            dG_errs = np.array([r.dG_err for r in res.bar_results])
+            dG_errs_by_component_by_lambda = np.array([r.dG_err_by_component for r in res.bar_results])
 
             for dg_errs in [dG_errs, dG_errs_by_component_by_lambda]:
                 assert np.all(0.0 < np.asarray(dg_errs))
                 assert np.linalg.norm(dg_errs) < 0.1
 
-            overlaps = np.array([r.overlap for r in res.pair_bar_results])
-            overlaps_by_component_by_lambda = np.array([r.overlap_by_component for r in res.pair_bar_results])
+            overlaps = np.array([r.overlap for r in res.bar_results])
+            overlaps_by_component_by_lambda = np.array([r.overlap_by_component for r in res.bar_results])
 
             assert overlaps_by_component_by_lambda.shape[0] == n_pairs
             assert overlaps_by_component_by_lambda.shape[1] == dG_errs_by_component_by_lambda.shape[1]
@@ -96,9 +96,9 @@ def run_triple(mol_a, mol_b, core, forcefield, n_frames, protein_path, n_eq_step
                 assert np.all(0.0 < np.asarray(overlaps))
                 assert np.all(np.asarray(overlaps) < 1.0)
 
-        check_result(sim_res.final_result)
+        check_pair_bar_result(sim_res.final_result)
         for res in sim_res.intermediate_results:
-            check_result(res)
+            check_pair_bar_result(res)
 
     vacuum_res = estimate_relative_free_energy_fn(
         mol_a,

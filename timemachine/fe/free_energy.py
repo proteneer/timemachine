@@ -58,7 +58,7 @@ class InitialState:
 
 
 @dataclass
-class PairBarResult:
+class BarResult:
     dG: float
     dG_err: float
     dG_err_by_component: NDArray  # (len(U_names),)
@@ -75,19 +75,19 @@ class PairBarPlots:
 
 
 @dataclass
-class IntermediateResult:
+class PairBarResult:
     initial_states: List[InitialState]
-    pair_bar_results: List[PairBarResult]
+    bar_results: List[BarResult]
 
 
 @dataclass
 class SimulationResult:
-    final_result: IntermediateResult
+    final_result: PairBarResult
     plots: PairBarPlots
     frames: List[NDArray]  # (len(keep_idxs), n_frames, N, 3)
     boxes: List[NDArray]
     md_params: MDParams
-    intermediate_results: List[IntermediateResult]
+    intermediate_results: List[PairBarResult]
 
 
 def image_frames(initial_state: InitialState, frames: np.ndarray, boxes: np.ndarray) -> np.ndarray:
@@ -342,7 +342,7 @@ def sample(initial_state: InitialState, md_params: MDParams, max_buffer_frames: 
     return all_coords, all_boxes
 
 
-def estimate_free_energy_pair_bar(u_kln_by_component: NDArray, temperature: float) -> PairBarResult:
+def estimate_free_energy_bar(u_kln_by_component: NDArray, temperature: float) -> BarResult:
     """
     Estimate free energy difference for a pair of states given pre-generated samples.
 
@@ -374,26 +374,26 @@ def estimate_free_energy_pair_bar(u_kln_by_component: NDArray, temperature: floa
     overlap = pair_overlap_from_ukln(u_kln_by_component.sum(axis=0))
     overlap_by_component = np.array([pair_overlap_from_ukln(u_kln) for u_kln in u_kln_by_component])
 
-    return PairBarResult(dG, dG_err, dG_err_by_component, overlap, overlap_by_component, u_kln_by_component)
+    return BarResult(dG, dG_err, dG_err_by_component, overlap, overlap_by_component, u_kln_by_component)
 
 
-def make_pair_bar_plots(res: IntermediateResult, temperature: float, prefix: str) -> PairBarPlots:
+def make_pair_bar_plots(res: PairBarResult, temperature: float, prefix: str) -> PairBarPlots:
     U_names = [type(U_fn).__name__ for U_fn in res.initial_states[0].potentials]
     lambdas = [s.lamb for s in res.initial_states]
 
-    dGs = np.array([r.dG for r in res.pair_bar_results])
-    dG_errs = np.array([r.dG_err for r in res.pair_bar_results])
-    u_kln_by_component_by_lambda = np.array([r.u_kln_by_component for r in res.pair_bar_results])
+    dGs = np.array([r.dG for r in res.bar_results])
+    dG_errs = np.array([r.dG_err for r in res.bar_results])
+    u_kln_by_component_by_lambda = np.array([r.u_kln_by_component for r in res.bar_results])
 
     overlap_detail_png = make_overlap_detail_figure(
         U_names, dGs, dG_errs, u_kln_by_component_by_lambda, temperature, prefix
     )
 
-    dG_errs_by_lambda_by_component = np.array([r.dG_err_by_component for r in res.pair_bar_results]).T
+    dG_errs_by_lambda_by_component = np.array([r.dG_err_by_component for r in res.bar_results]).T
     dG_errs_png = make_dG_errs_figure(U_names, lambdas, dG_errs, dG_errs_by_lambda_by_component)
 
-    overlaps = np.array([r.overlap for r in res.pair_bar_results])
-    overlaps_by_lambda_by_component = np.array([r.overlap_by_component for r in res.pair_bar_results]).T
+    overlaps = np.array([r.overlap for r in res.bar_results])
+    overlaps_by_lambda_by_component = np.array([r.overlap_by_component for r in res.bar_results]).T
     overlap_summary_png = make_overlap_summary_figure(U_names, lambdas, overlaps, overlaps_by_lambda_by_component)
 
     return PairBarPlots(dG_errs_png, overlap_summary_png, overlap_detail_png)
@@ -479,7 +479,7 @@ def run_sims_with_greedy_bisection(
     n_bisections: int,
     temperature: float,
     verbose: bool = True,
-) -> Tuple[List[IntermediateResult], List[StoredArrays], List[NDArray]]:
+) -> Tuple[List[PairBarResult], List[StoredArrays], List[NDArray]]:
     r"""Starting from a specified lambda schedule, successively bisect the lambda interval between the pair of states
     with the largest BAR :math:`\Delta G` error and sample the new state with MD.
 
@@ -539,20 +539,20 @@ def run_sims_with_greedy_bisection(
         return EnergyDecomposedState(frames, boxes, batch_u_fns)
 
     @cache
-    def get_pair_bar_result(lamb1: float, lamb2: float) -> PairBarResult:
+    def get_bar_result(lamb1: float, lamb2: float) -> BarResult:
         u_kln_by_component = compute_energy_decomposed_u_kln([get_state(lamb1), get_state(lamb2)])
-        return estimate_free_energy_pair_bar(u_kln_by_component, temperature)
+        return estimate_free_energy_bar(u_kln_by_component, temperature)
 
     def bar_error(lamb1: float, lamb2: float) -> float:
-        return get_pair_bar_result(lamb1, lamb2).dG_err
+        return get_bar_result(lamb1, lamb2).dG_err
 
     def midpoint(x1: float, x2: float) -> float:
         return (x1 + x2) / 2.0
 
-    def compute_intermediate_result(lambdas: Sequence[float]) -> IntermediateResult:
+    def compute_intermediate_result(lambdas: Sequence[float]) -> PairBarResult:
         refined_initial_states = [get_initial_state(lamb) for lamb in lambdas]
-        pair_bar_results = [get_pair_bar_result(lamb1, lamb2) for lamb1, lamb2 in zip(lambdas, lambdas[1:])]
-        return IntermediateResult(refined_initial_states, pair_bar_results)
+        bar_results = [get_bar_result(lamb1, lamb2) for lamb1, lamb2 in zip(lambdas, lambdas[1:])]
+        return PairBarResult(refined_initial_states, bar_results)
 
     lambdas = list(initial_lambdas)
     results = [compute_intermediate_result(lambdas)]
