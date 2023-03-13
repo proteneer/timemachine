@@ -22,9 +22,8 @@ void set_nonbonded_ixn_potential_idxs(
 std::shared_ptr<BoundPotential>
 construct_ixn_group_potential(const int N, std::shared_ptr<Potential> pot, const int P, const double *d_params);
 
-// Recursively flatten the potentials. Important to find specific NonbondedAllPairs potentials for multiple_steps_local which
-// can be wrapped in FanoutSummedPotential or SummedPotential objects. Creates copies of bound potentials, for simplicity and safety.
-void flatten_potentials(
+// Recursively populate nb_pots potentials with the NonbondedAllPairs
+void get_nonbonded_all_pair_potentials(
     std::vector<std::shared_ptr<BoundPotential>> input, std::vector<std::shared_ptr<BoundPotential>> &flattened);
 
 } // namespace timemachine

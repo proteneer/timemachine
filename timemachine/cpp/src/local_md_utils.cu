@@ -78,10 +78,20 @@ construct_ixn_group_potential(const int N, std::shared_ptr<Potential> pot, const
     }
 }
 
-// Recursively flatten the potentials. Important to find specific NonbondedAllPairs potentials for multiple_steps_local which
-// can be wrapped in FanoutSummedPotential or SummedPotential objects. Creates copies of bound potentials, for simplicity and safety.
-void flatten_potentials(
-    std::vector<std::shared_ptr<BoundPotential>> input, std::vector<std::shared_ptr<BoundPotential>> &flattened) {
+bool is_summed_potential(std::shared_ptr<Potential> pot) {
+    if (std::shared_ptr<FanoutSummedPotential> fanned_potential = std::dynamic_pointer_cast<FanoutSummedPotential>(pot);
+        fanned_potential != nullptr) {
+        return true;
+    } else if (std::shared_ptr<SummedPotential> summed_potential = std::dynamic_pointer_cast<SummedPotential>(pot);
+               summed_potential != nullptr) {
+        return true;
+    }
+    return false;
+}
+
+// Recursively populate nb_pots potentials with the NonbondedAllPairs
+void get_nonbonded_all_pair_potentials(
+    std::vector<std::shared_ptr<BoundPotential>> input, std::vector<std::shared_ptr<BoundPotential>> &nb_pots) {
     for (auto pot : input) {
         if (std::shared_ptr<FanoutSummedPotential> fanned_potential =
                 std::dynamic_pointer_cast<FanoutSummedPotential>(pot->potential);
@@ -93,10 +103,12 @@ void flatten_potentials(
             std::vector<int> shape{pot->size()};
             std::vector<std::shared_ptr<BoundPotential>> flattened_bps;
             for (auto summed_pot : fanned_potential->get_potentials()) {
-                flattened_bps.push_back(
-                    std::shared_ptr<BoundPotential>(new BoundPotential(summed_pot, shape, &h_params[0])));
+                if (is_summed_potential(summed_pot) || is_nonbonded_all_pairs_potential(summed_pot)) {
+                    flattened_bps.push_back(
+                        std::shared_ptr<BoundPotential>(new BoundPotential(summed_pot, shape, &h_params[0])));
+                }
             }
-            flatten_potentials(flattened_bps, flattened);
+            get_nonbonded_all_pair_potentials(flattened_bps, nb_pots);
             continue;
         } else if (std::shared_ptr<SummedPotential> summed_potential =
                        std::dynamic_pointer_cast<SummedPotential>(pot->potential);
@@ -112,18 +124,23 @@ void flatten_potentials(
             std::vector<std::shared_ptr<BoundPotential>> flattened_bps;
             std::vector<int> param_sizes = summed_potential->get_parameter_sizes();
             for (auto summed_pot : summed_potential->get_potentials()) {
-                std::vector<double> slice(h_params.begin() + offset, h_params.begin() + offset + param_sizes[i]);
-                shape[0] = param_sizes[i];
 
-                flattened_bps.push_back(
-                    std::shared_ptr<BoundPotential>(new BoundPotential(summed_pot, shape, &slice[0])));
+                if (is_summed_potential(summed_pot) || is_nonbonded_all_pairs_potential(summed_pot)) {
+                    std::vector<double> slice(h_params.begin() + offset, h_params.begin() + offset + param_sizes[i]);
+                    shape[0] = param_sizes[i];
+                    flattened_bps.push_back(
+                        std::shared_ptr<BoundPotential>(new BoundPotential(summed_pot, shape, &slice[0])));
+                }
+
                 offset += param_sizes[i];
                 i++;
             }
-            flatten_potentials(flattened_bps, flattened);
+            get_nonbonded_all_pair_potentials(flattened_bps, nb_pots);
             continue;
         }
-        flattened.push_back(pot);
+        if (is_nonbonded_all_pairs_potential(pot->potential)) {
+            nb_pots.push_back(pot);
+        }
     }
 }
 

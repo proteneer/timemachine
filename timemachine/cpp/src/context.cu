@@ -76,23 +76,19 @@ std::array<std::vector<double>, 2> Context::multiple_steps_local(
 
     const int box_buffer_size = x_buffer_size * 3 * 3;
 
-    std::vector<std::shared_ptr<BoundPotential>> local_bps;
-    flatten_potentials(bps_, local_bps);
+    std::vector<std::shared_ptr<BoundPotential>> nonbonded_pots;
+    get_nonbonded_all_pair_potentials(bps_, nonbonded_pots);
 
-    std::shared_ptr<BoundPotential> nonbonded_bp;
-
-    // Find the NonbondedAllPairs potential
-    for (std::shared_ptr<BoundPotential> pot : local_bps) {
-        if (is_nonbonded_all_pairs_potential(pot->potential)) {
-            if (nonbonded_bp) {
-                throw std::runtime_error("found multiple NonbondedAllPairs potentials");
-            }
-            nonbonded_bp = pot;
-        }
+    if (nonbonded_pots.size() > 1) {
+        throw std::runtime_error("found multiple NonbondedAllPairs potentials");
     }
-    if (!nonbonded_bp) {
+    if (nonbonded_pots.size() != 1) {
         throw std::runtime_error("unable to find a NonbondedAllPairs potential");
     }
+
+    // Only used to reference shared_ptr to potential and for Nonbonded parameters
+    // modifications to the BoundPotential has no impact
+    const auto nonbonded_bp = nonbonded_pots[0];
 
     std::shared_ptr<BoundPotential> ixn_group =
         construct_ixn_group_potential(N_, nonbonded_bp->potential, nonbonded_bp->size(), nonbonded_bp->d_p->data);
@@ -141,6 +137,8 @@ std::array<std::vector<double>, 2> Context::multiple_steps_local(
     std::shared_ptr<BoundPotential> bound_shell_restraint(
         new BoundPotential(restraint_ptr, std::vector<int>({0}), nullptr));
 
+    // Copy constructor to get copies of the BoundPotentials
+    std::vector<std::shared_ptr<BoundPotential>> local_bps = bps_;
     // Add the restraint potential aand ixn group potential
     local_bps.push_back(bound_shell_restraint);
     local_bps.push_back(ixn_group);
