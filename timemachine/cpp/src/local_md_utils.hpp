@@ -8,18 +8,6 @@
 #include <typeinfo>
 
 namespace timemachine {
-double get_nonbonded_potential_cutoff(std::shared_ptr<Potential> pot) {
-    if (std::shared_ptr<NonbondedAllPairs<float>> nb_pot = std::dynamic_pointer_cast<NonbondedAllPairs<float>>(pot);
-        nb_pot) {
-        return nb_pot->get_cutoff();
-    } else if (std::shared_ptr<NonbondedAllPairs<double>> nb_pot =
-                   std::dynamic_pointer_cast<NonbondedAllPairs<double>>(pot);
-               nb_pot) {
-        return nb_pot->get_cutoff();
-    } else {
-        throw std::runtime_error("Unable to cast potential to NonbondedAllPairs");
-    }
-}
 
 bool is_nonbonded_all_pairs_potential(std::shared_ptr<Potential> pot) {
     if (std::shared_ptr<NonbondedAllPairs<float>> nb_pot = std::dynamic_pointer_cast<NonbondedAllPairs<float>>(pot);
