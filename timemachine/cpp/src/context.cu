@@ -8,7 +8,9 @@
 #include "kernels/k_indices.cuh"
 #include "kernels/k_local_md.cuh"
 #include "kernels/kernel_utils.cuh"
+#include "langevin_integrator.hpp"
 #include "local_md_utils.hpp"
+#include "math_utils.cuh"
 #include "pinned_host_buffer.hpp"
 #include "set_utils.hpp"
 #include <cub/cub.cuh>
@@ -47,6 +49,15 @@ Context::~Context() {
     gpuErrchk(cudaFree(d_u_buffer_));
     gpuErrchk(cudaFree(d_sum_storage_));
 };
+
+double Context::_get_temperature() {
+    if (std::shared_ptr<LangevinIntegrator> langevin = std::dynamic_pointer_cast<LangevinIntegrator>(intg_);
+        langevin != nullptr) {
+        return langevin->get_temperature();
+    } else {
+        throw std::runtime_error("integrator must be LangevinIntegrator.");
+    }
+}
 
 std::array<std::vector<double>, 2> Context::multiple_steps_local(
     const int n_steps,
