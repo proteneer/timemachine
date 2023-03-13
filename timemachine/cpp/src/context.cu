@@ -196,7 +196,7 @@ std::array<std::vector<double>, 2> Context::multiple_steps_local(
         int num_col_indices = N_ - num_row_indices;
         if (num_row_indices == 0 || num_col_indices == 0) {
             throw std::runtime_error(
-                "entire system selected, reduce radius, increase k, check system or use Context::multiple_steps");
+                "entire system selected; reduce radius, increase k, check system or use Context::multiple_steps");
         }
 
         k_construct_bonded_params<<<ceil_divide(num_row_indices, tpb), tpb, 0, stream>>>(
