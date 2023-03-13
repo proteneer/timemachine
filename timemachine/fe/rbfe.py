@@ -467,7 +467,7 @@ def estimate_relative_free_energy(
             stored_frames,
             stored_boxes,
             md_params,
-            [result],
+            [],
         )
     except Exception as err:
         with open(f"failed_rbfe_result_{combined_prefix}.pkl", "wb") as fh:
