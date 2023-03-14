@@ -76,8 +76,13 @@ class PairBarPlots:
 
 @dataclass
 class PairBarResult:
-    initial_states: List[InitialState]
-    bar_results: List[BarResult]
+    """Results of BAR analysis on L-1 adjacent pairs of states given a sequence of L states."""
+
+    initial_states: List[InitialState]  # length L
+    bar_results: List[BarResult]  # length L - 1
+
+    def __post_init__(self):
+        assert len(self.bar_results) == len(self.initial_states) - 1
 
 
 @dataclass
