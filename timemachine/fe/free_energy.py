@@ -84,6 +84,30 @@ class PairBarResult:
     def __post_init__(self):
         assert len(self.bar_results) == len(self.initial_states) - 1
 
+    @property
+    def dGs(self) -> List[float]:
+        return [r.dG for r in self.bar_results]
+
+    @property
+    def dG_errs(self) -> List[float]:
+        return [r.dG_err for r in self.bar_results]
+
+    @property
+    def dG_err_by_component_by_lambda(self) -> NDArray:
+        return np.array([r.dG_err_by_component for r in self.bar_results])
+
+    @property
+    def overlaps(self) -> List[float]:
+        return [r.overlap for r in self.bar_results]
+
+    @property
+    def overlap_by_component_by_lambda(self) -> NDArray:
+        return np.array([r.overlap_by_component for r in self.bar_results])
+
+    @property
+    def u_kln_by_component_by_lambda(self) -> NDArray:
+        return np.array([r.u_kln_by_component for r in self.bar_results])
+
 
 @dataclass
 class SimulationResult:
@@ -386,20 +410,15 @@ def make_pair_bar_plots(res: PairBarResult, temperature: float, prefix: str) -> 
     U_names = [type(U_fn).__name__ for U_fn in res.initial_states[0].potentials]
     lambdas = [s.lamb for s in res.initial_states]
 
-    dGs = np.array([r.dG for r in res.bar_results])
-    dG_errs = np.array([r.dG_err for r in res.bar_results])
-    u_kln_by_component_by_lambda = np.array([r.u_kln_by_component for r in res.bar_results])
-
     overlap_detail_png = make_overlap_detail_figure(
-        U_names, dGs, dG_errs, u_kln_by_component_by_lambda, temperature, prefix
+        U_names, res.dGs, res.dG_errs, res.u_kln_by_component_by_lambda, temperature, prefix
     )
 
-    dG_errs_by_lambda_by_component = np.array([r.dG_err_by_component for r in res.bar_results]).T
-    dG_errs_png = make_dG_errs_figure(U_names, lambdas, dG_errs, dG_errs_by_lambda_by_component)
+    dG_errs_png = make_dG_errs_figure(U_names, lambdas, res.dG_errs, res.dG_err_by_component_by_lambda)
 
-    overlaps = np.array([r.overlap for r in res.bar_results])
-    overlaps_by_lambda_by_component = np.array([r.overlap_by_component for r in res.bar_results]).T
-    overlap_summary_png = make_overlap_summary_figure(U_names, lambdas, overlaps, overlaps_by_lambda_by_component)
+    overlap_summary_png = make_overlap_summary_figure(
+        U_names, lambdas, res.overlaps, res.overlap_by_component_by_lambda
+    )
 
     return PairBarPlots(dG_errs_png, overlap_summary_png, overlap_detail_png)
 

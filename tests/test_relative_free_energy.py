@@ -80,19 +80,13 @@ def run_triple(mol_a, mol_b, core, forcefield, n_frames, protein_path, n_eq_step
             n_pairs = len(res.initial_states) - 1
             assert len(res.bar_results) == n_pairs
 
-            dG_errs = np.array([r.dG_err for r in res.bar_results])
-            dG_errs_by_component_by_lambda = np.array([r.dG_err_by_component for r in res.bar_results])
-
-            for dg_errs in [dG_errs, dG_errs_by_component_by_lambda]:
+            for dg_errs in [res.dG_errs, res.dG_err_by_component_by_lambda]:
                 assert np.all(0.0 < np.asarray(dg_errs))
                 assert np.linalg.norm(dg_errs) < 0.1
 
-            overlaps = np.array([r.overlap for r in res.bar_results])
-            overlaps_by_component_by_lambda = np.array([r.overlap_by_component for r in res.bar_results])
-
-            assert overlaps_by_component_by_lambda.shape[0] == n_pairs
-            assert overlaps_by_component_by_lambda.shape[1] == dG_errs_by_component_by_lambda.shape[1]
-            for overlaps in [overlaps, overlaps_by_component_by_lambda]:
+            assert res.overlap_by_component_by_lambda.shape[0] == n_pairs
+            assert res.overlap_by_component_by_lambda.shape[1] == res.dG_err_by_component_by_lambda.shape[1]
+            for overlaps in [res.overlaps, res.overlap_by_component_by_lambda]:
                 assert np.all(0.0 < np.asarray(overlaps))
                 assert np.all(np.asarray(overlaps) < 1.0)
 
