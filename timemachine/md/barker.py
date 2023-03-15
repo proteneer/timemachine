@@ -28,7 +28,6 @@ class BarkerProposal:
         # sample from base kernel mu_sig
         z = gaussian_rvs * self.proposal_sig
 
-        #  use gradient information to compute probabilities of keeping vs. flipping sign of each component of z
         # p_xz = 1 / (1 + exp(-grad_x * z))
         grad_x = self.grad_log_q(x)
         log_p_xz = -np.logaddexp(0.0, -grad_x * z)
@@ -55,7 +54,7 @@ class BarkerProposal:
         base_logpdf_z = np.sum(-0.5 * z ** 2 - np.log(self.proposal_sig * np.sqrt(2 * np.pi)))
 
         # p_xz = 1 / (1 + exp(-grad_x * z))
-        grad_x = -self.grad_log_q(x)
+        grad_x = self.grad_log_q(x)
         log_p_xz = -np.logaddexp(0.0, -grad_x * z)
 
         log_Z = np.log(0.5)  # proposition 3.1
