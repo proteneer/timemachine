@@ -1,13 +1,12 @@
 # test that we can run relative free energy simulations in complex and in solvent
 # this doesn't test for accuracy, just that everything mechanically runs.
 from importlib import resources
-from typing import Sequence
 
 import numpy as np
 import pytest
 
 from timemachine.constants import DEFAULT_FF
-from timemachine.fe.free_energy import HostConfig, InitialState, PairBarResult, SimulationResult, image_frames, sample
+from timemachine.fe.free_energy import HostConfig, PairBarResult, SimulationResult, image_frames, sample
 from timemachine.fe.rbfe import (
     estimate_relative_free_energy,
     estimate_relative_free_energy_via_greedy_bisection,
@@ -46,7 +45,7 @@ def run_bitwise_reproducibility(mol_a, mol_b, core, forcefield, n_frames, estima
     )
 
     all_frames, all_boxes = [], []
-    for state in solvent_res.initial_states:
+    for state in solvent_res.final_result.initial_states:
         frames, boxes = sample(state, solvent_res.md_params)
         all_frames.append(frames)
         all_boxes.append(boxes)
@@ -62,9 +61,9 @@ def run_triple(mol_a, mol_b, core, forcefield, n_frames, protein_path, n_eq_step
     n_windows = 3
 
     def check_sim_result(sim_res: SimulationResult):
-        assert len(sim_res.initial_states) == n_windows
-        assert sim_res.initial_states[0].lamb == lambda_interval[0]
-        assert sim_res.initial_states[-1].lamb == lambda_interval[1]
+        assert len(sim_res.final_result.initial_states) == n_windows
+        assert sim_res.final_result.initial_states[0].lamb == lambda_interval[0]
+        assert sim_res.final_result.initial_states[-1].lamb == lambda_interval[1]
 
         assert sim_res.plots.dG_errs_png is not None
         assert sim_res.plots.overlap_summary_png is not None
@@ -77,26 +76,23 @@ def run_triple(mol_a, mol_b, core, forcefield, n_frames, protein_path, n_eq_step
         assert sim_res.md_params.n_frames == n_frames
         assert sim_res.md_params.n_eq_steps == n_eq_steps
 
-        def check_pair_bar_result(initial_states: Sequence[InitialState], bar_res: PairBarResult):
-            n_pairs = len(initial_states) - 1
-            assert len(bar_res.all_dGs) == n_pairs
+        def check_pair_bar_result(res: PairBarResult):
+            n_pairs = len(res.initial_states) - 1
+            assert len(res.bar_results) == n_pairs
 
-            assert len(bar_res.all_errs) == n_pairs
-            assert bar_res.dG_errs_by_lambda_by_component.shape[1] == n_pairs
-            for dg_errs in [bar_res.all_errs, bar_res.dG_errs_by_lambda_by_component]:
+            for dg_errs in [res.dG_errs, res.dG_err_by_component_by_lambda]:
                 assert np.all(0.0 < np.asarray(dg_errs))
                 assert np.linalg.norm(dg_errs) < 0.1
 
-            assert len(bar_res.overlaps_by_lambda) == n_pairs
-            assert bar_res.overlaps_by_lambda_by_component.shape[0] == bar_res.dG_errs_by_lambda_by_component.shape[0]
-            assert bar_res.overlaps_by_lambda_by_component.shape[1] == n_pairs
-            for overlaps in [bar_res.overlaps_by_lambda, bar_res.overlaps_by_lambda_by_component]:
+            assert res.overlap_by_component_by_lambda.shape[0] == n_pairs
+            assert res.overlap_by_component_by_lambda.shape[1] == res.dG_err_by_component_by_lambda.shape[1]
+            for overlaps in [res.overlaps, res.overlap_by_component_by_lambda]:
                 assert np.all(0.0 < np.asarray(overlaps))
                 assert np.all(np.asarray(overlaps) < 1.0)
 
-        check_pair_bar_result(sim_res.initial_states, sim_res.result)
-        for initial_states, res in sim_res.intermediate_results:
-            check_pair_bar_result(initial_states, res)
+        check_pair_bar_result(sim_res.final_result)
+        for res in sim_res.intermediate_results:
+            check_pair_bar_result(res)
 
     vacuum_res = estimate_relative_free_energy_fn(
         mol_a,
@@ -231,13 +227,13 @@ def test_imaging_frames():
         steps_per_frame=steps_per_frame,
         n_windows=windows,
     )
-    keep_idxs = [0, len(res.initial_states) - 1]
+    keep_idxs = [0, len(res.final_result.initial_states) - 1]
     assert len(keep_idxs) == len(res.frames)
 
     # A buffer, as imaging doesn't ensure everything is perfectly in the box
     padding = 0.3
     for i, (frames, boxes) in enumerate(zip(res.frames, res.boxes)):
-        initial_state = res.initial_states[keep_idxs[i]]
+        initial_state = res.final_result.initial_states[keep_idxs[i]]
         box_center = compute_box_center(boxes[0])
         box_extents = np.max(boxes, axis=(0, 1))
 

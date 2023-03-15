@@ -15,8 +15,9 @@ from timemachine.fe.free_energy import (
     HostConfig,
     InitialState,
     MDParams,
+    PairBarResult,
     SimulationResult,
-    estimate_free_energy_pair_bar,
+    estimate_free_energy_bar,
     make_pair_bar_plots,
     run_sims_sequential,
 )
@@ -247,16 +248,21 @@ def estimate_absolute_free_energy(
         u_kln_by_component_by_lambda, stored_frames, stored_boxes = run_sims_sequential(
             initial_states, md_params, temperature, keep_idxs
         )
-        pair_bar_result = estimate_free_energy_pair_bar(u_kln_by_component_by_lambda, temperature, combined_prefix)
-        plots = make_pair_bar_plots(initial_states, pair_bar_result, temperature, combined_prefix)
+        bar_results = [
+            estimate_free_energy_bar(u_kln_by_component, temperature)
+            for u_kln_by_component in u_kln_by_component_by_lambda
+        ]
+
+        result = PairBarResult(initial_states, bar_results)
+        plots = make_pair_bar_plots(result, temperature, combined_prefix)
+
         return SimulationResult(
-            initial_states,
-            pair_bar_result,
+            result,
             plots,
             stored_frames,
             stored_boxes,
             md_params,
-            [(initial_states, pair_bar_result)],
+            [],
         )
     except Exception as err:
         with open(f"failed_ahfe_result_{combined_prefix}.pkl", "wb") as fh:
