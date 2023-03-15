@@ -48,7 +48,7 @@ def test_minimizer():
         )
         t1 = time()
         print(
-            f"\tforce norm after room-temperature equilibration: {np.linalg.norm(host_du_dx_fxn(x_host), axis=-1).max():.3f} kJ/mol / nm^2"
+            f"\tforce norm after room-temperature equilibration: {np.linalg.norm(host_du_dx_fxn(x_host), axis=-1).max():.3f} kJ/mol / nm"
         )
         print(f"\tmax distance traveled = {np.linalg.norm(np.array(complex_coords) - x_host, axis=-1).max():.3f} nm")
         print(f"\tdone in {(t1 - t0):.3f} s")
@@ -61,7 +61,7 @@ def test_minimizer():
         t1 = time()
 
         print(
-            f"\tforce norm after low-temperature equilibration: {np.linalg.norm(host_du_dx_fxn(x_host), axis=-1).max():.3f} kJ/mol / nm^2"
+            f"\tforce norm after low-temperature equilibration: {np.linalg.norm(host_du_dx_fxn(x_host), axis=-1).max():.3f} kJ/mol / nm"
         )
         print(f"\tmax distance traveled = {np.linalg.norm(np.array(complex_coords) - x_host, axis=-1).max():.3f} nm")
         print(f"\tdone in {(t1 - t0):.3f} s")
@@ -70,7 +70,7 @@ def test_minimizer():
         print("using 4D FIRE annealing")
         x_host = minimizer.minimize_host_4d(mols, complex_system, complex_coords, ff, complex_box)
         print(
-            f"\tforce norm after 4D FIRE annealing: {np.linalg.norm(host_du_dx_fxn(x_host), axis=-1).max():.3f} kJ/mol / nm^2"
+            f"\tforce norm after 4D FIRE annealing: {np.linalg.norm(host_du_dx_fxn(x_host), axis=-1).max():.3f} kJ/mol / nm"
         )
         print(f"\tmax distance traveled = {np.linalg.norm(np.array(complex_coords) - x_host, axis=-1).max():.3f} nm")
         t1 = time()
