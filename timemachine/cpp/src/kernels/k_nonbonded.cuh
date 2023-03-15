@@ -486,7 +486,7 @@ void __device__ v_nonbonded_unified(
 
 template <typename RealType, bool COMPUTE_U, bool COMPUTE_DU_DX, bool COMPUTE_DU_DP>
 void __global__ k_nonbonded_unified(
-    const int N,
+    const int N,  // Number of atoms
     const int NR, // Number of row indices
     const double *__restrict__ coords,
     const double *__restrict__ params, // [N]
