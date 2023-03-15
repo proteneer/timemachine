@@ -9,7 +9,8 @@ Assert that the move:
     - [ ] An MCMC move constructed from this proposal accurately samples a simple target
 
     Has robust behavior:
-    - [ ] Resolves clashes without blowing up or requiring alchemical intermediates
+    - [x] Resolves clashes without blowing up or requiring alchemical intermediates
+        (Added to test_minimizer.py)
     - [ ] Avg. norm(proposal - x) remains <= avg. norm(gaussian(0, sig)), even when norm(grad_log_q(x)) >> 1
 """
 

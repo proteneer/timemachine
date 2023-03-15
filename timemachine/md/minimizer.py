@@ -7,15 +7,17 @@ from numpy.typing import NDArray
 from rdkit import Chem
 from simtk import openmm
 
-from timemachine.constants import MAX_FORCE_NORM
+from timemachine.constants import BOLTZ, MAX_FORCE_NORM
 from timemachine.fe import model_utils, topology
 from timemachine.fe.utils import get_romol_conf
 from timemachine.ff import Forcefield
 from timemachine.ff.handlers import openmm_deserializer
 from timemachine.lib import LangevinIntegrator, MonteCarloBarostat, custom_ops
 from timemachine.lib.potentials import HarmonicBond
+from timemachine.md.barker import BarkerProposal
 from timemachine.md.barostat.utils import get_bond_list, get_group_indices
 from timemachine.md.fire import fire_descent
+from timemachine.potentials import generic
 
 
 class MinimizationWarning(UserWarning):
@@ -24,6 +26,15 @@ class MinimizationWarning(UserWarning):
 
 class MinimizationError(Exception):
     pass
+
+
+def check_force_norm(du_dx):
+    """raise Minimization error if the force on any atom exceeds MAX_FORCE_NORM"""
+    norm = np.linalg.norm(du_dx, axis=-1)
+    if not np.all(norm < MAX_FORCE_NORM):
+        raise MinimizationError(
+            f"Minimization failed to reduce large forces below threshold: |frc| = {norm} > {MAX_FORCE_NORM}"
+        )
 
 
 def parameterize_system(topo, ff: Forcefield, lamb: float):
@@ -172,13 +183,102 @@ def minimize_host_4d(mols, host_system, host_coords, ff, box, mol_coords=None) -
     final_coords = fire_minimize(x, u_impls, box, 50)
     for impl in u_impls:
         du_dx, _ = impl.execute(final_coords, box)
-        norm = np.linalg.norm(du_dx, axis=-1)
-        if not np.all(norm < MAX_FORCE_NORM):
-            raise MinimizationError(
-                f"Minimization failed to reduce large forces below threshold: |frc| = {norm} > {MAX_FORCE_NORM}"
-            )
+        check_force_norm(du_dx)
 
     return final_coords[:num_host_atoms]
+
+
+def make_gpu_impl(potentials):
+    """return bound impl of a SummedPotential constructed from potentials"""
+
+    params = [p.params for p in potentials]
+    flat_params = np.concatenate([param.reshape(-1) for param in params])
+
+    generic_potentials = [generic.from_gpu(p) for p in potentials]
+    summed_potential = generic.SummedPotential(generic_potentials, params)
+
+    return summed_potential.to_gpu().bind(flat_params).bound_impl(np.float32)
+
+
+def make_host_du_dx_fxn(mols, host_system, host_coords, ff, box, mol_coords=None):
+    """construct function to compute du_dx w.r.t. host coords, given fixed mols and box"""
+
+    # openmm host_system -> timemachine host_bps
+    host_bps, _ = openmm_deserializer.deserialize_system(host_system, cutoff=1.2)
+
+    # construct appropriate topology from (mols, ff)
+    if len(mols) == 1:
+        top = topology.BaseTopology(mols[0], ff)
+    elif len(mols) == 2:
+        top = topology.DualTopologyMinimization(mols[0], mols[1], ff)
+    else:
+        raise ValueError("mols must be length 1 or 2")
+
+    hgt = topology.HostGuestTopology(host_bps, top)
+
+    # bound impls of potentials @ lam=0 (fully coupled) endstate
+    params_potential_pairs = parameterize_system(hgt, ff, 0.0)
+    bound_potentials = [potential.bind(params) for params, potential in params_potential_pairs]
+    gpu_impl = make_gpu_impl(bound_potentials)
+
+    # read conformers from mol_coords if given, or each mol's conf0 otherwise
+    conf_list = [np.array(host_coords)]
+
+    if mol_coords is not None:
+        for mc in mol_coords:
+            conf_list.append(mc)
+    else:
+        for mol in mols:
+            conf_list.append(get_romol_conf(mol))
+
+    combined_coords = np.concatenate(conf_list)
+
+    # wrap gpu_impl, partially applying box, mol coords
+    num_host_atoms = host_coords.shape[0]
+    assert box.shape == (3, 3)
+
+    def du_dx_host_fxn(x_host):
+        x = np.array(combined_coords)
+        x[:num_host_atoms] = x_host
+
+        du_dx, _ = gpu_impl.execute(x, box)
+        du_dx_host = du_dx[:num_host_atoms]
+        return du_dx_host
+
+    return du_dx_host_fxn
+
+
+def equilibrate_host_barker(mols, host_system, host_coords, ff, box, mol_coords=None, temperature=300.0):
+    """possibly simpler alternative to minimize_host_4d, for purposes of
+    clash resolution and initial pre-equilibration"""
+
+    du_dx_host_fxn = make_host_du_dx_fxn(mols, host_system, host_coords, ff, box, mol_coords)
+    grad_log_q = lambda x_host: -du_dx_host_fxn(x_host) / (BOLTZ * temperature)
+
+    # TODO: arbitrary step size -- adjust?
+    # TODO: if needed, revisit choice to omit Metropolis correction
+    barker_prop = BarkerProposal(grad_log_q, 0.0001)
+
+    x_host = np.array(host_coords)
+
+    max_iters = 1000
+    early_stop_threshold = MAX_FORCE_NORM / 100  # TODO: arbitrary threshold -- adjust?
+
+    for t in range(max_iters):
+        # unadjusted Barker proposal updates
+        x_host = barker_prop.sample(x_host)
+
+        # optional early termination
+        if t % 10 == 0:
+            f_norm = np.linalg.norm(du_dx_host_fxn(x_host), axis=-1).max()
+            if f_norm < early_stop_threshold:
+                print(f"\tterminating early @ iteration {t} since force norm = {f_norm:.3f} < {early_stop_threshold}")
+                break
+
+    final_forces = -du_dx_host_fxn(x_host)
+    check_force_norm(final_forces)
+
+    return x_host
 
 
 def equilibrate_host(
@@ -411,11 +511,7 @@ def local_minimize(x0, val_and_grad_fn, local_idxs, verbose=True, assert_energy_
         print("-" * 70)
 
     # note that this over the local atoms only, as this function is not concerned
-    max_frc = np.amax(per_atom_force_norms)
-    if not max_frc < MAX_FORCE_NORM:
-        raise MinimizationError(
-            f"Minimization failed to reduce large forces below threshold: |frc| = {max_frc} > {MAX_FORCE_NORM}"
-        )
+    check_force_norm(forces)
 
     x_final = x0.copy()
     x_final[local_idxs] = x_local_final
