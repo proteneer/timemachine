@@ -50,8 +50,7 @@ class BarkerProposal:
         """evaluate log p(y | x) using eq. 16"""
 
         z = y - x
-
-        base_logpdf_z = np.sum(-0.5 * z ** 2 - np.log(self.proposal_sig * np.sqrt(2 * np.pi)))
+        base_logpdf_z = np.sum(-0.5 * (z / self.proposal_sig) ** 2 - np.log(self.proposal_sig * np.sqrt(2 * np.pi)))
 
         # p_xz = 1 / (1 + exp(-grad_x * z))
         grad_x = self.grad_log_q(x)
