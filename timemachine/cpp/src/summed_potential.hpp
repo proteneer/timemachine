@@ -18,6 +18,8 @@ public:
 
     const std::vector<std::shared_ptr<Potential>> &get_potentials();
 
+    const std::vector<int> &get_parameter_sizes();
+
     virtual void execute_device(
         const int N,
         const int P,
