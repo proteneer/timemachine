@@ -54,10 +54,10 @@ def plot_dG_errs(ax, components, lambdas, dG_errs):
     ax.legend()
 
 
-def make_dG_errs_figure(components, lambdas, dG_errs_by_lambda, dG_errs_by_lambda_by_component):
+def make_dG_errs_figure(components, lambdas, dG_err_by_lambda, dG_err_by_component_by_lambda):
     _, (ax_top, ax_btm) = plt.subplots(2, 1, figsize=(7, 9))
-    plot_dG_errs(ax_top, ["Overall"], lambdas, [dG_errs_by_lambda])
-    plot_dG_errs(ax_btm, components, lambdas, dG_errs_by_lambda_by_component)
+    plot_dG_errs(ax_top, ["Overall"], lambdas, [dG_err_by_lambda])
+    plot_dG_errs(ax_btm, components, lambdas, dG_err_by_component_by_lambda.T)
     buffer = io.BytesIO()
     plt.savefig(buffer, format="png")
     buffer.seek(0)
@@ -86,10 +86,10 @@ def plot_overlap_summary(ax, components, lambdas, overlaps):
     ax.legend()
 
 
-def make_overlap_summary_figure(components, lambdas, overlaps_by_lambda, overlaps_by_lambda_by_component):
+def make_overlap_summary_figure(components, lambdas, overlap_by_lambda, overlap_by_component_by_lambda):
     _, (ax_top, ax_btm) = plt.subplots(2, 1, figsize=(7, 9))
-    plot_overlap_summary(ax_top, ["Overall"], lambdas, [overlaps_by_lambda])
-    plot_overlap_summary(ax_btm, components, lambdas, overlaps_by_lambda_by_component)
+    plot_overlap_summary(ax_top, ["Overall"], lambdas, [overlap_by_lambda])
+    plot_overlap_summary(ax_btm, components, lambdas, overlap_by_component_by_lambda.T)
     buffer = io.BytesIO()
     plt.savefig(buffer, format="png")
     buffer.seek(0)
