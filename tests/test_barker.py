@@ -109,7 +109,8 @@ def test_accurate_mcmc(threshold=1e-4):
 
 @pytest.mark.nogpu
 @pytest.mark.parametrize("proposal_sig", [0.1, 1.0])
-def test_proposal_magnitude_independent_of_force_magnitude(proposal_sig):
+@pytest.mark.parametrize("shared_seed", range(5))
+def test_proposal_magnitude_independent_of_force_magnitude(proposal_sig, shared_seed):
     """Generate Lennard-Jones-informed proposals from clashy vs. relaxed starting points
         (where |force(x_clash)| ~= +inf and |force(x_relaxed)| ~ 0).
 
@@ -126,14 +127,17 @@ def test_proposal_magnitude_independent_of_force_magnitude(proposal_sig):
 
     barker_prop = BarkerProposal(grad_log_q, proposal_sig=proposal_sig)
     expected_sq_distance = barker_prop.proposal_sig ** 2
+    n_samples = 100_000
+    rel_tol = 1e-2
+    abs_tol = 1e-2
 
     # ---------------------
-    np.random.seed(0)
+    np.random.seed(shared_seed)
 
     # sample many proposals from a clashy initial condition
-    x_clash = np.array([1e-3])
+    x_clash = 1e-3 * np.ones(n_samples)
     assert np.linalg.norm(grad_log_q(x_clash)) > 1e10
-    ys_clash = np.array([barker_prop.sample(x_clash) for _ in range(10_000)])
+    ys_clash = barker_prop.sample(x_clash)
 
     # assert that the gradient-informed proposals
     # are the same avg. sq. distance from starting point
@@ -141,28 +145,28 @@ def test_proposal_magnitude_independent_of_force_magnitude(proposal_sig):
     disp_clash = (ys_clash - x_clash).flatten()
     mean_sq_distance_clash = (disp_clash ** 2).mean()
 
-    assert pytest.approx(mean_sq_distance_clash, rel=1e-1) == expected_sq_distance
+    assert pytest.approx(mean_sq_distance_clash, rel=rel_tol) == expected_sq_distance
 
     # assert that the proposals are skewed in the expected direction
     skew = np.sign(disp_clash).mean()
-    assert pytest.approx(skew, abs=1e-2) == 1.0
+    assert pytest.approx(skew, abs=abs_tol) == 1.0
 
     # ---------------------
-    np.random.seed(0)
+    np.random.seed(shared_seed)
 
     # sample many proposals from a relaxed initial condition
-    x_relaxed = np.array([1e3])
+    x_relaxed = 1e3 * np.ones(n_samples)
     assert np.linalg.norm(grad_log_q(x_relaxed)) < 1e-10
-    ys = np.array([barker_prop.sample(x_relaxed) for _ in range(10_000)])
+    ys = barker_prop.sample(x_relaxed)
 
     # again, assert proposals are the expected avg. sq. distance from starting point
     disp = (ys - x_relaxed).flatten()
     mean_sq_distance = (disp ** 2).mean()
-    assert pytest.approx(mean_sq_distance, rel=1e-1) == expected_sq_distance
+    assert pytest.approx(mean_sq_distance, rel=rel_tol) == expected_sq_distance
 
     # assert that the proposals are not skewed much
     skew = np.sign(disp).mean()
-    assert pytest.approx(skew, abs=1e-2) == 0.0
+    assert pytest.approx(skew, abs=abs_tol) == 0.0
 
     # ---------------------
 
