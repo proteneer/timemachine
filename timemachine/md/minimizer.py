@@ -248,32 +248,22 @@ def make_host_du_dx_fxn(mols, host_system, host_coords, ff, box, mol_coords=None
     return du_dx_host_fxn
 
 
-def equilibrate_host_barker(mols, host_system, host_coords, ff, box, mol_coords=None, temperature=300.0):
+def equilibrate_host_barker(
+    mols, host_system, host_coords, ff, box, mol_coords=None, temperature=300.0, proposal_stddev=0.0001, n_steps=1000
+):
     """possibly simpler alternative to minimize_host_4d, for purposes of
     clash resolution and initial pre-equilibration"""
 
     du_dx_host_fxn = make_host_du_dx_fxn(mols, host_system, host_coords, ff, box, mol_coords)
     grad_log_q = lambda x_host: -du_dx_host_fxn(x_host) / (BOLTZ * temperature)
 
-    # TODO: arbitrary step size -- adjust?
     # TODO: if needed, revisit choice to omit Metropolis correction
-    barker_prop = BarkerProposal(grad_log_q, 0.0001)
+    barker_prop = BarkerProposal(grad_log_q, proposal_stddev)
 
     x_host = np.array(host_coords)
 
-    max_iters = 1000
-    early_stop_threshold = MAX_FORCE_NORM / 100  # TODO: arbitrary threshold -- adjust?
-
-    for t in range(max_iters):
-        # unadjusted Barker proposal updates
+    for t in range(n_steps):
         x_host = barker_prop.sample(x_host)
-
-        # optional early termination
-        if t % 10 == 0:
-            f_norm = np.linalg.norm(du_dx_host_fxn(x_host), axis=-1).max()
-            if f_norm < early_stop_threshold:
-                print(f"\tterminating early @ iteration {t} since force norm = {f_norm:.3f} < {early_stop_threshold}")
-                break
 
     final_forces = -du_dx_host_fxn(x_host)
     check_force_norm(final_forces)
