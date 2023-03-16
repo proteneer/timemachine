@@ -175,8 +175,7 @@ def bar_with_bootstrapped_uncertainty(w_F, w_R, n_bootstrap=1000, timeout=10) ->
 
 
 def df_err_from_ukln(u_kln: np.ndarray) -> float:
-    """Extract forward and reverse works from 2-state u_kln matrix,
-        and return bootstrapped BAR error
+    """Extract forward and reverse works from 2-state u_kln matrix and return BAR error computed by pymbar
 
     Parameters
     ----------
@@ -192,7 +191,7 @@ def df_err_from_ukln(u_kln: np.ndarray) -> float:
     assert k == l == 2
     w_fwd = u_kln[1, 0, :] - u_kln[0, 0, :]
     w_rev = u_kln[0, 1, :] - u_kln[1, 1, :]
-    _, df_err = bar_with_bootstrapped_uncertainty(w_fwd, w_rev)
+    _, df_err = pymbar.BAR(w_fwd, w_rev)
     return df_err
 
 
