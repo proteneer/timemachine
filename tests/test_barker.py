@@ -1,6 +1,4 @@
 """
-Ideas for tests:
-
 Assert that the move:
 
     Is correctly implemented:
@@ -11,11 +9,13 @@ Assert that the move:
     Has robust behavior:
     - [x] Resolves clashes without blowing up or requiring alchemical intermediates
         (Added to test_minimizer.py)
-    - [ ] Avg. norm(proposal - x) remains <= avg. norm(gaussian(0, sig)), even when norm(grad_log_q(x)) >> 1
+    - [x] Avg. norm(proposal - x) remains ~= avg. norm(gaussian(0, sig)), even when norm(grad_log_q(x)) >> 1
 """
 
 import numpy as np
 import pytest
+from jax import grad, jit
+from jax import numpy as jnp
 
 from timemachine.md.barker import BarkerProposal
 
@@ -105,3 +105,67 @@ def test_accurate_mcmc(threshold=1e-4):
     histogram_mse = np.mean((y_ref - y_empirical) ** 2)
 
     assert histogram_mse < threshold
+
+
+@pytest.mark.nogpu
+@pytest.mark.parametrize("proposal_sig", [0.1, 1.0])
+def test_proposal_magnitude_independent_of_force_magnitude(proposal_sig):
+    """Generate Lennard-Jones-informed proposals from clashy vs. relaxed starting points
+        (where |force(x_clash)| ~= +inf and |force(x_relaxed)| ~ 0).
+
+    Assert that:
+    * the avg. squared distance between proposal and starting point is the same in both cases
+    * the proposal skew is ~ 100% in the |force| ~= +inf case, and ~ 0% in the |force| ~= 0 case
+    """
+
+    def log_q(r):
+        sig, eps = 1.0, 1.0
+        return jnp.sum(-4 * eps * ((sig / r) ** 12 - (sig / r) ** 6))
+
+    grad_log_q = jit(grad(log_q))
+
+    barker_prop = BarkerProposal(grad_log_q, proposal_sig=proposal_sig)
+    expected_sq_distance = barker_prop.proposal_sig ** 2
+
+    # ---------------------
+    np.random.seed(0)
+
+    # sample many proposals from a clashy initial condition
+    x_clash = np.array([1e-3])
+    assert np.linalg.norm(grad_log_q(x_clash)) > 1e10
+    ys_clash = np.array([barker_prop.sample(x_clash) for _ in range(10_000)])
+
+    # assert that the gradient-informed proposals
+    # are the same avg. sq. distance from starting point
+    # as if proposed from the base kernel Normal(mu=x_clash, sig=proposal_sig)
+    disp_clash = (ys_clash - x_clash).flatten()
+    mean_sq_distance_clash = (disp_clash ** 2).mean()
+
+    assert pytest.approx(mean_sq_distance_clash, rel=1e-1) == expected_sq_distance
+
+    # assert that the proposals are skewed in the expected direction
+    skew = np.sign(disp_clash).mean()
+    assert pytest.approx(skew, abs=1e-2) == 1.0
+
+    # ---------------------
+    np.random.seed(0)
+
+    # sample many proposals from a relaxed initial condition
+    x_relaxed = np.array([1e3])
+    assert np.linalg.norm(grad_log_q(x_relaxed)) < 1e-10
+    ys = np.array([barker_prop.sample(x_relaxed) for _ in range(10_000)])
+
+    # again, assert proposals are the expected avg. sq. distance from starting point
+    disp = (ys - x_relaxed).flatten()
+    mean_sq_distance = (disp ** 2).mean()
+    assert pytest.approx(mean_sq_distance, rel=1e-1) == expected_sq_distance
+
+    # assert that the proposals are not skewed much
+    skew = np.sign(disp).mean()
+    assert pytest.approx(skew, abs=1e-2) == 0.0
+
+    # ---------------------
+
+    # shared random seed, so can assert with tighter tolerance that (A == B)
+    # than we could assert ((A == expectation) and (B == expectation)) above
+    assert pytest.approx(mean_sq_distance, rel=1e-100) == mean_sq_distance_clash
