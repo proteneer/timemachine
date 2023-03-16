@@ -267,11 +267,12 @@ def equilibrate_host(
     if seed is None:
         seed = np.random.randint(np.iinfo(np.int32).max)
 
-    integrator = LangevinIntegrator(temperature, dt, friction, combined_masses, seed).impl()
-
     hb_potential = next(p for _, p in params_potential_pairs if isinstance(p, HarmonicBond))
     bond_list = get_bond_list(hb_potential)
     combined_masses = model_utils.apply_hmr(combined_masses, bond_list)
+
+    integrator = LangevinIntegrator(temperature, dt, friction, combined_masses, seed).impl()
+
     group_indices = get_group_indices(bond_list)
 
     barostat_interval = 5
