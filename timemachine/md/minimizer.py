@@ -28,12 +28,12 @@ class MinimizationError(Exception):
     pass
 
 
-def check_force_norm(du_dx):
+def check_force_norm(du_dx, threshold=MAX_FORCE_NORM):
     """raise Minimization error if the force on any atom exceeds MAX_FORCE_NORM"""
     norm = np.linalg.norm(du_dx, axis=-1)
-    if not np.all(norm < MAX_FORCE_NORM):
+    if not np.all(norm < threshold):
         raise MinimizationError(
-            f"Minimization failed to reduce large forces below threshold: |frc| = {norm} > {MAX_FORCE_NORM}"
+            f"Minimization failed to reduce large forces below threshold: |frc| = {norm} > {threshold}"
         )
 
 
