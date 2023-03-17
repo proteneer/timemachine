@@ -15,8 +15,9 @@ from timemachine.fe.free_energy import (
     HostConfig,
     InitialState,
     MDParams,
+    PairBarResult,
     SimulationResult,
-    estimate_free_energy_pair_bar,
+    estimate_free_energy_bar,
     make_pair_bar_plots,
     run_sims_sequential,
     run_sims_with_greedy_bisection,
@@ -453,16 +454,20 @@ def estimate_relative_free_energy(
         u_kln_by_component_by_lambda, stored_frames, stored_boxes = run_sims_sequential(
             initial_states, md_params, temperature, keep_idxs
         )
-        pair_bar_result = estimate_free_energy_pair_bar(u_kln_by_component_by_lambda, temperature, combined_prefix)
-        plots = make_pair_bar_plots(initial_states, pair_bar_result, temperature, combined_prefix)
+        bar_results = [
+            estimate_free_energy_bar(u_kln_by_component, temperature)
+            for u_kln_by_component in u_kln_by_component_by_lambda
+        ]
+        result = PairBarResult(initial_states, bar_results)
+        plots = make_pair_bar_plots(result, temperature, combined_prefix)
+
         return SimulationResult(
-            initial_states,
-            pair_bar_result,
+            result,
             plots,
             stored_frames,
             stored_boxes,
             md_params,
-            [(initial_states, pair_bar_result)],
+            [],
         )
     except Exception as err:
         with open(f"failed_rbfe_result_{combined_prefix}.pkl", "wb") as fh:
@@ -579,7 +584,7 @@ def estimate_relative_free_energy_via_greedy_bisection(
     combined_prefix = get_mol_name(mol_a) + "_" + get_mol_name(mol_b) + "_" + prefix
 
     try:
-        raw_results, frames, boxes = run_sims_with_greedy_bisection(
+        results, frames, boxes = run_sims_with_greedy_bisection(
             [lambda_min, lambda_max],
             make_optimized_initial_state,
             md_params,
@@ -587,26 +592,15 @@ def estimate_relative_free_energy_via_greedy_bisection(
             temperature=temperature,
         )
 
-        results = [
-            (
-                res.initial_states,
-                estimate_free_energy_pair_bar(res.u_kln_by_component_by_lambda, temperature, combined_prefix),
-            )
-            # TODO: re-enable computation of intermediate results after resolving performance issue
-            # for res in raw_results
-            for res in raw_results[-1:]  # only compute PairBarResult for the final iteration
-        ]
+        final_result = results[-1]
 
-        initial_states, pair_bar_result = results[-1]
-
-        plots = make_pair_bar_plots(initial_states, pair_bar_result, temperature, combined_prefix)
+        plots = make_pair_bar_plots(final_result, temperature, combined_prefix)
 
         stored_frames = [np.array(frames[i]) for i in keep_idxs]
         stored_boxes = [boxes[i] for i in keep_idxs]
 
         return SimulationResult(
-            initial_states,
-            pair_bar_result,
+            final_result,
             plots,
             stored_frames,
             stored_boxes,
@@ -793,10 +787,10 @@ def run_edge_and_save_results(
     pkl_obj = (mol_a, mol_b, edge.metadata, core, solvent_res, solvent_top, complex_res, complex_top)
     file_client.store(path, pickle.dumps(pkl_obj))
 
-    solvent_ddg = np.sum(solvent_res.result.all_dGs)
-    solvent_ddg_err = np.linalg.norm(solvent_res.result.all_errs)
-    complex_ddg = np.sum(complex_res.result.all_dGs)
-    complex_ddg_err = np.linalg.norm(complex_res.result.all_errs)
+    solvent_ddg = sum(solvent_res.final_result.dGs)
+    solvent_ddg_err = np.linalg.norm(solvent_res.final_result.dG_errs)
+    complex_ddg = sum(complex_res.final_result.dGs)
+    complex_ddg_err = np.linalg.norm(complex_res.final_result.dG_errs)
 
     tm_ddg = complex_ddg - solvent_ddg
     tm_err = np.linalg.norm([complex_ddg_err, solvent_ddg_err])
