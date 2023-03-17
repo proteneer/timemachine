@@ -360,7 +360,7 @@ class TestContext(unittest.TestCase):
         with pytest.raises(RuntimeError, match="burn in steps must be greater than zero"):
             ctxt.multiple_steps_local(100, np.array([1], dtype=np.int32), radius=radius, burn_in=-5)
 
-        with pytest.raises(RuntimeError, match="radius must be greater than or equal to zero"):
+        with pytest.raises(RuntimeError, match="radius must be greater or equal to zero"):
             ctxt.multiple_steps_local(100, np.array([1], dtype=np.int32), radius=-0.1)
 
         with pytest.raises(RuntimeError, match="k must be greater than zero"):
