@@ -532,6 +532,81 @@ class TestContext(unittest.TestCase):
         np.testing.assert_array_equal(summed_pot_xs, xs)
         np.testing.assert_array_equal(summed_pot_boxes, boxes)
 
+    def test_multiple_steps_local_entire_system(self):
+        """Verify that running multiple_steps_local is valid even when consuming the entire system, IE radius ~= inf.
+
+        - Only a single particle, the reference, should not move
+        """
+        mol, _ = get_biphenyl()
+        ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
+
+        temperature = 300
+        dt = 1.5e-3
+        friction = 1.0
+        seed = 2022
+        radius = np.inf
+        num_steps = 5
+
+        unbound_potentials, sys_params, masses, coords, box = get_solvent_phase_system(
+            mol, ff, 0.0, minimize_energy=False
+        )
+        v0 = np.zeros_like(coords)
+        bps = []
+        for p, bp in zip(sys_params, unbound_potentials):
+            bps.append(bp.bind(p).bound_impl(np.float32))
+
+        # Select the molecule as the local idxs
+        local_idxs = np.arange(len(coords) - mol.GetNumAtoms(), len(coords), dtype=np.int32)
+
+        intg = LangevinIntegrator(temperature, dt, friction, masses, seed)
+
+        intg_impl = intg.impl()
+
+        ctxt = custom_ops.Context(coords, v0, box, intg_impl, bps)
+
+        xs, boxes = ctxt.multiple_steps_local(num_steps, local_idxs, radius=radius)
+
+        identical_positions = (xs == coords).sum(axis=1)
+        assert len(identical_positions) == 1, "Expected only a single atom to be stationary"
+
+    def test_multiple_steps_local_no_free_particles(self):
+        """Verify that running multiple_steps_local raises an exception if no free particles selected.
+
+        - For tiny radius and large k, should select nothing
+        """
+        mol, _ = get_biphenyl()
+        ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
+
+        temperature = 300
+        dt = 1.5e-3
+        friction = 1.0
+        seed = 2022
+        num_steps = 5
+
+        # tiny radius and large k can produce no free particles, which is a pointless move
+        radius = np.finfo(float).eps
+        k = 1.0e7
+
+        unbound_potentials, sys_params, masses, coords, box = get_solvent_phase_system(
+            mol, ff, 0.0, minimize_energy=False
+        )
+        v0 = np.zeros_like(coords)
+        bps = []
+        for p, bp in zip(sys_params, unbound_potentials):
+            bps.append(bp.bind(p).bound_impl(np.float32))
+
+        # Select the molecule as the local idxs
+        local_idxs = np.arange(len(coords) - mol.GetNumAtoms(), len(coords), dtype=np.int32)
+
+        intg = LangevinIntegrator(temperature, dt, friction, masses, seed)
+
+        intg_impl = intg.impl()
+
+        ctxt = custom_ops.Context(coords, v0, box, intg_impl, bps)
+
+        with pytest.raises(RuntimeError, match="no free particles"):
+            xs, boxes = ctxt.multiple_steps_local(num_steps, local_idxs, radius=radius, k=k)
+
     def test_setup_context_with_references(self):
         mol, _ = get_biphenyl()
         ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
