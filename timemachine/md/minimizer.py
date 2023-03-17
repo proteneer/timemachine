@@ -13,11 +13,10 @@ from timemachine.fe.utils import get_romol_conf
 from timemachine.ff import Forcefield
 from timemachine.ff.handlers import openmm_deserializer
 from timemachine.lib import LangevinIntegrator, MonteCarloBarostat, custom_ops
-from timemachine.lib.potentials import HarmonicBond
+from timemachine.lib.potentials import HarmonicBond, SummedPotential
 from timemachine.md.barker import BarkerProposal
 from timemachine.md.barostat.utils import get_bond_list, get_group_indices
 from timemachine.md.fire import fire_descent
-from timemachine.potentials import generic
 
 
 class MinimizationWarning(UserWarning):
@@ -200,10 +199,10 @@ def make_gpu_impl(potentials):
     params = [p.params for p in potentials]
     flat_params = np.concatenate([param.reshape(-1) for param in params])
 
-    generic_potentials = [generic.from_gpu(p) for p in potentials]
-    summed_potential = generic.SummedPotential(generic_potentials, params)
+    summed_potential = SummedPotential(potentials, params)
+    bound_impl = summed_potential.bind(flat_params).bound_impl(np.float32)
 
-    return summed_potential.to_gpu().bind(flat_params).bound_impl(np.float32)
+    return bound_impl
 
 
 def make_host_du_dx_fxn(mols, host_system, host_coords, ff, box, mol_coords=None):
