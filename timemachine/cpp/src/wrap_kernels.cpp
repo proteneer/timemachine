@@ -219,6 +219,13 @@ void declare_context(py::module &m) {
                 if (burn_in < 0) {
                     throw std::runtime_error("burn in steps must be greater than zero");
                 }
+                if (radius < 0.0) {
+                    throw std::runtime_error("radius must be greater than or equal to zero");
+                }
+                if (k <= 0.0) {
+                    throw std::runtime_error("k must be greater than zero");
+                }
+
                 const int N = ctxt.num_atoms();
                 const int x_interval = (store_x_interval <= 0) ? n_steps : store_x_interval;
 
