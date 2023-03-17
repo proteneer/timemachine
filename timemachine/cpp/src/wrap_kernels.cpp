@@ -18,6 +18,7 @@
 #include "langevin_integrator.hpp"
 #include "neighborlist.hpp"
 #include "nonbonded_all_pairs.hpp"
+#include "nonbonded_common.hpp"
 #include "nonbonded_interaction_group.hpp"
 #include "nonbonded_pair_list.hpp"
 #include "nonbonded_precomputed.hpp"
@@ -220,7 +221,7 @@ void declare_context(py::module &m) {
                     throw std::runtime_error("burn in steps must be greater than zero");
                 }
                 if (radius < 0.0) {
-                    throw std::runtime_error("radius must be greater than or equal to zero");
+                    throw std::runtime_error("radius must be greater or equal to zero");
                 }
                 if (k <= 0.0) {
                     throw std::runtime_error("k must be greater than zero");
@@ -231,21 +232,8 @@ void declare_context(py::module &m) {
 
                 std::vector<int> vec_local_idxs(local_idxs.size());
                 std::memcpy(vec_local_idxs.data(), local_idxs.data(), vec_local_idxs.size() * sizeof(int));
-                if (vec_local_idxs.size() < 1) {
-                    throw std::runtime_error("number of idxs must be at least 1");
-                }
-                if (vec_local_idxs.size() >= (long unsigned int)N) {
-                    throw std::runtime_error("number of idxs must be less than N");
-                }
-                if (*std::max_element(vec_local_idxs.begin(), vec_local_idxs.end()) >= N) {
-                    throw std::runtime_error("indices values must be less than N");
-                }
-                if (*std::min_element(vec_local_idxs.begin(), vec_local_idxs.end()) < 0) {
-                    throw std::runtime_error("indices values must be greater than or equal to 0");
-                }
+                verify_atom_idxs(N, vec_local_idxs);
 
-                // Verify that local idxs are unique
-                unique_idxs<int>(vec_local_idxs);
                 std::array<std::vector<double>, 2> result =
                     ctxt.multiple_steps_local(n_steps, vec_local_idxs, burn_in, x_interval, radius, k, seed);
                 const int D = 3;
