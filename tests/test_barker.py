@@ -56,7 +56,7 @@ def test_proposal_normalization(x0, proposal_sig):
 
     Z = np.trapz(pdf_grid, y_grid)
 
-    assert pytest.approx(Z) == 1
+    assert Z == pytest.approx(1)
 
 
 @pytest.mark.nogpu
@@ -142,11 +142,11 @@ def test_proposal_magnitude_independent_of_force_magnitude(proposal_sig, seed):
     disp_clash = (ys_clash - x_clash).flatten()
     mean_sq_distance_clash = (disp_clash ** 2).mean()
 
-    assert pytest.approx(mean_sq_distance_clash, rel=rel_tol) == expected_sq_distance
+    assert mean_sq_distance_clash == pytest.approx(expected_sq_distance, rel=rel_tol)
 
     # assert that the proposals are skewed in the expected direction
     skew = np.sign(disp_clash).mean()
-    assert pytest.approx(skew, abs=abs_tol) == 1.0
+    assert skew == pytest.approx(1, abs=abs_tol)
 
     # ---------------------
     barker_prop = BarkerProposal(grad_log_q, proposal_sig=proposal_sig, seed=seed)
@@ -159,11 +159,11 @@ def test_proposal_magnitude_independent_of_force_magnitude(proposal_sig, seed):
     # again, assert proposals are the expected avg. sq. distance from starting point
     disp = (ys - x_relaxed).flatten()
     mean_sq_distance = (disp ** 2).mean()
-    assert pytest.approx(mean_sq_distance, rel=rel_tol) == expected_sq_distance
+    assert mean_sq_distance == pytest.approx(expected_sq_distance, rel=rel_tol)
 
     # assert that the proposals are not skewed much
     skew = np.sign(disp).mean()
-    assert pytest.approx(skew, abs=abs_tol) == 0.0
+    assert skew == pytest.approx(0, abs=abs_tol)
 
     # ---------------------
 
