@@ -98,7 +98,6 @@ def read_from_args():
     parser.add_argument("--mol_b_name", type=str, help="name of the end molecule", required=True)
     parser.add_argument("--forcefield", type=str, help="location of the ligand forcefield", required=True)
     parser.add_argument("--protein", type=str, help="PDB of the protein complex", required=True)
-    parser.add_argument("--n_frames", type=int, help="Number of frames to run", required=True)
     parser.add_argument("--seed", type=int, help="Random number seed", required=True)
 
     args = parser.parse_args()
