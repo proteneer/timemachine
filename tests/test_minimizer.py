@@ -1,4 +1,5 @@
 from importlib import resources
+from time import time
 
 import numpy as np
 
@@ -7,6 +8,7 @@ from timemachine.fe.utils import read_sdf
 from timemachine.ff import Forcefield
 from timemachine.ff.handlers import openmm_deserializer
 from timemachine.md import builders, minimizer
+from timemachine.md.minimizer import equilibrate_host_barker, make_host_du_dx_fxn
 
 
 def test_minimizer():
@@ -19,13 +21,58 @@ def test_minimizer():
 
     with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
         all_mols = read_sdf(path_to_ligand)
+
     mol_a = all_mols[1]
     mol_b = all_mols[4]
 
-    # these methods will throw if the minimization failed
-    minimizer.minimize_host_4d([mol_a, mol_b], complex_system, complex_coords, ff, complex_box)
-    minimizer.minimize_host_4d([mol_a], complex_system, complex_coords, ff, complex_box)
-    minimizer.minimize_host_4d([mol_b], complex_system, complex_coords, ff, complex_box)
+    # TODO[requirements-gathering]:
+    #   do we really want to minimize here ("equilibrate to temperature ~= 0"),
+    #   or do we want to equilibrate ("equilibrate to temperature = 300")?
+    #   and if we run MD @ temperature = 300 initialized from x_host, how long does it take to "heat back up"?
+    room_temperature = 300.0
+    zero_temperature = 0.0
+
+    # equilibrate_host_barker and minimize_host_4d methods will throw if the minimization failed
+
+    setups = {"A and B simultaneously": [mol_a, mol_b], "A alone": [mol_a], "B alone": [mol_b]}
+
+    for key in setups:
+        print(f"minimizing host given {key}...")
+        mols = setups[key]
+        host_du_dx_fxn = make_host_du_dx_fxn(mols, complex_system, complex_coords, ff, complex_box)
+
+        print(f"using unadjusted Barker proposal @ temperature = {room_temperature} K...")
+        t0 = time()
+        x_host = equilibrate_host_barker(
+            mols, complex_system, complex_coords, ff, complex_box, temperature=room_temperature
+        )
+        t1 = time()
+        max_frc = np.linalg.norm(host_du_dx_fxn(x_host), axis=-1).max()
+        print(f"\tforce norm after room-temperature equilibration: {max_frc:.3f} kJ/mol / nm")
+        print(f"\tmax distance traveled = {np.linalg.norm(np.array(complex_coords) - x_host, axis=-1).max():.3f} nm")
+        print(f"\tdone in {(t1 - t0):.3f} s")
+
+        print(f"using unadjusted Barker proposal @ temperature = {zero_temperature} K...")
+        t0 = time()
+        x_host = equilibrate_host_barker(
+            mols, complex_system, complex_coords, ff, complex_box, temperature=zero_temperature
+        )
+        t1 = time()
+
+        max_frc = np.linalg.norm(host_du_dx_fxn(x_host), axis=-1).max()
+
+        print(f"\tforce norm after low-temperature 'equilibration': {max_frc:.3f} kJ/mol / nm")
+        print(f"\tmax distance traveled = {np.linalg.norm(np.array(complex_coords) - x_host, axis=-1).max():.3f} nm")
+        print(f"\tdone in {(t1 - t0):.3f} s")
+
+        t0 = time()
+        print("using 4D FIRE annealing")
+        x_host = minimizer.minimize_host_4d(mols, complex_system, complex_coords, ff, complex_box)
+        max_frc = np.linalg.norm(host_du_dx_fxn(x_host), axis=-1).max()
+        print(f"\tmax force norm after 4D FIRE annealing: {max_frc:.3f} kJ/mol / nm")
+        print(f"\tmax distance traveled = {np.linalg.norm(np.array(complex_coords) - x_host, axis=-1).max():.3f} nm")
+        t1 = time()
+        print(f"\tdone in {(t1 - t0):.3f} s")
 
 
 def test_equilibrate_host():
