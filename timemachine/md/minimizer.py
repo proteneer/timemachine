@@ -208,6 +208,8 @@ def make_gpu_impl(potentials):
 def make_host_du_dx_fxn(mols, host_system, host_coords, ff, box, mol_coords=None):
     """construct function to compute du_dx w.r.t. host coords, given fixed mols and box"""
 
+    assert box.shape == (3, 3)
+
     # openmm host_system -> timemachine host_bps
     host_bps, _ = openmm_deserializer.deserialize_system(host_system, cutoff=1.2)
 
@@ -236,11 +238,15 @@ def make_host_du_dx_fxn(mols, host_system, host_coords, ff, box, mol_coords=None
         for mol in mols:
             conf_list.append(get_romol_conf(mol))
 
+    # check conf_list consistent with mols
+    assert len(conf_list[1:]) == len(mols)
+    for (conf, mol) in zip(conf_list[1:], mols):
+        assert conf.shape == (mol.GetNumAtoms(), 3)
+
     combined_coords = np.concatenate(conf_list)
 
     # wrap gpu_impl, partially applying box, mol coords
     num_host_atoms = host_coords.shape[0]
-    assert box.shape == (3, 3)
 
     def du_dx_host_fxn(x_host):
         x = np.array(combined_coords)
