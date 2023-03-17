@@ -28,13 +28,19 @@ class MinimizationError(Exception):
     pass
 
 
-def check_force_norm(du_dx, threshold=MAX_FORCE_NORM):
-    """raise Minimization error if the force on any atom exceeds MAX_FORCE_NORM"""
-    norm = np.linalg.norm(du_dx, axis=-1)
-    if not np.all(norm < threshold):
-        raise MinimizationError(
-            f"Minimization failed to reduce large forces below threshold: |frc| = {norm} > {threshold}"
-        )
+def check_force_norm(forces, threshold=MAX_FORCE_NORM):
+    """raise MinimizationError if the force on any atom exceeds MAX_FORCE_NORM"""
+    per_atom_force_norms = np.linalg.norm(forces, axis=-1)
+
+    if (per_atom_force_norms > threshold).any():
+        bad_inds = np.where(per_atom_force_norms > threshold)[0]
+        max_atom_force_norm = np.max(per_atom_force_norms)
+        message = f"""
+        Minimization failed to reduce large forces below threshold:
+            max |frc| = {max_atom_force_norm} > {threshold}
+            {len(bad_inds)} / {len(forces)} atoms exceed threshold
+        """
+        raise MinimizationError(message)
 
 
 def parameterize_system(topo, ff: Forcefield, lamb: float):
@@ -183,7 +189,7 @@ def minimize_host_4d(mols, host_system, host_coords, ff, box, mol_coords=None) -
     final_coords = fire_minimize(x, u_impls, box, 50)
     for impl in u_impls:
         du_dx, _ = impl.execute(final_coords, box)
-        check_force_norm(du_dx)
+        check_force_norm(-du_dx)
 
     return final_coords[:num_host_atoms]
 
