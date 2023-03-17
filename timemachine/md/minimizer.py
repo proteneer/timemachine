@@ -256,8 +256,22 @@ def make_host_du_dx_fxn(mols, host_system, host_coords, ff, box, mol_coords=None
 def equilibrate_host_barker(
     mols, host_system, host_coords, ff, box, mol_coords=None, temperature=300.0, proposal_stddev=0.0001, n_steps=1000
 ):
-    """possibly simpler alternative to minimize_host_4d, for purposes of
-    clash resolution and initial pre-equilibration"""
+    """Possible alternative to minimize_host_4d, for purposes of clash resolution and initial pre-equilibration
+
+    Notes
+    -----
+    * Applies a robust proposal targeting lam = 0, and omits Metropolis correction
+        * For sufficiently small proposal_stddev, can be expected to sample from approximately the correct distribution
+        * Not expected to outperform BAOAB in terms of improved sampling efficiency or reduced sampling bias
+        * Possible advantage: robustness w.r.t. clashy initialization
+    * Can make progress even when |force| = +inf
+    * At proposal_stddev = 0.0001 nm:
+        * appears to resolve steric clashes
+        * appears stable even with Metropolis correction omitted
+    * Can be run as an approximate minimizer by setting temperature == 0.0
+    """
+
+    assert 0 < proposal_stddev <= 0.0001, "not tested with Metropolis correction omitted for larger proposal_stddevs"
 
     du_dx_host_fxn = make_host_du_dx_fxn(mols, host_system, host_coords, ff, box, mol_coords)
     grad_log_q = lambda x_host: -du_dx_host_fxn(x_host) / (BOLTZ * temperature)

@@ -30,9 +30,9 @@ def test_minimizer():
     #   or do we want to equilibrate ("equilibrate to temperature = 300")?
     #   and if we run MD @ temperature = 300 initialized from x_host, how long does it take to "heat back up"?
     room_temperature = 300.0
-    low_temperature = 1e-3
+    zero_temperature = 0.0
 
-    # these methods will throw if the minimization failed
+    # equilibrate_host_barker and minimize_host_4d methods will throw if the minimization failed
 
     setups = {"A and B simultaneously": [mol_a, mol_b], "A alone": [mol_a], "B alone": [mol_b]}
 
@@ -47,31 +47,29 @@ def test_minimizer():
             mols, complex_system, complex_coords, ff, complex_box, temperature=room_temperature
         )
         t1 = time()
-        print(
-            f"\tforce norm after room-temperature equilibration: {np.linalg.norm(host_du_dx_fxn(x_host), axis=-1).max():.3f} kJ/mol / nm"
-        )
+        max_frc = np.linalg.norm(host_du_dx_fxn(x_host), axis=-1).max()
+        print(f"\tforce norm after room-temperature equilibration: {max_frc:.3f} kJ/mol / nm")
         print(f"\tmax distance traveled = {np.linalg.norm(np.array(complex_coords) - x_host, axis=-1).max():.3f} nm")
         print(f"\tdone in {(t1 - t0):.3f} s")
 
-        print(f"using unadjusted Barker proposal @ temperature = {low_temperature} K...")
+        print(f"using unadjusted Barker proposal @ temperature = {zero_temperature} K...")
         t0 = time()
         x_host = equilibrate_host_barker(
-            mols, complex_system, complex_coords, ff, complex_box, temperature=low_temperature
+            mols, complex_system, complex_coords, ff, complex_box, temperature=zero_temperature
         )
         t1 = time()
 
-        print(
-            f"\tforce norm after low-temperature equilibration: {np.linalg.norm(host_du_dx_fxn(x_host), axis=-1).max():.3f} kJ/mol / nm"
-        )
+        max_frc = np.linalg.norm(host_du_dx_fxn(x_host), axis=-1).max()
+
+        print(f"\tforce norm after low-temperature 'equilibration': {max_frc:.3f} kJ/mol / nm")
         print(f"\tmax distance traveled = {np.linalg.norm(np.array(complex_coords) - x_host, axis=-1).max():.3f} nm")
         print(f"\tdone in {(t1 - t0):.3f} s")
 
         t0 = time()
         print("using 4D FIRE annealing")
         x_host = minimizer.minimize_host_4d(mols, complex_system, complex_coords, ff, complex_box)
-        print(
-            f"\tforce norm after 4D FIRE annealing: {np.linalg.norm(host_du_dx_fxn(x_host), axis=-1).max():.3f} kJ/mol / nm"
-        )
+        max_frc = np.linalg.norm(host_du_dx_fxn(x_host), axis=-1).max()
+        print(f"\tmax force norm after 4D FIRE annealing: {max_frc:.3f} kJ/mol / nm")
         print(f"\tmax distance traveled = {np.linalg.norm(np.array(complex_coords) - x_host, axis=-1).max():.3f} nm")
         t1 = time()
         print(f"\tdone in {(t1 - t0):.3f} s")
