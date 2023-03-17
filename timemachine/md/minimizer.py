@@ -7,7 +7,7 @@ from numpy.typing import NDArray
 from rdkit import Chem
 from simtk import openmm
 
-from timemachine.constants import BOLTZ, MAX_FORCE_NORM
+from timemachine.constants import BOLTZ, DEFAULT_TEMP, MAX_FORCE_NORM
 from timemachine.fe import model_utils, topology
 from timemachine.fe.utils import get_romol_conf
 from timemachine.ff import Forcefield
@@ -260,7 +260,7 @@ def equilibrate_host_barker(
     ff,
     box,
     mol_coords=None,
-    temperature=300.0,
+    temperature=DEFAULT_TEMP,
     proposal_stddev=0.0001,
     n_steps=1000,
     seed=None,
