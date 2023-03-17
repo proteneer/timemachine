@@ -61,8 +61,6 @@ def test_proposal_normalization(x0, proposal_sig):
 
 @pytest.mark.nogpu
 def test_accurate_mcmc(threshold=1e-4):
-    np.random.seed(0)
-
     def log_q(x):
         return np.sum(-(x ** 4))
 
@@ -72,7 +70,7 @@ def test_accurate_mcmc(threshold=1e-4):
     # system with a large number of quartic oscillators
     x = np.zeros(1_000)
 
-    prop = BarkerProposal(grad_log_q, proposal_sig=0.1)
+    prop = BarkerProposal(grad_log_q, proposal_sig=0.1, seed=0)
 
     def mcmc_move(x):
         y = prop.sample(x)
@@ -109,8 +107,8 @@ def test_accurate_mcmc(threshold=1e-4):
 
 @pytest.mark.nogpu
 @pytest.mark.parametrize("proposal_sig", [0.1, 1.0])
-@pytest.mark.parametrize("shared_seed", range(5))
-def test_proposal_magnitude_independent_of_force_magnitude(proposal_sig, shared_seed):
+@pytest.mark.parametrize("seed", range(5))
+def test_proposal_magnitude_independent_of_force_magnitude(proposal_sig, seed):
     """Generate Lennard-Jones-informed proposals from clashy vs. relaxed starting points
         (where |force(x_clash)| ~= +inf and |force(x_relaxed)| ~ 0).
 
@@ -125,14 +123,13 @@ def test_proposal_magnitude_independent_of_force_magnitude(proposal_sig, shared_
 
     grad_log_q = jit(grad(log_q))
 
-    barker_prop = BarkerProposal(grad_log_q, proposal_sig=proposal_sig)
-    expected_sq_distance = barker_prop.proposal_sig ** 2
+    expected_sq_distance = proposal_sig ** 2
     n_samples = 100_000
     rel_tol = 1e-2
     abs_tol = 1e-2
 
     # ---------------------
-    np.random.seed(shared_seed)
+    barker_prop = BarkerProposal(grad_log_q, proposal_sig=proposal_sig, seed=seed)
 
     # sample many proposals from a clashy initial condition
     x_clash = 1e-3 * np.ones(n_samples)
@@ -152,7 +149,7 @@ def test_proposal_magnitude_independent_of_force_magnitude(proposal_sig, shared_
     assert pytest.approx(skew, abs=abs_tol) == 1.0
 
     # ---------------------
-    np.random.seed(shared_seed)
+    barker_prop = BarkerProposal(grad_log_q, proposal_sig=proposal_sig, seed=seed)
 
     # sample many proposals from a relaxed initial condition
     x_relaxed = 1e3 * np.ones(n_samples)

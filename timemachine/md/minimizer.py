@@ -254,7 +254,16 @@ def make_host_du_dx_fxn(mols, host_system, host_coords, ff, box, mol_coords=None
 
 
 def equilibrate_host_barker(
-    mols, host_system, host_coords, ff, box, mol_coords=None, temperature=300.0, proposal_stddev=0.0001, n_steps=1000
+    mols,
+    host_system,
+    host_coords,
+    ff,
+    box,
+    mol_coords=None,
+    temperature=300.0,
+    proposal_stddev=0.0001,
+    n_steps=1000,
+    seed=None,
 ):
     """Possible alternative to minimize_host_4d, for purposes of clash resolution and initial pre-equilibration
 
@@ -277,7 +286,7 @@ def equilibrate_host_barker(
     grad_log_q = lambda x_host: -du_dx_host_fxn(x_host) / (BOLTZ * temperature)
 
     # TODO: if needed, revisit choice to omit Metropolis correction
-    barker_prop = BarkerProposal(grad_log_q, proposal_stddev)
+    barker_prop = BarkerProposal(grad_log_q, proposal_stddev, seed=seed)
 
     x_host = np.array(host_coords)
 

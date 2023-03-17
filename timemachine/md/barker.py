@@ -2,7 +2,7 @@ import numpy as np
 
 
 class BarkerProposal:
-    def __init__(self, grad_log_q, proposal_sig=0.001):
+    def __init__(self, grad_log_q, proposal_sig=0.001, seed=None):
         """Robust gradient-informed proposal distribution.
 
         Supports:
@@ -20,6 +20,10 @@ class BarkerProposal:
         self.grad_log_q = grad_log_q
         assert proposal_sig > 0
         self.proposal_sig = proposal_sig
+
+        if seed is None:
+            seed = np.random.randint(100000)
+        self.rng = np.random.default_rng(seed)
 
     def _sample(self, x, gaussian_rvs, uniform_rvs):
         """alg. 1"""
@@ -41,8 +45,8 @@ class BarkerProposal:
 
     def sample(self, x):
         """y ~ p(. | x)"""
-        gauss = np.random.randn(*x.shape)
-        unif = np.random.rand(*x.shape)
+        gauss = self.rng.normal(size=x.shape)
+        unif = self.rng.uniform(size=x.shape)
 
         return self._sample(x, gauss, unif)
 
