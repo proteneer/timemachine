@@ -220,14 +220,17 @@ void declare_context(py::module &m) {
                 if (burn_in < 0) {
                     throw std::runtime_error("burn in steps must be greater or equal to zero");
                 }
-                if (radius < 0.0) {
-                    throw std::runtime_error("radius must be greater or equal to zero");
+                // Lower bound on radius selected to be 1 Angstrom, to avoid case where no particles
+                // are moved. TBD whether or not this is a good lower bound
+                const double min_radius = 0.1;
+                if (radius < min_radius) {
+                    throw std::runtime_error("radius must be greater or equal to " + std::to_string(min_radius));
                 }
-                if (k <= 0.0) {
-                    throw std::runtime_error("k must be greater than zero");
+                if (k < 1.0) {
+                    throw std::runtime_error("k must be at least one");
                 }
                 // TBD determine a more precise threshold, currently 10x what has been tested
-                const float max_k = 1000000.0;
+                const double max_k = 1000000.0;
                 if (k > max_k) {
                     throw std::runtime_error("k must be less than than " + std::to_string(max_k));
                 }

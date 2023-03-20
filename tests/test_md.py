@@ -360,10 +360,10 @@ class TestContext(unittest.TestCase):
         with pytest.raises(RuntimeError, match="burn in steps must be greater or equal to zero"):
             ctxt.multiple_steps_local(100, np.array([1], dtype=np.int32), radius=radius, burn_in=-5)
 
-        with pytest.raises(RuntimeError, match="radius must be greater or equal to zero"):
-            ctxt.multiple_steps_local(100, np.array([1], dtype=np.int32), radius=-0.1)
+        with pytest.raises(RuntimeError, match="radius must be greater or equal to 0.1"):
+            ctxt.multiple_steps_local(100, np.array([1], dtype=np.int32), radius=0.01)
 
-        with pytest.raises(RuntimeError, match="k must be greater than zero"):
+        with pytest.raises(RuntimeError, match="k must be at least one"):
             ctxt.multiple_steps_local(100, np.array([1], dtype=np.int32), k=0.0)
 
         with pytest.raises(RuntimeError, match="k must be less than than 1000000.0"):
@@ -577,41 +577,46 @@ class TestContext(unittest.TestCase):
 
     def test_multiple_steps_local_no_free_particles(self):
         """Verify that running multiple_steps_local raises an exception if no free particles selected.
+        In this case we can trigger this failure by having a single atom molecule, and moving it away from
+        the water box. This is a pathological case, but to verify the exception
 
-        - For tiny radius and large k, should select nothing
+        This may need to be changed in the future if there are stochastic failures due to probabilistic selection
+        of the free particle.
         """
-        mol, _ = get_biphenyl()
-        ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
-
-        temperature = 300
+        temperature = constants.DEFAULT_TEMP
         dt = 1.5e-3
-        friction = 1.0
-        seed = 2022
-        num_steps = 5
+        friction = 0.0
+        seed = 2023
+        N = 100
+        D = 3
+        radius = 0.1
+        k = 1.0
 
-        # tiny radius and large k can produce no free particles, which is a pointless move
-        radius = np.finfo(float).eps
-        k = 1.0e6
+        rng = np.random.default_rng(seed)
+        x0 = rng.uniform(1, size=(N, D)).astype(dtype=np.float64) * 2
 
-        unbound_potentials, sys_params, masses, coords, box = get_solvent_phase_system(
-            mol, ff, 0.0, minimize_energy=False
-        )
-        v0 = np.zeros_like(coords)
-        bps = []
-        for p, bp in zip(sys_params, unbound_potentials):
-            bps.append(bp.bind(p).bound_impl(np.float32))
+        E = 2
 
-        # Select the molecule as the local idxs
-        local_idxs = np.arange(len(coords) - mol.GetNumAtoms(), len(coords), dtype=np.int32)
+        box = np.eye(3) * 1000.0
+
+        params, potential = prepare_nb_system(x0, E, p_scale=3.0, cutoff=1.0)
+        test_nrg = potential.to_gpu()
+
+        bps = [test_nrg.bind(params).bound_impl(np.float32)]
+
+        masses = rng.uniform(1.0, size=N)
+        v0 = rng.uniform(1.0, size=(x0.shape[0], x0.shape[1]))
+
+        # Select the last particle the local idxs
+        local_idxs = np.array([N - 1], dtype=np.int32)
+        x0[local_idxs] += 100.0
 
         intg = LangevinIntegrator(temperature, dt, friction, masses, seed)
 
-        intg_impl = intg.impl()
-
-        ctxt = custom_ops.Context(coords, v0, box, intg_impl, bps)
+        ctxt = custom_ops.Context(x0, v0, box, intg.impl(), bps)
 
         with pytest.raises(RuntimeError, match="no free particles"):
-            xs, boxes = ctxt.multiple_steps_local(num_steps, local_idxs, radius=radius, k=k)
+            xs, boxes = ctxt.multiple_steps_local(1, local_idxs, radius=radius, k=k, seed=seed)
 
     def test_setup_context_with_references(self):
         mol, _ = get_biphenyl()
