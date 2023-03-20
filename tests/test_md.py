@@ -366,6 +366,9 @@ class TestContext(unittest.TestCase):
         with pytest.raises(RuntimeError, match="k must be greater than zero"):
             ctxt.multiple_steps_local(100, np.array([1], dtype=np.int32), k=0.0)
 
+        with pytest.raises(RuntimeError, match="k must be less than than 1000000.0"):
+            ctxt.multiple_steps_local(100, np.array([1], dtype=np.int32), k=1e7)
+
     def test_multiple_steps_local_burn_in(self):
         """Verify that burn in steps are identical to regular steps"""
         seed = 2022

@@ -226,6 +226,11 @@ void declare_context(py::module &m) {
                 if (k <= 0.0) {
                     throw std::runtime_error("k must be greater than zero");
                 }
+                // TBD determine a more precise threshold, currently 10x what has been tested
+                const float max_k = 1000000.0;
+                if (k > max_k) {
+                    throw std::runtime_error("k must be less than than " + std::to_string(max_k));
+                }
 
                 const int N = ctxt.num_atoms();
                 const int x_interval = (store_x_interval <= 0) ? n_steps : store_x_interval;
