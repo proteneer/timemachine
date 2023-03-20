@@ -591,7 +591,7 @@ class TestContext(unittest.TestCase):
 
         # tiny radius and large k can produce no free particles, which is a pointless move
         radius = np.finfo(float).eps
-        k = 1.0e7
+        k = 1.0e6
 
         unbound_potentials, sys_params, masses, coords, box = get_solvent_phase_system(
             mol, ff, 0.0, minimize_energy=False
