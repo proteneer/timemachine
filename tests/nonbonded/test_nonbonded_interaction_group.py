@@ -16,10 +16,10 @@ def test_nonbonded_interaction_group_invalid_indices():
     with pytest.raises(RuntimeError, match="atom indices must be unique"):
         NonbondedInteractionGroup(3, [1, 1], 1.0, 1.0).unbound_impl(np.float64)
 
-    with pytest.raises(RuntimeError, match="indice values must be greater or equal to zero"):
+    with pytest.raises(RuntimeError, match="index values must be greater or equal to zero"):
         NonbondedInteractionGroup(3, [1, -1], 1.0, 1.0).unbound_impl(np.float64)
 
-    with pytest.raises(RuntimeError, match="indice values must be less than N"):
+    with pytest.raises(RuntimeError, match="index values must be less than N"):
         NonbondedInteractionGroup(3, [1, 100], 1.0, 1.0).unbound_impl(np.float64)
 
     with pytest.raises(RuntimeError) as e:

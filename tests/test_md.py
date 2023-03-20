@@ -345,23 +345,29 @@ class TestContext(unittest.TestCase):
 
         # Verify that indices are correctly checked
         ctxt = custom_ops.Context(coords, v0, box, intg_impl, bps)
-        with pytest.raises(RuntimeError, match="number of idxs must be at least 1"):
+        with pytest.raises(RuntimeError, match="indices can't be empty"):
             ctxt.multiple_steps_local(100, np.array([], dtype=np.int32), radius=radius)
 
-        with pytest.raises(RuntimeError, match="indices values must be less than N"):
+        with pytest.raises(RuntimeError, match="index values must be less than N"):
             ctxt.multiple_steps_local(100, np.array([N * 2], dtype=np.int32), radius=radius)
 
-        with pytest.raises(RuntimeError, match="indices values must be greater than or equal to 0"):
+        with pytest.raises(RuntimeError, match="index values must be greater or equal to zero"):
             ctxt.multiple_steps_local(100, np.array([-1], dtype=np.int32), radius=radius)
-
-        with pytest.raises(RuntimeError, match="number of idxs must be less than N"):
-            ctxt.multiple_steps_local(100, np.array([5] * N * 2, dtype=np.int32), radius=radius)
 
         with pytest.raises(RuntimeError, match="atom indices must be unique"):
             ctxt.multiple_steps_local(100, np.array([1, 1], dtype=np.int32), radius=radius)
 
-        with pytest.raises(RuntimeError, match="burn in steps must be greater than zero"):
+        with pytest.raises(RuntimeError, match="burn in steps must be greater or equal to zero"):
             ctxt.multiple_steps_local(100, np.array([1], dtype=np.int32), radius=radius, burn_in=-5)
+
+        with pytest.raises(RuntimeError, match="radius must be greater or equal to 0.1"):
+            ctxt.multiple_steps_local(100, np.array([1], dtype=np.int32), radius=0.01)
+
+        with pytest.raises(RuntimeError, match="k must be at least one"):
+            ctxt.multiple_steps_local(100, np.array([1], dtype=np.int32), k=0.0)
+
+        with pytest.raises(RuntimeError, match="k must be less than than 1000000.0"):
+            ctxt.multiple_steps_local(100, np.array([1], dtype=np.int32), k=1e7)
 
     def test_multiple_steps_local_burn_in(self):
         """Verify that burn in steps are identical to regular steps"""
@@ -531,6 +537,86 @@ class TestContext(unittest.TestCase):
         # Results using a summed potential should be identical.
         np.testing.assert_array_equal(summed_pot_xs, xs)
         np.testing.assert_array_equal(summed_pot_boxes, boxes)
+
+    def test_multiple_steps_local_entire_system(self):
+        """Verify that running multiple_steps_local is valid even when consuming the entire system, IE radius ~= inf.
+
+        - Only a single particle, the reference, should not move
+        """
+        mol, _ = get_biphenyl()
+        ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
+
+        temperature = 300
+        dt = 1.5e-3
+        friction = 1.0
+        seed = 2022
+        radius = np.inf
+        num_steps = 5
+
+        unbound_potentials, sys_params, masses, coords, box = get_solvent_phase_system(
+            mol, ff, 0.0, minimize_energy=False
+        )
+        v0 = np.zeros_like(coords)
+        bps = []
+        for p, bp in zip(sys_params, unbound_potentials):
+            bps.append(bp.bind(p).bound_impl(np.float32))
+
+        # Select the molecule as the local idxs
+        local_idxs = np.arange(len(coords) - mol.GetNumAtoms(), len(coords), dtype=np.int32)
+
+        intg = LangevinIntegrator(temperature, dt, friction, masses, seed)
+
+        intg_impl = intg.impl()
+
+        ctxt = custom_ops.Context(coords, v0, box, intg_impl, bps)
+
+        xs, boxes = ctxt.multiple_steps_local(num_steps, local_idxs, radius=radius)
+
+        assert xs.shape[0] == 1
+        assert np.all(xs[0] == coords, axis=1).sum() == 1, "Expected only a single atom to be stationary"
+
+    def test_multiple_steps_local_no_free_particles(self):
+        """Verify that running multiple_steps_local raises an exception if no free particles selected.
+        In this case we can trigger this failure by having a single atom molecule, and moving it away from
+        the water box. This is a pathological case, but to verify the exception
+
+        This may need to be changed in the future if there are stochastic failures due to probabilistic selection
+        of the free particle.
+        """
+        temperature = constants.DEFAULT_TEMP
+        dt = 1.5e-3
+        friction = 0.0
+        seed = 2023
+        N = 100
+        D = 3
+        radius = 0.1
+        k = 1.0
+
+        rng = np.random.default_rng(seed)
+        x0 = rng.uniform(1, size=(N, D)).astype(dtype=np.float64) * 2
+
+        E = 2
+
+        box = np.eye(3) * 1000.0
+
+        params, potential = prepare_nb_system(x0, E, p_scale=3.0, cutoff=1.0)
+        test_nrg = potential.to_gpu()
+
+        bps = [test_nrg.bind(params).bound_impl(np.float32)]
+
+        masses = rng.uniform(1.0, size=N)
+        v0 = rng.uniform(1.0, size=(x0.shape[0], x0.shape[1]))
+
+        # Select the last particle the local idxs
+        local_idxs = np.array([N - 1], dtype=np.int32)
+        x0[local_idxs] += 100.0
+
+        intg = LangevinIntegrator(temperature, dt, friction, masses, seed)
+
+        ctxt = custom_ops.Context(x0, v0, box, intg.impl(), bps)
+
+        with pytest.raises(RuntimeError, match="no free particles"):
+            xs, boxes = ctxt.multiple_steps_local(1, local_idxs, radius=radius, k=k, seed=seed)
 
     def test_setup_context_with_references(self):
         mol, _ = get_biphenyl()

@@ -18,6 +18,7 @@
 #include "langevin_integrator.hpp"
 #include "neighborlist.hpp"
 #include "nonbonded_all_pairs.hpp"
+#include "nonbonded_common.hpp"
 #include "nonbonded_interaction_group.hpp"
 #include "nonbonded_pair_list.hpp"
 #include "nonbonded_precomputed.hpp"
@@ -217,28 +218,30 @@ void declare_context(py::module &m) {
                     throw std::runtime_error("local steps must be at least one");
                 }
                 if (burn_in < 0) {
-                    throw std::runtime_error("burn in steps must be greater than zero");
+                    throw std::runtime_error("burn in steps must be greater or equal to zero");
                 }
+                // Lower bound on radius selected to be 1 Angstrom, to avoid case where no particles
+                // are moved. TBD whether or not this is a good lower bound
+                const double min_radius = 0.1;
+                if (radius < min_radius) {
+                    throw std::runtime_error("radius must be greater or equal to " + std::to_string(min_radius));
+                }
+                if (k < 1.0) {
+                    throw std::runtime_error("k must be at least one");
+                }
+                // TBD determine a more precise threshold, currently 10x what has been tested
+                const double max_k = 1000000.0;
+                if (k > max_k) {
+                    throw std::runtime_error("k must be less than than " + std::to_string(max_k));
+                }
+
                 const int N = ctxt.num_atoms();
                 const int x_interval = (store_x_interval <= 0) ? n_steps : store_x_interval;
 
                 std::vector<int> vec_local_idxs(local_idxs.size());
                 std::memcpy(vec_local_idxs.data(), local_idxs.data(), vec_local_idxs.size() * sizeof(int));
-                if (vec_local_idxs.size() < 1) {
-                    throw std::runtime_error("number of idxs must be at least 1");
-                }
-                if (vec_local_idxs.size() >= (long unsigned int)N) {
-                    throw std::runtime_error("number of idxs must be less than N");
-                }
-                if (*std::max_element(vec_local_idxs.begin(), vec_local_idxs.end()) >= N) {
-                    throw std::runtime_error("indices values must be less than N");
-                }
-                if (*std::min_element(vec_local_idxs.begin(), vec_local_idxs.end()) < 0) {
-                    throw std::runtime_error("indices values must be greater than or equal to 0");
-                }
+                verify_atom_idxs(N, vec_local_idxs);
 
-                // Verify that local idxs are unique
-                unique_idxs<int>(vec_local_idxs);
                 std::array<std::vector<double>, 2> result =
                     ctxt.multiple_steps_local(n_steps, vec_local_idxs, burn_in, x_interval, radius, k, seed);
                 const int D = 3;
