@@ -573,7 +573,7 @@ class TestContext(unittest.TestCase):
         xs, boxes = ctxt.multiple_steps_local(num_steps, local_idxs, radius=radius)
 
         assert xs.shape[0] == 1
-        assert (xs[0] == coords).sum() == 3, "Expected only a single atom to be stationary"
+        assert np.all(xs[0] == coords, axis=1).sum() == 1, "Expected only a single atom to be stationary"
 
     def test_multiple_steps_local_no_free_particles(self):
         """Verify that running multiple_steps_local raises an exception if no free particles selected.
