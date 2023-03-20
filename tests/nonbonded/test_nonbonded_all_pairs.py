@@ -15,10 +15,10 @@ def test_nonbonded_all_pairs_invalid_atom_idxs():
     with pytest.raises(RuntimeError, match="atom indices must be unique"):
         NonbondedAllPairs(3, 2.0, 1.1, [0, 0]).unbound_impl(np.float64)
 
-    with pytest.raises(RuntimeError, match="indice values must be greater or equal to zero"):
+    with pytest.raises(RuntimeError, match="index values must be greater or equal to zero"):
         NonbondedAllPairs(3, 2.0, 1.1, [0, -1]).unbound_impl(np.float64)
 
-    with pytest.raises(RuntimeError, match="indice values must be less than N"):
+    with pytest.raises(RuntimeError, match="index values must be less than N"):
         NonbondedAllPairs(3, 2.0, 1.1, [0, 100]).unbound_impl(np.float64)
 
 

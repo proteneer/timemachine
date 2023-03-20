@@ -348,10 +348,10 @@ class TestContext(unittest.TestCase):
         with pytest.raises(RuntimeError, match="indices can't be empty"):
             ctxt.multiple_steps_local(100, np.array([], dtype=np.int32), radius=radius)
 
-        with pytest.raises(RuntimeError, match="indice values must be less than N"):
+        with pytest.raises(RuntimeError, match="index values must be less than N"):
             ctxt.multiple_steps_local(100, np.array([N * 2], dtype=np.int32), radius=radius)
 
-        with pytest.raises(RuntimeError, match="indice values must be greater or equal to zero"):
+        with pytest.raises(RuntimeError, match="index values must be greater or equal to zero"):
             ctxt.multiple_steps_local(100, np.array([-1], dtype=np.int32), radius=radius)
 
         with pytest.raises(RuntimeError, match="atom indices must be unique"):
