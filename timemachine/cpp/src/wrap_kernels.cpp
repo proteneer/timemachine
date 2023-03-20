@@ -218,7 +218,7 @@ void declare_context(py::module &m) {
                     throw std::runtime_error("local steps must be at least one");
                 }
                 if (burn_in < 0) {
-                    throw std::runtime_error("burn in steps must be greater than zero");
+                    throw std::runtime_error("burn in steps must be greater or equal to zero");
                 }
                 if (radius < 0.0) {
                     throw std::runtime_error("radius must be greater or equal to zero");
