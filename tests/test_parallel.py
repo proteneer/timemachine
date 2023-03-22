@@ -1,4 +1,5 @@
 # tests for parallel execution
+import io
 import os
 import pickle
 import unittest
@@ -174,6 +175,11 @@ def test_file_client(tmpdir):
         assert fc.exists("test")
         assert str(fc.full_path("test")) == str(Path(tmpdir, "subdir", "test"))
         assert fc.load("test") == b"data"
+
+        fc.store_stream("test_copy", io.BytesIO(fc.load("test")))
+        assert fc.exists("test_copy")
+        assert str(fc.full_path("test_copy")) == str(Path(tmpdir, "subdir", "test_copy"))
+        assert fc.load("test") == fc.load("test_copy")
 
 
 def test_save_results(tmpdir):
