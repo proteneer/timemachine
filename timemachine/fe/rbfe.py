@@ -24,7 +24,7 @@ from timemachine.fe.free_energy import (
 )
 from timemachine.fe.single_topology import SingleTopology
 from timemachine.fe.system import VacuumSystem, convert_omm_system
-from timemachine.fe.utils import get_mol_name, get_romol_conf
+from timemachine.fe.utils import bytes_to_id, get_mol_name, get_romol_conf
 from timemachine.ff import Forcefield
 from timemachine.lib import LangevinIntegrator, MonteCarloBarostat
 from timemachine.lib.potentials import CustomOpWrapper
@@ -34,6 +34,10 @@ from timemachine.parallel.client import AbstractClient, AbstractFileClient, CUDA
 from timemachine.potentials import jax_utils
 
 DEFAULT_NUM_WINDOWS = 30
+
+# the constant is arbitrary, but see
+# https://github.com/proteneer/timemachine/commit/e1f7328f01f427534d8744aab6027338e116ad09
+MAX_SEED_VALUE = 10000
 
 
 def setup_in_vacuum(st, ligand_conf, lamb):
@@ -123,7 +127,7 @@ def setup_initial_state(
     # use a different seed to initialize every window,
     # but in a way that should be symmetric for
     # A -> B vs. B -> A edge definitions
-    init_seed = int(seed + hash(ligand_conf.tobytes())) % 10000
+    init_seed = int(seed + bytes_to_id(ligand_conf.tobytes())) % MAX_SEED_VALUE
 
     if host:
         x0, hmr_masses, potentials, baro = setup_in_env(
@@ -136,9 +140,13 @@ def setup_initial_state(
     # provide a different run_seed for every lambda window,
     # but in a way that should be symmetric for
     # A -> B vs. B -> A edge definitions
-    run_seed = int(seed + hash(bytes().join([np.array(p.params).tobytes() for p in potentials]))) % 10000
-    # the constant is arbitrary, but see
-    # https://github.com/proteneer/timemachine/commit/e1f7328f01f427534d8744aab6027338e116ad09
+    run_seed = (
+        int(seed + bytes_to_id(bytes().join([np.array(p.params).tobytes() for p in potentials]))) % MAX_SEED_VALUE
+    )
+    print("init_seed", lamb, init_seed, seed, bytes_to_id(ligand_conf.tobytes()))
+    print(
+        "run_seed", lamb, run_seed, seed, bytes_to_id(bytes().join([np.array(p.params).tobytes() for p in potentials]))
+    )
 
     # initialize velocities
     v0 = np.zeros_like(x0)  # tbd resample from Maxwell-boltzman?

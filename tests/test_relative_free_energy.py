@@ -1,6 +1,7 @@
 # test that we can run relative free energy simulations in complex and in solvent
 # this doesn't test for accuracy, just that everything mechanically runs.
 from importlib import resources
+from typing import List
 
 import numpy as np
 import pytest
@@ -60,11 +61,13 @@ def run_triple(mol_a, mol_b, core, forcefield, n_frames, protein_path, n_eq_step
     lambda_interval = [0.01, 0.03]
     n_windows = 3
 
-    def check_sim_result(sim_res: SimulationResult):
+    def check_sim_result(sim_res: SimulationResult, state_seeds: List[int]):
         assert len(sim_res.final_result.initial_states) == n_windows
         assert sim_res.final_result.initial_states[0].lamb == lambda_interval[0]
         assert sim_res.final_result.initial_states[-1].lamb == lambda_interval[1]
-
+        assert [initial_state.integrator.seed for initial_state in sim_res.final_result.initial_states] == state_seeds
+        for initial_state in sim_res.final_result.initial_states:
+            print("initial_state.integrator.seed", initial_state.integrator.seed)
         assert sim_res.plots.dG_errs_png is not None
         assert sim_res.plots.overlap_summary_png is not None
         assert sim_res.plots.overlap_detail_png is not None
@@ -107,8 +110,8 @@ def run_triple(mol_a, mol_b, core, forcefield, n_frames, protein_path, n_eq_step
         n_windows=n_windows,
         n_eq_steps=n_eq_steps,
     )
-
-    check_sim_result(vacuum_res)
+    print("vacuum")
+    check_sim_result(vacuum_res, state_seeds=[6998, 3540, 36])
 
     box_width = 4.0
     solvent_sys, solvent_conf, solvent_box, _ = builders.build_water_system(box_width, forcefield.water_ff)
@@ -128,7 +131,8 @@ def run_triple(mol_a, mol_b, core, forcefield, n_frames, protein_path, n_eq_step
         n_eq_steps=n_eq_steps,
     )
 
-    check_sim_result(solvent_res)
+    print("solvent")
+    check_sim_result(solvent_res, state_seeds=[8783, 701, 3494])
 
     seed = 2024
     complex_sys, complex_conf, _, _, complex_box, _ = builders.build_protein_system(
@@ -150,7 +154,8 @@ def run_triple(mol_a, mol_b, core, forcefield, n_frames, protein_path, n_eq_step
         n_eq_steps=n_eq_steps,
     )
 
-    check_sim_result(complex_res)
+    print("complex")
+    check_sim_result(complex_res, state_seeds=[9977, 1713, 5508])
 
 
 @pytest.mark.nightly(reason="Slow!")
