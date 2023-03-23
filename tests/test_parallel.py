@@ -181,7 +181,7 @@ def test_file_client(tmpdir):
         assert str(fc.full_path("test_copy")) == str(Path(tmpdir, "subdir", "test_copy"))
         assert fc.load("test") == fc.load("test_copy")
 
-        large_obj = b"".join(b"a" for i in range(io.DEFAULT_BUFFER_SIZE * 10))
+        large_obj = b"a" * (io.DEFAULT_BUFFER_SIZE * 10)
         fc.store_stream("larger_than_stream", io.BytesIO(large_obj))
         assert fc.load("larger_than_stream") == large_obj
 
