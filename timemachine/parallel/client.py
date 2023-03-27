@@ -1,3 +1,4 @@
+import io
 import multiprocessing
 import os
 import pickle
@@ -219,6 +220,21 @@ class BinaryFutureWrapper:
 
 
 class AbstractFileClient:
+    def store_stream(self, path: str, stream: io.IOBase):
+        """
+        Store a stream of binary data to a given path.
+
+        Parameters
+        ----------
+        path:
+            Relative path to store the data. The client may interpret
+            this path as appropriate (i.e. file path, s3 path, etc).
+
+        stream:
+            Stream containing binary contents.
+        """
+        raise NotImplementedError()
+
     def store(self, path: str, data: bytes):
         """
         Store the results to the given path.
@@ -283,6 +299,15 @@ class AbstractFileClient:
 class FileClient(AbstractFileClient):
     def __init__(self, base: Path = None):
         self.base = base or Path().cwd()
+
+    def store_stream(self, path: str, stream: io.IOBase):
+        full_path = Path(self.full_path(path))
+        full_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(full_path, "wb") as ofs:
+            chunk = stream.read(io.DEFAULT_BUFFER_SIZE)
+            while chunk:
+                ofs.write(chunk)
+                chunk = stream.read(io.DEFAULT_BUFFER_SIZE)
 
     def store(self, path: str, data: bytes):
         full_path = Path(self.full_path(path))

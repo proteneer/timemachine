@@ -1,3 +1,4 @@
+import hashlib
 from itertools import cycle
 from pathlib import Path
 from typing import List, Optional, Union
@@ -426,3 +427,9 @@ def extract_delta_Us_from_U_knk(U_knk):
         delta_Us.append((fwd_delta_U, rev_delta_U))
 
     return np.array(delta_Us)
+
+
+def bytes_to_id(data: bytes) -> int:
+    # Convert the given data into a 64-bit int
+    MAX_INT = 2 ** 64 - 1
+    return int(hashlib.sha256(data).hexdigest(), 16) % MAX_INT
