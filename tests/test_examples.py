@@ -276,4 +276,5 @@ def test_rbfe_edge_list_reproducible(rbfe_edge_list_hif2a_path):
 
                 with pytest.raises(AssertionError):
                     assert_results_equal(solvent_res_1, solvent_res_3)
+                with pytest.raises(AssertionError):
                     assert_results_equal(complex_res_1, complex_res_3)
