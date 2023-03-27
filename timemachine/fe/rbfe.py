@@ -143,10 +143,6 @@ def setup_initial_state(
     run_seed = (
         int(seed + bytes_to_id(bytes().join([np.array(p.params).tobytes() for p in potentials]))) % MAX_SEED_VALUE
     )
-    print("init_seed", lamb, init_seed, seed, bytes_to_id(ligand_conf.tobytes()))
-    print(
-        "run_seed", lamb, run_seed, seed, bytes_to_id(bytes().join([np.array(p.params).tobytes() for p in potentials]))
-    )
 
     # initialize velocities
     v0 = np.zeros_like(x0)  # tbd resample from Maxwell-boltzman?

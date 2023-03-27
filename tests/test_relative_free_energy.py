@@ -66,8 +66,6 @@ def run_triple(mol_a, mol_b, core, forcefield, n_frames, protein_path, n_eq_step
         assert sim_res.final_result.initial_states[0].lamb == lambda_interval[0]
         assert sim_res.final_result.initial_states[-1].lamb == lambda_interval[1]
         assert [initial_state.integrator.seed for initial_state in sim_res.final_result.initial_states] == state_seeds
-        for initial_state in sim_res.final_result.initial_states:
-            print("initial_state.integrator.seed", initial_state.integrator.seed)
         assert sim_res.plots.dG_errs_png is not None
         assert sim_res.plots.overlap_summary_png is not None
         assert sim_res.plots.overlap_detail_png is not None
