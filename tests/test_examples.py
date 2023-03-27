@@ -241,11 +241,6 @@ def test_rbfe_edge_list_hif2a(rbfe_edge_list_hif2a_path):
 
 
 def test_rbfe_edge_list_reproducible(rbfe_edge_list_hif2a_path):
-    def load_results(dir, mol_a_name, mol_b_name):
-        path = dir / rbfe.get_success_result_path(mol_a_name, mol_b_name)
-        assert path.exists()
-        return load_simulation_results(path)
-
     def assert_results_equal(r1: SimulationResult, r2: SimulationResult):
         def assert_pair_bar_result_equal(p1: PairBarResult, p2: PairBarResult):
             np.testing.assert_array_equal(p1.dGs, p2.dGs)
@@ -267,9 +262,15 @@ def test_rbfe_edge_list_reproducible(rbfe_edge_list_hif2a_path):
             path3, _, _ = r3  # should differ from results at path1 and path2
 
             for mol_a_name, mol_b_name in edges:
-                solvent_res_1, complex_res_1 = load_results(path1, mol_a_name, mol_b_name)
-                solvent_res_2, complex_res_2 = load_results(path2, mol_a_name, mol_b_name)
-                solvent_res_3, complex_res_3 = load_results(path3, mol_a_name, mol_b_name)
+
+                def load_results(dir):
+                    path = dir / rbfe.get_success_result_path(mol_a_name, mol_b_name)
+                    assert path.exists()
+                    return load_simulation_results(path)
+
+                solvent_res_1, complex_res_1 = load_results(path1)
+                solvent_res_2, complex_res_2 = load_results(path2)
+                solvent_res_3, complex_res_3 = load_results(path3)
 
                 assert_results_equal(solvent_res_1, solvent_res_2)
                 assert_results_equal(complex_res_1, complex_res_2)
