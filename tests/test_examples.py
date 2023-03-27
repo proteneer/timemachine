@@ -16,6 +16,7 @@ from scipy.special import logsumexp
 
 from timemachine.constants import DEFAULT_FF, DEFAULT_KT, KCAL_TO_KJ
 from timemachine.datasets import fetch_freesolv
+from timemachine.fe import rbfe
 from timemachine.fe.free_energy import PairBarResult, SimulationResult
 from timemachine.fe.utils import get_mol_name
 
@@ -160,8 +161,7 @@ def get_rbfe_edge_list_hif2a_path(seed):
         )
 
         def run(results_csv, temp_dir):
-            # expect running this script to write success_rbfe_result_{mol_a_name}_{mol_b_name}.pkl files
-            output_path = str(Path(temp_dir) / "success_rbfe_result*.pkl")
+            output_path = str(Path(temp_dir) / rbfe.get_success_result_path("*", "*"))
             assert len(glob(output_path)) == 0
             config = dict(results_csv=results_csv, **base_config)
             _ = run_example("rbfe_edge_list.py", get_cli_args(config), cwd=temp_dir)
@@ -190,6 +190,24 @@ def rbfe_edge_list_hif2a_path():
         yield r
 
 
+def load_simulation_results(path):
+    with path.open("rb") as fp:
+        results = pickle.load(fp)
+
+    (
+        _,  # mol_a
+        _,  # mol_b
+        _,  # edge_metadata
+        _,  # core,
+        solvent_res,
+        _,  # solvent_top,
+        complex_res,
+        _,  # complex_top,
+    ) = results
+
+    return solvent_res, complex_res
+
+
 def test_rbfe_edge_list_hif2a(rbfe_edge_list_hif2a_path):
     path, config, edges = rbfe_edge_list_hif2a_path
 
@@ -201,20 +219,7 @@ def test_rbfe_edge_list_hif2a(rbfe_edge_list_hif2a_path):
         # have more exhaustive checks in test_relative_free_energy.py
 
         assert results_path.exists()
-
-        with results_path.open("rb") as fp:
-            results = pickle.load(fp)
-
-        (
-            _,  # mol_a
-            _,  # mol_b
-            _,  # edge_metadata
-            _,  # core,
-            solvent_res,
-            _,  # solvent_top,
-            complex_res,
-            _,  # complex_top,
-        ) = results
+        solvent_res, complex_res = load_simulation_results(results_path)
 
         for result in solvent_res, complex_res:
             assert isinstance(result, SimulationResult)
@@ -232,28 +237,14 @@ def test_rbfe_edge_list_hif2a(rbfe_edge_list_hif2a_path):
                     assert frame.shape == (N, 3)
 
     for mol_a_name, mol_b_name in edges:
-        check_results(path / f"success_rbfe_result_{mol_a_name}_{mol_b_name}.pkl")
+        check_results(path / rbfe.get_success_result_path(mol_a_name, mol_b_name))
 
 
 def test_rbfe_edge_list_reproducible(rbfe_edge_list_hif2a_path):
     def load_results(dir, mol_a_name, mol_b_name):
-        path = dir / f"success_rbfe_result_{mol_a_name}_{mol_b_name}.pkl"
+        path = dir / rbfe.get_success_result_path(mol_a_name, mol_b_name)
         assert path.exists()
-        with path.open("rb") as fp:
-            results = pickle.load(fp)
-
-        (
-            _,  # mol_a
-            _,  # mol_b
-            _,  # edge_metadata
-            _,  # core,
-            solvent_res,
-            _,  # solvent_top,
-            complex_res,
-            _,  # complex_top,
-        ) = results
-
-        return solvent_res, complex_res
+        return load_simulation_results(path)
 
     def assert_results_equal(r1: SimulationResult, r2: SimulationResult):
         def assert_pair_bar_result_equal(p1: PairBarResult, p2: PairBarResult):
