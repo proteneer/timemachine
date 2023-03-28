@@ -406,12 +406,14 @@ def estimate_free_energy_bar(u_kln_by_component: NDArray, temperature: float) ->
     return BarResult(dG, dG_err, dG_err_by_component, overlap, overlap_by_component, u_kln_by_component)
 
 
-def make_pair_bar_plots(res: PairBarResult, temperature: float, prefix: str) -> PairBarPlots:
+def make_pair_bar_plots(
+    res: PairBarResult, temperature: float, mol_a_name: str, mol_b_name: str, leg: str
+) -> PairBarPlots:
     U_names = [type(U_fn).__name__ for U_fn in res.initial_states[0].potentials]
     lambdas = [s.lamb for s in res.initial_states]
 
     overlap_detail_png = make_overlap_detail_figure(
-        U_names, res.dGs, res.dG_errs, res.u_kln_by_component_by_lambda, temperature, prefix
+        U_names, res.dGs, res.dG_errs, res.u_kln_by_component_by_lambda, temperature, mol_a_name, mol_b_name, leg
     )
 
     dG_errs_png = make_dG_errs_figure(U_names, lambdas, res.dG_errs, res.dG_err_by_component_by_lambda)

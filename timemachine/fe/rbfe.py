@@ -367,8 +367,8 @@ def estimate_relative_free_energy(
     ff: Forcefield,
     host_config: Optional[HostConfig],
     seed: int,
+    leg: str,
     n_frames: int = 1000,
-    prefix: str = "",
     lambda_interval: Optional[Tuple[float, float]] = None,
     n_windows: Optional[int] = None,
     keep_idxs: Optional[List[int]] = None,
@@ -400,11 +400,11 @@ def estimate_relative_free_energy(
     seed: int
         Random seed to use for the simulations.
 
+    leg: str
+        name of the leg, e.g. "complex" (used for labeling figures and computing output paths)
+
     n_frames: int
         number of samples to generate for each lambda window, where each sample is `steps_per_frame` steps of MD.
-
-    prefix: str
-        A prefix to append to figures
 
     lambda_interval: (float, float) or None, optional
         Minimum and maximum value of lambda for the transformation; typically (0, 1), but sometimes useful to choose
@@ -452,8 +452,6 @@ def estimate_relative_free_energy(
         keep_idxs = [0, len(initial_states) - 1]  # keep frames from first and last windows
     assert len(keep_idxs) <= len(lambda_schedule)
 
-    # TODO: rename prefix to postfix, or move to beginning of combined_prefix?
-    combined_prefix = get_mol_name(mol_a) + "_" + get_mol_name(mol_b) + "_" + prefix
     try:
         u_kln_by_component_by_lambda, stored_frames, stored_boxes = run_sims_sequential(
             initial_states, md_params, temperature, keep_idxs
@@ -463,7 +461,7 @@ def estimate_relative_free_energy(
             for u_kln_by_component in u_kln_by_component_by_lambda
         ]
         result = PairBarResult(initial_states, bar_results)
-        plots = make_pair_bar_plots(result, temperature, combined_prefix)
+        plots = make_pair_bar_plots(result, temperature, get_mol_name(mol_a), get_mol_name(mol_b), leg)
 
         return SimulationResult(
             result,
@@ -474,7 +472,7 @@ def estimate_relative_free_energy(
             [],
         )
     except Exception as err:
-        with open(f"failed_rbfe_result_{combined_prefix}.pkl", "wb") as fh:
+        with open(get_failure_result_path(get_mol_name(mol_a), get_mol_name(mol_b), leg), "wb") as fh:
             pickle.dump((initial_states, md_params, err), fh)
         raise err
 
@@ -487,7 +485,7 @@ def estimate_relative_free_energy_via_greedy_bisection(
     host_config: Optional[HostConfig],
     seed: int,
     n_frames: int = 1000,
-    prefix: str = "",
+    leg: str = "",
     lambda_interval: Optional[Tuple[float, float]] = None,
     n_windows: Optional[int] = None,
     keep_idxs: Optional[List[int]] = None,
@@ -519,8 +517,8 @@ def estimate_relative_free_energy_via_greedy_bisection(
     n_frames: int
         number of samples to generate for each lambda window, where each sample is `steps_per_frame` steps of MD.
 
-    prefix: str
-        A prefix to append to figures
+    leg: str
+        name of the leg, e.g. "complex" (used for labeling figures and computing output paths)
 
     seed: int
         Random seed to use for the simulations.
@@ -584,9 +582,6 @@ def estimate_relative_free_energy_via_greedy_bisection(
         keep_idxs = [0, len(initial_states) - 1]  # keep frames from first and last windows
     assert len(keep_idxs) <= n_windows
 
-    # TODO: rename prefix to postfix, or move to beginning of combined_prefix?
-    combined_prefix = get_mol_name(mol_a) + "_" + get_mol_name(mol_b) + "_" + prefix
-
     try:
         results, frames, boxes = run_sims_with_greedy_bisection(
             [lambda_min, lambda_max],
@@ -598,7 +593,7 @@ def estimate_relative_free_energy_via_greedy_bisection(
 
         final_result = results[-1]
 
-        plots = make_pair_bar_plots(final_result, temperature, combined_prefix)
+        plots = make_pair_bar_plots(final_result, temperature, get_mol_name(mol_a), get_mol_name(mol_b), leg)
 
         stored_frames = [np.array(frames[i]) for i in keep_idxs]
         stored_boxes = [boxes[i] for i in keep_idxs]
@@ -613,7 +608,7 @@ def estimate_relative_free_energy_via_greedy_bisection(
         )
 
     except Exception as err:
-        with open(f"failed_rbfe_result_{combined_prefix}.pkl", "wb") as fh:
+        with open(get_failure_result_path(get_mol_name(mol_a), get_mol_name(mol_b), leg), "wb") as fh:
             pickle.dump((md_params, err), fh)
         raise err
 
@@ -640,7 +635,7 @@ def run_vacuum(
         host_config=None,
         seed=seed,
         n_frames=n_frames,
-        prefix="vacuum",
+        leg="vacuum",
         n_eq_steps=n_eq_steps,
         n_windows=n_windows,
         steps_per_frame=steps_per_frame,
@@ -673,7 +668,7 @@ def run_solvent(
         solvent_host_config,
         seed,
         n_frames=n_frames,
-        prefix="solvent",
+        leg="solvent",
         n_eq_steps=n_eq_steps or 10000,
         n_windows=n_windows,
         steps_per_frame=steps_per_frame,
@@ -708,7 +703,7 @@ def run_complex(
         complex_host_config,
         seed,
         n_frames=n_frames,
-        prefix="complex",
+        leg="complex",
         n_eq_steps=n_eq_steps or 10000,
         n_windows=n_windows,
         steps_per_frame=steps_per_frame,
@@ -723,8 +718,9 @@ class Edge(NamedTuple):
     metadata: Dict[str, Any]
 
 
-def get_failure_result_path(mol_a_name: str, mol_b_name: str):
-    return f"failure_rbfe_result_{mol_a_name}_{mol_b_name}.pkl"
+def get_failure_result_path(mol_a_name: str, mol_b_name: str, suffix: str = ""):
+    _suffix = "_" + suffix if suffix else ""
+    return f"failure_rbfe_result_{mol_a_name}_{mol_b_name}{_suffix}.pkl"
 
 
 def get_success_result_path(mol_a_name: str, mol_b_name: str):

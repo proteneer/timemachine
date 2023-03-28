@@ -1,7 +1,9 @@
 import io
+from typing import Sequence
 
 import numpy as np
 from matplotlib import pyplot as plt
+from numpy.typing import NDArray
 
 from timemachine.constants import BOLTZ
 
@@ -97,12 +99,14 @@ def make_overlap_summary_figure(components, lambdas, overlap_by_lambda, overlap_
 
 
 def make_overlap_detail_figure(
-    components,
-    dGs,
-    dG_errs,
-    u_kln_by_component_by_lambda,
-    temperature,
-    prefix,
+    components: Sequence[str],
+    dGs: Sequence[float],
+    dG_errs: Sequence[float],
+    u_kln_by_component_by_lambda: NDArray,
+    temperature: float,
+    mol_a_name: str,
+    mol_b_name: str,
+    leg: str,
 ):
     """Make (n_lambdas - 1) x (n_components + 1) overlap plots, and return related diagnostics
 
@@ -115,8 +119,12 @@ def make_overlap_detail_figure(
     u_kln_by_component_by_lambda: [L,P,2,2,T] array
     temperature: float
         kelvin
-    prefix: string
-        beginning of plot titles
+    mol_a_name: string
+        name of mol a
+    mol_b_name: string
+        name of mol b
+    leg: string
+        name of leg, e.g. "complex"
 
     Returns
     -------
@@ -153,7 +161,7 @@ def make_overlap_detail_figure(
 
         # add to plot
         plot_axis = all_axes[lamb_idx - 1][num_energy_components]
-        plot_title = f"{prefix}_{lamb_idx - 1}_to_{lamb_idx}"
+        plot_title = f"{mol_a_name}_{mol_b_name}_{leg}_{lamb_idx - 1}_to_{lamb_idx}"
         plot_BAR(df, df_err, w_fwd, w_rev, plot_title, plot_axis)
 
     # [n_lambdas x num_energy_components] plots (relying on energy decomposition)
