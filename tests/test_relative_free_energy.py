@@ -160,7 +160,7 @@ def run_triple(mol_a, mol_b, core, forcefield, n_frames, protein_path, n_eq_step
     check_sim_result(complex_res, state_seeds=state_seeds)
 
 
-# @pytest.mark.nightly(reason="Slow!")
+@pytest.mark.nightly(reason="Slow!")
 @pytest.mark.parametrize(
     "estimate_relative_free_energy_fn",
     [estimate_relative_free_energy, estimate_relative_free_energy_via_greedy_bisection],
