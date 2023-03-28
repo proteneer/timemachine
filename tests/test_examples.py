@@ -248,6 +248,7 @@ def test_rbfe_edge_list_reproducible(rbfe_edge_list_hif2a_path):
             np.testing.assert_array_equal(p1.dG_err_by_component_by_lambda, p2.dG_err_by_component_by_lambda)
             np.testing.assert_array_equal(p1.overlaps, p2.overlaps)
             np.testing.assert_array_equal(p1.overlap_by_component_by_lambda, p2.overlap_by_component_by_lambda)
+            np.testing.assert_array_equal(p1.u_kln_by_component_by_lambda, p2.u_kln_by_component_by_lambda)
 
         assert_pair_bar_result_equal(r1.final_result, r2.final_result)
 
