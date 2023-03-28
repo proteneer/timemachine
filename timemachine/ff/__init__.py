@@ -84,7 +84,7 @@ class Forcefield:
         path = Path(path_or_str)  # Safe to construct a Path object from another Path object
 
         with resources.files("timemachine.ff.params") as params_path:
-            built_in_path = params_path / original_path
+            built_in_path = params_path / path.name
             if built_in_path.is_file():
                 if path.is_file():
                     warn(f"Provided path {original_path} shares name with builtin forcefield, falling back to builtin")
