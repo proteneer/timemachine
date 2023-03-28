@@ -109,7 +109,9 @@ def run_triple(mol_a, mol_b, core, forcefield, n_frames, protein_path, n_eq_step
         n_eq_steps=n_eq_steps,
     )
     print("vacuum")
-    check_sim_result(vacuum_res, state_seeds=[6998, 3540, 36])
+    is_bisection = estimate_relative_free_energy_fn == estimate_relative_free_energy_via_greedy_bisection
+    state_seeds = [6998, 6082, 36] if is_bisection else [6998, 3540, 36]
+    check_sim_result(vacuum_res, state_seeds=state_seeds)
 
     box_width = 4.0
     solvent_sys, solvent_conf, solvent_box, _ = builders.build_water_system(box_width, forcefield.water_ff)
@@ -130,7 +132,8 @@ def run_triple(mol_a, mol_b, core, forcefield, n_frames, protein_path, n_eq_step
     )
 
     print("solvent")
-    check_sim_result(solvent_res, state_seeds=[8783, 701, 3494])
+    state_seeds = [8783, 8019, 3494] if is_bisection else [8783, 701, 3494]
+    check_sim_result(solvent_res, state_seeds=state_seeds)
 
     seed = 2024
     complex_sys, complex_conf, _, _, complex_box, _ = builders.build_protein_system(
@@ -153,10 +156,11 @@ def run_triple(mol_a, mol_b, core, forcefield, n_frames, protein_path, n_eq_step
     )
 
     print("complex")
-    check_sim_result(complex_res, state_seeds=[9977, 1713, 5508])
+    state_seeds = [9977, 3195, 5508] if is_bisection else [9977, 1713, 5508]
+    check_sim_result(complex_res, state_seeds=state_seeds)
 
 
-@pytest.mark.nightly(reason="Slow!")
+# @pytest.mark.nightly(reason="Slow!")
 @pytest.mark.parametrize(
     "estimate_relative_free_energy_fn",
     [estimate_relative_free_energy, estimate_relative_free_energy_via_greedy_bisection],
