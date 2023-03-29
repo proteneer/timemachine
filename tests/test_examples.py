@@ -190,7 +190,7 @@ def rbfe_edge_list_hif2a_path():
         yield r
 
 
-def load_simulation_results(path):
+def load_simulation_results(path: Path) -> Tuple[SimulationResult, SimulationResult]:
     with path.open("rb") as fp:
         results = pickle.load(fp)
 
@@ -240,28 +240,26 @@ def test_rbfe_edge_list_hif2a(rbfe_edge_list_hif2a_path):
         check_results(path / rbfe.get_success_result_path(mol_a_name, mol_b_name))
 
 
+def assert_simulation_results_equal(r1: SimulationResult, r2: SimulationResult):
+    def assert_pair_bar_results_equal(p1: PairBarResult, p2: PairBarResult):
+        np.testing.assert_array_equal(p1.dGs, p2.dGs)
+        np.testing.assert_array_equal(p1.dG_errs, p2.dG_errs)
+        np.testing.assert_array_equal(p1.dG_err_by_component_by_lambda, p2.dG_err_by_component_by_lambda)
+        np.testing.assert_array_equal(p1.overlaps, p2.overlaps)
+        np.testing.assert_array_equal(p1.overlap_by_component_by_lambda, p2.overlap_by_component_by_lambda)
+        np.testing.assert_array_equal(p1.u_kln_by_component_by_lambda, p2.u_kln_by_component_by_lambda)
+
+    assert_pair_bar_results_equal(r1.final_result, r2.final_result)
+
+    for p1, p2 in zip(r1.intermediate_results, r2.intermediate_results):
+        assert_pair_bar_results_equal(p1, p2)
+
+
 def test_rbfe_edge_list_reproducible(rbfe_edge_list_hif2a_path):
-    def assert_results_equal(r1: SimulationResult, r2: SimulationResult):
-        def assert_pair_bar_result_equal(p1: PairBarResult, p2: PairBarResult):
-            np.testing.assert_array_equal(p1.dGs, p2.dGs)
-            np.testing.assert_array_equal(p1.dG_errs, p2.dG_errs)
-            np.testing.assert_array_equal(p1.dG_err_by_component_by_lambda, p2.dG_err_by_component_by_lambda)
-            np.testing.assert_array_equal(p1.overlaps, p2.overlaps)
-            np.testing.assert_array_equal(p1.overlap_by_component_by_lambda, p2.overlap_by_component_by_lambda)
-            np.testing.assert_array_equal(p1.u_kln_by_component_by_lambda, p2.u_kln_by_component_by_lambda)
-
-        assert_pair_bar_result_equal(r1.final_result, r2.final_result)
-
-        for p1, p2 in zip(r1.intermediate_results, r2.intermediate_results):
-            assert_pair_bar_result_equal(p1, p2)
-
     path1, _, edges = rbfe_edge_list_hif2a_path
 
-    with get_rbfe_edge_list_hif2a_path(DEFAULT_SEED) as r2:
-        with get_rbfe_edge_list_hif2a_path(DEFAULT_SEED + 1) as r3:
-            path2, _, _ = r2  # should be bitwise equivalent to result at path1
-            path3, _, _ = r3  # should differ from results at path1 and path2
-
+    with get_rbfe_edge_list_hif2a_path(DEFAULT_SEED) as (path2, _, _):
+        with get_rbfe_edge_list_hif2a_path(DEFAULT_SEED + 1) as (path3, _, _):
             for mol_a_name, mol_b_name in edges:
 
                 def load_results(dir):
@@ -273,10 +271,12 @@ def test_rbfe_edge_list_reproducible(rbfe_edge_list_hif2a_path):
                 solvent_res_2, complex_res_2 = load_results(path2)
                 solvent_res_3, complex_res_3 = load_results(path3)
 
-                assert_results_equal(solvent_res_1, solvent_res_2)
-                assert_results_equal(complex_res_1, complex_res_2)
+                # results at path2 should be bitwise equivalent to those at path1
+                assert_simulation_results_equal(solvent_res_1, solvent_res_2)
+                assert_simulation_results_equal(complex_res_1, complex_res_2)
 
+                # results at path3 should differ from those at path1 and path2
                 with pytest.raises(AssertionError):
-                    assert_results_equal(solvent_res_1, solvent_res_3)
+                    assert_simulation_results_equal(solvent_res_1, solvent_res_3)
                 with pytest.raises(AssertionError):
-                    assert_results_equal(complex_res_1, complex_res_3)
+                    assert_simulation_results_equal(complex_res_1, complex_res_3)
