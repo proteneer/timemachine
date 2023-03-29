@@ -79,19 +79,26 @@ class Forcefield:
         -------
         Forcefield
             Return a ForceField object constructed from parameters file
+
+        Note
+        ----
+        If a path is provided that has the same file name as a built-in forcefield, it will throw a warning and load
+        the built-in forcefield.
         """
         original_path = str(path_or_str)
         path = Path(path_or_str)  # Safe to construct a Path object from another Path object
 
         with resources.files("timemachine.ff.params") as params_path:
-            built_in_path = params_path / original_path
+            built_in_path = params_path / path.name
             if built_in_path.is_file():
                 if path.is_file():
-                    warn(f"Provided path {original_path} shares name with builtin forcefield, falling back to builtin")
+                    warn(
+                        f"Provided path {original_path} shares name with built-in forcefield, falling back to built-in"
+                    )
                 # Search built in params for the forcefields
                 path = built_in_path
             if not path.is_file():
-                raise ValueError(f"Unable to find {original_path} in file system or built in forcefields")
+                raise ValueError(f"Unable to find {original_path} in file system or built-in forcefields")
             with open(path, "r") as ifs:
                 handlers, protein_ff, water_ff = deserialize_handlers(ifs.read())
 
