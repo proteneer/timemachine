@@ -723,6 +723,14 @@ class Edge(NamedTuple):
     metadata: Dict[str, Any]
 
 
+def get_failure_result_path(mol_a_name: str, mol_b_name: str):
+    return f"failure_rbfe_result_{mol_a_name}_{mol_b_name}.pkl"
+
+
+def get_success_result_path(mol_a_name: str, mol_b_name: str):
+    return f"success_rbfe_result_{mol_a_name}_{mol_b_name}.pkl"
+
+
 def run_edge_and_save_results(
     edge: Edge,
     mols: Dict[str, Chem.rdchem.Mol],
@@ -778,7 +786,7 @@ def run_edge_and_save_results(
             ),
         )
 
-        path = f"failure_rbfe_result_{edge.mol_a_name}_{edge.mol_b_name}.pkl"
+        path = get_failure_result_path(edge.mol_a_name, edge.mol_b_name)
         tb = traceback.format_exception(None, err, err.__traceback__)
         file_client.store(path, pickle.dumps((edge, err, tb)))
 
@@ -787,7 +795,7 @@ def run_edge_and_save_results(
 
         return file_client.full_path(path)
 
-    path = f"success_rbfe_result_{edge.mol_a_name}_{edge.mol_b_name}.pkl"
+    path = get_success_result_path(edge.mol_a_name, edge.mol_b_name)
     pkl_obj = (mol_a, mol_b, edge.metadata, core, solvent_res, solvent_top, complex_res, complex_top)
     file_client.store(path, pickle.dumps(pkl_obj))
 
