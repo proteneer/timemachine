@@ -199,9 +199,9 @@ def test_infer_node_vals_and_errs_networkx():
         e[edge_diff_prop] = diff
         e[edge_stddev_prop] = stddev
 
-    for n, ref_val, ref_stddev in zip(g.subgraph(ref_node_idxs).nodes.values(), ref_node_vals, ref_node_stddevs):
-        n[ref_node_val_prop] = ref_val
-        n[ref_node_stddev_prop] = ref_stddev
+    for n, ref_val, ref_stddev in zip(ref_node_idxs, ref_node_vals, ref_node_stddevs):
+        g.nodes[n][ref_node_val_prop] = ref_val
+        g.nodes[n][ref_node_stddev_prop] = ref_stddev
 
     seed = 2023
 

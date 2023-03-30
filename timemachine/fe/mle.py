@@ -253,23 +253,19 @@ def infer_node_vals_and_errs_networkx(
     dg_err : [K] array
     """
 
-    node_idx = {n: idx for idx, n in enumerate(nx_graph.nodes)}
-    edge_idxs = [(node_idx[n1], node_idx[n2]) for n1, n2 in nx_graph.edges]
-    edge_diffs = [e[edge_diff_prop] for e in nx_graph.edges.values()]
-    edge_stddevs = [e[edge_stddev_prop] for e in nx_graph.edges.values()]
+    node_to_idx = {n: idx for idx, n in enumerate(nx_graph.nodes)}
+    g = nx.relabel_nodes(nx_graph, node_to_idx)
 
-    ref_node_idxs = [node_idx[n] for n in ref_nodes]
-    ref_node_vals = [n[ref_node_val_prop] for n in nx_graph.subgraph(ref_nodes).nodes.values()]
+    ref_node_idxs = [node_to_idx[n] for n in ref_nodes]
+    ref_node_vals = [g.nodes[n][ref_node_val_prop] for n in ref_node_idxs]
     ref_node_stddevs = (
-        [n[ref_node_stddev_prop] for n in nx_graph.subgraph(ref_nodes).nodes.values()]
-        if ref_node_stddev_prop
-        else [0] * len(ref_nodes)
+        [g.nodes[n][ref_node_stddev_prop] for n in ref_node_idxs] if ref_node_stddev_prop else [0.0] * len(ref_nodes)
     )
 
     return infer_node_vals_and_errs(
-        np.array(edge_idxs),
-        np.array(edge_diffs),
-        np.array(edge_stddevs),
+        np.array(g.edges),
+        np.array([e[edge_diff_prop] for e in g.edges.values()]),
+        np.array([e[edge_stddev_prop] for e in g.edges.values()]),
         ref_node_idxs,
         ref_node_vals,
         ref_node_stddevs,
