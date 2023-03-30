@@ -3,7 +3,7 @@ import numpy as np
 import pytest
 from scipy.stats import linregress
 
-from timemachine.fe.mle import infer_node_vals, infer_node_vals_and_errs
+from timemachine.fe.mle import infer_node_vals, infer_node_vals_and_errs, infer_node_vals_and_errs_networkx
 
 pytestmark = [pytest.mark.nogpu]
 
@@ -175,6 +175,46 @@ def test_infer_node_dgs_w_error():
 
         res = linregress(dg, node_vals)
         assert res.rvalue > 0.9
+
+
+def test_infer_node_vals_and_errs_networkx():
+    edge_noise_stddev = np.random.rand()
+    g = generate_random_valid_regular_graph()
+    g = nx.convert_node_labels_to_integers(g)
+    n_nodes = g.number_of_nodes()
+
+    node_vals, edge_idxs, obs_edge_diffs, edge_stddevs = generate_instance(g, edge_noise_stddev)
+
+    num_refs = np.random.randint(n_nodes)
+    ref_node_idxs = np.random.choice(np.arange(n_nodes), num_refs, replace=False)
+    ref_node_vals = node_vals[ref_node_idxs]
+    ref_node_stddevs = 0.01 * np.ones(num_refs)
+
+    edge_diff_prop = "edge_diff"
+    edge_stddev_prop = "edge_stddev"
+    ref_node_val_prop = "ref_node_val"
+    ref_node_stddev_prop = "ref_node_stddev"
+
+    for e, diff, stddev in zip(g.edges.values(), obs_edge_diffs, edge_stddevs):
+        e[edge_diff_prop] = diff
+        e[edge_stddev_prop] = stddev
+
+    for n, ref_val, ref_stddev in zip(g.subgraph(ref_node_idxs).nodes.values(), ref_node_vals, ref_node_stddevs):
+        n[ref_node_val_prop] = ref_val
+        n[ref_node_stddev_prop] = ref_stddev
+
+    seed = 2023
+
+    ref_dg, ref_dg_err = infer_node_vals_and_errs(
+        edge_idxs, obs_edge_diffs, edge_stddevs, ref_node_idxs, ref_node_vals, ref_node_stddevs, seed=seed
+    )
+
+    dg, dg_err = infer_node_vals_and_errs_networkx(
+        g, edge_diff_prop, edge_stddev_prop, ref_node_idxs, ref_node_val_prop, ref_node_stddev_prop, seed=seed
+    )
+
+    np.testing.assert_array_equal(dg, ref_dg)
+    np.testing.assert_array_equal(dg_err, ref_dg_err)
 
 
 def test_infer_node_vals_incorrect_sizes():

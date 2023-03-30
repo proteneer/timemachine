@@ -1,9 +1,12 @@
+from typing import Any, Sequence, Tuple
+
 import networkx as nx
 import numpy as np
 from jax import jit
 from jax import numpy as jnp
 from jax import value_and_grad
 from jax.scipy.stats import norm
+from numpy.typing import NDArray
 from scipy.optimize import minimize
 
 
@@ -212,3 +215,60 @@ def infer_node_vals_and_errs(
     dg_err = bootstrap_estimates.std(0)
 
     return dg, dg_err
+
+
+def infer_node_vals_and_errs_networkx(
+    nx_graph: nx.Graph,
+    edge_diff_prop: str,
+    edge_stddev_prop: str,
+    ref_nodes: Sequence[Any],
+    ref_node_val_prop: str,
+    ref_node_stddev_prop: str,
+    n_bootstrap: int = 100,
+    seed: int = 0,
+) -> Tuple[NDArray, NDArray]:
+    """Version of :py:func:`fe.mle.infer_node_vals_and_errs` that accepts a networkx graph.
+
+    Parameters
+    ----------
+    nx_graph: nx.Graph
+        networkx graph
+    edge_diff_prop: str
+        edge property to use for differences
+    edge_stddev_prop: str
+        edge property to use for standard deviations
+    ref_nodes: sequence
+        reference nodes (must have properties ref_node_val_prop and ref_node_stddev_prop)
+    ref_node_val_prop: str
+        node property to use for reference values
+    ref_node_stddev_prop: str
+        node property to use for reference standard deviations
+    n_bootstrap, seed:
+        see documentation for :py:func:`fe.mle.infer_node_vals_and_errs`
+
+    Returns
+    -------
+    dg: [K] array
+        inferred absolute values
+    dg_err : [K] array
+    """
+
+    node_idx = {n: idx for idx, n in enumerate(nx_graph.nodes)}
+    edge_idxs = [(node_idx[n1], node_idx[n2]) for n1, n2 in nx_graph.edges]
+    edge_diffs = [e[edge_diff_prop] for e in nx_graph.edges.values()]
+    edge_stddevs = [e[edge_stddev_prop] for e in nx_graph.edges.values()]
+
+    ref_node_idxs = [node_idx[n] for n in ref_nodes]
+    ref_node_vals = [n[ref_node_val_prop] for n in nx_graph.subgraph(ref_nodes).nodes.values()]
+    ref_node_stddevs = [n[ref_node_stddev_prop] for n in nx_graph.subgraph(ref_nodes).nodes.values()]
+
+    return infer_node_vals_and_errs(
+        np.array(edge_idxs),
+        np.array(edge_diffs),
+        np.array(edge_stddevs),
+        ref_node_idxs,
+        ref_node_vals,
+        ref_node_stddevs,
+        n_bootstrap,
+        seed,
+    )
