@@ -1,4 +1,4 @@
-from typing import Any, Sequence, Tuple
+from typing import Any, Optional, Sequence, Tuple
 
 import networkx as nx
 import numpy as np
@@ -223,7 +223,7 @@ def infer_node_vals_and_errs_networkx(
     edge_stddev_prop: str,
     ref_nodes: Sequence[Any],
     ref_node_val_prop: str,
-    ref_node_stddev_prop: str,
+    ref_node_stddev_prop: Optional[str] = None,
     n_bootstrap: int = 100,
     seed: int = 0,
 ) -> Tuple[NDArray, NDArray]:
@@ -232,19 +232,19 @@ def infer_node_vals_and_errs_networkx(
     Parameters
     ----------
     nx_graph: nx.Graph
-        networkx graph
+        Networkx graph
     edge_diff_prop: str
-        edge property to use for differences
+        Edge property to use for differences
     edge_stddev_prop: str
-        edge property to use for standard deviations
+        Edge property to use for standard deviations
     ref_nodes: sequence
-        reference nodes (must have properties ref_node_val_prop and ref_node_stddev_prop)
+        Reference nodes (must have properties ref_node_val_prop and ref_node_stddev_prop)
     ref_node_val_prop: str
-        node property to use for reference values
-    ref_node_stddev_prop: str
-        node property to use for reference standard deviations
+        Node property to use for reference values
+    ref_node_stddev_prop: str or None, optional
+        Node property to use for reference standard deviations. If None, assume zero uncertainty in reference values.
     n_bootstrap, seed:
-        see documentation for :py:func:`fe.mle.infer_node_vals_and_errs`
+        See documentation for :py:func:`fe.mle.infer_node_vals_and_errs`
 
     Returns
     -------
@@ -260,7 +260,11 @@ def infer_node_vals_and_errs_networkx(
 
     ref_node_idxs = [node_idx[n] for n in ref_nodes]
     ref_node_vals = [n[ref_node_val_prop] for n in nx_graph.subgraph(ref_nodes).nodes.values()]
-    ref_node_stddevs = [n[ref_node_stddev_prop] for n in nx_graph.subgraph(ref_nodes).nodes.values()]
+    ref_node_stddevs = (
+        [n[ref_node_stddev_prop] for n in nx_graph.subgraph(ref_nodes).nodes.values()]
+        if ref_node_stddev_prop
+        else [0] * len(ref_nodes)
+    )
 
     return infer_node_vals_and_errs(
         np.array(edge_idxs),
