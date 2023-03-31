@@ -227,7 +227,7 @@ def infer_node_vals_and_errs_networkx(
     n_bootstrap: int = 100,
     seed: int = 0,
 ) -> Tuple[NDArray, NDArray]:
-    """Version of :py:func:`fe.mle.infer_node_vals_and_errs` that accepts a networkx graph.
+    """Version of :py:func:`timemachine.fe.mle.infer_node_vals_and_errs` that accepts a networkx graph.
 
     Parameters
     ----------
