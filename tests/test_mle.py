@@ -220,6 +220,19 @@ def test_infer_node_vals_and_errs_networkx():
         assert g_res.nodes[n][node_val_prop] == ref_dg
         assert g_res.nodes[n][node_stddev_prop] == ref_dg_err
 
+    # ensure results are invariant wrt relabeling nodes
+    label = {n: f"node_{np.random.randint(1000)}" for n in g.nodes}
+    g = nx.relabel_nodes(g, label)
+    ref_node_labels = [label[n] for n in ref_node_idxs]
+
+    g_res = infer_node_vals_and_errs_networkx(
+        g, edge_diff_prop, edge_stddev_prop, node_val_prop, node_stddev_prop, ref_node_labels, seed=seed
+    )
+
+    for n, (ref_dg, ref_dg_err) in enumerate(zip(ref_dgs, ref_dg_errs)):
+        assert g_res.nodes[label[n]][node_val_prop] == ref_dg
+        assert g_res.nodes[label[n]][node_stddev_prop] == ref_dg_err
+
 
 def test_infer_node_vals_incorrect_sizes():
     """Verify that infer_node_vals correctly asserts that the length of arrays are the same"""
