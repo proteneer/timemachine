@@ -178,6 +178,9 @@ def test_infer_node_dgs_w_error():
 
 
 def test_infer_node_vals_and_errs_networkx():
+
+    np.random.seed(0)
+
     edge_noise_stddev = np.random.rand()
     g = generate_random_valid_regular_graph()
     g = nx.convert_node_labels_to_integers(g)
@@ -203,7 +206,7 @@ def test_infer_node_vals_and_errs_networkx():
         g.nodes[n][node_val_prop] = ref_val
         g.nodes[n][node_stddev_prop] = ref_stddev
 
-    seed = 2023
+    seed = np.random.randint(1000)
 
     ref_dgs, ref_dg_errs = infer_node_vals_and_errs(
         edge_idxs, obs_edge_diffs, edge_stddevs, ref_node_idxs, ref_node_vals, ref_node_stddevs, seed=seed
