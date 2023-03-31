@@ -184,6 +184,8 @@ edge_diff_prop = "edge_diff"
 edge_stddev_prop = "edge_stddev"
 node_val_prop = "node_val"
 node_stddev_prop = "node_stddev"
+ref_node_val_prop = "ref_node_val"
+ref_node_stddev_prop = "ref_node_stddev"
 
 
 @pytest.fixture(scope="module", params=[0])
@@ -208,8 +210,8 @@ def _nx_graph_with_reference_mle_instance(request):
         e[edge_stddev_prop] = stddev
 
     for n, ref_val, ref_stddev in zip(ref_node_idxs, ref_node_vals, ref_node_stddevs):
-        g.nodes[n][node_val_prop] = ref_val
-        g.nodes[n][node_stddev_prop] = ref_stddev
+        g.nodes[n][ref_node_val_prop] = ref_val
+        g.nodes[n][ref_node_stddev_prop] = ref_stddev
 
     dgs, dg_errs = infer_node_vals_and_errs(
         edge_idxs, obs_edge_diffs, edge_stddevs, ref_node_idxs, ref_node_vals, ref_node_stddevs, seed=seed
@@ -230,6 +232,8 @@ infer_node_vals_and_errs_networkx_partial = partial(
     edge_stddev_prop=edge_stddev_prop,
     node_val_prop=node_val_prop,
     node_stddev_prop=node_stddev_prop,
+    ref_node_val_prop=ref_node_val_prop,
+    ref_node_stddev_prop=ref_node_stddev_prop,
 )
 
 
