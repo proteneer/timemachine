@@ -241,7 +241,7 @@ def infer_node_vals_and_errs_networkx(
     node_stddev_prop: str
         Node property to use for standard deviations. If missing in reference nodes, assume zero.
     ref_nodes: sequence
-        Reference nodes (must have properties ref_node_val_prop and ref_node_stddev_prop)
+        Reference nodes (must have properties `node_val_prop` and `node_stddev_prop`)
     n_bootstrap, seed:
         See documentation for :py:func:`fe.mle.infer_node_vals_and_errs`
 
