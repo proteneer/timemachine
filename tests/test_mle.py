@@ -264,7 +264,10 @@ def test_infer_node_vals_and_errs_networkx_invariant_missing_values(nx_graph_wit
     "Check that edges with missing values are ignored"
 
     g, ref_node_idxs, seed, ref_dgs, ref_dg_errs = nx_graph_with_reference_mle_instance
-    g.add_edge(np.random.choice(g.nodes), "undetermined", **{edge_diff_prop: None, edge_stddev_prop: None})
+    n1, n2, n3 = np.random.choice(g.nodes, 3, replace=False)
+    g.add_edge(n1, "undetermined")
+    g.add_edge(n2, "undetermined", **{edge_diff_prop: None})
+    g.add_edge(n3, "undetermined", **{edge_diff_prop: None, edge_stddev_prop: None})
 
     g_res = infer_node_vals_and_errs_networkx_partial(g, ref_nodes=ref_node_idxs, seed=seed)
 
@@ -273,9 +276,9 @@ def test_infer_node_vals_and_errs_networkx_invariant_missing_values(nx_graph_wit
         assert g_res.nodes[n][node_stddev_prop] == ref_dg_err
 
     # undetermined node should not be updated
-    undetermined = g.nodes["undetermined"].values()
-    assert undetermined[node_val_prop] is None
-    assert undetermined[node_stddev_prop] is None
+    n = g.nodes["undetermined"]
+    assert node_val_prop not in n
+    assert node_stddev_prop not in n
 
 
 def test_infer_node_vals_incorrect_sizes():

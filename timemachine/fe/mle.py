@@ -251,17 +251,31 @@ def infer_node_vals_and_errs_networkx(
         Graph where all nodes have been labeled with the inferred value of `node_val_prop` and `node_stddev_prop`.
     """
 
-    node_to_idx = {n: idx for idx, n in enumerate(nx_graph.nodes)}
-    g = nx.relabel_nodes(nx_graph, node_to_idx)
+    def get_valid_subgraph(g):
+        "Remove edges with missing edge_diff_prop or edge_stddev_prop; then, remove any isolated nodes"
+        sg = g.copy()
+
+        missing_edges = [e for e, v in sg.edges.items() if not v.get(edge_diff_prop) or not v.get(edge_stddev_prop)]
+        sg.remove_edges_from(missing_edges)
+
+        isolated_nodes = list(nx.isolates(sg))
+        sg.remove_nodes_from(isolated_nodes)
+
+        return sg
+
+    sg = get_valid_subgraph(nx_graph)
+
+    node_to_idx = {n: idx for idx, n in enumerate(sg.nodes)}
+    sg_ = nx.relabel_nodes(sg, node_to_idx)
 
     ref_node_idxs = [node_to_idx[n] for n in ref_nodes]
-    ref_node_vals = [g.nodes[n][node_val_prop] for n in ref_node_idxs]
-    ref_node_stddevs = [g.nodes[n].get(node_stddev_prop, 0.0) for n in ref_node_idxs]
+    ref_node_vals = [sg_.nodes[n][node_val_prop] for n in ref_node_idxs]
+    ref_node_stddevs = [sg_.nodes[n].get(node_stddev_prop, 0.0) for n in ref_node_idxs]
 
     dgs, dg_errs = infer_node_vals_and_errs(
-        np.array(g.edges),
-        np.array([e[edge_diff_prop] for e in g.edges.values()]),
-        np.array([e[edge_stddev_prop] for e in g.edges.values()]),
+        np.array(sg_.edges),
+        np.array([e[edge_diff_prop] for e in sg_.edges.values()]),
+        np.array([e[edge_stddev_prop] for e in sg_.edges.values()]),
         ref_node_idxs,
         ref_node_vals,
         ref_node_stddevs,
@@ -269,9 +283,16 @@ def infer_node_vals_and_errs_networkx(
         seed,
     )
 
-    for n, dg, dg_err in zip(g.nodes.values(), dgs, dg_errs):
+    for n, dg, dg_err in zip(sg_.nodes.values(), dgs, dg_errs):
         n[node_val_prop] = dg
         n[node_stddev_prop] = dg_err
 
     idx_to_node = {v: k for k, v in node_to_idx.items()}
-    return nx.relabel_nodes(g, idx_to_node)
+    sg1 = nx.relabel_nodes(sg_, idx_to_node)
+
+    g = nx_graph.copy()
+    for n, v in sg1.nodes.items():
+        g.nodes[n][node_val_prop] = v[node_val_prop]
+        g.nodes[n][node_stddev_prop] = v[node_stddev_prop]
+
+    return g
