@@ -192,29 +192,30 @@ def test_infer_node_vals_and_errs_networkx():
 
     edge_diff_prop = "edge_diff"
     edge_stddev_prop = "edge_stddev"
-    ref_node_val_prop = "ref_node_val"
-    ref_node_stddev_prop = "ref_node_stddev"
+    node_val_prop = "node_val"
+    node_stddev_prop = "node_stddev"
 
     for e, diff, stddev in zip(g.edges.values(), obs_edge_diffs, edge_stddevs):
         e[edge_diff_prop] = diff
         e[edge_stddev_prop] = stddev
 
     for n, ref_val, ref_stddev in zip(ref_node_idxs, ref_node_vals, ref_node_stddevs):
-        g.nodes[n][ref_node_val_prop] = ref_val
-        g.nodes[n][ref_node_stddev_prop] = ref_stddev
+        g.nodes[n][node_val_prop] = ref_val
+        g.nodes[n][node_stddev_prop] = ref_stddev
 
     seed = 2023
 
-    ref_dg, ref_dg_err = infer_node_vals_and_errs(
+    ref_dgs, ref_dg_errs = infer_node_vals_and_errs(
         edge_idxs, obs_edge_diffs, edge_stddevs, ref_node_idxs, ref_node_vals, ref_node_stddevs, seed=seed
     )
 
-    dg, dg_err = infer_node_vals_and_errs_networkx(
-        g, edge_diff_prop, edge_stddev_prop, ref_node_idxs, ref_node_val_prop, ref_node_stddev_prop, seed=seed
+    g_res = infer_node_vals_and_errs_networkx(
+        g, edge_diff_prop, edge_stddev_prop, node_val_prop, node_stddev_prop, ref_node_idxs, seed=seed
     )
 
-    np.testing.assert_array_equal(dg, ref_dg)
-    np.testing.assert_array_equal(dg_err, ref_dg_err)
+    for n, (ref_dg, ref_dg_err) in enumerate(zip(ref_dgs, ref_dg_errs)):
+        assert g_res.nodes[n][node_val_prop] == ref_dg
+        assert g_res.nodes[n][node_stddev_prop] == ref_dg_err
 
 
 def test_infer_node_vals_incorrect_sizes():
