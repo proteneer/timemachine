@@ -1,4 +1,5 @@
 import hashlib
+from functools import partial
 
 import networkx as nx
 import numpy as np
@@ -179,9 +180,16 @@ def test_infer_node_dgs_w_error():
         assert res.rvalue > 0.9
 
 
-def test_infer_node_vals_and_errs_networkx():
+edge_diff_prop = "edge_diff"
+edge_stddev_prop = "edge_stddev"
+node_val_prop = "node_val"
+node_stddev_prop = "node_stddev"
 
-    np.random.seed(0)
+
+@pytest.fixture(scope="module", params=[0])
+def _nx_graph_with_reference_mle_instance(request):
+    seed = request.param
+    np.random.seed(seed)
 
     edge_noise_stddev = np.random.rand()
     g = generate_random_valid_regular_graph()
@@ -195,11 +203,6 @@ def test_infer_node_vals_and_errs_networkx():
     ref_node_vals = node_vals[ref_node_idxs]
     ref_node_stddevs = 0.01 * np.ones(num_refs)
 
-    edge_diff_prop = "edge_diff"
-    edge_stddev_prop = "edge_stddev"
-    node_val_prop = "node_val"
-    node_stddev_prop = "node_stddev"
-
     for e, diff, stddev in zip(g.edges.values(), obs_edge_diffs, edge_stddevs):
         e[edge_diff_prop] = diff
         e[edge_stddev_prop] = stddev
@@ -208,32 +211,71 @@ def test_infer_node_vals_and_errs_networkx():
         g.nodes[n][node_val_prop] = ref_val
         g.nodes[n][node_stddev_prop] = ref_stddev
 
-    seed = np.random.randint(1000)
-
-    ref_dgs, ref_dg_errs = infer_node_vals_and_errs(
+    dgs, dg_errs = infer_node_vals_and_errs(
         edge_idxs, obs_edge_diffs, edge_stddevs, ref_node_idxs, ref_node_vals, ref_node_stddevs, seed=seed
     )
 
-    g_res = infer_node_vals_and_errs_networkx(
-        g, edge_diff_prop, edge_stddev_prop, node_val_prop, node_stddev_prop, ref_node_idxs, seed=seed
-    )
+    return g, ref_node_idxs, seed, dgs, dg_errs
+
+
+@pytest.fixture(scope="function")
+def nx_graph_with_reference_mle_instance(_nx_graph_with_reference_mle_instance):
+    g, *xs = _nx_graph_with_reference_mle_instance
+    return g.copy(), *xs
+
+
+infer_node_vals_and_errs_networkx_partial = partial(
+    infer_node_vals_and_errs_networkx,
+    edge_diff_prop=edge_diff_prop,
+    edge_stddev_prop=edge_stddev_prop,
+    node_val_prop=node_val_prop,
+    node_stddev_prop=node_stddev_prop,
+)
+
+
+def test_infer_node_vals_and_errs_networkx(nx_graph_with_reference_mle_instance):
+
+    g, ref_node_idxs, seed, ref_dgs, ref_dg_errs = nx_graph_with_reference_mle_instance
+
+    g_res = infer_node_vals_and_errs_networkx_partial(g, ref_nodes=ref_node_idxs, seed=seed)
 
     for n, (ref_dg, ref_dg_err) in enumerate(zip(ref_dgs, ref_dg_errs)):
         assert g_res.nodes[n][node_val_prop] == ref_dg
         assert g_res.nodes[n][node_stddev_prop] == ref_dg_err
 
-    # ensure results are invariant wrt relabeling nodes
+
+def test_infer_node_vals_and_errs_networkx_invariant_wrt_relabeling(nx_graph_with_reference_mle_instance):
+    "Ensure results are invariant wrt relabeling nodes"
+
+    g, ref_node_idxs, seed, ref_dgs, ref_dg_errs = nx_graph_with_reference_mle_instance
+
     idx_to_label = {n: hashlib.sha256(b"{n}") for n in g.nodes}
-    g = nx.relabel_nodes(g, idx_to_label)
+    g_relabeled = nx.relabel_nodes(g, idx_to_label)
     ref_node_labels = [idx_to_label[n] for n in ref_node_idxs]
 
-    g_res = infer_node_vals_and_errs_networkx(
-        g, edge_diff_prop, edge_stddev_prop, node_val_prop, node_stddev_prop, ref_node_labels, seed=seed
-    )
+    g_relabeled_res = infer_node_vals_and_errs_networkx_partial(g_relabeled, ref_nodes=ref_node_labels, seed=seed)
 
     for n, (ref_dg, ref_dg_err) in enumerate(zip(ref_dgs, ref_dg_errs)):
-        assert g_res.nodes[idx_to_label[n]][node_val_prop] == ref_dg
-        assert g_res.nodes[idx_to_label[n]][node_stddev_prop] == ref_dg_err
+        assert g_relabeled_res.nodes[idx_to_label[n]][node_val_prop] == ref_dg
+        assert g_relabeled_res.nodes[idx_to_label[n]][node_stddev_prop] == ref_dg_err
+
+
+def test_infer_node_vals_and_errs_networkx_invariant_missing_values(nx_graph_with_reference_mle_instance):
+    "Check that edges with missing values are ignored"
+
+    g, ref_node_idxs, seed, ref_dgs, ref_dg_errs = nx_graph_with_reference_mle_instance
+    g.add_edge(np.random.choice(g.nodes), "undetermined", **{edge_diff_prop: None, edge_stddev_prop: None})
+
+    g_res = infer_node_vals_and_errs_networkx_partial(g, ref_nodes=ref_node_idxs, seed=seed)
+
+    for n, (ref_dg, ref_dg_err) in enumerate(zip(ref_dgs, ref_dg_errs)):
+        assert g_res.nodes[n][node_val_prop] == ref_dg
+        assert g_res.nodes[n][node_stddev_prop] == ref_dg_err
+
+    # undetermined node should not be updated
+    undetermined = g.nodes["undetermined"].values()
+    assert undetermined[node_val_prop] is None
+    assert undetermined[node_stddev_prop] is None
 
 
 def test_infer_node_vals_incorrect_sizes():
