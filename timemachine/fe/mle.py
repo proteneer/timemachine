@@ -249,7 +249,7 @@ def infer_node_vals_and_errs_networkx(
     ref_node_stddev_prop: str
         Node property to use for reference standard deviations. If undefined in a reference node, assumed to be zero.
     n_bootstrap, seed:
-        See documentation for :py:func:`fe.mle.infer_node_vals_and_errs`
+        See documentation for :py:func:`timemachine.fe.mle.infer_node_vals_and_errs`
 
     Returns
     -------
