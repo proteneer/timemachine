@@ -223,7 +223,7 @@ def _nx_graph_with_reference_mle_instance(request):
 @pytest.fixture(scope="function")
 def nx_graph_with_reference_mle_instance(_nx_graph_with_reference_mle_instance):
     g, *xs = _nx_graph_with_reference_mle_instance
-    return g.copy(), *xs
+    return (g.copy(), *xs)
 
 
 infer_node_vals_and_errs_networkx_partial = partial(
