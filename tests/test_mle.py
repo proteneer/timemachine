@@ -253,7 +253,7 @@ def test_infer_node_vals_and_errs_networkx_invariant_wrt_relabeling(nx_graph_wit
 
     g, ref_node_idxs, seed, ref_dgs, ref_dg_errs = nx_graph_with_reference_mle_instance
 
-    idx_to_label = {n: hashlib.sha256(b"{n}") for n in g.nodes}
+    idx_to_label = {n: hashlib.sha256(bytes(n)).hexdigest() for n in g.nodes}
     g_relabeled = nx.relabel_nodes(g, idx_to_label)
     ref_node_labels = [idx_to_label[n] for n in ref_node_idxs]
 
@@ -264,8 +264,10 @@ def test_infer_node_vals_and_errs_networkx_invariant_wrt_relabeling(nx_graph_wit
         assert g_relabeled_res.nodes[idx_to_label[n]][node_stddev_prop] == ref_dg_err
 
 
-def test_infer_node_vals_and_errs_networkx_invariant_missing_values(nx_graph_with_reference_mle_instance):
+def test_infer_node_vals_and_errs_networkx_missing_values(nx_graph_with_reference_mle_instance):
     "Check that edges with missing values are ignored"
+
+    np.random.seed(0)
 
     g, ref_node_idxs, seed, ref_dgs, ref_dg_errs = nx_graph_with_reference_mle_instance
     n1, n2, n3 = np.random.choice(g.nodes, 3, replace=False)
@@ -280,7 +282,7 @@ def test_infer_node_vals_and_errs_networkx_invariant_missing_values(nx_graph_wit
         assert g_res.nodes[n][node_stddev_prop] == ref_dg_err
 
     # undetermined node should not be updated
-    n = g.nodes["undetermined"]
+    n = g_res.nodes["undetermined"]
     assert node_val_prop not in n
     assert node_stddev_prop not in n
 
