@@ -1,6 +1,6 @@
 import importlib_resources as resources
 import numpy as np
-from simtk.openmm import app
+from openmm import app
 
 from timemachine.ff.handlers import openmm_deserializer
 from timemachine.md.builders import strip_units

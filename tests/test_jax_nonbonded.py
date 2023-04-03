@@ -10,8 +10,8 @@ import pytest
 from jax import jit
 from jax import numpy as jnp
 from jax import value_and_grad, vmap
+from openmm import unit
 from scipy.optimize import minimize
-from simtk import unit
 
 from timemachine.constants import BOLTZ, DEFAULT_FF, DEFAULT_TEMP
 from timemachine.fe.reweighting import one_sided_exp
@@ -120,6 +120,7 @@ def generate_waterbox_nb_args() -> NonbondedArgs:
     conf = positions.value_in_unit(unit.nanometer)
 
     N = conf.shape[0]
+    print()
     beta = nb.get_beta()
     cutoff = nb.get_cutoff()
 

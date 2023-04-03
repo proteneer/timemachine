@@ -6,7 +6,7 @@ from typing import List, Sequence, Tuple
 
 import numpy as np
 from numpy.typing import NDArray as Array
-from simtk.openmm import app
+from openmm import app
 
 from timemachine.constants import BOLTZ, DEFAULT_FF, DEFAULT_TEMP
 from timemachine.fe import functional, model_utils
