@@ -2,25 +2,24 @@ import numpy as np
 import pytest
 from common import GradientTest, gen_nonbonded_params_with_4d_offsets
 
-from timemachine.lib.potentials import NonbondedPairList
-from timemachine.potentials import generic
+from timemachine.potentials import NonbondedPairList
 
 pytestmark = [pytest.mark.memcheck]
 
 
 def test_nonbonded_pair_list_invalid_pair_idxs():
     with pytest.raises(RuntimeError) as e:
-        NonbondedPairList([0], [0], 2.0, 1.1).unbound_impl(np.float32)
+        NonbondedPairList([0], [0], 2.0, 1.1).to_gpu(np.float32).unbound_impl
 
     assert "pair_idxs.size() must be even, but got 1" in str(e)
 
     with pytest.raises(RuntimeError) as e:
-        NonbondedPairList([(0, 0)], [(1, 1)], 2.0, 1.1).unbound_impl(np.float32)
+        NonbondedPairList([(0, 0)], [(1, 1)], 2.0, 1.1).to_gpu(np.float32).unbound_impl
 
     assert "illegal pair with src == dst: 0, 0" in str(e)
 
     with pytest.raises(RuntimeError) as e:
-        NonbondedPairList([(0, 1)], [(1, 1), (2, 2)], 2.0, 1.1).unbound_impl(np.float32)
+        NonbondedPairList([(0, 1)], [(1, 1), (2, 2)], 2.0, 1.1).to_gpu(np.float32).unbound_impl
 
     assert "expected same number of pairs and scale tuples, but got 1 != 2" in str(e)
 
@@ -36,7 +35,7 @@ def test_nonbonded_pair_list_correctness(
     atol,
     cutoff,
     beta,
-    example_nonbonded_potential,
+    example_nonbonded_potential_and_params,
     example_conf,
     example_box,
     rng: np.random.Generator,
@@ -53,10 +52,12 @@ def test_nonbonded_pair_list_correctness(
 
     rescale_mask = rng.uniform(0, 1, size=(num_pairs, 2))
 
-    potential = generic.NonbondedPairList(pair_idxs, rescale_mask, beta, cutoff)
+    potential = NonbondedPairList(pair_idxs, rescale_mask, beta, cutoff)
+    _, params = example_nonbonded_potential_and_params
+
     GradientTest().compare_forces_gpu_vs_reference(
         example_conf,
-        gen_nonbonded_params_with_4d_offsets(rng, example_nonbonded_potential.params, cutoff),
+        gen_nonbonded_params_with_4d_offsets(rng, params, cutoff),
         example_box,
         potential,
         precision=precision,

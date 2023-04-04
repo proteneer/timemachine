@@ -3,27 +3,26 @@ import numpy as np
 import pytest
 from common import GradientTest, gen_nonbonded_params_with_4d_offsets
 
-from timemachine.lib.potentials import NonbondedInteractionGroup
-from timemachine.potentials import generic
+from timemachine.potentials import Nonbonded, NonbondedInteractionGroup
 
 pytestmark = [pytest.mark.memcheck]
 
 
 def test_nonbonded_interaction_group_invalid_indices():
     with pytest.raises(RuntimeError, match="row_atom_idxs must be nonempty"):
-        NonbondedInteractionGroup(1, [], 1.0, 1.0).unbound_impl(np.float64)
+        NonbondedInteractionGroup(1, [], 1.0, 1.0).to_gpu(np.float64).unbound_impl
 
     with pytest.raises(RuntimeError, match="atom indices must be unique"):
-        NonbondedInteractionGroup(3, [1, 1], 1.0, 1.0).unbound_impl(np.float64)
+        NonbondedInteractionGroup(3, [1, 1], 1.0, 1.0).to_gpu(np.float64).unbound_impl
 
     with pytest.raises(RuntimeError, match="index values must be greater or equal to zero"):
-        NonbondedInteractionGroup(3, [1, -1], 1.0, 1.0).unbound_impl(np.float64)
+        NonbondedInteractionGroup(3, [1, -1], 1.0, 1.0).to_gpu(np.float64).unbound_impl
 
     with pytest.raises(RuntimeError, match="index values must be less than N"):
-        NonbondedInteractionGroup(3, [1, 100], 1.0, 1.0).unbound_impl(np.float64)
+        NonbondedInteractionGroup(3, [1, 100], 1.0, 1.0).to_gpu(np.float64).unbound_impl
 
     with pytest.raises(RuntimeError) as e:
-        NonbondedInteractionGroup(3, [0, 1, 2], 1.0, 1.0).unbound_impl(np.float64)
+        NonbondedInteractionGroup(3, [0, 1, 2], 1.0, 1.0).to_gpu(np.float64).unbound_impl
     assert "must be less then N(3) indices" == str(e.value)
 
 
@@ -43,7 +42,7 @@ def test_nonbonded_interaction_group_zero_interactions(rng: np.random.Generator)
 
     potential = NonbondedInteractionGroup(num_atoms, ligand_idxs, beta, cutoff)
 
-    du_dx, du_dp, u = potential.unbound_impl(np.float64).execute(conf, params, box)
+    du_dx, du_dp, u = potential.to_gpu(np.float64).unbound_impl.execute(conf, params, box)
 
     assert (du_dx == 0).all()
     assert (du_dp == 0).all()
@@ -63,7 +62,7 @@ def test_nonbonded_interaction_group_correctness(
     atol,
     cutoff,
     beta,
-    example_nonbonded_potential,
+    example_nonbonded_potential_and_params,
     example_conf,
     example_box,
     rng,
@@ -71,11 +70,12 @@ def test_nonbonded_interaction_group_correctness(
     "Compares with jax reference implementation."
 
     conf = example_conf[:num_atoms]
-    params = example_nonbonded_potential.params[:num_atoms, :]
+    _, example_params = example_nonbonded_potential_and_params
+    params = example_params[:num_atoms, :]
 
     ligand_idxs = rng.choice(num_atoms, size=(num_atoms_ligand,), replace=False).astype(np.int32)
 
-    potential = generic.NonbondedInteractionGroup(num_atoms, ligand_idxs, beta, cutoff)
+    potential = NonbondedInteractionGroup(num_atoms, ligand_idxs, beta, cutoff)
 
     GradientTest().compare_forces_gpu_vs_reference(
         conf,
@@ -101,7 +101,7 @@ def test_nonbonded_interaction_group_consistency_allpairs_4d_decoupled(
     atol,
     cutoff,
     beta,
-    example_nonbonded_potential,
+    example_nonbonded_potential_and_params,
     example_conf,
     example_box,
     rng: np.random.Generator,
@@ -124,15 +124,16 @@ def test_nonbonded_interaction_group_consistency_allpairs_4d_decoupled(
     """
 
     conf = example_conf[:num_atoms]
-    params = example_nonbonded_potential.params[:num_atoms, :]
+    _, example_params = example_nonbonded_potential_and_params
+    params = example_params[:num_atoms, :]
 
-    ref_allpairs = generic.Nonbonded(
+    ref_allpairs = Nonbonded(
         num_atoms,
         exclusion_idxs=np.array([], dtype=np.int32),
         scale_factors=np.zeros((0, 2), dtype=np.float64),
         beta=beta,
         cutoff=cutoff,
-    ).to_reference()
+    )
 
     ligand_idxs = rng.choice(num_atoms, size=(num_atoms_ligand,), replace=False).astype(np.int32)
 
@@ -151,7 +152,7 @@ def test_nonbonded_interaction_group_consistency_allpairs_4d_decoupled(
         return ref_ixngroups
 
     ref_ixngroups = make_ref_ixngroups()
-    test_ixngroups = NonbondedInteractionGroup(num_atoms, ligand_idxs, beta, cutoff)
+    test_ixngroups = NonbondedInteractionGroup(num_atoms, ligand_idxs, beta, cutoff).to_gpu(precision)
 
     GradientTest().compare_forces(
         conf,
@@ -161,7 +162,6 @@ def test_nonbonded_interaction_group_consistency_allpairs_4d_decoupled(
         test_potential=test_ixngroups,
         rtol=rtol,
         atol=atol,
-        precision=precision,
     )
 
 
@@ -178,7 +178,7 @@ def test_nonbonded_interaction_group_consistency_allpairs_constant_shift(
     atol,
     cutoff,
     beta,
-    example_nonbonded_potential,
+    example_nonbonded_potential_and_params,
     example_conf,
     example_box,
     rng: np.random.Generator,
@@ -199,22 +199,23 @@ def test_nonbonded_interaction_group_consistency_allpairs_constant_shift(
     """
 
     conf = example_conf[:num_atoms]
-    params = example_nonbonded_potential.params[:num_atoms, :]
+    _, example_params = example_nonbonded_potential_and_params
+    params = example_params[:num_atoms, :]
 
     def ref_allpairs(conf):
-        U_ref = generic.Nonbonded(
+        U_ref = Nonbonded(
             num_atoms,
             exclusion_idxs=np.array([], dtype=np.int32),
             scale_factors=np.zeros((0, 2), dtype=np.float64),
             beta=beta,
             cutoff=cutoff,
-        ).to_reference()
+        )
 
         return U_ref(conf, params, example_box)
 
     ligand_idxs = rng.choice(num_atoms, size=(num_atoms_ligand,), replace=False).astype(np.int32)
 
-    test_impl = NonbondedInteractionGroup(num_atoms, ligand_idxs, beta, cutoff).unbound_impl(precision)
+    test_impl = NonbondedInteractionGroup(num_atoms, ligand_idxs, beta, cutoff).to_gpu(precision).unbound_impl
 
     def test_ixngroups(conf):
         _, _, u = test_impl.execute(conf, params, example_box)
@@ -248,7 +249,7 @@ def test_nonbonded_interaction_group_set_atom_idxs(
     secondary_ligand_set = rng.choice(other_idxs, size=(1), replace=False).astype(np.int32)
 
     potential = NonbondedInteractionGroup(num_atoms, ligand_idxs, beta, cutoff)
-    unbound_pot = potential.unbound_impl(precision)
+    unbound_pot = potential.to_gpu(precision).unbound_impl
 
     ref_du_dx, ref_du_dp, ref_u = unbound_pot.execute(
         conf,
@@ -270,7 +271,7 @@ def test_nonbonded_interaction_group_set_atom_idxs(
 
     # Reconstructing an Ixn group with the other set of atoms should be identical.
     potential2 = NonbondedInteractionGroup(num_atoms, secondary_ligand_set, beta, cutoff)
-    unbound_pot2 = potential2.unbound_impl(precision)
+    unbound_pot2 = potential2.to_gpu(precision).unbound_impl
 
     diff_ref_du_dx, diff_ref_du_dp, diff_ref_u = unbound_pot2.execute(
         conf,

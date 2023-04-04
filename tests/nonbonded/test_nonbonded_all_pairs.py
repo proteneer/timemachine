@@ -2,35 +2,34 @@ import numpy as np
 import pytest
 from common import GradientTest, gen_nonbonded_params_with_4d_offsets
 
-from timemachine.lib.potentials import NonbondedAllPairs
-from timemachine.potentials import generic
+from timemachine.potentials import NonbondedAllPairs
 
 pytestmark = [pytest.mark.memcheck]
 
 
 def test_nonbonded_all_pairs_invalid_atom_idxs():
     with pytest.raises(RuntimeError, match="Neighborlist N must be at least 1"):
-        NonbondedAllPairs(3, 2.0, 1.1, []).unbound_impl(np.float64)
+        NonbondedAllPairs(3, 2.0, 1.1, []).to_gpu(np.float64).unbound_impl
 
     with pytest.raises(RuntimeError, match="atom indices must be unique"):
-        NonbondedAllPairs(3, 2.0, 1.1, [0, 0]).unbound_impl(np.float64)
+        NonbondedAllPairs(3, 2.0, 1.1, [0, 0]).to_gpu(np.float64).unbound_impl
 
     with pytest.raises(RuntimeError, match="index values must be greater or equal to zero"):
-        NonbondedAllPairs(3, 2.0, 1.1, [0, -1]).unbound_impl(np.float64)
+        NonbondedAllPairs(3, 2.0, 1.1, [0, -1]).to_gpu(np.float64).unbound_impl
 
     with pytest.raises(RuntimeError, match="index values must be less than N"):
-        NonbondedAllPairs(3, 2.0, 1.1, [0, 100]).unbound_impl(np.float64)
+        NonbondedAllPairs(3, 2.0, 1.1, [0, 100]).to_gpu(np.float64).unbound_impl
 
 
 def test_nonbonded_all_pairs_invalid_num_atoms():
-    potential = NonbondedAllPairs(1, 2.0, 1.1).unbound_impl(np.float32)
+    potential = NonbondedAllPairs(1, 2.0, 1.1).to_gpu(np.float32).unbound_impl
     with pytest.raises(RuntimeError) as e:
         potential.execute(np.zeros((2, 3)), np.zeros((1, 3)), np.eye(3))
     assert "NonbondedAllPairs::execute_device(): expected N == N_, got N=2, N_=1" == str(e.value)
 
 
 def test_nonbonded_all_pairs_invalid_num_params():
-    potential = NonbondedAllPairs(1, 2.0, 1.1).unbound_impl(np.float32)
+    potential = NonbondedAllPairs(1, 2.0, 1.1).to_gpu(np.float32).unbound_impl
     with pytest.raises(RuntimeError) as e:
         potential.execute(np.zeros((1, 3)), np.zeros((2, 3)), np.eye(3))
     assert "NonbondedAllPairs::execute_device(): expected P == N_*4, got P=6, N_*4=4" == str(e.value)
@@ -48,7 +47,7 @@ def test_nonbonded_all_pairs_singleton_subset(rng: np.random.Generator):
     for idx in rng.choice(num_atoms, size=(10,)):
         atom_idxs = np.array([idx], dtype=np.int32)
         potential = NonbondedAllPairs(num_atoms, beta, cutoff, atom_idxs)
-        du_dx, du_dp, u = potential.unbound_impl(np.float64).execute(conf, params, box)
+        du_dx, du_dp, u = potential.to_gpu(np.float64).unbound_impl.execute(conf, params, box)
 
         assert (du_dx == 0).all()
         assert (du_dp == 0).all()
@@ -68,7 +67,11 @@ def test_nonbonded_all_pairs_improper_subset(rng: np.random.Generator):
     params = rng.uniform(0, 1, size=(num_atoms, 4))
 
     def test_impl(atom_idxs):
-        return NonbondedAllPairs(num_atoms, beta, cutoff, atom_idxs).unbound_impl(np.float64).execute(conf, params, box)
+        return (
+            NonbondedAllPairs(num_atoms, beta, cutoff, atom_idxs)
+            .to_gpu(np.float64)
+            .unbound_impl.execute(conf, params, box)
+        )
 
     du_dx_1, du_dp_1, u_1 = test_impl(None)
     du_dx_2, du_dp_2, u_2 = test_impl(np.arange(num_atoms, dtype=np.int32))
@@ -88,7 +91,7 @@ def test_nonbonded_all_pairs_set_atom_idxs(precision, cutoff, beta, rng: np.rand
     params = rng.uniform(0, 1, size=(num_atoms, 4))
 
     potential = NonbondedAllPairs(num_atoms, beta, cutoff)
-    unbound_pot = potential.unbound_impl(precision)
+    unbound_pot = potential.to_gpu(precision).unbound_impl
 
     identity_idxs = np.arange(0, num_atoms, dtype=np.int32)
     for num_idxs in [5, 25, 50, 80, num_atoms]:
@@ -96,7 +99,7 @@ def test_nonbonded_all_pairs_set_atom_idxs(precision, cutoff, beta, rng: np.rand
         ignored_idxs = np.delete(identity_idxs, atom_idxs)
         unbound_pot.set_atom_idxs(atom_idxs)
         ref_potential = NonbondedAllPairs(num_atoms, beta, cutoff, atom_idxs)
-        unbound_ref = ref_potential.unbound_impl(precision)
+        unbound_ref = ref_potential.to_gpu(precision).unbound_impl
 
         du_dx, du_dp, u = unbound_pot.execute(
             conf,
@@ -140,7 +143,7 @@ def test_nonbonded_all_pairs_correctness(
     atol,
     cutoff,
     beta,
-    example_nonbonded_potential,
+    example_nonbonded_potential_and_params,
     example_conf,
     example_box,
     rng: np.random.Generator,
@@ -148,13 +151,14 @@ def test_nonbonded_all_pairs_correctness(
     "Compares with jax reference implementation."
 
     conf = example_conf[:num_atoms]
-    params = example_nonbonded_potential.params[:num_atoms, :]
+    _, example_params = example_nonbonded_potential_and_params
+    params = example_params[:num_atoms, :]
 
     atom_idxs = (
         rng.choice(num_atoms, size=(num_atoms_subset,), replace=False).astype(np.int32) if num_atoms_subset else None
     )
 
-    potential = generic.NonbondedAllPairs(num_atoms, beta, cutoff, atom_idxs)
+    potential = NonbondedAllPairs(num_atoms, beta, cutoff, atom_idxs)
 
     GradientTest().compare_forces_gpu_vs_reference(
         conf,

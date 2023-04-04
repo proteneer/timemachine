@@ -1,7 +1,9 @@
+from typing import cast
+
 import numpy as np
 import pytest
 
-from timemachine.lib import potentials
+from timemachine import potentials
 from timemachine.testsystems.dhfr import setup_dhfr
 
 
@@ -15,16 +17,11 @@ def _example_system():
 
 
 @pytest.fixture()
-def example_nonbonded_potential(_example_system):
+def example_nonbonded_potential_and_params(_example_system):
     host_fns, _, _, _ = _example_system
-
-    nonbonded_fn = None
-    for f in host_fns:
-        if isinstance(f, potentials.Nonbonded):
-            nonbonded_fn = f
-
-    assert nonbonded_fn is not None
-    return nonbonded_fn
+    nonbonded_bp = next(bp for bp in host_fns if isinstance(bp.potential, potentials.Nonbonded))
+    nonbonded_fn = cast(potentials.Nonbonded, nonbonded_bp.potential)
+    return nonbonded_fn, nonbonded_bp.params
 
 
 @pytest.fixture()

@@ -2,8 +2,7 @@ import numpy as np
 import pytest
 from common import GradientTest, gen_nonbonded_params_with_4d_offsets
 
-from timemachine.lib.potentials import NonbondedPairListPrecomputed
-from timemachine.potentials import generic
+from timemachine.potentials import NonbondedPairListPrecomputed
 
 pytestmark = [pytest.mark.memcheck]
 
@@ -11,12 +10,12 @@ pytestmark = [pytest.mark.memcheck]
 def test_nonbonded_precomputed_pair_list_invalid_pair_idxs():
 
     with pytest.raises(RuntimeError) as e:
-        NonbondedPairListPrecomputed([0], 2.0, 1.1).unbound_impl(np.float32)
+        NonbondedPairListPrecomputed([0], 2.0, 1.1).to_gpu(np.float32).unbound_impl
 
     assert "idxs.size() must be exactly 2*B" in str(e)
 
     with pytest.raises(RuntimeError) as e:
-        NonbondedPairListPrecomputed([(0, 0)], 2.0, 1.1).unbound_impl(np.float32)
+        NonbondedPairListPrecomputed([(0, 0)], 2.0, 1.1).to_gpu(np.float32).unbound_impl
 
     assert "illegal pair with src == dst: 0, 0" in str(e)
 
@@ -54,7 +53,7 @@ def test_nonbonded_pair_list_precomputed_correctness(
         1 + rng.uniform(0, 1, size=3) * 3
     )  # box should be fully ignored tbh (just like all other bonded forces)
 
-    potential = generic.NonbondedPairListPrecomputed(pair_idxs, beta, cutoff)
+    potential = NonbondedPairListPrecomputed(pair_idxs, beta, cutoff)
 
     GradientTest().compare_forces_gpu_vs_reference(
         conf,
