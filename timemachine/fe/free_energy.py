@@ -365,9 +365,10 @@ def sample(initial_state: InitialState, md_params: MDParams, max_buffer_frames: 
                         n_steps=steps,
                     )
                 else:
-                    ctxt.multiple_steps(
-                        n_steps=global_steps,
-                    )
+                    if global_steps > 0:
+                        ctxt.multiple_steps(
+                            n_steps=global_steps,
+                        )
                     x_t, box_t = ctxt.multiple_steps_local(
                         local_steps,
                         initial_state.ligand_idxs.astype(np.int32),
