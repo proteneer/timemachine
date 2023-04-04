@@ -99,7 +99,7 @@ setup(
     python_requires=">=3.10",
     install_requires=[
         "jax",
-        "jaxlib>0.4.6",
+        "jaxlib>0.3.13",
         "networkx",
         "numpy",
         "pymbar>3.0.4,<4",
