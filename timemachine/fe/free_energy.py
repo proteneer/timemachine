@@ -37,6 +37,9 @@ class MDParams:
     n_frames: int
     n_eq_steps: int
     steps_per_frame: int
+    local_steps: int = 0
+    k: float = 10_000.0
+    radius: float = 1.2
 
 
 @dataclass
@@ -340,14 +343,47 @@ def sample(initial_state: InitialState, md_params: MDParams, max_buffer_frames: 
         store_x_interval=0,
     )
 
+    rng = np.random.default_rng(md_params.n_frames * md_params.steps_per_frame)
+
     assert np.all(np.isfinite(ctxt.get_x_t())), "Equilibration resulted in a nan"
 
     def run_production_steps(n_steps: int) -> Tuple[NDArray, NDArray]:
-        _, coords, boxes = ctxt.multiple_steps_U(
-            n_steps=n_steps,
-            store_u_interval=0,
-            store_x_interval=md_params.steps_per_frame,
-        )
+        if md_params.local_steps <= 0:
+            _, coords, boxes = ctxt.multiple_steps_U(
+                n_steps=n_steps,
+                store_u_interval=0,
+                store_x_interval=md_params.steps_per_frame,
+            )
+        else:
+            coords = None
+            boxes = None
+            for steps in batches(n_steps, md_params.steps_per_frame):
+                global_steps = steps - md_params.local_steps
+                local_steps = md_params.local_steps
+                if global_steps < 0:
+                    x_t, box_t = ctxt.multiple_steps(
+                        n_steps=steps,
+                    )
+                else:
+                    ctxt.multiple_steps(
+                        n_steps=global_steps,
+                    )
+                    x_t, box_t = ctxt.multiple_steps_local(
+                        local_steps,
+                        initial_state.ligand_idxs.astype(np.int32),
+                        k=md_params.k,
+                        radius=md_params.radius,
+                        seed=rng.integers(np.iinfo(np.int32).max),
+                        burn_in=0,
+                    )
+
+                if coords is None:
+                    coords = np.array(x_t)
+                    boxes = np.array(box_t)
+                else:
+                    coords = np.concatenate([coords, x_t])
+                    boxes = np.concatenate([boxes, box_t])
+
         return coords, boxes
 
     all_coords: Union[NDArray, StoredArrays]

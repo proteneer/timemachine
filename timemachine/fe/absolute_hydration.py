@@ -2,7 +2,7 @@
 
 import pickle
 from functools import partial
-from typing import List, Sequence, Tuple
+from typing import List, Optional, Sequence, Tuple
 
 import numpy as np
 from numpy.typing import NDArray as Array
@@ -181,12 +181,10 @@ def estimate_absolute_free_energy(
     ff: Forcefield,
     host_config: HostConfig,
     seed: int,
-    n_frames=1000,
     prefix="",
+    md_params: Optional[MDParams] = None,
     n_windows=None,
     keep_idxs=None,
-    n_eq_steps=10000,
-    steps_per_frame=400,
 ):
     """
     Estimate the absolute hydration free energy for the given mol.
@@ -202,9 +200,6 @@ def estimate_absolute_free_energy(
     host_config: HostConfig
         Configuration for the host system.
 
-    n_frames: int
-        number of samples to generate for each lambda window, where each sample is `steps_per_frame` steps of MD.
-
     prefix: str
         A prefix to append to figures
 
@@ -218,11 +213,9 @@ def estimate_absolute_free_energy(
         If None, return only the end-state frames. Otherwise if not None, use only for debugging, and this
         will return the frames corresponding to the idxs of interest.
 
-    n_eq_steps: int
-        Number of equilibration steps for each window.
-
-    steps_per_frame: int
-        The number of steps to take before collecting a frame
+    md_params: MDParams or None
+        Parameters to run the MD with. If None defaults to 2000 frames, collected every 400 steps and 200,000
+        steps of equilibration
 
     Returns
     -------
@@ -232,6 +225,8 @@ def estimate_absolute_free_energy(
     """
     bt = BaseTopology(mol, ff)
     afe = AbsoluteFreeEnergy(mol, bt)
+    if md_params is None:
+        md_params = MDParams(n_frames=2000, steps_per_frame=400, n_eq_steps=200000)
 
     # note: tm convention lambda=1 means "decoupled", lambda=0 means "coupled"
     lambda_schedule = construct_pre_optimized_absolute_lambda_schedule_solvent(n_windows)[::-1]
@@ -239,7 +234,6 @@ def estimate_absolute_free_energy(
 
     temperature = DEFAULT_TEMP
     initial_states = setup_initial_states(afe, ff, host_config, temperature, lambda_schedule, seed)
-    md_params = MDParams(n_frames=n_frames, n_eq_steps=n_eq_steps, steps_per_frame=steps_per_frame)
 
     if keep_idxs is None:
         keep_idxs = [0, len(initial_states) - 1]  # keep first and last windows
@@ -355,7 +349,7 @@ def setup_initial_states(
 
 
 def run_solvent(
-    mol, forcefield, _, n_frames, seed, n_eq_steps=10000, steps_per_frame=400, n_windows=16
+    mol, forcefield: Forcefield, _, seed: int, md_params: MDParams, n_windows=16
 ) -> Tuple[SimulationResult, app.topology.Topology, HostConfig]:
     box_width = 4.0
     solvent_sys, solvent_conf, solvent_box, solvent_top = builders.build_water_system(box_width, forcefield.water_ff)
@@ -366,10 +360,8 @@ def run_solvent(
         forcefield,
         solvent_host_config,
         seed,
+        md_params=md_params,
         prefix="solvent",
-        n_frames=n_frames,
-        n_eq_steps=n_eq_steps,
         n_windows=n_windows,
-        steps_per_frame=steps_per_frame,
     )
     return solvent_res, solvent_top, solvent_host_config
