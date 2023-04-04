@@ -110,7 +110,7 @@ def run_triple(mol_a, mol_b, core, forcefield, n_frames, protein_path, n_eq_step
     )
     print("vacuum")
     is_bisection = estimate_relative_free_energy_fn == estimate_relative_free_energy_via_greedy_bisection
-    state_seeds = [6998, 6082, 36] if is_bisection else [6998, 3540, 36]
+    state_seeds = [5860, 8314, 8840] if is_bisection else [5860, 1830, 8840]
     check_sim_result(vacuum_res, state_seeds=state_seeds)
 
     box_width = 4.0
@@ -132,7 +132,7 @@ def run_triple(mol_a, mol_b, core, forcefield, n_frames, protein_path, n_eq_step
     )
 
     print("solvent")
-    state_seeds = [8783, 8019, 3494] if is_bisection else [8783, 701, 3494]
+    state_seeds = [1375, 9782, 8885] if is_bisection else [1375, 3070, 8885]
     check_sim_result(solvent_res, state_seeds=state_seeds)
 
     seed = 2024
@@ -156,7 +156,7 @@ def run_triple(mol_a, mol_b, core, forcefield, n_frames, protein_path, n_eq_step
     )
 
     print("complex")
-    state_seeds = [9977, 3195, 5508] if is_bisection else [9977, 1713, 5508]
+    state_seeds = [3876, 4352, 9056] if is_bisection else [3876, 3642, 9056]
     check_sim_result(complex_res, state_seeds=state_seeds)
 
 

@@ -120,7 +120,6 @@ def generate_waterbox_nb_args() -> NonbondedArgs:
     conf = positions.value_in_unit(unit.nanometer)
 
     N = conf.shape[0]
-    print()
     beta = nb.get_beta()
     cutoff = nb.get_cutoff()
 

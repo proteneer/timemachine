@@ -706,7 +706,6 @@ def test_am1_platform_dependence(mol_with_precomputed_charges):
     mol = mol_with_precomputed_charges["mol"]
     local_am1_charges = nonbonded.compute_or_load_am1_charges(mol)
     allowable_charges = mol_with_precomputed_charges["precomputed_charges"].values()
-    print(list(local_am1_charges))
     assert any(np.isclose(local_am1_charges, expected_charges).all() for expected_charges in allowable_charges)
 
 
