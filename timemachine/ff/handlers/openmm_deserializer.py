@@ -5,8 +5,7 @@ import numpy as np
 import openmm as mm
 from openmm import unit
 
-from timemachine import constants
-from timemachine.lib import potentials
+from timemachine import constants, potentials
 
 ORDERED_FORCES = ["HarmonicBond", "HarmonicAngle", "PeriodicTorsion", "Nonbonded"]
 
@@ -15,7 +14,7 @@ def value(quantity):
     return quantity.value_in_unit_system(unit.md_unit_system)
 
 
-def deserialize_system(system: mm.System, cutoff: float) -> Tuple[List[potentials.CustomOpWrapper], List[float]]:
+def deserialize_system(system: mm.System, cutoff: float) -> Tuple[List[potentials.BoundPotential], List[float]]:
     """
     Deserialize an OpenMM XML file
 
