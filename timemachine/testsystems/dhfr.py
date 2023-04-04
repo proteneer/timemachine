@@ -1,4 +1,5 @@
-import importlib_resources as resources
+from importlib import resources
+
 import numpy as np
 from openmm import app
 
