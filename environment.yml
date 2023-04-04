@@ -4,6 +4,6 @@ channels:
   - openeye
 dependencies:
   - python=3.10.10
-  - jax=0.4.8
-  - jaxlib=0.4.8=cpu*
+  - jax=0.4.7
+  - jaxlib=0.4.7=cpu*
   - openeye-toolkits=2022.2.2
