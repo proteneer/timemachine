@@ -19,7 +19,9 @@ from timemachine.constants import ONE_4PI_EPS0
 from timemachine.fe.utils import read_sdf
 from timemachine.ff import Forcefield
 from timemachine.lib import potentials
-from timemachine.potentials import bonded, generic
+from timemachine.potentials import Nonbonded, Potential, bonded
+from timemachine.potentials.potential import GpuImplWrapper
+from timemachine.potentials.summed import PotentialFxn
 
 
 @contextlib.contextmanager
@@ -111,7 +113,7 @@ def prepare_water_system(x, p_scale, cutoff):
 
     beta = 2.0
 
-    potential = generic.Nonbonded(N, exclusion_idxs, scales, beta, cutoff)
+    potential = Nonbonded(N, exclusion_idxs, scales, beta, cutoff)
 
     return params, potential
 
@@ -138,7 +140,7 @@ def prepare_nb_system(
 
     beta = 2.0
 
-    potential = generic.Nonbonded(N, exclusion_idxs, scales, beta, cutoff)
+    potential = Nonbonded(N, exclusion_idxs, scales, beta, cutoff)
 
     return params, potential
 
@@ -255,10 +257,9 @@ class GradientTest(unittest.TestCase):
         x: NDArray,
         params_arrays: Iterable[NDArray],
         box: NDArray,
-        ref_potential,
-        test_potential,
+        ref_potential: PotentialFxn,
+        test_potential: GpuImplWrapper,
         rtol: float,
-        precision,
         atol: float = 1e-8,
     ):
         """
@@ -272,7 +273,7 @@ class GradientTest(unittest.TestCase):
         to compute the forces/energies/etc.
 
         """
-        test_impl = test_potential.unbound_impl(precision)
+        test_impl = test_potential.unbound_impl
 
         x = (x.astype(np.float32)).astype(np.float64)
 
@@ -318,14 +319,12 @@ class GradientTest(unittest.TestCase):
         x: NDArray,
         params_arrays: Iterable[NDArray],
         box: NDArray,
-        potential: generic.Potential,
+        potential: Potential,
         rtol: float,
         precision,
         atol: float = 1e-8,
     ):
-        return self.compare_forces(
-            x, params_arrays, box, potential.to_reference(), potential.to_gpu(), rtol, precision, atol
-        )
+        return self.compare_forces(x, params_arrays, box, potential, potential.to_gpu(precision), rtol, atol)
 
 
 def gen_nonbonded_params_with_4d_offsets(rng: np.random.Generator, params, w_max: float, w_min: Optional[float] = None):
