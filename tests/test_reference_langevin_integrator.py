@@ -6,7 +6,7 @@ import pytest
 from jax import grad, jit
 from jax import numpy as jnp
 
-from timemachine.constants import BOLTZ, DEFAULT_FF
+from timemachine.constants import BOLTZ
 from timemachine.fe import utils
 from timemachine.fe.single_topology import SingleTopology
 from timemachine.ff import Forcefield
@@ -126,7 +126,7 @@ def test_reference_langevin_integrator_with_custom_ops():
     temperature = 300
     st = get_hif2a_ligand_pair_single_topology()
     mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
-    forcefield = Forcefield.load_from_file(DEFAULT_FF)
+    forcefield = Forcefield.load_default()
     st = SingleTopology(mol_a, mol_b, core, forcefield)
     vac_sys = st.setup_intermediate_state(0.5)
     x_a = utils.get_romol_conf(st.mol_a)

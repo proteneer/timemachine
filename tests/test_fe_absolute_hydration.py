@@ -1,7 +1,6 @@
 import numpy as np
 
 from timemachine import testsystems
-from timemachine.constants import DEFAULT_FF
 from timemachine.fe import absolute_hydration
 from timemachine.ff import Forcefield
 
@@ -12,7 +11,7 @@ def test_run_solvent():
     n_eq_steps = 100
     n_windows = 8
     mol, _ = testsystems.ligands.get_biphenyl()
-    ff = Forcefield.load_from_file(DEFAULT_FF)
+    ff = Forcefield.load_default()
     res, top, host_config = absolute_hydration.run_solvent(
         mol, ff, None, n_frames, seed, n_eq_steps=n_eq_steps, n_windows=n_windows
     )

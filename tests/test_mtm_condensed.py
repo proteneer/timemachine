@@ -10,7 +10,7 @@ import pytest
 from scipy.special import logsumexp
 
 from timemachine import testsystems
-from timemachine.constants import BOLTZ, DEFAULT_FF
+from timemachine.constants import BOLTZ
 from timemachine.fe.utils import get_mol_masses
 from timemachine.ff import Forcefield
 from timemachine.md import enhanced
@@ -29,7 +29,7 @@ def test_condensed_phase_mtm():
     np.random.seed(seed)
 
     mol, torsion_idxs = testsystems.ligands.get_biphenyl()
-    ff = Forcefield.load_from_file(DEFAULT_FF)
+    ff = Forcefield.load_default()
 
     masses = get_mol_masses(mol)
     num_ligand_atoms = len(masses)
@@ -178,7 +178,7 @@ def test_nvt_box():
     np.random.seed(seed)
 
     mol, _ = testsystems.ligands.get_biphenyl()
-    ff = Forcefield.load_from_file(DEFAULT_FF)
+    ff = Forcefield.load_default()
 
     ubps, params, masses, coords, box = enhanced.get_solvent_phase_system(mol, ff, 0.0)
     bps = []

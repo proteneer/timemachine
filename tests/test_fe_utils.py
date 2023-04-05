@@ -3,7 +3,6 @@ import pytest
 from rdkit import Chem
 from rdkit.Chem import AllChem
 
-from timemachine.constants import DEFAULT_FF
 from timemachine.fe import model_utils, utils
 from timemachine.fe.model_utils import image_frame, image_molecule
 from timemachine.ff import Forcefield
@@ -153,7 +152,7 @@ def test_experimental_conversions_to_kj():
 
 
 def test_get_strained_atoms():
-    ff = Forcefield.load_from_file(DEFAULT_FF)
+    ff = Forcefield.load_default()
     np.random.seed(2022)
     mol = Chem.AddHs(Chem.MolFromSmiles("c1ccccc1"))
     AllChem.EmbedMolecule(mol)
