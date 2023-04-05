@@ -56,12 +56,6 @@ def test_nonbonded_pair_list_correctness(
     _, params = example_nonbonded_potential_and_params
 
     for params in gen_nonbonded_params_with_4d_offsets(rng, params, cutoff):
-        GradientTest().compare_forces(
-            example_conf,
-            params,
-            example_box,
-            potential,
-            potential.to_gpu(precision),
-            rtol=rtol,
-            atol=atol,
-        )
+        test_impl = potential.to_gpu(precision)
+        GradientTest().compare_forces(example_conf, params, example_box, potential, test_impl, rtol=rtol, atol=atol)
+        GradientTest().assert_differentiable_interface_consistency(example_conf, params, example_box, test_impl)

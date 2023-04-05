@@ -81,6 +81,7 @@ def test_nonbonded_interaction_group_correctness(
 
     for params in gen_nonbonded_params_with_4d_offsets(rng, params, cutoff):
         GradientTest().compare_forces(conf, params, example_box, potential, test_impl, rtol=rtol, atol=atol)
+        GradientTest().assert_differentiable_interface_consistency(conf, params, example_box, test_impl)
 
 
 @pytest.mark.parametrize("beta", [2.0])

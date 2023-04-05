@@ -301,6 +301,17 @@ class GradientTest(unittest.TestCase):
             np.testing.assert_array_equal(test_u, test_u_2)
             np.testing.assert_array_equal(test_du_dp, test_du_dp_2)
 
+    def assert_differentiable_interface_consistency(
+        self, x: NDArray, params: NDArray, box: NDArray, gpu_impl: GpuImplWrapper
+    ):
+        """Check that energy and derivatives computed using the JAX differentiable interface are consistent with values
+        returned by execute_selective"""
+        ref_du_dx, ref_du_dp, ref_u = gpu_impl.unbound_impl.execute_selective(x, params, box, True, True, True)
+        test_u, (test_du_dx, test_du_dp) = jax.value_and_grad(gpu_impl, (0, 1))(x, params, box)
+        assert ref_u == test_u
+        np.testing.assert_array_equal(test_du_dx, ref_du_dx)
+        np.testing.assert_array_equal(test_du_dp, ref_du_dp)
+
 
 def gen_nonbonded_params_with_4d_offsets(
     rng: np.random.Generator, params, w_max: float, w_min: Optional[float] = None

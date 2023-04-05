@@ -28,7 +28,9 @@ def test_harmonic_angle_stable(n_particles, n_angles, precision, rtol, seed):
     box = np.eye(3) * 100  # note: ignored
     angle_idxs, coords, params = generate_system(n_particles, n_angles, seed)
     potential = HarmonicAngleStable(angle_idxs)
-    GradientTest().compare_forces(coords, params, box, potential, potential.to_gpu(precision), rtol)
+    test_impl = potential.to_gpu(precision)
+    GradientTest().compare_forces(coords, params, box, potential, test_impl, rtol)
+    GradientTest().assert_differentiable_interface_consistency(coords, params, box, test_impl)
 
 
 @pytest.mark.parametrize("n_particles", [64])

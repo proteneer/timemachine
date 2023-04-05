@@ -44,7 +44,9 @@ class TestBonded(GradientTest):
 
             params = np.array([], dtype=np.float64)
 
-            self.compare_forces(x_primal, params, box, potential, potential.to_gpu(precision), rtol)
+            test_impl = potential.to_gpu(precision)
+            self.compare_forces(x_primal, params, box, potential, test_impl, rtol)
+            self.assert_differentiable_interface_consistency(x_primal, params, box, test_impl)
 
     def test_centroid_restraint_singularity(self):
         # test singularity is stable when dij=0 and b0 = 0
@@ -97,21 +99,16 @@ class TestBonded(GradientTest):
 
         potential = HarmonicBond(bond_idxs)
         for precision, rtol in relative_tolerance_at_precision.items():
-            self.compare_forces(x, params, box, potential, potential.to_gpu(precision), rtol)
-
-        potential = HarmonicBond(bond_idxs)
-
-        for precision, rtol in relative_tolerance_at_precision.items():
-            self.compare_forces(x, params, box, potential, potential.to_gpu(precision), rtol)
+            test_impl = potential.to_gpu(precision)
+            self.compare_forces(x, params, box, potential, test_impl, rtol)
+            self.assert_differentiable_interface_consistency(x, params, box, test_impl)
 
             # test bitwise commutativity
-            test_potential = HarmonicBond(bond_idxs)
             test_potential_rev = HarmonicBond(bond_idxs[:, ::-1])
 
-            test_potential_impl = test_potential.to_gpu(precision).unbound_impl
             test_potential_rev_impl = test_potential_rev.to_gpu(precision).unbound_impl
 
-            test_du_dx, test_du_dp, test_u = test_potential_impl.execute_selective(x, params, box, 1, 1, 1)
+            test_du_dx, test_du_dp, test_u = test_impl.unbound_impl.execute_selective(x, params, box, 1, 1, 1)
 
             test_du_dx_rev, test_du_dp_rev, test_u_rev = test_potential_rev_impl.execute_selective(
                 x, params, box, 1, 1, 1
@@ -149,7 +146,9 @@ class TestBonded(GradientTest):
 
         potential = FlatBottomBond(bond_idxs)
         for precision, rtol in relative_tolerance_at_precision.items():
-            self.compare_forces(x, params, box, potential, potential.to_gpu(precision), rtol)
+            test_impl = potential.to_gpu(precision)
+            self.compare_forces(x, params, box, potential, test_impl, rtol)
+            self.assert_differentiable_interface_consistency(x, params, box, test_impl)
 
             # test bitwise commutativity
             test_potential = FlatBottomBond(bond_idxs)
