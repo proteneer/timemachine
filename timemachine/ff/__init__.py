@@ -87,21 +87,18 @@ class Forcefield:
         original_path = str(path_or_str)
         path = Path(path_or_str)  # Safe to construct a Path object from another Path object
 
-        for params_trav in resources.files("timemachine.ff.params").iterdir():
-            built_in_path = Path(params_trav.name) / path.name
-            print("ffs", built_in_path)
-            if built_in_path.is_file():
-                if path.is_file():
-                    warn(
-                        f"Provided path {original_path} shares name with built-in forcefield, falling back to built-in"
-                    )
-                # Search built in params for the forcefields
-                path = built_in_path
-            if not path.is_file():
-                raise ValueError(f"Unable to find {original_path} in file system or built-in forcefields")
-            with open(path, "r") as ifs:
-                handlers, protein_ff, water_ff = deserialize_handlers(ifs.read())
+        # Look for builtin ff
+        for resource in resources.files("timemachine.ff.params").iterdir():
+            if resource.name == path.name:
+                warn(f"Provided path {original_path} shares name with built-in forcefield, falling back to built-in")
+                handlers, protein_ff, water_ff = deserialize_handlers(resource.read_text())
+                return cls.from_handlers(handlers, protein_ff=protein_ff, water_ff=water_ff)
 
+        # Look for ff file
+        if not path.is_file():
+            raise ValueError(f"Unable to find {original_path} in file system or built-in forcefields")
+
+        handlers, protein_ff, water_ff = deserialize_handlers(path.read_text())
         return cls.from_handlers(handlers, protein_ff=protein_ff, water_ff=water_ff)
 
     @classmethod
