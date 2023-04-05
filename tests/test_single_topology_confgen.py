@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from timemachine.constants import DEFAULT_FF, DEFAULT_TEMP
+from timemachine.constants import DEFAULT_TEMP
 from timemachine.fe import atom_mapping, pdb_writer, utils
 from timemachine.fe.lambda_schedule import construct_pre_optimized_relative_lambda_schedule
 from timemachine.fe.rbfe import HostConfig, setup_initial_states, setup_optimized_host
@@ -49,7 +49,7 @@ def run_edge(mol_a, mol_b, protein_path, n_windows):
     with open(f"edge_map_{get_mol_name(mol_a)}_{get_mol_name(mol_b)}.svg", "w") as fh:
         fh.write(res)
 
-    ff = Forcefield.load_from_file(DEFAULT_FF)
+    ff = Forcefield.load_default()
     st = SingleTopology(mol_a, mol_b, core, ff)
 
     lambda_schedule = construct_pre_optimized_relative_lambda_schedule(n_windows)

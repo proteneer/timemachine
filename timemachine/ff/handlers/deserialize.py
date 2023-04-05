@@ -1,7 +1,7 @@
 import ast
 
 from timemachine import constants
-from timemachine.ff.handlers import bonded, nonbonded
+from timemachine.ff.handlers import bonded, nonbonded, serialization_format
 from timemachine.ff.handlers.suffix import _SUFFIX
 
 
@@ -21,8 +21,8 @@ def deserialize_handlers(obj):
 
     handlers = []
 
-    protein_ff = obj_dict.pop(constants.PROTEIN_FF_TAG, constants.DEFAULT_PROTEIN_FF)
-    water_ff = obj_dict.pop(constants.WATER_FF_TAG, constants.DEFAULT_WATER_FF)
+    protein_ff = obj_dict.pop(serialization_format.PROTEIN_FF_TAG, constants.DEFAULT_PROTEIN_FF)
+    water_ff = obj_dict.pop(serialization_format.WATER_FF_TAG, constants.DEFAULT_WATER_FF)
 
     for k, v in obj_dict.items():
         cls_name = k + _SUFFIX

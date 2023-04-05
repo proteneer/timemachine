@@ -7,7 +7,7 @@ import pytest
 from rdkit import Chem
 from rdkit.Chem import AllChem, rdmolops
 
-from timemachine.constants import DEFAULT_FF, ONE_4PI_EPS0
+from timemachine.constants import ONE_4PI_EPS0
 from timemachine.fe import utils
 from timemachine.ff import Forcefield
 from timemachine.ff.charges import AM1CCC_CHARGES
@@ -557,7 +557,7 @@ def test_gbsa_handler():
 
 def test_am1ccc_throws_error_on_phosphorus():
     """Temporary, until phosphorus patterns are added to AM1CCC port"""
-    ff = Forcefield.load_from_file(DEFAULT_FF)
+    ff = Forcefield.load_default()
 
     # contains phosphorus
     smi = "[H]c1c(OP(=S)(OC([H])([H])C([H])([H])[H])OC([H])([H])C([H])([H])[H])nc(C([H])(C([H])([H])[H])C([H])([H])[H])nc1C([H])([H])[H]"
@@ -569,7 +569,7 @@ def test_am1ccc_throws_error_on_phosphorus():
 
 
 def test_am1_differences():
-    ff = Forcefield.load_from_file(DEFAULT_FF)
+    ff = Forcefield.load_default()
 
     ccc = ff.q_handle
     assert isinstance(ccc, nonbonded.AM1CCCHandler)
@@ -920,7 +920,7 @@ def test_harmonic_bonds_complete():
 
     mol = Chem.MolFromSmiles("O(F)F")  # 0 smirks matches using current (2022-05-16) handler
 
-    ff = Forcefield.load_from_file(DEFAULT_FF)
+    ff = Forcefield.load_default()
     parameterize = ff.hb_handle.parameterize
 
     with pytest.raises(ValueError) as e:

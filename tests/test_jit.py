@@ -2,7 +2,6 @@ import os
 from tempfile import TemporaryDirectory
 from unittest import TestCase
 
-from timemachine.constants import DEFAULT_FF
 from timemachine.ff import Forcefield
 from timemachine.md.builders import build_water_system
 from timemachine.md.minimizer import minimize_host_4d
@@ -17,7 +16,7 @@ class TestJIT(TestCase):
             try:
                 # build a pair of alchemical ligands in a water box
                 mol_a, mol_b, _ = get_hif2a_ligand_pair_single_topology()
-                ff = Forcefield.load_from_file(DEFAULT_FF)
+                ff = Forcefield.load_default()
                 complex_system, complex_coords, complex_box, complex_top = build_water_system(2.6, ff.water_ff)
 
                 # Creates a custom_ops.Context which triggers JIT

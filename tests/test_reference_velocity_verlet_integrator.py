@@ -3,7 +3,6 @@ import pytest
 from jax import grad, jit
 from jax import numpy as jnp
 
-from timemachine.constants import DEFAULT_FF
 from timemachine.fe.rbfe import setup_initial_states
 from timemachine.fe.single_topology import SingleTopology
 from timemachine.fe.utils import get_romol_conf
@@ -109,7 +108,7 @@ def test_reversibility_with_custom_ops_potentials():
 
     # define a Python force fxn that calls custom_ops
     mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
-    forcefield = Forcefield.load_from_file(DEFAULT_FF)
+    forcefield = Forcefield.load_default()
     rfe = SingleTopology(mol_a, mol_b, core, forcefield)
     masses = np.array(rfe.combine_masses())
     coords = rfe.combine_confs(get_romol_conf(mol_a), get_romol_conf(mol_b))
