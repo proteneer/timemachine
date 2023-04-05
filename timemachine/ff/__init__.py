@@ -89,6 +89,7 @@ class Forcefield:
 
         for params_trav in resources.files("timemachine.ff.params").iterdir():
             built_in_path = Path(params_trav.name) / path.name
+            print("ffs", built_in_path)
             if built_in_path.is_file():
                 if path.is_file():
                     warn(
