@@ -3,5 +3,5 @@ scipy==1.10.1
 pymbar==3.0.5
 pyyaml==5.4.1
 networkx==2.5
-matplotlib==3.3.3
+matplotlib==3.7.1
 rdkit==2022.3.5

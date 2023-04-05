@@ -114,7 +114,7 @@ setup(
             "click==8.0.4",  # pinned due to https://github.com/psf/black/issues/2964 -- unpin if upgrading black
             "flake8==4.0.1",
             "isort==5.10.1",
-            "mypy==0.942",
+            "mypy==1.1.1",
             "pre-commit==2.17.0",
         ],
         "test": [
