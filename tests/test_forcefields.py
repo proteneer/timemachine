@@ -3,6 +3,7 @@ from glob import glob
 from pathlib import Path
 from warnings import catch_warnings
 
+import numpy as np
 import pytest
 from common import temporary_working_dir
 
@@ -80,4 +81,4 @@ def test_load_default():
 
     for (ref_handle, test_handle) in zip(ref.get_ordered_handles(), test.get_ordered_handles()):
         assert ref_handle.smirks == test_handle.smirks
-        assert (ref_handle.params == test_handle.params).all()
+        np.testing.assert_array_equal(ref_handle.params, test_handle.params)
