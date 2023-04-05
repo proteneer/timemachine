@@ -8,7 +8,7 @@ import numpy as np
 from numpy.typing import NDArray as Array
 from simtk.openmm import app
 
-from timemachine.constants import BOLTZ, DEFAULT_FF, DEFAULT_TEMP
+from timemachine.constants import BOLTZ, DEFAULT_TEMP
 from timemachine.fe import functional, model_utils
 from timemachine.fe.free_energy import (
     AbsoluteFreeEnergy,
@@ -118,7 +118,7 @@ def setup_absolute_hydration_with_endpoint_samples(
     np.random.seed(seed)
 
     # set up potentials
-    ff = ff or Forcefield.load_from_file(DEFAULT_FF)
+    ff = ff or Forcefield.load_default()
     potentials, params, masses, _, _ = enhanced.get_solvent_phase_system(mol, ff)
 
     U_fn = functional.construct_differentiable_interface_fast(potentials, params)
