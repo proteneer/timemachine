@@ -72,13 +72,13 @@ class Forcefield:
         Parameters
         ----------
 
-        path: string or pathlib.Path
+        path_or_str: string or pathlib.Path
             Either the filename of a built in ff (smirnoff_1_1_0_sc.py) or a path to a new forcefield file
 
         Returns
         -------
         Forcefield
-            Return a ForceField object constructed from parameters file
+            Return a Forcefield object constructed from parameters file
 
         Note
         ----
