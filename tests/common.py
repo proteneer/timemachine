@@ -299,9 +299,7 @@ class GradientTest(unittest.TestCase):
 
             np.testing.assert_array_equal(test_du_dx, test_du_dx_2)
             np.testing.assert_array_equal(test_u, test_u_2)
-
-            if isinstance(test_potential, potentials.Nonbonded):
-                np.testing.assert_array_equal(test_du_dp, test_du_dp_2)
+            np.testing.assert_array_equal(test_du_dp, test_du_dp_2)
 
 
 def gen_nonbonded_params_with_4d_offsets(
