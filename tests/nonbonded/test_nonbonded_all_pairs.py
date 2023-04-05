@@ -160,12 +160,7 @@ def test_nonbonded_all_pairs_correctness(
 
     potential = NonbondedAllPairs(num_atoms, beta, cutoff, atom_idxs)
 
-    GradientTest().compare_forces_gpu_vs_reference(
-        conf,
-        gen_nonbonded_params_with_4d_offsets(rng, params, cutoff),
-        example_box,
-        potential,
-        precision=precision,
-        rtol=rtol,
-        atol=atol,
-    )
+    test_impl = potential.to_gpu(precision)
+
+    for params in gen_nonbonded_params_with_4d_offsets(rng, params, cutoff):
+        GradientTest().compare_forces(conf, params, example_box, potential, test_impl, rtol=rtol, atol=atol)

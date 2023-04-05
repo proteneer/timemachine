@@ -55,12 +55,13 @@ def test_nonbonded_pair_list_correctness(
     potential = NonbondedPairList(pair_idxs, rescale_mask, beta, cutoff)
     _, params = example_nonbonded_potential_and_params
 
-    GradientTest().compare_forces_gpu_vs_reference(
-        example_conf,
-        gen_nonbonded_params_with_4d_offsets(rng, params, cutoff),
-        example_box,
-        potential,
-        precision=precision,
-        rtol=rtol,
-        atol=atol,
-    )
+    for params in gen_nonbonded_params_with_4d_offsets(rng, params, cutoff):
+        GradientTest().compare_forces(
+            example_conf,
+            params,
+            example_box,
+            potential,
+            potential.to_gpu(precision),
+            rtol=rtol,
+            atol=atol,
+        )

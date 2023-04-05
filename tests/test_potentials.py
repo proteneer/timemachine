@@ -259,7 +259,7 @@ def test_summed_potential(num_potentials, harmonic_bond_test_system):
     flat_params = np.concatenate([p.reshape(-1) for p in params_list])
 
     for rtol, precision in [(1e-6, np.float32), (1e-10, np.float64)]:
-        GradientTest().compare_forces_gpu_vs_reference(coords, [flat_params], box, potential, rtol, precision)
+        GradientTest().compare_forces(coords, flat_params, box, potential, potential.to_gpu(precision), rtol)
 
 
 def test_fanout_summed_potential_consistency(harmonic_bond_test_system):

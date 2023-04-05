@@ -155,15 +155,8 @@ class TestNonbondedDHFR(GradientTest):
             potential = potentials.Nonbonded(N, test_exclusions, test_scales, self.beta, self.cutoff)
 
             for precision, rtol, atol in [(np.float64, 1e-8, 1e-8), (np.float32, 1e-4, 5e-4)]:
-
-                self.compare_forces_gpu_vs_reference(
-                    test_conf,
-                    [test_params],
-                    self.box,
-                    potential,
-                    rtol=rtol,
-                    atol=atol,
-                    precision=precision,
+                self.compare_forces(
+                    test_conf, test_params, self.box, potential, potential.to_gpu(precision), rtol=rtol, atol=atol
                 )
 
     @unittest.skip("benchmark-only")
@@ -214,15 +207,14 @@ class TestNonbondedWater(GradientTest):
         for test_box in [big_box, box]:
 
             for precision, rtol, atol in [(np.float64, 1e-8, 1e-10), (np.float32, 1e-4, 3e-5)]:
-
-                self.compare_forces_gpu_vs_reference(
+                self.compare_forces(
                     host_conf,
-                    [test_bp.params],
+                    test_bp.params,
                     test_box,
                     test_bp.potential,
+                    test_bp.potential.to_gpu(precision),
                     rtol=rtol,
                     atol=atol,
-                    precision=precision,
                 )
 
 
@@ -271,7 +263,7 @@ class TestNonbonded(GradientTest):
 
             params = prepare_system_params(test_system, cutoff)
 
-            self.compare_forces_gpu_vs_reference(test_system, [params], box, potential, rtol, precision=precision)
+            self.compare_forces(test_system, params, box, potential, potential.to_gpu(precision), rtol)
 
     def test_nonbonded(self):
 
@@ -288,16 +280,11 @@ class TestNonbonded(GradientTest):
                 # E = 0 # DEBUG!
                 charge_params, potential = prepare_water_system(coords, p_scale=5.0, cutoff=cutoff)
                 for precision, rtol, atol in [(np.float64, 1e-8, 1e-8), (np.float32, 1e-4, 5e-4)]:
-
-                    self.compare_forces_gpu_vs_reference(
-                        coords,
-                        gen_nonbonded_params_with_4d_offsets(np.random.default_rng(2022), charge_params, cutoff),
-                        box,
-                        potential,
-                        rtol=rtol,
-                        atol=atol,
-                        precision=precision,
-                    )
+                    test_impl = potential.to_gpu(precision)
+                    for params in gen_nonbonded_params_with_4d_offsets(
+                        np.random.default_rng(2022), charge_params, cutoff
+                    ):
+                        self.compare_forces(coords, params, box, potential, test_impl, rtol=rtol, atol=atol)
 
     def test_nonbonded_with_box_smaller_than_cutoff(self):
 

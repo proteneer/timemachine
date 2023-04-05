@@ -77,15 +77,10 @@ def test_nonbonded_interaction_group_correctness(
 
     potential = NonbondedInteractionGroup(num_atoms, ligand_idxs, beta, cutoff)
 
-    GradientTest().compare_forces_gpu_vs_reference(
-        conf,
-        gen_nonbonded_params_with_4d_offsets(rng, params, cutoff),
-        example_box,
-        potential,
-        rtol=rtol,
-        atol=atol,
-        precision=precision,
-    )
+    test_impl = potential.to_gpu(precision)
+
+    for params in gen_nonbonded_params_with_4d_offsets(rng, params, cutoff):
+        GradientTest().compare_forces(conf, params, example_box, potential, test_impl, rtol=rtol, atol=atol)
 
 
 @pytest.mark.parametrize("beta", [2.0])
@@ -154,15 +149,16 @@ def test_nonbonded_interaction_group_consistency_allpairs_4d_decoupled(
     ref_ixngroups = make_ref_ixngroups()
     test_ixngroups = NonbondedInteractionGroup(num_atoms, ligand_idxs, beta, cutoff).to_gpu(precision)
 
-    GradientTest().compare_forces(
-        conf,
-        gen_nonbonded_params_with_4d_offsets(rng, params, cutoff),
-        example_box,
-        ref_potential=ref_ixngroups,
-        test_potential=test_ixngroups,
-        rtol=rtol,
-        atol=atol,
-    )
+    for params in gen_nonbonded_params_with_4d_offsets(rng, params, cutoff):
+        GradientTest().compare_forces(
+            conf,
+            params,
+            example_box,
+            ref_potential=ref_ixngroups,
+            test_potential=test_ixngroups,
+            rtol=rtol,
+            atol=atol,
+        )
 
 
 @pytest.mark.parametrize("beta", [2.0])

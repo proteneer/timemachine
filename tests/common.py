@@ -3,10 +3,11 @@ import functools
 import itertools
 import os
 import unittest
+from collections.abc import Iterator
 from dataclasses import dataclass
 from importlib import resources
 from tempfile import NamedTemporaryFile, TemporaryDirectory
-from typing import Iterable, Optional
+from typing import Optional
 
 import jax
 import jax.numpy as jnp
@@ -19,7 +20,7 @@ from timemachine.constants import ONE_4PI_EPS0
 from timemachine.fe.utils import read_sdf
 from timemachine.ff import Forcefield
 from timemachine.lib import potentials
-from timemachine.potentials import Nonbonded, Potential, bonded
+from timemachine.potentials import Nonbonded, bonded
 from timemachine.potentials.potential import GpuImplWrapper
 from timemachine.potentials.summed import PotentialFxn
 
@@ -255,26 +256,14 @@ class GradientTest(unittest.TestCase):
     def compare_forces(
         self,
         x: NDArray,
-        params_arrays: Iterable[NDArray],
+        params: NDArray,
         box: NDArray,
         ref_potential: PotentialFxn,
         test_potential: GpuImplWrapper,
         rtol: float,
         atol: float = 1e-8,
     ):
-        """
-        Compares the forces between a reference and a test potential.
-
-
-        Note
-        ----
-        Preferable to pass an iterable of parameters to this function than run this function repeatedly, as this
-        function constructs an unbound impl for the test_potential which can be expensive relative to the time it takes
-        to compute the forces/energies/etc.
-
-        """
-        test_impl = test_potential.unbound_impl
-
+        """Compares the forces between a reference and a test potential."""
         x = (x.astype(np.float32)).astype(np.float64)
 
         assert x.ndim == 2
@@ -283,51 +272,41 @@ class GradientTest(unittest.TestCase):
 
         assert x.dtype == np.float64
 
-        for params in params_arrays:
-            params = (params.astype(np.float32)).astype(np.float64)
-            assert params.dtype == np.float64
-            ref_u = ref_potential(x, params, box)
-            grad_fn = jax.grad(ref_potential, argnums=(0, 1))
-            ref_du_dx, ref_du_dp = grad_fn(x, params, box)
-            for combo in itertools.product([False, True], repeat=3):
+        params = (params.astype(np.float32)).astype(np.float64)
+        assert params.dtype == np.float64
+        ref_u = ref_potential(x, params, box)
+        grad_fn = jax.grad(ref_potential, argnums=(0, 1))
+        ref_du_dx, ref_du_dp = grad_fn(x, params, box)
 
-                compute_du_dx, compute_du_dp, compute_u = combo
+        for combo in itertools.product([False, True], repeat=3):
 
-                # do each computation twice to check determinism
-                test_du_dx, test_du_dp, test_u = test_impl.execute_selective(
-                    x, params, box, compute_du_dx, compute_du_dp, compute_u
-                )
-                if compute_u:
-                    np.testing.assert_allclose(ref_u, test_u, rtol=rtol, atol=atol)
-                if compute_du_dx:
-                    self.assert_equal_vectors(np.array(ref_du_dx), np.array(test_du_dx), rtol)
-                if compute_du_dp:
-                    np.testing.assert_allclose(ref_du_dp, test_du_dp, rtol=rtol, atol=atol)
+            compute_du_dx, compute_du_dp, compute_u = combo
 
-                test_du_dx_2, test_du_dp_2, test_u_2 = test_impl.execute_selective(
-                    x, params, box, compute_du_dx, compute_du_dp, compute_u
-                )
+            # do each computation twice to check determinism
+            test_du_dx, test_du_dp, test_u = test_potential.unbound_impl.execute_selective(
+                x, params, box, compute_du_dx, compute_du_dp, compute_u
+            )
+            if compute_u:
+                np.testing.assert_allclose(ref_u, test_u, rtol=rtol, atol=atol)
+            if compute_du_dx:
+                self.assert_equal_vectors(np.array(ref_du_dx), np.array(test_du_dx), rtol)
+            if compute_du_dp:
+                np.testing.assert_allclose(ref_du_dp, test_du_dp, rtol=rtol, atol=atol)
 
-                np.testing.assert_array_equal(test_du_dx, test_du_dx_2)
-                np.testing.assert_array_equal(test_u, test_u_2)
+            test_du_dx_2, test_du_dp_2, test_u_2 = test_potential.unbound_impl.execute_selective(
+                x, params, box, compute_du_dx, compute_du_dp, compute_u
+            )
 
-                if isinstance(test_potential, potentials.Nonbonded):
-                    np.testing.assert_array_equal(test_du_dp, test_du_dp_2)
+            np.testing.assert_array_equal(test_du_dx, test_du_dx_2)
+            np.testing.assert_array_equal(test_u, test_u_2)
 
-    def compare_forces_gpu_vs_reference(
-        self,
-        x: NDArray,
-        params_arrays: Iterable[NDArray],
-        box: NDArray,
-        potential: Potential,
-        rtol: float,
-        precision,
-        atol: float = 1e-8,
-    ):
-        return self.compare_forces(x, params_arrays, box, potential, potential.to_gpu(precision), rtol, atol)
+            if isinstance(test_potential, potentials.Nonbonded):
+                np.testing.assert_array_equal(test_du_dp, test_du_dp_2)
 
 
-def gen_nonbonded_params_with_4d_offsets(rng: np.random.Generator, params, w_max: float, w_min: Optional[float] = None):
+def gen_nonbonded_params_with_4d_offsets(
+    rng: np.random.Generator, params, w_max: float, w_min: Optional[float] = None
+) -> Iterator[NDArray]:
 
     if w_min is None:
         w_min = -w_max
