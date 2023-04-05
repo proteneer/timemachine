@@ -5,12 +5,13 @@ from timemachine.ff.handlers import bonded, nonbonded, serialization_format
 from timemachine.ff.handlers.suffix import _SUFFIX
 
 
-def deserialize_handlers(obj):
+def deserialize_handlers(obj, protein_ff_name=constants.DEFAULT_PROTEIN_FF, water_ff_name=constants.DEFAULT_WATER_FF):
     """
     Parameters
     ----------
     obj: bytes-like
         the binary we wish to deserialize.
+    protein_ff_name, water_ff_name: str
 
     Returns
     -------
@@ -21,8 +22,8 @@ def deserialize_handlers(obj):
 
     handlers = []
 
-    protein_ff = obj_dict.pop(serialization_format.PROTEIN_FF_TAG, constants.DEFAULT_PROTEIN_FF)
-    water_ff = obj_dict.pop(serialization_format.WATER_FF_TAG, constants.DEFAULT_WATER_FF)
+    protein_ff = obj_dict.pop(serialization_format.PROTEIN_FF_TAG, protein_ff_name)
+    water_ff = obj_dict.pop(serialization_format.WATER_FF_TAG, water_ff_name)
 
     for k, v in obj_dict.items():
         cls_name = k + _SUFFIX
