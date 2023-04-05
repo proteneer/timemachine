@@ -1,9 +1,8 @@
 from dataclasses import dataclass
+from importlib import resources
 from pathlib import Path
 from typing import Any, Generic, Iterable, Optional, Tuple, TypeVar, Union
 from warnings import warn
-
-import importlib_resources as resources
 
 from timemachine.constants import DEFAULT_PROTEIN_FF, DEFAULT_WATER_FF
 from timemachine.ff.handlers import bonded, nonbonded
@@ -88,8 +87,8 @@ class Forcefield:
         original_path = str(path_or_str)
         path = Path(path_or_str)  # Safe to construct a Path object from another Path object
 
-        with resources.files("timemachine.ff.params") as params_path:
-            built_in_path = params_path / path.name
+        for params_trav in resources.files("timemachine.ff.params").iterdir():
+            built_in_path = Path(params_trav.name) / path.name
             if built_in_path.is_file():
                 if path.is_file():
                     warn(
