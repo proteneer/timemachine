@@ -88,6 +88,8 @@ class Nonbonded(Potential):
     scale_factors: NDArray[np.float64]
     beta: float
     cutoff: float
+    disable_hilbert_sort: bool = False
+    nblist_padding: float = 0.1
 
     def __call__(self, conf: Conf, params: Params, box: Optional[Box]) -> float | Array:
         charge_rescale_mask, lj_rescale_mask = nonbonded.convert_exclusions_to_rescale_masks(
@@ -106,7 +108,13 @@ class Nonbonded(Potential):
         )
 
     def to_gpu(self, precision: Precision) -> GpuImplWrapper:
-        all_pairs = NonbondedAllPairs(self.num_atoms, self.beta, self.cutoff)
+        all_pairs = NonbondedAllPairs(
+            self.num_atoms,
+            self.beta,
+            self.cutoff,
+            disable_hilbert_sort=self.disable_hilbert_sort,
+            nblist_padding=self.nblist_padding,
+        )
         exclusions = NonbondedPairListNegated(self.exclusion_idxs, self.scale_factors, self.beta, self.cutoff)
         return FanoutSummedPotential([all_pairs, exclusions]).to_gpu(precision)
 
@@ -117,6 +125,8 @@ class NonbondedAllPairs(Potential):
     beta: float
     cutoff: float
     atom_idxs: Optional[Array] = None
+    disable_hilbert_sort: bool = False
+    nblist_padding: float = 0.1
 
     def __call__(self, conf: Conf, params: Params, box: Optional[Box]) -> float | Array:
         s = self.atom_idxs if self.atom_idxs is not None else slice(None)
@@ -142,6 +152,8 @@ class NonbondedInteractionGroup(Potential):
     row_atom_idxs: NDArray[np.int32]
     beta: float
     cutoff: float
+    disable_hilbert_sort: bool = False
+    nblist_padding: float = 0.1
 
     def __call__(self, conf: Conf, params: Params, box: Optional[Box]) -> float | Array:
         num_atoms, _ = jnp.array(conf).shape

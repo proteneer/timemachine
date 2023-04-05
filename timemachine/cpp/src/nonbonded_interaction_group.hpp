@@ -26,7 +26,7 @@ private:
     double cutoff_;
     Neighborlist<RealType> nblist_;
 
-    double nblist_padding_;
+    const double nblist_padding_;
     double *d_nblist_x_;    // coords which were used to compute the nblist
     double *d_nblist_box_;  // box which was used to rebuild the nblist
     int *d_rebuild_nblist_; // whether or not we have to rebuild the nblist
@@ -55,7 +55,7 @@ private:
     unsigned int *d_sort_storage_;
     size_t d_sort_storage_bytes_;
 
-    bool disable_hilbert_;
+    const bool disable_hilbert_;
 
     void hilbert_sort(
         const int N,
@@ -66,17 +66,18 @@ private:
         cudaStream_t stream);
 
 public:
-    // these are marked public but really only intended for testing.
-    void set_nblist_padding(double val);
-    void disable_hilbert_sort();
-
     void set_atom_idxs_device(
         const int NC, const int NR, unsigned int *d_column_idxs, unsigned int *d_row_idxs, const cudaStream_t stream);
 
     void set_atom_idxs(const std::vector<int> &atom_idxs);
 
     NonbondedInteractionGroup(
-        const int N, const std::vector<int> &row_atom_idxs, const double beta, const double cutoff);
+        const int N,
+        const std::vector<int> &row_atom_idxs,
+        const double beta,
+        const double cutoff,
+        const bool disable_hilbert_sort = false,
+        const double nblist_padding = 0.1);
 
     ~NonbondedInteractionGroup();
 
