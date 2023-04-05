@@ -21,9 +21,5 @@ DEFAULT_FF = "smirnoff_2_0_0_ccc.py"
 DEFAULT_PROTEIN_FF = "amber99sbildn"
 DEFAULT_WATER_FF = "tip3p"
 
-# serialization format definition
-PROTEIN_FF_TAG = "ProteinForcefield"
-WATER_FF_TAG = "WaterForcefield"
-
 # thresholds
 MAX_FORCE_NORM = 50000  # used to check norms in the gradient computations
