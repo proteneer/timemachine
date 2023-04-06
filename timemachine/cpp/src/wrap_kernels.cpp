@@ -369,11 +369,20 @@ void declare_context(py::module &m) {
             "set_v_t",
             [](timemachine::Context &ctxt, const py::array_t<double, py::array::c_style> new_v_t) {
                 if (new_v_t.shape()[0] != ctxt.num_atoms()) {
-                    throw std::runtime_error("number of new coords disagree with current coords");
+                    throw std::runtime_error("number of new velocities disagree with current coords");
                 }
                 ctxt.set_v_t(new_v_t.data());
             },
             py::arg("velocities"))
+        .def(
+            "set_box",
+            [](timemachine::Context &ctxt, const py::array_t<double, py::array::c_style> new_box_t) {
+                if (new_box_t.size() != 9 || new_box_t.shape()[0] != 3) {
+                    throw std::runtime_error("box must be 3x3");
+                }
+                ctxt.set_box(new_box_t.data());
+            },
+            py::arg("box"))
         .def(
             "get_x_t",
             [](timemachine::Context &ctxt) -> py::array_t<double, py::array::c_style> {
