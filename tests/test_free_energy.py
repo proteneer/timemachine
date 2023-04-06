@@ -7,7 +7,7 @@ from hypothesis.strategies import integers
 from jax import grad, jacfwd, jacrev, value_and_grad
 from scipy.optimize import check_grad, minimize
 
-from timemachine.constants import DEFAULT_FF, DEFAULT_TEMP
+from timemachine.constants import DEFAULT_TEMP
 from timemachine.fe import free_energy, topology, utils
 from timemachine.fe.free_energy import MDParams, batches, sample
 from timemachine.fe.functional import construct_differentiable_interface, construct_differentiable_interface_fast
@@ -97,7 +97,7 @@ def test_functional():
     """
 
     mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
-    forcefield = Forcefield.load_from_file(DEFAULT_FF)
+    forcefield = Forcefield.load_default()
     st = SingleTopology(mol_a, mol_b, core, forcefield)
 
     vac_sys = st.setup_intermediate_state(0.5)
@@ -151,7 +151,7 @@ def test_construct_differentiable_interface_fast():
     C++ code path produces equivalent results to doing the
     summation in Python"""
     mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
-    forcefield = Forcefield.load_from_file(DEFAULT_FF)
+    forcefield = Forcefield.load_default()
     st = SingleTopology(mol_a, mol_b, core, forcefield)
     vac_sys = st.setup_intermediate_state(0.5)
     x_a = utils.get_romol_conf(st.mol_a)
@@ -184,7 +184,7 @@ def test_absolute_vacuum():
         mols = utils.read_sdf(path_to_ligand)
     mol = mols[0]
 
-    ff = Forcefield.load_from_file(DEFAULT_FF)
+    ff = Forcefield.load_default()
     ff_params = ff.get_params()
 
     bt = topology.BaseTopology(mol, ff)
@@ -201,7 +201,7 @@ def test_vacuum_and_solvent_edge_types():
         mols = utils.read_sdf(path_to_ligand)
     mol = mols[0]
 
-    ff = Forcefield.load_from_file(DEFAULT_FF)
+    ff = Forcefield.load_default()
     solvent_system, solvent_coords, solvent_box, _ = builders.build_water_system(3.0, ff.water_ff)
 
     ff_params = ff.get_params()
@@ -238,7 +238,7 @@ def test_batches(n, batch_size):
 @pytest.fixture(scope="module")
 def hif2a_ligand_pair_single_topology_lam0_state():
     mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
-    forcefield = Forcefield.load_from_file(DEFAULT_FF)
+    forcefield = Forcefield.load_default()
     st = SingleTopology(mol_a, mol_b, core, forcefield)
     state = setup_initial_states(st, None, DEFAULT_TEMP, [0.0], 2023)[0]
     return state

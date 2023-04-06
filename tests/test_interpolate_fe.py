@@ -6,7 +6,7 @@ import numpy as np
 import pymbar
 import pytest
 
-from timemachine.constants import BOLTZ, DEFAULT_FF
+from timemachine.constants import BOLTZ
 from timemachine.fe import atom_mapping, pdb_writer, single_topology, utils
 from timemachine.fe.system import simulate_system
 from timemachine.fe.utils import get_romol_conf
@@ -17,7 +17,7 @@ from timemachine.ff import Forcefield
 def test_hif2a_free_energy_estimates():
     # Test that we can estimate the free energy differences for some simple transformations
 
-    forcefield = Forcefield.load_from_file(DEFAULT_FF)
+    forcefield = Forcefield.load_default()
 
     with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
         all_mols = utils.read_sdf(path_to_ligand)

@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Any, Generic, Iterable, Optional, Tuple, TypeVar, Union
 from warnings import warn
 
-from timemachine.constants import DEFAULT_PROTEIN_FF, DEFAULT_WATER_FF
+from timemachine.constants import DEFAULT_FF, DEFAULT_PROTEIN_FF, DEFAULT_WATER_FF
 from timemachine.ff.handlers import bonded, nonbonded
 from timemachine.ff.handlers.deserialize import deserialize_handlers
 from timemachine.ff.handlers.serialize import serialize_handlers
@@ -70,14 +70,13 @@ class Forcefield:
 
         Parameters
         ----------
-
-        path: string or pathlib.Path
+        path_or_str: string or pathlib.Path
             Either the filename of a built in ff (smirnoff_1_1_0_sc.py) or a path to a new forcefield file
 
         Returns
         -------
         Forcefield
-            Return a ForceField object constructed from parameters file
+            Return a Forcefield object constructed from parameters file
 
         Note
         ----
@@ -100,6 +99,11 @@ class Forcefield:
 
         handlers, protein_ff, water_ff = deserialize_handlers(path.read_text())
         return cls.from_handlers(handlers, protein_ff=protein_ff, water_ff=water_ff)
+
+    @classmethod
+    def load_default(cls) -> "Forcefield":
+        """alias for load_from_file(DEFAULT_FF)"""
+        return cls.load_from_file(DEFAULT_FF)
 
     @classmethod
     def from_handlers(

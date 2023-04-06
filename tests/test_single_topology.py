@@ -11,7 +11,6 @@ from hypothesis import assume, given, seed
 from rdkit import Chem
 from rdkit.Chem import AllChem
 
-from timemachine.constants import DEFAULT_FF
 from timemachine.fe import atom_mapping, single_topology
 from timemachine.fe.interpolate import linear_interpolation, log_linear_interpolation
 from timemachine.fe.single_topology import (
@@ -323,7 +322,7 @@ def test_jax_transform_intermediate_potential():
         mol_b = mols["57"]
 
         core = _get_core_by_mcs(mol_a, mol_b)
-        ff = Forcefield.load_from_file(DEFAULT_FF)
+        ff = Forcefield.load_default()
         st = SingleTopology(mol_a, mol_b, core, ff)
         conf = st.combine_confs(get_romol_conf(mol_a), get_romol_conf(mol_b))
         return st, conf
@@ -465,7 +464,7 @@ def test_no_chiral_atom_restraints():
     mol_b = ligand_from_smiles("c1(I)ccccc1")
     core = _get_core_by_mcs(mol_a, mol_b)
 
-    forcefield = Forcefield.load_from_file(DEFAULT_FF)
+    forcefield = Forcefield.load_default()
     st = SingleTopology(mol_a, mol_b, core, forcefield)
     init_conf = st.combine_confs(get_romol_conf(mol_a), get_romol_conf(mol_b))
     state = st.setup_intermediate_state(0.1)
@@ -480,7 +479,7 @@ def test_no_chiral_bond_restraints():
     mol_b = ligand_from_smiles("CI")
     core = _get_core_by_mcs(mol_a, mol_b)
 
-    forcefield = Forcefield.load_from_file(DEFAULT_FF)
+    forcefield = Forcefield.load_default()
     st = SingleTopology(mol_a, mol_b, core, forcefield)
     init_conf = st.combine_confs(get_romol_conf(mol_a), get_romol_conf(mol_b))
     state = st.setup_intermediate_state(0.1)

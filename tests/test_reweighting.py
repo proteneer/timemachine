@@ -5,7 +5,7 @@ from jax import grad, jit
 from jax import numpy as jnp
 from jax import value_and_grad, vmap
 
-from timemachine.constants import BOLTZ, DEFAULT_FF
+from timemachine.constants import BOLTZ
 from timemachine.datasets import fetch_freesolv
 from timemachine.fe.functional import construct_differentiable_interface_fast
 from timemachine.fe.reweighting import (
@@ -187,7 +187,7 @@ def make_ahfe_test_system():
     * fake "endpoint samples" (random perturbations of initial (conf, box) -- not actual samples!)
     """
     mol = fetch_freesolv()[123]
-    ff = Forcefield.load_from_file(DEFAULT_FF)
+    ff = Forcefield.load_default()
     temperature = 300
     ref_delta_f = -23.0  # from a short SMC calculation on mobley_242480, in kB T
 

@@ -3,7 +3,6 @@
 import numpy as np
 import pytest
 
-from timemachine.constants import DEFAULT_FF
 from timemachine.fe.single_topology import SingleTopology
 from timemachine.fe.system import convert_omm_system
 from timemachine.ff import Forcefield
@@ -15,7 +14,7 @@ from timemachine.testsystems.relative import get_hif2a_ligand_pair_single_topolo
 @pytest.fixture(scope="module")
 def hif2a_ligand_pair_single_topology():
     mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
-    forcefield = Forcefield.load_from_file(DEFAULT_FF)
+    forcefield = Forcefield.load_default()
     return SingleTopology(mol_a, mol_b, core, forcefield)
 
 
@@ -27,7 +26,7 @@ def complex_host_system():
 
 @pytest.fixture(scope="module")
 def solvent_host_system():
-    forcefield = Forcefield.load_from_file(DEFAULT_FF)
+    forcefield = Forcefield.load_default()
     host_sys_omm, _, _, _ = builders.build_water_system(3.0, forcefield.water_ff)
     return convert_omm_system(host_sys_omm)
 
