@@ -4,10 +4,10 @@ import subprocess
 import sys
 from contextlib import contextmanager
 from glob import glob
+from importlib import resources
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
-import importlib_resources as resources
 import numpy as np
 import pytest
 from common import temporary_working_dir

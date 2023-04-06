@@ -6,8 +6,8 @@ from typing import Any, Dict, Iterable, List, NamedTuple, Optional, Sequence, Tu
 
 import numpy as np
 from numpy.typing import NDArray
+from openmm import app
 from rdkit import Chem
-from simtk.openmm import app
 
 from timemachine.constants import DEFAULT_PRESSURE, DEFAULT_TEMP
 from timemachine.fe import atom_mapping, model_utils

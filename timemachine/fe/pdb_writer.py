@@ -1,9 +1,9 @@
 import tempfile
 
 import numpy as np
+from openmm import app
+from openmm.app import PDBFile
 from rdkit import Chem
-from simtk.openmm import app
-from simtk.openmm.app import PDBFile
 
 from timemachine.fe.single_topology import AtomMapMixin
 

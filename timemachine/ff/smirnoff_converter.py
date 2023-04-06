@@ -7,7 +7,7 @@ from typing import Any, Dict
 from xml.dom import minidom
 
 import numpy as np
-from simtk import unit
+from openmm import unit
 
 from timemachine.ff.charges import AM1CCC_CHARGES
 
@@ -38,7 +38,7 @@ def _ast_eval(node):
     elif isinstance(node, ast.UnaryOp):  # <operator> <operand> e.g., -1
         return operators[type(node.op)](_ast_eval(node.operand))
     elif isinstance(node, ast.Name):
-        # see if this is a simtk unit
+        # see if this is a openmm unit
         b = getattr(unit, node.id)
         return b
     # TODO: This was a quick hack that surprisingly worked. We should validate this further.
@@ -54,17 +54,17 @@ def to_md_units(q):
 
 def string_to_unit(unit_string):
     """
-    Deserializes a simtk.unit.Quantity from a string representation, for
+    Deserializes a openmm.unit.Quantity from a string representation, for
     example: "kilocalories_per_mole / angstrom ** 2"
 
     Parameters
     ----------
     unit_string : dict
-        Serialized representation of a simtk.unit.Quantity.
+        Serialized representation of a openmm.unit.Quantity.
 
     Returns
     -------
-    output_unit: simtk.unit.Quantity
+    output_unit: openmm.unit.Quantity
         The deserialized unit from the string
 
     """

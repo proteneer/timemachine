@@ -1,9 +1,8 @@
 from dataclasses import dataclass
+from importlib import resources
 from pathlib import Path
 from typing import Any, Generic, Iterable, Optional, Tuple, TypeVar, Union
 from warnings import warn
-
-import importlib_resources as resources
 
 from timemachine.constants import DEFAULT_FF, DEFAULT_PROTEIN_FF, DEFAULT_WATER_FF
 from timemachine.ff.handlers import bonded, nonbonded
@@ -71,7 +70,6 @@ class Forcefield:
 
         Parameters
         ----------
-
         path_or_str: string or pathlib.Path
             Either the filename of a built in ff (smirnoff_1_1_0_sc.py) or a path to a new forcefield file
 
@@ -88,20 +86,18 @@ class Forcefield:
         original_path = str(path_or_str)
         path = Path(path_or_str)  # Safe to construct a Path object from another Path object
 
-        with resources.files("timemachine.ff.params") as params_path:
-            built_in_path = params_path / path.name
-            if built_in_path.is_file():
-                if path.is_file():
-                    warn(
-                        f"Provided path {original_path} shares name with built-in forcefield, falling back to built-in"
-                    )
-                # Search built in params for the forcefields
-                path = built_in_path
-            if not path.is_file():
-                raise ValueError(f"Unable to find {original_path} in file system or built-in forcefields")
-            with open(path, "r") as ifs:
-                handlers, protein_ff, water_ff = deserialize_handlers(ifs.read())
+        # Look for builtin ff
+        with resources.as_file(resources.files("timemachine.ff.params") / path.name) as rpath:
+            if rpath.exists():
+                warn(f"Provided path {original_path} shares name with built-in forcefield, falling back to built-in")
+                handlers, protein_ff, water_ff = deserialize_handlers(rpath.read_text())
+                return cls.from_handlers(handlers, protein_ff=protein_ff, water_ff=water_ff)
 
+        # Look for ff file
+        if not path.is_file():
+            raise ValueError(f"Unable to find {original_path} in file system or built-in forcefields")
+
+        handlers, protein_ff, water_ff = deserialize_handlers(path.read_text())
         return cls.from_handlers(handlers, protein_ff=protein_ff, water_ff=water_ff)
 
     @classmethod

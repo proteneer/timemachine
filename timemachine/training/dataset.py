@@ -72,7 +72,7 @@ class Dataset:
         inds = np.arange(len(self))
         np.random.shuffle(inds)
         split_idx = int(len(self.data) * frac)
-        return self.indices_split(inds[:split_idx], inds[split_idx:])
+        return self.indices_split(list(inds[:split_idx]), list(inds[split_idx:]))
 
     def indices_split(self, left: List[int], right: List[int]) -> Tuple["Dataset", "Dataset"]:
         """Split dataset into two, providing the indices. Used when the data needs to
