@@ -115,7 +115,7 @@ setup(
             "flake8==4.0.1",
             "isort==5.10.1",
             "mypy==1.1.1",
-            "pre-commit==2.17.0",
+            "pre-commit==3.2.1",
         ],
         "test": [
             "pytest",
