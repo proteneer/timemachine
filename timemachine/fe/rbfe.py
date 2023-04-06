@@ -695,7 +695,7 @@ def run_complex(
     n_windows=None,
     min_cutoff=0.7,
 ):
-    complex_sys, complex_conf, _, _, complex_box, complex_top = builders.build_protein_system(
+    complex_sys, complex_conf, complex_box, complex_top = builders.build_protein_system(
         protein, forcefield.protein_ff, forcefield.water_ff
     )
     complex_box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes, deboggle later

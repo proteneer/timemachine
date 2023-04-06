@@ -55,7 +55,7 @@ def build_protein_system(host_pdbfile: Union[app.PDBFile, str], protein_ff: str,
         modeller.topology, nonbondedMethod=app.NoCutoff, constraints=None, rigidWater=False
     )
 
-    return solvated_host_system, solvated_host_coords, nwa, nha, box, modeller.topology
+    return solvated_host_system, solvated_host_coords, box, modeller.topology
 
 
 def build_water_system(box_width, water_ff: str):

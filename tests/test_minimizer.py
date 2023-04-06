@@ -14,7 +14,7 @@ def test_minimizer():
     ff = Forcefield.load_default()
 
     with resources.path("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as path_to_pdb:
-        complex_system, complex_coords, _, _, complex_box, _ = builders.build_protein_system(
+        complex_system, complex_coords, complex_box, _ = builders.build_protein_system(
             str(path_to_pdb), ff.protein_ff, ff.water_ff
         )
 
