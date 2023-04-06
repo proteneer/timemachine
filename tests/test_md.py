@@ -164,7 +164,29 @@ class TestContext(unittest.TestCase):
         new_x = np.random.rand(N, 3)
         ctxt.set_x_t(new_x)
 
+        with pytest.raises(RuntimeError, match="number of new coords disagree with current coords"):
+            bad_x = np.random.rand(N + 1, 3)
+            ctxt.set_x_t(bad_x)
+
         np.testing.assert_equal(ctxt.get_x_t(), new_x)
+
+        new_v = np.random.rand(N, 3)
+        ctxt.set_v_t(new_v)
+
+        with pytest.raises(RuntimeError, match="number of new velocities disagree with current coords"):
+            bad_v = np.random.rand(N - 1, 3)
+            ctxt.set_v_t(bad_v)
+
+        np.testing.assert_equal(ctxt.get_v_t(), new_v)
+
+        new_box = np.eye(3) * np.random.rand(3, 3)
+        ctxt.set_box(new_box)
+
+        with pytest.raises(RuntimeError, match="box must be 3x3"):
+            bad_box = np.random.rand(3, 4)
+            ctxt.set_box(bad_box)
+
+        np.testing.assert_equal(ctxt.get_box(), new_box)
 
     def test_fwd_mode(self):
         """

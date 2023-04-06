@@ -47,6 +47,8 @@ public:
 
     void get_v_t(double *out_buffer) const;
 
+    void set_box(const double *in_buffer);
+
     void get_box(double *out_buffer) const;
 
 private:
