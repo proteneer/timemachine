@@ -48,7 +48,7 @@ def run_pair(mol_a, mol_b, core, forcefield, n_frames, protein_path, seed):
         f"solvent dG: {np.sum(solvent_res.result.all_dGs):.3f} +- {np.linalg.norm(solvent_res.result.all_errs):.3f} kJ/mol"
     )
 
-    complex_sys, complex_conf, _, _, complex_box, complex_top = builders.build_protein_system(
+    complex_sys, complex_conf, complex_box, complex_top = builders.build_protein_system(
         protein_path, forcefield.protein_ff, forcefield.water_ff
     )
     complex_box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes

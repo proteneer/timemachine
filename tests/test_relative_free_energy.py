@@ -135,7 +135,7 @@ def run_triple(mol_a, mol_b, core, forcefield, n_frames, protein_path, n_eq_step
     check_sim_result(solvent_res, state_seeds=state_seeds)
 
     seed = 2024
-    complex_sys, complex_conf, _, _, complex_box, _ = builders.build_protein_system(
+    complex_sys, complex_conf, complex_box, _ = builders.build_protein_system(
         protein_path, forcefield.protein_ff, forcefield.water_ff
     )
     complex_box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes

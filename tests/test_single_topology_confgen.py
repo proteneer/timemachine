@@ -73,7 +73,7 @@ def run_edge(mol_a, mol_b, protein_path, n_windows):
     )
 
     # complex
-    complex_sys, complex_conf, _, _, complex_box, complex_top = builders.build_protein_system(
+    complex_sys, complex_conf, complex_box, complex_top = builders.build_protein_system(
         protein_path, ff.protein_ff, ff.water_ff
     )
     complex_box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes
