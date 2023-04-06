@@ -2,10 +2,10 @@ import warnings
 from typing import Optional, Tuple
 
 import numpy as np
+import openmm
 import scipy.optimize
 from numpy.typing import NDArray
 from rdkit import Chem
-from simtk import openmm
 
 from timemachine.constants import BOLTZ, DEFAULT_TEMP, MAX_FORCE_NORM
 from timemachine.fe import model_utils, topology

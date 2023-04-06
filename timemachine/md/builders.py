@@ -2,8 +2,7 @@ import os
 from typing import Union
 
 import numpy as np
-from simtk import unit
-from simtk.openmm import Vec3, app
+from openmm import Vec3, app, unit
 
 from timemachine.ff import sanitize_water_ff
 

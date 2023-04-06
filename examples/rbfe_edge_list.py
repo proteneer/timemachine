@@ -2,7 +2,7 @@ import argparse
 import csv
 from typing import List
 
-from simtk.openmm import app
+from openmm import app
 
 from timemachine.constants import KCAL_TO_KJ
 from timemachine.fe import rbfe

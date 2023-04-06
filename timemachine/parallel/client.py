@@ -4,7 +4,7 @@ import os
 import pickle
 from concurrent import futures
 from pathlib import Path
-from typing import List
+from typing import List, Optional
 
 from timemachine.parallel.utils import get_gpu_count
 
@@ -297,7 +297,7 @@ class AbstractFileClient:
 
 
 class FileClient(AbstractFileClient):
-    def __init__(self, base: Path = None):
+    def __init__(self, base: Optional[Path] = None):
         self.base = base or Path().cwd()
 
     def store_stream(self, path: str, stream: io.IOBase):

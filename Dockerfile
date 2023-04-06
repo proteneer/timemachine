@@ -7,7 +7,7 @@ ARG LIBXRENDER_VERSION
 ARG LIBXEXT_VERSION
 
 # Copied out of anaconda's dockerfile
-ARG MINICONDA_VERSION=4.6.14
+ARG MINICONDA_VERSION=py310_23.1.0-1
 ARG MAKE_VERSION=4.2.1-1.2
 ARG GIT_VERSION=1:2.25.1-*
 ARG WGET_VERSION=1.20.3-1ubuntu2
@@ -41,12 +41,13 @@ RUN . /opt/conda/etc/profile.d/conda.sh && \
     conda env create -n "${ENV_NAME}" --force -f environment.yml && \
     conda clean -a && \
     conda activate ${ENV_NAME}
+
 ENV PATH /opt/conda/envs/${ENV_NAME}/bin:$PATH
 
 ENV CONDA_DEFAULT_ENV ${ENV_NAME}
 
 # Install OpenMM
-ARG OPENMM_VERSION=7.5.1
+ARG OPENMM_VERSION=8.0.0
 
 ARG DOXYGEN_VERSION=1.9.1
 ARG CYTHON_VERSION=0.29.26

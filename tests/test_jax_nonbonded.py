@@ -10,8 +10,8 @@ import pytest
 from jax import jit
 from jax import numpy as jnp
 from jax import value_and_grad, vmap
+from openmm import unit
 from scipy.optimize import minimize
-from simtk import unit
 
 from timemachine.constants import BOLTZ, DEFAULT_TEMP
 from timemachine.fe.reweighting import one_sided_exp
