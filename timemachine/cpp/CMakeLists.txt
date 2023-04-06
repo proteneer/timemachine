@@ -2,12 +2,12 @@ cmake_minimum_required(VERSION 3.18 FATAL_ERROR)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(PYBIND11_PYTHON_VERSION 3.7 CACHE STRING "Which version of python we're building wrappers against")
+set(PYBIND11_PYTHON_VERSION 3.10 CACHE STRING "Which version of python we're building wrappers against")
 
 project(timemachine LANGUAGES CXX CUDA)
 
-find_package(PythonInterp 3.7 REQUIRED)
-find_package(PythonLibs 3.7 REQUIRED)
+find_package(PythonInterp 3.10 REQUIRED)
+find_package(PythonLibs 3.10 REQUIRED)
 
 string(APPEND CMAKE_CXX_FLAGS "-Werror -Wall -Wextra")
 
