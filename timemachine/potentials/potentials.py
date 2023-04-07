@@ -253,7 +253,7 @@ class SummedPotentialGpuImplWrapper(GpuImplWrapper):
         res = jax_interface.call_unbound_impl(self.unbound_impl, conf, params_flat, box)
         return cast(float, res)
 
-    def bind_params_list(self, params: Params) -> "BoundGpuImplWrapper":
+    def bind_params_list(self, params: Params) -> BoundGpuImplWrapper:
         params_flat = np.concatenate([ps.reshape(-1) for ps in params])
         return BoundGpuImplWrapper(custom_ops.BoundPotential(self.unbound_impl, params_flat))
 
