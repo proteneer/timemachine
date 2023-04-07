@@ -22,7 +22,7 @@ from timemachine.ff import ForcefieldParams
 from timemachine.ff.handlers import openmm_deserializer
 from timemachine.lib import LangevinIntegrator, MonteCarloBarostat, custom_ops
 from timemachine.md.barostat.utils import compute_box_center, get_bond_list, get_group_indices
-from timemachine.potentials import BoundPotential, HarmonicBond
+from timemachine.potentials import BoundPotential, HarmonicBond, Potential
 
 
 class HostConfig:
@@ -47,7 +47,7 @@ class InitialState:
     This object can be pickled safely.
     """
 
-    potentials: List[BoundPotential]
+    potentials: List[BoundPotential[Potential]]
     integrator: LangevinIntegrator
     barostat: Optional[MonteCarloBarostat]
     x0: np.ndarray

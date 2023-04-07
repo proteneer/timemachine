@@ -20,6 +20,7 @@ from timemachine.potentials import (
     Nonbonded,
     NonbondedPairListPrecomputed,
     PeriodicTorsion,
+    Potential,
 )
 
 # Chiral restraints are disabled until checks are added (see GH #815)
@@ -145,10 +146,13 @@ class VacuumSystem(Generic[_Nonbonded, _HarmonicAngle]):
 
         return U_fn
 
-    def get_U_fns(self) -> List[BoundPotential]:
+    def get_U_fns(self) -> List[BoundPotential[Potential]]:
         # For molecules too small for to have certain terms,
         # skip when no params are present
-        terms = cast(List[BoundPotential], [p for p in [self.bond, self.angle, self.torsion, self.nonbonded] if p])
+        terms = cast(
+            List[BoundPotential[Potential]],
+            [p for p in [self.bond, self.angle, self.torsion, self.nonbonded] if p],
+        )
         return [p for p in terms if p and len(p.params) > 0]
 
 
