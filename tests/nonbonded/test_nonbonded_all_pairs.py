@@ -143,7 +143,7 @@ def test_nonbonded_all_pairs_correctness(
     atol,
     cutoff,
     beta,
-    example_nonbonded_potential_and_params,
+    example_nonbonded_potential,
     example_conf,
     example_box,
     rng: np.random.Generator,
@@ -151,8 +151,7 @@ def test_nonbonded_all_pairs_correctness(
     "Compares with jax reference implementation."
 
     conf = example_conf[:num_atoms]
-    _, example_params = example_nonbonded_potential_and_params
-    params = example_params[:num_atoms, :]
+    params = example_nonbonded_potential.params[:num_atoms, :]
 
     atom_idxs = (
         rng.choice(num_atoms, size=(num_atoms_subset,), replace=False).astype(np.int32) if num_atoms_subset else None

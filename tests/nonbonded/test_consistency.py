@@ -33,17 +33,16 @@ def test_nonbonded_consistency(
     cutoff,
     beta,
     disable_hilbert_sort,
-    example_nonbonded_potential_and_params,
+    example_nonbonded_potential,
     example_conf,
     example_box,
     rng: np.random.Generator,
 ):
     conf = example_conf[:num_atoms, :]
-    example_potential, example_params = example_nonbonded_potential_and_params
-    params = example_params[:num_atoms, :]
-
+    example_bp = example_nonbonded_potential
+    params = example_nonbonded_potential.params[:num_atoms, :]
     exclusion_idxs, exclusion_scales = filter_valid_exclusions(
-        num_atoms, example_potential.exclusion_idxs, example_potential.scale_factors
+        num_atoms, example_bp.potential.exclusion_idxs, example_bp.potential.scale_factors
     )
 
     ligand_idxs = rng.choice(num_atoms, size=(num_atoms_ligand,), replace=False).astype(np.int32)

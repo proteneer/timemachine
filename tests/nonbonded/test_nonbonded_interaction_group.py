@@ -62,7 +62,7 @@ def test_nonbonded_interaction_group_correctness(
     atol,
     cutoff,
     beta,
-    example_nonbonded_potential_and_params,
+    example_nonbonded_potential,
     example_conf,
     example_box,
     rng,
@@ -70,8 +70,7 @@ def test_nonbonded_interaction_group_correctness(
     "Compares with jax reference implementation."
 
     conf = example_conf[:num_atoms]
-    _, example_params = example_nonbonded_potential_and_params
-    params = example_params[:num_atoms, :]
+    params = example_nonbonded_potential.params[:num_atoms, :]
 
     ligand_idxs = rng.choice(num_atoms, size=(num_atoms_ligand,), replace=False).astype(np.int32)
 
@@ -97,7 +96,7 @@ def test_nonbonded_interaction_group_consistency_allpairs_4d_decoupled(
     atol,
     cutoff,
     beta,
-    example_nonbonded_potential_and_params,
+    example_nonbonded_potential,
     example_conf,
     example_box,
     rng: np.random.Generator,
@@ -120,8 +119,7 @@ def test_nonbonded_interaction_group_consistency_allpairs_4d_decoupled(
     """
 
     conf = example_conf[:num_atoms]
-    _, example_params = example_nonbonded_potential_and_params
-    params = example_params[:num_atoms, :]
+    params = example_nonbonded_potential.params[:num_atoms, :]
 
     ref_allpairs = Nonbonded(
         num_atoms,
@@ -175,7 +173,7 @@ def test_nonbonded_interaction_group_consistency_allpairs_constant_shift(
     atol,
     cutoff,
     beta,
-    example_nonbonded_potential_and_params,
+    example_nonbonded_potential,
     example_conf,
     example_box,
     rng: np.random.Generator,
@@ -196,8 +194,7 @@ def test_nonbonded_interaction_group_consistency_allpairs_constant_shift(
     """
 
     conf = example_conf[:num_atoms]
-    _, example_params = example_nonbonded_potential_and_params
-    params = example_params[:num_atoms, :]
+    params = example_nonbonded_potential.params[:num_atoms, :]
 
     def ref_allpairs(conf):
         U_ref = Nonbonded(

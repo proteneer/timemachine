@@ -1,5 +1,3 @@
-from typing import cast
-
 import numpy as np
 import pytest
 
@@ -17,11 +15,10 @@ def _example_system():
 
 
 @pytest.fixture()
-def example_nonbonded_potential_and_params(_example_system):
+def example_nonbonded_potential(_example_system):
     host_fns, _, _, _ = _example_system
     nonbonded_bp = next(bp for bp in host_fns if isinstance(bp.potential, potentials.Nonbonded))
-    nonbonded_fn = cast(potentials.Nonbonded, nonbonded_bp.potential)
-    return nonbonded_fn, nonbonded_bp.params
+    return nonbonded_bp
 
 
 @pytest.fixture()

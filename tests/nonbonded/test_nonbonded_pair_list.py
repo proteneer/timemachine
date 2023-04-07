@@ -35,7 +35,7 @@ def test_nonbonded_pair_list_correctness(
     atol,
     cutoff,
     beta,
-    example_nonbonded_potential_and_params,
+    example_nonbonded_potential,
     example_conf,
     example_box,
     rng: np.random.Generator,
@@ -53,7 +53,7 @@ def test_nonbonded_pair_list_correctness(
     rescale_mask = rng.uniform(0, 1, size=(num_pairs, 2))
 
     potential = NonbondedPairList(pair_idxs, rescale_mask, beta, cutoff)
-    _, params = example_nonbonded_potential_and_params
+    params = example_nonbonded_potential.params
 
     for params in gen_nonbonded_params_with_4d_offsets(rng, params, cutoff):
         test_impl = potential.to_gpu(precision)
