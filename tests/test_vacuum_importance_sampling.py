@@ -34,14 +34,13 @@ def test_vacuum_importance_sampling():
 
     seed = 2021
 
-    # (ytz): hacky as hell, needs to be divisible by # of hyperthreaded cores
-    num_samples = 120000
+    num_samples = 200000
 
     weighted_xv_samples, log_weights = enhanced.generate_log_weighted_samples(
         mol, temperature, state.U_easy, state.U_decharged, seed, num_batches=num_samples
     )
 
-    enhanced_xv_samples = enhanced.sample_from_log_weights(weighted_xv_samples, log_weights, 100000)
+    enhanced_xv_samples = enhanced.sample_from_log_weights(weighted_xv_samples, log_weights, 200000)
     enhanced_samples = np.array([x for (x, v) in enhanced_xv_samples])
     print("enhanced_samples", enhanced_samples.shape)
 
