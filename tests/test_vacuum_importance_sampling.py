@@ -15,8 +15,8 @@ def get_ff_am1ccc():
     return ff
 
 
+# @pytest.mark.nightly(reason="This takes too long to run on CI")
 @pytest.mark.nogpu
-@pytest.mark.nightly(reason="This takes too long to run on CI")
 def test_vacuum_importance_sampling():
     """
     This tests importance sampling in the gas-phase, where samples generated
