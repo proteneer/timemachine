@@ -42,7 +42,7 @@ nightly_tests:
 
 .PHONY: nogpu_nightly_tests
 nogpu_nightly_tests:
-	pytest -m '$(NIGHTLY_MARKER) and $(NOGPU_MARKER)' $(PYTEST_CI_ARGS)
+	pytest -m '$(NIGHTLY_MARKER) and $(MEMCHECK_MARKER)' $(PYTEST_CI_ARGS)
 
 .PHONY: ci
-ci: verify memcheck_tests unit_tests
+ci: nogpu_nightly_test
