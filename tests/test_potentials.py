@@ -1,5 +1,6 @@
 import itertools
 
+import jax
 import numpy as np
 import pytest
 from common import GradientTest
@@ -285,3 +286,11 @@ def test_fanout_summed_potential_consistency(harmonic_bond_test_system):
     np.testing.assert_array_equal(du_dx_ref, du_dx_test)
     np.testing.assert_allclose(np.sum(du_dps_ref, axis=0), du_dp_test, rtol=1e-8, atol=1e-8)
     assert u_ref == u_test
+
+
+def test_potential_jax_differentiable(harmonic_bond):
+    potential = harmonic_bond.potential
+    params = harmonic_bond.params
+    coords = np.zeros(shape=(3, 3), dtype=np.float32)
+    box = np.diag(np.ones(3))
+    du_dx, du_dp = jax.grad(potential, argnums=(0, 1))(coords, params, box)
