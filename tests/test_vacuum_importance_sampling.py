@@ -33,7 +33,7 @@ def test_vacuum_importance_sampling():
 
         state = enhanced.VacuumState(mol, ff)
 
-        seed = 2021 + iseed
+        seed = 2030 + iseed
 
         num_samples = 200000
 
