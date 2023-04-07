@@ -37,7 +37,7 @@ def summed_potential(
     # np.split expects indices, must increment sizes to be indices
     split_indices = np.cumsum(sizes)
     paramss = [ps.reshape(shape) for ps, shape in zip(np.split(params, split_indices[:-1]), shapes)]
-    return sum(U_fn(conf, ps, box) for U_fn, ps in zip(U_fns, paramss))
+    return jnp.sum(jnp.array([U_fn(conf, ps, box) for U_fn, ps in zip(U_fns, paramss)]))
 
 
 def fanout_summed_potential(
@@ -62,4 +62,4 @@ def fanout_summed_potential(
     U_fns: list of functions with signature (conf, params, box) -> energy
         potential terms
     """
-    return sum(U_fn(conf, ps, box) for U_fn, ps in zip(U_fns, jnp.array(params)))
+    return jnp.sum(jnp.array([U_fn(conf, ps, box) for U_fn, ps in zip(U_fns, jnp.array(params))]))
