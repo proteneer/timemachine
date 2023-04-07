@@ -195,7 +195,8 @@ class NonbondedPairListNegated(Potential):
         vdW, electrostatics = nonbonded.nonbonded_on_specific_pairs(
             conf, params, box, self.idxs, self.beta, self.cutoff, self.rescale_mask
         )
-        return -jnp.sum(vdW) - jnp.sum(electrostatics)
+        U = jnp.sum(vdW) + jnp.sum(electrostatics)
+        return -U
 
     @classmethod
     def _custom_ops_class_name(cls, precision):
