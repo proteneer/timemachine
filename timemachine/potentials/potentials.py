@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Optional, Sequence
+from typing import Optional, Sequence, cast
 
 import jax.numpy as jnp
 import numpy as np
@@ -8,8 +8,8 @@ from numpy.typing import NDArray
 
 from timemachine.lib import custom_ops
 
-from . import bonded, bonded_stable, chiral_restraints, nonbonded, summed
-from .potential import GpuImplWrapper, Potential, Precision, get_custom_ops_class_name_suffix
+from . import bonded, bonded_stable, chiral_restraints, jax_interface, nonbonded, summed
+from .potential import BoundGpuImplWrapper, GpuImplWrapper, Potential, Precision, get_custom_ops_class_name_suffix
 from .types import Box, Conf, Params
 
 
@@ -228,10 +228,24 @@ class SummedPotential(Potential):
         shapes = [ps.shape for ps in self.params_init]
         return summed.summed_potential(conf, params, box, self.potentials, shapes)
 
-    def to_gpu(self, precision: Precision) -> GpuImplWrapper:
+    def to_gpu(self, precision: Precision) -> "SummedPotentialGpuImplWrapper":
         impls = [p.to_gpu(precision).unbound_impl for p in self.potentials]
         sizes = [ps.size for ps in self.params_init]
-        return GpuImplWrapper(custom_ops.SummedPotential(impls, sizes))
+        return SummedPotentialGpuImplWrapper(custom_ops.SummedPotential(impls, sizes))
+
+
+@dataclass
+class SummedPotentialGpuImplWrapper(GpuImplWrapper):
+    """Handles flattening parameters before passing to kernel to provide a nicer interface"""
+
+    def call_with_params_list(self, conf: Conf, params: Sequence[Params], box: Box) -> float:
+        params_flat = jnp.concatenate([ps.reshape(-1) for ps in params])
+        res = jax_interface.call_unbound_impl(self.unbound_impl, conf, params_flat, box)
+        return cast(float, res)
+
+    def bind_params_list(self, params: Params) -> "BoundGpuImplWrapper":
+        params_flat = np.concatenate([ps.reshape(-1) for ps in params])
+        return BoundGpuImplWrapper(custom_ops.BoundPotential(self.unbound_impl, params_flat))
 
 
 @dataclass

@@ -10,7 +10,7 @@ from openmm import app
 
 from timemachine import potentials
 from timemachine.constants import BOLTZ, DEFAULT_TEMP
-from timemachine.fe import functional, model_utils
+from timemachine.fe import model_utils
 from timemachine.fe.free_energy import (
     AbsoluteFreeEnergy,
     HostConfig,
@@ -31,6 +31,7 @@ from timemachine.lib import LangevinIntegrator, MonteCarloBarostat
 from timemachine.md import builders, enhanced, minimizer, moves, smc
 from timemachine.md.barostat.utils import get_bond_list, get_group_indices
 from timemachine.md.states import CoordsVelBox
+from timemachine.potentials import SummedPotential
 
 
 def generate_endstate_samples(
@@ -122,7 +123,7 @@ def setup_absolute_hydration_with_endpoint_samples(
     ff = ff or Forcefield.load_default()
     potentials, params, masses, _, _ = enhanced.get_solvent_phase_system(mol, ff)
 
-    U_fn = functional.construct_differentiable_interface_fast(potentials, params)
+    U_fn = SummedPotential(potentials, params)
     kBT = BOLTZ * temperature
 
     def reduced_potential_fxn(xvb, lam):

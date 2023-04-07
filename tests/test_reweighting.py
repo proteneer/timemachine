@@ -7,7 +7,6 @@ from jax import value_and_grad, vmap
 
 from timemachine.constants import BOLTZ
 from timemachine.datasets import fetch_freesolv
-from timemachine.fe.functional import construct_differentiable_interface_fast
 from timemachine.fe.reweighting import (
     construct_endpoint_reweighting_estimator,
     construct_mixture_reweighting_estimator,
@@ -16,6 +15,7 @@ from timemachine.fe.reweighting import (
 )
 from timemachine.ff import Forcefield
 from timemachine.md.enhanced import get_solvent_phase_system
+from timemachine.potentials import SummedPotential
 from timemachine.testsystems.gaussian1d import make_gaussian_testsystem
 
 
@@ -183,7 +183,7 @@ def _make_fake_sample_batch(conf, box, ligand_indices, n_snapshots=25):
 
 def make_ahfe_test_system():
     """an alchemical freesolv ligand in a water box, with:
-    * batched, differentiable reduced potential functions (using construct_differentiable_interface_fast)
+    * batched, differentiable reduced potential functions
     * fake "endpoint samples" (random perturbations of initial (conf, box) -- not actual samples!)
     """
     mol = fetch_freesolv()[123]
@@ -205,7 +205,7 @@ def make_ahfe_test_system():
     samples_0 = _make_fake_sample_batch(conf, box, ligand_indices, n_snapshots_0)
     samples_1 = _make_fake_sample_batch(conf, box, ligand_indices, n_snapshots_1)
 
-    U_fxn = construct_differentiable_interface_fast(unbound_potentials=ubps, params=params)
+    U_fxn = SummedPotential(ubps, params)
 
     def make_batched_u_fxn(lam=0.0):
         def batched_u_fxn(samples, ligand_nb_params):
