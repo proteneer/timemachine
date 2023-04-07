@@ -5,7 +5,7 @@ import unittest
 from collections.abc import Iterator
 from dataclasses import dataclass
 from importlib import resources
-from tempfile import NamedTemporaryFile, TemporaryDirectory, _TemporaryFileWrapper
+from tempfile import NamedTemporaryFile, TemporaryDirectory
 from typing import Optional
 
 import jax
@@ -38,7 +38,7 @@ def get_110_ccc_ff():
     return forcefield
 
 
-def get_hif2a_ligands_as_sdf_file(num_mols: int) -> _TemporaryFileWrapper:
+def get_hif2a_ligands_as_sdf_file() -> NamedTemporaryFile:  # type: ignore
     with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
         mols = read_sdf(path_to_ligand)
     temp_sdf = NamedTemporaryFile(suffix=".sdf")
