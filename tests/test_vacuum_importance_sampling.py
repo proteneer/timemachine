@@ -9,6 +9,8 @@ from timemachine.ff import Forcefield
 from timemachine.md import enhanced
 from timemachine.potentials import bonded
 
+# from matplotlib import pyplot as plt
+
 
 def get_ff_am1ccc():
     ff = Forcefield.load_default()
@@ -34,13 +36,13 @@ def test_vacuum_importance_sampling():
 
     seed = 2021
 
-    num_samples = 200000
+    num_samples = 1000000
 
     weighted_xv_samples, log_weights = enhanced.generate_log_weighted_samples(
         mol, temperature, state.U_easy, state.U_decharged, seed, num_batches=num_samples
     )
 
-    enhanced_xv_samples = enhanced.sample_from_log_weights(weighted_xv_samples, log_weights, 200000)
+    enhanced_xv_samples = enhanced.sample_from_log_weights(weighted_xv_samples, log_weights, 1000000)
     enhanced_samples = np.array([x for (x, v) in enhanced_xv_samples])
     print("enhanced_samples", enhanced_samples.shape)
 
@@ -74,6 +76,9 @@ def test_vacuum_importance_sampling():
     print("enhanced_torsions_rhs", enhanced_torsions_rhs.shape, list(enhanced_torsions_rhs))
     print("int_lhs", np.sum(enhanced_torsions_lhs * np.diff(binsa)))
     print("int_rhs", np.sum(enhanced_torsions_rhs * np.diff(binsb)))
+
+    # plt.hist(enhanced_torsions, bins=list(binsa) + list(binsb), histtype='stepfilled')
+    # plt.savefig('hist.png')
 
     # check for symmetry about theta=0
     assert np.mean((enhanced_torsions_lhs - enhanced_torsions_rhs[::-1]) ** 2) < 5e-2
