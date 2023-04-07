@@ -8,6 +8,7 @@ import numpy as np
 from numpy.typing import NDArray as Array
 from openmm import app
 
+from timemachine import potentials
 from timemachine.constants import BOLTZ, DEFAULT_TEMP
 from timemachine.fe import functional, model_utils
 from timemachine.fe.free_energy import (
@@ -26,7 +27,7 @@ from timemachine.fe.topology import BaseTopology
 from timemachine.fe.utils import get_mol_name, get_romol_conf
 from timemachine.ff import Forcefield
 from timemachine.ff.handlers import openmm_deserializer
-from timemachine.lib import LangevinIntegrator, MonteCarloBarostat, potentials
+from timemachine.lib import LangevinIntegrator, MonteCarloBarostat
 from timemachine.md import builders, enhanced, minimizer, moves, smc
 from timemachine.md.barostat.utils import get_bond_list, get_group_indices
 from timemachine.md.states import CoordsVelBox
@@ -333,7 +334,7 @@ def setup_initial_states(
 
         bond_potential = ubps[0]
         assert isinstance(bond_potential, potentials.HarmonicBond)
-        hmr_masses = model_utils.apply_hmr(masses, bond_potential.get_idxs())
+        hmr_masses = model_utils.apply_hmr(masses, bond_potential.idxs)
         group_idxs = get_group_indices(get_bond_list(bond_potential))
         baro = MonteCarloBarostat(len(hmr_masses), 1.0, temperature, group_idxs, 15, seed)
         box0 = host_config.box

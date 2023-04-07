@@ -8,12 +8,12 @@ from common import load_split_forcefields
 from rdkit import Chem
 from rdkit.Chem import AllChem
 
+from timemachine import potentials
 from timemachine.fe import topology
 from timemachine.fe.topology import BaseTopology, DualTopology, DualTopologyMinimization
 from timemachine.fe.utils import get_mol_name, get_romol_conf, read_sdf
 from timemachine.ff import Forcefield
 from timemachine.ff.handlers import openmm_deserializer
-from timemachine.lib import potentials
 from timemachine.md.builders import build_water_system
 
 
@@ -37,8 +37,8 @@ def test_dual_topology_nonbonded_pairlist():
 
     for precision, rtol, atol in [(np.float64, 1e-8, 1e-8), (np.float32, 1e-4, 5e-4)]:
 
-        nb_unbound = nb.unbound_impl(precision)
-        nb_pairlist_unbound = nb_pairlist.unbound_impl(precision)
+        nb_unbound = nb.to_gpu(precision).unbound_impl
+        nb_pairlist_unbound = nb_pairlist.to_gpu(precision).unbound_impl
 
         du_dx, du_dp, u = nb_unbound.execute(x0, nb_params, box)
 
@@ -61,16 +61,12 @@ def parameterize_nonbonded_full(
         ff_q_params, ff_q_params_intra, ff_lj_params, lamb
     )
     hg_exclusion_idxs = np.concatenate(
-        [hgt.host_nonbonded.get_exclusion_idxs(), guest_pot.get_exclusion_idxs() + hgt.num_host_atoms]
+        [hgt.host_nonbonded.potential.exclusion_idxs, guest_pot.exclusion_idxs + hgt.num_host_atoms]
     )
-    hg_scale_factors = np.concatenate([hgt.host_nonbonded.get_scale_factors(), guest_pot.get_scale_factors()])
+    hg_scale_factors = np.concatenate([hgt.host_nonbonded.potential.scale_factors, guest_pot.scale_factors])
     hg_nb_params = jnp.concatenate([hgt.host_nonbonded.params, guest_params])
     return hg_nb_params, potentials.Nonbonded(
-        hgt.num_host_atoms + num_guest_atoms,
-        hg_exclusion_idxs,
-        hg_scale_factors,
-        guest_pot.get_beta(),
-        guest_pot.get_cutoff(),
+        hgt.num_host_atoms + num_guest_atoms, hg_exclusion_idxs, hg_scale_factors, guest_pot.beta, guest_pot.cutoff
     )
 
 
@@ -85,7 +81,7 @@ def test_host_guest_nonbonded(ctor, precision, rtol, atol, use_tiny_mol):
         params, potentials = parameterize_nonbonded_full(
             hgt, ff.q_handle.params, ff.q_handle_intra.params, ff.lj_handle.params, lamb=lamb
         )
-        u_impl = potentials.bind(params).bound_impl(precision=precision)
+        u_impl = potentials.bind(params).to_gpu(precision=precision).bound_impl
         return u_impl.execute(x0, solvent_box)
 
     def compute_split_grad_u(ff: Forcefield, precision, x0, lamb):
@@ -95,7 +91,7 @@ def test_host_guest_nonbonded(ctor, precision, rtol, atol, use_tiny_mol):
         params, potentials = hgt.parameterize_nonbonded(
             ff.q_handle.params, ff.q_handle_intra.params, ff.lj_handle.params, lamb=lamb
         )
-        u_impl = potentials.bind(params).bound_impl(precision=precision)
+        u_impl = potentials.bind(params).to_gpu(precision=precision).bound_impl
         return u_impl.execute(x0, solvent_box)
 
     def compute_vacuum_grad_u(ff: Forcefield, precision, x0, lamb):
@@ -104,7 +100,7 @@ def test_host_guest_nonbonded(ctor, precision, rtol, atol, use_tiny_mol):
         params, potentials = bt.parameterize_nonbonded(
             ff.q_handle.params, ff.q_handle_intra.params, ff.lj_handle.params, lamb=lamb
         )
-        u_impl = potentials.bind(params).bound_impl(precision=precision)
+        u_impl = potentials.bind(params).to_gpu(precision=precision).bound_impl
         return u_impl.execute(x0, solvent_box)
 
     ffs = load_split_forcefields()

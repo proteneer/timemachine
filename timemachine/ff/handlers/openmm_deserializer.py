@@ -1,5 +1,5 @@
 from collections import defaultdict
-from typing import List, Tuple
+from typing import DefaultDict, List, Tuple
 
 import numpy as np
 import openmm as mm
@@ -44,7 +44,7 @@ def deserialize_system(system: mm.System, cutoff: float) -> Tuple[List[potential
     # this should not be a dict since we may have more than one instance of a given
     # force.
 
-    bps_dict = defaultdict(list)
+    bps_dict: DefaultDict[str, List[potentials.BoundPotential]] = defaultdict(list)
 
     for force in system.getForces():
 

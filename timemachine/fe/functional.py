@@ -1,10 +1,10 @@
-from typing import Tuple
+from typing import Sequence, Tuple, cast
 
 from jax import custom_jvp
 from jax import numpy as jnp
-from jax.interpreters.partial_eval import Tracer
+from jax.core import Tracer
 
-from timemachine.lib.potentials import SummedPotential
+from timemachine.potentials import Potential, SummedPotential
 
 
 def _make_selection_mask(compute_du_dx=False, compute_du_dp=False, compute_u=False):
@@ -61,21 +61,21 @@ def wrap_impl(impl, pack=lambda x: x):
             v = tangent.flatten()
             return jnp.matmul(J, v)
 
-        tangent_out = jnp.zeros(1)
+        tangent_out = 0.0
         if derivative_requested(coords_dot):
             tangent_out += explicit_jvp(coords_grad, coords_dot)
         if derivative_requested(params_dot):
             tangent_out += explicit_jvp(params_grad, params_dot)
 
         # specific to case of scalar-valued U: float64[1] -> float64, so primal and tangent have equal shapes/dtypes
-        tangent_out = jnp.sum(tangent_out)
+        tangent_out = cast(float, jnp.sum(tangent_out))
 
         return primal_out, tangent_out
 
     return U
 
 
-def construct_differentiable_interface(unbound_potentials, precision=jnp.float32):
+def construct_differentiable_interface(unbound_potentials: Sequence[Potential], precision=jnp.float32):
     """Construct a differentiable function U(coords, params, box) -> float
     from a collection of unbound potentials
 
@@ -84,7 +84,7 @@ def construct_differentiable_interface(unbound_potentials, precision=jnp.float32
 
     This implementation computes the sum of the component potentials in Python
     """
-    impls = [ubp.unbound_impl(precision) for ubp in unbound_potentials]
+    impls = [ubp.to_gpu(precision).unbound_impl for ubp in unbound_potentials]
     U_s = [wrap_impl(impl) for impl in impls]
 
     def U(coords, params, box):
@@ -93,7 +93,7 @@ def construct_differentiable_interface(unbound_potentials, precision=jnp.float32
     return U
 
 
-def construct_differentiable_interface_fast(unbound_potentials, params, precision=jnp.float32):
+def construct_differentiable_interface_fast(unbound_potentials: Sequence[Potential], params, precision=jnp.float32):
     """Construct a differentiable function U(coords, params, box) -> float
     from a collection of unbound potentials
 
@@ -102,7 +102,7 @@ def construct_differentiable_interface_fast(unbound_potentials, params, precisio
 
     This implementation computes the sum of the component potentials in C++ using the SummedPotential custom op
     """
-    impl = SummedPotential(unbound_potentials, params).unbound_impl(precision)
+    impl = SummedPotential(unbound_potentials, params).to_gpu(precision).unbound_impl
 
     def pack(params):
         return jnp.concatenate([ps.reshape(-1) for ps in params])

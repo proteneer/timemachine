@@ -1,16 +1,14 @@
 import contextlib
-import functools
 import itertools
 import os
 import unittest
 from collections.abc import Iterator
 from dataclasses import dataclass
 from importlib import resources
-from tempfile import NamedTemporaryFile, TemporaryDirectory
+from tempfile import NamedTemporaryFile, TemporaryDirectory, _TemporaryFileWrapper
 from typing import Optional
 
 import jax
-import jax.numpy as jnp
 import numpy as np
 from hilbertcurve.hilbertcurve import HilbertCurve
 from numpy.typing import NDArray
@@ -19,8 +17,7 @@ from rdkit import Chem
 from timemachine.constants import ONE_4PI_EPS0
 from timemachine.fe.utils import read_sdf
 from timemachine.ff import Forcefield
-from timemachine.lib import potentials
-from timemachine.potentials import Nonbonded, bonded
+from timemachine.potentials import Nonbonded
 from timemachine.potentials.potential import GpuImplWrapper
 from timemachine.potentials.summed import PotentialFxn
 
@@ -41,7 +38,7 @@ def get_110_ccc_ff():
     return forcefield
 
 
-def get_hif2a_ligands_as_sdf_file(num_mols: int) -> NamedTemporaryFile:
+def get_hif2a_ligands_as_sdf_file(num_mols: int) -> _TemporaryFileWrapper:
     with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
         mols = read_sdf(path_to_ligand)
     temp_sdf = NamedTemporaryFile(suffix=".sdf")
@@ -144,51 +141,6 @@ def prepare_nb_system(
     potential = Nonbonded(N, exclusion_idxs, scales, beta, cutoff)
 
     return params, potential
-
-
-def prepare_bonded_system(x, B, A, T, precision):
-
-    assert x.ndim == 2
-    N = x.shape[0]
-    # D = x.shape[1]
-
-    atom_idxs = np.arange(N)
-
-    bond_params = np.random.rand(B, 2).astype(np.float64)
-    bond_idxs = []
-    for _ in range(B):
-        bond_idxs.append(np.random.choice(atom_idxs, size=2, replace=False))
-    bond_idxs = np.array(bond_idxs, dtype=np.int32)
-    # params = np.concatenate([params, bond_params])
-
-    # angle_params = np.random.rand(P_angles).astype(np.float64)
-    # angle_param_idxs = np.random.randint(low=0, high=P_angles, size=(A,2), dtype=np.int32) + len(params)
-    # angle_idxs = []
-    # for _ in range(A):
-    #     angle_idxs.append(np.random.choice(atom_idxs, size=3, replace=False))
-    # angle_idxs = np.array(angle_idxs, dtype=np.int32)
-    # params = np.concatenate([params, angle_params])
-
-    # torsion_params = np.random.rand(P_torsions).astype(np.float64)
-    # torsion_param_idxs = np.random.randint(low=0, high=P_torsions, size=(T,3), dtype=np.int32) + len(params)
-    # torsion_idxs = []
-    # for _ in range(T):
-    #     torsion_idxs.append(np.random.choice(atom_idxs, size=4, replace=False))
-    # torsion_idxs = np.array(torsion_idxs, dtype=np.int32)
-    # params = np.concatenate([params, torsion_params])
-
-    print("precision", precision)
-    custom_bonded = potentials.HarmonicBond(bond_idxs, bond_params, precision=precision)
-    harmonic_bond_fn = functools.partial(bonded.harmonic_bond, box=None, bond_idxs=bond_idxs)
-
-    # custom_angles = potentials.HarmonicAngle(angle_idxs, angle_param_idxs, precision=precision)
-    # harmonic_angle_fn = functools.partial(bonded.harmonic_angle, box=None, angle_idxs=angle_idxs, param_idxs=angle_param_idxs)
-
-    # custom_torsions = potentials.PeriodicTorsion(torsion_idxs, torsion_param_idxs, precision=precision)
-    # periodic_torsion_fn = functools.partial(bonded.periodic_torsion, box=None, torsion_idxs=torsion_idxs, param_idxs=torsion_param_idxs)
-
-    return (bond_params, harmonic_bond_fn), custom_bonded
-    # return params, [harmonic_bond_fn, harmonic_angle_fn, periodic_torsion_fn], [custom_bonded, custom_angles, custom_torsions]
 
 
 def hilbert_sort(conf, D):
@@ -323,7 +275,9 @@ def gen_nonbonded_params_with_4d_offsets(
     num_atoms, _ = params.shape
 
     def params_with_w_coords(w_coords):
-        return jnp.asarray(params).at[:, 3].set(w_coords)
+        params_ = np.array(params)
+        params_[:, 3] = w_coords
+        return params
 
     # all zero
     yield params_with_w_coords(0.0)
@@ -332,8 +286,8 @@ def gen_nonbonded_params_with_4d_offsets(
     yield params_with_w_coords(w_max)
 
     # half zero, half w_max
-    w_coords = jnp.zeros(num_atoms)
-    w_coords = w_coords.at[-num_atoms // 2 :].set(w_max)
+    w_coords = np.zeros(num_atoms)
+    w_coords[-num_atoms // 2 :] = w_max
     yield params_with_w_coords(w_coords)
 
     # random uniform in [w_min, w_max]
@@ -363,9 +317,12 @@ def load_split_forcefields() -> SplitForcefield:
     ff_ref = Forcefield.load_from_file("smirnoff_2_0_0_ccc.py")
 
     ff_scaled = Forcefield.load_from_file("smirnoff_2_0_0_ccc.py")
+    assert ff_scaled.q_handle
     ff_scaled.q_handle.params *= 10
+    assert ff_scaled.q_handle_intra
     ff_scaled.q_handle_intra.params *= 10
 
     ff_inter_scaled = Forcefield.load_from_file("smirnoff_2_0_0_ccc.py")
+    assert ff_inter_scaled.q_handle
     ff_inter_scaled.q_handle.params *= 10
     return SplitForcefield(ff_ref, ff_scaled, ff_inter_scaled)

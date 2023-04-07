@@ -120,8 +120,8 @@ def generate_waterbox_nb_args() -> NonbondedArgs:
     conf = positions.value_in_unit(unit.nanometer)
 
     N = conf.shape[0]
-    beta = nb.get_beta()
-    cutoff = nb.get_cutoff()
+    beta = nb.potential.beta
+    cutoff = nb.potential.cutoff
 
     charge_rescale_mask = np.ones((N, N))
     lj_rescale_mask = np.ones((N, N))
@@ -163,13 +163,13 @@ def generate_random_inputs(n_atoms, dim, instance_flags=difficult_instance_flags
     eps = jnp.ones(n_atoms)
     w_coords = jnp.zeros(n_atoms)
     if instance_flags["randomize_charges"]:
-        charges = randn(n_atoms)
+        charges = jnp.array(randn(n_atoms))
     if instance_flags["randomize_sigma"]:
-        sig = min_dist * rand(n_atoms)
+        sig = min_dist * jnp.array(rand(n_atoms))
     if instance_flags["randomize_epsilon"]:
-        eps = rand(n_atoms)
+        eps = jnp.array(rand(n_atoms))
     if instance_flags["randomize_w_coords"]:
-        w_coords = 2 * cutoff * (2 * rand(n_atoms) - 1)  # [-2 * cutoff, 2 * cutoff]
+        w_coords = 2 * cutoff * (2 * jnp.array(rand(n_atoms)) - 1)  # [-2 * cutoff, 2 * cutoff]
 
     params = jnp.array([charges, sig, eps, w_coords]).T
 
@@ -315,8 +315,8 @@ def test_jax_nonbonded_block():
     conf = positions.value_in_unit(unit.nanometer)
 
     N = conf.shape[0]
-    beta = nb.get_beta()
-    cutoff = nb.get_cutoff()
+    beta = nb.potential.beta
+    cutoff = nb.potential.cutoff
 
     split = 70
 
@@ -383,8 +383,8 @@ def test_precomputation():
     conf = positions.value_in_unit(unit.nanometer)
 
     n_atoms = conf.shape[0]
-    beta = nb.get_beta()
-    cutoff = nb.get_cutoff()
+    beta = nb.potential.beta
+    cutoff = nb.potential.cutoff
 
     # generate array in the shape of a "trajectory" by adding noise to an initial conformation
     n_snapshots = 100

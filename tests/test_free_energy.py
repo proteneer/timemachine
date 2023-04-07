@@ -106,8 +106,9 @@ def test_functional():
     coords = st.combine_confs(x_a, x_b)
     box = np.eye(3) * 100
 
-    potentials = vac_sys.get_U_fns()
-    sys_params = [np.array(bp.params) for bp in potentials]
+    bps = vac_sys.get_U_fns()
+    potentials = [bp.potential for bp in bps]
+    sys_params = [np.array(bp.params) for bp in bps]
 
     tol_at_precision = {np.float32: 2.5e-10, np.float64: 1e-10}
     for precision, tol in tol_at_precision.items():
@@ -159,8 +160,9 @@ def test_construct_differentiable_interface_fast():
     coords = st.combine_confs(x_a, x_b)
     box = np.eye(3) * 100
 
-    potentials = vac_sys.get_U_fns()
-    sys_params = [np.array(bp.params) for bp in potentials]
+    bps = vac_sys.get_U_fns()
+    potentials = [bp.potential for bp in bps]
+    sys_params = [np.array(bp.params) for bp in bps]
 
     for precision in [np.float32, np.float64]:
         U_ref = construct_differentiable_interface(potentials, precision)

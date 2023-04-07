@@ -187,7 +187,7 @@ def test_nvt_box():
 
     temperature = 300.0
     n_steps = 100
-    mover = NVTMove(ubps, masses, temperature, n_steps, seed)
+    mover = NVTMove(bps, masses, temperature, n_steps, seed)
     v0 = np.zeros_like(coords)
     xvb0 = CoordsVelBox(coords, v0, box)
     xvb = mover.move(xvb0)
