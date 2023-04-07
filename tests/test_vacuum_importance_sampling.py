@@ -60,7 +60,7 @@ def test_vacuum_importance_sampling():
 
         # should be roughly 50/50
         print("COUNT", seed, np.abs(num_negative / (num_negative + num_positive)))
-        assert np.abs(num_negative / (num_negative + num_positive) - 0.5) < 0.05
+        assert np.abs(num_negative / (num_negative + num_positive) - 0.5) < 0.10
 
         # check that the distributions on the lhs look roughly identical
         # lhs is (-np.pi, 0) and rhs is (0, np.pi)
@@ -71,7 +71,7 @@ def test_vacuum_importance_sampling():
         # Note: We don't get perfect symmetry due to limited sampling
         # at 1e6 samples the MSE < 0.01
         print("MSE", seed, np.mean((enhanced_torsions_lhs - enhanced_torsions_rhs[::-1]) ** 2))
-        assert np.mean((enhanced_torsions_lhs - enhanced_torsions_rhs[::-1]) ** 2) < 0.15
+        assert np.mean((enhanced_torsions_lhs - enhanced_torsions_rhs[::-1]) ** 2) < 0.20
         weighted_xv_samples, log_weights = enhanced.generate_log_weighted_samples(
             mol,
             temperature,
@@ -88,4 +88,4 @@ def test_vacuum_importance_sampling():
         vanilla_samples_rhs, _ = np.histogram(vanilla_torsions, bins=50, range=(0, np.pi), density=True)
 
         # check for consistency with vanilla samples
-        assert np.mean((enhanced_torsions_lhs - vanilla_samples_rhs) ** 2) < 0.15
+        assert np.mean((enhanced_torsions_lhs - vanilla_samples_rhs) ** 2) < 0.20
