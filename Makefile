@@ -26,7 +26,7 @@ verify:
 
 .PHONY: nogpu_tests
 nogpu_tests:
-	pytest -m '$(NOGPU_MARKER) and not $(NIGHTLY_MARKER)' $(PYTEST_CI_ARGS) tests/test_vacuum_importance_sampling.py::test_vacuum_importance_sampling
+	pytest -m '$(NOGPU_MARKER) and not $(NIGHTLY_MARKER)' $(PYTEST_CI_ARGS)
 
 .PHONY: memcheck_tests
 memcheck_tests:

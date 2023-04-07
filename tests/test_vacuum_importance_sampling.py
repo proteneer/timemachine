@@ -15,10 +15,9 @@ def get_ff_am1ccc():
     return ff
 
 
-# @pytest.mark.nightly(reason="This takes too long to run on CI")
+@pytest.mark.nightly(reason="This takes too long to run on CI")
 @pytest.mark.nogpu
-@pytest.mark.parametrize("iseed", range(20))
-def test_vacuum_importance_sampling(iseed):
+def test_vacuum_importance_sampling():
     """
     This tests importance sampling in the gas-phase, where samples generated
     from a proposal distribution p_easy are reweighted into the target p_decharged.
@@ -33,7 +32,7 @@ def test_vacuum_importance_sampling(iseed):
 
     state = enhanced.VacuumState(mol, ff)
 
-    seed = 2021 + iseed
+    seed = 2021
 
     num_samples = 120000
 
