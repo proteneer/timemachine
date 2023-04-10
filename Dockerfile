@@ -97,6 +97,10 @@ RUN pip install --no-cache-dir pre-commit==2.17.0
 COPY .pre-commit-config.yaml /code/timemachine/
 RUN cd /code/timemachine && git init . && pre-commit install-hooks
 
+# Install CI requirements
+COPY ci/requirements.txt /code/timemachine/ci/requirements.txt
+RUN pip install --no-cache-dir -r timemachine/ci/requirements.txt
+
 # Dev container that contains the cuda developer tools
 FROM tm_base_env AS timemachine_dev
 ARG CUDA_ARCH=75
