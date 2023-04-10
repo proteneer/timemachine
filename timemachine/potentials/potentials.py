@@ -124,7 +124,7 @@ class NonbondedAllPairs(Potential):
     num_atoms: int
     beta: float
     cutoff: float
-    atom_idxs: Optional[Array] = None
+    atom_idxs: Optional[NDArray[np.int32]] = None
     disable_hilbert_sort: bool = False
     nblist_padding: float = 0.1
 

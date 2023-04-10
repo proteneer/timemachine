@@ -4,6 +4,7 @@ from typing import Any, Generic, Optional, TypeVar, cast
 
 import numpy as np
 from jax import Array
+from numpy.typing import NDArray
 
 from timemachine.lib import custom_ops
 
@@ -45,26 +46,26 @@ class BoundPotential(Generic[_P]):
         return self.potential(conf, self.params, box)
 
     def to_gpu(self, precision: Precision) -> "BoundGpuImplWrapper":
-        return self.potential.to_gpu(precision).bind(self.params)
+        return self.potential.to_gpu(precision).bind(np.asarray(self.params))
 
 
 @dataclass
 class GpuImplWrapper:
     unbound_impl: custom_ops.Potential
 
-    def __call__(self, conf: Conf, params: Params, box: Box) -> float:
+    def __call__(self, conf: NDArray, params: NDArray, box: NDArray) -> float:
         res = jax_interface.call_unbound_impl(self.unbound_impl, conf, params, box)
         return cast(float, res)
 
-    def bind(self, params: Params) -> "BoundGpuImplWrapper":
-        return BoundGpuImplWrapper(custom_ops.BoundPotential(self.unbound_impl, np.array(params)))
+    def bind(self, params: NDArray) -> "BoundGpuImplWrapper":
+        return BoundGpuImplWrapper(custom_ops.BoundPotential(self.unbound_impl, params))
 
 
 @dataclass
 class BoundGpuImplWrapper:
     bound_impl: custom_ops.BoundPotential
 
-    def __call__(self, conf: Conf, box: Box) -> float:
+    def __call__(self, conf: NDArray, box: NDArray) -> float:
         res = jax_interface.call_bound_impl(self.bound_impl, conf, box)
         return cast(float, res)
 
