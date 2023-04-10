@@ -15,8 +15,8 @@ def get_ff_am1ccc():
     return ff
 
 
-@pytest.mark.nightly(reason="This takes too long to run on CI")
 @pytest.mark.nogpu
+@pytest.mark.nightly(reason="This takes too long to run on CI")
 def test_vacuum_importance_sampling():
     """
     This tests importance sampling in the gas-phase, where samples generated
@@ -62,12 +62,10 @@ def test_vacuum_importance_sampling():
 
     # check that the distributions on the lhs look roughly identical
     # lhs is (-np.pi, 0) and rhs is (0, np.pi)
-    enhanced_torsions_lhs, binsa = np.histogram(enhanced_torsions, bins=50, range=(-np.pi, 0), density=True)
-    enhanced_torsions_rhs, binsb = np.histogram(enhanced_torsions, bins=50, range=(0, np.pi), density=True)
+    enhanced_torsions_lhs, _ = np.histogram(enhanced_torsions, bins=50, range=(-np.pi, 0), density=True)
+    enhanced_torsions_rhs, _ = np.histogram(enhanced_torsions, bins=50, range=(0, np.pi), density=True)
 
     # check for symmetry about theta=0
-    # Note: We don't get perfect symmetry due to limited sampling
-    # at 1e6 samples the MSE < 0.01
     assert np.mean((enhanced_torsions_lhs - enhanced_torsions_rhs[::-1]) ** 2) < 0.10
     weighted_xv_samples, log_weights = enhanced.generate_log_weighted_samples(
         mol,
