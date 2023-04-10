@@ -15,7 +15,7 @@ def get_ff_am1ccc():
     return ff
 
 
-# @pytest.mark.nightly(reason="This takes too long to run on CI")
+@pytest.mark.nightly(reason="This takes too long to run on CI")
 @pytest.mark.nogpu
 def test_vacuum_importance_sampling():
     """
