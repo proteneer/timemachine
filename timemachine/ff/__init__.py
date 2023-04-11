@@ -194,9 +194,17 @@ class Forcefield:
             else:
                 raise ValueError(f"Unsupported charge handler {q_handle}")
 
-
         return cls(
-            hb_handle, ha_handle, pt_handle, it_handle, q_handle, q_handle_solv, q_handle_intra, lj_handle, protein_ff, water_ff
+            hb_handle,
+            ha_handle,
+            pt_handle,
+            it_handle,
+            q_handle,
+            q_handle_solv,
+            q_handle_intra,
+            lj_handle,
+            protein_ff,
+            water_ff,
         )
 
     def get_ordered_handles(self):
