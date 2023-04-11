@@ -1,12 +1,11 @@
 from collections import defaultdict
-from typing import List, Tuple
+from typing import DefaultDict, List, Tuple
 
 import numpy as np
 import openmm as mm
 from openmm import unit
 
-from timemachine import constants
-from timemachine.lib import potentials
+from timemachine import constants, potentials
 
 ORDERED_FORCES = ["HarmonicBond", "HarmonicAngle", "PeriodicTorsion", "Nonbonded"]
 
@@ -15,7 +14,7 @@ def value(quantity):
     return quantity.value_in_unit_system(unit.md_unit_system)
 
 
-def deserialize_system(system: mm.System, cutoff: float) -> Tuple[List[potentials.CustomOpWrapper], List[float]]:
+def deserialize_system(system: mm.System, cutoff: float) -> Tuple[List[potentials.BoundPotential], List[float]]:
     """
     Deserialize an OpenMM XML file
 
@@ -45,7 +44,7 @@ def deserialize_system(system: mm.System, cutoff: float) -> Tuple[List[potential
     # this should not be a dict since we may have more than one instance of a given
     # force.
 
-    bps_dict = defaultdict(list)
+    bps_dict: DefaultDict[str, List[potentials.BoundPotential]] = defaultdict(list)
 
     for force in system.getForces():
 

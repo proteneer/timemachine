@@ -11,9 +11,10 @@ from numpy.typing import NDArray
 from scipy.special import logsumexp
 
 from timemachine import lib
-from timemachine.lib import custom_ops, potentials
+from timemachine.lib import custom_ops
 from timemachine.md.barostat.utils import get_bond_list, get_group_indices
 from timemachine.md.states import CoordsVelBox
+from timemachine.potentials import BoundPotential, HarmonicBond
 
 
 class MonteCarloMove:
@@ -74,7 +75,7 @@ class CompoundMove(MonteCarloMove):
 class NVTMove(MonteCarloMove):
     def __init__(
         self,
-        ubps: List[potentials.CustomOpWrapper],
+        bps: List[BoundPotential],
         masses: NDArray,
         temperature: float,
         n_steps: int,
@@ -84,7 +85,7 @@ class NVTMove(MonteCarloMove):
     ):
         intg = lib.LangevinIntegrator(temperature, dt, friction, masses, seed)
         self.integrator_impl = intg.impl()
-        all_impls = [bp.bound_impl(np.float32) for bp in ubps]
+        all_impls = [bp.to_gpu(np.float32).bound_impl for bp in bps]
 
         self.bound_impls = all_impls
         self.n_steps = n_steps
@@ -116,7 +117,7 @@ class NPTMove(NVTMove):
 
     def __init__(
         self,
-        ubps: List[potentials.CustomOpWrapper],
+        bps: List[BoundPotential],
         masses: NDArray,
         temperature: float,
         pressure: float,
@@ -126,11 +127,11 @@ class NPTMove(NVTMove):
         friction: float = 1.0,
         barostat_interval: int = 5,
     ):
-        super().__init__(ubps, masses, temperature, n_steps, seed, dt=dt, friction=friction)
+        super().__init__(bps, masses, temperature, n_steps, seed, dt=dt, friction=friction)
 
-        assert isinstance(ubps[0], potentials.HarmonicBond), "First potential must be of type HarmonicBond"
+        assert isinstance(bps[0].potential, HarmonicBond), "First potential must be of type HarmonicBond"
 
-        bond_list = get_bond_list(ubps[0])
+        bond_list = get_bond_list(bps[0].potential)
         group_idxs = get_group_indices(bond_list)
 
         barostat = lib.MonteCarloBarostat(len(masses), pressure, temperature, group_idxs, barostat_interval, seed + 1)

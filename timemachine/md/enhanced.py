@@ -24,7 +24,7 @@ from timemachine.lib import custom_ops
 from timemachine.md import builders, minimizer, moves
 from timemachine.md.barostat.utils import get_bond_list, get_group_indices
 from timemachine.md.states import CoordsVelBox
-from timemachine.potentials import bonded, nonbonded, rmsd
+from timemachine.potentials import bonded, rmsd
 
 logger = logging.getLogger(__name__)
 
@@ -96,30 +96,18 @@ class VacuumState:
         self.box = None
 
     def _harmonic_bond_nrg(self, x):
-        return bonded.harmonic_bond(x, self.bond_params, self.box, self.hb_potential.get_idxs())
+        return self.hb_potential(x, self.bond_params, self.box)
 
     def _harmonic_angle_nrg(self, x):
-        return bonded.harmonic_angle(x, self.angle_params, self.box, self.ha_potential.get_idxs())
+        return self.ha_potential(x, self.angle_params, self.box)
 
     def _proper_torsion_nrg(self, x):
-        return bonded.periodic_torsion(
-            x,
-            self.proper_torsion_params,
-            self.box,
-            self.pt_potential.get_idxs(),
-        )
+        return self.pt_potential(x, self.proper_torsion_params, self.box)
 
     def _improper_torsion_nrg(self, x):
-        return bonded.periodic_torsion(
-            x,
-            self.improper_torsion_params,
-            self.box,
-            self.it_potential.get_idxs(),
-        )
+        return self.it_potential(x, self.improper_torsion_params, self.box)
 
     def _nonbonded_nrg(self, x, decharge):
-        exclusions = self.nb_potential.get_exclusion_idxs()
-        scales = self.nb_potential.get_scale_factors()
 
         if decharge:
             charge_indices = jnp.index_exp[:, 0]
@@ -127,25 +115,10 @@ class VacuumState:
         else:
             nb_params = self.nb_params
 
-        N = x.shape[0]
-        charge_rescale_mask, lj_rescale_mask = nonbonded.convert_exclusions_to_rescale_masks(exclusions, scales, N)
-
-        beta = self.nb_potential.get_beta()
-        cutoff = self.nb_potential.get_cutoff()
-
         # tbd: set to None
         box = np.eye(3) * 1000
 
-        return nonbonded.nonbonded(
-            x,
-            nb_params,
-            box,
-            charge_rescale_mask,
-            lj_rescale_mask,
-            beta,
-            cutoff,
-            runtime_validate=False,
-        )
+        return self.nb_potential(x, nb_params, box)
 
     def U_easy(self, x):
         """
@@ -169,7 +142,7 @@ class VacuumState:
 
         rotatable_bonds = identify_rotatable_bonds(self.mol)
 
-        for idxs, params in zip(self.pt_potential.get_idxs(), self.proper_torsion_params):
+        for idxs, params in zip(self.pt_potential.idxs, self.proper_torsion_params):
             _, j, k, _ = idxs
             if (j, k) in rotatable_bonds:
                 logger.debug("turning off torsion %s", idxs)
@@ -492,7 +465,7 @@ def equilibrate_solvent_phase(
     for p, bp in zip(params, potentials):
         bps.append(bp.bind(p))
 
-    all_impls = [bp.bound_impl(np.float32) for bp in bps]
+    all_impls = [bp.to_gpu(np.float32).bound_impl for bp in bps]
 
     intg_equil = lib.LangevinIntegrator(temperature, dt, friction, masses, seed)
     intg_equil_impl = intg_equil.impl()

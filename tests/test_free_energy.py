@@ -10,12 +10,12 @@ from scipy.optimize import check_grad, minimize
 from timemachine.constants import DEFAULT_TEMP
 from timemachine.fe import free_energy, topology, utils
 from timemachine.fe.free_energy import MDParams, batches, sample
-from timemachine.fe.functional import construct_differentiable_interface, construct_differentiable_interface_fast
 from timemachine.fe.rbfe import setup_initial_states
 from timemachine.fe.single_topology import SingleTopology
 from timemachine.fe.stored_arrays import StoredArrays
 from timemachine.ff import Forcefield
 from timemachine.md import builders
+from timemachine.potentials import SummedPotential
 from timemachine.testsystems.relative import get_hif2a_ligand_pair_single_topology
 
 
@@ -23,7 +23,7 @@ def assert_shapes_consistent(U, coords, sys_params, box):
     """assert U, grad(U) have the right shapes"""
     # can call U and get right shape
     energy = U(coords, sys_params, box)
-    assert energy.shape == ()
+    assert isinstance(energy, float)
 
     # can call grad(U) and get right shape
     du_dx, du_dp = grad(U, argnums=(0, 1))(coords, sys_params, box)
@@ -106,12 +106,13 @@ def test_functional():
     coords = st.combine_confs(x_a, x_b)
     box = np.eye(3) * 100
 
-    potentials = vac_sys.get_U_fns()
-    sys_params = [np.array(bp.params) for bp in potentials]
+    bps = vac_sys.get_U_fns()
+    potentials = [bp.potential for bp in bps]
+    sys_params = [np.array(bp.params) for bp in bps]
 
     tol_at_precision = {np.float32: 2.5e-10, np.float64: 1e-10}
     for precision, tol in tol_at_precision.items():
-        U = construct_differentiable_interface(potentials, precision)
+        U = SummedPotential(potentials, sys_params).to_gpu(precision).call_with_params_list
 
         # U, grad(U) have the right shapes
         assert_shapes_consistent(U, coords, sys_params, box)
@@ -144,39 +145,6 @@ def test_functional():
         with pytest.raises(RuntimeError) as e:
             _ = grad(U, argnums=2)(coords, sys_params, box)
         assert "box" in str(e).lower()
-
-
-def test_construct_differentiable_interface_fast():
-    """Assert that the computation of U and its derivatives using the
-    C++ code path produces equivalent results to doing the
-    summation in Python"""
-    mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
-    forcefield = Forcefield.load_default()
-    st = SingleTopology(mol_a, mol_b, core, forcefield)
-    vac_sys = st.setup_intermediate_state(0.5)
-    x_a = utils.get_romol_conf(st.mol_a)
-    x_b = utils.get_romol_conf(st.mol_b)
-    coords = st.combine_confs(x_a, x_b)
-    box = np.eye(3) * 100
-
-    potentials = vac_sys.get_U_fns()
-    sys_params = [np.array(bp.params) for bp in potentials]
-
-    for precision in [np.float32, np.float64]:
-        U_ref = construct_differentiable_interface(potentials, precision)
-        U = construct_differentiable_interface_fast(potentials, sys_params, precision)
-        args = (coords, sys_params, box)
-        np.testing.assert_array_equal(U(*args), U_ref(*args))
-
-        argnums = (0, 1)
-        dU_dx_ref, dU_dps_ref = grad(U_ref, argnums)(*args)
-        dU_dx, dU_dps = grad(U, argnums)(*args)
-
-        np.testing.assert_array_equal(dU_dx, dU_dx_ref)
-
-        assert len(dU_dps) == len(dU_dps_ref)
-        for dU_dp, dU_dp_ref in zip(dU_dps, dU_dps_ref):
-            np.testing.assert_array_equal(dU_dp, dU_dp_ref)
 
 
 def test_absolute_vacuum():

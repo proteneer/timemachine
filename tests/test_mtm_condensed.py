@@ -60,11 +60,11 @@ def test_condensed_phase_mtm():
     ubps, params, masses, coords, box = enhanced.get_solvent_phase_system(mol, ff, 0.0)
 
     # Unwrap SummedPotential to get intermolecular potential
-    nb_potential = ubps[-1]._potentials[0]
-    nb_params = ubps[-1]._params_init[0]
+    nb_potential = ubps[-1].potentials[0]
+    nb_params = ubps[-1].params_init[0]
 
-    beta = nb_potential.get_beta()
-    cutoff = nb_potential.get_cutoff()
+    beta = nb_potential.beta
+    cutoff = nb_potential.cutoff
 
     params_i = nb_params[-num_ligand_atoms:]  # ligand params
     params_j = nb_params[:-num_ligand_atoms]  # water params
@@ -129,7 +129,9 @@ def test_condensed_phase_mtm():
         vacuum_log_weights=jnp.array(vacuum_log_weights),
     )
 
-    npt_mover = NPTMove(ubps, masses, temperature, pressure, n_steps=md_steps_per_move, seed=seed)
+    bps = [ubp.bind(params) for ubp, params in zip(ubps, params)]
+
+    npt_mover = NPTMove(bps, masses, temperature, pressure, n_steps=md_steps_per_move, seed=seed)
     mtm_mover = OptimizedMTMMove(K, batch_proposal_coords_fn, batch_log_weights_fn, seed=seed)
 
     enhanced_torsions = []
@@ -158,7 +160,7 @@ def test_condensed_phase_mtm():
 
     vanilla_torsions = []
     xvb_t = copy.deepcopy(xvb0)
-    npt_mover = NPTMove(ubps, masses, temperature, pressure, n_steps=500, seed=seed)
+    npt_mover = NPTMove(bps, masses, temperature, pressure, n_steps=500, seed=seed)
     for iteration in range(num_batches):
         solvent_torsion = get_torsion(xvb_t.coords[-num_ligand_atoms:])
         vanilla_torsions.append(solvent_torsion)
@@ -187,7 +189,7 @@ def test_nvt_box():
 
     temperature = 300.0
     n_steps = 100
-    mover = NVTMove(ubps, masses, temperature, n_steps, seed)
+    mover = NVTMove(bps, masses, temperature, n_steps, seed)
     v0 = np.zeros_like(coords)
     xvb0 = CoordsVelBox(coords, v0, box)
     xvb = mover.move(xvb0)

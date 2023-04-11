@@ -10,6 +10,10 @@
 # in it will take precedence over the stubs defined here.
 
 
+class Potential:
+    pass
+
+
 class BoundPotential:
     pass
 

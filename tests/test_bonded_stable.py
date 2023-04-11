@@ -2,7 +2,7 @@ import numpy as np
 import pytest
 from common import GradientTest
 
-from timemachine.potentials.generic import HarmonicAngle, HarmonicAngleStable
+from timemachine.potentials import HarmonicAngle, HarmonicAngleStable
 
 
 def generate_system(n_particles, n_angles, seed):
@@ -28,7 +28,9 @@ def test_harmonic_angle_stable(n_particles, n_angles, precision, rtol, seed):
     box = np.eye(3) * 100  # note: ignored
     angle_idxs, coords, params = generate_system(n_particles, n_angles, seed)
     potential = HarmonicAngleStable(angle_idxs)
-    GradientTest().compare_forces_gpu_vs_reference(coords, [params], box, potential, rtol, precision=precision)
+    test_impl = potential.to_gpu(precision)
+    GradientTest().compare_forces(coords, params, box, potential, test_impl, rtol)
+    GradientTest().assert_differentiable_interface_consistency(coords, params, box, test_impl)
 
 
 @pytest.mark.parametrize("n_particles", [64])
@@ -40,11 +42,8 @@ def test_harmonic_angle_stable_bitwise_symmetric(n_particles, n_angles, precisio
 
     angle_idxs, coords, params = generate_system(n_particles, n_angles, seed)
 
-    test_potential = HarmonicAngleStable(angle_idxs).to_gpu()
-    test_potential_rev = HarmonicAngleStable(angle_idxs[:, ::-1]).to_gpu()
-
-    test_potential_impl = test_potential.unbound_impl(precision)
-    test_potential_rev_impl = test_potential_rev.unbound_impl(precision)
+    test_potential_impl = HarmonicAngleStable(angle_idxs).to_gpu(precision).unbound_impl
+    test_potential_rev_impl = HarmonicAngleStable(angle_idxs[:, ::-1]).to_gpu(precision).unbound_impl
 
     box = np.eye(3) * 100  # note: ignored
     test_du_dx, test_du_dp, test_u = test_potential_impl.execute_selective(coords, params, box, 1, 1, 1)
@@ -65,8 +64,8 @@ def test_harmonic_angle_stable_reduces_to_harmonic_angle(n_particles, n_angles, 
     angle_idxs, coords, params = generate_system(n_particles, n_angles, seed)
     params[:, 2] = 0.0  # param idx 2 is eps
 
-    impl = HarmonicAngle(angle_idxs).to_gpu().unbound_impl(precision)
-    impl_stable = HarmonicAngleStable(angle_idxs).to_gpu().unbound_impl(precision)
+    impl = HarmonicAngle(angle_idxs).to_gpu(precision).unbound_impl
+    impl_stable = HarmonicAngleStable(angle_idxs).to_gpu(precision).unbound_impl
 
     box = np.eye(3) * 100  # note: ignored
     du_dx, du_dp, u = impl.execute_selective(coords, params[:, :2], box, 1, 1, 1)
@@ -95,7 +94,7 @@ def test_harmonic_angle_finite_force_with_vanishing_bond_length(potential, param
 
     angle_idxs = [(0, 1, 2)]
     coords = [(0, 0, 0), (1e-9, 0, 0), (0, 1, 0)]
-    impl = potential(angle_idxs).to_gpu().unbound_impl(precision)
+    impl = potential(angle_idxs).to_gpu(precision).unbound_impl
     box = np.eye(3) * 100  # note: ignored
     du_dx, _, _ = impl.execute_selective(coords, params, box, 1, 0, 0)
     print(du_dx)

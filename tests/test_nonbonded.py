@@ -3,16 +3,17 @@
 import copy
 import itertools
 import unittest
+from dataclasses import replace
+from typing import cast
 
 import numpy as np
 import pytest
 from common import GradientTest, gen_nonbonded_params_with_4d_offsets, prepare_system_params, prepare_water_system
 
+from timemachine import potentials
 from timemachine.ff import Forcefield
 from timemachine.ff.handlers import openmm_deserializer
-from timemachine.lib import potentials
 from timemachine.md import builders
-from timemachine.potentials import generic
 from timemachine.testsystems.dhfr import setup_dhfr
 
 np.set_printoptions(linewidth=500)
@@ -25,10 +26,9 @@ class TestNonbondedDHFR(GradientTest):
         # This test checks hilbert curve re-ordering gives identical results
         host_fns, _, host_coords, self.box = setup_dhfr()
 
-        for f in host_fns:
-            if isinstance(f, potentials.Nonbonded):
-                self.nonbonded_fn = f
-
+        nonbonded_bp = next(bp for bp in host_fns if isinstance(bp.potential, potentials.Nonbonded))
+        self.nonbonded_fn = cast(potentials.Nonbonded, nonbonded_bp.potential)
+        self.nonbonded_params = nonbonded_bp.params
         self.host_conf = host_coords
         self.beta = 2.0
         self.cutoff = 1.1
@@ -45,10 +45,8 @@ class TestNonbondedDHFR(GradientTest):
 
         for precision in [np.float32, np.float64]:
 
-            ref_nonbonded_impl = copy.copy(self.nonbonded_fn).unbound_impl(precision)
-            ref_nonbonded_impl.disable_hilbert_sort()
-
-            test_nonbonded_impl = copy.copy(self.nonbonded_fn).unbound_impl(precision)
+            ref_nonbonded_impl = replace(self.nonbonded_fn, disable_hilbert_sort=True).to_gpu(precision).unbound_impl
+            test_nonbonded_impl = self.nonbonded_fn.to_gpu(precision).unbound_impl
 
             padding = 0.1
             deltas = np.random.rand(N, 3) - 0.5  # [-0.5, +0.5]
@@ -63,17 +61,17 @@ class TestNonbondedDHFR(GradientTest):
 
             np.set_printoptions(precision=16)
             # under pure fixed point accumulation the results should be identical.
-            for x_idx, x in enumerate(xs):
+            for x in xs:
 
-                ref_du_dx, ref_du_dp, ref_u = ref_nonbonded_impl.execute(x, self.nonbonded_fn.params, self.box)
-                test_du_dx, test_du_dp, test_u = test_nonbonded_impl.execute(x, self.nonbonded_fn.params, self.box)
+                ref_du_dx, ref_du_dp, ref_u = ref_nonbonded_impl.execute(x, self.nonbonded_params, self.box)
+                test_du_dx, test_du_dp, test_u = test_nonbonded_impl.execute(x, self.nonbonded_params, self.box)
 
                 np.testing.assert_array_equal(ref_du_dx, test_du_dx)
                 np.testing.assert_array_equal(ref_du_dp, test_du_dp)
                 np.testing.assert_array_equal(ref_u, test_u)
 
-                ref_du_dx = ref_nonbonded_impl.execute_du_dx(x, self.nonbonded_fn.params, self.box)
-                test_du_dx = test_nonbonded_impl.execute_du_dx(x, self.nonbonded_fn.params, self.box)
+                ref_du_dx = ref_nonbonded_impl.execute_du_dx(x, self.nonbonded_params, self.box)
+                test_du_dx = test_nonbonded_impl.execute_du_dx(x, self.nonbonded_params, self.box)
 
                 for idx, (a, b) in enumerate(zip(ref_du_dx, test_du_dx)):
                     if np.linalg.norm(a - b) != 0:
@@ -93,15 +91,12 @@ class TestNonbondedDHFR(GradientTest):
 
         np.random.seed(2021)
 
-        ref_nonbonded_impl = copy.copy(self.nonbonded_fn).unbound_impl(np.float64)
-        ref_nonbonded_impl.set_nblist_padding(0.0)  # rebuild with every call
+        ref_nonbonded_impl = replace(self.nonbonded_fn, nblist_padding=0.0).to_gpu(np.float64).unbound_impl
 
         padding = 0.1
 
-        test_nonbonded_impl = copy.copy(self.nonbonded_fn).unbound_impl(np.float64)
-        test_nonbonded_impl.set_nblist_padding(
-            padding
-        )  # rebuild only when deltas have moved more than padding/2 angstroms
+        # rebuild only when deltas have moved more than padding/2 angstroms
+        test_nonbonded_impl = replace(self.nonbonded_fn, nblist_padding=padding).to_gpu(np.float64).unbound_impl
 
         deltas = np.random.rand(N, 3) - 0.5  # [-0.5, +0.5]
         divisor = 0.5 * (2 * np.sqrt(3)) / padding
@@ -114,16 +109,16 @@ class TestNonbondedDHFR(GradientTest):
         xs = [self.host_conf, self.host_conf + deltas]
 
         # under pure fixed point accumulation the results should be identical.
-        for x_idx, x in enumerate(xs):
-            ref_du_dx, ref_du_dp, ref_u = ref_nonbonded_impl.execute(x, self.nonbonded_fn.params, self.box)
-            test_du_dx, test_du_dp, test_u = test_nonbonded_impl.execute(x, self.nonbonded_fn.params, self.box)
+        for x in xs:
+            ref_du_dx, ref_du_dp, ref_u = ref_nonbonded_impl.execute(x, self.nonbonded_params, self.box)
+            test_du_dx, test_du_dp, test_u = test_nonbonded_impl.execute(x, self.nonbonded_params, self.box)
 
             np.testing.assert_array_equal(ref_du_dx, test_du_dx)
             np.testing.assert_array_equal(ref_du_dp, test_du_dp)
             np.testing.assert_array_equal(ref_u, test_u)
 
-            ref_du_dx = ref_nonbonded_impl.execute_du_dx(x, self.nonbonded_fn.params, self.box)
-            test_du_dx = test_nonbonded_impl.execute_du_dx(x, self.nonbonded_fn.params, self.box)
+            ref_du_dx = ref_nonbonded_impl.execute_du_dx(x, self.nonbonded_params, self.box)
+            test_du_dx = test_nonbonded_impl.execute_du_dx(x, self.nonbonded_params, self.box)
 
             for idx, (a, b) in enumerate(zip(ref_du_dx, test_du_dx)):
                 if np.linalg.norm(a - b) != 0:
@@ -149,26 +144,19 @@ class TestNonbondedDHFR(GradientTest):
             # strip out parts of the system
             test_exclusions = []
             test_scales = []
-            for (i, j), (sa, sb) in zip(self.nonbonded_fn.get_exclusion_idxs(), self.nonbonded_fn.get_scale_factors()):
+            for (i, j), (sa, sb) in zip(self.nonbonded_fn.exclusion_idxs, self.nonbonded_fn.scale_factors):
                 if i < N and j < N:
                     test_exclusions.append((i, j))
                     test_scales.append((sa, sb))
             test_exclusions = np.array(test_exclusions, dtype=np.int32)
             test_scales = np.array(test_scales, dtype=np.float64)
-            test_params = self.nonbonded_fn.params[:N, :]
+            test_params = self.nonbonded_params[:N, :]
 
-            potential = generic.Nonbonded(N, test_exclusions, test_scales, self.beta, self.cutoff)
+            potential = potentials.Nonbonded(N, test_exclusions, test_scales, self.beta, self.cutoff)
 
             for precision, rtol, atol in [(np.float64, 1e-8, 1e-8), (np.float32, 1e-4, 5e-4)]:
-
-                self.compare_forces_gpu_vs_reference(
-                    test_conf,
-                    [test_params],
-                    self.box,
-                    potential,
-                    rtol=rtol,
-                    atol=atol,
-                    precision=precision,
+                self.compare_forces(
+                    test_conf, test_params, self.box, potential, potential.to_gpu(precision), rtol=rtol, atol=atol
                 )
 
     @unittest.skip("benchmark-only")
@@ -181,7 +169,7 @@ class TestNonbondedDHFR(GradientTest):
 
         nb_fn = copy.deepcopy(self.nonbonded_fn)
 
-        impl = nb_fn.unbound_impl(precision)
+        impl = nb_fn.to_gpu(precision).unbound_impl
 
         for combo in itertools.product([False, True], repeat=4):
 
@@ -191,7 +179,7 @@ class TestNonbondedDHFR(GradientTest):
 
                 test_du_dx, test_du_dp, test_u = impl.execute_selective(
                     self.host_conf,
-                    [self.nonbonded_fn.params],
+                    [self.nonbonded_params],
                     self.box,
                     compute_du_dx,
                     compute_du_dp,
@@ -209,14 +197,8 @@ class TestNonbondedWater(GradientTest):
 
         host_fns, host_masses = openmm_deserializer.deserialize_system(host_system, cutoff=1.0)
 
-        test_nonbonded_fn = None
-        for f in host_fns:
-            if isinstance(f, potentials.Nonbonded):
-                test_nonbonded_fn = f
-        assert test_nonbonded_fn is not None
-        assert test_nonbonded_fn.params is not None
-
-        potential = generic.Nonbonded.from_gpu(test_nonbonded_fn)
+        test_bp = next(bp for bp in host_fns if isinstance(bp.potential, potentials.Nonbonded))
+        assert test_bp.params is not None
 
         big_box = box + np.eye(3) * 1000
 
@@ -225,15 +207,14 @@ class TestNonbondedWater(GradientTest):
         for test_box in [big_box, box]:
 
             for precision, rtol, atol in [(np.float64, 1e-8, 1e-10), (np.float32, 1e-4, 3e-5)]:
-
-                self.compare_forces_gpu_vs_reference(
+                self.compare_forces(
                     host_conf,
-                    [test_nonbonded_fn.params],
+                    test_bp.params,
                     test_box,
-                    potential,
+                    test_bp.potential,
+                    test_bp.potential.to_gpu(precision),
                     rtol=rtol,
                     atol=atol,
-                    precision=precision,
                 )
 
 
@@ -276,13 +257,13 @@ class TestNonbonded(GradientTest):
         beta = 2.0
         cutoff = 1.0
 
-        potential = generic.Nonbonded(N, exclusion_idxs, scales, beta, cutoff)
+        potential = potentials.Nonbonded(N, exclusion_idxs, scales, beta, cutoff)
 
         for precision, rtol in [(np.float64, 1e-8), (np.float32, 1e-4)]:
 
             params = prepare_system_params(test_system, cutoff)
 
-            self.compare_forces_gpu_vs_reference(test_system, [params], box, potential, rtol, precision=precision)
+            self.compare_forces(test_system, params, box, potential, potential.to_gpu(precision), rtol)
 
     def test_nonbonded(self):
 
@@ -299,16 +280,11 @@ class TestNonbonded(GradientTest):
                 # E = 0 # DEBUG!
                 charge_params, potential = prepare_water_system(coords, p_scale=5.0, cutoff=cutoff)
                 for precision, rtol, atol in [(np.float64, 1e-8, 1e-8), (np.float32, 1e-4, 5e-4)]:
-
-                    self.compare_forces_gpu_vs_reference(
-                        coords,
-                        gen_nonbonded_params_with_4d_offsets(np.random.default_rng(2022), charge_params, cutoff),
-                        box,
-                        potential,
-                        rtol=rtol,
-                        atol=atol,
-                        precision=precision,
-                    )
+                    test_impl = potential.to_gpu(precision)
+                    for params in gen_nonbonded_params_with_4d_offsets(
+                        np.random.default_rng(2022), charge_params, cutoff
+                    ):
+                        self.compare_forces(coords, params, box, potential, test_impl, rtol=rtol, atol=atol)
 
     def test_nonbonded_with_box_smaller_than_cutoff(self):
 
@@ -339,7 +315,7 @@ class TestNonbonded(GradientTest):
             for _ in range(steps):
                 _ = potential.execute_selective(x, params, box, True, True, True)
 
-        test_impl = potential.to_gpu().unbound_impl(precision)
+        test_impl = potential.to_gpu(precision).unbound_impl
 
         # With the default box, all is well
         run_nonbonded(test_impl, coords, box, charge_params, steps=2)

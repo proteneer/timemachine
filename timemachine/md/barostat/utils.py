@@ -5,7 +5,7 @@ import numpy as np
 from numpy.typing import NDArray
 from scipy.spatial.distance import pdist
 
-from timemachine.lib.potentials import HarmonicBond
+from timemachine.potentials import HarmonicBond
 
 
 def compute_box_volume(box: np.ndarray) -> float:
@@ -35,7 +35,7 @@ def get_bond_list(harmonic_bond_potential: HarmonicBond) -> List[Tuple[int, int]
         or if there are valence bonds not represented as harmonic bonds (e.g. as length constraints)
     """
 
-    bond_list = [(i, j) for i, j in harmonic_bond_potential.get_idxs()]
+    bond_list = [(i, j) for i, j in harmonic_bond_potential.idxs]
     return bond_list
 
 

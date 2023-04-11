@@ -19,7 +19,12 @@ namespace timemachine {
 
 template <typename RealType>
 NonbondedInteractionGroup<RealType>::NonbondedInteractionGroup(
-    const int N, const std::vector<int> &row_atom_idxs, const double beta, const double cutoff)
+    const int N,
+    const std::vector<int> &row_atom_idxs,
+    const double beta,
+    const double cutoff,
+    const bool disable_hilbert_sort,
+    const double nblist_padding)
     : N_(N), NR_(row_atom_idxs.size()), NC_(N_ - NR_),
 
       kernel_ptrs_({// enumerate over every possible kernel combination
@@ -36,8 +41,8 @@ NonbondedInteractionGroup<RealType>::NonbondedInteractionGroup(
                     &k_nonbonded_unified<RealType, 1, 1, 0>,
                     &k_nonbonded_unified<RealType, 1, 1, 1>}),
 
-      beta_(beta), cutoff_(cutoff), nblist_(N_), nblist_padding_(0.1), d_sort_storage_(nullptr),
-      d_sort_storage_bytes_(0), disable_hilbert_(false) {
+      beta_(beta), cutoff_(cutoff), nblist_(N_), nblist_padding_(nblist_padding), d_sort_storage_(nullptr),
+      d_sort_storage_bytes_(0), disable_hilbert_(disable_hilbert_sort) {
 
     if (NR_ == 0) {
         throw std::runtime_error("row_atom_idxs must be nonempty");
@@ -139,14 +144,6 @@ template <typename RealType> NonbondedInteractionGroup<RealType>::~NonbondedInte
     gpuErrchk(cudaFree(d_rebuild_nblist_));
     gpuErrchk(cudaFreeHost(p_rebuild_nblist_));
 };
-
-template <typename RealType> void NonbondedInteractionGroup<RealType>::set_nblist_padding(double val) {
-    nblist_padding_ = val;
-}
-
-template <typename RealType> void NonbondedInteractionGroup<RealType>::disable_hilbert_sort() {
-    disable_hilbert_ = true;
-}
 
 template <typename RealType>
 void NonbondedInteractionGroup<RealType>::hilbert_sort(

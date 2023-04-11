@@ -115,7 +115,7 @@ def test_reversibility_with_custom_ops_potentials():
     host = None  # vacuum
     initial_states = setup_initial_states(rfe, host, temperature, [lamb], seed)
     unbound_potentials = initial_states[0].potentials
-    bound_potentials = [pot.bound_impl(precision=np.float32) for pot in unbound_potentials]
+    bound_potentials = [pot.to_gpu(precision=np.float32).bound_impl for pot in unbound_potentials]
     box = 100 * np.eye(3)
 
     def force(coords):

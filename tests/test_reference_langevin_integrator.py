@@ -135,7 +135,7 @@ def test_reference_langevin_integrator_with_custom_ops():
     potentials = vac_sys.get_U_fns()
     masses = np.array(st.combine_masses())
 
-    impls = [bp.bound_impl(np.float32) for bp in potentials]
+    impls = [bp.to_gpu(np.float32).bound_impl for bp in potentials]
     box = 100 * np.eye(3)
 
     def custom_op_force_component(coords):

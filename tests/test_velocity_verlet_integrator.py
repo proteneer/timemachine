@@ -5,7 +5,7 @@ import pytest
 
 from timemachine.integrator import VelocityVerletIntegrator as ReferenceVelocityVerlet
 from timemachine.lib import VelocityVerletIntegrator, custom_ops
-from timemachine.lib.potentials import SummedPotential
+from timemachine.potentials import SummedPotential
 from timemachine.testsystems.relative import get_relative_hif2a_in_vacuum
 
 
@@ -90,8 +90,8 @@ def test_reversibility():
     seed = 2022
 
     # define a Python force fxn that calls custom_ops
-    unbound_potentials, sys_params, coords, masses = get_relative_hif2a_in_vacuum()
-    bound_potentials = [pot.bound_impl(precision=np.float32) for pot in unbound_potentials]
+    bound_potentials, sys_params, coords, masses = get_relative_hif2a_in_vacuum()
+    bound_impls = [pot.to_gpu(precision=np.float32).bound_impl for pot in bound_potentials]
 
     box = 100 * np.eye(3)
 
@@ -104,7 +104,7 @@ def test_reversibility():
         # here keeps the range the same for all n_step values.
         np.random.seed(seed)
         v0 = np.random.randn(*coords.shape)
-        ctxt = setup_velocity_verlet(bound_potentials, coords, box, dt, masses)
+        ctxt = setup_velocity_verlet(bound_impls, coords, box, dt, masses)
         ctxt.set_v_t(v0)
 
         # check "public" .step and .multiple_steps implementations
@@ -114,14 +114,14 @@ def test_reversibility():
 def test_matches_reference():
     np.random.seed(2022)
 
-    unbound_potentials, sys_params, coords, masses = get_relative_hif2a_in_vacuum()
+    bound_potentials, sys_params, coords, masses = get_relative_hif2a_in_vacuum()
     box = 100 * np.eye(3)
 
     dt = 1.5e-3
 
-    summed_potential = SummedPotential(unbound_potentials, sys_params)
-    summed_potential.bind(np.concatenate([param.reshape(-1) for param in sys_params]))
-    bound_summed = summed_potential.bound_impl(np.float32)
+    summed_potential = SummedPotential([bp.potential for bp in bound_potentials], sys_params)
+    sp_params = np.concatenate([param.reshape(-1) for param in sys_params])
+    bound_summed = summed_potential.bind(sp_params).to_gpu(np.float32).bound_impl
 
     def force(coords):
         du_dxs = bound_summed.execute(coords, box)[0]
@@ -154,15 +154,13 @@ def test_initialization_and_finalization():
     np.random.seed(2022)
 
     # define a Python force fxn that calls custom_ops
-    unbound_potentials, sys_params, coords, masses = get_relative_hif2a_in_vacuum()
-    bound_potentials = [
-        ubp.bind(params).bound_impl(np.float32) for (ubp, params) in zip(unbound_potentials, sys_params)
-    ]
+    bound_potentials, sys_params, coords, masses = get_relative_hif2a_in_vacuum()
+    bound_impls = [bp.to_gpu(np.float32).bound_impl for bp in bound_potentials]
     box = 100 * np.eye(3)
 
     dt = 1.5e-3
 
-    ctxt = setup_velocity_verlet(bound_potentials, coords, box, dt, masses)
+    ctxt = setup_velocity_verlet(bound_impls, coords, box, dt, masses)
     with pytest.raises(RuntimeError) as e:
         ctxt.finalize()
     assert "not initialized" in str(e.value)

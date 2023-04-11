@@ -1,4 +1,4 @@
-from typing import TypeAlias
+from typing import TypeAlias, cast
 
 import jax.numpy as jnp
 import numpy as np
@@ -210,7 +210,7 @@ def bernoulli_logpdf(log_p_i, z_i) -> float:
     b = jnp.array([jnp.ones(n), -jnp.ones(n)])
     log_1_minus_p_i = logsumexp(a=a, b=b, axis=0)
 
-    return jnp.sum(jnp.where(z_i, log_p_i, log_1_minus_p_i))
+    return cast(float, jnp.sum(jnp.where(z_i, log_p_i, log_1_minus_p_i)))
 
 
 def process_traj_in_chunks(f_snapshot, xs, boxes, chunk_size=DEFAULT_CHUNK_SIZE):
