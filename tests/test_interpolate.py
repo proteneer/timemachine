@@ -4,7 +4,8 @@ import numpy as np
 import pytest
 
 from timemachine.fe import atom_mapping, interpolate, single_topology
-from timemachine.fe.utils import get_romol_conf, read_sdf
+from timemachine.fe.single_topology import SingleTopology
+from timemachine.fe.utils import get_mol_name, get_romol_conf, read_sdf
 from timemachine.ff import Forcefield
 
 
@@ -261,3 +262,34 @@ def test_intermediate_states(num_pairs_to_setup=10):
             xs.append(x0 + 0.01 * np.random.randn(*x0.shape))
         for x in xs:
             np.testing.assert_almost_equal(U_ref(x), U_test(x))
+
+
+def test_duplicate_idxs_period_pairs():
+    """Check that parameter interpolation is able to handle torsion terms with duplicate ((i, j, k, l), period) pairs.
+    E.g. if we only align on idxs and period, this will result in a DuplicateAlignmentKeysError."""
+
+    mols = read_sdf("tests/data/syk_ligands_subset.sdf")
+    mol_by_name = {get_mol_name(mol): mol for mol in mols}
+
+    mol_a = mol_by_name["CHEMBL3664148"]
+    mol_b = mol_by_name["CHEMBL3668838"]
+
+    core = atom_mapping.get_cores(
+        mol_a,
+        mol_b,
+        ring_cutoff=0.12,
+        chain_cutoff=0.2,
+        max_visits=1e7,
+        connected_core=True,
+        max_cores=1e6,
+        enforce_core_core=True,
+        complete_rings=True,
+        enforce_chiral=True,
+        min_threshold=0,
+    )[0]
+
+    ff = Forcefield.load_default()
+    st = SingleTopology(mol_a, mol_b, core, ff)
+
+    # should not raise DuplicateAlignmentKeysError
+    st.setup_intermediate_state(0.5)
