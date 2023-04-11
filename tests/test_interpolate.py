@@ -275,7 +275,7 @@ def test_duplicate_idxs_period_pairs():
     AllChem.EmbedMolecule(mol_a)
 
     # CHEMBL3668838
-    # has a subgroup matching the a pattern with duplicate periods
+    # has a subgroup matching a pattern with duplicate periods
     mol_b = Chem.AddHs(Chem.MolFromSmiles("Cc1cc(Nc2nccc(-c3cn(C)cn3)n2)cc2cc(C(=O)NCc3nccs3)[nH]c12"))
     AllChem.EmbedMolecule(mol_b)
 
