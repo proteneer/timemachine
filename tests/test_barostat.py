@@ -37,7 +37,7 @@ def test_barostat_zero_interval():
 
     u_impls = []
     for bp in bound_potentials:
-        bp_impl = bp.bound_impl(precision=np.float32)
+        bp_impl = bp.to_gpu(precision=np.float32).bound_impl
         u_impls.append(bp_impl)
 
     with pytest.raises(RuntimeError):
@@ -97,7 +97,7 @@ def test_barostat_partial_group_idxs():
 
     u_impls = []
     for bp in bound_potentials:
-        bp_impl = bp.bound_impl(precision=np.float32)
+        bp_impl = bp.to_gpu(precision=np.float32).bound_impl
         u_impls.append(bp_impl)
 
     integrator = LangevinIntegrator(
@@ -161,7 +161,7 @@ def test_barostat_is_deterministic():
     u_impls = []
     for params, unbound_pot in zip(sys_params, unbound_potentials):
         bp = unbound_pot.bind(np.asarray(params))
-        bp_impl = bp.bound_impl(precision=np.float32)
+        bp_impl = bp.to_gpu(precision=np.float32).bound_impl
         u_impls.append(bp_impl)
 
     integrator = LangevinIntegrator(
@@ -216,7 +216,7 @@ def test_barostat_varying_pressure():
     u_impls = []
     for params, unbound_pot in zip(sys_params, unbound_potentials):
         bp = unbound_pot.bind(np.asarray(params))
-        bp_impl = bp.bound_impl(precision=np.float32)
+        bp_impl = bp.to_gpu(precision=np.float32).bound_impl
         u_impls.append(bp_impl)
 
     integrator = LangevinIntegrator(
@@ -308,7 +308,7 @@ def test_molecular_ideal_gas():
 
     u_impls = []
     for bp in bound_potentials:
-        bp_impl = bp.bound_impl(precision=np.float32)
+        bp_impl = bp.to_gpu(precision=np.float32).bound_impl
         u_impls.append(bp_impl)
 
     # expected volume

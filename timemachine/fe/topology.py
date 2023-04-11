@@ -4,11 +4,11 @@ import jax.numpy as jnp
 import numpy as np
 from numpy.typing import NDArray
 
+from timemachine import potentials
 from timemachine.fe import chiral_utils
 from timemachine.fe.system import VacuumSystem
 from timemachine.fe.utils import get_romol_conf
 from timemachine.ff.handlers import nonbonded
-from timemachine.lib import potentials
 from timemachine.potentials.nonbonded import combining_rule_epsilon, combining_rule_sigma
 
 _SCALE_12 = 1.0
@@ -50,23 +50,23 @@ class HostGuestTopology:
 
         # (ytz): extra assertions inside are to ensure we don't have duplicate terms
         for bp in host_potentials:
-            if isinstance(bp, potentials.HarmonicBond):
+            if isinstance(bp.potential, potentials.HarmonicBond):
                 assert self.host_harmonic_bond is None
                 self.host_harmonic_bond = bp
-            elif isinstance(bp, potentials.HarmonicAngle):
+            elif isinstance(bp.potential, potentials.HarmonicAngle):
                 assert self.host_harmonic_angle is None
                 self.host_harmonic_angle = bp
-            elif isinstance(bp, potentials.PeriodicTorsion):
+            elif isinstance(bp.potential, potentials.PeriodicTorsion):
                 assert self.host_periodic_torsion is None
                 self.host_periodic_torsion = bp
-            elif isinstance(bp, potentials.Nonbonded):
+            elif isinstance(bp.potential, potentials.Nonbonded):
                 assert self.host_nonbonded is None
                 self.host_nonbonded = bp
             else:
                 raise UnsupportedPotential("Unsupported host potential")
 
         assert self.host_nonbonded is not None
-        self.num_host_atoms = self.host_nonbonded.get_num_atoms()
+        self.num_host_atoms = self.host_nonbonded.potential.num_atoms
 
     def get_num_atoms(self):
         return self.num_host_atoms + self.guest_topology.get_num_atoms()
@@ -94,14 +94,14 @@ class HostGuestTopology:
 
         # (ytz): corner case exists if the guest_potential is None
         if host_potential is not None:
-            assert type(host_potential) == type(guest_potential)
+            assert type(host_potential.potential) == type(guest_potential)
 
-        guest_idxs = guest_potential.get_idxs() + self.num_host_atoms
+        guest_idxs = guest_potential.idxs + self.num_host_atoms
 
         if host_potential is not None:
             # the host is always on.
             host_params = host_potential.params
-            host_idxs = host_potential.get_idxs()
+            host_idxs = host_potential.potential.idxs
         else:
             # (ytz): this extra jank is to work around jnp.concatenate not supporting empty lists.
             host_params = np.array([], dtype=guest_params.dtype).reshape((-1, guest_params.shape[1]))
@@ -135,23 +135,19 @@ class HostGuestTopology:
 
         assert guest_params.shape == (num_guest_atoms, 4)
         assert self.host_nonbonded is not None
-        assert guest_pot.get_beta() == self.host_nonbonded.get_beta()
-        assert guest_pot.get_cutoff() == self.host_nonbonded.get_cutoff()
+        assert guest_pot.beta == self.host_nonbonded.potential.beta
+        assert guest_pot.cutoff == self.host_nonbonded.potential.cutoff
 
         # Exclude all ligand-lignad interactions which will be computed using a pairlist instead
         guest_exclusions, guest_scale_factors = exclude_all_ligand_ligand_ixns(self.num_host_atoms, num_guest_atoms)
 
-        hg_exclusion_idxs = np.concatenate([self.host_nonbonded.get_exclusion_idxs(), guest_exclusions])
-        hg_scale_factors = np.concatenate([self.host_nonbonded.get_scale_factors(), guest_scale_factors])
+        hg_exclusion_idxs = np.concatenate([self.host_nonbonded.potential.exclusion_idxs, guest_exclusions])
+        hg_scale_factors = np.concatenate([self.host_nonbonded.potential.scale_factors, guest_scale_factors])
 
         hg_nb_params = jnp.concatenate([self.host_nonbonded.params, guest_params])
 
         host_guest_pot = potentials.Nonbonded(
-            self.num_host_atoms + num_guest_atoms,
-            hg_exclusion_idxs,
-            hg_scale_factors,
-            guest_pot.get_beta(),
-            guest_pot.get_cutoff(),
+            self.num_host_atoms + num_guest_atoms, hg_exclusion_idxs, hg_scale_factors, guest_pot.beta, guest_pot.cutoff
         )
 
         # ligand intramolecular interactions
@@ -159,7 +155,7 @@ class HostGuestTopology:
             ff_q_params, ff_q_params_intra, ff_lj_params, intramol_params=True
         )
         # shift idxs because of the host
-        guest_intra_pot.set_idxs(guest_intra_pot.get_idxs() + self.num_host_atoms)
+        guest_intra_pot.idxs = guest_intra_pot.idxs + self.num_host_atoms
 
         # If the molecule has < 4 atoms there may not be any intramolecular terms
         # so they should be ignored here
@@ -168,10 +164,7 @@ class HostGuestTopology:
         # total potential = host_guest_pot + guest_intra_pot
         hg_total_pot = [host_guest_pot, guest_intra_pot] if has_intra_terms else [host_guest_pot]
         hg_total_params = [hg_nb_params, guest_intra_params] if has_intra_terms else [hg_nb_params]
-        sum_pot = potentials.SummedPotential(
-            hg_total_pot,
-            hg_total_params,
-        )
+        sum_pot = potentials.SummedPotential(hg_total_pot, hg_total_params)
 
         sum_params = jnp.concatenate(hg_total_params)
         return sum_params, sum_pot
@@ -319,7 +312,7 @@ class BaseTopology:
         proper_params, proper_potential = self.parameterize_proper_torsion(proper_params)
         improper_params, improper_potential = self.parameterize_improper_torsion(improper_params)
         combined_params = jnp.concatenate([proper_params, improper_params])
-        combined_idxs = np.concatenate([proper_potential.get_idxs(), improper_potential.get_idxs()])
+        combined_idxs = np.concatenate([proper_potential.idxs, improper_potential.idxs])
         combined_potential = potentials.PeriodicTorsion(combined_idxs)
         return combined_params, combined_potential
 
@@ -394,7 +387,7 @@ class BaseTopology:
         angle_potential = mol_ha.bind(mol_angle_params)
 
         torsion_params = np.concatenate([mol_proper_params, mol_improper_params])
-        torsion_idxs = np.concatenate([mol_pt.get_idxs(), mol_it.get_idxs()])
+        torsion_idxs = np.concatenate([mol_pt.idxs, mol_it.idxs])
         torsion_potential = potentials.PeriodicTorsion(torsion_idxs).bind(torsion_params)
         nonbonded_potential = mol_nbpl.bind(mol_nbpl_params)
 
@@ -522,17 +515,15 @@ class DualTopology(BaseTopology):
 
         params = np.concatenate([params_a, params_b])
 
-        inclusions_a = pairlist_a.get_idxs()
-        inclusions_b = pairlist_b.get_idxs()
+        inclusions_a = pairlist_a.idxs
+        inclusions_b = pairlist_b.idxs
         inclusions_b += NA
         inclusion_idxs = np.concatenate([inclusions_a, inclusions_b])
 
-        assert pairlist_a.get_beta() == pairlist_b.get_beta()
-        assert pairlist_a.get_cutoff() == pairlist_b.get_cutoff()
+        assert pairlist_a.beta == pairlist_b.beta
+        assert pairlist_a.cutoff == pairlist_b.cutoff
 
-        return params, potentials.NonbondedPairListPrecomputed(
-            inclusion_idxs, pairlist_a.get_beta(), pairlist_a.get_cutoff()
-        )
+        return params, potentials.NonbondedPairListPrecomputed(inclusion_idxs, pairlist_a.beta, pairlist_a.cutoff)
 
     def _parameterize_bonded_term(self, ff_params, bonded_handle, potential):
         offset = self.mol_a.GetNumAtoms()
@@ -556,7 +547,7 @@ class DualTopology(BaseTopology):
         improper_params, improper_potential = self.parameterize_improper_torsion(improper_params)
 
         combined_params = jnp.concatenate([proper_params, improper_params])
-        combined_idxs = np.concatenate([proper_potential.get_idxs(), improper_potential.get_idxs()])
+        combined_idxs = np.concatenate([proper_potential.idxs, improper_potential.idxs])
 
         combined_potential = potentials.PeriodicTorsion(combined_idxs)
         return combined_params, combined_potential
@@ -577,7 +568,7 @@ class DualTopologyMinimization(DualTopology):
         params, nb_potential = super().parameterize_nonbonded(
             ff_q_params, ff_q_params_intra, ff_lj_params, lamb, intramol_params=intramol_params
         )
-        cutoff = nb_potential.get_cutoff()
+        cutoff = nb_potential.cutoff
         params_with_offsets = jnp.asarray(params).at[:, 3].set(lamb * cutoff)
 
         return params_with_offsets, nb_potential

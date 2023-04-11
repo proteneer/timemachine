@@ -1,15 +1,14 @@
 import contextlib
-import functools
 import itertools
 import os
 import unittest
+from collections.abc import Iterator
 from dataclasses import dataclass
 from importlib import resources
 from tempfile import NamedTemporaryFile, TemporaryDirectory
-from typing import Iterable, Optional
+from typing import Optional
 
 import jax
-import jax.numpy as jnp
 import numpy as np
 from hilbertcurve.hilbertcurve import HilbertCurve
 from numpy.typing import NDArray
@@ -18,8 +17,9 @@ from rdkit import Chem
 from timemachine.constants import ONE_4PI_EPS0
 from timemachine.fe.utils import read_sdf
 from timemachine.ff import Forcefield
-from timemachine.lib import potentials
-from timemachine.potentials import bonded, generic
+from timemachine.potentials import Nonbonded
+from timemachine.potentials.potential import GpuImplWrapper
+from timemachine.potentials.summed import PotentialFxn
 
 
 @contextlib.contextmanager
@@ -38,7 +38,7 @@ def get_110_ccc_ff():
     return forcefield
 
 
-def get_hif2a_ligands_as_sdf_file(num_mols: int) -> NamedTemporaryFile:
+def get_hif2a_ligands_as_sdf_file() -> NamedTemporaryFile:  # type: ignore
     with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
         mols = read_sdf(path_to_ligand)
     temp_sdf = NamedTemporaryFile(suffix=".sdf")
@@ -111,7 +111,7 @@ def prepare_water_system(x, p_scale, cutoff):
 
     beta = 2.0
 
-    potential = generic.Nonbonded(N, exclusion_idxs, scales, beta, cutoff)
+    potential = Nonbonded(N, exclusion_idxs, scales, beta, cutoff)
 
     return params, potential
 
@@ -138,54 +138,9 @@ def prepare_nb_system(
 
     beta = 2.0
 
-    potential = generic.Nonbonded(N, exclusion_idxs, scales, beta, cutoff)
+    potential = Nonbonded(N, exclusion_idxs, scales, beta, cutoff)
 
     return params, potential
-
-
-def prepare_bonded_system(x, B, A, T, precision):
-
-    assert x.ndim == 2
-    N = x.shape[0]
-    # D = x.shape[1]
-
-    atom_idxs = np.arange(N)
-
-    bond_params = np.random.rand(B, 2).astype(np.float64)
-    bond_idxs = []
-    for _ in range(B):
-        bond_idxs.append(np.random.choice(atom_idxs, size=2, replace=False))
-    bond_idxs = np.array(bond_idxs, dtype=np.int32)
-    # params = np.concatenate([params, bond_params])
-
-    # angle_params = np.random.rand(P_angles).astype(np.float64)
-    # angle_param_idxs = np.random.randint(low=0, high=P_angles, size=(A,2), dtype=np.int32) + len(params)
-    # angle_idxs = []
-    # for _ in range(A):
-    #     angle_idxs.append(np.random.choice(atom_idxs, size=3, replace=False))
-    # angle_idxs = np.array(angle_idxs, dtype=np.int32)
-    # params = np.concatenate([params, angle_params])
-
-    # torsion_params = np.random.rand(P_torsions).astype(np.float64)
-    # torsion_param_idxs = np.random.randint(low=0, high=P_torsions, size=(T,3), dtype=np.int32) + len(params)
-    # torsion_idxs = []
-    # for _ in range(T):
-    #     torsion_idxs.append(np.random.choice(atom_idxs, size=4, replace=False))
-    # torsion_idxs = np.array(torsion_idxs, dtype=np.int32)
-    # params = np.concatenate([params, torsion_params])
-
-    print("precision", precision)
-    custom_bonded = potentials.HarmonicBond(bond_idxs, bond_params, precision=precision)
-    harmonic_bond_fn = functools.partial(bonded.harmonic_bond, box=None, bond_idxs=bond_idxs)
-
-    # custom_angles = potentials.HarmonicAngle(angle_idxs, angle_param_idxs, precision=precision)
-    # harmonic_angle_fn = functools.partial(bonded.harmonic_angle, box=None, angle_idxs=angle_idxs, param_idxs=angle_param_idxs)
-
-    # custom_torsions = potentials.PeriodicTorsion(torsion_idxs, torsion_param_idxs, precision=precision)
-    # periodic_torsion_fn = functools.partial(bonded.periodic_torsion, box=None, torsion_idxs=torsion_idxs, param_idxs=torsion_param_idxs)
-
-    return (bond_params, harmonic_bond_fn), custom_bonded
-    # return params, [harmonic_bond_fn, harmonic_angle_fn, periodic_torsion_fn], [custom_bonded, custom_angles, custom_torsions]
 
 
 def hilbert_sort(conf, D):
@@ -253,27 +208,14 @@ class GradientTest(unittest.TestCase):
     def compare_forces(
         self,
         x: NDArray,
-        params_arrays: Iterable[NDArray],
+        params: NDArray,
         box: NDArray,
-        ref_potential,
-        test_potential,
+        ref_potential: PotentialFxn,
+        test_potential: GpuImplWrapper,
         rtol: float,
-        precision,
         atol: float = 1e-8,
     ):
-        """
-        Compares the forces between a reference and a test potential.
-
-
-        Note
-        ----
-        Preferable to pass an iterable of parameters to this function than run this function repeatedly, as this
-        function constructs an unbound impl for the test_potential which can be expensive relative to the time it takes
-        to compute the forces/energies/etc.
-
-        """
-        test_impl = test_potential.unbound_impl(precision)
-
+        """Compares the forces between a reference and a test potential."""
         x = (x.astype(np.float32)).astype(np.float64)
 
         assert x.ndim == 2
@@ -282,53 +224,50 @@ class GradientTest(unittest.TestCase):
 
         assert x.dtype == np.float64
 
-        for params in params_arrays:
-            params = (params.astype(np.float32)).astype(np.float64)
-            assert params.dtype == np.float64
-            ref_u = ref_potential(x, params, box)
-            grad_fn = jax.grad(ref_potential, argnums=(0, 1))
-            ref_du_dx, ref_du_dp = grad_fn(x, params, box)
-            for combo in itertools.product([False, True], repeat=3):
+        params = (params.astype(np.float32)).astype(np.float64)
+        assert params.dtype == np.float64
+        ref_u = ref_potential(x, params, box)
+        grad_fn = jax.grad(ref_potential, argnums=(0, 1))
+        ref_du_dx, ref_du_dp = grad_fn(x, params, box)
 
-                compute_du_dx, compute_du_dp, compute_u = combo
+        for combo in itertools.product([False, True], repeat=3):
 
-                # do each computation twice to check determinism
-                test_du_dx, test_du_dp, test_u = test_impl.execute_selective(
-                    x, params, box, compute_du_dx, compute_du_dp, compute_u
-                )
-                if compute_u:
-                    np.testing.assert_allclose(ref_u, test_u, rtol=rtol, atol=atol)
-                if compute_du_dx:
-                    self.assert_equal_vectors(np.array(ref_du_dx), np.array(test_du_dx), rtol)
-                if compute_du_dp:
-                    np.testing.assert_allclose(ref_du_dp, test_du_dp, rtol=rtol, atol=atol)
+            compute_du_dx, compute_du_dp, compute_u = combo
 
-                test_du_dx_2, test_du_dp_2, test_u_2 = test_impl.execute_selective(
-                    x, params, box, compute_du_dx, compute_du_dp, compute_u
-                )
+            # do each computation twice to check determinism
+            test_du_dx, test_du_dp, test_u = test_potential.unbound_impl.execute_selective(
+                x, params, box, compute_du_dx, compute_du_dp, compute_u
+            )
+            if compute_u:
+                np.testing.assert_allclose(ref_u, test_u, rtol=rtol, atol=atol)
+            if compute_du_dx:
+                self.assert_equal_vectors(np.array(ref_du_dx), np.array(test_du_dx), rtol)
+            if compute_du_dp:
+                np.testing.assert_allclose(ref_du_dp, test_du_dp, rtol=rtol, atol=atol)
 
-                np.testing.assert_array_equal(test_du_dx, test_du_dx_2)
-                np.testing.assert_array_equal(test_u, test_u_2)
+            test_du_dx_2, test_du_dp_2, test_u_2 = test_potential.unbound_impl.execute_selective(
+                x, params, box, compute_du_dx, compute_du_dp, compute_u
+            )
 
-                if isinstance(test_potential, potentials.Nonbonded):
-                    np.testing.assert_array_equal(test_du_dp, test_du_dp_2)
+            np.testing.assert_array_equal(test_du_dx, test_du_dx_2)
+            np.testing.assert_array_equal(test_u, test_u_2)
+            np.testing.assert_array_equal(test_du_dp, test_du_dp_2)
 
-    def compare_forces_gpu_vs_reference(
-        self,
-        x: NDArray,
-        params_arrays: Iterable[NDArray],
-        box: NDArray,
-        potential: generic.Potential,
-        rtol: float,
-        precision,
-        atol: float = 1e-8,
+    def assert_differentiable_interface_consistency(
+        self, x: NDArray, params: NDArray, box: NDArray, gpu_impl: GpuImplWrapper
     ):
-        return self.compare_forces(
-            x, params_arrays, box, potential.to_reference(), potential.to_gpu(), rtol, precision, atol
-        )
+        """Check that energy and derivatives computed using the JAX differentiable interface are consistent with values
+        returned by execute_selective"""
+        ref_du_dx, ref_du_dp, ref_u = gpu_impl.unbound_impl.execute_selective(x, params, box, True, True, True)
+        test_u, (test_du_dx, test_du_dp) = jax.value_and_grad(gpu_impl, (0, 1))(x, params, box)
+        assert ref_u == test_u
+        np.testing.assert_array_equal(test_du_dx, ref_du_dx)
+        np.testing.assert_array_equal(test_du_dp, ref_du_dp)
 
 
-def gen_nonbonded_params_with_4d_offsets(rng: np.random.Generator, params, w_max: float, w_min: Optional[float] = None):
+def gen_nonbonded_params_with_4d_offsets(
+    rng: np.random.Generator, params, w_max: float, w_min: Optional[float] = None
+) -> Iterator[NDArray]:
 
     if w_min is None:
         w_min = -w_max
@@ -336,7 +275,9 @@ def gen_nonbonded_params_with_4d_offsets(rng: np.random.Generator, params, w_max
     num_atoms, _ = params.shape
 
     def params_with_w_coords(w_coords):
-        return jnp.asarray(params).at[:, 3].set(w_coords)
+        params_ = np.array(params)
+        params_[:, 3] = w_coords
+        return params
 
     # all zero
     yield params_with_w_coords(0.0)
@@ -345,8 +286,8 @@ def gen_nonbonded_params_with_4d_offsets(rng: np.random.Generator, params, w_max
     yield params_with_w_coords(w_max)
 
     # half zero, half w_max
-    w_coords = jnp.zeros(num_atoms)
-    w_coords = w_coords.at[-num_atoms // 2 :].set(w_max)
+    w_coords = np.zeros(num_atoms)
+    w_coords[-num_atoms // 2 :] = w_max
     yield params_with_w_coords(w_coords)
 
     # random uniform in [w_min, w_max]
@@ -376,9 +317,12 @@ def load_split_forcefields() -> SplitForcefield:
     ff_ref = Forcefield.load_from_file("smirnoff_2_0_0_ccc.py")
 
     ff_scaled = Forcefield.load_from_file("smirnoff_2_0_0_ccc.py")
+    assert ff_scaled.q_handle
     ff_scaled.q_handle.params *= 10
+    assert ff_scaled.q_handle_intra
     ff_scaled.q_handle_intra.params *= 10
 
     ff_inter_scaled = Forcefield.load_from_file("smirnoff_2_0_0_ccc.py")
+    assert ff_inter_scaled.q_handle
     ff_inter_scaled.q_handle.params *= 10
     return SplitForcefield(ff_ref, ff_scaled, ff_inter_scaled)

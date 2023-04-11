@@ -2,14 +2,14 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from timemachine.potentials import generic
+from timemachine.potentials import Nonbonded
 
 
-def test_generic_nonbonded_jittable(rng: np.random.Generator):
+def test_nonbonded_reference_jittable(rng: np.random.Generator):
 
     N = 30
 
-    potential = generic.Nonbonded(
+    U_ref = Nonbonded(
         N,
         exclusion_idxs=jnp.zeros((0,)),
         scale_factors=jnp.zeros((0, 1)),
@@ -17,8 +17,7 @@ def test_generic_nonbonded_jittable(rng: np.random.Generator):
         cutoff=0.1,
     )
 
-    U_ref = potential.to_reference()
-    U_ref_jit = jax.jit(U_ref)
+    U_ref_jit = jax.jit(U_ref.__call__)
 
     _ = U_ref_jit(
         conf=rng.uniform(0, 1, size=(N, 3)),

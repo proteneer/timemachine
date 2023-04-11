@@ -496,7 +496,7 @@ $$$$""",
 
     def get_chiral_atom_volumes(x):
         volumes = []
-        for idxs in chiral_atom.get_idxs():
+        for idxs in chiral_atom.potential.idxs:
             vol = chiral_restraints.pyramidal_volume(*x[idxs])
             volumes.append(vol)
         return np.array(volumes)
@@ -508,14 +508,14 @@ $$$$""",
 
     def get_chiral_bond_volumes(x):
         volumes = []
-        for idxs in chiral_bond.get_idxs():
+        for idxs in chiral_bond.potential.idxs:
             vol = chiral_restraints.torsion_volume(*x[idxs])
             volumes.append(vol)
         return np.array(volumes)
 
     ref_chiral_bond_vols = get_chiral_bond_volumes(x0)
 
-    for bond_vol, bond_sign in zip(ref_chiral_bond_vols, chiral_bond.get_signs()):
+    for bond_vol, bond_sign in zip(ref_chiral_bond_vols, chiral_bond.potential.signs):
         assert bond_vol * bond_sign < 0
 
     def assert_same_signs(a, b):

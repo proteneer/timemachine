@@ -1,12 +1,12 @@
 import itertools
 
+import jax
 import numpy as np
 import pytest
 from common import GradientTest
 
 from timemachine.lib import custom_ops
-from timemachine.lib.potentials import FanoutSummedPotential, HarmonicBond, SummedPotential
-from timemachine.potentials import generic
+from timemachine.potentials import FanoutSummedPotential, HarmonicBond, SummedPotential
 
 pytestmark = [pytest.mark.memcheck]
 
@@ -25,14 +25,14 @@ def execute_bound_impl(bp):
 
 
 def test_bound_potential_keeps_referenced_potential_alive(harmonic_bond):
-    bp = harmonic_bond.bound_impl(np.float32)
+    bp = harmonic_bond.to_gpu(np.float32).bound_impl
 
     # segfaults if referenced potential has been deallocated prematurely
     execute_bound_impl(bp)
 
 
 def test_bound_potential_get_potential(harmonic_bond):
-    unbound_impl = harmonic_bond.unbound_impl(np.float32)
+    unbound_impl = harmonic_bond.potential.to_gpu(np.float32).unbound_impl
     bound_impl = custom_ops.BoundPotential(unbound_impl, harmonic_bond.params)
     assert unbound_impl is bound_impl.get_potential()
 
@@ -58,14 +58,14 @@ def verify_potential_validation(potential):
 
 
 def test_bound_potential_execute_validation(harmonic_bond):
-    bound_impl = harmonic_bond.bound_impl(np.float32)
+    bound_impl = harmonic_bond.to_gpu(np.float32).bound_impl
     verify_potential_validation(bound_impl.execute)
 
     execute_bound_impl(bound_impl)
 
 
 def test_unbound_potential_execute_validation(harmonic_bond):
-    unbound_impl = harmonic_bond.unbound_impl(np.float32)
+    unbound_impl = harmonic_bond.potential.to_gpu(np.float32).unbound_impl
 
     for execute_method, extra_params in zip(
         [unbound_impl.execute, unbound_impl.execute_selective], [(), (True, True, True)]
@@ -87,28 +87,28 @@ def test_summed_potential_raises_on_inconsistent_lengths(harmonic_bond):
 
 
 def test_summed_potential_keeps_referenced_potentials_alive(harmonic_bond):
-    sp = SummedPotential([harmonic_bond], [harmonic_bond.params]).bind(harmonic_bond.params)
+    sp = SummedPotential([harmonic_bond.potential], [harmonic_bond.params]).bind(harmonic_bond.params)
 
     # segfaults if referenced potentials have been deallocated prematurely
-    execute_bound_impl(sp.bound_impl(np.float32))
+    execute_bound_impl(sp.to_gpu(np.float32).bound_impl)
 
 
 def test_summed_potential_get_potentials(harmonic_bond):
-    impls = [harmonic_bond.unbound_impl(np.float32) for _ in range(2)]
+    impls = [harmonic_bond.potential.to_gpu(np.float32).unbound_impl for _ in range(2)]
     params_sizes = [harmonic_bond.params.size] * 2
     summed_impl = custom_ops.SummedPotential(impls, params_sizes)
     assert set(id(p) for p in summed_impl.get_potentials()) == set(id(p) for p in impls)
 
 
 def test_summed_potential_invalid_parameters_size(harmonic_bond):
-    sp = SummedPotential([harmonic_bond], [harmonic_bond.params])
+    sp = SummedPotential([harmonic_bond.potential], [harmonic_bond.params])
 
     with pytest.raises(RuntimeError) as e:
-        execute_bound_impl(sp.bind(np.empty(0)).bound_impl(np.float32))
+        execute_bound_impl(sp.bind(np.empty(0)).to_gpu(np.float32).bound_impl)
     assert f"SummedPotential::execute_device(): expected {harmonic_bond.params.size} parameters, got 0" in str(e)
 
     with pytest.raises(RuntimeError) as e:
-        execute_bound_impl(sp.bind(np.ones(harmonic_bond.params.size + 1)).bound_impl(np.float32))
+        execute_bound_impl(sp.bind(np.ones(harmonic_bond.params.size + 1)).to_gpu(np.float32).bound_impl)
     assert (
         f"SummedPotential::execute_device(): expected {harmonic_bond.params.size} parameters, got {harmonic_bond.params.size + 1}"
         in str(e)
@@ -152,7 +152,7 @@ def test_execute_selective_batch(harmonic_bond):
 
     params_batch = np.stack([params, random_params] * num_param_batches)
 
-    unbound_impl = harmonic_bond.unbound_impl(np.float32)
+    unbound_impl = harmonic_bond.potential.to_gpu(np.float32).unbound_impl
 
     ref_du_dx, ref_du_dp, ref_u = reference_execute_over_batch(unbound_impl, coords_batch, boxes_batch, params_batch)
 
@@ -238,8 +238,8 @@ def harmonic_bond_test_system():
             [np.random.choice(num_atoms, size=(2,), replace=False) for _ in range(num_bonds)], dtype=np.int32
         )
 
-    harmonic_bond_1 = generic.HarmonicBond(random_bond_idxs())
-    harmonic_bond_2 = generic.HarmonicBond(random_bond_idxs())
+    harmonic_bond_1 = HarmonicBond(random_bond_idxs())
+    harmonic_bond_2 = HarmonicBond(random_bond_idxs())
 
     params_1 = np.random.uniform(0, 1, size=(num_bonds, 2))
     params_2 = np.random.uniform(0, 1, size=(num_bonds, 2))
@@ -255,12 +255,12 @@ def test_summed_potential(num_potentials, harmonic_bond_test_system):
 
     box = 3.0 * np.eye(3)
     params_list = [params] * num_potentials
-    potential = generic.SummedPotential([harmonic_bond] * num_potentials, params_list)
+    potential = SummedPotential([harmonic_bond] * num_potentials, params_list)
 
     flat_params = np.concatenate([p.reshape(-1) for p in params_list])
 
     for rtol, precision in [(1e-6, np.float32), (1e-10, np.float64)]:
-        GradientTest().compare_forces_gpu_vs_reference(coords, [flat_params], box, potential, rtol, precision)
+        GradientTest().compare_forces(coords, flat_params, box, potential, potential.to_gpu(precision), rtol)
 
 
 def test_fanout_summed_potential_consistency(harmonic_bond_test_system):
@@ -269,19 +269,28 @@ def test_fanout_summed_potential_consistency(harmonic_bond_test_system):
 
     harmonic_bond_1, harmonic_bond_2, params, _, coords = harmonic_bond_test_system
 
-    summed_potential = SummedPotential(
-        [harmonic_bond_1.to_gpu(), harmonic_bond_2.to_gpu()],
-        [params, params],
-    )
+    summed_potential = SummedPotential([harmonic_bond_1, harmonic_bond_2], [params, params])
 
-    fanout_summed_potential = FanoutSummedPotential([harmonic_bond_1.to_gpu(), harmonic_bond_2.to_gpu()])
+    fanout_summed_potential = FanoutSummedPotential([harmonic_bond_1, harmonic_bond_2])
 
     box = 3.0 * np.eye(3)
 
-    du_dx_ref, du_dps_ref, u_ref = summed_potential.unbound_impl(np.float32).execute(coords, [params, params], box)
+    du_dx_ref, du_dps_ref, u_ref = summed_potential.to_gpu(np.float32).unbound_impl.execute(
+        coords, [params, params], box
+    )
 
-    du_dx_test, du_dp_test, u_test = fanout_summed_potential.unbound_impl(np.float32).execute(coords, params, box)
+    du_dx_test, du_dp_test, u_test = fanout_summed_potential.to_gpu(np.float32).unbound_impl.execute(
+        coords, params, box
+    )
 
     np.testing.assert_array_equal(du_dx_ref, du_dx_test)
     np.testing.assert_allclose(np.sum(du_dps_ref, axis=0), du_dp_test, rtol=1e-8, atol=1e-8)
     assert u_ref == u_test
+
+
+def test_potential_jax_differentiable(harmonic_bond):
+    potential = harmonic_bond.potential
+    params = harmonic_bond.params
+    coords = np.zeros(shape=(3, 3), dtype=np.float32)
+    box = np.diag(np.ones(3))
+    du_dx, du_dp = jax.grad(potential, argnums=(0, 1))(coords, params, box)

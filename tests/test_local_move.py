@@ -227,7 +227,7 @@ def test_local_md_particle_density(k):
     v0 = np.zeros_like(coords)
     bps = []
     for p, bp in zip(sys_params, unbound_potentials):
-        bps.append(bp.bind(p).bound_impl(np.float32))
+        bps.append(bp.bind(p).to_gpu(np.float32).bound_impl)
 
     def num_particles_near_ligand(pair):
         new_coords, new_box = pair

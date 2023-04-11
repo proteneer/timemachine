@@ -40,7 +40,7 @@ References
         Gradient-based optimization of high-dimensional protocols, using a reweighting-based estimate of a
         a T.I.-tailored objective, stddev(du/dlambda).
 """
-from typing import Any, Callable
+from typing import Any, Callable, cast
 
 import numpy as np
 from jax import jit
@@ -181,7 +181,7 @@ def reweighted_stddev(f_n: Array, target_logpdf_n: Array, source_logpdf_n: Array
     sanitized = jnp.nan_to_num(weighted_squared_deviations, nan=0)
     stddev = jnp.sqrt(jnp.sum(sanitized))
 
-    return stddev
+    return cast(Float, stddev)
 
 
 def construct_max_work_stddev_distance(work_stddev_estimator) -> DistanceFxn:

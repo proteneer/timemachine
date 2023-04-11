@@ -11,7 +11,7 @@ from timemachine.fe import topology
 from timemachine.fe.utils import get_mol_masses, get_romol_conf
 from timemachine.ff import Forcefield
 from timemachine.integrator import LangevinIntegrator
-from timemachine.potentials import generic
+from timemachine.potentials import HarmonicBond
 
 
 def align_mols_by_core(
@@ -60,14 +60,10 @@ def align_mols_by_core(
     vacuum_system = top.setup_end_state()
     U = vacuum_system.get_U_fn()
 
-    fb = generic.HarmonicBond(bond_indices)
+    fb = HarmonicBond(bond_indices)
     restraint_params = np.zeros((len(core), 2))
     restraint_params[:, 0] = k
-    bond_U = functools.partial(
-        fb.to_reference(),
-        params=jnp.array(restraint_params),
-        box=None,
-    )
+    bond_U = functools.partial(fb, params=jnp.array(restraint_params), box=None)
 
     def combined_U(x):
         return U(x) + bond_U(x)
