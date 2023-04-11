@@ -84,7 +84,7 @@ def test_align_torsion():
     We expect that decoupled terms have their force constants turned set to zero,
     while maintaining the same equilibrium angles for the *same* period.
     """
-    a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p = np.random.rand(16)
+    a, b, c, d, e, f, g, h, i, j, j, k, l, m, n = np.random.rand(15)
 
     # tbd: what do we do if there are repeats?
     # merge repeats into a single term first?
@@ -92,17 +92,17 @@ def test_align_torsion():
     src_params = [(a, b, 2), (c, d, 1), (e, f, 3), (g, h, 1)]
 
     dst_idxs = [(2, 3, 9, 4), (2, 3, 9, 4), (0, 1, 4, 2), (3, 0, 2, 6)]
-    dst_params = [(i, j, 2), (k, l, 1), (m, n, 3), (o, p, 4)]
+    dst_params = [(i, b, 2), (j, k, 1), (l, f, 3), (m, n, 4)]
 
     test_set = interpolate.align_torsion_idxs_and_params(src_idxs, src_params, dst_idxs, dst_params)
 
     ref_set = {
-        ((2, 3, 9, 4), (a, b, 2), (i, j, 2)),
+        ((2, 3, 9, 4), (a, b, 2), (i, b, 2)),
         ((2, 1, 4, 3), (c, d, 1), (0, d, 1)),
-        ((0, 1, 4, 2), (e, f, 3), (m, n, 3)),
+        ((0, 1, 4, 2), (e, f, 3), (l, f, 3)),
         ((0, 1, 4, 2), (g, h, 1), (0, h, 1)),
-        ((2, 3, 9, 4), (0, l, 1), (k, l, 1)),
-        ((3, 0, 2, 6), (0, p, 4), (o, p, 4)),
+        ((2, 3, 9, 4), (0, k, 1), (j, k, 1)),
+        ((3, 0, 2, 6), (0, n, 4), (m, n, 4)),
     }
 
     assert test_set == ref_set
