@@ -2,10 +2,12 @@ from importlib import resources
 
 import numpy as np
 import pytest
+from rdkit import Chem
+from rdkit.Chem import AllChem
 
 from timemachine.fe import atom_mapping, interpolate, single_topology
 from timemachine.fe.single_topology import SingleTopology
-from timemachine.fe.utils import get_mol_name, get_romol_conf, read_sdf
+from timemachine.fe.utils import get_romol_conf, read_sdf
 from timemachine.ff import Forcefield
 
 
@@ -268,11 +270,11 @@ def test_duplicate_idxs_period_pairs():
     """Check that parameter interpolation is able to handle torsion terms with duplicate ((i, j, k, l), period) pairs.
     E.g. if we only align on idxs and period, this will result in a DuplicateAlignmentKeysError."""
 
-    mols = read_sdf("tests/data/syk_ligands_subset.sdf")
-    mol_by_name = {get_mol_name(mol): mol for mol in mols}
+    mol_a = Chem.AddHs(Chem.MolFromSmiles("CNC(=O)c1cc2cc(Nc3nccc(-c4cn(C)cn4)n3)cc(Cl)c2[nH]1"))
+    AllChem.EmbedMolecule(mol_a)
 
-    mol_a = mol_by_name["CHEMBL3664148"]
-    mol_b = mol_by_name["CHEMBL3668838"]
+    mol_b = Chem.AddHs(Chem.MolFromSmiles("Cc1cc(Nc2nccc(-c3cn(C)cn3)n2)cc2cc(C(=O)NCc3nccs3)[nH]c12"))
+    AllChem.EmbedMolecule(mol_b)
 
     core = atom_mapping.get_cores(
         mol_a,
