@@ -86,7 +86,7 @@ def test_align_torsion():
     We expect that decoupled terms have their force constants turned set to zero,
     while maintaining the same equilibrium angles for the *same* period.
     """
-    a, b, c, d, e, f, g, h, i, j, j, k, l, m, n = np.random.rand(15)
+    a, b, c, d, e, f, g, h, i, j, k, l, m, n = np.random.rand(14)
 
     # tbd: what do we do if there are repeats?
     # merge repeats into a single term first?
