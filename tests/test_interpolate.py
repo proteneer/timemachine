@@ -270,9 +270,12 @@ def test_duplicate_idxs_period_pairs():
     """Check that parameter interpolation is able to handle torsion terms with duplicate ((i, j, k, l), period) pairs.
     E.g. if we only align on idxs and period, this will result in a DuplicateAlignmentKeysError."""
 
+    # CHEMBL3664148
     mol_a = Chem.AddHs(Chem.MolFromSmiles("CNC(=O)c1cc2cc(Nc3nccc(-c4cn(C)cn4)n3)cc(Cl)c2[nH]1"))
     AllChem.EmbedMolecule(mol_a)
 
+    # CHEMBL3668838
+    # has a subgroup matching the a pattern with duplicate periods
     mol_b = Chem.AddHs(Chem.MolFromSmiles("Cc1cc(Nc2nccc(-c3cn(C)cn3)n2)cc2cc(C(=O)NCc3nccs3)[nH]c12"))
     AllChem.EmbedMolecule(mol_b)
 
