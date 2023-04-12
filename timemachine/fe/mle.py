@@ -227,10 +227,8 @@ def infer_node_vals_and_errs_networkx(
     node_stddev_prop: str = "inferred_dg_stddev",
     n_bootstrap: int = 100,
     seed: int = 0,
-):
+) -> nx.DiGraph:
     """Version of :py:func:`timemachine.fe.mle.infer_node_vals_and_errs` that accepts a networkx graph.
-
-    Updates the input graph, labelling nodes with inferred values of `node_val_prop` and `node_stddev_prop`.
 
     Parameters
     ----------
@@ -256,7 +254,8 @@ def infer_node_vals_and_errs_networkx(
     Returns
     -------
     networkx.Graph
-        Graph where all nodes have been labeled with the inferred value of `node_val_prop` and `node_stddev_prop`.
+        Subgraph limited to edges with defined edge_diff_prop and edge_stddev_prop, where nodes have been labeled with
+        the inferred values of `node_val_prop` and `node_stddev_prop`.
     """
 
     def infer_node_vals_and_errs_given_relabeled_graph(g: nx.DiGraph, node_to_idx: Dict[Any, int]):
@@ -294,10 +293,10 @@ def infer_node_vals_and_errs_networkx(
 
         return g_res
 
-    edges_with_diffs = [
+    edges_with_props = [
         e for e, d in graph.edges.items() if d.get(edge_diff_prop) is not None and d.get(edge_stddev_prop) is not None
     ]
-    sg = graph.edge_subgraph(edges_with_diffs).copy()
+    sg = graph.edge_subgraph(edges_with_props).copy()
 
     if not sg.nodes:
         raise ValueError("Empty graph after removing edges without predictions")
@@ -306,8 +305,4 @@ def infer_node_vals_and_errs_networkx(
         if n not in sg.nodes:
             raise ValueError(f"Reference node {repr(n)} is isolated")
 
-    sg_res = with_relabeled(sg, infer_node_vals_and_errs_given_relabeled_graph)
-
-    for n, v in sg_res.nodes.items():
-        graph.nodes[n][node_val_prop] = v[node_val_prop]
-        graph.nodes[n][node_stddev_prop] = v[node_stddev_prop]
+    return with_relabeled(sg, infer_node_vals_and_errs_given_relabeled_graph)
