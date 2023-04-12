@@ -217,7 +217,7 @@ def infer_node_vals_and_errs(
 
 
 def infer_node_vals_and_errs_networkx(
-    nx_graph: nx.DiGraph,
+    graph: nx.DiGraph,
     edge_diff_prop: str,
     edge_stddev_prop: str,
     ref_nodes: Sequence[Any],
@@ -227,8 +227,10 @@ def infer_node_vals_and_errs_networkx(
     node_stddev_prop: str = "inferred_dg_stddev",
     n_bootstrap: int = 100,
     seed: int = 0,
-) -> nx.DiGraph:
+):
     """Version of :py:func:`timemachine.fe.mle.infer_node_vals_and_errs` that accepts a networkx graph.
+
+    Updates the input graph, labelling nodes with inferred values of `node_val_prop` and `node_stddev_prop`.
 
     Parameters
     ----------
@@ -304,16 +306,13 @@ def infer_node_vals_and_errs_networkx(
 
         return g_res
 
-    sg = get_valid_subgraph(nx_graph)
+    sg = get_valid_subgraph(graph)
 
     if not sg.nodes:
         raise ValueError("Empty graph after removing edges without predictions")
 
     sg_res = with_relabeled(sg, infer_node_vals_and_errs_given_relabeled_graph)
 
-    g_res = nx_graph.copy()
     for n, v in sg_res.nodes.items():
-        g_res.nodes[n][node_val_prop] = v[node_val_prop]
-        g_res.nodes[n][node_stddev_prop] = v[node_stddev_prop]
-
-    return g_res
+        graph.nodes[n][node_val_prop] = v[node_val_prop]
+        graph.nodes[n][node_stddev_prop] = v[node_stddev_prop]

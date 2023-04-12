@@ -289,11 +289,11 @@ def test_infer_node_vals_and_errs_networkx(nx_graph_with_reference_mle_instance)
 
     g, ref_node_idxs, seed, ref_dgs, ref_dg_errs = nx_graph_with_reference_mle_instance
 
-    g_res = infer_node_vals_and_errs_networkx_partial(g, ref_nodes=ref_node_idxs, seed=seed)
+    infer_node_vals_and_errs_networkx_partial(g, ref_nodes=ref_node_idxs, seed=seed)
 
     for n, (ref_dg, ref_dg_err) in enumerate(zip(ref_dgs, ref_dg_errs)):
-        assert g_res.nodes[n][node_val_prop] == ref_dg
-        assert g_res.nodes[n][node_stddev_prop] == ref_dg_err
+        assert g.nodes[n][node_val_prop] == ref_dg
+        assert g.nodes[n][node_stddev_prop] == ref_dg_err
 
 
 def test_infer_node_vals_and_errs_networkx_invariant_wrt_permutation(nx_graph_with_reference_mle_instance):
@@ -311,10 +311,10 @@ def test_infer_node_vals_and_errs_networkx_invariant_wrt_permutation(nx_graph_wi
     g_shuffled.add_edges_from((u, v, d) for (u, v), d in edges)
 
     # use n_bootstrap=2 to save time, since we don't check errors here
-    g_res = infer_node_vals_and_errs_networkx_partial(g_shuffled, ref_nodes=ref_node_idxs, n_bootstrap=2, seed=seed)
+    infer_node_vals_and_errs_networkx_partial(g_shuffled, ref_nodes=ref_node_idxs, n_bootstrap=2, seed=seed)
 
     for n, (ref_dg, ref_dg_err) in enumerate(zip(ref_dgs, ref_dg_errs)):
-        assert g_res.nodes[n][node_val_prop] == pytest.approx(ref_dg, rel=1e-5)
+        assert g_shuffled.nodes[n][node_val_prop] == pytest.approx(ref_dg, rel=1e-5)
         # TODO: errors are noisy; unclear how to test consistency
         # assert g_res.nodes[n][node_stddev_prop] == pytest.approx(ref_dg_err)
 
@@ -329,12 +329,10 @@ def test_infer_node_vals_and_errs_networkx_invariant_wrt_relabeling_nodes(nx_gra
     ref_nodes = [idx_to_label[n] for n in ref_node_idxs]
 
     # use n_bootstrap=2 to save time, since we don't check errors here
-    g_relabeled_res = infer_node_vals_and_errs_networkx_partial(
-        g_relabeled, ref_nodes=ref_nodes, n_bootstrap=2, seed=seed
-    )
+    infer_node_vals_and_errs_networkx_partial(g_relabeled, ref_nodes=ref_nodes, n_bootstrap=2, seed=seed)
 
     for n, (ref_dg, ref_dg_err) in enumerate(zip(ref_dgs, ref_dg_errs)):
-        assert g_relabeled_res.nodes[idx_to_label[n]][node_val_prop] == pytest.approx(ref_dg, rel=1e-5)
+        assert g_relabeled.nodes[idx_to_label[n]][node_val_prop] == pytest.approx(ref_dg, rel=1e-5)
         # TODO: errors are noisy; unclear how to test consistency
         # assert g_relabeled_res.nodes[idx_to_label[n]][node_stddev_prop] == pytest.approx(ref_dg_err)
 
@@ -364,15 +362,15 @@ def test_infer_node_vals_and_errs_networkx_missing_values(nx_graph_with_referenc
     g.add_edge(n1, n3, **{edge_diff_prop: None, edge_stddev_prop: None})
 
     # use n_bootstrap=2 to save time, since we don't check errors here
-    g_res = infer_node_vals_and_errs_networkx_partial(g, ref_nodes=ref_nodes, n_bootstrap=2, seed=seed)
+    infer_node_vals_and_errs_networkx_partial(g, ref_nodes=ref_nodes, n_bootstrap=2, seed=seed)
 
     for n, (ref_dg, ref_dg_err) in enumerate(zip(ref_dgs, ref_dg_errs)):
-        assert g_res.nodes[idx_to_label[n]][node_val_prop] == pytest.approx(ref_dg, rel=1e-5)
+        assert g.nodes[idx_to_label[n]][node_val_prop] == pytest.approx(ref_dg, rel=1e-5)
         # TODO: errors are noisy; unclear how to test consistency
         # assert g_res.nodes[idx_to_label[n]][node_stddev_prop] == ref_dg_err
 
     # undetermined node should not be updated
-    n = g_res.nodes[undetermined_label]
+    n = g.nodes[undetermined_label]
     assert node_val_prop not in n
     assert node_stddev_prop not in n
 
