@@ -261,8 +261,8 @@ def infer_node_vals_and_errs_networkx(
         "Remove edges with missing edge_diff_prop or edge_stddev_prop; then, remove any isolated nodes"
         sg = g.copy()
 
-        missing_edges = [e for e, v in sg.edges.items() if not v.get(edge_diff_prop) or not v.get(edge_stddev_prop)]
-        sg.remove_edges_from(missing_edges)
+        edges_missing_val = [e for e, v in sg.edges.items() if not v.get(edge_diff_prop) or not v.get(edge_stddev_prop)]
+        sg.remove_edges_from(edges_missing_val)
 
         isolated_nodes = list(nx.isolates(sg))
         sg.remove_nodes_from(isolated_nodes)
