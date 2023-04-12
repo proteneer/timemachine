@@ -269,8 +269,7 @@ def infer_node_vals_and_errs_networkx(
 
         return sg
 
-    def infer_node_vals_and_errs_given_relabeled_graph(g: nx.DiGraph, node_to_idx: Dict[Any, int]) -> nx.DiGraph:
-        assert list(g.nodes) == list(range(g.number_of_nodes()))
+    def infer_node_vals_and_errs_given_relabeled_graph(g: nx.DiGraph, node_to_idx: Dict[Any, int]):
         assert set(g.nodes) == set(range(g.number_of_nodes()))
 
         ref_node_idxs = [node_to_idx[n] for n in ref_nodes if n in node_to_idx]
@@ -298,10 +297,10 @@ def infer_node_vals_and_errs_networkx(
         node_to_idx = {n: idx for idx, n in enumerate(sorted(g.nodes))}
         g_relabeled = nx.relabel_nodes(g, node_to_idx)
 
-        g_res_relabeled = f(g_relabeled, node_to_idx)
+        f(g_relabeled, node_to_idx)
 
         idx_to_node = {idx: n for n, idx in node_to_idx.items()}
-        g_res = nx.relabel_nodes(g_res_relabeled, idx_to_node)
+        g_res = nx.relabel_nodes(g_relabeled, idx_to_node)
 
         return g_res
 
