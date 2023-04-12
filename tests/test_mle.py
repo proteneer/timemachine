@@ -351,7 +351,7 @@ def test_infer_node_vals_and_errs_networkx_missing_values(nx_graph_with_referenc
 
     # define a new node somewhere in the middle of the sorted list of nodes
     # (needed to check that we correctly remove isolated nodes)
-    undetermined_label = str(np.random.choice(g.number_of_nodes() - 2) + 1) + "_undetermined"
+    undetermined_label = str(np.random.randint(1, g.number_of_nodes() - 1)) + "_undetermined"
     g.add_edge(n1, undetermined_label)
     g.add_edge(n2, undetermined_label, **{edge_diff_prop: None})
     g.add_edge(n3, undetermined_label, **{edge_diff_prop: None, edge_stddev_prop: None})
