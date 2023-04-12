@@ -306,6 +306,10 @@ def infer_node_vals_and_errs_networkx(
         return g_res
 
     sg = get_valid_subgraph(nx_graph)
+
+    if not sg.nodes:
+        raise ValueError("Empty graph after removing edges without predictions")
+
     sg_res = with_relabeled(sg, infer_node_vals_and_errs_given_relabeled_graph)
 
     g_res = nx_graph.copy()

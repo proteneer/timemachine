@@ -287,6 +287,15 @@ def test_infer_node_vals_and_errs_networkx_missing_values(nx_graph_with_referenc
     assert node_stddev_prop not in n
 
 
+def test_infer_node_vals_and_errs_networkx_raises_on_empty():
+    g = nx.DiGraph()
+    with pytest.raises(ValueError, match="Empty graph"):
+        infer_node_vals_and_errs_networkx_partial(g, ref_nodes=[])
+    g.add_edge(0, 1)
+    with pytest.raises(ValueError, match="Empty graph after removing edges without predictions"):
+        infer_node_vals_and_errs_networkx_partial(g, ref_nodes=[])
+
+
 def test_infer_node_vals_incorrect_sizes():
     """Verify that infer_node_vals correctly asserts that the length of arrays are the same"""
     g = generate_random_valid_regular_graph()
