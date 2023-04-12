@@ -259,20 +259,6 @@ def infer_node_vals_and_errs_networkx(
         Graph where all nodes have been labeled with the inferred value of `node_val_prop` and `node_stddev_prop`.
     """
 
-    def get_valid_subgraph(g: nx.DiGraph) -> nx.DiGraph:
-        """Remove edges with missing edge_diff_prop or edge_stddev_prop; then, remove any isolated nodes"""
-        sg = g.copy()
-
-        edges_missing_val = [
-            e for e, v in sg.edges.items() if v.get(edge_diff_prop) is None or v.get(edge_stddev_prop) is None
-        ]
-        sg.remove_edges_from(edges_missing_val)
-
-        isolated_nodes = list(nx.isolates(sg))
-        sg.remove_nodes_from(isolated_nodes)
-
-        return sg
-
     def infer_node_vals_and_errs_given_relabeled_graph(g: nx.DiGraph, node_to_idx: Dict[Any, int]):
         assert set(g.nodes) == set(range(g.number_of_nodes()))
 
@@ -308,7 +294,10 @@ def infer_node_vals_and_errs_networkx(
 
         return g_res
 
-    sg = get_valid_subgraph(graph)
+    edges_with_diffs = [
+        e for e, d in graph.edges.items() if d.get(edge_diff_prop) is not None and d.get(edge_stddev_prop) is not None
+    ]
+    sg = graph.edge_subgraph(edges_with_diffs).copy()
 
     if not sg.nodes:
         raise ValueError("Empty graph after removing edges without predictions")
