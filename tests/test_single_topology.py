@@ -310,6 +310,72 @@ def test_combine_masses():
     np.testing.assert_almost_equal(test_masses, ref_masses)
 
 
+def test_combine_masses_hmr():
+    C_mass = Chem.MolFromSmiles("C").GetAtomWithIdx(0).GetMass()
+    Cl_mass = Chem.MolFromSmiles("Cl").GetAtomWithIdx(0).GetMass()
+    Br_mass = Chem.MolFromSmiles("Br").GetAtomWithIdx(0).GetMass()
+    F_mass = Chem.MolFromSmiles("F").GetAtomWithIdx(0).GetMass()
+
+    mol_a = ligand_from_smiles("[H]C([H])([H])[H]")
+    mol_b = ligand_from_smiles("[H]C(F)(Cl)Br")
+    H_mass = mol_a.GetAtomWithIdx(1).GetMass()
+
+    AllChem.EmbedMolecule(mol_a, randomSeed=2023)
+    AllChem.EmbedMolecule(mol_b, randomSeed=2023)
+
+    # only C mapped
+    core = np.array([[0, 0]])
+
+    ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
+    st = SingleTopology(mol_a, mol_b, core, ff)
+
+    # No HMR
+    test_masses = st.combine_masses()
+    ref_masses = [C_mass, H_mass, H_mass, H_mass, H_mass, F_mass, Cl_mass, Br_mass, H_mass]
+    np.testing.assert_almost_equal(test_masses, ref_masses)
+
+    # HMR
+    test_masses = st.combine_masses(use_hmr=True)
+    scale = 2 * H_mass
+    ref_masses = [
+        max(C_mass - 4 * scale, C_mass - scale),
+        H_mass + scale,
+        H_mass + scale,
+        H_mass + scale,
+        H_mass + scale,
+        F_mass,
+        Cl_mass,
+        Br_mass,
+        H_mass + scale,
+    ]
+    np.testing.assert_almost_equal(test_masses, ref_masses)
+
+    # only C-H/C-F mapped
+    core = np.array([[0, 0], [1, 1]])
+
+    ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
+    st = SingleTopology(mol_a, mol_b, core, ff)
+
+    # No HMR
+    test_masses = st.combine_masses()
+    ref_masses = [C_mass, F_mass, H_mass, H_mass, H_mass, Cl_mass, Br_mass, H_mass]
+    np.testing.assert_almost_equal(test_masses, ref_masses)
+
+    # HMR
+    test_masses = st.combine_masses(use_hmr=True)
+    ref_masses = [
+        max(C_mass - 4 * scale, C_mass - scale),
+        F_mass,
+        H_mass + scale,
+        H_mass + scale,
+        H_mass + scale,
+        Cl_mass,
+        Br_mass,
+        H_mass + scale,
+    ]
+    np.testing.assert_almost_equal(test_masses, ref_masses)
+
+
 @pytest.mark.nogpu
 def test_jax_transform_intermediate_potential():
     def setup_arbitary_transformation():
@@ -437,6 +503,7 @@ def test_nonbonded_split(precision, rtol, atol, use_tiny_mol):
 def ligand_from_smiles(smiles):
     mol = Chem.AddHs(Chem.MolFromSmiles(smiles))
     AllChem.Compute2DCoords(mol)
+    mol.SetProp("_Name", smiles)
     return mol
 
 

@@ -8,7 +8,7 @@ import numpy as np
 from numpy.typing import NDArray
 from rdkit import Chem
 
-from timemachine.fe import interpolate, system, topology, utils
+from timemachine.fe import interpolate, model_utils, system, topology, utils
 from timemachine.fe.dummy import canonicalize_bond, identify_dummy_groups, identify_root_anchors
 from timemachine.fe.lambda_schedule import construct_pre_optimized_relative_lambda_schedule
 from timemachine.fe.system import HostGuestSystem, VacuumSystem
@@ -873,7 +873,7 @@ class SingleTopology(AtomMapMixin):
         self.src_system = self._setup_end_state_src()
         self.dst_system = self._setup_end_state_dst()
 
-    def combine_masses(self):
+    def combine_masses(self, use_hmr=False):
         """
         Combine masses between two end-states by taking the heavier of the two core atoms.
 
@@ -884,6 +884,20 @@ class SingleTopology(AtomMapMixin):
         """
         mol_a_masses = utils.get_mol_masses(self.mol_a)
         mol_b_masses = utils.get_mol_masses(self.mol_b)
+
+        # with HMR, apply to each molecule independently
+        # then use the larger value for core atoms and the
+        # HMR value for dummy atoms
+        if use_hmr:
+            # Can't use src_system, dst_system as these have dummy atoms attached
+            mol_a_top = topology.BaseTopology(self.mol_a, self.ff)
+            mol_b_top = topology.BaseTopology(self.mol_b, self.ff)
+            _, mol_a_hb = mol_a_top.parameterize_harmonic_bond(self.ff.hb_handle.params)
+            _, mol_b_hb = mol_b_top.parameterize_harmonic_bond(self.ff.hb_handle.params)
+
+            mol_a_masses = model_utils.apply_hmr(mol_a_masses, mol_a_hb.idxs)
+            mol_b_masses = model_utils.apply_hmr(mol_b_masses, mol_b_hb.idxs)
+
         mol_c_masses = []
         for c_idx in range(self.get_num_atoms()):
 
