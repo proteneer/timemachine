@@ -280,19 +280,52 @@ def test_duplicate_idxs_period_pairs():
     mol_b = Chem.AddHs(Chem.MolFromSmiles("Cc1cc(Nc2nccc(-c3cn(C)cn3)n2)cc2cc(C(=O)NCc3nccs3)[nH]c12"))
     AllChem.EmbedMolecule(mol_b)
 
-    core = atom_mapping.get_cores(
-        mol_a,
-        mol_b,
-        ring_cutoff=0.12,
-        chain_cutoff=0.2,
-        max_visits=1e7,
-        connected_core=True,
-        max_cores=1e6,
-        enforce_core_core=True,
-        complete_rings=True,
-        enforce_chiral=True,
-        min_threshold=0,
-    )[0]
+    core = np.array(
+        [
+            [26, 0],
+            [1, 1],
+            [2, 2],
+            [3, 3],
+            [6, 6],
+            [4, 7],
+            [5, 8],
+            [7, 9],
+            [8, 10],
+            [0, 11],
+            [12, 12],
+            [9, 13],
+            [10, 14],
+            [11, 15],
+            [13, 16],
+            [14, 17],
+            [15, 19],
+            [16, 20],
+            [17, 21],
+            [18, 22],
+            [19, 24],
+            [20, 25],
+            [21, 26],
+            [22, 27],
+            [23, 28],
+            [24, 29],
+            [25, 30],
+            [30, 35],
+            [31, 36],
+            [32, 37],
+            [33, 38],
+            [34, 39],
+            [37, 42],
+            [35, 43],
+            [36, 44],
+            [38, 45],
+            [39, 46],
+            [27, 47],
+            [28, 48],
+            [40, 49],
+            [41, 50],
+            [42, 51],
+        ]
+    )
 
     ff = Forcefield.load_default()
     st = SingleTopology(mol_a, mol_b, core, ff)
