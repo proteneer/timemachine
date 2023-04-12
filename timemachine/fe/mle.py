@@ -1,4 +1,4 @@
-from typing import Any, Callable, Sequence
+from typing import Any, Callable, Dict, Sequence
 
 import networkx as nx
 import numpy as np
@@ -269,18 +269,18 @@ def infer_node_vals_and_errs_networkx(
 
         return sg
 
-    def infer_node_vals_and_errs_given_relabeled_graph(g: nx.Graph, ref_nodes: Sequence[Any]) -> nx.Graph:
+    def infer_node_vals_and_errs_given_relabeled_graph(g: nx.Graph, node_to_idx: Dict[Any, int]) -> nx.Graph:
         assert list(g.nodes) == list(range(g.number_of_nodes()))
-        assert set(ref_nodes).issubset(g.nodes)
 
-        ref_node_vals = [g.nodes[n][ref_node_val_prop] for n in ref_nodes]
-        ref_node_stddevs = [g.nodes[n].get(ref_node_stddev_prop, 0.0) for n in ref_nodes]
+        ref_node_idxs = [node_to_idx[n] for n in ref_nodes if n in node_to_idx]
+        ref_node_vals = [g.nodes[n][ref_node_val_prop] for n in ref_node_idxs]
+        ref_node_stddevs = [g.nodes[n].get(ref_node_stddev_prop, 0.0) for n in ref_node_idxs]
 
         dgs, dg_errs = infer_node_vals_and_errs(
             np.array(g.edges),
             np.array([e[edge_diff_prop] for e in g.edges.values()]),
             np.array([e[edge_stddev_prop] for e in g.edges.values()]),
-            ref_nodes,
+            ref_node_idxs,
             ref_node_vals,
             ref_node_stddevs,
             n_bootstrap,
@@ -293,14 +293,13 @@ def infer_node_vals_and_errs_networkx(
 
         return g
 
-    def with_relabeled(g: nx.Graph, f: Callable[[nx.Graph, Sequence[Any]], nx.Graph]) -> nx.Graph:
+    def with_relabeled(g: nx.Graph, f: Callable[[nx.Graph, Dict[Any, int]], nx.Graph]) -> nx.Graph:
         node_to_idx = {n: idx for idx, n in enumerate(g.nodes)}
         g_relabeled = nx.relabel_nodes(g, node_to_idx)
 
-        ref_node_idxs = [node_to_idx[n] for n in ref_nodes]
-        g_res_relabeled = f(g_relabeled, ref_node_idxs)
+        g_res_relabeled = f(g_relabeled, node_to_idx)
 
-        idx_to_node = {v: k for k, v in node_to_idx.items()}
+        idx_to_node = {idx: n for n, idx in node_to_idx.items()}
         g_res = nx.relabel_nodes(g_res_relabeled, idx_to_node)
 
         return g_res
