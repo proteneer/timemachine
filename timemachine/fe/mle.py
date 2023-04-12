@@ -258,7 +258,7 @@ def infer_node_vals_and_errs_networkx(
     """
 
     def get_valid_subgraph(g: nx.DiGraph) -> nx.DiGraph:
-        "Remove edges with missing edge_diff_prop or edge_stddev_prop; then, remove any isolated nodes"
+        """Remove edges with missing edge_diff_prop or edge_stddev_prop; then, remove any isolated nodes"""
         sg = g.copy()
 
         edges_missing_val = [e for e, v in sg.edges.items() if not v.get(edge_diff_prop) or not v.get(edge_stddev_prop)]
