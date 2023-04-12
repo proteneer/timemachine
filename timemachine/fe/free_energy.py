@@ -21,8 +21,8 @@ from timemachine.fe.utils import get_mol_masses, get_romol_conf
 from timemachine.ff import ForcefieldParams
 from timemachine.ff.handlers import openmm_deserializer
 from timemachine.lib import LangevinIntegrator, MonteCarloBarostat, custom_ops
-from timemachine.lib.potentials import CustomOpWrapper, HarmonicBond
 from timemachine.md.barostat.utils import compute_box_center, get_bond_list, get_group_indices
+from timemachine.potentials import BoundPotential, HarmonicBond, Potential
 
 
 class HostConfig:
@@ -47,7 +47,7 @@ class InitialState:
     This object can be pickled safely.
     """
 
-    potentials: List[CustomOpWrapper]
+    potentials: List[BoundPotential[Potential]]
     integrator: LangevinIntegrator
     barostat: Optional[MonteCarloBarostat]
     x0: np.ndarray
@@ -145,7 +145,7 @@ def image_frames(initial_state: InitialState, frames: np.ndarray, boxes: np.ndar
     assert np.array(boxes).shape[1:] == (3, 3), "Boxes are not 3x3"
     assert len(frames) == len(boxes), "Number of frames and boxes don't match"
 
-    hb_potential = next(p for p in initial_state.potentials if isinstance(p, HarmonicBond))
+    hb_potential = next(p.potential for p in initial_state.potentials if isinstance(p.potential, HarmonicBond))
     group_indices = get_group_indices(get_bond_list(hb_potential))
     imaged_frames = np.empty_like(frames)
     for i, (frame, box) in enumerate(zip(frames, boxes)):
@@ -317,7 +317,7 @@ def sample(initial_state: InitialState, md_params: MDParams, max_buffer_frames: 
     * Assertion error if coords become NaN
     """
 
-    bound_impls = [p.bound_impl(np.float32) for p in initial_state.potentials]
+    bound_impls = [p.to_gpu(np.float32).bound_impl for p in initial_state.potentials]
     intg_impl = initial_state.integrator.impl()
     if initial_state.barostat:
         baro_impl = initial_state.barostat.impl(bound_impls)
@@ -474,7 +474,7 @@ def run_sims_sequential(
             stored_frames.append(cur_frames)
             stored_boxes.append(cur_boxes)
 
-        bound_impls = [p.bound_impl(np.float32) for p in initial_state.potentials]
+        bound_impls = [p.to_gpu(np.float32).bound_impl for p in initial_state.potentials]
         cur_batch_U_fns = get_batch_u_fns(bound_impls, temperature)
 
         state = EnergyDecomposedState(cur_frames, cur_boxes, cur_batch_U_fns)
@@ -492,7 +492,7 @@ def run_sims_sequential(
 
 def make_batch_u_fns(initial_state: InitialState, temperature: float) -> List[Batch_u_fn]:
     assert initial_state.barostat is None or initial_state.barostat.temperature == temperature
-    bound_impls = [p.bound_impl(np.float32) for p in initial_state.potentials]
+    bound_impls = [p.to_gpu(np.float32).bound_impl for p in initial_state.potentials]
     return get_batch_u_fns(bound_impls, temperature)
 
 

@@ -1,18 +1,20 @@
-from typing import List, Tuple
+from collections import defaultdict
+from typing import DefaultDict, List, Tuple
 
 import numpy as np
-from simtk import openmm as mm
-from simtk import unit
+import openmm as mm
+from openmm import unit
 
-from timemachine import constants
-from timemachine.lib import potentials
+from timemachine import constants, potentials
+
+ORDERED_FORCES = ["HarmonicBond", "HarmonicAngle", "PeriodicTorsion", "Nonbonded"]
 
 
 def value(quantity):
     return quantity.value_in_unit_system(unit.md_unit_system)
 
 
-def deserialize_system(system: mm.System, cutoff: float) -> Tuple[List[potentials.CustomOpWrapper], List[float]]:
+def deserialize_system(system: mm.System, cutoff: float) -> Tuple[List[potentials.BoundPotential], List[float]]:
     """
     Deserialize an OpenMM XML file
 
@@ -41,7 +43,8 @@ def deserialize_system(system: mm.System, cutoff: float) -> Tuple[List[potential
 
     # this should not be a dict since we may have more than one instance of a given
     # force.
-    bps = []
+
+    bps_dict: DefaultDict[str, List[potentials.BoundPotential]] = defaultdict(list)
 
     for force in system.getForces():
 
@@ -59,7 +62,7 @@ def deserialize_system(system: mm.System, cutoff: float) -> Tuple[List[potential
 
             bond_idxs = np.array(bond_idxs_, dtype=np.int32)
             bond_params = np.array(bond_params_, dtype=np.float64)
-            bps.append(potentials.HarmonicBond(bond_idxs).bind(bond_params))
+            bps_dict["HarmonicBond"].append(potentials.HarmonicBond(bond_idxs).bind(bond_params))
 
         if isinstance(force, mm.HarmonicAngleForce):
 
@@ -78,7 +81,7 @@ def deserialize_system(system: mm.System, cutoff: float) -> Tuple[List[potential
             angle_idxs = np.array(angle_idxs_, dtype=np.int32)
             angle_params = np.array(angle_params_, dtype=np.float64)
 
-            bps.append(potentials.HarmonicAngle(angle_idxs).bind(angle_params))
+            bps_dict["HarmonicAngle"].append(potentials.HarmonicAngle(angle_idxs).bind(angle_params))
 
         if isinstance(force, mm.PeriodicTorsionForce):
 
@@ -96,7 +99,7 @@ def deserialize_system(system: mm.System, cutoff: float) -> Tuple[List[potential
 
             torsion_idxs = np.array(torsion_idxs_, dtype=np.int32)
             torsion_params = np.array(torsion_params_, dtype=np.float64)
-            bps.append(potentials.PeriodicTorsion(torsion_idxs).bind(torsion_params))
+            bps_dict["PeriodicTorsion"].append(potentials.PeriodicTorsion(torsion_idxs).bind(torsion_params))
 
         if isinstance(force, mm.NonbondedForce):
 
@@ -200,8 +203,17 @@ def deserialize_system(system: mm.System, cutoff: float) -> Tuple[List[potential
             # use the same scale factors for electrostatics and lj
             scale_factors = np.stack([scale_factors_, scale_factors_], axis=1)
 
-            bps.append(potentials.Nonbonded(N, exclusion_idxs, scale_factors, beta, cutoff).bind(nb_params))
+            bps_dict["Nonbonded"].append(
+                potentials.Nonbonded(N, exclusion_idxs, scale_factors, beta, cutoff).bind(nb_params)
+            )
 
             # nrg_fns.append(('Exclusions', (exclusion_idxs, scale_factors, es_scale_factors)))
+
+    # ugh, ... various parts of our code assume the bps are in a certain order
+    # so put them back in that order here
+    bps = []
+    for k in ORDERED_FORCES:
+        if bps_dict.get(k):
+            bps.extend(bps_dict[k])
 
     return bps, masses

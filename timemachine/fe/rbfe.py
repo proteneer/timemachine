@@ -6,8 +6,8 @@ from typing import Any, Dict, Iterable, List, NamedTuple, Optional, Sequence, Tu
 
 import numpy as np
 from numpy.typing import NDArray
+from openmm import app
 from rdkit import Chem
-from simtk.openmm import app
 
 from timemachine.constants import DEFAULT_PRESSURE, DEFAULT_TEMP
 from timemachine.fe import atom_mapping, model_utils
@@ -27,11 +27,10 @@ from timemachine.fe.system import VacuumSystem, convert_omm_system
 from timemachine.fe.utils import bytes_to_id, get_mol_name, get_romol_conf
 from timemachine.ff import Forcefield
 from timemachine.lib import LangevinIntegrator, MonteCarloBarostat
-from timemachine.lib.potentials import CustomOpWrapper
 from timemachine.md import builders, minimizer
 from timemachine.md.barostat.utils import get_bond_list, get_group_indices
 from timemachine.parallel.client import AbstractClient, AbstractFileClient, CUDAPoolClient, FileClient
-from timemachine.potentials import jax_utils
+from timemachine.potentials import BoundPotential, jax_utils
 
 DEFAULT_NUM_WINDOWS = 30
 
@@ -40,14 +39,14 @@ DEFAULT_NUM_WINDOWS = 30
 MAX_SEED_VALUE = 10000
 
 
-def setup_in_vacuum(st, ligand_conf, lamb):
+def setup_in_vacuum(st: SingleTopology, ligand_conf, lamb):
     """Prepare potentials, initial coords, large 10x10x10nm box, and HMR masses"""
 
     system = st.setup_intermediate_state(lamb)
     combined_masses = np.array(st.combine_masses())
 
     potentials = system.get_U_fns()
-    hmr_masses = model_utils.apply_hmr(combined_masses, system.bond.get_idxs())
+    hmr_masses = model_utils.apply_hmr(combined_masses, system.bond.potential.idxs)
     baro = None
 
     x0 = ligand_conf
@@ -72,9 +71,9 @@ def setup_in_env(
     combined_masses = np.concatenate([host_masses, st.combine_masses()])
 
     potentials = system.get_U_fns()
-    hmr_masses = model_utils.apply_hmr(combined_masses, system.bond.get_idxs())
+    hmr_masses = model_utils.apply_hmr(combined_masses, system.bond.potential.idxs)
 
-    group_idxs = get_group_indices(get_bond_list(system.bond))
+    group_idxs = get_group_indices(get_bond_list(system.bond.potential))
     baro = MonteCarloBarostat(len(hmr_masses), DEFAULT_PRESSURE, temperature, group_idxs, 15, run_seed + 1)
 
     x0 = np.concatenate([host_conf, ligand_conf])
@@ -266,13 +265,13 @@ def setup_optimized_initial_state(
 
 
 def optimize_coords_state(
-    potentials: Iterable[CustomOpWrapper],
+    potentials: Iterable[BoundPotential],
     x0: NDArray,
     box: NDArray,
     free_idxs: List[int],
     assert_energy_decreased: bool,
 ) -> NDArray:
-    bound_impls = [p.bound_impl(np.float32) for p in potentials]
+    bound_impls = [p.to_gpu(np.float32).bound_impl for p in potentials]
     val_and_grad_fn = minimizer.get_val_and_grad_fn(bound_impls, box)
     assert np.all(np.isfinite(x0)), "Initial coordinates contain nan or inf"
     x_opt = minimizer.local_minimize(x0, val_and_grad_fn, free_idxs, assert_energy_decreased=assert_energy_decreased)
@@ -695,7 +694,7 @@ def run_complex(
     n_windows=None,
     min_cutoff=0.7,
 ):
-    complex_sys, complex_conf, _, _, complex_box, complex_top = builders.build_protein_system(
+    complex_sys, complex_conf, complex_box, complex_top = builders.build_protein_system(
         protein, forcefield.protein_ff, forcefield.water_ff
     )
     complex_box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes, deboggle later

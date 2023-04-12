@@ -3,6 +3,7 @@ from glob import glob
 from pathlib import Path
 from warnings import catch_warnings
 
+import numpy as np
 import pytest
 from common import temporary_working_dir
 
@@ -63,3 +64,21 @@ def test_loading_forcefield_from_file():
             with pytest.raises(ValueError, match="Unsupported charge handler"):
                 Forcefield.load_from_file(bad_ff)
         assert len(w) == 0
+
+
+def test_load_default():
+    """assert that load_default() is an alias for load_from_file(DEFAULT_FF)"""
+
+    ref = Forcefield.load_from_file(constants.DEFAULT_FF)
+    test = Forcefield.load_default()
+
+    # ref == test evaluates to false, so assert equality of smirks lists and parameter arrays manually
+
+    ref_handles = ref.get_ordered_handles()
+    test_handles = test.get_ordered_handles()
+
+    assert len(ref_handles) == len(test_handles)
+
+    for (ref_handle, test_handle) in zip(ref.get_ordered_handles(), test.get_ordered_handles()):
+        assert ref_handle.smirks == test_handle.smirks
+        np.testing.assert_array_equal(ref_handle.params, test_handle.params)

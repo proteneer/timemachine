@@ -96,18 +96,16 @@ setup(
     keywords="molecular dynamics",
     ext_modules=ext_modules,
     packages=find_packages(),
-    python_requires=">=3.7",
+    python_requires=">=3.10",
     install_requires=[
-        "importlib-resources",
         "jax",
-        "jaxlib>0.3.13",
+        "jaxlib>0.4.1",
         "networkx",
         "numpy",
         "pymbar>3.0.4,<4",
         "pyyaml",
         "rdkit",
         "scipy",
-        "typing-extensions",
         "matplotlib",
     ],
     extras_require={
@@ -116,8 +114,8 @@ setup(
             "click==8.0.4",  # pinned due to https://github.com/psf/black/issues/2964 -- unpin if upgrading black
             "flake8==4.0.1",
             "isort==5.10.1",
-            "mypy==0.942",
-            "pre-commit==2.17.0",
+            "mypy==1.1.1",
+            "pre-commit==3.2.1",
         ],
         "test": [
             "pytest",

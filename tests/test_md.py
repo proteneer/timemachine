@@ -11,9 +11,9 @@ from timemachine import constants
 from timemachine.ff import Forcefield
 from timemachine.integrator import langevin_coefficients
 from timemachine.lib import LangevinIntegrator, MonteCarloBarostat, VelocityVerletIntegrator, custom_ops
-from timemachine.lib.potentials import SummedPotential
 from timemachine.md.barostat.utils import get_bond_list, get_group_indices
 from timemachine.md.enhanced import get_solvent_phase_system
+from timemachine.potentials import SummedPotential
 from timemachine.testsystems.ligands import get_biphenyl
 
 pytestmark = [pytest.mark.memcheck]
@@ -31,7 +31,7 @@ class TestContext(unittest.TestCase):
         E = 2
 
         params, potential = prepare_nb_system(x0, E, p_scale=3.0, cutoff=1.0)
-        test_nrg = potential.to_gpu()
+        test_nrg = potential.to_gpu(precision=np.float64)
 
         masses = np.random.rand(N)
         v0 = np.random.rand(x0.shape[0], x0.shape[1])
@@ -43,7 +43,7 @@ class TestContext(unittest.TestCase):
         box = np.eye(3) * 3.0
         intg = custom_ops.LangevinIntegrator(masses, temperature, dt, friction, 1234)
 
-        bp = test_nrg.bind(params).bound_impl(precision=np.float64)
+        bp = test_nrg.bind(params).bound_impl
         bps = [bp]
 
         ctxt = custom_ops.Context(x0, v0, box, intg, bps)
@@ -81,7 +81,7 @@ class TestContext(unittest.TestCase):
         E = 2
 
         params, potential = prepare_nb_system(x0, E, p_scale=3.0, cutoff=1.0)
-        test_nrg = potential.to_gpu()
+        test_nrg = potential.to_gpu(precision=np.float64)
 
         masses = np.random.rand(N)
         v0 = np.random.rand(x0.shape[0], x0.shape[1])
@@ -93,7 +93,7 @@ class TestContext(unittest.TestCase):
         box = np.eye(3) * 3.0
         intg = custom_ops.LangevinIntegrator(masses, temperature, dt, friction, 1234)
 
-        bp = test_nrg.bind(params).bound_impl(precision=np.float64)
+        bp = test_nrg.bind(params).bound_impl
         bps = [bp]
 
         ctxt = custom_ops.Context(x0, v0, box, intg, bps)
@@ -140,7 +140,7 @@ class TestContext(unittest.TestCase):
         E = 2
 
         params, potential = prepare_nb_system(x0, E, p_scale=3.0, cutoff=1.0)
-        test_nrg = potential.to_gpu()
+        test_nrg = potential.to_gpu(precision=np.float64)
 
         masses = np.random.rand(N)
         v0 = np.random.rand(x0.shape[0], x0.shape[1])
@@ -152,7 +152,7 @@ class TestContext(unittest.TestCase):
         box = np.eye(3) * 3.0
         intg = custom_ops.LangevinIntegrator(masses, temperature, dt, friction, 1234)
 
-        bp = test_nrg.bind(params).bound_impl(precision=np.float64)
+        bp = test_nrg.bind(params).bound_impl
         bps = [bp]
 
         ctxt = custom_ops.Context(x0, v0, box, intg, bps)
@@ -164,7 +164,29 @@ class TestContext(unittest.TestCase):
         new_x = np.random.rand(N, 3)
         ctxt.set_x_t(new_x)
 
+        with pytest.raises(RuntimeError, match="number of new coords disagree with current coords"):
+            bad_x = np.random.rand(N + 1, 3)
+            ctxt.set_x_t(bad_x)
+
         np.testing.assert_equal(ctxt.get_x_t(), new_x)
+
+        new_v = np.random.rand(N, 3)
+        ctxt.set_v_t(new_v)
+
+        with pytest.raises(RuntimeError, match="number of new velocities disagree with current coords"):
+            bad_v = np.random.rand(N - 1, 3)
+            ctxt.set_v_t(bad_v)
+
+        np.testing.assert_equal(ctxt.get_v_t(), new_v)
+
+        new_box = np.eye(3) * np.random.rand(3, 3)
+        ctxt.set_box(new_box)
+
+        with pytest.raises(RuntimeError, match="box must be 3x3"):
+            bad_box = np.random.rand(3, 4)
+            ctxt.set_box(bad_box)
+
+        np.testing.assert_equal(ctxt.get_box(), new_box)
 
     def test_fwd_mode(self):
         """
@@ -189,8 +211,8 @@ class TestContext(unittest.TestCase):
             # cutoff=0.5,
             cutoff=1.0,
         )
-        ref_nrg_fn = potential.to_reference()
-        test_nrg = potential.to_gpu()
+        ref_nrg_fn = potential
+        test_nrg = potential.to_gpu(precision=np.float64)
 
         masses = np.random.rand(N)
 
@@ -245,7 +267,7 @@ class TestContext(unittest.TestCase):
 
         intg = custom_ops.LangevinIntegrator(masses, temperature, dt, friction, 1234)
 
-        bp = test_nrg.bind(params).bound_impl(precision=np.float64)
+        bp = test_nrg.bind(params).bound_impl
         bps = [bp]
 
         ctxt = custom_ops.Context(x0, v0, box, intg, bps)
@@ -304,7 +326,7 @@ class TestContext(unittest.TestCase):
             p_scale=3.0,
             cutoff=1.0,
         )
-        nb_pot = potential.to_gpu()
+        nb_pot = potential.to_gpu(np.float32)
 
         temperature = 300
         dt = 1.5e-3
@@ -315,7 +337,7 @@ class TestContext(unittest.TestCase):
         local_idxs = np.array([len(coords) - 1], dtype=np.int32)
 
         v0 = np.zeros_like(coords)
-        bps = [nb_pot.bind(params).bound_impl(np.float32)]
+        bps = [nb_pot.bind(params).bound_impl]
 
         reference_values = []
         for bp in bps:
@@ -389,7 +411,7 @@ class TestContext(unittest.TestCase):
             p_scale=3.0,
             cutoff=1.0,
         )
-        nb_pot = potential.to_gpu()
+        nb_pot = potential.to_gpu(np.float32)
 
         temperature = 300
         dt = 1.5e-3
@@ -400,7 +422,7 @@ class TestContext(unittest.TestCase):
         local_idxs = np.array([len(coords) - 1], dtype=np.int32)
 
         v0 = np.zeros_like(coords)
-        bps = [nb_pot.bind(params).bound_impl(np.float32)]
+        bps = [nb_pot.bind(params).bound_impl]
 
         reference_values = []
         for bp in bps:
@@ -450,7 +472,7 @@ class TestContext(unittest.TestCase):
         v0 = np.zeros_like(coords)
         bps = []
         for p, bp in zip(sys_params, unbound_potentials):
-            bps.append(bp.bind(p).bound_impl(np.float32))
+            bps.append(bp.bind(p).to_gpu(np.float32).bound_impl)
 
         reference_values = []
         for bp in bps:
@@ -521,7 +543,7 @@ class TestContext(unittest.TestCase):
         summed_potential = SummedPotential(unbound_potentials, sys_params)
         # Flatten the arrays so we can concatenate them.
         summed_potential = summed_potential.bind(np.concatenate([p.reshape(-1) for p in sys_params]))
-        bp = summed_potential.bound_impl(precision=np.float32)
+        bp = summed_potential.to_gpu(precision=np.float32).bound_impl
 
         intg_impl = intg.impl()
 
@@ -559,7 +581,7 @@ class TestContext(unittest.TestCase):
         v0 = np.zeros_like(coords)
         bps = []
         for p, bp in zip(sys_params, unbound_potentials):
-            bps.append(bp.bind(p).bound_impl(np.float32))
+            bps.append(bp.bind(p).to_gpu(np.float32).bound_impl)
 
         # Select the molecule as the local idxs
         local_idxs = np.arange(len(coords) - mol.GetNumAtoms(), len(coords), dtype=np.int32)
@@ -600,9 +622,9 @@ class TestContext(unittest.TestCase):
         box = np.eye(3) * 1000.0
 
         params, potential = prepare_nb_system(x0, E, p_scale=3.0, cutoff=1.0)
-        test_nrg = potential.to_gpu()
+        test_nrg = potential.to_gpu(np.float32)
 
-        bps = [test_nrg.bind(params).bound_impl(np.float32)]
+        bps = [test_nrg.bind(params).bound_impl]
 
         masses = rng.uniform(1.0, size=N)
         v0 = rng.uniform(1.0, size=(x0.shape[0], x0.shape[1]))
@@ -639,7 +661,7 @@ class TestContext(unittest.TestCase):
             weak_refs = []
             bps = []
             for p, bp in zip(sys_params, unbound_potentials):
-                bound_impl = bp.bind(p).bound_impl(np.float32)
+                bound_impl = bp.bind(p).to_gpu(np.float32).bound_impl
                 bps.append(bound_impl)
                 weak_refs.append(weakref.ref(bound_impl))
 

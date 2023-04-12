@@ -4,7 +4,6 @@ from importlib import resources
 
 import numpy as np
 
-from timemachine.constants import DEFAULT_FF
 from timemachine.fe.rbfe import setup_initial_states
 from timemachine.fe.single_topology import SingleTopology
 from timemachine.fe.utils import get_romol_conf, read_sdf
@@ -59,7 +58,7 @@ def get_hif2a_ligand_pair_single_topology():
 
 def get_relative_hif2a_in_vacuum():
     mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
-    ff = Forcefield.load_from_file(DEFAULT_FF)
+    ff = Forcefield.load_default()
     rfe = SingleTopology(mol_a, mol_b, core, ff)
 
     temperature = 300
@@ -67,8 +66,8 @@ def get_relative_hif2a_in_vacuum():
     lam = 0.5
     host = None  # vacuum
     initial_states = setup_initial_states(rfe, host, temperature, [lam], seed)
-    unbound_potentials = initial_states[0].potentials
-    sys_params = [np.array(u.params, dtype=np.float64) for u in unbound_potentials]
+    potentials = initial_states[0].potentials
+    sys_params = [np.array(u.params, dtype=np.float64) for u in potentials]
     coords = rfe.combine_confs(get_romol_conf(mol_a), get_romol_conf(mol_b))
     masses = np.array(rfe.combine_masses())
-    return unbound_potentials, sys_params, coords, masses
+    return potentials, sys_params, coords, masses

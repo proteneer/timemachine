@@ -24,7 +24,7 @@ private:
     Neighborlist<RealType> nblist_;
     int *p_ixn_count_; // pinned memory
 
-    double nblist_padding_;
+    const double nblist_padding_;
     double *d_nblist_x_;    // coords which were used to compute the nblist
     double *d_nblist_box_;  // box which was used to rebuild the nblist
     int *d_rebuild_nblist_; // whether or not we have to rebuild the nblist
@@ -53,19 +53,20 @@ private:
     unsigned int *d_sort_storage_;
     size_t d_sort_storage_bytes_;
 
-    bool disable_hilbert_;
+    const bool disable_hilbert_;
 
     std::array<k_nonbonded_fn, 8> kernel_ptrs_;
 
     void hilbert_sort(const double *d_x, const double *d_box, cudaStream_t stream);
 
 public:
-    // these are marked public but really only intended for testing.
-    void set_nblist_padding(double val);
-    void disable_hilbert_sort();
-
     NonbondedAllPairs(
-        const int N, const double beta, const double cutoff, const std::optional<std::set<int>> &atom_idxs);
+        const int N,
+        const double beta,
+        const double cutoff,
+        const std::optional<std::set<int>> &atom_idxs,
+        const bool disable_hilbert_sort = false,
+        const double nblist_padding = 0.1);
 
     ~NonbondedAllPairs();
 

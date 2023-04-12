@@ -3,7 +3,6 @@
 import numpy as np
 import pytest
 
-from timemachine.constants import DEFAULT_FF
 from timemachine.fe.single_topology import SingleTopology
 from timemachine.fe.system import convert_omm_system
 from timemachine.ff import Forcefield
@@ -15,7 +14,7 @@ from timemachine.testsystems.relative import get_hif2a_ligand_pair_single_topolo
 @pytest.fixture(scope="module")
 def hif2a_ligand_pair_single_topology():
     mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
-    forcefield = Forcefield.load_from_file(DEFAULT_FF)
+    forcefield = Forcefield.load_default()
     return SingleTopology(mol_a, mol_b, core, forcefield)
 
 
@@ -27,7 +26,7 @@ def complex_host_system():
 
 @pytest.fixture(scope="module")
 def solvent_host_system():
-    forcefield = Forcefield.load_from_file(DEFAULT_FF)
+    forcefield = Forcefield.load_default()
     host_sys_omm, _, _, _ = builders.build_water_system(3.0, forcefield.water_ff)
     return convert_omm_system(host_sys_omm)
 
@@ -57,25 +56,25 @@ def test_combined_parameters_bonded(host_system_fixture, hif2a_ligand_pair_singl
         hgs = st.combine_with_host(host_sys, lamb=lamb)
 
         # check bonds
-        check_bonded_idxs_consistency(hgs.bond.get_idxs(), len(host_sys.bond.get_idxs()))
-        check_bonded_idxs_consistency(hgs.angle.get_idxs(), len(host_sys.angle.get_idxs()))
+        check_bonded_idxs_consistency(hgs.bond.potential.idxs, len(host_sys.bond.potential.idxs))
+        check_bonded_idxs_consistency(hgs.angle.potential.idxs, len(host_sys.angle.potential.idxs))
 
         if host_sys.torsion:
-            check_bonded_idxs_consistency(hgs.torsion.get_idxs(), len(host_sys.torsion.get_idxs()))
+            check_bonded_idxs_consistency(hgs.torsion.potential.idxs, len(host_sys.torsion.potential.idxs))
         else:
-            check_bonded_idxs_consistency(hgs.torsion.get_idxs(), 0)
+            check_bonded_idxs_consistency(hgs.torsion.potential.idxs, 0)
 
         if host_sys.chiral_atom:
-            check_bonded_idxs_consistency(hgs.chiral_atom.get_idxs(), len(host_sys.chiral_atom.get_idxs()))
+            check_bonded_idxs_consistency(hgs.chiral_atom.potential.idxs, len(host_sys.chiral_atom.potential.idxs))
         else:
-            check_bonded_idxs_consistency(hgs.chiral_atom.get_idxs(), 0)
+            check_bonded_idxs_consistency(hgs.chiral_atom.potential.idxs, 0)
 
         if host_sys.chiral_bond:
-            check_bonded_idxs_consistency(hgs.chiral_bond.get_idxs(), len(host_sys.chiral_bond.get_idxs()))
+            check_bonded_idxs_consistency(hgs.chiral_bond.potential.idxs, len(host_sys.chiral_bond.potential.idxs))
         else:
-            check_bonded_idxs_consistency(hgs.chiral_bond.get_idxs(), 0)
+            check_bonded_idxs_consistency(hgs.chiral_bond.potential.idxs, 0)
 
-        check_bonded_idxs_consistency(hgs.nonbonded_guest_pairs.get_idxs(), 0)
+        check_bonded_idxs_consistency(hgs.nonbonded_guest_pairs.potential.idxs, 0)
 
 
 @pytest.mark.parametrize("host_system_fixture", ["solvent_host_system", "complex_host_system"])
@@ -95,7 +94,7 @@ def test_combined_parameters_nonbonded(host_system_fixture, hif2a_ligand_pair_si
         # check nonbonded terms
         # 1) exclusions
         # exclusions should be set for all ligand ixns in hgs.nonbonded_host_guest
-        hgs_exc_idxs = hgs.nonbonded_host_guest.get_exclusion_idxs()
+        hgs_exc_idxs = hgs.nonbonded_host_guest.potential.exclusion_idxs
         hgs_exc_guest_idxs = set()
         for i, j in hgs_exc_idxs:
             if i > num_host_atoms or j > num_host_atoms:
@@ -115,7 +114,7 @@ def test_combined_parameters_nonbonded(host_system_fixture, hif2a_ligand_pair_si
         # 2a) w offsets
         assert hgs.nonbonded_host_guest.params is not None
         w_coords = hgs.nonbonded_host_guest.params[:, 3]
-        cutoff = hgs.nonbonded_host_guest.get_cutoff()
+        cutoff = hgs.nonbonded_host_guest.potential.cutoff
 
         for a_idx, w in enumerate(w_coords):
             if a_idx < num_host_atoms:
@@ -193,7 +192,7 @@ def test_combined_parameters_nonbonded_intermediate(
 
     for lamb in rng.uniform(0.01, 0.99, (10,)):
         hgs = st.combine_with_host(host_sys, lamb=lamb)
-        cutoff = hgs.nonbonded_host_guest.get_cutoff()
+        cutoff = hgs.nonbonded_host_guest.potential.cutoff
 
         assert hgs.nonbonded_host_guest.params is not None
         guest_params = hgs.nonbonded_host_guest.params[num_host_atoms:]

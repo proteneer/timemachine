@@ -4,7 +4,7 @@
 
 import logging
 import re
-from typing import Any, Callable, Dict, List, Set, Type, TypeVar
+from typing import Any, Callable, Dict, List, Optional, Set, Type, TypeVar
 
 T = TypeVar("T")
 OEMol = Any
@@ -33,7 +33,7 @@ def call_openeye(
     oe_callable: Callable[[T], bool],
     *args: T,
     exception_type: Type[BaseException] = RuntimeError,
-    exception_kwargs: Dict[str, Any] = None,
+    exception_kwargs: Optional[Dict[str, Any]] = None,
 ):
     """Wraps a call to an OpenEye function, either capturing the output in an
     exception if the function does not complete successfully, or redirecting it

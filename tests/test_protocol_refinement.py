@@ -5,7 +5,8 @@ from timemachine.fe.protocol_refinement import greedy_bisection_step
 
 lambdas = floats(0.0, 1.0, allow_subnormal=False)
 
-lambda_schedules = lists(lambdas, min_size=2, unique=True).map(sorted)
+# https://github.com/python/mypy/issues/12617
+lambda_schedules = lists(lambdas, min_size=2, unique=True).map(sorted)  # type: ignore
 
 
 @composite

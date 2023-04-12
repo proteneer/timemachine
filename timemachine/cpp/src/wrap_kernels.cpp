@@ -369,11 +369,20 @@ void declare_context(py::module &m) {
             "set_v_t",
             [](timemachine::Context &ctxt, const py::array_t<double, py::array::c_style> new_v_t) {
                 if (new_v_t.shape()[0] != ctxt.num_atoms()) {
-                    throw std::runtime_error("number of new coords disagree with current coords");
+                    throw std::runtime_error("number of new velocities disagree with current coords");
                 }
                 ctxt.set_v_t(new_v_t.data());
             },
             py::arg("velocities"))
+        .def(
+            "set_box",
+            [](timemachine::Context &ctxt, const py::array_t<double, py::array::c_style> new_box_t) {
+                if (new_box_t.size() != 9 || new_box_t.shape()[0] != 3) {
+                    throw std::runtime_error("box must be 3x3");
+                }
+                ctxt.set_box(new_box_t.data());
+            },
+            py::arg("box"))
         .def(
             "get_x_t",
             [](timemachine::Context &ctxt) -> py::array_t<double, py::array::c_style> {
@@ -922,14 +931,14 @@ template <typename RealType> void declare_nonbonded_all_pairs(py::module &m, con
     std::string pyclass_name = std::string("NonbondedAllPairs_") + typestr;
     py::class_<Class, std::shared_ptr<Class>, timemachine::Potential>(
         m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
-        .def("set_nblist_padding", &timemachine::NonbondedAllPairs<RealType>::set_nblist_padding, py::arg("val"))
-        .def("disable_hilbert_sort", &timemachine::NonbondedAllPairs<RealType>::disable_hilbert_sort)
         .def("set_atom_idxs", &timemachine::NonbondedAllPairs<RealType>::set_atom_idxs, py::arg("atom_idxs"))
         .def(
             py::init([](const int N,
                         const double beta,
                         const double cutoff,
-                        const std::optional<py::array_t<int, py::array::c_style>> &atom_idxs_i) {
+                        const std::optional<py::array_t<int, py::array::c_style>> &atom_idxs_i,
+                        const bool disable_hilbert_sort,
+                        const double nblist_padding) {
                 std::optional<std::set<int>> unique_atom_idxs(std::nullopt);
                 if (atom_idxs_i) {
                     std::vector<int> atom_idxs(atom_idxs_i->size());
@@ -937,12 +946,15 @@ template <typename RealType> void declare_nonbonded_all_pairs(py::module &m, con
                     unique_atom_idxs.emplace(unique_idxs<int>(atom_idxs));
                 }
 
-                return new timemachine::NonbondedAllPairs<RealType>(N, beta, cutoff, unique_atom_idxs);
+                return new timemachine::NonbondedAllPairs<RealType>(
+                    N, beta, cutoff, unique_atom_idxs, disable_hilbert_sort, nblist_padding);
             }),
             py::arg("num_atoms"),
             py::arg("beta"),
             py::arg("cutoff"),
-            py::arg("atom_idxs_i") = py::none());
+            py::arg("atom_idxs_i") = py::none(),
+            py::arg("disable_hilbert_sort") = false,
+            py::arg("nblist_padding") = 0.1);
 }
 
 template <typename RealType> void declare_nonbonded_interaction_group(py::module &m, const char *typestr) {
@@ -950,24 +962,26 @@ template <typename RealType> void declare_nonbonded_interaction_group(py::module
     std::string pyclass_name = std::string("NonbondedInteractionGroup_") + typestr;
     py::class_<Class, std::shared_ptr<Class>, timemachine::Potential>(
         m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
-        .def(
-            "set_nblist_padding", &timemachine::NonbondedInteractionGroup<RealType>::set_nblist_padding, py::arg("val"))
-        .def("disable_hilbert_sort", &timemachine::NonbondedInteractionGroup<RealType>::disable_hilbert_sort)
         .def("set_atom_idxs", &timemachine::NonbondedInteractionGroup<RealType>::set_atom_idxs, py::arg("atom_idxs"))
         .def(
             py::init([](const int N,
                         const py::array_t<int, py::array::c_style> &row_atom_idxs_i,
                         const double beta,
-                        const double cutoff) {
+                        const double cutoff,
+                        const bool disable_hilbert_sort,
+                        const double nblist_padding) {
                 std::vector<int> row_atom_idxs(row_atom_idxs_i.size());
                 std::memcpy(row_atom_idxs.data(), row_atom_idxs_i.data(), row_atom_idxs_i.size() * sizeof(int));
 
-                return new timemachine::NonbondedInteractionGroup<RealType>(N, row_atom_idxs, beta, cutoff);
+                return new timemachine::NonbondedInteractionGroup<RealType>(
+                    N, row_atom_idxs, beta, cutoff, disable_hilbert_sort, nblist_padding);
             }),
             py::arg("num_atoms"),
             py::arg("row_atom_idxs_i"),
             py::arg("beta"),
-            py::arg("cutoff"));
+            py::arg("cutoff"),
+            py::arg("disable_hilbert_sort") = false,
+            py::arg("nblist_padding") = 0.1);
 }
 
 template <typename RealType, bool Negated> void declare_nonbonded_pair_list(py::module &m, const char *typestr) {

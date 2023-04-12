@@ -1,17 +1,27 @@
-import functools
 import multiprocessing
-from typing import List, Tuple
+from dataclasses import dataclass
+from typing import Generic, List, Optional, Sequence, Tuple, TypeVar, Union, cast
 
 import jax
-import jax.numpy as jnp
 import numpy as np
+import openmm
 import scipy
-from simtk import openmm
 
+from timemachine import potentials
 from timemachine.ff.handlers import openmm_deserializer
 from timemachine.integrator import simulate
-from timemachine.lib import potentials
-from timemachine.potentials import bonded, nonbonded
+from timemachine.potentials import (
+    BoundPotential,
+    ChiralAtomRestraint,
+    ChiralBondRestraint,
+    HarmonicAngle,
+    HarmonicAngleStable,
+    HarmonicBond,
+    Nonbonded,
+    NonbondedPairListPrecomputed,
+    PeriodicTorsion,
+    Potential,
+)
 
 # Chiral restraints are disabled until checks are added (see GH #815)
 # from timemachine.potentials import bonded, chiral_restraints, nonbonded
@@ -72,23 +82,27 @@ def simulate_system(U_fn, x0, num_samples=20000, steps_per_batch=500, num_worker
     return frames
 
 
-def convert_bps_into_system(bps):
+def convert_bps_into_system(bps: Sequence[potentials.BoundPotential]):
 
-    system = VacuumSystem(None, None, None, None, None, None)
+    bond = angle = torsion = nonbonded = None
 
-    for pot in bps:
-        if isinstance(pot, potentials.HarmonicBond):
-            system.bond = pot
-        elif isinstance(pot, potentials.HarmonicAngle):
-            system.angle = pot
-        elif isinstance(pot, potentials.PeriodicTorsion):
-            system.torsion = pot
-        elif isinstance(pot, potentials.Nonbonded):
-            system.nonbonded = pot
+    for bp in bps:
+        if isinstance(bp.potential, potentials.HarmonicBond):
+            bond = bp
+        elif isinstance(bp.potential, potentials.HarmonicAngle):
+            angle = bp
+        elif isinstance(bp.potential, potentials.PeriodicTorsion):
+            torsion = bp
+        elif isinstance(bp.potential, potentials.Nonbonded):
+            nonbonded = bp
         else:
             assert 0, "Unknown potential"
 
-    return system
+    assert bond
+    assert angle
+    assert nonbonded
+
+    return VacuumSystem(bond, angle, torsion, nonbonded, None, None)
 
 
 def convert_omm_system(omm_system: openmm.System) -> Tuple["VacuumSystem", List[float]]:
@@ -97,101 +111,61 @@ def convert_omm_system(omm_system: openmm.System) -> Tuple["VacuumSystem", List[
     return system, masses
 
 
-class VacuumSystem:
+_Nonbonded = TypeVar("_Nonbonded", bound=Union[Nonbonded, NonbondedPairListPrecomputed])
+_HarmonicAngle = TypeVar("_HarmonicAngle", bound=Union[HarmonicAngle, HarmonicAngleStable])
 
+
+@dataclass
+class VacuumSystem(Generic[_Nonbonded, _HarmonicAngle]):
     # utility system container
-
-    def __init__(self, bond, angle, torsion, nonbonded, chiral_atom, chiral_bond):
-        self.bond = bond
-        self.angle = angle
-        self.torsion = torsion
-        self.nonbonded = nonbonded
-        self.chiral_atom = chiral_atom
-        self.chiral_bond = chiral_bond
+    bond: BoundPotential[HarmonicBond]
+    angle: BoundPotential[_HarmonicAngle]
+    torsion: Optional[BoundPotential[PeriodicTorsion]]
+    nonbonded: BoundPotential[_Nonbonded]
+    chiral_atom: Optional[BoundPotential[ChiralAtomRestraint]]
+    chiral_bond: Optional[BoundPotential[ChiralBondRestraint]]
 
     def get_U_fn(self):
         """
         Return a jax function that evaluates the potential energy of a set of coordinates.
         """
-        bond_U = functools.partial(
-            bonded.harmonic_bond,
-            params=jnp.array(self.bond.params),
-            box=None,
-            bond_idxs=np.array(self.bond.get_idxs()),
-        )
-        angle_U = functools.partial(
-            bonded.harmonic_angle,
-            params=jnp.array(self.angle.params),
-            box=None,
-            angle_idxs=np.array(self.angle.get_idxs()),
-        )
-        torsion_U = functools.partial(
-            bonded.periodic_torsion,
-            params=jnp.array(self.torsion.params),
-            box=None,
-            torsion_idxs=np.array(self.torsion.get_idxs()),
-        )
-        nbpl_U = functools.partial(
-            nonbonded.nonbonded_on_precomputed_pairs,
-            pairs=np.array(self.nonbonded.get_idxs()),
-            params=jnp.array(self.nonbonded.params),
-            box=None,
-            beta=self.nonbonded.get_beta(),
-            cutoff=self.nonbonded.get_cutoff(),
-        )
-
-        # Chiral restraints are disabled until checks are added (see GH #815)
-        # if self.chiral_atom:
-        #     chiral_atom_U = functools.partial(
-        #         chiral_restraints.chiral_atom_restraint,
-        #         params=jnp.array(self.chiral_atom.params),
-        #         box=None,
-        #         idxs=np.array(self.chiral_atom.get_idxs()),
-        #         lamb=0.0,
-        #     )
-        # else:
-        #     chiral_atom_U = lambda _: 0
-
-        # if self.chiral_bond:
-        #     chiral_bond_U = functools.partial(
-        #         chiral_restraints.chiral_bond_restraint,
-        #         params=jnp.array(self.chiral_bond.params),
-        #         box=None,
-        #         idxs=np.array(self.chiral_bond.get_idxs()),
-        #         signs=np.array(self.chiral_bond.get_signs()),
-        #         lamb=0.0,
-        #     )
-        # else:
-        #     chiral_bond_U = lambda _: 0
 
         def U_fn(x):
-            Us_vdw, Us_coulomb = nbpl_U(x)
+            assert self.torsion
 
             # Chiral restraints are disabled until checks are added (see GH #815)
             # chiral_U = chiral_atom_U(x) + chiral_bond_U(x)
-
-            return bond_U(x) + angle_U(x) + torsion_U(x) + jnp.sum(Us_vdw) + jnp.sum(Us_coulomb)  # + chiral_U
+            return (
+                self.bond(x, box=None)
+                + self.angle(x, box=None)
+                + self.torsion(x, box=None)
+                + self.nonbonded(x, box=None)
+                # + self.chiral_atom(x, box=None)
+                # + self.chiral_bond(x, box=None)
+            )
 
         return U_fn
 
-    def get_U_fns(self):
+    def get_U_fns(self) -> List[BoundPotential[Potential]]:
         # For molecules too small for to have certain terms,
         # skip when no params are present
-        return [p for p in [self.bond, self.angle, self.torsion, self.nonbonded] if len(p.params) > 0]
+        terms = cast(
+            List[BoundPotential[Potential]],
+            [p for p in [self.bond, self.angle, self.torsion, self.nonbonded] if p],
+        )
+        return [p for p in terms if p and len(p.params) > 0]
 
 
+@dataclass
 class HostGuestSystem:
 
-    # utility system container
-
-    def __init__(self, bond, angle, torsion, chiral_atom, chiral_bond, nonbonded_guest_pairs, nonbonded_host_guest):
-        self.bond = bond
-        self.angle = angle
-        self.torsion = torsion
-        self.chiral_atom = chiral_atom
-        self.chiral_bond = chiral_bond
-        self.nonbonded_guest_pairs = nonbonded_guest_pairs
-        self.nonbonded_host_guest = nonbonded_host_guest
+    bond: BoundPotential[HarmonicBond]
+    angle: BoundPotential[HarmonicAngleStable]
+    torsion: BoundPotential[PeriodicTorsion]
+    chiral_atom: BoundPotential[ChiralAtomRestraint]
+    chiral_bond: BoundPotential[ChiralBondRestraint]
+    nonbonded_guest_pairs: BoundPotential[NonbondedPairListPrecomputed]
+    nonbonded_host_guest: BoundPotential[Nonbonded]
 
     def get_U_fns(self):
 

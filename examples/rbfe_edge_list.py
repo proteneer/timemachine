@@ -2,7 +2,7 @@ import argparse
 import csv
 from typing import List
 
-from simtk.openmm import app
+from openmm import app
 
 from timemachine.constants import KCAL_TO_KJ
 from timemachine.fe import rbfe
@@ -19,7 +19,7 @@ def parse_args():
         "--n_frames", type=int, help="number of frames to use for the free energy estimate", required=True
     )
     parser.add_argument("--ligands", type=str, help="SDF file containing the ligands of interest", required=True)
-    parser.add_argument("--results_csv", type=str, help="Results containing all the csv", required=True)
+    parser.add_argument("--results_csv", type=str, help="CSV containing the results and edges", required=True)
     parser.add_argument("--forcefield", type=str, help="location of the ligand forcefield", required=True)
     parser.add_argument("--protein", type=str, help="PDB of the protein complex", required=True)
     parser.add_argument("--n_gpus", type=int, help="number of gpus", required=True)

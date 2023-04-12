@@ -8,7 +8,7 @@ import jax.random as jrandom
 import numpy as np
 
 from timemachine import testsystems
-from timemachine.constants import BOLTZ, DEFAULT_FF
+from timemachine.constants import BOLTZ
 from timemachine.ff import Forcefield
 from timemachine.md import enhanced
 from timemachine.md.moves import NPTMove, OptimizedMTMMove, ReferenceMTMMove
@@ -17,7 +17,7 @@ from timemachine.potentials import nonbonded
 
 
 def get_ff_am1ccc():
-    ff = Forcefield.load_from_file(DEFAULT_FF)
+    ff = Forcefield.load_default()
     return ff
 
 
@@ -52,11 +52,11 @@ def test_optimized_MTM():
     ubps, params, masses, coords, box = enhanced.get_solvent_phase_system(mol, ff, 0.0)
 
     # Unwrap SummedPotential to get intermolecular potential
-    nb_potential = ubps[-1]._potentials[0]
-    nb_params = ubps[-1]._params_init[0]
+    nb_potential = ubps[-1].potentials[0]
+    nb_params = ubps[-1].params_init[0]
 
-    beta = nb_potential.get_beta()
-    cutoff = nb_potential.get_cutoff()
+    beta = nb_potential.beta
+    cutoff = nb_potential.cutoff
 
     params_i = nb_params[-num_ligand_atoms:]  # ligand params
     params_j = nb_params[:-num_ligand_atoms]  # water params
@@ -130,8 +130,10 @@ def test_optimized_MTM():
         vacuum_log_weights=jnp.array(vacuum_log_weights),
     )
 
+    bps = [ubp.bind(params) for ubp, params in zip(ubps, params)]
+
     # we should initialize new instances of this
-    npt_mover = NPTMove(ubps, masses, temperature, pressure, n_steps=1000, seed=seed)
+    npt_mover = NPTMove(bps, masses, temperature, pressure, n_steps=1000, seed=seed)
 
     K = 100
     # note that these seeds aren't actually used, since we feed in explicit keys to acceptance_probability

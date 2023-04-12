@@ -4,8 +4,8 @@ from typing import List, Optional
 import jax
 import numpy as np
 from numpy.typing import NDArray
+from openmm import app
 from rdkit import Chem
-from simtk.openmm import app
 
 from timemachine.constants import MAX_FORCE_NORM
 from timemachine.fe.topology import BaseTopology

@@ -6,7 +6,6 @@ from typing import List
 import numpy as np
 import pytest
 
-from timemachine.constants import DEFAULT_FF
 from timemachine.fe.free_energy import HostConfig, PairBarResult, SimulationResult, image_frames, sample
 from timemachine.fe.rbfe import (
     estimate_relative_free_energy,
@@ -110,7 +109,7 @@ def run_triple(mol_a, mol_b, core, forcefield, n_frames, protein_path, n_eq_step
     )
     print("vacuum")
     is_bisection = estimate_relative_free_energy_fn == estimate_relative_free_energy_via_greedy_bisection
-    state_seeds = [6998, 6082, 36] if is_bisection else [6998, 3540, 36]
+    state_seeds = [3595, 7643, 6265] if is_bisection else [3595, 3418, 6265]
     check_sim_result(vacuum_res, state_seeds=state_seeds)
 
     box_width = 4.0
@@ -132,11 +131,11 @@ def run_triple(mol_a, mol_b, core, forcefield, n_frames, protein_path, n_eq_step
     )
 
     print("solvent")
-    state_seeds = [8783, 8019, 3494] if is_bisection else [8783, 701, 3494]
+    state_seeds = [6713, 6361, 5083] if is_bisection else [6713, 9502, 5083]
     check_sim_result(solvent_res, state_seeds=state_seeds)
 
     seed = 2024
-    complex_sys, complex_conf, _, _, complex_box, _ = builders.build_protein_system(
+    complex_sys, complex_conf, complex_box, _ = builders.build_protein_system(
         protein_path, forcefield.protein_ff, forcefield.water_ff
     )
     complex_box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes
@@ -156,7 +155,7 @@ def run_triple(mol_a, mol_b, core, forcefield, n_frames, protein_path, n_eq_step
     )
 
     print("complex")
-    state_seeds = [9977, 3195, 5508] if is_bisection else [9977, 1713, 5508]
+    state_seeds = [3051, 1894, 5814] if is_bisection else [3051, 8351, 5814]
     check_sim_result(complex_res, state_seeds=state_seeds)
 
 
@@ -168,7 +167,7 @@ def run_triple(mol_a, mol_b, core, forcefield, n_frames, protein_path, n_eq_step
 def test_run_hif2a_test_system(estimate_relative_free_energy_fn):
 
     mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
-    forcefield = Forcefield.load_from_file(DEFAULT_FF)
+    forcefield = Forcefield.load_default()
 
     with resources.path("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as protein_path:
         run_triple(
@@ -194,7 +193,7 @@ def test_run_hif2a_test_system(estimate_relative_free_energy_fn):
 def test_steps_per_frames():
     """Verifies that modifying steps per frames doesn't change result trajectory"""
     mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
-    forcefield = Forcefield.load_from_file(DEFAULT_FF)
+    forcefield = Forcefield.load_default()
     seed = 2022
     frames = 5
     res = run_vacuum(mol_a, mol_b, core, forcefield, None, frames, seed, n_eq_steps=10, steps_per_frame=2, n_windows=2)
@@ -216,7 +215,7 @@ def test_imaging_frames():
 
     Does not check precision, as it is known to be lossy. Only to be used for post-processing/visualization."""
     mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
-    forcefield = Forcefield.load_from_file(DEFAULT_FF)
+    forcefield = Forcefield.load_default()
     seed = 2022
     frames = 1
     steps_per_frame = 1
@@ -268,7 +267,7 @@ def test_imaging_frames():
 def test_rbfe_with_1_window(estimate_relative_free_energy_fn):
     """Should not be able to run a relative free energy calculation with a single window"""
     mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
-    forcefield = Forcefield.load_from_file(DEFAULT_FF)
+    forcefield = Forcefield.load_default()
     seed = 2022
     with pytest.raises(AssertionError):
         estimate_relative_free_energy_fn(

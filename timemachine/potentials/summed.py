@@ -1,18 +1,15 @@
-from typing import Any, Callable, Sequence, Tuple
+from typing import Optional, Sequence, Tuple
 
+import jax.numpy as jnp
 import numpy as np
 
-Array = Any
-Conf = Array
-Params = Array
-Box = Array
-PotentialFxn = Callable[[Conf, Params, Box], float]
+from .types import Box, Conf, Params, PotentialFxn
 
 
 def summed_potential(
-    conf: Array,
-    params: Array,
-    box: Array,
+    conf: Conf,
+    params: Params,
+    box: Optional[Box],
     U_fns: Sequence[PotentialFxn],
     shapes: Sequence[Tuple],
 ):
@@ -40,4 +37,29 @@ def summed_potential(
     # np.split expects indices, must increment sizes to be indices
     split_indices = np.cumsum(sizes)
     paramss = [ps.reshape(shape) for ps, shape in zip(np.split(params, split_indices[:-1]), shapes)]
-    return sum(U_fn(conf, ps, box) for U_fn, ps in zip(U_fns, paramss))
+    return jnp.sum(jnp.array([U_fn(conf, ps, box) for U_fn, ps in zip(U_fns, paramss)]))
+
+
+def fanout_summed_potential(
+    conf: Conf,
+    params: Params,
+    box: Optional[Box],
+    U_fns: Sequence[PotentialFxn],
+):
+    """Reference implementation of the custom_ops FanoutSummedPotential.
+
+    Parameters
+    ----------
+    conf: array (N, 3)
+        conformation
+
+    params: array (P,)
+        flattened array of parameters shared by each potential term
+
+    box: array (3, 3)
+        periodic box
+
+    U_fns: list of functions with signature (conf, params, box) -> energy
+        potential terms
+    """
+    return jnp.sum(jnp.array([U_fn(conf, ps, box) for U_fn, ps in zip(U_fns, jnp.array(params))]))

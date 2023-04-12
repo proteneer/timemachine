@@ -11,7 +11,6 @@ from hypothesis import assume, given, seed
 from rdkit import Chem
 from rdkit.Chem import AllChem
 
-from timemachine.constants import DEFAULT_FF
 from timemachine.fe import atom_mapping, single_topology
 from timemachine.fe.interpolate import linear_interpolation, log_linear_interpolation
 from timemachine.fe.single_topology import (
@@ -247,12 +246,12 @@ def test_hif2a_end_state_stability(num_pairs_to_setup=25, num_pairs_to_simulate=
         for system in systems:
 
             # assert that the idxs are canonicalized.
-            assert_bond_idxs_are_canonical(system.bond.get_idxs())
-            assert_bond_idxs_are_canonical(system.angle.get_idxs())
-            assert_bond_idxs_are_canonical(system.torsion.get_idxs())
-            assert_bond_idxs_are_canonical(system.nonbonded.get_idxs())
-            assert_bond_idxs_are_canonical(system.chiral_bond.get_idxs())
-            assert_chiral_atom_idxs_are_canonical(system.chiral_atom.get_idxs())
+            assert_bond_idxs_are_canonical(system.bond.potential.idxs)
+            assert_bond_idxs_are_canonical(system.angle.potential.idxs)
+            assert_bond_idxs_are_canonical(system.torsion.potential.idxs)
+            assert_bond_idxs_are_canonical(system.nonbonded.potential.idxs)
+            assert_bond_idxs_are_canonical(system.chiral_bond.potential.idxs)
+            assert_chiral_atom_idxs_are_canonical(system.chiral_atom.potential.idxs)
 
             U_fn = jax.jit(system.get_U_fn())
             assert np.isfinite(U_fn(x0))
@@ -323,7 +322,7 @@ def test_jax_transform_intermediate_potential():
         mol_b = mols["57"]
 
         core = _get_core_by_mcs(mol_a, mol_b)
-        ff = Forcefield.load_from_file(DEFAULT_FF)
+        ff = Forcefield.load_default()
         st = SingleTopology(mol_a, mol_b, core, ff)
         conf = st.combine_confs(get_romol_conf(mol_a), get_romol_conf(mol_b))
         return st, conf
@@ -389,13 +388,13 @@ def test_nonbonded_split(precision, rtol, atol, use_tiny_mol):
 
         vacuum_system = st.setup_intermediate_state(lamb)
         vacuum_potentials = vacuum_system.get_U_fns()
-        vacuum_impls = [p.bound_impl(precision) for p in vacuum_potentials]
+        vacuum_impls = [p.to_gpu(precision).bound_impl for p in vacuum_potentials]
         val_and_grad_fn = minimizer.get_val_and_grad_fn(vacuum_impls, solvent_box)
         vacuum_u, vacuum_grad = val_and_grad_fn(ligand_conf)
 
         solvent_system = st.combine_with_host(convert_bps_into_system(solvent_bps), lamb)
         solvent_potentials = solvent_system.get_U_fns()
-        solvent_impls = [p.bound_impl(precision) for p in solvent_potentials]
+        solvent_impls = [p.to_gpu(precision).bound_impl for p in solvent_potentials]
         val_and_grad_fn = minimizer.get_val_and_grad_fn(solvent_impls, solvent_box)
         solvent_u, solvent_grad = val_and_grad_fn(combined_conf)
         return vacuum_grad, vacuum_u, solvent_grad, solvent_u
@@ -465,12 +464,12 @@ def test_no_chiral_atom_restraints():
     mol_b = ligand_from_smiles("c1(I)ccccc1")
     core = _get_core_by_mcs(mol_a, mol_b)
 
-    forcefield = Forcefield.load_from_file(DEFAULT_FF)
+    forcefield = Forcefield.load_default()
     st = SingleTopology(mol_a, mol_b, core, forcefield)
     init_conf = st.combine_confs(get_romol_conf(mol_a), get_romol_conf(mol_b))
     state = st.setup_intermediate_state(0.1)
 
-    assert len(state.chiral_atom.get_idxs()) == 0
+    assert len(state.chiral_atom.potential.idxs) == 0
     U = state.get_U_fn()
     _ = U(init_conf)
 
@@ -480,12 +479,12 @@ def test_no_chiral_bond_restraints():
     mol_b = ligand_from_smiles("CI")
     core = _get_core_by_mcs(mol_a, mol_b)
 
-    forcefield = Forcefield.load_from_file(DEFAULT_FF)
+    forcefield = Forcefield.load_default()
     st = SingleTopology(mol_a, mol_b, core, forcefield)
     init_conf = st.combine_confs(get_romol_conf(mol_a), get_romol_conf(mol_b))
     state = st.setup_intermediate_state(0.1)
 
-    assert len(state.chiral_bond.get_idxs()) == 0
+    assert len(state.chiral_bond.potential.idxs) == 0
     U = state.get_U_fn()
     _ = U(init_conf)
 
@@ -501,7 +500,8 @@ def pairs(elem, unique=False):
     return st.lists(elem, min_size=2, max_size=2, unique=unique).map(tuple)
 
 
-lambda_intervals = pairs(finite_floats(1e-9, 1.0 - 1e-9), unique=True).map(sorted)
+# https://github.com/python/mypy/issues/12617
+lambda_intervals = pairs(finite_floats(1e-9, 1.0 - 1e-9), unique=True).map(sorted)  # type: ignore
 
 
 @pytest.mark.parametrize(
@@ -533,7 +533,8 @@ def test_handle_ring_opening_closing_symmetric(interpolation_fn, k, lambda_inter
     )
 
 
-@given(nonzero_force_constants, st.lists(lambdas, min_size=3, max_size=3, unique=True).map(sorted))
+# https://github.com/python/mypy/issues/12617
+@given(nonzero_force_constants, st.lists(lambdas, min_size=3, max_size=3, unique=True).map(sorted))  # type: ignore
 @seed(2022)
 def test_handle_ring_opening_closing_pin_to_end_states(k, lambdas):
     lam, lambda_min, lambda_max = lambdas

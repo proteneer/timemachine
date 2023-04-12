@@ -16,9 +16,9 @@ from timemachine.fe.single_topology import SingleTopology
 from timemachine.ff import Forcefield
 from timemachine.ff.handlers import openmm_deserializer
 from timemachine.lib import LangevinIntegrator, MonteCarloBarostat, custom_ops
-from timemachine.lib.potentials import Nonbonded, NonbondedInteractionGroup
 from timemachine.md import builders, minimizer
 from timemachine.md.barostat.utils import get_bond_list, get_group_indices
+from timemachine.potentials import BoundPotential, Nonbonded, NonbondedInteractionGroup, Potential
 from timemachine.testsystems.dhfr import setup_dhfr
 from timemachine.testsystems.relative import get_hif2a_ligand_pair_single_topology
 
@@ -38,7 +38,7 @@ def generate_hif2a_frames(n_frames: int, frame_interval: int, seed=None, barosta
 
     # build the protein system.
     with resources.path("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as path_to_pdb:
-        host_system, host_coords, _, _, host_box, _ = builders.build_protein_system(
+        host_system, host_coords, host_box, _ = builders.build_protein_system(
             str(path_to_pdb), forcefield.protein_ff, forcefield.water_ff
         )
 
@@ -50,7 +50,7 @@ def generate_hif2a_frames(n_frames: int, frame_interval: int, seed=None, barosta
     pressure = constants.DEFAULT_PRESSURE
 
     harmonic_bond_potential = initial_state.potentials[0]
-    bond_list = get_bond_list(harmonic_bond_potential)
+    bond_list = get_bond_list(harmonic_bond_potential.potential)
     masses = initial_state.integrator.masses
     if hmr:
         dt = 2.5e-3
@@ -62,7 +62,7 @@ def generate_hif2a_frames(n_frames: int, frame_interval: int, seed=None, barosta
     bps = []
 
     for potential in initial_state.potentials:
-        bps.append(potential.bound_impl(precision=np.float32))  # get the bound implementation
+        bps.append(potential.to_gpu(precision=np.float32).bound_impl)  # get the bound implementation
 
     baro_impl = None
     if barostat_interval > 0:
@@ -93,7 +93,7 @@ def generate_hif2a_frames(n_frames: int, frame_interval: int, seed=None, barosta
 
 def benchmark_potential(
     label,
-    potential,
+    potential: Potential,
     precision,
     params,
     coords,
@@ -109,7 +109,7 @@ def benchmark_potential(
         label = label + "_f32"
     else:
         label = label + "_f64"
-    unbound = potential.unbound_impl(precision=precision)
+    unbound = potential.to_gpu(precision=precision).unbound_impl
     start = time.time()
     batch_times = []
     frames = coords.shape[0]
@@ -162,7 +162,7 @@ def benchmark(
     pressure = constants.DEFAULT_PRESSURE
 
     harmonic_bond_potential = bound_potentials[0]
-    bond_list = get_bond_list(harmonic_bond_potential)
+    bond_list = get_bond_list(harmonic_bond_potential.potential)
     if hmr:
         dt = 2.5e-3
         masses = apply_hmr(masses, bond_list)
@@ -171,7 +171,7 @@ def benchmark(
     bps = []
 
     for potential in bound_potentials:
-        bps.append(potential.bound_impl(precision=np.float32))  # get the bound implementation
+        bps.append(potential.to_gpu(precision=np.float32).bound_impl)  # get the bound implementation
 
     baro_impl = None
     if barostat_interval > 0:
@@ -255,7 +255,7 @@ def benchmark_local(
     rng = np.random.default_rng(seed)
 
     harmonic_bond_potential = bound_potentials[0]
-    bond_list = get_bond_list(harmonic_bond_potential)
+    bond_list = get_bond_list(harmonic_bond_potential.potential)
     if hmr:
         dt = 2.5e-3
         masses = apply_hmr(masses, bond_list)
@@ -264,7 +264,7 @@ def benchmark_local(
     bps = []
 
     for potential in bound_potentials:
-        bps.append(potential.bound_impl(precision=np.float32))  # get the bound implementation
+        bps.append(potential.to_gpu(precision=np.float32).bound_impl)  # get the bound implementation
 
     ctxt = custom_ops.Context(
         x0,
@@ -365,7 +365,7 @@ def prepare_hif2a_initial_state(st, host_system, host_coords, host_box):
     lamb = 0.1
     host = rbfe.setup_optimized_host(st, host_config)
     initial_state = rbfe.setup_initial_states(st, host, temperature, [lamb], seed=2022)[0]
-    bound_impls = [p.bound_impl(np.float32) for p in initial_state.potentials]
+    bound_impls = [p.to_gpu(np.float32).bound_impl for p in initial_state.potentials]
     val_and_grad_fn = minimizer.get_val_and_grad_fn(bound_impls, initial_state.box0)
     assert np.all(np.isfinite(initial_state.x0)), "Initial coordinates contain nan or inf"
     ligand_coords = initial_state.x0[initial_state.ligand_idxs]
@@ -387,7 +387,7 @@ def benchmark_hif2a(verbose=False, num_batches=100, steps_per_batch=1000):
 
     # build the protein system.
     with resources.path("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as path_to_pdb:
-        complex_system, complex_coords, _, _, complex_box, _ = builders.build_protein_system(
+        complex_system, complex_coords, complex_box, _ = builders.build_protein_system(
             str(path_to_pdb), forcefield.protein_ff, forcefield.water_ff
         )
 
@@ -468,10 +468,9 @@ def test_hif2a():
 
 
 def test_nonbonded_interaction_group_potential(hi2fa_test_frames):
-    pots, frames, boxes, ligand_idxs = hi2fa_test_frames
+    bps, frames, boxes, ligand_idxs = hi2fa_test_frames
     lambdas = np.array([0.0, 1.0])
-    nonbonded_potential = next(p for p in pots if isinstance(p, Nonbonded))
-    assert nonbonded_potential is not None
+    nonbonded_potential: BoundPotential[Nonbonded] = next(bp for bp in bps if isinstance(bp.potential, Nonbonded))
 
     num_param_batches = 5
     beta = 1 / (constants.BOLTZ * 300)
@@ -481,7 +480,7 @@ def test_nonbonded_interaction_group_potential(hi2fa_test_frames):
     nonbonded_params = np.stack([nonbonded_potential.params] * num_param_batches)
 
     potential = NonbondedInteractionGroup(
-        nonbonded_potential.get_num_atoms(),
+        nonbonded_potential.potential.num_atoms,
         ligand_idxs,
         beta,
         cutoff,
@@ -501,9 +500,10 @@ def test_nonbonded_interaction_group_potential(hi2fa_test_frames):
 
 
 def test_nonbonded_potential(hi2fa_test_frames):
-    pots, frames, boxes, _ = hi2fa_test_frames
+    bps, frames, boxes, _ = hi2fa_test_frames
 
-    nonbonded_pot = next(p for p in pots if isinstance(p, Nonbonded))
+    nonbonded_pot: BoundPotential[Nonbonded]
+    nonbonded_pot = next(bp for bp in bps if isinstance(bp.potential, Nonbonded))
     assert nonbonded_pot is not None
     lambdas = np.array([0.0, 1.0])
 
@@ -514,11 +514,11 @@ def test_nonbonded_potential(hi2fa_test_frames):
     precisions = [np.float32, np.float64]
 
     potential = Nonbonded(
-        nonbonded_pot.get_num_atoms(),
-        nonbonded_pot.get_exclusion_idxs(),
-        nonbonded_pot.get_scale_factors(),
-        nonbonded_pot.get_beta(),
-        nonbonded_pot.get_cutoff(),
+        nonbonded_pot.potential.num_atoms,
+        nonbonded_pot.potential.exclusion_idxs,
+        nonbonded_pot.potential.scale_factors,
+        nonbonded_pot.potential.beta,
+        nonbonded_pot.potential.cutoff,
     )
 
     class_name = potential.__class__.__name__
@@ -536,16 +536,16 @@ def test_nonbonded_potential(hi2fa_test_frames):
 
 
 def test_bonded_potentials(hi2fa_test_frames):
-    pots, frames, boxes, _ = hi2fa_test_frames
+    bps, frames, boxes, _ = hi2fa_test_frames
 
     lambdas = np.array([0.0, 1.0])
-    for potential in pots[:-1]:
-        class_name = potential.__class__.__name__
-        params = np.expand_dims(potential.params, axis=0)
+    for bp in bps[:-1]:
+        class_name = bp.__class__.__name__
+        params = np.expand_dims(bp.params, axis=0)
         for precision in [np.float32, np.float64]:
             benchmark_potential(
                 class_name,
-                potential,
+                bp.potential,
                 precision,
                 params,
                 frames,

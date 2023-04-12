@@ -26,7 +26,7 @@ def test_deterministic_energies():
 
     # build the protein system.
     with resources.path("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as path_to_pdb:
-        complex_system, complex_coords, _, _, complex_box, _ = builders.build_protein_system(
+        complex_system, complex_coords, complex_box, _ = builders.build_protein_system(
             str(path_to_pdb), ff.protein_ff, ff.water_ff
         )
     host_fns, host_masses = openmm_deserializer.deserialize_system(complex_system, cutoff=1.0)
@@ -38,7 +38,7 @@ def test_deterministic_energies():
     v0 = np.zeros_like(x0)
 
     harmonic_bond_potential = host_fns[0]
-    bond_list = get_bond_list(harmonic_bond_potential)
+    bond_list = get_bond_list(harmonic_bond_potential.potential)
     group_idxs = get_group_indices(bond_list)
     baro = MonteCarloBarostat(
         x0.shape[0],
@@ -53,11 +53,11 @@ def test_deterministic_energies():
 
     for precision, decimals in [(np.float32, 4), (np.float64, 8)]:
         bps = []
-        unbound_bps = []
+        ubps = []
 
-        for potential in host_fns:
-            bps.append(potential.bound_impl(precision=precision))  # get the bound implementation
-            unbound_bps.append(potential.unbound_impl(precision))
+        for bp in host_fns:
+            bps.append(bp.to_gpu(precision=precision).bound_impl)  # get the bound implementation
+            ubps.append(bp.potential.to_gpu(precision).unbound_impl)
 
         for barostat in [None, baro.impl(bps)]:
             ctxt = custom_ops.Context(x0, v0, complex_box, intg, bps, barostat=barostat)
@@ -67,7 +67,7 @@ def test_deterministic_energies():
                 test_u = 0.0
                 test_u_selective = 0.0
                 test_U_fixed = np.uint64(0)
-                for fn, unbound, bp in zip(host_fns, unbound_bps, bps):
+                for fn, unbound, bp in zip(host_fns, ubps, bps):
                     U_fixed = bp.execute_fixed(x, b)
                     test_U_fixed += U_fixed
                     _, U = bp.execute(x, b)

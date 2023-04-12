@@ -4,7 +4,6 @@ import sys
 import numpy as np
 from rdkit import Chem
 
-from timemachine.constants import DEFAULT_FF
 from timemachine.fe import atom_mapping, pdb_writer
 from timemachine.fe.rbfe import HostConfig, estimate_relative_free_energy
 from timemachine.fe.single_topology import AtomMapMixin
@@ -49,7 +48,7 @@ def run_pair(mol_a, mol_b, core, forcefield, n_frames, protein_path, seed):
         f"solvent dG: {np.sum(solvent_res.result.all_dGs):.3f} +- {np.linalg.norm(solvent_res.result.all_errs):.3f} kJ/mol"
     )
 
-    complex_sys, complex_conf, _, _, complex_box, complex_top = builders.build_protein_system(
+    complex_sys, complex_conf, complex_box, complex_top = builders.build_protein_system(
         protein_path, forcefield.protein_ff, forcefield.water_ff
     )
     complex_box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes
@@ -69,7 +68,7 @@ def run_pair(mol_a, mol_b, core, forcefield, n_frames, protein_path, seed):
 def hif2a_pair():
 
     mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
-    forcefield = Forcefield.load_from_file(DEFAULT_FF)
+    forcefield = Forcefield.load_default()
     protein_path = "timemachine/testsystems/data/hif2a_nowater_min.pdb"
 
     # fast

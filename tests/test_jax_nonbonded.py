@@ -10,10 +10,10 @@ import pytest
 from jax import jit
 from jax import numpy as jnp
 from jax import value_and_grad, vmap
+from openmm import unit
 from scipy.optimize import minimize
-from simtk import unit
 
-from timemachine.constants import BOLTZ, DEFAULT_FF, DEFAULT_TEMP
+from timemachine.constants import BOLTZ, DEFAULT_TEMP
 from timemachine.fe.reweighting import one_sided_exp
 from timemachine.ff import Forcefield
 from timemachine.ff.handlers import openmm_deserializer
@@ -111,7 +111,7 @@ difficult_instance_flags = {key: True for key in easy_instance_flags}
 
 
 def generate_waterbox_nb_args() -> NonbondedArgs:
-    ff = Forcefield.load_from_file(DEFAULT_FF)
+    ff = Forcefield.load_default()
     system, positions, box, _ = builders.build_water_system(3.0, ff.water_ff)
     bps, masses = openmm_deserializer.deserialize_system(system, cutoff=1.2)
     nb = bps[-1]
@@ -120,8 +120,8 @@ def generate_waterbox_nb_args() -> NonbondedArgs:
     conf = positions.value_in_unit(unit.nanometer)
 
     N = conf.shape[0]
-    beta = nb.get_beta()
-    cutoff = nb.get_cutoff()
+    beta = nb.potential.beta
+    cutoff = nb.potential.cutoff
 
     charge_rescale_mask = np.ones((N, N))
     lj_rescale_mask = np.ones((N, N))
@@ -163,13 +163,13 @@ def generate_random_inputs(n_atoms, dim, instance_flags=difficult_instance_flags
     eps = jnp.ones(n_atoms)
     w_coords = jnp.zeros(n_atoms)
     if instance_flags["randomize_charges"]:
-        charges = randn(n_atoms)
+        charges = jnp.array(randn(n_atoms))
     if instance_flags["randomize_sigma"]:
-        sig = min_dist * rand(n_atoms)
+        sig = min_dist * jnp.array(rand(n_atoms))
     if instance_flags["randomize_epsilon"]:
-        eps = rand(n_atoms)
+        eps = jnp.array(rand(n_atoms))
     if instance_flags["randomize_w_coords"]:
-        w_coords = 2 * cutoff * (2 * rand(n_atoms) - 1)  # [-2 * cutoff, 2 * cutoff]
+        w_coords = 2 * cutoff * (2 * jnp.array(rand(n_atoms)) - 1)  # [-2 * cutoff, 2 * cutoff]
 
     params = jnp.array([charges, sig, eps, w_coords]).T
 
@@ -306,7 +306,7 @@ def test_vmap():
 
 def test_jax_nonbonded_block():
     """Assert that nonbonded_block and nonbonded_on_specific_pairs agree"""
-    ff = Forcefield.load_from_file(DEFAULT_FF)
+    ff = Forcefield.load_default()
     system, positions, box, _ = builders.build_water_system(3.0, ff.water_ff)
     bps, masses = openmm_deserializer.deserialize_system(system, cutoff=1.2)
     nb = bps[-1]
@@ -315,8 +315,8 @@ def test_jax_nonbonded_block():
     conf = positions.value_in_unit(unit.nanometer)
 
     N = conf.shape[0]
-    beta = nb.get_beta()
-    cutoff = nb.get_cutoff()
+    beta = nb.potential.beta
+    cutoff = nb.potential.cutoff
 
     split = 70
 
@@ -374,7 +374,7 @@ def test_lj_basis():
 
 def test_precomputation():
     """Assert that nonbonded interaction groups using precomputation agree with reference nonbonded_on_specific_pairs"""
-    ff = Forcefield.load_from_file(DEFAULT_FF)
+    ff = Forcefield.load_default()
     system, positions, box, _ = builders.build_water_system(3.0, ff.water_ff)
     bps, masses = openmm_deserializer.deserialize_system(system, cutoff=1.2)
     nb = bps[-1]
@@ -383,8 +383,8 @@ def test_precomputation():
     conf = positions.value_in_unit(unit.nanometer)
 
     n_atoms = conf.shape[0]
-    beta = nb.get_beta()
-    cutoff = nb.get_cutoff()
+    beta = nb.potential.beta
+    cutoff = nb.potential.cutoff
 
     # generate array in the shape of a "trajectory" by adding noise to an initial conformation
     n_snapshots = 100

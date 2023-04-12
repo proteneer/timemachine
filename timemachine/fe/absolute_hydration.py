@@ -6,10 +6,11 @@ from typing import List, Sequence, Tuple
 
 import numpy as np
 from numpy.typing import NDArray as Array
-from simtk.openmm import app
+from openmm import app
 
-from timemachine.constants import BOLTZ, DEFAULT_FF, DEFAULT_TEMP
-from timemachine.fe import functional, model_utils
+from timemachine import potentials
+from timemachine.constants import BOLTZ, DEFAULT_TEMP
+from timemachine.fe import model_utils
 from timemachine.fe.free_energy import (
     AbsoluteFreeEnergy,
     HostConfig,
@@ -26,10 +27,11 @@ from timemachine.fe.topology import BaseTopology
 from timemachine.fe.utils import get_mol_name, get_romol_conf
 from timemachine.ff import Forcefield
 from timemachine.ff.handlers import openmm_deserializer
-from timemachine.lib import LangevinIntegrator, MonteCarloBarostat, potentials
+from timemachine.lib import LangevinIntegrator, MonteCarloBarostat
 from timemachine.md import builders, enhanced, minimizer, moves, smc
 from timemachine.md.barostat.utils import get_bond_list, get_group_indices
 from timemachine.md.states import CoordsVelBox
+from timemachine.potentials import SummedPotential
 
 
 def generate_endstate_samples(
@@ -118,10 +120,10 @@ def setup_absolute_hydration_with_endpoint_samples(
     np.random.seed(seed)
 
     # set up potentials
-    ff = ff or Forcefield.load_from_file(DEFAULT_FF)
+    ff = ff or Forcefield.load_default()
     potentials, params, masses, _, _ = enhanced.get_solvent_phase_system(mol, ff)
 
-    U_fn = functional.construct_differentiable_interface_fast(potentials, params)
+    U_fn = SummedPotential(potentials, params)
     kBT = BOLTZ * temperature
 
     def reduced_potential_fxn(xvb, lam):
@@ -333,7 +335,7 @@ def setup_initial_states(
 
         bond_potential = ubps[0]
         assert isinstance(bond_potential, potentials.HarmonicBond)
-        hmr_masses = model_utils.apply_hmr(masses, bond_potential.get_idxs())
+        hmr_masses = model_utils.apply_hmr(masses, bond_potential.idxs)
         group_idxs = get_group_indices(get_bond_list(bond_potential))
         baro = MonteCarloBarostat(len(hmr_masses), 1.0, temperature, group_idxs, 15, seed)
         box0 = host_config.box

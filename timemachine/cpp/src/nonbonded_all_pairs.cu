@@ -18,9 +18,15 @@ namespace timemachine {
 
 template <typename RealType>
 NonbondedAllPairs<RealType>::NonbondedAllPairs(
-    const int N, const double beta, const double cutoff, const std::optional<std::set<int>> &atom_idxs)
+    const int N,
+    const double beta,
+    const double cutoff,
+    const std::optional<std::set<int>> &atom_idxs,
+    const bool disable_hilbert_sort,
+    const double nblist_padding)
     : N_(N), K_(atom_idxs ? atom_idxs->size() : N_), beta_(beta), cutoff_(cutoff), d_atom_idxs_(nullptr), nblist_(K_),
-      nblist_padding_(0.1), d_sort_storage_(nullptr), d_sort_storage_bytes_(0), disable_hilbert_(false),
+      nblist_padding_(nblist_padding), d_sort_storage_(nullptr), d_sort_storage_bytes_(0),
+      disable_hilbert_(disable_hilbert_sort),
 
       kernel_ptrs_({// enumerate over every possible kernel combination
                     // U: Compute U
@@ -134,8 +140,6 @@ template <typename RealType> NonbondedAllPairs<RealType>::~NonbondedAllPairs() {
     gpuErrchk(cudaFreeHost(p_rebuild_nblist_));
 };
 
-template <typename RealType> void NonbondedAllPairs<RealType>::set_nblist_padding(double val) { nblist_padding_ = val; }
-
 // Set atom idxs upon which to compute the non-bonded potential. This will trigger a neighborlist rebuild.
 template <typename RealType> void NonbondedAllPairs<RealType>::set_atom_idxs(const std::vector<int> &atom_idxs) {
     verify_atom_idxs(N_, atom_idxs);
@@ -163,8 +167,6 @@ void NonbondedAllPairs<RealType>::set_atom_idxs_device(
     gpuErrchk(cudaMemsetAsync(d_rebuild_nblist_, 1, 1 * sizeof(*d_rebuild_nblist_), stream));
     this->K_ = K;
 }
-
-template <typename RealType> void NonbondedAllPairs<RealType>::disable_hilbert_sort() { disable_hilbert_ = true; }
 
 template <typename RealType>
 void NonbondedAllPairs<RealType>::hilbert_sort(const double *d_coords, const double *d_box, cudaStream_t stream) {

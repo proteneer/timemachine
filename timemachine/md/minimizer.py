@@ -1,11 +1,11 @@
 import warnings
-from typing import Optional, Tuple
+from typing import Optional, Sequence, Tuple
 
 import numpy as np
+import openmm
 import scipy.optimize
 from numpy.typing import NDArray
 from rdkit import Chem
-from simtk import openmm
 
 from timemachine.constants import BOLTZ, DEFAULT_TEMP, MAX_FORCE_NORM
 from timemachine.fe import model_utils, topology
@@ -13,10 +13,10 @@ from timemachine.fe.utils import get_romol_conf
 from timemachine.ff import Forcefield
 from timemachine.ff.handlers import openmm_deserializer
 from timemachine.lib import LangevinIntegrator, MonteCarloBarostat, custom_ops
-from timemachine.lib.potentials import HarmonicBond, SummedPotential
 from timemachine.md.barker import BarkerProposal
 from timemachine.md.barostat.utils import get_bond_list, get_group_indices
 from timemachine.md.fire import fire_descent
+from timemachine.potentials import HarmonicBond, SummedPotential
 
 
 class MinimizationWarning(UserWarning):
@@ -55,11 +55,13 @@ def parameterize_system(topo, ff: Forcefield, lamb: float):
 
 
 def bind_potentials(params_potential_pairs):
-    u_impls = [potential.bind(params).bound_impl(precision=np.float32) for params, potential in params_potential_pairs]
+    u_impls = [
+        potential.bind(params).to_gpu(precision=np.float32).bound_impl for params, potential in params_potential_pairs
+    ]
     return u_impls
 
 
-def fire_minimize(x0: NDArray, u_impls, box: NDArray, n_steps: int) -> NDArray:
+def fire_minimize(x0: NDArray, u_impls: Sequence[custom_ops.BoundPotential], box: NDArray, n_steps: int) -> NDArray:
     """
     Minimize coordinates using the FIRE algorithm
 
@@ -193,14 +195,14 @@ def minimize_host_4d(mols, host_system, host_coords, ff, box, mol_coords=None) -
     return final_coords[:num_host_atoms]
 
 
-def make_gpu_impl(potentials):
+def make_gpu_impl(bound_potentials):
     """return bound impl of a SummedPotential constructed from potentials"""
 
-    params = [p.params for p in potentials]
+    params = [bp.params for bp in bound_potentials]
     flat_params = np.concatenate([param.reshape(-1) for param in params])
 
-    summed_potential = SummedPotential(potentials, params)
-    bound_impl = summed_potential.bind(flat_params).bound_impl(np.float32)
+    summed_potential = SummedPotential([bp.potential for bp in bound_potentials], params)
+    bound_impl = summed_potential.bind(flat_params).to_gpu(np.float32).bound_impl
 
     return bound_impl
 

@@ -3,7 +3,6 @@ from time import time
 
 import numpy as np
 
-from timemachine.constants import DEFAULT_FF
 from timemachine.fe.utils import read_sdf
 from timemachine.ff import Forcefield
 from timemachine.ff.handlers import openmm_deserializer
@@ -12,10 +11,10 @@ from timemachine.md.minimizer import equilibrate_host_barker, make_host_du_dx_fx
 
 
 def test_minimizer():
-    ff = Forcefield.load_from_file(DEFAULT_FF)
+    ff = Forcefield.load_default()
 
     with resources.path("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as path_to_pdb:
-        complex_system, complex_coords, _, _, complex_box, _ = builders.build_protein_system(
+        complex_system, complex_coords, complex_box, _ = builders.build_protein_system(
             str(path_to_pdb), ff.protein_ff, ff.water_ff
         )
 
@@ -76,7 +75,7 @@ def test_minimizer():
 
 
 def test_equilibrate_host():
-    ff = Forcefield.load_from_file(DEFAULT_FF)
+    ff = Forcefield.load_default()
     host_system, host_coords, host_box, _ = builders.build_water_system(4.0, ff.water_ff)
 
     with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
@@ -94,14 +93,14 @@ def test_local_minimize_water_box():
     """
     Test that we can locally relax a box of water by selecting some random indices.
     """
-    ff = Forcefield.load_from_file(DEFAULT_FF)
+    ff = Forcefield.load_default()
 
     system, x0, box0, _ = builders.build_water_system(4.0, ff.water_ff)
     x0 = np.array(builders.strip_units(x0))
     host_fns, _ = openmm_deserializer.deserialize_system(system, cutoff=1.2)
     box0 += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes at the boundary
 
-    bound_impls = [p.bound_impl(np.float32) for p in host_fns]
+    bound_impls = [p.to_gpu(np.float32).bound_impl for p in host_fns]
     val_and_grad_fn = minimizer.get_val_and_grad_fn(bound_impls, box0)
 
     free_idxs = [0, 2, 3, 6, 7, 9, 15, 16]
