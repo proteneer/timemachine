@@ -178,7 +178,7 @@ def setup_initial_states(
     temperature: float,
     lambda_schedule: Union[NDArray, Sequence[float]],
     seed: int,
-    min_cutoff: float = 0.7,
+    min_cutoff: Optional[float] = 0.7,
 ) -> List[InitialState]:
     """
     Given a sequence of lambda values, return a list of initial states.
@@ -204,7 +204,7 @@ def setup_initial_states(
     seed: int
         Random number seed
 
-    min_cutoff: float
+    min_cutoff: float, optional
         throw error if any atom moves more than this distance (nm) after minimization
 
     Returns
@@ -313,7 +313,7 @@ def optimize_coordinates(initial_states, min_cutoff=0.7) -> List[NDArray]:
     ----------
     initial_states: list of InitialState
 
-    min_cutoff: float
+    min_cutoff: float, optional
         throw error if any atom moves more than this distance (nm) after minimization
 
     Returns
@@ -352,9 +352,10 @@ def optimize_coordinates(initial_states, min_cutoff=0.7) -> List[NDArray]:
     # sanity check that no atom has moved more than `min_cutoff` nm away
     for state, coords in zip(initial_states, all_xs):
         displacement_distances = jax_utils.distance_on_pairs(state.x0, coords, box=state.box0)
-        assert (
-            displacement_distances < min_cutoff
-        ).all(), f"λ = {state.lamb} moved an atom > {min_cutoff*10} Å from initial state during minimization"
+        if min_cutoff is not None:
+            assert (
+                displacement_distances < min_cutoff
+            ).all(), f"λ = {state.lamb} moved an atom > {min_cutoff*10} Å from initial state during minimization"
 
     return all_xs
 
@@ -373,7 +374,7 @@ def estimate_relative_free_energy(
     keep_idxs: Optional[List[int]] = None,
     n_eq_steps: int = 10000,
     steps_per_frame: int = 400,
-    min_cutoff: float = 0.7,
+    min_cutoff: Optional[float] = 0.7,
 ) -> SimulationResult:
     """
     Estimate relative free energy between mol_a and mol_b via independent simulations with a predetermined lambda
@@ -423,7 +424,7 @@ def estimate_relative_free_energy(
     steps_per_frame: int
         The number of steps to take before collecting a frame
 
-    min_cutoff: float
+    min_cutoff: float, optional
         throw error if any atom moves more than this distance (nm) after minimization
 
     Returns
@@ -492,7 +493,7 @@ def estimate_relative_free_energy_via_greedy_bisection(
     keep_idxs: Optional[List[int]] = None,
     n_eq_steps: int = 10000,
     steps_per_frame: int = 400,
-    min_cutoff: float = 0.7,
+    min_cutoff: Optional[float] = 0.7,
 ) -> SimulationResult:
     r"""Estimate relative free energy between mol_a and mol_b via independent simulations with a dynamic lambda schedule
     determined by successively bisecting the lambda interval between the pair of states with the greatest BAR
@@ -543,7 +544,7 @@ def estimate_relative_free_energy_via_greedy_bisection(
     steps_per_frame: int
         The number of steps to take before collecting a frame
 
-    min_cutoff: float
+    min_cutoff: float, optional
         throw error if any atom moves more than this distance (nm) after minimization
 
     Returns
@@ -628,9 +629,9 @@ def run_vacuum(
     n_eq_steps=10000,
     steps_per_frame=400,
     n_windows=None,
-    min_cutoff=2.5,
+    min_cutoff=None,
 ):
-    # min_cutoff defaults to 25 Å since there is no environment to prevent conformational changes in the ligand
+    # min_cutoff defaults to None since there is no environment to prevent conformational changes in the ligand
     return estimate_relative_free_energy_via_greedy_bisection(
         mol_a,
         mol_b,
