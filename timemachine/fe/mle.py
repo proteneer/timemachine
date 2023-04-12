@@ -220,11 +220,11 @@ def infer_node_vals_and_errs_networkx(
     nx_graph: nx.DiGraph,
     edge_diff_prop: str,
     edge_stddev_prop: str,
-    node_val_prop: str,
-    node_stddev_prop: str,
     ref_nodes: Sequence[Any],
     ref_node_val_prop: str,
     ref_node_stddev_prop: str,
+    node_val_prop: str = "inferred_dg",
+    node_stddev_prop: str = "inferred_dg_stddev",
     n_bootstrap: int = 100,
     seed: int = 0,
 ) -> nx.DiGraph:
@@ -238,16 +238,16 @@ def infer_node_vals_and_errs_networkx(
         Edge property to use for differences
     edge_stddev_prop: str
         Edge property to use for standard deviations
-    node_val_prop: str
-        Node property in which to record inferred absolute values
-    node_stddev_prop: str
-        Node property in which to record inferred standard deviations
     ref_nodes: sequence
         Reference nodes (must have properties `ref_node_val_prop` and `ref_node_stddev_prop`)
     ref_node_val_prop: str
         Node property to use for reference values. Must be defined on reference nodes.
     ref_node_stddev_prop: str
         Node property to use for reference standard deviations. If undefined in a reference node, assumed to be zero.
+    node_val_prop: str
+        Node property in which to write inferred absolute values
+    node_stddev_prop: str
+        Node property in which to write inferred standard deviations
     n_bootstrap, seed:
         See documentation for :py:func:`timemachine.fe.mle.infer_node_vals_and_errs`
 

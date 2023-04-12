@@ -278,10 +278,10 @@ infer_node_vals_and_errs_networkx_partial = partial(
     infer_node_vals_and_errs_networkx,
     edge_diff_prop=edge_diff_prop,
     edge_stddev_prop=edge_stddev_prop,
-    node_val_prop=node_val_prop,
-    node_stddev_prop=node_stddev_prop,
     ref_node_val_prop=ref_node_val_prop,
     ref_node_stddev_prop=ref_node_stddev_prop,
+    node_val_prop=node_val_prop,
+    node_stddev_prop=node_stddev_prop,
 )
 
 
