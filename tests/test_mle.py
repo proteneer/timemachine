@@ -194,7 +194,7 @@ def _nx_graph_with_reference_mle_instance(request):
     np.random.seed(seed)
 
     edge_noise_stddev = np.random.rand()
-    g = generate_random_valid_regular_graph()
+    g = generate_random_valid_regular_graph().to_directed()
     g = nx.convert_node_labels_to_integers(g)
     n_nodes = g.number_of_nodes()
 

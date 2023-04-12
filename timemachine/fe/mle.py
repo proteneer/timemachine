@@ -217,7 +217,7 @@ def infer_node_vals_and_errs(
 
 
 def infer_node_vals_and_errs_networkx(
-    nx_graph: nx.Graph,
+    nx_graph: nx.DiGraph,
     edge_diff_prop: str,
     edge_stddev_prop: str,
     node_val_prop: str,
@@ -227,7 +227,7 @@ def infer_node_vals_and_errs_networkx(
     ref_node_stddev_prop: str,
     n_bootstrap: int = 100,
     seed: int = 0,
-) -> nx.Graph:
+) -> nx.DiGraph:
     """Version of :py:func:`timemachine.fe.mle.infer_node_vals_and_errs` that accepts a networkx graph.
 
     Parameters
@@ -257,7 +257,7 @@ def infer_node_vals_and_errs_networkx(
         Graph where all nodes have been labeled with the inferred value of `node_val_prop` and `node_stddev_prop`.
     """
 
-    def get_valid_subgraph(g: nx.Graph) -> nx.Graph:
+    def get_valid_subgraph(g: nx.DiGraph) -> nx.DiGraph:
         "Remove edges with missing edge_diff_prop or edge_stddev_prop; then, remove any isolated nodes"
         sg = g.copy()
 
@@ -269,7 +269,7 @@ def infer_node_vals_and_errs_networkx(
 
         return sg
 
-    def infer_node_vals_and_errs_given_relabeled_graph(g: nx.Graph, node_to_idx: Dict[Any, int]) -> nx.Graph:
+    def infer_node_vals_and_errs_given_relabeled_graph(g: nx.DiGraph, node_to_idx: Dict[Any, int]) -> nx.DiGraph:
         assert list(g.nodes) == list(range(g.number_of_nodes()))
 
         ref_node_idxs = [node_to_idx[n] for n in ref_nodes if n in node_to_idx]
@@ -293,7 +293,7 @@ def infer_node_vals_and_errs_networkx(
 
         return g
 
-    def with_relabeled(g: nx.Graph, f: Callable[[nx.Graph, Dict[Any, int]], nx.Graph]) -> nx.Graph:
+    def with_relabeled(g: nx.DiGraph, f: Callable[[nx.DiGraph, Dict[Any, int]], nx.DiGraph]) -> nx.DiGraph:
         node_to_idx = {n: idx for idx, n in enumerate(g.nodes)}
         g_relabeled = nx.relabel_nodes(g, node_to_idx)
 
