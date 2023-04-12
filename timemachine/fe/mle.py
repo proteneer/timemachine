@@ -293,6 +293,10 @@ def infer_node_vals_and_errs_networkx(
 
         return g_res
 
+    for n in ref_nodes:
+        if n not in graph.nodes:
+            raise ValueError(f"Missing reference node {repr(n)}")
+
     edges_with_props = [
         e for e, d in graph.edges.items() if d.get(edge_diff_prop) is not None and d.get(edge_stddev_prop) is not None
     ]

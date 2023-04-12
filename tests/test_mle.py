@@ -388,6 +388,12 @@ def test_infer_node_vals_and_errs_networkx_raises_on_empty():
         infer_node_vals_and_errs_networkx_partial(g, ref_nodes=[2])
 
 
+def test_infer_node_vals_and_errs_networkx_raises_on_missing_ref():
+    g = nx.DiGraph()
+    with pytest.raises(ValueError, match="Missing reference node 1"):
+        infer_node_vals_and_errs_networkx_partial(g, ref_nodes=[1])
+
+
 def test_infer_node_vals_incorrect_sizes():
     """Verify that infer_node_vals correctly asserts that the length of arrays are the same"""
     g = generate_random_valid_regular_graph()
