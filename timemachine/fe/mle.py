@@ -271,15 +271,18 @@ def infer_node_vals_and_errs_networkx(
 
     def infer_node_vals_and_errs_given_relabeled_graph(g: nx.DiGraph, node_to_idx: Dict[Any, int]) -> nx.DiGraph:
         assert list(g.nodes) == list(range(g.number_of_nodes()))
+        assert set(g.nodes) == set(range(g.number_of_nodes()))
 
         ref_node_idxs = [node_to_idx[n] for n in ref_nodes if n in node_to_idx]
         ref_node_vals = [g.nodes[n][ref_node_val_prop] for n in ref_node_idxs]
         ref_node_stddevs = [g.nodes[n].get(ref_node_stddev_prop, 0.0) for n in ref_node_idxs]
 
+        edge_idxs = np.array(g.edges)
+
         dgs, dg_errs = infer_node_vals_and_errs(
-            np.array(g.edges),
-            np.array([e[edge_diff_prop] for e in g.edges.values()]),
-            np.array([e[edge_stddev_prop] for e in g.edges.values()]),
+            edge_idxs,
+            np.array([g.edges[e][edge_diff_prop] for e in edge_idxs]),
+            np.array([g.edges[e][edge_stddev_prop] for e in edge_idxs]),
             ref_node_idxs,
             ref_node_vals,
             ref_node_stddevs,
@@ -287,14 +290,12 @@ def infer_node_vals_and_errs_networkx(
             seed,
         )
 
-        for n, dg, dg_err in zip(g.nodes.values(), dgs, dg_errs):
-            n[node_val_prop] = dg
-            n[node_stddev_prop] = dg_err
-
-        return g
+        for n, (dg, dg_err) in enumerate(zip(dgs, dg_errs)):
+            g.nodes[n][node_val_prop] = dg
+            g.nodes[n][node_stddev_prop] = dg_err
 
     def with_relabeled(g: nx.DiGraph, f: Callable[[nx.DiGraph, Dict[Any, int]], nx.DiGraph]) -> nx.DiGraph:
-        node_to_idx = {n: idx for idx, n in enumerate(g.nodes)}
+        node_to_idx = {n: idx for idx, n in enumerate(sorted(g.nodes))}
         g_relabeled = nx.relabel_nodes(g, node_to_idx)
 
         g_res_relabeled = f(g_relabeled, node_to_idx)

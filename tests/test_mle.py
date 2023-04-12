@@ -205,9 +205,9 @@ def _nx_graph_with_reference_mle_instance(request):
     ref_node_vals = node_vals[ref_node_idxs]
     ref_node_stddevs = 0.01 * np.ones(num_refs)
 
-    for e, diff, stddev in zip(g.edges.values(), obs_edge_diffs, edge_stddevs):
-        e[edge_diff_prop] = diff
-        e[edge_stddev_prop] = stddev
+    for e, diff, stddev in zip(edge_idxs, obs_edge_diffs, edge_stddevs):
+        g.edges[e][edge_diff_prop] = diff
+        g.edges[e][edge_stddev_prop] = stddev
 
     for n, ref_val, ref_stddev in zip(ref_node_idxs, ref_node_vals, ref_node_stddevs):
         g.nodes[n][ref_node_val_prop] = ref_val
