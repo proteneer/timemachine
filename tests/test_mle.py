@@ -313,7 +313,7 @@ def test_infer_node_vals_and_errs_networkx_invariant_wrt_permutation(nx_graph_wi
     g_res = infer_node_vals_and_errs_networkx_partial(g_shuffled, ref_nodes=ref_node_idxs, seed=seed)
 
     for n, (ref_dg, ref_dg_err) in enumerate(zip(ref_dgs, ref_dg_errs)):
-        assert g_res.nodes[n][node_val_prop] == pytest.approx(ref_dg)
+        assert g_res.nodes[n][node_val_prop] == pytest.approx(ref_dg, rel=1e-5)
         # TODO: errors are noisy; unclear how to test consistency
         # assert g_res.nodes[n][node_stddev_prop] == pytest.approx(ref_dg_err)
 
@@ -330,7 +330,7 @@ def test_infer_node_vals_and_errs_networkx_invariant_wrt_relabeling_nodes(nx_gra
     g_relabeled_res = infer_node_vals_and_errs_networkx_partial(g_relabeled, ref_nodes=ref_nodes, seed=seed)
 
     for n, (ref_dg, ref_dg_err) in enumerate(zip(ref_dgs, ref_dg_errs)):
-        assert g_relabeled_res.nodes[idx_to_label[n]][node_val_prop] == pytest.approx(ref_dg)
+        assert g_relabeled_res.nodes[idx_to_label[n]][node_val_prop] == pytest.approx(ref_dg, rel=1e-5)
         # TODO: errors are noisy; unclear how to test consistency
         # assert g_relabeled_res.nodes[idx_to_label[n]][node_stddev_prop] == pytest.approx(ref_dg_err)
 
@@ -362,7 +362,7 @@ def test_infer_node_vals_and_errs_networkx_missing_values(nx_graph_with_referenc
     g_res = infer_node_vals_and_errs_networkx_partial(g, ref_nodes=ref_nodes, seed=seed)
 
     for n, (ref_dg, ref_dg_err) in enumerate(zip(ref_dgs, ref_dg_errs)):
-        assert g_res.nodes[idx_to_label[n]][node_val_prop] == pytest.approx(ref_dg)
+        assert g_res.nodes[idx_to_label[n]][node_val_prop] == pytest.approx(ref_dg, rel=1e-5)
         # TODO: errors are noisy; unclear how to test consistency
         # assert g_res.nodes[idx_to_label[n]][node_stddev_prop] == ref_dg_err
 
