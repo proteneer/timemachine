@@ -383,6 +383,12 @@ def test_infer_node_vals_and_errs_networkx_raises_on_empty():
     with pytest.raises(ValueError, match="Empty graph after removing edges without predictions"):
         infer_node_vals_and_errs_networkx_partial(g, ref_nodes=[])
 
+    g = nx.DiGraph()
+    g.add_edge(0, 1, **{edge_diff_prop: 1.0, edge_stddev_prop: 0.0})
+    g.add_edge(1, 2)
+    with pytest.raises(ValueError, match="Reference node 2 is isolated"):
+        infer_node_vals_and_errs_networkx_partial(g, ref_nodes=[2])
+
 
 def test_infer_node_vals_incorrect_sizes():
     """Verify that infer_node_vals correctly asserts that the length of arrays are the same"""

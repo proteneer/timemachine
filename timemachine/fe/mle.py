@@ -276,7 +276,7 @@ def infer_node_vals_and_errs_networkx(
     def infer_node_vals_and_errs_given_relabeled_graph(g: nx.DiGraph, node_to_idx: Dict[Any, int]):
         assert set(g.nodes) == set(range(g.number_of_nodes()))
 
-        ref_node_idxs = [node_to_idx[n] for n in ref_nodes if n in node_to_idx]
+        ref_node_idxs = [node_to_idx[n] for n in ref_nodes]
         ref_node_vals = [g.nodes[n][ref_node_val_prop] for n in ref_node_idxs]
         ref_node_stddevs = [g.nodes[n].get(ref_node_stddev_prop, 0.0) for n in ref_node_idxs]
 
@@ -312,6 +312,10 @@ def infer_node_vals_and_errs_networkx(
 
     if not sg.nodes:
         raise ValueError("Empty graph after removing edges without predictions")
+
+    for n in ref_nodes:
+        if n not in sg.nodes:
+            raise ValueError(f"Reference node {repr(n)} is isolated")
 
     sg_res = with_relabeled(sg, infer_node_vals_and_errs_given_relabeled_graph)
 
