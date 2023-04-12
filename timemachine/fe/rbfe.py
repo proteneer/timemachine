@@ -628,9 +628,9 @@ def run_vacuum(
     n_eq_steps=10000,
     steps_per_frame=400,
     n_windows=None,
-    min_cutoff=1.5,
+    min_cutoff=2.5,
 ):
-    # min_cutoff defaults to 15 Å since there is no environment to prevent conformational changes in the ligand
+    # min_cutoff defaults to 25 Å since there is no environment to prevent conformational changes in the ligand
     return estimate_relative_free_energy_via_greedy_bisection(
         mol_a,
         mol_b,
