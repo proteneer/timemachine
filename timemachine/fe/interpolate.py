@@ -122,7 +122,7 @@ align_chiral_atom_idxs_and_params = partial(align_idxs_and_params, make_default=
 align_torsion_idxs_and_params = partial(
     align_idxs_and_params,
     make_default=lambda p: (0, p[1], p[2]),  # p[1], p[2] is phase, period
-    key=lambda idxs, p: (idxs, p[1], p[2]),  # align on idxs, phase, period
+    key=lambda idxs, p: (idxs, p[2]),  # use idxs and period as key
     get_idxs=lambda key: key[0],
 )
 
@@ -136,7 +136,7 @@ def align_chiral_bond_idxs_and_params(src_idxs, src_params, src_signs, dst_idxs,
             dst_idxs,
             zip(dst_signs, dst_params),
             make_default=lambda p: (p[0], 0),  # p[0] is sign, 0 is force constant
-            key=lambda idxs, p: (idxs, p[0]),  # align on idxs, sign
+            key=lambda idxs, p: (idxs, p[0]),  # use idxs and sign as key
             get_idxs=lambda key: key[0],
         )
     }
