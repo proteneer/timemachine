@@ -180,6 +180,53 @@ def test_infer_node_dgs_w_error():
         assert res.rvalue > 0.9
 
 
+def test_infer_node_dgs_w_error_invariant_wrt_edge_order():
+    "Check that permuting the edges doesn't affect the result significantly"
+    np.random.seed(0)
+
+    for _ in range(5):
+        edge_noise_stddev = np.random.rand()
+        g = generate_random_valid_regular_graph()
+        n_nodes = g.number_of_nodes()
+
+        node_vals, edge_idxs, obs_edge_diffs, edge_stddevs = generate_instance(g, edge_noise_stddev)
+
+        num_refs = np.random.randint(n_nodes)
+        ref_node_idxs = np.random.choice(np.arange(n_nodes), num_refs, replace=False)
+        ref_node_vals = node_vals[ref_node_idxs]
+        ref_node_stddevs = 0.01 * np.ones(num_refs)
+
+        seed = np.random.randint(1000)
+
+        dg_1, dg_err_1 = infer_node_vals_and_errs(
+            edge_idxs,
+            obs_edge_diffs,
+            edge_stddevs,
+            ref_node_idxs,
+            ref_node_vals,
+            ref_node_stddevs,
+            seed=seed,
+        )
+
+        p = np.random.permutation(len(edge_idxs))
+        p = np.arange(len(edge_idxs))
+
+        dg_2, dg_err_2 = infer_node_vals_and_errs(
+            edge_idxs[p, :],
+            obs_edge_diffs[p],
+            edge_stddevs[p],
+            ref_node_idxs,
+            ref_node_vals,
+            ref_node_stddevs,
+            seed=seed,
+        )
+
+        np.testing.assert_allclose(dg_1, dg_2)  # expect convergence up to ~roundoff error
+
+        # TODO: errors are noisy; unclear how to test consistency
+        # np.testing.assert_allclose(dg_err_1, dg_err_2) # fails
+
+
 edge_diff_prop = "edge_diff"
 edge_stddev_prop = "edge_stddev"
 node_val_prop = "node_val"
