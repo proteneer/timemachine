@@ -1,6 +1,6 @@
 import argparse
 from pathlib import Path
-from tempfile import NamedTemporaryFile
+from tempfile import NamedTemporaryFile, SpooledTemporaryFile
 
 import numpy as np
 from rdkit import Chem
@@ -33,13 +33,38 @@ def write_ligand_trajectory_as_pdb(file_client, mol, res, prefix):
             file_client.store_stream(out_path, open(temp.name, "rb"))
 
 
+def store_ukln(file_client, res, prefix):
+    output = SpooledTemporaryFile()
+    np.savez(
+        output,
+        lambdas=np.array([s.lamb for s in res.final_result.initial_states]),
+        component_names=np.array([type(p.potential).__name__ for p in res.final_result.initial_states[0].potentials]),
+        overlap_by_component_by_lambda=res.final_result.overlap_by_component_by_lambda,
+    )
+    output.flush()
+    output.seek(0)
+    file_client.store_stream(prefix + "overlaps.npz", output)
+
+
+def store_mol(file_client, mol, prefix):
+    with NamedTemporaryFile(suffix=".sdf") as temp:
+        with Chem.SDWriter(temp.name) as writer:
+            writer.write(mol)
+        mol_name = get_mol_name(mol)
+        file_client.store_stream(prefix + f"{mol_name}.sdf", open(temp.name, "rb"))
+
+
 def run_simulation(file_client, mol, ff, params, seed, windows):
     solvent_res, solvent_top, solvent_host_config = run_solvent(mol, ff, None, seed, params, n_windows=windows)
     dG = np.sum(solvent_res.final_result.dGs)
     dG_err = np.linalg.norm(solvent_res.final_result.dG_errs)
     mol.SetProp("AHFE dG (kJ/mol)", str(dG))
     mol.SetProp("AHFE dG err (kJ/mol)", str(dG_err))
-    write_ligand_trajectory_as_pdb(file_client, mol, solvent_res, get_mol_name(mol) + "_ligand_traj")
+    prefix = f"{get_mol_name(mol)}/"
+    write_ligand_trajectory_as_pdb(file_client, mol, solvent_res, prefix + "ligand_traj")
+    store_ukln(file_client, solvent_res, prefix)
+    store_mol(file_client, mol, prefix)
+
     return mol
 
 
