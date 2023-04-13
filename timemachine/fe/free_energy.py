@@ -1,3 +1,4 @@
+from warnings import warn
 from dataclasses import dataclass
 from functools import lru_cache
 from typing import Callable, Iterable, List, Optional, Sequence, Tuple, Union, overload
@@ -358,25 +359,23 @@ def sample(initial_state: InitialState, md_params: MDParams, max_buffer_frames: 
             coords = None
             boxes = None
             for steps in batches(n_steps, md_params.steps_per_frame):
+                if steps < md_params.steps_per_frame:
+                    warn(f"Batch of sample has {steps}, less than batch size {md_params.steps_per_frame}. Setting to {md_params.steps_per_frame}")
+                    steps = md_params.steps_per_frame
                 global_steps = steps - md_params.local_steps
                 local_steps = md_params.local_steps
-                if global_steps < 0:
-                    x_t, box_t = ctxt.multiple_steps(
-                        n_steps=steps,
+                if global_steps > 0:
+                    ctxt.multiple_steps(
+                        n_steps=global_steps,
                     )
-                else:
-                    if global_steps > 0:
-                        ctxt.multiple_steps(
-                            n_steps=global_steps,
-                        )
-                    x_t, box_t = ctxt.multiple_steps_local(
-                        local_steps,
-                        initial_state.ligand_idxs.astype(np.int32),
-                        k=md_params.k,
-                        radius=md_params.radius,
-                        seed=rng.integers(np.iinfo(np.int32).max),
-                        burn_in=0,
-                    )
+                x_t, box_t = ctxt.multiple_steps_local(
+                    local_steps,
+                    initial_state.ligand_idxs.astype(np.int32),
+                    k=md_params.k,
+                    radius=md_params.radius,
+                    seed=rng.integers(np.iinfo(np.int32).max),
+                    burn_in=0,
+                )
 
                 if coords is None:
                     coords = np.array(x_t)
