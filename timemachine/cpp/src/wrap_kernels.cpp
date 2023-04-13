@@ -272,6 +272,8 @@ void declare_context(py::module &m) {
 
         F = iterations / store_x_interval
 
+        The first call to `multiple_steps_local` takes longer than subsequent calls, potentials need to be configured internally.
+
         Parameters
         ----------
         n_steps: int

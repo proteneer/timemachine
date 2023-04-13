@@ -83,6 +83,7 @@ pybind11_add_module(${LIBRARY_NAME} SHARED NO_EXTRAS
   src/verlet_integrator.cu
   src/context.cu
   src/barostat.cu
+  src/local_md_config.cu
   src/rmsd_align.cpp
   src/summed_potential.cu
   src/fanout_summed_potential.cu

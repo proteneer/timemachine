@@ -1,12 +1,4 @@
 #pragma once
-#include <cub/cub.cuh>
-
-// Struct to as a CUB <= operation
-struct LessThan {
-    int compare;
-    CUB_RUNTIME_FUNCTION __device__ __forceinline__ explicit LessThan(int compare) : compare(compare) {}
-    CUB_RUNTIME_FUNCTION __device__ __forceinline__ bool operator()(const int &a) const { return (a < compare); }
-};
 
 // Takes a source and destination array. Assumes K <= N with values in the src are less than or equal
 // to K. The value of the src is used as the indice and the value in the destination array. Allows combining
