@@ -2,8 +2,11 @@ from importlib import resources
 
 import numpy as np
 import pytest
+from rdkit import Chem
+from rdkit.Chem import AllChem
 
 from timemachine.fe import atom_mapping, interpolate, single_topology
+from timemachine.fe.single_topology import SingleTopology
 from timemachine.fe.utils import get_romol_conf, read_sdf
 from timemachine.ff import Forcefield
 
@@ -83,7 +86,7 @@ def test_align_torsion():
     We expect that decoupled terms have their force constants turned set to zero,
     while maintaining the same equilibrium angles for the *same* period.
     """
-    a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p = np.random.rand(16)
+    a, b, c, d, e, f, g, h, i, j, k, l, m, n = np.random.rand(14)
 
     # tbd: what do we do if there are repeats?
     # merge repeats into a single term first?
@@ -91,17 +94,17 @@ def test_align_torsion():
     src_params = [(a, b, 2), (c, d, 1), (e, f, 3), (g, h, 1)]
 
     dst_idxs = [(2, 3, 9, 4), (2, 3, 9, 4), (0, 1, 4, 2), (3, 0, 2, 6)]
-    dst_params = [(i, j, 2), (k, l, 1), (m, n, 3), (o, p, 4)]
+    dst_params = [(i, b, 2), (j, k, 1), (l, f, 3), (m, n, 4)]
 
     test_set = interpolate.align_torsion_idxs_and_params(src_idxs, src_params, dst_idxs, dst_params)
 
     ref_set = {
-        ((2, 3, 9, 4), (a, b, 2), (i, j, 2)),
+        ((2, 3, 9, 4), (a, b, 2), (i, b, 2)),
         ((2, 1, 4, 3), (c, d, 1), (0, d, 1)),
-        ((0, 1, 4, 2), (e, f, 3), (m, n, 3)),
+        ((0, 1, 4, 2), (e, f, 3), (l, f, 3)),
         ((0, 1, 4, 2), (g, h, 1), (0, h, 1)),
-        ((2, 3, 9, 4), (0, l, 1), (k, l, 1)),
-        ((3, 0, 2, 6), (0, p, 4), (o, p, 4)),
+        ((2, 3, 9, 4), (0, k, 1), (j, k, 1)),
+        ((3, 0, 2, 6), (0, n, 4), (m, n, 4)),
     }
 
     assert test_set == ref_set
@@ -261,3 +264,71 @@ def test_intermediate_states(num_pairs_to_setup=10):
             xs.append(x0 + 0.01 * np.random.randn(*x0.shape))
         for x in xs:
             np.testing.assert_almost_equal(U_ref(x), U_test(x))
+
+
+def test_duplicate_idxs_period_pairs():
+    """Check that parameter interpolation is able to handle torsion terms with duplicate ((i, j, k, l), period) pairs.
+    E.g. if we only align on idxs and period, this will result in a DuplicateAlignmentKeysError."""
+
+    # CHEMBL3664148
+    mol_a = Chem.AddHs(Chem.MolFromSmiles("CNC(=O)c1cc2cc(Nc3nccc(-c4cn(C)cn4)n3)cc(Cl)c2[nH]1"))
+    AllChem.EmbedMolecule(mol_a)
+
+    # CHEMBL3668838
+    # has a subgroup matching a pattern with duplicate periods:
+    # https://github.com/proteneer/timemachine/blob/c88b42c8aeadaeb7979558f04cae961502fd2917/timemachine/ff/params/smirnoff_2_0_0_ccc.py#L480
+    mol_b = Chem.AddHs(Chem.MolFromSmiles("Cc1cc(Nc2nccc(-c3cn(C)cn3)n2)cc2cc(C(=O)NCc3nccs3)[nH]c12"))
+    AllChem.EmbedMolecule(mol_b)
+
+    core = np.array(
+        [
+            [26, 0],
+            [1, 1],
+            [2, 2],
+            [3, 3],
+            [6, 6],
+            [4, 7],
+            [5, 8],
+            [7, 9],
+            [8, 10],
+            [0, 11],
+            [12, 12],
+            [9, 13],
+            [10, 14],
+            [11, 15],
+            [13, 16],
+            [14, 17],
+            [15, 19],
+            [16, 20],
+            [17, 21],
+            [18, 22],
+            [19, 24],
+            [20, 25],
+            [21, 26],
+            [22, 27],
+            [23, 28],
+            [24, 29],
+            [25, 30],
+            [30, 35],
+            [31, 36],
+            [32, 37],
+            [33, 38],
+            [34, 39],
+            [37, 42],
+            [35, 43],
+            [36, 44],
+            [38, 45],
+            [39, 46],
+            [27, 47],
+            [28, 48],
+            [40, 49],
+            [41, 50],
+            [42, 51],
+        ]
+    )
+
+    ff = Forcefield.load_default()
+    st = SingleTopology(mol_a, mol_b, core, ff)
+
+    # should not raise DuplicateAlignmentKeysError
+    st.setup_intermediate_state(0.5)
