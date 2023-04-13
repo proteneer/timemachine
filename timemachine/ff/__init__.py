@@ -56,9 +56,9 @@ class Forcefield:
     ]
     q_handle_solv: Optional[
         Union[
-            nonbonded.SimpleChargeHandler,
-            nonbonded.AM1BCCHandler,
-            nonbonded.AM1CCCHandler,
+            nonbonded.SimpleChargeSolventHandler,
+            nonbonded.AM1BCCSolventHandler,
+            nonbonded.AM1CCCSolventHandler,
         ]
     ]
     q_handle_intra: Optional[
@@ -233,6 +233,20 @@ class Forcefield:
             params(self.q_handle_solv),
             params(self.q_handle_intra),
             params(self.lj_handle),
+        )
+
+    def get_solvent_ff(self) -> "Forcefield":
+        return Forcefield(
+            self.hb_handle,
+            self.ha_handle,
+            self.pt_handle,
+            self.it_handle,
+            self.q_handle_solv,  # This is what makes it a solvent ff
+            self.q_handle_solv,
+            self.q_handle_intra,
+            self.lj_handle,
+            self.protein_ff,
+            self.water_ff,
         )
 
     def serialize(self) -> str:

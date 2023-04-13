@@ -361,7 +361,7 @@ def run_solvent(
     solvent_host_config = HostConfig(solvent_sys, solvent_conf, solvent_box)
     solvent_res = estimate_absolute_free_energy(
         mol,
-        forcefield,
+        forcefield.get_solvent_ff(),
         solvent_host_config,
         seed,
         prefix="solvent",
