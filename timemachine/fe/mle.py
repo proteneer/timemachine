@@ -1,4 +1,4 @@
-from typing import Any, Callable, Dict, Sequence
+from typing import Any, Sequence
 
 import networkx as nx
 import numpy as np
@@ -258,41 +258,6 @@ def infer_node_vals_and_errs_networkx(
         the inferred values of `node_val_prop` and `node_stddev_prop`.
     """
 
-    def infer_node_vals_and_errs_given_relabeled_graph(g: nx.DiGraph, node_to_idx: Dict[Any, int]):
-        assert set(g.nodes) == set(range(g.number_of_nodes()))
-
-        ref_node_idxs = [node_to_idx[n] for n in ref_nodes]
-        ref_node_vals = [g.nodes[n][ref_node_val_prop] for n in ref_node_idxs]
-        ref_node_stddevs = [g.nodes[n].get(ref_node_stddev_prop, 0.0) for n in ref_node_idxs]
-
-        edge_idxs = np.array(g.edges)
-
-        dgs, dg_errs = infer_node_vals_and_errs(
-            edge_idxs,
-            np.array([g.edges[e][edge_diff_prop] for e in edge_idxs]),
-            np.array([g.edges[e][edge_stddev_prop] for e in edge_idxs]),
-            ref_node_idxs,
-            ref_node_vals,
-            ref_node_stddevs,
-            n_bootstrap,
-            seed,
-        )
-
-        for n, (dg, dg_err) in enumerate(zip(dgs, dg_errs)):
-            g.nodes[n][node_val_prop] = dg
-            g.nodes[n][node_stddev_prop] = dg_err
-
-    def with_relabeled(g: nx.DiGraph, f: Callable[[nx.DiGraph, Dict[Any, int]], nx.DiGraph]) -> nx.DiGraph:
-        node_to_idx = {n: idx for idx, n in enumerate(sorted(g.nodes))}
-        g_relabeled = nx.relabel_nodes(g, node_to_idx)
-
-        f(g_relabeled, node_to_idx)
-
-        idx_to_node = {idx: n for n, idx in node_to_idx.items()}
-        g_res = nx.relabel_nodes(g_relabeled, idx_to_node)
-
-        return g_res
-
     for n in ref_nodes:
         if n not in graph.nodes:
             raise ValueError(f"Missing reference node {repr(n)}")
@@ -309,4 +274,34 @@ def infer_node_vals_and_errs_networkx(
         if n not in sg.nodes:
             raise ValueError(f"Reference node {repr(n)} is isolated")
 
-    return with_relabeled(sg, infer_node_vals_and_errs_given_relabeled_graph)
+    # Relabel the nodes with integers {1..n_nodes}
+    node_to_idx = {n: idx for idx, n in enumerate(sorted(sg.nodes))}
+    idx_to_node = {idx: n for n, idx in node_to_idx.items()}
+
+    sg_relabeled = nx.relabel_nodes(sg, node_to_idx)
+
+    ref_node_idxs = [node_to_idx[n] for n in ref_nodes]
+    ref_node_vals = [sg_relabeled.nodes[n][ref_node_val_prop] for n in ref_node_idxs]
+    ref_node_stddevs = [sg_relabeled.nodes[n].get(ref_node_stddev_prop, 0.0) for n in ref_node_idxs]
+
+    edge_idxs = np.array(sg_relabeled.edges)
+
+    dgs, dg_errs = infer_node_vals_and_errs(
+        edge_idxs,
+        np.array([sg_relabeled.edges[e][edge_diff_prop] for e in edge_idxs]),
+        np.array([sg_relabeled.edges[e][edge_stddev_prop] for e in edge_idxs]),
+        ref_node_idxs,
+        ref_node_vals,
+        ref_node_stddevs,
+        n_bootstrap,
+        seed,
+    )
+
+    for n, (dg, dg_err) in enumerate(zip(dgs, dg_errs)):
+        sg_relabeled.nodes[n][node_val_prop] = dg
+        sg_relabeled.nodes[n][node_stddev_prop] = dg_err
+
+    # Restore the original node labels
+    sg_with_inferred_values = nx.relabel_nodes(sg_relabeled, idx_to_node)
+
+    return sg_with_inferred_values
