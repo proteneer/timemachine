@@ -1,3 +1,5 @@
+from typing import Any, Sequence
+
 import networkx as nx
 import numpy as np
 from jax import jit
@@ -212,3 +214,94 @@ def infer_node_vals_and_errs(
     dg_err = bootstrap_estimates.std(0)
 
     return dg, dg_err
+
+
+def infer_node_vals_and_errs_networkx(
+    graph: nx.DiGraph,
+    edge_diff_prop: str,
+    edge_stddev_prop: str,
+    ref_nodes: Sequence[Any],
+    ref_node_val_prop: str,
+    ref_node_stddev_prop: str,
+    node_val_prop: str = "inferred_dg",
+    node_stddev_prop: str = "inferred_dg_stddev",
+    n_bootstrap: int = 100,
+    seed: int = 0,
+) -> nx.DiGraph:
+    """Version of :py:func:`timemachine.fe.mle.infer_node_vals_and_errs` that accepts a networkx graph.
+
+    Parameters
+    ----------
+    nx_graph: networkx.Graph
+        Networkx graph
+    edge_diff_prop: str
+        Edge property to use for differences
+    edge_stddev_prop: str
+        Edge property to use for standard deviations
+    ref_nodes: sequence
+        Reference nodes (must have properties `ref_node_val_prop` and `ref_node_stddev_prop`)
+    ref_node_val_prop: str
+        Node property to use for reference values. Must be defined on reference nodes.
+    ref_node_stddev_prop: str
+        Node property to use for reference standard deviations. If undefined in a reference node, assumed to be zero.
+    node_val_prop: str
+        Node property in which to write inferred absolute values
+    node_stddev_prop: str
+        Node property in which to write inferred standard deviations
+    n_bootstrap, seed:
+        See documentation for :py:func:`timemachine.fe.mle.infer_node_vals_and_errs`
+
+    Returns
+    -------
+    networkx.Graph
+        Subgraph limited to edges with defined edge_diff_prop and edge_stddev_prop, where nodes have been labeled with
+        the inferred values of `node_val_prop` and `node_stddev_prop`.
+    """
+
+    for n in ref_nodes:
+        if n not in graph.nodes:
+            raise ValueError(f"Missing reference node {repr(n)}")
+
+    edges_with_props = [
+        e for e, d in graph.edges.items() if d.get(edge_diff_prop) is not None and d.get(edge_stddev_prop) is not None
+    ]
+    sg = graph.edge_subgraph(edges_with_props).copy()
+
+    if not sg.nodes:
+        raise ValueError("Empty graph after removing edges without predictions")
+
+    for n in ref_nodes:
+        if n not in sg.nodes:
+            raise ValueError(f"Reference node {repr(n)} is isolated")
+
+    # Relabel the nodes with integers {1..n_nodes}
+    node_to_idx = {n: idx for idx, n in enumerate(sorted(sg.nodes))}
+    idx_to_node = {idx: n for n, idx in node_to_idx.items()}
+
+    sg_relabeled = nx.relabel_nodes(sg, node_to_idx)
+
+    ref_node_idxs = [node_to_idx[n] for n in ref_nodes]
+    ref_node_vals = [sg_relabeled.nodes[n][ref_node_val_prop] for n in ref_node_idxs]
+    ref_node_stddevs = [sg_relabeled.nodes[n].get(ref_node_stddev_prop, 0.0) for n in ref_node_idxs]
+
+    edge_idxs = np.array(sg_relabeled.edges)
+
+    dgs, dg_errs = infer_node_vals_and_errs(
+        edge_idxs,
+        np.array([sg_relabeled.edges[e][edge_diff_prop] for e in edge_idxs]),
+        np.array([sg_relabeled.edges[e][edge_stddev_prop] for e in edge_idxs]),
+        ref_node_idxs,
+        ref_node_vals,
+        ref_node_stddevs,
+        n_bootstrap,
+        seed,
+    )
+
+    for n, (dg, dg_err) in enumerate(zip(dgs, dg_errs)):
+        sg_relabeled.nodes[n][node_val_prop] = dg
+        sg_relabeled.nodes[n][node_stddev_prop] = dg_err
+
+    # Restore the original node labels
+    sg_with_inferred_values = nx.relabel_nodes(sg_relabeled, idx_to_node)
+
+    return sg_with_inferred_values
