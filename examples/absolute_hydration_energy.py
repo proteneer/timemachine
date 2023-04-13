@@ -18,7 +18,7 @@ Chem.SetDefaultPickleProperties(Chem.PropertyPickleOptions.AllProps)
 
 
 def write_ligand_trajectory_as_pdb(file_client, mol, res, prefix):
-    # initial states all have same ligand idxs/bonds, which is what is impotant here.
+    # initial states all have same ligand idxs/bonds, which is what is important here.
     initial_state = res.final_result.initial_states[0]
     for i, (frames, boxes) in enumerate(zip(res.frames, res.boxes)):
         # Only writing out ligands, but image_frames also centers ligands
