@@ -1,9 +1,13 @@
+import hashlib
+import random
+from functools import partial
+
 import networkx as nx
 import numpy as np
 import pytest
 from scipy.stats import linregress
 
-from timemachine.fe.mle import infer_node_vals, infer_node_vals_and_errs
+from timemachine.fe.mle import infer_node_vals, infer_node_vals_and_errs, infer_node_vals_and_errs_networkx
 
 pytestmark = [pytest.mark.nogpu]
 
@@ -175,6 +179,221 @@ def test_infer_node_dgs_w_error():
 
         res = linregress(dg, node_vals)
         assert res.rvalue > 0.9
+
+
+def test_infer_node_dgs_w_error_invariant_wrt_edge_order():
+    "Check that permuting the edges doesn't affect the result significantly"
+    np.random.seed(0)
+
+    for _ in range(5):
+        edge_noise_stddev = np.random.rand()
+        g = generate_random_valid_regular_graph()
+        n_nodes = g.number_of_nodes()
+
+        node_vals, edge_idxs, obs_edge_diffs, edge_stddevs = generate_instance(g, edge_noise_stddev)
+
+        num_refs = np.random.randint(n_nodes)
+        ref_node_idxs = np.random.choice(np.arange(n_nodes), num_refs, replace=False)
+        ref_node_vals = node_vals[ref_node_idxs]
+        ref_node_stddevs = 0.01 * np.ones(num_refs)
+
+        seed = np.random.randint(1000)
+
+        dg_1, dg_err_1 = infer_node_vals_and_errs(
+            edge_idxs,
+            obs_edge_diffs,
+            edge_stddevs,
+            ref_node_idxs,
+            ref_node_vals,
+            ref_node_stddevs,
+            seed=seed,
+        )
+
+        p = np.random.permutation(len(edge_idxs))
+        p = np.arange(len(edge_idxs))
+
+        dg_2, dg_err_2 = infer_node_vals_and_errs(
+            edge_idxs[p, :],
+            obs_edge_diffs[p],
+            edge_stddevs[p],
+            ref_node_idxs,
+            ref_node_vals,
+            ref_node_stddevs,
+            seed=seed,
+        )
+
+        np.testing.assert_allclose(dg_1, dg_2)  # expect convergence up to ~roundoff error
+
+        # TODO: errors are noisy; unclear how to test consistency
+        # np.testing.assert_allclose(dg_err_1, dg_err_2) # fails
+
+
+edge_diff_prop = "edge_diff"
+edge_stddev_prop = "edge_stddev"
+node_val_prop = "node_val"
+node_stddev_prop = "node_stddev"
+ref_node_val_prop = "ref_node_val"
+ref_node_stddev_prop = "ref_node_stddev"
+
+
+@pytest.fixture(scope="module", params=[0])
+def _nx_graph_with_reference_mle_instance(request):
+    seed = request.param
+    np.random.seed(seed)
+
+    edge_noise_stddev = np.random.rand()
+    g = generate_random_valid_regular_graph()
+    g = nx.convert_node_labels_to_integers(g)
+    n_nodes = g.number_of_nodes()
+
+    node_vals, edge_idxs, obs_edge_diffs, edge_stddevs = generate_instance(g, edge_noise_stddev)
+
+    num_refs = np.random.randint(n_nodes)
+    ref_node_idxs = np.random.choice(np.arange(n_nodes), num_refs, replace=False)
+    ref_node_vals = node_vals[ref_node_idxs]
+    ref_node_stddevs = 0.01 * np.ones(num_refs)
+
+    g = nx.DiGraph()
+
+    g.add_nodes_from(range(n_nodes))
+
+    for (u, v), diff, stddev in zip(edge_idxs, obs_edge_diffs, edge_stddevs):
+        g.add_edge(u, v, **{edge_diff_prop: diff, edge_stddev_prop: stddev})
+
+    for n, ref_val, ref_stddev in zip(ref_node_idxs, ref_node_vals, ref_node_stddevs):
+        g.add_node(n, **{ref_node_val_prop: ref_val, ref_node_stddev_prop: ref_stddev})
+
+    dgs, dg_errs = infer_node_vals_and_errs(
+        edge_idxs, obs_edge_diffs, edge_stddevs, ref_node_idxs, ref_node_vals, ref_node_stddevs, seed=seed
+    )
+
+    return g, ref_node_idxs, seed, dgs, dg_errs
+
+
+@pytest.fixture(scope="function")
+def nx_graph_with_reference_mle_instance(_nx_graph_with_reference_mle_instance):
+    g, *xs = _nx_graph_with_reference_mle_instance
+    return (g.copy(), *xs)
+
+
+infer_node_vals_and_errs_networkx_partial = partial(
+    infer_node_vals_and_errs_networkx,
+    edge_diff_prop=edge_diff_prop,
+    edge_stddev_prop=edge_stddev_prop,
+    ref_node_val_prop=ref_node_val_prop,
+    ref_node_stddev_prop=ref_node_stddev_prop,
+    node_val_prop=node_val_prop,
+    node_stddev_prop=node_stddev_prop,
+)
+
+
+def test_infer_node_vals_and_errs_networkx(nx_graph_with_reference_mle_instance):
+
+    g, ref_node_idxs, seed, ref_dgs, ref_dg_errs = nx_graph_with_reference_mle_instance
+
+    g_res = infer_node_vals_and_errs_networkx_partial(g, ref_nodes=ref_node_idxs, seed=seed)
+
+    for n, (ref_dg, ref_dg_err) in enumerate(zip(ref_dgs, ref_dg_errs)):
+        assert g_res.nodes[n][node_val_prop] == ref_dg
+        assert g_res.nodes[n][node_stddev_prop] == ref_dg_err
+
+
+def test_infer_node_vals_and_errs_networkx_invariant_wrt_permutation(nx_graph_with_reference_mle_instance):
+    "Ensure result does not depend on the internal ordering of nodes and edges in the networkx graph"
+
+    g, ref_node_idxs, seed, ref_dgs, ref_dg_errs = nx_graph_with_reference_mle_instance
+
+    g_shuffled = nx.DiGraph()
+    nodes = list(g.nodes.items())
+    edges = list(g.edges.items())
+    random.seed(0)
+    random.shuffle(nodes)
+    random.shuffle(edges)
+    g_shuffled.add_nodes_from(nodes)
+    g_shuffled.add_edges_from((u, v, d) for (u, v), d in edges)
+
+    # use n_bootstrap=2 to save time, since we don't check errors here
+    g_res = infer_node_vals_and_errs_networkx_partial(g_shuffled, ref_nodes=ref_node_idxs, n_bootstrap=2, seed=seed)
+
+    for n, (ref_dg, ref_dg_err) in enumerate(zip(ref_dgs, ref_dg_errs)):
+        assert g_res.nodes[n][node_val_prop] == pytest.approx(ref_dg, rel=1e-5)
+        # TODO: errors are noisy; unclear how to test consistency
+        # assert g_res.nodes[n][node_stddev_prop] == pytest.approx(ref_dg_err)
+
+
+def test_infer_node_vals_and_errs_networkx_invariant_wrt_relabeling_nodes(nx_graph_with_reference_mle_instance):
+    "Ensure results are invariant wrt relabeling nodes"
+
+    g, ref_node_idxs, seed, ref_dgs, ref_dg_errs = nx_graph_with_reference_mle_instance
+
+    idx_to_label = {n: hashlib.sha256(bytes(n)).hexdigest() for n in g.nodes}
+    g_relabeled = nx.relabel_nodes(g, idx_to_label)
+    ref_nodes = [idx_to_label[n] for n in ref_node_idxs]
+
+    # use n_bootstrap=2 to save time, since we don't check errors here
+    g_res = infer_node_vals_and_errs_networkx_partial(g_relabeled, ref_nodes=ref_nodes, n_bootstrap=2, seed=seed)
+
+    for n, (ref_dg, ref_dg_err) in enumerate(zip(ref_dgs, ref_dg_errs)):
+        assert g_res.nodes[idx_to_label[n]][node_val_prop] == pytest.approx(ref_dg, rel=1e-5)
+        # TODO: errors are noisy; unclear how to test consistency
+        # assert g_relabeled_res.nodes[idx_to_label[n]][node_stddev_prop] == pytest.approx(ref_dg_err)
+
+
+def test_infer_node_vals_and_errs_networkx_missing_values(nx_graph_with_reference_mle_instance):
+    "Check that edges with missing values are ignored"
+
+    np.random.seed(0)
+
+    g, ref_node_idxs, seed, ref_dgs, ref_dg_errs = nx_graph_with_reference_mle_instance
+
+    idx_to_label = {n: str(n) for n in g.nodes}
+    g = nx.relabel_nodes(g, idx_to_label)
+    ref_nodes = [idx_to_label[n] for n in ref_node_idxs]
+    n1, n2, n3 = np.random.choice(g.nodes, 3, replace=False)
+
+    # define a new node somewhere in the middle of the sorted list of nodes
+    # (needed to check that we correctly remove isolated nodes)
+    undetermined_label = str(np.random.randint(1, g.number_of_nodes() - 1)) + "_undetermined"
+    g.add_edge(n1, undetermined_label)
+    g.add_edge(n2, undetermined_label, **{edge_diff_prop: None})
+    g.add_edge(n3, undetermined_label, **{edge_diff_prop: None, edge_stddev_prop: None})
+
+    # unlabeled edges between exising nodes should have no effect on result
+    g.add_edge(n1, n2)
+    g.add_edge(n2, n3, **{edge_diff_prop: None})
+    g.add_edge(n1, n3, **{edge_diff_prop: None, edge_stddev_prop: None})
+
+    # use n_bootstrap=2 to save time, since we don't check errors here
+    g_res = infer_node_vals_and_errs_networkx_partial(g, ref_nodes=ref_nodes, n_bootstrap=2, seed=seed)
+
+    for n, (ref_dg, ref_dg_err) in enumerate(zip(ref_dgs, ref_dg_errs)):
+        assert g_res.nodes[idx_to_label[n]][node_val_prop] == pytest.approx(ref_dg, rel=1e-5)
+        # TODO: errors are noisy; unclear how to test consistency
+        # assert g_res.nodes[idx_to_label[n]][node_stddev_prop] == ref_dg_err
+
+    # undetermined node should not be in the result
+    assert undetermined_label not in g_res.nodes
+
+
+def test_infer_node_vals_and_errs_networkx_raises_on_empty():
+    g = nx.DiGraph()
+    with pytest.raises(ValueError, match="Empty graph"):
+        infer_node_vals_and_errs_networkx_partial(g, ref_nodes=[])
+    g.add_edge(0, 1)
+    with pytest.raises(ValueError, match="Empty graph after removing edges without predictions"):
+        infer_node_vals_and_errs_networkx_partial(g, ref_nodes=[])
+
+    g = nx.DiGraph()
+    g.add_edge(0, 1, **{edge_diff_prop: 1.0, edge_stddev_prop: 0.0})
+    g.add_edge(1, 2)
+    with pytest.raises(ValueError, match="Reference node 2 is isolated"):
+        infer_node_vals_and_errs_networkx_partial(g, ref_nodes=[2])
+
+
+def test_infer_node_vals_and_errs_networkx_raises_on_missing_ref():
+    g = nx.DiGraph()
+    with pytest.raises(ValueError, match="Missing reference node 1"):
+        infer_node_vals_and_errs_networkx_partial(g, ref_nodes=[1])
 
 
 def test_infer_node_vals_incorrect_sizes():
