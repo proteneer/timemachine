@@ -242,7 +242,7 @@ def _nx_graph_with_reference_mle_instance(request):
     np.random.seed(seed)
 
     edge_noise_stddev = np.random.rand()
-    g = generate_random_valid_regular_graph().to_directed()
+    g = generate_random_valid_regular_graph()
     g = nx.convert_node_labels_to_integers(g)
     n_nodes = g.number_of_nodes()
 
@@ -253,13 +253,15 @@ def _nx_graph_with_reference_mle_instance(request):
     ref_node_vals = node_vals[ref_node_idxs]
     ref_node_stddevs = 0.01 * np.ones(num_refs)
 
-    for e, diff, stddev in zip(edge_idxs, obs_edge_diffs, edge_stddevs):
-        g.edges[e][edge_diff_prop] = diff
-        g.edges[e][edge_stddev_prop] = stddev
+    g = nx.DiGraph()
+
+    g.add_nodes_from(range(n_nodes))
+
+    for (u, v), diff, stddev in zip(edge_idxs, obs_edge_diffs, edge_stddevs):
+        g.add_edge(u, v, **{edge_diff_prop: diff, edge_stddev_prop: stddev})
 
     for n, ref_val, ref_stddev in zip(ref_node_idxs, ref_node_vals, ref_node_stddevs):
-        g.nodes[n][ref_node_val_prop] = ref_val
-        g.nodes[n][ref_node_stddev_prop] = ref_stddev
+        g.add_node(n, **{ref_node_val_prop: ref_val, ref_node_stddev_prop: ref_stddev})
 
     dgs, dg_errs = infer_node_vals_and_errs(
         edge_idxs, obs_edge_diffs, edge_stddevs, ref_node_idxs, ref_node_vals, ref_node_stddevs, seed=seed
