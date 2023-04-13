@@ -43,10 +43,9 @@ def setup_in_vacuum(st: SingleTopology, ligand_conf, lamb):
     """Prepare potentials, initial coords, large 10x10x10nm box, and HMR masses"""
 
     system = st.setup_intermediate_state(lamb)
-    combined_masses = np.array(st.combine_masses())
+    hmr_masses = np.array(st.combine_masses(use_hmr=True))
 
     potentials = system.get_U_fns()
-    hmr_masses = model_utils.apply_hmr(combined_masses, system.bond.potential.idxs)
     baro = None
 
     x0 = ligand_conf
@@ -68,11 +67,10 @@ def setup_in_env(
     """Prepare potentials, concatenate environment and ligand coords, apply HMR, and construct barostat"""
 
     system = st.combine_with_host(host_system, lamb=lamb)
-    combined_masses = np.concatenate([host_masses, st.combine_masses()])
+    host_hmr_masses = model_utils.apply_hmr(host_masses, host_system.bond.potential.idxs)
+    hmr_masses = np.concatenate([host_hmr_masses, st.combine_masses(use_hmr=True)])
 
     potentials = system.get_U_fns()
-    hmr_masses = model_utils.apply_hmr(combined_masses, system.bond.potential.idxs)
-
     group_idxs = get_group_indices(get_bond_list(system.bond.potential))
     baro = MonteCarloBarostat(len(hmr_masses), DEFAULT_PRESSURE, temperature, group_idxs, 15, run_seed + 1)
 
