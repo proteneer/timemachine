@@ -1,10 +1,10 @@
-#include "local_md_potentials.hpp"
 #include "constants.hpp"
 #include "gpu_utils.cuh"
 #include "kernel_utils.cuh"
 #include "kernels/k_flat_bottom_bond.cuh"
 #include "kernels/k_indices.cuh"
 #include "kernels/k_local_md.cuh"
+#include "local_md_potentials.hpp"
 #include "math_utils.cuh"
 #include <cub/cub.cuh>
 #include <random>
@@ -56,13 +56,7 @@ LocalMDPotentials::LocalMDPotentials(const int N, const std::vector<std::shared_
     all_potentials_.push_back(ixn_group_);
 
     cub::DevicePartition::If(
-        nullptr,
-        temp_storage_bytes_,
-        d_free_idxs_.data,
-        d_row_idxs_.data,
-        num_selected_buffer_.data,
-        N_,
-        LessThan(N_));
+        nullptr, temp_storage_bytes_, d_free_idxs_.data, d_row_idxs_.data, num_selected_buffer_.data, N_, LessThan(N_));
     // Allocate char as temp_storage_bytes_ is in raw bytes and the type doesn't matter in practice.
     // Equivalent to DeviceBuffer<int> buf(temp_storage_bytes_ / sizeof(int))
     d_temp_storage_buffer_.reset(new DeviceBuffer<char>(temp_storage_bytes_));
@@ -92,8 +86,7 @@ void LocalMDPotentials::setup_from_idxs(
     curandErrchk(curandSetGeneratorOffset(cr_rng_, 0));
 
     // Set the array to all N, which indicates to ignore that idx
-    k_initialize_array<unsigned int>
-        <<<ceil_divide(N_, warp_size), warp_size, 0, stream>>>(N_, d_free_idxs_.data, N_);
+    k_initialize_array<unsigned int><<<ceil_divide(N_, warp_size), warp_size, 0, stream>>>(N_, d_free_idxs_.data, N_);
     gpuErrchk(cudaPeekAtLastError());
 
     // Generate values between (0, 1.0]
@@ -141,6 +134,7 @@ void LocalMDPotentials::_setup_free(
 
     const int num_row_idxs = p_num_selected_.data[0];
     const int num_col_idxs = N_ - num_row_idxs;
+    printf("Selected %d of %d\n", num_row_idxs, N_);
 
     if (num_row_idxs == 0) {
         throw std::runtime_error("LocalMDPotentials setup has no free particles selected");
