@@ -496,7 +496,7 @@ def test_nonbonded_split(precision, rtol, atol, use_tiny_mol):
             vacuum_u_inter_scaled,
             solvent_grad_inter_scaled,
             solvent_u_inter_scaled,
-        ) = get_vacuum_solvent_u_grads(ffs.inter_scaled, lamb)
+        ) = get_vacuum_solvent_u_grads(ffs.prot, lamb)
 
         # Compute the expected intermol scaled potential
         expected_inter_scaled_u = solvent_u_scaled - vacuum_u_scaled + vacuum_u_ref
