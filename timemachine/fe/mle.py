@@ -1,5 +1,3 @@
-from typing import Any, Sequence
-
 import networkx as nx
 import numpy as np
 from jax import jit
@@ -220,7 +218,6 @@ def infer_node_vals_and_errs_networkx(
     graph: nx.DiGraph,
     edge_diff_prop: str,
     edge_stddev_prop: str,
-    ref_nodes: Sequence[Any],
     ref_node_val_prop: str,
     ref_node_stddev_prop: str,
     node_val_prop: str = "inferred_dg",
@@ -238,8 +235,6 @@ def infer_node_vals_and_errs_networkx(
         Edge property to use for differences
     edge_stddev_prop: str
         Edge property to use for standard deviations
-    ref_nodes: sequence
-        Reference nodes (must have properties `ref_node_val_prop` and `ref_node_stddev_prop`)
     ref_node_val_prop: str
         Node property to use for reference values. Must be defined on reference nodes.
     ref_node_stddev_prop: str
@@ -258,10 +253,6 @@ def infer_node_vals_and_errs_networkx(
         the inferred values of `node_val_prop` and `node_stddev_prop`.
     """
 
-    for n in ref_nodes:
-        if n not in graph.nodes:
-            raise ValueError(f"Missing reference node {repr(n)}")
-
     edges_with_props = [
         e for e, d in graph.edges.items() if d.get(edge_diff_prop) is not None and d.get(edge_stddev_prop) is not None
     ]
@@ -270,19 +261,20 @@ def infer_node_vals_and_errs_networkx(
     if not sg.nodes:
         raise ValueError("Empty graph after removing edges without predictions")
 
-    for n in ref_nodes:
-        if n not in sg.nodes:
-            raise ValueError(f"Reference node {repr(n)} is isolated")
-
     # Relabel the nodes with integers {1..n_nodes}
     node_to_idx = {n: idx for idx, n in enumerate(sorted(sg.nodes))}
     idx_to_node = {idx: n for n, idx in node_to_idx.items()}
 
     sg_relabeled = nx.relabel_nodes(sg, node_to_idx)
 
-    ref_node_idxs = [node_to_idx[n] for n in ref_nodes]
-    ref_node_vals = [sg_relabeled.nodes[n][ref_node_val_prop] for n in ref_node_idxs]
-    ref_node_stddevs = [sg_relabeled.nodes[n].get(ref_node_stddev_prop, 0.0) for n in ref_node_idxs]
+    ref_node_idxs = []
+    ref_node_vals = []
+    ref_node_stddevs = []
+    for n, d in sg_relabeled.nodes.items():
+        if ref_node_val_prop in d:
+            ref_node_idxs.append(n)
+            ref_node_vals.append(d[ref_node_val_prop])
+            ref_node_stddevs.append(d.get(ref_node_stddev_prop, 0.0))
 
     edge_idxs = np.array(sg_relabeled.edges)
 
