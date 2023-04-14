@@ -25,10 +25,13 @@ def filter_valid_exclusions(
 @pytest.mark.parametrize("beta", [1.0, 2.0])
 @pytest.mark.parametrize("cutoff", [0.7, 1.1])
 @pytest.mark.parametrize("precision", [np.float64, np.float32])
-@pytest.mark.parametrize("num_atoms,num_atoms_ligand", [(33, 1), (231, 15), (4080, 1050)])
+@pytest.mark.parametrize(
+    "num_atoms,num_atoms_ligand,num_ixn_groups", [(33, 1, 0), (33, 1, 1), (231, 15, 2), (4080, 1050, 5)]
+)
 def test_nonbonded_consistency(
     num_atoms_ligand,
     num_atoms,
+    num_ixn_groups,
     precision,
     cutoff,
     beta,
@@ -48,6 +51,14 @@ def test_nonbonded_consistency(
     ligand_idxs = rng.choice(num_atoms, size=(num_atoms_ligand,), replace=False).astype(np.int32)
     host_idxs = np.setdiff1d(np.arange(num_atoms), ligand_idxs).astype(np.int32)
 
+    # Partition host_idxs into num_ixn_groups
+    if num_ixn_groups:
+        group_idxs = rng.choice(num_ixn_groups, size=(len(host_idxs),), replace=True).astype(np.int32)
+        col_atom_idxss = [host_idxs[group_idxs == i] for i in range(num_ixn_groups)]
+    else:
+        # Test case where col_atom_idxs is None
+        col_atom_idxss = [None]
+
     ref_impl = (
         Nonbonded(num_atoms, exclusion_idxs, exclusion_scales, beta, cutoff, disable_hilbert_sort)
         .to_gpu(precision)
@@ -57,8 +68,8 @@ def test_nonbonded_consistency(
     def make_allpairs_potential(atom_idxs):
         return NonbondedAllPairs(num_atoms, beta, cutoff, atom_idxs, disable_hilbert_sort)
 
-    def make_ixngroup_potential(ligand_idxs):
-        return NonbondedInteractionGroup(num_atoms, ligand_idxs, beta, cutoff, disable_hilbert_sort)
+    def make_ixngroup_potential(ligand_idxs, col_atom_idxs):
+        return NonbondedInteractionGroup(num_atoms, ligand_idxs, beta, cutoff, col_atom_idxs, disable_hilbert_sort)
 
     def make_pairlist_potential(exclusion_idxs, exclusion_scales):
         return NonbondedPairListNegated(exclusion_idxs, exclusion_scales, beta, cutoff)
@@ -68,9 +79,9 @@ def test_nonbonded_consistency(
             [
                 make_allpairs_potential(host_idxs),
                 make_allpairs_potential(ligand_idxs),
-                make_ixngroup_potential(ligand_idxs),
                 make_pairlist_potential(exclusion_idxs, exclusion_scales),
             ]
+            + [make_ixngroup_potential(ligand_idxs, col_atom_idxs) for col_atom_idxs in col_atom_idxss]
         )
         .to_gpu(precision)
         .unbound_impl

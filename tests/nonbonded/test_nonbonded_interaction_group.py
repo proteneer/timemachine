@@ -23,7 +23,15 @@ def test_nonbonded_interaction_group_invalid_indices():
 
     with pytest.raises(RuntimeError) as e:
         NonbondedInteractionGroup(3, [0, 1, 2], 1.0, 1.0).to_gpu(np.float64).unbound_impl
-    assert "must be less then N(3) indices" == str(e.value)
+    assert "must be less then N(3) row indices" == str(e.value)
+
+    with pytest.raises(RuntimeError) as e:
+        NonbondedInteractionGroup(3, [0, 1], 1.0, 1.0, col_atom_idxs=[2, 3, 4]).to_gpu(np.float64).unbound_impl
+    assert "must be less then N(3) col indices" == str(e.value)
+
+    with pytest.raises(RuntimeError) as e:
+        NonbondedInteractionGroup(3, [0, 1], 1.0, 1.0, col_atom_idxs=[0, 1]).to_gpu(np.float64).unbound_impl
+    assert "row and col indices must be disjoint" == str(e.value)
 
 
 def test_nonbonded_interaction_group_zero_interactions(rng: np.random.Generator):
@@ -54,7 +62,9 @@ def test_nonbonded_interaction_group_zero_interactions(rng: np.random.Generator)
 @pytest.mark.parametrize("precision,rtol,atol", [(np.float64, 1e-8, 1e-8), (np.float32, 1e-4, 5e-4)])
 @pytest.mark.parametrize("num_atoms_ligand", [1, 15])
 @pytest.mark.parametrize("num_atoms", [33, 231])
+@pytest.mark.parametrize("num_col_atoms", [0, 1, 10, -1])
 def test_nonbonded_interaction_group_correctness(
+    num_col_atoms,
     num_atoms,
     num_atoms_ligand,
     precision,
@@ -74,7 +84,15 @@ def test_nonbonded_interaction_group_correctness(
 
     ligand_idxs = rng.choice(num_atoms, size=(num_atoms_ligand,), replace=False).astype(np.int32)
 
-    potential = NonbondedInteractionGroup(num_atoms, ligand_idxs, beta, cutoff)
+    if num_col_atoms < 0:
+        num_col_atoms = num_atoms - num_atoms_ligand
+
+    col_atom_idxs = None
+    if num_col_atoms:
+        host_idxs = np.setdiff1d(np.arange(num_atoms), ligand_idxs).astype(np.int32)
+        col_atom_idxs = rng.choice(host_idxs, size=(num_col_atoms,), replace=False).astype(np.int32)
+
+    potential = NonbondedInteractionGroup(num_atoms, ligand_idxs, beta, cutoff, col_atom_idxs=col_atom_idxs)
 
     test_impl = potential.to_gpu(precision)
 
