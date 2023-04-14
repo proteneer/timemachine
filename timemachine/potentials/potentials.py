@@ -165,6 +165,9 @@ class NonbondedInteractionGroup(Potential):
 
     def __call__(self, conf: Conf, params: Params, box: Optional[Box]) -> float | Array:
         num_atoms, _ = jnp.array(conf).shape
+        col_atom_idxs = self.col_atom_idxs
+        if col_atom_idxs is None:
+            col_atom_idxs = np.setdiff1d(jnp.arange(num_atoms), self.row_atom_idxs)
 
         # If not set, col_atom_idxs are all others not in the row
         col_atom_idxs = self.col_atom_idxs

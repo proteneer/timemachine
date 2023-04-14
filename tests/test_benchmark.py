@@ -11,6 +11,7 @@ from scipy.spatial.distance import cdist
 
 from timemachine import constants
 from timemachine.fe import rbfe
+from timemachine.fe.free_energy import HostConfig
 from timemachine.fe.model_utils import apply_hmr
 from timemachine.fe.single_topology import SingleTopology
 from timemachine.ff import Forcefield
@@ -386,21 +387,22 @@ def benchmark_hif2a(verbose=False, num_batches=100, steps_per_batch=1000):
 
     # build the protein system.
     with resources.path("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as path_to_pdb:
-        complex_system, complex_coords, complex_box, _ = builders.build_protein_system(
+        complex_system, complex_coords, complex_box, _, complex_num_waters = builders.build_protein_system(
             str(path_to_pdb), forcefield.protein_ff, forcefield.water_ff
         )
 
     solvent_system, solvent_coords, solvent_box, _ = builders.build_water_system(4.0, forcefield.water_ff)
 
-    for stage, host_system, host_coords, host_box in [
-        ("hif2a", complex_system, complex_coords, complex_box),
-        ("solvent", solvent_system, solvent_coords, solvent_box),
+    for stage, host_system, host_coords, host_box, num_water_atoms in [
+        ("hif2a", complex_system, complex_coords, complex_box, complex_num_waters),
+        ("solvent", solvent_system, solvent_coords, solvent_box, solvent_coords.shape[0]),
     ]:
 
         host_fns, host_masses = openmm_deserializer.deserialize_system(host_system, cutoff=1.2)
 
         # resolve host clashes
-        min_host_coords = minimizer.minimize_host_4d([st.mol_a, st.mol_b], host_system, host_coords, st.ff, host_box)
+        host_config = HostConfig(host_system, host_coords, host_box, num_water_atoms)
+        min_host_coords = minimizer.minimize_host_4d([st.mol_a, st.mol_b], host_config, st.ff)
 
         x0 = min_host_coords
         v0 = np.zeros_like(x0)

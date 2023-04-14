@@ -464,7 +464,7 @@ def test_nonbonded_split(precision, rtol, atol, use_tiny_mol):
 
     def get_vacuum_solvent_u_grads(ff, lamb):
         st = SingleTopology(mol_a, mol_b, core, ff)
-        ligand_conf = st.combine_confs(get_romol_conf(mol_a), get_romol_conf(mol_b))  # TODO put lamb here w/Josh's fix
+        ligand_conf = st.combine_confs(get_romol_conf(mol_a), get_romol_conf(mol_b), lamb)
         combined_conf = np.concatenate([solvent_conf, ligand_conf])
 
         vacuum_system = st.setup_intermediate_state(lamb)
@@ -496,7 +496,7 @@ def test_nonbonded_split(precision, rtol, atol, use_tiny_mol):
             vacuum_u_inter_scaled,
             solvent_grad_inter_scaled,
             solvent_u_inter_scaled,
-        ) = get_vacuum_solvent_u_grads(ffs.inter_scaled, lamb)
+        ) = get_vacuum_solvent_u_grads(ffs.prot, lamb)
 
         # Compute the expected intermol scaled potential
         expected_inter_scaled_u = solvent_u_scaled - vacuum_u_scaled + vacuum_u_ref

@@ -49,11 +49,11 @@ def run_pair(mol_a, mol_b, core, forcefield, md_params, protein_path):
         f"solvent dG: {np.sum(solvent_res.result.all_dGs):.3f} +- {np.linalg.norm(solvent_res.result.all_errs):.3f} kJ/mol"
     )
 
-    complex_sys, complex_conf, complex_box, complex_top = builders.build_protein_system(
+    complex_sys, complex_conf, complex_box, complex_top, num_water_atoms = builders.build_protein_system(
         protein_path, forcefield.protein_ff, forcefield.water_ff
     )
     complex_box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes
-    complex_host_config = HostConfig(complex_sys, complex_conf, complex_box)
+    complex_host_config = HostConfig(complex_sys, complex_conf, complex_box, num_water_atoms)
     complex_res = estimate_relative_free_energy(
         mol_a, mol_b, core, forcefield, complex_host_config, md_params=md_params, prefix="complex"
     )

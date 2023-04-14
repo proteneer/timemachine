@@ -27,10 +27,11 @@ from timemachine.potentials import BoundPotential, HarmonicBond, Potential
 
 
 class HostConfig:
-    def __init__(self, omm_system, conf, box):
+    def __init__(self, omm_system, conf, box, num_water_atoms):
         self.omm_system = omm_system
         self.conf = conf
         self.box = box
+        self.num_water_atoms = num_water_atoms
 
 
 @dataclass(frozen=True)
@@ -182,7 +183,9 @@ class BaseFreeEnergy:
             topology.parameterize_harmonic_bond(ff_params.hb_params),
             topology.parameterize_harmonic_angle(ff_params.ha_params),
             topology.parameterize_periodic_torsion(ff_params.pt_params, ff_params.it_params),
-            topology.parameterize_nonbonded(ff_params.q_params, ff_params.q_params_intra, ff_params.lj_params, lamb),
+            topology.parameterize_nonbonded(
+                ff_params.q_params, ff_params.q_params_intra, ff_params.q_params_solv, ff_params.lj_params, lamb
+            ),
         ]
 
         params, potentials = zip(*params_potential_pairs)
@@ -207,7 +210,7 @@ class AbsoluteFreeEnergy(BaseFreeEnergy):
         self.mol = mol
         self.top = top
 
-    def prepare_host_edge(self, ff_params: ForcefieldParams, host_system, lamb: float):
+    def prepare_host_edge(self, ff_params: ForcefieldParams, host_config: HostConfig, lamb: float):
         """
         Prepares the host-guest system
 
@@ -216,8 +219,8 @@ class AbsoluteFreeEnergy(BaseFreeEnergy):
         ff_params: ForcefieldParams
             forcefield parameters
 
-        host_system: openmm.System
-            openmm System object to be deserialized.
+        host_config: HostConfig
+            HostConfig containing openmm System object to be deserialized.
 
         lamb: float
             alchemical parameter controlling 4D decoupling
@@ -230,8 +233,8 @@ class AbsoluteFreeEnergy(BaseFreeEnergy):
         """
         ligand_masses = get_mol_masses(self.mol)
 
-        host_bps, host_masses = openmm_deserializer.deserialize_system(host_system, cutoff=1.2)
-        hgt = topology.HostGuestTopology(host_bps, self.top)
+        host_bps, host_masses = openmm_deserializer.deserialize_system(host_config.omm_system, cutoff=1.2)
+        hgt = topology.HostGuestTopology(host_bps, self.top, host_config.num_water_atoms)
 
         final_params, final_potentials = self._get_system_params_and_potentials(ff_params, hgt, lamb)
         combined_masses = self._combine(ligand_masses, host_masses)

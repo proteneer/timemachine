@@ -2,13 +2,13 @@ import warnings
 from typing import Optional, Sequence, Tuple
 
 import numpy as np
-import openmm
 import scipy.optimize
 from numpy.typing import NDArray
 from rdkit import Chem
 
 from timemachine.constants import BOLTZ, DEFAULT_TEMP, MAX_FORCE_NORM
 from timemachine.fe import model_utils, topology
+from timemachine.fe.free_energy import HostConfig
 from timemachine.fe.utils import get_romol_conf
 from timemachine.ff import Forcefield
 from timemachine.ff.handlers import openmm_deserializer
@@ -49,7 +49,9 @@ def parameterize_system(topo, ff: Forcefield, lamb: float):
         topo.parameterize_harmonic_bond(ff_params.hb_params),
         topo.parameterize_harmonic_angle(ff_params.ha_params),
         topo.parameterize_periodic_torsion(ff_params.pt_params, ff_params.it_params),
-        topo.parameterize_nonbonded(ff_params.q_params, ff_params.q_params_intra, ff_params.lj_params, lamb),
+        topo.parameterize_nonbonded(
+            ff_params.q_params, ff_params.q_params_intra, ff_params.q_params_solv, ff_params.lj_params, lamb
+        ),
     ]
     return params_potential_pairs
 
@@ -102,7 +104,7 @@ def fire_minimize(x0: NDArray, u_impls: Sequence[custom_ops.BoundPotential], box
     return np.asarray(opt_state.position)
 
 
-def minimize_host_4d(mols, host_system, host_coords, ff, box, mol_coords=None) -> np.ndarray:
+def minimize_host_4d(mols, host_config: HostConfig, ff, mol_coords=None) -> np.ndarray:
     """
     Insert mols into a host system via 4D decoupling using Fire minimizer at lambda=1.0,
     0 Kelvin Langevin integration at a sequence of lambda from 1.0 to 0.0, and Fire minimizer again at lambda=0.0
@@ -114,17 +116,11 @@ def minimize_host_4d(mols, host_system, host_coords, ff, box, mol_coords=None) -
     mols: list of Chem.Mol
         Ligands to be inserted. This must be of length 1 or 2 for now.
 
-    host_system: openmm.System
-        OpenMM System representing the host
-
-    host_coords: np.ndarray
-        N x 3 coordinates of the host. units of nanometers.
+    host_config: HostConfig
+        Represents the host system.
 
     ff: ff.Forcefield
         Wrapper class around a list of handlers
-
-    box: np.ndarray [3,3]
-        Box matrix for periodic boundary conditions. units of nanometers.
 
     mol_coords: list of np.ndarray
         Pre-specify a list of mol coords. Else use the mol.GetConformer(0)
@@ -135,12 +131,12 @@ def minimize_host_4d(mols, host_system, host_coords, ff, box, mol_coords=None) -
         This returns minimized host_coords.
 
     """
-
+    box = host_config.box
     assert box.shape == (3, 3)
 
-    host_bps, host_masses = openmm_deserializer.deserialize_system(host_system, cutoff=1.2)
+    host_bps, host_masses = openmm_deserializer.deserialize_system(host_config.omm_system, cutoff=1.2)
 
-    num_host_atoms = host_coords.shape[0]
+    num_host_atoms = host_config.conf.shape[0]
 
     if len(mols) == 1:
         top = topology.BaseTopology(mols[0], ff)
@@ -150,7 +146,7 @@ def minimize_host_4d(mols, host_system, host_coords, ff, box, mol_coords=None) -
         raise ValueError("mols must be length 1 or 2")
 
     mass_list = [np.array(host_masses)]
-    conf_list = [np.array(host_coords)]
+    conf_list = [np.array(host_config.conf)]
     for mol in mols:
         # mass increase is to keep the ligand fixed
         mass_list.append(np.array([a.GetMass() * 100000 for a in mol.GetAtoms()]))
@@ -165,7 +161,7 @@ def minimize_host_4d(mols, host_system, host_coords, ff, box, mol_coords=None) -
     combined_masses = np.concatenate(mass_list)
     combined_coords = np.concatenate(conf_list)
 
-    hgt = topology.HostGuestTopology(host_bps, top)
+    hgt = topology.HostGuestTopology(host_bps, top, host_config.num_water_atoms)
 
     # this value doesn't matter since we will turn off the noise.
     seed = 0
@@ -263,10 +259,8 @@ def make_host_du_dx_fxn(mols, host_system, host_coords, ff, box, mol_coords=None
 
 def equilibrate_host_barker(
     mols,
-    host_system,
-    host_coords,
+    host_config: HostConfig,
     ff,
-    box,
     mol_coords=None,
     temperature=DEFAULT_TEMP,
     proposal_stddev=0.0001,
@@ -290,13 +284,15 @@ def equilibrate_host_barker(
 
     assert 0 < proposal_stddev <= 0.0001, "not tested with Metropolis correction omitted for larger proposal_stddevs"
 
-    du_dx_host_fxn = make_host_du_dx_fxn(mols, host_system, host_coords, ff, box, mol_coords)
+    du_dx_host_fxn = make_host_du_dx_fxn(
+        mols, host_config.omm_system, host_config.conf, ff, host_config.box, mol_coords
+    )
     grad_log_q = lambda x_host: -du_dx_host_fxn(x_host) / (BOLTZ * temperature)
 
     # TODO: if needed, revisit choice to omit Metropolis correction
     barker_prop = BarkerProposal(grad_log_q, proposal_stddev, seed=seed)
 
-    x_host = np.array(host_coords)
+    x_host = np.array(host_config.conf)
 
     for t in range(n_steps):
         x_host = barker_prop.sample(x_host)
@@ -309,12 +305,10 @@ def equilibrate_host_barker(
 
 def equilibrate_host(
     mol: Chem.Mol,
-    host_system: openmm.System,
-    host_coords: NDArray,
+    host_config: HostConfig,
     temperature: float,
     pressure: float,
     ff: Forcefield,
-    box: NDArray,
     n_steps: int,
     seed: Optional[int] = None,
 ) -> Tuple[NDArray, NDArray]:
@@ -333,11 +327,8 @@ def equilibrate_host(
     mol: Chem.Mol
         Ligand for the host to equilibrate with.
 
-    host_system: openmm.System
-        OpenMM System representing the host.
-
-    host_coords: np.ndarray
-        N x 3 coordinates of the host. units of nanometers.
+    host_config: HostConfig
+        Represents the host system.
 
     temperature: float
         Temperature at which to run the simulation. Units of kelvins.
@@ -347,9 +338,6 @@ def equilibrate_host(
 
     ff: ff.Forcefield
         Wrapper class around a list of handlers.
-
-    box: np.ndarray [3,3]
-        Box matrix for periodic boundary conditions. units of nanometers.
 
     n_steps: int
         Number of steps to run the simulation for.
@@ -364,9 +352,9 @@ def equilibrate_host(
 
     """
     # insert mol into the binding pocket.
-    host_bps, host_masses = openmm_deserializer.deserialize_system(host_system, cutoff=1.2)
+    host_bps, host_masses = openmm_deserializer.deserialize_system(host_config.omm_system, cutoff=1.2)
 
-    min_host_coords = minimize_host_4d([mol], host_system, host_coords, ff, box)
+    min_host_coords = minimize_host_4d([mol], host_config, ff)
 
     ligand_masses = [a.GetMass() for a in mol.GetAtoms()]
     ligand_coords = get_romol_conf(mol)
@@ -375,7 +363,7 @@ def equilibrate_host(
     combined_coords = np.concatenate([min_host_coords, ligand_coords])
 
     top = topology.BaseTopology(mol, ff)
-    hgt = topology.HostGuestTopology(host_bps, top)
+    hgt = topology.HostGuestTopology(host_bps, top, host_config.num_water_atoms)
 
     # setup the parameter handlers for the ligand
     params_potential_pairs = parameterize_system(hgt, ff, 1.0)
@@ -384,7 +372,7 @@ def equilibrate_host(
 
     # Re-minimize with the mol being flexible
     u_impls = bind_potentials(params_potential_pairs)  # lambda=1
-    x0 = fire_minimize(x0, u_impls, box, 50)
+    x0 = fire_minimize(x0, u_impls, host_config.box, 50)
     v0 = np.zeros_like(x0)
 
     dt = 2.5e-3
@@ -413,7 +401,7 @@ def equilibrate_host(
     ).impl(u_impls)
 
     # context components: positions, velocities, box, integrator, energy fxns
-    ctxt = custom_ops.Context(x0, v0, box, integrator, u_impls, barostat)
+    ctxt = custom_ops.Context(x0, v0, host_config.box, integrator, u_impls, barostat)
 
     ctxt.multiple_steps(n_steps)
 

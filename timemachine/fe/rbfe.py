@@ -163,13 +163,10 @@ def setup_optimized_host(st: SingleTopology, config: HostConfig) -> Host:
     system, masses = convert_omm_system(config.omm_system)
     conf = minimizer.minimize_host_4d(
         [st.mol_a, st.mol_b],
-        config.omm_system,
-        config.conf,
+        config,
         st.ff,
-        config.box,
     )
-    box = config.box
-    return Host(system, masses, conf, box)
+    return Host(system, masses, conf, config.box)
 
 
 def setup_initial_states(
@@ -635,7 +632,7 @@ def run_solvent(
     box_width = 4.0
     solvent_sys, solvent_conf, solvent_box, solvent_top = builders.build_water_system(box_width, forcefield.water_ff)
     solvent_box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes, deboggle later
-    solvent_host_config = HostConfig(solvent_sys, solvent_conf, solvent_box)
+    solvent_host_config = HostConfig(solvent_sys, solvent_conf, solvent_box, solvent_conf.shape[0])
     solvent_res = estimate_relative_free_energy_via_greedy_bisection(
         mol_a,
         mol_b,
@@ -660,11 +657,11 @@ def run_complex(
     n_windows: Optional[int] = None,
     min_cutoff: Optional[float] = 0.7,
 ):
-    complex_sys, complex_conf, complex_box, complex_top = builders.build_protein_system(
+    complex_sys, complex_conf, complex_box, complex_top, nwa = builders.build_protein_system(
         protein, forcefield.protein_ff, forcefield.water_ff
     )
     complex_box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes, deboggle later
-    complex_host_config = HostConfig(complex_sys, complex_conf, complex_box)
+    complex_host_config = HostConfig(complex_sys, complex_conf, complex_box, nwa)
     complex_res = estimate_relative_free_energy_via_greedy_bisection(
         mol_a,
         mol_b,
