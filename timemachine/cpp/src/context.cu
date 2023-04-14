@@ -6,7 +6,7 @@
 #include "gpu_utils.cuh"
 #include "kernels/kernel_utils.cuh"
 #include "langevin_integrator.hpp"
-#include "local_md_config.hpp"
+#include "local_md_potentials.hpp"
 #include "math_utils.cuh"
 #include "pinned_host_buffer.hpp"
 #include "set_utils.hpp"
@@ -79,8 +79,8 @@ std::array<std::vector<double>, 2> Context::multiple_steps_local(
         d_box_traj.reset(new DeviceBuffer<double>(box_buffer_size));
     }
 
-    if (!this->local_md_config_) {
-        this->local_md_config_.reset(new LocalMDConfig(N_, bps_));
+    if (!this->local_md_pots_) {
+        this->local_md_pots_.reset(new LocalMDPotentials(N_, bps_));
     }
 
     cudaStream_t stream;
@@ -89,12 +89,12 @@ std::array<std::vector<double>, 2> Context::multiple_steps_local(
     gpuErrchk(cudaStreamCreateWithFlags(&stream, cudaStreamNonBlocking));
     try {
 
-        local_md_config_->setup_from_idxs(
+        local_md_pots_->setup_from_idxs(
             d_x_t_, d_box_t_, local_idxs, this->_get_temperature(), seed, radius, k, stream);
 
-        const auto d_free_idxs = local_md_config_->get_free_idxs();
+        const auto d_free_idxs = local_md_pots_->get_free_idxs();
 
-        std::vector<std::shared_ptr<BoundPotential>> local_pots = local_md_config_->get_potentials();
+        std::vector<std::shared_ptr<BoundPotential>> local_pots = local_md_pots_->get_potentials();
 
         intg_->initialize(local_pots, d_x_t_, d_v_t_, d_box_t_, d_free_idxs->data, stream);
         for (int i = 0; i < burn_in; i++) {
@@ -118,7 +118,7 @@ std::array<std::vector<double>, 2> Context::multiple_steps_local(
             }
         }
         intg_->finalize(local_pots, d_x_t_, d_v_t_, d_box_t_, d_free_idxs->data, stream);
-        local_md_config_->reset(stream);
+        local_md_pots_->reset(stream);
     } catch (...) {
         gpuErrchk(cudaStreamSynchronize(stream));
         gpuErrchk(cudaStreamDestroy(stream));

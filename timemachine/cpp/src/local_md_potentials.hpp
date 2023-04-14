@@ -11,12 +11,12 @@
 
 namespace timemachine {
 
-class LocalMDConfig {
+class LocalMDPotentials {
 
 public:
-    LocalMDConfig(const int N, const std::vector<std::shared_ptr<BoundPotential>> bps);
+    LocalMDPotentials(const int N, const std::vector<std::shared_ptr<BoundPotential>> bps);
 
-    ~LocalMDConfig();
+    ~LocalMDPotentials();
 
     DeviceBuffer<unsigned int> *get_free_idxs();
 

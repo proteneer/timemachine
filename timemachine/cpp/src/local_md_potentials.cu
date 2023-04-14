@@ -1,10 +1,10 @@
+#include "local_md_potentials.hpp"
 #include "constants.hpp"
 #include "gpu_utils.cuh"
 #include "kernel_utils.cuh"
 #include "kernels/k_flat_bottom_bond.cuh"
 #include "kernels/k_indices.cuh"
 #include "kernels/k_local_md.cuh"
-#include "local_md_config.hpp"
 #include "math_utils.cuh"
 #include <cub/cub.cuh>
 #include <random>
@@ -19,7 +19,7 @@ struct LessThan {
     CUB_RUNTIME_FUNCTION __device__ __forceinline__ bool operator()(const int &a) const { return (a < compare); }
 };
 
-LocalMDConfig::LocalMDConfig(const int N, const std::vector<std::shared_ptr<BoundPotential>> bps)
+LocalMDPotentials::LocalMDPotentials(const int N, const std::vector<std::shared_ptr<BoundPotential>> bps)
     : N_(N), temp_storage_bytes_(0), all_potentials_(bps), restraints_(N_ * 2), bond_params_(N_ * 3),
       probability_buffer_(round_up_even(N_)), d_free_idxs_(N_), d_row_idxs_(N_), d_col_idxs_(N_), p_num_selected_(1),
       num_selected_buffer_(1) {
@@ -70,12 +70,12 @@ LocalMDConfig::LocalMDConfig(const int N, const std::vector<std::shared_ptr<Boun
     curandErrchk(curandCreateGenerator(&cr_rng_, CURAND_RNG_PSEUDO_DEFAULT));
 };
 
-LocalMDConfig::~LocalMDConfig() { curandErrchk(curandDestroyGenerator(cr_rng_)); }
+LocalMDPotentials::~LocalMDPotentials() { curandErrchk(curandDestroyGenerator(cr_rng_)); }
 
 // setup_from_idxs takes a set of idxs, a temperature and a seed to determine the free particles. Fix the local_idxs to length
 // one to ensure the same reference everytime, though the seed also handles the probabilities of selecting particles, and it is suggested
 // to provide a new seed at each step.
-void LocalMDConfig::setup_from_idxs(
+void LocalMDPotentials::setup_from_idxs(
     double *d_x_t,
     double *d_box_t,
     const std::vector<int> &local_idxs,
@@ -114,7 +114,7 @@ void LocalMDConfig::setup_from_idxs(
     this->_setup_free(reference_idx, radius, k, stream);
 }
 
-void LocalMDConfig::_setup_free(
+void LocalMDPotentials::_setup_free(
     const unsigned int reference_idx, const double radius, const double k, const cudaStream_t stream) {
     const int tpb = warp_size;
 
@@ -143,12 +143,12 @@ void LocalMDConfig::_setup_free(
     const int num_col_idxs = N_ - num_row_idxs;
 
     if (num_row_idxs == 0) {
-        throw std::runtime_error("LocalMDConfig setup has no free particles selected");
+        throw std::runtime_error("LocalMDPotentials setup has no free particles selected");
     }
 
     // The reference particle will always be in the column idxs
     if (num_row_idxs == N_ - 1) {
-        fprintf(stderr, "LocalMDConfig setup has entire system selected\n");
+        fprintf(stderr, "LocalMDPotentials setup has entire system selected\n");
     }
 
     k_construct_bonded_params<<<ceil_divide(num_row_idxs, tpb), tpb, 0, stream>>>(
@@ -182,11 +182,11 @@ void LocalMDConfig::_setup_free(
         ixn_group_->potential, num_col_idxs, num_row_idxs, d_col_idxs_.data, d_row_idxs_.data, stream);
 }
 
-std::vector<std::shared_ptr<BoundPotential>> LocalMDConfig::get_potentials() { return all_potentials_; }
+std::vector<std::shared_ptr<BoundPotential>> LocalMDPotentials::get_potentials() { return all_potentials_; }
 
-DeviceBuffer<unsigned int> *LocalMDConfig::get_free_idxs() { return &d_row_idxs_; }
+DeviceBuffer<unsigned int> *LocalMDPotentials::get_free_idxs() { return &d_row_idxs_; }
 
-void LocalMDConfig::reset(const cudaStream_t stream) {
+void LocalMDPotentials::reset(const cudaStream_t stream) {
     // Set the row idxs back to the identity.
     k_arange<<<ceil_divide(N_, warp_size), warp_size, 0, stream>>>(N_, d_row_idxs_.data);
     gpuErrchk(cudaPeekAtLastError());

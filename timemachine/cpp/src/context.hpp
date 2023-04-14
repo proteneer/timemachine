@@ -1,7 +1,7 @@
 #include "barostat.hpp"
 #include "bound_potential.hpp"
 #include "integrator.hpp"
-#include "local_md_config.hpp"
+#include "local_md_potentials.hpp"
 #include <array>
 #include <vector>
 
@@ -73,7 +73,7 @@ private:
 
     std::shared_ptr<Integrator> intg_;
     std::vector<std::shared_ptr<BoundPotential>> bps_;
-    std::unique_ptr<LocalMDConfig> local_md_config_;
+    std::unique_ptr<LocalMDPotentials> local_md_pots_;
 };
 
 } // namespace timemachine
