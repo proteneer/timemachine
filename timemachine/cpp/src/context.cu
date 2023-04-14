@@ -4,18 +4,14 @@
 #include "fixed_point.hpp"
 #include "flat_bottom_bond.hpp"
 #include "gpu_utils.cuh"
-#include "kernels/k_flat_bottom_bond.cuh"
-#include "kernels/k_indices.cuh"
-#include "kernels/k_local_md.cuh"
 #include "kernels/kernel_utils.cuh"
 #include "langevin_integrator.hpp"
-#include "local_md_utils.hpp"
+#include "local_md_potentials.hpp"
 #include "math_utils.cuh"
 #include "pinned_host_buffer.hpp"
 #include "set_utils.hpp"
 #include <cub/cub.cuh>
 #include <memory>
-#include <random>
 
 namespace timemachine {
 
@@ -70,32 +66,10 @@ std::array<std::vector<double>, 2> Context::multiple_steps_local(
     if (store_x_interval <= 0) {
         throw std::runtime_error("store_x_interval <= 0");
     }
-    const double temperature = this->_get_temperature();
 
     const int x_buffer_size = n_steps / store_x_interval;
 
     const int box_buffer_size = x_buffer_size * 3 * 3;
-
-    std::vector<std::shared_ptr<BoundPotential>> nonbonded_pots;
-    get_nonbonded_all_pair_potentials(bps_, nonbonded_pots);
-
-    if (nonbonded_pots.size() > 1) {
-        throw std::runtime_error("found multiple NonbondedAllPairs potentials");
-    }
-    if (nonbonded_pots.size() != 1) {
-        throw std::runtime_error("unable to find a NonbondedAllPairs potential");
-    }
-
-    // Only used to reference shared_ptr to potential and for Nonbonded parameters
-    // modifications to the BoundPotential has no impact
-    const auto nonbonded_bp = nonbonded_pots[0];
-
-    std::shared_ptr<BoundPotential> ixn_group =
-        construct_ixn_group_potential(N_, nonbonded_bp->potential, nonbonded_bp->size(), nonbonded_bp->d_p->data);
-
-    std::mt19937 rng;
-    rng.seed(seed);
-    std::uniform_int_distribution<unsigned int> random_dist(0, local_idxs.size() - 1);
 
     // Store coordinates in host memory as it can be very large
     std::vector<double> h_x_buffer(x_buffer_size * N_ * 3);
@@ -105,138 +79,29 @@ std::array<std::vector<double>, 2> Context::multiple_steps_local(
         d_box_traj.reset(new DeviceBuffer<double>(box_buffer_size));
     }
 
-    const size_t tpb = warp_size;
-
-    DeviceBuffer<unsigned int> d_free_indices(N_);
-
-    DeviceBuffer<unsigned int> d_row_idxs(N_);
-    DeviceBuffer<unsigned int> d_col_idxs(N_);
-
-    // Pinned memory for getting lengths of indice arrays
-    PinnedHostBuffer<int> p_num_selected(1);
-    DeviceBuffer<int> num_selected_buffer(1);
-    LessThan select_op(N_);
-
-    std::size_t temp_storage_bytes = 0;
-    cub::DevicePartition::If(
-        nullptr, temp_storage_bytes, d_free_indices.data, d_row_idxs.data, num_selected_buffer.data, N_, select_op);
-    // Allocate char as temp_storage_bytes is in raw bytes and the type doesn't matter in practice.
-    // Equivalent to DeviceBuffer<int> buf(temp_storage_bytes / sizeof(int))
-    DeviceBuffer<char> d_temp_storage_buffer(temp_storage_bytes);
-
-    DeviceBuffer<int> restraints(N_ * 2);
-    DeviceBuffer<double> bond_params(N_ * 3);
-    // Ensure that we allocate enough space for all potential bonds
-    std::vector<int> default_bonds(2 * N_);
-    for (int i = 0; i < N_; i++) {
-        default_bonds[i * 2 + 0] = 0;
-        default_bonds[i * 2 + 1] = i + 1;
+    if (!this->local_md_pots_) {
+        this->local_md_pots_.reset(new LocalMDPotentials(N_, bps_));
     }
-    std::shared_ptr<FlatBottomBond<double>> restraint_ptr(new FlatBottomBond<double>(default_bonds));
-    // Construct a bound potential with 0 params
-    std::shared_ptr<BoundPotential> bound_shell_restraint(
-        new BoundPotential(restraint_ptr, std::vector<int>({0}), nullptr));
-
-    // Copy constructor to get copies of the BoundPotentials
-    std::vector<std::shared_ptr<BoundPotential>> local_bps = bps_;
-    // Add the restraint potential aand ixn group potential
-    local_bps.push_back(bound_shell_restraint);
-    local_bps.push_back(ixn_group);
-
-    const double kBT = BOLTZ * temperature;
 
     cudaStream_t stream;
 
-    curandGenerator_t cr_rng;
-    DeviceBuffer<float> probability_buffer(round_up_even(N_));
-    curandErrchk(curandCreateGenerator(&cr_rng, CURAND_RNG_PSEUDO_DEFAULT));
-    curandErrchk(curandSetPseudoRandomGeneratorSeed(cr_rng, seed));
-
     // Create stream that doesn't sync with the default stream
     gpuErrchk(cudaStreamCreateWithFlags(&stream, cudaStreamNonBlocking));
-
     try {
-        curandErrchk(curandSetStream(cr_rng, stream));
 
-        // Set the array to all N, which indicates to ignore that idx
-        k_initialize_array<unsigned int><<<ceil_divide(N_, tpb), tpb, 0, stream>>>(N_, d_free_indices.data, N_);
-        gpuErrchk(cudaPeekAtLastError());
-        // Generate values between (0, 1.0]
-        curandErrchk(curandGenerateUniform(cr_rng, probability_buffer.data, round_up_even(N_)));
+        local_md_pots_->setup_from_idxs(
+            d_x_t_, d_box_t_, local_idxs, this->_get_temperature(), seed, radius, k, stream);
 
-        unsigned int reference_idx = local_idxs[random_dist(rng)];
+        const auto d_free_idxs = local_md_pots_->get_free_idxs();
 
-        // Select all of the particles that will be free
-        k_log_probability_selection<float><<<ceil_divide(N_, tpb), tpb, 0, stream>>>(
-            N_, kBT, radius, k, reference_idx, d_x_t_, d_box_t_, probability_buffer.data, d_free_indices.data);
-        gpuErrchk(cudaPeekAtLastError());
+        std::vector<std::shared_ptr<BoundPotential>> local_pots = local_md_pots_->get_potentials();
 
-        // Partition the free indices into the row indices
-        gpuErrchk(cub::DevicePartition::If(
-            d_temp_storage_buffer.data,
-            temp_storage_bytes,
-            d_free_indices.data,
-            d_row_idxs.data,
-            num_selected_buffer.data,
-            N_,
-            select_op,
-            stream));
-
-        gpuErrchk(cudaMemcpyAsync(
-            p_num_selected.data,
-            num_selected_buffer.data,
-            1 * sizeof(*p_num_selected.data),
-            cudaMemcpyDeviceToHost,
-            stream));
-        gpuErrchk(cudaStreamSynchronize(stream));
-
-        int num_row_indices = p_num_selected.data[0];
-        int num_col_indices = N_ - num_row_indices;
-
-        if (num_row_indices == 0) {
-            throw std::runtime_error("Context::multiple_steps_local(): no free particles selected");
-        }
-
-        // The reference particle will always be in the column indices
-        if (num_row_indices == N_ - 1) {
-            fprintf(stderr, "Context::multiple_steps_local(): entire system selected\n");
-        }
-
-        k_construct_bonded_params<<<ceil_divide(num_row_indices, tpb), tpb, 0, stream>>>(
-            num_row_indices, N_, reference_idx, k, 0.0, radius, d_row_idxs.data, restraints.data, bond_params.data);
-        gpuErrchk(cudaPeekAtLastError());
-        // Setup the flat bottom restraints
-        bound_shell_restraint->set_params_device(std::vector<int>({num_row_indices, 3}), bond_params.data, stream);
-        restraint_ptr->set_bonds_device(num_row_indices, restraints.data, stream);
-
-        // Set the nonbonded potential to compute forces of free particles
-        set_nonbonded_potential_idxs(nonbonded_bp->potential, num_row_indices, d_row_idxs.data, stream);
-
-        // Invert to get column indices
-        k_invert_indices<<<ceil_divide(N_, tpb), tpb, 0, stream>>>(N_, d_free_indices.data);
-        gpuErrchk(cudaPeekAtLastError());
-
-        // Partition the column indices to the column buffer to setup the interaction group
-        gpuErrchk(cub::DevicePartition::If(
-            d_temp_storage_buffer.data,
-            temp_storage_bytes,
-            d_free_indices.data,
-            d_col_idxs.data,
-            num_selected_buffer.data,
-            N_,
-            select_op,
-            stream));
-
-        // Free particles should be in the row indices
-        set_nonbonded_ixn_potential_idxs(
-            ixn_group->potential, num_col_indices, num_row_indices, d_col_idxs.data, d_row_idxs.data, stream);
-
-        intg_->initialize(local_bps, d_x_t_, d_v_t_, d_box_t_, d_row_idxs.data, stream);
+        intg_->initialize(local_pots, d_x_t_, d_v_t_, d_box_t_, d_free_idxs->data, stream);
         for (int i = 0; i < burn_in; i++) {
-            this->_step(local_bps, d_row_idxs.data, stream);
+            this->_step(local_pots, d_free_idxs->data, stream);
         }
         for (int i = 1; i <= n_steps; i++) {
-            this->_step(local_bps, d_row_idxs.data, stream);
+            this->_step(local_pots, d_free_idxs->data, stream);
             if (i % store_x_interval == 0) {
                 gpuErrchk(cudaMemcpyAsync(
                     &h_x_buffer[0] + ((i / store_x_interval) - 1) * N_ * 3,
@@ -252,22 +117,15 @@ std::array<std::vector<double>, 2> Context::multiple_steps_local(
                     stream));
             }
         }
-        intg_->finalize(local_bps, d_x_t_, d_v_t_, d_box_t_, d_row_idxs.data, stream);
-
-        // Set the row indices back to the identity.
-        k_arange<<<ceil_divide(N_, tpb), tpb, 0, stream>>>(N_, d_row_idxs.data);
-        gpuErrchk(cudaPeekAtLastError());
-        // Set back to the full system, for when the loop ends
-        set_nonbonded_potential_idxs(nonbonded_bp->potential, N_, d_row_idxs.data, stream);
+        intg_->finalize(local_pots, d_x_t_, d_v_t_, d_box_t_, d_free_idxs->data, stream);
+        local_md_pots_->reset(stream);
     } catch (...) {
         gpuErrchk(cudaStreamSynchronize(stream));
         gpuErrchk(cudaStreamDestroy(stream));
-        curandErrchk(curandDestroyGenerator(cr_rng));
         throw;
     }
     gpuErrchk(cudaStreamSynchronize(stream));
     gpuErrchk(cudaStreamDestroy(stream));
-    curandErrchk(curandDestroyGenerator(cr_rng));
 
     std::vector<double> h_box_buffer(box_buffer_size);
 

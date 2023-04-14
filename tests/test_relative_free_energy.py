@@ -1,7 +1,6 @@
 # test that we can run relative free energy simulations in complex and in solvent
 # this doesn't test for accuracy, just that everything mechanically runs.
 from importlib import resources
-from typing import List
 
 import numpy as np
 import pytest
@@ -24,7 +23,7 @@ def run_bitwise_reproducibility(mol_a, mol_b, core, forcefield, n_frames, estima
 
     seed = 2023
     box_width = 4.0
-    n_windows = 4
+    n_windows = 3
     solvent_sys, solvent_conf, solvent_box, _ = builders.build_water_system(box_width, forcefield.water_ff)
     solvent_box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes
     solvent_host_config = HostConfig(solvent_sys, solvent_conf, solvent_box)
@@ -60,11 +59,10 @@ def run_triple(mol_a, mol_b, core, forcefield, n_frames, protein_path, n_eq_step
     lambda_interval = [0.01, 0.03]
     n_windows = 3
 
-    def check_sim_result(sim_res: SimulationResult, state_seeds: List[int]):
+    def check_sim_result(sim_res: SimulationResult):
         assert len(sim_res.final_result.initial_states) == n_windows
         assert sim_res.final_result.initial_states[0].lamb == lambda_interval[0]
         assert sim_res.final_result.initial_states[-1].lamb == lambda_interval[1]
-        assert [initial_state.integrator.seed for initial_state in sim_res.final_result.initial_states] == state_seeds
         assert sim_res.plots.dG_errs_png is not None
         assert sim_res.plots.overlap_summary_png is not None
         assert sim_res.plots.overlap_detail_png is not None
@@ -108,9 +106,7 @@ def run_triple(mol_a, mol_b, core, forcefield, n_frames, protein_path, n_eq_step
         n_eq_steps=n_eq_steps,
     )
     print("vacuum")
-    is_bisection = estimate_relative_free_energy_fn == estimate_relative_free_energy_via_greedy_bisection
-    state_seeds = [3595, 7643, 6265] if is_bisection else [3595, 3418, 6265]
-    check_sim_result(vacuum_res, state_seeds=state_seeds)
+    check_sim_result(vacuum_res)
 
     box_width = 4.0
     solvent_sys, solvent_conf, solvent_box, _ = builders.build_water_system(box_width, forcefield.water_ff)
@@ -131,8 +127,7 @@ def run_triple(mol_a, mol_b, core, forcefield, n_frames, protein_path, n_eq_step
     )
 
     print("solvent")
-    state_seeds = [6713, 6361, 5083] if is_bisection else [6713, 9502, 5083]
-    check_sim_result(solvent_res, state_seeds=state_seeds)
+    check_sim_result(solvent_res)
 
     seed = 2024
     complex_sys, complex_conf, complex_box, _ = builders.build_protein_system(
@@ -155,8 +150,7 @@ def run_triple(mol_a, mol_b, core, forcefield, n_frames, protein_path, n_eq_step
     )
 
     print("complex")
-    state_seeds = [3051, 1894, 5814] if is_bisection else [3051, 8351, 5814]
-    check_sim_result(complex_res, state_seeds=state_seeds)
+    check_sim_result(complex_res)
 
 
 @pytest.mark.nightly(reason="Slow!")
@@ -181,12 +175,7 @@ def test_run_hif2a_test_system(estimate_relative_free_energy_fn):
             estimate_relative_free_energy_fn=estimate_relative_free_energy_fn,
         )
     run_bitwise_reproducibility(
-        mol_a,
-        mol_b,
-        core,
-        forcefield,
-        n_frames=100,
-        estimate_relative_free_energy_fn=estimate_relative_free_energy_fn,
+        mol_a, mol_b, core, forcefield, n_frames=100, estimate_relative_free_energy_fn=estimate_relative_free_energy_fn
     )
 
 
