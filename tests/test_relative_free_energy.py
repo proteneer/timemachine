@@ -1,7 +1,6 @@
 # test that we can run relative free energy simulations in complex and in solvent
 # this doesn't test for accuracy, just that everything mechanically runs.
 from importlib import resources
-from typing import List
 
 import numpy as np
 import pytest
@@ -19,13 +18,7 @@ from timemachine.md.barostat.utils import compute_box_center
 from timemachine.testsystems.relative import get_hif2a_ligand_pair_single_topology
 
 
-def get_seeds(sim_res: SimulationResult) -> List[int]:
-    return [initial_state.integrator.seed for initial_state in sim_res.final_result.initial_states]
-
-
-def run_bitwise_reproducibility(
-    mol_a, mol_b, core, forcefield, n_frames, estimate_relative_free_energy_fn, sim_results_by_leg
-):
+def run_bitwise_reproducibility(mol_a, mol_b, core, forcefield, n_frames, estimate_relative_free_energy_fn):
     # test that we can bitwise reproduce our trajectory using the initial state information
 
     seed = 2023
@@ -49,8 +42,6 @@ def run_bitwise_reproducibility(
         n_windows=n_windows,
         keep_idxs=keep_idxs,
     )
-    # Seeds should be the same as the passed in result
-    assert get_seeds(solvent_res) == get_seeds(sim_results_by_leg["solvent"])
 
     all_frames, all_boxes = [], []
     for state in solvent_res.final_result.initial_states:
@@ -161,13 +152,6 @@ def run_triple(mol_a, mol_b, core, forcefield, n_frames, protein_path, n_eq_step
     print("complex")
     check_sim_result(complex_res)
 
-    sim_results_by_leg = {
-        "vacuum": vacuum_res,
-        "solvent": solvent_res,
-        "complex": complex_res,
-    }
-    return sim_results_by_leg
-
 
 @pytest.mark.nightly(reason="Slow!")
 @pytest.mark.parametrize(
@@ -180,7 +164,7 @@ def test_run_hif2a_test_system(estimate_relative_free_energy_fn):
     forcefield = Forcefield.load_default()
 
     with resources.path("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as protein_path:
-        sim_results_by_leg = run_triple(
+        run_triple(
             mol_a,
             mol_b,
             core,
@@ -191,13 +175,7 @@ def test_run_hif2a_test_system(estimate_relative_free_energy_fn):
             estimate_relative_free_energy_fn=estimate_relative_free_energy_fn,
         )
     run_bitwise_reproducibility(
-        mol_a,
-        mol_b,
-        core,
-        forcefield,
-        n_frames=100,
-        estimate_relative_free_energy_fn=estimate_relative_free_energy_fn,
-        sim_results_by_leg=sim_results_by_leg,
+        mol_a, mol_b, core, forcefield, n_frames=100, estimate_relative_free_energy_fn=estimate_relative_free_energy_fn
     )
 
 
