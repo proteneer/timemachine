@@ -164,6 +164,7 @@ class NonbondedInteractionGroup(Potential):
     col_atom_idxs: Optional[NDArray[np.int32]] = None
     disable_hilbert_sort: bool = False
     nblist_padding: float = 0.1
+    col_atom_idxs: Optional[NDArray[np.int32]] = None
 
     def __call__(self, conf: Conf, params: Params, box: Optional[Box]) -> float | Array:
         num_atoms, _ = jnp.array(conf).shape
