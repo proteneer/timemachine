@@ -3,6 +3,7 @@ from time import time
 
 import numpy as np
 
+from timemachine.fe.free_energy import HostConfig
 from timemachine.fe.utils import read_sdf
 from timemachine.ff import Forcefield
 from timemachine.ff.handlers import openmm_deserializer
@@ -14,9 +15,10 @@ def test_minimizer():
     ff = Forcefield.load_default()
 
     with resources.path("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as path_to_pdb:
-        complex_system, complex_coords, complex_box, _ = builders.build_protein_system(
+        complex_system, complex_coords, complex_box, _, num_water_atoms = builders.build_protein_system(
             str(path_to_pdb), ff.protein_ff, ff.water_ff
         )
+        host_config = HostConfig(complex_system, complex_coords, complex_box, num_water_atoms)
 
     with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
         all_mols = read_sdf(path_to_ligand)
@@ -42,9 +44,7 @@ def test_minimizer():
 
         print(f"using unadjusted Barker proposal @ temperature = {room_temperature} K...")
         t0 = time()
-        x_host = equilibrate_host_barker(
-            mols, complex_system, complex_coords, ff, complex_box, temperature=room_temperature
-        )
+        x_host = equilibrate_host_barker(mols, host_config, ff, temperature=room_temperature)
         t1 = time()
         max_frc = np.linalg.norm(host_du_dx_fxn(x_host), axis=-1).max()
         print(f"\tforce norm after room-temperature equilibration: {max_frc:.3f} kJ/mol / nm")
@@ -53,9 +53,7 @@ def test_minimizer():
 
         print(f"using unadjusted Barker proposal @ temperature = {zero_temperature} K...")
         t0 = time()
-        x_host = equilibrate_host_barker(
-            mols, complex_system, complex_coords, ff, complex_box, temperature=zero_temperature
-        )
+        x_host = equilibrate_host_barker(mols, host_config, ff, temperature=zero_temperature)
         t1 = time()
 
         max_frc = np.linalg.norm(host_du_dx_fxn(x_host), axis=-1).max()
@@ -66,7 +64,7 @@ def test_minimizer():
 
         t0 = time()
         print("using 4D FIRE annealing")
-        x_host = minimizer.minimize_host_4d(mols, complex_system, complex_coords, ff, complex_box)
+        x_host = minimizer.minimize_host_4d(mols, host_config, ff)
         max_frc = np.linalg.norm(host_du_dx_fxn(x_host), axis=-1).max()
         print(f"\tmax force norm after 4D FIRE annealing: {max_frc:.3f} kJ/mol / nm")
         print(f"\tmax distance traveled = {np.linalg.norm(np.array(complex_coords) - x_host, axis=-1).max():.3f} nm")
@@ -77,13 +75,14 @@ def test_minimizer():
 def test_equilibrate_host():
     ff = Forcefield.load_default()
     host_system, host_coords, host_box, _ = builders.build_water_system(4.0, ff.water_ff)
+    host_config = HostConfig(host_system, host_coords, host_box, host_coords.shape[0])
 
     with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
         mols = read_sdf(path_to_ligand)
 
     mol = mols[0]
 
-    coords, box = minimizer.equilibrate_host(mol, host_system, host_coords, 300, 1.0, ff, host_box, 25, seed=2022)
+    coords, box = minimizer.equilibrate_host(mol, host_config, 300, 1.0, ff, 25, seed=2022)
     assert coords.shape[0] == host_coords.shape[0] + mol.GetNumAtoms()
     assert coords.shape[1] == host_coords.shape[1]
     assert box.shape == host_box.shape

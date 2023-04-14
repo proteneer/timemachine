@@ -2,6 +2,7 @@ from importlib import resources
 
 import numpy as np
 
+from timemachine.fe.free_energy import HostConfig
 from timemachine.ff import Forcefield
 from timemachine.ff.handlers import openmm_deserializer
 from timemachine.integrator import FIXED_TO_FLOAT
@@ -26,13 +27,14 @@ def test_deterministic_energies():
 
     # build the protein system.
     with resources.path("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as path_to_pdb:
-        complex_system, complex_coords, complex_box, _ = builders.build_protein_system(
+        complex_system, complex_coords, complex_box, _, num_water_atoms = builders.build_protein_system(
             str(path_to_pdb), ff.protein_ff, ff.water_ff
         )
     host_fns, host_masses = openmm_deserializer.deserialize_system(complex_system, cutoff=1.0)
 
     # resolve host clashes
-    min_coords = minimizer.minimize_host_4d([mol_a, mol_b], complex_system, complex_coords, ff, complex_box)
+    host_config = HostConfig(complex_system, complex_coords, complex_box, num_water_atoms)
+    min_coords = minimizer.minimize_host_4d([mol_a, mol_b], host_config, ff)
 
     x0 = min_coords
     v0 = np.zeros_like(x0)

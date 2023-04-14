@@ -303,26 +303,34 @@ def gen_nonbonded_params_with_4d_offsets(
 @dataclass
 class SplitForcefield:
     ref: Forcefield  # ref ff
-    scaled: Forcefield  # all charge terms scaled by 10x
-    inter_scaled: Forcefield  # intermolecular charge terms scaled by 10x
+    intra: Forcefield  # intermolecular charge terms scaled by 10x
+    solv: Forcefield  # water-ligand charge terms scaled by 10x
+    prot: Forcefield  # protein-ligand charge terms scaled by 10x
+    scaled: Forcefield  # all terms scaled by 10x
 
 
 def load_split_forcefields() -> SplitForcefield:
     """
     Returns:
-        OpenFF 2.0.0 ff,
-        OpenFF 2.0.0 ff with all charge terms scaled by 10x,
-        OpenFF 2.0.0 ff with only intermolecular charge terms scaled by 10x.
+        SplitForcefield which contains the ff with various
+        terms scaled by a factor of 10.
     """
     ff_ref = Forcefield.load_from_file("smirnoff_2_0_0_ccc.py")
 
-    ff_scaled = Forcefield.load_from_file("smirnoff_2_0_0_ccc.py")
-    assert ff_scaled.q_handle
-    ff_scaled.q_handle.params *= 10
-    assert ff_scaled.q_handle_intra
-    ff_scaled.q_handle_intra.params *= 10
+    ff_intra = Forcefield.load_from_file("smirnoff_2_0_0_ccc.py")
+    assert ff_intra.q_handle_intra
+    ff_intra.q_handle_intra.params *= 10
 
-    ff_inter_scaled = Forcefield.load_from_file("smirnoff_2_0_0_ccc.py")
-    assert ff_inter_scaled.q_handle
-    ff_inter_scaled.q_handle.params *= 10
-    return SplitForcefield(ff_ref, ff_scaled, ff_inter_scaled)
+    ff_solv = Forcefield.load_from_file("smirnoff_2_0_0_ccc.py")
+    assert ff_solv.q_handle_solv
+    ff_solv.q_handle_solv.params *= 10
+
+    ff_prot = Forcefield.load_from_file("smirnoff_2_0_0_ccc.py")
+    assert ff_prot.q_handle
+    ff_prot.q_handle.params *= 10
+
+    ff_scaled = Forcefield.load_from_file("smirnoff_2_0_0_ccc.py")
+    ff_scaled.q_handle.params *= 10
+    ff_scaled.q_handle_intra.params *= 10
+    ff_scaled.q_handle_solv.params *= 10
+    return SplitForcefield(ff_ref, ff_intra, ff_solv, ff_prot, ff_scaled)
