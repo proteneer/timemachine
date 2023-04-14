@@ -141,7 +141,6 @@ void LocalMDConfig::_setup_free(
 
     const int num_row_indices = p_num_selected_.data[0];
     const int num_col_indices = N_ - num_row_indices;
-    // printf("Idx %u K %f Radius %f Selected %d\n", reference_idx, k, radius, num_row_indices);
 
     if (num_row_indices == 0) {
         throw std::runtime_error("LocalMDConfig setup has no free particles selected");
