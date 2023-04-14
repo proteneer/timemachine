@@ -18,7 +18,7 @@ public:
 
     ~LocalMDConfig();
 
-    DeviceBuffer<unsigned int> *get_free_indices();
+    DeviceBuffer<unsigned int> *get_free_idxs();
 
     void setup_from_idxs(
         double *d_x_t_,
@@ -48,7 +48,7 @@ private:
     DeviceBuffer<double> bond_params_;
 
     DeviceBuffer<float> probability_buffer_;
-    DeviceBuffer<unsigned int> d_free_indices_;
+    DeviceBuffer<unsigned int> d_free_idxs_;
     std::unique_ptr<DeviceBuffer<char>> d_temp_storage_buffer_;
 
     DeviceBuffer<unsigned int> d_row_idxs_;
