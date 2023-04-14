@@ -134,7 +134,6 @@ void LocalMDPotentials::_setup_free(
 
     const int num_row_idxs = p_num_selected_.data[0];
     const int num_col_idxs = N_ - num_row_idxs;
-    printf("Selected %d of %d\n", num_row_idxs, N_);
 
     if (num_row_idxs == 0) {
         throw std::runtime_error("LocalMDPotentials setup has no free particles selected");
