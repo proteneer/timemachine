@@ -89,6 +89,7 @@ construct_ixn_group_potential(const int N, std::shared_ptr<Potential> pot, const
     std::vector<int> row_dummy_idxs{0};
     std::vector<int> col_dummy_idxs{1};
     std::vector<int> shape{P};
+    std::optional<std::set<int>> dummy_col_idxs(std::nullopt);
 
     if (N < 2) {
         throw std::runtime_error("N must be greater than 1");
