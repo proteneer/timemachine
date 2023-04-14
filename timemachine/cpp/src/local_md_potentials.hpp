@@ -54,7 +54,7 @@ private:
     DeviceBuffer<unsigned int> d_row_idxs_;
     DeviceBuffer<unsigned int> d_col_idxs_;
 
-    // Pinned memory for getting lengths of indice arrays
+    // Pinned memory for getting lengths of index arrays
     PinnedHostBuffer<int> p_num_selected_;
     DeviceBuffer<int> num_selected_buffer_;
 
