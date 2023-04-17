@@ -348,8 +348,8 @@ void declare_context(py::module &m) {
                 std::memcpy(vec_selection_mask.data(), selection_mask.data(), vec_selection_mask.size() * sizeof(int));
                 verify_atom_idxs(N, vec_selection_mask);
 
-                std::array<std::vector<double>, 2> result =
-                    ctxt.multiple_steps_local_selection(n_steps, reference_idx, vec_selection_mask, burn_in, x_interval, radius, k);
+                std::array<std::vector<double>, 2> result = ctxt.multiple_steps_local_selection(
+                    n_steps, reference_idx, vec_selection_mask, burn_in, x_interval, radius, k);
                 const int D = 3;
                 const int F = result[0].size() / (N * D);
                 py::array_t<double, py::array::c_style> out_x_buffer({F, N, D});
