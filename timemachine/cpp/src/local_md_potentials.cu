@@ -12,7 +12,7 @@
 
 namespace timemachine {
 
-// Struct to as a CUB <= operation
+// Struct to as a CUB < operation
 struct LessThan {
     int compare;
     CUB_RUNTIME_FUNCTION __device__ __forceinline__ explicit LessThan(int compare) : compare(compare) {}
