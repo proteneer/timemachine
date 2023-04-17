@@ -44,7 +44,7 @@ private:
     std::shared_ptr<FlatBottomBond<double>> restraint_;
     std::shared_ptr<BoundPotential> bound_restraint_;
 
-    DeviceBuffer<int> restraints_;
+    DeviceBuffer<int> restraint_pairs_;
     DeviceBuffer<double> bond_params_;
 
     DeviceBuffer<float> probability_buffer_;

@@ -20,7 +20,7 @@ struct LessThan {
 };
 
 LocalMDPotentials::LocalMDPotentials(const int N, const std::vector<std::shared_ptr<BoundPotential>> bps)
-    : N_(N), temp_storage_bytes_(0), all_potentials_(bps), restraints_(N_ * 2), bond_params_(N_ * 3),
+    : N_(N), temp_storage_bytes_(0), all_potentials_(bps), restraint_pairs_(N_ * 2), bond_params_(N_ * 3),
       probability_buffer_(round_up_even(N_)), d_free_idxs_(N_), d_row_idxs_(N_), d_col_idxs_(N_), p_num_selected_(1),
       num_selected_buffer_(1) {
 
@@ -146,12 +146,12 @@ void LocalMDPotentials::_setup_free_idxs_given_reference_idx(
     }
 
     k_construct_bonded_params<<<ceil_divide(num_row_idxs, tpb), tpb, 0, stream>>>(
-        num_row_idxs, N_, reference_idx, k, 0.0, radius, d_row_idxs_.data, restraints_.data, bond_params_.data);
+        num_row_idxs, N_, reference_idx, k, 0.0, radius, d_row_idxs_.data, restraint_pairs_.data, bond_params_.data);
     gpuErrchk(cudaPeekAtLastError());
 
     // Setup the flat bottom restraints
     bound_restraint_->set_params_device(std::vector<int>({num_row_idxs, 3}), bond_params_.data, stream);
-    restraint_->set_bonds_device(num_row_idxs, restraints_.data, stream);
+    restraint_->set_bonds_device(num_row_idxs, restraint_pairs_.data, stream);
 
     // Set the nonbonded potential to compute forces of free particles
     set_nonbonded_potential_idxs(nonbonded_bp_->potential, num_row_idxs, d_row_idxs_.data, stream);
