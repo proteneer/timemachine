@@ -55,6 +55,12 @@ double Context::_get_temperature() {
     }
 }
 
+void Context::initialize_local_md() {
+    if (!this->local_md_pots_) {
+        this->local_md_pots_.reset(new LocalMDPotentials(N_, bps_));
+    }
+}
+
 std::array<std::vector<double>, 2> Context::multiple_steps_local(
     const int n_steps,
     const std::vector<int> &local_idxs,
@@ -79,9 +85,7 @@ std::array<std::vector<double>, 2> Context::multiple_steps_local(
         d_box_traj.reset(new DeviceBuffer<double>(box_buffer_size));
     }
 
-    if (!this->local_md_pots_) {
-        this->local_md_pots_.reset(new LocalMDPotentials(N_, bps_));
-    }
+    this->initialize_local_md();
 
     cudaStream_t stream;
 

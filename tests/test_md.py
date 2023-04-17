@@ -640,6 +640,71 @@ class TestContext(unittest.TestCase):
         with pytest.raises(RuntimeError, match="no free particles"):
             xs, boxes = ctxt.multiple_steps_local(1, local_idxs, radius=radius, k=k, seed=seed)
 
+    def test_local_md_initialization(self):
+        """Verify that initialization of local md doesn't impact behavior of context."""
+        seed = 2023
+        np.random.seed(seed)
+
+        N = 8
+        D = 3
+
+        coords = np.random.rand(N, D).astype(dtype=np.float64) * 2
+        box = np.eye(3) * 3.0
+        masses = np.random.rand(N)
+
+        E = 2
+
+        params, potential = prepare_nb_system(
+            coords,
+            E,
+            p_scale=3.0,
+            cutoff=1.0,
+        )
+        nb_pot = potential.to_gpu(np.float32)
+
+        temperature = 300
+        dt = 1.5e-3
+        friction = 0.0
+        radius = 1.2
+
+        # Select a single particle to use as the reference, will be frozen
+        local_idxs = np.array([len(coords) - 1], dtype=np.int32)
+
+        v0 = np.zeros_like(coords)
+        bps = [nb_pot.bind(params).bound_impl]
+
+        reference_values = []
+        for bp in bps:
+            reference_values.append(bp.execute(coords, box))
+
+        intg = LangevinIntegrator(temperature, dt, friction, masses, seed)
+
+        steps = 10
+
+        # Verify that initializing local md doesn't modify global md behavior
+        ctxt = custom_ops.Context(coords, v0, box, intg.impl(), bps)
+        ref_xs, ref_boxes = ctxt.multiple_steps(steps)
+
+        ctxt = custom_ops.Context(coords, v0, box, intg.impl(), bps)
+        ctxt.initialize_local_md()
+        comp_xs, comp_boxes = ctxt.multiple_steps(steps)
+
+        np.testing.assert_array_equal(ref_xs, comp_xs)
+        np.testing.assert_array_equal(ref_boxes, comp_boxes)
+
+        # Verify that initializing local md doesn't modify global md behavior
+
+        ctxt = custom_ops.Context(coords, v0, box, intg.impl(), bps)
+        ref_local_xs, ref_local_boxes = ctxt.multiple_steps(steps)
+
+        ctxt = custom_ops.Context(coords, v0, box, intg.impl(), bps)
+        ctxt.initialize_local_md()
+        comp_local_xs, comp_local_boxes = ctxt.multiple_steps(steps)
+
+        np.testing.assert_array_equal(ref_local_xs, comp_local_xs)
+        np.testing.assert_array_equal(ref_local_boxes, comp_local_boxes)
+
+
     def test_setup_context_with_references(self):
         mol, _ = get_biphenyl()
         ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")

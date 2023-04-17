@@ -52,6 +52,7 @@ public:
 
     void get_box(double *out_buffer) const;
 
+    void initialize_local_md();
 private:
     int N_; // number of particles
 
@@ -60,6 +61,7 @@ private:
     void _step(std::vector<std::shared_ptr<BoundPotential>> &bps, unsigned int *d_atom_idxs, const cudaStream_t stream);
 
     double _get_temperature();
+
 
     int step_;
 

@@ -359,6 +359,13 @@ void declare_context(py::module &m) {
 
     )pbdoc")
         .def(
+            "initialize_local_md",
+            &timemachine::Context::initialize_local_md,
+            R"pbdoc(
+        Initialize context for local md. Explicitly configures the context to be able to run
+        local md. This is automatically done when calling local md methods, but can be done explicitly.
+    )pbdoc")
+        .def(
             "set_x_t",
             [](timemachine::Context &ctxt, const py::array_t<double, py::array::c_style> new_x_t) {
                 if (new_x_t.shape()[0] != ctxt.num_atoms()) {
