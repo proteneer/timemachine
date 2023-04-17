@@ -704,6 +704,62 @@ class TestContext(unittest.TestCase):
         np.testing.assert_array_equal(ref_local_xs, comp_local_xs)
         np.testing.assert_array_equal(ref_local_boxes, comp_local_boxes)
 
+    def test_local_md_with_selection_mask(self):
+        """Verify that running local md with a selection mask works as expected"""
+        seed = 2023
+        rng = np.random.default_rng(seed)
+
+        N = 8
+        D = 3
+
+        coords = rng.random(size=(N, D)).astype(dtype=np.float64) * 2
+        box = np.eye(3) * 3.0
+        masses = rng.random(N)
+
+        E = 2
+
+        params, potential = prepare_nb_system(
+            coords,
+            E,
+            p_scale=3.0,
+            cutoff=1.0,
+        )
+        nb_pot = potential.to_gpu(np.float32)
+
+        temperature = 300
+        dt = 1.5e-3
+        friction = 0.0
+        radius = 1.2
+
+        # Select a single particle to use as the reference, will be frozen
+        local_idxs = np.array([len(coords) - 1], dtype=np.int32)
+
+        v0 = np.zeros_like(coords)
+        bps = [nb_pot.bind(params).bound_impl]
+
+        reference_values = []
+        for bp in bps:
+            reference_values.append(bp.execute(coords, box))
+
+        intg = LangevinIntegrator(temperature, dt, friction, masses, seed)
+
+        idxs = np.arange(0, len(coords))
+
+        reference_idx = rng.choice(idxs)
+        # TODO, make it so you can't have the reference in the free
+        free_particles = rng.choice(idxs, size=len(coords) // 2)
+        free_particles = np.delete(free_particles, free_particles == reference_idx)
+
+        steps = 10
+
+        # Verify that initializing local md doesn't modify global md behavior
+        ctxt = custom_ops.Context(coords, v0, box, intg.impl(), bps)
+        xs, boxes = ctxt.multiple_steps_local_selection(steps, reference_idx, free_particles.astype(np.int32), burn_in=0)
+        # The reference idx should stay frozen
+        np.testing.assert_array_equal(xs[0][reference_idx], coords[reference_idx])
+        # The free particles should have moved
+        assert np.all(xs[0][free_particles] != coords[free_particles])
+
 
     def test_setup_context_with_references(self):
         mol, _ = get_biphenyl()

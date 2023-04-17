@@ -139,6 +139,83 @@ std::array<std::vector<double>, 2> Context::multiple_steps_local(
     return std::array<std::vector<double>, 2>({h_x_buffer, h_box_buffer});
 }
 
+std::array<std::vector<double>, 2> Context::multiple_steps_local_selection(
+    const int n_steps,
+    const int reference_idx,
+    const std::vector<int> &selection_mask,
+    const int burn_in,
+    const int store_x_interval,
+    const double radius,
+    const double k) {
+    if (store_x_interval <= 0) {
+        throw std::runtime_error("store_x_interval <= 0");
+    }
+
+    const int x_buffer_size = n_steps / store_x_interval;
+
+    const int box_buffer_size = x_buffer_size * 3 * 3;
+
+    // Store coordinates in host memory as it can be very large
+    std::vector<double> h_x_buffer(x_buffer_size * N_ * 3);
+    // Store boxes on GPU as boxes are a constant size and relatively small
+    std::unique_ptr<DeviceBuffer<double>> d_box_traj(nullptr);
+    if (box_buffer_size > 0) {
+        d_box_traj.reset(new DeviceBuffer<double>(box_buffer_size));
+    }
+
+    this->initialize_local_md();
+
+    cudaStream_t stream;
+
+    // Create stream that doesn't sync with the default stream
+    gpuErrchk(cudaStreamCreateWithFlags(&stream, cudaStreamNonBlocking));
+    try {
+
+        local_md_pots_->setup_from_mask(reference_idx, selection_mask, radius, k, stream);
+
+        const auto d_free_idxs = local_md_pots_->get_free_idxs();
+
+        std::vector<std::shared_ptr<BoundPotential>> local_pots = local_md_pots_->get_potentials();
+
+        intg_->initialize(local_pots, d_x_t_, d_v_t_, d_box_t_, d_free_idxs->data, stream);
+        for (int i = 0; i < burn_in; i++) {
+            this->_step(local_pots, d_free_idxs->data, stream);
+        }
+        for (int i = 1; i <= n_steps; i++) {
+            this->_step(local_pots, d_free_idxs->data, stream);
+            if (i % store_x_interval == 0) {
+                gpuErrchk(cudaMemcpyAsync(
+                    &h_x_buffer[0] + ((i / store_x_interval) - 1) * N_ * 3,
+                    d_x_t_,
+                    N_ * 3 * sizeof(double),
+                    cudaMemcpyDeviceToHost,
+                    stream));
+                gpuErrchk(cudaMemcpyAsync(
+                    &d_box_traj->data[0] + ((i / store_x_interval) - 1) * 3 * 3,
+                    d_box_t_,
+                    3 * 3 * sizeof(*d_box_traj->data),
+                    cudaMemcpyDeviceToDevice,
+                    stream));
+            }
+        }
+        intg_->finalize(local_pots, d_x_t_, d_v_t_, d_box_t_, d_free_idxs->data, stream);
+        local_md_pots_->reset(stream);
+    } catch (...) {
+        gpuErrchk(cudaStreamSynchronize(stream));
+        gpuErrchk(cudaStreamDestroy(stream));
+        throw;
+    }
+    gpuErrchk(cudaStreamSynchronize(stream));
+    gpuErrchk(cudaStreamDestroy(stream));
+
+    std::vector<double> h_box_buffer(box_buffer_size);
+
+    if (box_buffer_size > 0) {
+        d_box_traj->copy_to(&h_box_buffer[0]);
+    }
+    return std::array<std::vector<double>, 2>({h_x_buffer, h_box_buffer});
+}
+
 std::array<std::vector<double>, 2> Context::multiple_steps(const int n_steps, int store_x_interval) {
     if (store_x_interval <= 0) {
         throw std::runtime_error("store_x_interval <= 0");
