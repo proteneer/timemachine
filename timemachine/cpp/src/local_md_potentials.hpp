@@ -60,7 +60,8 @@ private:
 
     curandGenerator_t cr_rng_;
 
-    void _setup_free(const unsigned int reference_idx, const double radius, const double k, const cudaStream_t stream);
+    void _setup_free_idxs_given_reference_idx(
+        const unsigned int reference_idx, const double radius, const double k, const cudaStream_t stream);
 };
 
 } // namespace timemachine

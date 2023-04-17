@@ -105,10 +105,10 @@ void LocalMDPotentials::setup_from_idxs(
         N_, kBT, radius, k, reference_idx, d_x_t, d_box_t, probability_buffer_.data, d_free_idxs_.data);
     gpuErrchk(cudaPeekAtLastError());
 
-    this->_setup_free(reference_idx, radius, k, stream);
+    this->_setup_free_idxs_given_reference_idx(reference_idx, radius, k, stream);
 }
 
-void LocalMDPotentials::_setup_free(
+void LocalMDPotentials::_setup_free_idxs_given_reference_idx(
     const unsigned int reference_idx, const double radius, const double k, const cudaStream_t stream) {
     const int tpb = warp_size;
 
