@@ -39,7 +39,8 @@ LocalMDPotentials::LocalMDPotentials(const int N, const std::vector<std::shared_
     nonbonded_bp_ = nonbonded_pots[0];
 
     // Ensure that we allocate enough space for all potential bonds
-    std::vector<int> default_bonds(2 * N_);
+    // default_bonds[i * 2 + 0] != default_bonds[i * 2 + 1], so set first value to 0, second to i + 1
+    std::vector<int> default_bonds(N_ * 2);
     for (int i = 0; i < N_; i++) {
         default_bonds[i * 2 + 0] = 0;
         default_bonds[i * 2 + 1] = i + 1;
