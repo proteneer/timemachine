@@ -28,11 +28,11 @@ public:
         const int seed,
         const double radius,
         const double k,
-        const cudaStream_t stream);
+        cudaStream_t stream);
 
     std::vector<std::shared_ptr<BoundPotential>> get_potentials();
 
-    void reset_potentials(const cudaStream_t stream);
+    void reset_potentials(cudaStream_t stream);
 
 private:
     const int N_;
@@ -61,7 +61,7 @@ private:
     curandGenerator_t cr_rng_;
 
     void _setup_free_idxs_given_reference_idx(
-        const unsigned int reference_idx, const double radius, const double k, const cudaStream_t stream);
+        const unsigned int reference_idx, const double radius, const double k, cudaStream_t stream);
 };
 
 } // namespace timemachine

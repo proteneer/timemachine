@@ -84,7 +84,7 @@ void LocalMDPotentials::setup_from_idxs(
     const int seed,
     const double radius,
     const double k,
-    const cudaStream_t stream) {
+    cudaStream_t stream) {
 
     curandErrchk(curandSetStream(cr_rng_, stream));
     curandErrchk(curandSetPseudoRandomGeneratorSeed(cr_rng_, seed));
@@ -115,7 +115,7 @@ void LocalMDPotentials::setup_from_idxs(
 }
 
 void LocalMDPotentials::_setup_free_idxs_given_reference_idx(
-    const unsigned int reference_idx, const double radius, const double k, const cudaStream_t stream) {
+    const unsigned int reference_idx, const double radius, const double k, cudaStream_t stream) {
     const int tpb = warp_size;
 
     LessThan select_op(N_);
@@ -196,7 +196,7 @@ DeviceBuffer<unsigned int> *LocalMDPotentials::get_free_idxs() { return &d_row_i
 
 // reset_potentials resets the potentials passed in to the constructor to be in the original state. This is because
 // they are passed by reference and so changes made to the potentials will persist otherwise beyond the scope of the local md.
-void LocalMDPotentials::reset_potentials(const cudaStream_t stream) {
+void LocalMDPotentials::reset_potentials(cudaStream_t stream) {
     // Set the row idxs back to the identity.
     k_arange<<<ceil_divide(N_, warp_size), warp_size, 0, stream>>>(N_, d_row_idxs_.data);
     gpuErrchk(cudaPeekAtLastError());
