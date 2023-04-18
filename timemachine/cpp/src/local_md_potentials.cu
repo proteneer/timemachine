@@ -139,7 +139,9 @@ void LocalMDPotentials::_setup_free_idxs_given_reference_idx(
         stream));
     gpuErrchk(cudaStreamSynchronize(stream));
 
+    // The row indices is all of the free indices, which excludes the reference
     const int num_row_idxs = p_num_selected_.data[0];
+    // The col indices is all indices, except for the free, including the reference which is frozen.
     const int num_col_idxs = N_ - num_row_idxs;
 
     if (num_row_idxs == 0) {
