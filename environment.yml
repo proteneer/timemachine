@@ -3,7 +3,6 @@ channels:
   - conda-forge
   - openeye
 dependencies:
-  - python=3.8
+  - python=3.10.10
   - jax=0.4.7
   - jaxlib=0.4.7=cpu*
-  - openeye-toolkits=2020.2.0
