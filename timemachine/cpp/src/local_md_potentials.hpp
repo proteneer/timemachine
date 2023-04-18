@@ -32,7 +32,7 @@ public:
 
     std::vector<std::shared_ptr<BoundPotential>> get_potentials();
 
-    void reset(const cudaStream_t stream);
+    void reset_potentials(const cudaStream_t stream);
 
 private:
     const int N_;

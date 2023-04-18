@@ -194,7 +194,9 @@ std::vector<std::shared_ptr<BoundPotential>> LocalMDPotentials::get_potentials()
 
 DeviceBuffer<unsigned int> *LocalMDPotentials::get_free_idxs() { return &d_row_idxs_; }
 
-void LocalMDPotentials::reset(const cudaStream_t stream) {
+// reset_potentials resets the potentials passed in to the constructor to be in the original state. This is because
+// they are passed by reference and so changes made to the potentials will persist otherwise beyond the scope of the local md.
+void LocalMDPotentials::reset_potentials(const cudaStream_t stream) {
     // Set the row idxs back to the identity.
     k_arange<<<ceil_divide(N_, warp_size), warp_size, 0, stream>>>(N_, d_row_idxs_.data);
     gpuErrchk(cudaPeekAtLastError());

@@ -118,7 +118,7 @@ std::array<std::vector<double>, 2> Context::multiple_steps_local(
             }
         }
         intg_->finalize(local_pots, d_x_t_, d_v_t_, d_box_t_, d_free_idxs->data, stream);
-        local_md_pots_->reset(stream);
+        local_md_pots_->reset_potentials(stream);
     } catch (...) {
         gpuErrchk(cudaStreamSynchronize(stream));
         gpuErrchk(cudaStreamDestroy(stream));
