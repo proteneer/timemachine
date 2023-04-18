@@ -19,7 +19,7 @@ struct LessThan {
     CUB_RUNTIME_FUNCTION __device__ __forceinline__ bool operator()(const int &a) const { return (a < compare); }
 };
 
-LocalMDPotentials::LocalMDPotentials(const int N, const std::vector<std::shared_ptr<BoundPotential>> bps)
+LocalMDPotentials::LocalMDPotentials(const int N, const std::vector<std::shared_ptr<BoundPotential>> &bps)
     : N_(N), temp_storage_bytes_(0), all_potentials_(bps), d_restraint_pairs_(N_ * 2), d_bond_params_(N_ * 3),
       d_probability_buffer_(round_up_even(N_)), d_free_idxs_(N_), d_row_idxs_(N_), d_col_idxs_(N_), p_num_selected_(1),
       d_num_selected_buffer_(1) {

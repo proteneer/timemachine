@@ -14,7 +14,7 @@ namespace timemachine {
 class LocalMDPotentials {
 
 public:
-    LocalMDPotentials(const int N, const std::vector<std::shared_ptr<BoundPotential>> bps);
+    LocalMDPotentials(const int N, const std::vector<std::shared_ptr<BoundPotential>> &bps);
 
     ~LocalMDPotentials();
 
