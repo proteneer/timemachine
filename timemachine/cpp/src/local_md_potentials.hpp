@@ -44,10 +44,10 @@ private:
     std::shared_ptr<FlatBottomBond<double>> restraint_;
     std::shared_ptr<BoundPotential> bound_restraint_;
 
-    DeviceBuffer<int> restraint_pairs_;
-    DeviceBuffer<double> bond_params_;
+    DeviceBuffer<int> d_restraint_pairs_;
+    DeviceBuffer<double> d_bond_params_;
 
-    DeviceBuffer<float> probability_buffer_;
+    DeviceBuffer<float> d_probability_buffer_;
     DeviceBuffer<unsigned int> d_free_idxs_;
     std::unique_ptr<DeviceBuffer<char>> d_temp_storage_buffer_;
 
@@ -56,7 +56,7 @@ private:
 
     // Pinned memory for getting lengths of index arrays
     PinnedHostBuffer<int> p_num_selected_;
-    DeviceBuffer<int> num_selected_buffer_;
+    DeviceBuffer<int> d_num_selected_buffer_;
 
     curandGenerator_t cr_rng_;
 
