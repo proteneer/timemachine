@@ -18,7 +18,7 @@ public:
 
     ~LocalMDPotentials();
 
-    DeviceBuffer<unsigned int> *get_free_idxs();
+    unsigned int *get_free_idxs();
 
     void setup_from_idxs(
         double *d_x_t_,

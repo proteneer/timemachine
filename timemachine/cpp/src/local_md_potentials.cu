@@ -194,7 +194,7 @@ void LocalMDPotentials::_setup_free_idxs_given_reference_idx(
 
 std::vector<std::shared_ptr<BoundPotential>> LocalMDPotentials::get_potentials() { return all_potentials_; }
 
-DeviceBuffer<unsigned int> *LocalMDPotentials::get_free_idxs() { return &d_row_idxs_; }
+unsigned int *LocalMDPotentials::get_free_idxs() { return d_row_idxs_.data; }
 
 // reset_potentials resets the potentials passed in to the constructor to be in the original state. This is because
 // they are passed by reference and so changes made to the potentials will persist otherwise beyond the scope of the local md.
