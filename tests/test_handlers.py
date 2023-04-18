@@ -647,6 +647,16 @@ def test_trans_carboxlic_acid():
     assert np.sum(delta_charges) == pytest.approx(0.0)
 
 
+def test_freesolv_failures():
+    # Test failures for 3 cases in freesolv in openeye toolkits 2022.2.2
+    with resources.path("timemachine.testsystems.data", "freesolv_omega_failures.sdf") as path_to_ligand:
+        mols = utils.read_sdf(path_to_ligand)
+
+    for mol in mols:
+        am1elf10_charges = nonbonded.oe_assign_charges(mol, charge_model=nonbonded.AM1ELF10)
+        assert am1elf10_charges is not None
+
+
 def test_compute_or_load_am1_charges():
     """Loop over test ligands, asserting that charges are stored in expected property and that the same charges are
     returned on repeated calls"""
