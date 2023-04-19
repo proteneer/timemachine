@@ -344,7 +344,7 @@ void declare_context(py::module &m) {
             },
             py::arg("n_steps"),
             py::arg("reference_idx"),
-            py::arg("selection_mask"),
+            py::arg("selection_idxs"),
             py::arg("burn_in") = 500, // This is arbitrarily selected as a default, TODO make informed choice
             py::arg("store_x_interval") = 0,
             py::arg("radius") = 1.2,
@@ -369,9 +369,9 @@ void declare_context(py::module &m) {
         n_steps: int
             Number of steps to run.
 
-        selection_mask: np.array of int32
+        selection_idxs: np.array of int32
             The idxs of particles that should be free during local MD. Will be restrained to the particle specified by reference_idx particle using a
-            flat bottom restraint which is defined by the radius and k values.
+            flat bottom restraint which is defined by the radius and k values. Can be up to N - 1 particles, IE all particles except the reference_idx.
 
         burn_in: int
             How many steps to run prior to storing frames. This is to handle the fact that the local simulation applies a
