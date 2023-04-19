@@ -56,7 +56,7 @@ double Context::_get_temperature() {
 }
 
 void Context::initialize_local_md() {
-    if (!this->local_md_pots_) {
+    if (this->local_md_pots_ == nullptr) {
         this->local_md_pots_.reset(new LocalMDPotentials(N_, bps_));
     }
 }
