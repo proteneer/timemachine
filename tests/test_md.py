@@ -799,7 +799,7 @@ class TestContext(unittest.TestCase):
         idxs = np.arange(0, len(coords))
 
         reference_idx = rng.choice(idxs)
-        # TODO, make it so you can't have the reference in the free
+
         free_particles = rng.choice(idxs, size=len(coords) // 2, replace=False)
         free_particles = np.delete(free_particles, free_particles == reference_idx)
         frozen_particles = np.delete(idxs, free_particles)
