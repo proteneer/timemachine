@@ -14,11 +14,11 @@ namespace timemachine {
 class LocalMDPotentials {
 
 public:
-    LocalMDPotentials(const int N, const std::vector<std::shared_ptr<BoundPotential>> bps);
+    LocalMDPotentials(const int N, const std::vector<std::shared_ptr<BoundPotential>> &bps);
 
     ~LocalMDPotentials();
 
-    DeviceBuffer<unsigned int> *get_free_idxs();
+    unsigned int *get_free_idxs();
 
     void setup_from_idxs(
         double *d_x_t_,
@@ -28,18 +28,18 @@ public:
         const int seed,
         const double radius,
         const double k,
-        const cudaStream_t stream);
+        cudaStream_t stream);
 
     void setup_from_mask(
         const int reference_idx,
         const std::vector<int> &selection_mask,
         const double radius,
         const double k,
-        const cudaStream_t stream);
+        cudaStream_t stream);
 
     std::vector<std::shared_ptr<BoundPotential>> get_potentials();
 
-    void reset(const cudaStream_t stream);
+    void reset_potentials(cudaStream_t stream);
 
 private:
     const int N_;
@@ -51,10 +51,11 @@ private:
     std::shared_ptr<FlatBottomBond<double>> restraint_;
     std::shared_ptr<BoundPotential> bound_restraint_;
 
-    DeviceBuffer<int> restraints_;
-    DeviceBuffer<double> bond_params_;
+    DeviceBuffer<int> d_restraint_pairs_;
+    DeviceBuffer<double> d_bond_params_;
 
-    DeviceBuffer<float> probability_buffer_;
+    DeviceBuffer<float> d_probability_buffer_;
+
     DeviceBuffer<unsigned int> d_free_idxs_;
     std::unique_ptr<DeviceBuffer<char>> d_temp_storage_buffer_;
 
@@ -63,11 +64,13 @@ private:
 
     // Pinned memory for getting lengths of index arrays
     PinnedHostBuffer<int> p_num_selected_;
-    DeviceBuffer<int> num_selected_buffer_;
+
+    DeviceBuffer<int> d_num_selected_buffer_;
 
     curandGenerator_t cr_rng_;
 
-    void _setup_free(const unsigned int reference_idx, const double radius, const double k, const cudaStream_t stream);
+    void _setup_free_idxs_given_reference_idx(
+        const unsigned int reference_idx, const double radius, const double k, cudaStream_t stream);
 };
 
 } // namespace timemachine

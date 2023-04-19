@@ -12,17 +12,17 @@
 
 namespace timemachine {
 
-// Struct to as a CUB <= operation
+// Struct representing the CUB < operation
 struct LessThan {
     int compare;
     CUB_RUNTIME_FUNCTION __device__ __forceinline__ explicit LessThan(int compare) : compare(compare) {}
     CUB_RUNTIME_FUNCTION __device__ __forceinline__ bool operator()(const int &a) const { return (a < compare); }
 };
 
-LocalMDPotentials::LocalMDPotentials(const int N, const std::vector<std::shared_ptr<BoundPotential>> bps)
-    : N_(N), temp_storage_bytes_(0), all_potentials_(bps), restraints_(N_ * 2), bond_params_(N_ * 3),
-      probability_buffer_(round_up_even(N_)), d_free_idxs_(N_), d_row_idxs_(N_), d_col_idxs_(N_), p_num_selected_(1),
-      num_selected_buffer_(1) {
+LocalMDPotentials::LocalMDPotentials(const int N, const std::vector<std::shared_ptr<BoundPotential>> &bps)
+    : N_(N), temp_storage_bytes_(0), all_potentials_(bps), d_restraint_pairs_(N_ * 2), d_bond_params_(N_ * 3),
+      d_probability_buffer_(round_up_even(N_)), d_free_idxs_(N_), d_row_idxs_(N_), d_col_idxs_(N_), p_num_selected_(1),
+      d_num_selected_buffer_(1) {
 
     std::vector<std::shared_ptr<BoundPotential>> nonbonded_pots;
     get_nonbonded_all_pair_potentials(bps, nonbonded_pots);
@@ -39,7 +39,8 @@ LocalMDPotentials::LocalMDPotentials(const int N, const std::vector<std::shared_
     nonbonded_bp_ = nonbonded_pots[0];
 
     // Ensure that we allocate enough space for all potential bonds
-    std::vector<int> default_bonds(2 * N_);
+    // default_bonds[i * 2 + 0] != default_bonds[i * 2 + 1], so set first value to 0, second to i + 1
+    std::vector<int> default_bonds(N_ * 2);
     for (int i = 0; i < N_; i++) {
         default_bonds[i * 2 + 0] = 0;
         default_bonds[i * 2 + 1] = i + 1;
@@ -56,7 +57,13 @@ LocalMDPotentials::LocalMDPotentials(const int N, const std::vector<std::shared_
     all_potentials_.push_back(ixn_group_);
 
     cub::DevicePartition::If(
-        nullptr, temp_storage_bytes_, d_free_idxs_.data, d_row_idxs_.data, num_selected_buffer_.data, N_, LessThan(N_));
+        nullptr,
+        temp_storage_bytes_,
+        d_free_idxs_.data,
+        d_row_idxs_.data,
+        d_num_selected_buffer_.data,
+        N_,
+        LessThan(N_));
     // Allocate char as temp_storage_bytes_ is in raw bytes and the type doesn't matter in practice.
     // Equivalent to DeviceBuffer<int> buf(temp_storage_bytes_ / sizeof(int))
     d_temp_storage_buffer_.reset(new DeviceBuffer<char>(temp_storage_bytes_));
@@ -77,8 +84,7 @@ void LocalMDPotentials::setup_from_idxs(
     const int seed,
     const double radius,
     const double k,
-    const cudaStream_t stream) {
-
+    cudaStream_t stream) {
     curandErrchk(curandSetStream(cr_rng_, stream));
     curandErrchk(curandSetPseudoRandomGeneratorSeed(cr_rng_, seed));
     // Reset the generator offset to ensure same values for the same seed are produced
@@ -90,7 +96,7 @@ void LocalMDPotentials::setup_from_idxs(
     gpuErrchk(cudaPeekAtLastError());
 
     // Generate values between (0, 1.0]
-    curandErrchk(curandGenerateUniform(cr_rng_, probability_buffer_.data, round_up_even(N_)));
+    curandErrchk(curandGenerateUniform(cr_rng_, d_probability_buffer_.data, round_up_even(N_)));
 
     std::mt19937 rng;
     rng.seed(seed);
@@ -101,10 +107,10 @@ void LocalMDPotentials::setup_from_idxs(
     const double kBT = BOLTZ * temperature;
     // Select all of the particles that will be free
     k_log_probability_selection<float><<<ceil_divide(N_, warp_size), warp_size, 0, stream>>>(
-        N_, kBT, radius, k, reference_idx, d_x_t, d_box_t, probability_buffer_.data, d_free_idxs_.data);
+        N_, kBT, radius, k, reference_idx, d_x_t, d_box_t, d_probability_buffer_.data, d_free_idxs_.data);
     gpuErrchk(cudaPeekAtLastError());
 
-    this->_setup_free(reference_idx, radius, k, stream);
+    this->_setup_free_idxs_given_reference_idx(reference_idx, radius, k, stream);
 }
 
 // setup_from_idxs takes a set of idxs, a temperature and a seed to determine the free particles. Fix the local_idxs to length
@@ -135,11 +141,11 @@ void LocalMDPotentials::setup_from_mask(
     k_unique_indices<<<ceil_divide(N_, warp_size), warp_size, 0, stream>>>(N_, N_, d_row_idxs_.data, d_free_idxs_.data);
     gpuErrchk(cudaPeekAtLastError());
 
-    this->_setup_free((unsigned int)reference_idx, radius, k, stream);
+    this->_setup_free_idxs_given_reference_idx((unsigned int)reference_idx, radius, k, stream);
 }
 
-void LocalMDPotentials::_setup_free(
-    const unsigned int reference_idx, const double radius, const double k, const cudaStream_t stream) {
+void LocalMDPotentials::_setup_free_idxs_given_reference_idx(
+    const unsigned int reference_idx, const double radius, const double k, cudaStream_t stream) {
     const int tpb = warp_size;
 
     LessThan select_op(N_);
@@ -150,20 +156,22 @@ void LocalMDPotentials::_setup_free(
         temp_storage_bytes_,
         d_free_idxs_.data,
         d_row_idxs_.data,
-        num_selected_buffer_.data,
+        d_num_selected_buffer_.data,
         N_,
         select_op,
         stream));
 
     gpuErrchk(cudaMemcpyAsync(
         p_num_selected_.data,
-        num_selected_buffer_.data,
+        d_num_selected_buffer_.data,
         1 * sizeof(*p_num_selected_.data),
         cudaMemcpyDeviceToHost,
         stream));
     gpuErrchk(cudaStreamSynchronize(stream));
 
+    // The row indices is all of the free indices, which excludes the reference
     const int num_row_idxs = p_num_selected_.data[0];
+    // The col indices is all indices, except for the free, including the reference which is frozen.
     const int num_col_idxs = N_ - num_row_idxs;
 
     if (num_row_idxs == 0) {
@@ -176,12 +184,20 @@ void LocalMDPotentials::_setup_free(
     }
 
     k_construct_bonded_params<<<ceil_divide(num_row_idxs, tpb), tpb, 0, stream>>>(
-        num_row_idxs, N_, reference_idx, k, 0.0, radius, d_row_idxs_.data, restraints_.data, bond_params_.data);
+        num_row_idxs,
+        N_,
+        reference_idx,
+        k,
+        0.0,
+        radius,
+        d_row_idxs_.data,
+        d_restraint_pairs_.data,
+        d_bond_params_.data);
     gpuErrchk(cudaPeekAtLastError());
 
     // Setup the flat bottom restraints
-    bound_restraint_->set_params_device(std::vector<int>({num_row_idxs, 3}), bond_params_.data, stream);
-    restraint_->set_bonds_device(num_row_idxs, restraints_.data, stream);
+    bound_restraint_->set_params_device(std::vector<int>({num_row_idxs, 3}), d_bond_params_.data, stream);
+    restraint_->set_bonds_device(num_row_idxs, d_restraint_pairs_.data, stream);
 
     // Set the nonbonded potential to compute forces of free particles
     set_nonbonded_potential_idxs(nonbonded_bp_->potential, num_row_idxs, d_row_idxs_.data, stream);
@@ -196,7 +212,7 @@ void LocalMDPotentials::_setup_free(
         temp_storage_bytes_,
         d_free_idxs_.data,
         d_col_idxs_.data,
-        num_selected_buffer_.data,
+        d_num_selected_buffer_.data,
         N_,
         select_op,
         stream));
@@ -208,9 +224,11 @@ void LocalMDPotentials::_setup_free(
 
 std::vector<std::shared_ptr<BoundPotential>> LocalMDPotentials::get_potentials() { return all_potentials_; }
 
-DeviceBuffer<unsigned int> *LocalMDPotentials::get_free_idxs() { return &d_row_idxs_; }
+unsigned int *LocalMDPotentials::get_free_idxs() { return d_row_idxs_.data; }
 
-void LocalMDPotentials::reset(const cudaStream_t stream) {
+// reset_potentials resets the potentials passed in to the constructor to be in the original state. This is because
+// they are passed by reference and so changes made to the potentials will persist otherwise beyond the scope of the local md.
+void LocalMDPotentials::reset_potentials(cudaStream_t stream) {
     // Set the row idxs back to the identity.
     k_arange<<<ceil_divide(N_, warp_size), warp_size, 0, stream>>>(N_, d_row_idxs_.data);
     gpuErrchk(cudaPeekAtLastError());

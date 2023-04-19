@@ -96,16 +96,16 @@ std::array<std::vector<double>, 2> Context::multiple_steps_local(
         local_md_pots_->setup_from_idxs(
             d_x_t_, d_box_t_, local_idxs, this->_get_temperature(), seed, radius, k, stream);
 
-        const auto d_free_idxs = local_md_pots_->get_free_idxs();
+        unsigned int *d_free_idxs = local_md_pots_->get_free_idxs();
 
         std::vector<std::shared_ptr<BoundPotential>> local_pots = local_md_pots_->get_potentials();
 
-        intg_->initialize(local_pots, d_x_t_, d_v_t_, d_box_t_, d_free_idxs->data, stream);
+        intg_->initialize(local_pots, d_x_t_, d_v_t_, d_box_t_, d_free_idxs, stream);
         for (int i = 0; i < burn_in; i++) {
-            this->_step(local_pots, d_free_idxs->data, stream);
+            this->_step(local_pots, d_free_idxs, stream);
         }
         for (int i = 1; i <= n_steps; i++) {
-            this->_step(local_pots, d_free_idxs->data, stream);
+            this->_step(local_pots, d_free_idxs, stream);
             if (i % store_x_interval == 0) {
                 gpuErrchk(cudaMemcpyAsync(
                     &h_x_buffer[0] + ((i / store_x_interval) - 1) * N_ * 3,
@@ -121,8 +121,8 @@ std::array<std::vector<double>, 2> Context::multiple_steps_local(
                     stream));
             }
         }
-        intg_->finalize(local_pots, d_x_t_, d_v_t_, d_box_t_, d_free_idxs->data, stream);
-        local_md_pots_->reset(stream);
+        intg_->finalize(local_pots, d_x_t_, d_v_t_, d_box_t_, d_free_idxs, stream);
+        local_md_pots_->reset_potentials(stream);
     } catch (...) {
         gpuErrchk(cudaStreamSynchronize(stream));
         gpuErrchk(cudaStreamDestroy(stream));
@@ -173,16 +173,16 @@ std::array<std::vector<double>, 2> Context::multiple_steps_local_selection(
 
         local_md_pots_->setup_from_mask(reference_idx, selection_mask, radius, k, stream);
 
-        const auto d_free_idxs = local_md_pots_->get_free_idxs();
+        unsigned int *d_free_idxs = local_md_pots_->get_free_idxs();
 
         std::vector<std::shared_ptr<BoundPotential>> local_pots = local_md_pots_->get_potentials();
 
-        intg_->initialize(local_pots, d_x_t_, d_v_t_, d_box_t_, d_free_idxs->data, stream);
+        intg_->initialize(local_pots, d_x_t_, d_v_t_, d_box_t_, d_free_idxs, stream);
         for (int i = 0; i < burn_in; i++) {
-            this->_step(local_pots, d_free_idxs->data, stream);
+            this->_step(local_pots, d_free_idxs, stream);
         }
         for (int i = 1; i <= n_steps; i++) {
-            this->_step(local_pots, d_free_idxs->data, stream);
+            this->_step(local_pots, d_free_idxs, stream);
             if (i % store_x_interval == 0) {
                 gpuErrchk(cudaMemcpyAsync(
                     &h_x_buffer[0] + ((i / store_x_interval) - 1) * N_ * 3,
@@ -198,8 +198,8 @@ std::array<std::vector<double>, 2> Context::multiple_steps_local_selection(
                     stream));
             }
         }
-        intg_->finalize(local_pots, d_x_t_, d_v_t_, d_box_t_, d_free_idxs->data, stream);
-        local_md_pots_->reset(stream);
+        intg_->finalize(local_pots, d_x_t_, d_v_t_, d_box_t_, d_free_idxs, stream);
+        local_md_pots_->reset_potentials(stream);
     } catch (...) {
         gpuErrchk(cudaStreamSynchronize(stream));
         gpuErrchk(cudaStreamDestroy(stream));
