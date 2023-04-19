@@ -339,10 +339,6 @@ class TestContext(unittest.TestCase):
         v0 = np.zeros_like(coords)
         bps = [nb_pot.bind(params).bound_impl]
 
-        reference_values = []
-        for bp in bps:
-            reference_values.append(bp.execute(coords, box))
-
         intg = LangevinIntegrator(temperature, dt, friction, masses, seed)
 
         intg_impl = intg.impl()
@@ -423,10 +419,6 @@ class TestContext(unittest.TestCase):
 
         v0 = np.zeros_like(coords)
         bps = [nb_pot.bind(params).bound_impl]
-
-        reference_values = []
-        for bp in bps:
-            reference_values.append(bp.execute(coords, box))
 
         intg = LangevinIntegrator(temperature, dt, friction, masses, seed)
 
