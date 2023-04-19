@@ -731,19 +731,19 @@ class TestContext(unittest.TestCase):
         # Construct context with no potentials, should fail to initialize.
         ctxt = custom_ops.Context(coords, v0, box, intg.impl(), [])
         with pytest.raises(RuntimeError, match="unable to find a NonbondedAllPairs potential"):
-            ctxt.initialize_local_md()
+            ctxt.ensure_local_md_intialized()
 
         # If you have multiple nonbonded potentials, should fail
         ctxt = custom_ops.Context(coords, v0, box, intg.impl(), bps * 2)
         with pytest.raises(RuntimeError, match="found multiple NonbondedAllPairs potentials"):
-            ctxt.initialize_local_md()
+            ctxt.ensure_local_md_intialized()
 
         # Verify that initializing local md doesn't modify global md behavior
         ctxt = custom_ops.Context(coords, v0, box, intg.impl(), bps)
         ref_xs, ref_boxes = ctxt.multiple_steps(steps)
 
         ctxt = custom_ops.Context(coords, v0, box, intg.impl(), bps)
-        ctxt.initialize_local_md()
+        ctxt.ensure_local_md_intialized()
         comp_xs, comp_boxes = ctxt.multiple_steps(steps)
 
         np.testing.assert_array_equal(ref_xs, comp_xs)
@@ -754,7 +754,7 @@ class TestContext(unittest.TestCase):
         ref_local_xs, ref_local_boxes = ctxt.multiple_steps_local(steps, local_idxs)
 
         ctxt = custom_ops.Context(coords, v0, box, intg.impl(), bps)
-        ctxt.initialize_local_md()
+        ctxt.ensure_local_md_intialized()
         comp_local_xs, comp_local_boxes = ctxt.multiple_steps_local(steps, local_idxs)
 
         np.testing.assert_array_equal(ref_local_xs, comp_local_xs)

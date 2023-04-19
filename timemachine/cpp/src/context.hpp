@@ -61,7 +61,7 @@ public:
 
     void get_box(double *out_buffer) const;
 
-    void initialize_local_md();
+    void ensure_local_md_intialized();
 
 private:
     int N_; // number of particles

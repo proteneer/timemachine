@@ -261,7 +261,7 @@ void declare_context(py::module &m) {
 
         F = iterations / store_x_interval
 
-        The first call to `multiple_steps_local` takes longer than subsequent calls, if initialize_local_md has not been called previously,
+        The first call to `multiple_steps_local` takes longer than subsequent calls, if ensure_local_md_intialized has not been called previously,
         initializes potentials needed for local md.
 
         Parameters
@@ -362,7 +362,7 @@ void declare_context(py::module &m) {
 
         F = iterations / store_x_interval
 
-        The first call to `multiple_steps_local_selection` takes longer than subsequent calls, if initialize_local_md has not been called previously,
+        The first call to `multiple_steps_local_selection` takes longer than subsequent calls, if ensure_local_md_intialized has not been called previously,
         initializes potentials needed for local md.
 
         Parameters
@@ -449,11 +449,11 @@ void declare_context(py::module &m) {
 
     )pbdoc")
         .def(
-            "initialize_local_md",
-            &timemachine::Context::initialize_local_md,
+            "ensure_local_md_intialized",
+            &timemachine::Context::ensure_local_md_intialized,
             R"pbdoc(
-        Initialize context for local md. Explicitly configures the context to be able to run
-        local md. This is automatically done when calling local md methods, but can be done explicitly.
+        Ensures that the context is initialized for local md. Explicitly configures the context to be able to run
+        local md. This is automatically done when calling local md methods, but can be done explicitly. Is idempotent.
     )pbdoc")
         .def(
             "set_x_t",
