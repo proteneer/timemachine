@@ -802,7 +802,6 @@ class TestContext(unittest.TestCase):
 
         steps = 10
 
-        # Verify that initializing local md doesn't modify global md behavior
         ctxt = custom_ops.Context(coords, v0, box, intg.impl(), bps)
         xs, boxes = ctxt.multiple_steps_local_selection(
             steps, reference_idx, free_particles.astype(np.int32), burn_in=0

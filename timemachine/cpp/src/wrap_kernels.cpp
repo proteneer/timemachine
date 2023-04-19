@@ -370,6 +370,9 @@ void declare_context(py::module &m) {
         n_steps: int
             Number of steps to run.
 
+        reference_idx: int
+            Idx of particle to use as reference, will be frozen during steps.
+
         selection_idxs: np.array of int32
             The idxs of particles that should be free during local MD. Will be restrained to the particle specified by reference_idx particle using a
             flat bottom restraint which is defined by the radius and k values. Can be up to N - 1 particles, IE all particles except the reference_idx.
