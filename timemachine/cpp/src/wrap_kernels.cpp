@@ -350,7 +350,7 @@ void declare_context(py::module &m) {
             py::arg("radius") = 1.2,
             py::arg("k") = 10000.0,
             R"pbdoc(
-        Take multiple steps using a selection of free particles restrainted to a reference particle. Useful for avoiding the bias
+        Take multiple steps using a selection of free particles restrained to a reference particle. Useful for avoiding the bias
         introduced by switching on and off the restraint on different particles as is done with multiple_steps_local.
 
         Running a barostat and local MD at the same time are not currently supported. If a barostat is
@@ -382,7 +382,7 @@ void declare_context(py::module &m) {
             at the last step.
 
         radius: float
-            The radius in nanometers from the reference idx to allow particles to be unrestrainted in, afterwards apply a restraint to the reference particle..
+            The radius in nanometers from the reference idx to allow particles to be unrestrained in, afterwards apply a restraint to the reference particle..
 
         k: float
             The flat bottom restraint K value to use for restraint of atoms to the reference particle..
