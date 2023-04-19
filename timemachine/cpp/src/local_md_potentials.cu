@@ -116,9 +116,9 @@ void LocalMDPotentials::setup_from_idxs(
 // setup_from_idxs takes a set of idxs, a temperature and a seed to determine the free particles. Fix the local_idxs to length
 // one to ensure the same reference everytime, though the seed also handles the probabilities of selecting particles, and it is suggested
 // to provide a new seed at each step.
-void LocalMDPotentials::setup_from_mask(
+void LocalMDPotentials::setup_from_idxs(
     const int reference_idx,
-    const std::vector<int> &selection_mask,
+    const std::vector<int> &selection_idxs,
     const double radius,
     const double k,
     const cudaStream_t stream) {
@@ -132,12 +132,12 @@ void LocalMDPotentials::setup_from_mask(
 
     gpuErrchk(cudaMemcpyAsync(
         d_row_idxs_.data,
-        &selection_mask[0],
-        selection_mask.size() * sizeof(*d_row_idxs_.data),
+        &selection_idxs[0],
+        selection_idxs.size() * sizeof(*d_row_idxs_.data),
         cudaMemcpyHostToDevice,
         stream));
 
-    // Split out the values from the selection mask into the indices of the free
+    // Split out the values from the selection idxs into the indices of the free
     k_unique_indices<<<ceil_divide(N_, warp_size), warp_size, 0, stream>>>(N_, N_, d_row_idxs_.data, d_free_idxs_.data);
     gpuErrchk(cudaPeekAtLastError());
 

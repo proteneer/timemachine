@@ -315,7 +315,7 @@ void declare_context(py::module &m) {
             [](timemachine::Context &ctxt,
                const int n_steps,
                const int reference_idx,
-               const py::array_t<int, py::array::c_style> &selection_mask,
+               const py::array_t<int, py::array::c_style> &selection_idxs,
                const int burn_in,
                const int store_x_interval,
                const double radius,
@@ -344,12 +344,12 @@ void declare_context(py::module &m) {
                 const int N = ctxt.num_atoms();
                 const int x_interval = (store_x_interval <= 0) ? n_steps : store_x_interval;
 
-                std::vector<int> vec_selection_mask(selection_mask.size());
-                std::memcpy(vec_selection_mask.data(), selection_mask.data(), vec_selection_mask.size() * sizeof(int));
-                verify_atom_idxs(N, vec_selection_mask);
+                std::vector<int> vec_selection_idxs(selection_idxs.size());
+                std::memcpy(vec_selection_idxs.data(), selection_idxs.data(), vec_selection_idxs.size() * sizeof(int));
+                verify_atom_idxs(N, vec_selection_idxs);
 
                 std::array<std::vector<double>, 2> result = ctxt.multiple_steps_local_selection(
-                    n_steps, reference_idx, vec_selection_mask, burn_in, x_interval, radius, k);
+                    n_steps, reference_idx, vec_selection_idxs, burn_in, x_interval, radius, k);
                 const int D = 3;
                 const int F = result[0].size() / (N * D);
                 py::array_t<double, py::array::c_style> out_x_buffer({F, N, D});

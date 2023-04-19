@@ -30,9 +30,9 @@ public:
         const double k,
         cudaStream_t stream);
 
-    void setup_from_mask(
+    void setup_from_idxs(
         const int reference_idx,
-        const std::vector<int> &selection_mask,
+        const std::vector<int> &selection_idxs,
         const double radius,
         const double k,
         cudaStream_t stream);

@@ -142,7 +142,7 @@ std::array<std::vector<double>, 2> Context::multiple_steps_local(
 std::array<std::vector<double>, 2> Context::multiple_steps_local_selection(
     const int n_steps,
     const int reference_idx,
-    const std::vector<int> &selection_mask,
+    const std::vector<int> &selection_idxs,
     const int burn_in,
     const int store_x_interval,
     const double radius,
@@ -171,7 +171,7 @@ std::array<std::vector<double>, 2> Context::multiple_steps_local_selection(
     gpuErrchk(cudaStreamCreateWithFlags(&stream, cudaStreamNonBlocking));
     try {
 
-        local_md_pots_->setup_from_mask(reference_idx, selection_mask, radius, k, stream);
+        local_md_pots_->setup_from_idxs(reference_idx, selection_idxs, radius, k, stream);
 
         unsigned int *d_free_idxs = local_md_pots_->get_free_idxs();
 

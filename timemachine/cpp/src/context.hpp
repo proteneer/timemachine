@@ -41,7 +41,7 @@ public:
     std::array<std::vector<double>, 2> multiple_steps_local_selection(
         const int n_steps,
         const int reference_idx,
-        const std::vector<int> &selection_mask,
+        const std::vector<int> &selection_idxs,
         const int burn_in,
         const int store_x_interval,
         const double radius,
