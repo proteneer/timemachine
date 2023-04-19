@@ -1,4 +1,5 @@
 import gc
+import re
 import unittest
 import weakref
 
@@ -374,7 +375,7 @@ class TestContext(unittest.TestCase):
         with pytest.raises(RuntimeError, match="k must be at least one"):
             ctxt.multiple_steps_local(100, np.array([1], dtype=np.int32), k=0.0)
 
-        with pytest.raises(RuntimeError, match="k must be less than than 1000000.0"):
+        with pytest.raises(RuntimeError, match=re.escape("k must be less than than 1e+06")):
             ctxt.multiple_steps_local(100, np.array([1], dtype=np.int32), k=1e7)
 
     def test_multiple_steps_local_selection_validation(self):
@@ -435,7 +436,7 @@ class TestContext(unittest.TestCase):
         with pytest.raises(RuntimeError, match="k must be at least one"):
             ctxt.multiple_steps_local_selection(100, reference_idx, np.array([1], dtype=np.int32), k=0.0)
 
-        with pytest.raises(RuntimeError, match="k must be less than than 1000000.0"):
+        with pytest.raises(RuntimeError, match=re.escape("k must be less than than 1e+06")):
             ctxt.multiple_steps_local_selection(100, reference_idx, np.array([1], dtype=np.int32), k=1e7)
 
         with pytest.raises(RuntimeError, match="reference idx must not be in selection idxs"):

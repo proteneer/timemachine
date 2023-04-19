@@ -6,6 +6,7 @@
 #include "summed_potential.hpp"
 
 #include "gpu_utils.cuh"
+#include <sstream>
 
 namespace timemachine {
 
@@ -155,9 +156,11 @@ void verify_local_md_parameters(double radius, double k) {
         throw std::runtime_error("k must be at least one");
     }
     // TBD determine a more precise threshold, currently 10x what has been tested
-    const double max_k = 1000000.0;
+    const double max_k = 1e6;
     if (k > max_k) {
-        throw std::runtime_error("k must be less than than " + std::to_string(max_k));
+        std::ostringstream oss;
+        oss << "k must be less than than " << max_k;
+        throw std::runtime_error(oss.str());
     }
 }
 
