@@ -2,6 +2,7 @@
 #include <pybind11/numpy.h>
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
+#include <set>
 
 #include "barostat.hpp"
 #include "bound_potential.hpp"
@@ -322,6 +323,10 @@ void declare_context(py::module &m) {
                 std::vector<int> vec_selection_idxs(selection_idxs.size());
                 std::memcpy(vec_selection_idxs.data(), selection_idxs.data(), vec_selection_idxs.size() * sizeof(int));
                 verify_atom_idxs(N, vec_selection_idxs);
+                std::set<int> selection_set(vec_selection_idxs.begin(), vec_selection_idxs.end());
+                if (selection_set.find(reference_idx) != selection_set.end()) {
+                    throw std::runtime_error("reference idx must not be in selection idxs");
+                }
 
                 std::array<std::vector<double>, 2> result = ctxt.multiple_steps_local_selection(
                     n_steps, reference_idx, vec_selection_idxs, burn_in, x_interval, radius, k);

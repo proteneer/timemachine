@@ -351,16 +351,6 @@ class TestContext(unittest.TestCase):
         with pytest.raises(RuntimeError, match="integrator must be LangevinIntegrator."):
             ctxt.multiple_steps_local(100, local_idxs, radius=radius)
 
-        # Construct context with no potentials, local MD should fail.
-        ctxt = custom_ops.Context(coords, v0, box, intg_impl, [])
-        with pytest.raises(RuntimeError, match="unable to find a NonbondedAllPairs potential"):
-            ctxt.multiple_steps_local(100, local_idxs, radius=radius)
-
-        # If you have multiple nonbonded potentials, should fail
-        ctxt = custom_ops.Context(coords, v0, box, intg_impl, bps * 2)
-        with pytest.raises(RuntimeError, match="found multiple NonbondedAllPairs potentials"):
-            ctxt.multiple_steps_local(100, local_idxs, radius=radius)
-
         # Verify that indices are correctly checked
         ctxt = custom_ops.Context(coords, v0, box, intg_impl, bps)
         with pytest.raises(RuntimeError, match="indices can't be empty"):
@@ -386,6 +376,74 @@ class TestContext(unittest.TestCase):
 
         with pytest.raises(RuntimeError, match="k must be less than than 1000000.0"):
             ctxt.multiple_steps_local(100, np.array([1], dtype=np.int32), k=1e7)
+
+    def test_multiple_steps_local_selection_validation(self):
+        seed = 2022
+        np.random.seed(seed)
+
+        N = 8
+        D = 3
+
+        coords = np.random.rand(N, D).astype(dtype=np.float64) * 2
+        box = np.eye(3) * 3.0
+        masses = np.random.rand(N)
+
+        E = 2
+
+        params, potential = prepare_nb_system(
+            coords,
+            E,
+            p_scale=3.0,
+            cutoff=1.0,
+        )
+        nb_pot = potential.to_gpu(np.float32)
+
+        temperature = 300
+        dt = 1.5e-3
+        friction = 0.0
+        radius = 1.2
+
+        # Select a single particle to use as the reference, will be frozen
+        local_idxs = np.array([len(coords) - 1], dtype=np.int32)
+
+        v0 = np.zeros_like(coords)
+        bps = [nb_pot.bind(params).bound_impl]
+
+        # Use verlet since multiple_steps_local_selection doesn't depend on temperature
+        verlet = VelocityVerletIntegrator(dt, masses)
+        intg_impl = verlet.impl()
+
+        reference_idx = 0
+
+        # Verify that indices are correctly checked
+        ctxt = custom_ops.Context(coords, v0, box, intg_impl, bps)
+        with pytest.raises(RuntimeError, match="indices can't be empty"):
+            ctxt.multiple_steps_local_selection(100, reference_idx, np.array([], dtype=np.int32), radius=radius)
+
+        with pytest.raises(RuntimeError, match="index values must be less than N"):
+            ctxt.multiple_steps_local_selection(100, reference_idx, np.array([N * 2], dtype=np.int32), radius=radius)
+
+        with pytest.raises(RuntimeError, match="index values must be greater or equal to zero"):
+            ctxt.multiple_steps_local_selection(100, reference_idx, np.array([-1], dtype=np.int32), radius=radius)
+
+        with pytest.raises(RuntimeError, match="atom indices must be unique"):
+            ctxt.multiple_steps_local_selection(100, reference_idx, np.array([1, 1], dtype=np.int32), radius=radius)
+
+        with pytest.raises(RuntimeError, match="burn in steps must be greater or equal to zero"):
+            ctxt.multiple_steps_local_selection(100, reference_idx, np.array([1], dtype=np.int32), radius=radius, burn_in=-5)
+
+        with pytest.raises(RuntimeError, match="radius must be greater or equal to 0.1"):
+            ctxt.multiple_steps_local_selection(100, reference_idx, np.array([1], dtype=np.int32), radius=0.01)
+
+        with pytest.raises(RuntimeError, match="k must be at least one"):
+            ctxt.multiple_steps_local_selection(100, reference_idx, np.array([1], dtype=np.int32), k=0.0)
+
+        with pytest.raises(RuntimeError, match="k must be less than than 1000000.0"):
+            ctxt.multiple_steps_local_selection(100, reference_idx, np.array([1], dtype=np.int32), k=1e7)
+
+        with pytest.raises(RuntimeError, match="reference idx must not be in selection idxs"):
+            ctxt.multiple_steps_local_selection(100, reference_idx, np.array([reference_idx], dtype=np.int32), k=1.0)
+
 
     def test_multiple_steps_local_burn_in(self):
         """Verify that burn in steps are identical to regular steps"""
@@ -667,6 +725,16 @@ class TestContext(unittest.TestCase):
         intg = LangevinIntegrator(temperature, dt, friction, masses, seed)
 
         steps = 10
+
+        # Construct context with no potentials, should fail to initialize.
+        ctxt = custom_ops.Context(coords, v0, box, intg.impl(), [])
+        with pytest.raises(RuntimeError, match="unable to find a NonbondedAllPairs potential"):
+            ctxt.initialize_local_md()
+
+        # If you have multiple nonbonded potentials, should fail
+        ctxt = custom_ops.Context(coords, v0, box, intg.impl(), bps * 2)
+        with pytest.raises(RuntimeError, match="found multiple NonbondedAllPairs potentials"):
+            ctxt.initialize_local_md()
 
         # Verify that initializing local md doesn't modify global md behavior
         ctxt = custom_ops.Context(coords, v0, box, intg.impl(), bps)
