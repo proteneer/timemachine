@@ -16,6 +16,7 @@
 #include "harmonic_angle_stable.hpp"
 #include "harmonic_bond.hpp"
 #include "langevin_integrator.hpp"
+#include "local_md_utils.hpp"
 #include "neighborlist.hpp"
 #include "nonbonded_all_pairs.hpp"
 #include "nonbonded_common.hpp"
@@ -220,20 +221,7 @@ void declare_context(py::module &m) {
                 if (burn_in < 0) {
                     throw std::runtime_error("burn in steps must be greater or equal to zero");
                 }
-                // Lower bound on radius selected to be 1 Angstrom, to avoid case where no particles
-                // are moved. TBD whether or not this is a good lower bound
-                const double min_radius = 0.1;
-                if (radius < min_radius) {
-                    throw std::runtime_error("radius must be greater or equal to " + std::to_string(min_radius));
-                }
-                if (k < 1.0) {
-                    throw std::runtime_error("k must be at least one");
-                }
-                // TBD determine a more precise threshold, currently 10x what has been tested
-                const double max_k = 1000000.0;
-                if (k > max_k) {
-                    throw std::runtime_error("k must be less than than " + std::to_string(max_k));
-                }
+                timemachine::verify_local_md_parameters(radius, k);
 
                 const int N = ctxt.num_atoms();
                 const int x_interval = (store_x_interval <= 0) ? n_steps : store_x_interval;
@@ -326,20 +314,7 @@ void declare_context(py::module &m) {
                 if (burn_in < 0) {
                     throw std::runtime_error("burn in steps must be greater or equal to zero");
                 }
-                // Lower bound on radius selected to be 1 Angstrom, to avoid case where no particles
-                // are moved. TBD whether or not this is a good lower bound
-                const double min_radius = 0.1;
-                if (radius < min_radius) {
-                    throw std::runtime_error("radius must be greater or equal to " + std::to_string(min_radius));
-                }
-                if (k < 1.0) {
-                    throw std::runtime_error("k must be at least one");
-                }
-                // TBD determine a more precise threshold, currently 10x what has been tested
-                const double max_k = 1000000.0;
-                if (k > max_k) {
-                    throw std::runtime_error("k must be less than than " + std::to_string(max_k));
-                }
+                timemachine::verify_local_md_parameters(radius, k);
 
                 const int N = ctxt.num_atoms();
                 const int x_interval = (store_x_interval <= 0) ? n_steps : store_x_interval;
