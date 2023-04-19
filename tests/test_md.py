@@ -398,13 +398,8 @@ class TestContext(unittest.TestCase):
         )
         nb_pot = potential.to_gpu(np.float32)
 
-        temperature = 300
         dt = 1.5e-3
-        friction = 0.0
         radius = 1.2
-
-        # Select a single particle to use as the reference, will be frozen
-        local_idxs = np.array([len(coords) - 1], dtype=np.int32)
 
         v0 = np.zeros_like(coords)
         bps = [nb_pot.bind(params).bound_impl]
@@ -430,7 +425,9 @@ class TestContext(unittest.TestCase):
             ctxt.multiple_steps_local_selection(100, reference_idx, np.array([1, 1], dtype=np.int32), radius=radius)
 
         with pytest.raises(RuntimeError, match="burn in steps must be greater or equal to zero"):
-            ctxt.multiple_steps_local_selection(100, reference_idx, np.array([1], dtype=np.int32), radius=radius, burn_in=-5)
+            ctxt.multiple_steps_local_selection(
+                100, reference_idx, np.array([1], dtype=np.int32), radius=radius, burn_in=-5
+            )
 
         with pytest.raises(RuntimeError, match="radius must be greater or equal to 0.1"):
             ctxt.multiple_steps_local_selection(100, reference_idx, np.array([1], dtype=np.int32), radius=0.01)
@@ -449,7 +446,6 @@ class TestContext(unittest.TestCase):
 
         with pytest.raises(RuntimeError, match=f"reference idx must be at least 0 and less than {N}"):
             ctxt.multiple_steps_local_selection(100, -1, np.array([3], dtype=np.int32))
-
 
     def test_multiple_steps_local_burn_in(self):
         """Verify that burn in steps are identical to regular steps"""
