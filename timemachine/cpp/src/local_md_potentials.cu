@@ -113,9 +113,9 @@ void LocalMDPotentials::setup_from_idxs(
     this->_setup_free_idxs_given_reference_idx(reference_idx, radius, k, stream);
 }
 
-// setup_from_idxs takes a set of idxs, a temperature and a seed to determine the free particles. Fix the local_idxs to length
-// one to ensure the same reference everytime, though the seed also handles the probabilities of selecting particles, and it is suggested
-// to provide a new seed at each step.
+// setup_from_idxs takes a set of idxs, flat-bottom restraint parameters (radius, k)
+// assumes selection_idxs are sampled based on exp(-beta U_flat_bottom(distance_to_reference, radius, k))
+// (or that the user is otherwise accounting for selection probabilities)
 void LocalMDPotentials::setup_from_idxs(
     const int reference_idx,
     const std::vector<int> &selection_idxs,

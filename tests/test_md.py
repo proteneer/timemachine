@@ -404,7 +404,7 @@ class TestContext(unittest.TestCase):
         v0 = np.zeros_like(coords)
         bps = [nb_pot.bind(params).bound_impl]
 
-        # Use verlet since multiple_steps_local_selection doesn't depend on temperature
+        # Compatible with local NVE since multiple_steps_local_selection doesn't depend on temperature
         verlet = VelocityVerletIntegrator(dt, masses)
         intg_impl = verlet.impl()
 
@@ -749,7 +749,7 @@ class TestContext(unittest.TestCase):
         np.testing.assert_array_equal(ref_xs, comp_xs)
         np.testing.assert_array_equal(ref_boxes, comp_boxes)
 
-        # Verify that initializing local md doesn't modify global md behavior
+        # Verify that initializing local md doesn't modify local md behavior
         ctxt = custom_ops.Context(coords, v0, box, intg.impl(), bps)
         ref_local_xs, ref_local_boxes = ctxt.multiple_steps_local(steps, local_idxs)
 
