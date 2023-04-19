@@ -442,7 +442,13 @@ class TestContext(unittest.TestCase):
             ctxt.multiple_steps_local_selection(100, reference_idx, np.array([1], dtype=np.int32), k=1e7)
 
         with pytest.raises(RuntimeError, match="reference idx must not be in selection idxs"):
-            ctxt.multiple_steps_local_selection(100, reference_idx, np.array([reference_idx], dtype=np.int32), k=1.0)
+            ctxt.multiple_steps_local_selection(100, reference_idx, np.array([reference_idx], dtype=np.int32))
+
+        with pytest.raises(RuntimeError, match=f"reference idx must be at least 0 and less than {N}"):
+            ctxt.multiple_steps_local_selection(100, N, np.array([3], dtype=np.int32))
+
+        with pytest.raises(RuntimeError, match=f"reference idx must be at least 0 and less than {N}"):
+            ctxt.multiple_steps_local_selection(100, -1, np.array([3], dtype=np.int32))
 
 
     def test_multiple_steps_local_burn_in(self):

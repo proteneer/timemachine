@@ -320,6 +320,9 @@ void declare_context(py::module &m) {
                 const int N = ctxt.num_atoms();
                 const int x_interval = (store_x_interval <= 0) ? n_steps : store_x_interval;
 
+                if (reference_idx < 0 || reference_idx >= N) {
+                    throw std::runtime_error("reference idx must be at least 0 and less than " + std::to_string(N));
+                }
                 std::vector<int> vec_selection_idxs(selection_idxs.size());
                 std::memcpy(vec_selection_idxs.data(), selection_idxs.data(), vec_selection_idxs.size() * sizeof(int));
                 verify_atom_idxs(N, vec_selection_idxs);
