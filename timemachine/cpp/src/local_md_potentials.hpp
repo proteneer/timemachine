@@ -30,6 +30,13 @@ public:
         const double k,
         cudaStream_t stream);
 
+    void setup_from_idxs(
+        const int reference_idx,
+        const std::vector<int> &selection_idxs,
+        const double radius,
+        const double k,
+        cudaStream_t stream);
+
     std::vector<std::shared_ptr<BoundPotential>> get_potentials();
 
     void reset_potentials(cudaStream_t stream);
@@ -48,6 +55,7 @@ private:
     DeviceBuffer<double> d_bond_params_;
 
     DeviceBuffer<float> d_probability_buffer_;
+
     DeviceBuffer<unsigned int> d_free_idxs_;
     std::unique_ptr<DeviceBuffer<char>> d_temp_storage_buffer_;
 
@@ -56,6 +64,7 @@ private:
 
     // Pinned memory for getting lengths of index arrays
     PinnedHostBuffer<int> p_num_selected_;
+
     DeviceBuffer<int> d_num_selected_buffer_;
 
     curandGenerator_t cr_rng_;

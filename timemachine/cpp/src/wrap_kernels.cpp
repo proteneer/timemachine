@@ -2,6 +2,7 @@
 #include <pybind11/numpy.h>
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
+#include <set>
 
 #include "barostat.hpp"
 #include "bound_potential.hpp"
@@ -16,6 +17,7 @@
 #include "harmonic_angle_stable.hpp"
 #include "harmonic_bond.hpp"
 #include "langevin_integrator.hpp"
+#include "local_md_utils.hpp"
 #include "neighborlist.hpp"
 #include "nonbonded_all_pairs.hpp"
 #include "nonbonded_common.hpp"
@@ -220,20 +222,7 @@ void declare_context(py::module &m) {
                 if (burn_in < 0) {
                     throw std::runtime_error("burn in steps must be greater or equal to zero");
                 }
-                // Lower bound on radius selected to be 1 Angstrom, to avoid case where no particles
-                // are moved. TBD whether or not this is a good lower bound
-                const double min_radius = 0.1;
-                if (radius < min_radius) {
-                    throw std::runtime_error("radius must be greater or equal to " + std::to_string(min_radius));
-                }
-                if (k < 1.0) {
-                    throw std::runtime_error("k must be at least one");
-                }
-                // TBD determine a more precise threshold, currently 10x what has been tested
-                const double max_k = 1000000.0;
-                if (k > max_k) {
-                    throw std::runtime_error("k must be less than than " + std::to_string(max_k));
-                }
+                timemachine::verify_local_md_parameters(radius, k);
 
                 const int N = ctxt.num_atoms();
                 const int x_interval = (store_x_interval <= 0) ? n_steps : store_x_interval;
@@ -272,7 +261,8 @@ void declare_context(py::module &m) {
 
         F = iterations / store_x_interval
 
-        The first call to `multiple_steps_local` takes longer than subsequent calls, potentials need to be configured internally.
+        The first call to `multiple_steps_local` takes longer than subsequent calls, if ensure_local_md_intialized has not been called previously,
+        initializes potentials needed for local md.
 
         Parameters
         ----------
@@ -308,6 +298,106 @@ void declare_context(py::module &m) {
             Coordinates have shape (F, N, 3)
             Boxes have shape (F, 3, 3)
 
+        Note: All boxes returned will be identical as local md only runs under NVT.
+    )pbdoc")
+        .def(
+            "multiple_steps_local_selection",
+            [](timemachine::Context &ctxt,
+               const int n_steps,
+               const int reference_idx,
+               const py::array_t<int, py::array::c_style> &selection_idxs,
+               const int burn_in,
+               const int store_x_interval,
+               const double radius,
+               const double k) -> py::tuple {
+                if (n_steps <= 0) {
+                    throw std::runtime_error("local steps must be at least one");
+                }
+                if (burn_in < 0) {
+                    throw std::runtime_error("burn in steps must be greater or equal to zero");
+                }
+                timemachine::verify_local_md_parameters(radius, k);
+
+                const int N = ctxt.num_atoms();
+                const int x_interval = (store_x_interval <= 0) ? n_steps : store_x_interval;
+
+                if (reference_idx < 0 || reference_idx >= N) {
+                    throw std::runtime_error("reference idx must be at least 0 and less than " + std::to_string(N));
+                }
+                std::vector<int> vec_selection_idxs(selection_idxs.size());
+                std::memcpy(vec_selection_idxs.data(), selection_idxs.data(), vec_selection_idxs.size() * sizeof(int));
+                verify_atom_idxs(N, vec_selection_idxs);
+                std::set<int> selection_set(vec_selection_idxs.begin(), vec_selection_idxs.end());
+                if (selection_set.find(reference_idx) != selection_set.end()) {
+                    throw std::runtime_error("reference idx must not be in selection idxs");
+                }
+
+                std::array<std::vector<double>, 2> result = ctxt.multiple_steps_local_selection(
+                    n_steps, reference_idx, vec_selection_idxs, burn_in, x_interval, radius, k);
+                const int D = 3;
+                const int F = result[0].size() / (N * D);
+                py::array_t<double, py::array::c_style> out_x_buffer({F, N, D});
+                std::memcpy(out_x_buffer.mutable_data(), result[0].data(), result[0].size() * sizeof(double));
+
+                py::array_t<double, py::array::c_style> box_buffer({F, D, D});
+                std::memcpy(box_buffer.mutable_data(), result[1].data(), result[1].size() * sizeof(double));
+                return py::make_tuple(out_x_buffer, box_buffer);
+            },
+            py::arg("n_steps"),
+            py::arg("reference_idx"),
+            py::arg("selection_idxs"),
+            py::arg("burn_in") = 500, // This is arbitrarily selected as a default, TODO make informed choice
+            py::arg("store_x_interval") = 0,
+            py::arg("radius") = 1.2,
+            py::arg("k") = 10000.0,
+            R"pbdoc(
+        Take multiple steps using a selection of free particles restrained to a reference particle. Useful for avoiding the bias
+        introduced by switching on and off the restraint on different particles as is done with multiple_steps_local.
+
+        Running a barostat and local MD at the same time are not currently supported. If a barostat is
+        assigned to the context, the barostat won't run.
+
+        Note: Running this multiple times with small number of steps (< 100) may result in a vacuum around the local idxs due to
+        discretization error caused by switching on the restraint after a particle has moved beyond the radius.
+
+        F = iterations / store_x_interval
+
+        The first call to `multiple_steps_local_selection` takes longer than subsequent calls, if ensure_local_md_intialized has not been called previously,
+        initializes potentials needed for local md.
+
+        Parameters
+        ----------
+        n_steps: int
+            Number of steps to run.
+
+        reference_idx: int
+            Idx of particle to use as reference, will be frozen during steps.
+
+        selection_idxs: np.array of int32
+            The idxs of particles that should be free during local MD. Will be restrained to the particle specified by reference_idx particle using a
+            flat bottom restraint which is defined by the radius and k values. Can be up to N - 1 particles, IE all particles except the reference_idx.
+
+        burn_in: int
+            How many steps to run prior to storing frames. This is to handle the fact that the local simulation applies a
+            restraint, and burn in helps equilibrate the local simulation. Running with small numbers of steps (< 100) is not recommended.
+
+        store_x_interval: int
+            How often we store the frames, store after every store_x_interval iterations. Setting to zero collects frames
+            at the last step.
+
+        radius: float
+            The radius in nanometers from the reference idx to allow particles to be unrestrained in, afterwards apply a restraint to the reference particle..
+
+        k: float
+            The flat bottom restraint K value to use for restraint of atoms to the reference particle..
+
+        Returns
+        -------
+        2-tuple of coordinates, boxes
+            Coordinates have shape (F, N, 3)
+            Boxes have shape (F, 3, 3)
+
+        Note: All boxes returned will be identical as local md only runs under NVT.
     )pbdoc")
         .def(
             "multiple_steps_U",
@@ -357,6 +447,13 @@ void declare_context(py::module &m) {
             Coordinates have shape (F, N, 3)
             Boxes have shape (F, 3, 3)
 
+    )pbdoc")
+        .def(
+            "ensure_local_md_intialized",
+            &timemachine::Context::ensure_local_md_intialized,
+            R"pbdoc(
+        Ensures that the context is initialized for local md. Explicitly configures the context to be able to run
+        local md. This is automatically done when calling local md methods, but can be done explicitly. Is idempotent.
     )pbdoc")
         .def(
             "set_x_t",

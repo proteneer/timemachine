@@ -27,4 +27,6 @@ construct_ixn_group_potential(const int N, std::shared_ptr<Potential> pot, const
 void get_nonbonded_all_pair_potentials(
     std::vector<std::shared_ptr<BoundPotential>> input, std::vector<std::shared_ptr<BoundPotential>> &flattened);
 
+void verify_local_md_parameters(double radius, double k);
+
 } // namespace timemachine

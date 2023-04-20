@@ -85,7 +85,6 @@ void LocalMDPotentials::setup_from_idxs(
     const double radius,
     const double k,
     cudaStream_t stream) {
-
     curandErrchk(curandSetStream(cr_rng_, stream));
     curandErrchk(curandSetPseudoRandomGeneratorSeed(cr_rng_, seed));
     // Reset the generator offset to ensure same values for the same seed are produced
@@ -112,6 +111,37 @@ void LocalMDPotentials::setup_from_idxs(
     gpuErrchk(cudaPeekAtLastError());
 
     this->_setup_free_idxs_given_reference_idx(reference_idx, radius, k, stream);
+}
+
+// setup_from_idxs takes a set of idxs, flat-bottom restraint parameters (radius, k)
+// assumes selection_idxs are sampled based on exp(-beta U_flat_bottom(distance_to_reference, radius, k))
+// (or that the user is otherwise accounting for selection probabilities)
+void LocalMDPotentials::setup_from_idxs(
+    const int reference_idx,
+    const std::vector<int> &selection_idxs,
+    const double radius,
+    const double k,
+    const cudaStream_t stream) {
+
+    // Set the array to all N, which indicates to ignore that idx
+    k_initialize_array<unsigned int><<<ceil_divide(N_, warp_size), warp_size, 0, stream>>>(N_, d_free_idxs_.data, N_);
+    gpuErrchk(cudaPeekAtLastError());
+
+    k_initialize_array<unsigned int><<<ceil_divide(N_, warp_size), warp_size, 0, stream>>>(N_, d_row_idxs_.data, N_);
+    gpuErrchk(cudaPeekAtLastError());
+
+    gpuErrchk(cudaMemcpyAsync(
+        d_row_idxs_.data,
+        &selection_idxs[0],
+        selection_idxs.size() * sizeof(*d_row_idxs_.data),
+        cudaMemcpyHostToDevice,
+        stream));
+
+    // Split out the values from the selection idxs into the indices of the free
+    k_unique_indices<<<ceil_divide(N_, warp_size), warp_size, 0, stream>>>(N_, N_, d_row_idxs_.data, d_free_idxs_.data);
+    gpuErrchk(cudaPeekAtLastError());
+
+    this->_setup_free_idxs_given_reference_idx((unsigned int)reference_idx, radius, k, stream);
 }
 
 void LocalMDPotentials::_setup_free_idxs_given_reference_idx(

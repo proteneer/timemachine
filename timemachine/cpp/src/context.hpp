@@ -38,6 +38,15 @@ public:
         const double k,
         const int seed);
 
+    std::array<std::vector<double>, 2> multiple_steps_local_selection(
+        const int n_steps,
+        const int reference_idx,
+        const std::vector<int> &selection_idxs,
+        const int burn_in,
+        const int store_x_interval,
+        const double radius,
+        const double k);
+
     int num_atoms() const;
 
     void set_x_t(const double *in_buffer);
@@ -51,6 +60,8 @@ public:
     void set_box(const double *in_buffer);
 
     void get_box(double *out_buffer) const;
+
+    void ensure_local_md_intialized();
 
 private:
     int N_; // number of particles
