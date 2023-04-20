@@ -365,13 +365,11 @@ def estimate_relative_free_energy(
     ff: Forcefield,
     host_config: Optional[HostConfig],
     seed: int,
-    n_frames: int = 1000,
+    md_params: Optional[MDParams] = None,
     prefix: str = "",
     lambda_interval: Optional[Tuple[float, float]] = None,
     n_windows: Optional[int] = None,
     keep_idxs: Optional[List[int]] = None,
-    n_eq_steps: int = 10000,
-    steps_per_frame: int = 400,
     min_cutoff: Optional[float] = 0.7,
 ) -> SimulationResult:
     """
@@ -444,7 +442,9 @@ def estimate_relative_free_energy(
     initial_states = setup_initial_states(
         single_topology, host, temperature, lambda_schedule, seed, min_cutoff=min_cutoff
     )
-    md_params = MDParams(n_frames=n_frames, n_eq_steps=n_eq_steps, steps_per_frame=steps_per_frame)
+    if md_params is None:
+        md_params = MDParams(n_frames=2000, steps_per_frame=400, n_eq_steps=200000)
+    # md_params = MDParams(n_frames=n_frames, n_eq_steps=n_eq_steps, steps_per_frame=steps_per_frame)
 
     if keep_idxs is None:
         keep_idxs = [0, len(initial_states) - 1]  # keep frames from first and last windows
@@ -484,13 +484,11 @@ def estimate_relative_free_energy_via_greedy_bisection(
     ff: Forcefield,
     host_config: Optional[HostConfig],
     seed: int,
-    n_frames: int = 1000,
+    md_params: Optional[MDParams] = None,
     prefix: str = "",
     lambda_interval: Optional[Tuple[float, float]] = None,
     n_windows: Optional[int] = None,
     keep_idxs: Optional[List[int]] = None,
-    n_eq_steps: int = 10000,
-    steps_per_frame: int = 400,
     min_cutoff: Optional[float] = 0.7,
 ) -> SimulationResult:
     r"""Estimate relative free energy between mol_a and mol_b via independent simulations with a dynamic lambda schedule
@@ -576,7 +574,8 @@ def estimate_relative_free_energy_via_greedy_bisection(
         seed=seed,
     )
 
-    md_params = MDParams(n_frames=n_frames, n_eq_steps=n_eq_steps, steps_per_frame=steps_per_frame)
+    if md_params is None:
+        md_params = MDParams(n_frames=2000, steps_per_frame=400, n_eq_steps=200000)
 
     if keep_idxs is None:
         keep_idxs = [0, len(initial_states) - 1]  # keep frames from first and last windows

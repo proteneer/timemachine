@@ -1,7 +1,7 @@
-from warnings import warn
 from dataclasses import dataclass
 from functools import lru_cache
 from typing import Callable, Iterable, List, Optional, Sequence, Tuple, Union, overload
+from warnings import warn
 
 import numpy as np
 from numpy.typing import NDArray
@@ -360,7 +360,9 @@ def sample(initial_state: InitialState, md_params: MDParams, max_buffer_frames: 
             boxes = None
             for steps in batches(n_steps, md_params.steps_per_frame):
                 if steps < md_params.steps_per_frame:
-                    warn(f"Batch of sample has {steps}, less than batch size {md_params.steps_per_frame}. Setting to {md_params.steps_per_frame}")
+                    warn(
+                        f"Batch of sample has {steps}, less than batch size {md_params.steps_per_frame}. Setting to {md_params.steps_per_frame}"
+                    )
                     steps = md_params.steps_per_frame
                 global_steps = steps - md_params.local_steps
                 local_steps = md_params.local_steps
