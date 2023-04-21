@@ -1,4 +1,5 @@
 from importlib import resources
+from unittest.mock import patch
 
 import numpy as np
 import pytest
@@ -9,7 +10,7 @@ from scipy.optimize import check_grad, minimize
 
 from timemachine.constants import DEFAULT_TEMP
 from timemachine.fe import free_energy, topology, utils
-from timemachine.fe.free_energy import MDParams, batches, sample
+from timemachine.fe.free_energy import BarResult, MDParams, PairBarResult, batches, make_pair_bar_plots, sample
 from timemachine.fe.rbfe import setup_initial_states
 from timemachine.fe.single_topology import SingleTopology
 from timemachine.fe.stored_arrays import StoredArrays
@@ -230,3 +231,25 @@ def test_sample_max_buffer_frames(hif2a_ligand_pair_single_topology_lam0_state, 
 
     for frame_ref, frame_test in zip(frames_ref, frames_test):
         np.testing.assert_array_equal(frame_ref, frame_test)
+
+
+@patch("timemachine.fe.free_energy.make_overlap_detail_figure")
+def test_make_pair_bar_plots(mock_fig, hif2a_ligand_pair_single_topology_lam0_state):
+    pair_result = PairBarResult(
+        [hif2a_ligand_pair_single_topology_lam0_state] * 2,
+        [
+            BarResult(
+                0.0,
+                0.0,
+                np.zeros(4),
+                0.0,
+                np.zeros(4),
+                np.zeros((4, 2, 2, 1)),
+            )
+        ],
+    )
+    make_pair_bar_plots(pair_result, DEFAULT_TEMP, "")
+    assert mock_fig.call_args is not None
+    assert set(mock_fig.call_args[0]) == set(
+        ["HarmonicBond", "HarmonicAngleStable", "PeriodicTorsion", "NonbondedPairListPrecomputed"]
+    )
