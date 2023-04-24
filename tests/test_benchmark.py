@@ -540,7 +540,8 @@ def test_bonded_potentials(hi2fa_test_frames):
 
     lambdas = np.array([0.0, 1.0])
     for bp in bps[:-1]:
-        class_name = bp.__class__.__name__
+        potential = bp.potential
+        class_name = potential.__class__.__name__
         params = np.expand_dims(bp.params, axis=0)
         for precision in [np.float32, np.float64]:
             benchmark_potential(
