@@ -407,7 +407,7 @@ def estimate_free_energy_bar(u_kln_by_component: NDArray, temperature: float) ->
 
 
 def make_pair_bar_plots(res: PairBarResult, temperature: float, prefix: str) -> PairBarPlots:
-    U_names = [type(U_fn).__name__ for U_fn in res.initial_states[0].potentials]
+    U_names = [type(p.potential).__name__ for p in res.initial_states[0].potentials]
     lambdas = [s.lamb for s in res.initial_states]
 
     overlap_detail_png = make_overlap_detail_figure(
