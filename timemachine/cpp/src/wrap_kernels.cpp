@@ -18,6 +18,7 @@
 #include "harmonic_bond.hpp"
 #include "langevin_integrator.hpp"
 #include "local_md_utils.hpp"
+#include "log_flat_bottom_bond.hpp"
 #include "neighborlist.hpp"
 #include "nonbonded_all_pairs.hpp"
 #include "nonbonded_common.hpp"
@@ -906,6 +907,21 @@ template <typename RealType> void declare_flat_bottom_bond(py::module &m, const 
             py::arg("bond_idxs"));
 }
 
+template <typename RealType> void declare_log_flat_bottom_bond(py::module &m, const char *typestr) {
+
+    using Class = timemachine::LogFlatBottomBond<RealType>;
+    std::string pyclass_name = std::string("LogFlatBottomBond_") + typestr;
+    py::class_<Class, std::shared_ptr<Class>, timemachine::Potential>(
+        m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
+        .def(
+            py::init([](const py::array_t<int, py::array::c_style> &bond_idxs, double beta) {
+                std::vector<int> vec_bond_idxs(bond_idxs.data(), bond_idxs.data() + bond_idxs.size());
+                return new timemachine::LogFlatBottomBond<RealType>(vec_bond_idxs, beta);
+            }),
+            py::arg("bond_idxs"),
+            py::arg("beta"));
+}
+
 template <typename RealType> void declare_nonbonded_precomputed(py::module &m, const char *typestr) {
 
     using Class = timemachine::NonbondedPairListPrecomputed<RealType>;
@@ -1226,6 +1242,9 @@ PYBIND11_MODULE(custom_ops, m) {
 
     declare_flat_bottom_bond<double>(m, "f64");
     declare_flat_bottom_bond<float>(m, "f32");
+
+    declare_log_flat_bottom_bond<double>(m, "f64");
+    declare_log_flat_bottom_bond<float>(m, "f32");
 
     declare_chiral_atom_restraint<double>(m, "f64");
     declare_chiral_atom_restraint<float>(m, "f32");
