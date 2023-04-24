@@ -250,6 +250,6 @@ def test_make_pair_bar_plots(mock_fig, hif2a_ligand_pair_single_topology_lam0_st
     )
     make_pair_bar_plots(pair_result, DEFAULT_TEMP, "")
     assert mock_fig.call_args is not None
-    assert set(mock_fig.call_args[0]) == set(
+    assert set(mock_fig.call_args.args[0]) == set(
         ["HarmonicBond", "HarmonicAngleStable", "PeriodicTorsion", "NonbondedPairListPrecomputed"]
     )
