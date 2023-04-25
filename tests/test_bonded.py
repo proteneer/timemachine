@@ -9,6 +9,7 @@ from timemachine.potentials import (
     FlatBottomBond,
     HarmonicAngle,
     HarmonicBond,
+    LogFlatBottomBond,
     PeriodicTorsion,
 )
 
@@ -153,6 +154,58 @@ class TestBonded(GradientTest):
             # test bitwise commutativity
             test_potential = FlatBottomBond(bond_idxs)
             test_potential_rev = FlatBottomBond(bond_idxs[:, ::-1])
+
+            test_potential_impl = test_potential.to_gpu(precision).unbound_impl
+            test_potential_rev_impl = test_potential_rev.to_gpu(precision).unbound_impl
+
+            test_du_dx, test_du_dp, test_u = test_potential_impl.execute_selective(x, params, box, 1, 1, 1)
+
+            test_du_dx_rev, test_du_dp_rev, test_u_rev = test_potential_rev_impl.execute_selective(
+                x, params, box, 1, 1, 1
+            )
+
+            np.testing.assert_array_equal(test_u, test_u_rev)
+            np.testing.assert_array_equal(test_du_dx, test_du_dx_rev)
+            np.testing.assert_array_equal(test_du_dp, test_du_dp_rev)
+
+    def test_log_flat_bottom_bond(self, n_particles=64, n_bonds=35, dim=3):
+        """Randomly connect pairs of particles, then validate the resulting LogFlatBottomBond force"""
+        np.random.seed(2022)
+
+        # TODO(deboggle) : reduce code duplication between HarmonicBond, FlatBottomBond, and LogFlatBottomBond
+        box = np.eye(3) * 100
+        x = self.get_random_coords(n_particles, dim)
+
+        atom_idxs = np.arange(n_particles)
+
+        k = np.random.rand(n_bonds) * 1000  # k not too large to avoid exp(-inf)
+        r_min = np.zeros(n_bonds)
+        r_max = np.random.rand(n_bonds) * 0.1  # equivalent for the special case of local MD
+        params = np.array([k, r_min, r_max]).astype(np.float64).T
+        assert params.shape == (n_bonds, 3)
+
+        bond_idxs = []
+        for _ in range(n_bonds):
+            bond_idxs.append(np.random.choice(atom_idxs, size=2, replace=False))
+
+        bond_idxs = np.array(bond_idxs, dtype=np.int32) if n_bonds else np.zeros((0, 2), dtype=np.int32)
+
+        # Shift half of the bond indices by a single box dimension to ensure testing PBCs
+        x[bond_idxs[:, 1][: n_bonds // 2]] += np.diagonal(box)
+
+        relative_tolerance_at_precision = {np.float64: 1e-7, np.float32: 2e-5}
+
+        beta = np.random.rand()
+
+        potential = LogFlatBottomBond(bond_idxs, beta)
+        for precision, rtol in relative_tolerance_at_precision.items():
+            test_impl = potential.to_gpu(precision)
+            self.compare_forces(x, params, box, potential, test_impl, rtol)
+            self.assert_differentiable_interface_consistency(x, params, box, test_impl)
+
+            # test bitwise commutativity
+            test_potential = LogFlatBottomBond(bond_idxs, beta)
+            test_potential_rev = LogFlatBottomBond(bond_idxs[:, ::-1], beta)
 
             test_potential_impl = test_potential.to_gpu(precision).unbound_impl
             test_potential_rev_impl = test_potential_rev.to_gpu(precision).unbound_impl

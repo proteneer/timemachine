@@ -74,6 +74,15 @@ class FlatBottomBond(Potential):
 
 
 @dataclass
+class LogFlatBottomBond(Potential):
+    idxs: NDArray[np.int32]
+    beta: float
+
+    def __call__(self, conf: Conf, params: Params, box: Optional[Box]) -> float | Array:
+        return bonded.log_flat_bottom_bond(conf, params, box, self.idxs, self.beta)
+
+
+@dataclass
 class PeriodicTorsion(Potential):
     idxs: NDArray[np.int32]
 

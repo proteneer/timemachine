@@ -5,8 +5,8 @@ template <typename RealType>
 void __global__ k_harmonic_bond(
     const int B, // number of bonds
     const double *__restrict__ coords,
-    const double *__restrict__ params, // [p, 2]
-    const int *__restrict__ bond_idxs, // [b, 2]
+    const double *__restrict__ params, // [B, 2]
+    const int *__restrict__ bond_idxs, // [B, 2]
     unsigned long long *__restrict__ du_dx,
     unsigned long long *__restrict__ du_dp,
     unsigned long long *__restrict__ u) {
