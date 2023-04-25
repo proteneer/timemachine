@@ -130,6 +130,7 @@ setup(
             "datasets/**/*.csv",
             "datasets/**/*.pdb",
             "datasets/**/*.sdf",
+            "py.typed",
             "testsystems/data/**/*.pdb",
             "testsystems/data/**/*.sdf",
         ],
