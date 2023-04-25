@@ -287,6 +287,14 @@ infer_node_vals_and_errs_networkx_partial = partial(
 )
 
 
+def test_infer_node_vals_and_errs_networkx_requires_di_graph(nx_graph_with_reference_mle_instance):
+
+    g, seed, ref_dgs, ref_dg_errs = nx_graph_with_reference_mle_instance
+
+    with pytest.raises(AssertionError, match="Graph must be a DiGraph"):
+        infer_node_vals_and_errs_networkx_partial(g.to_undirected(), seed=seed)
+
+
 def test_infer_node_vals_and_errs_networkx(nx_graph_with_reference_mle_instance):
 
     g, seed, ref_dgs, ref_dg_errs = nx_graph_with_reference_mle_instance

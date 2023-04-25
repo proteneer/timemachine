@@ -225,12 +225,12 @@ def infer_node_vals_and_errs_networkx(
     n_bootstrap: int = 100,
     seed: int = 0,
 ) -> nx.DiGraph:
-    """Version of :py:func:`timemachine.fe.mle.infer_node_vals_and_errs` that accepts a networkx graph.
+    """Version of :py:func:`timemachine.fe.mle.infer_node_vals_and_errs` that accepts a directed networkx graph.
 
     Parameters
     ----------
-    nx_graph: networkx.Graph
-        Networkx graph
+    nx_graph: networkx.DiGraph
+        Directed Networkx graph
     edge_diff_prop: str
         Edge property to use for differences
     edge_stddev_prop: str
@@ -248,11 +248,11 @@ def infer_node_vals_and_errs_networkx(
 
     Returns
     -------
-    networkx.Graph
+    networkx.DiGraph
         Subgraph limited to edges with defined edge_diff_prop and edge_stddev_prop, where nodes have been labeled with
         the inferred values of `node_val_prop` and `node_stddev_prop`.
     """
-
+    assert isinstance(graph, nx.DiGraph), "Graph must be a DiGraph"
     edges_with_props = [
         e for e, d in graph.edges.items() if d.get(edge_diff_prop) is not None and d.get(edge_stddev_prop) is not None
     ]
