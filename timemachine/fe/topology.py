@@ -146,9 +146,7 @@ class HostGuestTopology:
         )
         return self._parameterize_bonded_term(guest_params, guest_potential, self.host_periodic_torsion)
 
-    def parameterize_nonbonded(
-        self, ff_q_params, ff_q_params_intra, ff_q_params_solv, ff_lj_params, lamb: float, GPUNB=False
-    ):
+    def parameterize_nonbonded(self, ff_q_params, ff_q_params_intra, ff_q_params_solv, ff_lj_params, lamb: float):
         num_guest_atoms = self.guest_topology.get_num_atoms()
         guest_params, guest_pot = self.guest_topology.parameterize_nonbonded(
             ff_q_params, ff_q_params_intra, ff_q_params_solv, ff_lj_params, lamb, intramol_params=False
@@ -175,15 +173,6 @@ class HostGuestTopology:
         host_guest_pot = potentials.Nonbonded(
             self.num_host_atoms + num_guest_atoms, hg_exclusion_idxs, hg_scale_factors, guest_pot.beta, guest_pot.cutoff
         )
-        if GPUNB:
-            # TODO: Remove once GPU version of NonbondedInteractionGroup supports
-            # a/b idxs.
-            hg_nb_params_gpu = hg_nb_params
-            host_guest_pot_gpu = host_guest_pot
-            # DEBUGDEBUGDEBUGDEBUG
-            host_guest_pot = None  # type: ignore
-            hg_nb_params = None  # type: ignore
-            # DEBUGDEBUGDEBUGDEBUG
 
         # L-W terms
         num_total_atoms = self.num_host_atoms + num_guest_atoms
@@ -248,9 +237,6 @@ class HostGuestTopology:
 
         # SummedPotential requires flattened params
         sum_params = jnp.concatenate(hg_total_params).reshape((-1,))
-
-        if GPUNB:
-            return sum_params, sum_pot, hg_nb_params_gpu, host_guest_pot_gpu
 
         return sum_params, sum_pot
 
