@@ -1,7 +1,6 @@
 from functools import partial
 from importlib import resources
 
-import jax
 import jax.numpy as jnp
 import numpy as np
 import pytest
@@ -90,21 +89,20 @@ def test_host_guest_nonbonded(ctor, precision, rtol, atol, use_tiny_mol):
         # Use the updated topology code to compute the nb grads and potential
         bt = Topology(ff)
         hgt = topology.HostGuestTopology(host_bps, bt, num_water_atoms)
-        params, us, gpu_params, gpu_us = hgt.parameterize_nonbonded(
+        params, us = hgt.parameterize_nonbonded(
             ff.q_handle.params,
             ff.q_handle_intra.params,
             ff.q_handle_solv.params,
             ff.lj_handle.params,
             lamb=lamb,
-            GPUNB=True,
         )
-        # u_impl = us.bind(params).to_gpu(precision=precision).bound_impl
-        # return u_impl.execute(x0, box)
+        u_impl = us.bind(params).to_gpu(precision=precision).bound_impl
+        return u_impl.execute(x0, box)
 
-        u, (g,) = jax.value_and_grad(us, argnums=(0,))(x0, params, box)
-        u_impl = gpu_us.bind(gpu_params).to_gpu(precision=precision).bound_impl
-        gpu_g, gpu_u = u_impl.execute(x0, box)
-        return g + gpu_g, u + gpu_u
+        # u, (g,) = jax.value_and_grad(us, argnums=(0,))(x0, params, box)
+        # u_impl = gpu_us.bind(gpu_params).to_gpu(precision=precision).bound_impl
+        # gpu_g, gpu_u = u_impl.execute(x0, box)
+        # return g + gpu_g, u + gpu_u
 
     def compute_intra_grad_u(ff: Forcefield, precision, x0, box, lamb, num_water_atoms, num_host_atoms):
         # Compute the vacuum nb grads and potential for the ligand intramolecular term
@@ -112,9 +110,10 @@ def test_host_guest_nonbonded(ctor, precision, rtol, atol, use_tiny_mol):
         params, us = bt.parameterize_nonbonded(
             ff.q_handle.params, ff.q_handle_intra.params, ff.q_handle_solv.params, ff.lj_handle.params, lamb=lamb
         )
-        # u_impl = us.bind(params).to_gpu(precision=precision).bound_impl
-        # g, u = u_impl.execute(x0, box)
-        u, (g,) = jax.value_and_grad(us, argnums=(0,))(x0, params, box)
+        u_impl = us.bind(params).to_gpu(precision=precision).bound_impl
+        g, u = u_impl.execute(x0, box)
+
+        # u, (g,) = jax.value_and_grad(us, argnums=(0,))(x0, params, box)
 
         # Pad g so it's the same shape as the others
         g_padded = np.concatenate([np.zeros((num_host_atoms, 3)), g])
@@ -154,10 +153,10 @@ def test_host_guest_nonbonded(ctor, precision, rtol, atol, use_tiny_mol):
         )
         # print("TEST IXN", is_solvent, ligand_idxs, water_idxs if is_solvent else protein_idxs, "P", lig_params)
         ixn_params = np.concatenate([hgt.host_nonbonded.params, lig_params])
-        # u_impl = u.bind(ixn_params).to_gpu(precision=precision).bound_impl
-        # return u_impl.execute(x0, box)
-        u, (g,) = jax.value_and_grad(u, argnums=(0,))(x0, ixn_params, box)
-        return g, u
+        u_impl = u.bind(ixn_params).to_gpu(precision=precision).bound_impl
+        return u_impl.execute(x0, box)
+        # u, (g,) = jax.value_and_grad(u, argnums=(0,))(x0, ixn_params, box)
+        # return g, u
 
     ffs = load_split_forcefields()
 
