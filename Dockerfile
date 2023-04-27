@@ -93,7 +93,7 @@ RUN pip install --no-cache-dir -r timemachine/requirements.txt
 FROM tm_base_env AS timemachine_ci
 
 # Install pre-commit and cache hooks
-RUN pip install --no-cache-dir pre-commit==2.17.0
+RUN pip install --no-cache-dir pre-commit==3.2.1
 COPY .pre-commit-config.yaml /code/timemachine/
 RUN cd /code/timemachine && git init . && pre-commit install-hooks
 
