@@ -17,8 +17,7 @@ public:
         const double *box_0,
         std::shared_ptr<Integrator> intg,
         std::vector<std::shared_ptr<BoundPotential>> bps,
-        std::shared_ptr<MonteCarloBarostat> barostat = nullptr,
-        bool freeze_reference = true);
+        std::shared_ptr<MonteCarloBarostat> barostat = nullptr);
 
     ~Context();
 
@@ -62,17 +61,18 @@ public:
 
     void get_box(double *out_buffer) const;
 
-    void ensure_local_md_intialized();
+    void setup_local_md(double temperature, bool freeze_reference);
 
 private:
     int N_; // number of particles
-    const bool freeze_reference_;
 
     std::shared_ptr<MonteCarloBarostat> barostat_;
 
     void _step(std::vector<std::shared_ptr<BoundPotential>> &bps, unsigned int *d_atom_idxs, const cudaStream_t stream);
 
     double _get_temperature();
+
+    void _ensure_local_md_intialized();
 
     int step_;
 

@@ -35,7 +35,7 @@ def test_multiple_steps_store_interval():
     masses = np.random.rand(N)
     v0 = np.random.rand(x0.shape[0], x0.shape[1])
 
-    temperature = 300
+    temperature = constants.DEFAULT_TEMP
     dt = 2e-3
     friction = 0.0
 
@@ -86,7 +86,7 @@ def test_multiple_steps_U_store_interval():
     masses = np.random.rand(N)
     v0 = np.random.rand(x0.shape[0], x0.shape[1])
 
-    temperature = 300
+    temperature = constants.DEFAULT_TEMP
     dt = 2e-3
     friction = 0.0
 
@@ -146,7 +146,7 @@ def test_set_and_get():
     masses = np.random.rand(N)
     v0 = np.random.rand(x0.shape[0], x0.shape[1])
 
-    temperature = 300
+    temperature = constants.DEFAULT_TEMP
     dt = 2e-3
     friction = 0.0
 
@@ -221,7 +221,7 @@ def test_fwd_mode():
     v0 = np.random.rand(x0.shape[0], x0.shape[1])
 
     num_steps = 12
-    temperature = 300
+    temperature = constants.DEFAULT_TEMP
     dt = 1.5e-3
     friction = 0.0
     ca, cbs, ccs = langevin_coefficients(temperature, dt, friction, masses)
@@ -332,31 +332,28 @@ def test_multiple_steps_local_validation(freeze_reference):
     )
     nb_pot = potential.to_gpu(np.float32)
 
-    temperature = 300
+    temperature = constants.DEFAULT_TEMP
     dt = 1.5e-3
-    friction = 0.0
     radius = 1.2
-
-    # Select a single particle to use as the reference, will be frozen
-    local_idxs = np.array([len(coords) - 1], dtype=np.int32)
 
     v0 = np.zeros_like(coords)
     bps = [nb_pot.bind(params).bound_impl]
 
-    intg = LangevinIntegrator(temperature, dt, friction, masses, seed)
-
-    intg_impl = intg.impl()
-
     verlet = VelocityVerletIntegrator(dt, masses)
-    verlet_impl = verlet.impl()
 
+    ctxt = custom_ops.Context(coords, v0, box, verlet.impl(), bps)
+    # If setup_local_md called with a temperature explicitly, can't use VelocityVerlet
     with pytest.raises(RuntimeError, match="integrator must be LangevinIntegrator."):
-        # If the integrator is not a thermostat, should fail
-        ctxt = custom_ops.Context(coords, v0, box, verlet_impl, bps, freeze_reference=freeze_reference)
-        ctxt.multiple_steps_local(100, local_idxs, radius=radius)
+        ctxt.multiple_steps_local(100, np.array([0], dtype=np.int32))
 
     # Verify that indices are correctly checked
-    ctxt = custom_ops.Context(coords, v0, box, intg_impl, bps, freeze_reference=freeze_reference)
+    ctxt = custom_ops.Context(coords, v0, box, verlet.impl(), bps)
+
+    # Must use a non-zero temperature
+    with pytest.raises(RuntimeError, match="temperature must be greater than 0"):
+        ctxt.setup_local_md(0.0, freeze_reference)
+
+    ctxt.setup_local_md(temperature, freeze_reference)
     with pytest.raises(RuntimeError, match="indices can't be empty"):
         ctxt.multiple_steps_local(100, np.array([], dtype=np.int32), radius=radius)
 
@@ -410,18 +407,15 @@ def test_multiple_steps_local_selection_validation(freeze_reference):
     v0 = np.zeros_like(coords)
     bps = [nb_pot.bind(params).bound_impl]
 
-    if freeze_reference:
-        # Compatible with local NVE since multiple_steps_local_selection doesn't depend on temperature
-        verlet = VelocityVerletIntegrator(dt, masses)
-        intg_impl = verlet.impl()
-    else:
-        intg = LangevinIntegrator(constants.DEFAULT_TEMP, dt, 1.0, masses, seed)
-        intg_impl = intg.impl()
+    # Compatible with local NVE since multiple_steps_local_selection doesn't depend on temperature
+    verlet = VelocityVerletIntegrator(dt, masses)
+    intg_impl = verlet.impl()
 
     reference_idx = 0
 
     # Verify that indices are correctly checked
-    ctxt = custom_ops.Context(coords, v0, box, intg_impl, bps, freeze_reference=freeze_reference)
+    ctxt = custom_ops.Context(coords, v0, box, intg_impl, bps)
+    ctxt.setup_local_md(constants.DEFAULT_TEMP, freeze_reference)
     with pytest.raises(RuntimeError, match="indices can't be empty"):
         ctxt.multiple_steps_local_selection(100, reference_idx, np.array([], dtype=np.int32), radius=radius)
 
@@ -481,7 +475,7 @@ def test_multiple_steps_local_burn_in(freeze_reference):
     )
     nb_pot = potential.to_gpu(np.float32)
 
-    temperature = 300
+    temperature = constants.DEFAULT_TEMP
     dt = 1.5e-3
     friction = 0.0
     radius = 1.2
@@ -499,12 +493,14 @@ def test_multiple_steps_local_burn_in(freeze_reference):
     steps = 100
     burn_in = 100
 
-    ctxt = custom_ops.Context(coords, v0, box, intg_impl, bps, freeze_reference=freeze_reference)
+    ctxt = custom_ops.Context(coords, v0, box, intg_impl, bps)
+    ctxt.setup_local_md(temperature, freeze_reference)
     ref_xs, ref_boxes = ctxt.multiple_steps_local(steps, local_idxs, radius=radius, burn_in=burn_in)
     assert np.all(ref_xs[-1] < 1000)
     intg_impl = intg.impl()
 
-    ctxt = custom_ops.Context(coords, v0, box, intg_impl, bps, freeze_reference=freeze_reference)
+    ctxt = custom_ops.Context(coords, v0, box, intg_impl, bps)
+    ctxt.setup_local_md(temperature, freeze_reference)
     comp_xs, comp_boxes = ctxt.multiple_steps_local(steps + burn_in, local_idxs, radius=radius, burn_in=0)
 
     # Final frame should be identical
@@ -524,7 +520,7 @@ def test_multiple_steps_local_consistency(freeze_reference):
     mol, _ = get_biphenyl()
     ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
 
-    temperature = 300
+    temperature = constants.DEFAULT_TEMP
     dt = 1.5e-3
     friction = 0.0
     seed = 2022
@@ -549,7 +545,8 @@ def test_multiple_steps_local_consistency(freeze_reference):
 
     intg_impl = intg.impl()
 
-    ctxt = custom_ops.Context(coords, v0, box, intg_impl, bps, freeze_reference=freeze_reference)
+    ctxt = custom_ops.Context(coords, v0, box, intg_impl, bps)
+    ctxt.setup_local_md(temperature, freeze_reference)
     # Run steps of local MD
     xs, boxes = ctxt.multiple_steps_local(num_steps, local_idxs, store_x_interval=x_interval, radius=radius)
 
@@ -592,9 +589,9 @@ def test_multiple_steps_local_consistency(freeze_reference):
 
     intg_impl = intg.impl()
 
-    ctxt = custom_ops.Context(
-        coords, v0, box, intg_impl, bps, barostat=barostat_impl, freeze_reference=freeze_reference
-    )
+    ctxt = custom_ops.Context(coords, v0, box, intg_impl, bps, barostat=barostat_impl)
+
+    ctxt.setup_local_md(temperature, freeze_reference)
     baro_xs, baro_boxes = ctxt.multiple_steps_local(num_steps, local_idxs, store_x_interval=x_interval, radius=radius)
 
     assert baro_xs.shape == xs.shape
@@ -613,7 +610,8 @@ def test_multiple_steps_local_consistency(freeze_reference):
     intg_impl = intg.impl()
 
     # Rerun with the summed potential
-    ctxt = custom_ops.Context(coords, v0, box, intg_impl, [bp], freeze_reference=freeze_reference)
+    ctxt = custom_ops.Context(coords, v0, box, intg_impl, [bp])
+    ctxt.setup_local_md(constants.DEFAULT_TEMP, freeze_reference)
     summed_pot_xs, summed_pot_boxes = ctxt.multiple_steps_local(
         num_steps, local_idxs, store_x_interval=x_interval, radius=radius
     )
@@ -635,7 +633,7 @@ def test_multiple_steps_local_entire_system(freeze_reference):
     mol, _ = get_biphenyl()
     ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
 
-    temperature = 300
+    temperature = constants.DEFAULT_TEMP
     dt = 1.5e-3
     friction = 1.0
     seed = 2022
@@ -655,7 +653,8 @@ def test_multiple_steps_local_entire_system(freeze_reference):
 
     intg_impl = intg.impl()
 
-    ctxt = custom_ops.Context(coords, v0, box, intg_impl, bps, freeze_reference=freeze_reference)
+    ctxt = custom_ops.Context(coords, v0, box, intg_impl, bps)
+    ctxt.setup_local_md(constants.DEFAULT_TEMP, freeze_reference)
 
     xs, boxes = ctxt.multiple_steps_local(num_steps, local_idxs, radius=radius)
 
@@ -733,7 +732,7 @@ def test_local_md_initialization(freeze_reference):
     )
     nb_pot = potential.to_gpu(np.float32)
 
-    temperature = 300
+    temperature = constants.DEFAULT_TEMP
     dt = 1.5e-3
     friction = 0.0
 
@@ -748,32 +747,40 @@ def test_local_md_initialization(freeze_reference):
     steps = 10
 
     # Construct context with no potentials, should fail to initialize.
-    ctxt = custom_ops.Context(coords, v0, box, intg.impl(), [], freeze_reference=freeze_reference)
+    ctxt = custom_ops.Context(coords, v0, box, intg.impl(), [])
     with pytest.raises(RuntimeError, match="unable to find a NonbondedAllPairs potential"):
-        ctxt.ensure_local_md_intialized()
+        ctxt.setup_local_md(constants.DEFAULT_TEMP, freeze_reference)
+
+    ctxt = custom_ops.Context(coords, v0, box, intg.impl(), bps * 2)
 
     # If you have multiple nonbonded potentials, should fail
-    ctxt = custom_ops.Context(coords, v0, box, intg.impl(), bps * 2, freeze_reference=freeze_reference)
     with pytest.raises(RuntimeError, match="found multiple NonbondedAllPairs potentials"):
-        ctxt.ensure_local_md_intialized()
+        ctxt.setup_local_md(constants.DEFAULT_TEMP, freeze_reference)
 
     # Verify that initializing local md doesn't modify global md behavior
-    ctxt = custom_ops.Context(coords, v0, box, intg.impl(), bps, freeze_reference=freeze_reference)
+    ctxt = custom_ops.Context(coords, v0, box, intg.impl(), bps)
+    ctxt.setup_local_md(constants.DEFAULT_TEMP, freeze_reference)
+
+    # Can only configure local md once
+    with pytest.raises(RuntimeError, match="already configured"):
+        ctxt.setup_local_md(constants.DEFAULT_TEMP, freeze_reference)
+
     ref_xs, ref_boxes = ctxt.multiple_steps(steps)
 
-    ctxt = custom_ops.Context(coords, v0, box, intg.impl(), bps, freeze_reference=freeze_reference)
-    ctxt.ensure_local_md_intialized()
+    ctxt = custom_ops.Context(coords, v0, box, intg.impl(), bps)
+    ctxt.setup_local_md(constants.DEFAULT_TEMP, freeze_reference)
     comp_xs, comp_boxes = ctxt.multiple_steps(steps)
 
     np.testing.assert_array_equal(ref_xs, comp_xs)
     np.testing.assert_array_equal(ref_boxes, comp_boxes)
 
     # Verify that initializing local md doesn't modify local md behavior
-    ctxt = custom_ops.Context(coords, v0, box, intg.impl(), bps, freeze_reference=freeze_reference)
+    ctxt = custom_ops.Context(coords, v0, box, intg.impl(), bps)
+    ctxt.setup_local_md(constants.DEFAULT_TEMP, freeze_reference)
     ref_local_xs, ref_local_boxes = ctxt.multiple_steps_local(steps, local_idxs)
 
-    ctxt = custom_ops.Context(coords, v0, box, intg.impl(), bps, freeze_reference=freeze_reference)
-    ctxt.ensure_local_md_intialized()
+    ctxt = custom_ops.Context(coords, v0, box, intg.impl(), bps)
+    ctxt.setup_local_md(constants.DEFAULT_TEMP, freeze_reference)
     comp_local_xs, comp_local_boxes = ctxt.multiple_steps_local(steps, local_idxs)
 
     np.testing.assert_array_equal(ref_local_xs, comp_local_xs)
@@ -804,7 +811,7 @@ def test_local_md_with_selection_mask(freeze_reference):
     )
     nb_pot = potential.to_gpu(np.float32)
 
-    temperature = 300
+    temperature = constants.DEFAULT_TEMP
     dt = 1.5e-3
     friction = 0.0
 
@@ -823,7 +830,8 @@ def test_local_md_with_selection_mask(freeze_reference):
 
     steps = 10
 
-    ctxt = custom_ops.Context(coords, v0, box, intg.impl(), bps, freeze_reference=freeze_reference)
+    ctxt = custom_ops.Context(coords, v0, box, intg.impl(), bps)
+    ctxt.setup_local_md(constants.DEFAULT_TEMP, freeze_reference)
     xs, boxes = ctxt.multiple_steps_local_selection(steps, reference_idx, free_particles.astype(np.int32), burn_in=0)
 
     if not freeze_reference:
@@ -839,7 +847,7 @@ def test_setup_context_with_references():
     mol, _ = get_biphenyl()
     ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
 
-    temperature = 300
+    temperature = constants.DEFAULT_TEMP
     dt = 1.5e-3
     friction = 0.0
     seed = 2022

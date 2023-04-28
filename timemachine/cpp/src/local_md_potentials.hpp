@@ -29,7 +29,6 @@ public:
         double *d_x_t_,
         double *d_box_t,
         const std::vector<int> &local_idxs,
-        const double temperature,
         const int seed,
         const double radius,
         const double k,
@@ -40,7 +39,6 @@ public:
         const std::vector<int> &selection_idxs,
         const double radius,
         const double k,
-        const double temperature,
         cudaStream_t stream);
 
     std::vector<std::shared_ptr<BoundPotential>> get_potentials();

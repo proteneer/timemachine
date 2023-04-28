@@ -26,8 +26,8 @@ LocalMDPotentials::LocalMDPotentials(
       d_probability_buffer_(round_up_even(N_)), d_free_idxs_(N_), d_row_idxs_(N_), d_col_idxs_(N_), p_num_selected_(1),
       d_num_selected_buffer_(1) {
 
-    if (!freeze_reference_ && temperature <= 0.0) {
-        throw std::runtime_error("unable to have free reference and temperature <= 0.0");
+    if (temperature_ <= 0.0) {
+        throw std::runtime_error("temperature must be greater than 0");
     }
 
     std::vector<std::shared_ptr<BoundPotential>> nonbonded_pots;
@@ -87,14 +87,13 @@ LocalMDPotentials::LocalMDPotentials(
 
 LocalMDPotentials::~LocalMDPotentials() { curandErrchk(curandDestroyGenerator(cr_rng_)); }
 
-// setup_from_idxs takes a set of idxs, a temperature and a seed to determine the free particles. Fix the local_idxs to length
+// setup_from_idxs takes a set of idxs and a seed to determine the free particles. Fix the local_idxs to length
 // one to ensure the same reference everytime, though the seed also handles the probabilities of selecting particles, and it is suggested
 // to provide a new seed at each step.
 void LocalMDPotentials::setup_from_idxs(
     double *d_x_t,
     double *d_box_t,
     const std::vector<int> &local_idxs,
-    const double temperature,
     const int seed,
     const double radius,
     const double k,
@@ -118,7 +117,7 @@ void LocalMDPotentials::setup_from_idxs(
 
     unsigned int reference_idx = local_idxs[random_dist(rng)];
 
-    const double kBT = BOLTZ * temperature;
+    const double kBT = BOLTZ * temperature_;
     // Select all of the particles that will be free
     k_log_probability_selection<float><<<ceil_divide(N_, warp_size), warp_size, 0, stream>>>(
         N_, kBT, radius, k, reference_idx, d_x_t, d_box_t, d_probability_buffer_.data, d_free_idxs_.data);
@@ -135,7 +134,6 @@ void LocalMDPotentials::setup_from_selection(
     const std::vector<int> &selection_idxs,
     const double radius,
     const double k,
-    const double temperature,
     const cudaStream_t stream) {
 
     // Set the array to all N, which indicates to ignore that idx
