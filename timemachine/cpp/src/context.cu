@@ -171,7 +171,7 @@ std::array<std::vector<double>, 2> Context::multiple_steps_local_selection(
     gpuErrchk(cudaStreamCreateWithFlags(&stream, cudaStreamNonBlocking));
     try {
 
-        local_md_pots_->setup_from_idxs(reference_idx, selection_idxs, radius, k, stream);
+        local_md_pots_->setup_from_selection(reference_idx, selection_idxs, radius, k, stream);
 
         unsigned int *d_free_idxs = local_md_pots_->get_free_idxs();
 

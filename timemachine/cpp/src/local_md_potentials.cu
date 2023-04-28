@@ -113,10 +113,10 @@ void LocalMDPotentials::setup_from_idxs(
     this->_setup_free_idxs_given_reference_idx(reference_idx, radius, k, stream);
 }
 
-// setup_from_idxs takes a set of idxs, flat-bottom restraint parameters (radius, k)
+// setup_from_selection takes a set of idxs, flat-bottom restraint parameters (radius, k)
 // assumes selection_idxs are sampled based on exp(-beta U_flat_bottom(distance_to_reference, radius, k))
 // (or that the user is otherwise accounting for selection probabilities)
-void LocalMDPotentials::setup_from_idxs(
+void LocalMDPotentials::setup_from_selection(
     const int reference_idx,
     const std::vector<int> &selection_idxs,
     const double radius,
