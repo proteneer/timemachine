@@ -347,20 +347,25 @@ void NonbondedInteractionGroup<RealType>::execute_device(
 
 template <typename RealType>
 void NonbondedInteractionGroup<RealType>::set_atom_idxs(const std::vector<int> &atom_idxs) {
-    verify_atom_idxs(N_, atom_idxs);
+    // Allow empty atom indices
+    verify_atom_idxs(N_, atom_idxs, true);
     std::vector<unsigned int> unsigned_idxs = std::vector<unsigned int>(atom_idxs.begin(), atom_idxs.end());
 
     std::set<unsigned int> unique_row_atom_idxs(unique_idxs(unsigned_idxs));
     // compute set of column atoms as set difference
     std::vector<unsigned int> col_atom_idxs_v = get_indices_difference(N_, unique_row_atom_idxs);
     std::vector<unsigned int> row_atom_idxs_v(set_to_vector(unique_row_atom_idxs));
-    DeviceBuffer<unsigned int> d_col(col_atom_idxs_v.size());
-    DeviceBuffer<unsigned int> d_row(row_atom_idxs_v.size());
-    d_col.copy_from(&col_atom_idxs_v[0]);
-    d_row.copy_from(&row_atom_idxs_v[0]);
-
     cudaStream_t stream = static_cast<cudaStream_t>(0);
-    this->set_atom_idxs_device(col_atom_idxs_v.size(), row_atom_idxs_v.size(), d_col.data, d_row.data, stream);
+    if (row_atom_idxs_v.size() == 0 || row_atom_idxs_v.size() == N_) {
+        this->set_atom_idxs_device(col_atom_idxs_v.size(), row_atom_idxs_v.size(), nullptr, nullptr, stream);
+    } else {
+        DeviceBuffer<unsigned int> d_col(col_atom_idxs_v.size());
+        DeviceBuffer<unsigned int> d_row(row_atom_idxs_v.size());
+        d_col.copy_from(&col_atom_idxs_v[0]);
+        d_row.copy_from(&row_atom_idxs_v[0]);
+
+        this->set_atom_idxs_device(col_atom_idxs_v.size(), row_atom_idxs_v.size(), d_col.data, d_row.data, stream);
+    }
     gpuErrchk(cudaStreamSynchronize(stream));
 }
 
