@@ -310,7 +310,8 @@ def test_fwd_mode():
     np.testing.assert_array_almost_equal(ref_all_xs[x_interval::x_interval], test_xs)
 
 
-def test_multiple_steps_local_validation():
+@pytest.mark.parametrize("freeze_reference", [True, False])
+def test_multiple_steps_local_validation(freeze_reference):
     seed = 2022
     np.random.seed(seed)
 
@@ -349,13 +350,13 @@ def test_multiple_steps_local_validation():
     verlet = VelocityVerletIntegrator(dt, masses)
     verlet_impl = verlet.impl()
 
-    # If the integrator is not a thermostat, should fail
-    ctxt = custom_ops.Context(coords, v0, box, verlet_impl, bps)
     with pytest.raises(RuntimeError, match="integrator must be LangevinIntegrator."):
+        # If the integrator is not a thermostat, should fail
+        ctxt = custom_ops.Context(coords, v0, box, verlet_impl, bps, freeze_reference=freeze_reference)
         ctxt.multiple_steps_local(100, local_idxs, radius=radius)
 
     # Verify that indices are correctly checked
-    ctxt = custom_ops.Context(coords, v0, box, intg_impl, bps)
+    ctxt = custom_ops.Context(coords, v0, box, intg_impl, bps, freeze_reference=freeze_reference)
     with pytest.raises(RuntimeError, match="indices can't be empty"):
         ctxt.multiple_steps_local(100, np.array([], dtype=np.int32), radius=radius)
 
@@ -381,7 +382,8 @@ def test_multiple_steps_local_validation():
         ctxt.multiple_steps_local(100, np.array([1], dtype=np.int32), k=1e7)
 
 
-def test_multiple_steps_local_selection_validation():
+@pytest.mark.parametrize("freeze_reference", [True, False])
+def test_multiple_steps_local_selection_validation(freeze_reference):
     seed = 2022
     np.random.seed(seed)
 
@@ -408,14 +410,18 @@ def test_multiple_steps_local_selection_validation():
     v0 = np.zeros_like(coords)
     bps = [nb_pot.bind(params).bound_impl]
 
-    # Compatible with local NVE since multiple_steps_local_selection doesn't depend on temperature
-    verlet = VelocityVerletIntegrator(dt, masses)
-    intg_impl = verlet.impl()
+    if freeze_reference:
+        # Compatible with local NVE since multiple_steps_local_selection doesn't depend on temperature
+        verlet = VelocityVerletIntegrator(dt, masses)
+        intg_impl = verlet.impl()
+    else:
+        intg = LangevinIntegrator(constants.DEFAULT_TEMP, dt, 1.0, masses, seed)
+        intg_impl = intg.impl()
 
     reference_idx = 0
 
     # Verify that indices are correctly checked
-    ctxt = custom_ops.Context(coords, v0, box, intg_impl, bps)
+    ctxt = custom_ops.Context(coords, v0, box, intg_impl, bps, freeze_reference=freeze_reference)
     with pytest.raises(RuntimeError, match="indices can't be empty"):
         ctxt.multiple_steps_local_selection(100, reference_idx, np.array([], dtype=np.int32), radius=radius)
 
@@ -452,7 +458,8 @@ def test_multiple_steps_local_selection_validation():
         ctxt.multiple_steps_local_selection(100, -1, np.array([3], dtype=np.int32))
 
 
-def test_multiple_steps_local_burn_in():
+@pytest.mark.parametrize("freeze_reference", [True, False])
+def test_multiple_steps_local_burn_in(freeze_reference):
     """Verify that burn in steps are identical to regular steps"""
     seed = 2022
     np.random.seed(seed)
@@ -492,12 +499,12 @@ def test_multiple_steps_local_burn_in():
     steps = 100
     burn_in = 100
 
-    ctxt = custom_ops.Context(coords, v0, box, intg_impl, bps)
+    ctxt = custom_ops.Context(coords, v0, box, intg_impl, bps, freeze_reference=freeze_reference)
     ref_xs, ref_boxes = ctxt.multiple_steps_local(steps, local_idxs, radius=radius, burn_in=burn_in)
-
+    assert np.all(ref_xs[-1] < 1000)
     intg_impl = intg.impl()
 
-    ctxt = custom_ops.Context(coords, v0, box, intg_impl, bps)
+    ctxt = custom_ops.Context(coords, v0, box, intg_impl, bps, freeze_reference=freeze_reference)
     comp_xs, comp_boxes = ctxt.multiple_steps_local(steps + burn_in, local_idxs, radius=radius, burn_in=0)
 
     # Final frame should be identical
@@ -505,7 +512,8 @@ def test_multiple_steps_local_burn_in():
     np.testing.assert_array_equal(ref_boxes, comp_boxes)
 
 
-def test_multiple_steps_local_consistency():
+@pytest.mark.parametrize("freeze_reference", [True, False])
+def test_multiple_steps_local_consistency(freeze_reference):
     """Verify that running multiple_steps_local is consistent.
 
     - Assert that particles nearby the local idxs move, particles far away do not
@@ -541,16 +549,17 @@ def test_multiple_steps_local_consistency():
 
     intg_impl = intg.impl()
 
-    ctxt = custom_ops.Context(coords, v0, box, intg_impl, bps)
+    ctxt = custom_ops.Context(coords, v0, box, intg_impl, bps, freeze_reference=freeze_reference)
     # Run steps of local MD
     xs, boxes = ctxt.multiple_steps_local(num_steps, local_idxs, store_x_interval=x_interval, radius=radius)
 
     assert xs.shape[0] == num_steps // x_interval
     assert boxes.shape[0] == num_steps // x_interval
 
+    expected_to_move = len(local_idxs) - 1 if freeze_reference else len(local_idxs)
+
     # Indices in local idxs should have moved, except for the one selected as frozen
-    moved_coords = np.sum(coords[local_idxs] != xs[-1][local_idxs])
-    assert (moved_coords // 3) == len(local_idxs) - 1
+    assert np.all(coords[local_idxs] != xs[-1][local_idxs], axis=1).sum() == expected_to_move
 
     # Get the particles within a certain distance of local idxs
     nblist = custom_ops.Neighborlist_f32(len(coords))
@@ -583,7 +592,9 @@ def test_multiple_steps_local_consistency():
 
     intg_impl = intg.impl()
 
-    ctxt = custom_ops.Context(coords, v0, box, intg_impl, bps, barostat=barostat_impl)
+    ctxt = custom_ops.Context(
+        coords, v0, box, intg_impl, bps, barostat=barostat_impl, freeze_reference=freeze_reference
+    )
     baro_xs, baro_boxes = ctxt.multiple_steps_local(num_steps, local_idxs, store_x_interval=x_interval, radius=radius)
 
     assert baro_xs.shape == xs.shape
@@ -602,7 +613,7 @@ def test_multiple_steps_local_consistency():
     intg_impl = intg.impl()
 
     # Rerun with the summed potential
-    ctxt = custom_ops.Context(coords, v0, box, intg_impl, [bp])
+    ctxt = custom_ops.Context(coords, v0, box, intg_impl, [bp], freeze_reference=freeze_reference)
     summed_pot_xs, summed_pot_boxes = ctxt.multiple_steps_local(
         num_steps, local_idxs, store_x_interval=x_interval, radius=radius
     )
@@ -615,7 +626,8 @@ def test_multiple_steps_local_consistency():
     np.testing.assert_array_equal(summed_pot_boxes, boxes)
 
 
-def test_multiple_steps_local_entire_system():
+@pytest.mark.parametrize("freeze_reference", [True, False])
+def test_multiple_steps_local_entire_system(freeze_reference):
     """Verify that running multiple_steps_local is valid even when consuming the entire system, IE radius ~= inf.
 
     - Only a single particle, the reference, should not move
@@ -643,15 +655,19 @@ def test_multiple_steps_local_entire_system():
 
     intg_impl = intg.impl()
 
-    ctxt = custom_ops.Context(coords, v0, box, intg_impl, bps)
+    ctxt = custom_ops.Context(coords, v0, box, intg_impl, bps, freeze_reference=freeze_reference)
 
     xs, boxes = ctxt.multiple_steps_local(num_steps, local_idxs, radius=radius)
 
     assert xs.shape[0] == 1
-    assert np.all(xs[0] == coords, axis=1).sum() == 1, "Expected only a single atom to be stationary"
+    if freeze_reference:
+        assert np.all(xs[0] == coords, axis=1).sum() == 1, "Expected only a single atom to be stationary"
+    else:
+        assert np.all(xs[0] != coords), "All coordinates should have moved"
 
 
-def test_multiple_steps_local_no_free_particles():
+@pytest.mark.parametrize("freeze_reference", [True, False])
+def test_multiple_steps_local_no_free_particles(freeze_reference):
     """Verify that running multiple_steps_local raises an exception if no free particles selected.
     In this case we can trigger this failure by having a single atom molecule, and moving it away from
     the water box. This is a pathological case, but to verify the exception
@@ -689,13 +705,14 @@ def test_multiple_steps_local_no_free_particles():
 
     intg = LangevinIntegrator(temperature, dt, friction, masses, seed)
 
-    ctxt = custom_ops.Context(x0, v0, box, intg.impl(), bps)
+    ctxt = custom_ops.Context(x0, v0, box, intg.impl(), bps, freeze_reference=freeze_reference)
 
     with pytest.raises(RuntimeError, match="no free particles"):
         xs, boxes = ctxt.multiple_steps_local(1, local_idxs, radius=radius, k=k, seed=seed)
 
 
-def test_local_md_initialization():
+@pytest.mark.parametrize("freeze_reference", [True, False])
+def test_local_md_initialization(freeze_reference):
     """Verify that initialization of local md doesn't impact behavior of context."""
     seed = 2023
     np.random.seed(seed)
@@ -732,20 +749,21 @@ def test_local_md_initialization():
     steps = 10
 
     # Construct context with no potentials, should fail to initialize.
-    ctxt = custom_ops.Context(coords, v0, box, intg.impl(), [])
+    ctxt = custom_ops.Context(coords, v0, box, intg.impl(), [], freeze_reference=freeze_reference)
     with pytest.raises(RuntimeError, match="unable to find a NonbondedAllPairs potential"):
         ctxt.ensure_local_md_intialized()
 
     # If you have multiple nonbonded potentials, should fail
-    ctxt = custom_ops.Context(coords, v0, box, intg.impl(), bps * 2)
+    ctxt = custom_ops.Context(coords, v0, box, intg.impl(), bps * 2, freeze_reference=freeze_reference)
     with pytest.raises(RuntimeError, match="found multiple NonbondedAllPairs potentials"):
         ctxt.ensure_local_md_intialized()
 
+
     # Verify that initializing local md doesn't modify global md behavior
-    ctxt = custom_ops.Context(coords, v0, box, intg.impl(), bps)
+    ctxt = custom_ops.Context(coords, v0, box, intg.impl(), bps, freeze_reference=freeze_reference)
     ref_xs, ref_boxes = ctxt.multiple_steps(steps)
 
-    ctxt = custom_ops.Context(coords, v0, box, intg.impl(), bps)
+    ctxt = custom_ops.Context(coords, v0, box, intg.impl(), bps, freeze_reference=freeze_reference)
     ctxt.ensure_local_md_intialized()
     comp_xs, comp_boxes = ctxt.multiple_steps(steps)
 
@@ -753,10 +771,10 @@ def test_local_md_initialization():
     np.testing.assert_array_equal(ref_boxes, comp_boxes)
 
     # Verify that initializing local md doesn't modify local md behavior
-    ctxt = custom_ops.Context(coords, v0, box, intg.impl(), bps)
+    ctxt = custom_ops.Context(coords, v0, box, intg.impl(), bps, freeze_reference=freeze_reference)
     ref_local_xs, ref_local_boxes = ctxt.multiple_steps_local(steps, local_idxs)
 
-    ctxt = custom_ops.Context(coords, v0, box, intg.impl(), bps)
+    ctxt = custom_ops.Context(coords, v0, box, intg.impl(), bps, freeze_reference=freeze_reference)
     ctxt.ensure_local_md_intialized()
     comp_local_xs, comp_local_boxes = ctxt.multiple_steps_local(steps, local_idxs)
 
@@ -764,7 +782,8 @@ def test_local_md_initialization():
     np.testing.assert_array_equal(ref_local_boxes, comp_local_boxes)
 
 
-def test_local_md_with_selection_mask():
+@pytest.mark.parametrize("freeze_reference", [True, False])
+def test_local_md_with_selection_mask(freeze_reference):
     """Verify that running local md with a selection mask works as expected"""
     seed = 2023
     np.random.seed(seed)
@@ -806,10 +825,13 @@ def test_local_md_with_selection_mask():
 
     steps = 10
 
-    ctxt = custom_ops.Context(coords, v0, box, intg.impl(), bps)
+    ctxt = custom_ops.Context(coords, v0, box, intg.impl(), bps, freeze_reference=freeze_reference)
     xs, boxes = ctxt.multiple_steps_local_selection(steps, reference_idx, free_particles.astype(np.int32), burn_in=0)
-    # The reference idx should stay frozen
-    np.testing.assert_array_equal(xs[0][reference_idx], coords[reference_idx])
+
+    if not freeze_reference:
+        free_particles = np.append(free_particles, reference_idx)
+        frozen_particles = np.delete(frozen_particles, frozen_particles == reference_idx)
+
     # The free particles should have moved
     assert np.all(xs[-1][free_particles] != coords[free_particles])
     assert np.all(xs[-1][frozen_particles] == coords[frozen_particles])

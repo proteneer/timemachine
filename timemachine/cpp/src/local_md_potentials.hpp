@@ -8,13 +8,18 @@
 #include "curand.h"
 #include "flat_bottom_bond.hpp"
 #include "local_md_utils.hpp"
+#include "log_flat_bottom_bond.hpp"
 
 namespace timemachine {
 
 class LocalMDPotentials {
 
 public:
-    LocalMDPotentials(const int N, const std::vector<std::shared_ptr<BoundPotential>> &bps);
+    LocalMDPotentials(
+        const int N,
+        const std::vector<std::shared_ptr<BoundPotential>> &bps,
+        bool freeze_reference = true,
+        double temperature = 0.0);
 
     ~LocalMDPotentials();
 
@@ -35,6 +40,7 @@ public:
         const std::vector<int> &selection_idxs,
         const double radius,
         const double k,
+        const double temperature,
         cudaStream_t stream);
 
     std::vector<std::shared_ptr<BoundPotential>> get_potentials();
@@ -43,13 +49,17 @@ public:
 
 private:
     const int N_;
+    const bool freeze_reference_;
+    const double temperature_;
     std::size_t temp_storage_bytes_;
 
     std::vector<std::shared_ptr<BoundPotential>> all_potentials_;
     std::shared_ptr<BoundPotential> ixn_group_;
     std::shared_ptr<BoundPotential> nonbonded_bp_;
     std::shared_ptr<FlatBottomBond<double>> restraint_;
+    std::shared_ptr<LogFlatBottomBond<double>> reference_restraint_;
     std::shared_ptr<BoundPotential> bound_restraint_;
+    std::shared_ptr<BoundPotential> reference_bound_restraint_;
 
     DeviceBuffer<int> d_restraint_pairs_;
     DeviceBuffer<double> d_bond_params_;

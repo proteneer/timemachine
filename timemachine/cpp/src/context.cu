@@ -22,8 +22,16 @@ Context::Context(
     const double *box_0,
     std::shared_ptr<Integrator> intg,
     std::vector<std::shared_ptr<BoundPotential>> bps,
-    std::shared_ptr<MonteCarloBarostat> barostat)
-    : N_(N), barostat_(barostat), step_(0), d_sum_storage_(nullptr), d_sum_storage_bytes_(0), intg_(intg), bps_(bps) {
+    std::shared_ptr<MonteCarloBarostat> barostat,
+    bool freeze_reference)
+    : N_(N), freeze_reference_(freeze_reference), barostat_(barostat), step_(0), d_sum_storage_(nullptr),
+      d_sum_storage_bytes_(0), intg_(intg), bps_(bps) {
+
+    if (!freeze_reference_) {
+        // Verify that temperature can be retrieved if not freezing reference
+        this->_get_temperature();
+    }
+
     d_x_t_ = gpuErrchkCudaMallocAndCopy(x_0, N * 3);
     d_v_t_ = gpuErrchkCudaMallocAndCopy(v_0, N * 3);
     d_box_t_ = gpuErrchkCudaMallocAndCopy(box_0, 3 * 3);
@@ -57,7 +65,11 @@ double Context::_get_temperature() {
 
 void Context::ensure_local_md_intialized() {
     if (this->local_md_pots_ == nullptr) {
-        this->local_md_pots_.reset(new LocalMDPotentials(N_, bps_));
+        double temperature = 0.0;
+        if (!freeze_reference_) {
+            temperature = this->_get_temperature();
+        }
+        this->local_md_pots_.reset(new LocalMDPotentials(N_, bps_, freeze_reference_, temperature));
     }
 }
 
@@ -165,13 +177,19 @@ std::array<std::vector<double>, 2> Context::multiple_steps_local_selection(
 
     this->ensure_local_md_intialized();
 
+    // Temperature is only used if not freezing the reference
+    double temperature = 0.0;
+    if (!freeze_reference_) {
+        temperature = this->_get_temperature();
+    }
+
     cudaStream_t stream;
 
     // Create stream that doesn't sync with the default stream
     gpuErrchk(cudaStreamCreateWithFlags(&stream, cudaStreamNonBlocking));
     try {
 
-        local_md_pots_->setup_from_selection(reference_idx, selection_idxs, radius, k, stream);
+        local_md_pots_->setup_from_selection(reference_idx, selection_idxs, radius, k, temperature, stream);
 
         unsigned int *d_free_idxs = local_md_pots_->get_free_idxs();
 

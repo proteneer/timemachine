@@ -26,3 +26,7 @@ void __global__ k_construct_bonded_params(
     params[idx * 3 + 1] = r_min;
     params[idx * 3 + 2] = r_max;
 }
+
+template <typename T> void __global__ k_update_indice(T *d_array, std::size_t idx, unsigned int val) {
+    d_array[idx] = val;
+}

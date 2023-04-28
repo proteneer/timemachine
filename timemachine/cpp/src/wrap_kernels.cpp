@@ -132,7 +132,8 @@ void declare_context(py::module &m) {
                         const py::array_t<double, py::array::c_style> &box0,
                         std::shared_ptr<timemachine::Integrator> intg,
                         std::vector<std::shared_ptr<timemachine::BoundPotential>> bps,
-                        std::optional<std::shared_ptr<timemachine::MonteCarloBarostat>> barostat) {
+                        std::optional<std::shared_ptr<timemachine::MonteCarloBarostat>> barostat,
+                        bool freeze_reference) {
                 int N = x0.shape()[0];
                 int D = x0.shape()[1];
                 verify_coords_and_box(x0, box0);
@@ -145,16 +146,22 @@ void declare_context(py::module &m) {
                 }
 
                 return new timemachine::Context(
-                    N, x0.data(), v0.data(), box0.data(), intg, bps, barostat.has_value() ? barostat.value() : nullptr
-                    // obs
-                );
+                    N,
+                    x0.data(),
+                    v0.data(),
+                    box0.data(),
+                    intg,
+                    bps,
+                    barostat.has_value() ? barostat.value() : nullptr,
+                    freeze_reference);
             }),
             py::arg("x0"),
             py::arg("v0"),
             py::arg("box"),
             py::arg("integrator"),
             py::arg("bps"),
-            py::arg("barostat") = py::none())
+            py::arg("barostat") = py::none(),
+            py::arg("freeze_reference") = true)
         .def(
             "step",
             &timemachine::Context::step,

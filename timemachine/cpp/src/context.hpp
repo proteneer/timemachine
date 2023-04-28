@@ -17,7 +17,8 @@ public:
         const double *box_0,
         std::shared_ptr<Integrator> intg,
         std::vector<std::shared_ptr<BoundPotential>> bps,
-        std::shared_ptr<MonteCarloBarostat> barostat = nullptr);
+        std::shared_ptr<MonteCarloBarostat> barostat = nullptr,
+        bool freeze_reference = true);
 
     ~Context();
 
@@ -65,6 +66,7 @@ public:
 
 private:
     int N_; // number of particles
+    const bool freeze_reference_;
 
     std::shared_ptr<MonteCarloBarostat> barostat_;
 
