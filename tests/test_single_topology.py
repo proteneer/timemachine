@@ -92,16 +92,16 @@ def test_find_dummy_groups_and_anchors():
     AllChem.EmbedMolecule(mol_a, randomSeed=2022)
     AllChem.EmbedMolecule(mol_b, randomSeed=2022)
 
-    core_pairs = np.array([[1, 2], [2, 1], [3, 0]])
+    core_atoms = np.array([2, 1, 0])
 
-    dgs, jks = single_topology.find_dummy_groups_and_anchors(mol_b, core_pairs[:, 1])
+    dgs, jks = single_topology.find_dummy_groups_and_anchors(mol_b, core_atoms)
     assert dgs == [{3}]
     assert jks == [(2, 1)]
 
     # angle should swap
-    core_pairs = np.array([[1, 2], [2, 0], [3, 1]])
+    core_atoms = np.array([2, 0, 1])
 
-    dgs, jks = single_topology.find_dummy_groups_and_anchors(mol_b, core_pairs[:, 1])
+    dgs, jks = single_topology.find_dummy_groups_and_anchors(mol_b, core_atoms)
     assert dgs == [{3}]
     assert jks == [(2, 1)]
 
@@ -116,20 +116,18 @@ def test_find_dummy_groups_and_anchors_multiple_angles():
     AllChem.EmbedMolecule(mol_a, randomSeed=2022)
     AllChem.EmbedMolecule(mol_b, randomSeed=2022)
 
-    core_pairs = np.array([[0, 2], [1, 1], [2, 3]])
-    dgs, jks = single_topology.find_dummy_groups_and_anchors(mol_b, core_pairs[:, 1])
+    core_atoms = np.array([2, 1, 3])
+    dgs, jks = single_topology.find_dummy_groups_and_anchors(mol_b, core_atoms)
     assert dgs == [{0}]
     assert jks == [(1, 2)] or jks == [(1, 3)]
-
-    dgs_zero, jks_zero = single_topology.find_dummy_groups_and_anchors(mol_b, core_pairs[:, 1])
 
     # this code should be invariant to different random seeds and different ordering of core pairs
     for idx in range(100):
         np.random.seed(idx)
-        core_pairs_shuffle = np.random.permutation(core_pairs)
-        dgs, jks = single_topology.find_dummy_groups_and_anchors(mol_b, core_pairs_shuffle[:, 1])
-        assert dgs == dgs_zero
-        assert jks == jks_zero
+        core_atoms_shuffle = np.random.permutation(core_atoms)
+        dgs_rep, jks_rep = single_topology.find_dummy_groups_and_anchors(mol_b, core_atoms_shuffle)
+        assert dgs_rep == dgs
+        assert jks_rep == jks
 
 
 def testing_find_dummy_groups_and_multiple_anchors():
@@ -143,21 +141,20 @@ def testing_find_dummy_groups_and_multiple_anchors():
     AllChem.EmbedMolecule(mol_a, randomSeed=2022)
     AllChem.EmbedMolecule(mol_b, randomSeed=2022)
 
-    core_pairs = np.array([[1, 1], [2, 2]])
+    core_atoms = np.array([1, 2])
 
     with pytest.warns(MultipleAnchorWarning):
-        dgs, jks = single_topology.find_dummy_groups_and_anchors(mol_b, core_pairs[:, 1])
+        dgs, jks = single_topology.find_dummy_groups_and_anchors(mol_b, core_atoms)
         assert dgs == [{0}]
         assert jks == [(1, 2)] or jks == [(2, 1)]
 
     # test determinism, should be robust against seeds
-    dgs_zero, jks_zero = single_topology.find_dummy_groups_and_anchors(mol_b, core_pairs[:, 1])
     for idx in range(100):
         np.random.seed(idx)
-        core_pairs_shuffle = np.random.permutation(core_pairs)
-        dgs, jks = single_topology.find_dummy_groups_and_anchors(mol_b, core_pairs_shuffle[:, 1])
-        assert dgs == dgs_zero
-        assert jks == jks_zero
+        core_atoms_shuffle = np.random.permutation(core_atoms)
+        dgs_rep, jks_rep = single_topology.find_dummy_groups_and_anchors(mol_b, core_atoms_shuffle)
+        assert dgs_rep == dgs
+        assert jks_rep == jks
 
     mol_a = Chem.MolFromSmiles("C(C)(C)C")
     mol_b = Chem.MolFromSmiles("O1CCCC1")
@@ -168,9 +165,9 @@ def testing_find_dummy_groups_and_multiple_anchors():
     core_b = [2, 1, 4, 3]
 
     with pytest.warns(MultipleAnchorWarning):
-        dgs, jks = single_topology.find_dummy_groups_and_anchors(mol_b, core_b)
-        assert dgs == [{0}]
-        assert jks == [(1, 2)]
+        dgs_rep, jks_rep = single_topology.find_dummy_groups_and_anchors(mol_b, core_b)
+        assert dgs_rep == [{0}]
+        assert jks_rep == [(1, 2)]
 
 
 def test_charge_perturbation_is_invalid():
