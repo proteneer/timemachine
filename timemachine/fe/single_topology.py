@@ -406,7 +406,7 @@ def find_dummy_groups_and_anchors(mol, core_atoms):
     -------
     list of 2-tuples
         Returns a set of dummy_groups, and a list of 2-tuples (j,k). j is the root_anchor atom,
-        and k is a neighboring core atom. Note that `k` may be None if no suitable neighbor can be found.
+        and k is a neighboring core atom. Note that `k` may be None if core_atoms has length 1.
 
     """
     assert len(set(core_atoms)) == len(core_atoms)
@@ -422,6 +422,9 @@ def find_dummy_groups_and_anchors(mol, core_atoms):
 
         if len(root_anchors) == 0:
             assert 0, "Disconnected dummy group"
+
+        # pick an (potentially arbitrary) anchor
+        ra = root_anchors[0]
 
         if len(root_anchors) > 1:
             # Consider the following situation:
@@ -439,19 +442,18 @@ def find_dummy_groups_and_anchors(mol, core_atoms):
             #
             # the lhs is more difficult because it has significantly more phase space that can be
             # sampled than the fused case, but it's not super obvious how to best detect this.
-            # So instead, we will pick a random anchor atom. One possible solution later on is to
+            # So instead, we will pick an arbitrary anchor atom. One possible solution later on is to
             # minimize the number of rotatable bonds?
             warnings.warn(
-                f"Multiple root anchors {root_anchors} found for dummy group: {dg}, picking a random anchor.",
+                f"Multiple root anchors {root_anchors} found for dummy group: {dg}, picking arbitrary anchor {ra}",
                 MultipleAnchorWarning,
             )
 
-        # pick an arbitrary angle core atom
-        ra = root_anchors[0]
+        # pick an arbitrary angle anchor (or None, if mol has only atom in the core)
         nbs = [a.GetIdx() for a in mol.GetAtomWithIdx(ra).GetNeighbors() if a.GetIdx() in core_atoms]
         nb = nbs[0] if nbs else None
 
-        # (i,j,k) where i is a dummy, j is anchor, and k is the angle anchor
+        # convention: (i, j, k) where i is a dummy, j is anchor, and k is the angle anchor
         angle_jk = ra, nb
 
         all_jks.append(angle_jk)
