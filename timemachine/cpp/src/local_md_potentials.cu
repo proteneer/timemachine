@@ -214,10 +214,11 @@ void LocalMDPotentials::_setup_free_idxs_given_reference_idx(
     restraint_->set_bonds_device(num_row_idxs, d_restraint_pairs_.data, stream);
 
     if (!freeze_reference_) {
-        // Remove the reference idx from the column indices and add to the row indices
-        k_update_indice<unsigned int><<<1, 1, 0, stream>>>(d_free_idxs_.data, reference_idx, reference_idx);
+        // Remove the reference idx from the column indices, d_free_idxs gets inverted to construct column idxs,
+        // and add to the row indices
+        k_update_index<<<1, 1, 0, stream>>>(d_free_idxs_.data, reference_idx, reference_idx);
         gpuErrchk(cudaPeekAtLastError());
-        k_update_indice<unsigned int><<<1, 1, 0, stream>>>(d_row_idxs_.data, num_row_idxs, reference_idx);
+        k_update_index<<<1, 1, 0, stream>>>(d_row_idxs_.data, num_row_idxs, reference_idx);
         gpuErrchk(cudaPeekAtLastError());
         num_row_idxs++;
         num_col_idxs--;
