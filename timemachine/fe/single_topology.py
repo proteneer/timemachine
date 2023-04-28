@@ -451,6 +451,13 @@ def find_dummy_groups_and_anchors(mol, core_atoms):
 
         # pick an arbitrary angle anchor (or None, if mol has only atom in the core)
         nbs = [a.GetIdx() for a in mol.GetAtomWithIdx(ra).GetNeighbors() if a.GetIdx() in core_atoms]
+
+        # NOTE: The selection of an arbitrary neighbor can result in a numerically unstable angle (i, j, k) in the case where
+        #
+        # 1. the bond (j, k) is not present in mol_a and
+        # 2. we use the standard HarmonicAngle force.
+        #
+        # The arbitrary choice is justified here because we use HarmonicAngleStable for intermediates.
         nb = nbs[0] if nbs else None
 
         # convention: (i, j, k) where i is a dummy, j is anchor, and k is the angle anchor
