@@ -27,6 +27,4 @@ void __global__ k_construct_bonded_params(
     params[idx * 3 + 2] = r_max;
 }
 
-void __global__ k_update_index(unsigned int *d_array, std::size_t idx, unsigned int val) {
-    d_array[idx] = val;
-}
+void __global__ k_update_index(unsigned int *d_array, std::size_t idx, unsigned int val) { d_array[idx] = val; }
