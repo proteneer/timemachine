@@ -29,10 +29,6 @@ class MultipleAnchorWarning(UserWarning):
     pass
 
 
-class CoreBondChangeWarning(UserWarning):
-    pass
-
-
 class MissingAngleError(RuntimeError):
     pass
 
@@ -281,7 +277,7 @@ def setup_end_state(ff, mol_a, mol_b, core, a_to_c, b_to_c):
     all_dummy_angle_idxs, all_dummy_angle_params = [], []
     all_dummy_improper_idxs, all_dummy_improper_params = [], []
 
-    dgs, jks = find_dummy_groups_and_anchors(mol_a, mol_b, core[:, 0], core[:, 1])
+    dgs, jks = find_dummy_groups_and_anchors(mol_b, core[:, 1])
     # gotta add 'em all!
     for dg, (anchor, nbr) in zip(dgs, jks):
 
@@ -394,24 +390,17 @@ def setup_end_state(ff, mol_a, mol_b, core, a_to_c, b_to_c):
     )
 
 
-def find_dummy_groups_and_anchors(mol_a, mol_b, core_a, core_b):
+def find_dummy_groups_and_anchors(mol, core_atoms):
     """
-    Find dummy groups for mol_b and appropriate bond/angle atoms in mol_a to
-    build restraints off of.
+    Find dummy groups and appropriate bond/angle atoms from which to build restraints.
 
     Parameters
     ----------
-    mol_a: Chem.Mol
+    mol: Chem.Mol
         Fully interacting molecule
 
-    mol_b: Chem.Mol
-        Molecule that will provide dummy atoms
-
-    core_a: list of int of length C
-        Core atoms in mol_a, unique atoms only
-
-    core_b: list of int of length C
-        Core atoms in mol_b, unique atoms only
+    core_atoms: list of int
+        Core atoms in mol, unique atoms only
 
     Returns
     -------
@@ -420,24 +409,16 @@ def find_dummy_groups_and_anchors(mol_a, mol_b, core_a, core_b):
         and k is a neighboring core atom. Note that `k` may be None if no suitable neighbor can be found.
 
     """
-    assert len(core_a) == len(core_b)
-    assert len(set(core_a)) == len(core_a)
-    assert len(set(core_b)) == len(core_b)
+    assert len(set(core_atoms)) == len(core_atoms)
 
-    bond_idxs_b = utils.get_romol_bonds(mol_b)
-    dummy_groups_b = identify_dummy_groups(bond_idxs_b, core_b)
-
-    core_b_to_a = dict()
-    for ca, cb in zip(core_a, core_b):
-        core_b_to_a[cb] = ca
-
-    bond_idxs_a = utils.get_romol_bonds(mol_a)
+    bond_idxs = utils.get_romol_bonds(mol)
+    dummy_groups = identify_dummy_groups(bond_idxs, core_atoms)
 
     all_jks = []
 
-    for dg in dummy_groups_b:
+    for dg in dummy_groups:
         dummy_atom = list(dg)[0]
-        root_anchors = identify_root_anchors(bond_idxs_b, core_b, dummy_atom)
+        root_anchors = identify_root_anchors(bond_idxs, core_atoms, dummy_atom)
 
         if len(root_anchors) == 0:
             assert 0, "Disconnected dummy group"
@@ -465,32 +446,17 @@ def find_dummy_groups_and_anchors(mol_a, mol_b, core_a, core_b):
                 MultipleAnchorWarning,
             )
 
+        # pick an arbitrary angle core atom
+        ra = root_anchors[0]
+        nbs = [a.GetIdx() for a in mol.GetAtomWithIdx(ra).GetNeighbors() if a.GetIdx() in core_atoms]
+        nb = nbs[0] if nbs else None
+
         # (i,j,k) where i is a dummy, j is anchor, and k is the angle anchor
-        angle_jk = None
-
-        # find an arbitrary but stable angle core atom that is one bond away from the root atom that is
-        # present in mol_a
-        for ra in root_anchors:
-            core_b_nbs = [a.GetIdx() for a in mol_b.GetAtomWithIdx(ra).GetNeighbors() if a.GetIdx() in core_b]
-            for nb in core_b_nbs:
-                # see if this core_bond is present in mol_a
-                # first, look up the idxs of the atoms in mol_a:
-                ra_a, nb_a = core_b_to_a[ra], core_b_to_a[nb]
-                if (ra_a, nb_a) in bond_idxs_a or (nb_a, ra_a) in bond_idxs_a:
-                    angle_jk = ra, nb
-                    break
-
-        if angle_jk is None:
-            warnings.warn("Unable to find stable angle term in mol_a", CoreBondChangeWarning)
-            # pick an arbitrary root_anchor
-            angle_jk = root_anchors[0], None
-
-        # revert me
-        # angle_jk = root_anchors[0], None
+        angle_jk = ra, nb
 
         all_jks.append(angle_jk)
 
-    return dummy_groups_b, all_jks
+    return dummy_groups, all_jks
 
 
 def handle_ring_opening_closing(
