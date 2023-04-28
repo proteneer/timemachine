@@ -51,22 +51,23 @@ LocalMDPotentials::LocalMDPotentials(
         default_bonds[i * 2 + 0] = 0;
         default_bonds[i * 2 + 1] = i + 1;
     }
-    restraint_ = std::shared_ptr<FlatBottomBond<double>>(new FlatBottomBond<double>(default_bonds));
+    free_restraint_ = std::shared_ptr<FlatBottomBond<double>>(new FlatBottomBond<double>(default_bonds));
     // Construct a bound potential with 0 params
-    bound_restraint_ = std::shared_ptr<BoundPotential>(new BoundPotential(restraint_, std::vector<int>({0}), nullptr));
+    bound_free_restraint_ =
+        std::shared_ptr<BoundPotential>(new BoundPotential(free_restraint_, std::vector<int>({0}), nullptr));
 
     ixn_group_ =
         construct_ixn_group_potential(N_, nonbonded_bp_->potential, nonbonded_bp_->size(), nonbonded_bp_->d_p->data);
 
     // Add the restraint potential and ixn group potential
-    all_potentials_.push_back(bound_restraint_);
+    all_potentials_.push_back(bound_free_restraint_);
     all_potentials_.push_back(ixn_group_);
     if (!freeze_reference_) {
-        reference_restraint_ = std::shared_ptr<LogFlatBottomBond<double>>(
+        frozen_restraint_ = std::shared_ptr<LogFlatBottomBond<double>>(
             new LogFlatBottomBond<double>(default_bonds, 1 / (temperature_ * BOLTZ)));
-        reference_bound_restraint_ =
-            std::shared_ptr<BoundPotential>(new BoundPotential(reference_restraint_, std::vector<int>({0}), nullptr));
-        all_potentials_.push_back(reference_bound_restraint_);
+        bound_frozen_restraint_ =
+            std::shared_ptr<BoundPotential>(new BoundPotential(frozen_restraint_, std::vector<int>({0}), nullptr));
+        all_potentials_.push_back(bound_frozen_restraint_);
     }
 
     cub::DevicePartition::If(
@@ -216,8 +217,8 @@ void LocalMDPotentials::_setup_free_idxs_given_reference_idx(
     gpuErrchk(cudaPeekAtLastError());
 
     // Setup the flat bottom restraints
-    bound_restraint_->set_params_device(std::vector<int>({num_row_idxs, 3}), d_bond_params_.data, stream);
-    restraint_->set_bonds_device(num_row_idxs, d_restraint_pairs_.data, stream);
+    bound_free_restraint_->set_params_device(std::vector<int>({num_row_idxs, 3}), d_bond_params_.data, stream);
+    free_restraint_->set_bonds_device(num_row_idxs, d_restraint_pairs_.data, stream);
 
     // Set the nonbonded potential to compute forces of free particles
     set_nonbonded_potential_idxs(nonbonded_bp_->potential, num_row_idxs, d_row_idxs_.data, stream);
@@ -257,8 +258,8 @@ void LocalMDPotentials::_setup_free_idxs_given_reference_idx(
             gpuErrchk(cudaPeekAtLastError());
         }
 
-        reference_bound_restraint_->set_params_device(std::vector<int>({num_col_idxs, 3}), d_bond_params_.data, stream);
-        reference_restraint_->set_bonds_device(num_col_idxs, d_restraint_pairs_.data, stream);
+        bound_frozen_restraint_->set_params_device(std::vector<int>({num_col_idxs, 3}), d_bond_params_.data, stream);
+        frozen_restraint_->set_bonds_device(num_col_idxs, d_restraint_pairs_.data, stream);
     }
 }
 

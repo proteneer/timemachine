@@ -56,10 +56,13 @@ private:
     std::vector<std::shared_ptr<BoundPotential>> all_potentials_;
     std::shared_ptr<BoundPotential> ixn_group_;
     std::shared_ptr<BoundPotential> nonbonded_bp_;
-    std::shared_ptr<FlatBottomBond<double>> restraint_;
-    std::shared_ptr<LogFlatBottomBond<double>> reference_restraint_;
-    std::shared_ptr<BoundPotential> bound_restraint_;
-    std::shared_ptr<BoundPotential> reference_bound_restraint_;
+    // Restraint for the free particles to the reference particle
+    std::shared_ptr<FlatBottomBond<double>> free_restraint_;
+    std::shared_ptr<BoundPotential> bound_free_restraint_;
+
+    // Restraint for the frozen particles to the reference particle
+    std::shared_ptr<LogFlatBottomBond<double>> frozen_restraint_;
+    std::shared_ptr<BoundPotential> bound_frozen_restraint_;
 
     DeviceBuffer<int> d_restraint_pairs_;
     DeviceBuffer<double> d_bond_params_;
