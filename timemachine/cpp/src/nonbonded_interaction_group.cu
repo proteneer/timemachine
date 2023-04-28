@@ -218,6 +218,11 @@ void NonbondedInteractionGroup<RealType>::execute_device(
             std::to_string(N_ * PARAMS_PER_ATOM));
     }
 
+    // If the size of the row or cols is none, exit
+    if (NR_ == 0 || NC_ == 0) {
+        return;
+    }
+
     const int tpb = warp_size;
     const int B = ceil_divide(N_, tpb);
 
@@ -370,29 +375,30 @@ void NonbondedInteractionGroup<RealType>::set_atom_idxs_device(
     if (NC + NR != N_) {
         throw std::runtime_error("Total of indices must equal N");
     }
-    const size_t tpb = warp_size;
+    if (NR > 0 && NC > 0) {
+        const size_t tpb = warp_size;
 
-    // The indices must already be on the GPU and are copied into the potential's buffers.
-    gpuErrchk(cudaMemcpyAsync(
-        d_col_atom_idxs_, d_in_column_idxs, NC * sizeof(*d_col_atom_idxs_), cudaMemcpyDeviceToDevice, stream));
-    gpuErrchk(cudaMemcpyAsync(
-        d_row_atom_idxs_, d_in_row_idxs, NR * sizeof(*d_row_atom_idxs_), cudaMemcpyDeviceToDevice, stream));
+        // The indices must already be on the GPU and are copied into the potential's buffers.
+        gpuErrchk(cudaMemcpyAsync(
+            d_col_atom_idxs_, d_in_column_idxs, NC * sizeof(*d_col_atom_idxs_), cudaMemcpyDeviceToDevice, stream));
+        gpuErrchk(cudaMemcpyAsync(
+            d_row_atom_idxs_, d_in_row_idxs, NR * sizeof(*d_row_atom_idxs_), cudaMemcpyDeviceToDevice, stream));
 
-    // The neighborlist does not use the indices directly, rather it takes a contiguous set of indices and the ixn group
-    // potential will resort the correct particles into the corresponding arrays. We can use the leftover spaces in the
-    // two d_*_atom_idxs_ arrays to store these nblist indices.
-    // NOTE: The leftover column indices will store the row indices and vice versa.
+        // The neighborlist does not use the indices directly, rather it takes a contiguous set of indices and the ixn group
+        // potential will resort the correct particles into the corresponding arrays. We can use the leftover spaces in the
+        // two d_*_atom_idxs_ arrays to store these nblist indices.
+        // NOTE: The leftover column indices will store the row indices and vice versa.
+        k_arange<<<ceil_divide(NR, tpb), tpb, 0, stream>>>(NR, d_col_atom_idxs_ + NC);
+        gpuErrchk(cudaPeekAtLastError());
+        k_arange<<<ceil_divide(NC, tpb), tpb, 0, stream>>>(NC, d_row_atom_idxs_ + NR, NR);
+        gpuErrchk(cudaPeekAtLastError());
 
-    k_arange<<<ceil_divide(NR, tpb), tpb, 0, stream>>>(NR, d_col_atom_idxs_ + NC);
-    gpuErrchk(cudaPeekAtLastError());
-    k_arange<<<ceil_divide(NC, tpb), tpb, 0, stream>>>(NC, d_row_atom_idxs_ + NR, NR);
-    gpuErrchk(cudaPeekAtLastError());
+        // Force a NBlist rebuild
+        gpuErrchk(cudaMemsetAsync(d_rebuild_nblist_, 1, 1 * sizeof(*d_rebuild_nblist_), stream));
 
-    // Force a NBlist rebuild
-    gpuErrchk(cudaMemsetAsync(d_rebuild_nblist_, 1, 1 * sizeof(*d_rebuild_nblist_), stream));
-
-    // Offset into the ends of the arrays that now contain the row and column indices for the nblist
-    nblist_.set_idxs_device(NC, NR, d_row_atom_idxs_ + NR, d_col_atom_idxs_ + NC, stream);
+        // Offset into the ends of the arrays that now contain the row and column indices for the nblist
+        nblist_.set_idxs_device(NC, NR, d_row_atom_idxs_ + NR, d_col_atom_idxs_ + NC, stream);
+    }
 
     // Update the row and column counts
     this->NR_ = NR;
