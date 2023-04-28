@@ -164,6 +164,12 @@ void LocalMDPotentials::_setup_free_idxs_given_reference_idx(
 
     LessThan select_op(N_);
 
+    if (!freeze_reference_) {
+        // Remove the reference idx from the column indices, d_free_idxs gets inverted to construct column idxs,
+        // and add to the row indices
+        k_update_index<<<1, 1, 0, stream>>>(d_free_idxs_.data, reference_idx, reference_idx);
+        gpuErrchk(cudaPeekAtLastError());
+    }
     // Partition the free idxs into the row idxs
     gpuErrchk(cub::DevicePartition::If(
         d_temp_storage_buffer_->data,
@@ -212,17 +218,6 @@ void LocalMDPotentials::_setup_free_idxs_given_reference_idx(
     // Setup the flat bottom restraints
     bound_restraint_->set_params_device(std::vector<int>({num_row_idxs, 3}), d_bond_params_.data, stream);
     restraint_->set_bonds_device(num_row_idxs, d_restraint_pairs_.data, stream);
-
-    if (!freeze_reference_) {
-        // Remove the reference idx from the column indices, d_free_idxs gets inverted to construct column idxs,
-        // and add to the row indices
-        k_update_index<<<1, 1, 0, stream>>>(d_free_idxs_.data, reference_idx, reference_idx);
-        gpuErrchk(cudaPeekAtLastError());
-        k_update_index<<<1, 1, 0, stream>>>(d_row_idxs_.data, num_row_idxs, reference_idx);
-        gpuErrchk(cudaPeekAtLastError());
-        num_row_idxs++;
-        num_col_idxs--;
-    }
 
     // Set the nonbonded potential to compute forces of free particles
     set_nonbonded_potential_idxs(nonbonded_bp_->potential, num_row_idxs, d_row_idxs_.data, stream);

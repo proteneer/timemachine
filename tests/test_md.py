@@ -666,10 +666,9 @@ def test_multiple_steps_local_entire_system(freeze_reference):
         assert np.all(xs[0] != coords), "All coordinates should have moved"
 
 
-@pytest.mark.parametrize("freeze_reference", [True, False])
-def test_multiple_steps_local_no_free_particles(freeze_reference):
-    """Verify that running multiple_steps_local raises an exception if no free particles selected.
-    In this case we can trigger this failure by having a single atom molecule, and moving it away from
+def test_multiple_steps_local_no_free_particles():
+    """Verify that running multiple_steps_local, with free_reference=True raises an exception if no free particles
+    selected. In this case we can trigger this failure by having a single atom molecule, and moving it away from
     the water box. This is a pathological case, but to verify the exception
 
     This may need to be changed in the future if there are stochastic failures due to probabilistic selection
@@ -705,7 +704,7 @@ def test_multiple_steps_local_no_free_particles(freeze_reference):
 
     intg = LangevinIntegrator(temperature, dt, friction, masses, seed)
 
-    ctxt = custom_ops.Context(x0, v0, box, intg.impl(), bps, freeze_reference=freeze_reference)
+    ctxt = custom_ops.Context(x0, v0, box, intg.impl(), bps)
 
     with pytest.raises(RuntimeError, match="no free particles"):
         xs, boxes = ctxt.multiple_steps_local(1, local_idxs, radius=radius, k=k, seed=seed)

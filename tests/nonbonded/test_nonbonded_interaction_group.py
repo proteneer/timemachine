@@ -86,6 +86,58 @@ def test_nonbonded_interaction_group_correctness(
 @pytest.mark.parametrize("beta", [2.0])
 @pytest.mark.parametrize("cutoff", [1.1])
 @pytest.mark.parametrize("precision,rtol,atol", [(np.float64, 1e-8, 1e-8), (np.float32, 1e-4, 5e-4)])
+@pytest.mark.parametrize("num_atoms", [33, 231, 1050])
+def test_nonbonded_interaction_group_empty_set_of_idxs(
+    num_atoms,
+    precision,
+    rtol,
+    atol,
+    cutoff,
+    beta,
+    example_nonbonded_potential,
+    example_conf,
+    example_box,
+    rng: np.random.Generator,
+):
+    """Verify that if an interaction group is set up to have 0 indices or all indices as the atom
+    indices to return all zero energies.
+
+    This is supported for local MD to be able to turn the potential into a no-op in certain situations,
+    not typically something that would be useful to do in python, and is here to test the behavior.
+    """
+
+    conf = example_conf[:num_atoms]
+    params = example_nonbonded_potential.params[:num_atoms, :]
+
+    # Should always return zero, as there are no interactions to compute
+    def ref_empty_ixn_group(coords, params, box):
+        return 0.0
+
+    # Construct with a dummy reference index, which should have a non-zero energy
+    ixn_group = NonbondedInteractionGroup(num_atoms, np.array([0]).astype(np.int32), beta, cutoff)
+    # Initially constructed, should have non-zero energies
+    assert ixn_group(conf, params, example_box) != 0.0
+
+    for ligand_idxs in ([], np.arange(num_atoms)):
+        test_ixngroups = ixn_group.to_gpu(precision)
+
+        # Set to either empty or all indices, both should produce zero energies
+        test_ixngroups.unbound_impl.set_atom_idxs(np.array(ligand_idxs).astype(np.int32))
+        for params in gen_nonbonded_params_with_4d_offsets(rng, params, cutoff):
+            GradientTest().compare_forces(
+                conf,
+                params,
+                example_box,
+                ref_potential=ref_empty_ixn_group,
+                test_potential=test_ixngroups,
+                rtol=rtol,
+                atol=atol,
+            )
+
+
+@pytest.mark.parametrize("beta", [2.0])
+@pytest.mark.parametrize("cutoff", [1.1])
+@pytest.mark.parametrize("precision,rtol,atol", [(np.float64, 1e-8, 1e-8), (np.float32, 1e-4, 5e-4)])
 @pytest.mark.parametrize("num_atoms_ligand", [1, 15])
 @pytest.mark.parametrize("num_atoms", [33, 231, 1050])
 def test_nonbonded_interaction_group_consistency_allpairs_4d_decoupled(
