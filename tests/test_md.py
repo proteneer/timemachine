@@ -758,7 +758,6 @@ def test_local_md_initialization(freeze_reference):
     with pytest.raises(RuntimeError, match="found multiple NonbondedAllPairs potentials"):
         ctxt.ensure_local_md_intialized()
 
-
     # Verify that initializing local md doesn't modify global md behavior
     ctxt = custom_ops.Context(coords, v0, box, intg.impl(), bps, freeze_reference=freeze_reference)
     ref_xs, ref_boxes = ctxt.multiple_steps(steps)
