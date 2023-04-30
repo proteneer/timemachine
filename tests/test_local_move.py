@@ -69,7 +69,7 @@ def assert_no_drift(
     # in the first step
     differences_early = np.diff(expected_selection_fraction_traj[:n_samples]) / expected_selection_fraction_traj[0]
     assert (
-        np.any(differences_early) < 2.0
+        np.all(differences_early) < 2.0
     ), "Difference between first and last sample greater than 200%, likely unstable"
 
     avg_at_start = np.mean(expected_selection_fraction_traj[:n_samples])
