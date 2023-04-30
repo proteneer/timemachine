@@ -66,7 +66,7 @@ void Context::setup_local_md(double temperature, bool freeze_reference) {
 void Context::_ensure_local_md_intialized() {
     if (this->local_md_pots_ == nullptr) {
         double temperature = this->_get_temperature();
-        this->local_md_pots_.reset(new LocalMDPotentials(N_, bps_, true, temperature));
+        this->setup_local_md(temperature, true);
     }
 }
 
