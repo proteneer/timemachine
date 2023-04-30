@@ -241,7 +241,7 @@ void LocalMDPotentials::_setup_free_idxs_given_reference_idx(
         ixn_group_->potential, num_col_idxs, num_row_idxs, d_col_idxs_.data, d_row_idxs_.data, stream);
 
     if (!freeze_reference_) {
-        // If there are no frozen, don't attach any
+        // If there are no frozen indices, don't attach any restraints
         if (num_col_idxs > 0) {
             k_construct_bonded_params<<<ceil_divide(num_col_idxs, tpb), tpb, 0, stream>>>(
                 num_col_idxs,
