@@ -24,7 +24,6 @@ NonbondedInteractionGroup<RealType>::NonbondedInteractionGroup(
     const std::vector<int> &col_atom_idxs,
     const double beta,
     const double cutoff,
-    const std::optional<std::set<int>> &col_atom_idxs,
     const bool disable_hilbert_sort,
     const double nblist_padding)
     : N_(N), NR_(row_atom_idxs.size()), NC_(col_atom_idxs.size()),
@@ -43,24 +42,22 @@ NonbondedInteractionGroup<RealType>::NonbondedInteractionGroup(
                     &k_nonbonded_unified<RealType, 1, 1, 0>,
                     &k_nonbonded_unified<RealType, 1, 1, 1>}),
 
-      beta_(beta), cutoff_(cutoff), nblist_(K_), nblist_padding_(nblist_padding), d_sort_storage_(nullptr),
+      beta_(beta), cutoff_(cutoff), nblist_(NR_ + NC_), nblist_padding_(nblist_padding), d_sort_storage_(nullptr),
       d_sort_storage_bytes_(0), disable_hilbert_(disable_hilbert_sort) {
 
     this->validate_idxs(N_, row_atom_idxs, col_atom_idxs, false);
 
-    if (col_atom_idxs) {
-        std::vector<int> h_col_atom_idxs(col_atom_idxs->begin(), col_atom_idxs->end());
-        if (h_col_atom_idxs.size() == static_cast<long unsigned int>(N)) {
-            throw std::runtime_error("must be less then N(" + std::to_string(N) + ") col indices");
-        }
-        verify_atom_idxs(N_, h_col_atom_idxs);
+    std::vector<int> h_col_atom_idxs(col_atom_idxs.begin(), col_atom_idxs.end());
+    if (h_col_atom_idxs.size() == static_cast<long unsigned int>(N)) {
+        throw std::runtime_error("must be less then N(" + std::to_string(N) + ") col indices");
+    }
+    verify_atom_idxs(N_, h_col_atom_idxs);
 
-        // row and col idxs must be disjoint
-        std::set<int> unique_row_idxs(row_atom_idxs.begin(), row_atom_idxs.end());
-        for (int col_atom_idx : h_col_atom_idxs) {
-            if (unique_row_idxs.find(col_atom_idx) != unique_row_idxs.end()) {
-                throw std::runtime_error("row and col indices must be disjoint");
-            }
+    // row and col idxs must be disjoint
+    std::set<int> unique_row_idxs(row_atom_idxs.begin(), row_atom_idxs.end());
+    for (int col_atom_idx : h_col_atom_idxs) {
+        if (unique_row_idxs.find(col_atom_idx) != unique_row_idxs.end()) {
+            throw std::runtime_error("row and col indices must be disjoint");
         }
     }
 
@@ -427,7 +424,6 @@ void NonbondedInteractionGroup<RealType>::set_atom_idxs_device(
     // Update the row and column counts
     this->NR_ = NR;
     this->NC_ = NC;
-    this->K_ = NR + NC;
 }
 
 template <typename RealType>
