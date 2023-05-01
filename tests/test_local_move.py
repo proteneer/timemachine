@@ -64,10 +64,12 @@ def assert_no_drift(
 
     expected_selection_fraction_traj = np.array([observable_fxn(x) for x in traj])
 
-    # A sanity check that the early samples don't have a massive jump within
+    # A sanity check that the early samples don't have a massive jump within them
     # in the case of unstable local MD this test can pass neighboring atoms go from ~10% of the system to ~100% of the system
     # in the first step
-    differences_early = np.diff(expected_selection_fraction_traj[:n_samples]) / expected_selection_fraction_traj[0]
+    differences_early = np.abs(
+        np.diff(expected_selection_fraction_traj[:n_samples]) / expected_selection_fraction_traj[0]
+    )
     assert (
         np.all(differences_early) < 2.0
     ), "Difference between first and last sample greater than 200%, likely unstable"
