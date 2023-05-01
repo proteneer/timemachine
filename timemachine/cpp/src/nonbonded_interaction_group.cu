@@ -65,7 +65,7 @@ NonbondedInteractionGroup<RealType>::NonbondedInteractionGroup(
     }
 
     cudaSafeMalloc(&d_col_atom_idxs_, N_ * sizeof(*d_col_atom_idxs_));
-    cudaSafeMalloc(&d_group_1_atom_idxs_, N_ * sizeof(*d_row_atom_idxs_));
+    cudaSafeMalloc(&d_row_atom_idxs_, N_ * sizeof(*d_row_atom_idxs_));
 
     cudaSafeMalloc(&d_perm_, N_ * sizeof(*d_perm_));
 
@@ -120,7 +120,7 @@ NonbondedInteractionGroup<RealType>::NonbondedInteractionGroup(
 
     gpuErrchk(cudaPeekAtLastError());
     cudaSafeMalloc(&d_sort_storage_, d_sort_storage_bytes_);
-    this->set_atom_idxs(row_atom_idxs, col_atom_idxs);
+    this->set_atom_idxs(group_1_atom_idxs, group_2_atom_idxs);
 };
 
 template <typename RealType> NonbondedInteractionGroup<RealType>::~NonbondedInteractionGroup() {
