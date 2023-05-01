@@ -54,15 +54,15 @@ NonbondedInteractionGroup<RealType>::NonbondedInteractionGroup(
     verify_atom_idxs(N_, row_atom_idxs);
 
     if (col_atom_idxs) {
-        std::vector<int> col_atom_idxs_h(col_atom_idxs->begin(), col_atom_idxs->end());
-        if (col_atom_idxs_h.size() == static_cast<long unsigned int>(N)) {
+        std::vector<int> h_col_atom_idxs(col_atom_idxs->begin(), col_atom_idxs->end());
+        if (h_col_atom_idxs.size() == static_cast<long unsigned int>(N)) {
             throw std::runtime_error("must be less then N(" + std::to_string(N) + ") col indices");
         }
-        verify_atom_idxs(N_, col_atom_idxs_h);
+        verify_atom_idxs(N_, h_col_atom_idxs);
 
         // row and col idxs must be disjoint
         std::set<int> unique_row_idxs(row_atom_idxs.begin(), row_atom_idxs.end());
-        for (int col_atom_idx : col_atom_idxs_h) {
+        for (int col_atom_idx : h_col_atom_idxs) {
             if (unique_row_idxs.find(col_atom_idx) != unique_row_idxs.end()) {
                 throw std::runtime_error("row and col indices must be disjoint");
             }
@@ -242,7 +242,7 @@ void NonbondedInteractionGroup<RealType>::execute_device(
 
     const int tpb = warp_size;
     const int B = ceil_divide(N_, tpb);
-    const int K_B = ceil_divide(K_, tpb);
+    const int B_K = ceil_divide(K_, tpb);
 
     // (ytz) see if we need to rebuild the neighborlist.
 
@@ -274,7 +274,7 @@ void NonbondedInteractionGroup<RealType>::execute_device(
         }
 
         // compute new coordinates
-        k_gather<<<dim3(K_B, 3, 1), tpb, 0, stream>>>(K_, d_perm_, d_x, d_sorted_x_);
+        k_gather<<<dim3(B_K, 3, 1), tpb, 0, stream>>>(K_, d_perm_, d_x, d_sorted_x_);
         gpuErrchk(cudaPeekAtLastError());
 
         nblist_.build_nblist_device(K_, d_sorted_x_, d_box, cutoff_ + nblist_padding_, stream);
@@ -302,7 +302,7 @@ void NonbondedInteractionGroup<RealType>::execute_device(
         gpuErrchk(cudaMemcpyAsync(d_nblist_x_, d_x, N * 3 * sizeof(*d_x), cudaMemcpyDeviceToDevice, stream));
         gpuErrchk(cudaMemcpyAsync(d_nblist_box_, d_box, 3 * 3 * sizeof(*d_box), cudaMemcpyDeviceToDevice, stream));
     } else {
-        k_gather<<<dim3(K_B, 3, 1), tpb, 0, stream>>>(K_, d_perm_, d_x, d_sorted_x_);
+        k_gather<<<dim3(B_K, 3, 1), tpb, 0, stream>>>(K_, d_perm_, d_x, d_sorted_x_);
         gpuErrchk(cudaPeekAtLastError());
     }
 
@@ -311,7 +311,7 @@ void NonbondedInteractionGroup<RealType>::execute_device(
         return;
     }
 
-    k_gather<<<dim3(K_B, PARAMS_PER_ATOM, 1), tpb, 0, stream>>>(K_, d_perm_, d_p, d_sorted_p_);
+    k_gather<<<dim3(B_K, PARAMS_PER_ATOM, 1), tpb, 0, stream>>>(K_, d_perm_, d_p, d_sorted_p_);
     gpuErrchk(cudaPeekAtLastError());
 
     // reset buffers and sorted accumulators
@@ -350,7 +350,7 @@ void NonbondedInteractionGroup<RealType>::execute_device(
 
     // coords are N,3
     if (d_du_dx) {
-        k_scatter_accum<<<dim3(K_B, 3, 1), tpb, 0, stream>>>(K_, d_perm_, d_sorted_du_dx_, d_du_dx);
+        k_scatter_accum<<<dim3(B_K, 3, 1), tpb, 0, stream>>>(K_, d_perm_, d_sorted_du_dx_, d_du_dx);
         gpuErrchk(cudaPeekAtLastError());
     }
 
@@ -359,7 +359,7 @@ void NonbondedInteractionGroup<RealType>::execute_device(
     if (d_du_dp) {
         // scattered assignment updates K_ <= N_ elements; the rest should be 0
         gpuErrchk(cudaMemsetAsync(d_du_dp_buffer_, 0, N_ * PARAMS_PER_ATOM * sizeof(*d_du_dp_buffer_), stream));
-        k_scatter_assign<<<dim3(K_B, PARAMS_PER_ATOM, 1), tpb, 0, stream>>>(
+        k_scatter_assign<<<dim3(B_K, PARAMS_PER_ATOM, 1), tpb, 0, stream>>>(
             K_, d_perm_, d_sorted_du_dp_, d_du_dp_buffer_);
         gpuErrchk(cudaPeekAtLastError());
     }
@@ -372,8 +372,9 @@ void NonbondedInteractionGroup<RealType>::execute_device(
 
 template <typename RealType>
 void NonbondedInteractionGroup<RealType>::set_atom_idxs(
-    const std::vector<int> &row_atom_idxs, const std::optional<std::set<int>> &col_atom_idxs) {
+    const std::vector<int> &row_atom_idxs, const std::optional<std::vector<int>> &col_atom_idxs) {
     verify_atom_idxs(N_, row_atom_idxs, true);
+    verify_atom_idxs(N_, col_atom_idxs, true);
     std::vector<unsigned int> unsigned_row_idxs = std::vector<unsigned int>(row_atom_idxs.begin(), row_atom_idxs.end());
 
     std::set<unsigned int> unique_row_atom_idxs(unique_idxs(unsigned_row_idxs));

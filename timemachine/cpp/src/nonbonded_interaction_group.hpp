@@ -71,7 +71,7 @@ public:
     void set_atom_idxs_device(
         const int NC, const int NR, unsigned int *d_column_idxs, unsigned int *d_row_idxs, const cudaStream_t stream);
 
-    void set_atom_idxs(const std::vector<int> &row_atom_idxs, const std::optional<std::set<int>> &col_atom_idxs);
+    void set_atom_idxs(const std::vector<int> &row_atom_idxs, const std::optional<std::vector<int>> &col_atom_idxs);
 
     NonbondedInteractionGroup(
         const int N,
