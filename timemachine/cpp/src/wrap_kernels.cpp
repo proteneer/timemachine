@@ -362,8 +362,9 @@ void declare_context(py::module &m) {
 
         F = iterations / store_x_interval
 
-        The first call to `multiple_steps_local_selection` takes longer than subsequent calls, if setup_local_md has not been local MD called are for local MD.         the
-        integrator, which must the integrator, which must be a LangevinIntegrator. be a LangevinIntegrator.
+        The first call to `multiple_steps_local_selection` takes longer than subsequent calls, if setup_local_md has not been called previously,
+        initializes potentials needed for local MD. The default local MD parameters are to freeze the reference and to
+        use the temperature of the integrator, which must be a LangevinIntegrator.
 
         Parameters
         ----------
@@ -386,10 +387,10 @@ void declare_context(py::module &m) {
             at the last step.
 
         radius: float
-            The radius in nanometers from the reference idx to allow particles to be unrestrained in, afterwards apply a restraint to the reference particle..
+            The radius in nanometers from the reference idx to allow particles to be unrestrained in, afterwards apply a restraint to the reference particle.
 
         k: float
-            The flat bottom restraint K value to use for restraint of atoms to the reference particle..
+            The flat bottom restraint K value to use for restraint of atoms to the reference particle.
 
         Returns
         -------
