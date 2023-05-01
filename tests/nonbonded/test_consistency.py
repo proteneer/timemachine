@@ -54,10 +54,10 @@ def test_nonbonded_consistency(
     # Partition host_idxs into num_ixn_groups
     if num_ixn_groups:
         group_idxs = rng.choice(num_ixn_groups, size=(len(host_idxs),), replace=True).astype(np.int32)
-        col_atom_idxss = [host_idxs[group_idxs == i] for i in range(num_ixn_groups)]
+        all_col_atom_idxs = [host_idxs[group_idxs == i] for i in range(num_ixn_groups)]
     else:
         # Test case where col_atom_idxs is None
-        col_atom_idxss = [None]
+        all_col_atom_idxs = [None]
 
     ref_impl = (
         Nonbonded(num_atoms, exclusion_idxs, exclusion_scales, beta, cutoff, disable_hilbert_sort)
@@ -81,7 +81,7 @@ def test_nonbonded_consistency(
                 make_allpairs_potential(ligand_idxs),
                 make_pairlist_potential(exclusion_idxs, exclusion_scales),
             ]
-            + [make_ixngroup_potential(ligand_idxs, col_atom_idxs) for col_atom_idxs in col_atom_idxss]
+            + [make_ixngroup_potential(ligand_idxs, col_atom_idxs) for col_atom_idxs in all_col_atom_idxs]
         )
         .to_gpu(precision)
         .unbound_impl

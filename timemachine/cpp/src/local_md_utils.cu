@@ -66,14 +66,14 @@ construct_ixn_group_potential(const int N, std::shared_ptr<Potential> pot, const
 
     if (std::shared_ptr<NonbondedAllPairs<float>> nb_pot = std::dynamic_pointer_cast<NonbondedAllPairs<float>>(pot);
         nb_pot) {
-        std::shared_ptr<Potential> ixn_group(new NonbondedInteractionGroup<float>(
-            N, dummy_idxs, nb_pot->get_beta(), nb_pot->get_cutoff(), dummy_col_idxs));
+        std::shared_ptr<Potential> ixn_group(
+            new NonbondedInteractionGroup<float>(N, dummy_idxs, dummy_idxs, nb_pot->get_beta(), nb_pot->get_cutoff()));
         return std::shared_ptr<BoundPotential>(new BoundPotential(ixn_group, shape, &h_params[0]));
     } else if (std::shared_ptr<NonbondedAllPairs<double>> nb_pot =
                    std::dynamic_pointer_cast<NonbondedAllPairs<double>>(pot);
                nb_pot) {
-        std::shared_ptr<Potential> ixn_group(new NonbondedInteractionGroup<double>(
-            N, dummy_idxs, nb_pot->get_beta(), nb_pot->get_cutoff(), dummy_col_idxs));
+        std::shared_ptr<Potential> ixn_group(
+            new NonbondedInteractionGroup<double>(N, dummy_idxs, dummy_idxs, nb_pot->get_beta(), nb_pot->get_cutoff()));
         return std::shared_ptr<BoundPotential>(new BoundPotential(ixn_group, shape, &h_params[0]));
     } else {
         throw std::runtime_error("unable to cast potential to NonbondedAllPairs");

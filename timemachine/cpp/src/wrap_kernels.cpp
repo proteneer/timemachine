@@ -1097,7 +1097,7 @@ template <typename RealType> void declare_nonbonded_interaction_group(py::module
             "set_atom_idxs",
             &timemachine::NonbondedInteractionGroup<RealType>::set_atom_idxs,
             py::arg("row_atom_idxs"),
-            py::arg("col_atom_idxs") = py::none(),
+            py::arg("col_atom_idxs"),
             R"pbdoc(
                     Set up the atom idxs for the NonbondedInteractionGroup.
                     The interaction is defined between two groups of atom idxs,
@@ -1109,9 +1109,8 @@ template <typename RealType> void declare_nonbonded_interaction_group(py::module
                     row_atom_idxs: NDArray
                         First group of atoms in the interaction.
 
-                    col_atom_idxs: Optional[NDArray]
-                        Second group of atoms in the interaction. If not specified,
-                        use all of the atoms not in the `row_atom_idxs`.
+                    col_atom_idxs: NDArray
+                        Second group of atoms in the interaction.
 
             )pbdoc")
         .def(
@@ -1125,15 +1124,17 @@ template <typename RealType> void declare_nonbonded_interaction_group(py::module
                 std::vector<int> row_atom_idxs(row_atom_idxs_i.size());
                 std::memcpy(row_atom_idxs.data(), row_atom_idxs_i.data(), row_atom_idxs_i.size() * sizeof(int));
 
-                std::optional<std::set<int>> unique_col_atom_idxs(std::nullopt);
+                std::vector<int> col_atom_idxs;
                 if (col_atom_idxs_i) {
-                    std::vector<int> col_atom_idxs(col_atom_idxs_i->size());
+                    col_atom_idxs.resize(col_atom_idxs_i->size());
                     std::memcpy(col_atom_idxs.data(), col_atom_idxs_i->data(), col_atom_idxs_i->size() * sizeof(int));
-                    unique_col_atom_idxs.emplace(unique_idxs<int>(col_atom_idxs));
+                } else {
+                    std::set<int> unique_row_atom_idxs(unique_idxs(row_atom_idxs));
+                    col_atom_idxs = get_indices_difference(N, unique_row_atom_idxs);
                 }
 
                 return new timemachine::NonbondedInteractionGroup<RealType>(
-                    N, row_atom_idxs, beta, cutoff, unique_col_atom_idxs, disable_hilbert_sort, nblist_padding);
+                    N, row_atom_idxs, col_atom_idxs, beta, cutoff, disable_hilbert_sort, nblist_padding);
             }),
             py::arg("num_atoms"),
             py::arg("row_atom_idxs_i"),

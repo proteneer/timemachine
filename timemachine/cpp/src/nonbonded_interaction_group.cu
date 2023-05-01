@@ -21,12 +21,12 @@ template <typename RealType>
 NonbondedInteractionGroup<RealType>::NonbondedInteractionGroup(
     const int N,
     const std::vector<int> &row_atom_idxs,
+    const std::vector<int> &col_atom_idxs,
     const double beta,
     const double cutoff,
-    const std::optional<std::set<int>> &col_atom_idxs,
     const bool disable_hilbert_sort,
     const double nblist_padding)
-    : N_(N), NR_(row_atom_idxs.size()), NC_(col_atom_idxs ? col_atom_idxs->size() : N_ - NR_), K_(NR_ + NC_),
+    : N_(N), NR_(row_atom_idxs.size()), NC_(col_atom_idxs.size()),
 
       kernel_ptrs_({// enumerate over every possible kernel combination
                     // U: Compute U
@@ -42,7 +42,7 @@ NonbondedInteractionGroup<RealType>::NonbondedInteractionGroup(
                     &k_nonbonded_unified<RealType, 1, 1, 0>,
                     &k_nonbonded_unified<RealType, 1, 1, 1>}),
 
-      beta_(beta), cutoff_(cutoff), nblist_(K_), nblist_padding_(nblist_padding), d_sort_storage_(nullptr),
+      beta_(beta), cutoff_(cutoff), nblist_(NR_ + NC_), nblist_padding_(nblist_padding), d_sort_storage_(nullptr),
       d_sort_storage_bytes_(0), disable_hilbert_(disable_hilbert_sort) {
 
     if (NR_ == 0) {
@@ -53,19 +53,17 @@ NonbondedInteractionGroup<RealType>::NonbondedInteractionGroup(
     }
     verify_atom_idxs(N_, row_atom_idxs);
 
-    if (col_atom_idxs) {
-        std::vector<int> h_col_atom_idxs(col_atom_idxs->begin(), col_atom_idxs->end());
-        if (h_col_atom_idxs.size() == static_cast<long unsigned int>(N)) {
-            throw std::runtime_error("must be less then N(" + std::to_string(N) + ") col indices");
-        }
-        verify_atom_idxs(N_, h_col_atom_idxs);
+    std::vector<int> h_col_atom_idxs(col_atom_idxs.begin(), col_atom_idxs.end());
+    if (h_col_atom_idxs.size() == static_cast<long unsigned int>(N)) {
+        throw std::runtime_error("must be less then N(" + std::to_string(N) + ") col indices");
+    }
+    verify_atom_idxs(N_, h_col_atom_idxs);
 
-        // row and col idxs must be disjoint
-        std::set<int> unique_row_idxs(row_atom_idxs.begin(), row_atom_idxs.end());
-        for (int col_atom_idx : h_col_atom_idxs) {
-            if (unique_row_idxs.find(col_atom_idx) != unique_row_idxs.end()) {
-                throw std::runtime_error("row and col indices must be disjoint");
-            }
+    // row and col idxs must be disjoint
+    std::set<int> unique_row_idxs(row_atom_idxs.begin(), row_atom_idxs.end());
+    for (int col_atom_idx : h_col_atom_idxs) {
+        if (unique_row_idxs.find(col_atom_idx) != unique_row_idxs.end()) {
+            throw std::runtime_error("row and col indices must be disjoint");
         }
     }
 
@@ -242,11 +240,11 @@ void NonbondedInteractionGroup<RealType>::execute_device(
 
     const int tpb = warp_size;
     const int B = ceil_divide(N_, tpb);
-    const int B_K = ceil_divide(K_, tpb);
+    const int K = NR_ + NC_; // total number of interactions
+    const int B_K = ceil_divide(K, tpb);
 
     // (ytz) see if we need to rebuild the neighborlist.
 
-    // TODO: Is this more efficient as a single call (K_, d_atom_idxs_, ...)?
     k_check_rebuild_coords_and_box_gather<RealType><<<ceil_divide(NR_, tpb), tpb, 0, stream>>>(
         NR_, d_row_atom_idxs_, d_x, d_nblist_x_, d_box, d_nblist_box_, nblist_padding_, d_rebuild_nblist_);
     gpuErrchk(cudaPeekAtLastError());
@@ -274,10 +272,10 @@ void NonbondedInteractionGroup<RealType>::execute_device(
         }
 
         // compute new coordinates
-        k_gather<<<dim3(B_K, 3, 1), tpb, 0, stream>>>(K_, d_perm_, d_x, d_sorted_x_);
+        k_gather<<<dim3(B_K, 3, 1), tpb, 0, stream>>>(K, d_perm_, d_x, d_sorted_x_);
         gpuErrchk(cudaPeekAtLastError());
 
-        nblist_.build_nblist_device(K_, d_sorted_x_, d_box, cutoff_ + nblist_padding_, stream);
+        nblist_.build_nblist_device(K, d_sorted_x_, d_box, cutoff_ + nblist_padding_, stream);
         gpuErrchk(cudaMemcpyAsync(
             p_ixn_count_, nblist_.get_ixn_count(), 1 * sizeof(*p_ixn_count_), cudaMemcpyDeviceToHost, stream));
 
@@ -302,7 +300,7 @@ void NonbondedInteractionGroup<RealType>::execute_device(
         gpuErrchk(cudaMemcpyAsync(d_nblist_x_, d_x, N * 3 * sizeof(*d_x), cudaMemcpyDeviceToDevice, stream));
         gpuErrchk(cudaMemcpyAsync(d_nblist_box_, d_box, 3 * 3 * sizeof(*d_box), cudaMemcpyDeviceToDevice, stream));
     } else {
-        k_gather<<<dim3(B_K, 3, 1), tpb, 0, stream>>>(K_, d_perm_, d_x, d_sorted_x_);
+        k_gather<<<dim3(B_K, 3, 1), tpb, 0, stream>>>(K, d_perm_, d_x, d_sorted_x_);
         gpuErrchk(cudaPeekAtLastError());
     }
 
@@ -311,15 +309,15 @@ void NonbondedInteractionGroup<RealType>::execute_device(
         return;
     }
 
-    k_gather<<<dim3(B_K, PARAMS_PER_ATOM, 1), tpb, 0, stream>>>(K_, d_perm_, d_p, d_sorted_p_);
+    k_gather<<<dim3(B_K, PARAMS_PER_ATOM, 1), tpb, 0, stream>>>(K, d_perm_, d_p, d_sorted_p_);
     gpuErrchk(cudaPeekAtLastError());
 
     // reset buffers and sorted accumulators
     if (d_du_dx) {
-        gpuErrchk(cudaMemsetAsync(d_sorted_du_dx_, 0, K_ * 3 * sizeof(*d_sorted_du_dx_), stream))
+        gpuErrchk(cudaMemsetAsync(d_sorted_du_dx_, 0, K * 3 * sizeof(*d_sorted_du_dx_), stream))
     }
     if (d_du_dp) {
-        gpuErrchk(cudaMemsetAsync(d_sorted_du_dp_, 0, K_ * PARAMS_PER_ATOM * sizeof(*d_sorted_du_dp_), stream))
+        gpuErrchk(cudaMemsetAsync(d_sorted_du_dp_, 0, K * PARAMS_PER_ATOM * sizeof(*d_sorted_du_dp_), stream))
     }
 
     gpuErrchk(cudaPeekAtLastError());
@@ -331,7 +329,7 @@ void NonbondedInteractionGroup<RealType>::execute_device(
     kernel_idx |= d_u ? 1 << 2 : 0;
 
     kernel_ptrs_[kernel_idx]<<<p_ixn_count_[0], tpb, 0, stream>>>(
-        K_,
+        K,
         nblist_.get_num_row_idxs(),
         d_sorted_x_,
         d_sorted_p_,
@@ -350,17 +348,17 @@ void NonbondedInteractionGroup<RealType>::execute_device(
 
     // coords are N,3
     if (d_du_dx) {
-        k_scatter_accum<<<dim3(B_K, 3, 1), tpb, 0, stream>>>(K_, d_perm_, d_sorted_du_dx_, d_du_dx);
+        k_scatter_accum<<<dim3(B_K, 3, 1), tpb, 0, stream>>>(K, d_perm_, d_sorted_du_dx_, d_du_dx);
         gpuErrchk(cudaPeekAtLastError());
     }
 
     // params are N, PARAMS_PER_ATOM
     // this needs to be an accumulated permute
     if (d_du_dp) {
-        // scattered assignment updates K_ <= N_ elements; the rest should be 0
+        // scattered assignment updates K <= N_ elements; the rest should be 0
         gpuErrchk(cudaMemsetAsync(d_du_dp_buffer_, 0, N_ * PARAMS_PER_ATOM * sizeof(*d_du_dp_buffer_), stream));
         k_scatter_assign<<<dim3(B_K, PARAMS_PER_ATOM, 1), tpb, 0, stream>>>(
-            K_, d_perm_, d_sorted_du_dp_, d_du_dp_buffer_);
+            K, d_perm_, d_sorted_du_dp_, d_du_dp_buffer_);
         gpuErrchk(cudaPeekAtLastError());
     }
 
@@ -372,20 +370,16 @@ void NonbondedInteractionGroup<RealType>::execute_device(
 
 template <typename RealType>
 void NonbondedInteractionGroup<RealType>::set_atom_idxs(
-    const std::vector<int> &row_atom_idxs, const std::optional<std::vector<int>> &col_atom_idxs) {
+    const std::vector<int> &row_atom_idxs, const std::vector<int> &col_atom_idxs) {
     verify_atom_idxs(N_, row_atom_idxs, true);
     verify_atom_idxs(N_, col_atom_idxs, true);
-    std::vector<unsigned int> unsigned_row_idxs = std::vector<unsigned int>(row_atom_idxs.begin(), row_atom_idxs.end());
 
+    std::vector<unsigned int> unsigned_row_idxs = std::vector<unsigned int>(row_atom_idxs.begin(), row_atom_idxs.end());
     std::set<unsigned int> unique_row_atom_idxs(unique_idxs(unsigned_row_idxs));
-    // compute set of column atoms as set difference
-    std::vector<unsigned int> col_atom_idxs_v;
-    if (col_atom_idxs) {
-        col_atom_idxs_v = std::vector<unsigned int>(col_atom_idxs->begin(), col_atom_idxs->end());
-    } else {
-        col_atom_idxs_v = get_indices_difference(N_, unique_row_atom_idxs);
-    }
+
     std::vector<unsigned int> row_atom_idxs_v(set_to_vector(unique_row_atom_idxs));
+    std::vector<unsigned int> col_atom_idxs_v(col_atom_idxs.begin(), col_atom_idxs.end());
+
     cudaStream_t stream = static_cast<cudaStream_t>(0);
     if (row_atom_idxs_v.size() == 0 || row_atom_idxs_v.size() == N_) {
         this->set_atom_idxs_device(col_atom_idxs_v.size(), row_atom_idxs_v.size(), nullptr, nullptr, stream);
@@ -442,7 +436,6 @@ void NonbondedInteractionGroup<RealType>::set_atom_idxs_device(
     // Update the row and column counts
     this->NR_ = NR;
     this->NC_ = NC;
-    this->K_ = NR + NC;
 }
 
 template <typename RealType>
