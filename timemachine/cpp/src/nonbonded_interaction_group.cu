@@ -51,15 +51,15 @@ NonbondedInteractionGroup<RealType>::NonbondedInteractionGroup(
     this->validate_idxs(N_, row_atom_idxs, col_atom_idxs, false);
 
     if (col_atom_idxs) {
-        std::vector<int> col_atom_idxs_h(col_atom_idxs->begin(), col_atom_idxs->end());
-        if (col_atom_idxs_h.size() == static_cast<long unsigned int>(N)) {
+        std::vector<int> h_col_atom_idxs(col_atom_idxs->begin(), col_atom_idxs->end());
+        if (h_col_atom_idxs.size() == static_cast<long unsigned int>(N)) {
             throw std::runtime_error("must be less then N(" + std::to_string(N) + ") col indices");
         }
-        verify_atom_idxs(N_, col_atom_idxs_h);
+        verify_atom_idxs(N_, h_col_atom_idxs);
 
         // row and col idxs must be disjoint
         std::set<int> unique_row_idxs(row_atom_idxs.begin(), row_atom_idxs.end());
-        for (int col_atom_idx : col_atom_idxs_h) {
+        for (int col_atom_idx : h_col_atom_idxs) {
             if (unique_row_idxs.find(col_atom_idx) != unique_row_idxs.end()) {
                 throw std::runtime_error("row and col indices must be disjoint");
             }
