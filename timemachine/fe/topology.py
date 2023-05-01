@@ -182,7 +182,7 @@ class HostGuestTopology:
             hg_water_pots.append(
                 potentials.NonbondedInteractionGroup(
                     num_total_atoms,
-                    np.array(lig_idxs, dtype=np.int32),
+                    lig_idxs,
                     guest_pot.beta,
                     guest_pot.cutoff,
                     col_atom_idxs=np.array(self.get_water_idxs(), dtype=np.int32),
