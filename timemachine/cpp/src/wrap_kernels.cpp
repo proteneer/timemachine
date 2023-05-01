@@ -298,7 +298,7 @@ void declare_context(py::module &m) {
             Coordinates have shape (F, N, 3)
             Boxes have shape (F, 3, 3)
 
-        Note: All boxes returned will be identical as local MD only runs under NVT.
+        Note: All boxes returned will be identical as local MD only runs under constant volume.
     )pbdoc")
         .def(
             "multiple_steps_local_selection",
@@ -397,7 +397,7 @@ void declare_context(py::module &m) {
             Coordinates have shape (F, N, 3)
             Boxes have shape (F, 3, 3)
 
-        Note: All boxes returned will be identical as local MD only runs under NVT.
+        Note: All boxes returned will be identical as local MD only runs under constant volume.
     )pbdoc")
         .def(
             "multiple_steps_U",
