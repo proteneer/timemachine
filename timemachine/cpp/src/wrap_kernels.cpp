@@ -1097,7 +1097,23 @@ template <typename RealType> void declare_nonbonded_interaction_group(py::module
             "set_atom_idxs",
             &timemachine::NonbondedInteractionGroup<RealType>::set_atom_idxs,
             py::arg("row_atom_idxs"),
-            py::arg("col_atom_idxs") = py::none())
+            py::arg("col_atom_idxs") = py::none(),
+            R"pbdoc(
+                    Set up the atom idxs for the NonbondedInteractionGroup.
+                    The interaction is defined between two groups of atom idxs,
+                    `row_atom_idxs` and `col_atom_idxs`. These should be a disjoint
+                    list of idxs.
+
+                    Parameters
+                    ----------
+                    row_atom_idxs: NDArray
+                        First group of atoms in the interaction.
+
+                    col_atom_idxs: Optional[NDArray]
+                        Second group of atoms in the interaction. If not specified,
+                        use all of the atoms not in the `row_atom_idxs`.
+
+            )pbdoc")
         .def(
             py::init([](const int N,
                         const py::array_t<int, py::array::c_style> &row_atom_idxs_i,
@@ -1125,7 +1141,34 @@ template <typename RealType> void declare_nonbonded_interaction_group(py::module
             py::arg("cutoff"),
             py::arg("col_atom_idxs_i") = py::none(),
             py::arg("disable_hilbert_sort") = false,
-            py::arg("nblist_padding") = 0.1);
+            py::arg("nblist_padding") = 0.1,
+            R"pbdoc(
+                    Set up the NonbondedInteractionGroup.
+
+                    Parameters
+                    ----------
+                    num_atoms: int
+                        Number of atoms.
+
+                    row_atom_idxs: NDArray
+                        First group of atoms in the interaction.
+
+                    beta: float
+
+                    cutoff: float
+                        Ignore all interactions beyond this distance in nm.
+
+                    col_atom_idxs: Optional[NDArray]
+                        Second group of atoms in the interaction. If not specified,
+                        use all of the atoms not in the `row_atom_idxs`.
+
+                    disable_hilbert_sort: bool
+                        Set to True to disable the Hilbert sort.
+
+                    nblist_padding: float
+                        Margin for the neighborlist.
+
+            )pbdoc");
 }
 
 template <typename RealType, bool Negated> void declare_nonbonded_pair_list(py::module &m, const char *typestr) {

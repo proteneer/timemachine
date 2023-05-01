@@ -4,6 +4,7 @@
 #include "neighborlist.hpp"
 #include "potential.hpp"
 #include <array>
+#include <optional>
 #include <vector>
 
 namespace timemachine {
