@@ -23,15 +23,15 @@ def test_nonbonded_interaction_group_invalid_indices():
 
     with pytest.raises(RuntimeError) as e:
         NonbondedInteractionGroup(3, [0, 1, 2], 1.0, 1.0).to_gpu(np.float64).unbound_impl
-    assert "must be less then N(3) row indices" == str(e.value)
+    assert "must be less then N(3) group 1 indices" == str(e.value)
 
     with pytest.raises(RuntimeError) as e:
         NonbondedInteractionGroup(3, [0, 1], 1.0, 1.0, col_atom_idxs=[2, 3, 4]).to_gpu(np.float64).unbound_impl
-    assert "must be less then N(3) col indices" == str(e.value)
+    assert "must be less then N(3) group 2 indices" == str(e.value)
 
     with pytest.raises(RuntimeError) as e:
         NonbondedInteractionGroup(3, [0, 1], 1.0, 1.0, col_atom_idxs=[0, 1]).to_gpu(np.float64).unbound_impl
-    assert "row and col indices must be disjoint" == str(e.value)
+    assert "group 1 and group 2 indices must be disjoint" == str(e.value)
 
 
 def test_nonbonded_interaction_group_zero_interactions(rng: np.random.Generator):

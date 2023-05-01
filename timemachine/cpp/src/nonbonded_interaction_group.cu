@@ -20,13 +20,14 @@ namespace timemachine {
 template <typename RealType>
 NonbondedInteractionGroup<RealType>::NonbondedInteractionGroup(
     const int N,
-    const std::vector<int> &row_atom_idxs,
+    const std::vector<int> &group_1_atom_idxs,
     const double beta,
     const double cutoff,
-    const std::optional<std::set<int>> &col_atom_idxs,
+    const std::optional<std::set<int>> &group_2_atom_idxs,
     const bool disable_hilbert_sort,
     const double nblist_padding)
-    : N_(N), NR_(row_atom_idxs.size()), NC_(col_atom_idxs ? col_atom_idxs->size() : N_ - NR_), K_(NR_ + NC_),
+    : N_(N), NR_(group_1_atom_idxs.size()), NC_(group_2_atom_idxs ? group_2_atom_idxs->size() : N_ - NR_),
+      K_(NR_ + NC_),
 
       kernel_ptrs_({// enumerate over every possible kernel combination
                     // U: Compute U
@@ -46,31 +47,31 @@ NonbondedInteractionGroup<RealType>::NonbondedInteractionGroup(
       d_sort_storage_bytes_(0), disable_hilbert_(disable_hilbert_sort) {
 
     if (NR_ == 0) {
-        throw std::runtime_error("row_atom_idxs must be nonempty");
+        throw std::runtime_error("group_1_atom_idxs must be nonempty");
     }
-    if (row_atom_idxs.size() == static_cast<long unsigned int>(N)) {
-        throw std::runtime_error("must be less then N(" + std::to_string(N) + ") row indices");
+    if (group_1_atom_idxs.size() == static_cast<long unsigned int>(N)) {
+        throw std::runtime_error("must be less then N(" + std::to_string(N) + ") group 1 indices");
     }
-    verify_atom_idxs(N_, row_atom_idxs);
+    verify_atom_idxs(N_, group_1_atom_idxs);
 
-    if (col_atom_idxs) {
-        std::vector<int> col_atom_idxs_h(col_atom_idxs->begin(), col_atom_idxs->end());
+    if (group_2_atom_idxs) {
+        std::vector<int> col_atom_idxs_h(group_2_atom_idxs->begin(), group_2_atom_idxs->end());
         if (col_atom_idxs_h.size() == static_cast<long unsigned int>(N)) {
-            throw std::runtime_error("must be less then N(" + std::to_string(N) + ") col indices");
+            throw std::runtime_error("must be less then N(" + std::to_string(N) + ") group 2 indices");
         }
         verify_atom_idxs(N_, col_atom_idxs_h);
 
         // row and col idxs must be disjoint
-        std::set<int> unique_row_idxs(row_atom_idxs.begin(), row_atom_idxs.end());
+        std::set<int> unique_row_idxs(group_1_atom_idxs.begin(), group_1_atom_idxs.end());
         for (int col_atom_idx : col_atom_idxs_h) {
             if (unique_row_idxs.find(col_atom_idx) != unique_row_idxs.end()) {
-                throw std::runtime_error("row and col indices must be disjoint");
+                throw std::runtime_error("group 1 and group 2 indices must be disjoint");
             }
         }
     }
 
     cudaSafeMalloc(&d_col_atom_idxs_, N_ * sizeof(*d_col_atom_idxs_));
-    cudaSafeMalloc(&d_row_atom_idxs_, N_ * sizeof(*d_row_atom_idxs_));
+    cudaSafeMalloc(&d_group_1_atom_idxs_, N_ * sizeof(*d_row_atom_idxs_));
 
     cudaSafeMalloc(&d_perm_, N_ * sizeof(*d_perm_));
 
@@ -372,15 +373,16 @@ void NonbondedInteractionGroup<RealType>::execute_device(
 
 template <typename RealType>
 void NonbondedInteractionGroup<RealType>::set_atom_idxs(
-    const std::vector<int> &atom_idxs, const std::optional<std::set<int>> &col_atom_idxs) {
-    verify_atom_idxs(N_, atom_idxs, true);
-    std::vector<unsigned int> unsigned_idxs = std::vector<unsigned int>(atom_idxs.begin(), atom_idxs.end());
+    const std::vector<int> &group_1_atom_idxs, const std::optional<std::set<int>> &group_2_atom_idxs) {
+    verify_atom_idxs(N_, group_1_atom_idxs, true);
+    std::vector<unsigned int> unsigned_idxs =
+        std::vector<unsigned int>(group_1_atom_idxs.begin(), group_1_atom_idxs.end());
 
     std::set<unsigned int> unique_row_atom_idxs(unique_idxs(unsigned_idxs));
     // compute set of column atoms as set difference
     std::vector<unsigned int> col_atom_idxs_v;
-    if (col_atom_idxs) {
-        col_atom_idxs_v = std::vector<unsigned int>(col_atom_idxs->begin(), col_atom_idxs->end());
+    if (group_2_atom_idxs) {
+        col_atom_idxs_v = std::vector<unsigned int>(group_2_atom_idxs->begin(), group_2_atom_idxs->end());
     } else {
         col_atom_idxs_v = get_indices_difference(N_, unique_row_atom_idxs);
     }
