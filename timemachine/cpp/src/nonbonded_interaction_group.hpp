@@ -85,7 +85,7 @@ public:
         const std::vector<int> &col_atom_idxs,
         const double beta,
         const double cutoff,
-        const std::optional<std::set<int>> &col_atom_idxs,
+        const std::optional<std::set<int>> &group_2_atom_idxs,
         const bool disable_hilbert_sort = false,
         const double nblist_padding = 0.1);
 
