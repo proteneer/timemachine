@@ -26,7 +26,7 @@ NonbondedInteractionGroup<RealType>::NonbondedInteractionGroup(
     const std::vector<int> &col_atom_idxs,
     const double beta,
     const double cutoff,
-    const std::optional<std::set<int>> &group_2_atom_idxs,
+    const std::optional<std::set<int>> &col_atom_idxs,
     const bool disable_hilbert_sort,
     const double nblist_padding)
     : N_(N), NR_(row_atom_idxs.size()), NC_(col_atom_idxs.size()),
@@ -50,18 +50,18 @@ NonbondedInteractionGroup<RealType>::NonbondedInteractionGroup(
 
     this->validate_idxs(N_, row_atom_idxs, col_atom_idxs, false);
 
-    if (group_2_atom_idxs) {
-        std::vector<int> col_atom_idxs_h(group_2_atom_idxs->begin(), group_2_atom_idxs->end());
+    if (col_atom_idxs) {
+        std::vector<int> col_atom_idxs_h(col_atom_idxs->begin(), col_atom_idxs->end());
         if (col_atom_idxs_h.size() == static_cast<long unsigned int>(N)) {
-            throw std::runtime_error("must be less then N(" + std::to_string(N) + ") group 2 indices");
+            throw std::runtime_error("must be less then N(" + std::to_string(N) + ") col indices");
         }
         verify_atom_idxs(N_, col_atom_idxs_h);
 
         // row and col idxs must be disjoint
-        std::set<int> unique_row_idxs(group_1_atom_idxs.begin(), group_1_atom_idxs.end());
+        std::set<int> unique_row_idxs(row_atom_idxs.begin(), row_atom_idxs.end());
         for (int col_atom_idx : col_atom_idxs_h) {
             if (unique_row_idxs.find(col_atom_idx) != unique_row_idxs.end()) {
-                throw std::runtime_error("group 1 and group 2 indices must be disjoint");
+                throw std::runtime_error("row and col indices must be disjoint");
             }
         }
     }
@@ -122,7 +122,7 @@ NonbondedInteractionGroup<RealType>::NonbondedInteractionGroup(
 
     gpuErrchk(cudaPeekAtLastError());
     cudaSafeMalloc(&d_sort_storage_, d_sort_storage_bytes_);
-    this->set_atom_idxs(group_1_atom_idxs, group_2_atom_idxs);
+    this->set_atom_idxs(row_atom_idxs, col_atom_idxs);
 };
 
 template <typename RealType> NonbondedInteractionGroup<RealType>::~NonbondedInteractionGroup() {
