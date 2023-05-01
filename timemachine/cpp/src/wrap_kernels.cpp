@@ -1103,7 +1103,7 @@ template <typename RealType> void declare_nonbonded_interaction_group(py::module
                         const py::array_t<int, py::array::c_style> &gropu_1_atom_idxs_i,
                         const double beta,
                         const double cutoff,
-                        std::optional<py::array_t<int, py::array::c_style>> &group_2_atom_idxs,
+                        std::optional<py::array_t<int, py::array::c_style>> &group_2_atom_idxs_i,
                         const bool disable_hilbert_sort,
                         const double nblist_padding) {
                 std::vector<int> gropu_1_atom_idxs(gropu_1_atom_idxs_i.size());
@@ -1111,10 +1111,12 @@ template <typename RealType> void declare_nonbonded_interaction_group(py::module
                     gropu_1_atom_idxs.data(), gropu_1_atom_idxs_i.data(), gropu_1_atom_idxs_i.size() * sizeof(int));
 
                 std::optional<std::set<int>> unique_group_2_atom_idxs(std::nullopt);
-                if (group_2_atom_idxs) {
-                    std::vector<int> group_2_atom_idxs(group_2_atom_idxs->size());
+                if (group_2_atom_idxs_i) {
+                    std::vector<int> group_2_atom_idxs(group_2_atom_idxs_i->size());
                     std::memcpy(
-                        group_2_atom_idxs.data(), group_2_atom_idxs->data(), group_2_atom_idxs->size() * sizeof(int));
+                        group_2_atom_idxs.data(),
+                        group_2_atom_idxs_i->data(),
+                        group_2_atom_idxs_i->size() * sizeof(int));
                     unique_group_2_atom_idxs.emplace(unique_idxs<int>(group_2_atom_idxs));
                 }
 
