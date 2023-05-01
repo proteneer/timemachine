@@ -1110,16 +1110,16 @@ template <typename RealType> void declare_nonbonded_interaction_group(py::module
                 std::memcpy(
                     gropu_1_atom_idxs.data(), gropu_1_atom_idxs_i.data(), gropu_1_atom_idxs_i.size() * sizeof(int));
 
-                std::optional<std::set<int>> unique_col_atom_idxs(std::nullopt);
+                std::optional<std::set<int>> unique_group_2_atom_idxs(std::nullopt);
                 if (group_2_atom_idxs) {
-                    std::vector<int> col_atom_idxs(group_2_atom_idxs->size());
+                    std::vector<int> group_2_atom_idxs(group_2_atom_idxs->size());
                     std::memcpy(
-                        col_atom_idxs.data(), group_2_atom_idxs->data(), group_2_atom_idxs->size() * sizeof(int));
-                    unique_col_atom_idxs.emplace(unique_idxs<int>(col_atom_idxs));
+                        group_2_atom_idxs.data(), group_2_atom_idxs->data(), group_2_atom_idxs->size() * sizeof(int));
+                    unique_group_2_atom_idxs.emplace(unique_idxs<int>(group_2_atom_idxs));
                 }
 
                 return new timemachine::NonbondedInteractionGroup<RealType>(
-                    N, gropu_1_atom_idxs, beta, cutoff, unique_col_atom_idxs, disable_hilbert_sort, nblist_padding);
+                    N, gropu_1_atom_idxs, beta, cutoff, unique_group_2_atom_idxs, disable_hilbert_sort, nblist_padding);
             }),
             py::arg("num_atoms"),
             py::arg("gropu_1_atom_idxs_i"),
