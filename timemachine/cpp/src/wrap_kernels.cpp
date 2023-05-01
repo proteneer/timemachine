@@ -1117,10 +1117,10 @@ template <typename RealType> void declare_nonbonded_interaction_group(py::module
             )pbdoc")
         .def(
             py::init([](const int N,
-                        const py::array_t<int, py::array::c_style> &gropu_1_atom_idxs_i,
+                        const py::array_t<int, py::array::c_style> &row_atom_idxs_i,
                         const double beta,
                         const double cutoff,
-                        std::optional<py::array_t<int, py::array::c_style>> &group_2_atom_idxs_i,
+                        std::optional<py::array_t<int, py::array::c_style>> &col_atom_idxs_i,
                         const bool disable_hilbert_sort,
                         const double nblist_padding) {
                 std::vector<int> gropu_1_atom_idxs(gropu_1_atom_idxs_i.size());
@@ -1140,10 +1140,10 @@ template <typename RealType> void declare_nonbonded_interaction_group(py::module
                     N, row_atom_idxs, col_atom_idxs, beta, cutoff, disable_hilbert_sort, nblist_padding);
             }),
             py::arg("num_atoms"),
-            py::arg("gropu_1_atom_idxs_i"),
+            py::arg("row_atom_idxs_i"),
             py::arg("beta"),
             py::arg("cutoff"),
-            py::arg("group_2_atom_idxs") = py::none(),
+            py::arg("col_atom_idxs_i") = py::none(),
             py::arg("disable_hilbert_sort") = false,
             py::arg("nblist_padding") = 0.1,
             R"pbdoc(
