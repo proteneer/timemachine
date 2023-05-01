@@ -70,15 +70,14 @@ public:
     void set_atom_idxs_device(
         const int NC, const int NR, unsigned int *d_column_idxs, unsigned int *d_row_idxs, const cudaStream_t stream);
 
-    void
-    set_atom_idxs(const std::vector<int> &group_1_atom_idxs, const std::optional<std::set<int>> &group_2_atom_idxs);
+    void set_atom_idxs(const std::vector<int> &row_atom_idxs, const std::optional<std::set<int>> &col_atom_idxs);
 
     NonbondedInteractionGroup(
         const int N,
-        const std::vector<int> &group_1_atom_idxs,
+        const std::vector<int> &row_atom_idxs,
         const double beta,
         const double cutoff,
-        const std::optional<std::set<int>> &group_2_atom_idxs,
+        const std::optional<std::set<int>> &col_atom_idxs,
         const bool disable_hilbert_sort = false,
         const double nblist_padding = 0.1);
 
