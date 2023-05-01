@@ -555,7 +555,7 @@ def test_multiple_steps_local_consistency(freeze_reference):
 
     expected_to_move = len(local_idxs) - 1 if freeze_reference else len(local_idxs)
 
-    # Indices in local idxs should have moved, except for the one selected as frozen
+    # Indices in local idxs should have moved, except for the one selected as frozen if freeze_reference
     assert np.all(coords[local_idxs] != xs[-1][local_idxs], axis=1).sum() == expected_to_move
 
     # Get the particles within a certain distance of local idxs
@@ -628,7 +628,7 @@ def test_multiple_steps_local_consistency(freeze_reference):
 def test_multiple_steps_local_entire_system(freeze_reference):
     """Verify that running multiple_steps_local is valid even when consuming the entire system, IE radius ~= inf.
 
-    - Only a single particle, the reference, should not move
+    - If freeze_reference only a single particle should not move else all should move.
     """
     mol, _ = get_biphenyl()
     ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
