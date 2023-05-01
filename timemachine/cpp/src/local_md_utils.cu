@@ -62,7 +62,6 @@ construct_ixn_group_potential(const int N, std::shared_ptr<Potential> pot, const
     gpuErrchk(cudaMemcpy(&h_params[0], d_params, P * sizeof(*d_params), cudaMemcpyDeviceToHost));
     std::vector<int> dummy_idxs{0};
     std::vector<int> shape{P};
-    std::optional<std::set<int>> dummy_col_idxs(std::nullopt);
 
     if (std::shared_ptr<NonbondedAllPairs<float>> nb_pot = std::dynamic_pointer_cast<NonbondedAllPairs<float>>(pot);
         nb_pot) {
