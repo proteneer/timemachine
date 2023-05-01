@@ -19,10 +19,16 @@ struct LessThan {
     CUB_RUNTIME_FUNCTION __device__ __forceinline__ bool operator()(const int &a) const { return (a < compare); }
 };
 
-LocalMDPotentials::LocalMDPotentials(const int N, const std::vector<std::shared_ptr<BoundPotential>> &bps)
-    : N_(N), temp_storage_bytes_(0), all_potentials_(bps), d_restraint_pairs_(N_ * 2), d_bond_params_(N_ * 3),
+LocalMDPotentials::LocalMDPotentials(
+    const int N, const std::vector<std::shared_ptr<BoundPotential>> &bps, bool freeze_reference, double temperature)
+    : N_(N), freeze_reference_(freeze_reference), temperature_(temperature), temp_storage_bytes_(0),
+      all_potentials_(bps), d_restraint_pairs_(N_ * 2), d_bond_params_(N_ * 3),
       d_probability_buffer_(round_up_even(N_)), d_free_idxs_(N_), d_row_idxs_(N_), d_col_idxs_(N_), p_num_selected_(1),
       d_num_selected_buffer_(1) {
+
+    if (temperature_ <= 0.0) {
+        throw std::runtime_error("temperature must be greater than 0");
+    }
 
     std::vector<std::shared_ptr<BoundPotential>> nonbonded_pots;
     get_nonbonded_all_pair_potentials(bps, nonbonded_pots);
@@ -45,16 +51,24 @@ LocalMDPotentials::LocalMDPotentials(const int N, const std::vector<std::shared_
         default_bonds[i * 2 + 0] = 0;
         default_bonds[i * 2 + 1] = i + 1;
     }
-    restraint_ = std::shared_ptr<FlatBottomBond<double>>(new FlatBottomBond<double>(default_bonds));
+    free_restraint_ = std::shared_ptr<FlatBottomBond<double>>(new FlatBottomBond<double>(default_bonds));
     // Construct a bound potential with 0 params
-    bound_restraint_ = std::shared_ptr<BoundPotential>(new BoundPotential(restraint_, std::vector<int>({0}), nullptr));
+    bound_free_restraint_ =
+        std::shared_ptr<BoundPotential>(new BoundPotential(free_restraint_, std::vector<int>({0}), nullptr));
 
     ixn_group_ =
         construct_ixn_group_potential(N_, nonbonded_bp_->potential, nonbonded_bp_->size(), nonbonded_bp_->d_p->data);
 
     // Add the restraint potential and ixn group potential
-    all_potentials_.push_back(bound_restraint_);
+    all_potentials_.push_back(bound_free_restraint_);
     all_potentials_.push_back(ixn_group_);
+    if (!freeze_reference_) {
+        frozen_restraint_ = std::shared_ptr<LogFlatBottomBond<double>>(
+            new LogFlatBottomBond<double>(default_bonds, 1 / (temperature_ * BOLTZ)));
+        bound_frozen_restraint_ =
+            std::shared_ptr<BoundPotential>(new BoundPotential(frozen_restraint_, std::vector<int>({0}), nullptr));
+        all_potentials_.push_back(bound_frozen_restraint_);
+    }
 
     cub::DevicePartition::If(
         nullptr,
@@ -73,14 +87,13 @@ LocalMDPotentials::LocalMDPotentials(const int N, const std::vector<std::shared_
 
 LocalMDPotentials::~LocalMDPotentials() { curandErrchk(curandDestroyGenerator(cr_rng_)); }
 
-// setup_from_idxs takes a set of idxs, a temperature and a seed to determine the free particles. Fix the local_idxs to length
+// setup_from_idxs takes a set of idxs and a seed to determine the free particles. Fix the local_idxs to length
 // one to ensure the same reference everytime, though the seed also handles the probabilities of selecting particles, and it is suggested
 // to provide a new seed at each step.
 void LocalMDPotentials::setup_from_idxs(
     double *d_x_t,
     double *d_box_t,
     const std::vector<int> &local_idxs,
-    const double temperature,
     const int seed,
     const double radius,
     const double k,
@@ -104,7 +117,7 @@ void LocalMDPotentials::setup_from_idxs(
 
     unsigned int reference_idx = local_idxs[random_dist(rng)];
 
-    const double kBT = BOLTZ * temperature;
+    const double kBT = BOLTZ * temperature_;
     // Select all of the particles that will be free
     k_log_probability_selection<float><<<ceil_divide(N_, warp_size), warp_size, 0, stream>>>(
         N_, kBT, radius, k, reference_idx, d_x_t, d_box_t, d_probability_buffer_.data, d_free_idxs_.data);
@@ -113,10 +126,10 @@ void LocalMDPotentials::setup_from_idxs(
     this->_setup_free_idxs_given_reference_idx(reference_idx, radius, k, stream);
 }
 
-// setup_from_idxs takes a set of idxs, flat-bottom restraint parameters (radius, k)
+// setup_from_selection takes a set of idxs, flat-bottom restraint parameters (radius, k)
 // assumes selection_idxs are sampled based on exp(-beta U_flat_bottom(distance_to_reference, radius, k))
 // (or that the user is otherwise accounting for selection probabilities)
-void LocalMDPotentials::setup_from_idxs(
+void LocalMDPotentials::setup_from_selection(
     const int reference_idx,
     const std::vector<int> &selection_idxs,
     const double radius,
@@ -150,6 +163,12 @@ void LocalMDPotentials::_setup_free_idxs_given_reference_idx(
 
     LessThan select_op(N_);
 
+    if (!freeze_reference_) {
+        // Remove the reference idx from the column indices, d_free_idxs gets inverted to construct column idxs,
+        // and add to the row indices
+        k_update_index<<<1, 1, 0, stream>>>(d_free_idxs_.data, reference_idx, reference_idx);
+        gpuErrchk(cudaPeekAtLastError());
+    }
     // Partition the free idxs into the row idxs
     gpuErrchk(cub::DevicePartition::If(
         d_temp_storage_buffer_->data,
@@ -196,8 +215,8 @@ void LocalMDPotentials::_setup_free_idxs_given_reference_idx(
     gpuErrchk(cudaPeekAtLastError());
 
     // Setup the flat bottom restraints
-    bound_restraint_->set_params_device(std::vector<int>({num_row_idxs, 3}), d_bond_params_.data, stream);
-    restraint_->set_bonds_device(num_row_idxs, d_restraint_pairs_.data, stream);
+    bound_free_restraint_->set_params_device(std::vector<int>({num_row_idxs, 3}), d_bond_params_.data, stream);
+    free_restraint_->set_bonds_device(num_row_idxs, d_restraint_pairs_.data, stream);
 
     // Set the nonbonded potential to compute forces of free particles
     set_nonbonded_potential_idxs(nonbonded_bp_->potential, num_row_idxs, d_row_idxs_.data, stream);
@@ -220,6 +239,26 @@ void LocalMDPotentials::_setup_free_idxs_given_reference_idx(
     // Free particles should be in the row idxs
     set_nonbonded_ixn_potential_idxs(
         ixn_group_->potential, num_col_idxs, num_row_idxs, d_col_idxs_.data, d_row_idxs_.data, stream);
+
+    if (!freeze_reference_) {
+        // If there are no frozen indices, don't attach any restraints
+        if (num_col_idxs > 0) {
+            k_construct_bonded_params<<<ceil_divide(num_col_idxs, tpb), tpb, 0, stream>>>(
+                num_col_idxs,
+                N_,
+                reference_idx,
+                k,
+                0.0,
+                radius,
+                d_col_idxs_.data,
+                d_restraint_pairs_.data,
+                d_bond_params_.data);
+            gpuErrchk(cudaPeekAtLastError());
+        }
+
+        bound_frozen_restraint_->set_params_device(std::vector<int>({num_col_idxs, 3}), d_bond_params_.data, stream);
+        frozen_restraint_->set_bonds_device(num_col_idxs, d_restraint_pairs_.data, stream);
+    }
 }
 
 std::vector<std::shared_ptr<BoundPotential>> LocalMDPotentials::get_potentials() { return all_potentials_; }

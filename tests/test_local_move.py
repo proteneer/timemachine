@@ -64,6 +64,16 @@ def assert_no_drift(
 
     expected_selection_fraction_traj = np.array([observable_fxn(x) for x in traj])
 
+    # A sanity check that the early samples don't have a massive jump within them
+    # in the case of unstable local MD this test can pass neighboring atoms go from ~10% of the system to ~100% of the system
+    # in the first step
+    differences_early = np.abs(
+        np.diff(expected_selection_fraction_traj[:n_samples]) / expected_selection_fraction_traj[0]
+    )
+    assert (
+        np.all(differences_early) < 2.0
+    ), "Difference between first and last sample greater than 200%, likely unstable"
+
     avg_at_start = np.mean(expected_selection_fraction_traj[:n_samples])
     avg_at_end = np.mean(expected_selection_fraction_traj[-n_samples:])
     if avg_at_start == avg_at_end:
@@ -191,8 +201,9 @@ def test_ideal_gas():
         assert_correctness(incorrect_local_move)
 
 
+@pytest.mark.parametrize("freeze_reference", [True, False])
 @pytest.mark.parametrize("k", [1.0, 1000.0, 10000.0])
-def test_local_md_particle_density(k):
+def test_local_md_particle_density(freeze_reference, k):
     """Verify that the average particle density around a single particle is stable.
 
     In the naive implementation of local md, a vacuum can appear around the local idxs. See naive_local_resampling_move

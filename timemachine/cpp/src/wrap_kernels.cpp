@@ -145,9 +145,7 @@ void declare_context(py::module &m) {
                 }
 
                 return new timemachine::Context(
-                    N, x0.data(), v0.data(), box0.data(), intg, bps, barostat.has_value() ? barostat.value() : nullptr
-                    // obs
-                );
+                    N, x0.data(), v0.data(), box0.data(), intg, bps, barostat.has_value() ? barostat.value() : nullptr);
             }),
             py::arg("x0"),
             py::arg("v0"),
@@ -262,8 +260,9 @@ void declare_context(py::module &m) {
 
         F = iterations / store_x_interval
 
-        The first call to `multiple_steps_local` takes longer than subsequent calls, if ensure_local_md_intialized has not been called previously,
-        initializes potentials needed for local md.
+        The first call to `multiple_steps_local` takes longer than subsequent calls, if setup_local_md has not been called previously,
+        initializes potentials needed for local MD. The default local MD parameters are to freeze the reference and to
+        use the temperature of the integrator, which must be a LangevinIntegrator.
 
         Parameters
         ----------
@@ -299,7 +298,7 @@ void declare_context(py::module &m) {
             Coordinates have shape (F, N, 3)
             Boxes have shape (F, 3, 3)
 
-        Note: All boxes returned will be identical as local md only runs under NVT.
+        Note: All boxes returned will be identical as local MD only runs under constant volume.
     )pbdoc")
         .def(
             "multiple_steps_local_selection",
@@ -363,8 +362,9 @@ void declare_context(py::module &m) {
 
         F = iterations / store_x_interval
 
-        The first call to `multiple_steps_local_selection` takes longer than subsequent calls, if ensure_local_md_intialized has not been called previously,
-        initializes potentials needed for local md.
+        The first call to `multiple_steps_local_selection` takes longer than subsequent calls, if setup_local_md has not been called previously,
+        initializes potentials needed for local MD. The default local MD parameters are to freeze the reference and to
+        use the temperature of the integrator, which must be a LangevinIntegrator.
 
         Parameters
         ----------
@@ -387,10 +387,10 @@ void declare_context(py::module &m) {
             at the last step.
 
         radius: float
-            The radius in nanometers from the reference idx to allow particles to be unrestrained in, afterwards apply a restraint to the reference particle..
+            The radius in nanometers from the reference idx to allow particles to be unrestrained in, afterwards apply a restraint to the reference particle.
 
         k: float
-            The flat bottom restraint K value to use for restraint of atoms to the reference particle..
+            The flat bottom restraint K value to use for restraint of atoms to the reference particle.
 
         Returns
         -------
@@ -398,7 +398,7 @@ void declare_context(py::module &m) {
             Coordinates have shape (F, N, 3)
             Boxes have shape (F, 3, 3)
 
-        Note: All boxes returned will be identical as local md only runs under NVT.
+        Note: All boxes returned will be identical as local MD only runs under constant volume.
     )pbdoc")
         .def(
             "multiple_steps_U",
@@ -450,11 +450,27 @@ void declare_context(py::module &m) {
 
     )pbdoc")
         .def(
-            "ensure_local_md_intialized",
-            &timemachine::Context::ensure_local_md_intialized,
+            "setup_local_md",
+            &timemachine::Context::setup_local_md,
+            py::arg("temperature"),
+            py::arg("freeze_reference"),
             R"pbdoc(
-        Ensures that the context is initialized for local md. Explicitly configures the context to be able to run
-        local md. This is automatically done when calling local md methods, but can be done explicitly. Is idempotent.
+        Configures the potential for local MD. This is automatically done when calling local MD methods,
+        but can be done explicitly and with different parameters.
+
+        Parameters
+        ----------
+        temperature: float
+            Temperature in kelvin
+
+        freeze_reference: bool
+            Whether or not to freeze reference, otherwise applies restraint between frozen
+            particles and the reference.
+
+        Raises
+        ------
+            RuntimeError:
+                Called a second time, can only be called once.
     )pbdoc")
         .def(
             "set_x_t",

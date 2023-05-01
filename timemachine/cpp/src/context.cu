@@ -24,6 +24,7 @@ Context::Context(
     std::vector<std::shared_ptr<BoundPotential>> bps,
     std::shared_ptr<MonteCarloBarostat> barostat)
     : N_(N), barostat_(barostat), step_(0), d_sum_storage_(nullptr), d_sum_storage_bytes_(0), intg_(intg), bps_(bps) {
+
     d_x_t_ = gpuErrchkCudaMallocAndCopy(x_0, N * 3);
     d_v_t_ = gpuErrchkCudaMallocAndCopy(v_0, N * 3);
     d_box_t_ = gpuErrchkCudaMallocAndCopy(box_0, 3 * 3);
@@ -55,9 +56,17 @@ double Context::_get_temperature() {
     }
 }
 
-void Context::ensure_local_md_intialized() {
+void Context::setup_local_md(double temperature, bool freeze_reference) {
+    if (this->local_md_pots_ != nullptr) {
+        throw std::runtime_error("local md already configured");
+    }
+    this->local_md_pots_.reset(new LocalMDPotentials(N_, bps_, freeze_reference, temperature));
+}
+
+void Context::_ensure_local_md_intialized() {
     if (this->local_md_pots_ == nullptr) {
-        this->local_md_pots_.reset(new LocalMDPotentials(N_, bps_));
+        double temperature = this->_get_temperature();
+        this->setup_local_md(temperature, true);
     }
 }
 
@@ -85,7 +94,7 @@ std::array<std::vector<double>, 2> Context::multiple_steps_local(
         d_box_traj.reset(new DeviceBuffer<double>(box_buffer_size));
     }
 
-    this->ensure_local_md_intialized();
+    this->_ensure_local_md_intialized();
 
     cudaStream_t stream;
 
@@ -93,8 +102,7 @@ std::array<std::vector<double>, 2> Context::multiple_steps_local(
     gpuErrchk(cudaStreamCreateWithFlags(&stream, cudaStreamNonBlocking));
     try {
 
-        local_md_pots_->setup_from_idxs(
-            d_x_t_, d_box_t_, local_idxs, this->_get_temperature(), seed, radius, k, stream);
+        local_md_pots_->setup_from_idxs(d_x_t_, d_box_t_, local_idxs, seed, radius, k, stream);
 
         unsigned int *d_free_idxs = local_md_pots_->get_free_idxs();
 
@@ -163,7 +171,7 @@ std::array<std::vector<double>, 2> Context::multiple_steps_local_selection(
         d_box_traj.reset(new DeviceBuffer<double>(box_buffer_size));
     }
 
-    this->ensure_local_md_intialized();
+    this->_ensure_local_md_intialized();
 
     cudaStream_t stream;
 
@@ -171,7 +179,7 @@ std::array<std::vector<double>, 2> Context::multiple_steps_local_selection(
     gpuErrchk(cudaStreamCreateWithFlags(&stream, cudaStreamNonBlocking));
     try {
 
-        local_md_pots_->setup_from_idxs(reference_idx, selection_idxs, radius, k, stream);
+        local_md_pots_->setup_from_selection(reference_idx, selection_idxs, radius, k, stream);
 
         unsigned int *d_free_idxs = local_md_pots_->get_free_idxs();
 

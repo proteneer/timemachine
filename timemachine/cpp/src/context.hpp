@@ -61,7 +61,7 @@ public:
 
     void get_box(double *out_buffer) const;
 
-    void ensure_local_md_intialized();
+    void setup_local_md(double temperature, bool freeze_reference);
 
 private:
     int N_; // number of particles
@@ -71,6 +71,8 @@ private:
     void _step(std::vector<std::shared_ptr<BoundPotential>> &bps, unsigned int *d_atom_idxs, const cudaStream_t stream);
 
     double _get_temperature();
+
+    void _ensure_local_md_intialized();
 
     int step_;
 

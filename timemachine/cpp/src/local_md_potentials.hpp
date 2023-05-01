@@ -8,13 +8,18 @@
 #include "curand.h"
 #include "flat_bottom_bond.hpp"
 #include "local_md_utils.hpp"
+#include "log_flat_bottom_bond.hpp"
 
 namespace timemachine {
 
 class LocalMDPotentials {
 
 public:
-    LocalMDPotentials(const int N, const std::vector<std::shared_ptr<BoundPotential>> &bps);
+    LocalMDPotentials(
+        const int N,
+        const std::vector<std::shared_ptr<BoundPotential>> &bps,
+        bool freeze_reference = true,
+        double temperature = 0.0);
 
     ~LocalMDPotentials();
 
@@ -24,13 +29,12 @@ public:
         double *d_x_t_,
         double *d_box_t,
         const std::vector<int> &local_idxs,
-        const double temperature,
         const int seed,
         const double radius,
         const double k,
         cudaStream_t stream);
 
-    void setup_from_idxs(
+    void setup_from_selection(
         const int reference_idx,
         const std::vector<int> &selection_idxs,
         const double radius,
@@ -43,13 +47,20 @@ public:
 
 private:
     const int N_;
+    const bool freeze_reference_;
+    const double temperature_;
     std::size_t temp_storage_bytes_;
 
     std::vector<std::shared_ptr<BoundPotential>> all_potentials_;
     std::shared_ptr<BoundPotential> ixn_group_;
     std::shared_ptr<BoundPotential> nonbonded_bp_;
-    std::shared_ptr<FlatBottomBond<double>> restraint_;
-    std::shared_ptr<BoundPotential> bound_restraint_;
+    // Restraint for the free particles to the reference particle
+    std::shared_ptr<FlatBottomBond<double>> free_restraint_;
+    std::shared_ptr<BoundPotential> bound_free_restraint_;
+
+    // Restraint for the frozen particles to the reference particle
+    std::shared_ptr<LogFlatBottomBond<double>> frozen_restraint_;
+    std::shared_ptr<BoundPotential> bound_frozen_restraint_;
 
     DeviceBuffer<int> d_restraint_pairs_;
     DeviceBuffer<double> d_bond_params_;
