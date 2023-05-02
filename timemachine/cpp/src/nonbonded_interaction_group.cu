@@ -42,7 +42,7 @@ NonbondedInteractionGroup<RealType>::NonbondedInteractionGroup(
                     &k_nonbonded_unified<RealType, 1, 1, 0>,
                     &k_nonbonded_unified<RealType, 1, 1, 1>}),
 
-      beta_(beta), cutoff_(cutoff), nblist_(NR_ + NC_), nblist_padding_(nblist_padding), d_sort_storage_(nullptr),
+      beta_(beta), cutoff_(cutoff), nblist_(N_), nblist_padding_(nblist_padding), d_sort_storage_(nullptr),
       d_sort_storage_bytes_(0), disable_hilbert_(disable_hilbert_sort) {
 
     if (NR_ == 0) {
@@ -119,13 +119,7 @@ NonbondedInteractionGroup<RealType>::NonbondedInteractionGroup(
 
     // estimate size needed to do radix sorting, this can use uninitialized data.
     cub::DeviceRadixSort::SortPairs(
-        d_sort_storage_,
-        d_sort_storage_bytes_,
-        d_sort_keys_in_,
-        d_sort_keys_out_,
-        d_sort_vals_in_,
-        d_perm_,
-        std::max(NC_, NR_));
+        d_sort_storage_, d_sort_storage_bytes_, d_sort_keys_in_, d_sort_keys_out_, d_sort_vals_in_, d_perm_, N_);
 
     gpuErrchk(cudaPeekAtLastError());
     cudaSafeMalloc(&d_sort_storage_, d_sort_storage_bytes_);
@@ -244,7 +238,6 @@ void NonbondedInteractionGroup<RealType>::execute_device(
     const int B_K = ceil_divide(K, tpb);
 
     // (ytz) see if we need to rebuild the neighborlist.
-
     k_check_rebuild_coords_and_box_gather<RealType><<<ceil_divide(NR_, tpb), tpb, 0, stream>>>(
         NR_, d_row_atom_idxs_, d_x, d_nblist_x_, d_box, d_nblist_box_, nblist_padding_, d_rebuild_nblist_);
     gpuErrchk(cudaPeekAtLastError());
@@ -424,6 +417,7 @@ void NonbondedInteractionGroup<RealType>::set_atom_idxs_device(
         k_arange<<<ceil_divide(NC, tpb), tpb, 0, stream>>>(NC, d_row_atom_idxs_ + NR, NR);
         gpuErrchk(cudaPeekAtLastError());
 
+        // Resize the nblist
         nblist_.resize_device(NC + NR, stream);
 
         // Force a NBlist rebuild
