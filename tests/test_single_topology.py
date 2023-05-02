@@ -136,7 +136,7 @@ def test_find_dummy_groups_and_anchors_multiple_angles():
         assert jks == jks_zero
 
 
-def testing_find_dummy_groups_and_multiple_anchors():
+def test_find_dummy_groups_and_multiple_anchors():
     """
     Test that we can find anchors and dummy groups with multiple anchors, we expect to find only a single
     root anchor and neighbor core atom pair.
