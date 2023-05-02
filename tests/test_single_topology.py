@@ -4,6 +4,7 @@ from importlib import resources
 import hypothesis.strategies as st
 import jax
 import jax.numpy as jnp
+import networkx as nx
 import numpy as np
 import pytest
 from common import load_split_forcefields
@@ -178,6 +179,27 @@ def test_find_dummy_groups_and_multiple_anchors():
         dgs, jks = single_topology.find_dummy_groups_and_anchors(mol_a, mol_b, core_a, core_b)
         assert dgs == [{0}]
         assert jks == [(1, 2)]
+
+
+def test_find_dummy_groups_ethane_cyclobutane():
+    """Test case where a naive heuristic results in disconnected components"""
+
+    mol_a = Chem.AddHs(Chem.MolFromSmiles("CC"))
+    mol_b = Chem.AddHs(Chem.MolFromSmiles("c1ccc1"))
+
+    AllChem.EmbedMolecule(mol_a, randomSeed=2022)
+    AllChem.EmbedMolecule(mol_b, randomSeed=2022)
+
+    core = np.array([[2, 0], [4, 2], [0, 3], [3, 7]])
+    ff = Forcefield.load_default()
+    st = SingleTopology(mol_a, mol_b, core, ff)
+
+    g = nx.Graph()
+    g.add_nodes_from(range(st.get_num_atoms()))
+    g.add_edges_from(st.src_system.bond.potential.idxs)
+
+    # bond graph should be connected (i.e. no floating bits)
+    assert len(list(nx.connected_components(g))) == 1
 
 
 def test_charge_perturbation_is_invalid():
