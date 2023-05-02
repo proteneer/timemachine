@@ -42,7 +42,7 @@ NonbondedInteractionGroup<RealType>::NonbondedInteractionGroup(
                     &k_nonbonded_unified<RealType, 1, 1, 0>,
                     &k_nonbonded_unified<RealType, 1, 1, 1>}),
 
-      beta_(beta), cutoff_(cutoff), nblist_(NR_ + NC_), nblist_padding_(nblist_padding), d_sort_storage_(nullptr),
+      beta_(beta), cutoff_(cutoff), nblist_(N_), nblist_padding_(nblist_padding), d_sort_storage_(nullptr),
       d_sort_storage_bytes_(0), disable_hilbert_(disable_hilbert_sort) {
 
     this->validate_idxs(N_, row_atom_idxs, col_atom_idxs, false);
