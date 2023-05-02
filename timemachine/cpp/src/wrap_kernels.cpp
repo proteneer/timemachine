@@ -1118,6 +1118,7 @@ template <typename RealType> void declare_nonbonded_interaction_group(py::module
                         const py::array_t<int, py::array::c_style> &row_atom_idxs_i,
                         const double beta,
                         const double cutoff,
+                        std::optional<py::array_t<int, py::array::c_style>> &col_atom_idxs_i,
                         const bool disable_hilbert_sort,
                         const double nblist_padding) {
                 std::vector<int> gropu_1_atom_idxs(gropu_1_atom_idxs_i.size());
@@ -1140,6 +1141,7 @@ template <typename RealType> void declare_nonbonded_interaction_group(py::module
             py::arg("row_atom_idxs_i"),
             py::arg("beta"),
             py::arg("cutoff"),
+            py::arg("col_atom_idxs_i") = py::none(),
             py::arg("disable_hilbert_sort") = false,
             py::arg("nblist_padding") = 0.1,
             R"pbdoc(

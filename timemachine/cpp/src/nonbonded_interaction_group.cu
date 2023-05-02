@@ -24,7 +24,6 @@ NonbondedInteractionGroup<RealType>::NonbondedInteractionGroup(
     const std::vector<int> &col_atom_idxs,
     const double beta,
     const double cutoff,
-    const std::optional<std::set<int>> &col_atom_idxs,
     const bool disable_hilbert_sort,
     const double nblist_padding)
     : N_(N), NR_(row_atom_idxs.size()), NC_(col_atom_idxs.size()),
@@ -43,7 +42,7 @@ NonbondedInteractionGroup<RealType>::NonbondedInteractionGroup(
                     &k_nonbonded_unified<RealType, 1, 1, 0>,
                     &k_nonbonded_unified<RealType, 1, 1, 1>}),
 
-      beta_(beta), cutoff_(cutoff), nblist_(K_), nblist_padding_(nblist_padding), d_sort_storage_(nullptr),
+      beta_(beta), cutoff_(cutoff), nblist_(N_), nblist_padding_(nblist_padding), d_sort_storage_(nullptr),
       d_sort_storage_bytes_(0), disable_hilbert_(disable_hilbert_sort) {
 
     this->validate_idxs(N_, row_atom_idxs, col_atom_idxs, false);
@@ -63,7 +62,7 @@ NonbondedInteractionGroup<RealType>::NonbondedInteractionGroup(
     }
 
     cudaSafeMalloc(&d_col_atom_idxs_, N_ * sizeof(*d_col_atom_idxs_));
-    cudaSafeMalloc(&d_group_1_atom_idxs_, N_ * sizeof(*d_row_atom_idxs_));
+    cudaSafeMalloc(&d_row_atom_idxs_, N_ * sizeof(*d_row_atom_idxs_));
 
     cudaSafeMalloc(&d_perm_, N_ * sizeof(*d_perm_));
 
@@ -425,7 +424,6 @@ void NonbondedInteractionGroup<RealType>::set_atom_idxs_device(
     // Update the row and column counts
     this->NR_ = NR;
     this->NC_ = NC;
-    this->K_ = NR + NC;
 }
 
 template <typename RealType>
