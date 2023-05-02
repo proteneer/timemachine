@@ -435,6 +435,12 @@ void NonbondedInteractionGroup<RealType>::validate_idxs(
     const int N, const std::vector<int> &row_atom_idxs, const std::vector<int> &col_atom_idxs, const bool allow_empty) {
 
     if (!allow_empty) {
+        if (row_atom_idxs.size() == 0) {
+            throw std::runtime_error("row_atom_idxs must be nonempty");
+        }
+        if (col_atom_idxs.size() == 0) {
+            throw std::runtime_error("col_atom_idxs must be nonempty");
+        }
         if (row_atom_idxs.size() == static_cast<long unsigned int>(N)) {
             throw std::runtime_error("must be less then N(" + std::to_string(N) + ") row indices");
         }
