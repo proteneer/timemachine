@@ -45,27 +45,7 @@ NonbondedInteractionGroup<RealType>::NonbondedInteractionGroup(
       beta_(beta), cutoff_(cutoff), nblist_(N_), nblist_padding_(nblist_padding), d_sort_storage_(nullptr),
       d_sort_storage_bytes_(0), disable_hilbert_(disable_hilbert_sort) {
 
-    if (NR_ == 0) {
-        throw std::runtime_error("row_atom_idxs must be nonempty");
-    }
-    if (row_atom_idxs.size() == static_cast<long unsigned int>(N)) {
-        throw std::runtime_error("must be less then N(" + std::to_string(N) + ") row indices");
-    }
-    verify_atom_idxs(N_, row_atom_idxs);
-
-    std::vector<int> h_col_atom_idxs(col_atom_idxs.begin(), col_atom_idxs.end());
-    if (h_col_atom_idxs.size() == static_cast<long unsigned int>(N)) {
-        throw std::runtime_error("must be less then N(" + std::to_string(N) + ") col indices");
-    }
-    verify_atom_idxs(N_, h_col_atom_idxs);
-
-    // row and col idxs must be disjoint
-    std::set<int> unique_row_idxs(row_atom_idxs.begin(), row_atom_idxs.end());
-    for (int col_atom_idx : h_col_atom_idxs) {
-        if (unique_row_idxs.find(col_atom_idx) != unique_row_idxs.end()) {
-            throw std::runtime_error("row and col indices must be disjoint");
-        }
-    }
+    this->validate_idxs(N_, row_atom_idxs, col_atom_idxs, false);
 
     cudaSafeMalloc(&d_col_atom_idxs_, N_ * sizeof(*d_col_atom_idxs_));
     cudaSafeMalloc(&d_row_atom_idxs_, N_ * sizeof(*d_row_atom_idxs_));
@@ -364,8 +344,8 @@ void NonbondedInteractionGroup<RealType>::execute_device(
 template <typename RealType>
 void NonbondedInteractionGroup<RealType>::set_atom_idxs(
     const std::vector<int> &row_atom_idxs, const std::vector<int> &col_atom_idxs) {
-    verify_atom_idxs(N_, row_atom_idxs, true);
-    verify_atom_idxs(N_, col_atom_idxs, true);
+
+    this->validate_idxs(N_, row_atom_idxs, col_atom_idxs, true);
 
     std::vector<unsigned int> unsigned_row_idxs = std::vector<unsigned int>(row_atom_idxs.begin(), row_atom_idxs.end());
     std::set<unsigned int> unique_row_atom_idxs(unique_idxs(unsigned_row_idxs));
@@ -447,6 +427,36 @@ void NonbondedInteractionGroup<RealType>::du_dp_fixed_to_float(
         du_dp_float[idx_sig] = FIXED_TO_FLOAT_DU_DP<double, FIXED_EXPONENT_DU_DSIG>(du_dp[idx_sig]);
         du_dp_float[idx_eps] = FIXED_TO_FLOAT_DU_DP<double, FIXED_EXPONENT_DU_DEPS>(du_dp[idx_eps]);
         du_dp_float[idx_w] = FIXED_TO_FLOAT_DU_DP<double, FIXED_EXPONENT_DU_DW>(du_dp[idx_w]);
+    }
+}
+
+template <typename RealType>
+void NonbondedInteractionGroup<RealType>::validate_idxs(
+    const int N, const std::vector<int> &row_atom_idxs, const std::vector<int> &col_atom_idxs, const bool allow_empty) {
+
+    if (!allow_empty) {
+        if (row_atom_idxs.size() == 0) {
+            throw std::runtime_error("row_atom_idxs must be nonempty");
+        }
+        if (col_atom_idxs.size() == 0) {
+            throw std::runtime_error("col_atom_idxs must be nonempty");
+        }
+        if (row_atom_idxs.size() == static_cast<long unsigned int>(N)) {
+            throw std::runtime_error("must be less then N(" + std::to_string(N) + ") row indices");
+        }
+        if (col_atom_idxs.size() == static_cast<long unsigned int>(N)) {
+            throw std::runtime_error("must be less then N(" + std::to_string(N) + ") col indices");
+        }
+    }
+    verify_atom_idxs(N, row_atom_idxs, allow_empty);
+    verify_atom_idxs(N, col_atom_idxs, allow_empty);
+
+    // row and col idxs must be disjoint
+    std::set<int> unique_row_idxs(row_atom_idxs.begin(), row_atom_idxs.end());
+    for (int col_atom_idx : col_atom_idxs) {
+        if (unique_row_idxs.find(col_atom_idx) != unique_row_idxs.end()) {
+            throw std::runtime_error("row and col indices must be disjoint");
+        }
     }
 }
 

@@ -66,6 +66,12 @@ private:
         unsigned int *d_perm,
         cudaStream_t stream);
 
+    void validate_idxs(
+        const int N,
+        const std::vector<int> &row_atom_idxs,
+        const std::vector<int> &col_atom_idxs,
+        const bool allow_empty);
+
 public:
     void set_atom_idxs_device(
         const int NC, const int NR, unsigned int *d_column_idxs, unsigned int *d_row_idxs, const cudaStream_t stream);
