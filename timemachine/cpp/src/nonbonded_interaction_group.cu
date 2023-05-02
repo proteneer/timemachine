@@ -26,7 +26,6 @@ NonbondedInteractionGroup<RealType>::NonbondedInteractionGroup(
     const std::vector<int> &col_atom_idxs,
     const double beta,
     const double cutoff,
-    const std::optional<std::set<int>> &col_atom_idxs,
     const bool disable_hilbert_sort,
     const double nblist_padding)
     : N_(N), NR_(row_atom_idxs.size()), NC_(col_atom_idxs.size()),
@@ -65,7 +64,7 @@ NonbondedInteractionGroup<RealType>::NonbondedInteractionGroup(
     }
 
     cudaSafeMalloc(&d_col_atom_idxs_, N_ * sizeof(*d_col_atom_idxs_));
-    cudaSafeMalloc(&d_group_1_atom_idxs_, N_ * sizeof(*d_row_atom_idxs_));
+    cudaSafeMalloc(&d_row_atom_idxs_, N_ * sizeof(*d_row_atom_idxs_));
 
     cudaSafeMalloc(&d_perm_, N_ * sizeof(*d_perm_));
 
