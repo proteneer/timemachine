@@ -23,6 +23,10 @@ def test_nonbonded_interaction_group_invalid_indices():
 
     with pytest.raises(RuntimeError) as e:
         NonbondedInteractionGroup(3, [0, 1, 2], 1.0, 1.0).to_gpu(np.float64).unbound_impl
+    assert "col_atom_idxs must be nonempty" == str(e.value)
+
+    with pytest.raises(RuntimeError) as e:
+        NonbondedInteractionGroup(3, [0, 1, 2], 1.0, 1.0, col_atom_idxs=[5]).to_gpu(np.float64).unbound_impl
     assert "must be less then N(3) row indices" == str(e.value)
 
     with pytest.raises(RuntimeError) as e:
