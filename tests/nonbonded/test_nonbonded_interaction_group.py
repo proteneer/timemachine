@@ -37,6 +37,10 @@ def test_nonbonded_interaction_group_invalid_indices():
         NonbondedInteractionGroup(3, [0, 1], 1.0, 1.0, col_atom_idxs=[0, 1]).to_gpu(np.float64).unbound_impl
     assert "row and col indices must be disjoint" == str(e.value)
 
+    with pytest.raises(RuntimeError) as e:
+        NonbondedInteractionGroup(3, [1, 2], 1.0, 1.0, col_atom_idxs=[0, 1]).to_gpu(np.float64).unbound_impl
+    assert "row and col indices must be disjoint" == str(e.value)
+
     # Ok for different idxs
     NonbondedInteractionGroup(3, [0, 1], 1.0, 1.0, col_atom_idxs=[2]).to_gpu(np.float64).unbound_impl
 
