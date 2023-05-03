@@ -371,7 +371,11 @@ def nonbonded_interaction_groups(
 
     See `nonbonded` docstring for more details
     """
-    validate_interaction_group_idxs(len(conf), a_idxs, b_idxs)
+    # If not set, col_atom_idxs are all others not in the row
+    num_atoms = len(conf)
+    if b_idxs is None:
+        b_idxs = np.setdiff1d(jnp.arange(num_atoms), a_idxs)
+    validate_interaction_group_idxs(num_atoms, a_idxs, b_idxs)
     pairs = pairs_from_interaction_groups(a_idxs, b_idxs)
     vdW, electrostatics = nonbonded_on_specific_pairs(conf, params, box, pairs, beta, cutoff)
     return vdW, electrostatics

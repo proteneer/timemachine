@@ -161,6 +161,7 @@ class NonbondedInteractionGroup(Potential):
     row_atom_idxs: NDArray[np.int32]
     beta: float
     cutoff: float
+    col_atom_idxs: Optional[NDArray[np.int32]] = None
     disable_hilbert_sort: bool = False
     nblist_padding: float = 0.1
 
@@ -172,7 +173,7 @@ class NonbondedInteractionGroup(Potential):
             params,
             box,
             self.row_atom_idxs,
-            np.setdiff1d(jnp.arange(num_atoms), self.row_atom_idxs),
+            self.col_atom_idxs,
             self.beta,
             self.cutoff,
         )

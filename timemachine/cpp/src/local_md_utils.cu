@@ -60,19 +60,24 @@ std::shared_ptr<BoundPotential>
 construct_ixn_group_potential(const int N, std::shared_ptr<Potential> pot, const int P, const double *d_params) {
     std::vector<double> h_params(P);
     gpuErrchk(cudaMemcpy(&h_params[0], d_params, P * sizeof(*d_params), cudaMemcpyDeviceToHost));
-    std::vector<int> dummy_idxs{0};
+    std::vector<int> row_dummy_idxs{0};
+    std::vector<int> col_dummy_idxs{1};
     std::vector<int> shape{P};
+
+    if (N < 2) {
+        throw std::runtime_error("N must be greater than 1");
+    }
 
     if (std::shared_ptr<NonbondedAllPairs<float>> nb_pot = std::dynamic_pointer_cast<NonbondedAllPairs<float>>(pot);
         nb_pot) {
-        std::shared_ptr<Potential> ixn_group(
-            new NonbondedInteractionGroup<float>(N, dummy_idxs, nb_pot->get_beta(), nb_pot->get_cutoff()));
+        std::shared_ptr<Potential> ixn_group(new NonbondedInteractionGroup<float>(
+            N, row_dummy_idxs, col_dummy_idxs, nb_pot->get_beta(), nb_pot->get_cutoff()));
         return std::shared_ptr<BoundPotential>(new BoundPotential(ixn_group, shape, &h_params[0]));
     } else if (std::shared_ptr<NonbondedAllPairs<double>> nb_pot =
                    std::dynamic_pointer_cast<NonbondedAllPairs<double>>(pot);
                nb_pot) {
-        std::shared_ptr<Potential> ixn_group(
-            new NonbondedInteractionGroup<double>(N, dummy_idxs, nb_pot->get_beta(), nb_pot->get_cutoff()));
+        std::shared_ptr<Potential> ixn_group(new NonbondedInteractionGroup<double>(
+            N, row_dummy_idxs, col_dummy_idxs, nb_pot->get_beta(), nb_pot->get_cutoff()));
         return std::shared_ptr<BoundPotential>(new BoundPotential(ixn_group, shape, &h_params[0]));
     } else {
         throw std::runtime_error("unable to cast potential to NonbondedAllPairs");

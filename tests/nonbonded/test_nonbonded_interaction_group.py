@@ -23,7 +23,26 @@ def test_nonbonded_interaction_group_invalid_indices():
 
     with pytest.raises(RuntimeError) as e:
         NonbondedInteractionGroup(3, [0, 1, 2], 1.0, 1.0).to_gpu(np.float64).unbound_impl
-    assert "must be less then N(3) indices" == str(e.value)
+    assert "col_atom_idxs must be nonempty" == str(e.value)
+
+    with pytest.raises(RuntimeError) as e:
+        NonbondedInteractionGroup(3, [0, 1, 2], 1.0, 1.0, col_atom_idxs=[5]).to_gpu(np.float64).unbound_impl
+    assert "must be less then N(3) row indices" == str(e.value)
+
+    with pytest.raises(RuntimeError) as e:
+        NonbondedInteractionGroup(3, [0, 1], 1.0, 1.0, col_atom_idxs=[2, 3, 4]).to_gpu(np.float64).unbound_impl
+    assert "must be less then N(3) col indices" == str(e.value)
+
+    with pytest.raises(RuntimeError) as e:
+        NonbondedInteractionGroup(3, [0, 1], 1.0, 1.0, col_atom_idxs=[0, 1]).to_gpu(np.float64).unbound_impl
+    assert "row and col indices must be disjoint" == str(e.value)
+
+    with pytest.raises(RuntimeError) as e:
+        NonbondedInteractionGroup(3, [1, 2], 1.0, 1.0, col_atom_idxs=[0, 1]).to_gpu(np.float64).unbound_impl
+    assert "row and col indices must be disjoint" == str(e.value)
+
+    # Ok for different idxs
+    NonbondedInteractionGroup(3, [0, 1], 1.0, 1.0, col_atom_idxs=[2]).to_gpu(np.float64).unbound_impl
 
 
 def test_nonbonded_interaction_group_zero_interactions(rng: np.random.Generator):
@@ -52,11 +71,13 @@ def test_nonbonded_interaction_group_zero_interactions(rng: np.random.Generator)
 @pytest.mark.parametrize("beta", [2.0])
 @pytest.mark.parametrize("cutoff", [1.1])
 @pytest.mark.parametrize("precision,rtol,atol", [(np.float64, 1e-8, 1e-8), (np.float32, 1e-4, 5e-4)])
+@pytest.mark.parametrize("num_atoms", [50, 231])
 @pytest.mark.parametrize("num_atoms_ligand", [1, 15])
-@pytest.mark.parametrize("num_atoms", [33, 231])
+@pytest.mark.parametrize("num_col_atoms", [0, 1, 10, 33, None])
 def test_nonbonded_interaction_group_correctness(
-    num_atoms,
+    num_col_atoms,
     num_atoms_ligand,
+    num_atoms,
     precision,
     rtol,
     atol,
@@ -74,7 +95,15 @@ def test_nonbonded_interaction_group_correctness(
 
     ligand_idxs = rng.choice(num_atoms, size=(num_atoms_ligand,), replace=False).astype(np.int32)
 
-    potential = NonbondedInteractionGroup(num_atoms, ligand_idxs, beta, cutoff)
+    if num_col_atoms is None:  # means all the rest
+        num_col_atoms = num_atoms - num_atoms_ligand
+
+    col_atom_idxs = None
+    if num_col_atoms:
+        host_idxs = np.setdiff1d(np.arange(num_atoms), ligand_idxs).astype(np.int32)
+        col_atom_idxs = rng.choice(host_idxs, size=(num_col_atoms,), replace=False).astype(np.int32)
+
+    potential = NonbondedInteractionGroup(num_atoms, ligand_idxs, beta, cutoff, col_atom_idxs=col_atom_idxs)
 
     test_impl = potential.to_gpu(precision)
 
@@ -121,8 +150,9 @@ def test_nonbonded_interaction_group_empty_set_of_idxs(
     for ligand_idxs in ([], np.arange(num_atoms)):
         test_ixngroups = ixn_group.to_gpu(precision)
 
+        col_atom_idxs = np.setdiff1d(np.arange(num_atoms), ligand_idxs).astype(np.int32)
         # Set to either empty or all indices, both should produce zero energies
-        test_ixngroups.unbound_impl.set_atom_idxs(np.array(ligand_idxs).astype(np.int32))
+        test_ixngroups.unbound_impl.set_atom_idxs(np.array(ligand_idxs).astype(np.int32), col_atom_idxs)
         for params in gen_nonbonded_params_with_4d_offsets(rng, params, cutoff):
             GradientTest().compare_forces(
                 conf,
@@ -304,7 +334,8 @@ def test_nonbonded_interaction_group_set_atom_idxs(
     )
 
     # Set to first particle not in ligand_idxs, should produce different values
-    unbound_pot.set_atom_idxs(secondary_ligand_set)
+    col_atom_idxs = np.setdiff1d(np.arange(num_atoms), secondary_ligand_set)
+    unbound_pot.set_atom_idxs(secondary_ligand_set, col_atom_idxs)
 
     diff_du_dx, diff_du_dp, diff_u = unbound_pot.execute(
         conf,
@@ -330,7 +361,8 @@ def test_nonbonded_interaction_group_set_atom_idxs(
 
     # Set back to the indices, but shuffled, should be identical to reference
     rng.shuffle(ligand_idxs)
-    unbound_pot.set_atom_idxs(ligand_idxs)
+    col_atom_idxs = np.setdiff1d(np.arange(num_atoms), ligand_idxs)
+    unbound_pot.set_atom_idxs(ligand_idxs, col_atom_idxs)
 
     test_du_dx, test_du_dp, test_u = unbound_pot.execute(
         conf,
