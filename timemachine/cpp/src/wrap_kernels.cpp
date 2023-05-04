@@ -1121,10 +1121,8 @@ template <typename RealType> void declare_nonbonded_interaction_group(py::module
                         std::optional<py::array_t<int, py::array::c_style>> &col_atom_idxs_i,
                         const bool disable_hilbert_sort,
                         const double nblist_padding) {
-                std::vector<int> gropu_1_atom_idxs(gropu_1_atom_idxs_i.size());
-                std::memcpy(
-                    gropu_1_atom_idxs.data(), gropu_1_atom_idxs_i.data(), gropu_1_atom_idxs_i.size() * sizeof(int));
-
+                std::vector<int> row_atom_idxs(row_atom_idxs_i.size());
+                std::memcpy(row_atom_idxs.data(), row_atom_idxs_i.data(), row_atom_idxs_i.size() * sizeof(int));
                 std::vector<int> col_atom_idxs;
                 if (col_atom_idxs_i) {
                     col_atom_idxs.resize(col_atom_idxs_i->size());
