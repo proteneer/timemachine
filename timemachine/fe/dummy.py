@@ -1,7 +1,7 @@
 import warnings
 from collections import defaultdict
 from itertools import product
-from typing import Collection, DefaultDict, Dict, FrozenSet, Iterable, Iterator, Optional, Tuple, TypeVar, cast
+from typing import Collection, DefaultDict, Dict, FrozenSet, Iterable, Iterator, Optional, Tuple, TypeVar
 
 import networkx as nx
 
@@ -92,7 +92,7 @@ def generate_dummy_group_assignments(
 
 def generate_anchored_dummy_group_assignments(
     mol_a, mol_b, core_atoms_a: Collection[int], core_atoms_b: Collection[int]
-) -> Iterator[Dict[int, Tuple[int, FrozenSet[int]]]]:
+) -> Iterator[Dict[int, Tuple[Optional[int], FrozenSet[int]]]]:
     """Returns an iterator over candidate anchored dummy group assignments.
 
     An anchored dummy group assignment is a set of triples (dummy group, j = bond anchor atom, k = angle anchor atom),
@@ -150,7 +150,7 @@ def generate_anchored_dummy_group_assignments(
                     (bond_anchor, (angle_anchor, dummy_group))
                     for angle_anchor in (
                         [
-                            cast(Optional[int], angle_anchor)  # angle_anchor may be missing
+                            angle_anchor
                             for angle_anchor in [n for n in bond_graph_b.neighbors(bond_anchor) if n in core_atoms_b]
                             if is_core_bond((bond_anchor, angle_anchor))
                         ]
