@@ -1,7 +1,7 @@
 import warnings
 from collections.abc import Iterable
 from functools import partial
-from typing import Callable, List, Tuple, TypeVar, Union, cast
+from typing import Callable, Collection, Dict, FrozenSet, List, Tuple, TypeVar, Union, cast
 
 import jax.numpy as jnp
 import numpy as np
@@ -9,7 +9,7 @@ from numpy.typing import NDArray
 from rdkit import Chem
 
 from timemachine.fe import interpolate, model_utils, system, topology, utils
-from timemachine.fe.dummy import canonicalize_bond, identify_dummy_groups, identify_root_anchors
+from timemachine.fe.dummy import canonicalize_bond, generate_anchored_dummy_group_assignments
 from timemachine.fe.lambda_schedule import construct_pre_optimized_relative_lambda_schedule
 from timemachine.fe.system import HostGuestSystem, VacuumSystem
 from timemachine.fe.topology import exclude_all_ligand_ligand_ixns
@@ -23,10 +23,6 @@ from timemachine.potentials import (
     NonbondedPairListPrecomputed,
     PeriodicTorsion,
 )
-
-
-class MultipleAnchorWarning(UserWarning):
-    pass
 
 
 class CoreBondChangeWarning(UserWarning):
@@ -281,10 +277,9 @@ def setup_end_state(ff, mol_a, mol_b, core, a_to_c, b_to_c):
     all_dummy_angle_idxs, all_dummy_angle_params = [], []
     all_dummy_improper_idxs, all_dummy_improper_params = [], []
 
-    dgs, jks = find_dummy_groups_and_anchors(mol_a, mol_b, core[:, 0], core[:, 1])
+    dgs = find_dummy_groups_and_anchors(mol_a, mol_b, core[:, 0], core[:, 1])
     # gotta add 'em all!
-    for dg, (anchor, nbr) in zip(dgs, jks):
-
+    for anchor, (nbr, dg) in dgs.items():
         all_idxs, all_params = setup_dummy_interactions_from_ff(ff, mol_b, dg, anchor, nbr)
         all_dummy_bond_idxs.extend(all_idxs[0])
         all_dummy_angle_idxs.extend(all_idxs[1])
@@ -394,103 +389,45 @@ def setup_end_state(ff, mol_a, mol_b, core, a_to_c, b_to_c):
     )
 
 
-def find_dummy_groups_and_anchors(mol_a, mol_b, core_a, core_b):
+def find_dummy_groups_and_anchors(
+    mol_a, mol_b, core_atoms_a: Collection[int], core_atoms_b: Collection[int]
+) -> Dict[int, Tuple[int, FrozenSet[int]]]:
+    """Returns an arbitrary partitioning of dummy atoms and anchor assignment for the A -> B transformation. See the
+    documentation for :py:func:`timemachine.fe.dummy.generate_dummy_group_assignments` and notes below for more
+    information.
+
+    Notes
+    -----
+    Consider the following situation:
+
+    D0.D1
+    .  .  where (.) is the dummy bond
+    C0-C1
+
+    One of (C0.D0), (D0.D1), (C1.D1) dummy bonds needs to be broken in order to maintain factorizability. This is a
+    little arbitrary, but some choices are probably more efficient than others:
+
+    hard     easy
+    D0.D1    D0 D1
+       .     .  .
+    C0-C1    C0-C1
+
+    The LHS is more difficult because it has significantly more phase space that can be sampled than the fused case, but
+    it's not super obvious how to best detect this. So instead, we will pick an arbitrary anchor atom. One possible
+    solution later on is to minimize the number of rotatable bonds?
     """
-    Find dummy groups for mol_b and appropriate bond/angle atoms in mol_a to
-    build restraints off of.
 
-    Parameters
-    ----------
-    mol_a: Chem.Mol
-        Fully interacting molecule
+    assignments = generate_anchored_dummy_group_assignments(mol_a, mol_b, core_atoms_a, core_atoms_b)
 
-    mol_b: Chem.Mol
-        Molecule that will provide dummy atoms
+    # TODO: consider refining to use a heuristic rather than arbitrary selection
+    # (e.g. number of angle terms, number of # rotatable bonds, etc.)
+    arbitrary_assignment = next(assignments)
 
-    core_a: list of int of length C
-        Core atoms in mol_a, unique atoms only
-
-    core_b: list of int of length C
-        Core atoms in mol_b, unique atoms only
-
-    Returns
-    -------
-    list of 2-tuples
-        Returns a set of dummy_groups, and a list of 2-tuples (j,k). j is the root_anchor atom,
-        and k is a neighboring core atom. Note that `k` may be None if no suitable neighbor can be found.
-
-    """
-    assert len(core_a) == len(core_b)
-    assert len(set(core_a)) == len(core_a)
-    assert len(set(core_b)) == len(core_b)
-
-    bond_idxs_b = utils.get_romol_bonds(mol_b)
-    dummy_groups_b = identify_dummy_groups(bond_idxs_b, core_b)
-
-    core_b_to_a = dict()
-    for ca, cb in zip(core_a, core_b):
-        core_b_to_a[cb] = ca
-
-    bond_idxs_a = utils.get_romol_bonds(mol_a)
-
-    all_jks = []
-
-    for dg in dummy_groups_b:
-        dummy_atom = list(dg)[0]
-        root_anchors = identify_root_anchors(bond_idxs_b, core_b, dummy_atom)
-
-        if len(root_anchors) == 0:
-            assert 0, "Disconnected dummy group"
-
-        if len(root_anchors) > 1:
-            # Consider the following situation:
-            # D0.D1
-            # .  .  where (.) is the dummy bond
-            # C0-C1
-            #
-            # One of (C0.D0), (D0.D1), (C1.D1) dummy bonds needs to be broken in order to maintain factorizability.
-            # This is a little arbitrary, but some choices are probably more efficient than others:
-            #
-            # hard     easy
-            # D0.D1    D0 D1
-            #    .     .  .
-            # C0-C1    C0-C1
-            #
-            # the lhs is more difficult because it has significantly more phase space that can be
-            # sampled than the fused case, but it's not super obvious how to best detect this.
-            # So instead, we will pick a random anchor atom. One possible solution later on is to
-            # minimize the number of rotatable bonds?
-            warnings.warn(
-                f"Multiple root anchors {root_anchors} found for dummy group: {dg}, picking a random anchor.",
-                MultipleAnchorWarning,
-            )
-
-        # (i,j,k) where i is a dummy, j is anchor, and k is the angle anchor
-        angle_jk = None
-
-        # find an arbitrary but stable angle core atom that is one bond away from the root atom that is
-        # present in mol_a
-        for ra in root_anchors:
-            core_b_nbs = [a.GetIdx() for a in mol_b.GetAtomWithIdx(ra).GetNeighbors() if a.GetIdx() in core_b]
-            for nb in core_b_nbs:
-                # see if this core_bond is present in mol_a
-                # first, look up the idxs of the atoms in mol_a:
-                ra_a, nb_a = core_b_to_a[ra], core_b_to_a[nb]
-                if (ra_a, nb_a) in bond_idxs_a or (nb_a, ra_a) in bond_idxs_a:
-                    angle_jk = ra, nb
-                    break
-
-        if angle_jk is None:
+    for _, (angle_anchor, _) in arbitrary_assignment.items():
+        if angle_anchor is None:
             warnings.warn("Unable to find stable angle term in mol_a", CoreBondChangeWarning)
-            # pick an arbitrary root_anchor
-            angle_jk = root_anchors[0], None
 
-        # revert me
-        # angle_jk = root_anchors[0], None
-
-        all_jks.append(angle_jk)
-
-    return dummy_groups_b, all_jks
+    return arbitrary_assignment
 
 
 def handle_ring_opening_closing(
