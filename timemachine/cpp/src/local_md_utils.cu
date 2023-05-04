@@ -3,7 +3,6 @@
 #include "nonbonded_interaction_group.hpp"
 
 #include "fanout_summed_potential.hpp"
-#include "set_utils.hpp"
 #include "summed_potential.hpp"
 
 #include "gpu_utils.cuh"
