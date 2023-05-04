@@ -63,7 +63,8 @@ def generate_dummy_group_assignments(
     dummy_atoms = frozenset(bond_graph.nodes()) - core_atoms_
     induced_g = nx.subgraph(bond_graph, dummy_atoms)
 
-    def maybe_warn_multiple_bond_anchors(bond_anchors, dummy_group):
+    def get_bond_anchors(dummy_atom, dummy_group):
+        bond_anchors = [n for n in bond_graph.neighbors(dummy_atom) if n in core_atoms]
         if len(bond_anchors) > 1:
             warnings.warn(
                 f"Multiple bond anchors {bond_anchors} found for dummy group: {dummy_group}",
@@ -75,13 +76,7 @@ def generate_dummy_group_assignments(
         union_by_key(bond_anchor_cc_pairs)
         for bond_anchor_cc_pairs in product(
             *[
-                [
-                    (bond_anchor, cc)
-                    for dummy_atom in cc
-                    for bond_anchor in maybe_warn_multiple_bond_anchors(
-                        [n for n in bond_graph.neighbors(dummy_atom) if n in core_atoms], cc
-                    )
-                ]
+                [(bond_anchor, cc) for dummy_atom in cc for bond_anchor in get_bond_anchors(dummy_atom, cc)]
                 for cc in nx.connected_components(induced_g)
             ]
         )
@@ -138,18 +133,15 @@ def generate_anchored_dummy_group_assignments(
     c_to_b = {c: b for c, b in enumerate(core_atoms_b)}
     core_bonds_b = frozenset(translate_bonds(core_bonds_c, c_to_b))
 
-    def is_core_bond(bond):
-        return canonicalize_bond(bond) in core_bonds_b
-
     def get_angle_anchors(bond_anchor):
         valid_angle_anchors = [
             angle_anchor
             for angle_anchor in [n for n in bond_graph_b.neighbors(bond_anchor) if n in core_atoms_b]
-            if is_core_bond((bond_anchor, angle_anchor))
+            if canonicalize_bond((bond_anchor, angle_anchor)) in core_bonds_b
         ]
         return valid_angle_anchors or [None]
 
-    assignments = (
+    anchored_dummy_group_assignments = (
         dict(anchored_dummy_group)
         for dummy_group_assignment in dummy_group_assignments
         for anchored_dummy_group in product(
@@ -160,7 +152,7 @@ def generate_anchored_dummy_group_assignments(
         )
     )
 
-    return assignments
+    return anchored_dummy_group_assignments
 
 
 def canonicalize_bond(ixn: Tuple[int, ...]) -> Tuple[int, ...]:
