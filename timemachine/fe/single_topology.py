@@ -1,7 +1,7 @@
 import warnings
 from collections.abc import Iterable
 from functools import partial
-from typing import Callable, Collection, Dict, FrozenSet, List, Tuple, TypeVar, Union, cast
+from typing import Callable, Collection, Dict, FrozenSet, List, Optional, Tuple, TypeVar, Union, cast
 
 import jax.numpy as jnp
 import numpy as np
@@ -391,7 +391,7 @@ def setup_end_state(ff, mol_a, mol_b, core, a_to_c, b_to_c):
 
 def find_dummy_groups_and_anchors(
     mol_a, mol_b, core_atoms_a: Collection[int], core_atoms_b: Collection[int]
-) -> Dict[int, Tuple[int, FrozenSet[int]]]:
+) -> Dict[int, Tuple[Optional[int], FrozenSet[int]]]:
     """Returns an arbitrary partitioning of dummy atoms and anchor assignment for the A -> B transformation. See the
     documentation for :py:func:`timemachine.fe.dummy.generate_dummy_group_assignments` and notes below for more
     information.
