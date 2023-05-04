@@ -420,7 +420,7 @@ def find_dummy_groups_and_anchors(
     assignments = generate_anchored_dummy_group_assignments(mol_a, mol_b, core_atoms_a, core_atoms_b)
 
     # TODO: consider refining to use a heuristic rather than arbitrary selection
-    # (e.g. number of angle terms, number of # rotatable bonds, etc.)
+    # (e.g. maximize core-dummy bonds, maximize angle terms, minimize rotatable bonds, etc.)
     arbitrary_assignment = next(assignments)
 
     for _, (angle_anchor, _) in arbitrary_assignment.items():
