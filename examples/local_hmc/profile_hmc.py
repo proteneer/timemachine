@@ -1,3 +1,4 @@
+from copy import deepcopy
 from time import time
 
 import networkx as nx
@@ -10,14 +11,21 @@ from timemachine.md.states import CoordsVelBox
 from timemachine.parallel.client import CUDAPoolClient
 from timemachine.testsystems.dhfr import setup_dhfr
 
+# TODO: update to use:
+# [x] cutoff = 1.2 instead of 1.0
+# [x] restraint energy before and after
 
-def measure_mcmc_performance(proposal_fxn, eq_samples, n_samples=100):
+n_samples = 1000
+folder_name = f"hmc_profiling_results_mcmc_{n_samples}"
+
+
+def measure_mcmc_performance(proposal_fxn, eq_samples, n_samples):
     log_accept_probs = []
     n_atoms_moved = []
     proposal_norms = []
     timings = []
     for _ in range(n_samples):
-        xvb_0 = eq_samples[np.random.randint(len(eq_samples))]
+        xvb_0 = deepcopy(eq_samples[np.random.randint(len(eq_samples))])
 
         t0 = time()
         xvb_prop, log_accept_prob = proposal_fxn(xvb_0)
@@ -29,6 +37,9 @@ def measure_mcmc_performance(proposal_fxn, eq_samples, n_samples=100):
         proposal_norms.append(np.linalg.norm(diff))
         log_accept_probs.append(log_accept_prob)
         timings.append(t1 - t0)
+
+        if np.random.rand() < np.exp(log_accept_prob):
+            xvb_0 = xvb_prop
 
     return dict(
         n_atoms_moved=np.array(n_atoms_moved),
@@ -62,32 +73,44 @@ def make_local_hmc_proposal_fxn(
 
 
 # pre-generated samples using Langevin at default settings
-# # TODO: probably I should propagate each of the stored Langevin samples using a few steps of HMC?
-dhfr_langevin_samples = np.load("dhfr_langevin_samples.npz")
-xs, boxes = dhfr_langevin_samples["xs"], dhfr_langevin_samples["boxes"]
+# [x] TODO: probably I should propagate each of the stored Langevin samples using a few steps of HMC?
+# --> done: see polish_equilibrium_samples (which runs 100 "polishing" steps of Barker MCMC)
+# dhfr_samples = np.load('dhfr_langevin_samples.npz')
+dhfr_samples = np.load("dhfr_mcmc_samples.npz")
+# TODO: use dhfr_mcmc_samples when completed
+xs, boxes = dhfr_samples["xs"], dhfr_samples["boxes"]
 eq_samples = [CoordsVelBox(x, None, box) for (x, box) in zip(xs, boxes)]
 
 # system
-host_fns, host_masses, host_conf, box = setup_dhfr()
+host_fns, host_masses, host_conf, box = setup_dhfr(1.2)
 constant_masses = np.ones_like(host_masses) * np.mean(host_masses)
 
 # grid search setup
 n_steps = 100  # fixed n_steps: molecular HMC is not as sensitive to this as other parameters
 
-dt_grid_fs = np.array([0.01, 0.05, 0.1, 0.5, 0.8, 1.0, 1.2, 1.4, 1.6, 1.8, 2.0, 2.5, 3.0, 3.5, 4.0])
+# dt_grid_fs = np.array([0.0001, 0.001, 0.01, 0.05, 0.1, 0.5, 0.8, 1.0, 1.2, 1.4, 1.6, 1.8, 2.0, 2.5, 3.0, 3.5, 4.0])
+# dt_grid_fs = 10**np.linspace(-4, np.log10(4.0), 20)
+
+small_dt_grid_fs = 10 ** np.linspace(-4, -1, 5)
+large_dt_grid_fs = 10 ** np.linspace(-1, np.log10(5.0), 15)
+dt_grid_fs = np.unique(np.hstack([small_dt_grid_fs, large_dt_grid_fs]))
+
 dt_grid_ps = 1e-3 * dt_grid_fs  # picoseconds
 
 
 def process_global_setting(i):
     dt = dt_grid_ps[i]
+    print()
     proposal_fxn = make_global_hmc_proposal_fxn(host_fns, dt, constant_masses, DEFAULT_TEMP, n_steps)
-    results = measure_mcmc_performance(proposal_fxn, eq_samples, n_samples=1000)
+    results = measure_mcmc_performance(proposal_fxn, eq_samples, n_samples=100)
 
     print(f"dt = {dt}, avg. acceptance rate = {np.exp(results['log_accept_probs']).mean()}")
-    fname = f"hmc_profiling_results/global_dt_{i}.npz"
+    fname = f"{folder_name}/global_dt_{i}.npz"
     print("saving result to ", fname)
 
     np.savez(fname, dt=dt, **results)
+
+    return True
 
 
 radius_grid = [0.1, 0.2, 0.3, 0.4, 0.5, 1.0, 2.0]
@@ -106,16 +129,22 @@ def process_local_settings(i, j):
     dt = dt_grid_ps[i]
     radius = radius_grid[j]
 
+    print(f"processing dt = {dt}, radius = {radius}...")
+
     proposal_fxn = make_local_hmc_proposal_fxn(
         host_fns, dt, constant_masses, protein_idxs, radius, k, n_steps, DEFAULT_TEMP
     )
-    results = measure_mcmc_performance(proposal_fxn, eq_samples, n_samples=1000)
-    print(f"dt = {dt}, radius = {radius}, avg. acceptance rate = {np.exp(results['log_accept_probs']).mean()}")
+    results = measure_mcmc_performance(proposal_fxn, eq_samples, n_samples=n_samples)
+    print(
+        f"completed dt = {dt}, radius = {radius}! avg. acceptance rate = {np.exp(results['log_accept_probs']).mean()}"
+    )
 
-    fname = f"hmc_profiling_results/local_dt_{i}_radius_{j}.npz"
+    fname = f"{folder_name}/local_dt_{i}_radius_{j}.npz"
     print("saving result to ", fname)
 
     np.savez(fname, radius=radius, dt=dt, **results)
+
+    return True
 
 
 if __name__ == "__main__":

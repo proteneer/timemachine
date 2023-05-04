@@ -1,4 +1,8 @@
+# generate Langevin trajectory, sampling bias assumed negligible
+
 # adapted from proteneer/timemachine/tests/test_benchmark.py
+
+# see also polish_equilibrium_samples which applies 100 steps of MCMC to each of these snapshots, to minimize any little sampling biases that might be present
 
 import time
 
@@ -8,10 +12,7 @@ from timemachine import constants
 from timemachine.fe.model_utils import apply_hmr
 from timemachine.lib import LangevinIntegrator, MonteCarloBarostat, custom_ops
 from timemachine.md.barostat.utils import get_bond_list, get_group_indices
-from timemachine.testsystems.dhfr import get_dhfr_system, setup_dhfr
-
-dhfr_system = get_dhfr_system()
-host_fns, host_masses, host_conf, box = setup_dhfr()
+from timemachine.testsystems.dhfr import setup_dhfr
 
 SECONDS_PER_DAY = 24 * 60 * 60
 
@@ -103,6 +104,8 @@ def simulate(x0, v0, box0, masses, bound_potentials, thinning=1_000, n_samples=1
 
 
 if __name__ == "__main__":
-    host_fns, host_masses, host_conf, box = setup_dhfr()
+    # TODO: maybe a few different values of cutoff, to see if that makes a difference in bias?
+
+    host_fns, host_masses, host_conf, box = setup_dhfr(1.2)
     xs, boxes = simulate(host_conf, np.zeros_like(host_conf), box, host_masses, host_fns)
     np.savez("dhfr_langevin_samples.npz", xs=xs, boxes=boxes)

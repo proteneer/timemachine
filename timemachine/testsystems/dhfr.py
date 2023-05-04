@@ -7,7 +7,7 @@ from timemachine.ff.handlers import openmm_deserializer
 from timemachine.md.builders import strip_units
 
 
-def setup_dhfr():
+def setup_dhfr(cutoff=1.0):
     with resources.path("timemachine.testsystems.data", "5dfr_solv_equil.pdb") as pdb_path:
         host_pdb = app.PDBFile(str(pdb_path))
 
@@ -19,7 +19,7 @@ def setup_dhfr():
     box = host_pdb.topology.getPeriodicBoxVectors()
     box = strip_units(box)
 
-    host_fns, host_masses = openmm_deserializer.deserialize_system(host_system, cutoff=1.0)
+    host_fns, host_masses = openmm_deserializer.deserialize_system(host_system, cutoff=cutoff)
 
     return host_fns, host_masses, np.array(host_coords), np.array(box)
 

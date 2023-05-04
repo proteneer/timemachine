@@ -2,10 +2,11 @@ from glob import glob
 
 import matplotlib.pyplot as plt
 import numpy as np
+from profile_hmc import folder_name
 
 
 def get_global_accept_rates():
-    global_fnames = glob("hmc_profiling_results/global_*.npz")
+    global_fnames = glob(f"{folder_name}/global_*.npz")
     all_global_results = []
     for fname in global_fnames:
         all_global_results.append(np.load(fname))
@@ -31,7 +32,7 @@ def get_global_accept_rates():
 
 
 def get_local_accept_rates():
-    local_fnames = glob("hmc_profiling_results/local_*.npz")
+    local_fnames = glob(f"{folder_name}/local_*.npz")
     all_local_results = []
     for fname in local_fnames:
         all_local_results.append(np.load(fname))
@@ -64,7 +65,7 @@ def get_local_accept_rates():
     return dts[perm], sorted_radii, accept_rates_by_radius, avg_n_selected
 
 
-def make_accept_rate_plot():
+def make_accept_rate_plot(log_scale=True):
     _dts, global_accept_rates, n_global = get_global_accept_rates()
     dts, radii, accept_rates_by_radius, avg_n_selected = get_local_accept_rates()
 
@@ -84,18 +85,22 @@ def make_accept_rate_plot():
     plt.xlabel("timestep (fs)")
     plt.ylabel("acceptance rate")
     plt.ylim(0, 1)
-    # plt.xscale('log')
+    if log_scale:
+        plt.xscale("log")
     plt.legend(loc=(1, 0))
 
     plt.title("HMC acceptance rates")
 
     plt.tight_layout()
 
-    fname = "local_hmc_acceptance_rates.pdf"
+    suffix = "log" if log_scale else "linear"
+    fname = f"local_hmc_acceptance_rates_{suffix}.pdf"
+
     print(f"saving figure to {fname}")
     plt.savefig(fname, bbox_inches="tight")
     plt.close()
 
 
 if __name__ == "__main__":
-    make_accept_rate_plot()
+    make_accept_rate_plot(log_scale=True)
+    make_accept_rate_plot(log_scale=False)
