@@ -2,8 +2,10 @@ import io
 
 import numpy as np
 from matplotlib import pyplot as plt
+from numpy.typing import NDArray
 
-from timemachine.constants import BOLTZ
+from timemachine.constants import BOLTZ, KCAL_TO_KJ
+from timemachine.fe.bar import compute_fwd_and_reverse_df_over_time
 
 
 def plot_work(w_forward, w_reverse, axes):
@@ -169,10 +171,73 @@ def make_overlap_detail_figure(
             plot_axis.set_title(components[u_idx])
 
     # detail plot as png
-    plt.tight_layout()
     buffer = io.BytesIO()
-    plt.savefig(buffer, format="png")
+    plt.savefig(buffer, format="png", bbox_inches="tight")
     buffer.seek(0)
     overlap_detail_png = buffer.read()
 
     return overlap_detail_png
+
+
+def plot_forward_and_reverse_ddg(
+    solvent_ukln_by_component_by_lambda: NDArray,
+    complex_ukln_by_component_by_lambda: NDArray,
+    temperature: float,
+    chunks: int = 10,
+) -> bytes:
+    """Forward and reverse ddG plot given a solvent and complex ukln.
+    In the case of good convergence, the forward and reverse ddGs should be similar and the ddG should
+    not be drifting with all samples.
+
+    Refer to figure 5 of https://www.ncbi.nlm.nih.gov/pmc/articles/PMC4420631/ for more details.
+
+    Parameters
+    ----------
+    solvent_ukln_by_component_by_lambda: [n_component, n_lambdas, 2, 2, N] array
+        Solvent ukln broken up by components and lambdas
+    complex_ukln_by_component_by_lambda: [n_component, n_lambdas, 2, 2, N] array
+        Complex ukln broken up by components and lambdas
+    temperature: float
+        Temperature that samples were collected at.
+    chunks: int
+        Number of chunks to split uklns by.
+
+    Returns
+    -------
+    ddg_convergence_plot_bytes: bytes
+    """
+
+    solvent_fwd, solvent_fwd_err, solvent_rev, solvent_rev_err = compute_fwd_and_reverse_df_over_time(
+        solvent_ukln_by_component_by_lambda.sum(0)  # Combine by component
+    )
+    complex_fwd, complex_fwd_err, complex_rev, complex_rev_err = compute_fwd_and_reverse_df_over_time(
+        complex_ukln_by_component_by_lambda.sum(0)  # Combine by component
+    )
+
+    kBT = BOLTZ * temperature
+
+    fwd = (complex_fwd - solvent_fwd) * kBT / KCAL_TO_KJ
+    rev = (complex_rev - solvent_rev) * kBT / KCAL_TO_KJ
+
+    fwd_err = np.linalg.norm([complex_fwd_err, solvent_fwd_err], axis=0) * kBT / KCAL_TO_KJ
+    rev_err = np.linalg.norm([complex_rev_err, solvent_rev_err], axis=0) * kBT / KCAL_TO_KJ
+
+    xs = np.linspace(1.0 / chunks, 1.0, chunks)
+
+    plt.figure(figsize=(6, 6))
+    plt.title("∆∆G Convergence Over Time")
+    plt.plot(xs, fwd, label="Forward ∆∆G", marker="o")
+    plt.fill_between(xs, fwd - fwd_err, fwd + fwd_err, alpha=0.25)
+    plt.plot(xs, rev, label="Reverse ∆∆G", marker="o")
+    plt.fill_between(xs, rev - rev_err, rev + rev_err, alpha=0.25)
+    plt.axhline(fwd[-1], linestyle="--")
+    plt.xlabel("Fraction of simulation time")
+    plt.ylabel("∆∆G (kcal/mol)")
+    plt.legend()
+
+    buffer = io.BytesIO()
+    plt.savefig(buffer, format="png", bbox_inches="tight")
+    buffer.seek(0)
+    plot_png = buffer.read()
+
+    return plot_png

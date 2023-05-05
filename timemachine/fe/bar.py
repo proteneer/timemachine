@@ -7,6 +7,7 @@ import jax.numpy as jnp
 import numpy as np
 import pymbar
 from jax.scipy.special import logsumexp
+from numpy.typing import NDArray
 from scipy.stats import normaltest
 
 logger = logging.getLogger(__name__)
@@ -98,7 +99,7 @@ def dG_dw(w):
     return dG_dw
 
 
-def bootstrap_bar(w_F, w_R, n_bootstrap=1000, timeout=10):
+def bootstrap_bar(w_F, w_R, n_bootstrap=1000, timeout=10) -> Tuple[float, NDArray]:
     """Subsample w_F, w_R with replacement and re-run BAR many times
 
     Parameters
@@ -174,6 +175,29 @@ def bar_with_bootstrapped_uncertainty(w_F, w_R, n_bootstrap=1000, timeout=10) ->
     return df, ddf
 
 
+def df_from_ukln(u_kln: np.ndarray) -> Tuple[float, float]:
+    """Extract forward and reverse works from 2-state u_kln matrix and return BAR dF and dF error computed by pymbar
+
+    Parameters
+    ----------
+    u_kln : [2, 2, n] array
+        pymbar u_kln input format, where k = l = 2
+
+    Returns
+    -------
+    df_err: float
+        BAR dF
+    df_err: float
+        BAR uncertainty
+    """
+    k, l, _ = u_kln.shape
+    assert k == l == 2
+    w_fwd = u_kln[1, 0, :] - u_kln[0, 0, :]
+    w_rev = u_kln[0, 1, :] - u_kln[1, 1, :]
+    df, df_err = pymbar.BAR(w_fwd, w_rev)
+    return df, df_err
+
+
 def df_err_from_ukln(u_kln: np.ndarray) -> float:
     """Extract forward and reverse works from 2-state u_kln matrix and return BAR error computed by pymbar
 
@@ -185,14 +209,36 @@ def df_err_from_ukln(u_kln: np.ndarray) -> float:
     Returns
     -------
     df_err: float
-        bootstrapped BAR uncertainty
+        BAR uncertainty
     """
-    k, l, _ = u_kln.shape
-    assert k == l == 2
-    w_fwd = u_kln[1, 0, :] - u_kln[0, 0, :]
-    w_rev = u_kln[0, 1, :] - u_kln[1, 1, :]
-    _, df_err = pymbar.BAR(w_fwd, w_rev)
+    _, df_err = df_from_ukln(u_kln)
     return df_err
+
+
+def df_from_ukln_by_lambda(ukln_by_lambda: NDArray) -> Tuple[float, float]:
+    """Extract dF and dF error compute by BAR over a series of lambda windows
+
+    Parameters
+    ----------
+    u_kln : [n_lambda, 2, 2, n] array
+        pymbar u_kln input format, where k = l = 2
+
+    Returns
+    -------
+    df: float
+        pair BAR dF across lambda
+    df_err: float
+        pair BAR uncertainty across lambda
+    """
+    win_dfs = []
+    win_errs = []
+    for lambda_idx in range(ukln_by_lambda.shape[0]):
+        window_ukln = ukln_by_lambda[lambda_idx]
+
+        dF, dF_err = df_from_ukln(window_ukln)
+        win_dfs.append(dF)
+        win_errs.append(dF_err)
+    return np.sum(win_dfs), np.linalg.norm(win_errs)  # type: ignore
 
 
 def pair_overlap_from_ukln(u_kln: np.ndarray) -> float:
@@ -217,3 +263,52 @@ def pair_overlap_from_ukln(u_kln: np.ndarray) -> float:
     assert u_kn.shape == (k, l * n)
     N_k = n * np.ones(l)
     return 2 * pymbar.MBAR(u_kn, N_k).computeOverlap()["matrix"][0, 1]  # type: ignore
+
+
+def compute_fwd_and_reverse_df_over_time(
+    ukln_by_lambda: NDArray, chunks: int = 10
+) -> Tuple[NDArray, NDArray, NDArray, NDArray]:
+    """Provided a u_kln computes the forward and reverse dF estimates.
+
+    Computes the dF value for increasing numbers of samples in both the forward and reverse direction.
+
+    Parameters
+    ----------
+
+    ukln_by_lambda: [n_lambda, 2, 2, N] array
+        Array of u_kln broken up by lambda windows
+
+    chunks: int
+        Number of chunks to break up u_kln into
+
+    Returns
+    -------
+        fwd_df: [chunks] np.ndarray
+            numpy array of dF for each chunk
+        fwd_df_err: [chunks] np.ndarray
+            numpy array of dF errors for each chunk
+        rev_df: [chunks] np.ndarray
+            numpy array of dF for each chunk, from reversed ukln
+        ref_df_err: [chunks] np.ndarray
+            numpy array of dF errors for each chunk, from reversed ukln
+    """
+    assert len(ukln_by_lambda.shape) == 4
+    assert ukln_by_lambda.shape[1] == 2
+    forward_predictions_ = []
+    reverse_predictions_ = []
+    total_frames = ukln_by_lambda.shape[-1]
+    assert total_frames >= chunks
+    frame_step_size = total_frames // chunks
+
+    # Reverse the u_kln along last axis to get the reverse
+    reversed_ukln_by_lambda = np.flip(ukln_by_lambda, 3)
+    for num_frames in range(frame_step_size, total_frames + 1, frame_step_size):
+        fwd_ukln = ukln_by_lambda[..., :num_frames]
+        reverse_ukln = reversed_ukln_by_lambda[..., :num_frames]
+
+        forward_predictions_.append(df_from_ukln_by_lambda(fwd_ukln))
+        reverse_predictions_.append(df_from_ukln_by_lambda(reverse_ukln))
+
+    forward_predictions = np.array(forward_predictions_)
+    reverse_predictions = np.array(reverse_predictions_)
+    return forward_predictions[:, 0], forward_predictions[:, 1], reverse_predictions[:, 0], reverse_predictions[:, 1]
