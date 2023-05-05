@@ -141,6 +141,8 @@ def generate_anchored_dummy_group_assignments(
         ]
         return valid_angle_anchors or [None]
 
+    # For each dummy group assignment, generate (possibly multiple) anchored dummy group assignments each corresponding
+    # to an independent choice of an angle anchor atom for each dummy group
     anchored_dummy_group_assignments = (
         dict(anchored_dummy_group)
         for dummy_group_assignment in dummy_group_assignments
