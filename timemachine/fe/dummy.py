@@ -30,7 +30,7 @@ def generate_dummy_group_assignments(
     using a heuristic:
 
     1) Generate an induced subgraph containing only dummy atoms
-    2) Identify connected components of the induced subgraph
+    2) Identify connected components of the induced subgraph (see note 1 below).
     3) Generate all possible mappings (bond anchor, connected component). In general there will be multiple
        possibilities since there may be an arbitrary choice of anchor atom for each dummy group
     4) For each mapping ("assignment"), merge connected components with the same bond anchor
@@ -55,6 +55,12 @@ def generate_dummy_group_assignments(
     -------
     iterator of dict
         each element is a mapping from bond anchor atom to dummy group
+
+    Notes
+    -----
+    1. The final dummy groups are constructed as unions of one or more of the connected components of the dummy induced
+       subgraph; in particular, we can never end up with a dummy group that is a subset of a connected component (the
+       latter might be desirable for efficiency but is more complicated to implement).
     """
     assert len(set(core_atoms)) == len(core_atoms)
     assert len(list(nx.connected_components(bond_graph))) == 1
