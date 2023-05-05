@@ -63,8 +63,8 @@ def generate_dummy_group_assignments(
     dummy_atoms = frozenset(bond_graph.nodes()) - core_atoms_
     induced_g = nx.subgraph(bond_graph, dummy_atoms)
 
-    def get_bond_anchors(dummy_atom, dummy_group):
-        bond_anchors = [n for n in bond_graph.neighbors(dummy_atom) if n in core_atoms]
+    def get_bond_anchors(dummy_group):
+        bond_anchors = {n for dummy_atom in dummy_group for n in bond_graph.neighbors(dummy_atom) if n in core_atoms}
         if len(bond_anchors) > 1:
             warnings.warn(
                 f"Multiple bond anchors {bond_anchors} found for dummy group: {dummy_group}",
@@ -75,10 +75,7 @@ def generate_dummy_group_assignments(
     dummy_group_assignments = (
         union_by_key(bond_anchor_cc_pairs)
         for bond_anchor_cc_pairs in product(
-            *[
-                [(bond_anchor, cc) for dummy_atom in cc for bond_anchor in get_bond_anchors(dummy_atom, cc)]
-                for cc in nx.connected_components(induced_g)
-            ]
+            *[[(bond_anchor, cc) for bond_anchor in get_bond_anchors(cc)] for cc in nx.connected_components(induced_g)]
         )
     )
 
