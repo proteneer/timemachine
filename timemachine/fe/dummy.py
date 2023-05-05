@@ -1,7 +1,7 @@
 import warnings
 from collections import defaultdict
 from itertools import product
-from typing import Collection, DefaultDict, Dict, FrozenSet, Iterable, Iterator, Optional, Tuple, TypeVar
+from typing import Collection, DefaultDict, Dict, FrozenSet, Iterable, Iterator, List, Optional, Tuple, TypeVar
 
 import networkx as nx
 
@@ -178,7 +178,7 @@ def convert_bond_list_to_nx(bond_list: Collection[Tuple[int, int]]) -> nx.Graph:
 
 def get_core_bonds(
     mol_a, mol_b, core_atoms_a: Collection[int], core_atoms_b: Collection[int]
-) -> FrozenSet[Tuple[int, int]]:
+) -> FrozenSet[Tuple[int, ...]]:
     """Returns core-core bonds that are present in both mol_a and mol_b"""
     bonds_a = get_romol_bonds(mol_a)
     bonds_b = get_romol_bonds(mol_b)
@@ -187,7 +187,10 @@ def get_core_bonds(
     return frozenset(translate_bonds(bonds_a, a_to_c)).intersection(frozenset(translate_bonds(bonds_b, b_to_c)))
 
 
-def translate_bonds(bonds: Collection[Tuple[int, int]], mapping: Dict[int, int]):
+def translate_bonds(bonds: Collection[Tuple[int, ...]], mapping: Dict[int, int]) -> List[Tuple[int, ...]]:
+    """Applies the given mapping of atom indices to a collection of bonds (i.e. tuples of atom indices)
+
+    Bonds containing indices that are missing from the input mapping are omitted in the output."""
     return [
         canonicalize_bond(tuple(mapping[idx] for idx in bond)) for bond in bonds if all(idx in mapping for idx in bond)
     ]
