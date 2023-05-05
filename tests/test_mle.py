@@ -173,6 +173,7 @@ def test_infer_node_dgs_w_error():
             ref_node_idxs,
             ref_node_vals,
             ref_node_stddevs,
+            n_bootstrap=10,
             seed=np.random.randint(1000),
         )
         assert (dg_err > 0).all()
@@ -199,28 +200,20 @@ def test_infer_node_dgs_w_error_invariant_wrt_edge_order():
 
         seed = np.random.randint(1000)
 
-        dg_1, dg_err_1 = infer_node_vals_and_errs(
-            edge_idxs,
-            obs_edge_diffs,
-            edge_stddevs,
-            ref_node_idxs,
-            ref_node_vals,
-            ref_node_stddevs,
+        f = partial(
+            infer_node_vals_and_errs,
+            ref_node_idxs=ref_node_idxs,
+            ref_node_vals=ref_node_vals,
+            ref_node_stddevs=ref_node_stddevs,
+            n_bootstrap=10,
             seed=seed,
         )
+
+        dg_1, dg_err_1 = f(edge_idxs, obs_edge_diffs, edge_stddevs)
 
         p = np.random.permutation(len(edge_idxs))
         p = np.arange(len(edge_idxs))
-
-        dg_2, dg_err_2 = infer_node_vals_and_errs(
-            edge_idxs[p, :],
-            obs_edge_diffs[p],
-            edge_stddevs[p],
-            ref_node_idxs,
-            ref_node_vals,
-            ref_node_stddevs,
-            seed=seed,
-        )
+        dg_2, dg_err_2 = f(edge_idxs[p, :], obs_edge_diffs[p], edge_stddevs[p])
 
         np.testing.assert_allclose(dg_1, dg_2)  # expect convergence up to ~roundoff error
 
@@ -234,6 +227,7 @@ node_val_prop = "node_val"
 node_stddev_prop = "node_stddev"
 ref_node_val_prop = "ref_node_val"
 ref_node_stddev_prop = "ref_node_stddev"
+n_bootstrap = 10
 
 
 @pytest.fixture(scope="module", params=[0])
@@ -264,7 +258,7 @@ def _nx_graph_with_reference_mle_instance(request):
         g.add_node(n, **{ref_node_val_prop: ref_val, ref_node_stddev_prop: ref_stddev})
 
     dgs, dg_errs = infer_node_vals_and_errs(
-        edge_idxs, obs_edge_diffs, edge_stddevs, ref_node_idxs, ref_node_vals, ref_node_stddevs, seed=seed
+        edge_idxs, obs_edge_diffs, edge_stddevs, ref_node_idxs, ref_node_vals, ref_node_stddevs, n_bootstrap, seed
     )
 
     return g, seed, dgs, dg_errs
@@ -284,15 +278,14 @@ infer_node_vals_and_errs_networkx_partial = partial(
     ref_node_stddev_prop=ref_node_stddev_prop,
     node_val_prop=node_val_prop,
     node_stddev_prop=node_stddev_prop,
+    n_bootstrap=n_bootstrap,
 )
 
 
-def test_infer_node_vals_and_errs_networkx_requires_di_graph(nx_graph_with_reference_mle_instance):
-
-    g, seed, ref_dgs, ref_dg_errs = nx_graph_with_reference_mle_instance
-
+def test_infer_node_vals_and_errs_networkx_requires_digraph():
+    g = nx.Graph()
     with pytest.raises(AssertionError, match="Graph must be a DiGraph"):
-        infer_node_vals_and_errs_networkx_partial(g.to_undirected(), seed=seed)
+        infer_node_vals_and_errs_networkx_partial(g)
 
 
 def test_infer_node_vals_and_errs_networkx(nx_graph_with_reference_mle_instance):
