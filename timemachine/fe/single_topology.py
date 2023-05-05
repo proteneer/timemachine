@@ -4,6 +4,7 @@ from functools import partial
 from typing import Callable, Collection, Dict, FrozenSet, List, Optional, Tuple, TypeVar, Union, cast
 
 import jax.numpy as jnp
+import networkx as nx
 import numpy as np
 from numpy.typing import NDArray
 from rdkit import Chem
@@ -240,6 +241,13 @@ def canonicalize_improper_idxs(idxs) -> Tuple[int, int, int, int]:
     return (i, *cw_items[idx])
 
 
+def get_num_connected_components(num_atoms: int, bonds: Collection[Tuple[int, int]]) -> int:
+    g = nx.Graph()
+    g.add_nodes_from(range(num_atoms))
+    g.add_edges_from(bonds)
+    return len(list(nx.connected_components(g)))
+
+
 def setup_end_state(ff, mol_a, mol_b, core, a_to_c, b_to_c):
     """
     Setup end-state for mol_a with dummy atoms of mol_b attached. The mapped indices will correspond
@@ -378,6 +386,11 @@ def setup_end_state(ff, mol_a, mol_b, core, a_to_c, b_to_c):
 
     chiral_atom_potential = ChiralAtomRestraint(chiral_atom_idxs).bind(mol_a_chiral_atom.params)
     chiral_bond_potential = ChiralBondRestraint(chiral_bond_idxs, chiral_bond_signs).bind(mol_a_chiral_bond.params)
+
+    num_atoms = mol_a.GetNumAtoms() + mol_b.GetNumAtoms() - len(core)
+    assert (
+        get_num_connected_components(num_atoms, bond_potential.potential.idxs) == 1
+    ), "hybrid molecule has multiple connected components"
 
     return system.VacuumSystem(
         bond_potential,
