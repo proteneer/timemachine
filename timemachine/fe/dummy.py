@@ -198,6 +198,7 @@ _V = TypeVar("_V")
 
 
 def union_by_key(ts: Iterable[Tuple[_K, FrozenSet[_V]]]) -> Dict[_K, FrozenSet[_V]]:
+    """Given an iterable of key-value pairs where the values are sets, returns a dictionary of sets merged by key."""
     d: DefaultDict[_K, FrozenSet[_V]] = defaultdict(frozenset)
     for k, xs in ts:
         d[k] = d[k].union(xs)
