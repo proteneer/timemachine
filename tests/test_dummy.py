@@ -21,7 +21,7 @@ from timemachine.fe.utils import get_romol_bonds
 pytestmark = [pytest.mark.nogpu]
 
 
-def test_identify_dummy_groups():
+def test_generate_dummy_group_assignments():
     r"""
     Test the heuristic for partitioning dummy atoms into dummy groups.
 
