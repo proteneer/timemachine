@@ -60,7 +60,6 @@ def test_identify_dummy_groups():
 
         return to_comparable(left) == to_comparable(right)
 
-    # [{1: frozenset({0}), 3: frozenset({4, 5})}]
     g = convert_bond_list_to_nx(get_romol_bonds(Chem.MolFromSmiles("FC1CC1(F)N")))
     core = [1, 2, 3]
     dgas = list(generate_dummy_group_assignments(g, core))
