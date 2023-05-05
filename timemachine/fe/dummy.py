@@ -31,9 +31,9 @@ def generate_dummy_group_assignments(
 
     1) Generate an induced subgraph containing only dummy atoms
     2) Identify connected components of the induced subgraph
-    3) For each connected component, generate all possible choices of (bond) anchor atom
-    4) Merge connected components with the same bond anchor; this gives a mapping of anchor atom to dummy group for each
-       distinct assignment of anchor atoms in (3)
+    3) Generate all possible mappings (bond anchor, connected component). In general there will be multiple
+       possibilities since there may be an arbitrary choice of anchor atom for each dummy group
+    4) For each mapping ("assignment"), merge connected components with the same bond anchor
 
     Example
     -------
