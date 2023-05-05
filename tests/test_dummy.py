@@ -1,5 +1,3 @@
-from collections.abc import Iterable
-
 import pytest
 from rdkit import Chem
 
@@ -21,14 +19,6 @@ from timemachine.fe.utils import get_romol_bonds
 # partition - only applies to dummy groups, as we require that dummy groups disjointly partition dummy atoms.
 
 pytestmark = [pytest.mark.nogpu]
-
-
-def deepfreeze(xs):
-    return frozenset(deepfreeze(x) if isinstance(x, Iterable) else x for x in xs)
-
-
-def deep_set_equality(xs, ys):
-    return deepfreeze(xs) == deepfreeze(ys)
 
 
 def test_identify_dummy_groups():
@@ -64,32 +54,36 @@ def test_identify_dummy_groups():
 
     """
 
+    def equivalent_assignment(left, right):
+        def to_comparable(dgas):
+            return frozenset(frozenset((k, frozenset(v)) for k, v in dgs.items()) for dgs in dgas)
+
+        return to_comparable(left) == to_comparable(right)
+
+    # [{1: frozenset({0}), 3: frozenset({4, 5})}]
     g = convert_bond_list_to_nx(get_romol_bonds(Chem.MolFromSmiles("FC1CC1(F)N")))
     core = [1, 2, 3]
     dgas = list(generate_dummy_group_assignments(g, core))
-    # assert exactly 1 assignment with dummy groups {0} and {4, 5}
-    assert deep_set_equality([dgs.values() for dgs in dgas], [[{0}, {4, 5}]])
+    assert equivalent_assignment(dgas, [{1: {0}, 3: {4, 5}}])
 
     g = convert_bond_list_to_nx(get_romol_bonds(Chem.MolFromSmiles("FC1CC1(F)NN")))
     core = [1, 2, 3]
     dgas = list(generate_dummy_group_assignments(g, core))
-    assert deep_set_equality([dgs.values() for dgs in dgas], [[{0}, {4, 5, 6}]])
+    assert equivalent_assignment(dgas, [{1: {0}, 3: {4, 5, 6}}])
 
     g = convert_bond_list_to_nx(get_romol_bonds(Chem.MolFromSmiles("C1CC11OO1")))
     core = [0, 1, 2]
     dgas = list(generate_dummy_group_assignments(g, core))
-    assert deep_set_equality([dgs.values() for dgs in dgas], [[{3, 4}]])
+    assert equivalent_assignment(dgas, [{2: {3, 4}}])
 
     g = convert_bond_list_to_nx(get_romol_bonds(Chem.MolFromSmiles("C1CC2OOC12")))
     core = [0, 1, 2, 5]
     dgas = list(generate_dummy_group_assignments(g, core))
-    assert len(dgas) == 2  # arbitrary choice of bond anchor
-    assert deep_set_equality([dgs.values() for dgs in dgas], [[{3, 4}]])
+    assert equivalent_assignment(dgas, [{2: {3, 4}}, {5: {3, 4}}])
 
     # example above, where O's are dummy atoms, and Cs are core
     g = convert_bond_list_to_nx(get_romol_bonds(Chem.MolFromSmiles("OC1COO1")))
     core = [1, 2]
     dgas = list(generate_dummy_group_assignments(g, core))
-    assert len(dgas) == 2
     # one or two groups depending on choice of anchor atom for {3, 4}
-    assert deep_set_equality([dgs.values() for dgs in dgas], [[{0}, {3, 4}], [{0, 3, 4}]])
+    assert equivalent_assignment(dgas, [{1: {0}, 2: {3, 4}}, {1: {0, 3, 4}}])
