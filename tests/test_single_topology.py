@@ -174,7 +174,7 @@ def test_find_dummy_groups_and_multiple_anchors():
         assert dgs == {1: (2, {0})}
 
 
-def test_ethane_cyclobutane():
+def test_ethane_cyclobutadiene():
     """Test case where a naive heuristic for identifying dummy groups results in disconnected components"""
 
     mol_a = Chem.AddHs(Chem.MolFromSmiles("CC"))
