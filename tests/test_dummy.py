@@ -86,3 +86,9 @@ def test_generate_dummy_group_assignments():
     dgas = list(generate_dummy_group_assignments(g, core))
     # one or two groups depending on choice of anchor atom for {3, 4}
     assert equivalent_assignment(dgas, [{1: {0}, 2: {3, 4}}, {1: {0, 3, 4}}])
+
+
+def test_generate_dummy_group_assignments_empty_core():
+    g = convert_bond_list_to_nx(get_romol_bonds(Chem.MolFromSmiles("OC1COO1")))
+    core = []
+    assert list(generate_dummy_group_assignments(g, core)) == []
