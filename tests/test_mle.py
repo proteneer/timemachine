@@ -386,6 +386,7 @@ def test_infer_node_vals_and_errs_networkx_raises_on_empty():
 
 def test_infer_node_vals_incorrect_sizes():
     """Verify that infer_node_vals correctly asserts that the length of arrays are the same"""
+    np.random.seed(2023)
     g = generate_random_valid_regular_graph()
     n_nodes = g.number_of_nodes()
 
@@ -413,6 +414,7 @@ def test_infer_node_vals_incorrect_sizes():
 
 def test_infer_node_vals_and_errs_incorrect_sizes():
     """Verify that infer_node_vals_and_errs correctly asserts that the length of arrays are the same"""
+    np.random.seed(2023)
     g = generate_random_valid_regular_graph()
     n_nodes = g.number_of_nodes()
 
