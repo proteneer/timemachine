@@ -3,7 +3,8 @@ import jax.numpy as jnp
 from timemachine.potentials.jax_utils import delta_r
 
 
-def centroid_restraint(conf, params, box, group_a_idxs, group_b_idxs, kb, b0):
+# flat_bottom
+def centroid_restraint(conf, params, box, group_a_idxs, group_b_idxs, kb, b_min, b_max):
     """Computes kb  * (r - b0)**2 where r is the distance between the centroids of group_a and group_b
 
     Notes
@@ -20,13 +21,14 @@ def centroid_restraint(conf, params, box, group_a_idxs, group_b_idxs, kb, b0):
     avg_xj = jnp.mean(xj, axis=0)
 
     dx = avg_xi - avg_xj
-    d2ij = jnp.sum(dx * dx)
-    d2ij = jnp.where(d2ij == 0, 0, d2ij)  # stabilize derivative
-    dij = jnp.sqrt(d2ij)
-    delta = dij - b0
+    dij = jnp.linalg.norm(dx)
 
+    nrg = (kb / 4) * ((dij > b_max) * ((dij - b_max) ** 4) + (dij < b_min) * ((dij - b_min) ** 4))
+    return nrg
+
+    # delta = dij - b0
     # when b0 == 0 and dij == 0
-    return jnp.where(b0 == 0, kb * d2ij, kb * delta ** 2)
+    # return jnp.where(b0 == 0, kb * d2ij, kb * delta ** 2)
 
 
 def harmonic_bond(conf, params, box, bond_idxs):

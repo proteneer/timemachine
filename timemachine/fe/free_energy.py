@@ -189,6 +189,9 @@ class BaseFreeEnergy:
         ]
 
         params, potentials = zip(*params_potential_pairs)
+
+        # print("WTF", params[-1].shape)
+
         return params, potentials
 
 

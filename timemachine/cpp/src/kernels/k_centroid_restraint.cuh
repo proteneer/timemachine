@@ -38,7 +38,8 @@ void __global__ k_centroid_restraint(
     const unsigned long long *__restrict__ d_centroid_b, // [3]
     // const double *d_masses, // ignore d_masses for now
     const double kb,
-    const double b0,
+    const double b_min,
+    const double b_max,
     unsigned long long *d_du_dx,
     unsigned long long *d_u) {
 
@@ -58,25 +59,29 @@ void __global__ k_centroid_restraint(
         dij += deltas[d] * deltas[d];
     }
     dij = sqrt(dij);
+    RealType r_gt_rmax = static_cast<RealType>(dij > b_max);
+    RealType r_lt_rmin = static_cast<RealType>(dij < b_min);
 
     if (t_idx == 0 && d_u) {
-        RealType nrg = kb * (dij - b0) * (dij - b0);
-        atomicAdd(d_u + 0, FLOAT_TO_FIXED<RealType>(nrg));
+        RealType nrg = (kb / 4) * (r_lt_rmin * (pow(dij - b_min, 4)) + r_gt_rmax * (pow(dij - b_max, 4)));
+        atomicAdd(d_u + 0, FLOAT_TO_FIXED<RealType>(nrg)); // bug fix for the energies!
     }
 
     // grads
     if (d_du_dx) {
 #pragma unroll
         for (int d = 0; d < 3; d++) {
-            if (b0 != 0) {
-                RealType du_ddij = 2 * kb * (dij - b0);
-                RealType ddij_dxi = deltas[d] / dij;
-                RealType delta = sign * du_ddij * ddij_dxi / count;
-                atomicAdd(d_du_dx + cur_array[group_idx] * 3 + d, FLOAT_TO_FIXED<RealType>(delta));
-            } else {
-                RealType delta = sign * 2 * kb * deltas[d] / count;
-                atomicAdd(d_du_dx + cur_array[group_idx] * 3 + d, FLOAT_TO_FIXED<RealType>(delta));
-            }
+            // if (b0 != 0) {
+            // RealType du_ddij = 2 * kb * (dij - b0);
+            RealType du_ddij = kb * ((r_gt_rmax * pow(dij - b_max, 3)) + (r_lt_rmin * pow(dij - b_min, 3)));
+
+            RealType ddij_dxi = deltas[d] / dij;
+            RealType delta = sign * du_ddij * ddij_dxi / count;
+            atomicAdd(d_du_dx + cur_array[group_idx] * 3 + d, FLOAT_TO_FIXED<RealType>(delta));
+            // } else {
+            // RealType delta = sign * 2 * kb * deltas[d] / count;
+            // atomicAdd(d_du_dx + cur_array[group_idx] * 3 + d, FLOAT_TO_FIXED<RealType>(delta));
+            // }
         }
     }
 }

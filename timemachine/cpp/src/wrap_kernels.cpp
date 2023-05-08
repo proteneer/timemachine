@@ -1027,18 +1027,21 @@ template <typename RealType> void declare_centroid_restraint(py::module &m, cons
             py::init([](const py::array_t<int, py::array::c_style> &group_a_idxs,
                         const py::array_t<int, py::array::c_style> &group_b_idxs,
                         double kb,
-                        double b0) {
+                        double b_min,
+                        double b_max) {
                 std::vector<int> vec_group_a_idxs(group_a_idxs.size());
                 std::memcpy(vec_group_a_idxs.data(), group_a_idxs.data(), vec_group_a_idxs.size() * sizeof(int));
                 std::vector<int> vec_group_b_idxs(group_b_idxs.size());
                 std::memcpy(vec_group_b_idxs.data(), group_b_idxs.data(), vec_group_b_idxs.size() * sizeof(int));
 
-                return new timemachine::CentroidRestraint<RealType>(vec_group_a_idxs, vec_group_b_idxs, kb, b0);
+                return new timemachine::CentroidRestraint<RealType>(
+                    vec_group_a_idxs, vec_group_b_idxs, kb, b_min, b_max);
             }),
             py::arg("group_a_idxs"),
             py::arg("group_b_idxs"),
             py::arg("kb"),
-            py::arg("b0"));
+            py::arg("b_min"),
+            py::arg("b_max"));
 }
 
 template <typename RealType> void declare_periodic_torsion(py::module &m, const char *typestr) {

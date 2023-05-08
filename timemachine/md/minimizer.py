@@ -434,7 +434,7 @@ def get_val_and_grad_fn(bps, box):
     return val_and_grad_fn
 
 
-def local_minimize(x0, val_and_grad_fn, local_idxs, verbose=True, assert_energy_decreased=True):
+def local_minimize(x0, val_and_grad_fn, local_idxs, verbose=True, assert_energy_decreased=True, method="BFGS"):
     """
     Minimize a local region given selected idxs.
 
@@ -490,8 +490,6 @@ def local_minimize(x0, val_and_grad_fn, local_idxs, verbose=True, assert_energy_
 
     x_local_0 = x0[local_idxs]
     x_local_0_flat = x_local_0.reshape(-1)
-
-    method = "BFGS"
 
     if verbose:
         print("-" * 70)
