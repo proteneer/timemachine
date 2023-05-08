@@ -443,6 +443,59 @@ def get_solvent_phase_system(mol, ff, lamb: float, box_width=3.0, margin=0.5, mi
     return potentials, params, masses, coords, water_box
 
 
+def get_complex_phase_system(mol, host_pdb, ff, minimize_energy=True):
+    """
+    Given a mol and forcefield return a solvated system where the
+    solvent has (optionally) been minimized.
+
+    Parameters
+    ----------
+    mol: Chem.Mol
+
+    ff: Forcefield
+
+    lamb: float
+
+    margin: Optional, float
+        Box margin in nm, default is 0.5 nm.
+
+    minimize_energy: bool
+        whether to apply minimize_host_4d
+    """
+
+    # construct water box
+    complex_system, complex_coords, complex_box, complex_topology = builders.build_protein_system(
+        host_pdb, ff.protein_ff, ff.water_ff
+    )
+
+    # construct alchemical system
+    bt = topology.BaseTopology(mol, ff)
+    afe = free_energy.AbsoluteFreeEnergy(mol, bt)
+    ff_params = ff.get_params()
+    potentials, params, masses = afe.prepare_host_edge(ff_params, complex_system, 1.0)
+
+    bound_potentials = []
+    for pot, param in zip(potentials, params):
+        bound_potentials.append(pot.bind(param))
+
+    # concatenate (optionally minimized) water_coords and ligand_coords
+    ligand_coords = get_romol_conf(mol)
+    if minimize_energy:
+        # assert 0
+        print("minimizing energy...")
+        # new_complex_coords = minimizer.minimize_host_4d([mol], complex_system, complex_coords, ff, complex_box)
+        x0 = np.concatenate([complex_coords, ligand_coords], axis=0)
+        idxs = list(range(len(x0)))
+        bp_impls = [bp.to_gpu(np.float32).bound_impl for bp in bound_potentials]
+        vgf = minimizer.get_val_and_grad_fn(bp_impls, complex_box)
+        coords = minimizer.local_minimize(x0, vgf, idxs, method="L-BFGS-B")
+        # coords = np.concatenate([new_complex_coords, ligand_coords])
+    else:
+        coords = np.concatenate([complex_coords, ligand_coords])
+
+    return potentials, params, masses, coords, complex_box
+
+
 def equilibrate_solvent_phase(
     potentials,
     params,
