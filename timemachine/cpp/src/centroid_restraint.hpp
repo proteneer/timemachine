@@ -18,11 +18,16 @@ private:
     int N_B_;
 
     double kb_;
-    double b0_;
+    double b_min_;
+    double b_max_;
 
 public:
     CentroidRestraint(
-        const std::vector<int> &group_a_idxs, const std::vector<int> &group_b_idxs, const double kb, const double b0);
+        const std::vector<int> &group_a_idxs,
+        const std::vector<int> &group_b_idxs,
+        const double kb,
+        const double b_min,
+        const double b_max);
 
     ~CentroidRestraint();
 

@@ -28,6 +28,23 @@ from timemachine.potentials import bonded, rmsd
 
 logger = logging.getLogger(__name__)
 
+from openmm import app
+
+from timemachine.potentials import CentroidRestraint
+
+# from timemachine.potentials.jax_utils import delta_r
+
+
+# numpy version
+def delta_r(ri, rj, box=None):
+    diff = ri - rj  # this can be either N,N,3 or B,3
+
+    # box is None for harmonic bonds, not None for nonbonded terms
+    if box is not None:
+        box_diag = np.diag(box)
+        diff -= box_diag * np.floor(diff / box_diag + 0.5)
+    return diff
+
 
 def identify_rotatable_bonds(mol):
     """
@@ -108,7 +125,6 @@ class VacuumState:
         return self.it_potential(x, self.improper_torsion_params, self.box)
 
     def _nonbonded_nrg(self, x, decharge):
-
         if decharge:
             charge_indices = jnp.index_exp[:, 0]
             nb_params = jnp.asarray(self.nb_params).at[charge_indices].set(0)
@@ -441,6 +457,164 @@ def get_solvent_phase_system(mol, ff, lamb: float, box_width=3.0, margin=0.5, mi
         coords = np.concatenate([water_coords, ligand_coords])
 
     return potentials, params, masses, coords, water_box
+
+
+import networkx as nx
+
+from timemachine import graph_utils
+
+
+def find_jordan_centers(mol):
+    g = graph_utils.convert_to_nx(mol)
+    return list(nx.center(g))
+
+
+def get_complex_phase_system(mol, host_pdb, ff, minimize_energy=True):
+    """
+    Given a mol and forcefield return a solvated system where the
+    solvent has (optionally) been minimized.
+
+    Parameters
+    ----------
+    mol: Chem.Mol
+
+    ff: Forcefield
+
+    lamb: float
+
+    margin: Optional, float
+        Box margin in nm, default is 0.5 nm.
+
+    minimize_energy: bool
+        whether to apply minimize_host_4d
+    """
+
+    # construct water box
+    complex_system, complex_coords, complex_box, complex_topology = builders.build_protein_system(
+        host_pdb, ff.protein_ff, ff.water_ff
+    )
+
+    # construct alchemical system
+    bt = topology.BaseTopology(mol, ff)
+    afe = free_energy.AbsoluteFreeEnergy(mol, bt)
+    ff_params = ff.get_params()
+
+    # REVERTME: 1.0?
+    potentials, params, masses = afe.prepare_host_edge(ff_params, complex_system, 1.0)
+
+    # concatenate (optionally minimized) water_coords and ligand_coords
+    ligand_coords = get_romol_conf(mol)
+    jordan_coords = []
+    jordan_idxs = find_jordan_centers(mol)
+
+    for atom in mol.GetAtoms():
+        atom_idx = atom.GetIdx()
+        if atom_idx in jordan_idxs:
+            jordan_coords.append(ligand_coords[atom_idx])
+
+    jordan_centroid = np.mean(jordan_coords, axis=0)
+
+    num_total_atoms = len(complex_coords) + len(ligand_coords)
+    num_ligand_atoms = mol.GetNumAtoms()
+
+    print("Ligand Centroid Idxs", jordan_idxs)
+    # offset indices
+    jordan_idxs = [x + len(complex_coords) for x in jordan_idxs]
+
+    # tbd: strip waters from host
+    # c_alpha_restraint_idxs = [616, 1529] # if we want use specified ones
+
+    # find nearby backbone atoms
+    host_top = app.PDBFile(host_pdb).topology
+
+    best_c_alpha_restraint_idxs = []
+    best_dist = np.inf
+
+    # set up REST region aroudn the ligand
+    side_chain_cutoff = 0.3
+    rest_idxs = []
+    for host_atom_idx, atom in enumerate(host_top.atoms()):
+        # avoid all backbone atoms
+        # if atom.name not in set(["CA", "C", "H", "O", "N"]):
+        for l_xyz in ligand_coords:
+            dr2 = delta_r(complex_coords[host_atom_idx], l_xyz, complex_box)
+            if np.linalg.norm(dr2) < side_chain_cutoff:
+                rest_idxs.append(host_atom_idx)
+                break
+
+    # set up restraints
+    for r in range(0, 100):
+        cutoff = r / 100
+        c_alpha_restraint_idxs = []
+        # tbd: replace with user specified
+        for host_atom_idx, atom in enumerate(host_top.atoms()):
+            # carbon-alpha
+            if atom.name == "CA":
+                # compute distance of carbon alpha to centroid of the ligand
+                # for ligand_atom_coords in   :
+                dr = delta_r(complex_coords[host_atom_idx], jordan_centroid, complex_box)
+                if np.linalg.norm(dr) < cutoff:  # 5 Angstroms
+                    # print("adding", host_atom_idx, atom, "to restraints")
+                    c_alpha_restraint_idxs.append(host_atom_idx)
+
+        c_alpha_centroid = np.mean(complex_coords[c_alpha_restraint_idxs], axis=0)
+        dist = np.linalg.norm(jordan_centroid - c_alpha_centroid)
+        if dist < best_dist:
+            # print(dist, c_alpha_restraint_idxs)
+            best_c_alpha_restraint_idxs = c_alpha_restraint_idxs
+            best_dist = dist
+
+    c_alpha_restraint_idxs = best_c_alpha_restraint_idxs
+    print("!\tInitial distance between centroids", best_dist)
+    print("!\tC Alpha Restraint Idxs", c_alpha_restraint_idxs)
+    print("!\tSide Chain REST idxs", rest_idxs)
+
+    flat_bottom_padding = 0.0
+    centroid_restraint = CentroidRestraint(
+        jordan_idxs,
+        c_alpha_restraint_idxs,
+        kb=1600.0,  # scaled by 1/4 in the quartic potential
+        b_min=0.0,
+        b_max=best_dist + flat_bottom_padding,
+    )
+
+    potentials = list(potentials)
+    params = list(params)
+
+    # insert in the middle to avoid dealing with code that expects [0] to be bonds and [-1] to be nonbonded
+    potentials.insert(3, centroid_restraint)
+    params.insert(3, np.array([]))
+
+    # deal with clashes still, sigh
+    complex_box += np.eye(3) * 0.15
+
+    ligand_idxs = np.array(np.arange(num_total_atoms - num_ligand_atoms, num_total_atoms), dtype=np.int32)
+
+    if minimize_energy:
+        print("minimizing energy...")
+        # new_complex_coords = minimizer.minimize_host_4d([mol], complex_system, complex_coords, ff, complex_box)
+        x0 = np.concatenate([complex_coords, ligand_coords], axis=0)
+
+        # print(np.mean(x0[ligand_idxs], axis=0))
+        # print(np.mean(x0[jordan_idxs], axis=0))
+
+        # assert 0
+
+        # lift ligand ixns
+        bound_potentials = []
+        for idx, (pot, param) in enumerate(zip(potentials, params)):
+            bound_potentials.append(pot.bind(param))
+
+        bp_impls = [bp.to_gpu(np.float32).bound_impl for bp in bound_potentials]
+        vgf = minimizer.get_val_and_grad_fn(bp_impls, complex_box)
+
+        idxs = list(range(len(x0)))
+        coords = minimizer.local_minimize(x0, vgf, idxs, method="L-BFGS-B")
+        # coords = np.concatenate([new_complex_coords, ligand_coords])
+    else:
+        coords = np.concatenate([complex_coords, ligand_coords])
+
+    return potentials, params, masses, coords, complex_box, complex_topology, ligand_idxs, jordan_idxs, rest_idxs
 
 
 def equilibrate_solvent_phase(

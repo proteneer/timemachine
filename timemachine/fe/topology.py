@@ -220,6 +220,8 @@ class BaseTopology:
         w_coords = lamb * cutoff * jnp.ones((N, 1))
         params = jnp.concatenate([jnp.reshape(q_params, (-1, 1)), jnp.reshape(lj_params, (-1, 2)), w_coords], axis=1)
 
+        # print("BT", params.shape)
+
         return params, nb
 
     def parameterize_nonbonded_pairlist(self, ff_q_params, ff_q_params_intra, ff_lj_params, intramol_params=True):

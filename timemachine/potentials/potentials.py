@@ -42,10 +42,13 @@ class CentroidRestraint(Potential):
     group_a_idxs: NDArray[np.int32]
     group_b_idxs: NDArray[np.int32]
     kb: float
-    b0: float
+    b_min: float
+    b_max: float
 
     def __call__(self, conf: Conf, params: Params, box: Optional[Box]) -> float | Array:
-        return bonded.centroid_restraint(conf, params, box, self.group_a_idxs, self.group_b_idxs, self.kb, self.b0)
+        return bonded.centroid_restraint(
+            conf, params, box, self.group_a_idxs, self.group_b_idxs, self.kb, self.b_min, self.b_max
+        )
 
 
 @dataclass
