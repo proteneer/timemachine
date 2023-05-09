@@ -1,6 +1,6 @@
 # Time Machine
 
-A high-performance differentiable molecular dynamics and Forcefield engine.
+A high-performance differentiable molecular dynamics and forcefield engine.
 
 ## Features
 
