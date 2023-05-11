@@ -1,12 +1,11 @@
 # Time Machine
 
-A high-performance differentiable molecular dynamics, docking and optimization engine. Computes analytical derivatives of the MD observable (eg. free energies) with respect to the forcefield parameters.
+A high-performance differentiable molecular dynamics and forcefield engine.
 
 ## Features
 
 1. Interpolated nonbonded softcore potentials are implemented via 4D decoupling.
 2. Computes derivatives of the observables with respect to forcefield parameters.
-3. Equilibrium and non-equilibrium free energy estimators, with highly optimized du/dl computations.
 
 ## Deficiencies
 
@@ -54,7 +53,7 @@ pip install .
 
 ## Developing Time Machine
 
-### Installing in develop mode
+### Installing in developer mode
 
 ```shell
 pip install -r requirements.txt
@@ -88,25 +87,7 @@ For example, starting from a clean environment with the openeye license file in 
 OE_DIR=~/.openeye pytest -xsv tests/
 ```
 
-Note: we currently only support and test on python 3.7, use other versions at your own peril.
-
-# Free Energy Methods
-
-## Theory
-
-The free energy difference of transforming B into A is defined as the log ratio of two partition functions:
-
-<img width="187" alt="Screen Shot 2020-09-29 at 10 25 29 AM" src="https://user-images.githubusercontent.com/2280724/94571588-28c29200-023e-11eb-970a-0c03fdbcf275.png">
-
-We estimate the free energy using [thermodynamic integration](http://www.alchemistry.org/wiki/Thermodynamic_Integration) via 4D decoupling across multiple lambda windows.
-
-The derivative of the free energy is significantly easier and cheaper to calculate as it only requires endpoint information.
-
-<img width="361" alt="Screen Shot 2020-09-29 at 10 25 37 AM" src="https://user-images.githubusercontent.com/2280724/94571589-28c29200-023e-11eb-9f49-bb0ee619406d.png">
-
-When we have experimental measurements, the loss function and its derivative is therefore:
-
-<img width="293" alt="Screen Shot 2020-09-29 at 10 25 41 AM" src="https://user-images.githubusercontent.com/2280724/94571590-28c29200-023e-11eb-8948-c8acb44eaa1a.png">
+Note: we currently only support and test on python 3.10, use other versions at your own peril.
 
 ## Forcefield Gotchas
 
