@@ -16,13 +16,14 @@ private:
     const double dt_;
     const double friction_;
     double ca_;
+
+    // The offset into the current batch of noise
+    int noise_iteration_;
+
     double *d_cbs_;
     double *d_ccs_;
     double *d_noise_;
     unsigned long long *d_du_dx_;
-
-    std::vector<cudaStream_t> pot_streams_;
-    std::vector<cudaEvent_t> stream_events_;
 
     curandGenerator_t cr_rng_;
 

@@ -5,25 +5,21 @@ __global__ void update_forward_baoab(
     const int N,
     const int D,
     const RealType ca,
-    const unsigned int *__restrict__ idxs, // N
-    const RealType *__restrict__ cbs,      // N
-    const RealType *__restrict__ ccs,      // N
-    const RealType *__restrict__ noise,    // N x 3
-    RealType *__restrict__ x_t,
-    RealType *__restrict__ v_t,
-    const unsigned long long *__restrict__ du_dx,
+    const unsigned int *__restrict__ idxs,        // N
+    const RealType *__restrict__ cbs,             // N
+    const RealType *__restrict__ ccs,             // N
+    const RealType *__restrict__ noise,           // N x 3
+    RealType *__restrict__ x_t,                   // N x 3
+    RealType *__restrict__ v_t,                   // N x 3
+    const unsigned long long *__restrict__ du_dx, // N x 3
     const RealType dt) {
 
     int kernel_idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (kernel_idx >= N) {
         return;
     }
-    int atom_idx;
-    if (idxs) {
-        atom_idx = idxs[kernel_idx];
-    } else {
-        atom_idx = kernel_idx;
-    }
+    int atom_idx = idxs == nullptr ? kernel_idx : idxs[kernel_idx];
+
     if (atom_idx >= N) {
         return;
     }
