@@ -15,6 +15,10 @@ private:
     const double dt_;
     const double friction_;
     double ca_;
+
+    int step_;
+    int noise_batch_size_;
+
     double *d_cbs_;
     double *d_ccs_;
     double *d_noise_;
