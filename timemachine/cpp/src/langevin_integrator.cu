@@ -10,7 +10,8 @@ namespace timemachine {
 
 LangevinIntegrator::LangevinIntegrator(
     int N, const double *masses, double temperature, double dt, double friction, int seed)
-    : N_(N), temperature_(temperature), dt_(dt), friction_(friction), runner_() {
+    : N_(N), temperature_(temperature), dt_(dt), friction_(friction), noise_iteration_(0), noise_batch_size_(5),
+      runner_() {
 
     ca_ = exp(-friction * dt);
 
@@ -28,7 +29,7 @@ LangevinIntegrator::LangevinIntegrator(
     d_ccs_ = gpuErrchkCudaMallocAndCopy(h_ccs.data(), N_);
 
     curandErrchk(curandCreateGenerator(&cr_rng_, CURAND_RNG_PSEUDO_DEFAULT));
-    cudaSafeMalloc(&d_noise_, round_up_even(N_ * 3) * sizeof(*d_noise_));
+    cudaSafeMalloc(&d_noise_, round_up_even(noise_batch_size_ * N_ * 3) * sizeof(*d_noise_));
     curandErrchk(curandSetPseudoRandomGeneratorSeed(cr_rng_, seed));
 
     cudaSafeMalloc(&d_du_dx_, N_ * 3 * sizeof(*d_du_dx_));
@@ -65,18 +66,22 @@ void LangevinIntegrator::step_fwd(
         nullptr,
         stream);
 
-    curandErrchk(curandSetStream(cr_rng_, stream));
-    curandErrchk(templateCurandNormal(cr_rng_, d_noise_, round_up_even(N_ * D), 0.0, 1.0));
+    noise_iteration_ = noise_iteration_ % noise_batch_size_;
+    if (noise_iteration_ == 0) {
+        // Generating noise can be expensive, doing it in batches for efficiency
+        curandErrchk(curandSetStream(cr_rng_, stream));
+        curandErrchk(templateCurandNormal(cr_rng_, d_noise_, round_up_even(noise_batch_size_ * N_ * D), 0.0, 1.0));
+    }
 
     size_t tpb = default_threads_per_block;
     // Run in blocks so as to ensure that neighboring threads are modifying the same atom
     // which allows more efficient memory accesses/writes
     size_t n_blocks = ceil_divide(N_ * D, tpb);
 
-    update_forward_baoab<double>
-        <<<n_blocks, tpb, 0, stream>>>(N_, D, ca_, d_idxs, d_cbs_, d_ccs_, d_noise_, d_x_t, d_v_t, d_du_dx_, 0.5 * dt_);
-
+    update_forward_baoab<double><<<n_blocks, tpb, 0, stream>>>(
+        N_, D, ca_, d_idxs, d_cbs_, d_ccs_, d_noise_ + (noise_iteration_ * N_ * D), d_x_t, d_v_t, d_du_dx_, 0.5 * dt_);
     gpuErrchk(cudaPeekAtLastError());
+    noise_iteration_++;
 }
 
 void LangevinIntegrator::initialize(

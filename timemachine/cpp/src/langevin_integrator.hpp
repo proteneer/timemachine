@@ -16,13 +16,15 @@ private:
     const double dt_;
     const double friction_;
     double ca_;
+
+    // The iteration of the noise, will be between 0 and noise_batch_size_ - 1
+    int noise_iteration_;
+    int noise_batch_size_; // Number of batches of noise to generate at one time.
+
     double *d_cbs_;
     double *d_ccs_;
-    double *d_noise_;
+    double *d_noise_; // [N_ * 3 * noise_batch_size_]
     unsigned long long *d_du_dx_;
-
-    std::vector<cudaStream_t> pot_streams_;
-    std::vector<cudaEvent_t> stream_events_;
 
     curandGenerator_t cr_rng_;
 
