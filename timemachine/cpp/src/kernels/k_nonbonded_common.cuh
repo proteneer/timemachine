@@ -24,10 +24,25 @@ typedef void (*k_nonbonded_fn)(
 #define PI 3.141592653589793115997963468544185161
 #define TWO_OVER_SQRT_PI 1.128379167095512595889238330988549829708
 
+double __device__ __forceinline__ fast_erfc(double val) { return erfc(val); }
+
+// fast_erfc here duplicates some of the logic of real_es_factor as real_es_factor relies on exp_beta_dij_2
+float __device__ __forceinline__ fast_erfc(float val) {
+    // max ulp error is: 2 + floor(abs(1.16 * x))
+    float exp_val_2 = __expf(-val * val);
+    // 5th order gaussian polynomial approximation, we need the exp(-x^2) anyways for the chain rule
+    // so we use last variant in https://en.wikipedia.org/wiki/Error_function#Approximation_with_elementary_functions
+    float t = 1.0f / (1.0f + 0.3275911f * val);
+    float erfc_val =
+        (0.254829592f + (-0.284496736f + (1.421413741f + (-1.453152027f + 1.061405429f * t) * t) * t) * t) * t *
+        exp_val_2;
+    return erfc_val;
+}
+
 double __device__ __forceinline__ real_es_factor(double real_beta, double dij, double inv_d2ij, double &erfc_beta_dij) {
     double beta_dij = real_beta * dij;
+    erfc_beta_dij = fast_erfc(beta_dij);
     double exp_beta_dij_2 = exp(-beta_dij * beta_dij);
-    erfc_beta_dij = erfc(beta_dij);
     return -inv_d2ij * (static_cast<double>(TWO_OVER_SQRT_PI) * beta_dij * exp_beta_dij_2 + erfc_beta_dij);
 }
 
