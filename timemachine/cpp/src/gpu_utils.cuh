@@ -16,6 +16,8 @@ templateCurandNormal(curandGenerator_t generator, double *outputPtr, size_t n, d
 
 #define gpuErrchk(ans)                                                                                                 \
     { gpuAssert((ans), __FILE__, __LINE__); }
+#define gpuErrWarn(ans)                                                                                                \
+    { gpuAssert((ans), __FILE__, __LINE__, false); }
 inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort = true) {
     if (code != cudaSuccess) {
         fprintf(stderr, "GPUassert: %s %s %d\n", cudaGetErrorString(code), file, line);

@@ -132,8 +132,8 @@ std::array<std::vector<double>, 2> Context::multiple_steps_local(
         intg_->finalize(local_pots, d_x_t_, d_v_t_, d_box_t_, d_free_idxs, stream);
         local_md_pots_->reset_potentials(stream);
     } catch (...) {
-        gpuErrchk(cudaStreamSynchronize(stream));
-        gpuErrchk(cudaStreamDestroy(stream));
+        gpuErrWarn(cudaStreamSynchronize(stream));
+        gpuErrWarn(cudaStreamDestroy(stream));
         throw;
     }
     gpuErrchk(cudaStreamSynchronize(stream));
@@ -209,8 +209,8 @@ std::array<std::vector<double>, 2> Context::multiple_steps_local_selection(
         intg_->finalize(local_pots, d_x_t_, d_v_t_, d_box_t_, d_free_idxs, stream);
         local_md_pots_->reset_potentials(stream);
     } catch (...) {
-        gpuErrchk(cudaStreamSynchronize(stream));
-        gpuErrchk(cudaStreamDestroy(stream));
+        gpuErrWarn(cudaStreamSynchronize(stream));
+        gpuErrWarn(cudaStreamDestroy(stream));
         throw;
     }
     gpuErrchk(cudaStreamSynchronize(stream));
