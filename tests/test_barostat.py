@@ -127,8 +127,8 @@ def test_barostat_partial_group_idxs():
 
 @pytest.mark.memcheck
 def test_barostat_is_deterministic():
-    """Verify that the barostat results in the same box size shift after 1000
-    steps. This is important to debugging as well as providing the ability to replicate
+    """Verify that the barostat results in the same box size shift after a fixed number of steps
+    This is important to debugging as well as providing the ability to replicate
     simulations
     """
     lam = 1.0
@@ -138,8 +138,6 @@ def test_barostat_is_deterministic():
     collision_rate = 1.0
     seed = 2021
     np.random.seed(seed)
-
-    box_vol = 26.89966
 
     pressure = 1.013
 
@@ -190,7 +188,19 @@ def test_barostat_is_deterministic():
     atm_box = ctxt.get_box()
     # Verify that the volume of the box has changed
     assert compute_box_volume(atm_box) != compute_box_volume(host_box)
-    np.testing.assert_almost_equal(compute_box_volume(atm_box), box_vol, decimal=5)
+
+    baro = custom_ops.MonteCarloBarostat(
+        coords.shape[0],
+        pressure,
+        temperature,
+        group_indices,
+        barostat_interval,
+        u_impls,
+        seed,
+    )
+    ctxt = custom_ops.Context(coords, v_0, host_box, integrator_impl, u_impls, barostat=baro)
+    ctxt.multiple_steps(15)
+    assert compute_box_volume(atm_box) == compute_box_volume(ctxt.get_box())
 
 
 def test_barostat_varying_pressure():
