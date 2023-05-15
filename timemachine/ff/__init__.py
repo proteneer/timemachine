@@ -89,7 +89,10 @@ class Forcefield:
         # Look for builtin ff
         with resources.as_file(resources.files("timemachine.ff.params") / path.name) as rpath:
             if rpath.exists():
-                warn(f"Provided path {original_path} shares name with built-in forcefield, falling back to built-in")
+                if path.is_file():
+                    warn(
+                        f"Provided path {original_path} shares name with built-in forcefield, falling back to built-in"
+                    )
                 handlers, protein_ff, water_ff = deserialize_handlers(rpath.read_text())
                 return cls.from_handlers(handlers, protein_ff=protein_ff, water_ff=water_ff)
 
