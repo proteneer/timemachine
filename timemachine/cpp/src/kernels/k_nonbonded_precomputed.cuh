@@ -88,7 +88,7 @@ void __global__ k_nonbonded_precomputed(
 
     if (q_ij != 0) {
 
-        RealType beta_dij = beta * d_ij;
+        RealType beta_dij = real_beta * d_ij;
         RealType erfc_beta = fast_erfc(beta_dij);
 
         if (u_buffer) {
@@ -100,21 +100,26 @@ void __global__ k_nonbonded_precomputed(
         if (du_dx || du_dp) {
             RealType du_dr =
                 q_ij *
-                ((beta_dij * exp(-beta * beta_dij * d_ij)) * static_cast<RealType>(TWO_OVER_SQRT_PI) + erfc_beta);
+                ((beta_dij * exp(-real_beta * beta_dij * d_ij)) * static_cast<RealType>(TWO_OVER_SQRT_PI) + erfc_beta);
             du_dr *= -inv_dij * inv_dij;
 
-            // forces
-            gi_x += FLOAT_TO_FIXED_NONBONDED(du_dr * delta_x * inv_dij);
-            gi_y += FLOAT_TO_FIXED_NONBONDED(du_dr * delta_y * inv_dij);
-            gi_z += FLOAT_TO_FIXED_NONBONDED(du_dr * delta_z * inv_dij);
+            RealType force_prefactor = du_dr * inv_dij;
+            if (du_dx) {
+                // forces
+                gi_x += FLOAT_TO_FIXED_NONBONDED(delta_x * force_prefactor);
+                gi_y += FLOAT_TO_FIXED_NONBONDED(delta_y * force_prefactor);
+                gi_z += FLOAT_TO_FIXED_NONBONDED(delta_z * force_prefactor);
 
-            gj_x += FLOAT_TO_FIXED_NONBONDED(-du_dr * delta_x * inv_dij);
-            gj_y += FLOAT_TO_FIXED_NONBONDED(-du_dr * delta_y * inv_dij);
-            gj_z += FLOAT_TO_FIXED_NONBONDED(-du_dr * delta_z * inv_dij);
+                gj_x += FLOAT_TO_FIXED_NONBONDED(-delta_x * force_prefactor);
+                gj_y += FLOAT_TO_FIXED_NONBONDED(-delta_y * force_prefactor);
+                gj_z += FLOAT_TO_FIXED_NONBONDED(-delta_z * force_prefactor);
+            }
 
-            // du/dp
-            g_q_ij += FLOAT_TO_FIXED_DU_DP<RealType, FIXED_EXPONENT_DU_DCHARGE>(erfc_beta * inv_dij);
-            g_dw_ij += FLOAT_TO_FIXED_DU_DP<RealType, FIXED_EXPONENT_DU_DW>(du_dr * delta_w * inv_dij);
+            if (du_dp) {
+                // du/dp
+                g_q_ij += FLOAT_TO_FIXED_DU_DP<RealType, FIXED_EXPONENT_DU_DCHARGE>(erfc_beta * inv_dij);
+                g_dw_ij += FLOAT_TO_FIXED_DU_DP<RealType, FIXED_EXPONENT_DU_DW>(delta_w * force_prefactor);
+            }
         }
     }
 
@@ -122,31 +127,31 @@ void __global__ k_nonbonded_precomputed(
 
         RealType d_ij_6 = pow(d_ij, 6);
         RealType sig_ij_6 = pow(sig_ij, 6);
-        RealType d_ij_12 = d_ij_6 * d_ij_6;
         RealType du_de;
         if (u_buffer || du_dp) {
             RealType sig_inv_dij_6 = pow(sig_ij * inv_dij, 6);
             du_de = 4 * (sig_inv_dij_6 - 1) * sig_inv_dij_6;
-        }
-
-        if (u_buffer) {
-            // energies
-            RealType nrg = eps_ij * du_de;
-            energy += FLOAT_TO_FIXED_NONBONDED(nrg);
-            atomicAdd(u_buffer + atom_i_idx, energy);
+            if (u_buffer) {
+                // energies
+                RealType nrg = eps_ij * du_de;
+                energy += FLOAT_TO_FIXED_NONBONDED(nrg);
+                atomicAdd(u_buffer + atom_i_idx, energy);
+            }
         }
 
         if (du_dx || du_dp) {
+            RealType d_ij_12 = d_ij_6 * d_ij_6;
             RealType du_dr = eps_ij * 24 * sig_ij_6 * (d_ij_6 - 2 * sig_ij_6) / (d_ij_12 * d_ij);
 
+            RealType force_prefactor = du_dr * inv_dij;
             if (du_dx) {
-                gi_x += FLOAT_TO_FIXED_NONBONDED(du_dr * delta_x * inv_dij);
-                gi_y += FLOAT_TO_FIXED_NONBONDED(du_dr * delta_y * inv_dij);
-                gi_z += FLOAT_TO_FIXED_NONBONDED(du_dr * delta_z * inv_dij);
+                gi_x += FLOAT_TO_FIXED_NONBONDED(delta_x * force_prefactor);
+                gi_y += FLOAT_TO_FIXED_NONBONDED(delta_y * force_prefactor);
+                gi_z += FLOAT_TO_FIXED_NONBONDED(delta_z * force_prefactor);
 
-                gj_x += FLOAT_TO_FIXED_NONBONDED(-du_dr * delta_x * inv_dij);
-                gj_y += FLOAT_TO_FIXED_NONBONDED(-du_dr * delta_y * inv_dij);
-                gj_z += FLOAT_TO_FIXED_NONBONDED(-du_dr * delta_z * inv_dij);
+                gj_x += FLOAT_TO_FIXED_NONBONDED(-delta_x * force_prefactor);
+                gj_y += FLOAT_TO_FIXED_NONBONDED(-delta_y * force_prefactor);
+                gj_z += FLOAT_TO_FIXED_NONBONDED(-delta_z * force_prefactor);
 
                 atomicAdd(du_dx + atom_i_idx * 3 + 0, gi_x);
                 atomicAdd(du_dx + atom_i_idx * 3 + 1, gi_y);
@@ -162,7 +167,7 @@ void __global__ k_nonbonded_precomputed(
 
                 g_eps_ij += FLOAT_TO_FIXED_DU_DP<RealType, FIXED_EXPONENT_DU_DEPS>(du_de);
                 g_sig_ij += FLOAT_TO_FIXED_DU_DP<RealType, FIXED_EXPONENT_DU_DSIG>(du_ds);
-                g_dw_ij += FLOAT_TO_FIXED_DU_DP<RealType, FIXED_EXPONENT_DU_DW>(du_dr * delta_w * inv_dij);
+                g_dw_ij += FLOAT_TO_FIXED_DU_DP<RealType, FIXED_EXPONENT_DU_DW>(delta_w * force_prefactor);
 
                 atomicAdd(du_dp + params_ij_idx + PARAM_OFFSET_CHARGE, g_q_ij);
                 atomicAdd(du_dp + params_ij_idx + PARAM_OFFSET_SIG, g_sig_ij);
