@@ -201,6 +201,7 @@ def benchmark(
     ctxt.multiple_steps(steps_per_batch)
 
     start = time.time()
+    import matplotlib.pyplot as plt
 
     for batch in range(num_batches):
 
@@ -224,7 +225,11 @@ def benchmark(
             print(f"ns per day: {ns_per_day:.3f}")
 
     assert np.all(np.abs(ctxt.get_x_t()) < 1000)
-
+    plt.plot(batch_times)
+    plt.axhline(np.mean(batch_times))
+    plt.axhline(np.median(batch_times), linestyle="--")
+    plt.savefig(f"{label}.png")
+    plt.clf()
     print(
         f"{label}: N={x0.shape[0]} speed: {ns_per_day:.2f}ns/day dt: {dt*1e3}fs (ran {steps_per_batch * num_batches} steps in {(time.time() - start):.2f}s)"
     )
@@ -397,42 +402,47 @@ def benchmark_hif2a(verbose=False, num_batches=100, steps_per_batch=1000):
         ("hif2a", complex_system, complex_coords, complex_box),
         ("solvent", solvent_system, solvent_coords, solvent_box),
     ]:
+        import os
+        import pickle
 
-        host_fns, host_masses = openmm_deserializer.deserialize_system(host_system, cutoff=1.2)
+        pickle_path = f"{stage}_state.pkl"
+        # host_fns, host_masses = openmm_deserializer.deserialize_system(host_system, cutoff=1.2)
 
-        # resolve host clashes
-        min_host_coords = minimizer.minimize_host_4d([st.mol_a, st.mol_b], host_system, host_coords, st.ff, host_box)
+        # # resolve host clashes
+        # min_host_coords = minimizer.minimize_host_4d([st.mol_a, st.mol_b], host_system, host_coords, st.ff, host_box)
 
-        x0 = min_host_coords
-        v0 = np.zeros_like(x0)
+        # x0 = min_host_coords
+        # v0 = np.zeros_like(x0)
 
-        benchmark(
-            stage + "-apo",
-            host_masses,
-            x0,
-            v0,
-            host_box,
-            host_fns,
-            verbose=verbose,
-            num_batches=num_batches,
-            steps_per_batch=steps_per_batch,
-        )
-        benchmark(
-            stage + "-apo-barostat-interval-25",
-            host_masses,
-            x0,
-            v0,
-            host_box,
-            host_fns,
-            verbose=verbose,
-            num_batches=num_batches,
-            steps_per_batch=steps_per_batch,
-            barostat_interval=25,
-        )
+        # benchmark(
+        #     stage + "-apo",
+        #     host_masses,
+        #     x0,
+        #     v0,
+        #     host_box,
+        #     host_fns,
+        #     verbose=verbose,
+        #     num_batches=num_batches,
+        #     steps_per_batch=steps_per_batch,
+        # )
+        # benchmark(
+        #     stage + "-apo-barostat-interval-25",
+        #     host_masses,
+        #     x0,
+        #     v0,
+        #     host_box,
+        #     host_fns,
+        #     verbose=verbose,
+        #     num_batches=num_batches,
+        #     steps_per_batch=steps_per_batch,
+        #     barostat_interval=25,
+        # )
 
-        # RBFE
-        initial_state = prepare_hif2a_initial_state(st, host_system, host_coords, host_box)
-
+        if not os.path.isfile(pickle_path):
+            # RBFE
+            initial_state = prepare_hif2a_initial_state(st, host_system, host_coords, host_box)
+            pickle.dump(initial_state, open(pickle_path, "wb"))
+        initial_state = pickle.load(open(pickle_path, "rb"))
         benchmark(
             stage + "-rbfe",
             initial_state.integrator.masses,
@@ -445,18 +455,18 @@ def benchmark_hif2a(verbose=False, num_batches=100, steps_per_batch=1000):
             steps_per_batch=steps_per_batch,
         )
 
-        benchmark_local(
-            stage + "-rbfe-local",
-            initial_state.integrator.masses,
-            initial_state.x0,
-            initial_state.v0,
-            host_box,
-            initial_state.potentials,
-            initial_state.ligand_idxs,
-            verbose=verbose,
-            num_batches=num_batches,
-            steps_per_batch=steps_per_batch,
-        )
+        # benchmark_local(
+        #     stage + "-rbfe-local",
+        #     initial_state.integrator.masses,
+        #     initial_state.x0,
+        #     initial_state.v0,
+        #     host_box,
+        #     initial_state.potentials,
+        #     initial_state.ligand_idxs,
+        #     verbose=verbose,
+        #     num_batches=num_batches,
+        #     steps_per_batch=steps_per_batch,
+        # )
 
 
 def test_dhfr():
@@ -558,10 +568,10 @@ def test_bonded_potentials(hi2fa_test_frames):
 
 if __name__ == "__main__":
 
-    benchmark_dhfr(verbose=False, num_batches=100)
-    benchmark_hif2a(verbose=False, num_batches=100)
+    # benchmark_dhfr(verbose=False, num_batches=100)
+    benchmark_hif2a(verbose=False, num_batches=100, steps_per_batch=10000)
 
-    hif2a_frames = generate_hif2a_frames(1000, 5, seed=2022)
-    test_nonbonded_interaction_group_potential(hif2a_frames)
-    test_nonbonded_potential(hif2a_frames)
-    test_bonded_potentials(hif2a_frames)
+#    hif2a_frames = generate_hif2a_frames(1000, 5, seed=2022)
+#    test_nonbonded_interaction_group_potential(hif2a_frames)
+#    test_nonbonded_potential(hif2a_frames)
+#    test_bonded_potentials(hif2a_frames)
