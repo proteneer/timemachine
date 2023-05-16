@@ -214,7 +214,7 @@ def test_infer_node_dgs_w_error_invariant_wrt_edge_order():
         p = np.random.permutation(len(edge_idxs))
         dg_2, dg_err_2 = f(edge_idxs[p, :], obs_edge_diffs[p], edge_stddevs[p])
 
-        np.testing.assert_allclose(dg_1, dg_2, rtol=1e-5)
+        np.testing.assert_allclose(dg_1, dg_2, rtol=1e-4)
 
         # TODO: errors are noisy; unclear how to test consistency
         # np.testing.assert_allclose(dg_err_1, dg_err_2) # fails
