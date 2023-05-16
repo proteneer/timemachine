@@ -147,10 +147,10 @@ class HostGuestTopology:
     def parameterize_nonbonded(self, ff_q_params, ff_q_params_intra, ff_q_params_solv, ff_lj_params, lamb: float):
         num_guest_atoms = self.guest_topology.get_num_atoms()
         guest_params, guest_pot = self.guest_topology.parameterize_nonbonded(
-            ff_q_params, ff_q_params_intra, ff_q_params_solv, ff_lj_params, lamb, intramol_params=False
+            ff_q_params, None, None, ff_lj_params, lamb, intramol_params=False
         )
         guest_params_solv, _ = self.guest_topology.parameterize_nonbonded(
-            ff_q_params_solv, ff_q_params_intra, ff_q_params_solv, ff_lj_params, lamb, intramol_params=False
+            ff_q_params_solv, None, None, ff_lj_params, lamb, intramol_params=False
         )
 
         assert guest_params.shape == (num_guest_atoms, 4)
@@ -187,7 +187,15 @@ class HostGuestTopology:
                     col_atom_idxs=np.array(self.get_water_idxs(), dtype=np.int32),
                 )
             )
-            # print("LW", lig_idxs, self.get_water_idxs(), "P", guest_params_solv.shape, "PS", guest_params_solv[lig_idxs, :].shape)
+            print(
+                "LW",
+                lig_idxs,
+                self.get_water_idxs(),
+                "P",
+                guest_params_solv.shape,
+                "PS",
+                guest_params_solv[lig_idxs, :].shape,
+            )
             hg_water_paramss.append(jnp.concatenate([self.host_nonbonded.params, guest_params_solv]))
 
         # hg_water_pot, hg_water_params = None, None # DEBUG TURN OFF WL term directly
@@ -206,7 +214,15 @@ class HostGuestTopology:
                         col_atom_idxs=np.array(self.get_other_idxs(), dtype=np.int32),
                     )
                 )
-                # print("LO", lig_idxs, self.get_other_idxs(), "P", guest_params.shape, "PS", guest_params[lig_idxs, :].shape)
+                print(
+                    "LO",
+                    lig_idxs,
+                    self.get_other_idxs(),
+                    "P",
+                    guest_params.shape,
+                    "PS",
+                    guest_params[lig_idxs, :].shape,
+                )
                 hg_other_paramss.append(jnp.concatenate([self.host_nonbonded.params, guest_params]))
 
         # hg_other_pot, hg_other_params = None, None
