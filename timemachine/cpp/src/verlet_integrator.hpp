@@ -4,6 +4,7 @@
 
 #include "bound_potential.hpp"
 #include "integrator.hpp"
+#include "streamed_potential_runner.hpp"
 
 namespace timemachine {
 
@@ -15,6 +16,7 @@ private:
     bool initialized_;
     double *d_cbs_;
     unsigned long long *d_du_dx_;
+    StreamedPotentialRunner runner_;
 
 public:
     VelocityVerletIntegrator(int N, double dt, const double *h_cbs);

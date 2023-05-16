@@ -236,6 +236,7 @@ class NonbondedPairListPrecomputed(Potential):
 class SummedPotential(Potential):
     potentials: Sequence[Potential]
     params_init: Sequence[NDArray]
+    parallel: bool = True
 
     def __post_init__(self):
         if len(self.potentials) != len(self.params_init):
@@ -248,7 +249,7 @@ class SummedPotential(Potential):
     def to_gpu(self, precision: Precision) -> "SummedPotentialGpuImplWrapper":
         impls = [p.to_gpu(precision).unbound_impl for p in self.potentials]
         sizes = [ps.size for ps in self.params_init]
-        return SummedPotentialGpuImplWrapper(custom_ops.SummedPotential(impls, sizes))
+        return SummedPotentialGpuImplWrapper(custom_ops.SummedPotential(impls, sizes, self.parallel))
 
 
 @dataclass
@@ -268,10 +269,11 @@ class SummedPotentialGpuImplWrapper(GpuImplWrapper):
 @dataclass
 class FanoutSummedPotential(Potential):
     potentials: Sequence[Potential]
+    parallel: bool = True
 
     def __call__(self, conf: Conf, params: Params, box: Optional[Box]) -> float | Array:
         return summed.fanout_summed_potential(conf, params, box, self.potentials)
 
     def to_gpu(self, precision: Precision) -> GpuImplWrapper:
         impls = [p.to_gpu(precision).unbound_impl for p in self.potentials]
-        return GpuImplWrapper(custom_ops.FanoutSummedPotential(impls))
+        return GpuImplWrapper(custom_ops.FanoutSummedPotential(impls, self.parallel))

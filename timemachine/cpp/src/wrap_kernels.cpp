@@ -1209,7 +1209,7 @@ void declare_barostat(py::module &m) {
                         const double temperature,
                         std::vector<std::vector<int>> group_idxs,
                         const int frequency,
-                        std::vector<timemachine::BoundPotential *> bps,
+                        std::vector<std::shared_ptr<timemachine::BoundPotential>> bps,
                         const int seed) {
                 return new timemachine::MonteCarloBarostat(N, pressure, temperature, group_idxs, frequency, bps, seed);
             }),
@@ -1233,12 +1233,13 @@ void declare_summed_potential(py::module &m) {
         m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
         .def(
             py::init(
-                [](std::vector<std::shared_ptr<timemachine::Potential>> potentials, std::vector<int> params_sizes) {
-                    return new timemachine::SummedPotential(potentials, params_sizes);
-                }),
+                [](std::vector<std::shared_ptr<timemachine::Potential>> potentials,
+                   std::vector<int> params_sizes,
+                   bool parallel) { return new timemachine::SummedPotential(potentials, params_sizes, parallel); }),
 
             py::arg("potentials"),
-            py::arg("params_sizes"))
+            py::arg("params_sizes"),
+            py::arg("parallel") = true)
         .def("get_potentials", &timemachine::SummedPotential::get_potentials);
 }
 
@@ -1249,10 +1250,11 @@ void declare_fanout_summed_potential(py::module &m) {
     py::class_<Class, std::shared_ptr<Class>, timemachine::Potential>(
         m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
         .def(
-            py::init([](std::vector<std::shared_ptr<timemachine::Potential>> potentials) {
-                return new timemachine::FanoutSummedPotential(potentials);
+            py::init([](std::vector<std::shared_ptr<timemachine::Potential>> potentials, bool parallel) {
+                return new timemachine::FanoutSummedPotential(potentials, parallel);
             }),
-            py::arg("potentials"))
+            py::arg("potentials"),
+            py::arg("parallel") = true)
         .def("get_potentials", &timemachine::FanoutSummedPotential::get_potentials);
 }
 
