@@ -169,7 +169,6 @@ def test_barostat_is_deterministic():
         masses,
         seed,
     )
-    integrator_impl = integrator.impl()
 
     v_0 = sample_velocities(masses, temperature)
 
@@ -183,7 +182,7 @@ def test_barostat_is_deterministic():
         seed,
     )
 
-    ctxt = custom_ops.Context(coords, v_0, host_box, integrator_impl, u_impls, barostat=baro)
+    ctxt = custom_ops.Context(coords, v_0, host_box, integrator.impl(), u_impls, barostat=baro)
     ctxt.multiple_steps(15)
     atm_box = ctxt.get_box()
     # Verify that the volume of the box has changed
@@ -198,7 +197,7 @@ def test_barostat_is_deterministic():
         u_impls,
         seed,
     )
-    ctxt = custom_ops.Context(coords, v_0, host_box, integrator_impl, u_impls, barostat=baro)
+    ctxt = custom_ops.Context(coords, v_0, host_box, integrator.impl(), u_impls, barostat=baro)
     ctxt.multiple_steps(15)
     assert compute_box_volume(atm_box) == compute_box_volume(ctxt.get_box())
 
