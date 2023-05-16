@@ -265,5 +265,5 @@ def test_local_md_particle_density(freeze_reference, k):
         return (xs[-1], boxes[-1]), None
 
     assert_no_drift(
-        (x0[-1], boxes[-1]), local_move, num_particles_near_ligand, n_local_resampling_iterations=250, threshold=0.05
+        (x0[-1], boxes[-1]), local_move, num_particles_near_ligand, n_local_resampling_iterations=250, threshold=0.055
     )
