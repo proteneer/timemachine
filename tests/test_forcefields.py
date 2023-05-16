@@ -33,9 +33,11 @@ def test_loading_forcefield_from_file():
         # Use full path as Path object
         ff = Forcefield.load_from_file(Path(path))
         assert ff is not None
-        # Load using just file name of the built in
-        ff = Forcefield.load_from_file(os.path.basename(path))
-        assert ff is not None
+        with catch_warnings(record=True) as w:
+            # Load using just file name of the built in
+            ff = Forcefield.load_from_file(os.path.basename(path))
+            assert ff is not None
+        assert len(w) == 0
 
     for prefix in ["", "timemachine/ff/params/"]:
         path = os.path.join(prefix, "nosuchfile.py")

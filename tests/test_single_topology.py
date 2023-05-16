@@ -4,6 +4,7 @@ from importlib import resources
 import hypothesis.strategies as st
 import jax
 import jax.numpy as jnp
+import networkx as nx
 import numpy as np
 import pytest
 from common import load_split_forcefields
@@ -12,11 +13,11 @@ from rdkit import Chem
 from rdkit.Chem import AllChem
 
 from timemachine.fe import atom_mapping, single_topology
+from timemachine.fe.dummy import MultipleAnchorWarning
 from timemachine.fe.interpolate import linear_interpolation, log_linear_interpolation
 from timemachine.fe.single_topology import (
     ChargePertubationError,
     CoreBondChangeWarning,
-    MultipleAnchorWarning,
     SingleTopology,
     canonicalize_improper_idxs,
     cyclic_difference,
@@ -95,17 +96,15 @@ def test_find_dummy_groups_and_anchors():
 
     core_pairs = np.array([[1, 2], [2, 1], [3, 0]])
 
-    dgs, jks = single_topology.find_dummy_groups_and_anchors(mol_a, mol_b, core_pairs[:, 0], core_pairs[:, 1])
-    assert dgs == [{3}]
-    assert jks == [(2, 1)]
+    dgs = single_topology.find_dummy_groups_and_anchors(mol_a, mol_b, core_pairs[:, 0], core_pairs[:, 1])
+    assert dgs == {2: (1, {3})}
 
     # angle should swap
     core_pairs = np.array([[1, 2], [2, 0], [3, 1]])
 
     with pytest.warns(CoreBondChangeWarning):
-        dgs, jks = single_topology.find_dummy_groups_and_anchors(mol_a, mol_b, core_pairs[:, 0], core_pairs[:, 1])
-        assert dgs == [{3}]
-        assert jks == [(2, None)]
+        dgs = single_topology.find_dummy_groups_and_anchors(mol_a, mol_b, core_pairs[:, 0], core_pairs[:, 1])
+        assert dgs == {2: (None, {3})}
 
 
 def test_find_dummy_groups_and_anchors_multiple_angles():
@@ -119,24 +118,22 @@ def test_find_dummy_groups_and_anchors_multiple_angles():
     AllChem.EmbedMolecule(mol_b, randomSeed=2022)
 
     core_pairs = np.array([[0, 2], [1, 1], [2, 3]])
-    dgs, jks = single_topology.find_dummy_groups_and_anchors(mol_a, mol_b, core_pairs[:, 0], core_pairs[:, 1])
-    assert dgs == [{0}]
-    assert jks == [(1, 2)] or jks == [(1, 3)]
+    dgs = single_topology.find_dummy_groups_and_anchors(mol_a, mol_b, core_pairs[:, 0], core_pairs[:, 1])
+    assert dgs == {1: (2, {0})} or dgs == {1: (3, {0})}
 
-    dgs_zero, jks_zero = single_topology.find_dummy_groups_and_anchors(mol_a, mol_b, core_pairs[:, 0], core_pairs[:, 1])
+    dgs_zero = single_topology.find_dummy_groups_and_anchors(mol_a, mol_b, core_pairs[:, 0], core_pairs[:, 1])
 
     # this code should be invariant to different random seeds and different ordering of core pairs
     for idx in range(100):
         np.random.seed(idx)
         core_pairs_shuffle = np.random.permutation(core_pairs)
-        dgs, jks = single_topology.find_dummy_groups_and_anchors(
+        dgs = single_topology.find_dummy_groups_and_anchors(
             mol_a, mol_b, core_pairs_shuffle[:, 0], core_pairs_shuffle[:, 1]
         )
         assert dgs == dgs_zero
-        assert jks == jks_zero
 
 
-def testing_find_dummy_groups_and_multiple_anchors():
+def test_find_dummy_groups_and_multiple_anchors():
     """
     Test that we can find anchors and dummy groups with multiple anchors, we expect to find only a single
     root anchor and neighbor core atom pair.
@@ -150,20 +147,18 @@ def testing_find_dummy_groups_and_multiple_anchors():
     core_pairs = np.array([[1, 1], [2, 2]])
 
     with pytest.warns(MultipleAnchorWarning):
-        dgs, jks = single_topology.find_dummy_groups_and_anchors(mol_a, mol_b, core_pairs[:, 0], core_pairs[:, 1])
-        assert dgs == [{0}]
-        assert jks == [(1, 2)] or jks == [(2, 1)]
+        dgs = single_topology.find_dummy_groups_and_anchors(mol_a, mol_b, core_pairs[:, 0], core_pairs[:, 1])
+        assert dgs == {1: (2, {0})} or dgs == {2: (1, {0})}
 
     # test determinism, should be robust against seeds
-    dgs_zero, jks_zero = single_topology.find_dummy_groups_and_anchors(mol_a, mol_b, core_pairs[:, 0], core_pairs[:, 1])
+    dgs_zero = single_topology.find_dummy_groups_and_anchors(mol_a, mol_b, core_pairs[:, 0], core_pairs[:, 1])
     for idx in range(100):
         np.random.seed(idx)
         core_pairs_shuffle = np.random.permutation(core_pairs)
-        dgs, jks = single_topology.find_dummy_groups_and_anchors(
+        dgs = single_topology.find_dummy_groups_and_anchors(
             mol_a, mol_b, core_pairs_shuffle[:, 0], core_pairs_shuffle[:, 1]
         )
         assert dgs == dgs_zero
-        assert jks == jks_zero
 
     mol_a = Chem.MolFromSmiles("C(C)(C)C")
     mol_b = Chem.MolFromSmiles("O1CCCC1")
@@ -175,9 +170,29 @@ def testing_find_dummy_groups_and_multiple_anchors():
     core_b = [2, 1, 4, 3]
 
     with pytest.warns(MultipleAnchorWarning):
-        dgs, jks = single_topology.find_dummy_groups_and_anchors(mol_a, mol_b, core_a, core_b)
-        assert dgs == [{0}]
-        assert jks == [(1, 2)]
+        dgs = single_topology.find_dummy_groups_and_anchors(mol_a, mol_b, core_a, core_b)
+        assert dgs == {1: (2, {0})}
+
+
+def test_ethane_cyclobutadiene():
+    """Test case where a naive heuristic for identifying dummy groups results in disconnected components"""
+
+    mol_a = Chem.AddHs(Chem.MolFromSmiles("CC"))
+    mol_b = Chem.AddHs(Chem.MolFromSmiles("c1ccc1"))
+
+    AllChem.EmbedMolecule(mol_a, randomSeed=2022)
+    AllChem.EmbedMolecule(mol_b, randomSeed=2022)
+
+    core = np.array([[2, 0], [4, 2], [0, 3], [3, 7]])
+    ff = Forcefield.load_default()
+    st = SingleTopology(mol_a, mol_b, core, ff)
+
+    g = nx.Graph()
+    g.add_nodes_from(range(st.get_num_atoms()))
+    g.add_edges_from(st.src_system.bond.potential.idxs)
+
+    # bond graph should be connected (i.e. no floating bits)
+    assert len(list(nx.connected_components(g))) == 1
 
 
 def test_charge_perturbation_is_invalid():
