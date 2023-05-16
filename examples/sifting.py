@@ -341,6 +341,9 @@ def adaptive_sequential_monte_carlo(
 
         print(t, lambdas[-1])
 
+    with open(outfile + "_final.npz", "wb") as fh:
+        np.savez(fh, log_weights=log_weights, samples=cur_samples)
+
     # final result: a collection of samples, with associated log weights
     incremental_log_weights = log_prob(samples, lambdas[-1]) - log_prob(samples, lambdas[-2])
     incremental_log_weights_traj.append(incremental_log_weights)
