@@ -1207,7 +1207,7 @@ void declare_barostat(py::module &m) {
                         const double temperature,
                         std::vector<std::vector<int>> group_idxs,
                         const int frequency,
-                        std::vector<timemachine::BoundPotential *> bps,
+                        std::vector<std::shared_ptr<timemachine::BoundPotential>> bps,
                         const int seed) {
                 return new timemachine::MonteCarloBarostat(N, pressure, temperature, group_idxs, frequency, bps, seed);
             }),

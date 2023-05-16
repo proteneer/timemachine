@@ -2,6 +2,7 @@
 #include "constants.hpp"
 #include "fixed_point.hpp"
 #include "gpu_utils.cuh"
+#include "math_utils.cuh"
 #include <algorithm>
 #include <cub/cub.cuh>
 #include <set>
@@ -17,10 +18,11 @@ MonteCarloBarostat::MonteCarloBarostat(
     const double temperature, // Kelvin
     const std::vector<std::vector<int>> group_idxs,
     const int interval,
-    const std::vector<BoundPotential *> bps,
+    const std::vector<std::shared_ptr<BoundPotential>> bps,
     const int seed)
     : N_(N), bps_(bps), pressure_(pressure), temperature_(temperature), interval_(interval), seed_(seed),
-      group_idxs_(group_idxs), step_(0), num_grouped_atoms_(0), d_sum_storage_(nullptr), d_sum_storage_bytes_(0) {
+      group_idxs_(group_idxs), step_(0), num_grouped_atoms_(0), d_sum_storage_(nullptr), d_sum_storage_bytes_(0),
+      runner_() {
 
     // Trigger check that interval is valid
     this->set_interval(interval_);
@@ -299,9 +301,7 @@ void MonteCarloBarostat::inplace_move(
     gpuErrchk(cudaMemsetAsync(d_u_buffer_, 0, N_ * sizeof(*d_u_buffer_), stream));
     gpuErrchk(cudaMemsetAsync(d_u_after_buffer_, 0, N_ * sizeof(*d_u_after_buffer_), stream));
 
-    for (int i = 0; i < bps_.size(); i++) {
-        bps_[i]->execute_device(N_, d_x, d_box, nullptr, nullptr, d_u_buffer_, stream);
-    }
+    runner_.execute_potentials(bps_, N_, d_x, d_box, nullptr, nullptr, d_u_buffer_, stream);
 
     cub::DeviceReduce::Sum(d_sum_storage_, d_sum_storage_bytes_, d_u_buffer_, d_init_u_, N_, stream);
     gpuErrchk(cudaPeekAtLastError());
@@ -317,7 +317,7 @@ void MonteCarloBarostat::inplace_move(
     gpuErrchk(cudaMemcpyAsync(d_box_after_, d_box, 3 * 3 * sizeof(*d_box_after_), cudaMemcpyDeviceToDevice, stream));
 
     const int tpb = 32;
-    const int blocks = (num_grouped_atoms_ + tpb - 1) / tpb;
+    const int blocks = ceil_divide(num_grouped_atoms_, tpb);
 
     find_group_centroids<<<blocks, tpb, 0, stream>>>(num_grouped_atoms_, d_x, d_atom_idxs_, d_mol_idxs_, d_centroids_);
 
@@ -336,9 +336,7 @@ void MonteCarloBarostat::inplace_move(
         d_centroids_);
     gpuErrchk(cudaPeekAtLastError());
 
-    for (int i = 0; i < bps_.size(); i++) {
-        bps_[i]->execute_device(N_, d_x_after_, d_box_after_, nullptr, nullptr, d_u_after_buffer_, stream);
-    }
+    runner_.execute_potentials(bps_, N_, d_x_after_, d_box_after_, nullptr, nullptr, d_u_after_buffer_, stream);
 
     cub::DeviceReduce::Sum(d_sum_storage_, d_sum_storage_bytes_, d_u_after_buffer_, d_final_u_, N_, stream);
     gpuErrchk(cudaPeekAtLastError());
@@ -346,7 +344,7 @@ void MonteCarloBarostat::inplace_move(
     double pressure = pressure_ * AVOGADRO * 1e-25;
     const double kT = BOLTZ * temperature_;
 
-    const int move_blocks = (N_ + tpb - 1) / tpb;
+    const int move_blocks = ceil_divide(N_, tpb);
 
     k_decide_move<<<move_blocks, tpb, 0, stream>>>(
         N_,

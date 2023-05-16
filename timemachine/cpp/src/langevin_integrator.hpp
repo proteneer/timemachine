@@ -4,6 +4,7 @@
 
 #include "bound_potential.hpp"
 #include "integrator.hpp"
+#include "streamed_potential_runner.hpp"
 
 namespace timemachine {
 
@@ -20,7 +21,12 @@ private:
     double *d_noise_;
     unsigned long long *d_du_dx_;
 
+    std::vector<cudaStream_t> pot_streams_;
+    std::vector<cudaEvent_t> stream_events_;
+
     curandGenerator_t cr_rng_;
+
+    StreamedPotentialRunner runner_;
 
 public:
     LangevinIntegrator(int N, const double *masses, double temperature, double dt, double friction, int seed);
