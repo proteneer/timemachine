@@ -3,6 +3,7 @@
 
 #include "bound_potential.hpp"
 #include "curand.h"
+#include "streamed_potential_runner.hpp"
 #include <random>
 #include <vector>
 
@@ -17,7 +18,7 @@ public:
         const double temperature, // in kelvin
         std::vector<std::vector<int>> group_idxs,
         const int interval,
-        std::vector<BoundPotential *> bps,
+        std::vector<std::shared_ptr<BoundPotential>> bps,
         const int seed);
 
     ~MonteCarloBarostat();
@@ -36,7 +37,7 @@ private:
 
     void reset_counters();
 
-    const std::vector<BoundPotential *> bps_;
+    std::vector<std::shared_ptr<BoundPotential>> bps_;
 
     double pressure_;
     const double temperature_;
@@ -77,6 +78,8 @@ private:
     size_t d_sum_storage_bytes_;
 
     unsigned long long *d_centroids_; // Accumulate centroids in fix point to ensure deterministic behavior
+
+    StreamedPotentialRunner runner_;
 };
 
 } // namespace timemachine

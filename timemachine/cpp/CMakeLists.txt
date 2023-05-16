@@ -90,6 +90,8 @@ pybind11_add_module(${LIBRARY_NAME} SHARED NO_EXTRAS
   src/fanout_summed_potential.cu
   src/device_buffer.cu
   src/pinned_host_buffer.cu
+  src/streamed_potential_runner.cu
+  src/stream_manager.cu
   src/kernels/k_nonbonded.cu
   src/kernels/k_nonbonded_common.cu
   src/kernels/k_indices.cu

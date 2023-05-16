@@ -3,8 +3,9 @@
 
 namespace timemachine {
 
-FanoutSummedPotential::FanoutSummedPotential(const std::vector<std::shared_ptr<Potential>> potentials)
-    : potentials_(potentials){};
+FanoutSummedPotential::FanoutSummedPotential(
+    const std::vector<std::shared_ptr<Potential>> potentials, const bool parallel)
+    : potentials_(potentials), parallel_(parallel){};
 
 const std::vector<std::shared_ptr<Potential>> &FanoutSummedPotential::get_potentials() { return potentials_; }
 
@@ -19,8 +20,22 @@ void FanoutSummedPotential::execute_device(
     unsigned long long *d_u,
     cudaStream_t stream) {
 
-    for (auto potential : potentials_) {
-        potential->execute_device(N, P, d_x, d_p, d_box, d_du_dx, d_du_dp, d_u, stream);
+    if (parallel_) {
+        for (auto i = 0; i < potentials_.size(); i++) {
+            // Always sync the new streams with the incoming stream to ensure that the state
+            // of the incoming buffers are valid
+            manager_.sync_from(i, stream);
+        }
+    }
+    cudaStream_t pot_stream = stream;
+    for (auto i = 0; i < potentials_.size(); i++) {
+        if (parallel_) {
+            pot_stream = manager_.get_stream(i);
+        }
+        potentials_[i]->execute_device(N, P, d_x, d_p, d_box, d_du_dx, d_du_dp, d_u, pot_stream);
+        if (parallel_) {
+            manager_.sync_to(i, stream);
+        }
     }
 };
 
