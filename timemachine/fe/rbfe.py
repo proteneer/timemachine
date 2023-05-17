@@ -42,6 +42,15 @@ MAX_SEED_VALUE = 10000
 DEFAULT_MD_PARAMS = MDParams(n_frames=1000, n_eq_steps=10_000, steps_per_frame=400, seed=2023)
 
 
+@dataclass
+class Host:
+    system: VacuumSystem
+    physical_masses: List[float]
+    conf: NDArray
+    box: NDArray
+    num_water_atoms: int
+
+
 def setup_in_vacuum(st: SingleTopology, ligand_conf, lamb):
     """Prepare potentials, initial coords, large 10x10x10nm box, and HMR masses"""
 
@@ -59,25 +68,22 @@ def setup_in_vacuum(st: SingleTopology, ligand_conf, lamb):
 
 def setup_in_env(
     st: SingleTopology,
-    host_system: VacuumSystem,
-    host_masses: List[float],
-    host_conf: NDArray,
+    host: Host,
     ligand_conf: NDArray,
     lamb: float,
     temperature: float,
     run_seed: int,
 ):
     """Prepare potentials, concatenate environment and ligand coords, apply HMR, and construct barostat"""
-
-    system = st.combine_with_host(host_system, lamb=lamb)
-    host_hmr_masses = model_utils.apply_hmr(host_masses, host_system.bond.potential.idxs)
+    system = st.combine_with_host(host.system, lamb, host.num_water_atoms)
+    host_hmr_masses = model_utils.apply_hmr(host.physical_masses, host.system.bond.potential.idxs)
     hmr_masses = np.concatenate([host_hmr_masses, st.combine_masses(use_hmr=True)])
 
     potentials = system.get_U_fns()
     group_idxs = get_group_indices(get_bond_list(system.bond.potential), len(hmr_masses))
     baro = MonteCarloBarostat(len(hmr_masses), DEFAULT_PRESSURE, temperature, group_idxs, 15, run_seed + 1)
 
-    x0 = np.concatenate([host_conf, ligand_conf])
+    x0 = np.concatenate([host.conf, ligand_conf])
 
     return x0, hmr_masses, potentials, baro
 
@@ -104,14 +110,6 @@ def assert_all_states_have_same_masses(initial_states: List[InitialState]):
     np.testing.assert_array_almost_equal(deviation_among_windows, 0, err_msg="masses assumed constant w.r.t. lambda")
 
 
-@dataclass
-class Host:
-    system: VacuumSystem
-    physical_masses: List[float]
-    conf: NDArray
-    box: NDArray
-
-
 def setup_initial_state(
     st: SingleTopology,
     lamb: float,
@@ -123,15 +121,12 @@ def setup_initial_state(
     conf_b = get_romol_conf(st.mol_b)
 
     ligand_conf = st.combine_confs(conf_a, conf_b, lamb)
-
     # use a different seed to initialize every window,
     # but in a way that should be symmetric for
     # A -> B vs. B -> A edge definitions
     init_seed = int(seed + bytes_to_id(ligand_conf.tobytes())) % MAX_SEED_VALUE
     if host:
-        x0, hmr_masses, potentials, baro = setup_in_env(
-            st, host.system, host.physical_masses, host.conf, ligand_conf, lamb, temperature, init_seed
-        )
+        x0, hmr_masses, potentials, baro = setup_in_env(st, host, ligand_conf, lamb, temperature, init_seed)
         box0 = host.box
     else:
         x0, box0, hmr_masses, potentials, baro = setup_in_vacuum(st, ligand_conf, lamb)
@@ -142,6 +137,12 @@ def setup_initial_state(
     run_seed = (
         int(seed + bytes_to_id(bytes().join([np.array(p.params).tobytes() for p in potentials]))) % MAX_SEED_VALUE
     )
+    print("-" * 80)
+    print("params:")
+    for p in potentials:
+        print(type(p.potential), bytes_to_id(np.array(p.params).tobytes()))
+    print("setup_initial_state", type(st), st, "init_seed", init_seed, "run_seed", run_seed)
+    print("-" * 80)
 
     # initialize velocities
     v0 = np.zeros_like(x0)  # tbd resample from Maxwell-boltzman?
@@ -166,7 +167,7 @@ def setup_optimized_host(st: SingleTopology, config: HostConfig) -> Host:
         config,
         st.ff,
     )
-    return Host(system, masses, conf, config.box)
+    return Host(system, masses, conf, config.box, config.num_water_atoms)
 
 
 def setup_initial_states(
@@ -244,7 +245,6 @@ def setup_optimized_initial_state(
     # discontinuity at lambda=0.5. Ensure that we pick a pre-optimized state on the same side of 0.5 as `lamb`:
     states_subset = [s for s in optimized_initial_states if (s.lamb <= 0.5) == (lamb <= 0.5)]
     nearest_optimized = min(states_subset, key=lambda s: abs(lamb - s.lamb))
-
     if lamb == nearest_optimized.lamb:
         return nearest_optimized
     else:
@@ -538,7 +538,6 @@ def estimate_relative_free_energy_via_greedy_bisection(
     lambda_grid = np.linspace(lambda_min, lambda_max, n_windows)
 
     temperature = DEFAULT_TEMP
-
     host = setup_optimized_host(single_topology, host_config) if host_config else None
 
     initial_states = setup_initial_states(
@@ -562,6 +561,7 @@ def estimate_relative_free_energy_via_greedy_bisection(
     combined_prefix = get_mol_name(mol_a) + "_" + get_mol_name(mol_b) + "_" + prefix
 
     try:
+        print("run_sims_with_greedy_bisection")
         results, frames, boxes = run_sims_with_greedy_bisection(
             [lambda_min, lambda_max],
             make_optimized_initial_state,
