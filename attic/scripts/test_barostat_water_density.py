@@ -61,7 +61,8 @@ if __name__ == "__main__":
     # get list of molecules for barostat by looking at bond table
     harmonic_bond_potential = unbound_potentials[0]
     bond_list = get_bond_list(harmonic_bond_potential)
-    group_indices = get_group_indices(bond_list)
+    num_atoms = len(masses)
+    group_indices = get_group_indices(bond_list, num_atoms)
 
     trajs = []
     volume_trajs = []
