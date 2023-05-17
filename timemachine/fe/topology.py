@@ -184,7 +184,7 @@ class HostGuestTopology:
                     lig_idxs,
                     guest_pot.beta,
                     guest_pot.cutoff,
-                    col_atom_idxs=np.array(self.get_water_idxs(), dtype=np.int32),
+                    col_atom_idxs=self.get_water_idxs(),
                 )
             )
             print(

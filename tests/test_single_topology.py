@@ -27,11 +27,13 @@ from timemachine.fe.single_topology import (
     setup_dummy_interactions_from_ff,
 )
 from timemachine.fe.system import convert_bps_into_system, minimize_scipy, simulate_system
+from timemachine.fe.topology import exclude_all_ligand_ligand_ixns
 from timemachine.fe.utils import get_mol_name, get_romol_conf, read_sdf
 from timemachine.ff import Forcefield
 from timemachine.ff.handlers import openmm_deserializer
 from timemachine.md import minimizer
-from timemachine.md.builders import build_water_system
+from timemachine.md.builders import build_protein_system, build_water_system
+from timemachine.potentials import Nonbonded, NonbondedInteractionGroup
 from timemachine.potentials.jax_utils import pairwise_distances
 
 
@@ -513,6 +515,289 @@ def test_nonbonded_split(precision, rtol, atol, use_tiny_mol):
         # The vacuum term should be the same as the ref
         assert vacuum_u_inter_scaled == pytest.approx(vacuum_u_ref, rel=rtol, abs=atol)
         np.testing.assert_allclose(vacuum_grad_ref, vacuum_grad_inter_scaled, rtol=rtol, atol=atol)
+
+
+class SingleTopologyRef(SingleTopology):
+    def _parameterize_host_guest_nonbonded(self, lamb, host_nonbonded, _):
+        # Parameterize nonbonded potential for the host guest interaction
+        num_host_atoms = host_nonbonded.params.shape[0]
+        num_guest_atoms = self.get_num_atoms()
+
+        guest_exclusions, guest_scale_factors = exclude_all_ligand_ligand_ixns(num_host_atoms, num_guest_atoms)
+
+        combined_exclusion_idxs = np.concatenate([host_nonbonded.potential.exclusion_idxs, guest_exclusions])
+        combined_scale_factors = np.concatenate([host_nonbonded.potential.scale_factors, guest_scale_factors])
+
+        host_params = host_nonbonded.params
+        cutoff = host_nonbonded.potential.cutoff
+
+        guest_charges, guest_sigmas, guest_epsilons, guest_w_coords = self._get_guest_params(
+            self.ff.q_handle, self.ff.lj_handle, lamb, cutoff
+        )
+
+        combined_charges = np.concatenate([host_params[:, 0], guest_charges])
+        combined_sigmas = np.concatenate([host_params[:, 1], guest_sigmas])
+        combined_epsilons = np.concatenate([host_params[:, 2], guest_epsilons])
+        combined_w_coords = np.concatenate([host_params[:, 3], guest_w_coords])
+        combined_nonbonded_params = np.stack(
+            [combined_charges, combined_sigmas, combined_epsilons, combined_w_coords], axis=1
+        )
+
+        combined_nonbonded = Nonbonded(
+            num_host_atoms + num_guest_atoms,
+            combined_exclusion_idxs,
+            combined_scale_factors,
+            host_nonbonded.potential.beta,
+            host_nonbonded.potential.cutoff,
+        ).bind(combined_nonbonded_params)
+
+        return combined_nonbonded
+
+
+@pytest.mark.parametrize("precision, rtol, atol", [(np.float64, 1e-8, 1e-8), (np.float32, 1e-4, 5e-4)])
+def test_combine_with_host_split(precision, rtol, atol):
+    # test the split P-L and L-W interactions
+
+    with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
+        mols = {get_mol_name(mol): mol for mol in read_sdf(path_to_ligand)}
+    mol_a = mols["338"]
+    mol_b = mols["43"]
+    core = _get_core_by_mcs(mol_a, mol_b)
+
+    def compute_ref_grad_u(ff: Forcefield, precision, x0, box, lamb, num_water_atoms, host_system):
+        # Use the original code to compute the nb grads and potential
+        st = SingleTopologyRef(mol_a, mol_b, core, ff)
+        ligand_conf = st.combine_confs(get_romol_conf(mol_a), get_romol_conf(mol_b), lamb)
+        combined_conf = np.concatenate([x0, ligand_conf])
+
+        combined_system = st.combine_with_host(host_system, lamb, num_water_atoms)
+        potentials = combined_system.get_U_fns()
+        impls = [p.to_gpu(precision).bound_impl for p in potentials]
+        u, grad = minimizer.get_val_and_grad_fn(impls, box)(combined_conf)
+        return grad, u
+
+    def compute_new_grad_u(ff: Forcefield, precision, x0, box, lamb, num_water_atoms, host_system):
+        st = SingleTopology(mol_a, mol_b, core, ff)
+        ligand_conf = st.combine_confs(get_romol_conf(mol_a), get_romol_conf(mol_b), lamb)
+        combined_conf = np.concatenate([x0, ligand_conf])
+
+        combined_system = st.combine_with_host(host_system, lamb, num_water_atoms)
+        potentials = combined_system.get_U_fns()
+        impls = [p.to_gpu(precision).bound_impl for p in potentials]
+        u, grad = minimizer.get_val_and_grad_fn(impls, box)(combined_conf)
+        return grad, u
+
+    def compute_intra_grad_u(ff: Forcefield, precision, x0, box, lamb, num_water_atoms, num_host_atoms):
+        st = SingleTopology(mol_a, mol_b, core, ff)
+        ligand_conf = st.combine_confs(get_romol_conf(mol_a), get_romol_conf(mol_b), lamb)
+
+        vacuum_system = st.setup_intermediate_state(lamb)
+        potentials = vacuum_system.get_U_fns()
+        impls = [p.to_gpu(precision).bound_impl for p in potentials]
+        u, grad = minimizer.get_val_and_grad_fn(impls, box)(ligand_conf)
+
+        # Pad g so it's the same shape as the others
+        grad_padded = np.concatenate([np.zeros((num_host_atoms, 3)), grad])
+        return grad_padded, u
+
+    def compute_ixn_grad_u(
+        ff: Forcefield,
+        precision,
+        x0,
+        box,
+        lamb,
+        num_water_atoms,
+        host_system,
+        water_idxs,
+        ligand_idxs,
+        protein_idxs,
+        is_solvent=False,
+    ):
+        # host_bps, _ = openmm_deserializer.deserialize_system(host_system, cutoff=1.2)
+        assert num_water_atoms == len(water_idxs)
+        # bt = Topology(ff)
+        # hgt = topology.HostGuestTopology(host_bps, bt, num_water_atoms)
+        st = SingleTopology(mol_a, mol_b, core, ff)
+        ligand_conf = st.combine_confs(get_romol_conf(mol_a), get_romol_conf(mol_b), lamb)
+        combined_conf = np.concatenate([x0, ligand_conf])
+        num_total_atoms = combined_conf.shape[0]
+
+        cutoff = host_system.nonbonded.potential.cutoff
+        u = NonbondedInteractionGroup(
+            num_total_atoms,
+            ligand_idxs,
+            host_system.nonbonded.potential.beta,
+            cutoff,
+            col_atom_idxs=water_idxs if is_solvent else protein_idxs,
+        )
+        guest_charges, guest_sigmas, guest_epsilons, guest_w_coords = st._get_guest_params(
+            ff.q_handle_solv if is_solvent else ff.q_handle, ff.lj_handle, lamb, cutoff
+        )
+
+        host_params = host_system.nonbonded.params
+        combined_charges = np.concatenate([host_params[:, 0], guest_charges])
+        combined_sigmas = np.concatenate([host_params[:, 1], guest_sigmas])
+        combined_epsilons = np.concatenate([host_params[:, 2], guest_epsilons])
+        combined_w_coords = np.concatenate([host_params[:, 3], guest_w_coords])
+        combined_nonbonded_params = np.stack(
+            [combined_charges, combined_sigmas, combined_epsilons, combined_w_coords], axis=1
+        )
+        u_impl = u.bind(combined_nonbonded_params).to_gpu(precision=precision).bound_impl
+        return u_impl.execute(combined_conf, box)
+
+    # split forcefield has different parameters for intramol and intermol terms
+    ffs = load_split_forcefields()
+
+    if True:
+        with resources.path("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as path_to_pdb:
+            complex_system, host_conf, box, _, num_water_atoms = build_protein_system(
+                str(path_to_pdb), ffs.ref.protein_ff, ffs.ref.water_ff
+            )
+            box += np.diag([0.1, 0.1, 0.1])
+    else:
+        complex_system, host_conf, box, _ = build_water_system(4.0, ffs.ref.water_ff)
+        num_water_atoms = host_conf.shape[0]
+
+    host_bps, _ = openmm_deserializer.deserialize_system(complex_system, cutoff=1.2)
+    complex_host = convert_bps_into_system(host_bps)
+
+    st = SingleTopologyRef(mol_a, mol_b, core, ffs.ref)
+
+    num_protein_atoms = host_conf.shape[0] - num_water_atoms
+    protein_idxs = np.arange(num_protein_atoms, dtype=np.int32)
+    water_idxs = np.arange(num_water_atoms, dtype=np.int32) + num_protein_atoms
+    num_host_atoms = host_conf.shape[0]
+    ligand_conf = st.combine_confs(get_romol_conf(mol_a), get_romol_conf(mol_b), 0.0)
+    ligand_idxs = np.arange(ligand_conf.shape[0], dtype=np.int32) + num_host_atoms
+    # combined_conf = np.concatenate([host_conf, ligand_conf])
+
+    n_lambdas = 3
+    for lamb in np.linspace(0, 1, n_lambdas):
+        """
+        Note: Notation here is interaction type _ scaled term
+        interaction type:
+            LL - ligand-ligand intramolecular interactions
+            PL - protein-ligand interactions
+            WL - water-ligand interactions
+            sum full NB potential
+
+        scaled term:
+            ref - ref ff
+            intra - ligand-ligand intramolecular parameters are scaled
+            prot - protein-ligand interaction parameters are scaled
+            solv - water-ligand interaction parameters are scaled
+        """
+
+        # Compute the grads, potential with the ref ff
+        LL_grad_ref, LL_u_ref = compute_intra_grad_u(
+            ffs.ref, precision, ligand_conf, box, lamb, num_water_atoms, num_host_atoms
+        )
+        sum_grad_ref, sum_u_ref = compute_ref_grad_u(
+            ffs.ref, precision, host_conf, box, lamb, num_water_atoms, complex_host
+        )
+        PL_grad_ref, PL_u_ref = compute_ixn_grad_u(
+            ffs.ref,
+            precision,
+            host_conf,
+            box,
+            lamb,
+            num_water_atoms,
+            complex_host,
+            water_idxs,
+            ligand_idxs,
+            protein_idxs,
+            is_solvent=False,
+        )
+        WL_grad_ref, WL_u_ref = compute_ixn_grad_u(
+            ffs.ref,
+            precision,
+            host_conf,
+            box,
+            lamb,
+            num_water_atoms,
+            complex_host,
+            water_idxs,
+            ligand_idxs,
+            protein_idxs,
+            is_solvent=True,
+        )
+
+        # Should be the same as the new code with the orig ff
+        sum_grad_new, sum_u_new = compute_new_grad_u(
+            ffs.ref, precision, host_conf, box, lamb, num_water_atoms, complex_host
+        )
+        assert sum_u_ref == pytest.approx(sum_u_new, rel=rtol, abs=atol)
+
+        np.testing.assert_allclose(sum_grad_ref, sum_grad_new, rtol=rtol, atol=atol)
+
+        # Compute the grads, potential with the intramolecular terms scaled
+        print("INTRA")
+        sum_grad_intra, sum_u_intra = compute_new_grad_u(
+            ffs.intra, precision, host_conf, box, lamb, num_water_atoms, complex_host
+        )
+        LL_grad_intra, LL_u_intra = compute_intra_grad_u(
+            ffs.intra, precision, ligand_conf, box, lamb, num_water_atoms, num_host_atoms
+        )
+
+        # U_intra = U_sum_ref - LL_ref + LL_intra
+        expected_u = sum_u_ref - LL_u_ref + LL_u_intra
+        expected_grad = sum_grad_ref - LL_grad_ref + LL_grad_intra
+
+        assert expected_u == pytest.approx(sum_u_intra, rel=rtol, abs=atol)
+        np.testing.assert_allclose(expected_grad, sum_grad_intra, rtol=rtol, atol=atol)
+        print("INTRA::Done")
+
+        # Compute the grads, potential with the ligand-water terms scaled
+        print("WL_SOLV")
+        sum_grad_solv, sum_u_solv = compute_new_grad_u(
+            ffs.solv, precision, host_conf, box, lamb, num_water_atoms, complex_host
+        )
+        WL_grad_solv, WL_u_solv = compute_ixn_grad_u(
+            ffs.solv,
+            precision,
+            host_conf,
+            box,
+            lamb,
+            num_water_atoms,
+            complex_host,
+            water_idxs,
+            ligand_idxs,
+            protein_idxs,
+            is_solvent=True,
+        )
+
+        # U_solv = U_sum_ref - WL_ref + WL_solv
+        expected_u = sum_u_ref - WL_u_ref + WL_u_solv
+        expected_grad = sum_grad_ref - WL_grad_ref + WL_grad_solv
+
+        assert expected_u == pytest.approx(sum_u_solv, rel=rtol, abs=atol)
+        np.testing.assert_allclose(expected_grad, sum_grad_solv, rtol=rtol, atol=atol)
+        print("WL_SOLV::Done")
+
+        # Compute the grads, potential with the protein-ligand terms scaled
+        sum_grad_prot, sum_u_prot = compute_new_grad_u(
+            ffs.prot, precision, host_conf, box, lamb, num_water_atoms, complex_host
+        )
+        PL_grad_prot, PL_u_prot = compute_ixn_grad_u(
+            ffs.prot,
+            precision,
+            host_conf,
+            box,
+            lamb,
+            num_water_atoms,
+            complex_host,
+            water_idxs,
+            ligand_idxs,
+            protein_idxs,
+            is_solvent=False,
+        )
+
+        # U_prot = U_sum_ref - PL_ref + PL_prot
+        expected_u = sum_u_ref - PL_u_ref + PL_u_prot
+        expected_grad = sum_grad_ref - PL_grad_ref + PL_grad_prot
+
+        assert expected_u == pytest.approx(sum_u_prot, rel=rtol, abs=atol)
+        np.testing.assert_allclose(expected_grad, sum_grad_prot, rtol=rtol, atol=atol)
 
 
 def ligand_from_smiles(smiles):
