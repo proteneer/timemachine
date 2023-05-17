@@ -1253,7 +1253,9 @@ class SingleTopology(AtomMapMixin):
             guest_w_coords.append(w)
         return (guest_charges, guest_sigmas, guest_epsilons, guest_w_coords)
 
-    def _parameterize_host_guest_nonbonded(self, lamb, host_nonbonded: BoundPotential[Nonbonded], num_water_atoms: int):
+    def _parameterize_host_guest_nonbonded(
+        self, lamb, host_nonbonded: BoundPotential[Nonbonded], num_water_atoms: int
+    ) -> BoundPotential[SummedPotential]:
         # Parameterize nonbonded potential for the host guest interaction
         num_host_atoms = host_nonbonded.params.shape[0]
         num_guest_atoms = self.get_num_atoms()
