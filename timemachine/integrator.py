@@ -135,6 +135,7 @@ class LangevinIntegrator(StochasticIntegrator):
         """BAOAB (https://arxiv.org/abs/1203.5428), rotated by half a timestep"""
         self.dt = dt
         self.masses = masses
+        self.temperature = temperature
         ca, cb, cc = langevin_coefficients(temperature, dt, friction, masses)
         self.force_fxn = force_fxn
 
