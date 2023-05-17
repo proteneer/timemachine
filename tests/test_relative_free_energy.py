@@ -198,8 +198,10 @@ def test_local_md_parameters_validation():
         MDParams(n_frames=frames, n_eq_steps=10, k=-1.0, steps_per_frame=steps_per_frame)
 
 
-def test_local_md_parameters():
+@pytest.mark.parametrize("freeze_reference", [True, False])
+def test_local_md_parameters(freeze_reference):
     """Run RBFE methods with local steps mixed in"""
+
     mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
     forcefield = Forcefield.load_default()
     seed = 2023

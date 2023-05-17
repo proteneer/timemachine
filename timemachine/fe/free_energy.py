@@ -42,6 +42,7 @@ class MDParams:
     k: float = 10_000.0
     min_radius: float = 1.0
     max_radius: float = 3.0
+    freeze_reference: bool = True
 
     def __post_init__(self):
         assert self.min_radius <= self.max_radius
@@ -364,6 +365,7 @@ def sample(initial_state: InitialState, md_params: MDParams, max_buffer_frames: 
         else:
             coords = None
             boxes = None
+            ctxt.setup_local_md(initial_state.integrator.temperature, md_params.freeze_reference)
             for steps in batches(n_steps, md_params.steps_per_frame):
                 if steps < md_params.steps_per_frame:
                     warn(
