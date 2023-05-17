@@ -43,17 +43,9 @@ def get_group_indices(bond_list: List[Tuple[int, int]], num_atoms: int) -> List[
     """Connected components of bond graph"""
 
     topology = nx.Graph(bond_list)
-    components = [np.array(list(c)) for c in nx.algorithms.connected_components(topology)]
+    topology.add_nodes_from(range(num_atoms))
 
-    found_set = set()
-    for grp in components:
-        for idx in grp:
-            assert idx < num_atoms
-            found_set.add(idx)
-
-    for atom_idx in range(num_atoms):
-        if atom_idx not in found_set:
-            components.append(np.array([atom_idx], dtype=np.int32))
+    components = [np.array(list(c), dtype=np.int32) for c in nx.algorithms.connected_components(topology)]
 
     return components
 
