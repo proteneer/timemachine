@@ -33,7 +33,7 @@ cudaStream_t StreamedPotentialRunner::_get_potential_stream(int index) {
     gpuErrchk(cudaStreamCreateWithFlags(&new_stream, cudaStreamNonBlocking));
 
     cudaEvent_t new_event;
-    // Create stream with timings disabled
+    // Create stream with timings disabled as timings slow down events
     gpuErrchk(cudaEventCreateWithFlags(&new_event, cudaEventDisableTiming));
     streams_.push_back(new_stream);
     events_.push_back(new_event);
@@ -59,7 +59,7 @@ void StreamedPotentialRunner::execute_potentials(
     unsigned long long *d_u,
     cudaStream_t stream) {
     // Always sync the new streams with the incoming stream to ensure that the state
-    // of the incoming buffers is valid
+    // of the incoming buffers are valid
     gpuErrchk(cudaEventRecord(sync_event_, stream));
     for (int i = 0; i < bps.size(); i++) {
         cudaStream_t pot_stream = this->_get_potential_stream(i);
