@@ -580,7 +580,7 @@ def test_multiple_steps_local_consistency(freeze_reference):
         np.testing.assert_equal(ref_u, test_u)
 
     # Verify that running with a barostat doesn't change the results
-    group_idxs = get_group_indices(get_bond_list(unbound_potentials[0]))
+    group_idxs = get_group_indices(get_bond_list(unbound_potentials[0]), len(masses))
 
     pressure = 1.0
 
@@ -870,7 +870,7 @@ def test_setup_context_with_references():
 
         barostat_impl = None
         if barostat_interval > 0:
-            group_idxs = get_group_indices(get_bond_list(unbound_potentials[0]))
+            group_idxs = get_group_indices(get_bond_list(unbound_potentials[0]), len(masses))
 
             barostat = MonteCarloBarostat(coords.shape[0], pressure, temperature, group_idxs, 1, seed)
             barostat_impl = barostat.impl(bps)

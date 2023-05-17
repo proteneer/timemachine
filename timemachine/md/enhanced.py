@@ -471,7 +471,7 @@ def equilibrate_solvent_phase(
     intg_equil_impl = intg_equil.impl()
 
     bond_list = get_bond_list(potentials[0])
-    group_idxs = get_group_indices(bond_list)
+    group_idxs = get_group_indices(bond_list, len(masses))
     barostat_interval = 5
 
     barostat = lib.MonteCarloBarostat(len(masses), pressure, temperature, group_idxs, barostat_interval, seed + 1)

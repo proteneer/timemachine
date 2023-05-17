@@ -72,7 +72,7 @@ def setup_in_env(
     hmr_masses = np.concatenate([host_hmr_masses, st.combine_masses(use_hmr=True)])
 
     potentials = system.get_U_fns()
-    group_idxs = get_group_indices(get_bond_list(system.bond.potential))
+    group_idxs = get_group_indices(get_bond_list(system.bond.potential), len(hmr_masses))
     baro = MonteCarloBarostat(len(hmr_masses), DEFAULT_PRESSURE, temperature, group_idxs, 15, run_seed + 1)
 
     x0 = np.concatenate([host_conf, ligand_conf])

@@ -157,7 +157,7 @@ def image_frames(initial_state: InitialState, frames: np.ndarray, boxes: np.ndar
     assert len(frames) == len(boxes), "Number of frames and boxes don't match"
 
     hb_potential = next(p.potential for p in initial_state.potentials if isinstance(p.potential, HarmonicBond))
-    group_indices = get_group_indices(get_bond_list(hb_potential))
+    group_indices = get_group_indices(get_bond_list(hb_potential), len(initial_state.integrator.masses))
     imaged_frames = np.empty_like(frames)
     for i, (frame, box) in enumerate(zip(frames, boxes)):
         assert frame.ndim == 2 and frame.shape[-1] == 3, "frames must have shape (N, 3)"

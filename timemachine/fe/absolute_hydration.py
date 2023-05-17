@@ -330,7 +330,7 @@ def setup_initial_states(
         bond_potential = ubps[0]
         assert isinstance(bond_potential, potentials.HarmonicBond)
         hmr_masses = model_utils.apply_hmr(masses, bond_potential.idxs)
-        group_idxs = get_group_indices(get_bond_list(bond_potential))
+        group_idxs = get_group_indices(get_bond_list(bond_potential), len(masses))
         baro = MonteCarloBarostat(len(hmr_masses), 1.0, temperature, group_idxs, 15, seed)
         box0 = host_config.box
 
