@@ -1,6 +1,7 @@
 import pickle
 import traceback
-from dataclasses import dataclass
+import warnings
+from dataclasses import dataclass, replace
 from functools import partial
 from typing import Any, Dict, Iterable, List, NamedTuple, Optional, Sequence, Tuple, Union
 
@@ -359,19 +360,17 @@ def optimize_coordinates(initial_states, min_cutoff=0.7) -> List[NDArray]:
 
 
 def estimate_relative_free_energy(
-    mol_a,
-    mol_b,
+    mol_a: Chem.rdchem.Mol,
+    mol_b: Chem.rdchem.Mol,
     core: NDArray,
     ff: Forcefield,
     host_config: Optional[HostConfig],
     seed: int,
-    n_frames: int = 1000,
     prefix: str = "",
     lambda_interval: Optional[Tuple[float, float]] = None,
     n_windows: Optional[int] = None,
     keep_idxs: Optional[List[int]] = None,
-    n_eq_steps: int = 10000,
-    steps_per_frame: int = 400,
+    md_params: Optional[MDParams] = None,
     min_cutoff: Optional[float] = 0.7,
 ) -> SimulationResult:
     """
@@ -398,9 +397,6 @@ def estimate_relative_free_energy(
     seed: int
         Random seed to use for the simulations.
 
-    n_frames: int
-        number of samples to generate for each lambda window, where each sample is `steps_per_frame` steps of MD.
-
     prefix: str
         A prefix to append to figures
 
@@ -416,11 +412,9 @@ def estimate_relative_free_energy(
         If None, return only the end-state frames. Otherwise if not None, use only for debugging, and this
         will return the frames corresponding to the idxs of interest.
 
-    n_eq_steps: int
-        Number of equilibration steps for each window.
-
-    steps_per_frame: int
-        The number of steps to take before collecting a frame
+    md_params: optional MDParams
+        Parameters to determine the equilibration and production MD. Defaults to 400 global steps per frame, 2000 frames and 200k
+        equilibration steps.
 
     min_cutoff: float, optional
         throw error if any atom moves more than this distance (nm) after minimization
@@ -444,7 +438,8 @@ def estimate_relative_free_energy(
     initial_states = setup_initial_states(
         single_topology, host, temperature, lambda_schedule, seed, min_cutoff=min_cutoff
     )
-    md_params = MDParams(n_frames=n_frames, n_eq_steps=n_eq_steps, steps_per_frame=steps_per_frame)
+    if md_params is None:
+        md_params = MDParams(n_frames=2000, n_eq_steps=200_000, steps_per_frame=400)
 
     if keep_idxs is None:
         keep_idxs = [0, len(initial_states) - 1]  # keep frames from first and last windows
@@ -478,19 +473,17 @@ def estimate_relative_free_energy(
 
 
 def estimate_relative_free_energy_via_greedy_bisection(
-    mol_a,
-    mol_b,
+    mol_a: Chem.rdchem.Mol,
+    mol_b: Chem.rdchem.Mol,
     core: NDArray,
     ff: Forcefield,
     host_config: Optional[HostConfig],
     seed: int,
-    n_frames: int = 1000,
+    md_params: Optional[MDParams] = None,
     prefix: str = "",
     lambda_interval: Optional[Tuple[float, float]] = None,
     n_windows: Optional[int] = None,
     keep_idxs: Optional[List[int]] = None,
-    n_eq_steps: int = 10000,
-    steps_per_frame: int = 400,
     min_cutoff: Optional[float] = 0.7,
 ) -> SimulationResult:
     r"""Estimate relative free energy between mol_a and mol_b via independent simulations with a dynamic lambda schedule
@@ -514,9 +507,6 @@ def estimate_relative_free_energy_via_greedy_bisection(
     host_config: HostConfig or None
         Configuration for the host system. If None, then the vacuum leg is run.
 
-    n_frames: int
-        number of samples to generate for each lambda window, where each sample is `steps_per_frame` steps of MD.
-
     prefix: str
         A prefix to append to figures
 
@@ -536,11 +526,9 @@ def estimate_relative_free_energy_via_greedy_bisection(
         If None, return only the end-state frames. Otherwise if not None, use only for debugging, and this
         will return the frames corresponding to the idxs of interest.
 
-    n_eq_steps: int
-        Number of equilibration steps for each window.
-
-    steps_per_frame: int
-        The number of steps to take before collecting a frame
+    md_params: optional MDParams
+        Parameters to determine the equilibration and production MD. Defaults to 400 global steps per frame, 2000 frames and 200k
+        equilibration steps.
 
     min_cutoff: float, optional
         throw error if any atom moves more than this distance (nm) after minimization
@@ -576,7 +564,8 @@ def estimate_relative_free_energy_via_greedy_bisection(
         seed=seed,
     )
 
-    md_params = MDParams(n_frames=n_frames, n_eq_steps=n_eq_steps, steps_per_frame=steps_per_frame)
+    if md_params is None:
+        md_params = MDParams(n_frames=2000, n_eq_steps=200_000, steps_per_frame=400)
 
     if keep_idxs is None:
         keep_idxs = [0, len(initial_states) - 1]  # keep frames from first and last windows
@@ -617,47 +606,44 @@ def estimate_relative_free_energy_via_greedy_bisection(
 
 
 def run_vacuum(
-    mol_a,
-    mol_b,
-    core,
-    forcefield,
+    mol_a: Chem.rdchem.Mol,
+    mol_b: Chem.rdchem.Mol,
+    core: NDArray,
+    forcefield: Forcefield,
     _,
-    n_frames,
-    seed,
-    n_eq_steps=10000,
-    steps_per_frame=400,
-    n_windows=None,
-    min_cutoff=None,
+    seed: int,
+    md_params: Optional[MDParams] = None,
+    n_windows: Optional[int] = None,
+    min_cutoff: Optional[float] = None,
 ):
+    if md_params is not None and md_params.local_steps > 0:
+        md_params = replace(md_params, local_steps=0)
+        warnings.warn("Vacuum simulations don't support local steps, will use all global steps")
     # min_cutoff defaults to None since there is no environment to prevent conformational changes in the ligand
     return estimate_relative_free_energy_via_greedy_bisection(
         mol_a,
         mol_b,
         core,
         forcefield,
+        md_params=md_params,
         host_config=None,
         seed=seed,
-        n_frames=n_frames,
         prefix="vacuum",
-        n_eq_steps=n_eq_steps,
         n_windows=n_windows,
-        steps_per_frame=steps_per_frame,
         min_cutoff=min_cutoff,
     )
 
 
 def run_solvent(
-    mol_a,
-    mol_b,
-    core,
-    forcefield,
+    mol_a: Chem.rdchem.Mol,
+    mol_b: Chem.rdchem.Mol,
+    core: NDArray,
+    forcefield: Forcefield,
     _,
-    n_frames,
-    seed,
-    n_eq_steps=None,
-    steps_per_frame=400,
-    n_windows=None,
-    min_cutoff=0.7,
+    seed: int,
+    md_params: Optional[MDParams] = None,
+    n_windows: Optional[int] = None,
+    min_cutoff: Optional[float] = 0.7,
 ):
     box_width = 4.0
     solvent_sys, solvent_conf, solvent_box, solvent_top = builders.build_water_system(box_width, forcefield.water_ff)
@@ -670,28 +656,24 @@ def run_solvent(
         forcefield,
         solvent_host_config,
         seed,
-        n_frames=n_frames,
+        md_params=md_params,
         prefix="solvent",
-        n_eq_steps=n_eq_steps or 10000,
         n_windows=n_windows,
-        steps_per_frame=steps_per_frame,
         min_cutoff=min_cutoff,
     )
     return solvent_res, solvent_top, solvent_host_config
 
 
 def run_complex(
-    mol_a,
-    mol_b,
-    core,
-    forcefield,
-    protein,
-    n_frames,
-    seed,
-    n_eq_steps=None,
-    steps_per_frame=400,
-    n_windows=None,
-    min_cutoff=0.7,
+    mol_a: Chem.rdchem.Mol,
+    mol_b: Chem.rdchem.Mol,
+    core: NDArray,
+    forcefield: Forcefield,
+    protein: Union[app.PDBFile, str],
+    seed: int,
+    md_params: Optional[MDParams] = None,
+    n_windows: Optional[int] = None,
+    min_cutoff: Optional[float] = 0.7,
 ):
     complex_sys, complex_conf, complex_box, complex_top = builders.build_protein_system(
         protein, forcefield.protein_ff, forcefield.water_ff
@@ -705,11 +687,9 @@ def run_complex(
         forcefield,
         complex_host_config,
         seed,
-        n_frames=n_frames,
         prefix="complex",
-        n_eq_steps=n_eq_steps or 10000,
+        md_params=md_params,
         n_windows=n_windows,
-        steps_per_frame=steps_per_frame,
         min_cutoff=min_cutoff,
     )
     return complex_res, complex_top, complex_host_config
@@ -734,11 +714,10 @@ def run_edge_and_save_results(
     mols: Dict[str, Chem.rdchem.Mol],
     forcefield: Forcefield,
     protein: app.PDBFile,
-    n_frames: int,
     seed: int,
     file_client: AbstractFileClient,
-    n_eq_steps: Optional[int],
     n_windows: Optional[int],
+    md_params: Optional[MDParams] = None,
 ):
     # Ensure that all mol props (e.g. _Name) are included in pickles
     # Without this get_mol_name(mol) will fail on roundtripped mol
@@ -764,10 +743,22 @@ def run_edge_and_save_results(
         core = all_cores[0]
 
         complex_res, complex_top, _ = run_complex(
-            mol_a, mol_b, core, forcefield, protein, n_frames, seed, n_eq_steps=n_eq_steps, n_windows=n_windows
+            mol_a,
+            mol_b,
+            core,
+            forcefield,
+            protein,
+            seed,
+            md_params,
         )
         solvent_res, solvent_top, _ = run_solvent(
-            mol_a, mol_b, core, forcefield, protein, n_frames, seed, n_eq_steps=n_eq_steps, n_windows=n_windows
+            mol_a,
+            mol_b,
+            core,
+            forcefield,
+            protein,
+            seed,
+            md_params,
         )
 
     except Exception as err:
@@ -829,12 +820,11 @@ def run_edges_parallel(
     edges: Sequence[Edge],
     ff: Forcefield,
     protein: app.PDBFile,
-    n_frames: int,
     n_gpus: int,
     seed: int,
     pool_client: Optional[AbstractClient] = None,
     file_client: Optional[AbstractFileClient] = None,
-    n_eq_steps: Optional[int] = None,
+    md_params: Optional[MDParams] = None,
     n_windows: Optional[int] = None,
 ):
     mols = {get_mol_name(mol): mol for mol in ligands}
@@ -855,11 +845,10 @@ def run_edges_parallel(
             mols,
             ff,
             protein,
-            n_frames,
             seed + edge_idx,
             file_client,
-            n_eq_steps,
             n_windows,
+            md_params,
         )
         for edge_idx, edge in enumerate(edges)
     ]

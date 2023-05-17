@@ -1,11 +1,12 @@
 # test that we can run relative free energy simulations in complex and in solvent
 # this doesn't test for accuracy, just that everything mechanically runs.
 from importlib import resources
+from warnings import catch_warnings
 
 import numpy as np
 import pytest
 
-from timemachine.fe.free_energy import HostConfig, PairBarResult, SimulationResult, image_frames, sample
+from timemachine.fe.free_energy import HostConfig, MDParams, PairBarResult, SimulationResult, image_frames, sample
 from timemachine.fe.rbfe import (
     estimate_relative_free_energy,
     estimate_relative_free_energy_via_greedy_bisection,
@@ -18,7 +19,7 @@ from timemachine.md.barostat.utils import compute_box_center
 from timemachine.testsystems.relative import get_hif2a_ligand_pair_single_topology
 
 
-def run_bitwise_reproducibility(mol_a, mol_b, core, forcefield, n_frames, estimate_relative_free_energy_fn):
+def run_bitwise_reproducibility(mol_a, mol_b, core, forcefield, md_params, estimate_relative_free_energy_fn):
     # test that we can bitwise reproduce our trajectory using the initial state information
 
     seed = 2023
@@ -36,7 +37,7 @@ def run_bitwise_reproducibility(mol_a, mol_b, core, forcefield, n_frames, estima
         forcefield,
         solvent_host_config,
         seed,
-        n_frames=n_frames,
+        md_params=md_params,
         prefix="solvent",
         lambda_interval=(0.01, 0.03),
         n_windows=n_windows,
@@ -53,7 +54,7 @@ def run_bitwise_reproducibility(mol_a, mol_b, core, forcefield, n_frames, estima
     np.testing.assert_equal(solvent_res.boxes, all_boxes)
 
 
-def run_triple(mol_a, mol_b, core, forcefield, n_frames, protein_path, n_eq_steps, estimate_relative_free_energy_fn):
+def run_triple(mol_a, mol_b, core, forcefield, md_params, protein_path, estimate_relative_free_energy_fn):
 
     seed = 2023
     lambda_interval = [0.01, 0.03]
@@ -67,12 +68,11 @@ def run_triple(mol_a, mol_b, core, forcefield, n_frames, protein_path, n_eq_step
         assert sim_res.plots.overlap_summary_png is not None
         assert sim_res.plots.overlap_detail_png is not None
 
-        assert len(sim_res.frames[0]) == n_frames
-        assert len(sim_res.frames[-1]) == n_frames
-        assert len(sim_res.boxes[0]) == n_frames
-        assert len(sim_res.boxes[-1]) == n_frames
-        assert sim_res.md_params.n_frames == n_frames
-        assert sim_res.md_params.n_eq_steps == n_eq_steps
+        assert len(sim_res.frames[0]) == md_params.n_frames
+        assert len(sim_res.frames[-1]) == md_params.n_frames
+        assert len(sim_res.boxes[0]) == md_params.n_frames
+        assert len(sim_res.boxes[-1]) == md_params.n_frames
+        assert sim_res.md_params == md_params
 
         def check_pair_bar_result(res: PairBarResult):
             n_pairs = len(res.initial_states) - 1
@@ -99,11 +99,10 @@ def run_triple(mol_a, mol_b, core, forcefield, n_frames, protein_path, n_eq_step
         forcefield,
         host_config=None,
         seed=seed,
-        n_frames=n_frames,
+        md_params=md_params,
         prefix="vacuum",
         lambda_interval=lambda_interval,
         n_windows=n_windows,
-        n_eq_steps=n_eq_steps,
     )
     print("vacuum")
     check_sim_result(vacuum_res)
@@ -119,11 +118,10 @@ def run_triple(mol_a, mol_b, core, forcefield, n_frames, protein_path, n_eq_step
         forcefield,
         solvent_host_config,
         seed,
-        n_frames=n_frames,
+        md_params=md_params,
         prefix="solvent",
         lambda_interval=lambda_interval,
         n_windows=n_windows,
-        n_eq_steps=n_eq_steps,
     )
 
     print("solvent")
@@ -142,11 +140,10 @@ def run_triple(mol_a, mol_b, core, forcefield, n_frames, protein_path, n_eq_step
         forcefield,
         complex_host_config,
         seed,
-        n_frames=n_frames,
+        md_params=md_params,
         prefix="complex",
         lambda_interval=lambda_interval,
         n_windows=n_windows,
-        n_eq_steps=n_eq_steps,
     )
 
     print("complex")
@@ -163,20 +160,90 @@ def test_run_hif2a_test_system(estimate_relative_free_energy_fn):
     mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
     forcefield = Forcefield.load_default()
 
+    md_params = MDParams(n_frames=100, n_eq_steps=1000, steps_per_frame=100)
+
     with resources.path("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as protein_path:
         run_triple(
             mol_a,
             mol_b,
             core,
             forcefield,
-            n_frames=100,
+            md_params=md_params,
             protein_path=str(protein_path),
-            n_eq_steps=1000,
             estimate_relative_free_energy_fn=estimate_relative_free_energy_fn,
         )
     run_bitwise_reproducibility(
-        mol_a, mol_b, core, forcefield, n_frames=100, estimate_relative_free_energy_fn=estimate_relative_free_energy_fn
+        mol_a,
+        mol_b,
+        core,
+        forcefield,
+        md_params=md_params,
+        estimate_relative_free_energy_fn=estimate_relative_free_energy_fn,
     )
+
+
+def test_local_md_parameters_validation():
+    frames = 5
+    steps_per_frame = 2
+    # validate that local steps <= steps per frame
+    with pytest.raises(AssertionError):
+        MDParams(n_frames=frames, n_eq_steps=10, local_steps=5, steps_per_frame=steps_per_frame)
+
+    # validate that min_radius <= max_radius
+    with pytest.raises(AssertionError):
+        MDParams(n_frames=frames, n_eq_steps=10, min_radius=4.0, max_radius=1.0, steps_per_frame=steps_per_frame)
+
+    # Validated that k > 0.0
+    with pytest.raises(AssertionError):
+        MDParams(n_frames=frames, n_eq_steps=10, k=-1.0, steps_per_frame=steps_per_frame)
+
+
+def test_local_md_parameters():
+    """Run RBFE methods with local steps mixed in"""
+    mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
+    forcefield = Forcefield.load_default()
+    seed = 2023
+    frames = 5
+    windows = 2
+    steps_per_frame = 5
+
+    md_params = MDParams(
+        n_frames=frames,
+        n_eq_steps=10,
+        steps_per_frame=steps_per_frame,
+        local_steps=steps_per_frame,
+        min_radius=0.1,
+        max_radius=0.5,
+    )
+
+    # Local MD not supported by vacuum, will reset local_steps to 0
+    with catch_warnings(record=True) as w:
+        res = run_vacuum(mol_a, mol_b, core, forcefield, None, seed, md_params=md_params, n_windows=windows)
+    # Several warnings raised here, look for a specific message
+    assert "Vacuum simulations don't support local steps, will use all global steps" in [x.message.args[0] for x in w]
+
+    assert len(res.frames[0]) == frames
+    assert res.md_params != md_params
+    assert res.md_params.local_steps == 0
+
+    # All of the particles should have moved, since it was global MD
+    assert np.all(res.frames[0][0] == res.frames[0][-1], axis=1).sum() == 0
+
+    res, _, _ = run_solvent(
+        mol_a,
+        mol_b,
+        core,
+        forcefield,
+        None,
+        seed,
+        md_params=md_params,
+        n_windows=windows,
+    )
+    assert len(res.frames[0]) == frames
+    assert res.md_params == md_params
+
+    # Some of the particles should have never moved
+    assert np.all(res.frames[0][0] == res.frames[0][-1], axis=1).sum() > 0
 
 
 def test_steps_per_frames():
@@ -185,13 +252,13 @@ def test_steps_per_frames():
     forcefield = Forcefield.load_default()
     seed = 2022
     frames = 5
-    res = run_vacuum(mol_a, mol_b, core, forcefield, None, frames, seed, n_eq_steps=10, steps_per_frame=2, n_windows=2)
+    md_params = MDParams(n_frames=frames, n_eq_steps=10, steps_per_frame=2)
+    res = run_vacuum(mol_a, mol_b, core, forcefield, None, seed, md_params=md_params, n_windows=2)
     assert len(res.frames[0]) == frames
 
     frames = 2
-    test_res = run_vacuum(
-        mol_a, mol_b, core, forcefield, None, frames, seed, n_eq_steps=10, steps_per_frame=5, n_windows=2
-    )
+    md_params = MDParams(n_frames=frames, n_eq_steps=10, steps_per_frame=5)
+    test_res = run_vacuum(mol_a, mol_b, core, forcefield, None, seed, md_params=md_params, n_windows=2)
     assert len(test_res.frames[0]) == frames
     assert len(test_res.frames) == 2
     # The last frame from the trajectories should match as num_frames * steps_per_frame are equal
@@ -209,6 +276,9 @@ def test_imaging_frames():
     frames = 1
     steps_per_frame = 1
     equil_steps = 1
+
+    md_params = MDParams(n_frames=frames, n_eq_steps=equil_steps, steps_per_frame=steps_per_frame)
+
     windows = 2
     res, _, _ = run_solvent(
         mol_a,
@@ -216,10 +286,8 @@ def test_imaging_frames():
         core,
         forcefield,
         None,
-        frames,
         seed,
-        n_eq_steps=equil_steps,
-        steps_per_frame=steps_per_frame,
+        md_params=md_params,
         n_windows=windows,
     )
     keep_idxs = [0, len(res.final_result.initial_states) - 1]
@@ -258,6 +326,7 @@ def test_rbfe_with_1_window(estimate_relative_free_energy_fn):
     mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
     forcefield = Forcefield.load_default()
     seed = 2022
+    md_params = MDParams(n_frames=1, n_eq_steps=10, steps_per_frame=1)
     with pytest.raises(AssertionError):
         estimate_relative_free_energy_fn(
             mol_a,
@@ -266,11 +335,9 @@ def test_rbfe_with_1_window(estimate_relative_free_energy_fn):
             forcefield,
             None,
             seed,
-            n_frames=1,
+            md_params=md_params,
             prefix="failure",
             n_windows=1,
-            steps_per_frame=1,
-            n_eq_steps=10,
         )
 
 
