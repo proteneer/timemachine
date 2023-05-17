@@ -399,7 +399,7 @@ def equilibrate_host(
 
     integrator = LangevinIntegrator(temperature, dt, friction, combined_masses, seed).impl()
 
-    group_indices = get_group_indices(bond_list)
+    group_indices = get_group_indices(bond_list, len(combined_masses))
 
     barostat_interval = 5
     u_impls = bind_potentials(parameterize_system(hgt, ff, 0.0))  # lambda=0

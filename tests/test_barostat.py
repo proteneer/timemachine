@@ -23,12 +23,12 @@ def test_barostat_zero_interval():
     mol_a, _, _ = get_hif2a_ligand_pair_single_topology()
     ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
 
-    unbound_potentials, sys_params, _, coords, _ = get_solvent_phase_system(mol_a, ff, lamb=0.0)
+    unbound_potentials, sys_params, masses, coords, _ = get_solvent_phase_system(mol_a, ff, lamb=0.0)
 
     # get list of molecules for barostat by looking at bond table
     harmonic_bond_potential = unbound_potentials[0]
     bond_list = get_bond_list(harmonic_bond_potential)
-    group_indices = get_group_indices(bond_list)
+    group_indices = get_group_indices(bond_list, len(masses))
 
     bound_potentials = []
     for params, unbound_pot in zip(sys_params, unbound_potentials):
@@ -85,7 +85,7 @@ def test_barostat_partial_group_idxs():
     # get list of molecules for barostat by looking at bond table
     harmonic_bond_potential = unbound_potentials[0]
     bond_list = get_bond_list(harmonic_bond_potential)
-    group_indices = get_group_indices(bond_list)
+    group_indices = get_group_indices(bond_list, len(masses))
 
     # Cut the number of groups in half
     group_indices = group_indices[len(group_indices) // 2 :]
@@ -156,7 +156,7 @@ def test_barostat_is_deterministic():
     # get list of molecules for barostat by looking at bond table
     harmonic_bond_potential = unbound_potentials[0]
     bond_list = get_bond_list(harmonic_bond_potential)
-    group_indices = get_group_indices(bond_list)
+    group_indices = get_group_indices(bond_list, len(masses))
 
     u_impls = []
     for params, unbound_pot in zip(sys_params, unbound_potentials):
@@ -211,7 +211,7 @@ def test_barostat_varying_pressure():
     # get list of molecules for barostat by looking at bond table
     harmonic_bond_potential = unbound_potentials[0]
     bond_list = get_bond_list(harmonic_bond_potential)
-    group_indices = get_group_indices(bond_list)
+    group_indices = get_group_indices(bond_list, len(masses))
 
     u_impls = []
     for params, unbound_pot in zip(sys_params, unbound_potentials):
@@ -294,7 +294,7 @@ def test_molecular_ideal_gas():
     # get list of molecules for barostat by looking at bond table
     harmonic_bond_potential = unbound_potentials[0]
     bond_list = get_bond_list(harmonic_bond_potential)
-    group_indices = get_group_indices(bond_list)
+    group_indices = get_group_indices(bond_list, len(masses))
 
     volume_trajs = []
 
@@ -362,3 +362,47 @@ def test_molecular_ideal_gas():
     actual_volume_in_md = np.array([np.mean(volume_traj[equil_time:]) for volume_traj in volume_trajs])
 
     np.testing.assert_allclose(actual=actual_volume_in_md, desired=expected_volume_in_md, rtol=relative_tolerance)
+
+
+def convert_to_fzset(grp_idxs):
+    all_items = set()
+    for grp in grp_idxs:
+        items = set()
+        for idx in grp:
+            items.add(idx)
+        items = frozenset(items)
+        all_items.add(items)
+    all_items = frozenset(all_items)
+    return all_items
+
+
+def assert_group_idxs_are_equal(set_a, set_b):
+    assert convert_to_fzset(set_a) == convert_to_fzset(set_b)
+
+
+def test_get_group_indices():
+    # test that we generate correct group indices even when
+    # there are disconnected atoms (eg. ions) present
+
+    bond_idxs = [[0, 3], [3, 1], [5, 2]]
+    test_idxs = get_group_indices(bond_idxs, num_atoms=7)
+
+    ref_idxs = [(0, 1, 3), (2, 5), (4,), (6,)]
+    assert_group_idxs_are_equal(ref_idxs, test_idxs)
+
+    test_idxs = get_group_indices([], num_atoms=4)
+    ref_idxs = [(0,), (1,), (2,), (3,)]
+    assert_group_idxs_are_equal(ref_idxs, test_idxs)
+
+    test_idxs = get_group_indices([], num_atoms=0)
+    ref_idxs = []
+    assert_group_idxs_are_equal(ref_idxs, test_idxs)
+
+    # slightly larger connected group
+    test_idxs = get_group_indices([[0, 3], [2, 4], [4, 3]], num_atoms=5)
+    ref_idxs = [(0, 2, 3, 4), (1,)]
+    assert_group_idxs_are_equal(ref_idxs, test_idxs)
+
+    with pytest.raises(AssertionError):
+        # num_atoms <  an atom's indx in bond_idxs
+        get_group_indices([[0, 3]], num_atoms=3)

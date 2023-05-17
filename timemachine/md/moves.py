@@ -132,7 +132,7 @@ class NPTMove(NVTMove):
         assert isinstance(bps[0].potential, HarmonicBond), "First potential must be of type HarmonicBond"
 
         bond_list = get_bond_list(bps[0].potential)
-        group_idxs = get_group_indices(bond_list)
+        group_idxs = get_group_indices(bond_list, len(masses))
 
         barostat = lib.MonteCarloBarostat(len(masses), pressure, temperature, group_idxs, barostat_interval, seed + 1)
         barostat_impl = barostat.impl(self.bound_impls)
