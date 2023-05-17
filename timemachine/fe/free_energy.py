@@ -369,7 +369,7 @@ def sample(initial_state: InitialState, md_params: MDParams, max_buffer_frames: 
             for steps in batches(n_steps, md_params.steps_per_frame):
                 if steps < md_params.steps_per_frame:
                     warn(
-                        f"Batch of sample has {steps}, less than batch size {md_params.steps_per_frame}. Setting to {md_params.steps_per_frame}"
+                        f"Batch of sample has {steps} steps, less than batch size {md_params.steps_per_frame}. Setting to {md_params.steps_per_frame}"
                     )
                     steps = md_params.steps_per_frame
                 global_steps = steps - md_params.local_steps

@@ -526,7 +526,7 @@ def estimate_relative_free_energy_via_greedy_bisection(
         If None, return only the end-state frames. Otherwise if not None, use only for debugging, and this
         will return the frames corresponding to the idxs of interest.
 
-    md_params: optional MDParams
+    md_params: MDParams, optional
         Parameters to determine the equilibration and production MD. Defaults to 400 global steps per frame, 2000 frames and 200k
         equilibration steps.
 
