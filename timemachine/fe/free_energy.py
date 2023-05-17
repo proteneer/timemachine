@@ -33,7 +33,7 @@ class HostConfig:
         self.box = box
 
 
-@dataclass
+@dataclass(frozen=True)
 class MDParams:
     n_frames: int
     n_eq_steps: int
@@ -359,58 +359,64 @@ def sample(initial_state: InitialState, md_params: MDParams, max_buffer_frames: 
     assert np.all(np.isfinite(ctxt.get_x_t())), "Equilibration resulted in a nan"
 
     def run_production_steps(n_steps: int) -> Tuple[NDArray, NDArray]:
-        if md_params.local_steps <= 0:
-            _, coords, boxes = ctxt.multiple_steps_U(
-                n_steps=n_steps,
-                store_u_interval=0,
-                store_x_interval=md_params.steps_per_frame,
-            )
-        else:
-            coords = None
-            boxes = None
-            ctxt.setup_local_md(initial_state.integrator.temperature, md_params.freeze_reference)
-            for steps in batches(n_steps, md_params.steps_per_frame):
-                if steps < md_params.steps_per_frame:
-                    warn(
-                        f"Batch of sample has {steps} steps, less than batch size {md_params.steps_per_frame}. Setting to {md_params.steps_per_frame}"
-                    )
-                    steps = md_params.steps_per_frame
-                global_steps = steps - md_params.local_steps
-                local_steps = md_params.local_steps
-                if global_steps > 0:
-                    ctxt.multiple_steps(
-                        n_steps=global_steps,
-                    )
-                x_t, box_t = ctxt.multiple_steps_local(
-                    local_steps,
-                    initial_state.ligand_idxs.astype(np.int32),
-                    k=md_params.k,
-                    radius=rng.uniform(md_params.min_radius, md_params.max_radius),
-                    seed=rng.integers(np.iinfo(np.int32).max),
-                    burn_in=0,
+        _, coords, boxes = ctxt.multiple_steps_U(
+            n_steps=n_steps,
+            store_u_interval=0,
+            store_x_interval=md_params.steps_per_frame,
+        )
+
+        return coords, boxes
+
+    def run_production_local_steps(n_steps: int) -> Tuple[NDArray, NDArray]:
+        coords = None
+        boxes = None
+        ctxt.setup_local_md(initial_state.integrator.temperature, md_params.freeze_reference)
+        for steps in batches(n_steps, md_params.steps_per_frame):
+            if steps < md_params.steps_per_frame:
+                warn(
+                    f"Batch of sample has {steps} steps, less than batch size {md_params.steps_per_frame}. Setting to {md_params.steps_per_frame}"
                 )
+                steps = md_params.steps_per_frame
+            global_steps = steps - md_params.local_steps
+            local_steps = md_params.local_steps
+            if global_steps > 0:
+                ctxt.multiple_steps(
+                    n_steps=global_steps,
+                )
+            x_t, box_t = ctxt.multiple_steps_local(
+                local_steps,
+                initial_state.ligand_idxs.astype(np.int32),
+                k=md_params.k,
+                radius=rng.uniform(md_params.min_radius, md_params.max_radius),
+                seed=rng.integers(np.iinfo(np.int32).max),
+                burn_in=0,
+            )
 
-                if coords is None:
-                    coords = np.array(x_t)
-                    boxes = np.array(box_t)
-                else:
-                    coords = np.concatenate([coords, x_t])
-                    boxes = np.concatenate([boxes, box_t])
-
+            if coords is None:
+                coords = np.array(x_t)
+                boxes = np.array(box_t)
+            else:
+                coords = np.concatenate([coords, x_t])
+                boxes = np.concatenate([boxes, box_t])
+        assert coords is not None and boxes is not None
         return coords, boxes
 
     all_coords: Union[NDArray, StoredArrays]
 
-    if max_buffer_frames:
+    steps_func = run_production_steps
+    if md_params.local_steps > 0:
+        steps_func = run_production_local_steps
+
+    if max_buffer_frames is not None and max_buffer_frames > 0:
         all_coords = StoredArrays()
         all_boxes_: List[NDArray] = []
         for n_frames in batches(md_params.n_frames, max_buffer_frames):
-            batch_coords, batch_boxes = run_production_steps(n_frames * md_params.steps_per_frame)
+            batch_coords, batch_boxes = steps_func(n_frames * md_params.steps_per_frame)
             all_coords.extend(batch_coords)
             all_boxes_.extend(batch_boxes)
         all_boxes = np.array(all_boxes_)
     else:
-        all_coords, all_boxes = run_production_steps(md_params.n_frames * md_params.steps_per_frame)
+        all_coords, all_boxes = steps_func(md_params.n_frames * md_params.steps_per_frame)
 
     assert len(all_coords) == md_params.n_frames
     assert len(all_boxes) == md_params.n_frames

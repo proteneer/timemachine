@@ -38,6 +38,8 @@ DEFAULT_NUM_WINDOWS = 30
 # https://github.com/proteneer/timemachine/commit/e1f7328f01f427534d8744aab6027338e116ad09
 MAX_SEED_VALUE = 10000
 
+DEFAULT_MD_PARAMS = MDParams(n_frames=1000, n_eq_steps=10_000, steps_per_frame=400)
+
 
 def setup_in_vacuum(st: SingleTopology, ligand_conf, lamb):
     """Prepare potentials, initial coords, large 10x10x10nm box, and HMR masses"""
@@ -369,7 +371,7 @@ def estimate_relative_free_energy(
     lambda_interval: Optional[Tuple[float, float]] = None,
     n_windows: Optional[int] = None,
     keep_idxs: Optional[List[int]] = None,
-    md_params: Optional[MDParams] = None,
+    md_params: MDParams = DEFAULT_MD_PARAMS,
     min_cutoff: Optional[float] = 0.7,
 ) -> SimulationResult:
     """
@@ -411,8 +413,8 @@ def estimate_relative_free_energy(
         If None, return only the end-state frames. Otherwise if not None, use only for debugging, and this
         will return the frames corresponding to the idxs of interest.
 
-    md_params: optional MDParams
-        Parameters to determine the equilibration and production MD. Defaults to 400 global steps per frame, 2000 frames and 200k
+    md_params: MDParams
+        Parameters to determine the equilibration and production MD. Defaults to 400 global steps per frame, 1000 frames and 10k
         equilibration steps.
 
     min_cutoff: float, optional
@@ -437,8 +439,6 @@ def estimate_relative_free_energy(
     initial_states = setup_initial_states(
         single_topology, host, temperature, lambda_schedule, seed, min_cutoff=min_cutoff
     )
-    if md_params is None:
-        md_params = MDParams(n_frames=2000, n_eq_steps=200_000, steps_per_frame=400)
 
     if keep_idxs is None:
         keep_idxs = [0, len(initial_states) - 1]  # keep frames from first and last windows
@@ -478,7 +478,7 @@ def estimate_relative_free_energy_via_greedy_bisection(
     ff: Forcefield,
     host_config: Optional[HostConfig],
     seed: int,
-    md_params: Optional[MDParams] = None,
+    md_params: MDParams = DEFAULT_MD_PARAMS,
     prefix: str = "",
     lambda_interval: Optional[Tuple[float, float]] = None,
     n_windows: Optional[int] = None,
@@ -525,8 +525,8 @@ def estimate_relative_free_energy_via_greedy_bisection(
         If None, return only the end-state frames. Otherwise if not None, use only for debugging, and this
         will return the frames corresponding to the idxs of interest.
 
-    md_params: MDParams, optional
-        Parameters to determine the equilibration and production MD. Defaults to 400 global steps per frame, 2000 frames and 200k
+    md_params: MDParams
+        Parameters to determine the equilibration and production MD. Defaults to 400 global steps per frame, 1000 frames and 10k
         equilibration steps.
 
     min_cutoff: float, optional
@@ -562,9 +562,6 @@ def estimate_relative_free_energy_via_greedy_bisection(
         temperature=temperature,
         seed=seed,
     )
-
-    if md_params is None:
-        md_params = MDParams(n_frames=2000, n_eq_steps=200_000, steps_per_frame=400)
 
     if keep_idxs is None:
         keep_idxs = [0, len(initial_states) - 1]  # keep frames from first and last windows
@@ -611,7 +608,7 @@ def run_vacuum(
     forcefield: Forcefield,
     _,
     seed: int,
-    md_params: Optional[MDParams] = None,
+    md_params: MDParams = DEFAULT_MD_PARAMS,
     n_windows: Optional[int] = None,
     min_cutoff: Optional[float] = None,
 ):
@@ -639,7 +636,7 @@ def run_solvent(
     forcefield: Forcefield,
     _,
     seed: int,
-    md_params: Optional[MDParams] = None,
+    md_params: MDParams = DEFAULT_MD_PARAMS,
     n_windows: Optional[int] = None,
     min_cutoff: Optional[float] = 0.7,
 ):
@@ -669,7 +666,7 @@ def run_complex(
     forcefield: Forcefield,
     protein: Union[app.PDBFile, str],
     seed: int,
-    md_params: Optional[MDParams] = None,
+    md_params: MDParams = DEFAULT_MD_PARAMS,
     n_windows: Optional[int] = None,
     min_cutoff: Optional[float] = 0.7,
 ):
@@ -715,7 +712,7 @@ def run_edge_and_save_results(
     seed: int,
     file_client: AbstractFileClient,
     n_windows: Optional[int],
-    md_params: Optional[MDParams] = None,
+    md_params: MDParams = DEFAULT_MD_PARAMS,
 ):
     # Ensure that all mol props (e.g. _Name) are included in pickles
     # Without this get_mol_name(mol) will fail on roundtripped mol
@@ -822,7 +819,7 @@ def run_edges_parallel(
     seed: int,
     pool_client: Optional[AbstractClient] = None,
     file_client: Optional[AbstractFileClient] = None,
-    md_params: Optional[MDParams] = None,
+    md_params: MDParams = DEFAULT_MD_PARAMS,
     n_windows: Optional[int] = None,
 ):
     mols = {get_mol_name(mol): mol for mol in ligands}
