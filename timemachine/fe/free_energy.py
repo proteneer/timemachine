@@ -39,15 +39,15 @@ class MDParams:
     n_eq_steps: int
     steps_per_frame: int
     local_steps: int = 0
-    k: float = 10_000.0
+    k: float = 1_000.0
     min_radius: float = 1.0
     max_radius: float = 3.0
     freeze_reference: bool = True
 
     def __post_init__(self):
-        assert self.min_radius <= self.max_radius
+        assert 0.1 <= self.min_radius <= self.max_radius
         assert self.local_steps <= self.steps_per_frame
-        assert self.k > 0.0
+        assert 1.0 <= self.k <= 1.0e6
 
 
 @dataclass

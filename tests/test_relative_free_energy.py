@@ -193,9 +193,17 @@ def test_local_md_parameters_validation():
     with pytest.raises(AssertionError):
         MDParams(n_frames=frames, n_eq_steps=10, min_radius=4.0, max_radius=1.0, steps_per_frame=steps_per_frame)
 
-    # Validated that k > 0.0
+    # validate that min_radius >= 0.1
+    with pytest.raises(AssertionError):
+        MDParams(n_frames=frames, n_eq_steps=10, min_radius=0.09, max_radius=1.0, steps_per_frame=steps_per_frame)
+
+    # validate that k >= 1.0
     with pytest.raises(AssertionError):
         MDParams(n_frames=frames, n_eq_steps=10, k=-1.0, steps_per_frame=steps_per_frame)
+
+    # validated that k <= 1e6
+    with pytest.raises(AssertionError):
+        MDParams(n_frames=frames, n_eq_steps=10, k=1.0e7, steps_per_frame=steps_per_frame)
 
 
 @pytest.mark.parametrize("freeze_reference", [True, False])
