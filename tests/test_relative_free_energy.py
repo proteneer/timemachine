@@ -182,26 +182,43 @@ def test_run_hif2a_test_system(estimate_relative_free_energy_fn):
     )
 
 
-def test_local_md_parameters_validation():
+def test_md_params_validation():
     frames = 5
     steps_per_frame = 2
-    # validate that local steps <= steps per frame
+
+    # assert steps_per_frame > 0
+    with pytest.raises(AssertionError):
+        MDParams(n_frames=frames, n_eq_steps=10, steps_per_frame=0)
+
+    # assert n_eq_steps > 0
+    with pytest.raises(AssertionError):
+        MDParams(n_frames=frames, n_eq_steps=0, steps_per_frame=steps_per_frame)
+
+    # assert n_frames > 0
+    with pytest.raises(AssertionError):
+        MDParams(n_frames=0, n_eq_steps=1, steps_per_frame=steps_per_frame)
+
+    # assert that local steps <= steps per frame
     with pytest.raises(AssertionError):
         MDParams(n_frames=frames, n_eq_steps=10, local_steps=5, steps_per_frame=steps_per_frame)
 
-    # validate that min_radius <= max_radius
+    # assert that local steps >= 0
+    with pytest.raises(AssertionError):
+        MDParams(n_frames=frames, n_eq_steps=10, local_steps=-1, steps_per_frame=steps_per_frame)
+
+    # assert that min_radius <= max_radius
     with pytest.raises(AssertionError):
         MDParams(n_frames=frames, n_eq_steps=10, min_radius=4.0, max_radius=1.0, steps_per_frame=steps_per_frame)
 
-    # validate that min_radius >= 0.1
+    # assert that min_radius >= 0.1
     with pytest.raises(AssertionError):
         MDParams(n_frames=frames, n_eq_steps=10, min_radius=0.09, max_radius=1.0, steps_per_frame=steps_per_frame)
 
-    # validate that k >= 1.0
+    # assert that k >= 1.0
     with pytest.raises(AssertionError):
         MDParams(n_frames=frames, n_eq_steps=10, k=-1.0, steps_per_frame=steps_per_frame)
 
-    # validated that k <= 1e6
+    # assert that k <= 1e6
     with pytest.raises(AssertionError):
         MDParams(n_frames=frames, n_eq_steps=10, k=1.0e7, steps_per_frame=steps_per_frame)
 

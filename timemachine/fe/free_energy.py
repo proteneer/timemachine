@@ -45,8 +45,11 @@ class MDParams:
     freeze_reference: bool = True
 
     def __post_init__(self):
+        assert self.steps_per_frame > 0
+        assert self.n_frames > 0
+        assert self.n_eq_steps > 0
         assert 0.1 <= self.min_radius <= self.max_radius
-        assert self.local_steps <= self.steps_per_frame
+        assert 0 <= self.local_steps <= self.steps_per_frame
         assert 1.0 <= self.k <= 1.0e6
 
 
