@@ -39,7 +39,7 @@ def test_deterministic_energies():
 
     harmonic_bond_potential = host_fns[0]
     bond_list = get_bond_list(harmonic_bond_potential.potential)
-    group_idxs = get_group_indices(bond_list)
+    group_idxs = get_group_indices(bond_list, len(host_masses))
     baro = MonteCarloBarostat(
         x0.shape[0],
         pressure,

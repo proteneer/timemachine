@@ -65,8 +65,9 @@ def generate_hif2a_frames(n_frames: int, frame_interval: int, seed=None, barosta
         bps.append(potential.to_gpu(precision=np.float32).bound_impl)  # get the bound implementation
 
     baro_impl = None
+
     if barostat_interval > 0:
-        group_idxs = get_group_indices(bond_list)
+        group_idxs = get_group_indices(bond_list, len(masses))
         baro = MonteCarloBarostat(
             initial_state.x0.shape[0],
             pressure,
@@ -175,7 +176,7 @@ def benchmark(
 
     baro_impl = None
     if barostat_interval > 0:
-        group_idxs = get_group_indices(bond_list)
+        group_idxs = get_group_indices(bond_list, len(masses))
         baro = MonteCarloBarostat(
             x0.shape[0],
             pressure,
