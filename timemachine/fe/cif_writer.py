@@ -106,7 +106,7 @@ class CIFWriter:
                     combined_topology.addBond(src_atom, dst_atom)
 
             else:
-                raise ValueError("Unknown obj type")
+                raise ValueError(f"Unknown obj type: {type(obj)}")
 
         self.topology = combined_topology
 

@@ -17,7 +17,7 @@ def write_trajectory_as_pdb(mol_a, mol_b, core, all_frames, host_topology, prefi
 
     atom_map_mixin = AtomMapMixin(mol_a, mol_b, core)
     for window_idx, window_frames in enumerate(all_frames):
-        out_path = f"{prefix}_{window_idx}.pdb"
+        out_path = f"{prefix}_{window_idx}.cif"
         writer = cif_writer.CIFWriter([host_topology, mol_a, mol_b], out_path)
         for frame in window_frames:
             host_frame = frame[: host_topology.getNumAtoms()]

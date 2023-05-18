@@ -593,7 +593,7 @@ $$$$""",
     # don't remove - useful for visualization
     # from timemachine.fe import cif_writer
     # traj = minimize_scipy(U_fn, x0_inverted, return_traj=True)
-    # writer = cif_writer.CIFWriter([mol], "chiral_inversion.pdb")
+    # writer = cif_writer.CIFWriter([mol], "chiral_inversion.cif")
     # for f in traj:
     #     f = f - np.mean(f, axis=0)
     #     writer.write_frame(f*10)

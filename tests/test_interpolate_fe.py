@@ -63,7 +63,7 @@ def test_hif2a_free_energy_estimates():
         # continue
         frames = simulate_system(U_fn, x0, num_samples=2000)
         all_frames.append(frames)
-        writer = cif_writer.CIFWriter([mol_a, mol_b], "debug_" + str(lambda_idx) + ".pdb")
+        writer = cif_writer.CIFWriter([mol_a, mol_b], "debug_" + str(lambda_idx) + ".cif")
         for f in frames:
             fc = cif_writer.convert_single_topology_mols(f, st)
             fc = fc - np.mean(fc, axis=0)
