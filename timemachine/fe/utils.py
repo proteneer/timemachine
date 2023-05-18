@@ -230,7 +230,7 @@ def plot_atom_mapping_grid(mol_a, mol_b, core, num_rotations=5):
 def view_atom_mapping_3d(
     mol_a: Chem.rdchem.Mol,
     mol_b: Chem.rdchem.Mol,
-    cores: Sequence[Sequence[Sequence[int]]] = (),
+    cores: Sequence[Sequence[Sequence[int]]] | NDArray = (),
     colors: Sequence[str] = (
         # https://colorbrewer2.org/#type=qualitative&scheme=Paired&n=12
         "#a6cee3",
@@ -259,7 +259,7 @@ def view_atom_mapping_3d(
     mol_a, mol_b : rdkit mols
         Input mols
 
-    cores : list of list of list of int, optional
+    cores : list of list of list of int or ndarray, optional
         Atom mappings. If nonempty, display additional rows with atoms color-coded according to the corresponding
         mapping
 
