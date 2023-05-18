@@ -258,7 +258,7 @@ def view_atom_mapping_3d(
     mol_a, mol_b : rdkit mols
         Input mols
 
-    cores : list of list of int, optional
+    cores : list of list of list of int or ndarray, optional
         Atom mappings. If nonempty, display additional rows with atoms color-coded according to the corresponding
         mapping
 
