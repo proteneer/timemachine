@@ -3,6 +3,7 @@
 #pragma once
 
 #include "bound_potential.hpp"
+#include "stream_manager.hpp"
 #include <memory>
 #include <vector>
 
@@ -27,14 +28,7 @@ public:
         cudaStream_t stream);
 
 private:
-    std::vector<cudaStream_t> streams_;
-    std::vector<cudaEvent_t> events_;
-
-    // Event for syncing spawned streams with the incoming stream
-    cudaEvent_t sync_event_;
-
-    cudaStream_t _get_potential_stream(int index);
-    cudaEvent_t _get_potential_event(int index);
+    StreamManager manager_;
 };
 
 } // namespace timemachine
