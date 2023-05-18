@@ -167,8 +167,8 @@ def test_get_strained_atoms():
 
 
 def test_view_atom_mapping_3d():
-    mol_a = Chem.MolFromSmiles("c1ccc1")
-    mol_b = Chem.MolFromSmiles("c1(N)ccc1")
+    mol_a = Chem.AddHs(Chem.MolFromSmiles("c1ccc1"))
+    mol_b = Chem.AddHs(Chem.MolFromSmiles("c1(N)ccc1"))
 
     AllChem.EmbedMolecule(mol_a)
     AllChem.EmbedMolecule(mol_b)
