@@ -1,8 +1,6 @@
-import tempfile
-
 import numpy as np
 from openmm import app
-from openmm.app import PDBFile
+from openmm.app import PDBxFile
 from rdkit import Chem
 
 from timemachine.fe.single_topology import AtomMapMixin
@@ -21,11 +19,10 @@ def convert_single_topology_mols(coords: np.ndarray, atom_map: AtomMapMixin) -> 
     Example
     -------
 
-        >>> writer = PDBWriter(...)
+        >>> writer = CIFWriter(...)
         >>> lig_coords = convert_single_topology_mols(x0[num_host_coords:], atom_map)
         >>> new_coords = np.concatenate((x0[:num_host_coords], lig_coords), axis=0)
         >>> writer.write_frame(new_coords*10)
-        >>> writer.close()
 
     """
     xa = np.zeros((atom_map.mol_a.GetNumAtoms(), 3))
@@ -37,12 +34,18 @@ def convert_single_topology_mols(coords: np.ndarray, atom_map: AtomMapMixin) -> 
     return np.concatenate((xa, xb), axis=0)
 
 
-class PDBWriter:
+class BondTypeError(Exception):
+    pass
+
+
+class CIFWriter:
     def __init__(self, objs, out_filepath):
         """
         This class writes frames out in the PDBFormat. It supports both OpenMM topology
         formats and RDKit ROMol types. The molecules are ordered sequentially by the order
         in which they are in objs
+
+        Note: only one app.Topology is currently allowed in objs.
 
         Usage:
 
@@ -51,53 +54,64 @@ class PDBWriter:
         mol_a = Chem.MolFromMolBlock("...")
         mol_b = Chem.MolFromMolBlock("...")
 
-        writer = PDBWriter([topol, mol_a, mol_b], out.pdb) # writer header
+        writer = PDBxWriter([topol, mol_a, mol_b], out.pdb) # writer header
         writer.write_frame(coords) # coords must be in units of angstroms
         writer.close() # writes footer
         ```
 
         Parameters
         ----------
-        objs: list of either Chem.Mol or app.Topoolgy types
+        objs: list of either Chem.Mol or app.Topology types
             Molecules of interest
 
         out_filepath: str
-            Where we write out the PDBFile to
+            Where we write out the PDBxFile to
 
         """
 
         assert len(objs) > 0
 
-        rd_mols = []
-        # super jank
+        combined_topology = None
+
+        # see if an existing topology is present
         for obj in objs:
             if isinstance(obj, app.Topology):
-                with tempfile.NamedTemporaryFile(mode="w") as fp:
-                    # write
-                    PDBFile.writeHeader(obj, fp)
-                    PDBFile.writeModel(obj, np.zeros((obj.getNumAtoms(), 3)), fp, 0)
-                    PDBFile.writeFooter(obj, fp)
-                    fp.flush()
-                    # read
-                    rd_mols.append(Chem.MolFromPDBFile(fp.name, removeHs=False))
+                assert combined_topology is None
+                combined_topology = obj
 
-            if isinstance(obj, Chem.Mol):
-                rd_mols.append(obj)
+        if combined_topology is None:
+            combined_topology = app.Topology()
 
-        combined_mol = rd_mols[0]
-        for mol in rd_mols[1:]:
-            combined_mol = Chem.CombineMols(combined_mol, mol)
+        for idx, obj in enumerate(objs):
+            if isinstance(obj, app.Topology):
+                pass
+            elif isinstance(obj, Chem.Mol):
+                mol = obj
+                new_chain = combined_topology.addChain()
+                new_residue = combined_topology.addResidue(name="LIG" + str(idx), chain=new_chain)
+                old_idx_to_new_atom_map = {}
+                for atom in mol.GetAtoms():
+                    name = atom.GetSymbol() + str(atom.GetIdx())
+                    element = app.element.Element.getByAtomicNumber(atom.GetAtomicNum())
+                    new_atom = combined_topology.addAtom(name, element, new_residue)
+                    old_idx = atom.GetIdx()
+                    old_idx_to_new_atom_map[old_idx] = new_atom
 
-        with tempfile.NamedTemporaryFile(mode="w") as fp:
-            # write
-            Chem.MolToPDBFile(combined_mol, fp.name)
-            fp.flush()
-            # read
-            combined_pdb = app.PDBFile(fp.name)
-            self.topology = combined_pdb.topology
+                # (ytz): while we could get fancier, mmcif only has the covale bond type:
+                # https://mmcif.wwpdb.org/dictionaries/mmcif_pdbx_v40.dic/Items/_struct_conn_type.id.html
+                # so we only bother with "yes/no"
+                for bond in mol.GetBonds():
+                    src_atom = old_idx_to_new_atom_map[bond.GetBeginAtomIdx()]
+                    dst_atom = old_idx_to_new_atom_map[bond.GetEndAtomIdx()]
+                    combined_topology.addBond(src_atom, dst_atom)
+
+            else:
+                raise ValueError("Unknown obj type")
+
+        self.topology = combined_topology
 
         self.out_handle = open(out_filepath, "w")
-        PDBFile.writeHeader(self.topology, self.out_handle)
+        PDBxFile.writeHeader(self.topology, self.out_handle)
         self.topology = self.topology
         self.frame_idx = 0
 
@@ -111,14 +125,5 @@ class PDBWriter:
             coordinates in units of angstroms
 
         """
-        # if self.outfile is None:
-        # raise ValueError("remember to call write_header first")
         self.frame_idx += 1
-        PDBFile.writeModel(self.topology, x, self.out_handle, self.frame_idx)
-
-    def close(self):
-        """
-        Write footer and close.
-        """
-        PDBFile.writeFooter(self.topology, self.out_handle)
-        self.out_handle.flush()
+        PDBxFile.writeModel(self.topology, x, self.out_handle, self.frame_idx)

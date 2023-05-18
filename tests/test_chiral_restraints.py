@@ -591,9 +591,9 @@ $$$$""",
     x0_inverted = utils.get_romol_conf(mol_inverted)
 
     # don't remove - useful for visualization
-    # from timemachine.fe import pdb_writer
+    # from timemachine.fe import cif_writer
     # traj = minimize_scipy(U_fn, x0_inverted, return_traj=True)
-    # writer = pdb_writer.PDBWriter([mol], "chiral_inversion.pdb")
+    # writer = cif_writer.CIFWriter([mol], "chiral_inversion.pdb")
     # for f in traj:
     #     f = f - np.mean(f, axis=0)
     #     writer.write_frame(f*10)
@@ -607,5 +607,3 @@ $$$$""",
         # writer.write_frame(f*10)
         assert_same_signs(frame_atom_vols, ref_chiral_atom_vols)
         assert_same_signs(frame_bond_vols, ref_chiral_bond_vols)
-
-    # writer.close()

@@ -7,7 +7,7 @@ import pymbar
 import pytest
 
 from timemachine.constants import BOLTZ
-from timemachine.fe import atom_mapping, pdb_writer, single_topology, utils
+from timemachine.fe import atom_mapping, cif_writer, single_topology, utils
 from timemachine.fe.system import simulate_system
 from timemachine.fe.utils import get_romol_conf
 from timemachine.ff import Forcefield
@@ -63,12 +63,11 @@ def test_hif2a_free_energy_estimates():
         # continue
         frames = simulate_system(U_fn, x0, num_samples=2000)
         all_frames.append(frames)
-        writer = pdb_writer.PDBWriter([mol_a, mol_b], "debug_" + str(lambda_idx) + ".pdb")
+        writer = cif_writer.CIFWriter([mol_a, mol_b], "debug_" + str(lambda_idx) + ".pdb")
         for f in frames:
-            fc = pdb_writer.convert_single_topology_mols(f, st)
+            fc = cif_writer.convert_single_topology_mols(f, st)
             fc = fc - np.mean(fc, axis=0)
             writer.write_frame(fc * 10)
-        writer.close()
 
         if lambda_idx > 0:
 
