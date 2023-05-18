@@ -14,10 +14,8 @@ def test_run_solvent():
     steps_per_frame = 10
     mol, _ = testsystems.ligands.get_biphenyl()
     ff = Forcefield.load_default()
-    md_params = MDParams(n_frames=n_frames, n_eq_steps=n_eq_steps, steps_per_frame=steps_per_frame)
-    res, top, host_config = absolute_hydration.run_solvent(
-        mol, ff, None, seed, md_params=md_params, n_windows=n_windows
-    )
+    md_params = MDParams(seed=seed, n_eq_steps=n_eq_steps, n_frames=n_frames, steps_per_frame=steps_per_frame)
+    res, top, host_config = absolute_hydration.run_solvent(mol, ff, None, md_params=md_params, n_windows=n_windows)
 
     assert res.plots.overlap_summary_png is not None
     assert res.plots.overlap_detail_png is not None
@@ -29,8 +27,6 @@ def test_run_solvent():
     assert len(res.boxes[0]) == n_frames
     assert len(res.boxes[-1]) == n_frames
     assert res.md_params == md_params
-    assert res.md_params.n_frames == n_frames
-    assert res.md_params.n_eq_steps == n_eq_steps
     assert host_config.omm_system is not None
     assert host_config.conf.shape == (6282, 3)
     assert host_config.box.shape == (3, 3)
