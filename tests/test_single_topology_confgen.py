@@ -22,6 +22,7 @@ def write_trajectory_as_pdb(mol_a, mol_b, core, all_frames, host_topology, out_p
     atom_map_mixin = AtomMapMixin(mol_a, mol_b, core)
     writer = cif_writer.CIFWriter([host_topology, mol_a, mol_b], out_path)
     for frame in all_frames:
+        print("FRAME IN ALL_FRAMES", frame)
         host_frame = frame[: host_topology.getNumAtoms()]
         ligand_frame = frame[host_topology.getNumAtoms() :]
         mol_ab_frame = cif_writer.convert_single_topology_mols(ligand_frame, atom_map_mixin)
@@ -62,6 +63,7 @@ def run_edge(mol_a, mol_b, protein_path, n_windows):
     solvent_host = setup_optimized_host(st, solvent_host_config)
     initial_states = setup_initial_states(st, solvent_host, DEFAULT_TEMP, lambda_schedule, seed)
     all_frames = [state.x0 for state in initial_states]
+    print("all_frames", all_frames)
     write_trajectory_as_pdb(
         mol_a,
         mol_b,

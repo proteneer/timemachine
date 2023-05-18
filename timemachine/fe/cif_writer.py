@@ -38,14 +38,40 @@ class BondTypeError(Exception):
     pass
 
 
+def deep_copy_topology(old_topology):
+
+    new_topology = app.Topology()
+    old_chain_id_kv = {}
+    for old_chain in old_topology.chains():
+        new_chain = new_topology.addChain()
+        old_chain_id_kv[old_chain.id] = new_chain
+
+    old_atom_id_kv = {}
+    for old_residue in old_topology.residues():
+        chain_obj = old_chain_id_kv[old_residue.chain.id]
+        new_residue = new_topology.addResidue(name=old_residue.name, chain=chain_obj)
+
+        for old_atom in old_residue.atoms():
+            new_atom = new_topology.addAtom(old_atom.name, old_atom.element, new_residue)
+            old_atom_id_kv[old_atom.id] = new_atom
+
+    for old_bond in old_topology.bonds():
+        old_atom1_id = old_bond.atom1.id
+        old_atom2_id = old_bond.atom2.id
+        new_atom1 = old_atom_id_kv[old_atom1_id]
+        new_atom2 = old_atom_id_kv[old_atom2_id]
+
+        new_topology.addBond(new_atom1, new_atom2, old_bond.type, old_bond.order)
+
+    return new_topology
+
+
 class CIFWriter:
     def __init__(self, objs, out_filepath):
         """
-        This class writes frames out in the PDBFormat. It supports both OpenMM topology
+        This class writes frames out in the mmCIF format. It supports both OpenMM topology
         formats and RDKit ROMol types. The molecules are ordered sequentially by the order
         in which they are in objs
-
-        Note: only one app.Topology is currently allowed in objs.
 
         Usage:
 
@@ -54,7 +80,7 @@ class CIFWriter:
         mol_a = Chem.MolFromMolBlock("...")
         mol_b = Chem.MolFromMolBlock("...")
 
-        writer = PDBxWriter([topol, mol_a, mol_b], out.pdb) # writer header
+        writer = CIFWriter([topol, mol_a, mol_b], out.cif) # writer header
         writer.write_frame(coords) # coords must be in units of angstroms
         writer.close() # writes footer
         ```
@@ -65,30 +91,42 @@ class CIFWriter:
             Molecules of interest
 
         out_filepath: str
-            Where we write out the PDBxFile to
+            Where we write out the CIF file to
 
         """
 
         assert len(objs) > 0
 
-        combined_topology = None
+        combined_topology = app.Topology()
 
         # see if an existing topology is present
-        for obj in objs:
+        for obj_idx, obj in enumerate(objs):
+            old_topology = obj
             if isinstance(obj, app.Topology):
-                assert combined_topology is None
-                combined_topology = obj
+                old_chain_id_kv = {}
+                for old_chain in old_topology.chains():
+                    new_chain = combined_topology.addChain()
+                    old_chain_id_kv[old_chain.id] = new_chain
 
-        if combined_topology is None:
-            combined_topology = app.Topology()
+                old_atom_id_kv = {}
+                for old_residue in old_topology.residues():
+                    chain_obj = old_chain_id_kv[old_residue.chain.id]
+                    new_residue = combined_topology.addResidue(name=old_residue.name, chain=chain_obj)
+                    for old_atom in old_residue.atoms():
+                        new_atom = combined_topology.addAtom(old_atom.name, old_atom.element, new_residue)
+                        old_atom_id_kv[old_atom.id] = new_atom
 
-        for idx, obj in enumerate(objs):
-            if isinstance(obj, app.Topology):
-                pass
+                for old_bond in old_topology.bonds():
+                    old_atom1_id = old_bond.atom1.id
+                    old_atom2_id = old_bond.atom2.id
+                    new_atom1 = old_atom_id_kv[old_atom1_id]
+                    new_atom2 = old_atom_id_kv[old_atom2_id]
+                    combined_topology.addBond(new_atom1, new_atom2, old_bond.type, old_bond.order)
+
             elif isinstance(obj, Chem.Mol):
                 mol = obj
                 new_chain = combined_topology.addChain()
-                new_residue = combined_topology.addResidue(name="LIG" + str(idx), chain=new_chain)
+                new_residue = combined_topology.addResidue(name="LIG", chain=new_chain)
                 old_idx_to_new_atom_map = {}
                 for atom in mol.GetAtoms():
                     name = atom.GetSymbol() + str(atom.GetIdx())
@@ -97,7 +135,7 @@ class CIFWriter:
                     old_idx = atom.GetIdx()
                     old_idx_to_new_atom_map[old_idx] = new_atom
 
-                # (ytz): while we could get fancier, mmcif only has the covale bond type:
+                # (ytz): while we could get fancier, mmcif only has the 'covale' bond type:
                 # https://mmcif.wwpdb.org/dictionaries/mmcif_pdbx_v40.dic/Items/_struct_conn_type.id.html
                 # so we only bother with "yes/no"
                 for bond in mol.GetBonds():
