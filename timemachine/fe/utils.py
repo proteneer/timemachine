@@ -268,8 +268,11 @@ def view_atom_mapping_3d(
     show_atom_idx_labels : bool, optional
         Whether to display atom indices
 
-    width, height : int
-        Dimensions of the view
+    width : int
+        Width of the view
+
+    row_height : int
+        Height of each row of the view
 
     Returns
     -------
