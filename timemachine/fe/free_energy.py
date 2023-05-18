@@ -606,7 +606,7 @@ def run_sims_with_greedy_bisection(
     @cache
     def get_samples(lamb: float) -> Tuple[StoredArrays, NDArray]:
         initial_state = get_initial_state(lamb)
-        frames, boxes = sample(initial_state, md_params, max_buffer_frames=1000)
+        frames, boxes = sample(initial_state, md_params, max_buffer_frames=100)
         return frames, boxes
 
     # NOTE: we don't cache get_state to avoid holding BoundPotentials in memory since they
