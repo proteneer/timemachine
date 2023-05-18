@@ -1,5 +1,5 @@
 import numpy as np
-import py3dmol
+import py3Dmol
 import pytest
 from rdkit import Chem
 from rdkit.Chem import AllChem
@@ -176,7 +176,7 @@ def test_view_atom_mapping_3d():
     core = [[2, 0], [3, 2], [0, 3], [1, 4]]
 
     view = utils.view_atom_mapping_3d(mol_a, mol_b, [core])
-    assert isinstance(view, py3dmol.view)
+    assert isinstance(view, py3Dmol.view)
 
     with pytest.raises(AssertionError, match="Expect a list of cores"):
         utils.view_atom_mapping_3d(mol_a, mol_b, core)
