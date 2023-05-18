@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import List, Optional, Sequence, Union
 
 import numpy as np
-from numpy.typing import ArrayLike, NDArray
+from numpy.typing import NDArray
 from rdkit import Chem
 from rdkit.Chem import AllChem, Draw
 from rdkit.Chem.Draw import rdMolDraw2D
@@ -230,7 +230,7 @@ def plot_atom_mapping_grid(mol_a, mol_b, core, num_rotations=5):
 def view_atom_mapping_3d(
     mol_a: Chem.rdchem.Mol,
     mol_b: Chem.rdchem.Mol,
-    cores: Sequence[ArrayLike] = (),
+    cores: Sequence[Sequence[Sequence[int]]] = (),
     colors: Sequence[str] = (
         # https://colorbrewer2.org/#type=qualitative&scheme=Paired&n=12
         "#a6cee3",
@@ -259,7 +259,7 @@ def view_atom_mapping_3d(
     mol_a, mol_b : rdkit mols
         Input mols
 
-    cores : list of list of list of int or ndarray, optional
+    cores : list of list of list of int, optional
         Atom mappings. If nonempty, display additional rows with atoms color-coded according to the corresponding
         mapping
 
@@ -288,8 +288,6 @@ def view_atom_mapping_3d(
     except ImportError as e:
         raise RuntimeError("requires py3Dmol to be installed") from e
 
-    colors_ = np.random.default_rng(seed).permutation(colors)
-
     make_style = lambda props: {"stick": props}
     atom_style = lambda color: make_style({"color": color})
     dummy_style = atom_style("white")
@@ -313,6 +311,14 @@ def view_atom_mapping_3d(
 
         view.setStyle(dummy_style, viewer=(row, 0))
         view.setStyle(dummy_style, viewer=(row, 1))
+
+        rng = np.random.default_rng(seed)
+        colors_ = (
+            rng.permutation(colors)
+            if len(core) <= len(colors)
+            # if more atoms than colors, need to reuse some colors
+            else rng.choice(colors, len(core), replace=True)
+        )
 
         for (ia, ib), color in zip(np.asarray(core).tolist(), cycle(colors_)):
             view.setStyle({"serial": ia}, atom_style(color), viewer=(row, 0))
