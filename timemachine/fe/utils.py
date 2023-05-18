@@ -248,7 +248,7 @@ def view_atom_mapping_3d(
     ),
     show_atom_idx_labels: bool = False,
     width: int = 800,
-    height: int = 500,
+    row_height: int = 200,
 ):
     """Produce a 3D rotatable view of a pair of molecules using py3Dmol. If `cores` is nonempty, display additional rows
     where the atoms are colored according to the atom mapping.
@@ -286,6 +286,7 @@ def view_atom_mapping_3d(
     dummy_style = atom_style("white")
 
     num_rows = 1 + len(cores)
+    height = num_rows * row_height
     view = py3Dmol.view(viewergrid=(num_rows, 2), width=width, height=height)
 
     def add_mol(mol, viewer):
