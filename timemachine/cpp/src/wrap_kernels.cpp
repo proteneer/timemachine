@@ -1230,13 +1230,13 @@ void declare_summed_potential(py::module &m) {
     py::class_<Class, std::shared_ptr<Class>, timemachine::Potential>(
         m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
         .def(
-            py::init(
-                [](std::vector<std::shared_ptr<timemachine::Potential>> potentials, std::vector<int> params_sizes) {
-                    return new timemachine::SummedPotential(potentials, params_sizes);
-                }),
+            py::init([](std::vector<std::shared_ptr<timemachine::Potential>> potentials,
+                        std::vector<int> params_sizes,
+                        bool serial) { return new timemachine::SummedPotential(potentials, params_sizes, serial); }),
 
             py::arg("potentials"),
-            py::arg("params_sizes"))
+            py::arg("params_sizes"),
+            py::arg("serial") = false)
         .def("get_potentials", &timemachine::SummedPotential::get_potentials);
 }
 
@@ -1247,10 +1247,11 @@ void declare_fanout_summed_potential(py::module &m) {
     py::class_<Class, std::shared_ptr<Class>, timemachine::Potential>(
         m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
         .def(
-            py::init([](std::vector<std::shared_ptr<timemachine::Potential>> potentials) {
-                return new timemachine::FanoutSummedPotential(potentials);
+            py::init([](std::vector<std::shared_ptr<timemachine::Potential>> potentials, bool serial) {
+                return new timemachine::FanoutSummedPotential(potentials, serial);
             }),
-            py::arg("potentials"))
+            py::arg("potentials"),
+            py::arg("serial") = false)
         .def("get_potentials", &timemachine::FanoutSummedPotential::get_potentials);
 }
 

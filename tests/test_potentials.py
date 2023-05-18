@@ -248,14 +248,15 @@ def harmonic_bond_test_system():
 
 
 @pytest.mark.parametrize("num_potentials", [1, 2, 5])
-def test_summed_potential(num_potentials, harmonic_bond_test_system):
+@pytest.mark.parametrize("serial", [False, True])
+def test_summed_potential(serial, num_potentials, harmonic_bond_test_system):
     """Assert SummedPotential is consistent on a set of harmonic bond potentials"""
 
     harmonic_bond, _, params, _, coords = harmonic_bond_test_system
 
     box = 3.0 * np.eye(3)
     params_list = [params] * num_potentials
-    potential = SummedPotential([harmonic_bond] * num_potentials, params_list)
+    potential = SummedPotential([harmonic_bond] * num_potentials, params_list, serial)
 
     flat_params = np.concatenate([p.reshape(-1) for p in params_list])
 
@@ -263,7 +264,8 @@ def test_summed_potential(num_potentials, harmonic_bond_test_system):
         GradientTest().compare_forces(coords, flat_params, box, potential, potential.to_gpu(precision), rtol)
 
 
-def test_fanout_summed_potential_consistency(harmonic_bond_test_system):
+@pytest.mark.parametrize("serial", [False, True])
+def test_fanout_summed_potential_consistency(serial, harmonic_bond_test_system):
     """Assert FanoutSummedPotential consistent with SummedPotential on
     a harmonic bond instance"""
 
@@ -271,7 +273,7 @@ def test_fanout_summed_potential_consistency(harmonic_bond_test_system):
 
     summed_potential = SummedPotential([harmonic_bond_1, harmonic_bond_2], [params, params])
 
-    fanout_summed_potential = FanoutSummedPotential([harmonic_bond_1, harmonic_bond_2])
+    fanout_summed_potential = FanoutSummedPotential([harmonic_bond_1, harmonic_bond_2], serial)
 
     box = 3.0 * np.eye(3)
 
