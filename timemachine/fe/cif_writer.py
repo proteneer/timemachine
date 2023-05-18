@@ -38,34 +38,6 @@ class BondTypeError(Exception):
     pass
 
 
-def deep_copy_topology(old_topology):
-
-    new_topology = app.Topology()
-    old_chain_id_kv = {}
-    for old_chain in old_topology.chains():
-        new_chain = new_topology.addChain()
-        old_chain_id_kv[old_chain.id] = new_chain
-
-    old_atom_id_kv = {}
-    for old_residue in old_topology.residues():
-        chain_obj = old_chain_id_kv[old_residue.chain.id]
-        new_residue = new_topology.addResidue(name=old_residue.name, chain=chain_obj)
-
-        for old_atom in old_residue.atoms():
-            new_atom = new_topology.addAtom(old_atom.name, old_atom.element, new_residue)
-            old_atom_id_kv[old_atom.id] = new_atom
-
-    for old_bond in old_topology.bonds():
-        old_atom1_id = old_bond.atom1.id
-        old_atom2_id = old_bond.atom2.id
-        new_atom1 = old_atom_id_kv[old_atom1_id]
-        new_atom2 = old_atom_id_kv[old_atom2_id]
-
-        new_topology.addBond(new_atom1, new_atom2, old_bond.type, old_bond.order)
-
-    return new_topology
-
-
 class CIFWriter:
     def __init__(self, objs, out_filepath):
         """
