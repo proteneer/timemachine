@@ -249,6 +249,7 @@ def view_atom_mapping_3d(
     show_atom_idx_labels: bool = False,
     width: int = 800,
     row_height: int = 200,
+    seed: int = 0,
 ):
     """Produce a 3D rotatable view of a pair of molecules using py3Dmol. If `cores` is nonempty, display additional rows
     where the atoms are colored according to the atom mapping.
@@ -274,6 +275,9 @@ def view_atom_mapping_3d(
     row_height : int
         Height of each row of the view
 
+    seed : int, optional
+        RNG seed used to generate color ordering
+
     Returns
     -------
     py3Dmol.view
@@ -283,6 +287,8 @@ def view_atom_mapping_3d(
         import py3Dmol
     except ImportError as e:
         raise RuntimeError("requires py3Dmol to be installed") from e
+
+    colors_ = np.random.default_rng(seed).permutation(colors)
 
     make_style = lambda props: {"stick": props}
     atom_style = lambda color: make_style({"color": color})
@@ -308,7 +314,7 @@ def view_atom_mapping_3d(
         view.setStyle(dummy_style, viewer=(row, 0))
         view.setStyle(dummy_style, viewer=(row, 1))
 
-        for (ia, ib), color in zip(np.asarray(core).tolist(), cycle(colors)):
+        for (ia, ib), color in zip(np.asarray(core).tolist(), cycle(colors_)):
             view.setStyle({"serial": ia}, atom_style(color), viewer=(row, 0))
             view.setStyle({"serial": ib}, atom_style(color), viewer=(row, 1))
 
