@@ -2,7 +2,7 @@
 
 import pickle
 from functools import partial
-from typing import List, Optional, Sequence, Tuple
+from typing import List, Sequence, Tuple
 
 import numpy as np
 from numpy.typing import NDArray as Array
@@ -32,6 +32,8 @@ from timemachine.md import builders, enhanced, minimizer, moves, smc
 from timemachine.md.barostat.utils import get_bond_list, get_group_indices
 from timemachine.md.states import CoordsVelBox
 from timemachine.potentials import SummedPotential
+
+DEFAULT_AHFE_MD_PARAMS = MDParams(n_frames=1000, n_eq_steps=10_000, steps_per_frame=400)
 
 
 def generate_endstate_samples(
@@ -182,7 +184,7 @@ def estimate_absolute_free_energy(
     host_config: HostConfig,
     seed: int,
     prefix="",
-    md_params: Optional[MDParams] = None,
+    md_params: MDParams = DEFAULT_AHFE_MD_PARAMS,
     n_windows=None,
     keep_idxs=None,
 ):
