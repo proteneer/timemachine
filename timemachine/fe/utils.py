@@ -1,5 +1,5 @@
 import hashlib
-from itertools import cycle
+from collections.abc import Iterable
 from pathlib import Path
 from typing import List, Optional, Sequence, Union
 
@@ -288,6 +288,11 @@ def view_atom_mapping_3d(
     except ImportError as e:
         raise RuntimeError("requires py3Dmol to be installed") from e
 
+    cores = np.asarray(cores).tolist()
+
+    if cores and cores[0]:
+        assert isinstance(cores[0][0], Iterable), "Expect a list of cores. Did you pass a single core?"
+
     make_style = lambda props: {"stick": props}
     atom_style = lambda color: make_style({"color": color})
     dummy_style = atom_style("white")
@@ -320,7 +325,7 @@ def view_atom_mapping_3d(
             else rng.choice(colors, len(core), replace=True)
         )
 
-        for (ia, ib), color in zip(np.asarray(core).tolist(), cycle(colors_)):
+        for (ia, ib), color in zip(core, colors_):
             view.setStyle({"serial": ia}, atom_style(color), viewer=(row, 0))
             view.setStyle({"serial": ib}, atom_style(color), viewer=(row, 1))
 
