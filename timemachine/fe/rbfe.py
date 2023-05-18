@@ -414,7 +414,7 @@ def estimate_relative_free_energy(
         will return the frames corresponding to the idxs of interest.
 
     md_params: MDParams
-        Parameters to determine the equilibration and production MD. Defaults to 400 global steps per frame, 1000 frames and 10k
+        Parameters for the equilibration and production MD. Defaults to 400 global steps per frame, 1000 frames and 10k
         equilibration steps.
 
     min_cutoff: float, optional
@@ -526,7 +526,7 @@ def estimate_relative_free_energy_via_greedy_bisection(
         will return the frames corresponding to the idxs of interest.
 
     md_params: MDParams
-        Parameters to determine the equilibration and production MD. Defaults to 400 global steps per frame, 1000 frames and 10k
+        Parameters for the equilibration and production MD. Defaults to 400 global steps per frame, 1000 frames and 10k
         equilibration steps.
 
     min_cutoff: float, optional

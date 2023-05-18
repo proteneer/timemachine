@@ -39,9 +39,9 @@ class MDParams:
     n_eq_steps: int
     steps_per_frame: int
     local_steps: int = 0
-    k: float = 1_000.0
-    min_radius: float = 1.0
-    max_radius: float = 3.0
+    k: float = 1_000.0  # kJ/mol/nm^4
+    min_radius: float = 1.0  # nm
+    max_radius: float = 3.0  # nm
     freeze_reference: bool = True
 
     def __post_init__(self):
