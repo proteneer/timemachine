@@ -4,7 +4,7 @@ import sys
 import numpy as np
 from rdkit import Chem
 
-from timemachine.fe import atom_mapping, pdb_writer
+from timemachine.fe import atom_mapping, cif_writer
 from timemachine.fe.rbfe import HostConfig, estimate_relative_free_energy
 from timemachine.fe.single_topology import AtomMapMixin
 from timemachine.fe.utils import plot_atom_mapping_grid, read_sdf
@@ -17,14 +17,13 @@ def write_trajectory_as_pdb(mol_a, mol_b, core, all_frames, host_topology, prefi
 
     atom_map_mixin = AtomMapMixin(mol_a, mol_b, core)
     for window_idx, window_frames in enumerate(all_frames):
-        out_path = f"{prefix}_{window_idx}.pdb"
-        writer = pdb_writer.PDBWriter([host_topology, mol_a, mol_b], out_path)
+        out_path = f"{prefix}_{window_idx}.cif"
+        writer = cif_writer.CIFWriter([host_topology, mol_a, mol_b], out_path)
         for frame in window_frames:
             host_frame = frame[: host_topology.getNumAtoms()]
             ligand_frame = frame[host_topology.getNumAtoms() :]
-            mol_ab_frame = pdb_writer.convert_single_topology_mols(ligand_frame, atom_map_mixin)
+            mol_ab_frame = cif_writer.convert_single_topology_mols(ligand_frame, atom_map_mixin)
             writer.write_frame(np.concatenate([host_frame, mol_ab_frame]) * 10)
-        writer.close()
 
 
 def run_pair(mol_a, mol_b, core, forcefield, n_frames, protein_path, seed):
