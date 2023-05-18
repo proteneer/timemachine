@@ -42,7 +42,7 @@ def test_cif_writer():
     forcefield = Forcefield.load_default()
     _, solvent_coords, _, solvent_top = builders.build_water_system(4.0, forcefield.water_ff)
 
-    with open("test_mol.cif", "w") as temp:
+    with NamedTemporaryFile(suffix=".cif") as temp:
         writer = CIFWriter([solvent_top, mol_a, mol_b], temp.name)
         good_coords = np.concatenate([solvent_coords, get_romol_conf(mol_a), get_romol_conf(mol_b)], axis=0)
         writer.write_frame(good_coords * 10)
