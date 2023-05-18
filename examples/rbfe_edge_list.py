@@ -67,7 +67,7 @@ if __name__ == "__main__":
     forcefield = Forcefield.load_from_file(args.forcefield)
     protein = app.PDBFile(str(args.protein))
 
-    md_params = MDParams(n_frames=args.n_frames, n_eq_steps=args.n_eq_steps, steps_per_frame=400)
+    md_params = MDParams(n_frames=args.n_frames, n_eq_steps=args.n_eq_steps, steps_per_frame=400, seed=args.seed)
 
     _ = rbfe.run_edges_parallel(
         ligands,
@@ -75,7 +75,6 @@ if __name__ == "__main__":
         forcefield,
         protein,
         args.n_gpus,
-        args.seed,
         md_params=md_params,
         n_windows=args.n_windows,
     )

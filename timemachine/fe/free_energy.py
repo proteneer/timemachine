@@ -38,6 +38,7 @@ class MDParams:
     n_frames: int
     n_eq_steps: int
     steps_per_frame: int
+    seed: int
     local_steps: int = 0
     k: float = 1_000.0  # kJ/mol/nm^4
     min_radius: float = 1.0  # nm
@@ -354,7 +355,7 @@ def sample(initial_state: InitialState, md_params: MDParams, max_buffer_frames: 
         store_x_interval=0,
     )
 
-    rng = np.random.default_rng(md_params.n_frames * md_params.steps_per_frame)
+    rng = np.random.default_rng(md_params.seed)
 
     assert np.all(np.isfinite(ctxt.get_x_t())), "Equilibration resulted in a nan"
 

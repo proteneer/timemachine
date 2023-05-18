@@ -38,7 +38,7 @@ DEFAULT_NUM_WINDOWS = 30
 # https://github.com/proteneer/timemachine/commit/e1f7328f01f427534d8744aab6027338e116ad09
 MAX_SEED_VALUE = 10000
 
-DEFAULT_MD_PARAMS = MDParams(n_frames=1000, n_eq_steps=10_000, steps_per_frame=400)
+DEFAULT_MD_PARAMS = MDParams(n_frames=1000, n_eq_steps=10_000, steps_per_frame=400, seed=2023)
 
 
 def setup_in_vacuum(st: SingleTopology, ligand_conf, lamb):
@@ -127,7 +127,6 @@ def setup_initial_state(
     # but in a way that should be symmetric for
     # A -> B vs. B -> A edge definitions
     init_seed = int(seed + bytes_to_id(ligand_conf.tobytes())) % MAX_SEED_VALUE
-
     if host:
         x0, hmr_masses, potentials, baro = setup_in_env(
             st, host.system, host.physical_masses, host.conf, ligand_conf, lamb, temperature, init_seed
@@ -366,7 +365,6 @@ def estimate_relative_free_energy(
     core: NDArray,
     ff: Forcefield,
     host_config: Optional[HostConfig],
-    seed: int,
     prefix: str = "",
     lambda_interval: Optional[Tuple[float, float]] = None,
     n_windows: Optional[int] = None,
@@ -395,9 +393,6 @@ def estimate_relative_free_energy(
     host_config: HostConfig or None
         Configuration for the host system. If None, then the vacuum leg is run.
 
-    seed: int
-        Random seed to use for the simulations.
-
     prefix: str
         A prefix to append to figures
 
@@ -415,7 +410,7 @@ def estimate_relative_free_energy(
 
     md_params: MDParams
         Parameters for the equilibration and production MD. Defaults to 400 global steps per frame, 1000 frames and 10k
-        equilibration steps.
+        equilibration steps with seed 2023.
 
     min_cutoff: float, optional
         throw error if any atom moves more than this distance (nm) after minimization
@@ -437,7 +432,7 @@ def estimate_relative_free_energy(
     host = setup_optimized_host(single_topology, host_config) if host_config else None
 
     initial_states = setup_initial_states(
-        single_topology, host, temperature, lambda_schedule, seed, min_cutoff=min_cutoff
+        single_topology, host, temperature, lambda_schedule, md_params.seed, min_cutoff=min_cutoff
     )
 
     if keep_idxs is None:
@@ -477,7 +472,6 @@ def estimate_relative_free_energy_via_greedy_bisection(
     core: NDArray,
     ff: Forcefield,
     host_config: Optional[HostConfig],
-    seed: int,
     md_params: MDParams = DEFAULT_MD_PARAMS,
     prefix: str = "",
     lambda_interval: Optional[Tuple[float, float]] = None,
@@ -509,9 +503,6 @@ def estimate_relative_free_energy_via_greedy_bisection(
     prefix: str
         A prefix to append to figures
 
-    seed: int
-        Random seed to use for the simulations.
-
     lambda_interval: (float, float) or None, optional
         Minimum and maximum value of lambda for the transformation; typically (0, 1), but sometimes useful to choose
         other values for testing.
@@ -527,7 +518,7 @@ def estimate_relative_free_energy_via_greedy_bisection(
 
     md_params: MDParams
         Parameters for the equilibration and production MD. Defaults to 400 global steps per frame, 1000 frames and 10k
-        equilibration steps.
+        equilibration steps with seed 2023.
 
     min_cutoff: float, optional
         throw error if any atom moves more than this distance (nm) after minimization
@@ -552,7 +543,9 @@ def estimate_relative_free_energy_via_greedy_bisection(
 
     host = setup_optimized_host(single_topology, host_config) if host_config else None
 
-    initial_states = setup_initial_states(single_topology, host, temperature, lambda_grid, seed, min_cutoff=min_cutoff)
+    initial_states = setup_initial_states(
+        single_topology, host, temperature, lambda_grid, md_params.seed, min_cutoff=min_cutoff
+    )
 
     make_optimized_initial_state = partial(
         setup_optimized_initial_state,
@@ -560,7 +553,7 @@ def estimate_relative_free_energy_via_greedy_bisection(
         host=host,
         optimized_initial_states=initial_states,
         temperature=temperature,
-        seed=seed,
+        seed=md_params.seed,
     )
 
     if keep_idxs is None:
@@ -607,7 +600,6 @@ def run_vacuum(
     core: NDArray,
     forcefield: Forcefield,
     _,
-    seed: int,
     md_params: MDParams = DEFAULT_MD_PARAMS,
     n_windows: Optional[int] = None,
     min_cutoff: Optional[float] = None,
@@ -622,7 +614,6 @@ def run_vacuum(
         forcefield,
         md_params=md_params,
         host_config=None,
-        seed=seed,
         prefix="vacuum",
         n_windows=n_windows,
         min_cutoff=min_cutoff,
@@ -635,7 +626,6 @@ def run_solvent(
     core: NDArray,
     forcefield: Forcefield,
     _,
-    seed: int,
     md_params: MDParams = DEFAULT_MD_PARAMS,
     n_windows: Optional[int] = None,
     min_cutoff: Optional[float] = 0.7,
@@ -650,7 +640,6 @@ def run_solvent(
         core,
         forcefield,
         solvent_host_config,
-        seed,
         md_params=md_params,
         prefix="solvent",
         n_windows=n_windows,
@@ -665,7 +654,6 @@ def run_complex(
     core: NDArray,
     forcefield: Forcefield,
     protein: Union[app.PDBFile, str],
-    seed: int,
     md_params: MDParams = DEFAULT_MD_PARAMS,
     n_windows: Optional[int] = None,
     min_cutoff: Optional[float] = 0.7,
@@ -681,7 +669,6 @@ def run_complex(
         core,
         forcefield,
         complex_host_config,
-        seed,
         prefix="complex",
         md_params=md_params,
         n_windows=n_windows,
@@ -709,7 +696,6 @@ def run_edge_and_save_results(
     mols: Dict[str, Chem.rdchem.Mol],
     forcefield: Forcefield,
     protein: app.PDBFile,
-    seed: int,
     file_client: AbstractFileClient,
     n_windows: Optional[int],
     md_params: MDParams = DEFAULT_MD_PARAMS,
@@ -743,7 +729,6 @@ def run_edge_and_save_results(
             core,
             forcefield,
             protein,
-            seed,
             md_params,
         )
         solvent_res, solvent_top, _ = run_solvent(
@@ -752,7 +737,6 @@ def run_edge_and_save_results(
             core,
             forcefield,
             protein,
-            seed,
             md_params,
         )
 
@@ -816,7 +800,6 @@ def run_edges_parallel(
     ff: Forcefield,
     protein: app.PDBFile,
     n_gpus: int,
-    seed: int,
     pool_client: Optional[AbstractClient] = None,
     file_client: Optional[AbstractFileClient] = None,
     md_params: MDParams = DEFAULT_MD_PARAMS,
@@ -840,12 +823,11 @@ def run_edges_parallel(
             mols,
             ff,
             protein,
-            seed + edge_idx,
             file_client,
             n_windows,
             md_params,
         )
-        for edge_idx, edge in enumerate(edges)
+        for edge in edges
     ]
 
     # Remove references to completed jobs to allow garbage collection.

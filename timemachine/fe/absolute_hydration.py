@@ -33,7 +33,7 @@ from timemachine.md.barostat.utils import get_bond_list, get_group_indices
 from timemachine.md.states import CoordsVelBox
 from timemachine.potentials import SummedPotential
 
-DEFAULT_AHFE_MD_PARAMS = MDParams(n_frames=1000, n_eq_steps=10_000, steps_per_frame=400)
+DEFAULT_AHFE_MD_PARAMS = MDParams(n_frames=1000, n_eq_steps=10_000, steps_per_frame=400, seed=2023)
 
 
 def generate_endstate_samples(
@@ -182,7 +182,6 @@ def estimate_absolute_free_energy(
     mol,
     ff: Forcefield,
     host_config: HostConfig,
-    seed: int,
     prefix="",
     md_params: MDParams = DEFAULT_AHFE_MD_PARAMS,
     n_windows=None,
@@ -205,9 +204,6 @@ def estimate_absolute_free_energy(
     prefix: str
         A prefix to append to figures
 
-    seed: int
-        Random seed to use for the simulations.
-
     n_windows: None
         Number of windows used for interpolating the the lambda schedule with additional windows.
 
@@ -215,9 +211,9 @@ def estimate_absolute_free_energy(
         If None, return only the end-state frames. Otherwise if not None, use only for debugging, and this
         will return the frames corresponding to the idxs of interest.
 
-    md_params: MDParams or None
-        Parameters to run the MD with. If None defaults to 2000 frames, collected every 400 steps and 200,000
-        steps of equilibration
+    md_params: MDParams
+        Parameters for the equilibration and production MD. Defaults to 400 global steps per frame, 1000 frames and 10k
+        equilibration steps with seed 2023.
 
     Returns
     -------
@@ -235,7 +231,7 @@ def estimate_absolute_free_energy(
     assert np.isclose(lambda_schedule[0], 1.0) and np.isclose(lambda_schedule[-1], 0.0)
 
     temperature = DEFAULT_TEMP
-    initial_states = setup_initial_states(afe, ff, host_config, temperature, lambda_schedule, seed)
+    initial_states = setup_initial_states(afe, ff, host_config, temperature, lambda_schedule, md_params.seed)
 
     if keep_idxs is None:
         keep_idxs = [0, len(initial_states) - 1]  # keep first and last windows
@@ -351,7 +347,7 @@ def setup_initial_states(
 
 
 def run_solvent(
-    mol, forcefield: Forcefield, _, seed: int, md_params: MDParams, n_windows=16
+    mol, forcefield: Forcefield, _, md_params: MDParams, n_windows=16
 ) -> Tuple[SimulationResult, app.topology.Topology, HostConfig]:
     box_width = 4.0
     solvent_sys, solvent_conf, solvent_box, solvent_top = builders.build_water_system(box_width, forcefield.water_ff)
@@ -361,7 +357,6 @@ def run_solvent(
         mol,
         forcefield,
         solvent_host_config,
-        seed,
         md_params=md_params,
         prefix="solvent",
         n_windows=n_windows,
