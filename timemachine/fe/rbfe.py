@@ -1,6 +1,7 @@
 import pickle
 import traceback
-from dataclasses import dataclass
+import warnings
+from dataclasses import dataclass, replace
 from functools import partial
 from typing import Any, Dict, Iterable, List, NamedTuple, Optional, Sequence, Tuple, Union
 
@@ -604,8 +605,9 @@ def run_vacuum(
     n_windows: Optional[int] = None,
     min_cutoff: Optional[float] = None,
 ):
-    assert md_params is not None and md_params.local_steps == 0, "vacuum simulations don't support local steps"
-
+    if md_params is not None and md_params.local_steps > 0:
+        md_params = replace(md_params, local_steps=0)
+        warnings.warn("Vacuum simulations don't support local steps, will use all global steps")
     # min_cutoff defaults to None since there is no environment to prevent conformational changes in the ligand
     return estimate_relative_free_energy_via_greedy_bisection(
         mol_a,

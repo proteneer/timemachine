@@ -1,7 +1,7 @@
 # test that we can run relative free energy simulations in complex and in solvent
 # this doesn't test for accuracy, just that everything mechanically runs.
-import dataclasses
 from importlib import resources
+from warnings import catch_warnings
 
 import numpy as np
 import pytest
@@ -242,15 +242,14 @@ def test_local_md_parameters(freeze_reference):
     )
 
     # Local MD not supported by vacuum, will reset local_steps to 0
-    with pytest.raises(AssertionError):
-        run_vacuum(mol_a, mol_b, core, forcefield, None, md_params=md_params, n_windows=windows)
-    vacuum_params = dataclasses.replace(md_params, local_steps=0)
-
-    res = run_vacuum(mol_a, mol_b, core, forcefield, None, md_params=vacuum_params, n_windows=windows)
+    with catch_warnings(record=True) as w:
+        res = run_vacuum(mol_a, mol_b, core, forcefield, None, md_params=md_params, n_windows=windows)
+    # Several warnings raised here, look for a specific message
+    assert "Vacuum simulations don't support local steps, will use all global steps" in [x.message.args[0] for x in w]
 
     assert len(res.frames[0]) == frames
     assert res.md_params != md_params
-    assert res.md_params == vacuum_params
+    assert res.md_params.local_steps == 0
 
     # All of the particles should have moved, since it was global MD
     assert np.all(res.frames[0][0] == res.frames[0][-1], axis=1).sum() == 0
