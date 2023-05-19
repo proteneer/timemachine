@@ -1,9 +1,7 @@
 import hashlib
-from itertools import cycle
 from pathlib import Path
-from typing import List, Optional, Union
+from typing import List, Optional, Sequence, Union
 
-import matplotlib.pyplot as plt
 import numpy as np
 from numpy.typing import NDArray
 from rdkit import Chem
@@ -229,15 +227,30 @@ def plot_atom_mapping_grid(mol_a, mol_b, core, num_rotations=5):
 
 
 def view_atom_mapping_3d(
-    mol_a,
-    mol_b,
-    core=None,
-    colors=plt.rcParams["axes.prop_cycle"].by_key()["color"],
-    show_atom_idx_labels=False,
-    width=800,
-    height=500,
+    mol_a: Chem.rdchem.Mol,
+    mol_b: Chem.rdchem.Mol,
+    cores: Sequence[Sequence[Sequence[int]]] | NDArray = (),
+    colors: Sequence[str] = (
+        # https://colorbrewer2.org/#type=qualitative&scheme=Paired&n=12
+        "#a6cee3",
+        "#1f78b4",
+        "#b2df8a",
+        "#33a02c",
+        "#fb9a99",
+        "#e31a1c",
+        "#fdbf6f",
+        "#ff7f00",
+        "#cab2d6",
+        "#6a3d9a",
+        "#ffff99",
+        "#b15928",
+    ),
+    show_atom_idx_labels: bool = False,
+    width: int = 800,
+    row_height: int = 200,
+    seed: int = 0,
 ):
-    """Produce a 3D rotatable view of a pair of molecules using py3Dmol. If `core` is specified, displays a second row
+    """Produce a 3D rotatable view of a pair of molecules using py3Dmol. If `cores` is nonempty, display additional rows
     where the atoms are colored according to the atom mapping.
 
     Parameters
@@ -245,8 +258,9 @@ def view_atom_mapping_3d(
     mol_a, mol_b : rdkit mols
         Input mols
 
-    core : ndarray or list of list of int or None, optional
-        Atom mapping. If passed, display a second row with atoms color-coded according to mapping
+    cores : list of list of list of int or ndarray, optional
+        Atom mappings. If nonempty, display additional rows with atoms color-coded according to the corresponding
+        mapping
 
     colors : list of str, optional
         Colors to use for highlighting atoms by mapping
@@ -254,8 +268,14 @@ def view_atom_mapping_3d(
     show_atom_idx_labels : bool, optional
         Whether to display atom indices
 
-    width, height : int
-        Dimensions of the view
+    width : int, optional
+        Width of the view
+
+    row_height : int, optional
+        Height of each row of the view
+
+    seed : int, optional
+        RNG seed used to generate color ordering
 
     Returns
     -------
@@ -267,11 +287,17 @@ def view_atom_mapping_3d(
     except ImportError as e:
         raise RuntimeError("requires py3Dmol to be installed") from e
 
+    cores_ = np.asarray(cores)
+    assert cores_.ndim == 3, "expect a list of cores"
+    cores = cores_.tolist()
+
     make_style = lambda props: {"stick": props}
     atom_style = lambda color: make_style({"color": color})
     dummy_style = atom_style("white")
 
-    view = py3Dmol.view(viewergrid=(1, 2) if core is None else (2, 2), width=width, height=height)
+    num_rows = 1 + len(cores)
+    height = num_rows * row_height
+    view = py3Dmol.view(viewergrid=(num_rows, 2), width=width, height=height)
 
     def add_mol(mol, viewer):
         view.addModel(Chem.MolToMolBlock(mol), "mol", viewer=viewer)
@@ -279,20 +305,27 @@ def view_atom_mapping_3d(
     add_mol(mol_a, (0, 0))
     add_mol(mol_b, (0, 1))
 
-    # second row (colored according to mapping)
-    if core is not None:
-        add_mol(mol_a, (1, 0))
-        add_mol(mol_b, (1, 1))
-
     view.setStyle(make_style({}))
 
-    if core is not None:
-        view.setStyle(dummy_style, viewer=(1, 0))
-        view.setStyle(dummy_style, viewer=(1, 1))
+    # additional rows, colored according to corresponding mappings
+    for row, core in enumerate(cores, 1):
+        add_mol(mol_a, (row, 0))
+        add_mol(mol_b, (row, 1))
 
-        for (ia, ib), color in zip(core.tolist(), cycle(colors)):
-            view.setStyle({"serial": ia}, atom_style(color), viewer=(1, 0))
-            view.setStyle({"serial": ib}, atom_style(color), viewer=(1, 1))
+        view.setStyle(dummy_style, viewer=(row, 0))
+        view.setStyle(dummy_style, viewer=(row, 1))
+
+        rng = np.random.default_rng(seed)
+        colors_ = (
+            rng.permutation(colors)
+            if len(core) <= len(colors)
+            # if more atoms than colors, need to reuse some colors
+            else rng.choice(colors, len(core), replace=True)
+        )
+
+        for (ia, ib), color in zip(core, colors_):
+            view.setStyle({"serial": ia}, atom_style(color), viewer=(row, 0))
+            view.setStyle({"serial": ib}, atom_style(color), viewer=(row, 1))
 
     view.zoomTo()
 
