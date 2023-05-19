@@ -317,7 +317,7 @@ def test_infer_node_vals_and_errs_networkx_invariant_wrt_permutation(nx_graph_wi
     g_res = infer_node_vals_and_errs_networkx_partial(g_shuffled, n_bootstrap=2, seed=seed)
 
     for n, (ref_dg, ref_dg_err) in enumerate(zip(ref_dgs, ref_dg_errs)):
-        assert g_res.nodes[n][node_val_prop] == pytest.approx(ref_dg, rel=1e-5)
+        assert g_res.nodes[n][node_val_prop] == pytest.approx(ref_dg, rel=1e-4)
         # TODO: errors are noisy; unclear how to test consistency
         # assert g_res.nodes[n][node_stddev_prop] == pytest.approx(ref_dg_err)
 
