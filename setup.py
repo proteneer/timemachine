@@ -122,6 +122,7 @@ setup(
             "pytest-cov",
             "hilbertcurve==1.0.5",
             "hypothesis[numpy]==6.54.6",
+            "py3Dmol==2.0.3",
         ],
         "viz": ["py3Dmol"],
     },
