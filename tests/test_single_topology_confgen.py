@@ -2,7 +2,7 @@ import numpy as np
 import pytest
 
 from timemachine.constants import DEFAULT_TEMP
-from timemachine.fe import atom_mapping, pdb_writer, utils
+from timemachine.fe import atom_mapping, cif_writer, utils
 from timemachine.fe.lambda_schedule import construct_pre_optimized_relative_lambda_schedule
 from timemachine.fe.rbfe import HostConfig, setup_initial_states, setup_optimized_host
 from timemachine.fe.single_topology import AtomMapMixin, SingleTopology
@@ -20,13 +20,12 @@ def get_mol_by_name(mols, name):
 
 def write_trajectory_as_pdb(mol_a, mol_b, core, all_frames, host_topology, out_path):
     atom_map_mixin = AtomMapMixin(mol_a, mol_b, core)
-    writer = pdb_writer.PDBWriter([host_topology, mol_a, mol_b], out_path)
+    writer = cif_writer.CIFWriter([host_topology, mol_a, mol_b], out_path)
     for frame in all_frames:
         host_frame = frame[: host_topology.getNumAtoms()]
         ligand_frame = frame[host_topology.getNumAtoms() :]
-        mol_ab_frame = pdb_writer.convert_single_topology_mols(ligand_frame, atom_map_mixin)
+        mol_ab_frame = cif_writer.convert_single_topology_mols(ligand_frame, atom_map_mixin)
         writer.write_frame(np.concatenate([host_frame, mol_ab_frame]) * 10)
-    writer.close()
 
 
 def run_edge(mol_a, mol_b, protein_path, n_windows):
