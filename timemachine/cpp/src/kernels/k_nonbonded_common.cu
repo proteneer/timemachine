@@ -11,5 +11,5 @@ k_add_ull_to_ull(const int N, const unsigned long long *__restrict__ src, unsign
         return;
     }
 
-    atomicAdd(dest + idx * stride + stride_idx, src[idx * stride + stride_idx]);
+    dest[idx * stride + stride_idx] += src[idx * stride + stride_idx];
 }
