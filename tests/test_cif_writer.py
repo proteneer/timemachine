@@ -73,7 +73,6 @@ def test_cif_writer(n_frames):
         for _ in range(n_frames):
             writer.write_frame(good_coords * 10)
         writer.close()
-        print(temp.name)
         cif = PDBxFile(temp.name)
         assert cif.getNumFrames() == n_frames
         assert cif.getPositions(asNumpy=True).shape == good_coords.shape
