@@ -178,5 +178,5 @@ def test_view_atom_mapping_3d():
     view = utils.view_atom_mapping_3d(mol_a, mol_b, [core])
     assert isinstance(view, py3Dmol.view)
 
-    with pytest.raises(AssertionError, match="Expect a list of cores"):
+    with pytest.raises(AssertionError, match="expect a list of cores"):
         utils.view_atom_mapping_3d(mol_a, mol_b, core)
