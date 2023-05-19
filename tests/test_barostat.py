@@ -199,6 +199,7 @@ def test_barostat_is_deterministic():
     )
     ctxt = custom_ops.Context(coords, v_0, host_box, integrator.impl(), u_impls, barostat=baro)
     ctxt.multiple_steps(15)
+    # Verify that we get back bitwise reproducible boxes
     assert compute_box_volume(atm_box) == compute_box_volume(ctxt.get_box())
 
 
