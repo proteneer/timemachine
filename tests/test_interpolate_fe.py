@@ -68,6 +68,7 @@ def test_hif2a_free_energy_estimates():
             fc = cif_writer.convert_single_topology_mols(f, st)
             fc = fc - np.mean(fc, axis=0)
             writer.write_frame(fc * 10)
+        writer.close()
 
         if lambda_idx > 0:
 

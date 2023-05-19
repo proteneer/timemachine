@@ -597,6 +597,7 @@ $$$$""",
     # for f in traj:
     #     f = f - np.mean(f, axis=0)
     #     writer.write_frame(f*10)
+    # writer.close()
 
     frames = simulate_system(U_fn, x0_inverted, num_samples=1000)
 
