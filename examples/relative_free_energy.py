@@ -14,7 +14,7 @@ from timemachine.md import builders
 from timemachine.testsystems.relative import get_hif2a_ligand_pair_single_topology
 
 
-def write_trajectory_as_pdb(mol_a, mol_b, core, all_frames, host_topology, prefix):
+def write_trajectory_as_cif(mol_a, mol_b, core, all_frames, host_topology, prefix):
 
     atom_map_mixin = AtomMapMixin(mol_a, mol_b, core)
     for window_idx, window_frames in enumerate(all_frames):
@@ -25,6 +25,7 @@ def write_trajectory_as_pdb(mol_a, mol_b, core, all_frames, host_topology, prefi
             ligand_frame = frame[host_topology.getNumAtoms() :]
             mol_ab_frame = cif_writer.convert_single_topology_mols(ligand_frame, atom_map_mixin)
             writer.write_frame(np.concatenate([host_frame, mol_ab_frame]) * 10)
+        writer.close()
 
 
 def run_pair(mol_a, mol_b, core, forcefield, md_params, protein_path):
@@ -42,7 +43,7 @@ def run_pair(mol_a, mol_b, core, forcefield, md_params, protein_path):
         fh.write(solvent_res.plots.overlap_detail_png)
 
     # this st is only needed to deal with visualization jank
-    write_trajectory_as_pdb(mol_a, mol_b, core, solvent_res.frames, solvent_top, "solvent_traj")
+    write_trajectory_as_cif(mol_a, mol_b, core, solvent_res.frames, solvent_top, "solvent_traj")
 
     print(
         f"solvent dG: {np.sum(solvent_res.result.all_dGs):.3f} +- {np.linalg.norm(solvent_res.result.all_errs):.3f} kJ/mol"
@@ -58,7 +59,7 @@ def run_pair(mol_a, mol_b, core, forcefield, md_params, protein_path):
     )
     with open("complex_overlap.png", "wb") as fh:
         fh.write(complex_res.plots.overlap_detail_png)
-    write_trajectory_as_pdb(mol_a, mol_b, core, complex_res.frames, complex_top, "complex_traj")
+    write_trajectory_as_cif(mol_a, mol_b, core, complex_res.frames, complex_top, "complex_traj")
 
     print(
         f"complex dG: {np.sum(complex_res.result.all_dGs):.3f} +- {np.linalg.norm(complex_res.result.all_errs):.3f} kJ/mol"

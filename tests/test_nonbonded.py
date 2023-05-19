@@ -271,7 +271,6 @@ class TestNonbonded(GradientTest):
         ff = Forcefield.load_default()
 
         _, all_coords, box, _ = builders.build_water_system(3.0, ff.water_ff)
-        all_coords = all_coords / all_coords.unit
         for size in [33, 231, 1050]:
 
             coords = all_coords[:size]
@@ -297,7 +296,6 @@ class TestNonbonded(GradientTest):
         ff = Forcefield.load_default()
 
         _, coords, box, _ = builders.build_water_system(3.0, ff.water_ff)
-        coords = coords / coords.unit
         coords = coords[:size]
 
         # Down shift box size to be only a portion of the cutoff

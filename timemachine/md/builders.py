@@ -8,7 +8,7 @@ from timemachine.ff import sanitize_water_ff
 
 
 def strip_units(coords):
-    return unit.Quantity(np.array(coords / coords.unit), coords.unit)
+    return np.array(coords.value_in_unit_system(unit.md_unit_system))
 
 
 def build_protein_system(host_pdbfile: Union[app.PDBFile, str], protein_ff: str, water_ff: str):
@@ -36,7 +36,6 @@ def build_protein_system(host_pdbfile: Union[app.PDBFile, str], protein_ff: str,
 
     padding = 1.0
     box_lengths = np.amax(host_coords, axis=0) - np.amin(host_coords, axis=0)
-    box_lengths = box_lengths.value_in_unit_system(unit.md_unit_system)
 
     box_lengths = box_lengths + padding
     box = np.eye(3, dtype=np.float64) * box_lengths
@@ -71,7 +70,7 @@ def build_water_system(box_width, water_ff: str):
     system = ff.createSystem(m.getTopology(), nonbondedMethod=app.NoCutoff, constraints=None, rigidWater=False)
 
     positions = m.getPositions()
-    positions = unit.Quantity(np.array(positions / positions.unit), positions.unit)
+    positions = strip_units(positions)
 
     assert m.getTopology().getNumAtoms() == positions.shape[0]
 

@@ -18,7 +18,7 @@ def get_mol_by_name(mols, name):
     assert 0, "Mol not found"
 
 
-def write_trajectory_as_pdb(mol_a, mol_b, core, all_frames, host_topology, out_path):
+def write_trajectory_as_cif(mol_a, mol_b, core, all_frames, host_topology, out_path):
     atom_map_mixin = AtomMapMixin(mol_a, mol_b, core)
     writer = cif_writer.CIFWriter([host_topology, mol_a, mol_b], out_path)
     for frame in all_frames:
@@ -26,6 +26,7 @@ def write_trajectory_as_pdb(mol_a, mol_b, core, all_frames, host_topology, out_p
         ligand_frame = frame[host_topology.getNumAtoms() :]
         mol_ab_frame = cif_writer.convert_single_topology_mols(ligand_frame, atom_map_mixin)
         writer.write_frame(np.concatenate([host_frame, mol_ab_frame]) * 10)
+    writer.close()
 
 
 def run_edge(mol_a, mol_b, protein_path, n_windows):
@@ -62,13 +63,13 @@ def run_edge(mol_a, mol_b, protein_path, n_windows):
     solvent_host = setup_optimized_host(st, solvent_host_config)
     initial_states = setup_initial_states(st, solvent_host, DEFAULT_TEMP, lambda_schedule, seed)
     all_frames = [state.x0 for state in initial_states]
-    write_trajectory_as_pdb(
+    write_trajectory_as_cif(
         mol_a,
         mol_b,
         core,
         all_frames,
         solvent_top,
-        f"solvent_{get_mol_name(mol_a)}_{get_mol_name(mol_b)}.pdb",
+        f"solvent_{get_mol_name(mol_a)}_{get_mol_name(mol_b)}.cif",
     )
 
     # complex
@@ -81,13 +82,13 @@ def run_edge(mol_a, mol_b, protein_path, n_windows):
     initial_states = setup_initial_states(st, complex_host, DEFAULT_TEMP, lambda_schedule, seed)
 
     all_frames = [state.x0 for state in initial_states]
-    write_trajectory_as_pdb(
+    write_trajectory_as_cif(
         mol_a,
         mol_b,
         core,
         all_frames,
         complex_top,
-        f"complex_{get_mol_name(mol_a)}_{get_mol_name(mol_b)}.pdb",
+        f"complex_{get_mol_name(mol_a)}_{get_mol_name(mol_b)}.cif",
     )
 
 

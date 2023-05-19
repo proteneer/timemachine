@@ -23,6 +23,7 @@ def convert_single_topology_mols(coords: np.ndarray, atom_map: AtomMapMixin) -> 
         >>> lig_coords = convert_single_topology_mols(x0[num_host_coords:], atom_map)
         >>> new_coords = np.concatenate((x0[:num_host_coords], lig_coords), axis=0)
         >>> writer.write_frame(new_coords*10)
+        >>> writer.close()
 
     """
     xa = np.zeros((atom_map.mol_a.GetNumAtoms(), 3))
@@ -54,7 +55,7 @@ class CIFWriter:
 
         writer = CIFWriter([topol, mol_a, mol_b], out.cif) # writer header
         writer.write_frame(coords) # coords must be in units of angstroms
-        writer.close() # writes footer
+        writer.close() # writes a hashtag
         ```
 
         Parameters
@@ -137,3 +138,14 @@ class CIFWriter:
         """
         self.frame_idx += 1
         PDBxFile.writeModel(self.topology, x, self.out_handle, self.frame_idx)
+
+    def close(self):
+        # Need this final #
+        self.out_handle.write("#")
+        self.out_handle.flush()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, type, value, tb):
+        self.close()
