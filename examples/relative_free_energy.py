@@ -5,6 +5,7 @@ import numpy as np
 from rdkit import Chem
 
 from timemachine.fe import atom_mapping, cif_writer
+from timemachine.fe.free_energy import MDParams
 from timemachine.fe.rbfe import HostConfig, estimate_relative_free_energy
 from timemachine.fe.single_topology import AtomMapMixin
 from timemachine.fe.utils import plot_atom_mapping_grid, read_sdf
@@ -26,7 +27,7 @@ def write_trajectory_as_pdb(mol_a, mol_b, core, all_frames, host_topology, prefi
             writer.write_frame(np.concatenate([host_frame, mol_ab_frame]) * 10)
 
 
-def run_pair(mol_a, mol_b, core, forcefield, n_frames, protein_path, seed):
+def run_pair(mol_a, mol_b, core, forcefield, md_params, protein_path):
 
     box_width = 4.0
     solvent_sys, solvent_conf, solvent_box, solvent_top = builders.build_water_system(box_width, forcefield.water_ff)
@@ -34,7 +35,7 @@ def run_pair(mol_a, mol_b, core, forcefield, n_frames, protein_path, seed):
     solvent_host_config = HostConfig(solvent_sys, solvent_conf, solvent_box)
 
     solvent_res = estimate_relative_free_energy(
-        mol_a, mol_b, core, forcefield, solvent_host_config, seed, n_frames=n_frames, prefix="solvent"
+        mol_a, mol_b, core, forcefield, solvent_host_config, md_params=md_params, prefix="solvent"
     )
 
     with open("solvent_overlap.png", "wb") as fh:
@@ -53,7 +54,7 @@ def run_pair(mol_a, mol_b, core, forcefield, n_frames, protein_path, seed):
     complex_box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes
     complex_host_config = HostConfig(complex_sys, complex_conf, complex_box)
     complex_res = estimate_relative_free_energy(
-        mol_a, mol_b, core, forcefield, complex_host_config, seed + 1, n_frames=n_frames, prefix="complex"
+        mol_a, mol_b, core, forcefield, complex_host_config, md_params=md_params, prefix="complex"
     )
     with open("complex_overlap.png", "wb") as fh:
         fh.write(complex_res.plots.overlap_detail_png)
@@ -70,9 +71,9 @@ def hif2a_pair():
     forcefield = Forcefield.load_default()
     protein_path = "timemachine/testsystems/data/hif2a_nowater_min.pdb"
 
+    md_params = MDParams(n_frames=100, n_eq_steps=200_000, steps_per_frame=400, seed=2023)
     # fast
-    seed = 2023
-    run_pair(mol_a, mol_b, core, forcefield, n_frames=100, protein_path=protein_path, seed=seed)
+    run_pair(mol_a, mol_b, core, forcefield, md_params, protein_path=protein_path)
 
 
 def get_mol_by_name(mols, name):
@@ -130,7 +131,9 @@ def read_from_args():
 
     forcefield = Forcefield.load_from_file(args.forcefield)
 
-    run_pair(mol_a, mol_b, core, forcefield, args.n_frames, args.protein, args.seed)
+    md_params = MDParams(n_frames=args.n_frames, n_eq_steps=200_000, steps_per_frame=400, seed=args.seed)
+
+    run_pair(mol_a, mol_b, core, forcefield, md_params, args.protein)
 
 
 if __name__ == "__main__":
