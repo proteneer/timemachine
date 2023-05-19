@@ -1,4 +1,5 @@
 import numpy as np
+import py3Dmol
 import pytest
 from rdkit import Chem
 from rdkit.Chem import AllChem
@@ -163,3 +164,19 @@ def test_get_strained_atoms():
     x0[-2, :] = x0[-1, :] + 0.01
     utils.set_romol_conf(mol, x0)
     assert model_utils.get_strained_atoms(mol, ff) == [10, 11]
+
+
+def test_view_atom_mapping_3d():
+    mol_a = Chem.AddHs(Chem.MolFromSmiles("c1ccc1"))
+    mol_b = Chem.AddHs(Chem.MolFromSmiles("c1(N)ccc1"))
+
+    AllChem.EmbedMolecule(mol_a)
+    AllChem.EmbedMolecule(mol_b)
+
+    core = [[2, 0], [3, 2], [0, 3], [1, 4]]
+
+    view = utils.view_atom_mapping_3d(mol_a, mol_b, [core])
+    assert isinstance(view, py3Dmol.view)
+
+    with pytest.raises(AssertionError, match="expect a list of cores"):
+        utils.view_atom_mapping_3d(mol_a, mol_b, core)
