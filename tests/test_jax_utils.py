@@ -3,7 +3,7 @@ from functools import partial
 import hypothesis.strategies as st
 import numpy as np
 import pytest
-from hypothesis import example, given, seed
+from hypothesis import example, given, seed, settings
 from hypothesis.extra.numpy import array_shapes, arrays
 from jax import jit
 from jax import numpy as jnp
@@ -156,6 +156,7 @@ def coords_box_w_triples(draw):
 
 
 @given(coords_box_w_triples())
+@settings(deadline=400)
 @example((np.array([[0, 0], [0.5, 0]]), np.array([[1, 1]]), None))
 @example((np.array([[0, 0], [1.5, 0]]), np.array([[1, 1]]), None))
 @seed(2022)

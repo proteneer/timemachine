@@ -6,6 +6,7 @@ from openmm import app
 
 from timemachine.constants import KCAL_TO_KJ
 from timemachine.fe import rbfe
+from timemachine.fe.free_energy import MDParams
 from timemachine.fe.utils import read_sdf
 from timemachine.ff import Forcefield
 
@@ -66,14 +67,14 @@ if __name__ == "__main__":
     forcefield = Forcefield.load_from_file(args.forcefield)
     protein = app.PDBFile(str(args.protein))
 
+    md_params = MDParams(n_frames=args.n_frames, n_eq_steps=args.n_eq_steps, steps_per_frame=400, seed=args.seed)
+
     _ = rbfe.run_edges_parallel(
         ligands,
         edges,
         forcefield,
         protein,
-        args.n_frames,
         args.n_gpus,
-        args.seed,
-        n_eq_steps=args.n_eq_steps,
+        md_params=md_params,
         n_windows=args.n_windows,
     )
