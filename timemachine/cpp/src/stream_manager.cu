@@ -34,7 +34,7 @@ cudaEvent_t StreamManager::get_stream_event(int key) {
         return events_[key];
     }
     cudaEvent_t new_event;
-    // Create stream with timings disabled as timings slow down events
+    // Create event with timings disabled as timings slow down events
     gpuErrchk(cudaEventCreateWithFlags(&new_event, cudaEventDisableTiming));
     // Call get_stream to ensure that event is created, as events are tied to a stream
     events_[key] = new_event;
