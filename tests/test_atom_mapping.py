@@ -1,3 +1,4 @@
+import multiprocessing
 import time
 
 import numpy as np
@@ -362,6 +363,23 @@ def get_mol_name(mol) -> str:
     return mol.GetProp("_Name")
 
 
+def get_pair_cores(pair):
+    mol_a, mol_b = pair
+    return atom_mapping.get_cores(
+        mol_a,
+        mol_b,
+        ring_cutoff=0.1,
+        chain_cutoff=0.2,
+        max_visits=1e7,  # 10 million max nodes to visit
+        connected_core=False,
+        max_cores=1000,
+        enforce_core_core=True,
+        complete_rings=False,
+        enforce_chiral=True,
+        min_threshold=0,
+    )
+
+
 # hif2a is easy
 # eg5 is challenging
 # notable outliers for eg5:
@@ -375,22 +393,13 @@ def get_mol_name(mol) -> str:
 def test_all_pairs(filepath):
     mols = Chem.SDMolSupplier(filepath, removeHs=False)
     mols = [m for m in mols]
-    for idx, mol_a in enumerate(mols):
-        for mol_b in mols[idx + 1 :]:
 
-            all_cores = atom_mapping.get_cores(
-                mol_a,
-                mol_b,
-                ring_cutoff=0.1,
-                chain_cutoff=0.2,
-                max_visits=1e7,  # 10 million max nodes to visit
-                connected_core=False,
-                max_cores=1000,
-                enforce_core_core=True,
-                complete_rings=False,
-                enforce_chiral=True,
-                min_threshold=0,
-            )
+    with multiprocessing.Pool() as pool:
+        pairs = []
+        for idx, mol_a in enumerate(mols):
+            for mol_b in mols[idx + 1 :]:
+                pairs.append((mol_a, mol_b))
+        for all_cores in pool.imap_unordered(get_pair_cores, pairs):
 
             # # useful for visualization
             # for core_idx, core in enumerate(all_cores[:1]):
