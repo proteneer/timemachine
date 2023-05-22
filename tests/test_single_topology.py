@@ -446,7 +446,7 @@ def test_combine_with_host():
 
 @pytest.mark.parametrize("precision, rtol, atol", [(np.float64, 1e-8, 1e-8), (np.float32, 1e-4, 5e-4)])
 @pytest.mark.parametrize("use_tiny_mol", [True, False])
-def test_nonbonded_split(precision, rtol, atol, use_tiny_mol):
+def test_nonbonded_intra_split(precision, rtol, atol, use_tiny_mol):
 
     # mol with no intramolecular NB terms and no dihedrals
     if use_tiny_mol:
@@ -604,10 +604,7 @@ def test_combine_with_host_split(precision, rtol, atol):
         protein_idxs,
         is_solvent=False,
     ):
-        # host_bps, _ = openmm_deserializer.deserialize_system(host_system, cutoff=1.2)
         assert num_water_atoms == len(water_idxs)
-        # bt = Topology(ff)
-        # hgt = topology.HostGuestTopology(host_bps, bt, num_water_atoms)
         st = SingleTopology(mol_a, mol_b, core, ff)
         ligand_conf = st.combine_confs(get_romol_conf(mol_a), get_romol_conf(mol_b), lamb)
         combined_conf = np.concatenate([x0, ligand_conf])
@@ -628,18 +625,13 @@ def test_combine_with_host_split(precision, rtol, atol):
         u_impl = u.bind(combined_nonbonded_params).to_gpu(precision=precision).bound_impl
         return u_impl.execute(combined_conf, box)
 
-    # split forcefield has different parameters for intramol and intermol terms
     ffs = load_split_forcefields()
 
-    if True:
-        with resources.path("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as path_to_pdb:
-            complex_system, host_conf, box, _, num_water_atoms = build_protein_system(
-                str(path_to_pdb), ffs.ref.protein_ff, ffs.ref.water_ff
-            )
-            box += np.diag([0.1, 0.1, 0.1])
-    else:
-        complex_system, host_conf, box, _ = build_water_system(4.0, ffs.ref.water_ff)
-        num_water_atoms = host_conf.shape[0]
+    with resources.path("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as path_to_pdb:
+        complex_system, host_conf, box, _, num_water_atoms = build_protein_system(
+            str(path_to_pdb), ffs.ref.protein_ff, ffs.ref.water_ff
+        )
+        box += np.diag([0.1, 0.1, 0.1])
 
     host_bps, _ = openmm_deserializer.deserialize_system(complex_system, cutoff=1.2)
     complex_host = convert_bps_into_system(host_bps)
@@ -652,7 +644,6 @@ def test_combine_with_host_split(precision, rtol, atol):
     num_host_atoms = host_conf.shape[0]
     ligand_conf = st.combine_confs(get_romol_conf(mol_a), get_romol_conf(mol_b), 0.0)
     ligand_idxs = np.arange(ligand_conf.shape[0], dtype=np.int32) + num_host_atoms
-    # combined_conf = np.concatenate([host_conf, ligand_conf])
 
     n_lambdas = 3
     for lamb in np.linspace(0, 1, n_lambdas):
@@ -714,7 +705,6 @@ def test_combine_with_host_split(precision, rtol, atol):
         np.testing.assert_allclose(sum_grad_ref, sum_grad_new, rtol=rtol, atol=atol)
 
         # Compute the grads, potential with the intramolecular terms scaled
-        print("INTRA")
         sum_grad_intra, sum_u_intra = compute_new_grad_u(
             ffs.intra, precision, host_conf, box, lamb, num_water_atoms, complex_host
         )
@@ -728,10 +718,8 @@ def test_combine_with_host_split(precision, rtol, atol):
 
         assert expected_u == pytest.approx(sum_u_intra, rel=rtol, abs=atol)
         np.testing.assert_allclose(expected_grad, sum_grad_intra, rtol=rtol, atol=atol)
-        print("INTRA::Done")
 
         # Compute the grads, potential with the ligand-water terms scaled
-        print("WL_SOLV")
         sum_grad_solv, sum_u_solv = compute_new_grad_u(
             ffs.solv, precision, host_conf, box, lamb, num_water_atoms, complex_host
         )
@@ -755,7 +743,6 @@ def test_combine_with_host_split(precision, rtol, atol):
 
         assert expected_u == pytest.approx(sum_u_solv, rel=rtol, abs=atol)
         np.testing.assert_allclose(expected_grad, sum_grad_solv, rtol=rtol, atol=atol)
-        print("WL_SOLV::Done")
 
         # Compute the grads, potential with the protein-ligand terms scaled
         sum_grad_prot, sum_u_prot = compute_new_grad_u(
