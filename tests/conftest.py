@@ -30,6 +30,7 @@ from timemachine.lib import custom_ops
 
 # disable deadline in CI to avoid "Flaky" errors if the first example times out
 hypothesis.settings.register_profile("ci", deadline=None)
+hypothesis.settings.register_profile("no-deadline", deadline=None)
 
 
 @pytest.fixture(autouse=True)
