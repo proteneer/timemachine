@@ -76,25 +76,28 @@ class CIFWriter:
         for obj_idx, obj in enumerate(objs):
             old_topology = obj
             if isinstance(obj, app.Topology):
-                old_chain_id_kv = {}
+                old_chain_obj_kv = {}
+
                 for old_chain in old_topology.chains():
                     new_chain = combined_topology.addChain()
-                    old_chain_id_kv[old_chain.id] = new_chain
+                    old_chain_obj_kv[old_chain] = new_chain
 
-                old_atom_id_kv = {}
+                old_atom_obj_kv = {}
                 for old_residue in old_topology.residues():
-                    chain_obj = old_chain_id_kv[old_residue.chain.id]
+                    chain_obj = old_chain_obj_kv[old_residue.chain]
                     new_residue = combined_topology.addResidue(name=old_residue.name, chain=chain_obj)
                     for old_atom in old_residue.atoms():
                         new_atom = combined_topology.addAtom(old_atom.name, old_atom.element, new_residue)
-                        old_atom_id_kv[old_atom.id] = new_atom
+                        assert old_atom not in old_atom_obj_kv
+                        old_atom_obj_kv[old_atom] = new_atom
 
                 for old_bond in old_topology.bonds():
-                    old_atom1_id = old_bond.atom1.id
-                    old_atom2_id = old_bond.atom2.id
-                    new_atom1 = old_atom_id_kv[old_atom1_id]
-                    new_atom2 = old_atom_id_kv[old_atom2_id]
+                    new_atom1 = old_atom_obj_kv[old_bond.atom1]
+                    new_atom2 = old_atom_obj_kv[old_bond.atom2]
                     combined_topology.addBond(new_atom1, new_atom2, old_bond.type, old_bond.order)
+
+                # assert that we've added everything
+                assert len(old_atom_obj_kv) == obj.getNumAtoms()
 
             elif isinstance(obj, Chem.Mol):
                 mol = obj
@@ -119,8 +122,11 @@ class CIFWriter:
             else:
                 raise ValueError(f"Unknown obj type: {type(obj)}")
 
-        self.topology = combined_topology
+        # assert that ids are unique.
+        atom_ids = list([x.id for x in combined_topology.atoms()])
+        assert len(atom_ids) == len(set(atom_ids))
 
+        self.topology = combined_topology
         self.out_handle = open(out_filepath, "w")
         PDBxFile.writeHeader(self.topology, self.out_handle)
         self.topology = self.topology
