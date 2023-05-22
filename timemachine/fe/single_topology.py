@@ -13,7 +13,7 @@ from timemachine.fe import interpolate, model_utils, system, topology, utils
 from timemachine.fe.dummy import canonicalize_bond, generate_anchored_dummy_group_assignments
 from timemachine.fe.lambda_schedule import construct_pre_optimized_relative_lambda_schedule
 from timemachine.fe.system import HostGuestSystem, VacuumSystem
-from timemachine.fe.topology import exclude_all_ligand_ixns
+from timemachine.fe.topology import exclude_all_ligand_ixns, get_ligand_ixn_pots_params
 from timemachine.potentials import (
     BoundPotential,
     ChiralAtomRestraint,
@@ -21,7 +21,6 @@ from timemachine.potentials import (
     HarmonicAngleStable,
     HarmonicBond,
     Nonbonded,
-    NonbondedInteractionGroup,
     NonbondedPairListPrecomputed,
     PeriodicTorsion,
     SummedPotential,
@@ -1201,7 +1200,8 @@ class SingleTopology(AtomMapMixin):
             guest_sigmas.append(sig)
             guest_epsilons.append(eps)
             guest_w_coords.append(w)
-        return (guest_charges, guest_sigmas, guest_epsilons, guest_w_coords)
+
+        return jnp.stack(jnp.array([guest_charges, guest_sigmas, guest_epsilons, guest_w_coords]), axis=1)
 
     def _parameterize_host_guest_nonbonded(
         self, lamb, host_nonbonded: BoundPotential[Nonbonded], num_water_atoms: int
@@ -1209,6 +1209,9 @@ class SingleTopology(AtomMapMixin):
         # Parameterize nonbonded potential for the host guest interaction
         num_host_atoms = host_nonbonded.params.shape[0]
         num_guest_atoms = self.get_num_atoms()
+        host_params = host_nonbonded.params
+        cutoff = host_nonbonded.potential.cutoff
+        beta = host_nonbonded.potential.beta
 
         # guest_exclusions, guest_scale_factors = exclude_all_ligand_ligand_ixns(num_host_atoms, num_guest_atoms)
         # TODO Use NB all for this
@@ -1217,43 +1220,25 @@ class SingleTopology(AtomMapMixin):
         combined_exclusion_idxs = np.concatenate([host_nonbonded.potential.exclusion_idxs, guest_exclusions])
         combined_scale_factors = np.concatenate([host_nonbonded.potential.scale_factors, guest_scale_factors])
 
-        host_params = host_nonbonded.params
-        cutoff = host_nonbonded.potential.cutoff
+        guest_ixn_water_params = self._get_guest_params(self.ff.q_handle_solv, self.ff.lj_handle, lamb, cutoff)
+        guest_ixn_other_params = self._get_guest_params(self.ff.q_handle, self.ff.lj_handle, lamb, cutoff)
 
-        def combine_params(host_params, guest_charges, guest_sigmas, guest_epsilons, guest_w_coords):
-            combined_charges = np.concatenate([host_params[:, 0], guest_charges])
-            combined_sigmas = np.concatenate([host_params[:, 1], guest_sigmas])
-            combined_epsilons = np.concatenate([host_params[:, 2], guest_epsilons])
-            combined_w_coords = np.concatenate([host_params[:, 3], guest_w_coords])
-            combined_nonbonded_params = np.stack(
-                [combined_charges, combined_sigmas, combined_epsilons, combined_w_coords], axis=1
-            )
-            return combined_nonbonded_params
-
-        # Note: The ligand charges are ignored b/c of the exclusions, but
-        # use the q_handle_intra here so that the run_seed is the same for the solvent leg.
-        guest_charges_intra, guest_sigmas, guest_epsilons, guest_w_coords = self._get_guest_params(
-            self.ff.q_handle_intra, self.ff.lj_handle, lamb, cutoff
-        )
-
-        combined_nonbonded_params = combine_params(
-            host_params, guest_charges_intra, guest_sigmas, guest_epsilons, guest_w_coords
-        )
+        # Note: The choice of guest_ixn_water_params here is arbitrary. It doesn't affect the
+        # potentials or grads, but any function like the seed could depened on these values.
+        hg_nb_params = jnp.concatenate([host_params, guest_ixn_water_params])
         combined_nonbonded = Nonbonded(
             num_host_atoms + num_guest_atoms,
             combined_exclusion_idxs,
             combined_scale_factors,
-            host_nonbonded.potential.beta,
-            host_nonbonded.potential.cutoff,
+            beta,
+            cutoff,
         )
 
         # L-W terms
-        num_total_atoms = num_host_atoms + num_guest_atoms
         num_other_atoms = num_host_atoms - num_water_atoms
 
-        # TOPOLOGY is OTHER WATER LIGAND, HOST = OTHER + WATER
-        def get_lig_idxs():
-            return np.arange(num_guest_atoms, dtype=np.int32) + num_host_atoms
+        def get_lig_idxs_list():
+            return [np.arange(num_guest_atoms, dtype=np.int32) + num_host_atoms]
 
         def get_water_idxs():
             return np.arange(num_water_atoms, dtype=np.int32) + num_other_atoms
@@ -1261,55 +1246,19 @@ class SingleTopology(AtomMapMixin):
         def get_other_idxs():
             return np.arange(num_other_atoms, dtype=np.int32)
 
-        hg_water_pot = NonbondedInteractionGroup(
-            num_total_atoms,
-            get_lig_idxs(),
-            host_nonbonded.potential.beta,
-            host_nonbonded.potential.cutoff,
-            col_atom_idxs=get_water_idxs(),
-        )
-        guest_charges_solv, _, _, _ = self._get_guest_params(self.ff.q_handle_solv, self.ff.lj_handle, lamb, cutoff)
-        hg_water_params = combine_params(host_params, guest_charges_solv, guest_sigmas, guest_epsilons, guest_w_coords)
-
-        print(
-            "STLW",
-            get_lig_idxs(),
+        ixn_pots, ixn_params = get_ligand_ixn_pots_params(
+            get_lig_idxs_list(),
             get_water_idxs(),
-            "P",
-            hg_water_params.shape,
+            get_other_idxs(),
+            host_params,
+            guest_ixn_water_params,
+            guest_ixn_other_params,
+            beta=beta,
+            cutoff=cutoff,
         )
 
-        # L-Other terms
-        hg_other_pot = None
-        hg_other_params = None
-        if num_other_atoms:
-            hg_other_pot = NonbondedInteractionGroup(
-                num_total_atoms,
-                get_lig_idxs(),
-                host_nonbonded.potential.beta,
-                host_nonbonded.potential.cutoff,
-                col_atom_idxs=get_other_idxs(),
-            )
-            guest_charges_other, _, _, _ = self._get_guest_params(self.ff.q_handle, self.ff.lj_handle, lamb, cutoff)
-            hg_other_params = combine_params(
-                host_params, guest_charges_other, guest_sigmas, guest_epsilons, guest_w_coords
-            )
-            print(
-                "STLO",
-                get_lig_idxs(),
-                get_other_idxs(),
-                "P",
-                hg_other_params.shape,
-            )
-
-        # ligand intramolecular interactions are calculated separately
-
-        def filter_none(values):
-            return [v for v in values if v is not None]
-
-        hg_total_pot = filter_none([combined_nonbonded, hg_water_pot, hg_other_pot])
-        hg_total_params = filter_none([combined_nonbonded_params, hg_water_params, hg_other_params])
-
+        hg_total_pot = [combined_nonbonded] + ixn_pots
+        hg_total_params = [hg_nb_params] + ixn_params
         sum_pot = SummedPotential(hg_total_pot, hg_total_params)
         bound_sum_pot = sum_pot.bind(jnp.concatenate(hg_total_params).reshape((-1,)))
 

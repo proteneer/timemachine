@@ -531,17 +531,8 @@ class SingleTopologyRef(SingleTopology):
         host_params = host_nonbonded.params
         cutoff = host_nonbonded.potential.cutoff
 
-        guest_charges, guest_sigmas, guest_epsilons, guest_w_coords = self._get_guest_params(
-            self.ff.q_handle, self.ff.lj_handle, lamb, cutoff
-        )
-
-        combined_charges = np.concatenate([host_params[:, 0], guest_charges])
-        combined_sigmas = np.concatenate([host_params[:, 1], guest_sigmas])
-        combined_epsilons = np.concatenate([host_params[:, 2], guest_epsilons])
-        combined_w_coords = np.concatenate([host_params[:, 3], guest_w_coords])
-        combined_nonbonded_params = np.stack(
-            [combined_charges, combined_sigmas, combined_epsilons, combined_w_coords], axis=1
-        )
+        guest_params = self._get_guest_params(self.ff.q_handle, self.ff.lj_handle, lamb, cutoff)
+        combined_nonbonded_params = np.concatenate([host_params, guest_params])
 
         combined_nonbonded = Nonbonded(
             num_host_atoms + num_guest_atoms,
@@ -630,18 +621,10 @@ def test_combine_with_host_split(precision, rtol, atol):
             cutoff,
             col_atom_idxs=water_idxs if is_solvent else protein_idxs,
         )
-        guest_charges, guest_sigmas, guest_epsilons, guest_w_coords = st._get_guest_params(
-            ff.q_handle_solv if is_solvent else ff.q_handle, ff.lj_handle, lamb, cutoff
-        )
+        guest_params = st._get_guest_params(ff.q_handle_solv if is_solvent else ff.q_handle, ff.lj_handle, lamb, cutoff)
 
         host_params = host_system.nonbonded.params
-        combined_charges = np.concatenate([host_params[:, 0], guest_charges])
-        combined_sigmas = np.concatenate([host_params[:, 1], guest_sigmas])
-        combined_epsilons = np.concatenate([host_params[:, 2], guest_epsilons])
-        combined_w_coords = np.concatenate([host_params[:, 3], guest_w_coords])
-        combined_nonbonded_params = np.stack(
-            [combined_charges, combined_sigmas, combined_epsilons, combined_w_coords], axis=1
-        )
+        combined_nonbonded_params = np.concatenate([host_params, guest_params])
         u_impl = u.bind(combined_nonbonded_params).to_gpu(precision=precision).bound_impl
         return u_impl.execute(combined_conf, box)
 
