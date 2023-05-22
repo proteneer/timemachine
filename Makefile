@@ -3,7 +3,7 @@ MKFILE_DIR := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
 CPP_DIR := $(MKFILE_DIR)timemachine/cpp/
 INSTALL_PREFIX := $(MKFILE_DIR)timemachine/
 # Conditionally set pytest args, to be able to override in CI
-PYTEST_CI_ARGS ?= --color=yes --cov=. --cov-report=html:coverage/ --cov-append --durations=100 --hypothesis-profile ci
+PYTEST_CI_ARGS ?= --color=yes --cov=. --cov-report=html:coverage/ --cov-append --durations=100
 
 NOGPU_MARKER := nogpu
 MEMCHECK_MARKER := memcheck
