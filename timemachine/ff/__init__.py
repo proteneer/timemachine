@@ -108,7 +108,6 @@ class Forcefield:
         # Look for ff file
         if not path.is_file():
             raise ValueError(f"Unable to find {original_path} in file system or built-in forcefields")
-        print(f"READ FF FROM PATH: {path}")
         handlers, protein_ff, water_ff = deserialize_handlers(path.read_text())
         return cls.from_handlers(handlers, protein_ff=protein_ff, water_ff=water_ff)
 

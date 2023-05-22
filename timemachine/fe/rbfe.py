@@ -137,12 +137,6 @@ def setup_initial_state(
     run_seed = (
         int(seed + bytes_to_id(bytes().join([np.array(p.params).tobytes() for p in potentials]))) % MAX_SEED_VALUE
     )
-    print("-" * 80)
-    print("params:")
-    for p in potentials:
-        print(type(p.potential), bytes_to_id(np.array(p.params).tobytes()))
-    print("setup_initial_state", type(st), st, "init_seed", init_seed, "run_seed", run_seed)
-    print("-" * 80)
 
     # initialize velocities
     v0 = np.zeros_like(x0)  # tbd resample from Maxwell-boltzman?
@@ -245,6 +239,7 @@ def setup_optimized_initial_state(
     # discontinuity at lambda=0.5. Ensure that we pick a pre-optimized state on the same side of 0.5 as `lamb`:
     states_subset = [s for s in optimized_initial_states if (s.lamb <= 0.5) == (lamb <= 0.5)]
     nearest_optimized = min(states_subset, key=lambda s: abs(lamb - s.lamb))
+
     if lamb == nearest_optimized.lamb:
         return nearest_optimized
     else:
@@ -538,6 +533,7 @@ def estimate_relative_free_energy_via_greedy_bisection(
     lambda_grid = np.linspace(lambda_min, lambda_max, n_windows)
 
     temperature = DEFAULT_TEMP
+
     host = setup_optimized_host(single_topology, host_config) if host_config else None
 
     initial_states = setup_initial_states(
@@ -561,7 +557,6 @@ def estimate_relative_free_energy_via_greedy_bisection(
     combined_prefix = get_mol_name(mol_a) + "_" + get_mol_name(mol_b) + "_" + prefix
 
     try:
-        print("run_sims_with_greedy_bisection")
         results, frames, boxes = run_sims_with_greedy_bisection(
             [lambda_min, lambda_max],
             make_optimized_initial_state,
