@@ -1145,7 +1145,7 @@ class SingleTopology(AtomMapMixin):
 
         return system.VacuumSystem(bond, angle, torsion, nonbonded, chiral_atom, chiral_bond)
 
-    def _get_guest_params(self, q_handle, lj_handle, lamb: float, cutoff: float) -> Tuple:
+    def _get_guest_params(self, q_handle, lj_handle, lamb: float, cutoff: float) -> NDArray:
         """
         Return a tuple of guest_charges, guest_sigmas, guest_epsilons, guest_w_coords
         for the guest at a given lambda.

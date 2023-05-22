@@ -662,30 +662,52 @@ def exclude_all_ligand_ixns(num_host_atoms: int, num_guest_atoms: int) -> Tuple[
 
 
 def get_ligand_ixn_pots_params(
-    lig_idxss,
-    water_idxs,
-    other_idxs,
-    host_nb_params,
-    guest_params_ixn_water,
-    guest_params_ixn_other,
+    lig_idxs_list: List[NDArray],
+    water_idxs: NDArray,
+    other_idxs: NDArray,
+    host_nb_params: NDArray,
+    guest_params_ixn_water: NDArray,
+    guest_params_ixn_other: NDArray,
     beta=2.0,
     cutoff=1.2,
 ):
     """
     Return the interaction group potentials and corresponding parameters
     for the ligand-water and ligand-protein interaction terms.
+
+    Parameters
+    ----------
+    lig_idxs_list:
+        List of ligand indexes (dtype, np.int32), one for each ligand.
+
+    water_idxs:
+        Indexes for the water atoms
+
+    other_idxs:
+        Indexes for the other environment atoms that are not waters.
+
+    host_nb_params:
+        Nonbonded parameters for the host (environment) atoms.
+
+    guest_params_ixn_water:
+        Parameters for the guest (ligand) NB interactions with water.
+
+    guest_params_ixn_other:
+        Parameters for the guest (ligand) NB interactions with the
+        non-water environment atoms.
     """
+
     # Init
     other_idxs = other_idxs if other_idxs is not None else []
 
     # L-W terms
-    num_lig_atoms = sum(len(lig_idxs) for lig_idxs in lig_idxss)
+    num_lig_atoms = sum(len(lig_idxs) for lig_idxs in lig_idxs_list)
     num_total_atoms = num_lig_atoms + len(water_idxs) + len(other_idxs)
 
     hg_water_pots = []
     hg_water_paramss = []
     # Loop for the case of DualTopology
-    for lig_idxs in lig_idxss:
+    for lig_idxs in lig_idxs_list:
         hg_water_pots.append(
             potentials.NonbondedInteractionGroup(
                 num_total_atoms,
@@ -701,7 +723,7 @@ def get_ligand_ixn_pots_params(
     hg_other_pots = []
     hg_other_paramss = []
     if len(other_idxs):
-        for lig_idxs in lig_idxss:
+        for lig_idxs in lig_idxs_list:
             hg_other_pots.append(
                 potentials.NonbondedInteractionGroup(
                     num_total_atoms,
