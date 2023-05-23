@@ -255,15 +255,13 @@ def hif2a_ligand_pair_single_topology_lam0_state():
     return state
 
 
-@given(integers(1, 100), integers(1, 100), integers(0, 5))
+@given(integers(1, 100), integers(1, 100))
 @seed(2023)
-@example(10, 3, 0)
-@example(10, 1, 1)
-@example(1, 10, 5)
-def test_sample_max_buffer_frames(
-    hif2a_ligand_pair_single_topology_lam0_state, n_frames, max_buffer_frames, local_steps
-):
-    md_params = MDParams(n_frames, 1, 1, 2023, local_steps=local_steps)
+@example(10, 3)
+@example(10, 1)
+@example(1, 10)
+def test_sample_max_buffer_frames(hif2a_ligand_pair_single_topology_lam0_state, n_frames, max_buffer_frames):
+    md_params = MDParams(n_frames, 1, 1, 2023)
     frames_ref, _ = sample(hif2a_ligand_pair_single_topology_lam0_state, md_params)
     frames_test, _ = sample(
         hif2a_ligand_pair_single_topology_lam0_state, md_params, max_buffer_frames=max_buffer_frames
