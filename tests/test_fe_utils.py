@@ -208,3 +208,12 @@ def test_view_atom_mapping_3d():
 
     view = utils.view_atom_mapping_3d(mol_a, mol_b, cores)
     assert isinstance(view, py3Dmol.view)
+
+    # multiple cores, different sizes, ndarray input
+    cores = [
+        np.array([[2, 0], [3, 2], [0, 3]]),
+        np.array([[2, 0], [3, 2], [0, 3], [1, 4]]),
+    ]
+
+    view = utils.view_atom_mapping_3d(mol_a, mol_b, cores)
+    assert isinstance(view, py3Dmol.view)
