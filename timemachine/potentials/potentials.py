@@ -97,17 +97,20 @@ class Nonbonded(Potential):
     scale_factors: NDArray[np.float64]
     beta: float
     cutoff: float
+    atom_idxs: Optional[NDArray[np.int32]] = None
     disable_hilbert_sort: bool = False
     nblist_padding: float = 0.1
 
     def __call__(self, conf: Conf, params: Params, box: Optional[Box]) -> float | Array:
+        s = self.atom_idxs if self.atom_idxs is not None else slice(None)
+        exclusion_idxs, scale_factors, num_atoms = self._filter_exclusions()
         charge_rescale_mask, lj_rescale_mask = nonbonded.convert_exclusions_to_rescale_masks(
-            self.exclusion_idxs, self.scale_factors, self.num_atoms
+            exclusion_idxs, scale_factors, num_atoms
         )
 
         return nonbonded.nonbonded(
-            conf,
-            params,
+            jnp.array(conf)[s, :],
+            jnp.array(params)[s, :],
             box,
             charge_rescale_mask,
             lj_rescale_mask,
@@ -116,15 +119,28 @@ class Nonbonded(Potential):
             runtime_validate=False,  # needed for this to be JAX-transformable
         )
 
+    def _filter_exclusions(self):
+        atom_idxs_set = set(self.atom_idxs) if self.atom_idxs is not None else set(range(self.num_atoms))
+        exclusion_idxs = []
+        scale_factors = []
+        for (i, j), sf in zip(self.exclusion_idxs, self.scale_factors):
+            if i not in atom_idxs_set or j not in atom_idxs_set:
+                continue
+            exclusion_idxs.append((i, j))
+            scale_factors.append(sf)
+        return np.array(exclusion_idxs, dtype=np.int32), np.array(scale_factors), len(atom_idxs_set)
+
     def to_gpu(self, precision: Precision) -> GpuImplWrapper:
         all_pairs = NonbondedAllPairs(
             self.num_atoms,
             self.beta,
             self.cutoff,
+            atom_idxs=self.atom_idxs,
             disable_hilbert_sort=self.disable_hilbert_sort,
             nblist_padding=self.nblist_padding,
         )
-        exclusions = NonbondedPairListNegated(self.exclusion_idxs, self.scale_factors, self.beta, self.cutoff)
+        exclusion_idxs, scale_factors, _ = self._filter_exclusions()
+        exclusions = NonbondedPairListNegated(exclusion_idxs, scale_factors, self.beta, self.cutoff)
         return FanoutSummedPotential([all_pairs, exclusions]).to_gpu(precision)
 
 

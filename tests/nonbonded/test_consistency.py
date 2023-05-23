@@ -60,7 +60,7 @@ def test_nonbonded_consistency(
         all_col_atom_idxs = [None]
 
     ref_impl = (
-        Nonbonded(num_atoms, exclusion_idxs, exclusion_scales, beta, cutoff, disable_hilbert_sort)
+        Nonbonded(num_atoms, exclusion_idxs, exclusion_scales, beta, cutoff, None, disable_hilbert_sort)
         .to_gpu(precision)
         .unbound_impl
     )

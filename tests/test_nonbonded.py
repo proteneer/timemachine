@@ -136,28 +136,31 @@ class TestNonbondedDHFR(GradientTest):
         """
         # we can't go bigger than this due to memory limitations in the the reference platform.
         for N in [33, 65, 231, 1050, 4080]:
+            for atom_idxs in [None, np.arange(N // 2, dtype=np.int32)]:
 
-            np.random.seed(2022)
+                np.random.seed(2022)
 
-            test_conf = self.host_conf[:N]
+                test_conf = self.host_conf[:N]
 
-            # strip out parts of the system
-            test_exclusions = []
-            test_scales = []
-            for (i, j), (sa, sb) in zip(self.nonbonded_fn.exclusion_idxs, self.nonbonded_fn.scale_factors):
-                if i < N and j < N:
-                    test_exclusions.append((i, j))
-                    test_scales.append((sa, sb))
-            test_exclusions = np.array(test_exclusions, dtype=np.int32)
-            test_scales = np.array(test_scales, dtype=np.float64)
-            test_params = self.nonbonded_params[:N, :]
+                # strip out parts of the system
+                test_exclusions = []
+                test_scales = []
+                for (i, j), (sa, sb) in zip(self.nonbonded_fn.exclusion_idxs, self.nonbonded_fn.scale_factors):
+                    if i < N and j < N:
+                        test_exclusions.append((i, j))
+                        test_scales.append((sa, sb))
+                test_exclusions = np.array(test_exclusions, dtype=np.int32)
+                test_scales = np.array(test_scales, dtype=np.float64)
+                test_params = self.nonbonded_params[:N, :]
 
-            potential = potentials.Nonbonded(N, test_exclusions, test_scales, self.beta, self.cutoff)
-
-            for precision, rtol, atol in [(np.float64, 1e-8, 1e-8), (np.float32, 1e-4, 5e-4)]:
-                self.compare_forces(
-                    test_conf, test_params, self.box, potential, potential.to_gpu(precision), rtol=rtol, atol=atol
+                potential = potentials.Nonbonded(
+                    N, test_exclusions, test_scales, self.beta, self.cutoff, atom_idxs=atom_idxs
                 )
+
+                for precision, rtol, atol in [(np.float64, 1e-8, 1e-8), (np.float32, 1e-4, 5e-4)]:
+                    self.compare_forces(
+                        test_conf, test_params, self.box, potential, potential.to_gpu(precision), rtol=rtol, atol=atol
+                    )
 
     @unittest.skip("benchmark-only")
     def test_benchmark(self):
