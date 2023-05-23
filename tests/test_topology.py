@@ -24,7 +24,9 @@ def test_dual_topology_nonbonded_pairlist():
     ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
     dt = topology.DualTopology(mol_a, mol_b, ff)
 
-    nb_params, nb = dt.parameterize_nonbonded(ff.q_handle.params, ff.q_handle_intra.params, ff.lj_handle.params, 0.0)
+    nb_params, nb = dt.parameterize_nonbonded(
+        ff.q_handle.params, ff.q_handle_intra.params, ff.q_handle_solv.params, ff.lj_handle.params, 0.0
+    )
 
     nb_pairlist_params, nb_pairlist = dt.parameterize_nonbonded_pairlist(
         ff.q_handle.params, ff.q_handle_intra.params, ff.lj_handle.params
