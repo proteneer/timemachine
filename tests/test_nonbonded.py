@@ -136,8 +136,12 @@ class TestNonbondedDHFR(GradientTest):
         """
         # we can't go bigger than this due to memory limitations in the the reference platform.
         for N in [33, 65, 231, 1050, 4080]:
-            for atom_idxs in [None, np.arange(N // 2, dtype=np.int32)]:
 
+            rng = np.random.default_rng(2022)
+
+            # for atom_idxs in [None, np.arange(N // 2, dtype=np.int32)]:
+            for atom_idxs in [None, np.array(rng.choice(N, N // 2, replace=False), dtype=np.int32)]:
+                print(N, atom_idxs)
                 np.random.seed(2022)
 
                 test_conf = self.host_conf[:N]
