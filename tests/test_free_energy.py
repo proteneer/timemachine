@@ -10,8 +10,16 @@ from scipy.optimize import check_grad, minimize
 
 from timemachine.constants import DEFAULT_TEMP
 from timemachine.fe import free_energy, topology, utils
-from timemachine.fe.free_energy import BarResult, MDParams, PairBarResult, batches, make_pair_bar_plots, sample
-from timemachine.fe.rbfe import setup_initial_states
+from timemachine.fe.free_energy import (
+    BarResult,
+    HostConfig,
+    MDParams,
+    PairBarResult,
+    batches,
+    make_pair_bar_plots,
+    sample,
+)
+from timemachine.fe.rbfe import setup_initial_states, setup_optimized_host
 from timemachine.fe.single_topology import SingleTopology
 from timemachine.fe.stored_arrays import StoredArrays
 from timemachine.ff import Forcefield
@@ -187,6 +195,40 @@ def test_vacuum_and_solvent_edge_types():
     assert type(vacuum_unbound_potentials) == type(solvent_unbound_potentials)
     assert type(vacuum_sys_params) == type(solvent_sys_params)
     assert type(vacuum_masses) == type(solvent_masses)
+
+
+@pytest.fixture(scope="module")
+def solvent_hif2a_ligand_pair_single_topology_lam0_state():
+    mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
+    forcefield = Forcefield.load_default()
+    st = SingleTopology(mol_a, mol_b, core, forcefield)
+
+    solvent_sys, solvent_conf, solvent_box, solvent_top = builders.build_water_system(3.0, forcefield.water_ff)
+    solvent_host_config = HostConfig(solvent_sys, solvent_conf, solvent_box)
+    solvent_host = setup_optimized_host(st, solvent_host_config)
+    state = setup_initial_states(st, solvent_host, DEFAULT_TEMP, [0.0], 2023)[0]
+    return state
+
+
+@pytest.mark.parametrize("n_frames", [1, 10])
+@pytest.mark.parametrize("local_steps", [0, 1])
+@pytest.mark.parametrize("max_buffer_frames", [1])
+def test_sample_max_buffer_frames_with_local_md(
+    solvent_hif2a_ligand_pair_single_topology_lam0_state, n_frames, local_steps, max_buffer_frames
+):
+    """Ensure that if sample is called with max_buffer_frames combined with local MD it works. This failed previously
+    due to trying to configure local md on the same context repeatedly. This was due to max_buffer_frames < n_frames which
+    resulted in caling ctxt.setup_local_md multiple times.
+    """
+    steps_per_frame = 1
+    n_eq_steps = 1
+
+    md_params = MDParams(n_frames, n_eq_steps, steps_per_frame, 2023, local_steps=local_steps)
+    frames, _ = sample(
+        solvent_hif2a_ligand_pair_single_topology_lam0_state, md_params, max_buffer_frames=max_buffer_frames
+    )
+    assert isinstance(frames, StoredArrays)
+    assert len(frames) == n_frames
 
 
 @given(integers(min_value=1))
