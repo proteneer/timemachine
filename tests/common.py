@@ -375,7 +375,7 @@ def check_split_ixns(
             LL - ligand-ligand intramolecular interactions
             PL - protein-ligand interactions
             WL - water-ligand interactions
-            sum full NB potential
+            sum - full NB potential
 
         scaled term:
             ref - ref ff
