@@ -357,6 +357,9 @@ def sample(initial_state: InitialState, md_params: MDParams, max_buffer_frames: 
 
     rng = np.random.default_rng(md_params.seed)
 
+    if md_params.local_steps > 0:
+        ctxt.setup_local_md(initial_state.integrator.temperature, md_params.freeze_reference)
+
     assert np.all(np.isfinite(ctxt.get_x_t())), "Equilibration resulted in a nan"
 
     def run_production_steps(n_steps: int) -> Tuple[NDArray, NDArray]:
@@ -371,7 +374,6 @@ def sample(initial_state: InitialState, md_params: MDParams, max_buffer_frames: 
     def run_production_local_steps(n_steps: int) -> Tuple[NDArray, NDArray]:
         coords = None
         boxes = None
-        ctxt.setup_local_md(initial_state.integrator.temperature, md_params.freeze_reference)
         for steps in batches(n_steps, md_params.steps_per_frame):
             if steps < md_params.steps_per_frame:
                 warn(
