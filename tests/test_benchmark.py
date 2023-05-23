@@ -39,11 +39,11 @@ def generate_hif2a_frames(n_frames: int, frame_interval: int, seed=None, barosta
 
     # build the protein system.
     with resources.path("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as path_to_pdb:
-        host_system, host_coords, host_box, _ = builders.build_protein_system(
+        host_system, host_coords, host_box, _, num_water_atoms = builders.build_protein_system(
             str(path_to_pdb), forcefield.protein_ff, forcefield.water_ff
         )
-
-    initial_state = prepare_hif2a_initial_state(st, host_system, host_coords, host_box)
+    host_config = HostConfig(host_system, host_coords, host_box, num_water_atoms)
+    initial_state = prepare_hif2a_initial_state(st, host_config)
 
     ligand_idxs = np.arange(len(host_coords), len(initial_state.x0), dtype=np.int32)
 
@@ -358,9 +358,8 @@ def benchmark_dhfr(verbose=False, num_batches=100, steps_per_batch=1000):
     )
 
 
-def prepare_hif2a_initial_state(st, host_system, host_coords, host_box):
+def prepare_hif2a_initial_state(st, host_config):
     st = rbfe.SingleTopology(st.mol_a, st.mol_b, st.core, st.ff)
-    host_config = rbfe.HostConfig(host_system, host_coords, host_box)
     temperature = constants.DEFAULT_TEMP
     lamb = 0.1
     host = rbfe.setup_optimized_host(st, host_config)
@@ -432,7 +431,7 @@ def benchmark_hif2a(verbose=False, num_batches=100, steps_per_batch=1000):
         )
 
         # RBFE
-        initial_state = prepare_hif2a_initial_state(st, host_system, host_coords, host_box)
+        initial_state = prepare_hif2a_initial_state(st, host_config)
 
         benchmark(
             stage + "-rbfe",
