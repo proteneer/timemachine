@@ -1,5 +1,4 @@
 import hashlib
-from collections.abc import Iterable
 from pathlib import Path
 from typing import List, Optional, Sequence, Union
 
@@ -288,17 +287,14 @@ def view_atom_mapping_3d(
     except ImportError as e:
         raise RuntimeError("requires py3Dmol to be installed") from e
 
-    cores_: Sequence[Sequence[Sequence[int]]] = cores.tolist() if isinstance(cores, np.ndarray) else cores
-    del cores
-
-    if cores_:
-        assert isinstance(cores_[0], Iterable) and isinstance(cores_[0][0], Iterable), "expect a list of cores"
+    if len(cores) > 0:
+        assert np.asarray(cores[0]).ndim == 2, "expect a list of cores"
 
     make_style = lambda props: {"stick": props}
     atom_style = lambda color: make_style({"color": color})
     dummy_style = atom_style("white")
 
-    num_rows = 1 + len(cores_)
+    num_rows = 1 + len(cores)
     height = num_rows * row_height
     view = py3Dmol.view(viewergrid=(num_rows, 2), width=width, height=height)
 
@@ -311,7 +307,7 @@ def view_atom_mapping_3d(
     view.setStyle(make_style({}))
 
     # additional rows, colored according to corresponding mappings
-    for row, core in enumerate(cores_, 1):
+    for row, core in enumerate(cores, 1):
         add_mol(mol_a, (row, 0))
         add_mol(mol_b, (row, 1))
 
@@ -325,6 +321,9 @@ def view_atom_mapping_3d(
             # if more atoms than colors, need to reuse some colors
             else rng.choice(colors, len(core), replace=True)
         )
+
+        if isinstance(core, np.ndarray):
+            core = core.tolist()
 
         for (ia, ib), color in zip(core, colors_):
             view.setStyle({"serial": ia}, atom_style(color), viewer=(row, 0))
