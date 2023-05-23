@@ -173,6 +173,9 @@ def test_view_atom_mapping_3d():
     AllChem.EmbedMolecule(mol_a)
     AllChem.EmbedMolecule(mol_b)
 
+    view = utils.view_atom_mapping_3d(mol_a, mol_b)
+    assert isinstance(view, py3Dmol.view)
+
     core = [[2, 0], [3, 2], [0, 3], [1, 4]]
 
     view = utils.view_atom_mapping_3d(mol_a, mol_b, [core])
