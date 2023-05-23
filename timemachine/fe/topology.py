@@ -169,19 +169,21 @@ class HostGuestTopology:
         assert cutoff == self.host_nonbonded.potential.cutoff
 
         # Exclude all ligand-lignad interactions which will be computed using a pairlist instead
-        # guest_exclusions, guest_scale_factors = exclude_all_ligand_ligand_ixns(self.num_host_atoms, num_guest_atoms)
-        guest_exclusions, guest_scale_factors = exclude_all_ligand_ixns(self.num_host_atoms, num_guest_atoms)
+        exclusion_idxs = self.host_nonbonded.potential.exclusion_idxs
+        scale_factors = self.host_nonbonded.potential.scale_factors
 
-        hg_exclusion_idxs = np.concatenate([self.host_nonbonded.potential.exclusion_idxs, guest_exclusions])
-        hg_scale_factors = np.concatenate([self.host_nonbonded.potential.scale_factors, guest_scale_factors])
-
-        # Note: The choice of guest_ixn_water_params here is arbitrary. It doesn't affect the
+        # Note: The choice of zeros here is arbitrary. It doesn't affect the
         # potentials or grads, but any function like the seed could depened on these values.
-        hg_nb_params = jnp.concatenate([self.host_nonbonded.params, guest_ixn_water_params])
+        hg_nb_params = jnp.concatenate([self.host_nonbonded.params, np.zeros(guest_ixn_water_params.shape)])
 
         # TODO: Use atom_idxs in Nonbonded instead of exclusions
         host_guest_pot = potentials.Nonbonded(
-            self.num_host_atoms + num_guest_atoms, hg_exclusion_idxs, hg_scale_factors, beta, cutoff
+            self.num_host_atoms + num_guest_atoms,
+            exclusion_idxs,
+            scale_factors,
+            beta,
+            cutoff,
+            atom_idxs=np.arange(self.num_host_atoms, dtype=np.int32),
         )
 
         ixn_pots, ixn_params = get_ligand_ixn_pots_params(
@@ -637,25 +639,6 @@ def exclude_all_ligand_ligand_ixns(num_host_atoms: int, num_guest_atoms: int) ->
             guest_scale_factors_.append((1.0, 1.0))
 
     guest_exclusions = np.array(guest_exclusions_, dtype=np.int32) + num_host_atoms
-    guest_scale_factors = np.array(guest_scale_factors_, dtype=np.float64)
-    return guest_exclusions, guest_scale_factors
-
-
-def exclude_all_ligand_ixns(num_host_atoms: int, num_guest_atoms: int) -> Tuple[NDArray, NDArray]:
-    """
-    Return a tuple of the ligand exclusions and scale factors which exclude
-    all ligand-ligand interactions. This is done to mask out these interactions
-    so they can be calculated using the pairlist.
-    """
-    guest_exclusions_ = []
-    guest_scale_factors_ = []
-
-    for i in range(num_host_atoms + num_guest_atoms):
-        for j in range(max(i + 1, num_host_atoms), num_host_atoms + num_guest_atoms):
-            guest_exclusions_.append((i, j))
-            guest_scale_factors_.append((1.0, 1.0))
-
-    guest_exclusions = np.array(guest_exclusions_, dtype=np.int32)
     guest_scale_factors = np.array(guest_scale_factors_, dtype=np.float64)
     return guest_exclusions, guest_scale_factors
 

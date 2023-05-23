@@ -13,7 +13,7 @@ from timemachine.fe import interpolate, model_utils, system, topology, utils
 from timemachine.fe.dummy import canonicalize_bond, generate_anchored_dummy_group_assignments
 from timemachine.fe.lambda_schedule import construct_pre_optimized_relative_lambda_schedule
 from timemachine.fe.system import HostGuestSystem, VacuumSystem
-from timemachine.fe.topology import exclude_all_ligand_ixns, get_ligand_ixn_pots_params
+from timemachine.fe.topology import get_ligand_ixn_pots_params
 from timemachine.potentials import (
     BoundPotential,
     ChiralAtomRestraint,
@@ -1215,23 +1215,24 @@ class SingleTopology(AtomMapMixin):
 
         # guest_exclusions, guest_scale_factors = exclude_all_ligand_ligand_ixns(num_host_atoms, num_guest_atoms)
         # TODO Use NB all for this
-        guest_exclusions, guest_scale_factors = exclude_all_ligand_ixns(num_host_atoms, num_guest_atoms)
+        # guest_exclusions, guest_scale_factors = exclude_all_ligand_ixns(num_host_atoms, num_guest_atoms)
 
-        combined_exclusion_idxs = np.concatenate([host_nonbonded.potential.exclusion_idxs, guest_exclusions])
-        combined_scale_factors = np.concatenate([host_nonbonded.potential.scale_factors, guest_scale_factors])
+        exclusion_idxs = host_nonbonded.potential.exclusion_idxs
+        scale_factors = host_nonbonded.potential.scale_factors
 
         guest_ixn_water_params = self._get_guest_params(self.ff.q_handle_solv, self.ff.lj_handle, lamb, cutoff)
         guest_ixn_other_params = self._get_guest_params(self.ff.q_handle, self.ff.lj_handle, lamb, cutoff)
 
-        # Note: The choice of guest_ixn_water_params here is arbitrary. It doesn't affect the
+        # Note: The choice of zeros here is arbitrary. It doesn't affect the
         # potentials or grads, but any function like the seed could depened on these values.
-        hg_nb_params = jnp.concatenate([host_params, guest_ixn_water_params])
+        hg_nb_params = jnp.concatenate([host_params, np.zeros(guest_ixn_water_params.shape)])
         combined_nonbonded = Nonbonded(
             num_host_atoms + num_guest_atoms,
-            combined_exclusion_idxs,
-            combined_scale_factors,
+            exclusion_idxs,
+            scale_factors,
             beta,
             cutoff,
+            atom_idxs=np.arange(num_host_atoms, dtype=np.int32),
         )
 
         # L-W terms
