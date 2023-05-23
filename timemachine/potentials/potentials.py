@@ -158,7 +158,9 @@ class Nonbonded(Potential):
             exclusion_idxs.append((i, j))
             scale_factors.append(sf)
 
-        return np.array(exclusion_idxs, dtype=np.int32), np.array(scale_factors)
+        return np.array(exclusion_idxs, dtype=np.int32), np.array(scale_factors) if len(
+            scale_factors
+        ) else np.zeros_like(self.scale_factors)
 
 
 @dataclass

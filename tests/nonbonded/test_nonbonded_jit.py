@@ -12,7 +12,7 @@ def test_nonbonded_reference_jittable(rng: np.random.Generator):
     U_ref = Nonbonded(
         N,
         exclusion_idxs=jnp.zeros((0,)),
-        scale_factors=jnp.zeros((0, 1)),
+        scale_factors=jnp.zeros((0, 2)),
         beta=1.0,
         cutoff=0.1,
     )
