@@ -287,9 +287,8 @@ def view_atom_mapping_3d(
     except ImportError as e:
         raise RuntimeError("requires py3Dmol to be installed") from e
 
-    cores_ = np.asarray(cores)
-    assert cores_.ndim == 3, "expect a list of cores"
-    cores = cores_.tolist()
+    for core in cores:
+        assert np.asarray(core).ndim == 2, "expect a list of cores"
 
     make_style = lambda props: {"stick": props}
     atom_style = lambda color: make_style({"color": color})
@@ -322,6 +321,9 @@ def view_atom_mapping_3d(
             # if more atoms than colors, need to reuse some colors
             else rng.choice(colors, len(core), replace=True)
         )
+
+        if isinstance(core, np.ndarray):
+            core = core.tolist()
 
         for (ia, ib), color in zip(core, colors_):
             view.setStyle({"serial": ia}, atom_style(color), viewer=(row, 0))
