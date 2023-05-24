@@ -103,8 +103,12 @@ class Nonbonded(Potential):
 
     def __call__(self, conf: Conf, params: Params, box: Optional[Box]) -> float | Array:
         s = self.atom_idxs if self.atom_idxs is not None else slice(None)
-        num_atoms = len(self.atom_idxs) if self.atom_idxs is not None else self.num_atoms
-        exclusion_idxs, scale_factors = self._filter_exclusions(update_idxs=True)
+        atom_idxs = self.atom_idxs if self.atom_idxs is not None else np.arange(self.num_atoms, dtype=np.int32)
+        num_atoms = len(atom_idxs)
+
+        exclusion_idxs, scale_factors = nonbonded.filter_exclusions(
+            atom_idxs, self.exclusion_idxs, self.scale_factors, update_idxs=True
+        )
         charge_rescale_mask, lj_rescale_mask = nonbonded.convert_exclusions_to_rescale_masks(
             exclusion_idxs, scale_factors, num_atoms
         )
@@ -129,38 +133,10 @@ class Nonbonded(Potential):
             disable_hilbert_sort=self.disable_hilbert_sort,
             nblist_padding=self.nblist_padding,
         )
-        exclusion_idxs, scale_factors = self._filter_exclusions()
+        atom_idxs = self.atom_idxs if self.atom_idxs is not None else np.arange(self.num_atoms, dtype=np.int32)
+        exclusion_idxs, scale_factors = nonbonded.filter_exclusions(atom_idxs, self.exclusion_idxs, self.scale_factors)
         exclusions = NonbondedPairListNegated(exclusion_idxs, scale_factors, self.beta, self.cutoff)
         return FanoutSummedPotential([all_pairs, exclusions]).to_gpu(precision)
-
-    def _filter_exclusions(self, update_idxs=False):
-        """
-        Return the exclusions and corresponding scale factors
-        with the atoms not in self.atom_idxs removed.
-
-        Parameters
-        ----------
-        update_idxs:
-            Set to True to remap the exclusion indexes
-            to point to the index of self.atom_idxs.
-            This is useful for the reference JAX potential.
-        """
-        atom_idxs = list(self.atom_idxs if self.atom_idxs is not None else range(self.num_atoms))
-        atom_idxs_set = set(atom_idxs)
-        map_to_filtered = {j: i for i, j in enumerate(atom_idxs)}
-        exclusion_idxs = []
-        scale_factors = []
-        for (i, j), sf in zip(self.exclusion_idxs, self.scale_factors):
-            if i not in atom_idxs_set or j not in atom_idxs_set:
-                continue
-            if update_idxs:
-                i, j = map_to_filtered[i], map_to_filtered[j]
-            exclusion_idxs.append((i, j))
-            scale_factors.append(sf)
-
-        return np.array(exclusion_idxs, dtype=np.int32), np.array(scale_factors) if len(
-            scale_factors
-        ) else np.zeros_like(self.scale_factors)
 
 
 @dataclass
