@@ -102,16 +102,26 @@ class Nonbonded(Potential):
     nblist_padding: float = 0.1
 
     def __call__(self, conf: Conf, params: Params, box: Optional[Box]) -> float | Array:
+        s = self.atom_idxs if self.atom_idxs is not None else slice(None)
+        atom_idxs = self.atom_idxs if self.atom_idxs is not None else np.arange(self.num_atoms, dtype=np.int32)
+        num_atoms = len(atom_idxs)
+
+        exclusion_idxs, scale_factors = nonbonded.filter_exclusions(
+            atom_idxs, self.exclusion_idxs, self.scale_factors, update_idxs=True
+        )
+        charge_rescale_mask, lj_rescale_mask = nonbonded.convert_exclusions_to_rescale_masks(
+            exclusion_idxs, scale_factors, num_atoms
+        )
+
         return nonbonded.nonbonded(
-            conf,
-            params,
+            jnp.array(conf)[s, :],
+            jnp.array(params)[s, :],
             box,
-            self.exclusion_idxs,
-            self.scale_factors,
+            charge_rescale_mask,
+            lj_rescale_mask,
             self.beta,
             self.cutoff,
             runtime_validate=False,  # needed for this to be JAX-transformable
-            atom_idxs=self.atom_idxs,
         )
 
     def to_gpu(self, precision: Precision) -> GpuImplWrapper:
@@ -139,16 +149,20 @@ class NonbondedAllPairs(Potential):
     nblist_padding: float = 0.1
 
     def __call__(self, conf: Conf, params: Params, box: Optional[Box]) -> float | Array:
+        s = self.atom_idxs if self.atom_idxs is not None else slice(None)
+        conf = jnp.array(conf)[s, :]
+        num_atoms, _ = conf.shape
+        no_rescale = jnp.ones((num_atoms, num_atoms))
+
         return nonbonded.nonbonded(
             conf,
-            params,
+            jnp.array(params)[s, :],
             box,
-            np.ones((0,), dtype=np.float32),
-            np.ones((0, 2), dtype=np.float32),
+            no_rescale,
+            no_rescale,
             self.beta,
             self.cutoff,
             runtime_validate=False,  # needed for this to be JAX-transformable
-            atom_idxs=self.atom_idxs,
         )
 
 
