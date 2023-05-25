@@ -28,3 +28,13 @@ void __global__ k_construct_bonded_params(
 }
 
 void __global__ k_update_index(unsigned int *d_array, std::size_t idx, unsigned int val) { d_array[idx] = val; }
+
+void __global__
+k_idxs_intersection(const int N, const unsigned int *d_a, const unsigned int *d_b, unsigned int *d_dest) {
+    const auto idx = blockDim.x * blockIdx.x + threadIdx.x;
+    if (idx >= N) {
+        return;
+    }
+    // Set to the value if a and b match, else set to N;
+    d_dest[idx] = d_a[idx] == d_b[idx] ? d_a[idx] : N;
+}

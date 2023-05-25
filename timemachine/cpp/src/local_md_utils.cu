@@ -22,6 +22,31 @@ bool is_nonbonded_all_pairs_potential(std::shared_ptr<Potential> pot) {
     return false;
 }
 
+int copy_nonbonded_potential_idxs(std::shared_ptr<Potential> pot, const int max_idxs, unsigned int *d_output_idxs) {
+    if (std::shared_ptr<NonbondedAllPairs<float>> nb_pot = std::dynamic_pointer_cast<NonbondedAllPairs<float>>(pot);
+        nb_pot) {
+        unsigned int *data = nb_pot->get_atom_idxs_device();
+        int K = nb_pot->get_num_atom_idxs();
+        if (K > max_idxs) {
+            throw std::runtime_error("indices for all pairs greater than allowed");
+        }
+        gpuErrchk(cudaMemcpy(d_output_idxs, data, K * sizeof(*data), cudaMemcpyDeviceToDevice));
+        return K;
+    } else if (std::shared_ptr<NonbondedAllPairs<double>> nb_pot =
+                   std::dynamic_pointer_cast<NonbondedAllPairs<double>>(pot);
+               nb_pot) {
+        unsigned int *data = nb_pot->get_atom_idxs_device();
+        int K = nb_pot->get_num_atom_idxs();
+        if (K > max_idxs) {
+            throw std::runtime_error("indices for all pairs greater than allowed");
+        }
+        gpuErrchk(cudaMemcpy(d_output_idxs, data, K * sizeof(*data), cudaMemcpyDeviceToDevice));
+        return K;
+    } else {
+        throw std::runtime_error("unable to cast potential to NonbondedAllPairs");
+    }
+}
+
 void set_nonbonded_potential_idxs(
     std::shared_ptr<Potential> pot, const int num_idxs, const unsigned int *d_idxs, const cudaStream_t stream) {
     if (std::shared_ptr<NonbondedAllPairs<float>> nb_pot = std::dynamic_pointer_cast<NonbondedAllPairs<float>>(pot);
