@@ -243,13 +243,11 @@ def test_neighborlist_resize():
         custom_ops.Neighborlist_f32(N),
         custom_ops.Neighborlist_f64(N),
     ):
-        with pytest.raises(RuntimeError) as e:
+        with pytest.raises(RuntimeError, match="size is must be at least 1"):
             nblist.resize(0)
-        assert "size is must be at least 1" == str(e.value)
 
-        with pytest.raises(RuntimeError) as e:
+        with pytest.raises(RuntimeError, match=f"size is greater than max size: {N + 1} > {N}"):
             nblist.resize(N + 1)
-        assert "size is greater than max size" == str(e.value)
 
 
 def test_neighborlist_invalid_row_idxs():

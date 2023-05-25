@@ -24,7 +24,7 @@ NonbondedAllPairs<RealType>::NonbondedAllPairs(
     const std::optional<std::set<int>> &atom_idxs,
     const bool disable_hilbert_sort,
     const double nblist_padding)
-    : N_(N), K_(atom_idxs ? atom_idxs->size() : N_), beta_(beta), cutoff_(cutoff), d_atom_idxs_(nullptr), nblist_(K_),
+    : N_(N), K_(atom_idxs ? atom_idxs->size() : N_), beta_(beta), cutoff_(cutoff), d_atom_idxs_(nullptr), nblist_(N_),
       nblist_padding_(nblist_padding), d_sort_storage_(nullptr), d_sort_storage_bytes_(0),
       disable_hilbert_(disable_hilbert_sort),
 
