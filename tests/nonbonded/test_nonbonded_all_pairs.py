@@ -35,6 +35,27 @@ def test_nonbonded_all_pairs_invalid_num_params():
     assert "NonbondedAllPairs::execute_device(): expected P == N_*4, got P=6, N_*4=4" == str(e.value)
 
 
+def test_nonbonded_all_pairs_get_and_set_atom_idxs(rng):
+    """Verify that getting and setting atom idxs on the GPU implementation of NonbondedAllPairs
+    behaves as expected
+    """
+    num_atoms = 231
+    beta = 2.0
+    cutoff = 1.1
+
+    potential = NonbondedAllPairs(num_atoms, beta, cutoff)
+    gpu_pot = potential.to_gpu(np.float32).unbound_impl
+    ref_atom_idxs = gpu_pot.get_atom_idxs()
+    assert len(ref_atom_idxs) == num_atoms
+    assert num_atoms == gpu_pot.get_num_atom_idxs()
+    assert len(set(ref_atom_idxs)) == len(ref_atom_idxs)
+    identity_idxs = np.arange(0, num_atoms, dtype=np.int32)
+    updated_idxs = rng.choice(identity_idxs, size=100, replace=False)
+    gpu_pot.set_atom_idxs(updated_idxs)
+    assert len(updated_idxs) == gpu_pot.get_num_atom_idxs()
+    np.testing.assert_array_equal(gpu_pot.get_atom_idxs(), updated_idxs)
+
+
 def test_nonbonded_all_pairs_singleton_subset(rng: np.random.Generator):
     """Checks that energy and derivatives are all zero when called with a single-atom subset"""
     num_atoms = 231

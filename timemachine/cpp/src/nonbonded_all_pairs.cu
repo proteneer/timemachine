@@ -151,6 +151,13 @@ template <typename RealType> void NonbondedAllPairs<RealType>::set_atom_idxs(con
     gpuErrchk(cudaStreamSynchronize(stream));
 }
 
+template <typename RealType> std::vector<int> NonbondedAllPairs<RealType>::get_atom_idxs() {
+    std::vector<unsigned int> atom_idxs_buffer(K_);
+    gpuErrchk(cudaMemcpy(&atom_idxs_buffer[0], d_atom_idxs_, K_ * sizeof(*d_atom_idxs_), cudaMemcpyDeviceToHost));
+    std::vector<int> atom_idxs = std::vector<int>(atom_idxs_buffer.begin(), atom_idxs_buffer.end());
+    return atom_idxs;
+}
+
 template <typename RealType>
 void NonbondedAllPairs<RealType>::set_atom_idxs_device(
     const int K, const unsigned int *d_in_atom_idxs, const cudaStream_t stream) {
