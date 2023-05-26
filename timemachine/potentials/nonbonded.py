@@ -136,7 +136,7 @@ def filter_exclusions(
     atom_idxs: NDArray[np.int32],
     exclusion_idxs: NDArray[np.int32],
     scale_factors: NDArray[np.float64],
-    update_idxs=False,
+    update_idxs: bool = False,
 ):
     """
     Return the exclusions and corresponding scale factors
