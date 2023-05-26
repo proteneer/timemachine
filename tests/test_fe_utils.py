@@ -173,6 +173,17 @@ def test_view_atom_mapping_3d():
     AllChem.EmbedMolecule(mol_a)
     AllChem.EmbedMolecule(mol_b)
 
+    # no core
+    view = utils.view_atom_mapping_3d(mol_a, mol_b)
+    assert isinstance(view, py3Dmol.view)
+
+    view = utils.view_atom_mapping_3d(mol_a, mol_b, [])
+    assert isinstance(view, py3Dmol.view)
+
+    view = utils.view_atom_mapping_3d(mol_a, mol_b, np.array([]))
+    assert isinstance(view, py3Dmol.view)
+
+    # single core
     core = [[2, 0], [3, 2], [0, 3], [1, 4]]
 
     view = utils.view_atom_mapping_3d(mol_a, mol_b, [core])
@@ -180,3 +191,29 @@ def test_view_atom_mapping_3d():
 
     with pytest.raises(AssertionError, match="expect a list of cores"):
         utils.view_atom_mapping_3d(mol_a, mol_b, core)
+
+    # multiple cores
+    view = utils.view_atom_mapping_3d(mol_a, mol_b, [core, core])
+    assert isinstance(view, py3Dmol.view)
+
+    # multiple cores, ndarray input
+    view = utils.view_atom_mapping_3d(mol_a, mol_b, np.array([core, core]))
+    assert isinstance(view, py3Dmol.view)
+
+    # multiple cores, different sizes
+    cores = [
+        [[2, 0], [3, 2], [0, 3]],
+        [[2, 0], [3, 2], [0, 3], [1, 4]],
+    ]
+
+    view = utils.view_atom_mapping_3d(mol_a, mol_b, cores)
+    assert isinstance(view, py3Dmol.view)
+
+    # multiple cores, different sizes, ndarray input
+    cores = [
+        np.array([[2, 0], [3, 2], [0, 3]]),
+        np.array([[2, 0], [3, 2], [0, 3], [1, 4]]),
+    ]
+
+    view = utils.view_atom_mapping_3d(mol_a, mol_b, cores)
+    assert isinstance(view, py3Dmol.view)
