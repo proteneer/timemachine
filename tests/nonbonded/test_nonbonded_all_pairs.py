@@ -21,6 +21,21 @@ def test_nonbonded_all_pairs_invalid_atom_idxs():
         NonbondedAllPairs(3, 2.0, 1.1, [0, 100]).to_gpu(np.float64).unbound_impl
 
 
+def test_nonbonded_all_pairs_invalid_set_atom_idxs():
+    nb_allpairs = NonbondedAllPairs(3, 2.0, 1.1).to_gpu(np.float32).unbound_impl
+    with pytest.raises(RuntimeError, match="indices can't be empty"):
+        nb_allpairs.set_atom_idxs([])
+
+    with pytest.raises(RuntimeError, match="atom indices must be unique"):
+        nb_allpairs.set_atom_idxs([0, 0])
+
+    with pytest.raises(RuntimeError, match="index values must be greater or equal to zero"):
+        nb_allpairs.set_atom_idxs([0, -1])
+
+    with pytest.raises(RuntimeError, match="index values must be less than N"):
+        nb_allpairs.set_atom_idxs([0, 100])
+
+
 def test_nonbonded_all_pairs_invalid_num_atoms():
     potential = NonbondedAllPairs(1, 2.0, 1.1).to_gpu(np.float32).unbound_impl
     with pytest.raises(RuntimeError) as e:
