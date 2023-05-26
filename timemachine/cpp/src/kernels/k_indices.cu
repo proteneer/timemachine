@@ -1,7 +1,7 @@
 #include "k_indices.cuh"
 
 // Takes a source and destination array.
-// The value of the src is used as the indice and the value in the destination array. Allows combining
+// The value of the src is used as the index and the value in the destination array. Allows combining
 // a series of indices to get a unique set of values.
 void __global__ k_unique_indices(
     const int N, // Number of values in src
