@@ -8,7 +8,7 @@ pytestmark = [pytest.mark.memcheck]
 
 
 def test_nonbonded_all_pairs_invalid_atom_idxs():
-    with pytest.raises(RuntimeError, match="Neighborlist N must be at least 1"):
+    with pytest.raises(RuntimeError, match="indices can't be empty"):
         NonbondedAllPairs(3, 2.0, 1.1, []).to_gpu(np.float64).unbound_impl
 
     with pytest.raises(RuntimeError, match="atom indices must be unique"):
