@@ -21,6 +21,7 @@ from timemachine.potentials.jax_utils import get_all_pairs_indices, pairs_from_i
 from timemachine.potentials.nonbonded import (
     basis_expand_lj_atom,
     basis_expand_lj_env,
+    convert_exclusions_to_rescale_masks,
     coulomb_interaction_group_energy,
     coulomb_prefactors_on_traj,
     lennard_jones,
@@ -35,14 +36,14 @@ Array = Any
 Conf = Array
 Params = Array
 Box = Array
-ChargeMask = Array
-LJMask = Array
+ExclusionIdxs = Array
+ScaleFactors = Array
 Beta = float
 Cutoff = float
 Energy = float
 
-NonbondedArgs = Tuple[Conf, Params, Box, ChargeMask, LJMask, Beta, Cutoff]
-NonbondedFxn = Callable[[Conf, Params, Box, ChargeMask, LJMask, Beta, Cutoff], Energy]
+NonbondedArgs = Tuple[Conf, Params, Box, ExclusionIdxs, ScaleFactors, Beta, Cutoff]
+NonbondedFxn = Callable[[Conf, Params, Box, ExclusionIdxs, ScaleFactors, Beta, Cutoff], Energy]
 
 pytestmark = [pytest.mark.nogpu]
 
@@ -116,19 +117,18 @@ def generate_waterbox_nb_args() -> NonbondedArgs:
     nb = bps[-1]
     params = nb.params
 
-    N = conf.shape[0]
     beta = nb.potential.beta
     cutoff = nb.potential.cutoff
 
-    charge_rescale_mask = np.ones((N, N))
-    lj_rescale_mask = np.ones((N, N))
+    exclusion_idxs = np.zeros((0,), dtype=np.int32)
+    scale_factors = np.zeros((0, 2))
 
     args = (
         conf,
         params,
         box,
-        charge_rescale_mask,
-        lj_rescale_mask,
+        exclusion_idxs,
+        scale_factors,
         beta,
         cutoff,
     )
@@ -150,6 +150,7 @@ def generate_random_inputs(n_atoms, dim, instance_flags=difficult_instance_flags
 
     min_dist = 0.1
     conf, box = resolve_clashes(conf, box, min_dist=min_dist)
+    box = np.array(box)
 
     cutoff = 1.2
     if instance_flags["randomize_cutoff"]:
@@ -170,21 +171,27 @@ def generate_random_inputs(n_atoms, dim, instance_flags=difficult_instance_flags
 
     params = jnp.array([charges, sig, eps, w_coords]).T
 
-    charge_rescale_mask = np.ones((n_atoms, n_atoms))
-    lj_rescale_mask = np.ones((n_atoms, n_atoms))
+    exclusion_idxs_ = []
+    scale_factors_ = []
 
     for _ in range(n_atoms):
         i, j = randint(n_atoms, size=2)
+        exclusion_idxs_.append((i, j))
+        charge_scale_factor = 1.0
+        lj_scale_factor = 1.0
         if instance_flags["randomize_charge_rescale_mask"]:
-            charge_rescale_mask[i, j] = charge_rescale_mask[j, i] = 0.0
+            charge_scale_factor = 0.0
         if instance_flags["randomize_lj_rescale_mask"]:
-            lj_rescale_mask[i, j] = lj_rescale_mask[j, i] = 0.0
+            lj_scale_factor = 0.0
+        scale_factors_.append((charge_scale_factor, lj_scale_factor))
 
     beta = 2.0
     if instance_flags["randomize_beta"]:
         beta += rand()
 
-    args = (conf, params, box, charge_rescale_mask, lj_rescale_mask, beta, cutoff)
+    exclusion_idxs = np.array(exclusion_idxs_, dtype=np.int32)
+    scale_factors = np.array(scale_factors_)
+    args = (conf, params, box, exclusion_idxs, scale_factors, beta, cutoff)
 
     return args
 
@@ -204,8 +211,8 @@ def _nonbonded_clone(
     conf,
     params,
     box,
-    charge_rescale_mask,
-    lj_rescale_mask,
+    exclusion_idxs,
+    scale_factors,
     beta,
     cutoff,
 ):
@@ -216,6 +223,7 @@ def _nonbonded_clone(
     """
 
     N = conf.shape[0]
+    charge_rescale_mask, lj_rescale_mask = convert_exclusions_to_rescale_masks(exclusion_idxs, scale_factors, N)
 
     # TODO: len(pairs) == n_interactions -- may want to break this
     #   up into more manageable blocks if n_interactions is large
@@ -239,8 +247,6 @@ def run_randomized_tests_of_jax_nonbonded(instance_generator, n_instances=10):
 
     instance_generator(n_atoms, dim) -> NonbondedArgs
     """
-    jittable_nonbonded = partial(nonbonded, runtime_validate=False)
-    u_a, u_b = jit(jittable_nonbonded), jit(_nonbonded_clone)
 
     min_size, max_size = 10, 50
 
@@ -249,7 +255,22 @@ def run_randomized_tests_of_jax_nonbonded(instance_generator, n_instances=10):
 
     for n_atoms, dim in zip(random_sizes, dims):
         args = instance_generator(n_atoms, dim)
-        compare_two_potentials(u_a, u_b, args)
+        conf, params, box, exclusion_idxs, scale_factors, beta, cutoff = args
+        diff_args = conf, params, box, beta, cutoff
+
+        # Need to differentiate between the args that can be traced
+        # and the args that are fixed. Otherwise we get a
+        # TracerArrayConversionError for exclusion_idxs and scale_factors.
+        def jittable_nonbonded(conf, params, box, beta, cutoff):
+            return nonbonded(conf, params, box, exclusion_idxs, scale_factors, beta, cutoff, runtime_validate=False)
+
+        def jittable_nonbonded_clone(conf, params, box, beta, cutoff):
+            return _nonbonded_clone(conf, params, box, exclusion_idxs, scale_factors, beta, cutoff)
+
+        u_a = jit(jittable_nonbonded)
+        u_b = jit(jittable_nonbonded_clone)
+
+        compare_two_potentials(u_a, u_b, diff_args)
 
 
 def test_jax_nonbonded_waterbox():

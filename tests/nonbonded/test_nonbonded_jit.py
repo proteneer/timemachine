@@ -23,12 +23,12 @@ def test_nonbonded_reference_jittable(num_atom_idxs, rng: np.random.Generator):
     U_ref_jit = jax.jit(U_ref.__call__)
 
     _ = U_ref_jit(
-        conf=rng.uniform(0, 1, size=(N, 3)),
-        params=rng.uniform(0, 1, size=(N, 3)),
+        conf=jnp.array(rng.uniform(0, 1, size=(N, 3))),
+        params=jnp.array(rng.uniform(0, 1, size=(N, 3))),
         box=10.0 * np.eye(3),
     )
     _ = jax.value_and_grad(U_ref_jit, argnums=(0, 1))(
-        rng.uniform(0, 1, size=(N, 3)),
-        rng.uniform(0, 1, size=(N, 3)),
+        jnp.array(rng.uniform(0, 1, size=(N, 3))),
+        jnp.array(rng.uniform(0, 1, size=(N, 3))),
         10.0 * np.eye(3),
     )
