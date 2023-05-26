@@ -4,6 +4,7 @@ import jax.numpy as jnp
 import numpy as np
 from jax import vmap
 from jax.scipy.special import erfc
+from numpy.typing import NDArray
 from scipy.special import binom
 
 from timemachine.potentials import jax_utils
@@ -131,15 +132,61 @@ def convert_exclusions_to_rescale_masks(exclusion_idxs, scales, N):
     return charge_rescale_mask, lj_rescale_mask
 
 
+def filter_exclusions(
+    atom_idxs: NDArray[np.int32],
+    exclusion_idxs: NDArray[np.int32],
+    scale_factors: NDArray[np.float64],
+    update_idxs: bool = False,
+):
+    """
+    Return the exclusions and corresponding scale factors
+    with the atoms not in atom_idxs removed.
+
+    Parameters
+    ----------
+    atom_idxs:
+        List of atoms that are considered for interaction.
+
+    exclusion_idxs:
+        List of atom pairs to exclude.
+
+    scale_factors:
+        Per exclusion charge and lj scale factors.
+
+    update_idxs:
+        Set to True to remap the exclusion indexes
+        to point to the index of atom_idxs.
+        This can be used for the reference JAX potential.
+    """
+    atom_idxs_set = set(atom_idxs)
+    map_to_filtered = {j: i for i, j in enumerate(atom_idxs)}
+    filtered_exclusion_idxs_ = []
+    filtered_scale_factors_ = []
+    for (i, j), sf in zip(exclusion_idxs, scale_factors):
+        if i not in atom_idxs_set or j not in atom_idxs_set:
+            continue
+        if update_idxs:
+            i, j = map_to_filtered[i], map_to_filtered[j]
+        filtered_exclusion_idxs_.append((i, j))
+        filtered_scale_factors_.append(sf)
+
+    filtered_exclusion_idxs = np.array(filtered_exclusion_idxs_, dtype=np.int32)
+    filtered_scale_factors = np.array(filtered_scale_factors_)
+    if not filtered_scale_factors.shape[0]:
+        filtered_scale_factors = filtered_scale_factors.reshape((0, scale_factors.shape[1]))
+    return filtered_exclusion_idxs, filtered_scale_factors
+
+
 def nonbonded(
     conf,
     params,
     box,
-    charge_rescale_mask,
-    lj_rescale_mask,
+    exclusion_idxs: NDArray[np.int32],
+    scale_factors: NDArray[np.float64],
     beta,
     cutoff,
     runtime_validate=True,
+    atom_idxs=None,
 ):
     """Lennard-Jones + Coulomb, with a few important twists:
     * distances are computed in 4D using coordinates in params
@@ -153,10 +200,10 @@ def nonbonded(
     params : (N, 3) np.ndarray
         columns [charges, sigmas, epsilons, w_coords], one row per particle
     box : Optional 3x3 np.ndarray
-    charge_rescale_mask : (N, N) np.ndarray
-        the Coulomb contribution of pair (i,j) will be multiplied by charge_rescale_mask[i,j]
-    lj_rescale_mask : (N, N) np.ndarray
-        the Lennard-Jones contribution of pair (i,j) will be multiplied by lj_rescale_mask[i,j]
+    exclusion_idxs:
+        List of atom pairs to exclude.
+    scale_factors:
+        Per exclusion charge and lj scale factors.
     beta : float
         the charge product q_ij will be multiplied by erfc(beta*d_ij)
     cutoff : Optional float
@@ -167,6 +214,8 @@ def nonbonded(
         (if True, this function will currently not play nice with Jax JIT)
         TODO: is there a way to conditionally print a runtime warning inside
             of a Jax JIT-compiled function, without triggering a Jax ConcretizationTypeError?
+    atom_idxs: NDArray[int32]
+        Subset of atoms to consider for the interaction or None to consider all atoms.
 
     Returns
     -------
@@ -180,11 +229,18 @@ def nonbonded(
     systems" https://aip.scitation.org/doi/abs/10.1063/1.470117
         * Coulomb interactions are treated using the direct-space contribution from eq 2
     """
+    # If requested, filter to a subset of interacting atoms
+    if atom_idxs is not None:
+        conf = jnp.array(conf)[atom_idxs, :]
+        params = jnp.array(params)[atom_idxs, :]
+        exclusion_idxs, scale_factors = filter_exclusions(atom_idxs, exclusion_idxs, scale_factors, update_idxs=True)
+
+    N = conf.shape[0]
+    charge_rescale_mask, lj_rescale_mask = convert_exclusions_to_rescale_masks(exclusion_idxs, scale_factors, N)
+
     if runtime_validate:
         assert (charge_rescale_mask == charge_rescale_mask.T).all()
         assert (lj_rescale_mask == lj_rescale_mask.T).all()
-
-    N = conf.shape[0]
 
     charges = params[:, 0]
     sig = params[:, 1]
