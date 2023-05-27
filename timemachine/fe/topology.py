@@ -138,7 +138,7 @@ class HostGuestTopology:
         assert guest_pot.beta == self.host_nonbonded.potential.beta
         assert guest_pot.cutoff == self.host_nonbonded.potential.cutoff
 
-        # Exclude all ligand-lignad interactions which will be computed using a pairlist instead
+        # Exclude all ligand-ligand interactions which will be computed using a pairlist instead
         guest_exclusions, guest_scale_factors = exclude_all_ligand_ligand_ixns(self.num_host_atoms, num_guest_atoms)
 
         hg_exclusion_idxs = np.concatenate([self.host_nonbonded.potential.exclusion_idxs, guest_exclusions])

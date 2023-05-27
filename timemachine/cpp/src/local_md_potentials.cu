@@ -23,8 +23,8 @@ LocalMDPotentials::LocalMDPotentials(
     const int N, const std::vector<std::shared_ptr<BoundPotential>> &bps, bool freeze_reference, double temperature)
     : N_(N), freeze_reference_(freeze_reference), temperature_(temperature), temp_storage_bytes_(0),
       all_potentials_(bps), d_restraint_pairs_(N_ * 2), d_bond_params_(N_ * 3),
-      d_probability_buffer_(round_up_even(N_)), d_free_idxs_(N_), d_row_idxs_(N_), d_col_idxs_(N_), p_num_selected_(1),
-      d_num_selected_buffer_(1) {
+      d_probability_buffer_(round_up_even(N_)), d_free_idxs_(N_), d_temp_idxs_(N_), d_all_pairs_idxs_(N_),
+      d_row_idxs_(N_), d_col_idxs_(N_), p_num_selected_(1), d_num_selected_buffer_(1) {
 
     if (temperature_ <= 0.0) {
         throw std::runtime_error("temperature must be greater than 0");
@@ -55,6 +55,11 @@ LocalMDPotentials::LocalMDPotentials(
     // Construct a bound potential with 0 params
     bound_free_restraint_ =
         std::shared_ptr<BoundPotential>(new BoundPotential(free_restraint_, std::vector<int>({0}), nullptr));
+
+    // Ensure that the refence idxs start out as all N_
+    k_initialize_array<unsigned int><<<ceil_divide(N_, warp_size), warp_size>>>(N_, d_all_pairs_idxs_.data, N_);
+    gpuErrchk(cudaPeekAtLastError());
+    num_allpairs_idxs_ = copy_nonbonded_potential_idxs(nonbonded_bp_->potential, N_, d_all_pairs_idxs_.data);
 
     ixn_group_ =
         construct_ixn_group_potential(N_, nonbonded_bp_->potential, nonbonded_bp_->size(), nonbonded_bp_->d_p->data);
@@ -169,11 +174,30 @@ void LocalMDPotentials::_setup_free_idxs_given_reference_idx(
         k_update_index<<<1, 1, 0, stream>>>(d_free_idxs_.data, reference_idx, reference_idx);
         gpuErrchk(cudaPeekAtLastError());
     }
+
+    int indices_to_remove = N_ - num_allpairs_idxs_;
+    unsigned int *d_free_idx_ptr = d_free_idxs_.data;
+    // If the atom indices of all pairs isn't all, take intersection with free
+    if (indices_to_remove > 0) {
+        k_initialize_array<unsigned int><<<ceil_divide(N_, tpb), tpb, 0, stream>>>(N_, d_col_idxs_.data, N_);
+        gpuErrchk(cudaPeekAtLastError());
+        // Spread atom indices out into array with each value at its own index (Val 0 will be at index 0)
+        k_unique_indices<<<ceil_divide(num_allpairs_idxs_, tpb), tpb, 0, stream>>>(
+            num_allpairs_idxs_, N_, d_all_pairs_idxs_.data, d_col_idxs_.data);
+        gpuErrchk(cudaPeekAtLastError());
+
+        // Update the free indices so that only indices that are also in the allpairs indices are considered free
+        k_idxs_intersection<<<ceil_divide(N_, tpb), tpb, 0, stream>>>(
+            N_, d_col_idxs_.data, d_free_idxs_.data, d_temp_idxs_.data);
+        gpuErrchk(cudaPeekAtLastError());
+        d_free_idx_ptr = d_temp_idxs_.data;
+    }
+
     // Partition the free idxs into the row idxs
     gpuErrchk(cub::DevicePartition::If(
         d_temp_storage_buffer_->data,
         temp_storage_bytes_,
-        d_free_idxs_.data,
+        d_free_idx_ptr,
         d_row_idxs_.data,
         d_num_selected_buffer_.data,
         N_,
@@ -190,17 +214,19 @@ void LocalMDPotentials::_setup_free_idxs_given_reference_idx(
 
     // The row indices is all of the free indices, which excludes the reference
     const int num_row_idxs = p_num_selected_.data[0];
-    // The col indices is all indices, except for the free, including the reference which is frozen.
-    const int num_col_idxs = N_ - num_row_idxs;
+    const int num_col_idxs = N_ - num_row_idxs - indices_to_remove;
 
     if (num_row_idxs == 0) {
         throw std::runtime_error("LocalMDPotentials setup has no free particles selected");
     }
 
-    // The reference particle will always be in the column idxs
-    if (num_row_idxs == N_ - 1) {
+    // The reference particle will always be in the column idxs if the reference is frozen
+    if (num_row_idxs == N_ - 1 || (!freeze_reference_ && num_row_idxs == N_)) {
         fprintf(stderr, "LocalMDPotentials setup has entire system selected\n");
     }
+
+    // Set the nonbonded potential to compute forces of free particles
+    set_nonbonded_potential_idxs(nonbonded_bp_->potential, num_row_idxs, d_row_idxs_.data, stream);
 
     k_construct_bonded_params<<<ceil_divide(num_row_idxs, tpb), tpb, 0, stream>>>(
         num_row_idxs,
@@ -218,18 +244,32 @@ void LocalMDPotentials::_setup_free_idxs_given_reference_idx(
     bound_free_restraint_->set_params_device(std::vector<int>({num_row_idxs, 3}), d_bond_params_.data, stream);
     free_restraint_->set_bonds_device(num_row_idxs, d_restraint_pairs_.data, stream);
 
-    // Set the nonbonded potential to compute forces of free particles
-    set_nonbonded_potential_idxs(nonbonded_bp_->potential, num_row_idxs, d_row_idxs_.data, stream);
-
     // Invert to get column idxs
     k_invert_indices<<<ceil_divide(N_, tpb), tpb, 0, stream>>>(N_, d_free_idxs_.data);
     gpuErrchk(cudaPeekAtLastError());
+
+    d_free_idx_ptr = d_free_idxs_.data;
+    // If the atom indices of all pairs isn't all, take intersection with frozen
+    if (indices_to_remove > 0) {
+        k_initialize_array<unsigned int><<<ceil_divide(N_, tpb), tpb, 0, stream>>>(N_, d_col_idxs_.data, N_);
+        gpuErrchk(cudaPeekAtLastError());
+        // Spread atom indices out into array with each value at its own index (Val 0 will be at index 0)
+        k_unique_indices<<<ceil_divide(num_allpairs_idxs_, tpb), tpb, 0, stream>>>(
+            num_allpairs_idxs_, N_, d_all_pairs_idxs_.data, d_col_idxs_.data);
+        gpuErrchk(cudaPeekAtLastError());
+
+        // Update the frozen indices so that only indices that are also in the allpairs indices are considered frozen
+        k_idxs_intersection<<<ceil_divide(N_, tpb), tpb, 0, stream>>>(
+            N_, d_col_idxs_.data, d_free_idxs_.data, d_temp_idxs_.data);
+        gpuErrchk(cudaPeekAtLastError());
+        d_free_idx_ptr = d_temp_idxs_.data;
+    }
 
     // Partition the column idxs to the column buffer to setup the interaction group
     gpuErrchk(cub::DevicePartition::If(
         d_temp_storage_buffer_->data,
         temp_storage_bytes_,
-        d_free_idxs_.data,
+        d_free_idx_ptr,
         d_col_idxs_.data,
         d_num_selected_buffer_.data,
         N_,
@@ -239,6 +279,10 @@ void LocalMDPotentials::_setup_free_idxs_given_reference_idx(
     // Free particles should be in the row idxs
     set_nonbonded_ixn_potential_idxs(
         ixn_group_->potential, num_col_idxs, num_row_idxs, d_col_idxs_.data, d_row_idxs_.data, stream);
+
+    // Invert to get back to the free indices, which the integrator will use
+    k_invert_indices<<<ceil_divide(N_, tpb), tpb, 0, stream>>>(N_, d_free_idxs_.data);
+    gpuErrchk(cudaPeekAtLastError());
 
     if (!freeze_reference_) {
         // If there are no frozen indices, don't attach any restraints
@@ -263,16 +307,13 @@ void LocalMDPotentials::_setup_free_idxs_given_reference_idx(
 
 std::vector<std::shared_ptr<BoundPotential>> LocalMDPotentials::get_potentials() { return all_potentials_; }
 
-unsigned int *LocalMDPotentials::get_free_idxs() { return d_row_idxs_.data; }
+unsigned int *LocalMDPotentials::get_free_idxs() { return d_free_idxs_.data; }
 
 // reset_potentials resets the potentials passed in to the constructor to be in the original state. This is because
 // they are passed by reference and so changes made to the potentials will persist otherwise beyond the scope of the local md.
 void LocalMDPotentials::reset_potentials(cudaStream_t stream) {
-    // Set the row idxs back to the identity.
-    k_arange<<<ceil_divide(N_, warp_size), warp_size, 0, stream>>>(N_, d_row_idxs_.data);
-    gpuErrchk(cudaPeekAtLastError());
-    // Set back to the full system
-    set_nonbonded_potential_idxs(nonbonded_bp_->potential, N_, d_row_idxs_.data, stream);
+    // Set back to the original indices
+    set_nonbonded_potential_idxs(nonbonded_bp_->potential, num_allpairs_idxs_, d_all_pairs_idxs_.data, stream);
 }
 
 } // namespace timemachine

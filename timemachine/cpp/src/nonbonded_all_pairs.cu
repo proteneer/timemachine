@@ -24,7 +24,7 @@ NonbondedAllPairs<RealType>::NonbondedAllPairs(
     const std::optional<std::set<int>> &atom_idxs,
     const bool disable_hilbert_sort,
     const double nblist_padding)
-    : N_(N), K_(atom_idxs ? atom_idxs->size() : N_), beta_(beta), cutoff_(cutoff), d_atom_idxs_(nullptr), nblist_(K_),
+    : N_(N), K_(atom_idxs ? atom_idxs->size() : N_), beta_(beta), cutoff_(cutoff), d_atom_idxs_(nullptr), nblist_(N_),
       nblist_padding_(nblist_padding), d_sort_storage_(nullptr), d_sort_storage_bytes_(0),
       disable_hilbert_(disable_hilbert_sort),
 
@@ -149,6 +149,13 @@ template <typename RealType> void NonbondedAllPairs<RealType>::set_atom_idxs(con
     atom_idxs_buffer.copy_from(&unsigned_idxs[0]);
     this->set_atom_idxs_device(atom_idxs.size(), atom_idxs_buffer.data, stream);
     gpuErrchk(cudaStreamSynchronize(stream));
+}
+
+template <typename RealType> std::vector<int> NonbondedAllPairs<RealType>::get_atom_idxs() {
+    std::vector<unsigned int> atom_idxs_buffer(K_);
+    gpuErrchk(cudaMemcpy(&atom_idxs_buffer[0], d_atom_idxs_, K_ * sizeof(*d_atom_idxs_), cudaMemcpyDeviceToHost));
+    std::vector<int> atom_idxs = std::vector<int>(atom_idxs_buffer.begin(), atom_idxs_buffer.end());
+    return atom_idxs;
 }
 
 template <typename RealType>

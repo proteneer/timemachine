@@ -278,7 +278,8 @@ template <typename RealType> void Neighborlist<RealType>::resize_device(const in
         throw std::runtime_error("size is must be at least 1");
     }
     if (size > max_size_) {
-        throw std::runtime_error("size is greater than max size");
+        throw std::runtime_error(
+            "size is greater than max size: " + std::to_string(size) + " > " + std::to_string(max_size_));
     }
     this->N_ = size;
     this->reset_row_idxs_device(stream);
