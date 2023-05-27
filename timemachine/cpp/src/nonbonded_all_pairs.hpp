@@ -85,6 +85,12 @@ public:
 
     double get_beta() const { return beta_; };
 
+    int get_num_atom_idxs() const { return K_; };
+
+    unsigned int *get_atom_idxs_device() const { return d_atom_idxs_; };
+
+    std::vector<int> get_atom_idxs();
+
     void set_atom_idxs(const std::vector<int> &atom_idxs);
 
     void set_atom_idxs_device(const int K, const unsigned int *d_atom_idxs, const cudaStream_t stream);

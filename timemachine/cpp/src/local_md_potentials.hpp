@@ -50,6 +50,7 @@ private:
     const bool freeze_reference_;
     const double temperature_;
     std::size_t temp_storage_bytes_;
+    int num_allpairs_idxs_;
 
     std::vector<std::shared_ptr<BoundPotential>> all_potentials_;
     std::shared_ptr<BoundPotential> ixn_group_;
@@ -68,6 +69,8 @@ private:
     DeviceBuffer<float> d_probability_buffer_;
 
     DeviceBuffer<unsigned int> d_free_idxs_;
+    DeviceBuffer<unsigned int> d_temp_idxs_; // Where intersection of free/frozen and initial atom indices are stored
+    DeviceBuffer<unsigned int> d_all_pairs_idxs_; // Where initial atom indices, of NonbondedAllPairs, are stored
     std::unique_ptr<DeviceBuffer<char>> d_temp_storage_buffer_;
 
     DeviceBuffer<unsigned int> d_row_idxs_;

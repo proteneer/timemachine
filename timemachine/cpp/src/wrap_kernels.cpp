@@ -1063,6 +1063,8 @@ template <typename RealType> void declare_nonbonded_all_pairs(py::module &m, con
     py::class_<Class, std::shared_ptr<Class>, timemachine::Potential>(
         m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
         .def("set_atom_idxs", &timemachine::NonbondedAllPairs<RealType>::set_atom_idxs, py::arg("atom_idxs"))
+        .def("get_atom_idxs", &timemachine::NonbondedAllPairs<RealType>::get_atom_idxs)
+        .def("get_num_atom_idxs", &timemachine::NonbondedAllPairs<RealType>::get_num_atom_idxs)
         .def(
             py::init([](const int N,
                         const double beta,

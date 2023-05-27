@@ -12,6 +12,9 @@ bool is_nonbonded_all_pairs_potential(std::shared_ptr<Potential> pot);
 void set_nonbonded_potential_idxs(
     std::shared_ptr<Potential> pot, const int num_idxs, const unsigned int *d_idxs, const cudaStream_t stream);
 
+// Copies the atom indices of the nonbonded all pairs potential and returns the number of indices copied.
+int copy_nonbonded_potential_idxs(std::shared_ptr<Potential> pot, const int max_idxs, unsigned int *d_output_idxs);
+
 void set_nonbonded_ixn_potential_idxs(
     std::shared_ptr<Potential> pot,
     const int num_col_idxs,
