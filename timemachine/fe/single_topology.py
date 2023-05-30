@@ -787,6 +787,108 @@ class AtomMapMixin:
 _Bonded = TypeVar("_Bonded", bound=Union[ChiralAtomRestraint, HarmonicAngleStable, HarmonicBond, PeriodicTorsion])
 
 
+def setup_intermediate_bonded_term(
+    src_bond: BoundPotential[_Bonded], dst_bond: BoundPotential[_Bonded], lamb, align_fn, interpolate_fn
+) -> BoundPotential[_Bonded]:
+
+    src_cls_bond = type(src_bond.potential)
+    dst_cls_bond = type(dst_bond.potential)
+
+    assert src_cls_bond == dst_cls_bond
+
+    bond_idxs_and_params = align_fn(
+        src_bond.potential.idxs,
+        src_bond.params,
+        dst_bond.potential.idxs,
+        dst_bond.params,
+    )
+    bond_idxs = []
+    bond_params = []
+    for idxs, src_params, dst_params in bond_idxs_and_params:
+        bond_idxs.append(idxs)
+        new_params = interpolate_fn(src_params, dst_params, lamb)
+        bond_params.append(new_params)
+
+    r = src_cls_bond(np.array(bond_idxs)).bind(jnp.array(bond_params))
+    return cast(BoundPotential[_Bonded], r)  # unclear why cast is needed for mypy
+
+
+def setup_intermediate_nonbonded_term(
+    src_nonbonded: BoundPotential[NonbondedPairListPrecomputed],
+    dst_nonbonded: BoundPotential[NonbondedPairListPrecomputed],
+    lamb,
+    align_fn,
+    interpolate_qlj_fn,
+) -> BoundPotential[NonbondedPairListPrecomputed]:
+
+    assert src_nonbonded.potential.beta == dst_nonbonded.potential.beta
+    assert src_nonbonded.potential.cutoff == dst_nonbonded.potential.cutoff
+
+    cutoff = src_nonbonded.potential.cutoff
+
+    pair_idxs_and_params = align_fn(
+        src_nonbonded.potential.idxs,
+        src_nonbonded.params,
+        dst_nonbonded.potential.idxs,
+        dst_nonbonded.params,
+    )
+    pair_idxs = []
+    pair_params = []
+    for idxs, src_params, dst_params in pair_idxs_and_params:
+        src_qlj, src_w = src_params[:3], src_params[3]
+        dst_qlj, dst_w = dst_params[:3], dst_params[3]
+
+        if src_qlj == (0, 0, 0):  # i.e. excluded in src state
+            new_params = (*dst_qlj, interpolate_w_coord(cutoff, 0, lamb))
+        elif dst_qlj == (0, 0, 0):
+            new_params = (*src_qlj, interpolate_w_coord(0, cutoff, lamb))
+        else:
+            new_params = (
+                *interpolate_qlj_fn(src_qlj, dst_qlj, lamb),
+                interpolate_w_coord(src_w, dst_w, lamb),
+            )
+
+        pair_idxs.append(idxs)
+        pair_params.append(new_params)
+
+    return NonbondedPairListPrecomputed(
+        np.array(pair_idxs), src_nonbonded.potential.beta, src_nonbonded.potential.cutoff
+    ).bind(jnp.array(pair_params))
+
+
+def setup_intermediate_chiral_bond_term(
+    src_bond: BoundPotential[ChiralBondRestraint],
+    dst_bond: BoundPotential[ChiralBondRestraint],
+    lamb,
+    interpolate_fn,
+) -> BoundPotential[ChiralBondRestraint]:
+
+    assert isinstance(src_bond.potential, ChiralBondRestraint)
+    assert isinstance(dst_bond.potential, ChiralBondRestraint)
+
+    idxs_and_params = interpolate.align_chiral_bond_idxs_and_params(
+        src_bond.potential.idxs,
+        src_bond.params,
+        src_bond.potential.signs,
+        dst_bond.potential.idxs,
+        dst_bond.params,
+        dst_bond.potential.signs,
+    )
+    chiral_bond_idxs_ = []
+    chiral_bond_params = []
+    chiral_bond_signs = []
+    for idxs, sign, src_k, dst_k in idxs_and_params:
+        chiral_bond_idxs_.append(idxs)
+        new_params = interpolate_fn(src_k, dst_k, lamb)
+        chiral_bond_params.append(new_params)
+        chiral_bond_signs.append(sign)
+
+    # these should be properly sized
+    chiral_bond_idxs = np.array(chiral_bond_idxs_, dtype=np.int32).reshape((-1, 4))
+
+    return ChiralBondRestraint(chiral_bond_idxs, np.array(chiral_bond_signs)).bind(jnp.array(chiral_bond_params))
+
+
 class SingleTopology(AtomMapMixin):
     def __init__(self, mol_a, mol_b, core, forcefield):
         """
@@ -951,107 +1053,6 @@ class SingleTopology(AtomMapMixin):
         new_core = np.stack([self.core[:, 1], self.core[:, 0]], axis=1)
         return setup_end_state(self.ff, self.mol_b, self.mol_a, new_core, self.b_to_c, self.a_to_c)
 
-    def _setup_intermediate_bonded_term(
-        self, src_bond: BoundPotential[_Bonded], dst_bond: BoundPotential[_Bonded], lamb, align_fn, interpolate_fn
-    ) -> BoundPotential[_Bonded]:
-
-        src_cls_bond = type(src_bond.potential)
-        dst_cls_bond = type(dst_bond.potential)
-
-        assert src_cls_bond == dst_cls_bond
-
-        bond_idxs_and_params = align_fn(
-            src_bond.potential.idxs,
-            src_bond.params,
-            dst_bond.potential.idxs,
-            dst_bond.params,
-        )
-        bond_idxs = []
-        bond_params = []
-        for idxs, src_params, dst_params in bond_idxs_and_params:
-            bond_idxs.append(idxs)
-            new_params = interpolate_fn(src_params, dst_params, lamb)
-            bond_params.append(new_params)
-
-        r = src_cls_bond(np.array(bond_idxs)).bind(jnp.array(bond_params))
-        return cast(BoundPotential[_Bonded], r)  # unclear why cast is needed for mypy
-
-    def _setup_intermediate_nonbonded_term(
-        self,
-        src_nonbonded: BoundPotential[NonbondedPairListPrecomputed],
-        dst_nonbonded: BoundPotential[NonbondedPairListPrecomputed],
-        lamb,
-        align_fn,
-        interpolate_qlj_fn,
-    ) -> BoundPotential[NonbondedPairListPrecomputed]:
-
-        assert src_nonbonded.potential.beta == dst_nonbonded.potential.beta
-        assert src_nonbonded.potential.cutoff == dst_nonbonded.potential.cutoff
-
-        cutoff = src_nonbonded.potential.cutoff
-
-        pair_idxs_and_params = align_fn(
-            src_nonbonded.potential.idxs,
-            src_nonbonded.params,
-            dst_nonbonded.potential.idxs,
-            dst_nonbonded.params,
-        )
-        pair_idxs = []
-        pair_params = []
-        for idxs, src_params, dst_params in pair_idxs_and_params:
-            src_qlj, src_w = src_params[:3], src_params[3]
-            dst_qlj, dst_w = dst_params[:3], dst_params[3]
-
-            if src_qlj == (0, 0, 0):  # i.e. excluded in src state
-                new_params = (*dst_qlj, interpolate_w_coord(cutoff, 0, lamb))
-            elif dst_qlj == (0, 0, 0):
-                new_params = (*src_qlj, interpolate_w_coord(0, cutoff, lamb))
-            else:
-                new_params = (
-                    *interpolate_qlj_fn(src_qlj, dst_qlj, lamb),
-                    interpolate_w_coord(src_w, dst_w, lamb),
-                )
-
-            pair_idxs.append(idxs)
-            pair_params.append(new_params)
-
-        return NonbondedPairListPrecomputed(
-            np.array(pair_idxs), src_nonbonded.potential.beta, src_nonbonded.potential.cutoff
-        ).bind(jnp.array(pair_params))
-
-    def _setup_intermediate_chiral_bond_term(
-        self,
-        src_bond: BoundPotential[ChiralBondRestraint],
-        dst_bond: BoundPotential[ChiralBondRestraint],
-        lamb,
-        interpolate_fn,
-    ) -> BoundPotential[ChiralBondRestraint]:
-
-        assert isinstance(src_bond.potential, ChiralBondRestraint)
-        assert isinstance(dst_bond.potential, ChiralBondRestraint)
-
-        idxs_and_params = interpolate.align_chiral_bond_idxs_and_params(
-            src_bond.potential.idxs,
-            src_bond.params,
-            src_bond.potential.signs,
-            dst_bond.potential.idxs,
-            dst_bond.params,
-            dst_bond.potential.signs,
-        )
-        chiral_bond_idxs_ = []
-        chiral_bond_params = []
-        chiral_bond_signs = []
-        for idxs, sign, src_k, dst_k in idxs_and_params:
-            chiral_bond_idxs_.append(idxs)
-            new_params = interpolate_fn(src_k, dst_k, lamb)
-            chiral_bond_params.append(new_params)
-            chiral_bond_signs.append(sign)
-
-        # these should be properly sized
-        chiral_bond_idxs = np.array(chiral_bond_idxs_, dtype=np.int32).reshape((-1, 4))
-
-        return ChiralBondRestraint(chiral_bond_idxs, np.array(chiral_bond_signs)).bind(jnp.array(chiral_bond_params))
-
     def setup_intermediate_state(self, lamb):
         r"""
         Set up intermediate states at some value of the alchemical parameter :math:`\lambda`.
@@ -1079,7 +1080,7 @@ class SingleTopology(AtomMapMixin):
         src_system = self.src_system
         dst_system = self.dst_system
 
-        bond = self._setup_intermediate_bonded_term(
+        bond = setup_intermediate_bonded_term(
             src_system.bond,
             dst_system.bond,
             lamb,
@@ -1092,7 +1093,7 @@ class SingleTopology(AtomMapMixin):
             ),
         )
 
-        angle = self._setup_intermediate_bonded_term(
+        angle = setup_intermediate_bonded_term(
             src_system.angle,
             dst_system.angle,
             lamb,
@@ -1107,7 +1108,7 @@ class SingleTopology(AtomMapMixin):
 
         assert src_system.torsion
         assert dst_system.torsion
-        torsion = self._setup_intermediate_bonded_term(
+        torsion = setup_intermediate_bonded_term(
             src_system.torsion,
             dst_system.torsion,
             lamb,
@@ -1115,7 +1116,7 @@ class SingleTopology(AtomMapMixin):
             partial(interpolate_periodic_torsion_params, lambda_min=0.7, lambda_max=1.0),
         )
 
-        nonbonded = self._setup_intermediate_nonbonded_term(
+        nonbonded = setup_intermediate_nonbonded_term(
             src_system.nonbonded,
             dst_system.nonbonded,
             lamb,
@@ -1125,7 +1126,7 @@ class SingleTopology(AtomMapMixin):
 
         assert src_system.chiral_atom
         assert dst_system.chiral_atom
-        chiral_atom = self._setup_intermediate_bonded_term(
+        chiral_atom = setup_intermediate_bonded_term(
             src_system.chiral_atom,
             dst_system.chiral_atom,
             lamb,
@@ -1135,7 +1136,7 @@ class SingleTopology(AtomMapMixin):
 
         assert src_system.chiral_bond
         assert dst_system.chiral_bond
-        chiral_bond = self._setup_intermediate_chiral_bond_term(
+        chiral_bond = setup_intermediate_chiral_bond_term(
             src_system.chiral_bond,
             dst_system.chiral_bond,
             lamb,
