@@ -4,7 +4,7 @@ import numpy as np
 from matplotlib import pyplot as plt
 from numpy.typing import NDArray
 
-from timemachine.constants import BOLTZ, KCAL_TO_KJ
+from timemachine.constants import BOLTZ, DEFAULT_TEMP, KCAL_TO_KJ
 from timemachine.fe.bar import compute_fwd_and_reverse_df_over_time
 
 
@@ -182,7 +182,7 @@ def make_overlap_detail_figure(
 def plot_forward_and_reverse_ddg(
     solvent_ukln_by_lambda: NDArray,
     complex_ukln_by_lambda: NDArray,
-    temperature: float,
+    temperature: float = DEFAULT_TEMP,
     chunks: int = 10,
 ) -> bytes:
     """Forward and reverse ddG plot given a solvent and complex ukln.
