@@ -218,9 +218,13 @@ def plot_forward_and_reverse_ddg(
 
     fwd = (complex_fwd - solvent_fwd) * kBT / KCAL_TO_KJ
     rev = (complex_rev - solvent_rev) * kBT / KCAL_TO_KJ
+    # Assert that first and last value are very close
+    assert np.allclose(fwd[-1], rev[-1])
 
     fwd_err = np.linalg.norm([complex_fwd_err, solvent_fwd_err], axis=0) * kBT / KCAL_TO_KJ
     rev_err = np.linalg.norm([complex_rev_err, solvent_rev_err], axis=0) * kBT / KCAL_TO_KJ
+    # Assert that first and last value are identical
+    assert np.allclose(fwd_err[-1], rev_err[-1])
 
     xs = np.linspace(1.0 / chunks, 1.0, chunks)
 
