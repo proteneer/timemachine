@@ -289,7 +289,7 @@ def compute_fwd_and_reverse_df_over_time(
             numpy array of dF errors for each chunk
         rev_df: [chunks] np.ndarray
             numpy array of dF for each chunk, from reversed ukln
-        ref_df_err: [chunks] np.ndarray
+        rev_df_err: [chunks] np.ndarray
             numpy array of dF errors for each chunk, from reversed ukln
     """
     assert len(ukln_by_lambda.shape) == 4
