@@ -732,6 +732,7 @@ def run_edge_and_save_results(
             forcefield,
             protein,
             md_params,
+            n_windows=n_windows,
         )
         solvent_res, solvent_top, _ = run_solvent(
             mol_a,
@@ -740,6 +741,7 @@ def run_edge_and_save_results(
             forcefield,
             protein,
             md_params,
+            n_windows=n_windows,
         )
 
     except Exception as err:

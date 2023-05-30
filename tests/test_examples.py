@@ -210,6 +210,7 @@ def load_simulation_results(path: Path) -> Tuple[SimulationResult, SimulationRes
 
 def test_rbfe_edge_list_hif2a(rbfe_edge_list_hif2a_path):
     path, config, edges = rbfe_edge_list_hif2a_path
+    n_windows = config["n_windows"]
 
     def check_results(results_path):
         # Just check that results are present and have the expected shape
@@ -222,6 +223,9 @@ def test_rbfe_edge_list_hif2a(rbfe_edge_list_hif2a_path):
         solvent_res, complex_res = load_simulation_results(results_path)
 
         for result in solvent_res, complex_res:
+            L = len(result.final_result.initial_states)
+            assert L == n_windows
+
             assert isinstance(result, SimulationResult)
             assert isinstance(result.frames, list)
             assert len(result.frames) == 2  # frames from first and last windows
