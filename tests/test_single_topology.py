@@ -1,5 +1,6 @@
 import functools
 from importlib import resources
+from unittest.mock import patch
 
 import hypothesis.strategies as st
 import jax
@@ -391,24 +392,25 @@ def test_combine_masses_hmr():
     np.testing.assert_almost_equal(test_masses, ref_masses)
 
 
+@pytest.fixture
+def example_transformation():
+    with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
+        mols = {get_mol_name(mol): mol for mol in read_sdf(path_to_ligand)}
+
+    mol_a = mols["206"]
+    mol_b = mols["57"]
+
+    core = _get_core_by_mcs(mol_a, mol_b)
+    ff = Forcefield.load_default()
+    return SingleTopology(mol_a, mol_b, core, ff)
+
+
 @pytest.mark.nogpu
-def test_jax_transform_intermediate_potential():
-    def setup_arbitary_transformation():
-        # NOTE: test system can probably be simplified; we just need
-        # any SingleTopology and conformation
-        with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
-            mols = {get_mol_name(mol): mol for mol in read_sdf(path_to_ligand)}
-
-        mol_a = mols["206"]
-        mol_b = mols["57"]
-
-        core = _get_core_by_mcs(mol_a, mol_b)
-        ff = Forcefield.load_default()
-        st = SingleTopology(mol_a, mol_b, core, ff)
-        conf = st.combine_confs(get_romol_conf(mol_a), get_romol_conf(mol_b))
-        return st, conf
-
-    st, conf = setup_arbitary_transformation()
+def test_jax_transform_intermediate_potential(example_transformation):
+    st = example_transformation
+    mol_a = st.mol_a
+    mol_b = st.mol_b
+    conf = st.combine_confs(get_romol_conf(mol_a), get_romol_conf(mol_b))
 
     def U(x, lam):
         return st.setup_intermediate_state(lam).get_U_fn()(x)
@@ -754,3 +756,10 @@ def test_interpolate_w_coord_monotonic():
     lambdas = np.linspace(0.0, 1.0, 100)
     ws = interpolate_w_coord(0.0, 1.0, lambdas)
     assert np.all(np.diff(ws) >= 0.0)
+
+
+@patch("timemachine.fe.interpolate.align_idxs_and_params")
+def test_setup_intermediate_state_does_not_align(mock_align_idxs_and_params, example_transformation):
+    """SingleTopology should call timemachine.interpolate.align_idxs_and_params only once during initialization."""
+    _ = example_transformation.setup_intermediate_state(0.5)
+    mock_align_idxs_and_params.assert_not_called()
