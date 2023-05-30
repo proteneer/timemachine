@@ -1125,6 +1125,7 @@ template <typename RealType> void declare_nonbonded_interaction_group(py::module
                         const double nblist_padding) {
                 std::vector<int> row_atom_idxs(row_atom_idxs_i.size());
                 std::memcpy(row_atom_idxs.data(), row_atom_idxs_i.data(), row_atom_idxs_i.size() * sizeof(int));
+
                 std::vector<int> col_atom_idxs;
                 if (col_atom_idxs_i) {
                     col_atom_idxs.resize(col_atom_idxs_i->size());

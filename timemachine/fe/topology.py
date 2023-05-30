@@ -686,7 +686,7 @@ def get_ligand_ixn_pots_params(
     num_total_atoms = num_lig_atoms + len(water_idxs) + len(other_idxs)
 
     hg_water_pots = []
-    hg_water_paramss = []
+    hg_water_params = []
     # Loop for the case of DualTopology
     for lig_idxs in lig_idxs_list:
         hg_water_pots.append(
@@ -698,11 +698,11 @@ def get_ligand_ixn_pots_params(
                 col_atom_idxs=water_idxs,
             )
         )
-        hg_water_paramss.append(jnp.concatenate([host_nb_params, guest_params_ixn_water]))
+        hg_water_params.append(jnp.concatenate([host_nb_params, guest_params_ixn_water]))
 
     # L-Other terms
     hg_other_pots = []
-    hg_other_paramss = []
+    hg_other_params = []
     if len(other_idxs):
         for lig_idxs in lig_idxs_list:
             hg_other_pots.append(
@@ -714,13 +714,13 @@ def get_ligand_ixn_pots_params(
                     col_atom_idxs=other_idxs,
                 )
             )
-            hg_other_paramss.append(jnp.concatenate([host_nb_params, guest_params_ixn_other]))
+            hg_other_params.append(jnp.concatenate([host_nb_params, guest_params_ixn_other]))
 
     def filter_none(values):
         return [v for v in values if v is not None]
 
     # total potential = host_guest_pot + guest_intra_pot + lw_ixn_pots + lo_ixn_pots
     hg_ixn_pots = filter_none(hg_water_pots + hg_other_pots)
-    hg_ixn_params = filter_none(hg_water_paramss + hg_other_paramss)
+    hg_ixn_params = filter_none(hg_water_params + hg_other_params)
 
     return hg_ixn_pots, hg_ixn_params
