@@ -176,7 +176,6 @@ class HostGuestTopology:
         # potentials or grads, but any function like the seed could depened on these values.
         hg_nb_params = jnp.concatenate([self.host_nonbonded.params, np.zeros(guest_ixn_water_params.shape)])
 
-        # TODO: Use atom_idxs in Nonbonded instead of exclusions
         host_guest_pot = potentials.Nonbonded(
             self.num_host_atoms + num_guest_atoms,
             exclusion_idxs,
