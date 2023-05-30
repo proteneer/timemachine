@@ -180,8 +180,8 @@ def make_overlap_detail_figure(
 
 
 def plot_forward_and_reverse_ddg(
-    solvent_ukln_by_component_by_lambda: NDArray,
-    complex_ukln_by_component_by_lambda: NDArray,
+    solvent_ukln_by_lambda: NDArray,
+    complex_ukln_by_lambda: NDArray,
     temperature: float,
     chunks: int = 10,
 ) -> bytes:
@@ -193,10 +193,10 @@ def plot_forward_and_reverse_ddg(
 
     Parameters
     ----------
-    solvent_ukln_by_component_by_lambda: [n_component, n_lambdas, 2, 2, N] array
-        Solvent ukln broken up by components and lambdas
-    complex_ukln_by_component_by_lambda: [n_component, n_lambdas, 2, 2, N] array
-        Complex ukln broken up by components and lambdas
+    solvent_ukln_by_lambda [n_lambdas, 2, 2, N] array
+        Solvent unitless ukln broken up by lambdas
+    complex_ukln_by_lambda [n_lambdas, 2, 2, N] array
+        Complex unitless ukln broken up by lambdas
     temperature: float
         Temperature that samples were collected at.
     chunks: int
@@ -208,10 +208,10 @@ def plot_forward_and_reverse_ddg(
     """
 
     solvent_fwd, solvent_fwd_err, solvent_rev, solvent_rev_err = compute_fwd_and_reverse_df_over_time(
-        solvent_ukln_by_component_by_lambda.sum(0)  # Combine by component
+        solvent_ukln_by_lambda
     )
     complex_fwd, complex_fwd_err, complex_rev, complex_rev_err = compute_fwd_and_reverse_df_over_time(
-        complex_ukln_by_component_by_lambda.sum(0)  # Combine by component
+        complex_ukln_by_lambda
     )
 
     kBT = BOLTZ * temperature
