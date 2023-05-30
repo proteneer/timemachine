@@ -69,13 +69,11 @@ class HostGuestTopology:
         self.num_host_atoms = self.host_nonbonded.potential.num_atoms
         self.num_water_atoms = num_water_atoms
         self.num_other_atoms = self.num_host_atoms - num_water_atoms
-        print("NH", self.num_host_atoms, "NW", self.num_water_atoms, "NO", self.num_other_atoms)
 
     def get_water_idxs(self) -> NDArray:
         return np.arange(self.num_water_atoms, dtype=np.int32) + self.num_other_atoms
 
     def get_other_idxs(self) -> NDArray:
-        # TODO: Other means non-water host atoms - pick a better name?
         return np.arange(self.num_other_atoms, dtype=np.int32)
 
     def get_num_atoms(self) -> int:
@@ -178,7 +176,6 @@ class HostGuestTopology:
         # potentials or grads, but any function like the seed could depened on these values.
         hg_nb_params = jnp.concatenate([self.host_nonbonded.params, np.zeros(guest_ixn_water_params.shape)])
 
-        # TODO: Use atom_idxs in Nonbonded instead of exclusions
         host_guest_pot = potentials.Nonbonded(
             self.num_host_atoms + num_guest_atoms,
             exclusion_idxs,
