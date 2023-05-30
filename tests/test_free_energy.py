@@ -180,7 +180,7 @@ def test_vacuum_and_solvent_edge_types():
 
     ff = Forcefield.load_default()
     solvent_system, solvent_coords, solvent_box, _ = builders.build_water_system(3.0, ff.water_ff)
-
+    host_system = HostConfig(solvent_system, solvent_coords, solvent_box, solvent_coords.shape[0])
     ff_params = ff.get_params()
 
     bt = topology.BaseTopology(mol, ff)
@@ -188,9 +188,7 @@ def test_vacuum_and_solvent_edge_types():
 
     vacuum_unbound_potentials, vacuum_sys_params, vacuum_masses = afe.prepare_vacuum_edge(ff_params)
 
-    solvent_unbound_potentials, solvent_sys_params, solvent_masses = afe.prepare_host_edge(
-        ff_params, solvent_system, 0.0
-    )
+    solvent_unbound_potentials, solvent_sys_params, solvent_masses = afe.prepare_host_edge(ff_params, host_system, 0.0)
 
     assert type(vacuum_unbound_potentials) == type(solvent_unbound_potentials)
     assert type(vacuum_sys_params) == type(solvent_sys_params)
@@ -204,7 +202,7 @@ def solvent_hif2a_ligand_pair_single_topology_lam0_state():
     st = SingleTopology(mol_a, mol_b, core, forcefield)
 
     solvent_sys, solvent_conf, solvent_box, solvent_top = builders.build_water_system(3.0, forcefield.water_ff)
-    solvent_host_config = HostConfig(solvent_sys, solvent_conf, solvent_box)
+    solvent_host_config = HostConfig(solvent_sys, solvent_conf, solvent_box, solvent_conf.shape[0])
     solvent_host = setup_optimized_host(st, solvent_host_config)
     state = setup_initial_states(st, solvent_host, DEFAULT_TEMP, [0.0], 2023)[0]
     return state

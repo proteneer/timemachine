@@ -1213,10 +1213,6 @@ class SingleTopology(AtomMapMixin):
         cutoff = host_nonbonded.potential.cutoff
         beta = host_nonbonded.potential.beta
 
-        # guest_exclusions, guest_scale_factors = exclude_all_ligand_ligand_ixns(num_host_atoms, num_guest_atoms)
-        # TODO Use NB all for this
-        # guest_exclusions, guest_scale_factors = exclude_all_ligand_ixns(num_host_atoms, num_guest_atoms)
-
         exclusion_idxs = host_nonbonded.potential.exclusion_idxs
         scale_factors = host_nonbonded.potential.scale_factors
 
