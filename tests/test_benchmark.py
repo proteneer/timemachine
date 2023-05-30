@@ -99,7 +99,6 @@ def benchmark_potential(
     params,
     coords,
     boxes,
-    lambdas,
     verbose=True,
     num_batches=5,
     compute_du_dx=True,
@@ -115,8 +114,7 @@ def benchmark_potential(
     batch_times = []
     frames = coords.shape[0]
     param_batches = params.shape[0]
-    num_lambs = len(lambdas)
-    runs_per_batch = frames * param_batches * num_lambs
+    runs_per_batch = frames * param_batches
     for _ in range(num_batches):
         batch_start = time.time()
         _, _, _ = unbound.execute_selective_batch(
@@ -136,7 +134,7 @@ def benchmark_potential(
         if verbose:
             print(f"executions per second: {runs_per_second:.3f}")
     print(
-        f"{label}: N={coords.shape[1]} Frames={frames} Params={param_batches} Lambdas={num_lambs} speed: {runs_per_second:.2f} executions/seconds (ran {runs_per_batch * num_batches} potentials in {(time.time() - start):.2f}s)"
+        f"{label}: N={coords.shape[1]} Frames={frames} Params={param_batches} speed: {runs_per_second:.2f} executions/seconds (ran {runs_per_batch * num_batches} potentials in {(time.time() - start):.2f}s)"
     )
 
 
@@ -470,7 +468,6 @@ def test_hif2a():
 
 def test_nonbonded_interaction_group_potential(hi2fa_test_frames):
     bps, frames, boxes, ligand_idxs = hi2fa_test_frames
-    lambdas = np.array([0.0, 1.0])
     nonbonded_potential: BoundPotential[Nonbonded] = next(bp for bp in bps if isinstance(bp.potential, Nonbonded))
 
     num_param_batches = 5
@@ -495,7 +492,6 @@ def test_nonbonded_interaction_group_potential(hi2fa_test_frames):
             nonbonded_params,
             frames,
             boxes,
-            lambdas,
             verbose=False,
         )
 
@@ -506,7 +502,6 @@ def test_nonbonded_potential(hi2fa_test_frames):
     nonbonded_pot: BoundPotential[Nonbonded]
     nonbonded_pot = next(bp for bp in bps if isinstance(bp.potential, Nonbonded))
     assert nonbonded_pot is not None
-    lambdas = np.array([0.0, 1.0])
 
     num_param_batches = 5
 
@@ -531,7 +526,6 @@ def test_nonbonded_potential(hi2fa_test_frames):
             nonbonded_params,
             frames,
             boxes,
-            lambdas,
             verbose=False,
         )
 
@@ -539,11 +533,12 @@ def test_nonbonded_potential(hi2fa_test_frames):
 def test_bonded_potentials(hi2fa_test_frames):
     bps, frames, boxes, _ = hi2fa_test_frames
 
-    lambdas = np.array([0.0, 1.0])
+    num_param_batches = 5
+
     for bp in bps[:-1]:
         potential = bp.potential
         class_name = potential.__class__.__name__
-        params = np.expand_dims(bp.params, axis=0)
+        params = np.stack([bp.params] * num_param_batches)
         for precision in [np.float32, np.float64]:
             benchmark_potential(
                 class_name,
@@ -552,7 +547,6 @@ def test_bonded_potentials(hi2fa_test_frames):
                 params,
                 frames,
                 boxes,
-                lambdas,
                 verbose=False,
             )
 
