@@ -1,9 +1,14 @@
 import numpy as np
 import pymbar
 import pytest
-from pymbar.testsystems import gaussian_work_example
+from pymbar.testsystems import ExponentialTestCase, gaussian_work_example
 
-from timemachine.fe.bar import bar_with_bootstrapped_uncertainty, bootstrap_bar, pair_overlap_from_ukln
+from timemachine.fe.bar import (
+    bar_with_bootstrapped_uncertainty,
+    bootstrap_bar,
+    compute_fwd_and_reverse_df_over_time,
+    pair_overlap_from_ukln,
+)
 
 
 @pytest.mark.nogpu
@@ -57,3 +62,33 @@ def test_pair_overlap_from_ukln():
 
     # overlapping
     assert gaussian_overlap((0, 0.1), (0.5, 0.2)) > 0.1
+
+
+@pytest.mark.nogpu
+@pytest.mark.parametrize("chunks", [1, 5, 10])
+def test_compute_fwd_and_reverse_df_over_time(chunks):
+    seed = 2023
+    pair_u_klns = 47
+
+    rng = np.random.default_rng(seed)
+
+    _, u_kln, _ = ExponentialTestCase(rates=[1, 2]).sample(N_k=(5, 10), mode="u_kln", seed=seed)
+    assert u_kln.shape == (2, 2, 10)
+    u_kln_by_lambda = np.stack([u_kln] * pair_u_klns)
+
+    noise = rng.random(size=(u_kln_by_lambda.shape))
+    u_kln_by_lambda += noise
+
+    with pytest.raises(AssertionError, match="fewer samples than chunks"):
+        compute_fwd_and_reverse_df_over_time(u_kln_by_lambda, chunks=u_kln_by_lambda.shape[-1] + 1)
+
+    fwd, fwd_err, rev, rev_err = compute_fwd_and_reverse_df_over_time(u_kln_by_lambda, chunks=chunks)
+    assert len(fwd) == chunks
+    assert len(fwd_err) == chunks
+
+    assert len(rev) == chunks
+    assert len(rev_err) == chunks
+
+    # The values at the end should be nearly identical since they contain all the samples
+    assert np.allclose(fwd[-1], rev[-1])
+    assert np.allclose(fwd_err[-1], rev_err[-1])

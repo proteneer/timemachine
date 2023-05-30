@@ -297,7 +297,7 @@ def compute_fwd_and_reverse_df_over_time(
     forward_predictions_ = []
     reverse_predictions_ = []
     total_frames = ukln_by_lambda.shape[-1]
-    assert total_frames >= chunks
+    assert total_frames >= chunks, "fewer samples than chunks"
     frame_step_size = total_frames // chunks
 
     # Reverse the u_kln along last axis to get the reverse
