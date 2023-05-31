@@ -6,9 +6,9 @@
 namespace timemachine {
 
 SummedPotential::SummedPotential(
-    const std::vector<std::shared_ptr<Potential>> potentials, const std::vector<int> params_sizes)
+    const std::vector<std::shared_ptr<Potential>> potentials, const std::vector<int> params_sizes, const bool parallel)
     : potentials_(potentials), params_sizes_(params_sizes),
-      P_(std::accumulate(params_sizes.begin(), params_sizes.end(), 0)) {
+      P_(std::accumulate(params_sizes.begin(), params_sizes.end(), 0)), parallel_(parallel) {
     if (potentials_.size() != params_sizes_.size()) {
         throw std::runtime_error("number of potentials != number of parameter sizes");
     }
@@ -36,9 +36,18 @@ void SummedPotential::execute_device(
     }
 
     int offset = 0;
-
+    if (parallel_) {
+        for (auto i = 0; i < potentials_.size(); i++) {
+            // Always sync the new streams with the incoming stream to ensure that the state
+            // of the incoming buffers are valid
+            manager_.sync_from(i, stream);
+        }
+    }
+    cudaStream_t pot_stream = stream;
     for (auto i = 0; i < potentials_.size(); i++) {
-
+        if (parallel_) {
+            pot_stream = manager_.get_stream(i);
+        }
         potentials_[i]->execute_device(
             N,
             params_sizes_[i],
@@ -48,9 +57,12 @@ void SummedPotential::execute_device(
             d_du_dx,
             d_du_dp == nullptr ? nullptr : d_du_dp + offset,
             d_u,
-            stream);
+            pot_stream);
 
         offset += params_sizes_[i];
+        if (parallel_) {
+            manager_.sync_to(i, stream);
+        }
     }
 };
 

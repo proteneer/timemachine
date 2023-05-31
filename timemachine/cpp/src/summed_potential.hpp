@@ -1,6 +1,7 @@
 #pragma once
 
 #include "potential.hpp"
+#include "stream_manager.hpp"
 #include <memory>
 #include <vector>
 
@@ -12,9 +13,14 @@ private:
     const std::vector<std::shared_ptr<Potential>> potentials_;
     const std::vector<int> params_sizes_;
     const int P_; // sum(params_sizes)
+    const bool parallel_;
+    StreamManager manager_;
 
 public:
-    SummedPotential(const std::vector<std::shared_ptr<Potential>> potentials, const std::vector<int> params_sizes);
+    SummedPotential(
+        const std::vector<std::shared_ptr<Potential>> potentials,
+        const std::vector<int> params_sizes,
+        const bool parallel);
 
     const std::vector<std::shared_ptr<Potential>> &get_potentials();
 

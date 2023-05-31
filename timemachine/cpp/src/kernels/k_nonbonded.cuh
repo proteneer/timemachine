@@ -187,7 +187,7 @@ void __global__ k_scatter_accum(
         return;
     }
 
-    array[unique_idxs[idx] * stride + stride_idx] += gathered_array[idx * stride + stride_idx];
+    atomicAdd(array + (unique_idxs[idx] * stride + stride_idx), gathered_array[idx * stride + stride_idx]);
 }
 
 template <typename RealType>

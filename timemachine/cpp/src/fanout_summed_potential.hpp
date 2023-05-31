@@ -1,6 +1,7 @@
 #pragma once
 
 #include "potential.hpp"
+#include "stream_manager.hpp"
 #include <memory>
 #include <vector>
 
@@ -10,9 +11,11 @@ class FanoutSummedPotential : public Potential {
 
 private:
     const std::vector<std::shared_ptr<Potential>> potentials_;
+    const bool parallel_;
+    StreamManager manager_;
 
 public:
-    FanoutSummedPotential(const std::vector<std::shared_ptr<Potential>> potentials);
+    FanoutSummedPotential(const std::vector<std::shared_ptr<Potential>> potentials, const bool parallel);
 
     const std::vector<std::shared_ptr<Potential>> &get_potentials();
 

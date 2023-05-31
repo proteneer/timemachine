@@ -9,7 +9,7 @@
 namespace timemachine {
 
 VelocityVerletIntegrator::VelocityVerletIntegrator(int N, double dt, const double *h_cbs)
-    : N_(N), dt_(dt), initialized_(false) {
+    : N_(N), dt_(dt), initialized_(false), runner_() {
 
     d_cbs_ = gpuErrchkCudaMallocAndCopy(h_cbs, N);
     cudaSafeMalloc(&d_du_dx_, N * 3 * sizeof(*d_du_dx_));
@@ -60,16 +60,16 @@ void VelocityVerletIntegrator::initialize(
     size_t n_blocks = ceil_divide(N_, tpb);
     dim3 dimGrid_dx(n_blocks, D);
 
-    for (int i = 0; i < bps.size(); i++) {
-        bps[i]->execute_device(
-            N_,
-            d_x_t,
-            d_box_t,
-            d_du_dx_, // we only need the forces
-            nullptr,
-            nullptr,
-            stream);
-    }
+    runner_.execute_potentials(
+        bps,
+        N_,
+        d_x_t,
+        d_box_t,
+        d_du_dx_, // we only need the forces
+        nullptr,
+        nullptr,
+        stream);
+
     half_step_velocity_verlet<double, true>
         <<<dimGrid_dx, tpb, 0, stream>>>(N_, D, d_idxs, d_cbs_, d_x_t, d_v_t, d_du_dx_, dt_);
     gpuErrchk(cudaPeekAtLastError());

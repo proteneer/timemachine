@@ -59,6 +59,7 @@ void NonbondedPairListPrecomputed<RealType>::execute_device(
 
         k_nonbonded_precomputed<RealType>
             <<<blocks, tpb, 0, stream>>>(B_, d_x, d_p, d_box, d_idxs_, beta_, cutoff_, d_du_dx, d_du_dp, d_u);
+        gpuErrchk(cudaPeekAtLastError());
     }
 };
 

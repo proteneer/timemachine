@@ -10,7 +10,7 @@ namespace timemachine {
 
 LangevinIntegrator::LangevinIntegrator(
     int N, const double *masses, double temperature, double dt, double friction, int seed)
-    : N_(N), temperature_(temperature), dt_(dt), friction_(friction) {
+    : N_(N), temperature_(temperature), dt_(dt), friction_(friction), runner_() {
 
     ca_ = exp(-friction * dt);
 
@@ -55,23 +55,22 @@ void LangevinIntegrator::step_fwd(
 
     gpuErrchk(cudaMemsetAsync(d_du_dx_, 0, N_ * D * sizeof(*d_du_dx_), stream));
 
-    for (int i = 0; i < bps.size(); i++) {
-        bps[i]->execute_device(
-            N_,
-            d_x_t,
-            d_box_t,
-            d_du_dx_, // we only need the forces
-            nullptr,
-            nullptr,
-            stream);
-    }
+    runner_.execute_potentials(
+        bps,
+        N_,
+        d_x_t,
+        d_box_t,
+        d_du_dx_, // we only need the forces
+        nullptr,
+        nullptr,
+        stream);
+
+    curandErrchk(curandSetStream(cr_rng_, stream));
+    curandErrchk(templateCurandNormal(cr_rng_, d_noise_, round_up_even(N_ * D), 0.0, 1.0));
 
     size_t tpb = warp_size;
     size_t n_blocks = ceil_divide(N_, tpb);
     dim3 dimGrid_dx(n_blocks, D);
-
-    curandErrchk(curandSetStream(cr_rng_, stream));
-    curandErrchk(templateCurandNormal(cr_rng_, d_noise_, round_up_even(N_ * D), 0.0, 1.0));
 
     update_forward_baoab<double>
         <<<dimGrid_dx, tpb, 0, stream>>>(N_, D, ca_, d_idxs, d_cbs_, d_ccs_, d_noise_, d_x_t, d_v_t, d_du_dx_, dt_);
