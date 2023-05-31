@@ -475,7 +475,7 @@ def test_nonbonded_intra_split(precision, rtol, atol, use_tiny_mol):
         val_and_grad_fn = minimizer.get_val_and_grad_fn(vacuum_impls, solvent_box)
         vacuum_u, vacuum_grad = val_and_grad_fn(ligand_conf)
 
-        solvent_system = st.combine_with_host(convert_bps_into_system(solvent_bps), lamb)
+        solvent_system = st.combine_with_host(convert_bps_into_system(solvent_bps), lamb, solvent_conf.shape[0])
         solvent_potentials = solvent_system.get_U_fns()
         solvent_impls = [p.to_gpu(precision).bound_impl for p in solvent_potentials]
         val_and_grad_fn = minimizer.get_val_and_grad_fn(solvent_impls, solvent_box)
@@ -498,7 +498,7 @@ def test_nonbonded_intra_split(precision, rtol, atol, use_tiny_mol):
             vacuum_u_inter_scaled,
             solvent_grad_inter_scaled,
             solvent_u_inter_scaled,
-        ) = get_vacuum_solvent_u_grads(ffs.prot, lamb)
+        ) = get_vacuum_solvent_u_grads(ffs.solv, lamb)
 
         # Compute the expected intermol scaled potential
         expected_inter_scaled_u = solvent_u_scaled - vacuum_u_scaled + vacuum_u_ref

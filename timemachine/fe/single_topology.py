@@ -1283,6 +1283,9 @@ class SingleTopology(AtomMapMixin):
         lamb: float
             Which lambda value we want to generate the combined system.
 
+        num_water_atoms: int
+            Number of water atoms as part of the host.
+
         Returns
         -------
         7-tuple of potentials
