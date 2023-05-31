@@ -40,7 +40,7 @@ def test_minimizer():
     for key in setups:
         print(f"minimizing host given {key}...")
         mols = setups[key]
-        host_du_dx_fxn = make_host_du_dx_fxn(mols, complex_system, complex_coords, ff, complex_box)
+        host_du_dx_fxn = make_host_du_dx_fxn(mols, host_config, ff)
 
         print(f"using unadjusted Barker proposal @ temperature = {room_temperature} K...")
         t0 = time()

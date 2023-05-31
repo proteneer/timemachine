@@ -203,13 +203,13 @@ def make_gpu_impl(bound_potentials):
     return bound_impl
 
 
-def make_host_du_dx_fxn(mols, host_system, host_coords, ff, box, mol_coords=None):
+def make_host_du_dx_fxn(mols, host_config, ff, mol_coords=None):
     """construct function to compute du_dx w.r.t. host coords, given fixed mols and box"""
 
-    assert box.shape == (3, 3)
+    assert host_config.box.shape == (3, 3)
 
     # openmm host_system -> timemachine host_bps
-    host_bps, _ = openmm_deserializer.deserialize_system(host_system, cutoff=1.2)
+    host_bps, _ = openmm_deserializer.deserialize_system(host_config.omm_system, cutoff=1.2)
 
     # construct appropriate topology from (mols, ff)
     if len(mols) == 1:
@@ -219,7 +219,7 @@ def make_host_du_dx_fxn(mols, host_system, host_coords, ff, box, mol_coords=None
     else:
         raise ValueError("mols must be length 1 or 2")
 
-    hgt = topology.HostGuestTopology(host_bps, top)
+    hgt = topology.HostGuestTopology(host_bps, top, host_config.num_water_atoms)
 
     # bound impls of potentials @ lam=0 (fully coupled) endstate
     params_potential_pairs = parameterize_system(hgt, ff, 0.0)
@@ -227,7 +227,7 @@ def make_host_du_dx_fxn(mols, host_system, host_coords, ff, box, mol_coords=None
     gpu_impl = make_gpu_impl(bound_potentials)
 
     # read conformers from mol_coords if given, or each mol's conf0 otherwise
-    conf_list = [np.array(host_coords)]
+    conf_list = [np.array(host_config.conf)]
 
     if mol_coords is not None:
         for mc in mol_coords:
@@ -244,13 +244,13 @@ def make_host_du_dx_fxn(mols, host_system, host_coords, ff, box, mol_coords=None
     combined_coords = np.concatenate(conf_list)
 
     # wrap gpu_impl, partially applying box, mol coords
-    num_host_atoms = host_coords.shape[0]
+    num_host_atoms = host_config.conf.shape[0]
 
     def du_dx_host_fxn(x_host):
         x = np.array(combined_coords)
         x[:num_host_atoms] = x_host
 
-        du_dx, _ = gpu_impl.execute(x, box)
+        du_dx, _ = gpu_impl.execute(x, host_config.box)
         du_dx_host = du_dx[:num_host_atoms]
         return du_dx_host
 
@@ -284,9 +284,7 @@ def equilibrate_host_barker(
 
     assert 0 < proposal_stddev <= 0.0001, "not tested with Metropolis correction omitted for larger proposal_stddevs"
 
-    du_dx_host_fxn = make_host_du_dx_fxn(
-        mols, host_config.omm_system, host_config.conf, ff, host_config.box, mol_coords
-    )
+    du_dx_host_fxn = make_host_du_dx_fxn(mols, host_config, ff, mol_coords)
     grad_log_q = lambda x_host: -du_dx_host_fxn(x_host) / (BOLTZ * temperature)
 
     # TODO: if needed, revisit choice to omit Metropolis correction
