@@ -67,6 +67,8 @@ def test_accurate_mcmc(threshold=1e-4):
     def grad_log_q(x):
         return -4 * x ** 3
 
+    rng = np.random.default_rng(0)
+
     # system with a large number of quartic oscillators
     x = np.zeros(1_000)
 
@@ -81,7 +83,7 @@ def test_accurate_mcmc(threshold=1e-4):
         _log_accept_prob = log_q(y) - log_q(x) + log_prob_rev - log_prob_fwd
         accept_prob = np.exp(min(0.0, _log_accept_prob))
 
-        if np.random.rand() < accept_prob:
+        if rng.random() < accept_prob:
             return y
         else:
             return x

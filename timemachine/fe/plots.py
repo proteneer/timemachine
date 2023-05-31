@@ -2,8 +2,10 @@ import io
 
 import numpy as np
 from matplotlib import pyplot as plt
+from numpy.typing import NDArray
 
-from timemachine.constants import BOLTZ
+from timemachine.constants import BOLTZ, DEFAULT_TEMP, KCAL_TO_KJ
+from timemachine.fe.bar import compute_fwd_and_reverse_df_over_time
 
 
 def plot_work(w_forward, w_reverse, axes):
@@ -169,10 +171,148 @@ def make_overlap_detail_figure(
             plot_axis.set_title(components[u_idx])
 
     # detail plot as png
-    plt.tight_layout()
     buffer = io.BytesIO()
-    plt.savefig(buffer, format="png")
+    plt.savefig(buffer, format="png", bbox_inches="tight")
     buffer.seek(0)
     overlap_detail_png = buffer.read()
 
     return overlap_detail_png
+
+
+def plot_forward_and_reverse_ddg(
+    solvent_ukln_by_lambda: NDArray,
+    complex_ukln_by_lambda: NDArray,
+    temperature: float = DEFAULT_TEMP,
+    frames_per_step: int = 100,
+) -> bytes:
+    """Forward and reverse ddG plot given a solvent and complex ukln.
+    In the case of good convergence, the forward and reverse ddGs should be similar and the ddG should
+    not be drifting with all samples.
+
+    Refer to figure 5 of https://www.ncbi.nlm.nih.gov/pmc/articles/PMC4420631/ for more details.
+
+    Parameters
+    ----------
+    solvent_ukln_by_lambda: [n_lambdas, 2, 2, N] array
+        Solvent unitless ukln broken up by lambdas
+    complex_ukln_by_lambda: [n_lambdas, 2, 2, N] array
+        Complex unitless ukln broken up by lambdas
+    temperature: float
+        Temperature that samples were collected at.
+    frames_per_step: int
+        Number of frames to include in a sample when computing u_kln over time
+
+    Returns
+    -------
+    ddg_convergence_plot_bytes: bytes
+    """
+
+    solvent_fwd, solvent_fwd_err, solvent_rev, solvent_rev_err = compute_fwd_and_reverse_df_over_time(
+        solvent_ukln_by_lambda, frames_per_step=frames_per_step
+    )
+    complex_fwd, complex_fwd_err, complex_rev, complex_rev_err = compute_fwd_and_reverse_df_over_time(
+        complex_ukln_by_lambda, frames_per_step=frames_per_step
+    )
+
+    kBT = BOLTZ * temperature
+
+    fwd = (complex_fwd - solvent_fwd) * kBT / KCAL_TO_KJ
+    rev = (complex_rev - solvent_rev) * kBT / KCAL_TO_KJ
+
+    fwd_err = np.linalg.norm([complex_fwd_err, solvent_fwd_err], axis=0) * kBT / KCAL_TO_KJ
+    rev_err = np.linalg.norm([complex_rev_err, solvent_rev_err], axis=0) * kBT / KCAL_TO_KJ
+
+    return plot_fwd_reverse_predictions(fwd, fwd_err, rev, rev_err)
+
+
+def plot_forward_and_reverse_dg(
+    ukln_by_lambda: NDArray,
+    temperature: float = DEFAULT_TEMP,
+    frames_per_step: int = 100,
+) -> bytes:
+    """Forward and reverse dG plot given a ukln.
+    In the case of good convergence, the forward and reverse dGs should be similar and the dG should
+    not be drifting with all samples.
+
+    Refer to figure 5 of https://www.ncbi.nlm.nih.gov/pmc/articles/PMC4420631/ for more details.
+
+    Parameters
+    ----------
+    ukln_by_lambda: [n_lambdas, 2, 2, N] array
+        Unitless ukln broken up by lambdas
+    temperature: float
+        Temperature that samples were collected at.
+    frames_per_step: int
+        Number of frames to include in a sample when computing u_kln over time
+
+    Returns
+    -------
+    dg_convergence_plot_bytes: bytes
+    """
+
+    fwd, fwd_err, rev, rev_err = compute_fwd_and_reverse_df_over_time(ukln_by_lambda, frames_per_step=frames_per_step)
+
+    kBT = BOLTZ * temperature
+
+    return plot_fwd_reverse_predictions(
+        fwd * kBT / KCAL_TO_KJ,
+        fwd_err * kBT / KCAL_TO_KJ,
+        rev * kBT / KCAL_TO_KJ,
+        rev_err * kBT / KCAL_TO_KJ,
+        energy_type="∆G",
+    )
+
+
+def plot_fwd_reverse_predictions(
+    fwd: NDArray, fwd_err: NDArray, rev: NDArray, rev_err: NDArray, energy_type: str = "∆∆G"
+):
+    """Forward and reverse plot given forward and reverse estimates of energies.
+    In the case of good convergence, the forward and reverse predictions should be similar and the energies should
+    not be drifting with all samples.
+
+    Refer to figure 5 of https://www.ncbi.nlm.nih.gov/pmc/articles/PMC4420631/ for more details.
+
+    Parameters
+    ----------
+    fwd: [N] array
+        Energies computed in forward direction, in units of kcal/mol
+    fwd_err: [N] array
+        Energies std errors computed in forward direction, in units of kcal/mol
+    rev: [N] array
+        Energies computed in reverse direction, in units of kcal/mol
+    rev_err: [N] array
+        Energies std errors computed in reverse direction, in units of kcal/mol
+    energy_type: string
+        The type of free energy that is being plotted, typically '∆∆G' or '∆G'
+
+    Returns
+    -------
+    energy_convergence_plot_bytes: bytes
+    """
+    assert len(fwd) == len(rev)
+    assert len(fwd) == len(fwd_err)
+    assert len(rev) == len(rev_err)
+
+    # Assert that first and last values are very close
+    assert np.allclose(fwd[-1], rev[-1])
+    assert np.allclose(fwd_err[-1], rev_err[-1])
+
+    xs = np.linspace(1.0 / len(fwd), 1.0, len(fwd))
+
+    plt.figure(figsize=(6, 6))
+    plt.title(f"{energy_type} Convergence Over Time")
+    plt.plot(xs, fwd, label=f"Forward {energy_type}", marker="o")
+    plt.fill_between(xs, fwd - fwd_err, fwd + fwd_err, alpha=0.25)
+    plt.plot(xs, rev, label=f"Reverse {energy_type}", marker="o")
+    plt.fill_between(xs, rev - rev_err, rev + rev_err, alpha=0.25)
+    plt.axhline(fwd[-1], linestyle="--")
+    plt.xlabel("Fraction of simulation time")
+    plt.ylabel(f"{energy_type} (kcal/mol)")
+    plt.legend()
+
+    buffer = io.BytesIO()
+    plt.savefig(buffer, format="png", bbox_inches="tight")
+    buffer.seek(0)
+    plot_png = buffer.read()
+
+    return plot_png
