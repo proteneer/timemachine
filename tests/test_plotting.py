@@ -22,8 +22,8 @@ def test_forward_and_reverse_ddg_plot_validation():
     dummy_solv_ukln = rng.random(size=ukln_shape)
     dummy_complex_ukln = rng.random(size=ukln_shape)
 
-    with pytest.raises(AssertionError, match="fewer samples than chunks"):
-        plot_forward_and_reverse_ddg(dummy_solv_ukln, dummy_complex_ukln, chunks=ukln_shape[-1] + 1)
+    with pytest.raises(AssertionError, match="fewer samples than frames_per_step"):
+        plot_forward_and_reverse_ddg(dummy_solv_ukln, dummy_complex_ukln, frames_per_step=ukln_shape[-1] + 1)
     # Verify that with different size arrays it fails
     with pytest.raises(AssertionError):
         plot_forward_and_reverse_ddg(dummy_solv_ukln, dummy_complex_ukln[0])
@@ -42,5 +42,5 @@ def test_forward_and_reverse_dg_plot_validation():
     ukln_shape = (47, 2, 2, 2000)
     dummy_ukln = rng.random(size=ukln_shape)
 
-    with pytest.raises(AssertionError, match="fewer samples than chunks"):
-        plot_forward_and_reverse_dg(dummy_ukln, chunks=ukln_shape[-1] + 1)
+    with pytest.raises(AssertionError, match="fewer samples than frames_per_step"):
+        plot_forward_and_reverse_dg(dummy_ukln, frames_per_step=ukln_shape[-1] + 1)

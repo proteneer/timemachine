@@ -266,7 +266,7 @@ def pair_overlap_from_ukln(u_kln: np.ndarray) -> float:
 
 
 def compute_fwd_and_reverse_df_over_time(
-    ukln_by_lambda: NDArray, chunks: int = 10
+    ukln_by_lambda: NDArray, frames_per_step: int = 100
 ) -> Tuple[NDArray, NDArray, NDArray, NDArray]:
     """Provided a u_kln computes the forward and reverse dF estimates.
 
@@ -278,18 +278,18 @@ def compute_fwd_and_reverse_df_over_time(
     ukln_by_lambda: [n_lambda, 2, 2, N] array
         Array of u_kln broken up by lambda windows
 
-    chunks: int
-        Number of chunks to break up u_kln into
+    frames_per_step: int
+        Number of frames to include in a sample when computing u_kln over time
 
     Returns
     -------
-        fwd_df: [chunks] np.ndarray
+        fwd_df: [N // frames_per_step] np.ndarray
             numpy array of dF for each chunk
-        fwd_df_err: [chunks] np.ndarray
+        fwd_df_err: [N // frames_per_step] np.ndarray
             numpy array of dF errors for each chunk
-        rev_df: [chunks] np.ndarray
+        rev_df: [N // frames_per_step] np.ndarray
             numpy array of dF for each chunk, from reversed ukln
-        rev_df_err: [chunks] np.ndarray
+        rev_df_err: [N // frames_per_step] np.ndarray
             numpy array of dF errors for each chunk, from reversed ukln
     """
     assert len(ukln_by_lambda.shape) == 4
@@ -297,12 +297,11 @@ def compute_fwd_and_reverse_df_over_time(
     forward_predictions_ = []
     reverse_predictions_ = []
     total_frames = ukln_by_lambda.shape[-1]
-    assert total_frames >= chunks, "fewer samples than chunks"
-    frame_step_size = total_frames // chunks
+    assert total_frames >= frames_per_step, "fewer samples than frames_per_step"
 
     # Reverse the u_kln along last axis to get the reverse
     reversed_ukln_by_lambda = np.flip(ukln_by_lambda, 3)
-    for num_frames in range(frame_step_size, total_frames + 1, frame_step_size):
+    for num_frames in range(frames_per_step, total_frames + 1, frames_per_step):
         fwd_ukln = ukln_by_lambda[..., :num_frames]
         reverse_ukln = reversed_ukln_by_lambda[..., :num_frames]
 

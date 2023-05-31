@@ -183,7 +183,7 @@ def plot_forward_and_reverse_ddg(
     solvent_ukln_by_lambda: NDArray,
     complex_ukln_by_lambda: NDArray,
     temperature: float = DEFAULT_TEMP,
-    chunks: int = 10,
+    frames_per_step: int = 100,
 ) -> bytes:
     """Forward and reverse ddG plot given a solvent and complex ukln.
     In the case of good convergence, the forward and reverse ddGs should be similar and the ddG should
@@ -199,8 +199,8 @@ def plot_forward_and_reverse_ddg(
         Complex unitless ukln broken up by lambdas
     temperature: float
         Temperature that samples were collected at.
-    chunks: int
-        Number of chunks to split uklns by.
+    frames_per_step: int
+        Number of frames to include in a sample when computing u_kln over time
 
     Returns
     -------
@@ -208,10 +208,10 @@ def plot_forward_and_reverse_ddg(
     """
 
     solvent_fwd, solvent_fwd_err, solvent_rev, solvent_rev_err = compute_fwd_and_reverse_df_over_time(
-        solvent_ukln_by_lambda, chunks=chunks
+        solvent_ukln_by_lambda, frames_per_step=frames_per_step
     )
     complex_fwd, complex_fwd_err, complex_rev, complex_rev_err = compute_fwd_and_reverse_df_over_time(
-        complex_ukln_by_lambda, chunks=chunks
+        complex_ukln_by_lambda, frames_per_step=frames_per_step
     )
 
     kBT = BOLTZ * temperature
@@ -228,7 +228,7 @@ def plot_forward_and_reverse_ddg(
 def plot_forward_and_reverse_dg(
     ukln_by_lambda: NDArray,
     temperature: float = DEFAULT_TEMP,
-    chunks: int = 10,
+    frames_per_step: int = 100,
 ) -> bytes:
     """Forward and reverse dG plot given a ukln.
     In the case of good convergence, the forward and reverse dGs should be similar and the dG should
@@ -242,15 +242,15 @@ def plot_forward_and_reverse_dg(
         Unitless ukln broken up by lambdas
     temperature: float
         Temperature that samples were collected at.
-    chunks: int
-        Number of chunks to split uklns by.
+    frames_per_step: int
+        Number of frames to include in a sample when computing u_kln over time
 
     Returns
     -------
     dg_convergence_plot_bytes: bytes
     """
 
-    fwd, fwd_err, rev, rev_err = compute_fwd_and_reverse_df_over_time(ukln_by_lambda, chunks=chunks)
+    fwd, fwd_err, rev, rev_err = compute_fwd_and_reverse_df_over_time(ukln_by_lambda, frames_per_step=frames_per_step)
 
     kBT = BOLTZ * temperature
 

@@ -65,8 +65,8 @@ def test_pair_overlap_from_ukln():
 
 
 @pytest.mark.nogpu
-@pytest.mark.parametrize("chunks", [1, 5, 10])
-def test_compute_fwd_and_reverse_df_over_time(chunks):
+@pytest.mark.parametrize("frames_per_step", [1, 5, 10])
+def test_compute_fwd_and_reverse_df_over_time(frames_per_step):
     seed = 2023
     pair_u_klns = 47
 
@@ -79,10 +79,12 @@ def test_compute_fwd_and_reverse_df_over_time(chunks):
     noise = rng.random(size=(u_kln_by_lambda.shape))
     u_kln_by_lambda += noise
 
-    with pytest.raises(AssertionError, match="fewer samples than chunks"):
-        compute_fwd_and_reverse_df_over_time(u_kln_by_lambda, chunks=u_kln_by_lambda.shape[-1] + 1)
+    with pytest.raises(AssertionError, match="fewer samples than frames_per_step"):
+        compute_fwd_and_reverse_df_over_time(u_kln_by_lambda, frames_per_step=u_kln_by_lambda.shape[-1] + 1)
 
-    fwd, fwd_err, rev, rev_err = compute_fwd_and_reverse_df_over_time(u_kln_by_lambda, chunks=chunks)
+    fwd, fwd_err, rev, rev_err = compute_fwd_and_reverse_df_over_time(u_kln_by_lambda, frames_per_step=frames_per_step)
+
+    chunks = u_kln.shape[-1] // frames_per_step
     assert len(fwd) == chunks
     assert len(fwd_err) == chunks
 
