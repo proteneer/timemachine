@@ -94,29 +94,17 @@ def test_combined_parameters_nonbonded(host_system_fixture, hif2a_ligand_pair_si
 
         hgs = st.combine_with_host(host_sys, lamb, num_water_atoms)
         # check nonbonded terms
-        # 1) exclusions
-        # exclusions should be set for all ligand ixns in hgs.nonbonded_host_guest
-        hgs_exc_idxs = hgs.nonbonded_host_guest.potential.exclusion_idxs
-        hgs_exc_guest_idxs = set()
-        for i, j in hgs_exc_idxs:
-            if i > num_host_atoms or j > num_host_atoms:
-                assert (i, j) not in hgs_exc_guest_idxs
-                hgs_exc_guest_idxs.add((i, j))
-
-        expected_guest_idxs = set()
-
-        for i in range(st.get_num_atoms()):
-            for j in range(st.get_num_atoms()):
-                if i < j:
-                    expected_guest_idxs.add((i + num_host_atoms, j + num_host_atoms))
-
-        assert hgs_exc_guest_idxs == expected_guest_idxs
+        # 1) ligand ixns should be omitted in hgs.nonbonded_host_guest
+        hgs_atom_idxs = hgs.nonbonded_host_guest.potential.potentials[0].atom_idxs
+        assert set(hgs_atom_idxs) == set(range(num_host_atoms))
 
         # 2) decoupling parameters for host-guest interactions
         # 2a) w offsets
-        assert hgs.nonbonded_host_guest.params is not None
-        w_coords = hgs.nonbonded_host_guest.params[:, 3]
-        cutoff = hgs.nonbonded_host_guest.potential.cutoff
+        assert len(hgs.nonbonded_host_guest.potential.params_init) > 1
+
+        # NBIxnGroup has the ligand interaction parameters
+        w_coords = hgs.nonbonded_host_guest.potential.params_init[1][:, 3]
+        cutoff = hgs.nonbonded_host_guest.potential.potentials[1].cutoff
 
         for a_idx, w in enumerate(w_coords):
             if a_idx < num_host_atoms:
@@ -151,7 +139,7 @@ def test_combined_parameters_nonbonded(host_system_fixture, hif2a_ligand_pair_si
         mol_b_charges = st.ff.q_handle.parameterize(st.mol_b)
         mol_b_sig_eps = st.ff.lj_handle.parameterize(st.mol_b)
 
-        for a_idx, (test_q, test_sig, test_eps, _) in enumerate(hgs.nonbonded_host_guest.params):
+        for a_idx, (test_q, test_sig, test_eps, _) in enumerate(hgs.nonbonded_host_guest.potential.params_init[1]):
 
             if a_idx < num_host_atoms:
                 continue
@@ -194,10 +182,11 @@ def test_combined_parameters_nonbonded_intermediate(
 
     for lamb in rng.uniform(0.01, 0.99, (10,)):
         hgs = st.combine_with_host(host_sys, lamb, num_water_atoms)
-        cutoff = hgs.nonbonded_host_guest.potential.cutoff
+        cutoff = hgs.nonbonded_host_guest.potential.potentials[0].cutoff
 
-        assert hgs.nonbonded_host_guest.params is not None
-        guest_params = hgs.nonbonded_host_guest.params[num_host_atoms:]
+        assert len(hgs.nonbonded_host_guest.potential.params_init) > 1
+        # NBIxnGroup has the ligand interaction parameters
+        guest_params = np.array(hgs.nonbonded_host_guest.potential.params_init[1][num_host_atoms:])
         ws_core = [w for flag, (_, _, _, w) in zip(st.c_flags, guest_params) if flag == 0]
         ws_a = [w for flag, (_, _, _, w) in zip(st.c_flags, guest_params) if flag == 1]
         ws_b = [w for flag, (_, _, _, w) in zip(st.c_flags, guest_params) if flag == 2]
