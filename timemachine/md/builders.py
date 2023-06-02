@@ -11,9 +11,9 @@ def strip_units(coords):
     return np.array(coords.value_in_unit_system(unit.md_unit_system))
 
 
-def build_protein_system(host_pdbfile: Union[app.PDBFile, str], protein_ff: str, water_ff: str):
+def build_protein_system(host_pdbfile: Union[app.PDBFile, str], protein_ff: str, water_ff: str, padding=1.0):
     """
-    Build a solvated protein system with a 10A padding.
+    Build a solvated protein system with a default of 10A padding.
 
     Parameters
     ---------
@@ -34,7 +34,6 @@ def build_protein_system(host_pdbfile: Union[app.PDBFile, str], protein_ff: str,
     modeller = app.Modeller(host_pdb.topology, host_pdb.positions)
     host_coords = strip_units(host_pdb.positions)
 
-    padding = 1.0
     box_lengths = np.amax(host_coords, axis=0) - np.amin(host_coords, axis=0)
 
     box_lengths = box_lengths + padding

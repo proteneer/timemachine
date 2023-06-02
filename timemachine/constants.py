@@ -23,3 +23,7 @@ DEFAULT_WATER_FF = "tip3p"
 
 # thresholds
 MAX_FORCE_NORM = 50000  # used to check norms in the gradient computations
+
+# Nonbonded parameters
+CUTOFF = 1.2
+BETA = 2.0

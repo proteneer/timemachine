@@ -1,5 +1,7 @@
 import numpy as np
 
+from timemachine.constants import CUTOFF
+
 
 def construct_lambda_schedule(num_windows):
     """Generate a length-num_windows list of lambda values from 0.0 up to 1.0
@@ -47,7 +49,7 @@ def interpolate_pre_optimized_protocol(pre_optimized_protocol, num_windows):
     return lambda_schedule
 
 
-def construct_pre_optimized_absolute_lambda_schedule_solvent(num_windows, nonbonded_cutoff=1.2):
+def construct_pre_optimized_absolute_lambda_schedule_solvent(num_windows, nonbonded_cutoff=CUTOFF):
     """Linearly interpolate a lambda schedule pre-optimized for solvent decoupling
 
     Notes

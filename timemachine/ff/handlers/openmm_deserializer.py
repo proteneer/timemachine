@@ -198,7 +198,7 @@ def deserialize_system(system: mm.System, cutoff: float) -> Tuple[List[potential
             nb_params[:, 1] = nb_params[:, 1] / 2
             nb_params[:, 2] = np.sqrt(nb_params[:, 2])
 
-            beta = 2.0  # erfc correction
+            beta = constants.BETA  # erfc correction
 
             # use the same scale factors for electrostatics and lj
             scale_factors = np.stack([scale_factors_, scale_factors_], axis=1)

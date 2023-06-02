@@ -6,7 +6,7 @@ from warnings import warn
 import numpy as np
 from numpy.typing import NDArray
 
-from timemachine.constants import BOLTZ
+from timemachine.constants import BOLTZ, CUTOFF
 from timemachine.fe import model_utils, topology
 from timemachine.fe.bar import bar_with_bootstrapped_uncertainty, df_err_from_ukln, pair_overlap_from_ukln
 from timemachine.fe.energy_decomposition import (
@@ -230,7 +230,7 @@ class AbsoluteFreeEnergy(BaseFreeEnergy):
         """
         ligand_masses = get_mol_masses(self.mol)
 
-        host_bps, host_masses = openmm_deserializer.deserialize_system(host_system, cutoff=1.2)
+        host_bps, host_masses = openmm_deserializer.deserialize_system(host_system, cutoff=CUTOFF)
         hgt = topology.HostGuestTopology(host_bps, self.top)
 
         final_params, final_potentials = self._get_system_params_and_potentials(ff_params, hgt, lamb)

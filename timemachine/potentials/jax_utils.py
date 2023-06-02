@@ -6,6 +6,8 @@ from jax import vmap
 from jax.scipy.special import logsumexp
 from numpy.typing import NDArray
 
+from timemachine.constants import CUTOFF
+
 Array: TypeAlias = NDArray
 
 
@@ -91,7 +93,7 @@ def distance_on_pairs(
     return dij
 
 
-def get_interacting_pair_indices_batch(confs, boxes, pairs, cutoff=1.2):
+def get_interacting_pair_indices_batch(confs, boxes, pairs, cutoff=CUTOFF):
     """Given candidate interacting pairs, exclude most pairs whose distances are >= cutoff
 
     Parameters

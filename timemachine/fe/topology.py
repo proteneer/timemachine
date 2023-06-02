@@ -5,6 +5,7 @@ import numpy as np
 from numpy.typing import NDArray
 
 from timemachine import potentials
+from timemachine.constants import BETA, CUTOFF
 from timemachine.fe import chiral_utils
 from timemachine.fe.system import VacuumSystem
 from timemachine.fe.utils import get_romol_conf
@@ -14,8 +15,8 @@ from timemachine.potentials.nonbonded import combining_rule_epsilon, combining_r
 _SCALE_12 = 1.0
 _SCALE_13 = 1.0
 _SCALE_14 = 0.5
-_BETA = 2.0
-_CUTOFF = 1.2
+_BETA = BETA
+_CUTOFF = CUTOFF
 
 
 class AtomMappingError(Exception):

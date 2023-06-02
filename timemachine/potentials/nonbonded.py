@@ -7,6 +7,7 @@ from jax.scipy.special import erfc
 from numpy.typing import NDArray
 from scipy.special import binom
 
+from timemachine.constants import BETA, CUTOFF
 from timemachine.potentials import jax_utils
 from timemachine.potentials.jax_utils import (
     DEFAULT_CHUNK_SIZE,
@@ -437,7 +438,7 @@ def nonbonded_interaction_groups(
     return vdW, electrostatics
 
 
-def validate_coulomb_cutoff(cutoff=1.0, beta=2.0, threshold=1e-2):
+def validate_coulomb_cutoff(cutoff=CUTOFF, beta=BETA, threshold=1e-2):
     """check whether f(r) = erfc(beta * r) <= threshold at r = cutoff
     following https://github.com/proteneer/timemachine/pull/424#discussion_r629678467"""
     if erfc(beta * cutoff) > threshold:
@@ -450,7 +451,7 @@ def validate_coulomb_cutoff(cutoff=1.0, beta=2.0, threshold=1e-2):
 #   TODO: avoid repetition between this and lennard-jones
 
 
-def coulomb_prefactor_on_atom(x_i, x_others, q_others, box=None, beta=2.0, cutoff=jnp.inf) -> float:
+def coulomb_prefactor_on_atom(x_i, x_others, q_others, box=None, beta=BETA, cutoff=jnp.inf) -> float:
     """Precompute part of (sum_i q_i * q_j / d_ij * rxn_field(d_ij)) that does not depend on q_i
 
     Parameters
@@ -475,7 +476,7 @@ def coulomb_prefactor_on_atom(x_i, x_others, q_others, box=None, beta=2.0, cutof
     return prefactor_i
 
 
-def coulomb_prefactors_on_snapshot(x_ligand, x_env, q_env, box=None, beta=2.0, cutoff=np.inf) -> Array:
+def coulomb_prefactors_on_snapshot(x_ligand, x_env, q_env, box=None, beta=BETA, cutoff=np.inf) -> Array:
     """Map coulomb_prefactor_on_atom over atoms in x_ligand
 
     Parameters
@@ -500,7 +501,7 @@ def coulomb_prefactors_on_snapshot(x_ligand, x_env, q_env, box=None, beta=2.0, c
 
 
 def coulomb_prefactors_on_traj(
-    traj, boxes, charges, ligand_indices, env_indices, beta=2.0, cutoff=jnp.inf, chunk_size=DEFAULT_CHUNK_SIZE
+    traj, boxes, charges, ligand_indices, env_indices, beta=BETA, cutoff=jnp.inf, chunk_size=DEFAULT_CHUNK_SIZE
 ):
     """Map coulomb_prefactors_on_snapshot over snapshots in a trajectory
 

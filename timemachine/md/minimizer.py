@@ -7,7 +7,7 @@ import scipy.optimize
 from numpy.typing import NDArray
 from rdkit import Chem
 
-from timemachine.constants import BOLTZ, DEFAULT_TEMP, MAX_FORCE_NORM
+from timemachine.constants import BOLTZ, CUTOFF, DEFAULT_TEMP, MAX_FORCE_NORM
 from timemachine.fe import model_utils, topology
 from timemachine.fe.utils import get_romol_conf
 from timemachine.ff import Forcefield
@@ -138,7 +138,7 @@ def minimize_host_4d(mols, host_system, host_coords, ff, box, mol_coords=None) -
 
     assert box.shape == (3, 3)
 
-    host_bps, host_masses = openmm_deserializer.deserialize_system(host_system, cutoff=1.2)
+    host_bps, host_masses = openmm_deserializer.deserialize_system(host_system, cutoff=CUTOFF)
 
     num_host_atoms = host_coords.shape[0]
 
@@ -213,7 +213,7 @@ def make_host_du_dx_fxn(mols, host_system, host_coords, ff, box, mol_coords=None
     assert box.shape == (3, 3)
 
     # openmm host_system -> timemachine host_bps
-    host_bps, _ = openmm_deserializer.deserialize_system(host_system, cutoff=1.2)
+    host_bps, _ = openmm_deserializer.deserialize_system(host_system, cutoff=CUTOFF)
 
     # construct appropriate topology from (mols, ff)
     if len(mols) == 1:
@@ -364,7 +364,7 @@ def equilibrate_host(
 
     """
     # insert mol into the binding pocket.
-    host_bps, host_masses = openmm_deserializer.deserialize_system(host_system, cutoff=1.2)
+    host_bps, host_masses = openmm_deserializer.deserialize_system(host_system, cutoff=CUTOFF)
 
     min_host_coords = minimize_host_4d([mol], host_system, host_coords, ff, box)
 

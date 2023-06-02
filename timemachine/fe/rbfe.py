@@ -631,8 +631,8 @@ def run_solvent(
     md_params: MDParams = DEFAULT_MD_PARAMS,
     n_windows: Optional[int] = None,
     min_cutoff: Optional[float] = 0.7,
+    box_width=4.0,
 ):
-    box_width = 4.0
     solvent_sys, solvent_conf, solvent_box, solvent_top = builders.build_water_system(box_width, forcefield.water_ff)
     solvent_box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes, deboggle later
     solvent_host_config = HostConfig(solvent_sys, solvent_conf, solvent_box)
@@ -659,9 +659,10 @@ def run_complex(
     md_params: MDParams = DEFAULT_MD_PARAMS,
     n_windows: Optional[int] = None,
     min_cutoff: Optional[float] = 0.7,
+    box_padding=1.0,
 ):
     complex_sys, complex_conf, complex_box, complex_top = builders.build_protein_system(
-        protein, forcefield.protein_ff, forcefield.water_ff
+        protein, forcefield.protein_ff, forcefield.water_ff, box_padding
     )
     complex_box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes, deboggle later
     complex_host_config = HostConfig(complex_sys, complex_conf, complex_box)
