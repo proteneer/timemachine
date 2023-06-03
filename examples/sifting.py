@@ -274,12 +274,13 @@ from timemachine.md.smc import BatchLogProb, BatchPropagator, Lambda, LogWeights
 NextLamSelector = Callable[[Samples, LogWeights, Lambda], Lambda]
 
 
-def adaptive_sequential_monte_carlo(
+def adaptive_neq_switch(
     samples: Samples,
     select_next_lam: NextLamSelector,
     propagate: BatchPropagator,
     log_prob: BatchLogProb,
     resample: Resampler,
+    log_weights,
     initial_lam: Lambda = 1.0,
     final_lam: Lambda = 0.0,
     max_num_lambdas: int = 10000,
@@ -299,6 +300,8 @@ def adaptive_sequential_monte_carlo(
         [exp(-u(x, lam)) for x in xs]
     resample: function
         (optionally) perform resampling given an array of log weights
+    log_weights: [N,]
+        list of initial weights
 
     Returns
     -------
@@ -324,24 +327,9 @@ def adaptive_sequential_monte_carlo(
     * get_endstate_samples_from_smc_result
     """
 
-    n = len(samples)
-    log_weights = np.zeros(n)
-
     cur_samples = samples
-    # ancestry_traj = [np.arange(n)]
-    # log_weights_traj = [np.array(log_weights)]
-    # incremental_log_weights_traj = []  # note: redundant but convenient
+    log_weights_traj = [log_weights]
     lambdas = [initial_lam]
-
-    # def accumulate_results(indices, log_weights, incremental_log_weights, lam):
-    # sample_traj.append(samples)
-    # ancestry_traj.append(indices)
-    # log_weights_traj.append(np.array(log_weights))
-    # incremental_log_weights_traj.append(np.array(incremental_log_weights))
-    # lambdas.append(lam)
-
-    lam_initial = lambdas[-1]
-    # lam_target = select_next_lam(cur_samples, log_weights, lam_initial)
 
     for t in range(max_num_lambdas):
         # print("T", t)
@@ -353,41 +341,35 @@ def adaptive_sequential_monte_carlo(
             break
 
         lam_initial = lambdas[-1]
-        # lam_target = select_next_lam(cur_samples, log_weights, lam_initial)
 
-        # toss out history
-        lam_target = select_next_lam(cur_samples, np.zeros_like(log_weights), lam_initial)
+        # keep history, incompatible with NEQ for certain thresholds
+        # lam_target = select_next_lam(cur_samples, log_weights, lam_initial)
+        # forget history
+        lam_target = select_next_lam(cur_samples, np.zeros_like(log_weights), lam_initial, target_lam=final_lam)
 
         # update log weights
         incremental_log_weights = log_prob(cur_samples, lam_target) - log_prob(cur_samples, lam_initial)
         log_weights += incremental_log_weights
 
-        # resample
-        indices, log_weights = resample(log_weights)
+        # resample, disabled for now
+        # indices, log_weights = resample(log_weights)
+        # resampled = [cur_samples[i] for i in indices]
+        # cur_samples = propagate(resampled, lam_target)
 
-        # identity = tuple(indices.tolist()) == tuple(range(len(log_weights)))
-        # if not identity:
-        if t % callback_interval == 0:
-            # nit: when we resample, all the weights become uniform again
-            # print(f"{len(set(indices.tolist()))} unique indices out of {len(log_weights)}")
-            callback_fn(t, lambdas[-1], log_weights, cur_samples, final=False)
-
-        resampled = [cur_samples[i] for i in indices]
-
-        # propagate
-        cur_samples = propagate(resampled, lam_target)
+        # propagate (also removes some of the clashiness induced by moving to lam_target)
+        cur_samples = propagate(cur_samples, lam_target)
 
         # log
         lambdas.append(lam_target)
+        log_weights_traj.append(log_weights)
 
-        if lam_target <= 0:
+        if lam_target == final_lam:
             print("Terminating")
             break
-        # accumulate_results(indices, log_weights, incremental_log_weights, lam_target)
-
-        # print(t, lambdas[-1])
 
     callback_fn(t, lambdas[-1], log_weights, cur_samples, final=True)
+
+    return cur_samples, lambdas, log_weights_traj
     # with open(outfile + "_final.npz", "wb") as fh:
     # np.savez(fh, log_weights=log_weights, samples=cur_samples)
 
@@ -456,22 +438,23 @@ def select_next_lam_CESS(
         lam_increment = 1.0
 
     next_lam = current_lam + direction * lam_increment
+    # next_lam = np.clip(next_lam, current_lam, target_lam)
 
     return next_lam
 
 
-def select_next_lam_NEQ(
-    samples,
-    log_weights,
-    current_lam,
-    batch_log_prob,
-    target_lam=0.0,
-    frac_ess_reduction_threshold=0.05,
-    xtol=1e-5,
-    verbose=False,
-):
-    next_lam = max(0.0, current_lam - 0.001)
-    return next_lam
+# def select_next_lam_NEQ(
+#     samples,
+#     log_weights,
+#     current_lam,
+#     batch_log_prob,
+#     target_lam=0.0,
+#     frac_ess_reduction_threshold=0.05,
+#     xtol=1e-5,
+#     verbose=False,
+# ):
+#     next_lam = max(0.0, current_lam - 0.001)
+#     return next_lam
 
 
 def make_smc_funcs(system, local_md_config):
@@ -525,6 +508,9 @@ def inplace_randomly_rotate(coords, ligand_idxs, jordan_idxs):
     centered_coords = ligand_coords - jordan_centroid
     rotated_coords = np.matmul(centered_coords, special_ortho_group.rvs(3))
     coords[ligand_idxs] = rotated_coords + jordan_centroid
+
+
+import pickle
 
 
 def estimate_populations(mol, host_pdb, ff, outfile, n_walkers, n_burn_in_steps, n_eq_steps, n_relax_steps, seed):
@@ -582,18 +568,55 @@ def estimate_populations(mol, host_pdb, ff, outfile, n_walkers, n_burn_in_steps,
             writer.write_frame(frame * 10)
         writer.close()
 
-    adaptive_sequential_monte_carlo(
+    # forward
+    log_weights = np.zeros(len(samples))
+
+    # coupling
+    lambda_0_samples, fwd_lambdas, fwd_log_weights_traj = adaptive_neq_switch(
         samples,
         select_next_lam,
         batch_propagate,
         batch_log_prob,
         resample_fxn,
+        log_weights,
         initial_lam=1.0,
         final_lam=0.0,
         max_num_lambdas=1000,
         callback_fn=write_frames_callback,
         callback_interval=10,
     )
+
+    # Alternatively, we can re-sample, and then set weights back to zero?
+
+    print("log_weights_fwd", fwd_log_weights_traj[-1])
+
+    # decoupling using samples and log_weights from the coupling process
+    lambda_1_samples, rev_lambdas, rev_log_weights_traj = adaptive_neq_switch(
+        lambda_0_samples,
+        select_next_lam,
+        batch_propagate,
+        batch_log_prob,
+        resample_fxn,
+        fwd_log_weights_traj[-1],
+        initial_lam=0.0,
+        final_lam=1.0,
+        max_num_lambdas=1000,
+        callback_fn=write_frames_callback,
+        callback_interval=10,
+    )
+
+    print("log_weights_rev", rev_log_weights_traj[-1])
+
+    with open(outfile + "_traj.pkl", "wb") as fh:
+        data = [
+            lambda_0_samples,
+            fwd_lambdas,
+            fwd_log_weights_traj,
+            lambda_1_samples,
+            rev_lambdas,
+            rev_log_weights_traj,
+        ]
+        pickle.dump(data, fh)
 
     # t3 = time()
 
