@@ -341,23 +341,25 @@ def adaptive_sequential_monte_carlo(
     # lambdas.append(lam)
 
     lam_initial = lambdas[-1]
-    lam_target = select_next_lam(cur_samples, log_weights, lam_initial)
-
-    callback_fn(0, lambdas[-1], log_weights, cur_samples, final=False)
+    # lam_target = select_next_lam(cur_samples, log_weights, lam_initial)
 
     for t in range(max_num_lambdas):
-        # if t % callback_interval == 0:
-        #     callback_fn(t, lambdas[-1], log_weights, cur_samples, final=False)
+        # print("T", t)
+
+        if t % callback_interval == 0:
+            callback_fn(t, lambdas[-1], log_weights, cur_samples, final=False)
 
         if lambdas[-1] == final_lam:
             break
 
         lam_initial = lambdas[-1]
-        lam_target = select_next_lam(cur_samples, log_weights, lam_initial)
+        # lam_target = select_next_lam(cur_samples, log_weights, lam_initial)
+
+        # toss out history
+        lam_target = select_next_lam(cur_samples, np.zeros_like(log_weights), lam_initial)
 
         # update log weights
         incremental_log_weights = log_prob(cur_samples, lam_target) - log_prob(cur_samples, lam_initial)
-        # print("target", "initial", lam_target, lam_initial, "ILW", incremental_log_weights)
         log_weights += incremental_log_weights
 
         # resample
@@ -469,7 +471,6 @@ def select_next_lam_NEQ(
     verbose=False,
 ):
     next_lam = max(0.0, current_lam - 0.001)
-
     return next_lam
 
 
@@ -491,8 +492,8 @@ def make_smc_funcs(system, local_md_config):
         params = apply_lifting(system, lam)
         return -batch_u(samples, params)
 
-    # select_next_lam = partial(select_next_lam_CESS, batch_log_prob=batch_log_prob)
-    select_next_lam = partial(select_next_lam_NEQ, batch_log_prob=batch_log_prob)
+    select_next_lam = partial(select_next_lam_CESS, batch_log_prob=batch_log_prob)
+    # select_next_lam = partial(select_next_lam_NEQ, batch_log_prob=batch_log_prob)
 
     return batch_propagate, batch_log_prob, select_next_lam
 
@@ -539,6 +540,7 @@ def estimate_populations(mol, host_pdb, ff, outfile, n_walkers, n_burn_in_steps,
     print("\trandomly rotating the ligand")
     for sample in samples:
         # assume that the protein doesn't move very much
+        # tbd: do we rotate ligand's velocities as well?
         inplace_randomly_rotate(sample.coords, system.ligand_idxs, system.jordan_idxs)
 
     local_md_config = LocalMDConfig(
