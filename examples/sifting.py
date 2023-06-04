@@ -8,6 +8,7 @@ import timemachine
 print(timemachine.__version__)
 
 import argparse
+import functools
 from copy import deepcopy
 from time import time
 
@@ -254,14 +255,14 @@ from timemachine.md.smc import conditional_multinomial_resample, effective_sampl
 from timemachine.potentials import SummedPotential
 
 
-def resample_fxn(log_weights):
+def resample_fxn(log_weights, thresh):
     ess = effective_sample_size(log_weights)
     msg = f"""
         ESS = {ess:.3f} ({100 * ess / len(log_weights):.5f}%)
         running estimate = {one_sided_exp(-log_weights):.5f}
     """
     print(msg)
-    out = conditional_multinomial_resample(log_weights, thresh=0.0)
+    out = conditional_multinomial_resample(log_weights, thresh)
     # out = conditional_multinomial_resample(log_weights, thresh=0.2)
 
     return out
@@ -390,7 +391,7 @@ def select_next_lam_CESS(
     current_lam,
     batch_log_prob,
     target_lam=0.0,
-    frac_ess_reduction_threshold=0.05,
+    frac_ess_reduction_threshold=0.02,
     xtol=1e-5,
     verbose=False,
 ):
@@ -577,7 +578,7 @@ def estimate_populations(mol, host_pdb, ff, outfile, n_walkers, n_burn_in_steps,
         select_next_lam,
         batch_propagate,
         batch_log_prob,
-        resample_fxn,
+        functools.partial(resample_fxn, thresh=0.0),
         log_weights,
         initial_lam=1.0,
         final_lam=0.0,
@@ -586,18 +587,24 @@ def estimate_populations(mol, host_pdb, ff, outfile, n_walkers, n_burn_in_steps,
         callback_interval=10,
     )
 
-    # Alternatively, we can re-sample, and then set weights back to zero?
-
     print("log_weights_fwd", fwd_log_weights_traj[-1])
+
+    # keep old weights
+    # log_weights = fwd_log_weights_traj[-1]
+
+    # Alternatively, we can re-sample, and then set weights back to zero
+    print("Forceing re-sampling for the reverse process")
+    indices, log_weights = resample_fxn(log_weights, thresh=1.0)
+    resampled = [lambda_0_samples[i] for i in indices]
 
     # decoupling using samples and log_weights from the coupling process
     lambda_1_samples, rev_lambdas, rev_log_weights_traj = adaptive_neq_switch(
-        lambda_0_samples,
+        resampled,
         select_next_lam,
         batch_propagate,
         batch_log_prob,
-        resample_fxn,
-        fwd_log_weights_traj[-1],
+        functools.partial(resample_fxn, thresh=0.0),
+        log_weights,
         initial_lam=0.0,
         final_lam=1.0,
         max_num_lambdas=1000,
