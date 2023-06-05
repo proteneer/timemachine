@@ -530,7 +530,7 @@ def get_complex_phase_system(mol, host_pdb, ff, minimize_energy=True):
     best_c_alpha_restraint_idxs = []
     best_dist = np.inf
 
-    # set up REST region aroudn the ligand
+    # set up REST region around the ligand
     side_chain_cutoff = 0.3
     rest_idxs = []
     for host_atom_idx, atom in enumerate(host_top.atoms()):
@@ -592,13 +592,7 @@ def get_complex_phase_system(mol, host_pdb, ff, minimize_energy=True):
 
     if minimize_energy:
         print("minimizing energy...")
-        # new_complex_coords = minimizer.minimize_host_4d([mol], complex_system, complex_coords, ff, complex_box)
         x0 = np.concatenate([complex_coords, ligand_coords], axis=0)
-
-        # print(np.mean(x0[ligand_idxs], axis=0))
-        # print(np.mean(x0[jordan_idxs], axis=0))
-
-        # assert 0
 
         # lift ligand ixns
         bound_potentials = []
@@ -610,11 +604,48 @@ def get_complex_phase_system(mol, host_pdb, ff, minimize_energy=True):
 
         idxs = list(range(len(x0)))
         coords = minimizer.local_minimize(x0, vgf, idxs, method="L-BFGS-B")
-        # coords = np.concatenate([new_complex_coords, ligand_coords])
     else:
         coords = np.concatenate([complex_coords, ligand_coords])
 
-    return potentials, params, masses, coords, complex_box, complex_topology, ligand_idxs, jordan_idxs, rest_idxs
+    # rank of ligands based on distance (might be useful for sequential insertion/deletion later)
+    # note: we need to do the same for side chains later as well
+    ligand_dists = []
+    for l_xyz in ligand_coords:
+        dr = delta_r(l_xyz, jordan_centroid, complex_box)
+        ligand_dists.append(np.linalg.norm(dr))
+
+    ligand_ranks = np.zeros(len(ligand_coords))
+    for rank, atom in enumerate(np.argsort(ligand_dists)):
+        ligand_ranks[atom] = rank
+
+    print(ligand_dists)
+    print("Ligand Ranks", ligand_ranks)
+
+    rest_dists = []
+    for s_xyz in complex_coords[rest_idxs]:
+        dr = delta_r(s_xyz, jordan_centroid, complex_box)
+        rest_dists.append(np.linalg.norm(dr))
+
+    rest_ranks = np.zeros(len(rest_idxs))
+    for rank, atom in enumerate(np.argsort(rest_dists)[::-1]):
+        rest_ranks[atom] = rank
+
+    print(rest_dists)
+    print("Rest Ranks", rest_ranks)
+
+    return (
+        potentials,
+        params,
+        masses,
+        coords,
+        complex_box,
+        complex_topology,
+        ligand_idxs,
+        ligand_ranks,
+        jordan_idxs,
+        rest_idxs,
+        rest_ranks,
+    )
 
 
 def equilibrate_solvent_phase(
