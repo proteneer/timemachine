@@ -176,13 +176,25 @@ void NonbondedAllPairs<RealType>::set_atom_idxs_device(
 }
 
 template <typename RealType>
+void NonbondedAllPairs<RealType>::sort(const double *d_coords, const double *d_box, cudaStream_t stream) {
+    // (ytz): update the permutation index before building neighborlist, as the neighborlist is tied
+    // to a particular sort order
+    if (!disable_hilbert_) {
+        this->hilbert_sort(d_coords, d_box, stream);
+    } else {
+        gpuErrchk(cudaMemcpyAsync(
+            d_sorted_atom_idxs_, d_atom_idxs_, K_ * sizeof(*d_atom_idxs_), cudaMemcpyDeviceToDevice, stream));
+    }
+}
+
+template <typename RealType>
 void NonbondedAllPairs<RealType>::hilbert_sort(const double *d_coords, const double *d_box, cudaStream_t stream) {
 
     const int tpb = warp_size;
     const int B = ceil_divide(K_, tpb);
 
-    k_coords_to_kv_gather<<<B, tpb, 0, stream>>>(
-        K_, d_atom_idxs_, d_coords, d_box, d_bin_to_idx_, d_sort_keys_in_, d_sort_vals_in_);
+    k_coords_to_kv_gather<RealType>
+        <<<B, tpb, 0, stream>>>(K_, d_atom_idxs_, d_coords, d_box, d_bin_to_idx_, d_sort_keys_in_, d_sort_vals_in_);
 
     gpuErrchk(cudaPeekAtLastError());
 
