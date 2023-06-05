@@ -8,8 +8,9 @@ import numpy as np
 from numpy.typing import NDArray as Array
 from openmm import app
 
+import timemachine
 from timemachine import potentials
-from timemachine.constants import BOLTZ, CUTOFF, DEFAULT_TEMP
+from timemachine.constants import BOLTZ, DEFAULT_TEMP
 from timemachine.fe import model_utils
 from timemachine.fe.free_energy import (
     AbsoluteFreeEnergy,
@@ -301,7 +302,9 @@ def setup_initial_states(
         Returns an initial state for each value of lambda.
 
     """
-    host_bps, host_masses = openmm_deserializer.deserialize_system(host_config.omm_system, cutoff=CUTOFF)
+    host_bps, host_masses = openmm_deserializer.deserialize_system(
+        host_config.omm_system, cutoff=timemachine.constants.CUTOFF
+    )
     host_conf = minimizer.minimize_host_4d(
         [afe.mol],
         host_config.omm_system,

@@ -1,6 +1,6 @@
 import numpy as np
 
-from timemachine.constants import CUTOFF
+from timemachine import constants
 
 
 def construct_lambda_schedule(num_windows):
@@ -49,7 +49,7 @@ def interpolate_pre_optimized_protocol(pre_optimized_protocol, num_windows):
     return lambda_schedule
 
 
-def construct_pre_optimized_absolute_lambda_schedule_solvent(num_windows, nonbonded_cutoff=CUTOFF):
+def construct_pre_optimized_absolute_lambda_schedule_solvent(num_windows, nonbonded_cutoff=None):
     """Linearly interpolate a lambda schedule pre-optimized for solvent decoupling
 
     Notes
@@ -60,6 +60,7 @@ def construct_pre_optimized_absolute_lambda_schedule_solvent(num_windows, nonbon
         (since decoupling_distance = lambda * nonbonded_cutoff,
         this schedule will not be appropriate for nonbonded_cutoff != 1.2!)
     """
+    nonbonded_cutoff = constants.CUTOFF if nonbonded_cutoff is None else nonbonded_cutoff
     assert nonbonded_cutoff == 1.2
 
     # fmt: off

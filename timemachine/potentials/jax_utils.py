@@ -6,7 +6,7 @@ from jax import vmap
 from jax.scipy.special import logsumexp
 from numpy.typing import NDArray
 
-from timemachine.constants import CUTOFF
+from timemachine import constants
 
 Array: TypeAlias = NDArray
 
@@ -93,7 +93,7 @@ def distance_on_pairs(
     return dij
 
 
-def get_interacting_pair_indices_batch(confs, boxes, pairs, cutoff=CUTOFF):
+def get_interacting_pair_indices_batch(confs, boxes, pairs, cutoff=None):
     """Given candidate interacting pairs, exclude most pairs whose distances are >= cutoff
 
     Parameters
@@ -112,6 +112,7 @@ def get_interacting_pair_indices_batch(confs, boxes, pairs, cutoff=CUTOFF):
     -----
     * Padding causes some amount of wasted effort, but keeps things nice and fixed-dimensional for later XLA steps
     """
+    cutoff = cutoff or constants.CUTOFF
     n_snapshots, n_atoms, dim = confs.shape
     assert boxes.shape == (n_snapshots, dim, dim)
 

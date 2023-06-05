@@ -9,6 +9,7 @@ import numpy as np
 from numpy.typing import NDArray
 from rdkit import Chem
 
+import timemachine
 from timemachine.fe import interpolate, model_utils, system, topology, utils
 from timemachine.fe.dummy import canonicalize_bond, generate_anchored_dummy_group_assignments
 from timemachine.fe.lambda_schedule import construct_pre_optimized_relative_lambda_schedule
@@ -989,7 +990,13 @@ class SingleTopology(AtomMapMixin):
         assert src_nonbonded.potential.cutoff == dst_nonbonded.potential.cutoff
 
         cutoff = src_nonbonded.potential.cutoff
-
+        print(
+            "ST cutoff, beta" * 10,
+            cutoff,
+            dst_nonbonded.potential.beta,
+            timemachine.constants.CUTOFF,
+            timemachine.constants.BETA,
+        )
         pair_idxs_and_params = align_fn(
             src_nonbonded.potential.idxs,
             src_nonbonded.params,

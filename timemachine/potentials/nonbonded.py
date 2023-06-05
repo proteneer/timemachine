@@ -7,7 +7,7 @@ from jax.scipy.special import erfc
 from numpy.typing import NDArray
 from scipy.special import binom
 
-from timemachine.constants import BETA, CUTOFF
+from timemachine import constants
 from timemachine.potentials import jax_utils
 from timemachine.potentials.jax_utils import (
     DEFAULT_CHUNK_SIZE,
@@ -438,9 +438,11 @@ def nonbonded_interaction_groups(
     return vdW, electrostatics
 
 
-def validate_coulomb_cutoff(cutoff=CUTOFF, beta=BETA, threshold=1e-2):
+def validate_coulomb_cutoff(cutoff=None, beta=None, threshold=1e-2):
     """check whether f(r) = erfc(beta * r) <= threshold at r = cutoff
     following https://github.com/proteneer/timemachine/pull/424#discussion_r629678467"""
+    cutoff = cutoff or constants.CUTOFF
+    beta = beta or constants.BETA
     if erfc(beta * cutoff) > threshold:
         print(UserWarning(f"erfc(beta * cutoff) = {erfc(beta * cutoff)} > threshold = {threshold}"))
 
@@ -451,7 +453,7 @@ def validate_coulomb_cutoff(cutoff=CUTOFF, beta=BETA, threshold=1e-2):
 #   TODO: avoid repetition between this and lennard-jones
 
 
-def coulomb_prefactor_on_atom(x_i, x_others, q_others, box=None, beta=BETA, cutoff=jnp.inf) -> float:
+def coulomb_prefactor_on_atom(x_i, x_others, q_others, box=None, beta=None, cutoff=jnp.inf) -> float:
     """Precompute part of (sum_i q_i * q_j / d_ij * rxn_field(d_ij)) that does not depend on q_i
 
     Parameters
@@ -471,12 +473,13 @@ def coulomb_prefactor_on_atom(x_i, x_others, q_others, box=None, beta=BETA, cuto
     prefactor_i : float
         sum_j q_j / d_ij * erfc(beta * d_ij)
     """
+    beta = beta or constants.BETA
     d_ij = jax_utils.distance_from_one_to_others(x_i, x_others, box, cutoff)
     prefactor_i = jnp.sum((q_others / d_ij) * erfc(beta * d_ij))
     return prefactor_i
 
 
-def coulomb_prefactors_on_snapshot(x_ligand, x_env, q_env, box=None, beta=BETA, cutoff=np.inf) -> Array:
+def coulomb_prefactors_on_snapshot(x_ligand, x_env, q_env, box=None, beta=None, cutoff=np.inf) -> Array:
     """Map coulomb_prefactor_on_atom over atoms in x_ligand
 
     Parameters
@@ -494,6 +497,8 @@ def coulomb_prefactors_on_snapshot(x_ligand, x_env, q_env, box=None, beta=BETA, 
         prefactors[i] = coulomb_prefactor_on_atom(x_ligand[i], ...)
     """
 
+    beta = beta or constants.BETA
+
     def f_atom(x_i):
         return coulomb_prefactor_on_atom(x_i, x_env, q_env, box, beta, cutoff)
 
@@ -501,7 +506,7 @@ def coulomb_prefactors_on_snapshot(x_ligand, x_env, q_env, box=None, beta=BETA, 
 
 
 def coulomb_prefactors_on_traj(
-    traj, boxes, charges, ligand_indices, env_indices, beta=BETA, cutoff=jnp.inf, chunk_size=DEFAULT_CHUNK_SIZE
+    traj, boxes, charges, ligand_indices, env_indices, beta=None, cutoff=jnp.inf, chunk_size=DEFAULT_CHUNK_SIZE
 ):
     """Map coulomb_prefactors_on_snapshot over snapshots in a trajectory
 
@@ -522,6 +527,7 @@ def coulomb_prefactors_on_traj(
     traj_prefactors: [T, N_lig] array
         traj_prefactors[t] = coulomb_prefactors_on_snapshot(traj[t][ligand_indices], ...)
     """
+    beta = beta or constants.BETA
     validate_interaction_group_idxs(len(traj[0]), ligand_indices, env_indices)
 
     q_env = charges[env_indices]

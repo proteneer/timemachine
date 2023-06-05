@@ -7,8 +7,7 @@ import numpy as np
 import openmm
 import scipy
 
-from timemachine import potentials
-from timemachine.constants import CUTOFF
+from timemachine import constants, potentials
 from timemachine.ff.handlers import openmm_deserializer
 from timemachine.integrator import simulate
 from timemachine.potentials import (
@@ -107,7 +106,7 @@ def convert_bps_into_system(bps: Sequence[potentials.BoundPotential]):
 
 
 def convert_omm_system(omm_system: openmm.System) -> Tuple["VacuumSystem", List[float]]:
-    bps, masses = openmm_deserializer.deserialize_system(omm_system, cutoff=CUTOFF)
+    bps, masses = openmm_deserializer.deserialize_system(omm_system, cutoff=constants.CUTOFF)
     system = convert_bps_into_system(bps)
     return system, masses
 

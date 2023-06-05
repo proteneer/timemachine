@@ -4,8 +4,8 @@ import jax.numpy as jnp
 import numpy as np
 from numpy.typing import NDArray
 
+import timemachine
 from timemachine import potentials
-from timemachine.constants import BETA, CUTOFF
 from timemachine.fe import chiral_utils
 from timemachine.fe.system import VacuumSystem
 from timemachine.fe.utils import get_romol_conf
@@ -15,8 +15,6 @@ from timemachine.potentials.nonbonded import combining_rule_epsilon, combining_r
 _SCALE_12 = 1.0
 _SCALE_13 = 1.0
 _SCALE_14 = 0.5
-_BETA = BETA
-_CUTOFF = CUTOFF
 
 
 class AtomMappingError(Exception):
@@ -211,9 +209,10 @@ class BaseTopology:
 
         scale_factors = np.stack([scale_factors, scale_factors], axis=1)
 
-        beta = _BETA
-        cutoff = _CUTOFF  # solve for this analytically later
+        beta = timemachine.constants.BETA
+        cutoff = timemachine.constants.CUTOFF  # solve for this analytically later
 
+        print("BaseTopology cutoff, beta", cutoff, beta)
         N = len(q_params)
 
         nb = potentials.Nonbonded(N, exclusion_idxs, scale_factors, beta, cutoff)
@@ -285,8 +284,9 @@ class BaseTopology:
         if params.shape[0] == 0:
             params = np.reshape(params, (0, 4))
 
-        beta = _BETA
-        cutoff = _CUTOFF  # solve for this analytically later
+        beta = timemachine.constants.BETA
+        cutoff = timemachine.constants.CUTOFF  # solve for this analytically later
+        print("BaseTopology cutoff, beta", cutoff, beta)
 
         return params, potentials.NonbondedPairListPrecomputed(inclusion_idxs, beta, cutoff)
 
@@ -485,8 +485,8 @@ class DualTopology(BaseTopology):
         N = NA + NB
         w_coords = jnp.zeros((N, 1))
 
-        beta = _BETA
-        cutoff = _CUTOFF  # solve for this analytically later
+        beta = timemachine.constants.BETA
+        cutoff = timemachine.constants.CUTOFF  # solve for this analytically later
 
         qlj_params = jnp.concatenate(
             [jnp.reshape(q_params, (-1, 1)), jnp.reshape(lj_params, (-1, 2)), w_coords], axis=1
