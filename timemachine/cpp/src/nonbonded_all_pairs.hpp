@@ -19,6 +19,8 @@ private:
     double beta_;
     double cutoff_;
 
+    unsigned int steps_;
+
     unsigned int *d_atom_idxs_; // [K_] indices of interacting atoms
 
     Neighborlist<RealType> nblist_;
@@ -56,6 +58,10 @@ private:
     const bool disable_hilbert_;
 
     std::array<k_nonbonded_fn, 8> kernel_ptrs_;
+
+    bool needs_sort();
+
+    void sort(const double *d_x, const double *d_box, cudaStream_t stream);
 
     void hilbert_sort(const double *d_x, const double *d_box, cudaStream_t stream);
 

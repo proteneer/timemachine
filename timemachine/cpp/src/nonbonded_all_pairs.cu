@@ -14,6 +14,8 @@
 
 #include <numeric>
 
+static const int STEPS_PER_SORT = 100;
+
 namespace timemachine {
 
 template <typename RealType>
@@ -24,8 +26,8 @@ NonbondedAllPairs<RealType>::NonbondedAllPairs(
     const std::optional<std::set<int>> &atom_idxs,
     const bool disable_hilbert_sort,
     const double nblist_padding)
-    : N_(N), K_(atom_idxs ? atom_idxs->size() : N_), beta_(beta), cutoff_(cutoff), d_atom_idxs_(nullptr), nblist_(N_),
-      nblist_padding_(nblist_padding), d_sort_storage_(nullptr), d_sort_storage_bytes_(0),
+    : N_(N), K_(atom_idxs ? atom_idxs->size() : N_), beta_(beta), cutoff_(cutoff), steps_(0), d_atom_idxs_(nullptr),
+      nblist_(N_), nblist_padding_(nblist_padding), d_sort_storage_(nullptr), d_sort_storage_bytes_(0),
       disable_hilbert_(disable_hilbert_sort),
 
       kernel_ptrs_({// enumerate over every possible kernel combination
@@ -173,18 +175,25 @@ void NonbondedAllPairs<RealType>::set_atom_idxs_device(
     // Force the rebuild of the nblist
     gpuErrchk(cudaMemsetAsync(d_rebuild_nblist_, 1, 1 * sizeof(*d_rebuild_nblist_), stream));
     this->K_ = K;
+    // Reset the steps so that we do a new sort
+    this->steps_ = 0;
 }
+
+template <typename RealType> bool NonbondedAllPairs<RealType>::needs_sort() { return steps_ % STEPS_PER_SORT == 0; }
 
 template <typename RealType>
 void NonbondedAllPairs<RealType>::sort(const double *d_coords, const double *d_box, cudaStream_t stream) {
     // (ytz): update the permutation index before building neighborlist, as the neighborlist is tied
-    // to a particular sort order
+    // to a particular sort order which means having to rebuild the neighborlist
     if (!disable_hilbert_) {
         this->hilbert_sort(d_coords, d_box, stream);
     } else {
         gpuErrchk(cudaMemcpyAsync(
             d_sorted_atom_idxs_, d_atom_idxs_, K_ * sizeof(*d_atom_idxs_), cudaMemcpyDeviceToDevice, stream));
     }
+    gpuErrchk(cudaMemsetAsync(d_rebuild_nblist_, 1, sizeof(*d_rebuild_nblist_), stream));
+    // Set the pinned memory to indicate that we need to rebuild
+    p_rebuild_nblist_[0] = 1;
 }
 
 template <typename RealType>
@@ -255,26 +264,22 @@ void NonbondedAllPairs<RealType>::execute_device(
 
     const int tpb = warp_size;
 
-    // (ytz) see if we need to rebuild the neighborlist.
-    k_check_rebuild_coords_and_box_gather<RealType><<<ceil_divide(K_, tpb), tpb, 0, stream>>>(
-        K_, d_atom_idxs_, d_x, d_nblist_x_, d_box, d_nblist_box_, nblist_padding_, d_rebuild_nblist_);
-    gpuErrchk(cudaPeekAtLastError());
+    if (this->needs_sort()) {
+        // Will require a nblist rebuild by setting p_rebuild_nblist to nonzero
+        this->sort(d_x, d_box, stream);
+    } else {
+        // (ytz) see if we need to rebuild the neighborlist.
+        k_check_rebuild_coords_and_box_gather<RealType><<<ceil_divide(K_, tpb), tpb, 0, stream>>>(
+            K_, d_atom_idxs_, d_x, d_nblist_x_, d_box, d_nblist_box_, nblist_padding_, d_rebuild_nblist_);
+        gpuErrchk(cudaPeekAtLastError());
 
-    // we can optimize this away by doing the check on the GPU directly.
-    gpuErrchk(cudaMemcpyAsync(
-        p_rebuild_nblist_, d_rebuild_nblist_, 1 * sizeof(*p_rebuild_nblist_), cudaMemcpyDeviceToHost, stream));
-    gpuErrchk(cudaStreamSynchronize(stream)); // slow!
+        // we can optimize this away by doing the check on the GPU directly.
+        gpuErrchk(cudaMemcpyAsync(
+            p_rebuild_nblist_, d_rebuild_nblist_, 1 * sizeof(*p_rebuild_nblist_), cudaMemcpyDeviceToHost, stream));
+        gpuErrchk(cudaStreamSynchronize(stream)); // slow!
+    }
 
     if (p_rebuild_nblist_[0] > 0) {
-
-        // (ytz): update the permutation index before building neighborlist, as the neighborlist is tied
-        // to a particular sort order
-        if (!disable_hilbert_) {
-            this->hilbert_sort(d_x, d_box, stream);
-        } else {
-            gpuErrchk(cudaMemcpyAsync(
-                d_sorted_atom_idxs_, d_atom_idxs_, K_ * sizeof(*d_atom_idxs_), cudaMemcpyDeviceToDevice, stream));
-        }
 
         // compute new coordinates
         k_gather<<<dim3(ceil_divide(K_, tpb), 3, 1), tpb, 0, stream>>>(K_, d_sorted_atom_idxs_, d_x, d_gathered_x_);
@@ -326,8 +331,6 @@ void NonbondedAllPairs<RealType>::execute_device(
         gpuErrchk(cudaMemsetAsync(d_gathered_du_dp_, 0, K_ * PARAMS_PER_ATOM * sizeof(*d_gathered_du_dp_), stream))
     }
 
-    gpuErrchk(cudaPeekAtLastError());
-
     // look up which kernel we need for this computation
     int kernel_idx = 0;
     kernel_idx |= d_du_dp ? 1 << 0 : 0;
@@ -367,13 +370,13 @@ void NonbondedAllPairs<RealType>::execute_device(
         k_scatter_assign<<<dim3(ceil_divide(K_, tpb), PARAMS_PER_ATOM, 1), tpb, 0, stream>>>(
             K_, d_sorted_atom_idxs_, d_gathered_du_dp_, d_du_dp_buffer_);
         gpuErrchk(cudaPeekAtLastError());
-    }
 
-    if (d_du_dp) {
         k_add_ull_to_ull<<<dim3(ceil_divide(N_, tpb), PARAMS_PER_ATOM, 1), tpb, 0, stream>>>(
             N, d_du_dp_buffer_, d_du_dp);
         gpuErrchk(cudaPeekAtLastError());
     }
+    // Increment steps
+    steps_++;
 }
 
 template <typename RealType>
