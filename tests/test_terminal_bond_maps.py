@@ -10,7 +10,7 @@ config.update("jax_enable_x64", True)
 
 from functools import partial
 
-from pymbar import BAR, EXP, MBAR
+import pymbar
 from rdkit import Chem
 from rdkit.Chem import AllChem
 
@@ -132,10 +132,10 @@ def test_on_methane():
 
     assert np.std(mapped_w_R) < 1.0
 
-    estimated_delta_f_forward = EXP(mapped_w_F)[0]
+    estimated_delta_f_forward = pymbar.exp(mapped_w_F)["Delta_f"]
 
-    estimated_delta_f_reverse = -EXP(mapped_w_R)[0]
-    estimated_delta_f_bar = BAR(mapped_w_F, mapped_w_R)[0]
+    estimated_delta_f_reverse = -pymbar.exp(mapped_w_R)["Delta_f"]
+    estimated_delta_f_bar = pymbar.bar(mapped_w_F, mapped_w_R)["Delta_f"]
 
     # also plug into MBAR
     K = 2
@@ -159,7 +159,7 @@ def test_on_methane():
 
     u_kn = compute_mapped_u_kn(samples, u_fxns, map_fxns)
 
-    mbar = MBAR(u_kn, N_k)
+    mbar = pymbar.MBAR(u_kn, N_k)
     estimated_delta_f_mbar = mbar.f_k[1]
 
     estimates = np.array(
