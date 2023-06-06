@@ -142,8 +142,7 @@ template <typename RealType> bool NonbondedInteractionGroup<RealType>::needs_sor
 
 template <typename RealType>
 void NonbondedInteractionGroup<RealType>::sort(const double *d_coords, const double *d_box, cudaStream_t stream) {
-    // (ytz): update the permutation index before building neighborlist, as the neighborlist is tied
-    // to a particular sort order
+    // We must rebuild the neighborlist after sorting, as the neighborlist is tied to a particular sort order
     if (!disable_hilbert_) {
         this->hilbert_sort(NR_, d_row_atom_idxs_, d_coords, d_box, d_perm_, stream);
         this->hilbert_sort(NC_, d_col_atom_idxs_, d_coords, d_box, d_perm_ + NR_, stream);
@@ -242,6 +241,7 @@ void NonbondedInteractionGroup<RealType>::execute_device(
     const int B_K = ceil_divide(K, tpb);
 
     if (this->needs_sort()) {
+        // Sorting always triggers a neighborlist rebuild
         this->sort(d_x, d_box, stream);
     } else {
         // (ytz) see if we need to rebuild the neighborlist.

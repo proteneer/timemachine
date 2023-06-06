@@ -183,8 +183,7 @@ template <typename RealType> bool NonbondedAllPairs<RealType>::needs_sort() { re
 
 template <typename RealType>
 void NonbondedAllPairs<RealType>::sort(const double *d_coords, const double *d_box, cudaStream_t stream) {
-    // (ytz): update the permutation index before building neighborlist, as the neighborlist is tied
-    // to a particular sort order which means having to rebuild the neighborlist
+    // We must rebuild the neighborlist after sorting, as the neighborlist is tied to a particular sort order
     if (!disable_hilbert_) {
         this->hilbert_sort(d_coords, d_box, stream);
     } else {
@@ -265,7 +264,7 @@ void NonbondedAllPairs<RealType>::execute_device(
     const int tpb = warp_size;
 
     if (this->needs_sort()) {
-        // Will require a nblist rebuild by setting p_rebuild_nblist to nonzero
+        // Sorting always triggers a neighborlist rebuild
         this->sort(d_x, d_box, stream);
     } else {
         // (ytz) see if we need to rebuild the neighborlist.
