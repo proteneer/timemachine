@@ -5,7 +5,7 @@ Assert accurate estimates for free energy differences between 1D Gaussians using
 from dataclasses import dataclass
 
 import numpy as np
-from pymbar import BAR, EXP, MBAR
+import pymbar
 
 from timemachine.maps.estimators import compute_mapped_reduced_work, compute_mapped_u_kn
 
@@ -75,7 +75,7 @@ def test_one_sided_estimates():
         assert np.std(mapped_w_F) < eps
 
         # ... and estimated_delta_f should be == exact_delta_f
-        estimated_delta_f = EXP(mapped_w_F)[0]
+        estimated_delta_f = pymbar.exp(mapped_w_F)["Delta_f"]
         exact_delta_f = dst_state.reduced_free_energy - src_state.reduced_free_energy
 
         np.testing.assert_allclose(estimated_delta_f, exact_delta_f)
@@ -100,8 +100,9 @@ def test_two_sided_estimates():
         w_F = compute_mapped_reduced_work(x_a, u_a, u_b, map_fxn)
         w_R = compute_mapped_reduced_work(x_b, u_b, u_a, inv_map_fxn)
 
-        # estimated_delta_f = BAR(w_F, w_R)[0] #  default solver -> BoundsError: Cannot determine bound on free energy
-        estimated_delta_f = BAR(w_F, w_R, method="self-consistent-iteration", compute_uncertainty=False)
+        # estimated_delta_f = pymbar.bar(w_F, w_R)["Delta_f"] #  default solver -> BoundsError: Cannot determine bound on free energy
+        bar_settings = dict(method="self-consistent-iteration", compute_uncertainty=False)
+        estimated_delta_f = pymbar.bar(w_F, w_R, **bar_settings)["Delta_f"]
 
         exact_delta_f = state_b.reduced_free_energy - state_a.reduced_free_energy
 
@@ -128,7 +129,7 @@ def test_multistate_estimates():
 
     # compute MBAR estimate
     u_kn = compute_mapped_u_kn(samples, u_fxns, map_fxns)
-    mbar = MBAR(u_kn, N_k)
+    mbar = pymbar.MBAR(u_kn, N_k)
 
     exact_f_k = np.array([state.reduced_free_energy for state in states])
     exact_f_k -= exact_f_k[0]
