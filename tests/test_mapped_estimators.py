@@ -101,9 +101,8 @@ def test_two_sided_estimates():
         w_R = compute_mapped_reduced_work(x_b, u_b, u_a, inv_map_fxn)
 
         # estimated_delta_f = pymbar.bar(w_F, w_R)["Delta_f"] #  default solver -> BoundsError: Cannot determine bound on free energy
-        estimated_delta_f = pymbar.bar(w_F, w_R, method="self-consistent-iteration", compute_uncertainty=False)[
-            "Delta_f"
-        ]
+        bar_settings = dict(method="self-consistent-iteration", compute_uncertainty=False)
+        estimated_delta_f = pymbar.bar(w_F, w_R, **bar_settings)["Delta_f"]
 
         exact_delta_f = state_b.reduced_free_energy - state_a.reduced_free_energy
 
