@@ -14,10 +14,10 @@ private:
     int NC_;             // Number of atoms in column, N_ by default
     int NR_;             // Number of atoms in row, N_ by default
 
-    double *d_row_block_bounds_ctr_;
-    double *d_row_block_bounds_ext_;
-    double *d_column_block_bounds_ctr_;
-    double *d_column_block_bounds_ext_;
+    RealType *d_row_block_bounds_ctr_;
+    RealType *d_row_block_bounds_ext_;
+    RealType *d_column_block_bounds_ctr_;
+    RealType *d_column_block_bounds_ext_;
 
     unsigned int *d_row_idxs_;
     unsigned int *d_column_idxs_;
