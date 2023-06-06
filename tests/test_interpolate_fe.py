@@ -87,7 +87,8 @@ def test_hif2a_free_energy_estimates():
             plt.legend()
             plt.savefig(f"lambda_{lambda_idx-1}_{lambda_idx}.png")
 
-            dG_exact, exact_bar_err = pymbar.BAR(fwd_delta_u, rev_delta_u)
+            bar = pymbar.bar(fwd_delta_u, rev_delta_u)
+            dG_exact, exact_bar_err = bar["Delta_f"], bar["dDelta_f"]
             dG_exact /= beta
             exact_bar_err /= beta
 
