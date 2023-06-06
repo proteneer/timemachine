@@ -14,8 +14,8 @@ void __global__ k_find_block_bounds(
     const unsigned int *__restrict__ row_idxs, // [num_indices]
     const double *__restrict__ coords,         // [N*3]
     const double *__restrict__ box,            // [3*3]
-    double *__restrict__ block_bounds_ctr,     // [num_tiles*3]
-    double *__restrict__ block_bounds_ext      // [num_tiles*3]
+    RealType *__restrict__ block_bounds_ctr,   // [num_tiles*3]
+    RealType *__restrict__ block_bounds_ext    // [num_tiles*3]
 ) {
 
     // Algorithm taken from https://github.com/openmm/openmm/blob/master/platforms/cuda/src/kernels/findInteractingBlocks.cu#L7
@@ -172,10 +172,10 @@ void __global__ k_find_blocks_with_ixns(
     const int NR,                                 // Number of rows idxs
     const unsigned int *__restrict__ column_idxs, // [NC]
     const unsigned int *__restrict__ row_idxs,    // [NR]
-    const double *__restrict__ column_bb_ctr,     // [N * 3] block centers
-    const double *__restrict__ column_bb_ext,     // [N * 3] block extents
-    const double *__restrict__ row_bb_ctr,        // [N * 3] block centers
-    const double *__restrict__ row_bb_ext,        // [N * 3] block extants
+    const RealType *__restrict__ column_bb_ctr,   // [N * 3] block centers
+    const RealType *__restrict__ column_bb_ext,   // [N * 3] block extents
+    const RealType *__restrict__ row_bb_ctr,      // [N * 3] block centers
+    const RealType *__restrict__ row_bb_ext,      // [N * 3] block extants
     const double *__restrict__ coords,            // [N * 3]
     const double *__restrict__ box,
     unsigned int *__restrict__ interactionCount, // number of tiles that have interactions
