@@ -284,13 +284,14 @@ void NonbondedAllPairs<RealType>::execute_device(
             p_rebuild_nblist_, d_rebuild_nblist_, 1 * sizeof(*p_rebuild_nblist_), cudaMemcpyDeviceToHost, stream));
         gpuErrchk(cudaEventRecord(rebuild_event_, stream));
     }
-    // compute new coordinates
-    k_gather<<<dim3(ceil_divide(K_, tpb), 3, 1), tpb, 0, stream>>>(K_, d_sorted_atom_idxs_, d_x, d_gathered_x_);
+    // compute new coordinates/params
+    k_gather_coords_and_params<<<dim3(ceil_divide(K_, tpb), PARAMS_PER_ATOM, 1), tpb, 0, stream>>>(
+        K_, d_sorted_atom_idxs_, d_x, d_p, d_gathered_x_, d_gathered_p_);
     gpuErrchk(cudaPeekAtLastError());
 
     // reset buffers and sorted accumulators
     if (d_du_dx) {
-        gpuErrchk(cudaMemsetAsync(d_gathered_du_dx_, 0, K_ * COORDS_DIM * sizeof(*d_gathered_du_dx_), stream))
+        gpuErrchk(cudaMemsetAsync(d_gathered_du_dx_, 0, K_ * 3 * sizeof(*d_gathered_du_dx_), stream))
     }
     if (d_du_dp) {
         gpuErrchk(cudaMemsetAsync(d_gathered_du_dp_, 0, K_ * PARAMS_PER_ATOM * sizeof(*d_gathered_du_dp_), stream))

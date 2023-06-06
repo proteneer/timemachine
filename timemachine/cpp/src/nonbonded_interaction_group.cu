@@ -263,12 +263,13 @@ void NonbondedInteractionGroup<RealType>::execute_device(
         gpuErrchk(cudaEventRecord(rebuild_event_, stream));
     }
 
-    // compute new coordinates
-    k_gather<<<dim3(B_K, 3, 1), tpb, 0, stream>>>(K, d_perm_, d_x, d_sorted_x_);
+    // compute new coordinates/params
+    k_gather_coords_and_params<<<dim3(ceil_divide(K, tpb), PARAMS_PER_ATOM, 1), tpb, 0, stream>>>(
+        K, d_perm_, d_x, d_p, d_sorted_x_, d_sorted_p_);
     gpuErrchk(cudaPeekAtLastError());
     // reset buffers and sorted accumulators
     if (d_du_dx) {
-        gpuErrchk(cudaMemsetAsync(d_sorted_du_dx_, 0, K * COORDS_DIM * sizeof(*d_sorted_du_dx_), stream))
+        gpuErrchk(cudaMemsetAsync(d_sorted_du_dx_, 0, K * 3 * sizeof(*d_sorted_du_dx_), stream))
     }
     if (d_du_dp) {
         gpuErrchk(cudaMemsetAsync(d_sorted_du_dp_, 0, K * PARAMS_PER_ATOM * sizeof(*d_sorted_du_dp_), stream))
