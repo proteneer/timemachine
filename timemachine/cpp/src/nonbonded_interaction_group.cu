@@ -169,8 +169,8 @@ void NonbondedInteractionGroup<RealType>::hilbert_sort(
     const int tpb = warp_size;
     const int B = ceil_divide(N, tpb);
 
-    k_coords_to_kv_gather<RealType>
-        <<<B, tpb, 0, stream>>>(N, d_atom_idxs, d_coords, d_box, d_bin_to_idx_, d_sort_keys_in_, d_sort_vals_in_);
+    k_coords_to_kv_gather<<<B, tpb, 0, stream>>>(
+        N, d_atom_idxs, d_coords, d_box, d_bin_to_idx_, d_sort_keys_in_, d_sort_vals_in_);
 
     gpuErrchk(cudaPeekAtLastError());
 
