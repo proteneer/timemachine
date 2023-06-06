@@ -91,7 +91,7 @@ class VacuumState:
 
         self.lamb = 0.0
         self.nb_params, self.nb_potential = bt.parameterize_nonbonded(
-            ff.q_handle.params, ff.q_handle_intra.params, ff.q_handle_solv.params, ff.lj_handle.params, self.lamb
+            ff.q_handle.params, ff.q_handle_intra.params, ff.lj_handle.params, self.lamb
         )
 
         self.box = None

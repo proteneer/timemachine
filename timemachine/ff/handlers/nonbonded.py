@@ -357,10 +357,6 @@ class SimpleChargeIntraHandler(SimpleChargeHandler):
     pass
 
 
-class SimpleChargeSolventHandler(SimpleChargeHandler):
-    pass
-
-
 class LennardJonesHandler(NonbondedHandler):
     @staticmethod
     def static_parameterize(params, smirks, mol):
@@ -478,10 +474,6 @@ class AM1BCCIntraHandler(AM1BCCHandler):
     pass
 
 
-class AM1BCCSolventHandler(AM1BCCHandler):
-    pass
-
-
 class AM1CCCHandler(SerializableMixIn):
     """The AM1CCCHandler stands for AM1 Correctable Charge Correction (CCC) which uses OpenEye's AM1 charges[1]
     along with corrections provided by the Forcefield definition in the form of SMIRKS and charge deltas. The SMIRKS
@@ -560,8 +552,4 @@ class AM1CCCHandler(SerializableMixIn):
 
 
 class AM1CCCIntraHandler(AM1CCCHandler):
-    pass
-
-
-class AM1CCCSolventHandler(AM1CCCHandler):
     pass

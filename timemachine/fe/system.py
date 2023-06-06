@@ -21,7 +21,6 @@ from timemachine.potentials import (
     NonbondedPairListPrecomputed,
     PeriodicTorsion,
     Potential,
-    SummedPotential,
 )
 
 # Chiral restraints are disabled until checks are added (see GH #815)
@@ -112,7 +111,7 @@ def convert_omm_system(omm_system: openmm.System) -> Tuple["VacuumSystem", List[
     return system, masses
 
 
-_Nonbonded = TypeVar("_Nonbonded", bound=Union[Nonbonded, NonbondedPairListPrecomputed, SummedPotential])
+_Nonbonded = TypeVar("_Nonbonded", bound=Union[Nonbonded, NonbondedPairListPrecomputed])
 _HarmonicAngle = TypeVar("_HarmonicAngle", bound=Union[HarmonicAngle, HarmonicAngleStable])
 
 
@@ -158,7 +157,7 @@ class VacuumSystem(Generic[_Nonbonded, _HarmonicAngle]):
 
 
 @dataclass
-class HostGuestSystem(Generic[_Nonbonded]):
+class HostGuestSystem:
 
     bond: BoundPotential[HarmonicBond]
     angle: BoundPotential[HarmonicAngleStable]
@@ -166,7 +165,7 @@ class HostGuestSystem(Generic[_Nonbonded]):
     chiral_atom: BoundPotential[ChiralAtomRestraint]
     chiral_bond: BoundPotential[ChiralBondRestraint]
     nonbonded_guest_pairs: BoundPotential[NonbondedPairListPrecomputed]
-    nonbonded_host_guest: BoundPotential[_Nonbonded]
+    nonbonded_host_guest: BoundPotential[Nonbonded]
 
     def get_U_fns(self):
 

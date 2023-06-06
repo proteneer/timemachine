@@ -4,7 +4,6 @@ relative binding free energy edge from the HIF2A test system"""
 
 import time
 from importlib import resources
-from typing import List
 
 import numpy as np
 import pytest
@@ -20,7 +19,7 @@ from timemachine.ff.handlers import openmm_deserializer
 from timemachine.lib import LangevinIntegrator, MonteCarloBarostat, custom_ops
 from timemachine.md import builders, minimizer
 from timemachine.md.barostat.utils import get_bond_list, get_group_indices
-from timemachine.potentials import BoundPotential, Nonbonded, NonbondedInteractionGroup, Potential, SummedPotential
+from timemachine.potentials import BoundPotential, Nonbonded, NonbondedInteractionGroup, Potential
 from timemachine.testsystems.dhfr import setup_dhfr
 from timemachine.testsystems.relative import get_hif2a_ligand_pair_single_topology
 
@@ -468,15 +467,6 @@ def test_hif2a():
     benchmark_hif2a(verbose=True, num_batches=2, steps_per_batch=100)
 
 
-def get_nonbonded_pot_params(bps: List[BoundPotential]) -> BoundPotential[Nonbonded]:
-    for bp in bps:
-        if isinstance(bp.potential, SummedPotential):
-            for pot, params in zip(bp.potential.potentials, bp.potential.params_init):
-                if isinstance(pot, Nonbonded):
-                    return pot, params
-    return None, None
-
-
 def test_nonbonded_interaction_group_potential(hi2fa_test_frames):
     bps, frames, boxes, ligand_idxs = hi2fa_test_frames
     nonbonded_potential: BoundPotential[Nonbonded] = next(bp for bp in bps if isinstance(bp.potential, Nonbonded))
@@ -486,10 +476,10 @@ def test_nonbonded_interaction_group_potential(hi2fa_test_frames):
     cutoff = 1.2
 
     precisions = [np.float32, np.float64]
-    nonbonded_params = np.stack([nonbonded_params] * num_param_batches)
+    nonbonded_params = np.stack([nonbonded_potential.params] * num_param_batches)
 
     potential = NonbondedInteractionGroup(
-        nonbonded_potential.num_atoms,
+        nonbonded_potential.potential.num_atoms,
         ligand_idxs,
         beta,
         cutoff,
@@ -510,21 +500,22 @@ def test_nonbonded_interaction_group_potential(hi2fa_test_frames):
 def test_nonbonded_potential(hi2fa_test_frames):
     bps, frames, boxes, _ = hi2fa_test_frames
 
-    nonbonded_pot, nonbonded_params = get_nonbonded_pot_params(bps)
+    nonbonded_pot: BoundPotential[Nonbonded]
+    nonbonded_pot = next(bp for bp in bps if isinstance(bp.potential, Nonbonded))
     assert nonbonded_pot is not None
 
     num_param_batches = 5
 
-    nonbonded_params = np.stack([nonbonded_params] * num_param_batches)
+    nonbonded_params = np.stack([nonbonded_pot.params] * num_param_batches)
 
     precisions = [np.float32, np.float64]
 
     potential = Nonbonded(
-        nonbonded_pot.num_atoms,
-        nonbonded_pot.exclusion_idxs,
-        nonbonded_pot.scale_factors,
-        nonbonded_pot.beta,
-        nonbonded_pot.cutoff,
+        nonbonded_pot.potential.num_atoms,
+        nonbonded_pot.potential.exclusion_idxs,
+        nonbonded_pot.potential.scale_factors,
+        nonbonded_pot.potential.beta,
+        nonbonded_pot.potential.cutoff,
     )
 
     class_name = potential.__class__.__name__
