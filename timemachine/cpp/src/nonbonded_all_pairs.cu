@@ -277,12 +277,12 @@ void NonbondedAllPairs<RealType>::execute_device(
             p_rebuild_nblist_, d_rebuild_nblist_, 1 * sizeof(*p_rebuild_nblist_), cudaMemcpyDeviceToHost, stream));
         gpuErrchk(cudaStreamSynchronize(stream)); // slow!
     }
+    // compute new coordinates
+    k_gather<<<dim3(ceil_divide(K_, tpb), 3, 1), tpb, 0, stream>>>(K_, d_sorted_atom_idxs_, d_x, d_gathered_x_);
+    gpuErrchk(cudaPeekAtLastError());
 
     if (p_rebuild_nblist_[0] > 0) {
 
-        // compute new coordinates
-        k_gather<<<dim3(ceil_divide(K_, tpb), 3, 1), tpb, 0, stream>>>(K_, d_sorted_atom_idxs_, d_x, d_gathered_x_);
-        gpuErrchk(cudaPeekAtLastError());
         nblist_.build_nblist_device(K_, d_gathered_x_, d_box, cutoff_ + nblist_padding_, stream);
         gpuErrchk(cudaMemcpyAsync(
             p_ixn_count_, nblist_.get_ixn_count(), 1 * sizeof(*p_ixn_count_), cudaMemcpyDeviceToHost, stream));
@@ -312,9 +312,6 @@ void NonbondedAllPairs<RealType>::execute_device(
         gpuErrchk(cudaMemsetAsync(d_rebuild_nblist_, 0, sizeof(*d_rebuild_nblist_), stream));
         gpuErrchk(cudaMemcpyAsync(d_nblist_x_, d_x, N * 3 * sizeof(*d_x), cudaMemcpyDeviceToDevice, stream));
         gpuErrchk(cudaMemcpyAsync(d_nblist_box_, d_box, 3 * 3 * sizeof(*d_box), cudaMemcpyDeviceToDevice, stream));
-    } else {
-        k_gather<<<dim3(ceil_divide(K_, tpb), 3, 1), tpb, 0, stream>>>(K_, d_sorted_atom_idxs_, d_x, d_gathered_x_);
-        gpuErrchk(cudaPeekAtLastError());
     }
 
     // do parameter interpolation here

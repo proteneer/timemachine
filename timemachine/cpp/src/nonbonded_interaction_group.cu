@@ -258,11 +258,11 @@ void NonbondedInteractionGroup<RealType>::execute_device(
         gpuErrchk(cudaStreamSynchronize(stream)); // slow!
     }
 
-    if (p_rebuild_nblist_[0] > 0) {
+    // compute new coordinates
+    k_gather<<<dim3(B_K, 3, 1), tpb, 0, stream>>>(K, d_perm_, d_x, d_sorted_x_);
+    gpuErrchk(cudaPeekAtLastError());
 
-        // compute new coordinates
-        k_gather<<<dim3(B_K, 3, 1), tpb, 0, stream>>>(K, d_perm_, d_x, d_sorted_x_);
-        gpuErrchk(cudaPeekAtLastError());
+    if (p_rebuild_nblist_[0] > 0) {
 
         nblist_.build_nblist_device(K, d_sorted_x_, d_box, cutoff_ + nblist_padding_, stream);
         gpuErrchk(cudaMemcpyAsync(
@@ -288,9 +288,6 @@ void NonbondedInteractionGroup<RealType>::execute_device(
         gpuErrchk(cudaMemsetAsync(d_rebuild_nblist_, 0, sizeof(*d_rebuild_nblist_), stream));
         gpuErrchk(cudaMemcpyAsync(d_nblist_x_, d_x, N * 3 * sizeof(*d_x), cudaMemcpyDeviceToDevice, stream));
         gpuErrchk(cudaMemcpyAsync(d_nblist_box_, d_box, 3 * 3 * sizeof(*d_box), cudaMemcpyDeviceToDevice, stream));
-    } else {
-        k_gather<<<dim3(B_K, 3, 1), tpb, 0, stream>>>(K, d_perm_, d_x, d_sorted_x_);
-        gpuErrchk(cudaPeekAtLastError());
     }
 
     // if the neighborlist is empty, we can return early
