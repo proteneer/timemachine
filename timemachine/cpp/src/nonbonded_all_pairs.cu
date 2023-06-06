@@ -279,8 +279,9 @@ void NonbondedAllPairs<RealType>::execute_device(
             p_rebuild_nblist_, d_rebuild_nblist_, 1 * sizeof(*p_rebuild_nblist_), cudaMemcpyDeviceToHost, stream));
         gpuErrchk(cudaStreamSynchronize(stream)); // slow!
     }
-    // compute new coordinates
-    k_gather<<<dim3(ceil_divide(K_, tpb), 3, 1), tpb, 0, stream>>>(K_, d_sorted_atom_idxs_, d_x, d_gathered_x_);
+    // compute new coordinates/params
+    k_gather_coords_and_params<<<dim3(ceil_divide(K_, tpb), PARAMS_PER_ATOM, 1), tpb, 0, stream>>>(
+        K_, d_sorted_atom_idxs_, d_x, d_p, d_gathered_x_, d_gathered_p_);
     gpuErrchk(cudaPeekAtLastError());
 
     if (p_rebuild_nblist_[0] > 0) {
@@ -315,11 +316,6 @@ void NonbondedAllPairs<RealType>::execute_device(
         gpuErrchk(cudaMemcpyAsync(d_nblist_x_, d_x, N * 3 * sizeof(*d_x), cudaMemcpyDeviceToDevice, stream));
         gpuErrchk(cudaMemcpyAsync(d_nblist_box_, d_box, 3 * 3 * sizeof(*d_box), cudaMemcpyDeviceToDevice, stream));
     }
-
-    // do parameter interpolation here
-    k_gather<<<dim3(ceil_divide(K_, tpb), PARAMS_PER_ATOM, 1), tpb, 0, stream>>>(
-        K_, d_sorted_atom_idxs_, d_p, d_gathered_p_);
-    gpuErrchk(cudaPeekAtLastError());
 
     // reset buffers and sorted accumulators
     if (d_du_dx) {

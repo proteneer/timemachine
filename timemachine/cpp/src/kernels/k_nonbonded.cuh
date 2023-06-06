@@ -155,11 +155,13 @@ void __global__ k_copy_nblist_coords_and_box(
 }
 
 template <typename RealType>
-void __global__ k_gather(
+void __global__ k_gather_coords_and_params(
     const int N,
     const unsigned int *__restrict__ idxs,
-    const RealType *__restrict__ array,
-    RealType *__restrict__ gathered_array) {
+    const RealType *__restrict__ coords,
+    const RealType *__restrict__ params,
+    RealType *__restrict__ gathered_coords,
+    RealType *__restrict__ gathered_params) {
 
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     int stride = gridDim.y;
@@ -169,7 +171,11 @@ void __global__ k_gather(
         return;
     }
 
-    gathered_array[idx * stride + stride_idx] = array[idxs[idx] * stride + stride_idx];
+    // Coords have 3 dimensions, params have 4
+    if (stride_idx < 3) {
+        gathered_coords[idx * 3 + stride_idx] = coords[idxs[idx] * 3 + stride_idx];
+    }
+    gathered_params[idx * stride + stride_idx] = params[idxs[idx] * stride + stride_idx];
 }
 
 template <typename RealType>

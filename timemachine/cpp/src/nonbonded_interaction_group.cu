@@ -258,8 +258,9 @@ void NonbondedInteractionGroup<RealType>::execute_device(
         gpuErrchk(cudaStreamSynchronize(stream)); // slow!
     }
 
-    // compute new coordinates
-    k_gather<<<dim3(B_K, 3, 1), tpb, 0, stream>>>(K, d_perm_, d_x, d_sorted_x_);
+    // compute new coordinates/params
+    k_gather_coords_and_params<<<dim3(ceil_divide(K, tpb), PARAMS_PER_ATOM, 1), tpb, 0, stream>>>(
+        K, d_perm_, d_x, d_p, d_sorted_x_, d_sorted_p_);
     gpuErrchk(cudaPeekAtLastError());
 
     if (p_rebuild_nblist_[0] > 0) {
@@ -294,9 +295,6 @@ void NonbondedInteractionGroup<RealType>::execute_device(
     if (p_ixn_count_[0] == 0) {
         return;
     }
-
-    k_gather<<<dim3(B_K, PARAMS_PER_ATOM, 1), tpb, 0, stream>>>(K, d_perm_, d_p, d_sorted_p_);
-    gpuErrchk(cudaPeekAtLastError());
 
     // reset buffers and sorted accumulators
     if (d_du_dx) {
