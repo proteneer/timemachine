@@ -58,6 +58,8 @@ private:
     unsigned int *d_sort_storage_;
     size_t d_sort_storage_bytes_;
 
+    cudaEvent_t rebuild_event_; // Event to synchronize rebuild flag on
+
     const bool disable_hilbert_;
 
     bool needs_sort();
