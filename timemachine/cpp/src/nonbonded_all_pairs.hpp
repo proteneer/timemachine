@@ -19,7 +19,8 @@ private:
     double beta_;
     double cutoff_;
 
-    unsigned int steps_;
+    // This may overflow, either reset to 0 or increment
+    unsigned int steps_since_last_sort_;
 
     unsigned int *d_atom_idxs_; // [K_] indices of interacting atoms
 

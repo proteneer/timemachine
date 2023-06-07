@@ -26,9 +26,9 @@ NonbondedAllPairs<RealType>::NonbondedAllPairs(
     const std::optional<std::set<int>> &atom_idxs,
     const bool disable_hilbert_sort,
     const double nblist_padding)
-    : N_(N), K_(atom_idxs ? atom_idxs->size() : N_), beta_(beta), cutoff_(cutoff), steps_(0), d_atom_idxs_(nullptr),
-      nblist_(N_), nblist_padding_(nblist_padding), d_sort_storage_(nullptr), d_sort_storage_bytes_(0),
-      disable_hilbert_(disable_hilbert_sort),
+    : N_(N), K_(atom_idxs ? atom_idxs->size() : N_), beta_(beta), cutoff_(cutoff), steps_since_last_sort_(0),
+      d_atom_idxs_(nullptr), nblist_(N_), nblist_padding_(nblist_padding), d_sort_storage_(nullptr),
+      d_sort_storage_bytes_(0), disable_hilbert_(disable_hilbert_sort),
 
       kernel_ptrs_({// enumerate over every possible kernel combination
                     // U: Compute U
@@ -176,10 +176,12 @@ void NonbondedAllPairs<RealType>::set_atom_idxs_device(
     gpuErrchk(cudaMemsetAsync(d_rebuild_nblist_, 1, 1 * sizeof(*d_rebuild_nblist_), stream));
     this->K_ = K;
     // Reset the steps so that we do a new sort
-    this->steps_ = 0;
+    this->steps_since_last_sort_ = 0;
 }
 
-template <typename RealType> bool NonbondedAllPairs<RealType>::needs_sort() { return steps_ % STEPS_PER_SORT == 0; }
+template <typename RealType> bool NonbondedAllPairs<RealType>::needs_sort() {
+    return steps_since_last_sort_ % STEPS_PER_SORT == 0;
+}
 
 template <typename RealType>
 void NonbondedAllPairs<RealType>::sort(const double *d_coords, const double *d_box, cudaStream_t stream) {
@@ -372,7 +374,7 @@ void NonbondedAllPairs<RealType>::execute_device(
         gpuErrchk(cudaPeekAtLastError());
     }
     // Increment steps
-    steps_++;
+    steps_since_last_sort_++;
 }
 
 template <typename RealType>

@@ -25,7 +25,8 @@ private:
 
     double beta_;
     double cutoff_;
-    unsigned int steps_;
+    // This is safe to overflow, either reset to 0 or increment
+    unsigned int steps_since_last_sort_;
     Neighborlist<RealType> nblist_;
 
     const double nblist_padding_;

@@ -44,8 +44,8 @@ NonbondedInteractionGroup<RealType>::NonbondedInteractionGroup(
                     &k_nonbonded_unified<RealType, 1, 1, 0>,
                     &k_nonbonded_unified<RealType, 1, 1, 1>}),
 
-      beta_(beta), cutoff_(cutoff), steps_(0), nblist_(N_), nblist_padding_(nblist_padding), d_sort_storage_(nullptr),
-      d_sort_storage_bytes_(0), disable_hilbert_(disable_hilbert_sort) {
+      beta_(beta), cutoff_(cutoff), steps_since_last_sort_(0), nblist_(N_), nblist_padding_(nblist_padding),
+      d_sort_storage_(nullptr), d_sort_storage_bytes_(0), disable_hilbert_(disable_hilbert_sort) {
 
     this->validate_idxs(N_, row_atom_idxs, col_atom_idxs, false);
 
@@ -137,7 +137,7 @@ template <typename RealType> NonbondedInteractionGroup<RealType>::~NonbondedInte
 };
 
 template <typename RealType> bool NonbondedInteractionGroup<RealType>::needs_sort() {
-    return steps_ % STEPS_PER_SORT == 0;
+    return steps_since_last_sort_ % STEPS_PER_SORT == 0;
 }
 
 template <typename RealType>
@@ -349,7 +349,7 @@ void NonbondedInteractionGroup<RealType>::execute_device(
         gpuErrchk(cudaPeekAtLastError());
     }
     // Increment steps
-    steps_++;
+    steps_since_last_sort_++;
 }
 
 template <typename RealType>
@@ -422,7 +422,7 @@ void NonbondedInteractionGroup<RealType>::set_atom_idxs_device(
     this->NR_ = NR;
     this->NC_ = NC;
     // Reset the steps so that we do a new sort
-    this->steps_ = 0;
+    this->steps_since_last_sort_ = 0;
 }
 
 template <typename RealType>
