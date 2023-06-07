@@ -1,5 +1,7 @@
 #include "k_nonbonded.cuh"
 
+// k_coords_to_kv_gather converts the coords and boxes to floats for performance
+// and does not impact the precision of the kernels.
 void __global__ k_coords_to_kv_gather(
     const int N,
     const unsigned int *__restrict__ atom_idxs,
@@ -18,15 +20,15 @@ void __global__ k_coords_to_kv_gather(
     const int atom_idx = atom_idxs[idx];
 
     // these coords have to be centered
-    double bx = box[0 * 3 + 0];
-    double by = box[1 * 3 + 1];
-    double bz = box[2 * 3 + 2];
+    float bx = box[0 * 3 + 0];
+    float by = box[1 * 3 + 1];
+    float bz = box[2 * 3 + 2];
 
-    double binWidth = max(max(bx, by), bz) / (HILBERT_GRID_DIM - 1.0);
+    float binWidth = max(max(bx, by), bz) / (HILBERT_GRID_DIM - 1.0);
 
-    double x = coords[atom_idx * 3 + 0];
-    double y = coords[atom_idx * 3 + 1];
-    double z = coords[atom_idx * 3 + 2];
+    float x = coords[atom_idx * 3 + 0];
+    float y = coords[atom_idx * 3 + 1];
+    float z = coords[atom_idx * 3 + 2];
 
     x -= bx * floor(x / bx);
     y -= by * floor(y / by);
