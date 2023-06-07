@@ -1,5 +1,6 @@
 #pragma once
 
+#include "../constants.hpp"
 #include "../fixed_point.hpp"
 #include "k_nonbonded_common.cuh"
 #include "kernel_utils.cuh"
@@ -171,9 +172,9 @@ void __global__ k_gather_coords_and_params(
         return;
     }
 
-    // Coords have 3 dimensions, params have 4
-    if (stride_idx < 3) {
-        gathered_coords[idx * 3 + stride_idx] = coords[idxs[idx] * 3 + stride_idx];
+    // Coords have COORDS_DIM dimensions, params have PARAMS_PER_ATOM
+    if (stride_idx < COORDS_DIM) {
+        gathered_coords[idx * COORDS_DIM + stride_idx] = coords[idxs[idx] * COORDS_DIM + stride_idx];
     }
     gathered_params[idx * stride + stride_idx] = params[idxs[idx] * stride + stride_idx];
 }

@@ -1,6 +1,7 @@
 #include <cub/cub.cuh>
 #include <string>
 
+#include "constants.hpp"
 #include "device_buffer.hpp"
 #include "fixed_point.hpp"
 #include "gpu_utils.cuh"
@@ -57,21 +58,21 @@ NonbondedAllPairs<RealType>::NonbondedAllPairs(
 
     cudaSafeMalloc(&d_sorted_atom_idxs_, N_ * sizeof(*d_sorted_atom_idxs_));
 
-    cudaSafeMalloc(&d_gathered_x_, N_ * 3 * sizeof(*d_gathered_x_));
+    cudaSafeMalloc(&d_gathered_x_, N_ * COORDS_DIM * sizeof(*d_gathered_x_));
 
     cudaSafeMalloc(&d_gathered_p_, N_ * PARAMS_PER_ATOM * sizeof(*d_gathered_p_));
-    cudaSafeMalloc(&d_gathered_du_dx_, N_ * 3 * sizeof(*d_gathered_du_dx_));
+    cudaSafeMalloc(&d_gathered_du_dx_, N_ * COORDS_DIM * sizeof(*d_gathered_du_dx_));
     cudaSafeMalloc(&d_gathered_du_dp_, N_ * PARAMS_PER_ATOM * sizeof(*d_gathered_du_dp_));
 
     cudaSafeMalloc(&d_du_dp_buffer_, N_ * PARAMS_PER_ATOM * sizeof(*d_du_dp_buffer_));
 
     gpuErrchk(cudaMallocHost(&p_ixn_count_, 1 * sizeof(*p_ixn_count_)));
-    gpuErrchk(cudaMallocHost(&p_box_, 3 * 3 * sizeof(*p_box_)));
+    gpuErrchk(cudaMallocHost(&p_box_, COORDS_DIM * COORDS_DIM * sizeof(*p_box_)));
 
-    cudaSafeMalloc(&d_nblist_x_, N_ * 3 * sizeof(*d_nblist_x_));
-    gpuErrchk(cudaMemset(d_nblist_x_, 0, N_ * 3 * sizeof(*d_nblist_x_))); // set non-sensical positions
-    cudaSafeMalloc(&d_nblist_box_, 3 * 3 * sizeof(*d_nblist_x_));
-    gpuErrchk(cudaMemset(d_nblist_box_, 0, 3 * 3 * sizeof(*d_nblist_x_)));
+    cudaSafeMalloc(&d_nblist_x_, N_ * COORDS_DIM * sizeof(*d_nblist_x_));
+    gpuErrchk(cudaMemset(d_nblist_x_, 0, N_ * COORDS_DIM * sizeof(*d_nblist_x_))); // set non-sensical positions
+    cudaSafeMalloc(&d_nblist_box_, COORDS_DIM * COORDS_DIM * sizeof(*d_nblist_x_));
+    gpuErrchk(cudaMemset(d_nblist_box_, 0, COORDS_DIM * COORDS_DIM * sizeof(*d_nblist_x_)));
     cudaSafeMalloc(&d_rebuild_nblist_, 1 * sizeof(*d_rebuild_nblist_));
     gpuErrchk(cudaMallocHost(&p_rebuild_nblist_, 1 * sizeof(*p_rebuild_nblist_)));
 
@@ -90,7 +91,7 @@ NonbondedAllPairs<RealType>::NonbondedAllPairs(
                 hilbert_coords[1] = j;
                 hilbert_coords[2] = k;
 
-                unsigned int bin = static_cast<unsigned int>(hilbert_c2i(3, HILBERT_N_BITS, hilbert_coords));
+                unsigned int bin = static_cast<unsigned int>(hilbert_c2i(COORDS_DIM, HILBERT_N_BITS, hilbert_coords));
                 bin_to_idx[i * HILBERT_GRID_DIM * HILBERT_GRID_DIM + j * HILBERT_GRID_DIM + k] = bin;
             }
         }
@@ -230,7 +231,7 @@ void NonbondedAllPairs<RealType>::execute_device(
     const int P,
     const double *d_x,
     const double *d_p,   // N * PARAMS_PER_ATOM
-    const double *d_box, // 3 * 3
+    const double *d_box, // COORDS_DIM * COORDS_DIM
     unsigned long long *d_du_dx,
     unsigned long long *d_du_dp,
     unsigned long long *d_u,
@@ -290,7 +291,8 @@ void NonbondedAllPairs<RealType>::execute_device(
         gpuErrchk(cudaMemcpyAsync(
             p_ixn_count_, nblist_.get_ixn_count(), 1 * sizeof(*p_ixn_count_), cudaMemcpyDeviceToHost, stream));
 
-        gpuErrchk(cudaMemcpyAsync(p_box_, d_box, 3 * 3 * sizeof(*d_box), cudaMemcpyDeviceToHost, stream));
+        gpuErrchk(
+            cudaMemcpyAsync(p_box_, d_box, COORDS_DIM * COORDS_DIM * sizeof(*d_box), cudaMemcpyDeviceToHost, stream));
 
         // this stream needs to be synchronized so we can be sure that p_ixn_count_ is properly set.
         gpuErrchk(cudaStreamSynchronize(stream));
@@ -305,21 +307,22 @@ void NonbondedAllPairs<RealType>::execute_device(
         const double db_cutoff = (cutoff_ + nblist_padding_) * 2;
 
         // Verify the width of the box in all dimensions is greater than twice the cutoff
-        for (int i = 0; i < 3; i++) {
-            if (p_box_[i * 3 + i] < db_cutoff) {
+        for (int i = 0; i < COORDS_DIM; i++) {
+            if (p_box_[i * COORDS_DIM + i] < db_cutoff) {
                 throw std::runtime_error(
                     "Cutoff with padding is more than half of the box width, neighborlist is no longer reliable");
             }
         }
 
         gpuErrchk(cudaMemsetAsync(d_rebuild_nblist_, 0, sizeof(*d_rebuild_nblist_), stream));
-        gpuErrchk(cudaMemcpyAsync(d_nblist_x_, d_x, N * 3 * sizeof(*d_x), cudaMemcpyDeviceToDevice, stream));
-        gpuErrchk(cudaMemcpyAsync(d_nblist_box_, d_box, 3 * 3 * sizeof(*d_box), cudaMemcpyDeviceToDevice, stream));
+        gpuErrchk(cudaMemcpyAsync(d_nblist_x_, d_x, N * COORDS_DIM * sizeof(*d_x), cudaMemcpyDeviceToDevice, stream));
+        gpuErrchk(cudaMemcpyAsync(
+            d_nblist_box_, d_box, COORDS_DIM * COORDS_DIM * sizeof(*d_box), cudaMemcpyDeviceToDevice, stream));
     }
 
     // reset buffers and sorted accumulators
     if (d_du_dx) {
-        gpuErrchk(cudaMemsetAsync(d_gathered_du_dx_, 0, K_ * 3 * sizeof(*d_gathered_du_dx_), stream))
+        gpuErrchk(cudaMemsetAsync(d_gathered_du_dx_, 0, K_ * COORDS_DIM * sizeof(*d_gathered_du_dx_), stream))
     }
     if (d_du_dp) {
         gpuErrchk(cudaMemsetAsync(d_gathered_du_dp_, 0, K_ * PARAMS_PER_ATOM * sizeof(*d_gathered_du_dp_), stream))
@@ -349,9 +352,9 @@ void NonbondedAllPairs<RealType>::execute_device(
 
     gpuErrchk(cudaPeekAtLastError());
 
-    // coords are N,3
+    // coords are N,COORDS_DIM
     if (d_du_dx) {
-        k_scatter_accum<<<dim3(ceil_divide(K_, tpb), 3, 1), tpb, 0, stream>>>(
+        k_scatter_accum<<<dim3(ceil_divide(K_, tpb), COORDS_DIM, 1), tpb, 0, stream>>>(
             K_, d_sorted_atom_idxs_, d_gathered_du_dx_, d_du_dx);
         gpuErrchk(cudaPeekAtLastError());
     }

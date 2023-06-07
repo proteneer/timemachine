@@ -1,6 +1,7 @@
 #include <algorithm>
 #include <vector>
 
+#include "constants.hpp"
 #include "device_buffer.hpp"
 #include "gpu_utils.cuh"
 #include "kernels/k_indices.cuh"
@@ -30,10 +31,10 @@ template <typename RealType> Neighborlist<RealType>::Neighborlist(const int N) :
     cudaSafeMalloc(&d_trim_atoms_, column_blocks * Y * tpb * sizeof(*d_trim_atoms_));
 
     // bounding box buffers
-    cudaSafeMalloc(&d_row_block_bounds_ctr_, row_blocks * 3 * sizeof(*d_row_block_bounds_ctr_));
-    cudaSafeMalloc(&d_row_block_bounds_ext_, row_blocks * 3 * sizeof(*d_row_block_bounds_ext_));
-    cudaSafeMalloc(&d_column_block_bounds_ctr_, column_blocks * 3 * sizeof(*d_column_block_bounds_ctr_));
-    cudaSafeMalloc(&d_column_block_bounds_ext_, column_blocks * 3 * sizeof(*d_column_block_bounds_ext_));
+    cudaSafeMalloc(&d_row_block_bounds_ctr_, row_blocks * COORDS_DIM * sizeof(*d_row_block_bounds_ctr_));
+    cudaSafeMalloc(&d_row_block_bounds_ext_, row_blocks * COORDS_DIM * sizeof(*d_row_block_bounds_ext_));
+    cudaSafeMalloc(&d_column_block_bounds_ctr_, column_blocks * COORDS_DIM * sizeof(*d_column_block_bounds_ctr_));
+    cudaSafeMalloc(&d_column_block_bounds_ext_, column_blocks * COORDS_DIM * sizeof(*d_column_block_bounds_ext_));
 
     // Row and column indice arrays
     cudaSafeMalloc(&d_column_idxs_, max_size_ * sizeof(*d_column_idxs_));
@@ -61,7 +62,7 @@ template <typename RealType>
 void Neighborlist<RealType>::compute_block_bounds_host(
     const int N, const double *h_coords, const double *h_box, double *h_bb_ctrs, double *h_bb_exts) {
 
-    const int D = 3;
+    const int D = COORDS_DIM;
     DeviceBuffer<double> d_coords(N * D);
     DeviceBuffer<double> d_box(D * D);
 
@@ -74,12 +75,12 @@ void Neighborlist<RealType>::compute_block_bounds_host(
     gpuErrchk(cudaMemcpy(
         h_bb_ctrs,
         d_column_block_bounds_ctr_,
-        this->num_column_blocks() * 3 * sizeof(*d_column_block_bounds_ctr_),
+        this->num_column_blocks() * COORDS_DIM * sizeof(*d_column_block_bounds_ctr_),
         cudaMemcpyDeviceToHost));
     gpuErrchk(cudaMemcpy(
         h_bb_exts,
         d_column_block_bounds_ext_,
-        this->num_column_blocks() * 3 * sizeof(*d_column_block_bounds_ext_),
+        this->num_column_blocks() * COORDS_DIM * sizeof(*d_column_block_bounds_ext_),
         cudaMemcpyDeviceToHost));
 }
 
@@ -91,8 +92,8 @@ Neighborlist<RealType>::get_nblist_host(int N, const double *h_coords, const dou
         throw std::runtime_error("N != N_");
     }
 
-    DeviceBuffer<double> d_coords(N * 3);
-    DeviceBuffer<double> d_box(3 * 3);
+    DeviceBuffer<double> d_coords(N * COORDS_DIM);
+    DeviceBuffer<double> d_box(COORDS_DIM * COORDS_DIM);
     d_coords.copy_from(h_coords);
     d_box.copy_from(h_box);
 
@@ -196,8 +197,8 @@ void Neighborlist<RealType>::compute_block_bounds_device(
     const double *d_box,    // [D*3]
     const cudaStream_t stream) {
 
-    if (D != 3) {
-        throw std::runtime_error("D != 3");
+    if (D != COORDS_DIM) {
+        throw std::runtime_error("D != " + std::to_string(COORDS_DIM));
     }
 
     const int tpb = warp_size;
