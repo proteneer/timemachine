@@ -11,6 +11,7 @@ void __global__ k_find_block_bounds(
     const int N,                               // Number of atoms
     const int num_tiles,                       // Number of tiles
     const int num_indices,                     // Number of indices
+    unsigned int *ixn_count,                   // [1]
     const unsigned int *__restrict__ row_idxs, // [num_indices]
     const double *__restrict__ coords,         // [N*3]
     const double *__restrict__ box,            // [3*3]
@@ -82,6 +83,11 @@ void __global__ k_find_block_bounds(
     block_bounds_ext[tile_idx * 3 + 0] = static_cast<RealType>(0.5) * (maxPos_x - minPos_x);
     block_bounds_ext[tile_idx * 3 + 1] = static_cast<RealType>(0.5) * (maxPos_y - minPos_y);
     block_bounds_ext[tile_idx * 3 + 2] = static_cast<RealType>(0.5) * (maxPos_z - minPos_z);
+
+    // Reset the ixn count
+    if (tile_idx == 0) {
+        ixn_count[0] = 0;
+    }
 }
 
 void __global__ k_compact_trim_atoms(

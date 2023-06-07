@@ -131,7 +131,6 @@ Neighborlist<RealType>::get_nblist_host(int N, const double *h_coords, const dou
 template <typename RealType>
 void Neighborlist<RealType>::build_nblist_device(
     const int N, const double *d_coords, const double *d_box, const double cutoff, const cudaStream_t stream) {
-    gpuErrchk(cudaMemsetAsync(d_ixn_count_, 0, 1 * sizeof(*d_ixn_count_), stream));
 
     const int D = 3;
     this->compute_block_bounds_device(N, D, d_coords, d_box, stream);
@@ -205,14 +204,30 @@ void Neighborlist<RealType>::compute_block_bounds_device(
     const int column_blocks = this->num_column_blocks(); // total number of blocks we need to process
 
     k_find_block_bounds<RealType><<<column_blocks, tpb, 0, stream>>>(
-        N, column_blocks, NC_, d_column_idxs_, d_coords, d_box, d_column_block_bounds_ctr_, d_column_block_bounds_ext_);
+        N,
+        column_blocks,
+        NC_,
+        d_ixn_count_,
+        d_column_idxs_,
+        d_coords,
+        d_box,
+        d_column_block_bounds_ctr_,
+        d_column_block_bounds_ext_);
     gpuErrchk(cudaPeekAtLastError());
     // In the case of upper triangle of the matrix, the column and row indices are the same, so only compute block ixns for both
     // when they are different
     if (!this->compute_upper_triangular()) {
         const int row_blocks = this->num_row_blocks();
         k_find_block_bounds<RealType><<<row_blocks, tpb, 0, stream>>>(
-            N, row_blocks, NR_, d_row_idxs_, d_coords, d_box, d_row_block_bounds_ctr_, d_row_block_bounds_ext_);
+            N,
+            row_blocks,
+            NR_,
+            d_ixn_count_,
+            d_row_idxs_,
+            d_coords,
+            d_box,
+            d_row_block_bounds_ctr_,
+            d_row_block_bounds_ext_);
         gpuErrchk(cudaPeekAtLastError());
     }
 };
