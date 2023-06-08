@@ -247,10 +247,10 @@ def apply_lifting(host_system, lam=0.0):
     # min_epsilon = 0.02
 
     ligand_ranks = host_system.ligand_ranks
-    rest_ranks = host_system.rest_ranks
+    # rest_ranks = host_system.rest_ranks
 
     ligand_w_coords = get_w_coords(lam, ligand_ranks, cutoff)
-    rest_w_coords = -get_w_coords(lam, rest_ranks, cutoff)
+    # rest_w_coords = -get_w_coords(lam, rest_ranks, cutoff)
 
     # print("lam", lam, "ligand_w", ligand_w_coords)
     # print("lam", lam, "rest_w", rest_w_coords)
@@ -264,21 +264,21 @@ def apply_lifting(host_system, lam=0.0):
         ligand_charges = -2 * nb_params[host_system.ligand_idxs, 0] * (lam - switch)
         # ligand_epsilons = np.clip(-2 * nb_params[host_system.ligand_idxs, 2] * (lam - switch), min_epsilon, np.inf)
 
-        rest_charges = -2 * nb_params[host_system.rest_idxs, 0] * (lam - switch)
+        # rest_charges = -2 * nb_params[host_system.rest_idxs, 0] * (lam - switch)
         # rest_epsilons = np.clip(-2 * nb_params[host_system.rest_idxs, 2] * (lam - switch), min_epsilon, np.inf)
     else:
         ligand_charges = 0.0
         # ligand_epsilons = min_epsilon
 
-        rest_charges = 0.0
+        # rest_charges = 0.0
         # rest_epsilons = min_epsilon
 
     nb_params = nb_params.at[host_system.ligand_idxs, -1].set(ligand_w_coords)
     nb_params = nb_params.at[host_system.ligand_idxs, 0].set(ligand_charges)
     # nb_params = nb_params.at[host_system.ligand_idxs, 2].set(ligand_epsilons)
 
-    nb_params = nb_params.at[host_system.rest_idxs, -1].set(rest_w_coords)
-    nb_params = nb_params.at[host_system.rest_idxs, 0].set(rest_charges)
+    # nb_params = nb_params.at[host_system.rest_idxs, -1].set(rest_w_coords)
+    # nb_params = nb_params.at[host_system.rest_idxs, 0].set(rest_charges)
     # nb_params = nb_params.at[host_system.rest_idxs, 2].set(rest_epsilons)
 
     # TBD: turn off centroid restraint
@@ -692,6 +692,8 @@ def estimate_populations(mol, host_pdb, ff, outfile, n_walkers, n_burn_in_steps,
     # forward
     log_weights = np.zeros(len(samples))
 
+    # (ytz) see how reversible the processes are without introducing charge changes
+
     # coupling
     lambda_0_samples, fwd_lambdas, fwd_log_weights_traj = adaptive_neq_switch(
         samples,
@@ -700,7 +702,7 @@ def estimate_populations(mol, host_pdb, ff, outfile, n_walkers, n_burn_in_steps,
         functools.partial(resample_fxn, thresh=0.0),
         log_weights,
         initial_lam=1.0,
-        final_lam=0.0,
+        final_lam=0.5,  # REVERTME
         max_num_lambdas=5000,
         callback_fn=functools.partial(write_frames_callback, path=outfile + "_fwd"),
         callback_interval=40,
@@ -725,7 +727,7 @@ def estimate_populations(mol, host_pdb, ff, outfile, n_walkers, n_burn_in_steps,
         batch_log_prob,
         functools.partial(resample_fxn, thresh=0.0),
         log_weights,
-        initial_lam=0.0,
+        initial_lam=0.5,  # REVERTME
         final_lam=1.0,
         max_num_lambdas=5000,
         callback_fn=functools.partial(write_frames_callback, path=outfile + "_rev"),
