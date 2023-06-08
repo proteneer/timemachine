@@ -372,3 +372,40 @@ def test_nonbonded_interaction_group_set_atom_idxs(
     np.testing.assert_array_equal(test_du_dx, ref_du_dx)
     np.testing.assert_array_equal(test_du_dp, ref_du_dp)
     np.testing.assert_equal(test_u, ref_u)
+
+
+@pytest.mark.parametrize("beta", [2.0])
+@pytest.mark.parametrize("cutoff", [1.1])
+@pytest.mark.parametrize("precision", [np.float64, np.float32])
+@pytest.mark.parametrize("num_atoms_ligand", [1, 15])
+@pytest.mark.parametrize("num_atoms", [33, 231])
+def test_nonbonded_ixn_group_order_independent(
+    num_atoms,
+    num_atoms_ligand,
+    precision,
+    cutoff,
+    beta,
+    example_nonbonded_potential,
+    example_conf,
+    example_box,
+    rng: np.random.Generator,
+):
+    "Verifies that with and without hilbert sorting the nonbonded potential is bitwise deterministic."
+
+    conf = example_conf[:num_atoms]
+    params = example_nonbonded_potential.params[:num_atoms, :]
+
+    ligand_idxs = rng.choice(num_atoms, size=(num_atoms_ligand,), replace=False).astype(np.int32)
+
+    sorted_pot = NonbondedInteractionGroup(num_atoms, ligand_idxs, beta, cutoff)
+    unsorted_pot = NonbondedInteractionGroup(num_atoms, ligand_idxs, beta, cutoff, disable_hilbert_sort=True)
+
+    sorted_impl = sorted_pot.to_gpu(precision).unbound_impl
+    unsorted_impl = unsorted_pot.to_gpu(precision).unbound_impl
+
+    for params in gen_nonbonded_params_with_4d_offsets(rng, params, cutoff):
+        a_du_dx, a_du_dp, a_u = sorted_impl.execute_selective(conf, params, example_box, True, True, True)
+        b_du_dx, b_du_dp, b_u = unsorted_impl.execute_selective(conf, params, example_box, True, True, True)
+        np.testing.assert_array_equal(a_du_dx, b_du_dx)
+        np.testing.assert_array_equal(a_du_dp, b_du_dp)
+        assert a_u == b_u

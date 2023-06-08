@@ -15,13 +15,13 @@ static_assert(HILBERT_GRID_DIM <= HILBERT_MAX_GRID_DIM);
 
 // generate kv values from coordinates to be radix sorted allowing the selection of a subset of coordinates
 void __global__ k_coords_to_kv_gather(
-    const int N,                   // number of atoms in selection
-    const unsigned int *atom_idxs, // [N] indices of atoms to select
-    const double *coords,
-    const double *box,
-    const unsigned int *bin_to_idx,
-    unsigned int *keys,
-    unsigned int *vals);
+    const int N,
+    const unsigned int *__restrict__ atom_idxs,
+    const double *__restrict__ coords,
+    const double *__restrict__ box,
+    const unsigned int *__restrict__ bin_to_idx,
+    unsigned int *__restrict__ keys,
+    unsigned int *__restrict__ vals);
 
 template <typename RealType>
 void __global__ k_check_rebuild_box(const int N, const double *new_box, const double *old_box, int *rebuild) {

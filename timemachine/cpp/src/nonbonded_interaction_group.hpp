@@ -25,6 +25,8 @@ private:
 
     double beta_;
     double cutoff_;
+    // This is safe to overflow, either reset to 0 or increment
+    unsigned int steps_since_last_sort_;
     Neighborlist<RealType> nblist_;
 
     const double nblist_padding_;
@@ -57,6 +59,10 @@ private:
     size_t d_sort_storage_bytes_;
 
     const bool disable_hilbert_;
+
+    bool needs_sort();
+
+    void sort(const double *d_x, const double *d_box, cudaStream_t stream);
 
     void hilbert_sort(
         const int N,
