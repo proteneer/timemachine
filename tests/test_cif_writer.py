@@ -94,7 +94,9 @@ def test_cif_writer(n_frames):
 
     # test complex
     with resources.path("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as path_to_pdb:
-        _, complex_coords, _, complex_top = builders.build_protein_system(str(path_to_pdb), ff.protein_ff, ff.water_ff)
+        _, complex_coords, _, complex_top, _ = builders.build_protein_system(
+            str(path_to_pdb), ff.protein_ff, ff.water_ff
+        )
 
         with NamedTemporaryFile(suffix=".cif") as temp:
             writer = CIFWriter([complex_top, mol_a, mol_b], temp.name)

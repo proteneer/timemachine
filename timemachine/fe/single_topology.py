@@ -1226,7 +1226,7 @@ class SingleTopology(AtomMapMixin):
 
         return combined_nonbonded
 
-    def combine_with_host(self, host_system: VacuumSystem, lamb):
+    def combine_with_host(self, host_system: VacuumSystem, lamb: float, num_water_atoms: int):
         """
         Setup host guest system. Bonds, angles, torsions, chiral_atom, chiral_bond and nonbonded terms are
         combined. In particular:
@@ -1247,6 +1247,9 @@ class SingleTopology(AtomMapMixin):
 
         lamb: float
             Which lambda value we want to generate the combined system.
+
+        num_water_atoms: int
+            Number of water atoms as part of the host.
 
         Returns
         -------

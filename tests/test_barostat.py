@@ -2,7 +2,7 @@ import numpy as np
 import pytest
 
 from timemachine.constants import AVOGADRO, BAR_TO_KJ_PER_NM3, BOLTZ
-from timemachine.fe.free_energy import AbsoluteFreeEnergy
+from timemachine.fe.free_energy import AbsoluteFreeEnergy, HostConfig
 from timemachine.fe.topology import BaseTopology
 from timemachine.ff import Forcefield
 from timemachine.lib import LangevinIntegrator, custom_ops
@@ -147,8 +147,8 @@ def test_barostat_is_deterministic():
     host_system, host_coords, host_box, host_top = build_water_system(3.0, ff.water_ff)
     bt = BaseTopology(mol_a, ff)
     afe = AbsoluteFreeEnergy(mol_a, bt)
-
-    unbound_potentials, sys_params, masses = afe.prepare_host_edge(ff.get_params(), host_system, lam)
+    host_config = HostConfig(host_system, host_coords, host_box, host_coords.shape[0])
+    unbound_potentials, sys_params, masses = afe.prepare_host_edge(ff.get_params(), host_config, lam)
     coords = afe.prepare_combined_coords(host_coords=host_coords)
 
     # get list of molecules for barostat by looking at bond table

@@ -74,20 +74,20 @@ def parameterize_nonbonded_full(
 @pytest.mark.parametrize("ctor", [BaseTopology, DualTopology, DualTopologyMinimization])
 @pytest.mark.parametrize("use_tiny_mol", [True, False])
 def test_host_guest_nonbonded(ctor, precision, rtol, atol, use_tiny_mol):
-    def compute_ref_grad_u(ff: Forcefield, precision, x0, lamb):
+    def compute_ref_grad_u(ff: Forcefield, precision, x0, lamb, num_water_atoms):
         # Use the original code to compute the nb grads and potential
         bt = Topology(ff)
-        hgt = topology.HostGuestTopology(host_bps, bt)
+        hgt = topology.HostGuestTopology(host_bps, bt, num_water_atoms)
         params, potentials = parameterize_nonbonded_full(
             hgt, ff.q_handle.params, ff.q_handle_intra.params, ff.lj_handle.params, lamb=lamb
         )
         u_impl = potentials.bind(params).to_gpu(precision=precision).bound_impl
         return u_impl.execute(x0, solvent_box)
 
-    def compute_split_grad_u(ff: Forcefield, precision, x0, lamb):
+    def compute_split_grad_u(ff: Forcefield, precision, x0, lamb, num_water_atoms):
         # Use the updated topology code to compute the nb grads and potential
         bt = Topology(ff)
-        hgt = topology.HostGuestTopology(host_bps, bt)
+        hgt = topology.HostGuestTopology(host_bps, bt, num_water_atoms)
         params, potentials = hgt.parameterize_nonbonded(
             ff.q_handle.params, ff.q_handle_intra.params, ff.lj_handle.params, lamb=lamb
         )
@@ -107,6 +107,7 @@ def test_host_guest_nonbonded(ctor, precision, rtol, atol, use_tiny_mol):
 
     box_width = 4.0
     solvent_sys, solvent_conf, solvent_box, solvent_top = build_water_system(box_width, ffs.ref.water_ff)
+    num_water_atoms = solvent_conf.shape[0]
     solvent_box += np.diag([0.1, 0.1, 0.1])
     host_bps, host_masses = openmm_deserializer.deserialize_system(solvent_sys, cutoff=1.2)
 
@@ -144,18 +145,20 @@ def test_host_guest_nonbonded(ctor, precision, rtol, atol, use_tiny_mol):
     for lamb in np.linspace(0, 1, n_lambdas):
         # Compute the grads, potential with the ref ff
         vacuum_grad_ref, vacuum_u_ref = compute_vacuum_grad_u(ffs.ref, precision, ligand_conf, lamb)
-        solvent_grad_ref, solvent_u_ref = compute_ref_grad_u(ffs.ref, precision, coords0, lamb)
+        solvent_grad_ref, solvent_u_ref = compute_ref_grad_u(ffs.ref, precision, coords0, lamb, num_water_atoms)
 
         # Compute the grads, potential with the scaled ff
         vacuum_grad_scaled, vacuum_u_scaled = compute_vacuum_grad_u(ffs.scaled, precision, ligand_conf, lamb)
-        solvent_grad_scaled, solvent_u_scaled = compute_ref_grad_u(ffs.scaled, precision, coords0, lamb)
+        solvent_grad_scaled, solvent_u_scaled = compute_ref_grad_u(
+            ffs.scaled, precision, coords0, lamb, num_water_atoms
+        )
 
         # Compute the grads, potential with the intermol scaled ff
         vacuum_grad_inter_scaled, vacuum_u_inter_scaled = compute_vacuum_grad_u(
             ffs.inter_scaled, precision, ligand_conf, lamb
         )
         solvent_grad_inter_scaled, solvent_u_inter_scaled = compute_split_grad_u(
-            ffs.inter_scaled, precision, coords0, lamb
+            ffs.inter_scaled, precision, coords0, lamb, num_water_atoms
         )
 
         # Compute the expected intermol scaled potential

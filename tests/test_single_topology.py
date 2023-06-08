@@ -432,11 +432,11 @@ def test_combine_with_host():
     core = np.array([[1, 0], [2, 1], [3, 2], [4, 3], [5, 4], [6, 5]])
     ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
 
-    solvent_sys, _, _, _ = build_water_system(4.0, ff.water_ff)
+    solvent_sys, solvent_conf, _, _ = build_water_system(4.0, ff.water_ff)
     host_bps, _ = openmm_deserializer.deserialize_system(solvent_sys, cutoff=1.2)
 
     st = SingleTopology(mol_a, mol_b, core, ff)
-    host_system = st.combine_with_host(convert_bps_into_system(host_bps), 0.5)
+    host_system = st.combine_with_host(convert_bps_into_system(host_bps), 0.5, solvent_conf.shape[0])
     # Expect there to be 5 functions, excluding the chiral bond and chiral atom restraints
     # This should be updated when chiral restraints are re-enabled.
     assert len(host_system.get_U_fns()) == 5
@@ -464,7 +464,7 @@ def test_nonbonded_split(precision, rtol, atol, use_tiny_mol):
 
     def get_vacuum_solvent_u_grads(ff, lamb):
         st = SingleTopology(mol_a, mol_b, core, ff)
-        ligand_conf = st.combine_confs(get_romol_conf(mol_a), get_romol_conf(mol_b))  # TODO put lamb here w/Josh's fix
+        ligand_conf = st.combine_confs(get_romol_conf(mol_a), get_romol_conf(mol_b), lamb)
         combined_conf = np.concatenate([solvent_conf, ligand_conf])
 
         vacuum_system = st.setup_intermediate_state(lamb)
@@ -473,7 +473,7 @@ def test_nonbonded_split(precision, rtol, atol, use_tiny_mol):
         val_and_grad_fn = minimizer.get_val_and_grad_fn(vacuum_impls, solvent_box)
         vacuum_u, vacuum_grad = val_and_grad_fn(ligand_conf)
 
-        solvent_system = st.combine_with_host(convert_bps_into_system(solvent_bps), lamb)
+        solvent_system = st.combine_with_host(convert_bps_into_system(solvent_bps), lamb, solvent_conf.shape[0])
         solvent_potentials = solvent_system.get_U_fns()
         solvent_impls = [p.to_gpu(precision).bound_impl for p in solvent_potentials]
         val_and_grad_fn = minimizer.get_val_and_grad_fn(solvent_impls, solvent_box)

@@ -27,7 +27,7 @@ class UnsupportedPotential(Exception):
 
 
 class HostGuestTopology:
-    def __init__(self, host_potentials, guest_topology):
+    def __init__(self, host_potentials, guest_topology, num_water_atoms: int):
         """
         Utility tool for combining host with a guest, in that order. host_potentials must be comprised
         exclusively of supported potentials (currently: bonds, angles, torsions, nonbonded).
@@ -67,9 +67,26 @@ class HostGuestTopology:
 
         assert self.host_nonbonded is not None
         self.num_host_atoms = self.host_nonbonded.potential.num_atoms
+        self.num_water_atoms = num_water_atoms
+        self.num_other_atoms = self.num_host_atoms - num_water_atoms
 
-    def get_num_atoms(self):
+    def get_water_idxs(self) -> NDArray:
+        return np.arange(self.num_water_atoms, dtype=np.int32) + self.num_other_atoms
+
+    def get_other_idxs(self) -> NDArray:
+        return np.arange(self.num_other_atoms, dtype=np.int32)
+
+    def get_num_atoms(self) -> int:
         return self.num_host_atoms + self.guest_topology.get_num_atoms()
+
+    def get_lig_idxs(self) -> List[NDArray]:
+        def to_np(a):
+            return [np.array(v, dtype=np.int32) for v in a]
+
+        if self.num_host_atoms:
+            return to_np(self.get_component_idxs()[1:])
+        else:
+            return to_np(self.get_component_idxs())
 
     def get_component_idxs(self) -> List[NDArray]:
         """

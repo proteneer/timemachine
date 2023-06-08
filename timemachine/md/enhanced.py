@@ -18,6 +18,7 @@ from scipy.special import logsumexp
 from timemachine import lib
 from timemachine.constants import BOLTZ
 from timemachine.fe import free_energy, topology
+from timemachine.fe.free_energy import HostConfig
 from timemachine.fe.utils import get_romol_conf
 from timemachine.integrator import simulate
 from timemachine.lib import custom_ops
@@ -425,17 +426,18 @@ def get_solvent_phase_system(mol, ff, lamb: float, box_width=3.0, margin=0.5, mi
     # construct water box
     water_system, water_coords, water_box, water_topology = builders.build_water_system(box_width, ff.water_ff)
     water_box = water_box + np.eye(3) * margin  # add a small margin around the box for stability
+    host_config = HostConfig(water_system, water_coords, water_box, water_coords.shape[0])
 
     # construct alchemical system
     bt = topology.BaseTopology(mol, ff)
     afe = free_energy.AbsoluteFreeEnergy(mol, bt)
     ff_params = ff.get_params()
-    potentials, params, masses = afe.prepare_host_edge(ff_params, water_system, lamb)
+    potentials, params, masses = afe.prepare_host_edge(ff_params, host_config, lamb)
 
     # concatenate (optionally minimized) water_coords and ligand_coords
     ligand_coords = get_romol_conf(mol)
     if minimize_energy:
-        new_water_coords = minimizer.minimize_host_4d([mol], water_system, water_coords, ff, water_box)
+        new_water_coords = minimizer.minimize_host_4d([mol], host_config, ff)
         coords = np.concatenate([new_water_coords, ligand_coords])
     else:
         coords = np.concatenate([water_coords, ligand_coords])
