@@ -179,7 +179,7 @@ void __device__ v_nonbonded_unified(
     const int NR,
     const double *__restrict__ coords,
     const double *__restrict__ params, // [N]
-    const double *__restrict__ box,
+    RealType shared_box[6],            // [6]
     const double beta,
     const double cutoff,
     const unsigned int *__restrict__ row_idxs,
@@ -189,13 +189,13 @@ void __device__ v_nonbonded_unified(
     unsigned long long *__restrict__ du_dp,
     unsigned long long *__restrict__ u_buffer) {
 
-    RealType box_x = box[0 * 3 + 0];
-    RealType box_y = box[1 * 3 + 1];
-    RealType box_z = box[2 * 3 + 2];
+    RealType box_x = shared_box[0];
+    RealType box_y = shared_box[1];
+    RealType box_z = shared_box[2];
 
-    RealType inv_box_x = 1 / box_x;
-    RealType inv_box_y = 1 / box_y;
-    RealType inv_box_z = 1 / box_z;
+    RealType inv_box_x = shared_box[3];
+    RealType inv_box_y = shared_box[4];
+    RealType inv_box_z = shared_box[5];
 
     int row_block_idx = ixn_tiles[tile_idx];
 
@@ -423,6 +423,16 @@ void __global__ k_nonbonded_unified(
     unsigned long long *__restrict__ du_dx,
     unsigned long long *__restrict__ du_dp,
     unsigned long long *__restrict__ u_buffer) {
+    __shared__ RealType shared_box[6];
+    if (threadIdx.x == 0) {
+        shared_box[0] = box[0 * 3 + 0];
+        shared_box[1] = box[1 * 3 + 1];
+        shared_box[2] = box[2 * 3 + 2];
+        shared_box[3] = 1 / shared_box[0];
+        shared_box[4] = 1 / shared_box[1];
+        shared_box[5] = 1 / shared_box[2];
+    }
+    __syncthreads();
     // Tiles are 32 x 32, which is the same as the warp size
     const int tile_size = warp_size;
 
@@ -454,7 +464,7 @@ void __global__ k_nonbonded_unified(
                 NR,
                 coords,
                 params,
-                box,
+                shared_box,
                 beta,
                 cutoff,
                 row_idxs,
@@ -470,7 +480,7 @@ void __global__ k_nonbonded_unified(
                 NR,
                 coords,
                 params,
-                box,
+                shared_box,
                 beta,
                 cutoff,
                 row_idxs,
