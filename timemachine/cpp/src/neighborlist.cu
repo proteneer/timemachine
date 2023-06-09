@@ -207,12 +207,12 @@ void Neighborlist<RealType>::compute_block_bounds_device(
         N,
         column_blocks,
         NC_,
-        d_ixn_count_,
         d_column_idxs_,
         d_coords,
         d_box,
         d_column_block_bounds_ctr_,
-        d_column_block_bounds_ext_);
+        d_column_block_bounds_ext_,
+        d_ixn_count_);
     gpuErrchk(cudaPeekAtLastError());
     // In the case of upper triangle of the matrix, the column and row indices are the same, so only compute block ixns for both
     // when they are different
@@ -222,12 +222,12 @@ void Neighborlist<RealType>::compute_block_bounds_device(
             N,
             row_blocks,
             NR_,
-            d_ixn_count_,
             d_row_idxs_,
             d_coords,
             d_box,
             d_row_block_bounds_ctr_,
-            d_row_block_bounds_ext_);
+            d_row_block_bounds_ext_,
+            d_ixn_count_);
         gpuErrchk(cudaPeekAtLastError());
     }
 };
