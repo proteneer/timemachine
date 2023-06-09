@@ -150,6 +150,7 @@ class HostGuestTopology:
         guest_ixn_other_params, _ = self.guest_topology.parameterize_nonbonded(
             ff_q_params, None, None, ff_lj_params, lamb, intramol_params=False
         )
+
         # ligand water interactions
         guest_ixn_water_params, _ = self.guest_topology.parameterize_nonbonded(
             ff_q_params_solv, None, None, ff_lj_params, lamb, intramol_params=False
