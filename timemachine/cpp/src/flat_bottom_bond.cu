@@ -56,7 +56,7 @@ void FlatBottomBond<RealType>::execute_device(
     }
 
     if (B_ > 0) {
-        const int tpb = warp_size;
+        const int tpb = default_threads_per_block;
         const int blocks = ceil_divide(B_, tpb);
 
         k_flat_bottom_bond<RealType>

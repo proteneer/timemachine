@@ -54,7 +54,7 @@ void NonbondedPairListPrecomputed<RealType>::execute_device(
     }
 
     if (B_ > 0) {
-        const int tpb = warp_size;
+        const int tpb = default_threads_per_block;
         const int blocks = ceil_divide(B_, tpb);
 
         k_nonbonded_precomputed<RealType>

@@ -171,7 +171,7 @@ void NonbondedInteractionGroup<RealType>::hilbert_sort(
     unsigned int *d_perm,
     cudaStream_t stream) {
 
-    const int tpb = warp_size;
+    const int tpb = default_threads_per_block;
     const int B = ceil_divide(N, tpb);
 
     k_coords_to_kv_gather<<<B, tpb, 0, stream>>>(
@@ -240,7 +240,7 @@ void NonbondedInteractionGroup<RealType>::execute_device(
         return;
     }
 
-    const int tpb = warp_size;
+    const int tpb = default_threads_per_block;
     const int B = ceil_divide(N_, tpb);
     const int K = NR_ + NC_; // total number of interactions
     const int B_K = ceil_divide(K, tpb);
@@ -396,7 +396,7 @@ void NonbondedInteractionGroup<RealType>::set_atom_idxs_device(
         throw std::runtime_error("number of idxs must be less than or equal to N");
     }
     if (NR > 0 && NC > 0) {
-        const size_t tpb = warp_size;
+        const size_t tpb = default_threads_per_block;
 
         // The indices must already be on the GPU and are copied into the potential's buffers.
         gpuErrchk(cudaMemcpyAsync(

@@ -42,7 +42,7 @@ void CentroidRestraint<RealType>::execute_device(
     unsigned long long *d_u,
     cudaStream_t stream) {
 
-    int tpb = 32;
+    int tpb = default_threads_per_block;
 
     int blocks = (N_B_ + N_A_ + tpb - 1) / tpb;
     gpuErrchk(cudaMemsetAsync(d_centroid_a_, 0.0, 3 * sizeof(*d_centroid_a_), stream));
