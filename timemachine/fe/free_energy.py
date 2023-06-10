@@ -213,7 +213,7 @@ class AbsoluteFreeEnergy(BaseFreeEnergy):
         self.mol = mol
         self.top = top
 
-    def prepare_host_edge(self, ff_params: ForcefieldParams, host_config: HostConfig, lamb: float):
+    def prepare_host_edge(self, ff_params, omm_system, nwa, lamb):
         """
         Prepares the host-guest system
 
@@ -236,8 +236,8 @@ class AbsoluteFreeEnergy(BaseFreeEnergy):
         """
         ligand_masses = get_mol_masses(self.mol)
 
-        host_bps, host_masses = openmm_deserializer.deserialize_system(host_config.omm_system, cutoff=1.2)
-        hgt = topology.HostGuestTopology(host_bps, self.top, host_config.num_water_atoms)
+        host_bps, host_masses = openmm_deserializer.deserialize_system(omm_system, cutoff=1.2)
+        hgt = topology.HostGuestTopology(host_bps, self.top, nwa)
 
         final_params, final_potentials = self._get_system_params_and_potentials(ff_params, hgt, lamb)
         combined_masses = self._combine(ligand_masses, host_masses)
@@ -528,7 +528,6 @@ def run_sims_sequential(
         assert all(np.array(keep_idxs) >= 0)
 
     for lamb_idx, initial_state in enumerate(initial_states):
-
         # run simulation
         cur_frames, cur_boxes = sample(initial_state, md_params)
         print(f"completed simulation at lambda={initial_state.lamb}!")

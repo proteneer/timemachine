@@ -448,7 +448,7 @@ def get_solvent_phase_system(mol, ff, lamb: float, box_width=3.0, margin=0.5, mi
     bt = topology.BaseTopology(mol, ff)
     afe = free_energy.AbsoluteFreeEnergy(mol, bt)
     ff_params = ff.get_params()
-    potentials, params, masses = afe.prepare_host_edge(ff_params, host_config, lamb)
+    potentials, params, masses = afe.prepare_host_edge(ff_params, host_config, 99999999999999999, lamb)
 
     # concatenate (optionally minimized) water_coords and ligand_coords
     ligand_coords = get_romol_conf(mol)
@@ -492,9 +492,11 @@ def get_complex_phase_system(mol, host_pdb, ff, minimize_energy=True):
     """
 
     # construct water box
-    complex_system, complex_coords, complex_box, complex_topology = builders.build_protein_system(
+    complex_system, complex_coords, complex_box, complex_topology, num_waters = builders.build_protein_system(
         host_pdb, ff.protein_ff, ff.water_ff
     )
+
+    print("Num Waters", num_waters)
 
     # construct alchemical system
     bt = topology.BaseTopology(mol, ff)
@@ -502,7 +504,7 @@ def get_complex_phase_system(mol, host_pdb, ff, minimize_energy=True):
     ff_params = ff.get_params()
 
     # REVERTME: 1.0?
-    potentials, params, masses = afe.prepare_host_edge(ff_params, complex_system, 1.0)
+    potentials, params, masses = afe.prepare_host_edge(ff_params, complex_system, num_waters, 1.0)
 
     # concatenate (optionally minimized) water_coords and ligand_coords
     ligand_coords = get_romol_conf(mol)

@@ -72,6 +72,9 @@ class ComplexPhaseSystem:
             self.rest_ranks,
         ) = enhanced.get_complex_phase_system(mol, host_pdb, ff, minimize_energy=True)
 
+    def get_num_atoms(self):
+        return len(self.masses)
+
     def construct_context(self, params, seed=2022):
         dt = 2.5e-3
         friction = 1.0
@@ -242,6 +245,12 @@ def apply_lifting(host_system, lam=0.0):
     params = deepcopy(host_system.params)
     nb_params = params[-1]
 
+    # layout of params
+    # [all_pairs, total_num_atoms*4]
+    # [ixn_group_water, total_num_atoms*4]
+    # [ixn_group_notwater, total_num_atoms*4]
+    # [precomputed_intramolecular parameters, ?x4]
+
     cutoff = 1.2
     switch = 0.5
     # min_epsilon = 0.02
@@ -252,29 +261,62 @@ def apply_lifting(host_system, lam=0.0):
     ligand_w_coords = get_w_coords(lam, ligand_ranks, cutoff)
     # rest_w_coords = -get_w_coords(lam, rest_ranks, cutoff)
 
-    # print("lam", lam, "ligand_w", ligand_w_coords)
-    # print("lam", lam, "rest_w", rest_w_coords)
+    # components = 3  # all, ligand water, ligand protein
+    component_dim = 4  # q,s,e,w
+    num_atoms = host_system.get_num_atoms()
+    # print(num_atoms)
 
-    # ligand atoms are grown from "inside-out"
-    # rest atoms are grown from "outside-in"
-    # hopefully this will "smoothly" push out the ligand
-    # tbd: shrink sigma too?
+    # assert 0
+    # stride = components * component_dim  # 3 systems * [q, s, e, w]
+    # assert len(nb_params) % stride == 0
+    # num_atoms = len(nb_params) // (components * component_dim)
+
+    # print("APPLY LIFT NUM ATOMS", num_atoms, "NB_PARAMS SHAPE", nb_params.shape)
+    # all_pairs_params = np.s_[: stride * num_atoms]
+    ligand_water_flat_idxs = np.s_[component_dim * num_atoms : 2 * component_dim * num_atoms]  # water
+    ligand_protein_flat_idxs = np.s_[2 * component_dim * num_atoms : 3 * component_dim * num_atoms :]  # non-water
+    # ligand_intra_flat_idxs = np.s_[3 * component_dim * num_atoms :]  # non-water
+
+    ligand_water_params = nb_params[ligand_water_flat_idxs].reshape(-1, 4)
+    ligand_protein_params = nb_params[ligand_protein_flat_idxs].reshape(-1, 4)
+    # ligand_intra_params = nb_params[ligand_intra_flat_idxs].reshape(-1, 4)  # don't need to touch this
+
+    assert lam >= 0.0
+    assert lam <= 1.0
 
     if lam < switch:
-        ligand_charges = -2 * nb_params[host_system.ligand_idxs, 0] * (lam - switch)
+        ligand_water_charges = 0
+        ligand_protein_charges = -2 * ligand_protein_params * (lam - switch)
+
+        ligand_water_w_coords = cutoff
+        ligand_protein_w_coords = ligand_w_coords  # should be zeros
         # ligand_epsilons = np.clip(-2 * nb_params[host_system.ligand_idxs, 2] * (lam - switch), min_epsilon, np.inf)
-
-        # rest_charges = -2 * nb_params[host_system.rest_idxs, 0] * (lam - switch)
-        # rest_epsilons = np.clip(-2 * nb_params[host_system.rest_idxs, 2] * (lam - switch), min_epsilon, np.inf)
     else:
-        ligand_charges = 0.0
-        # ligand_epsilons = min_epsilon
+        ligand_water_charges = 0.0
+        ligand_protein_charges = 0.0
+        ligand_water_w_coords = cutoff
+        ligand_protein_w_coords = ligand_w_coords
+        # ligand_epsilons = min_epsil
 
-        # rest_charges = 0.0
-        # rest_epsilons = min_epsilon
+    ligand_water_params = ligand_water_params.at[host_system.ligand_idxs, 0].set(ligand_water_charges)
+    ligand_water_params = ligand_water_params.at[host_system.ligand_idxs, -1].set(ligand_water_w_coords)
 
-    nb_params = nb_params.at[host_system.ligand_idxs, -1].set(ligand_w_coords)
-    nb_params = nb_params.at[host_system.ligand_idxs, 0].set(ligand_charges)
+    ligand_protein_params = ligand_protein_params.at[host_system.ligand_idxs, 0].set(ligand_protein_charges)
+    ligand_protein_params = ligand_protein_params.at[host_system.ligand_idxs, -1].set(ligand_protein_w_coords)
+
+    nb_params = nb_params.at[ligand_water_flat_idxs].set(ligand_water_params.reshape(-1))
+    nb_params = nb_params.at[ligand_protein_flat_idxs].set(ligand_protein_params.reshape(-1))
+
+    # print(lam, ligand_protein_w_coords)
+    # print(lam, "LP", nb_params[ligand_protein_flat_idxs].reshape(-1, 4)[:, -1])
+    # print(ligand_water_params)  # [HOST PARAMS, ATOM PARAMS]
+    # print(ligand_protein_params)  # [HOST_PARAMS, ATOM_PARAMS]
+    # print(ligand_intra_params)  # [HOST_PARAMS, ATOM_PARAMS]
+
+    # assert 0
+
+    # nb_params = nb_params.at[host_system.ligand_idxs, -1].set(ligand_w_coords)
+    # nb_params = nb_params.at[host_system.ligand_idxs, 0].set(ligand_charges)
     # nb_params = nb_params.at[host_system.ligand_idxs, 2].set(ligand_epsilons)
 
     # nb_params = nb_params.at[host_system.rest_idxs, -1].set(rest_w_coords)

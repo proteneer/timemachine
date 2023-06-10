@@ -105,7 +105,6 @@ class HostGuestTopology:
 
     # tbd: just merge the hamiltonians here
     def _parameterize_bonded_term(self, guest_params, guest_potential, host_potential):
-
         if guest_potential is None:
             raise UnsupportedPotential("Mismatch in guest_potential")
 
@@ -200,10 +199,17 @@ class HostGuestTopology:
         hg_total_pot = [host_guest_pot] + ixn_pots
         hg_total_params = [hg_nb_params] + ixn_params
 
+        # print(hg_nb_params.shape)
+        print("!0", ixn_params[0].shape, ixn_params[0])
+        print("!1", ixn_params[1].shape, ixn_params[1])
+
+        # assert 0
+
         # If the molecule has < 4 atoms there may not be any intramolecular terms
         # so they should be ignored here
         has_intra_terms = guest_intra_params.shape[0] > 0
         if has_intra_terms:
+            print("GUEST_INTRA_PARAMS", guest_intra_params.shape)
             hg_total_pot += [guest_intra_pot]
             hg_total_params += [guest_intra_params]
 
@@ -613,7 +619,6 @@ class DualTopologyMinimization(DualTopology):
     def parameterize_nonbonded(
         self, ff_q_params, ff_q_params_intra, ff_q_params_solv, ff_lj_params, lamb: float, intramol_params=True
     ):
-
         # both mol_a and mol_b are standardized.
         # we don't actually need derivatives for this stage.
 
@@ -703,6 +708,8 @@ def get_ligand_ixn_pots_params(
         )
         hg_water_params.append(jnp.concatenate([host_nb_params, guest_params_ixn_water]))
 
+    print("P0", host_nb_params.shape, "?", guest_params_ixn_water.shape)
+
     # L-Other terms
     hg_other_pots = []
     hg_other_params = []
@@ -718,6 +725,8 @@ def get_ligand_ixn_pots_params(
                 )
             )
             hg_other_params.append(jnp.concatenate([host_nb_params, guest_params_ixn_other]))
+
+    print("P1", host_nb_params.shape, "?", guest_params_ixn_other.shape)
 
     def filter_none(values):
         return [v for v in values if v is not None]
