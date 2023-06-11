@@ -339,12 +339,10 @@ class LocalMDConfig:
 
 
 # TODO: do all subsequent steps of local propagation with a fixed selection mask?
-def local_propagation(xvbs, ctxt, local_md_config):
+def local_propagation(xvbs, ctxt, local_md_config, propagate_seed):
     updates = []
 
-    for xvb in xvbs:
-        seed = np.random.randint(10000)
-
+    for idx, xvb in enumerate(xvbs):
         # def _local_propagate(xvb, ctxt, local_md_config, seed):
         ctxt.set_box(xvb.box)
         ctxt.set_v_t(xvb.velocities)
@@ -357,7 +355,7 @@ def local_propagation(xvbs, ctxt, local_md_config):
             local_md_config.store_x_interval,
             local_md_config.radius,
             local_md_config.k,
-            seed,
+            propagate_seed,
         )
 
         x = ctxt.get_x_t()
@@ -408,6 +406,7 @@ def adaptive_neq_switch(
     max_num_lambdas: int = 10000,
     callback_fn=None,  # what to do
     callback_interval=10,
+    global_seed=None,
 ) -> ResultDict:
     """barebones implementation of Sequential Monte Carlo (SMC)
 
@@ -453,6 +452,10 @@ def adaptive_neq_switch(
     lambdas = [initial_lam]
 
     for t in range(max_num_lambdas):
+
+        print("iteration", t)
+        print("last cur_samples", cur_samples[-1])
+
         if t % callback_interval == 0:
             callback_fn(t, lambdas[-1], log_weights, cur_samples, final=False)
 
@@ -460,16 +463,7 @@ def adaptive_neq_switch(
             break
 
         lam_initial = lambdas[-1]
-
-        # np.zeros_like(log_weights) discards history - bad for engagement rings when "coupling"
         lam_target = select_next_lam_simple(cur_samples, lam_initial, final_lam, batch_log_prob=log_prob)
-        # if final_lam == 0.0:
-        #     direction = "fwd"
-        # elif final_lam == 1.0:
-        #     direction = "rev"
-        # else:
-        #     assert 0
-        # lam_target = select_next_lam_NEQ(t + 1, direction=direction)
 
         # update log weights
         incremental_log_weights = log_prob(cur_samples, lam_target) - log_prob(cur_samples, lam_initial)
@@ -482,7 +476,7 @@ def adaptive_neq_switch(
         # cur_samples = propagate(resampled, lam_target)
 
         # propagate (also removes some of the clashiness induced by moving to lam_target)
-        cur_samples = propagate(cur_samples, lam_target)
+        cur_samples = propagate(cur_samples, lam_target, global_seed + t + 100)
 
         # append
         lambdas.append(lam_target)
@@ -632,10 +626,10 @@ def make_smc_funcs(system, local_md_config):
     def batch_u(samples, params):
         return np.array([u(s.coords, s.box, params) for s in samples])
 
-    def batch_propagate(samples, lam):
+    def batch_propagate(samples, lam, propagate_seed):
         params = apply_lifting(system, lam)
-        ctxt = system.construct_context(params, np.random.randint(1000))
-        return local_propagation(samples, ctxt, local_md_config)
+        ctxt = system.construct_context(params, propagate_seed)
+        return local_propagation(samples, ctxt, local_md_config, propagate_seed)
 
     def batch_log_prob(samples, lam):
         params = apply_lifting(system, lam)
@@ -663,13 +657,13 @@ def _image_frames(group_idxs, ligand_idxs, frames, boxes) -> np.ndarray:
     return np.array(imaged_frames)
 
 
-def inplace_randomly_rotate(coords, ligand_idxs, jordan_idxs):
+def inplace_randomly_rotate(coords, ligand_idxs, jordan_idxs, seed):
     ligand_coords = coords[ligand_idxs]
     # ligand_centroid = np.mean(coords[ligand_idxs], axis=0, keepdims=True)
     jordan_centroid = np.mean(coords[jordan_idxs], axis=0, keepdims=True)
     # remove centroid
     centered_coords = ligand_coords - jordan_centroid
-    rotated_coords = np.matmul(centered_coords, special_ortho_group.rvs(3))
+    rotated_coords = np.matmul(centered_coords, special_ortho_group.rvs(3, random_state=seed))
     coords[ligand_idxs] = rotated_coords + jordan_centroid
 
 
@@ -687,10 +681,13 @@ def estimate_populations(mol, host_pdb, ff, outfile, n_walkers, n_burn_in_steps,
     )
 
     print("\trandomly rotating the ligand")
-    for sample in samples:
+    for idx, sample in enumerate(samples):
         # assume that the protein doesn't move very much
         # tbd: do we rotate ligand's velocities as well?
-        inplace_randomly_rotate(sample.coords, system.ligand_idxs, system.jordan_idxs)
+        inplace_randomly_rotate(sample.coords, system.ligand_idxs, system.jordan_idxs, seed + idx)
+
+    print("Last inplace randomly rotate coords", sample.coords)
+    # assert 0
 
     local_md_config = LocalMDConfig(
         n_relax_steps,  # TODO: INCREASE THIS n_equilibrium_steps between runs
@@ -748,6 +745,7 @@ def estimate_populations(mol, host_pdb, ff, outfile, n_walkers, n_burn_in_steps,
         max_num_lambdas=5000,
         callback_fn=functools.partial(write_frames_callback, path=outfile + "_fwd"),
         callback_interval=40,
+        global_seed=seed,
     )
 
     print("fwd_lambdas", fwd_lambdas)
