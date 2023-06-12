@@ -338,9 +338,10 @@ void NonbondedAllPairs<RealType>::execute_device(
     kernel_idx |= d_du_dx ? 1 << 1 : 0;
     kernel_idx |= d_u ? 1 << 2 : 0;
 
-    kernel_ptrs_[kernel_idx]<<<p_ixn_count_[0], tpb, 0, stream>>>(
+    kernel_ptrs_[kernel_idx]<<<ceil_divide(p_ixn_count_[0], tpb / warp_size), tpb, 0, stream>>>(
         K_,
         nblist_.get_num_row_idxs(),
+        nblist_.get_ixn_count(),
         d_gathered_x_,
         d_gathered_p_,
         d_box,

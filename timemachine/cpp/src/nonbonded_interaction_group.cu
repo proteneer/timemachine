@@ -317,9 +317,10 @@ void NonbondedInteractionGroup<RealType>::execute_device(
     kernel_idx |= d_du_dx ? 1 << 1 : 0;
     kernel_idx |= d_u ? 1 << 2 : 0;
 
-    kernel_ptrs_[kernel_idx]<<<p_ixn_count_[0], tpb, 0, stream>>>(
+    kernel_ptrs_[kernel_idx]<<<ceil_divide(p_ixn_count_[0], tpb / warp_size), tpb, 0, stream>>>(
         K,
         nblist_.get_num_row_idxs(),
+        nblist_.get_ixn_count(),
         d_sorted_x_,
         d_sorted_p_,
         d_box,
