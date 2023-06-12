@@ -453,9 +453,8 @@ def adaptive_neq_switch(
     lambdas = [initial_lam]
 
     for t in range(max_num_lambdas):
-
-        print("iteration", t)
-        print("last cur_samples", cur_samples[-1])
+        # print("iteration", t)
+        # print("last cur_samples", cur_samples[-1])
 
         if t % callback_interval == 0:
             callback_fn(t, lambdas[-1], log_weights, cur_samples, final=False)
@@ -478,6 +477,12 @@ def adaptive_neq_switch(
 
         # propagate (also removes some of the clashiness induced by moving to lam_target)
         cur_samples = propagate(cur_samples, lam_target, global_seed + t + 100)
+
+        # check to see if we've blown up
+        for sample in cur_samples:
+            if np.amax(np.abs(sample.coords)) > 1e5:
+                print("Bad Coords detected", sample.coords)
+                raise RuntimeError("Simulation Blew-Up")
 
         # append
         lambdas.append(lam_target)
@@ -559,10 +564,12 @@ def select_next_lam_simple(
     current_lam,
     target_lam,
     batch_log_prob,
-    frac_ess_reduction_threshold=0.05,
+    frac_ess_reduction_threshold=0.02,
     xtol=1e-5,
     verbose=False,
 ):
+    # TODO: we should cap the adaptive code so that it's also bounded by a max abs delta_U
+    # i.e. we may have a case where we have high ESS but one particular walker has a clash.
     log_p_0 = batch_log_prob(samples, current_lam)
 
     # note scaled:
@@ -573,16 +580,6 @@ def select_next_lam_simple(
         trial_lam = current_lam + direction * increment
         log_p_trial = batch_log_prob(samples, trial_lam)
         incremental_log_weight = log_p_trial - log_p_0
-        # print(
-        #     "incremental_log_weights",
-        #     incremental_log_weight,
-        #     "cur lam",
-        #     current_lam,
-        #     "trial_lam",
-        #     trial_lam,
-        #     "with increment",
-        #     increment,
-        # )
         trial_log_weights = incremental_log_weight
         trial_ess = effective_sample_size(trial_log_weights) / len(trial_log_weights)
         if verbose:
@@ -619,7 +616,6 @@ def select_next_lam_NEQ(idx, direction):
 
 
 def make_smc_funcs(system, local_md_config):
-
     U_fn = SummedPotential(system.potentials, system.params).to_gpu(np.float32).call_with_params_list
 
     def u(x, box, params):
@@ -630,10 +626,12 @@ def make_smc_funcs(system, local_md_config):
 
     def batch_propagate(samples, lam, propagate_seed):
         params = apply_lifting(system, lam)
-        fpath = local_md_config.debug_file + str(lam) + ".pkl"
-        print("Writing out batch_propagate pickle file to: ", fpath)
-        with open(fpath, "wb") as fh:
-            pickle.dump([samples, lam, propagate_seed, local_md_config, system], fh)
+
+        # re-enable if we want to checkpoint
+        # fpath = local_md_config.debug_file + str(lam) + ".pkl"
+        # print("Writing out batch_propagate pickle file to: ", fpath)
+        # with open(fpath, "wb") as fh:
+        # pickle.dump([samples, lam, propagate_seed, local_md_config, system], fh)
         ctxt = system.construct_context(params, propagate_seed)
         return local_propagation(samples, ctxt, local_md_config, propagate_seed)
 
@@ -756,7 +754,7 @@ def estimate_populations(mol, host_pdb, ff, outfile, n_walkers, n_burn_in_steps,
     )
 
     print("fwd_lambdas", fwd_lambdas)
-    print("log_weights_fwd", fwd_log_weights_traj[-1])
+    print("log_weights_fwd", fwd_log_weights_traj[-1].tolist())
 
     # keep old weights
     log_weights = fwd_log_weights_traj[-1]
@@ -779,9 +777,10 @@ def estimate_populations(mol, host_pdb, ff, outfile, n_walkers, n_burn_in_steps,
         max_num_lambdas=5000,
         callback_fn=functools.partial(write_frames_callback, path=outfile + "_rev"),
         callback_interval=40,
+        global_seed=seed + 123456,
     )
 
-    print("log_weights_rev", rev_log_weights_traj[-1])
+    print("log_weights_rev", rev_log_weights_traj[-1].tolist())
 
     with open(outfile + "_traj.pkl", "wb") as fh:
         data = [
