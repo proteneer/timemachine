@@ -336,6 +336,7 @@ class LocalMDConfig:
     store_x_interval: int
     radius: float
     k: float
+    debug_file: str
 
 
 # TODO: do all subsequent steps of local propagation with a fixed selection mask?
@@ -618,6 +619,7 @@ def select_next_lam_NEQ(idx, direction):
 
 
 def make_smc_funcs(system, local_md_config):
+
     U_fn = SummedPotential(system.potentials, system.params).to_gpu(np.float32).call_with_params_list
 
     def u(x, box, params):
@@ -628,6 +630,10 @@ def make_smc_funcs(system, local_md_config):
 
     def batch_propagate(samples, lam, propagate_seed):
         params = apply_lifting(system, lam)
+        fpath = local_md_config.debug_file + str(lam) + ".pkl"
+        print("Writing out batch_propagate pickle file to: ", fpath)
+        with open(fpath, "wb") as fh:
+            pickle.dump([samples, lam, propagate_seed, local_md_config, system], fh)
         ctxt = system.construct_context(params, propagate_seed)
         return local_propagation(samples, ctxt, local_md_config, propagate_seed)
 
@@ -696,6 +702,7 @@ def estimate_populations(mol, host_pdb, ff, outfile, n_walkers, n_burn_in_steps,
         0,  # store_x_interval
         radius=2.5,  # 25 Angstrom LMD radius
         k=200,
+        debug_file=outfile + "_lmd_debug",
     )
 
     batch_propagate, batch_log_prob = make_smc_funcs(
