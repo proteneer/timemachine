@@ -56,6 +56,8 @@ private:
     unsigned int *d_sort_storage_;
     size_t d_sort_storage_bytes_;
 
+    cudaEvent_t nblist_flag_sync_event_; // Event to synchronize on
+
     const bool disable_hilbert_;
 
     std::array<k_nonbonded_fn, 8> kernel_ptrs_;
