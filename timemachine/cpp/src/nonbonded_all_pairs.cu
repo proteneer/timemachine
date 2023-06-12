@@ -114,7 +114,7 @@ NonbondedAllPairs<RealType>::NonbondedAllPairs(
     this->set_atom_idxs(atom_idxs_h);
 
     // Create event with timings disabled as timings slow down events
-    gpuErrchk(cudaEventCreateWithFlags(&rebuild_event_, cudaEventDisableTiming));
+    gpuErrchk(cudaEventCreateWithFlags(&nblist_flag_sync_event_, cudaEventDisableTiming));
 };
 
 template <typename RealType> NonbondedAllPairs<RealType>::~NonbondedAllPairs() {
@@ -144,7 +144,7 @@ template <typename RealType> NonbondedAllPairs<RealType>::~NonbondedAllPairs() {
     gpuErrchk(cudaFree(d_rebuild_nblist_));
     gpuErrchk(cudaFreeHost(p_rebuild_nblist_));
 
-    gpuErrchk(cudaEventDestroy(rebuild_event_));
+    gpuErrchk(cudaEventDestroy(nblist_flag_sync_event_));
 };
 
 // Set atom idxs upon which to compute the non-bonded potential. This will trigger a neighborlist rebuild.
@@ -282,7 +282,7 @@ void NonbondedAllPairs<RealType>::execute_device(
         // we can optimize this away by doing the check on the GPU directly.
         gpuErrchk(cudaMemcpyAsync(
             p_rebuild_nblist_, d_rebuild_nblist_, 1 * sizeof(*p_rebuild_nblist_), cudaMemcpyDeviceToHost, stream));
-        gpuErrchk(cudaEventRecord(rebuild_event_, stream));
+        gpuErrchk(cudaEventRecord(nblist_flag_sync_event_, stream));
     }
     // compute new coordinates/params
     k_gather_coords_and_params<<<dim3(ceil_divide(K_, tpb), PARAMS_PER_ATOM, 1), tpb, 0, stream>>>(
@@ -298,7 +298,7 @@ void NonbondedAllPairs<RealType>::execute_device(
     }
     // Syncing to an event allows having additional kernels run while we synchronize
     // Note that if no event is recorded, this is effectively a no-op, such as in the case of sorting.
-    gpuErrchk(cudaEventSynchronize(rebuild_event_));
+    gpuErrchk(cudaEventSynchronize(nblist_flag_sync_event_));
     if (p_rebuild_nblist_[0] > 0) {
 
         nblist_.build_nblist_device(K_, d_gathered_x_, d_box, cutoff_ + nblist_padding_, stream);
