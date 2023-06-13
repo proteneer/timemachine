@@ -103,8 +103,6 @@ RUN pip install --no-cache-dir -r timemachine/ci/requirements.txt
 
 # Dev container that contains the cuda developer tools
 FROM tm_base_env AS timemachine_dev
-ARG CUDA_ARCH=75
-ENV CMAKE_ARGS -DCUDA_ARCH=${CUDA_ARCH}
 COPY . /code/timemachine/
 WORKDIR /code/timemachine/
 RUN pip install --no-cache-dir -e .[test] && rm -rf ./build
