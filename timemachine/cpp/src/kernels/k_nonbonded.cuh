@@ -94,12 +94,12 @@ void __global__ k_gather_coords_and_params(
     gathered_params[idx * stride + stride_idx] = params[idxs[idx] * stride + stride_idx];
 }
 
-template <typename RealType>
+template <typename T>
 void __global__ k_scatter_accum(
     const int N,
     const unsigned int *__restrict__ unique_idxs, // NOTE: race condition possible if there are repeated indices
-    const RealType *__restrict__ gathered_array,
-    RealType *__restrict__ array) {
+    const T *__restrict__ gathered_array,
+    T *__restrict__ array) {
 
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     int stride = gridDim.y;
@@ -111,62 +111,6 @@ void __global__ k_scatter_accum(
 
     atomicAdd(array + (unique_idxs[idx] * stride + stride_idx), gathered_array[idx * stride + stride_idx]);
 }
-
-template <typename RealType>
-void __global__ k_scatter_assign(
-    const int N,
-    const unsigned int *__restrict__ unique_idxs, // NOTE: race condition possible if there are repeated indices
-    const RealType *__restrict__ gathered_array,
-    RealType *__restrict__ array) {
-
-    int idx = blockIdx.x * blockDim.x + threadIdx.x;
-    int stride = gridDim.y;
-    int stride_idx = blockIdx.y;
-
-    if (idx >= N) {
-        return;
-    }
-
-    array[unique_idxs[idx] * stride + stride_idx] = gathered_array[idx * stride + stride_idx];
-}
-
-template <typename RealType>
-void __global__ k_scatter_assign_2x(
-    const int N,
-    const unsigned int *__restrict__ unique_idxs, // NOTE: race condition possible if there are repeated indices
-    const RealType *__restrict__ gathered_array_1,
-    const RealType *__restrict__ gathered_array_2,
-    RealType *__restrict__ array_1,
-    RealType *__restrict__ array_2) {
-
-    int idx = blockIdx.x * blockDim.x + threadIdx.x;
-    int stride = gridDim.y;
-    int stride_idx = blockIdx.y;
-
-    if (idx >= N) {
-        return;
-    }
-
-    array_1[unique_idxs[idx] * stride + stride_idx] = gathered_array_1[idx * stride + stride_idx];
-    array_2[unique_idxs[idx] * stride + stride_idx] = gathered_array_2[idx * stride + stride_idx];
-}
-
-template <typename RealType> void __global__ k_reduce_buffer(int N, RealType *d_buffer, RealType *d_sum) {
-
-    int idx = blockIdx.x * blockDim.x + threadIdx.x;
-
-    RealType elem = idx < N ? d_buffer[idx] : 0;
-
-    atomicAdd(d_sum, elem);
-};
-
-template <typename RealType> void __global__ k_reduce_ull_buffer(int N, unsigned long long *d_buffer, RealType *d_sum) {
-
-    int idx = blockIdx.x * blockDim.x + threadIdx.x;
-    RealType elem = idx < N ? FIXED_TO_FLOAT<RealType>(d_buffer[idx]) : 0;
-
-    atomicAdd(d_sum, elem);
-};
 
 // ALCHEMICAL == false guarantees that the tile's atoms are such that
 // 1. src_param and dst_params are equal for every i in R and j in C

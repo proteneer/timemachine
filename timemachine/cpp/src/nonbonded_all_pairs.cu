@@ -63,8 +63,6 @@ NonbondedAllPairs<RealType>::NonbondedAllPairs(
     cudaSafeMalloc(&d_gathered_du_dx_, N_ * 3 * sizeof(*d_gathered_du_dx_));
     cudaSafeMalloc(&d_gathered_du_dp_, N_ * PARAMS_PER_ATOM * sizeof(*d_gathered_du_dp_));
 
-    cudaSafeMalloc(&d_du_dp_buffer_, N_ * PARAMS_PER_ATOM * sizeof(*d_du_dp_buffer_));
-
     gpuErrchk(cudaMallocHost(&p_ixn_count_, 1 * sizeof(*p_ixn_count_)));
     gpuErrchk(cudaMallocHost(&p_box_, 3 * 3 * sizeof(*p_box_)));
 
@@ -121,7 +119,6 @@ template <typename RealType> NonbondedAllPairs<RealType>::~NonbondedAllPairs() {
 
     gpuErrchk(cudaFree(d_atom_idxs_));
 
-    gpuErrchk(cudaFree(d_du_dp_buffer_));
     gpuErrchk(cudaFree(d_sorted_atom_idxs_));
 
     gpuErrchk(cudaFree(d_bin_to_idx_));
@@ -291,10 +288,10 @@ void NonbondedAllPairs<RealType>::execute_device(
 
     // reset buffers and sorted accumulators
     if (d_du_dx) {
-        gpuErrchk(cudaMemsetAsync(d_gathered_du_dx_, 0, K_ * 3 * sizeof(*d_gathered_du_dx_), stream))
+        gpuErrchk(cudaMemsetAsync(d_gathered_du_dx_, 0, K_ * 3 * sizeof(*d_gathered_du_dx_), stream));
     }
     if (d_du_dp) {
-        gpuErrchk(cudaMemsetAsync(d_gathered_du_dp_, 0, K_ * PARAMS_PER_ATOM * sizeof(*d_gathered_du_dp_), stream))
+        gpuErrchk(cudaMemsetAsync(d_gathered_du_dp_, 0, K_ * PARAMS_PER_ATOM * sizeof(*d_gathered_du_dp_), stream));
     }
     // Syncing to an event allows having additional kernels run while we synchronize
     // Note that if no event is recorded, this is effectively a no-op, such as in the case of sorting.
@@ -366,14 +363,8 @@ void NonbondedAllPairs<RealType>::execute_device(
     // params are N, PARAMS_PER_ATOM
     // this needs to be an accumulated permute
     if (d_du_dp) {
-        // scattered assignment updates K_ <= N_ elements; the rest should be 0
-        gpuErrchk(cudaMemsetAsync(d_du_dp_buffer_, 0, N_ * PARAMS_PER_ATOM * sizeof(*d_du_dp_buffer_), stream));
-        k_scatter_assign<<<dim3(ceil_divide(K_, tpb), PARAMS_PER_ATOM, 1), tpb, 0, stream>>>(
-            K_, d_sorted_atom_idxs_, d_gathered_du_dp_, d_du_dp_buffer_);
-        gpuErrchk(cudaPeekAtLastError());
-
-        k_add_ull_to_ull<<<dim3(ceil_divide(N_, tpb), PARAMS_PER_ATOM, 1), tpb, 0, stream>>>(
-            N, d_du_dp_buffer_, d_du_dp);
+        k_scatter_accum<<<dim3(ceil_divide(K_, tpb), PARAMS_PER_ATOM, 1), tpb, 0, stream>>>(
+            K_, d_sorted_atom_idxs_, d_gathered_du_dp_, d_du_dp);
         gpuErrchk(cudaPeekAtLastError());
     }
     // Increment steps
