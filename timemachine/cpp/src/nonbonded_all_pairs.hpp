@@ -46,7 +46,6 @@ private:
     double *d_gathered_p_;             // sorted parameters for subset of atoms
     unsigned long long *d_gathered_du_dx_;
     unsigned long long *d_gathered_du_dp_;
-    unsigned long long *d_du_dp_buffer_;
 
     // used for hilbert sorting
     unsigned int *d_bin_to_idx_; // mapping from 256x256x256 grid to hilbert curve index
