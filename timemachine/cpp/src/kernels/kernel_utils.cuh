@@ -36,7 +36,8 @@
 // Refer to the occupancy calculator in Nsight Compute for more details
 static const int default_threads_per_block = 128;
 static const int warp_size = 32;
-static_assert(default_threads_per_block % warp_size == 0); // default_threads_per_block must be multiple of warp_size
+// default_threads_per_block should be multiple of warp_size, else it is wasteful
+static_assert(default_threads_per_block % warp_size == 0);
 
 inline __device__ int linearize(int i, int j, int d) { return d * (d - 1) / 2 - (d - i) * (d - i - 1) / 2 + j; }
 
