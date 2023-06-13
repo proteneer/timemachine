@@ -436,9 +436,9 @@ void __global__ k_nonbonded_unified(
     // Tiles are 32 x 32, which is the same as the warp size
     const int tile_size = warp_size;
 
-    const int tiles_per_block = blockDim.x / warp_size;
+    const int tiles_per_block = blockDim.x / tile_size;
     const int stride = gridDim.x * tiles_per_block;
-    int tile_idx = blockIdx.x * tiles_per_block + (threadIdx.x / warp_size);
+    int tile_idx = blockIdx.x * tiles_per_block + (threadIdx.x / tile_size);
 
     const int tile_offset = threadIdx.x % tile_size;
 
