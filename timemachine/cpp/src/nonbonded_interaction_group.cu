@@ -59,7 +59,6 @@ NonbondedInteractionGroup<RealType>::NonbondedInteractionGroup(
     cudaSafeMalloc(&d_sorted_p_, N_ * PARAMS_PER_ATOM * sizeof(*d_sorted_p_));
     cudaSafeMalloc(&d_sorted_du_dx_, N_ * 3 * sizeof(*d_sorted_du_dx_));
     cudaSafeMalloc(&d_sorted_du_dp_, N_ * PARAMS_PER_ATOM * sizeof(*d_sorted_du_dp_));
-    cudaSafeMalloc(&d_du_dp_buffer_, N_ * PARAMS_PER_ATOM * sizeof(*d_du_dp_buffer_));
 
     gpuErrchk(cudaMallocHost(&p_ixn_count_, 1 * sizeof(*p_ixn_count_)));
     gpuErrchk(cudaMallocHost(&p_box_, 3 * 3 * sizeof(*p_box_)));
@@ -115,7 +114,6 @@ template <typename RealType> NonbondedInteractionGroup<RealType>::~NonbondedInte
     gpuErrchk(cudaFree(d_col_atom_idxs_));
     gpuErrchk(cudaFree(d_row_atom_idxs_));
 
-    gpuErrchk(cudaFree(d_du_dp_buffer_));
     gpuErrchk(cudaFree(d_perm_));
 
     gpuErrchk(cudaFree(d_bin_to_idx_));
@@ -344,13 +342,7 @@ void NonbondedInteractionGroup<RealType>::execute_device(
     // params are N, PARAMS_PER_ATOM
     // this needs to be an accumulated permute
     if (d_du_dp) {
-        // scattered assignment updates K <= N_ elements; the rest should be 0
-        gpuErrchk(cudaMemsetAsync(d_du_dp_buffer_, 0, N_ * PARAMS_PER_ATOM * sizeof(*d_du_dp_buffer_), stream));
-        k_scatter_assign<<<dim3(B_K, PARAMS_PER_ATOM, 1), tpb, 0, stream>>>(
-            K, d_perm_, d_sorted_du_dp_, d_du_dp_buffer_);
-        gpuErrchk(cudaPeekAtLastError());
-
-        k_add_ull_to_ull<<<dim3(B, PARAMS_PER_ATOM, 1), tpb, 0, stream>>>(N, d_du_dp_buffer_, d_du_dp);
+        k_scatter_accum<<<dim3(B_K, PARAMS_PER_ATOM, 1), tpb, 0, stream>>>(K, d_perm_, d_sorted_du_dp_, d_du_dp);
         gpuErrchk(cudaPeekAtLastError());
     }
     // Increment steps
