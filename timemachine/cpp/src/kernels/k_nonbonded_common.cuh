@@ -5,6 +5,9 @@
 // each atom parameterized by a 4-tuple: charge, lj sigma, lj epsilon, 4D coordinate w
 enum { PARAM_OFFSET_CHARGE = 0, PARAM_OFFSET_SIG, PARAM_OFFSET_EPS, PARAM_OFFSET_W, PARAMS_PER_ATOM };
 
+// Empirically selected number of kernel blocks, focusing on the cuda 8.* architectures
+static const int NONBONDED_KERNEL_BLOCKS = 512;
+
 typedef void (*k_nonbonded_fn)(
     const int N,
     const int NR,
