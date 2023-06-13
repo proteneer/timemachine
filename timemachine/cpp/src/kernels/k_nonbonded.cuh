@@ -178,12 +178,12 @@ void __global__ k_gather_coords_and_params(
     gathered_params[idx * stride + stride_idx] = params[idxs[idx] * stride + stride_idx];
 }
 
-template <typename RealType>
+template <typename T>
 void __global__ k_scatter_accum(
     const int N,
     const unsigned int *__restrict__ unique_idxs, // NOTE: race condition possible if there are repeated indices
-    const RealType *__restrict__ gathered_array,
-    RealType *__restrict__ array) {
+    const T *__restrict__ gathered_array,
+    T *__restrict__ array) {
 
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     int stride = gridDim.y;
