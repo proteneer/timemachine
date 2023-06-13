@@ -179,7 +179,7 @@ void __device__ v_nonbonded_unified(
     const int NR,
     const double *__restrict__ coords,
     const double *__restrict__ params, // [N]
-    RealType shared_box[6],            // [6]
+    box_cache<RealType> &shared_box,   // [6]
     const double beta,
     const double cutoff,
     const unsigned int *__restrict__ row_idxs,
@@ -189,13 +189,13 @@ void __device__ v_nonbonded_unified(
     unsigned long long *__restrict__ du_dp,
     unsigned long long *__restrict__ u_buffer) {
 
-    RealType box_x = shared_box[0];
-    RealType box_y = shared_box[1];
-    RealType box_z = shared_box[2];
+    RealType box_x = shared_box.x;
+    RealType box_y = shared_box.y;
+    RealType box_z = shared_box.z;
 
-    RealType inv_box_x = shared_box[3];
-    RealType inv_box_y = shared_box[4];
-    RealType inv_box_z = shared_box[5];
+    RealType inv_box_x = shared_box.inv_x;
+    RealType inv_box_y = shared_box.inv_y;
+    RealType inv_box_z = shared_box.inv_z;
 
     int row_block_idx = ixn_tiles[tile_idx];
 
@@ -423,14 +423,14 @@ void __global__ k_nonbonded_unified(
     unsigned long long *__restrict__ du_dx,
     unsigned long long *__restrict__ du_dp,
     unsigned long long *__restrict__ u_buffer) {
-    __shared__ RealType shared_box[6];
+    __shared__ box_cache<RealType> shared_box;
     if (threadIdx.x == 0) {
-        shared_box[0] = box[0 * 3 + 0];
-        shared_box[1] = box[1 * 3 + 1];
-        shared_box[2] = box[2 * 3 + 2];
-        shared_box[3] = 1 / shared_box[0];
-        shared_box[4] = 1 / shared_box[1];
-        shared_box[5] = 1 / shared_box[2];
+        shared_box.x = box[0 * 3 + 0];
+        shared_box.y = box[1 * 3 + 1];
+        shared_box.z = box[2 * 3 + 2];
+        shared_box.inv_x = 1 / shared_box.x;
+        shared_box.inv_y = 1 / shared_box.y;
+        shared_box.inv_z = 1 / shared_box.z;
     }
     __syncthreads();
     // Tiles are 32 x 32, which is the same as the warp size

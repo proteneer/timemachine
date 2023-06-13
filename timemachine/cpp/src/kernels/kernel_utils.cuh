@@ -2,6 +2,17 @@
 
 #include <cstdio>
 
+// box cache is a struct that can be used as shared memory in kernels to reduce
+// global memory reads and to reduce the amount of work done per block.
+template <typename RealType> struct box_cache {
+    RealType x;
+    RealType y;
+    RealType z;
+    RealType inv_x;
+    RealType inv_y;
+    RealType inv_z;
+};
+
 #define HESS_3N3N(i, j, N, di, dj) (di * N * 3 * N + i * 3 * N + dj * N + j)
 #define HESS_N3N3(i, j, N, di, dj) (i * 3 * N * 3 + di * N * 3 + j * 3 + dj)
 #define HESS_IDX HESS_N3N3
