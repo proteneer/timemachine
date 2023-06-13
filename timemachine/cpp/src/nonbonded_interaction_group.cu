@@ -248,13 +248,10 @@ void NonbondedInteractionGroup<RealType>::execute_device(
         this->sort(d_x, d_box, stream);
     } else {
         // (ytz) see if we need to rebuild the neighborlist.
-        k_check_rebuild_coords_and_box_gather<RealType><<<ceil_divide(NR_, tpb), tpb, 0, stream>>>(
-            NR_, d_row_atom_idxs_, d_x, d_nblist_x_, d_box, d_nblist_box_, nblist_padding_, d_rebuild_nblist_);
+        // Reuse the d_perm_ here to avoid having to make two kernels calls.
+        k_check_rebuild_coords_and_box_gather<RealType><<<ceil_divide(B_K, tpb), tpb, 0, stream>>>(
+            NR_ + NC_, d_perm_, d_x, d_nblist_x_, d_box, d_nblist_box_, nblist_padding_, d_rebuild_nblist_);
         gpuErrchk(cudaPeekAtLastError());
-        k_check_rebuild_coords_and_box_gather<RealType><<<ceil_divide(NC_, tpb), tpb, 0, stream>>>(
-            NC_, d_col_atom_idxs_, d_x, d_nblist_x_, d_box, d_nblist_box_, nblist_padding_, d_rebuild_nblist_);
-        gpuErrchk(cudaPeekAtLastError());
-
         // we can optimize this away by doing the check on the GPU directly.
         gpuErrchk(cudaMemcpyAsync(
             p_rebuild_nblist_, d_rebuild_nblist_, 1 * sizeof(*p_rebuild_nblist_), cudaMemcpyDeviceToHost, stream));
