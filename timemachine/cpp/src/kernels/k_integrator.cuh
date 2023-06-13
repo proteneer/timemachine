@@ -15,21 +15,16 @@ __global__ void update_forward_baoab(
     const RealType dt) {
 
     int kernel_idx = blockIdx.x * blockDim.x + threadIdx.x;
-    if (kernel_idx >= N) {
+    if (kernel_idx >= N * D) {
         return;
     }
-    int atom_idx;
-    if (idxs) {
-        atom_idx = idxs[kernel_idx];
-    } else {
-        atom_idx = kernel_idx;
-    }
+    int atom_idx = idxs != nullptr ? idxs[kernel_idx / D] : kernel_idx / D;
+
     if (atom_idx >= N) {
         return;
     }
 
-    int d_idx = blockIdx.y;
-    int local_idx = atom_idx * D + d_idx;
+    int local_idx = atom_idx * D + (kernel_idx % D);
 
     RealType force = -FIXED_TO_FLOAT<RealType>(du_dx[local_idx]);
 
@@ -41,7 +36,7 @@ __global__ void update_forward_baoab(
     RealType v_mid = v_t[local_idx] + cbs[atom_idx] * force;
 
     v_t[local_idx] = ca * v_mid + ccs[atom_idx] * noise[local_idx];
-    x_t[local_idx] += 0.5 * dt * (v_mid + v_t[local_idx]);
+    x_t[local_idx] += half_dt * (v_mid + v_t[local_idx]);
 };
 
 template <typename RealType, bool UPDATE_X>
