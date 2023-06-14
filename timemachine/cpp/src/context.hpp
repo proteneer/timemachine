@@ -74,6 +74,8 @@ private:
 
     void _ensure_local_md_intialized();
 
+    void _verify_boxes(cudaStream_t stream);
+
     int step_;
 
     double *d_x_t_;   // coordinates
@@ -86,6 +88,7 @@ private:
 
     std::shared_ptr<Integrator> intg_;
     std::vector<std::shared_ptr<BoundPotential>> bps_;
+    std::vector<std::shared_ptr<BoundPotential>> nonbonded_pots_; // Potentials used to verify
     std::unique_ptr<LocalMDPotentials> local_md_pots_;
 };
 

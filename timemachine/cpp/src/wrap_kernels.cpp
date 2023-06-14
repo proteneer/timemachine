@@ -21,7 +21,7 @@
 #include "log_flat_bottom_bond.hpp"
 #include "neighborlist.hpp"
 #include "nonbonded_all_pairs.hpp"
-#include "nonbonded_common.hpp"
+#include "nonbonded_common.cuh"
 #include "nonbonded_interaction_group.hpp"
 #include "nonbonded_pair_list.hpp"
 #include "nonbonded_precomputed.hpp"
@@ -228,7 +228,7 @@ void declare_context(py::module &m) {
 
                 std::vector<int> vec_local_idxs(local_idxs.size());
                 std::memcpy(vec_local_idxs.data(), local_idxs.data(), vec_local_idxs.size() * sizeof(int));
-                verify_atom_idxs(N, vec_local_idxs);
+                timemachine::verify_atom_idxs(N, vec_local_idxs);
 
                 std::array<std::vector<double>, 2> result =
                     ctxt.multiple_steps_local(n_steps, vec_local_idxs, burn_in, x_interval, radius, k, seed);
@@ -326,7 +326,7 @@ void declare_context(py::module &m) {
                 }
                 std::vector<int> vec_selection_idxs(selection_idxs.size());
                 std::memcpy(vec_selection_idxs.data(), selection_idxs.data(), vec_selection_idxs.size() * sizeof(int));
-                verify_atom_idxs(N, vec_selection_idxs);
+                timemachine::verify_atom_idxs(N, vec_selection_idxs);
                 std::set<int> selection_set(vec_selection_idxs.begin(), vec_selection_idxs.end());
                 if (selection_set.find(reference_idx) != selection_set.end()) {
                     throw std::runtime_error("reference idx must not be in selection idxs");

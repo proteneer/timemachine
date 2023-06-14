@@ -9,7 +9,7 @@
 #include "kernels/k_nonbonded_common.cuh"
 #include "kernels/kernel_utils.cuh"
 #include "nonbonded_all_pairs.hpp"
-#include "nonbonded_common.hpp"
+#include "nonbonded_common.cuh"
 #include "vendored/hilbert.h"
 
 #include <numeric>

@@ -1,7 +1,7 @@
 #pragma once
 
 #include "neighborlist.hpp"
-#include "nonbonded_common.hpp"
+#include "nonbonded_common.cuh"
 #include "potential.hpp"
 #include <array>
 #include <optional>
@@ -88,6 +88,8 @@ public:
         cudaStream_t stream) override;
 
     double get_cutoff() const { return cutoff_; };
+
+    double get_padding() const { return nblist_padding_; };
 
     double get_beta() const { return beta_; };
 
