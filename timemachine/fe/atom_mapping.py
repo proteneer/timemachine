@@ -100,6 +100,10 @@ def get_cores(
     enforce_core_core: bool
         If we allow core-core bonds to be broken. This may be deprecated later on.
 
+    ring_matches_ring_only: bool
+        atom i in mol A can match atom j in mol B
+        only if in_ring(i, A) == in_ring(j, B)
+
     complete_rings: bool
         If we require mapped atoms that are in a ring to be complete.
         If True then connected_core must also be True.
@@ -131,7 +135,7 @@ def get_cores(
         connected_core=connected_core,
         max_cores=max_cores,
         enforce_core_core=enforce_core_core,
-        ring_matches_ring=ring_matches_ring_only,
+        ring_matches_ring_only=ring_matches_ring_only,
         complete_rings=complete_rings,
         enforce_chiral=enforce_chiral,
         min_threshold=min_threshold,
@@ -300,7 +304,7 @@ def _get_cores_impl(
     connected_core,
     max_cores,
     enforce_core_core,
-    ring_matches_ring,
+    ring_matches_ring_only,
     complete_rings,
     enforce_chiral,
     min_threshold,
@@ -324,12 +328,13 @@ def _get_cores_impl(
             atom_j = mol_b.GetAtomWithIdx(jdx)
             dij = np.linalg.norm(a_xyz - b_xyz)
             dijs.append(dij)
-            if atom_i.IsInRing() or atom_j.IsInRing():
-                if dij < ring_cutoff and (not ring_matches_ring or atom_i.IsInRing() and atom_j.IsInRing()):
-                    allowed_idxs.add(jdx)
-            else:
-                if dij < chain_cutoff:
-                    allowed_idxs.add(jdx)
+
+            if ring_matches_ring_only and (atom_i.IsInRing() != atom_j.IsInRing()):
+                continue
+
+            cutoff = ring_cutoff if (atom_i.IsInRing() or atom_j.IsInRing()) else chain_cutoff
+            if dij < cutoff:
+                allowed_idxs.add(jdx)
 
         final_idxs = []
         for idx in np.argsort(dijs, kind="stable"):
