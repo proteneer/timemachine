@@ -214,9 +214,9 @@ void __device__ v_nonbonded_unified(
         RealType delta_y = ci_y - cj_y;
         RealType delta_z = ci_z - cj_z;
 
-        delta_x -= box_x * nearbyint(delta_x * inv_box_x);
-        delta_y -= box_y * nearbyint(delta_y * inv_box_y);
-        delta_z -= box_z * nearbyint(delta_z * inv_box_z);
+        delta_x -= shared_box.x * nearbyintf(delta_x * shared_box.inv_x);
+        delta_y -= shared_box.y * nearbyintf(delta_y * shared_box.inv_y);
+        delta_z -= shared_box.z * nearbyintf(delta_z * shared_box.inv_z);
 
         RealType d2ij = delta_x * delta_x + delta_y * delta_y + delta_z * delta_z;
         RealType delta_w;

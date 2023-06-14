@@ -71,9 +71,9 @@ void __global__ k_nonbonded_precomputed(
     RealType delta_y = ci_y - cj_y;
     RealType delta_z = ci_z - cj_z;
 
-    delta_x -= box_x * nearbyint(delta_x * inv_box_x);
-    delta_y -= box_y * nearbyint(delta_y * inv_box_y);
-    delta_z -= box_z * nearbyint(delta_z * inv_box_z);
+    delta_x -= box_x * nearbyintf(delta_x * inv_box_x);
+    delta_y -= box_y * nearbyintf(delta_y * inv_box_y);
+    delta_z -= box_z * nearbyintf(delta_z * inv_box_z);
 
     unsigned long long energy = 0;
 

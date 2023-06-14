@@ -64,9 +64,9 @@ void __global__ k_find_block_bounds(
         RealType center_x = static_cast<RealType>(0.5) * (maxPos_x + minPos_x);
         RealType center_y = static_cast<RealType>(0.5) * (maxPos_y + minPos_y);
         RealType center_z = static_cast<RealType>(0.5) * (maxPos_z + minPos_z);
-        pos_x -= bx * nearbyint((pos_x - center_x) * inv_bx);
-        pos_y -= by * nearbyint((pos_y - center_y) * inv_by);
-        pos_z -= bz * nearbyint((pos_z - center_z) * inv_bz);
+        pos_x -= bx * nearbyintf((pos_x - center_x) * inv_bx);
+        pos_y -= by * nearbyintf((pos_y - center_y) * inv_by);
+        pos_z -= bz * nearbyintf((pos_z - center_z) * inv_bz);
         minPos_x = min(minPos_x, pos_x);
         minPos_y = min(minPos_y, pos_y);
         minPos_z = min(minPos_z, pos_z);
@@ -246,9 +246,9 @@ void __global__ k_find_blocks_with_ixns(
          static_cast<RealType>(0.5) * bz - row_bb_ext_z >= cutoff);
 
     if (single_periodic_box) {
-        pos_i_x -= bx * nearbyint((pos_i_x - row_bb_ctr_x) * inv_bx);
-        pos_i_y -= by * nearbyint((pos_i_y - row_bb_ctr_y) * inv_by);
-        pos_i_z -= bz * nearbyint((pos_i_z - row_bb_ctr_z) * inv_bz);
+        pos_i_x -= bx * nearbyintf((pos_i_x - row_bb_ctr_x) * inv_bx);
+        pos_i_y -= by * nearbyintf((pos_i_y - row_bb_ctr_y) * inv_by);
+        pos_i_z -= bz * nearbyintf((pos_i_z - row_bb_ctr_z) * inv_bz);
 
         non_periodic_dist_i = static_cast<RealType>(0.5) * (pos_i_x * pos_i_x + pos_i_y * pos_i_y + pos_i_z * pos_i_z);
     }
@@ -277,9 +277,9 @@ void __global__ k_find_blocks_with_ixns(
         RealType box_box_dz = row_bb_ctr_z - col_bb_ctr_z;
 
         // Recenter delta box
-        box_box_dx -= bx * nearbyint(box_box_dx * inv_bx);
-        box_box_dy -= by * nearbyint(box_box_dy * inv_by);
-        box_box_dz -= bz * nearbyint(box_box_dz * inv_bz);
+        box_box_dx -= bx * nearbyintf(box_box_dx * inv_bx);
+        box_box_dy -= by * nearbyintf(box_box_dy * inv_by);
+        box_box_dz -= bz * nearbyintf(box_box_dz * inv_bz);
 
         // If boxes overlap, treat distance as 0
         box_box_dx = max(static_cast<RealType>(0.0), fabs(box_box_dx) - row_bb_ext_x - col_bb_ext_x);
@@ -326,9 +326,9 @@ void __global__ k_find_blocks_with_ixns(
         RealType atom_box_dy = (atom_i_idx < N ? coords[atom_i_idx * 3 + 1] : 0) - col_bb_ctr_y;
         RealType atom_box_dz = (atom_i_idx < N ? coords[atom_i_idx * 3 + 2] : 0) - col_bb_ctr_z;
 
-        atom_box_dx -= bx * nearbyint(atom_box_dx * inv_bx);
-        atom_box_dy -= by * nearbyint(atom_box_dy * inv_by);
-        atom_box_dz -= bz * nearbyint(atom_box_dz * inv_bz);
+        atom_box_dx -= bx * nearbyintf(atom_box_dx * inv_bx);
+        atom_box_dy -= by * nearbyintf(atom_box_dy * inv_by);
+        atom_box_dz -= bz * nearbyintf(atom_box_dz * inv_bz);
 
         atom_box_dx = max(static_cast<RealType>(0.0), fabs(atom_box_dx) - col_bb_ext_x);
         atom_box_dy = max(static_cast<RealType>(0.0), fabs(atom_box_dy) - col_bb_ext_y);
@@ -361,9 +361,9 @@ void __global__ k_find_blocks_with_ixns(
 
         if (single_periodic_box) {
             // Recenter using **row** box center
-            pos_j_x -= bx * nearbyint((pos_j_x - row_bb_ctr_x) * inv_bx);
-            pos_j_y -= by * nearbyint((pos_j_y - row_bb_ctr_y) * inv_by);
-            pos_j_z -= bz * nearbyint((pos_j_z - row_bb_ctr_z) * inv_bz);
+            pos_j_x -= bx * nearbyintf((pos_j_x - row_bb_ctr_x) * inv_bx);
+            pos_j_y -= by * nearbyintf((pos_j_y - row_bb_ctr_y) * inv_by);
+            pos_j_z -= bz * nearbyintf((pos_j_z - row_bb_ctr_z) * inv_bz);
 
             non_periodic_dist_j =
                 static_cast<RealType>(0.5) * (pos_j_x * pos_j_x + pos_j_y * pos_j_y + pos_j_z * pos_j_z);
@@ -382,9 +382,9 @@ void __global__ k_find_blocks_with_ixns(
                 RealType atom_atom_dy = row_i_y - pos_j_y;
                 RealType atom_atom_dz = row_i_z - pos_j_z;
 
-                atom_atom_dx -= bx * nearbyint(atom_atom_dx * inv_bx);
-                atom_atom_dy -= by * nearbyint(atom_atom_dy * inv_by);
-                atom_atom_dz -= bz * nearbyint(atom_atom_dz * inv_bz);
+                atom_atom_dx -= bx * nearbyintf(atom_atom_dx * inv_bx);
+                atom_atom_dy -= by * nearbyintf(atom_atom_dy * inv_by);
+                atom_atom_dz -= bz * nearbyintf(atom_atom_dz * inv_bz);
 
                 interacts |= (atom_atom_dx * atom_atom_dx + atom_atom_dy * atom_atom_dy + atom_atom_dz * atom_atom_dz) <
                              cutoff_squared;

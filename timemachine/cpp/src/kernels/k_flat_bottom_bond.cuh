@@ -38,9 +38,9 @@ void __global__ k_log_probability_selection(
     RealType atom_atom_dy = coords[idx * 3 + 1] - coords[reference_idx * 3 + 1];
     RealType atom_atom_dz = coords[idx * 3 + 2] - coords[reference_idx * 3 + 2];
 
-    atom_atom_dx -= bx * nearbyint(atom_atom_dx * inv_bx);
-    atom_atom_dy -= by * nearbyint(atom_atom_dy * inv_by);
-    atom_atom_dz -= bz * nearbyint(atom_atom_dz * inv_bz);
+    atom_atom_dx -= bx * nearbyintf(atom_atom_dx * inv_bx);
+    atom_atom_dy -= by * nearbyintf(atom_atom_dy * inv_by);
+    atom_atom_dz -= bz * nearbyintf(atom_atom_dz * inv_bz);
 
     const RealType distance_sq =
         atom_atom_dx * atom_atom_dx + atom_atom_dy * atom_atom_dy + atom_atom_dz * atom_atom_dz;
@@ -98,7 +98,7 @@ void __global__ k_flat_bottom_bond(
     RealType r2 = 0;
     for (int d = 0; d < 3; d++) {
         double delta = coords[src_idx * 3 + d] - coords[dst_idx * 3 + d];
-        delta -= box[d * 3 + d] * nearbyint(delta / box[d * 3 + d]);
+        delta -= box[d * 3 + d] * nearbyintf(delta / box[d * 3 + d]);
         dx[d] = delta;
         r2 += delta * delta;
     }

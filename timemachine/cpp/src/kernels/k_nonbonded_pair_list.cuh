@@ -111,9 +111,9 @@ void __global__ k_nonbonded_pair_list(
     RealType delta_y = ci_y - cj_y;
     RealType delta_z = ci_z - cj_z;
 
-    delta_x -= box_x * nearbyint(delta_x * inv_box_x);
-    delta_y -= box_y * nearbyint(delta_y * inv_box_y);
-    delta_z -= box_z * nearbyint(delta_z * inv_box_z);
+    delta_x -= box_x * nearbyintf(delta_x * inv_box_x);
+    delta_y -= box_y * nearbyintf(delta_y * inv_box_y);
+    delta_z -= box_z * nearbyintf(delta_z * inv_box_z);
 
     RealType delta_w = w_i - w_j;
     RealType d2ij = delta_x * delta_x + delta_y * delta_y + delta_z * delta_z + delta_w * delta_w;

@@ -47,7 +47,7 @@ void __global__ k_log_flat_bottom_bond(
     RealType r2 = 0;
     for (int d = 0; d < 3; d++) {
         double delta = coords[src_idx * 3 + d] - coords[dst_idx * 3 + d];
-        delta -= box[d * 3 + d] * nearbyint(delta / box[d * 3 + d]);
+        delta -= box[d * 3 + d] * nearbyintf(delta / box[d * 3 + d]);
         dx[d] = delta;
         r2 += delta * delta;
     }
