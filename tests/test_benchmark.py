@@ -136,7 +136,8 @@ def benchmark_potential(
         if verbose:
             print(f"executions per second: {runs_per_second:.3f}")
     print(
-        f"{label}: N={coords.shape[1]} Frames={frames} Params={param_batches} speed: {runs_per_second:.2f} executions/seconds (ran {runs_per_batch * num_batches} potentials in {(time.time() - start):.2f}s)"
+        f"{label}: N={coords.shape[1]} Frames={frames} Params={param_batches} speed: {runs_per_second:.2f} executions/seconds (ran {runs_per_batch * num_batches} potentials in {(time.time() - start):.2f}s)",
+        f"du_dp={compute_du_dp}, du_dx={compute_du_dx}, u={compute_u}",
     )
 
 

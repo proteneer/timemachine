@@ -1,7 +1,6 @@
 #pragma once
 
 #include "k_fixed_point.cuh"
-#include <vector>
 
 // each atom parameterized by a 4-tuple: charge, lj sigma, lj epsilon, 4D coordinate w
 enum { PARAM_OFFSET_CHARGE = 0, PARAM_OFFSET_SIG, PARAM_OFFSET_EPS, PARAM_OFFSET_W, PARAMS_PER_ATOM };
@@ -9,6 +8,7 @@ enum { PARAM_OFFSET_CHARGE = 0, PARAM_OFFSET_SIG, PARAM_OFFSET_EPS, PARAM_OFFSET
 typedef void (*k_nonbonded_fn)(
     const int N,
     const int NR,
+    const unsigned int *ixn_count,
     const double *__restrict__ coords,
     const double *__restrict__ params, // [N]
     const double *__restrict__ box,
@@ -110,6 +110,3 @@ void __device__ __forceinline__ compute_lj(
     sig_grad = lj_scale * 24 * eps_ij * sig5_inv_d6ij * (2 * sig6_inv_d6ij - 1);
     eps_grad = lj_scale * 4 * (sig6_inv_d6ij - 1) * sig6_inv_d6ij;
 }
-
-void __global__
-k_add_ull_to_ull(const int N, const unsigned long long *__restrict__ src, unsigned long long *__restrict__ dest);

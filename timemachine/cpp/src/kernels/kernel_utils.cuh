@@ -2,6 +2,17 @@
 
 #include <cstdio>
 
+// box cache is a struct that can be used as shared memory in kernels to reduce
+// global memory reads and to reduce the amount of work done per block.
+template <typename RealType> struct box_cache {
+    RealType x;
+    RealType y;
+    RealType z;
+    RealType inv_x;
+    RealType inv_y;
+    RealType inv_z;
+};
+
 #define HESS_3N3N(i, j, N, di, dj) (di * N * 3 * N + i * 3 * N + dj * N + j)
 #define HESS_N3N3(i, j, N, di, dj) (i * 3 * N * 3 + di * N * 3 + j * 3 + dj)
 #define HESS_IDX HESS_N3N3
@@ -31,7 +42,13 @@
 
 #define ONE_4PI_EPS0 138.935456
 
+// default_threads_per_block should be at least 128 to ensure maximum occupancy for Cuda Arch 8.6 with 48 SMs
+// given that there aren't too many registers in the kernel.
+// Refer to the occupancy calculator in Nsight Compute for more details
+static const int default_threads_per_block = 128;
 static const int warp_size = 32;
+// default_threads_per_block should be multiple of warp_size, else it is wasteful
+static_assert(default_threads_per_block % warp_size == 0);
 
 inline __device__ int linearize(int i, int j, int d) { return d * (d - 1) / 2 - (d - i) * (d - i - 1) / 2 + j; }
 

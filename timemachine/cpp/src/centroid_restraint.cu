@@ -1,9 +1,7 @@
 #include "centroid_restraint.hpp"
 #include "gpu_utils.cuh"
 #include "k_centroid_restraint.cuh"
-#include <chrono>
-#include <complex>
-#include <iostream>
+#include "math_utils.cuh"
 #include <vector>
 
 namespace timemachine {
@@ -42,9 +40,9 @@ void CentroidRestraint<RealType>::execute_device(
     unsigned long long *d_u,
     cudaStream_t stream) {
 
-    int tpb = 32;
+    int tpb = default_threads_per_block;
 
-    int blocks = (N_B_ + N_A_ + tpb - 1) / tpb;
+    int blocks = ceil_divide(N_B_ + N_A_, tpb);
     gpuErrchk(cudaMemsetAsync(d_centroid_a_, 0.0, 3 * sizeof(*d_centroid_a_), stream));
     gpuErrchk(cudaMemsetAsync(d_centroid_b_, 0.0, 3 * sizeof(*d_centroid_b_), stream));
     k_calc_centroid<RealType>

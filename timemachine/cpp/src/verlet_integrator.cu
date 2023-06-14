@@ -31,7 +31,7 @@ void VelocityVerletIntegrator::step_fwd(
     gpuErrchk(cudaMemsetAsync(d_du_dx_, 0, N_ * 3 * sizeof(*d_du_dx_), stream));
 
     const int D = 3;
-    size_t tpb = warp_size;
+    size_t tpb = default_threads_per_block;
     size_t n_blocks = ceil_divide(N_, tpb);
     dim3 dimGrid_dx(n_blocks, D);
     for (int i = 0; i < bps.size(); i++) {
@@ -56,7 +56,7 @@ void VelocityVerletIntegrator::initialize(
     gpuErrchk(cudaMemsetAsync(d_du_dx_, 0, N_ * 3 * sizeof(*d_du_dx_), stream));
 
     const int D = 3;
-    size_t tpb = warp_size;
+    size_t tpb = default_threads_per_block;
     size_t n_blocks = ceil_divide(N_, tpb);
     dim3 dimGrid_dx(n_blocks, D);
 
@@ -90,7 +90,7 @@ void VelocityVerletIntegrator::finalize(
     gpuErrchk(cudaMemsetAsync(d_du_dx_, 0, N_ * 3 * sizeof(*d_du_dx_), stream));
 
     const int D = 3;
-    size_t tpb = warp_size;
+    size_t tpb = default_threads_per_block;
     size_t n_blocks = ceil_divide(N_, tpb);
     dim3 dimGrid_dx(n_blocks, D);
 

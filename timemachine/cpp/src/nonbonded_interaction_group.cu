@@ -59,7 +59,6 @@ NonbondedInteractionGroup<RealType>::NonbondedInteractionGroup(
     cudaSafeMalloc(&d_sorted_p_, N_ * PARAMS_PER_ATOM * sizeof(*d_sorted_p_));
     cudaSafeMalloc(&d_sorted_du_dx_, N_ * 3 * sizeof(*d_sorted_du_dx_));
     cudaSafeMalloc(&d_sorted_du_dp_, N_ * PARAMS_PER_ATOM * sizeof(*d_sorted_du_dp_));
-    cudaSafeMalloc(&d_du_dp_buffer_, N_ * PARAMS_PER_ATOM * sizeof(*d_du_dp_buffer_));
 
     gpuErrchk(cudaMallocHost(&p_ixn_count_, 1 * sizeof(*p_ixn_count_)));
     gpuErrchk(cudaMallocHost(&p_box_, 3 * 3 * sizeof(*p_box_)));
@@ -106,13 +105,15 @@ NonbondedInteractionGroup<RealType>::NonbondedInteractionGroup(
     gpuErrchk(cudaPeekAtLastError());
     cudaSafeMalloc(&d_sort_storage_, d_sort_storage_bytes_);
     this->set_atom_idxs(row_atom_idxs, col_atom_idxs);
+
+    // Create event with timings disabled as timings slow down events
+    gpuErrchk(cudaEventCreateWithFlags(&nblist_flag_sync_event_, cudaEventDisableTiming));
 };
 
 template <typename RealType> NonbondedInteractionGroup<RealType>::~NonbondedInteractionGroup() {
     gpuErrchk(cudaFree(d_col_atom_idxs_));
     gpuErrchk(cudaFree(d_row_atom_idxs_));
 
-    gpuErrchk(cudaFree(d_du_dp_buffer_));
     gpuErrchk(cudaFree(d_perm_));
 
     gpuErrchk(cudaFree(d_bin_to_idx_));
@@ -134,6 +135,8 @@ template <typename RealType> NonbondedInteractionGroup<RealType>::~NonbondedInte
     gpuErrchk(cudaFree(d_nblist_box_));
     gpuErrchk(cudaFree(d_rebuild_nblist_));
     gpuErrchk(cudaFreeHost(p_rebuild_nblist_));
+
+    gpuErrchk(cudaEventDestroy(nblist_flag_sync_event_));
 };
 
 template <typename RealType> bool NonbondedInteractionGroup<RealType>::needs_sort() {
@@ -166,7 +169,7 @@ void NonbondedInteractionGroup<RealType>::hilbert_sort(
     unsigned int *d_perm,
     cudaStream_t stream) {
 
-    const int tpb = warp_size;
+    const int tpb = default_threads_per_block;
     const int B = ceil_divide(N, tpb);
 
     k_coords_to_kv_gather<<<B, tpb, 0, stream>>>(
@@ -235,7 +238,7 @@ void NonbondedInteractionGroup<RealType>::execute_device(
         return;
     }
 
-    const int tpb = warp_size;
+    const int tpb = default_threads_per_block;
     const int B = ceil_divide(N_, tpb);
     const int K = NR_ + NC_; // total number of interactions
     const int B_K = ceil_divide(K, tpb);
@@ -245,23 +248,31 @@ void NonbondedInteractionGroup<RealType>::execute_device(
         this->sort(d_x, d_box, stream);
     } else {
         // (ytz) see if we need to rebuild the neighborlist.
-        k_check_rebuild_coords_and_box_gather<RealType><<<ceil_divide(NR_, tpb), tpb, 0, stream>>>(
-            NR_, d_row_atom_idxs_, d_x, d_nblist_x_, d_box, d_nblist_box_, nblist_padding_, d_rebuild_nblist_);
+        // Reuse the d_perm_ here to avoid having to make two kernels calls.
+        k_check_rebuild_coords_and_box_gather<RealType><<<ceil_divide(B_K, tpb), tpb, 0, stream>>>(
+            NR_ + NC_, d_perm_, d_x, d_nblist_x_, d_box, d_nblist_box_, nblist_padding_, d_rebuild_nblist_);
         gpuErrchk(cudaPeekAtLastError());
-        k_check_rebuild_coords_and_box_gather<RealType><<<ceil_divide(NC_, tpb), tpb, 0, stream>>>(
-            NC_, d_col_atom_idxs_, d_x, d_nblist_x_, d_box, d_nblist_box_, nblist_padding_, d_rebuild_nblist_);
-        gpuErrchk(cudaPeekAtLastError());
-
         // we can optimize this away by doing the check on the GPU directly.
         gpuErrchk(cudaMemcpyAsync(
             p_rebuild_nblist_, d_rebuild_nblist_, 1 * sizeof(*p_rebuild_nblist_), cudaMemcpyDeviceToHost, stream));
-        gpuErrchk(cudaStreamSynchronize(stream)); // slow!
+        gpuErrchk(cudaEventRecord(nblist_flag_sync_event_, stream));
     }
 
-    // compute new coordinates
-    k_gather<<<dim3(B_K, 3, 1), tpb, 0, stream>>>(K, d_perm_, d_x, d_sorted_x_);
+    // compute new coordinates/params
+    k_gather_coords_and_params<<<dim3(ceil_divide(K, tpb), PARAMS_PER_ATOM, 1), tpb, 0, stream>>>(
+        K, d_perm_, d_x, d_p, d_sorted_x_, d_sorted_p_);
     gpuErrchk(cudaPeekAtLastError());
+    // reset buffers and sorted accumulators
+    if (d_du_dx) {
+        gpuErrchk(cudaMemsetAsync(d_sorted_du_dx_, 0, K * 3 * sizeof(*d_sorted_du_dx_), stream))
+    }
+    if (d_du_dp) {
+        gpuErrchk(cudaMemsetAsync(d_sorted_du_dp_, 0, K * PARAMS_PER_ATOM * sizeof(*d_sorted_du_dp_), stream))
+    }
 
+    // Syncing to an event allows having additional kernels run while we synchronize
+    // Note that if no event is recorded, this is effectively a no-op, such as in the case of sorting.
+    gpuErrchk(cudaEventSynchronize(nblist_flag_sync_event_));
     if (p_rebuild_nblist_[0] > 0) {
 
         nblist_.build_nblist_device(K, d_sorted_x_, d_box, cutoff_ + nblist_padding_, stream);
@@ -295,26 +306,16 @@ void NonbondedInteractionGroup<RealType>::execute_device(
         return;
     }
 
-    k_gather<<<dim3(B_K, PARAMS_PER_ATOM, 1), tpb, 0, stream>>>(K, d_perm_, d_p, d_sorted_p_);
-    gpuErrchk(cudaPeekAtLastError());
-
-    // reset buffers and sorted accumulators
-    if (d_du_dx) {
-        gpuErrchk(cudaMemsetAsync(d_sorted_du_dx_, 0, K * 3 * sizeof(*d_sorted_du_dx_), stream))
-    }
-    if (d_du_dp) {
-        gpuErrchk(cudaMemsetAsync(d_sorted_du_dp_, 0, K * PARAMS_PER_ATOM * sizeof(*d_sorted_du_dp_), stream))
-    }
-
     // look up which kernel we need for this computation
     int kernel_idx = 0;
     kernel_idx |= d_du_dp ? 1 << 0 : 0;
     kernel_idx |= d_du_dx ? 1 << 1 : 0;
     kernel_idx |= d_u ? 1 << 2 : 0;
 
-    kernel_ptrs_[kernel_idx]<<<p_ixn_count_[0], tpb, 0, stream>>>(
+    kernel_ptrs_[kernel_idx]<<<ceil_divide(p_ixn_count_[0], tpb / warp_size), tpb, 0, stream>>>(
         K,
         nblist_.get_num_row_idxs(),
+        nblist_.get_ixn_count(),
         d_sorted_x_,
         d_sorted_p_,
         d_box,
@@ -339,13 +340,7 @@ void NonbondedInteractionGroup<RealType>::execute_device(
     // params are N, PARAMS_PER_ATOM
     // this needs to be an accumulated permute
     if (d_du_dp) {
-        // scattered assignment updates K <= N_ elements; the rest should be 0
-        gpuErrchk(cudaMemsetAsync(d_du_dp_buffer_, 0, N_ * PARAMS_PER_ATOM * sizeof(*d_du_dp_buffer_), stream));
-        k_scatter_assign<<<dim3(B_K, PARAMS_PER_ATOM, 1), tpb, 0, stream>>>(
-            K, d_perm_, d_sorted_du_dp_, d_du_dp_buffer_);
-        gpuErrchk(cudaPeekAtLastError());
-
-        k_add_ull_to_ull<<<dim3(B, PARAMS_PER_ATOM, 1), tpb, 0, stream>>>(N, d_du_dp_buffer_, d_du_dp);
+        k_scatter_accum<<<dim3(B_K, PARAMS_PER_ATOM, 1), tpb, 0, stream>>>(K, d_perm_, d_sorted_du_dp_, d_du_dp);
         gpuErrchk(cudaPeekAtLastError());
     }
     // Increment steps
@@ -391,7 +386,7 @@ void NonbondedInteractionGroup<RealType>::set_atom_idxs_device(
         throw std::runtime_error("number of idxs must be less than or equal to N");
     }
     if (NR > 0 && NC > 0) {
-        const size_t tpb = warp_size;
+        const size_t tpb = default_threads_per_block;
 
         // The indices must already be on the GPU and are copied into the potential's buffers.
         gpuErrchk(cudaMemcpyAsync(

@@ -48,7 +48,6 @@ private:
     double *d_sorted_p_; // sorted parameters
     unsigned long long *d_sorted_du_dx_;
     unsigned long long *d_sorted_du_dp_;
-    unsigned long long *d_du_dp_buffer_;
 
     // used for hilbert sorting
     unsigned int *d_bin_to_idx_; // mapping from 256x256x256 grid to hilbert curve index
@@ -57,6 +56,8 @@ private:
     unsigned int *d_sort_vals_in_;
     unsigned int *d_sort_storage_;
     size_t d_sort_storage_bytes_;
+
+    cudaEvent_t nblist_flag_sync_event_; // Event to synchronize rebuild flag on
 
     const bool disable_hilbert_;
 
