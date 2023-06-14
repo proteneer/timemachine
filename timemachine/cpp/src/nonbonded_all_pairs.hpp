@@ -1,7 +1,7 @@
 #pragma once
 
-#include "kernels/k_nonbonded_common.cuh"
 #include "neighborlist.hpp"
+#include "nonbonded_common.hpp"
 #include "potential.hpp"
 #include <array>
 #include <optional>

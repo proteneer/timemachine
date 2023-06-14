@@ -305,7 +305,7 @@ void NonbondedAllPairs<RealType>::execute_device(
     kernel_idx |= d_du_dx ? 1 << 1 : 0;
     kernel_idx |= d_u ? 1 << 2 : 0;
 
-    kernel_ptrs_[kernel_idx]<<<NONBONDED_KERNEL_BLOCKS, tpb, 0, stream>>>(
+    kernel_ptrs_[kernel_idx]<<<NONBONDED_KERNEL_BLOCKS, NONBONDED_KERNEL_THREADS_PER_BLOCK, 0, stream>>>(
         K_,
         nblist_.get_num_row_idxs(),
         nblist_.get_ixn_count(),
