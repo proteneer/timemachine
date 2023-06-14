@@ -1,5 +1,4 @@
 from collections import defaultdict
-from typing import Callable, TypeVar
 
 import networkx as nx
 import numpy as np
@@ -326,7 +325,7 @@ def _get_cores_impl(
             dij = np.linalg.norm(a_xyz - b_xyz)
             dijs.append(dij)
             if atom_i.IsInRing() or atom_j.IsInRing():
-                if dij < ring_cutoff:
+                if dij < ring_cutoff and (not ring_matches_ring or atom_i.IsInRing() == atom_j.IsInRing()):
                     allowed_idxs.add(jdx)
             else:
                 if dij < chain_cutoff:
@@ -351,18 +350,7 @@ def _get_cores_impl(
         passed = not has_chiral_atom_flips(np_core, chiral_set_a, chiral_set_b)
         return passed
 
-    def ring_matches_ring_filter(trial_core):
-        return all(
-            mol_a.GetAtomWithIdx(int(idx_a)).IsInRing() == mol_b.GetAtomWithIdx(int(idx_b)).IsInRing()
-            for idx_a, idx_b in enumerate(trial_core)
-            if idx_b != mcgregor.UNMAPPED
-        )
-
-    filter_fxn = lambda _: True
-    if enforce_chiral:
-        filter_fxn = compose_predicates(filter_fxn, chiral_filter)
-    if ring_matches_ring:
-        filter_fxn = compose_predicates(filter_fxn, ring_matches_ring_filter)
+    filter_fxn = chiral_filter if enforce_chiral else lambda _: True
 
     all_cores, all_marcs = mcgregor.mcs(
         n_a,
@@ -511,13 +499,3 @@ def update_bond_core(core, bond_core):
         if bond_a[0] in core_a and bond_a[1] in core_a and bond_b[0] in core_b and bond_b[1] in core_b:
             new_bond_core[bond_a] = bond_b
     return new_bond_core
-
-
-_A = TypeVar("_A")
-
-
-def compose_predicates(p1: Callable[[_A], bool], p2: Callable[[_A], bool]) -> Callable[[_A], bool]:
-    def composition(x):
-        return p1(x) and p2(x)
-
-    return composition
