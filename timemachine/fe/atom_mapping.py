@@ -350,7 +350,10 @@ def _get_cores_impl(
         passed = not has_chiral_atom_flips(np_core, chiral_set_a, chiral_set_b)
         return passed
 
-    filter_fxn = chiral_filter if enforce_chiral else lambda _: True
+    if enforce_chiral:
+        filter_fxn = chiral_filter
+    else:
+        filter_fxn = lambda core: True
 
     all_cores, all_marcs = mcgregor.mcs(
         n_a,
