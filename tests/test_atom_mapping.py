@@ -903,7 +903,7 @@ def test_ring_matches_ring(ring_matches_ring):
     mol_b = Chem.AddHs(Chem.MolFromSmiles("C(c1ccccc1)"))
     AllChem.EmbedMolecule(mol_b, randomSeed=3)
 
-    kwargs = dict(
+    core_kwargs = dict(
         ring_cutoff=0.15,
         chain_cutoff=0.2,
         max_visits=1e7,
@@ -915,7 +915,7 @@ def test_ring_matches_ring(ring_matches_ring):
         min_threshold=0,
     )
 
-    cores = atom_mapping.get_cores(mol_a, mol_b, ring_matches_ring_only=ring_matches_ring, **kwargs)
+    cores = atom_mapping.get_cores(mol_a, mol_b, ring_matches_ring_only=ring_matches_ring, **core_kwargs)
 
     assert cores
 
