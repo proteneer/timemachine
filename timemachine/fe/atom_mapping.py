@@ -516,7 +516,7 @@ def update_bond_core(core, bond_core):
 _A = TypeVar("_A")
 
 
-def compose_predicates(p1: Callable[[_A], bool], p2: Callable[[_A], bool]):
+def compose_predicates(p1: Callable[[_A], bool], p2: Callable[[_A], bool]) -> Callable[[_A], bool]:
     def composition(x):
         return p1(x) and p2(x)
 
