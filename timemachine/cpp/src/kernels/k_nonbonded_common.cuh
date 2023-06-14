@@ -8,6 +8,7 @@ enum { PARAM_OFFSET_CHARGE = 0, PARAM_OFFSET_SIG, PARAM_OFFSET_EPS, PARAM_OFFSET
 typedef void (*k_nonbonded_fn)(
     const int N,
     const int NR,
+    const unsigned int *ixn_count,
     const double *__restrict__ coords,
     const double *__restrict__ params, // [N]
     const double *__restrict__ box,

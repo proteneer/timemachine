@@ -1,6 +1,7 @@
 #pragma once
 
 #include "curand.h"
+#include "kernels/kernel_utils.cuh"
 #include <cstdio>
 #include <iostream>
 
@@ -65,7 +66,7 @@ template <typename T> void __global__ k_initialize_array(int count, T *array, T 
 
 template <typename T> void initializeArray(int count, T *array, T val) {
 
-    int tpb = 32;
+    int tpb = default_threads_per_block;
     int B = (count + tpb - 1) / tpb; // total number of blocks we need to process
     // Nothing to allocate
     if (count == 0) {

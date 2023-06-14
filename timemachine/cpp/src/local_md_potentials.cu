@@ -164,7 +164,7 @@ void LocalMDPotentials::setup_from_selection(
 
 void LocalMDPotentials::_setup_free_idxs_given_reference_idx(
     const unsigned int reference_idx, const double radius, const double k, cudaStream_t stream) {
-    const int tpb = warp_size;
+    const int tpb = default_threads_per_block;
 
     LessThan select_op(N_);
 
