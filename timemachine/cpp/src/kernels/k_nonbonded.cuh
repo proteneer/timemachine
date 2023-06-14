@@ -377,7 +377,9 @@ void __global__ k_nonbonded_unified(
         shared_box.inv_z = 1 / shared_box.z;
     }
     __syncthreads();
-    // Tiles are 32 x 32, which is the same as the warp size
+    // Tile size is the same as warp size but it doesn't have to be.
+    // Can be used interchangably at the moment, but in the future we may have different
+    // tile sizes.
     const int tile_size = warp_size;
 
     const int tiles_per_block = blockDim.x / tile_size;
