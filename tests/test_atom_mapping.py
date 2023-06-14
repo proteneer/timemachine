@@ -889,6 +889,46 @@ def test_chiral_atom_map():
 
 
 @pytest.mark.nogpu
+@pytest.mark.parametrize(
+    "ring_matches_ring",
+    [
+        pytest.param(False, marks=pytest.mark.xfail(strict=True)),
+        pytest.param(True),
+    ],
+)
+def test_ring_matches_ring(ring_matches_ring):
+    mol_a = Chem.AddHs(Chem.MolFromSmiles("C(c1ccc1)"))
+    AllChem.EmbedMolecule(mol_a, randomSeed=3)
+
+    mol_b = Chem.AddHs(Chem.MolFromSmiles("C(c1ccccc1)"))
+    AllChem.EmbedMolecule(mol_b, randomSeed=3)
+
+    kwargs = dict(
+        ring_cutoff=0.15,
+        chain_cutoff=0.2,
+        max_visits=1e7,
+        connected_core=True,
+        max_cores=1e6,
+        enforce_core_core=False,
+        complete_rings=False,
+        enforce_chiral=False,
+        min_threshold=0,
+    )
+
+    cores = atom_mapping.get_cores(mol_a, mol_b, ring_matches_ring=ring_matches_ring, **kwargs)
+
+    assert cores
+
+    # should not map ring atoms to non-ring atoms and vice-versa
+    for core in cores:
+        for idx_a, idx_b in core:
+            assert mol_a.GetAtomWithIdx(int(idx_a)).IsInRing() == mol_b.GetAtomWithIdx(int(idx_b)).IsInRing()
+
+    # should map all ring atoms in mol_a
+    assert all(len([() for idx_a in core[:, 0] if mol_a.GetAtomWithIdx(int(idx_a)).IsInRing()]) == 4 for core in cores)
+
+
+@pytest.mark.nogpu
 def test_max_visits_exception():
     mol_a, mol_b = get_cyclohexanes_different_confs()
     core_kwargs = dict(
