@@ -325,7 +325,7 @@ def _get_cores_impl(
             dij = np.linalg.norm(a_xyz - b_xyz)
             dijs.append(dij)
             if atom_i.IsInRing() or atom_j.IsInRing():
-                if dij < ring_cutoff and (not ring_matches_ring or atom_i.IsInRing() == atom_j.IsInRing()):
+                if dij < ring_cutoff and (not ring_matches_ring or atom_i.IsInRing() and atom_j.IsInRing()):
                     allowed_idxs.add(jdx)
             else:
                 if dij < chain_cutoff:
