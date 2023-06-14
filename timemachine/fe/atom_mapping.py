@@ -1,4 +1,5 @@
 from collections import defaultdict
+from typing import Callable, TypeVar
 
 import networkx as nx
 import numpy as np
@@ -53,6 +54,7 @@ def get_cores(
     connected_core,
     max_cores,
     enforce_core_core,
+    ring_matches_ring,
     complete_rings,
     enforce_chiral,
     min_threshold,
@@ -130,6 +132,7 @@ def get_cores(
         connected_core=connected_core,
         max_cores=max_cores,
         enforce_core_core=enforce_core_core,
+        ring_matches_ring=ring_matches_ring,
         complete_rings=complete_rings,
         enforce_chiral=enforce_chiral,
         min_threshold=min_threshold,
@@ -298,6 +301,7 @@ def _get_cores_impl(
     connected_core,
     max_cores,
     enforce_core_core,
+    ring_matches_ring,
     complete_rings,
     enforce_chiral,
     min_threshold,
@@ -347,10 +351,18 @@ def _get_cores_impl(
         passed = not has_chiral_atom_flips(np_core, chiral_set_a, chiral_set_b)
         return passed
 
+    def ring_matches_ring_filter(trial_core):
+        return all(
+            mol_a.GetAtomWithIdx(int(idx_a)).IsInRing() == mol_b.GetAtomWithIdx(int(idx_b)).IsInRing()
+            for idx_a, idx_b in enumerate(trial_core)
+            if idx_b != mcgregor.UNMAPPED
+        )
+
+    filter_fxn = lambda _: True
     if enforce_chiral:
-        filter_fxn = chiral_filter
-    else:
-        filter_fxn = lambda core: True
+        filter_fxn = compose_predicates(filter_fxn, chiral_filter)
+    if ring_matches_ring:
+        filter_fxn = compose_predicates(filter_fxn, ring_matches_ring_filter)
 
     all_cores, all_marcs = mcgregor.mcs(
         n_a,
@@ -499,3 +511,13 @@ def update_bond_core(core, bond_core):
         if bond_a[0] in core_a and bond_a[1] in core_a and bond_b[0] in core_b and bond_b[1] in core_b:
             new_bond_core[bond_a] = bond_b
     return new_bond_core
+
+
+_A = TypeVar("_A")
+
+
+def compose_predicates(p1: Callable[[_A], bool], p2: Callable[[_A], bool]):
+    def composition(x):
+        return p1(x) and p2(x)
+
+    return composition
