@@ -123,7 +123,7 @@ void __device__ v_nonbonded_unified(
     const int NR,
     const double *__restrict__ coords,
     const double *__restrict__ params, // [N]
-    box_cache<RealType> &shared_box,   // [6]
+    box_cache<RealType> &shared_box,
     const double beta,
     const double cutoff,
     const unsigned int *__restrict__ row_idxs,

@@ -56,7 +56,7 @@ LocalMDPotentials::LocalMDPotentials(
     bound_free_restraint_ =
         std::shared_ptr<BoundPotential>(new BoundPotential(free_restraint_, std::vector<int>({0}), nullptr));
 
-    // Ensure that the refence idxs start out as all N_
+    // Ensure that the reference idxs start out as all N_
     k_initialize_array<unsigned int><<<ceil_divide(N_, warp_size), warp_size>>>(N_, d_all_pairs_idxs_.data, N_);
     gpuErrchk(cudaPeekAtLastError());
     num_allpairs_idxs_ = copy_nonbonded_potential_idxs(nonbonded_bp_->potential, N_, d_all_pairs_idxs_.data);
