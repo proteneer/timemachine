@@ -102,7 +102,7 @@ setup(
         "jaxlib>0.4.1",
         "networkx",
         "numpy",
-        "pymbar>3.0.4,<4",
+        "pymbar>=4",
         "pyyaml",
         "rdkit",
         "scipy",
