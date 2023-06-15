@@ -283,13 +283,15 @@ def test_make_pair_bar_plots(mock_fig, hif2a_ligand_pair_single_topology_lam0_st
     pair_result = PairBarResult(
         [hif2a_ligand_pair_single_topology_lam0_state] * 2,
         [
-            BarResult(
-                0.0,
-                0.0,
-                np.zeros(4),
-                0.0,
-                np.zeros(4),
+            (
                 np.zeros((4, 2, 2, 1)),
+                BarResult(
+                    0.0,
+                    0.0,
+                    np.zeros(4),
+                    0.0,
+                    np.zeros(4),
+                ),
             )
         ],
     )
