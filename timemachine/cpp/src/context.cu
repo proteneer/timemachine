@@ -51,8 +51,8 @@ Context::~Context() {
     gpuErrchk(cudaFree(d_sum_storage_));
 };
 
-void Context::_verify_boxes(cudaStream_t stream) {
-    // If we have no nonbonded potentials we do nothing.
+void Context::_verify_box(cudaStream_t stream) {
+    // If there are no nonbonded potentials, nothing to check.
     if (nonbonded_pots_.size() == 0) {
         return;
     }
@@ -151,7 +151,7 @@ std::array<std::vector<double>, 2> Context::multiple_steps_local(
                     3 * 3 * sizeof(*d_box_traj->data),
                     cudaMemcpyDeviceToDevice,
                     stream));
-                this->_verify_boxes(stream);
+                this->_verify_box(stream);
             }
         }
         intg_->finalize(local_pots, d_x_t_, d_v_t_, d_box_t_, d_free_idxs, stream);
@@ -229,7 +229,7 @@ std::array<std::vector<double>, 2> Context::multiple_steps_local_selection(
                     3 * 3 * sizeof(*d_box_traj->data),
                     cudaMemcpyDeviceToDevice,
                     stream));
-                this->_verify_boxes(stream);
+                this->_verify_box(stream);
             }
         }
         intg_->finalize(local_pots, d_x_t_, d_v_t_, d_box_t_, d_free_idxs, stream);
@@ -287,7 +287,7 @@ std::array<std::vector<double>, 2> Context::multiple_steps(const int n_steps, in
                 3 * 3 * sizeof(*d_box_buffer->data),
                 cudaMemcpyDeviceToDevice,
                 stream));
-            this->_verify_boxes(stream);
+            this->_verify_box(stream);
         }
     }
     intg_->finalize(bps_, d_x_t_, d_v_t_, d_box_t_, nullptr, stream);
@@ -356,7 +356,7 @@ Context::multiple_steps_U(const int n_steps, int store_u_interval, int store_x_i
                 3 * 3 * sizeof(*d_box_traj->data),
                 cudaMemcpyDeviceToDevice,
                 stream));
-            this->_verify_boxes(stream);
+            this->_verify_box(stream);
         }
 
         // we need to compute aggregate energies
