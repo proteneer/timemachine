@@ -80,6 +80,7 @@ pybind11_add_module(${LIBRARY_NAME} SHARED NO_EXTRAS
   src/periodic_torsion.cu
   src/chiral_atom_restraint.cu
   src/chiral_bond_restraint.cu
+  src/potential_executor.cu
   src/langevin_integrator.cu
   src/verlet_integrator.cu
   src/context.cu
