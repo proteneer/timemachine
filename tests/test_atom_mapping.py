@@ -883,7 +883,7 @@ def test_chiral_atom_map():
     assert len(chiral_oblivious_cores) == 4 * 3 * 2 * 1, "expected all hydrogen permutations to be valid"
     assert len(chiral_aware_cores) == (len(chiral_oblivious_cores) // 2), "expected only rotations to be valid"
 
-    for key, val in chiral_aware_cores[0]:
+    for (key, val) in chiral_aware_cores[0]:
         assert key == val, "expected first core to be identity map"
     assert len(chiral_aware_cores[0]) == 5
 
