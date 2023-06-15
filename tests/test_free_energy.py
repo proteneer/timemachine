@@ -300,18 +300,19 @@ def test_make_pair_bar_plots(mock_fig, hif2a_ligand_pair_single_topology_lam0_st
     )
 
 
-@patch("pymbar.MBAR")
-def test_bisection_handles_mbar_convergence_error(mock_MBAR):
-    """MBAR calculations may fail during early iterations of bisection, when there is typically insufficient overlap for
+@patch("pymbar.bar")
+def test_bisection_handles_mbar_convergence_error(mock_bar):
+    """BAR calculations may fail during early iterations of bisection, when there is typically insufficient overlap for
     convergence. Check that the bisection implementation intercepts convergence errors and handles them
     appropriately."""
 
-    mock_MBAR.side_effect = pymbar.utils.ConvergenceError("Mock convergence error")
+    mock_bar.side_effect = pymbar.utils.ConvergenceError("Mock convergence error")
 
     mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
     ff = Forcefield.load_default()
     md_params = MDParams(1, 1, 1, seed=2023)
 
+    # should handle ConvergenceError raised by pymbar.bar
     result = estimate_relative_free_energy_via_greedy_bisection(
         mol_a, mol_b, core, ff, host_config=None, md_params=md_params, n_windows=3
     )
