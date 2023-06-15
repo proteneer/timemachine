@@ -917,7 +917,8 @@ def test_setup_context_with_references():
         assert ref() is None
 
 
-def test_local_md_nonbonded_all_pairs_subset():
+@pytest.mark.parametrize("lamb", [0.0, 0.5, 1.0])
+def test_local_md_nonbonded_all_pairs_subset(lamb):
     """Test that if the nonbonded all pairs is set up on a subset of the system, that local MD can correctly
     simulate the local region without double counting interactions"""
     seed = 2023
@@ -931,7 +932,9 @@ def test_local_md_nonbonded_all_pairs_subset():
 
     # Lambda must either be 1.0 (uninteracting) or minimize energy, chose 1.0 as cheaper to not-minimize
     # else will overflow and coordinates will be different between tests
-    unbound_potentials, sys_params, masses, coords, box = get_solvent_phase_system(mol, ff, 1.0, minimize_energy=False)
+    unbound_potentials, sys_params, masses, coords, box = get_solvent_phase_system(
+        mol, ff, lamb, minimize_energy=lamb < 1.0
+    )
 
     identity_idxs = np.arange(0, len(coords), dtype=np.int32)
     ligand_idxs = np.arange(len(coords) - mol.GetNumAtoms(), len(coords), dtype=np.int32)
