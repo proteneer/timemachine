@@ -873,7 +873,7 @@ def test_chiral_atom_map():
         max_cores=1e6,
         enforce_core_core=True,
         complete_rings=True,
-        ring_matches_ring=True,
+        ring_matches_ring_only=True,
         min_threshold=0,
     )
 
@@ -883,20 +883,20 @@ def test_chiral_atom_map():
     assert len(chiral_oblivious_cores) == 4 * 3 * 2 * 1, "expected all hydrogen permutations to be valid"
     assert len(chiral_aware_cores) == (len(chiral_oblivious_cores) // 2), "expected only rotations to be valid"
 
-    for (key, val) in chiral_aware_cores[0]:
+    for key, val in chiral_aware_cores[0]:
         assert key == val, "expected first core to be identity map"
     assert len(chiral_aware_cores[0]) == 5
 
 
 @pytest.mark.nogpu
 @pytest.mark.parametrize(
-    "ring_matches_ring",
+    "ring_matches_ring_only",
     [
         pytest.param(False, marks=pytest.mark.xfail(strict=True)),
         pytest.param(True),
     ],
 )
-def test_ring_matches_ring(ring_matches_ring):
+def test_ring_matches_ring_only(ring_matches_ring_only):
     mol_a = Chem.AddHs(Chem.MolFromSmiles("C(c1ccc1)"))
     AllChem.EmbedMolecule(mol_a, randomSeed=3)
 
@@ -915,7 +915,7 @@ def test_ring_matches_ring(ring_matches_ring):
         min_threshold=0,
     )
 
-    cores = atom_mapping.get_cores(mol_a, mol_b, ring_matches_ring_only=ring_matches_ring, **core_kwargs)
+    cores = atom_mapping.get_cores(mol_a, mol_b, ring_matches_ring_only=ring_matches_ring_only, **core_kwargs)
 
     assert cores
 
@@ -937,7 +937,7 @@ def test_max_visits_exception():
         connected_core=False,
         max_cores=1000,
         enforce_core_core=True,
-        ring_matches_ring=False,
+        ring_matches_ring_only=False,
         complete_rings=False,
         enforce_chiral=True,
         min_threshold=0,
@@ -957,7 +957,7 @@ def test_max_cores_exception():
         chain_cutoff=0.2,
         connected_core=False,
         enforce_core_core=True,
-        ring_matches_ring=False,
+        ring_matches_ring_only=False,
         complete_rings=False,
         enforce_chiral=True,
         min_threshold=0,
@@ -976,7 +976,7 @@ def test_min_threshold():
         connected_core=False,
         max_cores=1000,
         enforce_core_core=True,
-        ring_matches_ring=False,
+        ring_matches_ring_only=False,
         complete_rings=False,
         enforce_chiral=True,
         min_threshold=mol_a.GetNumAtoms(),
