@@ -13,6 +13,7 @@ from rdkit import Chem
 from timemachine.constants import DEFAULT_PRESSURE, DEFAULT_TEMP
 from timemachine.fe import atom_mapping, model_utils
 from timemachine.fe.free_energy import (
+    BarResult,
     HostConfig,
     InitialState,
     MDParams,
@@ -438,8 +439,8 @@ def estimate_relative_free_energy(
         u_kln_by_component_by_lambda, stored_frames, stored_boxes = run_sims_sequential(
             initial_states, md_params, temperature, keep_idxs
         )
-        bar_results = [
-            estimate_free_energy_bar(u_kln_by_component, temperature)
+        bar_results: List[Tuple[NDArray, Optional[BarResult]]] = [
+            (u_kln_by_component, estimate_free_energy_bar(u_kln_by_component, temperature))
             for u_kln_by_component in u_kln_by_component_by_lambda
         ]
         result = PairBarResult(initial_states, bar_results)

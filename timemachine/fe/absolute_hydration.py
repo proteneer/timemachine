@@ -2,10 +2,10 @@
 
 import pickle
 from functools import partial
-from typing import List, Sequence, Tuple
+from typing import List, Optional, Sequence, Tuple
 
 import numpy as np
-from numpy.typing import NDArray as Array
+from numpy.typing import NDArray
 from openmm import app
 
 from timemachine import potentials
@@ -13,6 +13,7 @@ from timemachine.constants import BOLTZ, DEFAULT_TEMP
 from timemachine.fe import model_utils
 from timemachine.fe.free_energy import (
     AbsoluteFreeEnergy,
+    BarResult,
     HostConfig,
     InitialState,
     MDParams,
@@ -40,7 +41,7 @@ def generate_endstate_samples(
     num_samples: int,
     solvent_samples: Sequence[CoordsVelBox],
     ligand_samples: Sequence,
-    ligand_log_weights: Array,
+    ligand_log_weights: NDArray,
     num_ligand_atoms: int,
 ) -> List[CoordsVelBox]:
     """solvent + (noninteracting ligand) sample --> solvent + (vacuum ligand) sample
@@ -242,8 +243,8 @@ def estimate_absolute_free_energy(
         u_kln_by_component_by_lambda, stored_frames, stored_boxes = run_sims_sequential(
             initial_states, md_params, temperature, keep_idxs
         )
-        bar_results = [
-            estimate_free_energy_bar(u_kln_by_component, temperature)
+        bar_results: List[Tuple[NDArray, Optional[BarResult]]] = [
+            (u_kln_by_component, estimate_free_energy_bar(u_kln_by_component, temperature))
             for u_kln_by_component in u_kln_by_component_by_lambda
         ]
 
@@ -269,7 +270,7 @@ def setup_initial_states(
     ff: Forcefield,
     host_config: HostConfig,
     temperature: float,
-    lambda_schedule: Array,
+    lambda_schedule: NDArray,
     seed: int,
 ) -> List[InitialState]:
     """

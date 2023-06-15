@@ -4,6 +4,7 @@ from typing import Callable, Iterable, List, Optional, Sequence, Tuple, Union, o
 from warnings import warn
 
 import numpy as np
+import pymbar.utils
 from numpy.typing import NDArray
 
 from timemachine.constants import BOLTZ
@@ -80,7 +81,6 @@ class BarResult:
     dG_err_by_component: NDArray  # (len(U_names),)
     overlap: float
     overlap_by_component: NDArray  # (len(U_names),)
-    u_kln_by_component: NDArray  # (len(U_names), 2, 2, N)
 
 
 @dataclass
@@ -95,34 +95,40 @@ class PairBarResult:
     """Results of BAR analysis on L-1 adjacent pairs of states given a sequence of L states."""
 
     initial_states: List[InitialState]  # length L
-    bar_results: List[BarResult]  # length L - 1
+
+    # length L - 1 pairs of u_kln_by_component, BAR result
+    # NOTE: BAR result may be None if estimator fails to converge
+    bar_results: List[Tuple[NDArray, Optional[BarResult]]]
 
     def __post_init__(self):
-        assert len(self.bar_results) == len(self.initial_states) - 1
+        assert self.bar_results
+        assert len(self.initial_states) == len(self.bar_results) + 1
 
     @property
     def dGs(self) -> List[float]:
-        return [r.dG for r in self.bar_results]
+        return [r.dG if r else np.nan for _, r in self.bar_results]
 
     @property
     def dG_errs(self) -> List[float]:
-        return [r.dG_err for r in self.bar_results]
+        return [r.dG_err if r else np.nan for _, r in self.bar_results]
 
     @property
     def dG_err_by_component_by_lambda(self) -> NDArray:
-        return np.array([r.dG_err_by_component for r in self.bar_results])
+        n_components = self.bar_results[0][0].shape[0]
+        return np.array([r.dG_err_by_component if r else np.empty(n_components) for _, r in self.bar_results])
 
     @property
     def overlaps(self) -> List[float]:
-        return [r.overlap for r in self.bar_results]
+        return [r.overlap if r else np.nan for _, r in self.bar_results]
 
     @property
     def overlap_by_component_by_lambda(self) -> NDArray:
-        return np.array([r.overlap_by_component for r in self.bar_results])
+        n_components = self.bar_results[0][0].shape[0]
+        return np.array([r.overlap_by_component if r else np.empty(n_components) for _, r in self.bar_results])
 
     @property
     def u_kln_by_component_by_lambda(self) -> NDArray:
-        return np.array([r.u_kln_by_component for r in self.bar_results])
+        return np.array([u_kln_by_component for u_kln_by_component, _ in self.bar_results])
 
 
 @dataclass
@@ -462,7 +468,7 @@ def estimate_free_energy_bar(u_kln_by_component: NDArray, temperature: float) ->
     overlap = pair_overlap_from_ukln(u_kln_by_component.sum(axis=0))
     overlap_by_component = np.array([pair_overlap_from_ukln(u_kln) for u_kln in u_kln_by_component])
 
-    return BarResult(dG, dG_err, dG_err_by_component, overlap, overlap_by_component, u_kln_by_component)
+    return BarResult(dG, dG_err, dG_err_by_component, overlap, overlap_by_component)
 
 
 def make_pair_bar_plots(res: PairBarResult, temperature: float, prefix: str) -> PairBarPlots:
@@ -620,12 +626,19 @@ def run_sims_with_greedy_bisection(
         return EnergyDecomposedState(frames, boxes, batch_u_fns)
 
     @cache
-    def get_bar_result(lamb1: float, lamb2: float) -> BarResult:
+    def get_bar_result(lamb1: float, lamb2: float) -> Tuple[NDArray, Optional[BarResult]]:
         u_kln_by_component = compute_energy_decomposed_u_kln([get_state(lamb1), get_state(lamb2)])
-        return estimate_free_energy_bar(u_kln_by_component, temperature)
+        try:
+            bar_result = estimate_free_energy_bar(u_kln_by_component, temperature)
+        except pymbar.utils.ConvergenceError:
+            bar_result = None
+        return u_kln_by_component, bar_result
 
-    def bar_error(lamb1: float, lamb2: float) -> float:
-        return get_bar_result(lamb1, lamb2).dG_err
+    def get_local_cost(lamb1: float, lamb2: float) -> float:
+        _, bar_result = get_bar_result(lamb1, lamb2)
+
+        # If BAR computation failed to converge, assign an infinite cost
+        return bar_result.dG_err if bar_result else np.inf
 
     def midpoint(x1: float, x2: float) -> float:
         return (x1 + x2) / 2.0
@@ -638,7 +651,7 @@ def run_sims_with_greedy_bisection(
     lambdas = list(initial_lambdas)
     results = [compute_intermediate_result(lambdas)]
     for _ in range(n_bisections):
-        lambdas_new, info = greedy_bisection_step(lambdas, bar_error, midpoint)
+        lambdas_new, info = greedy_bisection_step(lambdas, get_local_cost, midpoint)
 
         if verbose:
             costs, left_idx, lamb_new = info

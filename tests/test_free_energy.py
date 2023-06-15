@@ -322,5 +322,5 @@ def test_bisection_handles_mbar_convergence_error(mock_MBAR):
     assert all(
         bar_result is None
         for pair_bar_result in result.intermediate_results
-        for bar_result in pair_bar_result.bar_results
+        for _, bar_result in pair_bar_result.bar_results
     )
