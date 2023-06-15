@@ -2,6 +2,7 @@ from importlib import resources
 from unittest.mock import patch
 
 import numpy as np
+import pymbar.utils
 import pytest
 from hypothesis import example, given, seed
 from hypothesis.strategies import integers
@@ -19,7 +20,11 @@ from timemachine.fe.free_energy import (
     make_pair_bar_plots,
     sample,
 )
-from timemachine.fe.rbfe import setup_initial_states, setup_optimized_host
+from timemachine.fe.rbfe import (
+    estimate_relative_free_energy_via_greedy_bisection,
+    setup_initial_states,
+    setup_optimized_host,
+)
 from timemachine.fe.single_topology import SingleTopology
 from timemachine.fe.stored_arrays import StoredArrays
 from timemachine.ff import Forcefield
@@ -292,4 +297,30 @@ def test_make_pair_bar_plots(mock_fig, hif2a_ligand_pair_single_topology_lam0_st
     assert mock_fig.call_args is not None
     assert set(mock_fig.call_args.args[0]) == set(
         ["HarmonicBond", "HarmonicAngleStable", "PeriodicTorsion", "NonbondedPairListPrecomputed"]
+    )
+
+
+@patch("pymbar.MBAR")
+def test_bisection_handles_mbar_convergence_error(mock_MBAR):
+    """MBAR calculations may fail during early iterations of bisection, when there is typically insufficient overlap for
+    convergence. Check that the bisection implementation intercepts convergence errors and handles them
+    appropriately."""
+
+    mock_MBAR.side_effect = pymbar.utils.ConvergenceError("Mock convergence error")
+
+    mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
+    ff = Forcefield.load_default()
+    md_params = MDParams(1, 1, 1, seed=2023)
+
+    result = estimate_relative_free_energy_via_greedy_bisection(
+        mol_a, mol_b, core, ff, host_config=None, md_params=md_params, n_windows=3
+    )
+
+    assert len(result.intermediate_results) == 2  # initial result plus one iteration of bisection
+
+    # bar_result is None where convergence fails
+    assert all(
+        bar_result is None
+        for pair_bar_result in result.intermediate_results
+        for bar_result in pair_bar_result.bar_results
     )
