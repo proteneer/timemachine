@@ -13,6 +13,7 @@ from timemachine.integrator import langevin_coefficients
 from timemachine.lib import LangevinIntegrator, MonteCarloBarostat, VelocityVerletIntegrator, custom_ops
 from timemachine.md.barostat.utils import get_bond_list, get_group_indices
 from timemachine.md.enhanced import get_solvent_phase_system
+from timemachine.md.minimizer import check_force_norm
 from timemachine.potentials import (
     Nonbonded,
     NonbondedAllPairs,
@@ -536,7 +537,7 @@ def test_multiple_steps_local_consistency(freeze_reference):
     num_steps = 500
     x_interval = 100
 
-    unbound_potentials, sys_params, masses, coords, box = get_solvent_phase_system(mol, ff, 0.0, minimize_energy=False)
+    unbound_potentials, sys_params, masses, coords, box = get_solvent_phase_system(mol, ff, 0.0, minimize_energy=True)
     v0 = np.zeros_like(coords)
     bps = []
     for p, bp in zip(sys_params, unbound_potentials):
@@ -586,6 +587,7 @@ def test_multiple_steps_local_consistency(freeze_reference):
         test_du_dx, test_u = bp.execute(coords, box)
         np.testing.assert_array_equal(ref_du_dx, test_du_dx)
         np.testing.assert_equal(ref_u, test_u)
+        check_force_norm(-ref_du_dx)
 
     # Verify that running with a barostat doesn't change the results
     group_idxs = get_group_indices(get_bond_list(unbound_potentials[0]), len(masses))
