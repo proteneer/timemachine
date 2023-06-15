@@ -20,3 +20,7 @@ class BoundPotential:
 
 class FanoutSummedPotential:
     pass
+
+
+class PotentialExecutor:
+    pass

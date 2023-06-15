@@ -27,6 +27,7 @@
 #include "nonbonded_precomputed.hpp"
 #include "periodic_torsion.hpp"
 #include "potential.hpp"
+#include "potential_executor.hpp"
 #include "rmsd_align.hpp"
 #include "set_utils.hpp"
 #include "summed_potential.hpp"
@@ -923,6 +924,165 @@ void declare_bound_potential(py::module &m) {
             py::arg("box"));
 }
 
+void declare_potential_executor(py::module &m) {
+
+    using Class = timemachine::PotentialExecutor;
+    std::string pyclass_name = std::string("PotentialExecutor");
+    py::class_<Class, std::shared_ptr<Class>>(m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
+        .def(
+            py::init([](int N, bool parallel) { return new timemachine::PotentialExecutor(N, parallel); }),
+            py::arg("num_atoms"),
+            py::arg("parallel") = true)
+        .def(
+            "execute_bound",
+            [](timemachine::PotentialExecutor &runner,
+               std::vector<std::shared_ptr<timemachine::BoundPotential>> &bps,
+               const py::array_t<double, py::array::c_style> &coords,
+               const py::array_t<double, py::array::c_style> &box,
+               bool compute_du_dx,
+               bool compute_u) -> py::tuple {
+                const long unsigned int N = coords.shape()[0];
+                const long unsigned int D = coords.shape()[1];
+                verify_coords_and_box(coords, box);
+
+                if (!compute_du_dx && !compute_u) {
+                    throw std::runtime_error("must compute either du_dx or energy");
+                }
+
+                // initialize with fixed garbage values for debugging convenience (these should be overwritten by `execute_bound`)
+                std::vector<unsigned long long> du_dx;
+                if (compute_du_dx) {
+                    du_dx.assign(N * D, 9999);
+                }
+                std::vector<unsigned long long> u;
+                if (compute_u) {
+                    u.assign(N, 9999);
+                }
+
+                runner.execute_bound(
+                    bps, coords.data(), box.data(), compute_du_dx ? &du_dx[0] : nullptr, compute_u ? &u[0] : nullptr);
+
+                py::array_t<double, py::array::c_style> py_du_dx({N, D});
+                if (compute_du_dx) {
+                    for (unsigned int i = 0; i < du_dx.size(); i++) {
+                        py_du_dx.mutable_data()[i] = FIXED_TO_FLOAT<double>(du_dx[i]);
+                    }
+                }
+
+                unsigned long long u_sum = 0;
+                if (compute_u) {
+                    u_sum = std::accumulate(u.begin(), u.end(), decltype(u)::value_type(0));
+                }
+
+                auto result = py::make_tuple(py_du_dx, FIXED_TO_FLOAT<double>(u_sum));
+
+                if (!compute_du_dx) {
+                    result[0] = py::none();
+                }
+                if (!compute_u) {
+                    result[1] = py::none();
+                }
+
+                return result;
+            },
+            py::arg("bps"),
+            py::arg("coords"),
+            py::arg("box"),
+            py::arg("compute_du_dx") = true,
+            py::arg("compute_u") = true)
+        .def(
+            "execute_unbound",
+            [](timemachine::PotentialExecutor &runner,
+               std::vector<std::shared_ptr<timemachine::Potential>> &pots,
+               const py::array_t<int, py::array::c_style> &param_sizes,
+               const py::array_t<double, py::array::c_style> &coords,
+               const py::array_t<double, py::array::c_style> &params,
+               const py::array_t<double, py::array::c_style> &box,
+               const bool compute_du_dx,
+               const bool compute_du_dp,
+               const bool compute_u) -> py::tuple {
+                const long unsigned int N = coords.shape()[0];
+                const long unsigned int D = coords.shape()[1];
+                const long unsigned int P = params.size();
+                verify_coords_and_box(coords, box);
+
+                if (!compute_du_dx && !compute_u && !compute_du_dp) {
+                    throw std::runtime_error("must compute either du_dx, du_dp or energy");
+                }
+
+                std::vector<int> vec_param_sizes(param_sizes.size());
+                std::memcpy(vec_param_sizes.data(), param_sizes.data(), vec_param_sizes.size() * sizeof(int));
+
+                // Store parameters on the device
+                timemachine::DeviceBuffer<double> param_buffer(P);
+                param_buffer.copy_from(params.data());
+
+                // initialize with fixed garbage values for debugging convenience (these should be overwritten by `execute_potentials`)
+                std::vector<unsigned long long> du_dx;
+                if (compute_du_dx) {
+                    du_dx.assign(N * D, 9999);
+                }
+                std::vector<unsigned long long> u;
+                if (compute_u) {
+                    u.assign(N, 9999);
+                }
+
+                std::vector<unsigned long long> du_dp;
+                if (compute_du_dp) {
+                    du_dp.assign(P, 9999);
+                }
+
+                runner.execute_potentials(
+                    pots,
+                    coords.data(),
+                    box.data(),
+                    vec_param_sizes,
+                    param_buffer,
+                    compute_du_dx ? &du_dx[0] : nullptr,
+                    compute_du_dp ? &du_dp[0] : nullptr,
+                    compute_u ? &u[0] : nullptr);
+
+                py::array_t<double, py::array::c_style> py_du_dx({N, D});
+                if (compute_du_dx) {
+                    for (unsigned int i = 0; i < du_dx.size(); i++) {
+                        py_du_dx.mutable_data()[i] = FIXED_TO_FLOAT<double>(du_dx[i]);
+                    }
+                }
+
+                py::array_t<double, py::array::c_style> py_du_dp(P);
+                if (compute_du_dp) {
+                    runner.du_dp_fixed_to_float(vec_param_sizes, pots, &du_dp[0], py_du_dp.mutable_data());
+                }
+
+                unsigned long long u_sum = 0;
+                if (compute_u) {
+                    u_sum = std::accumulate(u.begin(), u.end(), decltype(u)::value_type(0));
+                }
+
+                auto result = py::make_tuple(py_du_dx, py_du_dp, FIXED_TO_FLOAT<double>(u_sum));
+
+                if (!compute_du_dx) {
+                    result[0] = py::none();
+                }
+                if (!compute_du_dp) {
+                    result[1] = py::none();
+                }
+                if (!compute_u) {
+                    result[2] = py::none();
+                }
+
+                return result;
+            },
+            py::arg("pots"),
+            py::arg("param_sizes"),
+            py::arg("coords"),
+            py::arg("params"),
+            py::arg("box"),
+            py::arg("compute_du_dx") = true,
+            py::arg("compute_du_dp") = true,
+            py::arg("compute_u") = true);
+}
+
 template <typename RealType> void declare_harmonic_bond(py::module &m, const char *typestr) {
 
     using Class = timemachine::HarmonicBond<RealType>;
@@ -1382,4 +1542,5 @@ PYBIND11_MODULE(custom_ops, m) {
     declare_nonbonded_pair_list<float, true>(m, "f32_negated");
 
     declare_context(m);
+    declare_potential_executor(m);
 }
