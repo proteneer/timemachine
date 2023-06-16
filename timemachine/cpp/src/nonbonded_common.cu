@@ -60,11 +60,11 @@ bool is_nonbonded_all_pairs_potential(std::shared_ptr<Potential> pot) {
 double get_nonbonded_all_pair_cutoff_with_padding(std::shared_ptr<Potential> pot) {
     if (std::shared_ptr<NonbondedAllPairs<float>> nb_pot = std::dynamic_pointer_cast<NonbondedAllPairs<float>>(pot);
         nb_pot) {
-        return nb_pot->get_cutoff() + nb_pot->get_padding();
+        return nb_pot->get_cutoff() + nb_pot->get_nblist_padding();
     } else if (std::shared_ptr<NonbondedAllPairs<double>> nb_pot =
                    std::dynamic_pointer_cast<NonbondedAllPairs<double>>(pot);
                nb_pot) {
-        return nb_pot->get_cutoff() + nb_pot->get_padding();
+        return nb_pot->get_cutoff() + nb_pot->get_nblist_padding();
     } else {
         throw std::runtime_error("unable to cast potential to NonbondedAllPairs");
     }

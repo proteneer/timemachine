@@ -89,7 +89,7 @@ public:
 
     double get_cutoff() const { return cutoff_; };
 
-    double get_padding() const { return nblist_padding_; };
+    double get_nblist_padding() const { return nblist_padding_; };
 
     double get_beta() const { return beta_; };
 
