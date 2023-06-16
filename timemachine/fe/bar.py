@@ -92,7 +92,7 @@ def dG_dw(w):
         the gradient of free energy difference with respect to work
 
     """
-    dG = pymbar.bar(w[0], w[1])["Delta_f"]
+    dG, _ = pymbar.BAR(w[0], w[1])
     dBAR_dw = jax.grad(BARzero, argnums=(0,))
     dBAR_dA = jax.grad(BARzero, argnums=(1,))
     dG_dw = -dBAR_dw(w, dG)[0] / dBAR_dA(w, dG)[0]
@@ -126,7 +126,7 @@ def bootstrap_bar(w_F, w_R, n_bootstrap=1000, timeout=10) -> Tuple[float, NDArra
     * TODO[deboggle] -- upgrade from pymbar3 to pymbar4 and remove this
     * TODO[performance] -- multiprocessing, if needed?
     """
-    full_bar_result = pymbar.bar(w_F, w_R, compute_uncertainty=False)
+    full_bar_result = pymbar.BAR(w_F, w_R, compute_uncertainty=False)
 
     n_F, n_R = len(w_F), len(w_R)
 
@@ -145,21 +145,22 @@ def bootstrap_bar(w_F, w_R, n_bootstrap=1000, timeout=10) -> Tuple[float, NDArra
         w_F_sample = rng.choice(w_F, size=(n_F,), replace=True)
         w_R_sample = rng.choice(w_R, size=(n_R,), replace=True)
 
-        bar_result = pymbar.bar(
+        bar_result = pymbar.BAR(
             w_F=w_F_sample,
             w_R=w_R_sample,
-            DeltaF=full_bar_result["Delta_f"],  # warm start
+            DeltaF=full_bar_result,  # warm start
             compute_uncertainty=False,
             relative_tolerance=1e-6,  # reduce cost
         )
 
-        bootstrap_samples.append(bar_result["Delta_f"])
+        bootstrap_samples.append(bar_result)
 
-    return full_bar_result["Delta_f"], np.array(bootstrap_samples)
+    return full_bar_result, np.array(bootstrap_samples)
 
 
 def bar_with_bootstrapped_uncertainty(w_F, w_R, n_bootstrap=1000, timeout=10) -> Tuple[float, float]:
-    """Returns BAR estimate from pymbar.bar and error estimate computed by bootstrapping."""
+    """Drop-in replacement for pymbar.BAR(w_F, w_R) -> (df, ddf)
+    where first return is forwarded from pymbar.BAR but second return is computed by bootstrapping"""
 
     df, bootstrap_dfs = bootstrap_bar(w_F, w_R, n_bootstrap=n_bootstrap, timeout=timeout)
 
@@ -193,8 +194,7 @@ def df_from_ukln(u_kln: np.ndarray) -> Tuple[float, float]:
     assert k == l == 2
     w_fwd = u_kln[1, 0, :] - u_kln[0, 0, :]
     w_rev = u_kln[0, 1, :] - u_kln[1, 1, :]
-    bar = pymbar.bar(w_fwd, w_rev)
-    df, df_err = bar["Delta_f"], bar["dDelta_f"]
+    df, df_err = pymbar.BAR(w_fwd, w_rev)
     return df, df_err
 
 
@@ -262,7 +262,7 @@ def pair_overlap_from_ukln(u_kln: np.ndarray) -> float:
     u_kn = u_kln.reshape(k, -1)
     assert u_kn.shape == (k, l * n)
     N_k = n * np.ones(l)
-    return 2 * pymbar.MBAR(u_kn, N_k).compute_overlap()["matrix"][0, 1]
+    return 2 * pymbar.MBAR(u_kn, N_k).computeOverlap()["matrix"][0, 1]  # type: ignore
 
 
 def compute_fwd_and_reverse_df_over_time(

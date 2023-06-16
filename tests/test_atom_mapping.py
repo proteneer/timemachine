@@ -347,6 +347,7 @@ $$$$""",
         connected_core=True,
         max_cores=1e6,  # This pair has 350k cores
         enforce_core_core=True,
+        ring_matches_ring_only=False,
         complete_rings=True,
         enforce_chiral=True,
         min_threshold=0,
@@ -387,6 +388,7 @@ def test_all_pairs(filepath):
                 connected_core=False,
                 max_cores=1000,
                 enforce_core_core=True,
+                ring_matches_ring_only=False,
                 complete_rings=False,
                 enforce_chiral=True,
                 min_threshold=0,
@@ -438,6 +440,7 @@ def test_complete_rings_only():
         connected_core=True,
         max_cores=1000,
         enforce_core_core=True,
+        ring_matches_ring_only=True,
         complete_rings=True,
         enforce_chiral=True,
         min_threshold=0,
@@ -574,6 +577,7 @@ $$$$""",
         connected_core=False,
         max_cores=1000000,
         enforce_core_core=False,
+        ring_matches_ring_only=False,
         complete_rings=False,
         enforce_chiral=True,
         min_threshold=0,
@@ -595,6 +599,7 @@ $$$$""",
         connected_core=True,
         max_cores=1000000,
         enforce_core_core=True,
+        ring_matches_ring_only=False,
         complete_rings=False,
         enforce_chiral=True,
         min_threshold=0,
@@ -618,6 +623,7 @@ $$$$""",
         connected_core=False,
         max_cores=1000000,
         enforce_core_core=True,
+        ring_matches_ring_only=False,
         complete_rings=False,
         enforce_chiral=True,
         min_threshold=0,
@@ -749,6 +755,7 @@ def test_hif2a_failure():
         connected_core=True,
         max_cores=1e6,
         enforce_core_core=True,
+        ring_matches_ring_only=True,
         complete_rings=True,
         enforce_chiral=True,
         min_threshold=0,
@@ -806,6 +813,7 @@ def test_cyclohexane_stereo():
         connected_core=True,
         max_cores=100000,
         enforce_core_core=True,
+        ring_matches_ring_only=True,
         complete_rings=True,
         enforce_chiral=True,
         min_threshold=0,
@@ -865,6 +873,7 @@ def test_chiral_atom_map():
         max_cores=1e6,
         enforce_core_core=True,
         complete_rings=True,
+        ring_matches_ring_only=True,
         min_threshold=0,
     )
 
@@ -880,6 +889,46 @@ def test_chiral_atom_map():
 
 
 @pytest.mark.nogpu
+@pytest.mark.parametrize(
+    "ring_matches_ring_only",
+    [
+        pytest.param(False, marks=pytest.mark.xfail(strict=True)),
+        pytest.param(True),
+    ],
+)
+def test_ring_matches_ring_only(ring_matches_ring_only):
+    mol_a = Chem.AddHs(Chem.MolFromSmiles("C(c1ccc1)"))
+    AllChem.EmbedMolecule(mol_a, randomSeed=3)
+
+    mol_b = Chem.AddHs(Chem.MolFromSmiles("C(c1ccccc1)"))
+    AllChem.EmbedMolecule(mol_b, randomSeed=3)
+
+    core_kwargs = dict(
+        ring_cutoff=0.15,
+        chain_cutoff=0.2,
+        max_visits=1e7,
+        connected_core=True,
+        max_cores=1e6,
+        enforce_core_core=False,
+        complete_rings=False,
+        enforce_chiral=False,
+        min_threshold=0,
+    )
+
+    cores = atom_mapping.get_cores(mol_a, mol_b, ring_matches_ring_only=ring_matches_ring_only, **core_kwargs)
+
+    assert cores
+
+    # should not map ring atoms to non-ring atoms and vice-versa
+    for core in cores:
+        for idx_a, idx_b in core:
+            assert mol_a.GetAtomWithIdx(int(idx_a)).IsInRing() == mol_b.GetAtomWithIdx(int(idx_b)).IsInRing()
+
+    # should map all ring atoms in mol_a
+    assert all(len([() for idx_a in core[:, 0] if mol_a.GetAtomWithIdx(int(idx_a)).IsInRing()]) == 4 for core in cores)
+
+
+@pytest.mark.nogpu
 def test_max_visits_exception():
     mol_a, mol_b = get_cyclohexanes_different_confs()
     core_kwargs = dict(
@@ -888,6 +937,7 @@ def test_max_visits_exception():
         connected_core=False,
         max_cores=1000,
         enforce_core_core=True,
+        ring_matches_ring_only=False,
         complete_rings=False,
         enforce_chiral=True,
         min_threshold=0,
@@ -907,6 +957,7 @@ def test_max_cores_exception():
         chain_cutoff=0.2,
         connected_core=False,
         enforce_core_core=True,
+        ring_matches_ring_only=False,
         complete_rings=False,
         enforce_chiral=True,
         min_threshold=0,
@@ -925,6 +976,7 @@ def test_min_threshold():
         connected_core=False,
         max_cores=1000,
         enforce_core_core=True,
+        ring_matches_ring_only=False,
         complete_rings=False,
         enforce_chiral=True,
         min_threshold=mol_a.GetNumAtoms(),

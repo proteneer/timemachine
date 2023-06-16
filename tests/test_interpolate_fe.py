@@ -34,6 +34,7 @@ def test_hif2a_free_energy_estimates():
         connected_core=True,
         max_cores=1e6,
         enforce_core_core=True,
+        ring_matches_ring_only=True,
         complete_rings=True,
         enforce_chiral=True,
         min_threshold=0,
@@ -87,8 +88,7 @@ def test_hif2a_free_energy_estimates():
             plt.legend()
             plt.savefig(f"lambda_{lambda_idx-1}_{lambda_idx}.png")
 
-            bar = pymbar.bar(fwd_delta_u, rev_delta_u)
-            dG_exact, exact_bar_err = bar["Delta_f"], bar["dDelta_f"]
+            dG_exact, exact_bar_err = pymbar.BAR(fwd_delta_u, rev_delta_u)
             dG_exact /= beta
             exact_bar_err /= beta
 
