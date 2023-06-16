@@ -1,4 +1,4 @@
-from typing import List, Tuple
+from typing import List, Optional, Tuple
 
 import jax.numpy as jnp
 import numpy as np
@@ -79,9 +79,9 @@ class HostGuestTopology:
     def get_num_atoms(self) -> int:
         return self.num_host_atoms + self.guest_topology.get_num_atoms()
 
-    def get_lig_idxs(self) -> List[NDArray]:
+    def get_lig_idxs(self) -> NDArray:
         def to_np(a):
-            return [np.array(v, dtype=np.int32) for v in a]
+            return np.concatenate([np.array(v, dtype=np.int32) for v in a])
 
         if self.num_host_atoms:
             return to_np(self.get_component_idxs()[1:])
@@ -147,11 +147,15 @@ class HostGuestTopology:
     def parameterize_nonbonded(self, ff_q_params, ff_q_params_intra, ff_q_params_solv, ff_lj_params, lamb: float):
         num_guest_atoms = self.guest_topology.get_num_atoms()
         # ligand other interactions
+        # NOTE: None is passed for the other params to indicate they are not used.
         guest_ixn_other_params, _ = self.guest_topology.parameterize_nonbonded(
             ff_q_params, None, None, ff_lj_params, lamb, intramol_params=False
         )
 
         # ligand water interactions
+        # NOTE: We assume the handlers of the solvent terms are the same as the
+        # non-solvent terms (so we can pass ff_q_params_solv in place of ff_q_params).
+        # If this changes, this code will need to be updated.
         guest_ixn_water_params, _ = self.guest_topology.parameterize_nonbonded(
             ff_q_params_solv, None, None, ff_lj_params, lamb, intramol_params=False
         )
@@ -169,12 +173,12 @@ class HostGuestTopology:
         assert beta == self.host_nonbonded.potential.beta
         assert cutoff == self.host_nonbonded.potential.cutoff
 
-        # Exclude all ligand-lignad interactions which will be computed using a pairlist instead
         exclusion_idxs = self.host_nonbonded.potential.exclusion_idxs
         scale_factors = self.host_nonbonded.potential.scale_factors
 
         # Note: The choice of zeros here is arbitrary. It doesn't affect the
-        # potentials or grads, but any function like the seed could depened on these values.
+        # potentials or grads, but anything that looks at the parameters
+        # (such as hashing for the seed) could depend on these values
         hg_nb_params = jnp.concatenate([self.host_nonbonded.params, np.zeros(guest_ixn_water_params.shape)])
 
         host_guest_pot = potentials.Nonbonded(
@@ -644,9 +648,9 @@ def exclude_all_ligand_ligand_ixns(num_host_atoms: int, num_guest_atoms: int) ->
 
 
 def get_ligand_ixn_pots_params(
-    lig_idxs_list: List[NDArray],
+    lig_idxs: NDArray,
     water_idxs: NDArray,
-    other_idxs: NDArray,
+    other_idxs: Optional[NDArray],
     host_nb_params: NDArray,
     guest_params_ixn_water: NDArray,
     guest_params_ixn_other: NDArray,
@@ -663,10 +667,11 @@ def get_ligand_ixn_pots_params(
         List of ligand indexes (dtype, np.int32), one for each ligand.
 
     water_idxs:
-        Indexes for the water atoms
+        Indexes for the water atoms.
 
     other_idxs:
         Indexes for the other environment atoms that are not waters.
+        May be None if there are no other atoms.
 
     host_nb_params:
         Nonbonded parameters for the host (environment) atoms.
@@ -680,48 +685,39 @@ def get_ligand_ixn_pots_params(
     """
 
     # Init
-    other_idxs = other_idxs if other_idxs is not None else []
+    other_idxs = other_idxs if other_idxs is not None else np.array([])
 
-    # L-W terms
-    num_lig_atoms = sum(len(lig_idxs) for lig_idxs in lig_idxs_list)
+    # Ligand-Water terms
+    num_lig_atoms = len(lig_idxs)
     num_total_atoms = num_lig_atoms + len(water_idxs) + len(other_idxs)
 
-    hg_water_pots = []
-    hg_water_params = []
-    # Loop for the case of DualTopology
-    for lig_idxs in lig_idxs_list:
-        hg_water_pots.append(
+    hg_water_pot = potentials.NonbondedInteractionGroup(
+        num_total_atoms,
+        lig_idxs,
+        beta,
+        cutoff,
+        col_atom_idxs=water_idxs,
+    )
+    hg_water_params = jnp.concatenate([host_nb_params, guest_params_ixn_water])
+
+    # Lignad-Other (protein) terms
+    hg_other_pots = []
+    hg_other_params = []
+    if len(other_idxs):
+        hg_other_pots.append(
             potentials.NonbondedInteractionGroup(
                 num_total_atoms,
                 lig_idxs,
                 beta,
                 cutoff,
-                col_atom_idxs=water_idxs,
+                col_atom_idxs=other_idxs,
             )
         )
-        hg_water_params.append(jnp.concatenate([host_nb_params, guest_params_ixn_water]))
+        hg_other_params.append(jnp.concatenate([host_nb_params, guest_params_ixn_other]))
 
-    # L-Other terms
-    hg_other_pots = []
-    hg_other_params = []
-    if len(other_idxs):
-        for lig_idxs in lig_idxs_list:
-            hg_other_pots.append(
-                potentials.NonbondedInteractionGroup(
-                    num_total_atoms,
-                    lig_idxs,
-                    beta,
-                    cutoff,
-                    col_atom_idxs=other_idxs,
-                )
-            )
-            hg_other_params.append(jnp.concatenate([host_nb_params, guest_params_ixn_other]))
-
-    def filter_none(values):
-        return [v for v in values if v is not None]
-
-    # total potential = host_guest_pot + guest_intra_pot + lw_ixn_pots + lo_ixn_pots
-    hg_ixn_pots = filter_none(hg_water_pots + hg_other_pots)
-    hg_ixn_params = filter_none(hg_water_params + hg_other_params)
+    # total potential = host_guest_pot + guest_intra_pot + lw_ixn_pots + lp_ixn_pots
+    # May be None if there is no protein present
+    hg_ixn_pots = [hg_water_pot] + hg_other_pots
+    hg_ixn_params = [hg_water_params] + hg_other_params
 
     return hg_ixn_pots, hg_ixn_params

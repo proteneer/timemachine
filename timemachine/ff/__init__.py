@@ -149,27 +149,20 @@ class Forcefield:
             elif isinstance(handle, nonbonded.LennardJonesHandler):
                 assert lj_handle is None
                 lj_handle = handle
-            elif (
-                isinstance(handle, nonbonded.AM1CCCIntraHandler)
-                or isinstance(handle, nonbonded.AM1BCCIntraHandler)
-                or isinstance(handle, nonbonded.SimpleChargeIntraHandler)
+            elif isinstance(
+                handle, (nonbonded.AM1CCCIntraHandler, nonbonded.AM1BCCIntraHandler, nonbonded.SimpleChargeIntraHandler)
             ):
                 # Need to be checked first since they are also subclasses
                 # of the non-intra handlers
                 assert q_handle_intra is None
                 q_handle_intra = handle
-            elif (
-                isinstance(handle, nonbonded.AM1CCCSolventHandler)
-                or isinstance(handle, nonbonded.AM1BCCSolventHandler)
-                or isinstance(handle, nonbonded.SimpleChargeSolventHandler)
+            elif isinstance(
+                handle,
+                (nonbonded.AM1CCCSolventHandler, nonbonded.AM1BCCSolventHandler, nonbonded.SimpleChargeSolventHandler),
             ):
                 assert q_handle_solv is None
                 q_handle_solv = handle
-            elif (
-                isinstance(handle, nonbonded.AM1CCCHandler)
-                or isinstance(handle, nonbonded.AM1BCCHandler)
-                or isinstance(handle, nonbonded.SimpleChargeHandler)
-            ):
+            elif isinstance(handle, (nonbonded.AM1CCCHandler, nonbonded.AM1BCCHandler, nonbonded.SimpleChargeHandler)):
                 assert q_handle is None
                 q_handle = handle
 

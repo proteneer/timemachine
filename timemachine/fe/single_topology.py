@@ -1234,8 +1234,8 @@ class SingleTopology(AtomMapMixin):
         # L-W terms
         num_other_atoms = num_host_atoms - num_water_atoms
 
-        def get_lig_idxs_list():
-            return [np.arange(num_guest_atoms, dtype=np.int32) + num_host_atoms]
+        def get_lig_idxs():
+            return np.arange(num_guest_atoms, dtype=np.int32) + num_host_atoms
 
         def get_water_idxs():
             return np.arange(num_water_atoms, dtype=np.int32) + num_other_atoms
@@ -1244,7 +1244,7 @@ class SingleTopology(AtomMapMixin):
             return np.arange(num_other_atoms, dtype=np.int32)
 
         ixn_pots, ixn_params = get_ligand_ixn_pots_params(
-            get_lig_idxs_list(),
+            get_lig_idxs(),
             get_water_idxs(),
             get_other_idxs(),
             host_params,
