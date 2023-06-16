@@ -74,7 +74,7 @@ void LangevinIntegrator::step_fwd(
     size_t n_blocks = ceil_divide(N_ * D, tpb);
 
     update_forward_baoab<double>
-        <<<n_blocks, tpb, 0, stream>>>(N_, D, ca_, d_idxs, d_cbs_, d_ccs_, d_noise_, d_x_t, d_v_t, d_du_dx_, dt_);
+        <<<n_blocks, tpb, 0, stream>>>(N_, D, ca_, d_idxs, d_cbs_, d_ccs_, d_noise_, d_x_t, d_v_t, d_du_dx_, 0.5 * dt_);
 
     gpuErrchk(cudaPeekAtLastError());
 }
