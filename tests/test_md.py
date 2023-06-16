@@ -13,15 +13,8 @@ from timemachine.integrator import langevin_coefficients
 from timemachine.lib import LangevinIntegrator, MonteCarloBarostat, VelocityVerletIntegrator, custom_ops
 from timemachine.md.barostat.utils import get_bond_list, get_group_indices
 from timemachine.md.enhanced import get_solvent_phase_system
-from timemachine.potentials import (
-    Nonbonded,
-    NonbondedAllPairs,
-    NonbondedInteractionGroup,
-    NonbondedPairListNegated,
-    NonbondedPairListPrecomputed,
-    SummedPotential,
-    nonbonded,
-)
+from timemachine.md.minimizer import check_force_norm
+from timemachine.potentials import SummedPotential
 from timemachine.testsystems.ligands import get_biphenyl
 
 pytestmark = [pytest.mark.memcheck]
@@ -917,97 +910,60 @@ def test_setup_context_with_references():
         assert ref() is None
 
 
-def test_local_md_nonbonded_all_pairs_subset():
+@pytest.mark.parametrize("freeze_reference", [True, False])
+def test_local_md_nonbonded_all_pairs_subset(freeze_reference):
     """Test that if the nonbonded all pairs is set up on a subset of the system, that local MD can correctly
-    simulate the local region without double counting interactions"""
-    seed = 2023
+    simulate the local region and reset the idxs to the old value"""
+    seed = 2022
+    np.random.seed(seed)
+
+    N = 30
+    D = 3
+
+    coords = np.random.rand(N, D).astype(dtype=np.float64) * 2
+    box = np.eye(3) * 3.0
+    masses = np.random.rand(N)
+
+    E = 2
+
+    params, potential = prepare_nb_system(
+        coords,
+        E,
+        p_scale=3.0,
+        cutoff=1.0,
+    )
 
     temperature = constants.DEFAULT_TEMP
     dt = 1.5e-3
-    friction = 1.0
+    friction = 0.0
+    radius = 1.2
 
-    mol, _ = get_biphenyl()
-    ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
-
-    # Lambda must either be 1.0 (uninteracting) or minimize energy, chose 1.0 as cheaper to not-minimize
-    # else will overflow and coordinates will be different between tests
-    unbound_potentials, sys_params, masses, coords, box = get_solvent_phase_system(mol, ff, 1.0, minimize_energy=False)
-
-    identity_idxs = np.arange(0, len(coords), dtype=np.int32)
-    ligand_idxs = np.arange(len(coords) - mol.GetNumAtoms(), len(coords), dtype=np.int32)
-    non_ligand_idxs = np.delete(identity_idxs, ligand_idxs)
-
-    bound_pots = [bp.bind(params) for bp, params in zip(unbound_potentials, sys_params)]
-
-    summed_bound = next(fn for fn in bound_pots if isinstance(fn.potential, SummedPotential))
-    nb_pot_idx = next(i for i, pot in enumerate(summed_bound.potential.potentials) if isinstance(pot, Nonbonded))
-    nb_pot = summed_bound.potential.potentials[nb_pot_idx]
-    nb_bound = nb_pot.bind(summed_bound.potential.params_init[nb_pot_idx])
-    nb_pot_precomputed_idx = next(
-        i for i, pot in enumerate(summed_bound.potential.potentials) if isinstance(pot, NonbondedPairListPrecomputed)
-    )
-    nb_pot_precomputed = summed_bound.potential.potentials[nb_pot_precomputed_idx]
-    nb_bound_precomputed = nb_pot_precomputed.bind(summed_bound.potential.params_init[nb_pot_precomputed_idx])
-    # Construct nonbonded potentials from the reference one, will modify with atom indices to validate local MD produces
-    # the same results.
-    all_pairs = NonbondedAllPairs(
-        nb_pot.num_atoms,
-        nb_pot.beta,
-        nb_pot.cutoff,
-        disable_hilbert_sort=nb_pot.disable_hilbert_sort,
-        atom_idxs=non_ligand_idxs,
-        nblist_padding=nb_pot.nblist_padding,
-    ).bind(nb_bound.params)
-    ixn_group = NonbondedInteractionGroup(
-        nb_pot.num_atoms,
-        ligand_idxs,
-        nb_pot.beta,
-        nb_pot.cutoff,
-        disable_hilbert_sort=nb_pot.disable_hilbert_sort,
-        nblist_padding=nb_pot.nblist_padding,
-    ).bind(nb_bound.params)
-    exclusion_idxs, scale_factors = nonbonded.filter_exclusions(
-        non_ligand_idxs, nb_pot.exclusion_idxs, nb_pot.scale_factors, update_idxs=False
-    )
-    exclusions = NonbondedPairListNegated(exclusion_idxs, scale_factors, nb_pot.beta, nb_pot.cutoff).bind(
-        nb_bound.params
-    )
-
-    ref_bps = [fn.to_gpu(np.float32).bound_impl for fn in bound_pots]
-
-    # Construct without nonbonded potential and add modified all pairs, precomputed, ixn group and exclusions
-    comp_bps = [fn.to_gpu(np.float32).bound_impl for fn in bound_pots if not isinstance(fn.potential, SummedPotential)]
-
-    all_pairs_bound = all_pairs.to_gpu(np.float32).bound_impl
-
-    # Add back in the potentials that have been set up to have the ligand -> env computed with ixn group
-    comp_bps.append(nb_bound_precomputed.to_gpu(np.float32).bound_impl)
-    comp_bps.append(all_pairs_bound)
-    comp_bps.append(exclusions.to_gpu(np.float32).bound_impl)
-    comp_bps.append(ixn_group.to_gpu(np.float32).bound_impl)
+    # Select a single particle to use as the reference, will be frozen
+    local_idxs = np.array([len(coords) - 1], dtype=np.int32)
+    atom_idxs = np.random.choice(np.arange(N, dtype=np.int32), size=5, replace=False)
+    potential.atom_idxs = atom_idxs
+    nb_pot = potential.to_gpu(np.float32)
 
     v0 = np.zeros_like(coords)
+    bps = [nb_pot.bind(params).bound_impl]
+
+    ref_vals = [bp.execute(coords, box) for bp in bps]
 
     intg = LangevinIntegrator(temperature, dt, friction, masses, seed)
 
+    intg_impl = intg.impl()
+
     steps = 100
+    burn_in = 0
 
-    ctxt = custom_ops.Context(coords, v0, box, intg.impl(), ref_bps)
-    ctxt.setup_local_md(temperature, True)
-    ref_xs, ref_boxes = ctxt.multiple_steps(steps)
-    ref_local_xs, ref_local_boxes = ctxt.multiple_steps_local(steps, ligand_idxs, burn_in=0)
+    ctxt = custom_ops.Context(coords, v0, box, intg_impl, bps)
+    ctxt.setup_local_md(temperature, freeze_reference)
+    ref_xs, ref_boxes = ctxt.multiple_steps_local(steps, local_idxs, radius=radius, burn_in=burn_in)
 
-    ctxt = custom_ops.Context(coords, v0, box, intg.impl(), comp_bps)
-    ctxt.setup_local_md(temperature, True)
-    test_xs, test_boxes = ctxt.multiple_steps(steps)
-    test_local_xs, test_local_boxes = ctxt.multiple_steps_local(steps, ligand_idxs, burn_in=0)
-
-    # Verify that the all pairs is set back to the original atom indices set
-    np.testing.assert_array_equal(all_pairs_bound.get_potential().get_atom_idxs(), non_ligand_idxs)
-
-    # Global MD should be identical, verify that these match before moving onto local where potentials are modified
-    np.testing.assert_array_equal(ref_xs, test_xs)
-    np.testing.assert_array_equal(ref_boxes, test_boxes)
-
-    np.testing.assert_array_equal(ref_local_xs, test_local_xs)
-    np.testing.assert_array_equal(ref_local_boxes, test_local_boxes)
+    for (ref_du_dx, ref_u), bp in zip(ref_vals, bps):
+        test_du_dx, test_u = bp.execute(coords, box)
+        np.testing.assert_array_equal(ref_du_dx, test_du_dx)
+        np.testing.assert_equal(ref_u, test_u)
+        check_force_norm(-ref_du_dx)
+        test_du_dx, _ = bp.execute(ref_xs[-1], ref_boxes[-1])
+        check_force_norm(-test_du_dx)
