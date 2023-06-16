@@ -12,7 +12,7 @@ __global__ void update_forward_baoab(
     RealType *__restrict__ x_t,
     RealType *__restrict__ v_t,
     const unsigned long long *__restrict__ du_dx,
-    const RealType dt) {
+    const RealType half_dt) {
 
     int kernel_idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (kernel_idx >= N * D) {
