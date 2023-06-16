@@ -12,7 +12,7 @@
 
 namespace timemachine {
 
-void verify_atom_idxs(int N, const std::vector<int> &atom_idxs, const bool allow_empty) {
+void verify_atom_idxs(const int N, const std::vector<int> &atom_idxs, const bool allow_empty) {
     if (atom_idxs.size() == 0) {
         if (allow_empty) {
             // No further checks if we allow the indices to be empty
