@@ -44,7 +44,7 @@ void PeriodicTorsion<RealType>::execute_device(
     unsigned long long *d_u,
     cudaStream_t stream) {
 
-    const int tpb = default_threads_per_block;
+    const int tpb = DEFAULT_THREADS_PER_BLOCK;
     const int blocks = ceil_divide(T_, tpb);
 
     const int D = 3;
