@@ -4,7 +4,7 @@
 
 #define FULL_MASK 0xffffffff
 
-const int tile_size = warp_size;
+static const int TILE_SIZE = WARP_SIZE;
 
 template <typename RealType>
 void __global__ k_find_block_bounds(
@@ -27,7 +27,7 @@ void __global__ k_find_block_bounds(
     if (tile_idx >= num_tiles) {
         return;
     }
-    const int row_idx = tile_idx * tile_size;
+    const int row_idx = tile_idx * TILE_SIZE;
     if (row_idx >= num_indices) {
         return;
     }
@@ -52,7 +52,7 @@ void __global__ k_find_block_bounds(
     RealType maxPos_y = pos_y;
     RealType maxPos_z = pos_z;
 
-    const int last = min(row_idx + tile_size, num_indices);
+    const int last = min(row_idx + TILE_SIZE, num_indices);
     for (int i = row_idx + 1; i < last; i++) {
         atom_idx = row_idxs[i];
         pos_x = coords[atom_idx * 3 + 0];
@@ -99,12 +99,12 @@ void __global__ k_compact_trim_atoms(
     unsigned int *__restrict__ interactingAtoms) {
 
     // we can probably get away with using only 32 if we do some fancier remainder tricks, but this isn't a huge save
-    __shared__ int ixn_j_buffer[2 * warp_size];
+    __shared__ int ixn_j_buffer[2 * WARP_SIZE];
 
     ixn_j_buffer[threadIdx.x] = N;
-    ixn_j_buffer[warp_size + threadIdx.x] = N;
+    ixn_j_buffer[WARP_SIZE + threadIdx.x] = N;
 
-    const int indexInWarp = threadIdx.x % warp_size;
+    const int indexInWarp = threadIdx.x % WARP_SIZE;
     const int warpMask = (1 << indexInWarp) - 1;
     const int row_block_idx = blockIdx.x;
 
@@ -113,7 +113,7 @@ void __global__ k_compact_trim_atoms(
 
     for (int trim_block_idx = 0; trim_block_idx < Y; trim_block_idx++) {
 
-        int atom_j_idx = trim_atoms[row_block_idx * Y * warp_size + trim_block_idx * warp_size + threadIdx.x];
+        int atom_j_idx = trim_atoms[row_block_idx * Y * WARP_SIZE + trim_block_idx * WARP_SIZE + threadIdx.x];
         bool interacts = atom_j_idx < N;
 
         int includeAtomFlags = __ballot_sync(FULL_MASK, interacts);
@@ -125,18 +125,18 @@ void __global__ k_compact_trim_atoms(
         }
         neighborsInBuffer += __popc(includeAtomFlags);
 
-        if (neighborsInBuffer > warp_size) {
+        if (neighborsInBuffer > WARP_SIZE) {
             int tilesToStore = 1;
             if (indexInWarp == 0) {
                 sync_start[0] = atomicAdd(interactionCount, tilesToStore);
             }
             __syncwarp();
             interactingTiles[sync_start[0]] = row_block_idx; // IS THIS CORRECT? CONTESTED
-            interactingAtoms[sync_start[0] * warp_size + threadIdx.x] = ixn_j_buffer[threadIdx.x];
+            interactingAtoms[sync_start[0] * WARP_SIZE + threadIdx.x] = ixn_j_buffer[threadIdx.x];
 
-            ixn_j_buffer[threadIdx.x] = ixn_j_buffer[warp_size + threadIdx.x];
-            ixn_j_buffer[warp_size + threadIdx.x] = N; // reset old values
-            neighborsInBuffer -= warp_size;
+            ixn_j_buffer[threadIdx.x] = ixn_j_buffer[WARP_SIZE + threadIdx.x];
+            ixn_j_buffer[WARP_SIZE + threadIdx.x] = N; // reset old values
+            neighborsInBuffer -= WARP_SIZE;
         }
     }
 
@@ -147,7 +147,7 @@ void __global__ k_compact_trim_atoms(
         }
         __syncwarp();
         interactingTiles[sync_start[0]] = row_block_idx;
-        interactingAtoms[sync_start[0] * warp_size + threadIdx.x] = ixn_j_buffer[threadIdx.x];
+        interactingAtoms[sync_start[0] * WARP_SIZE + threadIdx.x] = ixn_j_buffer[threadIdx.x];
     }
 }
 
@@ -158,8 +158,8 @@ This is launched with a threadblock size of 32, (i.e. one warp).
 
 Each block proceeds as follows:
 
-1. Loads its own row block (tile_size = 32 atoms).
-2. Compare the row block against tile_size = 32 other column blocks via bounding box tests.
+1. Loads its own row block (TILE_SIZE = 32 atoms).
+2. Compare the row block against TILE_SIZE = 32 other column blocks via bounding box tests.
 3. Determine which blocks potentially interact using warp-level programming.
 4. Loop over each interacting block j, and see which row block atoms may interact with j's bbox.
 5. For atoms that interact, do a fine-grained comparison of each row block again against each col block atom.
@@ -186,21 +186,21 @@ void __global__ k_find_blocks_with_ixns(
     const double *__restrict__ box,
     unsigned int *__restrict__ interactionCount, // number of tiles that have interactions
     int *__restrict__ interactingTiles,          // the row block idx of the tile that is interacting
-    unsigned int *__restrict__ interactingAtoms, // [NR * warp_size] atom indices interacting with each row block
+    unsigned int *__restrict__ interactingAtoms, // [NR * WARP_SIZE] atom indices interacting with each row block
     unsigned int *__restrict__ trim_atoms,       // the left-over trims that will later be compacted
     const double cutoff) {
 
-    static_assert(tile_size == warp_size, "tile_size != warp_size is not currently supported");
+    static_assert(TILE_SIZE == WARP_SIZE, "TILE_SIZE != WARP_SIZE is not currently supported");
 
-    const int indexInWarp = threadIdx.x % warp_size;
+    const int indexInWarp = threadIdx.x % WARP_SIZE;
     const int warpMask = (1 << indexInWarp) - 1;
 
-    // we can probably get away with using only warp_size if we do some fancier remainder tricks, but this isn't a huge save
-    __shared__ int ixn_j_buffer[2 * warp_size];
+    // we can probably get away with using only WARP_SIZE if we do some fancier remainder tricks, but this isn't a huge save
+    __shared__ int ixn_j_buffer[2 * WARP_SIZE];
 
     // initialize
     ixn_j_buffer[threadIdx.x] = N;
-    ixn_j_buffer[warp_size + threadIdx.x] = N;
+    ixn_j_buffer[WARP_SIZE + threadIdx.x] = N;
 
     __shared__ volatile int sync_start[1];
 
@@ -224,7 +224,7 @@ void __global__ k_find_blocks_with_ixns(
     RealType pos_i_y = atom_i_idx < N ? coords[atom_i_idx * 3 + 1] : 0;
     RealType pos_i_z = atom_i_idx < N ? coords[atom_i_idx * 3 + 2] : 0;
 
-    const int NUM_COL_BLOCKS = (NC + tile_size - 1) / tile_size;
+    const int NUM_COL_BLOCKS = (NC + TILE_SIZE - 1) / TILE_SIZE;
 
     RealType bx = box[0 * 3 + 0];
     RealType by = box[1 * 3 + 1];
@@ -255,7 +255,7 @@ void __global__ k_find_blocks_with_ixns(
 
     const RealType cutoff_squared = static_cast<RealType>(cutoff) * static_cast<RealType>(cutoff);
 
-    int col_block_base = blockIdx.y * tile_size;
+    int col_block_base = blockIdx.y * TILE_SIZE;
 
     int col_block_idx = col_block_base + indexInWarp;
     bool include_col_block = (col_block_idx < NUM_COL_BLOCKS) && (!UPPER_TRIAG || col_block_idx >= row_block_idx);
@@ -309,7 +309,7 @@ void __global__ k_find_blocks_with_ixns(
         includeBlockFlags &= includeBlockFlags - 1;
 
         int col_block = col_block_base + offset;
-        int atom_j_idx = col_block * warp_size + threadIdx.x; // each thread loads a different atom
+        int atom_j_idx = col_block * WARP_SIZE + threadIdx.x; // each thread loads a different atom
         atom_j_idx = atom_j_idx < NC ? column_idxs[atom_j_idx] : N;
 
         // Compute overlap between column bounding box and row atom
@@ -412,22 +412,22 @@ void __global__ k_find_blocks_with_ixns(
         }
         neighborsInBuffer += __popc(includeAtomFlags);
 
-        if (neighborsInBuffer > warp_size) {
+        if (neighborsInBuffer > WARP_SIZE) {
             int tilesToStore = 1;
             if (indexInWarp == 0) {
                 sync_start[0] = atomicAdd(interactionCount, tilesToStore);
             }
             __syncwarp();
             interactingTiles[sync_start[0]] = row_block_idx;
-            interactingAtoms[sync_start[0] * warp_size + threadIdx.x] = ixn_j_buffer[threadIdx.x];
+            interactingAtoms[sync_start[0] * WARP_SIZE + threadIdx.x] = ixn_j_buffer[threadIdx.x];
 
-            ixn_j_buffer[threadIdx.x] = ixn_j_buffer[warp_size + threadIdx.x];
-            ixn_j_buffer[warp_size + threadIdx.x] = N; // reset old values
-            neighborsInBuffer -= warp_size;
+            ixn_j_buffer[threadIdx.x] = ixn_j_buffer[WARP_SIZE + threadIdx.x];
+            ixn_j_buffer[WARP_SIZE + threadIdx.x] = N; // reset old values
+            neighborsInBuffer -= WARP_SIZE;
         }
     }
 
     // store trim
     const int Y = gridDim.y;
-    trim_atoms[blockIdx.x * Y * warp_size + blockIdx.y * warp_size + threadIdx.x] = ixn_j_buffer[threadIdx.x];
+    trim_atoms[blockIdx.x * Y * WARP_SIZE + blockIdx.y * WARP_SIZE + threadIdx.x] = ixn_j_buffer[threadIdx.x];
 }

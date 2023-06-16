@@ -316,7 +316,7 @@ void MonteCarloBarostat::inplace_move(
     gpuErrchk(cudaMemcpyAsync(d_x_after_, d_x, N_ * 3 * sizeof(*d_x), cudaMemcpyDeviceToDevice, stream));
     gpuErrchk(cudaMemcpyAsync(d_box_after_, d_box, 3 * 3 * sizeof(*d_box_after_), cudaMemcpyDeviceToDevice, stream));
 
-    const int tpb = default_threads_per_block;
+    const int tpb = DEFAULT_THREADS_PER_BLOCK;
     const int blocks = ceil_divide(num_grouped_atoms_, tpb);
 
     find_group_centroids<<<blocks, tpb, 0, stream>>>(num_grouped_atoms_, d_x, d_atom_idxs_, d_mol_idxs_, d_centroids_);

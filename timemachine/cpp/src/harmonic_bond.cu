@@ -47,7 +47,7 @@ void HarmonicBond<RealType>::execute_device(
     }
 
     if (B_ > 0) {
-        const int tpb = default_threads_per_block;
+        const int tpb = DEFAULT_THREADS_PER_BLOCK;
         const int blocks = ceil_divide(B_, tpb);
 
         k_harmonic_bond<RealType><<<blocks, tpb, 0, stream>>>(B_, d_x, d_p, d_bond_idxs_, d_du_dx, d_du_dp, d_u);
