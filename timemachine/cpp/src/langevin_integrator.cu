@@ -73,7 +73,7 @@ void LangevinIntegrator::step_fwd(
         curandErrchk(templateCurandNormal(cr_rng_, d_noise_, round_up_even(noise_batch_size_ * N_ * D), 0.0, 1.0));
     }
 
-    size_t tpb = default_threads_per_block;
+    size_t tpb = DEFAULT_THREADS_PER_BLOCK;
     // Run in blocks so as to ensure that neighboring threads are modifying the same atom
     // which allows more efficient memory accesses/writes
     size_t n_blocks = ceil_divide(N_ * D, tpb);
