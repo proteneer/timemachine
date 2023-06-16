@@ -13,6 +13,7 @@ from timemachine.integrator import langevin_coefficients
 from timemachine.lib import LangevinIntegrator, MonteCarloBarostat, VelocityVerletIntegrator, custom_ops
 from timemachine.md.barostat.utils import get_bond_list, get_group_indices
 from timemachine.md.enhanced import get_solvent_phase_system
+from timemachine.md.minimizer import check_force_norm
 from timemachine.potentials import (
     Nonbonded,
     NonbondedAllPairs,
@@ -536,7 +537,7 @@ def test_multiple_steps_local_consistency(freeze_reference):
     num_steps = 500
     x_interval = 100
 
-    unbound_potentials, sys_params, masses, coords, box = get_solvent_phase_system(mol, ff, 0.0, minimize_energy=False)
+    unbound_potentials, sys_params, masses, coords, box = get_solvent_phase_system(mol, ff, 0.0, minimize_energy=True)
     v0 = np.zeros_like(coords)
     bps = []
     for p, bp in zip(sys_params, unbound_potentials):
@@ -586,6 +587,7 @@ def test_multiple_steps_local_consistency(freeze_reference):
         test_du_dx, test_u = bp.execute(coords, box)
         np.testing.assert_array_equal(ref_du_dx, test_du_dx)
         np.testing.assert_equal(ref_u, test_u)
+        check_force_norm(-ref_du_dx)
 
     # Verify that running with a barostat doesn't change the results
     group_idxs = get_group_indices(get_bond_list(unbound_potentials[0]), len(masses))
@@ -917,7 +919,8 @@ def test_setup_context_with_references():
         assert ref() is None
 
 
-def test_local_md_nonbonded_all_pairs_subset():
+@pytest.mark.parametrize("lamb", [0.0, 0.5, 1.0])
+def test_local_md_nonbonded_all_pairs_subset(lamb):
     """Test that if the nonbonded all pairs is set up on a subset of the system, that local MD can correctly
     simulate the local region without double counting interactions"""
     seed = 2023
@@ -931,7 +934,9 @@ def test_local_md_nonbonded_all_pairs_subset():
 
     # Lambda must either be 1.0 (uninteracting) or minimize energy, chose 1.0 as cheaper to not-minimize
     # else will overflow and coordinates will be different between tests
-    unbound_potentials, sys_params, masses, coords, box = get_solvent_phase_system(mol, ff, 1.0, minimize_energy=False)
+    unbound_potentials, sys_params, masses, coords, box = get_solvent_phase_system(
+        mol, ff, lamb, minimize_energy=lamb < 1.0
+    )
 
     identity_idxs = np.arange(0, len(coords), dtype=np.int32)
     ligand_idxs = np.arange(len(coords) - mol.GetNumAtoms(), len(coords), dtype=np.int32)
