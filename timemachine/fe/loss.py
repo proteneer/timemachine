@@ -11,7 +11,7 @@ from timemachine.fe import bar as tmbar
 # https://github.com/google/jax/issues/1142
 # courtesy of mattjj
 def mybar_impl(w):
-    A = pymbar.bar(w[0], w[1])["Delta_f"]
+    A, _ = pymbar.BAR(w[0], w[1])
     return A
 
 
