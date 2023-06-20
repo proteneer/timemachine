@@ -13,7 +13,7 @@ void __device__ __forceinline__ accumulate(unsigned long long *__restrict acc, u
     atomicAdd(acc, Negated ? -val : val);
 }
 
-template <typename RealType, bool Negated>
+template <typename RealType, bool Negated, bool COMPUTE_U>
 void __global__ k_nonbonded_pair_list(
     const int M, // number of pairs
     const double *__restrict__ coords,
@@ -33,16 +33,6 @@ void __global__ k_nonbonded_pair_list(
     // do need the calculation done for exclusions to perfectly mirror
     // that of the nonbonded kernel itself. Remember that floating points
     // commute but are not associative.
-    __shared__ box_cache<RealType> shared_box;
-    if (threadIdx.x == 0) {
-        shared_box.x = box[0 * 3 + 0];
-        shared_box.y = box[1 * 3 + 1];
-        shared_box.z = box[2 * 3 + 2];
-        shared_box.inv_x = 1 / shared_box.x;
-        shared_box.inv_y = 1 / shared_box.y;
-        shared_box.inv_z = 1 / shared_box.z;
-    }
-    __syncthreads();
 
     const int pair_idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (pair_idx >= M) {
@@ -87,24 +77,32 @@ void __global__ k_nonbonded_pair_list(
     RealType real_cutoff = static_cast<RealType>(cutoff);
     RealType cutoff_squared = real_cutoff * real_cutoff;
 
-    RealType charge_scale = scales[pair_idx * 2 + 0];
-    RealType lj_scale = scales[pair_idx * 2 + 1];
+    RealType box_x = box[0 * 3 + 0];
+    RealType box_y = box[1 * 3 + 1];
+    RealType box_z = box[2 * 3 + 2];
+
+    RealType box_inv_x = 1 / box_x;
+    RealType box_inv_y = 1 / box_y;
+    RealType box_inv_z = 1 / box_z;
 
     RealType delta_x = ci_x - cj_x;
     RealType delta_y = ci_y - cj_y;
     RealType delta_z = ci_z - cj_z;
 
-    delta_x -= shared_box.x * nearbyint(delta_x * shared_box.inv_x);
-    delta_y -= shared_box.y * nearbyint(delta_y * shared_box.inv_y);
-    delta_z -= shared_box.z * nearbyint(delta_z * shared_box.inv_z);
+    delta_x -= box_x * nearbyint(delta_x * box_inv_x);
+    delta_y -= box_y * nearbyint(delta_y * box_inv_y);
+    delta_z -= box_z * nearbyint(delta_z * box_inv_z);
 
     RealType delta_w = w_i - w_j;
     RealType d2ij = delta_x * delta_x + delta_y * delta_y + delta_z * delta_z + delta_w * delta_w;
 
-    // see note: this must be strictly less than
+    // Note: this must be strictly less than to evaluate
     if (d2ij >= cutoff_squared) {
         return;
     }
+
+    RealType charge_scale = scales[pair_idx * 2 + 0];
+    RealType lj_scale = scales[pair_idx * 2 + 1];
 
     RealType u;
     RealType ebd;
@@ -112,7 +110,7 @@ void __global__ k_nonbonded_pair_list(
     RealType dij;
     RealType inv_dij;
     RealType inv_d2ij;
-    compute_electrostatics<RealType, true>(
+    compute_electrostatics<RealType, COMPUTE_U>(
         charge_scale, qi, qj, d2ij, real_beta, dij, inv_dij, inv_d2ij, ebd, es_prefactor, u);
 
     RealType delta_prefactor = es_prefactor;
@@ -120,7 +118,7 @@ void __global__ k_nonbonded_pair_list(
     RealType sig_grad;
     RealType eps_grad;
     if (eps_i != 0 && eps_j != 0) {
-        compute_lj<RealType, true>(
+        compute_lj<RealType, COMPUTE_U>(
             lj_scale, eps_i, eps_j, sig_i, sig_j, inv_dij, inv_d2ij, u, delta_prefactor, sig_grad, eps_grad);
     }
 
