@@ -50,57 +50,51 @@ void __global__ k_nonbonded_pair_list(
     }
 
     int atom_i_idx = pair_idxs[pair_idx * 2 + 0];
-    int atom_j_idx = pair_idxs[pair_idx * 2 + 1];
-    int params_i_idx = atom_i_idx * PARAMS_PER_ATOM;
-    int params_j_idx = atom_j_idx * PARAMS_PER_ATOM;
-    int w_param_idx_i = params_i_idx + PARAM_OFFSET_W;
-    int w_param_idx_j = params_j_idx + PARAM_OFFSET_W;
 
-    RealType delta_x = coords[atom_i_idx * 3 + 0] - coords[atom_j_idx * 3 + 0];
-    RealType delta_y = coords[atom_i_idx * 3 + 1] - coords[atom_j_idx * 3 + 1];
-    RealType delta_z = coords[atom_i_idx * 3 + 2] - coords[atom_j_idx * 3 + 2];
-
-    delta_x -= shared_box.x * nearbyint(delta_x * shared_box.inv_x);
-    delta_y -= shared_box.y * nearbyint(delta_y * shared_box.inv_y);
-    delta_z -= shared_box.z * nearbyint(delta_z * shared_box.inv_z);
-
-    RealType real_cutoff = static_cast<RealType>(cutoff);
-    RealType cutoff_squared = real_cutoff * real_cutoff;
-    RealType delta_w = params[w_param_idx_i] - params[w_param_idx_j];
-    RealType d2ij = delta_x * delta_x + delta_y * delta_y + delta_z * delta_z + delta_w * delta_w;
-    // Note: must only compute pair if strictly less than
-    if (d2ij >= cutoff_squared) {
-        return;
-    }
+    RealType ci_x = coords[atom_i_idx * 3 + 0];
+    RealType ci_y = coords[atom_i_idx * 3 + 1];
+    RealType ci_z = coords[atom_i_idx * 3 + 2];
 
     unsigned long long gi_x = 0;
     unsigned long long gi_y = 0;
     unsigned long long gi_z = 0;
 
+    int params_i_idx = atom_i_idx * PARAMS_PER_ATOM;
     int charge_param_idx_i = params_i_idx + PARAM_OFFSET_CHARGE;
     int lj_param_idx_sig_i = params_i_idx + PARAM_OFFSET_SIG;
     int lj_param_idx_eps_i = params_i_idx + PARAM_OFFSET_EPS;
+    int w_param_idx_i = params_i_idx + PARAM_OFFSET_W;
 
     RealType qi = params[charge_param_idx_i];
     RealType sig_i = params[lj_param_idx_sig_i];
     RealType eps_i = params[lj_param_idx_eps_i];
+    RealType w_i = params[w_param_idx_i];
 
     unsigned long long g_qi = 0;
     unsigned long long g_sigi = 0;
     unsigned long long g_epsi = 0;
     unsigned long long g_wi = 0;
 
+    int atom_j_idx = pair_idxs[pair_idx * 2 + 1];
+
+    RealType cj_x = coords[atom_j_idx * 3 + 0];
+    RealType cj_y = coords[atom_j_idx * 3 + 1];
+    RealType cj_z = coords[atom_j_idx * 3 + 2];
+
     unsigned long long gj_x = 0;
     unsigned long long gj_y = 0;
     unsigned long long gj_z = 0;
 
+    int params_j_idx = atom_j_idx * PARAMS_PER_ATOM;
     int charge_param_idx_j = params_j_idx + PARAM_OFFSET_CHARGE;
     int lj_param_idx_sig_j = params_j_idx + PARAM_OFFSET_SIG;
     int lj_param_idx_eps_j = params_j_idx + PARAM_OFFSET_EPS;
+    int w_param_idx_j = params_j_idx + PARAM_OFFSET_W;
 
     RealType qj = params[charge_param_idx_j];
     RealType sig_j = params[lj_param_idx_sig_j];
     RealType eps_j = params[lj_param_idx_eps_j];
+    RealType w_j = params[w_param_idx_j];
 
     unsigned long long g_qj = 0;
     unsigned long long g_sigj = 0;
@@ -109,35 +103,51 @@ void __global__ k_nonbonded_pair_list(
 
     RealType real_beta = static_cast<RealType>(beta);
 
+    RealType real_cutoff = static_cast<RealType>(cutoff);
+    RealType cutoff_squared = real_cutoff * real_cutoff;
+
     RealType charge_scale = scales[pair_idx * 2 + 0];
     RealType lj_scale = scales[pair_idx * 2 + 1];
 
+    RealType delta_x = ci_x - cj_x;
+    RealType delta_y = ci_y - cj_y;
+    RealType delta_z = ci_z - cj_z;
+
+    delta_x -= shared_box.x * nearbyint(delta_x * shared_box.inv_x);
+    delta_y -= shared_box.y * nearbyint(delta_y * shared_box.inv_y);
+    delta_z -= shared_box.z * nearbyint(delta_z * shared_box.inv_z);
+
+    RealType delta_w = w_i - w_j;
+    RealType d2ij = delta_x * delta_x + delta_y * delta_y + delta_z * delta_z + delta_w * delta_w;
+
     unsigned long long energy = 0;
 
-    RealType u;
-    RealType ebd;
-    RealType es_prefactor;
-    RealType dij;
-    RealType inv_dij;
-    RealType inv_d2ij;
-    compute_electrostatics<RealType, true>(
-        charge_scale, qi, qj, d2ij, beta, dij, inv_dij, inv_d2ij, ebd, es_prefactor, u);
+    // see note: this must be strictly less than
+    if (d2ij < cutoff_squared) {
 
-    RealType delta_prefactor = es_prefactor;
-    // lennard jones force
-    if (eps_i != 0 && eps_j != 0) {
-        RealType sig_grad;
-        RealType eps_grad;
-        compute_lj<RealType, true>(
-            lj_scale, eps_i, eps_j, sig_i, sig_j, inv_dij, inv_d2ij, u, delta_prefactor, sig_grad, eps_grad);
+        RealType u;
+        RealType ebd;
+        RealType es_prefactor;
+        RealType dij;
+        RealType inv_dij;
+        RealType inv_d2ij;
+        compute_electrostatics<RealType, true>(
+            charge_scale, qi, qj, d2ij, beta, dij, inv_dij, inv_d2ij, ebd, es_prefactor, u);
 
-        g_sigi += FLOAT_TO_FIXED_DU_DP<RealType, FIXED_EXPONENT_DU_DSIG>(sig_grad);
-        g_sigj += FLOAT_TO_FIXED_DU_DP<RealType, FIXED_EXPONENT_DU_DSIG>(sig_grad);
-        g_epsi += FLOAT_TO_FIXED_DU_DP<RealType, FIXED_EXPONENT_DU_DEPS>(eps_grad * eps_j);
-        g_epsj += FLOAT_TO_FIXED_DU_DP<RealType, FIXED_EXPONENT_DU_DEPS>(eps_grad * eps_i);
-    }
+        RealType delta_prefactor = es_prefactor;
+        // lennard jones force
+        if (eps_i != 0 && eps_j != 0) {
+            RealType sig_grad;
+            RealType eps_grad;
+            compute_lj<RealType, true>(
+                lj_scale, eps_i, eps_j, sig_i, sig_j, inv_dij, inv_d2ij, u, delta_prefactor, sig_grad, eps_grad);
 
-    if (du_dx) {
+            g_sigi += FLOAT_TO_FIXED_DU_DP<RealType, FIXED_EXPONENT_DU_DSIG>(sig_grad);
+            g_sigj += FLOAT_TO_FIXED_DU_DP<RealType, FIXED_EXPONENT_DU_DSIG>(sig_grad);
+            g_epsi += FLOAT_TO_FIXED_DU_DP<RealType, FIXED_EXPONENT_DU_DEPS>(eps_grad * eps_j);
+            g_epsj += FLOAT_TO_FIXED_DU_DP<RealType, FIXED_EXPONENT_DU_DEPS>(eps_grad * eps_i);
+        }
+
         gi_x += FLOAT_TO_FIXED_NONBONDED(delta_prefactor * delta_x);
         gi_y += FLOAT_TO_FIXED_NONBONDED(delta_prefactor * delta_y);
         gi_z += FLOAT_TO_FIXED_NONBONDED(delta_prefactor * delta_z);
@@ -146,39 +156,41 @@ void __global__ k_nonbonded_pair_list(
         gj_y += FLOAT_TO_FIXED_NONBONDED(-delta_prefactor * delta_y);
         gj_z += FLOAT_TO_FIXED_NONBONDED(-delta_prefactor * delta_z);
 
-        accumulate<Negated>(du_dx + atom_i_idx * 3 + 0, gi_x);
-        accumulate<Negated>(du_dx + atom_i_idx * 3 + 1, gi_y);
-        accumulate<Negated>(du_dx + atom_i_idx * 3 + 2, gi_z);
+        // energy is size extensive so this may not be a good idea
+        energy += FLOAT_TO_FIXED_NONBONDED(u);
 
-        accumulate<Negated>(du_dx + atom_j_idx * 3 + 0, gj_x);
-        accumulate<Negated>(du_dx + atom_j_idx * 3 + 1, gj_y);
-        accumulate<Negated>(du_dx + atom_j_idx * 3 + 2, gj_z);
-    }
-
-    if (du_dp) {
         g_qi += FLOAT_TO_FIXED_DU_DP<RealType, FIXED_EXPONENT_DU_DCHARGE>(charge_scale * qj * inv_dij * ebd);
         g_qj += FLOAT_TO_FIXED_DU_DP<RealType, FIXED_EXPONENT_DU_DCHARGE>(charge_scale * qi * inv_dij * ebd);
 
         g_wi += FLOAT_TO_FIXED_DU_DP<RealType, FIXED_EXPONENT_DU_DW>(delta_prefactor * delta_w);
         g_wj += FLOAT_TO_FIXED_DU_DP<RealType, FIXED_EXPONENT_DU_DW>(-delta_prefactor * delta_w);
 
-        accumulate<Negated>(du_dp + charge_param_idx_i, g_qi);
-        accumulate<Negated>(du_dp + charge_param_idx_j, g_qj);
+        if (du_dx) {
+            accumulate<Negated>(du_dx + atom_i_idx * 3 + 0, gi_x);
+            accumulate<Negated>(du_dx + atom_i_idx * 3 + 1, gi_y);
+            accumulate<Negated>(du_dx + atom_i_idx * 3 + 2, gi_z);
 
-        accumulate<Negated>(du_dp + lj_param_idx_sig_i, g_sigi);
-        accumulate<Negated>(du_dp + lj_param_idx_eps_i, g_epsi);
+            accumulate<Negated>(du_dx + atom_j_idx * 3 + 0, gj_x);
+            accumulate<Negated>(du_dx + atom_j_idx * 3 + 1, gj_y);
+            accumulate<Negated>(du_dx + atom_j_idx * 3 + 2, gj_z);
+        }
 
-        accumulate<Negated>(du_dp + lj_param_idx_sig_j, g_sigj);
-        accumulate<Negated>(du_dp + lj_param_idx_eps_j, g_epsj);
+        if (du_dp) {
+            accumulate<Negated>(du_dp + charge_param_idx_i, g_qi);
+            accumulate<Negated>(du_dp + charge_param_idx_j, g_qj);
 
-        accumulate<Negated>(du_dp + w_param_idx_i, g_wi);
-        accumulate<Negated>(du_dp + w_param_idx_j, g_wj);
-    }
+            accumulate<Negated>(du_dp + lj_param_idx_sig_i, g_sigi);
+            accumulate<Negated>(du_dp + lj_param_idx_eps_i, g_epsi);
 
-    if (u_buffer) {
+            accumulate<Negated>(du_dp + lj_param_idx_sig_j, g_sigj);
+            accumulate<Negated>(du_dp + lj_param_idx_eps_j, g_epsj);
 
-        // energy is size extensive so this may not be a good idea
-        energy += FLOAT_TO_FIXED_NONBONDED(u);
-        accumulate<Negated>(u_buffer + atom_i_idx, energy);
+            accumulate<Negated>(du_dp + w_param_idx_i, g_wi);
+            accumulate<Negated>(du_dp + w_param_idx_j, g_wj);
+        }
+
+        if (u_buffer) {
+            accumulate<Negated>(u_buffer + atom_i_idx, energy);
+        }
     }
 }
