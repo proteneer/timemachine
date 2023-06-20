@@ -68,7 +68,7 @@ void LangevinIntegrator::step_fwd(
     curandErrchk(curandSetStream(cr_rng_, stream));
     curandErrchk(templateCurandNormal(cr_rng_, d_noise_, round_up_even(N_ * D), 0.0, 1.0));
 
-    size_t tpb = default_threads_per_block;
+    size_t tpb = DEFAULT_THREADS_PER_BLOCK;
     size_t n_blocks = ceil_divide(N_, tpb);
     dim3 dimGrid_dx(n_blocks, D);
 

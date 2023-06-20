@@ -196,7 +196,7 @@ void NonbondedAllPairs<RealType>::sort(const double *d_coords, const double *d_b
 template <typename RealType>
 void NonbondedAllPairs<RealType>::hilbert_sort(const double *d_coords, const double *d_box, cudaStream_t stream) {
 
-    const int tpb = default_threads_per_block;
+    const int tpb = DEFAULT_THREADS_PER_BLOCK;
     const int B = ceil_divide(K_, tpb);
 
     k_coords_to_kv_gather<<<B, tpb, 0, stream>>>(
@@ -259,7 +259,7 @@ void NonbondedAllPairs<RealType>::execute_device(
             std::to_string(P) + ", N_*" + std::to_string(PARAMS_PER_ATOM) + "=" + std::to_string(N_ * PARAMS_PER_ATOM));
     }
 
-    const int tpb = default_threads_per_block;
+    const int tpb = DEFAULT_THREADS_PER_BLOCK;
 
     if (this->needs_sort()) {
         // Sorting always triggers a neighborlist rebuild

@@ -135,9 +135,9 @@ void __device__ v_nonbonded_unified(
 
     int row_block_idx = ixn_tiles[tile_idx];
 
-    const int warp_idx = threadIdx.x % warp_size;
+    const int warp_idx = threadIdx.x % WARP_SIZE;
 
-    const int index = row_block_idx * warp_size + warp_idx;
+    const int index = row_block_idx * WARP_SIZE + warp_idx;
     const unsigned int atom_i_idx = index < NR ? row_idxs[index] : N;
 
     RealType ci_x = atom_i_idx < N ? coords[atom_i_idx * 3 + 0] : 0;
@@ -165,7 +165,7 @@ void __device__ v_nonbonded_unified(
     unsigned long long g_wi = 0;
 
     // i idx is contiguous but j is not, so we should swap them to avoid having to shuffle atom_j_idx
-    int atom_j_idx = ixn_atoms[tile_idx * warp_size + warp_idx];
+    int atom_j_idx = ixn_atoms[tile_idx * WARP_SIZE + warp_idx];
 
     RealType cj_x = atom_j_idx < N ? coords[atom_j_idx * 3 + 0] : 0;
     RealType cj_y = atom_j_idx < N ? coords[atom_j_idx * 3 + 1] : 0;
@@ -198,9 +198,9 @@ void __device__ v_nonbonded_unified(
 
     RealType real_beta = static_cast<RealType>(beta);
 
-    const int src_lane = (warp_idx + 1) % warp_size; // fixed
+    const int src_lane = (warp_idx + 1) % WARP_SIZE; // fixed
     // #pragma unroll
-    for (int round = 0; round < warp_size; round++) {
+    for (int round = 0; round < WARP_SIZE; round++) {
 
         RealType delta_x = ci_x - cj_x;
         RealType delta_y = ci_y - cj_y;
@@ -372,7 +372,7 @@ void __global__ k_nonbonded_unified(
     // Tile size is the same as warp size but it doesn't have to be.
     // Can be used interchangably at the moment, but in the future we may have different
     // tile sizes.
-    const int tile_size = warp_size;
+    const int tile_size = WARP_SIZE;
 
     const int tiles_per_block = blockDim.x / tile_size;
     const int stride = gridDim.x * tiles_per_block;

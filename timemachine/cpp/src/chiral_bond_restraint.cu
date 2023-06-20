@@ -56,7 +56,7 @@ void ChiralBondRestraint<RealType>::execute_device(
     }
 
     if (R_ > 0) {
-        const int tpb = default_threads_per_block;
+        const int tpb = DEFAULT_THREADS_PER_BLOCK;
         const int blocks = ceil_divide(R_, tpb);
 
         k_chiral_bond_restraint<RealType>
