@@ -60,9 +60,6 @@ NonbondedInteractionGroup<RealType>::NonbondedInteractionGroup(
     cudaSafeMalloc(&d_sorted_du_dx_, N_ * 3 * sizeof(*d_sorted_du_dx_));
     cudaSafeMalloc(&d_sorted_du_dp_, N_ * PARAMS_PER_ATOM * sizeof(*d_sorted_du_dp_));
 
-    gpuErrchk(cudaMallocHost(&p_ixn_count_, 1 * sizeof(*p_ixn_count_)));
-    gpuErrchk(cudaMallocHost(&p_box_, 3 * 3 * sizeof(*p_box_)));
-
     cudaSafeMalloc(&d_nblist_x_, N_ * 3 * sizeof(*d_nblist_x_));
     gpuErrchk(cudaMemset(d_nblist_x_, 0, N_ * 3 * sizeof(*d_nblist_x_))); // set non-sensical positions
     cudaSafeMalloc(&d_nblist_box_, 3 * 3 * sizeof(*d_nblist_x_));
@@ -127,9 +124,6 @@ template <typename RealType> NonbondedInteractionGroup<RealType>::~NonbondedInte
     gpuErrchk(cudaFree(d_sort_keys_out_));
     gpuErrchk(cudaFree(d_sort_vals_in_));
     gpuErrchk(cudaFree(d_sort_storage_));
-
-    gpuErrchk(cudaFreeHost(p_ixn_count_));
-    gpuErrchk(cudaFreeHost(p_box_));
 
     gpuErrchk(cudaFree(d_nblist_x_));
     gpuErrchk(cudaFree(d_nblist_box_));
@@ -276,34 +270,10 @@ void NonbondedInteractionGroup<RealType>::execute_device(
     if (p_rebuild_nblist_[0] > 0) {
 
         nblist_.build_nblist_device(K, d_sorted_x_, d_box, cutoff_ + nblist_padding_, stream);
-        gpuErrchk(cudaMemcpyAsync(
-            p_ixn_count_, nblist_.get_ixn_count(), 1 * sizeof(*p_ixn_count_), cudaMemcpyDeviceToHost, stream));
-
-        gpuErrchk(cudaMemcpyAsync(p_box_, d_box, 3 * 3 * sizeof(*d_box), cudaMemcpyDeviceToHost, stream));
-
-        // this stream needs to be synchronized so we can be sure that p_ixn_count_ is properly set.
-        gpuErrchk(cudaStreamSynchronize(stream));
-
-        // Verify that the cutoff and box size are valid together. If cutoff is greater than half the box
-        // then a particle can interact with multiple periodic copies.
-        const double db_cutoff = (cutoff_ + nblist_padding_) * 2;
-
-        // Verify the width of the box in all dimensions is greater than twice the cutoff
-        for (int i = 0; i < 3; i++) {
-            if (p_box_[i * 3 + i] < db_cutoff) {
-                throw std::runtime_error(
-                    "Cutoff with padding is more than half of the box width, neighborlist is no longer reliable");
-            }
-        }
 
         gpuErrchk(cudaMemsetAsync(d_rebuild_nblist_, 0, sizeof(*d_rebuild_nblist_), stream));
         gpuErrchk(cudaMemcpyAsync(d_nblist_x_, d_x, N * 3 * sizeof(*d_x), cudaMemcpyDeviceToDevice, stream));
         gpuErrchk(cudaMemcpyAsync(d_nblist_box_, d_box, 3 * 3 * sizeof(*d_box), cudaMemcpyDeviceToDevice, stream));
-    }
-
-    // if the neighborlist is empty, we can return early
-    if (p_ixn_count_[0] == 0) {
-        return;
     }
 
     // look up which kernel we need for this computation
@@ -312,7 +282,7 @@ void NonbondedInteractionGroup<RealType>::execute_device(
     kernel_idx |= d_du_dx ? 1 << 1 : 0;
     kernel_idx |= d_u ? 1 << 2 : 0;
 
-    kernel_ptrs_[kernel_idx]<<<ceil_divide(p_ixn_count_[0], tpb / WARP_SIZE), tpb, 0, stream>>>(
+    kernel_ptrs_[kernel_idx]<<<NONBONDED_KERNEL_BLOCKS, NONBONDED_KERNEL_THREADS_PER_BLOCK, 0, stream>>>(
         K,
         nblist_.get_num_row_idxs(),
         nblist_.get_ixn_count(),

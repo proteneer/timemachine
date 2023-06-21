@@ -123,7 +123,7 @@ void __device__ v_nonbonded_unified(
     const int NR,
     const double *__restrict__ coords,
     const double *__restrict__ params, // [N]
-    box_cache<RealType> &shared_box,   // [6]
+    box_cache<RealType> &shared_box,
     const double beta,
     const double cutoff,
     const unsigned int *__restrict__ row_idxs,
@@ -132,14 +132,6 @@ void __device__ v_nonbonded_unified(
     unsigned long long *__restrict__ du_dx,
     unsigned long long *__restrict__ du_dp,
     unsigned long long *__restrict__ u_buffer) {
-
-    RealType box_x = shared_box.x;
-    RealType box_y = shared_box.y;
-    RealType box_z = shared_box.z;
-
-    RealType inv_box_x = shared_box.inv_x;
-    RealType inv_box_y = shared_box.inv_y;
-    RealType inv_box_z = shared_box.inv_z;
 
     int row_block_idx = ixn_tiles[tile_idx];
 
@@ -214,9 +206,9 @@ void __device__ v_nonbonded_unified(
         RealType delta_y = ci_y - cj_y;
         RealType delta_z = ci_z - cj_z;
 
-        delta_x -= box_x * nearbyint(delta_x * inv_box_x);
-        delta_y -= box_y * nearbyint(delta_y * inv_box_y);
-        delta_z -= box_z * nearbyint(delta_z * inv_box_z);
+        delta_x -= shared_box.x * nearbyint(delta_x * shared_box.inv_x);
+        delta_y -= shared_box.y * nearbyint(delta_y * shared_box.inv_y);
+        delta_z -= shared_box.z * nearbyint(delta_z * shared_box.inv_z);
 
         RealType d2ij = delta_x * delta_x + delta_y * delta_y + delta_z * delta_z;
         RealType delta_w;
