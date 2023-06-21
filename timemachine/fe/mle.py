@@ -1,3 +1,5 @@
+from typing import Union
+
 import networkx as nx
 import numpy as np
 from jax import jit
@@ -215,7 +217,7 @@ def infer_node_vals_and_errs(
 
 
 def infer_node_vals_and_errs_networkx(
-    graph: nx.DiGraph,
+    graph: Union[nx.DiGraph, nx.MultiDiGraph],
     edge_diff_prop: str,
     edge_stddev_prop: str,
     ref_node_val_prop: str,
@@ -224,7 +226,7 @@ def infer_node_vals_and_errs_networkx(
     node_stddev_prop: str = "inferred_dg_stddev",
     n_bootstrap: int = 100,
     seed: int = 0,
-) -> nx.DiGraph:
+) -> Union[nx.DiGraph, nx.MultiDiGraph]:
     """Version of :py:func:`timemachine.fe.mle.infer_node_vals_and_errs` that accepts a directed networkx graph.
 
     Parameters
@@ -252,7 +254,7 @@ def infer_node_vals_and_errs_networkx(
         Subgraph limited to edges with defined edge_diff_prop and edge_stddev_prop, where nodes have been labeled with
         the inferred values of `node_val_prop` and `node_stddev_prop`.
     """
-    assert isinstance(graph, nx.DiGraph), "Graph must be a DiGraph"
+    assert isinstance(graph, (nx.DiGraph, nx.MultiDiGraph)), "Graph must be a DiGraph or MultiDiGraph"
     edges_with_props = [
         e for e, d in graph.edges.items() if d.get(edge_diff_prop) is not None and d.get(edge_stddev_prop) is not None
     ]
@@ -279,7 +281,7 @@ def infer_node_vals_and_errs_networkx(
     edge_idxs = np.array(sg_relabeled.edges)
 
     dgs, dg_errs = infer_node_vals_and_errs(
-        edge_idxs,
+        np.array([e[:2] for e in edge_idxs]),
         np.array([sg_relabeled.edges[e][edge_diff_prop] for e in edge_idxs]),
         np.array([sg_relabeled.edges[e][edge_stddev_prop] for e in edge_idxs]),
         ref_node_idxs,
