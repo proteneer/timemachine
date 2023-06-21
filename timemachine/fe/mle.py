@@ -8,6 +8,8 @@ from jax import value_and_grad
 from jax.scipy.stats import norm
 from scipy.optimize import minimize
 
+NxDiGraph = Union[nx.DiGraph, nx.MultiDiGraph]
+
 
 def make_stddevs_finite(stddevs, min_stddev=1e-3):
     """Ignore claims that stddev < min_stddev"""
@@ -217,7 +219,7 @@ def infer_node_vals_and_errs(
 
 
 def infer_node_vals_and_errs_networkx(
-    graph: Union[nx.DiGraph, nx.MultiDiGraph],
+    graph: NxDiGraph,
     edge_diff_prop: str,
     edge_stddev_prop: str,
     ref_node_val_prop: str,
@@ -226,7 +228,7 @@ def infer_node_vals_and_errs_networkx(
     node_stddev_prop: str = "inferred_dg_stddev",
     n_bootstrap: int = 100,
     seed: int = 0,
-) -> Union[nx.DiGraph, nx.MultiDiGraph]:
+) -> NxDiGraph:
     """Version of :py:func:`timemachine.fe.mle.infer_node_vals_and_errs` that accepts a directed networkx graph.
 
     Parameters
