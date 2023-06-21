@@ -6,7 +6,7 @@
 #include "kernels/k_local_md.cuh"
 #include "local_md_potentials.hpp"
 #include "math_utils.cuh"
-#include "nonbonded_common.cuh"
+#include "nonbonded_common.hpp"
 #include <cub/cub.cuh>
 #include <random>
 #include <vector>

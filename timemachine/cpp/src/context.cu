@@ -8,7 +8,7 @@
 #include "langevin_integrator.hpp"
 #include "local_md_potentials.hpp"
 #include "math_utils.cuh"
-#include "nonbonded_common.cuh"
+#include "nonbonded_common.hpp"
 #include "pinned_host_buffer.hpp"
 #include "set_utils.hpp"
 #include <cub/cub.cuh>

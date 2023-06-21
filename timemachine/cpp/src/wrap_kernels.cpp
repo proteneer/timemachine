@@ -21,7 +21,7 @@
 #include "log_flat_bottom_bond.hpp"
 #include "neighborlist.hpp"
 #include "nonbonded_all_pairs.hpp"
-#include "nonbonded_common.cuh"
+#include "nonbonded_common.hpp"
 #include "nonbonded_interaction_group.hpp"
 #include "nonbonded_pair_list.hpp"
 #include "nonbonded_precomputed.hpp"

@@ -3,7 +3,9 @@
 #include <string>
 
 #include "nonbonded_all_pairs.hpp"
-#include "nonbonded_common.cuh"
+#include "nonbonded_common.hpp"
+
+#include "cuda_runtime.h"
 
 #include "fanout_summed_potential.hpp"
 #include "summed_potential.hpp"
