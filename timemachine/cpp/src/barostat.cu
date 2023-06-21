@@ -171,7 +171,7 @@ void __global__ rescale_positions(
     coords[atom_idx * 3 + 0] += displacement_x;
     coords[atom_idx * 3 + 1] += displacement_y;
     coords[atom_idx * 3 + 2] += displacement_z;
-    if (atom_idx == 0) {
+    if (idx == 0) {
         scaled_box[0 * 3 + 0] *= length_scale[0];
         scaled_box[1 * 3 + 1] *= length_scale[0];
         scaled_box[2 * 3 + 2] *= length_scale[0];
