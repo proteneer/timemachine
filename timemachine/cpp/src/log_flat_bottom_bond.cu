@@ -61,7 +61,7 @@ void LogFlatBottomBond<RealType>::execute_device(
     }
 
     if (B_ > 0) {
-        const int tpb = warp_size;
+        const int tpb = DEFAULT_THREADS_PER_BLOCK;
         const int blocks = ceil_divide(B_, tpb);
 
         k_log_flat_bottom_bond<RealType>

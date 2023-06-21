@@ -291,7 +291,7 @@ def test_mixture_reweighting_ahfe():
 
 @pytest.mark.nogpu
 def test_one_sided_exp():
-    """assert consistency with pymbar.exp on random instances + instances containing +inf work"""
+    """assert consistency with pymbar.EXP on random instances + instances containing +inf work"""
 
     np.random.seed(2022)
     num_instances = 100
@@ -306,14 +306,14 @@ def test_one_sided_exp():
         reduced_works = np.random.randn(num_works) * stddev + mean
 
         # compare estimates
-        pymbar_estimate = pymbar.exp(reduced_works)["Delta_f"]
+        pymbar_estimate, _ = pymbar.EXP(reduced_works)
         tm_estimate = one_sided_exp(reduced_works)
 
         assert np.isclose(tm_estimate, pymbar_estimate)
 
     # also check +inf
     reduced_works = jnp.array([+np.inf, 0])
-    assert np.isclose(one_sided_exp(reduced_works), pymbar.exp(reduced_works)["Delta_f"])
+    assert np.isclose(one_sided_exp(reduced_works), pymbar.EXP(reduced_works)[0])
 
 
 @pytest.mark.nogpu

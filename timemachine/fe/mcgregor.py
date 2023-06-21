@@ -1,6 +1,7 @@
 # maximum common subgraph routines based off of the mcgregor paper
 import copy
 import time
+from typing import Callable, Sequence
 
 import numpy as np
 
@@ -173,7 +174,7 @@ def mcs(
     max_cores,
     enforce_core_core,
     min_threshold,
-    filter_fxn=(lambda core: True),
+    filter_fxn: Callable[[Sequence[int]], bool] = lambda core: True,
 ):
 
     assert n_a <= n_b
@@ -240,8 +241,8 @@ def mcs(
         for a, b in enumerate(atom_map_1_to_2):
             if b != UNMAPPED:
                 core.append((a, b))
-        core = np.array(sorted(core))
-        all_cores.append(core)
+        core_array = np.array(sorted(core))
+        all_cores.append(core_array)
 
     return all_cores, mcs_result.all_marcs
 

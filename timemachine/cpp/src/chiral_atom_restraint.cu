@@ -39,7 +39,7 @@ void ChiralAtomRestraint<RealType>::execute_device(
     }
 
     if (R_ > 0) {
-        const int tpb = warp_size;
+        const int tpb = DEFAULT_THREADS_PER_BLOCK;
         const int blocks = ceil_divide(R_, tpb);
 
         k_chiral_atom_restraint<RealType><<<blocks, tpb, 0, stream>>>(R_, d_x, d_p, d_idxs_, d_du_dx, d_du_dp, d_u);

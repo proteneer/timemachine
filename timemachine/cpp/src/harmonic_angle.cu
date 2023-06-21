@@ -43,7 +43,7 @@ void HarmonicAngle<RealType>::execute_device(
     unsigned long long *d_u,
     cudaStream_t stream) {
 
-    const int tpb = warp_size;
+    const int tpb = DEFAULT_THREADS_PER_BLOCK;
     const int blocks = ceil_divide(A_, tpb);
 
     if (A_ > 0) {

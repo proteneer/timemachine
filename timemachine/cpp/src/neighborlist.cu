@@ -15,7 +15,6 @@ template <typename RealType> Neighborlist<RealType>::Neighborlist(const int N) :
     if (N == 0) {
         throw std::runtime_error("Neighborlist N must be at least 1");
     }
-    const int tpb = warp_size;
     const int column_blocks = this->num_column_blocks();
     const int row_blocks = this->num_row_blocks();
     const int Y = this->Y();
@@ -27,7 +26,7 @@ template <typename RealType> Neighborlist<RealType>::Neighborlist(const int N) :
     cudaSafeMalloc(&d_ixn_count_, 1 * sizeof(*d_ixn_count_));
     cudaSafeMalloc(&d_ixn_tiles_, MAX_TILE_BUFFER * sizeof(*d_ixn_tiles_));
     cudaSafeMalloc(&d_ixn_atoms_, MAX_ATOM_BUFFER * sizeof(*d_ixn_atoms_));
-    cudaSafeMalloc(&d_trim_atoms_, column_blocks * Y * tpb * sizeof(*d_trim_atoms_));
+    cudaSafeMalloc(&d_trim_atoms_, column_blocks * Y * TILE_SIZE * sizeof(*d_trim_atoms_));
 
     // bounding box buffers
     cudaSafeMalloc(&d_row_block_bounds_ctr_, row_blocks * 3 * sizeof(*d_row_block_bounds_ctr_));
@@ -99,7 +98,6 @@ Neighborlist<RealType>::get_nblist_host(int N, const double *h_coords, const dou
     this->build_nblist_device(N, d_coords.data, d_box.data, cutoff, static_cast<cudaStream_t>(0));
 
     gpuErrchk(cudaDeviceSynchronize());
-    const int tpb = warp_size;
     const int column_blocks = this->num_column_blocks();
     const int row_blocks = this->num_row_blocks();
 
@@ -117,8 +115,8 @@ Neighborlist<RealType>::get_nblist_host(int N, const double *h_coords, const dou
     std::vector<std::vector<int>> ixn_list(row_blocks, std::vector<int>());
     for (int i = 0; i < h_ixn_count; i++) {
         int tile_idx = h_ixn_tiles[i];
-        for (int j = 0; j < tpb; j++) {
-            int atom_j_idx = h_ixn_atoms[i * tpb + j];
+        for (int j = 0; j < TILE_SIZE; j++) {
+            int atom_j_idx = h_ixn_atoms[i * TILE_SIZE + j];
             if (atom_j_idx < N) {
                 ixn_list[tile_idx].push_back(atom_j_idx);
             }
@@ -134,7 +132,7 @@ void Neighborlist<RealType>::build_nblist_device(
 
     const int D = 3;
     this->compute_block_bounds_device(N, D, d_coords, d_box, stream);
-    const int tpb = warp_size;
+    const int tpb = TILE_SIZE;
     const int row_blocks = this->num_row_blocks();
     const int Y = this->Y();
 
@@ -200,7 +198,7 @@ void Neighborlist<RealType>::compute_block_bounds_device(
         throw std::runtime_error("D != 3");
     }
 
-    const int tpb = warp_size;
+    const int tpb = DEFAULT_THREADS_PER_BLOCK;
     const int column_blocks = this->num_column_blocks(); // total number of blocks we need to process
 
     k_find_block_bounds<RealType><<<column_blocks, tpb, 0, stream>>>(
@@ -269,7 +267,7 @@ template <typename RealType> void Neighborlist<RealType>::reset_row_idxs() {
 }
 
 template <typename RealType> void Neighborlist<RealType>::reset_row_idxs_device(const cudaStream_t stream) {
-    const int tpb = warp_size;
+    const int tpb = DEFAULT_THREADS_PER_BLOCK;
     const int blocks = ceil_divide(N_, tpb);
     // Fill the indices with the 0 to N-1 indices, indicating 'normal' neighborlist operation
     k_arange<<<blocks, tpb, 0, stream>>>(N_, d_column_idxs_);
@@ -314,7 +312,7 @@ void Neighborlist<RealType>::set_idxs_device(
     if (NC == 0 || NR == 0) {
         throw std::runtime_error("Number of column and row indices must be non-zero");
     }
-    const size_t tpb = warp_size;
+    const size_t tpb = DEFAULT_THREADS_PER_BLOCK;
 
     // The indices must already be on the GPU and are copied into the neighborlist buffers.
     gpuErrchk(cudaMemcpyAsync(
@@ -342,17 +340,17 @@ template <typename RealType> bool Neighborlist<RealType>::compute_upper_triangul
 };
 
 template <typename RealType> int Neighborlist<RealType>::num_column_blocks() const {
-    return ceil_divide(NC_, tile_size);
+    return ceil_divide(NC_, TILE_SIZE);
 };
 
 template <typename RealType> int Neighborlist<RealType>::Y() const {
-    return ceil_divide(this->num_column_blocks(), warp_size);
+    return ceil_divide(this->num_column_blocks(), WARP_SIZE);
 };
 
-template <typename RealType> int Neighborlist<RealType>::num_row_blocks() const { return ceil_divide(NR_, tile_size); }
+template <typename RealType> int Neighborlist<RealType>::num_row_blocks() const { return ceil_divide(NR_, TILE_SIZE); }
 
 template <typename RealType> int Neighborlist<RealType>::max_ixn_count() const {
-    return num_column_blocks() * num_row_blocks() * warp_size;
+    return num_column_blocks() * num_row_blocks() * WARP_SIZE;
 }
 
 template class Neighborlist<double>;

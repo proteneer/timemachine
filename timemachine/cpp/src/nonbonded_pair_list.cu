@@ -1,5 +1,6 @@
 #include "gpu_utils.cuh"
 #include "k_nonbonded_pair_list.cuh"
+#include "kernels/kernel_utils.cuh"
 #include "math_utils.cuh"
 #include "nonbonded_pair_list.hpp"
 #include <stdexcept>
@@ -58,7 +59,7 @@ void NonbondedPairList<RealType, Negated>::execute_device(
     unsigned long long *d_u,
     cudaStream_t stream) {
 
-    const int tpb = 32;
+    const int tpb = DEFAULT_THREADS_PER_BLOCK;
     const int num_blocks_pairs = ceil_divide(M_, tpb);
 
     k_nonbonded_pair_list<RealType, Negated><<<num_blocks_pairs, tpb, 0, stream>>>(
