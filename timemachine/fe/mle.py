@@ -8,6 +8,8 @@ from jax import value_and_grad
 from jax.scipy.stats import norm
 from scipy.optimize import minimize
 
+_NX_G = TypeVar("_NX_G", bound=nx.DiGraph | nx.MultiGraph)
+
 
 def make_stddevs_finite(stddevs, min_stddev=1e-3):
     """Ignore claims that stddev < min_stddev"""
@@ -214,9 +216,6 @@ def infer_node_vals_and_errs(
     dg_err = bootstrap_estimates.std(0)
 
     return dg, dg_err
-
-
-_NX_G = TypeVar("_NX_G", bound=nx.DiGraph | nx.MultiGraph)
 
 
 def infer_node_vals_and_errs_networkx(
