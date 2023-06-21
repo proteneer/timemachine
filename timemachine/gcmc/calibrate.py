@@ -19,7 +19,6 @@ from timemachine.md.barostat.utils import get_bond_list, get_group_indices
 
 
 def _get_initial_state(lamb, water_ff, box_width, seed, nb_cutoff):
-
     solvent_sys, solvent_conf, solvent_box, _ = builders.build_water_system(box_width, water_ff)
 
     solvent_box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes
@@ -51,8 +50,7 @@ def _get_initial_state(lamb, water_ff, box_width, seed, nb_cutoff):
 
 
 def calibrate_gcmc(water_ff, box_width, seed, nb_cutoff=1.2):
-
-    mdp = MDParams(n_frames=50, n_eq_steps=10000, steps_per_frame=1000, seed=seed)
+    mdp = MDParams(n_frames=500, n_eq_steps=50000, steps_per_frame=1000, seed=seed)
 
     partial_get_initial_state_fn = functools.partial(
         _get_initial_state, water_ff=water_ff, box_width=box_width, seed=seed, nb_cutoff=nb_cutoff
@@ -60,7 +58,7 @@ def calibrate_gcmc(water_ff, box_width, seed, nb_cutoff=1.2):
 
     _get_initial_state(lamb=0, water_ff=water_ff, box_width=box_width, seed=seed, nb_cutoff=nb_cutoff)
 
-    n_bisections = 2
+    n_bisections = 12
     initial_lambdas = [0.0, 1.0]
     results, frames, boxes = run_sims_with_greedy_bisection(
         initial_lambdas, partial_get_initial_state_fn, mdp, n_bisections, DEFAULT_TEMP, verbose=True
@@ -92,6 +90,5 @@ def calibrate_gcmc(water_ff, box_width, seed, nb_cutoff=1.2):
 
 
 if __name__ == "__main__":
-
     ff = Forcefield.load_default()
     calibrate_gcmc(ff.water_ff, box_width=5.0, seed=2023, nb_cutoff=1.2)
