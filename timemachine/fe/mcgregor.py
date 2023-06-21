@@ -1,6 +1,7 @@
 # maximum common subgraph routines based off of the mcgregor paper
 import copy
 import time
+import warnings
 from typing import Callable, Sequence
 
 import numpy as np
@@ -156,7 +157,7 @@ def build_predicate_matrix(n_a, n_b, priority_idxs):
     return pmat
 
 
-class MaxVisitsError(Exception):
+class MaxVisitsWarning(UserWarning):
     pass
 
 
@@ -216,8 +217,9 @@ def mcs(
 
         # If timed out, either due to max_visits or max_cores, raise exception.
         if mcs_result.timed_out:
-            raise MaxVisitsError(
-                f"Reached max number of visits/cores: {len(mcs_result.all_maps)} cores with {mcs_result.nodes_visited} nodes visited"
+            warnings.warn(
+                f"Reached max number of visits/cores: {len(mcs_result.all_maps)} cores with {mcs_result.nodes_visited} nodes visited",
+                MaxVisitsWarning,
             )
 
         if len(mcs_result.all_maps) > 0:
