@@ -204,6 +204,11 @@ void declare_context(py::module &m) {
             Coordinates have shape (F, N, 3)
             Boxes have shape (F, 3, 3)
 
+        Raises
+        ------
+            RuntimeError:
+                Box dimensions are invalid when a frame is collected
+
     )pbdoc")
         .def(
             "multiple_steps_local",
@@ -297,6 +302,11 @@ void declare_context(py::module &m) {
         2-tuple of coordinates, boxes
             Coordinates have shape (F, N, 3)
             Boxes have shape (F, 3, 3)
+
+        Raises
+        ------
+            RuntimeError:
+                Box dimensions are invalid when a frame is collected
 
         Note: All boxes returned will be identical as local MD only runs under constant volume.
     )pbdoc")
@@ -398,6 +408,11 @@ void declare_context(py::module &m) {
             Coordinates have shape (F, N, 3)
             Boxes have shape (F, 3, 3)
 
+        Raises
+        ------
+            RuntimeError:
+                Box dimensions are invalid when a frame is collected
+
         Note: All boxes returned will be identical as local MD only runs under constant volume.
     )pbdoc")
         .def(
@@ -447,6 +462,11 @@ void declare_context(py::module &m) {
             Energies have shape (F,)
             Coordinates have shape (F, N, 3)
             Boxes have shape (F, 3, 3)
+
+        Raises
+        ------
+            RuntimeError:
+                Box dimensions are invalid when a frame is collected
 
     )pbdoc")
         .def(
