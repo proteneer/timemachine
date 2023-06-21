@@ -60,7 +60,7 @@ void NonbondedPairList<RealType, Negated>::execute_device(
     cudaStream_t stream) {
 
     if (M_ > 0) {
-        const int tpb = default_threads_per_block;
+        const int tpb = DEFAULT_THREADS_PER_BLOCK;
         const int num_blocks_pairs = ceil_divide(M_, tpb);
 
         k_nonbonded_pair_list<RealType, Negated><<<num_blocks_pairs, tpb, 0, stream>>>(
