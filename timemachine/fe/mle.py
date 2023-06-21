@@ -230,10 +230,11 @@ def infer_node_vals_and_errs_networkx(
     seed: int = 0,
 ) -> NxDiGraph:
     """Version of :py:func:`timemachine.fe.mle.infer_node_vals_and_errs` that accepts a directed networkx graph.
+    This will also accept a MultiDiGraph which represents multiple replicates of the same graph.
 
     Parameters
     ----------
-    nx_graph: networkx.DiGraph
+    nx_graph: networkx.DiGraph or networkx.MultiDiGraph
         Directed Networkx graph
     edge_diff_prop: str
         Edge property to use for differences
@@ -252,7 +253,7 @@ def infer_node_vals_and_errs_networkx(
 
     Returns
     -------
-    networkx.DiGraph
+    networkx.DiGraph/networkx.MultiDiGraph
         Subgraph limited to edges with defined edge_diff_prop and edge_stddev_prop, where nodes have been labeled with
         the inferred values of `node_val_prop` and `node_stddev_prop`.
     """
@@ -283,7 +284,7 @@ def infer_node_vals_and_errs_networkx(
     edge_idxs = np.array(sg_relabeled.edges)
 
     dgs, dg_errs = infer_node_vals_and_errs(
-        np.array([e[:2] for e in edge_idxs]),
+        np.array([e[:2] for e in edge_idxs]),  # remove edge key in MultiDiGraph if present
         np.array([sg_relabeled.edges[e][edge_diff_prop] for e in edge_idxs]),
         np.array([sg_relabeled.edges[e][edge_stddev_prop] for e in edge_idxs]),
         ref_node_idxs,
