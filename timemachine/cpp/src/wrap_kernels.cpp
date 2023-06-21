@@ -195,7 +195,9 @@ void declare_context(py::module &m) {
             Number of steps
 
         store_x_interval: int
-            How often we store the frames, stores after every store_x_interval steps
+            How often we store the frames, store after every store_x_interval iterations. Setting to zero collects frames
+            at the last step. Setting store_x_interval > n_steps will return no frames and skip runtime validation of box
+            size.
 
         Returns
         -------
@@ -285,7 +287,8 @@ void declare_context(py::module &m) {
 
         store_x_interval: int
             How often we store the frames, store after every store_x_interval iterations. Setting to zero collects frames
-            at the last step.
+            at the last step. Setting store_x_interval > n_steps will return no frames and skip runtime validation of box
+            size.
 
         radius: float
             The radius in nanometers from the selected idx to simulate for local MD.
@@ -394,7 +397,8 @@ void declare_context(py::module &m) {
 
         store_x_interval: int
             How often we store the frames, store after every store_x_interval iterations. Setting to zero collects frames
-            at the last step.
+            at the last step. Setting store_x_interval > n_steps will return no frames and skip runtime validation of box
+            size.
 
         radius: float
             The radius in nanometers from the reference idx to allow particles to be unrestrained in, afterwards apply a restraint to the reference particle.
@@ -454,7 +458,9 @@ void declare_context(py::module &m) {
             How often we store the energies, store after every store_u_interval steps
 
         store_x_interval: int
-            How often we store the frames, store after every store_x_interval steps
+            How often we store the frames, store after every store_x_interval iterations. Setting to zero collects frames
+            at the last step. Setting store_x_interval > n_steps will return no frames and skip runtime validation of box
+            size.
 
         Returns
         -------
