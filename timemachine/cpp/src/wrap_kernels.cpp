@@ -455,7 +455,7 @@ void declare_context(py::module &m) {
             Number of steps to run.
 
         store_u_interval: int
-            How often we store the energies, store after every store_u_interval steps
+            How often we store the energies, store after every store_u_interval steps.
 
         store_x_interval: int
             How often we store the frames, store after every store_x_interval iterations. Setting to zero collects frames
@@ -465,7 +465,9 @@ void declare_context(py::module &m) {
         Returns
         -------
         3-tuple of energies, coordinates, boxes
-            Energies have shape (F,)
+            F = floor(n_steps/store_x_interval).
+            K = floor(n_steps/store_u_interval).
+            Energies have shape (K,)
             Coordinates have shape (F, N, 3)
             Boxes have shape (F, 3, 3)
 
