@@ -1,4 +1,4 @@
-from typing import Union
+from typing import TypeVar
 
 import networkx as nx
 import numpy as np
@@ -216,8 +216,11 @@ def infer_node_vals_and_errs(
     return dg, dg_err
 
 
+_NX_G = TypeVar("_NX_G", bound=nx.DiGraph | nx.MultiGraph)
+
+
 def infer_node_vals_and_errs_networkx(
-    graph: Union[nx.DiGraph, nx.MultiDiGraph],
+    graph: _NX_G,
     edge_diff_prop: str,
     edge_stddev_prop: str,
     ref_node_val_prop: str,
@@ -226,7 +229,7 @@ def infer_node_vals_and_errs_networkx(
     node_stddev_prop: str = "inferred_dg_stddev",
     n_bootstrap: int = 100,
     seed: int = 0,
-) -> Union[nx.DiGraph, nx.MultiDiGraph]:
+) -> _NX_G:
     """Version of :py:func:`timemachine.fe.mle.infer_node_vals_and_errs` that accepts a directed networkx graph.
 
     Parameters
