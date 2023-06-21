@@ -1,4 +1,4 @@
-from typing import TypeVar
+from typing import Union
 
 import networkx as nx
 import numpy as np
@@ -7,8 +7,6 @@ from jax import numpy as jnp
 from jax import value_and_grad
 from jax.scipy.stats import norm
 from scipy.optimize import minimize
-
-_NX_G = TypeVar("_NX_G", bound=nx.DiGraph | nx.MultiGraph)
 
 
 def make_stddevs_finite(stddevs, min_stddev=1e-3):
@@ -219,7 +217,7 @@ def infer_node_vals_and_errs(
 
 
 def infer_node_vals_and_errs_networkx(
-    graph: _NX_G,
+    graph: Union[nx.DiGraph, nx.MultiDiGraph],
     edge_diff_prop: str,
     edge_stddev_prop: str,
     ref_node_val_prop: str,
@@ -228,7 +226,7 @@ def infer_node_vals_and_errs_networkx(
     node_stddev_prop: str = "inferred_dg_stddev",
     n_bootstrap: int = 100,
     seed: int = 0,
-) -> _NX_G:
+) -> Union[nx.DiGraph, nx.MultiDiGraph]:
     """Version of :py:func:`timemachine.fe.mle.infer_node_vals_and_errs` that accepts a directed networkx graph.
 
     Parameters
