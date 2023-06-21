@@ -281,12 +281,12 @@ def infer_node_vals_and_errs_networkx(
             ref_node_vals.append(d[ref_node_val_prop])
             ref_node_stddevs.append(d.get(ref_node_stddev_prop, 0.0))
 
-    edge_idxs = np.array(sg_relabeled.edges)
-
+    edges = np.array(sg_relabeled.edges)
+    edge_idxs = np.array([e[:2] for e in edges])  # remove edge key in MultiDiGraph if present
     dgs, dg_errs = infer_node_vals_and_errs(
-        np.array([e[:2] for e in edge_idxs]),  # remove edge key in MultiDiGraph if present
-        np.array([sg_relabeled.edges[e][edge_diff_prop] for e in edge_idxs]),
-        np.array([sg_relabeled.edges[e][edge_stddev_prop] for e in edge_idxs]),
+        edge_idxs,
+        np.array([sg_relabeled.edges[e][edge_diff_prop] for e in edges]),
+        np.array([sg_relabeled.edges[e][edge_stddev_prop] for e in edges]),
         ref_node_idxs,
         ref_node_vals,
         ref_node_stddevs,
