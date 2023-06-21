@@ -25,11 +25,17 @@ def test_dual_topology_nonbonded_pairlist():
     dt = topology.DualTopology(mol_a, mol_b, ff)
 
     nb_params, nb = dt.parameterize_nonbonded(
-        ff.q_handle.params, ff.q_handle_intra.params, ff.q_handle_solv.params, ff.lj_handle.params, 0.0
+        ff.q_handle.params,
+        ff.q_handle_intra.params,
+        ff.q_handle_solv.params,
+        ff.lj_handle.params,
+        ff.lj_handle_intra.params,
+        ff.lj_handle_solv.params,
+        0.0,
     )
 
     nb_pairlist_params, nb_pairlist = dt.parameterize_nonbonded_pairlist(
-        ff.q_handle.params, ff.q_handle_intra.params, ff.lj_handle.params
+        ff.q_handle.params, ff.q_handle_intra.params, ff.lj_handle.params, ff.lj_handle_intra.params
     )
 
     x0 = np.concatenate([get_romol_conf(mol_a), get_romol_conf(mol_b)])
@@ -53,12 +59,19 @@ def test_dual_topology_nonbonded_pairlist():
 
 
 def parameterize_nonbonded_full(
-    hgt: topology.HostGuestTopology, ff_q_params, ff_q_params_intra, ff_q_params_solv, ff_lj_params, lamb: float
+    hgt: topology.HostGuestTopology,
+    ff_q_params,
+    ff_q_params_intra,
+    ff_q_params_solv,
+    ff_lj_params,
+    ff_lj_params_intra,
+    ff_lj_params_solv,
+    lamb: float,
 ):
     # Implements the full NB potential for the host guest system
     num_guest_atoms = hgt.guest_topology.get_num_atoms()
     guest_params, guest_pot = hgt.guest_topology.parameterize_nonbonded(
-        ff_q_params, ff_q_params_intra, ff_q_params_solv, ff_lj_params, lamb
+        ff_q_params, ff_q_params_intra, ff_q_params_solv, ff_lj_params, ff_lj_params_intra, ff_lj_params_solv, lamb
     )
     hg_exclusion_idxs = np.concatenate(
         [hgt.host_nonbonded.potential.exclusion_idxs, guest_pot.exclusion_idxs + hgt.num_host_atoms]
@@ -79,7 +92,14 @@ def test_host_guest_nonbonded(ctor, precision, rtol, atol, use_tiny_mol):
         bt = Topology(ff)
         hgt = topology.HostGuestTopology(host_bps, bt, num_water_atoms)
         params, us = parameterize_nonbonded_full(
-            hgt, ff.q_handle.params, ff.q_handle_intra.params, ff.q_handle_solv.params, ff.lj_handle.params, lamb=lamb
+            hgt,
+            ff.q_handle.params,
+            ff.q_handle_intra.params,
+            ff.q_handle_solv.params,
+            ff.lj_handle.params,
+            ff.lj_handle_intra.params,
+            ff.lj_handle_solv.params,
+            lamb=lamb,
         )
         u_impl = us.bind(params).to_gpu(precision=precision).bound_impl
         return u_impl.execute(x0, box)
@@ -93,6 +113,8 @@ def test_host_guest_nonbonded(ctor, precision, rtol, atol, use_tiny_mol):
             ff.q_handle_intra.params,
             ff.q_handle_solv.params,
             ff.lj_handle.params,
+            ff.lj_handle_intra.params,
+            ff.lj_handle_solv.params,
             lamb=lamb,
         )
         u_impl = us.bind(params).to_gpu(precision=precision).bound_impl
@@ -102,7 +124,13 @@ def test_host_guest_nonbonded(ctor, precision, rtol, atol, use_tiny_mol):
         # Compute the vacuum nb grads and potential for the ligand intramolecular term
         bt = Topology(ff)
         params, us = bt.parameterize_nonbonded(
-            ff.q_handle.params, ff.q_handle_intra.params, ff.q_handle_solv.params, ff.lj_handle.params, lamb=lamb
+            ff.q_handle.params,
+            ff.q_handle_intra.params,
+            ff.q_handle_solv.params,
+            ff.lj_handle.params,
+            ff.lj_handle_intra.params,
+            ff.lj_handle_solv.params,
+            lamb=lamb,
         )
         u_impl = us.bind(params).to_gpu(precision=precision).bound_impl
         g, u = u_impl.execute(x0, box)
@@ -140,6 +168,8 @@ def test_host_guest_nonbonded(ctor, precision, rtol, atol, use_tiny_mol):
             ff.q_handle_intra.params,
             ff.q_handle_solv.params,
             ff.lj_handle.params,
+            ff.lj_handle_intra.params,
+            ff.lj_handle_solv.params,
             lamb=lamb,
             intramol_params=False,
         )

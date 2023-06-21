@@ -304,7 +304,11 @@ def setup_end_state(ff, mol_a, mol_b, core, a_to_c, b_to_c):
     mol_a_proper_params, mol_a_pt = mol_a_top.parameterize_proper_torsion(ff.pt_handle.params)
     mol_a_improper_params, mol_a_it = mol_a_top.parameterize_improper_torsion(ff.it_handle.params)
     mol_a_nbpl_params, mol_a_nbpl = mol_a_top.parameterize_nonbonded_pairlist(
-        ff.q_handle.params, ff.q_handle_intra.params, ff.lj_handle.params, intramol_params=True
+        ff.q_handle.params,
+        ff.q_handle_intra.params,
+        ff.lj_handle.params,
+        ff.lj_handle_intra.params,
+        intramol_params=True,
     )
     mol_a_chiral_atom, mol_a_chiral_bond = mol_a_top.setup_chiral_restraints()
 

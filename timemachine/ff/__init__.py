@@ -22,6 +22,8 @@ class ForcefieldParams(Generic[_T]):
     q_params_solv: _T
     q_params_intra: _T
     lj_params: _T
+    lj_params_solv: _T
+    lj_params_intra: _T
 
 
 def combine_params(a: ForcefieldParams[_T], b: ForcefieldParams[_T]) -> ForcefieldParams[Tuple[_T, _T]]:
@@ -34,6 +36,8 @@ def combine_params(a: ForcefieldParams[_T], b: ForcefieldParams[_T]) -> Forcefie
         (a.q_params_solv, b.q_params_solv),
         (a.q_params_intra, b.q_params_intra),
         (a.lj_params, b.lj_params),
+        (a.lj_params_solv, b.lj_params_solv),
+        (a.lj_params_intra, b.lj_params_intra),
     )
 
 
@@ -69,6 +73,8 @@ class Forcefield:
         ]
     ]
     lj_handle: Optional[nonbonded.LennardJonesHandler]
+    lj_handle_solv: Optional[nonbonded.LennardJonesSolventHandler]
+    lj_handle_intra: Optional[nonbonded.LennardJonesIntraHandler]
 
     protein_ff: str
     water_ff: str
@@ -129,6 +135,8 @@ class Forcefield:
         pt_handle = None
         it_handle = None
         lj_handle = None
+        lj_handle_solv = None
+        lj_handle_intra = None
         q_handle = None
         q_handle_solv = None
         q_handle_intra = None
@@ -146,6 +154,12 @@ class Forcefield:
             elif isinstance(handle, bonded.ImproperTorsionHandler):
                 assert it_handle is None
                 it_handle = handle
+            elif isinstance(handle, nonbonded.LennardJonesIntraHandler):
+                assert lj_handle_intra is None
+                lj_handle_intra = handle
+            elif isinstance(handle, nonbonded.LennardJonesSolventHandler):
+                assert lj_handle_solv is None
+                lj_handle_solv = handle
             elif isinstance(handle, nonbonded.LennardJonesHandler):
                 assert lj_handle is None
                 lj_handle = handle
@@ -165,6 +179,18 @@ class Forcefield:
             elif isinstance(handle, (nonbonded.AM1CCCHandler, nonbonded.AM1BCCHandler, nonbonded.SimpleChargeHandler)):
                 assert q_handle is None
                 q_handle = handle
+
+        if lj_handle_intra is None:
+            if isinstance(lj_handle, nonbonded.LennardJonesHandler):
+                lj_handle_intra = nonbonded.LennardJonesIntraHandler(
+                    lj_handle.smirks, lj_handle.params, lj_handle.props
+                )
+
+        if lj_handle_solv is None:
+            if isinstance(lj_handle, nonbonded.LennardJonesHandler):
+                lj_handle_solv = nonbonded.LennardJonesSolventHandler(
+                    lj_handle.smirks, lj_handle.params, lj_handle.props
+                )
 
         if q_handle_intra is None:
             # Copy the forcefield parameters to the intramolecular term if not
@@ -199,6 +225,8 @@ class Forcefield:
             q_handle_solv,
             q_handle_intra,
             lj_handle,
+            lj_handle_solv,
+            lj_handle_intra,
             protein_ff,
             water_ff,
         )
@@ -214,6 +242,8 @@ class Forcefield:
             self.q_handle_solv,
             self.q_handle_intra,
             self.lj_handle,
+            self.lj_handle_solv,
+            self.lj_handle_intra,
         ]
 
     def get_params(self) -> ForcefieldParams:
@@ -229,6 +259,8 @@ class Forcefield:
             params(self.q_handle_solv),
             params(self.q_handle_intra),
             params(self.lj_handle),
+            params(self.lj_handle_solv),
+            params(self.lj_handle_intra),
         )
 
     def serialize(self) -> str:
