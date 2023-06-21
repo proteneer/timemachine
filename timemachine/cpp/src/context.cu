@@ -40,6 +40,7 @@ Context::Context(
     gpuErrchk(cudaPeekAtLastError());
     cudaSafeMalloc(&d_sum_storage_, d_sum_storage_bytes_);
 
+    // A no-op if running in vacuum or there are no NonbondedAllPairs potentials
     get_nonbonded_all_pair_potentials(bps, nonbonded_pots_);
 };
 
