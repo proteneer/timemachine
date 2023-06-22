@@ -929,7 +929,7 @@ def test_ring_matches_ring_only(ring_matches_ring_only):
 
 
 @pytest.mark.nogpu
-def test_max_visits_exception():
+def test_max_visits_warning():
     mol_a, mol_b = get_cyclohexanes_different_confs()
     core_kwargs = dict(
         ring_cutoff=0.1,
@@ -950,7 +950,7 @@ def test_max_visits_exception():
 
 
 @pytest.mark.nogpu
-def test_max_cores_exception():
+def test_max_cores_warning():
     mol_a, mol_b = get_cyclohexanes_different_confs()
     core_kwargs = dict(
         ring_cutoff=0.1,
