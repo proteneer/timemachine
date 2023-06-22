@@ -711,8 +711,8 @@ def run_edge_and_save_results(
             connected_core=True,
             max_cores=1e6,
             enforce_core_core=True,
-            ring_matches_ring_only=False,
-            complete_rings=True,
+            ring_matches_ring_only=True,
+            complete_rings=False,
             enforce_chiral=True,
             min_threshold=0,
         )
