@@ -72,8 +72,6 @@ memory-tests:
   needs: ["lint"]
   tags:
     - gpu
-  variables:
-    CMAKE_ARGS: -DCUDA_ARCH=75
   rules:
     - if: $CI_EXTERNAL_PULL_REQUEST_IID
   script:
@@ -94,8 +92,6 @@ unit-tests:
     - gpu
   rules:
     - if: $CI_EXTERNAL_PULL_REQUEST_IID
-  variables:
-    CMAKE_ARGS: -DCUDA_ARCH=75
   script:
     - pip install .[test]
     - make unit_tests
@@ -114,8 +110,6 @@ nightly-tests:
     - gpu
   rules:
     - if: $NIGHTLY_TESTS
-  variables:
-    CMAKE_ARGS: -DCUDA_ARCH=75
   script:
     - pip install .[test]
     - make nightly_tests

@@ -5,21 +5,9 @@
 // each atom parameterized by a 4-tuple: charge, lj sigma, lj epsilon, 4D coordinate w
 enum { PARAM_OFFSET_CHARGE = 0, PARAM_OFFSET_SIG, PARAM_OFFSET_EPS, PARAM_OFFSET_W, PARAMS_PER_ATOM };
 
-typedef void (*k_nonbonded_fn)(
-    const int N,
-    const int NR,
-    const unsigned int *ixn_count,
-    const double *__restrict__ coords,
-    const double *__restrict__ params, // [N]
-    const double *__restrict__ box,
-    const double beta,
-    const double cutoff,
-    const unsigned int *__restrict__ row_idxs,
-    const int *__restrict__ ixn_tiles,
-    const unsigned int *__restrict__ ixn_atoms,
-    unsigned long long *__restrict__ du_dx,
-    unsigned long long *__restrict__ du_dp,
-    unsigned long long *__restrict__ u_buffer);
+// Empirically selected number of kernel blocks, focusing on the cuda 8.* architectures
+static const int NONBONDED_KERNEL_BLOCKS = 2048;
+static const int NONBONDED_KERNEL_THREADS_PER_BLOCK = 256;
 
 #define PI 3.141592653589793115997963468544185161
 #define TWO_OVER_SQRT_PI 1.128379167095512595889238330988549829708

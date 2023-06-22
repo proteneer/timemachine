@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.18 FATAL_ERROR)
+cmake_minimum_required(VERSION 3.24 FATAL_ERROR)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -104,38 +104,7 @@ include_directories(SYSTEM ${CMAKE_CURRENT_BINARY_DIR}/${CUB_SRC_DIR})
 set_property(TARGET ${LIBRARY_NAME} PROPERTY CUDA_STANDARD 17)
 
 if (NOT CUDA_ARCH)
-  find_program(HAS_SMI "nvidia-smi")
-  # In cuda 11.6 nvidia-smi added support to get GPU compute capability query
-  if (HAS_SMI AND CMAKE_CUDA_COMPILER_VERSION MATCHES "11\.[6-9]\.*")
-    execute_process(
-      COMMAND
-      bash
-      "-o"
-      "pipefail"
-      "-c"
-      "nvidia-smi --query-gpu=compute_cap --format=csv | grep -v compute_cap | uniq"
-      OUTPUT_VARIABLE SMI_OUTPUT
-      OUTPUT_STRIP_TRAILING_WHITESPACE
-      RESULT_VARIABLE STATUS
-    )
-    if (STATUS AND NOT STATUS EQUAL 0)
-      message("Warning: failed to determine CUDA_ARCH automatically: ${SMI_OUTPUT}")
-    else()
-      STRING(REPLACE "." "" CUDA_ARCH ${SMI_OUTPUT})
-      # Verify that only one compute capability was returned
-      STRING(REGEX MATCHALL "\n" NEW_LINES "${CUDA_ARCH}")
-      # NUM_COMPUTE_CAPS is off by one, as there will be one less newline than there are compute capabilities
-      list(LENGTH NEW_LINES NUM_COMPUTE_CAPS)
-      # If there are multiple compute capabilities, unset the CUDA_ARCH, fall back to the default below.
-      if(NUM_COMPUTE_CAPS GREATER_EQUAL 1)
-        unset(CUDA_ARCH)
-      endif()
-    endif()
-  endif()
-endif()
-# If still not set, default to 75
-if (NOT CUDA_ARCH)
-  set(CUDA_ARCH "75")
+  set(CUDA_ARCH "native")
 endif()
 message("Cuda Arch: " ${CUDA_ARCH})
 set_property(TARGET ${LIBRARY_NAME} PROPERTY CUDA_ARCHITECTURES "${CUDA_ARCH}")

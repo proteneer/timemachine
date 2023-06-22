@@ -8,6 +8,7 @@
 #include "langevin_integrator.hpp"
 #include "local_md_potentials.hpp"
 #include "math_utils.cuh"
+#include "nonbonded_common.hpp"
 #include "pinned_host_buffer.hpp"
 #include "set_utils.hpp"
 #include <cub/cub.cuh>
@@ -23,7 +24,8 @@ Context::Context(
     std::shared_ptr<Integrator> intg,
     std::vector<std::shared_ptr<BoundPotential>> bps,
     std::shared_ptr<MonteCarloBarostat> barostat)
-    : N_(N), barostat_(barostat), step_(0), d_sum_storage_(nullptr), d_sum_storage_bytes_(0), intg_(intg), bps_(bps) {
+    : N_(N), barostat_(barostat), step_(0), d_sum_storage_(nullptr), d_sum_storage_bytes_(0), intg_(intg), bps_(bps),
+      nonbonded_pots_(0) {
 
     d_x_t_ = gpuErrchkCudaMallocAndCopy(x_0, N * 3);
     d_v_t_ = gpuErrchkCudaMallocAndCopy(v_0, N * 3);
@@ -37,6 +39,9 @@ Context::Context(
     cub::DeviceReduce::Sum(d_sum_storage_, d_sum_storage_bytes_, d_in_tmp, d_out_tmp, N_);
     gpuErrchk(cudaPeekAtLastError());
     cudaSafeMalloc(&d_sum_storage_, d_sum_storage_bytes_);
+
+    // A no-op if running in vacuum or there are no NonbondedAllPairs potentials
+    get_nonbonded_all_pair_potentials(bps, nonbonded_pots_);
 };
 
 Context::~Context() {
@@ -46,6 +51,26 @@ Context::~Context() {
     gpuErrchk(cudaFree(d_u_buffer_));
     gpuErrchk(cudaFree(d_sum_storage_));
 };
+
+void Context::_verify_box(cudaStream_t stream) {
+    // If there are no nonbonded potentials, nothing to check.
+    if (nonbonded_pots_.size() == 0) {
+        return;
+    }
+    std::vector<double> h_box(9);
+    gpuErrchk(cudaMemcpyAsync(&h_box[0], d_box_t_, 9 * sizeof(*d_box_t_), cudaMemcpyDeviceToHost, stream));
+    gpuErrchk(cudaStreamSynchronize(stream));
+    for (auto boundpot : nonbonded_pots_) {
+        double cutoff = get_nonbonded_all_pair_cutoff_with_padding(boundpot->potential);
+        double db_cutoff = 2 * cutoff;
+        for (int i = 0; i < 3; i++) {
+            if (h_box[i * 3 + i] < db_cutoff) {
+                throw std::runtime_error(
+                    "cutoff with padding is more than half of the box width, neighborlist is no longer reliable");
+            }
+        }
+    }
+}
 
 double Context::_get_temperature() {
     if (std::shared_ptr<LangevinIntegrator> langevin = std::dynamic_pointer_cast<LangevinIntegrator>(intg_);
@@ -127,6 +152,7 @@ std::array<std::vector<double>, 2> Context::multiple_steps_local(
                     3 * 3 * sizeof(*d_box_traj->data),
                     cudaMemcpyDeviceToDevice,
                     stream));
+                this->_verify_box(stream);
             }
         }
         intg_->finalize(local_pots, d_x_t_, d_v_t_, d_box_t_, d_free_idxs, stream);
@@ -204,6 +230,7 @@ std::array<std::vector<double>, 2> Context::multiple_steps_local_selection(
                     3 * 3 * sizeof(*d_box_traj->data),
                     cudaMemcpyDeviceToDevice,
                     stream));
+                this->_verify_box(stream);
             }
         }
         intg_->finalize(local_pots, d_x_t_, d_v_t_, d_box_t_, d_free_idxs, stream);
@@ -261,6 +288,7 @@ std::array<std::vector<double>, 2> Context::multiple_steps(const int n_steps, in
                 3 * 3 * sizeof(*d_box_buffer->data),
                 cudaMemcpyDeviceToDevice,
                 stream));
+            this->_verify_box(stream);
         }
     }
     intg_->finalize(bps_, d_x_t_, d_v_t_, d_box_t_, nullptr, stream);
@@ -329,6 +357,7 @@ Context::multiple_steps_U(const int n_steps, int store_u_interval, int store_x_i
                 3 * 3 * sizeof(*d_box_traj->data),
                 cudaMemcpyDeviceToDevice,
                 stream));
+            this->_verify_box(stream);
         }
 
         // we need to compute aggregate energies

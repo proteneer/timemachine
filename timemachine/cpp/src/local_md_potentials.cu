@@ -6,6 +6,7 @@
 #include "kernels/k_local_md.cuh"
 #include "local_md_potentials.hpp"
 #include "math_utils.cuh"
+#include "nonbonded_common.hpp"
 #include <cub/cub.cuh>
 #include <random>
 #include <vector>
@@ -93,7 +94,7 @@ LocalMDPotentials::LocalMDPotentials(
 LocalMDPotentials::~LocalMDPotentials() { curandErrchk(curandDestroyGenerator(cr_rng_)); }
 
 // setup_from_idxs takes a set of idxs and a seed to determine the free particles. Fix the local_idxs to length
-// one to ensure the same reference everytime, though the seed also handles the probabilities of selecting particles, and it is suggested
+// one to ensure the same reference every time, though the seed also handles the probabilities of selecting particles, and it is suggested
 // to provide a new seed at each step.
 void LocalMDPotentials::setup_from_idxs(
     double *d_x_t,
