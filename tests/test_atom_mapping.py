@@ -756,7 +756,7 @@ def test_hif2a_failure():
         max_cores=1e6,
         enforce_core_core=True,
         ring_matches_ring_only=True,
-        complete_rings=True,
+        complete_rings=False,
         enforce_chiral=True,
         min_threshold=0,
     )
@@ -814,7 +814,7 @@ def test_cyclohexane_stereo():
         max_cores=100000,
         enforce_core_core=True,
         ring_matches_ring_only=True,
-        complete_rings=True,
+        complete_rings=False,
         enforce_chiral=True,
         min_threshold=0,
     )
@@ -872,7 +872,7 @@ def test_chiral_atom_map():
         connected_core=True,
         max_cores=1e6,
         enforce_core_core=True,
-        complete_rings=True,
+        complete_rings=False,
         ring_matches_ring_only=True,
         min_threshold=0,
     )
