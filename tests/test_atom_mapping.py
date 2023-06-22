@@ -946,7 +946,8 @@ def test_max_visits_warning():
     assert len(cores) > 0
 
     with pytest.warns(MaxVisitsWarning, match="Reached max number of visits/cores: 0 cores with 2 nodes visited"):
-        atom_mapping.get_cores(mol_a, mol_b, **core_kwargs, max_visits=1)
+        with pytest.raises(NoMappingError):
+            atom_mapping.get_cores(mol_a, mol_b, **core_kwargs, max_visits=1)
 
 
 @pytest.mark.nogpu
