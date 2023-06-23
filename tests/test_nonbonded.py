@@ -289,51 +289,6 @@ class TestNonbonded(GradientTest):
                     ):
                         self.compare_forces(coords, params, box, potential, test_impl, rtol=rtol, atol=atol)
 
-    def test_nonbonded_with_box_smaller_than_cutoff(self):
-
-        np.random.seed(4321)
-
-        precision = np.float32
-        cutoff = 1
-        size = 33
-        padding = 0.1
-        ff = Forcefield.load_default()
-
-        _, coords, box, _ = builders.build_water_system(3.0, ff.water_ff)
-        coords = coords[:size]
-
-        # Down shift box size to be only a portion of the cutoff
-        charge_params, potential = prepare_water_system(coords, p_scale=1.0, cutoff=cutoff)
-
-        def run_nonbonded(potential, x, box, params, steps=100):
-
-            x = (x.astype(np.float32)).astype(np.float64)
-            params = (params.astype(np.float32)).astype(np.float64)
-
-            assert x.ndim == 2
-            assert x.dtype == np.float64
-            assert params.dtype == np.float64
-
-            for _ in range(steps):
-                _ = potential.execute_selective(x, params, box, True, True, True)
-
-        test_impl = potential.to_gpu(precision).unbound_impl
-
-        # With the default box, all is well
-        run_nonbonded(test_impl, coords, box, charge_params, steps=2)
-
-        db_cutoff = (cutoff + padding) * 2
-
-        # Make box with diagonals right at the limit
-        box = np.eye(3) * db_cutoff
-        run_nonbonded(test_impl, coords, box, charge_params)
-
-        # Only populate the diag with values that are too low
-        box = np.eye(3) * (db_cutoff * 0.3)
-        with self.assertRaises(RuntimeError) as raised:
-            run_nonbonded(test_impl, coords, box, charge_params)
-        assert "more than half" in str(raised.exception)
-
 
 if __name__ == "__main__":
     unittest.main()

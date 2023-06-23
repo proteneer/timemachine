@@ -30,7 +30,7 @@ We currently support the following functional forms. Parameters that can be opti
 * OpenEye Toolkits
 * OpenMM
 * Cuda 11.0+
-* CMake 3.22.1
+* CMake 3.24.3
 
 ### Setup using Anaconda
 

@@ -1,5 +1,5 @@
 #pragma once
-
+#include "cuda_runtime.h"
 #include "math_utils.cuh"
 #include <vector>
 
@@ -55,15 +55,15 @@ public:
     void compute_block_bounds_host(
         const int N, const double *h_coords, const double *h_box, double *h_bb_ctrs, double *h_bb_exts);
 
-    unsigned int *get_ixn_atoms() { return d_ixn_atoms_; }
+    unsigned int *get_ixn_atoms() { return d_ixn_atoms_; };
 
-    int *get_ixn_tiles() { return d_ixn_tiles_; }
+    int *get_ixn_tiles() { return d_ixn_tiles_; };
 
-    unsigned int *get_ixn_count() { return d_ixn_count_; }
+    unsigned int *get_ixn_count() { return d_ixn_count_; };
 
-    unsigned int *get_row_idxs() { return d_row_idxs_; }
+    unsigned int *get_row_idxs() { return d_row_idxs_; };
 
-    int get_num_row_idxs() { return NR_; }
+    int get_num_row_idxs() { return NR_; };
 
     // get max number of row blocks
     int num_row_blocks() const;

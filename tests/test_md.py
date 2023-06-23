@@ -1016,3 +1016,96 @@ def test_local_md_nonbonded_all_pairs_subset(lamb):
 
     np.testing.assert_array_equal(ref_local_xs, test_local_xs)
     np.testing.assert_array_equal(ref_local_boxes, test_local_boxes)
+
+
+def test_context_invalid_boxes():
+    """Verify that nonbonded all pairs potentials provided to the context will correctly validate the box size"""
+    mol, _ = get_biphenyl()
+    ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
+
+    temperature = constants.DEFAULT_TEMP
+    dt = 1.5e-3
+    friction = 0.0
+    seed = 2022
+    steps = 1
+    rng = np.random.default_rng(seed)
+
+    unbound_potentials, sys_params, masses, coords, box = get_solvent_phase_system(mol, ff, 0.0, minimize_energy=False)
+    v0 = np.zeros_like(coords)
+
+    ligand_idxs = np.arange(len(coords) - mol.GetNumAtoms(), len(coords), dtype=np.int32)
+    reference_idx = rng.choice(ligand_idxs)
+    selection = np.array(list(set(ligand_idxs).difference(set([reference_idx]))), dtype=np.int32)
+
+    bps = []
+    for p, bp in zip(sys_params, unbound_potentials):
+        bound_impl = bp.bind(p).to_gpu(np.float32).bound_impl
+        bps.append(bound_impl)
+
+    intg = LangevinIntegrator(temperature, dt, friction, masses, seed)
+
+    ctxt = custom_ops.Context(coords, v0, box, intg.impl(), bps)
+    ctxt.multiple_steps(steps)
+    ctxt.multiple_steps_U(steps, 0, 0)
+    ctxt.multiple_steps_local(steps, ligand_idxs, burn_in=0)
+    ctxt.multiple_steps_local_selection(steps, reference_idx, selection, burn_in=0)
+
+    # Make the box way too small, which should trigger the failure
+    ctxt.set_box(box * 0.01)
+    err_msg = "cutoff with padding is more than half of the box width, neighborlist is no longer reliable"
+    with pytest.raises(RuntimeError, match=err_msg):
+        _, boxes = ctxt.multiple_steps(steps)
+        assert len(boxes) == 1
+    with pytest.raises(RuntimeError, match=err_msg):
+        _, boxes, _ = ctxt.multiple_steps_U(steps, 0, 0)
+        assert len(boxes) == 1
+    with pytest.raises(RuntimeError, match=err_msg):
+        _, boxes = ctxt.multiple_steps_local(steps, ligand_idxs, burn_in=0)
+        assert len(boxes) == 1
+    with pytest.raises(RuntimeError, match=err_msg):
+        _, boxes = ctxt.multiple_steps_local_selection(steps, reference_idx, selection, burn_in=0)
+        assert len(boxes) == 1
+
+    # Without returning boxes no check will be performed
+    _, boxes = ctxt.multiple_steps(steps, store_x_interval=steps + 1)
+    assert len(boxes) == 0
+    _, boxes, _ = ctxt.multiple_steps_U(steps, store_x_interval=steps + 1, store_u_interval=0)
+    assert len(boxes) == 0
+    _, boxes = ctxt.multiple_steps_local(steps, ligand_idxs, burn_in=0, store_x_interval=steps + 1)
+    assert len(boxes) == 0
+    _, boxes = ctxt.multiple_steps_local_selection(
+        steps, reference_idx, selection, burn_in=0, store_x_interval=steps + 1
+    )
+    assert len(boxes) == 0
+
+
+def test_context_invalid_boxes_without_nonbonded_potentials():
+    """Verify that without a nonbonded all pairs potentials the context performs no check"""
+    mol, _ = get_biphenyl()
+    ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
+
+    temperature = constants.DEFAULT_TEMP
+    dt = 1.5e-3
+    friction = 0.0
+    seed = 2022
+    steps = 1
+
+    unbound_potentials, sys_params, masses, coords, box = get_solvent_phase_system(mol, ff, 0.0, minimize_energy=False)
+    v0 = np.zeros_like(coords)
+
+    bps = []
+    for p, bp in zip(sys_params, unbound_potentials):
+        # Skip the nonbonded all pairs, which is a SummedPotential, will result in no check
+        if isinstance(bp, SummedPotential):
+            continue
+        bound_impl = bp.bind(p).to_gpu(np.float32).bound_impl
+        bps.append(bound_impl)
+
+    intg = LangevinIntegrator(temperature, dt, friction, masses, seed)
+
+    ctxt = custom_ops.Context(coords, v0, box, intg.impl(), bps)
+
+    # Make the box way too small, which should trigger the failure
+    ctxt.set_box(box * 0.01)
+    _, boxes = ctxt.multiple_steps(steps)
+    assert len(boxes) == 1

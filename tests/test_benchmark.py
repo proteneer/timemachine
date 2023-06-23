@@ -3,6 +3,7 @@ and running an intermediate lambda window "rbfe" MD for a
 relative binding free energy edge from the HIF2A test system"""
 
 import time
+from argparse import ArgumentParser
 from importlib import resources
 
 import numpy as np
@@ -554,11 +555,21 @@ def test_bonded_potentials(hi2fa_test_frames):
 
 
 if __name__ == "__main__":
+    parser = ArgumentParser()
+    parser.add_argument("--num_batches", default=100, type=int)
+    parser.add_argument("--skip_dhfr", action="store_true")
+    parser.add_argument("--skip_hif2a", action="store_true")
+    parser.add_argument("--skip_potentials", action="store_true")
+    parser.add_argument("--verbose", action="store_true")
+    args = parser.parse_args()
 
-    benchmark_dhfr(verbose=False, num_batches=100)
-    benchmark_hif2a(verbose=False, num_batches=100)
+    if not args.skip_dhfr:
+        benchmark_dhfr(verbose=args.verbose, num_batches=args.num_batches)
+    if not args.skip_hif2a:
+        benchmark_hif2a(verbose=args.verbose, num_batches=args.num_batches)
 
-    hif2a_frames = generate_hif2a_frames(1000, 5, seed=2022)
-    test_nonbonded_interaction_group_potential(hif2a_frames)
-    test_nonbonded_potential(hif2a_frames)
-    test_bonded_potentials(hif2a_frames)
+    if not args.skip_potentials:
+        hif2a_frames = generate_hif2a_frames(1000, 5, seed=2022)
+        test_nonbonded_interaction_group_potential(hif2a_frames)
+        test_nonbonded_potential(hif2a_frames)
+        test_bonded_potentials(hif2a_frames)
