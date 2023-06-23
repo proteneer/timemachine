@@ -1,5 +1,6 @@
 #pragma once
 
+#include "../gpu_utils.cuh"
 #include "k_fixed_point.cuh"
 
 // each atom parameterized by a 4-tuple: charge, lj sigma, lj epsilon, 4D coordinate w
@@ -23,11 +24,7 @@ float __device__ __forceinline__ real_es_factor(float real_beta, float dij, floa
     float beta_dij = real_beta * dij;
     // max ulp error is: 2 + floor(abs(1.16 * x))
     float exp_beta_dij_2 = __expf(-beta_dij * beta_dij);
-    // 5th order gaussian polynomial approximation, we need the exp(-x^2) anyways for the chain rule
-    // so we use last variant in https://en.wikipedia.org/wiki/Error_function#Approximation_with_elementary_functions
-    float t = 1.0f / (1.0f + 0.3275911f * beta_dij);
-    erfc_beta_dij = (0.254829592f + (-0.284496736f + (1.421413741f + (-1.453152027f + 1.061405429f * t) * t) * t) * t) *
-                    t * exp_beta_dij_2;
+    erfc_beta_dij = fasterfc(beta_dij);
     return -inv_d2ij * (static_cast<float>(TWO_OVER_SQRT_PI) * beta_dij * exp_beta_dij_2 + erfc_beta_dij);
 }
 

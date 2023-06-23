@@ -83,3 +83,21 @@ double __device__ __forceinline__ rmul_rn(double a, double b) { return __dmul_rn
 float __device__ __forceinline__ radd_rn(float a, float b) { return __fadd_rn(a, b); }
 
 double __device__ __forceinline__ radd_rn(double a, double b) { return __dadd_rn(a, b); }
+
+// Faster ERFC approximation courtesy of Norbert Juffa. NVIDIA Corporation
+static __forceinline__ __device__ float fasterfc(float a) {
+    /* approximate log(erfc(a)) with rel. error < 7e-9 */
+    float t, x = a;
+    t = (float)-1.6488499458192755E-006;
+    t = __fmaf_rn(t, x, (float)2.9524665006554534E-005);
+    t = __fmaf_rn(t, x, (float)-2.3341951153749626E-004);
+    t = __fmaf_rn(t, x, (float)1.0424943374047289E-003);
+    t = __fmaf_rn(t, x, (float)-2.5501426008983853E-003);
+    t = __fmaf_rn(t, x, (float)3.1979939710877236E-004);
+    t = __fmaf_rn(t, x, (float)2.7605379075746249E-002);
+    t = __fmaf_rn(t, x, (float)-1.4827402067461906E-001);
+    t = __fmaf_rn(t, x, (float)-9.1844764013203406E-001);
+    t = __fmaf_rn(t, x, (float)-1.6279070384382459E+000);
+    t = t * x;
+    return exp2f(t);
+}
