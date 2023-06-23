@@ -10,7 +10,6 @@ from typing import List, Optional, Tuple
 import numpy as np
 import pytest
 from numpy.typing import NDArray
-from scipy.spatial.distance import cdist
 
 from timemachine import constants
 from timemachine.fe import rbfe
@@ -31,7 +30,7 @@ SECONDS_PER_DAY = 24 * 60 * 60
 
 @pytest.fixture(scope="module")
 def hi2fa_test_frames():
-    return generate_hif2a_frames(100, 1, seed=2022)
+    return generate_hif2a_frames(100, 10, seed=2022, barostat_interval=20)
 
 
 def generate_hif2a_frames(n_frames: int, frame_interval: int, seed=None, barostat_interval: int = 5, hmr: bool = True):
@@ -97,17 +96,17 @@ def generate_hif2a_frames(n_frames: int, frame_interval: int, seed=None, barosta
 
 
 def benchmark_potential(
-    label,
+    label: str,
     potential: Potential,
     precision,
     params,
     coords,
     boxes,
-    verbose=True,
-    num_batches=5,
-    compute_du_dx=True,
-    compute_du_dp=True,
-    compute_u=True,
+    verbose: bool = True,
+    num_batches: int = 5,
+    compute_du_dx: bool = True,
+    compute_du_dp: bool = True,
+    compute_u: bool = True,
 ):
     if precision == np.float32:
         label = label + "_f32"
@@ -144,17 +143,17 @@ def benchmark_potential(
 
 
 def benchmark(
-    label,
+    label: str,
     masses,
     x0,
     v0,
     box,
     bound_potentials,
-    hmr=False,
-    verbose=True,
-    num_batches=100,
-    steps_per_batch=1000,
-    barostat_interval=0,
+    hmr: bool = True,
+    verbose: bool = True,
+    num_batches: int = 100,
+    steps_per_batch: int = 1000,
+    barostat_interval: int = 0,
 ):
     """
     TODO: configuration blob containing num_batches, steps_per_batch, and any other options
@@ -235,17 +234,17 @@ def benchmark(
 
 
 def benchmark_local(
-    label,
+    label: str,
     masses,
     x0,
     v0,
     box,
     bound_potentials,
     ligand_idxs,
-    hmr=False,
-    verbose=True,
-    num_batches=100,
-    steps_per_batch=1000,
+    hmr: bool = True,
+    verbose: bool = True,
+    num_batches: int = 100,
+    steps_per_batch: int = 1000,
 ):
     """
     TODO: configuration blob containing num_batches, steps_per_batch, and any other options
@@ -317,7 +316,7 @@ def benchmark_local(
     )
 
 
-def benchmark_dhfr(verbose=False, num_batches=100, steps_per_batch=1000):
+def benchmark_dhfr(verbose: bool = False, num_batches: int = 100, steps_per_batch: int = 1000):
 
     host_fns, host_masses, host_conf, box = setup_dhfr()
 
@@ -347,19 +346,6 @@ def benchmark_dhfr(verbose=False, num_batches=100, steps_per_batch=1000):
         steps_per_batch=steps_per_batch,
         barostat_interval=25,
     )
-    benchmark(
-        "dhfr-apo-hmr-barostat-interval-25",
-        host_masses,
-        x0,
-        v0,
-        box,
-        host_fns,
-        verbose=verbose,
-        hmr=True,
-        num_batches=num_batches,
-        steps_per_batch=steps_per_batch,
-        barostat_interval=25,
-    )
 
 
 def prepare_hif2a_initial_state(st, host_config):
@@ -368,20 +354,18 @@ def prepare_hif2a_initial_state(st, host_config):
     lamb = 0.1
     host = rbfe.setup_optimized_host(st, host_config)
     initial_state = rbfe.setup_initial_states(st, host, temperature, [lamb], seed=2022)[0]
-    bound_impls = [p.to_gpu(np.float32).bound_impl for p in initial_state.potentials]
-    val_and_grad_fn = minimizer.get_val_and_grad_fn(bound_impls, initial_state.box0)
-    assert np.all(np.isfinite(initial_state.x0)), "Initial coordinates contain nan or inf"
-    ligand_coords = initial_state.x0[initial_state.ligand_idxs]
-    d_ij = cdist(ligand_coords, initial_state.x0)
-    # if any atom is within any of the ligand's atom's ixn radius, flag it for minimization
-    cutoff = 0.5  # in nanometers
-    free_idxs = np.where(np.any(d_ij < cutoff, axis=0))[0].tolist()
-    x0_min = minimizer.local_minimize(initial_state.x0, val_and_grad_fn, free_idxs)
-    initial_state.x0 = x0_min
+    free_idxs = rbfe.get_free_idxs(initial_state)
+    initial_state.x0 = rbfe.optimize_coords_state(
+        initial_state.potentials,
+        initial_state.x0,
+        initial_state.box0,
+        free_idxs,
+        assert_energy_decreased=False,
+    )
     return initial_state
 
 
-def benchmark_hif2a(verbose=False, num_batches=100, steps_per_batch=1000):
+def benchmark_hif2a(verbose: bool = False, num_batches: int = 100, steps_per_batch: int = 1000):
 
     # we use simple charge "sc" to be able to run on machines that don't have openeye licenses.
     mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
@@ -487,7 +471,7 @@ def test_nonbonded_interaction_group_potential(hi2fa_test_frames):
     assert nonbonded_params is not None
 
     num_param_batches = 5
-    beta = 1 / (constants.BOLTZ * 300)
+    beta = 1 / (constants.BOLTZ * constants.DEFAULT_TEMP)
     cutoff = 1.2
 
     precisions = [np.float32, np.float64]
@@ -569,6 +553,7 @@ def test_bonded_potentials(hi2fa_test_frames):
 if __name__ == "__main__":
     parser = ArgumentParser()
     parser.add_argument("--num_batches", default=100, type=int)
+    parser.add_argument("--steps_per_batch", default=100, type=int)
     parser.add_argument("--skip_dhfr", action="store_true")
     parser.add_argument("--skip_hif2a", action="store_true")
     parser.add_argument("--skip_potentials", action="store_true")
@@ -576,12 +561,12 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     if not args.skip_dhfr:
-        benchmark_dhfr(verbose=args.verbose, num_batches=args.num_batches)
+        benchmark_dhfr(verbose=args.verbose, num_batches=args.num_batches, steps_per_batch=args.steps_per_batch)
     if not args.skip_hif2a:
-        benchmark_hif2a(verbose=args.verbose, num_batches=args.num_batches)
+        benchmark_hif2a(verbose=args.verbose, num_batches=args.num_batches, steps_per_batch=args.steps_per_batch)
 
     if not args.skip_potentials:
-        hif2a_frames = generate_hif2a_frames(1000, 5, seed=2022)
+        hif2a_frames = generate_hif2a_frames(1000, 20, seed=2022, barostat_interval=20)
         test_nonbonded_interaction_group_potential(hif2a_frames)
         test_nonbonded_potential(hif2a_frames)
         test_bonded_potentials(hif2a_frames)
