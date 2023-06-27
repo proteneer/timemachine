@@ -22,7 +22,7 @@ RUN wget --quiet https://repo.anaconda.com/miniconda/Miniconda3-${MINICONDA_VERS
     echo ". /opt/conda/etc/profile.d/conda.sh" >> ~/.bashrc
 
 # Setup CMake
-ARG CMAKE_VERSION=3.22.1
+ARG CMAKE_VERSION=3.24.3
 RUN wget --quiet https://github.com/Kitware/CMake/releases/download/v${CMAKE_VERSION}/cmake-${CMAKE_VERSION}-linux-x86_64.tar.gz -O cmake.tar.gz && \
     tar -xzf cmake.tar.gz && \
     rm -rf cmake.tar.gz
@@ -103,8 +103,6 @@ RUN pip install --no-cache-dir -r timemachine/ci/requirements.txt
 
 # Dev container that contains the cuda developer tools
 FROM tm_base_env AS timemachine_dev
-ARG CUDA_ARCH=75
-ENV CMAKE_ARGS -DCUDA_ARCH=${CUDA_ARCH}
 COPY . /code/timemachine/
 WORKDIR /code/timemachine/
 RUN pip install --no-cache-dir -e .[test] && rm -rf ./build
