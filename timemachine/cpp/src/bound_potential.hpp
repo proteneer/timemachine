@@ -20,6 +20,7 @@ struct BoundPotential {
     std::vector<int> shape;
     std::unique_ptr<DeviceBuffer<double>> d_p;
     std::shared_ptr<Potential> potential;
+    const int max_size_;
 
     int size() const;
 
