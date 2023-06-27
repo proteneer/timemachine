@@ -7,7 +7,7 @@ import jax.numpy as jnp
 import networkx as nx
 import numpy as np
 import pytest
-from common import load_split_forcefields
+from common import check_split_ixns, load_split_forcefields
 from hypothesis import assume, given, seed
 from rdkit import Chem
 from rdkit.Chem import AllChem
@@ -27,11 +27,13 @@ from timemachine.fe.single_topology import (
     setup_dummy_interactions_from_ff,
 )
 from timemachine.fe.system import convert_bps_into_system, minimize_scipy, simulate_system
+from timemachine.fe.topology import exclude_all_ligand_ligand_ixns
 from timemachine.fe.utils import get_mol_name, get_romol_conf, read_sdf
 from timemachine.ff import Forcefield
 from timemachine.ff.handlers import openmm_deserializer
 from timemachine.md import minimizer
 from timemachine.md.builders import build_water_system
+from timemachine.potentials import Nonbonded, NonbondedInteractionGroup
 from timemachine.potentials.jax_utils import pairwise_distances
 
 
@@ -444,7 +446,7 @@ def test_combine_with_host():
 
 @pytest.mark.parametrize("precision, rtol, atol", [(np.float64, 1e-8, 1e-8), (np.float32, 1e-4, 5e-4)])
 @pytest.mark.parametrize("use_tiny_mol", [True, False])
-def test_nonbonded_split(precision, rtol, atol, use_tiny_mol):
+def test_nonbonded_intra_split(precision, rtol, atol, use_tiny_mol):
 
     # mol with no intramolecular NB terms and no dihedrals
     if use_tiny_mol:
@@ -496,7 +498,7 @@ def test_nonbonded_split(precision, rtol, atol, use_tiny_mol):
             vacuum_u_inter_scaled,
             solvent_grad_inter_scaled,
             solvent_u_inter_scaled,
-        ) = get_vacuum_solvent_u_grads(ffs.inter_scaled, lamb)
+        ) = get_vacuum_solvent_u_grads(ffs.solv, lamb)
 
         # Compute the expected intermol scaled potential
         expected_inter_scaled_u = solvent_u_scaled - vacuum_u_scaled + vacuum_u_ref
@@ -513,6 +515,138 @@ def test_nonbonded_split(precision, rtol, atol, use_tiny_mol):
         # The vacuum term should be the same as the ref
         assert vacuum_u_inter_scaled == pytest.approx(vacuum_u_ref, rel=rtol, abs=atol)
         np.testing.assert_allclose(vacuum_grad_ref, vacuum_grad_inter_scaled, rtol=rtol, atol=atol)
+
+
+class SingleTopologyRef(SingleTopology):
+    def _parameterize_host_guest_nonbonded(self, lamb, host_nonbonded, _):
+        # Parameterize nonbonded potential for the host guest interaction
+        num_host_atoms = host_nonbonded.params.shape[0]
+        num_guest_atoms = self.get_num_atoms()
+
+        guest_exclusions, guest_scale_factors = exclude_all_ligand_ligand_ixns(num_host_atoms, num_guest_atoms)
+
+        combined_exclusion_idxs = np.concatenate([host_nonbonded.potential.exclusion_idxs, guest_exclusions])
+        combined_scale_factors = np.concatenate([host_nonbonded.potential.scale_factors, guest_scale_factors])
+
+        host_params = host_nonbonded.params
+        cutoff = host_nonbonded.potential.cutoff
+
+        guest_params = self._get_guest_params(self.ff.q_handle, self.ff.lj_handle, lamb, cutoff)
+        combined_nonbonded_params = np.concatenate([host_params, guest_params])
+
+        combined_nonbonded = Nonbonded(
+            num_host_atoms + num_guest_atoms,
+            combined_exclusion_idxs,
+            combined_scale_factors,
+            host_nonbonded.potential.beta,
+            host_nonbonded.potential.cutoff,
+        ).bind(combined_nonbonded_params)
+
+        return combined_nonbonded
+
+
+@pytest.mark.parametrize("precision, rtol, atol", [(np.float64, 1e-8, 1e-8), (np.float32, 1e-4, 5e-4)])
+def test_combine_with_host_split(precision, rtol, atol):
+    # test the split P-L and L-W interactions
+
+    with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
+        mols = {get_mol_name(mol): mol for mol in read_sdf(path_to_ligand)}
+    mol_a = mols["338"]
+    mol_b = mols["43"]
+    core = _get_core_by_mcs(mol_a, mol_b)
+
+    def compute_ref_grad_u(ff: Forcefield, precision, x0, box, lamb, num_water_atoms, host_bps):
+        # Use the original code to compute the nb grads and potential
+        host_system = convert_bps_into_system(host_bps)
+        st = SingleTopologyRef(mol_a, mol_b, core, ff)
+        ligand_conf = st.combine_confs(get_romol_conf(mol_a), get_romol_conf(mol_b), lamb)
+        num_host_atoms = x0.shape[0] - ligand_conf.shape[0]
+        combined_conf = np.concatenate([x0[:num_host_atoms], ligand_conf])
+
+        combined_system = st.combine_with_host(host_system, lamb, num_water_atoms)
+        potentials = combined_system.get_U_fns()
+        impls = [p.to_gpu(precision).bound_impl for p in potentials]
+        u, grad = minimizer.get_val_and_grad_fn(impls, box)(combined_conf)
+        return grad, u
+
+    def compute_new_grad_u(ff: Forcefield, precision, x0, box, lamb, num_water_atoms, host_bps):
+        host_system = convert_bps_into_system(host_bps)
+        st = SingleTopology(mol_a, mol_b, core, ff)
+        ligand_conf = st.combine_confs(get_romol_conf(mol_a), get_romol_conf(mol_b), lamb)
+        num_host_atoms = x0.shape[0] - ligand_conf.shape[0]
+        combined_conf = np.concatenate([x0[:num_host_atoms], ligand_conf])
+
+        combined_system = st.combine_with_host(host_system, lamb, num_water_atoms)
+        potentials = combined_system.get_U_fns()
+        impls = [p.to_gpu(precision).bound_impl for p in potentials]
+        u, grad = minimizer.get_val_and_grad_fn(impls, box)(combined_conf)
+        return grad, u
+
+    def compute_intra_grad_u(ff: Forcefield, precision, x0, box, lamb, num_water_atoms, num_host_atoms):
+        st = SingleTopology(mol_a, mol_b, core, ff)
+        ligand_conf = st.combine_confs(get_romol_conf(mol_a), get_romol_conf(mol_b), lamb)
+
+        vacuum_system = st.setup_intermediate_state(lamb)
+        potentials = vacuum_system.get_U_fns()
+        impls = [p.to_gpu(precision).bound_impl for p in potentials]
+        u, grad = minimizer.get_val_and_grad_fn(impls, box)(ligand_conf)
+
+        # Pad g so it's the same shape as the others
+        grad_padded = np.concatenate([np.zeros((num_host_atoms, 3)), grad])
+        return grad_padded, u
+
+    def compute_ixn_grad_u(
+        ff: Forcefield,
+        precision,
+        x0,
+        box,
+        lamb,
+        num_water_atoms,
+        host_bps,
+        water_idxs,
+        ligand_idxs,
+        protein_idxs,
+        is_solvent=False,
+    ):
+        assert num_water_atoms == len(water_idxs)
+        host_system = convert_bps_into_system(host_bps)
+        st = SingleTopology(mol_a, mol_b, core, ff)
+        ligand_conf = st.combine_confs(get_romol_conf(mol_a), get_romol_conf(mol_b), lamb)
+        num_host_atoms = x0.shape[0] - ligand_conf.shape[0]
+        combined_conf = np.concatenate([x0[:num_host_atoms], ligand_conf])
+        num_total_atoms = combined_conf.shape[0]
+
+        cutoff = host_system.nonbonded.potential.cutoff
+        u = NonbondedInteractionGroup(
+            num_total_atoms,
+            ligand_idxs,
+            host_system.nonbonded.potential.beta,
+            cutoff,
+            col_atom_idxs=water_idxs if is_solvent else protein_idxs,
+        )
+        guest_params = st._get_guest_params(ff.q_handle_solv if is_solvent else ff.q_handle, ff.lj_handle, lamb, cutoff)
+
+        host_params = host_system.nonbonded.params
+        combined_nonbonded_params = np.concatenate([host_params, guest_params])
+        u_impl = u.bind(combined_nonbonded_params).to_gpu(precision=precision).bound_impl
+        return u_impl.execute(combined_conf, box)
+
+    ffs = load_split_forcefields()
+    st = SingleTopologyRef(mol_a, mol_b, core, ffs.ref)
+    ligand_conf = st.combine_confs(get_romol_conf(mol_a), get_romol_conf(mol_b), 0.0)
+    ligand_idxs = np.arange(ligand_conf.shape[0], dtype=np.int32)
+
+    check_split_ixns(
+        ligand_conf,
+        ligand_idxs,
+        precision,
+        rtol,
+        atol,
+        compute_ref_grad_u,
+        compute_new_grad_u,
+        compute_intra_grad_u,
+        compute_ixn_grad_u,
+    )
 
 
 def ligand_from_smiles(smiles):
