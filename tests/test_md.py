@@ -985,9 +985,10 @@ def test_context_invalid_boxes():
     unbound_potentials, sys_params, masses, coords, box = get_solvent_phase_system(mol, ff, 0.0, minimize_energy=False)
     v0 = np.zeros_like(coords)
 
+    host_idxs = np.arange(len(coords) - mol.GetNumAtoms(), dtype=np.int32)
     ligand_idxs = np.arange(len(coords) - mol.GetNumAtoms(), len(coords), dtype=np.int32)
     reference_idx = rng.choice(ligand_idxs)
-    selection = np.array(list(set(ligand_idxs).difference(set([reference_idx]))), dtype=np.int32)
+    selection = rng.choice(host_idxs, size=40, replace=False)
 
     bps = []
     for p, bp in zip(sys_params, unbound_potentials):
