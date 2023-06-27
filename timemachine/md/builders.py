@@ -56,7 +56,7 @@ def build_protein_system(host_pdbfile: Union[app.PDBFile, str], protein_ff: str,
     return solvated_host_system, solvated_host_coords, box, modeller.topology, nwa
 
 
-def build_water_system(box_width, water_ff: str):
+def build_water_system(box_width, water_ff: str, num_waters=None):
     ff = app.ForceField(f"{water_ff}.xml")
 
     # Create empty topology and coordinates.
@@ -65,7 +65,7 @@ def build_water_system(box_width, water_ff: str):
     m = app.Modeller(top, pos)
 
     boxSize = Vec3(box_width, box_width, box_width) * unit.nanometers
-    m.addSolvent(ff, boxSize=boxSize, model=sanitize_water_ff(water_ff))
+    m.addSolvent(ff, boxSize=boxSize, model=sanitize_water_ff(water_ff), numAdded=num_waters)
 
     system = ff.createSystem(m.getTopology(), nonbondedMethod=app.NoCutoff, constraints=None, rigidWater=False)
 
