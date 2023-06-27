@@ -318,21 +318,21 @@ def load_split_forcefields() -> SplitForcefield:
         SplitForcefield which contains the ff with various
         terms scaled by a factor of 10.
     """
-    ff_ref = Forcefield.load_from_file("smirnoff_2_0_0_ccc.py")
+    ff_ref = Forcefield.load_default()
 
-    ff_intra = Forcefield.load_from_file("smirnoff_2_0_0_ccc.py")
+    ff_intra = Forcefield.load_default()
     assert ff_intra.q_handle_intra
     ff_intra.q_handle_intra.params *= 10
 
-    ff_solv = Forcefield.load_from_file("smirnoff_2_0_0_ccc.py")
+    ff_solv = Forcefield.load_default()
     assert ff_solv.q_handle_solv
     ff_solv.q_handle_solv.params *= 10
 
-    ff_prot = Forcefield.load_from_file("smirnoff_2_0_0_ccc.py")
+    ff_prot = Forcefield.load_default()
     assert ff_prot.q_handle
     ff_prot.q_handle.params *= 10
 
-    ff_scaled = Forcefield.load_from_file("smirnoff_2_0_0_ccc.py")
+    ff_scaled = Forcefield.load_default()
     ff_scaled.q_handle.params *= 10
     ff_scaled.q_handle_intra.params *= 10
     ff_scaled.q_handle_solv.params *= 10

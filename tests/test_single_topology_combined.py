@@ -3,6 +3,7 @@
 import numpy as np
 import pytest
 
+from timemachine import potentials
 from timemachine.fe.single_topology import SingleTopology
 from timemachine.fe.system import convert_omm_system
 from timemachine.ff import Forcefield
@@ -95,6 +96,7 @@ def test_combined_parameters_nonbonded(host_system_fixture, hif2a_ligand_pair_si
         hgs = st.combine_with_host(host_sys, lamb, num_water_atoms)
         # check nonbonded terms
         # 1) ligand ixns should be omitted in hgs.nonbonded_host_guest
+        assert isinstance(hgs.nonbonded_host_guest.potential.potentials[0], potentials.Nonbonded)
         hgs_atom_idxs = hgs.nonbonded_host_guest.potential.potentials[0].atom_idxs
         assert set(hgs_atom_idxs) == set(range(num_host_atoms))
 
@@ -103,6 +105,7 @@ def test_combined_parameters_nonbonded(host_system_fixture, hif2a_ligand_pair_si
         assert len(hgs.nonbonded_host_guest.potential.params_init) > 1
 
         # NBIxnGroup has the ligand interaction parameters
+        assert isinstance(hgs.nonbonded_host_guest.potential.potentials[1], potentials.NonbondedInteractionGroup)
         w_coords = hgs.nonbonded_host_guest.potential.params_init[1][:, 3]
         cutoff = hgs.nonbonded_host_guest.potential.potentials[1].cutoff
 
@@ -182,10 +185,12 @@ def test_combined_parameters_nonbonded_intermediate(
 
     for lamb in rng.uniform(0.01, 0.99, (10,)):
         hgs = st.combine_with_host(host_sys, lamb, num_water_atoms)
+        assert isinstance(hgs.nonbonded_host_guest.potential.potentials[0], potentials.Nonbonded)
         cutoff = hgs.nonbonded_host_guest.potential.potentials[0].cutoff
 
         assert len(hgs.nonbonded_host_guest.potential.params_init) > 1
         # NBIxnGroup has the ligand interaction parameters
+        assert isinstance(hgs.nonbonded_host_guest.potential.potentials[1], potentials.NonbondedInteractionGroup)
         guest_params = np.array(hgs.nonbonded_host_guest.potential.params_init[1][num_host_atoms:])
         ws_core = [w for flag, (_, _, _, w) in zip(st.c_flags, guest_params) if flag == 0]
         ws_a = [w for flag, (_, _, _, w) in zip(st.c_flags, guest_params) if flag == 1]

@@ -5,10 +5,11 @@ relative binding free energy edge from the HIF2A test system"""
 import time
 from argparse import ArgumentParser
 from importlib import resources
-from typing import List
+from typing import List, Optional, Tuple
 
 import numpy as np
 import pytest
+from numpy.typing import NDArray
 from scipy.spatial.distance import cdist
 
 from timemachine import constants
@@ -470,7 +471,7 @@ def test_hif2a():
     benchmark_hif2a(verbose=True, num_batches=2, steps_per_batch=100)
 
 
-def get_nonbonded_pot_params(bps: List[BoundPotential]) -> BoundPotential[Nonbonded]:
+def get_nonbonded_pot_params(bps: List[BoundPotential]) -> Optional[Tuple[BoundPotential[Nonbonded], NDArray]]:
     for bp in bps:
         if isinstance(bp.potential, SummedPotential):
             for pot, params in zip(bp.potential.potentials, bp.potential.params_init):
