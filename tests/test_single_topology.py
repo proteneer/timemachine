@@ -32,8 +32,8 @@ from timemachine.fe.utils import get_mol_name, get_romol_conf, read_sdf
 from timemachine.ff import Forcefield
 from timemachine.ff.handlers import openmm_deserializer
 from timemachine.md import minimizer
-from timemachine.md.builders import build_water_system
-from timemachine.potentials import Nonbonded, NonbondedInteractionGroup
+from timemachine.md.builders import build_protein_system, build_water_system
+from timemachine.potentials import Nonbonded, NonbondedInteractionGroup, SummedPotential
 from timemachine.potentials.jax_utils import pairwise_distances
 
 
@@ -541,6 +541,52 @@ class SingleTopologyRef(SingleTopology):
         ).bind(combined_nonbonded_params)
 
         return combined_nonbonded
+
+
+@pytest.mark.parametrize("precision", [np.float64, np.float32])
+@pytest.mark.parametrize("lamb", [0.0, 0.5, 1.0])
+def test_nonbonded_intra_split_bitwise_identical(precision, lamb):
+    with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
+        mols = {get_mol_name(mol): mol for mol in read_sdf(path_to_ligand)}
+    mol_a = mols["338"]
+    mol_b = mols["43"]
+    core = _get_core_by_mcs(mol_a, mol_b)
+
+    ff = Forcefield.load_default()
+
+    with resources.path("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as path_to_pdb:
+        complex_system, complex_coords, box, _, num_water_atoms = build_protein_system(
+            str(path_to_pdb), ff.protein_ff, ff.water_ff
+        )
+        box += np.diag([0.1, 0.1, 0.1])
+
+    host_bps, host_masses = openmm_deserializer.deserialize_system(complex_system, cutoff=1.2)
+    host_system = convert_bps_into_system(host_bps)
+    st_ref = SingleTopologyRef(mol_a, mol_b, core, ff)
+
+    combined_ref = st_ref.combine_with_host(host_system, lamb, num_water_atoms)
+    ref_potentials = combined_ref.get_U_fns()
+    ref_summed = SummedPotential([bp.potential for bp in ref_potentials], [bp.params for bp in ref_potentials])
+    flattened_ref_params = np.concatenate([bp.params.reshape(-1) for bp in ref_potentials])
+
+    st_split = SingleTopology(mol_a, mol_b, core, ff)
+    combined_split = st_split.combine_with_host(host_system, lamb, num_water_atoms)
+    split_potentials = combined_split.get_U_fns()
+    split_summed = SummedPotential([bp.potential for bp in split_potentials], [bp.params for bp in split_potentials])
+    flattened_split_params = np.concatenate([bp.params.reshape(-1) for bp in split_potentials])
+
+    ligand_conf = st_ref.combine_confs(get_romol_conf(mol_a), get_romol_conf(mol_b), lamb)
+    combined_conf = np.concatenate([complex_coords, ligand_conf])
+
+    # Ensure that the du_dx and du_dp are exactly identical, ignore du_dp as shapes are different
+    ref_du_dx, _, ref_u = ref_summed.to_gpu(precision).unbound_impl.execute_selective(
+        combined_conf, flattened_ref_params, box, True, False, True
+    )
+    split_du_dx, _, split_u = split_summed.to_gpu(precision).unbound_impl.execute_selective(
+        combined_conf, flattened_split_params, box, True, False, True
+    )
+    np.testing.assert_array_equal(ref_du_dx, split_du_dx)
+    np.testing.assert_equal(ref_u, split_u)
 
 
 @pytest.mark.parametrize("precision, rtol, atol", [(np.float64, 1e-8, 1e-8), (np.float32, 1e-4, 5e-4)])
