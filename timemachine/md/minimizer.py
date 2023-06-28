@@ -1,5 +1,5 @@
 import warnings
-from typing import Optional, Sequence, Tuple
+from typing import Iterable, Optional, Sequence, Tuple
 
 import numpy as np
 import scipy.optimize
@@ -16,7 +16,7 @@ from timemachine.lib import LangevinIntegrator, MonteCarloBarostat, custom_ops
 from timemachine.md.barker import BarkerProposal
 from timemachine.md.barostat.utils import get_bond_list, get_group_indices
 from timemachine.md.fire import fire_descent
-from timemachine.potentials import HarmonicBond, SummedPotential
+from timemachine.potentials import BoundPotential, HarmonicBond, SummedPotential
 
 
 class MinimizationWarning(UserWarning):
@@ -406,7 +406,7 @@ def equilibrate_host(
     return ctxt.get_x_t(), ctxt.get_box()
 
 
-def get_val_and_grad_fn(bps, box):
+def get_val_and_grad_fn(bps: Iterable[BoundPotential], box: NDArray):
     """
     Convert impls, box into a function that only takes in coords.
 
@@ -421,15 +421,13 @@ def get_val_and_grad_fn(bps, box):
     Energy function with gradient
         f: R^(Nx3) -> (R^1, R^Nx3)
     """
+    summed_pot = SummedPotential([bp.potential for bp in bps], [bp.params for bp in bps])
+    params = np.concatenate([bp.params.reshape(-1) for bp in bps])
+    impl = summed_pot.to_gpu(np.float32).bind(params).bound_impl
 
     def val_and_grad_fn(coords):
-        g = np.zeros_like(coords)
-        u = 0.0
-        for impl in bps:
-            g_bp, u_bp = impl.execute(coords, box)
-            g += g_bp
-            u += u_bp
-        return u, g
+        g_bp, u_bp = impl.execute(coords, box)
+        return u_bp, g_bp
 
     return val_and_grad_fn
 

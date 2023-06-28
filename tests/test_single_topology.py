@@ -471,14 +471,12 @@ def test_nonbonded_intra_split(precision, rtol, atol, use_tiny_mol):
 
         vacuum_system = st.setup_intermediate_state(lamb)
         vacuum_potentials = vacuum_system.get_U_fns()
-        vacuum_impls = [p.to_gpu(precision).bound_impl for p in vacuum_potentials]
-        val_and_grad_fn = minimizer.get_val_and_grad_fn(vacuum_impls, solvent_box)
+        val_and_grad_fn = minimizer.get_val_and_grad_fn(vacuum_potentials, solvent_box)
         vacuum_u, vacuum_grad = val_and_grad_fn(ligand_conf)
 
         solvent_system = st.combine_with_host(convert_bps_into_system(solvent_bps), lamb, solvent_conf.shape[0])
         solvent_potentials = solvent_system.get_U_fns()
-        solvent_impls = [p.to_gpu(precision).bound_impl for p in solvent_potentials]
-        val_and_grad_fn = minimizer.get_val_and_grad_fn(solvent_impls, solvent_box)
+        val_and_grad_fn = minimizer.get_val_and_grad_fn(solvent_potentials, solvent_box)
         solvent_u, solvent_grad = val_and_grad_fn(combined_conf)
         return vacuum_grad, vacuum_u, solvent_grad, solvent_u
 
@@ -565,8 +563,7 @@ def test_combine_with_host_split(precision, rtol, atol):
 
         combined_system = st.combine_with_host(host_system, lamb, num_water_atoms)
         potentials = combined_system.get_U_fns()
-        impls = [p.to_gpu(precision).bound_impl for p in potentials]
-        u, grad = minimizer.get_val_and_grad_fn(impls, box)(combined_conf)
+        u, grad = minimizer.get_val_and_grad_fn(potentials, box)(combined_conf)
         return grad, u
 
     def compute_new_grad_u(ff: Forcefield, precision, x0, box, lamb, num_water_atoms, host_bps):
@@ -578,8 +575,7 @@ def test_combine_with_host_split(precision, rtol, atol):
 
         combined_system = st.combine_with_host(host_system, lamb, num_water_atoms)
         potentials = combined_system.get_U_fns()
-        impls = [p.to_gpu(precision).bound_impl for p in potentials]
-        u, grad = minimizer.get_val_and_grad_fn(impls, box)(combined_conf)
+        u, grad = minimizer.get_val_and_grad_fn(potentials, box)(combined_conf)
         return grad, u
 
     def compute_intra_grad_u(ff: Forcefield, precision, x0, box, lamb, num_water_atoms, num_host_atoms):
@@ -588,8 +584,7 @@ def test_combine_with_host_split(precision, rtol, atol):
 
         vacuum_system = st.setup_intermediate_state(lamb)
         potentials = vacuum_system.get_U_fns()
-        impls = [p.to_gpu(precision).bound_impl for p in potentials]
-        u, grad = minimizer.get_val_and_grad_fn(impls, box)(ligand_conf)
+        u, grad = minimizer.get_val_and_grad_fn(potentials, box)(ligand_conf)
 
         # Pad g so it's the same shape as the others
         grad_padded = np.concatenate([np.zeros((num_host_atoms, 3)), grad])
