@@ -316,7 +316,7 @@ def load_split_forcefields() -> SplitForcefield:
     """
     Returns:
         SplitForcefield which contains the ff with various
-        terms scaled up.
+        terms scaled.
     """
     SIG_IDX, EPS_IDX = 0, 1
     Q_SCALE = 10
