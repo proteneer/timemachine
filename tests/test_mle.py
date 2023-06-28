@@ -299,6 +299,38 @@ def test_infer_node_vals_and_errs_networkx(nx_graph_with_reference_mle_instance)
         # assert g_res.nodes[n][node_stddev_prop] == pytest.approx(ref_dg_err)
 
 
+def test_infer_node_vals_and_errs_networkx_multi(nx_graph_with_reference_mle_instance):
+    g, seed, ref_dgs, ref_dg_errs = nx_graph_with_reference_mle_instance
+
+    # MultiDiGraph should result in same values
+    mg = nx.MultiDiGraph()
+    for n, d in g.nodes.items():
+        mg.add_node(n, **d)
+    for e, d in g.edges.items():
+        mg.add_edge(*e, **d)
+
+    g_res = infer_node_vals_and_errs_networkx_partial(mg, seed=seed)
+    for n, (ref_dg, ref_dg_err) in enumerate(zip(ref_dgs, ref_dg_errs)):
+        assert g_res.nodes[n][node_val_prop] == pytest.approx(ref_dg, rel=1e-5)
+        assert g_res.nodes[n][node_stddev_prop] == pytest.approx(ref_dg_err, rel=1e-5)
+
+    # multiple edges should result in similar values
+    for e, d in g.edges.items():
+        assert mg.add_edge(*e, **d) == 1
+
+    g_res = infer_node_vals_and_errs_networkx_partial(mg, seed=seed)
+    for n, (ref_dg, ref_dg_err) in enumerate(zip(ref_dgs, ref_dg_errs)):
+        assert g_res.nodes[n][node_val_prop] == pytest.approx(ref_dg, abs=1e-5)
+
+    # adding all 0 edges should shift the dgs toward 0
+    for e, d in g.edges.items():
+        assert mg.add_edge(*e, **{edge_diff_prop: 0.0, edge_stddev_prop: 0.1}) == 2
+
+    g_res = infer_node_vals_and_errs_networkx_partial(mg, seed=seed)
+    for n, (ref_dg, ref_dg_err) in enumerate(zip(ref_dgs, ref_dg_errs)):
+        assert np.abs(g_res.nodes[n][node_val_prop]) < 1.0
+
+
 def test_infer_node_vals_and_errs_networkx_invariant_wrt_permutation(nx_graph_with_reference_mle_instance):
     "Ensure result does not depend on the internal ordering of nodes and edges in the networkx graph"
 
