@@ -1220,7 +1220,7 @@ class SingleTopology(AtomMapMixin):
         exclusion_idxs = host_nonbonded.potential.exclusion_idxs
         scale_factors = host_nonbonded.potential.scale_factors
 
-        guest_ixn_water_params = self._get_guest_params(self.ff.q_handle_solv, self.ff.lj_handle, lamb, cutoff)
+        guest_ixn_water_params = self._get_guest_params(self.ff.q_handle_solv, self.ff.lj_handle_solv, lamb, cutoff)
         guest_ixn_other_params = self._get_guest_params(self.ff.q_handle, self.ff.lj_handle, lamb, cutoff)
 
         # Note: The choice of zeros here is arbitrary. It doesn't affect the

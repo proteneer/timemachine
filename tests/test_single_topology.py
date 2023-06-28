@@ -624,7 +624,10 @@ def test_combine_with_host_split(precision, rtol, atol):
             cutoff,
             col_atom_idxs=water_idxs if is_solvent else protein_idxs,
         )
-        guest_params = st._get_guest_params(ff.q_handle_solv if is_solvent else ff.q_handle, ff.lj_handle, lamb, cutoff)
+
+        q_handle = ff.q_handle_solv if is_solvent else ff.q_handle
+        lj_handle = ff.lj_handle_solv if is_solvent else ff.lj_handle
+        guest_params = st._get_guest_params(q_handle, lj_handle, lamb, cutoff)
 
         host_params = host_system.nonbonded.params
         combined_nonbonded_params = np.concatenate([host_params, guest_params])

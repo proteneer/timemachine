@@ -167,7 +167,7 @@ def test_host_guest_nonbonded(ctor, precision, rtol, atol, use_tiny_mol):
             ff.q_handle_solv.params if is_solvent else ff.q_handle.params,
             ff.q_handle_intra.params,
             ff.q_handle_solv.params,
-            ff.lj_handle.params,
+            ff.lj_handle_solv.params if is_solvent else ff.lj_handle.params,
             ff.lj_handle_intra.params,
             ff.lj_handle_solv.params,
             lamb=lamb,
