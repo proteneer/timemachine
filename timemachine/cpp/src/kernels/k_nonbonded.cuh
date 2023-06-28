@@ -123,7 +123,7 @@ void __device__ v_nonbonded_unified(
     const int NR,
     const double *__restrict__ coords,
     const double *__restrict__ params, // [N]
-    box_cache<RealType> &shared_box,   // [6]
+    box_cache<RealType> &shared_box,
     const double beta,
     const double cutoff,
     const unsigned int *__restrict__ row_idxs,
@@ -133,19 +133,11 @@ void __device__ v_nonbonded_unified(
     unsigned long long *__restrict__ du_dp,
     unsigned long long *__restrict__ u_buffer) {
 
-    RealType box_x = shared_box.x;
-    RealType box_y = shared_box.y;
-    RealType box_z = shared_box.z;
-
-    RealType inv_box_x = shared_box.inv_x;
-    RealType inv_box_y = shared_box.inv_y;
-    RealType inv_box_z = shared_box.inv_z;
-
     int row_block_idx = ixn_tiles[tile_idx];
 
-    const int warp_idx = threadIdx.x % warp_size;
+    const int warp_idx = threadIdx.x % WARP_SIZE;
 
-    const int index = row_block_idx * warp_size + warp_idx;
+    const int index = row_block_idx * WARP_SIZE + warp_idx;
     const unsigned int atom_i_idx = index < NR ? row_idxs[index] : N;
 
     RealType ci_x = atom_i_idx < N ? coords[atom_i_idx * 3 + 0] : 0;
@@ -173,7 +165,7 @@ void __device__ v_nonbonded_unified(
     unsigned long long g_wi = 0;
 
     // i idx is contiguous but j is not, so we should swap them to avoid having to shuffle atom_j_idx
-    int atom_j_idx = ixn_atoms[tile_idx * warp_size + warp_idx];
+    int atom_j_idx = ixn_atoms[tile_idx * WARP_SIZE + warp_idx];
 
     RealType cj_x = atom_j_idx < N ? coords[atom_j_idx * 3 + 0] : 0;
     RealType cj_y = atom_j_idx < N ? coords[atom_j_idx * 3 + 1] : 0;
@@ -206,17 +198,17 @@ void __device__ v_nonbonded_unified(
 
     RealType real_beta = static_cast<RealType>(beta);
 
-    const int src_lane = (warp_idx + 1) % warp_size; // fixed
+    const int src_lane = (warp_idx + 1) % WARP_SIZE; // fixed
     // #pragma unroll
-    for (int round = 0; round < warp_size; round++) {
+    for (int round = 0; round < WARP_SIZE; round++) {
 
         RealType delta_x = ci_x - cj_x;
         RealType delta_y = ci_y - cj_y;
         RealType delta_z = ci_z - cj_z;
 
-        delta_x -= box_x * nearbyint(delta_x * inv_box_x);
-        delta_y -= box_y * nearbyint(delta_y * inv_box_y);
-        delta_z -= box_z * nearbyint(delta_z * inv_box_z);
+        delta_x -= shared_box.x * nearbyint(delta_x * shared_box.inv_x);
+        delta_y -= shared_box.y * nearbyint(delta_y * shared_box.inv_y);
+        delta_z -= shared_box.z * nearbyint(delta_z * shared_box.inv_z);
 
         RealType d2ij = delta_x * delta_x + delta_y * delta_y + delta_z * delta_z;
         RealType delta_w;
@@ -380,7 +372,7 @@ void __global__ k_nonbonded_unified(
     // Tile size is the same as warp size but it doesn't have to be.
     // Can be used interchangably at the moment, but in the future we may have different
     // tile sizes.
-    const int tile_size = warp_size;
+    const int tile_size = WARP_SIZE;
 
     const int tiles_per_block = blockDim.x / tile_size;
     const int stride = gridDim.x * tiles_per_block;

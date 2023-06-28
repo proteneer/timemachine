@@ -195,7 +195,9 @@ void declare_context(py::module &m) {
             Number of steps
 
         store_x_interval: int
-            How often we store the frames, stores after every store_x_interval steps
+            How often we store the frames, store after every store_x_interval iterations. Setting to zero collects frames
+            at the last step. Setting store_x_interval > n_steps will return no frames and skip runtime validation of box
+            size.
 
         Returns
         -------
@@ -203,6 +205,11 @@ void declare_context(py::module &m) {
             F = floor(n_steps/store_x_interval).
             Coordinates have shape (F, N, 3)
             Boxes have shape (F, 3, 3)
+
+        Raises
+        ------
+            RuntimeError:
+                Box dimensions are invalid when a frame is collected
 
     )pbdoc")
         .def(
@@ -228,7 +235,7 @@ void declare_context(py::module &m) {
 
                 std::vector<int> vec_local_idxs(local_idxs.size());
                 std::memcpy(vec_local_idxs.data(), local_idxs.data(), vec_local_idxs.size() * sizeof(int));
-                verify_atom_idxs(N, vec_local_idxs);
+                timemachine::verify_atom_idxs(N, vec_local_idxs);
 
                 std::array<std::vector<double>, 2> result =
                     ctxt.multiple_steps_local(n_steps, vec_local_idxs, burn_in, x_interval, radius, k, seed);
@@ -280,7 +287,8 @@ void declare_context(py::module &m) {
 
         store_x_interval: int
             How often we store the frames, store after every store_x_interval iterations. Setting to zero collects frames
-            at the last step.
+            at the last step. Setting store_x_interval > n_steps will return no frames and skip runtime validation of box
+            size.
 
         radius: float
             The radius in nanometers from the selected idx to simulate for local MD.
@@ -297,6 +305,11 @@ void declare_context(py::module &m) {
         2-tuple of coordinates, boxes
             Coordinates have shape (F, N, 3)
             Boxes have shape (F, 3, 3)
+
+        Raises
+        ------
+            RuntimeError:
+                Box dimensions are invalid when a frame is collected
 
         Note: All boxes returned will be identical as local MD only runs under constant volume.
     )pbdoc")
@@ -326,7 +339,7 @@ void declare_context(py::module &m) {
                 }
                 std::vector<int> vec_selection_idxs(selection_idxs.size());
                 std::memcpy(vec_selection_idxs.data(), selection_idxs.data(), vec_selection_idxs.size() * sizeof(int));
-                verify_atom_idxs(N, vec_selection_idxs);
+                timemachine::verify_atom_idxs(N, vec_selection_idxs);
                 std::set<int> selection_set(vec_selection_idxs.begin(), vec_selection_idxs.end());
                 if (selection_set.find(reference_idx) != selection_set.end()) {
                     throw std::runtime_error("reference idx must not be in selection idxs");
@@ -384,7 +397,8 @@ void declare_context(py::module &m) {
 
         store_x_interval: int
             How often we store the frames, store after every store_x_interval iterations. Setting to zero collects frames
-            at the last step.
+            at the last step. Setting store_x_interval > n_steps will return no frames and skip runtime validation of box
+            size.
 
         radius: float
             The radius in nanometers from the reference idx to allow particles to be unrestrained in, afterwards apply a restraint to the reference particle.
@@ -397,6 +411,11 @@ void declare_context(py::module &m) {
         2-tuple of coordinates, boxes
             Coordinates have shape (F, N, 3)
             Boxes have shape (F, 3, 3)
+
+        Raises
+        ------
+            RuntimeError:
+                Box dimensions are invalid when a frame is collected
 
         Note: All boxes returned will be identical as local MD only runs under constant volume.
     )pbdoc")
@@ -436,17 +455,26 @@ void declare_context(py::module &m) {
             Number of steps to run.
 
         store_u_interval: int
-            How often we store the energies, store after every store_u_interval steps
+            How often we store the energies, store after every store_u_interval steps.
 
         store_x_interval: int
-            How often we store the frames, store after every store_x_interval steps
+            How often we store the frames, store after every store_x_interval iterations. Setting to zero collects frames
+            at the last step. Setting store_x_interval > n_steps will return no frames and skip runtime validation of box
+            size.
 
         Returns
         -------
         3-tuple of energies, coordinates, boxes
-            Energies have shape (F,)
+            F = floor(n_steps/store_x_interval).
+            K = floor(n_steps/store_u_interval).
+            Energies have shape (K,)
             Coordinates have shape (F, N, 3)
             Boxes have shape (F, 3, 3)
+
+        Raises
+        ------
+            RuntimeError:
+                Box dimensions are invalid when a frame is collected
 
     )pbdoc")
         .def(

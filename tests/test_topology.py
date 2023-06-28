@@ -4,17 +4,15 @@ from importlib import resources
 import jax.numpy as jnp
 import numpy as np
 import pytest
-from common import load_split_forcefields
+from common import check_split_ixns
 from rdkit import Chem
 from rdkit.Chem import AllChem
 
 from timemachine import potentials
 from timemachine.fe import topology
 from timemachine.fe.topology import BaseTopology, DualTopology, DualTopologyMinimization
-from timemachine.fe.utils import get_mol_name, get_romol_conf, read_sdf
+from timemachine.fe.utils import get_mol_name, get_romol_conf, read_sdf, set_romol_conf
 from timemachine.ff import Forcefield
-from timemachine.ff.handlers import openmm_deserializer
-from timemachine.md.builders import build_water_system
 
 
 def test_dual_topology_nonbonded_pairlist():
@@ -26,7 +24,9 @@ def test_dual_topology_nonbonded_pairlist():
     ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
     dt = topology.DualTopology(mol_a, mol_b, ff)
 
-    nb_params, nb = dt.parameterize_nonbonded(ff.q_handle.params, ff.q_handle_intra.params, ff.lj_handle.params, 0.0)
+    nb_params, nb = dt.parameterize_nonbonded(
+        ff.q_handle.params, ff.q_handle_intra.params, ff.q_handle_solv.params, ff.lj_handle.params, 0.0
+    )
 
     nb_pairlist_params, nb_pairlist = dt.parameterize_nonbonded_pairlist(
         ff.q_handle.params, ff.q_handle_intra.params, ff.lj_handle.params
@@ -53,12 +53,12 @@ def test_dual_topology_nonbonded_pairlist():
 
 
 def parameterize_nonbonded_full(
-    hgt: topology.HostGuestTopology, ff_q_params, ff_q_params_intra, ff_lj_params, lamb: float
+    hgt: topology.HostGuestTopology, ff_q_params, ff_q_params_intra, ff_q_params_solv, ff_lj_params, lamb: float
 ):
     # Implements the full NB potential for the host guest system
     num_guest_atoms = hgt.guest_topology.get_num_atoms()
     guest_params, guest_pot = hgt.guest_topology.parameterize_nonbonded(
-        ff_q_params, ff_q_params_intra, ff_lj_params, lamb
+        ff_q_params, ff_q_params_intra, ff_q_params_solv, ff_lj_params, lamb
     )
     hg_exclusion_idxs = np.concatenate(
         [hgt.host_nonbonded.potential.exclusion_idxs, guest_pot.exclusion_idxs + hgt.num_host_atoms]
@@ -74,42 +74,78 @@ def parameterize_nonbonded_full(
 @pytest.mark.parametrize("ctor", [BaseTopology, DualTopology, DualTopologyMinimization])
 @pytest.mark.parametrize("use_tiny_mol", [True, False])
 def test_host_guest_nonbonded(ctor, precision, rtol, atol, use_tiny_mol):
-    def compute_ref_grad_u(ff: Forcefield, precision, x0, lamb, num_water_atoms):
+    def compute_ref_grad_u(ff: Forcefield, precision, x0, box, lamb, num_water_atoms, host_bps):
         # Use the original code to compute the nb grads and potential
         bt = Topology(ff)
         hgt = topology.HostGuestTopology(host_bps, bt, num_water_atoms)
-        params, potentials = parameterize_nonbonded_full(
-            hgt, ff.q_handle.params, ff.q_handle_intra.params, ff.lj_handle.params, lamb=lamb
+        params, us = parameterize_nonbonded_full(
+            hgt, ff.q_handle.params, ff.q_handle_intra.params, ff.q_handle_solv.params, ff.lj_handle.params, lamb=lamb
         )
-        u_impl = potentials.bind(params).to_gpu(precision=precision).bound_impl
-        return u_impl.execute(x0, solvent_box)
+        u_impl = us.bind(params).to_gpu(precision=precision).bound_impl
+        return u_impl.execute(x0, box)
 
-    def compute_split_grad_u(ff: Forcefield, precision, x0, lamb, num_water_atoms):
+    def compute_new_grad_u(ff: Forcefield, precision, x0, box, lamb, num_water_atoms, host_bps):
         # Use the updated topology code to compute the nb grads and potential
         bt = Topology(ff)
         hgt = topology.HostGuestTopology(host_bps, bt, num_water_atoms)
-        params, potentials = hgt.parameterize_nonbonded(
-            ff.q_handle.params, ff.q_handle_intra.params, ff.lj_handle.params, lamb=lamb
+        params, us = hgt.parameterize_nonbonded(
+            ff.q_handle.params,
+            ff.q_handle_intra.params,
+            ff.q_handle_solv.params,
+            ff.lj_handle.params,
+            lamb=lamb,
         )
-        u_impl = potentials.bind(params).to_gpu(precision=precision).bound_impl
-        return u_impl.execute(x0, solvent_box)
+        u_impl = us.bind(params).to_gpu(precision=precision).bound_impl
+        return u_impl.execute(x0, box)
 
-    def compute_vacuum_grad_u(ff: Forcefield, precision, x0, lamb):
-        # Compute the vacuum nb grads and potential
+    def compute_intra_grad_u(ff: Forcefield, precision, x0, box, lamb, num_water_atoms, num_host_atoms):
+        # Compute the vacuum nb grads and potential for the ligand intramolecular term
         bt = Topology(ff)
-        params, potentials = bt.parameterize_nonbonded(
-            ff.q_handle.params, ff.q_handle_intra.params, ff.lj_handle.params, lamb=lamb
+        params, us = bt.parameterize_nonbonded(
+            ff.q_handle.params, ff.q_handle_intra.params, ff.q_handle_solv.params, ff.lj_handle.params, lamb=lamb
         )
-        u_impl = potentials.bind(params).to_gpu(precision=precision).bound_impl
-        return u_impl.execute(x0, solvent_box)
+        u_impl = us.bind(params).to_gpu(precision=precision).bound_impl
+        g, u = u_impl.execute(x0, box)
 
-    ffs = load_split_forcefields()
+        # Pad g so it's the same shape as the others
+        g_padded = np.concatenate([np.zeros((num_host_atoms, 3)), g])
+        return g_padded, u
 
-    box_width = 4.0
-    solvent_sys, solvent_conf, solvent_box, solvent_top = build_water_system(box_width, ffs.ref.water_ff)
-    num_water_atoms = solvent_conf.shape[0]
-    solvent_box += np.diag([0.1, 0.1, 0.1])
-    host_bps, host_masses = openmm_deserializer.deserialize_system(solvent_sys, cutoff=1.2)
+    def compute_ixn_grad_u(
+        ff: Forcefield,
+        precision,
+        x0,
+        box,
+        lamb,
+        num_water_atoms,
+        host_bps,
+        water_idxs,
+        ligand_idxs,
+        protein_idxs,
+        is_solvent=False,
+    ):
+        assert num_water_atoms == len(water_idxs)
+        num_total_atoms = len(ligand_idxs) + len(protein_idxs) + num_water_atoms
+        bt = Topology(ff)
+        hgt = topology.HostGuestTopology(host_bps, bt, num_water_atoms)
+        u = potentials.NonbondedInteractionGroup(
+            num_total_atoms,
+            ligand_idxs,
+            hgt.host_nonbonded.potential.beta,
+            hgt.host_nonbonded.potential.cutoff,
+            col_atom_idxs=water_idxs if is_solvent else protein_idxs,
+        )
+        lig_params, _ = bt.parameterize_nonbonded(
+            ff.q_handle_solv.params if is_solvent else ff.q_handle.params,
+            ff.q_handle_intra.params,
+            ff.q_handle_solv.params,
+            ff.lj_handle.params,
+            lamb=lamb,
+            intramol_params=False,
+        )
+        ixn_params = np.concatenate([hgt.host_nonbonded.params, lig_params])
+        u_impl = u.bind(ixn_params).to_gpu(precision=precision).bound_impl
+        return u_impl.execute(x0, box)
 
     with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
         mols_by_name = {get_mol_name(mol): mol for mol in read_sdf(path_to_ligand)}
@@ -124,58 +160,44 @@ def test_host_guest_nonbonded(ctor, precision, rtol, atol, use_tiny_mol):
         if use_tiny_mol:
             mol = mols_by_name["H2S"]
         else:
-            mol = mols_by_name["43"]
+            mol = mols_by_name["67"]
         ligand_conf = get_romol_conf(mol)
-        coords0 = np.concatenate([solvent_conf, ligand_conf])
         Topology = partial(ctor, mol)
     elif ctor in [DualTopology, DualTopologyMinimization]:
         if use_tiny_mol:
             mol_a = mols_by_name["H2S"]
-            mol_b = mols_by_name["30"]
+            mol_b = mols_by_name["67"]
         else:
-            mol_a = mols_by_name["43"]
-            mol_b = mols_by_name["30"]
+            # Pick smallest two molecules
+            mol_a = mols_by_name["30"]
+            mol_b = mols_by_name["67"]
+
+        # Center mol to reduce overlap (high overlap fails in f32)
+        mol_a_coords = get_romol_conf(mol_a)
+        mol_a_center = np.mean(mol_a_coords, axis=0)
+        mol_b_coords = get_romol_conf(mol_b)
+        mol_b_center = np.mean(mol_b_coords, axis=0)
+        mol_a_coords += mol_b_center - mol_a_center
+        set_romol_conf(mol_a, mol_a_coords)
+
         ligand_conf = np.concatenate([get_romol_conf(mol_a), get_romol_conf(mol_b)])
-        coords0 = np.concatenate([solvent_conf, ligand_conf])
         Topology = partial(ctor, mol_a, mol_b)
     else:
         raise ValueError(f"Unknown topology class: {ctor}")
 
-    n_lambdas = 3
-    for lamb in np.linspace(0, 1, n_lambdas):
-        # Compute the grads, potential with the ref ff
-        vacuum_grad_ref, vacuum_u_ref = compute_vacuum_grad_u(ffs.ref, precision, ligand_conf, lamb)
-        solvent_grad_ref, solvent_u_ref = compute_ref_grad_u(ffs.ref, precision, coords0, lamb, num_water_atoms)
+    ligand_idxs = np.arange(ligand_conf.shape[0], dtype=np.int32)
 
-        # Compute the grads, potential with the scaled ff
-        vacuum_grad_scaled, vacuum_u_scaled = compute_vacuum_grad_u(ffs.scaled, precision, ligand_conf, lamb)
-        solvent_grad_scaled, solvent_u_scaled = compute_ref_grad_u(
-            ffs.scaled, precision, coords0, lamb, num_water_atoms
-        )
-
-        # Compute the grads, potential with the intermol scaled ff
-        vacuum_grad_inter_scaled, vacuum_u_inter_scaled = compute_vacuum_grad_u(
-            ffs.inter_scaled, precision, ligand_conf, lamb
-        )
-        solvent_grad_inter_scaled, solvent_u_inter_scaled = compute_split_grad_u(
-            ffs.inter_scaled, precision, coords0, lamb, num_water_atoms
-        )
-
-        # Compute the expected intermol scaled potential
-        expected_inter_scaled_u = solvent_u_scaled - vacuum_u_scaled + vacuum_u_ref
-
-        # Pad gradients for the solvent
-        vacuum_grad_scaled_padded = np.concatenate([np.zeros(solvent_conf.shape), vacuum_grad_scaled])
-        vacuum_grad_ref_padded = np.concatenate([np.zeros(solvent_conf.shape), vacuum_grad_ref])
-        expected_inter_scaled_grad = solvent_grad_scaled - vacuum_grad_scaled_padded + vacuum_grad_ref_padded
-
-        # They should be equal
-        assert expected_inter_scaled_u == pytest.approx(solvent_u_inter_scaled, rel=rtol, abs=atol)
-        np.testing.assert_allclose(expected_inter_scaled_grad, solvent_grad_inter_scaled, rtol=rtol, atol=atol)
-
-        # The vacuum term should be the same as the ref
-        assert vacuum_u_inter_scaled == pytest.approx(vacuum_u_ref, rel=rtol, abs=atol)
-        np.testing.assert_allclose(vacuum_grad_ref, vacuum_grad_inter_scaled, rtol=rtol, atol=atol)
+    check_split_ixns(
+        ligand_conf,
+        ligand_idxs,
+        precision,
+        rtol,
+        atol,
+        compute_ref_grad_u,
+        compute_new_grad_u,
+        compute_intra_grad_u,
+        compute_ixn_grad_u,
+    )
 
 
 def test_exclude_all_ligand_ligand_ixns():

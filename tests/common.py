@@ -10,6 +10,7 @@ from typing import Optional
 
 import jax
 import numpy as np
+import pytest
 from hilbertcurve.hilbertcurve import HilbertCurve
 from numpy.typing import NDArray
 from rdkit import Chem
@@ -17,6 +18,8 @@ from rdkit import Chem
 from timemachine.constants import ONE_4PI_EPS0
 from timemachine.fe.utils import read_sdf
 from timemachine.ff import Forcefield
+from timemachine.ff.handlers import openmm_deserializer
+from timemachine.md.builders import build_protein_system
 from timemachine.potentials import Nonbonded
 from timemachine.potentials.potential import GpuImplWrapper
 from timemachine.potentials.summed import PotentialFxn
@@ -303,26 +306,183 @@ def gen_nonbonded_params_with_4d_offsets(
 @dataclass
 class SplitForcefield:
     ref: Forcefield  # ref ff
-    scaled: Forcefield  # all charge terms scaled by 10x
-    inter_scaled: Forcefield  # intermolecular charge terms scaled by 10x
+    intra: Forcefield  # intermolecular charge terms scaled by 10x
+    solv: Forcefield  # water-ligand charge terms scaled by 10x
+    prot: Forcefield  # protein-ligand charge terms scaled by 10x
+    scaled: Forcefield  # all terms scaled by 10x
 
 
 def load_split_forcefields() -> SplitForcefield:
     """
     Returns:
-        OpenFF 2.0.0 ff,
-        OpenFF 2.0.0 ff with all charge terms scaled by 10x,
-        OpenFF 2.0.0 ff with only intermolecular charge terms scaled by 10x.
+        SplitForcefield which contains the ff with various
+        terms scaled by a factor of 10.
     """
-    ff_ref = Forcefield.load_from_file("smirnoff_2_0_0_ccc.py")
+    ff_ref = Forcefield.load_default()
 
-    ff_scaled = Forcefield.load_from_file("smirnoff_2_0_0_ccc.py")
-    assert ff_scaled.q_handle
+    ff_intra = Forcefield.load_default()
+    assert ff_intra.q_handle_intra
+    ff_intra.q_handle_intra.params *= 10
+
+    ff_solv = Forcefield.load_default()
+    assert ff_solv.q_handle_solv
+    ff_solv.q_handle_solv.params *= 10
+
+    ff_prot = Forcefield.load_default()
+    assert ff_prot.q_handle
+    ff_prot.q_handle.params *= 10
+
+    ff_scaled = Forcefield.load_default()
     ff_scaled.q_handle.params *= 10
-    assert ff_scaled.q_handle_intra
     ff_scaled.q_handle_intra.params *= 10
+    ff_scaled.q_handle_solv.params *= 10
+    return SplitForcefield(ff_ref, ff_intra, ff_solv, ff_prot, ff_scaled)
 
-    ff_inter_scaled = Forcefield.load_from_file("smirnoff_2_0_0_ccc.py")
-    assert ff_inter_scaled.q_handle
-    ff_inter_scaled.q_handle.params *= 10
-    return SplitForcefield(ff_ref, ff_scaled, ff_inter_scaled)
+
+def check_split_ixns(
+    ligand_conf,
+    ligand_idxs,
+    precision,
+    rtol,
+    atol,
+    compute_ref_grad_u,
+    compute_new_grad_u,
+    compute_intra_grad_u,
+    compute_ixn_grad_u,
+):
+
+    ffs = load_split_forcefields()
+
+    with resources.path("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as path_to_pdb:
+        complex_system, host_conf, box, _, num_water_atoms = build_protein_system(
+            str(path_to_pdb), ffs.ref.protein_ff, ffs.ref.water_ff
+        )
+        box += np.diag([0.1, 0.1, 0.1])
+
+    coords0 = np.concatenate([host_conf, ligand_conf])
+    num_protein_atoms = host_conf.shape[0] - num_water_atoms
+    protein_idxs = np.arange(num_protein_atoms, dtype=np.int32)
+    water_idxs = np.arange(num_water_atoms, dtype=np.int32) + num_protein_atoms
+    num_host_atoms = host_conf.shape[0]
+    host_bps, host_masses = openmm_deserializer.deserialize_system(complex_system, cutoff=1.2)
+    ligand_idxs += num_host_atoms  # shift for the host
+
+    n_lambdas = 3
+    for lamb in np.linspace(0, 1, n_lambdas):
+        """
+        Note: Notation here is interaction type _ scaled term
+        interaction type:
+            LL - ligand-ligand intramolecular interactions
+            PL - protein-ligand interactions
+            WL - water-ligand interactions
+            sum - full NB potential
+
+        scaled term:
+            ref - ref ff
+            intra - ligand-ligand intramolecular parameters are scaled
+            prot - protein-ligand interaction parameters are scaled
+            solv - water-ligand interaction parameters are scaled
+        """
+
+        # Compute the grads, potential with the ref ff
+        LL_grad_ref, LL_u_ref = compute_intra_grad_u(
+            ffs.ref, precision, ligand_conf, box, lamb, num_water_atoms, num_host_atoms
+        )
+        sum_grad_ref, sum_u_ref = compute_ref_grad_u(ffs.ref, precision, coords0, box, lamb, num_water_atoms, host_bps)
+        PL_grad_ref, PL_u_ref = compute_ixn_grad_u(
+            ffs.ref,
+            precision,
+            coords0,
+            box,
+            lamb,
+            num_water_atoms,
+            host_bps,
+            water_idxs,
+            ligand_idxs,
+            protein_idxs,
+            is_solvent=False,
+        )
+        WL_grad_ref, WL_u_ref = compute_ixn_grad_u(
+            ffs.ref,
+            precision,
+            coords0,
+            box,
+            lamb,
+            num_water_atoms,
+            host_bps,
+            water_idxs,
+            ligand_idxs,
+            protein_idxs,
+            is_solvent=True,
+        )
+
+        # Should be the same as the new code with the orig ff
+        sum_grad_new, sum_u_new = compute_new_grad_u(ffs.ref, precision, coords0, box, lamb, num_water_atoms, host_bps)
+        assert sum_u_ref == pytest.approx(sum_u_new, rel=rtol, abs=atol)
+
+        np.testing.assert_allclose(sum_grad_ref, sum_grad_new, rtol=rtol, atol=atol)
+
+        # Compute the grads, potential with the intramolecular terms scaled
+        sum_grad_intra, sum_u_intra = compute_new_grad_u(
+            ffs.intra, precision, coords0, box, lamb, num_water_atoms, host_bps
+        )
+        LL_grad_intra, LL_u_intra = compute_intra_grad_u(
+            ffs.intra, precision, ligand_conf, box, lamb, num_water_atoms, num_host_atoms
+        )
+
+        # U_intra = U_sum_ref - LL_ref + LL_intra
+        expected_u = sum_u_ref - LL_u_ref + LL_u_intra
+        expected_grad = sum_grad_ref - LL_grad_ref + LL_grad_intra
+
+        assert expected_u == pytest.approx(sum_u_intra, rel=rtol, abs=atol)
+        np.testing.assert_allclose(expected_grad, sum_grad_intra, rtol=rtol, atol=atol)
+
+        # Compute the grads, potential with the ligand-water terms scaled
+        sum_grad_solv, sum_u_solv = compute_new_grad_u(
+            ffs.solv, precision, coords0, box, lamb, num_water_atoms, host_bps
+        )
+        WL_grad_solv, WL_u_solv = compute_ixn_grad_u(
+            ffs.solv,
+            precision,
+            coords0,
+            box,
+            lamb,
+            num_water_atoms,
+            host_bps,
+            water_idxs,
+            ligand_idxs,
+            protein_idxs,
+            is_solvent=True,
+        )
+
+        # U_solv = U_sum_ref - WL_ref + WL_solv
+        expected_u = sum_u_ref - WL_u_ref + WL_u_solv
+        expected_grad = sum_grad_ref - WL_grad_ref + WL_grad_solv
+
+        assert expected_u == pytest.approx(sum_u_solv, rel=rtol, abs=atol)
+        np.testing.assert_allclose(expected_grad, sum_grad_solv, rtol=rtol, atol=atol)
+
+        # Compute the grads, potential with the protein-ligand terms scaled
+        sum_grad_prot, sum_u_prot = compute_new_grad_u(
+            ffs.prot, precision, coords0, box, lamb, num_water_atoms, host_bps
+        )
+        PL_grad_prot, PL_u_prot = compute_ixn_grad_u(
+            ffs.prot,
+            precision,
+            coords0,
+            box,
+            lamb,
+            num_water_atoms,
+            host_bps,
+            water_idxs,
+            ligand_idxs,
+            protein_idxs,
+            is_solvent=False,
+        )
+
+        # U_prot = U_sum_ref - PL_ref + PL_prot
+        expected_u = sum_u_ref - PL_u_ref + PL_u_prot
+        expected_grad = sum_grad_ref - PL_grad_ref + PL_grad_prot
+
+        assert expected_u == pytest.approx(sum_u_prot, rel=rtol, abs=atol)
+        np.testing.assert_allclose(expected_grad, sum_grad_prot, rtol=rtol, atol=atol)
