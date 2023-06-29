@@ -13,7 +13,7 @@ from timemachine.ff import Forcefield
 from timemachine.md import enhanced
 from timemachine.md.moves import NPTMove, OptimizedMTMMove, ReferenceMTMMove
 from timemachine.md.states import CoordsVelBox
-from timemachine.potentials import nonbonded
+from timemachine.potentials import NonbondedInteractionGroup, nonbonded
 
 
 def get_ff_am1ccc():
@@ -51,12 +51,15 @@ def test_optimized_MTM():
     vacuum_samples = _vacuum_xv_samples[:, 0, :]
     ubps, params, masses, coords, box = enhanced.get_solvent_phase_system(mol, ff, 0.0)
 
-    # Unwrap SummedPotential to get intermolecular potential
-    nb_potential = ubps[-1].potentials[0]
-    nb_params = ubps[-1].params_init[0]
+    # Unwrap SummedPotential to get intermolecular water-ligand potential
+    nb_idx, nb_wl_potential = next(
+        (i, pot) for i, pot in enumerate(ubps[-1].potentials) if isinstance(pot, NonbondedInteractionGroup)
+    )
 
-    beta = nb_potential.beta
-    cutoff = nb_potential.cutoff
+    nb_params = ubps[-1].params_init[nb_idx]
+
+    beta = nb_wl_potential.beta
+    cutoff = nb_wl_potential.cutoff
 
     params_i = nb_params[-num_ligand_atoms:]  # ligand params
     params_j = nb_params[:-num_ligand_atoms]  # water params
