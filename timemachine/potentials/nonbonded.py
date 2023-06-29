@@ -539,12 +539,12 @@ def coulomb_interaction_group_energy(q_ligand: Array, q_prefactors: Array) -> fl
 
     Parameters
     ----------
-    q_ligand: [N_frames, N_lig] array
-    q_prefactors: [N_frames, N_lig] array
+    q_ligand: [N_lig] array
+    q_prefactors: [N_lig] array
 
     Returns
     -------
-    energy: [N_frames] array
+    energy: float
     """
 
     return jnp.dot(q_prefactors, q_ligand)
@@ -740,13 +740,13 @@ def lj_interaction_group_energy(sig_ligand, eps_ligand, lj_prefactors):
 
     Parameters
     ----------
-    sig_ligand, eps_ligand: [N_frames, N_lig] arrays
-    lj_prefactors: [N_frames, N_lig, 20] array
+    sig_ligand, eps_ligand: [N_lig] arrays
+    lj_prefactors: [N_lig, 20] array
 
     Returns
     -------
-    energy: [N_frames] array
+    energy: float
     """
 
     projection = vmap(basis_expand_lj_atom)(sig_ligand, eps_ligand)
-    return jnp.sum(jnp.sum(projection * lj_prefactors, axis=2), axis=1)
+    return jnp.sum(projection * lj_prefactors)
