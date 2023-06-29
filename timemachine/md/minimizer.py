@@ -57,9 +57,10 @@ def parameterize_system(topo, ff: Forcefield, lamb: float):
 
 
 def bind_potentials(params_potential_pairs):
-    u_impls = [
-        potential.bind(params).to_gpu(precision=np.float32).bound_impl for params, potential in params_potential_pairs
-    ]
+    pots = [pot for _, pot in params_potential_pairs]
+    params = [p for p, _ in params_potential_pairs]
+    flat_params = np.concatenate([p.reshape(-1) for p in params])
+    u_impls = [SummedPotential(pots, params).bind(flat_params).to_gpu(precision=np.float32).bound_impl]
     return u_impls
 
 
