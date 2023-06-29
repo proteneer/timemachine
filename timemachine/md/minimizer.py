@@ -406,7 +406,7 @@ def equilibrate_host(
     return ctxt.get_x_t(), ctxt.get_box()
 
 
-def get_val_and_grad_fn(bps: Iterable[BoundPotential], box: NDArray):
+def get_val_and_grad_fn(bps: Iterable[BoundPotential], box: NDArray, precision=np.float32):
     """
     Convert impls, box into a function that only takes in coords.
 
@@ -423,7 +423,7 @@ def get_val_and_grad_fn(bps: Iterable[BoundPotential], box: NDArray):
     """
     summed_pot = SummedPotential([bp.potential for bp in bps], [bp.params for bp in bps])
     params = np.concatenate([bp.params.reshape(-1) for bp in bps])
-    impl = summed_pot.to_gpu(np.float32).bind(params).bound_impl
+    impl = summed_pot.to_gpu(precision).bind(params).bound_impl
 
     def val_and_grad_fn(coords):
         g_bp, u_bp = impl.execute(coords, box)
