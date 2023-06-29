@@ -14,6 +14,7 @@ from rdkit.Chem import AllChem
 
 from timemachine.fe import atom_mapping, single_topology
 from timemachine.fe.dummy import MultipleAnchorWarning
+from timemachine.fe.free_energy import HostConfig
 from timemachine.fe.interpolate import linear_interpolation, log_linear_interpolation
 from timemachine.fe.single_topology import (
     ChargePertubationError,
@@ -462,6 +463,9 @@ def test_nonbonded_intra_split(precision, rtol, atol, use_tiny_mol):
     # split forcefield has different parameters for intramol and intermol terms
     ffs = load_split_forcefields()
     solvent_sys, solvent_conf, solvent_box, solvent_top = build_water_system(4.0, ffs.ref.water_ff)
+    solvent_conf = minimizer.minimize_host_4d(
+        [mol_a, mol_b], HostConfig(solvent_sys, solvent_conf, solvent_box, solvent_conf.shape[0]), ffs.ref
+    )
     solvent_bps, _ = openmm_deserializer.deserialize_system(solvent_sys, cutoff=1.2)
     solv_sys = convert_bps_into_system(solvent_bps)
 
@@ -509,10 +513,14 @@ def test_nonbonded_intra_split(precision, rtol, atol, use_tiny_mol):
 
         # They should be equal
         assert expected_inter_scaled_u == pytest.approx(solvent_u_inter_scaled, rel=rtol, abs=atol)
+        minimizer.check_force_norm(-expected_inter_scaled_grad)
+        minimizer.check_force_norm(-solvent_grad_inter_scaled)
         np.testing.assert_allclose(expected_inter_scaled_grad, solvent_grad_inter_scaled, rtol=rtol, atol=atol)
 
         # The vacuum term should be the same as the ref
         assert vacuum_u_inter_scaled == pytest.approx(vacuum_u_ref, rel=rtol, abs=atol)
+        minimizer.check_force_norm(-vacuum_grad_ref)
+        minimizer.check_force_norm(-vacuum_grad_inter_scaled)
         np.testing.assert_allclose(vacuum_grad_ref, vacuum_grad_inter_scaled, rtol=rtol, atol=atol)
 
 
