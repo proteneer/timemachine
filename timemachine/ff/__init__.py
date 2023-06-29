@@ -58,13 +58,6 @@ class Forcefield:
             nonbonded.AM1CCCHandler,
         ]
     ]
-    q_handle_solv: Optional[
-        Union[
-            nonbonded.SimpleChargeSolventHandler,
-            nonbonded.AM1BCCSolventHandler,
-            nonbonded.AM1CCCSolventHandler,
-        ]
-    ]
     q_handle_intra: Optional[
         Union[
             nonbonded.SimpleChargeIntraHandler,
@@ -72,9 +65,16 @@ class Forcefield:
             nonbonded.AM1CCCIntraHandler,
         ]
     ]
+    q_handle_solv: Optional[
+        Union[
+            nonbonded.SimpleChargeSolventHandler,
+            nonbonded.AM1BCCSolventHandler,
+            nonbonded.AM1CCCSolventHandler,
+        ]
+    ]
     lj_handle: Optional[nonbonded.LennardJonesHandler]
-    lj_handle_solv: Optional[nonbonded.LennardJonesSolventHandler]
     lj_handle_intra: Optional[nonbonded.LennardJonesIntraHandler]
+    lj_handle_solv: Optional[nonbonded.LennardJonesSolventHandler]
 
     protein_ff: str
     water_ff: str
@@ -222,11 +222,11 @@ class Forcefield:
             pt_handle,
             it_handle,
             q_handle,
-            q_handle_solv,
             q_handle_intra,
+            q_handle_solv,
             lj_handle,
-            lj_handle_solv,
             lj_handle_intra,
+            lj_handle_solv,
             protein_ff,
             water_ff,
         )
@@ -239,11 +239,11 @@ class Forcefield:
             self.pt_handle,
             self.it_handle,
             self.q_handle,
-            self.q_handle_solv,
             self.q_handle_intra,
+            self.q_handle_solv,
             self.lj_handle,
-            self.lj_handle_solv,
             self.lj_handle_intra,
+            self.lj_handle_solv,
         ]
 
     def get_params(self) -> ForcefieldParams:
@@ -256,11 +256,11 @@ class Forcefield:
             params(self.pt_handle),
             params(self.it_handle),
             params(self.q_handle),
-            params(self.q_handle_solv),
             params(self.q_handle_intra),
+            params(self.q_handle_solv),
             params(self.lj_handle),
-            params(self.lj_handle_solv),
             params(self.lj_handle_intra),
+            params(self.lj_handle_solv),
         )
 
     def serialize(self) -> str:
