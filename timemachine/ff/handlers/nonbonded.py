@@ -392,6 +392,14 @@ class LennardJonesHandler(NonbondedHandler):
         return jnp.stack([sigmas / 2, epsilons], axis=1)
 
 
+class LennardJonesIntraHandler(LennardJonesHandler):
+    pass
+
+
+class LennardJonesSolventHandler(LennardJonesHandler):
+    pass
+
+
 class GBSAHandler(NonbondedHandler):
     pass
 
