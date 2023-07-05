@@ -304,7 +304,11 @@ def setup_end_state(ff, mol_a, mol_b, core, a_to_c, b_to_c):
     mol_a_proper_params, mol_a_pt = mol_a_top.parameterize_proper_torsion(ff.pt_handle.params)
     mol_a_improper_params, mol_a_it = mol_a_top.parameterize_improper_torsion(ff.it_handle.params)
     mol_a_nbpl_params, mol_a_nbpl = mol_a_top.parameterize_nonbonded_pairlist(
-        ff.q_handle.params, ff.q_handle_intra.params, ff.lj_handle.params, intramol_params=True
+        ff.q_handle.params,
+        ff.q_handle_intra.params,
+        ff.lj_handle.params,
+        ff.lj_handle_intra.params,
+        intramol_params=True,
     )
     mol_a_chiral_atom, mol_a_chiral_bond = mol_a_top.setup_chiral_restraints()
 
@@ -1216,7 +1220,7 @@ class SingleTopology(AtomMapMixin):
         exclusion_idxs = host_nonbonded.potential.exclusion_idxs
         scale_factors = host_nonbonded.potential.scale_factors
 
-        guest_ixn_water_params = self._get_guest_params(self.ff.q_handle_solv, self.ff.lj_handle, lamb, cutoff)
+        guest_ixn_water_params = self._get_guest_params(self.ff.q_handle_solv, self.ff.lj_handle_solv, lamb, cutoff)
         guest_ixn_other_params = self._get_guest_params(self.ff.q_handle, self.ff.lj_handle, lamb, cutoff)
 
         # Note: The choice of zeros here is arbitrary. It doesn't affect the
