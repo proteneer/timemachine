@@ -1031,7 +1031,7 @@ void declare_potential_executor(py::module &m) {
                 timemachine::DeviceBuffer<double> param_buffer(P);
                 param_buffer.copy_from(params.data());
 
-                std::vector<int> vec_param_sizes;
+                std::vector<int> vec_param_sizes(param_sizes.size());
                 std::memcpy(
                     vec_param_sizes.data(), param_sizes.data(), vec_param_sizes.size() * sizeof(&vec_param_sizes[0]));
 
