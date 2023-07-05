@@ -368,8 +368,7 @@ def prepare_hif2a_initial_state(st, host_config):
     lamb = 0.1
     host = rbfe.setup_optimized_host(st, host_config)
     initial_state = rbfe.setup_initial_states(st, host, temperature, [lamb], seed=2022)[0]
-    bound_impls = [p.to_gpu(np.float32).bound_impl for p in initial_state.potentials]
-    val_and_grad_fn = minimizer.get_val_and_grad_fn(bound_impls, initial_state.box0)
+    val_and_grad_fn = minimizer.get_val_and_grad_fn(initial_state.potentials, initial_state.box0)
     assert np.all(np.isfinite(initial_state.x0)), "Initial coordinates contain nan or inf"
     ligand_coords = initial_state.x0[initial_state.ligand_idxs]
     d_ij = cdist(ligand_coords, initial_state.x0)
