@@ -5,7 +5,8 @@ import jax
 import jax.numpy as jnp
 from jax.core import Tracer
 from numpy.typing import NDArray
-from timemchine.lib import custom_ops
+
+from timemachine.lib import custom_ops
 
 
 class PotentialExecutor:
@@ -37,6 +38,7 @@ class PotentialExecutor:
         if len(pots) != len(params):
             raise RuntimeError("Number of potentials and params must agree")
         param_sizes = [len(p) for p in params]
+
         flattened_params = jnp.concatenate([p.reshape(-1) for p in params])
         u = _call_runner_unbound(self._runner, pots, param_sizes, coords, flattened_params, box)
         return cast(float, u)
@@ -46,7 +48,7 @@ class PotentialExecutor:
 def _call_runner_unbound(
     runner: custom_ops.PotentialExecutor,
     pots: List[custom_ops.Potential],
-    param_sizes: List[int],
+    param_sizes,
     coords: NDArray,
     params: NDArray,
     box: NDArray,
@@ -59,7 +61,7 @@ def _call_runner_unbound(
 # https://jax.readthedocs.io/en/latest/notebooks/Custom_derivative_rules_for_Python_code.html#custom-jvps-with-jax-custom-jvp
 @_call_runner_unbound.defjvp
 def _(
-    runner: custom_ops.PotentialExecutor, pots: List[custom_ops.Potential], param_sizes: List[int], primals, tangents
+    runner: custom_ops.PotentialExecutor, pots: List[custom_ops.Potential], param_sizes, primals, tangents
 ) -> Tuple[Any, Any]:
     x, params, box = primals
     dx, dp, dbox = tangents

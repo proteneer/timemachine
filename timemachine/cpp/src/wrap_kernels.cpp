@@ -950,13 +950,11 @@ void declare_potential_executor(py::module &m) {
                     throw std::runtime_error("must compute either du_dx or energy");
                 }
 
-                int P = 0;
                 std::vector<int> param_sizes;
                 std::vector<double *> param_ptrs;
                 std::vector<std::shared_ptr<timemachine::Potential>> pots;
                 for (auto bp : bps) {
                     pots.push_back(bp->potential);
-                    P += bp->size();
                     param_sizes.push_back(bp->size());
                     param_ptrs.push_back(bp->d_p == nullptr ? nullptr : bp->d_p->data);
                 }

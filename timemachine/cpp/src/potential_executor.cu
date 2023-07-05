@@ -30,7 +30,6 @@ void PotentialExecutor::execute_potentials(
     if (h_u != nullptr) {
         gpuErrchk(cudaMemsetAsync(d_u_buffer_.data, 0, d_u_buffer_.size, stream));
     }
-
     int num_params = 0;
     for (int size : param_sizes) {
         num_params += size;
