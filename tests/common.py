@@ -306,36 +306,53 @@ def gen_nonbonded_params_with_4d_offsets(
 @dataclass
 class SplitForcefield:
     ref: Forcefield  # ref ff
-    intra: Forcefield  # intermolecular charge terms scaled by 10x
-    solv: Forcefield  # water-ligand charge terms scaled by 10x
-    prot: Forcefield  # protein-ligand charge terms scaled by 10x
-    scaled: Forcefield  # all terms scaled by 10x
+    intra: Forcefield  # intermolecular charge terms/LJ terms scaled
+    solv: Forcefield  # water-ligand charge terms/LJ terms scaled
+    prot: Forcefield  # protein-ligand charge terms/LJ terms scaled
+    scaled: Forcefield  # all NB terms scaled
 
 
 def load_split_forcefields() -> SplitForcefield:
     """
     Returns:
         SplitForcefield which contains the ff with various
-        terms scaled by a factor of 10.
+        terms scaled.
     """
+    SIG_IDX, EPS_IDX = 0, 1
+    Q_SCALE = 10
+    SIG_SCALE = 0.5  # smaller change to prevent overflow
+    EPS_SCALE = 2.0
+
     ff_ref = Forcefield.load_default()
 
     ff_intra = Forcefield.load_default()
     assert ff_intra.q_handle_intra
-    ff_intra.q_handle_intra.params *= 10
+    ff_intra.q_handle_intra.params *= Q_SCALE
+    ff_intra.lj_handle_intra.params[:, SIG_IDX] *= SIG_SCALE
+    ff_intra.lj_handle_intra.params[:, EPS_IDX] *= EPS_SCALE
 
     ff_solv = Forcefield.load_default()
     assert ff_solv.q_handle_solv
-    ff_solv.q_handle_solv.params *= 10
+    ff_solv.q_handle_solv.params *= Q_SCALE
+    ff_solv.lj_handle_solv.params[:, SIG_IDX] *= SIG_SCALE
+    ff_solv.lj_handle_solv.params[:, EPS_IDX] *= EPS_SCALE
 
     ff_prot = Forcefield.load_default()
     assert ff_prot.q_handle
-    ff_prot.q_handle.params *= 10
+    ff_prot.q_handle.params *= Q_SCALE
+    ff_prot.lj_handle.params[:, SIG_IDX] *= SIG_SCALE
+    ff_prot.lj_handle.params[:, EPS_IDX] *= EPS_SCALE
 
     ff_scaled = Forcefield.load_default()
-    ff_scaled.q_handle.params *= 10
-    ff_scaled.q_handle_intra.params *= 10
-    ff_scaled.q_handle_solv.params *= 10
+    ff_scaled.q_handle.params *= Q_SCALE
+    ff_scaled.q_handle_intra.params *= Q_SCALE
+    ff_scaled.q_handle_solv.params *= Q_SCALE
+    ff_scaled.lj_handle.params[:, SIG_IDX] *= SIG_SCALE
+    ff_scaled.lj_handle.params[:, EPS_IDX] *= EPS_SCALE
+    ff_scaled.lj_handle_intra.params[:, SIG_IDX] *= SIG_SCALE
+    ff_scaled.lj_handle_intra.params[:, EPS_IDX] *= EPS_SCALE
+    ff_scaled.lj_handle_solv.params[:, SIG_IDX] *= SIG_SCALE
+    ff_scaled.lj_handle_solv.params[:, EPS_IDX] *= EPS_SCALE
     return SplitForcefield(ff_ref, ff_intra, ff_solv, ff_prot, ff_scaled)
 
 
@@ -418,8 +435,8 @@ def check_split_ixns(
 
         # Should be the same as the new code with the orig ff
         sum_grad_new, sum_u_new = compute_new_grad_u(ffs.ref, precision, coords0, box, lamb, num_water_atoms, host_bps)
-        assert sum_u_ref == pytest.approx(sum_u_new, rel=rtol, abs=atol)
 
+        assert sum_u_ref == pytest.approx(sum_u_new, rel=rtol, abs=atol)
         np.testing.assert_allclose(sum_grad_ref, sum_grad_new, rtol=rtol, atol=atol)
 
         # Compute the grads, potential with the intramolecular terms scaled
