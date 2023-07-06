@@ -124,8 +124,8 @@ void __device__ v_nonbonded_unified(
     const double *__restrict__ coords,
     const double *__restrict__ params, // [N]
     box_cache<RealType> &shared_box,
-    const double beta,
-    const double cutoff,
+    const RealType beta,
+    const RealType cutoff_squared,
     const unsigned int *__restrict__ row_idxs,
     const int *__restrict__ ixn_tiles,
     const unsigned int *__restrict__ ixn_atoms,
@@ -191,12 +191,7 @@ void __device__ v_nonbonded_unified(
     unsigned long long g_epsj = 0;
     unsigned long long g_wj = 0;
 
-    RealType real_cutoff = static_cast<RealType>(cutoff);
-    RealType cutoff_squared = real_cutoff * real_cutoff;
-
     unsigned long long energy = 0;
-
-    RealType real_beta = static_cast<RealType>(beta);
 
     const int src_lane = (warp_idx + 1) % WARP_SIZE; // fixed
     // #pragma unroll
@@ -224,20 +219,18 @@ void __device__ v_nonbonded_unified(
         const bool valid_ij = atom_i_idx < N && atom_j_idx < N && (N != NR || atom_i_idx < atom_j_idx);
 
         // (ytz): note that d2ij must be *strictly* less than cutoff_squared. This is because we set the
-        // non-interacting atoms to exactly real_cutoff*real_cutoff. This ensures that atoms who's 4th dimension
+        // non-interacting atoms to exactly cutoff_squared. This ensures that atoms who's 4th dimension
         // is set to cutoff are non-interacting.
         if (valid_ij && d2ij < cutoff_squared) {
             // electrostatics
             RealType u;
-            RealType es_prefactor;
+            RealType delta_prefactor;
             RealType ebd;
             RealType dij;
             RealType inv_dij;
             RealType inv_d2ij;
             compute_electrostatics<RealType, COMPUTE_U>(
-                1.0, qi, qj, d2ij, beta, dij, inv_dij, inv_d2ij, ebd, es_prefactor, u);
-
-            RealType delta_prefactor = es_prefactor;
+                1.0, qi, qj, d2ij, static_cast<RealType>(beta), dij, inv_dij, inv_d2ij, ebd, delta_prefactor, u);
 
             // lennard jones force
             if (eps_i != 0 && eps_j != 0) {
@@ -375,10 +368,10 @@ void __global__ k_nonbonded_unified(
     const int tile_size = WARP_SIZE;
 
     const int tiles_per_block = blockDim.x / tile_size;
-    const int stride = gridDim.x * tiles_per_block;
     int tile_idx = blockIdx.x * tiles_per_block + (threadIdx.x / tile_size);
 
     const int tile_offset = threadIdx.x % tile_size;
+    RealType cutoff_squared = static_cast<RealType>(cutoff) * static_cast<RealType>(cutoff);
 
     const unsigned int interactions = ixn_count[0];
     while (tile_idx < interactions) {
@@ -403,8 +396,8 @@ void __global__ k_nonbonded_unified(
                 coords,
                 params,
                 shared_box,
-                beta,
-                cutoff,
+                static_cast<RealType>(beta),
+                cutoff_squared,
                 row_idxs,
                 ixn_tiles,
                 ixn_atoms,
@@ -419,8 +412,8 @@ void __global__ k_nonbonded_unified(
                 coords,
                 params,
                 shared_box,
-                beta,
-                cutoff,
+                static_cast<RealType>(beta),
+                cutoff_squared,
                 row_idxs,
                 ixn_tiles,
                 ixn_atoms,
@@ -428,6 +421,6 @@ void __global__ k_nonbonded_unified(
                 du_dp,
                 u_buffer);
         };
-        tile_idx += stride;
+        tile_idx += gridDim.x * tiles_per_block;
     }
 }
