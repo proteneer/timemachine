@@ -10,6 +10,7 @@ public:
     ~PinnedHostBuffer();
 
     const size_t size;
+    const size_t length;
 
     T *const data;
 

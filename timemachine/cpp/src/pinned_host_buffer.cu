@@ -13,7 +13,8 @@ template <typename T> T *allocate(const std::size_t length) {
 }
 
 template <typename T>
-PinnedHostBuffer<T>::PinnedHostBuffer(const std::size_t length) : size(length * sizeof(T)), data(allocate<T>(length)) {}
+PinnedHostBuffer<T>::PinnedHostBuffer(const std::size_t length)
+    : size(length * sizeof(T)), length(length), data(allocate<T>(length)) {}
 
 template <typename T> PinnedHostBuffer<T>::~PinnedHostBuffer() {
     // TODO: the file/line context reported by gpuErrchk on failure is
