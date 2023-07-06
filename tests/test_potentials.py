@@ -115,6 +115,18 @@ def test_summed_potential_invalid_parameters_size(harmonic_bond):
     )
 
 
+def test_summed_potential_nested(harmonic_bond):
+    nested_sp = SummedPotential([harmonic_bond.potential], [harmonic_bond.params])
+    nested_sp_params = harmonic_bond.params.flatten()
+    sp = SummedPotential([nested_sp, harmonic_bond.potential], [nested_sp_params, harmonic_bond.params])
+    sp_params = np.concatenate([nested_sp_params, harmonic_bond.params.flatten()])
+    bp = sp.bind(sp_params)
+    execute_bound_impl(bp.to_gpu(np.float32).bound_impl)
+
+    # test reference potential
+    _ = bp(np.ones((3, 3)), np.eye(3))
+
+
 def reference_execute_over_batch(unbound, coords, boxes, params):
     coord_batches = coords.shape[0]
     param_batches = params.shape[0]
