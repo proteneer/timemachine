@@ -1,4 +1,3 @@
-from functools import reduce
 from typing import Optional, Sequence, Tuple
 
 import jax.numpy as jnp
@@ -34,7 +33,7 @@ def summed_potential(
         shapes of the parameter array input for each potential term (must be same length as U_fns)
     """
     assert len(U_fns) == len(shapes)
-    sizes = [reduce(lambda x, y: x * y, shape) for shape in shapes]
+    sizes = [np.product(shape) for shape in shapes]
     # np.split expects indices, must increment sizes to be indices
     split_indices = np.cumsum(sizes)
     paramss = [ps.reshape(shape) for ps, shape in zip(np.split(params, split_indices[:-1]), shapes)]
