@@ -1,5 +1,5 @@
 import warnings
-from typing import Optional, Sequence, Tuple
+from typing import Iterable, Optional, Sequence, Tuple
 
 import numpy as np
 import scipy.optimize
@@ -16,7 +16,7 @@ from timemachine.lib import LangevinIntegrator, MonteCarloBarostat, custom_ops
 from timemachine.md.barker import BarkerProposal
 from timemachine.md.barostat.utils import get_bond_list, get_group_indices
 from timemachine.md.fire import fire_descent
-from timemachine.potentials import HarmonicBond, SummedPotential
+from timemachine.potentials import BoundPotential, HarmonicBond, SummedPotential
 
 
 class MinimizationWarning(UserWarning):
@@ -49,15 +49,24 @@ def parameterize_system(topo, ff: Forcefield, lamb: float):
         topo.parameterize_harmonic_bond(ff_params.hb_params),
         topo.parameterize_harmonic_angle(ff_params.ha_params),
         topo.parameterize_periodic_torsion(ff_params.pt_params, ff_params.it_params),
-        topo.parameterize_nonbonded(ff_params.q_params, ff_params.q_params_intra, ff_params.lj_params, lamb),
+        topo.parameterize_nonbonded(
+            ff_params.q_params,
+            ff_params.q_params_intra,
+            ff_params.q_params_solv,
+            ff_params.lj_params,
+            ff_params.lj_params_intra,
+            ff_params.lj_params_solv,
+            lamb,
+        ),
     ]
     return params_potential_pairs
 
 
 def bind_potentials(params_potential_pairs):
-    u_impls = [
-        potential.bind(params).to_gpu(precision=np.float32).bound_impl for params, potential in params_potential_pairs
-    ]
+    pots = [pot for _, pot in params_potential_pairs]
+    params = [p for p, _ in params_potential_pairs]
+    flat_params = np.concatenate([p.reshape(-1) for p in params])
+    u_impls = [SummedPotential(pots, params).bind(flat_params).to_gpu(precision=np.float32).bound_impl]
     return u_impls
 
 
@@ -404,7 +413,7 @@ def equilibrate_host(
     return ctxt.get_x_t(), ctxt.get_box()
 
 
-def get_val_and_grad_fn(bps, box):
+def get_val_and_grad_fn(bps: Iterable[BoundPotential], box: NDArray, precision=np.float32):
     """
     Convert impls, box into a function that only takes in coords.
 
@@ -419,15 +428,13 @@ def get_val_and_grad_fn(bps, box):
     Energy function with gradient
         f: R^(Nx3) -> (R^1, R^Nx3)
     """
+    summed_pot = SummedPotential([bp.potential for bp in bps], [bp.params for bp in bps])
+    params = np.concatenate([bp.params.reshape(-1) for bp in bps])
+    impl = summed_pot.to_gpu(precision).bind(params).bound_impl
 
     def val_and_grad_fn(coords):
-        g = np.zeros_like(coords)
-        u = 0.0
-        for impl in bps:
-            g_bp, u_bp = impl.execute(coords, box)
-            g += g_bp
-            u += u_bp
-        return u, g
+        g_bp, u_bp = impl.execute(coords, box)
+        return u_bp, g_bp
 
     return val_and_grad_fn
 

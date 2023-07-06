@@ -98,8 +98,7 @@ def test_local_minimize_water_box():
     host_fns, _ = openmm_deserializer.deserialize_system(system, cutoff=1.2)
     box0 += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes at the boundary
 
-    bound_impls = [p.to_gpu(np.float32).bound_impl for p in host_fns]
-    val_and_grad_fn = minimizer.get_val_and_grad_fn(bound_impls, box0)
+    val_and_grad_fn = minimizer.get_val_and_grad_fn(host_fns, box0)
 
     free_idxs = [0, 2, 3, 6, 7, 9, 15, 16]
     frozen_idxs = set(range(len(x0))).difference(set(free_idxs))

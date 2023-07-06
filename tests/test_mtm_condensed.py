@@ -10,13 +10,13 @@ import pytest
 from scipy.special import logsumexp
 
 from timemachine import testsystems
-from timemachine.constants import BOLTZ
+from timemachine.constants import BOLTZ, DEFAULT_PRESSURE, DEFAULT_TEMP
 from timemachine.fe.utils import get_mol_masses
 from timemachine.ff import Forcefield
 from timemachine.md import enhanced
 from timemachine.md.moves import NPTMove, NVTMove, OptimizedMTMMove
 from timemachine.md.states import CoordsVelBox
-from timemachine.potentials import bonded, nonbonded
+from timemachine.potentials import NonbondedInteractionGroup, bonded, nonbonded
 
 
 @pytest.mark.nightly(reason="Takes a long time to run")
@@ -34,8 +34,8 @@ def test_condensed_phase_mtm():
     masses = get_mol_masses(mol)
     num_ligand_atoms = len(masses)
 
-    temperature = 300.0
-    pressure = 1.0
+    temperature = DEFAULT_TEMP
+    pressure = DEFAULT_PRESSURE
 
     state = enhanced.VacuumState(mol, ff)
 
@@ -59,12 +59,15 @@ def test_condensed_phase_mtm():
 
     ubps, params, masses, coords, box = enhanced.get_solvent_phase_system(mol, ff, 0.0)
 
-    # Unwrap SummedPotential to get intermolecular potential
-    nb_potential = ubps[-1].potentials[0]
-    nb_params = ubps[-1].params_init[0]
+    # Unwrap SummedPotential to get water-ligand nonbonded potential
+    nb_idx, nb_wl_potential = next(
+        (i, pot) for i, pot in enumerate(ubps[-1].potentials) if isinstance(pot, NonbondedInteractionGroup)
+    )
 
-    beta = nb_potential.beta
-    cutoff = nb_potential.cutoff
+    nb_params = ubps[-1].params_init[nb_idx]
+
+    beta = nb_wl_potential.beta
+    cutoff = nb_wl_potential.cutoff
 
     params_i = nb_params[-num_ligand_atoms:]  # ligand params
     params_j = nb_params[:-num_ligand_atoms]  # water params

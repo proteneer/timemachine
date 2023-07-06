@@ -263,8 +263,7 @@ def optimize_coords_state(
     free_idxs: List[int],
     assert_energy_decreased: bool,
 ) -> NDArray:
-    bound_impls = [p.to_gpu(np.float32).bound_impl for p in potentials]
-    val_and_grad_fn = minimizer.get_val_and_grad_fn(bound_impls, box)
+    val_and_grad_fn = minimizer.get_val_and_grad_fn(potentials, box)
     assert np.all(np.isfinite(x0)), "Initial coordinates contain nan or inf"
     x_opt = minimizer.local_minimize(x0, val_and_grad_fn, free_idxs, assert_energy_decreased=assert_energy_decreased)
     assert np.all(np.isfinite(x_opt)), "Minimization resulted in a nan"
