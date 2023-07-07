@@ -124,7 +124,14 @@ def test_summed_potential_nested(harmonic_bond):
     execute_bound_impl(bp.to_gpu(np.float32).bound_impl)
 
     # test reference potential
-    _ = bp(np.ones((3, 3)), np.eye(3))
+    x, box = np.ones((3, 3)), np.eye(3)
+    _ = bp(x, box)
+
+    # another level of nesting is fine, too
+    sp_prime = SummedPotential([sp, nested_sp, harmonic_bond.potential], [sp_params, nested_sp_params, harmonic_bond.params])
+    sp_prime_params = np.concatenate([sp_params, nested_sp_params, harmonic_bond.params.flatten()])
+    bp_prime = sp_prime.bind(sp_prime_params)
+    _ = bp_prime(x, box)
 
 
 def reference_execute_over_batch(unbound, coords, boxes, params):
