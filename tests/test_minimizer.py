@@ -12,8 +12,7 @@ from timemachine.md import builders, minimizer
 from timemachine.md.minimizer import equilibrate_host_barker, make_host_du_dx_fxn
 
 
-@pytest.mark.nightly(reason="Slow and no assertions")
-def test_minimizer():
+def test_minimize_host_4d():
     ff = Forcefield.load_default()
 
     with resources.path("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as path_to_pdb:
@@ -28,6 +27,26 @@ def test_minimizer():
     mol_a = all_mols[1]
     mol_b = all_mols[4]
 
+    for mols in [[mol_a], [mol_b], [mol_a, mol_b]]:
+        x_host = minimizer.minimize_host_4d(mols, host_config, ff)
+        assert x_host.shape == complex_coords.shape
+
+
+@pytest.mark.nightly(reason="Currently not used in practice")
+def test_equilibrate_host_barker():
+    ff = Forcefield.load_default()
+
+    with resources.path("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as path_to_pdb:
+        complex_system, complex_coords, complex_box, _, num_water_atoms = builders.build_protein_system(
+            str(path_to_pdb), ff.protein_ff, ff.water_ff
+        )
+        host_config = HostConfig(complex_system, complex_coords, complex_box, num_water_atoms)
+
+    with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
+        all_mols = read_sdf(path_to_ligand)
+
+    mol_a = all_mols[1]
+    mol_b = all_mols[4]
     # TODO[requirements-gathering]:
     #   do we really want to minimize here ("equilibrate to temperature ~= 0"),
     #   or do we want to equilibrate ("equilibrate to temperature = 300")?
@@ -47,6 +66,7 @@ def test_minimizer():
         print(f"using unadjusted Barker proposal @ temperature = {room_temperature} K...")
         t0 = time()
         x_host = equilibrate_host_barker(mols, host_config, ff, temperature=room_temperature)
+        assert x_host.shape == complex_coords.shape
         t1 = time()
         max_frc = np.linalg.norm(host_du_dx_fxn(x_host), axis=-1).max()
         print(f"\tforce norm after room-temperature equilibration: {max_frc:.3f} kJ/mol / nm")
@@ -56,21 +76,13 @@ def test_minimizer():
         print(f"using unadjusted Barker proposal @ temperature = {zero_temperature} K...")
         t0 = time()
         x_host = equilibrate_host_barker(mols, host_config, ff, temperature=zero_temperature)
+        assert x_host.shape == complex_coords.shape
         t1 = time()
 
         max_frc = np.linalg.norm(host_du_dx_fxn(x_host), axis=-1).max()
 
         print(f"\tforce norm after low-temperature 'equilibration': {max_frc:.3f} kJ/mol / nm")
         print(f"\tmax distance traveled = {np.linalg.norm(np.array(complex_coords) - x_host, axis=-1).max():.3f} nm")
-        print(f"\tdone in {(t1 - t0):.3f} s")
-
-        t0 = time()
-        print("using 4D FIRE annealing")
-        x_host = minimizer.minimize_host_4d(mols, host_config, ff)
-        max_frc = np.linalg.norm(host_du_dx_fxn(x_host), axis=-1).max()
-        print(f"\tmax force norm after 4D FIRE annealing: {max_frc:.3f} kJ/mol / nm")
-        print(f"\tmax distance traveled = {np.linalg.norm(np.array(complex_coords) - x_host, axis=-1).max():.3f} nm")
-        t1 = time()
         print(f"\tdone in {(t1 - t0):.3f} s")
 
 
