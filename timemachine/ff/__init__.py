@@ -19,8 +19,11 @@ class ForcefieldParams(Generic[_T]):
     pt_params: _T
     it_params: _T
     q_params: _T
+    q_params_solv: _T
     q_params_intra: _T
     lj_params: _T
+    lj_params_solv: _T
+    lj_params_intra: _T
 
 
 def combine_params(a: ForcefieldParams[_T], b: ForcefieldParams[_T]) -> ForcefieldParams[Tuple[_T, _T]]:
@@ -30,8 +33,11 @@ def combine_params(a: ForcefieldParams[_T], b: ForcefieldParams[_T]) -> Forcefie
         (a.pt_params, b.pt_params),
         (a.it_params, b.it_params),
         (a.q_params, b.q_params),
+        (a.q_params_solv, b.q_params_solv),
         (a.q_params_intra, b.q_params_intra),
         (a.lj_params, b.lj_params),
+        (a.lj_params_solv, b.lj_params_solv),
+        (a.lj_params_intra, b.lj_params_intra),
     )
 
 
@@ -59,7 +65,16 @@ class Forcefield:
             nonbonded.AM1CCCIntraHandler,
         ]
     ]
+    q_handle_solv: Optional[
+        Union[
+            nonbonded.SimpleChargeSolventHandler,
+            nonbonded.AM1BCCSolventHandler,
+            nonbonded.AM1CCCSolventHandler,
+        ]
+    ]
     lj_handle: Optional[nonbonded.LennardJonesHandler]
+    lj_handle_intra: Optional[nonbonded.LennardJonesIntraHandler]
+    lj_handle_solv: Optional[nonbonded.LennardJonesSolventHandler]
 
     protein_ff: str
     water_ff: str
@@ -120,7 +135,10 @@ class Forcefield:
         pt_handle = None
         it_handle = None
         lj_handle = None
+        lj_handle_solv = None
+        lj_handle_intra = None
         q_handle = None
+        q_handle_solv = None
         q_handle_intra = None
 
         for handle in ff_handlers:
@@ -136,25 +154,43 @@ class Forcefield:
             elif isinstance(handle, bonded.ImproperTorsionHandler):
                 assert it_handle is None
                 it_handle = handle
+            elif isinstance(handle, nonbonded.LennardJonesIntraHandler):
+                assert lj_handle_intra is None
+                lj_handle_intra = handle
+            elif isinstance(handle, nonbonded.LennardJonesSolventHandler):
+                assert lj_handle_solv is None
+                lj_handle_solv = handle
             elif isinstance(handle, nonbonded.LennardJonesHandler):
                 assert lj_handle is None
                 lj_handle = handle
-            elif (
-                isinstance(handle, nonbonded.AM1CCCIntraHandler)
-                or isinstance(handle, nonbonded.AM1BCCIntraHandler)
-                or isinstance(handle, nonbonded.SimpleChargeIntraHandler)
+            elif isinstance(
+                handle, (nonbonded.AM1CCCIntraHandler, nonbonded.AM1BCCIntraHandler, nonbonded.SimpleChargeIntraHandler)
             ):
                 # Need to be checked first since they are also subclasses
                 # of the non-intra handlers
                 assert q_handle_intra is None
                 q_handle_intra = handle
-            elif (
-                isinstance(handle, nonbonded.AM1CCCHandler)
-                or isinstance(handle, nonbonded.AM1BCCHandler)
-                or isinstance(handle, nonbonded.SimpleChargeHandler)
+            elif isinstance(
+                handle,
+                (nonbonded.AM1CCCSolventHandler, nonbonded.AM1BCCSolventHandler, nonbonded.SimpleChargeSolventHandler),
             ):
+                assert q_handle_solv is None
+                q_handle_solv = handle
+            elif isinstance(handle, (nonbonded.AM1CCCHandler, nonbonded.AM1BCCHandler, nonbonded.SimpleChargeHandler)):
                 assert q_handle is None
                 q_handle = handle
+
+        if lj_handle_intra is None:
+            if isinstance(lj_handle, nonbonded.LennardJonesHandler):
+                lj_handle_intra = nonbonded.LennardJonesIntraHandler(
+                    lj_handle.smirks, lj_handle.params, lj_handle.props
+                )
+
+        if lj_handle_solv is None:
+            if isinstance(lj_handle, nonbonded.LennardJonesHandler):
+                lj_handle_solv = nonbonded.LennardJonesSolventHandler(
+                    lj_handle.smirks, lj_handle.params, lj_handle.props
+                )
 
         if q_handle_intra is None:
             # Copy the forcefield parameters to the intramolecular term if not
@@ -168,8 +204,31 @@ class Forcefield:
             else:
                 raise ValueError(f"Unsupported charge handler {q_handle}")
 
+        if q_handle_solv is None:
+            # Copy the forcefield parameters to the solvent term if not
+            # already handled.
+            if isinstance(q_handle, nonbonded.AM1CCCHandler):
+                q_handle_solv = nonbonded.AM1CCCSolventHandler(q_handle.smirks, q_handle.params, q_handle.props)
+            elif isinstance(q_handle, nonbonded.AM1BCCHandler):
+                q_handle_solv = nonbonded.AM1BCCSolventHandler(q_handle.smirks, q_handle.params, q_handle.props)
+            elif isinstance(q_handle, nonbonded.SimpleChargeHandler):
+                q_handle_solv = nonbonded.SimpleChargeSolventHandler(q_handle.smirks, q_handle.params, q_handle.props)
+            else:
+                raise ValueError(f"Unsupported charge handler {q_handle}")
+
         return cls(
-            hb_handle, ha_handle, pt_handle, it_handle, q_handle, q_handle_intra, lj_handle, protein_ff, water_ff
+            hb_handle,
+            ha_handle,
+            pt_handle,
+            it_handle,
+            q_handle,
+            q_handle_intra,
+            q_handle_solv,
+            lj_handle,
+            lj_handle_intra,
+            lj_handle_solv,
+            protein_ff,
+            water_ff,
         )
 
     def get_ordered_handles(self):
@@ -181,7 +240,10 @@ class Forcefield:
             self.it_handle,
             self.q_handle,
             self.q_handle_intra,
+            self.q_handle_solv,
             self.lj_handle,
+            self.lj_handle_intra,
+            self.lj_handle_solv,
         ]
 
     def get_params(self) -> ForcefieldParams:
@@ -195,7 +257,10 @@ class Forcefield:
             params(self.it_handle),
             params(self.q_handle),
             params(self.q_handle_intra),
+            params(self.q_handle_solv),
             params(self.lj_handle),
+            params(self.lj_handle_intra),
+            params(self.lj_handle_solv),
         )
 
     def serialize(self) -> str:

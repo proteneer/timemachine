@@ -6,7 +6,7 @@ from rdkit import Chem
 from rdkit.Chem import AllChem
 
 from timemachine.fe import atom_mapping
-from timemachine.fe.mcgregor import MaxVisitsError, NoMappingError
+from timemachine.fe.mcgregor import MaxVisitsWarning, NoMappingError
 from timemachine.fe.utils import plot_atom_mapping_grid
 
 hif2a_set = "timemachine/datasets/fep_benchmark/hif2a/ligands.sdf"
@@ -929,7 +929,7 @@ def test_ring_matches_ring_only(ring_matches_ring_only):
 
 
 @pytest.mark.nogpu
-def test_max_visits_exception():
+def test_max_visits_warning():
     mol_a, mol_b = get_cyclohexanes_different_confs()
     core_kwargs = dict(
         ring_cutoff=0.1,
@@ -945,12 +945,13 @@ def test_max_visits_exception():
     cores = atom_mapping.get_cores(mol_a, mol_b, **core_kwargs, max_visits=10000)
     assert len(cores) > 0
 
-    with pytest.raises(MaxVisitsError, match="Reached max number of visits/cores: 0 cores with 2 nodes visited"):
-        atom_mapping.get_cores(mol_a, mol_b, **core_kwargs, max_visits=1)
+    with pytest.warns(MaxVisitsWarning, match="Reached max number of visits/cores: 0 cores with 2 nodes visited"):
+        with pytest.raises(NoMappingError):
+            atom_mapping.get_cores(mol_a, mol_b, **core_kwargs, max_visits=1)
 
 
 @pytest.mark.nogpu
-def test_max_cores_exception():
+def test_max_cores_warning():
     mol_a, mol_b = get_cyclohexanes_different_confs()
     core_kwargs = dict(
         ring_cutoff=0.1,
@@ -963,7 +964,7 @@ def test_max_cores_exception():
         min_threshold=0,
         max_visits=1e7,
     )
-    with pytest.raises(MaxVisitsError, match="Reached max number of visits/cores: 2 cores"):
+    with pytest.warns(MaxVisitsWarning, match="Reached max number of visits/cores: 2 cores"):
         atom_mapping.get_cores(mol_a, mol_b, **core_kwargs, max_cores=1)
 
 

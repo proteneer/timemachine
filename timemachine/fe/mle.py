@@ -1,3 +1,5 @@
+from typing import Union
+
 import networkx as nx
 import numpy as np
 from jax import jit
@@ -5,6 +7,8 @@ from jax import numpy as jnp
 from jax import value_and_grad
 from jax.scipy.stats import norm
 from scipy.optimize import minimize
+
+NxDiGraph = Union[nx.DiGraph, nx.MultiDiGraph]
 
 
 def make_stddevs_finite(stddevs, min_stddev=1e-3):
@@ -215,7 +219,7 @@ def infer_node_vals_and_errs(
 
 
 def infer_node_vals_and_errs_networkx(
-    graph: nx.DiGraph,
+    graph: NxDiGraph,
     edge_diff_prop: str,
     edge_stddev_prop: str,
     ref_node_val_prop: str,
@@ -224,12 +228,13 @@ def infer_node_vals_and_errs_networkx(
     node_stddev_prop: str = "inferred_dg_stddev",
     n_bootstrap: int = 100,
     seed: int = 0,
-) -> nx.DiGraph:
+) -> NxDiGraph:
     """Version of :py:func:`timemachine.fe.mle.infer_node_vals_and_errs` that accepts a directed networkx graph.
+    This will also accept a MultiDiGraph which represents multiple replicates of the same graph.
 
     Parameters
     ----------
-    nx_graph: networkx.DiGraph
+    nx_graph: networkx.DiGraph or networkx.MultiDiGraph
         Directed Networkx graph
     edge_diff_prop: str
         Edge property to use for differences
@@ -248,11 +253,11 @@ def infer_node_vals_and_errs_networkx(
 
     Returns
     -------
-    networkx.DiGraph
+    networkx.DiGraph/networkx.MultiDiGraph
         Subgraph limited to edges with defined edge_diff_prop and edge_stddev_prop, where nodes have been labeled with
         the inferred values of `node_val_prop` and `node_stddev_prop`.
     """
-    assert isinstance(graph, nx.DiGraph), "Graph must be a DiGraph"
+    assert isinstance(graph, (nx.DiGraph, nx.MultiDiGraph)), "Graph must be a DiGraph or MultiDiGraph"
     edges_with_props = [
         e for e, d in graph.edges.items() if d.get(edge_diff_prop) is not None and d.get(edge_stddev_prop) is not None
     ]
@@ -276,12 +281,12 @@ def infer_node_vals_and_errs_networkx(
             ref_node_vals.append(d[ref_node_val_prop])
             ref_node_stddevs.append(d.get(ref_node_stddev_prop, 0.0))
 
-    edge_idxs = np.array(sg_relabeled.edges)
-
+    edges = np.array(sg_relabeled.edges)
+    edge_idxs = edges[:, :2]  # remove edge key in MultiDiGraph if present
     dgs, dg_errs = infer_node_vals_and_errs(
         edge_idxs,
-        np.array([sg_relabeled.edges[e][edge_diff_prop] for e in edge_idxs]),
-        np.array([sg_relabeled.edges[e][edge_stddev_prop] for e in edge_idxs]),
+        np.array([sg_relabeled.edges[e][edge_diff_prop] for e in edges]),
+        np.array([sg_relabeled.edges[e][edge_stddev_prop] for e in edges]),
         ref_node_idxs,
         ref_node_vals,
         ref_node_stddevs,

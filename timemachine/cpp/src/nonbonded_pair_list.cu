@@ -59,13 +59,15 @@ void NonbondedPairList<RealType, Negated>::execute_device(
     unsigned long long *d_u,
     cudaStream_t stream) {
 
-    const int tpb = DEFAULT_THREADS_PER_BLOCK;
-    const int num_blocks_pairs = ceil_divide(M_, tpb);
+    if (M_ > 0) {
+        const int tpb = DEFAULT_THREADS_PER_BLOCK;
+        const int num_blocks_pairs = ceil_divide(M_, tpb);
 
-    k_nonbonded_pair_list<RealType, Negated><<<num_blocks_pairs, tpb, 0, stream>>>(
-        M_, d_x, d_p, d_box, d_pair_idxs_, d_scales_, beta_, cutoff_, d_du_dx, d_du_dp, d_u);
+        k_nonbonded_pair_list<RealType, Negated><<<num_blocks_pairs, tpb, 0, stream>>>(
+            M_, d_x, d_p, d_box, d_pair_idxs_, d_scales_, beta_, cutoff_, d_du_dx, d_du_dp, d_u);
 
-    gpuErrchk(cudaPeekAtLastError());
+        gpuErrchk(cudaPeekAtLastError());
+    }
 }
 
 // TODO: this implementation is duplicated from NonbondedAllPairs
