@@ -34,6 +34,9 @@ def summed_potential(
     """
     assert len(U_fns) == len(shapes)
     sizes = [np.prod(shape) for shape in shapes]
+    assert params.ndim == 1
+    (num_params,) = params.shape
+    assert sum(sizes) == num_params
     # np.split expects indices, must increment sizes to be indices
     split_indices = np.cumsum(sizes)
     paramss = [ps.reshape(shape) for ps, shape in zip(np.split(params, split_indices[:-1]), shapes)]
