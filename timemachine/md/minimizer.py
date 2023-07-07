@@ -16,7 +16,7 @@ from timemachine.lib import LangevinIntegrator, MonteCarloBarostat, custom_ops
 from timemachine.md.barker import BarkerProposal
 from timemachine.md.barostat.utils import get_bond_list, get_group_indices
 from timemachine.md.fire import fire_descent
-from timemachine.potentials import BoundPotential, HarmonicBond, Nonbonded, NonbondedAllPairs, NonbondedInteractionGroup
+from timemachine.potentials import BoundPotential, HarmonicBond
 from timemachine.potentials.executor import PotentialExecutor
 
 
@@ -415,15 +415,13 @@ def get_val_and_grad_fn(bps: Iterable[BoundPotential], box: NDArray, precision=n
         f: R^(Nx3) -> (R^1, R^Nx3)
     """
 
-    num_atoms = next(
-        bp.potential.num_atoms
-        for bp in bps
-        if isinstance(bp.potential, (Nonbonded, NonbondedAllPairs, NonbondedInteractionGroup))
-    )
+    executor: Optional[PotentialExecutor] = None
     gpu_bps = [bp.to_gpu(precision).bound_impl for bp in bps]
-    executor = PotentialExecutor(num_atoms)
 
     def val_and_grad_fn(coords):
+        nonlocal executor
+        if executor is None:
+            executor = PotentialExecutor(coords.shape[0])
         g_bp, u_bp = executor.execute_bound(gpu_bps, coords, box)
         return u_bp, g_bp
 
