@@ -2,6 +2,7 @@ from importlib import resources
 from time import time
 
 import numpy as np
+import pytest
 
 from timemachine.fe.free_energy import HostConfig
 from timemachine.fe.utils import read_sdf
@@ -11,6 +12,7 @@ from timemachine.md import builders, minimizer
 from timemachine.md.minimizer import equilibrate_host_barker, make_host_du_dx_fxn
 
 
+@pytest.mark.nightly(reason="Slow and no assertions")
 def test_minimizer():
     ff = Forcefield.load_default()
 
