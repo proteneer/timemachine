@@ -1,5 +1,5 @@
 import warnings
-from typing import Iterable, Optional, Sequence, Tuple
+from typing import Iterable, List, Optional, Sequence, Tuple
 
 import numpy as np
 import scipy.optimize
@@ -16,7 +16,8 @@ from timemachine.lib import LangevinIntegrator, MonteCarloBarostat, custom_ops
 from timemachine.md.barker import BarkerProposal
 from timemachine.md.barostat.utils import get_bond_list, get_group_indices
 from timemachine.md.fire import fire_descent
-from timemachine.potentials import BoundPotential, HarmonicBond, SummedPotential
+from timemachine.potentials import BoundPotential, HarmonicBond, Nonbonded, NonbondedAllPairs, NonbondedInteractionGroup
+from timemachine.potentials.executor import PotentialExecutor
 
 
 class MinimizationWarning(UserWarning):
@@ -62,12 +63,9 @@ def parameterize_system(topo, ff: Forcefield, lamb: float):
     return params_potential_pairs
 
 
-def bind_potentials(params_potential_pairs):
-    pots = [pot for _, pot in params_potential_pairs]
-    params = [p for p, _ in params_potential_pairs]
-    flat_params = np.concatenate([p.reshape(-1) for p in params])
-    u_impls = [SummedPotential(pots, params).bind(flat_params).to_gpu(precision=np.float32).bound_impl]
-    return u_impls
+def bind_potentials(params_potential_pairs) -> List[custom_ops.BoundPotential]:
+    pots = [pot.bind(p).to_gpu(precision=np.float32).bound_impl for p, pot in params_potential_pairs]
+    return pots
 
 
 def fire_minimize(x0: NDArray, u_impls: Sequence[custom_ops.BoundPotential], box: NDArray, n_steps: int) -> NDArray:
@@ -93,13 +91,11 @@ def fire_minimize(x0: NDArray, u_impls: Sequence[custom_ops.BoundPotential], box
         Minimized coords.
 
     """
+    executor = PotentialExecutor(x0.shape[0])
 
     def force(coords):
-        forces = np.zeros_like(coords)
-        for impl in u_impls:
-            du_dx, _ = impl.execute(coords, box)
-            forces -= du_dx
-        return forces
+        du_dx, _ = executor.execute_bound(u_impls, coords, box, compute_du_dx=True, compute_u=False)
+        return -du_dx
 
     def shift(d, dr):
         return d + dr
@@ -198,18 +194,6 @@ def minimize_host_4d(mols, host_config: HostConfig, ff, mol_coords=None) -> np.n
     return final_coords[:num_host_atoms]
 
 
-def make_gpu_impl(bound_potentials):
-    """return bound impl of a SummedPotential constructed from potentials"""
-
-    params = [bp.params for bp in bound_potentials]
-    flat_params = np.concatenate([param.reshape(-1) for param in params])
-
-    summed_potential = SummedPotential([bp.potential for bp in bound_potentials], params)
-    bound_impl = summed_potential.bind(flat_params).to_gpu(np.float32).bound_impl
-
-    return bound_impl
-
-
 def make_host_du_dx_fxn(mols, host_config, ff, mol_coords=None):
     """construct function to compute du_dx w.r.t. host coords, given fixed mols and box"""
 
@@ -230,8 +214,9 @@ def make_host_du_dx_fxn(mols, host_config, ff, mol_coords=None):
 
     # bound impls of potentials @ lam=0 (fully coupled) endstate
     params_potential_pairs = parameterize_system(hgt, ff, 0.0)
-    bound_potentials = [potential.bind(params) for params, potential in params_potential_pairs]
-    gpu_impl = make_gpu_impl(bound_potentials)
+    bound_potentials = [
+        potential.bind(params).to_gpu(np.float32).bound_impl for params, potential in params_potential_pairs
+    ]
 
     # read conformers from mol_coords if given, or each mol's conf0 otherwise
     conf_list = [np.array(host_config.conf)]
@@ -249,6 +234,7 @@ def make_host_du_dx_fxn(mols, host_config, ff, mol_coords=None):
         assert conf.shape == (mol.GetNumAtoms(), 3)
 
     combined_coords = np.concatenate(conf_list)
+    executor = PotentialExecutor(combined_coords.shape[0])
 
     # wrap gpu_impl, partially applying box, mol coords
     num_host_atoms = host_config.conf.shape[0]
@@ -257,7 +243,7 @@ def make_host_du_dx_fxn(mols, host_config, ff, mol_coords=None):
         x = np.array(combined_coords)
         x[:num_host_atoms] = x_host
 
-        du_dx, _ = gpu_impl.execute(x, host_config.box)
+        du_dx, _ = executor.execute_bound(bound_potentials, x, host_config.box, compute_u=False)
         du_dx_host = du_dx[:num_host_atoms]
         return du_dx_host
 
@@ -428,12 +414,17 @@ def get_val_and_grad_fn(bps: Iterable[BoundPotential], box: NDArray, precision=n
     Energy function with gradient
         f: R^(Nx3) -> (R^1, R^Nx3)
     """
-    summed_pot = SummedPotential([bp.potential for bp in bps], [bp.params for bp in bps])
-    params = np.concatenate([bp.params.reshape(-1) for bp in bps])
-    impl = summed_pot.to_gpu(precision).bind(params).bound_impl
+
+    num_atoms = next(
+        bp.potential.num_atoms
+        for bp in bps
+        if isinstance(bp.potential, (Nonbonded, NonbondedAllPairs, NonbondedInteractionGroup))
+    )
+    gpu_bps = [bp.to_gpu(precision).bound_impl for bp in bps]
+    executor = PotentialExecutor(num_atoms)
 
     def val_and_grad_fn(coords):
-        g_bp, u_bp = impl.execute(coords, box)
+        g_bp, u_bp = executor.execute_bound(gpu_bps, coords, box)
         return u_bp, g_bp
 
     return val_and_grad_fn
