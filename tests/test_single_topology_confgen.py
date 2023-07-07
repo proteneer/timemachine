@@ -41,7 +41,7 @@ def run_edge(mol_a, mol_b, protein_path, n_windows):
         max_cores=1e6,
         enforce_core_core=True,
         ring_matches_ring_only=True,
-        complete_rings=True,
+        complete_rings=False,
         enforce_chiral=True,
         min_threshold=0,
     )
