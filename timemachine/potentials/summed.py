@@ -33,7 +33,8 @@ def summed_potential(
         shapes of the parameter array input for each potential term (must be same length as U_fns)
     """
     assert len(U_fns) == len(shapes)
-    sizes = np.prod(shapes, axis=1)
+    sizes = [np.prod(shape) for shape in shapes]
+    assert params.shape == (sum(sizes),)
     # np.split expects indices, must increment sizes to be indices
     split_indices = np.cumsum(sizes)
     paramss = [ps.reshape(shape) for ps, shape in zip(np.split(params, split_indices[:-1]), shapes)]
