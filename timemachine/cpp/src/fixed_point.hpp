@@ -16,3 +16,17 @@ RealType __host__ __device__ __forceinline__ FIXED_TO_FLOAT_DU_DP(unsigned long 
 template <typename RealType> RealType __host__ __device__ __forceinline__ FIXED_TO_FLOAT(unsigned long long v) {
     return static_cast<RealType>(static_cast<long long>(v)) / FIXED_EXPONENT;
 }
+
+template <typename RealType> bool inline __device__ is_overflow(RealType u) {
+    return u > nextafter(static_cast<RealType>(LLONG_MAX), static_cast<RealType>(0.0)) ||
+           u < nextafter(static_cast<RealType>(LLONG_MIN), static_cast<RealType>(0.0));
+}
+
+template <typename RealType> bool inline __device__ energy_overflowed(RealType u_orig, int &overflow_count) {
+    RealType u = u_orig * FIXED_EXPONENT;
+    if (!isfinite(u) || is_overflow(u)) {
+        overflow_count++;
+        return true;
+    }
+    return false;
+}

@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from timemachine.constants import AVOGADRO, BAR_TO_KJ_PER_NM3, BOLTZ
+from timemachine.constants import AVOGADRO, BAR_TO_KJ_PER_NM3, BOLTZ, DEFAULT_PRESSURE, DEFAULT_TEMP
 from timemachine.fe.free_energy import AbsoluteFreeEnergy, HostConfig
 from timemachine.fe.topology import BaseTopology
 from timemachine.ff import Forcefield
@@ -14,16 +14,74 @@ from timemachine.md.thermostat.utils import sample_velocities
 from timemachine.testsystems.relative import get_hif2a_ligand_pair_single_topology
 
 
+def test_barostat_with_clashes():
+    temperature = DEFAULT_TEMP  # kelvin
+    pressure = DEFAULT_PRESSURE  # bar
+    timestep = 1.5e-3  # picosecond
+    barostat_interval = 3  # step count
+    collision_rate = 1.0  # 1 / picosecond
+    seed = 2023
+
+    np.random.seed(seed)
+
+    mol_a, _, _ = get_hif2a_ligand_pair_single_topology()
+    ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
+
+    # Set the lambda to 0.0 and don't minimize, resulting in clashes in the system
+    unbound_potentials, sys_params, masses, coords, box = get_solvent_phase_system(
+        mol_a, ff, lamb=0.0, minimize_energy=False
+    )
+    # get list of molecules for barostat by looking at bond table
+    harmonic_bond_potential = unbound_potentials[0]
+    bond_list = get_bond_list(harmonic_bond_potential)
+    group_indices = get_group_indices(bond_list, len(masses))
+
+    # Cut the number of groups in half
+    group_indices = group_indices[len(group_indices) // 2 :]
+
+    u_impls = []
+    for params, unbound_pot in zip(sys_params, unbound_potentials):
+        u_impls.append(unbound_pot.bind(params).to_gpu(precision=np.float32).bound_impl)
+
+    integrator = LangevinIntegrator(
+        temperature,
+        timestep,
+        collision_rate,
+        masses,
+        seed,
+    )
+    integrator_impl = integrator.impl()
+
+    v_0 = sample_velocities(masses, temperature)
+
+    baro = custom_ops.MonteCarloBarostat(
+        coords.shape[0],
+        pressure,
+        temperature,
+        group_indices,
+        barostat_interval,
+        u_impls,
+        seed,
+    )
+
+    # The clashes will result in overflows, so the box should never change as no move is accepted
+    ctxt = custom_ops.Context(coords, v_0, box, integrator_impl, u_impls, barostat=baro)
+    ctxt.multiple_steps(barostat_interval * 100)
+    assert np.all(box == ctxt.get_box())
+
+
 def test_barostat_zero_interval():
-    pressure = 1.013  # bar
-    temperature = 300.0  # kelvin
+    pressure = DEFAULT_PRESSURE  # bar
+    temperature = DEFAULT_TEMP  # kelvin
     seed = 2021
     np.random.seed(seed)
 
     mol_a, _, _ = get_hif2a_ligand_pair_single_topology()
     ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
 
-    unbound_potentials, sys_params, masses, coords, _ = get_solvent_phase_system(mol_a, ff, lamb=0.0)
+    unbound_potentials, sys_params, masses, coords, _ = get_solvent_phase_system(
+        mol_a, ff, lamb=1.0, minimize_energy=False
+    )
 
     # get list of molecules for barostat by looking at bond table
     harmonic_bond_potential = unbound_potentials[0]
@@ -69,7 +127,7 @@ def test_barostat_partial_group_idxs():
     """Verify that the barostat can handle a subset of the molecules
     rather than all of them. This test only verify that it runs, not the behavior"""
     lam = 1.0
-    temperature = 300.0  # kelvin
+    temperature = DEFAULT_TEMP  # kelvin
     timestep = 1.5e-3  # picosecond
     barostat_interval = 3  # step count
     collision_rate = 1.0  # 1 / picosecond
@@ -77,10 +135,12 @@ def test_barostat_partial_group_idxs():
     seed = 2021
     np.random.seed(seed)
 
-    pressure = 1.013  # bar
+    pressure = DEFAULT_PRESSURE  # bar
     mol_a, _, _ = get_hif2a_ligand_pair_single_topology()
     ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
-    unbound_potentials, sys_params, masses, coords, complex_box = get_solvent_phase_system(mol_a, ff, lam)
+    unbound_potentials, sys_params, masses, coords, complex_box = get_solvent_phase_system(
+        mol_a, ff, lam, minimize_energy=False
+    )
 
     # get list of molecules for barostat by looking at bond table
     harmonic_bond_potential = unbound_potentials[0]
@@ -122,7 +182,7 @@ def test_barostat_partial_group_idxs():
     )
 
     ctxt = custom_ops.Context(coords, v_0, complex_box, integrator_impl, u_impls, barostat=baro)
-    ctxt.multiple_steps(1000)
+    ctxt.multiple_steps(barostat_interval * 100)
 
 
 @pytest.mark.memcheck
@@ -132,14 +192,14 @@ def test_barostat_is_deterministic():
     simulations
     """
     lam = 1.0
-    temperature = 300.0
+    temperature = DEFAULT_TEMP
     timestep = 1.5e-3
     barostat_interval = 3
     collision_rate = 1.0
     seed = 2021
     np.random.seed(seed)
 
-    pressure = 1.013
+    pressure = DEFAULT_PRESSURE
 
     mol_a, _, _ = get_hif2a_ligand_pair_single_topology()
     ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
@@ -158,7 +218,7 @@ def test_barostat_is_deterministic():
 
     u_impls = []
     for params, unbound_pot in zip(sys_params, unbound_potentials):
-        bp = unbound_pot.bind(np.asarray(params))
+        bp = unbound_pot.bind(params)
         bp_impl = bp.to_gpu(precision=np.float32).bound_impl
         u_impls.append(bp_impl)
 
@@ -205,7 +265,7 @@ def test_barostat_is_deterministic():
 
 def test_barostat_varying_pressure():
     lam = 1.0
-    temperature = 300.0
+    temperature = DEFAULT_TEMP
     timestep = 1.5e-3
     barostat_interval = 3
     collision_rate = 1.0
@@ -258,7 +318,7 @@ def test_barostat_varying_pressure():
     assert compute_box_volume(complex_box) - ten_atm_box_vol > 0.4
 
     # Set the pressure to 1 atm
-    baro.set_pressure(1.013)
+    baro.set_pressure(DEFAULT_PRESSURE)
     # Changing the barostat interval resets the barostat step.
     baro.set_interval(2)
 

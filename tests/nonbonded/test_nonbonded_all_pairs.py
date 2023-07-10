@@ -114,7 +114,11 @@ def test_nonbonded_all_pairs_improper_subset(rng: np.random.Generator):
 
     np.testing.assert_array_equal(du_dx_1, du_dx_2)
     np.testing.assert_array_equal(du_dp_1, du_dp_2)
-    assert u_1 == u_2
+    # If energy overflows, returns a Nan
+    if not np.isnan(u_1):
+        assert u_1 == u_2
+    else:
+        assert np.isnan(u_2)
 
 
 @pytest.mark.parametrize("beta", [2.0])

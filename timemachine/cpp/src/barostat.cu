@@ -45,7 +45,9 @@ MonteCarloBarostat::MonteCarloBarostat(
     cudaSafeMalloc(&d_x_after_, N_ * 3 * sizeof(*d_x_after_));
     cudaSafeMalloc(&d_box_after_, 3 * 3 * sizeof(*d_box_after_));
     cudaSafeMalloc(&d_u_buffer_, N_ * sizeof(*d_u_buffer_));
+    cudaSafeMalloc(&d_u_init_overflow_count_, 1 * sizeof(*d_u_init_overflow_count_));
     cudaSafeMalloc(&d_u_after_buffer_, N_ * sizeof(*d_u_after_buffer_));
+    cudaSafeMalloc(&d_u_final_overflow_count_, 1 * sizeof(*d_u_final_overflow_count_));
 
     cudaSafeMalloc(&d_init_u_, 1 * sizeof(*d_init_u_));
     cudaSafeMalloc(&d_final_u_, 1 * sizeof(*d_final_u_));
@@ -125,6 +127,8 @@ MonteCarloBarostat::~MonteCarloBarostat() {
     gpuErrchk(cudaFree(d_u_buffer_));
     gpuErrchk(cudaFree(d_init_u_));
     gpuErrchk(cudaFree(d_final_u_));
+    gpuErrchk(cudaFree(d_u_init_overflow_count_));
+    gpuErrchk(cudaFree(d_u_final_overflow_count_));
     gpuErrchk(cudaFree(d_rand_));
     gpuErrchk(cudaFree(d_length_scale_));
     gpuErrchk(cudaFree(d_sum_storage_));
@@ -138,7 +142,7 @@ MonteCarloBarostat::~MonteCarloBarostat() {
 
 void __global__ rescale_positions(
     const int N,                                     // Number of atoms to shift
-    double *__restrict__ coords,                     // Cordinates
+    double *__restrict__ coords,                     // Coordinates
     const double *__restrict__ length_scale,         // [1]
     const double *__restrict__ box,                  // [9]
     double *__restrict__ scaled_box,                 // [9]
@@ -226,7 +230,9 @@ void __global__ k_decide_move(
     double *__restrict__ d_volume_delta,
     double *__restrict__ d_volume_scale,
     const unsigned long long *__restrict__ d_init_u,
+    const int *__restrict__ d_init_overflow_count,
     const unsigned long long *__restrict__ d_final_u,
+    const int *__restrict__ d_final_overflow_count,
     double *__restrict__ d_box,
     const double *__restrict__ d_box_output,
     double *__restrict__ d_x,
@@ -240,7 +246,11 @@ void __global__ k_decide_move(
 
     const double volume = d_box[0 * 3 + 0] * d_box[1 * 3 + 1] * d_box[2 * 3 + 2];
     const double new_volume = volume + d_volume_delta[0];
-    const double energy_delta = FIXED_TO_FLOAT<double>(d_final_u[0] - d_init_u[0]);
+    double energy_delta = INFINITY;
+    if (d_init_overflow_count[0] == 0 && d_final_overflow_count[0] == 0) {
+        energy_delta = FIXED_TO_FLOAT<double>(d_final_u[0] - d_init_u[0]);
+    }
+
     const double w = energy_delta + pressure * d_volume_delta[0] - num_molecules * kt * std::log(new_volume / volume);
 
     const bool rejected = w > 0 && rand[1] > std::exp(-w / kt);
@@ -298,10 +308,12 @@ void MonteCarloBarostat::inplace_move(
 
     gpuErrchk(cudaMemsetAsync(d_init_u_, 0, sizeof(*d_init_u_), stream));
     gpuErrchk(cudaMemsetAsync(d_final_u_, 0, sizeof(*d_final_u_), stream));
+    gpuErrchk(cudaMemsetAsync(d_u_init_overflow_count_, 0, sizeof(*d_u_init_overflow_count_), stream));
+    gpuErrchk(cudaMemsetAsync(d_u_final_overflow_count_, 0, sizeof(*d_u_final_overflow_count_), stream));
     gpuErrchk(cudaMemsetAsync(d_u_buffer_, 0, N_ * sizeof(*d_u_buffer_), stream));
     gpuErrchk(cudaMemsetAsync(d_u_after_buffer_, 0, N_ * sizeof(*d_u_after_buffer_), stream));
 
-    runner_.execute_potentials(bps_, N_, d_x, d_box, nullptr, nullptr, d_u_buffer_, stream);
+    runner_.execute_potentials(bps_, N_, d_x, d_box, nullptr, nullptr, d_u_buffer_, d_u_init_overflow_count_, stream);
 
     cub::DeviceReduce::Sum(d_sum_storage_, d_sum_storage_bytes_, d_u_buffer_, d_init_u_, N_, stream);
     gpuErrchk(cudaPeekAtLastError());
@@ -336,7 +348,8 @@ void MonteCarloBarostat::inplace_move(
         d_centroids_);
     gpuErrchk(cudaPeekAtLastError());
 
-    runner_.execute_potentials(bps_, N_, d_x_after_, d_box_after_, nullptr, nullptr, d_u_after_buffer_, stream);
+    runner_.execute_potentials(
+        bps_, N_, d_x_after_, d_box_after_, nullptr, nullptr, d_u_after_buffer_, d_u_final_overflow_count_, stream);
 
     cub::DeviceReduce::Sum(d_sum_storage_, d_sum_storage_bytes_, d_u_after_buffer_, d_final_u_, N_, stream);
     gpuErrchk(cudaPeekAtLastError());
@@ -355,7 +368,9 @@ void MonteCarloBarostat::inplace_move(
         d_volume_delta_,
         d_volume_scale_,
         d_init_u_,
+        d_u_init_overflow_count_,
         d_final_u_,
+        d_u_final_overflow_count_,
         d_box,
         d_box_after_,
         d_x,

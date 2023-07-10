@@ -63,6 +63,7 @@ void LangevinIntegrator::step_fwd(
         d_du_dx_, // we only need the forces
         nullptr,
         nullptr,
+        nullptr,
         stream);
 
     curandErrchk(curandSetStream(cr_rng_, stream));
