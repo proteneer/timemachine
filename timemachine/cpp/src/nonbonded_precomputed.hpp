@@ -8,11 +8,13 @@ namespace timemachine {
 template <typename RealType> class NonbondedPairListPrecomputed : public Potential {
 
 private:
-    int *d_idxs_;
     const int B_;
 
     double beta_;
     double cutoff_;
+
+    int *d_idxs_;
+    unsigned long long *d_u_buffer_;
 
 public:
     int num_bonds() const { return B_; }

@@ -1,3 +1,6 @@
+#include "fixed_point.hpp"
+#include "gpu_utils.cuh"
+#include "nonbonded_common.hpp"
 #include "summed_potential.hpp"
 #include <memory>
 #include <numeric>
@@ -8,7 +11,8 @@ namespace timemachine {
 SummedPotential::SummedPotential(
     const std::vector<std::shared_ptr<Potential>> potentials, const std::vector<int> params_sizes, const bool parallel)
     : potentials_(potentials), params_sizes_(params_sizes),
-      P_(std::accumulate(params_sizes.begin(), params_sizes.end(), 0)), parallel_(parallel) {
+      P_(std::accumulate(params_sizes.begin(), params_sizes.end(), 0)), parallel_(parallel),
+      d_u_buffer_(potentials.size()) {
     if (potentials_.size() != params_sizes_.size()) {
         throw std::runtime_error("number of potentials != number of parameter sizes");
     }
@@ -35,6 +39,9 @@ void SummedPotential::execute_device(
             "SummedPotential::execute_device(): expected " + std::to_string(P_) + " parameters, got " +
             std::to_string(P));
     }
+    if (d_u) {
+        gpuErrchk(cudaMemsetAsync(d_u_buffer_.data, 0, d_u_buffer_.size, stream));
+    }
 
     int offset = 0;
     if (parallel_) {
@@ -57,7 +64,7 @@ void SummedPotential::execute_device(
             d_box,
             d_du_dx,
             d_du_dp == nullptr ? nullptr : d_du_dp + offset,
-            d_u,
+            d_u == nullptr ? nullptr : d_u_buffer_.data + i,
             d_u_overflow_count,
             pot_stream);
 
@@ -65,6 +72,10 @@ void SummedPotential::execute_device(
         if (parallel_) {
             manager_.sync_to(i, stream);
         }
+    }
+    if (d_u) {
+        k_accumulate_energy<<<1, 1, 0, stream>>>(potentials_.size(), d_u_buffer_.data, d_u);
+        gpuErrchk(cudaPeekAtLastError());
     }
 };
 

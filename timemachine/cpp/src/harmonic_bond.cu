@@ -24,9 +24,13 @@ HarmonicBond<RealType>::HarmonicBond(const std::vector<int> &bond_idxs) : B_(bon
 
     cudaSafeMalloc(&d_bond_idxs_, B_ * 2 * sizeof(*d_bond_idxs_));
     gpuErrchk(cudaMemcpy(d_bond_idxs_, &bond_idxs[0], B_ * 2 * sizeof(*d_bond_idxs_), cudaMemcpyHostToDevice));
+    cudaSafeMalloc(&d_u_buffer_, B_ * sizeof(*d_u_buffer_));
 };
 
-template <typename RealType> HarmonicBond<RealType>::~HarmonicBond() { gpuErrchk(cudaFree(d_bond_idxs_)); };
+template <typename RealType> HarmonicBond<RealType>::~HarmonicBond() {
+    gpuErrchk(cudaFree(d_bond_idxs_));
+    gpuErrchk(cudaFree(d_u_buffer_));
+};
 
 template <typename RealType>
 void HarmonicBond<RealType>::execute_device(
@@ -51,8 +55,14 @@ void HarmonicBond<RealType>::execute_device(
         const int tpb = DEFAULT_THREADS_PER_BLOCK;
         const int blocks = ceil_divide(B_, tpb);
 
-        k_harmonic_bond<RealType><<<blocks, tpb, 0, stream>>>(B_, d_x, d_p, d_bond_idxs_, d_du_dx, d_du_dp, d_u);
+        k_harmonic_bond<RealType><<<blocks, tpb, 0, stream>>>(
+            B_, d_x, d_p, d_bond_idxs_, d_du_dx, d_du_dp, d_u == nullptr ? nullptr : d_u_buffer_);
         gpuErrchk(cudaPeekAtLastError());
+
+        if (d_u) {
+            k_accumulate_energy<<<1, 1, 0, stream>>>(B_, d_u_buffer_, d_u);
+            gpuErrchk(cudaPeekAtLastError());
+        }
     }
 };
 

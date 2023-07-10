@@ -61,7 +61,7 @@ void __global__ k_centroid_restraint(
 
     if (t_idx == 0 && d_u) {
         RealType nrg = kb * (dij - b0) * (dij - b0);
-        atomicAdd(d_u + 0, FLOAT_TO_FIXED<RealType>(nrg));
+        d_u[t_idx] = FLOAT_TO_FIXED<RealType>(nrg);
     }
 
     // grads

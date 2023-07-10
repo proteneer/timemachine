@@ -1,6 +1,7 @@
 #pragma once
 
 #include "curand.h"
+#include "fixed_point.hpp"
 #include "kernels/kernel_utils.cuh"
 #include <cstdio>
 #include <iostream>
@@ -83,3 +84,9 @@ double __device__ __forceinline__ rmul_rn(double a, double b) { return __dmul_rn
 float __device__ __forceinline__ radd_rn(float a, float b) { return __fadd_rn(a, b); }
 
 double __device__ __forceinline__ radd_rn(double a, double b) { return __dadd_rn(a, b); }
+
+void __global__ k_accumulate_energy(
+    int N,
+    const unsigned long long *__restrict__ input_buffer, // [N]
+    unsigned long long *__restrict u_buffer              // [1]
+);

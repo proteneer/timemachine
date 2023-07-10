@@ -9,6 +9,7 @@ template <typename RealType> class FlatBottomBond : public Potential {
 
 private:
     int *d_bond_idxs_;
+    unsigned long long *d_u_buffer_;
 
     int B_;
 

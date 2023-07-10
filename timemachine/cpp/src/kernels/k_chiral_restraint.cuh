@@ -83,7 +83,7 @@ void __global__ k_chiral_atom_restraint(
     }
 
     if (u) {
-        atomicAdd(u + xc_idx, FLOAT_TO_FIXED_BONDED<RealType>(k_restr * vol * vol));
+        u[r_idx] = FLOAT_TO_FIXED_BONDED<RealType>(k_restr * vol * vol);
     }
 }
 
@@ -172,6 +172,6 @@ void __global__ k_chiral_bond_restraint(
     }
 
     if (u) {
-        atomicAdd(u + x0_idx, FLOAT_TO_FIXED_BONDED<RealType>(k_restr * vol * vol));
+        u[r_idx] = FLOAT_TO_FIXED_BONDED<RealType>(k_restr * vol * vol);
     }
 }

@@ -31,18 +31,18 @@ NonbondedAllPairs<RealType>::NonbondedAllPairs(
       d_sort_storage_bytes_(0), disable_hilbert_(disable_hilbert_sort),
 
       kernel_ptrs_({// enumerate over every possible kernel combination
+                    // Set threads to 1 if not computing energy to reduced unused shared memory
                     // U: Compute U
                     // X: Compute DU_DX
                     // P: Compute DU_DP
-                    //                             U  X  P
-                    &k_nonbonded_unified<RealType, 0, 0, 0>,
-                    &k_nonbonded_unified<RealType, 0, 0, 1>,
-                    &k_nonbonded_unified<RealType, 0, 1, 0>,
-                    &k_nonbonded_unified<RealType, 0, 1, 1>,
-                    &k_nonbonded_unified<RealType, 1, 0, 0>,
-                    &k_nonbonded_unified<RealType, 1, 0, 1>,
-                    &k_nonbonded_unified<RealType, 1, 1, 0>,
-                    &k_nonbonded_unified<RealType, 1, 1, 1>}) {
+                    &k_nonbonded_unified<RealType, 1, 0, 0, 0>,
+                    &k_nonbonded_unified<RealType, 1, 0, 0, 1>,
+                    &k_nonbonded_unified<RealType, 1, 0, 1, 0>,
+                    &k_nonbonded_unified<RealType, 1, 0, 1, 1>,
+                    &k_nonbonded_unified<RealType, NONBONDED_KERNEL_THREADS_PER_BLOCK, 1, 0, 0>,
+                    &k_nonbonded_unified<RealType, NONBONDED_KERNEL_THREADS_PER_BLOCK, 1, 0, 1>,
+                    &k_nonbonded_unified<RealType, NONBONDED_KERNEL_THREADS_PER_BLOCK, 1, 1, 0>,
+                    &k_nonbonded_unified<RealType, NONBONDED_KERNEL_THREADS_PER_BLOCK, 1, 1, 1>}) {
 
     std::vector<int> atom_idxs_h;
     if (atom_idxs) {
@@ -58,6 +58,7 @@ NonbondedAllPairs<RealType>::NonbondedAllPairs(
     cudaSafeMalloc(&d_sorted_atom_idxs_, N_ * sizeof(*d_sorted_atom_idxs_));
 
     cudaSafeMalloc(&d_gathered_x_, N_ * 3 * sizeof(*d_gathered_x_));
+    cudaSafeMalloc(&d_u_buffer_, NONBONDED_KERNEL_BLOCKS * sizeof(*d_u_buffer_));
 
     cudaSafeMalloc(&d_gathered_p_, N_ * PARAMS_PER_ATOM * sizeof(*d_gathered_p_));
     cudaSafeMalloc(&d_gathered_du_dx_, N_ * 3 * sizeof(*d_gathered_du_dx_));
@@ -120,6 +121,7 @@ template <typename RealType> NonbondedAllPairs<RealType>::~NonbondedAllPairs() {
 
     gpuErrchk(cudaFree(d_bin_to_idx_));
     gpuErrchk(cudaFree(d_gathered_x_));
+    gpuErrchk(cudaFree(d_u_buffer_));
 
     gpuErrchk(cudaFree(d_gathered_p_));
     gpuErrchk(cudaFree(d_gathered_du_dx_));
@@ -320,7 +322,7 @@ void NonbondedAllPairs<RealType>::execute_device(
         nblist_.get_ixn_atoms(),
         d_gathered_du_dx_,
         d_gathered_du_dp_,
-        d_u, // switch to nullptr if we don't request energies
+        d_u == nullptr ? nullptr : d_u_buffer_, // switch to nullptr if we don't request energies,
         d_u_overflow_count);
     gpuErrchk(cudaPeekAtLastError());
 
@@ -336,6 +338,11 @@ void NonbondedAllPairs<RealType>::execute_device(
     if (d_du_dp) {
         k_scatter_accum<<<dim3(ceil_divide(K_, tpb), PARAMS_PER_ATOM, 1), tpb, 0, stream>>>(
             K_, d_sorted_atom_idxs_, d_gathered_du_dp_, d_du_dp);
+        gpuErrchk(cudaPeekAtLastError());
+    }
+
+    if (d_u) {
+        k_accumulate_energy<<<1, 1, 0, stream>>>(NONBONDED_KERNEL_BLOCKS, d_u_buffer_, d_u);
         gpuErrchk(cudaPeekAtLastError());
     }
     // Increment steps

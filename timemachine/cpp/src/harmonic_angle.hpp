@@ -9,6 +9,7 @@ template <typename RealType> class HarmonicAngle : public Potential {
 
 private:
     int *d_angle_idxs_;
+    unsigned long long *d_u_buffer_;
 
     const int A_;
 

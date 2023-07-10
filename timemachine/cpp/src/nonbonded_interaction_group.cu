@@ -31,18 +31,19 @@ NonbondedInteractionGroup<RealType>::NonbondedInteractionGroup(
     : N_(N), NR_(row_atom_idxs.size()), NC_(col_atom_idxs.size()),
 
       kernel_ptrs_({// enumerate over every possible kernel combination
+                    // Set threads to 1 if not computing energy to reduced unused shared memory
                     // U: Compute U
                     // X: Compute DU_DX
                     // P: Compute DU_DP
-                    //                             U  X  P
-                    &k_nonbonded_unified<RealType, 0, 0, 0>,
-                    &k_nonbonded_unified<RealType, 0, 0, 1>,
-                    &k_nonbonded_unified<RealType, 0, 1, 0>,
-                    &k_nonbonded_unified<RealType, 0, 1, 1>,
-                    &k_nonbonded_unified<RealType, 1, 0, 0>,
-                    &k_nonbonded_unified<RealType, 1, 0, 1>,
-                    &k_nonbonded_unified<RealType, 1, 1, 0>,
-                    &k_nonbonded_unified<RealType, 1, 1, 1>}),
+                    //                                                                 U  X  P
+                    &k_nonbonded_unified<RealType, 1, 0, 0, 0>,
+                    &k_nonbonded_unified<RealType, 1, 0, 0, 1>,
+                    &k_nonbonded_unified<RealType, 1, 0, 1, 0>,
+                    &k_nonbonded_unified<RealType, 1, 0, 1, 1>,
+                    &k_nonbonded_unified<RealType, NONBONDED_KERNEL_THREADS_PER_BLOCK, 1, 0, 0>,
+                    &k_nonbonded_unified<RealType, NONBONDED_KERNEL_THREADS_PER_BLOCK, 1, 0, 1>,
+                    &k_nonbonded_unified<RealType, NONBONDED_KERNEL_THREADS_PER_BLOCK, 1, 1, 0>,
+                    &k_nonbonded_unified<RealType, NONBONDED_KERNEL_THREADS_PER_BLOCK, 1, 1, 1>}),
 
       beta_(beta), cutoff_(cutoff), steps_since_last_sort_(0), nblist_(N_), nblist_padding_(nblist_padding),
       d_sort_storage_(nullptr), d_sort_storage_bytes_(0), disable_hilbert_(disable_hilbert_sort) {
@@ -51,6 +52,7 @@ NonbondedInteractionGroup<RealType>::NonbondedInteractionGroup(
 
     cudaSafeMalloc(&d_col_atom_idxs_, N_ * sizeof(*d_col_atom_idxs_));
     cudaSafeMalloc(&d_row_atom_idxs_, N_ * sizeof(*d_row_atom_idxs_));
+    cudaSafeMalloc(&d_u_buffer_, NONBONDED_KERNEL_BLOCKS * sizeof(*d_u_buffer_));
 
     cudaSafeMalloc(&d_perm_, N_ * sizeof(*d_perm_));
 
@@ -115,6 +117,7 @@ template <typename RealType> NonbondedInteractionGroup<RealType>::~NonbondedInte
 
     gpuErrchk(cudaFree(d_bin_to_idx_));
     gpuErrchk(cudaFree(d_sorted_x_));
+    gpuErrchk(cudaFree(d_u_buffer_));
 
     gpuErrchk(cudaFree(d_sorted_p_));
     gpuErrchk(cudaFree(d_sorted_du_dx_));
@@ -297,7 +300,7 @@ void NonbondedInteractionGroup<RealType>::execute_device(
         nblist_.get_ixn_atoms(),
         d_sorted_du_dx_,
         d_sorted_du_dp_,
-        d_u, // switch to nullptr if we don't request energies
+        d_u == nullptr ? nullptr : d_u_buffer_, // switch to nullptr if we don't request energies
         d_u_overflow_count);
 
     gpuErrchk(cudaPeekAtLastError());
@@ -312,6 +315,10 @@ void NonbondedInteractionGroup<RealType>::execute_device(
     // this needs to be an accumulated permute
     if (d_du_dp) {
         k_scatter_accum<<<dim3(B_K, PARAMS_PER_ATOM, 1), tpb, 0, stream>>>(K, d_perm_, d_sorted_du_dp_, d_du_dp);
+        gpuErrchk(cudaPeekAtLastError());
+    }
+    if (d_u) {
+        k_accumulate_energy<<<1, 1, 0, stream>>>(NONBONDED_KERNEL_BLOCKS, d_u_buffer_, d_u);
         gpuErrchk(cudaPeekAtLastError());
     }
     // Increment steps

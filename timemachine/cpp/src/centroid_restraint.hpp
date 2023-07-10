@@ -14,6 +14,8 @@ private:
     unsigned long long *d_centroid_a_;
     unsigned long long *d_centroid_b_;
 
+    unsigned long long *d_u_buffer_;
+
     int N_A_;
     int N_B_;
 

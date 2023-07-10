@@ -28,9 +28,14 @@ PeriodicTorsion<RealType>::PeriodicTorsion(const std::vector<int> &torsion_idxs 
 
     cudaSafeMalloc(&d_torsion_idxs_, T_ * 4 * sizeof(*d_torsion_idxs_));
     gpuErrchk(cudaMemcpy(d_torsion_idxs_, &torsion_idxs[0], T_ * 4 * sizeof(*d_torsion_idxs_), cudaMemcpyHostToDevice));
+
+    cudaSafeMalloc(&d_u_buffer_, T_ * sizeof(*d_u_buffer_));
 };
 
-template <typename RealType> PeriodicTorsion<RealType>::~PeriodicTorsion() { gpuErrchk(cudaFree(d_torsion_idxs_)); };
+template <typename RealType> PeriodicTorsion<RealType>::~PeriodicTorsion() {
+    gpuErrchk(cudaFree(d_torsion_idxs_));
+    gpuErrchk(cudaFree(d_u_buffer_));
+};
 
 template <typename RealType>
 void PeriodicTorsion<RealType>::execute_device(
@@ -56,9 +61,14 @@ void PeriodicTorsion<RealType>::execute_device(
                 "PeriodicTorsion::execute_device(): expected P == 3*T_, got P=" + std::to_string(P) +
                 ", 3*T_=" + std::to_string(3 * T_));
         }
-        k_periodic_torsion<RealType, D>
-            <<<blocks, tpb, 0, stream>>>(T_, d_x, d_p, d_torsion_idxs_, d_du_dx, d_du_dp, d_u);
+        k_periodic_torsion<RealType, D><<<blocks, tpb, 0, stream>>>(
+            T_, d_x, d_p, d_torsion_idxs_, d_du_dx, d_du_dp, d_u == nullptr ? nullptr : d_u_buffer_);
         gpuErrchk(cudaPeekAtLastError());
+
+        if (d_u) {
+            k_accumulate_energy<<<1, 1, 0, stream>>>(T_, d_u_buffer_, d_u);
+            gpuErrchk(cudaPeekAtLastError());
+        }
     }
 };
 

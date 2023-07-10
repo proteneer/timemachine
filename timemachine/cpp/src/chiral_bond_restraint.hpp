@@ -10,6 +10,7 @@ template <typename RealType> class ChiralBondRestraint : public Potential {
 private:
     int *d_idxs_;
     int *d_signs_;
+    unsigned long long *d_u_buffer_;
 
     const int R_;
 

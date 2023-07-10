@@ -1,5 +1,6 @@
 #pragma once
 
+#include "device_buffer.hpp"
 #include "potential.hpp"
 #include "stream_manager.hpp"
 #include <memory>
@@ -12,6 +13,7 @@ class FanoutSummedPotential : public Potential {
 private:
     const std::vector<std::shared_ptr<Potential>> potentials_;
     const bool parallel_;
+    DeviceBuffer<unsigned long long> d_u_buffer_;
     StreamManager manager_;
 
 public:

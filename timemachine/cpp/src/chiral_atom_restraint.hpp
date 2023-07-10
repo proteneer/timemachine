@@ -9,6 +9,7 @@ template <typename RealType> class ChiralAtomRestraint : public Potential {
 
 private:
     int *d_idxs_;
+    unsigned long long *d_u_buffer_;
 
     const int R_;
 

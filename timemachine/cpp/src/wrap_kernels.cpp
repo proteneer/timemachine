@@ -574,7 +574,7 @@ void declare_potential(py::module &m) {
                 // initialize with fixed garbage values for debugging convenience (these should be overwritten by `execute_host`)
                 std::vector<unsigned long long> du_dx(N * D, 9999);
                 std::vector<unsigned long long> du_dp(P, 9999);
-                std::vector<unsigned long long> u(N, 9999);
+                std::vector<unsigned long long> u(1, 9999);
                 std::vector<int> u_overflows(1, 9999);
 
                 pot.execute_host(
@@ -591,7 +591,7 @@ void declare_potential(py::module &m) {
                 py::array_t<double, py::array::c_style> py_du_dp(pshape);
                 pot.du_dp_fixed_to_float(N, P, &du_dp[0], py_du_dp.mutable_data());
 
-                double u_sum = accumulate_energies(N, &u[0], u_overflows[0]);
+                double u_sum = accumulate_energies(1, &u[0], u_overflows[0]);
 
                 return py::make_tuple(py_du_dx, py_du_dp, u_sum);
             },
@@ -638,8 +638,7 @@ void declare_potential(py::module &m) {
                 std::vector<unsigned long long> u;
                 std::vector<int> u_overflows;
                 if (compute_u) {
-                    // u vector is an array of unsigned long long that will be accumulated into a float, hence total_executions * N
-                    u.assign(total_executions * N, 9999);
+                    u.assign(total_executions, 9999);
                     u_overflows.assign(total_executions, 9999);
                 }
 
@@ -682,8 +681,9 @@ void declare_potential(py::module &m) {
 
                 if (compute_u) {
                     py::array_t<double, py::array::c_style> py_u({coord_batches, param_batches});
+
                     for (unsigned int i = 0; i < py_u.size(); i++) {
-                        py_u.mutable_data()[i] = accumulate_energies(N, &u[0] + (N * i), u_overflows[i]);
+                        py_u.mutable_data()[i] = accumulate_energies(1, &u[0] + i, u_overflows[i]);
                     }
                     result[2] = py_u;
                 }
@@ -752,8 +752,9 @@ void declare_potential(py::module &m) {
                 std::vector<unsigned long long> du_dx(N * D, 9999);
                 std::vector<unsigned long long> du_dp(P, 9999);
 
-                std::vector<unsigned long long> u(N, 9999);
+                std::vector<unsigned long long> u(1, 9999);
                 std::vector<int> u_overflows(1, 9999);
+
                 pot.execute_host(
                     N,
                     P,
@@ -775,7 +776,7 @@ void declare_potential(py::module &m) {
                 py::array_t<double, py::array::c_style> py_du_dp(pshape);
                 pot.du_dp_fixed_to_float(N, P, &du_dp[0], py_du_dp.mutable_data());
 
-                double u_sum = accumulate_energies(N, &u[0], u_overflows[0]);
+                double u_sum = accumulate_energies(1, &u[0], u_overflows[0]);
 
                 auto result = py::make_tuple(py_du_dx, py_du_dp, u_sum);
 
@@ -849,7 +850,7 @@ void declare_bound_potential(py::module &m) {
                 const long unsigned int D = coords.shape()[1];
                 verify_coords_and_box(coords, box);
                 std::vector<unsigned long long> du_dx(N * D, 9999);
-                std::vector<unsigned long long> u(N, 9999);
+                std::vector<unsigned long long> u(1, 9999);
                 std::vector<int> u_overflows(1, 9999);
 
                 bp.execute_host(N, coords.data(), box.data(), &du_dx[0], &u[0], &u_overflows[0]);
@@ -859,7 +860,7 @@ void declare_bound_potential(py::module &m) {
                     py_du_dx.mutable_data()[i] = FIXED_TO_FLOAT<double>(du_dx[i]);
                 }
 
-                double u_sum = accumulate_energies(N, &u[0], u_overflows[0]);
+                double u_sum = accumulate_energies(1, &u[0], u_overflows[0]);
 
                 return py::make_tuple(py_du_dx, u_sum);
             },
@@ -872,7 +873,7 @@ void declare_bound_potential(py::module &m) {
                const py::array_t<double, py::array::c_style> &box) -> py::tuple {
                 const long unsigned int N = coords.shape()[0];
                 verify_coords_and_box(coords, box);
-                std::vector<unsigned long long> u(N, 9999);
+                std::vector<unsigned long long> u(1, 9999);
                 std::vector<int> u_overflows(1, 9999);
 
                 bp.execute_host(N, coords.data(), box.data(), nullptr, &u[0], &u_overflows[0]);

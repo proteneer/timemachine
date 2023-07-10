@@ -35,6 +35,8 @@ NonbondedPairList<RealType, Negated>::NonbondedPairList(
             " != " + std::to_string(scales.size() / 2));
     }
 
+    cudaSafeMalloc(&d_u_buffer_, M_ * sizeof(*d_u_buffer_));
+
     cudaSafeMalloc(&d_pair_idxs_, M_ * 2 * sizeof(*d_pair_idxs_));
     gpuErrchk(cudaMemcpy(d_pair_idxs_, &pair_idxs[0], M_ * 2 * sizeof(*d_pair_idxs_), cudaMemcpyHostToDevice));
 
@@ -45,6 +47,7 @@ NonbondedPairList<RealType, Negated>::NonbondedPairList(
 template <typename RealType, bool Negated> NonbondedPairList<RealType, Negated>::~NonbondedPairList() {
     gpuErrchk(cudaFree(d_pair_idxs_));
     gpuErrchk(cudaFree(d_scales_));
+    gpuErrchk(cudaFree(d_u_buffer_));
 };
 
 template <typename RealType, bool Negated>
@@ -65,9 +68,25 @@ void NonbondedPairList<RealType, Negated>::execute_device(
         const int num_blocks_pairs = ceil_divide(M_, tpb);
 
         k_nonbonded_pair_list<RealType, Negated><<<num_blocks_pairs, tpb, 0, stream>>>(
-            M_, d_x, d_p, d_box, d_pair_idxs_, d_scales_, beta_, cutoff_, d_du_dx, d_du_dp, d_u, d_u_overflow_count);
+            M_,
+            d_x,
+            d_p,
+            d_box,
+            d_pair_idxs_,
+            d_scales_,
+            beta_,
+            cutoff_,
+            d_du_dx,
+            d_du_dp,
+            d_u == nullptr ? nullptr : d_u_buffer_,
+            d_u_overflow_count);
 
         gpuErrchk(cudaPeekAtLastError());
+
+        if (d_u) {
+            k_accumulate_energy<<<1, 1, 0, stream>>>(M_, d_u_buffer_, d_u);
+            gpuErrchk(cudaPeekAtLastError());
+        }
     }
 }
 

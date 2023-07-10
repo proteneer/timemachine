@@ -9,6 +9,7 @@ template <typename RealType> class PeriodicTorsion : public Potential {
 
 private:
     int *d_torsion_idxs_;
+    unsigned long long *d_u_buffer_;
 
     const int T_;
 

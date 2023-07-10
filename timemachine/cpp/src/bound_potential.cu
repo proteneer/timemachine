@@ -40,7 +40,7 @@ void BoundPotential::execute_host(
     d_box.copy_from(h_box);
 
     DeviceBuffer<unsigned long long> d_du_dx(N * D);
-    DeviceBuffer<unsigned long long> d_u(N);
+    DeviceBuffer<unsigned long long> d_u(1);
     DeviceBuffer<int> d_u_overflow_count(1);
 
     // very important that these are initialized to zero since the kernels themselves just accumulate

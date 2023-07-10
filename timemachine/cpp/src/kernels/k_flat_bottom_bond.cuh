@@ -110,11 +110,8 @@ void __global__ k_flat_bottom_bond(
     if (u) {
         RealType u_real = compute_flat_bottom_energy<RealType>(k, r, rmin, rmax);
 
-        // cast float -> fixed
-        auto sum_u = FLOAT_TO_FIXED_BONDED<RealType>(u_real);
-
-        // atomic add to u array
-        atomicAdd(u + src_idx, sum_u);
+        // Set idx to force
+        u[b_idx] = FLOAT_TO_FIXED_BONDED<RealType>(u_real);
     }
 
     if (du_dp) {

@@ -9,6 +9,7 @@ template <typename RealType> class HarmonicBond : public Potential {
 
 private:
     int *d_bond_idxs_;
+    unsigned long long *d_u_buffer_;
 
     const int B_;
 

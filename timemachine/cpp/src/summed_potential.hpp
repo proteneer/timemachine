@@ -1,5 +1,6 @@
 #pragma once
 
+#include "device_buffer.hpp"
 #include "potential.hpp"
 #include "stream_manager.hpp"
 #include <memory>
@@ -14,6 +15,7 @@ private:
     const std::vector<int> params_sizes_;
     const int P_; // sum(params_sizes)
     const bool parallel_;
+    DeviceBuffer<unsigned long long> d_u_buffer_;
     StreamManager manager_;
 
 public:

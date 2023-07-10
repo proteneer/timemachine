@@ -62,10 +62,8 @@ void __global__ k_log_flat_bottom_bond(
     if (u) {
         // RealType u_real = -log(1 - exp(-beta * nrg)) / beta;
         RealType u_real = -stable_log_1_exp_neg(beta * nrg) / beta;
-        // cast float -> fixed
-        auto sum_u = FLOAT_TO_FIXED_BONDED<RealType>(u_real);
-        // atomic add to u array
-        atomicAdd(u + src_idx, sum_u);
+        // Store energy in buffer
+        u[b_idx] = FLOAT_TO_FIXED_BONDED<RealType>(u_real);
     }
 
     RealType prefactor = -exp(-beta * nrg) / (1 - exp(-beta * nrg));

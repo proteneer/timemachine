@@ -4,7 +4,7 @@
 #include "bound_potential.hpp"
 #include "curand.h"
 #include "streamed_potential_runner.hpp"
-#include <random>
+#include <memory>
 #include <vector>
 
 namespace timemachine {
@@ -75,9 +75,6 @@ private:
     int *d_atom_idxs_;   // grouped index to atom coords
     int *d_mol_idxs_;    // grouped index to molecule index
     int *d_mol_offsets_; // Offset of molecules to determine size of mols
-
-    double *d_sum_storage_;
-    size_t d_sum_storage_bytes_;
 
     unsigned long long *d_centroids_; // Accumulate centroids in fix point to ensure deterministic behavior
 
