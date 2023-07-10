@@ -114,6 +114,43 @@ def test_summed_potential_invalid_parameters_size(harmonic_bond):
         in str(e)
     )
 
+    # test reference potential
+    x, box = np.ones((3, 3)), np.eye(3)
+
+    bp = sp.bind(np.empty(0))
+    with pytest.raises(AssertionError):
+        _ = bp(x, box)
+
+    bp = sp.bind(np.ones(harmonic_bond.params.size + 1))
+    with pytest.raises(AssertionError):
+        _ = bp(x, box)
+
+    # should assert flattened params
+    bp = sp.bind(harmonic_bond.params)
+    with pytest.raises(AssertionError):
+        _ = bp(x, box)
+
+
+def test_summed_potential_nested(harmonic_bond):
+    nested_sp = SummedPotential([harmonic_bond.potential], [harmonic_bond.params])
+    nested_sp_params = harmonic_bond.params.flatten()
+    sp = SummedPotential([nested_sp, harmonic_bond.potential], [nested_sp_params, harmonic_bond.params])
+    sp_params = np.concatenate([nested_sp_params, harmonic_bond.params.flatten()])
+    bp = sp.bind(sp_params)
+    execute_bound_impl(bp.to_gpu(np.float32).bound_impl)
+
+    # test reference potential
+    x, box = np.ones((3, 3)), np.eye(3)
+    _ = bp(x, box)
+
+    # another level of nesting is fine, too
+    sp_prime = SummedPotential(
+        [sp, nested_sp, harmonic_bond.potential], [sp_params, nested_sp_params, harmonic_bond.params]
+    )
+    sp_prime_params = np.concatenate([sp_params, nested_sp_params, harmonic_bond.params.flatten()])
+    bp_prime = sp_prime.bind(sp_prime_params)
+    _ = bp_prime(x, box)
+
 
 def reference_execute_over_batch(unbound, coords, boxes, params):
     coord_batches = coords.shape[0]
