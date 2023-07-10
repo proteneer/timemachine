@@ -22,7 +22,8 @@ typedef void (*k_nonbonded_fn)(
     const unsigned int *__restrict__ ixn_atoms,
     unsigned long long *__restrict__ du_dx,
     unsigned long long *__restrict__ du_dp,
-    unsigned long long *__restrict__ u_buffer);
+    unsigned long long *__restrict__ u_buffer,
+    int *__restrict__ u_overflow_count);
 
 void verify_atom_idxs(int N, const std::vector<int> &atom_idxs, const bool allow_empty = false);
 

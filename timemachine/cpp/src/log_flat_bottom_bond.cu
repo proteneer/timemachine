@@ -49,6 +49,7 @@ void LogFlatBottomBond<RealType>::execute_device(
     unsigned long long *d_du_dx,
     unsigned long long *d_du_dp,
     unsigned long long *d_u,
+    int *d_u_overflow_count,
     cudaStream_t stream) {
 
     const int num_params_per_bond = 3;

@@ -366,7 +366,7 @@ Context::multiple_steps_U(const int n_steps, int store_u_interval, int store_x_i
             gpuErrchk(cudaMemsetAsync(d_u_buffer_, 0, N_ * sizeof(*d_u_buffer_), stream));
             unsigned long long *u_ptr = d_u_traj->data + (step / store_u_interval) - 1;
             for (int i = 0; i < bps_.size(); i++) {
-                bps_[i]->execute_device(N_, d_x_t_, d_box_t_, nullptr, nullptr, d_u_buffer_, stream);
+                bps_[i]->execute_device(N_, d_x_t_, d_box_t_, nullptr, nullptr, d_u_buffer_, nullptr, stream);
             }
             cub::DeviceReduce::Sum(d_sum_storage_, d_sum_storage_bytes_, d_u_buffer_, u_ptr, N_, stream);
             gpuErrchk(cudaPeekAtLastError());

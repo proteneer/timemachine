@@ -27,6 +27,7 @@ public:
         unsigned long long *d_du_dx, // buffered
         unsigned long long *d_du_dp,
         unsigned long long *d_u, // buffered
+        int *d_u_overflow_count,
         cudaStream_t stream) override;
 };
 

@@ -18,6 +18,7 @@ void FanoutSummedPotential::execute_device(
     unsigned long long *d_du_dx,
     unsigned long long *d_du_dp,
     unsigned long long *d_u,
+    int *d_u_overflow_count,
     cudaStream_t stream) {
 
     if (parallel_) {
@@ -32,7 +33,7 @@ void FanoutSummedPotential::execute_device(
         if (parallel_) {
             pot_stream = manager_.get_stream(i);
         }
-        potentials_[i]->execute_device(N, P, d_x, d_p, d_box, d_du_dx, d_du_dp, d_u, pot_stream);
+        potentials_[i]->execute_device(N, P, d_x, d_p, d_box, d_du_dx, d_du_dp, d_u, d_u_overflow_count, pot_stream);
         if (parallel_) {
             manager_.sync_to(i, stream);
         }

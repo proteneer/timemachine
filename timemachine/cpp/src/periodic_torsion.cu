@@ -42,6 +42,7 @@ void PeriodicTorsion<RealType>::execute_device(
     unsigned long long *d_du_dx,
     unsigned long long *d_du_dp,
     unsigned long long *d_u,
+    int *d_u_overflow_count,
     cudaStream_t stream) {
 
     const int tpb = DEFAULT_THREADS_PER_BLOCK;
