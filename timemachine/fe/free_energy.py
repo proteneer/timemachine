@@ -569,6 +569,7 @@ def run_sims_with_greedy_bisection(
     md_params: MDParams,
     n_bisections: int,
     temperature: float,
+    min_overlap: float = 1.0,
     verbose: bool = True,
 ) -> Tuple[List[PairBarResult], List[StoredArrays], List[NDArray]]:
     r"""Starting from a specified lambda schedule, successively bisect the lambda interval between the pair of states
@@ -591,7 +592,11 @@ def run_sims_with_greedy_bisection(
     temperature: float
         Temperature in K
 
-    verbose: bool
+    min_overlap: float, optional
+        Terminate before n_bisections iterations if the BAR overlap between all neighboring pairs of states exceeds this
+        value. A value greater than or equal to 1.0 ensures that we always run n_bisections iterations.
+
+    verbose: bool, optional
         Whether to print diagnostic information
 
     Returns
@@ -659,7 +664,10 @@ def run_sims_with_greedy_bisection(
             print(f"Sampling new state at λ={lamb_new:.3g}…")
 
         lambdas = lambdas_new
-        results.append(compute_intermediate_result(lambdas))
+        result = compute_intermediate_result(lambdas)
+        results.append(result)
+        if np.all(np.array(result.overlaps) > min_overlap):
+            break
 
     frames = [get_state(lamb).frames for lamb in lambdas]
     boxes = [get_state(lamb).boxes for lamb in lambdas]
