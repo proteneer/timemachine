@@ -22,7 +22,8 @@ public:
         const double *h_box,
         unsigned long long *h_du_dx,
         unsigned long long *h_du_dp,
-        unsigned long long *h_u);
+        unsigned long long *h_u,
+        int *h_u_overflow_count);
 
     void execute_host(
         const int N,
@@ -32,7 +33,8 @@ public:
         const double *h_box,
         unsigned long long *h_du_dx,
         unsigned long long *h_du_dp,
-        unsigned long long *h_u);
+        unsigned long long *h_u,
+        int *h_u_overflow_count);
 
     void execute_host_du_dx(
         const int N,
@@ -51,6 +53,7 @@ public:
         unsigned long long *d_du_dx,
         unsigned long long *d_du_dp,
         unsigned long long *d_u,
+        int *d_u_overflow_count,
         cudaStream_t stream) = 0;
 
     virtual void du_dp_fixed_to_float(const int N, const int P, const unsigned long long *du_dp, double *du_dp_float);

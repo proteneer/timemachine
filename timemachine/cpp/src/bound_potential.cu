@@ -26,8 +26,10 @@ void BoundPotential::execute_host(
     const int N,
     const double *h_x,           // [N,3]
     const double *h_box,         // [3, 3]
-    unsigned long long *h_du_dx, // [N,3]
-    unsigned long long *h_u) {
+    unsigned long long *h_du_dx, // [N, 3]
+    unsigned long long *h_u,     // [1]
+    int *h_u_overflow_count      // [1]
+) {
 
     const int D = 3;
 
@@ -39,16 +41,24 @@ void BoundPotential::execute_host(
 
     DeviceBuffer<unsigned long long> d_du_dx(N * D);
     DeviceBuffer<unsigned long long> d_u(N);
+    DeviceBuffer<int> d_u_overflow_count(1);
 
     // very important that these are initialized to zero since the kernels themselves just accumulate
     gpuErrchk(cudaMemset(d_du_dx.data, 0, d_du_dx.size));
     gpuErrchk(cudaMemset(d_u.data, 0, d_u.size));
+    gpuErrchk(cudaMemset(d_u_overflow_count.data, 0, d_u_overflow_count.size));
 
     cudaStream_t stream = static_cast<cudaStream_t>(0);
-    this->execute_device(N, d_x.data, d_box.data, d_du_dx.data, nullptr, d_u.data, stream);
+    this->execute_device(N, d_x.data, d_box.data, d_du_dx.data, nullptr, d_u.data, d_u_overflow_count.data, stream);
     gpuErrchk(cudaStreamSynchronize(stream));
-    d_du_dx.copy_to(h_du_dx);
-    d_u.copy_to(h_u);
+
+    if (h_du_dx) {
+        d_du_dx.copy_to(h_du_dx);
+    }
+    if (h_u) {
+        d_u.copy_to(h_u);
+        d_u_overflow_count.copy_to(h_u_overflow_count);
+    }
 };
 
 void BoundPotential::set_params_device(

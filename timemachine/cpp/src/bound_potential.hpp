@@ -27,7 +27,12 @@ struct BoundPotential {
     void set_params_device(const std::vector<int> shape, const double *d_p, const cudaStream_t stream);
 
     void execute_host(
-        const int N, const double *h_x, const double *h_box, unsigned long long *h_du_dx, unsigned long long *h_u);
+        const int N,
+        const double *h_x,
+        const double *h_box,
+        unsigned long long *h_du_dx,
+        unsigned long long *h_u,
+        int *h_u_overflow_count);
 
     void execute_device(
         const int N,
@@ -36,9 +41,19 @@ struct BoundPotential {
         unsigned long long *d_du_dx,
         unsigned long long *d_du_dp,
         unsigned long long *d_u,
+        int *d_u_overflow_count,
         cudaStream_t stream) {
         this->potential->execute_device(
-            N, this->size(), d_x, this->size() > 0 ? this->d_p->data : nullptr, d_box, d_du_dx, d_du_dp, d_u, stream);
+            N,
+            this->size(),
+            d_x,
+            this->size() > 0 ? this->d_p->data : nullptr,
+            d_box,
+            d_du_dx,
+            d_du_dp,
+            d_u,
+            d_u_overflow_count,
+            stream);
     }
 };
 

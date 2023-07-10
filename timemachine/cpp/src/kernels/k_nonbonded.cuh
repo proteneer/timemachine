@@ -131,7 +131,8 @@ void __device__ v_nonbonded_unified(
     const unsigned int *__restrict__ ixn_atoms,
     unsigned long long *__restrict__ du_dx,
     unsigned long long *__restrict__ du_dp,
-    unsigned long long *__restrict__ u_buffer) {
+    unsigned long long *__restrict__ u_buffer,
+    int *__restrict__ d_u_overflow_count) {
 
     int row_block_idx = ixn_tiles[tile_idx];
 
@@ -195,6 +196,7 @@ void __device__ v_nonbonded_unified(
     RealType cutoff_squared = real_cutoff * real_cutoff;
 
     unsigned long long energy = 0;
+    int overflow_count = 0;
 
     RealType real_beta = static_cast<RealType>(beta);
 
@@ -276,7 +278,10 @@ void __device__ v_nonbonded_unified(
             }
 
             if (COMPUTE_U) {
-                energy += FLOAT_TO_FIXED_NONBONDED(u);
+                // If the energy is overflowed, don't bother adding it to the buffer
+                if (!energy_overflowed<RealType>(u, overflow_count)) {
+                    energy += FLOAT_TO_FIXED_NONBONDED(u);
+                }
             }
         }
 
@@ -339,6 +344,7 @@ void __device__ v_nonbonded_unified(
     if (COMPUTE_U) {
         if (atom_i_idx < N) {
             atomicAdd(u_buffer + atom_i_idx, energy);
+            atomicAdd(d_u_overflow_count, overflow_count);
         }
     }
 }
@@ -358,7 +364,8 @@ void __global__ k_nonbonded_unified(
     const unsigned int *__restrict__ ixn_atoms,
     unsigned long long *__restrict__ du_dx,
     unsigned long long *__restrict__ du_dp,
-    unsigned long long *__restrict__ u_buffer) {
+    unsigned long long *__restrict__ u_buffer,
+    int *__restrict__ u_overflow_count) {
     __shared__ box_cache<RealType> shared_box;
     if (threadIdx.x == 0) {
         shared_box.x = box[0 * 3 + 0];
@@ -410,7 +417,8 @@ void __global__ k_nonbonded_unified(
                 ixn_atoms,
                 du_dx,
                 du_dp,
-                u_buffer);
+                u_buffer,
+                u_overflow_count);
         } else {
             v_nonbonded_unified<RealType, 1, COMPUTE_U, COMPUTE_DU_DX, COMPUTE_DU_DP>(
                 tile_idx,
@@ -426,7 +434,8 @@ void __global__ k_nonbonded_unified(
                 ixn_atoms,
                 du_dx,
                 du_dp,
-                u_buffer);
+                u_buffer,
+                u_overflow_count);
         };
         tile_idx += stride;
     }
