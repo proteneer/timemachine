@@ -1,10 +1,12 @@
 # test the custom_op for rmsd alignment
-
 import numpy as np
+import pytest
 from scipy.stats import ortho_group, special_ortho_group
 
 from timemachine.lib import custom_ops
 from timemachine.potentials import rmsd
+
+pytestmark = [pytest.mark.nogpu]
 
 
 def test_rmsd_align_proper():
