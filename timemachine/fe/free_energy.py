@@ -675,17 +675,17 @@ def run_sims_with_greedy_bisection(
 
         if np.all(np.array(result.overlaps) > min_overlap):
             if verbose:
-                print(f"All BAR overlaps >= (min_overlap = {min_overlap}). Returning after {iteration+1} iterations.")
+                print(f"All BAR overlaps exceed min_overlap={min_overlap}. Returning after {iteration+1} iterations.")
             break
 
         if verbose:
             print(
-                f"Minimum BAR overlap {np.min(result.overlaps)} < (min_overlap = {min_overlap}). Continuing bisection…"
+                f"Minimum BAR overlap {np.min(result.overlaps)} less than min_overlap={min_overlap}. Continuing bisection…"
             )
     else:
         warn(
             f"Reached n_bisections={n_bisections} iterations without achieving min_overlap={min_overlap}. "
-            f"The minimum BAR overlap was {np.min(result.overlaps)}",
+            f"The minimum BAR overlap was {np.min(result.overlaps)}.",
             MinOverlapWarning,
         )
 
