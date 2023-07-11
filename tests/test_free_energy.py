@@ -342,3 +342,11 @@ def test_run_sims_with_greedy_bisection_early_stopping():
     ):
         results, _, _ = run_sims_with_greedy_bisection_partial(min_overlap=0.4)
         assert len(results) == 1 + 1
+
+    # min_overlap achieved after 2 iterations
+    with patch(
+        "timemachine.fe.free_energy.estimate_free_energy_bar",
+        side_effect=[result_with_overlap(overlap) for overlap in [0.0, 0.5, 0.3, 0.5, 0.6]],
+    ):
+        results, _, _ = run_sims_with_greedy_bisection_partial(min_overlap=0.4)
+        assert len(results) == 1 + 2
