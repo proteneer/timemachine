@@ -333,7 +333,7 @@ def test_run_sims_with_greedy_bisection_early_stopping():
     # min_overlap satisfied by initial states
     with patch("timemachine.fe.free_energy.estimate_free_energy_bar", return_value=result_with_overlap(0.5)):
         results, _, _ = run_sims_with_greedy_bisection_partial(min_overlap=0.4)
-        assert len(results) == 1 + 1
+        assert len(results) == 1
 
     # min_overlap achieved after 1 iteration
     with patch(
