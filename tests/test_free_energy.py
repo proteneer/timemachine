@@ -318,6 +318,7 @@ def test_run_sims_with_greedy_bisection_early_stopping():
         md_params,
         n_bisections=n_bisections,
         temperature=DEFAULT_TEMP,
+        verbose=False,
     )
 
     def result_with_overlap(overlap):
