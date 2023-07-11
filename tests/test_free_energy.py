@@ -1,3 +1,4 @@
+from functools import partial
 from importlib import resources
 from unittest.mock import patch
 
@@ -14,12 +15,14 @@ from timemachine.fe.free_energy import (
     BarResult,
     HostConfig,
     MDParams,
+    MinOverlapWarning,
     PairBarResult,
     batches,
     make_pair_bar_plots,
+    run_sims_with_greedy_bisection,
     sample,
 )
-from timemachine.fe.rbfe import setup_initial_states, setup_optimized_host
+from timemachine.fe.rbfe import setup_initial_state, setup_initial_states, setup_optimized_host
 from timemachine.fe.single_topology import SingleTopology
 from timemachine.fe.stored_arrays import StoredArrays
 from timemachine.ff import Forcefield
@@ -293,3 +296,48 @@ def test_make_pair_bar_plots(mock_fig, hif2a_ligand_pair_single_topology_lam0_st
     assert set(mock_fig.call_args.args[0]) == set(
         ["HarmonicBond", "HarmonicAngleStable", "PeriodicTorsion", "NonbondedPairListPrecomputed"]
     )
+
+
+def test_run_sims_with_greedy_bisection_early_stopping():
+    mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
+    forcefield = Forcefield.load_default()
+    st = SingleTopology(mol_a, mol_b, core, forcefield)
+    initial_state = setup_initial_state(st, 0.0, None, DEFAULT_TEMP, 2023)
+
+    def make_initial_state(_: float):
+        return initial_state
+
+    md_params = MDParams(1, 1, 1, 2023)
+
+    n_bisections = 3
+
+    run_sims_with_greedy_bisection_partial = partial(
+        run_sims_with_greedy_bisection,
+        [0.0, 1.0],
+        make_initial_state,
+        md_params,
+        n_bisections=n_bisections,
+        temperature=DEFAULT_TEMP,
+    )
+
+    def result_with_overlap(overlap):
+        return BarResult(np.nan, np.nan, np.empty, overlap, np.empty, np.empty)
+
+    # overlap does not improve; should run all n_bisections iterations
+    with patch("timemachine.fe.free_energy.estimate_free_energy_bar", return_value=result_with_overlap(0.0)):
+        with pytest.warns(MinOverlapWarning):
+            results, _, _ = run_sims_with_greedy_bisection_partial(min_overlap=0.4)
+        assert len(results) == 1 + n_bisections  # initial result + bisection iterations
+
+    # min_overlap satisfied by initial states
+    with patch("timemachine.fe.free_energy.estimate_free_energy_bar", return_value=result_with_overlap(0.5)):
+        results, _, _ = run_sims_with_greedy_bisection_partial(min_overlap=0.4)
+        assert len(results) == 1 + 1
+
+    # min_overlap achieved after 1 iteration
+    with patch(
+        "timemachine.fe.free_energy.estimate_free_energy_bar",
+        side_effect=[result_with_overlap(overlap) for overlap in [0.0, 0.5, 0.5]],
+    ):
+        results, _, _ = run_sims_with_greedy_bisection_partial(min_overlap=0.4)
+        assert len(results) == 1 + 1

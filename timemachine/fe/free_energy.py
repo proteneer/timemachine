@@ -563,6 +563,10 @@ def make_batch_u_fns(initial_state: InitialState, temperature: float) -> List[Ba
     return get_batch_u_fns(bound_impls, temperature)
 
 
+class MinOverlapWarning(UserWarning):
+    pass
+
+
 def run_sims_with_greedy_bisection(
     initial_lambdas: Sequence[float],
     make_initial_state: Callable[[float], InitialState],
@@ -593,8 +597,8 @@ def run_sims_with_greedy_bisection(
         Temperature in K
 
     min_overlap: float, optional
-        Terminate before n_bisections iterations if the BAR overlap between all neighboring pairs of states exceeds this
-        value. A value greater than or equal to 1.0 ensures that we always run n_bisections iterations.
+        Return early if the BAR overlap between all neighboring pairs of states exceeds this value. A value greater than
+        or equal to 1.0 ensures that we always run n_bisections iterations.
 
     verbose: bool, optional
         Whether to print diagnostic information
@@ -652,7 +656,7 @@ def run_sims_with_greedy_bisection(
 
     lambdas = list(initial_lambdas)
     results = [compute_intermediate_result(lambdas)]
-    for _ in range(n_bisections):
+    for iteration in range(n_bisections):
         lambdas_new, info = greedy_bisection_step(lambdas, bar_error, midpoint)
 
         if verbose:
@@ -666,8 +670,24 @@ def run_sims_with_greedy_bisection(
         lambdas = lambdas_new
         result = compute_intermediate_result(lambdas)
         results.append(result)
+
         if np.all(np.array(result.overlaps) > min_overlap):
+            if verbose:
+                print(
+                    f"All pair BAR overlaps >= (min_overlap = {min_overlap}). "
+                    f"Returning after {iteration+1} iterations."
+                )
             break
+
+        if verbose:
+            print(
+                f"Minimum pair BAR overlap {result.overlaps} < (min_overlap = {min_overlap}). " "Continuing bisection…"
+            )
+    else:
+        warn(
+            f"Reached n_bisections={n_bisections} iterations without achieving min_overlap={min_overlap}.",
+            MinOverlapWarning,
+        )
 
     frames = [get_state(lamb).frames for lamb in lambdas]
     boxes = [get_state(lamb).boxes for lamb in lambdas]
