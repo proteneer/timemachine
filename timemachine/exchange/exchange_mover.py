@@ -1,0 +1,346 @@
+# Prototype ExchangeMover that implements an instantaneous water swap move.
+# disable for ~2x speed-up
+from jax import config
+
+config.update("jax_enable_x64", True)
+
+import argparse
+import os
+
+import jax
+import jax.numpy as jnp
+import numpy as np
+from openmm import app
+from rdkit import Chem
+from scipy.stats import special_ortho_group
+
+from timemachine.constants import AVOGADRO, DEFAULT_KT, DEFAULT_PRESSURE, DEFAULT_TEMP
+from timemachine.fe import cif_writer
+from timemachine.fe.free_energy import AbsoluteFreeEnergy, HostConfig, InitialState, image_frames
+from timemachine.fe.topology import BaseTopology
+from timemachine.fe.utils import get_romol_conf
+from timemachine.ff import Forcefield
+from timemachine.ff.handlers.nonbonded import SimpleChargeHandler, SimpleChargeIntraHandler, SimpleChargeSolventHandler
+from timemachine.lib import LangevinIntegrator, MonteCarloBarostat, custom_ops
+from timemachine.md.barostat.utils import get_bond_list, get_group_indices
+from timemachine.md.builders import strip_units
+from timemachine.md.minimizer import minimize_host_4d
+from timemachine.potentials import nonbonded
+
+
+def build_system(host_pdbfile: str, water_ff: str, padding: float):
+    if isinstance(host_pdbfile, str):
+        assert os.path.exists(host_pdbfile)
+        host_pdb = app.PDBFile(host_pdbfile)
+    elif isinstance(host_pdbfile, app.PDBFile):
+        host_pdb = host_pdbfile
+    else:
+        raise TypeError("host_pdbfile must be a string or an openmm PDBFile object")
+
+    host_coords = strip_units(host_pdb.positions)
+
+    box_lengths = np.amax(host_coords, axis=0) - np.amin(host_coords, axis=0)
+
+    box_lengths = box_lengths + padding
+    box = np.eye(3, dtype=np.float64) * box_lengths
+
+    host_ff = app.ForceField(f"{water_ff}.xml")
+    nwa = len(host_coords)
+    solvated_host_system = host_ff.createSystem(
+        host_pdb.topology, nonbondedMethod=app.NoCutoff, constraints=None, rigidWater=False
+    )
+    solvated_host_coords = host_coords
+    solvated_topology = host_pdb.topology
+
+    return solvated_host_system, solvated_host_coords, box, solvated_topology, nwa
+
+
+# currently un-used.
+def randomly_rotate_and_translate(coords, offset):
+    centroid = np.mean(coords, axis=0, keepdims=True)
+    centered_coords = coords - centroid
+    rot_mat = special_ortho_group.rvs(3)
+    rotated_coords = np.matmul(centered_coords, rot_mat)
+    return rotated_coords + offset
+
+
+def randomly_translate(coords, offset):
+    centroid = np.mean(coords, axis=0, keepdims=True)
+    centered_coords = coords - centroid
+    return centered_coords + offset
+
+
+def get_initial_state(water_pdb, mol, ff, seed, nb_cutoff):
+    assert nb_cutoff == 1.2  # hardcoded in prepare_host_edge
+
+    # read water system
+    solvent_sys, solvent_conf, solvent_box, solvent_topology, num_water_atoms = build_system(
+        water_pdb, ff.water_ff, padding=0.1
+    )
+    solvent_box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes
+
+    assert num_water_atoms == len(solvent_conf)
+
+    bt = BaseTopology(mol, ff)
+    afe = AbsoluteFreeEnergy(mol, bt)
+    host_config = HostConfig(solvent_sys, solvent_conf, solvent_box, num_water_atoms)
+    potentials, params, combined_masses = afe.prepare_host_edge(ff.get_params(), host_config, 0.0)
+
+    host_bps = []
+    for p, bp in zip(params, potentials):
+        host_bps.append(bp.bind(p))
+
+    temperature = DEFAULT_TEMP
+    dt = 1e-3
+
+    integrator = LangevinIntegrator(temperature, dt, 1.0, combined_masses, seed)
+
+    bond_list = get_bond_list(host_bps[0].potential)
+    group_idxs = get_group_indices(bond_list, len(combined_masses))
+    barostat_interval = 25
+
+    barostat = MonteCarloBarostat(
+        len(combined_masses), DEFAULT_PRESSURE, temperature, group_idxs, barostat_interval, seed + 1
+    )
+
+    print("Minimizing the host system...", end="", flush=True)
+    host_conf = minimize_host_4d([mol], host_config, ff)
+    print("Done", flush=True)
+    combined_conf = np.concatenate([host_conf, get_romol_conf(mol)], axis=0)
+
+    ligand_idxs = np.arange(num_water_atoms, num_water_atoms + mol.GetNumAtoms())
+
+    initial_state = InitialState(
+        host_bps, integrator, barostat, combined_conf, np.zeros_like(combined_conf), solvent_box, 0.0, ligand_idxs
+    )
+
+    num_water_mols = num_water_atoms // 3
+
+    return initial_state, num_water_mols, solvent_topology
+
+
+class ExchangeMover:
+    def __init__(self, nb_params, nb_beta, nb_cutoff, water_idxs):
+        self.nb_beta = nb_beta
+        self.nb_cutoff = nb_cutoff
+        self.nb_params = jnp.array(nb_params)
+        self.num_waters = len(water_idxs)
+        self.water_idxs = water_idxs
+        # counters
+        self.a_count = 0  # accept count
+        self.t_count = 0  # trial count
+        self.beta = 1 / DEFAULT_KT
+
+        @jax.jit
+        def U_fn(conf, box, a_idxs, b_idxs):
+            # compute the energy of an interaction group
+            conf_i = conf[a_idxs]
+            conf_j = conf[b_idxs]
+            params_i = self.nb_params[a_idxs]
+            params_j = self.nb_params[b_idxs]
+            return nonbonded.nonbonded_block(conf_i, conf_j, box, params_i, params_j, self.nb_beta, self.nb_cutoff)
+
+        self.U_fn = U_fn
+
+    def exchange_move(self, coords, box):
+        self.t_count += 1
+        n_atoms = len(coords)
+        chosen_water = np.random.randint(self.num_waters)
+        chosen_water_atoms = self.water_idxs[chosen_water]
+
+        # compute delta_U of deletion
+        a_idxs = chosen_water_atoms
+        b_idxs = np.delete(np.arange(n_atoms), a_idxs)
+
+        # compute delta_U of insertion
+        trial_chosen_coords = coords[chosen_water_atoms]
+        trial_translation = np.diag(box) * np.random.rand(3)
+        # tbd - what should we do  with velocities?
+
+        # this has a higher acceptance probability than if we allowed for rotations
+        # (probably because we have a much higher chance of a useless move)
+        moved_coords = randomly_translate(trial_chosen_coords, trial_translation)
+        trial_coords = coords.copy()  # can optimize this later if needed
+        trial_coords[chosen_water_atoms] = moved_coords
+
+        delta_U_insert = self.U_fn(trial_coords, box, a_idxs, b_idxs)
+        if delta_U_insert > 200:
+            # micro-optimization, skip deletion moves if insertion work is really high
+            return coords, box
+
+        delta_U_delete = -self.U_fn(coords, box, a_idxs, b_idxs)
+        delta_U_total = delta_U_delete + delta_U_insert
+
+        if delta_U_total < -200:
+            print("MC overflow detected", delta_U_delete, delta_U_insert)
+            assert 0
+
+        p_accept = min(1, np.exp(-self.beta * delta_U_total))
+
+        if np.random.rand() < p_accept:
+            self.a_count += 1
+            return trial_coords, box
+        else:
+            return coords, box
+
+
+def propagate(ctxt, xi, vi, boxi, nsteps):
+    ctxt.set_x_t(xi)
+    ctxt.set_v_t(vi)
+    ctxt.set_box(boxi)
+    ctxt.multiple_steps_U(nsteps, 0, 0)
+    return ctxt.get_x_t(), ctxt.get_v_t(), ctxt.get_box()
+
+
+def initialize_ctxt(initial_state):
+    intg_impl = initial_state.integrator.impl()
+    bp_impls = [p.to_gpu(np.float32).bound_impl for p in initial_state.potentials]
+    baro_impl = initial_state.barostat.impl(bp_impls)
+
+    ctxt = custom_ops.Context(
+        initial_state.x0,
+        initial_state.v0,
+        initial_state.box0,
+        intg_impl,
+        bp_impls,
+        baro_impl,
+    )
+    return ctxt
+
+
+def compute_density(n_waters, box):
+    box_vol = np.product(np.diag(box))
+    numerator = n_waters * 18.01528 * 1e27
+    denominator = box_vol * AVOGADRO * 1000
+    return numerator / denominator
+
+
+def compute_occupancy(x_t, box_t, ligand_idxs, threshold):
+    # compute the number of waters inside the buckyball ligand
+
+    num_ligand_atoms = len(ligand_idxs)
+    num_host_atoms = len(x_t) - num_ligand_atoms
+    host_coords = x_t[:num_host_atoms]
+    ligand_coords = x_t[num_host_atoms:]
+    ligand_centroid = np.mean(ligand_coords, axis=0)
+    count = 0
+    for rj in host_coords:
+        diff = ligand_centroid - rj  # this can be either N,N,3 or B,3
+        box_diag = np.diag(box_t)
+        diff -= box_diag * np.floor(diff / box_diag + 0.5)
+        dij = np.linalg.norm(diff)
+        if dij < threshold:
+            count += 1
+    return count
+
+
+def setup_forcefield():
+    # use a simple charge handler on the ligand to avoid running AM1 on a buckyball
+    ff = Forcefield.load_default()
+    patterns = ["[*:1]"]
+    params = np.zeros(1)
+
+    q_handle = SimpleChargeHandler(patterns, params, None)
+    q_handle_intra = SimpleChargeIntraHandler(patterns, params, None)
+    q_handle_solv = SimpleChargeSolventHandler(patterns, params, None)
+    return Forcefield(
+        ff.hb_handle,
+        ff.ha_handle,
+        ff.pt_handle,
+        ff.it_handle,
+        q_handle=q_handle,
+        q_handle_solv=q_handle_solv,
+        q_handle_intra=q_handle_intra,
+        lj_handle=ff.lj_handle,
+        lj_handle_solv=ff.lj_handle_solv,
+        lj_handle_intra=ff.lj_handle_intra,
+        protein_ff=ff.protein_ff,
+        water_ff=ff.water_ff,
+    )
+
+
+def test_exchange():
+    parser = argparse.ArgumentParser(description="Test the exchange protocol in a box of water.")
+    parser.add_argument("--water_pdb", type=str, help="Location of the water PDB", required=True)
+    parser.add_argument("--ligand_sdf", type=str, help="SDF file containing the ligand of interest", required=True)
+
+    args = parser.parse_args()
+
+    suppl = list(Chem.SDMolSupplier(args.ligand_sdf, removeHs=False))
+    mol = suppl[0]
+
+    ff = setup_forcefield()
+
+    seed = 2024
+
+    np.random.seed(seed)
+
+    nb_cutoff = 1.2  # this has to be 1.2
+    initial_state, nwm, topology = get_initial_state(args.water_pdb, mol, ff, seed, nb_cutoff)
+    ctxt = initialize_ctxt(initial_state)
+
+    # set up water indices, assumes that waters are placed at the front of the coordinates.
+    water_idxs = []
+    for wai in range(nwm):
+        water_idxs.append([wai * 3 + 0, wai * 3 + 1, wai * 3 + 2])
+
+    water_idxs = np.array(water_idxs)
+    bps = initial_state.potentials
+
+    nb_beta = bps[-1].potential.potentials[0].beta
+    nb_cutoff = bps[-1].potential.potentials[0].cutoff
+    nb_params = bps[-1].potential.params_init[0]
+
+    mover = ExchangeMover(nb_params, nb_beta, nb_cutoff, water_idxs)
+    cur_box = initial_state.box0
+    cur_x_t = initial_state.x0
+    cur_v_t = np.zeros_like(cur_x_t)
+
+    seed = 2023
+    writer = cif_writer.CIFWriter([topology, mol], "water.cif")
+    cur_x_t = image_frames(initial_state, [cur_x_t], [cur_box])[0]
+    writer.write_frame(cur_x_t * 10)
+
+    # equilibration
+    print("Equilibrating the system...", end="", flush=True)
+    cur_x_t, cur_v_t, cur_box = propagate(ctxt, cur_x_t, cur_v_t, cur_box, 50000)
+    print("Done")
+
+    # TBD: cache the minimized and equilibrated initial structure later on to iterate faster.
+
+    cur_x_t = image_frames(initial_state, [cur_x_t], [cur_box])[0]
+    writer.write_frame(cur_x_t * 10)
+
+    md_steps_per_batch = 1000
+    for idx in range(100000):
+        density = compute_density(nwm, cur_box)
+        cur_x_t = image_frames(initial_state, [cur_x_t], [cur_box])[0]
+        occ = compute_occupancy(cur_x_t, cur_box, initial_state.ligand_idxs, threshold=0.46)
+
+        print(
+            f"{mover.a_count} / {mover.t_count} | density {density} | # of waters {occ // 3} | md step: {idx * md_steps_per_batch}"
+        )
+        if idx % 10 == 0:
+            writer.write_frame(cur_x_t * 10)
+
+        # run MC
+        for _ in range(5000):
+            assert np.amax(np.abs(cur_x_t)) < 1e3
+            cur_x_t, cur_box = mover.exchange_move(cur_x_t, cur_box)
+
+        # run MD
+        cur_x_t, cur_v_t, cur_box = propagate(ctxt, cur_x_t, cur_v_t, cur_box, md_steps_per_batch)
+
+
+if __name__ == "__main__":
+    # A trajectory is written out called water.cif
+    # To visualize it, run: pymol water.cif (note that the simulation does not have to be complete to visualize progress)
+
+    # example invocation:
+
+    # start with 6 waters:
+    # python timemachine/exchange/exchange_mover.py --water_pdb timemachine/datasets/water_exchange/bb_6_waters.pdb --ligand_sdf timemachine/datasets/water_exchange/bb_centered.sdf
+
+    # start with 0 waters:
+    # python timemachine/exchange/exchange_mover.py --water_pdb timemachine/datasets/water_exchange/bb_0_waters.pdb --ligand_sdf timemachine/datasets/water_exchange/bb_centered.sdf
+    test_exchange()
