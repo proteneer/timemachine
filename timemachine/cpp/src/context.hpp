@@ -27,8 +27,6 @@ public:
 
     std::array<std::vector<double>, 2> multiple_steps(const int n_steps, int store_x_interval);
 
-    std::array<std::vector<double>, 3> multiple_steps_U(const int n_steps, int store_u_interval, int store_x_interval);
-
     std::array<std::vector<double>, 2> multiple_steps_local(
         const int n_steps,
         const std::vector<int> &local_idxs,
@@ -81,10 +79,6 @@ private:
     double *d_x_t_;   // coordinates
     double *d_v_t_;   // velocities
     double *d_box_t_; // box vectors
-
-    unsigned long long *d_u_buffer_; // u [N]
-    double *d_sum_storage_;
-    size_t d_sum_storage_bytes_;
 
     std::shared_ptr<Integrator> intg_;
     std::vector<std::shared_ptr<BoundPotential>> bps_;
