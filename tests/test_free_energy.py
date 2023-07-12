@@ -321,32 +321,33 @@ def test_run_sims_with_greedy_bisection_early_stopping():
         verbose=False,
     )
 
+    # runs all n_bisections iterations by default
+    results, _, _ = run_sims_with_greedy_bisection_partial()
+    assert len(results) == 1 + n_bisections  # initial result + bisection iterations
+
     def result_with_overlap(overlap):
         return BarResult(np.nan, np.nan, np.empty, overlap, np.empty, np.empty)
 
-    # overlap does not improve; should run all n_bisections iterations
-    with patch("timemachine.fe.free_energy.estimate_free_energy_bar", return_value=result_with_overlap(0.0)):
+    with patch("timemachine.fe.free_energy.estimate_free_energy_bar") as mock_estimate_free_energy_bar:
+        # overlap does not improve; should run all n_bisections iterations
+        mock_estimate_free_energy_bar.return_value = result_with_overlap(0.0)
         with pytest.warns(MinOverlapWarning):
             results, _, _ = run_sims_with_greedy_bisection_partial(min_overlap=0.4)
-        assert len(results) == 1 + n_bisections  # initial result + bisection iterations
+        assert len(results) == 1 + n_bisections
 
-    # min_overlap satisfied by initial states
-    with patch("timemachine.fe.free_energy.estimate_free_energy_bar", return_value=result_with_overlap(0.5)):
+        # min_overlap satisfied by initial states
+        mock_estimate_free_energy_bar.return_value = result_with_overlap(0.5)
         results, _, _ = run_sims_with_greedy_bisection_partial(min_overlap=0.4)
         assert len(results) == 1
 
-    # min_overlap achieved after 1 iteration
-    with patch(
-        "timemachine.fe.free_energy.estimate_free_energy_bar",
-        side_effect=[result_with_overlap(overlap) for overlap in [0.0, 0.5, 0.5]],
-    ):
+        # min_overlap achieved after 1 iteration
+        mock_estimate_free_energy_bar.side_effect = [result_with_overlap(overlap) for overlap in [0.0, 0.5, 0.5]]
         results, _, _ = run_sims_with_greedy_bisection_partial(min_overlap=0.4)
         assert len(results) == 1 + 1
 
-    # min_overlap achieved after 2 iterations
-    with patch(
-        "timemachine.fe.free_energy.estimate_free_energy_bar",
-        side_effect=[result_with_overlap(overlap) for overlap in [0.0, 0.5, 0.3, 0.5, 0.6]],
-    ):
+        # min_overlap achieved after 2 iterations
+        mock_estimate_free_energy_bar.side_effect = [
+            result_with_overlap(overlap) for overlap in [0.0, 0.5, 0.3, 0.5, 0.6]
+        ]
         results, _, _ = run_sims_with_greedy_bisection_partial(min_overlap=0.4)
         assert len(results) == 1 + 2
