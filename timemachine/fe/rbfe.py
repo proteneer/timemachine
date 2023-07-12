@@ -468,6 +468,7 @@ def estimate_relative_free_energy_via_greedy_bisection(
     prefix: str = "",
     lambda_interval: Optional[Tuple[float, float]] = None,
     n_windows: Optional[int] = None,
+    min_overlap: Optional[float] = None,
     keep_idxs: Optional[List[int]] = None,
     min_cutoff: Optional[float] = 0.7,
 ) -> SimulationResult:
@@ -503,6 +504,10 @@ def estimate_relative_free_energy_via_greedy_bisection(
         Number of windows used for interpolating the lambda schedule with additional windows. Additionally controls the
         number of evenly-spaced lambda windows used for initial conformer optimization. Defaults to
         `DEFAULT_NUM_WINDOWS` windows.
+
+    min_overlap: float or None, optional
+        If not None, terminate bisection early when the BAR overlap between all neighboring pairs of states exceeds this
+        value
 
     keep_idxs: list of int or None, optional
         If None, return only the end-state frames. Otherwise if not None, use only for debugging, and this
@@ -562,6 +567,7 @@ def estimate_relative_free_energy_via_greedy_bisection(
             md_params,
             n_bisections=len(lambda_grid) - 2,
             temperature=temperature,
+            min_overlap=min_overlap,
         )
 
         final_result = results[-1]
@@ -594,6 +600,7 @@ def run_vacuum(
     _,
     md_params: MDParams = DEFAULT_MD_PARAMS,
     n_windows: Optional[int] = None,
+    min_overlap: Optional[float] = None,
     keep_idxs: Optional[List[int]] = None,
     min_cutoff: Optional[float] = None,
 ):
@@ -610,6 +617,7 @@ def run_vacuum(
         host_config=None,
         prefix="vacuum",
         n_windows=n_windows,
+        min_overlap=min_overlap,
         keep_idxs=keep_idxs,
         min_cutoff=min_cutoff,
     )
@@ -623,6 +631,7 @@ def run_solvent(
     _,
     md_params: MDParams = DEFAULT_MD_PARAMS,
     n_windows: Optional[int] = None,
+    min_overlap: Optional[float] = None,
     keep_idxs: Optional[List[int]] = None,
     min_cutoff: Optional[float] = 0.7,
 ):
@@ -639,6 +648,7 @@ def run_solvent(
         md_params=md_params,
         prefix="solvent",
         n_windows=n_windows,
+        min_overlap=min_overlap,
         keep_idxs=keep_idxs,
         min_cutoff=min_cutoff,
     )
@@ -653,6 +663,7 @@ def run_complex(
     protein: Union[app.PDBFile, str],
     md_params: MDParams = DEFAULT_MD_PARAMS,
     n_windows: Optional[int] = None,
+    min_overlap: Optional[float] = None,
     keep_idxs: Optional[List[int]] = None,
     min_cutoff: Optional[float] = 0.7,
 ):
@@ -670,6 +681,7 @@ def run_complex(
         prefix="complex",
         md_params=md_params,
         n_windows=n_windows,
+        min_overlap=min_overlap,
         keep_idxs=keep_idxs,
         min_cutoff=min_cutoff,
     )
