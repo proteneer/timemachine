@@ -438,64 +438,6 @@ void declare_context(py::module &m) {
         Note: All boxes returned will be identical as local MD only runs under constant volume.
     )pbdoc")
         .def(
-            "multiple_steps_U",
-            [](timemachine::Context &ctxt, const int n_steps, int store_u_interval, int store_x_interval) -> py::tuple {
-                int u_interval = (store_u_interval <= 0) ? n_steps : store_u_interval;
-                int x_interval = (store_x_interval <= 0) ? n_steps : store_x_interval;
-
-                std::array<std::vector<double>, 3> result = ctxt.multiple_steps_U(n_steps, u_interval, x_interval);
-
-                int UF = n_steps / u_interval;
-
-                py::array_t<double, py::array::c_style> out_u_buffer(UF);
-                std::memcpy(out_u_buffer.mutable_data(), result[0].data(), result[0].size() * sizeof(double));
-
-                int N = ctxt.num_atoms();
-                int D = 3;
-                int F = result[1].size() / (N * D);
-                py::array_t<double, py::array::c_style> out_x_buffer({F, N, D});
-                std::memcpy(out_x_buffer.mutable_data(), result[1].data(), result[1].size() * sizeof(double));
-
-                py::array_t<double, py::array::c_style> box_buffer({F, D, D});
-                std::memcpy(box_buffer.mutable_data(), result[2].data(), result[2].size() * sizeof(double));
-
-                return py::make_tuple(out_u_buffer, out_x_buffer, box_buffer);
-            },
-            py::arg("n_steps"),
-            py::arg("store_u_interval"),
-            py::arg("store_x_interval"),
-            R"pbdoc(
-        Take multiple steps; store energies in addition to frames.
-
-        Parameters
-        ----------
-        n_steps: int
-            Number of steps to run.
-
-        store_u_interval: int
-            How often we store the energies, store after every store_u_interval steps.
-
-        store_x_interval: int
-            How often we store the frames, store after every store_x_interval iterations. Setting to zero collects frames
-            at the last step. Setting store_x_interval > n_steps will return no frames and skip runtime validation of box
-            size.
-
-        Returns
-        -------
-        3-tuple of energies, coordinates, boxes
-            F = floor(n_steps/store_x_interval).
-            K = floor(n_steps/store_u_interval).
-            Energies have shape (K,)
-            Coordinates have shape (F, N, 3)
-            Boxes have shape (F, 3, 3)
-
-        Raises
-        ------
-            RuntimeError:
-                Box dimensions are invalid when a frame is collected
-
-    )pbdoc")
-        .def(
             "setup_local_md",
             &timemachine::Context::setup_local_md,
             py::arg("temperature"),

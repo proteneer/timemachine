@@ -73,16 +73,6 @@ def assert_reversibility_using_step_implementations(context, n_steps, atol=1e-10
 
     assert_reversible(x0, v0, multiple_steps_update, atol=atol)
 
-    def multiple_steps_U_update(x, v):
-        # Doesn't use the lamb sched, as multiple_steps_U is always run as a equilibrium simulation
-        context.set_x_t(x)
-        context.set_v_t(v)
-        _, xs, _ = context.multiple_steps_U(n_steps, 0, 0)
-        v = context.get_v_t()
-        return xs[-1], v
-
-    assert_reversible(x0, v0, multiple_steps_U_update, atol=atol)
-
 
 def test_reversibility():
     """Check reversibility of "public" .step and .multiple_steps implementations for a Context using the VelocityVerlet integrator"""
