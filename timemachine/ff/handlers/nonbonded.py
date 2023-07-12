@@ -350,6 +350,20 @@ class NonbondedHandler(SerializableMixIn):
         return params[param_idxs]
 
 
+class PrecomputedChargeHandler:
+    def __init__(self, params):
+        self.params = params
+
+    def parameterize(self, mol):
+        assert mol.GetNumAtoms() == len(self.params)
+        return self.params
+
+    def partial_parameterize(self, params, mol):
+        np.testing.assert_array_equal(params, self.params)
+        assert mol.GetNumAtoms() == len(self.params)
+        return self.params
+
+
 class SimpleChargeHandler(NonbondedHandler):
     pass
 
