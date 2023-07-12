@@ -594,6 +594,7 @@ def run_vacuum(
     _,
     md_params: MDParams = DEFAULT_MD_PARAMS,
     n_windows: Optional[int] = None,
+    keep_idxs: Optional[List[int]] = None,
     min_cutoff: Optional[float] = None,
 ):
     if md_params is not None and md_params.local_steps > 0:
@@ -609,6 +610,7 @@ def run_vacuum(
         host_config=None,
         prefix="vacuum",
         n_windows=n_windows,
+        keep_idxs=keep_idxs,
         min_cutoff=min_cutoff,
     )
 
@@ -621,6 +623,7 @@ def run_solvent(
     _,
     md_params: MDParams = DEFAULT_MD_PARAMS,
     n_windows: Optional[int] = None,
+    keep_idxs: Optional[List[int]] = None,
     min_cutoff: Optional[float] = 0.7,
 ):
     box_width = 4.0
@@ -636,6 +639,7 @@ def run_solvent(
         md_params=md_params,
         prefix="solvent",
         n_windows=n_windows,
+        keep_idxs=keep_idxs,
         min_cutoff=min_cutoff,
     )
     return solvent_res, solvent_top, solvent_host_config
@@ -649,6 +653,7 @@ def run_complex(
     protein: Union[app.PDBFile, str],
     md_params: MDParams = DEFAULT_MD_PARAMS,
     n_windows: Optional[int] = None,
+    keep_idxs: Optional[List[int]] = None,
     min_cutoff: Optional[float] = 0.7,
 ):
     complex_sys, complex_conf, complex_box, complex_top, nwa = builders.build_protein_system(
@@ -665,6 +670,7 @@ def run_complex(
         prefix="complex",
         md_params=md_params,
         n_windows=n_windows,
+        keep_idxs=keep_idxs,
         min_cutoff=min_cutoff,
     )
     return complex_res, complex_top, complex_host_config
