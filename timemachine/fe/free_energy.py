@@ -358,9 +358,8 @@ def sample(initial_state: InitialState, md_params: MDParams, max_buffer_frames: 
     )
 
     # burn-in
-    ctxt.multiple_steps_U(
+    ctxt.multiple_steps(
         n_steps=md_params.n_eq_steps,
-        store_u_interval=0,
         store_x_interval=0,
     )
 
@@ -372,9 +371,8 @@ def sample(initial_state: InitialState, md_params: MDParams, max_buffer_frames: 
     assert np.all(np.isfinite(ctxt.get_x_t())), "Equilibration resulted in a nan"
 
     def run_production_steps(n_steps: int) -> Tuple[NDArray, NDArray]:
-        _, coords, boxes = ctxt.multiple_steps_U(
+        coords, boxes = ctxt.multiple_steps(
             n_steps=n_steps,
-            store_u_interval=0,
             store_x_interval=md_params.steps_per_frame,
         )
 

@@ -71,62 +71,6 @@ def test_multiple_steps_store_interval():
     _, _ = bps[0].execute(test_xs[0], test_boxes[0])
 
 
-def test_multiple_steps_U_store_interval():
-    np.random.seed(2022)
-
-    N = 8
-    D = 3
-
-    x0 = np.random.rand(N, D).astype(dtype=np.float64) * 2
-
-    E = 2
-
-    params, potential = prepare_nb_system(x0, E, p_scale=3.0, cutoff=1.0)
-    test_nrg = potential.to_gpu(precision=np.float64)
-
-    masses = np.random.rand(N)
-    v0 = np.random.rand(x0.shape[0], x0.shape[1])
-
-    temperature = constants.DEFAULT_TEMP
-    dt = 2e-3
-    friction = 0.0
-
-    box = np.eye(3) * 3.0
-    intg = custom_ops.LangevinIntegrator(masses, temperature, dt, friction, 1234)
-
-    bp = test_nrg.bind(params).bound_impl
-    bps = [bp]
-
-    ctxt = custom_ops.Context(x0, v0, box, intg, bps)
-    test_us, test_xs, test_boxes = ctxt.multiple_steps_U(10, 10, 10)
-    assert len(test_xs) == 1
-    assert test_us.shape == (1,)
-    assert len(test_xs) == len(test_boxes)
-    # We should not get out the input frame
-    assert np.any(np.not_equal(x0, test_xs[0]))
-
-    # The current coordinates should match, as the number of steps and the interval match
-    np.testing.assert_array_equal(test_xs[0], ctxt.get_x_t())
-    _, test_frame_u = bps[0].execute(test_xs[0], test_boxes[0])
-    np.testing.assert_array_equal(test_us[0], test_frame_u)
-
-    # Given an interval greater than the number of steps, return empty arrays
-    test_us, test_xs, test_boxes = ctxt.multiple_steps_U(10, 100, 100)
-    assert len(test_xs) == 0
-    assert len(test_us) == 0
-    assert len(test_boxes) == 0
-
-    # Given interval of 0, return the last frame
-    test_us, test_xs, test_boxes = ctxt.multiple_steps_U(10, 0, 0)
-    assert len(test_xs) == 1
-    assert test_us.shape == (1,)
-    assert len(test_boxes) == 1
-
-    np.testing.assert_array_equal(test_xs[0], ctxt.get_x_t())
-    _, test_frame_u = bps[0].execute(test_xs[0], test_boxes[0])
-    np.testing.assert_array_equal(test_us[0], test_frame_u)
-
-
 def test_set_and_get():
     """
     This test the setters and getters in the context.
@@ -299,16 +243,6 @@ def test_fwd_mode():
     assert test_boxes.shape[0] == test_xs.shape[0]
     assert test_boxes.shape[1] == D
     assert test_boxes.shape[2] == test_xs.shape[2]
-
-    # test the multiple_steps_U method
-    ctxt_3 = custom_ops.Context(x0, v0, box, intg, bps)
-
-    u_interval = 3
-
-    test_us, test_xs, test_boxes = ctxt_3.multiple_steps_U(num_steps, u_interval, x_interval)
-    np.testing.assert_array_almost_equal(ref_all_us[u_interval::u_interval], test_us)
-
-    np.testing.assert_array_almost_equal(ref_all_xs[x_interval::x_interval], test_xs)
 
 
 @pytest.mark.parametrize("freeze_reference", [True, False])
@@ -999,7 +933,6 @@ def test_context_invalid_boxes():
 
     ctxt = custom_ops.Context(coords, v0, box, intg.impl(), bps)
     ctxt.multiple_steps(steps)
-    ctxt.multiple_steps_U(steps, 0, 0)
     ctxt.multiple_steps_local(steps, ligand_idxs, burn_in=0)
     ctxt.multiple_steps_local_selection(steps, reference_idx, selection, burn_in=0)
 
@@ -1010,9 +943,6 @@ def test_context_invalid_boxes():
         _, boxes = ctxt.multiple_steps(steps)
         assert len(boxes) == 1
     with pytest.raises(RuntimeError, match=err_msg):
-        _, boxes, _ = ctxt.multiple_steps_U(steps, 0, 0)
-        assert len(boxes) == 1
-    with pytest.raises(RuntimeError, match=err_msg):
         _, boxes = ctxt.multiple_steps_local(steps, ligand_idxs, burn_in=0)
         assert len(boxes) == 1
     with pytest.raises(RuntimeError, match=err_msg):
@@ -1021,8 +951,6 @@ def test_context_invalid_boxes():
 
     # Without returning boxes no check will be performed
     _, boxes = ctxt.multiple_steps(steps, store_x_interval=steps + 1)
-    assert len(boxes) == 0
-    _, boxes, _ = ctxt.multiple_steps_U(steps, store_x_interval=steps + 1, store_u_interval=0)
     assert len(boxes) == 0
     _, boxes = ctxt.multiple_steps_local(steps, ligand_idxs, burn_in=0, store_x_interval=steps + 1)
     assert len(boxes) == 0
