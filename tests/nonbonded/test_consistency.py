@@ -12,6 +12,8 @@ from timemachine.potentials import (
     NonbondedPairListNegated,
 )
 
+pytestmark = [pytest.mark.memcheck]
+
 
 def filter_valid_exclusions(
     num_atoms: int, exclusions: Iterable[Tuple[int, int]], scales: Iterable[Tuple[float, float]]
