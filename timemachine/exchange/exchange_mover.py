@@ -24,8 +24,9 @@ from timemachine.ff.handlers.nonbonded import SimpleChargeHandler, SimpleChargeI
 from timemachine.lib import LangevinIntegrator, MonteCarloBarostat, custom_ops
 from timemachine.md.barostat.utils import get_bond_list, get_group_indices
 from timemachine.md.builders import strip_units
-from timemachine.md.minimizer import minimize_host_4d
 from timemachine.potentials import nonbonded
+
+# from timemachine.md.minimizer import minimize_host_4d
 
 
 def build_system(host_pdbfile: str, water_ff: str, padding: float):
@@ -103,9 +104,12 @@ def get_initial_state(water_pdb, mol, ff, seed, nb_cutoff):
         len(combined_masses), DEFAULT_PRESSURE, temperature, group_idxs, barostat_interval, seed + 1
     )
 
-    print("Minimizing the host system...", end="", flush=True)
-    host_conf = minimize_host_4d([mol], host_config, ff)
-    print("Done", flush=True)
+    # (YTZ): This is disabled because the initial ligand and starting waters are pre-minimized
+    # print("Minimizing the host system...", end="", flush=True)
+    # host_conf = minimize_host_4d([mol], host_config, ff)
+    # print("Done", flush=True)
+
+    host_conf = solvent_conf
     combined_conf = np.concatenate([host_conf, get_romol_conf(mol)], axis=0)
 
     ligand_idxs = np.arange(num_water_atoms, num_water_atoms + mol.GetNumAtoms())
@@ -275,7 +279,7 @@ def test_exchange():
 
     np.random.seed(seed)
 
-    nb_cutoff = 1.2  # this has to be 1.2
+    nb_cutoff = 1.2  # this has to be 1.2 since the builders hard code this in (should fix later)
     initial_state, nwm, topology = get_initial_state(args.water_pdb, mol, ff, seed, nb_cutoff)
     ctxt = initialize_ctxt(initial_state)
 
@@ -287,11 +291,15 @@ def test_exchange():
     water_idxs = np.array(water_idxs)
     bps = initial_state.potentials
 
-    nb_beta = bps[-1].potential.potentials[0].beta
-    nb_cutoff = bps[-1].potential.potentials[0].cutoff
-    nb_params = bps[-1].potential.params_init[0]
+    # [0] nb_all_pairs, [1] nb_ligand_water, [2] nb_ligand_protein
+    nb_beta = bps[-1].potential.potentials[1].beta
+    nb_cutoff = bps[-1].potential.potentials[1].cutoff
+    nb_ligand_water_params = bps[-1].potential.params_init[1]
 
-    mover = ExchangeMover(nb_params, nb_beta, nb_cutoff, water_idxs)
+    print("number of water atoms", nwm * 3, "number of ligand atoms", mol.GetNumAtoms())
+    print("ligand_water parameters", nb_ligand_water_params)
+
+    mover = ExchangeMover(nb_ligand_water_params, nb_beta, nb_cutoff, water_idxs)
     cur_box = initial_state.box0
     cur_x_t = initial_state.x0
     cur_v_t = np.zeros_like(cur_x_t)
@@ -318,7 +326,7 @@ def test_exchange():
         occ = compute_occupancy(cur_x_t, cur_box, initial_state.ligand_idxs, threshold=0.46)
 
         print(
-            f"{mover.a_count} / {mover.t_count} | density {density} | # of waters {occ // 3} | md step: {idx * md_steps_per_batch}"
+            f"{mover.a_count} / {mover.t_count} | density {density} | # of waters in bb {occ // 3} | md step: {idx * md_steps_per_batch}"
         )
         if idx % 10 == 0:
             writer.write_frame(cur_x_t * 10)
