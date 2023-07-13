@@ -14,6 +14,62 @@ from timemachine.md.thermostat.utils import sample_velocities
 from timemachine.testsystems.relative import get_hif2a_ligand_pair_single_topology
 
 
+def test_barostat_with_clashes():
+    temperature = DEFAULT_TEMP  # kelvin
+    pressure = DEFAULT_PRESSURE  # bar
+    timestep = 1.5e-3  # picosecond
+    barostat_interval = 3  # step count
+    collision_rate = 1.0  # 1 / picosecond
+    seed = 2023
+
+    np.random.seed(seed)
+
+    mol_a, _, _ = get_hif2a_ligand_pair_single_topology()
+    ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
+
+    # Set the lambda to 0.0 and don't minimize, resulting in clashes in the system
+    unbound_potentials, sys_params, masses, coords, box = get_solvent_phase_system(
+        mol_a, ff, lamb=0.0, minimize_energy=False
+    )
+    # get list of molecules for barostat by looking at bond table
+    harmonic_bond_potential = unbound_potentials[0]
+    bond_list = get_bond_list(harmonic_bond_potential)
+    group_indices = get_group_indices(bond_list, len(masses))
+
+    # Cut the number of groups in half
+    group_indices = group_indices[len(group_indices) // 2 :]
+
+    u_impls = []
+    for params, unbound_pot in zip(sys_params, unbound_potentials):
+        u_impls.append(unbound_pot.bind(params).to_gpu(precision=np.float32).bound_impl)
+
+    integrator = LangevinIntegrator(
+        temperature,
+        timestep,
+        collision_rate,
+        masses,
+        seed,
+    )
+    integrator_impl = integrator.impl()
+
+    v_0 = sample_velocities(masses, temperature)
+
+    baro = custom_ops.MonteCarloBarostat(
+        coords.shape[0],
+        pressure,
+        temperature,
+        group_indices,
+        barostat_interval,
+        u_impls,
+        seed,
+    )
+
+    # The clashes will result in infs, so the box should never change as no move is accepted
+    ctxt = custom_ops.Context(coords, v_0, box, integrator_impl, u_impls, barostat=baro)
+    ctxt.multiple_steps(barostat_interval * 100)
+    assert np.all(box == ctxt.get_box())
+
+
 def test_barostat_zero_interval():
     pressure = DEFAULT_PRESSURE  # bar
     temperature = DEFAULT_TEMP  # kelvin

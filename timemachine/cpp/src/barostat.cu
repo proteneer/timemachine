@@ -142,7 +142,7 @@ MonteCarloBarostat::~MonteCarloBarostat() {
 
 void __global__ rescale_positions(
     const int N,                                     // Number of atoms to shift
-    double *__restrict__ coords,                     // Cordinates
+    double *__restrict__ coords,                     // Coordinates
     const double *__restrict__ length_scale,         // [1]
     const double *__restrict__ box,                  // [9]
     double *__restrict__ scaled_box,                 // [9]
