@@ -1,8 +1,7 @@
 # Prototype ExchangeMover that implements an instantaneous water swap move.
 # disable for ~2x speed-up
-from jax import config
-
-config.update("jax_enable_x64", True)
+# from jax import config
+# config.update("jax_enable_x64", True)
 
 import argparse
 import os
@@ -15,17 +14,19 @@ from rdkit import Chem
 from scipy.stats import special_ortho_group
 
 from timemachine.constants import AVOGADRO, DEFAULT_KT, DEFAULT_PRESSURE, DEFAULT_TEMP
+from timemachine.datasets.water_exchange import charges
 from timemachine.fe import cif_writer
 from timemachine.fe.free_energy import AbsoluteFreeEnergy, HostConfig, InitialState, image_frames
 from timemachine.fe.topology import BaseTopology
 from timemachine.fe.utils import get_romol_conf
 from timemachine.ff import Forcefield
-from timemachine.ff.handlers.nonbonded import SimpleChargeHandler, SimpleChargeIntraHandler, SimpleChargeSolventHandler
+from timemachine.ff.handlers.nonbonded import PrecomputedChargeHandler
 from timemachine.lib import LangevinIntegrator, MonteCarloBarostat, custom_ops
 from timemachine.md.barostat.utils import get_bond_list, get_group_indices
 from timemachine.md.builders import strip_units
 from timemachine.potentials import nonbonded
 
+# uncomment if we want to re-enable minimization
 # from timemachine.md.minimizer import minimize_host_4d
 
 
@@ -45,6 +46,7 @@ def build_system(host_pdbfile: str, water_ff: str, padding: float):
     box_lengths = box_lengths + padding
     box = np.eye(3, dtype=np.float64) * box_lengths
 
+    # host_ff = app.ForceField("/home/yutong/Code/timemachine/ff/params/tip3p_modified.xml")
     host_ff = app.ForceField(f"{water_ff}.xml")
     nwa = len(host_coords)
     solvated_host_system = host_ff.createSystem(
@@ -238,15 +240,12 @@ def compute_occupancy(x_t, box_t, ligand_idxs, threshold):
     return count
 
 
-def setup_forcefield():
+def setup_forcefield(charges):
     # use a simple charge handler on the ligand to avoid running AM1 on a buckyball
     ff = Forcefield.load_default()
-    patterns = ["[*:1]"]
-    params = np.zeros(1)
-
-    q_handle = SimpleChargeHandler(patterns, params, None)
-    q_handle_intra = SimpleChargeIntraHandler(patterns, params, None)
-    q_handle_solv = SimpleChargeSolventHandler(patterns, params, None)
+    q_handle = PrecomputedChargeHandler(charges)
+    q_handle_intra = PrecomputedChargeHandler(charges)
+    q_handle_solv = PrecomputedChargeHandler(charges)
     return Forcefield(
         ff.hb_handle,
         ff.ha_handle,
@@ -267,13 +266,27 @@ def test_exchange():
     parser = argparse.ArgumentParser(description="Test the exchange protocol in a box of water.")
     parser.add_argument("--water_pdb", type=str, help="Location of the water PDB", required=True)
     parser.add_argument("--ligand_sdf", type=str, help="SDF file containing the ligand of interest", required=True)
+    parser.add_argument("--out_cif", type=str, help="Output cif file", required=True)
+    parser.add_argument(
+        "--ligand_charges",
+        type=str,
+        help='Allowed values: "zero" or "espaloma"',
+        required=True,
+    )
 
     args = parser.parse_args()
 
     suppl = list(Chem.SDMolSupplier(args.ligand_sdf, removeHs=False))
     mol = suppl[0]
 
-    ff = setup_forcefield()
+    if args.ligand_charges == "espaloma":
+        esp = charges.espaloma_charges()  # charged system via espaloma
+    elif args.ligand_charges == "zero":
+        esp = np.zeros(mol.GetNumAtoms())  # decharged system
+    else:
+        assert 0, "Unknown charge model for the ligand"
+
+    ff = setup_forcefield(esp)
 
     seed = 2024
 
@@ -305,7 +318,7 @@ def test_exchange():
     cur_v_t = np.zeros_like(cur_x_t)
 
     seed = 2023
-    writer = cif_writer.CIFWriter([topology, mol], "water.cif")
+    writer = cif_writer.CIFWriter([topology, mol], args.out_cif)
     cur_x_t = image_frames(initial_state, [cur_x_t], [cur_box])[0]
     writer.write_frame(cur_x_t * 10)
 
@@ -319,7 +332,7 @@ def test_exchange():
     cur_x_t = image_frames(initial_state, [cur_x_t], [cur_box])[0]
     writer.write_frame(cur_x_t * 10)
 
-    md_steps_per_batch = 1000
+    md_steps_per_batch = 2000
     for idx in range(100000):
         density = compute_density(nwm, cur_box)
         cur_x_t = image_frames(initial_state, [cur_x_t], [cur_box])[0]
@@ -346,9 +359,9 @@ if __name__ == "__main__":
 
     # example invocation:
 
-    # start with 6 waters:
-    # python timemachine/exchange/exchange_mover.py --water_pdb timemachine/datasets/water_exchange/bb_6_waters.pdb --ligand_sdf timemachine/datasets/water_exchange/bb_centered.sdf
+    # start with 6 waters, using espaloma charges:
+    # python timemachine/exchange/exchange_mover.py --water_pdb timemachine/datasets/water_exchange/bb_6_waters.pdb --ligand_sdf timemachine/datasets/water_exchange/bb_centered.sdf --ligand_charges espaloma --out_cif traj_6_waters.cif
 
-    # start with 0 waters:
-    # python timemachine/exchange/exchange_mover.py --water_pdb timemachine/datasets/water_exchange/bb_0_waters.pdb --ligand_sdf timemachine/datasets/water_exchange/bb_centered.sdf
+    # start with 0 waters, using zero charges:
+    # python timemachine/exchange/exchange_mover.py --water_pdb timemachine/datasets/water_exchange/bb_0_waters.pdb --ligand_sdf timemachine/datasets/water_exchange/bb_centered.sdf --ligand_charges zero --out_cif traj_0_waters.cif
     test_exchange()
