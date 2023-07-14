@@ -170,21 +170,44 @@ class ExchangeMover:
         trial_coords[chosen_water_atoms] = moved_coords
 
         delta_U_insert = self.U_fn(trial_coords, box, a_idxs, b_idxs)
-        if delta_U_insert > 200:
-            # micro-optimization, skip deletion moves if insertion work is really high
-            return coords, box
+        # If our system is in a clash free state, a deletion move has delta_Us typically
+        # on the order of 35kTs. However, if we start in a clashy state, we can no longer
+        # guarantee this. So it's safer to disable this micro-optimization for now.
+
+        # if delta_U_insert > 1000:
+        # micro-optimization, skip deletion moves if insertion work is really high
+        # return coords, box
 
         delta_U_delete = -self.U_fn(coords, box, a_idxs, b_idxs)
         delta_U_total = delta_U_delete + delta_U_insert
 
-        if delta_U_total < -200:
+        if delta_U_total < -1000:
+            np.savez(
+                "debug_overflow_" + str(self.t_count) + ".npz",
+                trial_coords=trial_coords,
+                nb_params=self.nb_params,
+                coords=coords,
+                a_idxs=a_idxs,
+                b_idxs=b_idxs,
+            )
             print("MC overflow detected", delta_U_delete, delta_U_insert)
-            assert 0
+
+        # convert to inf if we get a nan
+        if np.isnan(delta_U_total):
+            delta_U_total = np.inf
 
         p_accept = min(1, np.exp(-self.beta * delta_U_total))
 
         if np.random.rand() < p_accept:
             self.a_count += 1
+            print(
+                "accepted a move with delta_U of",
+                delta_U_total,
+                "deletion",
+                delta_U_delete,
+                "insertion",
+                delta_U_insert,
+            )
             return trial_coords, box
         else:
             return coords, box
