@@ -17,8 +17,13 @@ template <typename RealType> RealType __host__ __device__ __forceinline__ FIXED_
     return static_cast<RealType>(static_cast<long long>(v)) / FIXED_EXPONENT;
 }
 
-template <typename RealType> bool inline __device__ __host__ energy_overflowed(RealType u, int &overflow_count) {
-    if (!isfinite(u) || u > static_cast<RealType>(LLONG_MAX / static_cast<long long>(FIXED_EXPONENT))) {
+template <typename RealType> bool inline __host__ __device__ is_overflow(RealType u) {
+    return (u > static_cast<RealType>(LLONG_MAX) - 1 || u < static_cast<RealType>(LLONG_MIN) + 1);
+}
+
+template <typename RealType> bool inline __device__ __host__ energy_overflowed(RealType u_orig, int &overflow_count) {
+    RealType u = u_orig * FIXED_EXPONENT;
+    if (!isfinite(u) || is_overflow(u)) {
         overflow_count++;
         return true;
     }
