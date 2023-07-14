@@ -473,17 +473,13 @@ def local_minimize(x0, val_and_grad_fn, local_idxs, verbose=True, assert_energy_
     x_local_shape = (n_local, 3)
     u_0, _ = val_and_grad_fn(x0)
 
-    # deal with overflow, empirically obtained by testing on some real systems.
-    guard_threshold = 5e4
-
     def val_and_grad_fn_local(x_local):
         x_prime = x0.copy()
         x_prime[local_idxs] = x_local
         u_full, grad_full = val_and_grad_fn(x_prime)
         # avoid being trapped when overflows spuriously appear as large negative numbers
         # remove after resolution of https://github.com/proteneer/timemachine/issues/481
-        if u_0 - u_full > guard_threshold:
-            u_full = np.inf
+        if not np.isfinite(u_full):
             grad_full = np.nan * grad_full
         return u_full, grad_full[local_idxs]
 

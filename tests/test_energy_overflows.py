@@ -8,6 +8,14 @@ from timemachine.potentials import NonbondedAllPairs, NonbondedPairListNegated
 pytestmark = [pytest.mark.memcheck]
 
 
+def verify_energies(a, b):
+    """The energies can be nan, in which can't nan != nan, this handles that case"""
+    if np.isfinite(a) or np.isfinite(b):
+        assert a == b
+    else:
+        assert not (np.isfinite(a) or np.isfinite(b))
+
+
 @pytest.mark.parametrize("precision,rtol,atol", [(np.float64, 1e-8, 1e-8), (np.float32, 1e-4, 5e-4)])
 def test_energy_overflow_due_to_clashes(precision, rtol, atol):
     """This test validates that if two particles overlap, the Nonbonded potential will return an inf energy"""
@@ -86,12 +94,12 @@ def test_energy_overflow_cancelled_by_exclusions(precision, rtol, atol):
         bound_pot = gpu_pot.bind(params).bound_impl
         _, _, selective_energy = unbound_pot.execute_selective(x0, params, box, False, False, True)
         _, bound_energy = bound_pot.execute(x0, box)
-        assert selective_energy == bound_energy
+        verify_energies(selective_energy, bound_energy)
 
         # Check that all of the energies out of a batch are identical
         _, _, energies = unbound_pot.execute_selective_batch([x0] * 2, [params] * 2, [box] * 2, False, False, True)
         for energy in energies.reshape(-1):
-            assert selective_energy == energy
+            verify_energies(selective_energy, energy)
 
         fixed_energy, overflows = bound_pot.execute_fixed(x0, box)
 

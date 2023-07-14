@@ -65,7 +65,7 @@ void verify_coords_and_box(
 // accumlate_energies handles the combining of energies, summing them up deterministically
 // and returning +inf if there are overflows
 double accumlate_energies(int N, unsigned long long *fixed_u, int overflows) {
-    double res = INFINITY;
+    double res = NAN;
     if (overflows == 0) {
         unsigned long long accum = 0;
         for (int i = 0; i < N; i++) {
