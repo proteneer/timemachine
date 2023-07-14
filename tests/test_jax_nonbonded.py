@@ -477,3 +477,15 @@ def test_precomputation():
 
         np.testing.assert_allclose(v_ref, v_test)
         np.testing.assert_allclose(gs_ref, gs_test)
+
+
+def test_lj_not_nan():
+    distances = [0.0, 0.00000001, 0.00001, 0.001, np.inf]
+
+    def U(r):
+        return lennard_jones(jnp.array(r), 0.3, 0.1)
+
+    for r in distances:
+        nrg = U(r)
+        assert not np.isnan(nrg)
+        assert np.sign(nrg) > 0
