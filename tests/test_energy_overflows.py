@@ -3,7 +3,7 @@ import pytest
 from common import GradientTest, prepare_nb_system, prepare_water_system
 
 from timemachine.integrator import FIXED_TO_FLOAT
-from timemachine.potentials import NonbondedAllPairs, NonbondedPairListNegated
+from timemachine.potentials import Nonbonded, NonbondedAllPairs, NonbondedPairListNegated
 
 pytestmark = [pytest.mark.memcheck]
 
@@ -132,3 +132,39 @@ def test_energy_overflow_cancelled_by_exclusions(precision, rtol, atol):
 
     # The sum of the fixed point energies should be bitwise identical to the test energy
     assert FIXED_TO_FLOAT(fixed_all_pairs_energy + fixed_pair_list_energy) == test_energy
+
+
+@pytest.mark.xfail(strict=True)
+@pytest.mark.parametrize("precision", [np.float32, np.float64])
+def test_energy_overflows_with_summation_of_energies(precision):
+
+    num_atoms = 1000
+
+    # all particles evenly spaced along x-axis, in a very large box
+    spacing = 0.75
+    x = spacing * np.array([np.arange(num_atoms), np.zeros(num_atoms), np.zeros(num_atoms)]).T
+    box = np.eye(3) * 10000.0
+    assert (np.diag(box) > spacing * num_atoms).all()
+
+    nb_params = np.ones((num_atoms, 4))
+    nb_params[:, -1] = 0.0
+
+    nonbonded = Nonbonded(
+        num_atoms=num_atoms,
+        exclusion_idxs=np.array([(0, num_atoms - 1)], dtype=np.int32),
+        scale_factors=np.zeros((1, 2)),
+        beta=2.0,
+        cutoff=1.2,
+    )
+    nonbonded_gpu = nonbonded.to_gpu(precision)
+
+    # TBD: Remove the try/finally to clean up the GPU potential, else calling reset_device
+    # will fail
+    try:
+        # The reference should return a large energy value
+        assert nonbonded(x, nb_params, box) > 0.0
+
+        # The GPU potentials will overflow, resulting in a nan value
+        assert not np.isfinite(nonbonded_gpu(x, nb_params, box))
+    finally:
+        del nonbonded_gpu
