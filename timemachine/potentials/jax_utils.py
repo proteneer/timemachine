@@ -12,6 +12,10 @@ Array: TypeAlias = NDArray
 DEFAULT_CHUNK_SIZE = 200
 
 
+def nan_to_inf(x):
+    return jnp.nan_to_num(x, nan=+jnp.inf)
+
+
 def get_all_pairs_indices(n: int) -> Array:
     """all indices i, j such that i < j < n"""
     n_interactions = n * (n - 1) / 2

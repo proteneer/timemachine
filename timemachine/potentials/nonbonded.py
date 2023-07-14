@@ -12,6 +12,7 @@ from timemachine.potentials.jax_utils import (
     DEFAULT_CHUNK_SIZE,
     delta_r,
     distance_on_pairs,
+    nan_to_inf,
     pairs_from_interaction_groups,
     pairwise_distances,
     process_traj_in_chunks,
@@ -48,7 +49,8 @@ def lennard_jones(dij, sig_ij, eps_ij):
     sig6 = (sig_ij / dij) ** 6
     sig12 = sig6 ** 2
 
-    return 4 * eps_ij * (sig12 - sig6)
+    nrg = 4 * eps_ij * (sig12 - sig6)  # +inf - +inf -> nan
+    return nan_to_inf(nrg)  # nrg can be nan if dij == 0
 
 
 def direct_space_pme(dij, qij, beta):
