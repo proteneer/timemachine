@@ -10,6 +10,7 @@ import pytest
 from jax import jit
 from jax import numpy as jnp
 from jax import value_and_grad, vmap
+from jax.experimental import disable_x64, enable_x64
 from scipy.optimize import minimize
 
 from timemachine.constants import BOLTZ, DEFAULT_TEMP
@@ -24,12 +25,14 @@ from timemachine.potentials.nonbonded import (
     convert_exclusions_to_rescale_masks,
     coulomb_interaction_group_energy,
     coulomb_prefactors_on_traj,
+    direct_space_pme,
     lennard_jones,
     lj_interaction_group_energy,
     lj_prefactors_on_traj,
     nonbonded,
     nonbonded_block,
     nonbonded_on_specific_pairs,
+    nonbonded_pair,
 )
 
 Array = Any
@@ -479,19 +482,60 @@ def test_precomputation():
         np.testing.assert_allclose(gs_ref, gs_test)
 
 
-def test_lj_not_nan():
-    """check both single and double precision mode"""
-    from jax.experimental import disable_x64, enable_x64
+@pytest.mark.parametrize("distance", [0.0, 0.00000001, 0.00001, 0.001, np.inf])  # include 0
+@pytest.mark.parametrize("jax_precision_mode", [disable_x64, enable_x64])
+@pytest.mark.parametrize("potential", ["lj", "es", "combined"])
+def test_nb_pair_not_nan(distance, jax_precision_mode, potential):
+    qij = -1.0
+    sig = 0.3
+    eps = 0.1
+    beta = 2.0
+    cutoff = 1.2
 
-    distances = [0.0, 0.00000001, 0.00001, 0.001, np.inf]
+    def U_lj(r):
+        return lennard_jones(jnp.array(r), sig, eps)
 
-    def U(r):
-        return lennard_jones(jnp.array(r), 0.3, 0.1)
+    def U_es(r):
+        return direct_space_pme(jnp.array(r), qij, beta)
 
-    for r in distances:
-        with enable_x64():
-            nrg = U(r)
-            assert not np.isnan(nrg)
-        with disable_x64():
-            nrg = U(r)
-            assert not np.isnan(nrg)
+    def U_combined(r):
+        return nonbonded_pair(jnp.array(r), qij, sig, eps, beta, cutoff)
+
+    potentials = {"lj": U_lj, "es": U_es, "combined": U_combined}
+    U_fn = potentials[potential]
+
+    with jax_precision_mode():
+        nrg = U_fn(distance)
+        assert not np.isnan(nrg)
+        assert nrg > -np.inf
+
+
+@pytest.mark.parametrize("jax_precision_mode", [disable_x64, enable_x64])
+def test_nonbonded_block_zero_distance(jax_precision_mode):
+    """check case of collocated oppositely charged particles"""
+    rng = np.random.default_rng(1234)
+
+    n_particles = 50
+    xi = rng.normal(size=(n_particles, 3))
+    xj = np.array(xi)  # duplicate positions, so at least some d_ij == 0
+
+    # random parameters: (sig > 0, eps > 0, charges can be > 0 or < 0)
+    params_i = rng.normal(size=(n_particles, 3))
+    params_i[:, :2] = np.abs(params_i[:, :2])
+
+    params_j = rng.normal(size=(n_particles, 3))
+    params_j[:, :2] = np.abs(params_j[:, :2])
+
+    beta = 2.0
+    cutoff = 1.2
+
+    q_i = params_i[:, 2]
+    q_j = params_j[:, 2]
+    assert np.sign(q_i) != np.sign(q_j).any(), "failed to generate informative random test"
+
+    box = np.eye(3) * 5
+
+    with jax_precision_mode():
+        U = nonbonded_block(xi, xj, box, params_i, params_j, beta, cutoff)
+        assert not np.isnan(U)
+        assert U > -np.inf

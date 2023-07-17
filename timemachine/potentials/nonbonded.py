@@ -62,6 +62,16 @@ def direct_space_pme(dij, qij, beta):
     return qij * erfc(beta * dij) / dij
 
 
+def nonbonded_pair(d_ij, q_ij, sig_ij, eps_ij, beta, cutoff):
+    """Compute LJ + direct-space PME, with a distance cutoff."""
+    lj = lennard_jones(d_ij, sig_ij, eps_ij)
+    es = direct_space_pme(d_ij, q_ij, beta)
+    nrg = lj + es
+    nrg_cutoff = jnp.where(d_ij < cutoff, nrg, 0.0)
+    nrg_nansafe = nan_to_inf(nrg_cutoff)  # for case of oppositely charged particles at 0 distance: inf - inf
+    return nrg_nansafe
+
+
 def nonbonded_block(xi, xj, box, params_i, params_j, beta, cutoff):
     """
     This is a modified version of `nonbonded` that computes a block of
@@ -81,6 +91,8 @@ def nonbonded_block(xi, xj, box, params_i, params_j, beta, cutoff):
         Coordinates
     box : Optional 3x3 np.ndarray
         Periodic boundary conditions
+    params_i, params_j : (N,at_least(3)) np.ndarray
+        (charge, sig, eps) parameters per particle
     beta : float
         the charge product q_ij will be multiplied by erfc(beta*d_ij)
     cutoff : Optional float
@@ -110,10 +122,8 @@ def nonbonded_block(xi, xj, box, params_i, params_j, beta, cutoff):
 
     qij = jnp.multiply(qi, qj)
 
-    es = direct_space_pme(dij, qij, beta)
-    lj = lennard_jones(dij, sig_ij, eps_ij)
+    nrg = nonbonded_pair(dij, qij, sig_ij, eps_ij, beta, cutoff)
 
-    nrg = jnp.where(dij < cutoff, es + lj, 0)
     return jnp.sum(nrg)
 
 
@@ -295,9 +305,9 @@ def nonbonded(
     if cutoff is not None:
         eij_charge = jnp.where(dij < cutoff, eij_charge, 0)
 
-    eij_total = eij_lj * lj_rescale_mask + eij_charge * charge_rescale_mask
+    eij_total = nan_to_inf(eij_lj * lj_rescale_mask + eij_charge * charge_rescale_mask)
 
-    return jnp.sum(eij_total / 2)
+    return nan_to_inf(jnp.sum(eij_total / 2))
 
 
 def nonbonded_on_specific_pairs(
