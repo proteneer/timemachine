@@ -5,6 +5,10 @@
 
 namespace timemachine {
 
+// Nonbonded Pair List that computes the interaction energies between pairs of atoms.
+// The negated version of this potential should be used in conjunction with a NonbondedAllPairs and/or
+// NonbondedInteractionGroup as a way to compute the exclusions and cancel them out from the other potentials
+// To ensure valid energies and du_dp values, combine the potentials using a FanoutSummedPotential
 template <typename RealType, bool Negated> class NonbondedPairList : public Potential {
 
 private:
