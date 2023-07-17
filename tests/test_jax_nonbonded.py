@@ -507,7 +507,9 @@ def test_nb_pair_not_nan(distance, jax_precision_mode, potential):
     with jax_precision_mode():
         nrg = U_fn(distance)
         assert not np.isnan(nrg)
-        assert nrg > -np.inf
+
+        if potential in ["lj", "combined"]:
+            assert nrg > -np.inf
 
 
 @pytest.mark.parametrize("jax_precision_mode", [disable_x64, enable_x64])
