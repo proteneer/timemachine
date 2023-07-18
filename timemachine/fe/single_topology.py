@@ -3,6 +3,7 @@ from collections.abc import Iterable
 from functools import partial
 from typing import Callable, Collection, Dict, FrozenSet, List, Optional, Tuple, TypeVar, Union, cast
 
+import jax
 import jax.numpy as jnp
 import networkx as nx
 import numpy as np
@@ -1149,7 +1150,7 @@ class SingleTopology(AtomMapMixin):
 
         return system.VacuumSystem(bond, angle, torsion, nonbonded, chiral_atom, chiral_bond)
 
-    def _get_guest_params(self, q_handle, lj_handle, lamb: float, cutoff: float) -> NDArray:
+    def _get_guest_params(self, q_handle, lj_handle, lamb: float, cutoff: float) -> jax.Array:
         """
         Return an array containing the guest_charges, guest_sigmas, guest_epsilons, guest_w_coords
         for the guest at a given lambda.
@@ -1265,7 +1266,7 @@ class SingleTopology(AtomMapMixin):
 
         return bound_sum_pot
 
-    def combine_with_host(self, host_system: VacuumSystem, lamb: float, num_water_atoms: int):
+    def combine_with_host(self, host_system: VacuumSystem, lamb: float, num_water_atoms: int) -> HostGuestSystem:
         """
         Setup host guest system. Bonds, angles, torsions, chiral_atom, chiral_bond and nonbonded terms are
         combined. In particular:
