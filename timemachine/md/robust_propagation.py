@@ -4,39 +4,38 @@
 
 from functools import partial
 
-import numpy as np
 from jax import grad
 
 from timemachine.constants import BOLTZ, DEFAULT_TEMP
 from timemachine.md.barker import BarkerProposal
 from timemachine.md.states import CoordsVelBox
-from timemachine.potentials import SummedPotential
 
 # from timemachine.md.thermostat.utils import sample_velocities
 
 
 class RobustPropagator:
     def __init__(
-        self, ctxt, potentials, n_barker_steps=100, barker_stepsize_nm=0.001, n_md_steps=1000, temperature=DEFAULT_TEMP
+        self, ctxt, U_fxn, n_barker_steps=100, barker_stepsize_nm=0.001, n_md_steps=1000, temperature=DEFAULT_TEMP
     ):
         """Propagate using a sequence of two approximate MCMC moves --
         the first is robust (Barker -- unlikely to blow up even if initialized with clashes / high force magnitude),
         the second is less robust but more accurate and efficient (inertial Langevin)
         """
         self.ctxt = ctxt
-        self.potentials = potentials
+        self.U_fxn = U_fxn  # U_fxn(conf, box) -> energy, -grad(U_fxn)(conf, box) -> forces
         self.n_barker_steps = n_barker_steps
         self.barker_stepsize_nm = barker_stepsize_nm
         self.n_md_steps = n_md_steps
 
-        summed_potential = SummedPotential(potentials, [p.params for p in potentials])
-        flat_params = np.hstack([np.array(p.params).flatten() for p in potentials])
-        summed_potential_impl = summed_potential.bind(flat_params).to_gpu(np.float32)
-
         kBT = BOLTZ * temperature  # TODO: read temperature, masses from ctxt.integrator?
 
+        def log_q(x, box):
+            return -U_fxn(x, box) / kBT
+
+        self.log_q = log_q
+
         def grad_log_q(x, box):
-            return -grad(summed_potential_impl)(x, box) / kBT
+            return -grad(log_q)(x, box)
 
         self.grad_log_q = grad_log_q
 
