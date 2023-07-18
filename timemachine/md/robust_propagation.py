@@ -35,7 +35,7 @@ class RobustPropagator:
         self.log_q = log_q
         self.grad_log_q = grad(log_q)
 
-    def propagate(self, xvb: CoordsVelBox) -> CoordsVelBox:  # TODO: modify signature to accept lam?
+    def move(self, xvb: CoordsVelBox) -> CoordsVelBox:  # TODO: modify signature to accept lam?
         x, v, box = xvb.coords, xvb.velocities, xvb.box
         barker = BarkerProposal(partial(self.grad_log_q, box=box), self.barker_stepsize_nm)
 
