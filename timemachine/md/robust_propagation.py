@@ -33,11 +33,7 @@ class RobustPropagator:
             return -U_fxn(x, box) / kBT
 
         self.log_q = log_q
-
-        def grad_log_q(x, box):
-            return -grad(log_q)(x, box)
-
-        self.grad_log_q = grad_log_q
+        self.grad_log_q = grad(log_q)
 
     def propagate(self, xvb: CoordsVelBox) -> CoordsVelBox:  # TODO: modify signature to accept lam?
         x, v, box = xvb.coords, xvb.velocities, xvb.box
