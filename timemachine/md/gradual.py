@@ -95,7 +95,7 @@ class PathwiseMH:
         favorability = self.target.logpdf_difference(y, x)
         irreversibility = self.path_proposal.logpdf(path) - self.rev_path_proposal.logpdf(path[-1])
 
-        log_accept_prob = np.min(0.0, favorability - irreversibility)
+        log_accept_prob = np.minimum(0.0, favorability - irreversibility)
         accept_prob = np.exp(log_accept_prob)
         accepted = np.random.rand() < accept_prob
 
@@ -139,7 +139,7 @@ class ReversibleNCMCMove:
         for (diff, prop) in zip(self.logpdf_difference_fxns, self.propagators):
             incremental_logpdf_diffs.append(diff(proposal_traj[-1]))
             proposal_traj.append(prop.move(proposal_traj[-1]))
-        log_accept_prob = np.min(0.0, np.sum(incremental_logpdf_diffs))
+        log_accept_prob = np.minimum(0.0, np.sum(incremental_logpdf_diffs))
         accept_prob = np.exp(log_accept_prob)
         accepted = np.random.rand() < accept_prob
 
