@@ -14,8 +14,7 @@ void StreamedPotentialRunner::execute_potentials(
     const double *d_box, // [3 * 3]
     unsigned long long *d_du_dx,
     unsigned long long *d_du_dp,
-    unsigned long long *d_u, // [bps.size()]
-    int *d_u_overflow_count, // [1]
+    __int128 *d_u, // [bps.size()]
     cudaStream_t stream) {
     for (int i = 0; i < bps.size(); i++) {
         // Always sync the new streams with the incoming stream to ensure that the state
@@ -24,14 +23,7 @@ void StreamedPotentialRunner::execute_potentials(
     }
     for (int i = 0; i < bps.size(); i++) {
         bps[i]->execute_device(
-            N,
-            d_x,
-            d_box,
-            d_du_dx,
-            d_du_dp,
-            d_u == nullptr ? nullptr : d_u + i,
-            d_u_overflow_count,
-            manager_.get_stream(i));
+            N, d_x, d_box, d_du_dx, d_du_dp, d_u == nullptr ? nullptr : d_u + i, manager_.get_stream(i));
         manager_.sync_to(i, stream);
     }
 };

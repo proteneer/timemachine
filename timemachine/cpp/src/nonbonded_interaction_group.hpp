@@ -30,11 +30,11 @@ private:
     Neighborlist<RealType> nblist_;
 
     const double nblist_padding_;
-    unsigned long long *d_u_buffer_; // [NONBONDED_KERNEL_BLOCKS]
-    double *d_nblist_x_;             // coords which were used to compute the nblist
-    double *d_nblist_box_;           // box which was used to rebuild the nblist
-    int *d_rebuild_nblist_;          // whether or not we have to rebuild the nblist
-    int *p_rebuild_nblist_;          // pinned
+    __int128 *d_u_buffer_;  // [NONBONDED_KERNEL_BLOCKS]
+    double *d_nblist_x_;    // coords which were used to compute the nblist
+    double *d_nblist_box_;  // box which was used to rebuild the nblist
+    int *d_rebuild_nblist_; // whether or not we have to rebuild the nblist
+    int *p_rebuild_nblist_; // pinned
     double *p_box_;
 
     unsigned int *d_perm_; // hilbert curve permutation
@@ -105,8 +105,7 @@ public:
         const double *d_box,
         unsigned long long *d_du_dx,
         unsigned long long *d_du_dp,
-        unsigned long long *d_u,
-        int *d_u_overflow_count,
+        __int128 *d_u,
         cudaStream_t stream) override;
 
     void du_dp_fixed_to_float(const int N, const int P, const unsigned long long *du_dp, double *du_dp_float) override;

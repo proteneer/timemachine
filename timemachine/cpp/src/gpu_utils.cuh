@@ -87,6 +87,6 @@ double __device__ __forceinline__ radd_rn(double a, double b) { return __dadd_rn
 
 void __global__ k_accumulate_energy(
     int N,
-    const unsigned long long *__restrict__ input_buffer, // [N]
-    unsigned long long *__restrict u_buffer              // [1]
+    const __int128 *__restrict__ input_buffer, // [N]
+    __int128 *__restrict u_buffer              // [1]
 );

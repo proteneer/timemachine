@@ -17,7 +17,7 @@ void __global__ k_log_flat_bottom_bond(
     const double beta,
     unsigned long long *__restrict__ du_dx,
     unsigned long long *__restrict__ du_dp,
-    unsigned long long *__restrict__ u) {
+    __int128 *__restrict__ u) {
 
     // which bond
     const auto b_idx = blockDim.x * blockIdx.x + threadIdx.x;
@@ -63,7 +63,7 @@ void __global__ k_log_flat_bottom_bond(
         // RealType u_real = -log(1 - exp(-beta * nrg)) / beta;
         RealType u_real = -stable_log_1_exp_neg(beta * nrg) / beta;
         // Store energy in buffer
-        u[b_idx] = FLOAT_TO_FIXED_BONDED<RealType>(u_real);
+        u[b_idx] = FLOAT_TO_FIXED_ENERGY<RealType>(u_real);
     }
 
     RealType prefactor = -exp(-beta * nrg) / (1 - exp(-beta * nrg));

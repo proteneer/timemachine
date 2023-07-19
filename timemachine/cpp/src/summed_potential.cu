@@ -30,8 +30,7 @@ void SummedPotential::execute_device(
     const double *d_box,
     unsigned long long *d_du_dx,
     unsigned long long *d_du_dp,
-    unsigned long long *d_u,
-    int *d_u_overflow_count,
+    __int128 *d_u,
     cudaStream_t stream) {
 
     if (P != P_) {
@@ -65,7 +64,6 @@ void SummedPotential::execute_device(
             d_du_dx,
             d_du_dp == nullptr ? nullptr : d_du_dp + offset,
             d_u == nullptr ? nullptr : d_u_buffer_.data + i,
-            d_u_overflow_count,
             pot_stream);
 
         offset += params_sizes_[i];

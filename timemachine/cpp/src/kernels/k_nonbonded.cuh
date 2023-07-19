@@ -124,8 +124,7 @@ void __device__ v_nonbonded_unified(
     const double *__restrict__ coords, // [N * 3]
     const double *__restrict__ params, // [N * 4]
     box_cache<RealType> &shared_box,
-    unsigned long long *energy_buffer, // [blockDim.x]
-    int *overflow_buffer,              // [blockDim.x]
+    __int128 *energy_buffer, // [blockDim.x]
     const double beta,
     const double cutoff,
     const unsigned int *__restrict__ row_idxs,
@@ -276,10 +275,7 @@ void __device__ v_nonbonded_unified(
 
             if (COMPUTE_U) {
                 // If the energy is overflowed, don't bother adding it to the buffer
-                if (!energy_overflowed<RealType>(u, overflow_buffer[threadIdx.x])) {
-                    // Accumulate energies into a shared memory buffer, accumulation into the energy buffer done in k_nonbonded_unified
-                    energy_buffer[threadIdx.x] += FLOAT_TO_FIXED_NONBONDED(u);
-                }
+                energy_buffer[threadIdx.x] += FLOAT_TO_FIXED_ENERGY<RealType>(u);
             }
         }
 
@@ -355,14 +351,12 @@ void __global__ k_nonbonded_unified(
     const unsigned int *__restrict__ ixn_atoms,
     unsigned long long *__restrict__ du_dx,
     unsigned long long *__restrict__ du_dp,
-    unsigned long long *__restrict__ u_buffer, // [blockDim.x]
-    int *__restrict__ u_overflow_count) {
+    __int128 *__restrict__ u_buffer // [blockDim.x]
+) {
     __shared__ box_cache<RealType> shared_box;
-    __shared__ unsigned long long block_energy_buffer[THREADS];
-    __shared__ int block_overflows[THREADS];
+    __shared__ __int128 block_energy_buffer[THREADS];
     if (COMPUTE_U) {
         block_energy_buffer[threadIdx.x] = 0; // Zero out the energy buffer
-        block_overflows[threadIdx.x] = 0;
     }
     if (threadIdx.x == 0) {
         shared_box.x = box[0 * 3 + 0];
@@ -408,7 +402,6 @@ void __global__ k_nonbonded_unified(
                 params,
                 shared_box,
                 block_energy_buffer,
-                block_overflows,
                 beta,
                 cutoff,
                 row_idxs,
@@ -425,7 +418,6 @@ void __global__ k_nonbonded_unified(
                 params,
                 shared_box,
                 block_energy_buffer,
-                block_overflows,
                 beta,
                 cutoff,
                 row_idxs,
@@ -440,13 +432,10 @@ void __global__ k_nonbonded_unified(
         // Sync to ensure the shared buffers are populated
         __syncthreads();
         if (threadIdx.x == 0) {
-            unsigned long long accumulated_energy = 0;
-            int overflows = 0;
+            __int128 accumulated_energy = 0;
             for (int i = 0; i < THREADS; i++) {
                 accumulated_energy += block_energy_buffer[i];
-                overflows += block_overflows[i];
             }
-            atomicAdd(u_overflow_count, overflows);
             u_buffer[blockIdx.x] = accumulated_energy;
         }
     }

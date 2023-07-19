@@ -68,7 +68,7 @@ void __global__ k_flat_bottom_bond(
     const int *__restrict__ bond_idxs, // [B, 2]
     unsigned long long *__restrict__ du_dx,
     unsigned long long *__restrict__ du_dp,
-    unsigned long long *__restrict__ u) {
+    __int128 *__restrict__ u) {
 
     // which bond
     const auto b_idx = blockDim.x * blockIdx.x + threadIdx.x;
@@ -111,7 +111,7 @@ void __global__ k_flat_bottom_bond(
         RealType u_real = compute_flat_bottom_energy<RealType>(k, r, rmin, rmax);
 
         // Set idx to force
-        u[b_idx] = FLOAT_TO_FIXED_BONDED<RealType>(u_real);
+        u[b_idx] = FLOAT_TO_FIXED_ENERGY<RealType>(u_real);
     }
 
     if (du_dp) {

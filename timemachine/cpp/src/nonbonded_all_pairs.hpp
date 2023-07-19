@@ -29,7 +29,7 @@ private:
     const double nblist_padding_;
     double *d_nblist_x_;   // coords which were used to compute the nblist
     double *d_nblist_box_; // box which was used to rebuild the nblist
-    unsigned long long *d_u_buffer_;
+    __int128 *d_u_buffer_;
     int *d_rebuild_nblist_; // whether or not we have to rebuild the nblist
     int *p_rebuild_nblist_; // pinned
 
@@ -85,8 +85,7 @@ public:
         const double *d_box,
         unsigned long long *d_du_dx,
         unsigned long long *d_du_dp,
-        unsigned long long *d_u,
-        int *d_u_overflow_count,
+        __int128 *d_u,
         cudaStream_t stream) override;
 
     double get_cutoff() const { return cutoff_; };

@@ -59,8 +59,7 @@ void NonbondedPairList<RealType, Negated>::execute_device(
     const double *d_box,
     unsigned long long *d_du_dx,
     unsigned long long *d_du_dp,
-    unsigned long long *d_u,
-    int *d_u_overflow_count,
+    __int128 *d_u,
     cudaStream_t stream) {
 
     if (M_ > 0) {
@@ -78,8 +77,7 @@ void NonbondedPairList<RealType, Negated>::execute_device(
             cutoff_,
             d_du_dx,
             d_du_dp,
-            d_u == nullptr ? nullptr : d_u_buffer_,
-            d_u_overflow_count);
+            d_u == nullptr ? nullptr : d_u_buffer_);
 
         gpuErrchk(cudaPeekAtLastError());
 

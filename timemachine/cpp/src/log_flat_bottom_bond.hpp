@@ -9,7 +9,7 @@ template <typename RealType> class LogFlatBottomBond : public Potential {
 
 private:
     int *d_bond_idxs_;
-    unsigned long long *d_u_buffer_;
+    __int128 *d_u_buffer_;
 
     int B_;
     double beta_;
@@ -31,8 +31,7 @@ public:
         const double *d_box,
         unsigned long long *d_du_dx,
         unsigned long long *d_du_dp,
-        unsigned long long *d_u,
-        int *d_u_overflow_count,
+        __int128 *d_u,
         cudaStream_t stream) override;
 };
 

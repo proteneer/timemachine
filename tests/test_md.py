@@ -789,7 +789,7 @@ def test_setup_context_with_references():
     seed = 2022
     pressure = constants.DEFAULT_PRESSURE
 
-    unbound_potentials, sys_params, masses, coords, box = get_solvent_phase_system(mol, ff, 0.0, minimize_energy=False)
+    unbound_potentials, sys_params, masses, coords, box = get_solvent_phase_system(mol, ff, 1.0, minimize_energy=False)
     v0 = np.zeros_like(coords)
 
     def build_context(barostat_interval):

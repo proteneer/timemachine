@@ -25,8 +25,7 @@ void __global__ k_nonbonded_pair_list(
     const double cutoff,
     unsigned long long *__restrict__ du_dx,
     unsigned long long *__restrict__ du_dp,
-    unsigned long long *__restrict__ u_buffer,
-    int *__restrict__ u_overflow_count) {
+    __int128 *__restrict__ u_buffer) {
 
     // (ytz): oddly enough the order of atom_i and atom_j
     // seem to not matter. I think this is because distance calculations
@@ -186,12 +185,6 @@ void __global__ k_nonbonded_pair_list(
     // Always accumulate into the energy buffers even if there is no interaction to ensure
     // buffer is zeroed out, avoids having to memset every call
     if (u_buffer) {
-        int overflow_count = 0;
-        if (!energy_overflowed<RealType>(u, overflow_count)) {
-            u_buffer[pair_idx] = Negated ? -FLOAT_TO_FIXED_NONBONDED(u) : FLOAT_TO_FIXED_NONBONDED(u);
-        } else {
-            u_buffer[pair_idx] = static_cast<unsigned long long>(0);
-        }
-        atomicAdd(u_overflow_count, Negated ? -overflow_count : overflow_count);
+        u_buffer[pair_idx] = Negated ? -FLOAT_TO_FIXED_ENERGY<RealType>(u) : FLOAT_TO_FIXED_ENERGY<RealType>(u);
     }
 }

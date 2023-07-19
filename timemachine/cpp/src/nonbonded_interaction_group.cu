@@ -199,8 +199,7 @@ void NonbondedInteractionGroup<RealType>::execute_device(
     const double *d_box, // 3 * 3
     unsigned long long *d_du_dx,
     unsigned long long *d_du_dp,
-    unsigned long long *d_u,
-    int *d_u_overflow_count,
+    __int128 *d_u,
     cudaStream_t stream) {
 
     // (ytz) the nonbonded algorithm proceeds as follows:
@@ -300,8 +299,8 @@ void NonbondedInteractionGroup<RealType>::execute_device(
         nblist_.get_ixn_atoms(),
         d_sorted_du_dx_,
         d_sorted_du_dp_,
-        d_u == nullptr ? nullptr : d_u_buffer_, // switch to nullptr if we don't request energies
-        d_u_overflow_count);
+        d_u == nullptr ? nullptr : d_u_buffer_ // switch to nullptr if we don't request energies
+    );
 
     gpuErrchk(cudaPeekAtLastError());
 

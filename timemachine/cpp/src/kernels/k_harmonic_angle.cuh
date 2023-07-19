@@ -9,7 +9,7 @@ void __global__ k_harmonic_angle(
     const int *__restrict__ angle_idxs, // [A, 3]
     unsigned long long *__restrict__ du_dx,
     unsigned long long *__restrict__ du_dp,
-    unsigned long long *__restrict__ u) {
+    __int128 *__restrict__ u) {
 
     const auto a_idx = blockDim.x * blockIdx.x + threadIdx.x;
 
@@ -77,6 +77,6 @@ void __global__ k_harmonic_angle(
     }
 
     if (u) {
-        u[a_idx] = FLOAT_TO_FIXED_BONDED(ka / 2 * delta * delta);
+        u[a_idx] = FLOAT_TO_FIXED_ENERGY<RealType>(ka / 2 * delta * delta);
     }
 }

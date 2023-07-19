@@ -67,3 +67,17 @@ template <typename RealType> unsigned long long __device__ __forceinline__ FLOAT
 template <typename RealType> unsigned long long __device__ __forceinline__ FLOAT_TO_FIXED_BONDED(RealType v) {
     return static_cast<unsigned long long>(real_to_int64(v * FIXED_EXPONENT));
 }
+
+// FLOAT_TO_FIXED_ENERGY converts floating point energies into fixed point. For infinite values or values beyond LLONG_MAX/LLONG_MIN
+// the value will be capped. This is accumulated into __int128 which handles the over and underflows, allowing us to be able to account
+// for overflows triggered by the summation of energies.
+template <typename RealType> __int128 __device__ __forceinline__ FLOAT_TO_FIXED_ENERGY(RealType u_orig) {
+    RealType u = u_orig * FIXED_EXPONENT;
+    if (!isfinite(u) || static_cast<__int128>(u) >= static_cast<__int128>(LLONG_MAX)) {
+        return static_cast<__int128>(LLONG_MAX);
+    } else if (static_cast<__int128>(u) <= static_cast<__int128>(LLONG_MIN)) {
+        return static_cast<__int128>(LLONG_MIN);
+    } else {
+        return static_cast<__int128>(real_to_int64(u));
+    }
+}

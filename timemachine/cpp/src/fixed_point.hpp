@@ -17,16 +17,16 @@ template <typename RealType> RealType __host__ __device__ __forceinline__ FIXED_
     return static_cast<RealType>(static_cast<long long>(v)) / FIXED_EXPONENT;
 }
 
-template <typename RealType> bool inline __device__ is_overflow(RealType u) {
-    return u > nextafter(static_cast<RealType>(LLONG_MAX), static_cast<RealType>(0.0)) ||
-           u < nextafter(static_cast<RealType>(LLONG_MIN), static_cast<RealType>(0.0));
+// FIXED_ENERGY_TO_FLOAT should be paired with a `fixed_point_overflow` as if it is beyond the long long representation
+// the value returned will be meaningless
+template <typename RealType> RealType __host__ __device__ __forceinline__ FIXED_ENERGY_TO_FLOAT(__int128 v) {
+    return static_cast<RealType>(static_cast<long long>(v)) / FIXED_EXPONENT;
 }
 
-template <typename RealType> bool inline __device__ energy_overflowed(RealType u_orig, int &overflow_count) {
-    RealType u = u_orig * FIXED_EXPONENT;
-    if (!isfinite(u) || is_overflow(u)) {
-        overflow_count++;
-        return true;
-    }
-    return false;
+// fixed_point_overflow detects if a __int128 fixed point representation is 'overflowed'
+// which means is outside of the long long range of representation.
+bool __host__ __device__ __forceinline__ fixed_point_overflow(__int128 val) {
+    __int128 max = LLONG_MAX;
+    __int128 min = LLONG_MIN;
+    return val >= max || val <= min;
 }

@@ -13,15 +13,16 @@ templateCurandNormal(curandGenerator_t generator, double *outputPtr, size_t n, d
 
 void __global__ k_accumulate_energy(
     int N,
-    const unsigned long long *__restrict__ input_buffer, // [N]
-    unsigned long long *__restrict u_buffer              // [1]
+    const __int128 *__restrict__ input_buffer, // [N]
+    __int128 *__restrict u_buffer              // [1]
 ) {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
-    if (idx >= N) {
+    // Should only have 1 idx, could have a warp that does a parallel reduce in the future
+    if (idx >= 1) {
         return;
     }
     // Read out the value from the u_buffer
-    unsigned long long accum = 0;
+    __int128 accum = 0;
     while (idx < N) {
         accum += input_buffer[idx];
         idx += blockDim.x * gridDim.x;

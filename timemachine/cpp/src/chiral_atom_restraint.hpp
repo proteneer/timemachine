@@ -9,7 +9,7 @@ template <typename RealType> class ChiralAtomRestraint : public Potential {
 
 private:
     int *d_idxs_;
-    unsigned long long *d_u_buffer_;
+    __int128 *d_u_buffer_;
 
     const int R_;
 
@@ -27,8 +27,7 @@ public:
         const double *d_box,
         unsigned long long *d_du_dx, // buffered
         unsigned long long *d_du_dp,
-        unsigned long long *d_u, // buffered
-        int *d_u_overflow_count,
+        __int128 *d_u,
         cudaStream_t stream) override;
 };
 
