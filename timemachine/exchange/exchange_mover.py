@@ -5,6 +5,7 @@
 
 import argparse
 import os
+from typing import Tuple
 
 import jax
 import jax.numpy as jnp
@@ -21,9 +22,11 @@ from timemachine.fe.topology import BaseTopology
 from timemachine.fe.utils import get_romol_conf
 from timemachine.ff import Forcefield
 from timemachine.ff.handlers.nonbonded import PrecomputedChargeHandler
-from timemachine.lib import LangevinIntegrator, MonteCarloBarostat, custom_ops
+from timemachine.lib import LangevinIntegrator, MonteCarloBarostat
+from timemachine.md import moves
 from timemachine.md.barostat.utils import get_bond_list, get_group_indices
 from timemachine.md.builders import strip_units
+from timemachine.md.states import CoordsVelBox
 from timemachine.potentials import nonbonded
 
 # uncomment if we want to re-enable minimization
@@ -125,7 +128,7 @@ def get_initial_state(water_pdb, mol, ff, seed, nb_cutoff):
     return initial_state, num_water_mols, solvent_topology
 
 
-class ExchangeMover:
+class ExchangeMove(moves.MonteCarloMove):
     def __init__(self, nb_params, nb_beta, nb_cutoff, water_idxs):
         self.nb_beta = nb_beta
         self.nb_cutoff = nb_cutoff
@@ -148,8 +151,9 @@ class ExchangeMover:
 
         self.U_fn = U_fn
 
-    def exchange_move(self, coords, box):
-        self.t_count += 1
+    def propose(self, x: CoordsVelBox) -> Tuple[CoordsVelBox, float]:
+        coords = x.coords
+        box = x.box
         n_atoms = len(coords)
         chosen_water = np.random.randint(self.num_waters)
         chosen_water_atoms = self.water_idxs[chosen_water]
@@ -173,68 +177,18 @@ class ExchangeMover:
         # If our system is in a clash free state, a deletion move has delta_Us typically
         # on the order of 35kTs. However, if we start in a clashy state, we can no longer
         # guarantee this. So it's safer to disable this micro-optimization for now.
-
-        # if delta_U_insert > 1000:
-        # micro-optimization, skip deletion moves if insertion work is really high
-        # return coords, box
-
         delta_U_delete = -self.U_fn(coords, box, a_idxs, b_idxs)
         delta_U_total = delta_U_delete + delta_U_insert
-
-        if delta_U_total < -1000:
-            np.savez(
-                "debug_overflow_" + str(self.t_count) + ".npz",
-                trial_coords=trial_coords,
-                nb_params=self.nb_params,
-                coords=coords,
-                a_idxs=a_idxs,
-                b_idxs=b_idxs,
-            )
-            print("MC overflow detected", delta_U_delete, delta_U_insert)
 
         # convert to inf if we get a nan
         if np.isnan(delta_U_total):
             delta_U_total = np.inf
 
-        p_accept = min(1, np.exp(-self.beta * delta_U_total))
+        log_p_accept = min(0, -self.beta * delta_U_total)
+        # print(-self.beta * delta_U_total, log_p_accept, np.exp(log_p_accept))
+        new_state = CoordsVelBox(trial_coords, x.velocities, x.box)
 
-        if np.random.rand() < p_accept:
-            self.a_count += 1
-            print(
-                "accepted a move with delta_U of",
-                delta_U_total,
-                "deletion",
-                delta_U_delete,
-                "insertion",
-                delta_U_insert,
-            )
-            return trial_coords, box
-        else:
-            return coords, box
-
-
-def propagate(ctxt, xi, vi, boxi, nsteps):
-    ctxt.set_x_t(xi)
-    ctxt.set_v_t(vi)
-    ctxt.set_box(boxi)
-    ctxt.multiple_steps_U(nsteps, 0, 0)
-    return ctxt.get_x_t(), ctxt.get_v_t(), ctxt.get_box()
-
-
-def initialize_ctxt(initial_state):
-    intg_impl = initial_state.integrator.impl()
-    bp_impls = [p.to_gpu(np.float32).bound_impl for p in initial_state.potentials]
-    baro_impl = initial_state.barostat.impl(bp_impls)
-
-    ctxt = custom_ops.Context(
-        initial_state.x0,
-        initial_state.v0,
-        initial_state.box0,
-        intg_impl,
-        bp_impls,
-        baro_impl,
-    )
-    return ctxt
+        return new_state, log_p_accept
 
 
 def compute_density(n_waters, box):
@@ -285,6 +239,11 @@ def setup_forcefield(charges):
     )
 
 
+def image_xvb(initial_state, xvb_t):
+    new_coords = image_frames(initial_state, [xvb_t.coords], [xvb_t.box])[0]
+    return CoordsVelBox(new_coords, xvb_t.velocities, xvb_t.box)
+
+
 def test_exchange():
     parser = argparse.ArgumentParser(description="Test the exchange protocol in a box of water.")
     parser.add_argument("--water_pdb", type=str, help="Location of the water PDB", required=True)
@@ -317,7 +276,7 @@ def test_exchange():
 
     nb_cutoff = 1.2  # this has to be 1.2 since the builders hard code this in (should fix later)
     initial_state, nwm, topology = get_initial_state(args.water_pdb, mol, ff, seed, nb_cutoff)
-    ctxt = initialize_ctxt(initial_state)
+    # ctxt = initialize_ctxt(initial_state)
 
     # set up water indices, assumes that waters are placed at the front of the coordinates.
     water_idxs = []
@@ -335,7 +294,7 @@ def test_exchange():
     print("number of water atoms", nwm * 3, "number of ligand atoms", mol.GetNumAtoms())
     print("ligand_water parameters", nb_ligand_water_params)
 
-    mover = ExchangeMover(nb_ligand_water_params, nb_beta, nb_cutoff, water_idxs)
+    exc_mover = ExchangeMove(nb_ligand_water_params, nb_beta, nb_cutoff, water_idxs)
     cur_box = initial_state.box0
     cur_x_t = initial_state.x0
     cur_v_t = np.zeros_like(cur_x_t)
@@ -345,35 +304,53 @@ def test_exchange():
     cur_x_t = image_frames(initial_state, [cur_x_t], [cur_box])[0]
     writer.write_frame(cur_x_t * 10)
 
-    # equilibration
-    print("Equilibrating the system...", end="", flush=True)
-    cur_x_t, cur_v_t, cur_box = propagate(ctxt, cur_x_t, cur_v_t, cur_box, 50000)
-    print("Done")
+    npt_mover = moves.NPTMove(
+        bps=initial_state.potentials,
+        masses=initial_state.integrator.masses,
+        temperature=initial_state.integrator.temperature,
+        pressure=initial_state.barostat.pressure,
+        n_steps=None,
+        seed=seed,
+        dt=initial_state.integrator.dt,
+        friction=initial_state.integrator.friction,
+        barostat_interval=initial_state.barostat.interval,
+    )
 
+    # equilibration
+    print("Equilibrating the system... ", end="", flush=True)
+
+    equilibration_steps = 50000
+
+    # equilibrate using the npt mover
+    npt_mover.n_steps = equilibration_steps
+    xvb_t = CoordsVelBox(cur_x_t, cur_v_t, cur_box)
+    xvb_t = npt_mover.move(xvb_t)
+    print("done")
+    md_steps_per_batch = 2000
+    npt_mover.n_steps = md_steps_per_batch
     # TBD: cache the minimized and equilibrated initial structure later on to iterate faster.
 
-    cur_x_t = image_frames(initial_state, [cur_x_t], [cur_box])[0]
-    writer.write_frame(cur_x_t * 10)
+    xvb_t = image_xvb(initial_state, xvb_t)
 
-    md_steps_per_batch = 2000
     for idx in range(100000):
-        density = compute_density(nwm, cur_box)
-        cur_x_t = image_frames(initial_state, [cur_x_t], [cur_box])[0]
-        occ = compute_occupancy(cur_x_t, cur_box, initial_state.ligand_idxs, threshold=0.46)
+        density = compute_density(nwm, xvb_t.box)
+
+        xvb_t = image_xvb(initial_state, xvb_t)
+        occ = compute_occupancy(xvb_t.coords, xvb_t.box, initial_state.ligand_idxs, threshold=0.46)
 
         print(
-            f"{mover.a_count} / {mover.t_count} | density {density} | # of waters in bb {occ // 3} | md step: {idx * md_steps_per_batch}"
+            f"{exc_mover.n_accepted} / {exc_mover.n_proposed} | density {density} | # of waters in bb {occ // 3} | md step: {idx * md_steps_per_batch}"
         )
-        if idx % 10 == 0:
-            writer.write_frame(cur_x_t * 10)
+        if idx % 1 == 0:
+            writer.write_frame(xvb_t.coords * 10)
 
         # run MC
         for _ in range(5000):
-            assert np.amax(np.abs(cur_x_t)) < 1e3
-            cur_x_t, cur_box = mover.exchange_move(cur_x_t, cur_box)
+            assert np.amax(np.abs(xvb_t.coords)) < 1e3
+            xvb_t = exc_mover.move(xvb_t)
 
         # run MD
-        cur_x_t, cur_v_t, cur_box = propagate(ctxt, cur_x_t, cur_v_t, cur_box, md_steps_per_batch)
+        xvb_t = npt_mover.move(xvb_t)
 
 
 if __name__ == "__main__":
