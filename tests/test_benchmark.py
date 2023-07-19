@@ -5,11 +5,9 @@ relative binding free energy edge from the HIF2A test system"""
 import time
 from argparse import ArgumentParser
 from importlib import resources
-from typing import List, Optional, Tuple
 
 import numpy as np
 import pytest
-from numpy.typing import NDArray
 
 from timemachine import constants
 from timemachine.fe import rbfe
@@ -21,7 +19,7 @@ from timemachine.ff.handlers import openmm_deserializer
 from timemachine.lib import LangevinIntegrator, MonteCarloBarostat, custom_ops
 from timemachine.md import builders, minimizer
 from timemachine.md.barostat.utils import get_bond_list, get_group_indices
-from timemachine.potentials import BoundPotential, Nonbonded, NonbondedInteractionGroup, Potential, SummedPotential
+from timemachine.potentials import HarmonicBond, Nonbonded, NonbondedInteractionGroup, Potential
 from timemachine.testsystems.dhfr import setup_dhfr
 from timemachine.testsystems.relative import get_hif2a_ligand_pair_single_topology
 
@@ -52,8 +50,9 @@ def generate_hif2a_frames(n_frames: int, frame_interval: int, seed=None, barosta
     temperature = constants.DEFAULT_TEMP
     pressure = constants.DEFAULT_PRESSURE
 
-    harmonic_bond_potential = initial_state.potentials[0]
-    bond_list = get_bond_list(harmonic_bond_potential.potential)
+    harmonic_bond_potential = initial_state.potentials[0].potential
+    assert isinstance(harmonic_bond_potential, HarmonicBond)
+    bond_list = get_bond_list(harmonic_bond_potential)
     masses = initial_state.integrator.masses
     if hmr:
         dt = 2.5e-3
@@ -455,18 +454,11 @@ def test_hif2a():
     benchmark_hif2a(verbose=True, num_batches=2, steps_per_batch=100)
 
 
-def get_nonbonded_pot_params(bps: List[BoundPotential]) -> Optional[Tuple[BoundPotential[Nonbonded], NDArray]]:
-    for bp in bps:
-        if isinstance(bp.potential, SummedPotential):
-            for pot, params in zip(bp.potential.potentials, bp.potential.params_init):
-                if isinstance(pot, Nonbonded):
-                    return pot, params
-    return None, None
-
-
 def test_nonbonded_interaction_group_potential(hi2fa_test_frames):
     bps, frames, boxes, ligand_idxs = hi2fa_test_frames
-    nonbonded_potential, nonbonded_params = get_nonbonded_pot_params(bps)
+    nonbonded_potential, nonbonded_params = next(
+        (bp.potential, bp.params) for bp in bps if isinstance(bp.potential, Nonbonded)
+    )
     assert nonbonded_potential is not None
     assert nonbonded_params is not None
 
@@ -499,7 +491,9 @@ def test_nonbonded_interaction_group_potential(hi2fa_test_frames):
 def test_nonbonded_potential(hi2fa_test_frames):
     bps, frames, boxes, _ = hi2fa_test_frames
 
-    nonbonded_pot, nonbonded_params = get_nonbonded_pot_params(bps)
+    nonbonded_pot, nonbonded_params = next(
+        (bp.potential, bp.params) for bp in bps if isinstance(bp.potential, Nonbonded)
+    )
     assert nonbonded_pot is not None
 
     num_param_batches = 5
