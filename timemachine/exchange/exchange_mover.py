@@ -135,9 +135,6 @@ class ExchangeMove(moves.MonteCarloMove):
         self.nb_params = jnp.array(nb_params)
         self.num_waters = len(water_idxs)
         self.water_idxs = water_idxs
-        # counters
-        self.a_count = 0  # accept count
-        self.t_count = 0  # trial count
         self.beta = 1 / DEFAULT_KT
 
         @jax.jit
@@ -185,7 +182,6 @@ class ExchangeMove(moves.MonteCarloMove):
             delta_U_total = np.inf
 
         log_p_accept = min(0, -self.beta * delta_U_total)
-        # print(-self.beta * delta_U_total, log_p_accept, np.exp(log_p_accept))
         new_state = CoordsVelBox(trial_coords, x.velocities, x.box)
 
         return new_state, log_p_accept
