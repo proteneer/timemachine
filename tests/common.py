@@ -10,7 +10,6 @@ from typing import Optional
 
 import jax
 import numpy as np
-import pytest
 from hilbertcurve.hilbertcurve import HilbertCurve
 from numpy.typing import NDArray
 from rdkit import Chem
@@ -262,7 +261,6 @@ class GradientTest(unittest.TestCase):
             test_du_dx_2, test_du_dp_2, test_u_2 = test_potential.unbound_impl.execute_selective(
                 x, params, box, compute_du_dx, compute_du_dp, compute_u
             )
-
             np.testing.assert_array_equal(test_du_dx, test_du_dx_2)
             np.testing.assert_array_equal(test_u, test_u_2)
             np.testing.assert_array_equal(test_du_dp, test_du_dp_2)
@@ -447,7 +445,7 @@ def check_split_ixns(
         # Should be the same as the new code with the orig ff
         sum_grad_new, sum_u_new = compute_new_grad_u(ffs.ref, precision, coords0, box, lamb, num_water_atoms, host_bps)
 
-        assert sum_u_ref == pytest.approx(sum_u_new, rel=rtol, abs=atol)
+        np.testing.assert_allclose(sum_u_ref, sum_u_new, rtol=rtol, atol=atol)
         np.testing.assert_allclose(sum_grad_ref, sum_grad_new, rtol=rtol, atol=atol)
 
         # Compute the grads, potential with the intramolecular terms scaled
@@ -462,7 +460,7 @@ def check_split_ixns(
         expected_u = sum_u_ref - LL_u_ref + LL_u_intra
         expected_grad = sum_grad_ref - LL_grad_ref + LL_grad_intra
 
-        assert expected_u == pytest.approx(sum_u_intra, rel=rtol, abs=atol)
+        np.testing.assert_allclose(expected_u, sum_u_intra, rtol=rtol, atol=atol)
         np.testing.assert_allclose(expected_grad, sum_grad_intra, rtol=rtol, atol=atol)
 
         # Compute the grads, potential with the ligand-water terms scaled
@@ -487,7 +485,7 @@ def check_split_ixns(
         expected_u = sum_u_ref - WL_u_ref + WL_u_solv
         expected_grad = sum_grad_ref - WL_grad_ref + WL_grad_solv
 
-        assert expected_u == pytest.approx(sum_u_solv, rel=rtol, abs=atol)
+        np.testing.assert_allclose(expected_u, sum_u_solv, rtol=rtol, atol=atol)
         np.testing.assert_allclose(expected_grad, sum_grad_solv, rtol=rtol, atol=atol)
 
         # Compute the grads, potential with the protein-ligand terms scaled
@@ -512,5 +510,5 @@ def check_split_ixns(
         expected_u = sum_u_ref - PL_u_ref + PL_u_prot
         expected_grad = sum_grad_ref - PL_grad_ref + PL_grad_prot
 
-        assert expected_u == pytest.approx(sum_u_prot, rel=rtol, abs=atol)
+        np.testing.assert_allclose(expected_u, sum_u_prot, rtol=rtol, atol=atol)
         np.testing.assert_allclose(expected_grad, sum_grad_prot, rtol=rtol, atol=atol)
