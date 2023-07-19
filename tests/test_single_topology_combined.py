@@ -219,3 +219,19 @@ def test_combined_parameters_nonbonded_intermediate(
             assert w_a < w_b
         else:
             assert w_b < w_a
+
+
+@pytest.mark.parametrize("host_system_fixture", ["solvent_host_system", "complex_host_system"])
+def test_nonbonded_host_params_independent_of_lambda(
+    host_system_fixture, hif2a_ligand_pair_single_topology: SingleTopology, request
+):
+    st = hif2a_ligand_pair_single_topology
+    (host_sys, _), num_water_atoms = request.getfixturevalue(host_system_fixture)
+
+    def get_nonbonded_host_params(lamb):
+        return st.combine_with_host(host_sys, lamb, num_water_atoms).nonbonded_host.params
+
+    params0 = get_nonbonded_host_params(0.0)
+    for lamb in np.linspace(0.1, 1, 10):
+        params = get_nonbonded_host_params(lamb)
+        assert np.all(params == params0)
