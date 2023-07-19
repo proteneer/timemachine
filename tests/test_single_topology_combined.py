@@ -236,4 +236,4 @@ def test_nonbonded_host_params_independent_of_lambda(
     params0 = get_nonbonded_host_params(0.0)
     for lamb in np.linspace(0.1, 1, 10):
         params = get_nonbonded_host_params(lamb)
-        assert np.all(params == params0)
+        np.testing.assert_array_equal(params, params0)
