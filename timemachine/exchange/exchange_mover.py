@@ -341,7 +341,7 @@ def test_exchange():
         print(
             f"{exc_mover.n_accepted} / {exc_mover.n_proposed} | density {density} | # of waters in bb {occ // 3} | md step: {idx * md_steps_per_batch}"
         )
-        if idx % 1 == 0:
+        if idx % 10 == 0:
             writer.write_frame(xvb_t.coords * 10)
 
         # run MC
