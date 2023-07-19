@@ -4,6 +4,7 @@ import sys
 import numpy as np
 from rdkit import Chem
 
+from timemachine.constants import DEFAULT_ATOM_MAPPING_KWARGS
 from timemachine.fe import atom_mapping, cif_writer
 from timemachine.fe.free_energy import MDParams
 from timemachine.fe.rbfe import HostConfig, estimate_relative_free_energy
@@ -112,16 +113,7 @@ def read_from_args():
     all_cores = atom_mapping.get_cores(
         mol_a,
         mol_b,
-        ring_cutoff=0.12,
-        chain_cutoff=0.2,
-        max_visits=1e7,
-        connected_core=True,
-        max_cores=1e6,
-        enforce_core_core=True,
-        ring_matches_ring_only=True,
-        complete_rings=False,
-        enforce_chiral=True,
-        min_threshold=0,
+        **DEFAULT_ATOM_MAPPING_KWARGS,
     )
 
     core = all_cores[0]

@@ -13,6 +13,7 @@ from rdkit import Chem
 from rdkit.Chem import AllChem
 
 from timemachine import potentials
+from timemachine.constants import DEFAULT_ATOM_MAPPING_KWARGS
 from timemachine.fe import atom_mapping, single_topology
 from timemachine.fe.dummy import MultipleAnchorWarning
 from timemachine.fe.free_energy import HostConfig
@@ -720,16 +721,7 @@ def _get_core_by_mcs(mol_a, mol_b):
     all_cores = atom_mapping.get_cores(
         mol_a,
         mol_b,
-        ring_cutoff=0.12,
-        chain_cutoff=0.2,
-        max_visits=1e7,
-        connected_core=True,
-        max_cores=1e6,
-        enforce_core_core=True,
-        ring_matches_ring_only=True,
-        complete_rings=False,
-        enforce_chiral=True,
-        min_threshold=0,
+        **DEFAULT_ATOM_MAPPING_KWARGS,
     )
 
     core = all_cores[0]

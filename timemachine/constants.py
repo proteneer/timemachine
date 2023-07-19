@@ -23,3 +23,17 @@ DEFAULT_WATER_FF = "tip3p"
 
 # thresholds
 MAX_FORCE_NORM = 50000  # used to check norms in the gradient computations
+
+# atom mapping parameters
+DEFAULT_ATOM_MAPPING_KWARGS = {
+    "ring_cutoff": 0.12,
+    "chain_cutoff": 0.2,
+    "max_visits": 1e7,
+    "connected_core": True,
+    "max_cores": 1e5,
+    "enforce_core_core": True,
+    "ring_matches_ring_only": True,
+    "complete_rings": False,
+    "enforce_chiral": True,
+    "min_threshold": 0,
+}
