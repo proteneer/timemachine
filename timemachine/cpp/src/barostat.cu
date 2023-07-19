@@ -36,11 +36,29 @@ MonteCarloBarostat::MonteCarloBarostat(
         std::cout << "warning pressure more than 10bar" << std::endl;
     }
 
-    curandErrchk(curandCreateGenerator(&cr_rng_, CURAND_RNG_PSEUDO_DEFAULT));
-    cudaSafeMalloc(&d_rand_, 2 * sizeof(double));
-    curandErrchk(curandSetPseudoRandomGeneratorSeed(cr_rng_, seed_));
-
     const int num_mols = group_idxs_.size();
+
+    std::set<int> group_set;
+    for (int i = 0; i < num_mols; i++) {
+        std::vector<int> atoms = group_idxs[i];
+        const int num_atoms = atoms.size();
+        num_grouped_atoms_ += num_atoms;
+        for (int j = 0; j < num_atoms; j++) {
+            int idx = atoms[j];
+            if (idx < 0 || idx >= N_) {
+                throw std::runtime_error("Grouped indices must be between 0 and N");
+            }
+            group_set.insert(idx);
+        }
+    }
+    // Verify that all of the group indices are unique
+    if (group_set.size() != num_grouped_atoms_) {
+        throw std::runtime_error("All grouped indices must be unique");
+    }
+
+    curandErrchk(curandCreateGenerator(&cr_rng_, CURAND_RNG_PSEUDO_DEFAULT));
+    cudaSafeMalloc(&d_rand_, 2 * sizeof(*d_rand_));
+    curandErrchk(curandSetPseudoRandomGeneratorSeed(cr_rng_, seed_));
 
     cudaSafeMalloc(&d_x_after_, N_ * 3 * sizeof(*d_x_after_));
     cudaSafeMalloc(&d_box_after_, 3 * 3 * sizeof(*d_box_after_));
@@ -61,24 +79,6 @@ MonteCarloBarostat::MonteCarloBarostat(
     cudaSafeMalloc(&d_volume_delta_, 1 * sizeof(*d_volume_delta_));
 
     gpuErrchk(cudaMemset(d_volume_scale_, 0, 1 * sizeof(*d_volume_scale_)));
-
-    std::set<int> group_set;
-    for (int i = 0; i < num_mols; i++) {
-        std::vector<int> atoms = group_idxs[i];
-        const int num_atoms = atoms.size();
-        num_grouped_atoms_ += num_atoms;
-        for (int j = 0; j < num_atoms; j++) {
-            int idx = atoms[j];
-            if (idx < 0 || idx >= N_) {
-                throw std::runtime_error("Grouped indices must be between 0 and N");
-            }
-            group_set.insert(idx);
-        }
-    }
-    // Verify that all of the group indices are unique
-    if (group_set.size() != num_grouped_atoms_) {
-        throw std::runtime_error("All grouped indices must be unique");
-    }
 
     cudaSafeMalloc(&d_centroids_, num_mols * 3 * sizeof(*d_centroids_));
     cudaSafeMalloc(&d_atom_idxs_, num_grouped_atoms_ * sizeof(*d_atom_idxs_));
