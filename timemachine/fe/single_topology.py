@@ -1208,10 +1208,8 @@ class SingleTopology(AtomMapMixin):
 
         return jnp.stack(jnp.array([guest_charges, guest_sigmas, guest_epsilons, guest_w_coords]), axis=1)
 
-    def _parameterize_host_guest_nonbonded(
-        self, lamb, host_nonbonded: BoundPotential[Nonbonded], num_water_atoms: int
-    ) -> BoundPotential[SummedPotential]:
-        # Parameterize nonbonded potential for the host guest interaction
+    def _parameterize_host_nonbonded(self, host_nonbonded: BoundPotential[Nonbonded]) -> BoundPotential[Nonbonded]:
+        """Parameterize host-host nonbonded interactions"""
         num_host_atoms = host_nonbonded.params.shape[0]
         num_guest_atoms = self.get_num_atoms()
         host_params = host_nonbonded.params
@@ -1221,12 +1219,10 @@ class SingleTopology(AtomMapMixin):
         exclusion_idxs = host_nonbonded.potential.exclusion_idxs
         scale_factors = host_nonbonded.potential.scale_factors
 
-        guest_ixn_water_params = self._get_guest_params(self.ff.q_handle_solv, self.ff.lj_handle_solv, lamb, cutoff)
-        guest_ixn_other_params = self._get_guest_params(self.ff.q_handle, self.ff.lj_handle, lamb, cutoff)
-
         # Note: The choice of zeros here is arbitrary. It doesn't affect the
         # potentials or grads, but any function like the seed could depened on these values.
-        hg_nb_params = jnp.concatenate([host_params, np.zeros(guest_ixn_water_params.shape)])
+        hg_nb_params = jnp.concatenate([host_params, np.zeros((num_guest_atoms, host_params.shape[1]))])
+
         combined_nonbonded = Nonbonded(
             num_host_atoms + num_guest_atoms,
             exclusion_idxs,
@@ -1235,6 +1231,19 @@ class SingleTopology(AtomMapMixin):
             cutoff,
             atom_idxs=np.arange(num_host_atoms, dtype=np.int32),
         )
+
+        return combined_nonbonded.bind(hg_nb_params)
+
+    def _parameterize_host_guest_nonbonded(
+        self, lamb, host_nonbonded: BoundPotential[Nonbonded], num_water_atoms: int
+    ) -> BoundPotential[SummedPotential]:
+        """Parameterize host-guest nonbonded interactions"""
+        num_host_atoms = host_nonbonded.params.shape[0]
+        num_guest_atoms = self.get_num_atoms()
+        cutoff = host_nonbonded.potential.cutoff
+
+        guest_ixn_water_params = self._get_guest_params(self.ff.q_handle_solv, self.ff.lj_handle_solv, lamb, cutoff)
+        guest_ixn_other_params = self._get_guest_params(self.ff.q_handle, self.ff.lj_handle, lamb, cutoff)
 
         # L-W terms
         num_other_atoms = num_host_atoms - num_water_atoms
@@ -1252,17 +1261,15 @@ class SingleTopology(AtomMapMixin):
             get_lig_idxs(),
             get_water_idxs(),
             get_other_idxs(),
-            host_params,
+            host_nonbonded.params,
             guest_ixn_water_params,
             guest_ixn_other_params,
-            beta=beta,
+            beta=host_nonbonded.potential.beta,
             cutoff=cutoff,
         )
 
-        hg_total_pot = [combined_nonbonded] + ixn_pots
-        hg_total_params = [hg_nb_params] + ixn_params
-        sum_pot = SummedPotential(hg_total_pot, hg_total_params)
-        bound_sum_pot = sum_pot.bind(jnp.concatenate(hg_total_params).reshape((-1,)))
+        sum_pot = SummedPotential(ixn_pots, ixn_params)
+        bound_sum_pot = sum_pot.bind(jnp.concatenate(ixn_params).reshape((-1,)))
 
         return bound_sum_pot
 
@@ -1346,8 +1353,8 @@ class SingleTopology(AtomMapMixin):
 
         combined_torsion = PeriodicTorsion(combined_torsion_idxs).bind(combined_torsion_params)
 
-        # concatenate guest charges with host charges
-        combined_nonbonded = self._parameterize_host_guest_nonbonded(lamb, host_system.nonbonded, num_water_atoms)
+        host_nonbonded = self._parameterize_host_nonbonded(host_system.nonbonded)
+        host_guest_nonbonded = self._parameterize_host_guest_nonbonded(lamb, host_system.nonbonded, num_water_atoms)
 
         return HostGuestSystem(
             combined_bond,
@@ -1356,7 +1363,8 @@ class SingleTopology(AtomMapMixin):
             guest_system.chiral_atom,
             guest_system.chiral_bond,
             guest_system.nonbonded,
-            combined_nonbonded,
+            host_nonbonded,
+            host_guest_nonbonded,
         )
 
     def get_component_idxs(self) -> List[NDArray]:
