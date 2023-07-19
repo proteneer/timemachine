@@ -5,6 +5,10 @@
 
 namespace timemachine {
 
+// Nonbonded Pair List that computes the interaction energies between pairs of atoms.
+// The negated version of this potential should be used in conjunction with a NonbondedAllPairs and/or
+// NonbondedInteractionGroup as a way to compute the exclusions and cancel them out from the other potentials
+// To ensure valid energies and du_dp values, combine the potentials using a FanoutSummedPotential
 template <typename RealType, bool Negated> class NonbondedPairList : public Potential {
 
 private:
@@ -34,6 +38,7 @@ public:
         unsigned long long *d_du_dx,
         unsigned long long *d_du_dp,
         unsigned long long *d_u,
+        int *d_u_overflow_count,
         cudaStream_t stream) override;
 
     void du_dp_fixed_to_float(const int N, const int P, const unsigned long long *du_dp, double *du_dp_float) override;

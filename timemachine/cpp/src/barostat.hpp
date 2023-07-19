@@ -61,6 +61,8 @@ private:
 
     unsigned long long *d_init_u_;
     unsigned long long *d_final_u_;
+    int *d_u_init_overflow_count_;
+    int *d_u_final_overflow_count_;
 
     double *d_volume_;
     double *d_volume_delta_;
