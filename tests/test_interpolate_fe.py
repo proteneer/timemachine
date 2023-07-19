@@ -6,7 +6,7 @@ import numpy as np
 import pymbar
 import pytest
 
-from timemachine.constants import BOLTZ
+from timemachine.constants import BOLTZ, DEFAULT_ATOM_MAPPING_KWARGS
 from timemachine.fe import atom_mapping, cif_writer, single_topology, utils
 from timemachine.fe.system import simulate_system
 from timemachine.fe.utils import get_romol_conf
@@ -28,16 +28,7 @@ def test_hif2a_free_energy_estimates():
     all_cores = atom_mapping.get_cores(
         mol_a,
         mol_b,
-        ring_cutoff=0.12,
-        chain_cutoff=0.2,
-        max_visits=1e7,
-        connected_core=True,
-        max_cores=1e6,
-        enforce_core_core=True,
-        ring_matches_ring_only=True,
-        complete_rings=False,
-        enforce_chiral=True,
-        min_threshold=0,
+        **DEFAULT_ATOM_MAPPING_KWARGS,
     )
     core = all_cores[0]
     svg = utils.plot_atom_mapping_grid(mol_a, mol_b, core)
