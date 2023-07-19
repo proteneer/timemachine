@@ -1323,19 +1323,19 @@ class SingleTopology(AtomMapMixin):
         combined_bond_idxs = np.concatenate(
             [host_system.bond.potential.idxs, guest_system.bond.potential.idxs + num_host_atoms]
         )
-        combined_bond_params = np.concatenate([host_system.bond.params, guest_system.bond.params])
+        combined_bond_params = jnp.concatenate([host_system.bond.params, guest_system.bond.params])
         combined_bond = HarmonicBond(combined_bond_idxs).bind(combined_bond_params)
 
         combined_angle_idxs = np.concatenate(
             [host_system.angle.potential.idxs, guest_system.angle.potential.idxs + num_host_atoms]
         )
-        host_angle_params = np.hstack(
+        host_angle_params = jnp.hstack(
             [
                 host_system.angle.params,
                 np.zeros((host_system.angle.params.shape[0], 1)),  # eps = 0
             ]
         )
-        combined_angle_params = np.concatenate([host_angle_params, guest_system.angle.params])
+        combined_angle_params = jnp.concatenate([host_angle_params, guest_system.angle.params])
         combined_angle = HarmonicAngleStable(combined_angle_idxs).bind(combined_angle_params)
 
         assert guest_system.torsion
@@ -1345,11 +1345,11 @@ class SingleTopology(AtomMapMixin):
             combined_torsion_idxs = np.concatenate(
                 [host_system.torsion.potential.idxs, guest_system.torsion.potential.idxs + num_host_atoms]
             )
-            combined_torsion_params = np.concatenate([host_system.torsion.params, guest_system.torsion.params])
+            combined_torsion_params = jnp.concatenate([host_system.torsion.params, guest_system.torsion.params])
         else:
             # solvent waters don't have torsions
             combined_torsion_idxs = np.array(guest_system.torsion.potential.idxs, dtype=np.int32) + num_host_atoms
-            combined_torsion_params = np.array(guest_system.torsion.params, dtype=np.float64)
+            combined_torsion_params = jnp.array(guest_system.torsion.params, dtype=np.float64)
 
         combined_torsion = PeriodicTorsion(combined_torsion_idxs).bind(combined_torsion_params)
 

@@ -1,5 +1,6 @@
 # test code for combining host guest systems and ensuring that parameters
 # and lambda configurations are correct
+import jax
 import numpy as np
 import pytest
 
@@ -228,6 +229,7 @@ def test_nonbonded_host_params_independent_of_lambda(
     st = hif2a_ligand_pair_single_topology
     (host_sys, _), num_water_atoms = request.getfixturevalue(host_system_fixture)
 
+    @jax.jit
     def get_nonbonded_host_params(lamb):
         return st.combine_with_host(host_sys, lamb, num_water_atoms).nonbonded_host.params
 
