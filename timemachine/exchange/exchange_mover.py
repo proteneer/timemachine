@@ -276,7 +276,6 @@ def test_exchange():
 
     nb_cutoff = 1.2  # this has to be 1.2 since the builders hard code this in (should fix later)
     initial_state, nwm, topology = get_initial_state(args.water_pdb, mol, ff, seed, nb_cutoff)
-    # ctxt = initialize_ctxt(initial_state)
 
     # set up water indices, assumes that waters are placed at the front of the coordinates.
     water_idxs = []
