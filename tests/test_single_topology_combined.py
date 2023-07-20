@@ -95,7 +95,7 @@ def test_combined_parameters_nonbonded(host_system_fixture, lamb, hif2a_ligand_p
 
     hgs = st.combine_with_host(host_sys, lamb, num_water_atoms)
     # check nonbonded terms
-    # 1) ligand ixns should be omitted in hgs.nonbonded_host_guest
+    # 1) ligand ixns should be omitted in hgs.nonbonded_host
     assert isinstance(hgs.nonbonded_host.potential, potentials.Nonbonded)
     assert hgs.nonbonded_host.potential.atom_idxs is not None
     assert set(hgs.nonbonded_host.potential.atom_idxs) == set(range(num_host_atoms))
@@ -103,12 +103,12 @@ def test_combined_parameters_nonbonded(host_system_fixture, lamb, hif2a_ligand_p
     # 2) decoupling parameters for host-guest interactions
     # 2a) w offsets
     if host_system_fixture == "solvent_host_system":
-        assert len(hgs.nonbonded_host_guest.potential.potentials) == 1  # ligand-water
+        assert len(hgs.nonbonded_host_guest_ixn.potential.potentials) == 1  # ligand-water
     elif host_system_fixture == "complex_host_system":
-        assert len(hgs.nonbonded_host_guest.potential.potentials) == 2  # ligand-water, ligand-protein
+        assert len(hgs.nonbonded_host_guest_ixn.potential.potentials) == 2  # ligand-water, ligand-protein
 
     for potential, params in zip(
-        hgs.nonbonded_host_guest.potential.potentials, hgs.nonbonded_host_guest.potential.params_init
+        hgs.nonbonded_host_guest_ixn.potential.potentials, hgs.nonbonded_host_guest_ixn.potential.params_init
     ):
         # NBIxnGroup has the ligand interaction parameters
         assert isinstance(potential, potentials.NonbondedInteractionGroup)
