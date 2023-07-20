@@ -30,7 +30,6 @@ from timemachine.fe.single_topology import (
     setup_dummy_interactions_from_ff,
 )
 from timemachine.fe.system import convert_bps_into_system, minimize_scipy, simulate_system
-from timemachine.fe.topology import exclude_all_ligand_ligand_ixns
 from timemachine.fe.utils import get_mol_name, get_romol_conf, read_sdf
 from timemachine.ff import Forcefield
 from timemachine.ff.handlers import openmm_deserializer
@@ -538,22 +537,20 @@ class SingleTopologyRef(SingleTopology):
         num_host_atoms = host_nonbonded.params.shape[0]
         num_guest_atoms = self.get_num_atoms()
 
-        guest_exclusions, guest_scale_factors = exclude_all_ligand_ligand_ixns(num_host_atoms, num_guest_atoms)
-
         host_params = host_nonbonded.params
         cutoff = host_nonbonded.potential.cutoff
 
         guest_params = self._get_guest_params(self.ff.q_handle, self.ff.lj_handle, lamb, cutoff)
         combined_nonbonded_params = np.concatenate([host_params, guest_params])
 
-        host_guest_nonbonded = potentials.NonbondedInteractionGroup(
+        host_guest_nonbonded_ixn = potentials.NonbondedInteractionGroup(
             num_host_atoms + num_guest_atoms,
             np.arange(num_host_atoms, dtype=np.int32),
             host_nonbonded.potential.beta,
             host_nonbonded.potential.cutoff,
         ).bind(combined_nonbonded_params)
 
-        return host_guest_nonbonded
+        return host_guest_nonbonded_ixn
 
 
 @pytest.mark.parametrize("precision", [np.float64, np.float32])

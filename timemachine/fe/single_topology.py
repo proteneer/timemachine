@@ -1354,7 +1354,9 @@ class SingleTopology(AtomMapMixin):
         combined_torsion = PeriodicTorsion(combined_torsion_idxs).bind(combined_torsion_params)
 
         host_nonbonded = self._parameterize_host_nonbonded(host_system.nonbonded)
-        host_guest_nonbonded = self._parameterize_host_guest_nonbonded_ixn(lamb, host_system.nonbonded, num_water_atoms)
+        host_guest_nonbonded_ixn = self._parameterize_host_guest_nonbonded_ixn(
+            lamb, host_system.nonbonded, num_water_atoms
+        )
 
         return HostGuestSystem(
             combined_bond,
@@ -1364,7 +1366,7 @@ class SingleTopology(AtomMapMixin):
             guest_system.chiral_bond,
             guest_system.nonbonded,
             host_nonbonded,
-            host_guest_nonbonded,
+            host_guest_nonbonded_ixn,
         )
 
     def get_component_idxs(self) -> List[NDArray]:
