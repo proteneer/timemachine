@@ -454,13 +454,17 @@ def test_hif2a():
     benchmark_hif2a(verbose=True, num_batches=2, steps_per_batch=100)
 
 
+def get_nonbonded_pot_params(bps):
+    try:
+        pot, params = next((bp.potential, bp.params) for bp in bps if isinstance(bp.potential, Nonbonded))
+        return pot, params
+    except StopIteration:
+        raise AssertionError("Nonbonded potential not found")
+
+
 def test_nonbonded_interaction_group_potential(hi2fa_test_frames):
     bps, frames, boxes, ligand_idxs = hi2fa_test_frames
-    nonbonded_potential, nonbonded_params = next(
-        (bp.potential, bp.params) for bp in bps if isinstance(bp.potential, Nonbonded)
-    )
-    assert nonbonded_potential is not None
-    assert nonbonded_params is not None
+    nonbonded_potential, nonbonded_params = get_nonbonded_pot_params(bps)
 
     num_param_batches = 5
     beta = 1 / (constants.BOLTZ * constants.DEFAULT_TEMP)
@@ -491,10 +495,7 @@ def test_nonbonded_interaction_group_potential(hi2fa_test_frames):
 def test_nonbonded_potential(hi2fa_test_frames):
     bps, frames, boxes, _ = hi2fa_test_frames
 
-    nonbonded_pot, nonbonded_params = next(
-        (bp.potential, bp.params) for bp in bps if isinstance(bp.potential, Nonbonded)
-    )
-    assert nonbonded_pot is not None
+    nonbonded_pot, nonbonded_params = get_nonbonded_pot_params(bps)
 
     num_param_batches = 5
 
