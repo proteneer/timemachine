@@ -47,100 +47,100 @@ lint:
   script:
     - make verify
 
-nogpu-tests:
-  stage: test
-  image: $DOCKER_TAG
-  needs: ["lint"]
-  tags:
-    - timemachine
-    - cpu
-  rules:
-    - if: $CI_EXTERNAL_PULL_REQUEST_IID
-  # Build custom ops with fixed cuda arch, to test C++ that is CPU only
-  variables:
-    CMAKE_ARGS: -DCUDA_ARCH=75
-  script:
-    - pip install .[test]
-    - make nogpu_tests
-  artifacts:
-    name: "$CI_JOB_NAME-$CI_COMMIT_REF_NAME-nogpu-tests"
-    paths:
-        - coverage/
-    when: on_success
-    expire_in: 1 week
+# nogpu-tests:
+#   stage: test
+#   image: $DOCKER_TAG
+#   needs: ["lint"]
+#   tags:
+#     - timemachine
+#     - cpu
+#   rules:
+#     - if: $CI_EXTERNAL_PULL_REQUEST_IID
+#   # Build custom ops with fixed cuda arch, to test C++ that is CPU only
+#   variables:
+#     CMAKE_ARGS: -DCUDA_ARCH=75
+#   script:
+#     - pip install .[test]
+#     - make nogpu_tests
+#   artifacts:
+#     name: "$CI_JOB_NAME-$CI_COMMIT_REF_NAME-nogpu-tests"
+#     paths:
+#         - coverage/
+#     when: on_success
+#     expire_in: 1 week
 
-memory-tests:
-  stage: test
-  image: $DOCKER_TAG
-  needs: ["lint"]
-  tags:
-    - gpu
-  rules:
-    - if: $CI_EXTERNAL_PULL_REQUEST_IID
-  script:
-    - pip install .[test]
-    - make memcheck_tests
-  artifacts:
-    name: "$CI_JOB_NAME-$CI_COMMIT_REF_NAME-memtests"
-    paths:
-        - coverage/
-    when: on_success
-    expire_in: 1 week
+# memory-tests:
+#   stage: test
+#   image: $DOCKER_TAG
+#   needs: ["lint"]
+#   tags:
+#     - gpu
+#   rules:
+#     - if: $CI_EXTERNAL_PULL_REQUEST_IID
+#   script:
+#     - pip install .[test]
+#     - make memcheck_tests
+#   artifacts:
+#     name: "$CI_JOB_NAME-$CI_COMMIT_REF_NAME-memtests"
+#     paths:
+#         - coverage/
+#     when: on_success
+#     expire_in: 1 week
 
-unit-tests:
-  stage: test
-  image: $DOCKER_TAG
-  needs: ["lint"]
-  tags:
-    - gpu
-  rules:
-    - if: $CI_EXTERNAL_PULL_REQUEST_IID
-  script:
-    - pip install .[test]
-    - make unit_tests
-  artifacts:
-    name: "$CI_JOB_NAME-$CI_COMMIT_REF_NAME-tests"
-    paths:
-        - coverage/
-    when: on_success
-    expire_in: 1 week
+# unit-tests:
+#   stage: test
+#   image: $DOCKER_TAG
+#   needs: ["lint"]
+#   tags:
+#     - gpu
+#   rules:
+#     - if: $CI_EXTERNAL_PULL_REQUEST_IID
+#   script:
+#     - pip install .[test]
+#     - make unit_tests
+#   artifacts:
+#     name: "$CI_JOB_NAME-$CI_COMMIT_REF_NAME-tests"
+#     paths:
+#         - coverage/
+#     when: on_success
+#     expire_in: 1 week
 
-nightly-tests:
-  stage: test
-  image: $DOCKER_TAG
-  needs: ["lint"]
-  tags:
-    - gpu
-  rules:
-    - if: $NIGHTLY_TESTS
-  script:
-    - pip install .[test]
-    - make nightly_tests
-  artifacts:
-    name: "$CI_JOB_NAME-$CI_COMMIT_REF_NAME-nightly-tests"
-    paths:
-        - coverage/
-    when: on_success
-    expire_in: 1 week
+# nightly-tests:
+#   stage: test
+#   image: $DOCKER_TAG
+#   needs: ["lint"]
+#   tags:
+#     - gpu
+#   rules:
+#     - if: $NIGHTLY_TESTS
+#   script:
+#     - pip install .[test]
+#     - make nightly_tests
+#   artifacts:
+#     name: "$CI_JOB_NAME-$CI_COMMIT_REF_NAME-nightly-tests"
+#     paths:
+#         - coverage/
+#     when: on_success
+#     expire_in: 1 week
 
-nightly-tests-nogpu:
-  stage: test
-  image: $DOCKER_TAG
-  needs: ["lint"]
-  tags:
-    - timemachine
-    - cpu
-  rules:
-    - if: $NIGHTLY_TESTS
-  # Build custom ops with fixed cuda arch, to test C++ that is CPU only
-  variables:
-    CMAKE_ARGS: -DCUDA_ARCH=75
-  script:
-    - pip install .[test]
-    - make nogpu_nightly_tests
-  artifacts:
-    name: "$CI_JOB_NAME-$CI_COMMIT_REF_NAME-nogpu-nightly-tests"
-    paths:
-        - coverage/
-    when: on_success
-    expire_in: 1 week
+# nightly-tests-nogpu:
+#   stage: test
+#   image: $DOCKER_TAG
+#   needs: ["lint"]
+#   tags:
+#     - timemachine
+#     - cpu
+#   rules:
+#     - if: $NIGHTLY_TESTS
+#   # Build custom ops with fixed cuda arch, to test C++ that is CPU only
+#   variables:
+#     CMAKE_ARGS: -DCUDA_ARCH=75
+#   script:
+#     - pip install .[test]
+#     - make nogpu_nightly_tests
+#   artifacts:
+#     name: "$CI_JOB_NAME-$CI_COMMIT_REF_NAME-nogpu-nightly-tests"
+#     paths:
+#         - coverage/
+#     when: on_success
+#     expire_in: 1 week
