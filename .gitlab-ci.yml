@@ -38,8 +38,6 @@ lint:
   stage: lint
   image: $DOCKER_TAG
   needs: ["docker_build"]
-  variables:
-    CMAKE_ARGS: -DCUDA_ARCH=75
   tags:
     - timemachine
     - cpu
