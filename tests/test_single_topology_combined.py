@@ -190,12 +190,12 @@ def test_combined_parameters_nonbonded_intermediate(
     hgs = st.combine_with_host(host_sys, lamb, num_water_atoms)
 
     if host_system_fixture == "solvent_host_system":
-        assert len(hgs.nonbonded_host_guest.potential.potentials) == 1  # ligand-water
+        assert len(hgs.nonbonded_host_guest_ixn.potential.potentials) == 1  # ligand-water
     elif host_system_fixture == "complex_host_system":
-        assert len(hgs.nonbonded_host_guest.potential.potentials) == 2  # ligand-water, ligand-protein
+        assert len(hgs.nonbonded_host_guest_ixn.potential.potentials) == 2  # ligand-water, ligand-protein
 
     for potential, params in zip(
-        hgs.nonbonded_host_guest.potential.potentials, hgs.nonbonded_host_guest.potential.params_init
+        hgs.nonbonded_host_guest_ixn.potential.potentials, hgs.nonbonded_host_guest_ixn.potential.params_init
     ):
         assert isinstance(potential, potentials.NonbondedInteractionGroup)
         guest_params = np.array(params[num_host_atoms:])

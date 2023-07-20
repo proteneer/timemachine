@@ -1234,10 +1234,10 @@ class SingleTopology(AtomMapMixin):
 
         return combined_nonbonded.bind(hg_nb_params)
 
-    def _parameterize_host_guest_nonbonded(
+    def _parameterize_host_guest_nonbonded_ixn(
         self, lamb, host_nonbonded: BoundPotential[Nonbonded], num_water_atoms: int
     ) -> BoundPotential[SummedPotential]:
-        """Parameterize host-guest nonbonded interactions"""
+        """Parameterize nonbonded interactions between the host and guest"""
         num_host_atoms = host_nonbonded.params.shape[0]
         num_guest_atoms = self.get_num_atoms()
         cutoff = host_nonbonded.potential.cutoff
@@ -1354,7 +1354,7 @@ class SingleTopology(AtomMapMixin):
         combined_torsion = PeriodicTorsion(combined_torsion_idxs).bind(combined_torsion_params)
 
         host_nonbonded = self._parameterize_host_nonbonded(host_system.nonbonded)
-        host_guest_nonbonded = self._parameterize_host_guest_nonbonded(lamb, host_system.nonbonded, num_water_atoms)
+        host_guest_nonbonded = self._parameterize_host_guest_nonbonded_ixn(lamb, host_system.nonbonded, num_water_atoms)
 
         return HostGuestSystem(
             combined_bond,

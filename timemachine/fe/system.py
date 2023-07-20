@@ -166,7 +166,7 @@ class HostGuestSystem:
     chiral_bond: BoundPotential[ChiralBondRestraint]
     nonbonded_guest_pairs: BoundPotential[NonbondedPairListPrecomputed]
     nonbonded_host: BoundPotential[Nonbonded]
-    nonbonded_host_guest: BoundPotential[SummedPotential]
+    nonbonded_host_guest_ixn: BoundPotential[SummedPotential]
 
     def get_U_fns(self):
 
@@ -180,5 +180,5 @@ class HostGuestSystem:
             # self.chiral_bond,
             self.nonbonded_guest_pairs,
             self.nonbonded_host,
-            self.nonbonded_host_guest,
+            self.nonbonded_host_guest_ixn,
         ]

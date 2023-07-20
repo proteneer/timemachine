@@ -533,7 +533,7 @@ def test_nonbonded_intra_split(precision, rtol, atol, use_tiny_mol):
 
 
 class SingleTopologyRef(SingleTopology):
-    def _parameterize_host_guest_nonbonded(self, lamb, host_nonbonded, _):
+    def _parameterize_host_guest_nonbonded_ixn(self, lamb, host_nonbonded, _):
         # Parameterize nonbonded potential for the host guest interaction
         num_host_atoms = host_nonbonded.params.shape[0]
         num_guest_atoms = self.get_num_atoms()
