@@ -363,6 +363,21 @@ def test_rbfe_with_1_window(estimate_relative_free_energy_fn):
         )
 
 
+def test_estimate_free_energy_via_greedy_bisection_invalid_args():
+    mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
+    with pytest.raises(ValueError, match="keep_idxs"):
+        estimate_relative_free_energy_via_greedy_bisection(
+            mol_a,
+            mol_b,
+            core,
+            Forcefield.load_default(),
+            host_config=None,
+            n_windows=3,
+            min_overlap=0.4,
+            keep_idxs=[0, 2],  # invalid with min_overlap not None
+        )
+
+
 if __name__ == "__main__":
     # convenience: so we can run this directly from python tests/test_relative_free_energy.py without
     # toggling the pytest marker
