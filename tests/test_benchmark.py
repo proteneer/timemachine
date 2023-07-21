@@ -455,10 +455,10 @@ def test_hif2a():
 
 
 def get_nonbonded_pot_params(bps):
-    try:
-        pot, params = next((bp.potential, bp.params) for bp in bps if isinstance(bp.potential, Nonbonded))
-        return pot, params
-    except StopIteration:
+    for bp in bps:
+        if isinstance(bp.potential, Nonbonded):
+            return bp.potential, bp.params
+    else:
         raise AssertionError("Nonbonded potential not found")
 
 
