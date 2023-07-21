@@ -175,44 +175,13 @@ def bar_with_bootstrapped_uncertainty(w_F, w_R, n_bootstrap=1000, timeout=10) ->
     return df, ddf
 
 
-def df_from_ukln(u_kln: np.ndarray) -> Tuple[float, float]:
-    """Extract forward and reverse works from 2-state u_kln matrix and return BAR dF and dF error computed by pymbar
-
-    Parameters
-    ----------
-    u_kln : [2, 2, n] array
-        pymbar u_kln input format, where k = l = 2
-
-    Returns
-    -------
-    df_err: float
-        BAR dF
-    df_err: float
-        BAR uncertainty
-    """
+def works_from_ukln(u_kln: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+    """Extract forward and reverse works from 2-state u_kln matrix"""
     k, l, _ = u_kln.shape
     assert k == l == 2
     w_fwd = u_kln[1, 0, :] - u_kln[0, 0, :]
     w_rev = u_kln[0, 1, :] - u_kln[1, 1, :]
-    df, df_err = pymbar.BAR(w_fwd, w_rev)
-    return df, df_err
-
-
-def df_err_from_ukln(u_kln: np.ndarray) -> float:
-    """Extract forward and reverse works from 2-state u_kln matrix and return BAR error computed by pymbar
-
-    Parameters
-    ----------
-    u_kln : [2, 2, n] array
-        pymbar u_kln input format, where k = l = 2
-
-    Returns
-    -------
-    df_err: float
-        BAR uncertainty
-    """
-    _, df_err = df_from_ukln(u_kln)
-    return df_err
+    return w_fwd, w_rev
 
 
 def df_from_ukln_by_lambda(ukln_by_lambda: NDArray) -> Tuple[float, float]:
@@ -235,7 +204,8 @@ def df_from_ukln_by_lambda(ukln_by_lambda: NDArray) -> Tuple[float, float]:
     for lambda_idx in range(ukln_by_lambda.shape[0]):
         window_ukln = ukln_by_lambda[lambda_idx]
 
-        dF, dF_err = df_from_ukln(window_ukln)
+        w_fwd, w_rev = works_from_ukln(window_ukln)
+        dF, dF_err = pymbar.BAR(w_fwd, w_rev)
         win_dfs.append(dF)
         win_errs.append(dF_err)
     return np.sum(win_dfs), np.linalg.norm(win_errs)  # type: ignore

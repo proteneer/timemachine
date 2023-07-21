@@ -84,15 +84,8 @@ def run_triple(mol_a, mol_b, core, forcefield, md_params, protein_path, estimate
                 assert np.all(0.0 < np.asarray(overlaps))
                 assert np.all(np.asarray(overlaps) < 1.0)
 
-            # when overlap ~= 1 (usually because a given energy term does not depend on lambda
-            # (e.g. host-host nonbonded interactions), pymbar returns nan for BAR error
-            assert np.all(
-                (0.0 < np.asarray(res.dG_err_by_component_by_lambda))
-                | np.isclose(res.overlap_by_component_by_lambda, 1.0, rtol=1e-9)
-            )
-            assert np.linalg.norm(res.dG_err_by_component_by_lambda) < 0.1 or np.any(
-                np.isclose(res.overlap_by_component_by_lambda, 1.0, rtol=1e-9)
-            )
+            assert np.all(0.0 <= np.asarray(res.dG_err_by_component_by_lambda))
+            assert np.linalg.norm(res.dG_err_by_component_by_lambda) < 0.1
 
         check_pair_bar_result(sim_res.final_result)
         for res in sim_res.intermediate_results:
