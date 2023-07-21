@@ -510,8 +510,9 @@ def estimate_relative_free_energy_via_greedy_bisection(
         value
 
     keep_idxs: list of int or None, optional
-        If None, return only the end-state frames. Otherwise if not None, use only for debugging, and this
-        will return the frames corresponding to the idxs of interest.
+        If None, return only the end-state frames. Otherwise if not None (typically for debugging), return frames from
+        windows corresponding to the specified indices. When min_overlap is not None, i.e. when adaptive bisection is
+        enabled, keep_idxs must equal one of None, [0, -1], or list(range(n_windows)).
 
     md_params: MDParams
         Parameters for the equilibration and production MD. Defaults to 400 global steps per frame, 1000 frames and 10k
@@ -554,8 +555,14 @@ def estimate_relative_free_energy_via_greedy_bisection(
     )
 
     if keep_idxs is None:
-        keep_idxs = [0, len(initial_states) - 1]  # keep frames from first and last windows
+        keep_idxs = [0, -1]  # keep frames from first and last windows
+
     assert len(keep_idxs) <= n_windows
+
+    if min_overlap is not None and keep_idxs not in [None, [0, -1], list(range(n_windows))]:
+        raise ValueError(
+            "when min_overlap is not None, keep_idxs must be equal to one of None, [0, -1], or list(range(n_windows))"
+        )
 
     # TODO: rename prefix to postfix, or move to beginning of combined_prefix?
     combined_prefix = get_mol_name(mol_a) + "_" + get_mol_name(mol_b) + "_" + prefix
