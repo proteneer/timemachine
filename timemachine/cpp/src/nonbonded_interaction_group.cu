@@ -69,9 +69,9 @@ NonbondedInteractionGroup<RealType>::NonbondedInteractionGroup(
     cudaSafeMalloc(&d_rebuild_nblist_, 1 * sizeof(*d_rebuild_nblist_));
     gpuErrchk(cudaMallocHost(&p_rebuild_nblist_, 1 * sizeof(*p_rebuild_nblist_)));
 
-    cudaSafeMalloc(&d_sort_keys_in_, N_ * sizeof(d_sort_keys_in_));
-    cudaSafeMalloc(&d_sort_keys_out_, N_ * sizeof(d_sort_keys_out_));
-    cudaSafeMalloc(&d_sort_vals_in_, N_ * sizeof(d_sort_vals_in_));
+    cudaSafeMalloc(&d_sort_keys_in_, N_ * sizeof(*d_sort_keys_in_));
+    cudaSafeMalloc(&d_sort_keys_out_, N_ * sizeof(*d_sort_keys_out_));
+    cudaSafeMalloc(&d_sort_vals_in_, N_ * sizeof(*d_sort_vals_in_));
 
     // initialize hilbert curve
     std::vector<unsigned int> bin_to_idx(HILBERT_GRID_DIM * HILBERT_GRID_DIM * HILBERT_GRID_DIM);
