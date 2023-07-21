@@ -20,7 +20,7 @@ CentroidRestraint<RealType>::CentroidRestraint(
     cudaSafeMalloc(&d_centroid_a_, 3 * sizeof(*d_centroid_a_));
     cudaSafeMalloc(&d_centroid_b_, 3 * sizeof(*d_centroid_b_));
 
-    cudaSafeMalloc(&d_u_buffer_, (N_A_ + N_B_) * sizeof(d_u_buffer_));
+    cudaSafeMalloc(&d_u_buffer_, sizeof(*d_u_buffer_));
 };
 
 template <typename RealType> CentroidRestraint<RealType>::~CentroidRestraint() {

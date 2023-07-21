@@ -17,7 +17,7 @@ ChiralAtomRestraint<RealType>::ChiralAtomRestraint(const std::vector<int> &idxs)
     cudaSafeMalloc(&d_idxs_, R_ * 4 * sizeof(*d_idxs_));
     gpuErrchk(cudaMemcpy(d_idxs_, &idxs[0], R_ * 4 * sizeof(*d_idxs_), cudaMemcpyHostToDevice));
 
-    cudaSafeMalloc(&d_u_buffer_, R_ * sizeof(d_u_buffer_));
+    cudaSafeMalloc(&d_u_buffer_, R_ * sizeof(*d_u_buffer_));
 };
 
 template <typename RealType> ChiralAtomRestraint<RealType>::~ChiralAtomRestraint() {
