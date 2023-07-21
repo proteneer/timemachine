@@ -68,9 +68,21 @@ template <typename RealType> unsigned long long __device__ __forceinline__ FLOAT
     return static_cast<unsigned long long>(real_to_int64(v * FIXED_EXPONENT));
 }
 
-// FLOAT_TO_FIXED_ENERGY converts floating point energies into fixed point. For infinite values or values beyond LLONG_MAX/LLONG_MIN
-// the value will be capped. This is accumulated into __int128 which handles the over and underflows, allowing us to be able to account
-// for overflows triggered by the summation of energies.
+/* FLOAT_TO_FIXED_ENERGY converts floating point energies into fixed point. For infinite values or values beyond LLONG_MAX/LLONG_MIN
+* the value will be capped. This is accumulated into __int128 which handles the over and underflows, allowing us to be able to account
+* for overflows triggered by the summation of energies.
+*
+* The energy values are only considered valid between the values LLONG_MIN and LLONG_MAX, and we use __int128 to be able to detect that the energies are invalid.
+* If there are individual interactions that are overflows (beyond limit or non-finite) we set LLONG_MAX to be the value. This way
+* the energy is beyond the bounds and only exclusion cancellations (only done between NonbondedAllPairs/IxnGroups and NonbondedPairList<..., true>) do not trigger invalid energies.
+* In the case where all interactions are within the bounds, we can still overflows due to summation which int128 allows us to detect
+*
+* Example of Summation overflow
+* -----------------------------
+* accumulated_energy = sum([LLONG_MAX - 1, LLONG_MAX - 1])
+* (__int128)accumulated_energy > LLONG_MAX  - Correctly detects that energies are beyond valid range
+* (long long)accumulated_energy > LLONG_MAX - Overflows and results in seemingly valid energies
+*/
 template <typename RealType> __int128 __device__ __forceinline__ FLOAT_TO_FIXED_ENERGY(RealType u_orig) {
     RealType u = u_orig * FIXED_EXPONENT;
     // All clashes (beyond representation of long long) are treated as LLONG_MAX, to avoid clashes of different signs but non-identical values

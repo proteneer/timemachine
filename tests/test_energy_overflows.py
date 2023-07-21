@@ -19,6 +19,7 @@ def verify_energies(a, b):
 
 
 def fixed_overflowed(a):
+    """Refer to timemachine/cpp/src/kernels/k_fixed_point.hpp::FLOAT_TO_FIXED_ENERGY for documentation on how we handle energies and overflows"""
     return a <= np.iinfo(np.int64).min or a >= np.iinfo(np.int64).max
 
 
