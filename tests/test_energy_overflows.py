@@ -2,7 +2,7 @@ import jax
 import numpy as np
 import pytest
 import scipy
-from common import GradientTest, prepare_nb_system, prepare_water_system
+from common import GradientTest, fixed_overflowed, prepare_nb_system, prepare_water_system
 
 from timemachine.integrator import FIXED_EXPONENT, FIXED_TO_FLOAT
 from timemachine.potentials import Nonbonded, NonbondedAllPairs, NonbondedPairListNegated
@@ -16,11 +16,6 @@ def verify_energies(a, b):
         assert a == b
     else:
         assert np.isnan(a) and np.isnan(b)
-
-
-def fixed_overflowed(a):
-    """Refer to timemachine/cpp/src/kernels/k_fixed_point.hpp::FLOAT_TO_FIXED_ENERGY for documentation on how we handle energies and overflows"""
-    return a <= np.iinfo(np.int64).min or a >= np.iinfo(np.int64).max
 
 
 @pytest.mark.parametrize("precision,rtol,atol", [(np.float64, 1e-8, 1e-8), (np.float32, 1e-4, 5e-4)])

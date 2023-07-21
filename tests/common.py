@@ -42,6 +42,12 @@ def get_110_ccc_ff():
     return forcefield
 
 
+def fixed_overflowed(a):
+    """Refer to timemachine/cpp/src/kernels/k_fixed_point.hpp::FLOAT_TO_FIXED_ENERGY for documentation onOne how we handle energies and overflows"""
+    converted_a = np.int64(np.uint64(a))
+    return converted_a <= np.iinfo(np.int64).min or converted_a >= np.iinfo(np.int64).max
+
+
 def get_hif2a_ligands_as_sdf_file() -> NamedTemporaryFile:  # type: ignore
     with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
         mols = read_sdf(path_to_ligand)

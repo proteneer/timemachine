@@ -856,18 +856,21 @@ void declare_bound_potential(py::module &m) {
             "execute_fixed",
             [](timemachine::BoundPotential &bp,
                const py::array_t<double, py::array::c_style> &coords,
-               const py::array_t<double, py::array::c_style> &box) -> py::int_ {
+               const py::array_t<double, py::array::c_style> &box) -> const py::array_t<uint64_t, py::array::c_style> {
                 const long unsigned int N = coords.shape()[0];
                 verify_coords_and_box(coords, box);
                 std::vector<__int128> u(1, 9999);
 
                 bp.execute_host(N, coords.data(), box.data(), nullptr, &u[0]);
 
-                // Force it to a specific value, else conversion borks
+                py::array_t<uint64_t, py::array::c_style> py_u(1);
                 if (fixed_point_overflow(u[0])) {
-                    return py::int_(LLONG_MAX);
+                    // Force it to a specific value, else conversion borks
+                    py_u.mutable_data()[0] = LLONG_MAX;
+                } else {
+                    py_u.mutable_data()[0] = u[0];
                 }
-                return py::int_(static_cast<long long>(u[0]));
+                return py_u;
             },
             py::arg("coords"),
             py::arg("box"));
