@@ -532,6 +532,16 @@ def estimate_relative_free_energy_via_greedy_bisection(
         n_windows = DEFAULT_NUM_WINDOWS
     assert n_windows >= 2
 
+    if keep_idxs is None:
+        keep_idxs = [0, -1]  # keep frames from first and last windows
+
+    assert len(keep_idxs) <= n_windows
+
+    if min_overlap is not None and keep_idxs not in [None, [0, -1], list(range(n_windows))]:
+        raise ValueError(
+            "when min_overlap is not None, keep_idxs must be equal to one of None, [0, -1], or list(range(n_windows))"
+        )
+
     single_topology = SingleTopology(mol_a, mol_b, core, ff)
 
     lambda_min, lambda_max = lambda_interval or (0.0, 1.0)
@@ -553,16 +563,6 @@ def estimate_relative_free_energy_via_greedy_bisection(
         temperature=temperature,
         seed=md_params.seed,
     )
-
-    if keep_idxs is None:
-        keep_idxs = [0, -1]  # keep frames from first and last windows
-
-    assert len(keep_idxs) <= n_windows
-
-    if min_overlap is not None and keep_idxs not in [None, [0, -1], list(range(n_windows))]:
-        raise ValueError(
-            "when min_overlap is not None, keep_idxs must be equal to one of None, [0, -1], or list(range(n_windows))"
-        )
 
     # TODO: rename prefix to postfix, or move to beginning of combined_prefix?
     combined_prefix = get_mol_name(mol_a) + "_" + get_mol_name(mol_b) + "_" + prefix
