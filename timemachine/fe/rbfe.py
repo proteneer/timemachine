@@ -428,7 +428,7 @@ def estimate_relative_free_energy(
     )
 
     if keep_idxs is None:
-        keep_idxs = [0, len(initial_states) - 1]  # keep frames from first and last windows
+        keep_idxs = [0, -1]  # keep frames from first and last windows
     assert len(keep_idxs) <= len(lambda_schedule)
 
     # TODO: rename prefix to postfix, or move to beginning of combined_prefix?

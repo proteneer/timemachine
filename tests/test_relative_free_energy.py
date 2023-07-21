@@ -313,7 +313,7 @@ def test_imaging_frames():
         md_params=md_params,
         n_windows=windows,
     )
-    keep_idxs = [0, len(res.final_result.initial_states) - 1]
+    keep_idxs = [0, -1]
     assert len(keep_idxs) == len(res.frames)
 
     # A buffer, as imaging doesn't ensure everything is perfectly in the box

@@ -234,7 +234,7 @@ def estimate_absolute_free_energy(
     initial_states = setup_initial_states(afe, ff, host_config, temperature, lambda_schedule, md_params.seed)
 
     if keep_idxs is None:
-        keep_idxs = [0, len(initial_states) - 1]  # keep first and last windows
+        keep_idxs = [0, -1]  # keep first and last windows
     assert len(keep_idxs) <= len(lambda_schedule)
 
     combined_prefix = get_mol_name(mol) + "_" + prefix
