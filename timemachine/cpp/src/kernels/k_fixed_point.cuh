@@ -73,10 +73,11 @@ template <typename RealType> unsigned long long __device__ __forceinline__ FLOAT
 // for overflows triggered by the summation of energies.
 template <typename RealType> __int128 __device__ __forceinline__ FLOAT_TO_FIXED_ENERGY(RealType u_orig) {
     RealType u = u_orig * FIXED_EXPONENT;
-    if (!isfinite(u) || static_cast<__int128>(u) >= static_cast<__int128>(LLONG_MAX)) {
+    // All clashes (beyond representation of long long) are treated as LLONG_MAX, to avoid clashes of different signs but non-identical values
+    // cancelling out.
+    if (!isfinite(u) || static_cast<__int128>(u) >= static_cast<__int128>(LLONG_MAX) ||
+        static_cast<__int128>(u) <= static_cast<__int128>(LLONG_MIN)) {
         return static_cast<__int128>(LLONG_MAX);
-    } else if (static_cast<__int128>(u) <= static_cast<__int128>(LLONG_MIN)) {
-        return static_cast<__int128>(LLONG_MIN);
     } else {
         return static_cast<__int128>(real_to_int64(u));
     }

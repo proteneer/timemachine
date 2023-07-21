@@ -185,6 +185,7 @@ void __global__ k_nonbonded_pair_list(
     // Always accumulate into the energy buffers even if there is no interaction to ensure
     // buffer is zeroed out, avoids having to memset every call
     if (u_buffer) {
+        // Do not do `FLOAT_TO_FIXED_ENERGY(Negated ? -u : u)` as that can produce a positive fixed point value
         u_buffer[pair_idx] = Negated ? -FLOAT_TO_FIXED_ENERGY<RealType>(u) : FLOAT_TO_FIXED_ENERGY<RealType>(u);
     }
 }
