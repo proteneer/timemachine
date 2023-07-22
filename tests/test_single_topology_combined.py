@@ -1,5 +1,6 @@
 # test code for combining host guest systems and ensuring that parameters
 # and lambda configurations are correct
+import jax
 import numpy as np
 import pytest
 
@@ -80,8 +81,9 @@ def test_combined_parameters_bonded(host_system_fixture, hif2a_ligand_pair_singl
         check_bonded_idxs_consistency(hgs.nonbonded_guest_pairs.potential.idxs, 0)
 
 
+@pytest.mark.parametrize("lamb", [0.0, 1.0])
 @pytest.mark.parametrize("host_system_fixture", ["solvent_host_system", "complex_host_system"])
-def test_combined_parameters_nonbonded(host_system_fixture, hif2a_ligand_pair_single_topology, request):
+def test_combined_parameters_nonbonded(host_system_fixture, lamb, hif2a_ligand_pair_single_topology, request):
     # test bonded and nonbonded parameters are correct at the end-states.
     # 1) we expected bonded idxs in the ligand to be shifted by num_host_atoms
     # 2) we expected nonbonded lambda_idxs to be shifted
@@ -91,23 +93,26 @@ def test_combined_parameters_nonbonded(host_system_fixture, hif2a_ligand_pair_si
     (host_sys, host_masses), num_water_atoms = request.getfixturevalue(host_system_fixture)
     num_host_atoms = len(host_masses)
 
-    for lamb in [0.0, 1.0]:
+    hgs = st.combine_with_host(host_sys, lamb, num_water_atoms)
+    # check nonbonded terms
+    # 1) ligand ixns should be omitted in hgs.nonbonded_host
+    assert isinstance(hgs.nonbonded_host.potential, potentials.Nonbonded)
+    assert hgs.nonbonded_host.potential.atom_idxs is not None
+    assert set(hgs.nonbonded_host.potential.atom_idxs) == set(range(num_host_atoms))
 
-        hgs = st.combine_with_host(host_sys, lamb, num_water_atoms)
-        # check nonbonded terms
-        # 1) ligand ixns should be omitted in hgs.nonbonded_host_guest
-        assert isinstance(hgs.nonbonded_host_guest.potential.potentials[0], potentials.Nonbonded)
-        hgs_atom_idxs = hgs.nonbonded_host_guest.potential.potentials[0].atom_idxs
-        assert set(hgs_atom_idxs) == set(range(num_host_atoms))
+    # 2) decoupling parameters for host-guest interactions
+    # 2a) w offsets
+    if host_system_fixture == "solvent_host_system":
+        assert len(hgs.nonbonded_host_guest_ixn.potential.potentials) == 1  # ligand-water
+    elif host_system_fixture == "complex_host_system":
+        assert len(hgs.nonbonded_host_guest_ixn.potential.potentials) == 2  # ligand-water, ligand-protein
 
-        # 2) decoupling parameters for host-guest interactions
-        # 2a) w offsets
-        assert len(hgs.nonbonded_host_guest.potential.params_init) > 1
-
+    for potential, params in zip(
+        hgs.nonbonded_host_guest_ixn.potential.potentials, hgs.nonbonded_host_guest_ixn.potential.params_init
+    ):
         # NBIxnGroup has the ligand interaction parameters
-        assert isinstance(hgs.nonbonded_host_guest.potential.potentials[1], potentials.NonbondedInteractionGroup)
-        w_coords = hgs.nonbonded_host_guest.potential.params_init[1][:, 3]
-        cutoff = hgs.nonbonded_host_guest.potential.potentials[1].cutoff
+        assert isinstance(potential, potentials.NonbondedInteractionGroup)
+        w_coords = params[:, 3]
 
         for a_idx, w in enumerate(w_coords):
             if a_idx < num_host_atoms:
@@ -125,11 +130,11 @@ def test_combined_parameters_nonbonded(host_system_fixture, hif2a_ligand_pair_si
                     if lamb == 0.0:
                         assert w == 0.0
                     elif lamb == 1.0:
-                        assert w == cutoff
+                        assert w == potential.cutoff
                 elif indicator == 2:
                     # mol_b dummy
                     if lamb == 0.0:
-                        assert w == cutoff
+                        assert w == potential.cutoff
                     elif lamb == 1.0:
                         assert w == 0.0
                 else:
@@ -142,7 +147,7 @@ def test_combined_parameters_nonbonded(host_system_fixture, hif2a_ligand_pair_si
         mol_b_charges = st.ff.q_handle.parameterize(st.mol_b)
         mol_b_sig_eps = st.ff.lj_handle.parameterize(st.mol_b)
 
-        for a_idx, (test_q, test_sig, test_eps, _) in enumerate(hgs.nonbonded_host_guest.potential.params_init[1]):
+        for a_idx, (test_q, test_sig, test_eps, _) in enumerate(params):
 
             if a_idx < num_host_atoms:
                 continue
@@ -173,25 +178,27 @@ def test_combined_parameters_nonbonded(host_system_fixture, hif2a_ligand_pair_si
                 assert test_eps == ref_eps
 
 
+@pytest.mark.parametrize("lamb", np.random.default_rng(2022).uniform(0.01, 0.99, (10,)))
 @pytest.mark.parametrize("host_system_fixture", ["solvent_host_system", "complex_host_system"])
 def test_combined_parameters_nonbonded_intermediate(
-    host_system_fixture, hif2a_ligand_pair_single_topology: SingleTopology, request
+    host_system_fixture, lamb, hif2a_ligand_pair_single_topology: SingleTopology, request
 ):
     st = hif2a_ligand_pair_single_topology
     (host_sys, host_masses), num_water_atoms = request.getfixturevalue(host_system_fixture)
     num_host_atoms = len(host_masses)
 
-    rng = np.random.default_rng(2022)
+    hgs = st.combine_with_host(host_sys, lamb, num_water_atoms)
 
-    for lamb in rng.uniform(0.01, 0.99, (10,)):
-        hgs = st.combine_with_host(host_sys, lamb, num_water_atoms)
-        assert isinstance(hgs.nonbonded_host_guest.potential.potentials[0], potentials.Nonbonded)
-        cutoff = hgs.nonbonded_host_guest.potential.potentials[0].cutoff
+    if host_system_fixture == "solvent_host_system":
+        assert len(hgs.nonbonded_host_guest_ixn.potential.potentials) == 1  # ligand-water
+    elif host_system_fixture == "complex_host_system":
+        assert len(hgs.nonbonded_host_guest_ixn.potential.potentials) == 2  # ligand-water, ligand-protein
 
-        assert len(hgs.nonbonded_host_guest.potential.params_init) > 1
-        # NBIxnGroup has the ligand interaction parameters
-        assert isinstance(hgs.nonbonded_host_guest.potential.potentials[1], potentials.NonbondedInteractionGroup)
-        guest_params = np.array(hgs.nonbonded_host_guest.potential.params_init[1][num_host_atoms:])
+    for potential, params in zip(
+        hgs.nonbonded_host_guest_ixn.potential.potentials, hgs.nonbonded_host_guest_ixn.potential.params_init
+    ):
+        assert isinstance(potential, potentials.NonbondedInteractionGroup)
+        guest_params = np.array(params[num_host_atoms:])
         ws_core = [w for flag, (_, _, _, w) in zip(st.c_flags, guest_params) if flag == 0]
         ws_a = [w for flag, (_, _, _, w) in zip(st.c_flags, guest_params) if flag == 1]
         ws_b = [w for flag, (_, _, _, w) in zip(st.c_flags, guest_params) if flag == 2]
@@ -206,10 +213,27 @@ def test_combined_parameters_nonbonded_intermediate(
         (w_b,) = set(ws_b)
 
         # w in [0, cutoff]
-        assert 0 < w_a < cutoff
-        assert 0 < w_b < cutoff
+        assert 0 < w_a < potential.cutoff
+        assert 0 < w_b < potential.cutoff
 
         if lamb < 0.5:
             assert w_a < w_b
         else:
             assert w_b < w_a
+
+
+@pytest.mark.parametrize("host_system_fixture", ["solvent_host_system", "complex_host_system"])
+def test_nonbonded_host_params_independent_of_lambda(
+    host_system_fixture, hif2a_ligand_pair_single_topology: SingleTopology, request
+):
+    st = hif2a_ligand_pair_single_topology
+    (host_sys, _), num_water_atoms = request.getfixturevalue(host_system_fixture)
+
+    @jax.jit
+    def get_nonbonded_host_params(lamb):
+        return st.combine_with_host(host_sys, lamb, num_water_atoms).nonbonded_host.params
+
+    params0 = get_nonbonded_host_params(0.0)
+    for lamb in np.linspace(0.1, 1, 10):
+        params = get_nonbonded_host_params(lamb)
+        np.testing.assert_array_equal(params, params0)
