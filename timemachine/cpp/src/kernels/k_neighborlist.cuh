@@ -8,7 +8,6 @@ static const int TILE_SIZE = WARP_SIZE;
 
 template <typename RealType>
 void __global__ k_find_block_bounds(
-    const int N,                               // Number of atoms
     const int num_tiles,                       // Number of tiles
     const int num_indices,                     // Number of indices
     const unsigned int *__restrict__ row_idxs, // [num_indices]
@@ -22,71 +21,92 @@ void __global__ k_find_block_bounds(
     // Algorithm taken from https://github.com/openmm/openmm/blob/master/platforms/cuda/src/kernels/findInteractingBlocks.cu#L7
     // Computes smaller bounding boxes than simpler form by accounting for periodic box conditions
 
-    // each thread processes one tile
-    const int tile_idx = blockIdx.x * blockDim.x + threadIdx.x;
+    // each warp processes one tile
+    int tile_idx = (blockIdx.x * blockDim.x + threadIdx.x) / WARP_SIZE;
+
     if (tile_idx >= num_tiles) {
         return;
     }
-    const int row_idx = tile_idx * TILE_SIZE;
-    if (row_idx >= num_indices) {
-        return;
+
+    RealType pos_x;
+    RealType pos_y;
+    RealType pos_z;
+
+    RealType min_pos_x;
+    RealType min_pos_y;
+    RealType min_pos_z;
+
+    RealType max_pos_x;
+    RealType max_pos_y;
+    RealType max_pos_z;
+
+    RealType imaged_pos;
+
+    const RealType box_x = box[0 * 3 + 0];
+    const RealType box_y = box[1 * 3 + 1];
+    const RealType box_z = box[2 * 3 + 2];
+
+    const RealType inv_bx = 1 / box_x;
+    const RealType inv_by = 1 / box_y;
+    const RealType inv_bz = 1 / box_z;
+
+    int row_idx = tile_idx * TILE_SIZE + (threadIdx.x % WARP_SIZE);
+    // Reset the ixn count
+    if (row_idx == 0) {
+        ixn_count[0] = 0;
     }
-    int atom_idx = row_idxs[row_idx];
 
-    const RealType bx = box[0 * 3 + 0];
-    const RealType by = box[1 * 3 + 1];
-    const RealType bz = box[2 * 3 + 2];
+    if (row_idx < num_indices) {
+        int atom_idx = row_idxs[row_idx];
 
-    const RealType inv_bx = 1 / bx;
-    const RealType inv_by = 1 / by;
-    const RealType inv_bz = 1 / bz;
-    RealType pos_x = coords[atom_idx * 3 + 0];
-    RealType pos_y = coords[atom_idx * 3 + 1];
-    RealType pos_z = coords[atom_idx * 3 + 2];
-
-    RealType minPos_x = pos_x;
-    RealType minPos_y = pos_y;
-    RealType minPos_z = pos_z;
-
-    RealType maxPos_x = pos_x;
-    RealType maxPos_y = pos_y;
-    RealType maxPos_z = pos_z;
-
-    const int last = min(row_idx + TILE_SIZE, num_indices);
-    for (int i = row_idx + 1; i < last; i++) {
-        atom_idx = row_idxs[i];
         pos_x = coords[atom_idx * 3 + 0];
         pos_y = coords[atom_idx * 3 + 1];
         pos_z = coords[atom_idx * 3 + 2];
-        // Build up center over time, and recenter before computing
-        // min and max, to reduce overall size of box thanks to accounting
-        // for periodic boundary conditions
-        RealType center_x = static_cast<RealType>(0.5) * (maxPos_x + minPos_x);
-        RealType center_y = static_cast<RealType>(0.5) * (maxPos_y + minPos_y);
-        RealType center_z = static_cast<RealType>(0.5) * (maxPos_z + minPos_z);
-        pos_x -= bx * nearbyint((pos_x - center_x) * inv_bx);
-        pos_y -= by * nearbyint((pos_y - center_y) * inv_by);
-        pos_z -= bz * nearbyint((pos_z - center_z) * inv_bz);
-        minPos_x = min(minPos_x, pos_x);
-        minPos_y = min(minPos_y, pos_y);
-        minPos_z = min(minPos_z, pos_z);
 
-        maxPos_x = max(maxPos_x, pos_x);
-        maxPos_y = max(maxPos_y, pos_y);
-        maxPos_z = max(maxPos_z, pos_z);
+        min_pos_x = pos_x;
+        min_pos_y = pos_y;
+        min_pos_z = pos_z;
+
+        max_pos_x = min_pos_x;
+        max_pos_y = min_pos_y;
+        max_pos_z = min_pos_z;
     }
 
-    block_bounds_ctr[tile_idx * 3 + 0] = static_cast<RealType>(0.5) * (maxPos_x + minPos_x);
-    block_bounds_ctr[tile_idx * 3 + 1] = static_cast<RealType>(0.5) * (maxPos_y + minPos_y);
-    block_bounds_ctr[tile_idx * 3 + 2] = static_cast<RealType>(0.5) * (maxPos_z + minPos_z);
+    // Build up center over time, and recenter before computing
+    // min and max, to reduce overall size of box thanks to accounting
+    // for periodic boundary conditions
+    const int src_lane = threadIdx.x + 1 % WARP_SIZE;
+    for (int i = 0; i < WARP_SIZE; i++) {
+        row_idx = __shfl_sync(0xffffffff, row_idx, src_lane);
+        pos_x = __shfl_sync(0xffffffff, pos_x, src_lane);
+        pos_y = __shfl_sync(0xffffffff, pos_y, src_lane);
+        pos_z = __shfl_sync(0xffffffff, pos_z, src_lane);
+        // Only evaluate for the first thread and when the row idx is valid
+        if (threadIdx.x % WARP_SIZE == 0 && row_idx < num_indices) {
+            imaged_pos =
+                pos_x - box_x * nearbyint((pos_x - static_cast<RealType>(0.5) * (max_pos_x + min_pos_x)) * inv_bx);
+            min_pos_x = min(min_pos_x, imaged_pos);
+            max_pos_x = max(max_pos_x, imaged_pos);
 
-    block_bounds_ext[tile_idx * 3 + 0] = static_cast<RealType>(0.5) * (maxPos_x - minPos_x);
-    block_bounds_ext[tile_idx * 3 + 1] = static_cast<RealType>(0.5) * (maxPos_y - minPos_y);
-    block_bounds_ext[tile_idx * 3 + 2] = static_cast<RealType>(0.5) * (maxPos_z - minPos_z);
+            imaged_pos =
+                pos_y - box_y * nearbyint((pos_y - static_cast<RealType>(0.5) * (max_pos_y + min_pos_y)) * inv_by);
+            min_pos_y = min(min_pos_y, imaged_pos);
+            max_pos_y = max(max_pos_y, imaged_pos);
 
-    // Reset the ixn count
-    if (tile_idx == 0) {
-        ixn_count[0] = 0;
+            imaged_pos =
+                pos_z - box_z * nearbyint((pos_z - static_cast<RealType>(0.5) * (max_pos_z + min_pos_z)) * inv_bz);
+            min_pos_z = min(min_pos_z, imaged_pos);
+            max_pos_z = max(max_pos_z, imaged_pos);
+        }
+    }
+    if (threadIdx.x % WARP_SIZE == 0) {
+        block_bounds_ctr[tile_idx * 3 + 0] = static_cast<RealType>(0.5) * (max_pos_x + min_pos_x);
+        block_bounds_ctr[tile_idx * 3 + 1] = static_cast<RealType>(0.5) * (max_pos_y + min_pos_y);
+        block_bounds_ctr[tile_idx * 3 + 2] = static_cast<RealType>(0.5) * (max_pos_z + min_pos_z);
+
+        block_bounds_ext[tile_idx * 3 + 0] = static_cast<RealType>(0.5) * (max_pos_x - min_pos_x);
+        block_bounds_ext[tile_idx * 3 + 1] = static_cast<RealType>(0.5) * (max_pos_y - min_pos_y);
+        block_bounds_ext[tile_idx * 3 + 2] = static_cast<RealType>(0.5) * (max_pos_z - min_pos_z);
     }
 }
 
@@ -181,7 +201,7 @@ void __global__ k_find_blocks_with_ixns(
     const RealType *__restrict__ column_bb_ctr,   // [N * 3] block centers
     const RealType *__restrict__ column_bb_ext,   // [N * 3] block extents
     const RealType *__restrict__ row_bb_ctr,      // [N * 3] block centers
-    const RealType *__restrict__ row_bb_ext,      // [N * 3] block extants
+    const RealType *__restrict__ row_bb_ext,      // [N * 3] block extents
     const double *__restrict__ coords,            // [N * 3]
     const double *__restrict__ box,
     unsigned int *__restrict__ interactionCount, // number of tiles that have interactions

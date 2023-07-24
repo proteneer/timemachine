@@ -199,11 +199,9 @@ void Neighborlist<RealType>::compute_block_bounds_device(
     }
 
     const int tpb = DEFAULT_THREADS_PER_BLOCK;
-    const int column_blocks = this->num_column_blocks(); // total number of blocks we need to process
 
-    k_find_block_bounds<RealType><<<column_blocks, tpb, 0, stream>>>(
-        N,
-        column_blocks,
+    k_find_block_bounds<RealType><<<ceil_divide(NC_, tpb), tpb, 0, stream>>>(
+        this->num_column_blocks(),
         NC_,
         d_column_idxs_,
         d_coords,
@@ -215,10 +213,8 @@ void Neighborlist<RealType>::compute_block_bounds_device(
     // In the case of upper triangle of the matrix, the column and row indices are the same, so only compute block ixns for both
     // when they are different
     if (!this->compute_upper_triangular()) {
-        const int row_blocks = this->num_row_blocks();
-        k_find_block_bounds<RealType><<<row_blocks, tpb, 0, stream>>>(
-            N,
-            row_blocks,
+        k_find_block_bounds<RealType><<<ceil_divide(NR_, tpb), tpb, 0, stream>>>(
+            this->num_row_blocks(),
             NR_,
             d_row_idxs_,
             d_coords,
