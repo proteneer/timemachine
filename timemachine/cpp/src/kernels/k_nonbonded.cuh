@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../fixed_point.hpp"
+#include "../gpu_utils.cuh"
 #include "k_nonbonded_common.cuh"
 #include "kernel_utils.cuh"
 
@@ -352,6 +353,7 @@ void __global__ k_nonbonded_unified(
     unsigned long long *__restrict__ du_dp,
     __int128 *__restrict__ u_buffer // [blockDim.x]
 ) {
+    static_assert(THREADS <= 256 && (THREADS & (THREADS - 1)) == 0);
     __shared__ box_cache<RealType> shared_box;
     __shared__ __int128 block_energy_buffer[THREADS];
     if (COMPUTE_U) {
@@ -430,12 +432,11 @@ void __global__ k_nonbonded_unified(
     if (COMPUTE_U) {
         // Sync to ensure the shared buffers are populated
         __syncthreads();
+
+        block_energy_reduce<THREADS>(block_energy_buffer, threadIdx.x);
+
         if (threadIdx.x == 0) {
-            __int128 accumulated_energy = 0;
-            for (int i = 0; i < THREADS; i++) {
-                accumulated_energy += block_energy_buffer[i];
-            }
-            u_buffer[blockIdx.x] = accumulated_energy;
+            u_buffer[blockIdx.x] = block_energy_buffer[0];
         }
     }
 }

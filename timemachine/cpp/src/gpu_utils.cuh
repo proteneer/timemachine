@@ -86,13 +86,48 @@ float __device__ __forceinline__ radd_rn(float a, float b) { return __fadd_rn(a,
 double __device__ __forceinline__ radd_rn(double a, double b) { return __dadd_rn(a, b); }
 
 // If this were not int128s, we could do __shfl_down_sync, but only supports up to 64 values
-__device__ __forceinline__ void warp_reduce(volatile __int128 *shared_data, int thread_idx) {
+__device__ __forceinline__ void energy_warp_reduce(volatile __int128 *shared_data, int thread_idx) {
 #pragma unroll 6
     for (int i = 32; i > 0; i /= 2) {
         if (thread_idx < i) {
             shared_data[thread_idx] = shared_data[thread_idx] + shared_data[thread_idx + i];
         }
         __syncwarp();
+    }
+}
+
+template <unsigned int THREADS_PER_BLOCK>
+__device__ __forceinline__ void block_energy_reduce(volatile __int128 *shared_data, int tid) {
+    static_assert(THREADS_PER_BLOCK <= 1024 && (THREADS_PER_BLOCK & (THREADS_PER_BLOCK - 1)) == 0);
+
+    // For larger blocks larger than a warp
+    if (THREADS_PER_BLOCK >= 1024) {
+        if (tid < 512) {
+            shared_data[tid] += shared_data[tid + 512];
+        }
+        __syncthreads();
+    }
+    if (THREADS_PER_BLOCK >= 512) {
+        if (tid < 256) {
+            shared_data[tid] += shared_data[tid + 256];
+        }
+        __syncthreads();
+    }
+    if (THREADS_PER_BLOCK >= 256) {
+        if (tid < 128) {
+            shared_data[tid] += shared_data[tid + 128];
+        }
+        __syncthreads();
+    }
+    if (THREADS_PER_BLOCK >= 128) {
+        if (tid < 64) {
+            shared_data[tid] += shared_data[tid + 64];
+        }
+        __syncthreads();
+    }
+
+    if (tid < WARP_SIZE) {
+        energy_warp_reduce(shared_data, tid);
     }
 }
 
@@ -106,7 +141,7 @@ void __global__ k_accumulate_energy(
     const __int128 *__restrict__ input_buffer, // [N]
     __int128 *__restrict__ u_buffer            // [1]
 ) {
-    static_assert(BLOCK_SIZE <= 512 && (BLOCK_SIZE & (BLOCK_SIZE - 1)) == 0);
+
     __shared__ __int128 shared_mem[BLOCK_SIZE];
     unsigned int tid = threadIdx.x;
     if (tid >= BLOCK_SIZE) {
@@ -124,29 +159,7 @@ void __global__ k_accumulate_energy(
     //
     __syncthreads();
 
-    // For larger blocks larger than a warp
-    if (BLOCK_SIZE >= 512) {
-        if (tid < 256) {
-            shared_mem[tid] += shared_mem[tid + 256];
-            __syncthreads();
-        }
-    }
-    if (BLOCK_SIZE >= 256) {
-        if (tid < 128) {
-            shared_mem[tid] += shared_mem[tid + 128];
-            __syncthreads();
-        }
-    }
-    if (BLOCK_SIZE >= 128) {
-        if (tid < 64) {
-            shared_mem[tid] += shared_mem[tid + 64];
-            __syncthreads();
-        }
-    }
-
-    if (tid < 32) {
-        warp_reduce(shared_mem, tid);
-    }
+    block_energy_reduce<BLOCK_SIZE>(shared_mem, threadIdx.x);
     if (tid == 0) {
         // This could be a race condition if multiple `k_accumulate_energy` are running
         // on the same u_buffer
