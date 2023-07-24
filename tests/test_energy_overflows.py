@@ -271,8 +271,8 @@ def test_energy_overflows_with_summation_of_energies(precision):
     )
     nonbonded_gpu = nonbonded.to_gpu(precision)
 
-    # The reference should return a large energy value
-    assert nonbonded(x, nb_params, box) > 0.0
+    # The reference should return a value larger than we can express in fixed point
+    assert nonbonded(x, nb_params, box) > np.iinfo(np.int64).max / FIXED_EXPONENT
 
     # The GPU potentials will overflow, resulting in a nan value
     assert np.isnan(nonbonded_gpu(x, nb_params, box))
