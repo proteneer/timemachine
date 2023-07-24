@@ -464,6 +464,10 @@ def estimate_free_energy_bar(u_kln_by_component: NDArray, temperature: float) ->
     kBT = BOLTZ * temperature
     dG, dG_err = df * kBT, df_err * kBT  # kJ/mol
 
+    overlap = pair_overlap_from_ukln(u_kln)
+
+    # Componentwise calculations
+
     w_fwd_by_component, w_rev_by_component = jax.vmap(works_from_ukln)(u_kln_by_component)
     dG_err_by_component = np.array(
         [pymbar.BAR(w_fwd, w_rev)[1] * kBT for w_fwd, w_rev in zip(w_fwd_by_component, w_rev_by_component)]
@@ -477,7 +481,6 @@ def estimate_free_energy_bar(u_kln_by_component: NDArray, temperature: float) ->
         dG_err_by_component,
     )
 
-    overlap = pair_overlap_from_ukln(u_kln_by_component.sum(axis=0))
     overlap_by_component = np.array([pair_overlap_from_ukln(u_kln) for u_kln in u_kln_by_component])
 
     return BarResult(dG, dG_err, dG_err_by_component, overlap, overlap_by_component, u_kln_by_component)
