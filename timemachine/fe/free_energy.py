@@ -537,8 +537,8 @@ def run_sims_sequential(
     u_kln_by_component_by_lambda = []
 
     keep_idxs = keep_idxs or []
-    if keep_idxs:
-        assert all(np.array(keep_idxs) >= 0)
+    keep_idxs = [range(len(initial_states))[i] for i in keep_idxs]  # ensure all indices > 0
+    assert np.all(np.array(keep_idxs) >= 0)
 
     for lamb_idx, initial_state in enumerate(initial_states):
 
