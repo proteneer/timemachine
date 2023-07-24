@@ -45,6 +45,7 @@ def get_110_ccc_ff():
 def fixed_overflowed(a):
     """Refer to timemachine/cpp/src/kernels/k_fixed_point.hpp::FLOAT_TO_FIXED_ENERGY for documentation on how we handle energies and overflows"""
     converted_a = np.int64(np.uint64(a))
+    assert converted_a != np.iinfo(np.int64).min, "Unexpected value for fixed point energy"
     return converted_a == np.iinfo(np.int64).max
 
 
