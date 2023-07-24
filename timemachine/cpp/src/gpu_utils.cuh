@@ -104,7 +104,7 @@ template <unsigned int BLOCK_SIZE>
 void __global__ k_accumulate_energy(
     int N,
     const __int128 *__restrict__ input_buffer, // [N]
-    __int128 *__restrict u_buffer              // [1]
+    __int128 *__restrict__ u_buffer            // [1]
 ) {
     static_assert(BLOCK_SIZE <= 512 && (BLOCK_SIZE & (BLOCK_SIZE - 1)) == 0);
     __shared__ __int128 shared_mem[BLOCK_SIZE];
