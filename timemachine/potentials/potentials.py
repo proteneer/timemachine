@@ -235,7 +235,7 @@ class NonbondedPairListPrecomputed(Potential):
 @dataclass
 class SummedPotential(Potential):
     potentials: Sequence[Potential]
-    params_init: Sequence[NDArray]
+    params_init: Sequence[Params]
     parallel: bool = True
 
     def __post_init__(self):

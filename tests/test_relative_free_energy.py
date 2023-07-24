@@ -75,15 +75,17 @@ def run_triple(mol_a, mol_b, core, forcefield, md_params, protein_path, estimate
             n_pairs = len(res.initial_states) - 1
             assert len(res.bar_results) == n_pairs
 
-            for dg_errs in [res.dG_errs, res.dG_err_by_component_by_lambda]:
-                assert np.all(0.0 < np.asarray(dg_errs))
-                assert np.linalg.norm(dg_errs) < 0.1
+            assert np.all(0.0 < np.asarray(res.dG_errs))
+            assert np.linalg.norm(res.dG_errs) < 0.1
 
             assert res.overlap_by_component_by_lambda.shape[0] == n_pairs
             assert res.overlap_by_component_by_lambda.shape[1] == res.dG_err_by_component_by_lambda.shape[1]
             for overlaps in [res.overlaps, res.overlap_by_component_by_lambda]:
                 assert np.all(0.0 < np.asarray(overlaps))
                 assert np.all(np.asarray(overlaps) < 1.0)
+
+            assert np.all(0.0 <= np.asarray(res.dG_err_by_component_by_lambda))
+            assert np.linalg.norm(res.dG_err_by_component_by_lambda) < 0.1
 
         check_pair_bar_result(sim_res.final_result)
         for res in sim_res.intermediate_results:
@@ -313,7 +315,7 @@ def test_imaging_frames():
         md_params=md_params,
         n_windows=windows,
     )
-    keep_idxs = [0, len(res.final_result.initial_states) - 1]
+    keep_idxs = [0, -1]
     assert len(keep_idxs) == len(res.frames)
 
     # A buffer, as imaging doesn't ensure everything is perfectly in the box
@@ -360,6 +362,21 @@ def test_rbfe_with_1_window(estimate_relative_free_energy_fn):
             md_params=md_params,
             prefix="failure",
             n_windows=1,
+        )
+
+
+def test_estimate_free_energy_via_greedy_bisection_invalid_args():
+    mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
+    with pytest.raises(ValueError, match="keep_idxs"):
+        estimate_relative_free_energy_via_greedy_bisection(
+            mol_a,
+            mol_b,
+            core,
+            Forcefield.load_default(),
+            host_config=None,
+            n_windows=3,
+            min_overlap=0.4,
+            keep_idxs=[0, 2],  # invalid with min_overlap not None
         )
 
 

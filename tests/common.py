@@ -23,7 +23,7 @@ from timemachine.integrator import FIXED_EXPONENT
 from timemachine.md.builders import build_protein_system
 from timemachine.potentials import Nonbonded
 from timemachine.potentials.potential import GpuImplWrapper
-from timemachine.potentials.summed import PotentialFxn
+from timemachine.potentials.types import PotentialFxn
 
 
 @contextlib.contextmanager
