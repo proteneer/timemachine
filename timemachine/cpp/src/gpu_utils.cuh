@@ -106,6 +106,7 @@ void __global__ k_accumulate_energy(
     const __int128 *__restrict__ input_buffer, // [N]
     __int128 *__restrict u_buffer              // [1]
 ) {
+    static_assert(BLOCK_SIZE <= 512 && (BLOCK_SIZE & (BLOCK_SIZE - 1)) == 0);
     __shared__ __int128 shared_mem[BLOCK_SIZE];
     unsigned int tid = threadIdx.x;
     if (tid >= BLOCK_SIZE) {
@@ -158,7 +159,7 @@ void __forceinline__ accumulate_energy(
     const __int128 *__restrict__ d_input_buffer, // [N]
     __int128 *__restrict d_u_buffer,             // [1]
     cudaStream_t stream) {
-    const static unsigned int BLOCKS = 512;
-    k_accumulate_energy<BLOCKS><<<1, BLOCKS, 0, stream>>>(N, d_input_buffer, d_u_buffer);
+    const static unsigned int THREADS_PER_BLOCK = 512;
+    k_accumulate_energy<THREADS_PER_BLOCK><<<1, THREADS_PER_BLOCK, 0, stream>>>(N, d_input_buffer, d_u_buffer);
     gpuErrchk(cudaPeekAtLastError());
 }
