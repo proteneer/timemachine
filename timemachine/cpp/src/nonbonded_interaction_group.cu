@@ -36,10 +36,10 @@ NonbondedInteractionGroup<RealType>::NonbondedInteractionGroup(
                     // X: Compute DU_DX
                     // P: Compute DU_DP
                     //                                                                 U  X  P
-                    &k_nonbonded_unified<RealType, 1, 0, 0, 0>,
-                    &k_nonbonded_unified<RealType, 1, 0, 0, 1>,
-                    &k_nonbonded_unified<RealType, 1, 0, 1, 0>,
-                    &k_nonbonded_unified<RealType, 1, 0, 1, 1>,
+                    &k_nonbonded_unified<RealType, NONBONDED_KERNEL_THREADS_PER_BLOCK, 0, 0, 0>,
+                    &k_nonbonded_unified<RealType, NONBONDED_KERNEL_THREADS_PER_BLOCK, 0, 0, 1>,
+                    &k_nonbonded_unified<RealType, NONBONDED_KERNEL_THREADS_PER_BLOCK, 0, 1, 0>,
+                    &k_nonbonded_unified<RealType, NONBONDED_KERNEL_THREADS_PER_BLOCK, 0, 1, 1>,
                     &k_nonbonded_unified<RealType, NONBONDED_KERNEL_THREADS_PER_BLOCK, 1, 0, 0>,
                     &k_nonbonded_unified<RealType, NONBONDED_KERNEL_THREADS_PER_BLOCK, 1, 0, 1>,
                     &k_nonbonded_unified<RealType, NONBONDED_KERNEL_THREADS_PER_BLOCK, 1, 1, 0>,
