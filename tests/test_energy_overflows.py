@@ -245,7 +245,7 @@ def test_energy_overflow_cancelled_by_exclusions(precision, rtol, atol):
 
     # The values are identical because of overflow, as its not clear how to go from
     # C++ __int128 to python integer.
-    assert fixed_pair_list_energy == fixed_pair_list_energy
+    assert fixed_all_pairs_energy == fixed_pair_list_energy
 
 
 @pytest.mark.parametrize("precision", [np.float32, np.float64])
