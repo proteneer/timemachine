@@ -10,6 +10,7 @@ from timemachine.fe.system import VacuumSystem
 from timemachine.fe.utils import get_romol_conf
 from timemachine.ff.handlers import nonbonded
 from timemachine.potentials.nonbonded import combining_rule_epsilon, combining_rule_sigma
+from timemachine.potentials.types import Params
 
 _SCALE_12 = 1.0
 _SCALE_13 = 1.0
@@ -703,9 +704,9 @@ def get_ligand_ixn_pots_params(
     lig_idxs: NDArray,
     water_idxs: NDArray,
     other_idxs: Optional[NDArray],
-    host_nb_params: NDArray,
-    guest_params_ixn_water: NDArray,
-    guest_params_ixn_other: NDArray,
+    host_nb_params: Params,
+    guest_params_ixn_water: Params,
+    guest_params_ixn_other: Params,
     beta=2.0,
     cutoff=1.2,
 ):

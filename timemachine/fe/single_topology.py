@@ -3,6 +3,7 @@ from collections.abc import Iterable
 from functools import partial
 from typing import Callable, Collection, Dict, FrozenSet, List, Optional, Tuple, TypeVar, Union, cast
 
+import jax
 import jax.numpy as jnp
 import networkx as nx
 import numpy as np
@@ -1149,7 +1150,7 @@ class SingleTopology(AtomMapMixin):
 
         return system.VacuumSystem(bond, angle, torsion, nonbonded, chiral_atom, chiral_bond)
 
-    def _get_guest_params(self, q_handle, lj_handle, lamb: float, cutoff: float) -> NDArray:
+    def _get_guest_params(self, q_handle, lj_handle, lamb: float, cutoff: float) -> jax.Array:
         """
         Return an array containing the guest_charges, guest_sigmas, guest_epsilons, guest_w_coords
         for the guest at a given lambda.
@@ -1207,10 +1208,8 @@ class SingleTopology(AtomMapMixin):
 
         return jnp.stack(jnp.array([guest_charges, guest_sigmas, guest_epsilons, guest_w_coords]), axis=1)
 
-    def _parameterize_host_guest_nonbonded(
-        self, lamb, host_nonbonded: BoundPotential[Nonbonded], num_water_atoms: int
-    ) -> BoundPotential[SummedPotential]:
-        # Parameterize nonbonded potential for the host guest interaction
+    def _parameterize_host_nonbonded(self, host_nonbonded: BoundPotential[Nonbonded]) -> BoundPotential[Nonbonded]:
+        """Parameterize host-host nonbonded interactions"""
         num_host_atoms = host_nonbonded.params.shape[0]
         num_guest_atoms = self.get_num_atoms()
         host_params = host_nonbonded.params
@@ -1220,12 +1219,10 @@ class SingleTopology(AtomMapMixin):
         exclusion_idxs = host_nonbonded.potential.exclusion_idxs
         scale_factors = host_nonbonded.potential.scale_factors
 
-        guest_ixn_water_params = self._get_guest_params(self.ff.q_handle_solv, self.ff.lj_handle_solv, lamb, cutoff)
-        guest_ixn_other_params = self._get_guest_params(self.ff.q_handle, self.ff.lj_handle, lamb, cutoff)
-
         # Note: The choice of zeros here is arbitrary. It doesn't affect the
         # potentials or grads, but any function like the seed could depened on these values.
-        hg_nb_params = jnp.concatenate([host_params, np.zeros(guest_ixn_water_params.shape)])
+        hg_nb_params = jnp.concatenate([host_params, np.zeros((num_guest_atoms, host_params.shape[1]))])
+
         combined_nonbonded = Nonbonded(
             num_host_atoms + num_guest_atoms,
             exclusion_idxs,
@@ -1234,6 +1231,19 @@ class SingleTopology(AtomMapMixin):
             cutoff,
             atom_idxs=np.arange(num_host_atoms, dtype=np.int32),
         )
+
+        return combined_nonbonded.bind(hg_nb_params)
+
+    def _parameterize_host_guest_nonbonded_ixn(
+        self, lamb, host_nonbonded: BoundPotential[Nonbonded], num_water_atoms: int
+    ) -> BoundPotential[SummedPotential]:
+        """Parameterize nonbonded interactions between the host and guest"""
+        num_host_atoms = host_nonbonded.params.shape[0]
+        num_guest_atoms = self.get_num_atoms()
+        cutoff = host_nonbonded.potential.cutoff
+
+        guest_ixn_water_params = self._get_guest_params(self.ff.q_handle_solv, self.ff.lj_handle_solv, lamb, cutoff)
+        guest_ixn_other_params = self._get_guest_params(self.ff.q_handle, self.ff.lj_handle, lamb, cutoff)
 
         # L-W terms
         num_other_atoms = num_host_atoms - num_water_atoms
@@ -1251,21 +1261,19 @@ class SingleTopology(AtomMapMixin):
             get_lig_idxs(),
             get_water_idxs(),
             get_other_idxs(),
-            host_params,
+            host_nonbonded.params,
             guest_ixn_water_params,
             guest_ixn_other_params,
-            beta=beta,
+            beta=host_nonbonded.potential.beta,
             cutoff=cutoff,
         )
 
-        hg_total_pot = [combined_nonbonded] + ixn_pots
-        hg_total_params = [hg_nb_params] + ixn_params
-        sum_pot = SummedPotential(hg_total_pot, hg_total_params)
-        bound_sum_pot = sum_pot.bind(jnp.concatenate(hg_total_params).reshape((-1,)))
+        sum_pot = SummedPotential(ixn_pots, ixn_params)
+        bound_sum_pot = sum_pot.bind(jnp.concatenate(ixn_params).reshape((-1,)))
 
         return bound_sum_pot
 
-    def combine_with_host(self, host_system: VacuumSystem, lamb: float, num_water_atoms: int):
+    def combine_with_host(self, host_system: VacuumSystem, lamb: float, num_water_atoms: int) -> HostGuestSystem:
         """
         Setup host guest system. Bonds, angles, torsions, chiral_atom, chiral_bond and nonbonded terms are
         combined. In particular:
@@ -1315,19 +1323,19 @@ class SingleTopology(AtomMapMixin):
         combined_bond_idxs = np.concatenate(
             [host_system.bond.potential.idxs, guest_system.bond.potential.idxs + num_host_atoms]
         )
-        combined_bond_params = np.concatenate([host_system.bond.params, guest_system.bond.params])
+        combined_bond_params = jnp.concatenate([host_system.bond.params, guest_system.bond.params])
         combined_bond = HarmonicBond(combined_bond_idxs).bind(combined_bond_params)
 
         combined_angle_idxs = np.concatenate(
             [host_system.angle.potential.idxs, guest_system.angle.potential.idxs + num_host_atoms]
         )
-        host_angle_params = np.hstack(
+        host_angle_params = jnp.hstack(
             [
                 host_system.angle.params,
                 np.zeros((host_system.angle.params.shape[0], 1)),  # eps = 0
             ]
         )
-        combined_angle_params = np.concatenate([host_angle_params, guest_system.angle.params])
+        combined_angle_params = jnp.concatenate([host_angle_params, guest_system.angle.params])
         combined_angle = HarmonicAngleStable(combined_angle_idxs).bind(combined_angle_params)
 
         assert guest_system.torsion
@@ -1337,16 +1345,18 @@ class SingleTopology(AtomMapMixin):
             combined_torsion_idxs = np.concatenate(
                 [host_system.torsion.potential.idxs, guest_system.torsion.potential.idxs + num_host_atoms]
             )
-            combined_torsion_params = np.concatenate([host_system.torsion.params, guest_system.torsion.params])
+            combined_torsion_params = jnp.concatenate([host_system.torsion.params, guest_system.torsion.params])
         else:
             # solvent waters don't have torsions
             combined_torsion_idxs = np.array(guest_system.torsion.potential.idxs, dtype=np.int32) + num_host_atoms
-            combined_torsion_params = np.array(guest_system.torsion.params, dtype=np.float64)
+            combined_torsion_params = jnp.array(guest_system.torsion.params, dtype=np.float64)
 
         combined_torsion = PeriodicTorsion(combined_torsion_idxs).bind(combined_torsion_params)
 
-        # concatenate guest charges with host charges
-        combined_nonbonded = self._parameterize_host_guest_nonbonded(lamb, host_system.nonbonded, num_water_atoms)
+        host_nonbonded = self._parameterize_host_nonbonded(host_system.nonbonded)
+        host_guest_nonbonded_ixn = self._parameterize_host_guest_nonbonded_ixn(
+            lamb, host_system.nonbonded, num_water_atoms
+        )
 
         return HostGuestSystem(
             combined_bond,
@@ -1355,7 +1365,8 @@ class SingleTopology(AtomMapMixin):
             guest_system.chiral_atom,
             guest_system.chiral_bond,
             guest_system.nonbonded,
-            combined_nonbonded,
+            host_nonbonded,
+            host_guest_nonbonded_ixn,
         )
 
     def get_component_idxs(self) -> List[NDArray]:

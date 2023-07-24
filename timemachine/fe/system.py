@@ -158,15 +158,15 @@ class VacuumSystem(Generic[_Nonbonded, _HarmonicAngle]):
 
 
 @dataclass
-class HostGuestSystem(Generic[_Nonbonded]):
-
+class HostGuestSystem:
     bond: BoundPotential[HarmonicBond]
     angle: BoundPotential[HarmonicAngleStable]
     torsion: BoundPotential[PeriodicTorsion]
     chiral_atom: BoundPotential[ChiralAtomRestraint]
     chiral_bond: BoundPotential[ChiralBondRestraint]
     nonbonded_guest_pairs: BoundPotential[NonbondedPairListPrecomputed]
-    nonbonded_host_guest: BoundPotential[_Nonbonded]
+    nonbonded_host: BoundPotential[Nonbonded]
+    nonbonded_host_guest_ixn: BoundPotential[SummedPotential]
 
     def get_U_fns(self):
 
@@ -179,5 +179,6 @@ class HostGuestSystem(Generic[_Nonbonded]):
             # self.chiral_atom,
             # self.chiral_bond,
             self.nonbonded_guest_pairs,
-            self.nonbonded_host_guest,
+            self.nonbonded_host,
+            self.nonbonded_host_guest_ixn,
         ]

@@ -259,7 +259,7 @@ def compute_or_load_bond_smirks_matches(mol, smirks_list):
     return np.array(bond_idxs), np.array(type_idxs)
 
 
-def apply_bond_charge_corrections(initial_charges, bond_idxs, deltas):
+def apply_bond_charge_corrections(initial_charges, bond_idxs, deltas, runtime_validate=True):
     """For an arbitrary collection of ordered bonds and associated increments `(a, b, delta)`,
     update `charges` by `charges[a] += delta`, `charges[b] -= delta`.
 
@@ -288,7 +288,8 @@ def apply_bond_charge_corrections(initial_charges, bond_idxs, deltas):
     final_net_charge = jnp.sum(final_charges)
     net_charge_is_unchanged = jnp.isclose(final_net_charge, net_charge, atol=1e-5)
 
-    assert net_charge_is_unchanged
+    if runtime_validate:
+        assert net_charge_is_unchanged
 
     # print some safety warnings
     directed_bonds = Counter([tuple(b) for b in bond_idxs])
@@ -560,7 +561,12 @@ class AM1CCCHandler(SerializableMixIn):
         bond_idxs, type_idxs = compute_or_load_bond_smirks_matches(mol, smirks)
 
         deltas = params[type_idxs]
-        q_params = apply_bond_charge_corrections(am1_charges, bond_idxs, deltas)
+        q_params = apply_bond_charge_corrections(
+            am1_charges,
+            bond_idxs,
+            deltas,
+            runtime_validate=False,  # required for jit
+        )
 
         assert q_params.shape[0] == mol.GetNumAtoms()  # check that return shape is consistent with input mol
 

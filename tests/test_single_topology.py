@@ -12,6 +12,7 @@ from hypothesis import assume, given, seed
 from rdkit import Chem
 from rdkit.Chem import AllChem
 
+from timemachine import potentials
 from timemachine.constants import DEFAULT_ATOM_MAPPING_KWARGS
 from timemachine.fe import atom_mapping, single_topology
 from timemachine.fe.dummy import MultipleAnchorWarning
@@ -29,13 +30,11 @@ from timemachine.fe.single_topology import (
     setup_dummy_interactions_from_ff,
 )
 from timemachine.fe.system import convert_bps_into_system, minimize_scipy, simulate_system
-from timemachine.fe.topology import exclude_all_ligand_ligand_ixns
 from timemachine.fe.utils import get_mol_name, get_romol_conf, read_sdf
 from timemachine.ff import Forcefield
 from timemachine.ff.handlers import openmm_deserializer
 from timemachine.md import minimizer
 from timemachine.md.builders import build_protein_system, build_water_system
-from timemachine.potentials import Nonbonded, NonbondedInteractionGroup, SummedPotential
 from timemachine.potentials.jax_utils import pairwise_distances
 
 
@@ -441,9 +440,16 @@ def test_combine_with_host():
 
     st = SingleTopology(mol_a, mol_b, core, ff)
     host_system = st.combine_with_host(convert_bps_into_system(host_bps), 0.5, solvent_conf.shape[0])
-    # Expect there to be 5 functions, excluding the chiral bond and chiral atom restraints
-    # This should be updated when chiral restraints are re-enabled.
-    assert len(host_system.get_U_fns()) == 5
+    assert set(type(bp.potential) for bp in host_system.get_U_fns()) == {
+        potentials.HarmonicBond,
+        potentials.HarmonicAngleStable,
+        potentials.PeriodicTorsion,
+        potentials.NonbondedPairListPrecomputed,
+        potentials.Nonbonded,
+        potentials.SummedPotential,  # P-L + L-W interactions
+        # NOTE: chiral bond and chiral atom restraints excluded
+        # This should be updated when chiral restraints are re-enabled.
+    }
 
 
 @pytest.mark.parametrize("precision, rtol, atol", [(np.float64, 1e-8, 1e-8), (np.float32, 1e-4, 5e-4)])
@@ -526,15 +532,10 @@ def test_nonbonded_intra_split(precision, rtol, atol, use_tiny_mol):
 
 
 class SingleTopologyRef(SingleTopology):
-    def _parameterize_host_guest_nonbonded(self, lamb, host_nonbonded, _):
+    def _parameterize_host_guest_nonbonded_ixn(self, lamb, host_nonbonded, _):
         # Parameterize nonbonded potential for the host guest interaction
         num_host_atoms = host_nonbonded.params.shape[0]
         num_guest_atoms = self.get_num_atoms()
-
-        guest_exclusions, guest_scale_factors = exclude_all_ligand_ligand_ixns(num_host_atoms, num_guest_atoms)
-
-        combined_exclusion_idxs = np.concatenate([host_nonbonded.potential.exclusion_idxs, guest_exclusions])
-        combined_scale_factors = np.concatenate([host_nonbonded.potential.scale_factors, guest_scale_factors])
 
         host_params = host_nonbonded.params
         cutoff = host_nonbonded.potential.cutoff
@@ -542,15 +543,14 @@ class SingleTopologyRef(SingleTopology):
         guest_params = self._get_guest_params(self.ff.q_handle, self.ff.lj_handle, lamb, cutoff)
         combined_nonbonded_params = np.concatenate([host_params, guest_params])
 
-        combined_nonbonded = Nonbonded(
+        host_guest_nonbonded_ixn = potentials.NonbondedInteractionGroup(
             num_host_atoms + num_guest_atoms,
-            combined_exclusion_idxs,
-            combined_scale_factors,
+            np.arange(num_host_atoms, dtype=np.int32),
             host_nonbonded.potential.beta,
             host_nonbonded.potential.cutoff,
         ).bind(combined_nonbonded_params)
 
-        return combined_nonbonded
+        return host_guest_nonbonded_ixn
 
 
 @pytest.mark.parametrize("precision", [np.float64, np.float32])
@@ -576,13 +576,17 @@ def test_nonbonded_intra_split_bitwise_identical(precision, lamb):
 
     combined_ref = st_ref.combine_with_host(host_system, lamb, num_water_atoms)
     ref_potentials = combined_ref.get_U_fns()
-    ref_summed = SummedPotential([bp.potential for bp in ref_potentials], [bp.params for bp in ref_potentials])
+    ref_summed = potentials.SummedPotential(
+        [bp.potential for bp in ref_potentials], [bp.params for bp in ref_potentials]
+    )
     flattened_ref_params = np.concatenate([bp.params.reshape(-1) for bp in ref_potentials])
 
     st_split = SingleTopology(mol_a, mol_b, core, ff)
     combined_split = st_split.combine_with_host(host_system, lamb, num_water_atoms)
     split_potentials = combined_split.get_U_fns()
-    split_summed = SummedPotential([bp.potential for bp in split_potentials], [bp.params for bp in split_potentials])
+    split_summed = potentials.SummedPotential(
+        [bp.potential for bp in split_potentials], [bp.params for bp in split_potentials]
+    )
     flattened_split_params = np.concatenate([bp.params.reshape(-1) for bp in split_potentials])
 
     ligand_conf = st_ref.combine_confs(get_romol_conf(mol_a), get_romol_conf(mol_b), lamb)
@@ -668,7 +672,7 @@ def test_combine_with_host_split(precision, rtol, atol):
         num_total_atoms = combined_conf.shape[0]
 
         cutoff = host_system.nonbonded.potential.cutoff
-        u = NonbondedInteractionGroup(
+        u = potentials.NonbondedInteractionGroup(
             num_total_atoms,
             ligand_idxs,
             host_system.nonbonded.potential.beta,

@@ -3,12 +3,14 @@ from functools import lru_cache
 from typing import Callable, Iterable, List, Optional, Sequence, Tuple, Union, overload
 from warnings import warn
 
+import jax
 import numpy as np
+import pymbar
 from numpy.typing import NDArray
 
 from timemachine.constants import BOLTZ
 from timemachine.fe import model_utils, topology
-from timemachine.fe.bar import bar_with_bootstrapped_uncertainty, df_err_from_ukln, pair_overlap_from_ukln
+from timemachine.fe.bar import bar_with_bootstrapped_uncertainty, pair_overlap_from_ukln, works_from_ukln
 from timemachine.fe.energy_decomposition import (
     Batch_u_fn,
     EnergyDecomposedState,
@@ -456,15 +458,25 @@ def estimate_free_energy_bar(u_kln_by_component: NDArray, temperature: float) ->
     """
     u_kln = u_kln_by_component.sum(0)
 
-    w_fwd = u_kln[1, 0] - u_kln[0, 0]
-    w_rev = u_kln[0, 1] - u_kln[1, 1]
-
+    w_fwd, w_rev = works_from_ukln(u_kln)
     df, df_err = bar_with_bootstrapped_uncertainty(w_fwd, w_rev)  # reduced units
 
     kBT = BOLTZ * temperature
     dG, dG_err = df * kBT, df_err * kBT  # kJ/mol
 
-    dG_err_by_component = np.array([df_err_from_ukln(u_kln) * kBT for u_kln in u_kln_by_component])
+    w_fwd_by_component, w_rev_by_component = jax.vmap(works_from_ukln)(u_kln_by_component)
+    dG_err_by_component = np.array(
+        [pymbar.BAR(w_fwd, w_rev)[1] * kBT for w_fwd, w_rev in zip(w_fwd_by_component, w_rev_by_component)]
+    )
+
+    # When forward and reverse works are identically zero (usually because a given energy term does not depend on
+    # lambda, e.g. host-host nonbonded interactions), BAR error is undefined; we return 0.0 by convention.
+    dG_err_by_component = np.where(
+        np.all(np.isclose(w_fwd_by_component, 0.0), axis=1) & np.all(np.isclose(w_rev_by_component, 0.0), axis=1),
+        0.0,
+        dG_err_by_component,
+    )
+
     overlap = pair_overlap_from_ukln(u_kln_by_component.sum(axis=0))
     overlap_by_component = np.array([pair_overlap_from_ukln(u_kln) for u_kln in u_kln_by_component])
 
