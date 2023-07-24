@@ -274,7 +274,6 @@ void __device__ v_nonbonded_unified(
             }
 
             if (COMPUTE_U) {
-                // If the energy is overflowed, don't bother adding it to the buffer
                 energy_buffer[threadIdx.x] += FLOAT_TO_FIXED_ENERGY<RealType>(u);
             }
         }
