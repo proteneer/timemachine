@@ -85,8 +85,80 @@ float __device__ __forceinline__ radd_rn(float a, float b) { return __fadd_rn(a,
 
 double __device__ __forceinline__ radd_rn(double a, double b) { return __dadd_rn(a, b); }
 
+// If this were not int128s, we could do __shfl_down_sync, but only supports up to 64 values
+__device__ __forceinline__ void warp_reduce(volatile __int128 *shared_data, int thread_idx) {
+#pragma unroll 6
+    for (int i = 32; i > 0; i /= 2) {
+        if (thread_idx < i) {
+            shared_data[thread_idx] = shared_data[thread_idx] + shared_data[thread_idx + i];
+        }
+        __syncwarp();
+    }
+}
+
+// Taken originally from https://developer.download.nvidia.com/assets/cuda/files/reduction.pdf
+// but modified to account for post Cuda 9.0 which no longer implicitly syncs warps and the
+// fact that we don't need to launch recursive blocks as we can simply reduce the number of energies
+// that are accumulated.
+template <unsigned int BLOCK_SIZE>
 void __global__ k_accumulate_energy(
     int N,
     const __int128 *__restrict__ input_buffer, // [N]
     __int128 *__restrict u_buffer              // [1]
-);
+) {
+    __shared__ __int128 shared_mem[BLOCK_SIZE];
+    unsigned int tid = threadIdx.x;
+    if (tid >= BLOCK_SIZE) {
+        return;
+    }
+
+    unsigned int i = tid;
+    const unsigned int stride = BLOCK_SIZE * 2;
+    shared_mem[tid] = 0;
+    while (i < N) {
+        // Only add two values if the input buffer has enough input
+        shared_mem[tid] += input_buffer[i] + (i + BLOCK_SIZE < N ? input_buffer[i + BLOCK_SIZE] : 0);
+        i += stride;
+    }
+    //
+    __syncthreads();
+
+    // For larger blocks larger than a warp
+    if (BLOCK_SIZE >= 512) {
+        if (tid < 256) {
+            shared_mem[tid] += shared_mem[tid + 256];
+            __syncthreads();
+        }
+    }
+    if (BLOCK_SIZE >= 256) {
+        if (tid < 128) {
+            shared_mem[tid] += shared_mem[tid + 128];
+            __syncthreads();
+        }
+    }
+    if (BLOCK_SIZE >= 128) {
+        if (tid < 64) {
+            shared_mem[tid] += shared_mem[tid + 64];
+            __syncthreads();
+        }
+    }
+
+    if (tid < 32) {
+        warp_reduce(shared_mem, tid);
+    }
+    if (tid == 0) {
+        // This could be a race condition if multiple `k_accumulate_energy` are running
+        // on the same u_buffer
+        u_buffer[0] = shared_mem[0];
+    }
+}
+
+void __forceinline__ accumulate_energy(
+    int N,
+    const __int128 *__restrict__ d_input_buffer, // [N]
+    __int128 *__restrict d_u_buffer,             // [1]
+    cudaStream_t stream) {
+    const static unsigned int BLOCKS = 512;
+    k_accumulate_energy<BLOCKS><<<1, BLOCKS, 0, stream>>>(N, d_input_buffer, d_u_buffer);
+    gpuErrchk(cudaPeekAtLastError());
+}

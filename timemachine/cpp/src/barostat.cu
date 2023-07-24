@@ -297,8 +297,7 @@ void MonteCarloBarostat::inplace_move(
     gpuErrchk(cudaMemsetAsync(d_u_after_buffer_, 0, bps_.size() * sizeof(*d_u_after_buffer_), stream));
 
     runner_.execute_potentials(bps_, N_, d_x, d_box, nullptr, nullptr, d_u_buffer_, stream);
-    k_accumulate_energy<<<1, 1, 0, stream>>>(bps_.size(), d_u_buffer_, d_init_u_);
-    gpuErrchk(cudaPeekAtLastError());
+    accumulate_energy(bps_.size(), d_u_buffer_, d_init_u_, stream);
 
     k_setup_barostat_move<<<1, 1, 0, stream>>>(d_rand_, d_box, d_volume_delta_, d_volume_scale_, d_length_scale_);
     gpuErrchk(cudaPeekAtLastError());
@@ -332,8 +331,7 @@ void MonteCarloBarostat::inplace_move(
 
     runner_.execute_potentials(bps_, N_, d_x_after_, d_box_after_, nullptr, nullptr, d_u_after_buffer_, stream);
 
-    k_accumulate_energy<<<1, 1, 0, stream>>>(bps_.size(), d_u_after_buffer_, d_final_u_);
-    gpuErrchk(cudaPeekAtLastError());
+    accumulate_energy(bps_.size(), d_u_after_buffer_, d_final_u_, stream);
 
     double pressure = pressure_ * AVOGADRO * 1e-25;
     const double kT = BOLTZ * temperature_;

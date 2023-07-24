@@ -72,8 +72,7 @@ void SummedPotential::execute_device(
         }
     }
     if (d_u) {
-        k_accumulate_energy<<<1, 1, 0, stream>>>(potentials_.size(), d_u_buffer_.data, d_u);
-        gpuErrchk(cudaPeekAtLastError());
+        accumulate_energy(potentials_.size(), d_u_buffer_.data, d_u, stream);
     }
 };
 

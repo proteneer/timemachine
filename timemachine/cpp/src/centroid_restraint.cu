@@ -68,8 +68,7 @@ void CentroidRestraint<RealType>::execute_device(
         gpuErrchk(cudaPeekAtLastError());
 
         if (d_u) {
-            k_accumulate_energy<<<1, 1, 0, stream>>>(1, d_u_buffer_, d_u);
-            gpuErrchk(cudaPeekAtLastError());
+            accumulate_energy(1, d_u_buffer_, d_u, stream);
         }
     }
 };

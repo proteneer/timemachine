@@ -52,8 +52,7 @@ void ChiralAtomRestraint<RealType>::execute_device(
         gpuErrchk(cudaPeekAtLastError());
 
         if (d_u) {
-            k_accumulate_energy<<<1, 1, 0, stream>>>(R_, d_u_buffer_, d_u);
-            gpuErrchk(cudaPeekAtLastError());
+            accumulate_energy(R_, d_u_buffer_, d_u, stream);
         }
     }
 };
