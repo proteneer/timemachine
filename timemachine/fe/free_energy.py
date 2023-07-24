@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from functools import lru_cache
+from functools import cache
 from typing import Callable, Iterable, List, Optional, Sequence, Tuple, Union, overload
 from warnings import warn
 
@@ -630,8 +630,6 @@ def run_sims_with_greedy_bisection(
 
     assert len(initial_lambdas) >= 2
     assert np.all(np.diff(initial_lambdas) > 0), "initial lambda schedule must be monotonically increasing"
-
-    cache = lru_cache(maxsize=None)
 
     get_initial_state = cache(make_initial_state)
 
