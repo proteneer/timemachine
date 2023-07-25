@@ -464,6 +464,21 @@ def estimate_free_energy_bar(u_kln_by_component: NDArray, temperature: float) ->
         results from BAR computation
 
     """
+
+    # 1. We represent energies that we aren't able to evaluate (e.g. because of a fixed-point overflow in GPU potential code) with NaNs, but
+    # 2. pymbar.MBAR will fail with LinAlgError if there are NaNs in the input.
+    #
+    # To work around this, we replace any NaNs with np.inf prior to the MBAR calculation.
+    #
+    # This is reasonable because u(x) -> inf corresponds to probability(x) -> 0, so this in effect declares that these
+    # pathological states have zero weight.
+    if np.any(np.isnan(u_kln_by_component)):
+        warn(
+            "Encountered NaNs in u_kln matrix. Replacing each instance with inf prior to MBAR calculation",
+            IndeterminateEnergyWarning,
+        )
+        u_kln_by_component = np.where(np.isnan(u_kln_by_component), np.inf, u_kln_by_component)
+
     u_kln = u_kln_by_component.sum(0)
 
     df, df_err = bar_with_bootstrapped_uncertainty(u_kln)  # reduced units
