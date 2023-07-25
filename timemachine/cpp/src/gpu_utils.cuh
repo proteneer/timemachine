@@ -86,7 +86,9 @@ float __device__ __forceinline__ radd_rn(float a, float b) { return __fadd_rn(a,
 double __device__ __forceinline__ radd_rn(double a, double b) { return __dadd_rn(a, b); }
 
 // If this were not int128s, we could do __shfl_down_sync, but only supports up to 64 values
+// For more details reference the PDF in the docstring for k_accumulate_energy
 __device__ __forceinline__ void energy_warp_reduce(volatile __int128 *shared_data, int thread_idx) {
+    // Repeatedly sum up the two halfs of the shared data
 #pragma unroll 6
     for (int i = 32; i > 0; i /= 2) {
         if (thread_idx < i) {
@@ -96,6 +98,10 @@ __device__ __forceinline__ void energy_warp_reduce(volatile __int128 *shared_dat
     }
 }
 
+// block_energy_reduce does a parallel reduction over shared memory within a block. The THREADS_PER_BLOCK
+// template is used to handle the cases where the number of threads is greater than a warp and sums half of the
+// values repeatedly until the final warp level reduction which stores the final accumulated value in `shared_data[0]`.
+// For more details reference the PDF in the docstring for k_accumulate_energy
 template <unsigned int THREADS_PER_BLOCK>
 __device__ __forceinline__ void block_energy_reduce(volatile __int128 *shared_data, int tid) {
     static_assert(THREADS_PER_BLOCK <= 1024 && (THREADS_PER_BLOCK & (THREADS_PER_BLOCK - 1)) == 0);
