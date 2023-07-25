@@ -144,12 +144,6 @@ void MonteCarloBarostat::inplace_move(
     // Generate scaling and metropolis conditions in one pass
     curandErrchk(curandGenerateUniformDouble(cr_rng_, d_rand_, 2));
 
-    gpuErrchk(cudaMemsetAsync(d_init_u_, 0, sizeof(*d_init_u_), stream));
-    gpuErrchk(cudaMemsetAsync(d_final_u_, 0, sizeof(*d_final_u_), stream));
-
-    gpuErrchk(cudaMemsetAsync(d_u_buffer_, 0, bps_.size() * sizeof(*d_u_buffer_), stream));
-    gpuErrchk(cudaMemsetAsync(d_u_after_buffer_, 0, bps_.size() * sizeof(*d_u_after_buffer_), stream));
-
     runner_.execute_potentials(bps_, N_, d_x, d_box, nullptr, nullptr, d_u_buffer_, stream);
     accumulate_energy(bps_.size(), d_u_buffer_, d_init_u_, stream);
 
@@ -162,6 +156,9 @@ void MonteCarloBarostat::inplace_move(
     // Create duplicates of the coords/box that we can modify
     gpuErrchk(cudaMemcpyAsync(d_x_after_, d_x, N_ * 3 * sizeof(*d_x), cudaMemcpyDeviceToDevice, stream));
     gpuErrchk(cudaMemcpyAsync(d_box_after_, d_box, 3 * 3 * sizeof(*d_box_after_), cudaMemcpyDeviceToDevice, stream));
+
+    runner_.execute_potentials(bps_, N_, d_x, d_box, nullptr, nullptr, d_u_buffer_, stream);
+    accumulate_energy(bps_.size(), d_u_buffer_, d_init_u_, stream);
 
     const int tpb = DEFAULT_THREADS_PER_BLOCK;
     const int blocks = ceil_divide(num_grouped_atoms_, tpb);
