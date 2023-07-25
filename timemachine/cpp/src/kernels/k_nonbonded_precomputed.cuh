@@ -59,21 +59,17 @@ void __global__ k_nonbonded_precomputed(
     RealType real_cutoff = static_cast<RealType>(cutoff);
     RealType cutoff_squared = real_cutoff * real_cutoff;
 
-    RealType box_x = box[0 * 3 + 0];
-    RealType box_y = box[1 * 3 + 1];
-    RealType box_z = box[2 * 3 + 2];
-
-    RealType inv_box_x = 1 / box_x;
-    RealType inv_box_y = 1 / box_y;
-    RealType inv_box_z = 1 / box_z;
+    RealType inv_box_x = 1 / box[0 * 3 + 0];
+    RealType inv_box_y = 1 / box[1 * 3 + 1];
+    RealType inv_box_z = 1 / box[2 * 3 + 2];
 
     RealType delta_x = ci_x - cj_x;
     RealType delta_y = ci_y - cj_y;
     RealType delta_z = ci_z - cj_z;
 
-    delta_x -= box_x * nearbyint(delta_x * inv_box_x);
-    delta_y -= box_y * nearbyint(delta_y * inv_box_y);
-    delta_z -= box_z * nearbyint(delta_z * inv_box_z);
+    delta_x -= box[0 * 3 + 0] * nearbyint(delta_x * inv_box_x);
+    delta_y -= box[1 * 3 + 1] * nearbyint(delta_y * inv_box_y);
+    delta_z -= box[2 * 3 + 2] * nearbyint(delta_z * inv_box_z);
 
     __int128 energy = 0;
 
@@ -81,9 +77,8 @@ void __global__ k_nonbonded_precomputed(
 
     if (d2_ij < cutoff_squared) {
 
-        RealType d_ij = sqrt(d2_ij);
-
-        RealType inv_dij = 1 / d_ij;
+        RealType inv_dij = rsqrt(d2_ij);
+        RealType d_ij = d2_ij * inv_dij;
 
         if (q_ij != 0) {
 
