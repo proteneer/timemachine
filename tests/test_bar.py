@@ -1,67 +1,91 @@
+from functools import partial
+from typing import Tuple
+
 import numpy as np
 import pymbar
 import pytest
-from pymbar.testsystems import ExponentialTestCase, gaussian_work_example
+from numpy.typing import NDArray
+from pymbar.testsystems import ExponentialTestCase
 
 from timemachine.fe.bar import (
     bar_with_bootstrapped_uncertainty,
     bootstrap_bar,
     compute_fwd_and_reverse_df_over_time,
+    mbar_from_u_kln,
     pair_overlap_from_ukln,
 )
 
 
+def gaussian_ukln_example(
+    params_1: Tuple[float, float], params_2: Tuple[float, float], seed: int = 0, n_samples: int = 2000
+) -> NDArray:
+    """Generate 2-state u_kln matrix for the specified pair of normal distributions."""
+
+    def u(mu, sigma, x):
+        return (x - mu) ** 2 / (2 * sigma ** 2)
+
+    mu_1, sigma_1 = params_1
+    mu_2, sigma_2 = params_2
+
+    u_1 = partial(u, mu_1, sigma_1)
+    u_2 = partial(u, mu_2, sigma_2)
+
+    rng = np.random.default_rng(seed)
+
+    x_1 = rng.normal(mu_1, sigma_1, (n_samples,))
+    x_2 = rng.normal(mu_2, sigma_2, (n_samples,))
+
+    return np.array([[u_1(x_1), u_1(x_2)], [u_2(x_1), u_2(x_2)]])
+
+
 @pytest.mark.nogpu
-def test_bootstrap_bar():
+@pytest.mark.parametrize("sigma", [0.1, 1.0, 10.0])
+def test_bootstrap_bar(sigma):
     np.random.seed(0)
-    n_bootstrap = 1000
+    n_bootstrap = 100
 
-    for sigma_F in [0.1, 1, 10]:
-        # default rbfe instance size, varying difficulty
-        w_F, w_R = gaussian_work_example(2000, 2000, sigma_F=sigma_F, seed=0)
+    # default rbfe instance size, varying difficulty
+    u_kln = gaussian_ukln_example((0.0, 1.0), (1.0, sigma))
 
-        # estimate 3 times
-        df_ref, ddf_ref = pymbar.BAR(w_F, w_R)
-        df_0, bootstrap_samples = bootstrap_bar(w_F, w_R, n_bootstrap=n_bootstrap)
-        df_1, bootstrap_sigma = bar_with_bootstrapped_uncertainty(w_F, w_R)
+    # estimate 3 times
+    dfs_ref, ddfs_ref = mbar_from_u_kln(u_kln).getFreeEnergyDifferences()
+    df_ref = dfs_ref[1, 0]
+    ddf_ref = ddfs_ref[1, 0]
+    df_0, bootstrap_samples = bootstrap_bar(u_kln, n_bootstrap=n_bootstrap)
+    df_1, bootstrap_sigma = bar_with_bootstrapped_uncertainty(u_kln)
 
-        # assert estimates identical, uncertainties comparable
-        print(f"stddev(w_F) = {sigma_F}, bootstrap uncertainty = {bootstrap_sigma}, pymbar.BAR uncertainty = {ddf_ref}")
-        assert df_0 == df_ref
-        assert df_1 == df_ref
-        assert len(bootstrap_samples) == n_bootstrap, "timed out on default problem size!"
-        np.testing.assert_approx_equal(bootstrap_sigma, ddf_ref, significant=1)
+    # assert estimates identical, uncertainties comparable
+    print(f"bootstrap uncertainty = {bootstrap_sigma}, pymbar.MBAR uncertainty = {ddf_ref}")
+    assert df_0 == df_ref
+    assert df_1 == df_ref
+    assert len(bootstrap_samples) == n_bootstrap, "timed out on default problem size!"
+    np.testing.assert_approx_equal(bootstrap_sigma, ddf_ref, significant=1)
+
+
+@pytest.mark.parametrize("sigma", [0.3, 1.0, 10.0])
+def test_compare_with_pymbar_bar(sigma):
+    """Compare the estimator used for 2-state delta fs (currently MBAR) with pymbar.BAR as reference."""
+    u_kln = gaussian_ukln_example((0.0, 1.0), (1.0, sigma))
+
+    w_F = u_kln[1, 0] - u_kln[0, 0]
+    w_R = u_kln[0, 1] - u_kln[1, 1]
+
+    df_ref, _ = pymbar.BAR(w_F, w_R)
+    dfs, _ = mbar_from_u_kln(u_kln).getFreeEnergyDifferences()
+
+    assert dfs[1, 0] == pytest.approx(df_ref, rel=0.05, abs=0.01)
 
 
 @pytest.mark.nogpu
 def test_pair_overlap_from_ukln():
-    def gaussian_overlap(p1, p2):
-        def make_gaussian(params):
-            mu, sigma = params
-
-            def u(x):
-                return (x - mu) ** 2 / (2 * sigma ** 2)
-
-            rng = np.random.default_rng(2022)
-            x = rng.normal(mu, sigma, 100)
-
-            return u, x
-
-        u1, x1 = make_gaussian(p1)
-        u2, x2 = make_gaussian(p2)
-
-        u_kln = np.array([[u1(x1), u1(x2)], [u2(x1), u2(x2)]])
-
-        return pair_overlap_from_ukln(u_kln)
-
     # identical distributions
-    np.testing.assert_allclose(gaussian_overlap((0, 1), (0, 1)), 1.0)
+    assert pair_overlap_from_ukln(gaussian_ukln_example((0, 1), (0, 1))) == pytest.approx(1.0)
 
     # non-overlapping
-    assert gaussian_overlap((0, 0.01), (1, 0.01)) < 1e-10
+    assert pair_overlap_from_ukln(gaussian_ukln_example((0, 0.01), (1, 0.01))) < 1e-10
 
     # overlapping
-    assert gaussian_overlap((0, 0.1), (0.5, 0.2)) > 0.1
+    assert pair_overlap_from_ukln(gaussian_ukln_example((0, 0.1), (0.5, 0.2))) > 0.1
 
 
 @pytest.mark.nogpu

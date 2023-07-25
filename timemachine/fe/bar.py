@@ -99,15 +99,37 @@ def dG_dw(w):
     return dG_dw
 
 
-def bootstrap_bar(w_F, w_R, n_bootstrap=1000, timeout=10) -> Tuple[float, NDArray]:
-    """Subsample w_F, w_R with replacement and re-run BAR many times
+def mbar_from_u_kln(u_kln: NDArray, **kwargs):
+    """Construct a pymbar.MBAR instance given a 2-state u_kln matrix."""
+    k, l, n = u_kln.shape
+    assert k == l == 2
+    u_kn = u_kln.reshape(k, -1)
+    assert u_kn.shape == (k, l * n)
+    N_k = n * np.ones(l)
+    return pymbar.MBAR(u_kln, N_k, **kwargs)
+
+
+def df_and_err_from_u_kln(u_kln: NDArray, **kwargs) -> Tuple[float, float]:
+    """Compute free energy difference and uncertainty given a 2-state u_kln matrix."""
+    mbar = mbar_from_u_kln(u_kln, **kwargs)
+    df, ddf = mbar.getFreeEnergyDifferences()
+    return df[1, 0], ddf[1, 0]
+
+
+def df_from_u_kln(u_kln: NDArray, **kwargs) -> float:
+    """Compute free energy difference given a 2-state u_kln matrix."""
+    mbar = mbar_from_u_kln(u_kln, **kwargs)
+    df = mbar.getFreeEnergyDifferences(compute_uncertainty=False)[0]
+    return df[1, 0]
+
+
+def bootstrap_bar(u_kln: NDArray, n_bootstrap=1000, timeout=10) -> Tuple[float, NDArray]:
+    """Given a 2-state u_kln matrix, subsample u_kln with replacement and re-run bar_from_u_kln many times
 
     Parameters
     ----------
-    w_F : array
-        forward works
-    w_R : array
-        reverse works
+    u_kln : array
+        2-state u_kln matrix
     n_bootstrap : int
         # bootstrap samples
     timeout : int
@@ -126,9 +148,11 @@ def bootstrap_bar(w_F, w_R, n_bootstrap=1000, timeout=10) -> Tuple[float, NDArra
     * TODO[deboggle] -- upgrade from pymbar3 to pymbar4 and remove this
     * TODO[performance] -- multiprocessing, if needed?
     """
-    full_bar_result = pymbar.BAR(w_F, w_R, compute_uncertainty=False)
+    mbar = mbar_from_u_kln(u_kln)
 
-    n_F, n_R = len(w_F), len(w_R)
+    full_bar_result = mbar.getFreeEnergyDifferences(compute_uncertainty=False)[0][1, 0]
+
+    _, _, n = u_kln.shape
 
     bootstrap_samples = []
 
@@ -142,27 +166,22 @@ def bootstrap_bar(w_F, w_R, n_bootstrap=1000, timeout=10) -> Tuple[float, NDArra
         if elapsed_time > timeout:
             break
 
-        w_F_sample = rng.choice(w_F, size=(n_F,), replace=True)
-        w_R_sample = rng.choice(w_R, size=(n_R,), replace=True)
+        u_kln_sample = rng.choice(u_kln, size=(n,), replace=True, axis=-1)
 
-        bar_result = pymbar.BAR(
-            w_F=w_F_sample,
-            w_R=w_R_sample,
-            DeltaF=full_bar_result,  # warm start
-            compute_uncertainty=False,
+        bar_result = df_from_u_kln(
+            u_kln_sample,
+            initial_f_k=mbar.f_k,  # warm start
             relative_tolerance=1e-6,  # reduce cost
         )
-
         bootstrap_samples.append(bar_result)
 
     return full_bar_result, np.array(bootstrap_samples)
 
 
-def bar_with_bootstrapped_uncertainty(w_F, w_R, n_bootstrap=1000, timeout=10) -> Tuple[float, float]:
-    """Drop-in replacement for pymbar.BAR(w_F, w_R) -> (df, ddf)
-    where first return is forwarded from pymbar.BAR but second return is computed by bootstrapping"""
+def bar_with_bootstrapped_uncertainty(u_kln: NDArray, n_bootstrap=1000, timeout=10) -> Tuple[float, float]:
+    """Given 2-state u_kln, returns free energy difference and uncertainty computed by bootstrapping."""
 
-    df, bootstrap_dfs = bootstrap_bar(w_F, w_R, n_bootstrap=n_bootstrap, timeout=timeout)
+    df, bootstrap_dfs = bootstrap_bar(u_kln, n_bootstrap=n_bootstrap, timeout=timeout)
 
     # warn if bootstrap distribution deviates significantly from normality
     normaltest_result = normaltest(bootstrap_dfs)
@@ -185,7 +204,7 @@ def works_from_ukln(u_kln: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
 
 
 def df_from_ukln_by_lambda(ukln_by_lambda: NDArray) -> Tuple[float, float]:
-    """Extract dF and dF error compute by BAR over a series of lambda windows
+    """Extract df and df error computed by BAR over a series of lambda windows
 
     Parameters
     ----------
@@ -203,15 +222,13 @@ def df_from_ukln_by_lambda(ukln_by_lambda: NDArray) -> Tuple[float, float]:
     win_errs = []
     for lambda_idx in range(ukln_by_lambda.shape[0]):
         window_ukln = ukln_by_lambda[lambda_idx]
-
-        w_fwd, w_rev = works_from_ukln(window_ukln)
-        dF, dF_err = pymbar.BAR(w_fwd, w_rev)
-        win_dfs.append(dF)
-        win_errs.append(dF_err)
+        df, df_err = df_and_err_from_u_kln(window_ukln)
+        win_dfs.append(df)
+        win_errs.append(df_err)
     return np.sum(win_dfs), np.linalg.norm(win_errs)  # type: ignore
 
 
-def pair_overlap_from_ukln(u_kln: np.ndarray) -> float:
+def pair_overlap_from_ukln(u_kln: NDArray) -> float:
     """Compute the off-diagonal entry of 2x2 MBAR overlap matrix,
         and normalize to interval [0,1]
 
