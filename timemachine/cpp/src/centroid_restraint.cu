@@ -1,4 +1,5 @@
 #include "centroid_restraint.hpp"
+#include "energy_accumulation.hpp"
 #include "gpu_utils.cuh"
 #include "k_centroid_restraint.cuh"
 #include "math_utils.cuh"
@@ -19,6 +20,8 @@ CentroidRestraint<RealType>::CentroidRestraint(
 
     cudaSafeMalloc(&d_centroid_a_, 3 * sizeof(*d_centroid_a_));
     cudaSafeMalloc(&d_centroid_b_, 3 * sizeof(*d_centroid_b_));
+
+    cudaSafeMalloc(&d_u_buffer_, sizeof(*d_u_buffer_));
 };
 
 template <typename RealType> CentroidRestraint<RealType>::~CentroidRestraint() {
@@ -26,6 +29,7 @@ template <typename RealType> CentroidRestraint<RealType>::~CentroidRestraint() {
     gpuErrchk(cudaFree(d_group_b_idxs_));
     gpuErrchk(cudaFree(d_centroid_a_));
     gpuErrchk(cudaFree(d_centroid_b_));
+    gpuErrchk(cudaFree(d_u_buffer_));
 };
 
 template <typename RealType>
@@ -37,23 +41,37 @@ void CentroidRestraint<RealType>::execute_device(
     const double *d_box,
     unsigned long long *d_du_dx,
     unsigned long long *d_du_dp,
-    unsigned long long *d_u,
-    int *d_u_overflow_count,
+    __int128 *d_u,
     cudaStream_t stream) {
 
-    int tpb = DEFAULT_THREADS_PER_BLOCK;
+    if (N_B_ + N_A_ > 0) {
+        int tpb = DEFAULT_THREADS_PER_BLOCK;
 
-    int blocks = ceil_divide(N_B_ + N_A_, tpb);
-    gpuErrchk(cudaMemsetAsync(d_centroid_a_, 0.0, 3 * sizeof(*d_centroid_a_), stream));
-    gpuErrchk(cudaMemsetAsync(d_centroid_b_, 0.0, 3 * sizeof(*d_centroid_b_), stream));
-    k_calc_centroid<RealType>
-        <<<blocks, tpb, 0, stream>>>(d_x, d_group_a_idxs_, d_group_b_idxs_, N_A_, N_B_, d_centroid_a_, d_centroid_b_);
+        int blocks = ceil_divide(N_B_ + N_A_, tpb);
+        gpuErrchk(cudaMemsetAsync(d_centroid_a_, 0.0, 3 * sizeof(*d_centroid_a_), stream));
+        gpuErrchk(cudaMemsetAsync(d_centroid_b_, 0.0, 3 * sizeof(*d_centroid_b_), stream));
+        k_calc_centroid<RealType><<<blocks, tpb, 0, stream>>>(
+            d_x, d_group_a_idxs_, d_group_b_idxs_, N_A_, N_B_, d_centroid_a_, d_centroid_b_);
+        gpuErrchk(cudaPeekAtLastError());
 
-    gpuErrchk(cudaPeekAtLastError());
+        k_centroid_restraint<RealType><<<blocks, tpb, 0, stream>>>(
+            d_x,
+            d_group_a_idxs_,
+            d_group_b_idxs_,
+            N_A_,
+            N_B_,
+            d_centroid_a_,
+            d_centroid_b_,
+            kb_,
+            b0_,
+            d_du_dx,
+            d_u == nullptr ? nullptr : d_u_buffer_);
+        gpuErrchk(cudaPeekAtLastError());
 
-    k_centroid_restraint<RealType><<<blocks, tpb, 0, stream>>>(
-        d_x, d_group_a_idxs_, d_group_b_idxs_, N_A_, N_B_, d_centroid_a_, d_centroid_b_, kb_, b0_, d_du_dx, d_u);
-    gpuErrchk(cudaPeekAtLastError());
+        if (d_u) {
+            accumulate_energy(1, d_u_buffer_, d_u, stream);
+        }
+    }
 };
 
 template class CentroidRestraint<double>;

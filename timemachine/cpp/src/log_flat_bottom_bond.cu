@@ -1,3 +1,4 @@
+#include "energy_accumulation.hpp"
 #include "gpu_utils.cuh"
 #include "k_log_flat_bottom_bond.cuh"
 #include "kernel_utils.cuh"
@@ -35,9 +36,13 @@ LogFlatBottomBond<RealType>::LogFlatBottomBond(const std::vector<int> &bond_idxs
     // copy idxs to device
     cudaSafeMalloc(&d_bond_idxs_, B_ * 2 * sizeof(*d_bond_idxs_));
     gpuErrchk(cudaMemcpy(d_bond_idxs_, &bond_idxs[0], B_ * 2 * sizeof(*d_bond_idxs_), cudaMemcpyHostToDevice));
+    cudaSafeMalloc(&d_u_buffer_, B_ * sizeof(*d_u_buffer_));
 };
 
-template <typename RealType> LogFlatBottomBond<RealType>::~LogFlatBottomBond() { gpuErrchk(cudaFree(d_bond_idxs_)); };
+template <typename RealType> LogFlatBottomBond<RealType>::~LogFlatBottomBond() {
+    gpuErrchk(cudaFree(d_bond_idxs_));
+    gpuErrchk(cudaFree(d_u_buffer_));
+};
 
 template <typename RealType>
 void LogFlatBottomBond<RealType>::execute_device(
@@ -48,8 +53,7 @@ void LogFlatBottomBond<RealType>::execute_device(
     const double *d_box,
     unsigned long long *d_du_dx,
     unsigned long long *d_du_dp,
-    unsigned long long *d_u,
-    int *d_u_overflow_count,
+    __int128 *d_u,
     cudaStream_t stream) {
 
     const int num_params_per_bond = 3;
@@ -65,9 +69,13 @@ void LogFlatBottomBond<RealType>::execute_device(
         const int tpb = DEFAULT_THREADS_PER_BLOCK;
         const int blocks = ceil_divide(B_, tpb);
 
-        k_log_flat_bottom_bond<RealType>
-            <<<blocks, tpb, 0, stream>>>(B_, d_x, d_box, d_p, d_bond_idxs_, beta_, d_du_dx, d_du_dp, d_u);
+        k_log_flat_bottom_bond<RealType><<<blocks, tpb, 0, stream>>>(
+            B_, d_x, d_box, d_p, d_bond_idxs_, beta_, d_du_dx, d_du_dp, d_u == nullptr ? nullptr : d_u_buffer_);
         gpuErrchk(cudaPeekAtLastError());
+
+        if (d_u) {
+            accumulate_energy(B_, d_u_buffer_, d_u, stream);
+        }
     }
 };
 

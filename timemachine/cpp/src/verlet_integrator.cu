@@ -35,7 +35,7 @@ void VelocityVerletIntegrator::step_fwd(
     size_t n_blocks = ceil_divide(N_, tpb);
     dim3 dimGrid_dx(n_blocks, D);
     for (int i = 0; i < bps.size(); i++) {
-        bps[i]->execute_device(N_, d_x_t, d_box_t, d_du_dx_, nullptr, nullptr, nullptr, stream);
+        bps[i]->execute_device(N_, d_x_t, d_box_t, d_du_dx_, nullptr, nullptr, stream);
     }
     update_forward_velocity_verlet<double>
         <<<dimGrid_dx, tpb, 0, stream>>>(N_, D, d_idxs, d_cbs_, d_x_t, d_v_t, d_du_dx_, dt_);
@@ -66,7 +66,6 @@ void VelocityVerletIntegrator::initialize(
         d_x_t,
         d_box_t,
         d_du_dx_, // we only need the forces
-        nullptr,
         nullptr,
         nullptr,
         stream);
@@ -101,7 +100,6 @@ void VelocityVerletIntegrator::finalize(
             d_x_t,
             d_box_t,
             d_du_dx_, // we only need the forces
-            nullptr,
             nullptr,
             nullptr,
             stream);

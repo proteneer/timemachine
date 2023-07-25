@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../fixed_point.hpp"
+#include "../gpu_utils.cuh"
 #include "k_nonbonded_common.cuh"
 #include "kernel_utils.cuh"
 
@@ -121,18 +122,17 @@ void __device__ v_nonbonded_unified(
     const int tile_idx,
     const int N,
     const int NR,
-    const double *__restrict__ coords,
-    const double *__restrict__ params, // [N]
+    const double *__restrict__ coords, // [N * 3]
+    const double *__restrict__ params, // [N * PARAMS_PER_ATOM]
     box_cache<RealType> &shared_box,
+    __int128 *energy_buffer, // [blockDim.x]
     const double beta,
     const double cutoff,
     const unsigned int *__restrict__ row_idxs,
     const int *__restrict__ ixn_tiles,
     const unsigned int *__restrict__ ixn_atoms,
     unsigned long long *__restrict__ du_dx,
-    unsigned long long *__restrict__ du_dp,
-    unsigned long long *__restrict__ u_buffer,
-    int *__restrict__ d_u_overflow_count) {
+    unsigned long long *__restrict__ du_dp) {
 
     int row_block_idx = ixn_tiles[tile_idx];
 
@@ -195,9 +195,6 @@ void __device__ v_nonbonded_unified(
     RealType real_cutoff = static_cast<RealType>(cutoff);
     RealType cutoff_squared = real_cutoff * real_cutoff;
 
-    unsigned long long energy = 0;
-    int overflow_count = 0;
-
     RealType real_beta = static_cast<RealType>(beta);
 
     const int src_lane = (warp_idx + 1) % WARP_SIZE; // fixed
@@ -237,7 +234,7 @@ void __device__ v_nonbonded_unified(
             RealType inv_dij;
             RealType inv_d2ij;
             compute_electrostatics<RealType, COMPUTE_U>(
-                1.0, qi, qj, d2ij, beta, dij, inv_dij, inv_d2ij, ebd, es_prefactor, u);
+                1.0, qi, qj, d2ij, real_beta, dij, inv_dij, inv_d2ij, ebd, es_prefactor, u);
 
             RealType delta_prefactor = es_prefactor;
 
@@ -278,10 +275,7 @@ void __device__ v_nonbonded_unified(
             }
 
             if (COMPUTE_U) {
-                // If the energy is overflowed, don't bother adding it to the buffer
-                if (!energy_overflowed<RealType>(u, overflow_count)) {
-                    energy += FLOAT_TO_FIXED_NONBONDED(u);
-                }
+                energy_buffer[threadIdx.x] += FLOAT_TO_FIXED_ENERGY<RealType>(u);
             }
         }
 
@@ -340,23 +334,16 @@ void __device__ v_nonbonded_unified(
             atomicAdd(du_dp + w_param_idx_j, g_wj);
         }
     }
-
-    if (COMPUTE_U) {
-        if (atom_i_idx < N) {
-            atomicAdd(u_buffer + atom_i_idx, energy);
-            atomicAdd(d_u_overflow_count, overflow_count);
-        }
-    }
 }
 
-template <typename RealType, bool COMPUTE_U, bool COMPUTE_DU_DX, bool COMPUTE_DU_DP>
+template <typename RealType, int THREADS, bool COMPUTE_U, bool COMPUTE_DU_DX, bool COMPUTE_DU_DP>
 void __global__ k_nonbonded_unified(
     const int N,  // Number of atoms
     const int NR, // Number of row indices
     const unsigned int *ixn_count,
-    const double *__restrict__ coords,
-    const double *__restrict__ params, // [N]
-    const double *__restrict__ box,
+    const double *__restrict__ coords, // [N, 3]
+    const double *__restrict__ params, // [N, PARAMS_PER_ATOM]
+    const double *__restrict__ box,    // [3, 3]
     const double beta,
     const double cutoff,
     const unsigned int *__restrict__ row_idxs,
@@ -364,9 +351,14 @@ void __global__ k_nonbonded_unified(
     const unsigned int *__restrict__ ixn_atoms,
     unsigned long long *__restrict__ du_dx,
     unsigned long long *__restrict__ du_dp,
-    unsigned long long *__restrict__ u_buffer,
-    int *__restrict__ u_overflow_count) {
+    __int128 *__restrict__ u_buffer // [blockDim.x]
+) {
+    static_assert(THREADS <= 256 && (THREADS & (THREADS - 1)) == 0);
     __shared__ box_cache<RealType> shared_box;
+    __shared__ __int128 block_energy_buffer[THREADS];
+    if (COMPUTE_U) {
+        block_energy_buffer[threadIdx.x] = 0; // Zero out the energy buffer
+    }
     if (threadIdx.x == 0) {
         shared_box.x = box[0 * 3 + 0];
         shared_box.y = box[1 * 3 + 1];
@@ -410,15 +402,14 @@ void __global__ k_nonbonded_unified(
                 coords,
                 params,
                 shared_box,
+                block_energy_buffer,
                 beta,
                 cutoff,
                 row_idxs,
                 ixn_tiles,
                 ixn_atoms,
                 du_dx,
-                du_dp,
-                u_buffer,
-                u_overflow_count);
+                du_dp);
         } else {
             v_nonbonded_unified<RealType, 1, COMPUTE_U, COMPUTE_DU_DX, COMPUTE_DU_DP>(
                 tile_idx,
@@ -427,16 +418,25 @@ void __global__ k_nonbonded_unified(
                 coords,
                 params,
                 shared_box,
+                block_energy_buffer,
                 beta,
                 cutoff,
                 row_idxs,
                 ixn_tiles,
                 ixn_atoms,
                 du_dx,
-                du_dp,
-                u_buffer,
-                u_overflow_count);
+                du_dp);
         };
         tile_idx += stride;
+    }
+    if (COMPUTE_U) {
+        // Sync to ensure the shared buffers are populated
+        __syncthreads();
+
+        block_energy_reduce<THREADS>(block_energy_buffer, threadIdx.x);
+
+        if (threadIdx.x == 0) {
+            u_buffer[blockIdx.x] = block_energy_buffer[0];
+        }
     }
 }

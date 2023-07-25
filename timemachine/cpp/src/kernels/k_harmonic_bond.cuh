@@ -9,7 +9,7 @@ void __global__ k_harmonic_bond(
     const int *__restrict__ bond_idxs, // [B, 2]
     unsigned long long *__restrict__ du_dx,
     unsigned long long *__restrict__ du_dp,
-    unsigned long long *__restrict__ u) {
+    __int128 *__restrict__ u) {
 
     const auto b_idx = blockDim.x * blockIdx.x + threadIdx.x;
 
@@ -56,6 +56,6 @@ void __global__ k_harmonic_bond(
     }
 
     if (u) {
-        atomicAdd(u + src_idx, FLOAT_TO_FIXED_BONDED<RealType>(kb / 2 * db * db));
+        u[b_idx] = FLOAT_TO_FIXED_ENERGY<RealType>(kb / 2 * db * db);
     }
 }

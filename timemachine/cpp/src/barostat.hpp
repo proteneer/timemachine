@@ -4,7 +4,7 @@
 #include "bound_potential.hpp"
 #include "curand.h"
 #include "streamed_potential_runner.hpp"
-#include <random>
+#include <memory>
 #include <vector>
 
 namespace timemachine {
@@ -56,13 +56,11 @@ private:
     int *d_num_attempted_;
     int *d_num_accepted_;
 
-    unsigned long long *d_u_buffer_;
-    unsigned long long *d_u_after_buffer_;
+    __int128 *d_u_buffer_;
+    __int128 *d_u_after_buffer_;
 
-    unsigned long long *d_init_u_;
-    unsigned long long *d_final_u_;
-    int *d_u_init_overflow_count_;
-    int *d_u_final_overflow_count_;
+    __int128 *d_init_u_;
+    __int128 *d_final_u_;
 
     double *d_volume_;
     double *d_volume_delta_;
@@ -76,10 +74,7 @@ private:
     int *d_mol_idxs_;    // grouped index to molecule index
     int *d_mol_offsets_; // Offset of molecules to determine size of mols
 
-    double *d_sum_storage_;
-    size_t d_sum_storage_bytes_;
-
-    unsigned long long *d_centroids_; // Accumulate centroids in fix point to ensure deterministic behavior
+    unsigned long long *d_centroids_; // Accumulate centroids in fixed point to ensure deterministic behavior
 
     StreamedPotentialRunner runner_;
 };

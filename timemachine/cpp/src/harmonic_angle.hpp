@@ -9,6 +9,7 @@ template <typename RealType> class HarmonicAngle : public Potential {
 
 private:
     int *d_angle_idxs_;
+    __int128 *d_u_buffer_;
 
     const int A_;
 
@@ -25,8 +26,7 @@ public:
         const double *d_box,
         unsigned long long *d_du_dx,
         unsigned long long *d_du_dp,
-        unsigned long long *d_u,
-        int *d_u_overflow_count,
+        __int128 *d_u,
         cudaStream_t stream) override;
 };
 

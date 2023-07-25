@@ -1,3 +1,4 @@
+#include "energy_accumulation.hpp"
 #include "gpu_utils.cuh"
 #include "harmonic_angle_stable.hpp"
 #include "k_harmonic_angle_stable.cuh"
@@ -27,10 +28,12 @@ HarmonicAngleStable<RealType>::HarmonicAngleStable(const std::vector<int> &angle
 
     cudaSafeMalloc(&d_angle_idxs_, A_ * 3 * sizeof(*d_angle_idxs_));
     gpuErrchk(cudaMemcpy(d_angle_idxs_, &angle_idxs[0], A_ * 3 * sizeof(*d_angle_idxs_), cudaMemcpyHostToDevice));
+    cudaSafeMalloc(&d_u_buffer_, A_ * sizeof(*d_u_buffer_));
 };
 
 template <typename RealType> HarmonicAngleStable<RealType>::~HarmonicAngleStable() {
     gpuErrchk(cudaFree(d_angle_idxs_));
+    gpuErrchk(cudaFree(d_u_buffer_));
 };
 
 template <typename RealType>
@@ -42,8 +45,7 @@ void HarmonicAngleStable<RealType>::execute_device(
     const double *d_box,
     unsigned long long *d_du_dx,
     unsigned long long *d_du_dp,
-    unsigned long long *d_u,
-    int *d_u_overflow_count,
+    __int128 *d_u,
     cudaStream_t stream) {
 
     const int tpb = DEFAULT_THREADS_PER_BLOCK;
@@ -56,9 +58,13 @@ void HarmonicAngleStable<RealType>::execute_device(
                 "HarmonicAngleStable::execute_device(): expected P == 3*A_, got P=" + std::to_string(P) +
                 ", 3*A_=" + std::to_string(3 * A_));
         }
-        k_harmonic_angle_stable<RealType>
-            <<<blocks, tpb, 0, stream>>>(A_, d_x, d_p, d_angle_idxs_, d_du_dx, d_du_dp, d_u);
+        k_harmonic_angle_stable<RealType><<<blocks, tpb, 0, stream>>>(
+            A_, d_x, d_p, d_angle_idxs_, d_du_dx, d_du_dp, d_u == nullptr ? nullptr : d_u_buffer_);
         gpuErrchk(cudaPeekAtLastError());
+
+        if (d_u) {
+            accumulate_energy(A_, d_u_buffer_, d_u, stream);
+        }
     }
 }
 

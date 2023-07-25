@@ -1,3 +1,4 @@
+#include "energy_accumulation.hpp"
 #include "gpu_utils.cuh"
 #include "k_nonbonded_precomputed.cuh"
 #include "kernel_utils.cuh"
@@ -28,10 +29,13 @@ NonbondedPairListPrecomputed<RealType>::NonbondedPairListPrecomputed(
 
     cudaSafeMalloc(&d_idxs_, B_ * 2 * sizeof(*d_idxs_));
     gpuErrchk(cudaMemcpy(d_idxs_, &idxs[0], B_ * 2 * sizeof(*d_idxs_), cudaMemcpyHostToDevice));
+
+    cudaSafeMalloc(&d_u_buffer_, B_ * sizeof(*d_u_buffer_));
 };
 
 template <typename RealType> NonbondedPairListPrecomputed<RealType>::~NonbondedPairListPrecomputed() {
     gpuErrchk(cudaFree(d_idxs_));
+    gpuErrchk(cudaFree(d_u_buffer_));
 };
 
 template <typename RealType>
@@ -43,8 +47,7 @@ void NonbondedPairListPrecomputed<RealType>::execute_device(
     const double *d_box,
     unsigned long long *d_du_dx,
     unsigned long long *d_du_dp,
-    unsigned long long *d_u,
-    int *d_u_overflow_count,
+    __int128 *d_u,
     cudaStream_t stream) {
 
     if (P != PARAMS_PER_PAIR * B_) {
@@ -58,9 +61,13 @@ void NonbondedPairListPrecomputed<RealType>::execute_device(
         const int tpb = DEFAULT_THREADS_PER_BLOCK;
         const int blocks = ceil_divide(B_, tpb);
 
-        k_nonbonded_precomputed<RealType>
-            <<<blocks, tpb, 0, stream>>>(B_, d_x, d_p, d_box, d_idxs_, beta_, cutoff_, d_du_dx, d_du_dp, d_u);
+        k_nonbonded_precomputed<RealType><<<blocks, tpb, 0, stream>>>(
+            B_, d_x, d_p, d_box, d_idxs_, beta_, cutoff_, d_du_dx, d_du_dp, d_u == nullptr ? nullptr : d_u_buffer_);
         gpuErrchk(cudaPeekAtLastError());
+
+        if (d_u) {
+            accumulate_energy(B_, d_u_buffer_, d_u, stream);
+        }
     }
 };
 

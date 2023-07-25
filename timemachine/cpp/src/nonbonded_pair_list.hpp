@@ -17,6 +17,8 @@ private:
     double beta_;
     double cutoff_;
 
+    __int128 *d_u_buffer_; // [M]
+
     int *d_pair_idxs_; // [M, 2]
     double *d_scales_; // [M, 2]
 
@@ -37,8 +39,7 @@ public:
         const double *d_box,
         unsigned long long *d_du_dx,
         unsigned long long *d_du_dp,
-        unsigned long long *d_u,
-        int *d_u_overflow_count,
+        __int128 *d_u,
         cudaStream_t stream) override;
 
     void du_dp_fixed_to_float(const int N, const int P, const unsigned long long *du_dp, double *du_dp_float) override;

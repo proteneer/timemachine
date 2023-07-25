@@ -14,6 +14,75 @@ from timemachine.md.thermostat.utils import sample_velocities
 from timemachine.testsystems.relative import get_hif2a_ligand_pair_single_topology
 
 
+@pytest.mark.memcheck
+def test_barostat_validation():
+    temperature = DEFAULT_TEMP  # kelvin
+    pressure = DEFAULT_PRESSURE  # bar
+    barostat_interval = 3  # step count
+    seed = 2023
+
+    np.random.seed(seed)
+
+    mol_a, _, _ = get_hif2a_ligand_pair_single_topology()
+    ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
+
+    unbound_potentials, sys_params, masses, coords, box = get_solvent_phase_system(
+        mol_a, ff, lamb=0.0, minimize_energy=False
+    )
+
+    u_impls = []
+    for params, unbound_pot in zip(sys_params, unbound_potentials):
+        u_impls.append(unbound_pot.bind(params).to_gpu(precision=np.float32).bound_impl)
+
+    # Invalid interval
+    with pytest.raises(RuntimeError, match="Barostat interval must be greater than 0"):
+        custom_ops.MonteCarloBarostat(
+            coords.shape[0],
+            pressure,
+            temperature,
+            [[0, 1]],
+            -1,
+            u_impls,
+            seed,
+        )
+
+    # Atom index over N
+    with pytest.raises(RuntimeError, match="Grouped indices must be between 0 and N"):
+        custom_ops.MonteCarloBarostat(
+            coords.shape[0],
+            pressure,
+            temperature,
+            [[0, coords.shape[0] + 1]],
+            barostat_interval,
+            u_impls,
+            seed,
+        )
+
+    # Atom index < 0
+    with pytest.raises(RuntimeError, match="Grouped indices must be between 0 and N"):
+        custom_ops.MonteCarloBarostat(
+            coords.shape[0],
+            pressure,
+            temperature,
+            [[-1, 0]],
+            barostat_interval,
+            u_impls,
+            seed,
+        )
+
+    # Atom index in two groups
+    with pytest.raises(RuntimeError, match="All grouped indices must be unique"):
+        custom_ops.MonteCarloBarostat(
+            coords.shape[0],
+            pressure,
+            temperature,
+            [[0, 1], [1, 2]],
+            barostat_interval,
+            u_impls,
+            seed,
+        )
+
+
 def test_barostat_with_clashes():
     temperature = DEFAULT_TEMP  # kelvin
     pressure = DEFAULT_PRESSURE  # bar
