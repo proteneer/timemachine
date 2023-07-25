@@ -50,7 +50,7 @@ void __global__ k_chiral_atom_restraint(
     pyramidal_vol_and_grad(xc, x1, x2, x3, vol, xc_grad, x1_grad, x2_grad, x3_grad);
     RealType k_restr = params[r_idx];
 
-    // Always set the energies to avoid getting meaningless values
+    // Always set the energies to avoid getting uninitialized values
     if (u) {
         u[r_idx] = vol > static_cast<RealType>(0.0) ? FLOAT_TO_FIXED_BONDED<RealType>(k_restr * vol * vol) : 0;
     }
