@@ -70,7 +70,7 @@ template <typename RealType> unsigned long long __device__ __forceinline__ FLOAT
 
 /* FLOAT_TO_FIXED_ENERGY converts floating point energies into fixed point. Values beyond LLONG_MAX/LLONG_MIN
 * (or nonfinite) will be capped to LLONG_MAX. This is accumulated into __int128 which handles the over and underflows,
-* allowing us to be able to account or overflows triggered by the summation of energies.
+* allowing us to be able to account for overflows triggered by the summation of energies.
 *
 * The energy values are only considered valid between the values LLONG_MIN and LLONG_MAX, and we use __int128 to be able to detect that the energies are invalid.
 * If there are individual interactions that are overflows (beyond limit or non-finite) we set LLONG_MAX to be the value. This way
