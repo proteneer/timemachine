@@ -6,7 +6,7 @@ from common import GradientTest, fixed_overflowed, prepare_nb_system, prepare_wa
 
 from timemachine.integrator import FIXED_EXPONENT, FIXED_TO_FLOAT
 from timemachine.lib import custom_ops
-from timemachine.potentials import Nonbonded, NonbondedAllPairs, NonbondedPairListNegated
+from timemachine.potentials import Nonbonded, NonbondedAllPairs, NonbondedExclusions
 
 pytestmark = [pytest.mark.memcheck]
 
@@ -198,9 +198,7 @@ def test_energy_overflow_cancelled_by_exclusions(precision, rtol, atol):
         potential.cutoff,
         nblist_padding=potential.nblist_padding,
     )
-    pair_list = NonbondedPairListNegated(
-        potential.exclusion_idxs, potential.scale_factors, potential.beta, potential.cutoff
-    )
+    pair_list = NonbondedExclusions(potential.exclusion_idxs, potential.scale_factors, potential.beta, potential.cutoff)
 
     def compute_potential_energy(pot):
         """Verify that all the different ways of computing the energy agree"""

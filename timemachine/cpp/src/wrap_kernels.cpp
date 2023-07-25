@@ -1158,7 +1158,13 @@ template <typename RealType> void declare_nonbonded_interaction_group(py::module
 
 template <typename RealType, bool Negated> void declare_nonbonded_pair_list(py::module &m, const char *typestr) {
     using Class = timemachine::NonbondedPairList<RealType, Negated>;
-    std::string pyclass_name = std::string("NonbondedPairList_") + typestr;
+    std::string pyclass_name;
+    // If the pair list is negated, it is intended to be used for exclusions
+    if (Negated) {
+        pyclass_name = std::string("NonbondedExclusions_") + typestr;
+    } else {
+        pyclass_name = std::string("NonbondedPairList_") + typestr;
+    }
     py::class_<Class, std::shared_ptr<Class>, timemachine::Potential>(
         m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
         .def(
@@ -1359,8 +1365,8 @@ PYBIND11_MODULE(custom_ops, m) {
     declare_nonbonded_pair_list<double, false>(m, "f64");
     declare_nonbonded_pair_list<float, false>(m, "f32");
 
-    declare_nonbonded_pair_list<double, true>(m, "f64_negated");
-    declare_nonbonded_pair_list<float, true>(m, "f32_negated");
+    declare_nonbonded_pair_list<double, true>(m, "f64");
+    declare_nonbonded_pair_list<float, true>(m, "f32");
 
     declare_context(m);
 }
