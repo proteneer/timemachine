@@ -1,3 +1,4 @@
+#include "energy_accumulation.hpp"
 #include "gpu_utils.cuh"
 #include "k_nonbonded_pair_list.cuh"
 #include "kernels/kernel_utils.cuh"

@@ -1,3 +1,4 @@
+#include "energy_accumulation.hpp"
 #include "gpu_utils.cuh"
 #include "k_periodic_torsion.cuh"
 #include "kernel_utils.cuh"

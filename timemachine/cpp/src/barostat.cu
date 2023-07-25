@@ -1,5 +1,6 @@
 #include "barostat.hpp"
 #include "constants.hpp"
+#include "energy_accumulation.hpp"
 #include "fixed_point.hpp"
 #include "gpu_utils.cuh"
 #include "math_utils.cuh"

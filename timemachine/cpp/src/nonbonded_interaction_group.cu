@@ -4,6 +4,7 @@
 #include <vector>
 
 #include "device_buffer.hpp"
+#include "energy_accumulation.hpp"
 #include "fixed_point.hpp"
 #include "gpu_utils.cuh"
 #include "kernel_utils.cuh"

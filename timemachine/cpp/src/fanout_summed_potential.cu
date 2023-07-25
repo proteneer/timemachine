@@ -1,3 +1,4 @@
+#include "energy_accumulation.hpp"
 #include "fanout_summed_potential.hpp"
 #include "gpu_utils.cuh"
 #include "nonbonded_common.hpp"

@@ -1,3 +1,4 @@
+#include "energy_accumulation.hpp"
 #include "gpu_utils.cuh"
 #include "harmonic_bond.hpp"
 #include "k_harmonic_bond.cuh"
