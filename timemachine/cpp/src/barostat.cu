@@ -10,6 +10,8 @@
 
 #include "kernels/k_barostat.cuh"
 
+static int RANDOM_BATCH_SIZE = 1000; // Number of batches of random values to generate at a time
+
 namespace timemachine {
 
 MonteCarloBarostat::MonteCarloBarostat(
@@ -56,7 +58,7 @@ MonteCarloBarostat::MonteCarloBarostat(
     }
 
     curandErrchk(curandCreateGenerator(&cr_rng_, CURAND_RNG_PSEUDO_DEFAULT));
-    cudaSafeMalloc(&d_rand_, 2 * sizeof(*d_rand_));
+    cudaSafeMalloc(&d_rand_, RANDOM_BATCH_SIZE * 2 * sizeof(*d_rand_));
     curandErrchk(curandSetPseudoRandomGeneratorSeed(cr_rng_, seed_));
 
     cudaSafeMalloc(&d_x_after_, N_ * 3 * sizeof(*d_x_after_));
@@ -140,31 +142,31 @@ void MonteCarloBarostat::inplace_move(
         return;
     }
 
-    curandErrchk(curandSetStream(cr_rng_, stream));
-    // Generate scaling and metropolis conditions in one pass
-    curandErrchk(curandGenerateUniformDouble(cr_rng_, d_rand_, 2));
+    // Get offset into the d_rand_ array
+    int random_offset = (((step_ / interval_) * 2) - 2) % (RANDOM_BATCH_SIZE * 2);
 
-    runner_.execute_potentials(bps_, N_, d_x, d_box, nullptr, nullptr, d_u_buffer_, stream);
-    accumulate_energy(bps_.size(), d_u_buffer_, d_init_u_, stream);
-
-    k_setup_barostat_move<<<1, 1, 0, stream>>>(d_rand_, d_box, d_volume_delta_, d_volume_scale_, d_length_scale_);
-    gpuErrchk(cudaPeekAtLastError());
+    // Generate the scaling and metropolis conditions in batches then offset on each move
+    if (random_offset == 0) {
+        curandErrchk(curandSetStream(cr_rng_, stream));
+        curandErrchk(curandGenerateUniformDouble(cr_rng_, d_rand_, RANDOM_BATCH_SIZE * 2));
+    }
 
     const int num_molecules = group_idxs_.size();
     gpuErrchk(cudaMemsetAsync(d_centroids_, 0, num_molecules * 3 * sizeof(*d_centroids_), stream));
+
+    k_setup_barostat_move<<<1, 1, 0, stream>>>(
+        d_rand_ + random_offset, d_box, d_volume_delta_, d_volume_scale_, d_length_scale_);
+    gpuErrchk(cudaPeekAtLastError());
 
     // Create duplicates of the coords/box that we can modify
     gpuErrchk(cudaMemcpyAsync(d_x_after_, d_x, N_ * 3 * sizeof(*d_x), cudaMemcpyDeviceToDevice, stream));
     gpuErrchk(cudaMemcpyAsync(d_box_after_, d_box, 3 * 3 * sizeof(*d_box_after_), cudaMemcpyDeviceToDevice, stream));
 
-    runner_.execute_potentials(bps_, N_, d_x, d_box, nullptr, nullptr, d_u_buffer_, stream);
-    accumulate_energy(bps_.size(), d_u_buffer_, d_init_u_, stream);
-
     const int tpb = DEFAULT_THREADS_PER_BLOCK;
     const int blocks = ceil_divide(num_grouped_atoms_, tpb);
 
-    find_group_centroids<<<blocks, tpb, 0, stream>>>(num_grouped_atoms_, d_x, d_atom_idxs_, d_mol_idxs_, d_centroids_);
-
+    find_group_centroids<<<blocks, tpb, 0, stream>>>(
+        num_grouped_atoms_, d_x_after_, d_atom_idxs_, d_mol_idxs_, d_centroids_);
     gpuErrchk(cudaPeekAtLastError());
 
     // Scale centroids
@@ -180,21 +182,21 @@ void MonteCarloBarostat::inplace_move(
         d_centroids_);
     gpuErrchk(cudaPeekAtLastError());
 
-    runner_.execute_potentials(bps_, N_, d_x_after_, d_box_after_, nullptr, nullptr, d_u_after_buffer_, stream);
+    runner_.execute_potentials(bps_, N_, d_x, d_box, nullptr, nullptr, d_u_buffer_, stream);
+    accumulate_energy(bps_.size(), d_u_buffer_, d_init_u_, stream);
 
+    runner_.execute_potentials(bps_, N_, d_x_after_, d_box_after_, nullptr, nullptr, d_u_after_buffer_, stream);
     accumulate_energy(bps_.size(), d_u_after_buffer_, d_final_u_, stream);
 
     double pressure = pressure_ * AVOGADRO * 1e-25;
     const double kT = BOLTZ * temperature_;
 
-    const int move_blocks = ceil_divide(N_, tpb);
-
-    k_decide_move<<<move_blocks, tpb, 0, stream>>>(
+    k_decide_move<<<ceil_divide(N_, tpb), tpb, 0, stream>>>(
         N_,
         num_molecules,
         kT,
         pressure,
-        d_rand_,
+        d_rand_ + random_offset,
         d_volume_delta_,
         d_volume_scale_,
         d_init_u_,
@@ -205,7 +207,6 @@ void MonteCarloBarostat::inplace_move(
         d_x_after_,
         d_num_accepted_,
         d_num_attempted_);
-
     gpuErrchk(cudaPeekAtLastError());
 };
 
