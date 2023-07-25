@@ -279,14 +279,15 @@ def test_energy_overflows_with_summation_of_energies(precision):
     assert np.isnan(nonbonded_gpu(x, nb_params, box))
 
 
-def test_energy_accumulation():
+@pytest.mark.parametrize("size", [1, 32, 257, 1000, 10000])
+def test_energy_accumulation(size):
     """Test the the logic used to accumulate energy in int128.
 
     It relies on doing a block level parallel reduce for performance.
     """
     rng = np.random.default_rng(2023)
 
-    vals = rng.integers(-10000, 10000, size=10000, dtype=np.int64)
+    vals = rng.integers(-10000, 10000, size=size, dtype=np.int64)
 
     result = custom_ops._accumulate_energy(vals)
 
