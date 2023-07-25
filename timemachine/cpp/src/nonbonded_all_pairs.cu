@@ -279,7 +279,7 @@ void NonbondedAllPairs<RealType>::execute_device(
         gpuErrchk(cudaEventRecord(nblist_flag_sync_event_, stream));
     }
     // compute new coordinates/params
-    k_gather_coords_and_params<<<dim3(ceil_divide(K_, tpb), PARAMS_PER_ATOM, 1), tpb, 0, stream>>>(
+    k_gather_coords_and_params<<<ceil_divide(K_, tpb), tpb, 0, stream>>>(
         K_, d_sorted_atom_idxs_, d_x, d_p, d_gathered_x_, d_gathered_p_);
     gpuErrchk(cudaPeekAtLastError());
 
