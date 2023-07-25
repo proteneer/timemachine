@@ -367,8 +367,7 @@ def test_estimate_free_energy_bar_with_energy_overflow():
     u_kln_with_nan[0, 1, 10] = np.nan
 
     # pymbar.MBAR fails with LinAlgError
-    with pytest.raises(Exception) as e:
-        assert type(e).__name__ == "LinAlgError"
+    with pytest.raises(SystemError, match="LinAlgError"):
         mbar_from_u_kln(u_kln_with_nan)
 
     # should warn with NaN
