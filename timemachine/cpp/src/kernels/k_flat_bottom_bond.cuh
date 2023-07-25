@@ -110,7 +110,7 @@ void __global__ k_flat_bottom_bond(
     if (u) {
         RealType u_real = compute_flat_bottom_energy<RealType>(k, r, rmin, rmax);
 
-        // Set idx to force
+        // Always set the energy buffer value to ensure buffer is initialized
         u[b_idx] = FLOAT_TO_FIXED_ENERGY<RealType>(u_real);
     }
 
