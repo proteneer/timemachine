@@ -548,7 +548,7 @@ def test_bonded_potentials(hi2fa_test_frames):
 if __name__ == "__main__":
     parser = ArgumentParser()
     parser.add_argument("--num_batches", default=100, type=int)
-    parser.add_argument("--steps_per_batch", default=100, type=int)
+    parser.add_argument("--steps_per_batch", default=1000, type=int)
     parser.add_argument("--skip_dhfr", action="store_true")
     parser.add_argument("--skip_hif2a", action="store_true")
     parser.add_argument("--skip_potentials", action="store_true")
