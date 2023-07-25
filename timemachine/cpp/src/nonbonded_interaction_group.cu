@@ -153,7 +153,6 @@ void NonbondedInteractionGroup<RealType>::sort(const double *d_coords, const dou
         gpuErrchk(cudaMemcpyAsync(
             d_perm_ + NR_, d_col_atom_idxs_, NC_ * sizeof(*d_col_atom_idxs_), cudaMemcpyDeviceToDevice, stream));
     }
-    gpuErrchk(cudaMemsetAsync(d_rebuild_nblist_, 1, sizeof(*d_rebuild_nblist_), stream));
     // Set the pinned memory to indicate that we need to rebuild
     p_rebuild_nblist_[0] = 1;
 }
