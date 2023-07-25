@@ -123,7 +123,7 @@ void __device__ v_nonbonded_unified(
     const int N,
     const int NR,
     const double *__restrict__ coords, // [N * 3]
-    const double *__restrict__ params, // [N * 4]
+    const double *__restrict__ params, // [N * PARAMS_PER_ATOM]
     box_cache<RealType> &shared_box,
     __int128 *energy_buffer, // [blockDim.x]
     const double beta,
