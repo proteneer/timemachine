@@ -442,6 +442,10 @@ def sample(initial_state: InitialState, md_params: MDParams, max_buffer_frames: 
     return all_coords, all_boxes
 
 
+class IndeterminateEnergyWarning(UserWarning):
+    pass
+
+
 def estimate_free_energy_bar(u_kln_by_component: NDArray, temperature: float) -> BarResult:
     """
     Estimate free energy difference for a pair of states given pre-generated samples.
