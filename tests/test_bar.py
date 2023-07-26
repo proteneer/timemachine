@@ -17,6 +17,8 @@ from timemachine.fe.bar import (
     works_from_ukln,
 )
 
+pytestmark = [pytest.mark.nogpu]
+
 
 def make_gaussian_ukln_example(
     params_a: Tuple[float, float], params_b: Tuple[float, float], seed: int = 0, n_samples: int = 2000
@@ -69,7 +71,6 @@ def partial_overlap_uniform_ukln_example():
     return u_kln
 
 
-@pytest.mark.nogpu
 @pytest.mark.parametrize("sigma", [0.1, 1.0, 10.0])
 def test_bootstrap_bar(sigma):
     np.random.seed(0)
@@ -94,7 +95,6 @@ def test_bootstrap_bar(sigma):
     assert df_1 == pytest.approx(dlogZ, abs=2.0 * bootstrap_sigma)
 
 
-@pytest.mark.nogpu
 @pytest.mark.parametrize("sigma", [0.1, 1.0, 10.0])
 def test_df_and_err_from_u_kln_approximates_exact_result(sigma):
     u_kln, dlogZ = make_gaussian_ukln_example((0.0, 1.0), (1.0, sigma))
@@ -146,7 +146,6 @@ def test_df_and_err_from_u_kln_zero_overlap(n):
     assert np.isfinite(df_err) and (n == 1 or df_err > 0.0)
 
 
-@pytest.mark.nogpu
 def test_pair_overlap_from_ukln():
     # identical distributions
     u_kln, _ = make_gaussian_ukln_example((0, 1), (0, 1))
@@ -161,7 +160,6 @@ def test_pair_overlap_from_ukln():
     assert pair_overlap_from_ukln(u_kln) > 0.1
 
 
-@pytest.mark.nogpu
 @pytest.mark.parametrize("frames_per_step", [1, 5, 10])
 def test_compute_fwd_and_reverse_df_over_time(frames_per_step):
     seed = 2023
