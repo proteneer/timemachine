@@ -212,7 +212,7 @@ class InsideOutsideExchangeMove(moves.MonteCarloMove):
         self.beta = 1 / DEFAULT_KT
         self.radius = radius
 
-        @jax.jit
+        # @jax.jit
         def U_fn(conf, box, a_idxs, b_idxs):
             # compute the energy of an interaction group
             conf_i = conf[a_idxs]
@@ -221,7 +221,14 @@ class InsideOutsideExchangeMove(moves.MonteCarloMove):
             params_j = self.nb_params[b_idxs]
             return nonbonded.nonbonded_block(conf_i, conf_j, box, params_i, params_j, self.nb_beta, self.nb_cutoff)
 
-        self.U_fn = U_fn
+        @jax.jit
+        def delta_U_total_fn(trial_coords, coords, box, a_idxs, b_idxs):
+            delta_U_insert = U_fn(trial_coords, box, a_idxs, b_idxs)
+            delta_U_delete = -U_fn(coords, box, a_idxs, b_idxs)
+            delta_U_total = delta_U_delete + delta_U_insert
+            return delta_U_total
+
+        self.delta_U_total_fn = delta_U_total_fn
 
     def get_water_groups(self, coords, box, center):
         # vectorized implementation
@@ -267,9 +274,11 @@ class InsideOutsideExchangeMove(moves.MonteCarloMove):
 
         # we can probably speed this up even more if we use an incremental voxel_map
         # (reduce complexity from O(N) to O(K))
-        delta_U_delete = -self.U_fn(coords, box, a_idxs, b_idxs)
-        delta_U_insert = self.U_fn(trial_coords, box, a_idxs, b_idxs)
-        delta_U_total = delta_U_delete + delta_U_insert
+        # delta_U_delete = -self.U_fn(coords, box, a_idxs, b_idxs)
+        # delta_U_insert = self.U_fn(trial_coords, box, a_idxs, b_idxs)
+        # delta_U_total = delta_U_delete + delta_U_insert
+        delta_U_total = self.delta_U_total_fn(trial_coords, coords, box, a_idxs, b_idxs)
+        delta_U_total = np.asarray(delta_U_total)
 
         # convert to inf if we get a nan
         if np.isnan(delta_U_total):
@@ -319,7 +328,7 @@ class InsideOutsideExchangeMove(moves.MonteCarloMove):
         def v2_insertion():
             # generate random proposals outside of the sphere but inside the box
             while True:
-                xyz = np.random.randn(3) * np.diag(box)
+                xyz = np.random.rand(3) * np.diag(box)
                 if np.linalg.norm(delta_r_np(xyz, center, box)) >= self.radius:
                     return xyz
 
@@ -390,6 +399,9 @@ def setup_forcefield(charges):
     )
 
 
+# import time
+
+
 def image_xvb(initial_state, xvb_t):
     new_coords = image_frames(initial_state, [xvb_t.coords], [xvb_t.box])[0]
     return CoordsVelBox(new_coords, xvb_t.velocities, xvb_t.box)
@@ -439,16 +451,16 @@ def test_exchange():
     # [0] nb_all_pairs, [1] nb_ligand_water, [2] nb_ligand_protein
     nb_beta = bps[-1].potential.potentials[1].beta
     nb_cutoff = bps[-1].potential.potentials[1].cutoff
-    nb_ligand_water_params = bps[-1].potential.params_init[1]
+    nb_water_ligand_params = bps[-1].potential.params_init[1]
 
     print("number of water atoms", nwm * 3, "number of ligand atoms", mol.GetNumAtoms())
-    print("ligand_water parameters", nb_ligand_water_params)
+    print("water_ligand parameters", nb_water_ligand_params)
 
-    # exc_mover = ExchangeMove(nb_ligand_water_params, nb_beta, nb_cutoff, water_idxs)
+    # exc_mover = ExchangeMove(nb_water_ligand_params, nb_beta, nb_cutoff, water_idxs)
 
     bb_radius = 0.46
     exc_mover = InsideOutsideExchangeMove(
-        nb_ligand_water_params, nb_beta, nb_cutoff, water_idxs, initial_state.ligand_idxs, bb_radius
+        nb_water_ligand_params, nb_beta, nb_cutoff, water_idxs, initial_state.ligand_idxs, bb_radius
     )
     cur_box = initial_state.box0
     cur_x_t = initial_state.x0
@@ -483,12 +495,15 @@ def test_exchange():
     print("done")
     md_steps_per_batch = 2000
     npt_mover.n_steps = md_steps_per_batch
+
     # TBD: cache the minimized and equilibrated initial structure later on to iterate faster.
+    mc_steps_per_batch = 5000
 
     # (ytz): If I start with pure MC, and no MD, it's actually very easy to remove the waters.
     # since the starting waters have very very high energy. If I re-run MD, then it becomes progressively harder
     # remove the water since we will re-equilibriate the waters.
 
+    # for idx in range(100000):
     for idx in range(100000):
         density = compute_density(nwm, xvb_t.box)
 
@@ -496,12 +511,15 @@ def test_exchange():
         occ = compute_occupancy(xvb_t.coords, xvb_t.box, initial_state.ligand_idxs, threshold=bb_radius)
 
         print(
-            f"{exc_mover.n_accepted} / {exc_mover.n_proposed} | density {density} | # of waters in bb {occ // 3} | md step: {idx * md_steps_per_batch}"
+            f"{exc_mover.n_accepted} / {exc_mover.n_proposed} | density {density} | # of waters in bb {occ // 3} | md step: {idx * md_steps_per_batch}",
+            flush=True,
         )
 
-        for _ in range(2000):
+        # start_time = time.time()
+        for _ in range(mc_steps_per_batch):
             assert np.amax(np.abs(xvb_t.coords)) < 1e3
             xvb_t = exc_mover.move(xvb_t)
+        # print("time per mc move", (time.time() - start_time) / mc_steps_per_batch)
 
         # run MD
         xvb_t = npt_mover.move(xvb_t)  # disabling this gets more moves?
