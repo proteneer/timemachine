@@ -265,6 +265,12 @@ class InsideOutsideExchangeMove(moves.MonteCarloMove):
         new_coords = coords[chosen_water_atoms]
         # remove centroid
         new_coords = new_coords - np.mean(new_coords, axis=0) + vj_insertion_fn()
+
+        # debug
+        # insertion_into_buckyball = len(vi_mols) > len(vj_mols)
+        # if insertion_into_buckyball:
+        # new_coords
+
         trial_coords = coords.copy()  # can optimize this later if needed
         trial_coords[chosen_water_atoms] = new_coords
 
@@ -305,13 +311,20 @@ class InsideOutsideExchangeMove(moves.MonteCarloMove):
         def v1_insertion():
             # sample a point inside the sphere uniformly
             # source: https://karthikkaranth.me/blog/generating-random-points-in-a-sphere/
-            xyz = np.random.rand() - 0.5
+            xyz = np.random.randn(3)
             n = np.linalg.norm(xyz)
             xyz = xyz / n
             # (ytz): this might not be inside the box, but it doesnt' matter
             # since all of our distances are computed using PBCs
             c = np.cbrt(np.random.rand())
-            return xyz * c * self.radius + center
+            new_xyz = xyz * c * self.radius + center
+
+            # print("without box", np.linalg.norm(new_xyz - center), self.radius)
+            # print("with box", np.linalg.norm(delta_r_np(new_xyz, center, box)), self.radius)
+
+            assert np.linalg.norm(delta_r_np(new_xyz, center, box)) < self.radius
+
+            return new_xyz
 
         # v1 << v2 so monte carlo is really slow (avg counter ~5000)
         # def v1_insertion():
@@ -368,9 +381,7 @@ def compute_occupancy(x_t, box_t, ligand_idxs, threshold):
     ligand_centroid = np.mean(ligand_coords, axis=0)
     count = 0
     for rj in host_coords:
-        diff = ligand_centroid - rj  # this can be either N,N,3 or B,3
-        box_diag = np.diag(box_t)
-        diff -= box_diag * np.floor(diff / box_diag + 0.5)
+        diff = delta_r_np(ligand_centroid, rj, box_t)
         dij = np.linalg.norm(diff)
         if dij < threshold:
             count += 1
