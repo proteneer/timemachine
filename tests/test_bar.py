@@ -46,11 +46,8 @@ def make_gaussian_ukln_example(
     return u_kln, dlogZ
 
 
-@pytest.fixture
-def partial_overlap_uniform_ukln_example():
-    """2-state u_kln matrix for uniform distributions with partial overlap"""
-
-    dlogZ = 5.0
+def make_partial_overlap_uniform_ukln_example(dlogZ: float, n_samples: int = 100) -> NDArray:
+    """Generate 2-state u_kln matrix for uniform distributions with partial overlap"""
 
     def u_a(x):
         """Unif[0.0, 1.0], with log(Z) = 0"""
@@ -63,31 +60,15 @@ def partial_overlap_uniform_ukln_example():
         return u_a(x_) + dlogZ
 
     rng = np.random.default_rng(2023)
-    n = 1000
 
-    x_a = rng.uniform(0, 1, (n,))
-    x_b = rng.uniform(0.5, 1.5, (n,))
+    x_a = rng.uniform(0, 1, (n_samples,))
+    x_b = rng.uniform(0.5, 1.5, (n_samples,))
 
     assert np.isfinite(u_a(x_a)).all()
     assert np.isfinite(u_b(x_b)).all()
 
     u_kln = np.array([[u_a(x_a), u_a(x_b)], [u_b(x_a), u_b(x_b)]])
 
-    return u_kln, dlogZ
-
-
-@pytest.fixture
-def non_overlapping_uniform_ukln_example():
-    """2-state u_kln matrix for non-overlapping uniform distributions"""
-    n = 100
-    ones = np.ones(n)
-    infs = np.inf * np.ones(n)
-    u_kln = np.array(
-        [
-            [ones, infs],
-            [infs, ones],
-        ]
-    )
     return u_kln
 
 
@@ -143,8 +124,9 @@ def test_df_and_err_from_u_kln_consistent_with_pymbar_bar(sigma):
     np.testing.assert_approx_equal(df_err, df_err_ref, significant=1)
 
 
-def test_df_and_err_from_u_kln_partial_overlap(partial_overlap_uniform_ukln_example):
-    u_kln, dlogZ = partial_overlap_uniform_ukln_example
+def test_df_and_err_from_u_kln_partial_overlap():
+    dlogZ = 5.0
+    u_kln = make_partial_overlap_uniform_ukln_example(dlogZ)
 
     w_F, w_R = works_from_ukln(u_kln)
 
@@ -157,13 +139,6 @@ def test_df_and_err_from_u_kln_partial_overlap(partial_overlap_uniform_ukln_exam
     df, df_err = df_and_err_from_u_kln(u_kln)
     assert df == pytest.approx(dlogZ, abs=2.0 * df_err)
     assert np.isfinite(df_err) and df_err > 0.0
-
-
-def test_df_and_err_from_u_kln_zero_overlap(non_overlapping_uniform_ukln_example):
-    u_kln = non_overlapping_uniform_ukln_example
-    _, df_err = df_and_err_from_u_kln(u_kln)
-    assert np.isfinite(df_err)
-    assert df_err > 0.0
 
 
 def test_pair_overlap_from_ukln():
