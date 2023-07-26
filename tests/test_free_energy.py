@@ -3,6 +3,7 @@ from importlib import resources
 from unittest.mock import patch
 
 import numpy as np
+import pymbar
 import pytest
 from hypothesis import example, given, seed
 from hypothesis.strategies import integers
@@ -11,7 +12,7 @@ from scipy.optimize import check_grad, minimize
 
 from timemachine.constants import DEFAULT_TEMP
 from timemachine.fe import free_energy, topology, utils
-from timemachine.fe.bar import mbar_from_u_kln
+from timemachine.fe.bar import ukln_to_ukn
 from timemachine.fe.free_energy import (
     BarResult,
     HostConfig,
@@ -368,7 +369,8 @@ def test_estimate_free_energy_bar_with_energy_overflow():
 
     # pymbar.MBAR fails with LinAlgError
     with pytest.raises(SystemError, match="LinAlgError"):
-        mbar_from_u_kln(u_kln_with_nan)
+        u_kn, N_k = ukln_to_ukn(u_kln_with_nan)
+        _ = pymbar.MBAR(u_kn, N_k)
 
     # should warn with NaN
     with pytest.warns(IndeterminateEnergyWarning, match="NaN"):
