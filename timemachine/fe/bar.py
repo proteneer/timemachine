@@ -1,6 +1,6 @@
 import logging
 from time import time
-from typing import Tuple
+from typing import Optional, Tuple
 
 import jax
 import jax.numpy as jnp
@@ -99,9 +99,13 @@ def dG_dw(w):
     return dG_dw
 
 
-def mbar_from_u_kln(u_kln: NDArray, **kwargs):
+def ukln_to_ukn(u_kln: NDArray) -> Tuple[NDArray, NDArray]:
     """Construct a pymbar.MBAR instance given a 2-state u_kln matrix.
 
+    NOTE: similar to https://pymbar.readthedocs.io/en/master/utils.html#pymbar.utils.kln_to_kn, but uses the (current)
+    timemachine convention where the first two axes correspond to evaluation state and sampling state respectively.
+
+    TODO: consider switching to pymbar convention?
 
     Parameters
     ----------
@@ -109,27 +113,28 @@ def mbar_from_u_kln(u_kln: NDArray, **kwargs):
         2-state u_kln matrix, where
         * the first dimension (k) indexes the state for which we evaluate the energy
         * the second dimension (l) indexes the state from which the configuration was sampled
-        NOTE: this convention is opposite the one used by pymbar
-        TODO: consider switching to pymbar convention?
     """
     k, l, n = u_kln.shape
     assert k == l == 2
     u_kn = u_kln.reshape(k, -1)
     assert u_kn.shape == (k, l * n)
     N_k = n * np.ones(l)
-    return pymbar.MBAR(u_kn, N_k, **kwargs)
+    return u_kn, N_k
 
 
-def df_and_err_from_u_kln(u_kln: NDArray, **kwargs) -> Tuple[float, float]:
+def df_and_err_from_u_kln(u_kln: NDArray) -> Tuple[float, float]:
     """Compute free energy difference and uncertainty given a 2-state u_kln matrix."""
-    mbar = mbar_from_u_kln(u_kln, **kwargs)
-    df, ddf = mbar.getFreeEnergyDifferences()
+    u_kn, N_k = ukln_to_ukn(u_kln)
+    df, ddf = pymbar.MBAR(u_kn, N_k).getFreeEnergyDifferences()
     return df[1, 0], ddf[1, 0]
 
 
-def df_from_u_kln(u_kln: NDArray, **kwargs) -> float:
+def df_from_u_kln(
+    u_kln: NDArray, initial_f_k: Optional[NDArray] = None, relative_tolerance: Optional[float] = 1.0e-7
+) -> float:
     """Compute free energy difference given a 2-state u_kln matrix."""
-    mbar = mbar_from_u_kln(u_kln, **kwargs)
+    u_kn, N_k = ukln_to_ukn(u_kln)
+    mbar = pymbar.MBAR(u_kn, N_k, initial_f_k=initial_f_k, relative_tolerance=relative_tolerance)
     df = mbar.getFreeEnergyDifferences(compute_uncertainty=False)[0]
     return df[1, 0]
 
@@ -159,7 +164,8 @@ def bootstrap_bar(u_kln: NDArray, n_bootstrap=1000, timeout=10) -> Tuple[float, 
     * TODO[deboggle] -- upgrade from pymbar3 to pymbar4 and remove this
     * TODO[performance] -- multiprocessing, if needed?
     """
-    mbar = mbar_from_u_kln(u_kln)
+    u_kn, N_k = ukln_to_ukn(u_kln)
+    mbar = pymbar.MBAR(u_kn, N_k)
 
     full_bar_result = mbar.getFreeEnergyDifferences(compute_uncertainty=False)[0][1, 0]
 
