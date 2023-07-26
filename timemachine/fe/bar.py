@@ -100,13 +100,24 @@ def dG_dw(w):
 
 
 def mbar_from_u_kln(u_kln: NDArray, **kwargs):
-    """Construct a pymbar.MBAR instance given a 2-state u_kln matrix."""
+    """Construct a pymbar.MBAR instance given a 2-state u_kln matrix.
+
+
+    Parameters
+    ----------
+    u_kln : array (2, 2, N)
+        2-state u_kln matrix, where
+        * the first dimension (k) indexes the state for which we evaluate the energy
+        * the second dimension (l) indexes the state from which the configuration was sampled
+        NOTE: this convention is opposite the one used by pymbar
+        TODO: consider switching to pymbar convention?
+    """
     k, l, n = u_kln.shape
     assert k == l == 2
     u_kn = u_kln.reshape(k, -1)
     assert u_kn.shape == (k, l * n)
     N_k = n * np.ones(l)
-    return pymbar.MBAR(u_kln, N_k, **kwargs)
+    return pymbar.MBAR(u_kn, N_k, **kwargs)
 
 
 def df_and_err_from_u_kln(u_kln: NDArray, **kwargs) -> Tuple[float, float]:
