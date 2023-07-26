@@ -20,7 +20,7 @@ from timemachine.fe.bar import (
 
 def make_gaussian_ukln_example(
     params_a: Tuple[float, float], params_b: Tuple[float, float], seed: int = 0, n_samples: int = 2000
-) -> NDArray:
+) -> Tuple[NDArray, float]:
     """Generate 2-state u_kln matrix for a pair of normal distributions."""
 
     def u(mu, sigma, x):
@@ -39,7 +39,9 @@ def make_gaussian_ukln_example(
 
     u_kln = np.array([[u_a(x_a), u_a(x_b)], [u_b(x_a), u_b(x_b)]])
 
-    return u_kln
+    dlogZ = np.log(sigma_a) - np.log(sigma_b)
+
+    return u_kln, dlogZ
 
 
 @pytest.fixture
@@ -74,25 +76,36 @@ def test_bootstrap_bar(sigma):
     n_bootstrap = 100
 
     # default rbfe instance size, varying difficulty
-    u_kln = make_gaussian_ukln_example((0.0, 1.0), (1.0, sigma))
+    u_kln, dlogZ = make_gaussian_ukln_example((0.0, 1.0), (1.0, sigma))
 
     # estimate 3 times
-    df_ref, ddf_ref = df_and_err_from_u_kln(u_kln)
+    df_ref, df_err_ref = df_and_err_from_u_kln(u_kln)
     df_0, bootstrap_samples = bootstrap_bar(u_kln, n_bootstrap=n_bootstrap)
     df_1, bootstrap_sigma = bar_with_bootstrapped_uncertainty(u_kln)
 
     # assert estimates identical, uncertainties comparable
-    print(f"bootstrap uncertainty = {bootstrap_sigma}, pymbar.MBAR uncertainty = {ddf_ref}")
+    print(f"bootstrap uncertainty = {bootstrap_sigma}, pymbar.MBAR uncertainty = {df_err_ref}")
     assert df_0 == df_ref
     assert df_1 == df_ref
     assert len(bootstrap_samples) == n_bootstrap, "timed out on default problem size!"
-    np.testing.assert_approx_equal(bootstrap_sigma, ddf_ref, significant=1)
+    np.testing.assert_approx_equal(bootstrap_sigma, df_err_ref, significant=1)
+
+    # assert bootstrap estimate is consistent with exact result
+    assert df_1 == pytest.approx(dlogZ, abs=2.0 * bootstrap_sigma)
+
+
+@pytest.mark.nogpu
+@pytest.mark.parametrize("sigma", [0.1, 1.0, 10.0])
+def test_df_and_err_from_u_kln_approximates_exact_result(sigma):
+    u_kln, dlogZ = make_gaussian_ukln_example((0.0, 1.0), (1.0, sigma))
+    df, df_err = df_and_err_from_u_kln(u_kln)
+    assert df == pytest.approx(dlogZ, abs=2.0 * df_err)
 
 
 @pytest.mark.parametrize("sigma", [0.3, 1.0, 10.0])
 def test_df_from_u_kln_compare_with_pymbar_bar(sigma):
     """Compare the estimator used for 2-state delta fs (currently MBAR) with pymbar.BAR as reference."""
-    u_kln = make_gaussian_ukln_example((0.0, 1.0), (1.0, sigma))
+    u_kln, _ = make_gaussian_ukln_example((0.0, 1.0), (1.0, sigma))
     w_F, w_R = works_from_ukln(u_kln)
 
     df_ref, _ = pymbar.BAR(w_F, w_R)
@@ -136,13 +149,16 @@ def test_df_and_err_from_u_kln_zero_overlap(n):
 @pytest.mark.nogpu
 def test_pair_overlap_from_ukln():
     # identical distributions
-    assert pair_overlap_from_ukln(make_gaussian_ukln_example((0, 1), (0, 1))) == pytest.approx(1.0)
+    u_kln, _ = make_gaussian_ukln_example((0, 1), (0, 1))
+    assert pair_overlap_from_ukln(u_kln) == pytest.approx(1.0)
 
     # non-overlapping
-    assert pair_overlap_from_ukln(make_gaussian_ukln_example((0, 0.01), (1, 0.01))) < 1e-10
+    u_kln, _ = make_gaussian_ukln_example((0, 0.01), (1, 0.01))
+    assert pair_overlap_from_ukln(u_kln) < 1e-10
 
     # overlapping
-    assert pair_overlap_from_ukln(make_gaussian_ukln_example((0, 0.1), (0.5, 0.2))) > 0.1
+    u_kln, _ = make_gaussian_ukln_example((0, 0.1), (0.5, 0.2))
+    assert pair_overlap_from_ukln(u_kln) > 0.1
 
 
 @pytest.mark.nogpu
