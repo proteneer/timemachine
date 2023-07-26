@@ -25,8 +25,7 @@ void __global__ k_nonbonded_pair_list(
     const double cutoff,
     unsigned long long *__restrict__ du_dx,
     unsigned long long *__restrict__ du_dp,
-    unsigned long long *__restrict__ u_buffer,
-    int *__restrict__ u_overflow_count) {
+    __int128 *__restrict__ u_buffer) {
 
     // (ytz): oddly enough the order of atom_i and atom_j
     // seem to not matter. I think this is because distance calculations
@@ -119,10 +118,10 @@ void __global__ k_nonbonded_pair_list(
     RealType delta_w = w_i - w_j;
     RealType d2ij = delta_x * delta_x + delta_y * delta_y + delta_z * delta_z + delta_w * delta_w;
 
+    RealType u = static_cast<RealType>(0.0);
     // see note: this must be strictly less than
     if (d2ij < cutoff_squared) {
 
-        RealType u;
         RealType ebd;
         RealType es_prefactor;
         RealType dij;
@@ -153,16 +152,6 @@ void __global__ k_nonbonded_pair_list(
         gj_y += FLOAT_TO_FIXED_NONBONDED(-delta_prefactor * delta_y);
         gj_z += FLOAT_TO_FIXED_NONBONDED(-delta_prefactor * delta_z);
 
-        if (u_buffer) {
-            // Don't add energy if it overflows, but always add the overflow count
-            int overflow_count = 0;
-            if (!energy_overflowed<RealType>(u, overflow_count)) {
-                unsigned long long energy = FLOAT_TO_FIXED_NONBONDED(u);
-                accumulate<Negated>(u_buffer + atom_i_idx, energy);
-            }
-            atomicAdd(u_overflow_count, Negated ? -overflow_count : overflow_count);
-        }
-
         g_qi += FLOAT_TO_FIXED_DU_DP<RealType, FIXED_EXPONENT_DU_DCHARGE>(charge_scale * qj * inv_dij * ebd);
         g_qj += FLOAT_TO_FIXED_DU_DP<RealType, FIXED_EXPONENT_DU_DCHARGE>(charge_scale * qi * inv_dij * ebd);
 
@@ -192,5 +181,11 @@ void __global__ k_nonbonded_pair_list(
             accumulate<Negated>(du_dp + w_param_idx_i, g_wi);
             accumulate<Negated>(du_dp + w_param_idx_j, g_wj);
         }
+    }
+    // Always accumulate into the energy buffers even if there is no interaction to ensure
+    // buffer is zeroed out, avoids having to memset every call
+    if (u_buffer) {
+        // Do not do `FLOAT_TO_FIXED_ENERGY(Negated ? -u : u)` as that can produce a positive fixed point value
+        u_buffer[pair_idx] = Negated ? -FLOAT_TO_FIXED_ENERGY<RealType>(u) : FLOAT_TO_FIXED_ENERGY<RealType>(u);
     }
 }

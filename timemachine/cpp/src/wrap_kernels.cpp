@@ -11,6 +11,7 @@
 #include "chiral_atom_restraint.hpp"
 #include "chiral_bond_restraint.hpp"
 #include "context.hpp"
+#include "energy_accumulation.hpp"
 #include "fanout_summed_potential.hpp"
 #include "fixed_point.hpp"
 #include "flat_bottom_bond.hpp"
@@ -62,19 +63,13 @@ void verify_coords_and_box(
     }
 }
 
-// accumulate_energies handles the combining of energies, summing them up deterministically
+// convert_energy_to_fp handles the combining of energies, summing them up deterministically
 // and returning nan if there are overflows.
-// The energies are collected in unsigned long long and overflows are incremented or decremented
-// by the potentials. Currently only the negated NonbondedAllPairs decrements the overflows which
-// are expected to exactly cancel out with other Nonbonded potentials if there are no clashes.
-double accumulate_energies(int N, unsigned long long *fixed_u, int overflows) {
+// The energies are collected in int128
+double convert_energy_to_fp(__int128 fixed_u) {
     double res = std::numeric_limits<double>::quiet_NaN();
-    if (overflows == 0) {
-        unsigned long long accum = 0;
-        for (int i = 0; i < N; i++) {
-            accum += fixed_u[i];
-        }
-        res = FIXED_TO_FLOAT<double>(accum);
+    if (!fixed_point_overflow(fixed_u)) {
+        res = FIXED_ENERGY_TO_FLOAT<double>(fixed_u);
     }
     return res;
 }
@@ -574,11 +569,9 @@ void declare_potential(py::module &m) {
                 // initialize with fixed garbage values for debugging convenience (these should be overwritten by `execute_host`)
                 std::vector<unsigned long long> du_dx(N * D, 9999);
                 std::vector<unsigned long long> du_dp(P, 9999);
-                std::vector<unsigned long long> u(N, 9999);
-                std::vector<int> u_overflows(1, 9999);
+                std::vector<__int128> u(1, 9999);
 
-                pot.execute_host(
-                    N, P, coords.data(), params.data(), box.data(), &du_dx[0], &du_dp[0], &u[0], &u_overflows[0]);
+                pot.execute_host(N, P, coords.data(), params.data(), box.data(), &du_dx[0], &du_dp[0], &u[0]);
 
                 py::array_t<double, py::array::c_style> py_du_dx({N, D});
                 for (unsigned int i = 0; i < du_dx.size(); i++) {
@@ -591,7 +584,7 @@ void declare_potential(py::module &m) {
                 py::array_t<double, py::array::c_style> py_du_dp(pshape);
                 pot.du_dp_fixed_to_float(N, P, &du_dp[0], py_du_dp.mutable_data());
 
-                double u_sum = accumulate_energies(N, &u[0], u_overflows[0]);
+                double u_sum = convert_energy_to_fp(u[0]);
 
                 return py::make_tuple(py_du_dx, py_du_dp, u_sum);
             },
@@ -635,12 +628,9 @@ void declare_potential(py::module &m) {
                 if (compute_du_dp) {
                     du_dp.assign(total_executions * P, 9999);
                 }
-                std::vector<unsigned long long> u;
-                std::vector<int> u_overflows;
+                std::vector<__int128> u;
                 if (compute_u) {
-                    // u vector is an array of unsigned long long that will be accumulated into a float, hence total_executions * N
-                    u.assign(total_executions * N, 9999);
-                    u_overflows.assign(total_executions, 9999);
+                    u.assign(total_executions, 9999);
                 }
 
                 pot.execute_batch_host(
@@ -653,8 +643,7 @@ void declare_potential(py::module &m) {
                     boxes.data(),
                     compute_du_dx ? du_dx.data() : nullptr,
                     compute_du_dp ? du_dp.data() : nullptr,
-                    compute_u ? u.data() : nullptr,
-                    compute_u ? u_overflows.data() : nullptr);
+                    compute_u ? u.data() : nullptr);
 
                 auto result = py::make_tuple(py::none(), py::none(), py::none());
                 if (compute_du_dx) {
@@ -682,8 +671,9 @@ void declare_potential(py::module &m) {
 
                 if (compute_u) {
                     py::array_t<double, py::array::c_style> py_u({coord_batches, param_batches});
+
                     for (unsigned int i = 0; i < py_u.size(); i++) {
-                        py_u.mutable_data()[i] = accumulate_energies(N, &u[0] + (N * i), u_overflows[i]);
+                        py_u.mutable_data()[i] = convert_energy_to_fp(u[i]);
                     }
                     result[2] = py_u;
                 }
@@ -752,8 +742,8 @@ void declare_potential(py::module &m) {
                 std::vector<unsigned long long> du_dx(N * D, 9999);
                 std::vector<unsigned long long> du_dp(P, 9999);
 
-                std::vector<unsigned long long> u(N, 9999);
-                std::vector<int> u_overflows(1, 9999);
+                std::vector<__int128> u(1, 9999);
+
                 pot.execute_host(
                     N,
                     P,
@@ -762,8 +752,7 @@ void declare_potential(py::module &m) {
                     box.data(),
                     compute_du_dx ? &du_dx[0] : nullptr,
                     compute_du_dp ? &du_dp[0] : nullptr,
-                    compute_u ? &u[0] : nullptr,
-                    compute_u ? &u_overflows[0] : nullptr);
+                    compute_u ? &u[0] : nullptr);
 
                 py::array_t<double, py::array::c_style> py_du_dx({N, D});
                 for (unsigned int i = 0; i < du_dx.size(); i++) {
@@ -775,7 +764,7 @@ void declare_potential(py::module &m) {
                 py::array_t<double, py::array::c_style> py_du_dp(pshape);
                 pot.du_dp_fixed_to_float(N, P, &du_dp[0], py_du_dp.mutable_data());
 
-                double u_sum = accumulate_energies(N, &u[0], u_overflows[0]);
+                double u_sum = convert_energy_to_fp(u[0]);
 
                 auto result = py::make_tuple(py_du_dx, py_du_dp, u_sum);
 
@@ -849,17 +838,16 @@ void declare_bound_potential(py::module &m) {
                 const long unsigned int D = coords.shape()[1];
                 verify_coords_and_box(coords, box);
                 std::vector<unsigned long long> du_dx(N * D, 9999);
-                std::vector<unsigned long long> u(N, 9999);
-                std::vector<int> u_overflows(1, 9999);
+                std::vector<__int128> u(1, 9999);
 
-                bp.execute_host(N, coords.data(), box.data(), &du_dx[0], &u[0], &u_overflows[0]);
+                bp.execute_host(N, coords.data(), box.data(), &du_dx[0], &u[0]);
 
                 py::array_t<double, py::array::c_style> py_du_dx({N, D});
                 for (unsigned int i = 0; i < du_dx.size(); i++) {
                     py_du_dx.mutable_data()[i] = FIXED_TO_FLOAT<double>(du_dx[i]);
                 }
 
-                double u_sum = accumulate_energies(N, &u[0], u_overflows[0]);
+                double u_sum = convert_energy_to_fp(u[0]);
 
                 return py::make_tuple(py_du_dx, u_sum);
             },
@@ -869,18 +857,21 @@ void declare_bound_potential(py::module &m) {
             "execute_fixed",
             [](timemachine::BoundPotential &bp,
                const py::array_t<double, py::array::c_style> &coords,
-               const py::array_t<double, py::array::c_style> &box) -> py::tuple {
+               const py::array_t<double, py::array::c_style> &box) -> const py::array_t<uint64_t, py::array::c_style> {
                 const long unsigned int N = coords.shape()[0];
                 verify_coords_and_box(coords, box);
-                std::vector<unsigned long long> u(N, 9999);
-                std::vector<int> u_overflows(1, 9999);
+                std::vector<__int128> u(1, 9999);
 
-                bp.execute_host(N, coords.data(), box.data(), nullptr, &u[0], &u_overflows[0]);
+                bp.execute_host(N, coords.data(), box.data(), nullptr, &u[0]);
 
-                uint64_t u_sum = std::accumulate(u.begin(), u.end(), decltype(u)::value_type(0));
                 py::array_t<uint64_t, py::array::c_style> py_u(1);
-                py_u.mutable_data()[0] = u_sum;
-                return py::make_tuple(py_u, u_overflows[0]);
+                if (fixed_point_overflow(u[0])) {
+                    // Force it to a specific value, else conversion borks
+                    py_u.mutable_data()[0] = LLONG_MAX;
+                } else {
+                    py_u.mutable_data()[0] = u[0];
+                }
+                return py_u;
             },
             py::arg("coords"),
             py::arg("box"));
@@ -1167,7 +1158,13 @@ template <typename RealType> void declare_nonbonded_interaction_group(py::module
 
 template <typename RealType, bool Negated> void declare_nonbonded_pair_list(py::module &m, const char *typestr) {
     using Class = timemachine::NonbondedPairList<RealType, Negated>;
-    std::string pyclass_name = std::string("NonbondedPairList_") + typestr;
+    std::string pyclass_name;
+    // If the pair list is negated, it is intended to be used for exclusions
+    if (Negated) {
+        pyclass_name = std::string("NonbondedExclusions_") + typestr;
+    } else {
+        pyclass_name = std::string("NonbondedPairList_") + typestr;
+    }
     py::class_<Class, std::shared_ptr<Class>, timemachine::Potential>(
         m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
         .def(
@@ -1277,6 +1274,28 @@ py_rmsd_align(const py::array_t<double, py::array::c_style> &x1, const py::array
     return py_x2_aligned;
 }
 
+double py_accumulate_energy(const py::array_t<long long, py::array::c_style> &input_data) {
+
+    int N = input_data.size();
+
+    std::vector<__int128> h_buffer(N);
+    for (int i = 0; i < N; i++) {
+        h_buffer[i] = static_cast<__int128>(input_data.data()[i]);
+    }
+
+    timemachine::DeviceBuffer<__int128> d_input_buffer(N);
+    d_input_buffer.copy_from(&h_buffer[0]);
+
+    timemachine::DeviceBuffer<__int128> d_output_buffer(1);
+
+    // Use default stream which will sync with the output_buffer copy_to
+    accumulate_energy(N, d_input_buffer.data, d_output_buffer.data, static_cast<cudaStream_t>(0));
+    std::vector<__int128> res(1);
+    d_output_buffer.copy_to(&res[0]);
+
+    return static_cast<long long>(res[0]);
+}
+
 void py_cuda_device_reset() { cudaDeviceReset(); }
 
 PYBIND11_MODULE(custom_ops, m) {
@@ -1287,6 +1306,11 @@ PYBIND11_MODULE(custom_ops, m) {
         "Destroy all allocations and reset all state on the current device in the current process.");
 
     m.def("rmsd_align", &py_rmsd_align, "RMSD align two molecules", py::arg("x1"), py::arg("x2"));
+    m.def(
+        "_accumulate_energy",
+        &py_accumulate_energy,
+        "Function for testing accumulating energy in a block reduce",
+        py::arg("x"));
 
     declare_barostat(m);
 
@@ -1341,8 +1365,8 @@ PYBIND11_MODULE(custom_ops, m) {
     declare_nonbonded_pair_list<double, false>(m, "f64");
     declare_nonbonded_pair_list<float, false>(m, "f32");
 
-    declare_nonbonded_pair_list<double, true>(m, "f64_negated");
-    declare_nonbonded_pair_list<float, true>(m, "f32_negated");
+    declare_nonbonded_pair_list<double, true>(m, "f64");
+    declare_nonbonded_pair_list<float, true>(m, "f32");
 
     declare_context(m);
 }

@@ -40,7 +40,7 @@ void __global__ k_centroid_restraint(
     const double kb,
     const double b0,
     unsigned long long *d_du_dx,
-    unsigned long long *d_u) {
+    __int128 *d_u) {
 
     const int t_idx = blockDim.x * blockIdx.x + threadIdx.x;
     if (N_A + N_B <= t_idx) {
@@ -61,7 +61,7 @@ void __global__ k_centroid_restraint(
 
     if (t_idx == 0 && d_u) {
         RealType nrg = kb * (dij - b0) * (dij - b0);
-        atomicAdd(d_u + 0, FLOAT_TO_FIXED<RealType>(nrg));
+        d_u[t_idx] = FLOAT_TO_FIXED_ENERGY<RealType>(nrg);
     }
 
     // grads

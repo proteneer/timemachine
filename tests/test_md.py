@@ -137,9 +137,8 @@ def test_set_and_get():
 
 def test_fwd_mode():
     """
-    This test ensures that we can reverse-mode differentiate
-    observables that are dU_dlambdas of each state. We provide
-    adjoints with respect to each computed dU/dLambda.
+    This test verifies that stepping forward in time matches whether using the
+    reference or the GPU platform.
     """
 
     np.random.seed(4321)
@@ -789,7 +788,7 @@ def test_setup_context_with_references():
     seed = 2022
     pressure = constants.DEFAULT_PRESSURE
 
-    unbound_potentials, sys_params, masses, coords, box = get_solvent_phase_system(mol, ff, 0.0, minimize_energy=False)
+    unbound_potentials, sys_params, masses, coords, box = get_solvent_phase_system(mol, ff, 1.0, minimize_energy=False)
     v0 = np.zeros_like(coords)
 
     def build_context(barostat_interval):

@@ -9,7 +9,7 @@ from numpy.typing import NDArray
 from timemachine.lib import custom_ops
 
 from . import bonded, bonded_stable, chiral_restraints, jax_interface, nonbonded, summed
-from .potential import BoundGpuImplWrapper, GpuImplWrapper, Potential, Precision, get_custom_ops_class_name_suffix
+from .potential import BoundGpuImplWrapper, GpuImplWrapper, Potential, Precision
 from .types import Box, Conf, Params
 
 
@@ -125,7 +125,7 @@ class Nonbonded(Potential):
         )
         atom_idxs = self.atom_idxs if self.atom_idxs is not None else np.arange(self.num_atoms, dtype=np.int32)
         exclusion_idxs, scale_factors = nonbonded.filter_exclusions(atom_idxs, self.exclusion_idxs, self.scale_factors)
-        exclusions = NonbondedPairListNegated(exclusion_idxs, scale_factors, self.beta, self.cutoff)
+        exclusions = NonbondedExclusions(exclusion_idxs, scale_factors, self.beta, self.cutoff)
         return FanoutSummedPotential([all_pairs, exclusions]).to_gpu(precision)
 
 
@@ -192,7 +192,7 @@ class NonbondedPairList(Potential):
 
 
 @dataclass
-class NonbondedPairListNegated(Potential):
+class NonbondedExclusions(Potential):
     idxs: NDArray[np.int32]
     rescale_mask: NDArray[np.float64]
     beta: float
@@ -204,10 +204,6 @@ class NonbondedPairListNegated(Potential):
         )
         U = jnp.sum(vdW) + jnp.sum(electrostatics)
         return -U
-
-    @classmethod
-    def _custom_ops_class_name(cls, precision):
-        return f"NonbondedPairList_{get_custom_ops_class_name_suffix(precision)}_negated"
 
 
 @dataclass

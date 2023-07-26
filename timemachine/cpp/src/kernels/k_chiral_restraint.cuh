@@ -10,7 +10,7 @@ void __global__ k_chiral_atom_restraint(
     const int *__restrict__ idxs,      // [R, 2]
     unsigned long long *__restrict__ du_dx,
     unsigned long long *__restrict__ du_dp,
-    unsigned long long *__restrict__ u) {
+    __int128 *__restrict__ u) {
 
     const auto r_idx = blockDim.x * blockIdx.x + threadIdx.x;
 
@@ -50,6 +50,11 @@ void __global__ k_chiral_atom_restraint(
     pyramidal_vol_and_grad(xc, x1, x2, x3, vol, xc_grad, x1_grad, x2_grad, x3_grad);
     RealType k_restr = params[r_idx];
 
+    // Always set the energies to avoid getting uninitialized values
+    if (u) {
+        u[r_idx] = vol > static_cast<RealType>(0.0) ? FLOAT_TO_FIXED_BONDED<RealType>(k_restr * vol * vol) : 0;
+    }
+
     if (k_restr == 0) {
         return;
     }
@@ -81,10 +86,6 @@ void __global__ k_chiral_atom_restraint(
     if (du_dp) {
         atomicAdd(du_dp + r_idx, FLOAT_TO_FIXED_BONDED<RealType>(vol * vol));
     }
-
-    if (u) {
-        atomicAdd(u + xc_idx, FLOAT_TO_FIXED_BONDED<RealType>(k_restr * vol * vol));
-    }
 }
 
 template <typename RealType>
@@ -96,7 +97,7 @@ void __global__ k_chiral_bond_restraint(
     const int *__restrict__ signs,     // [R]
     unsigned long long *__restrict__ du_dx,
     unsigned long long *__restrict__ du_dp,
-    unsigned long long *__restrict__ u) {
+    __int128 *__restrict__ u) {
 
     const auto r_idx = blockDim.x * blockIdx.x + threadIdx.x;
 
@@ -135,13 +136,18 @@ void __global__ k_chiral_bond_restraint(
     RealType vol;
     RealType k_restr = params[r_idx];
 
-    if (k_restr == 0) {
-        return;
-    }
-
     int sign = signs[r_idx];
 
     torsion_vol_and_grad(x0, x1, x2, x3, vol, x0_grad, x1_grad, x2_grad, x3_grad);
+
+    // Always set the energies to avoid having to memset
+    if (u) {
+        u[r_idx] = sign * vol > 0 ? FLOAT_TO_FIXED_BONDED<RealType>(k_restr * vol * vol) : 0;
+    }
+
+    if (k_restr == 0) {
+        return;
+    }
 
     if (sign * vol <= 0) {
         return;
@@ -169,9 +175,5 @@ void __global__ k_chiral_bond_restraint(
 
     if (du_dp) {
         atomicAdd(du_dp + r_idx, FLOAT_TO_FIXED_BONDED<RealType>(vol * vol));
-    }
-
-    if (u) {
-        atomicAdd(u + x0_idx, FLOAT_TO_FIXED_BONDED<RealType>(k_restr * vol * vol));
     }
 }

@@ -4,6 +4,7 @@
 
 #include "nonbonded_all_pairs.hpp"
 #include "nonbonded_common.hpp"
+#include "nonbonded_pair_list.hpp"
 
 #include "cuda_runtime.h"
 

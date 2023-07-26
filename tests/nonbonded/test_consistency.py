@@ -8,8 +8,8 @@ from timemachine.potentials import (
     FanoutSummedPotential,
     Nonbonded,
     NonbondedAllPairs,
+    NonbondedExclusions,
     NonbondedInteractionGroup,
-    NonbondedPairListNegated,
 )
 
 pytestmark = [pytest.mark.memcheck]
@@ -73,15 +73,15 @@ def test_nonbonded_consistency(
     def make_ixngroup_potential(ligand_idxs, col_atom_idxs):
         return NonbondedInteractionGroup(num_atoms, ligand_idxs, beta, cutoff, col_atom_idxs, disable_hilbert_sort)
 
-    def make_pairlist_potential(exclusion_idxs, exclusion_scales):
-        return NonbondedPairListNegated(exclusion_idxs, exclusion_scales, beta, cutoff)
+    def make_exclusions_potential(exclusion_idxs, exclusion_scales):
+        return NonbondedExclusions(exclusion_idxs, exclusion_scales, beta, cutoff)
 
     test_impl = (
         FanoutSummedPotential(
             [
                 make_allpairs_potential(host_idxs),
                 make_allpairs_potential(ligand_idxs),
-                make_pairlist_potential(exclusion_idxs, exclusion_scales),
+                make_exclusions_potential(exclusion_idxs, exclusion_scales),
             ]
             + [make_ixngroup_potential(ligand_idxs, col_atom_idxs) for col_atom_idxs in all_col_atom_idxs]
         )

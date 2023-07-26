@@ -22,8 +22,7 @@ void Potential::execute_batch_host(
     const double *h_box,         // [coord_batch_size, 3, 3]
     unsigned long long *h_du_dx, // [coord_batch_size, param_batch_size, N, 3]
     unsigned long long *h_du_dp, // [coord_batch_size, param_batch_size, P]
-    unsigned long long *h_u,     // [coord_batch_size, param_batch_size, N]
-    int *h_u_overflow_count      // [coord_batch_size, param_batch_size]
+    __int128 *h_u                // [coord_batch_size, param_batch_size, N]
 ) {
     std::unique_ptr<DeviceBuffer<double>> d_p(nullptr);
     if (P > 0) {
@@ -39,8 +38,7 @@ void Potential::execute_batch_host(
 
     std::unique_ptr<DeviceBuffer<unsigned long long>> d_du_dx_buffer(nullptr);
     std::unique_ptr<DeviceBuffer<unsigned long long>> d_du_dp_buffer(nullptr);
-    std::unique_ptr<DeviceBuffer<unsigned long long>> d_u_buffer(nullptr);
-    std::unique_ptr<DeviceBuffer<int>> d_u_overflow_count(nullptr);
+    std::unique_ptr<DeviceBuffer<__int128>> d_u_buffer(nullptr);
 
     const int total_executions = coord_batch_size * param_batch_size;
 
@@ -58,11 +56,8 @@ void Potential::execute_batch_host(
     }
 
     if (h_u) {
-        d_u_buffer.reset(new DeviceBuffer<unsigned long long>(total_executions * N));
+        d_u_buffer.reset(new DeviceBuffer<__int128>(total_executions));
         gpuErrchk(cudaMemsetAsync(d_u_buffer->data, 0, d_u_buffer->size, stream));
-
-        d_u_overflow_count.reset(new DeviceBuffer<int>(total_executions));
-        gpuErrchk(cudaMemset(d_u_overflow_count->data, 0, d_u_overflow_count->size));
     }
 
     for (unsigned int i = 0; i < coord_batch_size; i++) {
@@ -76,8 +71,7 @@ void Potential::execute_batch_host(
                 d_box.data + (i * D * D),
                 d_du_dx_buffer ? d_du_dx_buffer->data + (offset_factor * N * D) : nullptr,
                 d_du_dp_buffer ? d_du_dp_buffer->data + (offset_factor * P) : nullptr,
-                d_u_buffer ? d_u_buffer->data + (offset_factor * N) : nullptr,
-                d_u_overflow_count ? d_u_overflow_count->data + offset_factor : nullptr,
+                d_u_buffer ? d_u_buffer->data + offset_factor : nullptr,
                 stream);
         }
     }
@@ -94,7 +88,6 @@ void Potential::execute_batch_host(
 
     if (h_u) {
         d_u_buffer->copy_to(h_u);
-        d_u_overflow_count->copy_to(h_u_overflow_count);
     }
 }
 
@@ -106,8 +99,7 @@ void Potential::execute_host(
     const double *h_box,         // [3, 3]
     unsigned long long *h_du_dx, // [N,3]
     unsigned long long *h_du_dp, // [P]
-    unsigned long long *h_u,     // [N]
-    int *h_u_overflow_count      // [1]
+    __int128 *h_u                // [1]
 ) {
 
     const int &D = Potential::D;
@@ -121,8 +113,7 @@ void Potential::execute_host(
     std::unique_ptr<DeviceBuffer<double>> d_p;
     std::unique_ptr<DeviceBuffer<unsigned long long>> d_du_dx;
     std::unique_ptr<DeviceBuffer<unsigned long long>> d_du_dp;
-    std::unique_ptr<DeviceBuffer<unsigned long long>> d_u;
-    std::unique_ptr<DeviceBuffer<int>> d_u_overflow_count;
+    std::unique_ptr<DeviceBuffer<__int128>> d_u;
 
     // very important that these are initialized to zero since the kernels themselves just accumulate
 
@@ -141,11 +132,8 @@ void Potential::execute_host(
         gpuErrchk(cudaMemset(d_du_dp->data, 0, d_du_dp->size));
     }
     if (h_u) {
-        d_u.reset(new DeviceBuffer<unsigned long long>(N));
+        d_u.reset(new DeviceBuffer<__int128>(1));
         gpuErrchk(cudaMemset(d_u->data, 0, d_u->size));
-
-        d_u_overflow_count.reset(new DeviceBuffer<int>(1));
-        gpuErrchk(cudaMemset(d_u_overflow_count->data, 0, d_u_overflow_count->size));
     }
 
     this->execute_device(
@@ -157,7 +145,6 @@ void Potential::execute_host(
         d_du_dx ? d_du_dx->data : nullptr,
         d_du_dp ? d_du_dp->data : nullptr,
         d_u ? d_u->data : nullptr,
-        d_u ? d_u_overflow_count->data : nullptr,
         static_cast<cudaStream_t>(0));
 
     // outputs
@@ -169,7 +156,6 @@ void Potential::execute_host(
     }
     if (h_u) {
         d_u->copy_to(h_u);
-        d_u_overflow_count->copy_to(h_u_overflow_count);
     }
 };
 
@@ -202,7 +188,7 @@ void Potential::execute_host_du_dx(
     cudaSafeMalloc(&d_du_dx, N * D * sizeof(unsigned long long));
     gpuErrchk(cudaMemset(d_du_dx, 0, N * D * sizeof(unsigned long long)));
 
-    this->execute_device(N, P, d_x, d_p, d_box, d_du_dx, nullptr, nullptr, nullptr, static_cast<cudaStream_t>(0));
+    this->execute_device(N, P, d_x, d_p, d_box, d_du_dx, nullptr, nullptr, static_cast<cudaStream_t>(0));
 
     gpuErrchk(cudaMemcpy(h_du_dx, d_du_dx, N * D * sizeof(*h_du_dx), cudaMemcpyDeviceToHost));
     gpuErrchk(cudaFree(d_du_dx));

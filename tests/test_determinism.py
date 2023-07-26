@@ -2,6 +2,7 @@ from importlib import resources
 
 import numpy as np
 import pytest
+from common import fixed_overflowed
 
 from timemachine.constants import DEFAULT_PRESSURE, DEFAULT_TEMP
 from timemachine.fe.free_energy import HostConfig
@@ -78,18 +79,16 @@ def test_deterministic_energies():
                 minimizer.check_force_norm(-ref_du_dx)
                 test_u = 0.0
                 test_u_selective = 0.0
-                total_overflows = 0
                 test_U_fixed = np.uint64(0)
                 for fn, unbound, bp in zip(host_fns, ubps, bps):
-                    U_fixed, U_overflows = bp.execute_fixed(x, b)
-                    total_overflows += U_overflows
+                    U_fixed = bp.execute_fixed(x, b)
+                    assert not fixed_overflowed(U_fixed)
                     test_U_fixed += U_fixed
                     _, U = bp.execute(x, b)
                     test_u += U
                     _, _, U_selective = unbound.execute_selective(x, fn.params, b, False, False, True)
                     test_u_selective += U_selective
-                assert total_overflows == 0, "Fixed energies overflowed"
-                assert ref_U == FIXED_TO_FLOAT(test_U_fixed), str(barostat)
+                assert ref_U == FIXED_TO_FLOAT(test_U_fixed), precision
                 assert test_u == test_u_selective, str(barostat)
                 np.testing.assert_allclose(ref_U, test_u, rtol=rtol, atol=atol)
                 np.testing.assert_allclose(ref_U, test_u_selective, rtol=rtol, atol=atol)
