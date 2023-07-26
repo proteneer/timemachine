@@ -48,27 +48,31 @@ def make_gaussian_ukln_example(
 
 @pytest.fixture
 def partial_overlap_uniform_ukln_example():
+
+    dlogZ = 5.0
+
     def u_a(x):
-        """Unif[0.0, 1.0], with log_Z = 0"""
+        """Unif[0.0, 1.0], with log(Z) = 0"""
         in_bounds = (x > 0) * (x < 1)
         return np.where(in_bounds, 0, +np.inf)
 
     def u_b(x):
-        """Unif[0.5, 1.5], with log_Z = -5"""
+        """Unif[0.5, 1.5], with log(Z) = dlogZ"""
         x_ = x - 0.5
-        return u_a(x_) + 5.0
+        return u_a(x_) - dlogZ
 
     rng = np.random.default_rng(2023)
+    n = 1000
 
-    x_a = rng.uniform(0, 1, (1000,))
-    x_b = rng.uniform(0.5, 1.5, (1000,))
+    x_a = rng.uniform(0, 1, (n,))
+    x_b = rng.uniform(0.5, 1.5, (n,))
 
     assert np.isfinite(u_a(x_a)).all()
     assert np.isfinite(u_b(x_b)).all()
 
     u_kln = np.array([[u_a(x_a), u_a(x_b)], [u_b(x_a), u_b(x_b)]])
 
-    return u_kln
+    return u_kln, dlogZ
 
 
 @pytest.mark.parametrize("sigma", [0.1, 1.0, 10.0])
@@ -115,7 +119,7 @@ def test_df_from_u_kln_compare_with_pymbar_bar(sigma):
 
 
 def test_df_and_err_from_u_kln_partial_overlap(partial_overlap_uniform_ukln_example):
-    u_kln = partial_overlap_uniform_ukln_example
+    u_kln, dlogZ = partial_overlap_uniform_ukln_example
 
     w_F, w_R = works_from_ukln(u_kln)
 
@@ -126,7 +130,7 @@ def test_df_and_err_from_u_kln_partial_overlap(partial_overlap_uniform_ukln_exam
     assert pymbar.BAR(w_F, w_R) == (0.0, 0.0)
 
     df, df_err = df_and_err_from_u_kln(u_kln)
-    assert np.isfinite(df) and df != 0.0
+    assert df == pytest.approx(dlogZ, abs=2.0 * df_err)
     assert np.isfinite(df_err) and df_err > 0.0
 
 
