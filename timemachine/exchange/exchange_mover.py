@@ -5,7 +5,7 @@
 
 import argparse
 import os
-from typing import Tuple
+from typing import Callable, List, Tuple
 
 import jax
 import jax.numpy as jnp
@@ -49,7 +49,6 @@ def build_system(host_pdbfile: str, water_ff: str, padding: float):
     box_lengths = box_lengths + padding
     box = np.eye(3, dtype=np.float64) * box_lengths
 
-    # host_ff = app.ForceField("/home/yutong/Code/timemachine/ff/params/tip3p_modified.xml")
     host_ff = app.ForceField(f"{water_ff}.xml")
     nwa = len(host_coords)
     solvated_host_system = host_ff.createSystem(
@@ -180,11 +179,167 @@ class ExchangeMove(moves.MonteCarloMove):
         # convert to inf if we get a nan
         if np.isnan(delta_U_total):
             delta_U_total = np.inf
-
         log_p_accept = min(0, -self.beta * delta_U_total)
         new_state = CoordsVelBox(trial_coords, x.velocities, x.box)
 
         return new_state, log_p_accept
+
+
+# numpy version of delta_r
+def delta_r_np(ri, rj, box):
+    diff = ri - rj  # this can be either N,N,3 or B,3
+    if box is not None:
+        box_diag = np.diag(box)
+        diff -= box_diag * np.floor(diff / box_diag + 0.5)
+    return diff
+
+
+class InsideOutsideExchangeMove(moves.MonteCarloMove):
+    """
+    Special case of DualRegion swaps where we have two regions V1 and V2 such that
+    V1 = spherical shell centered on a set of indices, and V2 = box - V1.
+
+    This class explicitly attempts swaps between the two regions with equal probability.
+    """
+
+    def __init__(self, nb_params, nb_beta, nb_cutoff, water_idxs, ligand_idxs, radius):
+        self.nb_beta = nb_beta
+        self.nb_cutoff = nb_cutoff
+        self.nb_params = jnp.array(nb_params)
+        self.num_waters = len(water_idxs)
+        self.water_idxs = water_idxs
+        self.ligand_idxs = ligand_idxs  # used to determine center of sphere
+        self.beta = 1 / DEFAULT_KT
+        self.radius = radius
+
+        @jax.jit
+        def U_fn(conf, box, a_idxs, b_idxs):
+            # compute the energy of an interaction group
+            conf_i = conf[a_idxs]
+            conf_j = conf[b_idxs]
+            params_i = self.nb_params[a_idxs]
+            params_j = self.nb_params[b_idxs]
+            return nonbonded.nonbonded_block(conf_i, conf_j, box, params_i, params_j, self.nb_beta, self.nb_cutoff)
+
+        self.U_fn = U_fn
+
+    def get_water_groups(self, coords, box, center):
+        # vectorized implementation
+        dijs = np.linalg.norm(delta_r_np(np.mean(coords[self.water_idxs], axis=1), center, box), axis=1)
+        v1_mols = np.argwhere(dijs < self.radius).reshape(-1)
+        v2_mols = np.argwhere(dijs >= self.radius).reshape(-1)
+
+        # print(len(v1_mols), len(v2_mols))
+        # reference implementation
+        # for mol_idx, water_atoms in enumerate(self.water_idxs):
+        #     water_centroid = np.mean(coords[water_atoms], axis=0)
+        #     dr = delta_r(water_centroid, center)
+        #     if np.linalg.norm(dr) < self.radius:
+        #         v1_mols.append(mol_idx)
+        #     else:
+        #         v2_mols.append(mol_idx)
+
+        return v1_mols, v2_mols
+
+    # @profile
+    def swap_vi_into_vj(
+        self,
+        vi_mols: List[int],
+        vj_mols: List[int],
+        x: CoordsVelBox,
+        vj_insertion_fn: Callable,
+        vol_i: float,
+        vol_j: float,
+    ):
+        # swap a water molecule from region vi to region vj
+        coords, box = x.coords, x.box
+        chosen_water = np.random.choice(vi_mols)
+        chosen_water_atoms = self.water_idxs[chosen_water]
+        new_coords = coords[chosen_water_atoms]
+        # remove centroid
+        new_coords = new_coords - np.mean(new_coords, axis=0) + vj_insertion_fn()
+        trial_coords = coords.copy()  # can optimize this later if needed
+        trial_coords[chosen_water_atoms] = new_coords
+
+        n_atoms = len(coords)
+        a_idxs = chosen_water_atoms
+        b_idxs = np.delete(np.arange(n_atoms), a_idxs)
+
+        # we can probably speed this up even more if we use an incremental voxel_map
+        # (reduce complexity from O(N) to O(K))
+        delta_U_delete = -self.U_fn(coords, box, a_idxs, b_idxs)
+        delta_U_insert = self.U_fn(trial_coords, box, a_idxs, b_idxs)
+        delta_U_total = delta_U_delete + delta_U_insert
+
+        # convert to inf if we get a nan
+        if np.isnan(delta_U_total):
+            delta_U_total = np.inf
+
+        ni = len(vi_mols)
+        nj = len(vj_mols)
+        hastings_factor = np.log((ni * vol_j) / ((nj + 1) * vol_i))
+        # print(hastings_factor)
+        log_p_accept = min(0, -self.beta * delta_U_total + hastings_factor)
+        new_state = CoordsVelBox(trial_coords, x.velocities, x.box)
+
+        return new_state, log_p_accept
+
+    def propose(self, x: CoordsVelBox) -> Tuple[CoordsVelBox, float]:
+        box = x.box
+        coords = x.coords
+        center = np.mean(coords[self.ligand_idxs], axis=0)
+        v1_mols, v2_mols = self.get_water_groups(coords, box, center)
+        n1 = len(v1_mols)
+        n2 = len(v2_mols)
+
+        # optimized version
+        def v1_insertion():
+            # sample a point inside the sphere uniformly
+            # source: https://karthikkaranth.me/blog/generating-random-points-in-a-sphere/
+            xyz = np.random.rand() - 0.5
+            n = np.linalg.norm(xyz)
+            xyz = xyz / n
+            # (ytz): this might not be inside the box, but it doesnt' matter
+            # since all of our distances are computed using PBCs
+            c = np.cbrt(np.random.rand())
+            return xyz * c * self.radius + center
+
+        # v1 << v2 so monte carlo is really slow (avg counter ~5000)
+        # def v1_insertion():
+        #     # generate random proposals inside the sphere
+        #     # counter = 0
+        #     while True:
+        #         # counter += 1
+        #         xyz = np.random.randn(3) * np.diag(box)
+        #         if np.linalg.norm(delta_r_np(xyz, center, box)) < self.radius:
+        #             # print("inserted into v1 after", counter)
+        #             return xyz
+
+        # v2 >> v1 so monte carlo works really well
+        def v2_insertion():
+            # generate random proposals outside of the sphere but inside the box
+            while True:
+                xyz = np.random.randn(3) * np.diag(box)
+                if np.linalg.norm(delta_r_np(xyz, center, box)) >= self.radius:
+                    return xyz
+
+        vol_1 = (4 / 3) * np.pi * self.radius ** 3
+        vol_2 = np.prod(np.diag(box)) - vol_1
+
+        if n1 == 0 and n2 == 0:
+            assert 0
+        elif n1 > 0 and n2 == 0:
+            return self.swap_vi_into_vj(v1_mols, v2_mols, x, v2_insertion, vol_1, vol_2)
+        elif n1 == 0 and n2 > 0:
+            return self.swap_vi_into_vj(v2_mols, v1_mols, x, v1_insertion, vol_2, vol_1)
+        elif n1 > 0 and n2 > 0:
+            if np.random.rand() < 0.5:
+                return self.swap_vi_into_vj(v1_mols, v2_mols, x, v2_insertion, vol_1, vol_2)
+            else:
+                return self.swap_vi_into_vj(v2_mols, v1_mols, x, v1_insertion, vol_2, vol_1)
+        else:
+            # negative numbers, dun goof'd
+            assert 0
 
 
 def compute_density(n_waters, box):
@@ -289,7 +444,12 @@ def test_exchange():
     print("number of water atoms", nwm * 3, "number of ligand atoms", mol.GetNumAtoms())
     print("ligand_water parameters", nb_ligand_water_params)
 
-    exc_mover = ExchangeMove(nb_ligand_water_params, nb_beta, nb_cutoff, water_idxs)
+    # exc_mover = ExchangeMove(nb_ligand_water_params, nb_beta, nb_cutoff, water_idxs)
+
+    bb_radius = 0.46
+    exc_mover = InsideOutsideExchangeMove(
+        nb_ligand_water_params, nb_beta, nb_cutoff, water_idxs, initial_state.ligand_idxs, bb_radius
+    )
     cur_box = initial_state.box0
     cur_x_t = initial_state.x0
     cur_v_t = np.zeros_like(cur_x_t)
@@ -325,27 +485,26 @@ def test_exchange():
     npt_mover.n_steps = md_steps_per_batch
     # TBD: cache the minimized and equilibrated initial structure later on to iterate faster.
 
-    xvb_t = image_xvb(initial_state, xvb_t)
+    # (ytz): If I start with pure MC, and no MD, it's actually very easy to remove the waters.
+    # since the starting waters have very very high energy. If I re-run MD, then it becomes progressively harder
+    # remove the water since we will re-equilibriate the waters.
 
     for idx in range(100000):
         density = compute_density(nwm, xvb_t.box)
 
         xvb_t = image_xvb(initial_state, xvb_t)
-        occ = compute_occupancy(xvb_t.coords, xvb_t.box, initial_state.ligand_idxs, threshold=0.46)
+        occ = compute_occupancy(xvb_t.coords, xvb_t.box, initial_state.ligand_idxs, threshold=bb_radius)
 
         print(
             f"{exc_mover.n_accepted} / {exc_mover.n_proposed} | density {density} | # of waters in bb {occ // 3} | md step: {idx * md_steps_per_batch}"
         )
-        if idx % 10 == 0:
-            writer.write_frame(xvb_t.coords * 10)
 
-        # run MC
-        for _ in range(5000):
+        for _ in range(2000):
             assert np.amax(np.abs(xvb_t.coords)) < 1e3
             xvb_t = exc_mover.move(xvb_t)
 
         # run MD
-        xvb_t = npt_mover.move(xvb_t)
+        xvb_t = npt_mover.move(xvb_t)  # disabling this gets more moves?
 
 
 if __name__ == "__main__":

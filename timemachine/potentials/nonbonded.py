@@ -93,8 +93,8 @@ def nonbonded_block(xi, xj, box, params_i, params_j, beta, cutoff):
     """
     ri = jnp.expand_dims(xi, axis=1)
     rj = jnp.expand_dims(xj, axis=0)
-    d2ij = jnp.sum(jnp.power(delta_r(ri, rj, box), 2), axis=-1)
-    dij = jnp.sqrt(d2ij)
+
+    dij = jnp.linalg.norm(delta_r(ri, rj, box), axis=-1)
     sig_i = jnp.expand_dims(params_i[:, 1], axis=1)
     sig_j = jnp.expand_dims(params_j[:, 1], axis=0)
     eps_i = jnp.expand_dims(params_i[:, 2], axis=1)
