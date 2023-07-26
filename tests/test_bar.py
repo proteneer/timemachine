@@ -13,7 +13,6 @@ from timemachine.fe.bar import (
     compute_fwd_and_reverse_df_over_time,
     df_and_err_from_u_kln,
     df_from_u_kln,
-    mbar_from_u_kln,
     pair_overlap_from_ukln,
     works_from_ukln,
 )
@@ -78,9 +77,7 @@ def test_bootstrap_bar(sigma):
     u_kln = make_gaussian_ukln_example((0.0, 1.0), (1.0, sigma))
 
     # estimate 3 times
-    dfs_ref, ddfs_ref = mbar_from_u_kln(u_kln).getFreeEnergyDifferences()
-    df_ref = dfs_ref[1, 0]
-    ddf_ref = ddfs_ref[1, 0]
+    df_ref, ddf_ref = df_and_err_from_u_kln(u_kln)
     df_0, bootstrap_samples = bootstrap_bar(u_kln, n_bootstrap=n_bootstrap)
     df_1, bootstrap_sigma = bar_with_bootstrapped_uncertainty(u_kln)
 
