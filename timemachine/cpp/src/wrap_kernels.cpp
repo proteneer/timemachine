@@ -1311,6 +1311,7 @@ PYBIND11_MODULE(custom_ops, m) {
         &py_accumulate_energy,
         "Function for testing accumulating energy in a block reduce",
         py::arg("x"));
+    m.attr("FIXED_EXPONENT") = py::int_(FIXED_EXPONENT);
 
     declare_barostat(m);
 

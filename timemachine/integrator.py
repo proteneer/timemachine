@@ -9,16 +9,7 @@ import numpy as np
 from jax import random as jrandom
 
 from timemachine.constants import BOLTZ
-
-FIXED_EXPONENT = 0x1000000000
-
-
-def FIXED_TO_FLOAT(v):
-    return jnp.float64(jnp.int64(jnp.uint64(v))) / FIXED_EXPONENT
-
-
-def FLOAT_TO_FIXED(v):
-    return jnp.uint64(jnp.int64(v * FIXED_EXPONENT))
+from timemachine.lib.fixed_point import FIXED_TO_FLOAT, FLOAT_TO_FIXED
 
 
 def langevin_coefficients(temperature, dt, friction, masses):

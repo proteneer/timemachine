@@ -8,8 +8,8 @@ from timemachine.constants import DEFAULT_PRESSURE, DEFAULT_TEMP
 from timemachine.fe.free_energy import HostConfig
 from timemachine.ff import Forcefield
 from timemachine.ff.handlers import openmm_deserializer
-from timemachine.integrator import FIXED_TO_FLOAT
 from timemachine.lib import LangevinIntegrator, MonteCarloBarostat, custom_ops
+from timemachine.lib.fixed_point import FIXED_TO_FLOAT
 from timemachine.md import builders, minimizer
 from timemachine.md.barostat.utils import get_bond_list, get_group_indices
 from timemachine.potentials import SummedPotential

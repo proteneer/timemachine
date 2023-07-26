@@ -7,7 +7,8 @@ from timemachine.fe.rbfe import setup_initial_states
 from timemachine.fe.single_topology import SingleTopology
 from timemachine.fe.utils import get_romol_conf
 from timemachine.ff import Forcefield
-from timemachine.integrator import FIXED_TO_FLOAT, FLOAT_TO_FIXED, VelocityVerletIntegrator
+from timemachine.integrator import VelocityVerletIntegrator
+from timemachine.lib.fixed_point import FIXED_TO_FLOAT, FLOAT_TO_FIXED
 from timemachine.testsystems.relative import get_hif2a_ligand_pair_single_topology
 
 
