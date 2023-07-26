@@ -11,6 +11,7 @@ from timemachine.fe.bar import (
     bar_with_bootstrapped_uncertainty,
     bootstrap_bar,
     compute_fwd_and_reverse_df_over_time,
+    df_from_u_kln,
     mbar_from_u_kln,
     pair_overlap_from_ukln,
     works_from_ukln,
@@ -64,15 +65,15 @@ def test_bootstrap_bar(sigma):
 
 
 @pytest.mark.parametrize("sigma", [0.3, 1.0, 10.0])
-def test_compare_with_pymbar_bar(sigma):
+def test_df_from_u_kln_compare_with_pymbar_bar(sigma):
     """Compare the estimator used for 2-state delta fs (currently MBAR) with pymbar.BAR as reference."""
     u_kln = gaussian_ukln_example((0.0, 1.0), (1.0, sigma))
     w_F, w_R = works_from_ukln(u_kln)
 
     df_ref, _ = pymbar.BAR(w_F, w_R)
-    dfs, _ = mbar_from_u_kln(u_kln).getFreeEnergyDifferences()
+    df = df_from_u_kln(u_kln)
 
-    assert dfs[1, 0] == pytest.approx(df_ref, rel=0.05, abs=0.01)
+    assert df == pytest.approx(df_ref, rel=0.05, abs=0.01)
 
 
 @pytest.mark.nogpu
