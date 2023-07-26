@@ -11,6 +11,7 @@ from timemachine.fe.bar import (
     bar_with_bootstrapped_uncertainty,
     bootstrap_bar,
     compute_fwd_and_reverse_df_over_time,
+    df_and_err_from_u_kln,
     df_from_u_kln,
     mbar_from_u_kln,
     pair_overlap_from_ukln,
@@ -18,26 +19,53 @@ from timemachine.fe.bar import (
 )
 
 
-def gaussian_ukln_example(
-    params_1: Tuple[float, float], params_2: Tuple[float, float], seed: int = 0, n_samples: int = 2000
+def make_gaussian_ukln_example(
+    params_a: Tuple[float, float], params_b: Tuple[float, float], seed: int = 0, n_samples: int = 2000
 ) -> NDArray:
-    """Generate 2-state u_kln matrix for the specified pair of normal distributions."""
+    """Generate 2-state u_kln matrix for a pair of normal distributions."""
 
     def u(mu, sigma, x):
         return (x - mu) ** 2 / (2 * sigma ** 2)
 
-    mu_1, sigma_1 = params_1
-    mu_2, sigma_2 = params_2
+    mu_a, sigma_a = params_a
+    mu_b, sigma_b = params_b
 
-    u_1 = partial(u, mu_1, sigma_1)
-    u_2 = partial(u, mu_2, sigma_2)
+    u_a = partial(u, mu_a, sigma_a)
+    u_b = partial(u, mu_b, sigma_b)
 
     rng = np.random.default_rng(seed)
 
-    x_1 = rng.normal(mu_1, sigma_1, (n_samples,))
-    x_2 = rng.normal(mu_2, sigma_2, (n_samples,))
+    x_a = rng.normal(mu_a, sigma_a, (n_samples,))
+    x_b = rng.normal(mu_b, sigma_b, (n_samples,))
 
-    return np.array([[u_1(x_1), u_1(x_2)], [u_2(x_1), u_2(x_2)]])
+    u_kln = np.array([[u_a(x_a), u_a(x_b)], [u_b(x_a), u_b(x_b)]])
+
+    return u_kln
+
+
+@pytest.fixture
+def partial_overlap_uniform_ukln_example():
+    def u_a(x):
+        """Unif[0.0, 1.0], with log_Z = 0"""
+        in_bounds = (x > 0) * (x < 1)
+        return np.where(in_bounds, 0, +np.inf)
+
+    def u_b(x):
+        """Unif[0.5, 1.5], with log_Z = -5"""
+        x_ = x - 0.5
+        return u_a(x_) + 5.0
+
+    rng = np.random.default_rng(2023)
+
+    x_a = rng.uniform(0, 1, (1000,))
+    x_b = rng.uniform(0.5, 1.5, (1000,))
+
+    assert np.isfinite(u_a(x_a)).all()
+    assert np.isfinite(u_b(x_b)).all()
+
+    u_kln = np.array([[u_a(x_a), u_a(x_b)], [u_b(x_a), u_b(x_b)]])
+
+    return u_kln
 
 
 @pytest.mark.nogpu
@@ -47,7 +75,7 @@ def test_bootstrap_bar(sigma):
     n_bootstrap = 100
 
     # default rbfe instance size, varying difficulty
-    u_kln = gaussian_ukln_example((0.0, 1.0), (1.0, sigma))
+    u_kln = make_gaussian_ukln_example((0.0, 1.0), (1.0, sigma))
 
     # estimate 3 times
     dfs_ref, ddfs_ref = mbar_from_u_kln(u_kln).getFreeEnergyDifferences()
@@ -67,7 +95,7 @@ def test_bootstrap_bar(sigma):
 @pytest.mark.parametrize("sigma", [0.3, 1.0, 10.0])
 def test_df_from_u_kln_compare_with_pymbar_bar(sigma):
     """Compare the estimator used for 2-state delta fs (currently MBAR) with pymbar.BAR as reference."""
-    u_kln = gaussian_ukln_example((0.0, 1.0), (1.0, sigma))
+    u_kln = make_gaussian_ukln_example((0.0, 1.0), (1.0, sigma))
     w_F, w_R = works_from_ukln(u_kln)
 
     df_ref, _ = pymbar.BAR(w_F, w_R)
@@ -76,16 +104,48 @@ def test_df_from_u_kln_compare_with_pymbar_bar(sigma):
     assert df == pytest.approx(df_ref, rel=0.05, abs=0.01)
 
 
+def test_df_and_err_from_u_kln_partial_overlap(partial_overlap_uniform_ukln_example):
+    u_kln = partial_overlap_uniform_ukln_example
+
+    w_F, w_R = works_from_ukln(u_kln)
+
+    # this example has some infinite work values
+    assert np.any(np.isinf(w_F)) or np.any(np.isinf(w_R))
+
+    # pymbar.BAR warns and returns zero for df and uncertainty if inf is present in either input
+    assert pymbar.BAR(w_F, w_R) == (0.0, 0.0)
+
+    df, df_err = df_and_err_from_u_kln(u_kln)
+    assert np.isfinite(df) and df != 0.0
+    assert np.isfinite(df_err) and df_err > 0.0
+
+
+@pytest.mark.parametrize("n", [1, 30, 1000])
+def test_df_and_err_from_u_kln_zero_overlap(n):
+    # non-overlapping uniform distributions
+    ones = np.ones(n)
+    infs = np.inf * np.ones(n)
+    u_kln = np.array(
+        [
+            [ones, infs],
+            [infs, ones],
+        ]
+    )
+
+    _, df_err = df_and_err_from_u_kln(u_kln)
+    assert np.isfinite(df_err) and (n == 1 or df_err > 0.0)
+
+
 @pytest.mark.nogpu
 def test_pair_overlap_from_ukln():
     # identical distributions
-    assert pair_overlap_from_ukln(gaussian_ukln_example((0, 1), (0, 1))) == pytest.approx(1.0)
+    assert pair_overlap_from_ukln(make_gaussian_ukln_example((0, 1), (0, 1))) == pytest.approx(1.0)
 
     # non-overlapping
-    assert pair_overlap_from_ukln(gaussian_ukln_example((0, 0.01), (1, 0.01))) < 1e-10
+    assert pair_overlap_from_ukln(make_gaussian_ukln_example((0, 0.01), (1, 0.01))) < 1e-10
 
     # overlapping
-    assert pair_overlap_from_ukln(gaussian_ukln_example((0, 0.1), (0.5, 0.2))) > 0.1
+    assert pair_overlap_from_ukln(make_gaussian_ukln_example((0, 0.1), (0.5, 0.2))) > 0.1
 
 
 @pytest.mark.nogpu
