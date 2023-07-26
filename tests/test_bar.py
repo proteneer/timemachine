@@ -115,15 +115,6 @@ def test_bootstrap_bar(sigma):
     assert df_1 == pytest.approx(dlogZ, abs=2.0 * bootstrap_sigma)
 
 
-def test_bootstrap_bar_zero_overlap(non_overlapping_uniform_ukln_example):
-    """Verify that the bootstrapped error estimate is positive and large for the case of non-overlapping distributions.
-    This is required for bisection based on bootstrapped df error to work correctly."""
-
-    u_kln = non_overlapping_uniform_ukln_example
-    _, df_err = bar_with_bootstrapped_uncertainty(u_kln)
-    assert df_err > 0.0
-
-
 @pytest.mark.parametrize("sigma", [0.1, 1.0, 10.0])
 def test_df_from_u_kln_consistent_with_df_and_err_from_u_kln(sigma):
     u_kln, _ = make_gaussian_ukln_example((0.0, 1.0), (1.0, sigma))

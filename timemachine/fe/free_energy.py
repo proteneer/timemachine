@@ -673,8 +673,16 @@ def run_sims_with_greedy_bisection(
         u_kln_by_component = compute_energy_decomposed_u_kln([get_state(lamb1), get_state(lamb2)])
         return estimate_free_energy_bar(u_kln_by_component, temperature)
 
-    def bar_error(lamb1: float, lamb2: float) -> float:
-        return get_bar_result(lamb1, lamb2).dG_err
+    def overlap_to_cost(overlap: float) -> float:
+        """Use -log(overlap) as the cost function for bisection; i.e., bisect the pair of states with lowest overlap."""
+        return -np.log(overlap) if overlap != 0.0 else float("inf")
+
+    def cost_to_overlap(cost: float) -> float:
+        return np.exp(-cost)
+
+    def cost_fn(lamb1: float, lamb2: float) -> float:
+        overlap = get_bar_result(lamb1, lamb2).overlap
+        return overlap_to_cost(overlap)
 
     def midpoint(x1: float, x2: float) -> float:
         return (x1 + x2) / 2.0
@@ -695,15 +703,17 @@ def run_sims_with_greedy_bisection(
                 print(f"All BAR overlaps exceed min_overlap={min_overlap}. Returning after {iteration} iterations.")
             break
 
-        lambdas_new, info = greedy_bisection_step(lambdas, bar_error, midpoint)
+        lambdas_new, info = greedy_bisection_step(lambdas, cost_fn, midpoint)
 
         if verbose:
             costs, left_idx, lamb_new = info
-            max_bar_error = max(costs)
             lamb1 = lambdas[left_idx]
             lamb2 = lambdas[left_idx + 1]
-            print(f"Maximum BAR ΔG error {max_bar_error:.3g} kJ/mol between states at λ={lamb1:.3g} and λ={lamb2:.3g}")
-            print(f"Sampling new state at λ={lamb_new:.3g}…")
+            print(
+                f"Current minimum BAR overlap {cost_to_overlap(max(costs)):.3g} "
+                f"between states at λ={lamb1:.3g} and λ={lamb2:.3g}. "
+                f"Sampling new state at λ={lamb_new:.3g}…"
+            )
 
         lambdas = lambdas_new
         result = compute_intermediate_result(lambdas)
