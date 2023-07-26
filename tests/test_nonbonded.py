@@ -1,7 +1,3 @@
-# (ytz): check test and run benchmark with pytest:
-# pytest -xsv tests/test_nonbonded.py::TestNonbonded::test_dhfr && nvprof pytest -xsv tests/test_nonbonded.py::TestNonbonded::test_benchmark
-import copy
-import itertools
 import unittest
 from dataclasses import replace
 from typing import cast
@@ -163,33 +159,6 @@ class TestNonbondedDHFR(GradientTest):
                     self.compare_forces(
                         test_conf, test_params, self.box, potential, potential.to_gpu(precision), rtol=rtol, atol=atol
                     )
-
-    @unittest.skip("benchmark-only")
-    def test_benchmark(self):
-        """
-        This is mainly for benchmarking nonbonded computations on the initial state.
-        """
-
-        precision = np.float32
-
-        nb_fn = copy.deepcopy(self.nonbonded_fn)
-
-        impl = nb_fn.to_gpu(precision).unbound_impl
-
-        for combo in itertools.product([False, True], repeat=4):
-
-            compute_du_dx, compute_du_dp, compute_u = combo
-
-            for trip in range(50):
-
-                test_du_dx, test_du_dp, test_u = impl.execute_selective(
-                    self.host_conf,
-                    [self.nonbonded_params],
-                    self.box,
-                    compute_du_dx,
-                    compute_du_dp,
-                    compute_u,
-                )
 
 
 class TestNonbondedWater(GradientTest):
