@@ -100,7 +100,7 @@ def dG_dw(w):
 
 
 def ukln_to_ukn(u_kln: NDArray) -> Tuple[NDArray, NDArray]:
-    """Construct a pymbar.MBAR instance given a 2-state u_kln matrix.
+    """Convert 2-state u_kln matrix to u_kn and N_k, i.e. the inputs expected by pymbar.MBAR.
 
     NOTE: similar to https://pymbar.readthedocs.io/en/master/utils.html#pymbar.utils.kln_to_kn, but uses the (current)
     timemachine convention where the first two axes correspond to evaluation state and sampling state respectively.
