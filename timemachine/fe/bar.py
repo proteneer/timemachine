@@ -126,7 +126,7 @@ def df_and_err_from_u_kln(u_kln: NDArray) -> Tuple[float, float]:
     """Compute free energy difference and uncertainty given a 2-state u_kln matrix."""
     u_kn, N_k = ukln_to_ukn(u_kln)
     df, ddf = pymbar.MBAR(u_kn, N_k).getFreeEnergyDifferences()
-    return df[1, 0], ddf[1, 0]
+    return df[0, 1], ddf[0, 1]
 
 
 def df_from_u_kln(
@@ -136,7 +136,7 @@ def df_from_u_kln(
     u_kn, N_k = ukln_to_ukn(u_kln)
     mbar = pymbar.MBAR(u_kn, N_k, initial_f_k=initial_f_k, relative_tolerance=relative_tolerance)
     df = mbar.getFreeEnergyDifferences(compute_uncertainty=False)[0]
-    return df[1, 0]
+    return df[0, 1]
 
 
 def bootstrap_bar(u_kln: NDArray, n_bootstrap=1000, timeout=10) -> Tuple[float, NDArray]:
@@ -167,7 +167,7 @@ def bootstrap_bar(u_kln: NDArray, n_bootstrap=1000, timeout=10) -> Tuple[float, 
     u_kn, N_k = ukln_to_ukn(u_kln)
     mbar = pymbar.MBAR(u_kn, N_k)
 
-    full_bar_result = mbar.getFreeEnergyDifferences(compute_uncertainty=False)[0][1, 0]
+    full_bar_result = mbar.getFreeEnergyDifferences(compute_uncertainty=False)[0][0, 1]
 
     _, _, n = u_kln.shape
 

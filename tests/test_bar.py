@@ -59,7 +59,7 @@ def partial_overlap_uniform_ukln_example():
     def u_b(x):
         """Unif[0.5, 1.5], with log(Z) = dlogZ"""
         x_ = x - 0.5
-        return u_a(x_) - dlogZ
+        return u_a(x_) + dlogZ
 
     rng = np.random.default_rng(2023)
     n = 1000
