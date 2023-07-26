@@ -14,7 +14,9 @@ def value(quantity):
     return quantity.value_in_unit_system(unit.md_unit_system)
 
 
-def deserialize_system(system: mm.System, cutoff: float) -> Tuple[List[potentials.BoundPotential], List[float]]:
+def deserialize_system(
+    system: mm.System, cutoff: float, verbose=False
+) -> Tuple[List[potentials.BoundPotential], List[float]]:
     """
     Deserialize an OpenMM XML file
 
@@ -24,6 +26,8 @@ def deserialize_system(system: mm.System, cutoff: float) -> Tuple[List[potential
         A system object to be deserialized
     cutoff: float
         Nonbonded cutoff, in nm
+    verbose: bool
+        print warnings when overriding parameters
 
     Returns
     -------
@@ -124,7 +128,8 @@ def deserialize_system(system: mm.System, cutoff: float) -> Tuple[List[potential
                     msg = f"""Warning:
                         overriding (q={charge}, sig={sig}, eps={eps}) to
                         ({charge}, {sig_override}, {eps_override}) to avoid singularity"""
-                    print(msg)
+                    if verbose:
+                        print(msg)
                     sig = sig_override
                     eps = eps_override
 
