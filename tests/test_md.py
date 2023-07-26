@@ -137,9 +137,8 @@ def test_set_and_get():
 
 def test_fwd_mode():
     """
-    This test ensures that we can reverse-mode differentiate
-    observables that are dU_dlambdas of each state. We provide
-    adjoints with respect to each computed dU/dLambda.
+    This test verifies that stepping forward in time matches whether using the
+    reference or the GPU platform.
     """
 
     np.random.seed(4321)

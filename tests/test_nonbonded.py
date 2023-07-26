@@ -1,7 +1,3 @@
-# (ytz): check test and run benchmark with pytest:
-# pytest -xsv tests/test_nonbonded.py::TestNonbonded::test_dhfr && nvprof pytest -xsv tests/test_nonbonded.py::TestNonbonded::test_benchmark
-import copy
-import itertools
 import unittest
 from dataclasses import replace
 from typing import cast
@@ -30,8 +26,8 @@ class TestNonbondedDHFR(GradientTest):
         self.nonbonded_fn = cast(potentials.Nonbonded, nonbonded_bp.potential)
         self.nonbonded_params = nonbonded_bp.params
         self.host_conf = host_coords
-        self.beta = 2.0
-        self.cutoff = 1.1
+        self.beta = self.nonbonded_fn.beta
+        self.cutoff = self.nonbonded_fn.cutoff
 
     def test_nblist_hilbert(self):
         """
@@ -48,7 +44,7 @@ class TestNonbondedDHFR(GradientTest):
             ref_nonbonded_impl = replace(self.nonbonded_fn, disable_hilbert_sort=True).to_gpu(precision).unbound_impl
             test_nonbonded_impl = self.nonbonded_fn.to_gpu(precision).unbound_impl
 
-            padding = 0.1
+            padding = self.nonbonded_fn.nblist_padding
             deltas = np.random.rand(N, 3) - 0.5  # [-0.5, +0.5]
             divisor = 0.5 * (2 * np.sqrt(3)) / padding
             # if deltas are kept under +- p/(2*sqrt(3)) then no rebuild gets triggered
@@ -83,7 +79,7 @@ class TestNonbondedDHFR(GradientTest):
 
     def test_nblist_rebuild(self):
         """
-        This test makes sure that periodically rebuilding the neighborlist no impact on numerical results. The
+        This test makes sure that periodically rebuilding the neighborlist has no impact on numerical results. The
         computed forces, energies, etc. should be bitwise identical.
         """
 
@@ -139,20 +135,21 @@ class TestNonbondedDHFR(GradientTest):
 
             rng = np.random.default_rng(2022)
 
+            test_conf = self.host_conf[:N]
+
+            # strip out parts of the system
+            test_exclusions = []
+            test_scales = []
+            for (i, j), (sa, sb) in zip(self.nonbonded_fn.exclusion_idxs, self.nonbonded_fn.scale_factors):
+                if i < N and j < N:
+                    test_exclusions.append((i, j))
+                    test_scales.append((sa, sb))
+
+            test_exclusions = np.array(test_exclusions, dtype=np.int32)
+            test_scales = np.array(test_scales, dtype=np.float64)
+            test_params = self.nonbonded_params[:N, :]
+
             for atom_idxs in [None, np.array(rng.choice(N, N // 2, replace=False), dtype=np.int32)]:
-
-                test_conf = self.host_conf[:N]
-
-                # strip out parts of the system
-                test_exclusions = []
-                test_scales = []
-                for (i, j), (sa, sb) in zip(self.nonbonded_fn.exclusion_idxs, self.nonbonded_fn.scale_factors):
-                    if i < N and j < N:
-                        test_exclusions.append((i, j))
-                        test_scales.append((sa, sb))
-                test_exclusions = np.array(test_exclusions, dtype=np.int32)
-                test_scales = np.array(test_scales, dtype=np.float64)
-                test_params = self.nonbonded_params[:N, :]
 
                 potential = potentials.Nonbonded(
                     N, test_exclusions, test_scales, self.beta, self.cutoff, atom_idxs=atom_idxs
@@ -162,33 +159,6 @@ class TestNonbondedDHFR(GradientTest):
                     self.compare_forces(
                         test_conf, test_params, self.box, potential, potential.to_gpu(precision), rtol=rtol, atol=atol
                     )
-
-    @unittest.skip("benchmark-only")
-    def test_benchmark(self):
-        """
-        This is mainly for benchmarking nonbonded computations on the initial state.
-        """
-
-        precision = np.float32
-
-        nb_fn = copy.deepcopy(self.nonbonded_fn)
-
-        impl = nb_fn.to_gpu(precision).unbound_impl
-
-        for combo in itertools.product([False, True], repeat=4):
-
-            compute_du_dx, compute_du_dp, compute_u = combo
-
-            for trip in range(50):
-
-                test_du_dx, test_du_dp, test_u = impl.execute_selective(
-                    self.host_conf,
-                    [self.nonbonded_params],
-                    self.box,
-                    compute_du_dx,
-                    compute_du_dp,
-                    compute_u,
-                )
 
 
 class TestNonbondedWater(GradientTest):
