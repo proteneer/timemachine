@@ -100,6 +100,14 @@ def test_bootstrap_bar(sigma):
 
 
 @pytest.mark.parametrize("sigma", [0.1, 1.0, 10.0])
+def test_df_from_u_kln_consistent_with_df_and_err_from_u_kln(sigma):
+    u_kln, _ = make_gaussian_ukln_example((0.0, 1.0), (1.0, sigma))
+    df_ref, _ = df_and_err_from_u_kln(u_kln)
+    df = df_from_u_kln(u_kln)
+    assert df == df_ref
+
+
+@pytest.mark.parametrize("sigma", [0.1, 1.0, 10.0])
 def test_df_and_err_from_u_kln_approximates_exact_result(sigma):
     u_kln, dlogZ = make_gaussian_ukln_example((0.0, 1.0), (1.0, sigma))
     df, df_err = df_and_err_from_u_kln(u_kln)
@@ -107,15 +115,16 @@ def test_df_and_err_from_u_kln_approximates_exact_result(sigma):
 
 
 @pytest.mark.parametrize("sigma", [0.3, 1.0, 10.0])
-def test_df_from_u_kln_compare_with_pymbar_bar(sigma):
+def test_df_and_err_from_u_kln_consistent_with_pymbar_bar(sigma):
     """Compare the estimator used for 2-state delta fs (currently MBAR) with pymbar.BAR as reference."""
     u_kln, _ = make_gaussian_ukln_example((0.0, 1.0), (1.0, sigma))
     w_F, w_R = works_from_ukln(u_kln)
 
-    df_ref, _ = pymbar.BAR(w_F, w_R)
-    df = df_from_u_kln(u_kln)
+    df_ref, df_err_ref = pymbar.BAR(w_F, w_R)
+    df, df_err = df_and_err_from_u_kln(u_kln)
 
     assert df == pytest.approx(df_ref, rel=0.05, abs=0.01)
+    np.testing.assert_approx_equal(df_err, df_err_ref, significant=1)
 
 
 def test_df_and_err_from_u_kln_partial_overlap(partial_overlap_uniform_ukln_example):
