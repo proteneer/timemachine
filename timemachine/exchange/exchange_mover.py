@@ -1,11 +1,12 @@
 # Prototype ExchangeMover that implements an instantaneous water swap move.
 # disable for ~2x speed-up
 # from jax import config
+
 # config.update("jax_enable_x64", True)
 
 import argparse
 import os
-from typing import Tuple
+from typing import Callable, List, Tuple
 
 import jax
 import jax.numpy as jnp
@@ -49,7 +50,6 @@ def build_system(host_pdbfile: str, water_ff: str, padding: float):
     box_lengths = box_lengths + padding
     box = np.eye(3, dtype=np.float64) * box_lengths
 
-    # host_ff = app.ForceField("/home/yutong/Code/timemachine/ff/params/tip3p_modified.xml")
     host_ff = app.ForceField(f"{water_ff}.xml")
     nwa = len(host_coords)
     solvated_host_system = host_ff.createSystem(
@@ -61,12 +61,15 @@ def build_system(host_pdbfile: str, water_ff: str, padding: float):
     return solvated_host_system, solvated_host_coords, box, solvated_topology, nwa
 
 
-# currently un-used.
 def randomly_rotate_and_translate(coords, offset):
+    # coords: shape 3(OHH) x 3(xyz), water coordinates
     centroid = np.mean(coords, axis=0, keepdims=True)
     centered_coords = coords - centroid
     rot_mat = special_ortho_group.rvs(3)
-    rotated_coords = np.matmul(centered_coords, rot_mat)
+    # is this correct?
+    rotated_coords = np.matmul(centered_coords, rot_mat)  # buggy - can move molecule out of centroid?
+
+    # print(np.mean(rotated_coords, axis=0, keepdims=True))
     return rotated_coords + offset
 
 
@@ -128,8 +131,11 @@ def get_initial_state(water_pdb, mol, ff, seed, nb_cutoff):
     return initial_state, num_water_mols, solvent_topology
 
 
+from scipy.special import logsumexp
+
+
 class ExchangeMove(moves.MonteCarloMove):
-    def __init__(self, nb_params, nb_beta, nb_cutoff, water_idxs):
+    def __init__(self, nb_beta, nb_cutoff, nb_params, water_idxs):
         self.nb_beta = nb_beta
         self.nb_cutoff = nb_cutoff
         self.nb_params = jnp.array(nb_params)
@@ -137,58 +143,432 @@ class ExchangeMove(moves.MonteCarloMove):
         self.water_idxs = water_idxs
         self.beta = 1 / DEFAULT_KT
 
+        self.n_atoms = len(nb_params)
+        self.all_a_idxs = []
+        self.all_b_idxs = []
+        for a_idxs in water_idxs:
+            self.all_a_idxs.append(np.array(a_idxs))
+            self.all_b_idxs.append(np.delete(np.arange(self.n_atoms), a_idxs))
+        self.all_a_idxs = np.array(self.all_a_idxs)
+        self.all_b_idxs = np.array(self.all_b_idxs)
+
+        self.last_conf = None
+        self.last_bw = None
+
         @jax.jit
-        def U_fn(conf, box, a_idxs, b_idxs):
+        def U_fn_unsummed(conf, box, a_idxs, b_idxs):
             # compute the energy of an interaction group
             conf_i = conf[a_idxs]
             conf_j = conf[b_idxs]
             params_i = self.nb_params[a_idxs]
             params_j = self.nb_params[b_idxs]
-            return nonbonded.nonbonded_block(conf_i, conf_j, box, params_i, params_j, self.nb_beta, self.nb_cutoff)
+            nrgs = nonbonded.nonbonded_block_unsummed(
+                conf_i, conf_j, box, params_i, params_j, self.nb_beta, self.nb_cutoff
+            )
 
-        self.U_fn = U_fn
+            return jnp.where(jnp.isnan(nrgs), np.inf, nrgs)
+
+        @jax.jit
+        def U_fn(conf, box, a_idxs, b_idxs):
+            return jnp.sum(U_fn_unsummed(conf, box, a_idxs, b_idxs))
+
+        self.batch_U_fn = jax.jit(jax.vmap(U_fn, (None, None, 0, 0)))
+
+        def batch_log_weights(conf, box):
+            """
+            Return a list of energies equal to len(water_idxs)
+
+            # Cached based on conf
+            """
+            if not np.array_equal(self.last_conf, conf):
+                self.last_conf = conf
+                self.last_bw = self.beta * self.batch_U_fn(conf, box, self.all_a_idxs, self.all_b_idxs)
+
+            return self.last_bw
+
+        # @profile
+        def batch_log_weights_incremental(conf, box, water_idx, new_pos):
+            # compute the incremental weights
+            initial_weights = self.batch_log_weights(conf, box)
+
+            assert len(initial_weights) == self.num_waters
+
+            a_idxs = self.water_idxs[water_idx]
+            b_idxs = np.delete(np.arange(self.n_atoms), a_idxs)
+
+            # sum interaction energy of all the atoms in a water molecule
+            old_water_ixn_nrgs = np.sum(self.beta * U_fn_unsummed(conf, box, a_idxs, b_idxs), axis=0)
+            old_water_water_ixn_nrgs = np.sum(
+                old_water_ixn_nrgs[: (self.num_waters - 1) * 3].reshape((self.num_waters - 1), 3), axis=1
+            )
+
+            assert len(old_water_water_ixn_nrgs) == self.num_waters - 1
+
+            old_water_water_ixn_nrgs_full = np.zeros(len(self.water_idxs))
+            old_water_water_ixn_nrgs_full[:water_idx] = old_water_water_ixn_nrgs[:water_idx]
+            old_water_water_ixn_nrgs_full[water_idx + 1 :] = old_water_water_ixn_nrgs[water_idx:]
+
+            new_conf = conf.copy()
+            new_conf[a_idxs] = new_pos
+            new_water_ixn_nrgs = np.sum(self.beta * U_fn_unsummed(new_conf, box, a_idxs, b_idxs), axis=0)
+            new_water_water_ixn_nrgs = np.sum(
+                new_water_ixn_nrgs[: (self.num_waters - 1) * 3].reshape((self.num_waters - 1), 3), axis=1
+            )
+            new_water_water_ixn_nrgs_full = np.zeros(len(self.water_idxs))
+            new_water_water_ixn_nrgs_full[:water_idx] = new_water_water_ixn_nrgs[:water_idx]
+            new_water_water_ixn_nrgs_full[water_idx + 1 :] = new_water_water_ixn_nrgs[water_idx:]
+
+            final_weights = initial_weights - old_water_water_ixn_nrgs_full + new_water_water_ixn_nrgs_full
+            final_weights = final_weights.at[water_idx].set(np.sum(new_water_ixn_nrgs))
+
+            # ref_final_weights = self.batch_log_weights(new_conf, box)
+            # np.testing.assert_almost_equal(np.array(final_weights), np.array(ref_final_weights))
+
+            return final_weights, new_conf
+
+        self.batch_log_weights_incremental = batch_log_weights_incremental
+        self.batch_log_weights = batch_log_weights
 
     def propose(self, x: CoordsVelBox) -> Tuple[CoordsVelBox, float]:
         coords = x.coords
         box = x.box
-        n_atoms = len(coords)
-        chosen_water = np.random.randint(self.num_waters)
-        chosen_water_atoms = self.water_idxs[chosen_water]
+        log_weights_before = self.batch_log_weights(coords, box)
+        log_probs_before = log_weights_before - logsumexp(log_weights_before)
+        probs_before = np.exp(log_probs_before)
 
-        # compute delta_U of deletion
-        a_idxs = chosen_water_atoms
-        b_idxs = np.delete(np.arange(n_atoms), a_idxs)
+        chosen_water = np.random.choice(np.arange(self.num_waters), p=probs_before)
+
+        chosen_water_atoms = self.water_idxs[chosen_water]
 
         # compute delta_U of insertion
         trial_chosen_coords = coords[chosen_water_atoms]
         trial_translation = np.diag(box) * np.random.rand(3)
         # tbd - what should we do  with velocities?
 
-        # this has a higher acceptance probability than if we allowed for rotations
-        # (probably because we have a much higher chance of a useless move)
-        moved_coords = randomly_translate(trial_chosen_coords, trial_translation)
-        trial_coords = coords.copy()  # can optimize this later if needed
-        trial_coords[chosen_water_atoms] = moved_coords
+        moved_coords = randomly_rotate_and_translate(trial_chosen_coords, trial_translation)
+        # moved_coords = randomly_translate(trial_chosen_coords, trial_translation)
 
-        delta_U_insert = self.U_fn(trial_coords, box, a_idxs, b_idxs)
-        # If our system is in a clash free state, a deletion move has delta_Us typically
-        # on the order of 35kTs. However, if we start in a clashy state, we can no longer
-        # guarantee this. So it's safer to disable this micro-optimization for now.
-        delta_U_delete = -self.U_fn(coords, box, a_idxs, b_idxs)
-        delta_U_total = delta_U_delete + delta_U_insert
+        # optimized version using double transposition
+        log_weights_after, trial_coords = self.batch_log_weights_incremental(coords, box, chosen_water, moved_coords)
 
-        # convert to inf if we get a nan
-        if np.isnan(delta_U_total):
-            delta_U_total = np.inf
+        # reference version
+        # trial_coords = coords.copy()  # can optimize this later if needed
+        # trial_coords[chosen_water_atoms] = moved_coords
+        # log_weights_after = self.batch_log_weights(trial_coords, box)
 
-        log_p_accept = min(0, -self.beta * delta_U_total)
+        log_p_accept = min(0, logsumexp(log_weights_before) - logsumexp(log_weights_after))
         new_state = CoordsVelBox(trial_coords, x.velocities, x.box)
 
         return new_state, log_p_accept
 
 
+# numpy version of delta_r
+def delta_r_np(ri, rj, box):
+    diff = ri - rj  # this can be either N,N,3 or B,3
+    if box is not None:
+        box_diag = np.diag(box)
+        diff -= box_diag * np.floor(diff / box_diag + 0.5)
+    return diff
+
+
+class InsideOutsideExchangeMove(moves.MonteCarloMove):
+    """
+    Special case of DualRegion swaps where we have two regions V1 and V2 such that
+    V1 = spherical shell centered on a set of indices, and V2 = box - V1.
+
+    This class explicitly attempts swaps between the two regions with equal probability.
+    """
+
+    def __init__(self, nb_beta, nb_cutoff, nb_params, water_idxs, ligand_idxs, beta, radius):
+        self.nb_beta = nb_beta
+        self.nb_cutoff = nb_cutoff
+        self.nb_params = jnp.array(nb_params)
+        self.n_atoms = len(nb_params)
+        self.num_waters = len(water_idxs)
+        self.water_idxs = jnp.array(water_idxs)
+        self.water_idxs_np = np.array(water_idxs)
+        self.ligand_idxs = ligand_idxs  # used to determine center of sphere
+        self.beta = beta
+        self.radius = radius
+
+        self.all_a_idxs = []
+        self.all_b_idxs = []
+        for a_idxs in water_idxs:
+            self.all_a_idxs.append(np.array(a_idxs))
+            self.all_b_idxs.append(np.delete(np.arange(self.n_atoms), a_idxs))
+        self.all_a_idxs = np.array(self.all_a_idxs)
+        self.all_b_idxs = np.array(self.all_b_idxs)
+
+        self.last_conf = None
+        self.last_bw = None
+
+        @jax.jit
+        def U_fn_unsummed(conf, box, a_idxs, b_idxs):
+            # compute the energy of an interaction group
+            conf_i = conf[a_idxs]
+            conf_j = conf[b_idxs]
+            params_i = self.nb_params[a_idxs]
+            params_j = self.nb_params[b_idxs]
+            nrgs = nonbonded.nonbonded_block_unsummed(
+                conf_i, conf_j, box, params_i, params_j, self.nb_beta, self.nb_cutoff
+            )
+
+            return jnp.where(jnp.isnan(nrgs), np.inf, nrgs)
+
+        @jax.jit
+        def U_fn(conf, box, a_idxs, b_idxs):
+            return jnp.sum(U_fn_unsummed(conf, box, a_idxs, b_idxs))
+
+        self.batch_U_fn = jax.jit(jax.vmap(U_fn, (None, None, 0, 0)))
+
+        def batch_log_weights(conf, box):
+            """
+            Return a list of energies equal to len(water_idxs)
+
+            # Cached based on conf
+            """
+            if not np.array_equal(self.last_conf, conf):
+                self.last_conf = conf
+                self.last_bw = np.array(self.beta * self.batch_U_fn(conf, box, self.all_a_idxs, self.all_b_idxs))
+            return self.last_bw
+
+        self.batch_log_weights = batch_log_weights
+
+        # @profile
+        @jax.jit
+        def batch_log_weights_incremental(conf, box, water_idx, new_pos, initial_weights):
+            conf = jnp.array(conf)
+
+            assert len(initial_weights) == self.num_waters
+
+            a_idxs = self.water_idxs[water_idx]
+            b_idxs = jnp.delete(
+                jnp.arange(self.n_atoms), a_idxs, assume_unique_indices=True
+            )  # aui used to allow for jit
+
+            # sum interaction energy of all the atoms in a water molecule
+            old_water_ixn_nrgs = jnp.sum(self.beta * U_fn_unsummed(conf, box, a_idxs, b_idxs), axis=0)
+            old_water_water_ixn_nrgs = jnp.sum(
+                old_water_ixn_nrgs[: (self.num_waters - 1) * 3].reshape((self.num_waters - 1), 3), axis=1
+            )
+
+            assert len(old_water_water_ixn_nrgs) == self.num_waters - 1
+
+            old_water_water_ixn_nrgs_full = jnp.insert(old_water_water_ixn_nrgs, water_idx, 0)
+            new_conf = conf.copy()
+            new_conf = new_conf.at[a_idxs].set(new_pos)
+            new_water_ixn_nrgs = jnp.sum(self.beta * U_fn_unsummed(new_conf, box, a_idxs, b_idxs), axis=0)
+            new_water_water_ixn_nrgs = jnp.sum(
+                new_water_ixn_nrgs[: (self.num_waters - 1) * 3].reshape((self.num_waters - 1), 3), axis=1
+            )
+
+            new_water_water_ixn_nrgs_full = jnp.insert(new_water_water_ixn_nrgs, water_idx, 0)
+            final_weights = initial_weights - old_water_water_ixn_nrgs_full + new_water_water_ixn_nrgs_full
+            final_weights = final_weights.at[water_idx].set(jnp.sum(new_water_ixn_nrgs))
+
+            # ref_final_weights = self.batch_log_weights(new_conf, box)
+            # np.testing.assert_almost_equal(np.array(final_weights), np.array(ref_final_weights))
+
+            return final_weights, new_conf
+
+        self.batch_log_weights_incremental = batch_log_weights_incremental
+        self.batch_log_weights = batch_log_weights
+
+    def get_water_groups(self, coords, box, center):
+        dijs = np.linalg.norm(delta_r_np(np.mean(coords[self.water_idxs], axis=1), center, box), axis=1)
+        v1_mols = np.argwhere(dijs < self.radius).reshape(-1)
+        v2_mols = np.argwhere(dijs >= self.radius).reshape(-1)
+        return v1_mols, v2_mols
+
+    # @profile
+    def swap_vi_into_vj(
+        self,
+        vi_mols: List[int],
+        vj_mols: List[int],
+        x: CoordsVelBox,
+        vj_insertion_fn: Callable,
+        vol_i: float,
+        vol_j: float,
+    ):
+        # optimized algorithm:
+        # 1. compute batched log weights once for every water, this can be cached.
+        # normalization constants are just partial sums over these log weights
+        # 2. pick a random water to be inserted/deleted
+        # 3. compute updated batched log weights with this new water using the transposition trick
+
+        # swap a water molecule from region vi to region vj
+        coords, box = x.coords, x.box
+
+        # compute weights of waters in the vi region
+        # compute weights:
+        # p = w_i / sum_j w_j
+        # log p = log w_i - log sum_j w_j
+        # log p = log exp u_i - log sum_j exp u_j
+        # p = exp(u_i - log sum_j exp u_j)
+        # log_weights_before = self.batch_log_weights(coords, box, before_all_a_idxs, before_all_b_idxs)
+        log_weights_before_full = self.batch_log_weights(coords, box)
+        log_weights_before = log_weights_before_full[vi_mols]
+        log_probs_before = log_weights_before - logsumexp(log_weights_before)
+        probs_before = np.exp(log_probs_before)
+        water_idx = np.random.choice(vi_mols, p=probs_before)
+
+        chosen_water_atoms = self.water_idxs_np[water_idx]
+        new_coords = coords[chosen_water_atoms]
+        # remove centroid and offset into insertion site
+        new_coords = randomly_rotate_and_translate(new_coords, vj_insertion_fn())
+        # new_coords = randomly_translate(new_coords, vj_insertion_fn())
+
+        vj_plus_one_idxs = np.concatenate([[water_idx], vj_mols])
+
+        # initial_weights = self.batch_log_weights(coords, box)
+        log_weights_after_full, trial_coords = self.batch_log_weights_incremental(
+            coords, box, water_idx, new_coords, log_weights_before_full
+        )
+        trial_coords = np.array(trial_coords)
+        log_weights_after_full = np.array(log_weights_after_full)
+        log_weights_after = log_weights_after_full[vj_plus_one_idxs]
+
+        log_p_accept = min(
+            0, logsumexp(log_weights_before) - logsumexp(log_weights_after) + np.log(vol_j) - np.log(vol_i)
+        )
+
+        new_state = CoordsVelBox(trial_coords, x.velocities, x.box)
+
+        return new_state, log_p_accept
+
+    # def swap_vi_into_vj(
+    #     self,
+    #     vi_mols: List[int],
+    #     vj_mols: List[int],
+    #     x: CoordsVelBox,
+    #     vj_insertion_fn: Callable,
+    #     vol_i: float,
+    #     vol_j: float,
+    # ):
+    #     chosen_water = np.random.choice(vi_mols)
+    #     N_i = len(vi_mols)
+    #     N_j = len(vj_mols)
+    #     insertion_site = vj_insertion_fn()
+    #     new_coords, log_p_accept = self.swap_vi_into_vj_impl(
+    #         chosen_water, N_i, N_j, x.coords, x.box, insertion_site, vol_i, vol_j
+    #     )
+
+    #     return CoordsVelBox(new_coords, x.velocities, x.box), log_p_accept
+
+    # def swap_vi_into_vj_impl(self, chosen_water, N_i, N_j, coords, box, insertion_site, vol_i: float, vol_j: float):
+    #     assert N_i + N_j == len(self.water_idxs)
+    #     # swap a water molecule from region vi to region vj
+    #     # coords, box = x.coords, x.box
+    #     # chosen_water = np.random.choice(vi_mols)
+    #     chosen_water_atoms = self.water_idxs[chosen_water]
+    #     new_coords = coords[chosen_water_atoms]
+    #     # remove centroid and offset into insertion site
+    #     new_coords = new_coords - np.mean(new_coords, axis=0) + insertion_site
+
+    #     # debug
+    #     # insertion_into_buckyball = len(vi_mols) > len(vj_mols)
+    #     # if insertion_into_buckyball:
+    #     # new_coords
+
+    #     trial_coords = coords.copy()  # can optimize this later if needed
+    #     trial_coords[chosen_water_atoms] = new_coords
+
+    #     n_atoms = len(coords)
+    #     a_idxs = chosen_water_atoms
+    #     b_idxs = np.delete(np.arange(n_atoms), a_idxs)
+
+    #     # we can probably speed this up even more if we use an incremental voxel_map
+    #     # (reduce complexity from O(N) to O(K))
+    #     # delta_U_delete = -self.U_fn(coords, box, a_idxs, b_idxs)
+    #     # delta_U_insert = self.U_fn(trial_coords, box, a_idxs, b_idxs)
+    #     # delta_U_total = delta_U_delete + delta_U_insert
+
+    #     delta_U_total = self.delta_U_total_fn(trial_coords, coords, box, a_idxs, b_idxs)
+    #     delta_U_total = np.asarray(delta_U_total)
+
+    #     # convert to inf if we get a nan
+    #     if np.isnan(delta_U_total):
+    #         delta_U_total = np.inf
+
+    #     # ni = len(vi_mols)
+    #     # nj = len(vj_mols)
+    #     hastings_factor = np.log((N_i * vol_j) / ((N_j + 1) * vol_i))
+    #     # print("REF HF", hastings_factor)
+    #     log_p_accept = min(0, -self.beta * delta_U_total + hastings_factor)
+    #     # new_state = CoordsVelBox(trial_coords, x.velocities, x.box)
+
+    #     return trial_coords, log_p_accept
+
+    def propose(self, x: CoordsVelBox) -> Tuple[CoordsVelBox, float]:
+        box = x.box
+        coords = x.coords
+        center = np.mean(coords[self.ligand_idxs], axis=0)
+        v1_mols, v2_mols = self.get_water_groups(coords, box, center)
+        n1 = len(v1_mols)
+        n2 = len(v2_mols)
+
+        # optimized version
+        def v1_insertion():
+            # sample a point inside the sphere uniformly
+            # source: https://karthikkaranth.me/blog/generating-random-points-in-a-sphere/
+            xyz = np.random.randn(3)
+            n = np.linalg.norm(xyz)
+            xyz = xyz / n
+            # (ytz): this might not be inside the box, but it doesnt' matter
+            # since all of our distances are computed using PBCs
+            c = np.cbrt(np.random.rand())
+            new_xyz = xyz * c * self.radius + center
+
+            # print("without box", np.linalg.norm(new_xyz - center), self.radius)
+            # print("with box", np.linalg.norm(delta_r_np(new_xyz, center, box)), self.radius)
+
+            assert np.linalg.norm(delta_r_np(new_xyz, center, box)) < self.radius
+
+            return new_xyz
+
+        # v1 << v2 so monte carlo is really slow (avg counter ~5000)
+        # def v1_insertion():
+        #     # generate random proposals inside the sphere
+        #     # counter = 0
+        #     while True:
+        #         # counter += 1
+        #         xyz = np.random.randn(3) * np.diag(box)
+        #         if np.linalg.norm(delta_r_np(xyz, center, box)) < self.radius:
+        #             # print("inserted into v1 after", counter)
+        #             return xyz
+
+        # v2 >> v1 so monte carlo works really well
+        def v2_insertion():
+            # generate random proposals outside of the sphere but inside the box
+            while True:
+                xyz = np.random.rand(3) * np.diag(box)
+                if np.linalg.norm(delta_r_np(xyz, center, box)) >= self.radius:
+                    return xyz
+
+        vol_1 = (4 / 3) * np.pi * self.radius ** 3
+        vol_2 = np.prod(np.diag(box)) - vol_1
+
+        if n1 == 0 and n2 == 0:
+            assert 0
+        elif n1 > 0 and n2 == 0:
+            return self.swap_vi_into_vj(v1_mols, v2_mols, x, v2_insertion, vol_1, vol_2)
+        elif n1 == 0 and n2 > 0:
+            return self.swap_vi_into_vj(v2_mols, v1_mols, x, v1_insertion, vol_2, vol_1)
+        elif n1 > 0 and n2 > 0:
+            if np.random.rand() < 0.5:
+                return self.swap_vi_into_vj(v1_mols, v2_mols, x, v2_insertion, vol_1, vol_2)
+            else:
+                return self.swap_vi_into_vj(v2_mols, v1_mols, x, v1_insertion, vol_2, vol_1)
+        else:
+            # negative numbers, dun goof'd
+            assert 0
+
+
+from timemachine.lib.custom_ops import InsideOutsideExchangeMover
+
+
 def compute_density(n_waters, box):
-    box_vol = np.product(np.diag(box))
+    box_vol = np.prod(np.diag(box))
     numerator = n_waters * 18.01528 * 1e27
     denominator = box_vol * AVOGADRO * 1000
     return numerator / denominator
@@ -204,9 +584,7 @@ def compute_occupancy(x_t, box_t, ligand_idxs, threshold):
     ligand_centroid = np.mean(ligand_coords, axis=0)
     count = 0
     for rj in host_coords:
-        diff = ligand_centroid - rj  # this can be either N,N,3 or B,3
-        box_diag = np.diag(box_t)
-        diff -= box_diag * np.floor(diff / box_diag + 0.5)
+        diff = delta_r_np(ligand_centroid, rj, box_t)
         dij = np.linalg.norm(diff)
         if dij < threshold:
             count += 1
@@ -238,6 +616,31 @@ def setup_forcefield(charges):
 def image_xvb(initial_state, xvb_t):
     new_coords = image_frames(initial_state, [xvb_t.coords], [xvb_t.box])[0]
     return CoordsVelBox(new_coords, xvb_t.velocities, xvb_t.box)
+
+
+class CppMCMover(InsideOutsideExchangeMover):
+    n_proposed: int = 0
+    n_accepted: int = 0
+
+    # def __init__(self, impl):
+    # self._impl = impl
+
+    # def propose(self, x: CoordsVelBox) -> Tuple[CoordsVelBox, float]:
+    #     """return proposed state and log acceptance probability"""
+    #     raise NotImplementedError
+
+    def move(self, x: CoordsVelBox) -> CoordsVelBox:
+        new_coords, log_acceptance_probability = self.propose(x.coords, x.box)
+        self.n_proposed += 1
+
+        alpha = np.random.rand()
+        acceptance_probability = np.exp(log_acceptance_probability)
+        if alpha < acceptance_probability:
+            self.n_accepted += 1
+            proposal = CoordsVelBox(new_coords, x.velocities, x.box)
+            return proposal
+        else:
+            return x
 
 
 def test_exchange():
@@ -284,15 +687,35 @@ def test_exchange():
     # [0] nb_all_pairs, [1] nb_ligand_water, [2] nb_ligand_protein
     nb_beta = bps[-1].potential.potentials[1].beta
     nb_cutoff = bps[-1].potential.potentials[1].cutoff
-    nb_ligand_water_params = bps[-1].potential.params_init[1]
+    nb_water_ligand_params = bps[-1].potential.params_init[1]
 
     print("number of water atoms", nwm * 3, "number of ligand atoms", mol.GetNumAtoms())
-    print("ligand_water parameters", nb_ligand_water_params)
+    print("water_ligand parameters", nb_water_ligand_params)
 
-    exc_mover = ExchangeMove(nb_ligand_water_params, nb_beta, nb_cutoff, water_idxs)
+    bb_radius = 0.46
+    # exc_mover = CppMCMover(
+    #     nb_beta,
+    #     nb_cutoff,
+    #     nb_water_ligand_params.reshape(-1).tolist(),
+    #     water_idxs.reshape(-1).tolist(),
+    #     initial_state.ligand_idxs.reshape(-1).tolist(),
+    #     1 / DEFAULT_KT,
+    #     bb_radius,
+    # )
+
+    # reference
+    exc_mover = InsideOutsideExchangeMove(
+        nb_beta, nb_cutoff, nb_water_ligand_params, water_idxs, initial_state.ligand_idxs, 1 / DEFAULT_KT, bb_radius
+    )
+
+    # vanilla reference
+    # exc_mover = ExchangeMove(nb_beta, nb_cutoff, nb_water_ligand_params, water_idxs)
+
     cur_box = initial_state.box0
     cur_x_t = initial_state.x0
     cur_v_t = np.zeros_like(cur_x_t)
+
+    # debug
 
     seed = 2023
     writer = cif_writer.CIFWriter([topology, mol], args.out_cif)
@@ -321,31 +744,41 @@ def test_exchange():
     xvb_t = CoordsVelBox(cur_x_t, cur_v_t, cur_box)
     xvb_t = npt_mover.move(xvb_t)
     print("done")
-    md_steps_per_batch = 2000
+    md_steps_per_batch = 4000
     npt_mover.n_steps = md_steps_per_batch
+
     # TBD: cache the minimized and equilibrated initial structure later on to iterate faster.
+    mc_steps_per_batch = 10000
 
-    xvb_t = image_xvb(initial_state, xvb_t)
+    # (ytz): If I start with pure MC, and no MD, it's actually very easy to remove the waters.
+    # since the starting waters have very very high energy. If I re-run MD, then it becomes progressively harder
+    # remove the water since we will re-equilibriate the waters.
 
-    for idx in range(100000):
+    # for idx in range(100000):
+    for idx in range(1000000):
         density = compute_density(nwm, xvb_t.box)
 
         xvb_t = image_xvb(initial_state, xvb_t)
-        occ = compute_occupancy(xvb_t.coords, xvb_t.box, initial_state.ligand_idxs, threshold=0.46)
+        occ = compute_occupancy(xvb_t.coords, xvb_t.box, initial_state.ligand_idxs, threshold=bb_radius)
 
         print(
-            f"{exc_mover.n_accepted} / {exc_mover.n_proposed} | density {density} | # of waters in bb {occ // 3} | md step: {idx * md_steps_per_batch}"
+            f"{exc_mover.n_accepted} / {exc_mover.n_proposed} | density {density} | # of waters in bb {occ // 3} | md step: {idx * md_steps_per_batch}",
+            flush=True,
         )
+
         if idx % 10 == 0:
             writer.write_frame(xvb_t.coords * 10)
 
-        # run MC
-        for _ in range(5000):
+        # start_time = time.time()
+        for _ in range(mc_steps_per_batch):
             assert np.amax(np.abs(xvb_t.coords)) < 1e3
             xvb_t = exc_mover.move(xvb_t)
+        # print("time per mc move", (time.time() - start_time) / mc_steps_per_batch)
 
         # run MD
-        xvb_t = npt_mover.move(xvb_t)
+        xvb_t = npt_mover.move(xvb_t)  # disabling this gets more moves?
+
+    writer.close()
 
 
 if __name__ == "__main__":
@@ -360,3 +793,60 @@ if __name__ == "__main__":
     # start with 0 waters, using zero charges:
     # python timemachine/exchange/exchange_mover.py --water_pdb timemachine/datasets/water_exchange/bb_0_waters.pdb --ligand_sdf timemachine/datasets/water_exchange/bb_centered.sdf --ligand_charges zero --out_cif traj_0_waters.cif
     test_exchange()
+
+    # writer = cif_writer.CIFWriter([mol], "jank.cif")
+    # cur_x_t = image_frames(initial_state, [cur_x_t], [cur_box])[0]
+
+    # ligand_x_t = cur_x_t[initial_state.ligand_idxs]
+    # for idx in range(1000):
+    #     box = initial_state.box0
+    #     # coords = initial_state.x0
+
+    #     center = np.mean(ligand_x_t, axis=0)
+
+    #     # optimized version
+    #     def v1_insertion():
+    #         # sample a point inside the sphere uniformly
+    #         # source: https://karthikkaranth.me/blog/generating-random-points-in-a-sphere/
+    #         xyz = np.random.randn(3)
+    #         n = np.linalg.norm(xyz)
+    #         xyz = xyz / n
+    #         # (ytz): this might not be inside the box, but it doesnt' matter
+    #         # since all of our distances are computed using PBCs
+    #         c = np.cbrt(np.random.rand())
+    #         new_xyz = xyz * c * exc_mover.radius + center
+
+    #         # print("without box", np.linalg.norm(new_xyz - center), self.radius)
+    #         # print("with box", np.linalg.norm(delta_r_np(new_xyz, center, box)), self.radius)
+
+    #         assert np.linalg.norm(delta_r_np(new_xyz, center, box)) < exc_mover.radius
+
+    #         return new_xyz
+
+    #     # v1 << v2 so monte carlo is really slow (avg counter ~5000)
+    #     # def v1_insertion():
+    #     #     # generate random proposals inside the sphere
+    #     #     # counter = 0
+    #     #     while True:
+    #     #         # counter += 1
+    #     #         xyz = np.random.randn(3) * np.diag(box)
+    #     #         if np.linalg.norm(delta_r_np(xyz, center, box)) < self.radius:
+    #     #             # print("inserted into v1 after", counter)
+    #     #             return xyz
+
+    #     # v2 >> v1 so monte carlo works really well
+    #     def v2_insertion():
+    #         # generate random proposals outside of the sphere but inside the box
+    #         while True:
+    #             xyz = np.random.rand(3) * np.diag(box)
+    #             if np.linalg.norm(delta_r_np(xyz, center, box)) >= exc_mover.radius:
+    #                 return xyz
+
+    #     if idx < 500:
+    #         new_x_t = randomly_rotate_and_translate(ligand_x_t, v1_insertion())
+    #     elif idx >= 50:
+    #         new_x_t = randomly_rotate_and_translate(ligand_x_t, v2_insertion())
+
+    #     writer.write_frame(new_x_t * 10)
+
+    # assert 0
