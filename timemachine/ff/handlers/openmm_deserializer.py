@@ -29,9 +29,10 @@ def deserialize_system(system: mm.System, cutoff: float) -> Tuple[List[potential
     -------
     list of lib.Potential, masses
 
-    Note: We add a small epsilon (1e-3) to all zero eps values to prevent
-    a singularity from occurring in the lennard jones derivatives
-
+    Note: If an atom has zero eps and nonzero charge, sig and eps are overridden to small nonzero values.
+        (Otherwise, U(x) will spuriously go to -inf if the distance between oppositely charged particles is
+        brought to 0, which is possible with flexible TIP3P.)
+        (Another possible workaround to consider: Use CHARMM parameterization of TIP3P.)
     """
 
     masses = []
@@ -116,13 +117,16 @@ def deserialize_system(system: mm.System, cutoff: float) -> Tuple[List[potential
                 sig = value(sig)
                 eps = value(eps)
 
-                # increment eps by 1e-3 if we have eps==0 to avoid a singularity in parameter derivatives
-                # override default amber types
-
-                # this doesn't work for water!
-                # if eps == 0:
-                # print("Warning: overriding eps by 1e-3 to avoid a singularity")
-                # eps += 1e-3
+                # override (sig, eps) if we have eps==0, to avoid singularities in potential and derivatives
+                sig_override = 1e-4  # small radius
+                eps_override = 1e-4
+                if (eps == 0) and (charge != 0):
+                    msg = f"""Warning:
+                        overriding (q={charge}, sig={sig}, eps={eps}) to
+                        ({charge}, {sig_override}, {eps_override}) to avoid singularity"""
+                    print(msg)
+                    sig = sig_override
+                    eps = eps_override
 
                 # charge_params.append(charge_idx)
                 charge_params_.append(charge)
