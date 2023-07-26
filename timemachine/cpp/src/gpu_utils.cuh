@@ -1,6 +1,7 @@
 #pragma once
 
 #include "curand.h"
+#include "exceptions.hpp"
 #include "fixed_point.hpp"
 #include "kernels/kernel_utils.cuh"
 #include <cstdio>
@@ -21,8 +22,21 @@ templateCurandNormal(curandGenerator_t generator, double *outputPtr, size_t n, d
 inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort = true) {
     if (code != cudaSuccess) {
         fprintf(stderr, "GPUassert: %s %s %d\n", cudaGetErrorString(code), file, line);
-        if (abort)
+        if (abort) {
+            // If the GPU is invalid or missing for some reason, raise an exception so we can handle that
+            switch (code) {
+            case cudaErrorInvalidDevice:
+            case cudaErrorInsufficientDriver:
+            case cudaErrorNoDevice:
+            case cudaErrorStartupFailure:
+            case cudaErrorInvalidPtx:
+            case cudaErrorUnsupportedPtxVersion:
+                throw InvalidHardware();
+            default:
+                break;
+            }
             exit(code);
+        }
     }
 }
 

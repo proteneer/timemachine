@@ -12,6 +12,7 @@
 #include "chiral_bond_restraint.hpp"
 #include "context.hpp"
 #include "energy_accumulation.hpp"
+#include "exceptions.hpp"
 #include "fanout_summed_potential.hpp"
 #include "fixed_point.hpp"
 #include "flat_bottom_bond.hpp"
@@ -1299,7 +1300,7 @@ double py_accumulate_energy(const py::array_t<long long, py::array::c_style> &in
 void py_cuda_device_reset() { cudaDeviceReset(); }
 
 PYBIND11_MODULE(custom_ops, m) {
-
+    py::register_exception<InvalidHardware>(m, "InvalidHardware");
     m.def(
         "cuda_device_reset",
         &py_cuda_device_reset,
