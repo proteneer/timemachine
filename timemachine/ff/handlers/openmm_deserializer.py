@@ -144,7 +144,7 @@ def deserialize_system(
             if len(_charges_of_overridden_particles) > 0:
                 # most favorable pair
                 _q_ij = np.max(_charges_of_overridden_particles) * np.min(_charges_of_overridden_particles)
-                assert _q_ij < 0, "input contained particles with LJ eps == 0 and charges of opposite signs"
+                assert not (_q_ij < 0), "input contained particles with LJ eps == 0 and charges of opposite signs"
 
             charge_params = np.array(charge_params_, dtype=np.float64)
 
