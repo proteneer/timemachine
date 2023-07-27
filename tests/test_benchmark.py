@@ -158,6 +158,8 @@ def benchmark(
     TODO: configuration blob containing num_batches, steps_per_batch, and any other options
     """
 
+    if barostat_interval > 0:
+        label += f"-barostat-interval-{barostat_interval}"
     seed = 1234
     dt = 1.5e-3
     temperature = constants.DEFAULT_TEMP
@@ -334,7 +336,7 @@ def benchmark_dhfr(verbose: bool = False, num_batches: int = 100, steps_per_batc
         steps_per_batch=steps_per_batch,
     )
     benchmark(
-        "dhfr-apo-barostat-interval-25",
+        "dhfr-apo",
         host_masses,
         x0,
         v0,
@@ -405,7 +407,7 @@ def benchmark_hif2a(verbose: bool = False, num_batches: int = 100, steps_per_bat
             steps_per_batch=steps_per_batch,
         )
         benchmark(
-            stage + "-apo-barostat-interval-25",
+            stage + "-apo",
             host_masses,
             x0,
             v0,
@@ -423,7 +425,7 @@ def benchmark_hif2a(verbose: bool = False, num_batches: int = 100, steps_per_bat
         barostat_interval = initial_state.barostat.interval
 
         benchmark(
-            stage + f"-rbfe-barostat-interval-{barostat_interval}",
+            stage + "-rbfe",
             initial_state.integrator.masses,
             initial_state.x0,
             initial_state.v0,
