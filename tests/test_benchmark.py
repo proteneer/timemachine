@@ -420,8 +420,10 @@ def benchmark_hif2a(verbose: bool = False, num_batches: int = 100, steps_per_bat
         # RBFE
         initial_state = prepare_hif2a_initial_state(st, host_config)
 
+        barostat_interval = initial_state.barostat.interval
+
         benchmark(
-            stage + "-rbfe",
+            stage + f"-rbfe-barostat-interval-{barostat_interval}",
             initial_state.integrator.masses,
             initial_state.x0,
             initial_state.v0,
@@ -430,6 +432,7 @@ def benchmark_hif2a(verbose: bool = False, num_batches: int = 100, steps_per_bat
             verbose=verbose,
             num_batches=num_batches,
             steps_per_batch=steps_per_batch,
+            barostat_interval=barostat_interval,
         )
 
         benchmark_local(
