@@ -121,25 +121,30 @@ def ukln_to_ukn(u_kln: NDArray) -> Tuple[NDArray, NDArray]:
     return u_kn, N_k
 
 
-# slightly relaxed compared to defaults
-DEFAULT_MBAR_KWARGS = dict(
-    relative_tolerance=1e-6,  # pymbar default 1e-7
-    maximum_iterations=1_000,  # pymbar default 10_000
-)
+DEFAULT_RELATIVE_TOLERANCE = 1e-6  # pymbar default 1e-7
+DEFAULT_MAXIMUM_ITERATIONS = 1_000  # pymbar default 10_000
 
 
-def df_and_err_from_u_kln(u_kln: NDArray) -> Tuple[float, float]:
+def df_and_err_from_u_kln(u_kln: NDArray, maximum_iterations: int = DEFAULT_MAXIMUM_ITERATIONS) -> Tuple[float, float]:
     """Compute free energy difference and uncertainty given a 2-state u_kln matrix."""
     u_kn, N_k = ukln_to_ukn(u_kln)
-    mbar = pymbar.MBAR(u_kn, N_k, **DEFAULT_MBAR_KWARGS)
-    df, ddf = mbar.getFreeEnergyDifferences()
-    return df[0, 1], ddf[0, 1]
+    mbar = pymbar.MBAR(u_kn, N_k, maximum_iterations=maximum_iterations)
+    try:
+        df, ddf = mbar.getFreeEnergyDifferences()
+        return df[0, 1], ddf[0, 1]
+    except pymbar.utils.ParameterError:
+        # As of pymbar 3.1.0, computation of the covariance matrix can raise an exception on incomplete convergence.
+        # In this case, return the unconverged estimate with NaN as uncertainty.
+        df = mbar.getFreeEnergyDifferences(compute_uncertainty=False)[0]
+        return df[0, 1], np.nan
 
 
-def df_from_u_kln(u_kln: NDArray, initial_f_k: Optional[NDArray] = None) -> float:
+def df_from_u_kln(
+    u_kln: NDArray, initial_f_k: Optional[NDArray] = None, maximum_iterations: int = DEFAULT_MAXIMUM_ITERATIONS
+) -> float:
     """Compute free energy difference given a 2-state u_kln matrix."""
     u_kn, N_k = ukln_to_ukn(u_kln)
-    mbar = pymbar.MBAR(u_kn, N_k, initial_f_k=initial_f_k, **DEFAULT_MBAR_KWARGS)
+    mbar = pymbar.MBAR(u_kn, N_k, initial_f_k=initial_f_k, maximum_iterations=maximum_iterations)
     df = mbar.getFreeEnergyDifferences(compute_uncertainty=False)[0]
     return df[0, 1]
 

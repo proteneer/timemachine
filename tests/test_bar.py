@@ -148,6 +148,17 @@ def test_df_and_err_from_u_kln_partial_overlap():
     assert np.isfinite(df_err) and df_err > 0.0
 
 
+def test_df_from_u_kln_does_not_raise_on_incomplete_convergence():
+    u_kln = make_partial_overlap_uniform_ukln_example(5.0)
+
+    df = df_from_u_kln(u_kln, maximum_iterations=1)
+    assert np.isfinite(df)
+
+    df, ddf = df_and_err_from_u_kln(u_kln, maximum_iterations=1)
+    assert np.isfinite(df)
+    assert np.isnan(ddf)  # returns NaN for uncertainty on incomplete convergence
+
+
 def test_pair_overlap_from_ukln():
     # identical distributions
     u_kln, _ = make_gaussian_ukln_example((0, 1), (0, 1))
