@@ -7,7 +7,8 @@ from timemachine.ff.handlers import openmm_deserializer
 from timemachine.lib import custom_ops
 from timemachine.md import builders
 
-pytestmark = [pytest.mark.nogpu]
+# Run tests in the no-gpu, nightly tests
+pytestmark = [pytest.mark.nogpu, pytest.mark.nightly]
 
 
 def test_no_gpu_raises_exception():
