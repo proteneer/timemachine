@@ -1,5 +1,4 @@
 import logging
-from time import time
 from typing import Optional, Tuple
 
 import jax
@@ -137,7 +136,7 @@ def df_from_u_kln(u_kln: NDArray, initial_f_k: Optional[NDArray] = None) -> floa
     return df[0, 1]
 
 
-def bootstrap_bar(u_kln: NDArray, n_bootstrap=1000, timeout=10) -> Tuple[float, NDArray]:
+def bootstrap_bar(u_kln: NDArray, n_bootstrap=1000) -> Tuple[float, NDArray]:
     """Given a 2-state u_kln matrix, subsample u_kln with replacement and re-run bar_from_u_kln many times
 
     Parameters
@@ -171,16 +170,10 @@ def bootstrap_bar(u_kln: NDArray, n_bootstrap=1000, timeout=10) -> Tuple[float, 
 
     bootstrap_samples = []
 
-    t0 = time()
-
     seed = 2022
     rng = np.random.default_rng(seed)
 
     for _ in range(n_bootstrap):
-        elapsed_time = time() - t0
-        if elapsed_time > timeout:
-            break
-
         u_kln_sample = rng.choice(u_kln, size=(n,), replace=True, axis=-1)
 
         bar_result = df_from_u_kln(
@@ -192,10 +185,10 @@ def bootstrap_bar(u_kln: NDArray, n_bootstrap=1000, timeout=10) -> Tuple[float, 
     return full_bar_result, np.array(bootstrap_samples)
 
 
-def bar_with_bootstrapped_uncertainty(u_kln: NDArray, n_bootstrap=1000, timeout=10) -> Tuple[float, float]:
+def bar_with_bootstrapped_uncertainty(u_kln: NDArray, n_bootstrap=1000) -> Tuple[float, float]:
     """Given 2-state u_kln, returns free energy difference and uncertainty computed by bootstrapping."""
 
-    df, bootstrap_dfs = bootstrap_bar(u_kln, n_bootstrap=n_bootstrap, timeout=timeout)
+    df, bootstrap_dfs = bootstrap_bar(u_kln, n_bootstrap=n_bootstrap)
 
     # warn if bootstrap distribution deviates significantly from normality
     normaltest_result = normaltest(bootstrap_dfs)
