@@ -2,7 +2,9 @@
 
 #include "k_fixed_point.cuh"
 
-void __global__ rescale_positions(
+// k_rescale_positions scales the box and the centroids of groups to evaluate a potential
+// barostat move
+void __global__ k_rescale_positions(
     const int N,                                     // Number of atoms to shift
     double *__restrict__ coords,                     // Coordinates
     const double *__restrict__ length_scale,         // [1]
@@ -46,9 +48,10 @@ void __global__ rescale_positions(
     }
 }
 
-void __global__ find_group_centroids(
+// k_find_group_centroids computes the centroids of a group of atoms.
+void __global__ k_find_group_centroids(
     const int N,                               // Number of atoms to shift
-    const double *__restrict__ coords,         // Coordinates
+    const double *__restrict__ coords,         // Coordinates [N * 3]
     const int *__restrict__ atom_idxs,         // [N]
     const int *__restrict__ mol_idxs,          // [N]
     unsigned long long *__restrict__ centroids // [num_molecules * 3]
@@ -64,6 +67,8 @@ void __global__ find_group_centroids(
     }
 }
 
+// k_setup_barostat_move performs the initialization for a barostat move. It determines what the the proposed
+// volume will be and sets up d_length_scale and d_volume_delta for use in k_decide_move.
 void __global__ k_setup_barostat_move(
     const double *__restrict__ rand,     // [2], use first value, second value is metropolis condition
     double *__restrict__ d_box,          // [3*3]
@@ -85,6 +90,9 @@ void __global__ k_setup_barostat_move(
     d_length_scale[0] = cbrt(new_volume / volume);
 }
 
+// k_decide_move handles the metropolis check for whether or not to accept a barostat move that scales
+// the box volume. If the move is accepted then the box will be scaled as well as all of the coordinates.
+// It also handles the bookkeeping for the acceptance counters.
 void __global__ k_decide_move(
     const int N,
     const int num_molecules,

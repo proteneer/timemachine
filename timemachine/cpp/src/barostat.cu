@@ -165,12 +165,12 @@ void MonteCarloBarostat::inplace_move(
     const int tpb = DEFAULT_THREADS_PER_BLOCK;
     const int blocks = ceil_divide(num_grouped_atoms_, tpb);
 
-    find_group_centroids<<<blocks, tpb, 0, stream>>>(
+    k_find_group_centroids<<<blocks, tpb, 0, stream>>>(
         num_grouped_atoms_, d_x_after_, d_atom_idxs_, d_mol_idxs_, d_centroids_);
     gpuErrchk(cudaPeekAtLastError());
 
     // Scale centroids
-    rescale_positions<<<blocks, tpb, 0, stream>>>(
+    k_rescale_positions<<<blocks, tpb, 0, stream>>>(
         num_grouped_atoms_,
         d_x_after_,
         d_length_scale_,
