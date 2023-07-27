@@ -17,5 +17,5 @@ def test_no_gpu_raises_exception():
 
     host_fns, _ = openmm_deserializer.deserialize_system(solvent_system, cutoff=1.2)
 
-    with pytest.raises(custom_ops.InvalidHardware, match="Either no GPU or the GPU is acting up"):
+    with pytest.raises(custom_ops.InvalidHardware, match="Invalid Hardware - Code "):
         host_fns[0].to_gpu(np.float32)
