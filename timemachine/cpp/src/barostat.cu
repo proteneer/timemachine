@@ -173,6 +173,9 @@ void MonteCarloBarostat<RealType>::inplace_move(
     gpuErrchk(cudaMemcpyAsync(d_box_after_, d_box, 3 * 3 * sizeof(*d_box_after_), cudaMemcpyDeviceToDevice, stream));
 
     const int tpb = DEFAULT_THREADS_PER_BLOCK;
+    // TBD: For larger systems (20k >) may be better to reduce the number of blocks, rather than
+    // matching the number of blocks to be ceil_divide(units_of_work, tpb). The kernels already support this, but
+    // at the moment we match the blocks * tpb to equal units_of_work
     const int blocks = ceil_divide(num_grouped_atoms_, tpb);
 
     k_find_group_centroids<RealType>
