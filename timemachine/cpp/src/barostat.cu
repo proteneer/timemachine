@@ -7,14 +7,17 @@
 #include <algorithm>
 #include <set>
 #include <stdio.h>
+#include <variant>
 
 #include "kernels/k_barostat.cuh"
 
-static int RANDOM_BATCH_SIZE = 1000; // Number of batches of random values to generate at a time
+// Number of batches of random values to generate at a time
+const static int RANDOM_BATCH_SIZE = 1000;
 
 namespace timemachine {
 
-MonteCarloBarostat::MonteCarloBarostat(
+template <typename RealType>
+MonteCarloBarostat<RealType>::MonteCarloBarostat(
     const int N,
     const double pressure,    // Expected in Bar
     const double temperature, // Kelvin
@@ -107,7 +110,7 @@ MonteCarloBarostat::MonteCarloBarostat(
     this->reset_counters();
 };
 
-MonteCarloBarostat::~MonteCarloBarostat() {
+template <typename RealType> MonteCarloBarostat<RealType>::~MonteCarloBarostat() {
     gpuErrchk(cudaFree(d_x_after_));
     gpuErrchk(cudaFree(d_centroids_));
     gpuErrchk(cudaFree(d_atom_idxs_));
@@ -128,12 +131,13 @@ MonteCarloBarostat::~MonteCarloBarostat() {
     curandErrchk(curandDestroyGenerator(cr_rng_));
 };
 
-void MonteCarloBarostat::reset_counters() {
+template <typename RealType> void MonteCarloBarostat<RealType>::reset_counters() {
     gpuErrchk(cudaMemset(d_num_accepted_, 0, sizeof(*d_num_accepted_)));
     gpuErrchk(cudaMemset(d_num_attempted_, 0, sizeof(*d_num_attempted_)));
 }
 
-void MonteCarloBarostat::inplace_move(
+template <typename RealType>
+void MonteCarloBarostat<RealType>::inplace_move(
     double *d_x,   // [N*3]
     double *d_box, // [3*3]
     cudaStream_t stream) {
@@ -150,14 +154,18 @@ void MonteCarloBarostat::inplace_move(
     // and the second is used to accept or reject in the metropolis hasting check performed in k_decide_move.
     if (random_offset == 0) {
         curandErrchk(curandSetStream(cr_rng_, stream));
-        curandErrchk(curandGenerateUniformDouble(cr_rng_, d_rand_, RANDOM_BATCH_SIZE * 2));
+        if constexpr (std::is_same_v<RealType, double>) {
+            curandErrchk(curandGenerateUniformDouble(cr_rng_, d_rand_, RANDOM_BATCH_SIZE * 2));
+        } else {
+            curandErrchk(curandGenerateUniform(cr_rng_, d_rand_, RANDOM_BATCH_SIZE * 2));
+        }
     }
 
     const int num_molecules = group_idxs_.size();
     gpuErrchk(cudaMemsetAsync(d_centroids_, 0, num_molecules * 3 * sizeof(*d_centroids_), stream));
 
-    k_setup_barostat_move<<<1, 1, 0, stream>>>(
-        d_rand_ + random_offset, d_box, d_volume_delta_, d_volume_scale_, d_length_scale_);
+    k_setup_barostat_move<RealType>
+        <<<1, 1, 0, stream>>>(d_rand_ + random_offset, d_box, d_volume_delta_, d_volume_scale_, d_length_scale_);
     gpuErrchk(cudaPeekAtLastError());
 
     // Create duplicates of the coords/box that we can modify
@@ -167,8 +175,8 @@ void MonteCarloBarostat::inplace_move(
     const int tpb = DEFAULT_THREADS_PER_BLOCK;
     const int blocks = ceil_divide(num_grouped_atoms_, tpb);
 
-    k_find_group_centroids<<<blocks, tpb, 0, stream>>>(
-        num_grouped_atoms_, d_x_after_, d_atom_idxs_, d_mol_idxs_, d_centroids_);
+    k_find_group_centroids<RealType>
+        <<<blocks, tpb, 0, stream>>>(num_grouped_atoms_, d_x_after_, d_atom_idxs_, d_mol_idxs_, d_centroids_);
     gpuErrchk(cudaPeekAtLastError());
 
     // Scale centroids
@@ -193,7 +201,7 @@ void MonteCarloBarostat::inplace_move(
     double pressure = pressure_ * AVOGADRO * 1e-25;
     const double kT = BOLTZ * temperature_;
 
-    k_decide_move<<<ceil_divide(N_, tpb), tpb, 0, stream>>>(
+    k_decide_move<RealType><<<ceil_divide(N_, tpb), tpb, 0, stream>>>(
         N_,
         num_molecules,
         kT,
@@ -212,7 +220,7 @@ void MonteCarloBarostat::inplace_move(
     gpuErrchk(cudaPeekAtLastError());
 };
 
-void MonteCarloBarostat::set_interval(const int interval) {
+template <typename RealType> void MonteCarloBarostat<RealType>::set_interval(const int interval) {
     if (interval <= 0) {
         throw std::runtime_error("Barostat interval must be greater than 0");
     }
@@ -221,9 +229,9 @@ void MonteCarloBarostat::set_interval(const int interval) {
     step_ = 0;
 }
 
-int MonteCarloBarostat::get_interval() { return interval_; }
+template <typename RealType> int MonteCarloBarostat<RealType>::get_interval() { return interval_; }
 
-void MonteCarloBarostat::set_pressure(const double pressure) {
+template <typename RealType> void MonteCarloBarostat<RealType>::set_pressure(const double pressure) {
     pressure_ = pressure;
     // Could have equilibrated and be a large number of steps from shifting volume
     // adjustment, ie num attempted = 300 and num accepted = 150

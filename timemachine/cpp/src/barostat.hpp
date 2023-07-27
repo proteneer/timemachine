@@ -9,7 +9,7 @@
 
 namespace timemachine {
 
-class MonteCarloBarostat {
+template <typename RealType> class MonteCarloBarostat {
 
 public:
     MonteCarloBarostat(
@@ -39,14 +39,14 @@ private:
 
     std::vector<std::shared_ptr<BoundPotential>> bps_;
 
-    double pressure_;
-    const double temperature_;
+    RealType pressure_;
+    const RealType temperature_;
     int interval_;
     const int seed_;
     const std::vector<std::vector<int>> group_idxs_;
 
     // stuff that deals with RNG
-    double *d_rand_;
+    RealType *d_rand_;
     curandGenerator_t cr_rng_;
 
     // internals
@@ -62,10 +62,10 @@ private:
     __int128 *d_init_u_;
     __int128 *d_final_u_;
 
-    double *d_volume_;
-    double *d_volume_delta_;
-    double *d_length_scale_;
-    double *d_volume_scale_;
+    RealType *d_volume_;
+    RealType *d_volume_delta_;
+    RealType *d_length_scale_;
+    RealType *d_volume_scale_;
 
     double *d_x_after_;
     double *d_box_after_;
@@ -78,5 +78,8 @@ private:
 
     StreamedPotentialRunner runner_;
 };
+
+template class MonteCarloBarostat<float>;
+template class MonteCarloBarostat<double>;
 
 } // namespace timemachine
