@@ -165,6 +165,7 @@ class ExchangeMove(moves.MonteCarloMove):
 
         # this has a higher acceptance probability than if we allowed for rotations
         # (probably because we have a much higher chance of a useless move)
+        # moved_coords = randomly_translate(trial_chosen_coords, trial_translation)
         moved_coords = randomly_translate(trial_chosen_coords, trial_translation)
         trial_coords = coords.copy()  # can optimize this later if needed
         trial_coords[chosen_water_atoms] = moved_coords
@@ -283,6 +284,7 @@ class InsideOutsideExchangeMove(moves.MonteCarloMove):
         # delta_U_delete = -self.U_fn(coords, box, a_idxs, b_idxs)
         # delta_U_insert = self.U_fn(trial_coords, box, a_idxs, b_idxs)
         # delta_U_total = delta_U_delete + delta_U_insert
+ 
         delta_U_total = self.delta_U_total_fn(trial_coords, coords, box, a_idxs, b_idxs)
         delta_U_total = np.asarray(delta_U_total)
 
@@ -365,7 +367,7 @@ class InsideOutsideExchangeMove(moves.MonteCarloMove):
 
 
 def compute_density(n_waters, box):
-    box_vol = np.product(np.diag(box))
+    box_vol = np.prod(np.diag(box))
     numerator = n_waters * 18.01528 * 1e27
     denominator = box_vol * AVOGADRO * 1000
     return numerator / denominator
