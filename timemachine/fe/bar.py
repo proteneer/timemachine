@@ -185,7 +185,7 @@ def bootstrap_bar(u_kln: NDArray, n_bootstrap=1000) -> Tuple[float, NDArray]:
     return full_bar_result, np.array(bootstrap_samples)
 
 
-def bar_with_bootstrapped_uncertainty(u_kln: NDArray, n_bootstrap=1000) -> Tuple[float, float]:
+def bar_with_bootstrapped_uncertainty(u_kln: NDArray, n_bootstrap=100) -> Tuple[float, float]:
     """Given 2-state u_kln, returns free energy difference and uncertainty computed by bootstrapping."""
 
     df, bootstrap_dfs = bootstrap_bar(u_kln, n_bootstrap=n_bootstrap)
