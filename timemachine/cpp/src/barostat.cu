@@ -145,7 +145,9 @@ void MonteCarloBarostat::inplace_move(
     // Get offset into the d_rand_ array
     int random_offset = (((step_ / interval_) * 2) - 2) % (RANDOM_BATCH_SIZE * 2);
 
-    // Generate the scaling and metropolis conditions in batches then offset on each move
+    // Generate random values batches then offset on each move
+    // Each move requires two random values, the first is used to adjust the scaling of box in k_setup_barostat_move
+    // and the second is used to accept or reject in the metropolis hasting check performed in k_decide_move.
     if (random_offset == 0) {
         curandErrchk(curandSetStream(cr_rng_, stream));
         curandErrchk(curandGenerateUniformDouble(cr_rng_, d_rand_, RANDOM_BATCH_SIZE * 2));
