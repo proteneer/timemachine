@@ -1,6 +1,6 @@
 numpy==1.23.5
 scipy==1.10.1
-pymbar==3.0.5
+pymbar==3.1.1
 networkx==2.8.8
 matplotlib==3.7.1
 rdkit==2022.3.5

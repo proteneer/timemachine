@@ -121,17 +121,25 @@ def ukln_to_ukn(u_kln: NDArray) -> Tuple[NDArray, NDArray]:
     return u_kn, N_k
 
 
+# slightly relaxed compared to defaults
+DEFAULT_MBAR_KWARGS = dict(
+    relative_tolerance=1e-6,  # pymbar default 1e-7
+    maximum_iterations=1_000,  # pymbar default 10_000
+)
+
+
 def df_and_err_from_u_kln(u_kln: NDArray) -> Tuple[float, float]:
     """Compute free energy difference and uncertainty given a 2-state u_kln matrix."""
     u_kn, N_k = ukln_to_ukn(u_kln)
-    df, ddf = pymbar.MBAR(u_kn, N_k).getFreeEnergyDifferences()
+    mbar = pymbar.MBAR(u_kn, N_k, **DEFAULT_MBAR_KWARGS)
+    df, ddf = mbar.getFreeEnergyDifferences()
     return df[0, 1], ddf[0, 1]
 
 
 def df_from_u_kln(u_kln: NDArray, initial_f_k: Optional[NDArray] = None) -> float:
     """Compute free energy difference given a 2-state u_kln matrix."""
     u_kn, N_k = ukln_to_ukn(u_kln)
-    mbar = pymbar.MBAR(u_kn, N_k, initial_f_k=initial_f_k)
+    mbar = pymbar.MBAR(u_kn, N_k, initial_f_k=initial_f_k, **DEFAULT_MBAR_KWARGS)
     df = mbar.getFreeEnergyDifferences(compute_uncertainty=False)[0]
     return df[0, 1]
 
