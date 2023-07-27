@@ -46,9 +46,7 @@ def deserialize_system(
 
     N = len(masses)
 
-    # this should not be a dict since we may have more than one instance of a given
-    # force.
-
+    # key type is "List[bp]" rather than "bp", since we may have more than one instance of a given force.
     bps_dict: DefaultDict[str, List[potentials.BoundPotential]] = defaultdict(list)
 
     for force in system.getForces():
@@ -113,6 +111,8 @@ def deserialize_system(
             charge_params_ = []
             lj_params_ = []
 
+            _charges_of_overridden_particles = []
+
             for a_idx in range(num_atoms):
 
                 charge, sig, eps = force.getParticleParameters(a_idx)
@@ -122,20 +122,29 @@ def deserialize_system(
                 eps = value(eps)
 
                 # override (sig, eps) if we have eps==0, to avoid singularities in potential and derivatives
-                sig_override = 1e-4  # small radius
-                eps_override = 1e-4
                 if (eps == 0) and (charge != 0):
+                    _charges_of_overridden_particles.append(charge)
+                    sig_override = 1e-4  # small radius
+                    eps_override = 1e-4  # repulsive
+
                     msg = f"""Warning:
                         overriding (q={charge}, sig={sig}, eps={eps}) to
                         ({charge}, {sig_override}, {eps_override}) to avoid singularity"""
                     if verbose:
                         print(msg)
+
                     sig = sig_override
                     eps = eps_override
 
                 # charge_params.append(charge_idx)
                 charge_params_.append(charge)
                 lj_params_.append((sig, eps))
+
+            # a case that the LJ override could mishandle is if
+            if len(_charges_of_overridden_particles) > 0:
+                # most favorable pair
+                _q_ij = np.max(_charges_of_overridden_particles) * np.min(_charges_of_overridden_particles)
+                assert _q_ij < 0, "input contained particles with LJ eps == 0 and charges of opposite signs"
 
             charge_params = np.array(charge_params_, dtype=np.float64)
 
@@ -202,6 +211,9 @@ def deserialize_system(
                 ],
                 axis=1,
             )
+
+            # confirm that eps > 0 for any particle with charge != 0
+            assert (lj_params[charge_params != 0, 1] > 0).all()
 
             # optimizations
             nb_params[:, 1] = nb_params[:, 1] / 2
