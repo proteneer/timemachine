@@ -159,7 +159,7 @@ def bootstrap_bar(
     u_kln : array
         2-state u_kln matrix
     n_bootstrap : int
-        number o bootstrap samples
+        number of bootstrap samples
     maximum_iterations : int
         maximum number of solver iterations to use for each sample
 
