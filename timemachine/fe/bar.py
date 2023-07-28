@@ -158,16 +158,13 @@ def bootstrap_bar(u_kln: NDArray, n_bootstrap=100) -> Tuple[float, NDArray]:
         2-state u_kln matrix
     n_bootstrap : int
         # bootstrap samples
-    timeout : int
-        in seconds
 
     Returns
     -------
     best_estimate : float
         BAR(w_F, w_R, computeUncertainty=False)
     bootstrap_samples: array
-        length <= n_bootstrap
-        (length < n_bootstrap if timed out)
+        shape (n_bootstrap,)
 
     Notes
     -----
