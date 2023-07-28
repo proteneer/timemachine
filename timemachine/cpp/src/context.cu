@@ -23,7 +23,7 @@ Context::Context(
     const double *box_0,
     std::shared_ptr<Integrator> intg,
     std::vector<std::shared_ptr<BoundPotential>> bps,
-    std::shared_ptr<MonteCarloBarostat> barostat)
+    std::shared_ptr<MonteCarloBarostat<float>> barostat)
     : N_(N), barostat_(barostat), step_(0), intg_(intg), bps_(bps), nonbonded_pots_(0) {
 
     d_x_t_ = gpuErrchkCudaMallocAndCopy(x_0, N * 3);
