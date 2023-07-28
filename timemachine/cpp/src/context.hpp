@@ -17,7 +17,7 @@ public:
         const double *box_0,
         std::shared_ptr<Integrator> intg,
         std::vector<std::shared_ptr<BoundPotential>> bps,
-        std::shared_ptr<MonteCarloBarostat> barostat = nullptr);
+        std::shared_ptr<MonteCarloBarostat<float>> barostat = nullptr);
 
     ~Context();
 
@@ -64,7 +64,7 @@ public:
 private:
     int N_; // number of particles
 
-    std::shared_ptr<MonteCarloBarostat> barostat_;
+    std::shared_ptr<MonteCarloBarostat<float>> barostat_;
 
     void _step(std::vector<std::shared_ptr<BoundPotential>> &bps, unsigned int *d_atom_idxs, const cudaStream_t stream);
 

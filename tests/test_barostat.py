@@ -543,5 +543,5 @@ def test_get_group_indices():
     assert_group_idxs_are_equal(ref_idxs, test_idxs)
 
     with pytest.raises(AssertionError):
-        # num_atoms <  an atom's indx in bond_idxs
+        # num_atoms <  an atom's index in bond_idxs
         get_group_indices([[0, 3]], num_atoms=3)
