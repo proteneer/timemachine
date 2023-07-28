@@ -146,7 +146,7 @@ void declare_context(py::module &m) {
                         const py::array_t<double, py::array::c_style> &box0,
                         std::shared_ptr<timemachine::Integrator> intg,
                         std::vector<std::shared_ptr<timemachine::BoundPotential>> bps,
-                        std::optional<std::shared_ptr<timemachine::MonteCarloBarostat>> barostat) {
+                        std::optional<std::shared_ptr<timemachine::MonteCarloBarostat<float>>> barostat) {
                 int N = x0.shape()[0];
                 int D = x0.shape()[1];
                 verify_coords_and_box(x0, box0);
@@ -1189,19 +1189,18 @@ template <typename RealType, bool Negated> void declare_nonbonded_pair_list(py::
 
 void declare_barostat(py::module &m) {
 
-    using Class = timemachine::MonteCarloBarostat;
+    using Class = timemachine::MonteCarloBarostat<float>;
     std::string pyclass_name = std::string("MonteCarloBarostat");
     py::class_<Class, std::shared_ptr<Class>>(m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
         .def(
-            py::init([](const int N,
-                        const double pressure,
-                        const double temperature,
-                        std::vector<std::vector<int>> group_idxs,
-                        const int frequency,
-                        std::vector<std::shared_ptr<timemachine::BoundPotential>> bps,
-                        const int seed) {
-                return new timemachine::MonteCarloBarostat(N, pressure, temperature, group_idxs, frequency, bps, seed);
-            }),
+            py::init(
+                [](const int N,
+                   const double pressure,
+                   const double temperature,
+                   std::vector<std::vector<int>> group_idxs,
+                   const int frequency,
+                   std::vector<std::shared_ptr<timemachine::BoundPotential>> bps,
+                   const int seed) { return new Class(N, pressure, temperature, group_idxs, frequency, bps, seed); }),
             py::arg("N"),
             py::arg("pressure"),
             py::arg("temperature"),
@@ -1209,9 +1208,9 @@ void declare_barostat(py::module &m) {
             py::arg("frequency"),
             py::arg("bps"),
             py::arg("seed"))
-        .def("set_interval", &timemachine::MonteCarloBarostat::set_interval, py::arg("interval"))
-        .def("get_interval", &timemachine::MonteCarloBarostat::get_interval)
-        .def("set_pressure", &timemachine::MonteCarloBarostat::set_pressure, py::arg("pressure"));
+        .def("set_interval", &Class::set_interval, py::arg("interval"))
+        .def("get_interval", &Class::get_interval)
+        .def("set_pressure", &Class::set_pressure, py::arg("pressure"));
 }
 
 void declare_summed_potential(py::module &m) {
