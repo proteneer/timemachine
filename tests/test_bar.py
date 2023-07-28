@@ -131,14 +131,17 @@ def test_df_and_err_from_u_kln_partial_overlap():
     w_F, w_R = works_from_ukln(u_kln)
 
     # this example has some infinite work values
-    assert np.any(np.isinf(w_F)) or np.any(np.isinf(w_R))
+    assert np.any(np.isinf(w_F))
+    assert np.any(np.isinf(w_R))
 
-    assert not (np.any(np.isnan(w_F)) or np.any(np.isnan(w_R)))
+    # but no NaNs
+    assert not np.any(np.isnan(w_F))
+    assert not np.any(np.isnan(w_R))
 
-    # with default method, pymbar.BAR warns and returns zero for df and uncertainty if inf is present in either input
-    # assert pymbar.BAR(w_F, w_R) == (0.0, 0.0)
+    # pymbar.BAR warns and returns zero for df and uncertainty with default method
+    assert pymbar.BAR(w_F, w_R) == (0.0, 0.0)
 
-    # with self-consistent iteration method, pymbar.BAR warns and returns zero for df and uncertainty if inf is present in either input
+    # pymbar.BAR returns NaNs with self-consistent iteration method
     df_sci, df_err_sci = pymbar.BAR(w_F, w_R, method="self-consistent-iteration")
     assert np.isnan(df_sci)
     assert np.isnan(df_err_sci)
