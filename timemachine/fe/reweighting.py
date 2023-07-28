@@ -3,12 +3,14 @@ __all__ = [
     "construct_endpoint_reweighting_estimator",
     "construct_mixture_reweighting_estimator",
     "interpret_as_mixture_potential",
+    "construct_rw_uncertainty_estimate",
 ]
 
 from typing import Any, Callable, Collection
 
 import numpy as np
 from jax import numpy as jnp
+from jax import vmap
 from jax.scipy.special import logsumexp
 
 Samples = Collection
@@ -134,6 +136,21 @@ def interpret_as_mixture_potential(u_kn: Array, f_k: Array, N_k: Array) -> Array
     return mixture_u_n
 
 
+def construct_rw_uncertainty_estimate(n_works, n_replicates=1000, seed=1234):
+    """Freeze bootstrap indices to form a deterministic, differentiable estimate of reweighting uncertainty"""
+
+    # Generate and freeze a large number of random bootstrap indices.
+    rng = np.random.default_rng(seed)
+    bootstrap_indices = rng.integers(low=0, high=n_works, size=(n_replicates, n_works))
+
+    def rw_uncertainty(delta_us):
+        """deterministic, differentiable function of delta_us"""
+        estimates = vmap(one_sided_exp)(delta_us[bootstrap_indices])
+        return jnp.std(estimates)
+
+    return rw_uncertainty
+
+
 def construct_endpoint_reweighting_estimator(
     samples_0: Samples,
     samples_1: Samples,
@@ -141,13 +158,18 @@ def construct_endpoint_reweighting_estimator(
     batched_u_1_fxn: BatchedReducedPotentialFxn,
     ref_params: Params,
     ref_delta_f: float,
-) -> Callable[[Params], float]:
+    ref_delta_f_std: float = 0,
+    n_bootstrap_replicates: int = 1000,
+    seed: int = 1234,
+) -> Callable[[Params], Array]:
     """assuming
     * endpoint samples (samples_0, samples_1)
     * precise estimate of free energy difference at initial params
         ref_delta_f ~= f(ref_params, 1) - f(ref_params, 0)
 
-    construct an estimator of f(params, 1) - f(params, 0)
+    construct an estimator of delta_f(params) = f(params, 1) - f(params, 0)
+
+    (uses bootstrapping to generate many estimates for delta_f(params))
 
     Parameters
     ----------
@@ -167,53 +189,45 @@ def construct_endpoint_reweighting_estimator(
     ref_delta_f
         free energy difference between endstates 0, 1 at ref_params
         ref_delta_f ~= f(ref_params, 1) - f(ref_params, 0)
+    ref_delta_f_std
+        assumed noise level in estimate of ref_delta_f
+    n_bootstrap_replicates : int
+    seed : int
+        used to generate frozen bootstrap indices
 
     Returns
     -------
     estimate_delta_f
-        computes an estimate f(params, 1) - f(params, 0) for arbitrary params
+        computes n_bootstrap_replicates estimates of f(params, 1) - f(params, 0) for arbitrary params
 
         notes:
-        * estimate_delta_f(ref_params) == ref_delta_f
+        * estimate_delta_f(ref_params) ~ N(ref_delta_f, ref_delta_f_std)
         * estimate_delta_f(params) can become unreliable when
           params is very different from ref_params
     """
     ref_u_0 = batched_u_0_fxn(samples_0, ref_params)
     ref_u_1 = batched_u_1_fxn(samples_1, ref_params)
+    n_0 = len(ref_u_0)
+    n_1 = len(ref_u_1)
 
-    def endpoint_correction_0(params) -> float:
-        """estimate f(ref, 0) -> f(params, 0) by reweighting"""
-        delta_us = batched_u_0_fxn(samples_0, params) - ref_u_0
-        return one_sided_exp(delta_us)
+    # Generate and freeze a large number of random bootstrap indices.
+    rng = np.random.default_rng(seed)
+    bootstrap_indices_0 = rng.integers(low=0, high=n_0, size=(n_bootstrap_replicates, n_0))
+    bootstrap_indices_1 = rng.integers(low=0, high=n_1, size=(n_bootstrap_replicates, n_1))
+    ref_delta_f_smoothed_bootstrap = ref_delta_f + rng.normal(loc=0, scale=ref_delta_f_std, size=n_bootstrap_replicates)
 
-    def endpoint_correction_1(params) -> float:
-        """estimate f(ref, 1) -> f(params, 1) by reweighting"""
-        delta_us = batched_u_1_fxn(samples_1, params) - ref_u_1
-        return one_sided_exp(delta_us)
+    def estimate_delta_f_bootstrap(params):
+        delta_us_0 = batched_u_0_fxn(samples_0, params) - ref_u_0
+        delta_us_1 = batched_u_1_fxn(samples_1, params) - ref_u_1
 
-    def estimate_delta_f(params: Params) -> float:
-        """estimate f(params, 1) - f(params, 0)
+        estimates_0 = vmap(one_sided_exp)(delta_us_0[bootstrap_indices_0])
+        estimates_1 = vmap(one_sided_exp)(delta_us_1[bootstrap_indices_1])
 
-        using this thermodynamic cycle:
+        # TODO[decision] : return array of estimates, or just a (loc, scale) summary?
+        delta_f_estimates = ref_delta_f_smoothed_bootstrap - estimates_0 + estimates_1  # (n_bootstrap_replicates)
+        return delta_f_estimates
 
-        f(params, 0)  --->  f(params, 1)
-
-             ^                   ^
-             |                   |
-             |                   |
-             |                   |
-
-        f(ref, 0)     --->  f(ref, 1)
-
-
-        where
-        * "f(ref, 0) -> f(ref, 1)" is assumed precomputed (using any precise free energy method)
-        * "f(ref, 0) -> f(params, 0)" is estimated by reweighting
-        * "f(ref, 1) -> f(params, 1)" is estimated by reweighting
-        """
-        return ref_delta_f - endpoint_correction_0(params) + endpoint_correction_1(params)
-
-    return estimate_delta_f
+    return estimate_delta_f_bootstrap
 
 
 def construct_mixture_reweighting_estimator(
@@ -221,6 +235,8 @@ def construct_mixture_reweighting_estimator(
     u_ref_n: Array,
     batched_u_0_fxn: BatchedReducedPotentialFxn,
     batched_u_1_fxn: BatchedReducedPotentialFxn,
+    n_bootstrap_replicates: int = 1000,
+    seed: int = 1234,
 ) -> Callable[[Params], float]:
     r"""assuming
     * samples x_n from a distribution p_ref(x) \propto(exp(-u_ref(x))
@@ -277,33 +293,24 @@ def construct_mixture_reweighting_estimator(
     """
     assert len(samples_n) == len(u_ref_n)
 
-    def f_0(params):
-        """estimate f(params, 0) - f(ref) by reweighting"""
+    n = len(samples_n)
+
+    # Generate and freeze a large number of random bootstrap indices.
+    rng = np.random.default_rng(seed)
+    bootstrap_indices = rng.integers(low=0, high=n, size=(n_bootstrap_replicates, n))
+    # TODO[thinking] : should the bootstrap indices be shared for the ref->0 ref->1 edges?
+
+    def estimate_delta_f_bootstrap(params) -> float:
         u_0_n = batched_u_0_fxn(samples_n, params)
-        return one_sided_exp(u_0_n - u_ref_n)
+        delta_us_0 = u_0_n - u_ref_n
+        f_0_estimates = vmap(one_sided_exp)(delta_us_0[bootstrap_indices])
 
-    def f_1(params) -> float:
-        """estimate f(params, 1) - f(ref) by reweighting"""
         u_1_n = batched_u_1_fxn(samples_n, params)
-        return one_sided_exp(u_1_n - u_ref_n)
+        delta_us_1 = u_1_n - u_ref_n
+        f_1_estimates = vmap(one_sided_exp)(delta_us_1[bootstrap_indices])
 
-    def estimate_delta_f(params) -> float:
-        r"""estimate f(params, 1) - f(params, 0)
+        # TODO[decision] : return array of estimates, or just a (loc, scale) summary?
+        delta_f_estimates = f_1_estimates - f_0_estimates
+        return delta_f_estimates
 
-        using this thermodynamic cycle:
-
-        f(params, 0)  --->  f(params, 1)
-
-                /\         /\
-                 \         /
-                  \       /
-                   \     /
-
-                   f(ref)
-        where
-        * "f(params, 0) - f(ref)" is estimated by reweighting
-        * "f(params, 1) - f(ref)" is estimated by reweighting"""
-
-        return f_1(params) - f_0(params)
-
-    return estimate_delta_f
+    return estimate_delta_f_bootstrap
