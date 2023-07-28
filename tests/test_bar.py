@@ -14,6 +14,7 @@ from timemachine.fe.bar import (
     df_and_err_from_u_kln,
     df_from_u_kln,
     pair_overlap_from_ukln,
+    ukln_to_ukn,
     works_from_ukln,
 )
 
@@ -154,6 +155,16 @@ def test_df_and_err_from_u_kln_partial_overlap():
 def test_df_from_u_kln_does_not_raise_on_incomplete_convergence():
     u_kln = make_partial_overlap_uniform_ukln_example(5.0)
 
+    # pymbar raises an exception on incomplete convergence when computing covariances
+    u_kn, N_k = ukln_to_ukn(u_kln)
+    mbar = pymbar.MBAR(u_kn, N_k, maximum_iterations=1)
+    with pytest.raises(pymbar.utils.ParameterError):
+        _ = mbar.getFreeEnergyDifferences()
+
+    # no exception if we don't compute uncertainty
+    _ = mbar.getFreeEnergyDifferences(compute_uncertainty=False)
+
+    # df_from_u_kln, df_and_err_from_u_kln wrappers do not raise exceptions
     df = df_from_u_kln(u_kln, maximum_iterations=1)
     assert np.isfinite(df)
 
