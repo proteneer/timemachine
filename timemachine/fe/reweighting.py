@@ -21,32 +21,11 @@ Energies = Array
 BatchedReducedPotentialFxn = Callable[[Samples, Params], Energies]
 
 
-def log_mean(log_values: Array) -> float:
-    """stable log(mean(values))
-
-    log(mean(values))
-    = log(sum(values / len(values)))
-    = logsumexp(log(values) - log(len(values))
-    """
-    return logsumexp(log_values - jnp.log(len(log_values)))
-
-
-def estimate_log_z_ratio(log_importance_weights: Array) -> float:
-    """stable log(mean(importance_weights))"""
-    return log_mean(log_importance_weights)
-
-
 def one_sided_exp(delta_us: Array) -> float:
     """exponential averaging
+    see https://github.com/choderalab/pymbar/blob/15f932a271343e611ed4be2d468c77b1d11cf01f/pymbar/exp.py#L54"""
 
-    References
-    ----------
-    [1] pymbar implementation
-        https://github.com/choderalab/pymbar/blob/15f932a271343e611ed4be2d468c77b1d11cf01f/pymbar/exp.py#L54
-    """
-    # delta_us = -log_importance_weights
-    # delta_f  = -log_z_ratio
-    return -estimate_log_z_ratio(-delta_us)
+    return -logsumexp(-delta_us - jnp.log(len(delta_us)))
 
 
 def interpret_as_mixture_potential(u_kn: Array, f_k: Array, N_k: Array) -> Array:
@@ -65,14 +44,11 @@ def interpret_as_mixture_potential(u_kn: Array, f_k: Array, N_k: Array) -> Array
     Parameters
     ----------
     u_kn : [K, N] float array
-        reduced potentials of all N samples evaluated in all K states
-        u_kn[k, n] = u_k(x_n)
+        reduced potentials of all N samples evaluated in all K states (u_kn[k, n] = u_k(x_n))
     f_k : [K,] float array
-        reduced free energies of all K states
-        (up to an additive constant)
+        reduced free energies of all K states (up to an additive constant)
     N_k : [K,] int array
-        number of samples from each individual state
-        (sum(N_k) must equal N)
+        number of samples from each individual state (sum(N_k) must equal N)
 
     Returns
     -------
@@ -105,35 +81,7 @@ def interpret_as_mixture_potential(u_kn: Array, f_k: Array, N_k: Array) -> Array
     [3] [Elvira+, 2019] Generalized multiple importance sampling
         https://arxiv.org/abs/1511.03095
     """
-    # one-liner: mixture_u_n = -logsumexp(f_k - u_kn.T, b=N_k, axis=1)
-
-    # expanding steps:
-    K, N = u_kn.shape
-    assert f_k.shape == (K,)
-    N_k = np.array(N_k)
-    assert np.sum(N_k) == N
-
-    # q_k(x_n) = exp(-u_k(x_n))
-    log_q_kn = -u_kn
-
-    # p_k(x_n) = c q_k(x_n) / Z_k
-    # (up to a single undetermined constant c, shared across k)
-    log_Z_k = -f_k
-    normalized_log_q_kn = log_q_kn - jnp.expand_dims(log_Z_k, 1)
-
-    # mixture weights from sampling proportions
-    log_w_k = jnp.log(N_k) - jnp.log(jnp.sum(N_k))
-
-    # q_mix(x_n) = \sum_k w_k p_k(x_n)
-    weighted_log_q_kn = jnp.expand_dims(log_w_k, 1) + normalized_log_q_kn
-    mixture_log_q_n = logsumexp(weighted_log_q_kn, axis=0)
-
-    # q_mix(x_n) = exp(-u_mix(x_n))
-    mixture_u_n = -mixture_log_q_n
-
-    assert mixture_u_n.shape == (N,)
-
-    return mixture_u_n
+    return -logsumexp(f_k - u_kn.T, b=N_k, axis=1)
 
 
 def construct_rw_uncertainty_estimate(n_works, n_replicates=1000, seed=1234):
