@@ -90,7 +90,7 @@ def test_bootstrap_bar(sigma):
     print(f"bootstrap uncertainty = {bootstrap_sigma}, pymbar.MBAR uncertainty = {df_err_ref}")
     assert df_0 == df_ref
     assert df_1 == df_ref
-    assert len(bootstrap_samples) == n_bootstrap, "timed out on default problem size!"
+    assert len(bootstrap_samples) == n_bootstrap
     np.testing.assert_approx_equal(bootstrap_sigma, df_err_ref, significant=1)
 
     # assert bootstrap estimate is consistent with exact result
