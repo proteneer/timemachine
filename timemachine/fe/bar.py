@@ -149,7 +149,7 @@ def df_from_u_kln(
     return df[0, 1]
 
 
-def bootstrap_bar(u_kln: NDArray, n_bootstrap=1000) -> Tuple[float, NDArray]:
+def bootstrap_bar(u_kln: NDArray, n_bootstrap=100) -> Tuple[float, NDArray]:
     """Given a 2-state u_kln matrix, subsample u_kln with replacement and re-run bar_from_u_kln many times
 
     Parameters
