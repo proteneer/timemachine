@@ -3,6 +3,7 @@ from importlib import resources
 from unittest.mock import patch
 
 import numpy as np
+import pymbar
 import pytest
 from hypothesis import example, given, seed
 from hypothesis.strategies import integers
@@ -11,13 +12,16 @@ from scipy.optimize import check_grad, minimize
 
 from timemachine.constants import DEFAULT_TEMP
 from timemachine.fe import free_energy, topology, utils
+from timemachine.fe.bar import ukln_to_ukn
 from timemachine.fe.free_energy import (
     BarResult,
     HostConfig,
+    IndeterminateEnergyWarning,
     MDParams,
     MinOverlapWarning,
     PairBarResult,
     batches,
+    estimate_free_energy_bar,
     make_pair_bar_plots,
     run_sims_with_greedy_bisection,
     sample,
@@ -351,3 +355,36 @@ def test_run_sims_with_greedy_bisection_early_stopping():
         ]
         results, _, _ = run_sims_with_greedy_bisection_partial(min_overlap=0.4)
         assert len(results) == 1 + 2
+
+
+def test_estimate_free_energy_bar_with_energy_overflow():
+    """Ensure that we handle NaNs in u_kln inputs (e.g. due to overflow in potential evaluation)."""
+    rng = np.random.default_rng(2023)
+    u_kln = rng.uniform(-1, 1, (2, 2, 100))
+
+    _ = estimate_free_energy_bar(np.array([u_kln]), DEFAULT_TEMP)
+
+    u_kln_with_nan = np.array(u_kln)
+    u_kln_with_nan[0, 1, 10] = np.nan
+
+    # pymbar.MBAR fails with LinAlgError
+    with pytest.raises(SystemError, match="LinAlgError"):
+        u_kn, N_k = ukln_to_ukn(u_kln_with_nan)
+        _ = pymbar.MBAR(u_kn, N_k)
+
+    # should return finite results with warning
+    with pytest.warns(IndeterminateEnergyWarning, match="NaN"):
+        result_with_nan = estimate_free_energy_bar(np.array([u_kln_with_nan]), DEFAULT_TEMP)
+
+    assert np.isfinite(result_with_nan.dG)
+    assert np.isfinite(result_with_nan.dG_err)
+
+    u_kln_with_inf = np.array(u_kln)
+    u_kln_with_inf[0, 1, 10] = np.inf
+
+    # should give the same result with inf
+    result_with_inf = estimate_free_energy_bar(np.array([u_kln_with_inf]), DEFAULT_TEMP)
+    assert result_with_nan.dG == result_with_inf.dG
+    assert result_with_nan.dG_err == result_with_inf.dG_err
+    np.testing.assert_array_equal(result_with_nan.dG_err_by_component, result_with_inf.dG_err_by_component)
+    np.testing.assert_array_equal(result_with_nan.overlap, result_with_inf.overlap)

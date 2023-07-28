@@ -1,6 +1,5 @@
 import logging
-from time import time
-from typing import Tuple
+from typing import Optional, Tuple
 
 import jax
 import jax.numpy as jnp
@@ -99,70 +98,113 @@ def dG_dw(w):
     return dG_dw
 
 
-def bootstrap_bar(w_F, w_R, n_bootstrap=1000, timeout=10) -> Tuple[float, NDArray]:
-    """Subsample w_F, w_R with replacement and re-run BAR many times
+def ukln_to_ukn(u_kln: NDArray) -> Tuple[NDArray, NDArray]:
+    """Convert 2-state u_kln matrix to u_kn and N_k, i.e. the inputs expected by pymbar.MBAR.
+
+    NOTE: similar to https://pymbar.readthedocs.io/en/master/utils.html#pymbar.utils.kln_to_kn, but uses the (current)
+    timemachine convention where the first two axes correspond to evaluation state and sampling state respectively.
+
+    TODO: consider switching to pymbar convention?
 
     Parameters
     ----------
-    w_F : array
-        forward works
-    w_R : array
-        reverse works
+    u_kln : array (2, 2, N)
+        2-state u_kln matrix, where
+        * the first dimension (k) indexes the state for which we evaluate the energy
+        * the second dimension (l) indexes the state from which the configuration was sampled
+    """
+    k, l, n = u_kln.shape
+    assert k == l == 2
+    u_kn = u_kln.reshape(k, -1)
+    assert u_kn.shape == (k, l * n)
+    N_k = n * np.ones(l)
+    return u_kn, N_k
+
+
+DEFAULT_RELATIVE_TOLERANCE = 1e-6  # pymbar default 1e-7
+DEFAULT_MAXIMUM_ITERATIONS = 1_000  # pymbar default 10_000
+
+
+def df_and_err_from_u_kln(u_kln: NDArray, maximum_iterations: int = DEFAULT_MAXIMUM_ITERATIONS) -> Tuple[float, float]:
+    """Compute free energy difference and uncertainty given a 2-state u_kln matrix."""
+    u_kn, N_k = ukln_to_ukn(u_kln)
+    mbar = pymbar.MBAR(u_kn, N_k, maximum_iterations=maximum_iterations)
+    try:
+        df, ddf = mbar.getFreeEnergyDifferences()
+        return df[0, 1], ddf[0, 1]
+    except pymbar.utils.ParameterError:
+        # As of pymbar 3.1.0, computation of the covariance matrix can raise an exception on incomplete convergence.
+        # In this case, return the unconverged estimate with NaN as uncertainty.
+        df = mbar.getFreeEnergyDifferences(compute_uncertainty=False)[0]
+        return df[0, 1], np.nan
+
+
+def df_from_u_kln(
+    u_kln: NDArray, initial_f_k: Optional[NDArray] = None, maximum_iterations: int = DEFAULT_MAXIMUM_ITERATIONS
+) -> float:
+    """Compute free energy difference given a 2-state u_kln matrix."""
+    u_kn, N_k = ukln_to_ukn(u_kln)
+    mbar = pymbar.MBAR(u_kn, N_k, initial_f_k=initial_f_k, maximum_iterations=maximum_iterations)
+    df = mbar.getFreeEnergyDifferences(compute_uncertainty=False)[0]
+    return df[0, 1]
+
+
+def bootstrap_bar(
+    u_kln: NDArray, n_bootstrap: int = 100, maximum_iterations: int = DEFAULT_MAXIMUM_ITERATIONS
+) -> Tuple[float, NDArray]:
+    """Given a 2-state u_kln matrix, subsample u_kln with replacement and re-run df_from_u_kln many times
+
+    Parameters
+    ----------
+    u_kln : array
+        2-state u_kln matrix
     n_bootstrap : int
-        # bootstrap samples
-    timeout : int
-        in seconds
+        number of bootstrap samples
+    maximum_iterations : int
+        maximum number of solver iterations to use for each sample
 
     Returns
     -------
     best_estimate : float
         BAR(w_F, w_R, computeUncertainty=False)
     bootstrap_samples: array
-        length <= n_bootstrap
-        (length < n_bootstrap if timed out)
+        shape (n_bootstrap,)
 
     Notes
     -----
     * TODO[deboggle] -- upgrade from pymbar3 to pymbar4 and remove this
     * TODO[performance] -- multiprocessing, if needed?
     """
-    full_bar_result = pymbar.BAR(w_F, w_R, compute_uncertainty=False)
+    u_kn, N_k = ukln_to_ukn(u_kln)
+    mbar = pymbar.MBAR(u_kn, N_k, maximum_iterations=maximum_iterations)
 
-    n_F, n_R = len(w_F), len(w_R)
+    full_bar_result = mbar.getFreeEnergyDifferences(compute_uncertainty=False)[0][0, 1]
+
+    _, _, n = u_kln.shape
 
     bootstrap_samples = []
-
-    t0 = time()
 
     seed = 2022
     rng = np.random.default_rng(seed)
 
     for _ in range(n_bootstrap):
-        elapsed_time = time() - t0
-        if elapsed_time > timeout:
-            break
-
-        w_F_sample = rng.choice(w_F, size=(n_F,), replace=True)
-        w_R_sample = rng.choice(w_R, size=(n_R,), replace=True)
-
-        bar_result = pymbar.BAR(
-            w_F=w_F_sample,
-            w_R=w_R_sample,
-            DeltaF=full_bar_result,  # warm start
-            compute_uncertainty=False,
-            relative_tolerance=1e-6,  # reduce cost
+        u_kln_sample = rng.choice(u_kln, size=(n,), replace=True, axis=2)
+        bar_result = df_from_u_kln(
+            u_kln_sample,
+            initial_f_k=mbar.f_k,  # warm start
+            maximum_iterations=maximum_iterations,
         )
-
         bootstrap_samples.append(bar_result)
 
     return full_bar_result, np.array(bootstrap_samples)
 
 
-def bar_with_bootstrapped_uncertainty(w_F, w_R, n_bootstrap=1000, timeout=10) -> Tuple[float, float]:
-    """Drop-in replacement for pymbar.BAR(w_F, w_R) -> (df, ddf)
-    where first return is forwarded from pymbar.BAR but second return is computed by bootstrapping"""
+def bar_with_bootstrapped_uncertainty(
+    u_kln: NDArray, n_bootstrap=100, maximum_iterations: int = DEFAULT_MAXIMUM_ITERATIONS
+) -> Tuple[float, float]:
+    """Given 2-state u_kln, returns free energy difference and uncertainty computed by bootstrapping."""
 
-    df, bootstrap_dfs = bootstrap_bar(w_F, w_R, n_bootstrap=n_bootstrap, timeout=timeout)
+    df, bootstrap_dfs = bootstrap_bar(u_kln, n_bootstrap=n_bootstrap, maximum_iterations=maximum_iterations)
 
     # warn if bootstrap distribution deviates significantly from normality
     normaltest_result = normaltest(bootstrap_dfs)
@@ -185,7 +227,7 @@ def works_from_ukln(u_kln: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
 
 
 def df_from_ukln_by_lambda(ukln_by_lambda: NDArray) -> Tuple[float, float]:
-    """Extract dF and dF error compute by BAR over a series of lambda windows
+    """Extract df and df error computed by BAR over a series of lambda windows
 
     Parameters
     ----------
@@ -203,15 +245,13 @@ def df_from_ukln_by_lambda(ukln_by_lambda: NDArray) -> Tuple[float, float]:
     win_errs = []
     for lambda_idx in range(ukln_by_lambda.shape[0]):
         window_ukln = ukln_by_lambda[lambda_idx]
-
-        w_fwd, w_rev = works_from_ukln(window_ukln)
-        dF, dF_err = pymbar.BAR(w_fwd, w_rev)
-        win_dfs.append(dF)
-        win_errs.append(dF_err)
+        df, df_err = df_and_err_from_u_kln(window_ukln)
+        win_dfs.append(df)
+        win_errs.append(df_err)
     return np.sum(win_dfs), np.linalg.norm(win_errs)  # type: ignore
 
 
-def pair_overlap_from_ukln(u_kln: np.ndarray) -> float:
+def pair_overlap_from_ukln(u_kln: NDArray) -> float:
     """Compute the off-diagonal entry of 2x2 MBAR overlap matrix,
         and normalize to interval [0,1]
 
