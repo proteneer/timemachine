@@ -187,7 +187,7 @@ def bootstrap_bar(u_kln: NDArray, n_bootstrap=100) -> Tuple[float, NDArray]:
     rng = np.random.default_rng(seed)
 
     for _ in range(n_bootstrap):
-        u_kln_sample = rng.choice(u_kln, size=(n,), replace=True, axis=-1)
+        u_kln_sample = rng.choice(u_kln, size=(n,), replace=True, axis=2)
 
         bar_result = df_from_u_kln(
             u_kln_sample,
