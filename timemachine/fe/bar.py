@@ -149,7 +149,9 @@ def df_from_u_kln(
     return df[0, 1]
 
 
-def bootstrap_bar(u_kln: NDArray, n_bootstrap=100) -> Tuple[float, NDArray]:
+def bootstrap_bar(
+    u_kln: NDArray, n_bootstrap: int = 100, maximum_iterations: int = DEFAULT_MAXIMUM_ITERATIONS
+) -> Tuple[float, NDArray]:
     """Given a 2-state u_kln matrix, subsample u_kln with replacement and re-run df_from_u_kln many times
 
     Parameters
@@ -157,7 +159,9 @@ def bootstrap_bar(u_kln: NDArray, n_bootstrap=100) -> Tuple[float, NDArray]:
     u_kln : array
         2-state u_kln matrix
     n_bootstrap : int
-        # bootstrap samples
+        number o bootstrap samples
+    maximum_iterations : int
+        maximum number of solver iterations to use for each sample
 
     Returns
     -------
@@ -172,7 +176,7 @@ def bootstrap_bar(u_kln: NDArray, n_bootstrap=100) -> Tuple[float, NDArray]:
     * TODO[performance] -- multiprocessing, if needed?
     """
     u_kn, N_k = ukln_to_ukn(u_kln)
-    mbar = pymbar.MBAR(u_kn, N_k)
+    mbar = pymbar.MBAR(u_kn, N_k, maximum_iterations=maximum_iterations)
 
     full_bar_result = mbar.getFreeEnergyDifferences(compute_uncertainty=False)[0][0, 1]
 
@@ -185,16 +189,22 @@ def bootstrap_bar(u_kln: NDArray, n_bootstrap=100) -> Tuple[float, NDArray]:
 
     for _ in range(n_bootstrap):
         u_kln_sample = rng.choice(u_kln, size=(n,), replace=True, axis=2)
-        bar_result = df_from_u_kln(u_kln_sample, initial_f_k=mbar.f_k)  # warm start
+        bar_result = df_from_u_kln(
+            u_kln_sample,
+            initial_f_k=mbar.f_k,  # warm start
+            maximum_iterations=maximum_iterations,
+        )
         bootstrap_samples.append(bar_result)
 
     return full_bar_result, np.array(bootstrap_samples)
 
 
-def bar_with_bootstrapped_uncertainty(u_kln: NDArray, n_bootstrap=100) -> Tuple[float, float]:
+def bar_with_bootstrapped_uncertainty(
+    u_kln: NDArray, n_bootstrap=100, maximum_iterations: int = DEFAULT_MAXIMUM_ITERATIONS
+) -> Tuple[float, float]:
     """Given 2-state u_kln, returns free energy difference and uncertainty computed by bootstrapping."""
 
-    df, bootstrap_dfs = bootstrap_bar(u_kln, n_bootstrap=n_bootstrap)
+    df, bootstrap_dfs = bootstrap_bar(u_kln, n_bootstrap=n_bootstrap, maximum_iterations=maximum_iterations)
 
     # warn if bootstrap distribution deviates significantly from normality
     normaltest_result = normaltest(bootstrap_dfs)
