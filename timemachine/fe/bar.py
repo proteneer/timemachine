@@ -150,7 +150,7 @@ def df_from_u_kln(
 
 
 def bootstrap_bar(u_kln: NDArray, n_bootstrap=100) -> Tuple[float, NDArray]:
-    """Given a 2-state u_kln matrix, subsample u_kln with replacement and re-run bar_from_u_kln many times
+    """Given a 2-state u_kln matrix, subsample u_kln with replacement and re-run df_from_u_kln many times
 
     Parameters
     ----------
@@ -185,11 +185,7 @@ def bootstrap_bar(u_kln: NDArray, n_bootstrap=100) -> Tuple[float, NDArray]:
 
     for _ in range(n_bootstrap):
         u_kln_sample = rng.choice(u_kln, size=(n,), replace=True, axis=2)
-
-        bar_result = df_from_u_kln(
-            u_kln_sample,
-            initial_f_k=mbar.f_k,  # warm start
-        )
+        bar_result = df_from_u_kln(u_kln_sample, initial_f_k=mbar.f_k)  # warm start
         bootstrap_samples.append(bar_result)
 
     return full_bar_result, np.array(bootstrap_samples)
