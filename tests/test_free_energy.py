@@ -372,9 +372,12 @@ def test_estimate_free_energy_bar_with_energy_overflow():
         u_kn, N_k = ukln_to_ukn(u_kln_with_nan)
         _ = pymbar.MBAR(u_kn, N_k)
 
-    # should warn with NaN
+    # should return finite results with warning
     with pytest.warns(IndeterminateEnergyWarning, match="NaN"):
         result_with_nan = estimate_free_energy_bar(np.array([u_kln_with_nan]), DEFAULT_TEMP)
+
+    assert np.isfinite(result_with_nan.dG)
+    assert np.isfinite(result_with_nan.dG_err)
 
     u_kln_with_inf = np.array(u_kln)
     u_kln_with_inf[0, 1, 10] = np.inf
