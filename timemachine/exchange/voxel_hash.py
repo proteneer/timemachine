@@ -30,7 +30,7 @@ class VoxelHash:
         assert vdw_radius < self.box[0][0] / 2
         assert vdw_radius < self.box[1][1] / 2
         assert vdw_radius < self.box[2][2] / 2
-        # sign: +1 means insert, -1 means delete
+
         # activates nearby cells based on occupancy, not the most efficient method
         # inclusive range
         x_min, y_min, z_min = np.floor((xyz - vdw_radius) / self.cell_width).astype(np.int32)
@@ -70,12 +70,6 @@ class VoxelHash:
                     # compute the distance: tbd, PBCs?
                     dij = np.linalg.norm(delta_r_np(grid_point, xyz, self.box))
                     if dij < vdw_radius:
-                        # print("test", grid_point, xyz)
-                        # key = (int(wrapped_xi), int(wrapped_yi), int(wrapped_zi))
-                        # if key in debug:
-                        # print(key)
-                        # assert key not in debug
-                        # debug.add(key)
                         self.occupancy[wrapped_xi][wrapped_yi][wrapped_zi] += sign
 
         return debug
