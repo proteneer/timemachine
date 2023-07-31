@@ -85,6 +85,7 @@ pybind11_add_module(${LIBRARY_NAME} SHARED NO_EXTRAS
   src/verlet_integrator.cu
   src/context.cu
   src/barostat.cu
+  src/hilbert_curve.cu
   src/local_md_potentials.cu
   src/rmsd_align.cpp
   src/summed_potential.cu
@@ -93,7 +94,7 @@ pybind11_add_module(${LIBRARY_NAME} SHARED NO_EXTRAS
   src/pinned_host_buffer.cu
   src/streamed_potential_runner.cu
   src/stream_manager.cu
-  src/kernels/k_nonbonded.cu
+  src/kernels/k_hilbert.cu
   src/kernels/k_indices.cu
 )
 

@@ -1,5 +1,4 @@
 #include <complex>
-#include <cub/cub.cuh>
 #include <string>
 #include <vector>
 
@@ -12,7 +11,6 @@
 #include "nonbonded_common.hpp"
 #include "nonbonded_interaction_group.hpp"
 #include "set_utils.hpp"
-#include "vendored/hilbert.h"
 
 #include "k_nonbonded.cuh"
 
@@ -47,7 +45,7 @@ NonbondedInteractionGroup<RealType>::NonbondedInteractionGroup(
                     &k_nonbonded_unified<RealType, NONBONDED_KERNEL_THREADS_PER_BLOCK, 1, 1, 1>}),
 
       beta_(beta), cutoff_(cutoff), steps_since_last_sort_(0), nblist_(N_), nblist_padding_(nblist_padding),
-      d_sort_storage_(nullptr), d_sort_storage_bytes_(0), disable_hilbert_(disable_hilbert_sort) {
+      hilbert_sort_(nullptr), disable_hilbert_(disable_hilbert_sort) {
 
     this->validate_idxs(N_, row_atom_idxs, col_atom_idxs, false);
 
@@ -70,40 +68,10 @@ NonbondedInteractionGroup<RealType>::NonbondedInteractionGroup(
     cudaSafeMalloc(&d_rebuild_nblist_, 1 * sizeof(*d_rebuild_nblist_));
     gpuErrchk(cudaMallocHost(&p_rebuild_nblist_, 1 * sizeof(*p_rebuild_nblist_)));
 
-    cudaSafeMalloc(&d_sort_keys_in_, N_ * sizeof(*d_sort_keys_in_));
-    cudaSafeMalloc(&d_sort_keys_out_, N_ * sizeof(*d_sort_keys_out_));
-    cudaSafeMalloc(&d_sort_vals_in_, N_ * sizeof(*d_sort_vals_in_));
-
-    // initialize hilbert curve
-    std::vector<unsigned int> bin_to_idx(HILBERT_GRID_DIM * HILBERT_GRID_DIM * HILBERT_GRID_DIM);
-    for (int i = 0; i < HILBERT_GRID_DIM; i++) {
-        for (int j = 0; j < HILBERT_GRID_DIM; j++) {
-            for (int k = 0; k < HILBERT_GRID_DIM; k++) {
-
-                bitmask_t hilbert_coords[3];
-                hilbert_coords[0] = i;
-                hilbert_coords[1] = j;
-                hilbert_coords[2] = k;
-
-                unsigned int bin = static_cast<unsigned int>(hilbert_c2i(3, HILBERT_N_BITS, hilbert_coords));
-                bin_to_idx[i * HILBERT_GRID_DIM * HILBERT_GRID_DIM + j * HILBERT_GRID_DIM + k] = bin;
-            }
-        }
+    if (!disable_hilbert_) {
+        this->hilbert_sort_.reset(new HilbertCurve(N_));
     }
 
-    cudaSafeMalloc(&d_bin_to_idx_, HILBERT_GRID_DIM * HILBERT_GRID_DIM * HILBERT_GRID_DIM * sizeof(*d_bin_to_idx_));
-    gpuErrchk(cudaMemcpy(
-        d_bin_to_idx_,
-        &bin_to_idx[0],
-        HILBERT_GRID_DIM * HILBERT_GRID_DIM * HILBERT_GRID_DIM * sizeof(*d_bin_to_idx_),
-        cudaMemcpyHostToDevice));
-
-    // estimate size needed to do radix sorting, this can use uninitialized data.
-    cub::DeviceRadixSort::SortPairs(
-        d_sort_storage_, d_sort_storage_bytes_, d_sort_keys_in_, d_sort_keys_out_, d_sort_vals_in_, d_perm_, N_);
-
-    gpuErrchk(cudaPeekAtLastError());
-    cudaSafeMalloc(&d_sort_storage_, d_sort_storage_bytes_);
     this->set_atom_idxs(row_atom_idxs, col_atom_idxs);
 
     // Create event with timings disabled as timings slow down events
@@ -116,18 +84,12 @@ template <typename RealType> NonbondedInteractionGroup<RealType>::~NonbondedInte
 
     gpuErrchk(cudaFree(d_perm_));
 
-    gpuErrchk(cudaFree(d_bin_to_idx_));
     gpuErrchk(cudaFree(d_sorted_x_));
     gpuErrchk(cudaFree(d_u_buffer_));
 
     gpuErrchk(cudaFree(d_sorted_p_));
     gpuErrchk(cudaFree(d_sorted_du_dx_));
     gpuErrchk(cudaFree(d_sorted_du_dp_));
-
-    gpuErrchk(cudaFree(d_sort_keys_in_));
-    gpuErrchk(cudaFree(d_sort_keys_out_));
-    gpuErrchk(cudaFree(d_sort_vals_in_));
-    gpuErrchk(cudaFree(d_sort_storage_));
 
     gpuErrchk(cudaFree(d_nblist_x_));
     gpuErrchk(cudaFree(d_nblist_box_));
@@ -145,8 +107,8 @@ template <typename RealType>
 void NonbondedInteractionGroup<RealType>::sort(const double *d_coords, const double *d_box, cudaStream_t stream) {
     // We must rebuild the neighborlist after sorting, as the neighborlist is tied to a particular sort order
     if (!disable_hilbert_) {
-        this->hilbert_sort(NR_, d_row_atom_idxs_, d_coords, d_box, d_perm_, stream);
-        this->hilbert_sort(NC_, d_col_atom_idxs_, d_coords, d_box, d_perm_ + NR_, stream);
+        this->hilbert_sort_->sort_device(NR_, d_row_atom_idxs_, d_coords, d_box, d_perm_, stream);
+        this->hilbert_sort_->sort_device(NC_, d_col_atom_idxs_, d_coords, d_box, d_perm_ + NR_, stream);
     } else {
         gpuErrchk(cudaMemcpyAsync(
             d_perm_, d_row_atom_idxs_, NR_ * sizeof(*d_row_atom_idxs_), cudaMemcpyDeviceToDevice, stream));
@@ -156,39 +118,6 @@ void NonbondedInteractionGroup<RealType>::sort(const double *d_coords, const dou
     gpuErrchk(cudaMemsetAsync(d_rebuild_nblist_, 1, sizeof(*d_rebuild_nblist_), stream));
     // Set the pinned memory to indicate that we need to rebuild
     p_rebuild_nblist_[0] = 1;
-}
-
-template <typename RealType>
-void NonbondedInteractionGroup<RealType>::hilbert_sort(
-    const int N,
-    const unsigned int *d_atom_idxs,
-    const double *d_coords,
-    const double *d_box,
-    unsigned int *d_perm,
-    cudaStream_t stream) {
-
-    const int tpb = DEFAULT_THREADS_PER_BLOCK;
-    const int B = ceil_divide(N, tpb);
-
-    k_coords_to_kv_gather<<<B, tpb, 0, stream>>>(
-        N, d_atom_idxs, d_coords, d_box, d_bin_to_idx_, d_sort_keys_in_, d_sort_vals_in_);
-
-    gpuErrchk(cudaPeekAtLastError());
-
-    cub::DeviceRadixSort::SortPairs(
-        d_sort_storage_,
-        d_sort_storage_bytes_,
-        d_sort_keys_in_,
-        d_sort_keys_out_,
-        d_sort_vals_in_,
-        d_perm,
-        N,
-        0,                            // begin bit
-        sizeof(*d_sort_keys_in_) * 8, // end bit
-        stream                        // cudaStream
-    );
-
-    gpuErrchk(cudaPeekAtLastError());
 }
 
 template <typename RealType>

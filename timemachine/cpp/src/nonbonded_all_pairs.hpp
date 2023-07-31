@@ -1,9 +1,11 @@
 #pragma once
 
+#include "hilbert_curve.hpp"
 #include "neighborlist.hpp"
 #include "nonbonded_common.hpp"
 #include "potential.hpp"
 #include <array>
+#include <memory>
 #include <optional>
 #include <set>
 #include <vector>
@@ -46,15 +48,9 @@ private:
     unsigned long long *d_gathered_du_dx_;
     unsigned long long *d_gathered_du_dp_;
 
-    // used for hilbert sorting
-    unsigned int *d_bin_to_idx_; // mapping from 256x256x256 grid to hilbert curve index
-    unsigned int *d_sort_keys_in_;
-    unsigned int *d_sort_keys_out_;
-    unsigned int *d_sort_vals_in_;
-    unsigned int *d_sort_storage_;
-    size_t d_sort_storage_bytes_;
-
     cudaEvent_t nblist_flag_sync_event_; // Event to synchronize on
+
+    std::unique_ptr<HilbertCurve> hilbert_sort_;
 
     const bool disable_hilbert_;
 
@@ -63,8 +59,6 @@ private:
     bool needs_sort();
 
     void sort(const double *d_x, const double *d_box, cudaStream_t stream);
-
-    void hilbert_sort(const double *d_x, const double *d_box, cudaStream_t stream);
 
 public:
     NonbondedAllPairs(
