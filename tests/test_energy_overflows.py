@@ -5,7 +5,7 @@ import scipy
 from common import GradientTest, fixed_overflowed, prepare_nb_system, prepare_water_system
 
 from timemachine.lib import custom_ops
-from timemachine.lib.fixed_point import FIXED_TO_FLOAT
+from timemachine.lib.fixed_point import fixed_to_float
 from timemachine.potentials import Nonbonded, NonbondedAllPairs, NonbondedExclusions
 
 pytestmark = [pytest.mark.memcheck]
@@ -218,7 +218,7 @@ def test_energy_overflow_cancelled_by_exclusions(precision, rtol, atol):
 
         # If there are no overflows, the fixed energy value will match
         if not fixed_overflowed(fixed_energy):
-            assert FIXED_TO_FLOAT(fixed_energy) == selective_energy
+            assert fixed_to_float(fixed_energy) == selective_energy
 
         return bound_energy
 
