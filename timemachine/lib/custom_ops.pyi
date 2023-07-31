@@ -1,6 +1,7 @@
 from typing import List, Optional
 
 import numpy
+FIXED_EXPONENT: int
 
 class BoundPotential:
     def __init__(self, potential: Potential, params: numpy.typing.NDArray[numpy.float64]) -> None: ...
