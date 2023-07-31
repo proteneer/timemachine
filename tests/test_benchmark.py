@@ -158,6 +158,8 @@ def benchmark(
     TODO: configuration blob containing num_batches, steps_per_batch, and any other options
     """
 
+    if barostat_interval > 0:
+        label += f"-barostat-interval-{barostat_interval}"
     seed = 1234
     dt = 1.5e-3
     temperature = constants.DEFAULT_TEMP
@@ -322,29 +324,19 @@ def benchmark_dhfr(verbose: bool = False, num_batches: int = 100, steps_per_batc
     x0 = host_conf
     v0 = np.zeros_like(host_conf)
 
-    benchmark(
-        "dhfr-apo",
-        host_masses,
-        x0,
-        v0,
-        box,
-        host_fns,
-        verbose=verbose,
-        num_batches=num_batches,
-        steps_per_batch=steps_per_batch,
-    )
-    benchmark(
-        "dhfr-apo-barostat-interval-25",
-        host_masses,
-        x0,
-        v0,
-        box,
-        host_fns,
-        verbose=verbose,
-        num_batches=num_batches,
-        steps_per_batch=steps_per_batch,
-        barostat_interval=25,
-    )
+    for barostat_interval in [0, 25]:
+        benchmark(
+            "dhfr-apo",
+            host_masses,
+            x0,
+            v0,
+            box,
+            host_fns,
+            verbose=verbose,
+            num_batches=num_batches,
+            steps_per_batch=steps_per_batch,
+            barostat_interval=barostat_interval,
+        )
 
 
 def prepare_hif2a_initial_state(st, host_config):
@@ -393,32 +385,24 @@ def benchmark_hif2a(verbose: bool = False, num_batches: int = 100, steps_per_bat
         x0 = min_host_coords
         v0 = np.zeros_like(x0)
 
-        benchmark(
-            stage + "-apo",
-            host_masses,
-            x0,
-            v0,
-            host_box,
-            host_fns,
-            verbose=verbose,
-            num_batches=num_batches,
-            steps_per_batch=steps_per_batch,
-        )
-        benchmark(
-            stage + "-apo-barostat-interval-25",
-            host_masses,
-            x0,
-            v0,
-            host_box,
-            host_fns,
-            verbose=verbose,
-            num_batches=num_batches,
-            steps_per_batch=steps_per_batch,
-            barostat_interval=25,
-        )
+        for barostat_interval in [0, 25]:
+            benchmark(
+                stage + "-apo",
+                host_masses,
+                x0,
+                v0,
+                host_box,
+                host_fns,
+                verbose=verbose,
+                num_batches=num_batches,
+                steps_per_batch=steps_per_batch,
+                barostat_interval=barostat_interval,
+            )
 
         # RBFE
         initial_state = prepare_hif2a_initial_state(st, host_config)
+
+        barostat_interval = initial_state.barostat.interval
 
         benchmark(
             stage + "-rbfe",
@@ -430,6 +414,7 @@ def benchmark_hif2a(verbose: bool = False, num_batches: int = 100, steps_per_bat
             verbose=verbose,
             num_batches=num_batches,
             steps_per_batch=steps_per_batch,
+            barostat_interval=barostat_interval,
         )
 
         benchmark_local(
