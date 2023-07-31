@@ -64,6 +64,9 @@ void Neighborlist<RealType>::compute_block_bounds_host(
     DeviceBuffer<double> d_coords(N * D);
     DeviceBuffer<double> d_box(D * D);
 
+    std::vector<RealType> h_block_bounds_centers(this->num_column_blocks() * 3);
+    std::vector<RealType> h_block_bounds_extents(this->num_column_blocks() * 3);
+
     d_coords.copy_from(h_coords);
     d_box.copy_from(h_box);
 
@@ -71,15 +74,23 @@ void Neighborlist<RealType>::compute_block_bounds_host(
     gpuErrchk(cudaDeviceSynchronize());
 
     gpuErrchk(cudaMemcpy(
-        h_bb_ctrs,
+        &h_block_bounds_centers[0],
         d_column_block_bounds_ctr_,
         this->num_column_blocks() * 3 * sizeof(*d_column_block_bounds_ctr_),
         cudaMemcpyDeviceToHost));
     gpuErrchk(cudaMemcpy(
-        h_bb_exts,
+        &h_block_bounds_extents[0],
         d_column_block_bounds_ext_,
         this->num_column_blocks() * 3 * sizeof(*d_column_block_bounds_ext_),
         cudaMemcpyDeviceToHost));
+
+    // Handle the float -> double, doing a direct copy from a double buffer to a float buffer results in garbage values
+    for (auto i = 0; i < h_block_bounds_centers.size(); i++) {
+        h_bb_ctrs[i] = h_block_bounds_centers[i];
+    }
+    for (auto i = 0; i < h_block_bounds_extents.size(); i++) {
+        h_bb_exts[i] = h_block_bounds_extents[i];
+    }
 }
 
 template <typename RealType>
