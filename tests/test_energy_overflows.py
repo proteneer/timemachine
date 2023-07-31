@@ -4,8 +4,8 @@ import pytest
 import scipy
 from common import GradientTest, fixed_overflowed, prepare_nb_system, prepare_water_system
 
-from timemachine.integrator import FIXED_EXPONENT, FIXED_TO_FLOAT
 from timemachine.lib import custom_ops
+from timemachine.lib.fixed_point import fixed_to_float
 from timemachine.potentials import Nonbonded, NonbondedAllPairs, NonbondedExclusions
 
 pytestmark = [pytest.mark.memcheck]
@@ -109,7 +109,7 @@ def test_energy_overflow_max_representation(precision, rtol, atol):
         assert np.isfinite(u), "Reference is no longer finite"
         _, gpu_u = gpu_bound.execute(x, box)
         assert (
-            not np.isnan(gpu_u) and np.abs(gpu_u) < np.iinfo(np.int64).max / FIXED_EXPONENT
+            not np.isnan(gpu_u) and np.abs(gpu_u) < np.iinfo(np.int64).max / custom_ops.FIXED_EXPONENT
         ), "GPU platform returned nan"
         return u, du_dx.reshape(-1)
 
@@ -218,7 +218,7 @@ def test_energy_overflow_cancelled_by_exclusions(precision, rtol, atol):
 
         # If there are no overflows, the fixed energy value will match
         if not fixed_overflowed(fixed_energy):
-            assert FIXED_TO_FLOAT(fixed_energy) == selective_energy
+            assert fixed_to_float(fixed_energy) == selective_energy
 
         return bound_energy
 
@@ -271,7 +271,7 @@ def test_energy_overflows_with_summation_of_energies(precision):
     nonbonded_gpu = nonbonded.to_gpu(precision)
 
     # The reference should return a value larger than we can express in fixed point
-    assert nonbonded(x, nb_params, box) > np.iinfo(np.int64).max / FIXED_EXPONENT
+    assert nonbonded(x, nb_params, box) > np.iinfo(np.int64).max / custom_ops.FIXED_EXPONENT
 
     # The GPU potentials will overflow, resulting in a nan value
     assert np.isnan(nonbonded_gpu(x, nb_params, box))

@@ -7,7 +7,8 @@ from timemachine.fe.rbfe import setup_initial_states
 from timemachine.fe.single_topology import SingleTopology
 from timemachine.fe.utils import get_romol_conf
 from timemachine.ff import Forcefield
-from timemachine.integrator import FIXED_TO_FLOAT, FLOAT_TO_FIXED, VelocityVerletIntegrator
+from timemachine.integrator import VelocityVerletIntegrator
+from timemachine.lib.fixed_point import fixed_to_float, float_to_fixed
 from timemachine.testsystems.relative import get_hif2a_ligand_pair_single_topology
 
 
@@ -24,10 +25,10 @@ def assert_bitwise_reversiblility(x0, v0, update_fxn):
         x_next, v_next = update_fxn(x, v)
         return x_next, -v_next
 
-    # Bitwise determinisim is only guarenteed for x0s, v0s where FIXED_TO_FLOAT(FLOAT_TO_FIXED(x)) == x
+    # Bitwise determinisim is only guarenteed for x0s, v0s where fixed_to_float(float_to_fixed(x)) == x
     # This condition is not met for all floating point values and thus we roundtrip values initially.
-    x0 = FIXED_TO_FLOAT(FLOAT_TO_FIXED(x0))
-    v0 = FIXED_TO_FLOAT(FLOAT_TO_FIXED(v0))
+    x0 = fixed_to_float(float_to_fixed(x0))
+    v0 = fixed_to_float(float_to_fixed(v0))
 
     # assert "self_inverse" is really its own inverse
     x1, v1 = self_inverse(x0, v0)
