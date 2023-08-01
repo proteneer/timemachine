@@ -16,6 +16,7 @@ from scipy.stats import special_ortho_group
 
 from timemachine.constants import AVOGADRO, DEFAULT_KT, DEFAULT_PRESSURE, DEFAULT_TEMP
 from timemachine.datasets.water_exchange import charges
+from timemachine.exchange import voxel_hash
 from timemachine.fe import cif_writer
 from timemachine.fe.free_energy import AbsoluteFreeEnergy, HostConfig, InitialState, image_frames
 from timemachine.fe.topology import BaseTopology
@@ -470,11 +471,13 @@ def test_exchange():
     print("water_ligand parameters", nb_water_ligand_params)
 
     # exc_mover = ExchangeMove(nb_water_ligand_params, nb_beta, nb_cutoff, water_idxs)
-
     bb_radius = 0.46
-    exc_mover = InsideOutsideExchangeMove(
-        nb_water_ligand_params, nb_beta, nb_cutoff, water_idxs, initial_state.ligand_idxs, bb_radius
-    )
+    # exc_mover = InsideOutsideExchangeMove(
+    #     nb_water_ligand_params, nb_beta, nb_cutoff, water_idxs, initial_state.ligand_idxs, bb_radius
+    # )
+
+    exc_mover = GridExchangeMover(nb_water_ligand_params, nb_beta, nb_cutoff, water_idxs, initial_state.ligand_idxs)
+
     cur_box = initial_state.box0
     cur_x_t = initial_state.x0
     cur_v_t = np.zeros_like(cur_x_t)
@@ -504,7 +507,7 @@ def test_exchange():
     # equilibrate using the npt mover
     npt_mover.n_steps = equilibration_steps
     xvb_t = CoordsVelBox(cur_x_t, cur_v_t, cur_box)
-    xvb_t = npt_mover.move(xvb_t)
+    # xvb_t = npt_mover.move(xvb_t)
     print("done")
     md_steps_per_batch = 2000
     npt_mover.n_steps = md_steps_per_batch
@@ -538,9 +541,6 @@ def test_exchange():
         xvb_t = npt_mover.move(xvb_t)  # disabling this gets more moves?
 
 
-from timemachine.exchange_mover import voxel_hash
-
-
 class GridExchangeMover(moves.MonteCarloMove):
     """
     Insertions are biased by means of a grid exchange move
@@ -548,7 +548,7 @@ class GridExchangeMover(moves.MonteCarloMove):
     # tbd modify with initial coords
     """
 
-    def __init__(self, nb_params, nb_beta, nb_cutoff, water_idxs, ligand_idxs, radius):
+    def __init__(self, nb_params, nb_beta, nb_cutoff, water_idxs, ligand_idxs):
         self.nb_beta = nb_beta
         self.nb_cutoff = nb_cutoff
         self.nb_params = jnp.array(nb_params)
@@ -556,8 +556,6 @@ class GridExchangeMover(moves.MonteCarloMove):
         self.water_idxs = water_idxs
         self.ligand_idxs = ligand_idxs  # used to determine center of sphere
         self.beta = 1 / DEFAULT_KT
-        self.radius = radius
-
         self.vdw_radii = nb_params[:, 1]
 
         # @jax.jit
@@ -579,13 +577,16 @@ class GridExchangeMover(moves.MonteCarloMove):
         self.delta_U_total_fn = delta_U_total_fn
 
     def propose(self, x: CoordsVelBox) -> Tuple[CoordsVelBox, float]:
-        vh = voxel_hash.VoxelHash()
         box = x.box
         coords = x.coords
         n_atoms = len(coords)
 
+        cell_width = 0.2
+        vh = voxel_hash.VoxelHash(cell_width, box=box)
+
         # insert all the atoms into the voxel hash
-        for c, vdw_r in zip(coords, self.vdw_radii):
+        for c_idx, (c, vdw_r) in enumerate(zip(coords, self.vdw_radii)):
+            print("inserting", c_idx, "radii", vdw_r)
             vh.delsert(c, vdw_r, 1)
 
         # pick a water to delete
@@ -622,6 +623,8 @@ class GridExchangeMover(moves.MonteCarloMove):
             delta_U_total = np.inf
 
         hastings_factor = np.log(rev_probability / fwd_probability)
+
+        print("HF", hastings_factor)
         # print(hastings_factor)
         log_p_accept = min(0, -self.beta * delta_U_total + hastings_factor)
 
@@ -631,7 +634,6 @@ class GridExchangeMover(moves.MonteCarloMove):
         new_state = CoordsVelBox(trial_coords, x.velocities, x.box)
 
         return new_state, log_p_accept
-        # compute delta_U
 
 
 if __name__ == "__main__":
