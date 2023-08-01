@@ -12,7 +12,7 @@ def test_decouple_by_atom_rank():
 
     num_test_mols = 10
     np.random.seed(1234)
-    lambdas = np.linspace(0, 1, 100)
+    lambdas = np.linspace(0, 1, 1000)
     for mol in mols[:num_test_mols]:
         n_atoms = mol.GetNumAtoms()
         n_src_idxs = np.random.randint(1, min(5, n_atoms))  # arbitrary threshold: between 1 and 5 src_idxs
