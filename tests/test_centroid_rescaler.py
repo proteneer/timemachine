@@ -6,7 +6,7 @@ from timemachine.md.barostat.utils import compute_intramolecular_distances
 
 np.random.seed(2021)
 
-pytestmark = [pytest.mark.nogpu]
+pytestmark = [pytest.mark.nocuda]
 
 
 def _generate_random_instance():

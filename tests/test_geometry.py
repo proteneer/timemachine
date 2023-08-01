@@ -6,7 +6,7 @@ from rdkit import Chem
 from timemachine.fe import geometry, utils
 from timemachine.fe.geometry import LocalGeometry as LG
 
-pytestmark = [pytest.mark.nogpu]
+pytestmark = [pytest.mark.nocuda]
 
 
 def test_assign_aspirin():

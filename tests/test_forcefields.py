@@ -11,7 +11,7 @@ from timemachine import constants
 from timemachine.ff import Forcefield
 from timemachine.ff.handlers.deserialize import deserialize_handlers
 
-pytestmark = [pytest.mark.nogpu]
+pytestmark = [pytest.mark.nocuda]
 
 
 def test_serialization_of_ffs():
