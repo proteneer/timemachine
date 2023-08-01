@@ -57,8 +57,6 @@ class DecoupleByAtomRank:
 
     def atom_lams_from_global_lam(self, global_lam):
         """each stage goes from 0 to 1 in turn"""
-        if not (0 <= global_lam <= 1):
-            raise ValueError(f"global_lam={global_lam}, not in expected interval [0,1]")
 
         num_atoms = len(self.atom_idxs)
 
