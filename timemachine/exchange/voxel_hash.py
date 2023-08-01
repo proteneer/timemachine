@@ -29,6 +29,17 @@ class VoxelHash:
     def count_total(self):
         return np.sum(self.occupancy)
 
+    def get_cell(self, xyz):
+        # get the location a given coordinate (x,y,z) is associated with
+        loc = np.floor(xyz/self.cell_width).astype(np.int32)
+        return loc
+
+    def get_occupancy(self, xyz):
+        # get the location a given coordinate (x,y,z) is associated with
+        loc = np.floor(xyz/self.cell_width).astype(np.int32)
+        return loc
+
+
     # gpu optimization later on... sort by vdw radius to reduce warp divergence, skip vdw=0 for hydrogens
     def delsert(self, xyz, vdw_radius, sign):
         assert vdw_radius < self.box[0][0] / 2

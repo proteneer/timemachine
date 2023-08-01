@@ -599,22 +599,20 @@ class GridExchangeMover(moves.MonteCarloMove):
 
         # propose an insertion site 
         new_center, prob_insertion = vh.propose_insertion()
-
         # delete a water randomly
         chosen_water = np.random.randint(self.num_waters)
         chosen_water_atoms = self.water_idxs[chosen_water]
-
+        chosen_water_centroid = np.mean(coords[chosen_water_atoms], axis=0)
+        old_cell = vh.get_cell(chosen_water_centroid)
+        old_occupancy = vh.occupancy[old_cell]
+        assert old_occupancy > 0
         # centered around the oxygen?
         for atom_idx in chosen_water_atoms:
             vh.delsert(coords[atom_idx], self.vdw_radii[atom_idx], -1)
-
-        vh.count_zero()
-
-
-        vh.delsert(new_center)
-
-        # center = np.mean(coords[self.ligand_idxs], axis=0)
-        
+        new_occupancy = vh.occupancy[old_cell]
+        assert new_occupancy == 0
+        reversal_prob = 1/vh.count_zero()
+      
 
 
 
