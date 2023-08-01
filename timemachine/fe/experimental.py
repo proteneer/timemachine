@@ -2,33 +2,42 @@
 # adapted from:
 #   https://github.com/proteneer/timemachine/blob/acccb46c3ed7eaf614fd79b42e42db597a546891/examples/sifting.py#L212-L328
 
+import networkx as nx
 import numpy as np
 from jax import numpy as jnp
-from networkx import shortest_path_length
 
 from timemachine.graph_utils import convert_to_nx
 
 
 def rank_atoms_by_path_length_to_src(mol, source_idxs):
-    """rank(i) = min_{s in source_idxs} shortest_path_length(i, s)
+    """argsort by rank(i) = min_{s in source_idxs} shortest_path_length(i, s)
 
-    Usage suggestion:
+    Parameters
+    ----------
+    mol : rdkit mol
+    source_idxs : int sequence
+
+    Returns
+    -------
+    ranks : int array
+        a permutation of range(mol.GetNumAtoms())
+        sorted by distance from source_idxs
+        (arbitrarily breaks ties)
+
+    Usage suggestion
+    ----------------
     * source_idxs might contain a single central atom, a list of anchor atoms, or a list of peripheral atoms
     """
 
     graph = convert_to_nx(mol)
-    n_atoms = graph.number_of_nodes()
-    min_dist = np.inf * np.ones(n_atoms, dtype=int)
-
-    for source in source_idxs:
-        _distance_dict = shortest_path_length(graph, source=source)
-        _distances = np.array([_distance_dict[i] for i in range(n_atoms)])
-        min_dist = np.minimum(min_dist, _distances)
+    _distance_dict = nx.multi_source_dijkstra_path_length(graph, sources=list(source_idxs))
+    min_dist = np.array([_distance_dict[i] for i in range(mol.GetNumAtoms())])
 
     if not (min_dist < np.inf).all():
         raise ValueError("didn't expect mol graph to be disconnected")
 
-    return min_dist.astype(int)
+    ranks = np.argsort(min_dist)
+    return ranks
 
 
 # TODO: add utilities to get atom ranks using other heuristics,
