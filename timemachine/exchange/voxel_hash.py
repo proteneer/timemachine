@@ -25,20 +25,13 @@ class VoxelHash:
     def count_zero(self):
         return np.count_nonzero(self.occupancy == 0)
 
-
     def count_total(self):
         return np.sum(self.occupancy)
 
     def get_cell(self, xyz):
         # get the location a given coordinate (x,y,z) is associated with
-        loc = np.floor(xyz/self.cell_width).astype(np.int32)
+        loc = np.floor(xyz / self.cell_width).astype(np.int32)
         return loc
-
-    def get_occupancy(self, xyz):
-        # get the location a given coordinate (x,y,z) is associated with
-        loc = np.floor(xyz/self.cell_width).astype(np.int32)
-        return loc
-
 
     # gpu optimization later on... sort by vdw radius to reduce warp divergence, skip vdw=0 for hydrogens
     def delsert(self, xyz, vdw_radius, sign):
@@ -90,18 +83,58 @@ class VoxelHash:
 
         return debug
 
-    def propose_insertion(self):
-        # modify later exp(-occupancy), eg. fractional occupancies if needed
+    def get_cell_widths(self, cell_loc):
+        #        deals with this last cell on the boundary
+        #          |
+        #          v
+        # |---|---|--|
+        # |   |   |  |
+        # |---|---|--|
+        # |   |   |  |
+        # |---|---|--|
+        bx, by, bz = self.box[0][0], self.box[1][1], self.box[2][2]
+        # last cell - treat boundary carefully
+        if cell_loc[0] == self.cell_counts[0] - 1:
+            dx = bx - cell_loc[0] * self.cell_width
+        else:
+            dx = self.cell_width
+
+        if cell_loc[1] == self.cell_counts[1] - 1:
+            dy = by - cell_loc[1] * self.cell_width
+        else:
+            dy = self.cell_width
+
+        if cell_loc[2] == self.cell_counts[2] - 1:
+            dz = bz - cell_loc[2] * self.cell_width
+        else:
+            dz = self.cell_width
+
+        return np.array([dx, dy, dz])
+
+    def propose_insertion_site(self):
+        # Find a suitably empty site for inserting a water molecule
+        # find empty cell
+        # pick a random location within said empty cell
         empty_idxs = np.argwhere(self.occupancy == 0)
         if len(empty_idxs) == 0:
             assert 0
         selected_idx = np.random.randint(0, len(empty_idxs))
-        proposal_prob = 1/len(empty_idxs)
-        grid_coords = empty_idxs[selected_idx] * self.cell_width
-        delta = np.random.rand(3) * self.cell_width
-        
-        return grid_coords + delta, proposal_prob
+        cell_idx = empty_idxs[selected_idx]
+        grid_coords = cell_idx * self.cell_width
+        delta = np.random.rand(3) * self.get_cell_widths(cell_idx)
 
+        return grid_coords + delta
 
-if __name__ == "__main__":
-    test_vh()
+    def compute_insertion_probability(self, xyz):
+        # Compute probability of
+        # 1) picking the empty cell assigned to xyz (1/num_empty_cells)
+        # 2) picking this particular location within the cell (1/cell_vol)
+        # if the cell is not empty, then the probability of insertion is zero.
+        # WARNING: corner case - edge cells have a different volume than non-edge cells
+        cell = self.get_cell(xyz)
+        cell_occ = self.occupancy[cell[0]][cell[1]][cell[2]]  # ugh
+        if cell_occ > 0:
+            return 0
+        else:
+            cell_vol = np.prod(self.get_cell_widths(cell))
+            return 1 / (self.count_zero() * cell_vol)

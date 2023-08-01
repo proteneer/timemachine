@@ -195,7 +195,6 @@ def delta_r_np(ri, rj, box):
     return diff
 
 
-
 class InsideOutsideExchangeMove(moves.MonteCarloMove):
     """
     Special case of DualRegion swaps where we have two regions V1 and V2 such that
@@ -285,7 +284,7 @@ class InsideOutsideExchangeMove(moves.MonteCarloMove):
         # delta_U_delete = -self.U_fn(coords, box, a_idxs, b_idxs)
         # delta_U_insert = self.U_fn(trial_coords, box, a_idxs, b_idxs)
         # delta_U_total = delta_U_delete + delta_U_insert
- 
+
         delta_U_total = self.delta_U_total_fn(trial_coords, coords, box, a_idxs, b_idxs)
         delta_U_total = np.asarray(delta_U_total)
 
@@ -539,7 +538,6 @@ def test_exchange():
         xvb_t = npt_mover.move(xvb_t)  # disabling this gets more moves?
 
 
-
 from timemachine.exchange_mover import voxel_hash
 
 
@@ -584,37 +582,56 @@ class GridExchangeMover(moves.MonteCarloMove):
         vh = voxel_hash.VoxelHash()
         box = x.box
         coords = x.coords
+        n_atoms = len(coords)
 
         # insert all the atoms into the voxel hash
         for c, vdw_r in zip(coords, self.vdw_radii):
             vh.delsert(c, vdw_r, 1)
 
-        # we have generate candidates by
-        # a) deleting then inserting
-        # b) inserting then deleting
-        # the grid generated are not the same, differing by the occupancy
-
-        # we do b) because we avoid inserting back into the same pocket
-        # this way.
-
-        # propose an insertion site 
-        new_center, prob_insertion = vh.propose_insertion()
-        # delete a water randomly
+        # pick a water to delete
         chosen_water = np.random.randint(self.num_waters)
         chosen_water_atoms = self.water_idxs[chosen_water]
-        chosen_water_centroid = np.mean(coords[chosen_water_atoms], axis=0)
-        old_cell = vh.get_cell(chosen_water_centroid)
-        old_occupancy = vh.occupancy[old_cell]
-        assert old_occupancy > 0
-        # centered around the oxygen?
-        for atom_idx in chosen_water_atoms:
-            vh.delsert(coords[atom_idx], self.vdw_radii[atom_idx], -1)
-        new_occupancy = vh.occupancy[old_cell]
-        assert new_occupancy == 0
-        reversal_prob = 1/vh.count_zero()
-      
+        old_coords = coords[chosen_water_atoms]
+        chosen_water_centroid = np.mean(old_coords, axis=0)
 
+        # propose an insertion site *before* we do the deletion, and compute the probability
+        new_center = vh.propose_insertion_site()
+        fwd_probability = vh.compute_insertion_probability(new_center)
 
+        # now delete the old water from the voxel hash
+        for c, vdw_r in zip(old_coords, self.vdw_radii[chosen_water_atoms]):
+            vh.delsert(c, vdw_r, -1)
+
+        new_coords = randomly_translate(old_coords, new_center)
+
+        # insert the new water
+        for c, vdw_r in zip(new_coords, self.vdw_radii[chosen_water_atoms]):
+            vh.delsert(c, vdw_r, 1)
+
+        # now compute the reverse probability of going back to the original location
+        rev_probability = vh.compute_insertion_probability(chosen_water_centroid)
+
+        a_idxs = chosen_water_atoms
+        b_idxs = np.delete(np.arange(n_atoms), a_idxs)
+
+        delta_U_total = self.delta_U_total_fn(new_coords, old_coords, box, a_idxs, b_idxs)
+        delta_U_total = np.asarray(delta_U_total)
+
+        # convert to inf if we get a nan
+        if np.isnan(delta_U_total):
+            delta_U_total = np.inf
+
+        hastings_factor = np.log(rev_probability / fwd_probability)
+        # print(hastings_factor)
+        log_p_accept = min(0, -self.beta * delta_U_total + hastings_factor)
+
+        trial_coords = coords.copy()  # can optimize this later if needed
+        trial_coords[chosen_water_atoms] = new_coords
+
+        new_state = CoordsVelBox(trial_coords, x.velocities, x.box)
+
+        return new_state, log_p_accept
+        # compute delta_U
 
 
 if __name__ == "__main__":

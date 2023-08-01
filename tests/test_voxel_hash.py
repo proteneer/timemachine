@@ -70,6 +70,7 @@ def test_insertions():
             assert vh.count_nonzero() == rvh.count_nonzero()
             assert vh.count_total() == rvh.count_total()
 
+
 def test_insert_delete():
     box = np.zeros((3, 3))
     box[0][0] = 5.5
@@ -88,6 +89,7 @@ def test_insert_delete():
     new_count = vh.count_nonzero()
     assert old_count == new_count
 
+
 def test_propose_insertion():
     np.random.seed(2023)
     box = np.zeros((3, 3))
@@ -99,16 +101,41 @@ def test_propose_insertion():
     vh.delsert(np.array([1.8, 2.5, 3.3]), 0.4, sign=1)
 
     for _ in range(1000):
-        coords, prob = vh.propose_insertion()
+        coords = vh.propose_insertion_site()
+        print(coords)
         grid_idx = np.floor(coords / vh.cell_width).astype(np.int32)
         xi, yi, zi = grid_idx
         assert vh.occupancy[xi][yi][zi] == 0
-        assert prob == 1/vh.count_zero()
 
-from openmm import app
-from timemachine.md.builders import strip_units
+        prob = vh.compute_insertion_probability(coords)
+        assert prob == 1 / (vh.count_zero() * np.prod(vh.get_cell_widths(grid_idx)))
+        assert coords[0] < box[0][0]
+        assert coords[1] < box[1][1]
+        assert coords[2] < box[2][2]
+
 
 import tqdm
+from openmm import app
+
+from timemachine.md.builders import strip_units
+
+
+def test_cell_widths():
+    box = np.zeros((3, 3))
+    box[0][0] = 1.1
+    box[1][1] = 1.25
+    box[2][2] = 0.4
+
+    vh = VoxelHash(cell_width=0.3, box=box)
+
+    np.testing.assert_array_almost_equal(vh.get_cell_widths(np.array([2, 4, 0])), np.array([0.3, 0.05, 0.3]))
+    np.testing.assert_array_almost_equal(vh.get_cell_widths(np.array([2, 3, 0])), np.array([0.3, 0.3, 0.3]))
+    np.testing.assert_array_almost_equal(vh.get_cell_widths(np.array([3, 2, 0])), np.array([0.2, 0.3, 0.3]))
+    np.testing.assert_array_almost_equal(vh.get_cell_widths(np.array([3, 4, 0])), np.array([0.2, 0.05, 0.3]))
+    np.testing.assert_array_almost_equal(vh.get_cell_widths(np.array([3, 4, 1])), np.array([0.2, 0.05, 0.1]))
+    np.testing.assert_array_almost_equal(vh.get_cell_widths(np.array([0, 0, 0])), np.array([0.3, 0.3, 0.3]))
+    np.testing.assert_array_almost_equal(vh.get_cell_widths(np.array([1, 1, 1])), np.array([0.3, 0.3, 0.1]))
+
 
 def test_water_box():
     host_pdb = app.PDBFile("timemachine/datasets/water_exchange/bb_0_waters.pdb")
