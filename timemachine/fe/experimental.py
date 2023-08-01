@@ -66,8 +66,7 @@ class DecoupleByAtomRank:
         upper_boundaries = fractional_ranks
         lower_boundaries = upper_boundaries - bin_width
 
-        slope = 1.0 / bin_width  # == self.num_stages
-        atom_lams = jnp.clip(slope * (global_lam - lower_boundaries), 0, 1)
+        atom_lams = jnp.clip(self.num_stages * (global_lam - lower_boundaries), 0, 1)
 
         # patch special case: ensure exactly 1.0 at endpoint
         # (since in jax default float32 mode, atom_lams can be 0.99999994 != 1.0 at global_lam = 1.0)
