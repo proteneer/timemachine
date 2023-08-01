@@ -36,7 +36,7 @@ def rank_atoms_by_path_length_to_src(mol, source_idxs):
     if not (min_dist < np.inf).all():
         raise ValueError("didn't expect mol graph to be disconnected")
 
-    ranks = np.argsort(min_dist)
+    ranks = np.argsort(min_dist, kind="stable")
     return ranks
 
 
