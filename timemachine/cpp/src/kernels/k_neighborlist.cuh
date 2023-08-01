@@ -72,6 +72,9 @@ void __global__ k_find_block_bounds(
         max_pos_z = min_pos_z;
     }
 
+    // Only the first thread in each warp computes the min/max of the bounding box
+    bool compute_bounds = threadIdx.x % WARP_SIZE == 0;
+
     // Build up center over time, and recenter before computing
     // min and max, to reduce overall size of box thanks to accounting
     // for periodic boundary conditions
@@ -82,7 +85,7 @@ void __global__ k_find_block_bounds(
         pos_y = __shfl_sync(0xffffffff, pos_y, src_lane);
         pos_z = __shfl_sync(0xffffffff, pos_z, src_lane);
         // Only evaluate for the first thread and when the row idx is valid
-        if (threadIdx.x % WARP_SIZE == 0 && row_idx < num_indices) {
+        if (compute_bounds && row_idx < num_indices) {
             imaged_pos =
                 pos_x - box_x * nearbyint((pos_x - static_cast<RealType>(0.5) * (max_pos_x + min_pos_x)) * inv_bx);
             min_pos_x = min(min_pos_x, imaged_pos);
