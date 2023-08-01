@@ -22,6 +22,10 @@ class VoxelHash:
     def count_nonzero(self):
         return np.count_nonzero(self.occupancy)
 
+    def count_zero(self):
+        return np.count_nonzero(self.occupancy == 0)
+
+
     def count_total(self):
         return np.sum(self.occupancy)
 
@@ -42,6 +46,7 @@ class VoxelHash:
         y_max = min(y_max, y_min + self.cell_counts[1] - 1)
         z_max = min(z_max, z_min + self.cell_counts[2] - 1)
 
+        # print("frac", ((x_max-x_min)*(y_max-y_min)*(z_max-z_min))/(np.prod(self.cell_counts)))
         # optimize into bounding sphere, not box
         debug = set()
         for xi in range(x_min, x_max + 1):
@@ -74,19 +79,17 @@ class VoxelHash:
 
         return debug
 
-
-def test_vh():
-    # 5Angstrom
-    box = np.zeros((3, 3))
-    box[0] = 5.5
-    box[1] = 4.6
-    box[2] = 6.7
-
-    vh = VoxelHash(cell_width=0.2, box=box)
-    vh.delsert(np.array([1.8, 2.5, 3.3]), 0.4, sign=1)
-    print(np.sum(vh.occupancy))
-    vh.delsert(np.array([1.8, 2.5, 3.3]), 0.4, sign=-1)
-    print(np.sum(vh.occupancy))
+    def propose_insertion(self):
+        # modify later exp(-occupancy), eg. fractional occupancies if needed
+        empty_idxs = np.argwhere(self.occupancy == 0)
+        if len(empty_idxs) == 0:
+            assert 0
+        selected_idx = np.random.randint(0, len(empty_idxs))
+        proposal_prob = 1/len(empty_idxs)
+        grid_coords = empty_idxs[selected_idx] * self.cell_width
+        delta = np.random.rand(3) * self.cell_width
+        
+        return grid_coords + delta, proposal_prob
 
 
 if __name__ == "__main__":

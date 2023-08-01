@@ -70,9 +70,7 @@ def test_insertions():
             assert vh.count_nonzero() == rvh.count_nonzero()
             assert vh.count_total() == rvh.count_total()
 
-
 def test_insert_delete():
-    # 5Angstrom
     box = np.zeros((3, 3))
     box[0][0] = 5.5
     box[1][1] = 4.6
@@ -88,5 +86,47 @@ def test_insert_delete():
     old_count = vh.count_nonzero()
     vh.delsert(np.array([1.8, 2.5, 3.3]), 0.4, sign=1)
     new_count = vh.count_nonzero()
-
     assert old_count == new_count
+
+def test_propose_insertion():
+    np.random.seed(2023)
+    box = np.zeros((3, 3))
+    box[0][0] = 5.5
+    box[1][1] = 4.6
+    box[2][2] = 6.7
+
+    vh = VoxelHash(cell_width=0.2, box=box)
+    vh.delsert(np.array([1.8, 2.5, 3.3]), 0.4, sign=1)
+
+    for _ in range(1000):
+        coords, prob = vh.propose_insertion()
+        grid_idx = np.floor(coords / vh.cell_width).astype(np.int32)
+        xi, yi, zi = grid_idx
+        assert vh.occupancy[xi][yi][zi] == 0
+        assert prob == 1/vh.count_zero()
+
+from openmm import app
+from timemachine.md.builders import strip_units
+
+import tqdm
+
+def test_water_box():
+    host_pdb = app.PDBFile("timemachine/datasets/water_exchange/bb_0_waters.pdb")
+    host_coords = strip_units(host_pdb.positions)
+    box_lengths = np.amax(host_coords, axis=0) - np.amin(host_coords, axis=0)
+    box_lengths = box_lengths + 0.2
+    box = np.eye(3, dtype=np.float64) * box_lengths
+
+    cw = 0.2
+    vh = VoxelHash(cell_width=cw, box=box)
+
+    # print(box)
+    # insert only water vdw radiis
+    for coords in tqdm.tqdm(host_coords[::3]):
+        vdw = 0.4
+        # print("inserting", coords)
+        vh.delsert(coords, vdw, sign=1)
+
+    print(vh.count_total())
+    print(vh.count_zero())
+    print(vh.count_nonzero())

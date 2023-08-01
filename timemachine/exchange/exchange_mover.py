@@ -195,6 +195,7 @@ def delta_r_np(ri, rj, box):
     return diff
 
 
+
 class InsideOutsideExchangeMove(moves.MonteCarloMove):
     """
     Special case of DualRegion swaps where we have two regions V1 and V2 such that
@@ -536,6 +537,86 @@ def test_exchange():
 
         # run MD
         xvb_t = npt_mover.move(xvb_t)  # disabling this gets more moves?
+
+
+
+from timemachine.exchange_mover import voxel_hash
+
+
+class GridExchangeMover(moves.MonteCarloMove):
+    """
+    Insertions are biased by means of a grid exchange move
+
+    # tbd modify with initial coords
+    """
+
+    def __init__(self, nb_params, nb_beta, nb_cutoff, water_idxs, ligand_idxs, radius):
+        self.nb_beta = nb_beta
+        self.nb_cutoff = nb_cutoff
+        self.nb_params = jnp.array(nb_params)
+        self.num_waters = len(water_idxs)
+        self.water_idxs = water_idxs
+        self.ligand_idxs = ligand_idxs  # used to determine center of sphere
+        self.beta = 1 / DEFAULT_KT
+        self.radius = radius
+
+        self.vdw_radii = nb_params[:, 1]
+
+        # @jax.jit
+        def U_fn(conf, box, a_idxs, b_idxs):
+            # compute the energy of an interaction group
+            conf_i = conf[a_idxs]
+            conf_j = conf[b_idxs]
+            params_i = self.nb_params[a_idxs]
+            params_j = self.nb_params[b_idxs]
+            return nonbonded.nonbonded_block(conf_i, conf_j, box, params_i, params_j, self.nb_beta, self.nb_cutoff)
+
+        @jax.jit
+        def delta_U_total_fn(trial_coords, coords, box, a_idxs, b_idxs):
+            delta_U_insert = U_fn(trial_coords, box, a_idxs, b_idxs)
+            delta_U_delete = -U_fn(coords, box, a_idxs, b_idxs)
+            delta_U_total = delta_U_delete + delta_U_insert
+            return delta_U_total
+
+        self.delta_U_total_fn = delta_U_total_fn
+
+    def propose(self, x: CoordsVelBox) -> Tuple[CoordsVelBox, float]:
+        vh = voxel_hash.VoxelHash()
+        box = x.box
+        coords = x.coords
+
+        # insert all the atoms into the voxel hash
+        for c, vdw_r in zip(coords, self.vdw_radii):
+            vh.delsert(c, vdw_r, 1)
+
+        # we have generate candidates by
+        # a) deleting then inserting
+        # b) inserting then deleting
+        # the grid generated are not the same, differing by the occupancy
+
+        # we do b) because we avoid inserting back into the same pocket
+        # this way.
+
+        # propose an insertion site 
+        new_center, prob_insertion = vh.propose_insertion()
+
+        # delete a water randomly
+        chosen_water = np.random.randint(self.num_waters)
+        chosen_water_atoms = self.water_idxs[chosen_water]
+
+        # centered around the oxygen?
+        for atom_idx in chosen_water_atoms:
+            vh.delsert(coords[atom_idx], self.vdw_radii[atom_idx], -1)
+
+        vh.count_zero()
+
+
+        vh.delsert(new_center)
+
+        # center = np.mean(coords[self.ligand_idxs], axis=0)
+        
+
+
 
 
 if __name__ == "__main__":
