@@ -6,7 +6,7 @@ import pytest
 from timemachine.testsystems.relative import get_hif2a_ligand_pair_single_topology
 from timemachine.training.dataset import Dataset
 
-pytestmark = [pytest.mark.nogpu]
+pytestmark = [pytest.mark.nocuda]
 
 
 class TestDataset(unittest.TestCase):

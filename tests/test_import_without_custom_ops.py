@@ -1,6 +1,6 @@
 import pytest
 
-pytestmark = [pytest.mark.nogpu]
+pytestmark = [pytest.mark.nocuda]
 
 
 def test_import_potentials_without_custom_ops():

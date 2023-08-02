@@ -3,8 +3,8 @@ import pytest
 
 from timemachine.fe.plots import plot_forward_and_reverse_ddg, plot_forward_and_reverse_dg
 
-# All plotting tests are to be tested without gpus
-pytestmark = [pytest.mark.nogpu]
+# Plotting code should not depend on CUDA
+pytestmark = [pytest.mark.nocuda]
 
 
 def test_forward_and_reverse_ddg_plot():

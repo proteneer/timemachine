@@ -14,7 +14,7 @@ from timemachine import parallel
 from timemachine.parallel import client
 from timemachine.parallel.utils import batch_list
 
-pytestmark = [pytest.mark.nogpu]
+pytestmark = [pytest.mark.nocuda]
 
 
 def jax_fn(x):

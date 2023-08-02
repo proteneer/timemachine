@@ -19,8 +19,9 @@ from jax import numpy as jnp
 
 from timemachine.md.barker import BarkerProposal
 
+pytestmark = [pytest.mark.nocuda]
 
-@pytest.mark.nogpu
+
 def test_barker_shapes():
     def grad_log_q(x):
         return np.ones_like(x)
@@ -39,7 +40,6 @@ def test_barker_shapes():
         assert np.isscalar(logpdf)
 
 
-@pytest.mark.nogpu
 @pytest.mark.parametrize("x0", [-1, 0, +1])
 @pytest.mark.parametrize("proposal_sig", [0.1, 1.0])
 def test_proposal_normalization(x0, proposal_sig):
@@ -59,7 +59,6 @@ def test_proposal_normalization(x0, proposal_sig):
     assert Z == pytest.approx(1)
 
 
-@pytest.mark.nogpu
 def test_accurate_mcmc(threshold=1e-4):
     def log_q(x):
         return np.sum(-(x ** 4))
@@ -107,7 +106,6 @@ def test_accurate_mcmc(threshold=1e-4):
     assert histogram_mse < threshold
 
 
-@pytest.mark.nogpu
 @pytest.mark.parametrize("proposal_sig", [0.1, 1.0])
 @pytest.mark.parametrize("seed", range(5))
 def test_proposal_magnitude_independent_of_force_magnitude(proposal_sig, seed):

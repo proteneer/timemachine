@@ -13,7 +13,7 @@ from timemachine.optimize.protocol import (
 
 np.random.seed(2021)
 
-pytestmark = [pytest.mark.nogpu]
+pytestmark = [pytest.mark.nocuda]
 
 
 def test_rebalance_initial_protocol():

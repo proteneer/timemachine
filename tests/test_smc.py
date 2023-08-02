@@ -15,7 +15,7 @@ from timemachine.md.smc import (
 )
 from timemachine.testsystems.gaussian1d import make_gaussian_testsystem
 
-pytestmark = [pytest.mark.nogpu]
+pytestmark = [pytest.mark.nocuda]
 
 
 def generate_log_weights(n):

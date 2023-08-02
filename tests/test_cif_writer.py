@@ -12,8 +12,9 @@ from timemachine.ff import Forcefield
 from timemachine.md import builders
 from timemachine.testsystems.relative import get_hif2a_ligand_pair_single_topology
 
+pytestmark = [pytest.mark.nocuda]
 
-@pytest.mark.nogpu
+
 def test_write_single_topology_frame():
     mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
     forcefield = Forcefield.load_default()
@@ -43,7 +44,6 @@ def test_write_single_topology_frame():
 
 
 @pytest.mark.parametrize("n_frames", [1, 4, 5])
-@pytest.mark.nogpu
 def test_cif_writer_context(n_frames):
     mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
 
@@ -59,7 +59,6 @@ def test_cif_writer_context(n_frames):
 
 
 @pytest.mark.parametrize("n_frames", [1, 4, 5])
-@pytest.mark.nogpu
 def test_cif_writer(n_frames):
 
     ff = Forcefield.load_default()

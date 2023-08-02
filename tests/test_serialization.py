@@ -5,7 +5,7 @@ from timemachine.ff.handlers import bonded, nonbonded
 from timemachine.ff.handlers.deserialize import deserialize_handlers
 from timemachine.ff.handlers.serialize import bin_to_str
 
-pytestmark = [pytest.mark.nogpu]
+pytestmark = [pytest.mark.nocuda]
 
 
 def test_harmonic_bond():
