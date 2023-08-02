@@ -56,8 +56,6 @@ nocuda-tests:
     - cpu
   rules:
     - if: $CI_EXTERNAL_PULL_REQUEST_IID
-  variables:
-    CMAKE_ARGS: -DCUDA_ARCH=75
   script:
     - SKIP_CUSTOM_OPS=1 pip install .[test]
     - make nocuda_tests
