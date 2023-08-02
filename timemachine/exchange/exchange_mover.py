@@ -264,7 +264,7 @@ class InsideOutsideExchangeMove(moves.MonteCarloMove):
         chosen_water = np.random.choice(vi_mols)
         chosen_water_atoms = self.water_idxs[chosen_water]
         new_coords = coords[chosen_water_atoms]
-        # remove centroid
+        # remove centroid and offset into insertion site
         new_coords = new_coords - np.mean(new_coords, axis=0) + vj_insertion_fn()
 
         # debug
@@ -284,7 +284,7 @@ class InsideOutsideExchangeMove(moves.MonteCarloMove):
         # delta_U_delete = -self.U_fn(coords, box, a_idxs, b_idxs)
         # delta_U_insert = self.U_fn(trial_coords, box, a_idxs, b_idxs)
         # delta_U_total = delta_U_delete + delta_U_insert
- 
+
         delta_U_total = self.delta_U_total_fn(trial_coords, coords, box, a_idxs, b_idxs)
         delta_U_total = np.asarray(delta_U_total)
 
