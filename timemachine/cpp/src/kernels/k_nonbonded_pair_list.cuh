@@ -91,8 +91,6 @@ void __global__ k_nonbonded_pair_list(
     unsigned long long g_epsj = 0;
     unsigned long long g_wj = 0;
 
-    RealType real_beta = static_cast<RealType>(beta);
-
     RealType real_cutoff = static_cast<RealType>(cutoff);
     RealType cutoff_squared = real_cutoff * real_cutoff;
 
@@ -123,14 +121,13 @@ void __global__ k_nonbonded_pair_list(
     if (d2ij < cutoff_squared) {
 
         RealType ebd;
-        RealType es_prefactor;
+        RealType delta_prefactor;
         RealType dij;
         RealType inv_dij;
         RealType inv_d2ij;
         compute_electrostatics<RealType, true>(
-            charge_scale, qi, qj, d2ij, beta, dij, inv_dij, inv_d2ij, ebd, es_prefactor, u);
+            charge_scale, qi, qj, d2ij, static_cast<RealType>(beta), dij, inv_dij, inv_d2ij, ebd, delta_prefactor, u);
 
-        RealType delta_prefactor = es_prefactor;
         // lennard jones force
         if (eps_i != 0 && eps_j != 0) {
             RealType sig_grad;
