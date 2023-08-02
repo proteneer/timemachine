@@ -537,10 +537,8 @@ def estimate_relative_free_energy_bisection(
 
     assert len(keep_idxs) <= n_windows
 
-    if min_overlap is not None and keep_idxs not in [None, [0, -1], list(range(n_windows))]:
-        raise ValueError(
-            "when min_overlap is not None, keep_idxs must be equal to one of None, [0, -1], or list(range(n_windows))"
-        )
+    if min_overlap is not None and keep_idxs is not None and not all(i in {0, -1} for i in keep_idxs):
+        raise ValueError("when min_overlap is not None, keep_idxs must be None or a list with all elements in {0, -1}")
 
     single_topology = SingleTopology(mol_a, mol_b, core, ff)
 
