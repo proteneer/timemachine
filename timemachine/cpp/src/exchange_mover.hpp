@@ -1,4 +1,5 @@
 #include <vector>
+#include <array>
 
 namespace timemachine {
 
@@ -17,7 +18,7 @@ public:
     void get_water_groups(
         const std::vector<double> &coords,
         const std::array<double, 9> &box,
-        const std::vector<double> &center,
+        const std::array<double, 3> &center,
         std::vector<int> &v1_mols,
         std::vector<int> &v2_mols) const;
 
@@ -29,7 +30,9 @@ public:
         const std::array<double, 3> &center,
         bool insertion_mode,
         double vol_i,
-        double vol_j);
+        double vol_j,
+        std::vector<double> &proposal_coords,
+        double &log_prob) const;
 
 private:
     const double nb_beta_;
@@ -39,6 +42,7 @@ private:
     const std::vector<int> ligand_idxs_;
     const double beta_;
     const double radius_;
+
 };
 
 } // namespace timemachine

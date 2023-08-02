@@ -10,9 +10,9 @@ double periodic_distance(const double *ri, const double *rj, double bx, double b
     double dx = ri[0] - rj[0];
     double dy = ri[1] - rj[1];
     double dz = ri[2] - rj[2];
-    dx -= bx * (dx / bx + 0.5);
-    dy -= by * (dy / by + 0.5);
-    dz -= bz * (dz / bz + 0.5);
+    dx -= bx * nearbyint(dx / bx);
+    dy -= by * nearbyint(dy / by);
+    dz -= bz * nearbyint(dz / bz);
     return sqrt(dx * dx + dy * dy + dz * dz);
 }
 
@@ -159,7 +159,7 @@ InsideOutsideExchangeMover::InsideOutsideExchangeMover(
 void InsideOutsideExchangeMover::get_water_groups(
     const std::vector<double> &coords,
     const std::array<double, 9> &box,
-    const std::vector<double> &center,
+    const std::array<double, 3> &center,
     std::vector<int> &v1_mols,
     std::vector<int> &v2_mols) const {
 
@@ -167,11 +167,25 @@ void InsideOutsideExchangeMover::get_water_groups(
     double by = box[1 * 3 + 1];
     double bz = box[2 * 3 + 2];
 
-    int N = coords.size() / 3;
+    // int N = coords.size() / 3;
     v1_mols.clear();
     v2_mols.clear();
-    for (int i = 0; i < N; i++) {
-        double dij = periodic_distance(&coords[i * 3], &center[0], bx, by, bz);
+
+    for(size_t i=0; i < water_idxs_.size()/3; i++) {
+    
+        int o_idx = water_idxs_[i*3+0];
+        int h1_idx = water_idxs_[i*3+1];
+        int h2_idx = water_idxs_[i*3+2];
+
+        std::array<double, 9> water_coords({
+            coords[o_idx*3+0], coords[o_idx*3+1], coords[o_idx*3+2],
+            coords[h1_idx*3+0], coords[h1_idx*3+1], coords[h1_idx*3+2],
+            coords[h2_idx*3+0], coords[h2_idx*3+1], coords[h2_idx*3+2],
+        });
+
+        std::array<double, 3> centroid = compute_centroid(&water_coords[0], 3);
+
+        double dij = periodic_distance(&centroid[0], &center[0], bx, by, bz);
         if (dij < this->radius_) {
             v1_mols.push_back(i);
         } else {
@@ -188,10 +202,11 @@ void InsideOutsideExchangeMover::swap_vi_into_vj(
     const std::array<double, 3> &center,
     bool insertion_mode,
     double vol_i,
-    double vol_j) {
+    double vol_j,
+    std::vector<double> &proposal_coords,
+    double &log_prob) const {
 
     int num_atoms = coords.size();
-
     int chosen_water = vi_mols[rand() % vi_mols.size()];
 
     // get indices of selected atoms
@@ -214,10 +229,15 @@ void InsideOutsideExchangeMover::swap_vi_into_vj(
         new_center = v2_insertion(radius_, center, box);
     }
 
-    // sample water
-    // new_coords = ...
-    // optimization - we can revert coordinates later to avoid having to copy this
+    std::array<double, 3> new_coords_centroid = compute_centroid(&new_coords[0], 3);
 
+    for (int i = 0; i < 3; i++) {
+        new_coords[i * 3 + 0] = new_coords[i * 3 + 0] - new_coords_centroid[0] + new_center[0];
+        new_coords[i * 3 + 1] = new_coords[i * 3 + 1] - new_coords_centroid[1] + new_center[1];
+        new_coords[i * 3 + 2] = new_coords[i * 3 + 2] - new_coords_centroid[2] + new_center[2];
+    }
+
+    // sample water
     std::vector<double> trial_coords(coords);
     for (int i = 0; i < 3; i++) {
         int atom_idx = chosen_water_atom_idxs[i];
@@ -242,7 +262,8 @@ void InsideOutsideExchangeMover::swap_vi_into_vj(
     size_t nj = vj_mols.size();
 
     double hastings_factor = log((ni * vol_j) / ((nj + 1) * vol_i));
-    double log_p_accept = std::min(0.0, -beta_ * delta_U_total + hastings_factor);
+    log_prob = std::min(0.0, -beta_ * delta_U_total + hastings_factor);
+    proposal_coords = trial_coords;
 }
 
 } // namespace timemachine

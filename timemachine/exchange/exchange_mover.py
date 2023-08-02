@@ -203,14 +203,14 @@ class InsideOutsideExchangeMove(moves.MonteCarloMove):
     This class explicitly attempts swaps between the two regions with equal probability.
     """
 
-    def __init__(self, nb_params, nb_beta, nb_cutoff, water_idxs, ligand_idxs, radius):
+    def __init__(self, nb_beta, nb_cutoff, nb_params, water_idxs, ligand_idxs, beta, radius):
         self.nb_beta = nb_beta
         self.nb_cutoff = nb_cutoff
         self.nb_params = jnp.array(nb_params)
         self.num_waters = len(water_idxs)
         self.water_idxs = water_idxs
         self.ligand_idxs = ligand_idxs  # used to determine center of sphere
-        self.beta = 1 / DEFAULT_KT
+        self.beta = beta
         self.radius = radius
 
         # @jax.jit
@@ -473,7 +473,13 @@ def test_exchange():
 
     bb_radius = 0.46
     exc_mover = InsideOutsideExchangeMove(
-        nb_water_ligand_params, nb_beta, nb_cutoff, water_idxs, initial_state.ligand_idxs, bb_radius
+        nb_beta,
+        nb_cutoff,
+        nb_water_ligand_params,
+        water_idxs,
+        initial_state.ligand_idxs,
+        1/DEFAULT_KT,
+        bb_radius
     )
     cur_box = initial_state.box0
     cur_x_t = initial_state.x0
