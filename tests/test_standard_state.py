@@ -7,7 +7,7 @@ import scipy.integrate
 from timemachine.fe import standard_state
 from timemachine.potentials import rmsd
 
-pytestmark = [pytest.mark.nogpu]
+pytestmark = [pytest.mark.nocuda]
 
 
 def test_translational_restraint():

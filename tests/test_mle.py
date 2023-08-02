@@ -9,7 +9,7 @@ from scipy.stats import linregress
 
 from timemachine.fe.mle import infer_node_vals, infer_node_vals_and_errs, infer_node_vals_and_errs_networkx
 
-pytestmark = [pytest.mark.nogpu]
+pytestmark = [pytest.mark.nocuda]
 
 
 def generate_instance(g: nx.Graph, edge_noise_stddev=0.0):

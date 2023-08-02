@@ -7,7 +7,7 @@ from timemachine.fe import chiral_utils, utils
 from timemachine.fe.chiral_utils import ChiralCheckMode, ChiralRestrIdxSet, find_atom_map_chiral_conflicts
 from timemachine.potentials.chiral_restraints import U_chiral_atom_batch, U_chiral_bond_batch
 
-pytestmark = [pytest.mark.nogpu]
+pytestmark = [pytest.mark.nocuda]
 
 
 def test_setup_chiral_atom_restraints():

@@ -14,7 +14,7 @@ from timemachine.integrator import LangevinIntegrator
 from timemachine.testsystems.relative import get_hif2a_ligand_pair_single_topology
 
 
-@pytest.mark.nogpu
+@pytest.mark.nocuda
 def test_reference_langevin_integrator(threshold=1e-4):
     """Assert approximately canonical sampling of e^{-x^4 / kBT},
     for various settings of temperature, friction, timestep, and mass"""
@@ -58,7 +58,7 @@ def test_reference_langevin_integrator(threshold=1e-4):
         assert histogram_mse < threshold
 
 
-@pytest.mark.nogpu
+@pytest.mark.nocuda
 def test_reference_langevin_integrator_deterministic():
     """Asserts that trajectories are deterministic given a seed value"""
     force_fxn = lambda x: -4 * x ** 3
@@ -82,7 +82,7 @@ def test_reference_langevin_integrator_deterministic():
     assert_deterministic(lambda seed: langevin.multiple_steps_lax(jax.random.PRNGKey(seed), x0, v0))
 
 
-@pytest.mark.nogpu
+@pytest.mark.nocuda
 def test_reference_langevin_integrator_consistent():
     """
     Asserts that the result of the implementation based on jax.lax

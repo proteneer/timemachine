@@ -18,7 +18,7 @@ from timemachine.fe.utils import get_romol_bonds
 # root-anchor - first atom in an anchor group, also the anchor atom that has direct 1-2 bonds to dummy atoms.
 # partition - only applies to dummy groups, as we require that dummy groups disjointly partition dummy atoms.
 
-pytestmark = [pytest.mark.nogpu]
+pytestmark = [pytest.mark.nocuda]
 
 
 def test_generate_dummy_group_assignments():

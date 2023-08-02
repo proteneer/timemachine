@@ -8,7 +8,7 @@ from timemachine.fe import model_utils, utils
 from timemachine.fe.model_utils import image_frame, image_molecule
 from timemachine.ff import Forcefield
 
-pytestmark = [pytest.mark.nogpu]
+pytestmark = [pytest.mark.nocuda]
 
 
 def test_sanitize_energies():
