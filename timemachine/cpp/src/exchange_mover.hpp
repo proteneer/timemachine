@@ -23,12 +23,14 @@ public:
         std::vector<int> &v2_mols) const;
 
     void swap_vi_into_vj(
-        const std::vector<int> &vi_mols,
-        const std::vector<int> &vj_mols,
+        int chosen_water,
+        int N_i,
+        int N_j,
+        // const std::vector<int> &vi_mols,
+        // const std::vector<int> &vj_mols,
         const std::vector<double> &coords,
         const std::array<double, 9> &box,
-        const std::array<double, 3> &center,
-        bool insertion_mode,
+        const std::array<double, 3> &insertion_site,
         double vol_i,
         double vol_j,
         std::vector<double> &proposal_coords,

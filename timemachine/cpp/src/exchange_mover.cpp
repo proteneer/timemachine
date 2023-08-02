@@ -2,6 +2,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <iostream>
 #include <random>
 
 namespace timemachine {
@@ -92,22 +93,29 @@ double U_fn(
 
     double nrg = 0;
 
-    for (size_t i = 0; i < a_idxs.size(); i++) {
-        double xi = coords[i * 3 + 0];
-        double yi = coords[i * 3 + 1];
-        double zi = coords[i * 3 + 2];
+    for (size_t a = 0; a < a_idxs.size(); a++) {
 
-        double qi = nb_params[i * 4 + 0];
-        double sigi = nb_params[i * 4 + 1];
-        double epsi = nb_params[i * 4 + 2];
-        for (size_t j = 0; j < b_idxs.size(); j++) {
-            double xj = coords[j * 3 + 0];
-            double yj = coords[j * 3 + 1];
-            double zj = coords[j * 3 + 2];
+        size_t ii = a_idxs[a];
 
-            double qj = nb_params[j * 4 + 0];
-            double sigj = nb_params[j * 4 + 1];
-            double epsj = nb_params[j * 4 + 2];
+        double xi = coords[ii * 3 + 0];
+        double yi = coords[ii * 3 + 1];
+        double zi = coords[ii * 3 + 2];
+
+        double qi = nb_params[ii * 4 + 0];
+        double sigi = nb_params[ii * 4 + 1];
+        double epsi = nb_params[ii * 4 + 2];
+
+        for (size_t b = 0; b < b_idxs.size(); b++) {
+
+            size_t jj = b_idxs[b];
+
+            double xj = coords[jj * 3 + 0];
+            double yj = coords[jj * 3 + 1];
+            double zj = coords[jj * 3 + 2];
+
+            double qj = nb_params[jj * 4 + 0];
+            double sigj = nb_params[jj * 4 + 1];
+            double epsj = nb_params[jj * 4 + 2];
 
             double delta_x = xi - xj;
             double delta_y = yi - yj;
@@ -167,7 +175,6 @@ void InsideOutsideExchangeMover::get_water_groups(
     double by = box[1 * 3 + 1];
     double bz = box[2 * 3 + 2];
 
-    // int N = coords.size() / 3;
     v1_mols.clear();
     v2_mols.clear();
 
@@ -194,24 +201,37 @@ void InsideOutsideExchangeMover::get_water_groups(
     }
 }
 
+
 void InsideOutsideExchangeMover::swap_vi_into_vj(
-    const std::vector<int> &vi_mols,
-    const std::vector<int> &vj_mols,
+    int chosen_water,
+    int N_i,
+    int N_j,
     const std::vector<double> &coords,
     const std::array<double, 9> &box,
-    const std::array<double, 3> &center,
-    bool insertion_mode,
+    const std::array<double, 3> &insertion_site,
     double vol_i,
     double vol_j,
     std::vector<double> &proposal_coords,
     double &log_prob) const {
 
-    int num_atoms = coords.size();
-    int chosen_water = vi_mols[rand() % vi_mols.size()];
+
+    // proposal_coords = coords;
+    // log_prob = 0;
+    // return;
+
+    int num_atoms = coords.size() / 3;
+    // int chosen_water = vi_mols[rand() % vi_mols.size()];
+    // int chosen_water = vi_mols[rand() % vi_mols.size()];
+
+    std::cout << chosen_water << " " << water_idxs_.size() << std::endl;
 
     // get indices of selected atoms
-    std::array<int, 3> chosen_water_atom_idxs(
-        {water_idxs_[chosen_water * 3 + 0], water_idxs_[chosen_water * 3 + 1], water_idxs_[chosen_water * 3 + 2]});
+    std::array<int, 3> chosen_water_atom_idxs({
+        water_idxs_[chosen_water * 3 + 0],
+        water_idxs_[chosen_water * 3 + 1],
+        water_idxs_[chosen_water * 3 + 2]
+    });
+
 
     // get old coordinates of the atoms
     std::array<double, 9> new_coords;
@@ -222,19 +242,12 @@ void InsideOutsideExchangeMover::swap_vi_into_vj(
         new_coords[i * 3 + 2] = coords[atom_idx * 3 + 2];
     }
 
-    std::array<double, 3> new_center;
-    if (insertion_mode) {
-        new_center = v1_insertion(radius_, center);
-    } else {
-        new_center = v2_insertion(radius_, center, box);
-    }
-
     std::array<double, 3> new_coords_centroid = compute_centroid(&new_coords[0], 3);
 
     for (int i = 0; i < 3; i++) {
-        new_coords[i * 3 + 0] = new_coords[i * 3 + 0] - new_coords_centroid[0] + new_center[0];
-        new_coords[i * 3 + 1] = new_coords[i * 3 + 1] - new_coords_centroid[1] + new_center[1];
-        new_coords[i * 3 + 2] = new_coords[i * 3 + 2] - new_coords_centroid[2] + new_center[2];
+        new_coords[i * 3 + 0] = new_coords[i * 3 + 0] - new_coords_centroid[0] + insertion_site[0];
+        new_coords[i * 3 + 1] = new_coords[i * 3 + 1] - new_coords_centroid[1] + insertion_site[1];
+        new_coords[i * 3 + 2] = new_coords[i * 3 + 2] - new_coords_centroid[2] + insertion_site[2];
     }
 
     // sample water
@@ -248,20 +261,42 @@ void InsideOutsideExchangeMover::swap_vi_into_vj(
 
     std::array<int, 3> a_idxs(chosen_water_atom_idxs);
     // set difference
-    std::vector<int> b_idxs(num_atoms);
+    std::vector<int> b_idxs;
     for (int i = 0; i < num_atoms; i++) {
-        b_idxs[i] = i;
+        bool found = false;
+        for(auto a : a_idxs) {
+            if(i==a) {
+                std::cout << "skipping " << i << std::endl;
+                found = true;
+            }
+        }
+        if(!found) {
+            b_idxs.push_back(i);
+        }
     }
-    b_idxs.erase(b_idxs.begin() + chosen_water * 3, b_idxs.begin() + (chosen_water + 1) * 3);
+    // b_idxs.erase(b_idxs.begin() + chosen_water * 3, b_idxs.begin() + (chosen_water + 1) * 3);
+
+    std::cout << a_idxs.size() << " " << b_idxs.size() << std::endl;
+    for(auto x : a_idxs) {
+        std::cout << x << std::endl;
+    }
 
     double delta_U_insert = U_fn(trial_coords, box, nb_beta_, nb_cutoff_, nb_params_, a_idxs, b_idxs);
+
+
+    // std::cout << "DU_INSERT_: " << delta_U_insert << std::endl;
     double delta_U_delete = -U_fn(coords, box, nb_beta_, nb_cutoff_, nb_params_, a_idxs, b_idxs);
+    // double delta_U_delete = 0;
     double delta_U_total = delta_U_delete + delta_U_insert;
 
-    size_t ni = vi_mols.size();
-    size_t nj = vj_mols.size();
+    std::cout << delta_U_delete << " " << delta_U_insert << std::endl;
 
-    double hastings_factor = log((ni * vol_j) / ((nj + 1) * vol_i));
+    // size_t ni = vi_mols.size();
+    // size_t nj = vj_mols.size();
+
+    double hastings_factor = log((N_i * vol_j) / ((N_j + 1) * vol_i));
+
+    std::cout << "HF " << hastings_factor << std::endl;
     log_prob = std::min(0.0, -beta_ * delta_U_total + hastings_factor);
     proposal_coords = trial_coords;
 }

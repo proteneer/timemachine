@@ -301,6 +301,61 @@ class InsideOutsideExchangeMove(moves.MonteCarloMove):
 
         return new_state, log_p_accept
 
+    def swap_vi_into_vj_impl(
+        self,
+        chosen_water,
+        N_i,
+        N_j,
+        # x: CoordsVelBox,
+        coords,
+        box,
+        insertion_site: np.array,
+        vol_i: float,
+        vol_j: float):
+
+        assert N_i + N_j == len(self.water_idxs)
+        # swap a water molecule from region vi to region vj
+        # coords, box = x.coords, x.box
+        # chosen_water = np.random.choice(vi_mols)
+        chosen_water_atoms = self.water_idxs[chosen_water]
+        new_coords = coords[chosen_water_atoms]
+        # remove centroid and offset into insertion site
+        new_coords = new_coords - np.mean(new_coords, axis=0) + insertion_site
+
+        # debug
+        # insertion_into_buckyball = len(vi_mols) > len(vj_mols)
+        # if insertion_into_buckyball:
+        # new_coords
+
+        trial_coords = coords.copy()  # can optimize this later if needed
+        trial_coords[chosen_water_atoms] = new_coords
+
+        n_atoms = len(coords)
+        a_idxs = chosen_water_atoms
+        b_idxs = np.delete(np.arange(n_atoms), a_idxs)
+
+        # we can probably speed this up even more if we use an incremental voxel_map
+        # (reduce complexity from O(N) to O(K))
+        # delta_U_delete = -self.U_fn(coords, box, a_idxs, b_idxs)
+        # delta_U_insert = self.U_fn(trial_coords, box, a_idxs, b_idxs)
+        # delta_U_total = delta_U_delete + delta_U_insert
+
+        delta_U_total = self.delta_U_total_fn(trial_coords, coords, box, a_idxs, b_idxs)
+        delta_U_total = np.asarray(delta_U_total)
+
+        # convert to inf if we get a nan
+        if np.isnan(delta_U_total):
+            delta_U_total = np.inf
+
+        # ni = len(vi_mols)
+        # nj = len(vj_mols)
+        hastings_factor = np.log((N_i * vol_j) / ((N_j + 1) * vol_i))
+        # print("REF HF", hastings_factor)
+        log_p_accept = min(0, -self.beta * delta_U_total + hastings_factor)
+        # new_state = CoordsVelBox(trial_coords, x.velocities, x.box)
+
+        return trial_coords, log_p_accept
+
     def propose(self, x: CoordsVelBox) -> Tuple[CoordsVelBox, float]:
         box = x.box
         coords = x.coords

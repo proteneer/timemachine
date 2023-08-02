@@ -1271,14 +1271,11 @@ void declare_inside_outside_exchange_mover(py::module &m) {
                 std::array<double, 9> arr_box;
                 std::memcpy(arr_box.data(), box.data(), box.size() * sizeof(double));
 
-
                 std::array<double, 3> arr_center;
                 std::memcpy(arr_center.data(), center.data(), center.size() * sizeof(double));
 
                 std::vector<int> v1_mols;
                 std::vector<int> v2_mols;
- 
-
 
                 ioem.get_water_groups(vec_coords, arr_box, arr_center, v1_mols, v2_mols);
  
@@ -1290,6 +1287,58 @@ void declare_inside_outside_exchange_mover(py::module &m) {
 
 
                 return py::make_tuple(out_v1_mols, out_v2_mols);
+
+        })
+        .def(
+            "swap_vi_into_vj",
+            [](timemachine::InsideOutsideExchangeMover &ioem,
+                int chosen_water, 
+                int N_i,
+                int N_j,
+                const py::array_t<double, py::array::c_style> &coords,
+                const py::array_t<double, py::array::c_style> &box,
+                const py::array_t<double, py::array::c_style> &insertion_site,
+                double vol_i,
+                double vol_j) -> py::tuple {
+
+                const long unsigned int N = coords.shape()[0];
+                const long unsigned int D = coords.shape()[1];
+
+                verify_coords_and_box(coords, box);
+                // std::cout << coords.size() << " " << box.size() << " " << insertion_site.size() << std::endl;
+
+                std::vector<double> vec_coords(coords.size());
+                std::memcpy(vec_coords.data(), coords.data(), coords.size() * sizeof(double));
+                std::array<double, 9> arr_box;
+                std::memcpy(arr_box.data(), box.data(), box.size() * sizeof(double));
+
+                std::array<double, 3> arr_insertion_site;
+                std::memcpy(arr_insertion_site.data(), insertion_site.data(), insertion_site.size() * sizeof(double));
+
+                std::vector<double> proposal_coords;
+                double log_prob;
+
+               std::cout << "enter" << std::endl;
+                // ioem.get_water_groups(vec_coords, arr_box, arr_center, v1_mols, v2_mols);
+                ioem.swap_vi_into_vj(
+                    chosen_water,
+                    N_i,
+                    N_j,
+                    vec_coords,
+                    arr_box,
+                    arr_insertion_site,
+                    vol_i,
+                    vol_j,
+                    proposal_coords,
+                    log_prob);
+ 
+                std::cout << "done " << proposal_coords.size() << std::endl;
+                py::array_t<double, py::array::c_style> out_proposal_coords({N, D});
+                std::memcpy(out_proposal_coords.mutable_data(), &proposal_coords[0], proposal_coords.size() * sizeof(double));
+
+                std::cout << proposal_coords.size() << std::endl;
+
+                return py::make_tuple(out_proposal_coords, log_prob);
 
         });
 }
