@@ -52,6 +52,10 @@ unit_tests:
 nightly_tests:
 	pytest -m '$(NIGHTLY_MARKER) and not $(NOCUDA_MARKER) and not $(NOGPU_MARKER)' $(PYTEST_CI_ARGS)
 
+.PHONY: nocuda_nightly_tests
+nocuda_nightly_tests:
+	pytest -m '$(NIGHTLY_MARKER) and $(NOCUDA_MARKER)' $(PYTEST_CI_ARGS)
+
 .PHONY: nogpu_nightly_tests
 nogpu_nightly_tests:
 	pytest -m '$(NIGHTLY_MARKER) and $(NOGPU_MARKER)' $(PYTEST_CI_ARGS)
