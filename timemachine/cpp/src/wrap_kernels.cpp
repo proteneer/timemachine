@@ -1290,7 +1290,7 @@ void declare_inside_outside_exchange_mover(py::module &m) {
 
         })
         .def(
-            "swap_vi_into_vj",
+            "swap_vi_into_vj_impl",
             [](timemachine::InsideOutsideExchangeMover &ioem,
                 int chosen_water, 
                 int N_i,
@@ -1317,8 +1317,7 @@ void declare_inside_outside_exchange_mover(py::module &m) {
                 std::vector<double> proposal_coords;
                 double log_prob;
 
-                // ioem.get_water_groups(vec_coords, arr_box, arr_center, v1_mols, v2_mols);
-                ioem.swap_vi_into_vj(
+                ioem.swap_vi_into_vj_impl(
                     chosen_water,
                     N_i,
                     N_j,
@@ -1327,6 +1326,37 @@ void declare_inside_outside_exchange_mover(py::module &m) {
                     arr_insertion_site,
                     vol_i,
                     vol_j,
+                    proposal_coords,
+                    log_prob);
+ 
+                py::array_t<double, py::array::c_style> out_proposal_coords({N, D});
+                std::memcpy(out_proposal_coords.mutable_data(), &proposal_coords[0], proposal_coords.size() * sizeof(double));
+
+                return py::make_tuple(out_proposal_coords, log_prob);
+
+        })
+        .def(
+            "propose",
+            [](timemachine::InsideOutsideExchangeMover &ioem,
+                const py::array_t<double, py::array::c_style> &coords,
+                const py::array_t<double, py::array::c_style> &box) -> py::tuple {
+
+                const long unsigned int N = coords.shape()[0];
+                const long unsigned int D = coords.shape()[1];
+
+                verify_coords_and_box(coords, box);
+
+                std::vector<double> vec_coords(coords.size());
+                std::memcpy(vec_coords.data(), coords.data(), coords.size() * sizeof(double));
+                std::array<double, 9> arr_box;
+                std::memcpy(arr_box.data(), box.data(), box.size() * sizeof(double));
+
+                std::vector<double> proposal_coords;
+                double log_prob;
+
+                ioem.propose(
+                    vec_coords,
+                    arr_box,
                     proposal_coords,
                     log_prob);
  

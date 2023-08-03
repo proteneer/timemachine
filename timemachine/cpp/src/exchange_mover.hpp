@@ -22,7 +22,7 @@ public:
         std::vector<int> &v1_mols,
         std::vector<int> &v2_mols) const;
 
-    void swap_vi_into_vj(
+    void swap_vi_into_vj_impl(
         int chosen_water,
         int N_i,
         int N_j,
@@ -33,6 +33,24 @@ public:
         const std::array<double, 3> &insertion_site,
         double vol_i,
         double vol_j,
+        std::vector<double> &proposal_coords,
+        double &log_prob) const;
+
+    void swap_vi_into_vj(
+        const std::vector<int> &vi_mols,
+        const std::vector<int> &vj_mols,
+        const std::vector<double> & coords,
+        const std::array<double, 9> &box,
+        const std::array<double, 3> &insertion_site,
+        double vol_i,
+        double vol_j,
+        std::vector<double> &proposal_coords,
+        double &log_prob) const;
+
+
+    void propose(
+        const std::vector<double> & coords,
+        const std::array<double, 9> &box,
         std::vector<double> &proposal_coords,
         double &log_prob) const;
 

@@ -301,12 +301,38 @@ class InsideOutsideExchangeMove(moves.MonteCarloMove):
 
         return new_state, log_p_accept
 
+
+    # def swap_vi_into_vj(
+    #     self,
+    #     vi_mols: List[int],
+    #     vj_mols: List[int],
+    #     x: CoordsVelBox,
+    #     vj_insertion_fn: Callable,
+    #     vol_i: float,
+    #     vol_j: float,
+    # ):
+    #     chosen_water = np.random.choice(vi_mols)
+    #     N_i = len(vi_mols)
+    #     N_j = len(vj_mols)
+    #     insertion_site = vj_insertion_fn()
+    #     new_coords, log_p_accept = self.swap_vi_into_vj_impl(
+    #         chosen_water,
+    #         N_i,
+    #         N_j,
+    #         x.coords,
+    #         x.box,
+    #         insertion_site,
+    #         vol_i,
+    #         vol_j
+    #     )
+
+    #     return CoordsVelBox(new_coords, x.velocities, x.box), log_p_accept
+
     def swap_vi_into_vj_impl(
         self,
         chosen_water,
         N_i,
         N_j,
-        # x: CoordsVelBox,
         coords,
         box,
         insertion_site: np.array,
@@ -421,6 +447,8 @@ class InsideOutsideExchangeMove(moves.MonteCarloMove):
             assert 0
 
 
+from timemachine.lib.custom_ops import InsideOutsideExchangeMover
+
 def compute_density(n_waters, box):
     box_vol = np.prod(np.diag(box))
     numerator = n_waters * 18.01528 * 1e27
@@ -475,6 +503,31 @@ def image_xvb(initial_state, xvb_t):
     return CoordsVelBox(new_coords, xvb_t.velocities, xvb_t.box)
 
 
+class CppMCMover():
+    n_proposed: int = 0
+    n_accepted: int = 0
+
+    def __init__(self, impl):
+        self._impl = impl
+
+    # def propose(self, x: CoordsVelBox) -> Tuple[CoordsVelBox, float]:
+    #     """return proposed state and log acceptance probability"""
+    #     raise NotImplementedError
+
+    def move(self, x: CoordsVelBox) -> CoordsVelBox:
+        new_coords, log_acceptance_probability = self._impl.propose(x.coords, x.box)
+        self.n_proposed += 1
+
+        alpha = np.random.rand()
+        acceptance_probability = np.exp(log_acceptance_probability)
+        if alpha < acceptance_probability:
+            self.n_accepted += 1
+            proposal = CoordsVelBox(new_coords, x.velocities, x.box)
+            return proposal
+        else:
+            return x
+
+
 def test_exchange():
     parser = argparse.ArgumentParser(description="Test the exchange protocol in a box of water.")
     parser.add_argument("--water_pdb", type=str, help="Location of the water PDB", required=True)
@@ -524,18 +577,21 @@ def test_exchange():
     print("number of water atoms", nwm * 3, "number of ligand atoms", mol.GetNumAtoms())
     print("water_ligand parameters", nb_water_ligand_params)
 
-    # exc_mover = ExchangeMove(nb_water_ligand_params, nb_beta, nb_cutoff, water_idxs)
-
     bb_radius = 0.46
-    exc_mover = InsideOutsideExchangeMove(
-        nb_beta,
-        nb_cutoff,
-        nb_water_ligand_params,
-        water_idxs,
-        initial_state.ligand_idxs,
-        1/DEFAULT_KT,
-        bb_radius
-    )
+    # mover_impl = InsideOutsideExchangeMover(
+    #     nb_beta,
+    #     nb_cutoff,
+    #     nb_water_ligand_params.reshape(-1).tolist(),
+    #     water_idxs.reshape(-1).tolist(),
+    #     initial_state.ligand_idxs.reshape(-1).tolist(),
+    #     1/DEFAULT_KT,
+    #     bb_radius
+    # )
+    # exc_mover = CppMCMover(mover_impl)
+
+    exc_mover = ExchangeMove(nb_water_ligand_params, nb_beta, nb_cutoff, water_idxs)
+
+
     cur_box = initial_state.box0
     cur_x_t = initial_state.x0
     cur_v_t = np.zeros_like(cur_x_t)

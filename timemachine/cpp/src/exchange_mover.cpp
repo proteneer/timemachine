@@ -32,6 +32,7 @@ std::array<double, 3> compute_centroid(double *coords, int N) {
     return std::array<double, 3>({sum_x / N, sum_y / N, sum_z / N});
 }
 
+
 std::array<double, 3> v1_insertion(double radius, const std::array<double, 3> &center) {
 
     std::default_random_engine generator;
@@ -201,8 +202,127 @@ void InsideOutsideExchangeMover::get_water_groups(
     }
 }
 
+void InsideOutsideExchangeMover::propose(
+    const std::vector<double> & coords,
+    const std::array<double, 9> &box,
+    std::vector<double> &proposal_coords,
+    double &log_prob) const {
+
+
+    std::vector<double> ligand_coords;
+
+    for(size_t i=0; i < ligand_idxs_.size(); i++) {
+        int idx = ligand_idxs_[i];
+        ligand_coords.push_back(coords[idx*3+0]);
+        ligand_coords.push_back(coords[idx*3+1]);
+        ligand_coords.push_back(coords[idx*3+2]);
+    }
+    std::array<double, 3> ligand_centroid = compute_centroid(&ligand_coords[0], ligand_idxs_.size());
+    
+    std::vector<int> v1_mols, v2_mols;
+    get_water_groups(coords, box, ligand_centroid, v1_mols, v2_mols);
+
+    double PI = 3.14159265359;
+
+    double vol_1 = (4 / 3) * PI * radius_ * radius_ * radius_;
+    double vol_2 = box[0*3+0]*box[1*3+1]*box[2*3+2] - vol_1;
+
+    std::array<double, 3> insertion_site_v1 = v1_insertion(radius_, ligand_centroid);
+    std::array<double, 3> insertion_site_v2 = v2_insertion(radius_, ligand_centroid, box);
+
+    int n1 = v1_mols.size();
+    int n2 = v2_mols.size();
+
+    if(n1 == 0 && n2 == 0) {
+        throw std::runtime_error("jank");
+    } else if(n1 > 0 && n2 == 0) {
+        swap_vi_into_vj(
+            v1_mols,
+            v2_mols,
+            coords,
+            box,
+            insertion_site_v2,
+            vol_1,
+            vol_2,
+            proposal_coords,
+            log_prob
+        );
+    } else if(n1 == 0 && n2 > 0) {
+        swap_vi_into_vj(
+            v2_mols,
+            v1_mols,
+            coords,
+            box,
+            insertion_site_v1,
+            vol_2,
+            vol_1,
+            proposal_coords,
+            log_prob
+        );
+    } else if(n1 > 0 && n2 > 0) {
+        if(rand() % 2 == 0) {
+            swap_vi_into_vj(
+                v1_mols,
+                v2_mols,
+                coords,
+                box,
+                insertion_site_v2,
+                vol_1,
+                vol_2,
+                proposal_coords,
+                log_prob
+            );
+        } else {
+            swap_vi_into_vj(
+                v2_mols,
+                v1_mols,
+                coords,
+                box,
+                insertion_site_v1,
+                vol_2,
+                vol_1,
+                proposal_coords,
+                log_prob
+            );
+        }
+    }
+
+
+
+}
 
 void InsideOutsideExchangeMover::swap_vi_into_vj(
+    const std::vector<int> &vi_mols,
+    const std::vector<int> &vj_mols,
+    const std::vector<double> & coords,
+    const std::array<double, 9> &box,
+    const std::array<double, 3> &insertion_site,
+    double vol_i,
+    double vol_j,
+    std::vector<double> &proposal_coords,
+    double &log_prob) const {
+    // chosen_water = np.random.choice(vi_mols)
+    int chosen_water_idx = rand() % vi_mols.size();
+    int chosen_water = vi_mols[chosen_water_idx];
+
+    int N_i = vi_mols.size();
+    int N_j = vj_mols.size();
+
+    swap_vi_into_vj_impl(
+        chosen_water,
+        N_i,
+        N_j,
+        coords,
+        box,
+        insertion_site,
+        vol_i,
+        vol_j,
+        proposal_coords,
+        log_prob
+    );
+}
+
+void InsideOutsideExchangeMover::swap_vi_into_vj_impl(
     int chosen_water,
     int N_i,
     int N_j,
