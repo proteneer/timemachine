@@ -18,7 +18,7 @@ from timemachine.fe.bar import (
     works_from_ukln,
 )
 
-pytestmark = [pytest.mark.nogpu]
+pytestmark = [pytest.mark.nocuda]
 
 
 def make_gaussian_ukln_example(

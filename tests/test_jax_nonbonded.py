@@ -45,7 +45,7 @@ Energy = float
 NonbondedArgs = Tuple[Conf, Params, Box, ExclusionIdxs, ScaleFactors, Beta, Cutoff]
 NonbondedFxn = Callable[[Conf, Params, Box, ExclusionIdxs, ScaleFactors, Beta, Cutoff], Energy]
 
-pytestmark = [pytest.mark.nogpu]
+pytestmark = [pytest.mark.nocuda]
 
 
 def resolve_clashes(x0, box0, min_dist=0.1):

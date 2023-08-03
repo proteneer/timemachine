@@ -22,7 +22,7 @@ from timemachine.potentials.jax_utils import (
     process_traj_in_chunks,
 )
 
-pytestmark = [pytest.mark.nogpu]
+pytestmark = [pytest.mark.nocuda]
 
 
 def test_delta_r():

@@ -9,6 +9,8 @@ from timemachine.fe import atom_mapping
 from timemachine.fe.mcgregor import MaxVisitsWarning, NoMappingError
 from timemachine.fe.utils import plot_atom_mapping_grid
 
+pytestmark = [pytest.mark.nocuda]
+
 hif2a_set = "timemachine/datasets/fep_benchmark/hif2a/ligands.sdf"
 eg5_set = "timemachine/datasets/fep_benchmark/eg5/ligands.sdf"
 
@@ -18,7 +20,6 @@ datasets = [
 ]
 
 
-@pytest.mark.nogpu
 @pytest.mark.nightly(reason="Slow")
 def test_connected_core_and_complete_rings_with_large_numbers_of_cores():
     """The following tests that for two mols that have a large number of matching
@@ -370,7 +371,6 @@ def get_mol_name(mol) -> str:
 # CHEMBL1077227 -> CHEMBL1083836 has 14976 cores of size 48
 # CHEMBL1086410 -> CHEMBL1083836 has 10752 cores of size 52
 # CHEMBL1086410 -> CHEMBL1084935 has 6912 cores of size 60
-@pytest.mark.nogpu
 @pytest.mark.parametrize("filepath", datasets)
 @pytest.mark.nightly(reason="Slow")
 def test_all_pairs(filepath):
@@ -420,7 +420,6 @@ def get_mol_by_name(mols, name):
     assert 0, "Mol not found"
 
 
-@pytest.mark.nogpu
 def test_complete_rings_only():
     # this transformation has two ring changes:
     # a 6->5 member ring size change and a unicycle to bicycle change
@@ -502,7 +501,6 @@ def assert_core_sets_are_equal(core_set_a, core_set_b):
 
 
 # spot check
-@pytest.mark.nogpu
 def test_linker_map():
     # test that we can map a linker size change when connected_core=False, and enforce_core_core=False
     mol_a = Chem.MolFromMolBlock(
@@ -738,7 +736,6 @@ $$$$""",
     return mol_a, mol_b
 
 
-@pytest.mark.nogpu
 def test_hif2a_failure():
     # special failure with error message:
     # pred_sgg_a = a_cycles[a] == sg_a_cycles[a], KeyError: 18
@@ -799,7 +796,6 @@ def test_hif2a_failure():
     #         fh.write(res)
 
 
-@pytest.mark.nogpu
 def test_cyclohexane_stereo():
     # test that cyclohexane in two different conformations has a core alignment that is stereo correct. Note that this needs a
     # larger than typical cutoff.
@@ -857,7 +853,6 @@ def test_cyclohexane_stereo():
     assert len(all_cores) == 1
 
 
-@pytest.mark.nogpu
 def test_chiral_atom_map():
     mol_a = Chem.AddHs(Chem.MolFromSmiles("C"))
     mol_b = Chem.AddHs(Chem.MolFromSmiles("C"))
@@ -888,7 +883,6 @@ def test_chiral_atom_map():
     assert len(chiral_aware_cores[0]) == 5
 
 
-@pytest.mark.nogpu
 @pytest.mark.parametrize(
     "ring_matches_ring_only",
     [
@@ -928,7 +922,6 @@ def test_ring_matches_ring_only(ring_matches_ring_only):
     assert all(len([() for idx_a in core[:, 0] if mol_a.GetAtomWithIdx(int(idx_a)).IsInRing()]) == 4 for core in cores)
 
 
-@pytest.mark.nogpu
 def test_max_visits_warning():
     mol_a, mol_b = get_cyclohexanes_different_confs()
     core_kwargs = dict(
@@ -950,7 +943,6 @@ def test_max_visits_warning():
             atom_mapping.get_cores(mol_a, mol_b, **core_kwargs, max_visits=1)
 
 
-@pytest.mark.nogpu
 def test_max_cores_warning():
     mol_a, mol_b = get_cyclohexanes_different_confs()
     core_kwargs = dict(
@@ -968,7 +960,6 @@ def test_max_cores_warning():
         atom_mapping.get_cores(mol_a, mol_b, **core_kwargs, max_cores=1)
 
 
-@pytest.mark.nogpu
 def test_min_threshold():
     mol_a, mol_b = get_cyclohexanes_different_confs()
     core_kwargs = dict(

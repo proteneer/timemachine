@@ -3,7 +3,7 @@ from rdkit import Chem
 
 from timemachine.fe.restraints import setup_relative_restraints_using_smarts
 
-pytestmark = [pytest.mark.nogpu]
+pytestmark = [pytest.mark.nocuda]
 
 
 def test_setting_up_restraints_using_smarts():

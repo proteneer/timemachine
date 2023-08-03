@@ -394,7 +394,7 @@ def test_combine_masses_hmr():
     np.testing.assert_almost_equal(test_masses, ref_masses)
 
 
-@pytest.mark.nogpu
+@pytest.mark.nocuda
 def test_jax_transform_intermediate_potential():
     def setup_arbitary_transformation():
         # NOTE: test system can probably be simplified; we just need

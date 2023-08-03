@@ -18,6 +18,8 @@ from timemachine.md.enhanced import get_solvent_phase_system
 from timemachine.potentials import SummedPotential
 from timemachine.testsystems.gaussian1d import make_gaussian_testsystem
 
+pytestmark = [pytest.mark.nocuda]
+
 
 def assert_estimator_accurate(estimate_delta_f, analytical_delta_f, ref_params, n_random_trials, atol):
     """for many random parameter sets, assert that the reweighted estimates of
@@ -58,7 +60,6 @@ def assert_estimator_accurate(estimate_delta_f, analytical_delta_f, ref_params, 
         np.testing.assert_allclose(g_hat, g_ref, atol=atol)
 
 
-@pytest.mark.nogpu
 def test_endpoint_reweighting_1d():
     """assert that endpoint reweighting estimator for delta_f(params), grad(delta_f)(params) is accurate
     on tractable 1D system"""
@@ -89,7 +90,6 @@ def test_endpoint_reweighting_1d():
     assert_estimator_accurate(jit(estimate_delta_f), analytical_delta_f, ref_params, n_random_trials=10, atol=atol)
 
 
-@pytest.mark.nogpu
 def test_mixture_reweighting_1d():
     """using a variety of free energy estimates (MBAR, TI, analytical) to obtain reference mixture weights,
     assert that mixture reweighting estimator of delta_f(params), grad(delta_f)(params) is accurate
@@ -289,7 +289,6 @@ def test_mixture_reweighting_ahfe():
     assert np.isfinite(g_prime).all()
 
 
-@pytest.mark.nogpu
 def test_one_sided_exp():
     """assert consistency with pymbar.EXP on random instances + instances containing +inf work"""
 
@@ -316,7 +315,6 @@ def test_one_sided_exp():
     assert np.isclose(one_sided_exp(reduced_works), pymbar.EXP(reduced_works)[0])
 
 
-@pytest.mark.nogpu
 def test_interpret_as_mixture_potential():
     """assert approximate self-consistency a la https://arxiv.org/abs/1704.00891
 

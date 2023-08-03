@@ -64,6 +64,9 @@ void Neighborlist<RealType>::compute_block_bounds_host(
     DeviceBuffer<double> d_coords(N * D);
     DeviceBuffer<double> d_box(D * D);
 
+    std::vector<RealType> h_block_bounds_centers(this->num_column_blocks() * 3);
+    std::vector<RealType> h_block_bounds_extents(this->num_column_blocks() * 3);
+
     d_coords.copy_from(h_coords);
     d_box.copy_from(h_box);
 
@@ -71,15 +74,23 @@ void Neighborlist<RealType>::compute_block_bounds_host(
     gpuErrchk(cudaDeviceSynchronize());
 
     gpuErrchk(cudaMemcpy(
-        h_bb_ctrs,
+        &h_block_bounds_centers[0],
         d_column_block_bounds_ctr_,
         this->num_column_blocks() * 3 * sizeof(*d_column_block_bounds_ctr_),
         cudaMemcpyDeviceToHost));
     gpuErrchk(cudaMemcpy(
-        h_bb_exts,
+        &h_block_bounds_extents[0],
         d_column_block_bounds_ext_,
         this->num_column_blocks() * 3 * sizeof(*d_column_block_bounds_ext_),
         cudaMemcpyDeviceToHost));
+
+    // Handle the float -> double, doing a direct copy from a double buffer to a float buffer results in garbage values
+    for (auto i = 0; i < h_block_bounds_centers.size(); i++) {
+        h_bb_ctrs[i] = h_block_bounds_centers[i];
+    }
+    for (auto i = 0; i < h_block_bounds_extents.size(); i++) {
+        h_bb_exts[i] = h_block_bounds_extents[i];
+    }
 }
 
 template <typename RealType>
@@ -199,11 +210,9 @@ void Neighborlist<RealType>::compute_block_bounds_device(
     }
 
     const int tpb = DEFAULT_THREADS_PER_BLOCK;
-    const int column_blocks = this->num_column_blocks(); // total number of blocks we need to process
 
-    k_find_block_bounds<RealType><<<column_blocks, tpb, 0, stream>>>(
-        N,
-        column_blocks,
+    k_find_block_bounds<RealType><<<ceil_divide(NC_, tpb), tpb, 0, stream>>>(
+        this->num_column_blocks(),
         NC_,
         d_column_idxs_,
         d_coords,
@@ -215,10 +224,8 @@ void Neighborlist<RealType>::compute_block_bounds_device(
     // In the case of upper triangle of the matrix, the column and row indices are the same, so only compute block ixns for both
     // when they are different
     if (!this->compute_upper_triangular()) {
-        const int row_blocks = this->num_row_blocks();
-        k_find_block_bounds<RealType><<<row_blocks, tpb, 0, stream>>>(
-            N,
-            row_blocks,
+        k_find_block_bounds<RealType><<<ceil_divide(NR_, tpb), tpb, 0, stream>>>(
+            this->num_row_blocks(),
             NR_,
             d_row_idxs_,
             d_coords,
