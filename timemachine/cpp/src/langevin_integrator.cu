@@ -77,10 +77,9 @@ void LangevinIntegrator::step_fwd(
 
     size_t tpb = DEFAULT_THREADS_PER_BLOCK;
     size_t n_blocks = ceil_divide(N_, tpb);
-    dim3 dimGrid_dx(n_blocks, D);
 
-    update_forward_baoab<double><<<dimGrid_dx, tpb, 0, stream>>>(
-        N_, D, ca_, d_idxs, d_cbs_, d_ccs_, d_noise_ + (noise_iteration_ * N_ * D), d_x_t, d_v_t, d_du_dx_, dt_);
+    k_update_forward_baoab<double, D><<<n_blocks, tpb, 0, stream>>>(
+        N_, ca_, d_idxs, d_cbs_, d_ccs_, d_noise_ + (noise_iteration_ * N_ * D), d_x_t, d_v_t, d_du_dx_, dt_);
     gpuErrchk(cudaPeekAtLastError());
     noise_iteration_++;
 }
