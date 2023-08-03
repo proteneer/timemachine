@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Tuple
 
 import numpy as np
 import pytest
@@ -9,6 +9,7 @@ from timemachine.fe.utils import get_romol_conf
 from timemachine.ff import Forcefield
 from timemachine.lib import custom_ops
 from timemachine.md.builders import build_water_system
+from timemachine.testsystems.dhfr import setup_dhfr
 from timemachine.testsystems.relative import get_hif2a_ligand_pair_single_topology
 
 pytestmark = [pytest.mark.memcheck]
@@ -19,47 +20,84 @@ def test_empty_neighborlist():
         custom_ops.Neighborlist_f32(0)
 
 
-def test_block_bounds():
+def reference_block_bounds(coords: NDArray, box: NDArray, block_size: int) -> Tuple[NDArray, NDArray]:
+    # Make a copy to avoid modify the coordinates that end up used later by the Neighborlist
+    coords = coords.copy()
+    N = coords.shape[0]
+    box_diag = np.diagonal(box)
+    num_blocks = (N + block_size - 1) // block_size
+
+    ref_ctrs = []
+    ref_exts = []
+
+    for bidx in range(num_blocks):
+        start_idx = bidx * block_size
+        end_idx = min((bidx + 1) * block_size, N)
+        block_coords = coords[start_idx:end_idx]
+        min_coords = block_coords[0]
+        max_coords = block_coords[0]
+        for new_coords in block_coords[1:]:
+            center = 0.5 * (max_coords + min_coords)
+            new_coords -= box_diag * np.floor((new_coords - center) / box_diag + 0.5)
+            min_coords = np.minimum(min_coords, new_coords)
+            max_coords = np.maximum(max_coords, new_coords)
+
+        ref_ctrs.append((max_coords + min_coords) / 2)
+        ref_exts.append((max_coords - min_coords) / 2)
+
+    ref_ctrs = np.array(ref_ctrs)
+    ref_exts = np.array(ref_exts)
+    return ref_ctrs, ref_exts
+
+
+@pytest.mark.parametrize("precision,atol,rtol", [(np.float32, 1e-6, 1e-6), (np.float64, 1e-7, 1e-7)])
+@pytest.mark.parametrize("sort", [True, False])
+def test_block_bounds_dhfr(precision, atol, rtol, sort):
+    _, _, coords, box = setup_dhfr()
+
+    if precision == np.float32:
+        nblist = custom_ops.Neighborlist_f32(coords.shape[0])
+    else:
+        nblist = custom_ops.Neighborlist_f64(coords.shape[0])
+
+    if sort:
+        perm = hilbert_sort(coords + np.argmin(coords), coords.shape[1])
+        coords = coords[perm]
+
+    block_size = 32
+    ref_ctrs, ref_exts = reference_block_bounds(coords, box, block_size)
+
+    test_ctrs, test_exts = nblist.compute_block_bounds(coords, box, block_size)
+
+    for i, (ref_ctr, test_ctr) in enumerate(zip(ref_ctrs, test_ctrs)):
+        np.testing.assert_allclose(ref_ctr, test_ctr, atol=atol, rtol=rtol, err_msg=f"Center {i} has mismatch")
+    for i, (ref_ext, test_ext) in enumerate(zip(ref_exts, test_exts)):
+        np.testing.assert_allclose(ref_ext, test_ext, atol=atol, rtol=rtol, err_msg=f"Extent {i} has mismatch")
+
+
+@pytest.mark.parametrize("precision,atol,rtol", [(np.float32, 1e-6, 1e-6), (np.float64, 1e-7, 1e-7)])
+@pytest.mark.parametrize("size", [12, 128, 156, 298])
+def test_block_bounds(precision, atol, rtol, size):
     np.random.seed(2020)
-    sizes = [128, 156, 298]
-    max_size = max(sizes)
-    nblist = custom_ops.Neighborlist_f64(max_size)
-    for N in sizes:
-        nblist.resize(N)
-        block_size = 32
+    block_size = 32
+    D = 3
 
-        D = 3
+    if precision == np.float32:
+        nblist = custom_ops.Neighborlist_f32(size)
+    else:
+        nblist = custom_ops.Neighborlist_f64(size)
 
-        coords = np.random.randn(N, D)
-        box_diag = np.random.rand(3) + 1
-        box = np.eye(3) * box_diag
-        num_blocks = (N + block_size - 1) // block_size
+    coords = np.random.randn(size, D)
 
-        ref_ctrs = []
-        ref_exts = []
+    box_diag = np.random.rand(3) + 1
+    box = np.eye(3) * box_diag
 
-        for bidx in range(num_blocks):
-            start_idx = bidx * block_size
-            end_idx = min((bidx + 1) * block_size, N)
-            block_coords = coords[start_idx:end_idx]
-            min_coords = block_coords[0]
-            max_coords = block_coords[0]
-            for new_coords in block_coords[1:]:
-                center = 0.5 * (max_coords + min_coords)
-                new_coords -= box_diag * np.floor((new_coords - center) / box_diag + 0.5)
-                min_coords = np.minimum(min_coords, new_coords)
-                max_coords = np.maximum(max_coords, new_coords)
+    ref_ctrs, ref_exts = reference_block_bounds(coords, box, block_size)
 
-            ref_ctrs.append((max_coords + min_coords) / 2)
-            ref_exts.append((max_coords - min_coords) / 2)
+    test_ctrs, test_exts = nblist.compute_block_bounds(coords, box, block_size)
 
-        ref_ctrs = np.array(ref_ctrs)
-        ref_exts = np.array(ref_exts)
-
-        test_ctrs, test_exts = nblist.compute_block_bounds(coords, box, block_size)
-
-        np.testing.assert_almost_equal(ref_ctrs, test_ctrs)
-        np.testing.assert_almost_equal(ref_exts, test_exts)
+    np.testing.assert_allclose(ref_ctrs, test_ctrs, atol=atol, rtol=rtol)
+    np.testing.assert_allclose(ref_exts, test_exts, atol=atol, rtol=rtol)
 
 
 def get_water_coords(D, sort=False):
