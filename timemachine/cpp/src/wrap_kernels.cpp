@@ -1305,7 +1305,6 @@ void declare_inside_outside_exchange_mover(py::module &m) {
                 const long unsigned int D = coords.shape()[1];
 
                 verify_coords_and_box(coords, box);
-                // std::cout << coords.size() << " " << box.size() << " " << insertion_site.size() << std::endl;
 
                 std::vector<double> vec_coords(coords.size());
                 std::memcpy(vec_coords.data(), coords.data(), coords.size() * sizeof(double));
@@ -1318,7 +1317,6 @@ void declare_inside_outside_exchange_mover(py::module &m) {
                 std::vector<double> proposal_coords;
                 double log_prob;
 
-               std::cout << "enter" << std::endl;
                 // ioem.get_water_groups(vec_coords, arr_box, arr_center, v1_mols, v2_mols);
                 ioem.swap_vi_into_vj(
                     chosen_water,
@@ -1332,11 +1330,8 @@ void declare_inside_outside_exchange_mover(py::module &m) {
                     proposal_coords,
                     log_prob);
  
-                std::cout << "done " << proposal_coords.size() << std::endl;
                 py::array_t<double, py::array::c_style> out_proposal_coords({N, D});
                 std::memcpy(out_proposal_coords.mutable_data(), &proposal_coords[0], proposal_coords.size() * sizeof(double));
-
-                std::cout << proposal_coords.size() << std::endl;
 
                 return py::make_tuple(out_proposal_coords, log_prob);
 
