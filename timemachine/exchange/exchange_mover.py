@@ -139,6 +139,16 @@ class ExchangeMove(moves.MonteCarloMove):
         self.water_idxs = water_idxs
         self.beta = 1 / DEFAULT_KT
 
+        n_atoms = len(nb_params)
+        # for a_idxs, b_idxs in all_a_idxs, all_b_idxs:
+        self.all_a_idxs = []
+        self.all_b_idxs = []
+        for a_idxs in water_idxs:
+            self.all_a_idxs.append(np.array(a_idxs))
+            self.all_b_idxs.append(np.delete(np.arange(n_atoms), a_idxs))
+        self.all_a_idxs = np.array(self.all_a_idxs)
+        self.all_b_idxs = np.array(self.all_b_idxs)
+
         @jax.jit
         def U_fn(conf, box, a_idxs, b_idxs):
             # compute the energy of an interaction group
@@ -148,25 +158,15 @@ class ExchangeMove(moves.MonteCarloMove):
             params_j = self.nb_params[b_idxs]
             return nonbonded.nonbonded_block(conf_i, conf_j, box, params_i, params_j, self.nb_beta, self.nb_cutoff)
 
-        self.U_fn = U_fn
+        self.batch_U_fn = jax.jit(jax.vmap(U_fn, (None, None, 0, 0)))
 
-        def batch_log_weights(conf, box, water_idxs):
+        def batch_log_weights(conf, box):
             """
             Return a list of energies equal to len(water_idxs)
             """
-            # conf_i = conf[a_idxs]
-            # conf_j = conf[b_idxs]
-            # params_i = self.nb_params[a_idxs]
-            # params_j = self.nb_params[b_idxs]
-            # compute delta_U of deletion
-            n_atoms = len(conf)
             log_weights = []
-            for a_idxs in water_idxs:
-                a_idxs = np.array(a_idxs)
-                b_idxs = np.delete(np.arange(n_atoms), a_idxs)
-                nrg = self.U_fn(conf, box, a_idxs, b_idxs)
-                weight = self.beta * nrg
-                log_weights.append(weight)
+            nrgs = self.batch_U_fn(conf, box, self.all_a_idxs, self.all_b_idxs)
+            log_weights = self.beta * nrgs  # note the positive energy!
             return log_weights
 
         self.batch_log_weights = batch_log_weights
@@ -174,14 +174,13 @@ class ExchangeMove(moves.MonteCarloMove):
     def propose(self, x: CoordsVelBox) -> Tuple[CoordsVelBox, float]:
         coords = x.coords
         box = x.box
-        # n_atoms = len(coords)
-
-        log_weights_before = self.batch_log_weights(coords, box, self.water_idxs)
+        log_weights_before = self.batch_log_weights(coords, box)
+        # print(log_weights_before)
         log_probs_before = log_weights_before - logsumexp(log_weights_before)
         probs_before = np.exp(log_probs_before)
 
         # chosen_water = np.random.randint(self.num_waters)
-        print("LPB", log_probs_before)
+        # print("LPB", log_probs_before)
         chosen_water = np.random.choice(np.arange(self.num_waters), p=probs_before)
 
         print("picked", chosen_water)
@@ -208,7 +207,7 @@ class ExchangeMove(moves.MonteCarloMove):
         # delta_U_delete = self.U_fn(coords, box, a_idxs, b_idxs)
         # delta_U_total = delta_U_insert - delta_U_delete
 
-        log_weights_after = self.batch_log_weights(trial_coords, box, self.water_idxs)
+        log_weights_after = self.batch_log_weights(trial_coords, box)
 
         print("numerator", logsumexp(log_weights_before), "denominator", logsumexp(log_weights_after))
 
@@ -655,7 +654,7 @@ def test_exchange():
     npt_mover.n_steps = md_steps_per_batch
 
     # TBD: cache the minimized and equilibrated initial structure later on to iterate faster.
-    mc_steps_per_batch = 1
+    mc_steps_per_batch = 100
 
     # (ytz): If I start with pure MC, and no MD, it's actually very easy to remove the waters.
     # since the starting waters have very very high energy. If I re-run MD, then it becomes progressively harder
