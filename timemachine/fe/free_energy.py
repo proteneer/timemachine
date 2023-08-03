@@ -609,7 +609,7 @@ def run_sims_with_greedy_bisection(
     verbose: bool = True,
 ) -> Tuple[List[PairBarResult], List[StoredArrays], List[NDArray]]:
     r"""Starting from a specified lambda schedule, successively bisect the lambda interval between the pair of states
-    with the largest BAR :math:`\Delta G` error and sample the new state with MD.
+    with the lowest BAR overlap and sample the new state with MD.
 
     Parameters
     ----------
