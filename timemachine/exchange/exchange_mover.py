@@ -250,58 +250,6 @@ class InsideOutsideExchangeMove(moves.MonteCarloMove):
         return v1_mols, v2_mols
 
     # @profile
-    def swap_vi_into_vj(
-        self,
-        vi_mols: List[int],
-        vj_mols: List[int],
-        x: CoordsVelBox,
-        vj_insertion_fn: Callable,
-        vol_i: float,
-        vol_j: float,
-    ):
-        # swap a water molecule from region vi to region vj
-        coords, box = x.coords, x.box
-        chosen_water = np.random.choice(vi_mols)
-        chosen_water_atoms = self.water_idxs[chosen_water]
-        new_coords = coords[chosen_water_atoms]
-        # remove centroid and offset into insertion site
-        new_coords = new_coords - np.mean(new_coords, axis=0) + vj_insertion_fn()
-
-        # debug
-        # insertion_into_buckyball = len(vi_mols) > len(vj_mols)
-        # if insertion_into_buckyball:
-        # new_coords
-
-        trial_coords = coords.copy()  # can optimize this later if needed
-        trial_coords[chosen_water_atoms] = new_coords
-
-        n_atoms = len(coords)
-        a_idxs = chosen_water_atoms
-        b_idxs = np.delete(np.arange(n_atoms), a_idxs)
-
-        # we can probably speed this up even more if we use an incremental voxel_map
-        # (reduce complexity from O(N) to O(K))
-        # delta_U_delete = -self.U_fn(coords, box, a_idxs, b_idxs)
-        # delta_U_insert = self.U_fn(trial_coords, box, a_idxs, b_idxs)
-        # delta_U_total = delta_U_delete + delta_U_insert
-
-        delta_U_total = self.delta_U_total_fn(trial_coords, coords, box, a_idxs, b_idxs)
-        delta_U_total = np.asarray(delta_U_total)
-
-        # convert to inf if we get a nan
-        if np.isnan(delta_U_total):
-            delta_U_total = np.inf
-
-        ni = len(vi_mols)
-        nj = len(vj_mols)
-        hastings_factor = np.log((ni * vol_j) / ((nj + 1) * vol_i))
-        # print(hastings_factor)
-        log_p_accept = min(0, -self.beta * delta_U_total + hastings_factor)
-        new_state = CoordsVelBox(trial_coords, x.velocities, x.box)
-
-        return new_state, log_p_accept
-
-
     # def swap_vi_into_vj(
     #     self,
     #     vi_mols: List[int],
@@ -311,22 +259,74 @@ class InsideOutsideExchangeMove(moves.MonteCarloMove):
     #     vol_i: float,
     #     vol_j: float,
     # ):
+    #     # swap a water molecule from region vi to region vj
+    #     coords, box = x.coords, x.box
     #     chosen_water = np.random.choice(vi_mols)
-    #     N_i = len(vi_mols)
-    #     N_j = len(vj_mols)
-    #     insertion_site = vj_insertion_fn()
-    #     new_coords, log_p_accept = self.swap_vi_into_vj_impl(
-    #         chosen_water,
-    #         N_i,
-    #         N_j,
-    #         x.coords,
-    #         x.box,
-    #         insertion_site,
-    #         vol_i,
-    #         vol_j
-    #     )
+    #     chosen_water_atoms = self.water_idxs[chosen_water]
+    #     new_coords = coords[chosen_water_atoms]
+    #     # remove centroid and offset into insertion site
+    #     new_coords = new_coords - np.mean(new_coords, axis=0) + vj_insertion_fn()
 
-    #     return CoordsVelBox(new_coords, x.velocities, x.box), log_p_accept
+    #     # debug
+    #     # insertion_into_buckyball = len(vi_mols) > len(vj_mols)
+    #     # if insertion_into_buckyball:
+    #     # new_coords
+
+    #     trial_coords = coords.copy()  # can optimize this later if needed
+    #     trial_coords[chosen_water_atoms] = new_coords
+
+    #     n_atoms = len(coords)
+    #     a_idxs = chosen_water_atoms
+    #     b_idxs = np.delete(np.arange(n_atoms), a_idxs)
+
+    #     # we can probably speed this up even more if we use an incremental voxel_map
+    #     # (reduce complexity from O(N) to O(K))
+    #     # delta_U_delete = -self.U_fn(coords, box, a_idxs, b_idxs)
+    #     # delta_U_insert = self.U_fn(trial_coords, box, a_idxs, b_idxs)
+    #     # delta_U_total = delta_U_delete + delta_U_insert
+
+    #     delta_U_total = self.delta_U_total_fn(trial_coords, coords, box, a_idxs, b_idxs)
+    #     delta_U_total = np.asarray(delta_U_total)
+
+    #     # convert to inf if we get a nan
+    #     if np.isnan(delta_U_total):
+    #         delta_U_total = np.inf
+
+    #     ni = len(vi_mols)
+    #     nj = len(vj_mols)
+    #     hastings_factor = np.log((ni * vol_j) / ((nj + 1) * vol_i))
+    #     # print(hastings_factor)
+    #     log_p_accept = min(0, -self.beta * delta_U_total + hastings_factor)
+    #     new_state = CoordsVelBox(trial_coords, x.velocities, x.box)
+
+    #     return new_state, log_p_accept
+
+
+    def swap_vi_into_vj(
+        self,
+        vi_mols: List[int],
+        vj_mols: List[int],
+        x: CoordsVelBox,
+        vj_insertion_fn: Callable,
+        vol_i: float,
+        vol_j: float,
+    ):
+        chosen_water = np.random.choice(vi_mols)
+        N_i = len(vi_mols)
+        N_j = len(vj_mols)
+        insertion_site = vj_insertion_fn()
+        new_coords, log_p_accept = self.swap_vi_into_vj_impl(
+            chosen_water,
+            N_i,
+            N_j,
+            x.coords,
+            x.box,
+            insertion_site,
+            vol_i,
+            vol_j
+        )
+
+        return CoordsVelBox(new_coords, x.velocities, x.box), log_p_accept
 
     def swap_vi_into_vj_impl(
         self,
@@ -495,27 +495,24 @@ def setup_forcefield(charges):
     )
 
 
-# import time
-
-
 def image_xvb(initial_state, xvb_t):
     new_coords = image_frames(initial_state, [xvb_t.coords], [xvb_t.box])[0]
     return CoordsVelBox(new_coords, xvb_t.velocities, xvb_t.box)
 
 
-class CppMCMover():
+class CppMCMover(InsideOutsideExchangeMover):
     n_proposed: int = 0
     n_accepted: int = 0
 
-    def __init__(self, impl):
-        self._impl = impl
+    # def __init__(self, impl):
+        # self._impl = impl
 
     # def propose(self, x: CoordsVelBox) -> Tuple[CoordsVelBox, float]:
     #     """return proposed state and log acceptance probability"""
     #     raise NotImplementedError
 
     def move(self, x: CoordsVelBox) -> CoordsVelBox:
-        new_coords, log_acceptance_probability = self._impl.propose(x.coords, x.box)
+        new_coords, log_acceptance_probability = self.propose(x.coords, x.box)
         self.n_proposed += 1
 
         alpha = np.random.rand()
@@ -578,18 +575,26 @@ def test_exchange():
     print("water_ligand parameters", nb_water_ligand_params)
 
     bb_radius = 0.46
-    # mover_impl = InsideOutsideExchangeMover(
+    exc_mover = CppMCMover(
+        nb_beta,
+        nb_cutoff,
+        nb_water_ligand_params.reshape(-1).tolist(),
+        water_idxs.reshape(-1).tolist(),
+        initial_state.ligand_idxs.reshape(-1).tolist(),
+        1/DEFAULT_KT,
+        bb_radius
+    )
+
+    # reference
+    # exc_mover = InsideOutsideExchangeMove(
     #     nb_beta,
     #     nb_cutoff,
-    #     nb_water_ligand_params.reshape(-1).tolist(),
-    #     water_idxs.reshape(-1).tolist(),
-    #     initial_state.ligand_idxs.reshape(-1).tolist(),
+    #     nb_water_ligand_params,
+    #     water_idxs,
+    #     initial_state.ligand_idxs,
     #     1/DEFAULT_KT,
     #     bb_radius
     # )
-    # exc_mover = CppMCMover(mover_impl)
-
-    exc_mover = ExchangeMove(nb_water_ligand_params, nb_beta, nb_cutoff, water_idxs)
 
 
     cur_box = initial_state.box0

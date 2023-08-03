@@ -1,5 +1,6 @@
 #include <vector>
 #include <array>
+#include <random>
 
 namespace timemachine {
 
@@ -52,7 +53,7 @@ public:
         const std::vector<double> & coords,
         const std::array<double, 9> &box,
         std::vector<double> &proposal_coords,
-        double &log_prob) const;
+        double &log_prob); // not const because generator is modified.
 
 private:
     const double nb_beta_;
@@ -62,6 +63,9 @@ private:
     const std::vector<int> ligand_idxs_;
     const double beta_;
     const double radius_;
+
+    // std::random_device rd;
+    std::default_random_engine generator_;
 
 };
 

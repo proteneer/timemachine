@@ -33,10 +33,10 @@ std::array<double, 3> compute_centroid(double *coords, int N) {
 }
 
 
-std::array<double, 3> v1_insertion(double radius, const std::array<double, 3> &center) {
+std::array<double, 3> v1_insertion(double radius, const std::array<double, 3> &center, std::default_random_engine &generator) {
 
-    std::default_random_engine generator;
-    std::normal_distribution<double> normal_dist;
+    // std::default_random_engine generator;
+    std::normal_distribution<double> normal_dist(0.0, 1.0);
 
     double x = normal_dist(generator);
     double y = normal_dist(generator);
@@ -47,7 +47,7 @@ std::array<double, 3> v1_insertion(double radius, const std::array<double, 3> &c
     y /= n;
     z /= n;
 
-    std::uniform_real_distribution<double> uniform_dist;
+    std::uniform_real_distribution<double> uniform_dist(0.0, 1.0);
     double c = cbrt(uniform_dist(generator));
 
     double new_x = x * c * radius + center[0];
@@ -58,10 +58,10 @@ std::array<double, 3> v1_insertion(double radius, const std::array<double, 3> &c
 }
 
 std::array<double, 3>
-v2_insertion(double radius, const std::array<double, 3> &center, const std::array<double, 9> &box) {
+v2_insertion(double radius, const std::array<double, 3> &center, const std::array<double, 9> &box, std::default_random_engine &generator) {
 
-    std::default_random_engine generator;
-    std::uniform_real_distribution<double> uniform_dist;
+    // std::default_random_engine generator;
+    std::uniform_real_distribution<double> uniform_dist(0.0, 1.0);
 
     double bx = box[0 * 3 + 0];
     double by = box[1 * 3 + 1];
@@ -162,7 +162,11 @@ InsideOutsideExchangeMover::InsideOutsideExchangeMover(
     double radius)
     : nb_beta_(nb_beta), nb_cutoff_(nb_cutoff), nb_params_(nb_params), // Nx4
       water_idxs_(water_idxs),                                         // Wx3
-      ligand_idxs_(ligand_idxs), beta_(beta), radius_(radius) {}
+      ligand_idxs_(ligand_idxs), beta_(beta), radius_(radius), 
+      generator_(1234) {
+
+
+    }
 
 // partition water into inside/outside regions
 void InsideOutsideExchangeMover::get_water_groups(
@@ -206,7 +210,7 @@ void InsideOutsideExchangeMover::propose(
     const std::vector<double> & coords,
     const std::array<double, 9> &box,
     std::vector<double> &proposal_coords,
-    double &log_prob) const {
+    double &log_prob) {
 
 
     std::vector<double> ligand_coords;
@@ -227,8 +231,8 @@ void InsideOutsideExchangeMover::propose(
     double vol_1 = (4 / 3) * PI * radius_ * radius_ * radius_;
     double vol_2 = box[0*3+0]*box[1*3+1]*box[2*3+2] - vol_1;
 
-    std::array<double, 3> insertion_site_v1 = v1_insertion(radius_, ligand_centroid);
-    std::array<double, 3> insertion_site_v2 = v2_insertion(radius_, ligand_centroid, box);
+    std::array<double, 3> insertion_site_v1 = v1_insertion(radius_, ligand_centroid, generator_);
+    std::array<double, 3> insertion_site_v2 = v2_insertion(radius_, ligand_centroid, box, generator_);
 
     int n1 = v1_mols.size();
     int n2 = v2_mols.size();
