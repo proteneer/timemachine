@@ -214,16 +214,7 @@ void InsideOutsideExchangeMover::swap_vi_into_vj(
     std::vector<double> &proposal_coords,
     double &log_prob) const {
 
-
-    // proposal_coords = coords;
-    // log_prob = 0;
-    // return;
-
     int num_atoms = coords.size() / 3;
-    // int chosen_water = vi_mols[rand() % vi_mols.size()];
-    // int chosen_water = vi_mols[rand() % vi_mols.size()];
-
-    std::cout << chosen_water << " " << water_idxs_.size() << std::endl;
 
     // get indices of selected atoms
     std::array<int, 3> chosen_water_atom_idxs({
@@ -266,7 +257,6 @@ void InsideOutsideExchangeMover::swap_vi_into_vj(
         bool found = false;
         for(auto a : a_idxs) {
             if(i==a) {
-                std::cout << "skipping " << i << std::endl;
                 found = true;
             }
         }
@@ -274,29 +264,12 @@ void InsideOutsideExchangeMover::swap_vi_into_vj(
             b_idxs.push_back(i);
         }
     }
-    // b_idxs.erase(b_idxs.begin() + chosen_water * 3, b_idxs.begin() + (chosen_water + 1) * 3);
-
-    std::cout << a_idxs.size() << " " << b_idxs.size() << std::endl;
-    for(auto x : a_idxs) {
-        std::cout << x << std::endl;
-    }
 
     double delta_U_insert = U_fn(trial_coords, box, nb_beta_, nb_cutoff_, nb_params_, a_idxs, b_idxs);
-
-
-    // std::cout << "DU_INSERT_: " << delta_U_insert << std::endl;
     double delta_U_delete = -U_fn(coords, box, nb_beta_, nb_cutoff_, nb_params_, a_idxs, b_idxs);
-    // double delta_U_delete = 0;
     double delta_U_total = delta_U_delete + delta_U_insert;
 
-    std::cout << delta_U_delete << " " << delta_U_insert << std::endl;
-
-    // size_t ni = vi_mols.size();
-    // size_t nj = vj_mols.size();
-
     double hastings_factor = log((N_i * vol_j) / ((N_j + 1) * vol_i));
-
-    std::cout << "HF " << hastings_factor << std::endl;
     log_prob = std::min(0.0, -beta_ * delta_U_total + hastings_factor);
     proposal_coords = trial_coords;
 }
