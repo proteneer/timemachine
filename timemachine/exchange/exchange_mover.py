@@ -127,8 +127,11 @@ def get_initial_state(water_pdb, mol, ff, seed, nb_cutoff):
     return initial_state, num_water_mols, solvent_topology
 
 
+from scipy.special import logsumexp
+
+
 class ExchangeMove(moves.MonteCarloMove):
-    def __init__(self, nb_params, nb_beta, nb_cutoff, water_idxs):
+    def __init__(self, nb_beta, nb_cutoff, nb_params, water_idxs):
         self.nb_beta = nb_beta
         self.nb_cutoff = nb_cutoff
         self.nb_params = jnp.array(nb_params)
@@ -147,16 +150,47 @@ class ExchangeMove(moves.MonteCarloMove):
 
         self.U_fn = U_fn
 
+        def batch_log_weights(conf, box, water_idxs):
+            """
+            Return a list of energies equal to len(water_idxs)
+            """
+            # conf_i = conf[a_idxs]
+            # conf_j = conf[b_idxs]
+            # params_i = self.nb_params[a_idxs]
+            # params_j = self.nb_params[b_idxs]
+            # compute delta_U of deletion
+            n_atoms = len(conf)
+            log_weights = []
+            for a_idxs in water_idxs:
+                a_idxs = np.array(a_idxs)
+                b_idxs = np.delete(np.arange(n_atoms), a_idxs)
+                nrg = self.U_fn(conf, box, a_idxs, b_idxs)
+                weight = self.beta * nrg
+                log_weights.append(weight)
+            return log_weights
+
+        self.batch_log_weights = batch_log_weights
+
     def propose(self, x: CoordsVelBox) -> Tuple[CoordsVelBox, float]:
         coords = x.coords
         box = x.box
-        n_atoms = len(coords)
-        chosen_water = np.random.randint(self.num_waters)
+        # n_atoms = len(coords)
+
+        log_weights_before = self.batch_log_weights(coords, box, self.water_idxs)
+        log_probs_before = log_weights_before - logsumexp(log_weights_before)
+        probs_before = np.exp(log_probs_before)
+
+        # chosen_water = np.random.randint(self.num_waters)
+        print("LPB", log_probs_before)
+        chosen_water = np.random.choice(np.arange(self.num_waters), p=probs_before)
+
+        print("picked", chosen_water)
+
         chosen_water_atoms = self.water_idxs[chosen_water]
 
         # compute delta_U of deletion
-        a_idxs = chosen_water_atoms
-        b_idxs = np.delete(np.arange(n_atoms), a_idxs)
+        # a_idxs = chosen_water_atoms
+        # b_idxs = np.delete(np.arange(n_atoms), a_idxs) # not needed
 
         # compute delta_U of insertion
         trial_chosen_coords = coords[chosen_water_atoms]
@@ -165,22 +199,26 @@ class ExchangeMove(moves.MonteCarloMove):
 
         # this has a higher acceptance probability than if we allowed for rotations
         # (probably because we have a much higher chance of a useless move)
-        # moved_coords = randomly_translate(trial_chosen_coords, trial_translation)
         moved_coords = randomly_translate(trial_chosen_coords, trial_translation)
         trial_coords = coords.copy()  # can optimize this later if needed
         trial_coords[chosen_water_atoms] = moved_coords
 
-        delta_U_insert = self.U_fn(trial_coords, box, a_idxs, b_idxs)
-        # If our system is in a clash free state, a deletion move has delta_Us typically
-        # on the order of 35kTs. However, if we start in a clashy state, we can no longer
-        # guarantee this. So it's safer to disable this micro-optimization for now.
-        delta_U_delete = -self.U_fn(coords, box, a_idxs, b_idxs)
-        delta_U_total = delta_U_delete + delta_U_insert
+        # these terms cancel out
+        # delta_U_insert = self.U_fn(trial_coords, box, a_idxs, b_idxs)
+        # delta_U_delete = self.U_fn(coords, box, a_idxs, b_idxs)
+        # delta_U_total = delta_U_insert - delta_U_delete
+
+        log_weights_after = self.batch_log_weights(trial_coords, box, self.water_idxs)
+
+        print("numerator", logsumexp(log_weights_before), "denominator", logsumexp(log_weights_after))
+
+        log_p_accept = min(0, logsumexp(log_weights_before) - logsumexp(log_weights_after))
 
         # convert to inf if we get a nan
-        if np.isnan(delta_U_total):
-            delta_U_total = np.inf
-        log_p_accept = min(0, -self.beta * delta_U_total)
+        # if np.isnan(delta_U_total):
+        # delta_U_total = np.inf
+        # log_p_accept = min(0, -self.beta * delta_U_total)
+
         new_state = CoordsVelBox(trial_coords, x.velocities, x.box)
 
         return new_state, log_p_accept
@@ -301,7 +339,6 @@ class InsideOutsideExchangeMove(moves.MonteCarloMove):
 
     #     return new_state, log_p_accept
 
-
     def swap_vi_into_vj(
         self,
         vi_mols: List[int],
@@ -316,29 +353,12 @@ class InsideOutsideExchangeMove(moves.MonteCarloMove):
         N_j = len(vj_mols)
         insertion_site = vj_insertion_fn()
         new_coords, log_p_accept = self.swap_vi_into_vj_impl(
-            chosen_water,
-            N_i,
-            N_j,
-            x.coords,
-            x.box,
-            insertion_site,
-            vol_i,
-            vol_j
+            chosen_water, N_i, N_j, x.coords, x.box, insertion_site, vol_i, vol_j
         )
 
         return CoordsVelBox(new_coords, x.velocities, x.box), log_p_accept
 
-    def swap_vi_into_vj_impl(
-        self,
-        chosen_water,
-        N_i,
-        N_j,
-        coords,
-        box,
-        insertion_site: np.array,
-        vol_i: float,
-        vol_j: float):
-
+    def swap_vi_into_vj_impl(self, chosen_water, N_i, N_j, coords, box, insertion_site, vol_i: float, vol_j: float):
         assert N_i + N_j == len(self.water_idxs)
         # swap a water molecule from region vi to region vj
         # coords, box = x.coords, x.box
@@ -449,6 +469,7 @@ class InsideOutsideExchangeMove(moves.MonteCarloMove):
 
 from timemachine.lib.custom_ops import InsideOutsideExchangeMover
 
+
 def compute_density(n_waters, box):
     box_vol = np.prod(np.diag(box))
     numerator = n_waters * 18.01528 * 1e27
@@ -505,7 +526,7 @@ class CppMCMover(InsideOutsideExchangeMover):
     n_accepted: int = 0
 
     # def __init__(self, impl):
-        # self._impl = impl
+    # self._impl = impl
 
     # def propose(self, x: CoordsVelBox) -> Tuple[CoordsVelBox, float]:
     #     """return proposed state and log acceptance probability"""
@@ -575,15 +596,15 @@ def test_exchange():
     print("water_ligand parameters", nb_water_ligand_params)
 
     bb_radius = 0.46
-    exc_mover = CppMCMover(
-        nb_beta,
-        nb_cutoff,
-        nb_water_ligand_params.reshape(-1).tolist(),
-        water_idxs.reshape(-1).tolist(),
-        initial_state.ligand_idxs.reshape(-1).tolist(),
-        1/DEFAULT_KT,
-        bb_radius
-    )
+    # exc_mover = CppMCMover(
+    #     nb_beta,
+    #     nb_cutoff,
+    #     nb_water_ligand_params.reshape(-1).tolist(),
+    #     water_idxs.reshape(-1).tolist(),
+    #     initial_state.ligand_idxs.reshape(-1).tolist(),
+    #     1 / DEFAULT_KT,
+    #     bb_radius,
+    # )
 
     # reference
     # exc_mover = InsideOutsideExchangeMove(
@@ -596,6 +617,8 @@ def test_exchange():
     #     bb_radius
     # )
 
+    # vanilla reference
+    exc_mover = ExchangeMove(nb_beta, nb_cutoff, nb_water_ligand_params, water_idxs)
 
     cur_box = initial_state.box0
     cur_x_t = initial_state.x0
@@ -632,7 +655,7 @@ def test_exchange():
     npt_mover.n_steps = md_steps_per_batch
 
     # TBD: cache the minimized and equilibrated initial structure later on to iterate faster.
-    mc_steps_per_batch = 5000
+    mc_steps_per_batch = 1
 
     # (ytz): If I start with pure MC, and no MD, it's actually very easy to remove the waters.
     # since the starting waters have very very high energy. If I re-run MD, then it becomes progressively harder
