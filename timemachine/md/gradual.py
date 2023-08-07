@@ -92,8 +92,10 @@ class PathwiseMH:
     def move(self, x):
         path = self.path_proposal.sample(x)
         y = path[-1]
+
         favorability = self.target.logpdf_difference(y, x)
-        irreversibility = self.path_proposal.logpdf(path) - self.rev_path_proposal.logpdf(path[-1])
+        rev_path = path[::-1]
+        irreversibility = self.path_proposal.logpdf(path) - self.rev_path_proposal.logpdf(rev_path)
 
         log_accept_prob = np.minimum(0.0, favorability - irreversibility)
         accept_prob = np.exp(log_accept_prob)
