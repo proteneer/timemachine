@@ -13,7 +13,7 @@ namespace timemachine {
 
 LangevinIntegrator::LangevinIntegrator(
     int N, const double *masses, double temperature, double dt, double friction, int seed)
-    : N_(N), temperature_(temperature), dt_(dt), friction_(friction), noise_iteration_(0), runner_() {
+    : N_(N), temperature_(temperature), dt_(dt), friction_(friction), noise_offset_(0), runner_() {
 
     ca_ = exp(-friction * dt);
 
@@ -68,8 +68,8 @@ void LangevinIntegrator::step_fwd(
         nullptr,
         stream);
 
-    noise_iteration_ = noise_iteration_ % NOISE_BATCH_SIZE;
-    if (noise_iteration_ == 0) {
+    noise_offset_ = noise_offset_ % NOISE_BATCH_SIZE;
+    if (noise_offset_ == 0) {
         // Generating noise can be expensive, generate in batches for efficiency
         curandErrchk(curandSetStream(cr_rng_, stream));
         curandErrchk(templateCurandNormal(cr_rng_, d_noise_, round_up_even(NOISE_BATCH_SIZE * N_ * D), 0.0, 1.0));
@@ -79,9 +79,9 @@ void LangevinIntegrator::step_fwd(
     size_t n_blocks = ceil_divide(N_, tpb);
 
     k_update_forward_baoab<double, D><<<n_blocks, tpb, 0, stream>>>(
-        N_, ca_, d_idxs, d_cbs_, d_ccs_, d_noise_ + (noise_iteration_ * N_ * D), d_x_t, d_v_t, d_du_dx_, dt_);
+        N_, ca_, d_idxs, d_cbs_, d_ccs_, d_noise_ + (noise_offset_ * N_ * D), d_x_t, d_v_t, d_du_dx_, dt_);
     gpuErrchk(cudaPeekAtLastError());
-    noise_iteration_++;
+    noise_offset_++;
 }
 
 void LangevinIntegrator::initialize(

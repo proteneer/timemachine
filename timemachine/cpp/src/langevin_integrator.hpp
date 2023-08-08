@@ -18,7 +18,7 @@ private:
     double ca_;
 
     // The offset into the current batch of noise
-    int noise_iteration_;
+    int noise_offset_;
 
     double *d_cbs_;
     double *d_ccs_;
