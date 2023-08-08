@@ -284,7 +284,7 @@ def benchmark_local(
 
     local_seed = rng.integers(np.iinfo(np.int32).max)
     # run once before timer starts
-    ctxt.multiple_steps_local(steps_per_batch, ligand_idxs, seed=local_seed, burn_in=0)
+    ctxt.multiple_steps_local(steps_per_batch, ligand_idxs, seed=local_seed)
 
     start = time.time()
 
@@ -293,7 +293,7 @@ def benchmark_local(
         local_seed = rng.integers(np.iinfo(np.int32).max)
         # time the current batch
         batch_start = time.time()
-        _, _ = ctxt.multiple_steps_local(steps_per_batch, ligand_idxs, seed=local_seed, burn_in=0)
+        _, _ = ctxt.multiple_steps_local(steps_per_batch, ligand_idxs, seed=local_seed)
         batch_end = time.time()
 
         delta = batch_end - batch_start

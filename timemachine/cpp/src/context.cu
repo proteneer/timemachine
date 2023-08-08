@@ -86,7 +86,6 @@ void Context::_ensure_local_md_intialized() {
 std::array<std::vector<double>, 2> Context::multiple_steps_local(
     const int n_steps,
     const std::vector<int> &local_idxs,
-    const int burn_in,
     const int store_x_interval,
     const double radius,
     const double k,
@@ -122,9 +121,6 @@ std::array<std::vector<double>, 2> Context::multiple_steps_local(
         std::vector<std::shared_ptr<BoundPotential>> local_pots = local_md_pots_->get_potentials();
 
         intg_->initialize(local_pots, d_x_t_, d_v_t_, d_box_t_, d_free_idxs, stream);
-        for (int i = 0; i < burn_in; i++) {
-            this->_step(local_pots, d_free_idxs, stream);
-        }
         for (int i = 1; i <= n_steps; i++) {
             this->_step(local_pots, d_free_idxs, stream);
             if (i % store_x_interval == 0) {
@@ -165,7 +161,6 @@ std::array<std::vector<double>, 2> Context::multiple_steps_local_selection(
     const int n_steps,
     const int reference_idx,
     const std::vector<int> &selection_idxs,
-    const int burn_in,
     const int store_x_interval,
     const double radius,
     const double k) {
@@ -200,9 +195,6 @@ std::array<std::vector<double>, 2> Context::multiple_steps_local_selection(
         std::vector<std::shared_ptr<BoundPotential>> local_pots = local_md_pots_->get_potentials();
 
         intg_->initialize(local_pots, d_x_t_, d_v_t_, d_box_t_, d_free_idxs, stream);
-        for (int i = 0; i < burn_in; i++) {
-            this->_step(local_pots, d_free_idxs, stream);
-        }
         for (int i = 1; i <= n_steps; i++) {
             this->_step(local_pots, d_free_idxs, stream);
             if (i % store_x_interval == 0) {

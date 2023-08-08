@@ -261,7 +261,7 @@ def test_local_md_particle_density(freeze_reference, k):
 
     def local_move(_, steps=500):
         local_seed = rng.integers(np.iinfo(np.int32).max)
-        xs, boxes = ctxt.multiple_steps_local(steps, local_idxs, burn_in=0, k=k, seed=local_seed)
+        xs, boxes = ctxt.multiple_steps_local(steps, local_idxs, k=k, seed=local_seed)
         return (xs[-1], boxes[-1]), None
 
     assert_no_drift(
