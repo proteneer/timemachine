@@ -30,6 +30,9 @@ void __global__ k_coords_to_kv_gather(
     float y = coords[atom_idx * 3 + 1];
     float z = coords[atom_idx * 3 + 2];
 
+    // floor is used in place of nearbyint here to ensure all particles are imaged into the home box. This differs
+    // from distances calculations where the nearest possible image is calculated rather than imaging into
+    // the home box.
     x -= bx * floor(x / bx);
     y -= by * floor(y / by);
     z -= bz * floor(z / bz);
