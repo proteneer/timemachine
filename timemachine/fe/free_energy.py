@@ -405,7 +405,6 @@ def sample(initial_state: InitialState, md_params: MDParams, max_buffer_frames: 
                 k=md_params.k,
                 radius=rng.uniform(md_params.min_radius, md_params.max_radius),
                 seed=rng.integers(np.iinfo(np.int32).max),
-                burn_in=0,
             )
 
             if coords is None:
