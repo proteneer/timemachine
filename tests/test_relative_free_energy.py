@@ -9,7 +9,7 @@ import pytest
 from timemachine.fe.free_energy import HostConfig, MDParams, PairBarResult, SimulationResult, image_frames, sample
 from timemachine.fe.rbfe import (
     estimate_relative_free_energy,
-    estimate_relative_free_energy_via_greedy_bisection,
+    estimate_relative_free_energy_bisection,
     run_solvent,
     run_vacuum,
 )
@@ -148,7 +148,7 @@ def run_triple(mol_a, mol_b, core, forcefield, md_params, protein_path, estimate
 @pytest.mark.nightly(reason="Slow!")
 @pytest.mark.parametrize(
     "estimate_relative_free_energy_fn",
-    [estimate_relative_free_energy, estimate_relative_free_energy_via_greedy_bisection],
+    [estimate_relative_free_energy, estimate_relative_free_energy_bisection],
 )
 def test_run_hif2a_test_system(estimate_relative_free_energy_fn):
 
@@ -344,7 +344,7 @@ def test_imaging_frames():
 
 @pytest.mark.parametrize(
     "estimate_relative_free_energy_fn",
-    [estimate_relative_free_energy, estimate_relative_free_energy_via_greedy_bisection],
+    [estimate_relative_free_energy, estimate_relative_free_energy_bisection],
 )
 def test_rbfe_with_1_window(estimate_relative_free_energy_fn):
     """Should not be able to run a relative free energy calculation with a single window"""
@@ -365,10 +365,10 @@ def test_rbfe_with_1_window(estimate_relative_free_energy_fn):
         )
 
 
-def test_estimate_free_energy_via_greedy_bisection_invalid_args():
+def test_estimate_free_energy_bisection_invalid_args():
     mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
     with pytest.raises(ValueError, match="keep_idxs"):
-        estimate_relative_free_energy_via_greedy_bisection(
+        estimate_relative_free_energy_bisection(
             mol_a,
             mol_b,
             core,
@@ -384,4 +384,4 @@ if __name__ == "__main__":
     # convenience: so we can run this directly from python tests/test_relative_free_energy.py without
     # toggling the pytest marker
     test_run_hif2a_test_system(estimate_relative_free_energy)
-    test_run_hif2a_test_system(estimate_relative_free_energy_via_greedy_bisection)
+    test_run_hif2a_test_system(estimate_relative_free_energy_bisection)

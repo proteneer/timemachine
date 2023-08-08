@@ -23,7 +23,7 @@ from timemachine.fe.free_energy import (
     batches,
     estimate_free_energy_bar,
     make_pair_bar_plots,
-    run_sims_with_greedy_bisection,
+    run_sims_bisection,
     sample,
 )
 from timemachine.fe.rbfe import setup_initial_state, setup_initial_states, setup_optimized_host
@@ -316,7 +316,7 @@ def test_run_sims_with_greedy_bisection_early_stopping():
     n_bisections = 3
 
     run_sims_with_greedy_bisection_partial = partial(
-        run_sims_with_greedy_bisection,
+        run_sims_bisection,
         [0.0, 1.0],
         make_initial_state,
         md_params,

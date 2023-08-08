@@ -599,7 +599,7 @@ class MinOverlapWarning(UserWarning):
     pass
 
 
-def run_sims_with_greedy_bisection(
+def run_sims_bisection(
     initial_lambdas: Sequence[float],
     make_initial_state: Callable[[float], InitialState],
     md_params: MDParams,
