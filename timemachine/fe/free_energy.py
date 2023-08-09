@@ -406,7 +406,7 @@ def sample(initial_state: InitialState, md_params: MDParams, max_buffer_frames: 
             )
             coords.append(x_t)
             boxes.append(box_t)
-        return np.array(coords), np.array(boxes)
+        return np.concatenate(coords), np.concatenate(boxes)
 
     all_coords: Union[NDArray, StoredArrays]
 
