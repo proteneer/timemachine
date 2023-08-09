@@ -241,6 +241,7 @@ def test_local_md_parameters(freeze_reference):
         local_steps=steps_per_frame,
         min_radius=0.1,
         max_radius=0.5,
+        freeze_reference=freeze_reference,
     )
 
     # Local MD not supported by vacuum, will reset local_steps to 0
