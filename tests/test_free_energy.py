@@ -302,7 +302,7 @@ def test_make_pair_bar_plots(mock_fig, hif2a_ligand_pair_single_topology_lam0_st
     )
 
 
-def test_run_sims_with_greedy_bisection_early_stopping():
+def test_run_sims_bisection_early_stopping():
     mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
     forcefield = Forcefield.load_default()
     st = SingleTopology(mol_a, mol_b, core, forcefield)
@@ -315,7 +315,7 @@ def test_run_sims_with_greedy_bisection_early_stopping():
 
     n_bisections = 3
 
-    run_sims_with_greedy_bisection_partial = partial(
+    run_sims_bisection_early_stopping = partial(
         run_sims_bisection,
         [0.0, 1.0],
         make_initial_state,
@@ -326,7 +326,7 @@ def test_run_sims_with_greedy_bisection_early_stopping():
     )
 
     # runs all n_bisections iterations by default
-    results, _, _ = run_sims_with_greedy_bisection_partial()
+    results, _, _ = run_sims_bisection_early_stopping()
     assert len(results) == 1 + n_bisections  # initial result + bisection iterations
 
     def result_with_overlap(overlap):
@@ -336,24 +336,24 @@ def test_run_sims_with_greedy_bisection_early_stopping():
         # overlap does not improve; should run all n_bisections iterations
         mock_estimate_free_energy_bar.return_value = result_with_overlap(0.0)
         with pytest.warns(MinOverlapWarning):
-            results, _, _ = run_sims_with_greedy_bisection_partial(min_overlap=0.4)
+            results, _, _ = run_sims_bisection_early_stopping(min_overlap=0.4)
         assert len(results) == 1 + n_bisections
 
         # min_overlap satisfied by initial states
         mock_estimate_free_energy_bar.return_value = result_with_overlap(0.5)
-        results, _, _ = run_sims_with_greedy_bisection_partial(min_overlap=0.4)
+        results, _, _ = run_sims_bisection_early_stopping(min_overlap=0.4)
         assert len(results) == 1
 
         # min_overlap achieved after 1 iteration
         mock_estimate_free_energy_bar.side_effect = [result_with_overlap(overlap) for overlap in [0.0, 0.5, 0.5]]
-        results, _, _ = run_sims_with_greedy_bisection_partial(min_overlap=0.4)
+        results, _, _ = run_sims_bisection_early_stopping(min_overlap=0.4)
         assert len(results) == 1 + 1
 
         # min_overlap achieved after 2 iterations
         mock_estimate_free_energy_bar.side_effect = [
             result_with_overlap(overlap) for overlap in [0.0, 0.5, 0.3, 0.5, 0.6]
         ]
-        results, _, _ = run_sims_with_greedy_bisection_partial(min_overlap=0.4)
+        results, _, _ = run_sims_bisection_early_stopping(min_overlap=0.4)
         assert len(results) == 1 + 2
 
 
