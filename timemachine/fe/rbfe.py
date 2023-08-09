@@ -536,7 +536,7 @@ def estimate_relative_free_energy_bisection(
         keep_idxs = [0, -1]  # keep frames from first and last windows
 
     assert len(set(keep_idxs)) == len(keep_idxs)
-    assert len(keep_idxs) < n_windows
+    assert len(keep_idxs) <= n_windows
 
     single_topology = SingleTopology(mol_a, mol_b, core, ff)
 
