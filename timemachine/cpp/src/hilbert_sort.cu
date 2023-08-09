@@ -1,5 +1,5 @@
 #include "gpu_utils.cuh"
-#include "hilbert_curve.hpp"
+#include "hilbert_sort.hpp"
 #include "kernels/k_hilbert.cuh"
 #include "vendored/hilbert.h"
 #include <cub/cub.cuh>
@@ -9,7 +9,7 @@
 
 namespace timemachine {
 
-HilbertCurve::HilbertCurve(const int N)
+HilbertSort::HilbertSort(const int N)
     : N_(N), d_bin_to_idx_(HILBERT_GRID_DIM * HILBERT_GRID_DIM * HILBERT_GRID_DIM), d_sort_keys_in_(N),
       d_sort_keys_out_(N), d_sort_vals_in_(N), d_sort_storage_(nullptr), d_sort_storage_bytes_(0) {
     // initialize hilbert curve which maps each of the HILBERT_GRID_DIM x HILBERT_GRID_DIM x HILBERT_GRID_DIM cells into an index.
@@ -46,9 +46,9 @@ HilbertCurve::HilbertCurve(const int N)
     d_sort_storage_.reset(new DeviceBuffer<char>(d_sort_storage_bytes_));
 }
 
-HilbertCurve::~HilbertCurve(){};
+HilbertSort::~HilbertSort(){};
 
-void HilbertCurve::sort_device(
+void HilbertSort::sort_device(
     const int N,
     const unsigned int *d_atom_idxs,
     const double *d_coords,

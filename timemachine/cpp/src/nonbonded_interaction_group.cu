@@ -69,7 +69,7 @@ NonbondedInteractionGroup<RealType>::NonbondedInteractionGroup(
     gpuErrchk(cudaMallocHost(&p_rebuild_nblist_, 1 * sizeof(*p_rebuild_nblist_)));
 
     if (!disable_hilbert_) {
-        this->hilbert_sort_.reset(new HilbertCurve(N_));
+        this->hilbert_sort_.reset(new HilbertSort(N_));
     }
 
     this->set_atom_idxs(row_atom_idxs, col_atom_idxs);

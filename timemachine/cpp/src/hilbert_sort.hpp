@@ -6,7 +6,7 @@
 
 namespace timemachine {
 
-class HilbertCurve {
+class HilbertSort {
 
 private:
     const int N_;
@@ -21,9 +21,9 @@ private:
 
 public:
     // N - number of atoms
-    HilbertCurve(const int N);
+    HilbertSort(const int N);
 
-    ~HilbertCurve();
+    ~HilbertSort();
 
     void sort_device(
         const int N,

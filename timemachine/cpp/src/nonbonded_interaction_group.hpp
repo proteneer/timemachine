@@ -1,6 +1,6 @@
 #pragma once
 
-#include "hilbert_curve.hpp"
+#include "hilbert_sort.hpp"
 #include "neighborlist.hpp"
 #include "nonbonded_common.hpp"
 #include "potential.hpp"
@@ -52,7 +52,7 @@ private:
     unsigned long long *d_sorted_du_dx_;
     unsigned long long *d_sorted_du_dp_;
 
-    std::unique_ptr<HilbertCurve> hilbert_sort_;
+    std::unique_ptr<HilbertSort> hilbert_sort_;
 
     cudaEvent_t nblist_flag_sync_event_; // Event to synchronize rebuild flag on
 
