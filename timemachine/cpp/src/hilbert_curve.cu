@@ -9,10 +9,10 @@
 
 namespace timemachine {
 
-HilbertCurve::HilbertCurve(int N)
+HilbertCurve::HilbertCurve(const int N)
     : N_(N), d_bin_to_idx_(HILBERT_GRID_DIM * HILBERT_GRID_DIM * HILBERT_GRID_DIM), d_sort_keys_in_(N),
       d_sort_keys_out_(N), d_sort_vals_in_(N), d_sort_storage_(nullptr), d_sort_storage_bytes_(0) {
-    // initialize hilbert curve
+    // initialize hilbert curve which maps each of the HILBERT_GRID_DIM x HILBERT_GRID_DIM x HILBERT_GRID_DIM cells into an index.
     std::vector<unsigned int> bin_to_idx(HILBERT_GRID_DIM * HILBERT_GRID_DIM * HILBERT_GRID_DIM);
     for (int i = 0; i < HILBERT_GRID_DIM; i++) {
         for (int j = 0; j < HILBERT_GRID_DIM; j++) {
