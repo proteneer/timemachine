@@ -535,10 +535,8 @@ def estimate_relative_free_energy_bisection(
     if keep_idxs is None:
         keep_idxs = [0, -1]  # keep frames from first and last windows
 
-    assert len(keep_idxs) <= n_windows
-
-    if min_overlap is not None and not all(i in {0, -1} for i in keep_idxs):
-        raise ValueError("when min_overlap is not None, keep_idxs must be None or a list with all elements in {0, -1}")
+    assert len(set(keep_idxs)) == len(keep_idxs)
+    assert len(keep_idxs) < n_windows
 
     single_topology = SingleTopology(mol_a, mol_b, core, ff)
 
@@ -579,8 +577,17 @@ def estimate_relative_free_energy_bisection(
 
         plots = make_pair_bar_plots(final_result, temperature, combined_prefix)
 
-        stored_frames = [np.array(frames[i]) for i in keep_idxs]
-        stored_boxes = [boxes[i] for i in keep_idxs]
+        assert len(results) == len(frames) == len(boxes)
+        stored_frames = []
+        stored_boxes = []
+        for i in keep_idxs:
+            try:
+                stored_frames.append(np.array(frames[i]))
+                stored_boxes.append(boxes[i])
+            except IndexError:
+                warnings.warn(
+                    f"Invalid index in keep_idxs: {i}. Bisection terminated with only {len(results)} windows."
+                )
 
         return SimulationResult(
             final_result,
