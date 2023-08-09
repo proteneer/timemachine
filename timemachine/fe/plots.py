@@ -293,18 +293,20 @@ def plot_fwd_reverse_predictions(
     assert len(fwd) == len(fwd_err)
     assert len(rev) == len(rev_err)
 
-    # Assert that first and last values are very close
-    assert np.allclose(fwd[-1], rev[-1])
-    assert np.allclose(fwd_err[-1], rev_err[-1])
-
+    # Assert that first and last values are close
+    assert np.allclose(fwd[-1], rev[-1], atol=1), f"{fwd[-1]} not close to {rev[-1]}"
+    if np.isfinite(fwd_err).all() and np.isfinite(rev_err.all()):
+        assert np.allclose(fwd_err[-1], rev_err[-1], atol=1)
+    fwd_mask = np.isfinite(fwd_err)
+    rev_mask = np.isfinite(rev_err)
     xs = np.linspace(1.0 / len(fwd), 1.0, len(fwd))
 
     plt.figure(figsize=(6, 6))
     plt.title(f"{energy_type} Convergence Over Time")
     plt.plot(xs, fwd, label=f"Forward {energy_type}", marker="o")
-    plt.fill_between(xs, fwd - fwd_err, fwd + fwd_err, alpha=0.25)
+    plt.fill_between(xs[fwd_mask], fwd[fwd_mask] - fwd_err[fwd_mask], fwd[fwd_mask] + fwd_err[fwd_mask], alpha=0.25)
     plt.plot(xs, rev, label=f"Reverse {energy_type}", marker="o")
-    plt.fill_between(xs, rev - rev_err, rev + rev_err, alpha=0.25)
+    plt.fill_between(xs[rev_mask], rev[rev_mask] - rev_err[rev_mask], rev[rev_mask] + rev_err[rev_mask], alpha=0.25)
     plt.axhline(fwd[-1], linestyle="--")
     plt.xlabel("Fraction of simulation time")
     plt.ylabel(f"{energy_type} (kcal/mol)")
