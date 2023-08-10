@@ -30,7 +30,6 @@ public:
     std::array<std::vector<double>, 2> multiple_steps_local(
         const int n_steps,
         const std::vector<int> &local_idxs,
-        const int burn_in,
         const int store_x_interval,
         const double radius,
         const double k,
@@ -40,7 +39,6 @@ public:
         const int n_steps,
         const int reference_idx,
         const std::vector<int> &selection_idxs,
-        const int burn_in,
         const int store_x_interval,
         const double radius,
         const double k);

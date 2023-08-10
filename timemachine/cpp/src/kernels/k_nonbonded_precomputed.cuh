@@ -55,7 +55,6 @@ void __global__ k_nonbonded_precomputed(
     unsigned long long gj_y = 0;
     unsigned long long gj_z = 0;
 
-    RealType real_beta = static_cast<RealType>(beta);
     RealType real_cutoff = static_cast<RealType>(cutoff);
     RealType cutoff_squared = real_cutoff * real_cutoff;
 
@@ -88,7 +87,7 @@ void __global__ k_nonbonded_precomputed(
         if (q_ij != 0) {
 
             RealType erfc_beta;
-            RealType es_factor = real_es_factor(real_beta, d_ij, inv_dij * inv_dij, erfc_beta);
+            RealType es_factor = real_es_factor(static_cast<RealType>(beta), d_ij, inv_dij * inv_dij, erfc_beta);
 
             if (u_buffer) {
                 // energies

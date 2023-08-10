@@ -29,12 +29,13 @@ def test_forward_and_reverse_ddg_plot_validation():
         plot_forward_and_reverse_ddg(dummy_solv_ukln, dummy_complex_ukln[0])
 
 
-def test_forward_and_reverse_dg_plot():
+@pytest.mark.parametrize("ukln_shape", [(47, 2, 2, 2000), (5, 2, 2, 10)])
+def test_forward_and_reverse_dg_plot(ukln_shape):
     rng = np.random.default_rng(2023)
-    ukln_shape = (47, 2, 2, 2000)
-    dummy_ukln = rng.random(size=ukln_shape)
+    dummy_ukln = rng.random(size=ukln_shape) * 1000
 
-    plot_forward_and_reverse_dg(dummy_ukln)
+    frames_per_step = min(ukln_shape[-1], 100)
+    plot_forward_and_reverse_dg(dummy_ukln, frames_per_step=frames_per_step)
 
 
 def test_forward_and_reverse_dg_plot_validation():

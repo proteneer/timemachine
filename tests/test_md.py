@@ -300,9 +300,6 @@ def test_multiple_steps_local_validation(freeze_reference):
     with pytest.raises(RuntimeError, match="atom indices must be unique"):
         ctxt.multiple_steps_local(100, np.array([1, 1], dtype=np.int32), radius=radius)
 
-    with pytest.raises(RuntimeError, match="burn in steps must be greater or equal to zero"):
-        ctxt.multiple_steps_local(100, np.array([1], dtype=np.int32), radius=radius, burn_in=-5)
-
     with pytest.raises(RuntimeError, match="radius must be greater or equal to 0.1"):
         ctxt.multiple_steps_local(100, np.array([1], dtype=np.int32), radius=0.01)
 
@@ -362,11 +359,6 @@ def test_multiple_steps_local_selection_validation(freeze_reference):
     with pytest.raises(RuntimeError, match="atom indices must be unique"):
         ctxt.multiple_steps_local_selection(100, reference_idx, np.array([1, 1], dtype=np.int32), radius=radius)
 
-    with pytest.raises(RuntimeError, match="burn in steps must be greater or equal to zero"):
-        ctxt.multiple_steps_local_selection(
-            100, reference_idx, np.array([1], dtype=np.int32), radius=radius, burn_in=-5
-        )
-
     with pytest.raises(RuntimeError, match="radius must be greater or equal to 0.1"):
         ctxt.multiple_steps_local_selection(100, reference_idx, np.array([1], dtype=np.int32), radius=0.01)
 
@@ -384,62 +376,6 @@ def test_multiple_steps_local_selection_validation(freeze_reference):
 
     with pytest.raises(RuntimeError, match=f"reference idx must be at least 0 and less than {N}"):
         ctxt.multiple_steps_local_selection(100, -1, np.array([3], dtype=np.int32))
-
-
-@pytest.mark.parametrize("freeze_reference", [True, False])
-def test_multiple_steps_local_burn_in(freeze_reference):
-    """Verify that burn in steps are identical to regular steps"""
-    seed = 2022
-    np.random.seed(seed)
-
-    N = 8
-    D = 3
-
-    coords = np.random.rand(N, D).astype(dtype=np.float64) * 2
-    box = np.eye(3) * 3.0
-    masses = np.random.rand(N)
-
-    E = 2
-
-    params, potential = prepare_nb_system(
-        coords,
-        E,
-        p_scale=3.0,
-        cutoff=1.0,
-    )
-    nb_pot = potential.to_gpu(np.float32)
-
-    temperature = constants.DEFAULT_TEMP
-    dt = 1.5e-3
-    friction = 0.0
-    radius = 1.2
-
-    # Select a single particle to use as the reference, will be frozen
-    local_idxs = np.array([len(coords) - 1], dtype=np.int32)
-
-    v0 = np.zeros_like(coords)
-    bps = [nb_pot.bind(params).bound_impl]
-
-    intg = LangevinIntegrator(temperature, dt, friction, masses, seed)
-
-    intg_impl = intg.impl()
-
-    steps = 100
-    burn_in = 100
-
-    ctxt = custom_ops.Context(coords, v0, box, intg_impl, bps)
-    ctxt.setup_local_md(temperature, freeze_reference)
-    ref_xs, ref_boxes = ctxt.multiple_steps_local(steps, local_idxs, radius=radius, burn_in=burn_in)
-    assert np.all(ref_xs[-1] < 1000)
-    intg_impl = intg.impl()
-
-    ctxt = custom_ops.Context(coords, v0, box, intg_impl, bps)
-    ctxt.setup_local_md(temperature, freeze_reference)
-    comp_xs, comp_boxes = ctxt.multiple_steps_local(steps + burn_in, local_idxs, radius=radius, burn_in=0)
-
-    # Final frame should be identical
-    np.testing.assert_array_equal(ref_xs, comp_xs)
-    np.testing.assert_array_equal(ref_boxes, comp_boxes)
 
 
 @pytest.mark.parametrize("freeze_reference", [True, False])
@@ -767,7 +703,7 @@ def test_local_md_with_selection_mask(freeze_reference):
 
     ctxt = custom_ops.Context(coords, v0, box, intg.impl(), bps)
     ctxt.setup_local_md(constants.DEFAULT_TEMP, freeze_reference)
-    xs, boxes = ctxt.multiple_steps_local_selection(steps, reference_idx, free_particles.astype(np.int32), burn_in=0)
+    xs, boxes = ctxt.multiple_steps_local_selection(steps, reference_idx, free_particles.astype(np.int32))
 
     if not freeze_reference:
         free_particles = np.append(free_particles, reference_idx)
@@ -888,11 +824,10 @@ def test_local_md_nonbonded_all_pairs_subset(freeze_reference):
     intg_impl = intg.impl()
 
     steps = 100
-    burn_in = 0
 
     ctxt = custom_ops.Context(coords, v0, box, intg_impl, bps)
     ctxt.setup_local_md(temperature, freeze_reference)
-    ref_xs, ref_boxes = ctxt.multiple_steps_local(steps, local_idxs, radius=radius, burn_in=burn_in)
+    ref_xs, ref_boxes = ctxt.multiple_steps_local(steps, local_idxs, radius=radius)
 
     for (ref_du_dx, ref_u), bp in zip(ref_vals, bps):
         test_du_dx, test_u = bp.execute(coords, box)
@@ -932,8 +867,8 @@ def test_context_invalid_boxes():
 
     ctxt = custom_ops.Context(coords, v0, box, intg.impl(), bps)
     ctxt.multiple_steps(steps)
-    ctxt.multiple_steps_local(steps, ligand_idxs, burn_in=0)
-    ctxt.multiple_steps_local_selection(steps, reference_idx, selection, burn_in=0)
+    ctxt.multiple_steps_local(steps, ligand_idxs)
+    ctxt.multiple_steps_local_selection(steps, reference_idx, selection)
 
     # Make the box way too small, which should trigger the failure
     ctxt.set_box(box * 0.01)
@@ -942,20 +877,18 @@ def test_context_invalid_boxes():
         _, boxes = ctxt.multiple_steps(steps)
         assert len(boxes) == 1
     with pytest.raises(RuntimeError, match=err_msg):
-        _, boxes = ctxt.multiple_steps_local(steps, ligand_idxs, burn_in=0)
+        _, boxes = ctxt.multiple_steps_local(steps, ligand_idxs)
         assert len(boxes) == 1
     with pytest.raises(RuntimeError, match=err_msg):
-        _, boxes = ctxt.multiple_steps_local_selection(steps, reference_idx, selection, burn_in=0)
+        _, boxes = ctxt.multiple_steps_local_selection(steps, reference_idx, selection)
         assert len(boxes) == 1
 
     # Without returning boxes no check will be performed
     _, boxes = ctxt.multiple_steps(steps, store_x_interval=steps + 1)
     assert len(boxes) == 0
-    _, boxes = ctxt.multiple_steps_local(steps, ligand_idxs, burn_in=0, store_x_interval=steps + 1)
+    _, boxes = ctxt.multiple_steps_local(steps, ligand_idxs, store_x_interval=steps + 1)
     assert len(boxes) == 0
-    _, boxes = ctxt.multiple_steps_local_selection(
-        steps, reference_idx, selection, burn_in=0, store_x_interval=steps + 1
-    )
+    _, boxes = ctxt.multiple_steps_local_selection(steps, reference_idx, selection, store_x_interval=steps + 1)
     assert len(boxes) == 0
 
 

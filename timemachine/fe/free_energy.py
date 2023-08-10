@@ -385,8 +385,8 @@ def sample(initial_state: InitialState, md_params: MDParams, max_buffer_frames: 
         return coords, boxes
 
     def run_production_local_steps(n_steps: int) -> Tuple[NDArray, NDArray]:
-        coords = None
-        boxes = None
+        coords = []
+        boxes = []
         for steps in batches(n_steps, md_params.steps_per_frame):
             if steps < md_params.steps_per_frame:
                 warn(
@@ -396,26 +396,17 @@ def sample(initial_state: InitialState, md_params: MDParams, max_buffer_frames: 
             global_steps = steps - md_params.local_steps
             local_steps = md_params.local_steps
             if global_steps > 0:
-                ctxt.multiple_steps(
-                    n_steps=global_steps,
-                )
+                ctxt.multiple_steps(n_steps=global_steps)
             x_t, box_t = ctxt.multiple_steps_local(
                 local_steps,
                 initial_state.ligand_idxs.astype(np.int32),
                 k=md_params.k,
                 radius=rng.uniform(md_params.min_radius, md_params.max_radius),
                 seed=rng.integers(np.iinfo(np.int32).max),
-                burn_in=0,
             )
-
-            if coords is None:
-                coords = np.array(x_t)
-                boxes = np.array(box_t)
-            else:
-                coords = np.concatenate([coords, x_t])
-                boxes = np.concatenate([boxes, box_t])
-        assert coords is not None and boxes is not None
-        return coords, boxes
+            coords.append(x_t)
+            boxes.append(box_t)
+        return np.concatenate(coords), np.concatenate(boxes)
 
     all_coords: Union[NDArray, StoredArrays]
 
@@ -600,7 +591,7 @@ class MinOverlapWarning(UserWarning):
     pass
 
 
-def run_sims_with_greedy_bisection(
+def run_sims_bisection(
     initial_lambdas: Sequence[float],
     make_initial_state: Callable[[float], InitialState],
     md_params: MDParams,
@@ -610,7 +601,7 @@ def run_sims_with_greedy_bisection(
     verbose: bool = True,
 ) -> Tuple[List[PairBarResult], List[StoredArrays], List[NDArray]]:
     r"""Starting from a specified lambda schedule, successively bisect the lambda interval between the pair of states
-    with the largest BAR :math:`\Delta G` error and sample the new state with MD.
+    with the lowest BAR overlap and sample the new state with MD.
 
     Parameters
     ----------

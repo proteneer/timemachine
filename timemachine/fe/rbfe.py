@@ -20,8 +20,8 @@ from timemachine.fe.free_energy import (
     SimulationResult,
     estimate_free_energy_bar,
     make_pair_bar_plots,
+    run_sims_bisection,
     run_sims_sequential,
-    run_sims_with_greedy_bisection,
 )
 from timemachine.fe.single_topology import SingleTopology
 from timemachine.fe.system import VacuumSystem, convert_omm_system
@@ -458,7 +458,7 @@ def estimate_relative_free_energy(
         raise err
 
 
-def estimate_relative_free_energy_via_greedy_bisection(
+def estimate_relative_free_energy_bisection(
     mol_a: Chem.rdchem.Mol,
     mol_b: Chem.rdchem.Mol,
     core: NDArray,
@@ -535,12 +535,8 @@ def estimate_relative_free_energy_via_greedy_bisection(
     if keep_idxs is None:
         keep_idxs = [0, -1]  # keep frames from first and last windows
 
+    assert len(set(keep_idxs)) == len(keep_idxs)
     assert len(keep_idxs) <= n_windows
-
-    if min_overlap is not None and keep_idxs not in [None, [0, -1], list(range(n_windows))]:
-        raise ValueError(
-            "when min_overlap is not None, keep_idxs must be equal to one of None, [0, -1], or list(range(n_windows))"
-        )
 
     single_topology = SingleTopology(mol_a, mol_b, core, ff)
 
@@ -568,7 +564,7 @@ def estimate_relative_free_energy_via_greedy_bisection(
     combined_prefix = get_mol_name(mol_a) + "_" + get_mol_name(mol_b) + "_" + prefix
 
     try:
-        results, frames, boxes = run_sims_with_greedy_bisection(
+        results, frames, boxes = run_sims_bisection(
             [lambda_min, lambda_max],
             make_optimized_initial_state,
             md_params,
@@ -581,8 +577,15 @@ def estimate_relative_free_energy_via_greedy_bisection(
 
         plots = make_pair_bar_plots(final_result, temperature, combined_prefix)
 
-        stored_frames = [np.array(frames[i]) for i in keep_idxs]
-        stored_boxes = [boxes[i] for i in keep_idxs]
+        assert len(frames) == len(boxes) == len(results) + 1
+        stored_frames = []
+        stored_boxes = []
+        for i in keep_idxs:
+            try:
+                stored_frames.append(np.array(frames[i]))
+                stored_boxes.append(boxes[i])
+            except IndexError:
+                warnings.warn(f"Invalid index in keep_idxs: {i}. Bisection terminated with only {len(frames)} windows.")
 
         return SimulationResult(
             final_result,
@@ -615,7 +618,7 @@ def run_vacuum(
         md_params = replace(md_params, local_steps=0)
         warnings.warn("Vacuum simulations don't support local steps, will use all global steps")
     # min_cutoff defaults to None since there is no environment to prevent conformational changes in the ligand
-    return estimate_relative_free_energy_via_greedy_bisection(
+    return estimate_relative_free_energy_bisection(
         mol_a,
         mol_b,
         core,
@@ -646,7 +649,7 @@ def run_solvent(
     solvent_sys, solvent_conf, solvent_box, solvent_top = builders.build_water_system(box_width, forcefield.water_ff)
     solvent_box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes, deboggle later
     solvent_host_config = HostConfig(solvent_sys, solvent_conf, solvent_box, solvent_conf.shape[0])
-    solvent_res = estimate_relative_free_energy_via_greedy_bisection(
+    solvent_res = estimate_relative_free_energy_bisection(
         mol_a,
         mol_b,
         core,
@@ -679,7 +682,7 @@ def run_complex(
     )
     complex_box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes, deboggle later
     complex_host_config = HostConfig(complex_sys, complex_conf, complex_box, nwa)
-    complex_res = estimate_relative_free_energy_via_greedy_bisection(
+    complex_res = estimate_relative_free_energy_bisection(
         mol_a,
         mol_b,
         core,
