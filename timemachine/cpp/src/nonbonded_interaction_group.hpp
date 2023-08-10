@@ -1,9 +1,11 @@
 #pragma once
 
+#include "hilbert_sort.hpp"
 #include "neighborlist.hpp"
 #include "nonbonded_common.hpp"
 #include "potential.hpp"
 #include <array>
+#include <memory>
 #include <optional>
 #include <vector>
 
@@ -50,13 +52,7 @@ private:
     unsigned long long *d_sorted_du_dx_;
     unsigned long long *d_sorted_du_dp_;
 
-    // used for hilbert sorting
-    unsigned int *d_bin_to_idx_; // mapping from 256x256x256 grid to hilbert curve index
-    unsigned int *d_sort_keys_in_;
-    unsigned int *d_sort_keys_out_;
-    unsigned int *d_sort_vals_in_;
-    unsigned int *d_sort_storage_;
-    size_t d_sort_storage_bytes_;
+    std::unique_ptr<HilbertSort> hilbert_sort_;
 
     cudaEvent_t nblist_flag_sync_event_; // Event to synchronize rebuild flag on
 
@@ -65,14 +61,6 @@ private:
     bool needs_sort();
 
     void sort(const double *d_x, const double *d_box, cudaStream_t stream);
-
-    void hilbert_sort(
-        const int N,
-        const unsigned int *d_atom_idxs,
-        const double *d_x,
-        const double *d_box,
-        unsigned int *d_perm,
-        cudaStream_t stream);
 
     void validate_idxs(
         const int N,

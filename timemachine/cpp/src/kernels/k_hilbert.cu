@@ -1,4 +1,4 @@
-#include "k_nonbonded.cuh"
+#include "k_hilbert.cuh"
 
 // k_coords_to_kv_gather converts the coords and boxes to floats for performance
 // and does not impact the precision of the kernels.
