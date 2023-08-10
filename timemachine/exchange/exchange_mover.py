@@ -60,8 +60,8 @@ def build_system(host_pdbfile: str, water_ff: str, padding: float):
     return solvated_host_system, solvated_host_coords, box, solvated_topology, nwa
 
 
-# currently un-used.
 def randomly_rotate_and_translate(coords, offset):
+    # coords: shape 3(OHH) x 3(xyz), water coordinates
     centroid = np.mean(coords, axis=0, keepdims=True)
     centered_coords = coords - centroid
     rot_mat = special_ortho_group.rvs(3)
@@ -160,11 +160,11 @@ class ExchangeMove(moves.MonteCarloMove):
 
         self.batch_U_fn = jax.jit(jax.vmap(U_fn, (None, None, 0, 0)))
 
-        def batch_log_weights(conf, box, all_a_idxs, all_b_idxs):
+        def batch_log_weights(conf, box):
             """
             Return a list of energies equal to len(water_idxs)
             """
-            nrgs = self.batch_U_fn(conf, box, all_a_idxs, all_b_idxs)
+            nrgs = self.batch_U_fn(conf, box, self.all_a_idxs, self.all_b_idxs)
             log_weights = self.beta * nrgs  # note the positive energy!
             return log_weights
 
@@ -202,13 +202,9 @@ class ExchangeMove(moves.MonteCarloMove):
         trial_coords = coords.copy()  # can optimize this later if needed
         trial_coords[chosen_water_atoms] = moved_coords
 
-        # these terms cancel out
-        # delta_U_insert = self.U_fn(trial_coords, box, a_idxs, b_idxs)
-        # delta_U_delete = self.U_fn(coords, box, a_idxs, b_idxs)
-        # delta_U_total = delta_U_insert - delta_U_delete
-
-        log_weights_after = self.batch_log_weights(trial_coords, box)
-
+        log_weights_after = self.batch_log_weights(
+            trial_coords, box
+        )  # this can be computed using a simple transposition later on
         # print("numerator", logsumexp(log_weights_before), "denominator", logsumexp(log_weights_after))
 
         log_p_accept = min(0, logsumexp(log_weights_before) - logsumexp(log_weights_after))
@@ -268,12 +264,13 @@ class InsideOutsideExchangeMove(moves.MonteCarloMove):
 
         self.batch_U_fn = jax.jit(jax.vmap(U_fn, (None, None, 0, 0)))
 
+        # vectorized over multiple sets of a_idxs and b_idxs
         def batch_log_weights(conf, box, all_a_idxs, all_b_idxs):
             """
             Return a list of energies equal to len(water_idxs)
             """
             nrgs = self.batch_U_fn(conf, box, np.array(all_a_idxs), np.array(all_b_idxs))
-            log_weights = self.beta * nrgs  # note the positive energy!
+            log_weights = self.beta * nrgs  # note the positive interaction energy!
             return log_weights
 
         self.batch_log_weights = batch_log_weights
@@ -281,21 +278,9 @@ class InsideOutsideExchangeMove(moves.MonteCarloMove):
         self.delta_U_total_fn = delta_U_total_fn
 
     def get_water_groups(self, coords, box, center):
-        # vectorized implementation
         dijs = np.linalg.norm(delta_r_np(np.mean(coords[self.water_idxs], axis=1), center, box), axis=1)
         v1_mols = np.argwhere(dijs < self.radius).reshape(-1)
         v2_mols = np.argwhere(dijs >= self.radius).reshape(-1)
-
-        # print(len(v1_mols), len(v2_mols))
-        # reference implementation
-        # for mol_idx, water_atoms in enumerate(self.water_idxs):
-        #     water_centroid = np.mean(coords[water_atoms], axis=0)
-        #     dr = delta_r(water_centroid, center)
-        #     if np.linalg.norm(dr) < self.radius:
-        #         v1_mols.append(mol_idx)
-        #     else:
-        #         v2_mols.append(mol_idx)
-
         return v1_mols, v2_mols
 
     # @profile
@@ -313,6 +298,7 @@ class InsideOutsideExchangeMove(moves.MonteCarloMove):
 
         n_atoms = len(coords)
 
+        # compute weights of waters in the vi region
         before_all_a_idxs = []
         before_all_b_idxs = []
         for vi_mol in vi_mols:
@@ -320,28 +306,26 @@ class InsideOutsideExchangeMove(moves.MonteCarloMove):
             before_all_a_idxs.append(a_idxs)
             before_all_b_idxs.append(np.delete(np.arange(n_atoms), a_idxs))
 
+        # compute weights:
+        # p = w_i / sum_j w_j
+        # log p = log w_i - log sum_j w_j
+        # log p = log exp u_i - log sum_j exp u_j
+        # p = exp(u_i - log sum_j exp u_j)
         log_weights_before = self.batch_log_weights(coords, box, before_all_a_idxs, before_all_b_idxs)
         log_probs_before = log_weights_before - logsumexp(log_weights_before)
         probs_before = np.exp(log_probs_before)
-
-
         choiche = np.random.choice(np.arange(len(before_all_a_idxs)), p=probs_before)
+
         chosen_water_atoms = before_all_a_idxs[choiche]
         new_coords = coords[chosen_water_atoms]
         # remove centroid and offset into insertion site
-        # new_coords = new_coords - np.mean(new_coords, axis=0) + vj_insertion_fn()
         new_coords = randomly_rotate_and_translate(new_coords, vj_insertion_fn())
-
-
-        # debug
-        # insertion_into_buckyball = len(vi_mols) > len(vj_mols)
-        # if insertion_into_buckyball:
-        # new_coords
 
         trial_coords = coords.copy()  # can optimize this later if needed
         trial_coords[chosen_water_atoms] = new_coords
 
-        # move water into new group
+        # move water into v_j, and compute Z(x').
+        # this can in theory be computed using a simple transposition
         after_all_a_idxs = [chosen_water_atoms]
         after_all_b_idxs = [np.delete(np.arange(n_atoms), chosen_water_atoms)]
         for vj_mol in vj_mols:
@@ -351,29 +335,10 @@ class InsideOutsideExchangeMove(moves.MonteCarloMove):
 
         log_weights_after = self.batch_log_weights(trial_coords, box, after_all_a_idxs, after_all_b_idxs)
 
-        log_p_accept = min(0, logsumexp(log_weights_before) - logsumexp(log_weights_after) + np.log(vol_j) - np.log(vol_i))
-        # n_atoms = len(coords)
-        # a_idxs = chosen_water_atoms
-        # b_idxs = np.delete(np.arange(n_atoms), a_idxs)
+        log_p_accept = min(
+            0, logsumexp(log_weights_before) - logsumexp(log_weights_after) + np.log(vol_j) - np.log(vol_i)
+        )
 
-        # # we can probably speed this up even more if we use an incremental voxel_map
-        # # (reduce complexity from O(N) to O(K))
-        # # delta_U_delete = -self.U_fn(coords, box, a_idxs, b_idxs)
-        # # delta_U_insert = self.U_fn(trial_coords, box, a_idxs, b_idxs)
-        # # delta_U_total = delta_U_delete + delta_U_insert
-
-        # delta_U_total = self.delta_U_total_fn(trial_coords, coords, box, a_idxs, b_idxs)
-        # delta_U_total = np.asarray(delta_U_total)
-
-        # convert to inf if we get a nan
-        # if np.isnan(delta_U_total):
-            # delta_U_total = np.inf
-
-        # ni = len(vi_mols)
-        # nj = len(vj_mols)
-        # hastings_factor = np.log((ni * vol_j) / ((nj + 1) * vol_i))
-        # print(hastings_factor)
-        # log_p_accept = min(0, -self.beta * delta_U_total + hastings_factor)
         new_state = CoordsVelBox(trial_coords, x.velocities, x.box)
 
         return new_state, log_p_accept
@@ -646,18 +611,12 @@ def test_exchange():
     # )
 
     # reference
-    exc_mover = InsideOutsideExchangeMove(
-        nb_beta,
-        nb_cutoff,
-        nb_water_ligand_params,
-        water_idxs,
-        initial_state.ligand_idxs,
-        1/DEFAULT_KT,
-        bb_radius
-    )
+    # exc_mover = InsideOutsideExchangeMove(
+    # nb_beta, nb_cutoff, nb_water_ligand_params, water_idxs, initial_state.ligand_idxs, 1 / DEFAULT_KT, bb_radius
+    # )
 
     # vanilla reference
-    # exc_mover = ExchangeMove(nb_beta, nb_cutoff, nb_water_ligand_params, water_idxs)
+    exc_mover = ExchangeMove(nb_beta, nb_cutoff, nb_water_ligand_params, water_idxs)
 
     cur_box = initial_state.box0
     cur_x_t = initial_state.x0
@@ -688,13 +647,13 @@ def test_exchange():
     # equilibrate using the npt mover
     npt_mover.n_steps = equilibration_steps
     xvb_t = CoordsVelBox(cur_x_t, cur_v_t, cur_box)
-    # xvb_t = npt_mover.move(xvb_t)
+    xvb_t = npt_mover.move(xvb_t)
     print("done")
     md_steps_per_batch = 2000
     npt_mover.n_steps = md_steps_per_batch
 
     # TBD: cache the minimized and equilibrated initial structure later on to iterate faster.
-    mc_steps_per_batch = 100
+    mc_steps_per_batch = 10
 
     # (ytz): If I start with pure MC, and no MD, it's actually very easy to remove the waters.
     # since the starting waters have very very high energy. If I re-run MD, then it becomes progressively harder
