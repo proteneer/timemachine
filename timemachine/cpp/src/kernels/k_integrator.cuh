@@ -18,7 +18,7 @@ __global__ void k_update_forward_baoab(
     if (kernel_idx >= N) {
         return;
     }
-    int atom_idx = idxs == nullptr ? kernel_idx : idxs[kernel_idx];
+    int atom_idx = (idxs == nullptr ? kernel_idx : idxs[kernel_idx]);
 
     if (atom_idx >= N) {
         return;
