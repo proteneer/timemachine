@@ -585,9 +585,7 @@ def estimate_relative_free_energy_bisection(
                 stored_frames.append(np.array(frames[i]))
                 stored_boxes.append(boxes[i])
             except IndexError:
-                warnings.warn(
-                    f"Invalid index in keep_idxs: {i}. Bisection terminated with only {len(results)} windows."
-                )
+                warnings.warn(f"Invalid index in keep_idxs: {i}. Bisection terminated with only {len(frames)} windows.")
 
         return SimulationResult(
             final_result,
