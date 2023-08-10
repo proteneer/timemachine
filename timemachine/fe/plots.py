@@ -1,4 +1,5 @@
 import io
+import warnings
 
 import numpy as np
 from matplotlib import pyplot as plt
@@ -293,10 +294,13 @@ def plot_fwd_reverse_predictions(
     assert len(fwd) == len(fwd_err)
     assert len(rev) == len(rev_err)
 
-    # Assert that first and last values are close
-    assert np.allclose(fwd[-1], rev[-1], atol=1), f"{fwd[-1]} not close to {rev[-1]}"
-    if np.isfinite(fwd_err).all() and np.isfinite(rev_err.all()):
-        assert np.allclose(fwd_err[-1], rev_err[-1], atol=1)
+    # If the values aren't close warn, but don't fail as MBAR can produce relatively large differences
+    # when there is poor convergence
+    if not np.allclose(fwd[-1], rev[-1]):
+        warnings.warn(f"Final energies are not close: Fwd {fwd[-1]:.3f} Rev {rev[-1]:.3f}")
+    if np.isfinite(fwd_err).all() and np.isfinite(rev_err).all():
+        if not np.allclose(fwd_err[-1], rev_err[-1]):
+            warnings.warn(f"Final errors are not close: Fwd err {fwd_err[-1]:.3f} Rev err {rev_err[-1]:.3f}")
     fwd_mask = np.isfinite(fwd_err)
     rev_mask = np.isfinite(rev_err)
     xs = np.linspace(1.0 / len(fwd), 1.0, len(fwd))
