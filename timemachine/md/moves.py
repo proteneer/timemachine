@@ -1,6 +1,6 @@
 from abc import abstractmethod
 from functools import partial
-from typing import Any, List, Tuple
+from typing import Any, Generic, List, Tuple, TypeVar
 
 import jax
 import jax.numpy as jnp
@@ -16,16 +16,18 @@ from timemachine.md.barostat.utils import get_bond_list, get_group_indices
 from timemachine.md.states import CoordsVelBox
 from timemachine.potentials import BoundPotential, HarmonicBond
 
+_State = TypeVar("_State")
 
-class MonteCarloMove:
+
+class MonteCarloMove(Generic[_State]):
     n_proposed: int = 0
     n_accepted: int = 0
 
-    def propose(self, x: CoordsVelBox) -> Tuple[CoordsVelBox, float]:
+    def propose(self, x: _State) -> Tuple[_State, float]:
         """return proposed state and log acceptance probability"""
         raise NotImplementedError
 
-    def move(self, x: CoordsVelBox) -> CoordsVelBox:
+    def move(self, x: _State) -> _State:
         proposal, log_acceptance_probability = self.propose(x)
         self.n_proposed += 1
 
@@ -45,12 +47,12 @@ class MonteCarloMove:
             return 0.0
 
 
-class CompoundMove(MonteCarloMove):
+class CompoundMove(MonteCarloMove[_State]):
     def __init__(self, moves: List[MonteCarloMove]):
         """Apply each of a list of moves in sequence"""
         self.moves = moves
 
-    def move(self, x: CoordsVelBox) -> CoordsVelBox:
+    def move(self, x: _State) -> _State:
         for individual_move in self.moves:
             x = individual_move.move(x)
         return x
@@ -72,7 +74,7 @@ class CompoundMove(MonteCarloMove):
         return np.sum(self.n_proposed_by_move)
 
 
-class NVTMove(MonteCarloMove):
+class NVTMove(MonteCarloMove[CoordsVelBox]):
     def __init__(
         self,
         bps: List[BoundPotential],

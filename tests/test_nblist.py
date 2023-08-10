@@ -61,7 +61,7 @@ def test_block_bounds_dhfr(precision, atol, rtol, sort):
         nblist = custom_ops.Neighborlist_f64(coords.shape[0])
 
     if sort:
-        perm = hilbert_sort(coords + np.argmin(coords), coords.shape[1])
+        perm = hilbert_sort(coords, coords.shape[1])
         coords = coords[perm]
 
     block_size = 32
@@ -257,7 +257,7 @@ def test_neighborlist():
 
         sort = True
         if sort:
-            perm = hilbert_sort(coords + np.argmin(coords), D)
+            perm = hilbert_sort(coords, D)
             coords = coords[perm]
 
         ref_ixn_list = build_reference_ixn_list(coords, box, cutoff)
@@ -336,7 +336,7 @@ def test_neighborlist_on_subset_of_system():
     atom_idxs = np.arange(num_host_atoms, N, dtype=np.uint32)
     sort = True
     if sort:
-        perm = hilbert_sort(coords + np.argmin(coords), D)
+        perm = hilbert_sort(coords, D)
         coords = coords[perm]
         # Get the new idxs of the ligand atoms
         atom_idxs = np.isin(perm, atom_idxs).nonzero()[0]

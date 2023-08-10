@@ -1,47 +1,52 @@
 #include "k_fixed_point.cuh"
 
-template <typename RealType>
-__global__ void update_forward_baoab(
+template <typename RealType, int D>
+__global__ void k_update_forward_baoab(
     const int N,
-    const int D,
     const RealType ca,
-    const unsigned int *__restrict__ idxs, // N
-    const RealType *__restrict__ cbs,      // N
-    const RealType *__restrict__ ccs,      // N
-    const RealType *__restrict__ noise,    // N x 3
-    RealType *__restrict__ x_t,
-    RealType *__restrict__ v_t,
-    const unsigned long long *__restrict__ du_dx,
+    const unsigned int *__restrict__ idxs,        // N
+    const RealType *__restrict__ cbs,             // N
+    const RealType *__restrict__ ccs,             // N
+    const RealType *__restrict__ noise,           // N x 3
+    RealType *__restrict__ x_t,                   // N x 3
+    RealType *__restrict__ v_t,                   // N x 3
+    const unsigned long long *__restrict__ du_dx, // N x 3
     const RealType dt) {
+    static_assert(D == 3);
 
     int kernel_idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (kernel_idx >= N) {
         return;
     }
-    int atom_idx;
-    if (idxs) {
-        atom_idx = idxs[kernel_idx];
-    } else {
-        atom_idx = kernel_idx;
-    }
+    int atom_idx = (idxs == nullptr ? kernel_idx : idxs[kernel_idx]);
+
     if (atom_idx >= N) {
         return;
     }
-
-    int d_idx = blockIdx.y;
-    int local_idx = atom_idx * D + d_idx;
-
-    RealType force = -FIXED_TO_FLOAT<RealType>(du_dx[local_idx]);
 
     // BAOAB (https://arxiv.org/abs/1203.5428), rotated by half a timestep
 
     // ca assumed to contain exp(-friction * dt)
     // cbs assumed to contain dt / mass
     // ccs assumed to contain sqrt(1 - exp(-2 * friction * dt)) * sqrt(kT / mass)
-    RealType v_mid = v_t[local_idx] + cbs[atom_idx] * force;
+    RealType atom_cbs = cbs[atom_idx];
+    RealType atom_ccs = ccs[atom_idx];
 
-    v_t[local_idx] = ca * v_mid + ccs[atom_idx] * noise[local_idx];
-    x_t[local_idx] += 0.5 * dt * (v_mid + v_t[local_idx]);
+    RealType force_x = -FIXED_TO_FLOAT<RealType>(du_dx[atom_idx * D + 0]);
+    RealType force_y = -FIXED_TO_FLOAT<RealType>(du_dx[atom_idx * D + 1]);
+    RealType force_z = -FIXED_TO_FLOAT<RealType>(du_dx[atom_idx * D + 2]);
+
+    RealType v_mid_x = v_t[atom_idx * D + 0] + atom_cbs * force_x;
+    RealType v_mid_y = v_t[atom_idx * D + 1] + atom_cbs * force_y;
+    RealType v_mid_z = v_t[atom_idx * D + 2] + atom_cbs * force_z;
+
+    v_t[atom_idx * D + 0] = ca * v_mid_x + atom_ccs * noise[atom_idx * D + 0];
+    v_t[atom_idx * D + 1] = ca * v_mid_y + atom_ccs * noise[atom_idx * D + 1];
+    v_t[atom_idx * D + 2] = ca * v_mid_z + atom_ccs * noise[atom_idx * D + 2];
+
+    x_t[atom_idx * D + 0] += static_cast<RealType>(0.5) * dt * (v_mid_x + v_t[atom_idx * D + 0]);
+    x_t[atom_idx * D + 1] += static_cast<RealType>(0.5) * dt * (v_mid_y + v_t[atom_idx * D + 1]);
+    x_t[atom_idx * D + 2] += static_cast<RealType>(0.5) * dt * (v_mid_z + v_t[atom_idx * D + 2]);
 };
 
 template <typename RealType, bool UPDATE_X>
