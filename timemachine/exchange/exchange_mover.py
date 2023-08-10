@@ -139,13 +139,13 @@ class ExchangeMove(moves.MonteCarloMove):
         self.water_idxs = water_idxs
         self.beta = 1 / DEFAULT_KT
 
-        n_atoms = len(nb_params)
+        self.n_atoms = len(nb_params)
         # for a_idxs, b_idxs in all_a_idxs, all_b_idxs:
         self.all_a_idxs = []
         self.all_b_idxs = []
         for a_idxs in water_idxs:
             self.all_a_idxs.append(np.array(a_idxs))
-            self.all_b_idxs.append(np.delete(np.arange(n_atoms), a_idxs))
+            self.all_b_idxs.append(np.delete(np.arange(self.n_atoms), a_idxs))
         self.all_a_idxs = np.array(self.all_a_idxs)
         self.all_b_idxs = np.array(self.all_b_idxs)
 
@@ -158,6 +158,17 @@ class ExchangeMove(moves.MonteCarloMove):
             params_j = self.nb_params[b_idxs]
             return nonbonded.nonbonded_block(conf_i, conf_j, box, params_i, params_j, self.nb_beta, self.nb_cutoff)
 
+        @jax.jit
+        def U_fn_unsummed(conf, box, a_idxs, b_idxs):
+            # compute the energy of an interaction group
+            conf_i = conf[a_idxs]
+            conf_j = conf[b_idxs]
+            params_i = self.nb_params[a_idxs]
+            params_j = self.nb_params[b_idxs]
+            return nonbonded.nonbonded_block_unsummed(
+                conf_i, conf_j, box, params_i, params_j, self.nb_beta, self.nb_cutoff
+            )
+
         self.batch_U_fn = jax.jit(jax.vmap(U_fn, (None, None, 0, 0)))
 
         def batch_log_weights(conf, box):
@@ -168,6 +179,52 @@ class ExchangeMove(moves.MonteCarloMove):
             log_weights = self.beta * nrgs  # note the positive energy!
             return log_weights
 
+        def batch_log_weights_incremental(conf, box, water_idx, new_pos):
+            # compute the incremental weights
+            initial_weights = self.batch_log_weights(conf, box)
+
+            assert len(initial_weights) == self.num_waters
+
+            print("NUM WATERS", len(self.water_idxs))
+            print("IWS", initial_weights.shape)
+
+            a_idxs = self.water_idxs[water_idx]
+            b_idxs = np.delete(np.arange(self.n_atoms), a_idxs)
+
+            print("A_IDXS", len(a_idxs))
+            print("B_IDXS", len(b_idxs))
+
+            old_water_ixn_nrgs = np.sum(self.beta * U_fn_unsummed(conf, box, a_idxs, b_idxs), axis=0)
+            old_water_water_ixn_nrgs = np.sum(
+                old_water_ixn_nrgs[: (self.num_waters - 1) * 3].reshape((self.num_waters - 1), 3), axis=1
+            )
+            old_water_water_ixn_nrgs_full = np.zeros(len(self.water_idxs))
+            old_water_water_ixn_nrgs_full[:water_idx] = old_water_water_ixn_nrgs[:water_idx]
+            old_water_water_ixn_nrgs_full[water_idx + 1 :] = old_water_water_ixn_nrgs[water_idx:]
+
+            # we have one fewer waters now - subtract differential
+            new_conf = conf.copy()
+            new_conf[a_idxs] = new_pos
+            new_water_ixn_nrgs = np.sum(self.beta * U_fn_unsummed(new_conf, box, a_idxs, b_idxs), axis=0)
+            new_water_water_ixn_nrgs = np.sum(
+                new_water_ixn_nrgs[: (self.num_waters - 1) * 3].reshape((self.num_waters - 1), 3), axis=1
+            )
+            new_water_water_ixn_nrgs_full = np.zeros(len(self.water_idxs))
+            new_water_water_ixn_nrgs_full[:water_idx] = new_water_water_ixn_nrgs[:water_idx]
+            new_water_water_ixn_nrgs_full[water_idx + 1 :] = new_water_water_ixn_nrgs[water_idx:]
+
+            final_weights = initial_weights - old_water_water_ixn_nrgs_full + new_water_water_ixn_nrgs_full
+            # final_weights = initial_weights - new_water_water_ixn_nrgs
+
+            ref_final_weights = self.batch_log_weights(new_conf, box)
+
+            # print(type(final_weights))
+            # print(type(ref_final_weights))
+            np.testing.assert_almost_equal(np.array(final_weights), np.array(ref_final_weights))
+
+            return final_weights, new_conf
+
+        self.batch_log_weights_incremental = batch_log_weights_incremental
         self.batch_log_weights = batch_log_weights
 
     def propose(self, x: CoordsVelBox) -> Tuple[CoordsVelBox, float]:
@@ -186,26 +243,18 @@ class ExchangeMove(moves.MonteCarloMove):
 
         chosen_water_atoms = self.water_idxs[chosen_water]
 
-        # compute delta_U of deletion
-        # a_idxs = chosen_water_atoms
-        # b_idxs = np.delete(np.arange(n_atoms), a_idxs) # not needed
-
         # compute delta_U of insertion
         trial_chosen_coords = coords[chosen_water_atoms]
         trial_translation = np.diag(box) * np.random.rand(3)
         # tbd - what should we do  with velocities?
 
-        # this has a higher acceptance probability than if we allowed for rotations
-        # (probably because we have a much higher chance of a useless move)
-        # moved_coords = randomly_translate(trial_chosen_coords, trial_translation)
         moved_coords = randomly_rotate_and_translate(trial_chosen_coords, trial_translation)
-        trial_coords = coords.copy()  # can optimize this later if needed
-        trial_coords[chosen_water_atoms] = moved_coords
+        # trial_coords = coords.copy()  # can optimize this later if needed
+        # trial_coords[chosen_water_atoms] = moved_coords
 
-        log_weights_after = self.batch_log_weights(
-            trial_coords, box
-        )  # this can be computed using a simple transposition later on
-        # print("numerator", logsumexp(log_weights_before), "denominator", logsumexp(log_weights_after))
+        log_weights_after, trial_coords = self.batch_log_weights_incremental(coords, box, chosen_water, moved_coords)
+        # log_weights_after = self.batch_log_weights(trial_coords, box)
+        # this can be computed using a simple transposition later on
 
         log_p_accept = min(0, logsumexp(log_weights_before) - logsumexp(log_weights_after))
 
@@ -647,7 +696,7 @@ def test_exchange():
     # equilibrate using the npt mover
     npt_mover.n_steps = equilibration_steps
     xvb_t = CoordsVelBox(cur_x_t, cur_v_t, cur_box)
-    xvb_t = npt_mover.move(xvb_t)
+    # xvb_t = npt_mover.move(xvb_t)
     print("done")
     md_steps_per_batch = 2000
     npt_mover.n_steps = md_steps_per_batch
