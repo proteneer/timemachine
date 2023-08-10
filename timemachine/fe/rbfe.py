@@ -577,7 +577,7 @@ def estimate_relative_free_energy_bisection(
 
         plots = make_pair_bar_plots(final_result, temperature, combined_prefix)
 
-        assert len(results) == len(frames) == len(boxes)
+        assert len(frames) == len(boxes) == len(results) + 1
         stored_frames = []
         stored_boxes = []
         for i in keep_idxs:
