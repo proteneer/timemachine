@@ -24,6 +24,8 @@ from timemachine.potentials import Nonbonded
 from timemachine.potentials.potential import GpuImplWrapper
 from timemachine.potentials.types import PotentialFxn
 
+HILBERT_GRID_DIM = 128
+
 
 @contextlib.contextmanager
 def temporary_working_dir():
@@ -154,7 +156,12 @@ def prepare_nb_system(
 
 
 def hilbert_sort(conf, D):
-    hc = HilbertCurve(64, D)
+    hc = HilbertCurve(HILBERT_GRID_DIM, D)
+
+    # hc assumes non-negative coordinates
+    conf = np.array(conf - np.min(conf))
+    assert (conf >= 0.0).all()
+
     int_confs = (conf * 1000).astype(np.int64)
     dists = []
     for xyz in int_confs.tolist():
