@@ -55,8 +55,7 @@ LocalMDPotentials::LocalMDPotentials(
     std::vector<double> default_params(N_ * 3);
     free_restraint_ = std::shared_ptr<FlatBottomBond<double>>(new FlatBottomBond<double>(default_bonds));
     // Construct a bound potential with 0 params
-    bound_free_restraint_ =
-        std::shared_ptr<BoundPotential>(new BoundPotential(free_restraint_, 3 * N_, &default_params[0]));
+    bound_free_restraint_ = std::shared_ptr<BoundPotential>(new BoundPotential(free_restraint_, default_params));
 
     // Ensure that the refence idxs start out as all N_
     k_initialize_array<unsigned int><<<ceil_divide(N_, WARP_SIZE), WARP_SIZE>>>(N_, d_all_pairs_idxs_.data, N_);
@@ -73,7 +72,7 @@ LocalMDPotentials::LocalMDPotentials(
         frozen_restraint_ = std::shared_ptr<LogFlatBottomBond<double>>(
             new LogFlatBottomBond<double>(default_bonds, 1 / (temperature_ * BOLTZ)));
         bound_frozen_restraint_ =
-            std::shared_ptr<BoundPotential>(new BoundPotential(frozen_restraint_, 3 * N_, &default_params[0]));
+            std::shared_ptr<BoundPotential>(new BoundPotential(frozen_restraint_, default_params));
         all_potentials_.push_back(bound_frozen_restraint_);
     }
 

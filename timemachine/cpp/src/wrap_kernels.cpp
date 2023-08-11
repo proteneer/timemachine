@@ -75,6 +75,11 @@ double convert_energy_to_fp(__int128 fixed_u) {
     return res;
 }
 
+template <typename T> std::vector<T> py_array_to_vector(const py::array_t<T, py::array::c_style> &arr) {
+    std::vector v(arr.data(), arr.data() + arr.size());
+    return v;
+}
+
 template <typename RealType> void declare_neighborlist(py::module &m, const char *typestr) {
 
     using Class = timemachine::Neighborlist<RealType>;
@@ -804,7 +809,7 @@ void declare_bound_potential(py::module &m) {
         .def(
             py::init([](std::shared_ptr<timemachine::Potential> potential,
                         const py::array_t<double, py::array::c_style> &params) {
-                return new timemachine::BoundPotential(potential, params.size(), params.data());
+                return new timemachine::BoundPotential(potential, py_array_to_vector(params));
             }),
             py::arg("potential"),
             py::arg("params"))
@@ -866,8 +871,7 @@ template <typename RealType> void declare_harmonic_bond(py::module &m, const cha
         m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
         .def(
             py::init([](const py::array_t<int, py::array::c_style> &bond_idxs) {
-                std::vector<int> vec_bond_idxs(bond_idxs.data(), bond_idxs.data() + bond_idxs.size());
-                return new timemachine::HarmonicBond<RealType>(vec_bond_idxs);
+                return new timemachine::HarmonicBond<RealType>(py_array_to_vector(bond_idxs));
             }),
             py::arg("bond_idxs"));
 }
@@ -880,8 +884,7 @@ template <typename RealType> void declare_flat_bottom_bond(py::module &m, const 
         m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
         .def(
             py::init([](const py::array_t<int, py::array::c_style> &bond_idxs) {
-                std::vector<int> vec_bond_idxs(bond_idxs.data(), bond_idxs.data() + bond_idxs.size());
-                return new timemachine::FlatBottomBond<RealType>(vec_bond_idxs);
+                return new timemachine::FlatBottomBond<RealType>(py_array_to_vector(bond_idxs));
             }),
             py::arg("bond_idxs"));
 }
@@ -894,8 +897,7 @@ template <typename RealType> void declare_log_flat_bottom_bond(py::module &m, co
         m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
         .def(
             py::init([](const py::array_t<int, py::array::c_style> &bond_idxs, double beta) {
-                std::vector<int> vec_bond_idxs(bond_idxs.data(), bond_idxs.data() + bond_idxs.size());
-                return new timemachine::LogFlatBottomBond<RealType>(vec_bond_idxs, beta);
+                return new timemachine::LogFlatBottomBond<RealType>(py_array_to_vector(bond_idxs), beta);
             }),
             py::arg("bond_idxs"),
             py::arg("beta"));
@@ -909,8 +911,8 @@ template <typename RealType> void declare_nonbonded_precomputed(py::module &m, c
         m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
         .def(
             py::init([](const py::array_t<int, py::array::c_style> &pair_idxs, double beta, double cutoff) {
-                std::vector<int> vec_pair_idxs(pair_idxs.data(), pair_idxs.data() + pair_idxs.size());
-                return new timemachine::NonbondedPairListPrecomputed<RealType>(vec_pair_idxs, beta, cutoff);
+                return new timemachine::NonbondedPairListPrecomputed<RealType>(
+                    py_array_to_vector(pair_idxs), beta, cutoff);
             }),
             py::arg("pair_idxs"),
             py::arg("beta"),
@@ -925,8 +927,7 @@ template <typename RealType> void declare_chiral_atom_restraint(py::module &m, c
         m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
         .def(
             py::init([](const py::array_t<int, py::array::c_style> &idxs) {
-                std::vector<int> vec_idxs(idxs.data(), idxs.data() + idxs.size());
-                return new timemachine::ChiralAtomRestraint<RealType>(vec_idxs);
+                return new timemachine::ChiralAtomRestraint<RealType>(py_array_to_vector(idxs));
             }),
             py::arg("idxs"),
             R"pbdoc(Please refer to timemachine.potentials.chiral_restraints for documentation on arguments)pbdoc");
@@ -941,9 +942,8 @@ template <typename RealType> void declare_chiral_bond_restraint(py::module &m, c
         .def(
             py::init([](const py::array_t<int, py::array::c_style> &idxs,
                         const py::array_t<int, py::array::c_style> &signs) {
-                std::vector<int> vec_idxs(idxs.data(), idxs.data() + idxs.size());
-                std::vector<int> vec_signs(signs.data(), signs.data() + signs.size());
-                return new timemachine::ChiralBondRestraint<RealType>(vec_idxs, vec_signs);
+                return new timemachine::ChiralBondRestraint<RealType>(
+                    py_array_to_vector(idxs), py_array_to_vector(signs));
             }),
             py::arg("idxs"),
             py::arg("signs"),

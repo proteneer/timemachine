@@ -11,7 +11,7 @@ namespace timemachine {
 // a potential bounded to a set of parameters with some shape
 struct BoundPotential {
 
-    BoundPotential(std::shared_ptr<Potential> potential, const int size, const double *h_p);
+    BoundPotential(std::shared_ptr<Potential> potential, const std::vector<double> params);
 
     int size;
     std::unique_ptr<DeviceBuffer<double>> d_p;

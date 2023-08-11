@@ -3,11 +3,11 @@
 
 namespace timemachine {
 
-BoundPotential::BoundPotential(std::shared_ptr<Potential> potential, const int size, const double *h_p)
-    : size(size), d_p(nullptr), potential(potential), max_size_(size) {
+BoundPotential::BoundPotential(std::shared_ptr<Potential> potential, const std::vector<double> params)
+    : size(params.size()), d_p(nullptr), potential(potential), max_size_(size) {
     if (this->size > 0) {
         d_p.reset(new DeviceBuffer<double>(this->size));
-        d_p->copy_from(h_p);
+        d_p->copy_from(params.data());
     }
 }
 
