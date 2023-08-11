@@ -29,10 +29,7 @@ struct BoundPotential {
         unsigned long long *d_du_dx,
         unsigned long long *d_du_dp,
         __int128 *d_u,
-        cudaStream_t stream) {
-        this->potential->execute_device(
-            N, this->size, d_x, this->size > 0 ? this->d_p->data : nullptr, d_box, d_du_dx, d_du_dp, d_u, stream);
-    }
+        cudaStream_t stream);
 };
 
 } // namespace timemachine

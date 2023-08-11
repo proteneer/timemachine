@@ -11,6 +11,18 @@ BoundPotential::BoundPotential(std::shared_ptr<Potential> potential, const int s
     }
 }
 
+void BoundPotential::execute_device(
+    const int N,
+    const double *d_x,
+    const double *d_box,
+    unsigned long long *d_du_dx,
+    unsigned long long *d_du_dp,
+    __int128 *d_u,
+    cudaStream_t stream) {
+    this->potential->execute_device(
+        N, this->size, d_x, this->size > 0 ? this->d_p->data : nullptr, d_box, d_du_dx, d_du_dp, d_u, stream);
+}
+
 void BoundPotential::execute_host(
     const int N,
     const double *h_x,           // [N,3]
