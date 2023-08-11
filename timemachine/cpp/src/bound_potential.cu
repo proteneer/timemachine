@@ -46,16 +46,16 @@ void BoundPotential::execute_host(
     }
 };
 
-void BoundPotential::set_params_device(const int updated_size, const double *d_new_params, const cudaStream_t stream) {
-    if (updated_size > 0) {
-        if (updated_size > max_size_) {
+void BoundPotential::set_params_device(const int new_size, const double *d_new_params, const cudaStream_t stream) {
+    if (new_size > 0) {
+        if (new_size > max_size_) {
             throw std::runtime_error(
-                "parameter size is greater than max size: " + std::to_string(updated_size) + " > " +
+                "parameter size is greater than max size: " + std::to_string(new_size) + " > " +
                 std::to_string(max_size_));
         }
-        gpuErrchk(cudaMemcpyAsync(
-            d_p->data, d_new_params, updated_size * sizeof(*d_p->data), cudaMemcpyDeviceToDevice, stream));
+        gpuErrchk(
+            cudaMemcpyAsync(d_p->data, d_new_params, new_size * sizeof(*d_p->data), cudaMemcpyDeviceToDevice, stream));
     }
-    this->size = updated_size;
+    this->size = new_size;
 }
 } // namespace timemachine
