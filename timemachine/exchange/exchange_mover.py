@@ -1,6 +1,7 @@
 # Prototype ExchangeMover that implements an instantaneous water swap move.
 # disable for ~2x speed-up
 # from jax import config
+
 # config.update("jax_enable_x64", True)
 
 import argparse
@@ -149,6 +150,9 @@ class ExchangeMove(moves.MonteCarloMove):
         self.all_a_idxs = np.array(self.all_a_idxs)
         self.all_b_idxs = np.array(self.all_b_idxs)
 
+        self.last_conf = None
+        self.last_bw = None
+
         @jax.jit
         def U_fn(conf, box, a_idxs, b_idxs):
             # compute the energy of an interaction group
@@ -175,34 +179,38 @@ class ExchangeMove(moves.MonteCarloMove):
             """
             Return a list of energies equal to len(water_idxs)
             """
-            nrgs = self.batch_U_fn(conf, box, self.all_a_idxs, self.all_b_idxs)
-            log_weights = self.beta * nrgs  # note the positive energy!
-            return log_weights
+            if not np.array_equal(self.last_conf, conf):
+                self.last_conf = conf
+                self.last_bw = self.beta * self.batch_U_fn(conf, box, self.all_a_idxs, self.all_b_idxs)
 
+            return self.last_bw
+
+            # nrgs = self.batch_U_fn(conf, box, self.all_a_idxs, self.all_b_idxs)
+            # log_weights = self.beta * nrgs  # note the positive energy!
+            # return log_weights
+
+        # @profile
         def batch_log_weights_incremental(conf, box, water_idx, new_pos):
             # compute the incremental weights
             initial_weights = self.batch_log_weights(conf, box)
 
             assert len(initial_weights) == self.num_waters
 
-            print("NUM WATERS", len(self.water_idxs))
-            print("IWS", initial_weights.shape)
-
             a_idxs = self.water_idxs[water_idx]
             b_idxs = np.delete(np.arange(self.n_atoms), a_idxs)
 
-            print("A_IDXS", len(a_idxs))
-            print("B_IDXS", len(b_idxs))
-
+            # sum interaction energy of all the atoms in a water molecule
             old_water_ixn_nrgs = np.sum(self.beta * U_fn_unsummed(conf, box, a_idxs, b_idxs), axis=0)
             old_water_water_ixn_nrgs = np.sum(
                 old_water_ixn_nrgs[: (self.num_waters - 1) * 3].reshape((self.num_waters - 1), 3), axis=1
             )
+
+            assert len(old_water_water_ixn_nrgs) == self.num_waters - 1
+
             old_water_water_ixn_nrgs_full = np.zeros(len(self.water_idxs))
             old_water_water_ixn_nrgs_full[:water_idx] = old_water_water_ixn_nrgs[:water_idx]
             old_water_water_ixn_nrgs_full[water_idx + 1 :] = old_water_water_ixn_nrgs[water_idx:]
 
-            # we have one fewer waters now - subtract differential
             new_conf = conf.copy()
             new_conf[a_idxs] = new_pos
             new_water_ixn_nrgs = np.sum(self.beta * U_fn_unsummed(new_conf, box, a_idxs, b_idxs), axis=0)
@@ -214,13 +222,10 @@ class ExchangeMove(moves.MonteCarloMove):
             new_water_water_ixn_nrgs_full[water_idx + 1 :] = new_water_water_ixn_nrgs[water_idx:]
 
             final_weights = initial_weights - old_water_water_ixn_nrgs_full + new_water_water_ixn_nrgs_full
-            # final_weights = initial_weights - new_water_water_ixn_nrgs
+            final_weights = final_weights.at[water_idx].set(np.sum(new_water_ixn_nrgs))
 
-            ref_final_weights = self.batch_log_weights(new_conf, box)
-
-            # print(type(final_weights))
-            # print(type(ref_final_weights))
-            np.testing.assert_almost_equal(np.array(final_weights), np.array(ref_final_weights))
+            # ref_final_weights = self.batch_log_weights(new_conf, box)
+            # np.testing.assert_almost_equal(np.array(final_weights), np.array(ref_final_weights))
 
             return final_weights, new_conf
 
@@ -696,20 +701,20 @@ def test_exchange():
     # equilibrate using the npt mover
     npt_mover.n_steps = equilibration_steps
     xvb_t = CoordsVelBox(cur_x_t, cur_v_t, cur_box)
-    # xvb_t = npt_mover.move(xvb_t)
+    xvb_t = npt_mover.move(xvb_t)
     print("done")
     md_steps_per_batch = 2000
     npt_mover.n_steps = md_steps_per_batch
 
     # TBD: cache the minimized and equilibrated initial structure later on to iterate faster.
-    mc_steps_per_batch = 10
+    mc_steps_per_batch = 100
 
     # (ytz): If I start with pure MC, and no MD, it's actually very easy to remove the waters.
     # since the starting waters have very very high energy. If I re-run MD, then it becomes progressively harder
     # remove the water since we will re-equilibriate the waters.
 
     # for idx in range(100000):
-    for idx in range(100000):
+    for idx in range(1000000):
         density = compute_density(nwm, xvb_t.box)
 
         xvb_t = image_xvb(initial_state, xvb_t)
