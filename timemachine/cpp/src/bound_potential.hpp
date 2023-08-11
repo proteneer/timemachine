@@ -16,7 +16,8 @@ struct BoundPotential {
     int size;
     std::unique_ptr<DeviceBuffer<double>> d_p;
     std::shared_ptr<Potential> potential;
-    const int max_size_;
+
+    void set_params(const std::vector<double> params);
 
     void set_params_device(const int size, const double *d_p, const cudaStream_t stream);
 

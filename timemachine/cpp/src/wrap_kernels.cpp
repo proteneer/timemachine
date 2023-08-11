@@ -814,6 +814,12 @@ void declare_bound_potential(py::module &m) {
             py::arg("potential"),
             py::arg("params"))
         .def("get_potential", [](const timemachine::BoundPotential &bp) { return bp.potential; })
+        .def(
+            "set_params",
+            [](timemachine::BoundPotential &bp, const py::array_t<double, py::array::c_style> &params) {
+                bp.set_params(py_array_to_vector(params));
+            },
+            py::arg("params"))
         .def("size", [](const timemachine::BoundPotential &bp) { return bp.size; })
         .def(
             "execute",
