@@ -55,8 +55,8 @@ LocalMDPotentials::LocalMDPotentials(
     std::vector<double> default_params(N_ * 3);
     free_restraint_ = std::shared_ptr<FlatBottomBond<double>>(new FlatBottomBond<double>(default_bonds));
     // Construct a bound potential with 0 params
-    bound_free_restraint_ = std::shared_ptr<BoundPotential>(
-        new BoundPotential(free_restraint_, std::vector<int>({N_, 3}), &default_params[0]));
+    bound_free_restraint_ =
+        std::shared_ptr<BoundPotential>(new BoundPotential(free_restraint_, 3 * N_, &default_params[0]));
 
     // Ensure that the refence idxs start out as all N_
     k_initialize_array<unsigned int><<<ceil_divide(N_, WARP_SIZE), WARP_SIZE>>>(N_, d_all_pairs_idxs_.data, N_);
@@ -64,7 +64,7 @@ LocalMDPotentials::LocalMDPotentials(
     num_allpairs_idxs_ = copy_nonbonded_potential_idxs(nonbonded_bp_->potential, N_, d_all_pairs_idxs_.data);
 
     ixn_group_ =
-        construct_ixn_group_potential(N_, nonbonded_bp_->potential, nonbonded_bp_->size(), nonbonded_bp_->d_p->data);
+        construct_ixn_group_potential(N_, nonbonded_bp_->potential, nonbonded_bp_->size, nonbonded_bp_->d_p->data);
 
     // Add the restraint potential and ixn group potential
     all_potentials_.push_back(bound_free_restraint_);
@@ -72,8 +72,8 @@ LocalMDPotentials::LocalMDPotentials(
     if (!freeze_reference_) {
         frozen_restraint_ = std::shared_ptr<LogFlatBottomBond<double>>(
             new LogFlatBottomBond<double>(default_bonds, 1 / (temperature_ * BOLTZ)));
-        bound_frozen_restraint_ = std::shared_ptr<BoundPotential>(
-            new BoundPotential(frozen_restraint_, std::vector<int>({N_, 3}), &default_params[0]));
+        bound_frozen_restraint_ =
+            std::shared_ptr<BoundPotential>(new BoundPotential(frozen_restraint_, 3 * N_, &default_params[0]));
         all_potentials_.push_back(bound_frozen_restraint_);
     }
 
@@ -243,7 +243,7 @@ void LocalMDPotentials::_setup_free_idxs_given_reference_idx(
     gpuErrchk(cudaPeekAtLastError());
 
     // Setup the flat bottom restraints
-    bound_free_restraint_->set_params_device(std::vector<int>({num_row_idxs, 3}), d_bond_params_.data, stream);
+    bound_free_restraint_->set_params_device(3 * num_row_idxs, d_bond_params_.data, stream);
     free_restraint_->set_bonds_device(num_row_idxs, d_restraint_pairs_.data, stream);
 
     // Invert to get column idxs
@@ -302,7 +302,7 @@ void LocalMDPotentials::_setup_free_idxs_given_reference_idx(
             gpuErrchk(cudaPeekAtLastError());
         }
 
-        bound_frozen_restraint_->set_params_device(std::vector<int>({num_col_idxs, 3}), d_bond_params_.data, stream);
+        bound_frozen_restraint_->set_params_device(3 * num_col_idxs, d_bond_params_.data, stream);
         frozen_restraint_->set_bonds_device(num_col_idxs, d_restraint_pairs_.data, stream);
     }
 }
