@@ -119,9 +119,10 @@ Neighborlist<RealType>::get_nblist_host(int N, const double *h_coords, const dou
     gpuErrchk(cudaMemcpy(&h_ixn_count, d_ixn_count_, 1 * sizeof(*d_ixn_count_), cudaMemcpyDeviceToHost));
     std::vector<int> h_ixn_tiles(MAX_TILE_BUFFER);
     std::vector<unsigned int> h_ixn_atoms(MAX_ATOM_BUFFER);
-    gpuErrchk(cudaMemcpy(&h_ixn_tiles[0], d_ixn_tiles_, MAX_TILE_BUFFER * sizeof(int), cudaMemcpyDeviceToHost));
     gpuErrchk(
-        cudaMemcpy(&h_ixn_atoms[0], d_ixn_atoms_, MAX_ATOM_BUFFER * sizeof(unsigned int), cudaMemcpyDeviceToHost));
+        cudaMemcpy(&h_ixn_tiles[0], d_ixn_tiles_, MAX_TILE_BUFFER * sizeof(*d_ixn_tiles_), cudaMemcpyDeviceToHost));
+    gpuErrchk(
+        cudaMemcpy(&h_ixn_atoms[0], d_ixn_atoms_, MAX_ATOM_BUFFER * sizeof(*d_ixn_atoms_), cudaMemcpyDeviceToHost));
 
     std::vector<std::vector<int>> ixn_list(row_blocks, std::vector<int>());
     for (int i = 0; i < h_ixn_count; i++) {
