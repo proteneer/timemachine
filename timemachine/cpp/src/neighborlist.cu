@@ -76,12 +76,12 @@ void Neighborlist<RealType>::compute_block_bounds_host(
     gpuErrchk(cudaMemcpy(
         &h_block_bounds_centers[0],
         d_column_block_bounds_ctr_,
-        this->num_column_blocks() * 3 * sizeof(*d_column_block_bounds_ctr_),
+        h_block_bounds_centers.size() * sizeof(*d_column_block_bounds_ctr_),
         cudaMemcpyDeviceToHost));
     gpuErrchk(cudaMemcpy(
         &h_block_bounds_extents[0],
         d_column_block_bounds_ext_,
-        this->num_column_blocks() * 3 * sizeof(*d_column_block_bounds_ext_),
+        h_block_bounds_extents.size() * sizeof(*d_column_block_bounds_ext_),
         cudaMemcpyDeviceToHost));
 
     // Handle the float -> double, doing a direct copy from a double buffer to a float buffer results in garbage values

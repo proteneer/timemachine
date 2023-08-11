@@ -28,10 +28,6 @@ void __global__ k_find_block_bounds(
         return;
     }
 
-    RealType pos_x;
-    RealType pos_y;
-    RealType pos_z;
-
     RealType min_pos_x;
     RealType min_pos_y;
     RealType min_pos_z;
@@ -40,7 +36,13 @@ void __global__ k_find_block_bounds(
     RealType max_pos_y;
     RealType max_pos_z;
 
-    RealType imaged_pos;
+    RealType comp_min_pos_x;
+    RealType comp_min_pos_y;
+    RealType comp_min_pos_z;
+
+    RealType comp_max_pos_x;
+    RealType comp_max_pos_y;
+    RealType comp_max_pos_z;
 
     const RealType box_x = box[0 * 3 + 0];
     const RealType box_y = box[1 * 3 + 1];
@@ -59,47 +61,60 @@ void __global__ k_find_block_bounds(
     if (row_idx < num_indices) {
         int atom_idx = row_idxs[row_idx];
 
-        pos_x = coords[atom_idx * 3 + 0];
-        pos_y = coords[atom_idx * 3 + 1];
-        pos_z = coords[atom_idx * 3 + 2];
-
-        min_pos_x = pos_x;
-        min_pos_y = pos_y;
-        min_pos_z = pos_z;
+        min_pos_x = coords[atom_idx * 3 + 0];
+        min_pos_y = coords[atom_idx * 3 + 1];
+        min_pos_z = coords[atom_idx * 3 + 2];
 
         max_pos_x = min_pos_x;
         max_pos_y = min_pos_y;
         max_pos_z = min_pos_z;
     }
 
-    // Only the first thread in each warp computes the min/max of the bounding box
-    bool compute_bounds = threadIdx.x % WARP_SIZE == 0;
-
-    // Build up center over time, and recenter before computing
+    // Build up center in parallel, and recenter before computing
     // min and max, to reduce overall size of box thanks to accounting
     // for periodic boundary conditions
-    const int src_lane = threadIdx.x + 1 % WARP_SIZE;
-    for (int i = 0; i < WARP_SIZE; i++) {
-        row_idx = __shfl_sync(0xffffffff, row_idx, src_lane);
-        pos_x = __shfl_sync(0xffffffff, pos_x, src_lane);
-        pos_y = __shfl_sync(0xffffffff, pos_y, src_lane);
-        pos_z = __shfl_sync(0xffffffff, pos_z, src_lane);
-        // Only evaluate for the first thread and when the row idx is valid
-        if (compute_bounds && row_idx < num_indices) {
-            imaged_pos =
-                pos_x - box_x * nearbyint((pos_x - static_cast<RealType>(0.5) * (max_pos_x + min_pos_x)) * inv_bx);
-            min_pos_x = min(min_pos_x, imaged_pos);
-            max_pos_x = max(max_pos_x, imaged_pos);
+#pragma unroll 5
+    for (int i = WARP_SIZE / 2; i > 0; i /= 2) {
 
-            imaged_pos =
-                pos_y - box_y * nearbyint((pos_y - static_cast<RealType>(0.5) * (max_pos_y + min_pos_y)) * inv_by);
-            min_pos_y = min(min_pos_y, imaged_pos);
-            max_pos_y = max(max_pos_y, imaged_pos);
+        int comp_row_idx = __shfl_down_sync(0xffffffff, row_idx, i);
 
-            imaged_pos =
-                pos_z - box_z * nearbyint((pos_z - static_cast<RealType>(0.5) * (max_pos_z + min_pos_z)) * inv_bz);
-            min_pos_z = min(min_pos_z, imaged_pos);
-            max_pos_z = max(max_pos_z, imaged_pos);
+        // Note that on the first iteration could do only 3 syncs rather than 6 since min and max values
+        // are identical, not done as it adds complexity that doesn't warrant the tiny speed difference.
+        comp_min_pos_x = __shfl_down_sync(0xffffffff, min_pos_x, i);
+        comp_max_pos_x = __shfl_down_sync(0xffffffff, max_pos_x, i);
+
+        comp_min_pos_y = __shfl_down_sync(0xffffffff, min_pos_y, i);
+        comp_max_pos_y = __shfl_down_sync(0xffffffff, max_pos_y, i);
+
+        comp_min_pos_z = __shfl_down_sync(0xffffffff, min_pos_z, i);
+        comp_max_pos_z = __shfl_down_sync(0xffffffff, max_pos_z, i);
+
+        // Only need to look at comp_row_idx as row_idx is strictly less than comp_row_idx and so if comp_row_idx is valid
+        // row_idx is implicitly valid
+        if (comp_row_idx < num_indices) {
+            RealType comp_center_x = static_cast<RealType>(0.5) * (comp_min_pos_x + comp_max_pos_x);
+            comp_center_x -=
+                box_x * nearbyint((comp_center_x - (static_cast<RealType>(0.5) * (min_pos_x + max_pos_x))) * inv_bx);
+            min_pos_x =
+                min(min_pos_x, comp_center_x - (static_cast<RealType>(0.5) * (comp_max_pos_x - comp_min_pos_x)));
+            max_pos_x =
+                max(max_pos_x, comp_center_x + (static_cast<RealType>(0.5) * (comp_max_pos_x - comp_min_pos_x)));
+
+            RealType comp_center_y = static_cast<RealType>(0.5) * (comp_min_pos_y + comp_max_pos_y);
+            comp_center_y -=
+                box_y * nearbyint((comp_center_y - (static_cast<RealType>(0.5) * (min_pos_y + max_pos_y))) * inv_by);
+            min_pos_y =
+                min(min_pos_y, comp_center_y - (static_cast<RealType>(0.5) * (comp_max_pos_y - comp_min_pos_y)));
+            max_pos_y =
+                max(max_pos_y, comp_center_y + (static_cast<RealType>(0.5) * (comp_max_pos_y - comp_min_pos_y)));
+
+            RealType comp_center_z = static_cast<RealType>(0.5) * (comp_min_pos_z + comp_max_pos_z);
+            comp_center_z -=
+                box_z * nearbyint((comp_center_z - (static_cast<RealType>(0.5) * (min_pos_z + max_pos_z))) * inv_bz);
+            min_pos_z =
+                min(min_pos_z, comp_center_z - (static_cast<RealType>(0.5) * (comp_max_pos_z - comp_min_pos_z)));
+            max_pos_z =
+                max(max_pos_z, comp_center_z + (static_cast<RealType>(0.5) * (comp_max_pos_z - comp_min_pos_z)));
         }
     }
     if (threadIdx.x % WARP_SIZE == 0) {
@@ -107,9 +122,9 @@ void __global__ k_find_block_bounds(
         block_bounds_ctr[tile_idx * 3 + 1] = static_cast<RealType>(0.5) * (max_pos_y + min_pos_y);
         block_bounds_ctr[tile_idx * 3 + 2] = static_cast<RealType>(0.5) * (max_pos_z + min_pos_z);
 
-        block_bounds_ext[tile_idx * 3 + 0] = static_cast<RealType>(0.5) * (max_pos_x - min_pos_x);
-        block_bounds_ext[tile_idx * 3 + 1] = static_cast<RealType>(0.5) * (max_pos_y - min_pos_y);
-        block_bounds_ext[tile_idx * 3 + 2] = static_cast<RealType>(0.5) * (max_pos_z - min_pos_z);
+        block_bounds_ext[tile_idx * 3 + 0] = (static_cast<RealType>(0.5) * (max_pos_x - min_pos_x));
+        block_bounds_ext[tile_idx * 3 + 1] = (static_cast<RealType>(0.5) * (max_pos_y - min_pos_y));
+        block_bounds_ext[tile_idx * 3 + 2] = (static_cast<RealType>(0.5) * (max_pos_z - min_pos_z));
     }
 }
 

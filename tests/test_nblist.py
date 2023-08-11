@@ -15,15 +15,46 @@ from timemachine.testsystems.relative import get_hif2a_ligand_pair_single_topolo
 pytestmark = [pytest.mark.memcheck]
 
 
-def test_empty_neighborlist():
-    with pytest.raises(RuntimeError, match="Neighborlist N must be at least 1"):
-        custom_ops.Neighborlist_f32(0)
+# Currently we only support block sizes of 32, which results in Tile made up of 32x32
+# in the future we will want to consider supporting 16x32 tiles
+BLOCK_SIZE = 32
+
+
+def image_coords(x: NDArray, box_diag: NDArray) -> NDArray:
+    return x - box_diag * np.floor(x / box_diag + 0.5)
+
+
+def verify_box_bounds(coords: NDArray, box: NDArray, block_size: int, centers: NDArray, extents: NDArray):
+    """Verify that the box bounds generated correctly contain all of the particles within a block"""
+    coords = coords.copy()
+    N = coords.shape[0]
+    box_diag = np.diagonal(box)
+
+    num_blocks = (N + block_size - 1) // block_size
+
+    for bidx in range(num_blocks):
+        start_idx = bidx * block_size
+        end_idx = min((bidx + 1) * block_size, N)
+        block_coords = coords[start_idx:end_idx]
+
+        ctr = centers[bidx]
+        extent = extents[bidx]
+        # Image the coordinates into the bounding box
+        imaged_coords = block_coords - box_diag * np.floor((block_coords - ctr) / box_diag + 0.5)
+        # The coordinates must all be less than extent from the center
+        difference = np.amax(imaged_coords - ctr, axis=0) - extent
+
+        # Zero out all of the negative values
+        difference = np.where(difference < 0.0, 0.0, difference)
+        # atol should be less than the neighborlist padding used in practice, but large enough to avoid numerical
+        # error triggering failures
+        np.testing.assert_allclose(difference, 0.0, atol=1e-3, err_msg=f"Block {bidx} box is invalid")
 
 
 def reference_block_bounds(coords: NDArray, box: NDArray, block_size: int) -> Tuple[NDArray, NDArray]:
     # Make a copy to avoid modify the coordinates that end up used later by the Neighborlist
-    coords = coords.copy()
-    N = coords.shape[0]
+    coords_copy = coords.copy()
+    N = coords_copy.shape[0]
     box_diag = np.diagonal(box)
     num_blocks = (N + block_size - 1) // block_size
 
@@ -33,7 +64,7 @@ def reference_block_bounds(coords: NDArray, box: NDArray, block_size: int) -> Tu
     for bidx in range(num_blocks):
         start_idx = bidx * block_size
         end_idx = min((bidx + 1) * block_size, N)
-        block_coords = coords[start_idx:end_idx]
+        block_coords = coords_copy[start_idx:end_idx]
         min_coords = block_coords[0]
         max_coords = block_coords[0]
         for new_coords in block_coords[1:]:
@@ -47,7 +78,19 @@ def reference_block_bounds(coords: NDArray, box: NDArray, block_size: int) -> Tu
 
     ref_ctrs = np.array(ref_ctrs)
     ref_exts = np.array(ref_exts)
+    # Verify that all particles image into the new bounding boxes correctly
+    verify_box_bounds(coords, box, block_size, ref_ctrs, ref_exts)
     return ref_ctrs, ref_exts
+
+
+def compute_volumes_from_extents(exts: NDArray) -> NDArray:
+    # double to get dimensions of the bounding box from extents
+    return np.prod(exts.copy() * 2, axis=1)
+
+
+def test_empty_neighborlist():
+    with pytest.raises(RuntimeError, match="Neighborlist N must be at least 1"):
+        custom_ops.Neighborlist_f32(0)
 
 
 @pytest.mark.parametrize("precision,atol,rtol", [(np.float32, 1e-6, 1e-6), (np.float64, 1e-7, 1e-7)])
@@ -64,22 +107,24 @@ def test_block_bounds_dhfr(precision, atol, rtol, sort):
         perm = hilbert_sort(coords, coords.shape[1])
         coords = coords[perm]
 
-    block_size = 32
-    ref_ctrs, ref_exts = reference_block_bounds(coords, box, block_size)
+    ref_ctrs, ref_exts = reference_block_bounds(coords, box, BLOCK_SIZE)
 
-    test_ctrs, test_exts = nblist.compute_block_bounds(coords, box, block_size)
+    test_ctrs, test_exts = nblist.compute_block_bounds(coords, box, BLOCK_SIZE)
+    verify_box_bounds(coords, box, BLOCK_SIZE, test_ctrs, test_exts)
 
-    for i, (ref_ctr, test_ctr) in enumerate(zip(ref_ctrs, test_ctrs)):
-        np.testing.assert_allclose(ref_ctr, test_ctr, atol=atol, rtol=rtol, err_msg=f"Center {i} has mismatch")
-    for i, (ref_ext, test_ext) in enumerate(zip(ref_exts, test_exts)):
-        np.testing.assert_allclose(ref_ext, test_ext, atol=atol, rtol=rtol, err_msg=f"Extent {i} has mismatch")
+    ref_vols = compute_volumes_from_extents(ref_exts)
+    assert len(ref_vols) == len(ref_ctrs)
+
+    test_vols = compute_volumes_from_extents(test_exts)
+    assert len(test_vols) == len(test_ctrs)
+
+    np.testing.assert_allclose(ref_vols, test_vols, atol=atol, rtol=rtol)
 
 
 @pytest.mark.parametrize("precision,atol,rtol", [(np.float32, 1e-6, 1e-6), (np.float64, 1e-7, 1e-7)])
 @pytest.mark.parametrize("size", [12, 128, 156, 298])
 def test_block_bounds(precision, atol, rtol, size):
     np.random.seed(2020)
-    block_size = 32
     D = 3
 
     if precision == np.float32:
@@ -92,12 +137,18 @@ def test_block_bounds(precision, atol, rtol, size):
     box_diag = np.random.rand(3) + 1
     box = np.eye(3) * box_diag
 
-    ref_ctrs, ref_exts = reference_block_bounds(coords, box, block_size)
+    ref_ctrs, ref_exts = reference_block_bounds(coords, box, BLOCK_SIZE)
 
-    test_ctrs, test_exts = nblist.compute_block_bounds(coords, box, block_size)
+    test_ctrs, test_exts = nblist.compute_block_bounds(coords, box, BLOCK_SIZE)
+    verify_box_bounds(coords, box, BLOCK_SIZE, test_ctrs, test_exts)
 
-    np.testing.assert_allclose(ref_ctrs, test_ctrs, atol=atol, rtol=rtol)
-    np.testing.assert_allclose(ref_exts, test_exts, atol=atol, rtol=rtol)
+    ref_vols = compute_volumes_from_extents(ref_exts)
+    assert len(ref_vols) == len(ref_ctrs)
+
+    test_vols = compute_volumes_from_extents(test_exts)
+    assert len(test_vols) == len(test_ctrs)
+
+    np.testing.assert_allclose(ref_vols, test_vols, atol=atol, rtol=rtol)
 
 
 def get_water_coords(D, sort=False):
@@ -107,24 +158,18 @@ def get_water_coords(D, sort=False):
     return x
 
 
-def image_coords(x: NDArray, box_diag: NDArray) -> NDArray:
-    return x - box_diag * np.floor(x / box_diag + 0.5)
-
-
 def build_reference_ixn_list(coords: NDArray, box: NDArray, cutoff: float) -> List[List[float]]:
     # compute the sparsity of the tile
     ref_ixn_list = []
     N = coords.shape[0]
 
-    block_size = 32
-
-    num_blocks = (N + block_size - 1) // block_size
+    num_blocks = (N + BLOCK_SIZE - 1) // BLOCK_SIZE
     col_coords = np.expand_dims(coords, axis=0)
 
     box_diag = np.diagonal(box)
     for rbidx in range(num_blocks):
-        row_start = rbidx * block_size
-        row_end = min((rbidx + 1) * block_size, N)
+        row_start = rbidx * BLOCK_SIZE
+        row_end = min((rbidx + 1) * BLOCK_SIZE, N)
         row_coords = coords[row_start:row_end]
         row_coords = np.expand_dims(row_coords, axis=1)
 
@@ -142,7 +187,6 @@ def build_reference_ixn_list_with_subset(
     coords: NDArray, box: NDArray, cutoff: float, row_idxs: NDArray
 ) -> List[List[int]]:
     N = coords.shape[0]
-    block_size = 32
     identity_idxs = np.arange(N)
     col_idxs = np.delete(identity_idxs, row_idxs)
     box_diag = np.diagonal(box)
@@ -159,11 +203,11 @@ def build_reference_ixn_list_with_subset(
     ref_ixn_list = []
     all_row_coords = coords[row_idxs]
     row_length = all_row_coords.shape[0]
-    num_blocks = (row_length + block_size - 1) // block_size
+    num_blocks = (row_length + BLOCK_SIZE - 1) // BLOCK_SIZE
 
     for rbidx in range(num_blocks):
-        row_start = rbidx * block_size
-        row_end = min((rbidx + 1) * block_size, N)
+        row_start = rbidx * BLOCK_SIZE
+        row_end = min((rbidx + 1) * BLOCK_SIZE, N)
         row_coords = all_row_coords[row_start:row_end]
         row_coords = np.expand_dims(row_coords, axis=1)
         deltas = image_coords(row_coords - col_coords, box_diag)
@@ -183,7 +227,7 @@ def assert_ixn_lists_are_equal(ref_ixn, test_ixn):
             print("TESTING bidx", bidx)
             print(sorted(a))
             print(sorted(b))
-        np.testing.assert_equal(sorted(a), sorted(b))
+        np.testing.assert_equal(sorted(a), sorted(b), err_msg=f"Ixn list {bidx} doesn't match")
 
 
 @pytest.mark.parametrize("precision", [np.float32, np.float64])
