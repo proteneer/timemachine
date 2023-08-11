@@ -725,6 +725,9 @@ def test_exchange():
             flush=True,
         )
 
+        if idx % 100 == 0:
+            writer.write_frame(xvb_t.coords * 10)
+
         # start_time = time.time()
         for _ in range(mc_steps_per_batch):
             assert np.amax(np.abs(xvb_t.coords)) < 1e3
@@ -733,6 +736,8 @@ def test_exchange():
 
         # run MD
         xvb_t = npt_mover.move(xvb_t)  # disabling this gets more moves?
+
+    writer.close()
 
 
 if __name__ == "__main__":
