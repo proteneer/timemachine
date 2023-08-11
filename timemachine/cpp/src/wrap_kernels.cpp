@@ -804,14 +804,12 @@ void declare_bound_potential(py::module &m) {
         .def(
             py::init([](std::shared_ptr<timemachine::Potential> potential,
                         const py::array_t<double, py::array::c_style> &params) {
-                std::vector<int> pshape(params.shape(), params.shape() + params.ndim());
-
-                return new timemachine::BoundPotential(potential, pshape, params.data());
+                return new timemachine::BoundPotential(potential, params.size(), params.data());
             }),
             py::arg("potential"),
             py::arg("params"))
         .def("get_potential", [](const timemachine::BoundPotential &bp) { return bp.potential; })
-        .def("size", &timemachine::BoundPotential::size)
+        .def("size", [](const timemachine::BoundPotential &bp) { return bp.size; })
         .def(
             "execute",
             [](timemachine::BoundPotential &bp,

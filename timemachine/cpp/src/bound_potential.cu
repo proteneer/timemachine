@@ -1,25 +1,26 @@
 #include "bound_potential.hpp"
 #include "gpu_utils.cuh"
 
-int compute_size(std::vector<int> shape) {
-    if (shape.size() == 0) {
-        return 0;
-    }
-    int total = 1;
-    for (auto s : shape) {
-        total *= s;
-    }
-    return total;
-}
-
 namespace timemachine {
 
-BoundPotential::BoundPotential(std::shared_ptr<Potential> potential, std::vector<int> shape, const double *h_p)
-    : shape(shape), d_p(nullptr), potential(potential), max_size_(compute_size(shape)) {
-    if (this->size() > 0) {
-        d_p.reset(new DeviceBuffer<double>(this->size()));
+BoundPotential::BoundPotential(std::shared_ptr<Potential> potential, const int size, const double *h_p)
+    : size(size), d_p(nullptr), potential(potential), max_size_(size) {
+    if (this->size > 0) {
+        d_p.reset(new DeviceBuffer<double>(this->size));
         d_p->copy_from(h_p);
     }
+}
+
+void BoundPotential::execute_device(
+    const int N,
+    const double *d_x,
+    const double *d_box,
+    unsigned long long *d_du_dx,
+    unsigned long long *d_du_dp,
+    __int128 *d_u,
+    cudaStream_t stream) {
+    this->potential->execute_device(
+        N, this->size, d_x, this->size > 0 ? this->d_p->data : nullptr, d_box, d_du_dx, d_du_dp, d_u, stream);
 }
 
 void BoundPotential::execute_host(
@@ -57,21 +58,16 @@ void BoundPotential::execute_host(
     }
 };
 
-void BoundPotential::set_params_device(
-    const std::vector<int> device_shape, const double *d_new_params, const cudaStream_t stream) {
-    int updated_size = compute_size(device_shape);
-    if (updated_size > 0) {
-        if (updated_size > max_size_) {
+void BoundPotential::set_params_device(const int new_size, const double *d_new_params, const cudaStream_t stream) {
+    if (new_size > 0) {
+        if (new_size > max_size_) {
             throw std::runtime_error(
-                "parameter size is greater than max size: " + std::to_string(updated_size) + " > " +
+                "parameter size is greater than max size: " + std::to_string(new_size) + " > " +
                 std::to_string(max_size_));
         }
-        gpuErrchk(cudaMemcpyAsync(
-            d_p->data, d_new_params, updated_size * sizeof(*d_p->data), cudaMemcpyDeviceToDevice, stream));
+        gpuErrchk(
+            cudaMemcpyAsync(d_p->data, d_new_params, new_size * sizeof(*d_p->data), cudaMemcpyDeviceToDevice, stream));
     }
-    shape = device_shape;
+    this->size = new_size;
 }
-
-int BoundPotential::size() const { return compute_size(this->shape); }
-
 } // namespace timemachine

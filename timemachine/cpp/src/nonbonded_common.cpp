@@ -80,16 +80,15 @@ void get_nonbonded_all_pair_potentials(
         if (std::shared_ptr<FanoutSummedPotential> fanned_potential =
                 std::dynamic_pointer_cast<FanoutSummedPotential>(pot->potential);
             fanned_potential != nullptr) {
-            std::vector<double> h_params(pot->size());
-            if (pot->size() > 0) {
+            std::vector<double> h_params(pot->size);
+            if (pot->size > 0) {
                 pot->d_p->copy_to(&h_params[0]);
             }
-            std::vector<int> shape{pot->size()};
             std::vector<std::shared_ptr<BoundPotential>> flattened_bps;
             for (auto summed_pot : fanned_potential->get_potentials()) {
                 if (is_summed_potential(summed_pot) || is_nonbonded_all_pairs_potential(summed_pot)) {
                     flattened_bps.push_back(
-                        std::shared_ptr<BoundPotential>(new BoundPotential(summed_pot, shape, &h_params[0])));
+                        std::shared_ptr<BoundPotential>(new BoundPotential(summed_pot, pot->size, &h_params[0])));
                 }
             }
             get_nonbonded_all_pair_potentials(flattened_bps, nb_pots);
@@ -97,13 +96,12 @@ void get_nonbonded_all_pair_potentials(
         } else if (std::shared_ptr<SummedPotential> summed_potential =
                        std::dynamic_pointer_cast<SummedPotential>(pot->potential);
                    summed_potential != nullptr) {
-            std::vector<double> h_params(pot->size());
+            std::vector<double> h_params(pot->size);
             int i = 0;
             int offset = 0;
-            if (pot->size() > 0) {
+            if (pot->size > 0) {
                 pot->d_p->copy_to(&h_params[0]);
             }
-            std::vector<int> shape(1);
 
             std::vector<std::shared_ptr<BoundPotential>> flattened_bps;
             std::vector<int> param_sizes = summed_potential->get_parameter_sizes();
@@ -111,9 +109,8 @@ void get_nonbonded_all_pair_potentials(
 
                 if (is_summed_potential(summed_pot) || is_nonbonded_all_pairs_potential(summed_pot)) {
                     std::vector<double> slice(h_params.begin() + offset, h_params.begin() + offset + param_sizes[i]);
-                    shape[0] = param_sizes[i];
                     flattened_bps.push_back(
-                        std::shared_ptr<BoundPotential>(new BoundPotential(summed_pot, shape, &slice[0])));
+                        std::shared_ptr<BoundPotential>(new BoundPotential(summed_pot, param_sizes[i], &slice[0])));
                 }
 
                 offset += param_sizes[i];
