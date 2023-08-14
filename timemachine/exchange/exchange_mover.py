@@ -154,40 +154,35 @@ class ExchangeMove(moves.MonteCarloMove):
         self.last_bw = None
 
         @jax.jit
-        def U_fn(conf, box, a_idxs, b_idxs):
-            # compute the energy of an interaction group
-            conf_i = conf[a_idxs]
-            conf_j = conf[b_idxs]
-            params_i = self.nb_params[a_idxs]
-            params_j = self.nb_params[b_idxs]
-            return nonbonded.nonbonded_block(conf_i, conf_j, box, params_i, params_j, self.nb_beta, self.nb_cutoff)
-
-        @jax.jit
         def U_fn_unsummed(conf, box, a_idxs, b_idxs):
             # compute the energy of an interaction group
             conf_i = conf[a_idxs]
             conf_j = conf[b_idxs]
             params_i = self.nb_params[a_idxs]
             params_j = self.nb_params[b_idxs]
-            return nonbonded.nonbonded_block_unsummed(
+            nrgs = nonbonded.nonbonded_block_unsummed(
                 conf_i, conf_j, box, params_i, params_j, self.nb_beta, self.nb_cutoff
             )
+
+            return jnp.where(nrgs == np.nan, np.inf, nrgs)
+
+        @jax.jit
+        def U_fn(conf, box, a_idxs, b_idxs):
+            return jnp.sum(U_fn_unsummed(conf, box, a_idxs, b_idxs))
 
         self.batch_U_fn = jax.jit(jax.vmap(U_fn, (None, None, 0, 0)))
 
         def batch_log_weights(conf, box):
             """
             Return a list of energies equal to len(water_idxs)
+
+            # Cached based on conf
             """
             if not np.array_equal(self.last_conf, conf):
                 self.last_conf = conf
                 self.last_bw = self.beta * self.batch_U_fn(conf, box, self.all_a_idxs, self.all_b_idxs)
 
             return self.last_bw
-
-            # nrgs = self.batch_U_fn(conf, box, self.all_a_idxs, self.all_b_idxs)
-            # log_weights = self.beta * nrgs  # note the positive energy!
-            # return log_weights
 
         # @profile
         def batch_log_weights_incremental(conf, box, water_idx, new_pos):
@@ -240,11 +235,7 @@ class ExchangeMove(moves.MonteCarloMove):
         log_probs_before = log_weights_before - logsumexp(log_weights_before)
         probs_before = np.exp(log_probs_before)
 
-        # chosen_water = np.random.randint(self.num_waters)
-        # print("LPB", log_probs_before)
         chosen_water = np.random.choice(np.arange(self.num_waters), p=probs_before)
-
-        # print("picked", chosen_water)
 
         chosen_water_atoms = self.water_idxs[chosen_water]
 
@@ -254,12 +245,14 @@ class ExchangeMove(moves.MonteCarloMove):
         # tbd - what should we do  with velocities?
 
         moved_coords = randomly_rotate_and_translate(trial_chosen_coords, trial_translation)
+
+        # optimized version using double transposition
+        log_weights_after, trial_coords = self.batch_log_weights_incremental(coords, box, chosen_water, moved_coords)
+
+        # reference version
         # trial_coords = coords.copy()  # can optimize this later if needed
         # trial_coords[chosen_water_atoms] = moved_coords
-
-        log_weights_after, trial_coords = self.batch_log_weights_incremental(coords, box, chosen_water, moved_coords)
         # log_weights_after = self.batch_log_weights(trial_coords, box)
-        # this can be computed using a simple transposition later on
 
         log_p_accept = min(0, logsumexp(log_weights_before) - logsumexp(log_weights_after))
 
