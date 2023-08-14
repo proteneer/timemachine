@@ -57,13 +57,12 @@ void BoundPotential::execute_host(
 
 void BoundPotential::set_params(const std::vector<double> &params) {
     if (params.size() > 0) {
-        if (params.size() > buffer_size_) {
+        if (params.size() != buffer_size_) {
             throw std::runtime_error(
-                "parameter size is greater than device buffer size: " + std::to_string(params.size()) + " > " +
-                std::to_string(buffer_size_));
+                "parameter size is not equal to device buffer size: " + std::to_string(params.size()) +
+                " != " + std::to_string(buffer_size_));
         }
-        // NOTE: can't use d_p.copy_from here because new parameters size may be less than buffer size
-        gpuErrchk(cudaMemcpyAsync(d_p.data, params.data(), params.size() * sizeof(*d_p.data), cudaMemcpyHostToDevice));
+        d_p.copy_from(params.data());
     }
     this->size = params.size();
 }

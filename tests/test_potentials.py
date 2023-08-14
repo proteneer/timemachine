@@ -50,9 +50,9 @@ def test_bound_potential_set_params(harmonic_bond):
     u_test.bound_impl.set_params(new_params)
     np.testing.assert_array_equal(u_test(x, box), u_ref(x, box))
 
-    # should raise an exception if new parameters size exceeds buffer size
-    with pytest.raises(RuntimeError, match="6 > 4"):
-        invalid_params = np.ones(shape=(3, 2), dtype=np.float32)
+    # should raise an exception if new parameters size != buffer size
+    with pytest.raises(RuntimeError, match="2 != 4"):
+        invalid_params = np.ones(shape=(1, 2), dtype=np.float32)
         u_test.bound_impl.set_params(invalid_params)
 
 
