@@ -11,12 +11,14 @@ namespace timemachine {
 // a potential bounded to a set of parameters with some shape
 struct BoundPotential {
 
-    BoundPotential(std::shared_ptr<Potential> potential, const int size, const double *h_p);
+    BoundPotential(std::shared_ptr<Potential> potential, const std::vector<double> &params);
 
     int size;
-    std::unique_ptr<DeviceBuffer<double>> d_p;
+    const size_t buffer_size_; // d_p.size / sizeof(*d_p.data) TODO: remove when DeviceBuffer::length or similar added
+    DeviceBuffer<double> d_p;
     std::shared_ptr<Potential> potential;
-    const int max_size_;
+
+    void set_params(const std::vector<double> &params);
 
     void set_params_device(const int size, const double *d_p, const cudaStream_t stream);
 

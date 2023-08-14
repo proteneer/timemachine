@@ -82,13 +82,12 @@ void get_nonbonded_all_pair_potentials(
             fanned_potential != nullptr) {
             std::vector<double> h_params(pot->size);
             if (pot->size > 0) {
-                pot->d_p->copy_to(&h_params[0]);
+                pot->d_p.copy_to(&h_params[0]);
             }
             std::vector<std::shared_ptr<BoundPotential>> flattened_bps;
             for (auto summed_pot : fanned_potential->get_potentials()) {
                 if (is_summed_potential(summed_pot) || is_nonbonded_all_pairs_potential(summed_pot)) {
-                    flattened_bps.push_back(
-                        std::shared_ptr<BoundPotential>(new BoundPotential(summed_pot, pot->size, &h_params[0])));
+                    flattened_bps.push_back(std::shared_ptr<BoundPotential>(new BoundPotential(summed_pot, h_params)));
                 }
             }
             get_nonbonded_all_pair_potentials(flattened_bps, nb_pots);
@@ -100,7 +99,7 @@ void get_nonbonded_all_pair_potentials(
             int i = 0;
             int offset = 0;
             if (pot->size > 0) {
-                pot->d_p->copy_to(&h_params[0]);
+                pot->d_p.copy_to(&h_params[0]);
             }
 
             std::vector<std::shared_ptr<BoundPotential>> flattened_bps;
@@ -109,8 +108,7 @@ void get_nonbonded_all_pair_potentials(
 
                 if (is_summed_potential(summed_pot) || is_nonbonded_all_pairs_potential(summed_pot)) {
                     std::vector<double> slice(h_params.begin() + offset, h_params.begin() + offset + param_sizes[i]);
-                    flattened_bps.push_back(
-                        std::shared_ptr<BoundPotential>(new BoundPotential(summed_pot, param_sizes[i], &slice[0])));
+                    flattened_bps.push_back(std::shared_ptr<BoundPotential>(new BoundPotential(summed_pot, slice)));
                 }
 
                 offset += param_sizes[i];

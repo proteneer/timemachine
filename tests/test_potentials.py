@@ -37,6 +37,37 @@ def test_bound_potential_get_potential(harmonic_bond):
     assert unbound_impl is bound_impl.get_potential()
 
 
+def test_bound_potential_empty_params():
+    bond_idxs = np.empty((0, 2), dtype=np.int32)
+    params = np.empty((0, 2))
+    u_test = HarmonicBond(bond_idxs).bind(params).to_gpu(np.float32)
+    x = np.empty((0, 3))
+    box = np.eye(3)
+    assert u_test(x, box) == 0.0
+
+    u_test.bound_impl.set_params(np.empty((0, 2)))
+    assert u_test(x, box) == 0.0
+
+
+def test_bound_potential_set_params(harmonic_bond):
+    x, box = np.ones((3, 3)), np.eye(3)
+
+    new_params = np.random.default_rng(2023).random(size=(2, 2), dtype=np.float32)
+    u_ref = harmonic_bond.potential.to_gpu(np.float32).bind(new_params)
+
+    # before updating u_test with new parameters, should disagree with reference
+    u_test = harmonic_bond.to_gpu(np.float32)
+    assert not np.array_equal(u_test(x, box), u_ref(x, box))
+
+    u_test.bound_impl.set_params(new_params)
+    np.testing.assert_array_equal(u_test(x, box), u_ref(x, box))
+
+    # should raise an exception if new parameters size != buffer size
+    with pytest.raises(RuntimeError, match="2 != 4"):
+        invalid_params = np.ones(shape=(1, 2), dtype=np.float32)
+        u_test.bound_impl.set_params(invalid_params)
+
+
 def verify_potential_validation(potential):
     with pytest.raises(RuntimeError, match="coords dimensions must be 2"):
         potential(np.zeros(1), np.ones((3, 3)))
