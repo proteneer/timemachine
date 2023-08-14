@@ -14,6 +14,7 @@ struct BoundPotential {
     BoundPotential(std::shared_ptr<Potential> potential, const std::vector<double> &params);
 
     int size;
+    const size_t buffer_size_; // d_p.size / sizeof(*d_p.data) TODO: remove when DeviceBuffer::length or similar added
     DeviceBuffer<double> d_p;
     std::shared_ptr<Potential> potential;
 

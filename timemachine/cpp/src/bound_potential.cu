@@ -4,7 +4,7 @@
 namespace timemachine {
 
 BoundPotential::BoundPotential(std::shared_ptr<Potential> potential, const std::vector<double> &params)
-    : size(params.size()), d_p(size), potential(potential) {
+    : size(params.size()), buffer_size_(size), d_p(buffer_size_), potential(potential) {
     set_params(params);
 }
 
@@ -57,10 +57,10 @@ void BoundPotential::execute_host(
 
 void BoundPotential::set_params(const std::vector<double> &params) {
     if (params.size() > 0) {
-        if (params.size() * sizeof(*d_p.data) > d_p.size) {
+        if (params.size() > buffer_size_) {
             throw std::runtime_error(
                 "parameter size is greater than device buffer size: " + std::to_string(params.size()) + " > " +
-                std::to_string(d_p.size / sizeof(*d_p.data)));
+                std::to_string(buffer_size_));
         }
         // NOTE: can't use d_p.copy_from here because new parameters size may be less than buffer size
         gpuErrchk(cudaMemcpyAsync(d_p.data, params.data(), params.size() * sizeof(*d_p.data), cudaMemcpyHostToDevice));
@@ -70,10 +70,10 @@ void BoundPotential::set_params(const std::vector<double> &params) {
 
 void BoundPotential::set_params_device(const int new_size, const double *d_new_params, const cudaStream_t stream) {
     if (new_size > 0) {
-        if (new_size * sizeof(*d_p.data) > d_p.size) {
+        if (static_cast<size_t>(new_size) > buffer_size_) {
             throw std::runtime_error(
                 "parameter size is greater than device buffer size: " + std::to_string(new_size) + " > " +
-                std::to_string(d_p.size / sizeof(*d_p.data)));
+                std::to_string(buffer_size_));
         }
         gpuErrchk(
             cudaMemcpyAsync(d_p.data, d_new_params, new_size * sizeof(*d_p.data), cudaMemcpyDeviceToDevice, stream));
