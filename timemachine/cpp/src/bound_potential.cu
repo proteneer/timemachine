@@ -65,10 +65,10 @@ void BoundPotential::set_params(const std::vector<double> params) {
 
 void BoundPotential::set_params_device(const int new_size, const double *d_new_params, const cudaStream_t stream) {
     if (new_size > 0) {
-        if (static_cast<std::size_t>(new_size) > d_p->size) {
+        if (new_size * sizeof(*d_p->data) > d_p->size) {
             throw std::runtime_error(
                 "parameter size is greater than device buffer size: " + std::to_string(new_size) + " > " +
-                std::to_string(d_p->size));
+                std::to_string(d_p->size / sizeof(*d_p->data)));
         }
         gpuErrchk(
             cudaMemcpyAsync(d_p->data, d_new_params, new_size * sizeof(*d_p->data), cudaMemcpyDeviceToDevice, stream));
