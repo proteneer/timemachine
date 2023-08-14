@@ -4,7 +4,7 @@
 namespace timemachine {
 
 BoundPotential::BoundPotential(std::shared_ptr<Potential> potential, const std::vector<double> params)
-    : size(0), d_p(nullptr), potential(potential) {
+    : size(params.size()), d_p(size), potential(potential) {
     set_params(params);
 }
 
@@ -17,7 +17,7 @@ void BoundPotential::execute_device(
     __int128 *d_u,
     cudaStream_t stream) {
     this->potential->execute_device(
-        N, this->size, d_x, this->size > 0 ? this->d_p->data : nullptr, d_box, d_du_dx, d_du_dp, d_u, stream);
+        N, this->size, d_x, this->size > 0 ? this->d_p.data : nullptr, d_box, d_du_dx, d_du_dp, d_u, stream);
 }
 
 void BoundPotential::execute_host(
@@ -56,22 +56,27 @@ void BoundPotential::execute_host(
 };
 
 void BoundPotential::set_params(const std::vector<double> params) {
-    this->size = params.size();
-    if (this->size > 0) {
-        d_p.reset(new DeviceBuffer<double>(this->size));
-        d_p->copy_from(params.data());
+    if (params.size() > 0) {
+        if (params.size() * sizeof(*d_p.data) > d_p.size) {
+            throw std::runtime_error(
+                "parameter size is greater than device buffer size: " + std::to_string(params.size()) + " > " +
+                std::to_string(d_p.size / sizeof(*d_p.data)));
+        }
+        // NOTE: can't use d_p.copy_from here because new parameters size may be less than buffer size
+        gpuErrchk(cudaMemcpyAsync(d_p.data, params.data(), params.size() * sizeof(*d_p.data), cudaMemcpyHostToDevice));
     }
+    this->size = params.size();
 }
 
 void BoundPotential::set_params_device(const int new_size, const double *d_new_params, const cudaStream_t stream) {
     if (new_size > 0) {
-        if (new_size * sizeof(*d_p->data) > d_p->size) {
+        if (new_size * sizeof(*d_p.data) > d_p.size) {
             throw std::runtime_error(
                 "parameter size is greater than device buffer size: " + std::to_string(new_size) + " > " +
-                std::to_string(d_p->size / sizeof(*d_p->data)));
+                std::to_string(d_p.size / sizeof(*d_p.data)));
         }
         gpuErrchk(
-            cudaMemcpyAsync(d_p->data, d_new_params, new_size * sizeof(*d_p->data), cudaMemcpyDeviceToDevice, stream));
+            cudaMemcpyAsync(d_p.data, d_new_params, new_size * sizeof(*d_p.data), cudaMemcpyDeviceToDevice, stream));
     }
     this->size = new_size;
 }

@@ -14,7 +14,7 @@ struct BoundPotential {
     BoundPotential(std::shared_ptr<Potential> potential, const std::vector<double> params);
 
     int size;
-    std::unique_ptr<DeviceBuffer<double>> d_p;
+    DeviceBuffer<double> d_p;
     std::shared_ptr<Potential> potential;
 
     void set_params(const std::vector<double> params);

@@ -82,7 +82,7 @@ void get_nonbonded_all_pair_potentials(
             fanned_potential != nullptr) {
             std::vector<double> h_params(pot->size);
             if (pot->size > 0) {
-                pot->d_p->copy_to(&h_params[0]);
+                pot->d_p.copy_to(&h_params[0]);
             }
             std::vector<std::shared_ptr<BoundPotential>> flattened_bps;
             for (auto summed_pot : fanned_potential->get_potentials()) {
@@ -99,7 +99,7 @@ void get_nonbonded_all_pair_potentials(
             int i = 0;
             int offset = 0;
             if (pot->size > 0) {
-                pot->d_p->copy_to(&h_params[0]);
+                pot->d_p.copy_to(&h_params[0]);
             }
 
             std::vector<std::shared_ptr<BoundPotential>> flattened_bps;

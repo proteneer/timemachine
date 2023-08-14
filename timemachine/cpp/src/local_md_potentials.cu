@@ -63,7 +63,7 @@ LocalMDPotentials::LocalMDPotentials(
     num_allpairs_idxs_ = copy_nonbonded_potential_idxs(nonbonded_bp_->potential, N_, d_all_pairs_idxs_.data);
 
     ixn_group_ =
-        construct_ixn_group_potential(N_, nonbonded_bp_->potential, nonbonded_bp_->size, nonbonded_bp_->d_p->data);
+        construct_ixn_group_potential(N_, nonbonded_bp_->potential, nonbonded_bp_->size, nonbonded_bp_->d_p.data);
 
     // Add the restraint potential and ixn group potential
     all_potentials_.push_back(bound_free_restraint_);
