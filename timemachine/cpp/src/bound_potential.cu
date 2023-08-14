@@ -3,7 +3,7 @@
 
 namespace timemachine {
 
-BoundPotential::BoundPotential(std::shared_ptr<Potential> potential, const std::vector<double> params)
+BoundPotential::BoundPotential(std::shared_ptr<Potential> potential, const std::vector<double> &params)
     : size(params.size()), d_p(size), potential(potential) {
     set_params(params);
 }
@@ -55,7 +55,7 @@ void BoundPotential::execute_host(
     }
 };
 
-void BoundPotential::set_params(const std::vector<double> params) {
+void BoundPotential::set_params(const std::vector<double> &params) {
     if (params.size() > 0) {
         if (params.size() * sizeof(*d_p.data) > d_p.size) {
             throw std::runtime_error(
