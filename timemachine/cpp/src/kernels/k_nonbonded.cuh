@@ -52,7 +52,7 @@ void __global__ k_check_rebuild_coords_and_box_gather(
     }
 }
 
-template <typename RealType>
+template <typename RealType, int COORDS_DIM, int PARAMS_DIM>
 void __global__ k_gather_coords_and_params(
     const int N,
     const unsigned int *__restrict__ idxs,
@@ -60,20 +60,24 @@ void __global__ k_gather_coords_and_params(
     const RealType *__restrict__ params,
     RealType *__restrict__ gathered_coords,
     RealType *__restrict__ gathered_params) {
-
+    static_assert(COORDS_DIM == 3);
+    static_assert(PARAMS_DIM == PARAMS_PER_ATOM);
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
-    int stride = gridDim.y;
-    int stride_idx = blockIdx.y;
-
     if (idx >= N) {
         return;
     }
 
+    const unsigned int atom_idx = idxs[idx];
+
     // Coords have 3 dimensions, params have 4
-    if (stride_idx < 3) {
-        gathered_coords[idx * 3 + stride_idx] = coords[idxs[idx] * 3 + stride_idx];
+#pragma unroll COORDS_DIM
+    for (int i = 0; i < COORDS_DIM; i++) {
+        gathered_coords[idx * COORDS_DIM + i] = coords[atom_idx * COORDS_DIM + i];
     }
-    gathered_params[idx * stride + stride_idx] = params[idxs[idx] * stride + stride_idx];
+#pragma unroll PARAMS_DIM
+    for (int i = 0; i < PARAMS_DIM; i++) {
+        gathered_params[idx * PARAMS_DIM + i] = params[atom_idx * PARAMS_DIM + i];
+    }
 }
 
 template <typename T, int D>

@@ -186,8 +186,8 @@ void NonbondedInteractionGroup<RealType>::execute_device(
     }
 
     // compute new coordinates/params
-    k_gather_coords_and_params<<<dim3(ceil_divide(K, tpb), PARAMS_PER_ATOM, 1), tpb, 0, stream>>>(
-        K, d_perm_, d_x, d_p, d_sorted_x_, d_sorted_p_);
+    k_gather_coords_and_params<double, 3, PARAMS_PER_ATOM>
+        <<<ceil_divide(K, tpb), tpb, 0, stream>>>(K, d_perm_, d_x, d_p, d_sorted_x_, d_sorted_p_);
     gpuErrchk(cudaPeekAtLastError());
     // reset buffers and sorted accumulators
     if (d_du_dx) {
