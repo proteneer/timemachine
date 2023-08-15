@@ -94,7 +94,6 @@ pybind11_add_module(${LIBRARY_NAME} SHARED NO_EXTRAS
   src/stream_manager.cu
   src/kernels/k_nonbonded.cu
   src/kernels/k_indices.cu
-  src/exchange_mover.cpp
 )
 
 include_directories(src/kernels)

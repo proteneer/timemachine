@@ -31,8 +31,6 @@
 #include "set_utils.hpp"
 #include "summed_potential.hpp"
 #include "verlet_integrator.hpp"
-#include "exchange_mover.hpp"
-
 #include <iostream>
 
 namespace py = pybind11;
@@ -1227,147 +1225,6 @@ template <typename RealType, bool Negated> void declare_nonbonded_pair_list(py::
             py::arg("cutoff"));
 }
 
-
-void declare_inside_outside_exchange_mover(py::module &m) {
-
-    using Class = timemachine::InsideOutsideExchangeMover;
-    std::string pyclass_name = std::string("InsideOutsideExchangeMover");
-    py::class_<Class, std::shared_ptr<Class>>(m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
-        .def(
-            py::init([](double nb_beta,
-                        double nb_cutoff,
-                        const std::vector<double> &nb_params, // Nx4
-                        const std::vector<int> &water_idxs,   // Wx3
-                        const std::vector<int> &ligand_idxs,
-                        double beta,
-                        double radius) {
-                return new timemachine::InsideOutsideExchangeMover(
-                    nb_beta,
-                    nb_cutoff,
-                    nb_params, // Nx4
-                    water_idxs,   // Wx3
-                    ligand_idxs,
-                    beta,
-                    radius
-                );
-            }),
-            py::arg("nb_beta"),
-            py::arg("nb_cutoff"),
-            py::arg("nb_params"), // Nx4
-            py::arg("water_idxs"),   // Wx3
-            py::arg("ligand_idxs"),
-            py::arg("beta"),
-            py::arg("radius"))
-        .def(
-            "get_water_groups",
-            [](timemachine::InsideOutsideExchangeMover &ioem,
-               const py::array_t<double, py::array::c_style> &coords,
-               const py::array_t<double, py::array::c_style> &box,
-               const py::array_t<double, py::array::c_style> &center) -> py::tuple {
-                verify_coords_and_box(coords, box);
-
-                std::vector<double> vec_coords(coords.size());
-                std::memcpy(vec_coords.data(), coords.data(), coords.size() * sizeof(double));
-                std::array<double, 9> arr_box;
-                std::memcpy(arr_box.data(), box.data(), box.size() * sizeof(double));
-
-                std::array<double, 3> arr_center;
-                std::memcpy(arr_center.data(), center.data(), center.size() * sizeof(double));
-
-                std::vector<int> v1_mols;
-                std::vector<int> v2_mols;
-
-                ioem.get_water_groups(vec_coords, arr_box, arr_center, v1_mols, v2_mols);
- 
-                py::array_t<int, py::array::c_style> out_v1_mols(v1_mols.size());
-                std::memcpy(out_v1_mols.mutable_data(), &v1_mols[0], v1_mols.size() * sizeof(int));
-
-                py::array_t<int, py::array::c_style> out_v2_mols(v2_mols.size());
-                std::memcpy(out_v2_mols.mutable_data(), &v2_mols[0], v2_mols.size() * sizeof(int));
-
-
-                return py::make_tuple(out_v1_mols, out_v2_mols);
-
-        })
-        .def(
-            "swap_vi_into_vj_impl",
-            [](timemachine::InsideOutsideExchangeMover &ioem,
-                int chosen_water, 
-                int N_i,
-                int N_j,
-                const py::array_t<double, py::array::c_style> &coords,
-                const py::array_t<double, py::array::c_style> &box,
-                const py::array_t<double, py::array::c_style> &insertion_site,
-                double vol_i,
-                double vol_j) -> py::tuple {
-
-                const long unsigned int N = coords.shape()[0];
-                const long unsigned int D = coords.shape()[1];
-
-                verify_coords_and_box(coords, box);
-
-                std::vector<double> vec_coords(coords.size());
-                std::memcpy(vec_coords.data(), coords.data(), coords.size() * sizeof(double));
-                std::array<double, 9> arr_box;
-                std::memcpy(arr_box.data(), box.data(), box.size() * sizeof(double));
-
-                std::array<double, 3> arr_insertion_site;
-                std::memcpy(arr_insertion_site.data(), insertion_site.data(), insertion_site.size() * sizeof(double));
-
-                std::vector<double> proposal_coords;
-                double log_prob;
-
-                ioem.swap_vi_into_vj_impl(
-                    chosen_water,
-                    N_i,
-                    N_j,
-                    vec_coords,
-                    arr_box,
-                    arr_insertion_site,
-                    vol_i,
-                    vol_j,
-                    proposal_coords,
-                    log_prob);
- 
-                py::array_t<double, py::array::c_style> out_proposal_coords({N, D});
-                std::memcpy(out_proposal_coords.mutable_data(), &proposal_coords[0], proposal_coords.size() * sizeof(double));
-
-                return py::make_tuple(out_proposal_coords, log_prob);
-
-        })
-        .def(
-            "propose",
-            [](timemachine::InsideOutsideExchangeMover &ioem,
-                const py::array_t<double, py::array::c_style> &coords,
-                const py::array_t<double, py::array::c_style> &box) -> py::tuple {
-
-                const long unsigned int N = coords.shape()[0];
-                const long unsigned int D = coords.shape()[1];
-
-                verify_coords_and_box(coords, box);
-
-                std::vector<double> vec_coords(coords.size());
-                std::memcpy(vec_coords.data(), coords.data(), coords.size() * sizeof(double));
-                std::array<double, 9> arr_box;
-                std::memcpy(arr_box.data(), box.data(), box.size() * sizeof(double));
-
-                std::vector<double> proposal_coords;
-                double log_prob;
-
-                ioem.propose(
-                    vec_coords,
-                    arr_box,
-                    proposal_coords,
-                    log_prob);
- 
-                py::array_t<double, py::array::c_style> out_proposal_coords({N, D});
-                std::memcpy(out_proposal_coords.mutable_data(), &proposal_coords[0], proposal_coords.size() * sizeof(double));
-
-                return py::make_tuple(out_proposal_coords, log_prob);
-
-        });
-}
-
 void declare_barostat(py::module &m) {
 
     using Class = timemachine::MonteCarloBarostat;
@@ -1468,8 +1325,6 @@ PYBIND11_MODULE(custom_ops, m) {
     m.def("rmsd_align", &py_rmsd_align, "RMSD align two molecules", py::arg("x1"), py::arg("x2"));
 
     declare_barostat(m);
-    declare_inside_outside_exchange_mover(m);
-
     declare_integrator(m);
     declare_langevin_integrator(m);
     declare_velocity_verlet_integrator(m);
