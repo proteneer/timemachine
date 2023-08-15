@@ -135,7 +135,7 @@ class PairBarResult:
 class SimulationResult:
     final_result: PairBarResult
     plots: PairBarPlots
-    frames: List[NDArray]  # (len(keep_idxs), n_frames, N, 3)
+    frames: List[StoredArrays]  # (len(keep_idxs), n_frames, N, 3)
     boxes: List[NDArray]
     md_params: MDParams
     intermediate_results: List[PairBarResult]
@@ -519,7 +519,7 @@ def run_sims_sequential(
     md_params: MDParams,
     temperature: float,
     keep_idxs: List[int],
-) -> Tuple[PairBarResult, List[NDArray], List[NDArray]]:
+) -> Tuple[PairBarResult, List[StoredArrays], List[NDArray]]:
     """Sequentially run simulations at each state in initial_states,
     returning summaries that can be used for pair BAR, energy decomposition, and other diagnostics
 
@@ -557,7 +557,7 @@ def run_sims_sequential(
     for lamb_idx, initial_state in enumerate(initial_states):
 
         # run simulation
-        cur_frames, cur_boxes = sample(initial_state, md_params)
+        cur_frames, cur_boxes = sample(initial_state, md_params, max_buffer_frames=100)
         print(f"completed simulation at lambda={initial_state.lamb}!")
 
         # keep samples from any requested states in memory
