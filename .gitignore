@@ -10,3 +10,7 @@ oe_license.txt
 build/
 *.egg-info/
 .coverage*
+
+# Nsys profiling files
+*.sqlite
+*.nsys-rep
