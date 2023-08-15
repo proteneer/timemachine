@@ -9,7 +9,7 @@ project(timemachine LANGUAGES CXX CUDA)
 find_package(PythonInterp 3.10 REQUIRED)
 find_package(PythonLibs 3.10 REQUIRED)
 
-string(APPEND CMAKE_CXX_FLAGS "-Wall -Wextra")
+string(APPEND CMAKE_CXX_FLAGS "-Werror -Wall -Wextra")
 
 string(APPEND CMAKE_CUDA_FLAGS "-O3 -lineinfo")
 string(APPEND CMAKE_CUDA_FLAGS

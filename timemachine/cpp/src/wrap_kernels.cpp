@@ -31,6 +31,7 @@
 #include "set_utils.hpp"
 #include "summed_potential.hpp"
 #include "verlet_integrator.hpp"
+
 #include <iostream>
 
 namespace py = pybind11;
@@ -1325,6 +1326,7 @@ PYBIND11_MODULE(custom_ops, m) {
     m.def("rmsd_align", &py_rmsd_align, "RMSD align two molecules", py::arg("x1"), py::arg("x2"));
 
     declare_barostat(m);
+
     declare_integrator(m);
     declare_langevin_integrator(m);
     declare_velocity_verlet_integrator(m);
