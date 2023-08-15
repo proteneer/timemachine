@@ -6,6 +6,7 @@
 
 import argparse
 import os
+import sys
 from typing import Callable, List, Tuple
 
 import jax
@@ -80,6 +81,9 @@ def randomly_translate(coords, offset):
     return centered_coords + offset
 
 
+from timemachine.ff.handlers import openmm_deserializer
+
+
 def get_initial_state(water_pdb, mol, ff, seed, nb_cutoff):
     assert nb_cutoff == 1.2  # hardcoded in prepare_host_edge
 
@@ -91,41 +95,57 @@ def get_initial_state(water_pdb, mol, ff, seed, nb_cutoff):
 
     assert num_water_atoms == len(solvent_conf)
 
-    bt = BaseTopology(mol, ff)
-    afe = AbsoluteFreeEnergy(mol, bt)
-    host_config = HostConfig(solvent_sys, solvent_conf, solvent_box, num_water_atoms)
-    potentials, params, combined_masses = afe.prepare_host_edge(ff.get_params(), host_config, 0.0)
-
-    host_bps = []
-    for p, bp in zip(params, potentials):
-        host_bps.append(bp.bind(p))
-
     temperature = DEFAULT_TEMP
     dt = 1e-3
-
-    integrator = LangevinIntegrator(temperature, dt, 1.0, combined_masses, seed)
-
-    bond_list = get_bond_list(host_bps[0].potential)
-    group_idxs = get_group_indices(bond_list, len(combined_masses))
     barostat_interval = 25
 
-    barostat = MonteCarloBarostat(
-        len(combined_masses), DEFAULT_PRESSURE, temperature, group_idxs, barostat_interval, seed + 1
-    )
+    if mol:
+        bt = BaseTopology(mol, ff)
+        afe = AbsoluteFreeEnergy(mol, bt)
+        host_config = HostConfig(solvent_sys, solvent_conf, solvent_box, num_water_atoms)
+        potentials, params, combined_masses = afe.prepare_host_edge(ff.get_params(), host_config, 0.0)
 
-    # (YTZ): This is disabled because the initial ligand and starting waters are pre-minimized
-    # print("Minimizing the host system...", end="", flush=True)
-    # host_conf = minimize_host_4d([mol], host_config, ff)
-    # print("Done", flush=True)
+        host_bps = []
+        for p, bp in zip(params, potentials):
+            host_bps.append(bp.bind(p))
 
-    host_conf = solvent_conf
-    combined_conf = np.concatenate([host_conf, get_romol_conf(mol)], axis=0)
+        integrator = LangevinIntegrator(temperature, dt, 1.0, combined_masses, seed)
 
-    ligand_idxs = np.arange(num_water_atoms, num_water_atoms + mol.GetNumAtoms())
+        bond_list = get_bond_list(host_bps[0].potential)
+        group_idxs = get_group_indices(bond_list, len(combined_masses))
 
-    initial_state = InitialState(
-        host_bps, integrator, barostat, combined_conf, np.zeros_like(combined_conf), solvent_box, 0.0, ligand_idxs
-    )
+        barostat = MonteCarloBarostat(
+            len(combined_masses), DEFAULT_PRESSURE, temperature, group_idxs, barostat_interval, seed + 1
+        )
+
+        # (YTZ): This is disabled because the initial ligand and starting waters are pre-minimized
+        # print("Minimizing the host system...", end="", flush=True)
+        # host_conf = minimize_host_4d([mol], host_config, ff)
+        # print("Done", flush=True)
+
+        host_conf = solvent_conf
+        combined_conf = np.concatenate([host_conf, get_romol_conf(mol)], axis=0)
+
+        ligand_idxs = np.arange(num_water_atoms, num_water_atoms + mol.GetNumAtoms())
+
+        initial_state = InitialState(
+            host_bps, integrator, barostat, combined_conf, np.zeros_like(combined_conf), solvent_box, 0.0, ligand_idxs
+        )
+
+    else:
+        host_bps, host_masses = openmm_deserializer.deserialize_system(solvent_sys, cutoff=nb_cutoff)
+        integrator = LangevinIntegrator(temperature, dt, 1.0, host_masses, seed)
+        bond_list = get_bond_list(host_bps[0].potential)
+        group_idxs = get_group_indices(bond_list, len(host_masses))
+        barostat_interval = 25
+        barostat = MonteCarloBarostat(
+            len(host_masses), DEFAULT_PRESSURE, temperature, group_idxs, barostat_interval, seed + 1
+        )
+
+        ligand_idxs = [0, 1, 2]  # pick first water molecule to be a "ligand" for targetting purposes
+        initial_state = InitialState(
+            host_bps, integrator, barostat, solvent_conf, np.zeros_like(solvent_conf), solvent_box, 0.0, ligand_idxs
+        )
 
     num_water_mols = num_water_atoms // 3
 
@@ -136,201 +156,23 @@ from scipy.special import logsumexp
 
 
 class ExchangeMove(moves.MonteCarloMove):
-    def __init__(self, nb_beta, nb_cutoff, nb_params, water_idxs):
-        self.nb_beta = nb_beta
-        self.nb_cutoff = nb_cutoff
-        self.nb_params = jnp.array(nb_params)
-        self.num_waters = len(water_idxs)
-        self.water_idxs = water_idxs
-        self.beta = 1 / DEFAULT_KT
-
-        self.n_atoms = len(nb_params)
-        self.all_a_idxs = []
-        self.all_b_idxs = []
-        for a_idxs in water_idxs:
-            self.all_a_idxs.append(np.array(a_idxs))
-            self.all_b_idxs.append(np.delete(np.arange(self.n_atoms), a_idxs))
-        self.all_a_idxs = np.array(self.all_a_idxs)
-        self.all_b_idxs = np.array(self.all_b_idxs)
-
-        self.last_conf = None
-        self.last_bw = None
-
-        @jax.jit
-        def U_fn_unsummed(conf, box, a_idxs, b_idxs):
-            # compute the energy of an interaction group
-            conf_i = conf[a_idxs]
-            conf_j = conf[b_idxs]
-            params_i = self.nb_params[a_idxs]
-            params_j = self.nb_params[b_idxs]
-            nrgs = nonbonded.nonbonded_block_unsummed(
-                conf_i, conf_j, box, params_i, params_j, self.nb_beta, self.nb_cutoff
-            )
-
-            return jnp.where(jnp.isnan(nrgs), np.inf, nrgs)
-
-        @jax.jit
-        def U_fn(conf, box, a_idxs, b_idxs):
-            return jnp.sum(U_fn_unsummed(conf, box, a_idxs, b_idxs))
-
-        self.batch_U_fn = jax.jit(jax.vmap(U_fn, (None, None, 0, 0)))
-
-        def batch_log_weights(conf, box):
-            """
-            Return a list of energies equal to len(water_idxs)
-
-            # Cached based on conf
-            """
-            if not np.array_equal(self.last_conf, conf):
-                self.last_conf = conf
-                self.last_bw = self.beta * self.batch_U_fn(conf, box, self.all_a_idxs, self.all_b_idxs)
-
-            return self.last_bw
-
-        # @profile
-        def batch_log_weights_incremental(conf, box, water_idx, new_pos):
-            # compute the incremental weights
-            initial_weights = self.batch_log_weights(conf, box)
-
-            assert len(initial_weights) == self.num_waters
-
-            a_idxs = self.water_idxs[water_idx]
-            b_idxs = np.delete(np.arange(self.n_atoms), a_idxs)
-
-            # sum interaction energy of all the atoms in a water molecule
-            old_water_ixn_nrgs = np.sum(self.beta * U_fn_unsummed(conf, box, a_idxs, b_idxs), axis=0)
-            old_water_water_ixn_nrgs = np.sum(
-                old_water_ixn_nrgs[: (self.num_waters - 1) * 3].reshape((self.num_waters - 1), 3), axis=1
-            )
-
-            assert len(old_water_water_ixn_nrgs) == self.num_waters - 1
-
-            old_water_water_ixn_nrgs_full = np.zeros(len(self.water_idxs))
-            old_water_water_ixn_nrgs_full[:water_idx] = old_water_water_ixn_nrgs[:water_idx]
-            old_water_water_ixn_nrgs_full[water_idx + 1 :] = old_water_water_ixn_nrgs[water_idx:]
-
-            new_conf = conf.copy()
-            new_conf[a_idxs] = new_pos
-            new_water_ixn_nrgs = np.sum(self.beta * U_fn_unsummed(new_conf, box, a_idxs, b_idxs), axis=0)
-            new_water_water_ixn_nrgs = np.sum(
-                new_water_ixn_nrgs[: (self.num_waters - 1) * 3].reshape((self.num_waters - 1), 3), axis=1
-            )
-            new_water_water_ixn_nrgs_full = np.zeros(len(self.water_idxs))
-            new_water_water_ixn_nrgs_full[:water_idx] = new_water_water_ixn_nrgs[:water_idx]
-            new_water_water_ixn_nrgs_full[water_idx + 1 :] = new_water_water_ixn_nrgs[water_idx:]
-
-            final_weights = initial_weights - old_water_water_ixn_nrgs_full + new_water_water_ixn_nrgs_full
-            final_weights = final_weights.at[water_idx].set(np.sum(new_water_ixn_nrgs))
-
-            # ref_final_weights = self.batch_log_weights(new_conf, box)
-            # np.testing.assert_almost_equal(np.array(final_weights), np.array(ref_final_weights))
-
-            return final_weights, new_conf
-
-        self.batch_log_weights_incremental = batch_log_weights_incremental
-        self.batch_log_weights = batch_log_weights
-
-    def propose(self, x: CoordsVelBox) -> Tuple[CoordsVelBox, float]:
-        coords = x.coords
-        box = x.box
-        log_weights_before = self.batch_log_weights(coords, box)
-        log_probs_before = log_weights_before - logsumexp(log_weights_before)
-        probs_before = np.exp(log_probs_before)
-
-        chosen_water = np.random.choice(np.arange(self.num_waters), p=probs_before)
-
-        chosen_water_atoms = self.water_idxs[chosen_water]
-
-        # compute delta_U of insertion
-        trial_chosen_coords = coords[chosen_water_atoms]
-        trial_translation = np.diag(box) * np.random.rand(3)
-        # tbd - what should we do  with velocities?
-
-        moved_coords = randomly_rotate_and_translate(trial_chosen_coords, trial_translation)
-        # moved_coords = randomly_translate(trial_chosen_coords, trial_translation)
-
-        # optimized version using double transposition
-        log_weights_after, trial_coords = self.batch_log_weights_incremental(coords, box, chosen_water, moved_coords)
-
-        # reference version
-        # trial_coords = coords.copy()  # can optimize this later if needed
-        # trial_coords[chosen_water_atoms] = moved_coords
-        # log_weights_after = self.batch_log_weights(trial_coords, box)
-
-        log_p_accept = min(0, logsumexp(log_weights_before) - logsumexp(log_weights_after))
-        new_state = CoordsVelBox(trial_coords, x.velocities, x.box)
-
-        return new_state, log_p_accept
-
-
-# numpy version of delta_r
-def delta_r_np(ri, rj, box):
-    diff = ri - rj  # this can be either N,N,3 or B,3
-    if box is not None:
-        box_diag = np.diag(box)
-        diff -= box_diag * np.floor(diff / box_diag + 0.5)
-    return diff
-
-
-class TIBDExchangeMove(moves.MonteCarloMove):
-    r"""
-    Targetted Insertion and Biased Deletion Exchange Move
-
-    Insertions are targetted over two regions V1 and V2 such that V1 is a sphere whose origin
-    is at the centroid of a set of indices, and V2 = box - V1.
-
-    Deletions are biased such that each water x_i has a weight equal to exp(u_ixn_nrg(x_i, x \ x_i)).
-    """
-
     def __init__(
         self,
         nb_beta: float,
         nb_cutoff: float,
         nb_params: NDArray,
         water_idxs: NDArray,
-        ligand_idxs: List[int],
         beta: float,
-        radius: float,
     ):
-        """
-        Parameters
-        ----
-        nb_beta: float
-            nonbonded beta parameters used in direct space pme
-
-        nb_cutoff: float
-            cutoff in the nonbonded kernel
-
-        nb_params: NDArray (N,4)
-            N is the total number of atoms in the system.
-            Each 4-tuple of nonbonded parameters corresponds to (charge, sigma, epsilon, w coords)
-
-        water_idxs: NDArray (W,3)
-            W is the total number of water molecules in the system.
-            Each element is a 3-tuple denoting the index for oxygen, hydrogen, hydrogen (or whatever is
-            consistent with the nb_params)
-
-        ligand_idxs: List[int]
-            Indices corresponding to the atoms that should be used to compute the centroid
-
-        beta: float
-            Thermodynamic beta, 1/kT (in kJ/mol)
-
-        radius: float
-            Radius to use for the ligand_idxs
-
-        """
         self.nb_beta = nb_beta
         self.nb_cutoff = nb_cutoff
         self.nb_params = jnp.array(nb_params)
-        self.n_atoms = len(nb_params)
         self.num_waters = len(water_idxs)
-        self.water_idxs = jnp.array(water_idxs)
+        self.water_idxs_jnp = jnp.array(water_idxs)  # make jit happy
         self.water_idxs_np = np.array(water_idxs)
-        self.ligand_idxs = np.array(ligand_idxs)  # used to determine center of sphere
         self.beta = beta
-        self.radius = radius
 
+        self.n_atoms = len(nb_params)
         all_a_idxs = []
         all_b_idxs = []
         for a_idxs in water_idxs:
@@ -377,11 +219,12 @@ class TIBDExchangeMove(moves.MonteCarloMove):
         # @profile
         @jax.jit
         def batch_log_weights_incremental(conf, box, water_idx, new_pos, initial_weights):
+            """Compute Z(x') incrementally using Z(x)"""
             conf = jnp.array(conf)
 
             assert len(initial_weights) == self.num_waters
 
-            a_idxs = self.water_idxs[water_idx]
+            a_idxs = self.water_idxs_jnp[water_idx]
             b_idxs = jnp.delete(
                 jnp.arange(self.n_atoms), a_idxs, assume_unique_indices=True
             )  # aui used to allow for jit
@@ -416,10 +259,110 @@ class TIBDExchangeMove(moves.MonteCarloMove):
         self.batch_log_weights_incremental = batch_log_weights_incremental
         self.batch_log_weights = batch_log_weights
 
+    def propose(self, x: CoordsVelBox) -> Tuple[CoordsVelBox, float]:
+        coords = x.coords
+        box = x.box
+        log_weights_before = self.batch_log_weights(coords, box)
+        log_probs_before = log_weights_before - logsumexp(log_weights_before)
+        probs_before = np.exp(log_probs_before)
+        chosen_water = np.random.choice(np.arange(self.num_waters), p=probs_before)
+        chosen_water_atoms = self.water_idxs_np[chosen_water]
+
+        # compute delta_U of insertion
+        trial_chosen_coords = coords[chosen_water_atoms]
+        trial_translation = np.diag(box) * np.random.rand(3)
+        # tbd - what should we do  with velocities?
+
+        moved_coords = randomly_rotate_and_translate(trial_chosen_coords, trial_translation)
+        # moved_coords = randomly_translate(trial_chosen_coords, trial_translation)
+
+        # optimized version using double transposition
+        log_weights_after, trial_coords = self.batch_log_weights_incremental(
+            coords, box, chosen_water, moved_coords, log_weights_before
+        )
+
+        # reference version
+        # trial_coords = coords.copy()  # can optimize this later if needed
+        # trial_coords[chosen_water_atoms] = moved_coords
+        # log_weights_after = self.batch_log_weights(trial_coords, box)
+
+        log_p_accept = min(0, logsumexp(log_weights_before) - logsumexp(log_weights_after))
+        new_state = CoordsVelBox(trial_coords, x.velocities, x.box)
+
+        return new_state, log_p_accept
+
+
+# numpy version of delta_r
+def delta_r_np(ri, rj, box):
+    diff = ri - rj  # this can be either N,N,3 or B,3
+    if box is not None:
+        box_diag = np.diag(box)
+        diff -= box_diag * np.floor(diff / box_diag + 0.5)
+    return diff
+
+
+class TIBDExchangeMove(ExchangeMove):
+    r"""
+    Targetted Insertion and Biased Deletion Exchange Move
+
+    Insertions are targetted over two regions V1 and V2 such that V1 is a sphere whose origin
+    is at the centroid of a set of indices, and V2 = box - V1.
+
+    Deletions are biased such that each water x_i has a weight equal to exp(u_ixn_nrg(x_i, x \ x_i)).
+    """
+
+    def __init__(
+        self,
+        nb_beta: float,
+        nb_cutoff: float,
+        nb_params: NDArray,
+        water_idxs: NDArray,
+        beta: float,
+        ligand_idxs: List[int],
+        radius: float,
+    ):
+        """
+        Parameters
+        ----
+        nb_beta: float
+            nonbonded beta parameters used in direct space pme
+
+        nb_cutoff: float
+            cutoff in the nonbonded kernel
+
+        nb_params: NDArray (N,4)
+            N is the total number of atoms in the system.
+            Each 4-tuple of nonbonded parameters corresponds to (charge, sigma, epsilon, w coords)
+
+        water_idxs: NDArray (W,3)
+            W is the total number of water molecules in the system.
+            Each element is a 3-tuple denoting the index for oxygen, hydrogen, hydrogen (or whatever is
+            consistent with the nb_params)
+
+        ligand_idxs: List[int]
+            Indices corresponding to the atoms that should be used to compute the centroid
+
+        beta: float
+            Thermodynamic beta, 1/kT (in kJ/mol)
+
+        radius: float
+            Radius to use for the ligand_idxs
+
+        """
+        super().__init__(nb_beta, nb_cutoff, nb_params, water_idxs, beta)
+
+        self.ligand_idxs = np.array(ligand_idxs)  # used to determine center of sphere
+        self.radius = radius
+
     def get_water_groups(self, coords, box, center):
-        dijs = np.linalg.norm(delta_r_np(np.mean(coords[self.water_idxs], axis=1), center, box), axis=1)
+        """
+        Partition water molecules into two groups, depending if it's inside the sphere or outside the sphere.
+        """
+        dijs = np.linalg.norm(delta_r_np(np.mean(coords[self.water_idxs_np], axis=1), center, box), axis=1)
         v1_mols = np.argwhere(dijs < self.radius).reshape(-1)
         v2_mols = np.argwhere(dijs >= self.radius).reshape(-1)
+
+        assert len(v1_mols) + len(v2_mols) == len(self.water_idxs_np)
         return v1_mols, v2_mols
 
     # @profile
@@ -564,6 +507,9 @@ def compute_occupancy(x_t, box_t, ligand_idxs, threshold):
 def setup_forcefield(charges):
     # use a simple charge handler on the ligand to avoid running AM1 on a buckyball
     ff = Forcefield.load_default()
+    if charges is None:
+        return ff
+
     q_handle = PrecomputedChargeHandler(charges)
     q_handle_intra = PrecomputedChargeHandler(charges)
     q_handle_solv = PrecomputedChargeHandler(charges)
@@ -591,76 +537,110 @@ def image_xvb(initial_state, xvb_t):
 def test_exchange():
     parser = argparse.ArgumentParser(description="Test the exchange protocol in a box of water.")
     parser.add_argument("--water_pdb", type=str, help="Location of the water PDB", required=True)
-    parser.add_argument("--ligand_sdf", type=str, help="SDF file containing the ligand of interest", required=True)
+    parser.add_argument(
+        "--ligand_sdf",
+        type=str,
+        help="SDF file containing the ligand of interest. Disable to run bulk water.",
+        required=False,
+    )
     parser.add_argument("--out_cif", type=str, help="Output cif file", required=True)
     parser.add_argument(
         "--ligand_charges",
         type=str,
-        help='Allowed values: "zero" or "espaloma"',
+        help='Allowed values: "zero" or "espaloma", required if ligand_sdf is not False.',
+        required=False,
+    )
+
+    parser.add_argument(
+        "--md_steps_per_batch",
+        type=int,
+        help="Number of MD steps per batch",
+        required=True,
+    )
+
+    parser.add_argument(
+        "--mc_steps_per_batch",
+        type=int,
+        help="Number of MC steps per batch",
+        required=True,
+    )
+
+    parser.add_argument(
+        "--insertion_type",
+        type=str,
+        help='Allowed values "targeted" and "untargeted"',
         required=True,
     )
 
     args = parser.parse_args()
 
-    suppl = list(Chem.SDMolSupplier(args.ligand_sdf, removeHs=False))
-    mol = suppl[0]
+    print(" ".join(sys.argv))
 
-    if args.ligand_charges == "espaloma":
-        esp = charges.espaloma_charges()  # charged system via espaloma
-    elif args.ligand_charges == "zero":
-        esp = np.zeros(mol.GetNumAtoms())  # decharged system
+    if args.ligand_sdf is not None:
+        suppl = list(Chem.SDMolSupplier(args.ligand_sdf, removeHs=False))
+        mol = suppl[0]
+        if args.ligand_charges == "espaloma":
+            esp = charges.espaloma_charges()  # charged system via espaloma
+        elif args.ligand_charges == "zero":
+            esp = np.zeros(mol.GetNumAtoms())  # decharged system
+        else:
+            assert 0, "Unknown charge model for the ligand"
     else:
-        assert 0, "Unknown charge model for the ligand"
+        mol = None
+        esp = None
 
     ff = setup_forcefield(esp)
-
     seed = 2024
-
     np.random.seed(seed)
 
     nb_cutoff = 1.2  # this has to be 1.2 since the builders hard code this in (should fix later)
     initial_state, nwm, topology = get_initial_state(args.water_pdb, mol, ff, seed, nb_cutoff)
-
     # set up water indices, assumes that waters are placed at the front of the coordinates.
     water_idxs = []
     for wai in range(nwm):
         water_idxs.append([wai * 3 + 0, wai * 3 + 1, wai * 3 + 2])
-
     water_idxs = np.array(water_idxs)
     bps = initial_state.potentials
 
     # [0] nb_all_pairs, [1] nb_ligand_water, [2] nb_ligand_protein
-    nb_beta = bps[-1].potential.potentials[1].beta
-    nb_cutoff = bps[-1].potential.potentials[1].cutoff
-    nb_water_ligand_params = bps[-1].potential.params_init[1]
-
-    print("number of water atoms", nwm * 3, "number of ligand atoms", mol.GetNumAtoms())
+    # all_pairs has masked charges
+    if mol:
+        # uses a summed potential
+        nb_beta = bps[-1].potential.potentials[1].beta
+        nb_cutoff = bps[-1].potential.potentials[1].cutoff
+        nb_water_ligand_params = bps[-1].potential.params_init[1]
+        print("number of ligand atoms", mol.GetNumAtoms())
+    else:
+        # does not use a summed potential
+        nb_beta = bps[-1].potential.beta
+        nb_cutoff = bps[-1].potential.cutoff
+        nb_water_ligand_params = bps[-1].params
+    print("number of water atoms", nwm * 3)
     print("water_ligand parameters", nb_water_ligand_params)
-
     bb_radius = 0.46
 
-    # reference
-    exc_mover = TIBDExchangeMove(
-        nb_beta,
-        nb_cutoff,
-        nb_water_ligand_params,
-        water_idxs,
-        initial_state.ligand_idxs,
-        1 / DEFAULT_KT,
-        bb_radius,
-    )
-
-    # vanilla reference
-    # exc_mover = ExchangeMove(nb_beta, nb_cutoff, nb_water_ligand_params, water_idxs)
+    # tibd optimized
+    if args.insertion_type == "targeted":
+        exc_mover = TIBDExchangeMove(
+            nb_beta, nb_cutoff, nb_water_ligand_params, water_idxs, 1 / DEFAULT_KT, initial_state.ligand_idxs, bb_radius
+        )
+    elif args.insertion_type == "untargeted":
+        # vanilla reference
+        exc_mover = ExchangeMove(nb_beta, nb_cutoff, nb_water_ligand_params, water_idxs, 1 / DEFAULT_KT)
+    else:
+        assert 0
 
     cur_box = initial_state.box0
     cur_x_t = initial_state.x0
     cur_v_t = np.zeros_like(cur_x_t)
 
     # debug
-
     seed = 2023
-    writer = cif_writer.CIFWriter([topology, mol], args.out_cif)
+    if mol:
+        writer = cif_writer.CIFWriter([topology, mol], args.out_cif)
+    else:
+        writer = cif_writer.CIFWriter([topology], args.out_cif)
+
     cur_x_t = image_frames(initial_state, [cur_x_t], [cur_box])[0]
     writer.write_frame(cur_x_t * 10)
 
@@ -680,40 +660,39 @@ def test_exchange():
     print("Equilibrating the system... ", end="", flush=True)
 
     equilibration_steps = 50000
-
     # equilibrate using the npt mover
     npt_mover.n_steps = equilibration_steps
     xvb_t = CoordsVelBox(cur_x_t, cur_v_t, cur_box)
     xvb_t = npt_mover.move(xvb_t)
     print("done")
-    md_steps_per_batch = 4000
-    npt_mover.n_steps = md_steps_per_batch
+    # md_steps_per_batch = 4000
 
     # TBD: cache the minimized and equilibrated initial structure later on to iterate faster.
-    mc_steps_per_batch = 10000
-
+    npt_mover.n_steps = args.md_steps_per_batch
     # (ytz): If I start with pure MC, and no MD, it's actually very easy to remove the waters.
     # since the starting waters have very very high energy. If I re-run MD, then it becomes progressively harder
     # remove the water since we will re-equilibriate the waters.
-
     for idx in range(1000000):
         density = compute_density(nwm, xvb_t.box)
 
         xvb_t = image_xvb(initial_state, xvb_t)
-        occ = compute_occupancy(xvb_t.coords, xvb_t.box, initial_state.ligand_idxs, threshold=bb_radius)
 
+        # start_time = time.time()
+        for _ in range(args.mc_steps_per_batch):
+            assert np.amax(np.abs(xvb_t.coords)) < 1e3
+            xvb_t = exc_mover.move(xvb_t)
+
+        # compute occupancy at the end of MC moves (as opposed to MD moves), as its more sensitive to any possible any possible
+        # biases and/or correctness issues.
+        occ = compute_occupancy(xvb_t.coords, xvb_t.box, initial_state.ligand_idxs, threshold=bb_radius)
         print(
-            f"{exc_mover.n_accepted} / {exc_mover.n_proposed} | density {density} | # of waters in bb {occ // 3} | md step: {idx * md_steps_per_batch}",
+            f"{exc_mover.n_accepted} / {exc_mover.n_proposed} | density {density} | # of waters in spherical region {occ // 3} | md step: {idx * args.md_steps_per_batch}",
             flush=True,
         )
 
         if idx % 10 == 0:
             writer.write_frame(xvb_t.coords * 10)
 
-        # start_time = time.time()
-        for _ in range(mc_steps_per_batch):
-            assert np.amax(np.abs(xvb_t.coords)) < 1e3
-            xvb_t = exc_mover.move(xvb_t)
         # print("time per mc move", (time.time() - start_time) / mc_steps_per_batch)
 
         # run MD
@@ -728,9 +707,12 @@ if __name__ == "__main__":
 
     # example invocation:
 
-    # start with 6 waters, using espaloma charges:
-    # python timemachine/exchange/exchange_mover.py --water_pdb timemachine/datasets/water_exchange/bb_6_waters.pdb --ligand_sdf timemachine/datasets/water_exchange/bb_centered.sdf --ligand_charges espaloma --out_cif traj_6_waters.cif
+    # start with 6 waters, using espaloma charge, 10k mc steps, 10k md steps, targeted insertion:
+    # python timemachine/exchange/exchange_mover.py --water_pdb timemachine/datasets/water_exchange/bb_6_waters.pdb --ligand_sdf timemachine/datasets/water_exchange/bb_centered.sdf --ligand_charges espaloma --out_cif traj_6_waters.cif --md_steps_per_batch 10000 --mc_steps_per_batch 10000 --insertion_type targeted
 
-    # start with 0 waters, using zero charges:
-    # python timemachine/exchange/exchange_mover.py --water_pdb timemachine/datasets/water_exchange/bb_0_waters.pdb --ligand_sdf timemachine/datasets/water_exchange/bb_centered.sdf --ligand_charges zero --out_cif traj_0_waters.cif
+    # start with 0 waters, using zero charges, 10k mc steps, 10k md steps, targeted insertion:
+    # python timemachine/exchange/exchange_mover.py --water_pdb timemachine/datasets/water_exchange/bb_0_waters.pdb --ligand_sdf timemachine/datasets/water_exchange/bb_centered.sdf --ligand_charges zero --out_cif traj_0_waters.cif --md_steps_per_batch 10000 --mc_steps_per_batch 10000 --insertion_type targeted
+
+    # running in bulk, 10k mc steps, 10k md steps, untargeted insertion
+    # python -u timemachine/exchange/exchange_mover.py --water_pdb timemachine/datasets/water_exchange/bb_0_waters.pdb --out_cif bulk.cif --md_steps_per_batch 10000 --mc_steps_per_batch 10000 --insertion_type untargeted
     test_exchange()
