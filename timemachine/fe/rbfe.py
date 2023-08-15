@@ -16,9 +16,7 @@ from timemachine.fe.free_energy import (
     HostConfig,
     InitialState,
     MDParams,
-    PairBarResult,
     SimulationResult,
-    estimate_free_energy_bar,
     make_pair_bar_plots,
     run_sims_bisection,
     run_sims_sequential,
@@ -434,24 +432,9 @@ def estimate_relative_free_energy(
     # TODO: rename prefix to postfix, or move to beginning of combined_prefix?
     combined_prefix = get_mol_name(mol_a) + "_" + get_mol_name(mol_b) + "_" + prefix
     try:
-        u_kln_by_component_by_lambda, stored_frames, stored_boxes = run_sims_sequential(
-            initial_states, md_params, temperature, keep_idxs
-        )
-        bar_results = [
-            estimate_free_energy_bar(u_kln_by_component, temperature)
-            for u_kln_by_component in u_kln_by_component_by_lambda
-        ]
-        result = PairBarResult(initial_states, bar_results)
+        result, stored_frames, stored_boxes = run_sims_sequential(initial_states, md_params, temperature, keep_idxs)
         plots = make_pair_bar_plots(result, temperature, combined_prefix)
-
-        return SimulationResult(
-            result,
-            plots,
-            stored_frames,
-            stored_boxes,
-            md_params,
-            [],
-        )
+        return SimulationResult(result, plots, stored_frames, stored_boxes, md_params, [])
     except Exception as err:
         with open(f"failed_rbfe_result_{combined_prefix}.pkl", "wb") as fh:
             pickle.dump((initial_states, md_params, err), fh)
