@@ -236,14 +236,15 @@ void NonbondedInteractionGroup<RealType>::execute_device(
 
     // coords are N,3
     if (d_du_dx) {
-        k_scatter_accum<<<dim3(B_K, 3, 1), tpb, 0, stream>>>(K, d_perm_, d_sorted_du_dx_, d_du_dx);
+        k_scatter_accum<unsigned long long, 3><<<B_K, tpb, 0, stream>>>(K, d_perm_, d_sorted_du_dx_, d_du_dx);
         gpuErrchk(cudaPeekAtLastError());
     }
 
     // params are N, PARAMS_PER_ATOM
     // this needs to be an accumulated permute
     if (d_du_dp) {
-        k_scatter_accum<<<dim3(B_K, PARAMS_PER_ATOM, 1), tpb, 0, stream>>>(K, d_perm_, d_sorted_du_dp_, d_du_dp);
+        k_scatter_accum<unsigned long long, PARAMS_PER_ATOM>
+            <<<B_K, tpb, 0, stream>>>(K, d_perm_, d_sorted_du_dp_, d_du_dp);
         gpuErrchk(cudaPeekAtLastError());
     }
     if (d_u) {

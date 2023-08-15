@@ -76,22 +76,24 @@ void __global__ k_gather_coords_and_params(
     gathered_params[idx * stride + stride_idx] = params[idxs[idx] * stride + stride_idx];
 }
 
-template <typename T>
+template <typename T, int D>
 void __global__ k_scatter_accum(
     const int N,
     const unsigned int *__restrict__ unique_idxs, // NOTE: race condition possible if there are repeated indices
     const T *__restrict__ gathered_array,
     T *__restrict__ array) {
-
+    static_assert(D <= PARAMS_PER_ATOM);
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
-    int stride = gridDim.y;
-    int stride_idx = blockIdx.y;
 
     if (idx >= N) {
         return;
     }
+    const unsigned int atom_idx = unique_idxs[idx];
 
-    atomicAdd(array + (unique_idxs[idx] * stride + stride_idx), gathered_array[idx * stride + stride_idx]);
+#pragma unroll D
+    for (int i = 0; i < D; i++) {
+        atomicAdd(array + (atom_idx * D + i), gathered_array[idx * D + i]);
+    }
 }
 
 // ALCHEMICAL == false guarantees that the tile's atoms are such that
