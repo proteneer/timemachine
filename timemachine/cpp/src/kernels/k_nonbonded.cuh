@@ -92,11 +92,11 @@ void __global__ k_scatter_accum(
     if (idx >= N) {
         return;
     }
-    const unsigned int atom_idx = unique_idxs[idx];
+    const unsigned int dest_idx = unique_idxs[idx];
 
 #pragma unroll D
     for (int i = 0; i < D; i++) {
-        atomicAdd(array + (atom_idx * D + i), gathered_array[idx * D + i]);
+        atomicAdd(array + (dest_idx * D + i), gathered_array[idx * D + i]);
     }
 }
 
