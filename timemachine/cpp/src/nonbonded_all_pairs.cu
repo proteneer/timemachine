@@ -213,8 +213,8 @@ void NonbondedAllPairs<RealType>::execute_device(
         gpuErrchk(cudaEventRecord(nblist_flag_sync_event_, stream));
     }
     // compute new coordinates/params
-    k_gather_coords_and_params<<<dim3(ceil_divide(K_, tpb), PARAMS_PER_ATOM, 1), tpb, 0, stream>>>(
-        K_, d_sorted_atom_idxs_, d_x, d_p, d_gathered_x_, d_gathered_p_);
+    k_gather_coords_and_params<double, 3, PARAMS_PER_ATOM>
+        <<<ceil_divide(K_, tpb), tpb, 0, stream>>>(K_, d_sorted_atom_idxs_, d_x, d_p, d_gathered_x_, d_gathered_p_);
     gpuErrchk(cudaPeekAtLastError());
 
     // reset buffers and sorted accumulators
@@ -262,16 +262,16 @@ void NonbondedAllPairs<RealType>::execute_device(
 
     // coords are N,3
     if (d_du_dx) {
-        k_scatter_accum<<<dim3(ceil_divide(K_, tpb), 3, 1), tpb, 0, stream>>>(
-            K_, d_sorted_atom_idxs_, d_gathered_du_dx_, d_du_dx);
+        k_scatter_accum<unsigned long long, 3>
+            <<<ceil_divide(K_, tpb), tpb, 0, stream>>>(K_, d_sorted_atom_idxs_, d_gathered_du_dx_, d_du_dx);
         gpuErrchk(cudaPeekAtLastError());
     }
 
     // params are N, PARAMS_PER_ATOM
     // this needs to be an accumulated permute
     if (d_du_dp) {
-        k_scatter_accum<<<dim3(ceil_divide(K_, tpb), PARAMS_PER_ATOM, 1), tpb, 0, stream>>>(
-            K_, d_sorted_atom_idxs_, d_gathered_du_dp_, d_du_dp);
+        k_scatter_accum<unsigned long long, PARAMS_PER_ATOM>
+            <<<ceil_divide(K_, tpb), tpb, 0, stream>>>(K_, d_sorted_atom_idxs_, d_gathered_du_dp_, d_du_dp);
         gpuErrchk(cudaPeekAtLastError());
     }
 
