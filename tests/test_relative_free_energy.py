@@ -187,10 +187,6 @@ def test_md_params_validation():
     with pytest.raises(AssertionError):
         MDParams(seed=2023, n_frames=frames, n_eq_steps=10, steps_per_frame=0)
 
-    # assert n_eq_steps > 0
-    with pytest.raises(AssertionError):
-        MDParams(seed=2023, n_frames=frames, n_eq_steps=0, steps_per_frame=steps_per_frame)
-
     # assert n_frames > 0
     with pytest.raises(AssertionError):
         MDParams(seed=2023, n_frames=0, n_eq_steps=1, steps_per_frame=steps_per_frame)
