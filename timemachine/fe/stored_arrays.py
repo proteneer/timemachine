@@ -2,7 +2,7 @@ import io
 import tempfile
 from itertools import count
 from pathlib import Path
-from typing import Collection, Iterator, List, NoReturn, Sequence, Type, TypeVar, overload
+from typing import Collection, Iterable, Iterator, List, NoReturn, Sequence, Type, TypeVar, overload
 
 import numpy as np
 from numpy.typing import ArrayLike, NDArray
@@ -33,6 +33,13 @@ class StoredArrays(Sequence[NDArray]):
     def __init__(self):
         self._chunk_sizes: List[int] = []
         self._dir = tempfile.TemporaryDirectory()
+
+    @classmethod
+    def from_chunks(cls: Type[_T], chunks: Iterable[Collection[NDArray]]) -> _T:
+        sa = cls()
+        for chunk in chunks:
+            sa.extend(chunk)
+        return sa
 
     def __iter__(self) -> Iterator[NDArray]:
         for chunk in self._chunks():
@@ -91,7 +98,7 @@ class StoredArrays(Sequence[NDArray]):
         return (path / str(idx)).with_suffix(".npy")
 
     def __reduce__(self):
-        raise NotImplementedError(f"pickling not implemented for {type(self)}")
+        return self.from_chunks, (list(self._chunks()),)
 
     def store(self, client: AbstractFileClient, prefix: Path = Path(".")):
         """Save to persistent storage.
