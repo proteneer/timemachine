@@ -135,7 +135,7 @@ class PairBarResult:
 class SimulationResult:
     final_result: PairBarResult
     plots: PairBarPlots
-    frames: List[NDArray]  # (len(keep_idxs), n_frames, N, 3)
+    frames: List[StoredArrays]  # (len(keep_idxs), n_frames, N, 3)
     boxes: List[NDArray]
     md_params: MDParams
     intermediate_results: List[PairBarResult]
@@ -519,13 +519,13 @@ def run_sims_sequential(
     md_params: MDParams,
     temperature: float,
     keep_idxs: List[int],
-) -> Tuple[NDArray, List[NDArray], List[NDArray]]:
+) -> Tuple[PairBarResult, List[StoredArrays], List[NDArray]]:
     """Sequentially run simulations at each state in initial_states,
     returning summaries that can be used for pair BAR, energy decomposition, and other diagnostics
 
     Returns
     -------
-    decomposed_u_klns: [n_lams - 1, n_components, 2, 2, n_frames] array
+    pair_bar_result: PairBarResult
     stored_frames: coord trajectories, one for each state in keep_idxs
     stored_boxes: box trajectories, one for each state in keep_idxs
 
@@ -557,7 +557,7 @@ def run_sims_sequential(
     for lamb_idx, initial_state in enumerate(initial_states):
 
         # run simulation
-        cur_frames, cur_boxes = sample(initial_state, md_params)
+        cur_frames, cur_boxes = sample(initial_state, md_params, max_buffer_frames=100)
         print(f"completed simulation at lambda={initial_state.lamb}!")
 
         # keep samples from any requested states in memory
@@ -578,7 +578,11 @@ def run_sims_sequential(
 
         prev_state = state
 
-    return np.array(u_kln_by_component_by_lambda), stored_frames, stored_boxes
+    bar_results = [
+        estimate_free_energy_bar(u_kln_by_component, temperature) for u_kln_by_component in u_kln_by_component_by_lambda
+    ]
+
+    return PairBarResult(list(initial_states), bar_results), stored_frames, stored_boxes
 
 
 def make_batch_u_fns(initial_state: InitialState, temperature: float) -> List[Batch_u_fn]:
