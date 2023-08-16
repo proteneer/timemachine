@@ -3,6 +3,8 @@
 #include "device_buffer.hpp"
 #include "math_utils.cuh"
 #include <memory>
+#include <numeric>
+#include <vector>
 
 namespace timemachine {
 
@@ -32,6 +34,8 @@ public:
         const double *d_box,
         unsigned int *d_output_perm,
         cudaStream_t stream);
+
+    std::vector<unsigned int> sort_host(const int N, const double *h_coords, const double *h_box);
 };
 
 } // namespace timemachine

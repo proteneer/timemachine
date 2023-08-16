@@ -155,11 +155,12 @@ def prepare_nb_system(
     return params, potential
 
 
-def hilbert_sort(conf, D):
-    hc = HilbertCurve(HILBERT_GRID_DIM, D)
+def hilbert_sort(conf, box):
+    hc = HilbertCurve(HILBERT_GRID_DIM, conf.shape[1])
 
-    # hc assumes non-negative coordinates
-    conf = np.array(conf - np.min(conf))
+    box_diag = np.diagonal(box)
+    # hc assumes non-negative coordinates, re-image coordinates into home box
+    conf = conf - box_diag * np.floor(conf / box_diag)
     assert (conf >= 0.0).all()
 
     int_confs = (conf * 1000).astype(np.int64)
