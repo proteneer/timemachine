@@ -86,7 +86,7 @@ void __global__ k_scatter_accum(
     const unsigned int *__restrict__ unique_idxs, // NOTE: race condition possible if there are repeated indices
     const T *__restrict__ gathered_array,
     T *__restrict__ array) {
-    static_assert(D <= PARAMS_PER_ATOM);
+    static_assert(D <= 5, "More loop unrolling than expected");
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
 
     if (idx >= N) {
