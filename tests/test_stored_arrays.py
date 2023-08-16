@@ -139,8 +139,8 @@ def test_stored_arrays_store_raises_on_file_collision():
         sa.store(fc, prefix=Path("subdir"))  # no collision
 
 
-def test_stored_arrays_raises_on_pickling_attempt():
-    sa = StoredArrays()
-    with pytest.raises(NotImplementedError) as e:
-        _ = pickle.dumps(sa)
-    assert "pickling not implemented" in str(e)
+@given(stored_arrays_instances)
+@seed(2023)
+def test_stored_arrays_pickle_roundtrip(sa_ref):
+    sa_test = pickle.loads(pickle.dumps(sa_ref))
+    assert sa_ref == sa_test
