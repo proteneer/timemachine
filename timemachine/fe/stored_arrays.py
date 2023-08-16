@@ -2,12 +2,14 @@ import io
 import tempfile
 from itertools import count
 from pathlib import Path
-from typing import Collection, Iterator, List, NoReturn, Sequence, overload
+from typing import Collection, Iterator, List, NoReturn, Sequence, Type, TypeVar, overload
 
 import numpy as np
 from numpy.typing import ArrayLike, NDArray
 
 from timemachine.parallel.client import AbstractFileClient
+
+_T = TypeVar("_T", bound="StoredArrays")
 
 
 class StoredArrays(Sequence[NDArray]):
@@ -50,22 +52,19 @@ class StoredArrays(Sequence[NDArray]):
 
     def __getitem__(self, key) -> NDArray:
         if isinstance(key, int):
-            if key < -len(self) or key >= len(self):
-                raise IndexError(f"index {key} out of range for sequence of length {len(self)}")
-            if key < 0:
-                key += len(self)
+            key = range(len(self))[key]
             for idx, size in enumerate(self._chunk_sizes):
                 if key < size:
                     return np.load(self._get_chunk_path(idx))[key]
                 key -= size
-            assert False, "should not get here"
+            assert False, "internal error"
         elif isinstance(key, slice):
             raise NotImplementedError("slices are not implemented")
         else:
             raise ValueError("invalid subscript")
 
     def _get_chunk_path(self, idx: int) -> Path:
-        return StoredArrays.get_chunk_path(self._path(), idx)
+        return self.get_chunk_path(self._path(), idx)
 
     def __eq__(self, other) -> bool:
         return self._chunk_sizes == other._chunk_sizes and all(
@@ -111,13 +110,13 @@ class StoredArrays(Sequence[NDArray]):
         """
         for idx, chunk in enumerate(self._chunks()):
             serialized_array = serialize_array(np.array(chunk))
-            path = StoredArrays.get_chunk_path(prefix, idx)
+            path = self.get_chunk_path(prefix, idx)
             if client.exists(str(path)):
                 raise FileExistsError(f"file already exists: {path}")
             client.store(str(path), serialized_array)
 
     @classmethod
-    def load(cls, client: AbstractFileClient, prefix: Path = Path(".")) -> "StoredArrays":
+    def load(cls: Type[_T], client: AbstractFileClient, prefix: Path = Path(".")) -> _T:
         sa = cls()
         for idx in count():
             path = cls.get_chunk_path(prefix, idx)
