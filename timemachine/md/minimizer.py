@@ -27,7 +27,7 @@ class MinimizationError(Exception):
     pass
 
 
-def check_force_norm(forces, threshold=MAX_FORCE_NORM):
+def check_force_norm(forces: NDArray, threshold: float = MAX_FORCE_NORM):
     """raise MinimizationError if the force on any atom exceeds MAX_FORCE_NORM"""
     per_atom_force_norms = np.linalg.norm(forces, axis=-1)
 

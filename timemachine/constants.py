@@ -22,7 +22,7 @@ DEFAULT_PROTEIN_FF = "amber99sbildn"
 DEFAULT_WATER_FF = "tip3p"
 
 # thresholds
-MAX_FORCE_NORM = 50000  # used to check norms in the gradient computations
+MAX_FORCE_NORM = 50000.0  # used to check norms in the gradient computations
 
 # atom mapping parameters
 DEFAULT_ATOM_MAPPING_KWARGS = {
