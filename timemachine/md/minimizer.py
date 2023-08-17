@@ -417,7 +417,8 @@ def equilibrate_host(
     ctxt = custom_ops.Context(x0, v0, host_config.box, integrator, [u_impl], barostat)
 
     xs, boxes = ctxt.multiple_steps(n_steps)
-
+    assert len(xs) == 1
+    assert len(xs) == len(boxes)
     return xs[-1], boxes[-1]
 
 
