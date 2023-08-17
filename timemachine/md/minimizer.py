@@ -114,7 +114,14 @@ def fire_minimize(x0: NDArray, u_impls: Sequence[custom_ops.BoundPotential], box
     return np.asarray(opt_state.position)
 
 
-def minimize_host_4d(mols, host_config: HostConfig, ff, mol_coords=None) -> np.ndarray:
+def minimize_host_4d(
+    mols: List[Chem.Mol],
+    host_config: HostConfig,
+    ff: Forcefield,
+    mol_coords: Optional[List[NDArray]] = None,
+    windows: int = 50,
+    n_steps_per_window: int = 50,
+) -> np.ndarray:
     """
     Insert mols into a host system via 4D decoupling using Fire minimizer at lambda=1.0,
     0 Kelvin Langevin integration at a sequence of lambda from 1.0 to 0.0, and Fire minimizer again at lambda=0.0
@@ -134,6 +141,12 @@ def minimize_host_4d(mols, host_config: HostConfig, ff, mol_coords=None) -> np.n
 
     mol_coords: list of np.ndarray
         Pre-specify a list of mol coords. Else use the mol.GetConformer(0)
+
+    windows: integer
+        Number of lambda windows to lower the mols into the host via 4D decoupling
+
+    n_steps_per_window: integer
+        Number of steps to evaluate at each window
 
     Returns
     -------
@@ -184,20 +197,20 @@ def minimize_host_4d(mols, host_config: HostConfig, ff, mol_coords=None) -> np.n
     potentials, params = parameterize_system(hgt, ff, 1.0)
     u_impl = summed_potential_bound_impl_from_potentials_and_params(potentials, params)
     bound_impls = [u_impl]
-    x = fire_minimize(x0, bound_impls, box, 50)
+    x = fire_minimize(x0, bound_impls, box, n_steps_per_window)
 
     # No need to reconstruct the context, just change the bound potential params. Allows
     # for preserving the velocities between windows
     ctxt = custom_ops.Context(x, v0, box, intg, bound_impls)
-    for lamb in np.linspace(1.0, 0, 50):
+    for lamb in np.linspace(1.0, 0, windows):
         _, params = parameterize_system(hgt, ff, lamb)
         u_impl.set_params(flatten_params(params))
-        xs, _ = ctxt.multiple_steps(50)
+        xs, _ = ctxt.multiple_steps(n_steps_per_window)
         x = xs[-1]
 
     _, params = parameterize_system(hgt, ff, 0.0)
     u_impl.set_params(flatten_params(params))
-    final_coords = fire_minimize(x, bound_impls, box, 50)
+    final_coords = fire_minimize(x, bound_impls, box, n_steps_per_window)
     for impl in bound_impls:
         du_dx, _ = impl.execute(final_coords, box)
         check_force_norm(-du_dx)
