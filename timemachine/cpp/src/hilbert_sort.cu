@@ -82,4 +82,26 @@ void HilbertSort::sort_device(
     gpuErrchk(cudaPeekAtLastError());
 }
 
+std::vector<unsigned int> HilbertSort::sort_host(const int N, const double *h_coords, const double *h_box) {
+
+    std::vector<unsigned int> h_atom_idxs(N);
+    std::iota(h_atom_idxs.begin(), h_atom_idxs.end(), 0);
+
+    DeviceBuffer<double> d_coords(N * 3);
+    DeviceBuffer<double> d_box(3 * 3);
+    DeviceBuffer<unsigned int> d_atom_idxs(N);
+    DeviceBuffer<unsigned int> d_perm(N);
+
+    d_coords.copy_from(h_coords);
+    d_box.copy_from(h_box);
+    d_atom_idxs.copy_from(&h_atom_idxs[0]);
+
+    cudaStream_t stream = static_cast<cudaStream_t>(0);
+    this->sort_device(N, d_atom_idxs.data, d_coords.data, d_box.data, d_perm.data, stream);
+    gpuErrchk(cudaStreamSynchronize(stream));
+
+    d_perm.copy_to(&h_atom_idxs[0]);
+    return h_atom_idxs;
+}
+
 } // namespace timemachine

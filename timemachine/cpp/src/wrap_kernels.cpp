@@ -140,6 +140,29 @@ template <typename RealType> void declare_neighborlist(py::module &m, const char
         .def("resize", &timemachine::Neighborlist<RealType>::resize, py::arg("size"));
 }
 
+void declare_hilbert_sort(py::module &m) {
+
+    using Class = timemachine::HilbertSort;
+    std::string pyclass_name = std::string("HilbertSort");
+    py::class_<Class, std::shared_ptr<Class>>(m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
+        .def(py::init([](const int N) { return new timemachine::HilbertSort(N); }), py::arg("size"))
+        .def(
+            "sort",
+            [](timemachine::HilbertSort &sorter,
+               const py::array_t<double, py::array::c_style> &coords,
+               const py::array_t<double, py::array::c_style> &box) -> const py::array_t<uint32_t, py::array::c_style> {
+                const int N = coords.shape()[0];
+                verify_coords_and_box(coords, box);
+
+                std::vector<unsigned int> sort_perm = sorter.sort_host(N, coords.data(), box.data());
+                py::array_t<uint32_t, py::array::c_style> output_perm(sort_perm.size());
+                std::memcpy(output_perm.mutable_data(), sort_perm.data(), sort_perm.size() * sizeof(unsigned int));
+                return output_perm;
+            },
+            py::arg("coords"),
+            py::arg("box"));
+}
+
 void declare_context(py::module &m) {
 
     using Class = timemachine::Context;
@@ -1312,6 +1335,8 @@ PYBIND11_MODULE(custom_ops, m) {
 
     declare_neighborlist<double>(m, "f64");
     declare_neighborlist<float>(m, "f32");
+
+    declare_hilbert_sort(m);
 
     declare_centroid_restraint<double>(m, "f64");
     declare_centroid_restraint<float>(m, "f32");
