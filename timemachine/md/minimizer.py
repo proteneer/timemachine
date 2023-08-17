@@ -189,7 +189,7 @@ def minimize_host_4d(mols, host_config: HostConfig, ff, mol_coords=None) -> np.n
     # No need to reconstruct the context, just change the bound potential params. Allows
     # for preserving the velocities between windows
     ctxt = custom_ops.Context(x, v0, box, intg, bound_impls)
-    for lamb in np.linspace(1.0, 0, 50, endpoint=False):
+    for lamb in np.linspace(1.0, 0, 50):
         _, params = parameterize_system(hgt, ff, lamb)
         u_impl.set_params(flatten_params(params))
         xs, _ = ctxt.multiple_steps(50)
