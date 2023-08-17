@@ -1,5 +1,5 @@
 import warnings
-from typing import Iterable, Optional, Sequence, Tuple
+from typing import Iterable, List, Optional, Sequence, Tuple
 
 import numpy as np
 import scipy.optimize
@@ -16,7 +16,7 @@ from timemachine.lib import LangevinIntegrator, MonteCarloBarostat, custom_ops
 from timemachine.md.barker import BarkerProposal
 from timemachine.md.barostat.utils import get_bond_list, get_group_indices
 from timemachine.md.fire import fire_descent
-from timemachine.potentials import BoundPotential, HarmonicBond, SummedPotential
+from timemachine.potentials import BoundPotential, HarmonicBond, Potential, SummedPotential
 
 
 class MinimizationWarning(UserWarning):
@@ -27,7 +27,7 @@ class MinimizationError(Exception):
     pass
 
 
-def check_force_norm(forces, threshold=MAX_FORCE_NORM):
+def check_force_norm(forces: NDArray, threshold: float = MAX_FORCE_NORM):
     """raise MinimizationError if the force on any atom exceeds MAX_FORCE_NORM"""
     per_atom_force_norms = np.linalg.norm(forces, axis=-1)
 
@@ -42,7 +42,7 @@ def check_force_norm(forces, threshold=MAX_FORCE_NORM):
         raise MinimizationError(message)
 
 
-def parameterize_system(topo, ff: Forcefield, lamb: float):
+def parameterize_system(topo, ff: Forcefield, lamb: float) -> Tuple[List[Potential], List[NDArray]]:
     # setup the parameter handlers for the ligand
     ff_params = ff.get_params()
     params_potential_pairs = [
@@ -59,15 +59,18 @@ def parameterize_system(topo, ff: Forcefield, lamb: float):
             lamb,
         ),
     ]
-    return params_potential_pairs
+    return [pot for (_, pot) in params_potential_pairs], [params for (params, _) in params_potential_pairs]
 
 
-def bind_potentials(params_potential_pairs):
-    pots = [pot for _, pot in params_potential_pairs]
-    params = [p for p, _ in params_potential_pairs]
-    flat_params = np.concatenate([p.reshape(-1) for p in params])
-    u_impls = [SummedPotential(pots, params).bind(flat_params).to_gpu(precision=np.float32).bound_impl]
-    return u_impls
+def flatten_params(params: List[NDArray]) -> NDArray:
+    return np.concatenate([p.reshape(-1) for p in params])
+
+
+def summed_potential_bound_impl_from_potentials_and_params(
+    potentials: List[Potential], params: List[NDArray]
+) -> custom_ops.BoundPotential:
+    flat_params = flatten_params(params)
+    return SummedPotential(potentials, params).bind(flat_params).to_gpu(precision=np.float32).bound_impl
 
 
 def fire_minimize(x0: NDArray, u_impls: Sequence[custom_ops.BoundPotential], box: NDArray, n_steps: int) -> NDArray:
@@ -111,7 +114,14 @@ def fire_minimize(x0: NDArray, u_impls: Sequence[custom_ops.BoundPotential], box
     return np.asarray(opt_state.position)
 
 
-def minimize_host_4d(mols, host_config: HostConfig, ff, mol_coords=None) -> np.ndarray:
+def minimize_host_4d(
+    mols: List[Chem.Mol],
+    host_config: HostConfig,
+    ff: Forcefield,
+    mol_coords: Optional[List[NDArray]] = None,
+    windows: int = 50,
+    n_steps_per_window: int = 50,
+) -> np.ndarray:
     """
     Insert mols into a host system via 4D decoupling using Fire minimizer at lambda=1.0,
     0 Kelvin Langevin integration at a sequence of lambda from 1.0 to 0.0, and Fire minimizer again at lambda=0.0
@@ -131,6 +141,12 @@ def minimize_host_4d(mols, host_config: HostConfig, ff, mol_coords=None) -> np.n
 
     mol_coords: list of np.ndarray
         Pre-specify a list of mol coords. Else use the mol.GetConformer(0)
+
+    windows: integer
+        Number of lambda windows to lower the mols into the host via 4D decoupling
+
+    n_steps_per_window: integer
+        Number of steps to evaluate at each window
 
     Returns
     -------
@@ -178,36 +194,28 @@ def minimize_host_4d(mols, host_config: HostConfig, ff, mol_coords=None) -> np.n
     x0 = combined_coords
     v0 = np.zeros_like(x0)
 
-    u_impls = bind_potentials(parameterize_system(hgt, ff, 1.0))
-    x = fire_minimize(x0, u_impls, box, 50)
+    potentials, params = parameterize_system(hgt, ff, 1.0)
+    u_impl = summed_potential_bound_impl_from_potentials_and_params(potentials, params)
+    bound_impls = [u_impl]
+    x = fire_minimize(x0, bound_impls, box, n_steps_per_window)
 
-    for lamb in np.linspace(1.0, 0, 50):
-        u_impls = bind_potentials(parameterize_system(hgt, ff, lamb))
-        # NOTE: we don't save velocities between trajectories at different lambda windows; empirically this seems to
-        # reduce the efficiency of the optimization, with more windows being required to achieve an equivalent result
-        ctxt = custom_ops.Context(x, v0, box, intg, u_impls)
-        xs, _ = ctxt.multiple_steps(50)
+    # No need to reconstruct the context, just change the bound potential params. Allows
+    # for preserving the velocities between windows
+    ctxt = custom_ops.Context(x, v0, box, intg, bound_impls)
+    for lamb in np.linspace(1.0, 0, windows):
+        _, params = parameterize_system(hgt, ff, lamb)
+        u_impl.set_params(flatten_params(params))
+        xs, _ = ctxt.multiple_steps(n_steps_per_window)
         x = xs[-1]
 
-    u_impls = bind_potentials(parameterize_system(hgt, ff, 0.0))
-    final_coords = fire_minimize(x, u_impls, box, 50)
-    for impl in u_impls:
+    _, params = parameterize_system(hgt, ff, 0.0)
+    u_impl.set_params(flatten_params(params))
+    final_coords = fire_minimize(x, bound_impls, box, n_steps_per_window)
+    for impl in bound_impls:
         du_dx, _ = impl.execute(final_coords, box)
         check_force_norm(-du_dx)
 
     return final_coords[:num_host_atoms]
-
-
-def make_gpu_impl(bound_potentials):
-    """return bound impl of a SummedPotential constructed from potentials"""
-
-    params = [bp.params for bp in bound_potentials]
-    flat_params = np.concatenate([param.reshape(-1) for param in params])
-
-    summed_potential = SummedPotential([bp.potential for bp in bound_potentials], params)
-    bound_impl = summed_potential.bind(flat_params).to_gpu(np.float32).bound_impl
-
-    return bound_impl
 
 
 def make_host_du_dx_fxn(mols, host_config, ff, mol_coords=None):
@@ -229,9 +237,8 @@ def make_host_du_dx_fxn(mols, host_config, ff, mol_coords=None):
     hgt = topology.HostGuestTopology(host_bps, top, host_config.num_water_atoms)
 
     # bound impls of potentials @ lam=0 (fully coupled) endstate
-    params_potential_pairs = parameterize_system(hgt, ff, 0.0)
-    bound_potentials = [potential.bind(params) for params, potential in params_potential_pairs]
-    gpu_impl = make_gpu_impl(bound_potentials)
+    potentials, params = parameterize_system(hgt, ff, 0.0)
+    gpu_impl = summed_potential_bound_impl_from_potentials_and_params(potentials, params)
 
     # read conformers from mol_coords if given, or each mol's conf0 otherwise
     conf_list = [np.array(host_config.conf)]
@@ -371,13 +378,13 @@ def equilibrate_host(
     hgt = topology.HostGuestTopology(host_bps, top, host_config.num_water_atoms)
 
     # setup the parameter handlers for the ligand
-    params_potential_pairs = parameterize_system(hgt, ff, 1.0)
+    potentials, params = parameterize_system(hgt, ff, 1.0)
 
     x0 = combined_coords
 
     # Re-minimize with the mol being flexible
-    u_impls = bind_potentials(params_potential_pairs)  # lambda=1
-    x0 = fire_minimize(x0, u_impls, host_config.box, 50)
+    u_impl = summed_potential_bound_impl_from_potentials_and_params(potentials, params)  # lambda=1
+    x0 = fire_minimize(x0, [u_impl], host_config.box, 50)
     v0 = np.zeros_like(x0)
 
     dt = 2.5e-3
@@ -386,7 +393,7 @@ def equilibrate_host(
     if seed is None:
         seed = np.random.randint(np.iinfo(np.int32).max)
 
-    hb_potential = next(p for _, p in params_potential_pairs if isinstance(p, HarmonicBond))
+    hb_potential = next(p for p in potentials if isinstance(p, HarmonicBond))
     bond_list = get_bond_list(hb_potential)
     combined_masses = model_utils.apply_hmr(combined_masses, bond_list)
 
@@ -395,7 +402,8 @@ def equilibrate_host(
     group_indices = get_group_indices(bond_list, len(combined_masses))
 
     barostat_interval = 5
-    u_impls = bind_potentials(parameterize_system(hgt, ff, 0.0))  # lambda=0
+    _, params = parameterize_system(hgt, ff, 0.0)  # lambda=0
+    u_impl.set_params(flatten_params(params))
     barostat = MonteCarloBarostat(
         x0.shape[0],
         pressure,
@@ -403,14 +411,15 @@ def equilibrate_host(
         group_indices,
         barostat_interval,
         seed,
-    ).impl(u_impls)
+    ).impl([u_impl])
 
     # context components: positions, velocities, box, integrator, energy fxns
-    ctxt = custom_ops.Context(x0, v0, host_config.box, integrator, u_impls, barostat)
+    ctxt = custom_ops.Context(x0, v0, host_config.box, integrator, [u_impl], barostat)
 
-    ctxt.multiple_steps(n_steps)
-
-    return ctxt.get_x_t(), ctxt.get_box()
+    xs, boxes = ctxt.multiple_steps(n_steps)
+    assert len(xs) == 1
+    assert len(xs) == len(boxes)
+    return xs[-1], boxes[-1]
 
 
 def get_val_and_grad_fn(bps: Iterable[BoundPotential], box: NDArray, precision=np.float32):
