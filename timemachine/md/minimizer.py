@@ -181,16 +181,17 @@ def minimize_host_4d(mols, host_config: HostConfig, ff, mol_coords=None) -> np.n
     x0 = combined_coords
     v0 = np.zeros_like(x0)
 
-    u_impl = summed_potential_from_potentials_and_params(*parameterize_system(hgt, ff, 1.0))
+    potentials, params = parameterize_system(hgt, ff, 1.0)
+    u_impl = summed_potential_from_potentials_and_params(potentials, params)
     bound_impls = [u_impl]
     x = fire_minimize(x0, bound_impls, box, 50)
 
+    # No need to reconstruct the context, just change the bound potential params. Allows
+    # for preserving the velocities between windows
+    ctxt = custom_ops.Context(x, v0, box, intg, bound_impls)
     for lamb in np.linspace(1.0, 0, 50, endpoint=False):
         _, params = parameterize_system(hgt, ff, lamb)
         u_impl.set_params(flatten_params(params))
-        # NOTE: we don't save velocities between trajectories at different lambda windows; empirically this seems to
-        # reduce the efficiency of the optimization, with more windows being required to achieve an equivalent result
-        ctxt = custom_ops.Context(x, v0, box, intg, bound_impls)
         xs, _ = ctxt.multiple_steps(50)
         x = xs[-1]
 
