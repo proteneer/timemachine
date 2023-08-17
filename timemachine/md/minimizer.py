@@ -59,7 +59,7 @@ def parameterize_system(topo, ff: Forcefield, lamb: float) -> Tuple[List[Potenti
             lamb,
         ),
     ]
-    return [p for _, p in params_potential_pairs], [params for params, _ in params_potential_pairs]
+    return [pot for (_, pot) in params_potential_pairs], [params for (params, _) in params_potential_pairs]
 
 
 def flatten_params(params: List[NDArray]) -> NDArray:
