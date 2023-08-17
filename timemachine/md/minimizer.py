@@ -66,7 +66,7 @@ def flatten_params(params: List[NDArray]) -> NDArray:
     return np.concatenate([p.reshape(-1) for p in params])
 
 
-def summed_potential_from_potentials_and_params(
+def summed_potential_bound_impl_from_potentials_and_params(
     potentials: List[Potential], params: List[NDArray]
 ) -> custom_ops.BoundPotential:
     flat_params = flatten_params(params)
@@ -182,7 +182,7 @@ def minimize_host_4d(mols, host_config: HostConfig, ff, mol_coords=None) -> np.n
     v0 = np.zeros_like(x0)
 
     potentials, params = parameterize_system(hgt, ff, 1.0)
-    u_impl = summed_potential_from_potentials_and_params(potentials, params)
+    u_impl = summed_potential_bound_impl_from_potentials_and_params(potentials, params)
     bound_impls = [u_impl]
     x = fire_minimize(x0, bound_impls, box, 50)
 
@@ -225,7 +225,7 @@ def make_host_du_dx_fxn(mols, host_config, ff, mol_coords=None):
 
     # bound impls of potentials @ lam=0 (fully coupled) endstate
     potentials, params = parameterize_system(hgt, ff, 0.0)
-    gpu_impl = summed_potential_from_potentials_and_params(potentials, params)
+    gpu_impl = summed_potential_bound_impl_from_potentials_and_params(potentials, params)
 
     # read conformers from mol_coords if given, or each mol's conf0 otherwise
     conf_list = [np.array(host_config.conf)]
@@ -370,7 +370,7 @@ def equilibrate_host(
     x0 = combined_coords
 
     # Re-minimize with the mol being flexible
-    u_impl = summed_potential_from_potentials_and_params(potentials, params)  # lambda=1
+    u_impl = summed_potential_bound_impl_from_potentials_and_params(potentials, params)  # lambda=1
     x0 = fire_minimize(x0, [u_impl], host_config.box, 50)
     v0 = np.zeros_like(x0)
 
