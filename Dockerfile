@@ -1,11 +1,12 @@
 # Libraries required by RDkit
-ENV CUDA_ARCH=${CUDA_ARCH}
 ARG LIBXRENDER_VERSION=1:0.9.10-*
 ARG LIBXEXT_VERSION=2:1.3.4-*
 
 FROM nvidia/cuda:11.7.1-devel-ubuntu20.04 AS tm_base_env
 ARG LIBXRENDER_VERSION
 ARG LIBXEXT_VERSION
+
+ENV CUDA_ARCH=${CUDA_ARCH}
 
 # Copied out of anaconda's dockerfile
 ARG MINICONDA_VERSION=py310_23.1.0-1
