@@ -6,7 +6,7 @@ FROM nvidia/cuda:11.7.1-devel-ubuntu20.04 AS tm_base_env
 ARG LIBXRENDER_VERSION
 ARG LIBXEXT_VERSION
 
-ENV CUDA_ARCH=${CUDA_ARCH}
+ENV CMAKE_ARGS="-DCUDA_ARCH:STRING=${CUDA_ARCH}"
 
 # Copied out of anaconda's dockerfile
 ARG MINICONDA_VERSION=py310_23.1.0-1
