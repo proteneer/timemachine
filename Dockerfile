@@ -11,7 +11,7 @@ ARG MINICONDA_VERSION=py310_23.1.0-1
 ARG MAKE_VERSION=4.2.1-1.2
 ARG GIT_VERSION=1:2.25.1-*
 ARG WGET_VERSION=1.20.3-1ubuntu2
-RUN apt-get update && apt-get install --no-install-recommends -y \
+RUN (apt-get update || true)  && apt-get install --no-install-recommends -y \
     wget=${WGET_VERSION} git=${GIT_VERSION} make=${MAKE_VERSION} libxrender1=${LIBXRENDER_VERSION} libxext-dev=${LIBXEXT_VERSION} vim \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
@@ -111,7 +111,7 @@ RUN pip install --no-cache-dir -e .[test] && rm -rf ./build
 FROM nvidia/cuda:11.7.1-runtime-ubuntu20.04 as timemachine
 ARG LIBXRENDER_VERSION
 ARG LIBXEXT_VERSION
-RUN apt-get update && apt-get install --no-install-recommends -y libxrender1=${LIBXRENDER_VERSION} libxext-dev=${LIBXEXT_VERSION} \
+RUN (apt-get update || true) && apt-get install --no-install-recommends -y libxrender1=${LIBXRENDER_VERSION} libxext-dev=${LIBXEXT_VERSION} \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 COPY --from=timemachine_dev /opt/ /opt/
