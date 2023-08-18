@@ -7,7 +7,7 @@
 import argparse
 import os
 import sys
-from typing import Callable, List, Tuple
+from typing import List, Tuple
 
 import jax
 import jax.numpy as jnp
@@ -155,7 +155,7 @@ def get_initial_state(water_pdb, mol, ff, seed, nb_cutoff):
 from scipy.special import logsumexp
 
 
-class ExchangeMove(moves.MonteCarloMove):
+class BDExchangeMove(moves.MonteCarloMove):
     def __init__(
         self,
         nb_beta: float,
@@ -301,7 +301,30 @@ def delta_r_np(ri, rj, box):
     return diff
 
 
-class TIBDExchangeMove(ExchangeMove):
+def v1_insertion(radius, center, box):
+    # (ytz): sample a point inside the sphere uniformly
+    # source: https://karthikkaranth.me/blog/generating-random-points-in-a-sphere/
+    xyz = np.random.randn(3)
+    n = np.linalg.norm(xyz)
+    xyz = xyz / n
+    # (ytz): this might not be inside the box, but it doesnt' matter
+    # since all of our distances are computed using PBCs
+    c = np.cbrt(np.random.rand())
+    new_xyz = xyz * c * radius + center
+    assert np.linalg.norm(delta_r_np(new_xyz, center, box)) < radius
+
+    return new_xyz
+
+
+def v2_insertion(radius, center, box):
+    # generate random proposals outside of the sphere but inside the box
+    while True:
+        xyz = np.random.rand(3) * np.diag(box)
+        if np.linalg.norm(delta_r_np(xyz, center, box)) >= radius:
+            return xyz
+
+
+class TIBDExchangeMove(BDExchangeMove):
     r"""
     Targetted Insertion and Biased Deletion Exchange Move
 
@@ -371,7 +394,7 @@ class TIBDExchangeMove(ExchangeMove):
         vi_mols: List[int],
         vj_mols: List[int],
         x: CoordsVelBox,
-        vj_insertion_fn: Callable,
+        vj_site: NDArray,
         vol_i: float,
         vol_j: float,
     ):
@@ -399,8 +422,8 @@ class TIBDExchangeMove(ExchangeMove):
         chosen_water_atoms = self.water_idxs_np[water_idx]
         new_coords = coords[chosen_water_atoms]
         # remove centroid and offset into insertion site
-        new_coords = randomly_rotate_and_translate(new_coords, vj_insertion_fn())
-        # new_coords = randomly_translate(new_coords, vj_insertion_fn())
+        new_coords = randomly_rotate_and_translate(new_coords, vj_site)
+        # new_coords = randomly_translate(new_coords, vj_site)
 
         vj_plus_one_idxs = np.concatenate([[water_idx], vj_mols])
         log_weights_after_full, trial_coords = self.batch_log_weights_incremental(
@@ -426,55 +449,24 @@ class TIBDExchangeMove(ExchangeMove):
         n1 = len(v1_mols)
         n2 = len(v2_mols)
 
-        # optimized version
-        def v1_insertion():
-            # (ytz): sample a point inside the sphere uniformly
-            # source: https://karthikkaranth.me/blog/generating-random-points-in-a-sphere/
-            xyz = np.random.randn(3)
-            n = np.linalg.norm(xyz)
-            xyz = xyz / n
-            # (ytz): this might not be inside the box, but it doesnt' matter
-            # since all of our distances are computed using PBCs
-            c = np.cbrt(np.random.rand())
-            new_xyz = xyz * c * self.radius + center
-            assert np.linalg.norm(delta_r_np(new_xyz, center, box)) < self.radius
-
-            return new_xyz
-
-        # (ytz): reference implemntation left here for pedagogical reasons
-        # v1 << v2 so monte carlo is really slow (avg counter ~5000)
-        # def v1_insertion():
-        #     # generate random proposals inside the sphere
-        #     # counter = 0
-        #     while True:
-        #         # counter += 1
-        #         xyz = np.random.randn(3) * np.diag(box)
-        #         if np.linalg.norm(delta_r_np(xyz, center, box)) < self.radius:
-        #             # print("inserted into v1 after", counter)
-        #             return xyz
-
-        # v2 >> v1 so monte carlo works really well
-        def v2_insertion():
-            # generate random proposals outside of the sphere but inside the box
-            while True:
-                xyz = np.random.rand(3) * np.diag(box)
-                if np.linalg.norm(delta_r_np(xyz, center, box)) >= self.radius:
-                    return xyz
-
         vol_1 = (4 / 3) * np.pi * self.radius ** 3
         vol_2 = np.prod(np.diag(box)) - vol_1
+
+        # optimize this later
+        v1_site = v1_insertion(self.radius, center, box)
+        v2_site = v2_insertion(self.radius, center, box)
 
         if n1 == 0 and n2 == 0:
             assert 0
         elif n1 > 0 and n2 == 0:
-            return self.swap_vi_into_vj(v1_mols, v2_mols, x, v2_insertion, vol_1, vol_2)
+            return self.swap_vi_into_vj(v1_mols, v2_mols, x, v2_site, vol_1, vol_2)
         elif n1 == 0 and n2 > 0:
-            return self.swap_vi_into_vj(v2_mols, v1_mols, x, v1_insertion, vol_2, vol_1)
+            return self.swap_vi_into_vj(v2_mols, v1_mols, x, v1_site, vol_2, vol_1)
         elif n1 > 0 and n2 > 0:
             if np.random.rand() < 0.5:
-                return self.swap_vi_into_vj(v1_mols, v2_mols, x, v2_insertion, vol_1, vol_2)
+                return self.swap_vi_into_vj(v1_mols, v2_mols, x, v2_site, vol_1, vol_2)
             else:
-                return self.swap_vi_into_vj(v2_mols, v1_mols, x, v1_insertion, vol_2, vol_1)
+                return self.swap_vi_into_vj(v2_mols, v1_mols, x, v1_site, vol_2, vol_1)
         else:
             # negative numbers, dun goof'd
             assert 0
@@ -626,7 +618,7 @@ def test_exchange():
         )
     elif args.insertion_type == "untargeted":
         # vanilla reference
-        exc_mover = ExchangeMove(nb_beta, nb_cutoff, nb_water_ligand_params, water_idxs, 1 / DEFAULT_KT)
+        exc_mover = BDExchangeMove(nb_beta, nb_cutoff, nb_water_ligand_params, water_idxs, 1 / DEFAULT_KT)
     else:
         assert 0
 
@@ -665,7 +657,6 @@ def test_exchange():
     xvb_t = CoordsVelBox(cur_x_t, cur_v_t, cur_box)
     xvb_t = npt_mover.move(xvb_t)
     print("done")
-    # md_steps_per_batch = 4000
 
     # TBD: cache the minimized and equilibrated initial structure later on to iterate faster.
     npt_mover.n_steps = args.md_steps_per_batch
@@ -682,7 +673,7 @@ def test_exchange():
             assert np.amax(np.abs(xvb_t.coords)) < 1e3
             xvb_t = exc_mover.move(xvb_t)
 
-        # compute occupancy at the end of MC moves (as opposed to MD moves), as its more sensitive to any possible any possible
+        # compute occupancy at the end of MC moves (as opposed to MD moves), as its more sensitive to any possible
         # biases and/or correctness issues.
         occ = compute_occupancy(xvb_t.coords, xvb_t.box, initial_state.ligand_idxs, threshold=bb_radius)
         print(
@@ -696,7 +687,7 @@ def test_exchange():
         # print("time per mc move", (time.time() - start_time) / mc_steps_per_batch)
 
         # run MD
-        xvb_t = npt_mover.move(xvb_t)  # disabling this gets more moves?
+        xvb_t = npt_mover.move(xvb_t)
 
     writer.close()
 
