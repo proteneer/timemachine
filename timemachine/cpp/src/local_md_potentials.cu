@@ -41,6 +41,8 @@ LocalMDPotentials::LocalMDPotentials(
         throw std::runtime_error("unable to find a NonbondedAllPairs potential");
     }
 
+    const int tpb = DEFAULT_THREADS_PER_BLOCK;
+
     // Only used to reference shared_ptr to potential and for Nonbonded parameters
     // modifications to the BoundPotential has no impact
     nonbonded_bp_ = nonbonded_pots[0];
@@ -57,8 +59,8 @@ LocalMDPotentials::LocalMDPotentials(
     // Construct a bound potential with 0 params
     bound_free_restraint_ = std::shared_ptr<BoundPotential>(new BoundPotential(free_restraint_, default_params));
 
-    // Ensure that the refence idxs start out as all N_
-    k_initialize_array<unsigned int><<<ceil_divide(N_, WARP_SIZE), WARP_SIZE>>>(N_, d_all_pairs_idxs_.data, N_);
+    // Ensure that the reference idxs start out as all N_
+    k_initialize_array<unsigned int><<<ceil_divide(N_, tpb), tpb>>>(N_, d_all_pairs_idxs_.data, N_);
     gpuErrchk(cudaPeekAtLastError());
     num_allpairs_idxs_ = copy_nonbonded_potential_idxs(nonbonded_bp_->potential, N_, d_all_pairs_idxs_.data);
 
@@ -110,8 +112,10 @@ void LocalMDPotentials::setup_from_idxs(
     // Simply reseeding does NOT produce identical results
     curandErrchk(curandSetGeneratorOffset(cr_rng_, 0));
 
+    const int tpb = DEFAULT_THREADS_PER_BLOCK;
+
     // Set the array to all N, which indicates to ignore that idx
-    k_initialize_array<unsigned int><<<ceil_divide(N_, WARP_SIZE), WARP_SIZE, 0, stream>>>(N_, d_free_idxs_.data, N_);
+    k_initialize_array<unsigned int><<<ceil_divide(N_, tpb), tpb, 0, stream>>>(N_, d_free_idxs_.data, N_);
     gpuErrchk(cudaPeekAtLastError());
 
     // Generate values between (0, 1.0]
@@ -125,7 +129,7 @@ void LocalMDPotentials::setup_from_idxs(
 
     const double kBT = BOLTZ * temperature_;
     // Select all of the particles that will be free
-    k_log_probability_selection<float><<<ceil_divide(N_, WARP_SIZE), WARP_SIZE, 0, stream>>>(
+    k_log_probability_selection<float><<<ceil_divide(N_, tpb), tpb, 0, stream>>>(
         N_, kBT, radius, k, reference_idx, d_x_t, d_box_t, d_probability_buffer_.data, d_free_idxs_.data);
     gpuErrchk(cudaPeekAtLastError());
 
@@ -142,11 +146,13 @@ void LocalMDPotentials::setup_from_selection(
     const double k,
     const cudaStream_t stream) {
 
+    const int tpb = DEFAULT_THREADS_PER_BLOCK;
+
     // Set the array to all N, which indicates to ignore that idx
-    k_initialize_array<unsigned int><<<ceil_divide(N_, WARP_SIZE), WARP_SIZE, 0, stream>>>(N_, d_free_idxs_.data, N_);
+    k_initialize_array<unsigned int><<<ceil_divide(N_, tpb), tpb, 0, stream>>>(N_, d_free_idxs_.data, N_);
     gpuErrchk(cudaPeekAtLastError());
 
-    k_initialize_array<unsigned int><<<ceil_divide(N_, WARP_SIZE), WARP_SIZE, 0, stream>>>(N_, d_row_idxs_.data, N_);
+    k_initialize_array<unsigned int><<<ceil_divide(N_, tpb), tpb, 0, stream>>>(N_, d_row_idxs_.data, N_);
     gpuErrchk(cudaPeekAtLastError());
 
     gpuErrchk(cudaMemcpyAsync(
@@ -157,7 +163,7 @@ void LocalMDPotentials::setup_from_selection(
         stream));
 
     // Split out the values from the selection idxs into the indices of the free
-    k_unique_indices<<<ceil_divide(N_, WARP_SIZE), WARP_SIZE, 0, stream>>>(N_, N_, d_row_idxs_.data, d_free_idxs_.data);
+    k_unique_indices<<<ceil_divide(N_, tpb), tpb, 0, stream>>>(N_, N_, d_row_idxs_.data, d_free_idxs_.data);
     gpuErrchk(cudaPeekAtLastError());
 
     this->_setup_free_idxs_given_reference_idx((unsigned int)reference_idx, radius, k, stream);
