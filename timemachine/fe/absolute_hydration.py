@@ -26,7 +26,8 @@ from timemachine.fe.utils import get_mol_name, get_romol_conf
 from timemachine.ff import Forcefield
 from timemachine.ff.handlers import openmm_deserializer
 from timemachine.lib import LangevinIntegrator, MonteCarloBarostat
-from timemachine.md import builders, enhanced, minimizer, moves, smc
+from timemachine.md import builders, enhanced, minimizer, smc
+from timemachine.md.barostat.moves import NPTMove
 from timemachine.md.barostat.utils import get_bond_list, get_group_indices
 from timemachine.md.states import CoordsVelBox
 from timemachine.potentials import SummedPotential
@@ -132,7 +133,7 @@ def setup_absolute_hydration_with_endpoint_samples(
     for U, p in zip(potentials, params):
         U.bind(p)
 
-    npt_mover = moves.NPTMove(potentials, None, masses, temperature, pressure, n_steps, seed)
+    npt_mover = NPTMove(potentials, None, masses, temperature, pressure=pressure, n_steps=n_steps, seed=seed)
 
     # combine solvent and ligand samples
     solvent_xvbs, ligand_samples, ligand_log_weights = enhanced.pregenerate_samples(
