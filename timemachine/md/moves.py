@@ -95,11 +95,11 @@ class CompoundMove(Move[_State]):
         return x
 
     @property
-    def n_accepted_by_move(self) -> List[float]:
+    def n_accepted_by_move(self) -> List[int]:
         return [m._n_accepted for m in self.moves]
 
     @property
-    def n_proposed_by_move(self) -> List[float]:
+    def n_proposed_by_move(self) -> List[int]:
         return [m._n_proposed for m in self.moves]
 
 
