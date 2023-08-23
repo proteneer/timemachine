@@ -69,6 +69,16 @@ class MonteCarloMove(Move[_State], ABC):
         return self._n_accepted / self._n_proposed if self._n_proposed else np.nan
 
 
+class Identity(MonteCarloMove[_State]):
+    def move(self, x: _State) -> _State:
+        self._n_proposed += 1
+        self._n_accepted += 1
+        return x
+
+    def propose(self, x: _State) -> Tuple[_State, float]:
+        return x, 0.0
+
+
 class MetropolisHastingsMove(MonteCarloMove[_State], ABC):
     @abstractmethod
     def propose_with_log_q_diff(self, x: _State) -> Tuple[_State, float]:
@@ -84,6 +94,32 @@ class MetropolisHastingsMove(MonteCarloMove[_State], ABC):
 
 
 class CompoundMove(Move[_State]):
+    def __init__(self, moves: Sequence[MonteCarloMove[_State]]):
+        self.moves = moves
+
+    @property
+    def n_accepted_by_move(self) -> List[int]:
+        return [m._n_accepted for m in self.moves]
+
+    @property
+    def n_proposed_by_move(self) -> List[int]:
+        return [m._n_proposed for m in self.moves]
+
+
+class Choice(CompoundMove[_State]):
+    """Apply a single move uniformly selected from a list"""
+
+    def __init__(self, moves: Sequence[MonteCarloMove[_State]]):
+        self.moves = moves
+
+    def move(self, x: _State) -> _State:
+        idx = np.random.choice(len(self.moves))
+        chosen_move = self.moves[idx]
+        x = chosen_move.move(x)
+        return x
+
+
+class Sequential(CompoundMove[_State]):
     """Apply each of a list of MonteCarloMoves in sequence"""
 
     def __init__(self, moves: Sequence[MonteCarloMove[_State]]):
@@ -93,14 +129,6 @@ class CompoundMove(Move[_State]):
         for individual_move in self.moves:
             x = individual_move.move(x)
         return x
-
-    @property
-    def n_accepted_by_move(self) -> List[int]:
-        return [m._n_accepted for m in self.moves]
-
-    @property
-    def n_proposed_by_move(self) -> List[int]:
-        return [m._n_proposed for m in self.moves]
 
 
 class NVTMove(Move[CoordsVelBox]):

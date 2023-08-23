@@ -1,6 +1,6 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from functools import cache
-from typing import Callable, Iterable, List, Optional, Sequence, Tuple, Union, overload
+from typing import Callable, List, Optional, Sequence, Tuple, Union, overload
 from warnings import warn
 
 import jax
@@ -29,7 +29,10 @@ from timemachine.ff import ForcefieldParams
 from timemachine.ff.handlers import openmm_deserializer
 from timemachine.lib import LangevinIntegrator, MonteCarloBarostat, custom_ops
 from timemachine.md.barostat.utils import compute_box_center, get_bond_list, get_group_indices
-from timemachine.potentials import BoundPotential, HarmonicBond, Potential
+from timemachine.md.hrex import Hrex, HrexDiagnostics, ReplicaIdx, StateIdx, get_swap_attempts_per_iter_heuristic
+from timemachine.md.states import CoordsBox
+from timemachine.potentials import BoundPotential, HarmonicBond, SummedPotential
+from timemachine.utils import batches
 
 
 class HostConfig:
@@ -69,7 +72,7 @@ class InitialState:
     This object can be pickled safely.
     """
 
-    potentials: List[BoundPotential[Potential]]
+    potentials: List[BoundPotential]
     integrator: LangevinIntegrator
     barostat: Optional[MonteCarloBarostat]
     x0: np.ndarray
@@ -139,6 +142,7 @@ class SimulationResult:
     boxes: List[NDArray]
     md_params: MDParams
     intermediate_results: List[PairBarResult]
+    hrex_diagnostics: Optional[HrexDiagnostics] = None
 
 
 def image_frames(initial_state: InitialState, frames: np.ndarray, boxes: np.ndarray) -> np.ndarray:
@@ -308,16 +312,6 @@ class AbsoluteFreeEnergy(BaseFreeEnergy):
         return np.concatenate([host_values, ligand_values])
 
 
-def batches(n: int, batch_size: int) -> Iterable[int]:
-    assert n >= 0
-    assert batch_size > 0
-    quot, rem = divmod(n, batch_size)
-    for _ in range(quot):
-        yield batch_size
-    if rem:
-        yield rem
-
-
 @overload
 def sample(initial_state: InitialState, md_params: MDParams) -> Tuple[NDArray, NDArray]:
     ...
@@ -328,7 +322,9 @@ def sample(initial_state: InitialState, md_params: MDParams, max_buffer_frames: 
     ...
 
 
-def sample(initial_state: InitialState, md_params: MDParams, max_buffer_frames: Optional[int] = None):
+def sample(
+    initial_state: InitialState, md_params: MDParams, max_buffer_frames: Optional[int] = None
+) -> Tuple[Union[StoredArrays, NDArray], NDArray]:
     """Generate a trajectory given an initial state and a simulation protocol
 
     Parameters
@@ -364,10 +360,11 @@ def sample(initial_state: InitialState, md_params: MDParams, max_buffer_frames: 
     )
 
     # burn-in
-    ctxt.multiple_steps(
-        n_steps=md_params.n_eq_steps,
-        store_x_interval=0,
-    )
+    if md_params.n_eq_steps:
+        ctxt.multiple_steps(
+            n_steps=md_params.n_eq_steps,
+            store_x_interval=0,
+        )
 
     rng = np.random.default_rng(md_params.seed)
 
@@ -725,3 +722,145 @@ def run_sims_bisection(
     boxes = [get_state(lamb).boxes for lamb in lambdas]
 
     return results, frames, boxes
+
+
+def run_sims_hrex(
+    initial_states: Sequence[InitialState],
+    md_params: MDParams,
+    n_frames_per_iter: int,
+    temperature: float,
+    n_swap_attempts_per_iter: Optional[int] = None,
+    verbose: bool = True,
+) -> Tuple[PairBarResult, List[StoredArrays], List[NDArray], HrexDiagnostics]:
+
+    if n_swap_attempts_per_iter is None:
+        n_swap_attempts_per_iter = get_swap_attempts_per_iter_heuristic(len(initial_states))
+
+    np.random.seed(md_params.seed)
+
+    lambdas = [s.lamb for s in initial_states]
+    replicas = [CoordsBox(s.x0, s.box0) for s in initial_states]
+
+    bps = initial_states[0].potentials  # TODO: assert initial states have compatible potentials?
+    sp = SummedPotential([bp.potential for bp in bps], [bp.params for bp in bps])
+    ubp = sp.to_gpu(np.float32)
+
+    def compute_energy_offsets(xbs: List[CoordsBox], params: List[NDArray]):
+        coords = np.array([xb.coords for xb in xbs])
+        boxes = np.array([xb.box for xb in xbs])
+        _, _, U = ubp.unbound_impl.execute_selective_batch(
+            np.array(coords), np.array(params), np.array(boxes), False, False, True
+        )
+        return U
+
+    def get_log_q_fn(xbs: List[CoordsBox]):
+        def get_flattened_params(state_idx: StateIdx) -> NDArray:
+            bps = initial_states[state_idx].potentials
+            return np.concatenate([bp.params.flatten() for bp in bps])
+
+        params = [get_flattened_params(StateIdx(idx)) for idx, _ in enumerate(initial_states)]
+        U_kl = compute_energy_offsets(xbs, params)
+
+        def log_q(replica_idx: ReplicaIdx, state_idx: StateIdx) -> float:
+            U = U_kl[replica_idx, state_idx]
+            return -U / (BOLTZ * temperature)
+
+        return log_q
+
+    state_idxs = [StateIdx(i) for i, _ in enumerate(lambdas)]
+    neighbor_pairs = list(zip(state_idxs, state_idxs[1:]))
+    hrex = Hrex.from_replicas(replicas)
+
+    def get_equilibrated_initial_state(initial_state: InitialState, seed: int) -> InitialState:
+        md_params_equil = replace(md_params, n_frames=1, steps_per_frame=1, seed=seed)
+        (frame,), (box,) = sample(initial_state, md_params_equil)
+        initial_state_equil = replace(initial_state, x0=frame, box0=box)
+        return initial_state_equil
+
+    initial_states = [
+        get_equilibrated_initial_state(initial_state, seed=np.random.randint(np.iinfo(np.int32).max))
+        for initial_state in initial_states
+    ]
+
+    samples_by_state_by_iter: List[List[Tuple[StoredArrays, NDArray]]] = []
+    replica_idx_by_state_by_iter: List[List[ReplicaIdx]] = []
+    fraction_accepted_by_pair_by_iter: List[List[Tuple[int, int]]] = []
+
+    for iteration, n_frames_iter in enumerate(batches(md_params.n_frames, n_frames_per_iter), 1):
+
+        def sample_replica(xb: CoordsBox, state_idx: StateIdx) -> Tuple[StoredArrays, NDArray]:
+            frames, boxes = sample(
+                replace(initial_states[state_idx], x0=xb.coords, box0=xb.box),
+                replace(
+                    md_params,
+                    n_frames=n_frames_iter,
+                    n_eq_steps=0,
+                    seed=np.random.randint(np.iinfo(np.int32).max),
+                ),
+                max_buffer_frames=100,
+            )
+            return frames, boxes
+
+        def replica_from_samples(samples: Tuple[StoredArrays, NDArray]) -> CoordsBox:
+            frames, boxes = samples
+            return CoordsBox(frames[-1], boxes[-1])
+
+        hrex, samples_by_state = hrex.sample_replicas(sample_replica, replica_from_samples)
+        log_q = get_log_q_fn(replicas)
+        hrex, fraction_accepted_by_pair = hrex.attempt_neighbor_swaps(neighbor_pairs, log_q, n_swap_attempts_per_iter)
+
+        samples_by_state_by_iter.append(samples_by_state)
+        replica_idx_by_state_by_iter.append(hrex.replica_idx_by_state)
+        fraction_accepted_by_pair_by_iter.append(fraction_accepted_by_pair)
+
+        if verbose:
+
+            def get_swap_acceptance_rates(fraction_accepted_by_pair):
+                return [
+                    n_accepted / n_proposed if n_proposed else np.nan
+                    for n_accepted, n_proposed in fraction_accepted_by_pair
+                ]
+
+            instantaneous_swap_acceptance_rates = get_swap_acceptance_rates(fraction_accepted_by_pair)
+            average_swap_acceptance_rates = get_swap_acceptance_rates(np.sum(fraction_accepted_by_pair_by_iter, axis=0))
+
+            def format_rate(r):
+                return f"{r * 100.0:5.1f}%"
+
+            def format_rates(rs):
+                return " | ".join(format_rate(r) for r in rs)
+
+            print("Completed HREX iteration", iteration)
+            print("Acceptance rates (inst.)   :", format_rates(instantaneous_swap_acceptance_rates))
+            print("Acceptance rates (average) :", format_rates(average_swap_acceptance_rates))
+            print("Final replica permutation  :", hrex.replica_idx_by_state)
+            print()
+
+    # Concatenate frames and boxes from all iterations
+    frames_by_state: List[StoredArrays] = [StoredArrays() for _ in lambdas]
+    boxes_by_state_: List[List[NDArray]] = [[] for _ in lambdas]
+    for samples_by_state in samples_by_state_by_iter:
+        for samples, frames, boxes in zip(samples_by_state, frames_by_state, boxes_by_state_):
+            frames_i, boxes_i = samples
+            frames.extend(frames_i)
+            boxes.extend(boxes_i)
+
+    boxes_by_state: List[NDArray] = [np.array(boxes) for boxes in boxes_by_state_]
+
+    energy_decomposed_states = [
+        EnergyDecomposedState(
+            frames,
+            boxes,
+            get_batch_u_fns([pot.to_gpu(np.float32).bound_impl for pot in state.potentials], temperature),
+        )
+        for frames, boxes, state in zip(frames_by_state, boxes_by_state, initial_states)
+    ]
+
+    bar_results = [
+        estimate_free_energy_bar(compute_energy_decomposed_u_kln([s1, s2]), temperature)
+        for s1, s2 in zip(energy_decomposed_states[:-1], energy_decomposed_states[1:])
+    ]
+
+    diagnostics = HrexDiagnostics(replica_idx_by_state_by_iter, fraction_accepted_by_pair_by_iter)
+
+    return PairBarResult(list(initial_states), bar_results), frames_by_state, boxes_by_state, diagnostics
