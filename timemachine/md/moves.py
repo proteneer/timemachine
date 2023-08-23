@@ -1,7 +1,8 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from functools import partial
-from typing import Any, Generic, List, Sequence, Tuple, TypeVar
+from itertools import islice
+from typing import Any, Generic, Iterator, List, Sequence, Tuple, TypeVar
 
 import jax
 import jax.numpy as jnp
@@ -23,6 +24,14 @@ class Move(Generic[_State], ABC):
     @abstractmethod
     def move(self, _: _State) -> _State:
         ...
+
+    def sample_chain_iter(self, x: _State) -> Iterator[_State]:
+        while True:
+            x = self.move(x)
+            yield x
+
+    def sample_chain(self, x: _State, n_samples: int) -> List[_State]:
+        return list(islice(self.sample_chain_iter(x), n_samples))
 
 
 @dataclass
