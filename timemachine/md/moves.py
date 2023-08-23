@@ -20,8 +20,9 @@ _State = TypeVar("_State")
 
 
 class MonteCarloMove(Generic[_State]):
-    n_proposed: int = 0
-    n_accepted: int = 0
+    def __init__(self):
+        self.n_proposed = 0
+        self.n_accepted = 0
 
     def propose(self, x: _State) -> Tuple[_State, float]:
         """return proposed state and log acceptance probability"""
