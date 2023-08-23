@@ -543,11 +543,9 @@ def local_minimize(x0, val_and_grad_fn, local_idxs, verbose=True, assert_energy_
     x_final = x0.copy()
     x_final[local_idxs] = x_local_final
 
-    u_final, _ = val_and_grad_fn(x_final)
-
     if assert_energy_decreased:
-        assert u_final < u_0, f"u_0: {u_0:.3f}, u_f: {u_final:.3f}"
-    elif u_final >= u_0:
-        warnings.warn(f"WARNING: Energy did not decrease: u_0: {u_0:.3f}, u_f: {u_final:.3f}", MinimizationWarning)
+        assert U_final < u_0, f"u_0: {u_0:.3f}, u_f: {U_final:.3f}"
+    elif U_final >= u_0:
+        warnings.warn(f"WARNING: Energy did not decrease: u_0: {u_0:.3f}, u_f: {U_final:.3f}", MinimizationWarning)
 
     return x_final
