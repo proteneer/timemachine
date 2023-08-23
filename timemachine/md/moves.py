@@ -1,4 +1,4 @@
-from abc import abstractmethod
+from abc import ABC, abstractmethod
 from functools import partial
 from typing import Any, Generic, List, Tuple, TypeVar
 
@@ -19,14 +19,20 @@ from timemachine.potentials import BoundPotential, HarmonicBond
 _State = TypeVar("_State")
 
 
-class MonteCarloMove(Generic[_State]):
+class Move(Generic[_State], ABC):
+    @abstractmethod
+    def move(self, _: _State) -> _State:
+        ...
+
+
+class MonteCarloMove(Move[_State], ABC):
     def __init__(self):
         self.n_proposed = 0
         self.n_accepted = 0
 
+    @abstractmethod
     def propose(self, x: _State) -> Tuple[_State, float]:
         """return proposed state and log acceptance probability"""
-        raise NotImplementedError
 
     def move(self, x: _State) -> _State:
         proposal, log_acceptance_probability = self.propose(x)
@@ -45,7 +51,7 @@ class MonteCarloMove(Generic[_State]):
         return self.n_accepted / self.n_proposed if self.n_proposed else np.nan
 
 
-class CompoundMove(MonteCarloMove[_State]):
+class CompoundMove(Move):
     def __init__(self, moves: List[MonteCarloMove]):
         """Apply each of a list of moves in sequence"""
         self.moves = moves
@@ -63,16 +69,8 @@ class CompoundMove(MonteCarloMove[_State]):
     def n_proposed_by_move(self):
         return np.array([m.n_proposed for m in self.moves])
 
-    @property
-    def n_accepted(self):
-        return np.sum(self.n_accepted_by_move)
 
-    @property
-    def n_proposed(self):
-        return np.sum(self.n_proposed_by_move)
-
-
-class NVTMove(MonteCarloMove[CoordsVelBox]):
+class NVTMove(Move[CoordsVelBox]):
     def __init__(
         self,
         bps: List[BoundPotential],
@@ -102,9 +100,6 @@ class NVTMove(MonteCarloMove[CoordsVelBox]):
         box = boxes[0]
 
         after_steps = CoordsVelBox(x_t, v_t, box)
-
-        self.n_proposed += 1
-        self.n_accepted += 1
 
         return after_steps
 
@@ -146,9 +141,11 @@ class NPTMove(NVTMove):
         return self._steps(ctxt)
 
 
-class DeterministicMTMMove(MonteCarloMove):
-
-    rng_key: Any
+class DeterministicMTMMove(Move):
+    def __init__(self, rng_key):
+        self.rng_key = rng_key
+        self.n_proposed = 0
+        self.n_accepted = 0
 
     @abstractmethod
     def acceptance_probability(self, x, box, key) -> Tuple[Any, Any, Any]:
@@ -201,7 +198,7 @@ class OptimizedMTMMove(DeterministicMTMMove):
         self.n_proposed = 0
         self.batch_proposal_fn = batch_proposal_fn
         self.batched_log_weights_fn = batched_log_weights_fn
-        self.rng_key = jrandom.PRNGKey(seed)
+        super().__init__(jrandom.PRNGKey(seed))
 
     @partial(jax.jit, static_argnums=(0,))
     def acceptance_probability(self, x, box, key):
@@ -262,7 +259,7 @@ class ReferenceMTMMove(DeterministicMTMMove):
         self.batch_log_Q_fn = batch_log_Q_fn
         self.batch_log_pi_fn = batch_log_pi_fn
         self.batch_log_lambda_fn = batch_log_lambda_a_b_fn
-        self.rng_key = jrandom.PRNGKey(seed)
+        super().__init__(jrandom.PRNGKey(seed))
 
     def acceptance_probability(self, xvb, key):
 
