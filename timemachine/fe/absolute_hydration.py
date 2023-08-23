@@ -133,7 +133,7 @@ def setup_absolute_hydration_with_endpoint_samples(
     for U, p in zip(potentials, params):
         U.bind(p)
 
-    npt_mover = NPTMove(potentials, None, masses, temperature, pressure=pressure, n_steps=n_steps, seed=seed)
+    npt_mover = NPTMove(potentials, None, masses, temperature, pressure, n_steps=n_steps, seed=seed)
 
     # combine solvent and ligand samples
     solvent_xvbs, ligand_samples, ligand_log_weights = enhanced.pregenerate_samples(

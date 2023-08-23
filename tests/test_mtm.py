@@ -137,7 +137,7 @@ def test_optimized_MTM():
     bps = [ubp.bind(params) for ubp, params in zip(ubps, params)]
 
     # we should initialize new instances of this
-    npt_mover = NPTMove(bps, masses, temperature, pressure=pressure, n_steps=1000, seed=seed)
+    npt_mover = NPTMove(bps, masses, temperature, pressure, n_steps=1000, seed=seed)
 
     K = 100
     # note that these seeds aren't actually used, since we feed in explicit keys to acceptance_probability

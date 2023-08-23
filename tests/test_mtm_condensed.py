@@ -137,7 +137,7 @@ def test_condensed_phase_mtm(seed):
 
     bps = [ubp.bind(params) for ubp, params in zip(ubps, params)]
 
-    npt_mover = NPTMove(bps, masses, temperature, pressure=pressure, n_steps=md_steps_per_move, seed=seed)
+    npt_mover = NPTMove(bps, masses, temperature, pressure, n_steps=md_steps_per_move, seed=seed)
     mtm_mover = OptimizedMTMMove(K, batch_proposal_coords_fn, batch_log_weights_fn, seed=seed)
 
     enhanced_torsions = []
@@ -166,7 +166,7 @@ def test_condensed_phase_mtm(seed):
 
     vanilla_torsions = []
     xvb_t = copy.deepcopy(xvb0)
-    npt_mover = NPTMove(bps, masses, temperature, pressure=pressure, n_steps=500, seed=seed)
+    npt_mover = NPTMove(bps, masses, temperature, pressure, n_steps=500, seed=seed)
     for iteration in range(num_batches):
         solvent_torsion = get_torsion(xvb_t.coords[-num_ligand_atoms:])
         vanilla_torsions.append(solvent_torsion)

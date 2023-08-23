@@ -592,7 +592,7 @@ def generate_solvent_samples(
         potentials, params, masses, coords, box, temperature, pressure, num_equil_steps, seed
     )
 
-    npt_mover = NPTMove(potentials, masses, temperature, pressure=pressure, n_steps=md_steps_per_move, seed=seed)
+    npt_mover = NPTMove(potentials, masses, temperature, pressure, n_steps=md_steps_per_move, seed=seed)
 
     xvbs = [xvb0]
     for _ in range(n_samples):
