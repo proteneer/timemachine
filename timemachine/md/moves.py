@@ -41,10 +41,7 @@ class MonteCarloMove(Generic[_State]):
 
     @property
     def acceptance_fraction(self):
-        if self.n_proposed > 0:
-            return self.n_accepted / self.n_proposed
-        else:
-            return 0.0
+        return self.n_accepted / self.n_proposed if self.n_proposed else np.nan
 
 
 class CompoundMove(MonteCarloMove[_State]):
