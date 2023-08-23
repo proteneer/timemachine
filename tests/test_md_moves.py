@@ -16,11 +16,16 @@ def test_rwmh():
     class RWMH1D(MetropolisHastingsMove[float]):
         def propose_with_dlogq(self, x: float) -> Tuple[float, float]:
             x_prop = x + np.random.uniform(-dx, dx)
-            log_q = -(x_prop ** 2) / 2
-            return x_prop, log_q
+
+            def log_q(x):
+                return -(x ** 2) / 2
+
+            dlogq = log_q(x_prop) - log_q(x)
+
+            return x_prop, dlogq
 
     rwmh = RWMH1D()
-    x_0 = np.random.uniform(-0.3, 0.3)
+    x_0 = np.random.uniform(-1.0, 1.0)
     rw_samples = rwmh.sample_chain(x_0, n_samples)
 
     tau = round(2 / dx ** 2)
