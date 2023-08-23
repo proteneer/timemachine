@@ -62,12 +62,15 @@ class MonteCarloMove(Move[_State], ABC):
 
 class MetropolisHastingsMove(MonteCarloMove[_State], ABC):
     @abstractmethod
-    def propose_with_dlogp(self, x: _State) -> Tuple[_State, float]:
-        "return proposed state and its unnormalized log probability"
+    def propose_with_dlogq(self, x: _State) -> Tuple[_State, float]:
+        """Return proposed state and the difference in log unnormalized probability, i.e.
+
+        dlogq = log(q(x_proposed)) - log(q(x))
+        """
 
     def propose(self, x: _State) -> Tuple[_State, float]:
-        proposal, dlogp = self.propose_with_dlogp(x)
-        log_acceptance_probability = np.minimum(dlogp, 0.0)
+        proposal, dlogq = self.propose_with_dlogq(x)
+        log_acceptance_probability = np.minimum(dlogq, 0.0)
         return proposal, log_acceptance_probability
 
 
