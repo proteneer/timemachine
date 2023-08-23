@@ -22,7 +22,14 @@ from timemachine.ff.handlers import openmm_deserializer
 from timemachine.lib import LangevinIntegrator, MonteCarloBarostat, custom_ops
 from timemachine.md import builders, minimizer
 from timemachine.md.barostat.utils import get_bond_list, get_group_indices
-from timemachine.potentials import BoundPotential, HarmonicBond, Nonbonded, NonbondedInteractionGroup, Potential
+from timemachine.potentials import (
+    BoundPotential,
+    HarmonicBond,
+    Nonbonded,
+    NonbondedInteractionGroup,
+    Potential,
+    SummedPotential,
+)
 from timemachine.testsystems.dhfr import setup_dhfr
 from timemachine.testsystems.relative import get_hif2a_ligand_pair_single_topology
 
@@ -494,50 +501,18 @@ def test_nonbonded_interaction_group_potential(hi2fa_test_frames):
         )
 
 
-def test_nonbonded_potential(hi2fa_test_frames):
-    bps, frames, boxes, _ = hi2fa_test_frames
-
-    nonbonded_pot, nonbonded_params = get_nonbonded_pot_params(bps)
-
-    config = BenchmarkConfig(num_batches=2, steps_per_batch=0, verbose=False)
-
-    num_param_batches = 5
-
-    nonbonded_params = np.stack([nonbonded_params] * num_param_batches)
-
-    precisions = [np.float32, np.float64]
-
-    potential = Nonbonded(
-        nonbonded_pot.num_atoms,
-        nonbonded_pot.exclusion_idxs,
-        nonbonded_pot.scale_factors,
-        nonbonded_pot.beta,
-        nonbonded_pot.cutoff,
-    )
-
-    class_name = potential.__class__.__name__
-    for precision in precisions:
-        benchmark_potential(
-            config,
-            class_name,
-            potential,
-            precision,
-            nonbonded_params,
-            frames,
-            boxes,
-        )
-
-
-def test_bonded_potentials(hi2fa_test_frames):
+def test_hif2a_potentials(hi2fa_test_frames):
     bps, frames, boxes, _ = hi2fa_test_frames
 
     config = BenchmarkConfig(num_batches=2, steps_per_batch=0, verbose=False)
 
     num_param_batches = 5
 
-    for bp in bps[:-1]:
+    for bp in bps:
         potential = bp.potential
         class_name = potential.__class__.__name__
+        if isinstance(potential, SummedPotential):
+            class_name += "(" + ", ".join([pot.__class__.__name__ for pot in potential.potentials]) + ")"
         params = np.stack([bp.params] * num_param_batches)
         for precision in [np.float32, np.float64]:
             benchmark_potential(
@@ -574,5 +549,4 @@ if __name__ == "__main__":
     if not args.skip_potentials:
         hif2a_frames = generate_hif2a_frames(1000, 20, seed=2022, barostat_interval=20)
         test_nonbonded_interaction_group_potential(hif2a_frames)
-        test_nonbonded_potential(hif2a_frames)
-        test_bonded_potentials(hif2a_frames)
+        test_hif2a_potentials(hif2a_frames)
