@@ -317,8 +317,68 @@ def benchmark_local(
     )
 
 
-def benchmark_dhfr(verbose: bool = False, num_batches: int = 100, steps_per_batch: int = 1000):
+def run_single_topology_benchmarks(
+    stage: str,
+    st: SingleTopology,
+    host_config: HostConfig,
+    verbose: bool = False,
+    num_batches: int = 100,
+    steps_per_batch: int = 1000,
+):
+    host_fns, host_masses = openmm_deserializer.deserialize_system(host_config.omm_system, cutoff=1.2)
 
+    # resolve host clashes
+    min_host_coords = minimizer.minimize_host_4d([st.mol_a, st.mol_b], host_config, st.ff)
+    x0 = min_host_coords
+    v0 = np.zeros_like(x0)
+
+    for barostat_interval in [0, 25]:
+        benchmark(
+            f"{stage}-apo",
+            host_masses,
+            x0,
+            v0,
+            host_config.box,
+            host_fns,
+            verbose=verbose,
+            num_batches=num_batches,
+            steps_per_batch=steps_per_batch,
+            barostat_interval=barostat_interval,
+        )
+
+    # RBFE
+    initial_state = prepare_hif2a_initial_state(st, host_config)
+
+    barostat_interval = initial_state.barostat.interval
+
+    benchmark(
+        f"{stage}-rbfe",
+        initial_state.integrator.masses,
+        initial_state.x0,
+        initial_state.v0,
+        host_config.box,
+        initial_state.potentials,
+        verbose=verbose,
+        num_batches=num_batches,
+        steps_per_batch=steps_per_batch,
+        barostat_interval=barostat_interval,
+    )
+
+    benchmark_local(
+        f"{stage}-rbfe-local",
+        initial_state.integrator.masses,
+        initial_state.x0,
+        initial_state.v0,
+        host_config.box,
+        initial_state.potentials,
+        initial_state.ligand_idxs,
+        verbose=verbose,
+        num_batches=num_batches,
+        steps_per_batch=steps_per_batch,
+    )
+
+
+def benchmark_dhfr(verbose: bool = False, num_batches: int = 100, steps_per_batch: int = 1000):
     host_fns, host_masses, host_conf, box = setup_dhfr()
 
     x0 = host_conf
@@ -357,7 +417,6 @@ def prepare_hif2a_initial_state(st, host_config):
 
 
 def benchmark_hif2a(verbose: bool = False, num_batches: int = 100, steps_per_batch: int = 1000):
-
     # we use simple charge "sc" to be able to run on machines that don't have openeye licenses.
     mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
     forcefield = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
@@ -365,70 +424,33 @@ def benchmark_hif2a(verbose: bool = False, num_batches: int = 100, steps_per_bat
 
     # build the protein system.
     with resources.path("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as path_to_pdb:
-        complex_system, complex_coords, complex_box, _, complex_num_waters = builders.build_protein_system(
+        host_system, host_coords, host_box, _, host_num_waters = builders.build_protein_system(
             str(path_to_pdb), forcefield.protein_ff, forcefield.water_ff
         )
 
-    solvent_system, solvent_coords, solvent_box, _ = builders.build_water_system(4.0, forcefield.water_ff)
+    # resolve host clashes
+    host_config = HostConfig(host_system, host_coords, host_box, host_num_waters)
 
-    for stage, host_system, host_coords, host_box, num_water_atoms in [
-        ("hif2a", complex_system, complex_coords, complex_box, complex_num_waters),
-        ("solvent", solvent_system, solvent_coords, solvent_box, solvent_coords.shape[0]),
-    ]:
+    run_single_topology_benchmarks(
+        "hif2a", st, host_config, num_batches=num_batches, steps_per_batch=steps_per_batch, verbose=verbose
+    )
 
-        host_fns, host_masses = openmm_deserializer.deserialize_system(host_system, cutoff=1.2)
 
-        # resolve host clashes
-        host_config = HostConfig(host_system, host_coords, host_box, num_water_atoms)
-        min_host_coords = minimizer.minimize_host_4d([st.mol_a, st.mol_b], host_config, st.ff)
+def benchmark_solvent(verbose: bool = False, num_batches: int = 100, steps_per_batch: int = 1000):
+    # we use simple charge "sc" to be able to run on machines that don't have openeye licenses.
+    mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
+    forcefield = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
+    st = SingleTopology(mol_a, mol_b, core, forcefield)
 
-        x0 = min_host_coords
-        v0 = np.zeros_like(x0)
+    host_system, host_coords, host_box, _ = builders.build_water_system(4.0, forcefield.water_ff)
 
-        for barostat_interval in [0, 25]:
-            benchmark(
-                stage + "-apo",
-                host_masses,
-                x0,
-                v0,
-                host_box,
-                host_fns,
-                verbose=verbose,
-                num_batches=num_batches,
-                steps_per_batch=steps_per_batch,
-                barostat_interval=barostat_interval,
-            )
+    num_water_atoms = host_coords.shape[0]
 
-        # RBFE
-        initial_state = prepare_hif2a_initial_state(st, host_config)
-
-        barostat_interval = initial_state.barostat.interval
-
-        benchmark(
-            stage + "-rbfe",
-            initial_state.integrator.masses,
-            initial_state.x0,
-            initial_state.v0,
-            host_box,
-            initial_state.potentials,
-            verbose=verbose,
-            num_batches=num_batches,
-            steps_per_batch=steps_per_batch,
-            barostat_interval=barostat_interval,
-        )
-
-        benchmark_local(
-            stage + "-rbfe-local",
-            initial_state.integrator.masses,
-            initial_state.x0,
-            initial_state.v0,
-            host_box,
-            initial_state.potentials,
-            initial_state.ligand_idxs,
-            verbose=verbose,
-            num_batches=num_batches,
-            steps_per_batch=steps_per_batch,
-        )
+    # resolve host clashes
+    host_config = HostConfig(host_system, host_coords, host_box, num_water_atoms)
+    run_single_topology_benchmarks(
+        "solvent", st, host_config, num_batches=num_batches, steps_per_batch=steps_per_batch, verbose=verbose
+    )
 
 
 def test_dhfr():
@@ -437,6 +459,10 @@ def test_dhfr():
 
 def test_hif2a():
     benchmark_hif2a(verbose=True, num_batches=2, steps_per_batch=100)
+
+
+def test_solvent():
+    benchmark_solvent(verbose=True, num_batches=2, steps_per_batch=100)
 
 
 def get_nonbonded_pot_params(bps):
@@ -536,6 +562,7 @@ if __name__ == "__main__":
     parser.add_argument("--steps_per_batch", default=1000, type=int)
     parser.add_argument("--skip_dhfr", action="store_true")
     parser.add_argument("--skip_hif2a", action="store_true")
+    parser.add_argument("--skip_solvent", action="store_true")
     parser.add_argument("--skip_potentials", action="store_true")
     parser.add_argument("--verbose", action="store_true")
     args = parser.parse_args()
@@ -544,6 +571,8 @@ if __name__ == "__main__":
         benchmark_dhfr(verbose=args.verbose, num_batches=args.num_batches, steps_per_batch=args.steps_per_batch)
     if not args.skip_hif2a:
         benchmark_hif2a(verbose=args.verbose, num_batches=args.num_batches, steps_per_batch=args.steps_per_batch)
+    if not args.skip_solvent:
+        benchmark_solvent(verbose=args.verbose, num_batches=args.num_batches, steps_per_batch=args.steps_per_batch)
 
     if not args.skip_potentials:
         hif2a_frames = generate_hif2a_frames(1000, 20, seed=2022, barostat_interval=20)
