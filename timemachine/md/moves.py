@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
+from dataclasses import dataclass, field
 from functools import partial
-from typing import Any, Generic, List, Tuple, TypeVar
+from typing import Any, Generic, List, Sequence, Tuple, TypeVar
 
 import jax
 import jax.numpy as jnp
@@ -25,10 +26,11 @@ class Move(Generic[_State], ABC):
         ...
 
 
+@dataclass
 class MonteCarloMove(Move[_State], ABC):
-    def __init__(self):
-        self._n_proposed = 0
-        self._n_accepted = 0
+
+    _n_proposed: int = field(default=0, init=False)
+    _n_accepted: int = field(default=0, init=False)
 
     @abstractmethod
     def propose(self, x: _State) -> Tuple[_State, float]:
@@ -47,22 +49,23 @@ class MonteCarloMove(Move[_State], ABC):
             return x
 
     @property
-    def n_proposed(self):
+    def n_proposed(self) -> int:
         return self._n_proposed
 
     @property
-    def n_accepted(self):
+    def n_accepted(self) -> int:
         return self._n_accepted
 
     @property
-    def acceptance_fraction(self):
+    def acceptance_fraction(self) -> float:
         return self._n_accepted / self._n_proposed if self._n_proposed else np.nan
 
 
-class CompoundMove(Move):
-    def __init__(self, moves: List[MonteCarloMove]):
-        """Apply each of a list of moves in sequence"""
-        self.moves = moves
+@dataclass
+class CompoundMove(Move[_State]):
+    """Apply each of a list of moves in sequence"""
+
+    moves: Sequence[MonteCarloMove[_State]]
 
     def move(self, x: _State) -> _State:
         for individual_move in self.moves:
@@ -70,12 +73,12 @@ class CompoundMove(Move):
         return x
 
     @property
-    def n_accepted_by_move(self):
-        return np.array([m._n_accepted for m in self.moves])
+    def n_accepted_by_move(self) -> List[float]:
+        return [m._n_accepted for m in self.moves]
 
     @property
-    def n_proposed_by_move(self):
-        return np.array([m._n_proposed for m in self.moves])
+    def n_proposed_by_move(self) -> List[float]:
+        return [m._n_proposed for m in self.moves]
 
 
 class NVTMove(Move[CoordsVelBox]):
