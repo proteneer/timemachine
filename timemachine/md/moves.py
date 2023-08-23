@@ -60,6 +60,17 @@ class MonteCarloMove(Move[_State], ABC):
         return self._n_accepted / self._n_proposed if self._n_proposed else np.nan
 
 
+class MetropolisHastingsMove(MonteCarloMove[_State], ABC):
+    @abstractmethod
+    def propose_with_dlogp(self, x: _State) -> Tuple[_State, float]:
+        "return proposed state and its unnormalized log probability"
+
+    def propose(self, x: _State) -> Tuple[_State, float]:
+        proposal, dlogp = self.propose_with_dlogp(x)
+        log_acceptance_probability = np.minimum(dlogp, 0.0)
+        return proposal, log_acceptance_probability
+
+
 @dataclass
 class CompoundMove(Move[_State]):
     """Apply each of a list of moves in sequence"""
