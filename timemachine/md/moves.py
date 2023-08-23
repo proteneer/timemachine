@@ -27,8 +27,8 @@ class Move(Generic[_State], ABC):
 
 class MonteCarloMove(Move[_State], ABC):
     def __init__(self):
-        self.n_proposed = 0
-        self.n_accepted = 0
+        self._n_proposed = 0
+        self._n_accepted = 0
 
     @abstractmethod
     def propose(self, x: _State) -> Tuple[_State, float]:
@@ -36,19 +36,27 @@ class MonteCarloMove(Move[_State], ABC):
 
     def move(self, x: _State) -> _State:
         proposal, log_acceptance_probability = self.propose(x)
-        self.n_proposed += 1
+        self._n_proposed += 1
 
         alpha = np.random.rand()
         acceptance_probability = np.exp(log_acceptance_probability)
         if alpha < acceptance_probability:
-            self.n_accepted += 1
+            self._n_accepted += 1
             return proposal
         else:
             return x
 
     @property
+    def n_proposed(self):
+        return self._n_proposed
+
+    @property
+    def n_accepted(self):
+        return self._n_accepted
+
+    @property
     def acceptance_fraction(self):
-        return self.n_accepted / self.n_proposed if self.n_proposed else np.nan
+        return self._n_accepted / self._n_proposed if self._n_proposed else np.nan
 
 
 class CompoundMove(Move):
@@ -63,11 +71,11 @@ class CompoundMove(Move):
 
     @property
     def n_accepted_by_move(self):
-        return np.array([m.n_accepted for m in self.moves])
+        return np.array([m._n_accepted for m in self.moves])
 
     @property
     def n_proposed_by_move(self):
-        return np.array([m.n_proposed for m in self.moves])
+        return np.array([m._n_proposed for m in self.moves])
 
 
 class NVTMove(Move[CoordsVelBox]):
@@ -144,15 +152,23 @@ class NPTMove(NVTMove):
 class DeterministicMTMMove(Move):
     def __init__(self, rng_key):
         self.rng_key = rng_key
-        self.n_proposed = 0
-        self.n_accepted = 0
+        self._n_proposed = 0
+        self._n_accepted = 0
+
+    @property
+    def n_proposed(self):
+        return self._n_proposed
+
+    @property
+    def n_accepted(self):
+        return self._n_accepted
 
     @abstractmethod
     def acceptance_probability(self, x, box, key) -> Tuple[Any, Any, Any]:
         pass
 
     def move(self, xvb: CoordsVelBox) -> CoordsVelBox:
-        self.n_proposed += 1
+        self._n_proposed += 1
         y_proposed, acceptance_probability, key = self.acceptance_probability(xvb.coords, xvb.box, self.rng_key)
         # this may not be strictly necessary since the acceptance_probability should split the keys internally
         # but it never hurts to do an extra split.
@@ -161,7 +177,7 @@ class DeterministicMTMMove(Move):
         _, key = jrandom.split(key)
         self.rng_key = key
         if alpha < acceptance_probability:
-            self.n_accepted += 1
+            self._n_accepted += 1
             return CoordsVelBox(y_proposed, xvb.velocities, xvb.box)
         else:
             return xvb
@@ -194,8 +210,6 @@ class OptimizedMTMMove(DeterministicMTMMove):
 
         """
         self.K = K
-        self.n_accepted = 0
-        self.n_proposed = 0
         self.batch_proposal_fn = batch_proposal_fn
         self.batched_log_weights_fn = batched_log_weights_fn
         super().__init__(jrandom.PRNGKey(seed))
@@ -253,8 +267,6 @@ class ReferenceMTMMove(DeterministicMTMMove):
 
         """
         self.K = K
-        self.n_accepted = 0
-        self.n_proposed = 0
         self.batch_proposal_fn = batch_proposal_fn
         self.batch_log_Q_fn = batch_log_Q_fn
         self.batch_log_pi_fn = batch_log_pi_fn
