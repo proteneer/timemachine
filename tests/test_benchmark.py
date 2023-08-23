@@ -20,7 +20,7 @@ from timemachine.fe.single_topology import SingleTopology
 from timemachine.ff import Forcefield
 from timemachine.ff.handlers import openmm_deserializer
 from timemachine.lib import LangevinIntegrator, MonteCarloBarostat, custom_ops
-from timemachine.md import builders, minimizer
+from timemachine.md import builders
 from timemachine.md.barostat.utils import get_bond_list, get_group_indices
 from timemachine.potentials import (
     BoundPotential,
@@ -337,9 +337,9 @@ def run_single_topology_benchmarks(
 ):
     host_fns, host_masses = openmm_deserializer.deserialize_system(host_config.omm_system, cutoff=1.2)
 
-    # resolve host clashes
-    min_host_coords = minimizer.minimize_host_4d([st.mol_a, st.mol_b], host_config, st.ff)
-    x0 = min_host_coords
+    # RBFE
+    initial_state = prepare_hif2a_initial_state(st, host_config)
+    x0 = initial_state.x0[: len(host_config.conf)]
     v0 = np.zeros_like(x0)
 
     for barostat_interval in [0, 25]:
@@ -353,9 +353,6 @@ def run_single_topology_benchmarks(
             host_fns,
             barostat_interval=barostat_interval,
         )
-
-    # RBFE
-    initial_state = prepare_hif2a_initial_state(st, host_config)
 
     barostat_interval = initial_state.barostat.interval
 
