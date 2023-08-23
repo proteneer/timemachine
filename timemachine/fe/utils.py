@@ -145,17 +145,19 @@ def score_2d(conf, norm=2):
     return score / len(conf)
 
 
-def generate_good_rotations(mol_a, mol_b, num_rotations=3, max_rotations=1000):
+def generate_good_rotations(mol_a, mol_b, num_rotations=3, max_rotations=1000, seed=1234):
     assert num_rotations < max_rotations
 
     # generate some good rotations so that the viewing angle is pleasant, (so clashes are minimized):
     conf_a = get_romol_conf(mol_a)
     conf_b = get_romol_conf(mol_b)
 
+    unif_so3 = special_ortho_group(dim=3, seed=seed)
+
     scores = []
     rotations = []
     for _ in range(max_rotations):
-        r = special_ortho_group.rvs(3)
+        r = unif_so3.rvs()
         score_a = score_2d(conf_a @ r.T)
         score_b = score_2d(conf_b @ r.T)
         # take the bigger of the two scores
@@ -181,11 +183,11 @@ def rotate_mol(mol, rotation_matrix):
     return mol_copy
 
 
-def plot_atom_mapping_grid(mol_a, mol_b, core, num_rotations=5):
+def plot_atom_mapping_grid(mol_a, mol_b, core, num_rotations=5, seed=1234):
     mol_a_3d = recenter_mol(mol_a)
     mol_b_3d = recenter_mol(mol_b)
 
-    extra_rotations = generate_good_rotations(mol_a, mol_b, num_rotations)
+    extra_rotations = generate_good_rotations(mol_a, mol_b, num_rotations, seed=seed)
 
     extra_mols = []
 
