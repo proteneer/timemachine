@@ -84,7 +84,7 @@ class MetropolisHastingsMove(MonteCarloMove[_State], ABC):
 
 
 class CompoundMove(Move[_State]):
-    """Apply each of a list of moves in sequence"""
+    """Apply each of a list of MonteCarloMoves in sequence"""
 
     def __init__(self, moves: Sequence[MonteCarloMove[_State]]):
         self.moves = moves
