@@ -14,15 +14,15 @@ def test_rwmh():
     dx = 0.1
 
     class RWMH1D(MetropolisHastingsMove[float]):
-        def propose_with_dlogq(self, x: float) -> Tuple[float, float]:
+        def propose_with_log_q_diff(self, x: float) -> Tuple[float, float]:
             x_prop = x + np.random.uniform(-dx, dx)
 
             def log_q(x):
                 return -(x ** 2) / 2
 
-            dlogq = log_q(x_prop) - log_q(x)
+            log_q_diff = log_q(x_prop) - log_q(x)
 
-            return x_prop, dlogq
+            return x_prop, log_q_diff
 
     rwmh = RWMH1D()
     x_0 = np.random.uniform(-1.0, 1.0)
