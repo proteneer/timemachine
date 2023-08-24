@@ -6,7 +6,7 @@ from scipy.stats import ks_2samp
 from timemachine.md.moves import MetropolisHastingsMove
 
 
-def test_rwmh():
+def test_random_walk_metropolis_hastings():
     """Test sampling from a 1-d normal distribution using Random Walk Metropolis-Hastings"""
 
     np.random.seed(2023)
