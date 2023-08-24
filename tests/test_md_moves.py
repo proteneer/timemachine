@@ -29,22 +29,22 @@ def test_random_walk_metropolis_hastings(dist, seed):
     n_samples = 200_000
     dx = 0.1
 
+    # estimate autocorrelation time, number of independent samples
+    tau = round(2 / dx ** 2)
+    n_independent_samples = n_samples // tau
+
     if dist == "normal":
         log_q = lambda x: -(x ** 2) / 2
-        sample_target = lambda n: np.random.normal(0, 1, size=(n,))
+        target_samples = np.random.normal(0, 1, size=(n_independent_samples,))
     else:
         log_q = lambda x: 0.0 if -1 < x < 1 else -float("inf")
-        sample_target = lambda n: np.random.uniform(-1, 1, size=(n,))
+        target_samples = np.random.uniform(-1, 1, size=(n_independent_samples,))
 
     sampler = RWMH1D(log_q, dx)
     x_0 = np.random.uniform(-1.0, 1.0)
-
     rw_samples = sampler.sample_chain(x_0, n_samples)
 
-    tau = round(2 / dx ** 2)
-    decorrelated_rw_samples = rw_samples[tau::tau]
-
-    target_samples = sample_target(len(decorrelated_rw_samples))
+    decorrelated_rw_samples = rw_samples[::tau]
 
     _, pvalue = ks_2samp(decorrelated_rw_samples, target_samples)
 
