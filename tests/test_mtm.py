@@ -11,7 +11,8 @@ from timemachine import testsystems
 from timemachine.constants import BOLTZ
 from timemachine.ff import Forcefield
 from timemachine.md import enhanced
-from timemachine.md.moves import NPTMove, OptimizedMTMMove, ReferenceMTMMove
+from timemachine.md.barostat.moves import NPTMove
+from timemachine.md.moves import OptimizedMTMMove, ReferenceMTMMove
 from timemachine.md.states import CoordsVelBox
 from timemachine.potentials import NonbondedInteractionGroup, nonbonded
 
