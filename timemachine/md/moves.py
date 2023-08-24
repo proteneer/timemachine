@@ -26,11 +26,13 @@ class Move(Generic[_State], ABC):
         ...
 
     def sample_chain_iter(self, x: _State) -> Iterator[_State]:
+        """Given an initial state, returns an iterator over an infinite sequence of samples"""
         while True:
             x = self.move(x)
             yield x
 
     def sample_chain(self, x: _State, n_samples: int) -> List[_State]:
+        """Given an initial state and number of samples, returns a finite sequence of samples"""
         return list(islice(self.sample_chain_iter(x), n_samples))
 
 
