@@ -322,3 +322,79 @@ def plot_fwd_reverse_predictions(
     plot_png = buffer.read()
 
     return plot_png
+
+
+def plot_hrex_swap_acceptance_rates(swap_acceptance_rates: NDArray):
+    _, ax = plt.subplots()
+    ax.plot(swap_acceptance_rates, ".-")
+    ax.axhline(1.0, linestyle="--", color="gray")
+    ax.set_ylim(0, 1.1)
+    ax.set_xlabel(r"left state index")
+    ax.set_ylabel(r"swap acceptance rate")
+    ax.xaxis.get_major_locator().set_params(integer=True)
+
+
+def plot_hrex_swap_acceptance_rates_convergence(cumulative_swap_acceptance_rates: NDArray):
+    _, ax = plt.subplots()
+    ax.plot(cumulative_swap_acceptance_rates)
+    ax.axhline(1.0, linestyle="--", color="gray")
+    ax.set_ylim(0, 1.1)
+    ax.set_xlabel("iteration")
+    ax.set_ylabel("cumulative swap acceptance rate")
+    ax.xaxis.get_major_locator().set_params(integer=True)
+    ax.legend(labels=[str(i) for i in range(cumulative_swap_acceptance_rates.shape[0])], title="left state index")
+
+
+def plot_hrex_replica_state_distribution(cumulative_replica_state_counts: NDArray):
+
+    n_iters, _, n_states = cumulative_replica_state_counts.shape
+    replica_state_counts = cumulative_replica_state_counts[-1]
+    density_by_replica = replica_state_counts / n_iters  # (replica, state) -> float
+
+    bottom = np.zeros(n_states)
+    _, ax = plt.subplots()
+    for replica_idx, density in enumerate(density_by_replica):
+        ax.bar(np.arange(n_states), density, bottom=bottom, width=0.5, label=str(replica_idx))
+        bottom += density
+
+    ax.set_xlabel("state")
+    ax.set_ylabel("fraction of iterations")
+    ax.xaxis.get_major_locator().set_params(integer=True)
+    ax.legend(title="replica")
+
+
+def plot_hrex_replica_state_distribution_heatmap(cumulative_replica_state_counts: NDArray):
+    n_iters, _, n_states = cumulative_replica_state_counts.shape
+    replica_state_counts = cumulative_replica_state_counts[-1]
+    density_by_replica = replica_state_counts / n_iters  # (replica, state) -> float
+
+    fig, ax = plt.subplots()
+    p = ax.pcolor(np.arange(n_states), np.arange(n_states), density_by_replica.T, vmin=0.0, vmax=1.0)
+    ax.set_xlabel("replica")
+    ax.set_ylabel("state")
+    ax.xaxis.get_major_locator().set_params(integer=True)
+    ax.yaxis.get_major_locator().set_params(integer=True)
+    fig.colorbar(p, label="density")
+
+
+def plot_hrex_replica_state_distribution_convergence(cumulative_replica_state_counts: NDArray):
+
+    n_iters, _, n_states = cumulative_replica_state_counts.shape
+    cumulative_density = (
+        cumulative_replica_state_counts / np.arange(n_iters)[:, None, None]
+    )  # (iter, replica, state) -> float
+    cumulative_density_by_replica = np.swapaxes(cumulative_density, 0, 1)  # (replica, iter, state) -> float
+
+    fig, axs = plt.subplots(nrows=n_states)
+
+    for replica_idx, (density, ax) in enumerate(zip(cumulative_density_by_replica, axs)):
+        p = ax.pcolor(np.arange(n_iters), np.arange(n_states), density.T, vmin=0.0, vmax=1.0)
+        ax.set_xlabel("iteration")
+        ax.set_ylabel("state")
+        ax.set_title(f"replica = {replica_idx}")
+        ax.xaxis.get_major_locator().set_params(integer=True)
+        ax.yaxis.get_major_locator().set_params(integer=True)
+
+    fig.subplots_adjust(right=0.8)
+    cbar_ax = fig.add_axes([0.85, 0.15, 0.05, 0.7])
+    fig.colorbar(p, cax=cbar_ax, label="density")
