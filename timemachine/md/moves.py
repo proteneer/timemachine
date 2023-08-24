@@ -1,5 +1,4 @@
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
 from functools import partial
 from itertools import islice
 from typing import Any, Generic, Iterator, List, Sequence, Tuple, TypeVar
@@ -36,11 +35,10 @@ class Move(Generic[_State], ABC):
         return list(islice(self.sample_chain_iter(x), n_samples))
 
 
-@dataclass
 class MonteCarloMove(Move[_State], ABC):
-
-    _n_proposed: int = field(default=0, init=False)
-    _n_accepted: int = field(default=0, init=False)
+    def __init__(self):
+        self._n_proposed = 0
+        self._n_accepted = 0
 
     @abstractmethod
     def propose(self, x: _State) -> Tuple[_State, float]:
@@ -85,11 +83,11 @@ class MetropolisHastingsMove(MonteCarloMove[_State], ABC):
         return proposal, log_acceptance_probability
 
 
-@dataclass
 class CompoundMove(Move[_State]):
     """Apply each of a list of moves in sequence"""
 
-    moves: Sequence[MonteCarloMove[_State]]
+    def __init__(self, moves: Sequence[MonteCarloMove[_State]]):
+        self.moves = moves
 
     def move(self, x: _State) -> _State:
         for individual_move in self.moves:
