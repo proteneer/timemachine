@@ -32,13 +32,13 @@ def test_random_walk_metropolis_hastings(dist, seed):
     tau = round(1 / dx ** 2)
     n_independent_samples = n_samples // tau - 1
 
-    d_log_q = np.random.uniform(-1.0, 1.0)  # arbitrary offset added to log_q
+    log_q_offset = np.random.uniform(-1.0, 1.0)  # arbitrary offset added to log_q
 
     if dist == "normal":
-        log_q = lambda x: -(x ** 2) / 2 + d_log_q
+        log_q = lambda x: -(x ** 2) / 2 + log_q_offset
         target_samples = np.random.normal(0, 1, size=(n_independent_samples,))
     else:
-        log_q = lambda x: d_log_q if -1 < x < 1 else -float("inf")
+        log_q = lambda x: log_q_offset if -1 < x < 1 else -float("inf")
         target_samples = np.random.uniform(-1, 1, size=(n_independent_samples,))
 
     sampler = RWMH1D(log_q, dx)
