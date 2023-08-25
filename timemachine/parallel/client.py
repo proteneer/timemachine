@@ -5,7 +5,7 @@ import pickle
 from abc import ABC, abstractmethod
 from concurrent import futures
 from pathlib import Path
-from typing import Any, List, Optional
+from typing import Any, Iterator, List, Optional, Sequence
 from uuid import uuid4
 
 from timemachine.parallel.utils import get_gpu_count
@@ -362,3 +362,18 @@ def save_results(result_paths: List[str], local_file_client: FileClient, remote_
     for result_path in result_paths:
         if not local_file_client.exists(result_path):
             local_file_client.store(result_path, remote_file_client.load(result_path))
+
+
+def iterate_completed_futures(futures: Sequence[BaseFuture]) -> Iterator[BaseFuture]:
+    """Given a set of futures, return an iterator of futures whose `done()` function returns True.
+
+    Useful for when the results of the futures take different amounts of time
+    """
+    while len(futures) > 0:
+        leftover = []
+        for fut in futures:
+            if fut.done():
+                yield fut
+            else:
+                leftover.append(fut)
+        futures = leftover

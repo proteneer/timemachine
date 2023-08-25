@@ -2,6 +2,7 @@
 import io
 import os
 import pickle
+import time
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -31,6 +32,37 @@ def mult(x, y):
 
 def sum(*args, **kwargs):
     return args[0] + kwargs["key"]
+
+
+class DummyFuture(client.BaseFuture):
+    """A future that if you don't call done several times, the result() method will sleep"""
+
+    def __init__(self, iterations: int):
+        self.count = 0
+        self.iterations = iterations
+
+    def _ready(self):
+        return self.count > self.iterations
+
+    def result(self) -> str:
+        if not self._ready():
+            time.sleep(2)
+        return "finished"
+
+    def done(self) -> bool:
+        if not self._ready():
+            self.count += 1
+            return False
+        else:
+            return True
+
+    @property
+    def id(self) -> str:
+        return "a"
+
+    @property
+    def name(self) -> str:
+        return "a"
 
 
 class TestProcessPool(unittest.TestCase):
@@ -202,3 +234,21 @@ def test_save_results(tmpdir):
         for result_path in result_paths:
             assert lfc.exists(result_path)
             assert Path("local", result_path).exists()
+
+
+def test_iterate_completed_futures():
+    iterations = 5
+    fut = DummyFuture(iterations)
+    start = time.time()
+    fut.result()
+    # If we call result directly, will take ~2 seconds
+    assert time.time() - start > 1
+
+    futures = [DummyFuture(iterations) for _ in range(iterations)]
+    # If we iterate through the completed, should take nearly no time
+    start = time.time()
+    completed_futures = list(client.iterate_completed_futures(futures))
+    assert len(completed_futures) == len(futures), "Didn't get back the same number of futures"
+    for fut in completed_futures:
+        fut.result()
+    assert time.time() - start < 1
