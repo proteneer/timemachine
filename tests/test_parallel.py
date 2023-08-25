@@ -2,7 +2,6 @@
 import io
 import os
 import pickle
-import time
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -35,7 +34,7 @@ def sum(*args, **kwargs):
 
 
 class DummyFuture(client.BaseFuture):
-    """A future that if you don't call done several times, the result() method will sleep"""
+    """A future that if you don't call done until it return True, it will raise an exception on `result()`"""
 
     def __init__(self, iterations: int):
         self.count = 0
@@ -46,7 +45,7 @@ class DummyFuture(client.BaseFuture):
 
     def result(self) -> str:
         if not self._ready():
-            time.sleep(2)
+            raise RuntimeError("called result before ready!")
         return "finished"
 
     def done(self) -> bool:
@@ -238,17 +237,13 @@ def test_save_results(tmpdir):
 
 def test_iterate_completed_futures():
     iterations = 5
+    # Dummy future will raise an error if you call result before `done()` is True
     fut = DummyFuture(iterations)
-    start = time.time()
-    fut.result()
-    # If we call result directly, will take ~2 seconds
-    assert time.time() - start > 1
+    with pytest.raises(RuntimeError):
+        fut.result()
 
     futures = [DummyFuture(iterations) for _ in range(iterations)]
-    # If we iterate through the completed, should take nearly no time
-    start = time.time()
     completed_futures = list(client.iterate_completed_futures(futures))
     assert len(completed_futures) == len(futures), "Didn't get back the same number of futures"
     for fut in completed_futures:
         fut.result()
-    assert time.time() - start < 1
