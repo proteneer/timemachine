@@ -335,6 +335,7 @@ def plot_hrex_swap_acceptance_rates(swap_acceptance_rates: NDArray):
 
 
 def plot_hrex_swap_acceptance_rates_convergence(cumulative_swap_acceptance_rates: NDArray):
+    _, n_pairs = cumulative_swap_acceptance_rates.shape
     _, ax = plt.subplots()
     ax.plot(cumulative_swap_acceptance_rates)
     ax.axhline(1.0, linestyle="--", color="gray")
@@ -342,7 +343,7 @@ def plot_hrex_swap_acceptance_rates_convergence(cumulative_swap_acceptance_rates
     ax.set_xlabel("iteration")
     ax.set_ylabel("cumulative swap acceptance rate")
     ax.xaxis.get_major_locator().set_params(integer=True)
-    ax.legend(labels=[str(i) for i in range(cumulative_swap_acceptance_rates.shape[0])], title="left state index")
+    ax.legend(labels=[str(i) for i in range(n_pairs)], title="left state index")
 
 
 def plot_hrex_replica_state_distribution(cumulative_replica_state_counts: NDArray):
