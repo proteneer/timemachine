@@ -196,7 +196,7 @@ def setup_initial_states(
         Random number seed
 
     min_cutoff: float, optional
-        throw error if any atom moves more than this distance (nm) after minimization
+        Throw error if any atom moves more than this distance (nm) after minimization
 
     Returns
     -------
@@ -304,7 +304,7 @@ def optimize_coordinates(initial_states, min_cutoff=0.7) -> List[NDArray]:
     initial_states: list of InitialState
 
     min_cutoff: float, optional
-        throw error if any atom moves more than this distance (nm) after minimization
+        Throw error if any atom moves more than this distance (nm) after minimization
 
     Returns
     -------
@@ -404,7 +404,7 @@ def estimate_relative_free_energy(
         equilibration steps with seed 2023.
 
     min_cutoff: float, optional
-        throw error if any atom moves more than this distance (nm) after minimization
+        Throw error if any atom moves more than this distance (nm) after minimization
 
     Returns
     -------
@@ -477,7 +477,11 @@ def estimate_relative_free_energy_bisection(
     host_config: HostConfig or None
         Configuration for the host system. If None, then the vacuum leg is run.
 
-    prefix: str
+    md_params: MDParams, optional
+        Parameters for the equilibration and production MD. Defaults to 400 global steps per frame, 1000 frames and 10k
+        equilibration steps with seed 2023.
+
+    prefix: str, optional
         A prefix to append to figures
 
     lambda_interval: (float, float) or None, optional
@@ -491,18 +495,14 @@ def estimate_relative_free_energy_bisection(
 
     min_overlap: float or None, optional
         If not None, terminate bisection early when the BAR overlap between all neighboring pairs of states exceeds this
-        value
+        value. When given, the final number of windows may be less than or equal to n_windows.
 
     keep_idxs: list of int or None, optional
         If None, return only the end-state frames. Otherwise if not None (typically for debugging), return frames from
         windows corresponding to the specified indices.
 
-    md_params: MDParams
-        Parameters for the equilibration and production MD. Defaults to 400 global steps per frame, 1000 frames and 10k
-        equilibration steps with seed 2023.
-
-    min_cutoff: float, optional
-        throw error if any atom moves more than this distance (nm) after minimization
+    min_cutoff: float or None, optional
+        Throw error if any atom moves more than this distance (nm) after minimization
 
     Returns
     -------
