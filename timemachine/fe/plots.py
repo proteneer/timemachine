@@ -389,7 +389,7 @@ def plot_hrex_replica_state_distribution_convergence(cumulative_replica_state_co
         fraction_by_iter_by_replica_by_state, 0, 1
     )  # (replica, iter, state) -> float
 
-    fig, axs = plt.subplots(nrows=n_states)
+    fig, axs = plt.subplots(nrows=n_states, figsize=(6.4, 2.4 * n_states))
 
     for replica_idx, (fraction_by_iter_by_state, ax) in enumerate(zip(fraction_by_replica_by_iter_by_state, axs)):
         p = ax.pcolor(np.arange(n_iters), np.arange(n_states), fraction_by_iter_by_state.T, vmin=0.0, vmax=1.0)
@@ -399,6 +399,6 @@ def plot_hrex_replica_state_distribution_convergence(cumulative_replica_state_co
         ax.xaxis.get_major_locator().set_params(integer=True)
         ax.yaxis.get_major_locator().set_params(integer=True)
 
-    fig.subplots_adjust(right=0.8)
+    fig.subplots_adjust(right=0.8, hspace=0.5)
     cbar_ax = fig.add_axes([0.85, 0.15, 0.05, 0.7])
     fig.colorbar(p, cax=cbar_ax, label="fraction of iterations")
