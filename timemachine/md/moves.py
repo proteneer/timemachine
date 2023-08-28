@@ -69,18 +69,6 @@ class MonteCarloMove(Move[_State], ABC):
         return self._n_accepted / self._n_proposed if self._n_proposed else np.nan
 
 
-class Identity(MonteCarloMove[_State]):
-    """Move that leaves the state unchanged and is always accepted"""
-
-    def move(self, x: _State) -> _State:
-        self._n_proposed += 1
-        self._n_accepted += 1
-        return x
-
-    def propose(self, x: _State) -> Tuple[_State, float]:
-        return x, 0.0
-
-
 class MetropolisHastingsMove(MonteCarloMove[_State], ABC):
     @abstractmethod
     def propose_with_log_q_diff(self, x: _State) -> Tuple[_State, float]:
