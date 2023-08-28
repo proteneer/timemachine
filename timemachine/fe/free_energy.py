@@ -734,15 +734,7 @@ def run_sims_hrex(
 ) -> Tuple[PairBarResult, List[StoredArrays], List[NDArray], HrexDiagnostics]:
     r"""Sample from a sequence of states using nearest-neighbor Hamiltonian Replica EXchange (HREX).
 
-    This implementation uses a method described in [1] (in section III.B.2) to generate effectively uncorrelated
-    permutations by attempting many consecutive nearest-neighbor swap moves. By default, the number of swap moves is
-    determined as a function of the number of states (:math:`K`) as :math`N_{\text{swaps}} = K^4`, a heuristic also
-    described in [1].
-
-    References
-    ----------
-    [1]: http://dx.doi.org/10.1063/1.3660669
-
+    See documentation for :py:func:`timemachine.md.hrex.run_hrex` for details of the algorithm and implementation.
 
     Parameters
     ----------
