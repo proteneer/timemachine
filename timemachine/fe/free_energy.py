@@ -807,6 +807,11 @@ def run_sims_hrex(
 
     state_idxs = [StateIdx(i) for i, _ in enumerate(lambdas)]
     neighbor_pairs = list(zip(state_idxs, state_idxs[1:]))
+
+    # Add (0, 0) to the list of neighbor pairs considered for swap moves to ensure that performing a fixed number of
+    # neighbor swaps is aperiodic in cases where swap acceptance rates approach 100%
+    neighbor_pairs = [(StateIdx(0), StateIdx(0))] + neighbor_pairs
+
     hrex = Hrex.from_replicas(replicas)
 
     def get_equilibrated_initial_state(initial_state: InitialState, seed: int) -> InitialState:
