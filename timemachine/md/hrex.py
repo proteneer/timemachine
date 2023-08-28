@@ -4,7 +4,7 @@ from typing import Callable, Generic, List, NewType, Optional, Sequence, Tuple, 
 import numpy as np
 from numpy.typing import NDArray
 
-from timemachine.md.moves import Choice, Identity, MetropolisHastingsMove, MonteCarloMove
+from timemachine.md.moves import Identity, MetropolisHastingsMove, MixtureOfMoves, MonteCarloMove
 from timemachine.utils import batches
 
 _Replica = TypeVar("_Replica")
@@ -74,7 +74,7 @@ class Hrex(Generic[_Replica]):
         # nothing. The latter is included as a workaround for slow mixing when neighboring pairs have a near 100% swap
         # acceptance rate.
         identity: MonteCarloMove[List[ReplicaIdx]] = Identity()
-        move = Choice([NeighborSwapMove(log_q, s_a, s_b) for s_a, s_b in neighbor_pairs] + [identity])
+        move = MixtureOfMoves([NeighborSwapMove(log_q, s_a, s_b) for s_a, s_b in neighbor_pairs] + [identity])
 
         replica_idx_by_state = list(self.replica_idx_by_state)
         for _ in range(n_swap_attempts):

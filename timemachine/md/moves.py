@@ -108,7 +108,7 @@ class CompoundMove(Move[_State]):
         return [m._n_proposed for m in self.moves]
 
 
-class Choice(CompoundMove[_State]):
+class MixtureOfMoves(CompoundMove[_State]):
     """Apply a single move uniformly selected from a list"""
 
     def __init__(self, moves: Sequence[MonteCarloMove[_State]]):
@@ -121,7 +121,7 @@ class Choice(CompoundMove[_State]):
         return x
 
 
-class Sequential(CompoundMove[_State]):
+class SequenceOfMoves(CompoundMove[_State]):
     """Apply each of a list of MonteCarloMoves in sequence"""
 
     def __init__(self, moves: Sequence[MonteCarloMove[_State]]):
