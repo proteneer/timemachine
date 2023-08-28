@@ -78,9 +78,6 @@ class Hrex(Generic[_Replica]):
 
         fraction_accepted_by_pair = list(zip(move.n_accepted_by_move, move.n_proposed_by_move))
 
-        # Omit stats for the identity move (which is always accepted)
-        fraction_accepted_by_pair = fraction_accepted_by_pair[:-1]
-
         return Hrex(self.replicas, replica_idx_by_state), fraction_accepted_by_pair
 
     @property
