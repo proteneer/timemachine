@@ -347,17 +347,16 @@ def plot_hrex_swap_acceptance_rates_convergence(cumulative_swap_acceptance_rates
 
 
 def plot_hrex_replica_state_distribution(cumulative_replica_state_counts: NDArray):
-
-    n_iters, _, n_states = cumulative_replica_state_counts.shape
-    replica_state_counts = cumulative_replica_state_counts[-1]
-    density_by_replica = replica_state_counts / n_iters  # (replica, state) -> float
-    density_by_state = density_by_replica.T  # (state, replica) -> float
+    n_iters, n_replicas, n_states = cumulative_replica_state_counts.shape
+    count_by_replica_by_state = cumulative_replica_state_counts[-1]  # (replica, state) -> int
+    fraction_by_replica_by_state = count_by_replica_by_state / n_iters  # (replica, state) -> float
+    fraction_by_state_by_replica = fraction_by_replica_by_state.T  # (state, replica) -> float
 
     bottom = np.zeros(n_states)
     _, ax = plt.subplots()
-    for state_idx, density in enumerate(density_by_state):
-        ax.bar(np.arange(n_states), density, bottom=bottom, width=0.5, label=str(state_idx))
-        bottom += density
+    for state_idx, fraction_by_state in enumerate(fraction_by_state_by_replica):
+        ax.bar(np.arange(n_replicas), fraction_by_state, bottom=bottom, width=0.5, label=str(state_idx))
+        bottom += fraction_by_state
 
     ax.set_xlabel("replica")
     ax.set_ylabel("fraction of iterations")
@@ -366,31 +365,34 @@ def plot_hrex_replica_state_distribution(cumulative_replica_state_counts: NDArra
 
 
 def plot_hrex_replica_state_distribution_heatmap(cumulative_replica_state_counts: NDArray):
-    n_iters, _, n_states = cumulative_replica_state_counts.shape
-    replica_state_counts = cumulative_replica_state_counts[-1]
-    density_by_replica = replica_state_counts / n_iters  # (replica, state) -> float
+    n_iters, n_replicas, n_states = cumulative_replica_state_counts.shape
+    count_by_replica_by_state = cumulative_replica_state_counts[-1]  # (replica, state) -> int
+    fraction_by_replica_by_state = count_by_replica_by_state / n_iters  # (replica, state) -> float
+    fraction_by_state_by_replica = fraction_by_replica_by_state.T  # (state, replica) -> float
 
     fig, ax = plt.subplots()
-    p = ax.pcolor(np.arange(n_states), np.arange(n_states), density_by_replica.T, vmin=0.0, vmax=1.0)
+    p = ax.pcolor(np.arange(n_replicas), np.arange(n_states), fraction_by_state_by_replica, vmin=0.0, vmax=1.0)
     ax.set_xlabel("replica")
     ax.set_ylabel("state")
     ax.xaxis.get_major_locator().set_params(integer=True)
     ax.yaxis.get_major_locator().set_params(integer=True)
-    fig.colorbar(p, label="density")
+    fig.colorbar(p, label="fraction of iterations")
 
 
 def plot_hrex_replica_state_distribution_convergence(cumulative_replica_state_counts: NDArray):
 
     n_iters, _, n_states = cumulative_replica_state_counts.shape
-    cumulative_density = (
+    fraction_by_iter_by_replica_by_state = (
         cumulative_replica_state_counts / np.arange(n_iters)[:, None, None]
     )  # (iter, replica, state) -> float
-    cumulative_density_by_replica = np.swapaxes(cumulative_density, 0, 1)  # (replica, iter, state) -> float
+    fraction_by_replica_by_iter_by_state = np.swapaxes(
+        fraction_by_iter_by_replica_by_state, 0, 1
+    )  # (replica, iter, state) -> float
 
     fig, axs = plt.subplots(nrows=n_states)
 
-    for replica_idx, (density, ax) in enumerate(zip(cumulative_density_by_replica, axs)):
-        p = ax.pcolor(np.arange(n_iters), np.arange(n_states), density.T, vmin=0.0, vmax=1.0)
+    for replica_idx, (fraction_by_iter_by_state, ax) in enumerate(zip(fraction_by_replica_by_iter_by_state, axs)):
+        p = ax.pcolor(np.arange(n_iters), np.arange(n_states), fraction_by_iter_by_state.T, vmin=0.0, vmax=1.0)
         ax.set_xlabel("iteration")
         ax.set_ylabel("state")
         ax.set_title(f"replica = {replica_idx}")
@@ -399,4 +401,4 @@ def plot_hrex_replica_state_distribution_convergence(cumulative_replica_state_co
 
     fig.subplots_adjust(right=0.8)
     cbar_ax = fig.add_axes([0.85, 0.15, 0.05, 0.7])
-    fig.colorbar(p, cax=cbar_ax, label="density")
+    fig.colorbar(p, cax=cbar_ax, label="fraction of iterations")
