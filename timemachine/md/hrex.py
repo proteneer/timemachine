@@ -24,14 +24,15 @@ class NeighborSwapMove(MetropolisHastingsMove[List[_Replica]]):
     def propose_with_log_q_diff(self, state: List[_Replica]) -> Tuple[List[_Replica], float]:
         s_a = self.s_a
         s_b = self.s_b
-        r_a = state[s_a]
-        r_b = state[s_b]  # swap A and B
         state_ = list(state)
         state_[s_a], state_[s_b] = state_[s_b], state_[s_a]
+        proposed_state = state_
 
+        r_a = state[s_a]
+        r_b = state[s_b]
         log_q_diff = self.log_q(r_a, s_b) + self.log_q(r_b, s_a) - self.log_q(r_a, s_a) - self.log_q(r_b, s_b)
 
-        return state_, log_q_diff
+        return proposed_state, log_q_diff
 
 
 _Samples = TypeVar("_Samples")
