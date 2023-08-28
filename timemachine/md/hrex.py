@@ -111,8 +111,14 @@ class HrexDiagnostics:
         return cumulative_count
 
 
-def get_swap_attempts_per_iter_heuristic(n_states):
-    """Chodera et al. 2011 find that K^3 to K^5 swap attempts per iteration works well empirically"""
+def get_swap_attempts_per_iter_heuristic(n_states: int) -> int:
+    """Heuristic for number of swap attempts per iteration derived from [1].
+
+    References
+    ----------
+    [1]: http://dx.doi.org/10.1063/1.3660669
+    """
+
     return n_states ** 4
 
 
