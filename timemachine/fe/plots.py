@@ -350,17 +350,18 @@ def plot_hrex_replica_state_distribution(cumulative_replica_state_counts: NDArra
     n_iters, _, n_states = cumulative_replica_state_counts.shape
     replica_state_counts = cumulative_replica_state_counts[-1]
     density_by_replica = replica_state_counts / n_iters  # (replica, state) -> float
+    density_by_state = density_by_replica.T  # (state, replica) -> float
 
     bottom = np.zeros(n_states)
     _, ax = plt.subplots()
-    for replica_idx, density in enumerate(density_by_replica):
-        ax.bar(np.arange(n_states), density, bottom=bottom, width=0.5, label=str(replica_idx))
+    for state_idx, density in enumerate(density_by_state):
+        ax.bar(np.arange(n_states), density, bottom=bottom, width=0.5, label=str(state_idx))
         bottom += density
 
-    ax.set_xlabel("state")
+    ax.set_xlabel("replica")
     ax.set_ylabel("fraction of iterations")
     ax.xaxis.get_major_locator().set_params(integer=True)
-    ax.legend(title="replica")
+    ax.legend(title="state")
 
 
 def plot_hrex_replica_state_distribution_heatmap(cumulative_replica_state_counts: NDArray):
