@@ -601,6 +601,65 @@ def estimate_relative_free_energy_bisection_hrex(
     n_frames_bisection: int = 100,
     n_frames_per_iter: int = 10,
 ) -> SimulationResult:
+    """
+    Estimate relative free energy between mol_a and mol_b using Hamiltonian Replica EXchange (HREX) sampling of a
+    sequence of intermediate states determined by bisection. Molecules should be aligned to each other and within the
+    host environment.
+
+    Parameters
+    ----------
+    mol_a: Chem.Mol
+        initial molecule
+
+    mol_b: Chem.Mol
+        target molecule
+
+    core: list of 2-tuples
+        atom_mapping of atoms in mol_a into atoms in mol_b
+
+    ff: Forcefield
+        Forcefield to be used for the system
+
+    host_config: HostConfig or None
+        Configuration for the host system. If None, then the vacuum leg is run.
+
+    md_params: MDParams, optional
+        Parameters for the equilibration and production MD
+
+    prefix: str, optional
+        A prefix to append to figures
+
+    lambda_interval: (float, float) or None, optional
+        Minimum and maximum value of lambda for the transformation; typically (0, 1), but sometimes useful to choose
+        other values for testing.
+
+    n_windows: int or None, optional
+        Number of windows used for interpolating the lambda schedule with additional windows. Defaults to
+        `DEFAULT_NUM_WINDOWS` windows.
+
+    min_overlap: float or None, optional
+        If not None, terminate bisection early when the BAR overlap between all neighboring pairs of states exceeds this
+        value. When given, the final number of windows may be less than or equal to n_windows.
+
+    keep_idxs: list of int or None, optional
+        If None, return only the end-state frames. Otherwise if not None, use only for debugging, and this
+        will return the frames corresponding to the idxs of interest.
+
+    min_cutoff: float or None, optional
+        Throw error if any atom moves more than this distance (nm) after minimization
+
+    n_frames_bisection: int or None, optional
+        Number of frames to sample using MD during the initial bisection phase used to determine lambda spacing
+
+    n_frames_per_iter: int or None, optional
+        Number of frames to sample using MD per HREX iteration
+
+    Returns
+    -------
+    SimulationResult
+        Collected data from the simulation (see class for storage information). Returned frames and boxes
+        are defined by keep_idxs.
+    """
 
     if n_windows is None:
         n_windows = DEFAULT_NUM_WINDOWS

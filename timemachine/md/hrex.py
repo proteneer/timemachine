@@ -126,6 +126,45 @@ def run_hrex(
     n_samples_per_iter: int,
     n_swap_attempts_per_iter: Optional[int] = None,
 ) -> Tuple[List[List[_Samples]], HrexDiagnostics]:
+    """Sample from a sequence of states using Hamiltonian Replica EXchange (HREX).
+
+    Parameters
+    ----------
+    replicas: sequence of _Replica
+        Sequence of initial states of each replica
+
+    sample_replica: (_Replica, StateIdx, n_samples: int) -> _Samples
+        Local sampling function. Should return n_samples samples from the given replica and state
+
+    replica_from_samples: _Samples -> _Replica
+        Function that returns a replica state given a sequence of local samples. This is used to update the state of
+        individual replicas following local sampling.
+
+    neighbor_pairs: sequence of (StateIdx, StateIdx)
+        Pairs of states for which to attempt swap moves
+
+    get_log_q_fn: sequence of _Replica -> ((ReplicaIdx, StateIdx) -> float)
+        Function that returns a function from replica-state pairs to log unnormalized probability. Note that this is
+        equivalent to the simpler signature (_Replica, StateIdx) -> float; the "curried" form here is to allow for the
+        implementation to compute the full matrix as a batch operation when this is more efficient.
+
+    n_samples: int
+        Total number of local samples (e.g. MD frames)
+
+    n_samples_per_iter: int
+        Number of local samples (e.g. MD frames) per HREX iteration
+
+    n_swap_attempts_per_iter: int or None, optional
+        Number of neighbor swaps to attempt per iteration. Default is given by :py:func:`get_swap_attempts_per_iter_heuristic`.
+
+    Returns
+    -------
+    List[List[_Samples]]
+        samples grouped by state and iteration
+
+    HrexDiagnostics
+        HREX statistics (e.g. swap rates, replica-state distribution)
+    """
 
     n_replicas = len(replicas)
 

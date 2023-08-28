@@ -732,6 +732,52 @@ def run_sims_hrex(
     n_swap_attempts_per_iter: Optional[int] = None,
     verbose: bool = True,
 ) -> Tuple[PairBarResult, List[StoredArrays], List[NDArray], HrexDiagnostics]:
+    r"""Sample from a sequence of states using nearest-neighbor Hamiltonian Replica EXchange (HREX).
+
+    This implementation uses a method described in [1] (in section III.B.2) to generate effectively uncorrelated
+    permutations by attempting many consecutive nearest-neighbor swap moves. By default, the number of swap moves is
+    determined as a function of the number of states (:math:`K`) as :math`N_{\text{swaps}} = K^4`, a heuristic also
+    described in [1].
+
+    References
+    ----------
+    [1]: http://dx.doi.org/10.1063/1.3660669
+
+
+    Parameters
+    ----------
+    initial_states: sequence of InitialState
+        States to sample
+
+    md_params: MDParams
+        Parameters used to simulate new states
+
+    n_frames_per_iter: int
+        Number of frames to sample using MD per iteration
+
+    temperature: float
+        Temperature in K
+
+    n_swap_attempts_per_iter: int or None, optional
+        Number of nearest-neighbor swaps to attempt per iteration. Defaults to len(initial_states) ** 4.
+
+    verbose: bool, optional
+        Whether to print diagnostic information
+
+    Returns
+    -------
+    PairBarResult
+        results of pair BAR free energy analysis
+
+    List[StoredArrays]
+        coord trajectories
+
+    List[NDArray]
+        box trajectories
+
+    HrexDiagnostics
+        HREX statistics (e.g. swap rates, replica-state distribution)
+    """
 
     if n_swap_attempts_per_iter is None:
         n_swap_attempts_per_iter = get_swap_attempts_per_iter_heuristic(len(initial_states))
