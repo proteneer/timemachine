@@ -334,6 +334,26 @@ def plot_hrex_swap_acceptance_rates(swap_acceptance_rates: NDArray):
     ax.xaxis.get_major_locator().set_params(integer=True)
 
 
+def plot_hrex_transition_matrix(transition_rate: NDArray):
+    n_states, _ = transition_rate.shape
+    states = np.arange(n_states)
+
+    fig, ax = plt.subplots()
+    p = ax.pcolor(states, states, transition_rate, vmin=0.0, vmax=1.0)
+
+    for from_state in states:
+        for to_state in states:
+            ax.text(from_state, to_state, transition_rate[to_state, from_state], ha="center", va="center", color="w")
+
+    ax.set_xlabel("from state")
+    ax.set_ylabel("to state")
+    ax.xaxis.get_major_locator().set_params(integer=True)
+    ax.yaxis.get_major_locator().set_params(integer=True)
+    ax.set_aspect("equal")
+
+    fig.colorbar(p, label="transition rate")
+
+
 def plot_hrex_swap_acceptance_rates_convergence(cumulative_swap_acceptance_rates: NDArray):
     _, n_pairs = cumulative_swap_acceptance_rates.shape
     _, ax = plt.subplots()

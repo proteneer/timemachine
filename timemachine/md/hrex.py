@@ -104,6 +104,19 @@ class HrexDiagnostics:
         cumulative_count = np.cumsum(replica_in_state.astype(int), axis=0)  # (iter, replica, state) -> int
         return cumulative_count
 
+    @property
+    def transition_matrix(self) -> NDArray:
+        replica_idx_by_state_by_iter = np.array(self.replica_idx_by_state_by_iter)  # (iter, state) -> replica index
+        n_iters, _ = replica_idx_by_state_by_iter.shape
+
+        # transition_by_iter: (n_iters, n_states, n_states) -> bool
+        transition_by_iter = replica_idx_by_state_by_iter[:-1, None, :] == replica_idx_by_state_by_iter[1:, :, None]
+
+        transition_count = np.sum(transition_by_iter, axis=0)  # (to state, from state) -> int
+        transition_rate = transition_count / n_iters  # (to state, from state) -> float
+
+        return transition_rate
+
 
 def get_swap_attempts_per_iter_heuristic(n_states: int) -> int:
     """Heuristic for number of swap attempts per iteration derived from [1].

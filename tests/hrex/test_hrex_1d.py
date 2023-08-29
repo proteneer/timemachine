@@ -13,11 +13,13 @@ from timemachine.fe.plots import (
     plot_hrex_replica_state_distribution,
     plot_hrex_replica_state_distribution_convergence,
     plot_hrex_replica_state_distribution_heatmap,
-    plot_hrex_swap_acceptance_rates,
     plot_hrex_swap_acceptance_rates_convergence,
+    plot_hrex_transition_matrix,
 )
 from timemachine.md.hrex import HrexDiagnostics, ReplicaIdx, StateIdx, run_hrex
 from timemachine.md.moves import MetropolisHastingsMove
+
+DEBUG = True
 
 
 class Distribution(Protocol):
@@ -131,6 +133,10 @@ def run_hrex_with_local_proposal(
             fraction_accepted_by_pair[1:] for fraction_accepted_by_pair in diagnostics.fraction_accepted_by_pair_by_iter
         ],
     )
+
+    if DEBUG:
+        plot_hrex_diagnostics(diagnostics)
+        plt.show()
 
     return samples_by_state_by_iter, diagnostics
 
@@ -255,22 +261,19 @@ def test_hrex_gaussian_mixture(seed):
     final_swap_acceptance_rates = diagnostics.cumulative_swap_acceptance_rates[-1]
     assert final_swap_acceptance_rates[0] > 0.2
 
-    # Uncomment to visualize
-    # plot_hrex_gaussian_mixtures(hrex_samples, local_samples, target_samples, diagnostics)
+    if DEBUG:
+        plt.figure()
+        hist = partial(plt.hist, density=True, bins=50, alpha=0.7)
+        hist(target_samples, label="target")
+        hist(hrex_samples, label="hrex")
+        hist(local_samples, label="local")
+        plt.legend()
+        plt.show()
 
 
-def plot_hrex_gaussian_mixtures(hrex_samples, local_samples, target_samples, diagnostics: HrexDiagnostics):
-    plt.figure()
-    hist = partial(plt.hist, density=True, bins=50, alpha=0.7)
-    hist(target_samples, label="target")
-    hist(hrex_samples, label="hrex")
-    hist(local_samples, label="local")
-    plt.legend()
-
-    plot_hrex_swap_acceptance_rates(diagnostics.cumulative_swap_acceptance_rates[-1])
+def plot_hrex_diagnostics(diagnostics: HrexDiagnostics):
     plot_hrex_swap_acceptance_rates_convergence(diagnostics.cumulative_swap_acceptance_rates)
+    plot_hrex_transition_matrix(diagnostics.transition_matrix)
     plot_hrex_replica_state_distribution(diagnostics.cumulative_replica_state_counts)
     plot_hrex_replica_state_distribution_heatmap(diagnostics.cumulative_replica_state_counts)
     plot_hrex_replica_state_distribution_convergence(diagnostics.cumulative_replica_state_counts)
-
-    plt.show()
