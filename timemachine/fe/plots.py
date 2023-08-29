@@ -386,12 +386,19 @@ def plot_hrex_replica_state_distribution(cumulative_replica_state_counts: NDArra
 
 def plot_hrex_replica_state_distribution_heatmap(cumulative_replica_state_counts: NDArray):
     n_iters, n_replicas, n_states = cumulative_replica_state_counts.shape
+    replicas = np.arange(n_replicas)
+    states = np.arange(n_states)
     count_by_replica_by_state = cumulative_replica_state_counts[-1]  # (replica, state) -> int
     fraction_by_replica_by_state = count_by_replica_by_state / n_iters  # (replica, state) -> float
     fraction_by_state_by_replica = fraction_by_replica_by_state.T  # (state, replica) -> float
 
     fig, ax = plt.subplots()
-    p = ax.pcolor(np.arange(n_replicas), np.arange(n_states), fraction_by_state_by_replica, vmin=0.0, vmax=1.0)
+    p = ax.pcolor(replicas, states, fraction_by_state_by_replica, vmin=0.0, vmax=1.0)
+
+    for replica in replicas:
+        for state in states:
+            ax.text(replica, state, fraction_by_state_by_replica[replica, state], ha="center", va="center", color="w")
+
     ax.set_xlabel("replica")
     ax.set_ylabel("state")
     ax.xaxis.get_major_locator().set_params(integer=True)
