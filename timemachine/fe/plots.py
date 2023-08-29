@@ -396,6 +396,8 @@ def plot_hrex_replica_state_distribution_heatmap(cumulative_replica_state_counts
     ax.set_ylabel("state")
     ax.xaxis.get_major_locator().set_params(integer=True)
     ax.yaxis.get_major_locator().set_params(integer=True)
+    ax.set_aspect("equal")
+
     fig.colorbar(p, label="fraction of iterations")
 
 
