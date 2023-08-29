@@ -19,7 +19,7 @@ from timemachine.fe.plots import (
 from timemachine.md.hrex import HrexDiagnostics, ReplicaIdx, StateIdx, run_hrex
 from timemachine.md.moves import MetropolisHastingsMove
 
-DEBUG = True
+DEBUG = False
 
 
 class Distribution(Protocol):
