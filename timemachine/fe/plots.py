@@ -324,16 +324,6 @@ def plot_fwd_reverse_predictions(
     return plot_png
 
 
-def plot_hrex_swap_acceptance_rates(swap_acceptance_rates: NDArray):
-    _, ax = plt.subplots()
-    ax.plot(swap_acceptance_rates, ".-")
-    ax.axhline(1.0, linestyle="--", color="gray")
-    ax.set_ylim(0, 1.1)
-    ax.set_xlabel(r"left state index")
-    ax.set_ylabel(r"swap acceptance rate")
-    ax.xaxis.get_major_locator().set_params(integer=True)
-
-
 def plot_hrex_transition_matrix(transition_rate: NDArray):
     n_states, _ = transition_rate.shape
     states = np.arange(n_states)
