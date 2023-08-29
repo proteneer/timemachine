@@ -832,16 +832,11 @@ def run_sims_hrex(
     for iteration, n_frames_iter in enumerate(batches(md_params.n_frames, n_frames_per_iter), 1):
 
         def sample_replica(xb: CoordsBox, state_idx: StateIdx) -> Tuple[StoredArrays, NDArray]:
-            frames, boxes = sample(
-                replace(initial_states[state_idx], x0=xb.coords, box0=xb.box),
-                replace(
-                    md_params,
-                    n_frames=n_frames_iter,
-                    n_eq_steps=0,
-                    seed=np.random.randint(np.iinfo(np.int32).max),
-                ),
-                max_buffer_frames=100,
+            initial_state = replace(initial_states[state_idx], x0=xb.coords, box0=xb.box)
+            md_params_replica = replace(
+                md_params, n_frames=n_frames_iter, n_eq_steps=0, seed=np.random.randint(np.iinfo(np.int32).max)
             )
+            frames, boxes = sample(initial_state, md_params_replica, max_buffer_frames=100)
             return frames, boxes
 
         def replica_from_samples(samples: Tuple[StoredArrays, NDArray]) -> CoordsBox:
