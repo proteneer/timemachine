@@ -325,6 +325,7 @@ def plot_fwd_reverse_predictions(
 
 
 def plot_hrex_transition_matrix(transition_rate: NDArray):
+    """Plot matrix of estimated transition rates for permutation moves as a heatmap."""
     n_states, _ = transition_rate.shape
     states = np.arange(n_states)
 
@@ -345,6 +346,8 @@ def plot_hrex_transition_matrix(transition_rate: NDArray):
 
 
 def plot_hrex_swap_acceptance_rates_convergence(cumulative_swap_acceptance_rates: NDArray):
+    """Plot swap acceptance rates averaged over previous iterations as a function of iteration for each pair of
+    neighbors."""
     _, n_pairs = cumulative_swap_acceptance_rates.shape
     _, ax = plt.subplots()
     ax.plot(cumulative_swap_acceptance_rates)
@@ -357,6 +360,7 @@ def plot_hrex_swap_acceptance_rates_convergence(cumulative_swap_acceptance_rates
 
 
 def plot_hrex_replica_state_distribution(cumulative_replica_state_counts: NDArray):
+    """Plot distribution of (replica, state) pairs as a stacked bar plot."""
     n_iters, n_replicas, n_states = cumulative_replica_state_counts.shape
     count_by_replica_by_state = cumulative_replica_state_counts[-1]  # (replica, state) -> int
     fraction_by_replica_by_state = count_by_replica_by_state / n_iters  # (replica, state) -> float
@@ -375,6 +379,7 @@ def plot_hrex_replica_state_distribution(cumulative_replica_state_counts: NDArra
 
 
 def plot_hrex_replica_state_distribution_heatmap(cumulative_replica_state_counts: NDArray):
+    """Plot distribution of (replica, state) pairs as a heatmap."""
     n_iters, n_replicas, n_states = cumulative_replica_state_counts.shape
     replicas = np.arange(n_replicas)
     states = np.arange(n_states)
@@ -399,7 +404,7 @@ def plot_hrex_replica_state_distribution_heatmap(cumulative_replica_state_counts
 
 
 def plot_hrex_replica_state_distribution_convergence(cumulative_replica_state_counts: NDArray):
-
+    """Plot distribution of states as a function of iteration for each replica."""
     n_iters, _, n_states = cumulative_replica_state_counts.shape
     fraction_by_iter_by_replica_by_state = (
         cumulative_replica_state_counts / np.arange(n_iters)[:, None, None]
