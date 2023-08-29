@@ -117,6 +117,15 @@ class HrexDiagnostics:
 
         return transition_rate
 
+    @property
+    def relaxation_time(self):
+        """Estimate the relaxation time of permutation moves (in number of iterations) as a function of the
+        second-largest eigenvalue of the transition matrix"""
+
+        eigvals_ascending = np.linalg.eigvalsh(self.transition_matrix)
+        mu_2 = eigvals_ascending[-2]  # second-largest eigenvalue
+        return 1 / (1 - mu_2)
+
 
 def get_swap_attempts_per_iter_heuristic(n_states: int) -> int:
     """Heuristic for number of swap attempts per iteration derived from [1].
