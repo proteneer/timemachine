@@ -85,6 +85,51 @@ class Hrex(Generic[_Replica]):
         return [(StateIdx(i), self.replicas[replica_idx]) for i, replica_idx in enumerate(self.replica_idx_by_state)]
 
 
+def get_cumulative_replica_state_counts(replica_idx_by_state_by_iter: Sequence[Sequence[ReplicaIdx]]) -> NDArray:
+    """Given a mapping of state index to replica index by iteration, returns an array of cumulative counts by iteration, replica, and state.
+
+    Returns
+    -------
+    NDArray
+        (iter, replica, state) -> cumulative occupancy count: int
+    """
+    replica_idx_by_state_by_iter_ = np.array(replica_idx_by_state_by_iter)  # (iter, state) -> replica
+    _, n_states = replica_idx_by_state_by_iter_.shape
+    states = np.arange(n_states)
+    replica_in_state = replica_idx_by_state_by_iter_[:, :, None] == states  # (iter, replica, state) -> bool
+    cumulative_count = np.cumsum(replica_in_state.astype(int), axis=0)  # (iter, replica, state) -> int
+    return cumulative_count
+
+
+def estimate_transition_matrix(replica_idx_by_state_by_iter: Sequence[Sequence[ReplicaIdx]]) -> NDArray:
+    """Given a mapping of state index to replica index by iteration, returns an estimate of the transition matrix.
+
+    Returns
+    -------
+    NDArray
+        (state, state) -> transition_rate: float
+    """
+    replica_idx_by_state_by_iter_ = np.array(replica_idx_by_state_by_iter)  # (iter, state) -> replica index
+    n_iters, _ = replica_idx_by_state_by_iter_.shape
+
+    # transition_by_iter: (n_iters, n_states, n_states) -> bool
+    transition_by_iter = replica_idx_by_state_by_iter_[:-1, None, :] == replica_idx_by_state_by_iter_[1:, :, None]
+
+    transition_count = np.sum(transition_by_iter, axis=0)  # (to state, from state) -> int
+    transition_rate = transition_count / n_iters  # (to state, from state) -> float
+
+    return transition_rate
+
+
+def estimate_relaxation_time(transition_matrix: NDArray) -> float:
+    """Estimate the relaxation time of permutation moves (in number of iterations) as a function of the second-largest
+    eigenvalue of the transition matrix."""
+
+    eigvals_ascending = np.linalg.eigvalsh(transition_matrix)
+    mu_2 = eigvals_ascending[-2]  # second-largest eigenvalue
+    return 1 / (1 - mu_2)
+
+
 @dataclass
 class HrexDiagnostics:
     replica_idx_by_state_by_iter: List[List[ReplicaIdx]]
@@ -97,34 +142,15 @@ class HrexDiagnostics:
 
     @property
     def cumulative_replica_state_counts(self) -> NDArray:
-        replica = np.array(self.replica_idx_by_state_by_iter)  # (iter, state) -> replica
-        _, n_states = replica.shape
-        states = np.arange(n_states)
-        replica_in_state = replica[:, :, None] == states  # (iter, replica, state) -> bool
-        cumulative_count = np.cumsum(replica_in_state.astype(int), axis=0)  # (iter, replica, state) -> int
-        return cumulative_count
+        return get_cumulative_replica_state_counts(self.replica_idx_by_state_by_iter)
 
     @property
     def transition_matrix(self) -> NDArray:
-        replica_idx_by_state_by_iter = np.array(self.replica_idx_by_state_by_iter)  # (iter, state) -> replica index
-        n_iters, _ = replica_idx_by_state_by_iter.shape
-
-        # transition_by_iter: (n_iters, n_states, n_states) -> bool
-        transition_by_iter = replica_idx_by_state_by_iter[:-1, None, :] == replica_idx_by_state_by_iter[1:, :, None]
-
-        transition_count = np.sum(transition_by_iter, axis=0)  # (to state, from state) -> int
-        transition_rate = transition_count / n_iters  # (to state, from state) -> float
-
-        return transition_rate
+        return estimate_transition_matrix(self.replica_idx_by_state_by_iter)
 
     @property
     def relaxation_time(self):
-        """Estimate the relaxation time of permutation moves (in number of iterations) as a function of the
-        second-largest eigenvalue of the transition matrix"""
-
-        eigvals_ascending = np.linalg.eigvalsh(self.transition_matrix)
-        mu_2 = eigvals_ascending[-2]  # second-largest eigenvalue
-        return 1 / (1 - mu_2)
+        return estimate_relaxation_time(self.transition_matrix)
 
 
 def get_swap_attempts_per_iter_heuristic(n_states: int) -> int:
