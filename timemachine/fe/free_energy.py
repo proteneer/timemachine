@@ -1,5 +1,6 @@
 from dataclasses import dataclass, replace
 from functools import cache
+from itertools import islice
 from typing import Callable, List, Optional, Sequence, Tuple, Union, overload
 from warnings import warn
 
@@ -884,18 +885,20 @@ def run_sims_hrex(
 
     boxes_by_state: List[NDArray] = [np.array(boxes) for boxes in boxes_by_state_]
 
-    energy_decomposed_states = [
+    # Note: defined as a generator instead of a list to avoid holding potentials for all states in memory
+    # simultaneously, which could cause OOM
+    energy_decomposed_states = (
         EnergyDecomposedState(
             frames,
             boxes,
             get_batch_u_fns([pot.to_gpu(np.float32).bound_impl for pot in state.potentials], temperature),
         )
         for frames, boxes, state in zip(frames_by_state, boxes_by_state, initial_states)
-    ]
+    )
 
     bar_results = [
         estimate_free_energy_bar(compute_energy_decomposed_u_kln([s1, s2]), temperature)
-        for s1, s2 in zip(energy_decomposed_states[:-1], energy_decomposed_states[1:])
+        for s1, s2 in zip(energy_decomposed_states, islice(energy_decomposed_states, 1, None))
     ]
 
     diagnostics = HrexDiagnostics(replica_idx_by_state_by_iter, fraction_accepted_by_pair_by_iter)
