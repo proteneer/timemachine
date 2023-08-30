@@ -900,4 +900,4 @@ def run_sims_hrex(
 
     diagnostics = HrexDiagnostics(replica_idx_by_state_by_iter, fraction_accepted_by_pair_by_iter)
 
-    return PairBarResult(list(initial_states), bar_results), frames_by_state, boxes_by_state, diagnostics
+    return PairBarResult(initial_states, bar_results), frames_by_state, boxes_by_state, diagnostics
