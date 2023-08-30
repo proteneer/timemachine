@@ -786,9 +786,7 @@ def run_sims_hrex(
     def compute_energy_offsets(xbs: List[CoordsBox], params: List[NDArray]):
         coords = np.array([xb.coords for xb in xbs])
         boxes = np.array([xb.box for xb in xbs])
-        _, _, U = ubp.unbound_impl.execute_selective_batch(
-            np.array(coords), np.array(params), np.array(boxes), False, False, True
-        )
+        _, _, U = ubp.unbound_impl.execute_selective_batch(coords, np.array(params), boxes, False, False, True)
         return U
 
     def get_log_q_fn(xbs: List[CoordsBox]):
