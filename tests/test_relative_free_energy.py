@@ -184,7 +184,7 @@ def test_run_hif2a_test_system(estimate_relative_free_energy_fn):
         estimate_relative_free_energy_bisection,
         pytest.param(
             estimate_relative_free_energy_bisection_hrex,
-            marks=pytest.mark.xfail(
+            marks=pytest.mark.skip(
                 reason="lambda window trajectories are not individually reproducible given InitialState due to mixing"
             ),
         ),
