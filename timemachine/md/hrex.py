@@ -25,7 +25,7 @@ class NeighborSwapMove(MetropolisHastingsMove[List[_Replica]]):
         s_a = self.s_a
         s_b = self.s_b
         state_ = list(state)
-        state_[s_a], state_[s_b] = state_[s_b], state_[s_a]
+        state_[s_a], state_[s_b] = state[s_b], state[s_a]
         proposed_state = state_
 
         r_a = state[s_a]
