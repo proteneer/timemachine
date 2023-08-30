@@ -399,9 +399,8 @@ def estimate_relative_free_energy(
         If None, return only the end-state frames. Otherwise if not None, use only for debugging, and this
         will return the frames corresponding to the idxs of interest.
 
-    md_params: MDParams
-        Parameters for the equilibration and production MD. Defaults to 400 global steps per frame, 1000 frames and 10k
-        equilibration steps with seed 2023.
+    md_params: MDParams, optional
+        Parameters for the equilibration and production MD. Defaults to :py:const:`timemachine.fe.rbfe.DEFAULT_MD_PARAMS`
 
     min_cutoff: float, optional
         Throw error if any atom moves more than this distance (nm) after minimization
@@ -478,8 +477,7 @@ def estimate_relative_free_energy_bisection(
         Configuration for the host system. If None, then the vacuum leg is run.
 
     md_params: MDParams, optional
-        Parameters for the equilibration and production MD. Defaults to 400 global steps per frame, 1000 frames and 10k
-        equilibration steps with seed 2023.
+        Parameters for the equilibration and production MD. Defaults to :py:const:`timemachine.fe.rbfe.DEFAULT_MD_PARAMS`
 
     prefix: str, optional
         A prefix to append to figures
@@ -624,7 +622,7 @@ def estimate_relative_free_energy_bisection_hrex(
         Configuration for the host system. If None, then the vacuum leg is run.
 
     md_params: MDParams, optional
-        Parameters for the equilibration and production MD
+        Parameters for the equilibration and production MD. Defaults to :py:const:`timemachine.fe.rbfe.DEFAULT_MD_PARAMS`
 
     prefix: str, optional
         A prefix to append to figures
