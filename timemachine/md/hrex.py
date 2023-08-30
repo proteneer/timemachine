@@ -158,7 +158,7 @@ def get_swap_attempts_per_iter_heuristic(n_states: int) -> int:
 
     References
     ----------
-    [1]: http://dx.doi.org/10.1063/1.3660669
+    [1]: http://dx.doi.org/10.1063/1.3660669, https://arxiv.org/abs/1105.5749
     """
 
     return n_states ** 4
