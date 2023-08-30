@@ -1,6 +1,5 @@
 from dataclasses import dataclass, replace
 from functools import cache
-from itertools import islice
 from typing import Callable, List, Optional, Sequence, Tuple, Union, overload
 from warnings import warn
 
@@ -33,7 +32,7 @@ from timemachine.md.barostat.utils import compute_box_center, get_bond_list, get
 from timemachine.md.hrex import Hrex, HrexDiagnostics, ReplicaIdx, StateIdx, get_swap_attempts_per_iter_heuristic
 from timemachine.md.states import CoordsBox
 from timemachine.potentials import BoundPotential, HarmonicBond, SummedPotential
-from timemachine.utils import batches
+from timemachine.utils import batches, pairwise_transform_and_combine
 
 
 class HostConfig:
@@ -885,22 +884,24 @@ def run_sims_hrex(
 
     boxes_by_state: List[NDArray] = [np.array(boxes) for boxes in boxes_by_state_]
 
-    # Note: defined as a generator instead of a list to avoid holding potentials for all states in memory
-    # simultaneously, which could cause OOM
-    energy_decomposed_states = (
-        EnergyDecomposedState(
+    def make_energy_decomposed_state(
+        results: Tuple[StoredArrays, NDArray, InitialState]
+    ) -> EnergyDecomposedState[StoredArrays]:
+        frames, boxes, initial_state = results
+        return EnergyDecomposedState(
             frames,
             boxes,
-            get_batch_u_fns([pot.to_gpu(np.float32).bound_impl for pot in state.potentials], temperature),
+            get_batch_u_fns([pot.to_gpu(np.float32).bound_impl for pot in initial_state.potentials], temperature),
         )
-        for frames, boxes, state in zip(frames_by_state, boxes_by_state, initial_states)
-    )
 
-    bar_results = [
-        estimate_free_energy_bar(compute_energy_decomposed_u_kln([s1, s2]), temperature)
-        for s1, s2 in zip(energy_decomposed_states, islice(energy_decomposed_states, 1, None))
-    ]
+    results_by_state = zip(frames_by_state, boxes_by_state, initial_states)
+
+    bar_results = pairwise_transform_and_combine(
+        results_by_state,
+        make_energy_decomposed_state,
+        lambda s1, s2: estimate_free_energy_bar(compute_energy_decomposed_u_kln([s1, s2]), temperature),
+    )
 
     diagnostics = HrexDiagnostics(replica_idx_by_state_by_iter, fraction_accepted_by_pair_by_iter)
 
-    return PairBarResult(initial_states, bar_results), frames_by_state, boxes_by_state, diagnostics
+    return PairBarResult(initial_states, list(bar_results)), frames_by_state, boxes_by_state, diagnostics
