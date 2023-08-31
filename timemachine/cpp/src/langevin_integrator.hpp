@@ -59,6 +59,8 @@ public:
         double *d_box_t,
         unsigned int *d_idxs,
         cudaStream_t stream) override;
+
+    void set_seed(const int seed);
 };
 
 } // end namespace timemachine

@@ -100,4 +100,6 @@ void LangevinIntegrator::finalize(
     unsigned int *d_idxs,
     cudaStream_t stream){};
 
+void LangevinIntegrator::set_seed(const int seed) { curandSetPseudoRandomGeneratorSeed(cr_rng_, seed); }
+
 } // end namespace timemachine

@@ -545,7 +545,8 @@ void declare_langevin_integrator(py::module &m) {
             py::arg("temperature"),
             py::arg("dt"),
             py::arg("friction"),
-            py::arg("seed"));
+            py::arg("seed"))
+        .def("set_seed", &Class::set_seed, py::arg("seed"));
 }
 
 void declare_velocity_verlet_integrator(py::module &m) {
@@ -1219,7 +1220,8 @@ void declare_barostat(py::module &m) {
             py::arg("seed"))
         .def("set_interval", &Class::set_interval, py::arg("interval"))
         .def("get_interval", &Class::get_interval)
-        .def("set_pressure", &Class::set_pressure, py::arg("pressure"));
+        .def("set_pressure", &Class::set_pressure, py::arg("pressure"))
+        .def("set_seed", &Class::set_seed, py::arg("seed"));
 }
 
 void declare_summed_potential(py::module &m) {

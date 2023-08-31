@@ -241,4 +241,8 @@ template <typename RealType> void MonteCarloBarostat<RealType>::set_pressure(con
     this->reset_counters();
 }
 
+template <typename RealType> void MonteCarloBarostat<RealType>::set_seed(const int seed) {
+    curandSetPseudoRandomGeneratorSeed(cr_rng_, seed);
+}
+
 } // namespace timemachine

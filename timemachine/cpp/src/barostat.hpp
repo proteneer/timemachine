@@ -32,6 +32,8 @@ public:
 
     void set_pressure(const double pressure);
 
+    void set_seed(const int seed);
+
 private:
     const int N_;
 
