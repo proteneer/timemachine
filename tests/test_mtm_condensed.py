@@ -20,7 +20,7 @@ from timemachine.md.states import CoordsVelBox
 from timemachine.potentials import NonbondedInteractionGroup, bonded, nonbonded
 
 
-@pytest.mark.skip("Has shown to be flaky, needs further investigation. Condensed MTM not currently used")
+# @pytest.mark.skip("Has shown to be flaky, needs further investigation. Condensed MTM not currently used")
 @pytest.mark.nightly(reason="Takes a long time to run")
 @pytest.mark.parametrize("seed", [2021])
 def test_condensed_phase_mtm(seed):
@@ -137,19 +137,21 @@ def test_condensed_phase_mtm(seed):
 
     bps = [ubp.bind(params) for ubp, params in zip(ubps, params)]
 
-    npt_mover = NPTMove(bps, masses, temperature, pressure, n_steps=md_steps_per_move, seed=seed)
-    mtm_mover = OptimizedMTMMove(K, batch_proposal_coords_fn, batch_log_weights_fn, seed=seed)
+    npt_mover = NPTMove(bps, masses, temperature, pressure, n_steps=md_steps_per_move)
+    mtm_mover = OptimizedMTMMove(K, batch_proposal_coords_fn, batch_log_weights_fn)
 
     enhanced_torsions = []
 
     xvb_t = copy.deepcopy(xvb0)
 
+    key = jax.random.key(seed)
+
     for iteration in range(num_batches):
 
-        xvb_t = npt_mover.move(xvb_t)
+        key, xvb_t = npt_mover.move(key, xvb_t)
         solvent_torsion = get_torsion(xvb_t.coords[-num_ligand_atoms:])
         enhanced_torsions.append(solvent_torsion)
-        xvb_t = mtm_mover.move(xvb_t)
+        key, xvb_t = mtm_mover.move(key, xvb_t)
 
         print(
             f"K {K} frame {iteration} acceptance rate {mtm_mover.n_accepted/mtm_mover.n_proposed} solvent_torsion {solvent_torsion}"
@@ -166,11 +168,11 @@ def test_condensed_phase_mtm(seed):
 
     vanilla_torsions = []
     xvb_t = copy.deepcopy(xvb0)
-    npt_mover = NPTMove(bps, masses, temperature, pressure, n_steps=500, seed=seed)
+    npt_mover = NPTMove(bps, masses, temperature, pressure, n_steps=500)
     for iteration in range(num_batches):
         solvent_torsion = get_torsion(xvb_t.coords[-num_ligand_atoms:])
         vanilla_torsions.append(solvent_torsion)
-        xvb_t = npt_mover.move(xvb_t)
+        key, xvb_t = npt_mover.move(key, xvb_t)
 
     vanilla_torsions = np.asarray(vanilla_torsions)
 
@@ -198,5 +200,6 @@ def test_nvt_box():
     mover = NVTMove(bps, masses, temperature, n_steps, seed)
     v0 = np.zeros_like(coords)
     xvb0 = CoordsVelBox(coords, v0, box)
-    xvb = mover.move(xvb0)
+    key = jax.random.key(seed)
+    _, xvb = mover.move(key, xvb0)
     assert np.allclose(box, xvb.box)

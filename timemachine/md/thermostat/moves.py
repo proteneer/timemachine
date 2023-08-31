@@ -1,15 +1,22 @@
+from typing import Tuple
+
+from jax.random import PRNGKeyArray
+
 from timemachine.lib import custom_ops
-from timemachine.md.moves import Move
+from timemachine.md.moves import Move, random_seed
 from timemachine.md.states import CoordsVelBox
 
 
 class UnadjustedLangevinMove(Move):
-    def __init__(self, integrator_impl, bound_impls, n_steps=5):
+    def __init__(self, integrator_impl: custom_ops.LangevinIntegrator, bound_impls, n_steps=5):
         self.integrator_impl = integrator_impl
         self.bound_impls = bound_impls
         self.n_steps = n_steps
 
-    def move(self, x: CoordsVelBox):
+    def move(self, key: PRNGKeyArray, x: CoordsVelBox) -> Tuple[PRNGKeyArray, CoordsVelBox]:
+        key, seed = random_seed(key)
+        self.integrator_impl.set_seed(seed)
+
         # note: context creation overhead here is actually very small!
         ctxt = custom_ops.Context(
             x.coords,
@@ -26,4 +33,4 @@ class UnadjustedLangevinMove(Move):
 
         after_nvt = CoordsVelBox(x_t, v_t, x.box.copy())
 
-        return after_nvt
+        return key, after_nvt

@@ -1,6 +1,6 @@
 import copy
 import functools
-from typing import List
+from typing import List, cast
 
 import jax
 import jax.numpy as jnp
@@ -74,8 +74,8 @@ def test_optimized_MTM():
         np.testing.assert_array_equal(x_a[:-num_ligand_atoms], x_b[:-num_ligand_atoms])
         return -proposal_U(x_b[-num_ligand_atoms:]) / kT
 
-    def batch_log_Q_a_b_fn(xvbs_a, xvb_b):
-        return log_Q_a_b_fn(xvbs_a[0], xvb_b) * np.ones(len(xvbs_a))
+    def batch_log_Q_a_b_fn(xvbs_a, xvb_b) -> jax.Array:
+        return log_Q_a_b_fn(xvbs_a[0], xvb_b) * jnp.ones(len(xvbs_a))
 
     #  should this be proposal_U or full_U?
     def log_lambda_a_b_fn_coords(x_a, x_b):
@@ -85,13 +85,14 @@ def test_optimized_MTM():
 
     batch_log_lambda_a_b_fn_coords = jax.vmap(log_lambda_a_b_fn_coords, in_axes=(0, None))
 
-    def batch_log_lambda_a_b_fn(xvbs_a, xvb_b):
+    def batch_log_lambda_a_b_fn(xvbs_a, xvb_b) -> jax.Array:
         xs_a = []
         for a in xvbs_a:
             xs_a.append(a.coords)
-        xs_a = np.array(xs_a)
+        xs_a = jnp.array(xs_a)
 
-        return batch_log_lambda_a_b_fn_coords(xs_a, xvb_b.coords)
+        result = batch_log_lambda_a_b_fn_coords(xs_a, xvb_b.coords)
+        return cast(jax.Array, result)
 
     # (ytz): This only works for the decharged case since samples are generated from a decharged state.
     # U_self + U_nonbonded
@@ -105,9 +106,9 @@ def test_optimized_MTM():
     batch_log_prob_fn = jax.vmap(log_prob_fn)
 
     # do not take velocities into account when evaluating log probabilities
-    def batch_log_prob_wrapper(xvbs: List[CoordsVelBox]) -> List[float]:
-        batch_coords = np.array([xvb.coords for xvb in xvbs])
-        batch_boxes = np.array([xvb.box for xvb in xvbs])
+    def batch_log_prob_wrapper(xvbs: List[CoordsVelBox]) -> jax.Array:
+        batch_coords = jnp.array([xvb.coords for xvb in xvbs])
+        batch_boxes = jnp.array([xvb.box for xvb in xvbs])
         return batch_log_prob_fn(batch_coords, batch_boxes)
 
     # for use in optimized method
@@ -140,28 +141,26 @@ def test_optimized_MTM():
     npt_mover = NPTMove(bps, masses, temperature, pressure, n_steps=1000, seed=seed)
 
     K = 100
-    # note that these seeds aren't actually used, since we feed in explicit keys to acceptance_probability
     ref_mtm_mover = ReferenceMTMMove(
-        K, batch_proposal_fn, batch_log_Q_a_b_fn, batch_log_prob_wrapper, batch_log_lambda_a_b_fn, seed=seed
+        K, batch_proposal_fn, batch_log_Q_a_b_fn, batch_log_prob_wrapper, batch_log_lambda_a_b_fn
     )
-    test_mtm_mover = OptimizedMTMMove(K, batch_proposal_coords_fn, batch_log_weights_fn, seed=seed)
+    test_mtm_mover = OptimizedMTMMove(K, batch_proposal_coords_fn, batch_log_weights_fn)
     xvb_t = copy.deepcopy(xvb0)
     key = jrandom.PRNGKey(0)
 
     num_batches = 15
     for _ in range(num_batches):
 
-        xvb_t = npt_mover.move(xvb_t)
+        key, xvb_t = npt_mover.move(key, xvb_t)
 
-        ref_yvb, ref_prob, ref_key = ref_mtm_mover.acceptance_probability(xvb_t, key)
+        key, subkey = jrandom.split(key)
+        ref_key, ref_yvb, ref_prob = ref_mtm_mover.propose_with_log_q_diff(subkey, xvb_t)
 
-        np.testing.assert_array_equal(ref_yvb.velocities, xvb_t.velocities)
+        np.testing.assert_array_equal(np.asarray(ref_yvb.velocities), np.asarray(xvb_t.velocities))
         np.testing.assert_array_equal(ref_yvb.box, xvb_t.box)
 
-        test_y, test_prob, test_key = test_mtm_mover.acceptance_probability(xvb_t.coords, xvb_t.box, key)
+        test_key, test_y, test_prob = test_mtm_mover.propose_with_log_q_diff(subkey, xvb_t)
 
-        np.testing.assert_array_equal(ref_yvb.coords, test_y)
+        np.testing.assert_array_equal(ref_yvb.coords, test_y.coords)
         np.testing.assert_almost_equal(ref_prob, test_prob)
         np.testing.assert_array_equal(ref_key, test_key)
-
-        _, key = jrandom.split(ref_key)
