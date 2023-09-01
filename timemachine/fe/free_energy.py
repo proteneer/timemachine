@@ -783,11 +783,12 @@ def run_sims_hrex(
     sp = SummedPotential([bp.potential for bp in bps], [bp.params for bp in bps])
     ubp = sp.to_gpu(np.float32)
 
-    def compute_energy_offsets(xbs: List[CoordsBox], params: List[NDArray]):
+    def compute_log_q_matrix(xbs: List[CoordsBox], params: List[NDArray]):
         coords = np.array([xb.coords for xb in xbs])
         boxes = np.array([xb.box for xb in xbs])
         _, _, U = ubp.unbound_impl.execute_selective_batch(coords, np.array(params), boxes, False, False, True)
-        return U
+        log_q = -U / (BOLTZ * temperature)
+        return log_q
 
     def get_log_q_fn(xbs: List[CoordsBox]):
         def get_flattened_params(state_idx: StateIdx) -> NDArray:
@@ -795,13 +796,12 @@ def run_sims_hrex(
             return np.concatenate([bp.params.flatten() for bp in bps])
 
         params = [get_flattened_params(StateIdx(idx)) for idx, _ in enumerate(initial_states)]
-        U_kl = compute_energy_offsets(xbs, params)
+        log_q_kl = compute_log_q_matrix(xbs, params)
 
-        def log_q(replica_idx: ReplicaIdx, state_idx: StateIdx) -> float:
-            U = U_kl[replica_idx, state_idx]
-            return -U / (BOLTZ * temperature)
+        def log_q_fn(replica_idx: ReplicaIdx, state_idx: StateIdx) -> float:
+            return log_q_kl[replica_idx, state_idx]
 
-        return log_q
+        return log_q_fn
 
     state_idxs = [StateIdx(i) for i, _ in enumerate(lambdas)]
     neighbor_pairs = list(zip(state_idxs, state_idxs[1:]))
