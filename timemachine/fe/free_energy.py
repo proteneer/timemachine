@@ -791,11 +791,10 @@ def run_sims_hrex(
         return log_q
 
     def get_log_q_fn(xbs: List[CoordsBox]):
-        def get_flattened_params(state_idx: StateIdx) -> NDArray:
-            bps = initial_states[state_idx].potentials
-            return np.concatenate([bp.params.flatten() for bp in bps])
+        def get_flattened_params(initial_state: InitialState) -> NDArray:
+            return np.concatenate([bp.params.flatten() for bp in initial_state.potentials])
 
-        params = [get_flattened_params(StateIdx(idx)) for idx, _ in enumerate(initial_states)]
+        params = [get_flattened_params(initial_state) for initial_state in initial_states]
         log_q_kl = compute_log_q_matrix(xbs, params)
 
         def log_q_fn(replica_idx: ReplicaIdx, state_idx: StateIdx) -> float:
