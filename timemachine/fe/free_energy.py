@@ -777,7 +777,7 @@ def run_sims_hrex(
     np.random.seed(md_params.seed)
 
     lambdas = [s.lamb for s in initial_states]
-    replicas = [CoordsBox(s.x0, s.box0) for s in initial_states]
+    initial_replicas = [CoordsBox(s.x0, s.box0) for s in initial_states]
 
     bps = initial_states[0].potentials  # TODO: assert initial states have compatible potentials?
     sp = SummedPotential([bp.potential for bp in bps], [bp.params for bp in bps])
@@ -809,7 +809,7 @@ def run_sims_hrex(
     # neighbor swaps is aperiodic in cases where swap acceptance rates approach 100%
     neighbor_pairs = [(StateIdx(0), StateIdx(0))] + neighbor_pairs
 
-    hrex = Hrex.from_replicas(replicas)
+    hrex = Hrex.from_replicas(initial_replicas)
 
     def get_equilibrated_initial_state(initial_state: InitialState, seed: int) -> InitialState:
         md_params_equil = replace(md_params, n_frames=1, steps_per_frame=1, seed=seed)
@@ -841,7 +841,7 @@ def run_sims_hrex(
             return CoordsBox(frames[-1], boxes[-1])
 
         hrex, samples_by_state = hrex.sample_replicas(sample_replica, replica_from_samples)
-        log_q = get_log_q_fn(replicas)
+        log_q = get_log_q_fn(hrex.replicas)
         hrex, fraction_accepted_by_pair = hrex.attempt_neighbor_swaps(neighbor_pairs, log_q, n_swap_attempts_per_iter)
         fraction_accepted_by_pair = fraction_accepted_by_pair[1:]  # remove stats for (0, 0) pair
 
