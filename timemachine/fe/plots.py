@@ -392,7 +392,7 @@ def plot_hrex_replica_state_distribution_heatmap(cumulative_replica_state_counts
 
     for replica in replicas:
         for state in states:
-            ax.text(replica, state, fraction_by_state_by_replica[replica, state], ha="center", va="center", color="w")
+            ax.text(replica, state, fraction_by_state_by_replica[state, replica], ha="center", va="center", color="w")
 
     ax.set_xlabel("replica")
     ax.set_ylabel("state")
