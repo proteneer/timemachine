@@ -10,11 +10,14 @@ from timemachine.fe.plots import (
     plot_hrex_replica_state_distribution_convergence,
     plot_hrex_replica_state_distribution_heatmap,
     plot_hrex_swap_acceptance_rates_convergence,
+    plot_hrex_transition_matrix,
 )
 from timemachine.fe.rbfe import estimate_relative_free_energy_bisection_hrex
 from timemachine.ff import Forcefield
 from timemachine.md import builders
 from timemachine.testsystems.relative import get_hif2a_ligand_pair_single_topology
+
+DEBUG = False
 
 
 @pytest.mark.nightly(reason="Slow")
@@ -51,8 +54,8 @@ def test_hrex_rbfe_hif2a(host: Optional[str]):
         n_frames_per_iter=10,
     )
 
-    # Uncomment to visualize
-    # plot_hrex_rbfe_hif2a(result)
+    if DEBUG:
+        plot_hrex_rbfe_hif2a(result)
 
     assert result.hrex_diagnostics
 
@@ -68,6 +71,7 @@ def test_hrex_rbfe_hif2a(host: Optional[str]):
 def plot_hrex_rbfe_hif2a(result: SimulationResult):
     assert result.hrex_diagnostics
     plot_hrex_swap_acceptance_rates_convergence(result.hrex_diagnostics.cumulative_swap_acceptance_rates)
+    plot_hrex_transition_matrix(result.hrex_diagnostics.transition_matrix)
     plot_hrex_replica_state_distribution_convergence(result.hrex_diagnostics.cumulative_replica_state_counts)
     plot_hrex_replica_state_distribution_heatmap(result.hrex_diagnostics.cumulative_replica_state_counts)
     plt.show()
