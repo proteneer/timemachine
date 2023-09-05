@@ -13,7 +13,6 @@ StateIdx = NewType("StateIdx", int)
 ReplicaIdx = NewType("ReplicaIdx", int)
 
 
-@dataclass
 class NeighborSwapMove(MetropolisHastingsMove[List[Replica]]):
     def __init__(self, log_q: Callable[[Replica, StateIdx], float], s_a: StateIdx, s_b: StateIdx):
         super().__init__()
