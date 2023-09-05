@@ -24,6 +24,7 @@ from timemachine.fe.free_energy import AbsoluteFreeEnergy, HostConfig, InitialSt
 from timemachine.fe.topology import BaseTopology
 from timemachine.fe.utils import get_romol_conf
 from timemachine.ff import Forcefield
+from timemachine.ff.handlers import openmm_deserializer
 from timemachine.ff.handlers.nonbonded import PrecomputedChargeHandler
 from timemachine.lib import LangevinIntegrator, MonteCarloBarostat
 from timemachine.md import moves
@@ -63,7 +64,11 @@ def build_system(host_pdbfile: str, water_ff: str, padding: float):
     return solvated_host_system, solvated_host_coords, box, solvated_topology, nwa
 
 
-def randomly_rotate_and_translate(coords, offset):
+def randomly_rotate_and_translate(coords, new_loc):
+    """
+    Randomly rotate and translate coords such that the centroid of the displaced
+    coordinates is equal to new_loc.
+    """
     # coords: shape 3(OHH) x 3(xyz), water coordinates
     centroid = np.mean(coords, axis=0, keepdims=True)
     centered_coords = coords - centroid
@@ -72,16 +77,17 @@ def randomly_rotate_and_translate(coords, offset):
     # equivalent to standard form where R is first:
     # (R @ A.T).T = A @ R.T
     rotated_coords = centered_coords @ rot_mat.T
-    return rotated_coords + offset
+    return rotated_coords + new_loc
 
 
-def randomly_translate(coords, offset):
+def randomly_translate(coords, new_loc):
+    """
+    Translate coords such that the centroid of the displaced
+    coordinates is equal to new_loc.
+    """
     centroid = np.mean(coords, axis=0, keepdims=True)
     centered_coords = coords - centroid
-    return centered_coords + offset
-
-
-from timemachine.ff.handlers import openmm_deserializer
+    return centered_coords + new_loc
 
 
 def get_initial_state(water_pdb, mol, ff, seed, nb_cutoff):
@@ -95,10 +101,6 @@ def get_initial_state(water_pdb, mol, ff, seed, nb_cutoff):
 
     assert num_water_atoms == len(solvent_conf)
 
-    temperature = DEFAULT_TEMP
-    dt = 1e-3
-    barostat_interval = 25
-
     if mol:
         bt = BaseTopology(mol, ff)
         afe = AbsoluteFreeEnergy(mol, bt)
@@ -109,43 +111,34 @@ def get_initial_state(water_pdb, mol, ff, seed, nb_cutoff):
         for p, bp in zip(params, potentials):
             host_bps.append(bp.bind(p))
 
-        integrator = LangevinIntegrator(temperature, dt, 1.0, combined_masses, seed)
-
-        bond_list = get_bond_list(host_bps[0].potential)
-        group_idxs = get_group_indices(bond_list, len(combined_masses))
-
-        barostat = MonteCarloBarostat(
-            len(combined_masses), DEFAULT_PRESSURE, temperature, group_idxs, barostat_interval, seed + 1
-        )
-
         # (YTZ): This is disabled because the initial ligand and starting waters are pre-minimized
         # print("Minimizing the host system...", end="", flush=True)
         # host_conf = minimize_host_4d([mol], host_config, ff)
         # print("Done", flush=True)
 
-        host_conf = solvent_conf
-        combined_conf = np.concatenate([host_conf, get_romol_conf(mol)], axis=0)
-
         ligand_idxs = np.arange(num_water_atoms, num_water_atoms + mol.GetNumAtoms())
-
-        initial_state = InitialState(
-            host_bps, integrator, barostat, combined_conf, np.zeros_like(combined_conf), solvent_box, 0.0, ligand_idxs
-        )
+        final_masses = combined_masses
+        final_conf = np.concatenate([solvent_conf, get_romol_conf(mol)], axis=0)
 
     else:
         host_bps, host_masses = openmm_deserializer.deserialize_system(solvent_sys, cutoff=nb_cutoff)
-        integrator = LangevinIntegrator(temperature, dt, 1.0, host_masses, seed)
-        bond_list = get_bond_list(host_bps[0].potential)
-        group_idxs = get_group_indices(bond_list, len(host_masses))
-        barostat_interval = 25
-        barostat = MonteCarloBarostat(
-            len(host_masses), DEFAULT_PRESSURE, temperature, group_idxs, barostat_interval, seed + 1
-        )
-
         ligand_idxs = [0, 1, 2]  # pick first water molecule to be a "ligand" for targetting purposes
-        initial_state = InitialState(
-            host_bps, integrator, barostat, solvent_conf, np.zeros_like(solvent_conf), solvent_box, 0.0, ligand_idxs
-        )
+        final_masses = host_masses
+        final_conf = solvent_conf
+
+    temperature = DEFAULT_TEMP
+    dt = 1e-3
+    barostat_interval = 25
+    integrator = LangevinIntegrator(temperature, dt, 1.0, final_masses, seed)
+    bond_list = get_bond_list(host_bps[0].potential)
+    group_idxs = get_group_indices(bond_list, len(final_masses))
+    barostat = MonteCarloBarostat(
+        len(final_masses), DEFAULT_PRESSURE, temperature, group_idxs, barostat_interval, seed + 1
+    )
+
+    initial_state = InitialState(
+        host_bps, integrator, barostat, final_conf, np.zeros_like(final_conf), solvent_box, 0.0, ligand_idxs
+    )
 
     num_water_mols = num_water_atoms // 3
 
@@ -156,6 +149,10 @@ from scipy.special import logsumexp
 
 
 class BDExchangeMove(moves.MonteCarloMove):
+    """
+    Untargetted, biased deletion move where we selectively prefer certain waters over others.
+    """
+
     def __init__(
         self,
         nb_beta: float,
@@ -168,8 +165,14 @@ class BDExchangeMove(moves.MonteCarloMove):
         self.nb_cutoff = nb_cutoff
         self.nb_params = jnp.array(nb_params)
         self.num_waters = len(water_idxs)
+
+        for wi, wj, wk in water_idxs:
+            assert wi + 1 == wj
+            assert wi + 2 == wk
+
         self.water_idxs_jnp = jnp.array(water_idxs)  # make jit happy
         self.water_idxs_np = np.array(water_idxs)
+
         self.beta = beta
 
         self.n_atoms = len(nb_params)
@@ -178,6 +181,7 @@ class BDExchangeMove(moves.MonteCarloMove):
         for a_idxs in water_idxs:
             all_a_idxs.append(np.array(a_idxs))
             all_b_idxs.append(np.delete(np.arange(self.n_atoms), a_idxs))
+
         self.all_a_idxs = np.array(all_a_idxs)
         self.all_b_idxs = np.array(all_b_idxs)
 
@@ -211,7 +215,8 @@ class BDExchangeMove(moves.MonteCarloMove):
             """
             if not np.array_equal(self.last_conf, conf):
                 self.last_conf = conf
-                self.last_bw = np.array(self.beta * self.batch_U_fn(conf, box, self.all_a_idxs, self.all_b_idxs))
+                tmp = self.beta * self.batch_U_fn(conf, box, self.all_a_idxs, self.all_b_idxs)
+                self.last_bw = np.array(tmp)
             return self.last_bw
 
         self.batch_log_weights = batch_log_weights
@@ -301,7 +306,7 @@ def delta_r_np(ri, rj, box):
     return diff
 
 
-def v1_insertion(radius, center, box):
+def inner_insertion(radius, center, box):
     # (ytz): sample a point inside the sphere uniformly
     # source: https://karthikkaranth.me/blog/generating-random-points-in-a-sphere/
     xyz = np.random.randn(3)
@@ -316,7 +321,7 @@ def v1_insertion(radius, center, box):
     return new_xyz
 
 
-def v2_insertion(radius, center, box):
+def outer_insertion(radius, center, box):
     # generate random proposals outside of the sphere but inside the box
     while True:
         xyz = np.random.rand(3) * np.diag(box)
@@ -366,7 +371,7 @@ class TIBDExchangeMove(BDExchangeMove):
             Indices corresponding to the atoms that should be used to compute the centroid
 
         beta: float
-            Thermodynamic beta, 1/kT (in kJ/mol)
+            Thermodynamic beta, 1/kT, in (kJ/mol)^-1
 
         radius: float
             Radius to use for the ligand_idxs
@@ -381,12 +386,13 @@ class TIBDExchangeMove(BDExchangeMove):
         """
         Partition water molecules into two groups, depending if it's inside the sphere or outside the sphere.
         """
-        dijs = np.linalg.norm(delta_r_np(np.mean(coords[self.water_idxs_np], axis=1), center, box), axis=1)
-        v1_mols = np.argwhere(dijs < self.radius).reshape(-1)
-        v2_mols = np.argwhere(dijs >= self.radius).reshape(-1)
+        mol_centroids = np.mean(coords[self.water_idxs_np], axis=1)
+        dijs = np.linalg.norm(delta_r_np(mol_centroids, center, box), axis=1)
+        inner_mols = np.argwhere(dijs < self.radius).reshape(-1)
+        outer_mols = np.argwhere(dijs >= self.radius).reshape(-1)
 
-        assert len(v1_mols) + len(v2_mols) == len(self.water_idxs_np)
-        return v1_mols, v2_mols
+        assert len(inner_mols) + len(outer_mols) == len(self.water_idxs_np)
+        return inner_mols, outer_mols
 
     # @profile
     def swap_vi_into_vj(
@@ -445,28 +451,28 @@ class TIBDExchangeMove(BDExchangeMove):
         box = x.box
         coords = x.coords
         center = np.mean(coords[self.ligand_idxs], axis=0)
-        v1_mols, v2_mols = self.get_water_groups(coords, box, center)
-        n1 = len(v1_mols)
-        n2 = len(v2_mols)
+        inner_mols, outer_mols = self.get_water_groups(coords, box, center)
+        n1 = len(inner_mols)
+        n2 = len(outer_mols)
 
         vol_1 = (4 / 3) * np.pi * self.radius ** 3
         vol_2 = np.prod(np.diag(box)) - vol_1
 
         # optimize this later
-        v1_site = v1_insertion(self.radius, center, box)
-        v2_site = v2_insertion(self.radius, center, box)
+        v1_site = inner_insertion(self.radius, center, box)
+        v2_site = outer_insertion(self.radius, center, box)
 
         if n1 == 0 and n2 == 0:
             assert 0
         elif n1 > 0 and n2 == 0:
-            return self.swap_vi_into_vj(v1_mols, v2_mols, x, v2_site, vol_1, vol_2)
+            return self.swap_vi_into_vj(inner_mols, outer_mols, x, v2_site, vol_1, vol_2)
         elif n1 == 0 and n2 > 0:
-            return self.swap_vi_into_vj(v2_mols, v1_mols, x, v1_site, vol_2, vol_1)
+            return self.swap_vi_into_vj(outer_mols, inner_mols, x, v1_site, vol_2, vol_1)
         elif n1 > 0 and n2 > 0:
             if np.random.rand() < 0.5:
-                return self.swap_vi_into_vj(v1_mols, v2_mols, x, v2_site, vol_1, vol_2)
+                return self.swap_vi_into_vj(inner_mols, outer_mols, x, v2_site, vol_1, vol_2)
             else:
-                return self.swap_vi_into_vj(v2_mols, v1_mols, x, v1_site, vol_2, vol_1)
+                return self.swap_vi_into_vj(outer_mols, inner_mols, x, v1_site, vol_2, vol_1)
         else:
             # negative numbers, dun goof'd
             assert 0
