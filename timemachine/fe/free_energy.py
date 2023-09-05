@@ -29,7 +29,7 @@ from timemachine.ff import ForcefieldParams
 from timemachine.ff.handlers import openmm_deserializer
 from timemachine.lib import LangevinIntegrator, MonteCarloBarostat, custom_ops
 from timemachine.md.barostat.utils import compute_box_center, get_bond_list, get_group_indices
-from timemachine.md.hrex import Hrex, HrexDiagnostics, ReplicaIdx, StateIdx, get_swap_attempts_per_iter_heuristic
+from timemachine.md.hrex import HREX, HREXDiagnostics, ReplicaIdx, StateIdx, get_swap_attempts_per_iter_heuristic
 from timemachine.md.states import CoordsBox
 from timemachine.potentials import BoundPotential, HarmonicBond, SummedPotential
 from timemachine.utils import batches, pairwise_transform_and_combine
@@ -142,7 +142,7 @@ class SimulationResult:
     boxes: List[NDArray]
     md_params: MDParams
     intermediate_results: List[PairBarResult]
-    hrex_diagnostics: Optional[HrexDiagnostics] = None
+    hrex_diagnostics: Optional[HREXDiagnostics] = None
 
 
 def image_frames(initial_state: InitialState, frames: np.ndarray, boxes: np.ndarray) -> np.ndarray:
@@ -731,7 +731,7 @@ def run_sims_hrex(
     temperature: float,
     n_swap_attempts_per_iter: Optional[int] = None,
     verbose: bool = True,
-) -> Tuple[PairBarResult, List[StoredArrays], List[NDArray], HrexDiagnostics]:
+) -> Tuple[PairBarResult, List[StoredArrays], List[NDArray], HREXDiagnostics]:
     r"""Sample from a sequence of states using nearest-neighbor Hamiltonian Replica EXchange (HREX).
 
     See documentation for :py:func:`timemachine.md.hrex.run_hrex` for details of the algorithm and implementation.
@@ -767,7 +767,7 @@ def run_sims_hrex(
     List[NDArray]
         box trajectories
 
-    HrexDiagnostics
+    HREXDiagnostics
         HREX statistics (e.g. swap rates, replica-state distribution)
     """
 
@@ -809,7 +809,7 @@ def run_sims_hrex(
     # neighbor swaps is aperiodic in cases where swap acceptance rates approach 100%
     neighbor_pairs = [(StateIdx(0), StateIdx(0))] + neighbor_pairs
 
-    hrex = Hrex.from_replicas(initial_replicas)
+    hrex = HREX.from_replicas(initial_replicas)
 
     def get_equilibrated_initial_state(initial_state: InitialState, seed: int) -> InitialState:
         md_params_equil = replace(md_params, n_frames=1, steps_per_frame=1, seed=seed)
@@ -901,6 +901,6 @@ def run_sims_hrex(
         lambda s1, s2: estimate_free_energy_bar(compute_energy_decomposed_u_kln([s1, s2]), temperature),
     )
 
-    diagnostics = HrexDiagnostics(replica_idx_by_state_by_iter, fraction_accepted_by_pair_by_iter)
+    diagnostics = HREXDiagnostics(replica_idx_by_state_by_iter, fraction_accepted_by_pair_by_iter)
 
     return PairBarResult(initial_states, list(bar_results)), frames_by_state, boxes_by_state, diagnostics

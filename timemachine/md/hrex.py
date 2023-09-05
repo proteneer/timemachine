@@ -39,19 +39,19 @@ _Samples = TypeVar("_Samples")
 
 
 @dataclass
-class Hrex(Generic[_Replica]):
+class HREX(Generic[_Replica]):
     replicas: List[_Replica]
     replica_idx_by_state: List[ReplicaIdx]
 
     @classmethod
-    def from_replicas(cls, replicas: Sequence[_Replica]) -> "Hrex":
-        return Hrex(list(replicas), [ReplicaIdx(i) for i, _ in enumerate(replicas)])
+    def from_replicas(cls, replicas: Sequence[_Replica]) -> "HREX":
+        return HREX(list(replicas), [ReplicaIdx(i) for i, _ in enumerate(replicas)])
 
     def sample_replicas(
         self,
         sample_replica: Callable[[_Replica, StateIdx], _Samples],
         replica_from_samples: Callable[[_Samples], _Replica],
-    ) -> Tuple["Hrex[_Replica]", List[_Samples]]:
+    ) -> Tuple["HREX[_Replica]", List[_Samples]]:
 
         samples_by_state = [sample_replica(replica, state_idx) for state_idx, replica in self.state_replica_pairs]
         replicas_by_state = [replica_from_samples(samples) for samples in samples_by_state]
@@ -61,14 +61,14 @@ class Hrex(Generic[_Replica]):
             replica_idx = self.replica_idx_by_state[state_idx]
             replicas[replica_idx] = replica
 
-        return Hrex(replicas, self.replica_idx_by_state), samples_by_state
+        return HREX(replicas, self.replica_idx_by_state), samples_by_state
 
     def attempt_neighbor_swaps(
         self,
         neighbor_pairs: Sequence[Tuple[StateIdx, StateIdx]],
         log_q: Callable[[ReplicaIdx, StateIdx], float],
         n_swap_attempts: int,
-    ) -> Tuple["Hrex[_Replica]", List[Tuple[int, int]]]:
+    ) -> Tuple["HREX[_Replica]", List[Tuple[int, int]]]:
 
         move = MixtureOfMoves([NeighborSwapMove(log_q, s_a, s_b) for s_a, s_b in neighbor_pairs])
 
@@ -78,7 +78,7 @@ class Hrex(Generic[_Replica]):
 
         fraction_accepted_by_pair = list(zip(move.n_accepted_by_move, move.n_proposed_by_move))
 
-        return Hrex(self.replicas, replica_idx_by_state), fraction_accepted_by_pair
+        return HREX(self.replicas, replica_idx_by_state), fraction_accepted_by_pair
 
     @property
     def state_replica_pairs(self) -> List[Tuple[StateIdx, _Replica]]:
@@ -131,7 +131,7 @@ def estimate_relaxation_time(transition_matrix: NDArray) -> float:
 
 
 @dataclass
-class HrexDiagnostics:
+class HREXDiagnostics:
     replica_idx_by_state_by_iter: List[List[ReplicaIdx]]
     fraction_accepted_by_pair_by_iter: List[List[Tuple[int, int]]]
 
@@ -173,7 +173,7 @@ def run_hrex(
     n_samples: int,
     n_samples_per_iter: int,
     n_swap_attempts_per_iter: Optional[int] = None,
-) -> Tuple[List[List[_Samples]], HrexDiagnostics]:
+) -> Tuple[List[List[_Samples]], HREXDiagnostics]:
     r"""Sample from a sequence of states using Hamiltonian Replica EXchange (HREX).
 
     This implementation uses a method described in [1] (in section III.B.2) to generate effectively uncorrelated
@@ -219,7 +219,7 @@ def run_hrex(
     List[List[_Samples]]
         samples grouped by state and iteration
 
-    HrexDiagnostics
+    HREXDiagnostics
         HREX statistics (e.g. swap rates, replica-state distribution)
     """
 
@@ -228,7 +228,7 @@ def run_hrex(
     if n_swap_attempts_per_iter is None:
         n_swap_attempts_per_iter = get_swap_attempts_per_iter_heuristic(n_replicas)
 
-    hrex = Hrex.from_replicas(replicas)
+    hrex = HREX.from_replicas(replicas)
 
     samples_by_state_by_iter: List[List[_Samples]] = []
     replica_idx_by_state_by_iter: List[List[ReplicaIdx]] = []
@@ -244,4 +244,4 @@ def run_hrex(
         replica_idx_by_state_by_iter.append(hrex.replica_idx_by_state)
         fraction_accepted_by_pair_by_iter.append(fraction_accepted_by_pair)
 
-    return samples_by_state_by_iter, HrexDiagnostics(replica_idx_by_state_by_iter, fraction_accepted_by_pair_by_iter)
+    return samples_by_state_by_iter, HREXDiagnostics(replica_idx_by_state_by_iter, fraction_accepted_by_pair_by_iter)

@@ -16,7 +16,7 @@ from timemachine.fe.plots import (
     plot_hrex_swap_acceptance_rates_convergence,
     plot_hrex_transition_matrix,
 )
-from timemachine.md.hrex import HrexDiagnostics, ReplicaIdx, StateIdx, run_hrex
+from timemachine.md.hrex import HREXDiagnostics, ReplicaIdx, StateIdx, run_hrex
 from timemachine.md.moves import MetropolisHastingsMove
 
 DEBUG = False
@@ -271,7 +271,7 @@ def test_hrex_gaussian_mixture(seed):
         plt.show()
 
 
-def plot_hrex_diagnostics(diagnostics: HrexDiagnostics):
+def plot_hrex_diagnostics(diagnostics: HREXDiagnostics):
     plot_hrex_swap_acceptance_rates_convergence(diagnostics.cumulative_swap_acceptance_rates)
     plot_hrex_transition_matrix(diagnostics.transition_matrix)
     plot_hrex_replica_state_distribution(diagnostics.cumulative_replica_state_counts)
