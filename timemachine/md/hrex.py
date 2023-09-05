@@ -37,7 +37,7 @@ class NeighborSwapMove(MetropolisHastingsMove[List[Replica]]):
 Samples = TypeVar("Samples")
 
 
-@dataclass
+@dataclass(frozen=True)
 class HREX(Generic[Replica]):
     replicas: List[Replica]
     replica_idx_by_state: List[ReplicaIdx]
