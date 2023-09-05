@@ -106,7 +106,9 @@ def estimate_transition_matrix(replica_idx_by_state_by_iter: Sequence[Sequence[R
     The (i, j) element in the returned matrix represents the probability for a replica in state j to transition to state
     j in a single permutation move (consisting of many neighbor swap attempts).
 
-    The resulting matrix is "doubly stochastic", i.e., all rows and columns sum to 1.
+    The resulting matrix is:
+      * not necessarily symmetric
+      * "doubly stochastic", i.e., all rows and columns sum to 1
 
     Returns
     -------
