@@ -111,11 +111,11 @@ def estimate_transition_matrix(replica_idx_by_state_by_iter: Sequence[Sequence[R
     replica_idx_by_state_by_iter_ = np.array(replica_idx_by_state_by_iter)  # (iter, state) -> replica
     n_iters, _ = replica_idx_by_state_by_iter_.shape
 
-    # transition_by_iter: (n_iters, n_states, n_states) -> bool
+    # transition_by_iter: (iter, to state, from state) -> bool
     transition_by_iter = replica_idx_by_state_by_iter_[:-1, None, :] == replica_idx_by_state_by_iter_[1:, :, None]
 
     transition_count = np.sum(transition_by_iter, axis=0)  # (to state, from state) -> int
-    transition_rate = transition_count / n_iters  # (to state, from state) -> float
+    transition_rate = transition_count / (n_iters - 1)  # (to state, from state) -> float
 
     return transition_rate
 
