@@ -1,5 +1,6 @@
 import io
 import warnings
+from typing import Tuple
 
 import numpy as np
 from matplotlib import pyplot as plt
@@ -324,17 +325,27 @@ def plot_fwd_reverse_predictions(
     return plot_png
 
 
-def plot_hrex_transition_matrix(transition_rate: NDArray):
+def plot_hrex_transition_matrix(
+    transition_rate: NDArray, figsize: Tuple[float, float] = (13, 10), annotate: bool = True
+):
     """Plot matrix of estimated transition rates for permutation moves as a heatmap."""
     n_states, _ = transition_rate.shape
     states = np.arange(n_states)
 
-    fig, ax = plt.subplots()
-    p = ax.pcolor(states, states, transition_rate, vmin=0.0, vmax=1.0)
+    fig, ax = plt.subplots(figsize=figsize)
+    p = ax.pcolor(states, states, transition_rate)
 
-    for from_state in states:
-        for to_state in states:
-            ax.text(from_state, to_state, transition_rate[to_state, from_state], ha="center", va="center", color="w")
+    if annotate:
+        for from_state in states:
+            for to_state in states:
+                ax.text(
+                    from_state,
+                    to_state,
+                    transition_rate[to_state, from_state],
+                    ha="center",
+                    va="center",
+                    color="w",
+                )
 
     ax.set_xlabel("from state")
     ax.set_ylabel("to state")
@@ -356,7 +367,12 @@ def plot_hrex_swap_acceptance_rates_convergence(cumulative_swap_acceptance_rates
     ax.set_xlabel("iteration")
     ax.set_ylabel("cumulative swap acceptance rate")
     ax.xaxis.get_major_locator().set_params(integer=True)
-    ax.legend(labels=[str(i) for i in range(n_pairs)], title="left state index")
+    ax.legend(
+        labels=[str(i) for i in range(n_pairs)],
+        title="left state index",
+        loc="center left",
+        bbox_to_anchor=(1, 0.5),
+    )
 
 
 def plot_hrex_replica_state_distribution(cumulative_replica_state_counts: NDArray):
@@ -375,10 +391,12 @@ def plot_hrex_replica_state_distribution(cumulative_replica_state_counts: NDArra
     ax.set_xlabel("replica")
     ax.set_ylabel("fraction of iterations")
     ax.xaxis.get_major_locator().set_params(integer=True)
-    ax.legend(title="state")
+    ax.legend(title="state", loc="center left", bbox_to_anchor=(1, 0.5))
 
 
-def plot_hrex_replica_state_distribution_heatmap(cumulative_replica_state_counts: NDArray):
+def plot_hrex_replica_state_distribution_heatmap(
+    cumulative_replica_state_counts: NDArray, figsize: Tuple[float, float] = (13, 10), annotate: bool = True
+):
     """Plot distribution of (replica, state) pairs as a heatmap."""
     n_iters, n_replicas, n_states = cumulative_replica_state_counts.shape
     replicas = np.arange(n_replicas)
@@ -387,12 +405,15 @@ def plot_hrex_replica_state_distribution_heatmap(cumulative_replica_state_counts
     fraction_by_replica_by_state = count_by_replica_by_state / n_iters  # (replica, state) -> float
     fraction_by_state_by_replica = fraction_by_replica_by_state.T  # (state, replica) -> float
 
-    fig, ax = plt.subplots()
-    p = ax.pcolor(replicas, states, fraction_by_state_by_replica, vmin=0.0, vmax=1.0)
+    fig, ax = plt.subplots(figsize=figsize)
+    p = ax.pcolor(replicas, states, fraction_by_state_by_replica)
 
-    for replica in replicas:
-        for state in states:
-            ax.text(replica, state, fraction_by_state_by_replica[state, replica], ha="center", va="center", color="w")
+    if annotate:
+        for replica in replicas:
+            for state in states:
+                ax.text(
+                    replica, state, fraction_by_state_by_replica[state, replica], ha="center", va="center", color="w"
+                )
 
     ax.set_xlabel("replica")
     ax.set_ylabel("state")
