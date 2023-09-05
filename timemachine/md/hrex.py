@@ -234,13 +234,16 @@ def run_hrex(
     fraction_accepted_by_pair_by_iter: List[List[Tuple[int, int]]] = []
 
     for n_samples_batch in batches(n_samples, n_samples_per_iter):
+        log_q_fn = get_log_q_fn(hrex.replicas)
+        hrex, fraction_accepted_by_pair = hrex.attempt_neighbor_swaps(
+            neighbor_pairs, log_q_fn, n_swap_attempts_per_iter
+        )
+
         sample_replica_ = lambda replica, state_idx: sample_replica(replica, state_idx, n_samples_batch)
         hrex, samples_by_state = hrex.sample_replicas(sample_replica_, replica_from_samples)
-        log_q = get_log_q_fn(hrex.replicas)
-        hrex, fraction_accepted_by_pair = hrex.attempt_neighbor_swaps(neighbor_pairs, log_q, n_swap_attempts_per_iter)
 
-        samples_by_state_by_iter.append(samples_by_state)
-        replica_idx_by_state_by_iter.append(hrex.replica_idx_by_state)
         fraction_accepted_by_pair_by_iter.append(fraction_accepted_by_pair)
+        replica_idx_by_state_by_iter.append(hrex.replica_idx_by_state)
+        samples_by_state_by_iter.append(samples_by_state)
 
     return samples_by_state_by_iter, HREXDiagnostics(replica_idx_by_state_by_iter, fraction_accepted_by_pair_by_iter)
