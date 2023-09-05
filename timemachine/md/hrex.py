@@ -103,10 +103,15 @@ def get_cumulative_replica_state_counts(replica_idx_by_state_by_iter: Sequence[S
 def estimate_transition_matrix(replica_idx_by_state_by_iter: Sequence[Sequence[ReplicaIdx]]) -> NDArray:
     """Given a mapping of state index to replica index by iteration, returns an estimate of the transition matrix.
 
+    The (i, j) element in the returned matrix represents the probability for a replica in state j to transition to state
+    j in a single permutation move (consisting of many neighbor swap attempts).
+
+    The resulting matrix is "doubly stochastic", i.e., all rows and columns sum to 1.
+
     Returns
     -------
     NDArray
-        (state, state) -> transition_rate: float
+        (from state, to state) -> transition rate: float
     """
     replica_idx_by_state_by_iter_ = np.array(replica_idx_by_state_by_iter)  # (iter, state) -> replica
     n_iters, _ = replica_idx_by_state_by_iter_.shape
