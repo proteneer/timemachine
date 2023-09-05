@@ -410,6 +410,11 @@ class TIBDExchangeMove(BDExchangeMove):
         # 2. pick a random water to be inserted/deleted
         # 3. compute updated batched log weights with this new water using the transposition trick
 
+        # The transposition trick allows us to compute the denominator efficiently by computing a 3x(N-3)
+        # slice of the nonbonded matrix, as opposed to the full NxN matrix. The numerator is computed once
+        # at the start of a batch of MC moves, and only re-computed/replaced with the denominator when a move
+        # is accepted.
+
         # swap a water molecule from region vi to region vj
         coords, box = x.coords, x.box
 
