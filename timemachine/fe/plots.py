@@ -333,19 +333,14 @@ def plot_hrex_transition_matrix(
     states = np.arange(n_states)
 
     fig, ax = plt.subplots(figsize=figsize)
-    p = ax.pcolor(states, states, transition_rate)
+    p = ax.pcolormesh(states, states, transition_rate)
 
     if annotate:
         for from_state in states:
             for to_state in states:
-                ax.text(
-                    from_state,
-                    to_state,
-                    transition_rate[to_state, from_state],
-                    ha="center",
-                    va="center",
-                    color="w",
-                )
+                rate = transition_rate[to_state, from_state]
+                label = f"{rate:.3f}"
+                ax.text(from_state, to_state, label, ha="center", va="center", color="w")
 
     ax.set_xlabel("from state")
     ax.set_ylabel("to state")
@@ -378,15 +373,15 @@ def plot_hrex_swap_acceptance_rates_convergence(cumulative_swap_acceptance_rates
 def plot_hrex_replica_state_distribution(cumulative_replica_state_counts: NDArray):
     """Plot distribution of (replica, state) pairs as a stacked bar plot."""
     n_iters, n_replicas, n_states = cumulative_replica_state_counts.shape
-    count_by_replica_by_state = cumulative_replica_state_counts[-1]  # (replica, state) -> int
-    fraction_by_replica_by_state = count_by_replica_by_state / n_iters  # (replica, state) -> float
-    fraction_by_state_by_replica = fraction_by_replica_by_state.T  # (state, replica) -> float
+    count_by_state_by_replica = cumulative_replica_state_counts[-1]  # (replica, state) -> int
+    fraction_by_state_by_replica = count_by_state_by_replica / n_iters  # (replica, state) -> float
+    fraction_by_replica_by_state = fraction_by_state_by_replica.T  # (state, replica) -> float
 
     bottom = np.zeros(n_states)
     _, ax = plt.subplots()
-    for state_idx, fraction_by_state in enumerate(fraction_by_state_by_replica):
-        ax.bar(np.arange(n_replicas), fraction_by_state, bottom=bottom, width=0.5, label=str(state_idx))
-        bottom += fraction_by_state
+    for state_idx, fraction_by_replica in enumerate(fraction_by_replica_by_state):
+        ax.bar(np.arange(n_replicas), fraction_by_replica, bottom=bottom, width=0.5, label=str(state_idx))
+        bottom += fraction_by_replica
 
     ax.set_xlabel("replica")
     ax.set_ylabel("fraction of iterations")
@@ -401,19 +396,18 @@ def plot_hrex_replica_state_distribution_heatmap(
     n_iters, n_replicas, n_states = cumulative_replica_state_counts.shape
     replicas = np.arange(n_replicas)
     states = np.arange(n_states)
-    count_by_replica_by_state = cumulative_replica_state_counts[-1]  # (replica, state) -> int
-    fraction_by_replica_by_state = count_by_replica_by_state / n_iters  # (replica, state) -> float
-    fraction_by_state_by_replica = fraction_by_replica_by_state.T  # (state, replica) -> float
+    count_by_state_by_replica = cumulative_replica_state_counts[-1]  # (replica, state) -> int
+    fraction_by_state_by_replica = count_by_state_by_replica / n_iters  # (replica, state) -> float
 
     fig, ax = plt.subplots(figsize=figsize)
-    p = ax.pcolor(replicas, states, fraction_by_state_by_replica)
+    p = ax.pcolormesh(replicas, states, fraction_by_state_by_replica.T)
 
     if annotate:
         for replica in replicas:
             for state in states:
-                ax.text(
-                    replica, state, fraction_by_state_by_replica[state, replica], ha="center", va="center", color="w"
-                )
+                fraction = fraction_by_state_by_replica[replica, state]
+                label = f"{fraction:.3f}"
+                ax.text(replica, state, label, ha="center", va="center", color="w")
 
     ax.set_xlabel("replica")
     ax.set_ylabel("state")
@@ -427,17 +421,17 @@ def plot_hrex_replica_state_distribution_heatmap(
 def plot_hrex_replica_state_distribution_convergence(cumulative_replica_state_counts: NDArray):
     """Plot distribution of states as a function of iteration for each replica."""
     n_iters, _, n_states = cumulative_replica_state_counts.shape
-    fraction_by_iter_by_replica_by_state = (
+    fraction_by_state_by_replica_by_iter = (
         cumulative_replica_state_counts / np.arange(n_iters)[:, None, None]
     )  # (iter, replica, state) -> float
-    fraction_by_replica_by_iter_by_state = np.swapaxes(
-        fraction_by_iter_by_replica_by_state, 0, 1
+    fraction_by_state_by_iter_by_replica = np.swapaxes(
+        fraction_by_state_by_replica_by_iter, 0, 1
     )  # (replica, iter, state) -> float
 
     fig, axs = plt.subplots(nrows=n_states, figsize=(6.4, 2.4 * n_states))
 
-    for replica_idx, (fraction_by_iter_by_state, ax) in enumerate(zip(fraction_by_replica_by_iter_by_state, axs)):
-        p = ax.pcolor(np.arange(n_iters), np.arange(n_states), fraction_by_iter_by_state.T, vmin=0.0, vmax=1.0)
+    for replica_idx, (fraction_by_state_by_iter, ax) in enumerate(zip(fraction_by_state_by_iter_by_replica, axs)):
+        p = ax.pcolormesh(np.arange(n_iters), np.arange(n_states), fraction_by_state_by_iter.T, vmin=0.0, vmax=1.0)
         ax.set_xlabel("iteration")
         ax.set_ylabel("state")
         ax.set_title(f"replica = {replica_idx}")
