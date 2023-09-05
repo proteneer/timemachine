@@ -174,7 +174,7 @@ def run_hrex(
     n_samples_per_iter: int,
     n_swap_attempts_per_iter: Optional[int] = None,
 ) -> Tuple[List[List[_Samples]], HrexDiagnostics]:
-    """Sample from a sequence of states using Hamiltonian Replica EXchange (HREX).
+    r"""Sample from a sequence of states using Hamiltonian Replica EXchange (HREX).
 
     This implementation uses a method described in [1] (in section III.B.2) to generate effectively uncorrelated
     permutations by attempting many consecutive nearest-neighbor swap moves. By default, the number of swap moves is
