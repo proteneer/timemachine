@@ -131,6 +131,7 @@ def estimate_relaxation_time(transition_matrix: NDArray) -> float:
     """Estimate the relaxation time of permutation moves (in number of iterations) as a function of the second-largest
     eigenvalue of the transition matrix."""
 
+    assert np.allclose(np.sum(transition_matrix, axis=0), 1.0), "columns of transition matrix must sum to 1"
     eigvals_ascending = np.linalg.eigvals(transition_matrix)
     mu_2 = eigvals_ascending[-2]  # second-largest eigenvalue
     return 1 / (1 - mu_2)
