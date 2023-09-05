@@ -7,21 +7,21 @@ from numpy.typing import NDArray
 from timemachine.md.moves import MetropolisHastingsMove, MixtureOfMoves
 from timemachine.utils import batches
 
-_Replica = TypeVar("_Replica")
+Replica = TypeVar("Replica")
 
 StateIdx = NewType("StateIdx", int)
 ReplicaIdx = NewType("ReplicaIdx", int)
 
 
 @dataclass
-class NeighborSwapMove(MetropolisHastingsMove[List[_Replica]]):
-    def __init__(self, log_q: Callable[[_Replica, StateIdx], float], s_a: StateIdx, s_b: StateIdx):
+class NeighborSwapMove(MetropolisHastingsMove[List[Replica]]):
+    def __init__(self, log_q: Callable[[Replica, StateIdx], float], s_a: StateIdx, s_b: StateIdx):
         super().__init__()
         self.log_q = log_q
         self.s_a = s_a
         self.s_b = s_b
 
-    def propose_with_log_q_diff(self, state: List[_Replica]) -> Tuple[List[_Replica], float]:
+    def propose_with_log_q_diff(self, state: List[Replica]) -> Tuple[List[Replica], float]:
         s_a = self.s_a
         s_b = self.s_b
         state_ = list(state)
@@ -35,23 +35,23 @@ class NeighborSwapMove(MetropolisHastingsMove[List[_Replica]]):
         return proposed_state, log_q_diff
 
 
-_Samples = TypeVar("_Samples")
+Samples = TypeVar("Samples")
 
 
 @dataclass
-class HREX(Generic[_Replica]):
-    replicas: List[_Replica]
+class HREX(Generic[Replica]):
+    replicas: List[Replica]
     replica_idx_by_state: List[ReplicaIdx]
 
     @classmethod
-    def from_replicas(cls, replicas: Sequence[_Replica]) -> "HREX":
+    def from_replicas(cls, replicas: Sequence[Replica]) -> "HREX":
         return HREX(list(replicas), [ReplicaIdx(i) for i, _ in enumerate(replicas)])
 
     def sample_replicas(
         self,
-        sample_replica: Callable[[_Replica, StateIdx], _Samples],
-        replica_from_samples: Callable[[_Samples], _Replica],
-    ) -> Tuple["HREX[_Replica]", List[_Samples]]:
+        sample_replica: Callable[[Replica, StateIdx], Samples],
+        replica_from_samples: Callable[[Samples], Replica],
+    ) -> Tuple["HREX[Replica]", List[Samples]]:
 
         samples_by_state = [sample_replica(replica, state_idx) for state_idx, replica in self.state_replica_pairs]
         replicas_by_state = [replica_from_samples(samples) for samples in samples_by_state]
@@ -68,7 +68,7 @@ class HREX(Generic[_Replica]):
         neighbor_pairs: Sequence[Tuple[StateIdx, StateIdx]],
         log_q: Callable[[ReplicaIdx, StateIdx], float],
         n_swap_attempts: int,
-    ) -> Tuple["HREX[_Replica]", List[Tuple[int, int]]]:
+    ) -> Tuple["HREX[Replica]", List[Tuple[int, int]]]:
 
         move = MixtureOfMoves([NeighborSwapMove(log_q, s_a, s_b) for s_a, s_b in neighbor_pairs])
 
@@ -81,7 +81,7 @@ class HREX(Generic[_Replica]):
         return HREX(self.replicas, replica_idx_by_state), fraction_accepted_by_pair
 
     @property
-    def state_replica_pairs(self) -> List[Tuple[StateIdx, _Replica]]:
+    def state_replica_pairs(self) -> List[Tuple[StateIdx, Replica]]:
         return [(StateIdx(i), self.replicas[replica_idx]) for i, replica_idx in enumerate(self.replica_idx_by_state)]
 
 
@@ -165,15 +165,15 @@ def get_swap_attempts_per_iter_heuristic(n_states: int) -> int:
 
 
 def run_hrex(
-    replicas: Sequence[_Replica],
-    sample_replica: Callable[[_Replica, StateIdx, int], _Samples],
-    replica_from_samples: Callable[[_Samples], _Replica],
+    replicas: Sequence[Replica],
+    sample_replica: Callable[[Replica, StateIdx, int], Samples],
+    replica_from_samples: Callable[[Samples], Replica],
     neighbor_pairs: Sequence[Tuple[StateIdx, StateIdx]],
-    get_log_q_fn: Callable[[List[_Replica]], Callable[[ReplicaIdx, StateIdx], float]],
+    get_log_q_fn: Callable[[List[Replica]], Callable[[ReplicaIdx, StateIdx], float]],
     n_samples: int,
     n_samples_per_iter: int,
     n_swap_attempts_per_iter: Optional[int] = None,
-) -> Tuple[List[List[_Samples]], HREXDiagnostics]:
+) -> Tuple[List[List[Samples]], HREXDiagnostics]:
     r"""Sample from a sequence of states using Hamiltonian Replica EXchange (HREX).
 
     This implementation uses a method described in [1] (in section III.B.2) to generate effectively uncorrelated
@@ -230,7 +230,7 @@ def run_hrex(
 
     hrex = HREX.from_replicas(replicas)
 
-    samples_by_state_by_iter: List[List[_Samples]] = []
+    samples_by_state_by_iter: List[List[Samples]] = []
     replica_idx_by_state_by_iter: List[List[ReplicaIdx]] = []
     fraction_accepted_by_pair_by_iter: List[List[Tuple[int, int]]] = []
 
