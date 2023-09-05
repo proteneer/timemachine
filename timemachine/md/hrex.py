@@ -90,13 +90,13 @@ def get_cumulative_replica_state_counts(replica_idx_by_state_by_iter: Sequence[S
     Returns
     -------
     NDArray
-        (iter, replica, state) -> cumulative occupancy count: int
+        (iter, state, replica) -> cumulative occupancy count: int
     """
     replica_idx_by_state_by_iter_ = np.array(replica_idx_by_state_by_iter)  # (iter, state) -> replica
     _, n_states = replica_idx_by_state_by_iter_.shape
     states = np.arange(n_states)
-    replica_in_state = replica_idx_by_state_by_iter_[:, :, None] == states  # (iter, replica, state) -> bool
-    cumulative_count = np.cumsum(replica_in_state.astype(int), axis=0)  # (iter, replica, state) -> int
+    replica_in_state = replica_idx_by_state_by_iter_[:, :, None] == states  # (iter, state, replica) -> bool
+    cumulative_count = np.cumsum(replica_in_state.astype(int), axis=0)  # (iter, state, replica) -> int
     return cumulative_count
 
 
@@ -108,7 +108,7 @@ def estimate_transition_matrix(replica_idx_by_state_by_iter: Sequence[Sequence[R
     NDArray
         (state, state) -> transition_rate: float
     """
-    replica_idx_by_state_by_iter_ = np.array(replica_idx_by_state_by_iter)  # (iter, state) -> replica index
+    replica_idx_by_state_by_iter_ = np.array(replica_idx_by_state_by_iter)  # (iter, state) -> replica
     n_iters, _ = replica_idx_by_state_by_iter_.shape
 
     # transition_by_iter: (n_iters, n_states, n_states) -> bool

@@ -372,10 +372,9 @@ def plot_hrex_swap_acceptance_rates_convergence(cumulative_swap_acceptance_rates
 
 def plot_hrex_replica_state_distribution(cumulative_replica_state_counts: NDArray):
     """Plot distribution of (replica, state) pairs as a stacked bar plot."""
-    n_iters, n_replicas, n_states = cumulative_replica_state_counts.shape
-    count_by_state_by_replica = cumulative_replica_state_counts[-1]  # (replica, state) -> int
-    fraction_by_state_by_replica = count_by_state_by_replica / n_iters  # (replica, state) -> float
-    fraction_by_replica_by_state = fraction_by_state_by_replica.T  # (state, replica) -> float
+    n_iters, n_states, n_replicas = cumulative_replica_state_counts.shape
+    count_by_replica_by_state = cumulative_replica_state_counts[-1]  # (state, replica) -> int
+    fraction_by_replica_by_state = count_by_replica_by_state / n_iters  # (state, replica) -> float
 
     bottom = np.zeros(n_states)
     _, ax = plt.subplots()
@@ -393,19 +392,19 @@ def plot_hrex_replica_state_distribution_heatmap(
     cumulative_replica_state_counts: NDArray, figsize: Tuple[float, float] = (13, 10), annotate: bool = True
 ):
     """Plot distribution of (replica, state) pairs as a heatmap."""
-    n_iters, n_replicas, n_states = cumulative_replica_state_counts.shape
+    n_iters, n_states, n_replicas = cumulative_replica_state_counts.shape
     replicas = np.arange(n_replicas)
     states = np.arange(n_states)
-    count_by_state_by_replica = cumulative_replica_state_counts[-1]  # (replica, state) -> int
-    fraction_by_state_by_replica = count_by_state_by_replica / n_iters  # (replica, state) -> float
+    count_by_replica_by_state = cumulative_replica_state_counts[-1]  # (state, replica) -> int
+    fraction_by_replica_by_state = count_by_replica_by_state / n_iters  # (state, replica) -> float
 
     fig, ax = plt.subplots(figsize=figsize)
-    p = ax.pcolormesh(replicas, states, fraction_by_state_by_replica.T)
+    p = ax.pcolormesh(replicas, states, fraction_by_replica_by_state)
 
     if annotate:
         for replica in replicas:
             for state in states:
-                fraction = fraction_by_state_by_replica[replica, state]
+                fraction = fraction_by_replica_by_state[state, replica]
                 label = f"{fraction:.3f}"
                 ax.text(replica, state, label, ha="center", va="center", color="w")
 
@@ -418,26 +417,31 @@ def plot_hrex_replica_state_distribution_heatmap(
     fig.colorbar(p, label="fraction of iterations")
 
 
-def plot_hrex_replica_state_distribution_convergence(cumulative_replica_state_counts: NDArray):
+def plot_hrex_replica_state_distribution_convergence(cumulative_replica_state_counts: NDArray, ncols: int = 4):
     """Plot distribution of states as a function of iteration for each replica."""
-    n_iters, _, n_states = cumulative_replica_state_counts.shape
-    fraction_by_state_by_replica_by_iter = (
+    n_iters, n_states, _ = cumulative_replica_state_counts.shape
+    fraction_by_replica_by_state_by_iter = (
         cumulative_replica_state_counts / np.arange(n_iters)[:, None, None]
-    )  # (iter, replica, state) -> float
-    fraction_by_state_by_iter_by_replica = np.swapaxes(
-        fraction_by_state_by_replica_by_iter, 0, 1
+    )  # (iter, state, replica) -> float
+    fraction_by_state_by_iter_by_replica = np.moveaxis(
+        fraction_by_replica_by_state_by_iter, 2, 0
     )  # (replica, iter, state) -> float
 
-    fig, axs = plt.subplots(nrows=n_states, figsize=(6.4, 2.4 * n_states))
+    nrows = (n_states + ncols - 1) // ncols
+    fig, axs = plt.subplots(ncols=ncols, nrows=nrows, figsize=(13, 10), sharex=True, sharey=True)
 
-    for replica_idx, (fraction_by_state_by_iter, ax) in enumerate(zip(fraction_by_state_by_iter_by_replica, axs)):
+    for replica_idx, (fraction_by_state_by_iter, ax) in enumerate(zip(fraction_by_state_by_iter_by_replica, axs.flat)):
         p = ax.pcolormesh(np.arange(n_iters), np.arange(n_states), fraction_by_state_by_iter.T, vmin=0.0, vmax=1.0)
-        ax.set_xlabel("iteration")
-        ax.set_ylabel("state")
         ax.set_title(f"replica = {replica_idx}")
+
+    for ax in axs[-1, :]:
+        ax.set_xlabel("iteration")
         ax.xaxis.get_major_locator().set_params(integer=True)
+
+    for ax in axs[:, 0]:
+        ax.set_ylabel("state")
         ax.yaxis.get_major_locator().set_params(integer=True)
 
-    fig.subplots_adjust(right=0.8, hspace=0.5)
-    cbar_ax = fig.add_axes([0.85, 0.15, 0.05, 0.7])
+    fig.subplots_adjust(right=0.8, hspace=0.2, wspace=0.2)
+    cbar_ax = fig.add_axes([0.85, 0.15, 0.02, 0.7])
     fig.colorbar(p, cax=cbar_ax, label="fraction of iterations")
