@@ -19,7 +19,6 @@ C = TypeVar("C")
 def pairwise_transform_and_combine(xs: Iterable[A], f: Callable[[A], B], g: Callable[[B, B], C]) -> Iterator[C]:
     """Transforms an iterable using function `f` and combines adjacent transformed elements using function `g`."""
 
-    xs = iter(xs)
     prev_b: Optional[B] = None
 
     for a in xs:
