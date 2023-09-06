@@ -333,6 +333,19 @@ def outer_insertion(radius, center, box):
     assert 0, "outer_insertion_failed"
 
 
+def get_water_groups(coords, box, center, water_idxs, radius):
+    """
+    Partition water molecules into two groups, depending if it's inside the sphere or outside the sphere.
+    """
+    mol_centroids = np.mean(coords[water_idxs], axis=1)
+    dijs = np.linalg.norm(delta_r_np(mol_centroids, center, box), axis=1)
+    inner_mols = np.argwhere(dijs < radius).reshape(-1)
+    outer_mols = np.argwhere(dijs >= radius).reshape(-1)
+
+    assert len(inner_mols) + len(outer_mols) == len(water_idxs)
+    return inner_mols, outer_mols
+
+
 class TIBDExchangeMove(BDExchangeMove):
     r"""
     Targetted Insertion and Biased Deletion Exchange Move
@@ -386,17 +399,17 @@ class TIBDExchangeMove(BDExchangeMove):
         self.ligand_idxs = np.array(ligand_idxs)  # used to determine center of sphere
         self.radius = radius
 
-    def get_water_groups(self, coords, box, center):
-        """
-        Partition water molecules into two groups, depending if it's inside the sphere or outside the sphere.
-        """
-        mol_centroids = np.mean(coords[self.water_idxs_np], axis=1)
-        dijs = np.linalg.norm(delta_r_np(mol_centroids, center, box), axis=1)
-        inner_mols = np.argwhere(dijs < self.radius).reshape(-1)
-        outer_mols = np.argwhere(dijs >= self.radius).reshape(-1)
+    # def get_water_groups(self, coords, box, center):
+    #     """
+    #     Partition water molecules into two groups, depending if it's inside the sphere or outside the sphere.
+    #     """
+    #     mol_centroids = np.mean(coords[self.water_idxs_np], axis=1)
+    #     dijs = np.linalg.norm(delta_r_np(mol_centroids, center, box), axis=1)
+    #     inner_mols = np.argwhere(dijs < self.radius).reshape(-1)
+    #     outer_mols = np.argwhere(dijs >= self.radius).reshape(-1)
 
-        assert len(inner_mols) + len(outer_mols) == len(self.water_idxs_np)
-        return inner_mols, outer_mols
+    #     assert len(inner_mols) + len(outer_mols) == len(self.water_idxs_np)
+    #     return inner_mols, outer_mols
 
     # @profile
     def swap_vi_into_vj(
@@ -460,7 +473,7 @@ class TIBDExchangeMove(BDExchangeMove):
         box = x.box
         coords = x.coords
         center = np.mean(coords[self.ligand_idxs], axis=0)
-        inner_mols, outer_mols = self.get_water_groups(coords, box, center)
+        inner_mols, outer_mols = get_water_groups(coords, box, center, self.water_idxs_np, self.radius)
         n1 = len(inner_mols)
         n2 = len(outer_mols)
 

@@ -10,6 +10,7 @@ from timemachine.md.exchange.exchange_mover import delta_r_np
 
 
 def test_batch_log_weights_incremental():
+    # test that our trick for computing incremental batched log weights is correct
     W = 111  # num waters
     N = 439  # num atoms
     nb_beta = 1.2
@@ -47,6 +48,7 @@ def test_batch_log_weights_incremental():
 
 
 def test_inner_insertion():
+    # test that we can insert correctly inside a sphere under PBC
     for _ in range(1000):
         radius = np.random.rand()
         center = np.random.rand(3)
@@ -56,6 +58,7 @@ def test_inner_insertion():
 
 
 def test_outer_insertion():
+    # test that we can insert correctly outside a sphere but inside the box under PBC
     for _ in range(1000):
         center = np.random.rand(3)
         box = np.eye(3) * np.random.rand()
@@ -64,3 +67,33 @@ def test_outer_insertion():
         radius = np.random.rand() * (np.amax(box) / 2)
         new_xyz = exchange_mover.outer_insertion(radius, center, box)
         assert np.linalg.norm(delta_r_np(new_xyz, center, box)) >= radius
+
+
+def test_get_water_groups():
+    # test that we can partition waters into their groups correctly
+    N = 1000
+    W = 231
+
+    water_idxs = []
+    for wi in range(W):
+        water_idxs.append([wi * 3 + 0, wi * 3 + 1, wi * 3 + 2])  # has to be contiguous
+
+    for _ in range(1000):
+        coords = np.random.rand(N, 3)
+        box = np.eye(3) * np.random.rand()
+        center = np.random.rand(3)
+        radius = np.random.rand()
+
+        test_inner_mols, test_outer_mols = exchange_mover.get_water_groups(coords, box, center, water_idxs, radius)
+        ref_inner_mols, ref_outer_mols = [], []
+
+        for w_idx, (atom_idxs) in enumerate(water_idxs):
+            water_coords = coords[atom_idxs]
+            centroid = np.mean(water_coords, axis=0)
+            if np.linalg.norm(delta_r_np(centroid, center, box)) < radius:
+                ref_inner_mols.append(w_idx)
+            else:
+                ref_outer_mols.append(w_idx)
+
+        np.testing.assert_equal(test_inner_mols, ref_inner_mols)
+        np.testing.assert_equal(test_outer_mols, ref_outer_mols)
