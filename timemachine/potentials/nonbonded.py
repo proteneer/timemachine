@@ -63,7 +63,7 @@ def direct_space_pme(dij, qij, beta):
 def nonbonded_block_unsummed(xi, xj, box, params_i, params_j, beta, cutoff):
     """
     This is a modified version of `nonbonded` that computes a block of
-    interactions between two sets of particles x_i and x_j. It is assumed that
+    NxM interactions between two sets of particles x_i and x_j. It is assumed that
     there are no exclusions between the two particle sets. Typical use cases
     include computing the interaction energy between the environment and a
     ligand.
@@ -75,10 +75,14 @@ def nonbonded_block_unsummed(xi, xj, box, params_i, params_j, beta, cutoff):
     ----------
     xi : (N,3) np.ndarray
         Coordinates
-    xj : (N,3) np.ndarray
+    xj : (M,3) np.ndarray
         Coordinates
     box : Optional 3x3 np.ndarray
         Periodic boundary conditions
+    params_i : (N, 3) np.ndarray
+        3-Tuples of (charge, sigma, epsilons)
+    params_j : (M, 3) np.ndarray
+        3-Tuples of (charge, sigma, epsilons)
     beta : float
         the charge product q_ij will be multiplied by erfc(beta*d_ij)
     cutoff : Optional float
@@ -87,8 +91,8 @@ def nonbonded_block_unsummed(xi, xj, box, params_i, params_j, beta, cutoff):
 
     Returns
     -------
-    scalar
-        Interaction energy
+    (N,M) np.ndarray
+        Interaction energy block
 
     """
     ri = jnp.expand_dims(xi, axis=1)
@@ -117,34 +121,7 @@ def nonbonded_block_unsummed(xi, xj, box, params_i, params_j, beta, cutoff):
 
 def nonbonded_block(xi, xj, box, params_i, params_j, beta, cutoff):
     """
-    This is a modified version of `nonbonded` that computes a block of
-    interactions between two sets of particles x_i and x_j. It is assumed that
-    there are no exclusions between the two particle sets. Typical use cases
-    include computing the interaction energy between the environment and a
-    ligand.
-
-    This is mainly used for testing, as it does not support 4D decoupling or
-    alchemical semantics yet.
-
-    Parameters
-    ----------
-    xi : (N,3) np.ndarray
-        Coordinates
-    xj : (N,3) np.ndarray
-        Coordinates
-    box : Optional 3x3 np.ndarray
-        Periodic boundary conditions
-    beta : float
-        the charge product q_ij will be multiplied by erfc(beta*d_ij)
-    cutoff : Optional float
-        a pair of particles (i,j) will be considered non-interacting if the distance d_ij
-        between their 3D coordinates exceeds cutoff
-
-    Returns
-    -------
-    scalar
-        Interaction energy
-
+    This is a summed version of nonbonded_block_unsummed, returning a scalar
     """
     return jnp.sum(nonbonded_block_unsummed(xi, xj, box, params_i, params_j, beta, cutoff))
 
