@@ -44,14 +44,6 @@ def delta_r(ri, rj, box=None):
     return diff
 
 
-def delta_r_np(ri, rj, box):
-    diff = ri - rj  # this can be either N,N,3 or B,3
-    if box is not None:
-        box_diag = np.diag(box)
-        diff -= box_diag * np.floor(diff / box_diag + 0.5)
-    return diff
-
-
 def idxs_within_cutoff(x, x_lig, box, cutoff=0.5):
     """Indices of particles in x that are within
         cutoff of at least one particle in x_lig

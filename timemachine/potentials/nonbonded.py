@@ -146,28 +146,7 @@ def nonbonded_block(xi, xj, box, params_i, params_j, beta, cutoff):
         Interaction energy
 
     """
-    ri = jnp.expand_dims(xi, axis=1)
-    rj = jnp.expand_dims(xj, axis=0)
-
-    dij = jnp.linalg.norm(delta_r(ri, rj, box), axis=-1)
-    sig_i = jnp.expand_dims(params_i[:, 1], axis=1)
-    sig_j = jnp.expand_dims(params_j[:, 1], axis=0)
-    eps_i = jnp.expand_dims(params_i[:, 2], axis=1)
-    eps_j = jnp.expand_dims(params_j[:, 2], axis=0)
-
-    sig_ij = combining_rule_sigma(sig_i, sig_j)
-    eps_ij = combining_rule_epsilon(eps_i, eps_j)
-
-    qi = jnp.expand_dims(params_i[:, 0], axis=1)
-    qj = jnp.expand_dims(params_j[:, 0], axis=0)
-
-    qij = jnp.multiply(qi, qj)
-
-    es = direct_space_pme(dij, qij, beta)
-    lj = lennard_jones(dij, sig_ij, eps_ij)
-
-    nrg = jnp.where(dij < cutoff, es + lj, 0)
-    return jnp.sum(nrg)
+    return jnp.sum(nonbonded_block_unsummed(xi, xj, box, params_i, params_j, beta, cutoff))
 
 
 def convert_exclusions_to_rescale_masks(exclusion_idxs, scales, N):
