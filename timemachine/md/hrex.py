@@ -51,7 +51,6 @@ class HREX(Generic[Replica]):
         sample_replica: Callable[[Replica, StateIdx], Samples],
         replica_from_samples: Callable[[Samples], Replica],
     ) -> Tuple["HREX[Replica]", List[Samples]]:
-
         samples_by_state = [sample_replica(replica, state_idx) for state_idx, replica in self.state_replica_pairs]
         replicas_by_state = [replica_from_samples(samples) for samples in samples_by_state]
 
@@ -68,7 +67,6 @@ class HREX(Generic[Replica]):
         log_q: Callable[[ReplicaIdx, StateIdx], float],
         n_swap_attempts: int,
     ) -> Tuple["HREX[Replica]", List[Tuple[int, int]]]:
-
         move = MixtureOfMoves([NeighborSwapMove(log_q, s_a, s_b) for s_a, s_b in neighbor_pairs])
 
         replica_idx_by_state = list(self.replica_idx_by_state)
@@ -161,6 +159,11 @@ class HREXDiagnostics:
     def cumulative_swap_acceptance_rates(self) -> NDArray:
         n_accepted, n_proposed = np.moveaxis(np.array(self.fraction_accepted_by_pair_by_iter), -1, 0)
         return np.cumsum(n_accepted, axis=0) / np.cumsum(n_proposed, axis=0)
+
+    @property
+    def instantaneous_swap_acceptance_rates(self) -> NDArray:
+        n_accepted, n_proposed = np.moveaxis(np.array(self.fraction_accepted_by_pair_by_iter), -1, 0)
+        return n_accepted / n_proposed
 
     @property
     def cumulative_replica_state_counts(self) -> NDArray:

@@ -141,8 +141,6 @@ def compute_occupancy(x_t, box_t, ligand_idxs, threshold):
 def setup_forcefield():
     # use a precomputed charge handler on the ligand to avoid running AM1 on a buckyball
     ff = Forcefield.load_default()
-    # if charges is None:
-    #     return ff
 
     q_handle = PrecomputedChargeHandler()
     q_handle_intra = PrecomputedChargeHandler()
