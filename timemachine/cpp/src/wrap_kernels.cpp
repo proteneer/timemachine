@@ -76,7 +76,7 @@ double convert_energy_to_fp(__int128 fixed_u) {
 }
 
 template <typename T> std::vector<T> py_array_to_vector(const py::array_t<T, py::array::c_style> &arr) {
-    std::vector v(arr.data(), arr.data() + arr.size());
+    std::vector<T> v(arr.data(), arr.data() + arr.size());
     return v;
 }
 
