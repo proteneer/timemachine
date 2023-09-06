@@ -731,7 +731,7 @@ def run_sims_hrex(
     n_frames_per_iter: int,
     temperature: float,
     n_swap_attempts_per_iter: Optional[int] = None,
-    verbose: bool = True,
+    print_diagnostics_interval: Optional[int] = 10,
 ) -> Tuple[PairBarResult, List[StoredArrays], List[NDArray], HREXDiagnostics]:
     r"""Sample from a sequence of states using nearest-neighbor Hamiltonian Replica EXchange (HREX).
 
@@ -755,8 +755,8 @@ def run_sims_hrex(
     n_swap_attempts_per_iter: int or None, optional
         Number of nearest-neighbor swaps to attempt per iteration. Defaults to len(initial_states) ** 4.
 
-    verbose: bool, optional
-        Whether to print diagnostic information
+    print_diagnostics_interval: int or None, optional
+        If not None, print diagnostics every N iterations
 
     Returns
     -------
@@ -856,7 +856,7 @@ def run_sims_hrex(
         replica_idx_by_state_by_iter.append(hrex.replica_idx_by_state)
         fraction_accepted_by_pair_by_iter.append(fraction_accepted_by_pair)
 
-        if verbose:
+        if print_diagnostics_interval and iteration % print_diagnostics_interval == 0:
 
             def get_swap_acceptance_rates(fraction_accepted_by_pair):
                 return [
