@@ -1,4 +1,4 @@
-buckyball_3d_ammonia
+c90_buckyball_3d_neutral
                     3D
  Structure written by MMmdl.
  90135  0  0  1  0            999 V2000
@@ -228,30 +228,6 @@ buckyball_3d_ammonia
  88 90  2  0  0  0
  89 90  1  0  0  0
 M  END
-> <s_m_entry_id>
-3
-
-> <s_m_entry_name>
-bb_centered.1
-
-> <s_m_Source_Path>
-/home/yutong/Code/timemachine/timemachine/datasets/water_exchange
-
-> <s_m_Source_File>
-bb_centered.sdf
-
-> <i_m_Source_File_Index>
-1
-
-> <chiral flag>
-0
-
-> <version>
-0
-
-> <chiral flag>
-1
-
 > <atom.dprop.PartialCharge>
 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
 
