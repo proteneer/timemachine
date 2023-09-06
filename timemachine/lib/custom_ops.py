@@ -10,6 +10,10 @@
 # in it will take precedence over the stubs defined here.
 
 
+class Context:
+    pass
+
+
 class Potential:
     pass
 

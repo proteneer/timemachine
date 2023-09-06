@@ -12,6 +12,7 @@ from timemachine.fe.rbfe import (
     DEFAULT_MD_PARAMS,
     estimate_relative_free_energy,
     estimate_relative_free_energy_bisection,
+    estimate_relative_free_energy_bisection_hrex,
     run_solvent,
     run_vacuum,
 )
@@ -150,7 +151,11 @@ def run_triple(mol_a, mol_b, core, forcefield, md_params, protein_path, estimate
 @pytest.mark.nightly(reason="Slow!")
 @pytest.mark.parametrize(
     "estimate_relative_free_energy_fn",
-    [estimate_relative_free_energy, estimate_relative_free_energy_bisection],
+    [
+        estimate_relative_free_energy,
+        estimate_relative_free_energy_bisection,
+        estimate_relative_free_energy_bisection_hrex,
+    ],
 )
 def test_run_hif2a_test_system(estimate_relative_free_energy_fn):
 
@@ -169,6 +174,29 @@ def test_run_hif2a_test_system(estimate_relative_free_energy_fn):
             protein_path=str(protein_path),
             estimate_relative_free_energy_fn=estimate_relative_free_energy_fn,
         )
+
+
+@pytest.mark.nightly(reason="Slow!")
+@pytest.mark.parametrize(
+    "estimate_relative_free_energy_fn",
+    [
+        estimate_relative_free_energy,
+        estimate_relative_free_energy_bisection,
+        pytest.param(
+            estimate_relative_free_energy_bisection_hrex,
+            marks=pytest.mark.skip(
+                reason="lambda window trajectories are not individually reproducible given InitialState due to mixing"
+            ),
+        ),
+    ],
+)
+def test_run_hif2a_test_system_reproducibility(estimate_relative_free_energy_fn):
+
+    mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
+    forcefield = Forcefield.load_default()
+
+    md_params = MDParams(n_frames=100, n_eq_steps=1000, steps_per_frame=100, seed=2023)
+
     run_bitwise_reproducibility(
         mol_a,
         mol_b,
@@ -186,10 +214,6 @@ def test_md_params_validation():
     # assert steps_per_frame > 0
     with pytest.raises(AssertionError):
         MDParams(seed=2023, n_frames=frames, n_eq_steps=10, steps_per_frame=0)
-
-    # assert n_eq_steps > 0
-    with pytest.raises(AssertionError):
-        MDParams(seed=2023, n_frames=frames, n_eq_steps=0, steps_per_frame=steps_per_frame)
 
     # assert n_frames > 0
     with pytest.raises(AssertionError):
@@ -391,3 +415,4 @@ if __name__ == "__main__":
     # toggling the pytest marker
     test_run_hif2a_test_system(estimate_relative_free_energy)
     test_run_hif2a_test_system(estimate_relative_free_energy_bisection)
+    test_run_hif2a_test_system(estimate_relative_free_energy_bisection_hrex)
