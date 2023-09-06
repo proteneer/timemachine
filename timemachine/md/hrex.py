@@ -128,13 +128,13 @@ def estimate_transition_matrix(replica_idx_by_state_by_iter: Sequence[Sequence[R
 
 
 def estimate_relaxation_time(transition_matrix: NDArray) -> float:
-    """Estimate the relaxation time of permutation moves (in number of iterations) as a function of the second-largest
-    eigenvalue of the transition matrix.
+    """Estimate the relaxation time of permutation moves as a function of the second-largest eigenvalue of the
+    (symmetrized) transition matrix.
 
     Notes
     -----
     * Following [1] (section III.C.1), we assume that forward and time-reversed transitions are equally likely in the
-      limit of infinite time. (This is necessary to ensure purely real eigenvalues of the transition matrix.)
+      limit of infinite time, and symmetrize the transition matrix to ensure purely real eigenvalues.
 
     References
     ----------
@@ -143,7 +143,11 @@ def estimate_relaxation_time(transition_matrix: NDArray) -> float:
 
     assert np.allclose(np.sum(transition_matrix, axis=0), 1.0), "columns of transition matrix must sum to 1"
 
-    eigvals_ascending = np.linalg.eigvalsh(transition_matrix)
+    def symmetrize(x):
+        return (x + x.T) / 2.0
+
+    transition_matrix_symmetric = symmetrize(transition_matrix)
+    eigvals_ascending = np.linalg.eigvalsh(transition_matrix_symmetric)
     mu_2 = eigvals_ascending[-2]  # second-largest eigenvalue
     return 1 / (1 - mu_2)
 
