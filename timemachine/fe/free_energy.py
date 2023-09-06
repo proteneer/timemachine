@@ -739,7 +739,8 @@ def run_sims_hrex(
     Parameters
     ----------
     initial_states: sequence of InitialState
-        States to sample
+        States to sample. Should be ordered such that adjacent states have significant overlap for good mixing
+        performance
 
     md_params: MDParams
         Parameters used to simulate new states
