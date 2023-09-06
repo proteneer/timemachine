@@ -312,6 +312,21 @@ class AbsoluteFreeEnergy(BaseFreeEnergy):
         return np.concatenate([host_values, ligand_values])
 
 
+def get_context(initial_state: InitialState) -> custom_ops.Context:
+    bound_impls = [p.to_gpu(np.float32).bound_impl for p in initial_state.potentials]
+    intg_impl = initial_state.integrator.impl()
+    baro_impl = initial_state.barostat.impl(bound_impls) if initial_state.barostat else None
+
+    return custom_ops.Context(
+        initial_state.x0,
+        initial_state.v0,
+        initial_state.box0,
+        intg_impl,
+        bound_impls,
+        baro_impl,
+    )
+
+
 @overload
 def sample(initial_state: InitialState, md_params: MDParams) -> Tuple[NDArray, NDArray]:
     ...
@@ -343,21 +358,7 @@ def sample(
     * Assertion error if coords become NaN
     """
 
-    bound_impls = [p.to_gpu(np.float32).bound_impl for p in initial_state.potentials]
-    intg_impl = initial_state.integrator.impl()
-    if initial_state.barostat:
-        baro_impl = initial_state.barostat.impl(bound_impls)
-    else:
-        baro_impl = None
-
-    ctxt = custom_ops.Context(
-        initial_state.x0,
-        initial_state.v0,
-        initial_state.box0,
-        intg_impl,
-        bound_impls,
-        baro_impl,
-    )
+    ctxt = get_context(initial_state)
 
     # burn-in
     if md_params.n_eq_steps:
@@ -812,16 +813,21 @@ def run_sims_hrex(
 
     hrex = HREX.from_replicas(initial_replicas)
 
-    def get_equilibrated_initial_state(initial_state: InitialState, seed: int) -> InitialState:
-        md_params_equil = replace(md_params, n_frames=1, steps_per_frame=1, seed=seed)
-        (frame,), (box,) = sample(initial_state, md_params_equil)
-        initial_state_equil = replace(initial_state, x0=frame, box0=box)
-        return initial_state_equil
+    def get_equilibrated_initial_state(initial_state: InitialState) -> InitialState:
+        if md_params.n_eq_steps == 0:
+            return initial_state
 
-    initial_states = [
-        get_equilibrated_initial_state(initial_state, seed=np.random.randint(np.iinfo(np.int32).max))
-        for initial_state in initial_states
-    ]
+        ctxt = get_context(initial_state)
+
+        xs, boxes = ctxt.multiple_steps(md_params.n_eq_steps, store_x_interval=0)
+        assert len(xs) == len(boxes) == 1
+        x0 = xs[0]
+        box0 = boxes[0]
+
+        equilibrated_initial_state = replace(initial_state, x0=x0, box0=box0)
+        return equilibrated_initial_state
+
+    initial_states = [get_equilibrated_initial_state(initial_state) for initial_state in initial_states]
 
     samples_by_state_by_iter: List[List[Tuple[StoredArrays, NDArray]]] = []
     replica_idx_by_state_by_iter: List[List[ReplicaIdx]] = []
