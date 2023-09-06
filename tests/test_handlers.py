@@ -748,7 +748,6 @@ def test_charging_compounds_with_non_zero_charge():
 def test_precomputed_charge_handler():
     with resources.path("timemachine.datasets.water_exchange", "bb_centered_espaloma.sdf") as path_to_ligand:
         mol = utils.read_sdf(path_to_ligand)[0]
-        # mol = list(Chem.SDMolSupplier(path_to_ligand, removeHs=False))[0]
 
     pch = nonbonded.PrecomputedChargeHandler()
     params = pch.parameterize(mol)
