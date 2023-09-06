@@ -352,16 +352,16 @@ def plot_hrex_transition_matrix(
     fig.colorbar(p, label="transition rate")
 
 
-def plot_hrex_swap_acceptance_rates_convergence(cumulative_swap_acceptance_rates: NDArray):
+def plot_hrex_swap_acceptance_rates_convergence(swap_acceptance_rates: NDArray, label: str = "cumulative"):
     """Plot swap acceptance rates averaged over previous iterations as a function of iteration for each pair of
     neighbors."""
-    _, n_pairs = cumulative_swap_acceptance_rates.shape
+    _, n_pairs = swap_acceptance_rates.shape
     _, ax = plt.subplots()
-    ax.plot(cumulative_swap_acceptance_rates)
+    ax.plot(swap_acceptance_rates)
     ax.axhline(1.0, linestyle="--", color="gray")
     ax.set_ylim(0, 1.1)
     ax.set_xlabel("iteration")
-    ax.set_ylabel("cumulative swap acceptance rate")
+    ax.set_ylabel(f"{label} swap acceptance rate")
     ax.xaxis.get_major_locator().set_params(integer=True)
     ax.legend(
         labels=[str(i) for i in range(n_pairs)],
