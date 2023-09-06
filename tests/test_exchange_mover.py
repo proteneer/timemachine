@@ -6,10 +6,10 @@ import numpy as np
 
 from timemachine.constants import DEFAULT_KT
 from timemachine.md.exchange import exchange_mover
+from timemachine.md.exchange.exchange_mover import delta_r_np
 
 
 def test_batch_log_weights_incremental():
-
     W = 111  # num waters
     N = 439  # num atoms
     nb_beta = 1.2
@@ -44,3 +44,23 @@ def test_batch_log_weights_incremental():
 
         np.testing.assert_allclose(trial_coords, new_conf)
         np.testing.assert_allclose(np.array(test_log_weights), np.array(ref_final_weights))
+
+
+def test_inner_insertion():
+    for _ in range(1000):
+        radius = np.random.rand()
+        center = np.random.rand(3)
+        box = np.eye(3) * np.random.rand()
+        new_xyz = exchange_mover.inner_insertion(radius, center, box)
+        assert np.linalg.norm(delta_r_np(new_xyz, center, box)) < radius
+
+
+def test_outer_insertion():
+    for _ in range(1000):
+        center = np.random.rand(3)
+        box = np.eye(3) * np.random.rand()
+        # radius has to be smaller than maximum dimension of the box / 2
+        # in order for the sphere to be enclosed
+        radius = np.random.rand() * (np.amax(box) / 2)
+        new_xyz = exchange_mover.outer_insertion(radius, center, box)
+        assert np.linalg.norm(delta_r_np(new_xyz, center, box)) >= radius

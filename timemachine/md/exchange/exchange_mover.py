@@ -162,7 +162,6 @@ class BDExchangeMove(moves.MetropolisHastingsMove):
         water_idxs: NDArray,
         beta: float,
     ):
-
         super().__init__()
         self.nb_beta = nb_beta
         self.nb_cutoff = nb_cutoff
@@ -326,10 +325,12 @@ def inner_insertion(radius, center, box):
 
 def outer_insertion(radius, center, box):
     # generate random proposals outside of the sphere but inside the box
-    while True:
+    for i in range(1000000):
         xyz = np.random.rand(3) * np.diag(box)
         if np.linalg.norm(delta_r_np(xyz, center, box)) >= radius:
             return xyz
+
+    assert 0, "outer_insertion_failed"
 
 
 class TIBDExchangeMove(BDExchangeMove):
