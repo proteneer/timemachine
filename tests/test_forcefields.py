@@ -5,7 +5,7 @@ from warnings import catch_warnings
 
 import numpy as np
 import pytest
-from common import temporary_working_dir
+from common import load_split_forcefields, temporary_working_dir
 
 from timemachine import constants
 from timemachine.ff import Forcefield
@@ -84,3 +84,39 @@ def test_load_default():
     for (ref_handle, test_handle) in zip(ref.get_ordered_handles(), test.get_ordered_handles()):
         assert ref_handle.smirks == test_handle.smirks
         np.testing.assert_array_equal(ref_handle.params, test_handle.params)
+
+
+def test_split():
+    ffs = load_split_forcefields()
+
+    def check(ff):
+        params = ff.get_params()
+        np.testing.assert_array_equal(ff.hb_handle.params, params.hb_params)
+        np.testing.assert_array_equal(ff.ha_handle.params, params.ha_params)
+        np.testing.assert_array_equal(ff.pt_handle.params, params.pt_params)
+        np.testing.assert_array_equal(ff.it_handle.params, params.it_params)
+        np.testing.assert_array_equal(ff.q_handle.params, params.q_params)
+        np.testing.assert_array_equal(ff.q_handle_intra.params, params.q_params_intra)
+        np.testing.assert_array_equal(ff.q_handle_solv.params, params.q_params_solv)
+        np.testing.assert_array_equal(ff.lj_handle.params, params.lj_params)
+        np.testing.assert_array_equal(ff.lj_handle_intra.params, params.lj_params_intra)
+        np.testing.assert_array_equal(ff.lj_handle_solv.params, params.lj_params_solv)
+
+        assert ff.get_ordered_handles() == [
+            ff.hb_handle,
+            ff.ha_handle,
+            ff.pt_handle,
+            ff.it_handle,
+            ff.q_handle,
+            ff.q_handle_intra,
+            ff.q_handle_solv,
+            ff.lj_handle,
+            ff.lj_handle_intra,
+            ff.lj_handle_solv,
+        ]
+
+    check(ffs.ref)
+    check(ffs.intra)
+    check(ffs.solv)
+    check(ffs.prot)
+    check(ffs.prot)

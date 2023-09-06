@@ -19,11 +19,11 @@ class ForcefieldParams(Generic[_T]):
     pt_params: _T
     it_params: _T
     q_params: _T
-    q_params_solv: _T
     q_params_intra: _T
+    q_params_solv: _T
     lj_params: _T
-    lj_params_solv: _T
     lj_params_intra: _T
+    lj_params_solv: _T
 
 
 def combine_params(a: ForcefieldParams[_T], b: ForcefieldParams[_T]) -> ForcefieldParams[Tuple[_T, _T]]:
@@ -33,11 +33,11 @@ def combine_params(a: ForcefieldParams[_T], b: ForcefieldParams[_T]) -> Forcefie
         (a.pt_params, b.pt_params),
         (a.it_params, b.it_params),
         (a.q_params, b.q_params),
-        (a.q_params_solv, b.q_params_solv),
         (a.q_params_intra, b.q_params_intra),
+        (a.q_params_solv, b.q_params_solv),
         (a.lj_params, b.lj_params),
-        (a.lj_params_solv, b.lj_params_solv),
         (a.lj_params_intra, b.lj_params_intra),
+        (a.lj_params_solv, b.lj_params_solv),
     )
 
 
@@ -135,11 +135,11 @@ class Forcefield:
         pt_handle = None
         it_handle = None
         lj_handle = None
-        lj_handle_solv = None
         lj_handle_intra = None
+        lj_handle_solv = None
         q_handle = None
-        q_handle_solv = None
         q_handle_intra = None
+        q_handle_solv = None
 
         for handle in ff_handlers:
             if isinstance(handle, bonded.HarmonicBondHandler):
