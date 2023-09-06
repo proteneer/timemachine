@@ -17,7 +17,6 @@ pytestmark = [pytest.mark.nocuda]
 
 
 def test_harmonic_bond():
-
     patterns = [
         ["[#6X4:1]-[#6X4:2]", 0.1, 0.2],
         ["[#6X4:1]-[#6X3:2]", 99.0, 99.0],
@@ -168,7 +167,6 @@ def test_harmonic_angle():
 
 
 def test_proper_torsion():
-
     # proper torsions have a variadic number of terms
 
     patterns = [
@@ -219,7 +217,6 @@ def test_proper_torsion():
 
 
 def test_improper_torsion():
-
     patterns = [
         ["[*:1]~[#6X3:2](~[*:3])~[*:4]", 1.5341333333333333, 3.141592653589793, 2.0],
         ["[*:1]~[#6X3:2](~[#8X1:3])~[#8:4]", 99.0, 99.0, 99.0],
@@ -275,7 +272,6 @@ def test_improper_torsion():
 
 
 def test_exclusions():
-
     mol = Chem.MolFromSmiles("FC(F)=C(F)F")
     exc_idxs, scales = nonbonded.generate_exclusion_idxs(mol, scale12=0.0, scale13=0.2, scale14=0.5)
 
@@ -330,7 +326,6 @@ def test_am1_bcc():
 
 
 def test_am1_ccc():
-
     patterns = [
         ["[#6X4:1]-[#1:2]", 0.46323257920556493],
         ["[#6X3$(*=[#8,#16]):1]-[#6a:2]", 0.24281402370571598],
@@ -439,7 +434,6 @@ $$$$
 
 
 def test_simple_charge_handler():
-
     patterns = [
         ["[#1:1]", 99.0],
         ["[#1:1]-[#6X4]", 99.0],
@@ -507,7 +501,6 @@ def test_simple_charge_handler():
 
 @pytest.mark.skip("gbsa is deprecated")
 def test_gbsa_handler():
-
     patterns = [
         ["[*:1]", 99.0, 99.0],
         ["[#1:1]", 99.0, 99.0],
@@ -585,13 +578,11 @@ def test_am1_differences():
     bcc = nonbonded.AM1BCCHandler([], [], None)
 
     for mol in suppl:
-
         am1_params = am1.parameterize(mol)
         ccc_params = ccc.parameterize(mol)
         bcc_params = bcc.parameterize(mol)
 
         if np.sum(np.abs(ccc_params - bcc_params)) > 0.1:
-
             print(mol.GetProp("_Name"), Chem.MolToSmiles(mol))
             print("  AM1    CCC    BCC  S ?")
             for atom_idx, atom in enumerate(mol.GetAtoms()):
@@ -682,7 +673,7 @@ def test_compute_or_load_am1_charges():
 
     # expect the same charges as the first time around
     cached_am1_charges = [nonbonded.compute_or_load_am1_charges(mol) for mol in mols]
-    for (fresh, cached) in zip(fresh_am1_charges, cached_am1_charges):
+    for fresh, cached in zip(fresh_am1_charges, cached_am1_charges):
         np.testing.assert_array_equal(fresh, cached)
 
 
@@ -752,6 +743,118 @@ def test_charging_compounds_with_non_zero_charge():
 
     es_params = am1h.parameterize(negative_mol)
     np.testing.assert_almost_equal(np.sum(es_params) / np.sqrt(ONE_4PI_EPS0), -1.0, decimal=5)
+
+
+def test_precomputed_charge_handler():
+    with resources.path("timemachine.datasets.water_exchange", "bb_centered_espaloma.sdf") as path_to_ligand:
+        mol = utils.read_sdf(path_to_ligand)[0]
+        # mol = list(Chem.SDMolSupplier(path_to_ligand, removeHs=False))[0]
+
+    pch = nonbonded.PrecomputedChargeHandler()
+    params = pch.parameterize(mol)
+    for a_idx, p in enumerate(params):
+        assert float(mol.GetAtomWithIdx(a_idx).GetProp("PartialCharge")) * np.sqrt(ONE_4PI_EPS0) == p
+
+    # allclose used here to deal with roundoff
+    np.testing.assert_allclose(
+        params,
+        np.array(
+            [
+                0.08300972,
+                0.08096719,
+                0.08595583,
+                0.08161837,
+                0.08247714,
+                -0.00184935,
+                0.12134614,
+                0.09675746,
+                0.00247987,
+                -0.00978577,
+                -0.13067351,
+                -0.14841685,
+                -0.05102999,
+                0.1550052,
+                -0.01422306,
+                -0.08452472,
+                -0.00732864,
+                -0.00732864,
+                -0.08452472,
+                -0.2431052,
+                -0.24310519,
+                -0.09801473,
+                -0.09801478,
+                -0.03118374,
+                -0.0311838,
+                -0.14239897,
+                -0.00184933,
+                -0.14239886,
+                -0.05103004,
+                0.1550052,
+                -0.01422302,
+                0.00286067,
+                0.00286068,
+                0.4839953,
+                -0.02375002,
+                -0.02375001,
+                0.48399526,
+                0.00286067,
+                0.0028607,
+                -0.14841686,
+                0.00247987,
+                0.08247715,
+                -0.13067354,
+                -0.00978578,
+                0.08161835,
+                -0.03118377,
+                -0.03118373,
+                -0.09801482,
+                -0.09801474,
+                -0.2431052,
+                -0.2431052,
+                -0.08452472,
+                -0.00732864,
+                -0.00732862,
+                -0.08452476,
+                -0.01422311,
+                0.15500528,
+                -0.05103001,
+                -0.14841682,
+                -0.13067353,
+                -0.00978577,
+                0.08300972,
+                0.08595583,
+                0.08096719,
+                -0.1423989,
+                -0.00184936,
+                -0.14239885,
+                0.09797411,
+                0.09797414,
+                -0.00184938,
+                0.08247717,
+                0.08161836,
+                0.08595586,
+                0.08096719,
+                0.08300973,
+                0.12134615,
+                0.09675753,
+                0.00247987,
+                -0.05103004,
+                0.15500516,
+                -0.01422306,
+                0.08161838,
+                -0.0097857,
+                -0.13067359,
+                0.08247717,
+                0.00247984,
+                -0.14841682,
+                0.08300976,
+                0.08595584,
+                0.08096716,
+            ],
+            dtype=np.float32,
+        )
+        * np.sqrt(ONE_4PI_EPS0),
+    )
 
 
 def test_compute_or_load_bond_smirks_matches():
@@ -827,7 +930,6 @@ def test_apply_bond_charge_corrections():
 
 
 def test_lennard_jones_handler():
-
     patterns = [
         ["[#1:1]", 99.0, 999.0],
         ["[#1:1]-[#6X4]", 99.0, 999.0],
