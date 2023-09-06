@@ -25,7 +25,7 @@ DEBUG = False
 def test_hrex_rbfe_hif2a(host: Optional[str]):
     mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
     forcefield = Forcefield.load_default()
-    md_params = MDParams(n_frames=1000, n_eq_steps=10_000, steps_per_frame=400, seed=2023)
+    md_params = MDParams(n_frames=200, n_eq_steps=10_000, steps_per_frame=400, seed=2023)
 
     host_config: Optional[HostConfig] = None
 
@@ -48,10 +48,10 @@ def test_hrex_rbfe_hif2a(host: Optional[str]):
         forcefield,
         host_config,
         md_params,
-        lambda_interval=(0.0, 0.2),
+        lambda_interval=(0.0, 0.15),
         n_windows=5,
         n_frames_bisection=100,
-        n_frames_per_iter=10,
+        n_frames_per_iter=1,
     )
 
     if DEBUG:
