@@ -5,7 +5,7 @@ config.update("jax_enable_x64", True)
 import numpy as np
 
 from timemachine.constants import DEFAULT_KT
-from timemachine.exchange import exchange_mover
+from timemachine.md.exchange import exchange_mover
 
 
 def test_batch_log_weights_incremental():
