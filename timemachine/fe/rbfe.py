@@ -597,7 +597,7 @@ def estimate_relative_free_energy_bisection_hrex(
     keep_idxs: Optional[List[int]] = None,
     min_cutoff: Optional[float] = 0.7,
     n_frames_bisection: int = 100,
-    n_frames_per_iter: int = 10,
+    n_frames_per_iter: int = 5,
 ) -> SimulationResult:
     """
     Estimate relative free energy between mol_a and mol_b using Hamiltonian Replica EXchange (HREX) sampling of a

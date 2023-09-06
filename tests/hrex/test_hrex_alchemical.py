@@ -51,7 +51,7 @@ def test_hrex_rbfe_hif2a(host: Optional[str]):
         lambda_interval=(0.0, 0.15),
         n_windows=5,
         n_frames_bisection=100,
-        n_frames_per_iter=1,
+        n_frames_per_iter=5,
     )
 
     if DEBUG:
