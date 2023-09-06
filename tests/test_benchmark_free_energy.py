@@ -68,7 +68,7 @@ def test_benchmark_hif2a_single_topology(hif2a_single_topology_leg, enable_hrex)
 
     host_name, n_windows, initial_states = hif2a_single_topology_leg
 
-    n_frames = 1000 // n_windows
+    n_frames = 500 // n_windows
     md_params = MDParams(n_frames=n_frames, n_eq_steps=1, steps_per_frame=400, seed=2023)
     temperature = DEFAULT_TEMP
 
