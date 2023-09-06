@@ -7,6 +7,7 @@ from numpy.typing import NDArray
 from scipy.special import logsumexp
 from scipy.stats import special_ortho_group
 
+from timemachine.constants import BOLTZ
 from timemachine.md import moves
 from timemachine.md.states import CoordsVelBox
 from timemachine.potentials import nonbonded
@@ -49,7 +50,7 @@ class BDExchangeMove(moves.MetropolisHastingsMove):
         nb_cutoff: float,
         nb_params: NDArray,
         water_idxs: NDArray,
-        beta: float,
+        temperature: float,
     ):
         super().__init__()
         self.nb_beta = nb_beta
@@ -64,7 +65,8 @@ class BDExchangeMove(moves.MetropolisHastingsMove):
         self.water_idxs_jnp = jnp.array(water_idxs)  # make jit happy
         self.water_idxs_np = np.array(water_idxs)
 
-        self.beta = beta
+        kT = BOLTZ * temperature
+        self.beta = 1 / kT
 
         self.n_atoms = len(nb_params)
         all_a_idxs = []
@@ -251,7 +253,7 @@ class TIBDExchangeMove(BDExchangeMove):
         nb_cutoff: float,
         nb_params: NDArray,
         water_idxs: NDArray,
-        beta: float,
+        temperature: float,
         ligand_idxs: List[int],
         radius: float,
     ):
@@ -276,31 +278,18 @@ class TIBDExchangeMove(BDExchangeMove):
         ligand_idxs: List[int]
             Indices corresponding to the atoms that should be used to compute the centroid
 
-        beta: float
-            Thermodynamic beta, 1/kT, in (kJ/mol)^-1
+        temperature: float
+            Temperature, in Kelvin
 
         radius: float
             Radius to use for the ligand_idxs
 
         """
-        super().__init__(nb_beta, nb_cutoff, nb_params, water_idxs, beta)
+        super().__init__(nb_beta, nb_cutoff, nb_params, water_idxs, temperature)
 
         self.ligand_idxs = np.array(ligand_idxs)  # used to determine center of sphere
         self.radius = radius
 
-    # def get_water_groups(self, coords, box, center):
-    #     """
-    #     Partition water molecules into two groups, depending if it's inside the sphere or outside the sphere.
-    #     """
-    #     mol_centroids = np.mean(coords[self.water_idxs_np], axis=1)
-    #     dijs = np.linalg.norm(delta_r_np(mol_centroids, center, box), axis=1)
-    #     inner_mols = np.argwhere(dijs < self.radius).reshape(-1)
-    #     outer_mols = np.argwhere(dijs >= self.radius).reshape(-1)
-
-    #     assert len(inner_mols) + len(outer_mols) == len(self.water_idxs_np)
-    #     return inner_mols, outer_mols
-
-    # @profile
     def swap_vi_into_vj(
         self,
         vi_mols: List[int],
@@ -338,9 +327,10 @@ class TIBDExchangeMove(BDExchangeMove):
 
         chosen_water_atoms = self.water_idxs_np[water_idx]
         new_coords = coords[chosen_water_atoms]
+
         # remove centroid and offset into insertion site
         new_coords = randomly_rotate_and_translate(new_coords, vj_site)
-        # new_coords = randomly_translate(new_coords, vj_site)
+        # new_coords = randomly_translate(new_coords, vj_site) # keep for pedagogical utility
 
         vj_plus_one_idxs = np.concatenate([[water_idx], vj_mols])
         log_weights_after_full, trial_coords = self.batch_log_weights_incremental(

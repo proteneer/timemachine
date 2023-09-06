@@ -359,10 +359,7 @@ class PrecomputedChargeHandler:
         for atom in mol.GetAtoms():
             q = float(atom.GetProp("PartialCharge"))
             params.append(q * np.sqrt(constants.ONE_4PI_EPS0))
-
-        assert mol.GetNumAtoms() == len(params)
-
-        return params
+        return np.array(params)
 
     def partial_parameterize(self, _, mol):
         return self.parameterize(mol)
