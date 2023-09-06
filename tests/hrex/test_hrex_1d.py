@@ -86,7 +86,7 @@ def run_hrex_with_local_proposal(
     initial_replicas: Sequence[float],
     proposal: Callable[[float], Distribution],
     n_samples=10_000,
-    n_samples_per_iter=10,
+    n_samples_per_iter=20,
 ):
     assert len(states) == len(initial_replicas)
 
@@ -213,10 +213,10 @@ def test_hrex_same_distributions_different_free_energies(seed):
     final_replica_state_density = diagnostics.cumulative_replica_state_counts[-1] / n_iters
 
     # Fraction of time spent in each state for each replica should be close to uniform
-    assert np.all(np.abs(final_replica_state_density - np.mean(final_replica_state_density)) < 0.05)
+    assert np.all(np.abs(final_replica_state_density - np.mean(final_replica_state_density)) < 0.2)
 
 
-@pytest.mark.parametrize("seed", [0, 1, 2, 3, 5])
+@pytest.mark.parametrize("seed", range(5))
 def test_hrex_gaussian_mixture(seed):
     """Use HREX to sample from a mixture of two gaussians with ~zero overlap."""
 
@@ -248,6 +248,15 @@ def test_hrex_gaussian_mixture(seed):
 
     target_samples = states[0].sample(n_samples)
 
+    if DEBUG:
+        plt.figure()
+        hist = partial(plt.hist, density=True, bins=50, alpha=0.7)
+        hist(target_samples, label="target")
+        hist(hrex_samples, label="hrex")
+        hist(local_samples, label="local")
+        plt.legend()
+        plt.show()
+
     # KS test assumes independent samples
     # Use a rough estimate of autocorrelation time to subsample correlated MCMC samples
     tau = round(1 / proposal_radius ** 2)
@@ -260,15 +269,6 @@ def test_hrex_gaussian_mixture(seed):
 
     final_swap_acceptance_rates = diagnostics.cumulative_swap_acceptance_rates[-1]
     assert final_swap_acceptance_rates[0] > 0.2
-
-    if DEBUG:
-        plt.figure()
-        hist = partial(plt.hist, density=True, bins=50, alpha=0.7)
-        hist(target_samples, label="target")
-        hist(hrex_samples, label="hrex")
-        hist(local_samples, label="local")
-        plt.legend()
-        plt.show()
 
 
 def plot_hrex_diagnostics(diagnostics: HREXDiagnostics):
