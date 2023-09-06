@@ -776,6 +776,9 @@ def run_sims_hrex(
     if n_swap_attempts_per_iter is None:
         n_swap_attempts_per_iter = get_swap_attempts_per_iter_heuristic(len(initial_states))
 
+    # Setting the numpy global PRNG state is necessary to ensure determinism in timemachine.md.moves.MonteCarloMove
+    # TODO: Avoid use of global PRNG state (see https://github.com/proteneer/timemachine/issues/980)
+    warn(f"Setting numpy global random state using seed {md_params.seed}")
     np.random.seed(md_params.seed)
 
     lambdas = [s.lamb for s in initial_states]
