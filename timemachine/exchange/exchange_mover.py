@@ -28,6 +28,7 @@ from timemachine.ff.handlers import openmm_deserializer
 from timemachine.ff.handlers.nonbonded import PrecomputedChargeHandler
 from timemachine.lib import LangevinIntegrator, MonteCarloBarostat
 from timemachine.md import moves
+from timemachine.md.barostat.moves import NPTMove
 from timemachine.md.barostat.utils import get_bond_list, get_group_indices
 from timemachine.md.builders import strip_units
 from timemachine.md.states import CoordsVelBox
@@ -148,7 +149,7 @@ def get_initial_state(water_pdb, mol, ff, seed, nb_cutoff):
 from scipy.special import logsumexp
 
 
-class BDExchangeMove(moves.MonteCarloMove):
+class BDExchangeMove(moves.MetropolisHastingsMove):
     """
     Untargetted, biased deletion move where we selectively prefer certain waters over others.
     """
@@ -161,6 +162,8 @@ class BDExchangeMove(moves.MonteCarloMove):
         water_idxs: NDArray,
         beta: float,
     ):
+
+        super().__init__()
         self.nb_beta = nb_beta
         self.nb_cutoff = nb_cutoff
         self.nb_params = jnp.array(nb_params)
@@ -264,7 +267,7 @@ class BDExchangeMove(moves.MonteCarloMove):
         self.batch_log_weights_incremental = batch_log_weights_incremental
         self.batch_log_weights = batch_log_weights
 
-    def propose(self, x: CoordsVelBox) -> Tuple[CoordsVelBox, float]:
+    def propose_with_log_q_diff(self, x: CoordsVelBox) -> Tuple[CoordsVelBox, float]:
         coords = x.coords
         box = x.box
         log_weights_before = self.batch_log_weights(coords, box)
@@ -291,10 +294,10 @@ class BDExchangeMove(moves.MonteCarloMove):
         # trial_coords[chosen_water_atoms] = moved_coords
         # log_weights_after = self.batch_log_weights(trial_coords, box)
 
-        log_p_accept = min(0, logsumexp(log_weights_before) - logsumexp(log_weights_after))
+        log_q_diff = logsumexp(log_weights_before) - logsumexp(log_weights_after)
         new_state = CoordsVelBox(trial_coords, x.velocities, x.box)
 
-        return new_state, log_p_accept
+        return new_state, log_q_diff
 
 
 # numpy version of delta_r
@@ -647,7 +650,7 @@ def test_exchange():
     cur_x_t = image_frames(initial_state, [cur_x_t], [cur_box])[0]
     writer.write_frame(cur_x_t * 10)
 
-    npt_mover = moves.NPTMove(
+    npt_mover = NPTMove(
         bps=initial_state.potentials,
         masses=initial_state.integrator.masses,
         temperature=initial_state.integrator.temperature,
