@@ -803,12 +803,12 @@ def run_sims_hrex(
 
         return log_q_fn
 
-    state_idxs = [StateIdx(i) for i, _ in enumerate(lambdas)]
+    state_idxs = [StateIdx(i) for i, _ in enumerate(initial_states)]
     neighbor_pairs = list(zip(state_idxs, state_idxs[1:]))
 
-    # Add (0, 0) to the list of neighbor pairs considered for swap moves to ensure that performing a fixed number of
-    # neighbor swaps is aperiodic in cases where swap acceptance rates approach 100%
-    neighbor_pairs = [(StateIdx(0), StateIdx(0))] + neighbor_pairs
+    if len(initial_states) == 2:
+        # Add an identity move to the mixture to ensure aperiodicity
+        neighbor_pairs = [(StateIdx(0), StateIdx(0))] + neighbor_pairs
 
     hrex = HREX.from_replicas(initial_replicas)
 
