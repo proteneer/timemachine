@@ -8,7 +8,7 @@ import pytest
 from common import load_split_forcefields, temporary_working_dir
 
 from timemachine import constants
-from timemachine.ff import Forcefield
+from timemachine.ff import Forcefield, combine_params
 from timemachine.ff.handlers.deserialize import deserialize_handlers
 
 pytestmark = [pytest.mark.nocuda]
@@ -114,6 +114,18 @@ def test_split():
             ff.lj_handle_intra,
             ff.lj_handle_solv,
         ]
+
+        combined = combine_params(ff.get_params(), ff.get_params())
+        np.testing.assert_array_equal((ff.hb_handle.params, ff.hb_handle.params), combined.hb_params)
+        np.testing.assert_array_equal((ff.ha_handle.params, ff.ha_handle.params), combined.ha_params)
+        np.testing.assert_array_equal((ff.pt_handle.params, ff.pt_handle.params), combined.pt_params)
+        np.testing.assert_array_equal((ff.it_handle.params, ff.it_handle.params), combined.it_params)
+        np.testing.assert_array_equal((ff.q_handle.params, ff.q_handle.params), combined.q_params)
+        np.testing.assert_array_equal((ff.q_handle_intra.params, ff.q_handle_intra.params), combined.q_params_intra)
+        np.testing.assert_array_equal((ff.q_handle_solv.params, ff.q_handle_solv.params), combined.q_params_solv)
+        np.testing.assert_array_equal((ff.lj_handle.params, ff.lj_handle.params), combined.lj_params)
+        np.testing.assert_array_equal((ff.lj_handle_intra.params, ff.lj_handle_intra.params), combined.lj_params_intra)
+        np.testing.assert_array_equal((ff.lj_handle_solv.params, ff.lj_handle_solv.params), combined.lj_params_solv)
 
     check(ffs.ref)
     check(ffs.intra)
