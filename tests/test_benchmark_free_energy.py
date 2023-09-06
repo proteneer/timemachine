@@ -74,7 +74,12 @@ def test_benchmark_hif2a_single_topology(hif2a_single_topology_leg, enable_hrex)
 
     if enable_hrex:
         run = partial(
-            run_sims_hrex, initial_states, md_params, n_frames_per_iter=1, temperature=temperature, verbose=False
+            run_sims_hrex,
+            initial_states,
+            md_params,
+            n_frames_per_iter=1,
+            temperature=temperature,
+            print_diagnostics_interval=None,
         )
     else:
         run = partial(run_sims_sequential, initial_states, md_params, temperature=temperature, keep_idxs=[])
