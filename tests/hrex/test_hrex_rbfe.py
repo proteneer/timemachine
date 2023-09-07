@@ -48,7 +48,7 @@ def hif2a_single_topology_leg(request):
 @pytest.mark.nightly(reason="Slow")
 def test_hrex_rbfe_hif2a(hif2a_single_topology_leg):
     mol_a, mol_b, core, forcefield, host_config = hif2a_single_topology_leg
-    md_params = MDParams(n_frames=200, n_eq_steps=10_000, steps_per_frame=400, seed=2023)
+    md_params = MDParams(n_frames=200, n_eq_steps=10_000, steps_per_frame=400, seed=2024)
     n_windows = 5
 
     result = estimate_relative_free_energy_bisection_hrex(
