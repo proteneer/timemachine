@@ -857,7 +857,9 @@ def run_sims_hrex(
         hrex, samples_by_state = hrex.sample_replicas(sample_replica, replica_from_samples)
         log_q = get_log_q_fn(hrex.replicas)
         hrex, fraction_accepted_by_pair = hrex.attempt_neighbor_swaps(neighbor_pairs, log_q, n_swap_attempts_per_iter)
-        fraction_accepted_by_pair = fraction_accepted_by_pair[1:]  # remove stats for (0, 0) pair
+
+        if len(initial_states) == 2:
+            fraction_accepted_by_pair = fraction_accepted_by_pair[1:]  # remove stats for identity move
 
         samples_by_state_by_iter.append(samples_by_state)
         replica_idx_by_state_by_iter.append(hrex.replica_idx_by_state)

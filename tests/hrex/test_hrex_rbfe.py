@@ -49,6 +49,7 @@ def hif2a_single_topology_leg(request):
 def test_hrex_rbfe_hif2a(hif2a_single_topology_leg):
     mol_a, mol_b, core, forcefield, host_config = hif2a_single_topology_leg
     md_params = MDParams(n_frames=200, n_eq_steps=10_000, steps_per_frame=400, seed=2023)
+    n_windows = 5
 
     result = estimate_relative_free_energy_bisection_hrex(
         mol_a,
@@ -58,7 +59,7 @@ def test_hrex_rbfe_hif2a(hif2a_single_topology_leg):
         host_config,
         md_params,
         lambda_interval=(0.0, 0.15),
-        n_windows=5,
+        n_windows=n_windows,
         n_frames_bisection=100,
         n_frames_per_iter=5,
     )
@@ -67,6 +68,8 @@ def test_hrex_rbfe_hif2a(hif2a_single_topology_leg):
         plot_hrex_rbfe_hif2a(result)
 
     assert result.hrex_diagnostics
+
+    assert result.hrex_diagnostics.cumulative_swap_acceptance_rates.shape[1] == n_windows - 1
 
     # Swap acceptance rates for all neighboring pairs should be >~ 20%
     final_swap_acceptance_rates = result.hrex_diagnostics.cumulative_swap_acceptance_rates[-1]
