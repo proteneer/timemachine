@@ -10,7 +10,7 @@ import numpy as np
 from numpy.typing import NDArray
 from rdkit import Chem
 
-from timemachine.fe import interpolate, model_utils, system, topology, utils
+from timemachine.fe import interpolate, model_utils, topology, utils
 from timemachine.fe.dummy import canonicalize_bond, generate_anchored_dummy_group_assignments
 from timemachine.fe.lambda_schedule import construct_pre_optimized_relative_lambda_schedule
 from timemachine.fe.system import HostGuestSystem, VacuumSystem
@@ -398,7 +398,7 @@ def setup_end_state(ff, mol_a, mol_b, core, a_to_c, b_to_c):
         get_num_connected_components(num_atoms, bond_potential.potential.idxs) == 1
     ), "hybrid molecule has multiple connected components"
 
-    return system.VacuumSystem(
+    return VacuumSystem(
         bond_potential,
         angle_potential,
         torsion_potential,
@@ -1058,7 +1058,7 @@ class SingleTopology(AtomMapMixin):
 
         return ChiralBondRestraint(chiral_bond_idxs, np.array(chiral_bond_signs)).bind(jnp.array(chiral_bond_params))
 
-    def setup_intermediate_state(self, lamb):
+    def setup_intermediate_state(self, lamb) -> VacuumSystem:
         r"""
         Set up intermediate states at some value of the alchemical parameter :math:`\lambda`.
 
@@ -1148,7 +1148,7 @@ class SingleTopology(AtomMapMixin):
             interpolate.linear_interpolation,
         )
 
-        return system.VacuumSystem(bond, angle, torsion, nonbonded, chiral_atom, chiral_bond)
+        return VacuumSystem(bond, angle, torsion, nonbonded, chiral_atom, chiral_bond)
 
     def _get_guest_params(self, q_handle, lj_handle, lamb: float, cutoff: float) -> jax.Array:
         """

@@ -29,6 +29,7 @@ from timemachine.potentials.nonbonded import (
     lj_prefactors_on_traj,
     nonbonded,
     nonbonded_block,
+    nonbonded_block_unsummed,
     nonbonded_on_specific_pairs,
 )
 
@@ -203,7 +204,7 @@ def compare_two_potentials(u_a: NonbondedFxn, u_b: NonbondedFxn, args: Nonbonded
     energy_b, gradients_b = value_and_grads(u_b)(*args)
 
     np.testing.assert_allclose(energy_a, energy_b)
-    for (g_a, g_b) in zip(gradients_a, gradients_b):
+    for g_a, g_b in zip(gradients_a, gradients_b):
         np.testing.assert_allclose(g_a, g_b)
 
 
@@ -326,7 +327,7 @@ def test_jax_nonbonded_block():
     """Assert that nonbonded_block and nonbonded_on_specific_pairs agree"""
     ff = Forcefield.load_default()
     system, conf, box, _ = builders.build_water_system(3.0, ff.water_ff)
-    bps, masses = openmm_deserializer.deserialize_system(system, cutoff=1.2)
+    bps, _ = openmm_deserializer.deserialize_system(system, cutoff=1.2)
     nb = bps[-1]
     params = nb.params
 
@@ -354,6 +355,47 @@ def test_jax_nonbonded_block():
         return jnp.sum(vdw + es)
 
     np.testing.assert_allclose(u_a(conf, box, params), u_b(conf, box, params))
+
+
+def test_jax_nonbonded_block_unsummed():
+    """Assert that unsummed nonbonded_block and nonbonded_on_specific_pairs agree"""
+    ff = Forcefield.load_default()
+    system, conf, box, _ = builders.build_water_system(3.0, ff.water_ff)
+    bps, _ = openmm_deserializer.deserialize_system(system, cutoff=1.2)
+    nb = bps[-1]
+    params = nb.params
+
+    N = conf.shape[0]
+    beta = nb.potential.beta
+    cutoff = nb.potential.cutoff
+
+    split = 70
+
+    def u_test(x, box, params):
+        xi = x[:split]
+        xj = x[split:]
+        pi = params[:split]
+        pj = params[split:]
+        return nonbonded_block_unsummed(xi, xj, box, pi, pj, beta, cutoff)
+
+    i_s, j_s = jnp.indices((split, N - split))
+    indices_left = i_s.flatten()
+    indices_right = j_s.flatten() + split
+    pairs = jnp.array([indices_left, indices_right]).T
+
+    def u_ref(x, box, params):
+        vdw, es = nonbonded_on_specific_pairs(x, params, box, pairs, beta, cutoff)
+        u_total_pairs = vdw + es
+        n_rows = split
+        n_cols = N - split
+        expected = np.zeros((n_rows, n_cols))
+
+        for idx, val in enumerate(u_total_pairs):
+            expected[idx // n_cols, idx % n_cols] = val
+
+        return expected
+
+    np.testing.assert_allclose(u_test(conf, box, params), u_ref(conf, box, params))
 
 
 def test_lj_basis():

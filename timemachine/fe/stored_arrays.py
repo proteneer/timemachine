@@ -30,7 +30,7 @@ class StoredArrays(Sequence[NDArray]):
     [array([1, 2, 3]), array([4, 5, 6]), array([7, 8, 9])]
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._chunk_sizes: List[int] = []
         self._dir = tempfile.TemporaryDirectory()
 
