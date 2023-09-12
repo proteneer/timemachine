@@ -353,7 +353,9 @@ def sample(
 
     Returns
     -------
-    xs, boxes: NDArray with .shape[0] = md_params.n_frames
+    xs: NDArray with shape (n_frames, N, 3)
+
+    boxes: NDArray with shape (n_frames, 3, 3)
 
     final_velocities: NDArray with shape (N,)
 
