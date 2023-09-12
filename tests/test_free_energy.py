@@ -229,7 +229,7 @@ def test_sample_max_buffer_frames_with_local_md(
     n_eq_steps = 1
 
     md_params = MDParams(n_frames, n_eq_steps, steps_per_frame, 2023, local_steps=local_steps)
-    frames, _ = sample(
+    frames, _, _ = sample(
         solvent_hif2a_ligand_pair_single_topology_lam0_state, md_params, max_buffer_frames=max_buffer_frames
     )
     assert isinstance(frames, StoredArrays)
@@ -267,8 +267,8 @@ def hif2a_ligand_pair_single_topology_lam0_state():
 @example(1, 10)
 def test_sample_max_buffer_frames(hif2a_ligand_pair_single_topology_lam0_state, n_frames, max_buffer_frames):
     md_params = MDParams(n_frames, 1, 1, 2023)
-    frames_ref, _ = sample(hif2a_ligand_pair_single_topology_lam0_state, md_params)
-    frames_test, _ = sample(
+    frames_ref, _, _ = sample(hif2a_ligand_pair_single_topology_lam0_state, md_params)
+    frames_test, _, _ = sample(
         hif2a_ligand_pair_single_topology_lam0_state, md_params, max_buffer_frames=max_buffer_frames
     )
 
