@@ -357,7 +357,7 @@ def sample(
 
     boxes: NDArray with shape (n_frames, 3, 3)
 
-    final_velocities: NDArray with shape (N,)
+    final_velocities: NDArray with shape (N, 3)
 
     Notes
     -----
