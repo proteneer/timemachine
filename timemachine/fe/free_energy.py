@@ -808,12 +808,12 @@ def run_sims_hrex(
         log_q = -U / (BOLTZ * temperature)
         return log_q
 
-    def get_log_q_fn(xvb: List[CoordsVelBox]):
+    def get_log_q_fn(xvbs: List[CoordsVelBox]):
         def get_flattened_params(initial_state: InitialState) -> NDArray:
             return np.concatenate([bp.params.flatten() for bp in initial_state.potentials])
 
         params = [get_flattened_params(initial_state) for initial_state in initial_states]
-        log_q_kl = compute_log_q_matrix(xvb, params)
+        log_q_kl = compute_log_q_matrix(xvbs, params)
 
         def log_q_fn(replica_idx: ReplicaIdx, state_idx: StateIdx) -> float:
             return log_q_kl[replica_idx, state_idx]
