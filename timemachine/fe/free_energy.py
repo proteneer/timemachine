@@ -30,7 +30,7 @@ from timemachine.ff.handlers import openmm_deserializer
 from timemachine.lib import LangevinIntegrator, MonteCarloBarostat, custom_ops
 from timemachine.md.barostat.utils import compute_box_center, get_bond_list, get_group_indices
 from timemachine.md.hrex import HREX, HREXDiagnostics, ReplicaIdx, StateIdx, get_swap_attempts_per_iter_heuristic
-from timemachine.md.states import CoordsBox
+from timemachine.md.states import CoordsVelBox
 from timemachine.potentials import BoundPotential, HarmonicBond, SummedPotential
 from timemachine.utils import batches, pairwise_transform_and_combine
 
@@ -328,18 +328,20 @@ def get_context(initial_state: InitialState) -> custom_ops.Context:
 
 
 @overload
-def sample(initial_state: InitialState, md_params: MDParams) -> Tuple[NDArray, NDArray]:
+def sample(initial_state: InitialState, md_params: MDParams) -> Tuple[NDArray, NDArray, NDArray]:
     ...
 
 
 @overload
-def sample(initial_state: InitialState, md_params: MDParams, max_buffer_frames: int) -> Tuple[StoredArrays, NDArray]:
+def sample(
+    initial_state: InitialState, md_params: MDParams, max_buffer_frames: int
+) -> Tuple[StoredArrays, NDArray, NDArray]:
     ...
 
 
 def sample(
     initial_state: InitialState, md_params: MDParams, max_buffer_frames: Optional[int] = None
-) -> Tuple[Union[StoredArrays, NDArray], NDArray]:
+) -> Tuple[Union[StoredArrays, NDArray], NDArray, NDArray]:
     """Generate a trajectory given an initial state and a simulation protocol
 
     Parameters
@@ -351,7 +353,9 @@ def sample(
 
     Returns
     -------
-    xs, boxes: np.arrays with .shape[0] = md_params.n_frames
+    xs, boxes: NDArray with .shape[0] = md_params.n_frames
+
+    final_velocities: NDArray with shape (N,)
 
     Notes
     -----
@@ -374,15 +378,16 @@ def sample(
 
     assert np.all(np.isfinite(ctxt.get_x_t())), "Equilibration resulted in a nan"
 
-    def run_production_steps(n_steps: int) -> Tuple[NDArray, NDArray]:
+    def run_production_steps(n_steps: int) -> Tuple[NDArray, NDArray, NDArray]:
         coords, boxes = ctxt.multiple_steps(
             n_steps=n_steps,
             store_x_interval=md_params.steps_per_frame,
         )
+        final_velocities = ctxt.get_v_t()
 
-        return coords, boxes
+        return coords, boxes, final_velocities
 
-    def run_production_local_steps(n_steps: int) -> Tuple[NDArray, NDArray]:
+    def run_production_local_steps(n_steps: int) -> Tuple[NDArray, NDArray, NDArray]:
         coords = []
         boxes = []
         for steps in batches(n_steps, md_params.steps_per_frame):
@@ -404,7 +409,10 @@ def sample(
             )
             coords.append(x_t)
             boxes.append(box_t)
-        return np.concatenate(coords), np.concatenate(boxes)
+
+        final_velocities = ctxt.get_v_t()
+
+        return np.concatenate(coords), np.concatenate(boxes), final_velocities
 
     all_coords: Union[NDArray, StoredArrays]
 
@@ -415,20 +423,21 @@ def sample(
     if max_buffer_frames is not None and max_buffer_frames > 0:
         all_coords = StoredArrays()
         all_boxes_: List[NDArray] = []
+        final_velocities: NDArray = None  # type: ignore # work around "possibly unbound" error
         for n_frames in batches(md_params.n_frames, max_buffer_frames):
-            batch_coords, batch_boxes = steps_func(n_frames * md_params.steps_per_frame)
+            batch_coords, batch_boxes, final_velocities = steps_func(n_frames * md_params.steps_per_frame)
             all_coords.extend(batch_coords)
             all_boxes_.extend(batch_boxes)
         all_boxes = np.array(all_boxes_)
     else:
-        all_coords, all_boxes = steps_func(md_params.n_frames * md_params.steps_per_frame)
+        all_coords, all_boxes, final_velocities = steps_func(md_params.n_frames * md_params.steps_per_frame)
 
     assert len(all_coords) == md_params.n_frames
     assert len(all_boxes) == md_params.n_frames
 
     assert np.all(np.isfinite(all_coords[-1])), "Production resulted in a nan"
 
-    return all_coords, all_boxes
+    return all_coords, all_boxes, final_velocities
 
 
 class IndeterminateEnergyWarning(UserWarning):
@@ -555,7 +564,7 @@ def run_sims_sequential(
     for lamb_idx, initial_state in enumerate(initial_states):
 
         # run simulation
-        cur_frames, cur_boxes = sample(initial_state, md_params, max_buffer_frames=100)
+        cur_frames, cur_boxes, _ = sample(initial_state, md_params, max_buffer_frames=100)
         print(f"completed simulation at lambda={initial_state.lamb}!")
 
         # keep samples from any requested states in memory
@@ -649,7 +658,7 @@ def run_sims_bisection(
     @cache
     def get_samples(lamb: float) -> Tuple[StoredArrays, NDArray]:
         initial_state = get_initial_state(lamb)
-        frames, boxes = sample(initial_state, md_params, max_buffer_frames=100)
+        frames, boxes, _ = sample(initial_state, md_params, max_buffer_frames=100)
         return frames, boxes
 
     # NOTE: we don't cache get_state to avoid holding BoundPotentials in memory since they
@@ -782,25 +791,25 @@ def run_sims_hrex(
     np.random.seed(md_params.seed)
 
     lambdas = [s.lamb for s in initial_states]
-    initial_replicas = [CoordsBox(s.x0, s.box0) for s in initial_states]
+    initial_replicas = [CoordsVelBox(s.x0, s.v0, s.box0) for s in initial_states]
 
     bps = initial_states[0].potentials  # TODO: assert initial states have compatible potentials?
     sp = SummedPotential([bp.potential for bp in bps], [bp.params for bp in bps])
     ubp = sp.to_gpu(np.float32)
 
-    def compute_log_q_matrix(xbs: List[CoordsBox], params: List[NDArray]):
-        coords = np.array([xb.coords for xb in xbs])
-        boxes = np.array([xb.box for xb in xbs])
+    def compute_log_q_matrix(xvbs: List[CoordsVelBox], params: List[NDArray]):
+        coords = np.array([xvb.coords for xvb in xvbs])
+        boxes = np.array([xvb.box for xvb in xvbs])
         _, _, U = ubp.unbound_impl.execute_selective_batch(coords, np.array(params), boxes, False, False, True)
         log_q = -U / (BOLTZ * temperature)
         return log_q
 
-    def get_log_q_fn(xbs: List[CoordsBox]):
+    def get_log_q_fn(xvb: List[CoordsVelBox]):
         def get_flattened_params(initial_state: InitialState) -> NDArray:
             return np.concatenate([bp.params.flatten() for bp in initial_state.potentials])
 
         params = [get_flattened_params(initial_state) for initial_state in initial_states]
-        log_q_kl = compute_log_q_matrix(xbs, params)
+        log_q_kl = compute_log_q_matrix(xvb, params)
 
         def log_q_fn(replica_idx: ReplicaIdx, state_idx: StateIdx) -> float:
             return log_q_kl[replica_idx, state_idx]
@@ -838,29 +847,30 @@ def run_sims_hrex(
 
     for iteration, n_frames_iter in enumerate(batches(md_params.n_frames, n_frames_per_iter), 1):
 
-        def sample_replica(xb: CoordsBox, state_idx: StateIdx) -> Tuple[StoredArrays, NDArray]:
-            initial_state = replace(initial_states[state_idx], x0=xb.coords, box0=xb.box)
+        def sample_replica(xvb: CoordsVelBox, state_idx: StateIdx) -> Tuple[StoredArrays, NDArray, NDArray]:
+            initial_state = replace(initial_states[state_idx], x0=xvb.coords, v0=xvb.velocities, box0=xvb.box)
             md_params_replica = replace(
                 md_params, n_frames=n_frames_iter, n_eq_steps=0, seed=np.random.randint(np.iinfo(np.int32).max)
             )
 
             # TODO: `sample` creates a new context from scratch. We should optimize this to reuse an existing context
             # with BoundPotential#set_params
-            frames, boxes = sample(initial_state, md_params_replica, max_buffer_frames=100)
+            frames, boxes, final_velocities = sample(initial_state, md_params_replica, max_buffer_frames=100)
 
-            return frames, boxes
+            return frames, boxes, final_velocities
 
-        def replica_from_samples(samples: Tuple[StoredArrays, NDArray]) -> CoordsBox:
-            frames, boxes = samples
-            return CoordsBox(frames[-1], boxes[-1])
+        def replica_from_samples(samples: Tuple[StoredArrays, NDArray, NDArray]) -> CoordsVelBox:
+            frames, boxes, final_velocities = samples
+            return CoordsVelBox(frames[-1], final_velocities, boxes[-1])
 
-        hrex, samples_by_state = hrex.sample_replicas(sample_replica, replica_from_samples)
+        hrex, samples_by_state_ = hrex.sample_replicas(sample_replica, replica_from_samples)
         log_q = get_log_q_fn(hrex.replicas)
         hrex, fraction_accepted_by_pair = hrex.attempt_neighbor_swaps(neighbor_pairs, log_q, n_swap_attempts_per_iter)
 
         if len(initial_states) == 2:
             fraction_accepted_by_pair = fraction_accepted_by_pair[1:]  # remove stats for identity move
 
+        samples_by_state = [(coords, boxes) for coords, boxes, _ in samples_by_state_]  # drop velocities
         samples_by_state_by_iter.append(samples_by_state)
         replica_idx_by_state_by_iter.append(hrex.replica_idx_by_state)
         fraction_accepted_by_pair_by_iter.append(fraction_accepted_by_pair)
