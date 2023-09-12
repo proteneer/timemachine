@@ -385,6 +385,7 @@ def sample(
             n_steps=n_steps,
             store_x_interval=md_params.steps_per_frame,
         )
+        assert np.all(coords[-1] == ctxt.get_x_t())
         final_velocities = ctxt.get_v_t()
 
         return coords, boxes, final_velocities
@@ -412,6 +413,7 @@ def sample(
             coords.append(x_t)
             boxes.append(box_t)
 
+        assert np.all(coords[-1][-1] == ctxt.get_x_t())
         final_velocities = ctxt.get_v_t()
 
         return np.concatenate(coords), np.concatenate(boxes), final_velocities
