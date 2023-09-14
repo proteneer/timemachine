@@ -146,7 +146,6 @@ def get_initial_state(water_pdb, mol, ff, seed, nb_cutoff, lamb):
     # modify state with all ligand atoms decoupled (returned by prepare_host_edge) to
     # state with only half of the ligand atoms decoupled. This roughly decouples a contingous
     # semi-sphere along the "wide" axis as opposed to form random small pores.
-    nb_params = params[-1]
 
     final_masses = combined_masses
     final_conf = np.concatenate([solvent_conf, get_romol_conf(mol)], axis=0)
@@ -154,24 +153,26 @@ def get_initial_state(water_pdb, mol, ff, seed, nb_cutoff, lamb):
     component_dim = 4  # q,s,e,w
     num_atoms = len(final_conf)
 
+    # increase buckyball bond lengths
+    nb_params = params[-1]
     ligand_water_flat_idxs = np.s_[component_dim * num_atoms : 2 * component_dim * num_atoms]  # water
-    ligand_protein_flat_idxs = np.s_[2 * component_dim * num_atoms : 3 * component_dim * num_atoms :]  # non-water
     ligand_water_params = nb_params[ligand_water_flat_idxs].reshape(-1, 4)
-    ligand_protein_params = nb_params[ligand_protein_flat_idxs].reshape(-1, 4)
 
-    fully_coupled_ligand_atoms = ligand_idxs[: len(ligand_idxs) // 2]
+    # make mutable for simplicity
+    ligand_water_params = np.array(ligand_water_params)
 
-    ligand_water_params = ligand_water_params.at[fully_coupled_ligand_atoms, -1].set(0)
-    ligand_protein_params = ligand_protein_params.at[fully_coupled_ligand_atoms, -1].set(0)
+    # don't change charges
+    # scale vdw radii for every atom
+    ligand_water_params[ligand_idxs][:, 1] = (1 - lamb) * ligand_water_params[ligand_idxs][:, 1]
+    # scale w coordinate for every other atom
+    ligand_water_params[ligand_idxs[::2]][:, -1] = lamb * nb_cutoff
 
     nb_params = nb_params.at[ligand_water_flat_idxs].set(ligand_water_params.reshape(-1))
-    nb_params = nb_params.at[ligand_protein_flat_idxs].set(ligand_protein_params.reshape(-1))
 
     # override last potential with the updated nb_params
     host_bps = []
     for p, bp in zip(params[:-1], potentials[:-1]):
         host_bps.append(bp.bind(p))
-
     host_bps.append(potentials[-1].bind(nb_params))
 
     # (YTZ): This is disabled because the initial ligand and starting waters are pre-minimized
@@ -288,8 +289,8 @@ def test_hrex():
     bb_radius = 0.46
 
     lambda_min = 0.0
-    lambda_max = 0.3
-    n_windows = 48
+    lambda_max = 0.35
+    n_windows = 64
 
     mdp = MDParams(n_frames=args.n_frames, n_eq_steps=10_000, steps_per_frame=400, seed=2023)
     sim_res = estimate_relative_free_energy_hrex(
