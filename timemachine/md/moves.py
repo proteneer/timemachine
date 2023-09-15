@@ -69,20 +69,6 @@ class MonteCarloMove(Move[_State], ABC):
         return self._n_accepted / self._n_proposed if self._n_proposed else np.nan
 
 
-class MetropolisHastingsMove(MonteCarloMove[_State], ABC):
-    @abstractmethod
-    def propose_with_log_q_diff(self, x: _State) -> Tuple[_State, float]:
-        """Return proposed state and the difference in log unnormalized probability, i.e.
-
-        log_q_diff = log(q(x_proposed)) - log(q(x))
-        """
-
-    def propose(self, x: _State) -> Tuple[_State, float]:
-        proposal, log_q_diff = self.propose_with_log_q_diff(x)
-        log_acceptance_probability = np.minimum(log_q_diff, 0.0)
-        return proposal, log_acceptance_probability
-
-
 class CompoundMove(Move[_State]):
     def __init__(self, moves: Sequence[MonteCarloMove[_State]]):
         self.moves = moves
