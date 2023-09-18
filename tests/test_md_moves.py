@@ -4,19 +4,20 @@ import numpy as np
 import pytest
 from scipy.stats import ks_2samp
 
-from timemachine.md.moves import MetropolisHastingsMove
+from timemachine.md.moves import MonteCarloMove
 
 
-class RWMH1D(MetropolisHastingsMove[float]):
+class RWMH1D(MonteCarloMove[float]):
     def __init__(self, log_q: Callable[[float], float], proposal_radius: float):
         super().__init__()
         self.log_q = log_q
         self.proposal_radius = proposal_radius
 
-    def propose_with_log_q_diff(self, x: float) -> Tuple[float, float]:
+    def propose(self, x: float) -> Tuple[float, float]:
         x_prop = np.random.normal(x, self.proposal_radius)
         log_q_diff = self.log_q(x_prop) - self.log_q(x)
-        return x_prop, log_q_diff
+        log_acceptance_probability = np.minimum(log_q_diff, 0.0)
+        return x_prop, log_acceptance_probability
 
 
 @pytest.mark.parametrize("seed", [2023, 2024, 2025])

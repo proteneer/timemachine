@@ -4,7 +4,7 @@ from typing import Callable, Generic, List, NewType, Optional, Sequence, Tuple, 
 import numpy as np
 from numpy.typing import NDArray
 
-from timemachine.md.moves import MetropolisHastingsMove, MixtureOfMoves
+from timemachine.md.moves import MixtureOfMoves, MonteCarloMove
 from timemachine.utils import batches
 
 Replica = TypeVar("Replica")
@@ -13,14 +13,14 @@ StateIdx = NewType("StateIdx", int)
 ReplicaIdx = NewType("ReplicaIdx", int)
 
 
-class NeighborSwapMove(MetropolisHastingsMove[List[Replica]]):
+class NeighborSwapMove(MonteCarloMove[List[Replica]]):
     def __init__(self, log_q: Callable[[Replica, StateIdx], float], s_a: StateIdx, s_b: StateIdx):
         super().__init__()
         self.log_q = log_q
         self.s_a = s_a
         self.s_b = s_b
 
-    def propose_with_log_q_diff(self, state: List[Replica]) -> Tuple[List[Replica], float]:
+    def propose(self, state: List[Replica]) -> Tuple[List[Replica], float]:
         s_a = self.s_a
         s_b = self.s_b
         state_ = list(state)
@@ -31,7 +31,9 @@ class NeighborSwapMove(MetropolisHastingsMove[List[Replica]]):
         r_b = state[s_b]
         log_q_diff = self.log_q(r_a, s_b) + self.log_q(r_b, s_a) - self.log_q(r_a, s_a) - self.log_q(r_b, s_b)
 
-        return proposed_state, log_q_diff
+        log_acceptance_probability = np.minimum(log_q_diff, 0.0)
+
+        return proposed_state, log_acceptance_probability
 
 
 Samples = TypeVar("Samples")

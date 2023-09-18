@@ -39,7 +39,7 @@ def randomly_translate(coords, new_loc):
     return centered_coords + new_loc
 
 
-class BDExchangeMove(moves.MetropolisHastingsMove):
+class BDExchangeMove(moves.MonteCarloMove):
     """
     Untargetted, biased deletion move where we selectively prefer certain waters over others.
     """
@@ -157,7 +157,7 @@ class BDExchangeMove(moves.MetropolisHastingsMove):
         self.batch_log_weights_incremental = batch_log_weights_incremental
         self.batch_log_weights = batch_log_weights
 
-    def propose_with_log_q_diff(self, x: CoordsVelBox) -> Tuple[CoordsVelBox, float]:
+    def propose(self, x: CoordsVelBox) -> Tuple[CoordsVelBox, float]:
         coords = x.coords
         box = x.box
         log_weights_before = self.batch_log_weights(coords, box)
@@ -184,10 +184,10 @@ class BDExchangeMove(moves.MetropolisHastingsMove):
         # trial_coords[chosen_water_atoms] = moved_coords
         # log_weights_after = self.batch_log_weights(trial_coords, box)
 
-        log_q_diff = logsumexp(log_weights_before) - logsumexp(log_weights_after)
+        log_acceptance_probability = np.minimum(logsumexp(log_weights_before) - logsumexp(log_weights_after), 0.0)
         new_state = CoordsVelBox(trial_coords, x.velocities, x.box)
 
-        return new_state, log_q_diff
+        return new_state, log_acceptance_probability
 
 
 # numpy version of delta_r
