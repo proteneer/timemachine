@@ -17,7 +17,7 @@ from timemachine.fe.plots import (
     plot_hrex_transition_matrix,
 )
 from timemachine.md.hrex import HREXDiagnostics, ReplicaIdx, StateIdx, run_hrex
-from timemachine.md.moves import MetropolisHastingsMove
+from timemachine.md.moves import MonteCarloMove
 
 DEBUG = False
 
@@ -69,16 +69,17 @@ def gaussian(loc: float, scale: float, log_weight: float = 0.0) -> Distribution:
 
 
 @dataclass
-class LocalMove(MetropolisHastingsMove[float]):
+class LocalMove(MonteCarloMove[float]):
     def __init__(self, proposal: Callable[[float], Distribution], target: Distribution):
         super().__init__()
         self.proposal = proposal
         self.target = target
 
-    def propose_with_log_q_diff(self, x: float) -> Tuple[float, float]:
+    def propose(self, x: float) -> Tuple[float, float]:
         x_p = self.proposal(x).sample(1).item()
         log_q_diff = self.target.log_q(x_p) - self.target.log_q(x)
-        return x_p, log_q_diff
+        log_acceptance_probability = np.minimum(log_q_diff, 0.0)
+        return x_p, log_acceptance_probability
 
 
 def run_hrex_with_local_proposal(
