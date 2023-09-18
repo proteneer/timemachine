@@ -794,7 +794,6 @@ def run_sims_hrex(
     warn(f"Setting numpy global random state using seed {md_params.seed}")
     np.random.seed(md_params.seed)
 
-    lambdas = [s.lamb for s in initial_states]
     initial_replicas = [CoordsVelBox(s.x0, s.v0, s.box0) for s in initial_states]
 
     bps = initial_states[0].potentials  # TODO: assert initial states have compatible potentials?
@@ -903,8 +902,8 @@ def run_sims_hrex(
             print()
 
     # Concatenate frames and boxes from all iterations
-    frames_by_state: List[StoredArrays] = [StoredArrays() for _ in lambdas]
-    boxes_by_state_: List[List[NDArray]] = [[] for _ in lambdas]
+    frames_by_state: List[StoredArrays] = [StoredArrays() for _ in initial_states]
+    boxes_by_state_: List[List[NDArray]] = [[] for _ in initial_states]
     for samples_by_state in samples_by_state_by_iter:
         for samples, frames, boxes in zip(samples_by_state, frames_by_state, boxes_by_state_):
             frames_i, boxes_i = samples
