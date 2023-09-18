@@ -1,6 +1,6 @@
 from dataclasses import dataclass, replace
 from functools import cache
-from typing import Callable, List, Optional, Sequence, Tuple, Union, overload
+from typing import Callable, Iterable, List, Optional, Sequence, Tuple, Union, overload
 from warnings import warn
 
 import jax
@@ -32,6 +32,7 @@ from timemachine.md.barostat.utils import compute_box_center, get_bond_list, get
 from timemachine.md.hrex import HREX, HREXDiagnostics, ReplicaIdx, StateIdx, get_swap_attempts_per_iter_heuristic
 from timemachine.md.states import CoordsVelBox
 from timemachine.potentials import BoundPotential, HarmonicBond, SummedPotential
+from timemachine.potentials.potential import BoundGpuImplWrapper
 from timemachine.utils import batches, pairwise_transform_and_combine
 
 
@@ -365,6 +366,40 @@ def sample(
     """
 
     ctxt = get_context(initial_state)
+    return sample_with_context(
+        ctxt, md_params, initial_state.integrator.temperature, initial_state.ligand_idxs, max_buffer_frames
+    )
+
+
+@overload
+def sample_with_context(
+    ctxt: custom_ops.Context,
+    md_params: MDParams,
+    temperature: float,
+    ligand_idxs: NDArray[np.int32],
+    max_buffer_frames: None,
+) -> Tuple[NDArray, NDArray, NDArray]:
+    ...
+
+
+@overload
+def sample_with_context(
+    ctxt: custom_ops.Context,
+    md_params: MDParams,
+    temperature: float,
+    ligand_idxs: NDArray[np.int32],
+    max_buffer_frames: int,
+) -> Tuple[StoredArrays, NDArray, NDArray]:
+    ...
+
+
+def sample_with_context(
+    ctxt: custom_ops.Context,
+    md_params: MDParams,
+    temperature: float,
+    ligand_idxs: NDArray[np.int32],
+    max_buffer_frames: Optional[int] = None,
+) -> Tuple[Union[StoredArrays, NDArray], NDArray, NDArray]:
 
     # burn-in
     if md_params.n_eq_steps:
@@ -376,7 +411,7 @@ def sample(
     rng = np.random.default_rng(md_params.seed)
 
     if md_params.local_steps > 0:
-        ctxt.setup_local_md(initial_state.integrator.temperature, md_params.freeze_reference)
+        ctxt.setup_local_md(temperature, md_params.freeze_reference)
 
     assert np.all(np.isfinite(ctxt.get_x_t())), "Equilibration resulted in a nan"
 
@@ -405,7 +440,7 @@ def sample(
                 ctxt.multiple_steps(n_steps=global_steps)
             x_t, box_t = ctxt.multiple_steps_local(
                 local_steps,
-                initial_state.ligand_idxs.astype(np.int32),
+                ligand_idxs,
                 k=md_params.k,
                 radius=rng.uniform(md_params.min_radius, md_params.max_radius),
                 seed=rng.integers(np.iinfo(np.int32).max),
@@ -798,23 +833,21 @@ def run_sims_hrex(
     warn(f"Setting numpy global random state using seed {md_params.seed}")
     np.random.seed(md_params.seed)
 
-    bps = initial_states[0].potentials  # TODO: assert initial states have compatible potentials?
-    sp = SummedPotential([bp.potential for bp in bps], [bp.params for bp in bps])
-    ubp = sp.to_gpu(np.float32)
+    def get_summed_potential_bound_impl(bps: Iterable[BoundPotential]) -> BoundGpuImplWrapper:
+        potentials = [bp.potential for bp in bps]
+        params = [bp.params for bp in bps]
+        sp = SummedPotential(potentials, params)
+        return sp.to_gpu(np.float32).bind_params_list(params)
 
-    def compute_log_q_matrix(xvbs: List[CoordsVelBox], params: List[NDArray]):
-        coords = np.array([xvb.coords for xvb in xvbs])
-        boxes = np.array([xvb.box for xvb in xvbs])
-        _, _, U = ubp.unbound_impl.execute_selective_batch(coords, np.array(params), boxes, False, False, True)
+    bound_impls = [get_summed_potential_bound_impl(initial_state.potentials) for initial_state in initial_states]
+
+    def compute_log_q_matrix(xvbs: List[CoordsVelBox]):
+        U = np.array([[bound_impl(xvb.coords, xvb.box) for bound_impl in bound_impls] for xvb in xvbs])
         log_q = -U / (BOLTZ * temperature)
         return log_q
 
     def get_log_q_fn(xvbs: List[CoordsVelBox]):
-        def get_flattened_params(initial_state: InitialState) -> NDArray:
-            return np.concatenate([bp.params.flatten() for bp in initial_state.potentials])
-
-        params = [get_flattened_params(initial_state) for initial_state in initial_states]
-        log_q_kl = compute_log_q_matrix(xvbs, params)
+        log_q_kl = compute_log_q_matrix(xvbs)
 
         def log_q_fn(replica_idx: ReplicaIdx, state_idx: StateIdx) -> float:
             return log_q_kl[replica_idx, state_idx]
@@ -828,23 +861,35 @@ def run_sims_hrex(
         # Add an identity move to the mixture to ensure aperiodicity
         neighbor_pairs = [(StateIdx(0), StateIdx(0))] + neighbor_pairs
 
-    def get_equilibrated_initial_state(initial_state: InitialState) -> InitialState:
+    contexts = [
+        custom_ops.Context(
+            initial_state.x0,
+            initial_state.v0,
+            initial_state.box0,
+            initial_state.integrator.impl(),
+            bps=[bound_impl.bound_impl],
+            barostat=initial_state.barostat.impl([bound_impl.bound_impl]) if initial_state.barostat else None,
+        )
+        for initial_state, bound_impl in zip(initial_states, bound_impls)
+    ]
+
+    def get_equilibrated_xvb(initial_state: InitialState, context: custom_ops.Context) -> CoordsVelBox:
         if md_params.n_eq_steps == 0:
-            return initial_state
+            return CoordsVelBox(initial_state.x0, initial_state.v0, initial_state.box0)
 
-        ctxt = get_context(initial_state)
-
-        xs, boxes = ctxt.multiple_steps(md_params.n_eq_steps, store_x_interval=0)
+        xs, boxes = context.multiple_steps(md_params.n_eq_steps, store_x_interval=0)
         assert len(xs) == len(boxes) == 1
         x0 = xs[0]
-        assert np.all(x0 == ctxt.get_x_t())
-        v0 = ctxt.get_v_t()
+        assert np.all(x0 == context.get_x_t())
+        v0 = context.get_v_t()
         box0 = boxes[0]
 
-        equilibrated_initial_state = replace(initial_state, x0=x0, v0=v0, box0=box0)
-        return equilibrated_initial_state
+        return CoordsVelBox(x0, v0, box0)
 
-    initial_states = [get_equilibrated_initial_state(initial_state) for initial_state in initial_states]
+    initial_replicas = [
+        get_equilibrated_xvb(initial_state, context) for initial_state, context in zip(initial_states, contexts)
+    ]
+    hrex = HREX.from_replicas(initial_replicas)
 
     initial_replicas = [CoordsVelBox(s.x0, s.v0, s.box0) for s in initial_states]
     hrex = HREX.from_replicas(initial_replicas)
@@ -856,14 +901,25 @@ def run_sims_hrex(
     for iteration, n_frames_iter in enumerate(batches(md_params.n_frames, n_frames_per_iter), 1):
 
         def sample_replica(xvb: CoordsVelBox, state_idx: StateIdx) -> Tuple[StoredArrays, NDArray, NDArray]:
-            initial_state = replace(initial_states[state_idx], x0=xvb.coords, v0=xvb.velocities, box0=xvb.box)
+
+            ctxt = contexts[state_idx]
+            ctxt.set_x_t(xvb.coords)
+            ctxt.set_v_t(xvb.velocities)
+            ctxt.set_box(xvb.box)
+
             md_params_replica = replace(
                 md_params, n_frames=n_frames_iter, n_eq_steps=0, seed=np.random.randint(np.iinfo(np.int32).max)
             )
 
-            # TODO: `sample` creates a new context from scratch. We should optimize this to reuse an existing context
-            # with BoundPotential#set_params
-            frames, boxes, final_velocities = sample(initial_state, md_params_replica, max_buffer_frames=100)
+            initial_state = initial_states[state_idx]
+
+            frames, boxes, final_velocities = sample_with_context(
+                ctxt,
+                md_params_replica,
+                initial_state.integrator.temperature,
+                initial_state.ligand_idxs,
+                max_buffer_frames=100,
+            )
 
             return frames, boxes, final_velocities
 
@@ -937,4 +993,4 @@ def run_sims_hrex(
 
     diagnostics = HREXDiagnostics(replica_idx_by_state_by_iter, fraction_accepted_by_pair_by_iter)
 
-    return PairBarResult(initial_states, list(bar_results)), frames_by_state, boxes_by_state, diagnostics
+    return PairBarResult(list(initial_states), list(bar_results)), frames_by_state, boxes_by_state, diagnostics
