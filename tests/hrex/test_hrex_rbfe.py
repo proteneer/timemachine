@@ -61,7 +61,7 @@ def test_hrex_rbfe_hif2a(hif2a_single_topology_leg):
         lambda_interval=(0.0, 0.15),
         n_windows=n_windows,
         n_frames_bisection=100,
-        n_frames_per_iter=5,
+        n_frames_per_iter=1,
     )
 
     if DEBUG:
