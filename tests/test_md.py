@@ -632,7 +632,7 @@ def test_local_md_initialization(freeze_reference):
     ctxt = custom_ops.Context(coords, v0, box, intg.impl(), bps)
     ctxt.setup_local_md(constants.DEFAULT_TEMP, freeze_reference)
 
-    # setup_local_md is idempotent, and will warn if already setup already performed
+    # setup_local_md is idempotent if called with the same parameters
     ctxt.setup_local_md(constants.DEFAULT_TEMP, freeze_reference)
 
     # If the parameters change, will raise an exception

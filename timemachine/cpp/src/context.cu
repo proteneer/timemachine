@@ -78,7 +78,6 @@ void Context::setup_local_md(double temperature, bool freeze_reference) {
                 std::to_string(this->local_md_pots_->temperature) + " Freeze Reference " +
                 std::to_string(this->local_md_pots_->freeze_reference));
         }
-        fprintf(stderr, "Context::setup_local_md: already setup local MD, skipping\n");
         return;
     }
     this->local_md_pots_.reset(new LocalMDPotentials(N_, bps_, freeze_reference, temperature));
