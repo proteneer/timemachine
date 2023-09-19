@@ -44,7 +44,7 @@ def assert_shapes_consistent(U, coords, sys_params, box):
     # can call grad(U) and get right shape
     du_dx, du_dp = grad(U, argnums=(0, 1))(coords, sys_params, box)
     assert du_dx.shape == coords.shape
-    for (p, p_prime) in zip(sys_params, du_dp):
+    for p, p_prime in zip(sys_params, du_dp):
         assert p.shape == p_prime.shape
 
 
@@ -326,7 +326,7 @@ def test_run_sims_bisection_early_stopping():
     )
 
     # runs all n_bisections iterations by default
-    results, _, _ = run_sims_bisection_early_stopping()
+    results = run_sims_bisection_early_stopping()[0]
     assert len(results) == 1 + n_bisections  # initial result + bisection iterations
 
     def result_with_overlap(overlap):
@@ -336,24 +336,24 @@ def test_run_sims_bisection_early_stopping():
         # overlap does not improve; should run all n_bisections iterations
         mock_estimate_free_energy_bar.return_value = result_with_overlap(0.0)
         with pytest.warns(MinOverlapWarning):
-            results, _, _ = run_sims_bisection_early_stopping(min_overlap=0.4)
+            results = run_sims_bisection_early_stopping(min_overlap=0.4)[0]
         assert len(results) == 1 + n_bisections
 
         # min_overlap satisfied by initial states
         mock_estimate_free_energy_bar.return_value = result_with_overlap(0.5)
-        results, _, _ = run_sims_bisection_early_stopping(min_overlap=0.4)
+        results = run_sims_bisection_early_stopping(min_overlap=0.4)[0]
         assert len(results) == 1
 
         # min_overlap achieved after 1 iteration
         mock_estimate_free_energy_bar.side_effect = [result_with_overlap(overlap) for overlap in [0.0, 0.5, 0.5]]
-        results, _, _ = run_sims_bisection_early_stopping(min_overlap=0.4)
+        results = run_sims_bisection_early_stopping(min_overlap=0.4)[0]
         assert len(results) == 1 + 1
 
         # min_overlap achieved after 2 iterations
         mock_estimate_free_energy_bar.side_effect = [
             result_with_overlap(overlap) for overlap in [0.0, 0.5, 0.3, 0.5, 0.6]
         ]
-        results, _, _ = run_sims_bisection_early_stopping(min_overlap=0.4)
+        results = run_sims_bisection_early_stopping(min_overlap=0.4)[0]
         assert len(results) == 1 + 2
 
 
