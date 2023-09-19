@@ -22,12 +22,12 @@ struct LessThan {
 
 LocalMDPotentials::LocalMDPotentials(
     const int N, const std::vector<std::shared_ptr<BoundPotential>> &bps, bool freeze_reference, double temperature)
-    : N_(N), freeze_reference_(freeze_reference), temperature_(temperature), temp_storage_bytes_(0),
-      all_potentials_(bps), d_restraint_pairs_(N_ * 2), d_bond_params_(N_ * 3),
-      d_probability_buffer_(round_up_even(N_)), d_free_idxs_(N_), d_temp_idxs_(N_), d_all_pairs_idxs_(N_),
-      d_row_idxs_(N_), d_col_idxs_(N_), p_num_selected_(1), d_num_selected_buffer_(1) {
+    : freeze_reference(freeze_reference), temperature(temperature), N_(N), temp_storage_bytes_(0), all_potentials_(bps),
+      d_restraint_pairs_(N_ * 2), d_bond_params_(N_ * 3), d_probability_buffer_(round_up_even(N_)), d_free_idxs_(N_),
+      d_temp_idxs_(N_), d_all_pairs_idxs_(N_), d_row_idxs_(N_), d_col_idxs_(N_), p_num_selected_(1),
+      d_num_selected_buffer_(1) {
 
-    if (temperature_ <= 0.0) {
+    if (temperature <= 0.0) {
         throw std::runtime_error("temperature must be greater than 0");
     }
 
@@ -70,9 +70,9 @@ LocalMDPotentials::LocalMDPotentials(
     // Add the restraint potential and ixn group potential
     all_potentials_.push_back(bound_free_restraint_);
     all_potentials_.push_back(ixn_group_);
-    if (!freeze_reference_) {
+    if (!freeze_reference) {
         frozen_restraint_ = std::shared_ptr<LogFlatBottomBond<double>>(
-            new LogFlatBottomBond<double>(default_bonds, 1 / (temperature_ * BOLTZ)));
+            new LogFlatBottomBond<double>(default_bonds, 1 / (temperature * BOLTZ)));
         bound_frozen_restraint_ =
             std::shared_ptr<BoundPotential>(new BoundPotential(frozen_restraint_, default_params));
         all_potentials_.push_back(bound_frozen_restraint_);
@@ -127,7 +127,7 @@ void LocalMDPotentials::setup_from_idxs(
 
     unsigned int reference_idx = local_idxs[random_dist(rng)];
 
-    const double kBT = BOLTZ * temperature_;
+    const double kBT = BOLTZ * temperature;
     // Select all of the particles that will be free
     k_log_probability_selection<float><<<ceil_divide(N_, tpb), tpb, 0, stream>>>(
         N_, kBT, radius, k, reference_idx, d_x_t, d_box_t, d_probability_buffer_.data, d_free_idxs_.data);
@@ -175,7 +175,7 @@ void LocalMDPotentials::_setup_free_idxs_given_reference_idx(
 
     LessThan select_op(N_);
 
-    if (!freeze_reference_) {
+    if (!freeze_reference) {
         // Remove the reference idx from the column indices, d_free_idxs gets inverted to construct column idxs,
         // and add to the row indices
         k_update_index<<<1, 1, 0, stream>>>(d_free_idxs_.data, reference_idx, reference_idx);
@@ -228,7 +228,7 @@ void LocalMDPotentials::_setup_free_idxs_given_reference_idx(
     }
 
     // The reference particle will always be in the column idxs if the reference is frozen
-    if (num_row_idxs == N_ - 1 || (!freeze_reference_ && num_row_idxs == N_)) {
+    if (num_row_idxs == N_ - 1 || (!freeze_reference && num_row_idxs == N_)) {
         fprintf(stderr, "LocalMDPotentials setup has entire system selected\n");
     }
 
@@ -291,7 +291,7 @@ void LocalMDPotentials::_setup_free_idxs_given_reference_idx(
     k_invert_indices<<<ceil_divide(N_, tpb), tpb, 0, stream>>>(N_, d_free_idxs_.data);
     gpuErrchk(cudaPeekAtLastError());
 
-    if (!freeze_reference_) {
+    if (!freeze_reference) {
         // If there are no frozen indices, don't attach any restraints
         if (num_col_idxs > 0) {
             k_construct_bonded_params<<<ceil_divide(num_col_idxs, tpb), tpb, 0, stream>>>(

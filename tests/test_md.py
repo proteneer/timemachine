@@ -632,9 +632,14 @@ def test_local_md_initialization(freeze_reference):
     ctxt = custom_ops.Context(coords, v0, box, intg.impl(), bps)
     ctxt.setup_local_md(constants.DEFAULT_TEMP, freeze_reference)
 
-    # Can only configure local md once
-    with pytest.raises(RuntimeError, match="already configured"):
-        ctxt.setup_local_md(constants.DEFAULT_TEMP, freeze_reference)
+    # setup_local_md is idempotent if called with the same parameters
+    ctxt.setup_local_md(constants.DEFAULT_TEMP, freeze_reference)
+
+    # If the parameters change, will raise an exception
+    with pytest.raises(RuntimeError, match="local md configured with different parameters"):
+        ctxt.setup_local_md(constants.DEFAULT_TEMP + 1, freeze_reference)
+    with pytest.raises(RuntimeError, match="local md configured with different parameters"):
+        ctxt.setup_local_md(constants.DEFAULT_TEMP, not freeze_reference)
 
     ref_xs, ref_boxes = ctxt.multiple_steps(steps)
 
