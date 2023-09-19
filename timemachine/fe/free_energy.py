@@ -735,8 +735,8 @@ def run_sims_bisection(
                 MinOverlapWarning,
             )
 
-    frames = [get_state(lamb).frames for lamb in lambdas]
-    boxes = [get_state(lamb).boxes for lamb in lambdas]
+    frames = [get_samples(lamb)[0] for lamb in lambdas]
+    boxes = [get_samples(lamb)[1] for lamb in lambdas]
     final_velocities = [get_samples(lamb)[2] for lamb in lambdas]
 
     return results, frames, boxes, final_velocities
