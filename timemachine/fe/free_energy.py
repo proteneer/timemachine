@@ -794,8 +794,6 @@ def run_sims_hrex(
     warn(f"Setting numpy global random state using seed {md_params.seed}")
     np.random.seed(md_params.seed)
 
-    initial_replicas = [CoordsVelBox(s.x0, s.v0, s.box0) for s in initial_states]
-
     bps = initial_states[0].potentials  # TODO: assert initial states have compatible potentials?
     sp = SummedPotential([bp.potential for bp in bps], [bp.params for bp in bps])
     ubp = sp.to_gpu(np.float32)
@@ -826,8 +824,6 @@ def run_sims_hrex(
         # Add an identity move to the mixture to ensure aperiodicity
         neighbor_pairs = [(StateIdx(0), StateIdx(0))] + neighbor_pairs
 
-    hrex = HREX.from_replicas(initial_replicas)
-
     def get_equilibrated_initial_state(initial_state: InitialState) -> InitialState:
         if md_params.n_eq_steps == 0:
             return initial_state
@@ -843,6 +839,9 @@ def run_sims_hrex(
         return equilibrated_initial_state
 
     initial_states = [get_equilibrated_initial_state(initial_state) for initial_state in initial_states]
+
+    initial_replicas = [CoordsVelBox(s.x0, s.v0, s.box0) for s in initial_states]
+    hrex = HREX.from_replicas(initial_replicas)
 
     samples_by_state_by_iter: List[List[Tuple[StoredArrays, NDArray]]] = []
     replica_idx_by_state_by_iter: List[List[ReplicaIdx]] = []
