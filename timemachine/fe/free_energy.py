@@ -614,7 +614,7 @@ def run_sims_bisection(
     temperature: float,
     min_overlap: Optional[float] = None,
     verbose: bool = True,
-) -> Tuple[List[PairBarResult], List[StoredArrays], List[NDArray]]:
+) -> Tuple[List[PairBarResult], List[StoredArrays], List[NDArray], List[NDArray]]:
     r"""Starting from a specified lambda schedule, successively bisect the lambda interval between the pair of states
     with the lowest BAR overlap and sample the new state with MD.
 
@@ -652,6 +652,9 @@ def run_sims_bisection(
 
     boxes: list of NDArray
         Boxes from the final iteration of bisection. Shape (L, F, 3, 3).
+
+    final_velocities: list of NDArray
+        Velocities from the final frame for each state
     """
 
     assert len(initial_lambdas) >= 2
@@ -660,17 +663,17 @@ def run_sims_bisection(
     get_initial_state = cache(make_initial_state)
 
     @cache
-    def get_samples(lamb: float) -> Tuple[StoredArrays, NDArray]:
+    def get_samples(lamb: float) -> Tuple[StoredArrays, NDArray, NDArray]:
         initial_state = get_initial_state(lamb)
-        frames, boxes, _ = sample(initial_state, md_params, max_buffer_frames=100)
-        return frames, boxes
+        frames, boxes, final_velocities = sample(initial_state, md_params, max_buffer_frames=100)
+        return frames, boxes, final_velocities
 
     # NOTE: we don't cache get_state to avoid holding BoundPotentials in memory since they
     # 1. can use significant GPU memory
     # 2. can be reconstructed relatively quickly
     def get_state(lamb: float) -> EnergyDecomposedState[StoredArrays]:
         initial_state = get_initial_state(lamb)
-        frames, boxes = get_samples(lamb)
+        frames, boxes, _ = get_samples(lamb)
         batch_u_fns = make_batch_u_fns(initial_state, temperature)
         return EnergyDecomposedState(frames, boxes, batch_u_fns)
 
@@ -734,8 +737,9 @@ def run_sims_bisection(
 
     frames = [get_state(lamb).frames for lamb in lambdas]
     boxes = [get_state(lamb).boxes for lamb in lambdas]
+    final_velocities = [get_samples(lamb)[2] for lamb in lambdas]
 
-    return results, frames, boxes
+    return results, frames, boxes, final_velocities
 
 
 def run_sims_hrex(

@@ -545,7 +545,7 @@ def estimate_relative_free_energy_bisection(
     combined_prefix = get_mol_name(mol_a) + "_" + get_mol_name(mol_b) + "_" + prefix
 
     try:
-        results, frames, boxes = run_sims_bisection(
+        results, frames, boxes, _ = run_sims_bisection(
             [lambda_min, lambda_max],
             make_optimized_initial_state,
             md_params,
@@ -696,7 +696,7 @@ def estimate_relative_free_energy_bisection_hrex(
 
     try:
         # First phase: bisection to determine lambda spacing
-        results_bisection, _, _ = run_sims_bisection(
+        results, frames_by_state, boxes_by_state, final_velocities_by_state = run_sims_bisection(
             [lambda_min, lambda_max],
             make_optimized_initial_state,
             replace(md_params, n_frames=n_frames_bisection),  # TODO: clean up
@@ -704,12 +704,25 @@ def estimate_relative_free_energy_bisection_hrex(
             temperature=temperature,
             min_overlap=min_overlap,
         )
-        result_bisection = results_bisection[-1]
 
         # Second phase: sample initial states determined by bisection using HREX
-        initial_states_hrex = result_bisection.initial_states
-        pair_bar_result, frames, boxes, diagnostics = run_sims_hrex(
-            initial_states_hrex, md_params, n_frames_per_iter=n_frames_per_iter, temperature=temperature
+
+        # Use equilibrated samples from bisection as initial states
+        initial_states_hrex = [
+            replace(initial_state, x0=frames[-1], v0=final_velocities, box0=boxes[-1])
+            for initial_state, frames, boxes, final_velocities in zip(
+                results[-1].initial_states,
+                frames_by_state,
+                boxes_by_state,
+                final_velocities_by_state,
+            )
+        ]
+
+        pair_bar_result, frames_by_state, boxes_by_state, diagnostics = run_sims_hrex(
+            initial_states_hrex,
+            replace(md_params, n_eq_steps=0),  # using pre-equilibrated samples
+            n_frames_per_iter=n_frames_per_iter,
+            temperature=temperature,
         )
 
         plots = make_pair_bar_plots(pair_bar_result, temperature, combined_prefix)
@@ -718,14 +731,14 @@ def estimate_relative_free_energy_bisection_hrex(
         stored_boxes = []
         for i in keep_idxs:
             try:
-                stored_frames.append(frames[i])
-                stored_boxes.append(boxes[i])
+                stored_frames.append(frames_by_state[i])
+                stored_boxes.append(boxes_by_state[i])
             except IndexError:
-                warnings.warn(f"Invalid index in keep_idxs: {i}. Bisection terminated with only {len(frames)} windows.")
+                warnings.warn(
+                    f"Invalid index in keep_idxs: {i}. Bisection terminated with only {len(frames_by_state)} windows."
+                )
 
-        return SimulationResult(
-            pair_bar_result, plots, stored_frames, stored_boxes, md_params, results_bisection, diagnostics
-        )
+        return SimulationResult(pair_bar_result, plots, stored_frames, stored_boxes, md_params, results, diagnostics)
 
     except Exception as err:
         with open(f"failed_rbfe_result_{combined_prefix}.pkl", "wb") as fh:
