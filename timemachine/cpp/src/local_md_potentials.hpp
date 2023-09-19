@@ -45,10 +45,11 @@ public:
 
     void reset_potentials(cudaStream_t stream);
 
+    const bool freeze_reference;
+    const double temperature;
+
 private:
     const int N_;
-    const bool freeze_reference_;
-    const double temperature_;
     std::size_t temp_storage_bytes_;
     int num_allpairs_idxs_;
 
