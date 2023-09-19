@@ -837,8 +837,9 @@ def run_sims_hrex(
         xs, boxes = ctxt.multiple_steps(md_params.n_eq_steps, store_x_interval=0)
         assert len(xs) == len(boxes) == 1
         x0 = xs[0]
-        box0 = boxes[0]
+        assert np.all(x0 == ctxt.get_x_t())
         v0 = ctxt.get_v_t()
+        box0 = boxes[0]
 
         equilibrated_initial_state = replace(initial_state, x0=x0, v0=v0, box0=box0)
         return equilibrated_initial_state
