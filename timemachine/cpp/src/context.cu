@@ -71,7 +71,14 @@ double Context::_get_temperature() {
 
 void Context::setup_local_md(double temperature, bool freeze_reference) {
     if (this->local_md_pots_ != nullptr) {
-        throw std::runtime_error("local md already configured");
+        if (this->local_md_pots_->temperature != temperature ||
+            this->local_md_pots_->freeze_reference != freeze_reference) {
+            throw std::runtime_error(
+                "local md configured with different parameters, current parameters: Temperature " +
+                std::to_string(this->local_md_pots_->temperature) + " Freeze Reference " +
+                std::to_string(this->local_md_pots_->freeze_reference));
+        }
+        return;
     }
     this->local_md_pots_.reset(new LocalMDPotentials(N_, bps_, freeze_reference, temperature));
 }

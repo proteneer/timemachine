@@ -614,7 +614,7 @@ def run_sims_bisection(
     temperature: float,
     min_overlap: Optional[float] = None,
     verbose: bool = True,
-) -> Tuple[List[PairBarResult], List[StoredArrays], List[NDArray]]:
+) -> Tuple[List[PairBarResult], List[StoredArrays], List[NDArray], List[NDArray]]:
     r"""Starting from a specified lambda schedule, successively bisect the lambda interval between the pair of states
     with the lowest BAR overlap and sample the new state with MD.
 
@@ -652,6 +652,9 @@ def run_sims_bisection(
 
     boxes: list of NDArray
         Boxes from the final iteration of bisection. Shape (L, F, 3, 3).
+
+    final_velocities: list of NDArray
+        Velocities from the final frame for each state
     """
 
     assert len(initial_lambdas) >= 2
@@ -660,17 +663,17 @@ def run_sims_bisection(
     get_initial_state = cache(make_initial_state)
 
     @cache
-    def get_samples(lamb: float) -> Tuple[StoredArrays, NDArray]:
+    def get_samples(lamb: float) -> Tuple[StoredArrays, NDArray, NDArray]:
         initial_state = get_initial_state(lamb)
-        frames, boxes, _ = sample(initial_state, md_params, max_buffer_frames=100)
-        return frames, boxes
+        frames, boxes, final_velocities = sample(initial_state, md_params, max_buffer_frames=100)
+        return frames, boxes, final_velocities
 
     # NOTE: we don't cache get_state to avoid holding BoundPotentials in memory since they
     # 1. can use significant GPU memory
     # 2. can be reconstructed relatively quickly
     def get_state(lamb: float) -> EnergyDecomposedState[StoredArrays]:
         initial_state = get_initial_state(lamb)
-        frames, boxes = get_samples(lamb)
+        frames, boxes, _ = get_samples(lamb)
         batch_u_fns = make_batch_u_fns(initial_state, temperature)
         return EnergyDecomposedState(frames, boxes, batch_u_fns)
 
@@ -732,10 +735,11 @@ def run_sims_bisection(
                 MinOverlapWarning,
             )
 
-    frames = [get_state(lamb).frames for lamb in lambdas]
-    boxes = [get_state(lamb).boxes for lamb in lambdas]
+    frames = [get_samples(lamb)[0] for lamb in lambdas]
+    boxes = [get_samples(lamb)[1] for lamb in lambdas]
+    final_velocities = [get_samples(lamb)[2] for lamb in lambdas]
 
-    return results, frames, boxes
+    return results, frames, boxes, final_velocities
 
 
 def run_sims_hrex(
@@ -828,9 +832,6 @@ def run_sims_hrex(
     warn(f"Setting numpy global random state using seed {md_params.seed}")
     np.random.seed(md_params.seed)
 
-    lambdas = [s.lamb for s in initial_states]
-    initial_replicas = [CoordsVelBox(s.x0, s.v0, s.box0) for s in initial_states]
-
     bps = initial_states[0].potentials  # TODO: assert initial states have compatible potentials?
     sp = SummedPotential([bp.potential for bp in bps], [bp.params for bp in bps])
     ubp = sp.to_gpu(np.float32)
@@ -861,8 +862,6 @@ def run_sims_hrex(
         # Add an identity move to the mixture to ensure aperiodicity
         neighbor_pairs = [(StateIdx(0), StateIdx(0))] + neighbor_pairs
 
-    hrex = HREX.from_replicas(initial_replicas)
-
     def get_equilibrated_initial_state(initial_state: InitialState) -> InitialState:
         if md_params.n_eq_steps == 0:
             return initial_state
@@ -872,12 +871,17 @@ def run_sims_hrex(
         xs, boxes = ctxt.multiple_steps(md_params.n_eq_steps, store_x_interval=0)
         assert len(xs) == len(boxes) == 1
         x0 = xs[0]
+        assert np.all(x0 == ctxt.get_x_t())
+        v0 = ctxt.get_v_t()
         box0 = boxes[0]
 
-        equilibrated_initial_state = replace(initial_state, x0=x0, box0=box0)
+        equilibrated_initial_state = replace(initial_state, x0=x0, v0=v0, box0=box0)
         return equilibrated_initial_state
 
     initial_states = [get_equilibrated_initial_state(initial_state) for initial_state in initial_states]
+
+    initial_replicas = [CoordsVelBox(s.x0, s.v0, s.box0) for s in initial_states]
+    hrex = HREX.from_replicas(initial_replicas)
 
     samples_by_state_by_iter: List[List[Tuple[StoredArrays, NDArray]]] = []
     replica_idx_by_state_by_iter: List[List[ReplicaIdx]] = []
@@ -937,8 +941,8 @@ def run_sims_hrex(
             print()
 
     # Concatenate frames and boxes from all iterations
-    frames_by_state: List[StoredArrays] = [StoredArrays() for _ in lambdas]
-    boxes_by_state_: List[List[NDArray]] = [[] for _ in lambdas]
+    frames_by_state: List[StoredArrays] = [StoredArrays() for _ in initial_states]
+    boxes_by_state_: List[List[NDArray]] = [[] for _ in initial_states]
     for samples_by_state in samples_by_state_by_iter:
         for samples, frames, boxes in zip(samples_by_state, frames_by_state, boxes_by_state_):
             frames_i, boxes_i = samples
