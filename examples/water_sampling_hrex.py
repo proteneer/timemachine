@@ -7,6 +7,7 @@
 import argparse
 import os
 import sys
+from dataclasses import replace
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -66,7 +67,7 @@ def estimate_relative_free_energy_hrex(
         state, _, _ = get_initial_state(water_pdb, mol, ff, seed, nb_cutoff, lamb)
         return state
 
-    results_bisection, _, _ = run_sims_bisection(
+    results_bisection, frames_by_state, boxes_by_state, final_velocities_by_state = run_sims_bisection(
         [lambda_min, lambda_max],
         make_optimized_initial_state,
         md_params,  # optimize?
@@ -82,8 +83,21 @@ def estimate_relative_free_energy_hrex(
     print("Bisected Lambda Schedule", lambda_schedule)
 
     # Second phase: sample initial states determined by bisection using HREX
-    pair_bar_result, frames, boxes, diagnostics = run_sims_hrex(
-        initial_states_hrex, md_params, n_frames_per_iter=n_frames_per_iter, temperature=temperature
+    initial_states_hrex = [
+        replace(initial_state, x0=frames[-1], v0=final_velocities, box0=boxes[-1])
+        for initial_state, frames, boxes, final_velocities in zip(
+            results_bisection[-1].initial_states,
+            frames_by_state,
+            boxes_by_state,
+            final_velocities_by_state,
+        )
+    ]
+
+    pair_bar_result, frames_by_state, boxes_by_state, diagnostics = run_sims_hrex(
+        initial_states_hrex,
+        replace(md_params, n_eq_steps=0),  # using pre-equilibrated samples
+        n_frames_per_iter=n_frames_per_iter,
+        temperature=temperature,
     )
 
     plots = make_pair_bar_plots(pair_bar_result, temperature, combined_prefix)
@@ -92,8 +106,8 @@ def estimate_relative_free_energy_hrex(
     stored_boxes = []
     keep_idxs = np.arange(len(initial_states_hrex))
     for i in keep_idxs:
-        stored_frames.append(frames[i])
-        stored_boxes.append(boxes[i])
+        stored_frames.append(frames_by_state[i])
+        stored_boxes.append(boxes_by_state[i])
 
     return SimulationResult(pair_bar_result, plots, stored_frames, stored_boxes, md_params, None, diagnostics)
 
@@ -180,7 +194,7 @@ def get_initial_state(water_pdb, mol, ff, seed, nb_cutoff, lamb):
     # print("Done", flush=True)
 
     temperature = DEFAULT_TEMP
-    dt = 1e-3
+    dt = 1.5e-3
     barostat_interval = 25
     integrator = LangevinIntegrator(temperature, dt, 1.0, final_masses, seed)
     bond_list = get_bond_list(host_bps[0].potential)
