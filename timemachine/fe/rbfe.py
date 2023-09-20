@@ -720,7 +720,6 @@ def estimate_relative_free_energy_bisection_hrex(
             initial_states_hrex,
             replace(md_params, n_eq_steps=0),  # using pre-equilibrated samples
             n_frames_per_iter=n_frames_per_iter,
-            temperature=temperature,
         )
 
         plots = make_pair_bar_plots(pair_bar_result, temperature, combined_prefix)
