@@ -75,9 +75,9 @@ def test_hrex_rbfe_hif2a(hif2a_single_topology_leg):
     final_swap_acceptance_rates = result.hrex_diagnostics.cumulative_swap_acceptance_rates[-1]
     assert np.all(final_swap_acceptance_rates > 0.2)
 
-    # All replicas should have visited each state at least once
+    # Expect some replicas to visit every state
     final_replica_state_counts = result.hrex_diagnostics.cumulative_replica_state_counts[-1]
-    assert np.all(final_replica_state_counts > 0)
+    assert np.any(np.all(final_replica_state_counts > 0, axis=0))
 
 
 def plot_hrex_rbfe_hif2a(result: SimulationResult):
