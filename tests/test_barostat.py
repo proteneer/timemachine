@@ -545,3 +545,89 @@ def test_get_group_indices():
     with pytest.raises(AssertionError):
         # num_atoms <  an atom's index in bond_idxs
         get_group_indices([[0, 3]], num_atoms=3)
+
+
+@pytest.mark.memcheck
+def test_barostat_scaling_behavior():
+    """Verify that it is possible to retrieve and set the volume scaling factor. Also check that the adaptive behavior of the scaling can be disabled"""
+    lam = 1.0
+    temperature = DEFAULT_TEMP
+    timestep = 1.5e-3
+    barostat_interval = 3
+    collision_rate = 1.0
+    seed = 2021
+    np.random.seed(seed)
+
+    pressure = DEFAULT_PRESSURE
+
+    mol_a, _, _ = get_hif2a_ligand_pair_single_topology()
+    ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
+
+    host_system, host_coords, host_box, host_top = build_water_system(3.0, ff.water_ff)
+    bt = BaseTopology(mol_a, ff)
+    afe = AbsoluteFreeEnergy(mol_a, bt)
+    host_config = HostConfig(host_system, host_coords, host_box, host_coords.shape[0])
+    unbound_potentials, sys_params, masses = afe.prepare_host_edge(ff.get_params(), host_config, lam)
+    coords = afe.prepare_combined_coords(host_coords=host_coords)
+
+    # get list of molecules for barostat by looking at bond table
+    harmonic_bond_potential = unbound_potentials[0]
+    bond_list = get_bond_list(harmonic_bond_potential)
+    group_indices = get_group_indices(bond_list, len(masses))
+
+    u_impls = []
+    for params, unbound_pot in zip(sys_params, unbound_potentials):
+        bp = unbound_pot.bind(params)
+        bp_impl = bp.to_gpu(precision=np.float32).bound_impl
+        u_impls.append(bp_impl)
+
+    integrator = LangevinIntegrator(
+        temperature,
+        timestep,
+        collision_rate,
+        masses,
+        seed,
+    )
+
+    v_0 = sample_velocities(masses, temperature)
+
+    baro = custom_ops.MonteCarloBarostat(
+        coords.shape[0],
+        pressure,
+        temperature,
+        group_indices,
+        barostat_interval,
+        u_impls,
+        seed,
+    )
+    # Initial volume scaling is 0
+    assert baro.get_volume_scale_factor() == 0.0
+    assert baro.get_adaptive_scaling()
+
+    ctxt = custom_ops.Context(coords, v_0, host_box, integrator.impl(), u_impls, barostat=baro)
+    ctxt.multiple_steps(15)
+
+    # Verify that the volume scaling is non-zero
+    scaling = baro.get_volume_scale_factor()
+    assert scaling > 0
+
+    ctxt.multiple_steps(100)
+    # The scaling should adapt between moves
+    assert scaling != baro.get_volume_scale_factor()
+
+    # Reset the scaling to the previous value
+    baro.set_volume_scale_factor(scaling)
+    assert scaling == baro.get_volume_scale_factor()
+
+    # Set back to the initial volume scaling, effectively disabling the barostat
+    baro.set_volume_scale_factor(0.0)
+    baro.set_adaptive_scaling(False)
+    assert not baro.get_adaptive_scaling()
+    ctxt.multiple_steps(100)
+    assert baro.get_volume_scale_factor() == 0.0
+
+    # Turning adaptive scaling back on should change the scaling after some MD
+    baro.set_adaptive_scaling(True)
+    assert baro.get_adaptive_scaling()
+    ctxt.multiple_steps(100)
+    assert baro.get_volume_scale_factor() != 0.0
