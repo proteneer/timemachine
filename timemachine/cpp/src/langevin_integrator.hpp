@@ -22,7 +22,7 @@ private:
 
     double *d_cbs_;
     double *d_ccs_;
-    double *d_noise_;
+    float *d_noise_;
     unsigned long long *d_du_dx_;
 
     curandGenerator_t cr_rng_;
