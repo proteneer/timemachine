@@ -130,12 +130,12 @@ void __global__ k_decide_move(
     const bool rejected = w > 0 && rand[1] > std::exp(-w / kt);
 
     while (idx < N) {
-        if (idx == 0 && adaptive) {
+        if (idx == 0) {
             if (!rejected) {
                 num_accepted[0]++;
             }
             num_attempted[0]++;
-            if (num_attempted[0] >= 10) {
+            if (adaptive && num_attempted[0] >= 10) {
                 if (num_accepted[0] < 0.25 * num_attempted[0]) {
                     d_volume_scale[0] /= 1.1;
                     // Reset the counters
