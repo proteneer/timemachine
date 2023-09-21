@@ -8,7 +8,7 @@ template <typename RealType>
 void __global__ k_rescale_positions(
     const int N,                                     // Number of atoms to shift
     double *__restrict__ coords,                     // Coordinates
-    const double *__restrict__ length_scale,         // [1]
+    const RealType *__restrict__ length_scale,       // [1]
     const double *__restrict__ box,                  // [9]
     double *__restrict__ scaled_box,                 // [9]
     const int *__restrict__ atom_idxs,               // [N]
@@ -78,7 +78,7 @@ void __global__ k_setup_barostat_move(
     double *__restrict__ d_box,            // [3*3]
     RealType *__restrict__ d_volume_delta, // [1]
     double *__restrict__ d_volume_scale,   // [1]
-    double *__restrict__ d_length_scale    // [1]
+    RealType *__restrict__ d_length_scale  // [1]
 ) {
     const int idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx >= 1) {

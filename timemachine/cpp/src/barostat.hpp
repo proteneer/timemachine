@@ -75,7 +75,7 @@ private:
 
     RealType *d_volume_;
     RealType *d_volume_delta_;
-    double *d_length_scale_;
+    RealType *d_length_scale_;
     double *d_volume_scale_;
 
     double *d_x_after_;
