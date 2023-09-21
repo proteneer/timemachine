@@ -25,9 +25,9 @@ MonteCarloBarostat<RealType>::MonteCarloBarostat(
     const int interval,
     const std::vector<std::shared_ptr<BoundPotential>> bps,
     const int seed,
-    const bool adaptive)
-    : N_(N), adaptive_(adaptive), bps_(bps), pressure_(pressure), temperature_(temperature), interval_(interval),
-      seed_(seed), group_idxs_(group_idxs), step_(0), num_grouped_atoms_(0), runner_() {
+    const bool adapt_volume_scale_factor)
+    : N_(N), adaptive_(adapt_volume_scale_factor), bps_(bps), pressure_(pressure), temperature_(temperature),
+      interval_(interval), seed_(seed), group_idxs_(group_idxs), step_(0), num_grouped_atoms_(0), runner_() {
 
     // Trigger check that interval is valid
     this->set_interval(interval_);

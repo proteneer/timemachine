@@ -1209,8 +1209,8 @@ void declare_barostat(py::module &m) {
                         const int frequency,
                         std::vector<std::shared_ptr<timemachine::BoundPotential>> bps,
                         const int seed,
-                        const bool adaptive) {
-                return new Class(N, pressure, temperature, group_idxs, frequency, bps, seed, adaptive);
+                        const bool adapt_volume_scale_factor) {
+                return new Class(N, pressure, temperature, group_idxs, frequency, bps, seed, adapt_volume_scale_factor);
             }),
             py::arg("N"),
             py::arg("pressure"),
@@ -1219,7 +1219,7 @@ void declare_barostat(py::module &m) {
             py::arg("frequency"),
             py::arg("bps"),
             py::arg("seed"),
-            py::arg("adaptive") = true)
+            py::arg("adapt_volume_scale_factor") = true)
         .def("set_interval", &Class::set_interval, py::arg("interval"))
         .def("get_interval", &Class::get_interval)
         .def("set_volume_scale_factor", &Class::set_volume_scale_factor, py::arg("volume_scale_factor"))
