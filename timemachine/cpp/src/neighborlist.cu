@@ -93,6 +93,12 @@ void Neighborlist<RealType>::compute_block_bounds_host(
     }
 }
 
+template <typename RealType> unsigned int Neighborlist<RealType>::num_ixns() {
+    unsigned int h_ixn_count;
+    gpuErrchk(cudaMemcpy(&h_ixn_count, d_ixn_count_, 1 * sizeof(*d_ixn_count_), cudaMemcpyDeviceToHost));
+    return h_ixn_count;
+}
+
 template <typename RealType>
 std::vector<std::vector<int>>
 Neighborlist<RealType>::get_nblist_host(int N, const double *h_coords, const double *h_box, const double cutoff) {

@@ -137,6 +137,7 @@ template <typename RealType> void declare_neighborlist(py::module &m, const char
             },
             py::arg("idxs"))
         .def("reset_row_idxs", &timemachine::Neighborlist<RealType>::reset_row_idxs)
+        .def("get_ixn_count", &timemachine::Neighborlist<RealType>::num_ixns)
         .def("resize", &timemachine::Neighborlist<RealType>::resize, py::arg("size"));
 }
 
