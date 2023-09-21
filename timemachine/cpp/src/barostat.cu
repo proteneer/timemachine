@@ -138,6 +138,7 @@ template <typename RealType> void MonteCarloBarostat<RealType>::reset_counters()
     gpuErrchk(cudaMemset(d_num_attempted_, 0, sizeof(*d_num_attempted_)));
 }
 
+<<<<<<< HEAD
 template <typename RealType> double MonteCarloBarostat<RealType>::get_volume_scale_factor() {
     double h_scaling;
     gpuErrchk(cudaMemcpy(&h_scaling, d_volume_scale_, 1 * sizeof(*d_volume_scale_), cudaMemcpyDeviceToHost));
@@ -157,6 +158,25 @@ template <typename RealType> bool MonteCarloBarostat<RealType>::get_adaptive_sca
 template <typename RealType>
 void MonteCarloBarostat<RealType>::set_adaptive_scaling(const bool adaptive_scaling_enabled) {
     this->adaptive_scaling_enabled_ = adaptive_scaling_enabled;
+=======
+template <typename RealType> bool MonteCarloBarostat<RealType>::inplace_move_host(double *h_x, double *h_box) {
+
+    DeviceBuffer<double> d_x(N_ * 3);
+    DeviceBuffer<double> d_box(3 * 3);
+    int h_accepted_before;
+
+    cudaMemcpy(&h_accepted_before, d_num_accepted_, 1 * sizeof(h_accepted_before), cudaMemcpyDeviceToHost);
+    d_x.copy_from(h_x);
+    d_box.copy_from(h_box);
+    this->inplace_move(d_x.data, d_box.data, 0);
+    gpuErrchk(cudaStreamSynchronize(0));
+    d_x.copy_to(h_x);
+    d_box.copy_to(h_box);
+    int h_accepted_after;
+
+    cudaMemcpy(&h_accepted_after, d_num_accepted_, 1 * sizeof(h_accepted_after), cudaMemcpyDeviceToHost);
+    return h_accepted_after > h_accepted_before;
+>>>>>>> 4cd6c344... Add reference test
 }
 
 template <typename RealType>
