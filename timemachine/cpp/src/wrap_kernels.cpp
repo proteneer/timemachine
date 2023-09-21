@@ -533,7 +533,7 @@ void declare_integrator(py::module &m) {
 
 void declare_langevin_integrator(py::module &m) {
 
-    using Class = timemachine::LangevinIntegrator;
+    using Class = timemachine::LangevinIntegrator<float>;
     std::string pyclass_name = std::string("LangevinIntegrator");
     py::class_<Class, std::shared_ptr<Class>, timemachine::Integrator>(
         m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
@@ -542,10 +542,7 @@ void declare_langevin_integrator(py::module &m) {
                         double temperature,
                         double dt,
                         double friction,
-                        int seed) {
-                return new timemachine::LangevinIntegrator(
-                    masses.size(), masses.data(), temperature, dt, friction, seed);
-            }),
+                        int seed) { return new Class(masses.size(), masses.data(), temperature, dt, friction, seed); }),
             py::arg("masses"),
             py::arg("temperature"),
             py::arg("dt"),

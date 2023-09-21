@@ -64,7 +64,8 @@ void Context::_verify_box(cudaStream_t stream) {
 }
 
 double Context::_get_temperature() {
-    if (std::shared_ptr<LangevinIntegrator> langevin = std::dynamic_pointer_cast<LangevinIntegrator>(intg_);
+    if (std::shared_ptr<LangevinIntegrator<float>> langevin =
+            std::dynamic_pointer_cast<LangevinIntegrator<float>>(intg_);
         langevin != nullptr) {
         return langevin->get_temperature();
     } else {
