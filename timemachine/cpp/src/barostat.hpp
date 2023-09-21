@@ -19,7 +19,8 @@ public:
         std::vector<std::vector<int>> group_idxs,
         const int interval,
         std::vector<std::shared_ptr<BoundPotential>> bps,
-        const int seed);
+        const int seed,
+        const bool adaptive);
 
     ~MonteCarloBarostat();
 
@@ -36,8 +37,14 @@ public:
 
     void set_pressure(const double pressure);
 
+    void set_adaptive_scaling(const bool adapative);
+
+    bool get_adaptive_scaling();
+
 private:
     const int N_;
+
+    bool adaptive_; // Whether or no to adapt d_volume_scaling
 
     void reset_counters();
 

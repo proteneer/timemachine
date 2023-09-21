@@ -549,7 +549,7 @@ def test_get_group_indices():
 
 @pytest.mark.memcheck
 def test_barostat_scaling_behavior():
-    """Verify that it is possible to retrieve and set the barostat scaling factor"""
+    """Verify that it is possible to retrieve and set the volume scaling factor. Also check that the adaptive behavior of the scaling can be disabled"""
     lam = 1.0
     temperature = DEFAULT_TEMP
     timestep = 1.5e-3
@@ -602,6 +602,7 @@ def test_barostat_scaling_behavior():
     )
     # Initial volume scaling is 0
     assert baro.get_volume_scaling() == 0.0
+    assert baro.get_adaptive_scaling()
 
     ctxt = custom_ops.Context(coords, v_0, host_box, integrator.impl(), u_impls, barostat=baro)
     ctxt.multiple_steps(15)
@@ -617,3 +618,16 @@ def test_barostat_scaling_behavior():
     # Reset the scaling to the previous value
     baro.set_volume_scaling(scaling)
     assert scaling == baro.get_volume_scaling()
+
+    # Set back to the initial volume scaling, effectively disabling the barostat
+    baro.set_volume_scaling(0.0)
+    baro.set_adaptive_scaling(False)
+    assert not baro.get_adaptive_scaling()
+    ctxt.multiple_steps(100)
+    assert baro.get_volume_scaling() == 0.0
+
+    # Turning adaptive scaling back on should change the scaling after some MD
+    baro.set_adaptive_scaling(True)
+    assert baro.get_adaptive_scaling()
+    ctxt.multiple_steps(100)
+    assert baro.get_volume_scaling() != 0.0
