@@ -1219,6 +1219,8 @@ void declare_barostat(py::module &m) {
             py::arg("seed"))
         .def("set_interval", &Class::set_interval, py::arg("interval"))
         .def("get_interval", &Class::get_interval)
+        .def("set_volume_scaling", &Class::set_volume_scaling, py::arg("volume_scaling"))
+        .def("get_volume_scaling", &Class::get_volume_scaling)
         .def("set_pressure", &Class::set_pressure, py::arg("pressure"));
 }
 

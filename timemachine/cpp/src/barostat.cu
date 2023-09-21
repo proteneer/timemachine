@@ -136,6 +136,17 @@ template <typename RealType> void MonteCarloBarostat<RealType>::reset_counters()
     gpuErrchk(cudaMemset(d_num_attempted_, 0, sizeof(*d_num_attempted_)));
 }
 
+template <typename RealType> double MonteCarloBarostat<RealType>::get_volume_scaling() {
+    double h_scaling;
+    gpuErrchk(cudaMemcpy(&h_scaling, d_volume_scale_, 1 * sizeof(*d_volume_scale_), cudaMemcpyDeviceToHost));
+    return h_scaling;
+}
+
+template <typename RealType> void MonteCarloBarostat<RealType>::set_volume_scaling(const double scaling) {
+    gpuErrchk(cudaMemcpy(d_volume_scale_, &scaling, 1 * sizeof(*d_volume_scale_), cudaMemcpyHostToDevice));
+    this->reset_counters();
+}
+
 template <typename RealType>
 void MonteCarloBarostat<RealType>::inplace_move(
     double *d_x,   // [N*3]
@@ -183,7 +194,7 @@ void MonteCarloBarostat<RealType>::inplace_move(
     gpuErrchk(cudaPeekAtLastError());
 
     // Scale centroids
-    k_rescale_positions<<<blocks, tpb, 0, stream>>>(
+    k_rescale_positions<RealType><<<blocks, tpb, 0, stream>>>(
         num_grouped_atoms_,
         d_x_after_,
         d_length_scale_,

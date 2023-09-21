@@ -30,6 +30,10 @@ public:
 
     int get_interval();
 
+    double get_volume_scaling();
+
+    void set_volume_scaling(const double scaling);
+
     void set_pressure(const double pressure);
 
 private:
@@ -64,8 +68,8 @@ private:
 
     RealType *d_volume_;
     RealType *d_volume_delta_;
-    RealType *d_length_scale_;
-    RealType *d_volume_scale_;
+    double *d_length_scale_;
+    double *d_volume_scale_;
 
     double *d_x_after_;
     double *d_box_after_;
