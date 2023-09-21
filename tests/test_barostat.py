@@ -609,7 +609,7 @@ def test_barostat_scaling_behavior():
 
     # Verify that the volume scaling is non-zero
     scaling = baro.get_volume_scaling()
-    assert scaling >= 0
+    assert scaling > 0
 
     ctxt.multiple_steps(100)
     # The scaling should adapt between moves
