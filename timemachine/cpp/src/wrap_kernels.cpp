@@ -1222,8 +1222,8 @@ void declare_barostat(py::module &m) {
             py::arg("adaptive") = true)
         .def("set_interval", &Class::set_interval, py::arg("interval"))
         .def("get_interval", &Class::get_interval)
-        .def("set_volume_scaling", &Class::set_volume_scaling, py::arg("volume_scaling"))
-        .def("get_volume_scaling", &Class::get_volume_scaling)
+        .def("set_volume_scale_factor", &Class::set_volume_scale_factor, py::arg("volume_scale_factor"))
+        .def("get_volume_scale_factor", &Class::get_volume_scale_factor)
         .def("set_adaptive_scaling", &Class::set_adaptive_scaling, py::arg("adaptive_scaling"))
         .def("get_adaptive_scaling", &Class::get_adaptive_scaling)
         .def("set_pressure", &Class::set_pressure, py::arg("pressure"));

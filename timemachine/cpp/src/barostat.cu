@@ -137,14 +137,15 @@ template <typename RealType> void MonteCarloBarostat<RealType>::reset_counters()
     gpuErrchk(cudaMemset(d_num_attempted_, 0, sizeof(*d_num_attempted_)));
 }
 
-template <typename RealType> double MonteCarloBarostat<RealType>::get_volume_scaling() {
+template <typename RealType> double MonteCarloBarostat<RealType>::get_volume_scale_factor() {
     double h_scaling;
     gpuErrchk(cudaMemcpy(&h_scaling, d_volume_scale_, 1 * sizeof(*d_volume_scale_), cudaMemcpyDeviceToHost));
     return h_scaling;
 }
 
-template <typename RealType> void MonteCarloBarostat<RealType>::set_volume_scaling(const double scaling) {
-    gpuErrchk(cudaMemcpy(d_volume_scale_, &scaling, 1 * sizeof(*d_volume_scale_), cudaMemcpyHostToDevice));
+template <typename RealType>
+void MonteCarloBarostat<RealType>::set_volume_scale_factor(const double volume_scale_factor) {
+    gpuErrchk(cudaMemcpy(d_volume_scale_, &volume_scale_factor, 1 * sizeof(*d_volume_scale_), cudaMemcpyHostToDevice));
     this->reset_counters();
 }
 

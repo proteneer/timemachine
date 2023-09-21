@@ -601,33 +601,33 @@ def test_barostat_scaling_behavior():
         seed,
     )
     # Initial volume scaling is 0
-    assert baro.get_volume_scaling() == 0.0
+    assert baro.get_volume_scale_factor() == 0.0
     assert baro.get_adaptive_scaling()
 
     ctxt = custom_ops.Context(coords, v_0, host_box, integrator.impl(), u_impls, barostat=baro)
     ctxt.multiple_steps(15)
 
     # Verify that the volume scaling is non-zero
-    scaling = baro.get_volume_scaling()
+    scaling = baro.get_volume_scale_factor()
     assert scaling > 0
 
     ctxt.multiple_steps(100)
     # The scaling should adapt between moves
-    assert scaling != baro.get_volume_scaling()
+    assert scaling != baro.get_volume_scale_factor()
 
     # Reset the scaling to the previous value
-    baro.set_volume_scaling(scaling)
-    assert scaling == baro.get_volume_scaling()
+    baro.set_volume_scale_factor(scaling)
+    assert scaling == baro.get_volume_scale_factor()
 
     # Set back to the initial volume scaling, effectively disabling the barostat
-    baro.set_volume_scaling(0.0)
+    baro.set_volume_scale_factor(0.0)
     baro.set_adaptive_scaling(False)
     assert not baro.get_adaptive_scaling()
     ctxt.multiple_steps(100)
-    assert baro.get_volume_scaling() == 0.0
+    assert baro.get_volume_scale_factor() == 0.0
 
     # Turning adaptive scaling back on should change the scaling after some MD
     baro.set_adaptive_scaling(True)
     assert baro.get_adaptive_scaling()
     ctxt.multiple_steps(100)
-    assert baro.get_volume_scaling() != 0.0
+    assert baro.get_volume_scale_factor() != 0.0

@@ -31,9 +31,9 @@ public:
 
     int get_interval();
 
-    double get_volume_scaling();
+    double get_volume_scale_factor();
 
-    void set_volume_scaling(const double scaling);
+    void set_volume_scale_factor(const double scaling);
 
     void set_pressure(const double pressure);
 
