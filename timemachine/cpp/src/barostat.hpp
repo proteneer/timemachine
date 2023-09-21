@@ -37,7 +37,7 @@ public:
 
     void set_pressure(const double pressure);
 
-    void set_adaptive_scaling(const bool adapative);
+    void set_adaptive_scaling(const bool adaptive);
 
     bool get_adaptive_scaling();
 
