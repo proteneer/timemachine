@@ -363,7 +363,7 @@ template <typename RealType> int Neighborlist<RealType>::Y() const {
 template <typename RealType> int Neighborlist<RealType>::num_row_blocks() const { return ceil_divide(NR_, TILE_SIZE); }
 
 template <typename RealType> int Neighborlist<RealType>::max_ixn_count() const {
-    return num_column_blocks() * num_row_blocks() * WARP_SIZE;
+    return num_column_blocks() * num_row_blocks();
 }
 
 template class Neighborlist<double>;
