@@ -469,20 +469,6 @@ def test_barostat_recentering_upon_acceptance():
             np.testing.assert_array_equal(new_box_t, box_t)
 
     assert num_accepted > 0
-    # ten_atm_box = ctxt.get_box()
-    # ten_atm_box_vol = compute_box_volume(ten_atm_box)
-    # # Expect the box to shrink thanks to the barostat
-    # assert compute_box_volume(complex_box) - ten_atm_box_vol > 0.4
-
-    # # Set the pressure to 1 atm
-    # baro.set_pressure(DEFAULT_PRESSURE)
-    # # Changing the barostat interval resets the barostat step.
-    # baro.set_interval(2)
-
-    # ctxt.multiple_steps(2000)
-    # atm_box = ctxt.get_box()
-    # # Box will grow thanks to the lower pressure
-    # assert compute_box_volume(atm_box) > ten_atm_box_vol
 
 
 def test_molecular_ideal_gas():
