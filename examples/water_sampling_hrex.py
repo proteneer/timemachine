@@ -57,7 +57,7 @@ def estimate_relative_free_energy_hrex(
     ff: Forcefield,
     nb_cutoff: float,
     md_params: MDParams,
-    n_frames_per_iter: int = 5,
+    n_frames_per_iter: int,
 ) -> SimulationResult:
     temperature = DEFAULT_TEMP
 
@@ -316,6 +316,7 @@ def test_hrex():
         ff,
         nb_cutoff,
         mdp,
+        n_frames_per_iter=1,
     )
 
     pair_bar_result = sim_res.final_result
@@ -343,7 +344,8 @@ def test_hrex():
             alpha = 0.25
 
         plt.plot(occs, label=f"{lamb:.2f}", alpha=alpha, linewidth=lw)
-        print("lambda", lamb, "occupancies", occs)
+        unique, counts = np.unique(occs, return_counts=True)
+        print("lambda", lamb, "occupancies", dict(zip(unique, counts)))
 
     plt.legend()
     plt.xlabel("frame")
