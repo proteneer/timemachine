@@ -33,18 +33,18 @@ public:
 
     double get_volume_scale_factor();
 
-    void set_volume_scale_factor(const double scaling);
+    void set_volume_scale_factor(const double volume_scale_factor);
 
     void set_pressure(const double pressure);
 
-    void set_adaptive_scaling(const bool adaptive);
+    void set_adaptive_scaling(const bool adaptive_scaling_enabled);
 
     bool get_adaptive_scaling();
 
 private:
     const int N_;
 
-    bool adaptive_; // Whether or no to adapt d_volume_scale_
+    bool adaptive_scaling_enabled_; // Whether or no to adapt d_volume_scale_
 
     void reset_counters();
 

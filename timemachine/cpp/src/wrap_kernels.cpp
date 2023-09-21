@@ -1209,8 +1209,8 @@ void declare_barostat(py::module &m) {
                         const int frequency,
                         std::vector<std::shared_ptr<timemachine::BoundPotential>> bps,
                         const int seed,
-                        const bool adapt_volume_scale_factor) {
-                return new Class(N, pressure, temperature, group_idxs, frequency, bps, seed, adapt_volume_scale_factor);
+                        const bool adaptive_scaling_enabled) {
+                return new Class(N, pressure, temperature, group_idxs, frequency, bps, seed, adaptive_scaling_enabled);
             }),
             py::arg("N"),
             py::arg("pressure"),
@@ -1219,12 +1219,12 @@ void declare_barostat(py::module &m) {
             py::arg("frequency"),
             py::arg("bps"),
             py::arg("seed"),
-            py::arg("adapt_volume_scale_factor") = true)
+            py::arg("adaptive_scaling_enabled") = true)
         .def("set_interval", &Class::set_interval, py::arg("interval"))
         .def("get_interval", &Class::get_interval)
         .def("set_volume_scale_factor", &Class::set_volume_scale_factor, py::arg("volume_scale_factor"))
         .def("get_volume_scale_factor", &Class::get_volume_scale_factor)
-        .def("set_adaptive_scaling", &Class::set_adaptive_scaling, py::arg("adaptive_scaling"))
+        .def("set_adaptive_scaling", &Class::set_adaptive_scaling, py::arg("adaptive_scaling_enabled"))
         .def("get_adaptive_scaling", &Class::get_adaptive_scaling)
         .def("set_pressure", &Class::set_pressure, py::arg("pressure"));
 }

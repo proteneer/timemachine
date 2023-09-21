@@ -25,9 +25,10 @@ MonteCarloBarostat<RealType>::MonteCarloBarostat(
     const int interval,
     const std::vector<std::shared_ptr<BoundPotential>> bps,
     const int seed,
-    const bool adapt_volume_scale_factor)
-    : N_(N), adaptive_(adapt_volume_scale_factor), bps_(bps), pressure_(pressure), temperature_(temperature),
-      interval_(interval), seed_(seed), group_idxs_(group_idxs), step_(0), num_grouped_atoms_(0), runner_() {
+    const bool adaptive_scaling_enabled)
+    : N_(N), adaptive_scaling_enabled_(adaptive_scaling_enabled), bps_(bps), pressure_(pressure),
+      temperature_(temperature), interval_(interval), seed_(seed), group_idxs_(group_idxs), step_(0),
+      num_grouped_atoms_(0), runner_() {
 
     // Trigger check that interval is valid
     this->set_interval(interval_);
@@ -149,10 +150,13 @@ void MonteCarloBarostat<RealType>::set_volume_scale_factor(const double volume_s
     this->reset_counters();
 }
 
-template <typename RealType> bool MonteCarloBarostat<RealType>::get_adaptive_scaling() { return this->adaptive_; }
+template <typename RealType> bool MonteCarloBarostat<RealType>::get_adaptive_scaling() {
+    return this->adaptive_scaling_enabled_;
+}
 
-template <typename RealType> void MonteCarloBarostat<RealType>::set_adaptive_scaling(const bool scaling) {
-    this->adaptive_ = scaling;
+template <typename RealType>
+void MonteCarloBarostat<RealType>::set_adaptive_scaling(const bool adaptive_scaling_enabled) {
+    this->adaptive_scaling_enabled_ = adaptive_scaling_enabled;
 }
 
 template <typename RealType>
@@ -184,7 +188,7 @@ void MonteCarloBarostat<RealType>::inplace_move(
     gpuErrchk(cudaMemsetAsync(d_centroids_, 0, num_molecules * 3 * sizeof(*d_centroids_), stream));
 
     k_setup_barostat_move<RealType><<<1, 1, 0, stream>>>(
-        adaptive_, d_rand_ + random_offset, d_box, d_volume_delta_, d_volume_scale_, d_length_scale_);
+        adaptive_scaling_enabled_, d_rand_ + random_offset, d_box, d_volume_delta_, d_volume_scale_, d_length_scale_);
     gpuErrchk(cudaPeekAtLastError());
 
     // Create duplicates of the coords/box that we can modify
@@ -225,7 +229,7 @@ void MonteCarloBarostat<RealType>::inplace_move(
 
     k_decide_move<RealType><<<ceil_divide(N_, tpb), tpb, 0, stream>>>(
         N_,
-        adaptive_,
+        adaptive_scaling_enabled_,
         num_molecules,
         kT,
         pressure,
