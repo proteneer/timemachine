@@ -44,7 +44,7 @@ public:
 private:
     const int N_;
 
-    bool adaptive_; // Whether or no to adapt d_volume_scaling
+    bool adaptive_; // Whether or no to adapt d_volume_scale_
 
     void reset_counters();
 
