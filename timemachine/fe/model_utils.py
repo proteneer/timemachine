@@ -190,7 +190,6 @@ def generate_openmm_topology(objs, coords, out_filename=None, box=None):
     combined_mol = None
 
     for mol_idx, mol in enumerate(rd_mols):
-
         mol_copy = Chem.Mol(mol)
         mol_copy.RemoveAllConformers()
         mol_conf = Chem.Conformer(mol.GetNumAtoms())

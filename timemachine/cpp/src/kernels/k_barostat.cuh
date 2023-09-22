@@ -41,9 +41,24 @@ void __global__ k_rescale_positions(
         RealType displacement_y = ((centroid_y - center_y) * scale) + center_y - centroid_y;
         RealType displacement_z = ((centroid_z - center_z) * scale) + center_z - centroid_z;
 
-        coords[atom_idx * 3 + 0] += displacement_x;
-        coords[atom_idx * 3 + 1] += displacement_y;
-        coords[atom_idx * 3 + 2] += displacement_z;
+        // centroid of the new molecule
+        centroid_x += displacement_x;
+        centroid_y += displacement_y;
+        centroid_z += displacement_z;
+
+        // compute displacement needed to shift centroid back into the scaled homebox
+        RealType scaled_box_x = box[0 * 3 + 0] * scale;
+        RealType scaled_box_y = box[1 * 3 + 1] * scale;
+        RealType scaled_box_z = box[2 * 3 + 2] * scale;
+
+        RealType new_center_x = scaled_box_x * floor(centroid_x / scaled_box_x);
+        RealType new_center_y = scaled_box_y * floor(centroid_y / scaled_box_y);
+        RealType new_center_z = scaled_box_z * floor(centroid_z / scaled_box_z);
+
+        // final coordinates
+        coords[atom_idx * 3 + 0] += displacement_x - new_center_x;
+        coords[atom_idx * 3 + 1] += displacement_y - new_center_y;
+        coords[atom_idx * 3 + 2] += displacement_z - new_center_z;
 
         idx += gridDim.x * blockDim.x;
     }

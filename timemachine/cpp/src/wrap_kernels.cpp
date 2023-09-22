@@ -1226,7 +1226,26 @@ void declare_barostat(py::module &m) {
         .def("get_volume_scale_factor", &Class::get_volume_scale_factor)
         .def("set_adaptive_scaling", &Class::set_adaptive_scaling, py::arg("adaptive_scaling_enabled"))
         .def("get_adaptive_scaling", &Class::get_adaptive_scaling)
-        .def("set_pressure", &Class::set_pressure, py::arg("pressure"));
+        .def("set_pressure", &Class::set_pressure, py::arg("pressure"))
+        .def(
+            "move_host",
+            [](timemachine::MonteCarloBarostat<float> &barostat,
+               const py::array_t<double, py::array::c_style> &coords,
+               const py::array_t<double, py::array::c_style> &box) -> py::tuple {
+                const int N = coords.shape()[0];
+
+                py::array_t<double, py::array::c_style> py_x({N, 3});
+                py::array_t<double, py::array::c_style> py_box({3, 3});
+                std::memcpy(py_x.mutable_data(), coords.data(), coords.size() * sizeof(double));
+                std::memcpy(py_box.mutable_data(), box.data(), box.size() * sizeof(double));
+                verify_coords_and_box(coords, box);
+
+                bool accepted = barostat.inplace_move_host(py_x.mutable_data(), py_box.mutable_data());
+
+                return py::make_tuple(accepted, py_x, py_box);
+            },
+            py::arg("coords"),
+            py::arg("box"));
 }
 
 void declare_summed_potential(py::module &m) {

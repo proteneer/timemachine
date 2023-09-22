@@ -7,12 +7,13 @@ from rdkit.Chem import AllChem
 from timemachine.fe import model_utils, utils
 from timemachine.fe.model_utils import image_frame, image_molecule
 from timemachine.ff import Forcefield
+from timemachine.md.barostat.utils import get_group_indices
+from timemachine.potentials import bonded, nonbonded
 
 pytestmark = [pytest.mark.nocuda]
 
 
 def test_sanitize_energies():
-
     full_us = np.array([[15000.0, -5081923.0, 1598, 1.5, -23.0], [-423581.0, np.nan, -238, 13.5, 23.0]])
 
     test_us = utils.sanitize_energies(full_us, lamb_idx=3, cutoff=10000)
@@ -23,7 +24,6 @@ def test_sanitize_energies():
 
 
 def test_extract_delta_Us_from_U_knk():
-
     K = 4
     N = 8
 
@@ -75,6 +75,59 @@ def test_image_frame():
             new_coords[group] += offset
         imaged_coords = image_frame(group_indices, new_coords, box)
         np.testing.assert_allclose(coords, imaged_coords)
+
+
+def test_image_frame_energy_invariance():
+    # test that calling image frames does not affect the energies of bonded and nonbonded terms.
+    np.random.seed(2023)
+
+    # box of size [5,4,3]
+    box = np.eye(3)
+    box[0][0] = 5
+    box[1][1] = 4
+    box[2][2] = 3
+    n_atoms = 500  # num atoms
+    n_bonds = 100  # num bonds
+
+    # generate coordinates between [-10, +10]
+    old_coords = (np.random.rand(n_atoms, 3) - 0.5) * 20
+    nb_params = np.random.rand(n_atoms, 4)
+    nb_params[:, 0] -= 0.5  # make charges pos and neg
+    nb_params[:, 1] *= 0.1  # decrease sigma to avoid singularities
+    nb_params[:, -1] *= 0.1  # vary 4D decoupling
+
+    exc_idxs = np.array([], dtype=np.int32).reshape(0, 2)
+    exc_sfs = np.array([], dtype=np.float64).reshape(0, 2)
+
+    bond_idxs = []
+    atom_idxs = np.arange(n_atoms)
+    for _ in range(n_bonds):
+        bond_idxs.append(np.random.choice(atom_idxs, size=2, replace=False))
+
+    group_idxs = get_group_indices(bond_idxs, n_atoms)
+    new_coords = image_frame(group_idxs, old_coords, box)
+
+    # assert centroids are in box
+
+    for atom_idxs in group_idxs:
+        x, y, z = np.mean(new_coords[atom_idxs], axis=0)
+        assert x > 0 and x < box[0][0]
+        assert y > 0 and y < box[1][1]
+        assert z > 0 and z < box[2][2]
+
+    assert not np.array_equal(old_coords, new_coords)
+
+    old_nb_U = nonbonded.nonbonded(old_coords, nb_params, box, exc_idxs, exc_sfs, 1.2, 1.3)
+    new_nb_U = nonbonded.nonbonded(new_coords, nb_params, box, exc_idxs, exc_sfs, 1.2, 1.3)
+
+    np.testing.assert_allclose(old_nb_U, new_nb_U)
+
+    hb_params = np.random.rand(n_bonds, 2)
+    bond_idxs = np.array(bond_idxs)
+    old_hb_U = bonded.harmonic_bond(old_coords, hb_params, box, bond_idxs)
+    new_hb_U = bonded.harmonic_bond(new_coords, hb_params, box, bond_idxs)
+
+    np.testing.assert_allclose(old_hb_U, new_hb_U)
 
 
 def test_image_molecules():

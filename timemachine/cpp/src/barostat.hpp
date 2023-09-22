@@ -27,6 +27,9 @@ public:
     // inplace_move() may modify d_x and d_box
     void inplace_move(double *d_x, double *d_box, cudaStream_t stream);
 
+    // used for testing, bool return tells you if move was accepted
+    bool inplace_move_host(double *h_x, double *h_box);
+
     void set_interval(const int interval);
 
     int get_interval();
