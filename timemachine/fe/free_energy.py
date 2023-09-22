@@ -141,6 +141,7 @@ class Trajectory:
     frames: StoredArrays  # (frame, atom, dim)
     boxes: NDArray  # (frame, dim, dim)
     final_velocities: NDArray  # (atom, dim)
+    final_barostat_volume_scale_factor: Optional[float]
 
     def __post_init__(self):
         n_frames = len(self.frames)
@@ -157,7 +158,9 @@ class Trajectory:
 
         boxes = np.concatenate([t.boxes for t in ts])
         final_velocities = ts[-1].final_velocities
-        return Trajectory(frames, boxes, final_velocities)
+        final_barostat_volume_scale_factor = ts[-1].final_barostat_volume_scale_factor
+
+        return Trajectory(frames, boxes, final_velocities, final_barostat_volume_scale_factor)
 
 
 @dataclass
@@ -436,7 +439,9 @@ def sample_with_context(
 
     assert np.all(np.isfinite(all_coords[-1])), "Production resulted in a nan"
 
-    return Trajectory(all_coords, all_boxes, final_velocities)
+    final_barostat_volume_scale_factor = ctxt.get_barostat().get_volume_scale_factor() if ctxt.get_barostat() else None
+
+    return Trajectory(all_coords, all_boxes, final_velocities, final_barostat_volume_scale_factor)
 
 
 def sample(initial_state: InitialState, md_params: MDParams, max_buffer_frames: int) -> Trajectory:

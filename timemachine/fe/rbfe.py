@@ -3,7 +3,7 @@ import traceback
 import warnings
 from dataclasses import dataclass, replace
 from functools import partial
-from typing import Any, Dict, Iterable, List, NamedTuple, Optional, Sequence, Tuple, Union
+from typing import Any, Dict, Iterable, List, NamedTuple, Optional, Sequence, Tuple, Union, cast
 
 import numpy as np
 from numpy.typing import NDArray
@@ -17,6 +17,7 @@ from timemachine.fe.free_energy import (
     InitialState,
     MDParams,
     SimulationResult,
+    Trajectory,
     make_pair_bar_plots,
     run_sims_bisection,
     run_sims_hrex,
@@ -707,13 +708,34 @@ def estimate_relative_free_energy_bisection_hrex(
 
         # Second phase: sample initial states determined by bisection using HREX
 
-        # Use equilibrated samples from bisection as initial states
+        def get_mean_final_barostat_volume_scale_factor(trajectories_by_state: Iterable[Trajectory]) -> Optional[float]:
+            scale_factors = [traj.final_barostat_volume_scale_factor for traj in trajectories_by_state]
+            if any(x is not None for x in scale_factors):
+                assert all(x is not None for x in scale_factors)
+                sfs = cast(List[float], scale_factors)  # implied by assertion but required by mypy
+                return float(np.mean(sfs))
+            else:
+                return None
+
+        mean_final_barostat_volume_scale_factor = get_mean_final_barostat_volume_scale_factor(trajectories_by_state)
+
+        # Use equilibrated samples and the average of the final barostat volume scale factors from bisection phase to
+        # initialize states for HREX
         initial_states_hrex = [
-            replace(initial_state, x0=traj.frames[-1], v0=traj.final_velocities, box0=traj.boxes[-1])
-            for initial_state, traj in zip(
-                results[-1].initial_states,
-                trajectories_by_state,
+            replace(
+                initial_state,
+                x0=traj.frames[-1],
+                v0=traj.final_velocities,
+                box0=traj.boxes[-1],
+                barostat=replace(
+                    initial_state.barostat,
+                    adaptive_scaling_enabled=False,
+                    initial_volume_scale_factor=mean_final_barostat_volume_scale_factor,
+                )
+                if initial_state.barostat
+                else None,
             )
+            for initial_state, traj in zip(results[-1].initial_states, trajectories_by_state)
         ]
 
         pair_bar_result, trajectories_by_state, diagnostics = run_sims_hrex(
