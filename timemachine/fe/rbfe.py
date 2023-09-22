@@ -695,10 +695,11 @@ def estimate_relative_free_energy_bisection_hrex(
 
     try:
         # First phase: bisection to determine lambda spacing
+        md_params_bisection = replace(md_params, n_frames=n_frames_bisection)
         results, trajectories_by_state = run_sims_bisection(
             [lambda_min, lambda_max],
             make_optimized_initial_state,
-            replace(md_params, n_frames=n_frames_bisection),  # TODO: clean up
+            md_params_bisection,
             n_bisections=len(lambda_grid) - 2,
             temperature=temperature,
             min_overlap=min_overlap,
