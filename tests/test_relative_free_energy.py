@@ -47,9 +47,9 @@ def run_bitwise_reproducibility(mol_a, mol_b, core, forcefield, md_params, estim
 
     all_frames, all_boxes = [], []
     for state in solvent_res.final_result.initial_states:
-        frames, boxes, _ = sample(state, solvent_res.md_params, max_buffer_frames=100)
-        all_frames.append(frames)
-        all_boxes.append(boxes)
+        traj = sample(state, solvent_res.md_params, max_buffer_frames=100)
+        all_frames.append(traj.frames)
+        all_boxes.append(traj.boxes)
 
     np.testing.assert_equal(solvent_res.frames, all_frames)
     np.testing.assert_equal(solvent_res.boxes, all_boxes)
