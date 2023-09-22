@@ -20,7 +20,8 @@ public:
         const int interval,
         std::vector<std::shared_ptr<BoundPotential>> bps,
         const int seed,
-        const bool adapt_volume_scale_factor);
+        const bool adapt_volume_scale_factor,
+        const double initial_volume_scale_factor);
 
     ~MonteCarloBarostat();
 

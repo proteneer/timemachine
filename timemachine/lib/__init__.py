@@ -45,6 +45,8 @@ class MonteCarloBarostat:
     group_idxs: List[NDArray]
     interval: int
     seed: int
+    adaptive_scaling_enabled: bool = True
+    initial_volume_scale_factor: float = 0.0
 
     def impl(self, bound_potentials):
         return custom_ops.MonteCarloBarostat(
@@ -55,4 +57,6 @@ class MonteCarloBarostat:
             self.interval,
             bound_potentials,
             self.seed,
+            self.adaptive_scaling_enabled,
+            self.initial_volume_scale_factor,
         )
