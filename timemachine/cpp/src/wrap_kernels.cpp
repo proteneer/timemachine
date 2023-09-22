@@ -1202,24 +1202,50 @@ void declare_barostat(py::module &m) {
     std::string pyclass_name = std::string("MonteCarloBarostat");
     py::class_<Class, std::shared_ptr<Class>>(m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
         .def(
-            py::init(
-                [](const int N,
-                   const double pressure,
-                   const double temperature,
-                   std::vector<std::vector<int>> group_idxs,
-                   const int frequency,
-                   std::vector<std::shared_ptr<timemachine::BoundPotential>> bps,
-                   const int seed) { return new Class(N, pressure, temperature, group_idxs, frequency, bps, seed); }),
+            py::init([](const int N,
+                        const double pressure,
+                        const double temperature,
+                        std::vector<std::vector<int>> group_idxs,
+                        const int frequency,
+                        std::vector<std::shared_ptr<timemachine::BoundPotential>> bps,
+                        const int seed,
+                        const bool adaptive_scaling_enabled) {
+                return new Class(N, pressure, temperature, group_idxs, frequency, bps, seed, adaptive_scaling_enabled);
+            }),
             py::arg("N"),
             py::arg("pressure"),
             py::arg("temperature"),
             py::arg("group_idxs"),
             py::arg("frequency"),
             py::arg("bps"),
-            py::arg("seed"))
+            py::arg("seed"),
+            py::arg("adaptive_scaling_enabled") = true)
         .def("set_interval", &Class::set_interval, py::arg("interval"))
         .def("get_interval", &Class::get_interval)
-        .def("set_pressure", &Class::set_pressure, py::arg("pressure"));
+        .def("set_volume_scale_factor", &Class::set_volume_scale_factor, py::arg("volume_scale_factor"))
+        .def("get_volume_scale_factor", &Class::get_volume_scale_factor)
+        .def("set_adaptive_scaling", &Class::set_adaptive_scaling, py::arg("adaptive_scaling_enabled"))
+        .def("get_adaptive_scaling", &Class::get_adaptive_scaling)
+        .def("set_pressure", &Class::set_pressure, py::arg("pressure"))
+        .def(
+            "move_host",
+            [](timemachine::MonteCarloBarostat<float> &barostat,
+               const py::array_t<double, py::array::c_style> &coords,
+               const py::array_t<double, py::array::c_style> &box) -> py::tuple {
+                const int N = coords.shape()[0];
+
+                py::array_t<double, py::array::c_style> py_x({N, 3});
+                py::array_t<double, py::array::c_style> py_box({3, 3});
+                std::memcpy(py_x.mutable_data(), coords.data(), coords.size() * sizeof(double));
+                std::memcpy(py_box.mutable_data(), box.data(), box.size() * sizeof(double));
+                verify_coords_and_box(coords, box);
+
+                bool accepted = barostat.inplace_move_host(py_x.mutable_data(), py_box.mutable_data());
+
+                return py::make_tuple(accepted, py_x, py_box);
+            },
+            py::arg("coords"),
+            py::arg("box"));
 }
 
 void declare_summed_potential(py::module &m) {

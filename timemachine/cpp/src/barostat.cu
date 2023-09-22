@@ -24,9 +24,11 @@ MonteCarloBarostat<RealType>::MonteCarloBarostat(
     const std::vector<std::vector<int>> group_idxs,
     const int interval,
     const std::vector<std::shared_ptr<BoundPotential>> bps,
-    const int seed)
-    : N_(N), bps_(bps), pressure_(pressure), temperature_(temperature), interval_(interval), seed_(seed),
-      group_idxs_(group_idxs), step_(0), num_grouped_atoms_(0), runner_() {
+    const int seed,
+    const bool adaptive_scaling_enabled)
+    : N_(N), adaptive_scaling_enabled_(adaptive_scaling_enabled), bps_(bps), pressure_(pressure),
+      temperature_(temperature), interval_(interval), seed_(seed), group_idxs_(group_idxs), step_(0),
+      num_grouped_atoms_(0), runner_() {
 
     // Trigger check that interval is valid
     this->set_interval(interval_);
@@ -136,6 +138,46 @@ template <typename RealType> void MonteCarloBarostat<RealType>::reset_counters()
     gpuErrchk(cudaMemset(d_num_attempted_, 0, sizeof(*d_num_attempted_)));
 }
 
+template <typename RealType> double MonteCarloBarostat<RealType>::get_volume_scale_factor() {
+    double h_scaling;
+    gpuErrchk(cudaMemcpy(&h_scaling, d_volume_scale_, 1 * sizeof(*d_volume_scale_), cudaMemcpyDeviceToHost));
+    return h_scaling;
+}
+
+template <typename RealType>
+void MonteCarloBarostat<RealType>::set_volume_scale_factor(const double volume_scale_factor) {
+    gpuErrchk(cudaMemcpy(d_volume_scale_, &volume_scale_factor, 1 * sizeof(*d_volume_scale_), cudaMemcpyHostToDevice));
+    this->reset_counters();
+}
+
+template <typename RealType> bool MonteCarloBarostat<RealType>::get_adaptive_scaling() {
+    return this->adaptive_scaling_enabled_;
+}
+
+template <typename RealType>
+void MonteCarloBarostat<RealType>::set_adaptive_scaling(const bool adaptive_scaling_enabled) {
+    this->adaptive_scaling_enabled_ = adaptive_scaling_enabled;
+}
+
+template <typename RealType> bool MonteCarloBarostat<RealType>::inplace_move_host(double *h_x, double *h_box) {
+
+    DeviceBuffer<double> d_x(N_ * 3);
+    DeviceBuffer<double> d_box(3 * 3);
+    int h_accepted_before;
+
+    cudaMemcpy(&h_accepted_before, d_num_accepted_, 1 * sizeof(h_accepted_before), cudaMemcpyDeviceToHost);
+    d_x.copy_from(h_x);
+    d_box.copy_from(h_box);
+    this->inplace_move(d_x.data, d_box.data, 0);
+    gpuErrchk(cudaStreamSynchronize(0));
+    d_x.copy_to(h_x);
+    d_box.copy_to(h_box);
+    int h_accepted_after;
+
+    cudaMemcpy(&h_accepted_after, d_num_accepted_, 1 * sizeof(h_accepted_after), cudaMemcpyDeviceToHost);
+    return h_accepted_after > h_accepted_before;
+}
+
 template <typename RealType>
 void MonteCarloBarostat<RealType>::inplace_move(
     double *d_x,   // [N*3]
@@ -164,8 +206,8 @@ void MonteCarloBarostat<RealType>::inplace_move(
     const int num_molecules = group_idxs_.size();
     gpuErrchk(cudaMemsetAsync(d_centroids_, 0, num_molecules * 3 * sizeof(*d_centroids_), stream));
 
-    k_setup_barostat_move<RealType>
-        <<<1, 1, 0, stream>>>(d_rand_ + random_offset, d_box, d_volume_delta_, d_volume_scale_, d_length_scale_);
+    k_setup_barostat_move<RealType><<<1, 1, 0, stream>>>(
+        adaptive_scaling_enabled_, d_rand_ + random_offset, d_box, d_volume_delta_, d_volume_scale_, d_length_scale_);
     gpuErrchk(cudaPeekAtLastError());
 
     // Create duplicates of the coords/box that we can modify
@@ -183,7 +225,7 @@ void MonteCarloBarostat<RealType>::inplace_move(
     gpuErrchk(cudaPeekAtLastError());
 
     // Scale centroids
-    k_rescale_positions<<<blocks, tpb, 0, stream>>>(
+    k_rescale_positions<RealType><<<blocks, tpb, 0, stream>>>(
         num_grouped_atoms_,
         d_x_after_,
         d_length_scale_,
@@ -206,6 +248,7 @@ void MonteCarloBarostat<RealType>::inplace_move(
 
     k_decide_move<RealType><<<ceil_divide(N_, tpb), tpb, 0, stream>>>(
         N_,
+        adaptive_scaling_enabled_,
         num_molecules,
         kT,
         pressure,
