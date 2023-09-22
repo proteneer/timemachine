@@ -1,6 +1,6 @@
 from dataclasses import dataclass, replace
 from functools import cache
-from typing import Callable, Iterable, List, Optional, Sequence, Tuple, Union
+from typing import Callable, List, Optional, Sequence, Tuple, Union
 from warnings import warn
 
 import jax
@@ -148,13 +148,13 @@ class Trajectory:
         assert self.final_velocities.shape == (n_atoms, n_dims)
 
     @staticmethod
-    def concatenate(ts: Iterable["Trajectory"]) -> "Trajectory":
+    def concatenate(ts: Sequence["Trajectory"]) -> "Trajectory":
         frames = StoredArrays()
         for t in ts:
             frames.extend(t.frames)
 
         boxes = np.concatenate([t.boxes for t in ts])
-        final_velocities = np.concatenate([t.final_velocities for t in ts])
+        final_velocities = ts[-1].final_velocities
         return Trajectory(frames, boxes, final_velocities)
 
 
