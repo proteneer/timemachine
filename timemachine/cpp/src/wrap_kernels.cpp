@@ -511,12 +511,17 @@ void declare_context(py::module &m) {
                 ctxt.get_v_t(buffer.mutable_data());
                 return buffer;
             })
-        .def("get_box", [](timemachine::Context &ctxt) -> py::array_t<double, py::array::c_style> {
-            unsigned int D = 3;
-            py::array_t<double, py::array::c_style> buffer({D, D});
-            ctxt.get_box(buffer.mutable_data());
-            return buffer;
-        });
+        .def(
+            "get_box",
+            [](timemachine::Context &ctxt) -> py::array_t<double, py::array::c_style> {
+                unsigned int D = 3;
+                py::array_t<double, py::array::c_style> buffer({D, D});
+                ctxt.get_box(buffer.mutable_data());
+                return buffer;
+            })
+        .def("get_integrator", &timemachine::Context::get_integrator)
+        .def("get_potentials", &timemachine::Context::get_potentials)
+        .def("get_barostat", &timemachine::Context::get_barostat);
 }
 
 void declare_integrator(py::module &m) {
