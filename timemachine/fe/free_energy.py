@@ -1,6 +1,6 @@
 from dataclasses import dataclass, replace
 from functools import cache
-from typing import Callable, List, Optional, Sequence, Tuple, Union, overload
+from typing import Callable, List, Optional, Sequence, Tuple, Union
 from warnings import warn
 
 import jax
@@ -327,29 +327,21 @@ def get_context(initial_state: InitialState) -> custom_ops.Context:
     )
 
 
-@overload
-def sample(initial_state: InitialState, md_params: MDParams) -> Tuple[NDArray, NDArray, NDArray]:
-    ...
-
-
-@overload
 def sample(
     initial_state: InitialState, md_params: MDParams, max_buffer_frames: int
 ) -> Tuple[StoredArrays, NDArray, NDArray]:
-    ...
-
-
-def sample(
-    initial_state: InitialState, md_params: MDParams, max_buffer_frames: Optional[int] = None
-) -> Tuple[Union[StoredArrays, NDArray], NDArray, NDArray]:
     """Generate a trajectory given an initial state and a simulation protocol
 
     Parameters
     ----------
     initial_state: InitialState
         (contains potentials, integrator, optional barostat)
+
     md_params: MDParams
         (specifies x0, v0, box0, number of MD steps, thinning interval, etc...)
+
+    max_buffer_frames: int
+        number of frames to store in memory before dumping to disk
 
     Returns
     -------
@@ -424,17 +416,14 @@ def sample(
     if md_params.local_steps > 0:
         steps_func = run_production_local_steps
 
-    if max_buffer_frames is not None and max_buffer_frames > 0:
-        all_coords = StoredArrays()
-        all_boxes_: List[NDArray] = []
-        final_velocities: NDArray = None  # type: ignore # work around "possibly unbound" error
-        for n_frames in batches(md_params.n_frames, max_buffer_frames):
-            batch_coords, batch_boxes, final_velocities = steps_func(n_frames * md_params.steps_per_frame)
-            all_coords.extend(batch_coords)
-            all_boxes_.extend(batch_boxes)
-        all_boxes = np.array(all_boxes_)
-    else:
-        all_coords, all_boxes, final_velocities = steps_func(md_params.n_frames * md_params.steps_per_frame)
+    all_coords = StoredArrays()
+    all_boxes_: List[NDArray] = []
+    final_velocities: NDArray = None  # type: ignore # work around "possibly unbound" error
+    for n_frames in batches(md_params.n_frames, max_buffer_frames):
+        batch_coords, batch_boxes, final_velocities = steps_func(n_frames * md_params.steps_per_frame)
+        all_coords.extend(batch_coords)
+        all_boxes_.extend(batch_boxes)
+    all_boxes = np.array(all_boxes_)
 
     assert len(all_coords) == md_params.n_frames
     assert len(all_boxes) == md_params.n_frames

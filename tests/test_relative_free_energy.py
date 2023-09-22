@@ -47,7 +47,7 @@ def run_bitwise_reproducibility(mol_a, mol_b, core, forcefield, md_params, estim
 
     all_frames, all_boxes = [], []
     for state in solvent_res.final_result.initial_states:
-        frames, boxes, _ = sample(state, solvent_res.md_params)
+        frames, boxes, _ = sample(state, solvent_res.md_params, max_buffer_frames=100)
         all_frames.append(frames)
         all_boxes.append(boxes)
 
