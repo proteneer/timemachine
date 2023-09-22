@@ -848,16 +848,14 @@ def run_sims_hrex(
     np.random.seed(md_params.seed)
 
     def get_potential_and_context(initial_state: InitialState) -> Tuple[GpuImplWrapper, Context]:
-
         # Set up overall potential
         potentials = [bp.potential for bp in initial_state.potentials]
         params = [bp.params for bp in initial_state.potentials]
         potential = SummedPotential(potentials, params).to_gpu(np.float32)
 
-        bound_potential = potential.bind_params_list(params)
-
         # Set up context for MD using overall potential
-        bound_impls = [bound_potential.bound_impl]
+        bound_impl = potential.bind_params_list(params).bound_impl
+        bound_impls = [bound_impl]
         intg_impl = initial_state.integrator.impl()
         baro_impl = initial_state.barostat.impl(bound_impls) if initial_state.barostat else None
         context = Context(
