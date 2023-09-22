@@ -5,7 +5,7 @@ from unittest.mock import patch
 import numpy as np
 import pymbar
 import pytest
-from hypothesis import example, given, seed
+from hypothesis import given, seed
 from hypothesis.strategies import integers
 from jax import grad, jacfwd, jacrev, value_and_grad
 from scipy.optimize import check_grad, minimize
@@ -229,11 +229,9 @@ def test_sample_max_buffer_frames_with_local_md(
     n_eq_steps = 1
 
     md_params = MDParams(n_frames, n_eq_steps, steps_per_frame, 2023, local_steps=local_steps)
-    frames, _, _ = sample(
-        solvent_hif2a_ligand_pair_single_topology_lam0_state, md_params, max_buffer_frames=max_buffer_frames
-    )
-    assert isinstance(frames, StoredArrays)
-    assert len(frames) == n_frames
+    traj = sample(solvent_hif2a_ligand_pair_single_topology_lam0_state, md_params, max_buffer_frames)
+    assert isinstance(traj.frames, StoredArrays)
+    assert len(traj.frames) == n_frames
 
 
 @given(integers(min_value=1))
@@ -258,26 +256,6 @@ def hif2a_ligand_pair_single_topology_lam0_state():
     st = SingleTopology(mol_a, mol_b, core, forcefield)
     state = setup_initial_states(st, None, DEFAULT_TEMP, [0.0], 2023)[0]
     return state
-
-
-@given(integers(1, 100), integers(1, 100))
-@seed(2023)
-@example(10, 3)
-@example(10, 1)
-@example(1, 10)
-def test_sample_max_buffer_frames(hif2a_ligand_pair_single_topology_lam0_state, n_frames, max_buffer_frames):
-    md_params = MDParams(n_frames, 1, 1, 2023)
-    frames_ref, _, _ = sample(hif2a_ligand_pair_single_topology_lam0_state, md_params)
-    frames_test, _, _ = sample(
-        hif2a_ligand_pair_single_topology_lam0_state, md_params, max_buffer_frames=max_buffer_frames
-    )
-
-    assert isinstance(frames_ref, np.ndarray)
-    assert isinstance(frames_test, StoredArrays)
-    assert len(frames_ref) == len(frames_test)
-
-    for frame_ref, frame_test in zip(frames_ref, frames_test):
-        np.testing.assert_array_equal(frame_ref, frame_test)
 
 
 @patch("timemachine.fe.free_energy.make_overlap_detail_figure")

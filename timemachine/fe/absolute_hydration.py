@@ -238,9 +238,9 @@ def estimate_absolute_free_energy(
 
     combined_prefix = get_mol_name(mol) + "_" + prefix
     try:
-        result, stored_frames, stored_boxes = run_sims_sequential(initial_states, md_params, temperature, keep_idxs)
+        result, stored_trajectories = run_sims_sequential(initial_states, md_params, temperature, keep_idxs)
         plots = make_pair_bar_plots(result, temperature, combined_prefix)
-        return SimulationResult(result, plots, stored_frames, stored_boxes, md_params, [])
+        return SimulationResult(result, plots, stored_trajectories, md_params, [])
     except Exception as err:
         with open(f"failed_ahfe_result_{combined_prefix}.pkl", "wb") as fh:
             pickle.dump((initial_states, md_params, err), fh)

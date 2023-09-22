@@ -1,6 +1,6 @@
 from dataclasses import dataclass, replace
 from functools import cache
-from typing import Callable, List, Optional, Sequence, Tuple, Union, overload
+from typing import Callable, List, Optional, Sequence, Tuple, Union
 from warnings import warn
 
 import jax
@@ -135,14 +135,45 @@ class PairBarResult:
 
 
 @dataclass
+class Trajectory:
+    frames: StoredArrays  # (frame, atom, dim)
+    boxes: NDArray  # (frame, dim, dim)
+    final_velocities: NDArray  # (atom, dim)
+
+    def __post_init__(self):
+        n_frames = len(self.frames)
+        assert n_frames > 0
+        n_atoms, n_dims = self.frames[0].shape
+        assert self.boxes.shape == (n_frames, n_dims, n_dims)
+        assert self.final_velocities.shape == (n_atoms, n_dims)
+
+    @staticmethod
+    def concatenate(ts: Sequence["Trajectory"]) -> "Trajectory":
+        frames = StoredArrays()
+        for t in ts:
+            frames.extend(t.frames)
+
+        boxes = np.concatenate([t.boxes for t in ts])
+        final_velocities = ts[-1].final_velocities
+        return Trajectory(frames, boxes, final_velocities)
+
+
+@dataclass
 class SimulationResult:
     final_result: PairBarResult
     plots: PairBarPlots
-    frames: List[StoredArrays]  # (len(keep_idxs), n_frames, N, 3)
-    boxes: List[NDArray]
+    trajectories: List[Trajectory]
     md_params: MDParams
     intermediate_results: List[PairBarResult]
     hrex_diagnostics: Optional[HREXDiagnostics] = None
+
+    @property
+    def frames(self) -> List[StoredArrays]:
+        return [traj.frames for traj in self.trajectories]
+
+    @property
+    def boxes(self) -> List[NDArray]:
+        return [traj.boxes for traj in self.trajectories]
 
 
 def image_frames(initial_state: InitialState, frames: np.ndarray, boxes: np.ndarray) -> np.ndarray:
@@ -327,37 +358,23 @@ def get_context(initial_state: InitialState) -> custom_ops.Context:
     )
 
 
-@overload
-def sample(initial_state: InitialState, md_params: MDParams) -> Tuple[NDArray, NDArray, NDArray]:
-    ...
-
-
-@overload
-def sample(
-    initial_state: InitialState, md_params: MDParams, max_buffer_frames: int
-) -> Tuple[StoredArrays, NDArray, NDArray]:
-    ...
-
-
-def sample(
-    initial_state: InitialState, md_params: MDParams, max_buffer_frames: Optional[int] = None
-) -> Tuple[Union[StoredArrays, NDArray], NDArray, NDArray]:
+def sample(initial_state: InitialState, md_params: MDParams, max_buffer_frames: int) -> Trajectory:
     """Generate a trajectory given an initial state and a simulation protocol
 
     Parameters
     ----------
     initial_state: InitialState
         (contains potentials, integrator, optional barostat)
+
     md_params: MDParams
         (specifies x0, v0, box0, number of MD steps, thinning interval, etc...)
 
+    max_buffer_frames: int
+        number of frames to store in memory before dumping to disk
+
     Returns
     -------
-    xs: NDArray with shape (n_frames, N, 3)
-
-    boxes: NDArray with shape (n_frames, 3, 3)
-
-    final_velocities: NDArray with shape (N, 3)
+    Trajectory
 
     Notes
     -----
@@ -424,24 +441,21 @@ def sample(
     if md_params.local_steps > 0:
         steps_func = run_production_local_steps
 
-    if max_buffer_frames is not None and max_buffer_frames > 0:
-        all_coords = StoredArrays()
-        all_boxes_: List[NDArray] = []
-        final_velocities: NDArray = None  # type: ignore # work around "possibly unbound" error
-        for n_frames in batches(md_params.n_frames, max_buffer_frames):
-            batch_coords, batch_boxes, final_velocities = steps_func(n_frames * md_params.steps_per_frame)
-            all_coords.extend(batch_coords)
-            all_boxes_.extend(batch_boxes)
-        all_boxes = np.array(all_boxes_)
-    else:
-        all_coords, all_boxes, final_velocities = steps_func(md_params.n_frames * md_params.steps_per_frame)
+    all_coords = StoredArrays()
+    all_boxes_: List[NDArray] = []
+    final_velocities: NDArray = None  # type: ignore # work around "possibly unbound" error
+    for n_frames in batches(md_params.n_frames, max_buffer_frames):
+        batch_coords, batch_boxes, final_velocities = steps_func(n_frames * md_params.steps_per_frame)
+        all_coords.extend(batch_coords)
+        all_boxes_.extend(batch_boxes)
+    all_boxes = np.array(all_boxes_)
 
     assert len(all_coords) == md_params.n_frames
     assert len(all_boxes) == md_params.n_frames
 
     assert np.all(np.isfinite(all_coords[-1])), "Production resulted in a nan"
 
-    return all_coords, all_boxes, final_velocities
+    return Trajectory(all_coords, all_boxes, final_velocities)
 
 
 class IndeterminateEnergyWarning(UserWarning):
@@ -530,15 +544,17 @@ def run_sims_sequential(
     md_params: MDParams,
     temperature: float,
     keep_idxs: List[int],
-) -> Tuple[PairBarResult, List[StoredArrays], List[NDArray]]:
+) -> Tuple[PairBarResult, List[Trajectory]]:
     """Sequentially run simulations at each state in initial_states,
     returning summaries that can be used for pair BAR, energy decomposition, and other diagnostics
 
     Returns
     -------
-    pair_bar_result: PairBarResult
-    stored_frames: coord trajectories, one for each state in keep_idxs
-    stored_boxes: box trajectories, one for each state in keep_idxs
+    PairBarResult
+        Results of pair BAR analysis
+
+    list of Trajectory
+        Trajectory for each state specified in keep_idxs
 
     Notes
     -----
@@ -552,8 +568,7 @@ def run_sims_sequential(
         * We decide to use MBAR(states) rather than sum_i BAR(states[i], states[i+1])
         * We use online protocol optimization approaches that require more states to be kept on-hand
     """
-    stored_frames = []
-    stored_boxes = []
+    stored_trajectories = []
 
     # keep no more than 2 states in memory at once
     prev_state: Optional[EnergyDecomposedState] = None
@@ -568,18 +583,17 @@ def run_sims_sequential(
     for lamb_idx, initial_state in enumerate(initial_states):
 
         # run simulation
-        cur_frames, cur_boxes, _ = sample(initial_state, md_params, max_buffer_frames=100)
+        traj = sample(initial_state, md_params, max_buffer_frames=100)
         print(f"completed simulation at lambda={initial_state.lamb}!")
 
         # keep samples from any requested states in memory
         if lamb_idx in keep_idxs:
-            stored_frames.append(cur_frames)
-            stored_boxes.append(cur_boxes)
+            stored_trajectories.append(traj)
 
         bound_impls = [p.to_gpu(np.float32).bound_impl for p in initial_state.potentials]
         cur_batch_U_fns = get_batch_u_fns(bound_impls, temperature)
 
-        state = EnergyDecomposedState(cur_frames, cur_boxes, cur_batch_U_fns)
+        state = EnergyDecomposedState(traj.frames, traj.boxes, cur_batch_U_fns)
 
         # analysis that depends on current and previous state
         if prev_state:
@@ -593,7 +607,7 @@ def run_sims_sequential(
         estimate_free_energy_bar(u_kln_by_component, temperature) for u_kln_by_component in u_kln_by_component_by_lambda
     ]
 
-    return PairBarResult(list(initial_states), bar_results), stored_frames, stored_boxes
+    return PairBarResult(list(initial_states), bar_results), stored_trajectories
 
 
 def make_batch_u_fns(initial_state: InitialState, temperature: float) -> List[Batch_u_fn]:
@@ -614,7 +628,7 @@ def run_sims_bisection(
     temperature: float,
     min_overlap: Optional[float] = None,
     verbose: bool = True,
-) -> Tuple[List[PairBarResult], List[StoredArrays], List[NDArray], List[NDArray]]:
+) -> Tuple[List[PairBarResult], List[Trajectory]]:
     r"""Starting from a specified lambda schedule, successively bisect the lambda interval between the pair of states
     with the lowest BAR overlap and sample the new state with MD.
 
@@ -643,18 +657,12 @@ def run_sims_bisection(
 
     Returns
     -------
-    results: list of IntermediateResult
+    list of IntermediateResult
         For each iteration of bisection, object containing the current list of states and array of energy-decomposed
         u_kln matrices.
 
-    frames: list of StoredArrays
-        Frames from the final iteration of bisection. Shape (L, F, N, 3) where N is the number of atoms.
-
-    boxes: list of NDArray
-        Boxes from the final iteration of bisection. Shape (L, F, 3, 3).
-
-    final_velocities: list of NDArray
-        Velocities from the final frame for each state
+    list of Trajectory
+        Trajectory for each state
     """
 
     assert len(initial_lambdas) >= 2
@@ -663,19 +671,19 @@ def run_sims_bisection(
     get_initial_state = cache(make_initial_state)
 
     @cache
-    def get_samples(lamb: float) -> Tuple[StoredArrays, NDArray, NDArray]:
+    def get_samples(lamb: float) -> Trajectory:
         initial_state = get_initial_state(lamb)
-        frames, boxes, final_velocities = sample(initial_state, md_params, max_buffer_frames=100)
-        return frames, boxes, final_velocities
+        traj = sample(initial_state, md_params, max_buffer_frames=100)
+        return traj
 
     # NOTE: we don't cache get_state to avoid holding BoundPotentials in memory since they
     # 1. can use significant GPU memory
     # 2. can be reconstructed relatively quickly
     def get_state(lamb: float) -> EnergyDecomposedState[StoredArrays]:
         initial_state = get_initial_state(lamb)
-        frames, boxes, _ = get_samples(lamb)
+        traj = get_samples(lamb)
         batch_u_fns = make_batch_u_fns(initial_state, temperature)
-        return EnergyDecomposedState(frames, boxes, batch_u_fns)
+        return EnergyDecomposedState(traj.frames, traj.boxes, batch_u_fns)
 
     @cache
     def get_bar_result(lamb1: float, lamb2: float) -> BarResult:
@@ -735,11 +743,9 @@ def run_sims_bisection(
                 MinOverlapWarning,
             )
 
-    frames = [get_samples(lamb)[0] for lamb in lambdas]
-    boxes = [get_samples(lamb)[1] for lamb in lambdas]
-    final_velocities = [get_samples(lamb)[2] for lamb in lambdas]
+    trajectories = [get_samples(lamb) for lamb in lambdas]
 
-    return results, frames, boxes, final_velocities
+    return results, trajectories
 
 
 def run_sims_hrex(
@@ -749,7 +755,7 @@ def run_sims_hrex(
     temperature: float,
     n_swap_attempts_per_iter: Optional[int] = None,
     print_diagnostics_interval: Optional[int] = 10,
-) -> Tuple[PairBarResult, List[StoredArrays], List[NDArray], HREXDiagnostics]:
+) -> Tuple[PairBarResult, List[Trajectory], HREXDiagnostics]:
     r"""Sample from a sequence of states using nearest-neighbor Hamiltonian Replica EXchange (HREX).
 
     See documentation for :py:func:`timemachine.md.hrex.run_hrex` for details of the algorithm and implementation.
@@ -780,11 +786,8 @@ def run_sims_hrex(
     PairBarResult
         results of pair BAR free energy analysis
 
-    List[StoredArrays]
-        coord trajectories
-
-    List[NDArray]
-        box trajectories
+    list of Trajectory
+        Trajectory for each state
 
     HREXDiagnostics
         HREX statistics (e.g. swap rates, replica-state distribution)
@@ -883,13 +886,13 @@ def run_sims_hrex(
     initial_replicas = [CoordsVelBox(s.x0, s.v0, s.box0) for s in initial_states]
     hrex = HREX.from_replicas(initial_replicas)
 
-    samples_by_state_by_iter: List[List[Tuple[StoredArrays, NDArray]]] = []
+    samples_by_state_by_iter: List[List[Trajectory]] = []
     replica_idx_by_state_by_iter: List[List[ReplicaIdx]] = []
     fraction_accepted_by_pair_by_iter: List[List[Tuple[int, int]]] = []
 
     for iteration, n_frames_iter in enumerate(batches(md_params.n_frames, n_frames_per_iter), 1):
 
-        def sample_replica(xvb: CoordsVelBox, state_idx: StateIdx) -> Tuple[StoredArrays, NDArray, NDArray]:
+        def sample_replica(xvb: CoordsVelBox, state_idx: StateIdx) -> Trajectory:
             initial_state = replace(initial_states[state_idx], x0=xvb.coords, v0=xvb.velocities, box0=xvb.box)
             md_params_replica = replace(
                 md_params, n_frames=n_frames_iter, n_eq_steps=0, seed=np.random.randint(np.iinfo(np.int32).max)
@@ -897,22 +900,18 @@ def run_sims_hrex(
 
             # TODO: `sample` creates a new context from scratch. We should optimize this to reuse an existing context
             # with BoundPotential#set_params
-            frames, boxes, final_velocities = sample(initial_state, md_params_replica, max_buffer_frames=100)
+            return sample(initial_state, md_params_replica, max_buffer_frames=100)
 
-            return frames, boxes, final_velocities
+        def replica_from_samples(traj: Trajectory) -> CoordsVelBox:
+            return CoordsVelBox(traj.frames[-1], traj.final_velocities, traj.boxes[-1])
 
-        def replica_from_samples(samples: Tuple[StoredArrays, NDArray, NDArray]) -> CoordsVelBox:
-            frames, boxes, final_velocities = samples
-            return CoordsVelBox(frames[-1], final_velocities, boxes[-1])
-
-        hrex, samples_by_state_ = hrex.sample_replicas(sample_replica, replica_from_samples)
+        hrex, samples_by_state = hrex.sample_replicas(sample_replica, replica_from_samples)
         log_q = get_log_q_fn(hrex.replicas)
         hrex, fraction_accepted_by_pair = hrex.attempt_neighbor_swaps(neighbor_pairs, log_q, n_swap_attempts_per_iter)
 
         if len(initial_states) == 2:
             fraction_accepted_by_pair = fraction_accepted_by_pair[1:]  # remove stats for identity move
 
-        samples_by_state = [(coords, boxes) for coords, boxes, _ in samples_by_state_]  # drop velocities
         samples_by_state_by_iter.append(samples_by_state)
         replica_idx_by_state_by_iter.append(hrex.replica_idx_by_state)
         fraction_accepted_by_pair_by_iter.append(fraction_accepted_by_pair)
@@ -940,16 +939,7 @@ def run_sims_hrex(
             print("Final replica permutation  :", hrex.replica_idx_by_state)
             print()
 
-    # Concatenate frames and boxes from all iterations
-    frames_by_state: List[StoredArrays] = [StoredArrays() for _ in initial_states]
-    boxes_by_state_: List[List[NDArray]] = [[] for _ in initial_states]
-    for samples_by_state in samples_by_state_by_iter:
-        for samples, frames, boxes in zip(samples_by_state, frames_by_state, boxes_by_state_):
-            frames_i, boxes_i = samples
-            frames.extend(frames_i)
-            boxes.extend(boxes_i)
-
-    boxes_by_state: List[NDArray] = [np.array(boxes) for boxes in boxes_by_state_]
+    samples_by_state = [Trajectory.concatenate(samples_by_iter) for samples_by_iter in zip(*samples_by_state_by_iter)]
 
     def make_energy_decomposed_state(
         results: Tuple[StoredArrays, NDArray, InitialState]
@@ -961,7 +951,10 @@ def run_sims_hrex(
             get_batch_u_fns([pot.to_gpu(np.float32).bound_impl for pot in initial_state.potentials], temperature),
         )
 
-    results_by_state = zip(frames_by_state, boxes_by_state, initial_states)
+    results_by_state = [
+        (samples.frames, samples.boxes, initial_state)
+        for samples, initial_state in zip(samples_by_state, initial_states)
+    ]
 
     bar_results = pairwise_transform_and_combine(
         results_by_state,
@@ -971,4 +964,4 @@ def run_sims_hrex(
 
     diagnostics = HREXDiagnostics(replica_idx_by_state_by_iter, fraction_accepted_by_pair_by_iter)
 
-    return PairBarResult(initial_states, list(bar_results)), frames_by_state, boxes_by_state, diagnostics
+    return PairBarResult(initial_states, list(bar_results)), samples_by_state, diagnostics

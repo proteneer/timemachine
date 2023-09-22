@@ -432,9 +432,9 @@ def estimate_relative_free_energy(
     # TODO: rename prefix to postfix, or move to beginning of combined_prefix?
     combined_prefix = get_mol_name(mol_a) + "_" + get_mol_name(mol_b) + "_" + prefix
     try:
-        result, stored_frames, stored_boxes = run_sims_sequential(initial_states, md_params, temperature, keep_idxs)
+        result, stored_trajectories = run_sims_sequential(initial_states, md_params, temperature, keep_idxs)
         plots = make_pair_bar_plots(result, temperature, combined_prefix)
-        return SimulationResult(result, plots, stored_frames, stored_boxes, md_params, [])
+        return SimulationResult(result, plots, stored_trajectories, md_params, [])
     except Exception as err:
         with open(f"failed_rbfe_result_{combined_prefix}.pkl", "wb") as fh:
             pickle.dump((initial_states, md_params, err), fh)
@@ -545,7 +545,7 @@ def estimate_relative_free_energy_bisection(
     combined_prefix = get_mol_name(mol_a) + "_" + get_mol_name(mol_b) + "_" + prefix
 
     try:
-        results, frames, boxes, _ = run_sims_bisection(
+        results, trajectories = run_sims_bisection(
             [lambda_min, lambda_max],
             make_optimized_initial_state,
             md_params,
@@ -558,21 +558,20 @@ def estimate_relative_free_energy_bisection(
 
         plots = make_pair_bar_plots(final_result, temperature, combined_prefix)
 
-        assert len(frames) == len(boxes) == len(results) + 1
-        stored_frames = []
-        stored_boxes = []
+        assert len(trajectories) == len(results) + 1
+        stored_trajectories = []
         for i in keep_idxs:
             try:
-                stored_frames.append(frames[i])
-                stored_boxes.append(boxes[i])
+                stored_trajectories.append(trajectories[i])
             except IndexError:
-                warnings.warn(f"Invalid index in keep_idxs: {i}. Bisection terminated with only {len(frames)} windows.")
+                warnings.warn(
+                    f"Invalid index in keep_idxs: {i}. Bisection terminated with only {len(trajectories)} windows."
+                )
 
         return SimulationResult(
             final_result,
             plots,
-            stored_frames,
-            stored_boxes,
+            stored_trajectories,
             md_params,
             results,
         )
@@ -696,7 +695,7 @@ def estimate_relative_free_energy_bisection_hrex(
 
     try:
         # First phase: bisection to determine lambda spacing
-        results, frames_by_state, boxes_by_state, final_velocities_by_state = run_sims_bisection(
+        results, trajectories_by_state = run_sims_bisection(
             [lambda_min, lambda_max],
             make_optimized_initial_state,
             replace(md_params, n_frames=n_frames_bisection),  # TODO: clean up
@@ -709,16 +708,14 @@ def estimate_relative_free_energy_bisection_hrex(
 
         # Use equilibrated samples from bisection as initial states
         initial_states_hrex = [
-            replace(initial_state, x0=frames[-1], v0=final_velocities, box0=boxes[-1])
-            for initial_state, frames, boxes, final_velocities in zip(
+            replace(initial_state, x0=traj.frames[-1], v0=traj.final_velocities, box0=traj.boxes[-1])
+            for initial_state, traj in zip(
                 results[-1].initial_states,
-                frames_by_state,
-                boxes_by_state,
-                final_velocities_by_state,
+                trajectories_by_state,
             )
         ]
 
-        pair_bar_result, frames_by_state, boxes_by_state, diagnostics = run_sims_hrex(
+        pair_bar_result, trajectories_by_state, diagnostics = run_sims_hrex(
             initial_states_hrex,
             replace(md_params, n_eq_steps=0),  # using pre-equilibrated samples
             n_frames_per_iter=n_frames_per_iter,
@@ -727,18 +724,16 @@ def estimate_relative_free_energy_bisection_hrex(
 
         plots = make_pair_bar_plots(pair_bar_result, temperature, combined_prefix)
 
-        stored_frames = []
-        stored_boxes = []
+        stored_trajectories = []
         for i in keep_idxs:
             try:
-                stored_frames.append(frames_by_state[i])
-                stored_boxes.append(boxes_by_state[i])
+                stored_trajectories.append(trajectories_by_state[i])
             except IndexError:
                 warnings.warn(
-                    f"Invalid index in keep_idxs: {i}. Bisection terminated with only {len(frames_by_state)} windows."
+                    f"Invalid index in keep_idxs: {i}. Bisection terminated with only {len(trajectories_by_state)} windows."
                 )
 
-        return SimulationResult(pair_bar_result, plots, stored_frames, stored_boxes, md_params, results, diagnostics)
+        return SimulationResult(pair_bar_result, plots, stored_trajectories, md_params, results, diagnostics)
 
     except Exception as err:
         with open(f"failed_rbfe_result_{combined_prefix}.pkl", "wb") as fh:
