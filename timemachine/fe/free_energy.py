@@ -790,6 +790,40 @@ def run_sims_hrex(
         HREX statistics (e.g. swap rates, replica-state distribution)
     """
 
+    # TODO: to support replica exchange with variable temperatures,
+    #  consider modifying sample fxn to rescale velocities by sqrt(T_new/T_orig)
+    def assert_ensembles_compatible(state_a: InitialState, state_b: InitialState):
+        """check that xvb from state_a can be swapped with xvb from state_b (up to timestep error),
+        with swap acceptance probability that depends only on U_a, U_b, kBT"""
+
+        # assert (A, B) have identical masses, temperature
+        intg_a = state_a.integrator
+        intg_b = state_b.integrator
+
+        assert (intg_a.masses == intg_b.masses).all()
+        assert intg_a.temperature == intg_b.temperature
+
+        # assert same pressure (or same volume)
+        assert (state_a.barostat is None) == (state_b.barostat is None), "should both be NVT or both be NPT"
+
+        if state_a.barostat and state_b.barostat:
+            # assert (A, B) are compatible NPT ensembles
+            baro_a: MonteCarloBarostat = state_a.barostat
+            baro_b: MonteCarloBarostat = state_b.barostat
+
+            assert baro_a.pressure == baro_b.pressure
+            assert baro_a.temperature == baro_b.temperature
+
+            # also, assert barostat and integrator are self-consistent
+            assert intg_a.temperature == baro_a.temperature
+
+        else:
+            # assert (A, B) are compatible NVT ensembles
+            assert (state_a.box0 == state_b.box0).all()
+
+    for s in initial_states[1:]:
+        assert_ensembles_compatible(initial_states[0], s)
+
     if n_swap_attempts_per_iter is None:
         n_swap_attempts_per_iter = get_swap_attempts_per_iter_heuristic(len(initial_states))
 
