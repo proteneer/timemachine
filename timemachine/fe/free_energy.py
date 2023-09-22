@@ -33,7 +33,7 @@ from timemachine.md.barostat.utils import compute_box_center, get_bond_list, get
 from timemachine.md.hrex import HREX, HREXDiagnostics, ReplicaIdx, StateIdx, get_swap_attempts_per_iter_heuristic
 from timemachine.md.states import CoordsVelBox
 from timemachine.potentials import BoundPotential, HarmonicBond, SummedPotential
-from timemachine.potentials.potential import BoundGpuImplWrapper, GpuImplWrapper
+from timemachine.potentials.potential import GpuImplWrapper
 from timemachine.utils import batches, pairwise_transform_and_combine
 
 
@@ -847,7 +847,7 @@ def run_sims_hrex(
     warn(f"Setting numpy global random state using seed {md_params.seed}")
     np.random.seed(md_params.seed)
 
-    def get_potential_and_context(initial_state: InitialState) -> Tuple[GpuImplWrapper, BoundGpuImplWrapper, Context]:
+    def get_potential_and_context(initial_state: InitialState) -> Tuple[GpuImplWrapper, Context]:
 
         # Set up overall potential
         potentials = [bp.potential for bp in initial_state.potentials]
@@ -869,11 +869,11 @@ def run_sims_hrex(
             baro_impl,
         )
 
-        return potential, bound_potential, context
+        return potential, context
 
     # Set up overall potential and context using the first state.
     # NOTE: this assumes that states differ only in their parameters, but we do not check this!
-    potential, bound_potential, context = get_potential_and_context(initial_states[0])
+    potential, context = get_potential_and_context(initial_states[0])
     temperature = initial_states[0].integrator.temperature
     ligand_idxs = initial_states[0].ligand_idxs
 
@@ -912,7 +912,7 @@ def run_sims_hrex(
         context.set_v_t(xvb.velocities)
         context.set_box(xvb.box)
 
-        bound_potential.bound_impl.set_params(params)
+        context.get_potentials()[0].set_params(params)
 
         xs, boxes = context.multiple_steps(md_params.n_eq_steps, store_x_interval=0)
         x0 = xs[0]
@@ -940,7 +940,7 @@ def run_sims_hrex(
             context.set_box(xvb.box)
 
             params = params_by_state[state_idx]
-            bound_potential.bound_impl.set_params(params)
+            context.get_potentials()[0].set_params(params)
 
             md_params_replica = replace(
                 md_params, n_frames=n_frames_iter, n_eq_steps=0, seed=np.random.randint(np.iinfo(np.int32).max)
