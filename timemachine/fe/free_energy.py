@@ -453,7 +453,7 @@ def sample(initial_state: InitialState, md_params: MDParams, max_buffer_frames: 
         (contains potentials, integrator, optional barostat)
 
     md_params: MDParams
-        (specifies x0, v0, box0, number of MD steps, thinning interval, etc...)
+        MD parameters
 
     max_buffer_frames: int
         number of frames to store in memory before dumping to disk
@@ -782,7 +782,7 @@ def run_sims_hrex(
         performance
 
     md_params: MDParams
-        Parameters used to simulate new states
+        MD parameters
 
     n_frames_per_iter: int
         Number of frames to sample using MD per iteration
