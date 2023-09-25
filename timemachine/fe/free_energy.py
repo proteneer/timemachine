@@ -57,6 +57,12 @@ class MDParams:
     max_radius: float = 3.0  # nm
     freeze_reference: bool = True
 
+    # Number of frames to sample using MD during the initial bisection phase used to determine lambda spacing
+    hrex_n_frames_bisection: int = 100
+
+    # Number of frames to sample using MD per HREX iteration. Set to 0 to disable HREX.
+    hrex_n_frames_per_iter: int = 0
+
     def __post_init__(self):
         assert self.steps_per_frame > 0
         assert self.n_frames > 0
@@ -64,6 +70,8 @@ class MDParams:
         assert 0.1 <= self.min_radius <= self.max_radius
         assert 0 <= self.local_steps <= self.steps_per_frame
         assert 1.0 <= self.k <= 1.0e6
+        assert self.hrex_n_frames_bisection > 0
+        assert self.hrex_n_frames_per_iter >= 0
 
 
 @dataclass

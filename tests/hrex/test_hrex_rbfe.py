@@ -48,7 +48,14 @@ def hif2a_single_topology_leg(request):
 @pytest.mark.nightly(reason="Slow")
 def test_hrex_rbfe_hif2a(hif2a_single_topology_leg):
     mol_a, mol_b, core, forcefield, host_config = hif2a_single_topology_leg
-    md_params = MDParams(n_frames=200, n_eq_steps=10_000, steps_per_frame=400, seed=2024)
+    md_params = MDParams(
+        n_frames=200,
+        n_eq_steps=10_000,
+        steps_per_frame=400,
+        seed=2024,
+        hrex_n_frames_bisection=100,
+        hrex_n_frames_per_iter=1,
+    )
     n_windows = 5
 
     result = estimate_relative_free_energy_bisection_hrex(
@@ -60,8 +67,6 @@ def test_hrex_rbfe_hif2a(hif2a_single_topology_leg):
         md_params,
         lambda_interval=(0.0, 0.15),
         n_windows=n_windows,
-        n_frames_bisection=100,
-        n_frames_per_iter=1,
     )
 
     if DEBUG:
@@ -92,7 +97,9 @@ def plot_hrex_rbfe_hif2a(result: SimulationResult):
 def test_hrex_rbfe_reproducibility(hif2a_single_topology_leg):
     mol_a, mol_b, core, forcefield, host_config = hif2a_single_topology_leg
 
-    md_params = MDParams(n_frames=10, n_eq_steps=10, steps_per_frame=400, seed=2023)
+    md_params = MDParams(
+        n_frames=10, n_eq_steps=10, steps_per_frame=400, seed=2023, hrex_n_frames_bisection=1, hrex_n_frames_per_iter=1
+    )
 
     run = lambda seed: estimate_relative_free_energy_bisection_hrex(
         mol_a,
@@ -103,8 +110,6 @@ def test_hrex_rbfe_reproducibility(hif2a_single_topology_leg):
         replace(md_params, seed=seed),
         lambda_interval=(0.0, 0.1),
         n_windows=3,
-        n_frames_bisection=1,
-        n_frames_per_iter=1,
     )
 
     res1 = run(2023)

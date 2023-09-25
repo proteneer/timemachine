@@ -162,7 +162,15 @@ def test_run_hif2a_test_system(estimate_relative_free_energy_fn):
     mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
     forcefield = Forcefield.load_default()
 
-    md_params = MDParams(n_frames=100, n_eq_steps=1000, steps_per_frame=100, seed=2023)
+    md_params = MDParams(
+        n_frames=100,
+        n_eq_steps=1000,
+        steps_per_frame=100,
+        seed=2023,
+        hrex_n_frames_per_iter=1
+        if estimate_relative_free_energy_fn == estimate_relative_free_energy_bisection_hrex
+        else 0,
+    )
 
     with resources.path("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as protein_path:
         run_triple(
@@ -195,7 +203,9 @@ def test_run_hif2a_test_system_reproducibility(estimate_relative_free_energy_fn)
     mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
     forcefield = Forcefield.load_default()
 
-    md_params = MDParams(n_frames=100, n_eq_steps=1000, steps_per_frame=100, seed=2023)
+    md_params = MDParams(
+        n_frames=100, n_eq_steps=1000, steps_per_frame=100, seed=2023, hrex_n_frames_per_iter=0
+    )  # HREX is not tested
 
     run_bitwise_reproducibility(
         mol_a,

@@ -39,7 +39,14 @@ DEFAULT_NUM_WINDOWS = 30
 # https://github.com/proteneer/timemachine/commit/e1f7328f01f427534d8744aab6027338e116ad09
 MAX_SEED_VALUE = 10000
 
-DEFAULT_MD_PARAMS = MDParams(n_frames=1000, n_eq_steps=10_000, steps_per_frame=400, seed=2023)
+DEFAULT_MD_PARAMS = MDParams(
+    n_frames=1000,
+    n_eq_steps=10_000,
+    steps_per_frame=400,
+    seed=2023,
+    hrex_n_frames_bisection=100,
+    hrex_n_frames_per_iter=0,
+)
 
 
 @dataclass
@@ -596,8 +603,6 @@ def estimate_relative_free_energy_bisection_hrex(
     min_overlap: Optional[float] = None,
     keep_idxs: Optional[List[int]] = None,
     min_cutoff: Optional[float] = 0.7,
-    n_frames_bisection: int = 100,
-    n_frames_per_iter: int = 1,
 ) -> SimulationResult:
     """
     Estimate relative free energy between mol_a and mol_b using Hamiltonian Replica EXchange (HREX) sampling of a
@@ -646,12 +651,6 @@ def estimate_relative_free_energy_bisection_hrex(
     min_cutoff: float or None, optional
         Throw error if any atom moves more than this distance (nm) after minimization
 
-    n_frames_bisection: int or None, optional
-        Number of frames to sample using MD during the initial bisection phase used to determine lambda spacing
-
-    n_frames_per_iter: int or None, optional
-        Number of frames to sample using MD per HREX iteration
-
     Returns
     -------
     SimulationResult
@@ -696,7 +695,7 @@ def estimate_relative_free_energy_bisection_hrex(
 
     try:
         # First phase: bisection to determine lambda spacing
-        md_params_bisection = replace(md_params, n_frames=n_frames_bisection)
+        md_params_bisection = replace(md_params, n_frames=md_params.hrex_n_frames_bisection)
         results, trajectories_by_state = run_sims_bisection(
             [lambda_min, lambda_max],
             make_optimized_initial_state,
@@ -746,7 +745,7 @@ def estimate_relative_free_energy_bisection_hrex(
         pair_bar_result, trajectories_by_state, diagnostics = run_sims_hrex(
             initial_states_hrex,
             replace(md_params, n_eq_steps=0),  # using pre-equilibrated samples
-            n_frames_per_iter=n_frames_per_iter,
+            n_frames_per_iter=md_params.hrex_n_frames_per_iter,
         )
 
         plots = make_pair_bar_plots(pair_bar_result, temperature, combined_prefix)
@@ -784,7 +783,12 @@ def run_vacuum(
         md_params = replace(md_params, local_steps=0)
         warnings.warn("Vacuum simulations don't support local steps, will use all global steps")
     # min_cutoff defaults to None since there is no environment to prevent conformational changes in the ligand
-    return estimate_relative_free_energy_bisection(
+    estimate_fxn = (
+        estimate_relative_free_energy_bisection_hrex
+        if md_params.hrex_n_frames_per_iter
+        else estimate_relative_free_energy_bisection
+    )
+    return estimate_fxn(
         mol_a,
         mol_b,
         core,
@@ -815,7 +819,12 @@ def run_solvent(
     solvent_sys, solvent_conf, solvent_box, solvent_top = builders.build_water_system(box_width, forcefield.water_ff)
     solvent_box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes, deboggle later
     solvent_host_config = HostConfig(solvent_sys, solvent_conf, solvent_box, solvent_conf.shape[0])
-    solvent_res = estimate_relative_free_energy_bisection(
+    estimate_fxn = (
+        estimate_relative_free_energy_bisection_hrex
+        if md_params.hrex_n_frames_per_iter
+        else estimate_relative_free_energy_bisection
+    )
+    solvent_res = estimate_fxn(
         mol_a,
         mol_b,
         core,
@@ -848,7 +857,12 @@ def run_complex(
     )
     complex_box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes, deboggle later
     complex_host_config = HostConfig(complex_sys, complex_conf, complex_box, nwa)
-    complex_res = estimate_relative_free_energy_bisection(
+    estimate_fxn = (
+        estimate_relative_free_energy_bisection_hrex
+        if md_params.hrex_n_frames_per_iter
+        else estimate_relative_free_energy_bisection
+    )
+    complex_res = estimate_fxn(
         mol_a,
         mol_b,
         core,
