@@ -1,6 +1,6 @@
 import io
 import warnings
-from typing import Tuple
+from typing import Callable, Literal, Tuple, cast
 
 import numpy as np
 from matplotlib import pyplot as plt
@@ -326,7 +326,10 @@ def plot_fwd_reverse_predictions(
 
 
 def plot_hrex_transition_matrix(
-    transition_rate: NDArray, figsize: Tuple[float, float] = (13, 10), annotate: bool = True
+    transition_rate: NDArray,
+    figsize: Tuple[float, float] = (13, 10),
+    annotate: bool | Literal["auto"] = "auto",
+    format_rate: Callable[[float], str] = lambda x: f"{100.0*x:.1f}",
 ):
     """Plot matrix of estimated transition rates for permutation moves as a heatmap."""
     n_states, _ = transition_rate.shape
@@ -335,12 +338,15 @@ def plot_hrex_transition_matrix(
     fig, ax = plt.subplots(figsize=figsize)
     p = ax.pcolormesh(states, states, transition_rate)
 
-    if annotate:
+    # Skip text annotations if "auto" and large number of states
+    annotate_ = n_states <= 20 if annotate == "auto" else annotate
+
+    if annotate_:
         for from_state in states:
             for to_state in states:
                 rate = transition_rate[to_state, from_state]
                 if rate > 0.0:
-                    label = f"{rate:.3f}"
+                    label = format_rate(cast(float, rate))
                     ax.text(from_state, to_state, label, ha="center", va="center", color="w", fontsize=8)
 
     ax.set_xlabel("from state")
@@ -390,7 +396,10 @@ def plot_hrex_replica_state_distribution(cumulative_replica_state_counts: NDArra
 
 
 def plot_hrex_replica_state_distribution_heatmap(
-    cumulative_replica_state_counts: NDArray, figsize: Tuple[float, float] = (13, 10), annotate: bool = True
+    cumulative_replica_state_counts: NDArray,
+    figsize: Tuple[float, float] = (13, 10),
+    annotate: bool | Literal["auto"] = "auto",
+    format_rate: Callable[[float], str] = lambda x: f"{100.0*x:.1f}",
 ):
     """Plot distribution of (replica, state) pairs as a heatmap."""
     n_iters, n_states, n_replicas = cumulative_replica_state_counts.shape
@@ -402,11 +411,14 @@ def plot_hrex_replica_state_distribution_heatmap(
     fig, ax = plt.subplots(figsize=figsize)
     p = ax.pcolormesh(replicas, states, fraction_by_replica_by_state)
 
-    if annotate:
+    # Skip text annotations if "auto" and large number of states
+    annotate_ = n_states <= 20 if annotate == "auto" else annotate
+
+    if annotate_:
         for replica in replicas:
             for state in states:
                 fraction = fraction_by_replica_by_state[state, replica]
-                label = f"{fraction:.3f}"
+                label = format_rate(fraction)
                 ax.text(replica, state, label, ha="center", va="center", color="w", fontsize=8)
 
     ax.set_xlabel("replica")
