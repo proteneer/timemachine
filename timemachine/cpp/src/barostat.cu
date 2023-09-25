@@ -83,7 +83,8 @@ MonteCarloBarostat<RealType>::MonteCarloBarostat(
     cudaSafeMalloc(&d_volume_scale_, 1 * sizeof(*d_volume_scale_));
     cudaSafeMalloc(&d_volume_delta_, 1 * sizeof(*d_volume_delta_));
 
-    gpuErrchk(cudaMemset(d_volume_scale_, initial_volume_scale_factor, 1 * sizeof(*d_volume_scale_)));
+    gpuErrchk(cudaMemcpy(
+        d_volume_scale_, &initial_volume_scale_factor, 1 * sizeof(*d_volume_scale_), cudaMemcpyHostToDevice));
 
     cudaSafeMalloc(&d_centroids_, num_mols * 3 * sizeof(*d_centroids_));
     cudaSafeMalloc(&d_atom_idxs_, num_grouped_atoms_ * sizeof(*d_atom_idxs_));
