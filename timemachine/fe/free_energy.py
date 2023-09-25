@@ -27,11 +27,13 @@ from timemachine.fe.stored_arrays import StoredArrays
 from timemachine.fe.utils import get_mol_masses, get_romol_conf
 from timemachine.ff import ForcefieldParams
 from timemachine.ff.handlers import openmm_deserializer
-from timemachine.lib import LangevinIntegrator, MonteCarloBarostat, custom_ops
+from timemachine.lib import LangevinIntegrator, MonteCarloBarostat
+from timemachine.lib.custom_ops import Context
 from timemachine.md.barostat.utils import compute_box_center, get_bond_list, get_group_indices
 from timemachine.md.hrex import HREX, HREXDiagnostics, ReplicaIdx, StateIdx, get_swap_attempts_per_iter_heuristic
 from timemachine.md.states import CoordsVelBox
 from timemachine.potentials import BoundPotential, HarmonicBond, SummedPotential
+from timemachine.potentials.potential import GpuImplWrapper
 from timemachine.utils import batches, pairwise_transform_and_combine
 
 
@@ -139,6 +141,7 @@ class Trajectory:
     frames: StoredArrays  # (frame, atom, dim)
     boxes: NDArray  # (frame, dim, dim)
     final_velocities: NDArray  # (atom, dim)
+    final_barostat_volume_scale_factor: Optional[float]
 
     def __post_init__(self):
         n_frames = len(self.frames)
@@ -155,7 +158,9 @@ class Trajectory:
 
         boxes = np.concatenate([t.boxes for t in ts])
         final_velocities = ts[-1].final_velocities
-        return Trajectory(frames, boxes, final_velocities)
+        final_barostat_volume_scale_factor = ts[-1].final_barostat_volume_scale_factor
+
+        return Trajectory(frames, boxes, final_velocities, final_barostat_volume_scale_factor)
 
 
 @dataclass
@@ -343,12 +348,12 @@ class AbsoluteFreeEnergy(BaseFreeEnergy):
         return np.concatenate([host_values, ligand_values])
 
 
-def get_context(initial_state: InitialState) -> custom_ops.Context:
+def get_context(initial_state: InitialState) -> Context:
     bound_impls = [p.to_gpu(np.float32).bound_impl for p in initial_state.potentials]
     intg_impl = initial_state.integrator.impl()
     baro_impl = initial_state.barostat.impl(bound_impls) if initial_state.barostat else None
 
-    return custom_ops.Context(
+    return Context(
         initial_state.x0,
         initial_state.v0,
         initial_state.box0,
@@ -358,30 +363,9 @@ def get_context(initial_state: InitialState) -> custom_ops.Context:
     )
 
 
-def sample(initial_state: InitialState, md_params: MDParams, max_buffer_frames: int) -> Trajectory:
-    """Generate a trajectory given an initial state and a simulation protocol
-
-    Parameters
-    ----------
-    initial_state: InitialState
-        (contains potentials, integrator, optional barostat)
-
-    md_params: MDParams
-        (specifies x0, v0, box0, number of MD steps, thinning interval, etc...)
-
-    max_buffer_frames: int
-        number of frames to store in memory before dumping to disk
-
-    Returns
-    -------
-    Trajectory
-
-    Notes
-    -----
-    * Assertion error if coords become NaN
-    """
-
-    ctxt = get_context(initial_state)
+def sample_with_context(
+    ctxt: Context, md_params: MDParams, temperature: float, ligand_idxs: NDArray, max_buffer_frames: int
+) -> Trajectory:
 
     # burn-in
     if md_params.n_eq_steps:
@@ -393,7 +377,7 @@ def sample(initial_state: InitialState, md_params: MDParams, max_buffer_frames: 
     rng = np.random.default_rng(md_params.seed)
 
     if md_params.local_steps > 0:
-        ctxt.setup_local_md(initial_state.integrator.temperature, md_params.freeze_reference)
+        ctxt.setup_local_md(temperature, md_params.freeze_reference)
 
     assert np.all(np.isfinite(ctxt.get_x_t())), "Equilibration resulted in a nan"
 
@@ -422,7 +406,7 @@ def sample(initial_state: InitialState, md_params: MDParams, max_buffer_frames: 
                 ctxt.multiple_steps(n_steps=global_steps)
             x_t, box_t = ctxt.multiple_steps_local(
                 local_steps,
-                initial_state.ligand_idxs.astype(np.int32),
+                ligand_idxs.astype(np.int32),
                 k=md_params.k,
                 radius=rng.uniform(md_params.min_radius, md_params.max_radius),
                 seed=rng.integers(np.iinfo(np.int32).max),
@@ -455,7 +439,39 @@ def sample(initial_state: InitialState, md_params: MDParams, max_buffer_frames: 
 
     assert np.all(np.isfinite(all_coords[-1])), "Production resulted in a nan"
 
-    return Trajectory(all_coords, all_boxes, final_velocities)
+    final_barostat_volume_scale_factor = ctxt.get_barostat().get_volume_scale_factor() if ctxt.get_barostat() else None
+
+    return Trajectory(all_coords, all_boxes, final_velocities, final_barostat_volume_scale_factor)
+
+
+def sample(initial_state: InitialState, md_params: MDParams, max_buffer_frames: int) -> Trajectory:
+    """Generate a trajectory given an initial state and a simulation protocol
+
+    Parameters
+    ----------
+    initial_state: InitialState
+        (contains potentials, integrator, optional barostat)
+
+    md_params: MDParams
+        MD parameters
+
+    max_buffer_frames: int
+        number of frames to store in memory before dumping to disk
+
+    Returns
+    -------
+    Trajectory
+
+    Notes
+    -----
+    * Assertion error if coords become NaN
+    """
+
+    ctxt = get_context(initial_state)
+
+    return sample_with_context(
+        ctxt, md_params, initial_state.integrator.temperature, initial_state.ligand_idxs, max_buffer_frames
+    )
 
 
 class IndeterminateEnergyWarning(UserWarning):
@@ -752,7 +768,6 @@ def run_sims_hrex(
     initial_states: Sequence[InitialState],
     md_params: MDParams,
     n_frames_per_iter: int,
-    temperature: float,
     n_swap_attempts_per_iter: Optional[int] = None,
     print_diagnostics_interval: Optional[int] = 10,
 ) -> Tuple[PairBarResult, List[Trajectory], HREXDiagnostics]:
@@ -767,13 +782,10 @@ def run_sims_hrex(
         performance
 
     md_params: MDParams
-        Parameters used to simulate new states
+        MD parameters
 
     n_frames_per_iter: int
         Number of frames to sample using MD per iteration
-
-    temperature: float
-        Temperature in K
 
     n_swap_attempts_per_iter: int or None, optional
         Number of nearest-neighbor swaps to attempt per iteration. Defaults to len(initial_states) ** 4.
@@ -835,23 +847,48 @@ def run_sims_hrex(
     warn(f"Setting numpy global random state using seed {md_params.seed}")
     np.random.seed(md_params.seed)
 
-    bps = initial_states[0].potentials  # TODO: assert initial states have compatible potentials?
-    sp = SummedPotential([bp.potential for bp in bps], [bp.params for bp in bps])
-    ubp = sp.to_gpu(np.float32)
+    def get_potential_and_context(initial_state: InitialState) -> Tuple[GpuImplWrapper, Context]:
+        # Set up overall potential
+        potentials = [bp.potential for bp in initial_state.potentials]
+        params = [bp.params for bp in initial_state.potentials]
+        potential = SummedPotential(potentials, params).to_gpu(np.float32)
 
-    def compute_log_q_matrix(xvbs: List[CoordsVelBox], params: List[NDArray]):
+        # Set up context for MD using overall potential
+        bound_impl = potential.bind_params_list(params).bound_impl
+        bound_impls = [bound_impl]
+        intg_impl = initial_state.integrator.impl()
+        baro_impl = initial_state.barostat.impl(bound_impls) if initial_state.barostat else None
+        context = Context(
+            initial_state.x0,
+            initial_state.v0,
+            initial_state.box0,
+            intg_impl,
+            bound_impls,
+            baro_impl,
+        )
+
+        return potential, context
+
+    # Set up overall potential and context using the first state.
+    # NOTE: this assumes that states differ only in their parameters, but we do not check this!
+    potential, context = get_potential_and_context(initial_states[0])
+    temperature = initial_states[0].integrator.temperature
+    ligand_idxs = initial_states[0].ligand_idxs
+
+    def get_flattened_params(initial_state: InitialState) -> NDArray:
+        return np.concatenate([bp.params.flatten() for bp in initial_state.potentials])
+
+    params_by_state = np.array([get_flattened_params(initial_state) for initial_state in initial_states])
+
+    def compute_log_q_matrix(xvbs: List[CoordsVelBox]):
         coords = np.array([xvb.coords for xvb in xvbs])
         boxes = np.array([xvb.box for xvb in xvbs])
-        _, _, U = ubp.unbound_impl.execute_selective_batch(coords, np.array(params), boxes, False, False, True)
+        _, _, U = potential.unbound_impl.execute_selective_batch(coords, params_by_state, boxes, False, False, True)
         log_q = -U / (BOLTZ * temperature)
         return log_q
 
     def get_log_q_fn(xvbs: List[CoordsVelBox]):
-        def get_flattened_params(initial_state: InitialState) -> NDArray:
-            return np.concatenate([bp.params.flatten() for bp in initial_state.potentials])
-
-        params = [get_flattened_params(initial_state) for initial_state in initial_states]
-        log_q_kl = compute_log_q_matrix(xvbs, params)
+        log_q_kl = compute_log_q_matrix(xvbs)
 
         def log_q_fn(replica_idx: ReplicaIdx, state_idx: StateIdx) -> float:
             return log_q_kl[replica_idx, state_idx]
@@ -865,25 +902,29 @@ def run_sims_hrex(
         # Add an identity move to the mixture to ensure aperiodicity
         neighbor_pairs = [(StateIdx(0), StateIdx(0))] + neighbor_pairs
 
-    def get_equilibrated_initial_state(initial_state: InitialState) -> InitialState:
+    def get_equilibrated_xvb(xvb: CoordsVelBox, params: NDArray) -> CoordsVelBox:
         if md_params.n_eq_steps == 0:
-            return initial_state
+            return xvb
 
-        ctxt = get_context(initial_state)
+        context.set_x_t(xvb.coords)
+        context.set_v_t(xvb.velocities)
+        context.set_box(xvb.box)
 
-        xs, boxes = ctxt.multiple_steps(md_params.n_eq_steps, store_x_interval=0)
-        assert len(xs) == len(boxes) == 1
+        assert len(context.get_potentials()) == 1
+        context.get_potentials()[0].set_params(params)
+
+        xs, boxes = context.multiple_steps(md_params.n_eq_steps, store_x_interval=0)
         x0 = xs[0]
-        assert np.all(x0 == ctxt.get_x_t())
-        v0 = ctxt.get_v_t()
+        v0 = context.get_v_t()
         box0 = boxes[0]
 
-        equilibrated_initial_state = replace(initial_state, x0=x0, v0=v0, box0=box0)
-        return equilibrated_initial_state
+        return CoordsVelBox(x0, v0, box0)
 
-    initial_states = [get_equilibrated_initial_state(initial_state) for initial_state in initial_states]
+    initial_replicas = [
+        get_equilibrated_xvb(CoordsVelBox(s.x0, s.v0, s.box0), params)
+        for s, params in zip(initial_states, params_by_state)
+    ]
 
-    initial_replicas = [CoordsVelBox(s.x0, s.v0, s.box0) for s in initial_states]
     hrex = HREX.from_replicas(initial_replicas)
 
     samples_by_state_by_iter: List[List[Trajectory]] = []
@@ -893,14 +934,19 @@ def run_sims_hrex(
     for iteration, n_frames_iter in enumerate(batches(md_params.n_frames, n_frames_per_iter), 1):
 
         def sample_replica(xvb: CoordsVelBox, state_idx: StateIdx) -> Trajectory:
-            initial_state = replace(initial_states[state_idx], x0=xvb.coords, v0=xvb.velocities, box0=xvb.box)
+            context.set_x_t(xvb.coords)
+            context.set_v_t(xvb.velocities)
+            context.set_box(xvb.box)
+
+            params = params_by_state[state_idx]
+            assert len(context.get_potentials()) == 1
+            context.get_potentials()[0].set_params(params)
+
             md_params_replica = replace(
                 md_params, n_frames=n_frames_iter, n_eq_steps=0, seed=np.random.randint(np.iinfo(np.int32).max)
             )
 
-            # TODO: `sample` creates a new context from scratch. We should optimize this to reuse an existing context
-            # with BoundPotential#set_params
-            return sample(initial_state, md_params_replica, max_buffer_frames=100)
+            return sample_with_context(context, md_params_replica, temperature, ligand_idxs, max_buffer_frames=100)
 
         def replica_from_samples(traj: Trajectory) -> CoordsVelBox:
             return CoordsVelBox(traj.frames[-1], traj.final_velocities, traj.boxes[-1])
@@ -964,4 +1010,4 @@ def run_sims_hrex(
 
     diagnostics = HREXDiagnostics(replica_idx_by_state_by_iter, fraction_accepted_by_pair_by_iter)
 
-    return PairBarResult(initial_states, list(bar_results)), samples_by_state, diagnostics
+    return PairBarResult(list(initial_states), list(bar_results)), samples_by_state, diagnostics

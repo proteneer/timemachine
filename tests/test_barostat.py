@@ -37,15 +37,7 @@ def test_barostat_validation():
 
     # Invalid interval
     with pytest.raises(RuntimeError, match="Barostat interval must be greater than 0"):
-        custom_ops.MonteCarloBarostat(
-            coords.shape[0],
-            pressure,
-            temperature,
-            [[0, 1]],
-            -1,
-            u_impls,
-            seed,
-        )
+        custom_ops.MonteCarloBarostat(coords.shape[0], pressure, temperature, [[0, 1]], -1, u_impls, seed, True, 0.0)
 
     # Atom index over N
     with pytest.raises(RuntimeError, match="Grouped indices must be between 0 and N"):
@@ -57,30 +49,20 @@ def test_barostat_validation():
             barostat_interval,
             u_impls,
             seed,
+            True,
+            0.0,
         )
 
     # Atom index < 0
     with pytest.raises(RuntimeError, match="Grouped indices must be between 0 and N"):
         custom_ops.MonteCarloBarostat(
-            coords.shape[0],
-            pressure,
-            temperature,
-            [[-1, 0]],
-            barostat_interval,
-            u_impls,
-            seed,
+            coords.shape[0], pressure, temperature, [[-1, 0]], barostat_interval, u_impls, seed, True, 0.0
         )
 
     # Atom index in two groups
     with pytest.raises(RuntimeError, match="All grouped indices must be unique"):
         custom_ops.MonteCarloBarostat(
-            coords.shape[0],
-            pressure,
-            temperature,
-            [[0, 1], [1, 2]],
-            barostat_interval,
-            u_impls,
-            seed,
+            coords.shape[0], pressure, temperature, [[0, 1], [1, 2]], barostat_interval, u_impls, seed, True, 0.0
         )
 
 
@@ -125,13 +107,7 @@ def test_barostat_with_clashes():
     v_0 = sample_velocities(masses, temperature)
 
     baro = custom_ops.MonteCarloBarostat(
-        coords.shape[0],
-        pressure,
-        temperature,
-        group_indices,
-        barostat_interval,
-        u_impls,
-        seed,
+        coords.shape[0], pressure, temperature, group_indices, barostat_interval, u_impls, seed, True, 0.0
     )
 
     # The clashes will result in overflows, so the box should never change as no move is accepted
@@ -170,23 +146,11 @@ def test_barostat_zero_interval():
 
     with pytest.raises(RuntimeError):
         custom_ops.MonteCarloBarostat(
-            coords.shape[0],
-            pressure,
-            temperature,
-            group_indices,
-            0,
-            u_impls,
-            seed,
+            coords.shape[0], pressure, temperature, group_indices, 0, u_impls, seed, True, 0.0
         )
     # Setting it to 1 should be valid.
     baro = custom_ops.MonteCarloBarostat(
-        coords.shape[0],
-        pressure,
-        temperature,
-        group_indices,
-        1,
-        u_impls,
-        seed,
+        coords.shape[0], pressure, temperature, group_indices, 1, u_impls, seed, True, 0.0
     )
     # Setting back to 0 should raise another error
     with pytest.raises(RuntimeError):
@@ -242,13 +206,7 @@ def test_barostat_partial_group_idxs():
     v_0 = sample_velocities(masses, temperature)
 
     baro = custom_ops.MonteCarloBarostat(
-        coords.shape[0],
-        pressure,
-        temperature,
-        group_indices,
-        barostat_interval,
-        u_impls,
-        seed,
+        coords.shape[0], pressure, temperature, group_indices, barostat_interval, u_impls, seed, True, 0.0
     )
 
     ctxt = custom_ops.Context(coords, v_0, complex_box, integrator_impl, u_impls, barostat=baro)
@@ -303,13 +261,7 @@ def test_barostat_is_deterministic():
     v_0 = sample_velocities(masses, temperature)
 
     baro = custom_ops.MonteCarloBarostat(
-        coords.shape[0],
-        pressure,
-        temperature,
-        group_indices,
-        barostat_interval,
-        u_impls,
-        seed,
+        coords.shape[0], pressure, temperature, group_indices, barostat_interval, u_impls, seed, True, 0.0
     )
 
     ctxt = custom_ops.Context(coords, v_0, host_box, integrator.impl(), u_impls, barostat=baro)
@@ -319,13 +271,7 @@ def test_barostat_is_deterministic():
     assert compute_box_volume(atm_box) != compute_box_volume(host_box)
 
     baro = custom_ops.MonteCarloBarostat(
-        coords.shape[0],
-        pressure,
-        temperature,
-        group_indices,
-        barostat_interval,
-        u_impls,
-        seed,
+        coords.shape[0], pressure, temperature, group_indices, barostat_interval, u_impls, seed, True, 0.0
     )
     ctxt = custom_ops.Context(coords, v_0, host_box, integrator.impl(), u_impls, barostat=baro)
     ctxt.multiple_steps(15)
@@ -371,13 +317,7 @@ def test_barostat_varying_pressure():
     v_0 = sample_velocities(masses, temperature)
 
     baro = custom_ops.MonteCarloBarostat(
-        coords.shape[0],
-        pressure,
-        temperature,
-        group_indices,
-        barostat_interval,
-        u_impls,
-        seed,
+        coords.shape[0], pressure, temperature, group_indices, barostat_interval, u_impls, seed, True, 0.0
     )
 
     ctxt = custom_ops.Context(coords, v_0, complex_box, integrator_impl, u_impls, barostat=baro)
@@ -436,13 +376,7 @@ def test_barostat_recentering_upon_acceptance():
     v_0 = sample_velocities(masses, temperature)
 
     baro = custom_ops.MonteCarloBarostat(
-        coords.shape[0],
-        pressure,
-        temperature,
-        group_indices,
-        barostat_interval,
-        u_impls,
-        seed,
+        coords.shape[0], pressure, temperature, group_indices, barostat_interval, u_impls, seed, True, 0.0
     )
     ctxt = custom_ops.Context(coords, v_0, complex_box, integrator_impl, u_impls, barostat=baro)
     # mini equilibriate the system to get barostat proposals to be reasonable
@@ -552,13 +486,7 @@ def test_molecular_ideal_gas():
         new_box = complex_box * length_scale
 
         baro = custom_ops.MonteCarloBarostat(
-            new_coords.shape[0],
-            pressure,
-            temperature,
-            group_indices,
-            barostat_interval,
-            u_impls,
-            seed,
+            new_coords.shape[0], pressure, temperature, group_indices, barostat_interval, u_impls, seed, True, 0.0
         )
 
         ctxt = custom_ops.Context(new_coords, v_0, new_box, integrator_impl, u_impls, barostat=baro)
@@ -665,13 +593,7 @@ def test_barostat_scaling_behavior():
     v_0 = sample_velocities(masses, temperature)
 
     baro = custom_ops.MonteCarloBarostat(
-        coords.shape[0],
-        pressure,
-        temperature,
-        group_indices,
-        barostat_interval,
-        u_impls,
-        seed,
+        coords.shape[0], pressure, temperature, group_indices, barostat_interval, u_impls, seed, True, 0.0
     )
     # Initial volume scaling is 0
     assert baro.get_volume_scale_factor() == 0.0
@@ -704,3 +626,18 @@ def test_barostat_scaling_behavior():
     assert baro.get_adaptive_scaling()
     ctxt.multiple_steps(100)
     assert baro.get_volume_scale_factor() != 0.0
+
+    # Check that the adaptive_scaling_enabled, initial_volume_scale_factor constructor arguments works as expected
+    baro = custom_ops.MonteCarloBarostat(
+        coords.shape[0],
+        pressure,
+        temperature,
+        group_indices,
+        barostat_interval,
+        u_impls,
+        seed,
+        False,
+        initial_volume_scale_factor=1.23,
+    )
+    assert not baro.get_adaptive_scaling()
+    assert baro.get_volume_scale_factor() == 1.23

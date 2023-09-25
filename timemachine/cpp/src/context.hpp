@@ -59,6 +59,12 @@ public:
 
     void setup_local_md(double temperature, bool freeze_reference);
 
+    std::shared_ptr<Integrator> get_integrator() const;
+
+    std::vector<std::shared_ptr<BoundPotential>> get_potentials() const;
+
+    std::shared_ptr<MonteCarloBarostat<float>> get_barostat() const;
+
 private:
     int N_; // number of particles
 

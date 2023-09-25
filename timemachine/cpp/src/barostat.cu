@@ -25,7 +25,8 @@ MonteCarloBarostat<RealType>::MonteCarloBarostat(
     const int interval,
     const std::vector<std::shared_ptr<BoundPotential>> bps,
     const int seed,
-    const bool adaptive_scaling_enabled)
+    const bool adaptive_scaling_enabled,
+    const double initial_volume_scale_factor)
     : N_(N), adaptive_scaling_enabled_(adaptive_scaling_enabled), bps_(bps), pressure_(pressure),
       temperature_(temperature), interval_(interval), seed_(seed), group_idxs_(group_idxs), step_(0),
       num_grouped_atoms_(0), runner_() {
@@ -82,7 +83,8 @@ MonteCarloBarostat<RealType>::MonteCarloBarostat(
     cudaSafeMalloc(&d_volume_scale_, 1 * sizeof(*d_volume_scale_));
     cudaSafeMalloc(&d_volume_delta_, 1 * sizeof(*d_volume_delta_));
 
-    gpuErrchk(cudaMemset(d_volume_scale_, 0, 1 * sizeof(*d_volume_scale_)));
+    gpuErrchk(cudaMemcpy(
+        d_volume_scale_, &initial_volume_scale_factor, 1 * sizeof(*d_volume_scale_), cudaMemcpyHostToDevice));
 
     cudaSafeMalloc(&d_centroids_, num_mols * 3 * sizeof(*d_centroids_));
     cudaSafeMalloc(&d_atom_idxs_, num_grouped_atoms_ * sizeof(*d_atom_idxs_));

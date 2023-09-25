@@ -3,7 +3,7 @@ import traceback
 import warnings
 from dataclasses import dataclass, replace
 from functools import partial
-from typing import Any, Dict, Iterable, List, NamedTuple, Optional, Sequence, Tuple, Union
+from typing import Any, Dict, Iterable, List, NamedTuple, Optional, Sequence, Tuple, Union, cast
 
 import numpy as np
 from numpy.typing import NDArray
@@ -17,6 +17,7 @@ from timemachine.fe.free_energy import (
     InitialState,
     MDParams,
     SimulationResult,
+    Trajectory,
     make_pair_bar_plots,
     run_sims_bisection,
     run_sims_hrex,
@@ -596,7 +597,7 @@ def estimate_relative_free_energy_bisection_hrex(
     keep_idxs: Optional[List[int]] = None,
     min_cutoff: Optional[float] = 0.7,
     n_frames_bisection: int = 100,
-    n_frames_per_iter: int = 5,
+    n_frames_per_iter: int = 1,
 ) -> SimulationResult:
     """
     Estimate relative free energy between mol_a and mol_b using Hamiltonian Replica EXchange (HREX) sampling of a
@@ -695,31 +696,57 @@ def estimate_relative_free_energy_bisection_hrex(
 
     try:
         # First phase: bisection to determine lambda spacing
+        md_params_bisection = replace(md_params, n_frames=n_frames_bisection)
         results, trajectories_by_state = run_sims_bisection(
             [lambda_min, lambda_max],
             make_optimized_initial_state,
-            replace(md_params, n_frames=n_frames_bisection),  # TODO: clean up
+            md_params_bisection,
             n_bisections=len(lambda_grid) - 2,
             temperature=temperature,
             min_overlap=min_overlap,
         )
 
+        initial_states = results[-1].initial_states
+        has_barostat_by_state = [initial_state.barostat is not None for initial_state in initial_states]
+        assert all(has_barostat_by_state) or not any(has_barostat_by_state)
+
         # Second phase: sample initial states determined by bisection using HREX
 
-        # Use equilibrated samples from bisection as initial states
+        def get_mean_final_barostat_volume_scale_factor(trajectories_by_state: Iterable[Trajectory]) -> Optional[float]:
+            scale_factors = [traj.final_barostat_volume_scale_factor for traj in trajectories_by_state]
+            if any(x is not None for x in scale_factors):
+                assert all(x is not None for x in scale_factors)
+                sfs = cast(List[float], scale_factors)  # implied by assertion but required by mypy
+                return float(np.mean(sfs))
+            else:
+                return None
+
+        mean_final_barostat_volume_scale_factor = get_mean_final_barostat_volume_scale_factor(trajectories_by_state)
+        assert (mean_final_barostat_volume_scale_factor is not None) == all(has_barostat_by_state)
+
+        # Use equilibrated samples and the average of the final barostat volume scale factors from bisection phase to
+        # initialize states for HREX
         initial_states_hrex = [
-            replace(initial_state, x0=traj.frames[-1], v0=traj.final_velocities, box0=traj.boxes[-1])
-            for initial_state, traj in zip(
-                results[-1].initial_states,
-                trajectories_by_state,
+            replace(
+                initial_state,
+                x0=traj.frames[-1],
+                v0=traj.final_velocities,
+                box0=traj.boxes[-1],
+                barostat=replace(
+                    initial_state.barostat,
+                    adaptive_scaling_enabled=False,
+                    initial_volume_scale_factor=mean_final_barostat_volume_scale_factor,
+                )
+                if initial_state.barostat
+                else None,
             )
+            for initial_state, traj in zip(initial_states, trajectories_by_state)
         ]
 
         pair_bar_result, trajectories_by_state, diagnostics = run_sims_hrex(
             initial_states_hrex,
             replace(md_params, n_eq_steps=0),  # using pre-equilibrated samples
             n_frames_per_iter=n_frames_per_iter,
-            temperature=temperature,
         )
 
         plots = make_pair_bar_plots(pair_bar_result, temperature, combined_prefix)

@@ -511,12 +511,17 @@ void declare_context(py::module &m) {
                 ctxt.get_v_t(buffer.mutable_data());
                 return buffer;
             })
-        .def("get_box", [](timemachine::Context &ctxt) -> py::array_t<double, py::array::c_style> {
-            unsigned int D = 3;
-            py::array_t<double, py::array::c_style> buffer({D, D});
-            ctxt.get_box(buffer.mutable_data());
-            return buffer;
-        });
+        .def(
+            "get_box",
+            [](timemachine::Context &ctxt) -> py::array_t<double, py::array::c_style> {
+                unsigned int D = 3;
+                py::array_t<double, py::array::c_style> buffer({D, D});
+                ctxt.get_box(buffer.mutable_data());
+                return buffer;
+            })
+        .def("get_integrator", &timemachine::Context::get_integrator)
+        .def("get_potentials", &timemachine::Context::get_potentials)
+        .def("get_barostat", &timemachine::Context::get_barostat);
 }
 
 void declare_integrator(py::module &m) {
@@ -1209,8 +1214,18 @@ void declare_barostat(py::module &m) {
                         const int frequency,
                         std::vector<std::shared_ptr<timemachine::BoundPotential>> bps,
                         const int seed,
-                        const bool adaptive_scaling_enabled) {
-                return new Class(N, pressure, temperature, group_idxs, frequency, bps, seed, adaptive_scaling_enabled);
+                        const bool adaptive_scaling_enabled,
+                        const double initial_volume_scale_factor) {
+                return new Class(
+                    N,
+                    pressure,
+                    temperature,
+                    group_idxs,
+                    frequency,
+                    bps,
+                    seed,
+                    adaptive_scaling_enabled,
+                    initial_volume_scale_factor);
             }),
             py::arg("N"),
             py::arg("pressure"),
@@ -1219,7 +1234,8 @@ void declare_barostat(py::module &m) {
             py::arg("frequency"),
             py::arg("bps"),
             py::arg("seed"),
-            py::arg("adaptive_scaling_enabled") = true)
+            py::arg("adaptive_scaling_enabled"),
+            py::arg("initial_volume_scale_factor"))
         .def("set_interval", &Class::set_interval, py::arg("interval"))
         .def("get_interval", &Class::get_interval)
         .def("set_volume_scale_factor", &Class::set_volume_scale_factor, py::arg("volume_scale_factor"))

@@ -77,8 +77,7 @@ def test_benchmark_hif2a_single_topology(hif2a_single_topology_leg, enable_hrex)
             run_sims_hrex,
             initial_states,
             md_params,
-            n_frames_per_iter=5,
-            temperature=temperature,
+            n_frames_per_iter=1,
             print_diagnostics_interval=None,
         )
     else:
