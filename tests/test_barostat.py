@@ -704,3 +704,16 @@ def test_barostat_scaling_behavior():
     assert baro.get_adaptive_scaling()
     ctxt.multiple_steps(100)
     assert baro.get_volume_scale_factor() != 0.0
+
+    # Check that the initial_volume_scale_factor constructor argument works as expected
+    baro = custom_ops.MonteCarloBarostat(
+        coords.shape[0],
+        pressure,
+        temperature,
+        group_indices,
+        barostat_interval,
+        u_impls,
+        seed,
+        initial_volume_scale_factor=1.23,
+    )
+    assert baro.get_volume_scale_factor() == 1.23
