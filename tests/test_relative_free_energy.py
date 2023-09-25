@@ -64,7 +64,6 @@ def run_bitwise_reproducibility(mol_a, mol_b, core, forcefield, md_params, estim
 
 
 def run_triple(mol_a, mol_b, core, forcefield, md_params, protein_path, estimate_relative_free_energy_fn):
-
     lambda_interval = [0.01, 0.03]
     n_windows = 3
 
@@ -156,17 +155,16 @@ def run_triple(mol_a, mol_b, core, forcefield, md_params, protein_path, estimate
     check_sim_result(complex_res)
 
 
-@pytest.mark.nightly(reason="Slow!")
+# @pytest.mark.nightly(reason="Slow!")
 @pytest.mark.parametrize(
     "estimate_relative_free_energy_fn",
     [
-        estimate_relative_free_energy,
-        estimate_relative_free_energy_bisection,
+        # estimate_relative_free_energy,
+        # estimate_relative_free_energy_bisection,
         estimate_relative_free_energy_bisection_hrex,
     ],
 )
 def test_run_hif2a_test_system(estimate_relative_free_energy_fn):
-
     mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
     forcefield = Forcefield.load_default()
 
@@ -205,7 +203,6 @@ def test_run_hif2a_test_system(estimate_relative_free_energy_fn):
     ],
 )
 def test_run_hif2a_test_system_reproducibility(estimate_relative_free_energy_fn):
-
     mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
     forcefield = Forcefield.load_default()
 

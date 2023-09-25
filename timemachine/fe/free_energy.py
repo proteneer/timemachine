@@ -400,7 +400,6 @@ def get_context(initial_state: InitialState) -> Context:
 def sample_with_context(
     ctxt: Context, md_params: MDParams, temperature: float, ligand_idxs: NDArray, max_buffer_frames: int
 ) -> Trajectory:
-
     # burn-in
     if md_params.n_eq_steps:
         ctxt.multiple_steps(
@@ -630,7 +629,6 @@ def run_sims_sequential(
     assert np.all(np.array(keep_idxs) >= 0)
 
     for lamb_idx, initial_state in enumerate(initial_states):
-
         # run simulation
         traj = sample(initial_state, md_params, max_buffer_frames=100)
         print(f"completed simulation at lambda={initial_state.lamb}!")
@@ -763,7 +761,6 @@ def run_sims_bisection(
     results = [result]
 
     for iteration in range(n_bisections):
-
         if min_overlap is not None and np.all(np.array(result.overlaps) > min_overlap):
             if verbose:
                 print(f"All BAR overlaps exceed min_overlap={min_overlap}. Returning after {iteration} iterations.")
