@@ -910,6 +910,7 @@ def run_sims_hrex(
         context.set_v_t(xvb.velocities)
         context.set_box(xvb.box)
 
+        assert len(context.get_potentials()) == 1
         context.get_potentials()[0].set_params(params)
 
         xs, boxes = context.multiple_steps(md_params.n_eq_steps, store_x_interval=0)
@@ -938,6 +939,7 @@ def run_sims_hrex(
             context.set_box(xvb.box)
 
             params = params_by_state[state_idx]
+            assert len(context.get_potentials()) == 1
             context.get_potentials()[0].set_params(params)
 
             md_params_replica = replace(
