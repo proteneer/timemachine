@@ -706,6 +706,10 @@ def estimate_relative_free_energy_bisection_hrex(
             min_overlap=min_overlap,
         )
 
+        initial_states = results[-1].initial_states
+        has_barostat_by_state = [initial_state.barostat is not None for initial_state in initial_states]
+        assert all(has_barostat_by_state) or not any(has_barostat_by_state)
+
         # Second phase: sample initial states determined by bisection using HREX
 
         def get_mean_final_barostat_volume_scale_factor(trajectories_by_state: Iterable[Trajectory]) -> Optional[float]:
@@ -718,6 +722,7 @@ def estimate_relative_free_energy_bisection_hrex(
                 return None
 
         mean_final_barostat_volume_scale_factor = get_mean_final_barostat_volume_scale_factor(trajectories_by_state)
+        assert (mean_final_barostat_volume_scale_factor is not None) == all(has_barostat_by_state)
 
         # Use equilibrated samples and the average of the final barostat volume scale factors from bisection phase to
         # initialize states for HREX
@@ -735,7 +740,7 @@ def estimate_relative_free_energy_bisection_hrex(
                 if initial_state.barostat
                 else None,
             )
-            for initial_state, traj in zip(results[-1].initial_states, trajectories_by_state)
+            for initial_state, traj in zip(initial_states, trajectories_by_state)
         ]
 
         pair_bar_result, trajectories_by_state, diagnostics = run_sims_hrex(
