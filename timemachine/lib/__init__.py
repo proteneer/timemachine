@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from typing import List, Optional
+from typing import Any, Optional
 
 import numpy as np
 from numpy.typing import NDArray
@@ -42,7 +42,7 @@ class MonteCarloBarostat:
     N: int
     pressure: float
     temperature: float
-    group_idxs: List[NDArray]
+    group_idxs: Any  # TODO: address mixed convention for type of group_idxs
     interval: int
     seed: int
     adaptive_scaling_enabled: bool = True
@@ -53,7 +53,7 @@ class MonteCarloBarostat:
             self.N,
             self.pressure,
             self.temperature,
-            [g.tolist() for g in self.group_idxs],
+            self.group_idxs,
             self.interval,
             bound_potentials,
             self.seed,
