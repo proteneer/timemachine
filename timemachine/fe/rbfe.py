@@ -14,6 +14,7 @@ from timemachine.constants import DEFAULT_ATOM_MAPPING_KWARGS, DEFAULT_PRESSURE,
 from timemachine.fe import atom_mapping, model_utils
 from timemachine.fe.free_energy import (
     HostConfig,
+    HREXParams,
     InitialState,
     MDParams,
     SimulationResult,
@@ -39,14 +40,9 @@ DEFAULT_NUM_WINDOWS = 30
 # https://github.com/proteneer/timemachine/commit/e1f7328f01f427534d8744aab6027338e116ad09
 MAX_SEED_VALUE = 10000
 
-DEFAULT_MD_PARAMS = MDParams(
-    n_frames=1000,
-    n_eq_steps=10_000,
-    steps_per_frame=400,
-    seed=2023,
-    hrex_n_frames_bisection=100,
-    hrex_n_frames_per_iter=0,
-)
+DEFAULT_MD_PARAMS = MDParams(n_frames=1000, n_eq_steps=10_000, steps_per_frame=400, seed=2023, hrex_params=None)
+
+DEFAULT_HREX_PARAMS = replace(DEFAULT_MD_PARAMS, hrex_params=HREXParams(n_frames_bisection=100, n_frames_per_iter=1))
 
 
 @dataclass
@@ -449,6 +445,23 @@ def estimate_relative_free_energy(
         raise err
 
 
+def estimate_relative_free_energy_bisection_or_hrex(*args, **kwargs) -> SimulationResult:
+    """
+    See `estimate_relative_free_energy_bisection` for parameters.
+
+    Will call `estimate_relative_free_energy_bisection` or `estimate_relative_free_energy_bisection_hrex`
+    as appropriate givne md_params.
+
+    """
+    md_params = kwargs["md_params"]
+    estimate_fxn = (
+        estimate_relative_free_energy_bisection_hrex
+        if md_params.hrex_params is not None
+        else estimate_relative_free_energy_bisection
+    )
+    return estimate_fxn(*args, **kwargs)
+
+
 def estimate_relative_free_energy_bisection(
     mol_a: Chem.rdchem.Mol,
     mol_b: Chem.rdchem.Mol,
@@ -596,7 +609,7 @@ def estimate_relative_free_energy_bisection_hrex(
     core: NDArray,
     ff: Forcefield,
     host_config: Optional[HostConfig],
-    md_params: MDParams = DEFAULT_MD_PARAMS,
+    md_params: MDParams = DEFAULT_HREX_PARAMS,
     prefix: str = "",
     lambda_interval: Optional[Tuple[float, float]] = None,
     n_windows: Optional[int] = None,
@@ -695,7 +708,8 @@ def estimate_relative_free_energy_bisection_hrex(
 
     try:
         # First phase: bisection to determine lambda spacing
-        md_params_bisection = replace(md_params, n_frames=md_params.hrex_n_frames_bisection)
+        assert md_params.hrex_params is not None, "hrex_params must be set to use HREX"
+        md_params_bisection = replace(md_params, n_frames=md_params.hrex_params.n_frames_bisection)
         results, trajectories_by_state = run_sims_bisection(
             [lambda_min, lambda_max],
             make_optimized_initial_state,
@@ -745,7 +759,7 @@ def estimate_relative_free_energy_bisection_hrex(
         pair_bar_result, trajectories_by_state, diagnostics = run_sims_hrex(
             initial_states_hrex,
             replace(md_params, n_eq_steps=0),  # using pre-equilibrated samples
-            n_frames_per_iter=md_params.hrex_n_frames_per_iter,
+            n_frames_per_iter=md_params.hrex_params.n_frames_per_iter,
         )
 
         plots = make_pair_bar_plots(pair_bar_result, temperature, combined_prefix)
@@ -773,7 +787,7 @@ def run_vacuum(
     core: NDArray,
     forcefield: Forcefield,
     _,
-    md_params: MDParams = DEFAULT_MD_PARAMS,
+    md_params: MDParams = DEFAULT_HREX_PARAMS,
     n_windows: Optional[int] = None,
     min_overlap: Optional[float] = None,
     keep_idxs: Optional[List[int]] = None,
@@ -783,12 +797,7 @@ def run_vacuum(
         md_params = replace(md_params, local_steps=0)
         warnings.warn("Vacuum simulations don't support local steps, will use all global steps")
     # min_cutoff defaults to None since there is no environment to prevent conformational changes in the ligand
-    estimate_fxn = (
-        estimate_relative_free_energy_bisection_hrex
-        if md_params.hrex_n_frames_per_iter
-        else estimate_relative_free_energy_bisection
-    )
-    return estimate_fxn(
+    return estimate_relative_free_energy_bisection_or_hrex(
         mol_a,
         mol_b,
         core,
@@ -809,7 +818,7 @@ def run_solvent(
     core: NDArray,
     forcefield: Forcefield,
     _,
-    md_params: MDParams = DEFAULT_MD_PARAMS,
+    md_params: MDParams = DEFAULT_HREX_PARAMS,
     n_windows: Optional[int] = None,
     min_overlap: Optional[float] = None,
     keep_idxs: Optional[List[int]] = None,
@@ -819,12 +828,7 @@ def run_solvent(
     solvent_sys, solvent_conf, solvent_box, solvent_top = builders.build_water_system(box_width, forcefield.water_ff)
     solvent_box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes, deboggle later
     solvent_host_config = HostConfig(solvent_sys, solvent_conf, solvent_box, solvent_conf.shape[0])
-    estimate_fxn = (
-        estimate_relative_free_energy_bisection_hrex
-        if md_params.hrex_n_frames_per_iter
-        else estimate_relative_free_energy_bisection
-    )
-    solvent_res = estimate_fxn(
+    solvent_res = estimate_relative_free_energy_bisection_or_hrex(
         mol_a,
         mol_b,
         core,
@@ -846,7 +850,7 @@ def run_complex(
     core: NDArray,
     forcefield: Forcefield,
     protein: Union[app.PDBFile, str],
-    md_params: MDParams = DEFAULT_MD_PARAMS,
+    md_params: MDParams = DEFAULT_HREX_PARAMS,
     n_windows: Optional[int] = None,
     min_overlap: Optional[float] = None,
     keep_idxs: Optional[List[int]] = None,
@@ -857,12 +861,7 @@ def run_complex(
     )
     complex_box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes, deboggle later
     complex_host_config = HostConfig(complex_sys, complex_conf, complex_box, nwa)
-    estimate_fxn = (
-        estimate_relative_free_energy_bisection_hrex
-        if md_params.hrex_n_frames_per_iter
-        else estimate_relative_free_energy_bisection
-    )
-    complex_res = estimate_fxn(
+    complex_res = estimate_relative_free_energy_bisection_or_hrex(
         mol_a,
         mol_b,
         core,

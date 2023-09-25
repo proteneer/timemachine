@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pytest
 
-from timemachine.fe.free_energy import HostConfig, MDParams, SimulationResult
+from timemachine.fe.free_energy import HostConfig, HREXParams, MDParams, SimulationResult
 from timemachine.fe.plots import (
     plot_hrex_replica_state_distribution_convergence,
     plot_hrex_replica_state_distribution_heatmap,
@@ -53,8 +53,7 @@ def test_hrex_rbfe_hif2a(hif2a_single_topology_leg):
         n_eq_steps=10_000,
         steps_per_frame=400,
         seed=2024,
-        hrex_n_frames_bisection=100,
-        hrex_n_frames_per_iter=1,
+        hrex_params=HREXParams(n_frames_bisection=100, n_frames_per_iter=1),
     )
     n_windows = 5
 
@@ -98,7 +97,11 @@ def test_hrex_rbfe_reproducibility(hif2a_single_topology_leg):
     mol_a, mol_b, core, forcefield, host_config = hif2a_single_topology_leg
 
     md_params = MDParams(
-        n_frames=10, n_eq_steps=10, steps_per_frame=400, seed=2023, hrex_n_frames_bisection=1, hrex_n_frames_per_iter=1
+        n_frames=10,
+        n_eq_steps=10,
+        steps_per_frame=400,
+        seed=2023,
+        hrex_params=HREXParams(n_frames_bisection=1, n_frames_per_iter=1),
     )
 
     run = lambda seed: estimate_relative_free_energy_bisection_hrex(
