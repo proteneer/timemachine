@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from typing import List
+from typing import List, Optional
 
 import numpy as np
 from numpy.typing import NDArray
@@ -46,7 +46,7 @@ class MonteCarloBarostat:
     interval: int
     seed: int
     adaptive_scaling_enabled: bool = True
-    initial_volume_scale_factor: float = 0.0
+    initial_volume_scale_factor: Optional[float] = None
 
     def impl(self, bound_potentials):
         return custom_ops.MonteCarloBarostat(
@@ -58,5 +58,5 @@ class MonteCarloBarostat:
             bound_potentials,
             self.seed,
             self.adaptive_scaling_enabled,
-            self.initial_volume_scale_factor,
+            self.initial_volume_scale_factor or 0.0,
         )
