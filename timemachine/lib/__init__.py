@@ -58,5 +58,5 @@ class MonteCarloBarostat:
             bound_potentials,
             self.seed,
             self.adaptive_scaling_enabled,
-            self.initial_volume_scale_factor or 0.0,
+            self.initial_volume_scale_factor or 0.0,  # 0.0 is a special value meaning "use 1% of initial box volume"
         )

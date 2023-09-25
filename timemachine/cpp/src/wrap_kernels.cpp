@@ -1234,8 +1234,8 @@ void declare_barostat(py::module &m) {
             py::arg("frequency"),
             py::arg("bps"),
             py::arg("seed"),
-            py::arg("adaptive_scaling_enabled") = true,
-            py::arg("initial_volume_scale_factor") = 0.0)
+            py::arg("adaptive_scaling_enabled"),
+            py::arg("initial_volume_scale_factor"))
         .def("set_interval", &Class::set_interval, py::arg("interval"))
         .def("get_interval", &Class::get_interval)
         .def("set_volume_scale_factor", &Class::set_volume_scale_factor, py::arg("volume_scale_factor"))
