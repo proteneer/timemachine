@@ -30,7 +30,14 @@ from timemachine.ff.handlers import openmm_deserializer
 from timemachine.lib import LangevinIntegrator, MonteCarloBarostat
 from timemachine.lib.custom_ops import Context
 from timemachine.md.barostat.utils import compute_box_center, get_bond_list, get_group_indices
-from timemachine.md.hrex import HREX, HREXDiagnostics, ReplicaIdx, StateIdx, get_swap_attempts_per_iter_heuristic
+from timemachine.md.hrex import (
+    HREX,
+    HREXDiagnostics,
+    HREXPlots,
+    ReplicaIdx,
+    StateIdx,
+    get_swap_attempts_per_iter_heuristic,
+)
 from timemachine.md.states import CoordsVelBox
 from timemachine.potentials import BoundPotential, HarmonicBond, SummedPotential
 from timemachine.potentials.potential import GpuImplWrapper
@@ -46,6 +53,27 @@ class HostConfig:
 
 
 @dataclass(frozen=True)
+class HREXParams:
+    """
+    Parameters
+    ----------
+
+    n_frames_bisection:
+        Number of frames to sample using MD during the initial bisection phase used to determine lambda spacing
+
+    n_frames_per_iter:
+        Number of frames to sample using MD per HREX iteration.
+    """
+
+    n_frames_bisection: int = 100
+    n_frames_per_iter: int = 1
+
+    def __post_init__(self):
+        assert self.n_frames_bisection > 0
+        assert self.n_frames_per_iter > 0
+
+
+@dataclass(frozen=True)
 class MDParams:
     n_frames: int
     n_eq_steps: int
@@ -56,6 +84,9 @@ class MDParams:
     min_radius: float = 1.0  # nm
     max_radius: float = 3.0  # nm
     freeze_reference: bool = True
+
+    # Set to HREXParams or None to disable HREX
+    hrex_params: Optional[HREXParams] = None
 
     def __post_init__(self):
         assert self.steps_per_frame > 0
@@ -141,7 +172,7 @@ class Trajectory:
     frames: StoredArrays  # (frame, atom, dim)
     boxes: NDArray  # (frame, dim, dim)
     final_velocities: NDArray  # (atom, dim)
-    final_barostat_volume_scale_factor: Optional[float]
+    final_barostat_volume_scale_factor: Optional[float] = None
 
     def __post_init__(self):
         n_frames = len(self.frames)
@@ -171,6 +202,7 @@ class SimulationResult:
     md_params: MDParams
     intermediate_results: List[PairBarResult]
     hrex_diagnostics: Optional[HREXDiagnostics] = None
+    hrex_plots: Optional[HREXPlots] = None
 
     @property
     def frames(self) -> List[StoredArrays]:

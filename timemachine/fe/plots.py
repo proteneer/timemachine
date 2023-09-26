@@ -463,3 +463,16 @@ def plot_hrex_replica_state_distribution_convergence(cumulative_replica_state_co
     fig.subplots_adjust(right=0.8, hspace=0.2, wspace=0.2)
     cbar_ax = fig.add_axes([0.85, 0.15, 0.02, 0.7])
     fig.colorbar(p, cax=cbar_ax, label="fraction of iterations")
+
+
+def plot_fxn(f, *args, **kwargs) -> bytes:
+    """
+    Given a function which generates a plot, return the plot as png bytes.
+    """
+    plt.clf()
+    f(*args, **kwargs)
+    buffer = io.BytesIO()
+    plt.savefig(buffer, format="png", bbox_inches="tight")
+    buffer.seek(0)
+    plot_png = buffer.read()
+    return plot_png
