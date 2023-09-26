@@ -15,6 +15,7 @@ from timemachine.fe import atom_mapping, model_utils
 from timemachine.fe.free_energy import (
     HostConfig,
     HREXParams,
+    HREXPlots,
     InitialState,
     MDParams,
     SimulationResult,
@@ -23,6 +24,13 @@ from timemachine.fe.free_energy import (
     run_sims_bisection,
     run_sims_hrex,
     run_sims_sequential,
+)
+from timemachine.fe.plots import (
+    plot_fxn,
+    plot_hrex_replica_state_distribution_convergence,
+    plot_hrex_replica_state_distribution_heatmap,
+    plot_hrex_swap_acceptance_rates_convergence,
+    plot_hrex_transition_matrix,
 )
 from timemachine.fe.single_topology import SingleTopology
 from timemachine.fe.system import VacuumSystem, convert_omm_system
@@ -773,7 +781,21 @@ def estimate_relative_free_energy_bisection_hrex(
                     f"Invalid index in keep_idxs: {i}. Bisection terminated with only {len(trajectories_by_state)} windows."
                 )
 
-        return SimulationResult(pair_bar_result, plots, stored_trajectories, md_params, results, diagnostics)
+        hrex_plots = HREXPlots(
+            transition_matrix_png=plot_fxn(plot_hrex_transition_matrix, diagnostics.transition_matrix),
+            swap_acceptance_rates_convergence_png=plot_fxn(
+                plot_hrex_swap_acceptance_rates_convergence, diagnostics.cumulative_swap_acceptance_rates
+            ),
+            replica_state_distribution_convergence_png=plot_fxn(
+                plot_hrex_replica_state_distribution_convergence, diagnostics.cumulative_replica_state_counts
+            ),
+            replica_state_distribution_heatmap_png=plot_fxn(
+                plot_hrex_replica_state_distribution_heatmap, diagnostics.cumulative_replica_state_counts
+            ),
+        )
+        return SimulationResult(
+            pair_bar_result, plots, stored_trajectories, md_params, results, diagnostics, hrex_plots
+        )
 
     except Exception as err:
         with open(f"failed_rbfe_result_{combined_prefix}.pkl", "wb") as fh:

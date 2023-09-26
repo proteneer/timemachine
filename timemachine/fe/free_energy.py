@@ -30,7 +30,14 @@ from timemachine.ff.handlers import openmm_deserializer
 from timemachine.lib import LangevinIntegrator, MonteCarloBarostat
 from timemachine.lib.custom_ops import Context
 from timemachine.md.barostat.utils import compute_box_center, get_bond_list, get_group_indices
-from timemachine.md.hrex import HREX, HREXDiagnostics, ReplicaIdx, StateIdx, get_swap_attempts_per_iter_heuristic
+from timemachine.md.hrex import (
+    HREX,
+    HREXDiagnostics,
+    HREXPlots,
+    ReplicaIdx,
+    StateIdx,
+    get_swap_attempts_per_iter_heuristic,
+)
 from timemachine.md.states import CoordsVelBox
 from timemachine.potentials import BoundPotential, HarmonicBond, SummedPotential
 from timemachine.potentials.potential import GpuImplWrapper
@@ -165,7 +172,7 @@ class Trajectory:
     frames: StoredArrays  # (frame, atom, dim)
     boxes: NDArray  # (frame, dim, dim)
     final_velocities: NDArray  # (atom, dim)
-    final_barostat_volume_scale_factor: Optional[float]
+    final_barostat_volume_scale_factor: Optional[float] = None
 
     def __post_init__(self):
         n_frames = len(self.frames)
@@ -195,6 +202,7 @@ class SimulationResult:
     md_params: MDParams
     intermediate_results: List[PairBarResult]
     hrex_diagnostics: Optional[HREXDiagnostics] = None
+    hrex_plots: Optional[HREXPlots] = None
 
     @property
     def frames(self) -> List[StoredArrays]:
