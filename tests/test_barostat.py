@@ -609,9 +609,10 @@ def test_barostat_scaling_behavior():
     # Set to an intentionally bad factor to ensure it adapts
     bad_scaling_factor = 0.5 * compute_box_volume(host_box)
     baro.set_volume_scale_factor(bad_scaling_factor)
+    assert baro.get_volume_scale_factor() == bad_scaling_factor
     ctxt.multiple_steps(100)
     # The scaling should adapt between moves
-    assert bad_scaling_factor != baro.get_volume_scale_factor()
+    assert bad_scaling_factor > baro.get_volume_scale_factor()
 
     # Reset the scaling to the previous value
     baro.set_volume_scale_factor(scaling)
