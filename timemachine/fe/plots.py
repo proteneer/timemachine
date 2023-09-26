@@ -1,6 +1,6 @@
 import io
 import warnings
-from typing import Callable, Literal, Tuple, cast
+from typing import Callable, Tuple, cast
 
 import numpy as np
 from matplotlib import pyplot as plt
@@ -8,6 +8,8 @@ from numpy.typing import NDArray
 
 from timemachine.constants import BOLTZ, DEFAULT_TEMP, KCAL_TO_KJ
 from timemachine.fe.bar import compute_fwd_and_reverse_df_over_time
+
+DEFAULT_HEATMAP_ANNOTATE_THRESHOLD = 20
 
 
 def plot_work(w_forward, w_reverse, axes):
@@ -328,7 +330,7 @@ def plot_fwd_reverse_predictions(
 def plot_hrex_transition_matrix(
     transition_rate: NDArray,
     figsize: Tuple[float, float] = (13, 10),
-    annotate: bool | Literal["auto"] = "auto",
+    annotate_threshold: int = DEFAULT_HEATMAP_ANNOTATE_THRESHOLD,
     format_rate: Callable[[float], str] = lambda x: f"{100.0*x:.1f}",
 ):
     """Plot matrix of estimated transition rates for permutation moves as a heatmap."""
@@ -338,10 +340,8 @@ def plot_hrex_transition_matrix(
     fig, ax = plt.subplots(figsize=figsize)
     p = ax.pcolormesh(states, states, transition_rate)
 
-    # Skip text annotations if "auto" and large number of states
-    annotate_ = n_states <= 20 if annotate == "auto" else annotate
-
-    if annotate_:
+    # Skip text annotations when number of states is large
+    if n_states <= annotate_threshold:
         for from_state in states:
             for to_state in states:
                 rate = transition_rate[to_state, from_state]
@@ -398,7 +398,7 @@ def plot_hrex_replica_state_distribution(cumulative_replica_state_counts: NDArra
 def plot_hrex_replica_state_distribution_heatmap(
     cumulative_replica_state_counts: NDArray,
     figsize: Tuple[float, float] = (13, 10),
-    annotate: bool | Literal["auto"] = "auto",
+    annotate_threshold: int = DEFAULT_HEATMAP_ANNOTATE_THRESHOLD,
     format_rate: Callable[[float], str] = lambda x: f"{100.0*x:.1f}",
 ):
     """Plot distribution of (replica, state) pairs as a heatmap."""
@@ -411,10 +411,8 @@ def plot_hrex_replica_state_distribution_heatmap(
     fig, ax = plt.subplots(figsize=figsize)
     p = ax.pcolormesh(replicas, states, fraction_by_replica_by_state)
 
-    # Skip text annotations if "auto" and large number of states
-    annotate_ = n_states <= 20 if annotate == "auto" else annotate
-
-    if annotate_:
+    # Skip text annotations when number of states is large
+    if n_states <= annotate_threshold:
         for replica in replicas:
             for state in states:
                 fraction = fraction_by_replica_by_state[state, replica]
