@@ -83,6 +83,13 @@ def test_hrex_rbfe_hif2a(hif2a_single_topology_leg):
     final_replica_state_counts = result.hrex_diagnostics.cumulative_replica_state_counts[-1]
     assert np.any(np.all(final_replica_state_counts > 0, axis=0))
 
+    # Check plots were generated
+    assert result.hrex_plots
+    assert result.hrex_plots.transition_matrix_png
+    assert result.hrex_plots.swap_acceptance_rates_convergence_png
+    assert result.hrex_plots.replica_state_distribution_convergence_png
+    assert result.hrex_plots.replica_state_distribution_heatmap_png
+
 
 def plot_hrex_rbfe_hif2a(result: SimulationResult):
     assert result.hrex_diagnostics
