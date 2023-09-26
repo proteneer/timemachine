@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pytest
 
-from timemachine.fe.free_energy import HostConfig, MDParams, SimulationResult
+from timemachine.fe.free_energy import HostConfig, HREXParams, MDParams, SimulationResult
 from timemachine.fe.plots import (
     plot_hrex_replica_state_distribution_convergence,
     plot_hrex_replica_state_distribution_heatmap,
@@ -48,7 +48,13 @@ def hif2a_single_topology_leg(request):
 @pytest.mark.nightly(reason="Slow")
 def test_hrex_rbfe_hif2a(hif2a_single_topology_leg):
     mol_a, mol_b, core, forcefield, host_config = hif2a_single_topology_leg
-    md_params = MDParams(n_frames=200, n_eq_steps=10_000, steps_per_frame=400, seed=2024)
+    md_params = MDParams(
+        n_frames=200,
+        n_eq_steps=10_000,
+        steps_per_frame=400,
+        seed=2024,
+        hrex_params=HREXParams(n_frames_bisection=100, n_frames_per_iter=1),
+    )
     n_windows = 5
 
     result = estimate_relative_free_energy_bisection_hrex(
@@ -60,8 +66,6 @@ def test_hrex_rbfe_hif2a(hif2a_single_topology_leg):
         md_params,
         lambda_interval=(0.0, 0.15),
         n_windows=n_windows,
-        n_frames_bisection=100,
-        n_frames_per_iter=1,
     )
 
     if DEBUG:
@@ -79,6 +83,13 @@ def test_hrex_rbfe_hif2a(hif2a_single_topology_leg):
     final_replica_state_counts = result.hrex_diagnostics.cumulative_replica_state_counts[-1]
     assert np.any(np.all(final_replica_state_counts > 0, axis=0))
 
+    # Check plots were generated
+    assert result.hrex_plots
+    assert result.hrex_plots.transition_matrix_png
+    assert result.hrex_plots.swap_acceptance_rates_convergence_png
+    assert result.hrex_plots.replica_state_distribution_convergence_png
+    assert result.hrex_plots.replica_state_distribution_heatmap_png
+
 
 def plot_hrex_rbfe_hif2a(result: SimulationResult):
     assert result.hrex_diagnostics
@@ -92,7 +103,13 @@ def plot_hrex_rbfe_hif2a(result: SimulationResult):
 def test_hrex_rbfe_reproducibility(hif2a_single_topology_leg):
     mol_a, mol_b, core, forcefield, host_config = hif2a_single_topology_leg
 
-    md_params = MDParams(n_frames=10, n_eq_steps=10, steps_per_frame=400, seed=2023)
+    md_params = MDParams(
+        n_frames=10,
+        n_eq_steps=10,
+        steps_per_frame=400,
+        seed=2023,
+        hrex_params=HREXParams(n_frames_bisection=1, n_frames_per_iter=1),
+    )
 
     run = lambda seed: estimate_relative_free_energy_bisection_hrex(
         mol_a,
@@ -103,8 +120,6 @@ def test_hrex_rbfe_reproducibility(hif2a_single_topology_leg):
         replace(md_params, seed=seed),
         lambda_interval=(0.0, 0.1),
         n_windows=3,
-        n_frames_bisection=1,
-        n_frames_per_iter=1,
     )
 
     res1 = run(2023)

@@ -7,7 +7,15 @@ from warnings import catch_warnings
 import numpy as np
 import pytest
 
-from timemachine.fe.free_energy import HostConfig, MDParams, PairBarResult, SimulationResult, image_frames, sample
+from timemachine.fe.free_energy import (
+    HostConfig,
+    HREXParams,
+    MDParams,
+    PairBarResult,
+    SimulationResult,
+    image_frames,
+    sample,
+)
 from timemachine.fe.rbfe import (
     DEFAULT_MD_PARAMS,
     estimate_relative_free_energy,
@@ -162,7 +170,13 @@ def test_run_hif2a_test_system(estimate_relative_free_energy_fn):
     mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
     forcefield = Forcefield.load_default()
 
-    md_params = MDParams(n_frames=100, n_eq_steps=1000, steps_per_frame=100, seed=2023)
+    md_params = MDParams(
+        n_frames=100,
+        n_eq_steps=1000,
+        steps_per_frame=100,
+        seed=2023,
+        hrex_params=HREXParams(n_frames_per_iter=1),
+    )
 
     with resources.path("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as protein_path:
         run_triple(
@@ -195,7 +209,12 @@ def test_run_hif2a_test_system_reproducibility(estimate_relative_free_energy_fn)
     mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
     forcefield = Forcefield.load_default()
 
-    md_params = MDParams(n_frames=100, n_eq_steps=1000, steps_per_frame=100, seed=2023)
+    md_params = MDParams(
+        n_frames=100,
+        n_eq_steps=1000,
+        steps_per_frame=100,
+        seed=2023,
+    )
 
     run_bitwise_reproducibility(
         mol_a,
