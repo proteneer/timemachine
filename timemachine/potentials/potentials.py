@@ -160,7 +160,7 @@ class NonbondedInteractionGroup(Potential):
     cutoff: float
     col_atom_idxs: Optional[NDArray[np.int32]] = None
     disable_hilbert_sort: bool = False
-    nblist_padding: float = 0.1
+    nblist_padding: float = 0.2  # Greater padding than other NB potentials, performs better for RBFE
 
     def __call__(self, conf: Conf, params: Params, box: Optional[Box]) -> float | Array:
         num_atoms, _ = jnp.array(conf).shape
