@@ -71,8 +71,7 @@ def sequential_monte_carlo(
     """
     n = len(samples)
     log_weights = np.zeros(n)
-    norm_log_weights = log_weights - logsumexp(log_weights)
-    print("norm wts", np.exp(norm_log_weights))
+
     # store
     sample_traj = [samples]
     ancestry_traj = [np.arange(n)]
@@ -94,15 +93,10 @@ def sequential_monte_carlo(
     for (lam_initial, lam_target) in zip(lambdas[:-2], lambdas[1:-1]):
         # update log weights
         incremental_log_weights = log_prob(sample_traj[-1], lam_target) - log_prob(sample_traj[-1], lam_initial)
-        # log_weights += incremental_log_weights
+        log_weights += incremental_log_weights
 
         # resample
-        ess1 = effective_sample_size(log_weights + incremental_log_weights)
-        ess2 = conditional_effective_sample_size(norm_log_weights, incremental_log_weights)
-        print("*****SMC ESS", ess1, ess2)
-        indices, log_weights = resample(log_weights + incremental_log_weights)
-        norm_log_weights = log_weights - logsumexp(log_weights)
-        print("norm wts", np.exp(norm_log_weights))
+        indices, log_weights = resample(log_weights)
         resampled = [sample_traj[-1][i] for i in indices]
 
         # propagate
@@ -148,6 +142,10 @@ def adaptive_sequential_monte_carlo(
         [exp(-u(x, lam)) for x in xs]
     resample: function
         (optionally) perform resampling given an array of log weights
+    cess_target: float
+        Target CESS (see `conditional_effective_sample_size`). Intermediate lambdas
+        will be sampled keeping the CESS between successive windows at approximately
+        this value. This value should be in the range (1, N).
     epsilon:
         Used to determine the precision of the adaptive binary search.
 
@@ -167,12 +165,18 @@ def adaptive_sequential_monte_carlo(
 
     References
     ----------
-    ... TODO
+    * [Zhou, Johansen, Aston, 2016]
+        Towards Automatic Model Comparison: An Adaptive Sequential Monte Carlo Approach
+        https://arxiv.org/pdf/1303.3123 (Algorithm #4)
     """
     n = len(samples)
+
+    # check cess_target
+    assert cess_target > 1, f"cess_target is too small: {cess_target} <= 1"
+    assert cess_target < n, f"cess_target is too large: {cess_target} >= {n}"
+
     log_weights = np.zeros(n)
     norm_log_weights = log_weights - logsumexp(log_weights)
-    print("norm wts", np.exp(norm_log_weights))
 
     # store
     sample_traj = [samples]
@@ -203,20 +207,19 @@ def adaptive_sequential_monte_carlo(
             mid_lambda = min(lam_target, left_lambda + (right_lambda - left_lambda) / 2)
             incremental_log_weights = log_prob(sample_traj[-1], mid_lambda) - cur_log_prob
             cess = conditional_effective_sample_size(norm_log_weights, incremental_log_weights)
-            print("LOOP", mid_lambda, "l", left_lambda, "r", right_lambda, "cess", cess, cess_target)
+
             if left_lambda > right_lambda:
-                # Let the loop run above so we can sample at the lam_target exactly
-                print("Found crossing point")
+                # end of search
                 break
+
             if cess < cess_target:  # too small
                 right_lambda = mid_lambda - epsilon
             elif cess > cess_target:  # too big
                 left_lambda = mid_lambda + epsilon
             elif mid_lambda == lam_target:
-                print("mid == lam_target stopping")
+                # at the target lambda
                 break
 
-        print("final state", mid_lambda, "l", left_lambda, "r", right_lambda, "cess", cess)
         lam_target = mid_lambda
 
         # Stop when lam_target == 1.0
@@ -224,13 +227,11 @@ def adaptive_sequential_monte_carlo(
         #   * discussion at https://github.com/proteneer/timemachine/pull/718#discussion_r854276326
         #   * helper function get_endstate_samples_from_smc_result
         if lam_target == 1.0:
-            print("Stopping as lam_target == 1")
             break
 
         # resample
         indices, log_weights = resample(log_weights + incremental_log_weights)
         norm_log_weights = log_weights - logsumexp(log_weights)
-        print("norm wts", np.exp(norm_log_weights))
         resampled = [sample_traj[-1][i] for i in indices]
 
         # propagate
@@ -299,12 +300,16 @@ def conditional_effective_sample_size(norm_log_weights, incremental_log_weights)
     done every step. If resampling is done every step, this is the same as `effective_sample_size`.
     See the paper for more details.
 
+    Parameters
+    ----------
+    norm_log_weights: [N]
+
     Notes
     -----
-    * This uses the definition from [Zhou, Johansen, Aston, 2015]
+    * This uses the definition from [Zhou, Johansen, Aston, 2016]
       "Towards Automatic Model Comparison: An Adaptive Sequential Monte Carlo Approach"
-      https://arxiv.org/pdf/1303.3123.pdf (eq 3.16)
-    * This is equal to the ESS if resampling is performed each iteration
+      https://arxiv.org/pdf/1303.3123 (eq 3.16)
+    * This is equal to the ESS if resampling is performed each iteration (i.e. not using conditiaonl resampling)
     """
     n = len(norm_log_weights)
     summed_weights = norm_log_weights + incremental_log_weights
