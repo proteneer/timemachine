@@ -72,12 +72,12 @@ def estimate_relative_free_energy_hrex(
 
     print("Starting bi-section")
 
-    # md_params_bisection = replace(md_params, n_frames=n_frames_bisection)
+    md_params_bisection = replace(md_params, n_frames=100)
     # results_bisection, frames_by_state, boxes_by_state, final_velocities_by_state = run_sims_bisection(
     results_bisection, trajectories_by_state = run_sims_bisection(
         [lambda_min, lambda_max],
         make_optimized_initial_state,
-        md_params,  # optimize?
+        md_params_bisection,  # optimize?
         n_bisections=n_windows - 2,
         temperature=temperature,
         min_overlap=0.666,
@@ -322,7 +322,7 @@ def test_hrex():
     lambda_max = 0.3
     n_windows = 48
 
-    mdp = MDParams(n_frames=args.n_frames, n_eq_steps=10_000, steps_per_frame=400, seed=2023)
+    mdp = MDParams(n_frames=args.n_frames, n_eq_steps=10_000, steps_per_frame=10, seed=2023)
     sim_res = estimate_relative_free_energy_hrex(
         mol,
         args.water_pdb,
