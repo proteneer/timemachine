@@ -3,12 +3,13 @@ from dataclasses import dataclass
 from typing import Callable, Generic, Iterable, List, Sequence, TypeVar
 
 import numpy as np
+from numpy.typing import NDArray
 
 from timemachine.constants import BOLTZ, DEFAULT_TEMP
 from timemachine.lib.custom_ops import BoundPotential
 
 Frames = TypeVar("Frames")
-Boxes = np.ndarray
+Boxes = List[NDArray]
 ReducedEnergies = np.ndarray
 Batch_u_fn = Callable[[Frames, Boxes], ReducedEnergies]
 
