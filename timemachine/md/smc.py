@@ -71,7 +71,8 @@ def sequential_monte_carlo(
     """
     n = len(samples)
     log_weights = np.zeros(n)
-
+    norm_log_weights = log_weights - logsumexp(log_weights)
+    print("norm wts", np.exp(norm_log_weights))
     # store
     sample_traj = [samples]
     ancestry_traj = [np.arange(n)]
@@ -93,10 +94,15 @@ def sequential_monte_carlo(
     for (lam_initial, lam_target) in zip(lambdas[:-2], lambdas[1:-1]):
         # update log weights
         incremental_log_weights = log_prob(sample_traj[-1], lam_target) - log_prob(sample_traj[-1], lam_initial)
-        log_weights += incremental_log_weights
+        # log_weights += incremental_log_weights
 
         # resample
-        indices, log_weights = resample(log_weights)
+        ess1 = effective_sample_size(log_weights + incremental_log_weights)
+        ess2 = conditional_effective_sample_size(norm_log_weights, incremental_log_weights)
+        print("*****SMC ESS", ess1, ess2)
+        indices, log_weights = resample(log_weights + incremental_log_weights)
+        norm_log_weights = log_weights - logsumexp(log_weights)
+        print("norm wts", np.exp(norm_log_weights))
         resampled = [sample_traj[-1][i] for i in indices]
 
         # propagate
@@ -116,6 +122,139 @@ def sequential_monte_carlo(
         log_weights_traj=np.array(log_weights_traj),
         ancestry_traj=np.array(ancestry_traj),
         incremental_log_weights_traj=np.array(incremental_log_weights_traj),
+    )
+    return trajs_dict
+
+
+def adaptive_sequential_monte_carlo(
+    samples: Samples,
+    propagate: BatchPropagator,
+    log_prob: BatchLogProb,
+    resample: Resampler,
+    cess_target: float,
+    epsilon=1e-2,
+) -> ResultDict:
+    """Implementation of Adaptive Sequential Monte Carlo (SMC).
+       This will adaptively interpolate between lambda=0 and lambda=1,
+       starting at lambda=0.
+
+    Parameters
+    ----------
+    samples: [N,] list
+    propagate: function
+        [move(x, lam) for x in xs]
+        for example, move(x, lam) might mean "run 100 steps of all-atom MD targeting exp(-u(., lam)), initialized at x"
+    log_prob: function
+        [exp(-u(x, lam)) for x in xs]
+    resample: function
+        (optionally) perform resampling given an array of log weights
+    epsilon:
+        Used to determine the precision of the adaptive binary search.
+
+    Returns
+    -------
+    trajs_dict
+        "sample_traj"
+            [K-1, N] list of snapshots
+        "incremental_log_weights_traj"
+            [K-1, N] array of incremental log weights
+        "ancestry_traj"
+            [K-1, N] array of ancestor idxs
+        "log_weights_traj"
+            [K, N] array of accumulated log weights
+        "lambdas_traj"
+            [K] array of adaptive lambdas
+
+    References
+    ----------
+    ... TODO
+    """
+    n = len(samples)
+    log_weights = np.zeros(n)
+    norm_log_weights = log_weights - logsumexp(log_weights)
+    print("norm wts", np.exp(norm_log_weights))
+
+    # store
+    sample_traj = [samples]
+    ancestry_traj = [np.arange(n)]
+    log_weights_traj = [np.array(log_weights)]
+    incremental_log_weights_traj = []  # note: redundant but convenient
+    lambdas_traj = [0.0]
+
+    def accumulate_results(samples, indices, log_weights, incremental_log_weights, lam_target):
+        sample_traj.append(samples)
+        ancestry_traj.append(indices)
+        log_weights_traj.append(np.array(log_weights))
+        incremental_log_weights_traj.append(np.array(incremental_log_weights))
+        lambdas_traj.append(lam_target)
+
+    lam_initial = 0.0
+    lam_target = 1.0  # adapted
+
+    # Main ASMC loop
+    while True:
+
+        # binary search for lambda that gives cess ~= cess_target
+        left_lambda = lam_initial
+        right_lambda = lam_target
+
+        cur_log_prob = log_prob(sample_traj[-1], lam_initial)
+        while True:
+            mid_lambda = min(lam_target, left_lambda + (right_lambda - left_lambda) / 2)
+            incremental_log_weights = log_prob(sample_traj[-1], mid_lambda) - cur_log_prob
+            cess = conditional_effective_sample_size(norm_log_weights, incremental_log_weights)
+            print("LOOP", mid_lambda, "l", left_lambda, "r", right_lambda, "cess", cess, cess_target)
+            if left_lambda > right_lambda:
+                # Let the loop run above so we can sample at the lam_target exactly
+                print("Found crossing point")
+                break
+            if cess < cess_target:  # too small
+                right_lambda = mid_lambda - epsilon
+            elif cess > cess_target:  # too big
+                left_lambda = mid_lambda + epsilon
+            elif mid_lambda == lam_target:
+                print("mid == lam_target stopping")
+                break
+
+        print("final state", mid_lambda, "l", left_lambda, "r", right_lambda, "cess", cess)
+        lam_target = mid_lambda
+
+        # Stop when lam_target == 1.0
+        #   See
+        #   * discussion at https://github.com/proteneer/timemachine/pull/718#discussion_r854276326
+        #   * helper function get_endstate_samples_from_smc_result
+        if lam_target == 1.0:
+            print("Stopping as lam_target == 1")
+            break
+
+        # resample
+        indices, log_weights = resample(log_weights + incremental_log_weights)
+        norm_log_weights = log_weights - logsumexp(log_weights)
+        print("norm wts", np.exp(norm_log_weights))
+        resampled = [sample_traj[-1][i] for i in indices]
+
+        # propagate
+        samples = propagate(resampled, lam_target)
+
+        # log
+        accumulate_results(samples, indices, log_weights, incremental_log_weights, lam_target)
+
+        # update target
+        lam_initial = lam_target
+        lam_target = 1.0
+
+    # final result: a collection of samples, with associated log weights
+    incremental_log_weights_traj.append(incremental_log_weights)
+    log_weights_traj.append(np.array(log_weights + incremental_log_weights))
+    lambdas_traj.append(lam_target)
+
+    # cast everything (except samples list) to arrays
+    trajs_dict = dict(
+        traj=sample_traj,
+        log_weights_traj=np.array(log_weights_traj),
+        ancestry_traj=np.array(ancestry_traj),
+        incremental_log_weights_traj=np.array(incremental_log_weights_traj),
+        lambdas_traj=np.array(lambdas_traj),
     )
     return trajs_dict
 
@@ -150,6 +289,28 @@ def effective_sample_size(log_weights):
     """
     norm_weights = jnp.exp(log_weights - jlogsumexp(log_weights))
     return 1 / jnp.sum(norm_weights ** 2)
+
+
+def conditional_effective_sample_size(norm_log_weights, incremental_log_weights):
+    r"""
+    Conditional Effective sample size, taking values in interval [1, len(log_weights)]
+    This is a different approximation for the effective sample size, which
+    empirically shows better results when used with Adaptive SMC if resampling is not
+    done every step. If resampling is done every step, this is the same as `effective_sample_size`.
+    See the paper for more details.
+
+    Notes
+    -----
+    * This uses the definition from [Zhou, Johansen, Aston, 2015]
+      "Towards Automatic Model Comparison: An Adaptive Sequential Monte Carlo Approach"
+      https://arxiv.org/pdf/1303.3123.pdf (eq 3.16)
+    * This is equal to the ESS if resampling is performed each iteration
+    """
+    n = len(norm_log_weights)
+    summed_weights = norm_log_weights + incremental_log_weights
+    num = 2 * jlogsumexp(summed_weights)
+    denom = jlogsumexp(summed_weights + incremental_log_weights)
+    return n * jnp.exp(num - denom)
 
 
 def conditional_multinomial_resample(log_weights, thresh=0.5):
