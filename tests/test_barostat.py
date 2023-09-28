@@ -213,21 +213,14 @@ def test_barostat_partial_group_idxs():
     ctxt.multiple_steps(barostat_interval * 100)
 
 
-@pytest.mark.memcheck
-def test_barostat_is_deterministic():
-    """Verify that the barostat results in the same box size shift after a fixed number of steps
-    This is important to debugging as well as providing the ability to replicate
-    simulations
-    """
+@pytest.fixture()
+def barostat_test_system():
     lam = 1.0
     temperature = DEFAULT_TEMP
     timestep = 1.5e-3
-    barostat_interval = 3
     collision_rate = 1.0
     seed = 2021
     np.random.seed(seed)
-
-    pressure = DEFAULT_PRESSURE
 
     mol_a, _, _ = get_hif2a_ligand_pair_single_topology()
     ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
@@ -259,6 +252,22 @@ def test_barostat_is_deterministic():
     )
 
     v_0 = sample_velocities(masses, temperature)
+
+    return coords, v_0, host_box, group_indices, u_impls, integrator, seed
+
+
+@pytest.mark.memcheck
+def test_barostat_is_deterministic(barostat_test_system):
+    """Verify that the barostat results in the same box size shift after a fixed number of steps
+    This is important to debugging as well as providing the ability to replicate
+    simulations
+    """
+
+    pressure = DEFAULT_PRESSURE
+    barostat_interval = 3
+
+    coords, v_0, host_box, group_indices, u_impls, integrator, seed = barostat_test_system
+    temperature = integrator.temperature
 
     baro = custom_ops.MonteCarloBarostat(
         coords.shape[0], pressure, temperature, group_indices, barostat_interval, u_impls, seed, True, 0.0
