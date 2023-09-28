@@ -211,7 +211,7 @@ def adaptive_sequential_monte_carlo(
 
         cur_log_prob = log_prob(sample_traj[-1], lam_initial, True)
         while True:
-            mid_lambda = min(lam_target, left_lambda + (right_lambda - left_lambda) / 2)
+            mid_lambda = max(min(lam_target, left_lambda + (right_lambda - left_lambda) / 2), lam_initial)
             incremental_log_weights = log_prob(sample_traj[-1], mid_lambda, False) - cur_log_prob
             cess = conditional_effective_sample_size(norm_log_weights, incremental_log_weights)
             print("LOOP", mid_lambda, "l", left_lambda, "r", right_lambda, "cess", cess, cess_target)
@@ -226,6 +226,10 @@ def adaptive_sequential_monte_carlo(
             elif mid_lambda == lam_target:
                 print("mid == lam_target stopping")
                 break
+
+        if mid_lambda == lam_initial:
+            # must move at least epsilon
+            mid_lambda += epsilon
 
         print("final state", mid_lambda, "l", left_lambda, "r", right_lambda, "cess", cess)
         lam_target = mid_lambda
