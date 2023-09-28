@@ -362,9 +362,12 @@ template <typename RealType> int Neighborlist<RealType>::Y() const {
 
 template <typename RealType> int Neighborlist<RealType>::num_row_blocks() const { return ceil_divide(NR_, TILE_SIZE); }
 
+// max_ixn_count determines the number of tile to atom interaction counts. For each tile that interacts with another
+// it can have TILE_SIZE interactions. Note that d_ixn_count_ is only the number of tile interactions, thus reduced by a factor of TILE_SIZE
 template <typename RealType> int Neighborlist<RealType>::max_ixn_count() const {
-    // At most, in the case where we compute the upper triangular, will be the upper half of the matrix without the diagonal
-    int max_tile_interactions = ((num_column_blocks() * num_row_blocks()) / 2) - num_column_blocks();
+    // At most, in the case where we compute the upper triangular, will be the upper half of the matrix
+    // Leave the diagonal to ensure the number of interactions is sufficient for the non-upper triangular mode
+    int max_tile_interactions = (num_column_blocks() * num_row_blocks()) / 2;
 
     // Each tile interaction can have TILE_SIZE interactions
     return max_tile_interactions * TILE_SIZE;
