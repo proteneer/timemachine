@@ -11,7 +11,9 @@
 
 namespace timemachine {
 
-template <typename RealType> Neighborlist<RealType>::Neighborlist(const int N) : max_size_(N), N_(N), NC_(N), NR_(N) {
+template <typename RealType>
+Neighborlist<RealType>::Neighborlist(const int N)
+    : max_size_(N), N_(N), NC_(N), NR_(N), atom_buffer_size_(this->max_ixn_count()) {
     if (N == 0) {
         throw std::runtime_error("Neighborlist N must be at least 1");
     }
@@ -20,12 +22,11 @@ template <typename RealType> Neighborlist<RealType>::Neighborlist(const int N) :
     const int Y = this->Y();
 
     const unsigned long long MAX_TILE_BUFFER = row_blocks * column_blocks;
-    const unsigned long long MAX_ATOM_BUFFER = this->max_ixn_count();
 
     // interaction buffers
     cudaSafeMalloc(&d_ixn_count_, 1 * sizeof(*d_ixn_count_));
     cudaSafeMalloc(&d_ixn_tiles_, MAX_TILE_BUFFER * sizeof(*d_ixn_tiles_));
-    cudaSafeMalloc(&d_ixn_atoms_, MAX_ATOM_BUFFER * sizeof(*d_ixn_atoms_));
+    cudaSafeMalloc(&d_ixn_atoms_, atom_buffer_size_ * sizeof(*d_ixn_atoms_));
     cudaSafeMalloc(&d_trim_atoms_, column_blocks * Y * TILE_SIZE * sizeof(*d_trim_atoms_));
 
     // bounding box buffers
@@ -119,15 +120,15 @@ Neighborlist<RealType>::get_nblist_host(int N, const double *h_coords, const dou
     const int row_blocks = this->num_row_blocks();
 
     unsigned long long MAX_TILE_BUFFER = row_blocks * column_blocks;
-    unsigned long long MAX_ATOM_BUFFER = this->max_ixn_count();
 
     unsigned int h_ixn_count;
     gpuErrchk(cudaMemcpy(&h_ixn_count, d_ixn_count_, 1 * sizeof(*d_ixn_count_), cudaMemcpyDeviceToHost));
     std::vector<int> h_ixn_tiles(MAX_TILE_BUFFER);
-    std::vector<unsigned int> h_ixn_atoms(MAX_ATOM_BUFFER);
-    gpuErrchk(cudaMemcpy(&h_ixn_tiles[0], d_ixn_tiles_, MAX_TILE_BUFFER * sizeof(int), cudaMemcpyDeviceToHost));
+    std::vector<unsigned int> h_ixn_atoms(atom_buffer_size_);
     gpuErrchk(
-        cudaMemcpy(&h_ixn_atoms[0], d_ixn_atoms_, MAX_ATOM_BUFFER * sizeof(unsigned int), cudaMemcpyDeviceToHost));
+        cudaMemcpy(&h_ixn_tiles[0], d_ixn_tiles_, MAX_TILE_BUFFER * sizeof(*d_ixn_tiles_), cudaMemcpyDeviceToHost));
+    gpuErrchk(
+        cudaMemcpy(&h_ixn_atoms[0], d_ixn_atoms_, atom_buffer_size_ * sizeof(*d_ixn_atoms_), cudaMemcpyDeviceToHost));
 
     std::vector<std::vector<int>> ixn_list(row_blocks, std::vector<int>());
     for (int i = 0; i < h_ixn_count; i++) {
@@ -343,9 +344,10 @@ void Neighborlist<RealType>::set_idxs_device(
     this->NC_ = NC;
 
     // Clear the atom ixns, to avoid reuse
-    unsigned long long MAX_ATOM_BUFFER = this->max_ixn_count();
     // Set to max value, ie greater than N. Note that Memset is on bytes, which is why it is UCHAR_MAX
-    gpuErrchk(cudaMemsetAsync(d_ixn_atoms_, UCHAR_MAX, MAX_ATOM_BUFFER * sizeof(*d_ixn_atoms_), stream));
+    // Need to use atom_buffer_size_ here rather than this->max_ixn_count to ensure it covers the entire buffer otherwise
+    // values can end up negative when converted to integers
+    gpuErrchk(cudaMemsetAsync(d_ixn_atoms_, UCHAR_MAX, atom_buffer_size_ * sizeof(*d_ixn_atoms_), stream));
 }
 
 template <typename RealType> bool Neighborlist<RealType>::compute_upper_triangular() const {
@@ -365,9 +367,12 @@ template <typename RealType> int Neighborlist<RealType>::num_row_blocks() const 
 // max_ixn_count determines the number of tile to atom interaction counts. For each tile that interacts with another
 // it can have TILE_SIZE interactions. Note that d_ixn_count_ is only the number of tile interactions, thus reduced by a factor of TILE_SIZE
 template <typename RealType> int Neighborlist<RealType>::max_ixn_count() const {
-    // At most, in the case where we compute the upper triangular, will be the upper half of the matrix
-    // Leave the diagonal to ensure the number of interactions is sufficient for the non-upper triangular mode
-    int max_tile_interactions = ceil_divide(num_column_blocks() * num_row_blocks(), 2);
+    int max_tile_interactions = num_column_blocks() * num_row_blocks();
+    if (this->compute_upper_triangular()) {
+        // At most, in the case where we compute the upper triangular, will be the upper half of the matrix
+        // Leave the diagonal to ensure the number of interactions is sufficient for the non-upper triangular mode
+        max_tile_interactions = ceil_divide(max_tile_interactions, 2);
+    }
 
     // Each tile interaction can have TILE_SIZE interactions
     return max_tile_interactions * TILE_SIZE;
