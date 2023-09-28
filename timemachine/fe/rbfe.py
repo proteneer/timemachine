@@ -727,6 +727,8 @@ def estimate_relative_free_energy_bisection_hrex(
             min_overlap=min_overlap,
         )
 
+        assert all(traj.final_velocities is not None for traj in trajectories_by_state)
+
         initial_states = results[-1].initial_states
         has_barostat_by_state = [initial_state.barostat is not None for initial_state in initial_states]
         assert all(has_barostat_by_state) or not any(has_barostat_by_state)

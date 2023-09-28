@@ -1,12 +1,15 @@
 from dataclasses import replace
 from importlib import resources
 from typing import Optional
+from unittest.mock import patch
 
 import matplotlib.pyplot as plt
 import numpy as np
 import pytest
+from psutil import Process
+from scipy import stats
 
-from timemachine.fe.free_energy import HostConfig, HREXParams, MDParams, SimulationResult
+from timemachine.fe.free_energy import HostConfig, HREXParams, MDParams, SimulationResult, sample_with_context
 from timemachine.fe.plots import (
     plot_hrex_replica_state_distribution_convergence,
     plot_hrex_replica_state_distribution_heatmap,
@@ -57,16 +60,30 @@ def test_hrex_rbfe_hif2a(hif2a_single_topology_leg):
     )
     n_windows = 5
 
-    result = estimate_relative_free_energy_bisection_hrex(
-        mol_a,
-        mol_b,
-        core,
-        forcefield,
-        host_config,
-        md_params,
-        lambda_interval=(0.0, 0.15),
-        n_windows=n_windows,
-    )
+    rss_traj = []
+
+    def sample_and_record_rss(*args, **kwargs):
+        traj = sample_with_context(*args, **kwargs)
+        rss_traj.append(Process().memory_info().rss)
+        return traj
+
+    with patch("timemachine.fe.free_energy.sample_with_context", sample_and_record_rss):
+        result = estimate_relative_free_energy_bisection_hrex(
+            mol_a,
+            mol_b,
+            core,
+            forcefield,
+            host_config,
+            md_params,
+            lambda_interval=(0.0, 0.15),
+            n_windows=n_windows,
+        )
+
+    # Check that memory usage is not increasing
+    rss_traj = rss_traj[10:]  # discard initial transients
+    rss_diff_count = np.sum(np.diff(rss_traj) != 0)
+    rss_increase_count = np.sum(np.diff(rss_traj) > 0)
+    assert stats.binom.pmf(rss_increase_count, n=rss_diff_count, p=0.5) >= 0.001
 
     if DEBUG:
         plot_hrex_rbfe_hif2a(result)
