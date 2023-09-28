@@ -367,7 +367,7 @@ template <typename RealType> int Neighborlist<RealType>::num_row_blocks() const 
 template <typename RealType> int Neighborlist<RealType>::max_ixn_count() const {
     // At most, in the case where we compute the upper triangular, will be the upper half of the matrix
     // Leave the diagonal to ensure the number of interactions is sufficient for the non-upper triangular mode
-    int max_tile_interactions = (num_column_blocks() * num_row_blocks()) / 2;
+    int max_tile_interactions = ceil_divide(num_column_blocks() * num_row_blocks(), 2);
 
     // Each tile interaction can have TILE_SIZE interactions
     return max_tile_interactions * TILE_SIZE;
