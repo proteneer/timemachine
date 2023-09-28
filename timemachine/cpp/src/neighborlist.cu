@@ -11,9 +11,7 @@
 
 namespace timemachine {
 
-template <typename RealType>
-Neighborlist<RealType>::Neighborlist(const int N, const bool allocate_max_ixn_count)
-    : max_size_(N), N_(N), NC_(N), NR_(N), allocate_max_ixn_count_(allocate_max_ixn_count) {
+template <typename RealType> Neighborlist<RealType>::Neighborlist(const int N) : max_size_(N), N_(N), NC_(N), NR_(N) {
     if (N == 0) {
         throw std::runtime_error("Neighborlist N must be at least 1");
     }
