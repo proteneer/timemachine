@@ -11,7 +11,9 @@
 
 namespace timemachine {
 
-template <typename RealType> Neighborlist<RealType>::Neighborlist(const int N) : max_size_(N), N_(N), NC_(N), NR_(N) {
+template <typename RealType>
+Neighborlist<RealType>::Neighborlist(const int N, const bool allocate_max_ixn_count)
+    : max_size_(N), N_(N), NC_(N), NR_(N), allocate_max_ixn_count_(allocate_max_ixn_count) {
     if (N == 0) {
         throw std::runtime_error("Neighborlist N must be at least 1");
     }
@@ -363,7 +365,11 @@ template <typename RealType> int Neighborlist<RealType>::Y() const {
 template <typename RealType> int Neighborlist<RealType>::num_row_blocks() const { return ceil_divide(NR_, TILE_SIZE); }
 
 template <typename RealType> int Neighborlist<RealType>::max_ixn_count() const {
-    return num_column_blocks() * num_row_blocks() * WARP_SIZE;
+    // At most, in the case where we compute the upper triangular, will be the upper half of the matrix without the diagonal
+    int max_tile_interactions = ((num_column_blocks() * num_row_blocks()) / 2) - num_column_blocks();
+
+    // Each tile interaction can have TILE_SIZE interactions
+    return max_tile_interactions * TILE_SIZE;
 }
 
 template class Neighborlist<double>;
