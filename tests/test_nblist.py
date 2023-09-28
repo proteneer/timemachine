@@ -362,3 +362,20 @@ def test_neighborlist_on_subset_of_system():
         assert len(reference_complete_ixns) == len(test_ixn_list), "Number of blocks with interactions don't agree"
 
         assert_ixn_lists_are_equal(reference_complete_ixns, test_ixn_list)
+
+
+@pytest.mark.parametrize("block_size", [32])
+@pytest.mark.parametrize("tiles", [2, 10, 100])
+def test_nblist_max_interactions(block_size, tiles):
+    """Verify that if all particles in the system interact, that the neighborlist correctly assigns large enough buffers"""
+    rng = np.random.default_rng(2023)
+
+    coords = rng.random(size=(block_size * tiles, 3))
+    box = np.eye(3) * 100.0
+
+    nblist = custom_ops.Neighborlist_f32(coords.shape[0])
+
+    test_ixn_list = nblist.get_nblist(coords, box, 10.0)
+    assert len(test_ixn_list) == tiles
+    for tile_ixns in test_ixn_list:
+        assert len(tile_ixns) > 0
