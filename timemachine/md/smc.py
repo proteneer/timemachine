@@ -20,6 +20,7 @@ LogWeights = Array
 
 BatchPropagator = Callable[[Samples, Lambda], Samples]
 BatchLogProb = Callable[[Samples, Lambda], LogWeights]
+BatchLogProbASMC = Callable[[Samples, Lambda, bool], LogWeights]
 
 Resampler = Callable[[LogWeights], Tuple[IndexArray, LogWeights]]
 ResultDict = Dict[str, Any]
@@ -129,10 +130,11 @@ def sequential_monte_carlo(
 def adaptive_sequential_monte_carlo(
     samples: Samples,
     propagate: BatchPropagator,
-    log_prob: BatchLogProb,
+    log_prob: BatchLogProbASMC,
     resample: Resampler,
     cess_target: float,
     epsilon=1e-2,
+    store_intermediate_traj=True,
 ) -> ResultDict:
     """Implementation of Adaptive Sequential Monte Carlo (SMC).
        This will adaptively interpolate between lambda=0 and lambda=1,
@@ -145,17 +147,22 @@ def adaptive_sequential_monte_carlo(
         [move(x, lam) for x in xs]
         for example, move(x, lam) might mean "run 100 steps of all-atom MD targeting exp(-u(., lam)), initialized at x"
     log_prob: function
-        [exp(-u(x, lam)) for x in xs]
+        [exp(-u(x, lam, first: bool)) for x in xs]
+        first is set to True for the first iteration of each binary search.
+        This may be used to improve performance by caching prefactors.
     resample: function
         (optionally) perform resampling given an array of log weights
     epsilon:
         Used to determine the precision of the adaptive binary search.
+    store_intermediate_traj:
+        Set to True (default) to store intermediate trajectories.
 
     Returns
     -------
     trajs_dict
-        "sample_traj"
-            [K-1, N] list of snapshots
+        "traj"
+            [K-1, N] list of snapshots only if `store_intermediate_traj` = True.
+            [1, N] list of snapshots if `store_intermediate_traj` = False.
         "incremental_log_weights_traj"
             [K-1, N] array of incremental log weights
         "ancestry_traj"
@@ -182,7 +189,11 @@ def adaptive_sequential_monte_carlo(
     lambdas_traj = [0.0]
 
     def accumulate_results(samples, indices, log_weights, incremental_log_weights, lam_target):
-        sample_traj.append(samples)
+        if store_intermediate_traj:
+            sample_traj.append(samples)
+        else:
+            # only store one intermediate set of samples to reduce memory usage
+            sample_traj[0] = samples
         ancestry_traj.append(indices)
         log_weights_traj.append(np.array(log_weights))
         incremental_log_weights_traj.append(np.array(incremental_log_weights))
@@ -198,10 +209,10 @@ def adaptive_sequential_monte_carlo(
         left_lambda = lam_initial
         right_lambda = lam_target
 
-        cur_log_prob = log_prob(sample_traj[-1], lam_initial)
+        cur_log_prob = log_prob(sample_traj[-1], lam_initial, True)
         while True:
             mid_lambda = min(lam_target, left_lambda + (right_lambda - left_lambda) / 2)
-            incremental_log_weights = log_prob(sample_traj[-1], mid_lambda) - cur_log_prob
+            incremental_log_weights = log_prob(sample_traj[-1], mid_lambda, False) - cur_log_prob
             cess = conditional_effective_sample_size(norm_log_weights, incremental_log_weights)
             print("LOOP", mid_lambda, "l", left_lambda, "r", right_lambda, "cess", cess, cess_target)
             if left_lambda > right_lambda:
@@ -256,6 +267,7 @@ def adaptive_sequential_monte_carlo(
         incremental_log_weights_traj=np.array(incremental_log_weights_traj),
         lambdas_traj=np.array(lambdas_traj),
     )
+
     return trajs_dict
 
 
