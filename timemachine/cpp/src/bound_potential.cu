@@ -3,7 +3,7 @@
 
 namespace timemachine {
 
-BoundPotential::BoundPotential(std::shared_ptr<Potential> potential, const std::vector<double> &params)
+BoundPotential::BoundPotential(std::shared_ptr<Potential> potential, const std::vector<ParamsType> &params)
     : size(params.size()), buffer_size_(size), d_p(buffer_size_), potential(potential) {
     set_params(params);
 }
@@ -55,7 +55,7 @@ void BoundPotential::execute_host(
     }
 };
 
-void BoundPotential::set_params(const std::vector<double> &params) {
+void BoundPotential::set_params(const std::vector<ParamsType> &params) {
     if (params.size() != buffer_size_) {
         throw std::runtime_error(
             "parameter size is not equal to device buffer size: " + std::to_string(params.size()) +
@@ -65,7 +65,7 @@ void BoundPotential::set_params(const std::vector<double> &params) {
     this->size = params.size();
 }
 
-void BoundPotential::set_params_device(const int new_size, const double *d_new_params, const cudaStream_t stream) {
+void BoundPotential::set_params_device(const int new_size, const ParamsType *d_new_params, const cudaStream_t stream) {
     if (static_cast<size_t>(new_size) > buffer_size_) {
         throw std::runtime_error(
             "parameter size is greater than device buffer size: " + std::to_string(new_size) + " > " +

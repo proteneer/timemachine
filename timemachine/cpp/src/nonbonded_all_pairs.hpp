@@ -44,7 +44,7 @@ private:
     // specified)
     unsigned int *d_sorted_atom_idxs_; // [K_] indices of interacting atoms, sorted by hilbert curve index
     double *d_gathered_x_;             // sorted coordinates for subset of atoms
-    double *d_gathered_p_;             // sorted parameters for subset of atoms
+    ParamsType *d_gathered_p_;         // sorted parameters for subset of atoms
     unsigned long long *d_gathered_du_dx_;
     unsigned long long *d_gathered_du_dp_;
 
@@ -75,7 +75,7 @@ public:
         const int N,
         const int P,
         const double *d_x,
-        const double *d_p,
+        const ParamsType *d_p,
         const double *d_box,
         unsigned long long *d_du_dx,
         unsigned long long *d_du_dp,

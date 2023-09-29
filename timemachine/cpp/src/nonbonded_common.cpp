@@ -12,6 +12,7 @@
 #include "summed_potential.hpp"
 
 #include "set_utils.hpp"
+#include "types.hpp"
 
 namespace timemachine {
 
@@ -80,7 +81,7 @@ void get_nonbonded_all_pair_potentials(
         if (std::shared_ptr<FanoutSummedPotential> fanned_potential =
                 std::dynamic_pointer_cast<FanoutSummedPotential>(pot->potential);
             fanned_potential != nullptr) {
-            std::vector<double> h_params(pot->size);
+            std::vector<ParamsType> h_params(pot->size);
             if (pot->size > 0) {
                 pot->d_p.copy_to(&h_params[0]);
             }
@@ -95,7 +96,7 @@ void get_nonbonded_all_pair_potentials(
         } else if (std::shared_ptr<SummedPotential> summed_potential =
                        std::dynamic_pointer_cast<SummedPotential>(pot->potential);
                    summed_potential != nullptr) {
-            std::vector<double> h_params(pot->size);
+            std::vector<ParamsType> h_params(pot->size);
             int i = 0;
             int offset = 0;
             if (pot->size > 0) {
@@ -107,7 +108,8 @@ void get_nonbonded_all_pair_potentials(
             for (auto summed_pot : summed_potential->get_potentials()) {
 
                 if (is_summed_potential(summed_pot) || is_nonbonded_all_pairs_potential(summed_pot)) {
-                    std::vector<double> slice(h_params.begin() + offset, h_params.begin() + offset + param_sizes[i]);
+                    std::vector<ParamsType> slice(
+                        h_params.begin() + offset, h_params.begin() + offset + param_sizes[i]);
                     flattened_bps.push_back(std::shared_ptr<BoundPotential>(new BoundPotential(summed_pot, slice)));
                 }
 

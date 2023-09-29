@@ -1,5 +1,6 @@
 #pragma once
 
+#include "types.hpp"
 #include <cuda_runtime.h>
 
 namespace timemachine {
@@ -18,7 +19,7 @@ public:
         const int param_batch_size,
         const int P,
         const double *h_x,
-        const double *h_p,
+        const ParamsType *h_p,
         const double *h_box,
         unsigned long long *h_du_dx,
         unsigned long long *h_du_dp,
@@ -28,7 +29,7 @@ public:
         const int N,
         const int P,
         const double *h_x,
-        const double *h_p,
+        const ParamsType *h_p,
         const double *h_box,
         unsigned long long *h_du_dx,
         unsigned long long *h_du_dp,
@@ -38,7 +39,7 @@ public:
         const int N,
         const int P,
         const double *h_x,
-        const double *h_p,
+        const ParamsType *h_p,
         const double *h_box,
         unsigned long long *h_du_dx);
 
@@ -46,7 +47,7 @@ public:
         const int N,
         const int P,
         const double *d_x,
-        const double *d_p,
+        const ParamsType *d_p,
         const double *d_box,
         unsigned long long *d_du_dx,
         unsigned long long *d_du_dp,

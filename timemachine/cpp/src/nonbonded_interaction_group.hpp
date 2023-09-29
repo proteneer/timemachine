@@ -4,6 +4,7 @@
 #include "neighborlist.hpp"
 #include "nonbonded_common.hpp"
 #include "potential.hpp"
+#include "types.hpp"
 #include <array>
 #include <memory>
 #include <optional>
@@ -47,8 +48,8 @@ private:
     //   independently
     // - otherwise, atoms are sorted into contiguous blocks by
     //   interaction group, with arbitrary ordering within each block
-    double *d_sorted_x_; // sorted coordinates
-    double *d_sorted_p_; // sorted parameters
+    double *d_sorted_x_;     // sorted coordinates
+    ParamsType *d_sorted_p_; // sorted parameters
     unsigned long long *d_sorted_du_dx_;
     unsigned long long *d_sorted_du_dp_;
 
@@ -89,7 +90,7 @@ public:
         const int N,
         const int P,
         const double *d_x,
-        const double *d_p,
+        const ParamsType *d_p,
         const double *d_box,
         unsigned long long *d_du_dx,
         unsigned long long *d_du_dp,

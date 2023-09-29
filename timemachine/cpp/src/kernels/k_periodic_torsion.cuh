@@ -1,5 +1,6 @@
 #include "../fixed_point.hpp"
 #include "../gpu_utils.cuh"
+#include "../types.hpp"
 #include "k_fixed_point.cuh"
 
 template <typename RealType> inline __device__ RealType dot_product(const RealType a[3], const RealType b[3]) {
@@ -17,10 +18,10 @@ inline __device__ void cross_product(const RealType a[3], const RealType b[3], R
 
 template <typename RealType, int D>
 void __global__ k_periodic_torsion(
-    const int T,                          // number of bonds
-    const double *__restrict__ coords,    // [n, 3]
-    const double *__restrict__ params,    // [p, 3]
-    const int *__restrict__ torsion_idxs, // [b, 4]
+    const int T,                           // number of bonds
+    const double *__restrict__ coords,     // [n, 3]
+    const ParamsType *__restrict__ params, // [p, 3]
+    const int *__restrict__ torsion_idxs,  // [b, 4]
     unsigned long long *__restrict__ du_dx,
     unsigned long long *__restrict__ du_dp,
     __int128 *__restrict__ u) {

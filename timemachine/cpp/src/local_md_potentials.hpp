@@ -9,6 +9,7 @@
 #include "flat_bottom_bond.hpp"
 #include "local_md_utils.hpp"
 #include "log_flat_bottom_bond.hpp"
+#include "types.hpp"
 
 namespace timemachine {
 
@@ -65,7 +66,7 @@ private:
     std::shared_ptr<BoundPotential> bound_frozen_restraint_;
 
     DeviceBuffer<int> d_restraint_pairs_;
-    DeviceBuffer<double> d_bond_params_;
+    DeviceBuffer<ParamsType> d_bond_params_;
 
     DeviceBuffer<float> d_probability_buffer_;
 
