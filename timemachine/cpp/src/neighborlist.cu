@@ -364,19 +364,15 @@ template <typename RealType> int Neighborlist<RealType>::Y() const {
 
 template <typename RealType> int Neighborlist<RealType>::num_row_blocks() const { return ceil_divide(NR_, TILE_SIZE); }
 
-// max_ixn_count determines the number of tile to atom interaction counts. For each tile that interacts with another
-// it can have TILE_SIZE interactions. Note that d_ixn_count_ is only the number of tile interactions, and differs by a factor of TILE_SIZE
+// max_ixn_count determines the number of tile-atom interaction counts. For each tile that interacts with another
+// it can have TILE_SIZE tile-atom interactions. Note that d_ixn_count_ is only the number of tile-tile interactions, and differs by a factor of TILE_SIZE
 template <typename RealType> int Neighborlist<RealType>::max_ixn_count() const {
-    // The maximum number of interactions is that of all tiles interacting with all other tiles. Which
-    // is the upper triangular matrix.
-    // Use the maximum NxN matrix to allocate to allow supporting any combination of atom idxs
+    // The maximum number of tile-atom interactions is that of all tile-tile interactions multiplied by TILE_SIZE.
+    // Use the maximum value of N to compute the size of the upper triangular matrix to support any set of row indices.
     const int n_blocks = ceil_divide(max_size_, TILE_SIZE);
-    // Compute the size of the matrix without the diagonal
-    int max_tile_interactions = (n_blocks * n_blocks) - n_blocks;
-    // Divide by two to get the upper, then add back in the size of the diagonal
-    max_tile_interactions = ceil_divide(max_tile_interactions, 2) + n_blocks;
-    // Each tile interaction can have TILE_SIZE interactions
-    return max_tile_interactions * TILE_SIZE;
+    int max_tile_tile_interactions = (n_blocks * (n_blocks + 1)) / 2;
+    // Each tile-tile interaction can have TILE_SIZE tile-atom interactions
+    return max_tile_tile_interactions * TILE_SIZE;
 }
 
 template class Neighborlist<double>;
