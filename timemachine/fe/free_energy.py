@@ -170,28 +170,30 @@ class PairBarResult:
 @dataclass
 class Trajectory:
     frames: StoredArrays  # (frame, atom, dim)
-    boxes: NDArray  # (frame, dim, dim)
-    final_velocities: NDArray  # (atom, dim)
+    boxes: List[NDArray]  # (frame, dim, dim)
+    final_velocities: Optional[NDArray]  # (atom, dim)
     final_barostat_volume_scale_factor: Optional[float] = None
 
     def __post_init__(self):
         n_frames = len(self.frames)
-        assert n_frames > 0
+        assert len(self.boxes) == n_frames
+        if n_frames == 0:
+            return
         n_atoms, n_dims = self.frames[0].shape
-        assert self.boxes.shape == (n_frames, n_dims, n_dims)
-        assert self.final_velocities.shape == (n_atoms, n_dims)
+        assert self.boxes[0].shape == (n_dims, n_dims)
+        if self.final_velocities is not None:
+            assert self.final_velocities.shape == (n_atoms, n_dims)
 
-    @staticmethod
-    def concatenate(ts: Sequence["Trajectory"]) -> "Trajectory":
-        frames = StoredArrays()
-        for t in ts:
-            frames.extend(t.frames)
+    def extend(self, other: "Trajectory"):
+        """Concatenate another trajectory to the end of this one"""
+        self.frames.extend(other.frames)
+        self.boxes.extend(other.boxes)
+        self.final_velocities = other.final_velocities
+        self.final_barostat_volume_scale_factor = other.final_barostat_volume_scale_factor
 
-        boxes = np.concatenate([t.boxes for t in ts])
-        final_velocities = ts[-1].final_velocities
-        final_barostat_volume_scale_factor = ts[-1].final_barostat_volume_scale_factor
-
-        return Trajectory(frames, boxes, final_velocities, final_barostat_volume_scale_factor)
+    @classmethod
+    def empty(cls):
+        return Trajectory(StoredArrays(), [], None, None)
 
 
 @dataclass
@@ -210,7 +212,7 @@ class SimulationResult:
 
     @property
     def boxes(self) -> List[NDArray]:
-        return [traj.boxes for traj in self.trajectories]
+        return [np.array(traj.boxes) for traj in self.trajectories]
 
 
 def image_frames(initial_state: InitialState, frames: np.ndarray, boxes: np.ndarray) -> np.ndarray:
@@ -458,13 +460,12 @@ def sample_with_context(
         steps_func = run_production_local_steps
 
     all_coords = StoredArrays()
-    all_boxes_: List[NDArray] = []
+    all_boxes: List[NDArray] = []
     final_velocities: NDArray = None  # type: ignore # work around "possibly unbound" error
     for n_frames in batches(md_params.n_frames, max_buffer_frames):
         batch_coords, batch_boxes, final_velocities = steps_func(n_frames * md_params.steps_per_frame)
         all_coords.extend(batch_coords)
-        all_boxes_.extend(batch_boxes)
-    all_boxes = np.array(all_boxes_)
+        all_boxes.extend(batch_boxes)
 
     assert len(all_coords) == md_params.n_frames
     assert len(all_boxes) == md_params.n_frames
@@ -959,7 +960,7 @@ def run_sims_hrex(
 
     hrex = HREX.from_replicas(initial_replicas)
 
-    samples_by_state_by_iter: List[List[Trajectory]] = []
+    samples_by_state: List[Trajectory] = [Trajectory.empty() for _ in initial_states]
     replica_idx_by_state_by_iter: List[List[ReplicaIdx]] = []
     fraction_accepted_by_pair_by_iter: List[List[Tuple[int, int]]] = []
 
@@ -983,14 +984,16 @@ def run_sims_hrex(
         def replica_from_samples(traj: Trajectory) -> CoordsVelBox:
             return CoordsVelBox(traj.frames[-1], traj.final_velocities, traj.boxes[-1])
 
-        hrex, samples_by_state = hrex.sample_replicas(sample_replica, replica_from_samples)
+        hrex, samples_by_state_iter = hrex.sample_replicas(sample_replica, replica_from_samples)
         log_q = get_log_q_fn(hrex.replicas)
         hrex, fraction_accepted_by_pair = hrex.attempt_neighbor_swaps(neighbor_pairs, log_q, n_swap_attempts_per_iter)
 
         if len(initial_states) == 2:
             fraction_accepted_by_pair = fraction_accepted_by_pair[1:]  # remove stats for identity move
 
-        samples_by_state_by_iter.append(samples_by_state)
+        for samples, samples_iter in zip(samples_by_state, samples_by_state_iter):
+            samples.extend(samples_iter)
+
         replica_idx_by_state_by_iter.append(hrex.replica_idx_by_state)
         fraction_accepted_by_pair_by_iter.append(fraction_accepted_by_pair)
 
@@ -1017,10 +1020,8 @@ def run_sims_hrex(
             print("Final replica permutation  :", hrex.replica_idx_by_state)
             print()
 
-    samples_by_state = [Trajectory.concatenate(samples_by_iter) for samples_by_iter in zip(*samples_by_state_by_iter)]
-
     def make_energy_decomposed_state(
-        results: Tuple[StoredArrays, NDArray, InitialState]
+        results: Tuple[StoredArrays, List[NDArray], InitialState]
     ) -> EnergyDecomposedState[StoredArrays]:
         frames, boxes, initial_state = results
         return EnergyDecomposedState(
@@ -1034,12 +1035,14 @@ def run_sims_hrex(
         for samples, initial_state in zip(samples_by_state, initial_states)
     ]
 
-    bar_results = pairwise_transform_and_combine(
-        results_by_state,
-        make_energy_decomposed_state,
-        lambda s1, s2: estimate_free_energy_bar(compute_energy_decomposed_u_kln([s1, s2]), temperature),
+    bar_results = list(
+        pairwise_transform_and_combine(
+            results_by_state,
+            make_energy_decomposed_state,
+            lambda s1, s2: estimate_free_energy_bar(compute_energy_decomposed_u_kln([s1, s2]), temperature),
+        )
     )
 
     diagnostics = HREXDiagnostics(replica_idx_by_state_by_iter, fraction_accepted_by_pair_by_iter)
 
-    return PairBarResult(list(initial_states), list(bar_results)), samples_by_state, diagnostics
+    return PairBarResult(list(initial_states), bar_results), samples_by_state, diagnostics
