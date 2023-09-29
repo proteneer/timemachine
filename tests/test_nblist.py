@@ -369,13 +369,14 @@ def test_neighborlist_on_subset_of_system():
 def test_nblist_max_interactions(block_size, tiles):
     """Verify that if all particles in the system interact, that the neighborlist correctly assigns large enough buffers"""
     rng = np.random.default_rng(2023)
+    cutoff = 10.0  # Set a large cutoff, so everything overlaps
 
     coords = rng.random(size=(block_size * tiles, 3))
     box = np.eye(3) * 100.0
 
     nblist = custom_ops.Neighborlist_f32(coords.shape[0])
     max_ixn_count = nblist.get_max_ixn_count()
-    test_ixn_list = nblist.get_nblist(coords, box, 10.0)
+    test_ixn_list = nblist.get_nblist(coords, box, cutoff)
     assert len(test_ixn_list) == tiles
     for tile_ixns in test_ixn_list:
         assert len(tile_ixns) > 0
