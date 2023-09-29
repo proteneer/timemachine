@@ -1,4 +1,5 @@
 // Kernels specific to Local MD implementation.
+#include "../types.hpp"
 
 void __global__ k_construct_bonded_params(
     const int num_idxs,               // Number of idxs
@@ -9,7 +10,7 @@ void __global__ k_construct_bonded_params(
     const double r_max,
     const unsigned int *__restrict__ idxs, // [num_idxs]
     int *__restrict__ bonds,               // [num_idxs * 2]
-    double *__restrict__ params            // [num_idxs * 3]
+    ParamsType *__restrict__ params        // [num_idxs * 3]
 ) {
     const auto idx = blockDim.x * blockIdx.x + threadIdx.x;
     if (idx >= num_idxs) {

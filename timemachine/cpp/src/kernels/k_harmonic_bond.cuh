@@ -1,12 +1,13 @@
 #include "../fixed_point.hpp"
+#include "../types.hpp"
 #include "k_fixed_point.cuh"
 
 template <typename RealType>
 void __global__ k_harmonic_bond(
     const int B, // number of bonds
     const double *__restrict__ coords,
-    const double *__restrict__ params, // [B, 2]
-    const int *__restrict__ bond_idxs, // [B, 2]
+    const ParamsType *__restrict__ params, // [B, 2]
+    const int *__restrict__ bond_idxs,     // [B, 2]
     unsigned long long *__restrict__ du_dx,
     unsigned long long *__restrict__ du_dp,
     __int128 *__restrict__ u) {

@@ -75,6 +75,14 @@ double convert_energy_to_fp(__int128 fixed_u) {
     return res;
 }
 
+std::vector<ParamsType> convert_params_to_params_type(const py::array_t<double, py::array::c_style> &params) {
+    std::vector<ParamsType> output(params.size());
+    for (int i = 0; i < params.size(); i++) {
+        output[i] = static_cast<ParamsType>(params.data()[i]);
+    }
+    return output;
+}
+
 template <typename T> std::vector<T> py_array_to_vector(const py::array_t<T, py::array::c_style> &arr) {
     std::vector<T> v(arr.data(), arr.data() + arr.size());
     return v;
@@ -586,8 +594,8 @@ void declare_potential(py::module &m) {
                 std::vector<unsigned long long> du_dx(N * D, 9999);
                 std::vector<unsigned long long> du_dp(P, 9999);
                 std::vector<__int128> u(1, 9999);
-
-                pot.execute_host(N, P, coords.data(), params.data(), box.data(), &du_dx[0], &du_dp[0], &u[0]);
+                std::vector<ParamsType> converted_params = convert_params_to_params_type(params);
+                pot.execute_host(N, P, coords.data(), converted_params.data(), box.data(), &du_dx[0], &du_dp[0], &u[0]);
 
                 py::array_t<double, py::array::c_style> py_du_dx({N, D});
                 for (unsigned int i = 0; i < du_dx.size(); i++) {
@@ -649,13 +657,14 @@ void declare_potential(py::module &m) {
                     u.assign(total_executions, 9999);
                 }
 
+                std::vector<ParamsType> converted_params = convert_params_to_params_type(params);
                 pot.execute_batch_host(
                     coord_batches,
                     N,
                     param_batches,
                     P,
                     coords.data(),
-                    params.data(),
+                    converted_params.data(),
                     boxes.data(),
                     compute_du_dx ? du_dx.data() : nullptr,
                     compute_du_dp ? du_dp.data() : nullptr,
@@ -759,12 +768,12 @@ void declare_potential(py::module &m) {
                 std::vector<unsigned long long> du_dp(P, 9999);
 
                 std::vector<__int128> u(1, 9999);
-
+                std::vector<ParamsType> converted_params = convert_params_to_params_type(params);
                 pot.execute_host(
                     N,
                     P,
                     coords.data(),
-                    params.data(),
+                    converted_params.data(),
                     box.data(),
                     compute_du_dx ? &du_dx[0] : nullptr,
                     compute_du_dp ? &du_dp[0] : nullptr,
@@ -814,8 +823,8 @@ void declare_potential(py::module &m) {
                 verify_coords_and_box(coords, box);
 
                 std::vector<unsigned long long> du_dx(N * D);
-
-                pot.execute_host_du_dx(N, P, coords.data(), params.data(), box.data(), &du_dx[0]);
+                std::vector<ParamsType> converted_params = convert_params_to_params_type(params);
+                pot.execute_host_du_dx(N, P, coords.data(), converted_params.data(), box.data(), &du_dx[0]);
 
                 py::array_t<double, py::array::c_style> py_du_dx({N, D});
                 for (unsigned int i = 0; i < du_dx.size(); i++) {
@@ -837,7 +846,8 @@ void declare_bound_potential(py::module &m) {
         .def(
             py::init([](std::shared_ptr<timemachine::Potential> potential,
                         const py::array_t<double, py::array::c_style> &params) {
-                return new timemachine::BoundPotential(potential, py_array_to_vector(params));
+                std::vector<ParamsType> converted_params = convert_params_to_params_type(params);
+                return new timemachine::BoundPotential(potential, converted_params);
             }),
             py::arg("potential"),
             py::arg("params"))
@@ -845,7 +855,7 @@ void declare_bound_potential(py::module &m) {
         .def(
             "set_params",
             [](timemachine::BoundPotential &bp, const py::array_t<double, py::array::c_style> &params) {
-                bp.set_params(py_array_to_vector(params));
+                bp.set_params(convert_params_to_params_type(params));
             },
             py::arg("params"))
         .def("size", [](const timemachine::BoundPotential &bp) { return bp.size; })

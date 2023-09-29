@@ -6,6 +6,7 @@
 // using this kernel.
 
 #include "../fixed_point.hpp"
+#include "../types.hpp"
 #include "k_nonbonded_common.cuh"
 
 template <bool Negated>
@@ -17,7 +18,7 @@ template <typename RealType, bool Negated>
 void __global__ k_nonbonded_pair_list(
     const int M, // number of pairs
     const double *__restrict__ coords,
-    const double *__restrict__ params,
+    const ParamsType *__restrict__ params,
     const double *__restrict__ box,
     const int *__restrict__ pair_idxs, // [M, 2] pair-list of atoms
     const double *__restrict__ scales, // [M]

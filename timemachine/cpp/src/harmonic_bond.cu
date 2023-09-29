@@ -38,7 +38,8 @@ void HarmonicBond<RealType>::execute_device(
     const int N,
     const int P,
     const double *d_x,
-    const double *d_p,
+    const ParamsType *d_p,
+
     const double *d_box,
     unsigned long long *d_du_dx,
     unsigned long long *d_du_dp,

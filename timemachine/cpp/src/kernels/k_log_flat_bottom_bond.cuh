@@ -12,8 +12,8 @@ void __global__ k_log_flat_bottom_bond(
     const int B, // number of bonds
     const double *__restrict__ coords,
     const double *__restrict__ box,
-    const double *__restrict__ params, // [B, 3]
-    const int *__restrict__ bond_idxs, // [B, 2]
+    const ParamsType *__restrict__ params, // [B, 3]
+    const int *__restrict__ bond_idxs,     // [B, 2]
     const double beta,
     unsigned long long *__restrict__ du_dx,
     unsigned long long *__restrict__ du_dp,
