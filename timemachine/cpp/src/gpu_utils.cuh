@@ -102,7 +102,7 @@ double __device__ __forceinline__ radd_rn(double a, double b) { return __dadd_rn
 
 // If this were not int128s, we could do __shfl_down_sync, but only supports up to 64 values
 // For more details reference the PDF in the docstring for k_accumulate_energy
-__device__ __forceinline__ void energy_warp_reduce(volatile __int128 *shared_data, int thread_idx) {
+__device__ __forceinline__ void energy_warp_reduce(volatile EnergyType *shared_data, int thread_idx) {
     // Repeatedly sum up the two halfs of the shared data
 #pragma unroll 6
     for (int i = 32; i > 0; i /= 2) {
@@ -118,7 +118,7 @@ __device__ __forceinline__ void energy_warp_reduce(volatile __int128 *shared_dat
 // values repeatedly until the final warp level reduction which stores the final accumulated value in `shared_data[0]`.
 // For more details reference the PDF in the docstring for k_accumulate_energy
 template <unsigned int THREADS_PER_BLOCK>
-__device__ __forceinline__ void block_energy_reduce(volatile __int128 *shared_data, int tid) {
+__device__ __forceinline__ void block_energy_reduce(volatile EnergyType *shared_data, int tid) {
     static_assert(THREADS_PER_BLOCK <= 1024 && (THREADS_PER_BLOCK & (THREADS_PER_BLOCK - 1)) == 0);
 
     // For larger blocks larger than a warp
@@ -159,11 +159,11 @@ __device__ __forceinline__ void block_energy_reduce(volatile __int128 *shared_da
 template <unsigned int BLOCK_SIZE>
 void __global__ k_accumulate_energy(
     int N,
-    const __int128 *__restrict__ input_buffer, // [N]
-    __int128 *__restrict__ u_buffer            // [1]
+    const EnergyType *__restrict__ input_buffer, // [N]
+    EnergyType *__restrict__ u_buffer            // [1]
 ) {
 
-    __shared__ __int128 shared_mem[BLOCK_SIZE];
+    __shared__ EnergyType shared_mem[BLOCK_SIZE];
     unsigned int tid = threadIdx.x;
     if (tid >= BLOCK_SIZE) {
         return;

@@ -22,7 +22,7 @@ typedef void (*k_nonbonded_fn)(
     const unsigned int *__restrict__ ixn_atoms,
     unsigned long long *__restrict__ du_dx,
     unsigned long long *__restrict__ du_dp,
-    __int128 *__restrict__ u_buffer);
+    EnergyType *__restrict__ u_buffer);
 
 void verify_atom_idxs(int N, const std::vector<int> &atom_idxs, const bool allow_empty = false);
 

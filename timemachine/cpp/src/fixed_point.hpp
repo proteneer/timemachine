@@ -1,5 +1,7 @@
 #pragma once
 
+#include "types.hpp"
+
 #define FIXED_EXPONENT 0x1000000000
 
 // we need to use a different level of precision for parameter derivatives
@@ -19,14 +21,14 @@ template <typename RealType> RealType __host__ __device__ __forceinline__ FIXED_
 
 // FIXED_ENERGY_TO_FLOAT should be paired with a `fixed_point_overflow` as if it is beyond the long long representation
 // the value returned will be meaningless
-template <typename RealType> RealType __host__ __device__ __forceinline__ FIXED_ENERGY_TO_FLOAT(__int128 v) {
+template <typename RealType> RealType __host__ __device__ __forceinline__ FIXED_ENERGY_TO_FLOAT(EnergyType v) {
     return static_cast<RealType>(static_cast<long long>(v)) / FIXED_EXPONENT;
 }
 
-// fixed_point_overflow detects if a __int128 fixed point representation is 'overflowed'
+// fixed_point_overflow detects if a EnergyType fixed point representation is 'overflowed'
 // which means is outside of the long long range of representation.
-bool __host__ __device__ __forceinline__ fixed_point_overflow(__int128 val) {
-    __int128 max = LLONG_MAX;
-    __int128 min = LLONG_MIN;
+bool __host__ __device__ __forceinline__ fixed_point_overflow(EnergyType val) {
+    EnergyType max = static_cast<EnergyType>(LLONG_MAX);
+    EnergyType min = static_cast<EnergyType>(LLONG_MIN);
     return val >= max || val <= min;
 }

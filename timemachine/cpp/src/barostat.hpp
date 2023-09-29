@@ -71,11 +71,11 @@ private:
     int *d_num_attempted_;
     int *d_num_accepted_;
 
-    __int128 *d_u_buffer_;
-    __int128 *d_u_after_buffer_;
+    EnergyType *d_u_buffer_;
+    EnergyType *d_u_after_buffer_;
 
-    __int128 *d_init_u_;
-    __int128 *d_final_u_;
+    EnergyType *d_init_u_;
+    EnergyType *d_final_u_;
 
     RealType *d_volume_;
     RealType *d_volume_delta_;

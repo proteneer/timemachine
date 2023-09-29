@@ -17,7 +17,7 @@ void __global__ k_log_flat_bottom_bond(
     const double beta,
     unsigned long long *__restrict__ du_dx,
     unsigned long long *__restrict__ du_dp,
-    __int128 *__restrict__ u) {
+    EnergyType *__restrict__ u) {
 
     // which bond
     const auto b_idx = blockDim.x * blockIdx.x + threadIdx.x;

@@ -167,7 +167,7 @@ void NonbondedAllPairs<RealType>::execute_device(
     const double *d_box, // 3 * 3
     unsigned long long *d_du_dx,
     unsigned long long *d_du_dp,
-    __int128 *d_u,
+    EnergyType *d_u,
     cudaStream_t stream) {
 
     // (ytz) the nonbonded algorithm proceeds as follows:
