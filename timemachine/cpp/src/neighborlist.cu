@@ -368,7 +368,8 @@ template <typename RealType> int Neighborlist<RealType>::num_row_blocks() const 
 // it can have TILE_SIZE interactions. Note that d_ixn_count_ is only the number of tile interactions, thus reduced by a factor of TILE_SIZE
 template <typename RealType> int Neighborlist<RealType>::max_ixn_count() const {
     int max_tile_interactions = num_column_blocks() * num_row_blocks();
-    if (this->compute_upper_triangular()) {
+    // If the tile interactions is less than 128, don't apply the reduction else it can run over.
+    if (this->compute_upper_triangular() && max_tile_interactions > 128) {
         // At most, in the case where we compute the upper triangular, will be the upper half of the matrix
         // Leave the diagonal to ensure the number of interactions is sufficient for the non-upper triangular mode
         max_tile_interactions = ceil_divide(max_tile_interactions, 2);
