@@ -323,7 +323,7 @@ def conditional_effective_sample_size(norm_log_weights, incremental_log_weights)
     * This uses the definition from [Zhou, Johansen, Aston, 2016]
       "Towards Automatic Model Comparison: An Adaptive Sequential Monte Carlo Approach"
       https://arxiv.org/pdf/1303.3123 (eq 3.16)
-    * This is equal to the ESS if resampling is performed each iteration (i.e. not using conditiaonl resampling)
+    * This is equal to the ESS if resampling is performed each iteration (i.e. not using conditional resampling)
     """
     n = len(norm_log_weights)
     summed_weights = norm_log_weights + incremental_log_weights
