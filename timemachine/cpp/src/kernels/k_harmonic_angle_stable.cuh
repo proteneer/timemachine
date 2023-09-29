@@ -11,7 +11,7 @@ void __global__ k_harmonic_angle_stable(
     const int *__restrict__ angle_idxs,    // [A, 3]
     unsigned long long *__restrict__ du_dx,
     unsigned long long *__restrict__ du_dp,
-    __int128 *__restrict__ u) {
+    EnergyType *__restrict__ u) {
 
     const auto a_idx = blockDim.x * blockIdx.x + threadIdx.x;
 

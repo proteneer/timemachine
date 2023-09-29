@@ -26,7 +26,7 @@ void __global__ k_nonbonded_pair_list(
     const double cutoff,
     unsigned long long *__restrict__ du_dx,
     unsigned long long *__restrict__ du_dp,
-    __int128 *__restrict__ u_buffer) {
+    EnergyType *__restrict__ u_buffer) {
 
     // (ytz): oddly enough the order of atom_i and atom_j
     // seem to not matter. I think this is because distance calculations

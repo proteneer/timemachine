@@ -2,6 +2,7 @@
 
 // cuda specific version
 #include "../fixed_point.hpp"
+#include "../types.hpp"
 
 // (ytz): courtesy of @scottlegrand/NVIDIA, even faster conversion
 // This was original a hack to improve perf on Maxwell, that is now needed for Ampere
@@ -69,10 +70,10 @@ template <typename RealType> unsigned long long __device__ __forceinline__ FLOAT
 }
 
 /* FLOAT_TO_FIXED_ENERGY converts floating point energies into fixed point. Values beyond LLONG_MAX/LLONG_MIN
-* (or non-finite) will be capped to LLONG_MAX. This is accumulated into __int128 which handles the positive/negative overflows,
+* (or non-finite) will be capped to LLONG_MAX. This is accumulated into EnergyType which handles the positive/negative overflows,
 * allows to account for overflows triggered by the summation of energies.
 *
-* The energy values are only considered valid between the values LLONG_MIN and LLONG_MAX, and we use __int128 to be able to detect that the energies are invalid.
+* The energy values are only considered valid between the values LLONG_MIN and LLONG_MAX, and we use EnergyType to be able to detect that the energies are invalid.
 * If there are individual interactions that are overflows (beyond limit or non-finite) we set LLONG_MAX to be the value. This way
 * the energy is beyond the bounds and only exclusion cancellations (only done between NonbondedAllPairs/IxnGroups and NonbondedPairList<..., true>) do not trigger invalid energies.
 * In the case where all interactions are within the bounds, we can still overflows due to summation which int128 allows us to detect.
@@ -80,17 +81,17 @@ template <typename RealType> unsigned long long __device__ __forceinline__ FLOAT
 * Example of Summation overflow
 * -----------------------------
 * accumulated_energy = sum([LLONG_MAX - 1, LLONG_MAX - 1])
-* (__int128)accumulated_energy > LLONG_MAX  - Correctly detects that energies are beyond valid range
+* (EnergyType)accumulated_energy > LLONG_MAX  - Correctly detects that energies are beyond valid range
 * (long long)accumulated_energy > LLONG_MAX - Overflows and results in seemingly valid energies
 */
-template <typename RealType> __int128 __device__ __forceinline__ FLOAT_TO_FIXED_ENERGY(RealType u_orig) {
+template <typename RealType> EnergyType __device__ __forceinline__ FLOAT_TO_FIXED_ENERGY(RealType u_orig) {
     RealType u = u_orig * FIXED_EXPONENT;
     // All clashes (beyond representation of long long) are treated as LLONG_MAX, to avoid clashes of different signs but non-identical values
     // cancelling out.
-    if (!isfinite(u) || static_cast<__int128>(u) >= static_cast<__int128>(LLONG_MAX) ||
-        static_cast<__int128>(u) <= static_cast<__int128>(LLONG_MIN)) {
-        return static_cast<__int128>(LLONG_MAX);
+    if (!isfinite(u) || static_cast<EnergyType>(u) >= static_cast<EnergyType>(LLONG_MAX) ||
+        static_cast<EnergyType>(u) <= static_cast<EnergyType>(LLONG_MIN)) {
+        return static_cast<EnergyType>(LLONG_MAX);
     } else {
-        return static_cast<__int128>(real_to_int64(u));
+        return static_cast<EnergyType>(real_to_int64(u));
     }
 }

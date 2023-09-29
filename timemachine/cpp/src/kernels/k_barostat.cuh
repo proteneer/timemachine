@@ -122,8 +122,8 @@ void __global__ k_decide_move(
     const RealType *__restrict__ rand, // [2] Use second value
     RealType *__restrict__ d_volume_delta,
     double *__restrict__ d_volume_scale,
-    const __int128 *__restrict__ d_init_u,
-    const __int128 *__restrict__ d_final_u,
+    const EnergyType *__restrict__ d_init_u,
+    const EnergyType *__restrict__ d_final_u,
     double *__restrict__ d_box,
     const double *__restrict__ d_box_output,
     double *__restrict__ d_x,

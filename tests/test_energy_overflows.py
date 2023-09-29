@@ -243,7 +243,7 @@ def test_energy_overflow_cancelled_by_exclusions(precision, rtol, atol):
     assert fixed_overflowed(fixed_pair_list_energy)
 
     # The values are identical because of overflow, as its not clear how to go from
-    # C++ __int128 to python integer.
+    # C++ EnergyType to python integer.
     assert fixed_all_pairs_energy == fixed_pair_list_energy
 
 

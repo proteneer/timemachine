@@ -22,7 +22,7 @@ void Potential::execute_batch_host(
     const double *h_box,         // [coord_batch_size, 3, 3]
     unsigned long long *h_du_dx, // [coord_batch_size, param_batch_size, N, 3]
     unsigned long long *h_du_dp, // [coord_batch_size, param_batch_size, P]
-    __int128 *h_u                // [coord_batch_size, param_batch_size, N]
+    EnergyType *h_u              // [coord_batch_size, param_batch_size, N]
 ) {
     std::unique_ptr<DeviceBuffer<ParamsType>> d_p(nullptr);
     if (P > 0) {
@@ -38,7 +38,7 @@ void Potential::execute_batch_host(
 
     std::unique_ptr<DeviceBuffer<unsigned long long>> d_du_dx_buffer(nullptr);
     std::unique_ptr<DeviceBuffer<unsigned long long>> d_du_dp_buffer(nullptr);
-    std::unique_ptr<DeviceBuffer<__int128>> d_u_buffer(nullptr);
+    std::unique_ptr<DeviceBuffer<EnergyType>> d_u_buffer(nullptr);
 
     const int total_executions = coord_batch_size * param_batch_size;
 
@@ -56,7 +56,7 @@ void Potential::execute_batch_host(
     }
 
     if (h_u) {
-        d_u_buffer.reset(new DeviceBuffer<__int128>(total_executions));
+        d_u_buffer.reset(new DeviceBuffer<EnergyType>(total_executions));
         gpuErrchk(cudaMemsetAsync(d_u_buffer->data, 0, d_u_buffer->size, stream));
     }
 
@@ -99,7 +99,7 @@ void Potential::execute_host(
     const double *h_box,         // [3, 3]
     unsigned long long *h_du_dx, // [N,3]
     unsigned long long *h_du_dp, // [P]
-    __int128 *h_u                // [1]
+    EnergyType *h_u              // [1]
 ) {
 
     const int &D = Potential::D;
@@ -113,7 +113,7 @@ void Potential::execute_host(
     std::unique_ptr<DeviceBuffer<ParamsType>> d_p;
     std::unique_ptr<DeviceBuffer<unsigned long long>> d_du_dx;
     std::unique_ptr<DeviceBuffer<unsigned long long>> d_du_dp;
-    std::unique_ptr<DeviceBuffer<__int128>> d_u;
+    std::unique_ptr<DeviceBuffer<EnergyType>> d_u;
 
     // very important that these are initialized to zero since the kernels themselves just accumulate
 
@@ -132,7 +132,7 @@ void Potential::execute_host(
         gpuErrchk(cudaMemset(d_du_dp->data, 0, d_du_dp->size));
     }
     if (h_u) {
-        d_u.reset(new DeviceBuffer<__int128>(1));
+        d_u.reset(new DeviceBuffer<EnergyType>(1));
         gpuErrchk(cudaMemset(d_u->data, 0, d_u->size));
     }
 

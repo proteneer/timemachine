@@ -14,7 +14,7 @@ void BoundPotential::execute_device(
     const double *d_box,
     unsigned long long *d_du_dx,
     unsigned long long *d_du_dp,
-    __int128 *d_u,
+    EnergyType *d_u,
     cudaStream_t stream) {
     this->potential->execute_device(
         N, this->size, d_x, this->size > 0 ? this->d_p.data : nullptr, d_box, d_du_dx, d_du_dp, d_u, stream);
@@ -25,7 +25,7 @@ void BoundPotential::execute_host(
     const double *h_x,           // [N,3]
     const double *h_box,         // [3, 3]
     unsigned long long *h_du_dx, // [N, 3]
-    __int128 *h_u                // [1]
+    EnergyType *h_u              // [1]
 ) {
 
     const int D = 3;
@@ -37,7 +37,7 @@ void BoundPotential::execute_host(
     d_box.copy_from(h_box);
 
     DeviceBuffer<unsigned long long> d_du_dx(N * D);
-    DeviceBuffer<__int128> d_u(1);
+    DeviceBuffer<EnergyType> d_u(1);
 
     // very important that these are initialized to zero since the kernels themselves just accumulate
     gpuErrchk(cudaMemset(d_du_dx.data, 0, d_du_dx.size));

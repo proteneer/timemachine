@@ -40,7 +40,7 @@ void __global__ k_centroid_restraint(
     const double kb,
     const double b0,
     unsigned long long *d_du_dx,
-    __int128 *d_u) {
+    EnergyType *d_u) {
 
     const int t_idx = blockDim.x * blockIdx.x + threadIdx.x;
     if (N_A + N_B <= t_idx) {

@@ -10,7 +10,7 @@ void __global__ k_harmonic_bond(
     const int *__restrict__ bond_idxs,     // [B, 2]
     unsigned long long *__restrict__ du_dx,
     unsigned long long *__restrict__ du_dp,
-    __int128 *__restrict__ u) {
+    EnergyType *__restrict__ u) {
 
     const auto b_idx = blockDim.x * blockIdx.x + threadIdx.x;
 

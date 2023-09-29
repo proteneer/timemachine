@@ -11,7 +11,7 @@ void __global__ k_chiral_atom_restraint(
     const int *__restrict__ idxs,          // [R, 2]
     unsigned long long *__restrict__ du_dx,
     unsigned long long *__restrict__ du_dp,
-    __int128 *__restrict__ u) {
+    EnergyType *__restrict__ u) {
 
     const auto r_idx = blockDim.x * blockIdx.x + threadIdx.x;
 
@@ -98,7 +98,7 @@ void __global__ k_chiral_bond_restraint(
     const int *__restrict__ signs,         // [R]
     unsigned long long *__restrict__ du_dx,
     unsigned long long *__restrict__ du_dp,
-    __int128 *__restrict__ u) {
+    EnergyType *__restrict__ u) {
 
     const auto r_idx = blockDim.x * blockIdx.x + threadIdx.x;
 
