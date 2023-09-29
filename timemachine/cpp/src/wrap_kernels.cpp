@@ -67,7 +67,7 @@ void verify_coords_and_box(
 // convert_energy_to_fp handles the combining of energies, summing them up deterministically
 // and returning nan if there are overflows.
 // The energies are collected in int128
-double convert_energy_to_fp(__int128 fixed_u) {
+double convert_energy_to_fp(EnergyType fixed_u) {
     double res = std::numeric_limits<double>::quiet_NaN();
     if (!fixed_point_overflow(fixed_u)) {
         res = FIXED_ENERGY_TO_FLOAT<double>(fixed_u);
@@ -593,7 +593,7 @@ void declare_potential(py::module &m) {
                 // initialize with fixed garbage values for debugging convenience (these should be overwritten by `execute_host`)
                 std::vector<unsigned long long> du_dx(N * D, 9999);
                 std::vector<unsigned long long> du_dp(P, 9999);
-                std::vector<__int128> u(1, 9999);
+                std::vector<EnergyType> u(1, 9999);
                 std::vector<ParamsType> converted_params = convert_params_to_params_type(params);
                 pot.execute_host(N, P, coords.data(), converted_params.data(), box.data(), &du_dx[0], &du_dp[0], &u[0]);
 
@@ -652,7 +652,7 @@ void declare_potential(py::module &m) {
                 if (compute_du_dp) {
                     du_dp.assign(total_executions * P, 9999);
                 }
-                std::vector<__int128> u;
+                std::vector<EnergyType> u;
                 if (compute_u) {
                     u.assign(total_executions, 9999);
                 }
@@ -767,7 +767,7 @@ void declare_potential(py::module &m) {
                 std::vector<unsigned long long> du_dx(N * D, 9999);
                 std::vector<unsigned long long> du_dp(P, 9999);
 
-                std::vector<__int128> u(1, 9999);
+                std::vector<EnergyType> u(1, 9999);
                 std::vector<ParamsType> converted_params = convert_params_to_params_type(params);
                 pot.execute_host(
                     N,
@@ -868,7 +868,7 @@ void declare_bound_potential(py::module &m) {
                 const long unsigned int D = coords.shape()[1];
                 verify_coords_and_box(coords, box);
                 std::vector<unsigned long long> du_dx(N * D, 9999);
-                std::vector<__int128> u(1, 9999);
+                std::vector<EnergyType> u(1, 9999);
 
                 bp.execute_host(N, coords.data(), box.data(), &du_dx[0], &u[0]);
 
@@ -890,7 +890,7 @@ void declare_bound_potential(py::module &m) {
                const py::array_t<double, py::array::c_style> &box) -> const py::array_t<uint64_t, py::array::c_style> {
                 const long unsigned int N = coords.shape()[0];
                 verify_coords_and_box(coords, box);
-                std::vector<__int128> u(1, 9999);
+                std::vector<EnergyType> u(1, 9999);
 
                 bp.execute_host(N, coords.data(), box.data(), nullptr, &u[0]);
 
@@ -1339,19 +1339,19 @@ double py_accumulate_energy(const py::array_t<long long, py::array::c_style> &in
 
     int N = input_data.size();
 
-    std::vector<__int128> h_buffer(N);
+    std::vector<EnergyType> h_buffer(N);
     for (int i = 0; i < N; i++) {
-        h_buffer[i] = static_cast<__int128>(input_data.data()[i]);
+        h_buffer[i] = static_cast<EnergyType>(input_data.data()[i]);
     }
 
-    timemachine::DeviceBuffer<__int128> d_input_buffer(N);
+    timemachine::DeviceBuffer<EnergyType> d_input_buffer(N);
     d_input_buffer.copy_from(&h_buffer[0]);
 
-    timemachine::DeviceBuffer<__int128> d_output_buffer(1);
+    timemachine::DeviceBuffer<EnergyType> d_output_buffer(1);
 
     // Use default stream which will sync with the output_buffer copy_to
     accumulate_energy(N, d_input_buffer.data, d_output_buffer.data, static_cast<cudaStream_t>(0));
-    std::vector<__int128> res(1);
+    std::vector<EnergyType> res(1);
     d_output_buffer.copy_to(&res[0]);
 
     return static_cast<long long>(res[0]);

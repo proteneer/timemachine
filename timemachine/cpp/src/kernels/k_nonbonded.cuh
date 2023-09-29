@@ -113,7 +113,7 @@ void __device__ v_nonbonded_unified(
     const double *__restrict__ coords,     // [N * 3]
     const ParamsType *__restrict__ params, // [N * PARAMS_PER_ATOM]
     box_cache<RealType> &shared_box,
-    __int128 *energy_buffer, // [blockDim.x]
+    EnergyType *energy_buffer, // [blockDim.x]
     const double beta,
     const double cutoff,
     const unsigned int *__restrict__ row_idxs,
@@ -339,11 +339,11 @@ void __global__ k_nonbonded_unified(
     const unsigned int *__restrict__ ixn_atoms,
     unsigned long long *__restrict__ du_dx,
     unsigned long long *__restrict__ du_dp,
-    __int128 *__restrict__ u_buffer // [blockDim.x]
+    EnergyType *__restrict__ u_buffer // [blockDim.x]
 ) {
     static_assert(THREADS <= 256 && (THREADS & (THREADS - 1)) == 0);
     __shared__ box_cache<RealType> shared_box;
-    __shared__ __int128 block_energy_buffer[THREADS];
+    __shared__ EnergyType block_energy_buffer[THREADS];
     if (COMPUTE_U) {
         block_energy_buffer[threadIdx.x] = 0; // Zero out the energy buffer
     }

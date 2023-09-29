@@ -9,7 +9,7 @@ template <typename RealType> class PeriodicTorsion : public Potential {
 
 private:
     int *d_torsion_idxs_;
-    __int128 *d_u_buffer_;
+    EnergyType *d_u_buffer_;
 
     const int T_;
 
@@ -29,7 +29,7 @@ public:
         const double *d_box,
         unsigned long long *d_du_dx,
         unsigned long long *d_du_dp,
-        __int128 *d_u,
+        EnergyType *d_u,
         cudaStream_t stream) override;
 };
 

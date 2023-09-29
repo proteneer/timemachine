@@ -18,7 +18,7 @@ void __global__ k_nonbonded_precomputed(
     const double cutoff,
     unsigned long long *__restrict__ du_dx,
     unsigned long long *__restrict__ du_dp,
-    __int128 *__restrict__ u_buffer) {
+    EnergyType *__restrict__ u_buffer) {
 
     const int pair_idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (pair_idx >= M) {
@@ -75,7 +75,7 @@ void __global__ k_nonbonded_precomputed(
     delta_y -= box_y * nearbyint(delta_y * inv_box_y);
     delta_z -= box_z * nearbyint(delta_z * inv_box_z);
 
-    __int128 energy = 0;
+    EnergyType energy = 0;
 
     RealType d2_ij = delta_x * delta_x + delta_y * delta_y + delta_z * delta_z + delta_w * delta_w;
 

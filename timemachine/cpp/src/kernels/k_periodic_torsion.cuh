@@ -24,7 +24,7 @@ void __global__ k_periodic_torsion(
     const int *__restrict__ torsion_idxs,  // [b, 4]
     unsigned long long *__restrict__ du_dx,
     unsigned long long *__restrict__ du_dp,
-    __int128 *__restrict__ u) {
+    EnergyType *__restrict__ u) {
 
     const auto t_idx = blockDim.x * blockIdx.x + threadIdx.x;
 

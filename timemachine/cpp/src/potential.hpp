@@ -23,7 +23,7 @@ public:
         const double *h_box,
         unsigned long long *h_du_dx,
         unsigned long long *h_du_dp,
-        __int128 *h_u);
+        EnergyType *h_u);
 
     void execute_host(
         const int N,
@@ -33,7 +33,7 @@ public:
         const double *h_box,
         unsigned long long *h_du_dx,
         unsigned long long *h_du_dp,
-        __int128 *h_u);
+        EnergyType *h_u);
 
     void execute_host_du_dx(
         const int N,
@@ -51,7 +51,7 @@ public:
         const double *d_box,
         unsigned long long *d_du_dx,
         unsigned long long *d_du_dp,
-        __int128 *h_u,
+        EnergyType *h_u,
         cudaStream_t stream) = 0;
 
     virtual void du_dp_fixed_to_float(const int N, const int P, const unsigned long long *du_dp, double *du_dp_float);

@@ -50,7 +50,7 @@ void FlatBottomBond<RealType>::execute_device(
     const double *d_box,
     unsigned long long *d_du_dx,
     unsigned long long *d_du_dp,
-    __int128 *d_u,
+    EnergyType *d_u,
     cudaStream_t stream) {
 
     const int num_params_per_bond = 3;

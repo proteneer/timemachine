@@ -9,7 +9,7 @@ template <typename RealType> class HarmonicBond : public Potential {
 
 private:
     int *d_bond_idxs_;
-    __int128 *d_u_buffer_;
+    EnergyType *d_u_buffer_;
 
     const int B_;
 
@@ -30,7 +30,7 @@ public:
         const double *d_box,
         unsigned long long *d_du_dx, // buffered
         unsigned long long *d_du_dp,
-        __int128 *d_u, // buffered
+        EnergyType *d_u, // buffered
         cudaStream_t stream) override;
 };
 

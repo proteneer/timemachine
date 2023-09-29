@@ -34,5 +34,5 @@ template class DeviceBuffer<int>;
 template class DeviceBuffer<char>;
 template class DeviceBuffer<unsigned int>;
 template class DeviceBuffer<unsigned long long>;
-template class DeviceBuffer<__int128>;
+template class DeviceBuffer<EnergyType>;
 } // namespace timemachine
