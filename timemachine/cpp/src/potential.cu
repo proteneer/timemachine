@@ -4,8 +4,8 @@
 #include "fixed_point.hpp"
 #include "gpu_utils.cuh"
 #include "potential.hpp"
+#include "types.hpp"
 
-#include <chrono>
 #include <iostream>
 
 namespace timemachine {
@@ -18,15 +18,15 @@ void Potential::execute_batch_host(
     const int param_batch_size,  // Number of batches of parameters
     const int P,                 // Number of parameters
     const double *h_x,           // [coord_batch_size, N, 3]
-    const double *h_p,           // [param_batch_size, P]
+    const ParamsType *h_p,       // [param_batch_size, P]
     const double *h_box,         // [coord_batch_size, 3, 3]
     unsigned long long *h_du_dx, // [coord_batch_size, param_batch_size, N, 3]
     unsigned long long *h_du_dp, // [coord_batch_size, param_batch_size, P]
     __int128 *h_u                // [coord_batch_size, param_batch_size, N]
 ) {
-    std::unique_ptr<DeviceBuffer<double>> d_p(nullptr);
+    std::unique_ptr<DeviceBuffer<ParamsType>> d_p(nullptr);
     if (P > 0) {
-        d_p.reset(new DeviceBuffer<double>(param_batch_size * P));
+        d_p.reset(new DeviceBuffer<ParamsType>(param_batch_size * P));
         d_p->copy_from(h_p);
     }
 
@@ -95,7 +95,7 @@ void Potential::execute_host(
     const int N,
     const int P,
     const double *h_x,           // [N,3]
-    const double *h_p,           // [P,]
+    const ParamsType *h_p,       // [P,]
     const double *h_box,         // [3, 3]
     unsigned long long *h_du_dx, // [N,3]
     unsigned long long *h_du_dp, // [P]
@@ -110,7 +110,7 @@ void Potential::execute_host(
     d_x.copy_from(h_x);
     d_box.copy_from(h_box);
 
-    std::unique_ptr<DeviceBuffer<double>> d_p;
+    std::unique_ptr<DeviceBuffer<ParamsType>> d_p;
     std::unique_ptr<DeviceBuffer<unsigned long long>> d_du_dx;
     std::unique_ptr<DeviceBuffer<unsigned long long>> d_du_dp;
     std::unique_ptr<DeviceBuffer<__int128>> d_u;
@@ -118,7 +118,7 @@ void Potential::execute_host(
     // very important that these are initialized to zero since the kernels themselves just accumulate
 
     if (P > 0) {
-        d_p.reset(new DeviceBuffer<double>(P));
+        d_p.reset(new DeviceBuffer<ParamsType>(P));
         d_p->copy_from(h_p);
     }
 
@@ -162,15 +162,15 @@ void Potential::execute_host(
 void Potential::execute_host_du_dx(
     const int N,
     const int P,
-    const double *h_x,   // [N,3]
-    const double *h_p,   // [P,]
-    const double *h_box, // [3, 3]
+    const double *h_x,     // [N,3]
+    const ParamsType *h_p, // [P,]
+    const double *h_box,   // [3, 3]
     unsigned long long *h_du_dx) {
 
     const int &D = Potential::D;
-
+    // TODO: Convert this to DeviceBuffer
     double *d_x;
-    double *d_p;
+    ParamsType *d_p;
     double *d_box;
 
     cudaSafeMalloc(&d_x, N * D * sizeof(double));

@@ -13,7 +13,7 @@ typedef void (*k_nonbonded_fn)(
     const int NR,
     const unsigned int *ixn_count,
     const double *__restrict__ coords,
-    const double *__restrict__ params, // [N]
+    const ParamsType *__restrict__ params, // [N]
     const double *__restrict__ box,
     const double beta,
     const double cutoff,

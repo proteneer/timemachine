@@ -70,8 +70,8 @@ void set_nonbonded_ixn_potential_idxs(
 }
 
 std::shared_ptr<BoundPotential>
-construct_ixn_group_potential(const int N, std::shared_ptr<Potential> pot, const int P, const double *d_params) {
-    std::vector<double> h_params(P);
+construct_ixn_group_potential(const int N, std::shared_ptr<Potential> pot, const int P, const ParamsType *d_params) {
+    std::vector<ParamsType> h_params(P);
     gpuErrchk(cudaMemcpy(&h_params[0], d_params, P * sizeof(*d_params), cudaMemcpyDeviceToHost));
     std::vector<int> row_dummy_idxs{0};
     std::vector<int> col_dummy_idxs{1};

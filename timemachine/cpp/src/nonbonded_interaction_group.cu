@@ -125,7 +125,8 @@ void NonbondedInteractionGroup<RealType>::execute_device(
     const int N,
     const int P,
     const double *d_x,
-    const double *d_p,   // N * PARAMS_PER_ATOM
+    const ParamsType *d_p,
+    // N * PARAMS_PER_ATOM
     const double *d_box, // 3 * 3
     unsigned long long *d_du_dx,
     unsigned long long *d_du_dp,

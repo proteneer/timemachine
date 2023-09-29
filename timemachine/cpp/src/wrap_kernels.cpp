@@ -575,7 +575,7 @@ void declare_potential(py::module &m) {
             "execute",
             [](timemachine::Potential &pot,
                const py::array_t<double, py::array::c_style> &coords,
-               const py::array_t<double, py::array::c_style> &params,
+               const py::array_t<ParamsType, py::array::c_style> &params,
                const py::array_t<double, py::array::c_style> &box) -> py::tuple {
                 const long unsigned int N = coords.shape()[0];
                 const long unsigned int D = coords.shape()[1];
@@ -585,7 +585,6 @@ void declare_potential(py::module &m) {
                 std::vector<unsigned long long> du_dx(N * D, 9999);
                 std::vector<unsigned long long> du_dp(P, 9999);
                 std::vector<__int128> u(1, 9999);
-
                 pot.execute_host(N, P, coords.data(), params.data(), box.data(), &du_dx[0], &du_dp[0], &u[0]);
 
                 py::array_t<double, py::array::c_style> py_du_dx({N, D});
@@ -610,7 +609,7 @@ void declare_potential(py::module &m) {
             "execute_selective_batch",
             [](timemachine::Potential &pot,
                const py::array_t<double, py::array::c_style> &coords,
-               const py::array_t<double, py::array::c_style> &params,
+               const py::array_t<ParamsType, py::array::c_style> &params,
                const py::array_t<double, py::array::c_style> &boxes,
                const bool compute_du_dx,
                const bool compute_du_dp,
@@ -744,7 +743,7 @@ void declare_potential(py::module &m) {
             "execute_selective",
             [](timemachine::Potential &pot,
                const py::array_t<double, py::array::c_style> &coords,
-               const py::array_t<double, py::array::c_style> &params,
+               const py::array_t<ParamsType, py::array::c_style> &params,
                const py::array_t<double, py::array::c_style> &box,
                bool compute_du_dx,
                bool compute_du_dp,
@@ -805,7 +804,7 @@ void declare_potential(py::module &m) {
             "execute_du_dx",
             [](timemachine::Potential &pot,
                const py::array_t<double, py::array::c_style> &coords,
-               const py::array_t<double, py::array::c_style> &params,
+               const py::array_t<ParamsType, py::array::c_style> &params,
                const py::array_t<double, py::array::c_style> &box) -> py::array_t<double, py::array::c_style> {
                 const long unsigned int N = coords.shape()[0];
                 const long unsigned int D = coords.shape()[1];
@@ -835,7 +834,7 @@ void declare_bound_potential(py::module &m) {
     py::class_<Class, std::shared_ptr<Class>>(m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
         .def(
             py::init([](std::shared_ptr<timemachine::Potential> potential,
-                        const py::array_t<double, py::array::c_style> &params) {
+                        const py::array_t<ParamsType, py::array::c_style> &params) {
                 return new timemachine::BoundPotential(potential, py_array_to_vector(params));
             }),
             py::arg("potential"),
@@ -843,7 +842,7 @@ void declare_bound_potential(py::module &m) {
         .def("get_potential", [](const timemachine::BoundPotential &bp) { return bp.potential; })
         .def(
             "set_params",
-            [](timemachine::BoundPotential &bp, const py::array_t<double, py::array::c_style> &params) {
+            [](timemachine::BoundPotential &bp, const py::array_t<ParamsType, py::array::c_style> &params) {
                 bp.set_params(py_array_to_vector(params));
             },
             py::arg("params"))

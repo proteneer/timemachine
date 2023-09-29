@@ -2,6 +2,7 @@
 
 #include "../fixed_point.hpp"
 #include "../gpu_utils.cuh"
+#include "../types.hpp"
 #include "k_nonbonded_common.cuh"
 #include "kernel_utils.cuh"
 
@@ -57,9 +58,9 @@ void __global__ k_gather_coords_and_params(
     const int N,
     const unsigned int *__restrict__ idxs,
     const RealType *__restrict__ coords,
-    const RealType *__restrict__ params,
+    const ParamsType *__restrict__ params,
     RealType *__restrict__ gathered_coords,
-    RealType *__restrict__ gathered_params) {
+    ParamsType *__restrict__ gathered_params) {
     static_assert(COORDS_DIM == 3);
     static_assert(PARAMS_DIM == PARAMS_PER_ATOM);
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
@@ -109,8 +110,8 @@ void __device__ v_nonbonded_unified(
     const int tile_idx,
     const int N,
     const int NR,
-    const double *__restrict__ coords, // [N * 3]
-    const double *__restrict__ params, // [N * PARAMS_PER_ATOM]
+    const double *__restrict__ coords,     // [N * 3]
+    const ParamsType *__restrict__ params, // [N * PARAMS_PER_ATOM]
     box_cache<RealType> &shared_box,
     __int128 *energy_buffer, // [blockDim.x]
     const double beta,
@@ -328,9 +329,9 @@ void __global__ k_nonbonded_unified(
     const int N,  // Number of atoms
     const int NR, // Number of row indices
     const unsigned int *ixn_count,
-    const double *__restrict__ coords, // [N, 3]
-    const double *__restrict__ params, // [N, PARAMS_PER_ATOM]
-    const double *__restrict__ box,    // [3, 3]
+    const double *__restrict__ coords,     // [N, 3]
+    const ParamsType *__restrict__ params, // [N, PARAMS_PER_ATOM]
+    const double *__restrict__ box,        // [3, 3]
     const double beta,
     const double cutoff,
     const unsigned int *__restrict__ row_idxs,

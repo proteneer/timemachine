@@ -4,6 +4,7 @@
 
 #include "bound_potential.hpp"
 #include "potential.hpp"
+#include "types.hpp"
 
 namespace timemachine {
 
@@ -22,7 +23,7 @@ void set_nonbonded_ixn_potential_idxs(
     const cudaStream_t stream);
 
 std::shared_ptr<BoundPotential>
-construct_ixn_group_potential(const int N, std::shared_ptr<Potential> pot, const int P, const double *d_params);
+construct_ixn_group_potential(const int N, std::shared_ptr<Potential> pot, const int P, const ParamsType *d_params);
 
 void verify_local_md_parameters(double radius, double k);
 

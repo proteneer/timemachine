@@ -1,4 +1,5 @@
 #include "../fixed_point.hpp"
+#include "../types.hpp"
 #include "chiral_utils.cuh"
 #include "k_fixed_point.cuh"
 
@@ -6,8 +7,8 @@ template <typename RealType>
 void __global__ k_chiral_atom_restraint(
     const int R, // number of restraints
     const double *__restrict__ coords,
-    const double *__restrict__ params, // [R]
-    const int *__restrict__ idxs,      // [R, 2]
+    const ParamsType *__restrict__ params, // [R]
+    const int *__restrict__ idxs,          // [R, 2]
     unsigned long long *__restrict__ du_dx,
     unsigned long long *__restrict__ du_dp,
     __int128 *__restrict__ u) {
@@ -92,9 +93,9 @@ template <typename RealType>
 void __global__ k_chiral_bond_restraint(
     const int R, // number of restraints
     const double *__restrict__ coords,
-    const double *__restrict__ params, // [R]
-    const int *__restrict__ idxs,      // [R, 2]
-    const int *__restrict__ signs,     // [R]
+    const ParamsType *__restrict__ params, // [R]
+    const int *__restrict__ idxs,          // [R, 2]
+    const int *__restrict__ signs,         // [R]
     unsigned long long *__restrict__ du_dx,
     unsigned long long *__restrict__ du_dp,
     __int128 *__restrict__ u) {
