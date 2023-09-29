@@ -46,7 +46,7 @@ public:
     void set_idxs_device(
         const int NC, const int NR, unsigned int *column_idxs, unsigned int *row_idxs, const cudaStream_t stream);
 
-    unsigned int num_ixns();
+    unsigned int num_tile_ixns();
 
     std::vector<std::vector<int>>
     get_nblist_host(const int N, const double *h_coords, const double *h_box, const double cutoff);

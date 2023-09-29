@@ -93,7 +93,8 @@ void Neighborlist<RealType>::compute_block_bounds_host(
     }
 }
 
-template <typename RealType> unsigned int Neighborlist<RealType>::num_ixns() {
+// Return the number of tiles that interact
+template <typename RealType> unsigned int Neighborlist<RealType>::num_tile_ixns() {
     unsigned int h_ixn_count;
     gpuErrchk(cudaMemcpy(&h_ixn_count, d_ixn_count_, 1 * sizeof(*d_ixn_count_), cudaMemcpyDeviceToHost));
     return h_ixn_count;

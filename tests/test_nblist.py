@@ -374,8 +374,9 @@ def test_nblist_max_interactions(block_size, tiles):
     box = np.eye(3) * 100.0
 
     nblist = custom_ops.Neighborlist_f32(coords.shape[0])
-
+    max_ixn_count = nblist.get_max_ixn_count()
     test_ixn_list = nblist.get_nblist(coords, box, 10.0)
     assert len(test_ixn_list) == tiles
     for tile_ixns in test_ixn_list:
         assert len(tile_ixns) > 0
+    assert nblist.get_tile_ixn_count() * block_size == max_ixn_count
