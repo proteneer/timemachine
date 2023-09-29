@@ -1,3 +1,5 @@
+from typing import Optional
+
 import numpy as np
 import pytest
 from jax import jit, vmap
@@ -169,8 +171,8 @@ def test_conditional_effective_sample_size():
 
 
 @pytest.mark.parametrize("resampling_fxn", [identity_resample, multinomial_resample, conditional_multinomial_resample])
-@pytest.mark.parametrize("test_adaptive_smc", [True, False])
-def test_sequential_monte_carlo(test_adaptive_smc: bool, resampling_fxn: Resampler):
+@pytest.mark.parametrize("test_adaptive_smc, cess_factor", [(True, 0.5), (True, 1.1), (False, None)])
+def test_sequential_monte_carlo(cess_factor: Optional[float], test_adaptive_smc: bool, resampling_fxn: Resampler):
     """Run SMC with the desired resampling_fxn on a Gaussian 1D test system, and assert that:
     * running estimates of the free energy as a fxn of lambda match analytical free energies, and
     * endstate samples have expected mean and stddev
@@ -189,7 +191,7 @@ def test_sequential_monte_carlo(test_adaptive_smc: bool, resampling_fxn: Resampl
 
     vec_u_fxn = jit(vmap(u_fxn, in_axes=(0, None, None)))
 
-    def log_prob(xs, lam):
+    def log_prob(xs, lam, *args):
         xs = np.array(xs)
         return -vec_u_fxn(xs, lam, params)
 
@@ -220,10 +222,26 @@ def test_sequential_monte_carlo(test_adaptive_smc: bool, resampling_fxn: Resampl
 
     if test_adaptive_smc:
         # apply ASMC
-        cess_target = len(samples) * 0.5  # arbitray value results in ~5 windows
-        result_dict = adaptive_sequential_monte_carlo(
-            samples, propagate, log_prob, resampling_fxn, cess_target=cess_target
-        )
+        assert cess_factor is not None
+        cess_target = len(samples) * cess_factor  # arbitray value results in ~5 windows
+        if cess_target > len(samples):
+            with pytest.raises(AssertionError, match="too large"):
+                result_dict = adaptive_sequential_monte_carlo(
+                    samples,
+                    propagate,
+                    log_prob,
+                    resampling_fxn,
+                    cess_target=cess_target,
+                )
+            return
+        else:
+            result_dict = adaptive_sequential_monte_carlo(
+                samples,
+                propagate,
+                log_prob,
+                resampling_fxn,
+                cess_target=cess_target,
+            )
 
         # ASMC returns the lambdas that were used
         lambdas = result_dict["lambdas_traj"]
