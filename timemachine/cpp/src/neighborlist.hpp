@@ -13,7 +13,6 @@ private:
     int N_;              // Number of atoms
     int NC_;             // Number of atoms in column, N_ by default
     int NR_;             // Number of atoms in row, N_ by default
-    const unsigned long long atom_buffer_size_;
 
     RealType *d_row_block_bounds_ctr_;
     RealType *d_row_block_bounds_ext_;
