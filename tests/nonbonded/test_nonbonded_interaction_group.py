@@ -115,6 +115,57 @@ def test_nonbonded_interaction_group_correctness(
 @pytest.mark.parametrize("beta", [2.0])
 @pytest.mark.parametrize("cutoff", [1.1])
 @pytest.mark.parametrize("precision,rtol,atol", [(np.float64, 1e-8, 1e-8), (np.float32, 1e-4, 5e-4)])
+@pytest.mark.parametrize("num_atoms", [231])
+@pytest.mark.parametrize("num_atoms_ligand", [128])
+@pytest.mark.parametrize("num_col_atoms", [1, 10, 33])
+def test_nonbonded_interaction_group_neighborlist_rebuild(
+    num_col_atoms,
+    num_atoms_ligand,
+    num_atoms,
+    precision,
+    rtol,
+    atol,
+    cutoff,
+    beta,
+    example_nonbonded_potential,
+    example_conf,
+    example_box,
+    rng,
+):
+    "Verify that randomizing the column indices will correctly trigger a neighborlist rebuild"
+
+    conf = example_conf[:num_atoms]
+    params = example_nonbonded_potential.params[:num_atoms, :]
+
+    ligand_idxs = rng.choice(num_atoms, size=(num_atoms_ligand,), replace=False).astype(np.int32)
+
+    if num_col_atoms is None:  # means all the rest
+        num_col_atoms = num_atoms - num_atoms_ligand
+
+    col_atom_idxs = None
+    if num_col_atoms:
+        host_idxs = np.setdiff1d(np.arange(num_atoms), ligand_idxs).astype(np.int32)
+        col_atom_idxs = rng.choice(host_idxs, size=(num_col_atoms,), replace=False).astype(np.int32)
+
+    potential = NonbondedInteractionGroup(num_atoms, ligand_idxs, beta, cutoff, col_atom_idxs=col_atom_idxs)
+
+    test_impl = potential.to_gpu(precision)
+
+    # Test that if we generate the forces then change the column indices that we correctly detect
+    for params in gen_nonbonded_params_with_4d_offsets(rng, params, cutoff):
+        GradientTest().compare_forces(conf, params, example_box, potential, test_impl, rtol=rtol, atol=atol)
+        GradientTest().assert_differentiable_interface_consistency(conf, params, example_box, test_impl)
+
+        # Randomize the column indices to trigger a nblist rebuild
+        conf[col_atom_idxs] += rng.random(size=(len(col_atom_idxs), 3)) * (cutoff ** 2)
+
+        GradientTest().compare_forces(conf, params, example_box, potential, test_impl, rtol=rtol, atol=atol)
+        GradientTest().assert_differentiable_interface_consistency(conf, params, example_box, test_impl)
+
+
+@pytest.mark.parametrize("beta", [2.0])
+@pytest.mark.parametrize("cutoff", [1.1])
+@pytest.mark.parametrize("precision,rtol,atol", [(np.float64, 1e-8, 1e-8), (np.float32, 1e-4, 5e-4)])
 @pytest.mark.parametrize("num_atoms", [33, 231, 1050])
 def test_nonbonded_interaction_group_empty_set_of_idxs(
     num_atoms,
