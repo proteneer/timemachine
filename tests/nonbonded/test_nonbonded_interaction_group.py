@@ -151,7 +151,7 @@ def test_nonbonded_interaction_group_neighborlist_rebuild(
 
     test_impl = potential.to_gpu(precision)
 
-    # Test that if we generate the forces then change the column indices that we correctly detect
+    # Test that if we compare the potentials then randomize the column indices that the potentials still agree.
     for params in gen_nonbonded_params_with_4d_offsets(rng, params, cutoff):
         GradientTest().compare_forces(conf, params, example_box, potential, test_impl, rtol=rtol, atol=atol)
         GradientTest().assert_differentiable_interface_consistency(conf, params, example_box, test_impl)
