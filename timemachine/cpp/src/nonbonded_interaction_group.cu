@@ -45,7 +45,8 @@ NonbondedInteractionGroup<RealType>::NonbondedInteractionGroup(
                     &k_nonbonded_unified<RealType, NONBONDED_KERNEL_THREADS_PER_BLOCK, 1, 1, 1>}),
 
       beta_(beta), cutoff_(cutoff), steps_since_last_sort_(0), nblist_(N_), nblist_padding_(nblist_padding),
-      hilbert_sort_(nullptr), disable_hilbert_(disable_hilbert_sort) {
+      nblist_distance_check_(static_cast<RealType>(0.25) * nblist_padding_ * nblist_padding_), hilbert_sort_(nullptr),
+      disable_hilbert_(disable_hilbert_sort) {
 
     this->validate_idxs(N_, row_atom_idxs, col_atom_idxs, false);
 
@@ -65,8 +66,8 @@ NonbondedInteractionGroup<RealType>::NonbondedInteractionGroup(
     gpuErrchk(cudaMemset(d_nblist_x_, 0, N_ * 3 * sizeof(*d_nblist_x_))); // set non-sensical positions
     cudaSafeMalloc(&d_nblist_box_, 3 * 3 * sizeof(*d_nblist_box_));
     gpuErrchk(cudaMemset(d_nblist_box_, 0, 3 * 3 * sizeof(*d_nblist_box_)));
-    cudaSafeMalloc(&d_rebuild_nblist_, 1 * sizeof(*d_rebuild_nblist_));
-    gpuErrchk(cudaMallocHost(&p_rebuild_nblist_, 1 * sizeof(*p_rebuild_nblist_)));
+    cudaSafeMalloc(&d_rebuild_nblist_, 2 * sizeof(*d_rebuild_nblist_));
+    gpuErrchk(cudaMallocHost(&p_rebuild_nblist_, 2 * sizeof(*p_rebuild_nblist_)));
 
     if (!disable_hilbert_) {
         this->hilbert_sort_.reset(new HilbertSort(N_));
@@ -107,6 +108,7 @@ template <typename RealType>
 void NonbondedInteractionGroup<RealType>::sort(const double *d_coords, const double *d_box, cudaStream_t stream) {
     // We must rebuild the neighborlist after sorting, as the neighborlist is tied to a particular sort order
     if (!disable_hilbert_) {
+        // Reuse the d_perm_ here to avoid having to make two kernels calls.
         this->hilbert_sort_->sort_device(NR_, d_row_atom_idxs_, d_coords, d_box, d_perm_, stream);
         this->hilbert_sort_->sort_device(NC_, d_col_atom_idxs_, d_coords, d_box, d_perm_ + NR_, stream);
     } else {
@@ -115,9 +117,9 @@ void NonbondedInteractionGroup<RealType>::sort(const double *d_coords, const dou
         gpuErrchk(cudaMemcpyAsync(
             d_perm_ + NR_, d_col_atom_idxs_, NC_ * sizeof(*d_col_atom_idxs_), cudaMemcpyDeviceToDevice, stream));
     }
-    gpuErrchk(cudaMemsetAsync(d_rebuild_nblist_, 1, sizeof(*d_rebuild_nblist_), stream));
     // Set the pinned memory to indicate that we need to rebuild
     p_rebuild_nblist_[0] = 1;
+    p_rebuild_nblist_[1] = 0; // Already sorted, don't need to resort
 }
 
 template <typename RealType>
@@ -170,6 +172,7 @@ void NonbondedInteractionGroup<RealType>::execute_device(
     const int K = NR_ + NC_; // total number of interactions
     const int B_K = ceil_divide(K, tpb);
 
+    // (ytz) see if we need to rebuild the neighborlist.
     if (this->needs_sort()) {
         // Sorting always triggers a neighborlist rebuild
         this->sort(d_x, d_box, stream);
@@ -177,18 +180,13 @@ void NonbondedInteractionGroup<RealType>::execute_device(
         // (ytz) see if we need to rebuild the neighborlist.
         // Reuse the d_perm_ here to avoid having to make two kernels calls.
         k_check_rebuild_coords_and_box_gather<RealType><<<B_K, tpb, 0, stream>>>(
-            NR_ + NC_, d_perm_, d_x, d_nblist_x_, d_box, d_nblist_box_, nblist_padding_, d_rebuild_nblist_);
+            NR_ + NC_, d_perm_, d_x, d_nblist_x_, d_box, d_nblist_box_, nblist_distance_check_, d_rebuild_nblist_);
         gpuErrchk(cudaPeekAtLastError());
         // we can optimize this away by doing the check on the GPU directly.
         gpuErrchk(cudaMemcpyAsync(
-            p_rebuild_nblist_, d_rebuild_nblist_, 1 * sizeof(*p_rebuild_nblist_), cudaMemcpyDeviceToHost, stream));
+            p_rebuild_nblist_, d_rebuild_nblist_, 2 * sizeof(*p_rebuild_nblist_), cudaMemcpyDeviceToHost, stream));
         gpuErrchk(cudaEventRecord(nblist_flag_sync_event_, stream));
     }
-
-    // compute new coordinates/params
-    k_gather_coords_and_params<double, 3, PARAMS_PER_ATOM>
-        <<<ceil_divide(K, tpb), tpb, 0, stream>>>(K, d_perm_, d_x, d_p, d_sorted_x_, d_sorted_p_);
-    gpuErrchk(cudaPeekAtLastError());
     // reset buffers and sorted accumulators
     if (d_du_dx) {
         gpuErrchk(cudaMemsetAsync(d_sorted_du_dx_, 0, K * 3 * sizeof(*d_sorted_du_dx_), stream))
@@ -200,11 +198,18 @@ void NonbondedInteractionGroup<RealType>::execute_device(
     // Syncing to an event allows having additional kernels run while we synchronize
     // Note that if no event is recorded, this is effectively a no-op, such as in the case of sorting.
     gpuErrchk(cudaEventSynchronize(nblist_flag_sync_event_));
+    if (p_rebuild_nblist_[1] > 0) {
+        this->sort(d_x, d_box, stream); // Will set p_rebuild_nblist_[0] = 1
+    }
+    // compute new coordinates/params
+    k_gather_coords_and_params<double, 3, PARAMS_PER_ATOM>
+        <<<ceil_divide(K, tpb), tpb, 0, stream>>>(K, d_perm_, d_x, d_p, d_sorted_x_, d_sorted_p_);
+    gpuErrchk(cudaPeekAtLastError());
     if (p_rebuild_nblist_[0] > 0) {
 
         nblist_.build_nblist_device(K, d_sorted_x_, d_box, cutoff_ + nblist_padding_, stream);
 
-        gpuErrchk(cudaMemsetAsync(d_rebuild_nblist_, 0, sizeof(*d_rebuild_nblist_), stream));
+        gpuErrchk(cudaMemsetAsync(d_rebuild_nblist_, 0, 2 * sizeof(*d_rebuild_nblist_), stream));
         gpuErrchk(cudaMemcpyAsync(d_nblist_x_, d_x, N * 3 * sizeof(*d_x), cudaMemcpyDeviceToDevice, stream));
         gpuErrchk(cudaMemcpyAsync(d_nblist_box_, d_box, 3 * 3 * sizeof(*d_box), cudaMemcpyDeviceToDevice, stream));
     }

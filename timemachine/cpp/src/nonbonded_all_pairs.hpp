@@ -29,6 +29,7 @@ private:
     Neighborlist<RealType> nblist_;
 
     const double nblist_padding_;
+    const double nblist_distance_check_;
     double *d_nblist_x_;   // coords which were used to compute the nblist
     double *d_nblist_box_; // box which was used to rebuild the nblist
     __int128 *d_u_buffer_;

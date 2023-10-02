@@ -8,13 +8,14 @@
 template <typename RealType>
 void __global__ k_check_rebuild_coords_and_box_gather(
     const int N,
-    const unsigned int *atom_idxs,
+    const unsigned int *__restrict__ atom_idxs,
     const double *__restrict__ new_coords,
     const double *__restrict__ old_coords,
     const double *__restrict__ new_box,
     const double *__restrict__ old_box,
-    const double padding,
-    int *rebuild_flag) {
+    const double dist,
+    int *__restrict__ rebuild_flag // [2]
+) {
 
     const int idx = blockIdx.x * blockDim.x + threadIdx.x;
 
@@ -23,7 +24,6 @@ void __global__ k_check_rebuild_coords_and_box_gather(
         // we can probably derive a looser bound later on.
         if (old_box[idx] != new_box[idx]) {
             rebuild_flag[0] = 1;
-            return;
         }
     }
 
@@ -46,7 +46,10 @@ void __global__ k_check_rebuild_coords_and_box_gather(
     RealType dz = zi - zj;
 
     RealType d2ij = dx * dx + dy * dy + dz * dz;
-    if (d2ij > static_cast<RealType>(0.25) * padding * padding) {
+    // If the distance moved further than the sort distance, indicate to resort
+    if (d2ij > SORT_DISTANCE) {
+        rebuild_flag[1] = 1; // Indicate to resort
+    } else if (d2ij > dist) {
         // (ytz): this is *safe* but technically is a race condition
         rebuild_flag[0] = 1;
     }

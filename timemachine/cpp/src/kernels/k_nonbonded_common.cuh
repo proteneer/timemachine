@@ -8,6 +8,8 @@ enum { PARAM_OFFSET_CHARGE = 0, PARAM_OFFSET_SIG, PARAM_OFFSET_EPS, PARAM_OFFSET
 // Empirically selected number of kernel blocks, focusing on the cuda 8.* architectures
 static const int NONBONDED_KERNEL_BLOCKS = 2048;
 static const int NONBONDED_KERNEL_THREADS_PER_BLOCK = 256;
+// If distance of coords between new and old is greater than the distance, needs a new sort
+static const float SORT_DISTANCE = 0.7; // nm
 
 #define PI 3.141592653589793115997963468544185161
 #define TWO_OVER_SQRT_PI 1.128379167095512595889238330988549829708

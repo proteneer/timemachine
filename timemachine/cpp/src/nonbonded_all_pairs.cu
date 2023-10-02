@@ -26,7 +26,8 @@ NonbondedAllPairs<RealType>::NonbondedAllPairs(
     const bool disable_hilbert_sort,
     const double nblist_padding)
     : N_(N), K_(atom_idxs ? atom_idxs->size() : N_), beta_(beta), cutoff_(cutoff), steps_since_last_sort_(0),
-      d_atom_idxs_(nullptr), nblist_(N_), nblist_padding_(nblist_padding), hilbert_sort_(nullptr),
+      d_atom_idxs_(nullptr), nblist_(N_), nblist_padding_(nblist_padding),
+      nblist_distance_check_(static_cast<RealType>(0.25) * nblist_padding_ * nblist_padding_), hilbert_sort_(nullptr),
       disable_hilbert_(disable_hilbert_sort),
 
       kernel_ptrs_({// enumerate over every possible kernel combination
@@ -68,8 +69,8 @@ NonbondedAllPairs<RealType>::NonbondedAllPairs(
     gpuErrchk(cudaMemset(d_nblist_x_, 0, N_ * 3 * sizeof(*d_nblist_x_))); // set non-sensical positions
     cudaSafeMalloc(&d_nblist_box_, 3 * 3 * sizeof(*d_nblist_box_));
     gpuErrchk(cudaMemset(d_nblist_box_, 0, 3 * 3 * sizeof(*d_nblist_box_)));
-    cudaSafeMalloc(&d_rebuild_nblist_, 1 * sizeof(*d_rebuild_nblist_));
-    gpuErrchk(cudaMallocHost(&p_rebuild_nblist_, 1 * sizeof(*p_rebuild_nblist_)));
+    cudaSafeMalloc(&d_rebuild_nblist_, 2 * sizeof(*d_rebuild_nblist_));
+    gpuErrchk(cudaMallocHost(&p_rebuild_nblist_, 2 * sizeof(*p_rebuild_nblist_)));
 
     if (!disable_hilbert_) {
         this->hilbert_sort_.reset(new HilbertSort(N_));
@@ -133,7 +134,7 @@ void NonbondedAllPairs<RealType>::set_atom_idxs_device(
         cudaMemcpyAsync(d_atom_idxs_, d_in_atom_idxs, K * sizeof(*d_atom_idxs_), cudaMemcpyDeviceToDevice, stream));
     nblist_.resize_device(K, stream);
     // Force the rebuild of the nblist
-    gpuErrchk(cudaMemsetAsync(d_rebuild_nblist_, 1, 1 * sizeof(*d_rebuild_nblist_), stream));
+    gpuErrchk(cudaMemsetAsync(d_rebuild_nblist_, 1, 2 * sizeof(*d_rebuild_nblist_), stream));
     this->K_ = K;
     // Reset the steps so that we do a new sort
     this->steps_since_last_sort_ = 0;
@@ -152,9 +153,9 @@ void NonbondedAllPairs<RealType>::sort(const double *d_coords, const double *d_b
         gpuErrchk(cudaMemcpyAsync(
             d_sorted_atom_idxs_, d_atom_idxs_, K_ * sizeof(*d_atom_idxs_), cudaMemcpyDeviceToDevice, stream));
     }
-    gpuErrchk(cudaMemsetAsync(d_rebuild_nblist_, 1, sizeof(*d_rebuild_nblist_), stream));
     // Set the pinned memory to indicate that we need to rebuild
     p_rebuild_nblist_[0] = 1;
+    p_rebuild_nblist_[1] = 0; // Don't need a new sort, as we just sorted
 }
 
 template <typename RealType>
@@ -204,7 +205,7 @@ void NonbondedAllPairs<RealType>::execute_device(
     } else {
         // (ytz) see if we need to rebuild the neighborlist.
         k_check_rebuild_coords_and_box_gather<RealType><<<ceil_divide(K_, tpb), tpb, 0, stream>>>(
-            K_, d_atom_idxs_, d_x, d_nblist_x_, d_box, d_nblist_box_, nblist_padding_, d_rebuild_nblist_);
+            K_, d_atom_idxs_, d_x, d_nblist_x_, d_box, d_nblist_box_, nblist_distance_check_, d_rebuild_nblist_);
         gpuErrchk(cudaPeekAtLastError());
 
         // we can optimize this away by doing the check on the GPU directly.
@@ -212,10 +213,6 @@ void NonbondedAllPairs<RealType>::execute_device(
             p_rebuild_nblist_, d_rebuild_nblist_, 1 * sizeof(*p_rebuild_nblist_), cudaMemcpyDeviceToHost, stream));
         gpuErrchk(cudaEventRecord(nblist_flag_sync_event_, stream));
     }
-    // compute new coordinates/params
-    k_gather_coords_and_params<double, 3, PARAMS_PER_ATOM>
-        <<<ceil_divide(K_, tpb), tpb, 0, stream>>>(K_, d_sorted_atom_idxs_, d_x, d_p, d_gathered_x_, d_gathered_p_);
-    gpuErrchk(cudaPeekAtLastError());
 
     // reset buffers and sorted accumulators
     if (d_du_dx) {
@@ -227,6 +224,13 @@ void NonbondedAllPairs<RealType>::execute_device(
     // Syncing to an event allows having additional kernels run while we synchronize
     // Note that if no event is recorded, this is effectively a no-op, such as in the case of sorting.
     gpuErrchk(cudaEventSynchronize(nblist_flag_sync_event_));
+    if (p_rebuild_nblist_[1] > 0) {
+        this->sort(d_x, d_box, stream); // Will set p_rebuild_nblist_[0] = 1
+    }
+    // compute new coordinates/params
+    k_gather_coords_and_params<double, 3, PARAMS_PER_ATOM>
+        <<<ceil_divide(K_, tpb), tpb, 0, stream>>>(K_, d_sorted_atom_idxs_, d_x, d_p, d_gathered_x_, d_gathered_p_);
+    gpuErrchk(cudaPeekAtLastError());
     if (p_rebuild_nblist_[0] > 0) {
 
         nblist_.build_nblist_device(K_, d_gathered_x_, d_box, cutoff_ + nblist_padding_, stream);
