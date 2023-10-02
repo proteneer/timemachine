@@ -242,7 +242,7 @@ class GradientTest(unittest.TestCase):
 
         assert x.dtype == np.float64
 
-        params = (params.astype(np.float32)).astype(np.float64)
+        # params = (params.astype(np.float32)).astype(np.float64)
         assert params.dtype == np.float64
         ref_u = ref_potential(x, params, box)
         assert (
