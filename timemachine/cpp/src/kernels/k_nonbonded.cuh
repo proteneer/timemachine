@@ -8,7 +8,7 @@
 template <typename RealType>
 void __global__ k_check_rebuild_coords_and_box_gather(
     const int N,
-    const unsigned int *atom_idxs,
+    const unsigned int *__restrict__ atom_idxs,
     const double *__restrict__ new_coords,
     const double *__restrict__ old_coords,
     const double *__restrict__ new_box,
@@ -112,7 +112,7 @@ void __device__ v_nonbonded_unified(
     const double *__restrict__ coords, // [N * 3]
     const double *__restrict__ params, // [N * PARAMS_PER_ATOM]
     box_cache<RealType> &shared_box,
-    __int128 *energy_buffer, // [blockDim.x]
+    __int128 *__restrict__ energy_buffer, // [blockDim.x]
     const double beta,
     const double cutoff,
     const unsigned int *__restrict__ row_idxs,
@@ -327,7 +327,7 @@ template <typename RealType, int THREADS, bool COMPUTE_U, bool COMPUTE_DU_DX, bo
 void __global__ k_nonbonded_unified(
     const int N,  // Number of atoms
     const int NR, // Number of row indices
-    const unsigned int *ixn_count,
+    const unsigned int *__restrict__ ixn_count,
     const double *__restrict__ coords, // [N, 3]
     const double *__restrict__ params, // [N, PARAMS_PER_ATOM]
     const double *__restrict__ box,    // [3, 3]
