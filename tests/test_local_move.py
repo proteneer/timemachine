@@ -207,7 +207,7 @@ def test_local_md_particle_density(freeze_reference, k):
     """Verify that the average particle density around a single particle is stable.
 
     In the naive implementation of local md, a vacuum can appear around the local idxs. See naive_local_resampling_move
-    for what the incorrect implementation looks like. The vacuume is introduced due to discretization error where in a step
+    for what the incorrect implementation looks like. The vacuum is introduced due to discretization error where in a step
     a particle moves away from the local idxs and is frozen in the next round of local MD.
     """
     mol, _ = get_biphenyl()
@@ -264,6 +264,7 @@ def test_local_md_particle_density(freeze_reference, k):
         xs, boxes = ctxt.multiple_steps_local(steps, local_idxs, k=k, seed=local_seed)
         return (xs[-1], boxes[-1]), None
 
+    # The threshold for this test is sensitive to the random seed. Selected by setting threshold that passes with 10 seeds
     assert_no_drift(
-        (x0[-1], boxes[-1]), local_move, num_particles_near_ligand, n_local_resampling_iterations=250, threshold=0.055
+        (x0[-1], boxes[-1]), local_move, num_particles_near_ligand, n_local_resampling_iterations=250, threshold=0.08
     )

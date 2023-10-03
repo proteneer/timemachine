@@ -7,11 +7,20 @@ from warnings import catch_warnings
 import numpy as np
 import pytest
 
-from timemachine.fe.free_energy import HostConfig, MDParams, PairBarResult, SimulationResult, image_frames, sample
+from timemachine.fe.free_energy import (
+    HostConfig,
+    HREXParams,
+    MDParams,
+    PairBarResult,
+    SimulationResult,
+    image_frames,
+    sample,
+)
 from timemachine.fe.rbfe import (
     DEFAULT_MD_PARAMS,
     estimate_relative_free_energy,
     estimate_relative_free_energy_bisection,
+    estimate_relative_free_energy_bisection_hrex,
     run_solvent,
     run_vacuum,
 )
@@ -46,9 +55,9 @@ def run_bitwise_reproducibility(mol_a, mol_b, core, forcefield, md_params, estim
 
     all_frames, all_boxes = [], []
     for state in solvent_res.final_result.initial_states:
-        frames, boxes = sample(state, solvent_res.md_params)
-        all_frames.append(frames)
-        all_boxes.append(boxes)
+        traj = sample(state, solvent_res.md_params, max_buffer_frames=100)
+        all_frames.append(traj.frames)
+        all_boxes.append(traj.boxes)
 
     np.testing.assert_equal(solvent_res.frames, all_frames)
     np.testing.assert_equal(solvent_res.boxes, all_boxes)
@@ -150,14 +159,24 @@ def run_triple(mol_a, mol_b, core, forcefield, md_params, protein_path, estimate
 @pytest.mark.nightly(reason="Slow!")
 @pytest.mark.parametrize(
     "estimate_relative_free_energy_fn",
-    [estimate_relative_free_energy, estimate_relative_free_energy_bisection],
+    [
+        estimate_relative_free_energy,
+        estimate_relative_free_energy_bisection,
+        estimate_relative_free_energy_bisection_hrex,
+    ],
 )
 def test_run_hif2a_test_system(estimate_relative_free_energy_fn):
 
     mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
     forcefield = Forcefield.load_default()
 
-    md_params = MDParams(n_frames=100, n_eq_steps=1000, steps_per_frame=100, seed=2023)
+    md_params = MDParams(
+        n_frames=100,
+        n_eq_steps=1000,
+        steps_per_frame=100,
+        seed=2023,
+        hrex_params=HREXParams(n_frames_per_iter=1),
+    )
 
     with resources.path("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as protein_path:
         run_triple(
@@ -169,6 +188,34 @@ def test_run_hif2a_test_system(estimate_relative_free_energy_fn):
             protein_path=str(protein_path),
             estimate_relative_free_energy_fn=estimate_relative_free_energy_fn,
         )
+
+
+@pytest.mark.nightly(reason="Slow!")
+@pytest.mark.parametrize(
+    "estimate_relative_free_energy_fn",
+    [
+        estimate_relative_free_energy,
+        estimate_relative_free_energy_bisection,
+        pytest.param(
+            estimate_relative_free_energy_bisection_hrex,
+            marks=pytest.mark.skip(
+                reason="lambda window trajectories are not individually reproducible given InitialState due to mixing"
+            ),
+        ),
+    ],
+)
+def test_run_hif2a_test_system_reproducibility(estimate_relative_free_energy_fn):
+
+    mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
+    forcefield = Forcefield.load_default()
+
+    md_params = MDParams(
+        n_frames=100,
+        n_eq_steps=1000,
+        steps_per_frame=100,
+        seed=2023,
+    )
+
     run_bitwise_reproducibility(
         mol_a,
         mol_b,
@@ -186,10 +233,6 @@ def test_md_params_validation():
     # assert steps_per_frame > 0
     with pytest.raises(AssertionError):
         MDParams(seed=2023, n_frames=frames, n_eq_steps=10, steps_per_frame=0)
-
-    # assert n_eq_steps > 0
-    with pytest.raises(AssertionError):
-        MDParams(seed=2023, n_frames=frames, n_eq_steps=0, steps_per_frame=steps_per_frame)
 
     # assert n_frames > 0
     with pytest.raises(AssertionError):
@@ -391,3 +434,4 @@ if __name__ == "__main__":
     # toggling the pytest marker
     test_run_hif2a_test_system(estimate_relative_free_energy)
     test_run_hif2a_test_system(estimate_relative_free_energy_bisection)
+    test_run_hif2a_test_system(estimate_relative_free_energy_bisection_hrex)

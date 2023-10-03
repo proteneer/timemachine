@@ -1,26 +1,35 @@
+from dataclasses import dataclass, field
+from typing import Any, Optional
+
+import numpy as np
+from numpy.typing import NDArray
+
 from timemachine.lib import custom_ops
 
 # safe to pickle!
 
 
+@dataclass
 class LangevinIntegrator:
-    def __init__(self, temperature, dt, friction, masses, seed):
-
-        self.dt = dt
-        self.friction = friction
-        self.masses = masses
-        self.seed = seed
-        self.temperature = temperature
+    temperature: float
+    dt: float
+    friction: float
+    masses: NDArray[np.float64]
+    seed: int
 
     def impl(self):
         return custom_ops.LangevinIntegrator(self.masses, self.temperature, self.dt, self.friction, self.seed)
 
 
+@dataclass
 class VelocityVerletIntegrator:
-    def __init__(self, dt, masses):
-        self.dt = dt
+    dt: float
+    masses: NDArray[np.float64]
 
-        cb = dt / masses
+    cbs: NDArray[np.float64] = field(init=False)
+
+    def __post_init__(self):
+        cb = self.dt / self.masses
         cb *= -1
         self.cbs = cb
 
@@ -28,19 +37,26 @@ class VelocityVerletIntegrator:
         return custom_ops.VelocityVerletIntegrator(self.dt, self.cbs)
 
 
+@dataclass
 class MonteCarloBarostat:
-
-    __slots__ = ("N", "temperature", "pressure", "group_idxs", "interval", "seed")
-
-    def __init__(self, N, pressure, temperature, group_idxs, interval, seed):
-        self.N = N
-        self.pressure = pressure
-        self.temperature = temperature
-        self.group_idxs = group_idxs
-        self.interval = interval
-        self.seed = seed
+    N: int
+    pressure: float
+    temperature: float
+    group_idxs: Any  # TODO: address mixed convention for type of group_idxs
+    interval: int
+    seed: int
+    adaptive_scaling_enabled: bool = True
+    initial_volume_scale_factor: Optional[float] = None
 
     def impl(self, bound_potentials):
         return custom_ops.MonteCarloBarostat(
-            self.N, self.pressure, self.temperature, self.group_idxs, self.interval, bound_potentials, self.seed
+            self.N,
+            self.pressure,
+            self.temperature,
+            self.group_idxs,
+            self.interval,
+            bound_potentials,
+            self.seed,
+            self.adaptive_scaling_enabled,
+            self.initial_volume_scale_factor or 0.0,  # 0.0 is a special value meaning "use 1% of initial box volume"
         )

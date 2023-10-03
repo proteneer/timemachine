@@ -14,7 +14,8 @@ from timemachine.constants import BOLTZ, DEFAULT_PRESSURE, DEFAULT_TEMP
 from timemachine.fe.utils import get_mol_masses
 from timemachine.ff import Forcefield
 from timemachine.md import enhanced
-from timemachine.md.moves import NPTMove, NVTMove, OptimizedMTMMove
+from timemachine.md.barostat.moves import NPTMove
+from timemachine.md.moves import NVTMove, OptimizedMTMMove
 from timemachine.md.states import CoordsVelBox
 from timemachine.potentials import NonbondedInteractionGroup, bonded, nonbonded
 

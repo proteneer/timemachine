@@ -19,21 +19,36 @@ public:
         std::vector<std::vector<int>> group_idxs,
         const int interval,
         std::vector<std::shared_ptr<BoundPotential>> bps,
-        const int seed);
+        const int seed,
+        const bool adapt_volume_scale_factor,
+        const double initial_volume_scale_factor);
 
     ~MonteCarloBarostat();
 
     // inplace_move() may modify d_x and d_box
     void inplace_move(double *d_x, double *d_box, cudaStream_t stream);
 
+    // used for testing, bool return tells you if move was accepted
+    bool inplace_move_host(double *h_x, double *h_box);
+
     void set_interval(const int interval);
 
     int get_interval();
 
+    double get_volume_scale_factor();
+
+    void set_volume_scale_factor(const double volume_scale_factor);
+
     void set_pressure(const double pressure);
+
+    void set_adaptive_scaling(const bool adaptive_scaling_enabled);
+
+    bool get_adaptive_scaling();
 
 private:
     const int N_;
+
+    bool adaptive_scaling_enabled_; // Whether or no to adapt d_volume_scale_
 
     void reset_counters();
 
@@ -65,7 +80,7 @@ private:
     RealType *d_volume_;
     RealType *d_volume_delta_;
     RealType *d_length_scale_;
-    RealType *d_volume_scale_;
+    double *d_volume_scale_;
 
     double *d_x_after_;
     double *d_box_after_;

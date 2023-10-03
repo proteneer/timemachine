@@ -33,6 +33,37 @@ def sum(*args, **kwargs):
     return args[0] + kwargs["key"]
 
 
+class DummyFuture(client.BaseFuture):
+    """A future that if you don't call done until it return True, it will raise an exception on `result()`"""
+
+    def __init__(self, iterations: int):
+        self.count = 0
+        self.iterations = iterations
+
+    def _ready(self):
+        return self.count > self.iterations
+
+    def result(self) -> str:
+        if not self._ready():
+            raise RuntimeError("called result before ready!")
+        return "finished"
+
+    def done(self) -> bool:
+        if not self._ready():
+            self.count += 1
+            return False
+        else:
+            return True
+
+    @property
+    def id(self) -> str:
+        return "a"
+
+    @property
+    def name(self) -> str:
+        return "a"
+
+
 class TestProcessPool(unittest.TestCase):
     def setUp(self):
         max_workers = 10
@@ -202,3 +233,17 @@ def test_save_results(tmpdir):
         for result_path in result_paths:
             assert lfc.exists(result_path)
             assert Path("local", result_path).exists()
+
+
+def test_iterate_completed_futures():
+    iterations = 5
+    # Dummy future will raise an error if you call result before `done()` is True
+    fut = DummyFuture(iterations)
+    with pytest.raises(RuntimeError):
+        fut.result()
+
+    futures = [DummyFuture(iterations) for _ in range(iterations)]
+    completed_futures = list(client.iterate_completed_futures(futures))
+    assert len(completed_futures) == len(futures), "Didn't get back the same number of futures"
+    for fut in completed_futures:
+        fut.result()

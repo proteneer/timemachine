@@ -60,10 +60,10 @@ def direct_space_pme(dij, qij, beta):
     return qij * erfc(beta * dij) / dij
 
 
-def nonbonded_block(xi, xj, box, params_i, params_j, beta, cutoff):
+def nonbonded_block_unsummed(xi, xj, box, params_i, params_j, beta, cutoff):
     """
     This is a modified version of `nonbonded` that computes a block of
-    interactions between two sets of particles x_i and x_j. It is assumed that
+    NxM interactions between two sets of particles x_i and x_j. It is assumed that
     there are no exclusions between the two particle sets. Typical use cases
     include computing the interaction energy between the environment and a
     ligand.
@@ -75,10 +75,14 @@ def nonbonded_block(xi, xj, box, params_i, params_j, beta, cutoff):
     ----------
     xi : (N,3) np.ndarray
         Coordinates
-    xj : (N,3) np.ndarray
+    xj : (M,3) np.ndarray
         Coordinates
     box : Optional 3x3 np.ndarray
         Periodic boundary conditions
+    params_i : (N, 3) np.ndarray
+        3-Tuples of (charge, sigma, epsilons)
+    params_j : (M, 3) np.ndarray
+        3-Tuples of (charge, sigma, epsilons)
     beta : float
         the charge product q_ij will be multiplied by erfc(beta*d_ij)
     cutoff : Optional float
@@ -87,14 +91,14 @@ def nonbonded_block(xi, xj, box, params_i, params_j, beta, cutoff):
 
     Returns
     -------
-    scalar
-        Interaction energy
+    (N,M) np.ndarray
+        Interaction energy block
 
     """
     ri = jnp.expand_dims(xi, axis=1)
     rj = jnp.expand_dims(xj, axis=0)
-    d2ij = jnp.sum(jnp.power(delta_r(ri, rj, box), 2), axis=-1)
-    dij = jnp.sqrt(d2ij)
+
+    dij = jnp.linalg.norm(delta_r(ri, rj, box), axis=-1)
     sig_i = jnp.expand_dims(params_i[:, 1], axis=1)
     sig_j = jnp.expand_dims(params_j[:, 1], axis=0)
     eps_i = jnp.expand_dims(params_i[:, 2], axis=1)
@@ -111,8 +115,15 @@ def nonbonded_block(xi, xj, box, params_i, params_j, beta, cutoff):
     es = direct_space_pme(dij, qij, beta)
     lj = lennard_jones(dij, sig_ij, eps_ij)
 
-    nrg = jnp.where(dij < cutoff, es + lj, 0)
-    return jnp.sum(nrg)
+    nrgs = jnp.where(dij < cutoff, es + lj, 0)
+    return nrgs
+
+
+def nonbonded_block(xi, xj, box, params_i, params_j, beta, cutoff):
+    """
+    This is a summed version of nonbonded_block_unsummed, returning a scalar
+    """
+    return jnp.sum(nonbonded_block_unsummed(xi, xj, box, params_i, params_j, beta, cutoff))
 
 
 def convert_exclusions_to_rescale_masks(exclusion_idxs, scales, N):

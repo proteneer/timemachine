@@ -1,9 +1,9 @@
 from timemachine.lib import custom_ops
-from timemachine.md.moves import MonteCarloMove
+from timemachine.md.moves import Move
 from timemachine.md.states import CoordsVelBox
 
 
-class UnadjustedLangevinMove(MonteCarloMove):
+class UnadjustedLangevinMove(Move):
     def __init__(self, integrator_impl, bound_impls, n_steps=5):
         self.integrator_impl = integrator_impl
         self.bound_impls = bound_impls
@@ -25,8 +25,5 @@ class UnadjustedLangevinMove(MonteCarloMove):
         v_t = ctxt.get_v_t()
 
         after_nvt = CoordsVelBox(x_t, v_t, x.box.copy())
-
-        self.n_proposed += 1
-        self.n_accepted += 1
 
         return after_nvt

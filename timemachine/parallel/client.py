@@ -2,9 +2,11 @@ import io
 import multiprocessing
 import os
 import pickle
+from abc import ABC, abstractmethod
 from concurrent import futures
 from pathlib import Path
-from typing import List, Optional
+from typing import Any, Iterator, List, Optional, Sequence
+from uuid import uuid4
 
 from timemachine.parallel.utils import get_gpu_count
 
@@ -12,11 +14,31 @@ from timemachine.parallel.utils import get_gpu_count
 # multiprocessing (typically for local cluster use) and gRPC (distributed and multi-node).
 
 
+class BaseFuture(ABC):
+    @abstractmethod
+    def done(self) -> bool:
+        ...
+
+    @abstractmethod
+    def result(self) -> Any:
+        ...
+
+    @property
+    @abstractmethod
+    def id(self) -> str:
+        ...
+
+    @property
+    @abstractmethod
+    def name(self) -> str:
+        ...
+
+
 class AbstractClient:
     def __init__(self):
         self.max_workers = 1
 
-    def submit(self, task_fn, *args, **kwargs):
+    def submit(self, task_fn, *args, **kwargs) -> BaseFuture:
         """
         Submit is an asynchronous method that will launch task_fn whose
         results will be collected at a later point in time. The input task_fn
@@ -65,53 +87,57 @@ class AbstractClient:
         raise NotImplementedError()
 
 
-class _MockFuture:
+class _MockFuture(BaseFuture):
 
-    __slots__ = ("val",)
+    __slots__ = ("val", "_id")
 
     def __init__(self, val):
         self.val = val
+        self._id = str(uuid4())
 
-    def result(self):
+    def result(self) -> Any:
         return self.val
+
+    def done(self) -> bool:
+        return True
 
     @property
     def id(self) -> str:
         """
         Return the id as a str for this subjob
         """
-        return "1"
+        return self._id
 
     @property
     def name(self) -> str:
         """
         Return the name as a str for this subjob
         """
-        return "1"
+        return self._id
 
 
-class WrappedFuture:
+class WrappedFuture(BaseFuture):
     def __init__(self, future, job_id: str):
         self._future = future
         self._id = job_id
 
-    def result(self):
+    def result(self) -> Any:
         return self._future.result()
 
-    def done(self):
+    def done(self) -> bool:
         return self._future.done()
 
     @property
-    def id(self):
+    def id(self) -> str:
         return self._id
 
     @property
-    def name(self):
-        return str(self._id)
+    def name(self) -> str:
+        return self._id
 
 
 class SerialClient(AbstractClient):
-    def submit(self, task_fn, *args, **kwargs):
+    def submit(self, task_fn, *args, **kwargs) -> BaseFuture:
         return _MockFuture(task_fn(*args, **kwargs))
 
     def verify(self):
@@ -138,7 +164,7 @@ class ProcessPoolClient(AbstractClient):
         ctxt = multiprocessing.get_context("spawn")
         self.executor = futures.ProcessPoolExecutor(max_workers=self.max_workers, mp_context=ctxt)
 
-    def submit(self, task_fn, *args, **kwargs):
+    def submit(self, task_fn, *args, **kwargs) -> BaseFuture:
         """
         See abstract class for documentation.
         """
@@ -181,7 +207,7 @@ class CUDAPoolClient(ProcessPoolClient):
             os.environ["CUDA_VISIBLE_DEVICES"] = str(idx)
         return fn(*args, **kwargs)
 
-    def submit(self, task_fn, *args, **kwargs):
+    def submit(self, task_fn, *args, **kwargs) -> BaseFuture:
         """
         See abstract class for documentation.
         """
@@ -207,15 +233,18 @@ class BinaryFutureWrapper:
         self._future = future
         self._id = job_id
 
-    def result(self):
+    def result(self) -> Any:
         return pickle.loads(self._future.result().binary)
 
+    def done(self) -> bool:
+        return self._future.done()
+
     @property
-    def id(self):
+    def id(self) -> str:
         return self._id
 
     @property
-    def name(self):
+    def name(self) -> str:
         return str(self._id)
 
 
@@ -333,3 +362,18 @@ def save_results(result_paths: List[str], local_file_client: FileClient, remote_
     for result_path in result_paths:
         if not local_file_client.exists(result_path):
             local_file_client.store(result_path, remote_file_client.load(result_path))
+
+
+def iterate_completed_futures(futures: Sequence[BaseFuture]) -> Iterator[BaseFuture]:
+    """Given a set of futures, return an iterator of futures whose `done()` function returns True.
+
+    Useful for when the results of the futures take different amounts of time
+    """
+    while len(futures) > 0:
+        leftover = []
+        for fut in futures:
+            if fut.done():
+                yield fut
+            else:
+                leftover.append(fut)
+        futures = leftover

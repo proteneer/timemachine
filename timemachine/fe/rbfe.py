@@ -3,7 +3,7 @@ import traceback
 import warnings
 from dataclasses import dataclass, replace
 from functools import partial
-from typing import Any, Dict, Iterable, List, NamedTuple, Optional, Sequence, Tuple, Union
+from typing import Any, Dict, Iterable, List, NamedTuple, Optional, Sequence, Tuple, Union, cast
 
 import numpy as np
 from numpy.typing import NDArray
@@ -14,12 +14,23 @@ from timemachine.constants import DEFAULT_ATOM_MAPPING_KWARGS, DEFAULT_PRESSURE,
 from timemachine.fe import atom_mapping, model_utils
 from timemachine.fe.free_energy import (
     HostConfig,
+    HREXParams,
+    HREXPlots,
     InitialState,
     MDParams,
     SimulationResult,
+    Trajectory,
     make_pair_bar_plots,
     run_sims_bisection,
+    run_sims_hrex,
     run_sims_sequential,
+)
+from timemachine.fe.plots import (
+    plot_fxn,
+    plot_hrex_replica_state_distribution_convergence,
+    plot_hrex_replica_state_distribution_heatmap,
+    plot_hrex_swap_acceptance_rates_convergence,
+    plot_hrex_transition_matrix,
 )
 from timemachine.fe.single_topology import SingleTopology
 from timemachine.fe.system import VacuumSystem, convert_omm_system
@@ -37,7 +48,9 @@ DEFAULT_NUM_WINDOWS = 30
 # https://github.com/proteneer/timemachine/commit/e1f7328f01f427534d8744aab6027338e116ad09
 MAX_SEED_VALUE = 10000
 
-DEFAULT_MD_PARAMS = MDParams(n_frames=1000, n_eq_steps=10_000, steps_per_frame=400, seed=2023)
+DEFAULT_MD_PARAMS = MDParams(n_frames=1000, n_eq_steps=10_000, steps_per_frame=400, seed=2023, hrex_params=None)
+
+DEFAULT_HREX_PARAMS = replace(DEFAULT_MD_PARAMS, hrex_params=HREXParams(n_frames_bisection=100, n_frames_per_iter=1))
 
 
 @dataclass
@@ -195,7 +208,7 @@ def setup_initial_states(
         Random number seed
 
     min_cutoff: float, optional
-        throw error if any atom moves more than this distance (nm) after minimization
+        Throw error if any atom moves more than this distance (nm) after minimization
 
     Returns
     -------
@@ -303,7 +316,7 @@ def optimize_coordinates(initial_states, min_cutoff=0.7) -> List[NDArray]:
     initial_states: list of InitialState
 
     min_cutoff: float, optional
-        throw error if any atom moves more than this distance (nm) after minimization
+        Throw error if any atom moves more than this distance (nm) after minimization
 
     Returns
     -------
@@ -398,12 +411,11 @@ def estimate_relative_free_energy(
         If None, return only the end-state frames. Otherwise if not None, use only for debugging, and this
         will return the frames corresponding to the idxs of interest.
 
-    md_params: MDParams
-        Parameters for the equilibration and production MD. Defaults to 400 global steps per frame, 1000 frames and 10k
-        equilibration steps with seed 2023.
+    md_params: MDParams, optional
+        Parameters for the equilibration and production MD. Defaults to :py:const:`timemachine.fe.rbfe.DEFAULT_MD_PARAMS`
 
     min_cutoff: float, optional
-        throw error if any atom moves more than this distance (nm) after minimization
+        Throw error if any atom moves more than this distance (nm) after minimization
 
     Returns
     -------
@@ -432,13 +444,30 @@ def estimate_relative_free_energy(
     # TODO: rename prefix to postfix, or move to beginning of combined_prefix?
     combined_prefix = get_mol_name(mol_a) + "_" + get_mol_name(mol_b) + "_" + prefix
     try:
-        result, stored_frames, stored_boxes = run_sims_sequential(initial_states, md_params, temperature, keep_idxs)
+        result, stored_trajectories = run_sims_sequential(initial_states, md_params, temperature, keep_idxs)
         plots = make_pair_bar_plots(result, temperature, combined_prefix)
-        return SimulationResult(result, plots, stored_frames, stored_boxes, md_params, [])
+        return SimulationResult(result, plots, stored_trajectories, md_params, [])
     except Exception as err:
         with open(f"failed_rbfe_result_{combined_prefix}.pkl", "wb") as fh:
             pickle.dump((initial_states, md_params, err), fh)
         raise err
+
+
+def estimate_relative_free_energy_bisection_or_hrex(*args, **kwargs) -> SimulationResult:
+    """
+    See `estimate_relative_free_energy_bisection` for parameters.
+
+    Will call `estimate_relative_free_energy_bisection` or `estimate_relative_free_energy_bisection_hrex`
+    as appropriate givne md_params.
+
+    """
+    md_params = kwargs["md_params"]
+    estimate_fxn = (
+        estimate_relative_free_energy_bisection_hrex
+        if md_params.hrex_params is not None
+        else estimate_relative_free_energy_bisection
+    )
+    return estimate_fxn(*args, **kwargs)
 
 
 def estimate_relative_free_energy_bisection(
@@ -476,7 +505,10 @@ def estimate_relative_free_energy_bisection(
     host_config: HostConfig or None
         Configuration for the host system. If None, then the vacuum leg is run.
 
-    prefix: str
+    md_params: MDParams, optional
+        Parameters for the equilibration and production MD. Defaults to :py:const:`timemachine.fe.rbfe.DEFAULT_MD_PARAMS`
+
+    prefix: str, optional
         A prefix to append to figures
 
     lambda_interval: (float, float) or None, optional
@@ -490,19 +522,14 @@ def estimate_relative_free_energy_bisection(
 
     min_overlap: float or None, optional
         If not None, terminate bisection early when the BAR overlap between all neighboring pairs of states exceeds this
-        value
+        value. When given, the final number of windows may be less than or equal to n_windows.
 
     keep_idxs: list of int or None, optional
         If None, return only the end-state frames. Otherwise if not None (typically for debugging), return frames from
-        windows corresponding to the specified indices. When min_overlap is not None, i.e. when adaptive bisection is
-        enabled, keep_idxs must equal one of None, [0, -1], or list(range(n_windows)).
+        windows corresponding to the specified indices.
 
-    md_params: MDParams
-        Parameters for the equilibration and production MD. Defaults to 400 global steps per frame, 1000 frames and 10k
-        equilibration steps with seed 2023.
-
-    min_cutoff: float, optional
-        throw error if any atom moves more than this distance (nm) after minimization
+    min_cutoff: float or None, optional
+        Throw error if any atom moves more than this distance (nm) after minimization
 
     Returns
     -------
@@ -547,7 +574,7 @@ def estimate_relative_free_energy_bisection(
     combined_prefix = get_mol_name(mol_a) + "_" + get_mol_name(mol_b) + "_" + prefix
 
     try:
-        results, frames, boxes = run_sims_bisection(
+        results, trajectories = run_sims_bisection(
             [lambda_min, lambda_max],
             make_optimized_initial_state,
             md_params,
@@ -560,23 +587,216 @@ def estimate_relative_free_energy_bisection(
 
         plots = make_pair_bar_plots(final_result, temperature, combined_prefix)
 
-        assert len(frames) == len(boxes) == len(results) + 1
-        stored_frames = []
-        stored_boxes = []
+        assert len(trajectories) == len(results) + 1
+        stored_trajectories = []
         for i in keep_idxs:
             try:
-                stored_frames.append(frames[i])
-                stored_boxes.append(boxes[i])
+                stored_trajectories.append(trajectories[i])
             except IndexError:
-                warnings.warn(f"Invalid index in keep_idxs: {i}. Bisection terminated with only {len(frames)} windows.")
+                warnings.warn(
+                    f"Invalid index in keep_idxs: {i}. Bisection terminated with only {len(trajectories)} windows."
+                )
 
         return SimulationResult(
             final_result,
             plots,
-            stored_frames,
-            stored_boxes,
+            stored_trajectories,
             md_params,
             results,
+        )
+
+    except Exception as err:
+        with open(f"failed_rbfe_result_{combined_prefix}.pkl", "wb") as fh:
+            pickle.dump((md_params, err), fh)
+        raise err
+
+
+def estimate_relative_free_energy_bisection_hrex(
+    mol_a: Chem.rdchem.Mol,
+    mol_b: Chem.rdchem.Mol,
+    core: NDArray,
+    ff: Forcefield,
+    host_config: Optional[HostConfig],
+    md_params: MDParams = DEFAULT_HREX_PARAMS,
+    prefix: str = "",
+    lambda_interval: Optional[Tuple[float, float]] = None,
+    n_windows: Optional[int] = None,
+    min_overlap: Optional[float] = None,
+    keep_idxs: Optional[List[int]] = None,
+    min_cutoff: Optional[float] = 0.7,
+) -> SimulationResult:
+    """
+    Estimate relative free energy between mol_a and mol_b using Hamiltonian Replica EXchange (HREX) sampling of a
+    sequence of intermediate states determined by bisection. Molecules should be aligned to each other and within the
+    host environment.
+
+    Parameters
+    ----------
+    mol_a: Chem.Mol
+        initial molecule
+
+    mol_b: Chem.Mol
+        target molecule
+
+    core: list of 2-tuples
+        atom_mapping of atoms in mol_a into atoms in mol_b
+
+    ff: Forcefield
+        Forcefield to be used for the system
+
+    host_config: HostConfig or None
+        Configuration for the host system. If None, then the vacuum leg is run.
+
+    md_params: MDParams, optional
+        Parameters for the equilibration and production MD. Defaults to :py:const:`timemachine.fe.rbfe.DEFAULT_MD_PARAMS`
+
+    prefix: str, optional
+        A prefix to append to figures
+
+    lambda_interval: (float, float) or None, optional
+        Minimum and maximum value of lambda for the transformation; typically (0, 1), but sometimes useful to choose
+        other values for testing.
+
+    n_windows: int or None, optional
+        Number of windows used for interpolating the lambda schedule with additional windows. Defaults to
+        `DEFAULT_NUM_WINDOWS` windows.
+
+    min_overlap: float or None, optional
+        If not None, terminate bisection early when the BAR overlap between all neighboring pairs of states exceeds this
+        value. When given, the final number of windows may be less than or equal to n_windows.
+
+    keep_idxs: list of int or None, optional
+        If None, return only the end-state frames. Otherwise if not None, use only for debugging, and this
+        will return the frames corresponding to the idxs of interest.
+
+    min_cutoff: float or None, optional
+        Throw error if any atom moves more than this distance (nm) after minimization
+
+    Returns
+    -------
+    SimulationResult
+        Collected data from the simulation (see class for storage information). Returned frames and boxes
+        are defined by keep_idxs.
+    """
+
+    if n_windows is None:
+        n_windows = DEFAULT_NUM_WINDOWS
+    assert n_windows >= 2
+
+    if keep_idxs is None:
+        keep_idxs = [0, -1]  # keep frames from first and last windows
+
+    assert len(set(keep_idxs)) == len(keep_idxs)
+    assert len(keep_idxs) <= n_windows
+
+    single_topology = SingleTopology(mol_a, mol_b, core, ff)
+
+    lambda_min, lambda_max = lambda_interval or (0.0, 1.0)
+    lambda_grid = np.linspace(lambda_min, lambda_max, n_windows)
+
+    temperature = DEFAULT_TEMP
+
+    host = setup_optimized_host(single_topology, host_config) if host_config else None
+
+    initial_states = setup_initial_states(
+        single_topology, host, temperature, lambda_grid, md_params.seed, min_cutoff=min_cutoff
+    )
+
+    make_optimized_initial_state = partial(
+        setup_optimized_initial_state,
+        single_topology,
+        host=host,
+        optimized_initial_states=initial_states,
+        temperature=temperature,
+        seed=md_params.seed,
+    )
+
+    # TODO: rename prefix to postfix, or move to beginning of combined_prefix?
+    combined_prefix = get_mol_name(mol_a) + "_" + get_mol_name(mol_b) + "_" + prefix
+
+    try:
+        # First phase: bisection to determine lambda spacing
+        assert md_params.hrex_params is not None, "hrex_params must be set to use HREX"
+        md_params_bisection = replace(md_params, n_frames=md_params.hrex_params.n_frames_bisection)
+        results, trajectories_by_state = run_sims_bisection(
+            [lambda_min, lambda_max],
+            make_optimized_initial_state,
+            md_params_bisection,
+            n_bisections=len(lambda_grid) - 2,
+            temperature=temperature,
+            min_overlap=min_overlap,
+        )
+
+        assert all(traj.final_velocities is not None for traj in trajectories_by_state)
+
+        initial_states = results[-1].initial_states
+        has_barostat_by_state = [initial_state.barostat is not None for initial_state in initial_states]
+        assert all(has_barostat_by_state) or not any(has_barostat_by_state)
+
+        # Second phase: sample initial states determined by bisection using HREX
+
+        def get_mean_final_barostat_volume_scale_factor(trajectories_by_state: Iterable[Trajectory]) -> Optional[float]:
+            scale_factors = [traj.final_barostat_volume_scale_factor for traj in trajectories_by_state]
+            if any(x is not None for x in scale_factors):
+                assert all(x is not None for x in scale_factors)
+                sfs = cast(List[float], scale_factors)  # implied by assertion but required by mypy
+                return float(np.mean(sfs))
+            else:
+                return None
+
+        mean_final_barostat_volume_scale_factor = get_mean_final_barostat_volume_scale_factor(trajectories_by_state)
+        assert (mean_final_barostat_volume_scale_factor is not None) == all(has_barostat_by_state)
+
+        # Use equilibrated samples and the average of the final barostat volume scale factors from bisection phase to
+        # initialize states for HREX
+        initial_states_hrex = [
+            replace(
+                initial_state,
+                x0=traj.frames[-1],
+                v0=traj.final_velocities,
+                box0=traj.boxes[-1],
+                barostat=replace(
+                    initial_state.barostat,
+                    adaptive_scaling_enabled=False,
+                    initial_volume_scale_factor=mean_final_barostat_volume_scale_factor,
+                )
+                if initial_state.barostat
+                else None,
+            )
+            for initial_state, traj in zip(initial_states, trajectories_by_state)
+        ]
+
+        pair_bar_result, trajectories_by_state, diagnostics = run_sims_hrex(
+            initial_states_hrex,
+            replace(md_params, n_eq_steps=0),  # using pre-equilibrated samples
+            n_frames_per_iter=md_params.hrex_params.n_frames_per_iter,
+        )
+
+        plots = make_pair_bar_plots(pair_bar_result, temperature, combined_prefix)
+
+        stored_trajectories = []
+        for i in keep_idxs:
+            try:
+                stored_trajectories.append(trajectories_by_state[i])
+            except IndexError:
+                warnings.warn(
+                    f"Invalid index in keep_idxs: {i}. Bisection terminated with only {len(trajectories_by_state)} windows."
+                )
+
+        hrex_plots = HREXPlots(
+            transition_matrix_png=plot_fxn(plot_hrex_transition_matrix, diagnostics.transition_matrix),
+            swap_acceptance_rates_convergence_png=plot_fxn(
+                plot_hrex_swap_acceptance_rates_convergence, diagnostics.cumulative_swap_acceptance_rates
+            ),
+            replica_state_distribution_convergence_png=plot_fxn(
+                plot_hrex_replica_state_distribution_convergence, diagnostics.cumulative_replica_state_counts
+            ),
+            replica_state_distribution_heatmap_png=plot_fxn(
+                plot_hrex_replica_state_distribution_heatmap, diagnostics.cumulative_replica_state_counts
+            ),
+        )
+        return SimulationResult(
+            pair_bar_result, plots, stored_trajectories, md_params, results, diagnostics, hrex_plots
         )
 
     except Exception as err:
@@ -591,7 +811,7 @@ def run_vacuum(
     core: NDArray,
     forcefield: Forcefield,
     _,
-    md_params: MDParams = DEFAULT_MD_PARAMS,
+    md_params: MDParams = DEFAULT_HREX_PARAMS,
     n_windows: Optional[int] = None,
     min_overlap: Optional[float] = None,
     keep_idxs: Optional[List[int]] = None,
@@ -601,7 +821,7 @@ def run_vacuum(
         md_params = replace(md_params, local_steps=0)
         warnings.warn("Vacuum simulations don't support local steps, will use all global steps")
     # min_cutoff defaults to None since there is no environment to prevent conformational changes in the ligand
-    return estimate_relative_free_energy_bisection(
+    return estimate_relative_free_energy_bisection_or_hrex(
         mol_a,
         mol_b,
         core,
@@ -622,7 +842,7 @@ def run_solvent(
     core: NDArray,
     forcefield: Forcefield,
     _,
-    md_params: MDParams = DEFAULT_MD_PARAMS,
+    md_params: MDParams = DEFAULT_HREX_PARAMS,
     n_windows: Optional[int] = None,
     min_overlap: Optional[float] = None,
     keep_idxs: Optional[List[int]] = None,
@@ -632,7 +852,7 @@ def run_solvent(
     solvent_sys, solvent_conf, solvent_box, solvent_top = builders.build_water_system(box_width, forcefield.water_ff)
     solvent_box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes, deboggle later
     solvent_host_config = HostConfig(solvent_sys, solvent_conf, solvent_box, solvent_conf.shape[0])
-    solvent_res = estimate_relative_free_energy_bisection(
+    solvent_res = estimate_relative_free_energy_bisection_or_hrex(
         mol_a,
         mol_b,
         core,
@@ -654,7 +874,7 @@ def run_complex(
     core: NDArray,
     forcefield: Forcefield,
     protein: Union[app.PDBFile, str],
-    md_params: MDParams = DEFAULT_MD_PARAMS,
+    md_params: MDParams = DEFAULT_HREX_PARAMS,
     n_windows: Optional[int] = None,
     min_overlap: Optional[float] = None,
     keep_idxs: Optional[List[int]] = None,
@@ -665,7 +885,7 @@ def run_complex(
     )
     complex_box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes, deboggle later
     complex_host_config = HostConfig(complex_sys, complex_conf, complex_box, nwa)
-    complex_res = estimate_relative_free_energy_bisection(
+    complex_res = estimate_relative_free_energy_bisection_or_hrex(
         mol_a,
         mol_b,
         core,

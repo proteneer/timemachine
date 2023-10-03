@@ -1,6 +1,7 @@
-from abc import abstractmethod
+from abc import ABC, abstractmethod
 from functools import partial
-from typing import Any, Generic, List, Tuple, TypeVar
+from itertools import islice
+from typing import Any, Generic, Iterator, List, Sequence, Tuple, TypeVar
 
 import jax
 import jax.numpy as jnp
@@ -12,44 +13,92 @@ from scipy.special import logsumexp
 
 from timemachine import lib
 from timemachine.lib import custom_ops
-from timemachine.md.barostat.utils import get_bond_list, get_group_indices
 from timemachine.md.states import CoordsVelBox
-from timemachine.potentials import BoundPotential, HarmonicBond
+from timemachine.potentials import BoundPotential
 
 _State = TypeVar("_State")
 
 
-class MonteCarloMove(Generic[_State]):
-    n_proposed: int = 0
-    n_accepted: int = 0
+class Move(Generic[_State], ABC):
+    @abstractmethod
+    def move(self, _: _State) -> _State:
+        ...
 
+    def sample_chain_iter(self, x: _State) -> Iterator[_State]:
+        """Given an initial state, returns an iterator over an infinite sequence of samples"""
+        while True:
+            x = self.move(x)
+            yield x
+
+    def sample_chain(self, x: _State, n_samples: int) -> List[_State]:
+        """Given an initial state and number of samples, returns a finite sequence of samples"""
+        return list(islice(self.sample_chain_iter(x), n_samples))
+
+
+class MonteCarloMove(Move[_State], ABC):
+    def __init__(self):
+        self._n_proposed = 0
+        self._n_accepted = 0
+
+    @abstractmethod
     def propose(self, x: _State) -> Tuple[_State, float]:
         """return proposed state and log acceptance probability"""
-        raise NotImplementedError
 
     def move(self, x: _State) -> _State:
         proposal, log_acceptance_probability = self.propose(x)
-        self.n_proposed += 1
+        self._n_proposed += 1
 
         alpha = np.random.rand()
         acceptance_probability = np.exp(log_acceptance_probability)
         if alpha < acceptance_probability:
-            self.n_accepted += 1
+            self._n_accepted += 1
             return proposal
         else:
             return x
 
     @property
-    def acceptance_fraction(self):
-        if self.n_proposed > 0:
-            return self.n_accepted / self.n_proposed
-        else:
-            return 0.0
+    def n_proposed(self) -> int:
+        return self._n_proposed
+
+    @property
+    def n_accepted(self) -> int:
+        return self._n_accepted
+
+    @property
+    def acceptance_fraction(self) -> float:
+        return self._n_accepted / self._n_proposed if self._n_proposed else np.nan
 
 
-class CompoundMove(MonteCarloMove[_State]):
-    def __init__(self, moves: List[MonteCarloMove]):
-        """Apply each of a list of moves in sequence"""
+class CompoundMove(Move[_State]):
+    def __init__(self, moves: Sequence[MonteCarloMove[_State]]):
+        self.moves = moves
+
+    @property
+    def n_accepted_by_move(self) -> List[int]:
+        return [m._n_accepted for m in self.moves]
+
+    @property
+    def n_proposed_by_move(self) -> List[int]:
+        return [m._n_proposed for m in self.moves]
+
+
+class MixtureOfMoves(CompoundMove[_State]):
+    """Apply a single move uniformly selected from a list"""
+
+    def __init__(self, moves: Sequence[MonteCarloMove[_State]]):
+        self.moves = moves
+
+    def move(self, x: _State) -> _State:
+        idx = np.random.choice(len(self.moves))
+        chosen_move = self.moves[idx]
+        x = chosen_move.move(x)
+        return x
+
+
+class SequenceOfMoves(CompoundMove[_State]):
+    """Apply each of a list of MonteCarloMoves in sequence"""
+
+    def __init__(self, moves: Sequence[MonteCarloMove[_State]]):
         self.moves = moves
 
     def move(self, x: _State) -> _State:
@@ -57,24 +106,8 @@ class CompoundMove(MonteCarloMove[_State]):
             x = individual_move.move(x)
         return x
 
-    @property
-    def n_accepted_by_move(self):
-        return np.array([m.n_accepted for m in self.moves])
 
-    @property
-    def n_proposed_by_move(self):
-        return np.array([m.n_proposed for m in self.moves])
-
-    @property
-    def n_accepted(self):
-        return np.sum(self.n_accepted_by_move)
-
-    @property
-    def n_proposed(self):
-        return np.sum(self.n_proposed_by_move)
-
-
-class NVTMove(MonteCarloMove[CoordsVelBox]):
+class NVTMove(Move[CoordsVelBox]):
     def __init__(
         self,
         bps: List[BoundPotential],
@@ -105,59 +138,29 @@ class NVTMove(MonteCarloMove[CoordsVelBox]):
 
         after_steps = CoordsVelBox(x_t, v_t, box)
 
-        self.n_proposed += 1
-        self.n_accepted += 1
-
         return after_steps
 
 
-class NPTMove(NVTMove):
-    """
-    Functionally, NPT is implemented as NVTMove plus a MC Barostat.
-    So inherit from NVTMove here.
-    """
+class DeterministicMTMMove(Move):
+    def __init__(self, rng_key):
+        self.rng_key = rng_key
+        self._n_proposed = 0
+        self._n_accepted = 0
 
-    def __init__(
-        self,
-        bps: List[BoundPotential],
-        masses: NDArray,
-        temperature: float,
-        pressure: float,
-        n_steps: int,
-        seed: int,
-        dt: float = 1.5e-3,
-        friction: float = 1.0,
-        barostat_interval: int = 5,
-    ):
-        super().__init__(bps, masses, temperature, n_steps, seed, dt=dt, friction=friction)
+    @property
+    def n_proposed(self):
+        return self._n_proposed
 
-        assert isinstance(bps[0].potential, HarmonicBond), "First potential must be of type HarmonicBond"
-
-        bond_list = get_bond_list(bps[0].potential)
-        group_idxs = get_group_indices(bond_list, len(masses))
-
-        barostat = lib.MonteCarloBarostat(len(masses), pressure, temperature, group_idxs, barostat_interval, seed + 1)
-        barostat_impl = barostat.impl(self.bound_impls)
-        self.barostat_impl = barostat_impl
-
-    def move(self, x: CoordsVelBox) -> CoordsVelBox:
-        # note: context creation overhead here is actually very small!
-        ctxt = custom_ops.Context(
-            x.coords, x.velocities, x.box, self.integrator_impl, self.bound_impls, self.barostat_impl
-        )
-        return self._steps(ctxt)
-
-
-class DeterministicMTMMove(MonteCarloMove):
-
-    rng_key: Any
+    @property
+    def n_accepted(self):
+        return self._n_accepted
 
     @abstractmethod
     def acceptance_probability(self, x, box, key) -> Tuple[Any, Any, Any]:
         pass
 
     def move(self, xvb: CoordsVelBox) -> CoordsVelBox:
-        self.n_proposed += 1
+        self._n_proposed += 1
         y_proposed, acceptance_probability, key = self.acceptance_probability(xvb.coords, xvb.box, self.rng_key)
         # this may not be strictly necessary since the acceptance_probability should split the keys internally
         # but it never hurts to do an extra split.
@@ -166,7 +169,7 @@ class DeterministicMTMMove(MonteCarloMove):
         _, key = jrandom.split(key)
         self.rng_key = key
         if alpha < acceptance_probability:
-            self.n_accepted += 1
+            self._n_accepted += 1
             return CoordsVelBox(y_proposed, xvb.velocities, xvb.box)
         else:
             return xvb
@@ -199,11 +202,9 @@ class OptimizedMTMMove(DeterministicMTMMove):
 
         """
         self.K = K
-        self.n_accepted = 0
-        self.n_proposed = 0
         self.batch_proposal_fn = batch_proposal_fn
         self.batched_log_weights_fn = batched_log_weights_fn
-        self.rng_key = jrandom.PRNGKey(seed)
+        super().__init__(jrandom.PRNGKey(seed))
 
     @partial(jax.jit, static_argnums=(0,))
     def acceptance_probability(self, x, box, key):
@@ -258,13 +259,11 @@ class ReferenceMTMMove(DeterministicMTMMove):
 
         """
         self.K = K
-        self.n_accepted = 0
-        self.n_proposed = 0
         self.batch_proposal_fn = batch_proposal_fn
         self.batch_log_Q_fn = batch_log_Q_fn
         self.batch_log_pi_fn = batch_log_pi_fn
         self.batch_log_lambda_fn = batch_log_lambda_a_b_fn
-        self.rng_key = jrandom.PRNGKey(seed)
+        super().__init__(jrandom.PRNGKey(seed))
 
     def acceptance_probability(self, xvb, key):
 

@@ -21,7 +21,7 @@ void __global__ k_rescale_positions(
     RealType center_y = box[1 * 3 + 1] * 0.5f;
     RealType center_z = box[2 * 3 + 2] * 0.5f;
 
-    RealType scale = length_scale[0];
+    RealType scale = static_cast<RealType>(length_scale[0]);
     if (idx == 0) {
         scaled_box[0 * 3 + 0] *= scale;
         scaled_box[1 * 3 + 1] *= scale;
@@ -41,9 +41,24 @@ void __global__ k_rescale_positions(
         RealType displacement_y = ((centroid_y - center_y) * scale) + center_y - centroid_y;
         RealType displacement_z = ((centroid_z - center_z) * scale) + center_z - centroid_z;
 
-        coords[atom_idx * 3 + 0] += displacement_x;
-        coords[atom_idx * 3 + 1] += displacement_y;
-        coords[atom_idx * 3 + 2] += displacement_z;
+        // centroid of the new molecule
+        centroid_x += displacement_x;
+        centroid_y += displacement_y;
+        centroid_z += displacement_z;
+
+        // compute displacement needed to shift centroid back into the scaled homebox
+        RealType scaled_box_x = box[0 * 3 + 0] * scale;
+        RealType scaled_box_y = box[1 * 3 + 1] * scale;
+        RealType scaled_box_z = box[2 * 3 + 2] * scale;
+
+        RealType new_center_x = scaled_box_x * floor(centroid_x / scaled_box_x);
+        RealType new_center_y = scaled_box_y * floor(centroid_y / scaled_box_y);
+        RealType new_center_z = scaled_box_z * floor(centroid_z / scaled_box_z);
+
+        // final coordinates
+        coords[atom_idx * 3 + 0] += displacement_x - new_center_x;
+        coords[atom_idx * 3 + 1] += displacement_y - new_center_y;
+        coords[atom_idx * 3 + 2] += displacement_z - new_center_z;
 
         idx += gridDim.x * blockDim.x;
     }
@@ -73,10 +88,11 @@ void __global__ k_find_group_centroids(
 // volume will be and sets up d_length_scale and d_volume_delta for use in k_decide_move.
 template <typename RealType>
 void __global__ k_setup_barostat_move(
+    const bool adaptive,
     const RealType *__restrict__ rand,     // [2], use first value, second value is metropolis condition
     double *__restrict__ d_box,            // [3*3]
     RealType *__restrict__ d_volume_delta, // [1]
-    RealType *__restrict__ d_volume_scale, // [1]
+    double *__restrict__ d_volume_scale,   // [1]
     RealType *__restrict__ d_length_scale  // [1]
 ) {
     const int idx = blockIdx.x * blockDim.x + threadIdx.x;
@@ -84,7 +100,7 @@ void __global__ k_setup_barostat_move(
         return; // Only a single thread needs to perform this operation
     }
     const RealType volume = d_box[0 * 3 + 0] * d_box[1 * 3 + 1] * d_box[2 * 3 + 2];
-    if (d_volume_scale[0] == 0) {
+    if (d_volume_scale[0] == 0.0 && adaptive) {
         d_volume_scale[0] = 0.01 * volume;
     }
     const RealType delta_volume = d_volume_scale[0] * 2 * (rand[0] - 0.5);
@@ -99,12 +115,13 @@ void __global__ k_setup_barostat_move(
 template <typename RealType>
 void __global__ k_decide_move(
     const int N,
+    const bool adaptive,
     const int num_molecules,
     const double kt,
     const double pressure,
     const RealType *__restrict__ rand, // [2] Use second value
     RealType *__restrict__ d_volume_delta,
-    RealType *__restrict__ d_volume_scale,
+    double *__restrict__ d_volume_scale,
     const __int128 *__restrict__ d_init_u,
     const __int128 *__restrict__ d_final_u,
     double *__restrict__ d_box,
@@ -133,7 +150,7 @@ void __global__ k_decide_move(
                 num_accepted[0]++;
             }
             num_attempted[0]++;
-            if (num_attempted[0] >= 10) {
+            if (adaptive && num_attempted[0] >= 10) {
                 if (num_accepted[0] < 0.25 * num_attempted[0]) {
                     d_volume_scale[0] /= 1.1;
                     // Reset the counters

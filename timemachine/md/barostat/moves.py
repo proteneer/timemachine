@@ -1,6 +1,16 @@
+from typing import List
+
 import numpy as np
 from jax import numpy as jnp
 from jax.ops import segment_sum
+from numpy.typing import NDArray
+
+from timemachine import lib
+from timemachine.lib import custom_ops
+from timemachine.md.barostat.utils import get_bond_list, get_group_indices
+from timemachine.md.moves import NVTMove
+from timemachine.md.states import CoordsVelBox
+from timemachine.potentials import BoundPotential, HarmonicBond
 
 
 def compute_centroid(group):
@@ -71,3 +81,40 @@ class CentroidRescaler:
         displaced_coords = self.displace_by_group(coords, group_displacements)
 
         return displaced_coords
+
+
+class NPTMove(NVTMove):
+    """
+    Functionally, NPT is implemented as NVTMove plus a MC Barostat.
+    So inherit from NVTMove here.
+    """
+
+    def __init__(
+        self,
+        bps: List[BoundPotential],
+        masses: NDArray,
+        temperature: float,
+        pressure: float,
+        n_steps: int,
+        seed: int,
+        dt: float = 1.5e-3,
+        friction: float = 1.0,
+        barostat_interval: int = 5,
+    ):
+        super().__init__(bps, masses, temperature, n_steps, seed, dt=dt, friction=friction)
+
+        assert isinstance(bps[0].potential, HarmonicBond), "First potential must be of type HarmonicBond"
+
+        bond_list = get_bond_list(bps[0].potential)
+        group_idxs = get_group_indices(bond_list, len(masses))
+
+        barostat = lib.MonteCarloBarostat(len(masses), pressure, temperature, group_idxs, barostat_interval, seed + 1)
+        barostat_impl = barostat.impl(self.bound_impls)
+        self.barostat_impl = barostat_impl
+
+    def move(self, x: CoordsVelBox) -> CoordsVelBox:
+        # note: context creation overhead here is actually very small!
+        ctxt = custom_ops.Context(
+            x.coords, x.velocities, x.box, self.integrator_impl, self.bound_impls, self.barostat_impl
+        )
+        return self._steps(ctxt)

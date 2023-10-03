@@ -1,9 +1,12 @@
+#include "barostat.hpp"
+#include "bound_potential.hpp"
 #include "constants.hpp"
 #include "context.hpp"
 
 #include "fixed_point.hpp"
 #include "flat_bottom_bond.hpp"
 #include "gpu_utils.cuh"
+#include "integrator.hpp"
 #include "kernels/kernel_utils.cuh"
 #include "langevin_integrator.hpp"
 #include "local_md_potentials.hpp"
@@ -71,7 +74,14 @@ double Context::_get_temperature() {
 
 void Context::setup_local_md(double temperature, bool freeze_reference) {
     if (this->local_md_pots_ != nullptr) {
-        throw std::runtime_error("local md already configured");
+        if (this->local_md_pots_->temperature != temperature ||
+            this->local_md_pots_->freeze_reference != freeze_reference) {
+            throw std::runtime_error(
+                "local md configured with different parameters, current parameters: Temperature " +
+                std::to_string(this->local_md_pots_->temperature) + " Freeze Reference " +
+                std::to_string(this->local_md_pots_->freeze_reference));
+        }
+        return;
     }
     this->local_md_pots_.reset(new LocalMDPotentials(N_, bps_, freeze_reference, temperature));
 }
@@ -340,5 +350,11 @@ void Context::get_v_t(double *out_buffer) const {
 void Context::get_box(double *out_buffer) const {
     gpuErrchk(cudaMemcpy(out_buffer, d_box_t_, 3 * 3 * sizeof(*out_buffer), cudaMemcpyDeviceToHost));
 }
+
+std::shared_ptr<Integrator> Context::get_integrator() const { return intg_; }
+
+std::vector<std::shared_ptr<BoundPotential>> Context::get_potentials() const { return bps_; }
+
+std::shared_ptr<MonteCarloBarostat<float>> Context::get_barostat() const { return barostat_; }
 
 } // namespace timemachine

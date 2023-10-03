@@ -1,6 +1,6 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from functools import cache
-from typing import Callable, Iterable, List, Optional, Sequence, Tuple, Union, overload
+from typing import Callable, List, Optional, Sequence, Tuple, Union
 from warnings import warn
 
 import jax
@@ -27,9 +27,21 @@ from timemachine.fe.stored_arrays import StoredArrays
 from timemachine.fe.utils import get_mol_masses, get_romol_conf
 from timemachine.ff import ForcefieldParams
 from timemachine.ff.handlers import openmm_deserializer
-from timemachine.lib import LangevinIntegrator, MonteCarloBarostat, custom_ops
+from timemachine.lib import LangevinIntegrator, MonteCarloBarostat
+from timemachine.lib.custom_ops import Context
 from timemachine.md.barostat.utils import compute_box_center, get_bond_list, get_group_indices
-from timemachine.potentials import BoundPotential, HarmonicBond, Potential
+from timemachine.md.hrex import (
+    HREX,
+    HREXDiagnostics,
+    HREXPlots,
+    ReplicaIdx,
+    StateIdx,
+    get_swap_attempts_per_iter_heuristic,
+)
+from timemachine.md.states import CoordsVelBox
+from timemachine.potentials import BoundPotential, HarmonicBond, SummedPotential
+from timemachine.potentials.potential import GpuImplWrapper
+from timemachine.utils import batches, pairwise_transform_and_combine
 
 
 class HostConfig:
@@ -38,6 +50,27 @@ class HostConfig:
         self.conf = conf
         self.box = box
         self.num_water_atoms = num_water_atoms
+
+
+@dataclass(frozen=True)
+class HREXParams:
+    """
+    Parameters
+    ----------
+
+    n_frames_bisection:
+        Number of frames to sample using MD during the initial bisection phase used to determine lambda spacing
+
+    n_frames_per_iter:
+        Number of frames to sample using MD per HREX iteration.
+    """
+
+    n_frames_bisection: int = 100
+    n_frames_per_iter: int = 1
+
+    def __post_init__(self):
+        assert self.n_frames_bisection > 0
+        assert self.n_frames_per_iter > 0
 
 
 @dataclass(frozen=True)
@@ -52,10 +85,13 @@ class MDParams:
     max_radius: float = 3.0  # nm
     freeze_reference: bool = True
 
+    # Set to HREXParams or None to disable HREX
+    hrex_params: Optional[HREXParams] = None
+
     def __post_init__(self):
         assert self.steps_per_frame > 0
         assert self.n_frames > 0
-        assert self.n_eq_steps > 0
+        assert self.n_eq_steps >= 0
         assert 0.1 <= self.min_radius <= self.max_radius
         assert 0 <= self.local_steps <= self.steps_per_frame
         assert 1.0 <= self.k <= 1.0e6
@@ -69,7 +105,7 @@ class InitialState:
     This object can be pickled safely.
     """
 
-    potentials: List[BoundPotential[Potential]]
+    potentials: List[BoundPotential]
     integrator: LangevinIntegrator
     barostat: Optional[MonteCarloBarostat]
     x0: np.ndarray
@@ -132,13 +168,51 @@ class PairBarResult:
 
 
 @dataclass
+class Trajectory:
+    frames: StoredArrays  # (frame, atom, dim)
+    boxes: List[NDArray]  # (frame, dim, dim)
+    final_velocities: Optional[NDArray]  # (atom, dim)
+    final_barostat_volume_scale_factor: Optional[float] = None
+
+    def __post_init__(self):
+        n_frames = len(self.frames)
+        assert len(self.boxes) == n_frames
+        if n_frames == 0:
+            return
+        n_atoms, n_dims = self.frames[0].shape
+        assert self.boxes[0].shape == (n_dims, n_dims)
+        if self.final_velocities is not None:
+            assert self.final_velocities.shape == (n_atoms, n_dims)
+
+    def extend(self, other: "Trajectory"):
+        """Concatenate another trajectory to the end of this one"""
+        self.frames.extend(other.frames)
+        self.boxes.extend(other.boxes)
+        self.final_velocities = other.final_velocities
+        self.final_barostat_volume_scale_factor = other.final_barostat_volume_scale_factor
+
+    @classmethod
+    def empty(cls):
+        return Trajectory(StoredArrays(), [], None, None)
+
+
+@dataclass
 class SimulationResult:
     final_result: PairBarResult
     plots: PairBarPlots
-    frames: List[StoredArrays]  # (len(keep_idxs), n_frames, N, 3)
-    boxes: List[NDArray]
+    trajectories: List[Trajectory]
     md_params: MDParams
     intermediate_results: List[PairBarResult]
+    hrex_diagnostics: Optional[HREXDiagnostics] = None
+    hrex_plots: Optional[HREXPlots] = None
+
+    @property
+    def frames(self) -> List[StoredArrays]:
+        return [traj.frames for traj in self.trajectories]
+
+    @property
+    def boxes(self) -> List[NDArray]:
+        return [np.array(traj.boxes) for traj in self.trajectories]
 
 
 def image_frames(initial_state: InitialState, frames: np.ndarray, boxes: np.ndarray) -> np.ndarray:
@@ -308,53 +382,12 @@ class AbsoluteFreeEnergy(BaseFreeEnergy):
         return np.concatenate([host_values, ligand_values])
 
 
-def batches(n: int, batch_size: int) -> Iterable[int]:
-    assert n >= 0
-    assert batch_size > 0
-    quot, rem = divmod(n, batch_size)
-    for _ in range(quot):
-        yield batch_size
-    if rem:
-        yield rem
-
-
-@overload
-def sample(initial_state: InitialState, md_params: MDParams) -> Tuple[NDArray, NDArray]:
-    ...
-
-
-@overload
-def sample(initial_state: InitialState, md_params: MDParams, max_buffer_frames: int) -> Tuple[StoredArrays, NDArray]:
-    ...
-
-
-def sample(initial_state: InitialState, md_params: MDParams, max_buffer_frames: Optional[int] = None):
-    """Generate a trajectory given an initial state and a simulation protocol
-
-    Parameters
-    ----------
-    initial_state: InitialState
-        (contains potentials, integrator, optional barostat)
-    md_params: MDParams
-        (specifies x0, v0, box0, number of MD steps, thinning interval, etc...)
-
-    Returns
-    -------
-    xs, boxes: np.arrays with .shape[0] = md_params.n_frames
-
-    Notes
-    -----
-    * Assertion error if coords become NaN
-    """
-
+def get_context(initial_state: InitialState) -> Context:
     bound_impls = [p.to_gpu(np.float32).bound_impl for p in initial_state.potentials]
     intg_impl = initial_state.integrator.impl()
-    if initial_state.barostat:
-        baro_impl = initial_state.barostat.impl(bound_impls)
-    else:
-        baro_impl = None
+    baro_impl = initial_state.barostat.impl(bound_impls) if initial_state.barostat else None
 
-    ctxt = custom_ops.Context(
+    return Context(
         initial_state.x0,
         initial_state.v0,
         initial_state.box0,
@@ -363,28 +396,36 @@ def sample(initial_state: InitialState, md_params: MDParams, max_buffer_frames: 
         baro_impl,
     )
 
+
+def sample_with_context(
+    ctxt: Context, md_params: MDParams, temperature: float, ligand_idxs: NDArray, max_buffer_frames: int
+) -> Trajectory:
+
     # burn-in
-    ctxt.multiple_steps(
-        n_steps=md_params.n_eq_steps,
-        store_x_interval=0,
-    )
+    if md_params.n_eq_steps:
+        ctxt.multiple_steps(
+            n_steps=md_params.n_eq_steps,
+            store_x_interval=0,
+        )
 
     rng = np.random.default_rng(md_params.seed)
 
     if md_params.local_steps > 0:
-        ctxt.setup_local_md(initial_state.integrator.temperature, md_params.freeze_reference)
+        ctxt.setup_local_md(temperature, md_params.freeze_reference)
 
     assert np.all(np.isfinite(ctxt.get_x_t())), "Equilibration resulted in a nan"
 
-    def run_production_steps(n_steps: int) -> Tuple[NDArray, NDArray]:
+    def run_production_steps(n_steps: int) -> Tuple[NDArray, NDArray, NDArray]:
         coords, boxes = ctxt.multiple_steps(
             n_steps=n_steps,
             store_x_interval=md_params.steps_per_frame,
         )
+        assert np.all(coords[-1] == ctxt.get_x_t())
+        final_velocities = ctxt.get_v_t()
 
-        return coords, boxes
+        return coords, boxes, final_velocities
 
-    def run_production_local_steps(n_steps: int) -> Tuple[NDArray, NDArray]:
+    def run_production_local_steps(n_steps: int) -> Tuple[NDArray, NDArray, NDArray]:
         coords = []
         boxes = []
         for steps in batches(n_steps, md_params.steps_per_frame):
@@ -399,14 +440,18 @@ def sample(initial_state: InitialState, md_params: MDParams, max_buffer_frames: 
                 ctxt.multiple_steps(n_steps=global_steps)
             x_t, box_t = ctxt.multiple_steps_local(
                 local_steps,
-                initial_state.ligand_idxs.astype(np.int32),
+                ligand_idxs.astype(np.int32),
                 k=md_params.k,
                 radius=rng.uniform(md_params.min_radius, md_params.max_radius),
                 seed=rng.integers(np.iinfo(np.int32).max),
             )
             coords.append(x_t)
             boxes.append(box_t)
-        return np.concatenate(coords), np.concatenate(boxes)
+
+        assert np.all(coords[-1][-1] == ctxt.get_x_t())
+        final_velocities = ctxt.get_v_t()
+
+        return np.concatenate(coords), np.concatenate(boxes), final_velocities
 
     all_coords: Union[NDArray, StoredArrays]
 
@@ -414,23 +459,52 @@ def sample(initial_state: InitialState, md_params: MDParams, max_buffer_frames: 
     if md_params.local_steps > 0:
         steps_func = run_production_local_steps
 
-    if max_buffer_frames is not None and max_buffer_frames > 0:
-        all_coords = StoredArrays()
-        all_boxes_: List[NDArray] = []
-        for n_frames in batches(md_params.n_frames, max_buffer_frames):
-            batch_coords, batch_boxes = steps_func(n_frames * md_params.steps_per_frame)
-            all_coords.extend(batch_coords)
-            all_boxes_.extend(batch_boxes)
-        all_boxes = np.array(all_boxes_)
-    else:
-        all_coords, all_boxes = steps_func(md_params.n_frames * md_params.steps_per_frame)
+    all_coords = StoredArrays()
+    all_boxes: List[NDArray] = []
+    final_velocities: NDArray = None  # type: ignore # work around "possibly unbound" error
+    for n_frames in batches(md_params.n_frames, max_buffer_frames):
+        batch_coords, batch_boxes, final_velocities = steps_func(n_frames * md_params.steps_per_frame)
+        all_coords.extend(batch_coords)
+        all_boxes.extend(batch_boxes)
 
     assert len(all_coords) == md_params.n_frames
     assert len(all_boxes) == md_params.n_frames
 
     assert np.all(np.isfinite(all_coords[-1])), "Production resulted in a nan"
 
-    return all_coords, all_boxes
+    final_barostat_volume_scale_factor = ctxt.get_barostat().get_volume_scale_factor() if ctxt.get_barostat() else None
+
+    return Trajectory(all_coords, all_boxes, final_velocities, final_barostat_volume_scale_factor)
+
+
+def sample(initial_state: InitialState, md_params: MDParams, max_buffer_frames: int) -> Trajectory:
+    """Generate a trajectory given an initial state and a simulation protocol
+
+    Parameters
+    ----------
+    initial_state: InitialState
+        (contains potentials, integrator, optional barostat)
+
+    md_params: MDParams
+        MD parameters
+
+    max_buffer_frames: int
+        number of frames to store in memory before dumping to disk
+
+    Returns
+    -------
+    Trajectory
+
+    Notes
+    -----
+    * Assertion error if coords become NaN
+    """
+
+    ctxt = get_context(initial_state)
+
+    return sample_with_context(
+        ctxt, md_params, initial_state.integrator.temperature, initial_state.ligand_idxs, max_buffer_frames
+    )
 
 
 class IndeterminateEnergyWarning(UserWarning):
@@ -519,15 +593,17 @@ def run_sims_sequential(
     md_params: MDParams,
     temperature: float,
     keep_idxs: List[int],
-) -> Tuple[PairBarResult, List[StoredArrays], List[NDArray]]:
+) -> Tuple[PairBarResult, List[Trajectory]]:
     """Sequentially run simulations at each state in initial_states,
     returning summaries that can be used for pair BAR, energy decomposition, and other diagnostics
 
     Returns
     -------
-    pair_bar_result: PairBarResult
-    stored_frames: coord trajectories, one for each state in keep_idxs
-    stored_boxes: box trajectories, one for each state in keep_idxs
+    PairBarResult
+        Results of pair BAR analysis
+
+    list of Trajectory
+        Trajectory for each state specified in keep_idxs
 
     Notes
     -----
@@ -541,8 +617,7 @@ def run_sims_sequential(
         * We decide to use MBAR(states) rather than sum_i BAR(states[i], states[i+1])
         * We use online protocol optimization approaches that require more states to be kept on-hand
     """
-    stored_frames = []
-    stored_boxes = []
+    stored_trajectories = []
 
     # keep no more than 2 states in memory at once
     prev_state: Optional[EnergyDecomposedState] = None
@@ -557,18 +632,17 @@ def run_sims_sequential(
     for lamb_idx, initial_state in enumerate(initial_states):
 
         # run simulation
-        cur_frames, cur_boxes = sample(initial_state, md_params, max_buffer_frames=100)
+        traj = sample(initial_state, md_params, max_buffer_frames=100)
         print(f"completed simulation at lambda={initial_state.lamb}!")
 
         # keep samples from any requested states in memory
         if lamb_idx in keep_idxs:
-            stored_frames.append(cur_frames)
-            stored_boxes.append(cur_boxes)
+            stored_trajectories.append(traj)
 
         bound_impls = [p.to_gpu(np.float32).bound_impl for p in initial_state.potentials]
         cur_batch_U_fns = get_batch_u_fns(bound_impls, temperature)
 
-        state = EnergyDecomposedState(cur_frames, cur_boxes, cur_batch_U_fns)
+        state = EnergyDecomposedState(traj.frames, traj.boxes, cur_batch_U_fns)
 
         # analysis that depends on current and previous state
         if prev_state:
@@ -582,7 +656,7 @@ def run_sims_sequential(
         estimate_free_energy_bar(u_kln_by_component, temperature) for u_kln_by_component in u_kln_by_component_by_lambda
     ]
 
-    return PairBarResult(list(initial_states), bar_results), stored_frames, stored_boxes
+    return PairBarResult(list(initial_states), bar_results), stored_trajectories
 
 
 def make_batch_u_fns(initial_state: InitialState, temperature: float) -> List[Batch_u_fn]:
@@ -603,7 +677,7 @@ def run_sims_bisection(
     temperature: float,
     min_overlap: Optional[float] = None,
     verbose: bool = True,
-) -> Tuple[List[PairBarResult], List[StoredArrays], List[NDArray]]:
+) -> Tuple[List[PairBarResult], List[Trajectory]]:
     r"""Starting from a specified lambda schedule, successively bisect the lambda interval between the pair of states
     with the lowest BAR overlap and sample the new state with MD.
 
@@ -632,15 +706,12 @@ def run_sims_bisection(
 
     Returns
     -------
-    results: list of IntermediateResult
+    list of IntermediateResult
         For each iteration of bisection, object containing the current list of states and array of energy-decomposed
         u_kln matrices.
 
-    frames: list of StoredArrays
-        Frames from the final iteration of bisection. Shape (L, F, N, 3) where N is the number of atoms.
-
-    boxes: list of NDArray
-        Boxes from the final iteration of bisection. Shape (L, F, 3, 3).
+    list of Trajectory
+        Trajectory for each state
     """
 
     assert len(initial_lambdas) >= 2
@@ -649,19 +720,19 @@ def run_sims_bisection(
     get_initial_state = cache(make_initial_state)
 
     @cache
-    def get_samples(lamb: float) -> Tuple[StoredArrays, NDArray]:
+    def get_samples(lamb: float) -> Trajectory:
         initial_state = get_initial_state(lamb)
-        frames, boxes = sample(initial_state, md_params, max_buffer_frames=100)
-        return frames, boxes
+        traj = sample(initial_state, md_params, max_buffer_frames=100)
+        return traj
 
     # NOTE: we don't cache get_state to avoid holding BoundPotentials in memory since they
     # 1. can use significant GPU memory
     # 2. can be reconstructed relatively quickly
     def get_state(lamb: float) -> EnergyDecomposedState[StoredArrays]:
         initial_state = get_initial_state(lamb)
-        frames, boxes = get_samples(lamb)
+        traj = get_samples(lamb)
         batch_u_fns = make_batch_u_fns(initial_state, temperature)
-        return EnergyDecomposedState(frames, boxes, batch_u_fns)
+        return EnergyDecomposedState(traj.frames, traj.boxes, batch_u_fns)
 
     @cache
     def get_bar_result(lamb1: float, lamb2: float) -> BarResult:
@@ -721,7 +792,257 @@ def run_sims_bisection(
                 MinOverlapWarning,
             )
 
-    frames = [get_state(lamb).frames for lamb in lambdas]
-    boxes = [get_state(lamb).boxes for lamb in lambdas]
+    trajectories = [get_samples(lamb) for lamb in lambdas]
 
-    return results, frames, boxes
+    return results, trajectories
+
+
+def run_sims_hrex(
+    initial_states: Sequence[InitialState],
+    md_params: MDParams,
+    n_frames_per_iter: int,
+    n_swap_attempts_per_iter: Optional[int] = None,
+    print_diagnostics_interval: Optional[int] = 10,
+) -> Tuple[PairBarResult, List[Trajectory], HREXDiagnostics]:
+    r"""Sample from a sequence of states using nearest-neighbor Hamiltonian Replica EXchange (HREX).
+
+    See documentation for :py:func:`timemachine.md.hrex.run_hrex` for details of the algorithm and implementation.
+
+    Parameters
+    ----------
+    initial_states: sequence of InitialState
+        States to sample. Should be ordered such that adjacent states have significant overlap for good mixing
+        performance
+
+    md_params: MDParams
+        MD parameters
+
+    n_frames_per_iter: int
+        Number of frames to sample using MD per iteration
+
+    n_swap_attempts_per_iter: int or None, optional
+        Number of nearest-neighbor swaps to attempt per iteration. Defaults to len(initial_states) ** 4.
+
+    print_diagnostics_interval: int or None, optional
+        If not None, print diagnostics every N iterations
+
+    Returns
+    -------
+    PairBarResult
+        results of pair BAR free energy analysis
+
+    list of Trajectory
+        Trajectory for each state
+
+    HREXDiagnostics
+        HREX statistics (e.g. swap rates, replica-state distribution)
+    """
+
+    # TODO: to support replica exchange with variable temperatures,
+    #  consider modifying sample fxn to rescale velocities by sqrt(T_new/T_orig)
+    def assert_ensembles_compatible(state_a: InitialState, state_b: InitialState):
+        """check that xvb from state_a can be swapped with xvb from state_b (up to timestep error),
+        with swap acceptance probability that depends only on U_a, U_b, kBT"""
+
+        # assert (A, B) have identical masses, temperature
+        intg_a = state_a.integrator
+        intg_b = state_b.integrator
+
+        assert (intg_a.masses == intg_b.masses).all()
+        assert intg_a.temperature == intg_b.temperature
+
+        # assert same pressure (or same volume)
+        assert (state_a.barostat is None) == (state_b.barostat is None), "should both be NVT or both be NPT"
+
+        if state_a.barostat and state_b.barostat:
+            # assert (A, B) are compatible NPT ensembles
+            baro_a: MonteCarloBarostat = state_a.barostat
+            baro_b: MonteCarloBarostat = state_b.barostat
+
+            assert baro_a.pressure == baro_b.pressure
+            assert baro_a.temperature == baro_b.temperature
+
+            # also, assert barostat and integrator are self-consistent
+            assert intg_a.temperature == baro_a.temperature
+
+        else:
+            # assert (A, B) are compatible NVT ensembles
+            assert (state_a.box0 == state_b.box0).all()
+
+    for s in initial_states[1:]:
+        assert_ensembles_compatible(initial_states[0], s)
+
+    if n_swap_attempts_per_iter is None:
+        n_swap_attempts_per_iter = get_swap_attempts_per_iter_heuristic(len(initial_states))
+
+    # Setting the numpy global PRNG state is necessary to ensure determinism in timemachine.md.moves.MonteCarloMove
+    # TODO: Avoid use of global PRNG state (see https://github.com/proteneer/timemachine/issues/980)
+    warn(f"Setting numpy global random state using seed {md_params.seed}")
+    np.random.seed(md_params.seed)
+
+    def get_potential_and_context(initial_state: InitialState) -> Tuple[GpuImplWrapper, Context]:
+        # Set up overall potential
+        potentials = [bp.potential for bp in initial_state.potentials]
+        params = [bp.params for bp in initial_state.potentials]
+        potential = SummedPotential(potentials, params).to_gpu(np.float32)
+
+        # Set up context for MD using overall potential
+        bound_impl = potential.bind_params_list(params).bound_impl
+        bound_impls = [bound_impl]
+        intg_impl = initial_state.integrator.impl()
+        baro_impl = initial_state.barostat.impl(bound_impls) if initial_state.barostat else None
+        context = Context(
+            initial_state.x0,
+            initial_state.v0,
+            initial_state.box0,
+            intg_impl,
+            bound_impls,
+            baro_impl,
+        )
+
+        return potential, context
+
+    # Set up overall potential and context using the first state.
+    # NOTE: this assumes that states differ only in their parameters, but we do not check this!
+    potential, context = get_potential_and_context(initial_states[0])
+    temperature = initial_states[0].integrator.temperature
+    ligand_idxs = initial_states[0].ligand_idxs
+
+    def get_flattened_params(initial_state: InitialState) -> NDArray:
+        return np.concatenate([bp.params.flatten() for bp in initial_state.potentials])
+
+    params_by_state = np.array([get_flattened_params(initial_state) for initial_state in initial_states])
+
+    def compute_log_q_matrix(xvbs: List[CoordsVelBox]):
+        coords = np.array([xvb.coords for xvb in xvbs])
+        boxes = np.array([xvb.box for xvb in xvbs])
+        _, _, U = potential.unbound_impl.execute_selective_batch(coords, params_by_state, boxes, False, False, True)
+        log_q = -U / (BOLTZ * temperature)
+        return log_q
+
+    def get_log_q_fn(xvbs: List[CoordsVelBox]):
+        log_q_kl = compute_log_q_matrix(xvbs)
+
+        def log_q_fn(replica_idx: ReplicaIdx, state_idx: StateIdx) -> float:
+            return log_q_kl[replica_idx, state_idx]
+
+        return log_q_fn
+
+    state_idxs = [StateIdx(i) for i, _ in enumerate(initial_states)]
+    neighbor_pairs = list(zip(state_idxs, state_idxs[1:]))
+
+    if len(initial_states) == 2:
+        # Add an identity move to the mixture to ensure aperiodicity
+        neighbor_pairs = [(StateIdx(0), StateIdx(0))] + neighbor_pairs
+
+    def get_equilibrated_xvb(xvb: CoordsVelBox, params: NDArray) -> CoordsVelBox:
+        if md_params.n_eq_steps == 0:
+            return xvb
+
+        context.set_x_t(xvb.coords)
+        context.set_v_t(xvb.velocities)
+        context.set_box(xvb.box)
+
+        assert len(context.get_potentials()) == 1
+        context.get_potentials()[0].set_params(params)
+
+        xs, boxes = context.multiple_steps(md_params.n_eq_steps, store_x_interval=0)
+        x0 = xs[0]
+        v0 = context.get_v_t()
+        box0 = boxes[0]
+
+        return CoordsVelBox(x0, v0, box0)
+
+    initial_replicas = [
+        get_equilibrated_xvb(CoordsVelBox(s.x0, s.v0, s.box0), params)
+        for s, params in zip(initial_states, params_by_state)
+    ]
+
+    hrex = HREX.from_replicas(initial_replicas)
+
+    samples_by_state: List[Trajectory] = [Trajectory.empty() for _ in initial_states]
+    replica_idx_by_state_by_iter: List[List[ReplicaIdx]] = []
+    fraction_accepted_by_pair_by_iter: List[List[Tuple[int, int]]] = []
+
+    for iteration, n_frames_iter in enumerate(batches(md_params.n_frames, n_frames_per_iter), 1):
+
+        def sample_replica(xvb: CoordsVelBox, state_idx: StateIdx) -> Trajectory:
+            context.set_x_t(xvb.coords)
+            context.set_v_t(xvb.velocities)
+            context.set_box(xvb.box)
+
+            params = params_by_state[state_idx]
+            assert len(context.get_potentials()) == 1
+            context.get_potentials()[0].set_params(params)
+
+            md_params_replica = replace(
+                md_params, n_frames=n_frames_iter, n_eq_steps=0, seed=np.random.randint(np.iinfo(np.int32).max)
+            )
+
+            return sample_with_context(context, md_params_replica, temperature, ligand_idxs, max_buffer_frames=100)
+
+        def replica_from_samples(traj: Trajectory) -> CoordsVelBox:
+            return CoordsVelBox(traj.frames[-1], traj.final_velocities, traj.boxes[-1])
+
+        hrex, samples_by_state_iter = hrex.sample_replicas(sample_replica, replica_from_samples)
+        log_q = get_log_q_fn(hrex.replicas)
+        hrex, fraction_accepted_by_pair = hrex.attempt_neighbor_swaps(neighbor_pairs, log_q, n_swap_attempts_per_iter)
+
+        if len(initial_states) == 2:
+            fraction_accepted_by_pair = fraction_accepted_by_pair[1:]  # remove stats for identity move
+
+        for samples, samples_iter in zip(samples_by_state, samples_by_state_iter):
+            samples.extend(samples_iter)
+
+        replica_idx_by_state_by_iter.append(hrex.replica_idx_by_state)
+        fraction_accepted_by_pair_by_iter.append(fraction_accepted_by_pair)
+
+        if print_diagnostics_interval and iteration % print_diagnostics_interval == 0:
+
+            def get_swap_acceptance_rates(fraction_accepted_by_pair):
+                return [
+                    n_accepted / n_proposed if n_proposed else np.nan
+                    for n_accepted, n_proposed in fraction_accepted_by_pair
+                ]
+
+            instantaneous_swap_acceptance_rates = get_swap_acceptance_rates(fraction_accepted_by_pair)
+            average_swap_acceptance_rates = get_swap_acceptance_rates(np.sum(fraction_accepted_by_pair_by_iter, axis=0))
+
+            def format_rate(r):
+                return f"{r * 100.0:5.1f}%"
+
+            def format_rates(rs):
+                return " | ".join(format_rate(r) for r in rs)
+
+            print("Completed HREX iteration", iteration)
+            print("Acceptance rates (inst.)   :", format_rates(instantaneous_swap_acceptance_rates))
+            print("Acceptance rates (average) :", format_rates(average_swap_acceptance_rates))
+            print("Final replica permutation  :", hrex.replica_idx_by_state)
+            print()
+
+    def make_energy_decomposed_state(
+        results: Tuple[StoredArrays, List[NDArray], InitialState]
+    ) -> EnergyDecomposedState[StoredArrays]:
+        frames, boxes, initial_state = results
+        return EnergyDecomposedState(
+            frames,
+            boxes,
+            get_batch_u_fns([pot.to_gpu(np.float32).bound_impl for pot in initial_state.potentials], temperature),
+        )
+
+    results_by_state = [
+        (samples.frames, samples.boxes, initial_state)
+        for samples, initial_state in zip(samples_by_state, initial_states)
+    ]
+
+    bar_results = list(
+        pairwise_transform_and_combine(
+            results_by_state,
+            make_energy_decomposed_state,
+            lambda s1, s2: estimate_free_energy_bar(compute_energy_decomposed_u_kln([s1, s2]), temperature),
+        )
+    )
+
+    diagnostics = HREXDiagnostics(replica_idx_by_state_by_iter, fraction_accepted_by_pair_by_iter)
+
+    return PairBarResult(list(initial_states), bar_results), samples_by_state, diagnostics

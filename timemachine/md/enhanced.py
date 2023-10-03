@@ -22,7 +22,8 @@ from timemachine.fe.free_energy import HostConfig
 from timemachine.fe.utils import get_romol_conf
 from timemachine.integrator import simulate
 from timemachine.lib import custom_ops
-from timemachine.md import builders, minimizer, moves
+from timemachine.md import builders, minimizer
+from timemachine.md.barostat.moves import NPTMove
 from timemachine.md.barostat.utils import get_bond_list, get_group_indices
 from timemachine.md.states import CoordsVelBox
 from timemachine.potentials import bonded, rmsd
@@ -591,7 +592,7 @@ def generate_solvent_samples(
         potentials, params, masses, coords, box, temperature, pressure, num_equil_steps, seed
     )
 
-    npt_mover = moves.NPTMove(potentials, masses, temperature, pressure, n_steps=md_steps_per_move, seed=seed)
+    npt_mover = NPTMove(potentials, masses, temperature, pressure, n_steps=md_steps_per_move, seed=seed)
 
     xvbs = [xvb0]
     for _ in range(n_samples):
