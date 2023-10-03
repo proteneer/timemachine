@@ -8,7 +8,7 @@
 
 namespace timemachine {
 
-class LangevinIntegrator : public Integrator {
+template <typename RealType> class LangevinIntegrator : public Integrator {
 
 private:
     const int N_;
@@ -20,9 +20,9 @@ private:
     // The offset into the current batch of noise
     int noise_offset_;
 
-    double *d_cbs_;
-    double *d_ccs_;
-    double *d_noise_;
+    RealType *d_cbs_;
+    RealType *d_ccs_;
+    RealType *d_noise_;
     unsigned long long *d_du_dx_;
 
     curandGenerator_t cr_rng_;
@@ -60,5 +60,8 @@ public:
         unsigned int *d_idxs,
         cudaStream_t stream) override;
 };
+
+template class LangevinIntegrator<float>;
+template class LangevinIntegrator<double>;
 
 } // end namespace timemachine
