@@ -21,6 +21,8 @@ from timemachine.md.moves import MonteCarloMove
 
 DEBUG = False
 
+pytestmark = [pytest.mark.nogpu]
+
 
 class Distribution(Protocol):
     def sample(self, n_samples: int) -> NDArray:
