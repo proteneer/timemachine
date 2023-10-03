@@ -14,6 +14,8 @@ from hypothesis.strategies import composite, integers, lists
 from timemachine.fe.stored_arrays import StoredArrays
 from timemachine.parallel.client import FileClient
 
+pytestmark = [pytest.mark.nogpu]
+
 
 @composite
 def chunks(draw):

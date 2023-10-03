@@ -10,6 +10,7 @@ config.update("jax_enable_x64", True)
 
 from functools import partial
 
+import pytest
 from pymbar import BAR, EXP, MBAR
 from rdkit import Chem
 from rdkit.Chem import AllChem
@@ -19,6 +20,8 @@ from timemachine.ff import Forcefield
 from timemachine.maps.estimators import compute_mapped_reduced_work, compute_mapped_u_kn
 from timemachine.maps.terminal_bonds import Interval, TerminalBondMap, TerminalMappableState, interval_map
 from timemachine.md.enhanced import VacuumState, generate_ligand_samples
+
+pytestmark = [pytest.mark.nogpu]
 
 
 def test_invertibility_of_interval_maps():
