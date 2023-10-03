@@ -8,8 +8,8 @@ __global__ void k_update_forward_baoab(
     const RealType *__restrict__ cbs,             // N
     const RealType *__restrict__ ccs,             // N
     const RealType *__restrict__ noise,           // N x 3
-    RealType *__restrict__ x_t,                   // N x 3
-    RealType *__restrict__ v_t,                   // N x 3
+    double *__restrict__ x_t,                     // N x 3
+    double *__restrict__ v_t,                     // N x 3
     const unsigned long long *__restrict__ du_dx, // N x 3
     const RealType dt) {
     static_assert(D == 3);
