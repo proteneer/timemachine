@@ -93,6 +93,13 @@ void Neighborlist<RealType>::compute_block_bounds_host(
     }
 }
 
+// Return the number of tiles that interact
+template <typename RealType> unsigned int Neighborlist<RealType>::num_tile_ixns() {
+    unsigned int h_ixn_count;
+    gpuErrchk(cudaMemcpy(&h_ixn_count, d_ixn_count_, 1 * sizeof(*d_ixn_count_), cudaMemcpyDeviceToHost));
+    return h_ixn_count;
+}
+
 template <typename RealType>
 std::vector<std::vector<int>>
 Neighborlist<RealType>::get_nblist_host(int N, const double *h_coords, const double *h_box, const double cutoff) {
@@ -119,9 +126,10 @@ Neighborlist<RealType>::get_nblist_host(int N, const double *h_coords, const dou
     gpuErrchk(cudaMemcpy(&h_ixn_count, d_ixn_count_, 1 * sizeof(*d_ixn_count_), cudaMemcpyDeviceToHost));
     std::vector<int> h_ixn_tiles(MAX_TILE_BUFFER);
     std::vector<unsigned int> h_ixn_atoms(MAX_ATOM_BUFFER);
-    gpuErrchk(cudaMemcpy(&h_ixn_tiles[0], d_ixn_tiles_, MAX_TILE_BUFFER * sizeof(int), cudaMemcpyDeviceToHost));
     gpuErrchk(
-        cudaMemcpy(&h_ixn_atoms[0], d_ixn_atoms_, MAX_ATOM_BUFFER * sizeof(unsigned int), cudaMemcpyDeviceToHost));
+        cudaMemcpy(&h_ixn_tiles[0], d_ixn_tiles_, MAX_TILE_BUFFER * sizeof(*d_ixn_tiles_), cudaMemcpyDeviceToHost));
+    gpuErrchk(
+        cudaMemcpy(&h_ixn_atoms[0], d_ixn_atoms_, MAX_ATOM_BUFFER * sizeof(*d_ixn_atoms_), cudaMemcpyDeviceToHost));
 
     std::vector<std::vector<int>> ixn_list(row_blocks, std::vector<int>());
     for (int i = 0; i < h_ixn_count; i++) {
@@ -336,8 +344,8 @@ void Neighborlist<RealType>::set_idxs_device(
     this->NR_ = NR;
     this->NC_ = NC;
 
+    const unsigned long long MAX_ATOM_BUFFER = this->max_ixn_count();
     // Clear the atom ixns, to avoid reuse
-    unsigned long long MAX_ATOM_BUFFER = this->max_ixn_count();
     // Set to max value, ie greater than N. Note that Memset is on bytes, which is why it is UCHAR_MAX
     gpuErrchk(cudaMemsetAsync(d_ixn_atoms_, UCHAR_MAX, MAX_ATOM_BUFFER * sizeof(*d_ixn_atoms_), stream));
 }
@@ -356,8 +364,15 @@ template <typename RealType> int Neighborlist<RealType>::Y() const {
 
 template <typename RealType> int Neighborlist<RealType>::num_row_blocks() const { return ceil_divide(NR_, TILE_SIZE); }
 
+// max_ixn_count determines the number of tile-atom interaction counts. For each tile that interacts with another
+// it can have TILE_SIZE tile-atom interactions. Note that d_ixn_count_ is only the number of tile-tile interactions, and differs by a factor of TILE_SIZE
 template <typename RealType> int Neighborlist<RealType>::max_ixn_count() const {
-    return num_column_blocks() * num_row_blocks() * WARP_SIZE;
+    // The maximum number of tile-atom interactions is that of all tile-tile interactions multiplied by TILE_SIZE.
+    // Use the maximum value of N to compute the size of the upper triangular matrix to support any set of row indices.
+    const int n_blocks = ceil_divide(max_size_, TILE_SIZE);
+    int max_tile_tile_interactions = (n_blocks * (n_blocks + 1)) / 2;
+    // Each tile-tile interaction can have TILE_SIZE tile-atom interactions
+    return max_tile_tile_interactions * TILE_SIZE;
 }
 
 template class Neighborlist<double>;

@@ -137,6 +137,8 @@ template <typename RealType> void declare_neighborlist(py::module &m, const char
             },
             py::arg("idxs"))
         .def("reset_row_idxs", &timemachine::Neighborlist<RealType>::reset_row_idxs)
+        .def("get_tile_ixn_count", &timemachine::Neighborlist<RealType>::num_tile_ixns)
+        .def("get_max_ixn_count", &timemachine::Neighborlist<RealType>::max_ixn_count)
         .def("resize", &timemachine::Neighborlist<RealType>::resize, py::arg("size"));
 }
 
@@ -468,7 +470,7 @@ void declare_context(py::module &m) {
     )pbdoc")
         .def(
             "set_x_t",
-            [](timemachine::Context &ctxt, const py::array_t<double, py::array::c_style> new_x_t) {
+            [](timemachine::Context &ctxt, const py::array_t<double, py::array::c_style> &new_x_t) {
                 if (new_x_t.shape()[0] != ctxt.num_atoms()) {
                     throw std::runtime_error("number of new coords disagree with current coords");
                 }
@@ -477,7 +479,7 @@ void declare_context(py::module &m) {
             py::arg("coords"))
         .def(
             "set_v_t",
-            [](timemachine::Context &ctxt, const py::array_t<double, py::array::c_style> new_v_t) {
+            [](timemachine::Context &ctxt, const py::array_t<double, py::array::c_style> &new_v_t) {
                 if (new_v_t.shape()[0] != ctxt.num_atoms()) {
                     throw std::runtime_error("number of new velocities disagree with current coords");
                 }
@@ -486,7 +488,7 @@ void declare_context(py::module &m) {
             py::arg("velocities"))
         .def(
             "set_box",
-            [](timemachine::Context &ctxt, const py::array_t<double, py::array::c_style> new_box_t) {
+            [](timemachine::Context &ctxt, const py::array_t<double, py::array::c_style> &new_box_t) {
                 if (new_box_t.size() != 9 || new_box_t.shape()[0] != 3) {
                     throw std::runtime_error("box must be 3x3");
                 }
