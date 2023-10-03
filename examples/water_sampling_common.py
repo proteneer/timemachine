@@ -5,6 +5,7 @@ from openmm import app
 
 from timemachine.constants import AVOGADRO, DEFAULT_PRESSURE, DEFAULT_TEMP
 from timemachine.fe.free_energy import AbsoluteFreeEnergy, HostConfig, InitialState
+from timemachine.fe.model_utils import apply_hmr
 from timemachine.fe.topology import BaseTopology
 from timemachine.fe.utils import get_romol_conf
 from timemachine.ff import Forcefield
@@ -108,7 +109,6 @@ def get_initial_state(water_pdb, mol, ff, seed, nb_cutoff, lamb):
     ligand_idxs = np.arange(num_water_atoms, num_water_atoms + mol.GetNumAtoms())
     nb_params = np.array(params[-1])
 
-    final_masses = combined_masses
     final_conf = np.concatenate([solvent_conf, get_romol_conf(mol)], axis=0)
 
     component_dim = 4  # q,s,e,w
@@ -141,11 +141,17 @@ def get_initial_state(water_pdb, mol, ff, seed, nb_cutoff, lamb):
     # print("Done", flush=True)
 
     temperature = DEFAULT_TEMP
-    dt = 1.0e-3
+
     barostat_interval = 25
-    integrator = LangevinIntegrator(temperature, dt, 1.0, final_masses, seed)
+
     bond_list = get_bond_list(next(bp for bp in host_bps if isinstance(bp.potential, HarmonicBond)).potential)
+    print("Applying hmr to the system")
+    # this only really affects the waters, since buckyball has no hydrogens.
+    final_masses = apply_hmr(combined_masses, bond_list)
     group_idxs = get_group_indices(bond_list, len(final_masses))
+
+    dt = 2.5e-3
+    integrator = LangevinIntegrator(temperature, dt, 1.0, final_masses, seed)
     barostat = MonteCarloBarostat(
         len(final_masses), DEFAULT_PRESSURE, temperature, group_idxs, barostat_interval, seed + 1
     )
