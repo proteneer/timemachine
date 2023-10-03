@@ -4,6 +4,7 @@ from typing import List, Optional, Sequence, Union
 
 import numpy as np
 from numpy.typing import NDArray
+from PIL import Image
 from rdkit import Chem
 from rdkit.Chem import AllChem, Draw
 from rdkit.Chem.Draw import rdMolDraw2D
@@ -145,7 +146,13 @@ def score_2d(conf, norm=2):
     return score / len(conf)
 
 
-def generate_good_rotations(mol_a, mol_b, num_rotations=3, max_rotations=1000, seed=1234):
+def generate_good_rotations(
+    mol_a: Chem.rdchem.Mol,
+    mol_b: Chem.rdchem.Mol,
+    num_rotations: int = 3,
+    max_rotations: int = 1000,
+    seed: int = 1234,
+) -> NDArray:
     assert num_rotations < max_rotations
 
     # generate some good rotations so that the viewing angle is pleasant, (so clashes are minimized):
@@ -183,7 +190,13 @@ def rotate_mol(mol, rotation_matrix):
     return mol_copy
 
 
-def plot_atom_mapping_grid(mol_a, mol_b, core, num_rotations=5, seed=1234):
+def plot_atom_mapping_grid(
+    mol_a: Chem.rdchem.Mol,
+    mol_b: Chem.rdchem.Mol,
+    core: NDArray,
+    num_rotations: int = 5,
+    seed: int = 1234,
+) -> Image:
     mol_a_3d = recenter_mol(mol_a)
     mol_b_3d = recenter_mol(mol_b)
 
@@ -212,7 +225,7 @@ def plot_atom_mapping_grid(mol_a, mol_b, core, num_rotations=5, seed=1234):
 
     all_mols = [mol_a_3d, mol_b_3d, *extra_mols]
 
-    legends = []
+    legends: List[str] = []
     while len(legends) < num_mols:
         legends.append(get_mol_name(mol_a) + " (3D)")
         legends.append(get_mol_name(mol_b) + " (3D)")
