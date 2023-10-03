@@ -134,7 +134,7 @@ void __global__ k_nonbonded_pair_list(
         if (eps_i != 0 && eps_j != 0) {
             RealType sig_grad;
             RealType eps_grad;
-            compute_lj<RealType, true>(
+            compute_lj<RealType, true, true>(
                 lj_scale, eps_i, eps_j, sig_i, sig_j, inv_dij, inv_d2ij, u, delta_prefactor, sig_grad, eps_grad);
 
             g_sigi += FLOAT_TO_FIXED_DU_DP<RealType, FIXED_EXPONENT_DU_DSIG>(sig_grad);

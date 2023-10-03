@@ -67,7 +67,7 @@ void __device__ __forceinline__ compute_electrostatics(
 // This is pulled out into a function to ensure that the same bit values
 // are computed to ensure that that the fixed point values are exactly the same regardless
 // of where the values are computed.
-template <typename RealType, bool COMPUTE_U>
+template <typename RealType, bool COMPUTE_U, bool COMPUTE_DU_DP>
 void __device__ __forceinline__ compute_lj(
     RealType lj_scale,
     RealType eps_i,
@@ -88,7 +88,6 @@ void __device__ __forceinline__ compute_lj(
     RealType sig4_inv_d4ij = sig2_inv_d2ij * sig2_inv_d2ij;
     RealType sig6_inv_d6ij = sig4_inv_d4ij * sig2_inv_d2ij;
     RealType sig6_inv_d8ij = sig6_inv_d6ij * inv_d2ij;
-    RealType sig5_inv_d6ij = sig_ij * sig4_inv_d4ij * inv_d2ij;
 
     RealType lj_prefactor = lj_scale * eps_ij * sig6_inv_d8ij * (sig6_inv_d6ij * 48 - 24);
     if (COMPUTE_U) {
@@ -97,8 +96,11 @@ void __device__ __forceinline__ compute_lj(
 
     delta_prefactor -= lj_prefactor;
 
-    sig_grad = lj_scale * 24 * eps_ij * sig5_inv_d6ij * (2 * sig6_inv_d6ij - 1);
-    eps_grad = lj_scale * 4 * (sig6_inv_d6ij - 1) * sig6_inv_d6ij;
+    if (COMPUTE_DU_DP) {
+        RealType sig5_inv_d6ij = sig_ij * sig4_inv_d4ij * inv_d2ij;
+        sig_grad = lj_scale * 24 * eps_ij * sig5_inv_d6ij * (2 * sig6_inv_d6ij - 1);
+        eps_grad = lj_scale * 4 * (sig6_inv_d6ij - 1) * sig6_inv_d6ij;
+    }
 }
 
 } // namespace timemachine

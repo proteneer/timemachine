@@ -231,7 +231,7 @@ void __device__ v_nonbonded_unified(
             if (eps_i != 0 && eps_j != 0) {
                 RealType sig_grad;
                 RealType eps_grad;
-                compute_lj<RealType, COMPUTE_U>(
+                compute_lj<RealType, COMPUTE_U, COMPUTE_DU_DP>(
                     1.0, eps_i, eps_j, sig_i, sig_j, inv_dij, inv_d2ij, u, delta_prefactor, sig_grad, eps_grad);
 
                 // do chain rule inside loop
