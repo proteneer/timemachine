@@ -122,6 +122,7 @@ def test_exchange():
     elif args.insertion_type == "untargeted":
         # vanilla reference
         exc_mover = exchange_mover.BDExchangeMove(nb_beta, nb_cutoff, nb_water_ligand_params, water_idxs, DEFAULT_TEMP)
+
     cur_box = initial_state.box0
     cur_x_t = initial_state.x0
     cur_v_t = np.zeros_like(cur_x_t)

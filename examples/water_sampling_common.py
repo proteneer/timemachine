@@ -150,7 +150,9 @@ def get_initial_state(water_pdb, mol, ff, seed, nb_cutoff, use_hmr, lamb):
 
     group_idxs = get_group_indices(bond_list, len(combined_masses))
     if use_hmr:
-
+        # (ytz): TODO,
+        # play with setting multiplier=5 to go from 16/1/1 to 6/6/6
+        # default multiplier=2 changes it to 12/3/3 (only applies to this special case)
         final_masses = apply_hmr(combined_masses, bond_list)
         print("Applying hmr to the system", final_masses)
         dt = 2.5e-3
