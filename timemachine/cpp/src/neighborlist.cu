@@ -116,6 +116,7 @@ Neighborlist<RealType>::get_nblist_host(int N, const double *h_coords, const dou
     this->build_nblist_device(N, d_coords.data, d_box.data, cutoff, static_cast<cudaStream_t>(0));
 
     gpuErrchk(cudaDeviceSynchronize());
+    // printf("HERE WE GO\n");
     const int column_blocks = this->num_column_blocks();
     const int row_blocks = this->num_row_blocks();
 
@@ -124,6 +125,7 @@ Neighborlist<RealType>::get_nblist_host(int N, const double *h_coords, const dou
 
     unsigned int h_ixn_count;
     gpuErrchk(cudaMemcpy(&h_ixn_count, d_ixn_count_, 1 * sizeof(*d_ixn_count_), cudaMemcpyDeviceToHost));
+    // printf("Num ixns %d\n", h_ixn_count);
     std::vector<int> h_ixn_tiles(MAX_TILE_BUFFER);
     std::vector<unsigned int> h_ixn_atoms(MAX_ATOM_BUFFER);
     gpuErrchk(
@@ -131,15 +133,19 @@ Neighborlist<RealType>::get_nblist_host(int N, const double *h_coords, const dou
     gpuErrchk(
         cudaMemcpy(&h_ixn_atoms[0], d_ixn_atoms_, MAX_ATOM_BUFFER * sizeof(*d_ixn_atoms_), cudaMemcpyDeviceToHost));
 
+    // printf("Starting!\n");
     std::vector<std::vector<int>> ixn_list(row_blocks, std::vector<int>());
     for (int i = 0; i < h_ixn_count; i++) {
         int tile_idx = h_ixn_tiles[i];
+        // printf("Got tile %d\n", tile_idx);
         for (int j = 0; j < TILE_SIZE; j++) {
+            // printf("i %d j %d, Index %d, Max %llu\n",i, j, i * TILE_SIZE + j, MAX_ATOM_BUFFER);
             int atom_j_idx = h_ixn_atoms[i * TILE_SIZE + j];
             if (atom_j_idx < N) {
                 ixn_list[tile_idx].push_back(atom_j_idx);
             }
         }
+        // printf("Finished tile\n");
     }
 
     return ixn_list;
@@ -178,6 +184,7 @@ void Neighborlist<RealType>::build_nblist_device(
             d_ixn_atoms_,
             d_trim_atoms_,
             cutoff);
+        gpuErrchk(cudaPeekAtLastError());
     } else {
         k_find_blocks_with_ixns<RealType, false><<<dimGrid, tpb, 0, stream>>>(
             N_,
@@ -196,12 +203,12 @@ void Neighborlist<RealType>::build_nblist_device(
             d_ixn_atoms_,
             d_trim_atoms_,
             cutoff);
+        gpuErrchk(cudaPeekAtLastError());
     }
 
-    gpuErrchk(cudaPeekAtLastError());
-    k_compact_trim_atoms<<<row_blocks, tpb, 0, stream>>>(
-        N_, Y, d_trim_atoms_, d_ixn_count_, d_ixn_tiles_, d_ixn_atoms_);
-
+    const int trim_blocks = ceil_divide(NR_, DEFAULT_THREADS_PER_BLOCK);
+    k_compact_trim_atoms<DEFAULT_THREADS_PER_BLOCK><<<trim_blocks, DEFAULT_THREADS_PER_BLOCK, 0, stream>>>(
+        N_, Y, row_blocks, d_trim_atoms_, d_ixn_count_, d_ixn_tiles_, d_ixn_atoms_);
     gpuErrchk(cudaPeekAtLastError());
 }
 
