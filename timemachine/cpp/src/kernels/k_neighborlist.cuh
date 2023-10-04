@@ -113,64 +113,79 @@ void __global__ k_find_block_bounds(
     }
 }
 
+template <int THREADS_PER_BLOCK>
 void __global__ k_compact_trim_atoms(
     const int N,
     const int Y,
+    const int row_blocks,
     unsigned int *__restrict__ trim_atoms,
-    unsigned int *__restrict__ interactionCount,
-    int *__restrict__ interactingTiles,
-    unsigned int *__restrict__ interactingAtoms) {
+    unsigned int *__restrict__ interaction_count,
+    int *__restrict__ interacting_tiles,
+    unsigned int *__restrict__ interacting_atoms) {
+    static_assert(
+        THREADS_PER_BLOCK > 0 && THREADS_PER_BLOCK % WARP_SIZE == 0,
+        "Threads per block must be a multiple of warp size");
+    // we can probably get away with using only THREADS_PER_BLOCK if we do some fancier remainder tricks, but this isn't a huge save
+    __shared__ int ixn_j_buffer[2 * THREADS_PER_BLOCK];
+    __shared__ volatile int sync_start[THREADS_PER_BLOCK / TILE_SIZE];
 
-    // we can probably get away with using only 32 if we do some fancier remainder tricks, but this isn't a huge save
-    __shared__ int ixn_j_buffer[2 * WARP_SIZE];
+    const int warp_idx = threadIdx.x % WARP_SIZE;
+    // Mask to determine which threads in the warp before the current thread has interactions
+    const int warp_mask = (1 << warp_idx) - 1;
+    const int rows_per_block = blockDim.x / TILE_SIZE;
+    const int warp_block = threadIdx.x / WARP_SIZE;
+    const int row_block_idx = blockIdx.x * rows_per_block + warp_block;
+    if (row_block_idx >= row_blocks) {
+        return;
+    }
 
     ixn_j_buffer[threadIdx.x] = N;
-    ixn_j_buffer[WARP_SIZE + threadIdx.x] = N;
+    ixn_j_buffer[THREADS_PER_BLOCK + threadIdx.x] = N;
 
-    const int indexInWarp = threadIdx.x % WARP_SIZE;
-    const int warpMask = (1 << indexInWarp) - 1;
-    const int row_block_idx = blockIdx.x;
-
-    __shared__ volatile int sync_start[1];
-    int neighborsInBuffer = 0;
-
+    int neighbors_in_buffer = 0;
     for (int trim_block_idx = 0; trim_block_idx < Y; trim_block_idx++) {
 
-        int atom_j_idx = trim_atoms[row_block_idx * Y * WARP_SIZE + trim_block_idx * WARP_SIZE + threadIdx.x];
+        int atom_j_idx = trim_atoms[row_block_idx * Y * WARP_SIZE + trim_block_idx * WARP_SIZE + warp_idx];
+
         bool interacts = atom_j_idx < N;
 
-        int includeAtomFlags = __ballot_sync(FULL_MASK, interacts);
+        int include_atom_flags = __ballot_sync(FULL_MASK, interacts);
 
         if (interacts) {
             // only interacting atoms partake in this
-            int index = neighborsInBuffer + __popc(includeAtomFlags & warpMask); // where to store this in shared memory
-            ixn_j_buffer[index] = atom_j_idx;
+            int index =
+                neighbors_in_buffer + __popc(include_atom_flags & warp_mask); // where to store this in shared memory
+            // If the index is greater than the tile size, add the threads per block to ensure same thread block processes
+            // the interaction
+            index = index >= TILE_SIZE ? (index % TILE_SIZE) + THREADS_PER_BLOCK : index;
+            ixn_j_buffer[warp_block * WARP_SIZE + index] = atom_j_idx;
         }
-        neighborsInBuffer += __popc(includeAtomFlags);
+        neighbors_in_buffer += __popc(include_atom_flags);
 
-        if (neighborsInBuffer > WARP_SIZE) {
-            int tilesToStore = 1;
-            if (indexInWarp == 0) {
-                sync_start[0] = atomicAdd(interactionCount, tilesToStore);
+        if (neighbors_in_buffer > TILE_SIZE) {
+            int tiles_to_store = 1;
+            if (warp_idx == 0) {
+                sync_start[warp_block] = atomicAdd(interaction_count, tiles_to_store);
             }
             __syncwarp();
-            interactingTiles[sync_start[0]] = row_block_idx; // IS THIS CORRECT? CONTESTED
-            interactingAtoms[sync_start[0] * WARP_SIZE + threadIdx.x] = ixn_j_buffer[threadIdx.x];
 
-            ixn_j_buffer[threadIdx.x] = ixn_j_buffer[WARP_SIZE + threadIdx.x];
-            ixn_j_buffer[WARP_SIZE + threadIdx.x] = N; // reset old values
-            neighborsInBuffer -= WARP_SIZE;
+            interacting_tiles[sync_start[warp_block]] = row_block_idx; // IS THIS CORRECT? CONTESTED
+            interacting_atoms[sync_start[warp_block] * TILE_SIZE + warp_idx] = ixn_j_buffer[threadIdx.x];
+
+            ixn_j_buffer[threadIdx.x] = ixn_j_buffer[THREADS_PER_BLOCK + threadIdx.x];
+            ixn_j_buffer[THREADS_PER_BLOCK + threadIdx.x] = N; // reset old values
+            neighbors_in_buffer -= TILE_SIZE;
         }
     }
 
-    if (neighborsInBuffer > 0) {
-        int tilesToStore = 1;
-        if (indexInWarp == 0) {
-            sync_start[0] = atomicAdd(interactionCount, tilesToStore);
+    if (neighbors_in_buffer > 0) {
+        int tiles_to_store = 1;
+        if (warp_idx == 0) {
+            sync_start[warp_block] = atomicAdd(interaction_count, tiles_to_store);
         }
         __syncwarp();
-        interactingTiles[sync_start[0]] = row_block_idx;
-        interactingAtoms[sync_start[0] * WARP_SIZE + threadIdx.x] = ixn_j_buffer[threadIdx.x];
+        interacting_tiles[sync_start[warp_block]] = row_block_idx;
+        interacting_atoms[sync_start[warp_block] * TILE_SIZE + warp_idx] = ixn_j_buffer[threadIdx.x];
     }
 }
 
