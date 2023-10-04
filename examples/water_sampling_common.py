@@ -145,21 +145,24 @@ def get_initial_state(water_pdb, mol, ff, seed, nb_cutoff, use_hmr, lamb):
     barostat_interval = 25
 
     bond_list = get_bond_list(next(bp for bp in host_bps if isinstance(bp.potential, HarmonicBond)).potential)
-
-    # this only really affects the waters, since buckyball has no hydrogens.
-
     group_idxs = get_group_indices(bond_list, len(combined_masses))
-    if use_hmr:
-        # (ytz): TODO,
-        # play with setting multiplier=5 to go from 16/1/1 to 6/6/6
-        # default multiplier=2 changes it to 12/3/3 (only applies to this special case)
-        final_masses = apply_hmr(combined_masses, bond_list)
-        print("Applying hmr to the system", final_masses)
-        dt = 2.5e-3
-    else:
+
+    if use_hmr == 0:
         final_masses = combined_masses
         print("Not applying hmr to the system", final_masses)
         dt = 1e-3
+    elif use_hmr == 1:
+        # (ytz): apply_hmr only affects the waters, since buckyball has no hydrogens.
+        final_masses = apply_hmr(combined_masses, bond_list, multiplier=2)
+        print("Applying default hmr to the system", final_masses)
+        dt = 2.5e-3
+    elif use_hmr == 2:
+        # (ytz): apply_hmr with more optimal schedule
+        final_masses = apply_hmr(combined_masses, bond_list, multiplier=4.23)
+        print("Applying optimized hmr to the system", final_masses)
+        dt = 2.5e-3
+    else:
+        assert 0
 
     integrator = LangevinIntegrator(temperature, dt, 1.0, final_masses, seed)
     barostat = MonteCarloBarostat(
