@@ -237,39 +237,35 @@ def test_nblist_row_indices_are_order_independent():
             assert_ixn_lists_are_equal(shuffled_ixns, test_shuffle_ixn_list)
 
 
-def test_neighborlist():
+@pytest.mark.parametrize("size", [35, 64, 129, 1025, 1259, 2029])
+@pytest.mark.parametrize("ctor", [custom_ops.Neighborlist_f32, custom_ops.Neighborlist_f64])
+def test_neighborlist(size, ctor):
     water_coords = get_water_coords(3, sort=False)
-    sizes = [35, 64, 129, 1025, 1259, 2029]
-    max_size = max(sizes)
-    nblists = [custom_ops.Neighborlist_f32(max_size), custom_ops.Neighborlist_f64(max_size)]
-    for size in sizes:
-        print("testing size:", size)
+    nblist = ctor(size)
+    print("testing size:", size)
 
-        np.random.seed(1234)
-        atom_idxs = np.random.choice(np.arange(size), size, replace=False)
-        coords = water_coords[atom_idxs]
-        padding = 0.1
-        diag = np.amax(coords, axis=0) - np.amin(coords, axis=0) + padding
-        box = np.eye(3) * diag
+    np.random.seed(1234)
+    atom_idxs = np.random.choice(np.arange(size), size, replace=False)
+    coords = water_coords[atom_idxs]
+    padding = 0.1
+    diag = np.amax(coords, axis=0) - np.amin(coords, axis=0) + padding
+    box = np.eye(3) * diag
 
-        cutoff = 1.0
+    cutoff = 1.0
 
-        sort = True
-        if sort:
-            perm = hilbert_sort(coords, box)
-            coords = coords[perm]
+    sort = True
+    if sort:
+        perm = hilbert_sort(coords, box)
+        coords = coords[perm]
 
-        ref_ixn_list = build_reference_ixn_list(coords, box, cutoff)
-        for nblist in nblists:
-            # Resize the nblist accordingly
-            nblist.resize(size)
-            # Run twice to ensure deterministic results
-            for _ in range(2):
-                test_ixn_list = nblist.get_nblist(coords, box, cutoff)
+    ref_ixn_list = build_reference_ixn_list(coords, box, cutoff)
+    # Run twice to ensure deterministic results
+    for _ in range(2):
+        test_ixn_list = nblist.get_nblist(coords, box, cutoff)
 
-                assert len(ref_ixn_list) == len(test_ixn_list)
+        assert len(ref_ixn_list) == len(test_ixn_list)
 
-                assert_ixn_lists_are_equal(ref_ixn_list, test_ixn_list)
+        assert_ixn_lists_are_equal(ref_ixn_list, test_ixn_list)
 
 
 def test_neighborlist_resize():
