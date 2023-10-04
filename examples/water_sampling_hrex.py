@@ -28,6 +28,7 @@ def estimate_relative_free_energy_hrex_bb(
     lambda_min,
     lambda_max,
     n_windows,
+    use_hmr,
     ff: Forcefield,
     nb_cutoff: float,
     md_params: MDParams,
@@ -37,7 +38,7 @@ def estimate_relative_free_energy_hrex_bb(
     combined_prefix = "hrex"
 
     def make_optimized_initial_state_fn(lamb: float) -> InitialState:
-        state, _, _ = get_initial_state(water_pdb, mol, ff, seed, nb_cutoff, lamb)
+        state, _, _ = get_initial_state(water_pdb, mol, ff, seed, nb_cutoff, use_hmr, lamb)
         return state
 
     return estimate_relative_free_energy_bisection_hrex_impl(
@@ -113,6 +114,12 @@ def test_hrex():
         help="Number of frames to use for bisection and hrex",
         required=True,
     )
+    parser.add_argument(
+        "--use_hmr",
+        type=int,
+        help="Whether or not we apply HMR. 1 for yes, 0 for no.",
+        required=True,
+    )
 
     args = parser.parse_args()
 
@@ -128,7 +135,7 @@ def test_hrex():
     nb_cutoff = 1.2  # this has to be 1.2 since the builders hard code this in (should fix later)
 
     # set up water indices, assumes that waters are placed at the front of the coordinates.
-    dummy_initial_state, nwm, _ = get_initial_state(args.water_pdb, mol, ff, seed, nb_cutoff, 0.0)
+    dummy_initial_state, nwm, _ = get_initial_state(args.water_pdb, mol, ff, seed, nb_cutoff, args.use_hmr, 0.0)
     water_idxs = []
     for wai in range(nwm):
         water_idxs.append([wai * 3 + 0, wai * 3 + 1, wai * 3 + 2])
@@ -145,7 +152,7 @@ def test_hrex():
     mdp = MDParams(n_frames=args.n_frames, n_eq_steps=10_000, steps_per_frame=400, seed=2023, hrex_params=hrex_params)
     print("hrex_params:", hrex_params)
     sim_res = estimate_relative_free_energy_hrex_bb(
-        mol, args.water_pdb, seed, lambda_min, lambda_max, n_windows, ff, nb_cutoff, mdp
+        mol, args.water_pdb, seed, lambda_min, lambda_max, n_windows, args.use_hmr, ff, nb_cutoff, mdp
     )
 
     pair_bar_result = sim_res.final_result
@@ -191,6 +198,6 @@ def test_hrex():
 if __name__ == "__main__":
     # example invocation:
 
-    # start with 0 waters, using espaloma charges
-    # python -u examples/water_sampling_hrex.py --water_pdb timemachine/datasets/water_exchange/bb_0_waters.pdb --ligand_sdf timemachine/datasets/water_exchange/bb_centered_espaloma.sdf --n_frames 2000
+    # start with 0 waters, using espaloma charges, with hmr, for 2000 frames
+    # python -u examples/water_sampling_hrex.py --water_pdb timemachine/datasets/water_exchange/bb_0_waters.pdb --ligand_sdf timemachine/datasets/water_exchange/bb_centered_espaloma.sdf --n_frames 2000 --use_hmr 1
     test_hrex()

@@ -91,7 +91,7 @@ def compute_occupancy(x_t, box_t, ligand_idxs, threshold):
     return count
 
 
-def get_initial_state(water_pdb, mol, ff, seed, nb_cutoff, lamb):
+def get_initial_state(water_pdb, mol, ff, seed, nb_cutoff, use_hmr, lamb):
     assert nb_cutoff == 1.2  # hardcoded in prepare_host_edge
 
     # read water system
@@ -145,12 +145,20 @@ def get_initial_state(water_pdb, mol, ff, seed, nb_cutoff, lamb):
     barostat_interval = 25
 
     bond_list = get_bond_list(next(bp for bp in host_bps if isinstance(bp.potential, HarmonicBond)).potential)
-    print("Applying hmr to the system")
-    # this only really affects the waters, since buckyball has no hydrogens.
-    final_masses = apply_hmr(combined_masses, bond_list)
-    group_idxs = get_group_indices(bond_list, len(final_masses))
 
-    dt = 2.5e-3
+    # this only really affects the waters, since buckyball has no hydrogens.
+
+    group_idxs = get_group_indices(bond_list, len(combined_masses))
+    if use_hmr:
+
+        final_masses = apply_hmr(combined_masses, bond_list)
+        print("Applying hmr to the system", final_masses)
+        dt = 2.5e-3
+    else:
+        final_masses = combined_masses
+        print("Not applying hmr to the system", final_masses)
+        dt = 1e-3
+
     integrator = LangevinIntegrator(temperature, dt, 1.0, final_masses, seed)
     barostat = MonteCarloBarostat(
         len(final_masses), DEFAULT_PRESSURE, temperature, group_idxs, barostat_interval, seed + 1

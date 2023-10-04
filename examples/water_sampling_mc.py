@@ -61,6 +61,12 @@ def test_exchange():
         help='Allowed values "targeted" and "untargeted"',
         required=True,
     )
+    parser.add_argument(
+        "--use_hmr",
+        type=int,
+        help="Whether or not we apply HMR. 1 for yes, 0 for no.",
+        required=True,
+    )
 
     args = parser.parse_args()
 
@@ -78,7 +84,7 @@ def test_exchange():
 
     nb_cutoff = 1.2  # this has to be 1.2 since the builders hard code this in (should fix later)
     # nit: use lamb=0.0 to get the fully-interacting end-state
-    initial_state, nwm, topology = get_initial_state(args.water_pdb, mol, ff, seed, nb_cutoff, lamb=0.0)
+    initial_state, nwm, topology = get_initial_state(args.water_pdb, mol, ff, seed, nb_cutoff, args.use_hmr, lamb=0.0)
     # set up water indices, assumes that waters are placed at the front of the coordinates.
     water_idxs = []
     for wai in range(nwm):
@@ -192,11 +198,14 @@ if __name__ == "__main__":
 
     # example invocation:
 
-    # start with 6 waters, using espaloma charges, 10k mc steps, 10k md steps, targeted insertion:
-    # python examples/water_sampling_mc.py --water_pdb timemachine/datasets/water_exchange/bb_6_waters.pdb --ligand_sdf timemachine/datasets/water_exchange/bb_centered_espaloma.sdf --out_cif traj_6_waters.cif --md_steps_per_batch 10000 --mc_steps_per_batch 10000 --insertion_type targeted
+    # start with 0 waters, with hmr, using espaloma charges, 10k mc steps, 10k md steps, targeted insertion:
+    # python examples/water_sampling_mc.py --water_pdb timemachine/datasets/water_exchange/bb_0_waters.pdb --ligand_sdf timemachine/datasets/water_exchange/bb_centered_espaloma.sdf --out_cif traj_0_waters.cif --md_steps_per_batch 10000 --mc_steps_per_batch 10000 --insertion_type targeted --use_hmr 1
 
-    # start with 0 waters, using zero charges, 10k mc steps, 10k md steps, targeted insertion:
-    # python examples/water_sampling_mc.py --water_pdb timemachine/datasets/water_exchange/bb_0_waters.pdb --ligand_sdf timemachine/datasets/water_exchange/bb_centered_neutral.sdf --out_cif traj_0_waters.cif --md_steps_per_batch 10000 --mc_steps_per_batch 10000 --insertion_type targeted
+    # start with 6 waters, with hmr, using espaloma charges, 10k mc steps, 10k md steps, targeted insertion:
+    # python examples/water_sampling_mc.py --water_pdb timemachine/datasets/water_exchange/bb_6_waters.pdb --ligand_sdf timemachine/datasets/water_exchange/bb_centered_espaloma.sdf --out_cif traj_6_waters.cif --md_steps_per_batch 10000 --mc_steps_per_batch 10000 --insertion_type targeted --use_hmr 1
+
+    # start with 0 waters, with hmr, using zero charges, 10k mc steps, 10k md steps, targeted insertion:
+    # python examples/water_sampling_mc.py --water_pdb timemachine/datasets/water_exchange/bb_0_waters.pdb --ligand_sdf timemachine/datasets/water_exchange/bb_centered_neutral.sdf --out_cif traj_0_waters.cif --md_steps_per_batch 10000 --mc_steps_per_batch 10000 --insertion_type targeted --use_hmr 1
 
     # running in bulk, 10k mc steps, 10k md steps, untargeted insertion
     # python -u examples/water_sampling_mc.py --water_pdb timemachine/datasets/water_exchange/bb_0_waters.pdb --out_cif bulk.cif --md_steps_per_batch 10000 --mc_steps_per_batch 10000 --insertion_type untargeted
