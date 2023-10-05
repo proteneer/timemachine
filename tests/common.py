@@ -242,6 +242,9 @@ class GradientTest(unittest.TestCase):
 
         assert x.dtype == np.float64
 
+        # Reduce the precision of parameters to single precision to emulate production where jax is not configured to
+        # use double precision. Cuda/C++ stores parameters in double precision so that it is possible to determine
+        # where there is test failures due to loss of precision.
         params = (params.astype(np.float32)).astype(np.float64)
         assert params.dtype == np.float64
         ref_u = ref_potential(x, params, box)
