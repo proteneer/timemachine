@@ -37,7 +37,6 @@ private:
     double *d_nblist_box_;  // box which was used to rebuild the nblist
     int *d_rebuild_nblist_; // whether or not we have to rebuild the nblist
     int *p_rebuild_nblist_; // pinned
-    double *p_box_;
 
     unsigned int *d_perm_; // hilbert curve permutation
 

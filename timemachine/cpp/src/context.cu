@@ -138,7 +138,7 @@ std::array<std::vector<double>, 2> Context::multiple_steps_local(
                 gpuErrchk(cudaMemcpyAsync(
                     &h_x_buffer[0] + ((i / store_x_interval) - 1) * N_ * 3,
                     d_x_t_,
-                    N_ * 3 * sizeof(double),
+                    N_ * 3 * sizeof(*d_x_t_),
                     cudaMemcpyDeviceToHost,
                     stream));
                 gpuErrchk(cudaMemcpyAsync(
@@ -212,7 +212,7 @@ std::array<std::vector<double>, 2> Context::multiple_steps_local_selection(
                 gpuErrchk(cudaMemcpyAsync(
                     &h_x_buffer[0] + ((i / store_x_interval) - 1) * N_ * 3,
                     d_x_t_,
-                    N_ * 3 * sizeof(double),
+                    N_ * 3 * sizeof(*d_x_t_),
                     cudaMemcpyDeviceToHost,
                     stream));
                 gpuErrchk(cudaMemcpyAsync(
@@ -270,7 +270,7 @@ std::array<std::vector<double>, 2> Context::multiple_steps(const int n_steps, in
             gpuErrchk(cudaMemcpyAsync(
                 &h_x_buffer[0] + ((i / store_x_interval) - 1) * N_ * 3,
                 d_x_t_,
-                N_ * 3 * sizeof(double),
+                N_ * 3 * sizeof(*d_x_t_),
                 cudaMemcpyDeviceToHost,
                 stream));
             gpuErrchk(cudaMemcpyAsync(

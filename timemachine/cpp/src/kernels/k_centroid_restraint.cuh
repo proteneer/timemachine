@@ -39,8 +39,8 @@ void __global__ k_centroid_restraint(
     // const double *d_masses, // ignore d_masses for now
     const double kb,
     const double b0,
-    unsigned long long *d_du_dx,
-    __int128 *d_u) {
+    unsigned long long *__restrict__ d_du_dx,
+    __int128 *__restrict__ d_u) {
 
     const int t_idx = blockDim.x * blockIdx.x + threadIdx.x;
     if (N_A + N_B <= t_idx) {
