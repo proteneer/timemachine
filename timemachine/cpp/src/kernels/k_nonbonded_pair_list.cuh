@@ -17,9 +17,9 @@ void __device__ __forceinline__ accumulate(unsigned long long *__restrict acc, u
 template <typename RealType, bool Negated>
 void __global__ k_nonbonded_pair_list(
     const int M, // number of pairs
-    const double *__restrict__ coords,
+    const CoordsType *__restrict__ coords,
     const ParamsType *__restrict__ params,
-    const double *__restrict__ box,
+    const CoordsType *__restrict__ box,
     const int *__restrict__ pair_idxs, // [M, 2] pair-list of atoms
     const double *__restrict__ scales, // [M]
     const double beta,

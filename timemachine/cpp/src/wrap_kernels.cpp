@@ -41,7 +41,7 @@ namespace py = pybind11;
 
 // A utility to make sure that the coords and box shapes are correct
 void verify_coords_and_box(
-    const py::array_t<double, py::array::c_style> &coords, const py::array_t<double, py::array::c_style> &box) {
+    const py::array_t<CoordsType, py::array::c_style> &coords, const py::array_t<CoordsType, py::array::c_style> &box) {
     size_t coord_dimensions = coords.ndim();
     if (coord_dimensions != 2) {
         throw std::runtime_error("coords dimensions must be 2");
@@ -89,8 +89,8 @@ template <typename RealType> void declare_neighborlist(py::module &m, const char
         .def(
             "compute_block_bounds",
             [](timemachine::Neighborlist<RealType> &nblist,
-               const py::array_t<double, py::array::c_style> &coords,
-               const py::array_t<double, py::array::c_style> &box,
+               const py::array_t<CoordsType, py::array::c_style> &coords,
+               const py::array_t<CoordsType, py::array::c_style> &box,
                const int block_size) -> py::tuple {
                 if (block_size != 32) {
                     // The neighborlist kernel implementation assumes that block size is fixed to the CUDA warpSize
@@ -115,8 +115,8 @@ template <typename RealType> void declare_neighborlist(py::module &m, const char
         .def(
             "get_nblist",
             [](timemachine::Neighborlist<RealType> &nblist,
-               const py::array_t<double, py::array::c_style> &coords,
-               const py::array_t<double, py::array::c_style> &box,
+               const py::array_t<CoordsType, py::array::c_style> &coords,
+               const py::array_t<CoordsType, py::array::c_style> &box,
                const double cutoff) -> std::vector<std::vector<int>> {
                 int N = coords.shape()[0];
                 verify_coords_and_box(coords, box);
@@ -151,8 +151,9 @@ void declare_hilbert_sort(py::module &m) {
         .def(
             "sort",
             [](timemachine::HilbertSort &sorter,
-               const py::array_t<double, py::array::c_style> &coords,
-               const py::array_t<double, py::array::c_style> &box) -> const py::array_t<uint32_t, py::array::c_style> {
+               const py::array_t<CoordsType, py::array::c_style> &coords,
+               const py::array_t<CoordsType, py::array::c_style> &box)
+                -> const py::array_t<uint32_t, py::array::c_style> {
                 const int N = coords.shape()[0];
                 verify_coords_and_box(coords, box);
 
@@ -171,9 +172,9 @@ void declare_context(py::module &m) {
     std::string pyclass_name = std::string("Context");
     py::class_<Class>(m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
         .def(
-            py::init([](const py::array_t<double, py::array::c_style> &x0,
+            py::init([](const py::array_t<CoordsType, py::array::c_style> &x0,
                         const py::array_t<double, py::array::c_style> &v0,
-                        const py::array_t<double, py::array::c_style> &box0,
+                        const py::array_t<CoordsType, py::array::c_style> &box0,
                         std::shared_ptr<timemachine::Integrator> intg,
                         std::vector<std::shared_ptr<timemachine::BoundPotential>> bps,
                         std::optional<std::shared_ptr<timemachine::MonteCarloBarostat<float>>> barostat) {
@@ -212,16 +213,16 @@ void declare_context(py::module &m) {
             [](timemachine::Context &ctxt, const int n_steps, int store_x_interval) -> py::tuple {
                 // (ytz): I hate C++
                 int x_interval = (store_x_interval <= 0) ? n_steps : store_x_interval;
-                std::array<std::vector<double>, 2> result = ctxt.multiple_steps(n_steps, x_interval);
+                std::array<std::vector<CoordsType>, 2> result = ctxt.multiple_steps(n_steps, x_interval);
 
                 int N = ctxt.num_atoms();
                 int D = 3;
                 int F = result[0].size() / (N * D);
-                py::array_t<double, py::array::c_style> out_x_buffer({F, N, D});
-                std::memcpy(out_x_buffer.mutable_data(), result[0].data(), result[0].size() * sizeof(double));
+                py::array_t<CoordsType, py::array::c_style> out_x_buffer({F, N, D});
+                std::memcpy(out_x_buffer.mutable_data(), result[0].data(), result[0].size() * sizeof(CoordsType));
 
-                py::array_t<double, py::array::c_style> box_buffer({F, D, D});
-                std::memcpy(box_buffer.mutable_data(), result[1].data(), result[1].size() * sizeof(double));
+                py::array_t<CoordsType, py::array::c_style> box_buffer({F, D, D});
+                std::memcpy(box_buffer.mutable_data(), result[1].data(), result[1].size() * sizeof(CoordsType));
 
                 return py::make_tuple(out_x_buffer, box_buffer);
             },
@@ -277,15 +278,15 @@ void declare_context(py::module &m) {
                 std::memcpy(vec_local_idxs.data(), local_idxs.data(), vec_local_idxs.size() * sizeof(int));
                 timemachine::verify_atom_idxs(N, vec_local_idxs);
 
-                std::array<std::vector<double>, 2> result =
+                std::array<std::vector<CoordsType>, 2> result =
                     ctxt.multiple_steps_local(n_steps, vec_local_idxs, x_interval, radius, k, seed);
                 const int D = 3;
                 const int F = result[0].size() / (N * D);
-                py::array_t<double, py::array::c_style> out_x_buffer({F, N, D});
-                std::memcpy(out_x_buffer.mutable_data(), result[0].data(), result[0].size() * sizeof(double));
+                py::array_t<CoordsType, py::array::c_style> out_x_buffer({F, N, D});
+                std::memcpy(out_x_buffer.mutable_data(), result[0].data(), result[0].size() * sizeof(CoordsType));
 
-                py::array_t<double, py::array::c_style> box_buffer({F, D, D});
-                std::memcpy(box_buffer.mutable_data(), result[1].data(), result[1].size() * sizeof(double));
+                py::array_t<CoordsType, py::array::c_style> box_buffer({F, D, D});
+                std::memcpy(box_buffer.mutable_data(), result[1].data(), result[1].size() * sizeof(CoordsType));
                 return py::make_tuple(out_x_buffer, box_buffer);
             },
             py::arg("n_steps"),
@@ -376,15 +377,15 @@ void declare_context(py::module &m) {
                     throw std::runtime_error("reference idx must not be in selection idxs");
                 }
 
-                std::array<std::vector<double>, 2> result = ctxt.multiple_steps_local_selection(
+                std::array<std::vector<CoordsType>, 2> result = ctxt.multiple_steps_local_selection(
                     n_steps, reference_idx, vec_selection_idxs, x_interval, radius, k);
                 const int D = 3;
                 const int F = result[0].size() / (N * D);
-                py::array_t<double, py::array::c_style> out_x_buffer({F, N, D});
-                std::memcpy(out_x_buffer.mutable_data(), result[0].data(), result[0].size() * sizeof(double));
+                py::array_t<CoordsType, py::array::c_style> out_x_buffer({F, N, D});
+                std::memcpy(out_x_buffer.mutable_data(), result[0].data(), result[0].size() * sizeof(CoordsType));
 
-                py::array_t<double, py::array::c_style> box_buffer({F, D, D});
-                std::memcpy(box_buffer.mutable_data(), result[1].data(), result[1].size() * sizeof(double));
+                py::array_t<CoordsType, py::array::c_style> box_buffer({F, D, D});
+                std::memcpy(box_buffer.mutable_data(), result[1].data(), result[1].size() * sizeof(CoordsType));
                 return py::make_tuple(out_x_buffer, box_buffer);
             },
             py::arg("n_steps"),
@@ -470,7 +471,7 @@ void declare_context(py::module &m) {
     )pbdoc")
         .def(
             "set_x_t",
-            [](timemachine::Context &ctxt, const py::array_t<double, py::array::c_style> &new_x_t) {
+            [](timemachine::Context &ctxt, const py::array_t<CoordsType, py::array::c_style> &new_x_t) {
                 if (new_x_t.shape()[0] != ctxt.num_atoms()) {
                     throw std::runtime_error("number of new coords disagree with current coords");
                 }
@@ -488,7 +489,7 @@ void declare_context(py::module &m) {
             py::arg("velocities"))
         .def(
             "set_box",
-            [](timemachine::Context &ctxt, const py::array_t<double, py::array::c_style> &new_box_t) {
+            [](timemachine::Context &ctxt, const py::array_t<CoordsType, py::array::c_style> &new_box_t) {
                 if (new_box_t.size() != 9 || new_box_t.shape()[0] != 3) {
                     throw std::runtime_error("box must be 3x3");
                 }
@@ -497,10 +498,10 @@ void declare_context(py::module &m) {
             py::arg("box"))
         .def(
             "get_x_t",
-            [](timemachine::Context &ctxt) -> py::array_t<double, py::array::c_style> {
+            [](timemachine::Context &ctxt) -> py::array_t<CoordsType, py::array::c_style> {
                 unsigned int N = ctxt.num_atoms();
                 unsigned int D = 3;
-                py::array_t<double, py::array::c_style> buffer({N, D});
+                py::array_t<CoordsType, py::array::c_style> buffer({N, D});
                 ctxt.get_x_t(buffer.mutable_data());
                 return buffer;
             })
@@ -515,9 +516,9 @@ void declare_context(py::module &m) {
             })
         .def(
             "get_box",
-            [](timemachine::Context &ctxt) -> py::array_t<double, py::array::c_style> {
+            [](timemachine::Context &ctxt) -> py::array_t<CoordsType, py::array::c_style> {
                 unsigned int D = 3;
-                py::array_t<double, py::array::c_style> buffer({D, D});
+                py::array_t<CoordsType, py::array::c_style> buffer({D, D});
                 ctxt.get_box(buffer.mutable_data());
                 return buffer;
             })
@@ -574,9 +575,9 @@ void declare_potential(py::module &m) {
         .def(
             "execute",
             [](timemachine::Potential &pot,
-               const py::array_t<double, py::array::c_style> &coords,
+               const py::array_t<CoordsType, py::array::c_style> &coords,
                const py::array_t<ParamsType, py::array::c_style> &params,
-               const py::array_t<double, py::array::c_style> &box) -> py::tuple {
+               const py::array_t<CoordsType, py::array::c_style> &box) -> py::tuple {
                 const long unsigned int N = coords.shape()[0];
                 const long unsigned int D = coords.shape()[1];
                 const long unsigned int P = params.size();
@@ -609,9 +610,9 @@ void declare_potential(py::module &m) {
         .def(
             "execute_selective_batch",
             [](timemachine::Potential &pot,
-               const py::array_t<double, py::array::c_style> &coords,
+               const py::array_t<CoordsType, py::array::c_style> &coords,
                const py::array_t<ParamsType, py::array::c_style> &params,
-               const py::array_t<double, py::array::c_style> &boxes,
+               const py::array_t<CoordsType, py::array::c_style> &boxes,
                const bool compute_du_dx,
                const bool compute_du_dp,
                const bool compute_u) -> py::tuple {
@@ -743,9 +744,9 @@ void declare_potential(py::module &m) {
         .def(
             "execute_selective",
             [](timemachine::Potential &pot,
-               const py::array_t<double, py::array::c_style> &coords,
+               const py::array_t<CoordsType, py::array::c_style> &coords,
                const py::array_t<ParamsType, py::array::c_style> &params,
-               const py::array_t<double, py::array::c_style> &box,
+               const py::array_t<CoordsType, py::array::c_style> &box,
                bool compute_du_dx,
                bool compute_du_dp,
                bool compute_u) -> py::tuple {
@@ -804,9 +805,9 @@ void declare_potential(py::module &m) {
         .def(
             "execute_du_dx",
             [](timemachine::Potential &pot,
-               const py::array_t<double, py::array::c_style> &coords,
+               const py::array_t<CoordsType, py::array::c_style> &coords,
                const py::array_t<ParamsType, py::array::c_style> &params,
-               const py::array_t<double, py::array::c_style> &box) -> py::array_t<double, py::array::c_style> {
+               const py::array_t<CoordsType, py::array::c_style> &box) -> py::array_t<double, py::array::c_style> {
                 const long unsigned int N = coords.shape()[0];
                 const long unsigned int D = coords.shape()[1];
                 const long unsigned int P = params.size();
@@ -851,8 +852,8 @@ void declare_bound_potential(py::module &m) {
         .def(
             "execute",
             [](timemachine::BoundPotential &bp,
-               const py::array_t<double, py::array::c_style> &coords,
-               const py::array_t<double, py::array::c_style> &box) -> py::tuple {
+               const py::array_t<CoordsType, py::array::c_style> &coords,
+               const py::array_t<CoordsType, py::array::c_style> &box) -> py::tuple {
                 const long unsigned int N = coords.shape()[0];
                 const long unsigned int D = coords.shape()[1];
                 verify_coords_and_box(coords, box);
@@ -875,8 +876,9 @@ void declare_bound_potential(py::module &m) {
         .def(
             "execute_fixed",
             [](timemachine::BoundPotential &bp,
-               const py::array_t<double, py::array::c_style> &coords,
-               const py::array_t<double, py::array::c_style> &box) -> const py::array_t<uint64_t, py::array::c_style> {
+               const py::array_t<CoordsType, py::array::c_style> &coords,
+               const py::array_t<CoordsType, py::array::c_style> &box)
+                -> const py::array_t<uint64_t, py::array::c_style> {
                 const long unsigned int N = coords.shape()[0];
                 verify_coords_and_box(coords, box);
                 std::vector<EnergyType> u(1, 9999);
@@ -1245,14 +1247,14 @@ void declare_barostat(py::module &m) {
         .def(
             "move_host",
             [](timemachine::MonteCarloBarostat<float> &barostat,
-               const py::array_t<double, py::array::c_style> &coords,
-               const py::array_t<double, py::array::c_style> &box) -> py::tuple {
+               const py::array_t<CoordsType, py::array::c_style> &coords,
+               const py::array_t<CoordsType, py::array::c_style> &box) -> py::tuple {
                 const int N = coords.shape()[0];
 
-                py::array_t<double, py::array::c_style> py_x({N, 3});
-                py::array_t<double, py::array::c_style> py_box({3, 3});
-                std::memcpy(py_x.mutable_data(), coords.data(), coords.size() * sizeof(double));
-                std::memcpy(py_box.mutable_data(), box.data(), box.size() * sizeof(double));
+                py::array_t<CoordsType, py::array::c_style> py_x({N, 3});
+                py::array_t<CoordsType, py::array::c_style> py_box({3, 3});
+                std::memcpy(py_x.mutable_data(), coords.data(), coords.size() * sizeof(CoordsType));
+                std::memcpy(py_box.mutable_data(), box.data(), box.size() * sizeof(CoordsType));
                 verify_coords_and_box(coords, box);
 
                 bool accepted = barostat.inplace_move_host(py_x.mutable_data(), py_box.mutable_data());
@@ -1296,8 +1298,8 @@ void declare_fanout_summed_potential(py::module &m) {
         .def("get_potentials", &timemachine::FanoutSummedPotential::get_potentials);
 }
 
-const py::array_t<double, py::array::c_style>
-py_rmsd_align(const py::array_t<double, py::array::c_style> &x1, const py::array_t<double, py::array::c_style> &x2) {
+const py::array_t<CoordsType, py::array::c_style> py_rmsd_align(
+    const py::array_t<CoordsType, py::array::c_style> &x1, const py::array_t<CoordsType, py::array::c_style> &x2) {
 
     int N1 = x1.shape()[0];
     int N2 = x2.shape()[0];
@@ -1317,7 +1319,7 @@ py_rmsd_align(const py::array_t<double, py::array::c_style> &x1, const py::array
         throw std::runtime_error("D2 != 3");
     }
 
-    py::array_t<double, py::array::c_style> py_x2_aligned({N1, D1});
+    py::array_t<CoordsType, py::array::c_style> py_x2_aligned({N1, D1});
 
     timemachine::rmsd_align_cpu(N1, x1.data(), x2.data(), py_x2_aligned.mutable_data());
 

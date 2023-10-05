@@ -11,8 +11,8 @@ void __global__ k_find_block_bounds(
     const int num_tiles,                       // Number of tiles
     const int num_indices,                     // Number of indices
     const unsigned int *__restrict__ row_idxs, // [num_indices]
-    const double *__restrict__ coords,         // [N*3]
-    const double *__restrict__ box,            // [3*3]
+    const CoordsType *__restrict__ coords,     // [N*3]
+    const CoordsType *__restrict__ box,        // [3*3]
     RealType *__restrict__ block_bounds_ctr,   // [num_tiles*3]
     RealType *__restrict__ block_bounds_ext,   // [num_tiles*3]
     unsigned int *ixn_count                    // [1]
@@ -205,8 +205,8 @@ void __global__ k_find_blocks_with_ixns(
     const RealType *__restrict__ column_bb_ext,   // [N * 3] block extents
     const RealType *__restrict__ row_bb_ctr,      // [N * 3] block centers
     const RealType *__restrict__ row_bb_ext,      // [N * 3] block extents
-    const double *__restrict__ coords,            // [N * 3]
-    const double *__restrict__ box,
+    const CoordsType *__restrict__ coords,        // [N * 3]
+    const CoordsType *__restrict__ box,
     unsigned int *__restrict__ interactionCount, // number of tiles that have interactions
     int *__restrict__ interactingTiles,          // the row block idx of the tile that is interacting
     unsigned int *__restrict__ interactingAtoms, // [NR * WARP_SIZE] atom indices interacting with each row block

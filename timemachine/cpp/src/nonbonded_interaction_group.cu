@@ -104,7 +104,8 @@ template <typename RealType> bool NonbondedInteractionGroup<RealType>::needs_sor
 }
 
 template <typename RealType>
-void NonbondedInteractionGroup<RealType>::sort(const double *d_coords, const double *d_box, cudaStream_t stream) {
+void NonbondedInteractionGroup<RealType>::sort(
+    const CoordsType *d_coords, const CoordsType *d_box, cudaStream_t stream) {
     // We must rebuild the neighborlist after sorting, as the neighborlist is tied to a particular sort order
     if (!disable_hilbert_) {
         this->hilbert_sort_->sort_device(NR_, d_row_atom_idxs_, d_coords, d_box, d_perm_, stream);
@@ -124,10 +125,10 @@ template <typename RealType>
 void NonbondedInteractionGroup<RealType>::execute_device(
     const int N,
     const int P,
-    const double *d_x,
+    const CoordsType *d_x,
     const ParamsType *d_p,
     // N * PARAMS_PER_ATOM
-    const double *d_box, // 3 * 3
+    const CoordsType *d_box, // 3 * 3
     unsigned long long *d_du_dx,
     unsigned long long *d_du_dp,
     EnergyType *d_u,
@@ -187,7 +188,7 @@ void NonbondedInteractionGroup<RealType>::execute_device(
     }
 
     // compute new coordinates/params
-    k_gather_coords_and_params<double, 3, PARAMS_PER_ATOM>
+    k_gather_coords_and_params<CoordsType, 3, PARAMS_PER_ATOM>
         <<<ceil_divide(K, tpb), tpb, 0, stream>>>(K, d_perm_, d_x, d_p, d_sorted_x_, d_sorted_p_);
     gpuErrchk(cudaPeekAtLastError());
     // reset buffers and sorted accumulators

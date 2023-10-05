@@ -33,11 +33,11 @@ private:
     Neighborlist<RealType> nblist_;
 
     const double nblist_padding_;
-    EnergyType *d_u_buffer_; // [NONBONDED_KERNEL_BLOCKS]
-    double *d_nblist_x_;     // coords which were used to compute the nblist
-    double *d_nblist_box_;   // box which was used to rebuild the nblist
-    int *d_rebuild_nblist_;  // whether or not we have to rebuild the nblist
-    int *p_rebuild_nblist_;  // pinned
+    EnergyType *d_u_buffer_;   // [NONBONDED_KERNEL_BLOCKS]
+    CoordsType *d_nblist_x_;   // coords which were used to compute the nblist
+    CoordsType *d_nblist_box_; // box which was used to rebuild the nblist
+    int *d_rebuild_nblist_;    // whether or not we have to rebuild the nblist
+    int *p_rebuild_nblist_;    // pinned
     double *p_box_;
 
     unsigned int *d_perm_; // hilbert curve permutation
@@ -48,7 +48,7 @@ private:
     //   independently
     // - otherwise, atoms are sorted into contiguous blocks by
     //   interaction group, with arbitrary ordering within each block
-    double *d_sorted_x_;     // sorted coordinates
+    CoordsType *d_sorted_x_; // sorted coordinates
     ParamsType *d_sorted_p_; // sorted parameters
     unsigned long long *d_sorted_du_dx_;
     unsigned long long *d_sorted_du_dp_;
@@ -61,7 +61,7 @@ private:
 
     bool needs_sort();
 
-    void sort(const double *d_x, const double *d_box, cudaStream_t stream);
+    void sort(const CoordsType *d_x, const CoordsType *d_box, cudaStream_t stream);
 
     void validate_idxs(
         const int N,
@@ -89,9 +89,9 @@ public:
     virtual void execute_device(
         const int N,
         const int P,
-        const double *d_x,
+        const CoordsType *d_x,
         const ParamsType *d_p,
-        const double *d_box,
+        const CoordsType *d_box,
         unsigned long long *d_du_dx,
         unsigned long long *d_du_dp,
         EnergyType *d_u,

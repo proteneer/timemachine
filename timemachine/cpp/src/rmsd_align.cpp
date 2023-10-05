@@ -10,7 +10,7 @@ Optimally align x2 onto x1. In particular, x2 is shifted so that its centroid is
 at the same position as the of x1's centroid. x2 is also rotated so that the RMSD
 is minimized.
 */
-void rmsd_align_cpu(const int N, const double *x1_raw, const double *x2_raw, double *x2_aligned_raw) {
+void rmsd_align_cpu(const int N, const CoordsType *x1_raw, const CoordsType *x2_raw, CoordsType *x2_aligned_raw) {
 
     Eigen::MatrixXd x1(N, 3);
     Eigen::MatrixXd x2(N, 3);

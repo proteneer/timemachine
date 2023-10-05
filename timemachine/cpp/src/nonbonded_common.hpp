@@ -12,9 +12,9 @@ typedef void (*k_nonbonded_fn)(
     const int N,
     const int NR,
     const unsigned int *ixn_count,
-    const double *__restrict__ coords,
+    const CoordsType *__restrict__ coords,
     const ParamsType *__restrict__ params, // [N]
-    const double *__restrict__ box,
+    const CoordsType *__restrict__ box,
     const double beta,
     const double cutoff,
     const unsigned int *__restrict__ row_idxs,

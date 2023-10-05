@@ -5,8 +5,8 @@
 void __global__ k_coords_to_kv_gather(
     const int N,
     const unsigned int *__restrict__ atom_idxs,
-    const double *__restrict__ coords,
-    const double *__restrict__ box,
+    const CoordsType *__restrict__ coords,
+    const CoordsType *__restrict__ box,
     const unsigned int *__restrict__ bin_to_idx,
     unsigned int *__restrict__ keys,
     unsigned int *__restrict__ vals) {

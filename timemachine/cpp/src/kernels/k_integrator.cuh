@@ -8,7 +8,7 @@ __global__ void k_update_forward_baoab(
     const RealType *__restrict__ cbs,             // N
     const RealType *__restrict__ ccs,             // N
     const RealType *__restrict__ noise,           // N x 3
-    double *__restrict__ x_t,                     // N x 3
+    CoordsType *__restrict__ x_t,                 // N x 3
     double *__restrict__ v_t,                     // N x 3
     const unsigned long long *__restrict__ du_dx, // N x 3
     const RealType dt) {
@@ -55,8 +55,8 @@ __global__ void half_step_velocity_verlet(
     const int D,
     const unsigned int *__restrict__ idxs,
     const RealType *__restrict__ cbs, // N, dt / mass
-    RealType *__restrict__ x_t,
-    RealType *__restrict__ v_t,
+    CoordsType *__restrict__ x_t,
+    double *__restrict__ v_t,
     const unsigned long long *__restrict__ du_dx,
     const RealType dt) {
     int kernel_idx = blockIdx.x * blockDim.x + threadIdx.x;
@@ -90,8 +90,8 @@ __global__ void update_forward_velocity_verlet(
     const int D,
     const unsigned int *__restrict__ idxs,
     const RealType *__restrict__ cbs, // N, dt / mass
-    RealType *__restrict__ x_t,
-    RealType *__restrict__ v_t,
+    CoordsType *__restrict__ x_t,
+    double *__restrict__ v_t,
     const unsigned long long *__restrict__ du_dx,
     const RealType dt) {
     int kernel_idx = blockIdx.x * blockDim.x + threadIdx.x;

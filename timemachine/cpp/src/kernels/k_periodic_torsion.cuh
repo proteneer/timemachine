@@ -19,7 +19,7 @@ inline __device__ void cross_product(const RealType a[3], const RealType b[3], R
 template <typename RealType, int D>
 void __global__ k_periodic_torsion(
     const int T,                           // number of bonds
-    const double *__restrict__ coords,     // [n, 3]
+    const CoordsType *__restrict__ coords, // [n, 3]
     const ParamsType *__restrict__ params, // [p, 3]
     const int *__restrict__ torsion_idxs,  // [b, 4]
     unsigned long long *__restrict__ du_dx,

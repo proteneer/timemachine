@@ -26,10 +26,10 @@ public:
     ~MonteCarloBarostat();
 
     // inplace_move() may modify d_x and d_box
-    void inplace_move(double *d_x, double *d_box, cudaStream_t stream);
+    void inplace_move(CoordsType *d_x, CoordsType *d_box, cudaStream_t stream);
 
     // used for testing, bool return tells you if move was accepted
-    bool inplace_move_host(double *h_x, double *h_box);
+    bool inplace_move_host(double *h_x, CoordsType *h_box);
 
     void set_interval(const int interval);
 
@@ -82,8 +82,8 @@ private:
     RealType *d_length_scale_;
     double *d_volume_scale_;
 
-    double *d_x_after_;
-    double *d_box_after_;
+    CoordsType *d_x_after_;
+    CoordsType *d_box_after_;
 
     int *d_atom_idxs_;   // grouped index to atom coords
     int *d_mol_idxs_;    // grouped index to molecule index

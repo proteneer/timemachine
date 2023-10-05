@@ -10,8 +10,8 @@ StreamedPotentialRunner::~StreamedPotentialRunner() {}
 void StreamedPotentialRunner::execute_potentials(
     std::vector<std::shared_ptr<BoundPotential>> &bps,
     const int N,
-    const double *d_x,   // [N * 3]
-    const double *d_box, // [3 * 3]
+    const CoordsType *d_x,   // [N * 3]
+    const CoordsType *d_box, // [3 * 3]
     unsigned long long *d_du_dx,
     unsigned long long *d_du_dp,
     EnergyType *d_u, // [bps.size()]

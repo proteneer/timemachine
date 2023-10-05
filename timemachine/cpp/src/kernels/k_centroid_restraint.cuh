@@ -1,10 +1,11 @@
 #pragma once
 
+#include "../types.hpp"
 #include "k_fixed_point.cuh"
 
 template <typename RealType>
 void __global__ k_calc_centroid(
-    const double *__restrict__ d_coords, // [n, 3]
+    const CoordsType *__restrict__ d_coords, // [n, 3]
     const int *__restrict__ d_group_a_idxs,
     const int *__restrict__ d_group_b_idxs,
     const int N_A,
@@ -29,7 +30,7 @@ void __global__ k_calc_centroid(
 template <typename RealType>
 void __global__ k_centroid_restraint(
     // const int N,     // number of bonds, ignore for now
-    const double *__restrict__ d_coords, // [n, 3]
+    const CoordsType *__restrict__ d_coords, // [n, 3]
     const int *__restrict__ d_group_a_idxs,
     const int *__restrict__ d_group_b_idxs,
     const int N_A,

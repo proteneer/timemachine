@@ -55,9 +55,9 @@ template <typename RealType, bool Negated>
 void NonbondedPairList<RealType, Negated>::execute_device(
     const int N,
     const int P,
-    const double *d_x,
+    const CoordsType *d_x,
     const ParamsType *d_p,
-    const double *d_box,
+    const CoordsType *d_box,
     unsigned long long *d_du_dx,
     unsigned long long *d_du_dp,
     EnergyType *d_u,

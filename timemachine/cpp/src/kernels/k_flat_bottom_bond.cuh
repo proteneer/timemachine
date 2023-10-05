@@ -17,8 +17,8 @@ void __global__ k_log_probability_selection(
     const float radius,                      // Radius, corresponds to r_max for flat bottom
     const float k,                           // Constant restraint value
     const unsigned int reference_idx,        // Idx that the probability is specific to
-    const double *__restrict__ coords,       // [N, 3]
-    const double *__restrict__ box,          // [3, 3]
+    const CoordsType *__restrict__ coords,   // [N, 3]
+    const CoordsType *__restrict__ box,      // [3, 3]
     const float *__restrict__ probabilities, // [N] probabilities of selection
     unsigned int *__restrict__ selected      // [N] idx array, N if idx is not selected, else idx of coordinate
 ) {
@@ -63,8 +63,8 @@ void __global__ k_log_probability_selection(
 template <typename RealType>
 void __global__ k_flat_bottom_bond(
     const int B, // number of bonds
-    const double *__restrict__ coords,
-    const double *__restrict__ box,
+    const CoordsType *__restrict__ coords,
+    const CoordsType *__restrict__ box,
     const ParamsType *__restrict__ params, // [B, 3]
     const int *__restrict__ bond_idxs,     // [B, 2]
     unsigned long long *__restrict__ du_dx,

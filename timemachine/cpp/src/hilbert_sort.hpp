@@ -2,6 +2,7 @@
 #include "cuda_runtime.h"
 #include "device_buffer.hpp"
 #include "math_utils.cuh"
+#include "types.hpp"
 #include <memory>
 #include <numeric>
 #include <vector>
@@ -30,12 +31,12 @@ public:
     void sort_device(
         const int N,
         const unsigned int *d_atom_idxs,
-        const double *d_coords,
-        const double *d_box,
+        const CoordsType *d_coords,
+        const CoordsType *d_box,
         unsigned int *d_output_perm,
         cudaStream_t stream);
 
-    std::vector<unsigned int> sort_host(const int N, const double *h_coords, const double *h_box);
+    std::vector<unsigned int> sort_host(const int N, const CoordsType *h_coords, const CoordsType *h_box);
 };
 
 } // namespace timemachine

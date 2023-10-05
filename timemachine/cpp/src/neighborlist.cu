@@ -58,7 +58,7 @@ template <typename RealType> Neighborlist<RealType>::~Neighborlist() {
 
 template <typename RealType>
 void Neighborlist<RealType>::compute_block_bounds_host(
-    const int N, const double *h_coords, const double *h_box, double *h_bb_ctrs, double *h_bb_exts) {
+    const int N, const CoordsType *h_coords, const CoordsType *h_box, double *h_bb_ctrs, double *h_bb_exts) {
 
     const int D = 3;
     DeviceBuffer<double> d_coords(N * D);
@@ -101,8 +101,8 @@ template <typename RealType> unsigned int Neighborlist<RealType>::num_tile_ixns(
 }
 
 template <typename RealType>
-std::vector<std::vector<int>>
-Neighborlist<RealType>::get_nblist_host(int N, const double *h_coords, const double *h_box, const double cutoff) {
+std::vector<std::vector<int>> Neighborlist<RealType>::get_nblist_host(
+    int N, const CoordsType *h_coords, const CoordsType *h_box, const double cutoff) {
 
     if (N != N_) {
         throw std::runtime_error("N != N_");
@@ -147,7 +147,7 @@ Neighborlist<RealType>::get_nblist_host(int N, const double *h_coords, const dou
 
 template <typename RealType>
 void Neighborlist<RealType>::build_nblist_device(
-    const int N, const double *d_coords, const double *d_box, const double cutoff, const cudaStream_t stream) {
+    const int N, const CoordsType *d_coords, const CoordsType *d_box, const double cutoff, const cudaStream_t stream) {
 
     const int D = 3;
     this->compute_block_bounds_device(N, D, d_coords, d_box, stream);
@@ -207,10 +207,10 @@ void Neighborlist<RealType>::build_nblist_device(
 
 template <typename RealType>
 void Neighborlist<RealType>::compute_block_bounds_device(
-    const int N,            // Number of atoms
-    const int D,            // Box dimensions
-    const double *d_coords, // [N*3]
-    const double *d_box,    // [D*3]
+    const int N,                // Number of atoms
+    const int D,                // Box dimensions
+    const CoordsType *d_coords, // [N*3]
+    const CoordsType *d_box,    // [D*3]
     const cudaStream_t stream) {
 
     if (D != 3) {

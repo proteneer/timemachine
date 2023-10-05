@@ -1,6 +1,7 @@
 #pragma once
 #include "cuda_runtime.h"
 #include "math_utils.cuh"
+#include "types.hpp"
 #include <vector>
 
 namespace timemachine {
@@ -49,13 +50,17 @@ public:
     unsigned int num_tile_ixns();
 
     std::vector<std::vector<int>>
-    get_nblist_host(const int N, const double *h_coords, const double *h_box, const double cutoff);
+    get_nblist_host(const int N, const CoordsType *h_coords, const CoordsType *h_box, const double cutoff);
 
     void build_nblist_device(
-        const int N, const double *d_coords, const double *d_box, const double cutoff, const cudaStream_t stream);
+        const int N,
+        const CoordsType *d_coords,
+        const CoordsType *d_box,
+        const double cutoff,
+        const cudaStream_t stream);
 
     void compute_block_bounds_host(
-        const int N, const double *h_coords, const double *h_box, double *h_bb_ctrs, double *h_bb_exts);
+        const int N, const CoordsType *h_coords, const CoordsType *h_box, double *h_bb_ctrs, double *h_bb_exts);
 
     unsigned int *get_ixn_atoms() { return d_ixn_atoms_; };
 
@@ -84,7 +89,7 @@ private:
     int Y() const;
 
     void compute_block_bounds_device(
-        const int N, const int D, const double *d_coords, const double *d_box, cudaStream_t stream);
+        const int N, const int D, const CoordsType *d_coords, const CoordsType *d_box, cudaStream_t stream);
 };
 
 } // namespace timemachine

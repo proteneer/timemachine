@@ -10,9 +10,9 @@ static const int PARAMS_PER_PAIR = PARAMS_PER_ATOM;
 template <typename RealType>
 void __global__ k_nonbonded_precomputed(
     const int M,                           // number of pairs
-    const double *__restrict__ coords,     // [N, 3] coordinates
+    const CoordsType *__restrict__ coords, // [N, 3] coordinates
     const ParamsType *__restrict__ params, // [M, 4] q_ij, s_ij, e_ij, w_offset_ij
-    const double *__restrict__ box,        // box vectors
+    const CoordsType *__restrict__ box,    // box vectors
     const int *__restrict__ pair_idxs,     // [M, 2] pair-list of atoms
     const double beta,
     const double cutoff,

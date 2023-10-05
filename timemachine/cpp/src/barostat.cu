@@ -161,10 +161,10 @@ void MonteCarloBarostat<RealType>::set_adaptive_scaling(const bool adaptive_scal
     this->adaptive_scaling_enabled_ = adaptive_scaling_enabled;
 }
 
-template <typename RealType> bool MonteCarloBarostat<RealType>::inplace_move_host(double *h_x, double *h_box) {
+template <typename RealType> bool MonteCarloBarostat<RealType>::inplace_move_host(CoordsType *h_x, CoordsType *h_box) {
 
-    DeviceBuffer<double> d_x(N_ * 3);
-    DeviceBuffer<double> d_box(3 * 3);
+    DeviceBuffer<CoordsType> d_x(N_ * 3);
+    DeviceBuffer<CoordsType> d_box(3 * 3);
     int h_accepted_before;
 
     cudaMemcpy(&h_accepted_before, d_num_accepted_, 1 * sizeof(h_accepted_before), cudaMemcpyDeviceToHost);
@@ -182,8 +182,8 @@ template <typename RealType> bool MonteCarloBarostat<RealType>::inplace_move_hos
 
 template <typename RealType>
 void MonteCarloBarostat<RealType>::inplace_move(
-    double *d_x,   // [N*3]
-    double *d_box, // [3*3]
+    CoordsType *d_x,   // [N*3]
+    CoordsType *d_box, // [3*3]
     cudaStream_t stream) {
     step_++;
     if (step_ % interval_ != 0) {

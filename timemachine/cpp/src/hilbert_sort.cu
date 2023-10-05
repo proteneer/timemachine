@@ -51,8 +51,8 @@ HilbertSort::~HilbertSort(){};
 void HilbertSort::sort_device(
     const int N,
     const unsigned int *d_atom_idxs,
-    const double *d_coords,
-    const double *d_box,
+    const CoordsType *d_coords,
+    const CoordsType *d_box,
     unsigned int *d_output_perm,
     cudaStream_t stream) {
     if (N > N_) {
@@ -82,7 +82,7 @@ void HilbertSort::sort_device(
     gpuErrchk(cudaPeekAtLastError());
 }
 
-std::vector<unsigned int> HilbertSort::sort_host(const int N, const double *h_coords, const double *h_box) {
+std::vector<unsigned int> HilbertSort::sort_host(const int N, const CoordsType *h_coords, const CoordsType *h_box) {
 
     std::vector<unsigned int> h_atom_idxs(N);
     std::iota(h_atom_idxs.begin(), h_atom_idxs.end(), 0);

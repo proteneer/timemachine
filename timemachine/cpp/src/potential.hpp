@@ -18,9 +18,9 @@ public:
         const int N,
         const int param_batch_size,
         const int P,
-        const double *h_x,
+        const CoordsType *h_x,
         const ParamsType *h_p,
-        const double *h_box,
+        const CoordsType *h_box,
         unsigned long long *h_du_dx,
         unsigned long long *h_du_dp,
         EnergyType *h_u);
@@ -28,9 +28,9 @@ public:
     void execute_host(
         const int N,
         const int P,
-        const double *h_x,
+        const CoordsType *h_x,
         const ParamsType *h_p,
-        const double *h_box,
+        const CoordsType *h_box,
         unsigned long long *h_du_dx,
         unsigned long long *h_du_dp,
         EnergyType *h_u);
@@ -38,17 +38,17 @@ public:
     void execute_host_du_dx(
         const int N,
         const int P,
-        const double *h_x,
+        const CoordsType *h_x,
         const ParamsType *h_p,
-        const double *h_box,
+        const CoordsType *h_box,
         unsigned long long *h_du_dx);
 
     virtual void execute_device(
         const int N,
         const int P,
-        const double *d_x,
+        const CoordsType *d_x,
         const ParamsType *d_p,
-        const double *d_box,
+        const CoordsType *d_box,
         unsigned long long *d_du_dx,
         unsigned long long *d_du_dp,
         EnergyType *h_u,

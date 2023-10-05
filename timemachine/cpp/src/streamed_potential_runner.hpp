@@ -20,8 +20,8 @@ public:
     void execute_potentials(
         std::vector<std::shared_ptr<BoundPotential>> &bps,
         const int N,
-        const double *d_x,
-        const double *d_box,
+        const CoordsType *d_x,
+        const CoordsType *d_box,
         unsigned long long *d_du_dx,
         unsigned long long *d_du_dp,
         EnergyType *d_u,

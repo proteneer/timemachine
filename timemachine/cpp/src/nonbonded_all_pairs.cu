@@ -144,7 +144,7 @@ template <typename RealType> bool NonbondedAllPairs<RealType>::needs_sort() {
 }
 
 template <typename RealType>
-void NonbondedAllPairs<RealType>::sort(const double *d_coords, const double *d_box, cudaStream_t stream) {
+void NonbondedAllPairs<RealType>::sort(const CoordsType *d_coords, const CoordsType *d_box, cudaStream_t stream) {
     // We must rebuild the neighborlist after sorting, as the neighborlist is tied to a particular sort order
     if (!disable_hilbert_) {
         this->hilbert_sort_->sort_device(K_, d_atom_idxs_, d_coords, d_box, d_sorted_atom_idxs_, stream);
@@ -161,10 +161,10 @@ template <typename RealType>
 void NonbondedAllPairs<RealType>::execute_device(
     const int N,
     const int P,
-    const double *d_x,
+    const CoordsType *d_x,
     const ParamsType *d_p,
     // N * PARAMS_PER_ATOM
-    const double *d_box, // 3 * 3
+    const CoordsType *d_box, // 3 * 3
     unsigned long long *d_du_dx,
     unsigned long long *d_du_dp,
     EnergyType *d_u,

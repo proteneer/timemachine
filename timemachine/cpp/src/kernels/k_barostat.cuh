@@ -7,10 +7,10 @@
 template <typename RealType>
 void __global__ k_rescale_positions(
     const int N,                                     // Number of atoms to shift
-    double *__restrict__ coords,                     // Coordinates
+    CoordsType *__restrict__ coords,                 // Coordinates
     const RealType *__restrict__ length_scale,       // [1]
-    const double *__restrict__ box,                  // [9]
-    double *__restrict__ scaled_box,                 // [9]
+    const CoordsType *__restrict__ box,              // [9]
+    CoordsType *__restrict__ scaled_box,             // [9]
     const int *__restrict__ atom_idxs,               // [N]
     const int *__restrict__ mol_idxs,                // [N]
     const int *__restrict__ mol_offsets,             // [N]
@@ -68,7 +68,7 @@ void __global__ k_rescale_positions(
 template <typename RealType>
 void __global__ k_find_group_centroids(
     const int N,                               // Number of atoms to shift
-    const double *__restrict__ coords,         // Coordinates [N * 3]
+    const CoordsType *__restrict__ coords,     // Coordinates [N * 3]
     const int *__restrict__ atom_idxs,         // [N]
     const int *__restrict__ mol_idxs,          // [N]
     unsigned long long *__restrict__ centroids // [num_molecules * 3]
@@ -90,7 +90,7 @@ template <typename RealType>
 void __global__ k_setup_barostat_move(
     const bool adaptive,
     const RealType *__restrict__ rand,     // [2], use first value, second value is metropolis condition
-    double *__restrict__ d_box,            // [3*3]
+    CoordsType *__restrict__ d_box,        // [3*3]
     RealType *__restrict__ d_volume_delta, // [1]
     double *__restrict__ d_volume_scale,   // [1]
     RealType *__restrict__ d_length_scale  // [1]
@@ -124,10 +124,10 @@ void __global__ k_decide_move(
     double *__restrict__ d_volume_scale,
     const EnergyType *__restrict__ d_init_u,
     const EnergyType *__restrict__ d_final_u,
-    double *__restrict__ d_box,
-    const double *__restrict__ d_box_output,
-    double *__restrict__ d_x,
-    const double *__restrict__ d_x_output,
+    CoordsType *__restrict__ d_box,
+    const CoordsType *__restrict__ d_box_output,
+    CoordsType *__restrict__ d_x,
+    const CoordsType *__restrict__ d_x_output,
     int *__restrict__ num_accepted,
     int *__restrict__ num_attempted) {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;

@@ -21,9 +21,9 @@ namespace timemachine {
 
 Context::Context(
     int N,
-    const double *x_0,
+    const CoordsType *x_0,
     const double *v_0,
-    const double *box_0,
+    const CoordsType *box_0,
     std::shared_ptr<Integrator> intg,
     std::vector<std::shared_ptr<BoundPotential>> bps,
     std::shared_ptr<MonteCarloBarostat<float>> barostat)
@@ -48,7 +48,7 @@ void Context::_verify_box(cudaStream_t stream) {
     if (nonbonded_pots_.size() == 0) {
         return;
     }
-    std::vector<double> h_box(9);
+    std::vector<CoordsType> h_box(9);
     gpuErrchk(cudaMemcpyAsync(&h_box[0], d_box_t_, 9 * sizeof(*d_box_t_), cudaMemcpyDeviceToHost, stream));
     gpuErrchk(cudaStreamSynchronize(stream));
     for (auto boundpot : nonbonded_pots_) {
@@ -94,7 +94,7 @@ void Context::_ensure_local_md_intialized() {
     }
 }
 
-std::array<std::vector<double>, 2> Context::multiple_steps_local(
+std::array<std::vector<CoordsType>, 2> Context::multiple_steps_local(
     const int n_steps,
     const std::vector<int> &local_idxs,
     const int store_x_interval,
@@ -110,11 +110,11 @@ std::array<std::vector<double>, 2> Context::multiple_steps_local(
     const int box_buffer_size = x_buffer_size * 3 * 3;
 
     // Store coordinates in host memory as it can be very large
-    std::vector<double> h_x_buffer(x_buffer_size * N_ * 3);
+    std::vector<CoordsType> h_x_buffer(x_buffer_size * N_ * 3);
     // Store boxes on GPU as boxes are a constant size and relatively small
-    std::unique_ptr<DeviceBuffer<double>> d_box_traj(nullptr);
+    std::unique_ptr<DeviceBuffer<CoordsType>> d_box_traj(nullptr);
     if (box_buffer_size > 0) {
-        d_box_traj.reset(new DeviceBuffer<double>(box_buffer_size));
+        d_box_traj.reset(new DeviceBuffer<CoordsType>(box_buffer_size));
     }
 
     this->_ensure_local_md_intialized();
@@ -160,15 +160,15 @@ std::array<std::vector<double>, 2> Context::multiple_steps_local(
     gpuErrchk(cudaStreamSynchronize(stream));
     gpuErrchk(cudaStreamDestroy(stream));
 
-    std::vector<double> h_box_buffer(box_buffer_size);
+    std::vector<CoordsType> h_box_buffer(box_buffer_size);
 
     if (box_buffer_size > 0) {
         d_box_traj->copy_to(&h_box_buffer[0]);
     }
-    return std::array<std::vector<double>, 2>({h_x_buffer, h_box_buffer});
+    return std::array<std::vector<CoordsType>, 2>({h_x_buffer, h_box_buffer});
 }
 
-std::array<std::vector<double>, 2> Context::multiple_steps_local_selection(
+std::array<std::vector<CoordsType>, 2> Context::multiple_steps_local_selection(
     const int n_steps,
     const int reference_idx,
     const std::vector<int> &selection_idxs,
@@ -184,11 +184,11 @@ std::array<std::vector<double>, 2> Context::multiple_steps_local_selection(
     const int box_buffer_size = x_buffer_size * 3 * 3;
 
     // Store coordinates in host memory as it can be very large
-    std::vector<double> h_x_buffer(x_buffer_size * N_ * 3);
+    std::vector<CoordsType> h_x_buffer(x_buffer_size * N_ * 3);
     // Store boxes on GPU as boxes are a constant size and relatively small
-    std::unique_ptr<DeviceBuffer<double>> d_box_traj(nullptr);
+    std::unique_ptr<DeviceBuffer<CoordsType>> d_box_traj(nullptr);
     if (box_buffer_size > 0) {
-        d_box_traj.reset(new DeviceBuffer<double>(box_buffer_size));
+        d_box_traj.reset(new DeviceBuffer<CoordsType>(box_buffer_size));
     }
 
     this->_ensure_local_md_intialized();
@@ -234,15 +234,15 @@ std::array<std::vector<double>, 2> Context::multiple_steps_local_selection(
     gpuErrchk(cudaStreamSynchronize(stream));
     gpuErrchk(cudaStreamDestroy(stream));
 
-    std::vector<double> h_box_buffer(box_buffer_size);
+    std::vector<CoordsType> h_box_buffer(box_buffer_size);
 
     if (box_buffer_size > 0) {
         d_box_traj->copy_to(&h_box_buffer[0]);
     }
-    return std::array<std::vector<double>, 2>({h_x_buffer, h_box_buffer});
+    return std::array<std::vector<CoordsType>, 2>({h_x_buffer, h_box_buffer});
 }
 
-std::array<std::vector<double>, 2> Context::multiple_steps(const int n_steps, int store_x_interval) {
+std::array<std::vector<CoordsType>, 2> Context::multiple_steps(const int n_steps, int store_x_interval) {
     if (store_x_interval <= 0) {
         throw std::runtime_error("store_x_interval <= 0");
     }
@@ -253,13 +253,13 @@ std::array<std::vector<double>, 2> Context::multiple_steps(const int n_steps, in
     int x_buffer_size = n_steps / store_x_interval;
     int box_buffer_size = x_buffer_size * 3 * 3;
 
-    std::vector<double> h_x_buffer(x_buffer_size * N_ * 3);
+    std::vector<CoordsType> h_x_buffer(x_buffer_size * N_ * 3);
 
     cudaStream_t stream = static_cast<cudaStream_t>(0);
 
-    std::unique_ptr<DeviceBuffer<double>> d_box_buffer(nullptr);
+    std::unique_ptr<DeviceBuffer<CoordsType>> d_box_buffer(nullptr);
     if (box_buffer_size > 0) {
-        d_box_buffer.reset(new DeviceBuffer<double>(box_buffer_size));
+        d_box_buffer.reset(new DeviceBuffer<CoordsType>(box_buffer_size));
     }
 
     intg_->initialize(bps_, d_x_t_, d_v_t_, d_box_t_, nullptr, stream);
@@ -286,12 +286,12 @@ std::array<std::vector<double>, 2> Context::multiple_steps(const int n_steps, in
 
     gpuErrchk(cudaStreamSynchronize(stream));
 
-    std::vector<double> h_box_buffer(box_buffer_size);
+    std::vector<CoordsType> h_box_buffer(box_buffer_size);
     if (box_buffer_size > 0) {
         d_box_buffer->copy_to(&h_box_buffer[0]);
     }
 
-    return std::array<std::vector<double>, 2>({h_x_buffer, h_box_buffer});
+    return std::array<std::vector<CoordsType>, 2>({h_x_buffer, h_box_buffer});
 }
 
 void Context::step() {
@@ -328,7 +328,7 @@ void Context::_step(
 
 int Context::num_atoms() const { return N_; }
 
-void Context::set_x_t(const double *in_buffer) {
+void Context::set_x_t(const CoordsType *in_buffer) {
     gpuErrchk(cudaMemcpy(d_x_t_, in_buffer, N_ * 3 * sizeof(*in_buffer), cudaMemcpyHostToDevice));
 }
 
@@ -336,11 +336,11 @@ void Context::set_v_t(const double *in_buffer) {
     gpuErrchk(cudaMemcpy(d_v_t_, in_buffer, N_ * 3 * sizeof(*in_buffer), cudaMemcpyHostToDevice));
 }
 
-void Context::set_box(const double *in_buffer) {
+void Context::set_box(const CoordsType *in_buffer) {
     gpuErrchk(cudaMemcpy(d_box_t_, in_buffer, 3 * 3 * sizeof(*in_buffer), cudaMemcpyHostToDevice));
 }
 
-void Context::get_x_t(double *out_buffer) const {
+void Context::get_x_t(CoordsType *out_buffer) const {
     gpuErrchk(cudaMemcpy(out_buffer, d_x_t_, N_ * 3 * sizeof(*out_buffer), cudaMemcpyDeviceToHost));
 }
 
@@ -348,7 +348,7 @@ void Context::get_v_t(double *out_buffer) const {
     gpuErrchk(cudaMemcpy(out_buffer, d_v_t_, N_ * 3 * sizeof(*out_buffer), cudaMemcpyDeviceToHost));
 }
 
-void Context::get_box(double *out_buffer) const {
+void Context::get_box(CoordsType *out_buffer) const {
     gpuErrchk(cudaMemcpy(out_buffer, d_box_t_, 3 * 3 * sizeof(*out_buffer), cudaMemcpyDeviceToHost));
 }
 

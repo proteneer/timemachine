@@ -17,9 +17,9 @@ void Potential::execute_batch_host(
     const int N,                 // Number of atoms
     const int param_batch_size,  // Number of batches of parameters
     const int P,                 // Number of parameters
-    const double *h_x,           // [coord_batch_size, N, 3]
+    const CoordsType *h_x,       // [coord_batch_size, N, 3]
     const ParamsType *h_p,       // [param_batch_size, P]
-    const double *h_box,         // [coord_batch_size, 3, 3]
+    const CoordsType *h_box,     // [coord_batch_size, 3, 3]
     unsigned long long *h_du_dx, // [coord_batch_size, param_batch_size, N, 3]
     unsigned long long *h_du_dp, // [coord_batch_size, param_batch_size, P]
     EnergyType *h_u              // [coord_batch_size, param_batch_size, N]
@@ -30,10 +30,10 @@ void Potential::execute_batch_host(
         d_p->copy_from(h_p);
     }
 
-    DeviceBuffer<double> d_box(coord_batch_size * D * D);
+    DeviceBuffer<CoordsType> d_box(coord_batch_size * D * D);
     d_box.copy_from(h_box);
 
-    DeviceBuffer<double> d_x_buffer(coord_batch_size * N * D);
+    DeviceBuffer<CoordsType> d_x_buffer(coord_batch_size * N * D);
     d_x_buffer.copy_from(h_x);
 
     std::unique_ptr<DeviceBuffer<unsigned long long>> d_du_dx_buffer(nullptr);
@@ -94,9 +94,9 @@ void Potential::execute_batch_host(
 void Potential::execute_host(
     const int N,
     const int P,
-    const double *h_x,           // [N,3]
+    const CoordsType *h_x,       // [N,3]
     const ParamsType *h_p,       // [P,]
-    const double *h_box,         // [3, 3]
+    const CoordsType *h_box,     // [3, 3]
     unsigned long long *h_du_dx, // [N,3]
     unsigned long long *h_du_dp, // [P]
     EnergyType *h_u              // [1]
@@ -104,8 +104,8 @@ void Potential::execute_host(
 
     const int &D = Potential::D;
 
-    DeviceBuffer<double> d_x(N * D);
-    DeviceBuffer<double> d_box(D * D);
+    DeviceBuffer<CoordsType> d_x(N * D);
+    DeviceBuffer<CoordsType> d_box(D * D);
 
     d_x.copy_from(h_x);
     d_box.copy_from(h_box);
@@ -162,16 +162,16 @@ void Potential::execute_host(
 void Potential::execute_host_du_dx(
     const int N,
     const int P,
-    const double *h_x,     // [N,3]
-    const ParamsType *h_p, // [P,]
-    const double *h_box,   // [3, 3]
+    const CoordsType *h_x,   // [N,3]
+    const ParamsType *h_p,   // [P,]
+    const CoordsType *h_box, // [3, 3]
     unsigned long long *h_du_dx) {
 
     const int &D = Potential::D;
     // TODO: Convert this to DeviceBuffer
-    double *d_x;
+    CoordsType *d_x;
     ParamsType *d_p;
-    double *d_box;
+    CoordsType *d_box;
 
     cudaSafeMalloc(&d_x, N * D * sizeof(double));
     gpuErrchk(cudaMemcpy(d_x, h_x, N * D * sizeof(double), cudaMemcpyHostToDevice));

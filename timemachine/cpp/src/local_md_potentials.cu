@@ -99,8 +99,8 @@ LocalMDPotentials::~LocalMDPotentials() { curandErrchk(curandDestroyGenerator(cr
 // one to ensure the same reference every time, though the seed also handles the probabilities of selecting particles, and it is suggested
 // to provide a new seed at each step.
 void LocalMDPotentials::setup_from_idxs(
-    double *d_x_t,
-    double *d_box_t,
+    CoordsType *d_x_t,
+    CoordsType *d_box_t,
     const std::vector<int> &local_idxs,
     const int seed,
     const double radius,

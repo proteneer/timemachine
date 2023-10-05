@@ -6,7 +6,7 @@
 template <typename RealType>
 void __global__ k_harmonic_angle_stable(
     const int A,                           // number of angles
-    const double *__restrict__ coords,     // [N, 3]
+    const CoordsType *__restrict__ coords, // [N, 3]
     const ParamsType *__restrict__ params, // [P, 3]
     const int *__restrict__ angle_idxs,    // [A, 3]
     unsigned long long *__restrict__ du_dx,

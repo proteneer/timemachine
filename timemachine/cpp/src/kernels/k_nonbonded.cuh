@@ -10,10 +10,10 @@ template <typename RealType>
 void __global__ k_check_rebuild_coords_and_box_gather(
     const int N,
     const unsigned int *atom_idxs,
-    const double *__restrict__ new_coords,
-    const double *__restrict__ old_coords,
-    const double *__restrict__ new_box,
-    const double *__restrict__ old_box,
+    const CoordsType *__restrict__ new_coords,
+    const CoordsType *__restrict__ old_coords,
+    const CoordsType *__restrict__ new_box,
+    const CoordsType *__restrict__ old_box,
     const double padding,
     int *rebuild_flag) {
 
@@ -110,7 +110,7 @@ void __device__ v_nonbonded_unified(
     const int tile_idx,
     const int N,
     const int NR,
-    const double *__restrict__ coords,     // [N * 3]
+    const CoordsType *__restrict__ coords, // [N * 3]
     const ParamsType *__restrict__ params, // [N * PARAMS_PER_ATOM]
     box_cache<RealType> &shared_box,
     EnergyType *energy_buffer, // [blockDim.x]
@@ -329,9 +329,9 @@ void __global__ k_nonbonded_unified(
     const int N,  // Number of atoms
     const int NR, // Number of row indices
     const unsigned int *ixn_count,
-    const double *__restrict__ coords,     // [N, 3]
+    const CoordsType *__restrict__ coords, // [N, 3]
     const ParamsType *__restrict__ params, // [N, PARAMS_PER_ATOM]
-    const double *__restrict__ box,        // [3, 3]
+    const CoordsType *__restrict__ box,    // [3, 3]
     const double beta,
     const double cutoff,
     const unsigned int *__restrict__ row_idxs,

@@ -12,9 +12,9 @@ class Context {
 public:
     Context(
         int N,
-        const double *x_0,
+        const CoordsType *x_0,
         const double *v_0,
-        const double *box_0,
+        const CoordsType *box_0,
         std::shared_ptr<Integrator> intg,
         std::vector<std::shared_ptr<BoundPotential>> bps,
         std::shared_ptr<MonteCarloBarostat<float>> barostat = nullptr);
@@ -25,9 +25,9 @@ public:
     void initialize();
     void finalize();
 
-    std::array<std::vector<double>, 2> multiple_steps(const int n_steps, int store_x_interval);
+    std::array<std::vector<CoordsType>, 2> multiple_steps(const int n_steps, int store_x_interval);
 
-    std::array<std::vector<double>, 2> multiple_steps_local(
+    std::array<std::vector<CoordsType>, 2> multiple_steps_local(
         const int n_steps,
         const std::vector<int> &local_idxs,
         const int store_x_interval,
@@ -35,7 +35,7 @@ public:
         const double k,
         const int seed);
 
-    std::array<std::vector<double>, 2> multiple_steps_local_selection(
+    std::array<std::vector<CoordsType>, 2> multiple_steps_local_selection(
         const int n_steps,
         const int reference_idx,
         const std::vector<int> &selection_idxs,
@@ -45,17 +45,17 @@ public:
 
     int num_atoms() const;
 
-    void set_x_t(const double *in_buffer);
+    void set_x_t(const CoordsType *in_buffer);
 
-    void get_x_t(double *out_buffer) const;
+    void get_x_t(CoordsType *out_buffer) const;
 
     void set_v_t(const double *in_buffer);
 
     void get_v_t(double *out_buffer) const;
 
-    void set_box(const double *in_buffer);
+    void set_box(const CoordsType *in_buffer);
 
-    void get_box(double *out_buffer) const;
+    void get_box(CoordsType *out_buffer) const;
 
     void setup_local_md(double temperature, bool freeze_reference);
 
@@ -80,9 +80,9 @@ private:
 
     int step_;
 
-    double *d_x_t_;   // coordinates
-    double *d_v_t_;   // velocities
-    double *d_box_t_; // box vectors
+    CoordsType *d_x_t_;   // coordinates
+    double *d_v_t_;       // velocities
+    CoordsType *d_box_t_; // box vectors
 
     std::shared_ptr<Integrator> intg_;
     std::vector<std::shared_ptr<BoundPotential>> bps_;

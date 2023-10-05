@@ -23,13 +23,13 @@ struct BoundPotential {
 
     void set_params_device(const int size, const ParamsType *d_p, const cudaStream_t stream);
 
-    void
-    execute_host(const int N, const double *h_x, const double *h_box, unsigned long long *h_du_dx, EnergyType *h_u);
+    void execute_host(
+        const int N, const CoordsType *h_x, const CoordsType *h_box, unsigned long long *h_du_dx, EnergyType *h_u);
 
     void execute_device(
         const int N,
-        const double *d_x,
-        const double *d_box,
+        const CoordsType *d_x,
+        const CoordsType *d_box,
         unsigned long long *d_du_dx,
         unsigned long long *d_du_dp,
         EnergyType *d_u,

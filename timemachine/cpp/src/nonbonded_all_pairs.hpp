@@ -29,8 +29,8 @@ private:
     Neighborlist<RealType> nblist_;
 
     const double nblist_padding_;
-    double *d_nblist_x_;   // coords which were used to compute the nblist
-    double *d_nblist_box_; // box which was used to rebuild the nblist
+    CoordsType *d_nblist_x_;   // coords which were used to compute the nblist
+    CoordsType *d_nblist_box_; // box which was used to rebuild the nblist
     EnergyType *d_u_buffer_;
     int *d_rebuild_nblist_; // whether or not we have to rebuild the nblist
     int *p_rebuild_nblist_; // pinned
@@ -43,7 +43,7 @@ private:
     // by atom_idxs (or the input ordering, if atom_idxs is not
     // specified)
     unsigned int *d_sorted_atom_idxs_; // [K_] indices of interacting atoms, sorted by hilbert curve index
-    double *d_gathered_x_;             // sorted coordinates for subset of atoms
+    CoordsType *d_gathered_x_;         // sorted coordinates for subset of atoms
     ParamsType *d_gathered_p_;         // sorted parameters for subset of atoms
     unsigned long long *d_gathered_du_dx_;
     unsigned long long *d_gathered_du_dp_;
@@ -58,7 +58,7 @@ private:
 
     bool needs_sort();
 
-    void sort(const double *d_x, const double *d_box, cudaStream_t stream);
+    void sort(const CoordsType *d_x, const CoordsType *d_box, cudaStream_t stream);
 
 public:
     NonbondedAllPairs(
@@ -74,9 +74,9 @@ public:
     virtual void execute_device(
         const int N,
         const int P,
-        const double *d_x,
+        const CoordsType *d_x,
         const ParamsType *d_p,
-        const double *d_box,
+        const CoordsType *d_box,
         unsigned long long *d_du_dx,
         unsigned long long *d_du_dp,
         EnergyType *d_u,

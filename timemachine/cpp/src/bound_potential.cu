@@ -10,8 +10,8 @@ BoundPotential::BoundPotential(std::shared_ptr<Potential> potential, const std::
 
 void BoundPotential::execute_device(
     const int N,
-    const double *d_x,
-    const double *d_box,
+    const CoordsType *d_x,
+    const CoordsType *d_box,
     unsigned long long *d_du_dx,
     unsigned long long *d_du_dp,
     EnergyType *d_u,
@@ -22,16 +22,16 @@ void BoundPotential::execute_device(
 
 void BoundPotential::execute_host(
     const int N,
-    const double *h_x,           // [N,3]
-    const double *h_box,         // [3, 3]
+    const CoordsType *h_x,       // [N,3]
+    const CoordsType *h_box,     // [3, 3]
     unsigned long long *h_du_dx, // [N, 3]
     EnergyType *h_u              // [1]
 ) {
 
     const int D = 3;
 
-    DeviceBuffer<double> d_x(N * D);
-    DeviceBuffer<double> d_box(D * D);
+    DeviceBuffer<CoordsType> d_x(N * D);
+    DeviceBuffer<CoordsType> d_box(D * D);
 
     d_x.copy_from(h_x);
     d_box.copy_from(h_box);

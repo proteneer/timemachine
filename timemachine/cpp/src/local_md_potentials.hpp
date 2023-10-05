@@ -27,8 +27,8 @@ public:
     unsigned int *get_free_idxs();
 
     void setup_from_idxs(
-        double *d_x_t_,
-        double *d_box_t,
+        CoordsType *d_x_t_,
+        CoordsType *d_box_t,
         const std::vector<int> &local_idxs,
         const int seed,
         const double radius,
