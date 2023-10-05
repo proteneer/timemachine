@@ -94,7 +94,6 @@ class MonteCarloBarostat(MonteCarloMove):
         upper_bound = 1e1  # don't let self.max_delta_volume exceed upper_bound nm^3
 
         if self.n_proposed >= 10:
-
             if self.acceptance_fraction < 0.25:
                 decreased = self.max_delta_volume / adaptation_multiplier
                 self.max_delta_volume = max(lower_bound, decreased)

@@ -3,7 +3,7 @@ import traceback
 import warnings
 from dataclasses import dataclass, replace
 from functools import partial
-from typing import Any, Dict, Iterable, List, NamedTuple, Optional, Sequence, Tuple, Union, cast
+from typing import Any, Callable, Dict, Iterable, List, Literal, NamedTuple, Optional, Sequence, Tuple, Union, cast
 
 import numpy as np
 from numpy.typing import NDArray
@@ -243,7 +243,6 @@ def setup_optimized_initial_state(
     temperature: float,
     seed: int,
 ) -> InitialState:
-
     # Use pre-optimized initial state with the closest value of lambda as a starting point for optimization.
 
     # NOTE: The current approach for generating optimized conformations in `optimize_coordinates` creates a
@@ -611,108 +610,22 @@ def estimate_relative_free_energy_bisection(
         raise err
 
 
-def estimate_relative_free_energy_bisection_hrex(
-    mol_a: Chem.rdchem.Mol,
-    mol_b: Chem.rdchem.Mol,
-    core: NDArray,
-    ff: Forcefield,
-    host_config: Optional[HostConfig],
-    md_params: MDParams = DEFAULT_HREX_PARAMS,
-    prefix: str = "",
-    lambda_interval: Optional[Tuple[float, float]] = None,
-    n_windows: Optional[int] = None,
+def estimate_relative_free_energy_bisection_hrex_impl(
+    temperature: float,
+    lambda_min: float,
+    lambda_max: float,
+    md_params: MDParams,
+    n_windows: int,
+    make_optimized_initial_state_fn: Callable[[float], InitialState],
+    combined_prefix: str,
     min_overlap: Optional[float] = None,
-    keep_idxs: Optional[List[int]] = None,
-    min_cutoff: Optional[float] = 0.7,
+    keep_idxs: Optional[List[int] | Literal["all"]] = None,
 ) -> SimulationResult:
-    """
-    Estimate relative free energy between mol_a and mol_b using Hamiltonian Replica EXchange (HREX) sampling of a
-    sequence of intermediate states determined by bisection. Molecules should be aligned to each other and within the
-    host environment.
-
-    Parameters
-    ----------
-    mol_a: Chem.Mol
-        initial molecule
-
-    mol_b: Chem.Mol
-        target molecule
-
-    core: list of 2-tuples
-        atom_mapping of atoms in mol_a into atoms in mol_b
-
-    ff: Forcefield
-        Forcefield to be used for the system
-
-    host_config: HostConfig or None
-        Configuration for the host system. If None, then the vacuum leg is run.
-
-    md_params: MDParams, optional
-        Parameters for the equilibration and production MD. Defaults to :py:const:`timemachine.fe.rbfe.DEFAULT_MD_PARAMS`
-
-    prefix: str, optional
-        A prefix to append to figures
-
-    lambda_interval: (float, float) or None, optional
-        Minimum and maximum value of lambda for the transformation; typically (0, 1), but sometimes useful to choose
-        other values for testing.
-
-    n_windows: int or None, optional
-        Number of windows used for interpolating the lambda schedule with additional windows. Defaults to
-        `DEFAULT_NUM_WINDOWS` windows.
-
-    min_overlap: float or None, optional
-        If not None, terminate bisection early when the BAR overlap between all neighboring pairs of states exceeds this
-        value. When given, the final number of windows may be less than or equal to n_windows.
-
-    keep_idxs: list of int or None, optional
-        If None, return only the end-state frames. Otherwise if not None, use only for debugging, and this
-        will return the frames corresponding to the idxs of interest.
-
-    min_cutoff: float or None, optional
-        Throw error if any atom moves more than this distance (nm) after minimization
-
-    Returns
-    -------
-    SimulationResult
-        Collected data from the simulation (see class for storage information). Returned frames and boxes
-        are defined by keep_idxs.
-    """
-
     if n_windows is None:
         n_windows = DEFAULT_NUM_WINDOWS
     assert n_windows >= 2
 
-    if keep_idxs is None:
-        keep_idxs = [0, -1]  # keep frames from first and last windows
-
-    assert len(set(keep_idxs)) == len(keep_idxs)
-    assert len(keep_idxs) <= n_windows
-
-    single_topology = SingleTopology(mol_a, mol_b, core, ff)
-
-    lambda_min, lambda_max = lambda_interval or (0.0, 1.0)
     lambda_grid = np.linspace(lambda_min, lambda_max, n_windows)
-
-    temperature = DEFAULT_TEMP
-
-    host = setup_optimized_host(single_topology, host_config) if host_config else None
-
-    initial_states = setup_initial_states(
-        single_topology, host, temperature, lambda_grid, md_params.seed, min_cutoff=min_cutoff
-    )
-
-    make_optimized_initial_state = partial(
-        setup_optimized_initial_state,
-        single_topology,
-        host=host,
-        optimized_initial_states=initial_states,
-        temperature=temperature,
-        seed=md_params.seed,
-    )
-
-    # TODO: rename prefix to postfix, or move to beginning of combined_prefix?
-    combined_prefix = get_mol_name(mol_a) + "_" + get_mol_name(mol_b) + "_" + prefix
 
     try:
         # First phase: bisection to determine lambda spacing
@@ -720,7 +633,7 @@ def estimate_relative_free_energy_bisection_hrex(
         md_params_bisection = replace(md_params, n_frames=md_params.hrex_params.n_frames_bisection)
         results, trajectories_by_state = run_sims_bisection(
             [lambda_min, lambda_max],
-            make_optimized_initial_state,
+            make_optimized_initial_state_fn,
             md_params_bisection,
             n_bisections=len(lambda_grid) - 2,
             temperature=temperature,
@@ -775,6 +688,16 @@ def estimate_relative_free_energy_bisection_hrex(
         plots = make_pair_bar_plots(pair_bar_result, temperature, combined_prefix)
 
         stored_trajectories = []
+
+        if keep_idxs is None:
+            keep_idxs = [0, -1]  # keep frames from first and last windows
+        elif keep_idxs == "all":
+            warnings.warn("Warning: keeping frames from every state.")
+            keep_idxs = list(range(len(initial_states)))
+
+        assert len(set(keep_idxs)) == len(keep_idxs)
+        assert len(keep_idxs) <= n_windows
+
         for i in keep_idxs:
             try:
                 stored_trajectories.append(trajectories_by_state[i])
@@ -803,6 +726,116 @@ def estimate_relative_free_energy_bisection_hrex(
         with open(f"failed_rbfe_result_{combined_prefix}.pkl", "wb") as fh:
             pickle.dump((md_params, err), fh)
         raise err
+
+
+def estimate_relative_free_energy_bisection_hrex(
+    mol_a: Chem.rdchem.Mol,
+    mol_b: Chem.rdchem.Mol,
+    core: NDArray,
+    ff: Forcefield,
+    host_config: Optional[HostConfig],
+    md_params: MDParams = DEFAULT_HREX_PARAMS,
+    prefix: str = "",
+    lambda_interval: Optional[Tuple[float, float]] = None,
+    n_windows: Optional[int] = None,
+    min_overlap: Optional[float] = None,
+    keep_idxs: Optional[List[int] | Literal["all"]] = None,
+    min_cutoff: Optional[float] = 0.7,
+) -> SimulationResult:
+    """
+    Estimate relative free energy between mol_a and mol_b using Hamiltonian Replica EXchange (HREX) sampling of a
+    sequence of intermediate states determined by bisection. Molecules should be aligned to each other and within the
+    host environment.
+
+    Parameters
+    ----------
+    mol_a: Chem.Mol
+        initial molecule
+
+    mol_b: Chem.Mol
+        target molecule
+
+    core: list of 2-tuples
+        atom_mapping of atoms in mol_a into atoms in mol_b
+
+    ff: Forcefield
+        Forcefield to be used for the system
+
+    host_config: HostConfig or None
+        Configuration for the host system. If None, then the vacuum leg is run.
+
+    md_params: MDParams, optional
+        Parameters for the equilibration and production MD. Defaults to :py:const:`timemachine.fe.rbfe.DEFAULT_MD_PARAMS`
+
+    prefix: str, optional
+        A prefix to append to figures
+
+    lambda_interval: (float, float) or None, optional
+        Minimum and maximum value of lambda for the transformation; typically (0, 1), but sometimes useful to choose
+        other values for testing.
+
+    n_windows: int or None, optional
+        Number of windows used for interpolating the lambda schedule with additional windows. Defaults to
+        `DEFAULT_NUM_WINDOWS` windows.
+
+    min_overlap: float or None, optional
+        If not None, terminate bisection early when the BAR overlap between all neighboring pairs of states exceeds this
+        value. When given, the final number of windows may be less than or equal to n_windows.
+
+    keep_idxs: list of int or None or "all", optional
+        If None, return only the end-state frames. If "all", return frames from every state. Otherwise, use only for
+        debugging, and this will return the frames corresponding to the idxs of interest.
+
+    min_cutoff: float or None, optional
+        Throw error if any atom moves more than this distance (nm) after minimization
+
+    Returns
+    -------
+    SimulationResult
+        Collected data from the simulation (see class for storage information). Returned frames and boxes
+        are defined by keep_idxs.
+    """
+
+    if n_windows is None:
+        n_windows = DEFAULT_NUM_WINDOWS
+    assert n_windows >= 2
+
+    single_topology = SingleTopology(mol_a, mol_b, core, ff)
+
+    lambda_min, lambda_max = lambda_interval or (0.0, 1.0)
+    lambda_grid = np.linspace(lambda_min, lambda_max, n_windows)
+
+    temperature = DEFAULT_TEMP
+
+    host = setup_optimized_host(single_topology, host_config) if host_config else None
+
+    initial_states = setup_initial_states(
+        single_topology, host, temperature, lambda_grid, md_params.seed, min_cutoff=min_cutoff
+    )
+
+    make_optimized_initial_state_fn = partial(
+        setup_optimized_initial_state,
+        single_topology,
+        host=host,
+        optimized_initial_states=initial_states,
+        temperature=temperature,
+        seed=md_params.seed,
+    )
+
+    # TODO: rename prefix to postfix, or move to beginning of combined_prefix?
+    combined_prefix = get_mol_name(mol_a) + "_" + get_mol_name(mol_b) + "_" + prefix
+
+    return estimate_relative_free_energy_bisection_hrex_impl(
+        temperature,
+        lambda_min,
+        lambda_max,
+        md_params,
+        n_windows,
+        make_optimized_initial_state_fn,
+        combined_prefix,
+        min_overlap,
+        keep_idxs,
+    )
 
 
 def run_vacuum(
