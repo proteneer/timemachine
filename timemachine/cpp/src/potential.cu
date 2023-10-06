@@ -173,20 +173,20 @@ void Potential::execute_host_du_dx(
     ParamsType *d_p;
     CoordsType *d_box;
 
-    cudaSafeMalloc(&d_x, N * D * sizeof(double));
-    gpuErrchk(cudaMemcpy(d_x, h_x, N * D * sizeof(double), cudaMemcpyHostToDevice));
+    cudaSafeMalloc(&d_x, N * D * sizeof(*d_x));
+    gpuErrchk(cudaMemcpy(d_x, h_x, N * D * sizeof(*d_x), cudaMemcpyHostToDevice));
 
-    cudaSafeMalloc(&d_p, P * sizeof(double));
-    gpuErrchk(cudaMemcpy(d_p, h_p, P * sizeof(double), cudaMemcpyHostToDevice));
+    cudaSafeMalloc(&d_p, P * sizeof(*d_p));
+    gpuErrchk(cudaMemcpy(d_p, h_p, P * sizeof(*d_p), cudaMemcpyHostToDevice));
 
-    cudaSafeMalloc(&d_box, D * D * sizeof(double));
-    gpuErrchk(cudaMemcpy(d_box, h_box, D * D * sizeof(double), cudaMemcpyHostToDevice));
+    cudaSafeMalloc(&d_box, D * D * sizeof(*d_box));
+    gpuErrchk(cudaMemcpy(d_box, h_box, D * D * sizeof(*d_box), cudaMemcpyHostToDevice));
 
     unsigned long long *d_du_dx; // du/dx
 
     // very important that these are initialized to zero since the kernels themselves just accumulate
-    cudaSafeMalloc(&d_du_dx, N * D * sizeof(unsigned long long));
-    gpuErrchk(cudaMemset(d_du_dx, 0, N * D * sizeof(unsigned long long)));
+    cudaSafeMalloc(&d_du_dx, N * D * sizeof(*d_du_dx));
+    gpuErrchk(cudaMemset(d_du_dx, 0, N * D * sizeof(*d_du_dx)));
 
     this->execute_device(N, P, d_x, d_p, d_box, d_du_dx, nullptr, nullptr, static_cast<cudaStream_t>(0));
 

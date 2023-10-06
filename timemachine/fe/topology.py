@@ -753,7 +753,7 @@ def get_ligand_ixn_pots_params(
     )
     hg_water_params = jnp.concatenate([host_nb_params, guest_params_ixn_water])
 
-    # Lignad-Other (protein) terms
+    # Ligand-Other (protein) terms
     hg_other_pots = []
     hg_other_params = []
     if len(other_idxs):

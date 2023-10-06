@@ -15,7 +15,7 @@ void __global__ k_find_block_bounds(
     const CoordsType *__restrict__ box,        // [3*3]
     RealType *__restrict__ block_bounds_ctr,   // [num_tiles*3]
     RealType *__restrict__ block_bounds_ext,   // [num_tiles*3]
-    unsigned int *ixn_count                    // [1]
+    unsigned int *__restrict__ ixn_count       // [1]
 ) {
 
     // Algorithm taken from https://github.com/openmm/openmm/blob/master/platforms/cuda/src/kernels/findInteractingBlocks.cu#L7
