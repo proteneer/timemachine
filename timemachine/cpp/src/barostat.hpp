@@ -29,7 +29,7 @@ public:
     void inplace_move(CoordsType *d_x, CoordsType *d_box, cudaStream_t stream);
 
     // used for testing, bool return tells you if move was accepted
-    bool inplace_move_host(double *h_x, CoordsType *h_box);
+    bool inplace_move_host(CoordsType *h_x, CoordsType *h_box);
 
     void set_interval(const int interval);
 
