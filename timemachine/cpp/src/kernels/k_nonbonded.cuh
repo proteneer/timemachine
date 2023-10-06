@@ -5,6 +5,8 @@
 #include "k_nonbonded_common.cuh"
 #include "kernel_utils.cuh"
 
+namespace timemachine {
+
 template <typename RealType>
 void __global__ k_check_rebuild_coords_and_box_gather(
     const int N,
@@ -427,3 +429,5 @@ void __global__ k_nonbonded_unified(
         }
     }
 }
+
+} // namespace timemachine

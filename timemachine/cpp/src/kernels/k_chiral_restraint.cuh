@@ -2,6 +2,8 @@
 #include "chiral_utils.cuh"
 #include "k_fixed_point.cuh"
 
+namespace timemachine {
+
 template <typename RealType>
 void __global__ k_chiral_atom_restraint(
     const int R, // number of restraints
@@ -177,3 +179,5 @@ void __global__ k_chiral_bond_restraint(
         atomicAdd(du_dp + r_idx, FLOAT_TO_FIXED_BONDED<RealType>(vol * vol));
     }
 }
+
+} // namespace timemachine

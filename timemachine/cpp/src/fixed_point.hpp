@@ -1,5 +1,7 @@
 #pragma once
 
+namespace timemachine {
+
 #define FIXED_EXPONENT 0x1000000000
 
 // we need to use a different level of precision for parameter derivatives
@@ -30,3 +32,5 @@ bool __host__ __device__ __forceinline__ fixed_point_overflow(__int128 val) {
     __int128 min = LLONG_MIN;
     return val >= max || val <= min;
 }
+
+} // namespace timemachine

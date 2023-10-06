@@ -2,6 +2,8 @@
 
 #include "k_fixed_point.cuh"
 
+namespace timemachine {
+
 // each atom parameterized by a 4-tuple: charge, lj sigma, lj epsilon, 4D coordinate w
 enum { PARAM_OFFSET_CHARGE = 0, PARAM_OFFSET_SIG, PARAM_OFFSET_EPS, PARAM_OFFSET_W, PARAMS_PER_ATOM };
 
@@ -98,3 +100,5 @@ void __device__ __forceinline__ compute_lj(
     sig_grad = lj_scale * 24 * eps_ij * sig5_inv_d6ij * (2 * sig6_inv_d6ij - 1);
     eps_grad = lj_scale * 4 * (sig6_inv_d6ij - 1) * sig6_inv_d6ij;
 }
+
+} // namespace timemachine

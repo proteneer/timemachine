@@ -2,6 +2,8 @@
 #include "../gpu_utils.cuh"
 #include "k_fixed_point.cuh"
 
+namespace timemachine {
+
 template <typename RealType>
 void __global__ k_harmonic_angle_stable(
     const int A,                        // number of angles
@@ -89,3 +91,5 @@ void __global__ k_harmonic_angle_stable(
         u[a_idx] = FLOAT_TO_FIXED_ENERGY<RealType>(ka / 2 * delta * delta);
     }
 }
+
+} // namespace timemachine

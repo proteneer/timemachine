@@ -2,6 +2,8 @@
 
 #include "k_fixed_point.cuh"
 
+namespace timemachine {
+
 // k_rescale_positions scales the box and the centroids of groups to evaluate a potential
 // barostat move
 template <typename RealType>
@@ -180,3 +182,5 @@ void __global__ k_decide_move(
         idx += gridDim.x * blockDim.x;
     }
 }
+
+} // namespace timemachine

@@ -38,6 +38,7 @@
 #include <iostream>
 
 namespace py = pybind11;
+using namespace timemachine;
 
 // A utility to make sure that the coords and box shapes are correct
 void verify_coords_and_box(
@@ -82,13 +83,13 @@ template <typename T> std::vector<T> py_array_to_vector(const py::array_t<T, py:
 
 template <typename RealType> void declare_neighborlist(py::module &m, const char *typestr) {
 
-    using Class = timemachine::Neighborlist<RealType>;
+    using Class = Neighborlist<RealType>;
     std::string pyclass_name = std::string("Neighborlist_") + typestr;
     py::class_<Class>(m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
-        .def(py::init([](int N) { return new timemachine::Neighborlist<RealType>(N); }), py::arg("N"))
+        .def(py::init([](int N) { return new Neighborlist<RealType>(N); }), py::arg("N"))
         .def(
             "compute_block_bounds",
-            [](timemachine::Neighborlist<RealType> &nblist,
+            [](Neighborlist<RealType> &nblist,
                const py::array_t<double, py::array::c_style> &coords,
                const py::array_t<double, py::array::c_style> &box,
                const int block_size) -> py::tuple {
@@ -114,7 +115,7 @@ template <typename RealType> void declare_neighborlist(py::module &m, const char
             py::arg("block_size"))
         .def(
             "get_nblist",
-            [](timemachine::Neighborlist<RealType> &nblist,
+            [](Neighborlist<RealType> &nblist,
                const py::array_t<double, py::array::c_style> &coords,
                const py::array_t<double, py::array::c_style> &box,
                const double cutoff) -> std::vector<std::vector<int>> {
@@ -129,28 +130,27 @@ template <typename RealType> void declare_neighborlist(py::module &m, const char
             py::arg("cutoff"))
         .def(
             "set_row_idxs",
-            [](timemachine::Neighborlist<RealType> &nblist,
-               const py::array_t<unsigned int, py::array::c_style> &idxs_i) {
+            [](Neighborlist<RealType> &nblist, const py::array_t<unsigned int, py::array::c_style> &idxs_i) {
                 std::vector<unsigned int> idxs(idxs_i.size());
                 std::memcpy(idxs.data(), idxs_i.data(), idxs_i.size() * sizeof(unsigned int));
                 nblist.set_row_idxs(idxs);
             },
             py::arg("idxs"))
-        .def("reset_row_idxs", &timemachine::Neighborlist<RealType>::reset_row_idxs)
-        .def("get_tile_ixn_count", &timemachine::Neighborlist<RealType>::num_tile_ixns)
-        .def("get_max_ixn_count", &timemachine::Neighborlist<RealType>::max_ixn_count)
-        .def("resize", &timemachine::Neighborlist<RealType>::resize, py::arg("size"));
+        .def("reset_row_idxs", &Neighborlist<RealType>::reset_row_idxs)
+        .def("get_tile_ixn_count", &Neighborlist<RealType>::num_tile_ixns)
+        .def("get_max_ixn_count", &Neighborlist<RealType>::max_ixn_count)
+        .def("resize", &Neighborlist<RealType>::resize, py::arg("size"));
 }
 
 void declare_hilbert_sort(py::module &m) {
 
-    using Class = timemachine::HilbertSort;
+    using Class = HilbertSort;
     std::string pyclass_name = std::string("HilbertSort");
     py::class_<Class, std::shared_ptr<Class>>(m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
-        .def(py::init([](const int N) { return new timemachine::HilbertSort(N); }), py::arg("size"))
+        .def(py::init([](const int N) { return new HilbertSort(N); }), py::arg("size"))
         .def(
             "sort",
-            [](timemachine::HilbertSort &sorter,
+            [](HilbertSort &sorter,
                const py::array_t<double, py::array::c_style> &coords,
                const py::array_t<double, py::array::c_style> &box) -> const py::array_t<uint32_t, py::array::c_style> {
                 const int N = coords.shape()[0];
@@ -167,16 +167,16 @@ void declare_hilbert_sort(py::module &m) {
 
 void declare_context(py::module &m) {
 
-    using Class = timemachine::Context;
+    using Class = Context;
     std::string pyclass_name = std::string("Context");
     py::class_<Class>(m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
         .def(
             py::init([](const py::array_t<double, py::array::c_style> &x0,
                         const py::array_t<double, py::array::c_style> &v0,
                         const py::array_t<double, py::array::c_style> &box0,
-                        std::shared_ptr<timemachine::Integrator> intg,
-                        std::vector<std::shared_ptr<timemachine::BoundPotential>> bps,
-                        std::optional<std::shared_ptr<timemachine::MonteCarloBarostat<float>>> barostat) {
+                        std::shared_ptr<Integrator> intg,
+                        std::vector<std::shared_ptr<BoundPotential>> bps,
+                        std::optional<std::shared_ptr<MonteCarloBarostat<float>>> barostat) {
                 int N = x0.shape()[0];
                 int D = x0.shape()[1];
                 verify_coords_and_box(x0, box0);
@@ -188,7 +188,7 @@ void declare_context(py::module &m) {
                     throw std::runtime_error("v0 D != x0 D");
                 }
 
-                return new timemachine::Context(
+                return new Context(
                     N, x0.data(), v0.data(), box0.data(), intg, bps, barostat.has_value() ? barostat.value() : nullptr);
             }),
             py::arg("x0"),
@@ -199,17 +199,17 @@ void declare_context(py::module &m) {
             py::arg("barostat") = py::none())
         .def(
             "step",
-            &timemachine::Context::step,
+            &Context::step,
             R"pbdoc(
         Take a single step.
 
         Note: Must call `initialize` before stepping and `finalize` after stepping to ensure the correct velocities and positions to be returned by `get_x_t()` and `get_v_t()`,.
         )pbdoc")
-        .def("finalize", &timemachine::Context::finalize)
-        .def("initialize", &timemachine::Context::initialize)
+        .def("finalize", &Context::finalize)
+        .def("initialize", &Context::initialize)
         .def(
             "multiple_steps",
-            [](timemachine::Context &ctxt, const int n_steps, int store_x_interval) -> py::tuple {
+            [](Context &ctxt, const int n_steps, int store_x_interval) -> py::tuple {
                 // (ytz): I hate C++
                 int x_interval = (store_x_interval <= 0) ? n_steps : store_x_interval;
                 std::array<std::vector<double>, 2> result = ctxt.multiple_steps(n_steps, x_interval);
@@ -258,7 +258,7 @@ void declare_context(py::module &m) {
     )pbdoc")
         .def(
             "multiple_steps_local",
-            [](timemachine::Context &ctxt,
+            [](Context &ctxt,
                const int n_steps,
                const py::array_t<int, py::array::c_style> &local_idxs,
                const int store_x_interval,
@@ -268,14 +268,14 @@ void declare_context(py::module &m) {
                 if (n_steps <= 0) {
                     throw std::runtime_error("local steps must be at least one");
                 }
-                timemachine::verify_local_md_parameters(radius, k);
+                verify_local_md_parameters(radius, k);
 
                 const int N = ctxt.num_atoms();
                 const int x_interval = (store_x_interval <= 0) ? n_steps : store_x_interval;
 
                 std::vector<int> vec_local_idxs(local_idxs.size());
                 std::memcpy(vec_local_idxs.data(), local_idxs.data(), vec_local_idxs.size() * sizeof(int));
-                timemachine::verify_atom_idxs(N, vec_local_idxs);
+                verify_atom_idxs(N, vec_local_idxs);
 
                 std::array<std::vector<double>, 2> result =
                     ctxt.multiple_steps_local(n_steps, vec_local_idxs, x_interval, radius, k, seed);
@@ -350,7 +350,7 @@ void declare_context(py::module &m) {
     )pbdoc")
         .def(
             "multiple_steps_local_selection",
-            [](timemachine::Context &ctxt,
+            [](Context &ctxt,
                const int n_steps,
                const int reference_idx,
                const py::array_t<int, py::array::c_style> &selection_idxs,
@@ -360,7 +360,7 @@ void declare_context(py::module &m) {
                 if (n_steps <= 0) {
                     throw std::runtime_error("local steps must be at least one");
                 }
-                timemachine::verify_local_md_parameters(radius, k);
+                verify_local_md_parameters(radius, k);
 
                 const int N = ctxt.num_atoms();
                 const int x_interval = (store_x_interval <= 0) ? n_steps : store_x_interval;
@@ -370,7 +370,7 @@ void declare_context(py::module &m) {
                 }
                 std::vector<int> vec_selection_idxs(selection_idxs.size());
                 std::memcpy(vec_selection_idxs.data(), selection_idxs.data(), vec_selection_idxs.size() * sizeof(int));
-                timemachine::verify_atom_idxs(N, vec_selection_idxs);
+                verify_atom_idxs(N, vec_selection_idxs);
                 std::set<int> selection_set(vec_selection_idxs.begin(), vec_selection_idxs.end());
                 if (selection_set.find(reference_idx) != selection_set.end()) {
                     throw std::runtime_error("reference idx must not be in selection idxs");
@@ -447,7 +447,7 @@ void declare_context(py::module &m) {
     )pbdoc")
         .def(
             "setup_local_md",
-            &timemachine::Context::setup_local_md,
+            &Context::setup_local_md,
             py::arg("temperature"),
             py::arg("freeze_reference"),
             R"pbdoc(
@@ -470,7 +470,7 @@ void declare_context(py::module &m) {
     )pbdoc")
         .def(
             "set_x_t",
-            [](timemachine::Context &ctxt, const py::array_t<double, py::array::c_style> &new_x_t) {
+            [](Context &ctxt, const py::array_t<double, py::array::c_style> &new_x_t) {
                 if (new_x_t.shape()[0] != ctxt.num_atoms()) {
                     throw std::runtime_error("number of new coords disagree with current coords");
                 }
@@ -479,7 +479,7 @@ void declare_context(py::module &m) {
             py::arg("coords"))
         .def(
             "set_v_t",
-            [](timemachine::Context &ctxt, const py::array_t<double, py::array::c_style> &new_v_t) {
+            [](Context &ctxt, const py::array_t<double, py::array::c_style> &new_v_t) {
                 if (new_v_t.shape()[0] != ctxt.num_atoms()) {
                     throw std::runtime_error("number of new velocities disagree with current coords");
                 }
@@ -488,7 +488,7 @@ void declare_context(py::module &m) {
             py::arg("velocities"))
         .def(
             "set_box",
-            [](timemachine::Context &ctxt, const py::array_t<double, py::array::c_style> &new_box_t) {
+            [](Context &ctxt, const py::array_t<double, py::array::c_style> &new_box_t) {
                 if (new_box_t.size() != 9 || new_box_t.shape()[0] != 3) {
                     throw std::runtime_error("box must be 3x3");
                 }
@@ -497,7 +497,7 @@ void declare_context(py::module &m) {
             py::arg("box"))
         .def(
             "get_x_t",
-            [](timemachine::Context &ctxt) -> py::array_t<double, py::array::c_style> {
+            [](Context &ctxt) -> py::array_t<double, py::array::c_style> {
                 unsigned int N = ctxt.num_atoms();
                 unsigned int D = 3;
                 py::array_t<double, py::array::c_style> buffer({N, D});
@@ -506,7 +506,7 @@ void declare_context(py::module &m) {
             })
         .def(
             "get_v_t",
-            [](timemachine::Context &ctxt) -> py::array_t<double, py::array::c_style> {
+            [](Context &ctxt) -> py::array_t<double, py::array::c_style> {
                 unsigned int N = ctxt.num_atoms();
                 unsigned int D = 3;
                 py::array_t<double, py::array::c_style> buffer({N, D});
@@ -515,29 +515,29 @@ void declare_context(py::module &m) {
             })
         .def(
             "get_box",
-            [](timemachine::Context &ctxt) -> py::array_t<double, py::array::c_style> {
+            [](Context &ctxt) -> py::array_t<double, py::array::c_style> {
                 unsigned int D = 3;
                 py::array_t<double, py::array::c_style> buffer({D, D});
                 ctxt.get_box(buffer.mutable_data());
                 return buffer;
             })
-        .def("get_integrator", &timemachine::Context::get_integrator)
-        .def("get_potentials", &timemachine::Context::get_potentials)
-        .def("get_barostat", &timemachine::Context::get_barostat);
+        .def("get_integrator", &Context::get_integrator)
+        .def("get_potentials", &Context::get_potentials)
+        .def("get_barostat", &Context::get_barostat);
 }
 
 void declare_integrator(py::module &m) {
 
-    using Class = timemachine::Integrator;
+    using Class = Integrator;
     std::string pyclass_name = std::string("Integrator");
     py::class_<Class, std::shared_ptr<Class>>(m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr());
 }
 
 void declare_langevin_integrator(py::module &m) {
 
-    using Class = timemachine::LangevinIntegrator<float>;
+    using Class = LangevinIntegrator<float>;
     std::string pyclass_name = std::string("LangevinIntegrator");
-    py::class_<Class, std::shared_ptr<Class>, timemachine::Integrator>(
+    py::class_<Class, std::shared_ptr<Class>, Integrator>(
         m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
         .def(
             py::init([](const py::array_t<double, py::array::c_style> &masses,
@@ -554,13 +554,13 @@ void declare_langevin_integrator(py::module &m) {
 
 void declare_velocity_verlet_integrator(py::module &m) {
 
-    using Class = timemachine::VelocityVerletIntegrator;
+    using Class = VelocityVerletIntegrator;
     std::string pyclass_name = std::string("VelocityVerletIntegrator");
-    py::class_<Class, std::shared_ptr<Class>, timemachine::Integrator>(
+    py::class_<Class, std::shared_ptr<Class>, Integrator>(
         m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
         .def(
             py::init([](double dt, const py::array_t<double, py::array::c_style> &cbs) {
-                return new timemachine::VelocityVerletIntegrator(cbs.size(), dt, cbs.data());
+                return new VelocityVerletIntegrator(cbs.size(), dt, cbs.data());
             }),
             py::arg("dt"),
             py::arg("cbs"));
@@ -568,12 +568,12 @@ void declare_velocity_verlet_integrator(py::module &m) {
 
 void declare_potential(py::module &m) {
 
-    using Class = timemachine::Potential;
+    using Class = Potential;
     std::string pyclass_name = std::string("Potential");
     py::class_<Class, std::shared_ptr<Class>>(m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
         .def(
             "execute",
-            [](timemachine::Potential &pot,
+            [](Potential &pot,
                const py::array_t<double, py::array::c_style> &coords,
                const py::array_t<double, py::array::c_style> &params,
                const py::array_t<double, py::array::c_style> &box) -> py::tuple {
@@ -608,7 +608,7 @@ void declare_potential(py::module &m) {
             py::arg("box"))
         .def(
             "execute_selective_batch",
-            [](timemachine::Potential &pot,
+            [](Potential &pot,
                const py::array_t<double, py::array::c_style> &coords,
                const py::array_t<double, py::array::c_style> &params,
                const py::array_t<double, py::array::c_style> &boxes,
@@ -742,7 +742,7 @@ void declare_potential(py::module &m) {
     )pbdoc")
         .def(
             "execute_selective",
-            [](timemachine::Potential &pot,
+            [](Potential &pot,
                const py::array_t<double, py::array::c_style> &coords,
                const py::array_t<double, py::array::c_style> &params,
                const py::array_t<double, py::array::c_style> &box,
@@ -803,7 +803,7 @@ void declare_potential(py::module &m) {
             py::arg("compute_u"))
         .def(
             "execute_du_dx",
-            [](timemachine::Potential &pot,
+            [](Potential &pot,
                const py::array_t<double, py::array::c_style> &coords,
                const py::array_t<double, py::array::c_style> &params,
                const py::array_t<double, py::array::c_style> &box) -> py::array_t<double, py::array::c_style> {
@@ -830,27 +830,26 @@ void declare_potential(py::module &m) {
 
 void declare_bound_potential(py::module &m) {
 
-    using Class = timemachine::BoundPotential;
+    using Class = BoundPotential;
     std::string pyclass_name = std::string("BoundPotential");
     py::class_<Class, std::shared_ptr<Class>>(m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
         .def(
-            py::init([](std::shared_ptr<timemachine::Potential> potential,
-                        const py::array_t<double, py::array::c_style> &params) {
-                return new timemachine::BoundPotential(potential, py_array_to_vector(params));
+            py::init([](std::shared_ptr<Potential> potential, const py::array_t<double, py::array::c_style> &params) {
+                return new BoundPotential(potential, py_array_to_vector(params));
             }),
             py::arg("potential"),
             py::arg("params"))
-        .def("get_potential", [](const timemachine::BoundPotential &bp) { return bp.potential; })
+        .def("get_potential", [](const BoundPotential &bp) { return bp.potential; })
         .def(
             "set_params",
-            [](timemachine::BoundPotential &bp, const py::array_t<double, py::array::c_style> &params) {
+            [](BoundPotential &bp, const py::array_t<double, py::array::c_style> &params) {
                 bp.set_params(py_array_to_vector(params));
             },
             py::arg("params"))
-        .def("size", [](const timemachine::BoundPotential &bp) { return bp.size; })
+        .def("size", [](const BoundPotential &bp) { return bp.size; })
         .def(
             "execute",
-            [](timemachine::BoundPotential &bp,
+            [](BoundPotential &bp,
                const py::array_t<double, py::array::c_style> &coords,
                const py::array_t<double, py::array::c_style> &box) -> py::tuple {
                 const long unsigned int N = coords.shape()[0];
@@ -874,7 +873,7 @@ void declare_bound_potential(py::module &m) {
             py::arg("box"))
         .def(
             "execute_fixed",
-            [](timemachine::BoundPotential &bp,
+            [](BoundPotential &bp,
                const py::array_t<double, py::array::c_style> &coords,
                const py::array_t<double, py::array::c_style> &box) -> const py::array_t<uint64_t, py::array::c_style> {
                 const long unsigned int N = coords.shape()[0];
@@ -898,39 +897,39 @@ void declare_bound_potential(py::module &m) {
 
 template <typename RealType> void declare_harmonic_bond(py::module &m, const char *typestr) {
 
-    using Class = timemachine::HarmonicBond<RealType>;
+    using Class = HarmonicBond<RealType>;
     std::string pyclass_name = std::string("HarmonicBond_") + typestr;
-    py::class_<Class, std::shared_ptr<Class>, timemachine::Potential>(
+    py::class_<Class, std::shared_ptr<Class>, Potential>(
         m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
         .def(
             py::init([](const py::array_t<int, py::array::c_style> &bond_idxs) {
-                return new timemachine::HarmonicBond<RealType>(py_array_to_vector(bond_idxs));
+                return new HarmonicBond<RealType>(py_array_to_vector(bond_idxs));
             }),
             py::arg("bond_idxs"));
 }
 
 template <typename RealType> void declare_flat_bottom_bond(py::module &m, const char *typestr) {
 
-    using Class = timemachine::FlatBottomBond<RealType>;
+    using Class = FlatBottomBond<RealType>;
     std::string pyclass_name = std::string("FlatBottomBond_") + typestr;
-    py::class_<Class, std::shared_ptr<Class>, timemachine::Potential>(
+    py::class_<Class, std::shared_ptr<Class>, Potential>(
         m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
         .def(
             py::init([](const py::array_t<int, py::array::c_style> &bond_idxs) {
-                return new timemachine::FlatBottomBond<RealType>(py_array_to_vector(bond_idxs));
+                return new FlatBottomBond<RealType>(py_array_to_vector(bond_idxs));
             }),
             py::arg("bond_idxs"));
 }
 
 template <typename RealType> void declare_log_flat_bottom_bond(py::module &m, const char *typestr) {
 
-    using Class = timemachine::LogFlatBottomBond<RealType>;
+    using Class = LogFlatBottomBond<RealType>;
     std::string pyclass_name = std::string("LogFlatBottomBond_") + typestr;
-    py::class_<Class, std::shared_ptr<Class>, timemachine::Potential>(
+    py::class_<Class, std::shared_ptr<Class>, Potential>(
         m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
         .def(
             py::init([](const py::array_t<int, py::array::c_style> &bond_idxs, double beta) {
-                return new timemachine::LogFlatBottomBond<RealType>(py_array_to_vector(bond_idxs), beta);
+                return new LogFlatBottomBond<RealType>(py_array_to_vector(bond_idxs), beta);
             }),
             py::arg("bond_idxs"),
             py::arg("beta"));
@@ -938,14 +937,13 @@ template <typename RealType> void declare_log_flat_bottom_bond(py::module &m, co
 
 template <typename RealType> void declare_nonbonded_precomputed(py::module &m, const char *typestr) {
 
-    using Class = timemachine::NonbondedPairListPrecomputed<RealType>;
+    using Class = NonbondedPairListPrecomputed<RealType>;
     std::string pyclass_name = std::string("NonbondedPairListPrecomputed_") + typestr;
-    py::class_<Class, std::shared_ptr<Class>, timemachine::Potential>(
+    py::class_<Class, std::shared_ptr<Class>, Potential>(
         m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
         .def(
             py::init([](const py::array_t<int, py::array::c_style> &pair_idxs, double beta, double cutoff) {
-                return new timemachine::NonbondedPairListPrecomputed<RealType>(
-                    py_array_to_vector(pair_idxs), beta, cutoff);
+                return new NonbondedPairListPrecomputed<RealType>(py_array_to_vector(pair_idxs), beta, cutoff);
             }),
             py::arg("pair_idxs"),
             py::arg("beta"),
@@ -954,13 +952,13 @@ template <typename RealType> void declare_nonbonded_precomputed(py::module &m, c
 
 template <typename RealType> void declare_chiral_atom_restraint(py::module &m, const char *typestr) {
 
-    using Class = timemachine::ChiralAtomRestraint<RealType>;
+    using Class = ChiralAtomRestraint<RealType>;
     std::string pyclass_name = std::string("ChiralAtomRestraint_") + typestr;
-    py::class_<Class, std::shared_ptr<Class>, timemachine::Potential>(
+    py::class_<Class, std::shared_ptr<Class>, Potential>(
         m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
         .def(
             py::init([](const py::array_t<int, py::array::c_style> &idxs) {
-                return new timemachine::ChiralAtomRestraint<RealType>(py_array_to_vector(idxs));
+                return new ChiralAtomRestraint<RealType>(py_array_to_vector(idxs));
             }),
             py::arg("idxs"),
             R"pbdoc(Please refer to timemachine.potentials.chiral_restraints for documentation on arguments)pbdoc");
@@ -968,15 +966,14 @@ template <typename RealType> void declare_chiral_atom_restraint(py::module &m, c
 
 template <typename RealType> void declare_chiral_bond_restraint(py::module &m, const char *typestr) {
 
-    using Class = timemachine::ChiralBondRestraint<RealType>;
+    using Class = ChiralBondRestraint<RealType>;
     std::string pyclass_name = std::string("ChiralBondRestraint_") + typestr;
-    py::class_<Class, std::shared_ptr<Class>, timemachine::Potential>(
+    py::class_<Class, std::shared_ptr<Class>, Potential>(
         m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
         .def(
             py::init([](const py::array_t<int, py::array::c_style> &idxs,
                         const py::array_t<int, py::array::c_style> &signs) {
-                return new timemachine::ChiralBondRestraint<RealType>(
-                    py_array_to_vector(idxs), py_array_to_vector(signs));
+                return new ChiralBondRestraint<RealType>(py_array_to_vector(idxs), py_array_to_vector(signs));
             }),
             py::arg("idxs"),
             py::arg("signs"),
@@ -985,39 +982,39 @@ template <typename RealType> void declare_chiral_bond_restraint(py::module &m, c
 
 template <typename RealType> void declare_harmonic_angle(py::module &m, const char *typestr) {
 
-    using Class = timemachine::HarmonicAngle<RealType>;
+    using Class = HarmonicAngle<RealType>;
     std::string pyclass_name = std::string("HarmonicAngle_") + typestr;
-    py::class_<Class, std::shared_ptr<Class>, timemachine::Potential>(
+    py::class_<Class, std::shared_ptr<Class>, Potential>(
         m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
         .def(
             py::init([](const py::array_t<int, py::array::c_style> &angle_idxs) {
                 std::vector<int> vec_angle_idxs(angle_idxs.size());
                 std::memcpy(vec_angle_idxs.data(), angle_idxs.data(), vec_angle_idxs.size() * sizeof(int));
-                return new timemachine::HarmonicAngle<RealType>(vec_angle_idxs);
+                return new HarmonicAngle<RealType>(vec_angle_idxs);
             }),
             py::arg("angle_idxs"));
 }
 
 template <typename RealType> void declare_harmonic_angle_stable(py::module &m, const char *typestr) {
 
-    using Class = timemachine::HarmonicAngleStable<RealType>;
+    using Class = HarmonicAngleStable<RealType>;
     std::string pyclass_name = std::string("HarmonicAngleStable_") + typestr;
-    py::class_<Class, std::shared_ptr<Class>, timemachine::Potential>(
+    py::class_<Class, std::shared_ptr<Class>, Potential>(
         m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
         .def(
             py::init([](const py::array_t<int, py::array::c_style> &angle_idxs) {
                 std::vector<int> vec_angle_idxs(angle_idxs.size());
                 std::memcpy(vec_angle_idxs.data(), angle_idxs.data(), vec_angle_idxs.size() * sizeof(int));
-                return new timemachine::HarmonicAngleStable<RealType>(vec_angle_idxs);
+                return new HarmonicAngleStable<RealType>(vec_angle_idxs);
             }),
             py::arg("angle_idxs"));
 }
 
 template <typename RealType> void declare_centroid_restraint(py::module &m, const char *typestr) {
 
-    using Class = timemachine::CentroidRestraint<RealType>;
+    using Class = CentroidRestraint<RealType>;
     std::string pyclass_name = std::string("CentroidRestraint_") + typestr;
-    py::class_<Class, std::shared_ptr<Class>, timemachine::Potential>(
+    py::class_<Class, std::shared_ptr<Class>, Potential>(
         m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
         .def(
             py::init([](const py::array_t<int, py::array::c_style> &group_a_idxs,
@@ -1029,7 +1026,7 @@ template <typename RealType> void declare_centroid_restraint(py::module &m, cons
                 std::vector<int> vec_group_b_idxs(group_b_idxs.size());
                 std::memcpy(vec_group_b_idxs.data(), group_b_idxs.data(), vec_group_b_idxs.size() * sizeof(int));
 
-                return new timemachine::CentroidRestraint<RealType>(vec_group_a_idxs, vec_group_b_idxs, kb, b0);
+                return new CentroidRestraint<RealType>(vec_group_a_idxs, vec_group_b_idxs, kb, b0);
             }),
             py::arg("group_a_idxs"),
             py::arg("group_b_idxs"),
@@ -1039,28 +1036,28 @@ template <typename RealType> void declare_centroid_restraint(py::module &m, cons
 
 template <typename RealType> void declare_periodic_torsion(py::module &m, const char *typestr) {
 
-    using Class = timemachine::PeriodicTorsion<RealType>;
+    using Class = PeriodicTorsion<RealType>;
     std::string pyclass_name = std::string("PeriodicTorsion_") + typestr;
-    py::class_<Class, std::shared_ptr<Class>, timemachine::Potential>(
+    py::class_<Class, std::shared_ptr<Class>, Potential>(
         m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
         .def(
             py::init([](const py::array_t<int, py::array::c_style> &torsion_idxs) {
                 std::vector<int> vec_torsion_idxs(torsion_idxs.size());
                 std::memcpy(vec_torsion_idxs.data(), torsion_idxs.data(), vec_torsion_idxs.size() * sizeof(int));
-                return new timemachine::PeriodicTorsion<RealType>(vec_torsion_idxs);
+                return new PeriodicTorsion<RealType>(vec_torsion_idxs);
             }),
             py::arg("angle_idxs"));
 }
 
 template <typename RealType> void declare_nonbonded_all_pairs(py::module &m, const char *typestr) {
 
-    using Class = timemachine::NonbondedAllPairs<RealType>;
+    using Class = NonbondedAllPairs<RealType>;
     std::string pyclass_name = std::string("NonbondedAllPairs_") + typestr;
-    py::class_<Class, std::shared_ptr<Class>, timemachine::Potential>(
+    py::class_<Class, std::shared_ptr<Class>, Potential>(
         m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
-        .def("set_atom_idxs", &timemachine::NonbondedAllPairs<RealType>::set_atom_idxs, py::arg("atom_idxs"))
-        .def("get_atom_idxs", &timemachine::NonbondedAllPairs<RealType>::get_atom_idxs)
-        .def("get_num_atom_idxs", &timemachine::NonbondedAllPairs<RealType>::get_num_atom_idxs)
+        .def("set_atom_idxs", &NonbondedAllPairs<RealType>::set_atom_idxs, py::arg("atom_idxs"))
+        .def("get_atom_idxs", &NonbondedAllPairs<RealType>::get_atom_idxs)
+        .def("get_num_atom_idxs", &NonbondedAllPairs<RealType>::get_num_atom_idxs)
         .def(
             py::init([](const int N,
                         const double beta,
@@ -1075,7 +1072,7 @@ template <typename RealType> void declare_nonbonded_all_pairs(py::module &m, con
                     unique_atom_idxs.emplace(unique_idxs<int>(atom_idxs));
                 }
 
-                return new timemachine::NonbondedAllPairs<RealType>(
+                return new NonbondedAllPairs<RealType>(
                     N, beta, cutoff, unique_atom_idxs, disable_hilbert_sort, nblist_padding);
             }),
             py::arg("num_atoms"),
@@ -1087,13 +1084,13 @@ template <typename RealType> void declare_nonbonded_all_pairs(py::module &m, con
 }
 
 template <typename RealType> void declare_nonbonded_interaction_group(py::module &m, const char *typestr) {
-    using Class = timemachine::NonbondedInteractionGroup<RealType>;
+    using Class = NonbondedInteractionGroup<RealType>;
     std::string pyclass_name = std::string("NonbondedInteractionGroup_") + typestr;
-    py::class_<Class, std::shared_ptr<Class>, timemachine::Potential>(
+    py::class_<Class, std::shared_ptr<Class>, Potential>(
         m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
         .def(
             "set_atom_idxs",
-            &timemachine::NonbondedInteractionGroup<RealType>::set_atom_idxs,
+            &NonbondedInteractionGroup<RealType>::set_atom_idxs,
             py::arg("row_atom_idxs"),
             py::arg("col_atom_idxs"),
             R"pbdoc(
@@ -1131,7 +1128,7 @@ template <typename RealType> void declare_nonbonded_interaction_group(py::module
                     col_atom_idxs = get_indices_difference(N, unique_row_atom_idxs);
                 }
 
-                return new timemachine::NonbondedInteractionGroup<RealType>(
+                return new NonbondedInteractionGroup<RealType>(
                     N, row_atom_idxs, col_atom_idxs, beta, cutoff, disable_hilbert_sort, nblist_padding);
             }),
             py::arg("num_atoms"),
@@ -1171,7 +1168,7 @@ template <typename RealType> void declare_nonbonded_interaction_group(py::module
 }
 
 template <typename RealType, bool Negated> void declare_nonbonded_pair_list(py::module &m, const char *typestr) {
-    using Class = timemachine::NonbondedPairList<RealType, Negated>;
+    using Class = NonbondedPairList<RealType, Negated>;
     std::string pyclass_name;
     // If the pair list is negated, it is intended to be used for exclusions
     if (Negated) {
@@ -1179,7 +1176,7 @@ template <typename RealType, bool Negated> void declare_nonbonded_pair_list(py::
     } else {
         pyclass_name = std::string("NonbondedPairList_") + typestr;
     }
-    py::class_<Class, std::shared_ptr<Class>, timemachine::Potential>(
+    py::class_<Class, std::shared_ptr<Class>, Potential>(
         m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
         .def(
             py::init([](const py::array_t<int, py::array::c_style> &pair_idxs_i,
@@ -1192,7 +1189,7 @@ template <typename RealType, bool Negated> void declare_nonbonded_pair_list(py::
                 std::vector<double> scales(scales_i.size());
                 std::memcpy(scales.data(), scales_i.data(), scales_i.size() * sizeof(double));
 
-                return new timemachine::NonbondedPairList<RealType, Negated>(pair_idxs, scales, beta, cutoff);
+                return new NonbondedPairList<RealType, Negated>(pair_idxs, scales, beta, cutoff);
             }),
             py::arg("pair_idxs_i"),
             py::arg("scales_i"),
@@ -1202,7 +1199,7 @@ template <typename RealType, bool Negated> void declare_nonbonded_pair_list(py::
 
 void declare_barostat(py::module &m) {
 
-    using Class = timemachine::MonteCarloBarostat<float>;
+    using Class = MonteCarloBarostat<float>;
     std::string pyclass_name = std::string("MonteCarloBarostat");
     py::class_<Class, std::shared_ptr<Class>>(m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
         .def(
@@ -1211,7 +1208,7 @@ void declare_barostat(py::module &m) {
                         const double temperature,
                         std::vector<std::vector<int>> group_idxs,
                         const int frequency,
-                        std::vector<std::shared_ptr<timemachine::BoundPotential>> bps,
+                        std::vector<std::shared_ptr<BoundPotential>> bps,
                         const int seed,
                         const bool adaptive_scaling_enabled,
                         const double initial_volume_scale_factor) {
@@ -1244,7 +1241,7 @@ void declare_barostat(py::module &m) {
         .def("set_pressure", &Class::set_pressure, py::arg("pressure"))
         .def(
             "move_host",
-            [](timemachine::MonteCarloBarostat<float> &barostat,
+            [](MonteCarloBarostat<float> &barostat,
                const py::array_t<double, py::array::c_style> &coords,
                const py::array_t<double, py::array::c_style> &box) -> py::tuple {
                 const int N = coords.shape()[0];
@@ -1265,35 +1262,34 @@ void declare_barostat(py::module &m) {
 
 void declare_summed_potential(py::module &m) {
 
-    using Class = timemachine::SummedPotential;
+    using Class = SummedPotential;
     std::string pyclass_name = std::string("SummedPotential");
-    py::class_<Class, std::shared_ptr<Class>, timemachine::Potential>(
+    py::class_<Class, std::shared_ptr<Class>, Potential>(
         m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
         .def(
-            py::init(
-                [](std::vector<std::shared_ptr<timemachine::Potential>> potentials,
-                   std::vector<int> params_sizes,
-                   bool parallel) { return new timemachine::SummedPotential(potentials, params_sizes, parallel); }),
+            py::init([](std::vector<std::shared_ptr<Potential>> potentials,
+                        std::vector<int> params_sizes,
+                        bool parallel) { return new SummedPotential(potentials, params_sizes, parallel); }),
 
             py::arg("potentials"),
             py::arg("params_sizes"),
             py::arg("parallel") = true)
-        .def("get_potentials", &timemachine::SummedPotential::get_potentials);
+        .def("get_potentials", &SummedPotential::get_potentials);
 }
 
 void declare_fanout_summed_potential(py::module &m) {
 
-    using Class = timemachine::FanoutSummedPotential;
+    using Class = FanoutSummedPotential;
     std::string pyclass_name = std::string("FanoutSummedPotential");
-    py::class_<Class, std::shared_ptr<Class>, timemachine::Potential>(
+    py::class_<Class, std::shared_ptr<Class>, Potential>(
         m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
         .def(
-            py::init([](std::vector<std::shared_ptr<timemachine::Potential>> potentials, bool parallel) {
-                return new timemachine::FanoutSummedPotential(potentials, parallel);
+            py::init([](std::vector<std::shared_ptr<Potential>> potentials, bool parallel) {
+                return new FanoutSummedPotential(potentials, parallel);
             }),
             py::arg("potentials"),
             py::arg("parallel") = true)
-        .def("get_potentials", &timemachine::FanoutSummedPotential::get_potentials);
+        .def("get_potentials", &FanoutSummedPotential::get_potentials);
 }
 
 const py::array_t<double, py::array::c_style>
@@ -1319,7 +1315,7 @@ py_rmsd_align(const py::array_t<double, py::array::c_style> &x1, const py::array
 
     py::array_t<double, py::array::c_style> py_x2_aligned({N1, D1});
 
-    timemachine::rmsd_align_cpu(N1, x1.data(), x2.data(), py_x2_aligned.mutable_data());
+    rmsd_align_cpu(N1, x1.data(), x2.data(), py_x2_aligned.mutable_data());
 
     return py_x2_aligned;
 }
@@ -1333,10 +1329,10 @@ double py_accumulate_energy(const py::array_t<long long, py::array::c_style> &in
         h_buffer[i] = static_cast<__int128>(input_data.data()[i]);
     }
 
-    timemachine::DeviceBuffer<__int128> d_input_buffer(N);
+    DeviceBuffer<__int128> d_input_buffer(N);
     d_input_buffer.copy_from(&h_buffer[0]);
 
-    timemachine::DeviceBuffer<__int128> d_output_buffer(1);
+    DeviceBuffer<__int128> d_output_buffer(1);
 
     // Use default stream which will sync with the output_buffer copy_to
     accumulate_energy(N, d_input_buffer.data, d_output_buffer.data, static_cast<cudaStream_t>(0));

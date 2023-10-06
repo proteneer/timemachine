@@ -2,6 +2,8 @@
 
 #include "kernel_utils.cuh"
 
+namespace timemachine {
+
 #define FULL_MASK 0xffffffff
 
 static const int TILE_SIZE = WARP_SIZE;
@@ -454,3 +456,5 @@ void __global__ k_find_blocks_with_ixns(
     const int Y = gridDim.y;
     trim_atoms[blockIdx.x * Y * WARP_SIZE + blockIdx.y * WARP_SIZE + threadIdx.x] = ixn_j_buffer[threadIdx.x];
 }
+
+} // namespace timemachine

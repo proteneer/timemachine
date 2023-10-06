@@ -2,6 +2,8 @@
 
 #include "k_nonbonded_common.cuh"
 
+namespace timemachine {
+
 // Shape of parameter array is identical to other nonbonded variants
 // except that rows map to pairs instead of individual atoms
 static const int PARAMS_PER_PAIR = PARAMS_PER_ATOM;
@@ -176,3 +178,5 @@ void __global__ k_nonbonded_precomputed(
         u_buffer[pair_idx] = energy;
     }
 }
+
+} // namespace timemachine

@@ -1,6 +1,8 @@
 #include "../fixed_point.hpp"
 #include "k_fixed_point.cuh"
 
+namespace timemachine {
+
 // branchless implementation of piecewise function
 template <typename RealType>
 RealType __device__ __forceinline__ compute_flat_bottom_energy(RealType k, RealType r, RealType rmin, RealType rmax) {
@@ -149,3 +151,5 @@ void __global__ k_flat_bottom_bond(
         }
     }
 }
+
+} // namespace timemachine
