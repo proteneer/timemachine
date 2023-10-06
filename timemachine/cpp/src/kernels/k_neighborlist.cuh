@@ -211,8 +211,277 @@ Each block proceeds as follows:
 // k_find_block_ixns determines the the column atoms that interact with the atoms in a row tile.
 // In the case that UPPER_TRIAG is true, expect row_idxs and column_idxs to be identical and be the
 // values of np.arange(0, N).
-template <typename RealType, bool UPPER_TRIAG>
+template <typename RealType, bool UPPER_TRIAG, int THREADS_PER_BLOCK>
 void __global__ k_find_blocks_with_ixns(
+    const int N,                                  // Total number of atoms
+    const int NC,                                 // Number of columns idxs
+    const int NR,                                 // Number of rows idxs
+    const unsigned int *__restrict__ column_idxs, // [NC]
+    const unsigned int *__restrict__ row_idxs,    // [NR]
+    const RealType *__restrict__ column_bb_ctr,   // [N * 3] block centers
+    const RealType *__restrict__ column_bb_ext,   // [N * 3] block extents
+    const RealType *__restrict__ row_bb_ctr,      // [N * 3] block centers
+    const RealType *__restrict__ row_bb_ext,      // [N * 3] block extents
+    const double *__restrict__ coords,            // [N * 3]
+    const double *__restrict__ box,
+    unsigned int *__restrict__ interaction_count, // number of tiles that have interactions
+    int *__restrict__ interacting_tiles,          // the row block idx of the tile that is interacting
+    unsigned int *__restrict__ interacting_atoms, // [NR * WARP_SIZE] atom indices interacting with each row block
+    unsigned int *__restrict__ trim_atoms,        // the left-over trims that will later be compacted
+    const double cutoff) {
+
+    static_assert(TILE_SIZE == WARP_SIZE, "TILE_SIZE != WARP_SIZE is not currently supported");
+
+    const int warp_idx = threadIdx.x % WARP_SIZE;
+    // Mask to determine which threads in the warp before the current thread has interactions
+    const int warp_mask = (1 << warp_idx) - 1;
+    const int rows_per_block = blockDim.x / TILE_SIZE;
+    const int warp_block = threadIdx.x / WARP_SIZE;
+    const int row_block_idx = blockIdx.x * rows_per_block + warp_block;
+
+    // we can probably get away with using only WARP_SIZE if we do some fancier remainder tricks, but this isn't a huge save
+    __shared__ int ixn_j_buffer[2 * THREADS_PER_BLOCK];
+
+    // initialize
+    ixn_j_buffer[threadIdx.x] = N;
+    ixn_j_buffer[THREADS_PER_BLOCK + threadIdx.x] = N;
+
+    __shared__ volatile int sync_start[THREADS_PER_BLOCK];
+
+    unsigned int atom_i_idx = blockIdx.x * blockDim.x + threadIdx.x;
+    atom_i_idx = atom_i_idx < NR ? row_idxs[atom_i_idx] : N;
+
+    // Retrieve the center coords of row's box and outer limits of row box.
+    RealType row_bb_ctr_x = row_bb_ctr[row_block_idx * 3 + 0];
+    RealType row_bb_ctr_y = row_bb_ctr[row_block_idx * 3 + 1];
+    RealType row_bb_ctr_z = row_bb_ctr[row_block_idx * 3 + 2];
+
+    RealType row_bb_ext_x = row_bb_ext[row_block_idx * 3 + 0];
+    RealType row_bb_ext_y = row_bb_ext[row_block_idx * 3 + 1];
+    RealType row_bb_ext_z = row_bb_ext[row_block_idx * 3 + 2];
+
+    int neighbors_in_buffer = 0;
+
+    RealType pos_i_x = atom_i_idx < N ? coords[atom_i_idx * 3 + 0] : 0;
+    RealType pos_i_y = atom_i_idx < N ? coords[atom_i_idx * 3 + 1] : 0;
+    RealType pos_i_z = atom_i_idx < N ? coords[atom_i_idx * 3 + 2] : 0;
+
+    const int NUM_COL_BLOCKS = (NC + TILE_SIZE - 1) / TILE_SIZE;
+
+    RealType bx = box[0 * 3 + 0];
+    RealType by = box[1 * 3 + 1];
+    RealType bz = box[2 * 3 + 2];
+
+    RealType inv_bx = 1 / bx;
+    RealType inv_by = 1 / by;
+    RealType inv_bz = 1 / bz;
+
+    RealType non_periodic_dist_i = 0;
+    RealType non_periodic_dist_j = 0;
+
+    // Determine if the row block can be translated into a periodic box
+    // to optimize distance calculations
+    // https://github.com/proteneer/timemachine/issues/320
+    const bool single_periodic_box =
+        (static_cast<RealType>(0.5) * bx - row_bb_ext_x >= cutoff &&
+         static_cast<RealType>(0.5) * by - row_bb_ext_y >= cutoff &&
+         static_cast<RealType>(0.5) * bz - row_bb_ext_z >= cutoff);
+
+    if (single_periodic_box) {
+        pos_i_x -= bx * nearbyint((pos_i_x - row_bb_ctr_x) * inv_bx);
+        pos_i_y -= by * nearbyint((pos_i_y - row_bb_ctr_y) * inv_by);
+        pos_i_z -= bz * nearbyint((pos_i_z - row_bb_ctr_z) * inv_bz);
+
+        non_periodic_dist_i = static_cast<RealType>(0.5) * (pos_i_x * pos_i_x + pos_i_y * pos_i_y + pos_i_z * pos_i_z);
+    }
+
+    const RealType cutoff_squared = static_cast<RealType>(cutoff) * static_cast<RealType>(cutoff);
+
+    int col_block_base = blockIdx.y * TILE_SIZE;
+
+    int col_block_idx = col_block_base + warp_idx;
+    bool include_col_block = (col_block_idx < NUM_COL_BLOCKS) && (!UPPER_TRIAG || col_block_idx >= row_block_idx);
+
+    if (include_col_block) {
+
+        // Compute center of column box and extent coords.
+        RealType col_bb_ctr_x = column_bb_ctr[col_block_idx * 3 + 0];
+        RealType col_bb_ctr_y = column_bb_ctr[col_block_idx * 3 + 1];
+        RealType col_bb_ctr_z = column_bb_ctr[col_block_idx * 3 + 2];
+
+        RealType col_bb_ext_x = column_bb_ext[col_block_idx * 3 + 0];
+        RealType col_bb_ext_y = column_bb_ext[col_block_idx * 3 + 1];
+        RealType col_bb_ext_z = column_bb_ext[col_block_idx * 3 + 2];
+
+        // Find delta between boxes
+        RealType box_box_dx = row_bb_ctr_x - col_bb_ctr_x;
+        RealType box_box_dy = row_bb_ctr_y - col_bb_ctr_y;
+        RealType box_box_dz = row_bb_ctr_z - col_bb_ctr_z;
+
+        // Recenter delta box
+        box_box_dx -= bx * nearbyint(box_box_dx * inv_bx);
+        box_box_dy -= by * nearbyint(box_box_dy * inv_by);
+        box_box_dz -= bz * nearbyint(box_box_dz * inv_bz);
+
+        // If boxes overlap, treat distance as 0
+        box_box_dx = max(static_cast<RealType>(0.0), fabs(box_box_dx) - row_bb_ext_x - col_bb_ext_x);
+        box_box_dy = max(static_cast<RealType>(0.0), fabs(box_box_dy) - row_bb_ext_y - col_bb_ext_y);
+        box_box_dz = max(static_cast<RealType>(0.0), fabs(box_box_dz) - row_bb_ext_z - col_bb_ext_z);
+
+        // Check if the deltas between boxes are within cutoff
+        include_col_block &=
+            (box_box_dx * box_box_dx + box_box_dy * box_box_dy + box_box_dz * box_box_dz) < (cutoff_squared);
+    }
+
+    // __ballot returns bit flags to indicate which thread in the warp identified a column block within the cutoff.
+    unsigned includeBlockFlags = __ballot_sync(FULL_MASK, include_col_block);
+
+    // Loop over the col blocks we identified as potentially containing neighbors.
+    while (includeBlockFlags != 0) {
+
+        // (ytz): CUDA ffs returns an inclusive [0,32] such that:
+        // ffs(0) == 0
+        // ffs(2^0=1) == 1
+        // ffs(2^1=2) == 2
+        // ffs(2^2=4) == 3
+        // ffs(2^3=8) == 4
+        // ffs(2^31) == 32
+
+        int offset = __ffs(includeBlockFlags) - 1;
+        includeBlockFlags &= includeBlockFlags - 1;
+
+        int col_block = col_block_base + offset;
+        int atom_j_idx = col_block * WARP_SIZE + threadIdx.x; // each thread loads a different atom
+        atom_j_idx = atom_j_idx < NC ? column_idxs[atom_j_idx] : N;
+
+        // Compute overlap between column bounding box and row atom
+        RealType col_bb_ctr_x = column_bb_ctr[col_block * 3 + 0];
+        RealType col_bb_ctr_y = column_bb_ctr[col_block * 3 + 1];
+        RealType col_bb_ctr_z = column_bb_ctr[col_block * 3 + 2];
+
+        RealType col_bb_ext_x = column_bb_ext[col_block * 3 + 0];
+        RealType col_bb_ext_y = column_bb_ext[col_block * 3 + 1];
+        RealType col_bb_ext_z = column_bb_ext[col_block * 3 + 2];
+
+        // Don't use pos_i_* here, as might have been shifted to center of row box
+        RealType atom_box_dx = (atom_i_idx < N ? coords[atom_i_idx * 3 + 0] : 0) - col_bb_ctr_x;
+        RealType atom_box_dy = (atom_i_idx < N ? coords[atom_i_idx * 3 + 1] : 0) - col_bb_ctr_y;
+        RealType atom_box_dz = (atom_i_idx < N ? coords[atom_i_idx * 3 + 2] : 0) - col_bb_ctr_z;
+
+        atom_box_dx -= bx * nearbyint(atom_box_dx * inv_bx);
+        atom_box_dy -= by * nearbyint(atom_box_dy * inv_by);
+        atom_box_dz -= bz * nearbyint(atom_box_dz * inv_bz);
+
+        atom_box_dx = max(static_cast<RealType>(0.0), fabs(atom_box_dx) - col_bb_ext_x);
+        atom_box_dy = max(static_cast<RealType>(0.0), fabs(atom_box_dy) - col_bb_ext_y);
+        atom_box_dz = max(static_cast<RealType>(0.0), fabs(atom_box_dz) - col_bb_ext_z);
+
+        bool check_column_atoms =
+            atom_i_idx < N &&
+            atom_box_dx * atom_box_dx + atom_box_dy * atom_box_dy + atom_box_dz * atom_box_dz < cutoff_squared;
+        // Find rows where the row atom and column boxes are within cutoff
+        unsigned atom_flags = __ballot_sync(FULL_MASK, check_column_atoms);
+        bool interacts = false;
+
+        //       threadIdx
+        //      0 1 2 3 4 5
+        //   0  0 0 0 0 0 0
+        // a 1  0 1 0 1 1 0  row_atom
+        // t 0  0 0 0 0 0 0
+        // o 0  0 0 0 0 0 0
+        // m 0  0 0 0 0 0 0
+        // f 1  1 0 0 0 1 1  row_atom
+        // l 0  0 0 0 0 0 0
+        // a 1  0 1 0 0 1 0  row_atom
+        // g 1  1 1 0 0 0 1  row_atom
+        // s 0  0 0 0 0 0 0
+        //   0  0 0 0 0 0 0
+
+        RealType pos_j_x = atom_j_idx < N ? coords[atom_j_idx * 3 + 0] : 0;
+        RealType pos_j_y = atom_j_idx < N ? coords[atom_j_idx * 3 + 1] : 0;
+        RealType pos_j_z = atom_j_idx < N ? coords[atom_j_idx * 3 + 2] : 0;
+
+        if (single_periodic_box) {
+            // Recenter using **row** box center
+            pos_j_x -= bx * nearbyint((pos_j_x - row_bb_ctr_x) * inv_bx);
+            pos_j_y -= by * nearbyint((pos_j_y - row_bb_ctr_y) * inv_by);
+            pos_j_z -= bz * nearbyint((pos_j_z - row_bb_ctr_z) * inv_bz);
+
+            non_periodic_dist_j =
+                static_cast<RealType>(0.5) * (pos_j_x * pos_j_x + pos_j_y * pos_j_y + pos_j_z * pos_j_z);
+        }
+
+        unsigned include_atom_flags = 0;
+        while (atom_flags) {
+            const int row_atom = __ffs(atom_flags) - 1;
+            atom_flags &= atom_flags - 1;
+            RealType row_i_x = __shfl_sync(FULL_MASK, pos_i_x, row_atom);
+            RealType row_i_y = __shfl_sync(FULL_MASK, pos_i_y, row_atom);
+            RealType row_i_z = __shfl_sync(FULL_MASK, pos_i_z, row_atom);
+
+            if (!single_periodic_box) {
+                RealType atom_atom_dx = row_i_x - pos_j_x;
+                RealType atom_atom_dy = row_i_y - pos_j_y;
+                RealType atom_atom_dz = row_i_z - pos_j_z;
+
+                atom_atom_dx -= bx * nearbyint(atom_atom_dx * inv_bx);
+                atom_atom_dy -= by * nearbyint(atom_atom_dy * inv_by);
+                atom_atom_dz -= bz * nearbyint(atom_atom_dz * inv_bz);
+
+                interacts |= (atom_atom_dx * atom_atom_dx + atom_atom_dy * atom_atom_dy + atom_atom_dz * atom_atom_dz) <
+                             cutoff_squared;
+            } else {
+                // All threads in warp need single_periodic_box to be true for this not to hang
+                RealType corrected_i = __shfl_sync(FULL_MASK, non_periodic_dist_i, row_atom);
+
+                // Below is half the magnitude of the distance equation, expanded.
+                RealType half_dist =
+                    corrected_i + non_periodic_dist_j - row_i_x * pos_j_x - row_i_y * pos_j_y - row_i_z * pos_j_z;
+                interacts |= half_dist < (static_cast<RealType>(0.5) * cutoff_squared);
+            }
+            include_atom_flags = __ballot_sync(FULL_MASK, interacts);
+            // If all threads in the warp have found interactions, can terminate early
+            if (include_atom_flags == FULL_MASK) {
+                break;
+            }
+        }
+
+        // Add any interacting atoms to the buffer.
+        if (interacts) {
+            int index =
+                neighbors_in_buffer + __popc(include_atom_flags & warp_mask); // where to store this in shared memory
+            // If the index is greater than the tile size, add the threads per block to ensure same thread block processes
+            // the interaction
+            index = index >= TILE_SIZE ? (index % TILE_SIZE) + THREADS_PER_BLOCK : index;
+            ixn_j_buffer[warp_block * WARP_SIZE + index] = atom_j_idx;
+        }
+        neighbors_in_buffer += __popc(include_atom_flags);
+
+        if (neighbors_in_buffer > TILE_SIZE) {
+            int tiles_to_store = 1;
+            if (warp_idx == 0) {
+                sync_start[warp_block] = atomicAdd(interaction_count, tiles_to_store);
+            }
+            __syncwarp();
+            interacting_tiles[sync_start[warp_block]] = row_block_idx;
+            interacting_atoms[sync_start[warp_block] * WARP_SIZE + threadIdx.x] = ixn_j_buffer[threadIdx.x];
+
+            ixn_j_buffer[threadIdx.x] = ixn_j_buffer[THREADS_PER_BLOCK + threadIdx.x];
+            ixn_j_buffer[THREADS_PER_BLOCK + threadIdx.x] = N; // reset old values
+            neighbors_in_buffer -= TILE_SIZE;
+        }
+    }
+
+    // store trim
+    const int Y = gridDim.y;
+    trim_atoms[row_block_idx * Y * WARP_SIZE + blockIdx.y * WARP_SIZE + warp_idx] = ixn_j_buffer[threadIdx.x];
+}
+
+// k_find_block_ixns determines the the column atoms that interact with the atoms in a row tile.
+// In the case that UPPER_TRIAG is true, expect row_idxs and column_idxs to be identical and be the
+// values of np.arange(0, N).
+template <typename RealType, bool UPPER_TRIAG>
+void __global__ reference_k_find_blocks_with_ixns(
     const int N,                                  // Total number of atoms
     const int NC,                                 // Number of columns idxs
     const int NR,                                 // Number of rows idxs
