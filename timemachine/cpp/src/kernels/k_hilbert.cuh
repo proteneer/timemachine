@@ -1,5 +1,7 @@
 #pragma once
 
+namespace timemachine {
+
 // Divide [0,1]^3 box into HILBERT_GRID_DIM^3 voxels for Hilbert sort
 static const int HILBERT_GRID_DIM = 128;
 
@@ -18,3 +20,5 @@ void __global__ k_coords_to_kv_gather(
     const unsigned int *__restrict__ bin_to_idx,
     unsigned int *__restrict__ keys,
     unsigned int *__restrict__ vals);
+
+} // namespace timemachine

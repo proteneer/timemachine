@@ -3,6 +3,8 @@
 #include <set>
 #include <vector>
 
+namespace timemachine {
+
 template <typename T> std::set<T> unique_idxs(const std::vector<T> &idxs) {
     std::set<T> unique_idxs(idxs.begin(), idxs.end());
     if (unique_idxs.size() < idxs.size()) {
@@ -32,3 +34,5 @@ template <typename T> std::vector<T> get_indices_difference(const size_t N, cons
     std::vector<T> dif_vect(set_to_vector(difference));
     return dif_vect;
 }
+
+} // namespace timemachine

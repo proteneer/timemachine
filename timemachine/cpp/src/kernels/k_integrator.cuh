@@ -1,5 +1,7 @@
 #include "k_fixed_point.cuh"
 
+namespace timemachine {
+
 template <typename RealType, int D>
 __global__ void k_update_forward_baoab(
     const int N,
@@ -116,3 +118,5 @@ __global__ void update_forward_velocity_verlet(
     v_t[local_idx] += cbs[atom_idx] * force;
     x_t[local_idx] += dt * v_t[local_idx];
 };
+
+} // namespace timemachine

@@ -1,5 +1,7 @@
 #include "k_hilbert.cuh"
 
+namespace timemachine {
+
 // k_coords_to_kv_gather converts the coords and boxes to floats for performance
 // and does not impact the precision of the kernels.
 void __global__ k_coords_to_kv_gather(
@@ -46,3 +48,5 @@ void __global__ k_coords_to_kv_gather(
     // keys[idx] = atom_idx;
     vals[idx] = atom_idx;
 }
+
+} // namespace timemachine

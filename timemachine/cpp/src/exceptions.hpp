@@ -3,6 +3,8 @@
 #include <stdexcept>
 #include <string>
 
+namespace timemachine {
+
 class InvalidHardware : public std::exception {
 private:
     std::string err_msg_;
@@ -13,3 +15,5 @@ public:
     }
     const char *what() const noexcept { return err_msg_.c_str(); }
 };
+
+} // namespace timemachine

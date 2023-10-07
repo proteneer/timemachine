@@ -1,3 +1,4 @@
+namespace timemachine {
 
 template <typename RealType> __device__ struct Matrix { RealType x0, y0, z0, x1, y1, z1, x2, y2, z2; };
 
@@ -174,3 +175,5 @@ __device__ void torsion_vol_and_grad(
     x2_grad = -do_dyy - do_dzz;
     x3_grad = do_dzz;
 }
+
+} // namespace timemachine

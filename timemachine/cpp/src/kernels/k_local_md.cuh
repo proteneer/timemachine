@@ -1,5 +1,7 @@
 // Kernels specific to Local MD implementation.
 
+namespace timemachine {
+
 void __global__ k_construct_bonded_params(
     const int num_idxs,               // Number of idxs
     const int num_atoms,              // Max value any idx can be
@@ -43,3 +45,5 @@ void __global__ k_idxs_intersection(
     // Set to the value if a and b match, else set to N;
     d_dest[idx] = d_a[idx] == d_b[idx] ? d_a[idx] : N;
 }
+
+} // namespace timemachine

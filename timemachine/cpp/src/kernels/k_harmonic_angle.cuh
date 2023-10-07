@@ -1,6 +1,8 @@
 #include "../fixed_point.hpp"
 #include "k_fixed_point.cuh"
 
+namespace timemachine {
+
 template <typename RealType, int D>
 void __global__ k_harmonic_angle(
     const int A,                        // number of bonds
@@ -80,3 +82,5 @@ void __global__ k_harmonic_angle(
         u[a_idx] = FLOAT_TO_FIXED_ENERGY<RealType>(ka / 2 * delta * delta);
     }
 }
+
+} // namespace timemachine

@@ -1,8 +1,6 @@
 #include "rmsd_align.hpp"
 #include <Eigen/Dense>
 
-#include <iostream> // delete me
-
 namespace timemachine {
 
 /*

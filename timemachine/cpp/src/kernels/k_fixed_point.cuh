@@ -3,6 +3,8 @@
 // cuda specific version
 #include "../fixed_point.hpp"
 
+namespace timemachine {
+
 // (ytz): courtesy of @scottlegrand/NVIDIA, even faster conversion
 // This was original a hack to improve perf on Maxwell, that is now needed for Ampere
 long long __device__ __forceinline__ real_to_int64(float x) {
@@ -94,3 +96,5 @@ template <typename RealType> __int128 __device__ __forceinline__ FLOAT_TO_FIXED_
         return static_cast<__int128>(real_to_int64(u));
     }
 }
+
+} // namespace timemachine

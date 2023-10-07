@@ -2,6 +2,8 @@
 #include "k_fixed_point.cuh"
 #include "k_flat_bottom_bond.cuh"
 
+namespace timemachine {
+
 template <typename RealType> RealType __device__ __forceinline__ stable_log_1_exp_neg(RealType x) {
     const RealType LOG_2 = 0.693147180559945309417232121;
     return x < LOG_2 ? log(-expm1(-x)) : log1p(-exp(-x));
@@ -103,3 +105,5 @@ void __global__ k_log_flat_bottom_bond(
         }
     }
 }
+
+} // namespace timemachine

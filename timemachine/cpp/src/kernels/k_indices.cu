@@ -1,5 +1,6 @@
 #include "k_indices.cuh"
 
+namespace timemachine {
 // Takes a source and destination array.
 // The value of the src is used as the index and the value in the destination array. Allows combining
 // a series of indices to get a unique set of values.
@@ -36,3 +37,5 @@ void __global__ k_arange(const int N, unsigned int *__restrict__ arr, unsigned i
     }
     arr[atom_idx] = atom_idx + offset;
 }
+
+} // namespace timemachine

@@ -2,6 +2,8 @@
 #include "../gpu_utils.cuh"
 #include "k_fixed_point.cuh"
 
+namespace timemachine {
+
 template <typename RealType> inline __device__ RealType dot_product(const RealType a[3], const RealType b[3]) {
     return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
 }
@@ -127,3 +129,5 @@ void __global__ k_periodic_torsion(
         u[t_idx] = FLOAT_TO_FIXED_ENERGY<RealType>(kt * (1 + cos(period * angle - phase)));
     }
 }
+
+} // namespace timemachine

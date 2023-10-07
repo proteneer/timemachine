@@ -1,6 +1,6 @@
 #pragma once
 
-#include <cstdio>
+namespace timemachine {
 
 // box cache is a struct that can be used as shared memory in kernels to reduce
 // global memory reads and to reduce the amount of work done per block.
@@ -103,3 +103,5 @@ template <> inline __device__ float fast_vec_norm<float, 4>(const float v[4]) {
 template <> inline __device__ double fast_vec_norm<double, 4>(const double v[4]) {
     return norm4d(v[0], v[1], v[2], v[3]);
 };
+
+} // namespace timemachine

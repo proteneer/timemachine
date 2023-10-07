@@ -8,6 +8,8 @@
 #include "../fixed_point.hpp"
 #include "k_nonbonded_common.cuh"
 
+namespace timemachine {
+
 template <bool Negated>
 void __device__ __forceinline__ accumulate(unsigned long long *__restrict acc, unsigned long long val) {
     atomicAdd(acc, Negated ? -val : val);
@@ -186,3 +188,5 @@ void __global__ k_nonbonded_pair_list(
         u_buffer[pair_idx] = Negated ? -FLOAT_TO_FIXED_ENERGY<RealType>(u) : FLOAT_TO_FIXED_ENERGY<RealType>(u);
     }
 }
+
+} // namespace timemachine

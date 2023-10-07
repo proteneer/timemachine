@@ -1,5 +1,6 @@
 #pragma once
 
+namespace timemachine {
 // Takes a source and destination array. Assumes K <= N with values in the src are less than or equal
 // to K. The value of the src is used as the indice and the value in the destination array. Allows combining
 // a series of indices to get a unique set of values.
@@ -15,3 +16,5 @@ void __global__ k_unique_indices(
 void __global__ k_invert_indices(const int N, unsigned int *__restrict__ arr);
 
 void __global__ k_arange(const int N, unsigned int *__restrict__ arr, unsigned int offset = 0);
+
+} // namespace timemachine

@@ -2,6 +2,8 @@
 
 #include "k_fixed_point.cuh"
 
+namespace timemachine {
+
 template <typename RealType>
 void __global__ k_calc_centroid(
     const double *__restrict__ d_coords, // [n, 3]
@@ -80,3 +82,5 @@ void __global__ k_centroid_restraint(
         }
     }
 }
+
+} // namespace timemachine
