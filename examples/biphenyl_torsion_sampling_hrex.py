@@ -274,8 +274,10 @@ def main():
     run_parser.add_argument(
         "--n_frames", type=int, default=4_000, help="Number of frames (picoseconds) to sample using HREX"
     )
+    run_parser.add_argument("-o", "--output", type=str, default="hrex_biphenyl_data.npz", help="Output file name")
 
     plot_parser = subparsers.add_parser("plot")
+    plot_parser.add_argument("-f", "--input", type=str, default="hrex_biphenyl_data.npz", help="Input file name")
     plot_parser.add_argument("--save", action="store_true")
 
     args = parser.parse_args()
@@ -285,7 +287,7 @@ def main():
             args.solvent or False, args.min_overlap, args.n_frames_bisection, args.n_frames
         )
         np.savez(
-            "hrex_biphenyl_data.npz",
+            args.output,
             lambdas=lambdas,
             phi_traj_by_state=phi_traj_by_state,
             phi_traj_by_state_hrex=phi_traj_by_state_hrex,
@@ -293,7 +295,7 @@ def main():
             fraction_accepted_by_pair_by_iter=diagnostics.fraction_accepted_by_pair_by_iter,
         )
     else:
-        data = np.load("hrex_biphenyl_data.npz")
+        data = np.load(args.input)
         lambdas = data["lambdas"]
         phi_traj_by_state = data["phi_traj_by_state"]
         phi_traj_by_state_hrex = data["phi_traj_by_state_hrex"]
