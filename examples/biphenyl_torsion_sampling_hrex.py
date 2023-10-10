@@ -28,15 +28,16 @@ from timemachine.testsystems.ligands import get_biphenyl
 def get_potentials(
     top: BaseTopology | HostGuestTopology,
     ff_params: ForcefieldParams,
-    decouple_atom_idxs: NDArray[np.int_],
+    intramol_atom_pairs_to_decouple: NDArray,  # (n_pairs, 2)
+    atoms_to_decouple_from_env: NDArray,
     lamb: float,
 ) -> List[BoundPotential]:
     assert 0.0 <= lamb <= 1.0
 
     if isinstance(top, BaseTopology):
-        return get_potentials_vacuum(top, ff_params, decouple_atom_idxs, lamb)
+        return get_potentials_vacuum(top, ff_params, intramol_atom_pairs_to_decouple, lamb)
     elif isinstance(top, HostGuestTopology):
-        return get_potentials_solvent(top, ff_params, decouple_atom_idxs, lamb)
+        return get_potentials_solvent(top, ff_params, intramol_atom_pairs_to_decouple, atoms_to_decouple_from_env, lamb)
     else:
         assert False
 
@@ -44,7 +45,7 @@ def get_potentials(
 def get_potentials_vacuum(
     top: BaseTopology,
     ff_params: ForcefieldParams,
-    decouple_atom_idxs: NDArray[np.int_],
+    intramol_atom_pairs_to_decouple: NDArray,
     lamb: float,
 ) -> List[BoundPotential]:
     hb_params, hb_pot = top.parameterize_harmonic_bond(ff_params.hb_params)
@@ -61,9 +62,8 @@ def get_potentials_vacuum(
         ff_params.lj_params_intra,
     )
 
-    decouple_atom = np.isin(nb_pot.idxs, decouple_atom_idxs)
-    decouple_pair = np.logical_xor(decouple_atom[:, 0], decouple_atom[:, 1])
-    nb_params[decouple_pair, 3] = lamb
+    matches = np.all(nb_pot.idxs[:, None, :] == intramol_atom_pairs_to_decouple[None, :, :], axis=-1)
+    nb_params[np.any(matches, axis=1), 3] = lamb
 
     return [
         hb_pot.bind(hb_params),
@@ -76,7 +76,8 @@ def get_potentials_vacuum(
 def get_potentials_solvent(
     top: HostGuestTopology,
     ff_params: ForcefieldParams,
-    decouple_atom_idxs: NDArray[np.int_],
+    intramol_atom_pairs_to_decouple: NDArray,
+    atoms_to_decouple_from_env: NDArray,
     lamb: float,
 ) -> List[BoundPotential]:
     hb_params, hb_pot = top.parameterize_harmonic_bond(ff_params.hb_params)
@@ -105,11 +106,10 @@ def get_potentials_solvent(
     lw_params = cast(jax.Array, lw_params)
     ll_params = cast(jax.Array, ll_params)
 
-    lw_params = lw_params.at[decouple_atom_idxs, 3].set(lamb)
+    lw_params = lw_params.at[atoms_to_decouple_from_env, 3].set(lamb)
 
-    decouple_atom = np.isin(ll_pot.idxs, decouple_atom_idxs)
-    decouple_pair = np.logical_xor(decouple_atom[:, 0], decouple_atom[:, 1])
-    ll_params = ll_params.at[decouple_pair, 3].set(lamb)
+    matches = np.all(ll_pot.idxs[:, None, :] == intramol_atom_pairs_to_decouple[None, :, :], axis=-1)
+    ll_params = ll_params.at[np.any(matches, axis=1), 3].set(lamb)
 
     # decouple a selection of atoms from both ligand and environment
     nb_params = np.concatenate([ww_params.flatten(), lw_params.flatten(), ll_params.flatten()])
@@ -143,7 +143,8 @@ def sample_biphenyl_hrex(
 
     bt = BaseTopology(mol, ff)
     ligand_masses = get_mol_masses(mol)
-    decouple_atom_idxs = np.array([12, 16], dtype=np.int_)
+    intramol_atom_pairs_to_decouple = np.array([[16, 17], [12, 21]])
+    atoms_to_decouple_from_env = np.array([12, 16])
 
     x0_ligand = get_romol_conf(mol)
     baro: Optional[MonteCarloBarostat] = None
@@ -159,13 +160,16 @@ def sample_biphenyl_hrex(
         top = HostGuestTopology(host_bps, bt, num_water_atoms)
 
         # translate ligand indices to system indices
-        decouple_atom_idxs += num_water_atoms
+        intramol_atom_pairs_to_decouple += num_water_atoms
+        atoms_to_decouple_from_env += num_water_atoms
         torsion_idxs += num_water_atoms
 
         combined_masses = np.concatenate([host_masses, ligand_masses])
         integrator = LangevinIntegrator(temperature, dt=2.5e-3, friction=1.0, masses=combined_masses, seed=seed)
 
-        bps = get_potentials_solvent(top, ff.get_params(), decouple_atom_idxs, 0.0)
+        bps = get_potentials_solvent(
+            top, ff.get_params(), intramol_atom_pairs_to_decouple, atoms_to_decouple_from_env, 0.0
+        )
         bond_pot = next(bp for bp in bps if isinstance(bp.potential, HarmonicBond)).potential
         hmr_masses = model_utils.apply_hmr(combined_masses, bond_pot.idxs)
         group_idxs = get_group_indices(get_bond_list(bond_pot), len(combined_masses))
@@ -186,7 +190,7 @@ def sample_biphenyl_hrex(
     v0 = np.zeros_like(x0)
 
     def make_initial_state(lamb: float) -> InitialState:
-        bps = get_potentials(top, ff.get_params(), decouple_atom_idxs, lamb)
+        bps = get_potentials(top, ff.get_params(), intramol_atom_pairs_to_decouple, atoms_to_decouple_from_env, lamb)
         return InitialState(bps, integrator, baro, x0, v0, box0, lamb, ligand_idxs)
 
     results, trajectories_by_state = run_sims_bisection(
