@@ -109,7 +109,7 @@ def get_potentials_solvent(
 
     decouple_atom = np.isin(ll_pot.idxs, decouple_atom_idxs)
     decouple_pair = np.logical_xor(decouple_atom[:, 0], decouple_atom[:, 1])
-    ll_params.at[decouple_pair, 3].set(lamb)
+    ll_params = ll_params.at[decouple_pair, 3].set(lamb)
 
     # decouple a selection of atoms from both ligand and environment
     nb_params = np.concatenate([ww_params.flatten(), lw_params.flatten(), ll_params.flatten()])
