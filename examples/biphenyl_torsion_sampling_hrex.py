@@ -319,8 +319,8 @@ def main():
         plot_hrex_replica_state_distribution_heatmap(diagnostics.cumulative_replica_state_counts)
         savefig("hrex_biphenyl_replica_state_distribution.png")
 
-        def plot(phi_traj_by_state, title_suffix, name_suffix=""):
-            plot_occupancy(phi_traj_by_state, lambdas, window_size=400)
+        def plot(phi_traj_by_state, title_suffix, window_size, name_suffix=""):
+            plot_occupancy(phi_traj_by_state, lambdas, window_size)
             plt.title(f"Occupancy {title_suffix}")
             savefig(f"hrex_biphenyl_cumulative_fraction_left_by_state{name_suffix}.png")
 
@@ -328,8 +328,8 @@ def main():
             plt.title(f"Torsion angle trajectory {title_suffix}")
             savefig(f"hrex_biphenyl_torsion_angle_trajectory_by_state{name_suffix}.png")
 
-        plot(phi_traj_by_state, "(no HREX)")
-        plot(phi_traj_by_state_hrex, "(HREX)", name_suffix="_hrex")
+        plot(phi_traj_by_state, "(no HREX)", window_size=250)
+        plot(phi_traj_by_state_hrex, "(HREX)", window_size=1_000, name_suffix="_hrex")
 
         if not args.save:
             plt.show()
