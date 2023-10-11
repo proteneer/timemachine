@@ -31,6 +31,7 @@
 #include "periodic_torsion.hpp"
 #include "potential.hpp"
 #include "rmsd_align.hpp"
+#include "rotations.hpp"
 #include "set_utils.hpp"
 #include "summed_potential.hpp"
 #include "verlet_integrator.hpp"
@@ -40,9 +41,7 @@
 namespace py = pybind11;
 using namespace timemachine;
 
-// A utility to make sure that the coords and box shapes are correct
-void verify_coords_and_box(
-    const py::array_t<double, py::array::c_style> &coords, const py::array_t<double, py::array::c_style> &box) {
+void verify_coords(const py::array_t<double, py::array::c_style> &coords) {
     size_t coord_dimensions = coords.ndim();
     if (coord_dimensions != 2) {
         throw std::runtime_error("coords dimensions must be 2");
@@ -50,6 +49,12 @@ void verify_coords_and_box(
     if (coords.shape(coord_dimensions - 1) != 3) {
         throw std::runtime_error("coords must have a shape that is 3 dimensional");
     }
+}
+
+// A utility to make sure that the coords and box shapes are correct
+void verify_coords_and_box(
+    const py::array_t<double, py::array::c_style> &coords, const py::array_t<double, py::array::c_style> &box) {
+    verify_coords(coords);
     if (box.ndim() != 2 || box.shape(0) != 3 || box.shape(1) != 3) {
         throw std::runtime_error("box must be 3x3");
     }
@@ -1342,6 +1347,32 @@ double py_accumulate_energy(const py::array_t<long long, py::array::c_style> &in
     return static_cast<long long>(res[0]);
 }
 
+template <typename RealType>
+py::array_t<double, py::array::c_style> py_rotate_coords(
+    const py::array_t<double, py::array::c_style> &coords, const py::array_t<double, py::array::c_style> &quaternions) {
+    verify_coords(coords);
+
+    size_t quaternions_ndims = coords.ndim();
+    if (quaternions_ndims != 2) {
+        throw std::runtime_error("quaternions dimensions must be 2");
+    }
+    if (quaternions.shape(quaternions_ndims - 1) != 4) {
+        throw std::runtime_error("quaternions must have a shape that is 4 dimensional");
+    }
+
+    std::vector<RealType> v_quaternions(quaternions.size());
+    for (int i = 0; i < quaternions.size(); i++) {
+        v_quaternions[i] = static_cast<RealType>(quaternions.data()[i]);
+    }
+
+    const int N = coords.shape(0);
+    const int num_rotations = quaternions.shape(0);
+    py::array_t<double, py::array::c_style> py_rotated_coords({N, num_rotations, 3});
+    rotate_coordinates_host<RealType>(
+        N, num_rotations, coords.data(), &v_quaternions[0], py_rotated_coords.mutable_data());
+    return py_rotated_coords;
+}
+
 void py_cuda_device_reset() { cudaDeviceReset(); }
 
 PYBIND11_MODULE(custom_ops, m) {
@@ -1357,6 +1388,18 @@ PYBIND11_MODULE(custom_ops, m) {
         &py_accumulate_energy,
         "Function for testing accumulating energy in a block reduce",
         py::arg("x"));
+    m.def(
+        "rotate_coords_f32",
+        &py_rotate_coords<float>,
+        "Function for testing rotation of coordinates in CUDA",
+        py::arg("coords"),
+        py::arg("quaternions"));
+    m.def(
+        "rotate_coords_f64",
+        &py_rotate_coords<double>,
+        "Function for testing rotation of coordinates in CUDA",
+        py::arg("coords"),
+        py::arg("quaternions"));
     m.attr("FIXED_EXPONENT") = py::int_(FIXED_EXPONENT);
 
     declare_barostat(m);
