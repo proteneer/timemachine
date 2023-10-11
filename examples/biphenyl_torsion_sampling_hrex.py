@@ -106,6 +106,10 @@ def get_potentials_solvent(
     lw_params = cast(jax.Array, lw_params)
     ll_params = cast(jax.Array, ll_params)
 
+    # NOTE: We decouple atoms in `atoms_to_decouple_from_env` from the environment simultaneously and at the same rate
+    # as we decouple atom pairs `intramol_atom_pairs_to_decouple` from each other.
+    # TODO: Revisit more flexible scheduling; e.g. controlling each atom's interaction with the environment, or each
+    # intramolecular pair interaction, independently.
     lw_params = lw_params.at[atoms_to_decouple_from_env, 3].set(lamb)
 
     matches = np.all(ll_pot.idxs[:, None, :] == intramol_atom_pairs_to_decouple[None, :, :], axis=-1)
