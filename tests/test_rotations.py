@@ -24,7 +24,7 @@ def hamiliton_product(q1: NDArray, q2: NDArray) -> NDArray:
     return output
 
 
-def rotate_vector_by_quaternions(coords: NDArray, quaternion: NDArray) -> NDArray:
+def rotate_vector_by_quaternion(coords: NDArray, quaternion: NDArray) -> NDArray:
     """
     Reference implementation of rotating coordinates using a quaternion
 
@@ -70,7 +70,7 @@ def test_reference_rotation_by_quaternion(seed, size):
 
         ref_coords = rotation.apply(coords)
 
-        test_coords = rotate_vector_by_quaternions(coords, quaternion)
+        test_coords = rotate_vector_by_quaternion(coords, quaternion)
 
         np.testing.assert_allclose(ref_coords, test_coords)
 
@@ -99,7 +99,7 @@ def test_cuda_rotation_by_quaternion(seed, precision, atol, rtol, n_rotations, n
     assert rotated_coords.shape == (n_coords, n_rotations, 3)
     for i, coords in enumerate(all_coords):
         for j, quat in enumerate(quaternions):
-            test_coords = rotate_vector_by_quaternions(coords, quat)
+            test_coords = rotate_vector_by_quaternion(coords, quat)
 
             np.testing.assert_allclose(
                 rotated_coords[i][j],
