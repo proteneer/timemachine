@@ -444,7 +444,7 @@ def plot_hrex_replica_state_distribution_convergence(cumulative_replica_state_co
     fig, axs = plt.subplots(ncols=ncols, nrows=nrows, figsize=(13, 10), sharex=True, sharey=True, squeeze=False)
 
     # (replica, state) pairs with no observations will be colored white
-    cmap = plt.get_cmap("viridis")
+    cmap = plt.get_cmap("viridis_r")
     cmap.set_bad("white")
 
     for replica_idx, (fraction_by_state_by_iter, ax) in enumerate(zip(fraction_by_state_by_iter_by_replica, axs.flat)):
