@@ -448,7 +448,7 @@ def plot_hrex_replica_state_distribution_convergence(cumulative_replica_state_co
     cmap.set_bad("white")
 
     for replica_idx, (fraction_by_state_by_iter, ax) in enumerate(zip(fraction_by_state_by_iter_by_replica, axs.flat)):
-        p = ax.pcolormesh(iteration, np.arange(n_states), np.log10(fraction_by_state_by_iter.T))
+        p = ax.pcolormesh(iteration, np.arange(n_states), np.log10(fraction_by_state_by_iter.T), cmap=cmap)
         ax.set_title(f"replica = {replica_idx}")
 
     for ax in axs[-1, :]:
