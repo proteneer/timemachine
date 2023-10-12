@@ -14,7 +14,6 @@
 #include "nonbonded_common.hpp"
 #include "pinned_host_buffer.hpp"
 #include "set_utils.hpp"
-#include <cub/cub.cuh>
 #include <memory>
 
 namespace timemachine {
