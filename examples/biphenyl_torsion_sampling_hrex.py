@@ -1,3 +1,13 @@
+# Example using HREX to sample multiple modes of a biphenyl molecule with a sterically-hindered rotatable bond
+#
+# Example usage:
+#
+# Collect samples:
+# $ python biphenyl_torsion_sampling_hrex.py run --solvent --n_frames=4000
+#
+# Plot results:
+# $ python biphenyl_torsion_sampling_hrex.py plot
+
 import argparse
 from dataclasses import replace
 from typing import Iterable, List, Optional, Tuple, cast
