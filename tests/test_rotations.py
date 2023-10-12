@@ -36,7 +36,7 @@ def rotate_vector_by_quaternions(coords: NDArray, quaternion: NDArray) -> NDArra
     assert quaternion.shape[0] == 4
     expanded_coords = np.concatenate([np.zeros(1), coords])
     quaternion_conjugate = quaternion.copy()
-    # Compute quaternion conjugate by taking the conjugate of all but w
+    # Compute quaternion conjugate by negating all but w
     quaternion_conjugate[1:] *= -1
     ham_coords = hamiliton_product(quaternion, expanded_coords)
     return hamiliton_product(ham_coords, quaternion_conjugate)[1:]  # Truncate off w
@@ -61,7 +61,7 @@ def test_reference_rotation_by_quaternion(seed, size):
     all_coords = rng.normal(size=(size, 3)) * 100.0
 
     quaternions = rng.normal(size=(size, 4))
-    # Normalize the quaternions to a vector quaternion, implicitly performed by Rotation
+    # Normalize the quaternions to unit quaternions, representing a rotations
     norms = np.linalg.norm(quaternions, axis=-1)
     quaternions = quaternions / np.expand_dims(norms, -1)
     for coords, quaternion in zip(all_coords, quaternions):
@@ -93,7 +93,7 @@ def test_cuda_rotation_by_quaternion(seed, precision, atol, rtol, n_rotations, n
     rotated_coords = rotate_function(all_coords, quaternions)
 
     norms = np.linalg.norm(quaternions, axis=-1)
-    # Normalize the quaternions to a vector quaternion after passing to C++, as should be automatically normalized
+    # Normalize the quaternions to a unit quaternion after passing to C++, as should be automatically normalized
     quaternions = quaternions / np.expand_dims(norms, -1)
     # Generates rotations for all individual sets of coordinates
     assert rotated_coords.shape == (n_coords, n_rotations, 3)
