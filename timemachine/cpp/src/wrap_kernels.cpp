@@ -86,6 +86,15 @@ template <typename T> std::vector<T> py_array_to_vector(const py::array_t<T, py:
     return v;
 }
 
+template <typename T1, typename T2>
+std::vector<T2> py_array_vector_with_cast(const py::array_t<T1, py::array::c_style> &arr) {
+    std::vector<T2> v(arr.size());
+    for (int i = 0; i < arr.size(); i++) {
+        v[i] = static_cast<T2>(arr.data()[i]);
+    }
+    return v;
+}
+
 template <typename RealType> void declare_neighborlist(py::module &m, const char *typestr) {
 
     using Class = Neighborlist<RealType>;
@@ -1360,10 +1369,7 @@ py::array_t<double, py::array::c_style> py_rotate_coords(
         throw std::runtime_error("quaternions must have a shape that is 4 dimensional");
     }
 
-    std::vector<RealType> v_quaternions(quaternions.size());
-    for (int i = 0; i < quaternions.size(); i++) {
-        v_quaternions[i] = static_cast<RealType>(quaternions.data()[i]);
-    }
+    std::vector<RealType> v_quaternions = py_array_vector_with_cast<double, RealType>(quaternions);
 
     const int N = coords.shape(0);
     const int num_rotations = quaternions.shape(0);
