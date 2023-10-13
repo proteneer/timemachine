@@ -6,6 +6,7 @@ import numpy as np
 from jax import numpy as jnp
 from jax.scipy.special import logsumexp as jlogsumexp
 from numpy.typing import NDArray
+from scipy.optimize import root_scalar
 from scipy.special import logsumexp
 
 # type annotations
@@ -211,29 +212,24 @@ def adaptive_sequential_monte_carlo(
     while True:
 
         # binary search for lambda that gives cess ~= cess_target
-        left_lambda = lam_initial
-        right_lambda = lam_target
-
         cur_log_prob = log_prob(sample_traj[-1], lam_initial, True)
-        while True:
-            mid_lambda = max(min(lam_target, left_lambda + (right_lambda - left_lambda) / 2), lam_initial)
-            incremental_log_weights = log_prob(sample_traj[-1], mid_lambda, False) - cur_log_prob
-            cess = conditional_effective_sample_size(norm_log_weights, incremental_log_weights)
-            if left_lambda > right_lambda:
-                # Let the loop run above so we can sample at the lam_target exactly
-                break
-            if cess < cess_target:  # too small
-                right_lambda = mid_lambda - epsilon
-            elif cess > cess_target:  # too big
-                left_lambda = mid_lambda + epsilon
-            elif mid_lambda == lam_target:
-                break
 
-        if mid_lambda == lam_initial:
-            # must move at least epsilon
-            mid_lambda += epsilon
+        # Used to pass incremental_log_weights out of the closure
+        incremental_log_weights_closure = [None]
 
-        lam_target = mid_lambda
+        def f_opt(lam: float) -> float:
+            incremental_log_weights_closure[0] = log_prob(sample_traj[-1], lam, False) - cur_log_prob
+            cess = conditional_effective_sample_size(norm_log_weights, incremental_log_weights_closure[0])
+            return cess - cess_target
+
+        try:
+            lam_target = root_scalar(f_opt, bracket=(lam_initial, lam_target), method="bisect", xtol=epsilon).root
+        except ValueError:
+            # no root, just run at the final lambda
+            pass
+
+        incremental_log_weights = incremental_log_weights_closure[0]
+        assert incremental_log_weights is not None
 
         # Stop when lam_target == 1.0
         #   See

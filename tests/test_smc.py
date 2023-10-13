@@ -168,6 +168,7 @@ def test_conditional_effective_sample_size():
         ess = effective_sample_size(log_weights + incremental_log_weights)
         cess = conditional_effective_sample_size(norm_log_weights, incremental_log_weights)
         assert np.abs(cess - ess) > 1
+        assert cess > ess
 
 
 @pytest.mark.parametrize("resampling_fxn", [identity_resample, multinomial_resample, conditional_multinomial_resample])
