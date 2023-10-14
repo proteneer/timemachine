@@ -19,17 +19,17 @@ void __global__ k_harmonic_angle(
         return;
     }
 
-    int i_idx = angle_idxs[a_idx * 3 + 0];
-    int j_idx = angle_idxs[a_idx * 3 + 1];
-    int k_idx = angle_idxs[a_idx * 3 + 2];
+    int i_idx = angle_idxs[a_idx * D + 0];
+    int j_idx = angle_idxs[a_idx * D + 1];
+    int k_idx = angle_idxs[a_idx * D + 2];
 
-    RealType rij[3];
-    RealType rjk[3];
+    RealType rij[D];
+    RealType rjk[D];
     RealType nij = 0; // initialize your summed variables!
     RealType njk = 0; // initialize your summed variables!
     RealType top = 0;
     // this is a little confusing
-    for (int d = 0; d < 3; d++) {
+    for (int d = 0; d < D; d++) {
         RealType vij = coords[j_idx * D + d] - coords[i_idx * D + d];
         RealType vjk = coords[j_idx * D + d] - coords[k_idx * D + d];
 
@@ -57,7 +57,7 @@ void __global__ k_harmonic_angle(
     RealType delta = top / nijk - cos(a0);
 
     if (du_dx) {
-        for (int d = 0; d < 3; d++) {
+        for (int d = 0; d < D; d++) {
             RealType grad_i = ka * delta * (rij[d] * top / (n3ij * njk) + (-rjk[d]) / nijk);
             atomicAdd(du_dx + i_idx * D + d, FLOAT_TO_FIXED_BONDED<RealType>(grad_i));
 
