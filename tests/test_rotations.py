@@ -35,9 +35,15 @@ def test_cuda_rotation_by_quaternion(seed, precision, atol, rtol, n_rotations, n
     rotated_coords = rotate_function(all_coords, quaternions)
     assert rotated_coords.shape == (n_coords, n_rotations, 3)
 
+    inv_quaternions = quaternions.copy()
+    inv_quaternions[:, 1:] *= -1
+
     rotation = Rotation.from_quat([convert_quaternion_for_scipy(quat) for quat in quaternions])
     for i, coords in enumerate(all_coords):
         ref_rotated_coords = rotation.apply(coords)
+
+        inverted_coords = rotate_function(ref_rotated_coords, inv_quaternions)
+
         for j, ref_coords in enumerate(ref_rotated_coords):
             np.testing.assert_allclose(
                 rotated_coords[i][j],
@@ -45,4 +51,11 @@ def test_cuda_rotation_by_quaternion(seed, precision, atol, rtol, n_rotations, n
                 rtol=rtol,
                 atol=atol,
                 err_msg=f"Coords {i} with Rotation {j} have a mismatch",
+            )
+            np.testing.assert_allclose(
+                inverted_coords[j][j],
+                coords,
+                rtol=rtol,
+                atol=atol,
+                err_msg=f"Coords {j} didn't get back to original value",
             )
