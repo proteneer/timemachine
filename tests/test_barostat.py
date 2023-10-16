@@ -14,8 +14,9 @@ from timemachine.md.enhanced import get_solvent_phase_system
 from timemachine.md.thermostat.utils import sample_velocities
 from timemachine.testsystems.relative import get_hif2a_ligand_pair_single_topology
 
+pytestmark = [pytest.mark.memcheck]
 
-@pytest.mark.memcheck
+
 def test_barostat_validation():
     temperature = DEFAULT_TEMP  # kelvin
     pressure = DEFAULT_PRESSURE  # bar
@@ -213,7 +214,6 @@ def test_barostat_partial_group_idxs():
     ctxt.multiple_steps(barostat_interval * 100)
 
 
-@pytest.mark.memcheck
 def test_barostat_is_deterministic():
     """Verify that the barostat results in the same box size shift after a fixed number of steps
     This is important to debugging as well as providing the ability to replicate
@@ -548,7 +548,6 @@ def test_get_group_indices():
         get_group_indices([[0, 3]], num_atoms=3)
 
 
-@pytest.mark.memcheck
 def test_barostat_scaling_behavior():
     """Verify that it is possible to retrieve and set the volume scaling factor. Also check that the adaptive behavior of the scaling can be disabled"""
     lam = 1.0
