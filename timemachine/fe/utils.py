@@ -380,7 +380,7 @@ def set_romol_conf(mol, new_coords: NDArray):
         conf.SetAtomPosition(i, pos)
 
 
-def get_mol_masses(mol):
+def get_mol_masses(mol) -> NDArray:
     """Return the masses for the given mol"""
     return np.array([a.GetMass() for a in mol.GetAtoms()])
 
