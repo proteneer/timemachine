@@ -9,7 +9,7 @@ from rdkit import Chem
 from timemachine.constants import BOLTZ, DEFAULT_TEMP, MAX_FORCE_NORM
 from timemachine.fe import model_utils, topology
 from timemachine.fe.free_energy import HostConfig
-from timemachine.fe.utils import get_romol_conf
+from timemachine.fe.utils import get_mol_masses, get_romol_conf
 from timemachine.ff import Forcefield
 from timemachine.ff.handlers import openmm_deserializer
 from timemachine.lib import LangevinIntegrator, MonteCarloBarostat, custom_ops
@@ -172,7 +172,7 @@ def minimize_host_4d(
     conf_list = [np.array(host_config.conf)]
     for mol in mols:
         # mass increase is to keep the ligand fixed
-        mass_list.append(np.array([a.GetMass() * 100000 for a in mol.GetAtoms()]))
+        mass_list.append(get_mol_masses(mol) * 100000)
 
     if mol_coords is not None:
         for mc in mol_coords:
@@ -368,7 +368,7 @@ def equilibrate_host(
 
     min_host_coords = minimize_host_4d([mol], host_config, ff)
 
-    ligand_masses = [a.GetMass() for a in mol.GetAtoms()]
+    ligand_masses = get_mol_masses(mol)
     ligand_coords = get_romol_conf(mol)
 
     combined_masses = np.concatenate([host_masses, ligand_masses])

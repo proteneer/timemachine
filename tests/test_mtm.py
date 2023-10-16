@@ -9,6 +9,7 @@ import numpy as np
 
 from timemachine import testsystems
 from timemachine.constants import BOLTZ
+from timemachine.fe.utils import get_mol_masses
 from timemachine.ff import Forcefield
 from timemachine.md import enhanced
 from timemachine.md.barostat.moves import NPTMove
@@ -33,7 +34,7 @@ def test_optimized_MTM():
     mol, _ = testsystems.ligands.get_biphenyl()
     ff = get_ff_am1ccc()
 
-    masses = np.array([a.GetMass() for a in mol.GetAtoms()])
+    masses = get_mol_masses(mol)
     num_ligand_atoms = len(masses)
 
     temperature = 300.0
