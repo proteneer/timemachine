@@ -223,7 +223,7 @@ def test_sample_max_buffer_frames_with_local_md(
 ):
     """Ensure that if sample is called with max_buffer_frames combined with local MD it works. This failed previously
     due to trying to configure local md on the same context repeatedly. This was due to max_buffer_frames < n_frames which
-    resulted in caling ctxt.setup_local_md multiple times.
+    resulted in calling ctxt.setup_local_md multiple times.
     """
     steps_per_frame = 1
     n_eq_steps = 1
