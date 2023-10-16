@@ -258,10 +258,11 @@ def hif2a_ligand_pair_single_topology_lam0_state():
     mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
     forcefield = Forcefield.load_default()
     st = SingleTopology(mol_a, mol_b, core, forcefield)
-    state = setup_initial_states(st, None, DEFAULT_TEMP, [0.0], 2023)[0]
+    state = setup_initial_state(st, 0.0, None, DEFAULT_TEMP, 2023)
     return state
 
 
+@pytest.mark.nocuda
 @patch("timemachine.fe.free_energy.make_overlap_detail_figure")
 def test_make_pair_bar_plots(mock_fig, hif2a_ligand_pair_single_topology_lam0_state):
     pair_result = PairBarResult(
@@ -284,11 +285,8 @@ def test_make_pair_bar_plots(mock_fig, hif2a_ligand_pair_single_topology_lam0_st
     )
 
 
-def test_run_sims_bisection_early_stopping():
-    mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
-    forcefield = Forcefield.load_default()
-    st = SingleTopology(mol_a, mol_b, core, forcefield)
-    initial_state = setup_initial_state(st, 0.0, None, DEFAULT_TEMP, 2023)
+def test_run_sims_bisection_early_stopping(hif2a_ligand_pair_single_topology_lam0_state):
+    initial_state = hif2a_ligand_pair_single_topology_lam0_state
 
     def make_initial_state(_: float):
         return initial_state

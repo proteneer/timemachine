@@ -1,3 +1,4 @@
+import pytest
 from hypothesis import given, seed
 from hypothesis.strategies import composite, floats, lists, sampled_from
 
@@ -7,6 +8,9 @@ lambdas = floats(0.0, 1.0, allow_subnormal=False)
 
 # https://github.com/python/mypy/issues/12617
 lambda_schedules = lists(lambdas, min_size=2, unique=True).map(sorted)  # type: ignore
+
+
+pytestmark = [pytest.mark.nocuda]
 
 
 @composite

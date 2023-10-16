@@ -38,6 +38,7 @@ from timemachine.md.builders import build_protein_system, build_water_system
 from timemachine.potentials.jax_utils import pairwise_distances
 
 
+@pytest.mark.nocuda
 def test_phenol():
     """
     Test that dummy interactions are setup correctly for a phenol. We want to check that bonds and angles
@@ -86,6 +87,7 @@ def test_phenol():
         all_idxs, _ = setup_dummy_interactions_from_ff(ff, mol, dummy_group=[12], root_anchor_atom=6, nbr_anchor_atom=4)
 
 
+@pytest.mark.nocuda
 def test_find_dummy_groups_and_anchors():
     """
     Test that we can find the anchors and dummy groups when there's a single core anchor atom. When core bond
@@ -110,6 +112,7 @@ def test_find_dummy_groups_and_anchors():
         assert dgs == {2: (None, {3})}
 
 
+@pytest.mark.nocuda
 def test_find_dummy_groups_and_anchors_multiple_angles():
     """
     Test that when multiple angle groups are possible we can find one deterministically
@@ -136,6 +139,7 @@ def test_find_dummy_groups_and_anchors_multiple_angles():
         assert dgs == dgs_zero
 
 
+@pytest.mark.nocuda
 def test_find_dummy_groups_and_multiple_anchors():
     """
     Test that we can find anchors and dummy groups with multiple anchors, we expect to find only a single
@@ -177,6 +181,7 @@ def test_find_dummy_groups_and_multiple_anchors():
         assert dgs == {1: (2, {0})}
 
 
+@pytest.mark.nocuda
 def test_ethane_cyclobutadiene():
     """Test case where a naive heuristic for identifying dummy groups results in disconnected components"""
 
@@ -198,6 +203,7 @@ def test_ethane_cyclobutadiene():
     assert len(list(nx.connected_components(g))) == 1
 
 
+@pytest.mark.nocuda
 def test_charge_perturbation_is_invalid():
     mol_a = Chem.AddHs(Chem.MolFromSmiles("Cc1cc[nH]c1"))
     mol_b = Chem.AddHs(Chem.MolFromSmiles("C[n+]1cc[nH]c1"))
@@ -288,6 +294,7 @@ def test_hif2a_end_state_stability(num_pairs_to_setup=25, num_pairs_to_simulate=
                 assert np.all(batch_distance_check(frames) < distance_cutoff)
 
 
+@pytest.mark.nocuda
 def test_canonicalize_improper_idxs():
 
     # these are in the cw rotation set
@@ -305,6 +312,7 @@ def test_canonicalize_improper_idxs():
     assert canonicalize_improper_idxs((5, 0, 3, 1)) == (5, 0, 1, 3)
 
 
+@pytest.mark.nocuda
 def test_combine_masses():
 
     C_mass = Chem.MolFromSmiles("C").GetAtomWithIdx(0).GetMass()
@@ -328,6 +336,7 @@ def test_combine_masses():
     np.testing.assert_almost_equal(test_masses, ref_masses)
 
 
+@pytest.mark.nocuda
 def test_combine_masses_hmr():
     C_mass = Chem.MolFromSmiles("C").GetAtomWithIdx(0).GetMass()
     Cl_mass = Chem.MolFromSmiles("Cl").GetAtomWithIdx(0).GetMass()
@@ -726,6 +735,7 @@ def _get_core_by_mcs(mol_a, mol_b):
     return core
 
 
+@pytest.mark.nocuda
 def test_no_chiral_atom_restraints():
     mol_a = ligand_from_smiles("c1ccccc1")
     mol_b = ligand_from_smiles("c1(I)ccccc1")
@@ -741,6 +751,7 @@ def test_no_chiral_atom_restraints():
     _ = U(init_conf)
 
 
+@pytest.mark.nocuda
 def test_no_chiral_bond_restraints():
     mol_a = ligand_from_smiles("C")
     mol_b = ligand_from_smiles("CI")
@@ -771,6 +782,7 @@ def pairs(elem, unique=False):
 lambda_intervals = pairs(finite_floats(1e-9, 1.0 - 1e-9), unique=True).map(sorted)  # type: ignore
 
 
+@pytest.mark.nocuda
 @pytest.mark.parametrize(
     "interpolation_fn",
     [
@@ -845,6 +857,7 @@ def test_interpolate_harmonic_force_constant(src_k, dst_k, k_min, lambda_interva
     assert_nondecreasing(lambda lam: f(k2, k1, 1.0 - lam))
 
 
+@pytest.mark.nocuda
 @given(pairs(nonzero_force_constants, unique=True).filter(lambda ks: np.abs(ks[0] - ks[1]) / ks[1] > 1e-6))
 @seed(2022)
 def test_interpolate_harmonic_force_constant_sublinear(ks):
@@ -857,10 +870,12 @@ def test_interpolate_harmonic_force_constant_sublinear(ks):
     )
 
 
+@pytest.mark.nocuda
 def test_interpolate_harmonic_force_constant_jax_transformable():
     _ = jax.jit(interpolate_harmonic_force_constant)(0.0, 1.0, 0.1, 1e-12, 0.0, 1.0)
 
 
+@pytest.mark.nocuda
 def test_cyclic_difference():
     assert cyclic_difference(0, 0, 1) == 0
     assert cyclic_difference(0, 1, 2) == 1  # arbitrary, positive by convention
@@ -892,6 +907,7 @@ periods = st.integers(1, int(1e9))
 bounded_ints = st.integers(-int(1e9), int(1e9))
 
 
+@pytest.mark.nocuda
 @given(bounded_ints, bounded_ints, periods)
 @seed(2022)
 def test_cyclic_difference_inverse(a, b, period):
@@ -900,12 +916,14 @@ def test_cyclic_difference_inverse(a, b, period):
     assert_equal_cyclic(a + x, b, period)
 
 
+@pytest.mark.nocuda
 @given(bounded_ints, bounded_ints, periods)
 @seed(2022)
 def test_cyclic_difference_antisymmetric(a, b, period):
     assert cyclic_difference(a, b, period) + cyclic_difference(b, a, period) == 0
 
 
+@pytest.mark.nocuda
 @given(bounded_ints, bounded_ints, bounded_ints, bounded_ints, periods)
 @seed(2022)
 def test_cyclic_difference_shift_by_n_periods(a, b, m, n, period):
@@ -916,6 +934,7 @@ def test_cyclic_difference_shift_by_n_periods(a, b, m, n, period):
     )
 
 
+@pytest.mark.nocuda
 @given(bounded_ints, bounded_ints, bounded_ints, periods)
 @seed(2022)
 def test_cyclic_difference_translation_invariant(a, b, t, period):
@@ -926,6 +945,7 @@ def test_cyclic_difference_translation_invariant(a, b, t, period):
     )
 
 
+@pytest.mark.nocuda
 @given(pairs(finite_floats()))
 @seed(2022)
 def test_interpolate_w_coord_valid_at_end_states(end_states):
@@ -935,6 +955,7 @@ def test_interpolate_w_coord_valid_at_end_states(end_states):
     assert f(1.0) == b
 
 
+@pytest.mark.nocuda
 def test_interpolate_w_coord_monotonic():
     lambdas = np.linspace(0.0, 1.0, 100)
     ws = interpolate_w_coord(0.0, 1.0, lambdas)
