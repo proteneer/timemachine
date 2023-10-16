@@ -1,3 +1,5 @@
+from typing import Optional
+
 import numpy as np
 import pytest
 from jax import jit, vmap
@@ -5,7 +7,10 @@ from scipy.special import logsumexp
 
 from timemachine.fe.reweighting import one_sided_exp
 from timemachine.md.smc import (
+    ASMCMaxIterError,
     Resampler,
+    adaptive_sequential_monte_carlo,
+    conditional_effective_sample_size,
     conditional_multinomial_resample,
     effective_sample_size,
     get_endstate_samples_from_smc_result,
@@ -115,8 +120,66 @@ def test_effective_sample_size():
         np.testing.assert_almost_equal(ess, 1)
 
 
+def test_conditional_effective_sample_size():
+    np.random.seed(2023)
+    rng = np.random.default_rng(2023)
+
+    # construct test system
+    # see note below about choice of max_lam_target = 0.4
+    for _ in range(100):
+        target_mean, target_log_sigma = 1, -2
+        params = np.array([target_mean, target_log_sigma])
+        n_particles = 10000
+        u_fxn, _, sample, reduced_free_energy = make_gaussian_testsystem()
+
+        # prepare inputs for SMC
+        samples = sample(0, params, n_particles).flatten()
+
+        vec_u_fxn = jit(vmap(u_fxn, in_axes=(0, None, None)))
+
+        def log_prob(xs, lam):
+            xs = np.array(xs)
+            return -vec_u_fxn(xs, lam, params)
+
+        lam_initial = 0.0
+        # low = 0.1 otherwise could be so close to lam_initial that we can't distinguish the cases
+        lam_target = rng.uniform(low=0.1)
+
+        incremental_log_weights = log_prob(samples, lam_target) - log_prob(samples, lam_initial)
+        log_weights = np.zeros(len(samples))
+        norm_log_weights = log_weights - logsumexp(log_weights)
+
+        ess = effective_sample_size(log_weights + incremental_log_weights)
+        cess = conditional_effective_sample_size(norm_log_weights, incremental_log_weights)
+        assert pytest.approx(ess) == cess
+
+        # ESS and CESS are the same when multinomial resampling is used
+        indices, log_weights = multinomial_resample(log_weights + incremental_log_weights)
+        norm_log_weights = log_weights - logsumexp(log_weights)
+
+        ess = effective_sample_size(log_weights + incremental_log_weights)
+        cess = conditional_effective_sample_size(norm_log_weights, incremental_log_weights)
+        assert pytest.approx(ess) == cess
+
+        # ESS and CESS differ when not actually resampling
+        # or conditional_multinomial_resample is used with a ess < thresh
+        indices, log_weights = identity_resample(log_weights + incremental_log_weights)
+        norm_log_weights = log_weights - logsumexp(log_weights)
+
+        ess = effective_sample_size(log_weights + incremental_log_weights)
+        cess = conditional_effective_sample_size(norm_log_weights, incremental_log_weights)
+        assert np.abs(cess - ess) > 1
+        assert cess > ess
+
+
 @pytest.mark.parametrize("resampling_fxn", [identity_resample, multinomial_resample, conditional_multinomial_resample])
-def test_sequential_monte_carlo(resampling_fxn: Resampler):
+@pytest.mark.parametrize(
+    "test_adaptive_smc, cess_factor, max_iteration_test",
+    [(True, 0.5, False), (True, 0.5, True), (True, 1.1, False), (False, None, False)],
+)
+def test_sequential_monte_carlo(
+    max_iteration_test: bool, cess_factor: Optional[float], test_adaptive_smc: bool, resampling_fxn: Resampler
+):
     """Run SMC with the desired resampling_fxn on a Gaussian 1D test system, and assert that:
     * running estimates of the free energy as a fxn of lambda match analytical free energies, and
     * endstate samples have expected mean and stddev
@@ -127,11 +190,7 @@ def test_sequential_monte_carlo(resampling_fxn: Resampler):
     target_mean, target_log_sigma = 1, -2
     params = np.array([target_mean, target_log_sigma])  # TODO: randomize / parameterize
     n_particles = 10000
-    n_windows = 100
-    lambdas = np.linspace(0, 1, n_windows)
     u_fxn, _, sample, reduced_free_energy = make_gaussian_testsystem()
-    ref_free_energies = np.array([reduced_free_energy(lam, params) for lam in lambdas])
-    ref_delta_fs = ref_free_energies - ref_free_energies[0]
 
     # prepare inputs for SMC
     samples = sample(0, params, n_particles).flatten()
@@ -139,7 +198,7 @@ def test_sequential_monte_carlo(resampling_fxn: Resampler):
 
     vec_u_fxn = jit(vmap(u_fxn, in_axes=(0, None, None)))
 
-    def log_prob(xs, lam):
+    def log_prob(xs, lam, *args):
         xs = np.array(xs)
         return -vec_u_fxn(xs, lam, params)
 
@@ -168,8 +227,49 @@ def test_sequential_monte_carlo(resampling_fxn: Resampler):
 
         return updated
 
-    # apply SMC
-    result_dict = sequential_monte_carlo(samples, lambdas, propagate, log_prob, resampling_fxn)
+    if test_adaptive_smc:
+        # apply ASMC
+        assert cess_factor is not None
+        cess_target = len(samples) * cess_factor  # arbitray value results in ~5 windows
+        if cess_target > len(samples):
+            with pytest.raises(AssertionError, match="too large"):
+                result_dict = adaptive_sequential_monte_carlo(
+                    samples,
+                    propagate,
+                    log_prob,
+                    resampling_fxn,
+                    cess_target=cess_target,
+                )
+            return
+        elif max_iteration_test:
+            with pytest.raises(ASMCMaxIterError, match="maximum number of iterations"):
+                result_dict = adaptive_sequential_monte_carlo(
+                    samples,
+                    propagate,
+                    log_prob,
+                    resampling_fxn,
+                    cess_target=cess_target,
+                    max_iterations=1,
+                )
+            return
+        else:
+            result_dict = adaptive_sequential_monte_carlo(
+                samples,
+                propagate,
+                log_prob,
+                resampling_fxn,
+                cess_target=cess_target,
+            )
+
+        # ASMC returns the lambdas that were used
+        lambdas = result_dict["lambdas_traj"]
+        n_windows = len(result_dict["lambdas_traj"])
+        assert n_windows > 2
+    else:
+        # apply SMC
+        n_windows = 100
+        lambdas = np.linspace(0, 1, n_windows)
+        result_dict = sequential_monte_carlo(samples, lambdas, propagate, log_prob, resampling_fxn)
 
     # compute running delta_f estimates
     log_weights_traj = result_dict["log_weights_traj"]
@@ -177,6 +277,8 @@ def test_sequential_monte_carlo(resampling_fxn: Resampler):
     running_estimates = np.array([one_sided_exp(-log_weights) for log_weights in log_weights_traj])
 
     # assert all running estimates are within ~ 0.1 kT of reference
+    ref_free_energies = np.array([reduced_free_energy(lam, params) for lam in lambdas])
+    ref_delta_fs = ref_free_energies - ref_free_energies[0]
     np.testing.assert_array_almost_equal(running_estimates, ref_delta_fs, decimal=1)
 
     # assert this isn't a "no-op" test
