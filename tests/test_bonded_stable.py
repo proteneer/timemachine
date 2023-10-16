@@ -46,8 +46,8 @@ def test_harmonic_angle_stable_bitwise_symmetric(n_particles, n_angles, precisio
     test_potential_rev_impl = HarmonicAngleStable(angle_idxs[:, ::-1]).to_gpu(precision).unbound_impl
 
     box = np.eye(3) * 100  # note: ignored
-    test_du_dx, test_du_dp, test_u = test_potential_impl.execute_selective(coords, params, box, 1, 1, 1)
-    test_du_dx_rev, test_du_dp_rev, test_u_rev = test_potential_rev_impl.execute_selective(coords, params, box, 1, 1, 1)
+    test_du_dx, test_du_dp, test_u = test_potential_impl.execute(coords, params, box, 1, 1, 1)
+    test_du_dx_rev, test_du_dp_rev, test_u_rev = test_potential_rev_impl.execute(coords, params, box, 1, 1, 1)
 
     np.testing.assert_array_equal(test_u, test_u_rev)
     np.testing.assert_array_equal(test_du_dx, test_du_dx_rev)
@@ -68,8 +68,8 @@ def test_harmonic_angle_stable_reduces_to_harmonic_angle(n_particles, n_angles, 
     impl_stable = HarmonicAngleStable(angle_idxs).to_gpu(precision).unbound_impl
 
     box = np.eye(3) * 100  # note: ignored
-    du_dx, du_dp, u = impl.execute_selective(coords, params[:, :2], box, 1, 1, 1)
-    du_dx_stable, du_dp_stable, u_stable = impl_stable.execute_selective(coords, params, box, 1, 1, 1)
+    du_dx, du_dp, u = impl.execute(coords, params[:, :2], box, 1, 1, 1)
+    du_dx_stable, du_dp_stable, u_stable = impl_stable.execute(coords, params, box, 1, 1, 1)
 
     np.testing.assert_allclose(u, u_stable, rtol=rtol)
     np.testing.assert_allclose(du_dx, du_dx_stable, rtol=rtol)
@@ -96,6 +96,6 @@ def test_harmonic_angle_finite_force_with_vanishing_bond_length(potential, param
     coords = [(0, 0, 0), (1e-9, 0, 0), (0, 1, 0)]
     impl = potential(angle_idxs).to_gpu(precision).unbound_impl
     box = np.eye(3) * 100  # note: ignored
-    du_dx, _, _ = impl.execute_selective(coords, params, box, 1, 0, 0)
+    du_dx, _, _ = impl.execute(coords, params, box, 1, 0, 0)
     print(du_dx)
     assert (np.abs(du_dx) < 1e7).all()

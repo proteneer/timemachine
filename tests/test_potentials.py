@@ -98,16 +98,12 @@ def test_bound_potential_execute_validation(harmonic_bond):
 def test_unbound_potential_execute_validation(harmonic_bond):
     unbound_impl = harmonic_bond.potential.to_gpu(np.float32).unbound_impl
 
-    for execute_method, extra_params in zip(
-        [unbound_impl.execute, unbound_impl.execute_selective], [(), (True, True, True)]
-    ):
+    def func(coords, box):
+        return unbound_impl.execute(coords, harmonic_bond.params, box)
 
-        def func(coords, box):
-            return execute_method(coords, harmonic_bond.params, box, *extra_params)
+    verify_potential_validation(func)
 
-        verify_potential_validation(func)
-
-        execute_method(np.zeros((3, 3)), harmonic_bond.params, np.eye(3), *extra_params)
+    unbound_impl.execute(np.zeros((3, 3)), harmonic_bond.params, np.eye(3))
 
 
 def test_summed_potential_raises_on_inconsistent_lengths(harmonic_bond):
@@ -200,7 +196,7 @@ def reference_execute_over_batch(unbound, coords, boxes, params):
     return du_dx, du_dp, u
 
 
-def test_execute_selective_batch(harmonic_bond):
+def test_execute_batch(harmonic_bond):
     np.random.seed(2022)
 
     N = 5
@@ -226,7 +222,7 @@ def test_execute_selective_batch(harmonic_bond):
 
     # Verify that number of boxes and coords match
     with pytest.raises(RuntimeError) as e:
-        _ = unbound_impl.execute_selective_batch(
+        _ = unbound_impl.execute_batch(
             coords_batch,
             params_batch,
             boxes_batch[:num_coord_batches],
@@ -238,7 +234,7 @@ def test_execute_selective_batch(harmonic_bond):
 
     # Verify that coords have 3 dimensions
     with pytest.raises(RuntimeError) as e:
-        _ = unbound_impl.execute_selective_batch(
+        _ = unbound_impl.execute_batch(
             coords,
             params_batch,
             box,
@@ -250,7 +246,7 @@ def test_execute_selective_batch(harmonic_bond):
 
     # Verify that params must have at least two dimensions
     with pytest.raises(RuntimeError) as e:
-        _ = unbound_impl.execute_selective_batch(
+        _ = unbound_impl.execute_batch(
             coords_batch,
             np.ones(3),
             boxes_batch,
@@ -264,7 +260,7 @@ def test_execute_selective_batch(harmonic_bond):
 
     for combo in itertools.product([False, True], repeat=3):
         compute_du_dx, compute_du_dp, compute_u = combo
-        batch_du_dx, batch_du_dp, batch_u = unbound_impl.execute_selective_batch(
+        batch_du_dx, batch_du_dp, batch_u = unbound_impl.execute_batch(
             coords_batch,
             params_batch,
             boxes_batch,

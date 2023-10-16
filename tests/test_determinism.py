@@ -86,7 +86,7 @@ def test_deterministic_energies():
                     test_U_fixed += U_fixed
                     _, U = bp.execute(x, b)
                     test_u += U
-                    _, _, U_selective = unbound.execute_selective(x, fn.params, b, False, False, True)
+                    _, _, U_selective = unbound.execute(x, fn.params, b, False, False, True)
                     test_u_selective += U_selective
                 assert ref_U == fixed_to_float(test_U_fixed), precision
                 assert test_u == test_u_selective, str(barostat)

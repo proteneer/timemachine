@@ -913,7 +913,7 @@ def run_sims_hrex(
     def compute_log_q_matrix(xvbs: List[CoordsVelBox]):
         coords = np.array([xvb.coords for xvb in xvbs])
         boxes = np.array([xvb.box for xvb in xvbs])
-        _, _, U = potential.unbound_impl.execute_selective_batch(coords, params_by_state, boxes, False, False, True)
+        _, _, U = potential.unbound_impl.execute_batch(coords, params_by_state, boxes, False, False, True)
         log_q = -U / (BOLTZ * temperature)
         return log_q
 
