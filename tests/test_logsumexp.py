@@ -8,11 +8,12 @@ from timemachine.lib import custom_ops
 @pytest.mark.memcheck
 @pytest.mark.parametrize("precision,atol,rtol", [(np.float64, 1e-8, 1e-8), (np.float32, 2e-5, 1e-5)])
 @pytest.mark.parametrize("seed", list(range(2)))
+@pytest.mark.parametrize("loc", [1000, 0, -1000])
 @pytest.mark.parametrize("size", [2, 100, 10000])
-def test_cuda_logsumexp(precision, atol, rtol, seed, size):
+def test_cuda_logsumexp(precision, atol, rtol, seed, loc, size):
     rng = np.random.default_rng(seed)
 
-    values = rng.normal(size=size) * 1000.0
+    values = rng.normal(size=size, loc=loc) * 1000.0
 
     reference_val = logsumexp(values)
 
