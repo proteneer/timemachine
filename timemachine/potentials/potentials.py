@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Optional, Sequence, cast
+from typing import List, Optional, Sequence, cast
 
 import jax.numpy as jnp
 import numpy as np
@@ -239,13 +239,19 @@ class SummedPotential(Potential):
             raise ValueError("number of potentials != number of parameter arrays")
 
     def __call__(self, conf: Conf, params: Params, box: Optional[Box]) -> float | Array:
-        shapes = [ps.shape for ps in self.params_init]
-        return summed.summed_potential(conf, params, box, self.potentials, shapes)
+        return summed.summed_potential(conf, params, box, self.potentials, self.params_shapes)
 
     def to_gpu(self, precision: Precision) -> "SummedPotentialGpuImplWrapper":
         impls = [p.to_gpu(precision).unbound_impl for p in self.potentials]
         sizes = [ps.size for ps in self.params_init]
         return SummedPotentialGpuImplWrapper(custom_ops.SummedPotential(impls, sizes, self.parallel))
+
+    @property
+    def params_shapes(self):
+        return [ps.shape for ps in self.params_init]
+
+    def unflatten_params(self, params: Params) -> List[Params]:
+        return summed.unflatten_params(params, self.params_shapes)
 
 
 @dataclass
