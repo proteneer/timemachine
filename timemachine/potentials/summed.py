@@ -1,4 +1,4 @@
-from typing import Optional, Sequence, Tuple
+from typing import List, Optional, Sequence, Tuple
 
 import jax.numpy as jnp
 import numpy as np
@@ -33,12 +33,15 @@ def summed_potential(
         shapes of the parameter array input for each potential term (must be same length as U_fns)
     """
     assert len(U_fns) == len(shapes)
-    sizes = [np.prod(shape) for shape in shapes]
+    unflattened_params = unflatten_params(params, shapes)
+    return jnp.sum(jnp.array([U_fn(conf, ps, box) for U_fn, ps in zip(U_fns, unflattened_params)]))
+
+
+def unflatten_params(params: Params, shapes: Sequence[Tuple[int, ...]]) -> List[Params]:
+    sizes = [int(np.prod(shape)) for shape in shapes]
     assert params.shape == (sum(sizes),)
-    # np.split expects indices, must increment sizes to be indices
     split_indices = np.cumsum(sizes)
-    paramss = [ps.reshape(shape) for ps, shape in zip(np.split(params, split_indices[:-1]), shapes)]
-    return jnp.sum(jnp.array([U_fn(conf, ps, box) for U_fn, ps in zip(U_fns, paramss)]))
+    return [ps.reshape(shape) for ps, shape in zip(np.split(params, split_indices[:-1]), shapes)]
 
 
 def fanout_summed_potential(
