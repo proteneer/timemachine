@@ -3,10 +3,13 @@ from jax import config
 config.update("jax_enable_x64", True)
 
 import numpy as np
+import pytest
 
 from timemachine.constants import DEFAULT_KT
 from timemachine.md.exchange import exchange_mover
 from timemachine.md.exchange.exchange_mover import delta_r_np
+
+pytestmark = [pytest.mark.nocuda]
 
 
 def test_batch_log_weights_incremental():
