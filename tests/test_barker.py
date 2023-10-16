@@ -46,7 +46,7 @@ def test_proposal_normalization(x0, proposal_sig):
     r"""numerically integrate \int dy p_sig(y | x0) and assert close to 1"""
 
     def grad_log_q(x):
-        return -4 * x ** 3
+        return -4 * x**3
 
     y_grid = np.linspace(-10, +10, 1_000)
 
@@ -61,10 +61,10 @@ def test_proposal_normalization(x0, proposal_sig):
 
 def test_accurate_mcmc(threshold=1e-4):
     def log_q(x):
-        return np.sum(-(x ** 4))
+        return np.sum(-(x**4))
 
     def grad_log_q(x):
-        return -4 * x ** 3
+        return -4 * x**3
 
     rng = np.random.default_rng(0)
 
@@ -123,7 +123,7 @@ def test_proposal_magnitude_independent_of_force_magnitude(proposal_sig, seed):
 
     grad_log_q = jit(grad(log_q))
 
-    expected_sq_distance = proposal_sig ** 2
+    expected_sq_distance = proposal_sig**2
     n_samples = 100_000
     rel_tol = 1e-2
     abs_tol = 1e-2
@@ -140,7 +140,7 @@ def test_proposal_magnitude_independent_of_force_magnitude(proposal_sig, seed):
     # are the same avg. sq. distance from starting point
     # as if proposed from the base kernel Normal(mu=x_clash, sig=proposal_sig)
     disp_clash = (ys_clash - x_clash).flatten()
-    mean_sq_distance_clash = (disp_clash ** 2).mean()
+    mean_sq_distance_clash = (disp_clash**2).mean()
 
     assert mean_sq_distance_clash == pytest.approx(expected_sq_distance, rel=rel_tol)
 
@@ -158,7 +158,7 @@ def test_proposal_magnitude_independent_of_force_magnitude(proposal_sig, seed):
 
     # again, assert proposals are the expected avg. sq. distance from starting point
     disp = (ys - x_relaxed).flatten()
-    mean_sq_distance = (disp ** 2).mean()
+    mean_sq_distance = (disp**2).mean()
     assert mean_sq_distance == pytest.approx(expected_sq_distance, rel=rel_tol)
 
     # assert that the proposals are not skewed much

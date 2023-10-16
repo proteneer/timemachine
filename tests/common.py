@@ -95,7 +95,6 @@ def prepare_system_params(x: NDArray, cutoff: float, sigma_scale: float = 5.0) -
 
 
 def prepare_water_system(x, p_scale, cutoff):
-
     assert x.ndim == 2
     N = x.shape[0]
     # D = x.shape[1]
@@ -134,7 +133,6 @@ def prepare_nb_system(
     p_scale,
     cutoff,
 ):
-
     assert x.ndim == 2
     N = x.shape[0]
     # D = x.shape[1]
@@ -252,7 +250,6 @@ class GradientTest(unittest.TestCase):
         ref_du_dx, ref_du_dp = grad_fn(x, params, box)
 
         for combo in itertools.product([False, True], repeat=3):
-
             compute_du_dx, compute_du_dp, compute_u = combo
 
             # do each computation twice to check determinism
@@ -288,7 +285,6 @@ class GradientTest(unittest.TestCase):
 def gen_nonbonded_params_with_4d_offsets(
     rng: np.random.Generator, params, w_max: float, w_min: Optional[float] = None
 ) -> Iterator[NDArray]:
-
     if w_min is None:
         w_min = -w_max
 
@@ -384,7 +380,6 @@ def check_split_ixns(
     compute_intra_grad_u,
     compute_ixn_grad_u,
 ):
-
     ffs = load_split_forcefields()
 
     with resources.path("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as path_to_pdb:

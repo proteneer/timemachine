@@ -61,7 +61,6 @@ def setup_relative_restraints_using_smarts(mol_a, mol_b, smarts):
 
     for core_idxs_a in all_core_idxs_a:
         for core_idxs_b in all_core_idxs_b:
-
             ri = np.expand_dims(ligand_coords_a[core_idxs_a], 1)
             rj = np.expand_dims(ligand_coords_b[core_idxs_b], 0)
             rij = np.sqrt(np.sum(np.power(ri - rj, 2), axis=-1))

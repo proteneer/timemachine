@@ -47,7 +47,6 @@ def deserialize_system(system: mm.System, cutoff: float) -> Tuple[List[potential
     bps_dict: DefaultDict[str, List[potentials.BoundPotential]] = defaultdict(list)
 
     for force in system.getForces():
-
         if isinstance(force, mm.HarmonicBondForce):
             bond_idxs_ = []
             bond_params_ = []
@@ -65,12 +64,10 @@ def deserialize_system(system: mm.System, cutoff: float) -> Tuple[List[potential
             bps_dict["HarmonicBond"].append(potentials.HarmonicBond(bond_idxs).bind(bond_params))
 
         if isinstance(force, mm.HarmonicAngleForce):
-
             angle_idxs_ = []
             angle_params_ = []
 
             for a_idx in range(force.getNumAngles()):
-
                 src_idx, mid_idx, dst_idx, angle, k = force.getAngleParameters(a_idx)
                 angle = value(angle)
                 k = value(k)
@@ -84,7 +81,6 @@ def deserialize_system(system: mm.System, cutoff: float) -> Tuple[List[potential
             bps_dict["HarmonicAngle"].append(potentials.HarmonicAngle(angle_idxs).bind(angle_params))
 
         if isinstance(force, mm.PeriodicTorsionForce):
-
             torsion_idxs_ = []
             torsion_params_ = []
 
@@ -102,14 +98,12 @@ def deserialize_system(system: mm.System, cutoff: float) -> Tuple[List[potential
             bps_dict["PeriodicTorsion"].append(potentials.PeriodicTorsion(torsion_idxs).bind(torsion_params))
 
         if isinstance(force, mm.NonbondedForce):
-
             num_atoms = force.getNumParticles()
 
             charge_params_ = []
             lj_params_ = []
 
             for a_idx in range(num_atoms):
-
                 charge, sig, eps = force.getParticleParameters(a_idx)
                 charge = value(charge) * np.sqrt(constants.ONE_4PI_EPS0)
 
@@ -148,7 +142,6 @@ def deserialize_system(system: mm.System, cutoff: float) -> Tuple[List[potential
 
             # validate exclusions/exceptions to make sure they make sense
             for a_idx in range(force.getNumExceptions()):
-
                 # tbd charge scale factors
                 src, dst, new_cp, new_sig, new_eps = force.getExceptionParameters(a_idx)
                 new_sig = value(new_sig)

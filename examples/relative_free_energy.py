@@ -16,7 +16,6 @@ from timemachine.testsystems.relative import get_hif2a_ligand_pair_single_topolo
 
 
 def write_trajectory_as_cif(mol_a, mol_b, core, all_frames, host_topology, prefix):
-
     atom_map_mixin = AtomMapMixin(mol_a, mol_b, core)
     for window_idx, window_frames in enumerate(all_frames):
         out_path = f"{prefix}_{window_idx}.cif"
@@ -30,7 +29,6 @@ def write_trajectory_as_cif(mol_a, mol_b, core, all_frames, host_topology, prefi
 
 
 def run_pair(mol_a, mol_b, core, forcefield, md_params, protein_path):
-
     box_width = 4.0
     solvent_sys, solvent_conf, solvent_box, solvent_top = builders.build_water_system(box_width, forcefield.water_ff)
     solvent_box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes
@@ -68,7 +66,6 @@ def run_pair(mol_a, mol_b, core, forcefield, md_params, protein_path):
 
 
 def hif2a_pair():
-
     mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
     forcefield = Forcefield.load_default()
     protein_path = "timemachine/testsystems/data/hif2a_nowater_min.pdb"
@@ -87,7 +84,6 @@ def get_mol_by_name(mols, name):
 
 
 def read_from_args():
-
     parser = argparse.ArgumentParser(
         description="Estimate relative free energy difference between complex and solvent given two ligands mol_a and mol_b."
     )
@@ -131,7 +127,6 @@ def read_from_args():
 
 
 if __name__ == "__main__":
-
     if len(sys.argv) == 1:
         hif2a_pair()
     else:

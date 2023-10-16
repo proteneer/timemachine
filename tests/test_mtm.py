@@ -151,7 +151,6 @@ def test_optimized_MTM():
 
     num_batches = 15
     for _ in range(num_batches):
-
         xvb_t = npt_mover.move(xvb_t)
 
         ref_yvb, ref_prob, ref_key = ref_mtm_mover.acceptance_probability(xvb_t, key)

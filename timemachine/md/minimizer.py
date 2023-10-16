@@ -252,7 +252,7 @@ def make_host_du_dx_fxn(mols, host_config, ff, mol_coords=None):
 
     # check conf_list consistent with mols
     assert len(conf_list[1:]) == len(mols)
-    for (conf, mol) in zip(conf_list[1:], mols):
+    for conf, mol in zip(conf_list[1:], mols):
         assert conf.shape == (mol.GetNumAtoms(), 3)
 
     combined_coords = np.concatenate(conf_list)

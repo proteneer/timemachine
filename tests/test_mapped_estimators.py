@@ -17,7 +17,7 @@ class UnnormalizedGaussian:
     reduced_free_energy: float
 
     def _normalized_logpdf(self, x):
-        return -((x - self.mean) ** 2) / (self.stddev ** 2) - np.log(self.stddev * np.sqrt(2 * np.pi))
+        return -((x - self.mean) ** 2) / (self.stddev**2) - np.log(self.stddev * np.sqrt(2 * np.pi))
 
     def reduced_potential(self, x):
         return -self._normalized_logpdf(x) + self.reduced_free_energy

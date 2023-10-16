@@ -116,7 +116,6 @@ class VacuumState:
         return self.it_potential(x, self.improper_torsion_params, self.box)
 
     def _nonbonded_nrg(self, x, decharge):
-
         if decharge:
             charge_indices = jnp.index_exp[:, 0]
             nb_params = jnp.asarray(self.nb_params).at[charge_indices].set(0)

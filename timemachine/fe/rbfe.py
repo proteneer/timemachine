@@ -666,7 +666,7 @@ def estimate_relative_free_energy_bisection_hrex_impl(
             replace(
                 initial_state,
                 x0=traj.frames[-1],
-                v0=traj.final_velocities,
+                v0=traj.final_velocities,  # type: ignore
                 box0=traj.boxes[-1],
                 barostat=replace(
                     initial_state.barostat,

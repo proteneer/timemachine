@@ -8,7 +8,6 @@ pytestmark = [pytest.mark.memcheck]
 
 
 def test_nonbonded_precomputed_pair_list_invalid_pair_idxs():
-
     with pytest.raises(RuntimeError) as e:
         NonbondedPairListPrecomputed([0], 2.0, 1.1).to_gpu(np.float32).unbound_impl
 

@@ -85,7 +85,6 @@ def generate_endstate_samples(
 
     all_xvbs = []
     for i, choice_idx in enumerate(solvent_choice_idxs):
-
         # solvent + noninteracting ligand
         noninteracting_xvb = solvent_samples[choice_idx]
 
@@ -112,7 +111,7 @@ def setup_absolute_hydration_with_endpoint_samples(
     * npt_mover
     * initial_samples from lam = 1
     """
-    if type(seed) != int:
+    if not isinstance(seed, int):
         seed = np.random.randint(1000)
         print(f"setting seed randomly to {seed}")
     else:

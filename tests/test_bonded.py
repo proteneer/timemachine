@@ -64,7 +64,6 @@ class TestBonded(GradientTest):
             coords_1 = self.get_random_coords(n_particles * 2, 3)
 
             for coords in [coords_0, coords_1]:
-
                 gai = np.arange(5).astype(np.int32)
                 gbi = (np.arange(5) + 5).astype(np.int32)
 

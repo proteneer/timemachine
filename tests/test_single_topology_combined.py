@@ -47,7 +47,6 @@ def test_combined_parameters_bonded(host_system_fixture, hif2a_ligand_pair_singl
     num_host_atoms = len(host_masses)
 
     def check_bonded_idxs_consistency(bonded_idxs, num_host_idxs):
-
         for b_idx, atom_idxs in enumerate(bonded_idxs):
             if b_idx < num_host_idxs:
                 assert np.all(atom_idxs < num_host_atoms)
@@ -55,7 +54,6 @@ def test_combined_parameters_bonded(host_system_fixture, hif2a_ligand_pair_singl
                 assert np.all(atom_idxs >= num_host_atoms)
 
     for lamb in [0.0, 1.0]:
-
         # generate host guest system
         hgs = st.combine_with_host(host_sys, lamb, num_water_atoms)
 
@@ -148,7 +146,6 @@ def test_combined_parameters_nonbonded(host_system_fixture, lamb, hif2a_ligand_p
         mol_b_sig_eps = st.ff.lj_handle.parameterize(st.mol_b)
 
         for a_idx, (test_q, test_sig, test_eps, _) in enumerate(params):
-
             if a_idx < num_host_atoms:
                 continue
 

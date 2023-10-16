@@ -159,12 +159,12 @@ def pairwise_distances(x, box=None, w=None):
         assert box.shape == (d, d)
 
     d_ijk = delta_r(x[:, None], x[None, :], box)  # (x_i, x_j, dimension)
-    d2_ij = jnp.sum(d_ijk ** 2, axis=2)
+    d2_ij = jnp.sum(d_ijk**2, axis=2)
 
     if w is not None:
         assert w.shape == (n,)
         dw_ij = w[:, None] - w[None, :]
-        d2_ij += dw_ij ** 2
+        d2_ij += dw_ij**2
 
     # prevent nans in gradient
     d2_ij = d2_ij.at[jnp.diag_indices_from(d2_ij)].set(0.0)
@@ -191,8 +191,8 @@ def distance_from_one_to_others(x_i, x_others, box=None, cutoff=jnp.inf):
         if distance(x_i, x_j) > cutoff, d_ij is set to np.inf
     """
     displacements_ij = delta_r(x_i, x_others, box)
-    d2_ij = jnp.sum(displacements_ij ** 2, axis=1)
-    d_ij = jnp.where(d2_ij <= cutoff ** 2, jnp.sqrt(d2_ij), jnp.inf)
+    d2_ij = jnp.sum(displacements_ij**2, axis=1)
+    d_ij = jnp.where(d2_ij <= cutoff**2, jnp.sqrt(d2_ij), jnp.inf)
     return d_ij
 
 

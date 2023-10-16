@@ -69,7 +69,7 @@ def U_chiral_atom(x, idxs, kc):
     assert len(idxs) == 4
     x0, x1, x2, x3 = x[idxs]
     v = pyramidal_volume(x0, x1, x2, x3)
-    return jnp.where(v > 0, kc * v ** 2, 0.0)
+    return jnp.where(v > 0, kc * v**2, 0.0)
 
 
 def U_chiral_bond(x, idxs, kc, s):
@@ -86,7 +86,7 @@ def U_chiral_bond(x, idxs, kc, s):
     # assert s == 1 or s == -1, can't be used during vmap/tracing
     x0, x1, x2, x3 = x[i], x[j], x[k], x[l]
     v = torsion_volume(x0, x1, x2, x3)
-    return jnp.where(v * s > 0, kc * v ** 2, 0.0)
+    return jnp.where(v * s > 0, kc * v**2, 0.0)
 
 
 # allow batching over multiple idxs and force constants

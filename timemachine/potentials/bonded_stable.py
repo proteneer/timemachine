@@ -44,7 +44,7 @@ def harmonic_angle_stable(conf, params, angle_idxs, cos_angles=True):
     vkj = ck - cj
 
     top = jnp.sum(vij * vkj, -1)
-    bot = jnp.sqrt((jnp.sum(vij * vij, axis=-1) + eps ** 2) * (jnp.sum(vkj * vkj, axis=-1) + eps ** 2))
+    bot = jnp.sqrt((jnp.sum(vij * vij, axis=-1) + eps**2) * (jnp.sum(vkj * vkj, axis=-1) + eps**2))
 
     tb = top / bot
 

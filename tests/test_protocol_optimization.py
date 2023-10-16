@@ -102,7 +102,7 @@ def test_work_stddev_estimator():
 
 def poorly_spaced_path(lam):
     """lam in [0,1] -> (offset in [0, 4], force_constant in [1, 16])"""
-    lam_eff = lam ** 4
+    lam_eff = lam**4
 
     offset = 4 * lam_eff
     force_constant = 2 ** (4 * lam_eff)

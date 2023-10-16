@@ -22,7 +22,6 @@ def test_rmsd_align_proper():
     np.random.seed(2021)
 
     for _ in range(1000):
-
         x1 = np.random.rand(N, 3)
         random_t = np.random.rand(3)
         random_R = special_ortho_group.rvs(3)
@@ -56,7 +55,6 @@ def test_rmsd_align_improper():
     np.random.seed(2021)
 
     for _ in range(1000):
-
         x1 = np.random.rand(N, 3)
         random_t = np.random.rand(3)
         random_R = ortho_group.rvs(3)

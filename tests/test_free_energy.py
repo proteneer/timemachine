@@ -71,7 +71,7 @@ def assert_no_second_derivative(f, x):
         grad(div_f)(x)
     except Exception as e:
         problem = e
-    assert type(problem) == TypeError
+    assert isinstance(problem, TypeError)
 
 
 def assert_ff_optimizable(U, coords, sys_params, box, tol=1e-10):
@@ -197,9 +197,9 @@ def test_vacuum_and_solvent_edge_types():
 
     solvent_unbound_potentials, solvent_sys_params, solvent_masses = afe.prepare_host_edge(ff_params, host_system, 0.0)
 
-    assert type(vacuum_unbound_potentials) == type(solvent_unbound_potentials)
-    assert type(vacuum_sys_params) == type(solvent_sys_params)
-    assert type(vacuum_masses) == type(solvent_masses)
+    assert isinstance(vacuum_unbound_potentials, type(solvent_unbound_potentials))
+    assert isinstance(vacuum_sys_params, type(solvent_sys_params))
+    assert isinstance(vacuum_masses, type(solvent_masses))
 
 
 @pytest.fixture(scope="module")

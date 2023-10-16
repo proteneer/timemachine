@@ -30,13 +30,13 @@ def test_random_walk_metropolis_hastings(dist, seed):
     dx = 0.1
 
     # estimate autocorrelation time, number of independent samples
-    tau = round(1 / dx ** 2)
+    tau = round(1 / dx**2)
     n_independent_samples = n_samples // tau - 1
 
     log_q_offset = np.random.uniform(-1.0, 1.0)  # arbitrary offset added to log_q
 
     if dist == "normal":
-        log_q = lambda x: -(x ** 2) / 2 + log_q_offset
+        log_q = lambda x: -(x**2) / 2 + log_q_offset
         target_samples = np.random.normal(0, 1, size=(n_independent_samples,))
     else:
         log_q = lambda x: log_q_offset if -1 < x < 1 else -float("inf")
