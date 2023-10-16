@@ -7,6 +7,7 @@ from scipy.special import logsumexp
 
 from timemachine.fe.reweighting import one_sided_exp
 from timemachine.md.smc import (
+    ASMCMaxIterError,
     Resampler,
     adaptive_sequential_monte_carlo,
     conditional_effective_sample_size,
@@ -172,8 +173,13 @@ def test_conditional_effective_sample_size():
 
 
 @pytest.mark.parametrize("resampling_fxn", [identity_resample, multinomial_resample, conditional_multinomial_resample])
-@pytest.mark.parametrize("test_adaptive_smc, cess_factor", [(True, 0.5), (True, 1.1), (False, None)])
-def test_sequential_monte_carlo(cess_factor: Optional[float], test_adaptive_smc: bool, resampling_fxn: Resampler):
+@pytest.mark.parametrize(
+    "test_adaptive_smc, cess_factor, max_iteration_test",
+    [(True, 0.5, False), (True, 0.5, True), (True, 1.1, False), (False, None, False)],
+)
+def test_sequential_monte_carlo(
+    max_iteration_test: bool, cess_factor: Optional[float], test_adaptive_smc: bool, resampling_fxn: Resampler
+):
     """Run SMC with the desired resampling_fxn on a Gaussian 1D test system, and assert that:
     * running estimates of the free energy as a fxn of lambda match analytical free energies, and
     * endstate samples have expected mean and stddev
@@ -233,6 +239,17 @@ def test_sequential_monte_carlo(cess_factor: Optional[float], test_adaptive_smc:
                     log_prob,
                     resampling_fxn,
                     cess_target=cess_target,
+                )
+            return
+        elif max_iteration_test:
+            with pytest.raises(ASMCMaxIterError, match="maximum number of iterations"):
+                result_dict = adaptive_sequential_monte_carlo(
+                    samples,
+                    propagate,
+                    log_prob,
+                    resampling_fxn,
+                    cess_target=cess_target,
+                    max_iterations=1,
                 )
             return
         else:

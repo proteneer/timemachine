@@ -123,6 +123,14 @@ def sequential_monte_carlo(
     return trajs_dict
 
 
+class ASMCMaxIterError(Exception):
+    """
+    Exception when ASMC exceeds the maximum number of iters.
+    """
+
+    pass
+
+
 def adaptive_sequential_monte_carlo(
     samples: Samples,
     propagate: BatchPropagator,
@@ -131,6 +139,7 @@ def adaptive_sequential_monte_carlo(
     cess_target: float,
     epsilon=1e-2,
     store_intermediate_traj=True,
+    max_iterations=100,
 ) -> ResultDict:
     """Implementation of Adaptive Sequential Monte Carlo (SMC).
        This will adaptively interpolate between lambda=0 and lambda=1,
@@ -156,7 +165,9 @@ def adaptive_sequential_monte_carlo(
         Used to determine the precision of the adaptive binary search.
     store_intermediate_traj:
         Set to True (default) to store intermediate trajectories.
-
+    max_iterations:
+        Set to the maximum number of iterations. If exceeded, will throw an
+        `ASMCMaxIterError` exception.
     Returns
     -------
     trajs_dict
@@ -209,7 +220,7 @@ def adaptive_sequential_monte_carlo(
     lam_target = 1.0  # adapted
 
     # Main ASMC loop
-    while True:
+    for _ in range(max_iterations):
 
         # binary search for lambda that gives cess ~= cess_target
         cur_log_prob = log_prob(sample_traj[-1], lam_initial, True)
@@ -252,6 +263,8 @@ def adaptive_sequential_monte_carlo(
         # update target
         lam_initial = lam_target
         lam_target = 1.0
+    else:
+        raise ASMCMaxIterError(f"ASMC exceeded maximum number of iterations {max_iterations}.")
 
     # final result: a collection of samples, with associated log weights
     incremental_log_weights_traj.append(incremental_log_weights)
