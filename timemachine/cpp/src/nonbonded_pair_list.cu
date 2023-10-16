@@ -11,8 +11,8 @@ namespace timemachine {
 
 template <typename RealType, bool Negated>
 NonbondedPairList<RealType, Negated>::NonbondedPairList(
-    const std::vector<int> &pair_idxs, // [M, 2]
-    const std::vector<double> &scales, // [M, 2]
+    const std::vector<int> &pair_idxs,   // [M, 2]
+    const std::vector<RealType> &scales, // [M, 2]
     const double beta,
     const double cutoff)
     : M_(pair_idxs.size() / 2), beta_(beta), cutoff_(cutoff) {

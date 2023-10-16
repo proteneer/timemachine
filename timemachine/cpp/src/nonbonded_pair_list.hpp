@@ -19,13 +19,13 @@ private:
 
     __int128 *d_u_buffer_; // [M]
 
-    int *d_pair_idxs_; // [M, 2]
-    double *d_scales_; // [M, 2]
+    int *d_pair_idxs_;   // [M, 2]
+    RealType *d_scales_; // [M, 2]
 
 public:
     NonbondedPairList(
-        const std::vector<int> &pair_idxs, // [M, 2]
-        const std::vector<double> &scales, // [M, 2]
+        const std::vector<int> &pair_idxs,   // [M, 2]
+        const std::vector<RealType> &scales, // [M, 2]
         const double beta,
         const double cutoff);
 

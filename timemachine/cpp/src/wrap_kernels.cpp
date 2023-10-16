@@ -1396,7 +1396,7 @@ template <typename RealType, bool Negated> void declare_nonbonded_pair_list(py::
                         const double cutoff) {
                 std::vector<int> pair_idxs = py_array_to_vector(pair_idxs_i);
 
-                std::vector<double> scales = py_array_to_vector(scales_i);
+                std::vector<RealType> scales = py_array_to_vector_with_cast<double, RealType>(scales_i);
 
                 return new NonbondedPairList<RealType, Negated>(pair_idxs, scales, beta, cutoff);
             }),

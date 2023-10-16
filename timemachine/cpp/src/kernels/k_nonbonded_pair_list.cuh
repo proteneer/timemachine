@@ -21,8 +21,8 @@ void __global__ k_nonbonded_pair_list(
     const double *__restrict__ coords,
     const double *__restrict__ params,
     const double *__restrict__ box,
-    const int *__restrict__ pair_idxs, // [M, 2] pair-list of atoms
-    const double *__restrict__ scales, // [M]
+    const int *__restrict__ pair_idxs,   // [M, 2] pair-list of atoms
+    const RealType *__restrict__ scales, // [M]
     const double beta,
     const double cutoff,
     unsigned long long *__restrict__ du_dx,
