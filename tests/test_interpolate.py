@@ -11,6 +11,8 @@ from timemachine.fe.single_topology import SingleTopology
 from timemachine.fe.utils import get_romol_conf, read_sdf
 from timemachine.ff import Forcefield
 
+pytestmark = [pytest.mark.nocuda]
+
 
 def test_align_harmonic_bond():
     """
@@ -259,7 +261,6 @@ def test_intermediate_states(num_pairs_to_setup=10):
             np.testing.assert_almost_equal(U_ref(x), U_test(x))
 
 
-@pytest.mark.nogpu
 def test_duplicate_idxs_period_pairs():
     """Check that parameter interpolation is able to handle torsion terms with duplicate ((i, j, k, l), period) pairs.
     E.g. if we only align on idxs and period, this will result in a DuplicateAlignmentKeysError."""

@@ -223,6 +223,7 @@ def test_run_hif2a_test_system_reproducibility(estimate_relative_free_energy_fn)
     )
 
 
+@pytest.mark.nogpu
 def test_md_params_validation():
     frames = 5
     steps_per_frame = 2
