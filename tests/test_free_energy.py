@@ -163,6 +163,7 @@ def test_functional():
         assert "box" in str(e).lower()
 
 
+@pytest.mark.nocuda
 def test_absolute_vacuum():
     with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
         mols = utils.read_sdf(path_to_ligand)
@@ -179,6 +180,7 @@ def test_absolute_vacuum():
     np.testing.assert_array_almost_equal(afe.prepare_combined_coords(), utils.get_romol_conf(mol))
 
 
+@pytest.mark.nocuda
 def test_vacuum_and_solvent_edge_types():
     """Ensure that the values returned by the vacuum and solvent edges are all of the same type."""
     with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
@@ -234,12 +236,14 @@ def test_sample_max_buffer_frames_with_local_md(
     assert len(traj.frames) == n_frames
 
 
+@pytest.mark.nocuda
 @given(integers(min_value=1))
 @seed(2023)
 def test_batches_of_nothing(batch_size):
     assert list(batches(0, batch_size)) == []
 
 
+@pytest.mark.nocuda
 @given(integers(min_value=1, max_value=1000), integers(min_value=1))
 @seed(2023)
 def test_batches(n, batch_size):
@@ -335,6 +339,7 @@ def test_run_sims_bisection_early_stopping():
         assert len(results) == 1 + 2
 
 
+@pytest.mark.nocuda
 def test_estimate_free_energy_bar_with_energy_overflow():
     """Ensure that we handle NaNs in u_kln inputs (e.g. due to overflow in potential evaluation)."""
     rng = np.random.default_rng(2023)

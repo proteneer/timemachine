@@ -424,6 +424,7 @@ def test_jax_transform_intermediate_potential():
     _ = jax.jit(jax.vmap(U))(confs, lambdas)
 
 
+@pytest.mark.nocuda
 def test_combine_with_host():
     """Verifies that combine_with_host correctly sets up all of the U functions"""
     mol_a = Chem.MolFromSmiles("BrC1=CC=CC=C1")
