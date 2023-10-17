@@ -13,9 +13,9 @@ template <typename RealType> class LangevinIntegrator : public Integrator {
 private:
     const int N_;
     const double temperature_;
-    const double dt_;
+    const RealType dt_;
     const double friction_;
-    double ca_;
+    RealType ca_;
 
     // The offset into the current batch of noise
     int noise_offset_;

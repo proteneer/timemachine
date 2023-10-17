@@ -130,7 +130,15 @@ void LocalMDPotentials::setup_from_idxs(
     const double kBT = BOLTZ * temperature;
     // Select all of the particles that will be free
     k_log_probability_selection<float><<<ceil_divide(N_, tpb), tpb, 0, stream>>>(
-        N_, kBT, radius, k, reference_idx, d_x_t, d_box_t, d_probability_buffer_.data, d_free_idxs_.data);
+        N_,
+        kBT,
+        static_cast<float>(radius),
+        static_cast<float>(k),
+        reference_idx,
+        d_x_t,
+        d_box_t,
+        d_probability_buffer_.data,
+        d_free_idxs_.data);
     gpuErrchk(cudaPeekAtLastError());
 
     this->_setup_free_idxs_given_reference_idx(reference_idx, radius, k, stream);
