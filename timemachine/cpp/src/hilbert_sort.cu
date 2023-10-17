@@ -33,15 +33,14 @@ HilbertSort::HilbertSort(const int N)
 
     // estimate size needed to do radix sorting
     // reuse d_sort_keys_in_ rather than constructing a dummy output idxs buffer
-    cub::DeviceRadixSort::SortPairs(
+    gpuErrchk(cub::DeviceRadixSort::SortPairs(
         nullptr,
         d_sort_storage_bytes_,
         d_sort_keys_in_.data,
         d_sort_keys_out_.data,
         d_sort_vals_in_.data,
         d_sort_keys_in_.data,
-        N_);
-    gpuErrchk(cudaPeekAtLastError());
+        N_));
 
     d_sort_storage_.reset(new DeviceBuffer<char>(d_sort_storage_bytes_));
 }
@@ -66,7 +65,7 @@ void HilbertSort::sort_device(
 
     gpuErrchk(cudaPeekAtLastError());
 
-    cub::DeviceRadixSort::SortPairs(
+    gpuErrchk(cub::DeviceRadixSort::SortPairs(
         d_sort_storage_->data,
         d_sort_storage_bytes_,
         d_sort_keys_in_.data,
@@ -77,9 +76,7 @@ void HilbertSort::sort_device(
         0,                                 // begin bit
         sizeof(*d_sort_keys_in_.data) * 8, // end bit
         stream                             // cudaStream
-    );
-
-    gpuErrchk(cudaPeekAtLastError());
+        ));
 }
 
 std::vector<unsigned int> HilbertSort::sort_host(const int N, const double *h_coords, const double *h_box) {
