@@ -38,14 +38,14 @@ void __global__ k_periodic_torsion(
     int k_idx = torsion_idxs[t_idx * 4 + 2];
     int l_idx = torsion_idxs[t_idx * 4 + 3];
 
-    RealType rij[3];
-    RealType rkj[3];
-    RealType rkl[3];
+    RealType rij[D];
+    RealType rkj[D];
+    RealType rkl[D];
 
     RealType rkj_norm_square = 0;
 
     // (todo) cap to three dims, while keeping stride at 4
-    for (int d = 0; d < 3; d++) {
+    for (int d = 0; d < D; d++) {
         RealType vij = coords[j_idx * D + d] - coords[i_idx * D + d];
         RealType vkj = coords[j_idx * D + d] - coords[k_idx * D + d];
         RealType vkl = coords[l_idx * D + d] - coords[k_idx * D + d];
@@ -56,7 +56,7 @@ void __global__ k_periodic_torsion(
     }
 
     RealType rkj_norm = sqrt(rkj_norm_square);
-    RealType n1[3], n2[3];
+    RealType n1[D], n2[D];
 
     cross_product(rij, rkj, n1);
     cross_product(rkj, rkl, n2);
@@ -66,18 +66,18 @@ void __global__ k_periodic_torsion(
     n1_norm_square = dot_product(n1, n1);
     n2_norm_square = dot_product(n2, n2);
 
-    RealType n3[3];
+    RealType n3[D];
     cross_product(n1, n2, n3);
 
-    RealType d_angle_dR0[3];
-    RealType d_angle_dR3[3];
-    RealType d_angle_dR1[3];
-    RealType d_angle_dR2[3];
+    RealType d_angle_dR0[D];
+    RealType d_angle_dR3[D];
+    RealType d_angle_dR1[D];
+    RealType d_angle_dR2[D];
 
     RealType rij_dot_rkj = dot_product(rij, rkj);
     RealType rkl_dot_rkj = dot_product(rkl, rkj);
 
-    for (int d = 0; d < 3; d++) {
+    for (int d = 0; d < D; d++) {
         d_angle_dR0[d] = rkj_norm / n1_norm_square * n1[d];
         d_angle_dR3[d] = -rkj_norm / n2_norm_square * n2[d];
         d_angle_dR1[d] =
@@ -88,7 +88,7 @@ void __global__ k_periodic_torsion(
 
     RealType rkj_n = sqrt(dot_product(rkj, rkj));
 
-    for (int d = 0; d < 3; d++) {
+    for (int d = 0; d < D; d++) {
         rkj[d] /= rkj_n;
     }
 
@@ -96,9 +96,9 @@ void __global__ k_periodic_torsion(
     RealType x = dot_product(n1, n2);
     RealType angle = atan2(y, x);
 
-    int kt_idx = t_idx * 3 + 0;
-    int phase_idx = t_idx * 3 + 1;
-    int period_idx = t_idx * 3 + 2;
+    int kt_idx = t_idx * D + 0;
+    int phase_idx = t_idx * D + 1;
+    int period_idx = t_idx * D + 2;
 
     RealType kt = params[kt_idx];
     RealType phase = params[phase_idx];
@@ -107,7 +107,7 @@ void __global__ k_periodic_torsion(
     RealType prefactor = kt * sin(period * angle - phase) * period;
 
     if (du_dx) {
-        for (int d = 0; d < 3; d++) {
+        for (int d = 0; d < D; d++) {
             atomicAdd(du_dx + i_idx * D + d, FLOAT_TO_FIXED_BONDED<RealType>(d_angle_dR0[d] * prefactor));
             atomicAdd(du_dx + j_idx * D + d, FLOAT_TO_FIXED_BONDED<RealType>(d_angle_dR1[d] * prefactor));
             atomicAdd(du_dx + k_idx * D + d, FLOAT_TO_FIXED_BONDED<RealType>(d_angle_dR2[d] * prefactor));
