@@ -11,6 +11,8 @@ from timemachine.fe.single_topology import SingleTopology
 from timemachine.fe.utils import get_romol_conf, read_sdf
 from timemachine.ff import Forcefield
 
+pytestmark = [pytest.mark.nocuda]
+
 
 def test_align_harmonic_bond():
     """

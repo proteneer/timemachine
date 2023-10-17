@@ -16,6 +16,8 @@ from timemachine.potentials.chiral_restraints import (
     torsion_volume,
 )
 
+pytestmark = [pytest.mark.nocuda]
+
 
 def test_chiral_restraints_pyramidal():
     """For ammonium, assert that:
