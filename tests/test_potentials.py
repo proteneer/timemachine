@@ -288,6 +288,74 @@ def test_unbound_impl_execute_batch(harmonic_bond, precision):
             assert batch_u is None
 
 
+@pytest.mark.parametrize("precision", [np.float32, np.float64])
+def test_bound_impl_execute_batch(harmonic_bond, precision):
+    np.random.seed(2022)
+
+    N = 5
+
+    coords = np.random.random((N, 3))
+    perturbed_coords = coords + np.random.random(coords.shape)
+
+    num_coord_batches = 5
+
+    box = np.diag(np.ones(3))
+    coords_batch = np.stack([coords, perturbed_coords] * num_coord_batches)
+    boxes_batch = np.stack([box] * 2 * num_coord_batches)
+
+    params = harmonic_bond.params
+
+    unbound_gpu = harmonic_bond.potential.to_gpu(precision)
+    bound_impl = unbound_gpu.bind(params).bound_impl
+
+    ref_du_dx, _, ref_u = reference_execute_over_batch(
+        unbound_gpu.unbound_impl, coords_batch, boxes_batch, np.array([params])
+    )
+    # Remove the dimension for parameters that don't matter
+    ref_du_dx = ref_du_dx.squeeze()
+    ref_u = ref_u.squeeze()
+
+    # Verify that number of boxes and coords match
+    with pytest.raises(RuntimeError) as e:
+        _ = bound_impl.execute_batch(
+            coords_batch,
+            boxes_batch[:num_coord_batches],
+            True,
+            True,
+        )
+    assert str(e.value) == "number of batches of coords and boxes don't match"
+
+    # Verify that coords have 3 dimensions
+    with pytest.raises(RuntimeError) as e:
+        _ = bound_impl.execute_batch(
+            coords,
+            box,
+            True,
+            True,
+        )
+    assert str(e.value) == "coords and boxes must have 3 dimensions"
+
+    for combo in itertools.product([False, True], repeat=2):
+        compute_du_dx, compute_u = combo
+        batch_du_dx, batch_u = bound_impl.execute_batch(
+            coords_batch,
+            boxes_batch,
+            compute_du_dx,
+            compute_u,
+        )
+        if compute_du_dx:
+            assert batch_du_dx.shape == (len(coords_batch), N, 3)
+            np.testing.assert_array_equal(batch_du_dx, ref_du_dx)
+        else:
+            assert batch_du_dx is None
+
+        if compute_u:
+            assert batch_u.shape == (len(coords_batch),)
+            np.testing.assert_array_equal(batch_u, ref_u)
+        else:
+            assert batch_u is None
+
+
 @pytest.fixture
 def harmonic_bond_test_system():
     np.random.seed(2022)
