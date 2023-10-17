@@ -41,11 +41,9 @@ def get_batch_u_fns(bps: Iterable[BoundPotential], temperature: float = DEFAULT_
     for bp in bps:
 
         def batch_u_fn(xs, boxes, bp_impl):
-            Us = []
-            for x, box in zip(xs, boxes):
-                _, U = bp_impl.execute(x, box, compute_du_dx=False)
-                Us.append(U)
-            us = np.array(Us) / kBT
+            coords = np.array([x for x in xs])
+            _, Us = bp_impl.execute_batch(coords, np.array(boxes), compute_du_dx=False, compute_u=True)
+            us = Us / kBT
             return us
 
         # extra functools.partial is needed to deal with closure jank
