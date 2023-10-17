@@ -261,10 +261,16 @@ class GradientTest(unittest.TestCase):
             )
             if compute_u:
                 np.testing.assert_allclose(ref_u, test_u, rtol=rtol, atol=atol)
+            else:
+                assert test_u is None
             if compute_du_dx:
                 self.assert_equal_vectors(np.array(ref_du_dx), np.array(test_du_dx), rtol)
+            else:
+                assert test_du_dx is None
             if compute_du_dp:
                 np.testing.assert_allclose(ref_du_dp, test_du_dp, rtol=rtol, atol=atol)
+            else:
+                assert test_du_dp is None
 
             test_du_dx_2, test_du_dp_2, test_u_2 = test_potential.unbound_impl.execute(
                 x, params, box, compute_du_dx, compute_du_dp, compute_u
