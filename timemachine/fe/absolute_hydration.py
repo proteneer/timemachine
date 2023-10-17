@@ -85,7 +85,6 @@ def generate_endstate_samples(
 
     all_xvbs = []
     for i, choice_idx in enumerate(solvent_choice_idxs):
-
         # solvent + noninteracting ligand
         noninteracting_xvb = solvent_samples[choice_idx]
 
@@ -184,7 +183,6 @@ def estimate_absolute_free_energy(
     prefix="",
     md_params: MDParams = DEFAULT_AHFE_MD_PARAMS,
     n_windows=None,
-    keep_idxs=None,
 ):
     """
     Estimate the absolute hydration free energy for the given mol.
@@ -205,10 +203,6 @@ def estimate_absolute_free_energy(
 
     n_windows: None
         Number of windows used for interpolating the the lambda schedule with additional windows.
-
-    keep_idxs: list of int or None
-        If None, return only the end-state frames. Otherwise if not None, use only for debugging, and this
-        will return the frames corresponding to the idxs of interest.
 
     md_params: MDParams
         Parameters for the equilibration and production MD. Defaults to 400 global steps per frame, 1000 frames and 10k
@@ -232,13 +226,9 @@ def estimate_absolute_free_energy(
     temperature = DEFAULT_TEMP
     initial_states = setup_initial_states(afe, ff, host_config, temperature, lambda_schedule, md_params.seed)
 
-    if keep_idxs is None:
-        keep_idxs = [0, -1]  # keep first and last windows
-    assert len(keep_idxs) <= len(lambda_schedule)
-
     combined_prefix = get_mol_name(mol) + "_" + prefix
     try:
-        result, stored_trajectories = run_sims_sequential(initial_states, md_params, temperature, keep_idxs)
+        result, stored_trajectories = run_sims_sequential(initial_states, md_params, temperature)
         plots = make_pair_bar_plots(result, temperature, combined_prefix)
         return SimulationResult(result, plots, stored_trajectories, md_params, [])
     except Exception as err:

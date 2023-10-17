@@ -591,7 +591,6 @@ def run_sims_sequential(
     initial_states: Sequence[InitialState],
     md_params: MDParams,
     temperature: float,
-    keep_idxs: List[int],
 ) -> Tuple[PairBarResult, List[Trajectory]]:
     """Sequentially run simulations at each state in initial_states,
     returning summaries that can be used for pair BAR, energy decomposition, and other diagnostics
@@ -602,15 +601,13 @@ def run_sims_sequential(
         Results of pair BAR analysis
 
     list of Trajectory
-        Trajectory for each state specified in keep_idxs
+        Trajectory for each state in initial_states
 
     Notes
     -----
     * Memory complexity:
         Memory demand should be no more than that of 2 states worth of frames.
-
-        Requesting too many states in keep_idxs may blow this up,
-        so best to keep to first and last states in keep_idxs.
+        Disk demand is proportional to number of initial states.
 
         This restriction may need to be relaxed in the future if:
         * We decide to use MBAR(states) rather than sum_i BAR(states[i], states[i+1])
@@ -624,18 +621,13 @@ def run_sims_sequential(
     # u_kln matrix (2, 2, n_frames) for each pair of adjacent lambda windows and energy term
     u_kln_by_component_by_lambda = []
 
-    keep_idxs = keep_idxs or []
-    keep_idxs = [range(len(initial_states))[i] for i in keep_idxs]  # ensure all indices > 0
-    assert np.all(np.array(keep_idxs) >= 0)
-
-    for lamb_idx, initial_state in enumerate(initial_states):
+    for initial_state in initial_states:
         # run simulation
         traj = sample(initial_state, md_params, max_buffer_frames=100)
         print(f"completed simulation at lambda={initial_state.lamb}!")
 
         # keep samples from any requested states in memory
-        if lamb_idx in keep_idxs:
-            stored_trajectories.append(traj)
+        stored_trajectories.append(traj)
 
         bound_impls = [p.to_gpu(np.float32).bound_impl for p in initial_state.potentials]
         cur_batch_U_fns = get_batch_u_fns(bound_impls, temperature)
