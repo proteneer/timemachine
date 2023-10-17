@@ -145,8 +145,7 @@ template <typename RealType> void declare_neighborlist(py::module &m, const char
         .def(
             "set_row_idxs",
             [](Neighborlist<RealType> &nblist, const py::array_t<unsigned int, py::array::c_style> &idxs_i) {
-                std::vector<unsigned int> idxs(idxs_i.size());
-                std::memcpy(idxs.data(), idxs_i.data(), idxs_i.size() * sizeof(unsigned int));
+                std::vector<unsigned int> idxs = py_array_to_vector(idxs_i);
                 nblist.set_row_idxs(idxs);
             },
             py::arg("idxs"))
@@ -287,8 +286,7 @@ void declare_context(py::module &m) {
                 const int N = ctxt.num_atoms();
                 const int x_interval = (store_x_interval <= 0) ? n_steps : store_x_interval;
 
-                std::vector<int> vec_local_idxs(local_idxs.size());
-                std::memcpy(vec_local_idxs.data(), local_idxs.data(), vec_local_idxs.size() * sizeof(int));
+                std::vector<int> vec_local_idxs = py_array_to_vector(local_idxs);
                 verify_atom_idxs(N, vec_local_idxs);
 
                 std::array<std::vector<double>, 2> result =
@@ -382,8 +380,7 @@ void declare_context(py::module &m) {
                 if (reference_idx < 0 || reference_idx >= N) {
                     throw std::runtime_error("reference idx must be at least 0 and less than " + std::to_string(N));
                 }
-                std::vector<int> vec_selection_idxs(selection_idxs.size());
-                std::memcpy(vec_selection_idxs.data(), selection_idxs.data(), vec_selection_idxs.size() * sizeof(int));
+                std::vector<int> vec_selection_idxs = py_array_to_vector(selection_idxs);
                 verify_atom_idxs(N, vec_selection_idxs);
                 std::set<int> selection_set(vec_selection_idxs.begin(), vec_selection_idxs.end());
                 if (selection_set.find(reference_idx) != selection_set.end()) {
@@ -1002,8 +999,7 @@ template <typename RealType> void declare_harmonic_angle(py::module &m, const ch
         m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
         .def(
             py::init([](const py::array_t<int, py::array::c_style> &angle_idxs) {
-                std::vector<int> vec_angle_idxs(angle_idxs.size());
-                std::memcpy(vec_angle_idxs.data(), angle_idxs.data(), vec_angle_idxs.size() * sizeof(int));
+                std::vector<int> vec_angle_idxs = py_array_to_vector(angle_idxs);
                 return new HarmonicAngle<RealType>(vec_angle_idxs);
             }),
             py::arg("angle_idxs"));
@@ -1017,8 +1013,7 @@ template <typename RealType> void declare_harmonic_angle_stable(py::module &m, c
         m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
         .def(
             py::init([](const py::array_t<int, py::array::c_style> &angle_idxs) {
-                std::vector<int> vec_angle_idxs(angle_idxs.size());
-                std::memcpy(vec_angle_idxs.data(), angle_idxs.data(), vec_angle_idxs.size() * sizeof(int));
+                std::vector<int> vec_angle_idxs = py_array_to_vector(angle_idxs);
                 return new HarmonicAngleStable<RealType>(vec_angle_idxs);
             }),
             py::arg("angle_idxs"));
@@ -1035,10 +1030,8 @@ template <typename RealType> void declare_centroid_restraint(py::module &m, cons
                         const py::array_t<int, py::array::c_style> &group_b_idxs,
                         double kb,
                         double b0) {
-                std::vector<int> vec_group_a_idxs(group_a_idxs.size());
-                std::memcpy(vec_group_a_idxs.data(), group_a_idxs.data(), vec_group_a_idxs.size() * sizeof(int));
-                std::vector<int> vec_group_b_idxs(group_b_idxs.size());
-                std::memcpy(vec_group_b_idxs.data(), group_b_idxs.data(), vec_group_b_idxs.size() * sizeof(int));
+                std::vector<int> vec_group_a_idxs = py_array_to_vector(group_a_idxs);
+                std::vector<int> vec_group_b_idxs = py_array_to_vector(group_b_idxs);
 
                 return new CentroidRestraint<RealType>(vec_group_a_idxs, vec_group_b_idxs, kb, b0);
             }),
@@ -1056,8 +1049,7 @@ template <typename RealType> void declare_periodic_torsion(py::module &m, const 
         m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
         .def(
             py::init([](const py::array_t<int, py::array::c_style> &torsion_idxs) {
-                std::vector<int> vec_torsion_idxs(torsion_idxs.size());
-                std::memcpy(vec_torsion_idxs.data(), torsion_idxs.data(), vec_torsion_idxs.size() * sizeof(int));
+                std::vector<int> vec_torsion_idxs = py_array_to_vector(torsion_idxs);
                 return new PeriodicTorsion<RealType>(vec_torsion_idxs);
             }),
             py::arg("angle_idxs"));
@@ -1130,8 +1122,7 @@ template <typename RealType> void declare_nonbonded_interaction_group(py::module
                         std::optional<py::array_t<int, py::array::c_style>> &col_atom_idxs_i,
                         const bool disable_hilbert_sort,
                         const double nblist_padding) {
-                std::vector<int> row_atom_idxs(row_atom_idxs_i.size());
-                std::memcpy(row_atom_idxs.data(), row_atom_idxs_i.data(), row_atom_idxs_i.size() * sizeof(int));
+                std::vector<int> row_atom_idxs = py_array_to_vector(row_atom_idxs_i);
 
                 std::vector<int> col_atom_idxs;
                 if (col_atom_idxs_i) {
@@ -1197,11 +1188,9 @@ template <typename RealType, bool Negated> void declare_nonbonded_pair_list(py::
                         const py::array_t<double, py::array::c_style> &scales_i,
                         const double beta,
                         const double cutoff) {
-                std::vector<int> pair_idxs(pair_idxs_i.size());
-                std::memcpy(pair_idxs.data(), pair_idxs_i.data(), pair_idxs_i.size() * sizeof(int));
+                std::vector<int> pair_idxs = py_array_to_vector(pair_idxs_i);
 
-                std::vector<double> scales(scales_i.size());
-                std::memcpy(scales.data(), scales_i.data(), scales_i.size() * sizeof(double));
+                std::vector<double> scales = py_array_to_vector(scales_i);
 
                 return new NonbondedPairList<RealType, Negated>(pair_idxs, scales, beta, cutoff);
             }),
@@ -1338,10 +1327,7 @@ double py_accumulate_energy(const py::array_t<long long, py::array::c_style> &in
 
     int N = input_data.size();
 
-    std::vector<__int128> h_buffer(N);
-    for (int i = 0; i < N; i++) {
-        h_buffer[i] = static_cast<__int128>(input_data.data()[i]);
-    }
+    std::vector<__int128> h_buffer = py_array_to_vector_with_cast<long long, __int128>(input_data);
 
     DeviceBuffer<__int128> d_input_buffer(N);
     d_input_buffer.copy_from(&h_buffer[0]);
