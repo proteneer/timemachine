@@ -583,42 +583,7 @@ void declare_potential(py::module &m) {
     std::string pyclass_name = std::string("Potential");
     py::class_<Class, std::shared_ptr<Class>>(m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
         .def(
-            "execute",
-            [](Potential &pot,
-               const py::array_t<double, py::array::c_style> &coords,
-               const py::array_t<double, py::array::c_style> &params,
-               const py::array_t<double, py::array::c_style> &box) -> py::tuple {
-                const long unsigned int N = coords.shape()[0];
-                const long unsigned int D = coords.shape()[1];
-                const long unsigned int P = params.size();
-                verify_coords_and_box(coords, box);
-                // initialize with fixed garbage values for debugging convenience (these should be overwritten by `execute_host`)
-                std::vector<unsigned long long> du_dx(N * D, 9999);
-                std::vector<unsigned long long> du_dp(P, 9999);
-                std::vector<__int128> u(1, 9999);
-
-                pot.execute_host(N, P, coords.data(), params.data(), box.data(), &du_dx[0], &du_dp[0], &u[0]);
-
-                py::array_t<double, py::array::c_style> py_du_dx({N, D});
-                for (unsigned int i = 0; i < du_dx.size(); i++) {
-                    // py_du_dx.mutable_data()[i] = static_cast<double>(static_cast<long long>(du_dx[i]))/FIXED_EXPONENT;
-                    py_du_dx.mutable_data()[i] = FIXED_TO_FLOAT<double>(du_dx[i]);
-                }
-
-                std::vector<ssize_t> pshape(params.shape(), params.shape() + params.ndim());
-
-                py::array_t<double, py::array::c_style> py_du_dp(pshape);
-                pot.du_dp_fixed_to_float(N, P, &du_dp[0], py_du_dp.mutable_data());
-
-                double u_sum = convert_energy_to_fp(u[0]);
-
-                return py::make_tuple(py_du_dx, py_du_dp, u_sum);
-            },
-            py::arg("coords"),
-            py::arg("params"),
-            py::arg("box"))
-        .def(
-            "execute_selective_batch",
+            "execute_batch",
             [](Potential &pot,
                const py::array_t<double, py::array::c_style> &coords,
                const py::array_t<double, py::array::c_style> &params,
@@ -752,7 +717,7 @@ void declare_potential(py::module &m) {
 
     )pbdoc")
         .def(
-            "execute_selective",
+            "execute",
             [](Potential &pot,
                const py::array_t<double, py::array::c_style> &coords,
                const py::array_t<double, py::array::c_style> &params,
@@ -765,10 +730,18 @@ void declare_potential(py::module &m) {
                 const long unsigned int P = params.size();
                 verify_coords_and_box(coords, box);
                 // initialize with fixed garbage values for debugging convenience (these should be overwritten by `execute_host`)
-                std::vector<unsigned long long> du_dx(N * D, 9999);
-                std::vector<unsigned long long> du_dp(P, 9999);
-
-                std::vector<__int128> u(1, 9999);
+                std::vector<unsigned long long> du_dx;
+                if (compute_du_dx) {
+                    du_dx.assign(N * D, 9999);
+                }
+                std::vector<unsigned long long> du_dp;
+                if (compute_du_dp) {
+                    du_dp.assign(P, 9999);
+                }
+                std::vector<__int128> u;
+                if (compute_u) {
+                    u.assign(1, 9999);
+                }
 
                 pot.execute_host(
                     N,
@@ -780,28 +753,25 @@ void declare_potential(py::module &m) {
                     compute_du_dp ? &du_dp[0] : nullptr,
                     compute_u ? &u[0] : nullptr);
 
-                py::array_t<double, py::array::c_style> py_du_dx({N, D});
-                for (unsigned int i = 0; i < du_dx.size(); i++) {
-                    py_du_dx.mutable_data()[i] = FIXED_TO_FLOAT<double>(du_dx[i]);
+                auto result = py::make_tuple(py::none(), py::none(), py::none());
+
+                if (compute_du_dx) {
+                    py::array_t<double, py::array::c_style> py_du_dx({N, D});
+                    for (unsigned int i = 0; i < du_dx.size(); i++) {
+                        py_du_dx.mutable_data()[i] = FIXED_TO_FLOAT<double>(du_dx[i]);
+                    }
+                    result[0] = py_du_dx;
                 }
+                if (compute_du_dp) {
+                    std::vector<ssize_t> pshape(params.shape(), params.shape() + params.ndim());
 
-                std::vector<ssize_t> pshape(params.shape(), params.shape() + params.ndim());
-
-                py::array_t<double, py::array::c_style> py_du_dp(pshape);
-                pot.du_dp_fixed_to_float(N, P, &du_dp[0], py_du_dp.mutable_data());
-
-                double u_sum = convert_energy_to_fp(u[0]);
-
-                auto result = py::make_tuple(py_du_dx, py_du_dp, u_sum);
-
-                if (!compute_du_dx) {
-                    result[0] = py::none();
+                    py::array_t<double, py::array::c_style> py_du_dp(pshape);
+                    pot.du_dp_fixed_to_float(N, P, &du_dp[0], py_du_dp.mutable_data());
+                    result[1] = py_du_dp;
                 }
-                if (!compute_du_dp) {
-                    result[1] = py::none();
-                }
-                if (!compute_u) {
-                    result[2] = py::none();
+                if (compute_u) {
+                    double u_sum = convert_energy_to_fp(u[0]);
+                    result[2] = u_sum;
                 }
 
                 return result;
@@ -809,9 +779,9 @@ void declare_potential(py::module &m) {
             py::arg("coords"),
             py::arg("params"),
             py::arg("box"),
-            py::arg("compute_du_dx"),
-            py::arg("compute_du_dp"),
-            py::arg("compute_u"))
+            py::arg("compute_du_dx") = true,
+            py::arg("compute_du_dp") = true,
+            py::arg("compute_u") = true)
         .def(
             "execute_du_dx",
             [](Potential &pot,
@@ -862,26 +832,47 @@ void declare_bound_potential(py::module &m) {
             "execute",
             [](BoundPotential &bp,
                const py::array_t<double, py::array::c_style> &coords,
-               const py::array_t<double, py::array::c_style> &box) -> py::tuple {
+               const py::array_t<double, py::array::c_style> &box,
+               bool compute_du_dx,
+               bool compute_u) -> py::tuple {
                 const long unsigned int N = coords.shape()[0];
                 const long unsigned int D = coords.shape()[1];
                 verify_coords_and_box(coords, box);
-                std::vector<unsigned long long> du_dx(N * D, 9999);
-                std::vector<__int128> u(1, 9999);
-
-                bp.execute_host(N, coords.data(), box.data(), &du_dx[0], &u[0]);
-
-                py::array_t<double, py::array::c_style> py_du_dx({N, D});
-                for (unsigned int i = 0; i < du_dx.size(); i++) {
-                    py_du_dx.mutable_data()[i] = FIXED_TO_FLOAT<double>(du_dx[i]);
+                // initialize with fixed garbage values for debugging convenience (these should be overwritten by `execute_host`)
+                std::vector<unsigned long long> du_dx;
+                if (compute_du_dx) {
+                    du_dx.assign(N * D, 9999);
+                }
+                std::vector<__int128> u;
+                if (compute_u) {
+                    u.assign(1, 9999);
                 }
 
-                double u_sum = convert_energy_to_fp(u[0]);
+                bp.execute_host(
+                    N, coords.data(), box.data(), compute_du_dx ? &du_dx[0] : nullptr, compute_u ? &u[0] : nullptr);
 
-                return py::make_tuple(py_du_dx, u_sum);
+                auto result = py::make_tuple(py::none(), py::none());
+
+                if (compute_du_dx) {
+                    py::array_t<double, py::array::c_style> py_du_dx({N, D});
+                    if (compute_du_dx) {
+                        for (unsigned int i = 0; i < du_dx.size(); i++) {
+                            py_du_dx.mutable_data()[i] = FIXED_TO_FLOAT<double>(du_dx[i]);
+                        }
+                    }
+                    result[0] = py_du_dx;
+                }
+                if (compute_u) {
+                    double u_sum = convert_energy_to_fp(u[0]);
+                    result[1] = u_sum;
+                }
+
+                return result;
             },
             py::arg("coords"),
-            py::arg("box"))
+            py::arg("box"),
+            py::arg("compute_du_dx") = true,
+            py::arg("compute_u") = true)
         .def(
             "execute_fixed",
             [](BoundPotential &bp,

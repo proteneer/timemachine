@@ -100,7 +100,7 @@ def fire_minimize(x0: NDArray, u_impls: Sequence[custom_ops.BoundPotential], box
     def force(coords):
         forces = np.zeros_like(coords)
         for impl in u_impls:
-            du_dx, _ = impl.execute(coords, box)
+            du_dx, _ = impl.execute(coords, box, compute_u=False)
             forces -= du_dx
         return forces
 
@@ -208,17 +208,17 @@ def minimize_host_4d(
         xs, _ = ctxt.multiple_steps(n_steps_per_window)
         x = xs[-1]
 
-    _, params = parameterize_system(hgt, ff, 0.0)
-    u_impl.set_params(flatten_params(params))
     final_coords = fire_minimize(x, bound_impls, box, n_steps_per_window)
     for impl in bound_impls:
-        du_dx, _ = impl.execute(final_coords, box)
+        du_dx, _ = impl.execute(final_coords, box, compute_u=False)
         check_force_norm(-du_dx)
 
     return final_coords[:num_host_atoms]
 
 
-def make_host_du_dx_fxn(mols, host_config, ff, mol_coords=None):
+def make_host_du_dx_fxn(
+    mols: List[Chem.Mol], host_config: HostConfig, ff: Forcefield, mol_coords: Optional[List[NDArray]] = None
+):
     """construct function to compute du_dx w.r.t. host coords, given fixed mols and box"""
 
     assert host_config.box.shape == (3, 3)
@@ -264,7 +264,7 @@ def make_host_du_dx_fxn(mols, host_config, ff, mol_coords=None):
         x = np.array(combined_coords)
         x[:num_host_atoms] = x_host
 
-        du_dx, _ = gpu_impl.execute(x, host_config.box)
+        du_dx, _ = gpu_impl.execute(x, host_config.box, compute_u=False)
         du_dx_host = du_dx[:num_host_atoms]
         return du_dx_host
 
@@ -272,15 +272,15 @@ def make_host_du_dx_fxn(mols, host_config, ff, mol_coords=None):
 
 
 def equilibrate_host_barker(
-    mols,
+    mols: List[Chem.Mol],
     host_config: HostConfig,
-    ff,
-    mol_coords=None,
-    temperature=DEFAULT_TEMP,
-    proposal_stddev=0.0001,
-    n_steps=1000,
-    seed=None,
-):
+    ff: Forcefield,
+    mol_coords: Optional[List[NDArray]] = None,
+    temperature: float = DEFAULT_TEMP,
+    proposal_stddev: float = 0.0001,
+    n_steps: int = 1000,
+    seed: Optional[int] = None,
+) -> NDArray:
     """Possible alternative to minimize_host_4d, for purposes of clash resolution and initial pre-equilibration
 
     Notes
@@ -448,7 +448,9 @@ def get_val_and_grad_fn(bps: Iterable[BoundPotential], box: NDArray, precision=n
     return val_and_grad_fn
 
 
-def local_minimize(x0, val_and_grad_fn, local_idxs, verbose=True, assert_energy_decreased=True):
+def local_minimize(
+    x0: NDArray, val_and_grad_fn, local_idxs, verbose: bool = True, assert_energy_decreased: bool = True
+):
     """
     Minimize a local region given selected idxs.
 

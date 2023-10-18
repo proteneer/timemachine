@@ -98,16 +98,12 @@ def test_bound_potential_execute_validation(harmonic_bond):
 def test_unbound_potential_execute_validation(harmonic_bond):
     unbound_impl = harmonic_bond.potential.to_gpu(np.float32).unbound_impl
 
-    for execute_method, extra_params in zip(
-        [unbound_impl.execute, unbound_impl.execute_selective], [(), (True, True, True)]
-    ):
+    def func(coords, box):
+        return unbound_impl.execute(coords, harmonic_bond.params, box)
 
-        def func(coords, box):
-            return execute_method(coords, harmonic_bond.params, box, *extra_params)
+    verify_potential_validation(func)
 
-        verify_potential_validation(func)
-
-        execute_method(np.zeros((3, 3)), harmonic_bond.params, np.eye(3), *extra_params)
+    unbound_impl.execute(np.zeros((3, 3)), harmonic_bond.params, np.eye(3))
 
 
 def test_summed_potential_raises_on_inconsistent_lengths(harmonic_bond):
@@ -200,7 +196,8 @@ def reference_execute_over_batch(unbound, coords, boxes, params):
     return du_dx, du_dp, u
 
 
-def test_execute_selective_batch(harmonic_bond):
+@pytest.mark.parametrize("precision", [np.float32, np.float64])
+def test_unbound_impl_execute_batch(harmonic_bond, precision):
     np.random.seed(2022)
 
     N = 5
@@ -220,13 +217,13 @@ def test_execute_selective_batch(harmonic_bond):
 
     params_batch = np.stack([params, random_params] * num_param_batches)
 
-    unbound_impl = harmonic_bond.potential.to_gpu(np.float32).unbound_impl
+    unbound_impl = harmonic_bond.potential.to_gpu(precision).unbound_impl
 
     ref_du_dx, ref_du_dp, ref_u = reference_execute_over_batch(unbound_impl, coords_batch, boxes_batch, params_batch)
 
     # Verify that number of boxes and coords match
     with pytest.raises(RuntimeError) as e:
-        _ = unbound_impl.execute_selective_batch(
+        _ = unbound_impl.execute_batch(
             coords_batch,
             params_batch,
             boxes_batch[:num_coord_batches],
@@ -238,7 +235,7 @@ def test_execute_selective_batch(harmonic_bond):
 
     # Verify that coords have 3 dimensions
     with pytest.raises(RuntimeError) as e:
-        _ = unbound_impl.execute_selective_batch(
+        _ = unbound_impl.execute_batch(
             coords,
             params_batch,
             box,
@@ -250,7 +247,7 @@ def test_execute_selective_batch(harmonic_bond):
 
     # Verify that params must have at least two dimensions
     with pytest.raises(RuntimeError) as e:
-        _ = unbound_impl.execute_selective_batch(
+        _ = unbound_impl.execute_batch(
             coords_batch,
             np.ones(3),
             boxes_batch,
@@ -264,7 +261,7 @@ def test_execute_selective_batch(harmonic_bond):
 
     for combo in itertools.product([False, True], repeat=3):
         compute_du_dx, compute_du_dp, compute_u = combo
-        batch_du_dx, batch_du_dp, batch_u = unbound_impl.execute_selective_batch(
+        batch_du_dx, batch_du_dp, batch_u = unbound_impl.execute_batch(
             coords_batch,
             params_batch,
             boxes_batch,
@@ -274,22 +271,21 @@ def test_execute_selective_batch(harmonic_bond):
         )
         if compute_du_dx:
             assert batch_du_dx.shape == (*shape_prefix, N, 3)
+            np.testing.assert_array_equal(batch_du_dx, ref_du_dx)
         else:
             assert batch_du_dx is None
+
         if compute_du_dp:
             assert batch_du_dp.shape == (*shape_prefix, *harmonic_bond.params.shape)
+            np.testing.assert_array_equal(batch_du_dp, ref_du_dp)
         else:
             assert batch_du_dp is None
+
         if compute_u:
             assert batch_u.shape == (*shape_prefix,)
+            np.testing.assert_array_equal(batch_u, ref_u)
         else:
             assert batch_u is None
-        if compute_du_dx:
-            np.testing.assert_array_equal(batch_du_dx, ref_du_dx)
-        if compute_du_dp:
-            np.testing.assert_array_equal(batch_du_dp, ref_du_dp)
-        if compute_u:
-            np.testing.assert_array_equal(batch_u, ref_u)
 
 
 @pytest.fixture
@@ -364,3 +360,28 @@ def test_potential_jax_differentiable(harmonic_bond):
     coords = np.zeros(shape=(3, 3), dtype=np.float32)
     box = np.diag(np.ones(3))
     du_dx, du_dp = jax.grad(potential, argnums=(0, 1))(coords, params, box)
+
+
+@pytest.mark.parametrize("precision", [np.float32, np.float64])
+def test_bound_and_unbound_execute_match(harmonic_bond_test_system, precision):
+    """Verify that whether using the bound or unbound implementation of a potential the forces and energies computed are bitwise identical."""
+    harmonic_bond_1, _, params, _, coords = harmonic_bond_test_system
+
+    gpu_bond = harmonic_bond_1.to_gpu(precision)
+
+    gpu_bound_bond = gpu_bond.bind(params)
+
+    box = 3.0 * np.eye(3)
+
+    unbound_impl = gpu_bond.unbound_impl
+    bound_impl = gpu_bound_bond.bound_impl
+    for combo in itertools.product([False, True], repeat=2):
+        compute_du_dx, compute_u = combo
+
+        bound_du_dx, bound_u = bound_impl.execute(coords, box, compute_u=compute_u, compute_du_dx=compute_du_dx)
+
+        unbound_du_dx, _, unbound_u = unbound_impl.execute(
+            coords, params, box, compute_u=compute_u, compute_du_dp=False, compute_du_dx=compute_du_dx
+        )
+        np.testing.assert_array_equal(bound_du_dx, unbound_du_dx)
+        np.testing.assert_array_equal(bound_u, unbound_u)

@@ -230,17 +230,23 @@ class GradientTest(unittest.TestCase):
             compute_du_dx, compute_du_dp, compute_u = combo
 
             # do each computation twice to check determinism
-            test_du_dx, test_du_dp, test_u = test_potential.unbound_impl.execute_selective(
+            test_du_dx, test_du_dp, test_u = test_potential.unbound_impl.execute(
                 x, params, box, compute_du_dx, compute_du_dp, compute_u
             )
             if compute_u:
                 np.testing.assert_allclose(ref_u, test_u, rtol=rtol, atol=atol)
+            else:
+                assert test_u is None
             if compute_du_dx:
                 self.assert_equal_vectors(np.array(ref_du_dx), np.array(test_du_dx), rtol)
+            else:
+                assert test_du_dx is None
             if compute_du_dp:
                 np.testing.assert_allclose(ref_du_dp, test_du_dp, rtol=rtol, atol=atol)
+            else:
+                assert test_du_dp is None
 
-            test_du_dx_2, test_du_dp_2, test_u_2 = test_potential.unbound_impl.execute_selective(
+            test_du_dx_2, test_du_dp_2, test_u_2 = test_potential.unbound_impl.execute(
                 x, params, box, compute_du_dx, compute_du_dp, compute_u
             )
             np.testing.assert_array_equal(test_du_dx, test_du_dx_2)
@@ -251,8 +257,8 @@ class GradientTest(unittest.TestCase):
         self, x: NDArray, params: NDArray, box: NDArray, gpu_impl: GpuImplWrapper
     ):
         """Check that energy and derivatives computed using the JAX differentiable interface are consistent with values
-        returned by execute_selective"""
-        ref_du_dx, ref_du_dp, ref_u = gpu_impl.unbound_impl.execute_selective(x, params, box, True, True, True)
+        returned by execute"""
+        ref_du_dx, ref_du_dp, ref_u = gpu_impl.unbound_impl.execute(x, params, box, True, True, True)
         test_u, (test_du_dx, test_du_dp) = jax.value_and_grad(gpu_impl, (0, 1))(x, params, box)
         assert ref_u == test_u
         np.testing.assert_array_equal(test_du_dx, ref_du_dx)

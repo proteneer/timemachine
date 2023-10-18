@@ -43,7 +43,7 @@ def test_energy_overflow_due_to_clashes(precision, rtol, atol):
     gpu_bound = gpu_pot.bind(params).bound_impl
 
     reference_energy = potential(x0, params, box)
-    _, _, test_energy = gpu_unbound.execute_selective(x0, params, box, False, False, True)
+    _, _, test_energy = gpu_unbound.execute(x0, params, box, False, False, True)
     np.testing.assert_allclose(reference_energy, test_energy, rtol=rtol, atol=atol)
 
     # Verify that there was no overflow before placing particles on top of each other
@@ -56,7 +56,7 @@ def test_energy_overflow_due_to_clashes(precision, rtol, atol):
     # Note that the reference potential returns an inf, while the unbound returns a nan
     reference_energy = potential(x0, params, box)
     assert not np.isfinite(reference_energy)
-    _, _, test_energy = gpu_unbound.execute_selective(x0, params, box, False, False, True)
+    _, _, test_energy = gpu_unbound.execute(x0, params, box, False, False, True)
     assert np.isnan(test_energy)
 
     # Verify that there was an overflow that wasn't cancelled out
@@ -155,7 +155,7 @@ def test_energy_overflow_negative_inf_energy(precision, rtol, atol):
     gpu_bound = gpu_pot.bind(params).bound_impl
 
     reference_energy = potential(x0, params, box)
-    _, _, test_energy = gpu_unbound.execute_selective(x0, params, box, False, False, True)
+    _, _, test_energy = gpu_unbound.execute(x0, params, box, False, False, True)
     np.testing.assert_allclose(reference_energy, test_energy, rtol=rtol, atol=atol)
 
     # Verify that there was no overflow before placing particles on top of each other
@@ -168,7 +168,7 @@ def test_energy_overflow_negative_inf_energy(precision, rtol, atol):
     # Note that the reference potential returns -inf, while the unbound returns a nan
     reference_energy = potential(x0, params, box)
     assert not np.isfinite(reference_energy)
-    _, _, test_energy = gpu_unbound.execute_selective(x0, params, box, False, False, True)
+    _, _, test_energy = gpu_unbound.execute(x0, params, box, False, False, True)
     assert not np.isfinite(test_energy) and np.isnan(test_energy)
 
     # Verify that there was an overflow that wasn't cancelled out
@@ -205,12 +205,12 @@ def test_energy_overflow_cancelled_by_exclusions(precision, rtol, atol):
         gpu_pot = pot.to_gpu(precision)
         unbound_pot = gpu_pot.unbound_impl
         bound_pot = gpu_pot.bind(params).bound_impl
-        _, _, selective_energy = unbound_pot.execute_selective(x0, params, box, False, False, True)
+        _, _, selective_energy = unbound_pot.execute(x0, params, box, False, False, True)
         _, bound_energy = bound_pot.execute(x0, box)
         verify_energies(selective_energy, bound_energy)
 
         # Check that all of the energies out of a batch are identical
-        _, _, energies = unbound_pot.execute_selective_batch([x0] * 2, [params] * 2, [box] * 2, False, False, True)
+        _, _, energies = unbound_pot.execute_batch([x0] * 2, [params] * 2, [box] * 2, False, False, True)
         for energy in energies.reshape(-1):
             verify_energies(selective_energy, energy)
 

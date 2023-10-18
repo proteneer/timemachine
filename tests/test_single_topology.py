@@ -603,10 +603,10 @@ def test_nonbonded_intra_split_bitwise_identical(precision, lamb):
     combined_conf = np.concatenate([complex_coords, ligand_conf])
 
     # Ensure that the du_dx and du_dp are exactly identical, ignore du_dp as shapes are different
-    ref_du_dx, _, ref_u = ref_summed.to_gpu(precision).unbound_impl.execute_selective(
+    ref_du_dx, _, ref_u = ref_summed.to_gpu(precision).unbound_impl.execute(
         combined_conf, flattened_ref_params, box, True, False, True
     )
-    split_du_dx, _, split_u = split_summed.to_gpu(precision).unbound_impl.execute_selective(
+    split_du_dx, _, split_u = split_summed.to_gpu(precision).unbound_impl.execute(
         combined_conf, flattened_split_params, box, True, False, True
     )
     np.testing.assert_array_equal(ref_du_dx, split_du_dx)
