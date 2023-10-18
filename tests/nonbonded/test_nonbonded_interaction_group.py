@@ -201,9 +201,9 @@ def test_nonbonded_interaction_group_empty_set_of_idxs(
     for ligand_idxs in ([], np.arange(num_atoms)):
         test_ixngroups = ixn_group.to_gpu(precision)
 
-        col_atom_idxs = np.setdiff1d(np.arange(num_atoms), ligand_idxs).astype(np.int32)
+        col_atom_idxs = np.setdiff1d(np.arange(num_atoms), np.array(ligand_idxs)).astype(np.int32)
         # Set to either empty or all indices, both should produce zero energies
-        test_ixngroups.unbound_impl.set_atom_idxs(np.array(ligand_idxs).astype(np.int32), col_atom_idxs)
+        test_ixngroups.unbound_impl.set_atom_idxs(np.array(ligand_idxs).astype(np.int32), col_atom_idxs)  # type: ignore
         for params in gen_nonbonded_params_with_4d_offsets(rng, params, cutoff):
             GradientTest().compare_forces(
                 conf,
@@ -386,7 +386,7 @@ def test_nonbonded_interaction_group_set_atom_idxs(
 
     # Set to first particle not in ligand_idxs, should produce different values
     col_atom_idxs = np.setdiff1d(np.arange(num_atoms), secondary_ligand_set)
-    unbound_pot.set_atom_idxs(secondary_ligand_set, col_atom_idxs)
+    unbound_pot.set_atom_idxs(secondary_ligand_set, col_atom_idxs)  # type: ignore
 
     diff_du_dx, diff_du_dp, diff_u = unbound_pot.execute(
         conf,
@@ -413,7 +413,7 @@ def test_nonbonded_interaction_group_set_atom_idxs(
     # Set back to the indices, but shuffled, should be identical to reference
     rng.shuffle(ligand_idxs)
     col_atom_idxs = np.setdiff1d(np.arange(num_atoms), ligand_idxs)
-    unbound_pot.set_atom_idxs(ligand_idxs, col_atom_idxs)
+    unbound_pot.set_atom_idxs(ligand_idxs, col_atom_idxs)  # type: ignore
 
     test_du_dx, test_du_dp, test_u = unbound_pot.execute(
         conf,

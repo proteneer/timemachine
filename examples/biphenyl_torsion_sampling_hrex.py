@@ -162,6 +162,7 @@ def sample_biphenyl_hrex(
 
     x0_ligand = get_romol_conf(mol)
     baro: Optional[MonteCarloBarostat] = None
+    top: BaseTopology | HostGuestTopology = bt
 
     if solvent:
         # construct water box
