@@ -135,7 +135,7 @@ def benchmark_potential(
     runs_per_batch = frames * param_batches
     for _ in range(config.num_batches):
         batch_start = time.time()
-        _, _, _ = unbound.execute_selective_batch(
+        _, _, _ = unbound.execute_batch(
             coords,
             params,
             boxes,

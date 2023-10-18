@@ -43,8 +43,7 @@ def get_batch_u_fns(bps: Iterable[BoundPotential], temperature: float = DEFAULT_
         def batch_u_fn(xs, boxes, bp_impl):
             Us = []
             for x, box in zip(xs, boxes):
-                # tbd optimize to "selective" later
-                _, U = bp_impl.execute(x, box)
+                _, U = bp_impl.execute(x, box, compute_du_dx=False)
                 Us.append(U)
             us = np.array(Us) / kBT
             return us

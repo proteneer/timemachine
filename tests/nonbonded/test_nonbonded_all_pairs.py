@@ -238,8 +238,8 @@ def test_nonbonded_all_pairs_order_independent(
     unsorted_impl = unsorted_pot.to_gpu(precision).unbound_impl
 
     for params in gen_nonbonded_params_with_4d_offsets(rng, params, cutoff):
-        a_du_dx, a_du_dp, a_u = sorted_impl.execute_selective(conf, params, example_box, True, True, True)
-        b_du_dx, b_du_dp, b_u = unsorted_impl.execute_selective(conf, params, example_box, True, True, True)
+        a_du_dx, a_du_dp, a_u = sorted_impl.execute(conf, params, example_box)
+        b_du_dx, b_du_dp, b_u = unsorted_impl.execute(conf, params, example_box)
         np.testing.assert_array_equal(a_du_dx, b_du_dx)
         np.testing.assert_array_equal(a_du_dp, b_du_dp)
         assert a_u == b_u
