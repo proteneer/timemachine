@@ -22,7 +22,7 @@ void Potential::execute_batch_host(
     const double *h_box,         // [coord_batch_size, 3, 3]
     unsigned long long *h_du_dx, // [coord_batch_size, param_batch_size, N, 3]
     unsigned long long *h_du_dp, // [coord_batch_size, param_batch_size, P]
-    __int128 *h_u                // [coord_batch_size, param_batch_size, N]
+    __int128 *h_u                // [coord_batch_size, param_batch_size]
 ) {
     std::unique_ptr<DeviceBuffer<double>> d_p(nullptr);
     if (P > 0) {

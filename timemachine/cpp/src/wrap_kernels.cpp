@@ -901,16 +901,12 @@ void declare_bound_potential(py::module &m) {
                     u.assign(coord_batches, 9999);
                 }
 
-                bp.potential->execute_batch_host(
+                bp.execute_batch_host(
                     coord_batches,
                     N,
-                    1,
-                    bp.size,
                     coords.data(),
-                    bp.d_p.data,
                     boxes.data(),
                     compute_du_dx ? du_dx.data() : nullptr,
-                    nullptr,
                     compute_u ? u.data() : nullptr);
 
                 auto result = py::make_tuple(py::none(), py::none());
