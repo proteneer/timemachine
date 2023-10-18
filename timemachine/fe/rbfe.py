@@ -419,6 +419,7 @@ def estimate_relative_free_energy(
     """
     if n_windows is None:
         n_windows = DEFAULT_NUM_WINDOWS
+    assert n_windows >= 2
 
     single_topology = SingleTopology(mol_a, mol_b, core, ff)
 
