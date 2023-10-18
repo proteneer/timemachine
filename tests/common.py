@@ -5,17 +5,15 @@ import unittest
 from collections.abc import Iterator
 from dataclasses import dataclass
 from importlib import resources
-from tempfile import NamedTemporaryFile, TemporaryDirectory
+from tempfile import TemporaryDirectory
 from typing import Optional
 
 import jax
 import numpy as np
 from hilbertcurve.hilbertcurve import HilbertCurve
 from numpy.typing import NDArray
-from rdkit import Chem
 
 from timemachine.constants import ONE_4PI_EPS0
-from timemachine.fe.utils import read_sdf
 from timemachine.ff import Forcefield
 from timemachine.ff.handlers import openmm_deserializer
 from timemachine.lib import custom_ops
@@ -38,26 +36,11 @@ def temporary_working_dir():
             os.chdir(init_dir)
 
 
-def get_110_ccc_ff():
-    forcefield = Forcefield.load_from_file("smirnoff_1_1_0_ccc.py")
-    return forcefield
-
-
 def fixed_overflowed(a):
     """Refer to timemachine/cpp/src/kernels/k_fixed_point.cuh::FLOAT_TO_FIXED_ENERGY for documentation on how we handle energies and overflows"""
     converted_a = np.int64(np.uint64(a))
     assert converted_a != np.iinfo(np.int64).min, "Unexpected value for fixed point energy"
     return converted_a == np.iinfo(np.int64).max
-
-
-def get_hif2a_ligands_as_sdf_file() -> NamedTemporaryFile:  # type: ignore
-    with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
-        mols = read_sdf(path_to_ligand)
-    temp_sdf = NamedTemporaryFile(suffix=".sdf")
-    with Chem.SDWriter(temp_sdf.name) as writer:
-        for mol in mols:
-            writer.write(mol)
-    return temp_sdf
 
 
 def prepare_system_params(x: NDArray, cutoff: float, sigma_scale: float = 5.0) -> NDArray:
@@ -186,15 +169,6 @@ class GradientTest(unittest.TestCase):
         # if sort:
         # perm = hilbert_sort(x, D)
         # x = x[perm]
-
-        return x
-
-    def get_cdk8_coords(self, D, sort=False):
-        x = np.load("cdk8.npy").astype(np.float64)
-        print("num_atoms", x.shape[0])
-        if sort:
-            perm = hilbert_sort(x, D)
-            x = x[perm]
 
         return x
 
