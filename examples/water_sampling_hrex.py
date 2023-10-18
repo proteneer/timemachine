@@ -50,7 +50,6 @@ def estimate_relative_free_energy_hrex_bb(
         make_optimized_initial_state_fn,
         combined_prefix,
         min_overlap=0.667,
-        keep_idxs="all",  # special value to denote keeping every frame
     )
 
 
