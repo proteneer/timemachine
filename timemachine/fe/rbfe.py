@@ -3,7 +3,7 @@ import traceback
 import warnings
 from dataclasses import dataclass, replace
 from functools import partial
-from typing import Any, Callable, Dict, Iterable, List, Literal, NamedTuple, Optional, Sequence, Tuple, Union, cast
+from typing import Any, Callable, Dict, Iterable, List, NamedTuple, Optional, Sequence, Tuple, Union, cast
 
 import numpy as np
 from numpy.typing import NDArray
@@ -370,7 +370,6 @@ def estimate_relative_free_energy(
     prefix: str = "",
     lambda_interval: Optional[Tuple[float, float]] = None,
     n_windows: Optional[int] = None,
-    keep_idxs: Optional[List[int]] = None,
     md_params: MDParams = DEFAULT_MD_PARAMS,
     min_cutoff: Optional[float] = 0.7,
 ) -> SimulationResult:
@@ -406,10 +405,6 @@ def estimate_relative_free_energy(
         Number of windows used for interpolating the lambda schedule with additional windows. Defaults to
         `DEFAULT_NUM_WINDOWS` windows.
 
-    keep_idxs: list of int or None, optional
-        If None, return only the end-state frames. Otherwise if not None, use only for debugging, and this
-        will return the frames corresponding to the idxs of interest.
-
     md_params: MDParams, optional
         Parameters for the equilibration and production MD. Defaults to :py:const:`timemachine.fe.rbfe.DEFAULT_MD_PARAMS`
 
@@ -419,10 +414,13 @@ def estimate_relative_free_energy(
     Returns
     -------
     SimulationResult
-        Collected data from the simulation (see class for storage information). Returned frames and boxes
-        are defined by keep_idxs.
+        Collected data from the simulation (see class for storage information). Returned frames and boxes are of size n_windows.
 
     """
+    if n_windows is None:
+        n_windows = DEFAULT_NUM_WINDOWS
+    assert n_windows >= 2
+
     single_topology = SingleTopology(mol_a, mol_b, core, ff)
 
     lambda_min, lambda_max = lambda_interval or (0.0, 1.0)
@@ -436,14 +434,10 @@ def estimate_relative_free_energy(
         single_topology, host, temperature, lambda_schedule, md_params.seed, min_cutoff=min_cutoff
     )
 
-    if keep_idxs is None:
-        keep_idxs = [0, -1]  # keep frames from first and last windows
-    assert len(keep_idxs) <= len(lambda_schedule)
-
     # TODO: rename prefix to postfix, or move to beginning of combined_prefix?
     combined_prefix = get_mol_name(mol_a) + "_" + get_mol_name(mol_b) + "_" + prefix
     try:
-        result, stored_trajectories = run_sims_sequential(initial_states, md_params, temperature, keep_idxs)
+        result, stored_trajectories = run_sims_sequential(initial_states, md_params, temperature)
         plots = make_pair_bar_plots(result, temperature, combined_prefix)
         return SimulationResult(result, plots, stored_trajectories, md_params, [])
     except Exception as err:
@@ -480,7 +474,6 @@ def estimate_relative_free_energy_bisection(
     lambda_interval: Optional[Tuple[float, float]] = None,
     n_windows: Optional[int] = None,
     min_overlap: Optional[float] = None,
-    keep_idxs: Optional[List[int]] = None,
     min_cutoff: Optional[float] = 0.7,
 ) -> SimulationResult:
     r"""Estimate relative free energy between mol_a and mol_b via independent simulations with a dynamic lambda schedule
@@ -523,29 +516,18 @@ def estimate_relative_free_energy_bisection(
         If not None, terminate bisection early when the BAR overlap between all neighboring pairs of states exceeds this
         value. When given, the final number of windows may be less than or equal to n_windows.
 
-    keep_idxs: list of int or None, optional
-        If None, return only the end-state frames. Otherwise if not None (typically for debugging), return frames from
-        windows corresponding to the specified indices.
-
     min_cutoff: float or None, optional
         Throw error if any atom moves more than this distance (nm) after minimization
 
     Returns
     -------
     SimulationResult
-        Collected data from the simulation (see class for storage information). Returned frames and boxes
-        are defined by keep_idxs.
+        Collected data from the simulation (see class for storage information). Returned frames and boxes are of size n_windows.
     """
 
     if n_windows is None:
         n_windows = DEFAULT_NUM_WINDOWS
     assert n_windows >= 2
-
-    if keep_idxs is None:
-        keep_idxs = [0, -1]  # keep frames from first and last windows
-
-    assert len(set(keep_idxs)) == len(keep_idxs)
-    assert len(keep_idxs) <= n_windows
 
     single_topology = SingleTopology(mol_a, mol_b, core, ff)
 
@@ -587,19 +569,11 @@ def estimate_relative_free_energy_bisection(
         plots = make_pair_bar_plots(final_result, temperature, combined_prefix)
 
         assert len(trajectories) == len(results) + 1
-        stored_trajectories = []
-        for i in keep_idxs:
-            try:
-                stored_trajectories.append(trajectories[i])
-            except IndexError:
-                warnings.warn(
-                    f"Invalid index in keep_idxs: {i}. Bisection terminated with only {len(trajectories)} windows."
-                )
 
         return SimulationResult(
             final_result,
             plots,
-            stored_trajectories,
+            trajectories,
             md_params,
             results,
         )
@@ -619,7 +593,6 @@ def estimate_relative_free_energy_bisection_hrex_impl(
     make_optimized_initial_state_fn: Callable[[float], InitialState],
     combined_prefix: str,
     min_overlap: Optional[float] = None,
-    keep_idxs: Optional[List[int] | Literal["all"]] = None,
 ) -> SimulationResult:
     if n_windows is None:
         n_windows = DEFAULT_NUM_WINDOWS
@@ -687,25 +660,6 @@ def estimate_relative_free_energy_bisection_hrex_impl(
 
         plots = make_pair_bar_plots(pair_bar_result, temperature, combined_prefix)
 
-        stored_trajectories = []
-
-        if keep_idxs is None:
-            keep_idxs = [0, -1]  # keep frames from first and last windows
-        elif keep_idxs == "all":
-            warnings.warn("Warning: keeping frames from every state.")
-            keep_idxs = list(range(len(initial_states)))
-
-        assert len(set(keep_idxs)) == len(keep_idxs)
-        assert len(keep_idxs) <= n_windows
-
-        for i in keep_idxs:
-            try:
-                stored_trajectories.append(trajectories_by_state[i])
-            except IndexError:
-                warnings.warn(
-                    f"Invalid index in keep_idxs: {i}. Bisection terminated with only {len(trajectories_by_state)} windows."
-                )
-
         hrex_plots = HREXPlots(
             transition_matrix_png=plot_fxn(plot_hrex_transition_matrix, diagnostics.transition_matrix),
             swap_acceptance_rates_convergence_png=plot_fxn(
@@ -719,7 +673,7 @@ def estimate_relative_free_energy_bisection_hrex_impl(
             ),
         )
         return SimulationResult(
-            pair_bar_result, plots, stored_trajectories, md_params, results, diagnostics, hrex_plots
+            pair_bar_result, plots, trajectories_by_state, md_params, results, diagnostics, hrex_plots
         )
 
     except Exception as err:
@@ -739,7 +693,6 @@ def estimate_relative_free_energy_bisection_hrex(
     lambda_interval: Optional[Tuple[float, float]] = None,
     n_windows: Optional[int] = None,
     min_overlap: Optional[float] = None,
-    keep_idxs: Optional[List[int] | Literal["all"]] = None,
     min_cutoff: Optional[float] = 0.7,
 ) -> SimulationResult:
     """
@@ -781,19 +734,14 @@ def estimate_relative_free_energy_bisection_hrex(
     min_overlap: float or None, optional
         If not None, terminate bisection early when the BAR overlap between all neighboring pairs of states exceeds this
         value. When given, the final number of windows may be less than or equal to n_windows.
-
-    keep_idxs: list of int or None or "all", optional
-        If None, return only the end-state frames. If "all", return frames from every state. Otherwise, use only for
-        debugging, and this will return the frames corresponding to the idxs of interest.
-
     min_cutoff: float or None, optional
         Throw error if any atom moves more than this distance (nm) after minimization
 
     Returns
     -------
     SimulationResult
-        Collected data from the simulation (see class for storage information). Returned frames and boxes
-        are defined by keep_idxs.
+        Collected data from the simulation (see class for storage information).
+
     """
 
     if n_windows is None:
@@ -834,7 +782,6 @@ def estimate_relative_free_energy_bisection_hrex(
         make_optimized_initial_state_fn,
         combined_prefix,
         min_overlap,
-        keep_idxs,
     )
 
 
@@ -847,7 +794,6 @@ def run_vacuum(
     md_params: MDParams = DEFAULT_HREX_PARAMS,
     n_windows: Optional[int] = None,
     min_overlap: Optional[float] = None,
-    keep_idxs: Optional[List[int]] = None,
     min_cutoff: Optional[float] = None,
 ):
     if md_params is not None and md_params.local_steps > 0:
@@ -864,7 +810,6 @@ def run_vacuum(
         prefix="vacuum",
         n_windows=n_windows,
         min_overlap=min_overlap,
-        keep_idxs=keep_idxs,
         min_cutoff=min_cutoff,
     )
 
@@ -878,7 +823,6 @@ def run_solvent(
     md_params: MDParams = DEFAULT_HREX_PARAMS,
     n_windows: Optional[int] = None,
     min_overlap: Optional[float] = None,
-    keep_idxs: Optional[List[int]] = None,
     min_cutoff: Optional[float] = 0.7,
 ):
     box_width = 4.0
@@ -895,7 +839,6 @@ def run_solvent(
         prefix="solvent",
         n_windows=n_windows,
         min_overlap=min_overlap,
-        keep_idxs=keep_idxs,
         min_cutoff=min_cutoff,
     )
     return solvent_res, solvent_top, solvent_host_config
@@ -910,7 +853,6 @@ def run_complex(
     md_params: MDParams = DEFAULT_HREX_PARAMS,
     n_windows: Optional[int] = None,
     min_overlap: Optional[float] = None,
-    keep_idxs: Optional[List[int]] = None,
     min_cutoff: Optional[float] = 0.7,
 ):
     complex_sys, complex_conf, complex_box, complex_top, nwa = builders.build_protein_system(
@@ -928,7 +870,6 @@ def run_complex(
         md_params=md_params,
         n_windows=n_windows,
         min_overlap=min_overlap,
-        keep_idxs=keep_idxs,
         min_cutoff=min_cutoff,
     )
     return complex_res, complex_top, complex_host_config

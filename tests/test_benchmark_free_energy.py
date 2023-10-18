@@ -65,7 +65,6 @@ def hif2a_single_topology_leg(request):
 @pytest.mark.nightly(reason="Slow")
 @pytest.mark.parametrize("enable_hrex", [False, True])
 def test_benchmark_hif2a_single_topology(hif2a_single_topology_leg, enable_hrex):
-
     host_name, n_windows, initial_states = hif2a_single_topology_leg
 
     n_frames = 500 // n_windows
@@ -81,7 +80,7 @@ def test_benchmark_hif2a_single_topology(hif2a_single_topology_leg, enable_hrex)
             print_diagnostics_interval=None,
         )
     else:
-        run = partial(run_sims_sequential, initial_states, md_params, temperature=temperature, keep_idxs=[])
+        run = partial(run_sims_sequential, initial_states, md_params, temperature=temperature)
 
     _, elapsed_ns = run_with_timing(run)
 
