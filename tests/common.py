@@ -5,17 +5,15 @@ import unittest
 from collections.abc import Iterator
 from dataclasses import dataclass
 from importlib import resources
-from tempfile import NamedTemporaryFile, TemporaryDirectory
+from tempfile import TemporaryDirectory
 from typing import Optional
 
 import jax
 import numpy as np
 from hilbertcurve.hilbertcurve import HilbertCurve
 from numpy.typing import NDArray
-from rdkit import Chem
 
 from timemachine.constants import ONE_4PI_EPS0
-from timemachine.fe.utils import read_sdf
 from timemachine.ff import Forcefield
 from timemachine.ff.handlers import openmm_deserializer
 from timemachine.lib import custom_ops
@@ -38,26 +36,11 @@ def temporary_working_dir():
             os.chdir(init_dir)
 
 
-def get_110_ccc_ff():
-    forcefield = Forcefield.load_from_file("smirnoff_1_1_0_ccc.py")
-    return forcefield
-
-
 def fixed_overflowed(a):
     """Refer to timemachine/cpp/src/kernels/k_fixed_point.cuh::FLOAT_TO_FIXED_ENERGY for documentation on how we handle energies and overflows"""
     converted_a = np.int64(np.uint64(a))
     assert converted_a != np.iinfo(np.int64).min, "Unexpected value for fixed point energy"
     return converted_a == np.iinfo(np.int64).max
-
-
-def get_hif2a_ligands_as_sdf_file() -> NamedTemporaryFile:  # type: ignore
-    with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
-        mols = read_sdf(path_to_ligand)
-    temp_sdf = NamedTemporaryFile(suffix=".sdf")
-    with Chem.SDWriter(temp_sdf.name) as writer:
-        for mol in mols:
-            writer.write(mol)
-    return temp_sdf
 
 
 def prepare_system_params(x: NDArray, cutoff: float, sigma_scale: float = 5.0) -> NDArray:
@@ -187,15 +170,6 @@ class GradientTest(unittest.TestCase):
 
         return x
 
-    def get_cdk8_coords(self, D, sort=False):
-        x = np.load("cdk8.npy").astype(np.float64)
-        print("num_atoms", x.shape[0])
-        if sort:
-            perm = hilbert_sort(x, D)
-            x = x[perm]
-
-        return x
-
     def assert_equal_vectors(self, truth, test, rtol):
         """
         OpenMM convention - errors are compared against norm of force vectors
@@ -253,17 +227,23 @@ class GradientTest(unittest.TestCase):
             compute_du_dx, compute_du_dp, compute_u = combo
 
             # do each computation twice to check determinism
-            test_du_dx, test_du_dp, test_u = test_potential.unbound_impl.execute_selective(
+            test_du_dx, test_du_dp, test_u = test_potential.unbound_impl.execute(
                 x, params, box, compute_du_dx, compute_du_dp, compute_u
             )
             if compute_u:
                 np.testing.assert_allclose(ref_u, test_u, rtol=rtol, atol=atol)
+            else:
+                assert test_u is None
             if compute_du_dx:
                 self.assert_equal_vectors(np.array(ref_du_dx), np.array(test_du_dx), rtol)
+            else:
+                assert test_du_dx is None
             if compute_du_dp:
                 np.testing.assert_allclose(ref_du_dp, test_du_dp, rtol=rtol, atol=atol)
+            else:
+                assert test_du_dp is None
 
-            test_du_dx_2, test_du_dp_2, test_u_2 = test_potential.unbound_impl.execute_selective(
+            test_du_dx_2, test_du_dp_2, test_u_2 = test_potential.unbound_impl.execute(
                 x, params, box, compute_du_dx, compute_du_dp, compute_u
             )
             np.testing.assert_array_equal(test_du_dx, test_du_dx_2)
@@ -274,8 +254,8 @@ class GradientTest(unittest.TestCase):
         self, x: NDArray, params: NDArray, box: NDArray, gpu_impl: GpuImplWrapper
     ):
         """Check that energy and derivatives computed using the JAX differentiable interface are consistent with values
-        returned by execute_selective"""
-        ref_du_dx, ref_du_dp, ref_u = gpu_impl.unbound_impl.execute_selective(x, params, box, True, True, True)
+        returned by execute"""
+        ref_du_dx, ref_du_dp, ref_u = gpu_impl.unbound_impl.execute(x, params, box, True, True, True)
         test_u, (test_du_dx, test_du_dp) = jax.value_and_grad(gpu_impl, (0, 1))(x, params, box)
         assert ref_u == test_u
         np.testing.assert_array_equal(test_du_dx, ref_du_dx)

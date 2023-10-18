@@ -163,6 +163,7 @@ def test_functional():
         assert "box" in str(e).lower()
 
 
+@pytest.mark.nocuda
 def test_absolute_vacuum():
     with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
         mols = utils.read_sdf(path_to_ligand)
@@ -179,6 +180,7 @@ def test_absolute_vacuum():
     np.testing.assert_array_almost_equal(afe.prepare_combined_coords(), utils.get_romol_conf(mol))
 
 
+@pytest.mark.nocuda
 def test_vacuum_and_solvent_edge_types():
     """Ensure that the values returned by the vacuum and solvent edges are all of the same type."""
     with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
@@ -223,7 +225,7 @@ def test_sample_max_buffer_frames_with_local_md(
 ):
     """Ensure that if sample is called with max_buffer_frames combined with local MD it works. This failed previously
     due to trying to configure local md on the same context repeatedly. This was due to max_buffer_frames < n_frames which
-    resulted in caling ctxt.setup_local_md multiple times.
+    resulted in calling ctxt.setup_local_md multiple times.
     """
     steps_per_frame = 1
     n_eq_steps = 1
@@ -234,12 +236,14 @@ def test_sample_max_buffer_frames_with_local_md(
     assert len(traj.frames) == n_frames
 
 
+@pytest.mark.nocuda
 @given(integers(min_value=1))
 @seed(2023)
 def test_batches_of_nothing(batch_size):
     assert list(batches(0, batch_size)) == []
 
 
+@pytest.mark.nocuda
 @given(integers(min_value=1, max_value=1000), integers(min_value=1))
 @seed(2023)
 def test_batches(n, batch_size):
@@ -254,10 +258,11 @@ def hif2a_ligand_pair_single_topology_lam0_state():
     mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
     forcefield = Forcefield.load_default()
     st = SingleTopology(mol_a, mol_b, core, forcefield)
-    state = setup_initial_states(st, None, DEFAULT_TEMP, [0.0], 2023)[0]
+    state = setup_initial_state(st, 0.0, None, DEFAULT_TEMP, 2023)
     return state
 
 
+@pytest.mark.nocuda
 @patch("timemachine.fe.free_energy.make_overlap_detail_figure")
 def test_make_pair_bar_plots(mock_fig, hif2a_ligand_pair_single_topology_lam0_state):
     pair_result = PairBarResult(
@@ -280,11 +285,8 @@ def test_make_pair_bar_plots(mock_fig, hif2a_ligand_pair_single_topology_lam0_st
     )
 
 
-def test_run_sims_bisection_early_stopping():
-    mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
-    forcefield = Forcefield.load_default()
-    st = SingleTopology(mol_a, mol_b, core, forcefield)
-    initial_state = setup_initial_state(st, 0.0, None, DEFAULT_TEMP, 2023)
+def test_run_sims_bisection_early_stopping(hif2a_ligand_pair_single_topology_lam0_state):
+    initial_state = hif2a_ligand_pair_single_topology_lam0_state
 
     def make_initial_state(_: float):
         return initial_state
@@ -335,6 +337,7 @@ def test_run_sims_bisection_early_stopping():
         assert len(results) == 1 + 2
 
 
+@pytest.mark.nocuda
 def test_estimate_free_energy_bar_with_energy_overflow():
     """Ensure that we handle NaNs in u_kln inputs (e.g. due to overflow in potential evaluation)."""
     rng = np.random.default_rng(2023)

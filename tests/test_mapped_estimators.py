@@ -5,9 +5,12 @@ Assert accurate estimates for free energy differences between 1D Gaussians using
 from dataclasses import dataclass
 
 import numpy as np
+import pytest
 from pymbar import BAR, EXP, MBAR
 
 from timemachine.maps.estimators import compute_mapped_reduced_work, compute_mapped_u_kn
+
+pytestmark = [pytest.mark.nocuda]
 
 
 @dataclass

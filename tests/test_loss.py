@@ -1,6 +1,9 @@
 import numpy as np
+import pytest
 
 from timemachine.fe.loss import flat_bottom_loss, l1_loss, pseudo_huber_loss, truncated_residuals
+
+pytestmark = [pytest.mark.nocuda]
 
 np.random.seed(2021)
 

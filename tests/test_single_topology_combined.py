@@ -12,6 +12,8 @@ from timemachine.md import builders
 from timemachine.testsystems.dhfr import get_dhfr_system
 from timemachine.testsystems.relative import get_hif2a_ligand_pair_single_topology
 
+pytestmark = [pytest.mark.nocuda]
+
 
 @pytest.fixture(scope="module")
 def hif2a_ligand_pair_single_topology():
@@ -35,8 +37,9 @@ def solvent_host_system():
     return convert_omm_system(host_sys_omm), conf.shape[0]
 
 
+@pytest.mark.parametrize("lamb", [0.0, 1.0])
 @pytest.mark.parametrize("host_system_fixture", ["solvent_host_system", "complex_host_system"])
-def test_combined_parameters_bonded(host_system_fixture, hif2a_ligand_pair_single_topology, request):
+def test_combined_parameters_bonded(host_system_fixture, lamb, hif2a_ligand_pair_single_topology, request):
     # test bonded and nonbonded parameters are correct at the end-states.
     # 1) we expected bonded idxs in the ligand to be shifted by num_host_atoms
     # 2) we expected nonbonded lambda_idxs to be shifted
@@ -53,30 +56,29 @@ def test_combined_parameters_bonded(host_system_fixture, hif2a_ligand_pair_singl
             else:
                 assert np.all(atom_idxs >= num_host_atoms)
 
-    for lamb in [0.0, 1.0]:
-        # generate host guest system
-        hgs = st.combine_with_host(host_sys, lamb, num_water_atoms)
+    # generate host guest system
+    hgs = st.combine_with_host(host_sys, lamb, num_water_atoms)
 
-        # check bonds
-        check_bonded_idxs_consistency(hgs.bond.potential.idxs, len(host_sys.bond.potential.idxs))
-        check_bonded_idxs_consistency(hgs.angle.potential.idxs, len(host_sys.angle.potential.idxs))
+    # check bonds
+    check_bonded_idxs_consistency(hgs.bond.potential.idxs, len(host_sys.bond.potential.idxs))
+    check_bonded_idxs_consistency(hgs.angle.potential.idxs, len(host_sys.angle.potential.idxs))
 
-        if host_sys.torsion:
-            check_bonded_idxs_consistency(hgs.torsion.potential.idxs, len(host_sys.torsion.potential.idxs))
-        else:
-            check_bonded_idxs_consistency(hgs.torsion.potential.idxs, 0)
+    if host_sys.torsion:
+        check_bonded_idxs_consistency(hgs.torsion.potential.idxs, len(host_sys.torsion.potential.idxs))
+    else:
+        check_bonded_idxs_consistency(hgs.torsion.potential.idxs, 0)
 
-        if host_sys.chiral_atom:
-            check_bonded_idxs_consistency(hgs.chiral_atom.potential.idxs, len(host_sys.chiral_atom.potential.idxs))
-        else:
-            check_bonded_idxs_consistency(hgs.chiral_atom.potential.idxs, 0)
+    if host_sys.chiral_atom:
+        check_bonded_idxs_consistency(hgs.chiral_atom.potential.idxs, len(host_sys.chiral_atom.potential.idxs))
+    else:
+        check_bonded_idxs_consistency(hgs.chiral_atom.potential.idxs, 0)
 
-        if host_sys.chiral_bond:
-            check_bonded_idxs_consistency(hgs.chiral_bond.potential.idxs, len(host_sys.chiral_bond.potential.idxs))
-        else:
-            check_bonded_idxs_consistency(hgs.chiral_bond.potential.idxs, 0)
+    if host_sys.chiral_bond:
+        check_bonded_idxs_consistency(hgs.chiral_bond.potential.idxs, len(host_sys.chiral_bond.potential.idxs))
+    else:
+        check_bonded_idxs_consistency(hgs.chiral_bond.potential.idxs, 0)
 
-        check_bonded_idxs_consistency(hgs.nonbonded_guest_pairs.potential.idxs, 0)
+    check_bonded_idxs_consistency(hgs.nonbonded_guest_pairs.potential.idxs, 0)
 
 
 @pytest.mark.parametrize("lamb", [0.0, 1.0])

@@ -6,6 +6,8 @@ from scipy.stats import ks_2samp
 
 from timemachine.md.moves import MonteCarloMove
 
+pytestmark = [pytest.mark.nocuda]
+
 
 class RWMH1D(MonteCarloMove[float]):
     def __init__(self, log_q: Callable[[float], float], proposal_radius: float):

@@ -14,9 +14,10 @@ namespace timemachine {
 template <typename RealType>
 LangevinIntegrator<RealType>::LangevinIntegrator(
     int N, const double *masses, double temperature, double dt, double friction, int seed)
-    : N_(N), temperature_(temperature), dt_(dt), friction_(friction), noise_offset_(0), runner_() {
+    : N_(N), temperature_(temperature), dt_(static_cast<RealType>(dt)), friction_(friction), noise_offset_(0),
+      runner_() {
 
-    ca_ = exp(-friction * dt);
+    ca_ = static_cast<RealType>(exp(-friction * dt));
 
     const double kT = BOLTZ * temperature;
     const double ccs_adjustment = sqrt(1 - exp(-2 * friction * dt));

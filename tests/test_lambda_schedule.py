@@ -3,6 +3,8 @@ import pytest
 
 from timemachine.fe.lambda_schedule import interpolate_pre_optimized_protocol, validate_lambda_schedule
 
+pytestmark = [pytest.mark.nocuda]
+
 
 def test_validate_lambda_schedule():
     """check that assertions fail when they should"""

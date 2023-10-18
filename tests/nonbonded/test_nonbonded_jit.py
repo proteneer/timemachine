@@ -5,6 +5,8 @@ import pytest
 
 from timemachine.potentials import Nonbonded
 
+pytestmark = [pytest.mark.nocuda]
+
 
 @pytest.mark.parametrize("num_atom_idxs", [None, 15])
 def test_nonbonded_reference_jittable(num_atom_idxs, rng: np.random.Generator):

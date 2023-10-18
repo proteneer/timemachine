@@ -457,7 +457,7 @@ def estimate_relative_free_energy_bisection_or_hrex(*args, **kwargs) -> Simulati
     See `estimate_relative_free_energy_bisection` for parameters.
 
     Will call `estimate_relative_free_energy_bisection` or `estimate_relative_free_energy_bisection_hrex`
-    as appropriate givne md_params.
+    as appropriate given md_params.
 
     """
     md_params = kwargs["md_params"]

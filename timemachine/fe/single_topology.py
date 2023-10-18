@@ -1344,7 +1344,7 @@ class SingleTopology(AtomMapMixin):
         else:
             # solvent waters don't have torsions
             combined_torsion_idxs = np.array(guest_system.torsion.potential.idxs, dtype=np.int32) + num_host_atoms
-            combined_torsion_params = jnp.array(guest_system.torsion.params, dtype=np.float64)
+            combined_torsion_params = jnp.array(guest_system.torsion.params)
 
         combined_torsion = PeriodicTorsion(combined_torsion_idxs).bind(combined_torsion_params)
 

@@ -108,11 +108,9 @@ class TestBonded(GradientTest):
 
             test_potential_rev_impl = test_potential_rev.to_gpu(precision).unbound_impl
 
-            test_du_dx, test_du_dp, test_u = test_impl.unbound_impl.execute_selective(x, params, box, 1, 1, 1)
+            test_du_dx, test_du_dp, test_u = test_impl.unbound_impl.execute(x, params, box, 1, 1, 1)
 
-            test_du_dx_rev, test_du_dp_rev, test_u_rev = test_potential_rev_impl.execute_selective(
-                x, params, box, 1, 1, 1
-            )
+            test_du_dx_rev, test_du_dp_rev, test_u_rev = test_potential_rev_impl.execute(x, params, box, 1, 1, 1)
 
             np.testing.assert_array_equal(test_u, test_u_rev)
             np.testing.assert_array_equal(test_du_dx, test_du_dx_rev)
@@ -157,11 +155,9 @@ class TestBonded(GradientTest):
             test_potential_impl = test_potential.to_gpu(precision).unbound_impl
             test_potential_rev_impl = test_potential_rev.to_gpu(precision).unbound_impl
 
-            test_du_dx, test_du_dp, test_u = test_potential_impl.execute_selective(x, params, box, 1, 1, 1)
+            test_du_dx, test_du_dp, test_u = test_potential_impl.execute(x, params, box, 1, 1, 1)
 
-            test_du_dx_rev, test_du_dp_rev, test_u_rev = test_potential_rev_impl.execute_selective(
-                x, params, box, 1, 1, 1
-            )
+            test_du_dx_rev, test_du_dp_rev, test_u_rev = test_potential_rev_impl.execute(x, params, box, 1, 1, 1)
 
             np.testing.assert_array_equal(test_u, test_u_rev)
             np.testing.assert_array_equal(test_du_dx, test_du_dx_rev)
@@ -209,11 +205,9 @@ class TestBonded(GradientTest):
             test_potential_impl = test_potential.to_gpu(precision).unbound_impl
             test_potential_rev_impl = test_potential_rev.to_gpu(precision).unbound_impl
 
-            test_du_dx, test_du_dp, test_u = test_potential_impl.execute_selective(x, params, box, 1, 1, 1)
+            test_du_dx, test_du_dp, test_u = test_potential_impl.execute(x, params, box, 1, 1, 1)
 
-            test_du_dx_rev, test_du_dp_rev, test_u_rev = test_potential_rev_impl.execute_selective(
-                x, params, box, 1, 1, 1
-            )
+            test_du_dx_rev, test_du_dp_rev, test_u_rev = test_potential_rev_impl.execute(x, params, box, 1, 1, 1)
 
             np.testing.assert_array_equal(test_u, test_u_rev)
             np.testing.assert_array_equal(test_du_dx, test_du_dx_rev)
@@ -279,11 +273,9 @@ class TestBonded(GradientTest):
             test_potential_impl = test_potential.to_gpu(precision).unbound_impl
             test_potential_rev_impl = test_potential_rev.to_gpu(precision).unbound_impl
 
-            test_du_dx, test_du_dp, test_u = test_potential_impl.execute_selective(x, params, box, 1, 1, 1)
+            test_du_dx, test_du_dp, test_u = test_potential_impl.execute(x, params, box, 1, 1, 1)
 
-            test_du_dx_rev, test_du_dp_rev, test_u_rev = test_potential_rev_impl.execute_selective(
-                x, params, box, 1, 1, 1
-            )
+            test_du_dx_rev, test_du_dp_rev, test_u_rev = test_potential_rev_impl.execute(x, params, box, 1, 1, 1)
 
             np.testing.assert_array_equal(test_u, test_u_rev)
             np.testing.assert_array_equal(test_du_dx, test_du_dx_rev)
@@ -323,11 +315,9 @@ class TestBonded(GradientTest):
             test_potential_impl = test_potential.to_gpu(precision).unbound_impl
             test_potential_rev_impl = test_potential_rev.to_gpu(precision).unbound_impl
 
-            test_du_dx, test_du_dp, test_u = test_potential_impl.execute_selective(x, params, box, 1, 1, 1)
+            test_du_dx, test_du_dp, test_u = test_potential_impl.execute(x, params, box, 1, 1, 1)
 
-            test_du_dx_rev, test_du_dp_rev, test_u_rev = test_potential_rev_impl.execute_selective(
-                x, params, box, 1, 1, 1
-            )
+            test_du_dx_rev, test_du_dp_rev, test_u_rev = test_potential_rev_impl.execute(x, params, box, 1, 1, 1)
 
             np.testing.assert_array_equal(test_u, test_u_rev)
             np.testing.assert_array_equal(test_du_dx, test_du_dx_rev)
