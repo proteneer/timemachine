@@ -15,13 +15,13 @@ def test_run_solvent():
     mol, _ = testsystems.ligands.get_biphenyl()
     ff = Forcefield.load_default()
     md_params = MDParams(seed=seed, n_eq_steps=n_eq_steps, n_frames=n_frames, steps_per_frame=steps_per_frame)
-    res, top, host_config = absolute_hydration.run_solvent(mol, ff, None, md_params=md_params, n_windows=n_windows)
+    res, _, host_config = absolute_hydration.run_solvent(mol, ff, None, md_params=md_params, n_windows=n_windows)
 
     assert res.plots.overlap_summary_png is not None
     assert res.plots.overlap_detail_png is not None
     assert np.linalg.norm(res.final_result.dG_errs) < 10
-    assert len(res.frames) == 2
-    assert len(res.boxes) == 2
+    assert len(res.frames) == n_windows
+    assert len(res.boxes) == n_windows
     assert len(res.frames[0]) == n_frames
     assert len(res.frames[-1]) == n_frames
     assert len(res.boxes[0]) == n_frames
