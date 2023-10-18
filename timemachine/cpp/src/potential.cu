@@ -12,6 +12,36 @@ namespace timemachine {
 
 const int Potential::D = 3;
 
+void Potential::execute_batch_device(
+    const int coord_batch_size,
+    const int N,
+    const int param_batch_size,
+    const int P,
+    const double *d_x,
+    const double *d_p,
+    const double *d_box,
+    unsigned long long *d_du_dx,
+    unsigned long long *d_du_dp,
+    __int128 *d_u,
+    cudaStream_t stream) {
+
+    for (unsigned int i = 0; i < coord_batch_size; i++) {
+        for (unsigned int j = 0; j < param_batch_size; j++) {
+            unsigned int offset_factor = (i * param_batch_size) + j;
+            this->execute_device(
+                N,
+                P,
+                d_x + (i * N * D),
+                P > 0 ? d_p + (j * P) : nullptr,
+                d_box + (i * D * D),
+                d_du_dx ? d_du_dx + (offset_factor * N * D) : nullptr,
+                d_du_dp ? d_du_dp + (offset_factor * P) : nullptr,
+                d_u ? d_u + offset_factor : nullptr,
+                stream);
+        }
+    }
+}
+
 void Potential::execute_batch_host(
     const int coord_batch_size,  // Number of batches of coordinates
     const int N,                 // Number of atoms
@@ -60,21 +90,19 @@ void Potential::execute_batch_host(
         gpuErrchk(cudaMemsetAsync(d_u_buffer->data, 0, d_u_buffer->size, stream));
     }
 
-    for (unsigned int i = 0; i < coord_batch_size; i++) {
-        for (unsigned int j = 0; j < param_batch_size; j++) {
-            unsigned int offset_factor = (i * param_batch_size) + j;
-            this->execute_device(
-                N,
-                P,
-                d_x_buffer.data + (i * N * D),
-                P > 0 ? d_p->data + (j * P) : nullptr,
-                d_box.data + (i * D * D),
-                d_du_dx_buffer ? d_du_dx_buffer->data + (offset_factor * N * D) : nullptr,
-                d_du_dp_buffer ? d_du_dp_buffer->data + (offset_factor * P) : nullptr,
-                d_u_buffer ? d_u_buffer->data + offset_factor : nullptr,
-                stream);
-        }
-    }
+    this->execute_batch_device(
+        coord_batch_size,
+        N,
+        param_batch_size,
+        P,
+        d_x_buffer.data,
+        P > 0 ? d_p->data : nullptr,
+        d_box.data,
+        h_du_dx ? d_du_dx_buffer->data : nullptr,
+        h_du_dp ? d_du_dp_buffer->data : nullptr,
+        h_u ? d_u_buffer->data : nullptr,
+        stream);
+
     gpuErrchk(cudaStreamSynchronize(stream));
     gpuErrchk(cudaStreamDestroy(stream));
 

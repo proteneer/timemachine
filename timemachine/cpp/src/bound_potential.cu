@@ -53,16 +53,19 @@ void BoundPotential::execute_batch_host(
         gpuErrchk(cudaMemsetAsync(d_u_buffer->data, 0, d_u_buffer->size, stream));
     }
 
-    for (unsigned int i = 0; i < coord_batch_size; i++) {
-        this->execute_device(
-            N,
-            d_x_buffer.data + (i * N * D),
-            d_box.data + (i * D * D),
-            d_du_dx_buffer ? d_du_dx_buffer->data + (i * N * D) : nullptr,
-            nullptr,
-            d_u_buffer ? d_u_buffer->data + i : nullptr,
-            stream);
-    }
+    this->potential->execute_batch_device(
+        coord_batch_size,
+        N,
+        1, // only a single set of parameters
+        this->size,
+        d_x_buffer.data,
+        this->size > 0 ? this->d_p.data : nullptr,
+        d_box.data,
+        h_du_dx ? d_du_dx_buffer->data : nullptr,
+        nullptr,
+        h_u ? d_u_buffer->data : nullptr,
+        stream);
+
     gpuErrchk(cudaStreamSynchronize(stream));
     gpuErrchk(cudaStreamDestroy(stream));
 
