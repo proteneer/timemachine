@@ -26,7 +26,7 @@ from timemachine.fe.free_energy import (
     run_sims_sequential,
 )
 from timemachine.fe.plots import (
-    plot_fxn,
+    plot_as_png_fxn,
     plot_hrex_replica_state_distribution_convergence,
     plot_hrex_replica_state_distribution_heatmap,
     plot_hrex_swap_acceptance_rates_convergence,
@@ -661,14 +661,14 @@ def estimate_relative_free_energy_bisection_hrex_impl(
         plots = make_pair_bar_plots(pair_bar_result, temperature, combined_prefix)
 
         hrex_plots = HREXPlots(
-            transition_matrix_png=plot_fxn(plot_hrex_transition_matrix, diagnostics.transition_matrix),
-            swap_acceptance_rates_convergence_png=plot_fxn(
+            transition_matrix_png=plot_as_png_fxn(plot_hrex_transition_matrix, diagnostics.transition_matrix),
+            swap_acceptance_rates_convergence_png=plot_as_png_fxn(
                 plot_hrex_swap_acceptance_rates_convergence, diagnostics.cumulative_swap_acceptance_rates
             ),
-            replica_state_distribution_convergence_png=plot_fxn(
+            replica_state_distribution_convergence_png=plot_as_png_fxn(
                 plot_hrex_replica_state_distribution_convergence, diagnostics.cumulative_replica_state_counts
             ),
-            replica_state_distribution_heatmap_png=plot_fxn(
+            replica_state_distribution_heatmap_png=plot_as_png_fxn(
                 plot_hrex_replica_state_distribution_heatmap, diagnostics.cumulative_replica_state_counts
             ),
         )
