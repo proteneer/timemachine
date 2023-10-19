@@ -62,14 +62,14 @@ def get_ff(ff_path=DEFAULT_FF) -> Forcefield:
     return Forcefield.load_from_file(ff_path)
 
 
-def get_result_path(mol_id: str) -> Path:
+def get_result_path(mol_id: str) -> str:
     """
     Return the path to the smc results for a particular molecule.
     """
     return f"summary_smc_result_{mol_id}.pkl"
 
 
-def get_full_traj_path(mol_id: str) -> Path:
+def get_full_traj_path(mol_id: str) -> str:
     return f"full_smc_traj_{mol_id}.pkl"
 
 
