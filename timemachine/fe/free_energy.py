@@ -21,7 +21,12 @@ from timemachine.fe.energy_decomposition import (
     compute_energy_decomposed_u_kln,
     get_batch_u_fns,
 )
-from timemachine.fe.plots import make_dG_errs_figure, make_overlap_detail_figure, make_overlap_summary_figure
+from timemachine.fe.plots import (
+    plot_as_png_fxn,
+    plot_dG_errs_figure,
+    plot_overlap_detail_figure,
+    plot_overlap_summary_figure,
+)
 from timemachine.fe.protocol_refinement import greedy_bisection_step
 from timemachine.fe.stored_arrays import StoredArrays
 from timemachine.fe.utils import get_mol_masses, get_romol_conf
@@ -574,14 +579,14 @@ def make_pair_bar_plots(res: PairBarResult, temperature: float, prefix: str) -> 
     U_names = [type(p.potential).__name__ for p in res.initial_states[0].potentials]
     lambdas = [s.lamb for s in res.initial_states]
 
-    overlap_detail_png = make_overlap_detail_figure(
-        U_names, res.dGs, res.dG_errs, res.u_kln_by_component_by_lambda, temperature, prefix
+    overlap_detail_png = plot_as_png_fxn(
+        plot_overlap_detail_figure, U_names, res.dGs, res.dG_errs, res.u_kln_by_component_by_lambda, temperature, prefix
     )
 
-    dG_errs_png = make_dG_errs_figure(U_names, lambdas, res.dG_errs, res.dG_err_by_component_by_lambda)
+    dG_errs_png = plot_as_png_fxn(plot_dG_errs_figure, U_names, lambdas, res.dG_errs, res.dG_err_by_component_by_lambda)
 
-    overlap_summary_png = make_overlap_summary_figure(
-        U_names, lambdas, res.overlaps, res.overlap_by_component_by_lambda
+    overlap_summary_png = plot_as_png_fxn(
+        plot_overlap_summary_figure, U_names, lambdas, res.overlaps, res.overlap_by_component_by_lambda
     )
 
     return PairBarPlots(dG_errs_png, overlap_summary_png, overlap_detail_png)

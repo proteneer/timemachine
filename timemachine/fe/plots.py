@@ -49,7 +49,7 @@ def plot_BAR(df, df_err, fwd_delta_u, rev_delta_u, title, axes):
     plot_work(fwd_delta_u, rev_delta_u, axes)
 
 
-def plot_dG_errs(ax, components, lambdas, dG_errs):
+def plot_dG_errs_subfigure(ax, components, lambdas, dG_errs):
     # one line per energy component
     for component, ys in zip(components, dG_errs):
         ax.plot(lambdas[:-1], ys, marker=".", label=component)
@@ -60,17 +60,17 @@ def plot_dG_errs(ax, components, lambdas, dG_errs):
     ax.legend()
 
 
-def make_dG_errs_figure(components, lambdas, dG_err_by_lambda, dG_err_by_component_by_lambda):
+def plot_dG_errs_figure(components, lambdas, dG_err_by_lambda, dG_err_by_component_by_lambda):
     _, (ax_top, ax_btm) = plt.subplots(2, 1, figsize=(7, 9))
-    plot_dG_errs(ax_top, ["Overall"], lambdas, [dG_err_by_lambda])
-    plot_dG_errs(ax_btm, components, lambdas, dG_err_by_component_by_lambda.T)
-    buffer = io.BytesIO()
-    plt.savefig(buffer, format="png")
-    buffer.seek(0)
-    return buffer.read()
+    plot_dG_errs_subfigure(ax_top, ["Overall"], lambdas, [dG_err_by_lambda])
+    plot_dG_errs_subfigure(ax_btm, components, lambdas, dG_err_by_component_by_lambda.T)
+    # buffer = io.BytesIO()
+    # plt.savefig(buffer, format="png")
+    # buffer.seek(0)
+    # return buffer.read()
 
 
-def plot_overlap_summary(ax, components, lambdas, overlaps):
+def plot_overlap_summary_subfigure(ax, components, lambdas, overlaps):
     # one line per energy component
     for component, ys in zip(components, overlaps):
         percentages = 100 * np.asarray(ys)
@@ -92,17 +92,17 @@ def plot_overlap_summary(ax, components, lambdas, overlaps):
     ax.legend()
 
 
-def make_overlap_summary_figure(components, lambdas, overlap_by_lambda, overlap_by_component_by_lambda):
+def plot_overlap_summary_figure(components, lambdas, overlap_by_lambda, overlap_by_component_by_lambda):
     _, (ax_top, ax_btm) = plt.subplots(2, 1, figsize=(7, 9))
-    plot_overlap_summary(ax_top, ["Overall"], lambdas, [overlap_by_lambda])
-    plot_overlap_summary(ax_btm, components, lambdas, overlap_by_component_by_lambda.T)
-    buffer = io.BytesIO()
-    plt.savefig(buffer, format="png")
-    buffer.seek(0)
-    return buffer.read()
+    plot_overlap_summary_subfigure(ax_top, ["Overall"], lambdas, [overlap_by_lambda])
+    plot_overlap_summary_subfigure(ax_btm, components, lambdas, overlap_by_component_by_lambda.T)
+    # buffer = io.BytesIO()
+    # plt.savefig(buffer, format="png")
+    # buffer.seek(0)
+    # return buffer.read()
 
 
-def make_overlap_detail_figure(
+def plot_overlap_detail_figure(
     components,
     dGs,
     dG_errs,
@@ -140,7 +140,7 @@ def make_overlap_detail_figure(
     num_rows = len(u_kln_by_component_by_lambda)  # L - 1 adjacent pairs
     num_cols = num_energy_components + 1  # one per component + one for overall energy
 
-    figure, all_axes = plt.subplots(num_rows, num_cols, figsize=(num_cols * 5, num_rows * 3))
+    _, all_axes = plt.subplots(num_rows, num_cols, figsize=(num_cols * 5, num_rows * 3))
     if num_rows == 1:
         all_axes = [all_axes]
 
@@ -175,12 +175,12 @@ def make_overlap_detail_figure(
             plot_axis.set_title(components[u_idx])
 
     # detail plot as png
-    buffer = io.BytesIO()
-    plt.savefig(buffer, format="png", bbox_inches="tight")
-    buffer.seek(0)
-    overlap_detail_png = buffer.read()
+    # buffer = io.BytesIO()
+    # plt.savefig(buffer, format="png", bbox_inches="tight")
+    # buffer.seek(0)
+    # overlap_detail_png = buffer.read()
 
-    return overlap_detail_png
+    # return overlap_detail_png
 
 
 def plot_forward_and_reverse_ddg(
@@ -467,7 +467,7 @@ def plot_hrex_replica_state_distribution_convergence(cumulative_replica_state_co
     fig.colorbar(p, cax=cbar_ax, label=r"$\log_{10}$(number of iterations)")
 
 
-def plot_fxn(f, *args, **kwargs) -> bytes:
+def plot_as_png_fxn(f, *args, **kwargs) -> bytes:
     """
     Given a function which generates a plot, return the plot as png bytes.
     """
