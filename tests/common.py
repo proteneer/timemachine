@@ -323,24 +323,33 @@ def load_split_forcefields() -> SplitForcefield:
     ff_ref = Forcefield.load_default()
 
     ff_intra = Forcefield.load_default()
-    assert ff_intra.q_handle_intra
+    assert ff_intra.q_handle_intra is not None
+    assert ff_intra.lj_handle_intra is not None
     ff_intra.q_handle_intra.params *= Q_SCALE
     ff_intra.lj_handle_intra.params[:, SIG_IDX] *= SIG_SCALE
     ff_intra.lj_handle_intra.params[:, EPS_IDX] *= EPS_SCALE
 
     ff_solv = Forcefield.load_default()
-    assert ff_solv.q_handle_solv
+    assert ff_solv.q_handle_solv is not None
+    assert ff_solv.lj_handle_solv is not None
     ff_solv.q_handle_solv.params *= Q_SCALE
     ff_solv.lj_handle_solv.params[:, SIG_IDX] *= SIG_SCALE
     ff_solv.lj_handle_solv.params[:, EPS_IDX] *= EPS_SCALE
 
     ff_prot = Forcefield.load_default()
-    assert ff_prot.q_handle
+    assert ff_prot.q_handle is not None
+    assert ff_prot.lj_handle is not None
     ff_prot.q_handle.params *= Q_SCALE
     ff_prot.lj_handle.params[:, SIG_IDX] *= SIG_SCALE
     ff_prot.lj_handle.params[:, EPS_IDX] *= EPS_SCALE
 
     ff_scaled = Forcefield.load_default()
+    assert ff_scaled.q_handle is not None
+    assert ff_scaled.q_handle_intra is not None
+    assert ff_scaled.q_handle_solv is not None
+    assert ff_scaled.lj_handle is not None
+    assert ff_scaled.lj_handle_intra is not None
+    assert ff_scaled.lj_handle_solv is not None
     ff_scaled.q_handle.params *= Q_SCALE
     ff_scaled.q_handle_intra.params *= Q_SCALE
     ff_scaled.q_handle_solv.params *= Q_SCALE

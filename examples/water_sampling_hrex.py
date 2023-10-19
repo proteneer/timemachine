@@ -86,9 +86,9 @@ def plot_hrex_water_transitions(
     plt.ylabel("occupancy")
 
 
-def plot_and_save(f, fname, *args, **kwargs) -> bytes:
+def plot_and_save(f, fname, *args, **kwargs):
     """
-    Given a function which generates a plot, return the plot as png bytes.
+    Given a function which generates a plot, saves plot to fname as a png.
     """
     plt.clf()
     f(*args, **kwargs)
