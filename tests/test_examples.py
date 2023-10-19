@@ -228,7 +228,7 @@ def test_rbfe_edge_list_hif2a(rbfe_edge_list_hif2a_path):
 
             assert isinstance(result, SimulationResult)
             assert isinstance(result.frames, list)
-            assert len(result.frames) == 2  # frames from first and last windows
+            assert len(result.frames) == n_windows  # frames from first and last windows
             for frames in result.frames:
                 assert len(frames) == config["n_frames"]
 
