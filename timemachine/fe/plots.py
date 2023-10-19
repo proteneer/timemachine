@@ -64,10 +64,6 @@ def plot_dG_errs_figure(components, lambdas, dG_err_by_lambda, dG_err_by_compone
     _, (ax_top, ax_btm) = plt.subplots(2, 1, figsize=(7, 9))
     plot_dG_errs_subfigure(ax_top, ["Overall"], lambdas, [dG_err_by_lambda])
     plot_dG_errs_subfigure(ax_btm, components, lambdas, dG_err_by_component_by_lambda.T)
-    # buffer = io.BytesIO()
-    # plt.savefig(buffer, format="png")
-    # buffer.seek(0)
-    # return buffer.read()
 
 
 def plot_overlap_summary_subfigure(ax, components, lambdas, overlaps):
@@ -96,10 +92,6 @@ def plot_overlap_summary_figure(components, lambdas, overlap_by_lambda, overlap_
     _, (ax_top, ax_btm) = plt.subplots(2, 1, figsize=(7, 9))
     plot_overlap_summary_subfigure(ax_top, ["Overall"], lambdas, [overlap_by_lambda])
     plot_overlap_summary_subfigure(ax_btm, components, lambdas, overlap_by_component_by_lambda.T)
-    # buffer = io.BytesIO()
-    # plt.savefig(buffer, format="png")
-    # buffer.seek(0)
-    # return buffer.read()
 
 
 def plot_overlap_detail_figure(
@@ -173,14 +165,6 @@ def plot_overlap_detail_figure(
 
             plot_work(w_fwd_by_component[u_idx], w_rev_by_component[u_idx], plot_axis)
             plot_axis.set_title(components[u_idx])
-
-    # detail plot as png
-    # buffer = io.BytesIO()
-    # plt.savefig(buffer, format="png", bbox_inches="tight")
-    # buffer.seek(0)
-    # overlap_detail_png = buffer.read()
-
-    # return overlap_detail_png
 
 
 def plot_forward_and_reverse_ddg(
