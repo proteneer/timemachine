@@ -1,3 +1,5 @@
+from typing import Callable
+
 import numpy as np
 import pytest
 
@@ -8,17 +10,17 @@ pytestmark = [pytest.mark.nocuda]
 np.random.seed(2021)
 
 
-def _assert_nonnegative_loss(loss_fxn: callable):
+def _assert_nonnegative_loss(loss_fxn: Callable[[float], float]):
     residuals = np.linspace(-10, 10, 100)
     losses = np.array([loss_fxn(res) for res in residuals])
     np.testing.assert_array_equal(losses >= 0, True)
 
 
-def _assert_zero_loss_when_perfect(loss_fxn: callable):
+def _assert_zero_loss_when_perfect(loss_fxn: Callable[[float], float]):
     np.testing.assert_almost_equal(loss_fxn(0.0), 0)
 
 
-def _assert_basic_loss_properties(loss_fxn: callable):
+def _assert_basic_loss_properties(loss_fxn: Callable[[float], float]):
     _assert_nonnegative_loss(loss_fxn)
     _assert_zero_loss_when_perfect(loss_fxn)
 

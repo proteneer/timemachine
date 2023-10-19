@@ -346,7 +346,7 @@ def run_single_topology_benchmarks(
         benchmark(
             config,
             f"{stage}-apo",
-            host_masses,
+            np.array(host_masses),
             x0,
             v0,
             host_config.box,
