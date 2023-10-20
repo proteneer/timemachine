@@ -263,8 +263,8 @@ def hif2a_ligand_pair_single_topology_lam0_state():
 
 
 @pytest.mark.nocuda
-@patch("timemachine.fe.free_energy.make_overlap_detail_figure")
-def test_make_pair_bar_plots(mock_fig, hif2a_ligand_pair_single_topology_lam0_state):
+@patch("timemachine.fe.free_energy.plot_overlap_detail_figure")
+def test_plot_pair_bar_plots(mock_fig, hif2a_ligand_pair_single_topology_lam0_state):
     pair_result = PairBarResult(
         [hif2a_ligand_pair_single_topology_lam0_state] * 2,
         [

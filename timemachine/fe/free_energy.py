@@ -21,7 +21,12 @@ from timemachine.fe.energy_decomposition import (
     compute_energy_decomposed_u_kln,
     get_batch_u_fns,
 )
-from timemachine.fe.plots import make_dG_errs_figure, make_overlap_detail_figure, make_overlap_summary_figure
+from timemachine.fe.plots import (
+    plot_as_png_fxn,
+    plot_dG_errs_figure,
+    plot_overlap_detail_figure,
+    plot_overlap_summary_figure,
+)
 from timemachine.fe.protocol_refinement import greedy_bisection_step
 from timemachine.fe.stored_arrays import StoredArrays
 from timemachine.fe.utils import get_mol_masses, get_romol_conf
@@ -574,14 +579,14 @@ def make_pair_bar_plots(res: PairBarResult, temperature: float, prefix: str) -> 
     U_names = [type(p.potential).__name__ for p in res.initial_states[0].potentials]
     lambdas = [s.lamb for s in res.initial_states]
 
-    overlap_detail_png = make_overlap_detail_figure(
-        U_names, res.dGs, res.dG_errs, res.u_kln_by_component_by_lambda, temperature, prefix
+    overlap_detail_png = plot_as_png_fxn(
+        plot_overlap_detail_figure, U_names, res.dGs, res.dG_errs, res.u_kln_by_component_by_lambda, temperature, prefix
     )
 
-    dG_errs_png = make_dG_errs_figure(U_names, lambdas, res.dG_errs, res.dG_err_by_component_by_lambda)
+    dG_errs_png = plot_as_png_fxn(plot_dG_errs_figure, U_names, lambdas, res.dG_errs, res.dG_err_by_component_by_lambda)
 
-    overlap_summary_png = make_overlap_summary_figure(
-        U_names, lambdas, res.overlaps, res.overlap_by_component_by_lambda
+    overlap_summary_png = plot_as_png_fxn(
+        plot_overlap_summary_figure, U_names, lambdas, res.overlaps, res.overlap_by_component_by_lambda
     )
 
     return PairBarPlots(dG_errs_png, overlap_summary_png, overlap_detail_png)
@@ -591,7 +596,6 @@ def run_sims_sequential(
     initial_states: Sequence[InitialState],
     md_params: MDParams,
     temperature: float,
-    keep_idxs: List[int],
 ) -> Tuple[PairBarResult, List[Trajectory]]:
     """Sequentially run simulations at each state in initial_states,
     returning summaries that can be used for pair BAR, energy decomposition, and other diagnostics
@@ -602,15 +606,13 @@ def run_sims_sequential(
         Results of pair BAR analysis
 
     list of Trajectory
-        Trajectory for each state specified in keep_idxs
+        Trajectory for each state in initial_states
 
     Notes
     -----
     * Memory complexity:
         Memory demand should be no more than that of 2 states worth of frames.
-
-        Requesting too many states in keep_idxs may blow this up,
-        so best to keep to first and last states in keep_idxs.
+        Disk demand is proportional to number of initial states.
 
         This restriction may need to be relaxed in the future if:
         * We decide to use MBAR(states) rather than sum_i BAR(states[i], states[i+1])
@@ -624,18 +626,13 @@ def run_sims_sequential(
     # u_kln matrix (2, 2, n_frames) for each pair of adjacent lambda windows and energy term
     u_kln_by_component_by_lambda = []
 
-    keep_idxs = keep_idxs or []
-    keep_idxs = [range(len(initial_states))[i] for i in keep_idxs]  # ensure all indices > 0
-    assert np.all(np.array(keep_idxs) >= 0)
-
-    for lamb_idx, initial_state in enumerate(initial_states):
+    for initial_state in initial_states:
         # run simulation
         traj = sample(initial_state, md_params, max_buffer_frames=100)
         print(f"completed simulation at lambda={initial_state.lamb}!")
 
         # keep samples from any requested states in memory
-        if lamb_idx in keep_idxs:
-            stored_trajectories.append(traj)
+        stored_trajectories.append(traj)
 
         bound_impls = [p.to_gpu(np.float32).bound_impl for p in initial_state.potentials]
         cur_batch_U_fns = get_batch_u_fns(bound_impls, temperature)

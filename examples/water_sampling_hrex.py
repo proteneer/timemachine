@@ -50,7 +50,6 @@ def estimate_relative_free_energy_hrex_bb(
         make_optimized_initial_state_fn,
         combined_prefix,
         min_overlap=0.667,
-        keep_idxs="all",  # special value to denote keeping every frame
     )
 
 
@@ -87,9 +86,9 @@ def plot_hrex_water_transitions(
     plt.ylabel("occupancy")
 
 
-def plot_and_save(f, fname, *args, **kwargs) -> bytes:
+def plot_and_save(f, fname, *args, **kwargs):
     """
-    Given a function which generates a plot, return the plot as png bytes.
+    Given a function which generates a plot, saves plot to fname as a png.
     """
     plt.clf()
     f(*args, **kwargs)

@@ -80,7 +80,7 @@ def test_benchmark_hif2a_single_topology(hif2a_single_topology_leg, enable_hrex)
             print_diagnostics_interval=None,
         )
     else:
-        run = partial(run_sims_sequential, initial_states, md_params, temperature=temperature, keep_idxs=[])
+        run = partial(run_sims_sequential, initial_states, md_params, temperature=temperature)
 
     _, elapsed_ns = run_with_timing(run)
 

@@ -12,6 +12,36 @@ namespace timemachine {
 
 const int Potential::D = 3;
 
+void Potential::execute_batch_device(
+    const int coord_batch_size,
+    const int N,
+    const int param_batch_size,
+    const int P,
+    const double *d_x,
+    const double *d_p,
+    const double *d_box,
+    unsigned long long *d_du_dx,
+    unsigned long long *d_du_dp,
+    __int128 *d_u,
+    cudaStream_t stream) {
+
+    for (unsigned int i = 0; i < coord_batch_size; i++) {
+        for (unsigned int j = 0; j < param_batch_size; j++) {
+            unsigned int offset_factor = (i * param_batch_size) + j;
+            this->execute_device(
+                N,
+                P,
+                d_x + (i * N * D),
+                P > 0 ? d_p + (j * P) : nullptr,
+                d_box + (i * D * D),
+                d_du_dx ? d_du_dx + (offset_factor * N * D) : nullptr,
+                d_du_dp ? d_du_dp + (offset_factor * P) : nullptr,
+                d_u ? d_u + offset_factor : nullptr,
+                stream);
+        }
+    }
+}
+
 void Potential::execute_batch_host(
     const int coord_batch_size,  // Number of batches of coordinates
     const int N,                 // Number of atoms
@@ -22,7 +52,7 @@ void Potential::execute_batch_host(
     const double *h_box,         // [coord_batch_size, 3, 3]
     unsigned long long *h_du_dx, // [coord_batch_size, param_batch_size, N, 3]
     unsigned long long *h_du_dp, // [coord_batch_size, param_batch_size, P]
-    __int128 *h_u                // [coord_batch_size, param_batch_size, N]
+    __int128 *h_u                // [coord_batch_size, param_batch_size]
 ) {
     std::unique_ptr<DeviceBuffer<double>> d_p(nullptr);
     if (P > 0) {
@@ -60,21 +90,19 @@ void Potential::execute_batch_host(
         gpuErrchk(cudaMemsetAsync(d_u_buffer->data, 0, d_u_buffer->size, stream));
     }
 
-    for (unsigned int i = 0; i < coord_batch_size; i++) {
-        for (unsigned int j = 0; j < param_batch_size; j++) {
-            unsigned int offset_factor = (i * param_batch_size) + j;
-            this->execute_device(
-                N,
-                P,
-                d_x_buffer.data + (i * N * D),
-                P > 0 ? d_p->data + (j * P) : nullptr,
-                d_box.data + (i * D * D),
-                d_du_dx_buffer ? d_du_dx_buffer->data + (offset_factor * N * D) : nullptr,
-                d_du_dp_buffer ? d_du_dp_buffer->data + (offset_factor * P) : nullptr,
-                d_u_buffer ? d_u_buffer->data + offset_factor : nullptr,
-                stream);
-        }
-    }
+    this->execute_batch_device(
+        coord_batch_size,
+        N,
+        param_batch_size,
+        P,
+        d_x_buffer.data,
+        P > 0 ? d_p->data : nullptr,
+        d_box.data,
+        h_du_dx ? d_du_dx_buffer->data : nullptr,
+        h_du_dp ? d_du_dp_buffer->data : nullptr,
+        h_u ? d_u_buffer->data : nullptr,
+        stream);
+
     gpuErrchk(cudaStreamSynchronize(stream));
     gpuErrchk(cudaStreamDestroy(stream));
 
@@ -169,32 +197,22 @@ void Potential::execute_host_du_dx(
 
     const int &D = Potential::D;
 
-    double *d_x;
-    double *d_p;
-    double *d_box;
+    DeviceBuffer<double> d_x(N * D);
+    DeviceBuffer<double> d_p(P);
+    DeviceBuffer<double> d_box(D * D);
 
-    cudaSafeMalloc(&d_x, N * D * sizeof(*d_x));
-    gpuErrchk(cudaMemcpy(d_x, h_x, N * D * sizeof(*d_x), cudaMemcpyHostToDevice));
+    d_x.copy_from(h_x);
+    d_p.copy_from(h_p);
+    d_box.copy_from(h_box);
 
-    cudaSafeMalloc(&d_p, P * sizeof(*d_p));
-    gpuErrchk(cudaMemcpy(d_p, h_p, P * sizeof(*d_p), cudaMemcpyHostToDevice));
+    DeviceBuffer<unsigned long long> d_du_dx(N * D);
 
-    cudaSafeMalloc(&d_box, D * D * sizeof(*d_box));
-    gpuErrchk(cudaMemcpy(d_box, h_box, D * D * sizeof(*d_box), cudaMemcpyHostToDevice));
+    gpuErrchk(cudaMemset(d_du_dx.data, 0, d_du_dx.size));
 
-    unsigned long long *d_du_dx; // du/dx
+    this->execute_device(
+        N, P, d_x.data, d_p.data, d_box.data, d_du_dx.data, nullptr, nullptr, static_cast<cudaStream_t>(0));
 
-    // very important that these are initialized to zero since the kernels themselves just accumulate
-    cudaSafeMalloc(&d_du_dx, N * D * sizeof(*d_du_dx));
-    gpuErrchk(cudaMemset(d_du_dx, 0, N * D * sizeof(*d_du_dx)));
-
-    this->execute_device(N, P, d_x, d_p, d_box, d_du_dx, nullptr, nullptr, static_cast<cudaStream_t>(0));
-
-    gpuErrchk(cudaMemcpy(h_du_dx, d_du_dx, N * D * sizeof(*h_du_dx), cudaMemcpyDeviceToHost));
-    gpuErrchk(cudaFree(d_du_dx));
-    gpuErrchk(cudaFree(d_x));
-    gpuErrchk(cudaFree(d_p));
-    gpuErrchk(cudaFree(d_box));
+    d_du_dx.copy_to(h_du_dx);
 };
 
 void Potential::du_dp_fixed_to_float(const int N, const int P, const unsigned long long *du_dp, double *du_dp_float) {

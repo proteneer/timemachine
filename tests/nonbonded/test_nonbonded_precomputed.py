@@ -36,10 +36,10 @@ def test_nonbonded_pair_list_precomputed_correctness(
 ):
     "Compares with jax reference implementation."
 
-    pair_idxs = []
+    _pair_idxs = []
     for _ in range(ixn_group_size):
-        pair_idxs.append(rng.choice(np.arange(num_atoms), 2, replace=False))
-    pair_idxs = np.array(pair_idxs, dtype=np.int32)
+        _pair_idxs.append(rng.choice(np.arange(num_atoms), 2, replace=False))
+    pair_idxs = np.array(_pair_idxs, dtype=np.int32)
     num_pairs, _ = pair_idxs.shape
 
     params = rng.uniform(0, 1, size=(num_pairs, 4))

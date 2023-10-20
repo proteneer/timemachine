@@ -874,6 +874,94 @@ void declare_bound_potential(py::module &m) {
             py::arg("compute_du_dx") = true,
             py::arg("compute_u") = true)
         .def(
+            "execute_batch",
+            [](BoundPotential &bp,
+               const py::array_t<double, py::array::c_style> &coords,
+               const py::array_t<double, py::array::c_style> &boxes,
+               const bool compute_du_dx,
+               const bool compute_u) -> py::tuple {
+                if (coords.ndim() != 3 && boxes.ndim() != 3) {
+                    throw std::runtime_error("coords and boxes must have 3 dimensions");
+                }
+                if (coords.shape()[0] != boxes.shape()[0]) {
+                    throw std::runtime_error("number of batches of coords and boxes don't match");
+                }
+                const long unsigned int coord_batches = coords.shape()[0];
+                const long unsigned int N = coords.shape()[1];
+                const long unsigned int D = coords.shape()[2];
+
+                // initialize with fixed garbage values for debugging convenience (these should be overwritten by `execute_batch_host`)
+                // Only initialize memory when needed, as buffers can be quite large
+                std::vector<unsigned long long> du_dx;
+                if (compute_du_dx) {
+                    du_dx.assign(coord_batches * N * D, 9999);
+                }
+                std::vector<__int128> u;
+                if (compute_u) {
+                    u.assign(coord_batches, 9999);
+                }
+
+                bp.execute_batch_host(
+                    coord_batches,
+                    N,
+                    coords.data(),
+                    boxes.data(),
+                    compute_du_dx ? du_dx.data() : nullptr,
+                    compute_u ? u.data() : nullptr);
+
+                auto result = py::make_tuple(py::none(), py::none());
+                if (compute_du_dx) {
+                    py::array_t<double, py::array::c_style> py_du_dx({coord_batches, N, D});
+                    for (unsigned int i = 0; i < du_dx.size(); i++) {
+                        py_du_dx.mutable_data()[i] = FIXED_TO_FLOAT<double>(du_dx[i]);
+                    }
+                    result[0] = py_du_dx;
+                }
+
+                if (compute_u) {
+                    py::array_t<double, py::array::c_style> py_u(coord_batches);
+
+                    for (unsigned int i = 0; i < py_u.size(); i++) {
+                        py_u.mutable_data()[i] = convert_energy_to_fp(u[i]);
+                    }
+                    result[1] = py_u;
+                }
+
+                return result;
+            },
+            py::arg("coords"),
+            py::arg("boxes"),
+            py::arg("compute_du_dx"),
+            py::arg("compute_u"),
+            R"pbdoc(
+        Execute the potential over a batch of coordinates and boxes.
+
+        Note: This function allocates memory for all of the inputs on the GPU. This may lead to OOMs.
+
+        Parameters
+        ----------
+        coords: NDArray
+            A three dimensional array containing a batch of coordinates.
+
+        boxes: NDArray
+            A three dimensional array containing a batch of boxes.
+
+        compute_du_dx: bool
+            Indicates to compute du_dx, else returns None for du_dx.
+
+        compute_u: bool
+            Indicates to compute u, else returns None for u.
+
+
+        Returns
+        -------
+        2-tuple of du_dx, u
+            coord_batch_size = coords.shape[0]
+            du_dx has shape (coords_batch_size, N, 3)
+            u has shape (coords_batch_size)
+
+    )pbdoc")
+        .def(
             "execute_fixed",
             [](BoundPotential &bp,
                const py::array_t<double, py::array::c_style> &coords,

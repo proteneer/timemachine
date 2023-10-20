@@ -116,13 +116,13 @@ def get_smc_free_solv_results(result_path: str) -> Tuple[Array, Array]:
     assert len(smc_result_fnames) == 2
 
     # load predictions and experimental values
-    dG_preds = []
-    dG_expts = []
+    _dG_preds = []
+    _dG_expts = []
     for fname in smc_result_fnames:
-        dG_preds.append(get_predicted_dG(fname))
-        dG_expts.append(experimental_dGs[get_mol_name_from_pkl(fname)])
-    dG_preds = np.array(dG_preds)
-    dG_expts = np.array(dG_expts)
+        _dG_preds.append(get_predicted_dG(fname))
+        _dG_expts.append(experimental_dGs[get_mol_name_from_pkl(fname)])
+    dG_preds = np.array(_dG_preds)
+    dG_expts = np.array(_dG_expts)
     return dG_preds, dG_expts
 
 
@@ -228,7 +228,7 @@ def test_rbfe_edge_list_hif2a(rbfe_edge_list_hif2a_path):
 
             assert isinstance(result, SimulationResult)
             assert isinstance(result.frames, list)
-            assert len(result.frames) == 2  # frames from first and last windows
+            assert len(result.frames) == n_windows  # frames from first and last windows
             for frames in result.frames:
                 assert len(frames) == config["n_frames"]
 

@@ -27,8 +27,8 @@ def reference_block_bounds(coords: NDArray, box: NDArray, block_size: int) -> Tu
     box_diag = np.diagonal(box)
     num_blocks = (N + block_size - 1) // block_size
 
-    ref_ctrs = []
-    ref_exts = []
+    _ref_ctrs = []
+    _ref_exts = []
 
     for bidx in range(num_blocks):
         start_idx = bidx * block_size
@@ -42,11 +42,11 @@ def reference_block_bounds(coords: NDArray, box: NDArray, block_size: int) -> Tu
             min_coords = np.minimum(min_coords, new_coords)
             max_coords = np.maximum(max_coords, new_coords)
 
-        ref_ctrs.append((max_coords + min_coords) / 2)
-        ref_exts.append((max_coords - min_coords) / 2)
+        _ref_ctrs.append((max_coords + min_coords) / 2)
+        _ref_exts.append((max_coords - min_coords) / 2)
 
-    ref_ctrs = np.array(ref_ctrs)
-    ref_exts = np.array(ref_exts)
+    ref_ctrs = np.array(_ref_ctrs)
+    ref_exts = np.array(_ref_exts)
     return ref_ctrs, ref_exts
 
 

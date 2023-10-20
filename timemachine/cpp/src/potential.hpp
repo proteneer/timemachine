@@ -42,6 +42,19 @@ public:
         const double *h_box,
         unsigned long long *h_du_dx);
 
+    void execute_batch_device(
+        const int coord_batch_size,
+        const int N,
+        const int param_batch_size,
+        const int P,
+        const double *d_x,
+        const double *d_p,
+        const double *d_box,
+        unsigned long long *d_du_dx,
+        unsigned long long *d_du_dp,
+        __int128 *d_u,
+        cudaStream_t stream);
+
     virtual void execute_device(
         const int N,
         const int P,

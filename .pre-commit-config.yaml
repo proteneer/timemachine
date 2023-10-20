@@ -29,7 +29,6 @@ repos:
     -   id: mypy
         additional_dependencies:
           - "numpy==1.23.5"
-        files: '^timemachine.*\.pyi?$'
 
         # Exclude custom_ops.py to work around clash with stub file when typechecking
         exclude: '^timemachine/lib/custom_ops.py$'
