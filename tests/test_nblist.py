@@ -349,7 +349,6 @@ def test_neighborlist_on_subset_of_system():
     ):
         nblist.set_row_idxs(atom_idxs)
         for _ in range(2):
-
             test_ixn_list = nblist.get_nblist(coords, box, cutoff)
             # compute the sparsity of the tile
             assert len(reference_subset_ixns) == len(test_ixn_list), "Number of blocks with interactions don't agree"

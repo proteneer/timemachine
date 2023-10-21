@@ -219,8 +219,9 @@ def sample_biphenyl_hrex(
 
     initial_states = results[-1].initial_states
 
+    assert all([traj.final_velocities is not None for traj in trajectories_by_state])
     initial_states_hrex = [
-        replace(initial_state, x0=traj.frames[-1], v0=traj.final_velocities, box0=traj.boxes[-1])
+        replace(initial_state, x0=traj.frames[-1], v0=traj.final_velocities, box0=traj.boxes[-1])  # type: ignore
         for initial_state, traj in zip(initial_states, trajectories_by_state)
     ]
 

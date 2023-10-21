@@ -726,7 +726,6 @@ class AtomMapMixin:
     """
 
     def __init__(self, mol_a, mol_b, core):
-
         assert core.shape[1] == 2
         assert mol_a is not None
         assert mol_b is not None
@@ -856,7 +855,6 @@ class SingleTopology(AtomMapMixin):
 
         mol_c_masses = []
         for c_idx in range(self.get_num_atoms()):
-
             indicator = self.c_flags[c_idx]
             if indicator == 0:
                 mass_a = mol_a_masses[self.c_to_a[c_idx]]
@@ -960,7 +958,6 @@ class SingleTopology(AtomMapMixin):
     def _setup_intermediate_bonded_term(
         self, src_bond: BoundPotential[_Bonded], dst_bond: BoundPotential[_Bonded], lamb, align_fn, interpolate_fn
     ) -> BoundPotential[_Bonded]:
-
         src_cls_bond = type(src_bond.potential)
         dst_cls_bond = type(dst_bond.potential)
 
@@ -990,7 +987,6 @@ class SingleTopology(AtomMapMixin):
         align_fn,
         interpolate_qlj_fn,
     ) -> BoundPotential[NonbondedPairListPrecomputed]:
-
         assert src_nonbonded.potential.beta == dst_nonbonded.potential.beta
         assert src_nonbonded.potential.cutoff == dst_nonbonded.potential.cutoff
 
@@ -1032,7 +1028,6 @@ class SingleTopology(AtomMapMixin):
         lamb,
         interpolate_fn,
     ) -> BoundPotential[ChiralBondRestraint]:
-
         assert isinstance(src_bond.potential, ChiralBondRestraint)
         assert isinstance(dst_bond.potential, ChiralBondRestraint)
 

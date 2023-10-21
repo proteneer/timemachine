@@ -111,7 +111,7 @@ def setup_absolute_hydration_with_endpoint_samples(
     * npt_mover
     * initial_samples from lam = 1
     """
-    if type(seed) != int:
+    if not isinstance(seed, int):
         seed = np.random.randint(1000)
         print(f"setting seed randomly to {seed}")
     else:

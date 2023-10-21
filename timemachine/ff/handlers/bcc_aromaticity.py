@@ -71,7 +71,6 @@ def call_openeye(
     output_string = re.sub("\n$", "", output_string)
 
     if not status:
-
         # noinspection PyArgumentList
         raise exception_type("\n" + output_string, **exception_kwargs)
 
@@ -112,7 +111,6 @@ def match_smirks(smirks: str, oe_molecule: OEMol, unique: bool = False) -> List[
     matches = []
 
     for match in substructure_search.Match(oe_molecule, unique):
-
         matched_indices = {
             atom_match.pattern.GetMapIdx() - 1: atom_match.target.GetIdx()
             for atom_match in match.GetAtoms()
@@ -145,14 +143,12 @@ class AromaticityModel:
         bonds = {tuple(sorted((bond.GetBgnIdx(), bond.GetEndIdx()))): bond for bond in oe_molecule.GetBonds()}
 
         for ring_match in ring_matches:
-
             ring_atom_indices = {match for match in ring_match.values()}
 
             for matched_atom_index in ring_atom_indices:
                 atoms[matched_atom_index].SetAromatic(True)
 
             for (index_a, index_b), bond in bonds.items():
-
                 if index_a not in ring_atom_indices or index_b not in ring_atom_indices:
                     continue
 
@@ -219,7 +215,6 @@ class AromaticityModel:
         case_2_atoms: Set[int] = set()
 
         while previous_case_2_atoms != case_2_atoms:
-
             case_2_matches = match_smirks(case_2_smirks, oe_molecule, unique=True)
             # Enforce the ar6 condition
             case_2_matches = [
@@ -248,7 +243,6 @@ class AromaticityModel:
         case_3_atoms: Set[int] = set()
 
         while previous_case_3_atoms != case_3_atoms:
-
             case_3_matches = match_smirks(case_3_smirks, oe_molecule, unique=True)
 
             # Enforce the ar6 condition

@@ -356,7 +356,7 @@ class TIBDExchangeMove(BDExchangeMove):
         n1 = len(inner_mols)
         n2 = len(outer_mols)
 
-        vol_1 = (4 / 3) * np.pi * self.radius ** 3
+        vol_1 = (4 / 3) * np.pi * self.radius**3
         vol_2 = np.prod(np.diag(box)) - vol_1
 
         # optimize this later

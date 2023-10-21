@@ -178,7 +178,7 @@ class ChiralRestrIdxSet:
         allowed_set = set()
         disallowed_set = set()
 
-        for (center, i, j, k) in self.restr_idxs:
+        for center, i, j, k in self.restr_idxs:
             # rotations
             allowed_set.add((center, i, j, k))
             allowed_set.add((center, j, k, i))

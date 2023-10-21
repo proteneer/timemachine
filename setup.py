@@ -109,12 +109,11 @@ setup(
     ],
     extras_require={
         "dev": [
-            "black==21.10b0",
-            "click==8.0.4",  # pinned due to https://github.com/psf/black/issues/2964 -- unpin if upgrading black
-            "flake8==4.0.1",
-            "isort==5.10.1",
-            "mypy==1.1.1",
-            "pre-commit==3.2.1",
+            "black==23.9.1",
+            "flake8==6.1.0",
+            "isort==5.12.0",
+            "mypy==1.5.1",
+            "pre-commit==3.4.0",
         ],
         "test": [
             "pytest",

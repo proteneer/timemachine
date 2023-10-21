@@ -177,7 +177,6 @@ def mcs(
     min_threshold,
     filter_fxn: Callable[[Sequence[int]], bool] = lambda core: True,
 ):
-
     assert n_a <= n_b
 
     g_a = Graph(n_a, bonds_a)
@@ -275,7 +274,6 @@ def recursion(
     enforce_core_core,
     filter_fxn,
 ):
-
     if mcs_result.nodes_visited > max_visits:
         mcs_result.timed_out = True
         return
@@ -301,7 +299,6 @@ def recursion(
 
     for jdx in priority_idxs[layer]:
         if atom_map_2_to_1[jdx] == UNMAPPED:  # optimize later
-
             atom_map_add(atom_map_1_to_2, atom_map_2_to_1, layer, jdx)
             if enforce_core_core and not _verify_core_is_connected(
                 g1, g2, layer, jdx, atom_map_1_to_2, atom_map_2_to_1

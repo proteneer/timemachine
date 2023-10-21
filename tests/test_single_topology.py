@@ -260,7 +260,6 @@ def test_hif2a_end_state_stability(num_pairs_to_setup=25, num_pairs_to_simulate=
 
     # this has been tested for up to 50 random pairs
     for pair_idx, (mol_a, mol_b) in enumerate(pairs[:num_pairs_to_setup]):
-
         print("Checking", get_mol_name(mol_a), "->", get_mol_name(mol_b))
         core = _get_core_by_mcs(mol_a, mol_b)
         st = SingleTopology(mol_a, mol_b, core, ff)
@@ -268,7 +267,6 @@ def test_hif2a_end_state_stability(num_pairs_to_setup=25, num_pairs_to_simulate=
         systems = [st.src_system, st.dst_system]
 
         for system in systems:
-
             # assert that the idxs are canonicalized.
             assert_bond_idxs_are_canonical(system.bond.potential.idxs)
             assert_bond_idxs_are_canonical(system.angle.potential.idxs)
@@ -296,7 +294,6 @@ def test_hif2a_end_state_stability(num_pairs_to_setup=25, num_pairs_to_simulate=
 
 @pytest.mark.nocuda
 def test_canonicalize_improper_idxs():
-
     # these are in the cw rotation set
     improper_idxs = [(5, 0, 1, 3), (5, 1, 3, 0), (5, 3, 0, 1)]
 
@@ -314,7 +311,6 @@ def test_canonicalize_improper_idxs():
 
 @pytest.mark.nocuda
 def test_combine_masses():
-
     C_mass = Chem.MolFromSmiles("C").GetAtomWithIdx(0).GetMass()
     Br_mass = Chem.MolFromSmiles("Br").GetAtomWithIdx(0).GetMass()
     F_mass = Chem.MolFromSmiles("F").GetAtomWithIdx(0).GetMass()
@@ -465,7 +461,6 @@ def test_combine_with_host():
 @pytest.mark.parametrize("precision, rtol, atol", [(np.float64, 1e-8, 1e-8), (np.float32, 1e-4, 5e-4)])
 @pytest.mark.parametrize("use_tiny_mol", [True, False])
 def test_nonbonded_intra_split(precision, rtol, atol, use_tiny_mol):
-
     # mol with no intramolecular NB terms and no dihedrals
     if use_tiny_mol:
         mol_a = ligand_from_smiles("S")

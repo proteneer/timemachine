@@ -145,7 +145,6 @@ def test_condensed_phase_mtm(seed):
     xvb_t = copy.deepcopy(xvb0)
 
     for iteration in range(num_batches):
-
         xvb_t = npt_mover.move(xvb_t)
         solvent_torsion = get_torsion(xvb_t.coords[-num_ligand_atoms:])
         enhanced_torsions.append(solvent_torsion)

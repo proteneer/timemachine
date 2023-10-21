@@ -81,7 +81,7 @@ def test_load_default():
 
     assert len(ref_handles) == len(test_handles)
 
-    for (ref_handle, test_handle) in zip(ref.get_ordered_handles(), test.get_ordered_handles()):
+    for ref_handle, test_handle in zip(ref.get_ordered_handles(), test.get_ordered_handles()):
         assert ref_handle.smirks == test_handle.smirks
         np.testing.assert_array_equal(ref_handle.params, test_handle.params)
 

@@ -27,7 +27,6 @@ def test_jax_differentiable_interface():
     sys_params = [np.array(bp.params) for bp in bps]
 
     for precision in [np.float32, np.float64]:
-
         gpu_impls = [p.to_gpu(precision) for p in potentials]
 
         def U_ref(coords, sys_params, box):
