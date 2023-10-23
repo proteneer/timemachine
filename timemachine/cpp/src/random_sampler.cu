@@ -14,7 +14,11 @@ RandomSampler<RealType>::RandomSampler(const int N, const int seed)
     // Allocate enough space for a single key value pair
     cudaSafeMalloc(&d_arg_max_, 1 * sizeof(cub::KeyValuePair<int, RealType>));
     gpuErrchk(cub::DeviceReduce::ArgMax(
-        nullptr, temp_storage_bytes_, d_gumbel_.data, static_cast<cub::KeyValuePair<int, RealType> *>(d_arg_max_), N_));
+        nullptr,
+        temp_storage_bytes_,
+        d_gumbel_.data,
+        reinterpret_cast<cub::KeyValuePair<int, RealType> *>(d_arg_max_),
+        N_));
     d_sort_storage_.reset(new DeviceBuffer<char>(temp_storage_bytes_));
 
     curandErrchk(curandCreateGenerator(&cr_rng_, CURAND_RNG_PSEUDO_DEFAULT));
@@ -52,11 +56,11 @@ void RandomSampler<RealType>::sample_device(
             d_sort_storage_->data,
             temp_storage_bytes_,
             d_gumbel_.data,
-            static_cast<cub::KeyValuePair<int, RealType> *>(d_arg_max_),
+            reinterpret_cast<cub::KeyValuePair<int, RealType> *>(d_arg_max_),
             N));
 
         k_copy_kv_key<RealType>
-            <<<1, 1, 0, stream>>>(1, static_cast<cub::KeyValuePair<int, RealType> *>(d_arg_max_), d_samples + i);
+            <<<1, 1, 0, stream>>>(1, reinterpret_cast<cub::KeyValuePair<int, RealType> *>(d_arg_max_), d_samples + i);
         gpuErrchk(cudaPeekAtLastError());
     }
 };
