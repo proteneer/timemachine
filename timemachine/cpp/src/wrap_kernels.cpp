@@ -206,7 +206,7 @@ template <typename RealType> void declare_random_sampler(py::module &m, const ch
             Number of Samples to return
 
         probabilities: array of doubles
-            Probabilities to assign to each index.
+            Probabilities to assign to each index. Do not need to be normalized
 
         Returns
         -------
