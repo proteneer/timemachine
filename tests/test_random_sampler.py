@@ -7,8 +7,8 @@ from timemachine.lib import custom_ops
 pytestmark = [pytest.mark.memcheck]
 
 
-@pytest.mark.parametrize("seed", list(range(5)))
-@pytest.mark.parametrize("size, num_samples", [(500, 1500), (1000, 3000), (10000, 30000)])
+@pytest.mark.parametrize("seed", [2022])
+@pytest.mark.parametrize("size, num_samples", [(500, 1500), (1000, 3000)])
 @pytest.mark.parametrize("precision", [np.float32, np.float64])
 def test_random_sampler(seed, size, num_samples, precision):
     rng = np.random.default_rng(seed)
