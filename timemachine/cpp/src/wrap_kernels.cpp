@@ -30,6 +30,7 @@
 #include "nonbonded_precomputed.hpp"
 #include "periodic_torsion.hpp"
 #include "potential.hpp"
+#include "random_sampler.hpp"
 #include "rmsd_align.hpp"
 #include "rotations.hpp"
 #include "set_utils.hpp"
@@ -178,6 +179,42 @@ void declare_hilbert_sort(py::module &m) {
             py::arg("box"));
 }
 
+template <typename RealType> void declare_random_sampler(py::module &m, const char *typestr) {
+
+    using Class = RandomSampler<RealType>;
+    std::string pyclass_name = std::string("RandomSampler_") + typestr;
+    py::class_<Class, std::shared_ptr<Class>>(m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
+        .def(py::init([](const int N, const int seed) { return new Class(N, seed); }), py::arg("size"), py::arg("seed"))
+        .def(
+            "sample",
+            [](Class &sampler,
+               const int K,
+               const py::array_t<double, py::array::c_style> &probabilities) -> std::vector<int> {
+                std::vector<RealType> real_probs = py_array_to_vector_with_cast<double, RealType>(probabilities);
+
+                std::vector<int> samples = sampler.sample_host(K, real_probs);
+                return samples;
+            },
+            py::arg("K"),
+            py::arg("probabilities"),
+            R"pbdoc(
+        Randomly select K samples from a probability distribution.
+
+        Parameters
+        ----------
+        K: int
+            Number of Samples to return
+
+        probabilities: array of doubles
+            Probabilities to assign to each index.
+
+        Returns
+        -------
+        Array of sample indices
+            Shape (K, )
+        )pbdoc");
+}
+
 void declare_context(py::module &m) {
 
     using Class = Context;
@@ -216,7 +253,7 @@ void declare_context(py::module &m) {
             R"pbdoc(
         Take a single step.
 
-        Note: Must call `initialize` before stepping and `finalize` after stepping to ensure the correct velocities and positions to be returned by `get_x_t()` and `get_v_t()`,.
+        Note: Must call `initialize` before stepping and `finalize` after stepping to ensure the correct velocities and positions to be returned by `get_x_t()` and `get_v_t()`.
         )pbdoc")
         .def("finalize", &Context::finalize)
         .def("initialize", &Context::initialize)
@@ -1530,6 +1567,9 @@ PYBIND11_MODULE(custom_ops, m) {
 
     declare_nonbonded_pair_list<double, true>(m, "f64");
     declare_nonbonded_pair_list<float, true>(m, "f32");
+
+    declare_random_sampler<double>(m, "f64");
+    declare_random_sampler<float>(m, "f32");
 
     declare_context(m);
 }

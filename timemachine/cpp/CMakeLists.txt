@@ -96,6 +96,7 @@ pybind11_add_module(${LIBRARY_NAME} SHARED NO_EXTRAS
   src/pinned_host_buffer.cu
   src/streamed_potential_runner.cu
   src/stream_manager.cu
+  src/random_sampler.cu
   src/kernels/k_hilbert.cu
   src/kernels/k_indices.cu
 )
