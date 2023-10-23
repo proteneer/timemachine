@@ -2,7 +2,7 @@ from typing import Any
 
 import jax.numpy as jnp
 import numpy as np
-from jax import vmap
+from jax import jit, vmap
 from jax.scipy.special import erfc
 from numpy.typing import NDArray
 from scipy.special import binom
@@ -539,7 +539,7 @@ def coulomb_prefactors_on_traj(
     def f_snapshot(coords, box):
         x_ligand = coords[ligand_indices]
         x_env = coords[env_indices]
-        return coulomb_prefactors_on_snapshot(x_ligand, x_env, q_env, box, beta, cutoff)
+        return jit(coulomb_prefactors_on_snapshot)(x_ligand, x_env, q_env, box, beta, cutoff)
 
     return process_traj_in_chunks(f_snapshot, traj, boxes, chunk_size)
 
@@ -593,7 +593,7 @@ def _basis_expand_lj_term(sig_env, eps_env, r_env, power):
     """
     r_inv_pow = r_env**-power
 
-    exponents = power - jnp.arange(power + 1)
+    exponents = power - np.arange(power + 1)
     coeffs = binom(power, exponents)
 
     raised = sig_env ** jnp.expand_dims(exponents, 1)
@@ -625,8 +625,9 @@ def basis_expand_lj_env(sig_env, eps_env, r_env):
         can be dotted with output of basis_expand_lj_atom(sig, eps)
         to compute energy of one atom interacting with all environment atoms
     """
-    h_n_12 = _basis_expand_lj_term(sig_env, eps_env, r_env, 12)
-    h_n_6 = -_basis_expand_lj_term(sig_env, eps_env, r_env, 6)
+    jit_basis_expand_lj_term = jit(_basis_expand_lj_term, static_argnums=3)
+    h_n_12 = jit_basis_expand_lj_term(sig_env, eps_env, r_env, 12)
+    h_n_6 = -jit_basis_expand_lj_term(sig_env, eps_env, r_env, 6)
     return jnp.hstack([h_n_12, h_n_6])
 
 
@@ -740,7 +741,7 @@ def lj_prefactors_on_traj(
     def f_snapshot(coords, box):
         x_ligand = coords[ligand_indices]
         x_env = coords[env_indices]
-        return lj_prefactors_on_snapshot(x_ligand, x_env, sig_env, eps_env, box, cutoff)
+        return jit(lj_prefactors_on_snapshot)(x_ligand, x_env, sig_env, eps_env, box, cutoff)
 
     return process_traj_in_chunks(f_snapshot, traj, boxes, chunk_size)
 
