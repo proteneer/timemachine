@@ -33,3 +33,29 @@ def test_random_sampler(seed, size, num_samples, precision):
 
     ks, pv = ks_2samp(ref_selection, test_selection)
     assert ks < 0.05, (pv, ks)
+
+
+@pytest.mark.parametrize("seed", [2022, 2023])
+@pytest.mark.parametrize("precision", [np.float32, np.float64])
+def test_random_sampler_simple_distribution(seed, precision):
+    """Very basic test that doesn't rely on the KS test to verify correctness"""
+    num_samples = 1000
+
+    # Setup weights such that expected percentages are obvious
+    weights = np.array([7.5, 2.5])
+    expected_percentages = np.array([0.75, 0.25])
+
+    size = len(weights)
+
+    klass = custom_ops.RandomSampler_f32
+    if precision == np.float64:
+        klass = custom_ops.RandomSampler_f64
+
+    sampler = klass(size, seed)
+
+    test_selection = sampler.sample(num_samples, weights)
+    assert len(test_selection) == num_samples
+
+    _, counts = np.unique(test_selection, return_counts=True)
+    percentages = counts / num_samples
+    np.testing.assert_allclose(expected_percentages, percentages, atol=0.05)
