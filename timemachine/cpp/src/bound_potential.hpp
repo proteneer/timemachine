@@ -32,6 +32,14 @@ struct BoundPotential {
         unsigned long long *d_du_dp,
         __int128 *d_u,
         cudaStream_t stream);
+
+    void execute_batch_host(
+        const int coord_batch_size,
+        const int N,
+        const double *h_x,
+        const double *h_box,
+        unsigned long long *h_du_dx,
+        __int128 *h_u);
 };
 
 } // namespace timemachine

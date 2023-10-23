@@ -21,8 +21,8 @@ def test_reference_langevin_integrator(threshold=1e-4):
 
     np.random.seed(2021)
 
-    potential_fxn = lambda x: x ** 4
-    force_fxn = lambda x: -4 * x ** 3
+    potential_fxn = lambda x: x**4
+    force_fxn = lambda x: -4 * x**3
 
     # loop over settings
     temperatures = [200, 300]
@@ -35,7 +35,7 @@ def test_reference_langevin_integrator(threshold=1e-4):
     print(f"testing reference integrator for {len(settings)} combinations of settings:")
     print("(temperature, friction, dt, mass) -> histogram_mse")
 
-    for (temperature, friction, dt, mass) in settings:
+    for temperature, friction, dt, mass in settings:
         # generate n_production_steps * n_copies samples
         n_copies = 2500
         langevin = LangevinIntegrator(force_fxn, mass, temperature, dt, friction)
@@ -61,7 +61,7 @@ def test_reference_langevin_integrator(threshold=1e-4):
 @pytest.mark.nocuda
 def test_reference_langevin_integrator_deterministic():
     """Asserts that trajectories are deterministic given a seed value"""
-    force_fxn = lambda x: -4 * x ** 3
+    force_fxn = lambda x: -4 * x**3
     langevin = LangevinIntegrator(force_fxn, masses=1.0, temperature=300.0, dt=0.1, friction=1.0)
     x0, v0 = 0.1 * jax.random.uniform(jax.random.PRNGKey(1), shape=(2, 5))
 
@@ -88,7 +88,7 @@ def test_reference_langevin_integrator_consistent():
     Asserts that the result of the implementation based on jax.lax
     primitives is consistent with a simple for-loop implementation
     """
-    force_fxn = lambda x: -4 * x ** 3
+    force_fxn = lambda x: -4 * x**3
     langevin = LangevinIntegrator(force_fxn, masses=1.0, temperature=300.0, dt=0.1, friction=1.0)
     x0, v0 = 0.1 * jax.random.uniform(jax.random.PRNGKey(1), shape=(2, 5))
     key = jax.random.PRNGKey(1)
@@ -144,7 +144,7 @@ def test_reference_langevin_integrator_with_custom_ops():
 
     def jax_restraint(coords):
         center = jnp.mean(coords, 0)
-        return jnp.sum(center ** 4)
+        return jnp.sum(center**4)
 
     @jit
     def jax_force_component(coords):

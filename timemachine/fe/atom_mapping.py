@@ -67,7 +67,7 @@ def get_cores(
     ----------------
     1) The returned cores are sorted in increasing order based on the rmsd of the alignment.
     2) The number of cores atoms may vary slightly, but the number of mapped edges are the same.
-    3) If a time-out has occured due to max_visits, then an exception is thrown.
+    3) If a time-out has occurred due to max_visits, then an exception is thrown.
 
     Parameters
     ----------
@@ -217,7 +217,6 @@ def _to_networkx_graph(mol):
 
 
 def _remove_incomplete_rings(mol_a, mol_b, core, bond_core):
-
     # to networkx
     g_a, g_b = _to_networkx_graph(mol_a), _to_networkx_graph(mol_b)
     sg_a = induce_mol_subgraph(mol_a, core[:, 0], list(bond_core.keys()))

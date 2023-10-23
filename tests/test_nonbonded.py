@@ -40,7 +40,6 @@ class TestNonbondedDHFR(GradientTest):
         N = self.host_conf.shape[0]
 
         for precision in [np.float32, np.float64]:
-
             ref_nonbonded_impl = replace(self.nonbonded_fn, disable_hilbert_sort=True).to_gpu(precision).unbound_impl
             test_nonbonded_impl = self.nonbonded_fn.to_gpu(precision).unbound_impl
 
@@ -58,7 +57,6 @@ class TestNonbondedDHFR(GradientTest):
             np.set_printoptions(precision=16)
             # under pure fixed point accumulation the results should be identical.
             for x in xs:
-
                 ref_du_dx, ref_du_dp, ref_u = ref_nonbonded_impl.execute(x, self.nonbonded_params, self.box)
                 test_du_dx, test_du_dp, test_u = test_nonbonded_impl.execute(x, self.nonbonded_params, self.box)
 
@@ -132,7 +130,6 @@ class TestNonbondedDHFR(GradientTest):
         """
         # we can't go bigger than this due to memory limitations in the the reference platform.
         for N in [33, 65, 231, 1050, 4080]:
-
             rng = np.random.default_rng(2022)
 
             test_conf = self.host_conf[:N]
@@ -150,7 +147,6 @@ class TestNonbondedDHFR(GradientTest):
             test_params = self.nonbonded_params[:N, :]
 
             for atom_idxs in [None, np.array(rng.choice(N, N // 2, replace=False), dtype=np.int32)]:
-
                 potential = potentials.Nonbonded(
                     N, test_exclusions, test_scales, self.beta, self.cutoff, atom_idxs=atom_idxs
                 )
@@ -179,7 +175,6 @@ class TestNonbondedWater(GradientTest):
         # (ytz): note the ordering should be from large box to small box. though in the current code
         # the rebuild is triggered as long as the box *changes*.
         for test_box in [big_box, box]:
-
             for precision, rtol, atol in [(np.float64, 1e-8, 1e-10), (np.float32, 1e-4, 3e-5)]:
                 self.compare_forces(
                     host_conf,
@@ -194,7 +189,6 @@ class TestNonbondedWater(GradientTest):
 
 class TestNonbonded(GradientTest):
     def test_exclusion(self):
-
         # This test verifies behavior when two particles are arbitrarily
         # close but are marked as excluded to ensure proper cancellation
         # of exclusions occur in the fixed point math.
@@ -234,19 +228,16 @@ class TestNonbonded(GradientTest):
         potential = potentials.Nonbonded(N, exclusion_idxs, scales, beta, cutoff)
 
         for precision, rtol in [(np.float64, 1e-8), (np.float32, 1e-4)]:
-
             params = prepare_system_params(test_system, cutoff)
 
             self.compare_forces(test_system, params, box, potential, potential.to_gpu(precision), rtol)
 
     def test_nonbonded(self):
-
         np.random.seed(4321)
         ff = Forcefield.load_default()
 
         _, all_coords, box, _ = builders.build_water_system(3.0, ff.water_ff)
         for size in [33, 231, 1050]:
-
             coords = all_coords[:size]
 
             for cutoff in [1.0]:

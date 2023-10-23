@@ -1,6 +1,5 @@
 # test that we can run relative free energy simulations in complex and in solvent
 # this doesn't test for accuracy, just that everything mechanically runs.
-from dataclasses import replace
 from importlib import resources
 from warnings import catch_warnings
 
@@ -17,7 +16,6 @@ from timemachine.fe.free_energy import (
     sample,
 )
 from timemachine.fe.rbfe import (
-    DEFAULT_MD_PARAMS,
     estimate_relative_free_energy,
     estimate_relative_free_energy_bisection,
     estimate_relative_free_energy_bisection_hrex,
@@ -38,7 +36,6 @@ def run_bitwise_reproducibility(mol_a, mol_b, core, forcefield, md_params, estim
     solvent_sys, solvent_conf, solvent_box, _ = builders.build_water_system(box_width, forcefield.water_ff)
     solvent_box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes
     solvent_host_config = HostConfig(solvent_sys, solvent_conf, solvent_box, solvent_conf.shape[0])
-    keep_idxs = list(range(n_windows))
 
     solvent_res = estimate_relative_free_energy_fn(
         mol_a,
@@ -50,7 +47,6 @@ def run_bitwise_reproducibility(mol_a, mol_b, core, forcefield, md_params, estim
         prefix="solvent",
         lambda_interval=(0.01, 0.03),
         n_windows=n_windows,
-        keep_idxs=keep_idxs,
     )
 
     all_frames, all_boxes = [], []
@@ -223,6 +219,7 @@ def test_run_hif2a_test_system_reproducibility(estimate_relative_free_energy_fn)
     )
 
 
+@pytest.mark.nogpu
 def test_md_params_validation():
     frames = 5
     steps_per_frame = 2
@@ -358,13 +355,12 @@ def test_imaging_frames():
         md_params=md_params,
         n_windows=windows,
     )
-    keep_idxs = [0, -1]
-    assert len(keep_idxs) == len(res.frames)
 
     # A buffer, as imaging doesn't ensure everything is perfectly in the box
     padding = 0.3
+
     for i, (frames, boxes) in enumerate(zip(res.frames, res.boxes)):
-        initial_state = res.final_result.initial_states[keep_idxs[i]]
+        initial_state = res.final_result.initial_states[i]
         box_center = compute_box_center(boxes[0])
         box_extents = np.max(boxes, axis=(0, 1))
 
@@ -406,24 +402,6 @@ def test_rbfe_with_1_window(estimate_relative_free_energy_fn):
             prefix="failure",
             n_windows=1,
         )
-
-
-def test_estimate_free_energy_bisection_invalid_args():
-    mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
-    with catch_warnings(record=True) as ws:
-        estimate_relative_free_energy_bisection(
-            mol_a,
-            mol_b,
-            core,
-            Forcefield.load_default(),
-            host_config=None,
-            md_params=replace(DEFAULT_MD_PARAMS, n_frames=1, n_eq_steps=1, steps_per_frame=1),
-            n_windows=10,
-            min_overlap=0.0,  # causes immediate termination with 2 windows
-            keep_idxs=[0, 9],
-        )
-
-    assert "Invalid index in keep_idxs: 9. Bisection terminated with only 2 windows." in {w.message.args[0] for w in ws}
 
 
 if __name__ == "__main__":

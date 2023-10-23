@@ -7,7 +7,6 @@ pytestmark = [pytest.mark.nocuda]
 
 
 def test_setting_up_restraints_using_smarts():
-
     smi_a = "CCCONNN"
     smi_b = "CCCNNN"
     mol_a = Chem.AddHs(Chem.MolFromSmiles(smi_a))

@@ -146,8 +146,7 @@ template <typename RealType> void declare_neighborlist(py::module &m, const char
         .def(
             "set_row_idxs",
             [](Neighborlist<RealType> &nblist, const py::array_t<unsigned int, py::array::c_style> &idxs_i) {
-                std::vector<unsigned int> idxs(idxs_i.size());
-                std::memcpy(idxs.data(), idxs_i.data(), idxs_i.size() * sizeof(unsigned int));
+                std::vector<unsigned int> idxs = py_array_to_vector(idxs_i);
                 nblist.set_row_idxs(idxs);
             },
             py::arg("idxs"))
@@ -288,8 +287,7 @@ void declare_context(py::module &m) {
                 const int N = ctxt.num_atoms();
                 const int x_interval = (store_x_interval <= 0) ? n_steps : store_x_interval;
 
-                std::vector<int> vec_local_idxs(local_idxs.size());
-                std::memcpy(vec_local_idxs.data(), local_idxs.data(), vec_local_idxs.size() * sizeof(int));
+                std::vector<int> vec_local_idxs = py_array_to_vector(local_idxs);
                 verify_atom_idxs(N, vec_local_idxs);
 
                 std::array<std::vector<double>, 2> result =
@@ -383,8 +381,7 @@ void declare_context(py::module &m) {
                 if (reference_idx < 0 || reference_idx >= N) {
                     throw std::runtime_error("reference idx must be at least 0 and less than " + std::to_string(N));
                 }
-                std::vector<int> vec_selection_idxs(selection_idxs.size());
-                std::memcpy(vec_selection_idxs.data(), selection_idxs.data(), vec_selection_idxs.size() * sizeof(int));
+                std::vector<int> vec_selection_idxs = py_array_to_vector(selection_idxs);
                 verify_atom_idxs(N, vec_selection_idxs);
                 std::set<int> selection_set(vec_selection_idxs.begin(), vec_selection_idxs.end());
                 if (selection_set.find(reference_idx) != selection_set.end()) {
@@ -587,42 +584,7 @@ void declare_potential(py::module &m) {
     std::string pyclass_name = std::string("Potential");
     py::class_<Class, std::shared_ptr<Class>>(m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
         .def(
-            "execute",
-            [](Potential &pot,
-               const py::array_t<double, py::array::c_style> &coords,
-               const py::array_t<double, py::array::c_style> &params,
-               const py::array_t<double, py::array::c_style> &box) -> py::tuple {
-                const long unsigned int N = coords.shape()[0];
-                const long unsigned int D = coords.shape()[1];
-                const long unsigned int P = params.size();
-                verify_coords_and_box(coords, box);
-                // initialize with fixed garbage values for debugging convenience (these should be overwritten by `execute_host`)
-                std::vector<unsigned long long> du_dx(N * D, 9999);
-                std::vector<unsigned long long> du_dp(P, 9999);
-                std::vector<__int128> u(1, 9999);
-
-                pot.execute_host(N, P, coords.data(), params.data(), box.data(), &du_dx[0], &du_dp[0], &u[0]);
-
-                py::array_t<double, py::array::c_style> py_du_dx({N, D});
-                for (unsigned int i = 0; i < du_dx.size(); i++) {
-                    // py_du_dx.mutable_data()[i] = static_cast<double>(static_cast<long long>(du_dx[i]))/FIXED_EXPONENT;
-                    py_du_dx.mutable_data()[i] = FIXED_TO_FLOAT<double>(du_dx[i]);
-                }
-
-                std::vector<ssize_t> pshape(params.shape(), params.shape() + params.ndim());
-
-                py::array_t<double, py::array::c_style> py_du_dp(pshape);
-                pot.du_dp_fixed_to_float(N, P, &du_dp[0], py_du_dp.mutable_data());
-
-                double u_sum = convert_energy_to_fp(u[0]);
-
-                return py::make_tuple(py_du_dx, py_du_dp, u_sum);
-            },
-            py::arg("coords"),
-            py::arg("params"),
-            py::arg("box"))
-        .def(
-            "execute_selective_batch",
+            "execute_batch",
             [](Potential &pot,
                const py::array_t<double, py::array::c_style> &coords,
                const py::array_t<double, py::array::c_style> &params,
@@ -756,7 +718,7 @@ void declare_potential(py::module &m) {
 
     )pbdoc")
         .def(
-            "execute_selective",
+            "execute",
             [](Potential &pot,
                const py::array_t<double, py::array::c_style> &coords,
                const py::array_t<double, py::array::c_style> &params,
@@ -769,10 +731,18 @@ void declare_potential(py::module &m) {
                 const long unsigned int P = params.size();
                 verify_coords_and_box(coords, box);
                 // initialize with fixed garbage values for debugging convenience (these should be overwritten by `execute_host`)
-                std::vector<unsigned long long> du_dx(N * D, 9999);
-                std::vector<unsigned long long> du_dp(P, 9999);
-
-                std::vector<__int128> u(1, 9999);
+                std::vector<unsigned long long> du_dx;
+                if (compute_du_dx) {
+                    du_dx.assign(N * D, 9999);
+                }
+                std::vector<unsigned long long> du_dp;
+                if (compute_du_dp) {
+                    du_dp.assign(P, 9999);
+                }
+                std::vector<__int128> u;
+                if (compute_u) {
+                    u.assign(1, 9999);
+                }
 
                 pot.execute_host(
                     N,
@@ -784,28 +754,25 @@ void declare_potential(py::module &m) {
                     compute_du_dp ? &du_dp[0] : nullptr,
                     compute_u ? &u[0] : nullptr);
 
-                py::array_t<double, py::array::c_style> py_du_dx({N, D});
-                for (unsigned int i = 0; i < du_dx.size(); i++) {
-                    py_du_dx.mutable_data()[i] = FIXED_TO_FLOAT<double>(du_dx[i]);
+                auto result = py::make_tuple(py::none(), py::none(), py::none());
+
+                if (compute_du_dx) {
+                    py::array_t<double, py::array::c_style> py_du_dx({N, D});
+                    for (unsigned int i = 0; i < du_dx.size(); i++) {
+                        py_du_dx.mutable_data()[i] = FIXED_TO_FLOAT<double>(du_dx[i]);
+                    }
+                    result[0] = py_du_dx;
                 }
+                if (compute_du_dp) {
+                    std::vector<ssize_t> pshape(params.shape(), params.shape() + params.ndim());
 
-                std::vector<ssize_t> pshape(params.shape(), params.shape() + params.ndim());
-
-                py::array_t<double, py::array::c_style> py_du_dp(pshape);
-                pot.du_dp_fixed_to_float(N, P, &du_dp[0], py_du_dp.mutable_data());
-
-                double u_sum = convert_energy_to_fp(u[0]);
-
-                auto result = py::make_tuple(py_du_dx, py_du_dp, u_sum);
-
-                if (!compute_du_dx) {
-                    result[0] = py::none();
+                    py::array_t<double, py::array::c_style> py_du_dp(pshape);
+                    pot.du_dp_fixed_to_float(N, P, &du_dp[0], py_du_dp.mutable_data());
+                    result[1] = py_du_dp;
                 }
-                if (!compute_du_dp) {
-                    result[1] = py::none();
-                }
-                if (!compute_u) {
-                    result[2] = py::none();
+                if (compute_u) {
+                    double u_sum = convert_energy_to_fp(u[0]);
+                    result[2] = u_sum;
                 }
 
                 return result;
@@ -813,9 +780,9 @@ void declare_potential(py::module &m) {
             py::arg("coords"),
             py::arg("params"),
             py::arg("box"),
-            py::arg("compute_du_dx"),
-            py::arg("compute_du_dp"),
-            py::arg("compute_u"))
+            py::arg("compute_du_dx") = true,
+            py::arg("compute_du_dp") = true,
+            py::arg("compute_u") = true)
         .def(
             "execute_du_dx",
             [](Potential &pot,
@@ -866,26 +833,135 @@ void declare_bound_potential(py::module &m) {
             "execute",
             [](BoundPotential &bp,
                const py::array_t<double, py::array::c_style> &coords,
-               const py::array_t<double, py::array::c_style> &box) -> py::tuple {
+               const py::array_t<double, py::array::c_style> &box,
+               bool compute_du_dx,
+               bool compute_u) -> py::tuple {
                 const long unsigned int N = coords.shape()[0];
                 const long unsigned int D = coords.shape()[1];
                 verify_coords_and_box(coords, box);
-                std::vector<unsigned long long> du_dx(N * D, 9999);
-                std::vector<__int128> u(1, 9999);
-
-                bp.execute_host(N, coords.data(), box.data(), &du_dx[0], &u[0]);
-
-                py::array_t<double, py::array::c_style> py_du_dx({N, D});
-                for (unsigned int i = 0; i < du_dx.size(); i++) {
-                    py_du_dx.mutable_data()[i] = FIXED_TO_FLOAT<double>(du_dx[i]);
+                // initialize with fixed garbage values for debugging convenience (these should be overwritten by `execute_host`)
+                std::vector<unsigned long long> du_dx;
+                if (compute_du_dx) {
+                    du_dx.assign(N * D, 9999);
+                }
+                std::vector<__int128> u;
+                if (compute_u) {
+                    u.assign(1, 9999);
                 }
 
-                double u_sum = convert_energy_to_fp(u[0]);
+                bp.execute_host(
+                    N, coords.data(), box.data(), compute_du_dx ? &du_dx[0] : nullptr, compute_u ? &u[0] : nullptr);
 
-                return py::make_tuple(py_du_dx, u_sum);
+                auto result = py::make_tuple(py::none(), py::none());
+
+                if (compute_du_dx) {
+                    py::array_t<double, py::array::c_style> py_du_dx({N, D});
+                    if (compute_du_dx) {
+                        for (unsigned int i = 0; i < du_dx.size(); i++) {
+                            py_du_dx.mutable_data()[i] = FIXED_TO_FLOAT<double>(du_dx[i]);
+                        }
+                    }
+                    result[0] = py_du_dx;
+                }
+                if (compute_u) {
+                    double u_sum = convert_energy_to_fp(u[0]);
+                    result[1] = u_sum;
+                }
+
+                return result;
             },
             py::arg("coords"),
-            py::arg("box"))
+            py::arg("box"),
+            py::arg("compute_du_dx") = true,
+            py::arg("compute_u") = true)
+        .def(
+            "execute_batch",
+            [](BoundPotential &bp,
+               const py::array_t<double, py::array::c_style> &coords,
+               const py::array_t<double, py::array::c_style> &boxes,
+               const bool compute_du_dx,
+               const bool compute_u) -> py::tuple {
+                if (coords.ndim() != 3 && boxes.ndim() != 3) {
+                    throw std::runtime_error("coords and boxes must have 3 dimensions");
+                }
+                if (coords.shape()[0] != boxes.shape()[0]) {
+                    throw std::runtime_error("number of batches of coords and boxes don't match");
+                }
+                const long unsigned int coord_batches = coords.shape()[0];
+                const long unsigned int N = coords.shape()[1];
+                const long unsigned int D = coords.shape()[2];
+
+                // initialize with fixed garbage values for debugging convenience (these should be overwritten by `execute_batch_host`)
+                // Only initialize memory when needed, as buffers can be quite large
+                std::vector<unsigned long long> du_dx;
+                if (compute_du_dx) {
+                    du_dx.assign(coord_batches * N * D, 9999);
+                }
+                std::vector<__int128> u;
+                if (compute_u) {
+                    u.assign(coord_batches, 9999);
+                }
+
+                bp.execute_batch_host(
+                    coord_batches,
+                    N,
+                    coords.data(),
+                    boxes.data(),
+                    compute_du_dx ? du_dx.data() : nullptr,
+                    compute_u ? u.data() : nullptr);
+
+                auto result = py::make_tuple(py::none(), py::none());
+                if (compute_du_dx) {
+                    py::array_t<double, py::array::c_style> py_du_dx({coord_batches, N, D});
+                    for (unsigned int i = 0; i < du_dx.size(); i++) {
+                        py_du_dx.mutable_data()[i] = FIXED_TO_FLOAT<double>(du_dx[i]);
+                    }
+                    result[0] = py_du_dx;
+                }
+
+                if (compute_u) {
+                    py::array_t<double, py::array::c_style> py_u(coord_batches);
+
+                    for (unsigned int i = 0; i < py_u.size(); i++) {
+                        py_u.mutable_data()[i] = convert_energy_to_fp(u[i]);
+                    }
+                    result[1] = py_u;
+                }
+
+                return result;
+            },
+            py::arg("coords"),
+            py::arg("boxes"),
+            py::arg("compute_du_dx"),
+            py::arg("compute_u"),
+            R"pbdoc(
+        Execute the potential over a batch of coordinates and boxes.
+
+        Note: This function allocates memory for all of the inputs on the GPU. This may lead to OOMs.
+
+        Parameters
+        ----------
+        coords: NDArray
+            A three dimensional array containing a batch of coordinates.
+
+        boxes: NDArray
+            A three dimensional array containing a batch of boxes.
+
+        compute_du_dx: bool
+            Indicates to compute du_dx, else returns None for du_dx.
+
+        compute_u: bool
+            Indicates to compute u, else returns None for u.
+
+
+        Returns
+        -------
+        2-tuple of du_dx, u
+            coord_batch_size = coords.shape[0]
+            du_dx has shape (coords_batch_size, N, 3)
+            u has shape (coords_batch_size)
+
+    )pbdoc")
         .def(
             "execute_fixed",
             [](BoundPotential &bp,
@@ -1003,8 +1079,7 @@ template <typename RealType> void declare_harmonic_angle(py::module &m, const ch
         m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
         .def(
             py::init([](const py::array_t<int, py::array::c_style> &angle_idxs) {
-                std::vector<int> vec_angle_idxs(angle_idxs.size());
-                std::memcpy(vec_angle_idxs.data(), angle_idxs.data(), vec_angle_idxs.size() * sizeof(int));
+                std::vector<int> vec_angle_idxs = py_array_to_vector(angle_idxs);
                 return new HarmonicAngle<RealType>(vec_angle_idxs);
             }),
             py::arg("angle_idxs"));
@@ -1018,8 +1093,7 @@ template <typename RealType> void declare_harmonic_angle_stable(py::module &m, c
         m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
         .def(
             py::init([](const py::array_t<int, py::array::c_style> &angle_idxs) {
-                std::vector<int> vec_angle_idxs(angle_idxs.size());
-                std::memcpy(vec_angle_idxs.data(), angle_idxs.data(), vec_angle_idxs.size() * sizeof(int));
+                std::vector<int> vec_angle_idxs = py_array_to_vector(angle_idxs);
                 return new HarmonicAngleStable<RealType>(vec_angle_idxs);
             }),
             py::arg("angle_idxs"));
@@ -1036,10 +1110,8 @@ template <typename RealType> void declare_centroid_restraint(py::module &m, cons
                         const py::array_t<int, py::array::c_style> &group_b_idxs,
                         double kb,
                         double b0) {
-                std::vector<int> vec_group_a_idxs(group_a_idxs.size());
-                std::memcpy(vec_group_a_idxs.data(), group_a_idxs.data(), vec_group_a_idxs.size() * sizeof(int));
-                std::vector<int> vec_group_b_idxs(group_b_idxs.size());
-                std::memcpy(vec_group_b_idxs.data(), group_b_idxs.data(), vec_group_b_idxs.size() * sizeof(int));
+                std::vector<int> vec_group_a_idxs = py_array_to_vector(group_a_idxs);
+                std::vector<int> vec_group_b_idxs = py_array_to_vector(group_b_idxs);
 
                 return new CentroidRestraint<RealType>(vec_group_a_idxs, vec_group_b_idxs, kb, b0);
             }),
@@ -1057,8 +1129,7 @@ template <typename RealType> void declare_periodic_torsion(py::module &m, const 
         m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
         .def(
             py::init([](const py::array_t<int, py::array::c_style> &torsion_idxs) {
-                std::vector<int> vec_torsion_idxs(torsion_idxs.size());
-                std::memcpy(vec_torsion_idxs.data(), torsion_idxs.data(), vec_torsion_idxs.size() * sizeof(int));
+                std::vector<int> vec_torsion_idxs = py_array_to_vector(torsion_idxs);
                 return new PeriodicTorsion<RealType>(vec_torsion_idxs);
             }),
             py::arg("angle_idxs"));
@@ -1131,8 +1202,7 @@ template <typename RealType> void declare_nonbonded_interaction_group(py::module
                         std::optional<py::array_t<int, py::array::c_style>> &col_atom_idxs_i,
                         const bool disable_hilbert_sort,
                         const double nblist_padding) {
-                std::vector<int> row_atom_idxs(row_atom_idxs_i.size());
-                std::memcpy(row_atom_idxs.data(), row_atom_idxs_i.data(), row_atom_idxs_i.size() * sizeof(int));
+                std::vector<int> row_atom_idxs = py_array_to_vector(row_atom_idxs_i);
 
                 std::vector<int> col_atom_idxs;
                 if (col_atom_idxs_i) {
@@ -1198,11 +1268,9 @@ template <typename RealType, bool Negated> void declare_nonbonded_pair_list(py::
                         const py::array_t<double, py::array::c_style> &scales_i,
                         const double beta,
                         const double cutoff) {
-                std::vector<int> pair_idxs(pair_idxs_i.size());
-                std::memcpy(pair_idxs.data(), pair_idxs_i.data(), pair_idxs_i.size() * sizeof(int));
+                std::vector<int> pair_idxs = py_array_to_vector(pair_idxs_i);
 
-                std::vector<double> scales(scales_i.size());
-                std::memcpy(scales.data(), scales_i.data(), scales_i.size() * sizeof(double));
+                std::vector<double> scales = py_array_to_vector(scales_i);
 
                 return new NonbondedPairList<RealType, Negated>(pair_idxs, scales, beta, cutoff);
             }),
@@ -1360,10 +1428,7 @@ double py_accumulate_energy(const py::array_t<long long, py::array::c_style> &in
 
     int N = input_data.size();
 
-    std::vector<__int128> h_buffer(N);
-    for (int i = 0; i < N; i++) {
-        h_buffer[i] = static_cast<__int128>(input_data.data()[i]);
-    }
+    std::vector<__int128> h_buffer = py_array_to_vector_with_cast<long long, __int128>(input_data);
 
     DeviceBuffer<__int128> d_input_buffer(N);
     d_input_buffer.copy_from(&h_buffer[0]);

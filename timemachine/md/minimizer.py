@@ -9,7 +9,7 @@ from rdkit import Chem
 from timemachine.constants import BOLTZ, DEFAULT_TEMP, MAX_FORCE_NORM
 from timemachine.fe import model_utils, topology
 from timemachine.fe.free_energy import HostConfig
-from timemachine.fe.utils import get_romol_conf
+from timemachine.fe.utils import get_mol_masses, get_romol_conf
 from timemachine.ff import Forcefield
 from timemachine.ff.handlers import openmm_deserializer
 from timemachine.lib import LangevinIntegrator, MonteCarloBarostat, custom_ops
@@ -100,7 +100,7 @@ def fire_minimize(x0: NDArray, u_impls: Sequence[custom_ops.BoundPotential], box
     def force(coords):
         forces = np.zeros_like(coords)
         for impl in u_impls:
-            du_dx, _ = impl.execute(coords, box)
+            du_dx, _ = impl.execute(coords, box, compute_u=False)
             forces -= du_dx
         return forces
 
@@ -172,7 +172,7 @@ def minimize_host_4d(
     conf_list = [np.array(host_config.conf)]
     for mol in mols:
         # mass increase is to keep the ligand fixed
-        mass_list.append(np.array([a.GetMass() * 100000 for a in mol.GetAtoms()]))
+        mass_list.append(get_mol_masses(mol) * 100000)
 
     if mol_coords is not None:
         for mc in mol_coords:
@@ -208,17 +208,17 @@ def minimize_host_4d(
         xs, _ = ctxt.multiple_steps(n_steps_per_window)
         x = xs[-1]
 
-    _, params = parameterize_system(hgt, ff, 0.0)
-    u_impl.set_params(flatten_params(params))
     final_coords = fire_minimize(x, bound_impls, box, n_steps_per_window)
     for impl in bound_impls:
-        du_dx, _ = impl.execute(final_coords, box)
+        du_dx, _ = impl.execute(final_coords, box, compute_u=False)
         check_force_norm(-du_dx)
 
     return final_coords[:num_host_atoms]
 
 
-def make_host_du_dx_fxn(mols, host_config, ff, mol_coords=None):
+def make_host_du_dx_fxn(
+    mols: List[Chem.Mol], host_config: HostConfig, ff: Forcefield, mol_coords: Optional[List[NDArray]] = None
+):
     """construct function to compute du_dx w.r.t. host coords, given fixed mols and box"""
 
     assert host_config.box.shape == (3, 3)
@@ -252,7 +252,7 @@ def make_host_du_dx_fxn(mols, host_config, ff, mol_coords=None):
 
     # check conf_list consistent with mols
     assert len(conf_list[1:]) == len(mols)
-    for (conf, mol) in zip(conf_list[1:], mols):
+    for conf, mol in zip(conf_list[1:], mols):
         assert conf.shape == (mol.GetNumAtoms(), 3)
 
     combined_coords = np.concatenate(conf_list)
@@ -264,7 +264,7 @@ def make_host_du_dx_fxn(mols, host_config, ff, mol_coords=None):
         x = np.array(combined_coords)
         x[:num_host_atoms] = x_host
 
-        du_dx, _ = gpu_impl.execute(x, host_config.box)
+        du_dx, _ = gpu_impl.execute(x, host_config.box, compute_u=False)
         du_dx_host = du_dx[:num_host_atoms]
         return du_dx_host
 
@@ -272,15 +272,15 @@ def make_host_du_dx_fxn(mols, host_config, ff, mol_coords=None):
 
 
 def equilibrate_host_barker(
-    mols,
+    mols: List[Chem.Mol],
     host_config: HostConfig,
-    ff,
-    mol_coords=None,
-    temperature=DEFAULT_TEMP,
-    proposal_stddev=0.0001,
-    n_steps=1000,
-    seed=None,
-):
+    ff: Forcefield,
+    mol_coords: Optional[List[NDArray]] = None,
+    temperature: float = DEFAULT_TEMP,
+    proposal_stddev: float = 0.0001,
+    n_steps: int = 1000,
+    seed: Optional[int] = None,
+) -> NDArray:
     """Possible alternative to minimize_host_4d, for purposes of clash resolution and initial pre-equilibration
 
     Notes
@@ -368,7 +368,7 @@ def equilibrate_host(
 
     min_host_coords = minimize_host_4d([mol], host_config, ff)
 
-    ligand_masses = [a.GetMass() for a in mol.GetAtoms()]
+    ligand_masses = get_mol_masses(mol)
     ligand_coords = get_romol_conf(mol)
 
     combined_masses = np.concatenate([host_masses, ligand_masses])
@@ -448,7 +448,9 @@ def get_val_and_grad_fn(bps: Iterable[BoundPotential], box: NDArray, precision=n
     return val_and_grad_fn
 
 
-def local_minimize(x0, val_and_grad_fn, local_idxs, verbose=True, assert_energy_decreased=True):
+def local_minimize(
+    x0: NDArray, val_and_grad_fn, local_idxs, verbose: bool = True, assert_energy_decreased: bool = True
+):
     """
     Minimize a local region given selected idxs.
 

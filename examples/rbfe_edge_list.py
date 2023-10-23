@@ -12,7 +12,6 @@ from timemachine.ff import Forcefield
 
 
 def parse_args():
-
     parser = argparse.ArgumentParser(
         description="Estimate relative free energy difference between complex and solvent given a results csv file."
     )

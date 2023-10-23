@@ -145,7 +145,6 @@ def test_condensed_phase_mtm(seed):
     xvb_t = copy.deepcopy(xvb0)
 
     for iteration in range(num_batches):
-
         xvb_t = npt_mover.move(xvb_t)
         solvent_torsion = get_torsion(xvb_t.coords[-num_ligand_atoms:])
         enhanced_torsions.append(solvent_torsion)
@@ -188,12 +187,12 @@ def test_nvt_box():
     mol, _ = testsystems.ligands.get_biphenyl()
     ff = Forcefield.load_default()
 
-    ubps, params, masses, coords, box = enhanced.get_solvent_phase_system(mol, ff, 0.0)
+    ubps, params, masses, coords, box = enhanced.get_solvent_phase_system(mol, ff, 0.0, minimize_energy=False)
     bps = []
     for p, bp in zip(params, ubps):
         bps.append(bp.bind(p))
 
-    temperature = 300.0
+    temperature = DEFAULT_TEMP
     n_steps = 100
     mover = NVTMove(bps, masses, temperature, n_steps, seed)
     v0 = np.zeros_like(coords)

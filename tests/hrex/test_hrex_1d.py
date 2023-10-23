@@ -62,7 +62,7 @@ class GaussianMixture:
 
     def log_q(self, x: float) -> float:
         x_ = np.atleast_1d(np.asarray(x))
-        log_q = -((x_[:, None] - self.locs) ** 2) / (2 * self.scales ** 2)
+        log_q = -((x_[:, None] - self.locs) ** 2) / (2 * self.scales**2)
         return logsumexp(log_q + self.log_weights, axis=1)
 
 
@@ -161,7 +161,7 @@ def test_hrex_different_distributions_same_free_energy(seed):
 
     # KS test assumes independent samples
     # Use a rough estimate of autocorrelation time to subsample correlated MCMC samples
-    tau = round(1 / proposal_radius ** 2)
+    tau = round(1 / proposal_radius**2)
 
     (n_samples,) = samples_by_state[0].shape
 
@@ -200,7 +200,7 @@ def test_hrex_same_distributions_different_free_energies(seed):
 
     # KS test assumes independent samples
     # Use a rough estimate of autocorrelation time to subsample correlated MCMC samples
-    tau = round(1 / proposal_radius ** 2)
+    tau = round(1 / proposal_radius**2)
 
     (n_samples,) = samples_by_state[0].shape
 
@@ -262,7 +262,7 @@ def test_hrex_gaussian_mixture(seed):
 
     # KS test assumes independent samples
     # Use a rough estimate of autocorrelation time to subsample correlated MCMC samples
-    tau = round(1 / proposal_radius ** 2)
+    tau = round(1 / proposal_radius**2)
 
     def compute_ks_pvalue(samples):
         return scipy.stats.ks_2samp(samples[tau::tau], target_samples).pvalue

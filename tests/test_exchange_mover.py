@@ -3,14 +3,18 @@ from jax import config
 config.update("jax_enable_x64", True)
 
 import numpy as np
+import pytest
 
 from timemachine.constants import DEFAULT_KT
 from timemachine.md.exchange import exchange_mover
 from timemachine.md.exchange.exchange_mover import delta_r_np
 
+pytestmark = [pytest.mark.nocuda]
+
 
 def test_batch_log_weights_incremental():
     # test that our trick for computing incremental batched log weights is correct
+    np.random.seed(2023)
     W = 111  # num waters
     N = 439  # num atoms
     nb_beta = 1.2
@@ -49,6 +53,7 @@ def test_batch_log_weights_incremental():
 
 def test_inner_insertion():
     # test that we can insert correctly inside a sphere under PBC
+    np.random.seed(2023)
     for _ in range(1000):
         radius = np.random.rand()
         center = np.random.rand(3)
@@ -59,6 +64,7 @@ def test_inner_insertion():
 
 def test_outer_insertion():
     # test that we can insert correctly outside a sphere but inside the box under PBC
+    np.random.seed(2023)
     for _ in range(1000):
         center = np.random.rand(3)
         box = np.eye(3) * np.random.rand()
@@ -71,6 +77,7 @@ def test_outer_insertion():
 
 def test_get_water_groups():
     # test that we can partition waters into their groups correctly
+    np.random.seed(2023)
     N = 1000
     W = 231
 

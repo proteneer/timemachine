@@ -1,5 +1,6 @@
 from functools import partial
 from importlib import resources
+from typing import no_type_check
 
 import jax.numpy as jnp
 import numpy as np
@@ -42,7 +43,6 @@ def test_dual_topology_nonbonded_pairlist():
     box = np.eye(3) * 4.0
 
     for precision, rtol, atol in [(np.float64, 1e-8, 1e-8), (np.float32, 1e-4, 5e-4)]:
-
         nb_unbound = nb.to_gpu(precision).unbound_impl
         nb_pairlist_unbound = nb_pairlist.to_gpu(precision).unbound_impl
 
@@ -73,6 +73,7 @@ def parameterize_nonbonded_full(
     guest_params, guest_pot = hgt.guest_topology.parameterize_nonbonded(
         ff_q_params, ff_q_params_intra, ff_q_params_solv, ff_lj_params, ff_lj_params_intra, ff_lj_params_solv, lamb
     )
+    assert hgt.host_nonbonded is not None
     hg_exclusion_idxs = np.concatenate(
         [hgt.host_nonbonded.potential.exclusion_idxs, guest_pot.exclusion_idxs + hgt.num_host_atoms]
     )
@@ -83,6 +84,7 @@ def parameterize_nonbonded_full(
     )
 
 
+@no_type_check
 @pytest.mark.parametrize("precision, rtol, atol", [(np.float64, 1e-8, 1e-8), (np.float32, 1e-4, 5e-4)])
 @pytest.mark.parametrize("ctor", [BaseTopology, DualTopology, DualTopologyMinimization])
 @pytest.mark.parametrize("use_tiny_mol", [True, False])

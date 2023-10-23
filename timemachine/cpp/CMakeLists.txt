@@ -19,6 +19,7 @@ string(APPEND CMAKE_CUDA_FLAGS
   " -Wextra"
   " -Wno-unused-parameter"
   " -Wreorder"
+  " -Wfloat-conversion"
 )
 message(${CMAKE_CUDA_FLAGS})
 

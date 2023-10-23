@@ -30,7 +30,6 @@ def write_trajectory_as_cif(mol_a, mol_b, core, all_frames, host_topology, out_p
 
 
 def run_edge(mol_a, mol_b, protein_path, n_windows):
-
     all_cores = atom_mapping.get_cores(
         mol_a,
         mol_b,

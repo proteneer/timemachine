@@ -208,7 +208,6 @@ class OptimizedMTMMove(DeterministicMTMMove):
 
     @partial(jax.jit, static_argnums=(0,))
     def acceptance_probability(self, x, box, key):
-
         # split #1
         yj = self.batch_proposal_fn(x, self.K, key)
         _, key = jrandom.split(key)
@@ -266,7 +265,6 @@ class ReferenceMTMMove(DeterministicMTMMove):
         super().__init__(jrandom.PRNGKey(seed))
 
     def acceptance_probability(self, xvb, key):
-
         # split # 1
         yj = self.batch_proposal_fn(xvb, self.K, key)
         _, key = jrandom.split(key)

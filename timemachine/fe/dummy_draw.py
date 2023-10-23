@@ -45,7 +45,6 @@ def draw_dummy_core_ixns(mol, core, bonds, dummy_group, color_blind=False):
     legends = []
 
     for atom_idxs in bonds:
-
         mol_copy = Chem.Mol(mol)
         highlightAtomColors = {}
         highlightBondColors = {}

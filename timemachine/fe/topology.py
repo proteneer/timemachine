@@ -106,13 +106,12 @@ class HostGuestTopology:
 
     # tbd: just merge the hamiltonians here
     def _parameterize_bonded_term(self, guest_params, guest_potential, host_potential):
-
         if guest_potential is None:
             raise UnsupportedPotential("Mismatch in guest_potential")
 
         # (ytz): corner case exists if the guest_potential is None
         if host_potential is not None:
-            assert type(host_potential.potential) == type(guest_potential)
+            assert isinstance(host_potential.potential, type(guest_potential))
 
         guest_idxs = guest_potential.idxs + self.num_host_atoms
 
@@ -661,7 +660,6 @@ class DualTopologyMinimization(DualTopology):
         lamb: float,
         intramol_params=True,
     ):
-
         # both mol_a and mol_b are standardized.
         # we don't actually need derivatives for this stage.
 

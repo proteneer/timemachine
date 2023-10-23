@@ -5,9 +5,12 @@ Assert accurate estimates for free energy differences between 1D Gaussians using
 from dataclasses import dataclass
 
 import numpy as np
+import pytest
 from pymbar import BAR, EXP, MBAR
 
 from timemachine.maps.estimators import compute_mapped_reduced_work, compute_mapped_u_kn
+
+pytestmark = [pytest.mark.nocuda]
 
 
 @dataclass
@@ -17,7 +20,7 @@ class UnnormalizedGaussian:
     reduced_free_energy: float
 
     def _normalized_logpdf(self, x):
-        return -((x - self.mean) ** 2) / (self.stddev ** 2) - np.log(self.stddev * np.sqrt(2 * np.pi))
+        return -((x - self.mean) ** 2) / (self.stddev**2) - np.log(self.stddev * np.sqrt(2 * np.pi))
 
     def reduced_potential(self, x):
         return -self._normalized_logpdf(x) + self.reduced_free_energy

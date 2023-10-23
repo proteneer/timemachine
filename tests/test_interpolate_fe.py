@@ -63,7 +63,6 @@ def test_hif2a_free_energy_estimates():
         writer.close()
 
         if lambda_idx > 0:
-
             prev_frames = all_frames[lambda_idx - 1]
             cur_frames = all_frames[lambda_idx]
 

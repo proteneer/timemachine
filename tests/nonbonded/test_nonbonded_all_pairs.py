@@ -137,7 +137,7 @@ def test_nonbonded_all_pairs_set_atom_idxs(precision, cutoff, beta, rng: np.rand
     for num_idxs in [5, 25, 50, 80, num_atoms]:
         atom_idxs = rng.choice(num_atoms, size=(num_idxs,), replace=False).astype(identity_idxs.dtype)
         ignored_idxs = np.delete(identity_idxs, atom_idxs)
-        unbound_pot.set_atom_idxs(atom_idxs)
+        unbound_pot.set_atom_idxs(atom_idxs)  # type: ignore
         ref_potential = NonbondedAllPairs(num_atoms, beta, cutoff, atom_idxs)
         unbound_ref = ref_potential.to_gpu(precision).unbound_impl
 
@@ -238,8 +238,8 @@ def test_nonbonded_all_pairs_order_independent(
     unsorted_impl = unsorted_pot.to_gpu(precision).unbound_impl
 
     for params in gen_nonbonded_params_with_4d_offsets(rng, params, cutoff):
-        a_du_dx, a_du_dp, a_u = sorted_impl.execute_selective(conf, params, example_box, True, True, True)
-        b_du_dx, b_du_dp, b_u = unsorted_impl.execute_selective(conf, params, example_box, True, True, True)
+        a_du_dx, a_du_dp, a_u = sorted_impl.execute(conf, params, example_box)
+        b_du_dx, b_du_dp, b_u = unsorted_impl.execute(conf, params, example_box)
         np.testing.assert_array_equal(a_du_dx, b_du_dx)
         np.testing.assert_array_equal(a_du_dp, b_du_dp)
         assert a_u == b_u

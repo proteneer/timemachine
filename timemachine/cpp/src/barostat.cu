@@ -27,9 +27,9 @@ MonteCarloBarostat<RealType>::MonteCarloBarostat(
     const int seed,
     const bool adaptive_scaling_enabled,
     const double initial_volume_scale_factor)
-    : N_(N), adaptive_scaling_enabled_(adaptive_scaling_enabled), bps_(bps), pressure_(pressure),
-      temperature_(temperature), interval_(interval), seed_(seed), group_idxs_(group_idxs), step_(0),
-      num_grouped_atoms_(0), runner_() {
+    : N_(N), adaptive_scaling_enabled_(adaptive_scaling_enabled), bps_(bps), pressure_(static_cast<RealType>(pressure)),
+      temperature_(static_cast<RealType>(temperature)), interval_(interval), seed_(seed), group_idxs_(group_idxs),
+      step_(0), num_grouped_atoms_(0), runner_() {
 
     // Trigger check that interval is valid
     this->set_interval(interval_);
@@ -280,7 +280,7 @@ template <typename RealType> void MonteCarloBarostat<RealType>::set_interval(con
 template <typename RealType> int MonteCarloBarostat<RealType>::get_interval() { return interval_; }
 
 template <typename RealType> void MonteCarloBarostat<RealType>::set_pressure(const double pressure) {
-    pressure_ = pressure;
+    pressure_ = static_cast<RealType>(pressure);
     // Could have equilibrated and be a large number of steps from shifting volume
     // adjustment, ie num attempted = 300 and num accepted = 150
     this->reset_counters();

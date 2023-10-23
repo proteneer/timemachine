@@ -157,7 +157,7 @@ def test_nonbonded_interaction_group_neighborlist_rebuild(
         GradientTest().assert_differentiable_interface_consistency(conf, params, example_box, test_impl)
 
         # Randomize the coordinates of the column atoms to trigger a nblist rebuild
-        conf[col_atom_idxs] += rng.random(size=(len(col_atom_idxs), 3)) * (cutoff ** 2)
+        conf[col_atom_idxs] += rng.random(size=(len(col_atom_idxs), 3)) * (cutoff**2)
 
         GradientTest().compare_forces(conf, params, example_box, potential, test_impl, rtol=rtol, atol=atol)
         GradientTest().assert_differentiable_interface_consistency(conf, params, example_box, test_impl)
@@ -201,9 +201,9 @@ def test_nonbonded_interaction_group_empty_set_of_idxs(
     for ligand_idxs in ([], np.arange(num_atoms)):
         test_ixngroups = ixn_group.to_gpu(precision)
 
-        col_atom_idxs = np.setdiff1d(np.arange(num_atoms), ligand_idxs).astype(np.int32)
+        col_atom_idxs = np.setdiff1d(np.arange(num_atoms), np.array(ligand_idxs)).astype(np.int32)
         # Set to either empty or all indices, both should produce zero energies
-        test_ixngroups.unbound_impl.set_atom_idxs(np.array(ligand_idxs).astype(np.int32), col_atom_idxs)
+        test_ixngroups.unbound_impl.set_atom_idxs(np.array(ligand_idxs).astype(np.int32), col_atom_idxs)  # type: ignore
         for params in gen_nonbonded_params_with_4d_offsets(rng, params, cutoff):
             GradientTest().compare_forces(
                 conf,
@@ -386,7 +386,7 @@ def test_nonbonded_interaction_group_set_atom_idxs(
 
     # Set to first particle not in ligand_idxs, should produce different values
     col_atom_idxs = np.setdiff1d(np.arange(num_atoms), secondary_ligand_set)
-    unbound_pot.set_atom_idxs(secondary_ligand_set, col_atom_idxs)
+    unbound_pot.set_atom_idxs(secondary_ligand_set, col_atom_idxs)  # type: ignore
 
     diff_du_dx, diff_du_dp, diff_u = unbound_pot.execute(
         conf,
@@ -413,7 +413,7 @@ def test_nonbonded_interaction_group_set_atom_idxs(
     # Set back to the indices, but shuffled, should be identical to reference
     rng.shuffle(ligand_idxs)
     col_atom_idxs = np.setdiff1d(np.arange(num_atoms), ligand_idxs)
-    unbound_pot.set_atom_idxs(ligand_idxs, col_atom_idxs)
+    unbound_pot.set_atom_idxs(ligand_idxs, col_atom_idxs)  # type: ignore
 
     test_du_dx, test_du_dp, test_u = unbound_pot.execute(
         conf,
@@ -455,8 +455,8 @@ def test_nonbonded_ixn_group_order_independent(
     unsorted_impl = unsorted_pot.to_gpu(precision).unbound_impl
 
     for params in gen_nonbonded_params_with_4d_offsets(rng, params, cutoff):
-        a_du_dx, a_du_dp, a_u = sorted_impl.execute_selective(conf, params, example_box, True, True, True)
-        b_du_dx, b_du_dp, b_u = unsorted_impl.execute_selective(conf, params, example_box, True, True, True)
+        a_du_dx, a_du_dp, a_u = sorted_impl.execute(conf, params, example_box)
+        b_du_dx, b_du_dp, b_u = unsorted_impl.execute(conf, params, example_box)
         np.testing.assert_array_equal(a_du_dx, b_du_dx)
         np.testing.assert_array_equal(a_du_dp, b_du_dp)
         assert a_u == b_u

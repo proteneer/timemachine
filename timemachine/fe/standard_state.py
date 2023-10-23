@@ -31,7 +31,7 @@ def integrate_radial_Z(u_fn, beta, r_max):
     """
 
     def integrand(r):
-        return 4 * np.pi * (r ** 2) * np.exp(-beta * u_fn(r))
+        return 4 * np.pi * (r**2) * np.exp(-beta * u_fn(r))
 
     r_min = 0.0
     Z, err = scipy.integrate.quad(integrand, r_min, r_max)
@@ -73,8 +73,8 @@ def integrate_radial_Z_exact(k, beta):
         4.0
         * np.pi
         * (
-            (b * np.exp(-(b ** 2) * k)) / (2 * k)
-            + ((1 + 2 * b ** 2 * k) * np.sqrt(np.pi) * (1 + scipy.special.erf(b * np.sqrt(k)))) / (4 * k ** (3 / 2))
+            (b * np.exp(-(b**2) * k)) / (2 * k)
+            + ((1 + 2 * b**2 * k) * np.sqrt(np.pi) * (1 + scipy.special.erf(b * np.sqrt(k)))) / (4 * k ** (3 / 2))
         )
     )
     return Z_exact
@@ -154,7 +154,7 @@ def release_orientational_restraints(k_t, k_r, beta):
     """
 
     def harmonic_restraint(r):
-        return k_t * r ** 2
+        return k_t * r**2
 
     Z_numeric = integrate_radial_Z(harmonic_restraint, beta, r_max=np.inf)  # i like to live dangerously
     Z_exact = integrate_radial_Z_exact(k_t, beta)

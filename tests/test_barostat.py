@@ -66,6 +66,7 @@ def test_barostat_validation():
         )
 
 
+@pytest.mark.memcheck
 def test_barostat_with_clashes():
     temperature = DEFAULT_TEMP  # kelvin
     pressure = DEFAULT_PRESSURE  # bar
@@ -116,6 +117,7 @@ def test_barostat_with_clashes():
     assert np.all(box == ctxt.get_box())
 
 
+@pytest.mark.memcheck
 def test_barostat_zero_interval():
     pressure = DEFAULT_PRESSURE  # bar
     temperature = DEFAULT_TEMP  # kelvin
@@ -157,6 +159,7 @@ def test_barostat_zero_interval():
         baro.set_interval(0)
 
 
+@pytest.mark.memcheck
 def test_barostat_partial_group_idxs():
     """Verify that the barostat can handle a subset of the molecules
     rather than all of them. This test only verify that it runs, not the behavior"""
@@ -379,7 +382,7 @@ def test_barostat_recentering_upon_acceptance():
         coords.shape[0], pressure, temperature, group_indices, barostat_interval, u_impls, seed, True, 0.0
     )
     ctxt = custom_ops.Context(coords, v_0, complex_box, integrator_impl, u_impls, barostat=baro)
-    # mini equilibriate the system to get barostat proposals to be reasonable
+    # mini equilibrate the system to get barostat proposals to be reasonable
     ctxt.multiple_steps(1000)
     num_accepted = 0
     for _ in range(100):
@@ -520,6 +523,7 @@ def assert_group_idxs_are_equal(set_a, set_b):
     assert convert_to_fzset(set_a) == convert_to_fzset(set_b)
 
 
+@pytest.mark.nocuda
 def test_get_group_indices():
     # test that we generate correct group indices even when
     # there are disconnected atoms (eg. ions) present

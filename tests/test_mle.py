@@ -67,7 +67,6 @@ def generate_random_valid_regular_graph(max_retries=10):
 def test_random_spanning_graphs_with_no_edge_noise():
     np.random.seed(2022)
     for i in range(10):
-
         K = np.random.randint(3, 500)
         g = nx.random_tree(K, seed=hash(K * i))
         E = g.number_of_edges()
@@ -86,7 +85,6 @@ def test_random_spanning_graphs_with_no_edge_noise():
 def test_random_spanning_graphs_with_some_edge_noise():
     np.random.seed(2022)
     for i in range(10):
-
         K = np.random.randint(3, 500)
         sigma = np.random.rand()
         g = nx.random_tree(K, seed=hash(K * i))
@@ -151,7 +149,6 @@ def test_random_graphs_containing_cycles_with_edge_noise():
 
 
 def test_infer_node_dgs_w_error():
-
     np.random.seed(0)
 
     for _ in range(5):
@@ -288,7 +285,6 @@ def test_infer_node_vals_and_errs_networkx_requires_digraph():
 
 
 def test_infer_node_vals_and_errs_networkx(nx_graph_with_reference_mle_instance):
-
     g, seed, ref_dgs, ref_dg_errs = nx_graph_with_reference_mle_instance
 
     g_res = infer_node_vals_and_errs_networkx_partial(g, seed=seed)

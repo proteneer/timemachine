@@ -60,7 +60,6 @@ def test_cif_writer_context(n_frames):
 
 @pytest.mark.parametrize("n_frames", [1, 4, 5])
 def test_cif_writer(n_frames):
-
     ff = Forcefield.load_default()
 
     mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()

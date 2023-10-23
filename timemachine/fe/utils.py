@@ -481,5 +481,5 @@ def extract_delta_Us_from_U_knk(U_knk):
 
 def bytes_to_id(data: bytes) -> int:
     # Convert the given data into a 64-bit int
-    MAX_INT = 2 ** 64 - 1
+    MAX_INT = 2**64 - 1
     return int(hashlib.sha256(data).hexdigest(), 16) % MAX_INT

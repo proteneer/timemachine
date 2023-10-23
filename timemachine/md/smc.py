@@ -6,6 +6,7 @@ import numpy as np
 from jax import numpy as jnp
 from jax.scipy.special import logsumexp as jlogsumexp
 from numpy.typing import NDArray
+from scipy.optimize import root_scalar
 from scipy.special import logsumexp
 
 # type annotations
@@ -17,9 +18,11 @@ LogWeight = float
 Array = NDArray
 IndexArray = Array
 LogWeights = Array
+First = bool
 
 BatchPropagator = Callable[[Samples, Lambda], Samples]
 BatchLogProb = Callable[[Samples, Lambda], LogWeights]
+BatchLogProbASMC = Callable[[Samples, Lambda, First], LogWeights]
 
 Resampler = Callable[[LogWeights], Tuple[IndexArray, LogWeights]]
 ResultDict = Dict[str, Any]
@@ -90,7 +93,7 @@ def sequential_monte_carlo(
     #   See also
     #   * discussion at https://github.com/proteneer/timemachine/pull/718#discussion_r854276326
     #   * helper function get_endstate_samples_from_smc_result
-    for (lam_initial, lam_target) in zip(lambdas[:-2], lambdas[1:-1]):
+    for lam_initial, lam_target in zip(lambdas[:-2], lambdas[1:-1]):
         # update log weights
         incremental_log_weights = log_prob(sample_traj[-1], lam_target) - log_prob(sample_traj[-1], lam_initial)
         log_weights += incremental_log_weights
@@ -117,6 +120,165 @@ def sequential_monte_carlo(
         ancestry_traj=np.array(ancestry_traj),
         incremental_log_weights_traj=np.array(incremental_log_weights_traj),
     )
+    return trajs_dict
+
+
+class ASMCMaxIterError(Exception):
+    """
+    Exception when ASMC exceeds the maximum number of iters.
+    """
+
+    pass
+
+
+def adaptive_sequential_monte_carlo(
+    samples: Samples,
+    propagate: BatchPropagator,
+    log_prob: BatchLogProbASMC,
+    resample: Resampler,
+    cess_target: float,
+    epsilon=1e-2,
+    store_intermediate_traj=True,
+    max_iterations=100,
+) -> ResultDict:
+    """Implementation of Adaptive Sequential Monte Carlo (SMC).
+       This will adaptively interpolate between lambda=0 and lambda=1,
+       starting at lambda=0.
+
+    Parameters
+    ----------
+    samples: [N,] list
+    propagate: function
+        [move(x, lam) for x in xs]
+        for example, move(x, lam) might mean "run 100 steps of all-atom MD targeting exp(-u(., lam)), initialized at x"
+    log_prob: function
+        [exp(-u(x, lam, first: bool)) for x in xs]
+        first is set to True for the first iteration of each binary search.
+        This may be used to improve performance by caching prefactors.
+    resample: function
+        (optionally) perform resampling given an array of log weights
+    cess_target: float
+        Target CESS (see `conditional_effective_sample_size`). Intermediate lambdas
+        will be sampled keeping the CESS between successive windows at approximately
+        this value. This value should be in the range (1, N).
+    epsilon:
+        Used to determine the precision of the adaptive binary search.
+    store_intermediate_traj:
+        Set to True (default) to store intermediate trajectories.
+    max_iterations:
+        Set to the maximum number of iterations. If exceeded, will throw an
+        `ASMCMaxIterError` exception.
+    Returns
+    -------
+    trajs_dict
+        "traj"
+            [K-1, N] list of snapshots only if `store_intermediate_traj` = True.
+            [1, N] list of snapshots if `store_intermediate_traj` = False.
+        "incremental_log_weights_traj"
+            [K-1, N] array of incremental log weights
+        "ancestry_traj"
+            [K-1, N] array of ancestor idxs
+        "log_weights_traj"
+            [K, N] array of accumulated log weights
+        "lambdas_traj"
+            [K] array of adaptive lambdas
+
+    References
+    ----------
+    * [Zhou, Johansen, Aston, 2016]
+        Towards Automatic Model Comparison: An Adaptive Sequential Monte Carlo Approach
+        https://arxiv.org/pdf/1303.3123 (Algorithm #4)
+    """
+    n = len(samples)
+
+    # check cess_target
+    assert cess_target > 1, f"cess_target is too small: {cess_target} <= 1"
+    assert cess_target < n, f"cess_target is too large: {cess_target} >= {n}"
+
+    log_weights = np.zeros(n)
+    norm_log_weights = log_weights - logsumexp(log_weights)
+
+    # store
+    sample_traj = [samples]
+    ancestry_traj = [np.arange(n)]
+    log_weights_traj = [np.array(log_weights)]
+    incremental_log_weights_traj = []  # note: redundant but convenient
+    lambdas_traj = [0.0]
+
+    def accumulate_results(samples, indices, log_weights, incremental_log_weights, lam_target):
+        if store_intermediate_traj:
+            sample_traj.append(samples)
+        else:
+            # only store one intermediate set of samples to reduce memory usage
+            sample_traj[0] = samples
+        ancestry_traj.append(indices)
+        log_weights_traj.append(np.array(log_weights))
+        incremental_log_weights_traj.append(np.array(incremental_log_weights))
+        lambdas_traj.append(lam_target)
+
+    lam_initial = 0.0
+    lam_target = 1.0  # adapted
+
+    # Main ASMC loop
+    for _ in range(max_iterations):
+        # binary search for lambda that gives cess ~= cess_target
+        cur_log_prob = log_prob(sample_traj[-1], lam_initial, True)
+
+        # Used to pass incremental_log_weights out of the closure
+        incremental_log_weights_closure = [None]
+
+        def f_opt(lam: float) -> float:
+            incremental_log_weights_closure[0] = log_prob(sample_traj[-1], lam, False) - cur_log_prob
+            cess = conditional_effective_sample_size(norm_log_weights, incremental_log_weights_closure[0])
+            return cess - cess_target
+
+        try:
+            lam_target = root_scalar(f_opt, bracket=(lam_initial, lam_target), method="bisect", xtol=epsilon).root
+        except ValueError:
+            # no root, just run at the final lambda
+            pass
+
+        incremental_log_weights = incremental_log_weights_closure[0]
+        assert incremental_log_weights is not None
+
+        # Stop when lam_target == 1.0
+        #   See
+        #   * discussion at https://github.com/proteneer/timemachine/pull/718#discussion_r854276326
+        #   * helper function get_endstate_samples_from_smc_result
+        if lam_target == 1.0:
+            break
+
+        # resample
+        indices, log_weights = resample(log_weights + incremental_log_weights)
+        norm_log_weights = log_weights - logsumexp(log_weights)
+        resampled = [sample_traj[-1][i] for i in indices]
+
+        # propagate
+        samples = propagate(resampled, lam_target)
+
+        # log
+        accumulate_results(samples, indices, log_weights, incremental_log_weights, lam_target)
+
+        # update target
+        lam_initial = lam_target
+        lam_target = 1.0
+    else:
+        raise ASMCMaxIterError(f"ASMC exceeded maximum number of iterations {max_iterations}.")
+
+    # final result: a collection of samples, with associated log weights
+    incremental_log_weights_traj.append(incremental_log_weights)
+    log_weights_traj.append(np.array(log_weights + incremental_log_weights))
+    lambdas_traj.append(lam_target)
+
+    # cast everything (except samples list) to arrays
+    trajs_dict = dict(
+        traj=sample_traj,
+        log_weights_traj=np.array(log_weights_traj),
+        ancestry_traj=np.array(ancestry_traj),
+        incremental_log_weights_traj=np.array(incremental_log_weights_traj),
+        lambdas_traj=np.array(lambdas_traj),
+    )
+
     return trajs_dict
 
 
@@ -149,7 +311,33 @@ def effective_sample_size(log_weights):
         and references therein for some insightful discussion of limitations and possible improvements
     """
     norm_weights = jnp.exp(log_weights - jlogsumexp(log_weights))
-    return 1 / jnp.sum(norm_weights ** 2)
+    return 1 / jnp.sum(norm_weights**2)
+
+
+def conditional_effective_sample_size(norm_log_weights, incremental_log_weights):
+    r"""
+    Conditional Effective sample size, taking values in interval [1, len(log_weights)]
+    This is a different approximation for the effective sample size, which
+    empirically shows better results when used with Adaptive SMC if resampling is not
+    done every step. If resampling is done every step, this is the same as `effective_sample_size`.
+    See the paper for more details.
+
+    Parameters
+    ----------
+    norm_log_weights: [N]
+
+    Notes
+    -----
+    * This uses the definition from [Zhou, Johansen, Aston, 2016]
+      "Towards Automatic Model Comparison: An Adaptive Sequential Monte Carlo Approach"
+      https://arxiv.org/pdf/1303.3123 (eq 3.16)
+    * This is equal to the ESS if resampling is performed each iteration (i.e. not using conditional resampling)
+    """
+    n = len(norm_log_weights)
+    summed_weights = norm_log_weights + incremental_log_weights
+    num = 2 * jlogsumexp(summed_weights)
+    denom = jlogsumexp(summed_weights + incremental_log_weights)
+    return n * jnp.exp(num - denom)
 
 
 def conditional_multinomial_resample(log_weights, thresh=0.5):

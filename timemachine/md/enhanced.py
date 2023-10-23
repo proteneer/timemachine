@@ -19,7 +19,7 @@ from timemachine import lib
 from timemachine.constants import BOLTZ
 from timemachine.fe import free_energy, topology
 from timemachine.fe.free_energy import HostConfig
-from timemachine.fe.utils import get_romol_conf
+from timemachine.fe.utils import get_mol_masses, get_romol_conf
 from timemachine.integrator import simulate
 from timemachine.lib import custom_ops
 from timemachine.md import builders, minimizer
@@ -116,7 +116,6 @@ class VacuumState:
         return self.it_potential(x, self.improper_torsion_params, self.box)
 
     def _nonbonded_nrg(self, x, decharge):
-
         if decharge:
             charge_indices = jnp.index_exp[:, 0]
             nb_params = jnp.asarray(self.nb_params).at[charge_indices].set(0)
@@ -323,7 +322,7 @@ def generate_log_weighted_samples(
         Samples generated from p_target
 
     """
-    masses = np.array([a.GetMass() for a in mol.GetAtoms()])
+    masses = get_mol_masses(mol)
 
     if num_workers is None:
         num_workers = os.cpu_count()

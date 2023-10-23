@@ -8,7 +8,6 @@ pytestmark = [pytest.mark.memcheck]
 
 
 def test_nonbonded_precomputed_pair_list_invalid_pair_idxs():
-
     with pytest.raises(RuntimeError) as e:
         NonbondedPairListPrecomputed([0], 2.0, 1.1).to_gpu(np.float32).unbound_impl
 
@@ -37,10 +36,10 @@ def test_nonbonded_pair_list_precomputed_correctness(
 ):
     "Compares with jax reference implementation."
 
-    pair_idxs = []
+    _pair_idxs = []
     for _ in range(ixn_group_size):
-        pair_idxs.append(rng.choice(np.arange(num_atoms), 2, replace=False))
-    pair_idxs = np.array(pair_idxs, dtype=np.int32)
+        _pair_idxs.append(rng.choice(np.arange(num_atoms), 2, replace=False))
+    pair_idxs = np.array(_pair_idxs, dtype=np.int32)
     num_pairs, _ = pair_idxs.shape
 
     params = rng.uniform(0, 1, size=(num_pairs, 4))

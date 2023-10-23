@@ -49,7 +49,6 @@ def hi2fa_test_frames():
 
 
 def generate_hif2a_frames(n_frames: int, frame_interval: int, seed=None, barostat_interval: int = 5, hmr: bool = True):
-
     mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
     forcefield = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
     st = SingleTopology(mol_a, mol_b, core, forcefield)
@@ -135,7 +134,7 @@ def benchmark_potential(
     runs_per_batch = frames * param_batches
     for _ in range(config.num_batches):
         batch_start = time.time()
-        _, _, _ = unbound.execute_selective_batch(
+        _, _, _ = unbound.execute_batch(
             coords,
             params,
             boxes,
@@ -168,7 +167,6 @@ def benchmark(
     hmr: bool = True,
     barostat_interval: int = 0,
 ):
-
     if barostat_interval > 0:
         label += f"-barostat-interval-{barostat_interval}"
     seed = 1234
@@ -221,7 +219,6 @@ def benchmark(
     start = time.time()
 
     for batch in range(num_batches):
-
         # time the current batch
         batch_start = time.time()
         _, _ = ctxt.multiple_steps(steps_per_batch)
@@ -259,7 +256,6 @@ def benchmark_local(
     ligand_idxs: NDArray,
     hmr: bool = True,
 ):
-
     seed = 1234
     dt = 1.5e-3
     temperature = constants.DEFAULT_TEMP
@@ -301,7 +297,6 @@ def benchmark_local(
     start = time.time()
 
     for batch in range(num_batches):
-
         local_seed = rng.integers(np.iinfo(np.int32).max)
         # time the current batch
         batch_start = time.time()
@@ -346,7 +341,7 @@ def run_single_topology_benchmarks(
         benchmark(
             config,
             f"{stage}-apo",
-            host_masses,
+            np.array(host_masses),
             x0,
             v0,
             host_config.box,
