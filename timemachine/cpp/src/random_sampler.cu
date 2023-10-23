@@ -11,12 +11,11 @@ template <typename RealType>
 RandomSampler<RealType>::RandomSampler(const int N, const int seed)
     : N_(N), temp_storage_bytes_(0), d_rand_(round_up_even(N_)), d_gumbel_(N_) {
 
+    // Allocate enough space for a single key value pair
     cudaSafeMalloc(&d_arg_max_, 1 * sizeof(cub::KeyValuePair<int, RealType>));
     gpuErrchk(cub::DeviceReduce::ArgMax(
         nullptr, temp_storage_bytes_, d_gumbel_.data, static_cast<cub::KeyValuePair<int, RealType> *>(d_arg_max_), N_));
     d_sort_storage_.reset(new DeviceBuffer<char>(temp_storage_bytes_));
-
-    // Allocate enough space for a single key value pair
 
     curandErrchk(curandCreateGenerator(&cr_rng_, CURAND_RNG_PSEUDO_DEFAULT));
     curandErrchk(curandSetPseudoRandomGeneratorSeed(cr_rng_, seed));
