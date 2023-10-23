@@ -9,7 +9,6 @@
 namespace timemachine {
 
 // An RandomSampler for random sampling from probabilities (np.random.choice(X, replace=True p=probabilities))
-// Currently implemented with the Alias Method.
 template <typename RealType> class RandomSampler {
 
 private:
