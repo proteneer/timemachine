@@ -84,7 +84,6 @@ def simulate_system(U_fn, x0, num_samples=20000, steps_per_batch=500, num_worker
 
 
 def convert_bps_into_system(bps: Sequence[potentials.BoundPotential]):
-
     bond = angle = torsion = nonbonded = None
 
     for bp in bps:
@@ -169,7 +168,6 @@ class HostGuestSystem:
     nonbonded_host_guest_ixn: BoundPotential[SummedPotential]
 
     def get_U_fns(self):
-
         return [
             self.bond,
             self.angle,

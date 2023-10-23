@@ -113,11 +113,11 @@ class InitialState:
     potentials: List[BoundPotential]
     integrator: LangevinIntegrator
     barostat: Optional[MonteCarloBarostat]
-    x0: np.ndarray
-    v0: np.ndarray
-    box0: np.ndarray
+    x0: NDArray
+    v0: NDArray
+    box0: NDArray
     lamb: float
-    ligand_idxs: np.ndarray
+    ligand_idxs: NDArray
 
 
 @dataclass

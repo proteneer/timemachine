@@ -221,7 +221,6 @@ def test_intermediate_states(num_pairs_to_setup=10):
     ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
 
     for mol_a, mol_b in pairs[:num_pairs_to_setup]:
-
         print("Checking", mol_a.GetProp("_Name"), "->", mol_b.GetProp("_Name"))
         all_cores = atom_mapping.get_cores(
             mol_a,

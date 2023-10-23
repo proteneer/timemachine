@@ -249,7 +249,6 @@ def test_energy_overflow_cancelled_by_exclusions(precision, rtol, atol):
 
 @pytest.mark.parametrize("precision", [np.float32, np.float64])
 def test_energy_overflows_with_summation_of_energies(precision):
-
     num_atoms = 1000
 
     # all particles evenly spaced along x-axis, in a very large box

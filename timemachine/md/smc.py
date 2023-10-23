@@ -93,7 +93,7 @@ def sequential_monte_carlo(
     #   See also
     #   * discussion at https://github.com/proteneer/timemachine/pull/718#discussion_r854276326
     #   * helper function get_endstate_samples_from_smc_result
-    for (lam_initial, lam_target) in zip(lambdas[:-2], lambdas[1:-1]):
+    for lam_initial, lam_target in zip(lambdas[:-2], lambdas[1:-1]):
         # update log weights
         incremental_log_weights = log_prob(sample_traj[-1], lam_target) - log_prob(sample_traj[-1], lam_initial)
         log_weights += incremental_log_weights
@@ -221,7 +221,6 @@ def adaptive_sequential_monte_carlo(
 
     # Main ASMC loop
     for _ in range(max_iterations):
-
         # binary search for lambda that gives cess ~= cess_target
         cur_log_prob = log_prob(sample_traj[-1], lam_initial, True)
 
@@ -312,7 +311,7 @@ def effective_sample_size(log_weights):
         and references therein for some insightful discussion of limitations and possible improvements
     """
     norm_weights = jnp.exp(log_weights - jlogsumexp(log_weights))
-    return 1 / jnp.sum(norm_weights ** 2)
+    return 1 / jnp.sum(norm_weights**2)
 
 
 def conditional_effective_sample_size(norm_log_weights, incremental_log_weights):

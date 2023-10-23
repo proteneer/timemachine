@@ -9,7 +9,6 @@ pytestmark = [pytest.mark.nocuda]
 
 
 def test_harmonic_bond():
-
     patterns = [
         ["[#6X4:1]-[#6X4:2]", 0.1, 0.2],
         ["[#6X4:1]-[#6X3:2]", 99.0, 99.0],
@@ -118,7 +117,6 @@ def test_harmonic_bond():
 
 
 def test_proper_torsion():
-
     # proper torsions have a variadic number of terms
 
     patterns = [
@@ -145,7 +143,6 @@ def test_proper_torsion():
 
 
 def test_improper_torsion():
-
     patterns = [
         ["[*:1]~[#6X3:2](~[*:3])~[*:4]", 1.5341333333333333, 3.141592653589793, 2.0],
         ["[*:1]~[#6X3:2](~[#8X1:3])~[#8:4]", 99.0, 99.0, 99.0],
@@ -172,7 +169,6 @@ def test_improper_torsion():
 
 
 def test_simple_charge_handler():
-
     patterns = [
         ["[#1:1]", 99.0],
         ["[#1:1]-[#6X4]", 99.0],
@@ -228,7 +224,6 @@ def test_simple_charge_handler():
 
 
 def test_gbsa_handler():
-
     patterns = [
         ["[*:1]", 99.0, 99.0],
         ["[#1:1]", 99.0, 99.0],
@@ -272,7 +267,6 @@ def test_gbsa_handler():
 
 
 def test_am1bcc():
-
     smirks = []
     params = []
     props = None
@@ -288,7 +282,6 @@ def test_am1bcc():
 
 
 def test_am1ccc():
-
     patterns = [
         ["[#6X4:1]-[#1:2]", 0.46323257920556493],
         ["[#6X3$(*=[#8,#16]):1]-[#6a:2]", 0.24281402370571598],
@@ -320,7 +313,6 @@ def test_am1ccc():
 
 
 def test_lennard_jones_handler():
-
     patterns = [
         ["[#1:1]", 99.0, 999.0],
         ["[#1:1]-[#6X4]", 99.0, 999.0],

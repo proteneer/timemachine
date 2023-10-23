@@ -46,7 +46,7 @@ def combining_rule_epsilon(eps_i, eps_j):
 def lennard_jones(dij, sig_ij, eps_ij):
     """https://en.wikipedia.org/wiki/Lennard-Jones_potential"""
     sig6 = (sig_ij / dij) ** 6
-    sig12 = sig6 ** 2
+    sig12 = sig6**2
 
     return 4 * eps_ij * (sig12 - sig6)
 
@@ -591,7 +591,7 @@ def _basis_expand_lj_term(sig_env, eps_env, r_env, power):
     ----------
     eq. C.1 of Levi Naden's thesis
     """
-    r_inv_pow = r_env ** -power
+    r_inv_pow = r_env**-power
 
     exponents = power - np.arange(power + 1)
     coeffs = binom(power, exponents)
@@ -653,7 +653,7 @@ def basis_expand_lj_atom(sig: float, eps: float) -> Array:
         to compute energy of one atom interacting with all environment atoms
     """
     exponents = jnp.hstack([jnp.arange(12 + 1), jnp.arange(6 + 1)])
-    return eps * (sig ** exponents)
+    return eps * (sig**exponents)
 
 
 def lj_prefactors_on_atom(x, x_others, sig_others, eps_others, box=None, cutoff=jnp.inf):

@@ -8,7 +8,6 @@ from timemachine.ff.handlers.suffix import _SUFFIX
 
 
 def serialize_handlers(all_handlers, protein_ff, water_ff):
-
     final_ff = {}
     final_ff[serialization_format.PROTEIN_FF_TAG] = protein_ff
     final_ff[serialization_format.WATER_FF_TAG] = water_ff

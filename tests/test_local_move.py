@@ -25,7 +25,7 @@ def make_hmc_mover(x, logpdf_fxn, dt=0.1, n_steps=100):
     integrator = VelocityVerletIntegrator(force_fxn, masses=masses, dt=dt)
 
     def augmented_logpdf(x, v):
-        return logpdf_fxn(x) - np.sum(0.5 * masses[:, np.newaxis] * v ** 2)
+        return logpdf_fxn(x) - np.sum(0.5 * masses[:, np.newaxis] * v**2)
 
     @jit
     def augmented_proposal(x0, v0):

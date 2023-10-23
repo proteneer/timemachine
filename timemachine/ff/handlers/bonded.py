@@ -214,7 +214,6 @@ class ImproperTorsionHandler(SerializableMixIn):
 
     @staticmethod
     def static_parameterize(params, smirks, mol):
-
         # improper torsions do not use a valence dict as
         # we cannot sort based on b_idxs[0] and b_idxs[-1]
         # and reverse if needed. Impropers are centered around

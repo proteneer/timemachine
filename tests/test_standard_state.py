@@ -25,8 +25,8 @@ def test_translational_restraint():
         4.0
         * np.pi
         * (
-            (b * np.exp(-(b ** 2) * k)) / (2 * k)
-            + ((1 + 2 * b ** 2 * k) * np.sqrt(np.pi) * (1 + scipy.special.erf(b * np.sqrt(k)))) / (4 * k ** (3 / 2))
+            (b * np.exp(-(b**2) * k)) / (2 * k)
+            + ((1 + 2 * b**2 * k) * np.sqrt(np.pi) * (1 + scipy.special.erf(b * np.sqrt(k)))) / (4 * k ** (3 / 2))
         )
     )
 
@@ -38,7 +38,6 @@ def test_translational_restraint():
 
 
 def test_rotational_restraint():
-
     k = 25.0
     u_fn = functools.partial(rmsd.angle_u, k=k)
     beta = 0.67

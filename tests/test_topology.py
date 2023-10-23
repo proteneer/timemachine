@@ -43,7 +43,6 @@ def test_dual_topology_nonbonded_pairlist():
     box = np.eye(3) * 4.0
 
     for precision, rtol, atol in [(np.float64, 1e-8, 1e-8), (np.float32, 1e-4, 5e-4)]:
-
         nb_unbound = nb.to_gpu(precision).unbound_impl
         nb_pairlist_unbound = nb_pairlist.to_gpu(precision).unbound_impl
 

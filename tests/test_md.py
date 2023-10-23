@@ -174,7 +174,6 @@ def test_fwd_mode():
     assert (ccs == 0).all()
 
     def integrate_once_through(x_t, v_t, box, params):
-
         dU_dx_fn = jax.grad(ref_nrg_fn, argnums=(0,))
         dU_dp_fn = jax.grad(ref_nrg_fn, argnums=(1,))
 

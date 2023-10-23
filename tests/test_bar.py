@@ -27,7 +27,7 @@ def make_gaussian_ukln_example(
     """Generate 2-state u_kln matrix for a pair of normal distributions."""
 
     def u(mu, sigma, x):
-        return (x - mu) ** 2 / (2 * sigma ** 2)
+        return (x - mu) ** 2 / (2 * sigma**2)
 
     mu_a, sigma_a = params_a
     mu_b, sigma_b = params_b

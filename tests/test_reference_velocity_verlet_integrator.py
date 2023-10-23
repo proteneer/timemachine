@@ -71,7 +71,7 @@ def test_reversibility_with_jax_potentials():
     np.random.seed(2022)
 
     def U(x):
-        return jnp.sum(x ** 4)
+        return jnp.sum(x**4)
 
     @jit
     def force(x):

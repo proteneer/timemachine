@@ -122,7 +122,7 @@ def apply_conf_maps_to_traj(xs, bond_idxs, params) -> Tuple[Array, Array]:
     xs = jnp.array(xs)
     logdetjacs = np.zeros(len(xs))
 
-    for (bond, param) in zip(bond_idxs, params):  # TODO: jax.lax for-loop?
+    for bond, param in zip(bond_idxs, params):  # TODO: jax.lax for-loop?
         xs, logdetjac_increments = apply_conf_map_to_traj(xs, bond, param)
         logdetjacs += logdetjac_increments
 
@@ -246,7 +246,7 @@ def states_to_conf_map_params(src: TerminalMappableState, dst: TerminalMappableS
     mapped_bond_list = []
     params_list = []
 
-    for (a, b) in bond_idxs:
+    for a, b in bond_idxs:
         src_interval = [interval for (idx, interval) in zip(src.idxs, src.intervals) if tuple(idx) == (a, b)][0]
         dst_interval = [interval for (idx, interval) in zip(dst.idxs, dst.intervals) if tuple(idx) == (a, b)][0]
 

@@ -157,7 +157,7 @@ def test_nonbonded_interaction_group_neighborlist_rebuild(
         GradientTest().assert_differentiable_interface_consistency(conf, params, example_box, test_impl)
 
         # Randomize the coordinates of the column atoms to trigger a nblist rebuild
-        conf[col_atom_idxs] += rng.random(size=(len(col_atom_idxs), 3)) * (cutoff ** 2)
+        conf[col_atom_idxs] += rng.random(size=(len(col_atom_idxs), 3)) * (cutoff**2)
 
         GradientTest().compare_forces(conf, params, example_box, potential, test_impl, rtol=rtol, atol=atol)
         GradientTest().assert_differentiable_interface_consistency(conf, params, example_box, test_impl)

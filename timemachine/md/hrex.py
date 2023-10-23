@@ -53,7 +53,6 @@ class HREX(Generic[Replica]):
         sample_replica: Callable[[Replica, StateIdx], Samples],
         replica_from_samples: Callable[[Samples], Replica],
     ) -> Tuple["HREX[Replica]", List[Samples]]:
-
         samples_by_state = [sample_replica(replica, state_idx) for state_idx, replica in self.state_replica_pairs]
         replicas_by_state = [replica_from_samples(samples) for samples in samples_by_state]
 
@@ -70,7 +69,6 @@ class HREX(Generic[Replica]):
         log_q: Callable[[ReplicaIdx, StateIdx], float],
         n_swap_attempts: int,
     ) -> Tuple["HREX[Replica]", List[Tuple[int, int]]]:
-
         move = MixtureOfMoves([NeighborSwapMove(log_q, s_a, s_b) for s_a, s_b in neighbor_pairs])
 
         replica_idx_by_state = list(self.replica_idx_by_state)
@@ -193,7 +191,7 @@ def get_swap_attempts_per_iter_heuristic(n_states: int) -> int:
     [1]: http://dx.doi.org/10.1063/1.3660669, https://arxiv.org/abs/1105.5749
     """
 
-    return n_states ** 3
+    return n_states**3
 
 
 def run_hrex(

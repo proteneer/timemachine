@@ -197,7 +197,7 @@ def test_process_traj_in_chunks():
     boxes = np.random.randn(T, 3, 3)
 
     def f_snapshot(x, box):
-        return jnp.sum(x ** 2) + jnp.sum(box ** 3)  # arbitrary fxn
+        return jnp.sum(x**2) + jnp.sum(box**3)  # arbitrary fxn
 
     reference = vmap(f_snapshot)(traj, boxes)
 

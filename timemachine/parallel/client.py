@@ -88,7 +88,6 @@ class AbstractClient:
 
 
 class _MockFuture(BaseFuture):
-
     __slots__ = ("val", "_id")
 
     def __init__(self, val):
