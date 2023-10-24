@@ -16,7 +16,7 @@ private:
     const int N_; // Max number of values that can be sampled from
     size_t temp_storage_bytes_;
 
-    DeviceBuffer<RealType> d_rand_;
+    // Stores both the initial uniform random values and the final gumbel distribution
     DeviceBuffer<RealType> d_gumbel_;
     DeviceBuffer<cub::KeyValuePair<int, RealType>> d_arg_max_;
 

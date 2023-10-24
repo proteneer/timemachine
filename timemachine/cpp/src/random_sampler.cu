@@ -9,7 +9,7 @@ namespace timemachine {
 
 template <typename RealType>
 RandomSampler<RealType>::RandomSampler(const int N, const int seed)
-    : N_(N), temp_storage_bytes_(0), d_rand_(round_up_even(N_)), d_gumbel_(N_), d_arg_max_(1) {
+    : N_(N), temp_storage_bytes_(0), d_gumbel_(round_up_even(N_)), d_arg_max_(1) {
 
     gpuErrchk(cub::DeviceReduce::ArgMax(nullptr, temp_storage_bytes_, d_gumbel_.data, d_arg_max_.data, N_));
     d_sort_storage_.reset(new DeviceBuffer<char>(temp_storage_bytes_));
@@ -38,9 +38,9 @@ void RandomSampler<RealType>::sample_device(
     const int tpb = DEFAULT_THREADS_PER_BLOCK;
     const int blocks = ceil_divide(N, tpb);
     for (int i = 0; i < K; i++) {
-        curandErrchk(templateCurandUniform(cr_rng_, d_rand_.data, round_up_even(N)));
+        curandErrchk(templateCurandUniform(cr_rng_, d_gumbel_.data, round_up_even(N)));
 
-        k_setup_gumbel_max_trick<<<blocks, tpb, 0, stream>>>(N, d_rand_.data, d_log_probabilities, d_gumbel_.data);
+        k_setup_gumbel_max_trick<<<blocks, tpb, 0, stream>>>(N, d_log_probabilities, d_gumbel_.data);
         gpuErrchk(cudaPeekAtLastError());
 
         gpuErrchk(
