@@ -9,11 +9,13 @@ public:
 
     ~DeviceBuffer();
 
-    const size_t length;
+    size_t length;
 
-    const size_t size;
+    size_t size;
 
-    T *const data;
+    T *data;
+
+    void realloc(const size_t length);
 
     void copy_from(const T *host_buffer) const;
 

@@ -15,6 +15,18 @@ template <typename T>
 DeviceBuffer<T>::DeviceBuffer(const std::size_t length)
     : length(length), size(length * sizeof(T)), data(allocate<T>(length)) {}
 
+template <typename T> void DeviceBuffer<T>::realloc(const size_t new_length) {
+    // Print a warning if buffers were non-zero when resized, this can have real performance impacts
+    if (this->length > 0) {
+        std::cout << "warning:: resizing device buffer that is non-zero" << std::endl;
+    }
+    // Free the existing data
+    gpuErrchk(cudaFree(data));
+    this->size = new_length * sizeof(T);
+    this->length = new_length;
+    this->data = allocate<T>(new_length);
+}
+
 template <typename T> DeviceBuffer<T>::~DeviceBuffer() {
     // TODO: the file/line context reported by gpuErrchk on failure is
     // not very useful when it's called from here. Is there a way to

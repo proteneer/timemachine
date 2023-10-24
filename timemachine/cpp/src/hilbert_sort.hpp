@@ -2,8 +2,6 @@
 #include "cuda_runtime.h"
 #include "device_buffer.hpp"
 #include "math_utils.cuh"
-#include <memory>
-#include <numeric>
 #include <vector>
 
 namespace timemachine {
@@ -18,7 +16,7 @@ private:
     DeviceBuffer<unsigned int> d_sort_keys_in_;
     DeviceBuffer<unsigned int> d_sort_keys_out_;
     DeviceBuffer<unsigned int> d_sort_vals_in_;
-    std::unique_ptr<DeviceBuffer<char>> d_sort_storage_;
+    DeviceBuffer<char> d_sort_storage_;
     size_t d_sort_storage_bytes_;
 
 public:

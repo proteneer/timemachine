@@ -3,6 +3,7 @@
 #include "kernels/k_hilbert.cuh"
 #include "vendored/hilbert.h"
 #include <cub/cub.cuh>
+#include <numeric>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -11,7 +12,7 @@ namespace timemachine {
 
 HilbertSort::HilbertSort(const int N)
     : N_(N), d_bin_to_idx_(HILBERT_GRID_DIM * HILBERT_GRID_DIM * HILBERT_GRID_DIM), d_sort_keys_in_(N),
-      d_sort_keys_out_(N), d_sort_vals_in_(N), d_sort_storage_(nullptr), d_sort_storage_bytes_(0) {
+      d_sort_keys_out_(N), d_sort_vals_in_(N), d_sort_storage_(0), d_sort_storage_bytes_(0) {
     // initialize hilbert curve which maps each of the HILBERT_GRID_DIM x HILBERT_GRID_DIM x HILBERT_GRID_DIM cells into an index.
     std::vector<unsigned int> bin_to_idx(HILBERT_GRID_DIM * HILBERT_GRID_DIM * HILBERT_GRID_DIM);
     for (int i = 0; i < HILBERT_GRID_DIM; i++) {
@@ -42,7 +43,7 @@ HilbertSort::HilbertSort(const int N)
         d_sort_keys_in_.data,
         N_));
 
-    d_sort_storage_.reset(new DeviceBuffer<char>(d_sort_storage_bytes_));
+    d_sort_storage_.realloc(d_sort_storage_bytes_);
 }
 
 HilbertSort::~HilbertSort(){};
@@ -66,7 +67,7 @@ void HilbertSort::sort_device(
     gpuErrchk(cudaPeekAtLastError());
 
     gpuErrchk(cub::DeviceRadixSort::SortPairs(
-        d_sort_storage_->data,
+        d_sort_storage_.data,
         d_sort_storage_bytes_,
         d_sort_keys_in_.data,
         d_sort_keys_out_.data,
