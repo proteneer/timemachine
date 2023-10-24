@@ -45,12 +45,12 @@ void BoundPotential::execute_batch_host(
 
     if (h_du_dx) {
         d_du_dx_buffer.realloc(total_executions * N * D);
-        gpuErrchk(cudaMemsetAsync(d_du_dx_buffer.data, 0, d_du_dx_buffer.size, stream));
+        gpuErrchk(cudaMemsetAsync(d_du_dx_buffer.data, 0, d_du_dx_buffer.size(), stream));
     }
 
     if (h_u) {
         d_u_buffer.realloc(total_executions);
-        gpuErrchk(cudaMemsetAsync(d_u_buffer.data, 0, d_u_buffer.size, stream));
+        gpuErrchk(cudaMemsetAsync(d_u_buffer.data, 0, d_u_buffer.size(), stream));
     }
 
     this->potential->execute_batch_device(
@@ -101,11 +101,11 @@ void BoundPotential::execute_host(
     // very important that these are initialized to zero since the kernels themselves just accumulate
     if (h_du_dx != nullptr) {
         d_du_dx.realloc(N * D);
-        gpuErrchk(cudaMemsetAsync(d_du_dx.data, 0, d_du_dx.size, stream));
+        gpuErrchk(cudaMemsetAsync(d_du_dx.data, 0, d_du_dx.size(), stream));
     }
     if (h_u != nullptr) {
         d_u.realloc(1);
-        gpuErrchk(cudaMemsetAsync(d_u.data, 0, d_u.size, stream));
+        gpuErrchk(cudaMemsetAsync(d_u.data, 0, d_u.size(), stream));
     }
 
     this->execute_device(

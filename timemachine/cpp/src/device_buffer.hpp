@@ -11,11 +11,11 @@ public:
 
     size_t length;
 
-    size_t size;
-
     T *data;
 
     void realloc(const size_t length);
+
+    size_t size() const;
 
     void copy_from(const T *host_buffer) const;
 
