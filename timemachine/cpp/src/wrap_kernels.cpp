@@ -31,12 +31,12 @@
 #include "nonbonded_precomputed.hpp"
 #include "periodic_torsion.hpp"
 #include "potential.hpp"
-#include "random_sampler.hpp"
 #include "rmsd_align.hpp"
 #include "rotations.hpp"
 #include "set_utils.hpp"
 #include "summed_potential.hpp"
 #include "verlet_integrator.hpp"
+#include "weighted_random_sampler.hpp"
 
 #include <iostream>
 
@@ -180,10 +180,10 @@ void declare_hilbert_sort(py::module &m) {
             py::arg("box"));
 }
 
-template <typename RealType> void declare_random_sampler(py::module &m, const char *typestr) {
+template <typename RealType> void declare_weighted_random_sampler(py::module &m, const char *typestr) {
 
-    using Class = RandomSampler<RealType>;
-    std::string pyclass_name = std::string("RandomSampler_") + typestr;
+    using Class = WeightedRandomSampler<RealType>;
+    std::string pyclass_name = std::string("WeightedRandomSampler_") + typestr;
     py::class_<Class, std::shared_ptr<Class>>(m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
         .def(py::init([](const int N, const int seed) { return new Class(N, seed); }), py::arg("size"), py::arg("seed"))
         .def(
@@ -1590,8 +1590,8 @@ PYBIND11_MODULE(custom_ops, m) {
     declare_nonbonded_pair_list<double, true>(m, "f64");
     declare_nonbonded_pair_list<float, true>(m, "f32");
 
-    declare_random_sampler<double>(m, "f64");
-    declare_random_sampler<float>(m, "f32");
+    declare_weighted_random_sampler<double>(m, "f64");
+    declare_weighted_random_sampler<float>(m, "f32");
 
     declare_log_sum_exp<double>(m, "f64");
     declare_log_sum_exp<float>(m, "f32");

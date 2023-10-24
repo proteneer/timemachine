@@ -20,9 +20,9 @@ def test_random_sampler(seed, size, num_samples, precision):
     # Sort the probabilities to easily visualize
     probs = np.sort(probs)[::-1]
 
-    klass = custom_ops.RandomSampler_f32
+    klass = custom_ops.WeightedRandomSampler_f32
     if precision == np.float64:
-        klass = custom_ops.RandomSampler_f64
+        klass = custom_ops.WeightedRandomSampler_f64
 
     x = np.arange(size)
     ref_selection = rng.choice(x, size=num_samples, p=probs)
@@ -47,9 +47,9 @@ def test_random_sampler_simple_distribution(seed, precision):
 
     size = len(weights)
 
-    klass = custom_ops.RandomSampler_f32
+    klass = custom_ops.WeightedRandomSampler_f32
     if precision == np.float64:
-        klass = custom_ops.RandomSampler_f64
+        klass = custom_ops.WeightedRandomSampler_f64
 
     sampler = klass(size, seed)
 

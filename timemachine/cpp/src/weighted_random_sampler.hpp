@@ -9,8 +9,8 @@
 
 namespace timemachine {
 
-// An RandomSampler for random sampling from probabilities (np.random.choice(X, replace=True p=probabilities))
-template <typename RealType> class RandomSampler {
+// An WeightedRandomSampler for random sampling from probabilities (np.random.choice(X, replace=True p=probabilities))
+template <typename RealType> class WeightedRandomSampler {
 
 private:
     const int N_; // Max number of values that can be sampled from
@@ -25,9 +25,9 @@ private:
     curandGenerator_t cr_rng_;
 
 public:
-    RandomSampler(const int N, const int seed);
+    WeightedRandomSampler(const int N, const int seed);
 
-    ~RandomSampler();
+    ~WeightedRandomSampler();
 
     void sample_device(
         const int N, const int num_samples, const RealType *d_log_probabilities, int *d_samples, cudaStream_t stream);

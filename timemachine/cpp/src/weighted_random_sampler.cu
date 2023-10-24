@@ -3,12 +3,12 @@
 #include "kernels/k_sampling.cuh"
 #include "kernels/kernel_utils.cuh"
 #include "math_utils.cuh"
-#include "random_sampler.hpp"
+#include "weighted_random_sampler.hpp"
 
 namespace timemachine {
 
 template <typename RealType>
-RandomSampler<RealType>::RandomSampler(const int N, const int seed)
+WeightedRandomSampler<RealType>::WeightedRandomSampler(const int N, const int seed)
     : N_(N), temp_storage_bytes_(0), d_gumbel_(round_up_even(N_)), d_arg_max_(1) {
 
     gpuErrchk(cub::DeviceReduce::ArgMax(nullptr, temp_storage_bytes_, d_gumbel_.data, d_arg_max_.data, N_));
@@ -18,12 +18,12 @@ RandomSampler<RealType>::RandomSampler(const int N, const int seed)
     curandErrchk(curandSetPseudoRandomGeneratorSeed(cr_rng_, seed));
 };
 
-template <typename RealType> RandomSampler<RealType>::~RandomSampler() {
+template <typename RealType> WeightedRandomSampler<RealType>::~WeightedRandomSampler() {
     curandErrchk(curandDestroyGenerator(cr_rng_));
 };
 
 template <typename RealType>
-void RandomSampler<RealType>::sample_device(
+void WeightedRandomSampler<RealType>::sample_device(
     const int N, const int num_samples, const RealType *d_log_probabilities, int *d_samples, cudaStream_t stream) {
     if (N > N_) {
         throw std::runtime_error(
@@ -53,7 +53,7 @@ void RandomSampler<RealType>::sample_device(
 
 template <typename RealType>
 std::vector<int>
-RandomSampler<RealType>::sample_host(const int num_samples, const std::vector<RealType> &probabilities) {
+WeightedRandomSampler<RealType>::sample_host(const int num_samples, const std::vector<RealType> &probabilities) {
     std::vector<int> h_selection(num_samples);
     // Convert the probabilities into log probabilities
     std::vector<RealType> h_log_probs(probabilities.size());
@@ -73,7 +73,7 @@ RandomSampler<RealType>::sample_host(const int num_samples, const std::vector<Re
     return h_selection;
 };
 
-template class RandomSampler<float>;
-template class RandomSampler<double>;
+template class WeightedRandomSampler<float>;
+template class WeightedRandomSampler<double>;
 
 } // namespace timemachine
