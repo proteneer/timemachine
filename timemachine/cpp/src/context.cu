@@ -110,7 +110,7 @@ std::array<std::vector<double>, 2> Context::multiple_steps_local(
     // Store coordinates in host memory as it can be very large
     std::vector<double> h_x_buffer(x_buffer_size * N_ * 3);
     // Store boxes on GPU as boxes are a constant size and relatively small
-    DeviceBuffer<double> d_box_traj(0);
+    DeviceBuffer<double> d_box_traj;
     if (box_buffer_size > 0) {
         d_box_traj.realloc(box_buffer_size);
     }
@@ -184,7 +184,7 @@ std::array<std::vector<double>, 2> Context::multiple_steps_local_selection(
     // Store coordinates in host memory as it can be very large
     std::vector<double> h_x_buffer(x_buffer_size * N_ * 3);
     // Store boxes on GPU as boxes are a constant size and relatively small
-    DeviceBuffer<double> d_box_traj(0);
+    DeviceBuffer<double> d_box_traj;
     if (box_buffer_size > 0) {
         d_box_traj.realloc(box_buffer_size);
     }
@@ -255,7 +255,7 @@ std::array<std::vector<double>, 2> Context::multiple_steps(const int n_steps, in
 
     cudaStream_t stream = static_cast<cudaStream_t>(0);
 
-    DeviceBuffer<double> d_box_buffer(0);
+    DeviceBuffer<double> d_box_buffer;
     if (box_buffer_size > 0) {
         d_box_buffer.realloc(box_buffer_size);
     }

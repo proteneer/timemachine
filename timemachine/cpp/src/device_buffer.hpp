@@ -5,6 +5,7 @@ namespace timemachine {
 
 template <typename T> class DeviceBuffer {
 public:
+    DeviceBuffer();
     DeviceBuffer(const size_t length);
 
     ~DeviceBuffer();

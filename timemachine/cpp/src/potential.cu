@@ -60,9 +60,9 @@ void Potential::execute_batch_host(
     DeviceBuffer<double> d_x_buffer(coord_batch_size * N * D);
     d_x_buffer.copy_from(h_x);
 
-    DeviceBuffer<unsigned long long> d_du_dx_buffer(0);
-    DeviceBuffer<unsigned long long> d_du_dp_buffer(0);
-    DeviceBuffer<__int128> d_u_buffer(0);
+    DeviceBuffer<unsigned long long> d_du_dx_buffer;
+    DeviceBuffer<unsigned long long> d_du_dp_buffer;
+    DeviceBuffer<__int128> d_u_buffer;
 
     const int total_executions = coord_batch_size * param_batch_size;
 
@@ -133,9 +133,9 @@ void Potential::execute_host(
     d_box.copy_from(h_box);
 
     DeviceBuffer<double> d_p(P);
-    DeviceBuffer<unsigned long long> d_du_dx(0);
-    DeviceBuffer<unsigned long long> d_du_dp(0);
-    DeviceBuffer<__int128> d_u(0);
+    DeviceBuffer<unsigned long long> d_du_dx;
+    DeviceBuffer<unsigned long long> d_du_dp;
+    DeviceBuffer<__int128> d_u;
 
     // very important that these are initialized to zero since the kernels themselves just accumulate
 
