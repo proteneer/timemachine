@@ -13,4 +13,12 @@ templateCurandNormal(curandGenerator_t generator, double *outputPtr, size_t n, d
     return curandGenerateNormalDouble(generator, outputPtr, n, mean, stddev);
 }
 
+curandStatus_t templateCurandUniform(curandGenerator_t generator, float *outputPtr, size_t n) {
+    return curandGenerateUniform(generator, outputPtr, n);
+}
+
+curandStatus_t templateCurandUniform(curandGenerator_t generator, double *outputPtr, size_t n) {
+    return curandGenerateUniformDouble(generator, outputPtr, n);
+}
+
 } // namespace timemachine

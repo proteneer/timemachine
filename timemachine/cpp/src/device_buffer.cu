@@ -1,6 +1,7 @@
 #include "device_buffer.hpp"
 #include "gpu_utils.cuh"
 #include <cstddef>
+#include <cub/util_type.cuh>
 
 namespace timemachine {
 
@@ -35,4 +36,6 @@ template class DeviceBuffer<char>;
 template class DeviceBuffer<unsigned int>;
 template class DeviceBuffer<unsigned long long>;
 template class DeviceBuffer<__int128>;
+template class DeviceBuffer<cub::KeyValuePair<int, double>>;
+template class DeviceBuffer<cub::KeyValuePair<int, float>>;
 } // namespace timemachine
