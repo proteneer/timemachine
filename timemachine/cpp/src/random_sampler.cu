@@ -9,16 +9,10 @@ namespace timemachine {
 
 template <typename RealType>
 RandomSampler<RealType>::RandomSampler(const int N, const int seed)
-    : N_(N), temp_storage_bytes_(0), d_rand_(round_up_even(N_)), d_gumbel_(N_) {
+    : N_(N), temp_storage_bytes_(0), d_rand_(round_up_even(N_)), d_gumbel_(N_), d_arg_max_(1) {
 
     // Allocate enough space for a single key value pair
-    cudaSafeMalloc(&d_arg_max_, 1 * sizeof(cub::KeyValuePair<int, RealType>));
-    gpuErrchk(cub::DeviceReduce::ArgMax(
-        nullptr,
-        temp_storage_bytes_,
-        d_gumbel_.data,
-        reinterpret_cast<cub::KeyValuePair<int, RealType> *>(d_arg_max_),
-        N_));
+    gpuErrchk(cub::DeviceReduce::ArgMax(nullptr, temp_storage_bytes_, d_gumbel_.data, d_arg_max_.data, N_));
     d_sort_storage_.reset(new DeviceBuffer<char>(temp_storage_bytes_));
 
     curandErrchk(curandCreateGenerator(&cr_rng_, CURAND_RNG_PSEUDO_DEFAULT));
@@ -27,8 +21,6 @@ RandomSampler<RealType>::RandomSampler(const int N, const int seed)
 
 template <typename RealType> RandomSampler<RealType>::~RandomSampler() {
     curandErrchk(curandDestroyGenerator(cr_rng_));
-
-    gpuErrchk(cudaFree(d_arg_max_));
 };
 
 template <typename RealType>
@@ -52,15 +44,10 @@ void RandomSampler<RealType>::sample_device(
         k_setup_gumbel_max_trick<<<blocks, tpb, 0, stream>>>(N, d_rand_.data, d_log_probabilities, d_gumbel_.data);
         gpuErrchk(cudaPeekAtLastError());
 
-        gpuErrchk(cub::DeviceReduce::ArgMax(
-            d_sort_storage_->data,
-            temp_storage_bytes_,
-            d_gumbel_.data,
-            reinterpret_cast<cub::KeyValuePair<int, RealType> *>(d_arg_max_),
-            N));
+        gpuErrchk(
+            cub::DeviceReduce::ArgMax(d_sort_storage_->data, temp_storage_bytes_, d_gumbel_.data, d_arg_max_.data, N));
 
-        k_copy_kv_key<RealType>
-            <<<1, 1, 0, stream>>>(1, reinterpret_cast<cub::KeyValuePair<int, RealType> *>(d_arg_max_), d_samples + i);
+        k_copy_kv_key<RealType><<<1, 1, 0, stream>>>(1, d_arg_max_.data, d_samples + i);
         gpuErrchk(cudaPeekAtLastError());
     }
 };

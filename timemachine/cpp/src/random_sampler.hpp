@@ -5,6 +5,7 @@
 
 #include "curand.h"
 #include "device_buffer.hpp"
+#include <cub/util_type.cuh>
 
 namespace timemachine {
 
@@ -17,10 +18,9 @@ private:
 
     DeviceBuffer<RealType> d_rand_;
     DeviceBuffer<RealType> d_gumbel_;
+    DeviceBuffer<cub::KeyValuePair<int, RealType>> d_arg_max_;
 
     std::unique_ptr<DeviceBuffer<char>> d_sort_storage_;
-    // Can't import cub here to get the definition of KeyValuePair, create a single raw buffer dynamically and use casts
-    void *d_arg_max_;
 
     curandGenerator_t cr_rng_;
 
