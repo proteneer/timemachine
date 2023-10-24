@@ -1,4 +1,11 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+# mypy: ignore-errors
+
 # converts smirnoff xmls into python dictionaries.
+# example usage:
+# python timemachine/ff/amber_converter.py --input_path amber99sbildn.xml --method "nonbonded"
+
 import pprint
 from argparse import ArgumentParser
 from typing import Any, Dict, List
@@ -17,6 +24,7 @@ NONBONDED_TAG = "NonbondedForce"
 tags = [RESIDUE_TAG, BOND_TAG, ANGLE_TAG, PROPER_TAG, NONBONDED_TAG]
 
 STANDARD_RESIDUES = [
+    "ace",
     "ala",
     "arg",
     "asn",  # asparagine
@@ -28,14 +36,15 @@ STANDARD_RESIDUES = [
     "glh",  # glutamic acid (neutral)
     "glu",  # glutamic acid (charged)
     "gly",
-    "his",  # unused?
-    "hip",
-    "hid",
-    "hie",
+    "hip",  # protonated histidine
+    "hid",  # first tautomer (delta location)
+    "hie",  # second tautomer (epsilon location)
     "ile",
     "leu",
     "lys",
     "met",
+    "nme",
+    "nmet",
     "phe",
     "pro",
     "ser",
@@ -47,6 +56,7 @@ STANDARD_RESIDUES = [
 
 
 def make_residue_mol(atoms, bonds):
+    # Generate an rdkit molecule given a list of atoms and a list of bonds
     mw = Chem.RWMol()
     mw.BeginBatchEdit()
     for atom in atoms:
@@ -56,23 +66,24 @@ def make_residue_mol(atoms, bonds):
     for src, dst in bonds:
         mw.AddBond(src, dst, Chem.BondType.SINGLE)
     mw.CommitBatchEdit()
-    print(Chem.MolToSmiles(mw))
+
+    for atom in mw.GetAtoms():
+        atom.SetProp("molAtomMapNumber", str(atom.GetIdx()))
     return mw
 
 
-if __name__ == "__main__":
-    parser = ArgumentParser(description="Convert an AMBER protein XML to a timemachine FF")
-    parser.add_argument("--input_path", help="Path to XML ff")
-    parser.add_argument(
-        "--method",
-        help="Which typing system to use, either based on harmonic bonds or the nonbonded terms",
-        choices=["template_bond", "harmonic_bond", "nonbonded"],
-        default=None,
-    )
-    args = parser.parse_args()
+def dual_sort(src_key, dst_key, src_idx, dst_idx):
+    # sort (src_key, dst_key) along with (src_idx, dst_idx)
+    # this is important for maintaining directionality of the BCCs.
+    if src_key < dst_key:
+        return src_key, dst_key, src_idx, dst_idx
+    else:
+        return dst_key, src_key, dst_idx, src_idx
 
+
+def process_ff(args):
     xmldoc = minidom.parse(args.input_path)
-    forcefield: Dict[str, Any] = {}
+    # forcefield: Dict[str, Any] = {}
 
     # process atom types
     itemlist = xmldoc.getElementsByTagName("Type")
@@ -99,12 +110,14 @@ if __name__ == "__main__":
                 hb_bond_set.add(key_tuple)
 
     # process nonbonded types
+    # the bond-templates under specifies symmetries, so we do one more level
+    # of indirection to look up the actual charge, sigma, epsilon values and
+    # generate a new atom type hash.
     nb_atom_types_hash = {}
     itemlist = xmldoc.getElementsByTagName(NONBONDED_TAG)
     for res in itemlist:
         for idx, cn in enumerate(res.childNodes):
             if cn.nodeName == "Atom":
-                # print("JANK TYPE", type(cn.attributes["type"].value))
                 a_type: str = str(cn.attributes["type"].value)
                 charge: str = cn.attributes["charge"].value
                 sig: str = cn.attributes["sigma"].value
@@ -113,10 +126,13 @@ if __name__ == "__main__":
                 assert a_type not in nb_atom_types_hash
                 nb_atom_types_hash[a_type] = key
 
-    all_res_mols = []
-    all_residues = []
-    all_bond_classes = []
-    all_bond_idxs = []
+    all_res_mols: Any = []
+    all_residues: Any = []
+    all_bond_classes: Any = []
+    all_bond_idxs: Any = []
+
+    for tag in tags:
+        print(tag)
 
     for tag in tags:
         itemlist = xmldoc.getElementsByTagName(tag)
@@ -130,7 +146,6 @@ if __name__ == "__main__":
                 atom_idxs_to_names = {}
                 atom_types_to_idxs = {}
 
-                # bond_types_to_param_idx = {}
                 bond_types_to_param_idx: Dict[str, int] = {}
                 bond_param_idxs = []
                 bond_list = []
@@ -150,21 +165,19 @@ if __name__ == "__main__":
 
                     elif cn.nodeName == "Bond" and args.method == "harmonic_bond":
                         # generate BCCs based on harmonic_bond atom types, note this "over-symmetrizes"
-                        # i.e. symmetry classes are too large
+                        # i.e. symmetry classes are too large, and some just look grossly wrong, eg. serine
                         src_idx = int(cn.attributes["from"].value)
                         dst_idx = int(cn.attributes["to"].value)
 
                         # get the atom types
                         src_type = atom_idxs_to_types[src_idx]
                         dst_type = atom_idxs_to_types[dst_idx]
-
-                        # print(src_type, dst_type)
                         bond_src_type = atom_types_name_to_class[src_type]
                         bond_dst_type = atom_types_name_to_class[dst_type]
-
-                        # re-type based on "type field?"
                         # canonicalize bond_type
-                        bond_src_type, bond_dst_type = sorted((bond_src_type, bond_dst_type))
+                        bond_src_type, bond_dst_type, src_idx, dst_idx = dual_sort(
+                            bond_src_type, bond_dst_type, src_idx, dst_idx
+                        )
                         key_tuple = (bond_src_type, bond_dst_type)
                         assert key_tuple in hb_bond_set
 
@@ -185,10 +198,9 @@ if __name__ == "__main__":
                         src_type = atom_idxs_to_types[src_idx]
                         dst_type = atom_idxs_to_types[dst_idx]
 
-                        result: list = sorted([src_type, dst_type])
-                        bond_src_type, bond_dst_type = result
+                        # canonicalize bond_type
+                        bond_src_type, bond_dst_type, src_idx, dst_idx = dual_sort(src_type, dst_type, src_idx, dst_idx)
                         bond_key = (bond_src_type, bond_dst_type)
-                        # assert bond_key in hb_bond_set
 
                         if bond_key not in bond_type_map:
                             bond_type_map[bond_key] = len(bond_type_map)
@@ -199,23 +211,27 @@ if __name__ == "__main__":
                         bond_iota += 1
 
                     elif cn.nodeName == "Bond" and args.method == "nonbonded":
-                        # generate BCCs based on nonbonded atom types formed by the concacentation of q,sig,eps
+                        # generate BCCs based on nonbonded atom types formed by the concatenation of q,sig,eps
                         # this roughly generates the correct symmetries (probably at the cost of having more parameters)
                         src_idx = int(cn.attributes["from"].value)
                         dst_idx = int(cn.attributes["to"].value)
                         src_type = atom_idxs_to_types[src_idx]
                         dst_type = atom_idxs_to_types[dst_idx]
-
-                        src_name = atom_idxs_to_names[src_idx]
-                        dst_name = atom_idxs_to_names[dst_idx]
-                        # canonicalize the bond type but deduplicate based on redundant charges.
-                        src_hash, dst_hash = sorted([nb_atom_types_hash[src_type], nb_atom_types_hash[dst_type]])
+                        # the following also applies to method == "harmonic_bond" and method == "template_bond"
+                        # it's important that we canonicalize the bond in a way that also maintains the directionality of the bcc (placeholder'd by param_idx)
+                        # Note that the bond list is ordered, such that [(atom_i, atom_j), bcc] is defined such that atom_i is incremented by bcc, atom_j is decrement by bcc
+                        # So, given a bond: hash_4 (atom_5) ---- hash_2 (atom_6), the convention is such that atom_6 is incremented and atom_5 is decremented
+                        # to achieve this, we:
+                        # 1) generate a canonical key hash formed sorting the hashes of the two atoms:  hash_2|hash_4
+                        # 2) if we ended up swapping the order (as in the case above), we also need to swap the order of the atoms as well
+                        # 3) record the atom idxs [(atom_6, atom_2), bcc]
+                        src_hash, dst_hash, src_idx, dst_idx = dual_sort(
+                            nb_atom_types_hash[src_type], nb_atom_types_hash[dst_type], src_idx, dst_idx
+                        )
                         key_hash = src_hash + "|" + dst_hash
                         if key_hash not in bond_types_to_param_idx:
                             bond_types_to_param_idx[key_hash] = len(bond_types_to_param_idx)
 
-                        # TODO: careful of direction -> and <- when computing -bcc and +bcc
-                        # this can probably be handled by the parameterization code as well
                         bond_list.append((src_idx, dst_idx))
                         bond_param_idxs.append(bond_types_to_param_idx[key_hash])
                         bond_iota += 1
@@ -224,24 +240,24 @@ if __name__ == "__main__":
                 print("bond list", bond_list)
                 print("bcc parameters", bond_param_idxs)
 
-                if res.attributes["name"].value.lower() in STANDARD_RESIDUES:
-                    all_residues.append(res_name)
-                    all_bond_classes.append(bond_param_idxs)
-                    res_mol = make_residue_mol(atom_symbols, bond_list)
-                    res_mol.SetProp("_Name", res.attributes["name"].value)
-                    all_res_mols.append(res_mol)
-                    all_bond_idxs.append(bond_list)
+                # uncomment if you only want to generate types for standard residues
+                # if res.attributes["name"].value.lower() in STANDARD_RESIDUES:
+                all_residues.append(res_name)
+                all_bond_classes.append(bond_param_idxs)
+                res_mol = make_residue_mol(atom_symbols, bond_list)
+                res_mol.SetProp("_Name", res.attributes["name"].value)
+                all_res_mols.append(res_mol)
+                all_bond_idxs.append(bond_list)
 
     highlightBondLists = []
     highlightBondColors = []
 
+    # generate colors for bonds
     for bond_classes in all_bond_classes:
         bl = []
-        # setup hash
         bond_colors_complete = {}
         for idx in range(len(bond_classes)):
             bond_colors_complete[idx] = tuple(np.random.random(3))
-
         bond_colors = {}
         for bond_idx, bond_class in enumerate(bond_classes):
             bl.append(bond_idx)
@@ -269,12 +285,29 @@ if __name__ == "__main__":
                 bc_dict[bc] = []
             bc_dict[bc].append(bil)
 
-        for k, v in bc_dict.items():
+        for v in bc_dict.values():
             pattern = res_name + " " + str(v)
             value = 0.0
             all_patterns_and_params.append([pattern, value])
 
-    final_dict = {"ProteinBCC": {"patterns": all_patterns_and_params}}
+    final_dict = {"EnvironmentBCC": {"patterns": all_patterns_and_params}}
+
+    # add a special type for tip3p water assuming HOH
+    final_dict["EnvironmentBCC"]["patterns"].append(["HOH [(0, 1), (0, 2)]", 0.0])
 
     pp = pprint.PrettyPrinter(width=500, compact=False, indent=2)
     pp.pprint(final_dict)
+
+
+if __name__ == "__main__":
+    parser = ArgumentParser(description="Convert an AMBER protein XML to a timemachine FF")
+    parser.add_argument("--input_path", help="Path to XML ff", required=True)
+    parser.add_argument(
+        "--method",
+        help="Which typing system to use, either based on residue template bond tables,  harmonic bonds or the nonbonded terms",
+        choices=["template_bond", "harmonic_bond", "nonbonded"],
+        default="nonbonded",
+    )
+    args = parser.parse_args()
+
+    process_ff(args)

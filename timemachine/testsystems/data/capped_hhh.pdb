@@ -1,0 +1,74 @@
+TITLE      - preprocessed
+REMARK   4      COMPLIES WITH FORMAT V. 3.0, 1-DEC-2006
+REMARK 888
+REMARK 888 WRITTEN BY MAESTRO (A PRODUCT OF SCHRODINGER, LLC)
+ATOM      1  CH3 ACE A   0      -1.468  -2.684   3.490  1.00  0.00           C  
+ATOM      2  C   ACE A   0      -1.207  -1.621   2.423  1.00  0.00           C  
+ATOM      3  O   ACE A   0      -1.091  -0.442   2.752  1.00  0.00           O  
+ATOM      4 1H   ACE A   0      -1.520  -2.200   4.491  1.00  0.00           H  
+ATOM      5 2H   ACE A   0      -2.430  -3.200   3.275  1.00  0.00           H  
+ATOM      6 3H   ACE A   0      -0.645  -3.433   3.480  1.00  0.00           H  
+ATOM      7  N   HIS A   1      -1.101  -1.981   1.095  1.00  0.00           N  
+ATOM      8  CA  HIS A   1      -0.851  -0.962   0.081  1.00  0.00           C  
+ATOM      9  C   HIS A   1       0.467  -1.270  -0.653  1.00  0.00           C  
+ATOM     10  O   HIS A   1       1.149  -2.254  -0.362  1.00  0.00           O  
+ATOM     11  CB  HIS A   1      -0.896   0.412   0.744  1.00  0.00           C  
+ATOM     12  CG  HIS A   1      -0.657   1.603  -0.155  1.00  0.00           C  
+ATOM     13  ND1 HIS A   1       0.560   2.106  -0.375  1.00  0.00           N1+
+ATOM     14  CD2 HIS A   1      -1.529   2.376  -0.885  1.00  0.00           C  
+ATOM     15  CE1 HIS A   1       0.453   3.154  -1.208  1.00  0.00           C  
+ATOM     16  NE2 HIS A   1      -0.817   3.365  -1.552  1.00  0.00           N  
+ATOM     17  H   HIS A   1      -1.196  -2.949   0.825  1.00  0.00           H  
+ATOM     18  HA  HIS A   1      -1.716  -0.885  -0.578  1.00  0.00           H  
+ATOM     19  HB2 HIS A   1      -1.877   0.569   1.191  1.00  0.00           H  
+ATOM     20  HB3 HIS A   1      -0.131   0.467   1.519  1.00  0.00           H  
+ATOM     21  HD1 HIS A   1       1.367   1.688   0.067  1.00  0.00           H  
+ATOM     22  HD2 HIS A   1      -2.586   2.158  -0.870  1.00  0.00           H  
+ATOM     23  HE1 HIS A   1       1.336   3.697  -1.509  1.00  0.00           H  
+ATOM     24  HE2 HIS A   1      -1.302   4.029  -2.137  1.00  0.00           H  
+ATOM     25  N   HIS A   2       0.814  -0.372  -1.641  1.00  0.00           N  
+ATOM     26  CA  HIS A   2       2.028  -0.505  -2.439  1.00  0.00           C  
+ATOM     27  C   HIS A   2       2.117   0.655  -3.448  1.00  0.00           C  
+ATOM     28  O   HIS A   2       1.246   1.525  -3.505  1.00  0.00           O  
+ATOM     29  CB  HIS A   2       2.050  -1.892  -3.074  1.00  0.00           C  
+ATOM     30  CG  HIS A   2       3.241  -2.218  -3.945  1.00  0.00           C  
+ATOM     31  ND1 HIS A   2       3.261  -1.972  -5.258  1.00  0.00           N  
+ATOM     32  CD2 HIS A   2       4.457  -2.781  -3.643  1.00  0.00           C  
+ATOM     33  CE1 HIS A   2       4.443  -2.368  -5.756  1.00  0.00           C  
+ATOM     34  NE2 HIS A   2       5.219  -2.878  -4.801  1.00  0.00           N  
+ATOM     35  H   HIS A   2       0.218   0.419  -1.838  1.00  0.00           H  
+ATOM     36  HA  HIS A   2       2.891  -0.583  -1.779  1.00  0.00           H  
+ATOM     37  HB2 HIS A   2       2.038  -2.651  -2.291  1.00  0.00           H  
+ATOM     38  HB3 HIS A   2       1.173  -2.015  -3.711  1.00  0.00           H  
+ATOM     39  HD2 HIS A   2       4.681  -3.068  -2.626  1.00  0.00           H  
+ATOM     40  HE1 HIS A   2       4.653  -2.250  -6.809  1.00  0.00           H  
+ATOM     41  HE2 HIS A   2       6.147  -3.275  -4.763  1.00  0.00           H  
+ATOM     42  N   HIS A   3       3.228   0.641  -4.266  1.00  0.00           N  
+ATOM     43  CA  HIS A   3       3.478   1.660  -5.280  1.00  0.00           C  
+ATOM     44  C   HIS A   3       4.796   1.352  -6.014  1.00  0.00           C  
+ATOM     45  O   HIS A   3       5.478   0.367  -5.723  1.00  0.00           O  
+ATOM     46  CB  HIS A   3       3.434   3.034  -4.617  1.00  0.00           C  
+ATOM     47  CG  HIS A   3       3.672   4.225  -5.516  1.00  0.00           C  
+ATOM     48  ND1 HIS A   3       4.890   4.728  -5.736  1.00  0.00           N  
+ATOM     49  CD2 HIS A   3       2.801   4.997  -6.246  1.00  0.00           C  
+ATOM     50  CE1 HIS A   3       4.782   5.775  -6.569  1.00  0.00           C  
+ATOM     51  NE2 HIS A   3       3.513   5.986  -6.913  1.00  0.00           N  
+ATOM     52  H   HIS A   3       3.912  -0.097  -4.177  1.00  0.00           H  
+ATOM     53  HA  HIS A   3       2.613   1.737  -5.938  1.00  0.00           H  
+ATOM     54  HB2 HIS A   3       2.452   3.191  -4.170  1.00  0.00           H  
+ATOM     55  HB3 HIS A   3       4.198   3.089  -3.842  1.00  0.00           H  
+ATOM     56  HD1 HIS A   3       5.696   4.310  -5.294  1.00  0.00           H  
+ATOM     57  HD2 HIS A   3       1.743   4.780  -6.231  1.00  0.00           H  
+ATOM     58  HE1 HIS A   3       5.666   6.319  -6.870  1.00  0.00           H  
+ATOM     59  N   NMA A   3A      5.144   2.250  -7.002  1.00  0.00           N  
+ATOM     60  CA  NMA A   3A      6.371   2.057  -7.762  1.00  0.00           C  
+ATOM     61  H   NMA A   3A      4.548   3.040  -7.199  1.00  0.00           H  
+ATOM     62 1HA  NMA A   3A      6.879   1.137  -7.394  1.00  0.00           H  
+ATOM     63 2HA  NMA A   3A      6.131   1.948  -8.843  1.00  0.00           H  
+ATOM     64 3HA  NMA A   3A      7.039   2.936  -7.626  1.00  0.00           H  
+TER      65      NMA A   3A
+CONECT    1    4    5    6
+CONECT    4    1
+CONECT    5    1
+CONECT    6    1
+END   
