@@ -11,7 +11,6 @@ template <typename RealType>
 RandomSampler<RealType>::RandomSampler(const int N, const int seed)
     : N_(N), temp_storage_bytes_(0), d_rand_(round_up_even(N_)), d_gumbel_(N_), d_arg_max_(1) {
 
-    // Allocate enough space for a single key value pair
     gpuErrchk(cub::DeviceReduce::ArgMax(nullptr, temp_storage_bytes_, d_gumbel_.data, d_arg_max_.data, N_));
     d_sort_storage_.reset(new DeviceBuffer<char>(temp_storage_bytes_));
 
