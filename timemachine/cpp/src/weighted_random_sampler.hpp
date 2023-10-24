@@ -1,6 +1,5 @@
 #pragma once
 
-#include <memory>
 #include <vector>
 
 #include "curand.h"
@@ -20,7 +19,7 @@ private:
     DeviceBuffer<RealType> d_gumbel_;
     DeviceBuffer<cub::KeyValuePair<int, RealType>> d_arg_max_;
 
-    std::unique_ptr<DeviceBuffer<char>> d_sort_storage_;
+    DeviceBuffer<char> d_sort_storage_;
 
     curandGenerator_t cr_rng_;
 

@@ -24,7 +24,7 @@ void FanoutSummedPotential::execute_device(
     cudaStream_t stream) {
 
     if (d_u) {
-        gpuErrchk(cudaMemsetAsync(d_u_buffer_.data, 0, d_u_buffer_.size, stream));
+        gpuErrchk(cudaMemsetAsync(d_u_buffer_.data, 0, d_u_buffer_.size(), stream));
     }
 
     if (parallel_) {

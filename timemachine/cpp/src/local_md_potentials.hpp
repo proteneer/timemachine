@@ -72,7 +72,7 @@ private:
     DeviceBuffer<unsigned int> d_free_idxs_;
     DeviceBuffer<unsigned int> d_temp_idxs_; // Where intersection of free/frozen and initial atom indices are stored
     DeviceBuffer<unsigned int> d_all_pairs_idxs_; // Where initial atom indices, of NonbondedAllPairs, are stored
-    std::unique_ptr<DeviceBuffer<char>> d_temp_storage_buffer_;
+    DeviceBuffer<char> d_temp_storage_buffer_;
 
     DeviceBuffer<unsigned int> d_row_idxs_;
     DeviceBuffer<unsigned int> d_col_idxs_;

@@ -24,8 +24,8 @@ LocalMDPotentials::LocalMDPotentials(
     const int N, const std::vector<std::shared_ptr<BoundPotential>> &bps, bool freeze_reference, double temperature)
     : freeze_reference(freeze_reference), temperature(temperature), N_(N), temp_storage_bytes_(0), all_potentials_(bps),
       d_restraint_pairs_(N_ * 2), d_bond_params_(N_ * 3), d_probability_buffer_(round_up_even(N_)), d_free_idxs_(N_),
-      d_temp_idxs_(N_), d_all_pairs_idxs_(N_), d_row_idxs_(N_), d_col_idxs_(N_), p_num_selected_(1),
-      d_num_selected_buffer_(1) {
+      d_temp_idxs_(N_), d_all_pairs_idxs_(N_), d_temp_storage_buffer_(0), d_row_idxs_(N_), d_col_idxs_(N_),
+      p_num_selected_(1), d_num_selected_buffer_(1) {
 
     if (temperature <= 0.0) {
         throw std::runtime_error("temperature must be greater than 0");
@@ -88,7 +88,7 @@ LocalMDPotentials::LocalMDPotentials(
         LessThan(N_)));
     // Allocate char as temp_storage_bytes_ is in raw bytes and the type doesn't matter in practice.
     // Equivalent to DeviceBuffer<int> buf(temp_storage_bytes_ / sizeof(int))
-    d_temp_storage_buffer_.reset(new DeviceBuffer<char>(temp_storage_bytes_));
+    d_temp_storage_buffer_.realloc(temp_storage_bytes_);
 
     curandErrchk(curandCreateGenerator(&cr_rng_, CURAND_RNG_PSEUDO_DEFAULT));
 };
@@ -210,7 +210,7 @@ void LocalMDPotentials::_setup_free_idxs_given_reference_idx(
 
     // Partition the free idxs into the row idxs
     gpuErrchk(cub::DevicePartition::If(
-        d_temp_storage_buffer_->data,
+        d_temp_storage_buffer_.data,
         temp_storage_bytes_,
         d_free_idx_ptr,
         d_row_idxs_.data,
@@ -282,7 +282,7 @@ void LocalMDPotentials::_setup_free_idxs_given_reference_idx(
 
     // Partition the column idxs to the column buffer to setup the interaction group
     gpuErrchk(cub::DevicePartition::If(
-        d_temp_storage_buffer_->data,
+        d_temp_storage_buffer_.data,
         temp_storage_bytes_,
         d_free_idx_ptr,
         d_col_idxs_.data,

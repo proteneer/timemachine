@@ -1,7 +1,6 @@
 #pragma once
 
 #include "device_buffer.hpp"
-#include <memory>
 
 namespace timemachine {
 
@@ -12,7 +11,7 @@ private:
 
     // Buffers for finding the max/summed value
     std::size_t temp_storage_bytes_;
-    std::unique_ptr<DeviceBuffer<char>> d_temp_storage_buffer_;
+    DeviceBuffer<char> d_temp_storage_buffer_;
 
 public:
     LogSumExp(const int N);

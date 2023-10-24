@@ -11,8 +11,21 @@ template <typename T> T *allocate(const std::size_t length) {
     return buffer;
 }
 
+template <typename T> DeviceBuffer<T>::DeviceBuffer() : DeviceBuffer(0) {}
+
 template <typename T>
-DeviceBuffer<T>::DeviceBuffer(const std::size_t length) : size(length * sizeof(T)), data(allocate<T>(length)) {}
+DeviceBuffer<T>::DeviceBuffer(const std::size_t length) : length(length), data(allocate<T>(length)) {}
+
+template <typename T> void DeviceBuffer<T>::realloc(const size_t new_length) {
+    // Print a warning if buffers were non-zero when resized, this can have real performance impacts
+    if (this->length > 0) {
+        std::cout << "warning:: resizing device buffer that is non-zero" << std::endl;
+    }
+    // Free the existing data
+    gpuErrchk(cudaFree(data));
+    this->length = new_length;
+    this->data = allocate<T>(new_length);
+}
 
 template <typename T> DeviceBuffer<T>::~DeviceBuffer() {
     // TODO: the file/line context reported by gpuErrchk on failure is
@@ -21,12 +34,14 @@ template <typename T> DeviceBuffer<T>::~DeviceBuffer() {
     gpuErrchk(cudaFree(data));
 }
 
+template <typename T> size_t DeviceBuffer<T>::size() const { return this->length * sizeof(T); }
+
 template <typename T> void DeviceBuffer<T>::copy_from(const T *host_buffer) const {
-    gpuErrchk(cudaMemcpy(data, host_buffer, size, cudaMemcpyHostToDevice));
+    gpuErrchk(cudaMemcpy(data, host_buffer, this->size(), cudaMemcpyHostToDevice));
 }
 
 template <typename T> void DeviceBuffer<T>::copy_to(T *host_buffer) const {
-    gpuErrchk(cudaMemcpy(host_buffer, data, size, cudaMemcpyDeviceToHost));
+    gpuErrchk(cudaMemcpy(host_buffer, data, this->size(), cudaMemcpyDeviceToHost));
 }
 
 template class DeviceBuffer<double>;

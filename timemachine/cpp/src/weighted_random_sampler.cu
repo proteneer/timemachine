@@ -9,10 +9,10 @@ namespace timemachine {
 
 template <typename RealType>
 WeightedRandomSampler<RealType>::WeightedRandomSampler(const int N, const int seed)
-    : N_(N), temp_storage_bytes_(0), d_gumbel_(round_up_even(N_)), d_arg_max_(1) {
+    : N_(N), temp_storage_bytes_(0), d_gumbel_(round_up_even(N_)), d_arg_max_(1), d_sort_storage_(0) {
 
     gpuErrchk(cub::DeviceReduce::ArgMax(nullptr, temp_storage_bytes_, d_gumbel_.data, d_arg_max_.data, N_));
-    d_sort_storage_.reset(new DeviceBuffer<char>(temp_storage_bytes_));
+    d_sort_storage_.realloc(temp_storage_bytes_);
 
     curandErrchk(curandCreateGenerator(&cr_rng_, CURAND_RNG_PSEUDO_DEFAULT));
     curandErrchk(curandSetPseudoRandomGeneratorSeed(cr_rng_, seed));
@@ -44,7 +44,7 @@ void WeightedRandomSampler<RealType>::sample_device(
         gpuErrchk(cudaPeekAtLastError());
 
         gpuErrchk(
-            cub::DeviceReduce::ArgMax(d_sort_storage_->data, temp_storage_bytes_, d_gumbel_.data, d_arg_max_.data, N));
+            cub::DeviceReduce::ArgMax(d_sort_storage_.data, temp_storage_bytes_, d_gumbel_.data, d_arg_max_.data, N));
 
         k_copy_kv_key<RealType><<<1, 1, 0, stream>>>(1, d_arg_max_.data, d_samples + i);
         gpuErrchk(cudaPeekAtLastError());
