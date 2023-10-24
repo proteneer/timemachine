@@ -9,6 +9,8 @@ public:
 
     ~DeviceBuffer();
 
+    const size_t length;
+
     const size_t size;
 
     T *const data;
