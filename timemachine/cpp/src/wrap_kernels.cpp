@@ -189,21 +189,21 @@ template <typename RealType> void declare_random_sampler(py::module &m, const ch
         .def(
             "sample",
             [](Class &sampler,
-               const int K,
+               const int num_samples,
                const py::array_t<double, py::array::c_style> &probabilities) -> std::vector<int> {
                 std::vector<RealType> real_probs = py_array_to_vector_with_cast<double, RealType>(probabilities);
 
-                std::vector<int> samples = sampler.sample_host(K, real_probs);
+                std::vector<int> samples = sampler.sample_host(num_samples, real_probs);
                 return samples;
             },
-            py::arg("K"),
+            py::arg("num_samples"),
             py::arg("probabilities"),
             R"pbdoc(
-        Randomly select K samples from a probability distribution.
+        Randomly select num_samples from a probability distribution.
 
         Parameters
         ----------
-        K: int
+        num_samples: int
             Number of Samples to return
 
         probabilities: array of doubles
@@ -212,7 +212,7 @@ template <typename RealType> void declare_random_sampler(py::module &m, const ch
         Returns
         -------
         Array of sample indices
-            Shape (K, )
+            Shape (num_samples, )
         )pbdoc");
 }
 

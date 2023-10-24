@@ -29,10 +29,10 @@ public:
 
     ~RandomSampler();
 
-    void
-    sample_device(const int N, const int K, const RealType *d_log_probabilities, int *d_samples, cudaStream_t stream);
+    void sample_device(
+        const int N, const int num_samples, const RealType *d_log_probabilities, int *d_samples, cudaStream_t stream);
 
-    std::vector<int> sample_host(const int K, const std::vector<RealType> &probabilities);
+    std::vector<int> sample_host(const int num_samples, const std::vector<RealType> &probabilities);
 };
 
 } // namespace timemachine

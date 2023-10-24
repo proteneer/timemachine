@@ -24,20 +24,20 @@ template <typename RealType> RandomSampler<RealType>::~RandomSampler() {
 
 template <typename RealType>
 void RandomSampler<RealType>::sample_device(
-    const int N, const int K, const RealType *d_log_probabilities, int *d_samples, cudaStream_t stream) {
+    const int N, const int num_samples, const RealType *d_log_probabilities, int *d_samples, cudaStream_t stream) {
     if (N > N_) {
         throw std::runtime_error(
             "N is greater than buffer size:  N=" + std::to_string(N) + ", N_=" + std::to_string(N_));
     }
-    if (K <= 0) {
-        throw std::runtime_error("K must be at least 1: K=" + std::to_string(K));
+    if (num_samples <= 0) {
+        throw std::runtime_error("num_samples must be at least 1: num_samples=" + std::to_string(num_samples));
     }
     // Perform sampling using the gumbel-max-trick like cupy
     // https://github.com/cupy/cupy/blob/46f6ed6e78661fb1d31b41a072519f119f5a2385/cupy/random/_generator.py#L1115-L1121
     curandErrchk(curandSetStream(cr_rng_, stream));
     const int tpb = DEFAULT_THREADS_PER_BLOCK;
     const int blocks = ceil_divide(N, tpb);
-    for (int i = 0; i < K; i++) {
+    for (int i = 0; i < num_samples; i++) {
         curandErrchk(templateCurandUniform(cr_rng_, d_gumbel_.data, round_up_even(N)));
 
         k_setup_gumbel_max_trick<<<blocks, tpb, 0, stream>>>(N, d_log_probabilities, d_gumbel_.data);
@@ -52,20 +52,21 @@ void RandomSampler<RealType>::sample_device(
 };
 
 template <typename RealType>
-std::vector<int> RandomSampler<RealType>::sample_host(const int K, const std::vector<RealType> &probabilities) {
-    std::vector<int> h_selection(K);
+std::vector<int>
+RandomSampler<RealType>::sample_host(const int num_samples, const std::vector<RealType> &probabilities) {
+    std::vector<int> h_selection(num_samples);
     // Convert the probabilities into log probabilities
     std::vector<RealType> h_log_probs(probabilities.size());
     for (int i = 0; i < probabilities.size(); i++) {
         h_log_probs[i] = log(probabilities[i]);
     }
 
-    DeviceBuffer<int> d_samples_buffer(K);
+    DeviceBuffer<int> d_samples_buffer(num_samples);
     DeviceBuffer<RealType> d_probability_buffer_(h_log_probs.size());
     d_probability_buffer_.copy_from(&h_log_probs[0]);
 
     cudaStream_t stream = static_cast<cudaStream_t>(0);
-    this->sample_device(h_log_probs.size(), K, d_probability_buffer_.data, d_samples_buffer.data, stream);
+    this->sample_device(h_log_probs.size(), num_samples, d_probability_buffer_.data, d_samples_buffer.data, stream);
     gpuErrchk(cudaStreamSynchronize(stream));
 
     d_samples_buffer.copy_to(&h_selection[0]);

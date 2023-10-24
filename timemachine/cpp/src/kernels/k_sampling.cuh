@@ -28,7 +28,6 @@ k_copy_kv_key(const int N, const cub::KeyValuePair<int, T> *__restrict__ kv_pair
         return;
     }
 
-    // printf("Key %d Val %f\n", kv_pairs[idx].key, kv_pairs[idx].value);
     out[idx] = kv_pairs[idx].key;
 }
 
