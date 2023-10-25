@@ -40,7 +40,7 @@ void SummedPotential::execute_device(
             std::to_string(P));
     }
     if (d_u) {
-        gpuErrchk(cudaMemsetAsync(d_u_buffer_.data, 0, d_u_buffer_.size, stream));
+        gpuErrchk(cudaMemsetAsync(d_u_buffer_.data, 0, d_u_buffer_.size(), stream));
     }
 
     int offset = 0;

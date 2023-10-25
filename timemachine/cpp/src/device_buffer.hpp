@@ -5,13 +5,20 @@ namespace timemachine {
 
 template <typename T> class DeviceBuffer {
 public:
+    DeviceBuffer();
     DeviceBuffer(const size_t length);
 
     ~DeviceBuffer();
 
-    const size_t size;
+    size_t length;
 
-    T *const data;
+    T *data;
+
+    void realloc(const size_t length);
+
+    // Size returns the number of bytes that make up the buffer unlike the std::container which returns
+    // the number of elements. For the number of elements use the `length` property.
+    size_t size() const;
 
     void copy_from(const T *host_buffer) const;
 
