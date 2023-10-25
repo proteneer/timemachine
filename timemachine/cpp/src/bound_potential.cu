@@ -4,7 +4,7 @@
 namespace timemachine {
 
 BoundPotential::BoundPotential(std::shared_ptr<Potential> potential, const std::vector<double> &params)
-    : size(params.size()), buffer_size_(size), d_p(buffer_size_), potential(potential) {
+    : size(params.size()), d_p(size), potential(potential) {
     set_params(params);
 }
 
@@ -35,8 +35,8 @@ void BoundPotential::execute_batch_host(
     DeviceBuffer<double> d_x_buffer(coord_batch_size * N * D);
     d_x_buffer.copy_from(h_x);
 
-    std::unique_ptr<DeviceBuffer<unsigned long long>> d_du_dx_buffer(nullptr);
-    std::unique_ptr<DeviceBuffer<__int128>> d_u_buffer(nullptr);
+    DeviceBuffer<unsigned long long> d_du_dx_buffer;
+    DeviceBuffer<__int128> d_u_buffer;
 
     const int total_executions = coord_batch_size;
 
@@ -44,13 +44,13 @@ void BoundPotential::execute_batch_host(
     gpuErrchk(cudaStreamCreate(&stream));
 
     if (h_du_dx) {
-        d_du_dx_buffer.reset(new DeviceBuffer<unsigned long long>(total_executions * N * D));
-        gpuErrchk(cudaMemsetAsync(d_du_dx_buffer->data, 0, d_du_dx_buffer->size, stream));
+        d_du_dx_buffer.realloc(total_executions * N * D);
+        gpuErrchk(cudaMemsetAsync(d_du_dx_buffer.data, 0, d_du_dx_buffer.size(), stream));
     }
 
     if (h_u) {
-        d_u_buffer.reset(new DeviceBuffer<__int128>(total_executions));
-        gpuErrchk(cudaMemsetAsync(d_u_buffer->data, 0, d_u_buffer->size, stream));
+        d_u_buffer.realloc(total_executions);
+        gpuErrchk(cudaMemsetAsync(d_u_buffer.data, 0, d_u_buffer.size(), stream));
     }
 
     this->potential->execute_batch_device(
@@ -61,20 +61,20 @@ void BoundPotential::execute_batch_host(
         d_x_buffer.data,
         this->size > 0 ? this->d_p.data : nullptr,
         d_box.data,
-        h_du_dx ? d_du_dx_buffer->data : nullptr,
+        h_du_dx ? d_du_dx_buffer.data : nullptr,
         nullptr,
-        h_u ? d_u_buffer->data : nullptr,
+        h_u ? d_u_buffer.data : nullptr,
         stream);
 
     gpuErrchk(cudaStreamSynchronize(stream));
     gpuErrchk(cudaStreamDestroy(stream));
 
     if (h_du_dx) {
-        d_du_dx_buffer->copy_to(h_du_dx);
+        d_du_dx_buffer.copy_to(h_du_dx);
     }
 
     if (h_u) {
-        d_u_buffer->copy_to(h_u);
+        d_u_buffer.copy_to(h_u);
     }
 }
 
@@ -94,53 +94,53 @@ void BoundPotential::execute_host(
     d_x.copy_from(h_x);
     d_box.copy_from(h_box);
 
-    std::unique_ptr<DeviceBuffer<unsigned long long>> d_du_dx(nullptr);
-    std::unique_ptr<DeviceBuffer<__int128>> d_u(nullptr);
+    DeviceBuffer<unsigned long long> d_du_dx;
+    DeviceBuffer<__int128> d_u;
 
     cudaStream_t stream = static_cast<cudaStream_t>(0);
     // very important that these are initialized to zero since the kernels themselves just accumulate
     if (h_du_dx != nullptr) {
-        d_du_dx.reset(new DeviceBuffer<unsigned long long>(N * D));
-        gpuErrchk(cudaMemsetAsync(d_du_dx->data, 0, d_du_dx->size, stream));
+        d_du_dx.realloc(N * D);
+        gpuErrchk(cudaMemsetAsync(d_du_dx.data, 0, d_du_dx.size(), stream));
     }
     if (h_u != nullptr) {
-        d_u.reset(new DeviceBuffer<__int128>(1));
-        gpuErrchk(cudaMemsetAsync(d_u->data, 0, d_u->size, stream));
+        d_u.realloc(1);
+        gpuErrchk(cudaMemsetAsync(d_u.data, 0, d_u.size(), stream));
     }
 
     this->execute_device(
         N,
         d_x.data,
         d_box.data,
-        h_du_dx != nullptr ? d_du_dx->data : nullptr,
+        h_du_dx != nullptr ? d_du_dx.data : nullptr,
         nullptr,
-        h_u != nullptr ? d_u->data : nullptr,
+        h_u != nullptr ? d_u.data : nullptr,
         stream);
     gpuErrchk(cudaStreamSynchronize(stream));
 
     if (h_du_dx) {
-        d_du_dx->copy_to(h_du_dx);
+        d_du_dx.copy_to(h_du_dx);
     }
     if (h_u) {
-        d_u->copy_to(h_u);
+        d_u.copy_to(h_u);
     }
 };
 
 void BoundPotential::set_params(const std::vector<double> &params) {
-    if (params.size() != buffer_size_) {
+    if (params.size() != d_p.length) {
         throw std::runtime_error(
             "parameter size is not equal to device buffer size: " + std::to_string(params.size()) +
-            " != " + std::to_string(buffer_size_));
+            " != " + std::to_string(d_p.length));
     }
     d_p.copy_from(params.data());
     this->size = params.size();
 }
 
 void BoundPotential::set_params_device(const int new_size, const double *d_new_params, const cudaStream_t stream) {
-    if (static_cast<size_t>(new_size) > buffer_size_) {
+    if (static_cast<size_t>(new_size) > d_p.length) {
         throw std::runtime_error(
             "parameter size is greater than device buffer size: " + std::to_string(new_size) + " > " +
-            std::to_string(buffer_size_));
+            std::to_string(d_p.length));
     }
     gpuErrchk(cudaMemcpyAsync(d_p.data, d_new_params, new_size * sizeof(*d_p.data), cudaMemcpyDeviceToDevice, stream));
     this->size = new_size;

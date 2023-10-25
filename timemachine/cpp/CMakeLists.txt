@@ -74,6 +74,7 @@ pybind11_add_module(${LIBRARY_NAME} SHARED NO_EXTRAS
   src/energy_accumulation.cu
   src/local_md_utils.cu
   src/neighborlist.cu
+  src/logsumexp.cu
   src/harmonic_bond.cu
   src/flat_bottom_bond.cu
   src/log_flat_bottom_bond.cu
@@ -96,6 +97,7 @@ pybind11_add_module(${LIBRARY_NAME} SHARED NO_EXTRAS
   src/pinned_host_buffer.cu
   src/streamed_potential_runner.cu
   src/stream_manager.cu
+  src/weighted_random_sampler.cu
   src/kernels/k_hilbert.cu
   src/kernels/k_indices.cu
 )

@@ -198,11 +198,7 @@ void MonteCarloBarostat<RealType>::inplace_move(
     // and the second is used to accept or reject in the metropolis hasting check performed in k_decide_move.
     if (random_offset == 0) {
         curandErrchk(curandSetStream(cr_rng_, stream));
-        if constexpr (std::is_same_v<RealType, double>) {
-            curandErrchk(curandGenerateUniformDouble(cr_rng_, d_rand_, RANDOM_BATCH_SIZE * 2));
-        } else {
-            curandErrchk(curandGenerateUniform(cr_rng_, d_rand_, RANDOM_BATCH_SIZE * 2));
-        }
+        curandErrchk(templateCurandUniform(cr_rng_, d_rand_, RANDOM_BATCH_SIZE * 2));
     }
 
     const int num_molecules = group_idxs_.size();

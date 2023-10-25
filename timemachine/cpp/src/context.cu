@@ -14,8 +14,6 @@
 #include "nonbonded_common.hpp"
 #include "pinned_host_buffer.hpp"
 #include "set_utils.hpp"
-#include <cub/cub.cuh>
-#include <memory>
 
 namespace timemachine {
 
@@ -112,9 +110,9 @@ std::array<std::vector<double>, 2> Context::multiple_steps_local(
     // Store coordinates in host memory as it can be very large
     std::vector<double> h_x_buffer(x_buffer_size * N_ * 3);
     // Store boxes on GPU as boxes are a constant size and relatively small
-    std::unique_ptr<DeviceBuffer<double>> d_box_traj(nullptr);
+    DeviceBuffer<double> d_box_traj;
     if (box_buffer_size > 0) {
-        d_box_traj.reset(new DeviceBuffer<double>(box_buffer_size));
+        d_box_traj.realloc(box_buffer_size);
     }
 
     this->_ensure_local_md_intialized();
@@ -142,9 +140,9 @@ std::array<std::vector<double>, 2> Context::multiple_steps_local(
                     cudaMemcpyDeviceToHost,
                     stream));
                 gpuErrchk(cudaMemcpyAsync(
-                    &d_box_traj->data[0] + ((i / store_x_interval) - 1) * 3 * 3,
+                    &d_box_traj.data[0] + ((i / store_x_interval) - 1) * 3 * 3,
                     d_box_t_,
-                    3 * 3 * sizeof(*d_box_traj->data),
+                    3 * 3 * sizeof(*d_box_traj.data),
                     cudaMemcpyDeviceToDevice,
                     stream));
                 this->_verify_box(stream);
@@ -163,7 +161,7 @@ std::array<std::vector<double>, 2> Context::multiple_steps_local(
     std::vector<double> h_box_buffer(box_buffer_size);
 
     if (box_buffer_size > 0) {
-        d_box_traj->copy_to(&h_box_buffer[0]);
+        d_box_traj.copy_to(&h_box_buffer[0]);
     }
     return std::array<std::vector<double>, 2>({h_x_buffer, h_box_buffer});
 }
@@ -186,9 +184,9 @@ std::array<std::vector<double>, 2> Context::multiple_steps_local_selection(
     // Store coordinates in host memory as it can be very large
     std::vector<double> h_x_buffer(x_buffer_size * N_ * 3);
     // Store boxes on GPU as boxes are a constant size and relatively small
-    std::unique_ptr<DeviceBuffer<double>> d_box_traj(nullptr);
+    DeviceBuffer<double> d_box_traj;
     if (box_buffer_size > 0) {
-        d_box_traj.reset(new DeviceBuffer<double>(box_buffer_size));
+        d_box_traj.realloc(box_buffer_size);
     }
 
     this->_ensure_local_md_intialized();
@@ -216,9 +214,9 @@ std::array<std::vector<double>, 2> Context::multiple_steps_local_selection(
                     cudaMemcpyDeviceToHost,
                     stream));
                 gpuErrchk(cudaMemcpyAsync(
-                    &d_box_traj->data[0] + ((i / store_x_interval) - 1) * 3 * 3,
+                    &d_box_traj.data[0] + ((i / store_x_interval) - 1) * 3 * 3,
                     d_box_t_,
-                    3 * 3 * sizeof(*d_box_traj->data),
+                    3 * 3 * sizeof(*d_box_traj.data),
                     cudaMemcpyDeviceToDevice,
                     stream));
                 this->_verify_box(stream);
@@ -237,7 +235,7 @@ std::array<std::vector<double>, 2> Context::multiple_steps_local_selection(
     std::vector<double> h_box_buffer(box_buffer_size);
 
     if (box_buffer_size > 0) {
-        d_box_traj->copy_to(&h_box_buffer[0]);
+        d_box_traj.copy_to(&h_box_buffer[0]);
     }
     return std::array<std::vector<double>, 2>({h_x_buffer, h_box_buffer});
 }
@@ -257,9 +255,9 @@ std::array<std::vector<double>, 2> Context::multiple_steps(const int n_steps, in
 
     cudaStream_t stream = static_cast<cudaStream_t>(0);
 
-    std::unique_ptr<DeviceBuffer<double>> d_box_buffer(nullptr);
+    DeviceBuffer<double> d_box_buffer;
     if (box_buffer_size > 0) {
-        d_box_buffer.reset(new DeviceBuffer<double>(box_buffer_size));
+        d_box_buffer.realloc(box_buffer_size);
     }
 
     intg_->initialize(bps_, d_x_t_, d_v_t_, d_box_t_, nullptr, stream);
@@ -274,9 +272,9 @@ std::array<std::vector<double>, 2> Context::multiple_steps(const int n_steps, in
                 cudaMemcpyDeviceToHost,
                 stream));
             gpuErrchk(cudaMemcpyAsync(
-                &d_box_buffer->data[0] + ((i / store_x_interval) - 1) * 3 * 3,
+                &d_box_buffer.data[0] + ((i / store_x_interval) - 1) * 3 * 3,
                 d_box_t_,
-                3 * 3 * sizeof(*d_box_buffer->data),
+                3 * 3 * sizeof(*d_box_buffer.data),
                 cudaMemcpyDeviceToDevice,
                 stream));
             this->_verify_box(stream);
@@ -288,7 +286,7 @@ std::array<std::vector<double>, 2> Context::multiple_steps(const int n_steps, in
 
     std::vector<double> h_box_buffer(box_buffer_size);
     if (box_buffer_size > 0) {
-        d_box_buffer->copy_to(&h_box_buffer[0]);
+        d_box_buffer.copy_to(&h_box_buffer[0]);
     }
 
     return std::array<std::vector<double>, 2>({h_x_buffer, h_box_buffer});
