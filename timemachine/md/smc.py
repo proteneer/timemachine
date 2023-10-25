@@ -300,13 +300,21 @@ def multinomial_resample(log_weights):
 
     return indices, avg_log_weights
 
+
 def stratified_resample(log_weights):
     """
-    Split cummulative sum of weights into N intervals
+    Split cummulative sum of weights into N interval
     and pick one particle per subinterval.
 
-    Based on the code at https://github.com/rlabbe/filterpy/blob/6cc052bea5a806d3531b59c820530c42b67a910c/filterpy/monte_carlo/resampling.py
-    [MIT license]
+    References
+    ----------
+    * [Douc, Cappé, Moulines, 2005]
+        Comparison of Resampling Schemes for Particle Filtering
+        https://arxiv.org/abs/cs/0507025
+
+    * Code based on:
+        https://github.com/rlabbe/filterpy/blob/6cc052bea5a806d3531b59c820530c42b67a910c/filterpy/monte_carlo/resampling.py
+        [MIT license]
     """
     weights = np.exp(log_weights - logsumexp(log_weights))
     assert np.isclose(np.sum(weights), 1.0)
