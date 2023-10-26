@@ -430,4 +430,156 @@ void __global__ k_nonbonded_unified(
     }
 }
 
+template <typename RealType, int THREADS>
+void __global__ k_compute_nonbonded_target_atom_energies(
+    const int N,
+    const int num_target_atoms,
+    const int *__restrict__ target_atoms,        // [num_target_atoms]
+    const int *__restrict__ target_mols,         // [num_target_atoms]
+    const int *__restrict__ target_mols_offsets, // [num_mols + 1]
+    const double *__restrict__ coords,           // [N, 3]
+    const double *__restrict__ params,           // [N, PARAMS_PER_ATOM]
+    const double *__restrict__ box,              // [3, 3],
+    const RealType beta,
+    const RealType cutoff_squared,
+    __int128 *__restrict__ output_energies // [num_target_atoms, gridDim.x]
+) {
+    static_assert(THREADS <= 256 && (THREADS & (THREADS - 1)) == 0);
+    volatile __shared__ __int128 block_energy_buffer[THREADS];
+
+    int row_idx = blockIdx.y;
+    if (row_idx >= num_target_atoms) {
+        return;
+    }
+    const RealType bx = box[0 * 3 + 0];
+    const RealType by = box[1 * 3 + 1];
+    const RealType bz = box[2 * 3 + 2];
+
+    const RealType inv_bx = 1 / bx;
+    const RealType inv_by = 1 / by;
+    const RealType inv_bz = 1 / bz;
+
+    const int atom_i_idx = target_atoms[row_idx];
+    const int mol_i_idx = target_mols[row_idx];
+
+    const int min_mol_offset = target_mols_offsets[mol_i_idx];
+    const int max_mol_offset = target_mols_offsets[mol_i_idx + 1];
+    const int min_atom_idx = target_atoms[min_mol_offset];
+    const int max_atom_idx = target_atoms[max_mol_offset - 1];
+
+    int params_i_idx = atom_i_idx * PARAMS_PER_ATOM;
+    int charge_param_idx_i = params_i_idx + PARAM_OFFSET_CHARGE;
+    int lj_param_idx_sig_i = params_i_idx + PARAM_OFFSET_SIG;
+    int lj_param_idx_eps_i = params_i_idx + PARAM_OFFSET_EPS;
+    int w_param_idx_i = params_i_idx + PARAM_OFFSET_W;
+
+    RealType qi = params[charge_param_idx_i];
+    RealType sig_i = params[lj_param_idx_sig_i];
+    RealType eps_i = params[lj_param_idx_eps_i];
+    RealType w_i = params[w_param_idx_i];
+
+    RealType ci_x = coords[atom_i_idx * 3 + 0];
+    RealType ci_y = coords[atom_i_idx * 3 + 1];
+    RealType ci_z = coords[atom_i_idx * 3 + 2];
+
+    int atom_j_idx = blockIdx.x * blockDim.x + threadIdx.x;
+    // Zero out the energy buffer
+    block_energy_buffer[threadIdx.x] = 0;
+    while (atom_j_idx < N) {
+        // The two atoms are in the same molecule, don't compute the energies
+        if (!(atom_j_idx >= min_atom_idx && atom_j_idx <= max_atom_idx)) {
+
+            int params_j_idx = atom_j_idx * PARAMS_PER_ATOM;
+            int charge_param_idx_j = params_j_idx + PARAM_OFFSET_CHARGE;
+            int lj_param_idx_sig_j = params_j_idx + PARAM_OFFSET_SIG;
+            int lj_param_idx_eps_j = params_j_idx + PARAM_OFFSET_EPS;
+            int w_param_idx_j = params_j_idx + PARAM_OFFSET_W;
+
+            RealType qj = params[charge_param_idx_j];
+            RealType sig_j = params[lj_param_idx_sig_j];
+            RealType eps_j = params[lj_param_idx_eps_j];
+            RealType w_j = params[w_param_idx_j];
+
+            RealType cj_x = coords[atom_j_idx * 3 + 0];
+            RealType cj_y = coords[atom_j_idx * 3 + 1];
+            RealType cj_z = coords[atom_j_idx * 3 + 2];
+
+            RealType delta_x = ci_x - cj_x;
+            RealType delta_y = ci_y - cj_y;
+            RealType delta_z = ci_z - cj_z;
+            RealType delta_w = w_i - w_j;
+
+            delta_x -= bx * nearbyint(delta_x * inv_bx);
+            delta_y -= by * nearbyint(delta_y * inv_by);
+            delta_z -= bz * nearbyint(delta_z * inv_bz);
+
+            RealType d2ij = delta_x * delta_x + delta_y * delta_y + delta_z * delta_z + delta_w * delta_w;
+
+            if (d2ij < cutoff_squared) {
+                RealType u;
+                RealType delta_prefactor;
+                RealType ebd;
+                RealType dij;
+                RealType inv_dij;
+                RealType inv_d2ij;
+                compute_electrostatics<RealType, true>(
+                    1.0, qi, qj, d2ij, beta, dij, inv_dij, inv_d2ij, ebd, delta_prefactor, u);
+
+                // lennard jones force
+                if (eps_i != 0 && eps_j != 0) {
+                    RealType sig_grad;
+                    RealType eps_grad;
+                    compute_lj<RealType, true>(
+                        1.0, eps_i, eps_j, sig_i, sig_j, inv_dij, inv_d2ij, u, delta_prefactor, sig_grad, eps_grad);
+                }
+                // Store the atom by atom energy
+                block_energy_buffer[threadIdx.x] = FLOAT_TO_FIXED_ENERGY<RealType>(u);
+            }
+        }
+        // Sync to ensure the shared buffers are populated
+        __syncthreads();
+
+        block_energy_reduce<THREADS>(block_energy_buffer, threadIdx.x);
+
+        if (threadIdx.x == 0) {
+            output_energies[blockIdx.y * gridDim.x + blockIdx.x] += block_energy_buffer[0];
+        }
+        // Sync the threads so threads don't move on and stomp on the block energy buffer
+        __syncthreads();
+
+        atom_j_idx += gridDim.x * blockDim.x;
+        // Always zero before the end of the loop, in case one thread no longer loops
+        block_energy_buffer[threadIdx.x] = 0;
+    }
+}
+
+template <typename RealType, int BLOCK_SIZE>
+void __global__ k_accumulate_atom_energies_to_per_mol_energies(
+    const int target_atoms,
+    const int target_mols,
+    const int *__restrict__ mol_idxs,               // [target_atoms]
+    const int *__restrict__ mol_offsets,            // [target_mols + 1]
+    const __int128 *__restrict__ per_atom_energies, // [target_atoms, BLOCK_SIZE]
+    __int128 *__restrict__ per_mol_energies) {
+    const int idx = blockIdx.x * blockDim.x + threadIdx.x;
+
+    if (idx >= target_mols) {
+        return;
+    }
+
+    __int128 energy_accumulator = 0;
+
+    const int mol_start = mol_offsets[idx];
+    const int mol_end = mol_offsets[idx + 1];
+
+    // TBD Parallelize
+    for (int i = mol_start; i < mol_end; i++) {
+        for (int j = 0; j < BLOCK_SIZE; j++) {
+            energy_accumulator += per_atom_energies[i * BLOCK_SIZE + j];
+        }
+    }
+
+    per_mol_energies[idx] = energy_accumulator;
+}
+
 } // namespace timemachine
