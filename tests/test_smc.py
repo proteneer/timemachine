@@ -17,6 +17,7 @@ from timemachine.md.smc import (
     identity_resample,
     multinomial_resample,
     sequential_monte_carlo,
+    stratified_resample,
 )
 from timemachine.testsystems.gaussian1d import make_gaussian_testsystem
 
@@ -37,7 +38,9 @@ def generate_log_weights(n):
     return log_weights
 
 
-@pytest.mark.parametrize("resampling_fxn", [identity_resample, multinomial_resample, conditional_multinomial_resample])
+@pytest.mark.parametrize(
+    "resampling_fxn", [identity_resample, multinomial_resample, conditional_multinomial_resample, stratified_resample]
+)
 def test_resampler(resampling_fxn: Resampler):
     """On a collection of random log_weights vectors of varying size, assert that:
     * total weight before and after resampling are consistent, and
