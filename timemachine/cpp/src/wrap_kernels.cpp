@@ -226,12 +226,7 @@ template <typename RealType> void declare_nonbonded_mol_energy(py::module &m, co
             py::init([](const int N,
                         const std::vector<std::vector<int>> target_mols,
                         const double beta,
-                        const double cutoff) {
-                printf("New class\n");
-                auto val = new Class(N, target_mols, beta, cutoff);
-                printf("Made\n");
-                return val;
-            }),
+                        const double cutoff) { return new Class(N, target_mols, beta, cutoff); }),
             py::arg("N"),
             py::arg("target_mols"),
             py::arg("beta"),
