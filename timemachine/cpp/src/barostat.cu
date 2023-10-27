@@ -4,8 +4,7 @@
 #include "fixed_point.hpp"
 #include "gpu_utils.cuh"
 #include "math_utils.cuh"
-#include <algorithm>
-#include <set>
+#include "mol_utils.hpp"
 #include <stdio.h>
 #include <variant>
 
@@ -45,23 +44,11 @@ MonteCarloBarostat<RealType>::MonteCarloBarostat(
 
     const int num_mols = group_idxs_.size();
 
-    std::set<int> group_set;
-    for (int i = 0; i < num_mols; i++) {
-        std::vector<int> atoms = group_idxs[i];
-        const int num_atoms = atoms.size();
-        num_grouped_atoms_ += num_atoms;
-        for (int j = 0; j < num_atoms; j++) {
-            int idx = atoms[j];
-            if (idx < 0 || idx >= N_) {
-                throw std::runtime_error("Grouped indices must be between 0 and N");
-            }
-            group_set.insert(idx);
-        }
-    }
-    // Verify that all of the group indices are unique
-    if (group_set.size() != num_grouped_atoms_) {
-        throw std::runtime_error("All grouped indices must be unique");
-    }
+    verify_group_idxs(N, group_idxs);
+    // Array of flattened atom indices, mol indices and mol offsets
+    std::array<std::vector<int>, 3> flattened_groups = prepare_group_idxs_for_gpu(group_idxs_);
+
+    num_grouped_atoms_ = flattened_groups[0].size();
 
     curandErrchk(curandCreateGenerator(&cr_rng_, CURAND_RNG_PSEUDO_DEFAULT));
     cudaSafeMalloc(&d_rand_, RANDOM_BATCH_SIZE * 2 * sizeof(*d_rand_));
@@ -87,29 +74,26 @@ MonteCarloBarostat<RealType>::MonteCarloBarostat(
         d_volume_scale_, &initial_volume_scale_factor, 1 * sizeof(*d_volume_scale_), cudaMemcpyHostToDevice));
 
     cudaSafeMalloc(&d_centroids_, num_mols * 3 * sizeof(*d_centroids_));
-    cudaSafeMalloc(&d_atom_idxs_, num_grouped_atoms_ * sizeof(*d_atom_idxs_));
-    cudaSafeMalloc(&d_mol_idxs_, num_grouped_atoms_ * sizeof(*d_mol_idxs_));
     cudaSafeMalloc(&d_mol_offsets_, (num_mols + 1) * sizeof(*d_mol_offsets_));
 
-    int offset = 0;
-    int mol_offsets[num_mols + 1];
-    int mol_idxs[num_grouped_atoms_];
-    int atom_idxs[num_grouped_atoms_];
-    for (int i = 0; i < num_mols; i++) {
-        std::vector<int> atoms = group_idxs[i];
-        mol_offsets[i] = offset;
-        int num_atoms = atoms.size();
-        for (int j = 0; j < num_atoms; j++) {
-            mol_idxs[offset + j] = i;
-            atom_idxs[offset + j] = atoms[j];
-        }
-        offset += num_atoms;
-    }
-    mol_offsets[num_mols] = offset;
-    gpuErrchk(cudaMemcpy(d_mol_idxs_, mol_idxs, num_grouped_atoms_ * sizeof(*d_mol_idxs_), cudaMemcpyHostToDevice));
-    gpuErrchk(cudaMemcpy(d_atom_idxs_, atom_idxs, num_grouped_atoms_ * sizeof(*d_atom_idxs_), cudaMemcpyHostToDevice));
-    gpuErrchk(
-        cudaMemcpy(d_mol_offsets_, mol_offsets, (num_mols + 1) * sizeof(*d_mol_offsets_), cudaMemcpyHostToDevice));
+    cudaSafeMalloc(&d_atom_idxs_, num_grouped_atoms_ * sizeof(*d_atom_idxs_));
+    cudaSafeMalloc(&d_mol_idxs_, num_grouped_atoms_ * sizeof(*d_mol_idxs_));
+
+    gpuErrchk(cudaMemcpy(
+        d_atom_idxs_,
+        &flattened_groups[0][0],
+        flattened_groups[1].size() * sizeof(*d_atom_idxs_),
+        cudaMemcpyHostToDevice));
+    gpuErrchk(cudaMemcpy(
+        d_mol_idxs_,
+        &flattened_groups[1][0],
+        flattened_groups[0].size() * sizeof(*d_mol_idxs_),
+        cudaMemcpyHostToDevice));
+    gpuErrchk(cudaMemcpy(
+        d_mol_offsets_,
+        &flattened_groups[2][0],
+        flattened_groups[2].size() * sizeof(*d_mol_offsets_),
+        cudaMemcpyHostToDevice));
 
     this->reset_counters();
 };
