@@ -325,7 +325,7 @@ void __device__ v_nonbonded_unified(
     }
 }
 
-template <typename RealType, int THREADS, bool COMPUTE_U, bool COMPUTE_DU_DX, bool COMPUTE_DU_DP>
+template <typename RealType, int THREADS_PER_BLOCK, bool COMPUTE_U, bool COMPUTE_DU_DX, bool COMPUTE_DU_DP>
 void __global__ k_nonbonded_unified(
     const int N,  // Number of atoms
     const int NR, // Number of row indices
@@ -342,9 +342,9 @@ void __global__ k_nonbonded_unified(
     unsigned long long *__restrict__ du_dp,
     __int128 *__restrict__ u_buffer // [blockDim.x]
 ) {
-    static_assert(THREADS <= 256 && (THREADS & (THREADS - 1)) == 0);
+    static_assert(THREADS_PER_BLOCK <= 256 && (THREADS_PER_BLOCK & (THREADS_PER_BLOCK - 1)) == 0);
     __shared__ box_cache<RealType> shared_box;
-    __shared__ __int128 block_energy_buffer[THREADS];
+    __shared__ __int128 block_energy_buffer[THREADS_PER_BLOCK];
     if (COMPUTE_U) {
         block_energy_buffer[threadIdx.x] = 0; // Zero out the energy buffer
     }
@@ -422,7 +422,7 @@ void __global__ k_nonbonded_unified(
         // Sync to ensure the shared buffers are populated
         __syncthreads();
 
-        block_energy_reduce<THREADS>(block_energy_buffer, threadIdx.x);
+        block_energy_reduce<THREADS_PER_BLOCK>(block_energy_buffer, threadIdx.x);
 
         if (threadIdx.x == 0) {
             u_buffer[blockIdx.x] = block_energy_buffer[0];
@@ -430,7 +430,7 @@ void __global__ k_nonbonded_unified(
     }
 }
 
-template <typename RealType, int THREADS>
+template <typename RealType, int THREADS_PER_BLOCK>
 void __global__ k_compute_nonbonded_target_atom_energies(
     const int N,
     const int num_target_atoms,
@@ -444,8 +444,8 @@ void __global__ k_compute_nonbonded_target_atom_energies(
     const RealType cutoff_squared,
     __int128 *__restrict__ output_energies // [num_target_atoms, gridDim.x]
 ) {
-    static_assert(THREADS <= 256 && (THREADS & (THREADS - 1)) == 0);
-    volatile __shared__ __int128 block_energy_buffer[THREADS];
+    static_assert(THREADS_PER_BLOCK <= 256 && (THREADS_PER_BLOCK & (THREADS_PER_BLOCK - 1)) == 0);
+    volatile __shared__ __int128 block_energy_buffer[THREADS_PER_BLOCK];
 
     int row_idx = blockIdx.y;
     if (row_idx >= num_target_atoms) {
@@ -540,7 +540,7 @@ void __global__ k_compute_nonbonded_target_atom_energies(
         // Sync to ensure the shared buffers are populated
         __syncthreads();
 
-        block_energy_reduce<THREADS>(block_energy_buffer, threadIdx.x);
+        block_energy_reduce<THREADS_PER_BLOCK>(block_energy_buffer, threadIdx.x);
 
         if (threadIdx.x == 0) {
             output_energies[blockIdx.y * gridDim.x + blockIdx.x] += block_energy_buffer[0];
