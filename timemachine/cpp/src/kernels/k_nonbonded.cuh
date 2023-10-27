@@ -487,7 +487,8 @@ void __global__ k_compute_nonbonded_target_atom_energies(
     block_energy_buffer[threadIdx.x] = 0;
     while (atom_j_idx < N) {
         // The two atoms are in the same molecule, don't compute the energies
-        if (!(atom_j_idx >= min_atom_idx && atom_j_idx <= max_atom_idx)) {
+        // requires that the atom indices in each target mol is consecutive
+        if (atom_j_idx < min_atom_idx || atom_j_idx > max_atom_idx) {
 
             int params_j_idx = atom_j_idx * PARAMS_PER_ATOM;
             int charge_param_idx_j = params_j_idx + PARAM_OFFSET_CHARGE;
