@@ -52,7 +52,7 @@ void NonbondedMolEnergyPotential<RealType>::mol_energies_device(
 
     const int tpb = THREADS_PER_BLOCK;
     // Brute force num_target_atoms X all atoms
-    dim3 dimGrid(BLOCK_SIZE, static_cast<int>(d_target_atom_idxs_.length), 1);
+    dim3 dimGrid(BLOCK_SIZE, BLOCK_SIZE, 1);
 
     gpuErrchk(cudaMemsetAsync(d_atom_energy_buffer_.data, 0, d_atom_energy_buffer_.size(), stream));
 
