@@ -9,6 +9,7 @@ from timemachine.md import builders
 from timemachine.md.barostat.utils import get_bond_list, get_group_indices
 from timemachine.md.exchange.exchange_mover import BDExchangeMove, randomly_rotate_and_translate
 from timemachine.potentials import HarmonicBond, Nonbonded
+from timemachine.testsystems.dhfr import setup_dhfr
 
 
 @pytest.mark.memcheck
@@ -183,3 +184,44 @@ def test_nonbonded_mol_energy_random_moves(num_mols, moves, precision, atol, rto
         non_nan_idx = np.isfinite(test_mol_energies[large_energy_indices])
         # Large energies are not reliable, so beyond the threshold we simply verify that both the reference and test both exceed the threshold
         assert np.all(np.abs(test_mol_energies[large_energy_indices][non_nan_idx]) >= threshold)
+
+
+@pytest.mark.parametrize("precision,atol,rtol", [(np.float64, 1e-8, 1e-8), (np.float32, 5e-4, 3e-3)])
+def test_nonbonded_mol_energy_matches_exchange_mover_batch_U_in_complex(precision, atol, rtol):
+    """Test that computing the per water energies of a system with a complex is equivalent."""
+    bps, _, conf, box = setup_dhfr()
+    nb = next(bp for bp in bps if isinstance(bp.potential, Nonbonded))
+    bond_pot = next(bp for bp in bps if isinstance(bp.potential, HarmonicBond)).potential
+
+    all_group_idxs = get_group_indices(get_bond_list(bond_pot), conf.shape[0])
+
+    # only act on waters
+    group_idxs = [group for group in all_group_idxs if len(group) == 3]
+
+    N = conf.shape[0]
+
+    params = nb.params
+
+    beta = nb.potential.beta
+    cutoff = nb.potential.cutoff
+    klass = custom_ops.NonbondedMolEnergyPotential_f32
+    if precision == np.float64:
+        klass = custom_ops.NonbondedMolEnergyPotential_f64
+
+    mover = BDExchangeMove(beta, cutoff, params, group_idxs, DEFAULT_TEMP)
+
+    mol_by_mol_pot = klass(N, group_idxs, beta, cutoff)
+
+    def u_ref(x, box, params):
+        return mover.batch_U_fn(x, box, mover.all_a_idxs, mover.all_b_idxs)
+
+    def u_test(x, box, params):
+        mol_energies = mol_by_mol_pot.execute(x, params, box)
+        assert mol_energies.shape == (len(group_idxs),)
+
+        # Make sure running again gives bitwise identical results
+        comp_mol_energies = mol_by_mol_pot.execute(x, params, box)
+        np.testing.assert_array_equal(mol_energies, comp_mol_energies)
+        return mol_energies
+
+    np.testing.assert_allclose(u_test(conf, box, params), u_ref(conf, box, params), rtol=rtol, atol=atol)
