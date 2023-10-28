@@ -1,3 +1,5 @@
+from importlib import resources
+
 import numpy as np
 import pytest
 
@@ -9,7 +11,6 @@ from timemachine.md import builders
 from timemachine.md.barostat.utils import get_bond_list, get_group_indices
 from timemachine.md.exchange.exchange_mover import BDExchangeMove, randomly_rotate_and_translate
 from timemachine.potentials import HarmonicBond, Nonbonded
-from timemachine.testsystems.dhfr import setup_dhfr
 
 
 @pytest.mark.memcheck
@@ -189,7 +190,10 @@ def test_nonbonded_mol_energy_random_moves(num_mols, moves, precision, atol, rto
 @pytest.mark.parametrize("precision,atol,rtol", [(np.float64, 1e-8, 1e-8), (np.float32, 5e-4, 3e-3)])
 def test_nonbonded_mol_energy_matches_exchange_mover_batch_U_in_complex(precision, atol, rtol):
     """Test that computing the per water energies of a system with a complex is equivalent."""
-    bps, _, conf, box = setup_dhfr()
+    ff = Forcefield.load_default()
+    with resources.path("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as path_to_ligand:
+        complex_system, conf, box, _, _ = builders.build_protein_system(str(path_to_ligand), ff.protein_ff, ff.water_ff)
+    bps, _ = openmm_deserializer.deserialize_system(complex_system, cutoff=1.2)
     nb = next(bp for bp in bps if isinstance(bp.potential, Nonbonded))
     bond_pot = next(bp for bp in bps if isinstance(bp.potential, HarmonicBond)).potential
 
