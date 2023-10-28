@@ -554,13 +554,15 @@ void __global__ k_compute_nonbonded_target_atom_energies(
     }
 }
 
-template <typename RealType, int BLOCK_SIZE>
+// NUM_BLOCKS is the number of blocks that k_compute_nonbonded_target_atom_energies is run with. Decides the number
+// of values that need to be accumulated per atom.
+template <typename RealType, int NUM_BLOCKS>
 void __global__ k_accumulate_atom_energies_to_per_mol_energies(
     const int target_atoms,
     const int target_mols,
     const int *__restrict__ mol_idxs,               // [target_atoms]
     const int *__restrict__ mol_offsets,            // [target_mols + 1]
-    const __int128 *__restrict__ per_atom_energies, // [target_atoms, BLOCK_SIZE]
+    const __int128 *__restrict__ per_atom_energies, // [target_atoms, NUM_BLOCKS]
     __int128 *__restrict__ per_mol_energies) {
     const int idx = blockIdx.x * blockDim.x + threadIdx.x;
 
@@ -575,8 +577,8 @@ void __global__ k_accumulate_atom_energies_to_per_mol_energies(
 
     // TBD Parallelize
     for (int i = mol_start; i < mol_end; i++) {
-        for (int j = 0; j < BLOCK_SIZE; j++) {
-            energy_accumulator += per_atom_energies[i * BLOCK_SIZE + j];
+        for (int j = 0; j < NUM_BLOCKS; j++) {
+            energy_accumulator += per_atom_energies[i * NUM_BLOCKS + j];
         }
     }
 
