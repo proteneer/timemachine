@@ -60,6 +60,7 @@ def test_exchange():
         type=str,
         help='Allowed values "targeted" and "untargeted"',
         required=True,
+        choices=["targeted", "untargeted"],
     )
     parser.add_argument(
         "--use_hmr",

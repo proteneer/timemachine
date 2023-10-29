@@ -525,13 +525,16 @@ def assert_group_idxs_are_equal(set_a, set_b):
 
 @pytest.mark.nocuda
 def test_get_group_indices():
-    # test that we generate correct group indices even when
-    # there are disconnected atoms (eg. ions) present
+    """
+    Test that we generate correct group indices even when there are disconnected atoms (eg. ions) present
 
-    bond_idxs = [[0, 3], [3, 1], [5, 2]]
+    Note that indices must be consecutive within each mol
+    """
+
+    bond_idxs = [[1, 0], [1, 2], [5, 6]]
     test_idxs = get_group_indices(bond_idxs, num_atoms=7)
 
-    ref_idxs = [(0, 1, 3), (2, 5), (4,), (6,)]
+    ref_idxs = [(0, 1, 2), (5, 6), (3,), (4,)]
     assert_group_idxs_are_equal(ref_idxs, test_idxs)
 
     test_idxs = get_group_indices([], num_atoms=4)
@@ -543,8 +546,8 @@ def test_get_group_indices():
     assert_group_idxs_are_equal(ref_idxs, test_idxs)
 
     # slightly larger connected group
-    test_idxs = get_group_indices([[0, 3], [2, 4], [4, 3]], num_atoms=5)
-    ref_idxs = [(0, 2, 3, 4), (1,)]
+    test_idxs = get_group_indices([[0, 1], [1, 3], [3, 2]], num_atoms=5)
+    ref_idxs = [(0, 1, 2, 3), (4,)]
     assert_group_idxs_are_equal(ref_idxs, test_idxs)
 
     with pytest.raises(AssertionError):

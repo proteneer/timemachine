@@ -66,6 +66,7 @@ pybind11_add_module(${LIBRARY_NAME} SHARED NO_EXTRAS
   src/centroid_restraint.cu
   src/gpu_utils.cu
   src/vendored/hilbert.cpp
+  src/mol_utils.cpp
   src/nonbonded_common.cpp
   src/nonbonded_precomputed.cu
   src/nonbonded_all_pairs.cu
@@ -98,6 +99,7 @@ pybind11_add_module(${LIBRARY_NAME} SHARED NO_EXTRAS
   src/streamed_potential_runner.cu
   src/stream_manager.cu
   src/weighted_random_sampler.cu
+  src/nonbonded_mol_energy.cu
   src/kernels/k_hilbert.cu
   src/kernels/k_indices.cu
 )

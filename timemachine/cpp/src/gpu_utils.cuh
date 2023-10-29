@@ -108,11 +108,12 @@ double __device__ __forceinline__ radd_rn(double a, double b) { return __dadd_rn
 
 // If this were not int128s, we could do __shfl_down_sync, but only supports up to 64 values
 // For more details reference the PDF in the docstring for k_accumulate_energy
+template <unsigned int THREADS_PER_BLOCK>
 __device__ __forceinline__ void energy_warp_reduce(volatile __int128 *shared_data, int thread_idx) {
     // Repeatedly sum up the two halfs of the shared data
 #pragma unroll 6
     for (int i = 32; i > 0; i /= 2) {
-        if (thread_idx < i) {
+        if (thread_idx < i && thread_idx + i < THREADS_PER_BLOCK) {
             shared_data[thread_idx] = shared_data[thread_idx] + shared_data[thread_idx + i];
         }
         __syncwarp();
@@ -124,37 +125,39 @@ __device__ __forceinline__ void energy_warp_reduce(volatile __int128 *shared_dat
 // values repeatedly until the final warp level reduction which stores the final accumulated value in `shared_data[0]`.
 // For more details reference the PDF in the docstring for k_accumulate_energy
 template <unsigned int THREADS_PER_BLOCK>
-__device__ __forceinline__ void block_energy_reduce(volatile __int128 *shared_data, int tid) {
+__device__ __forceinline__ void block_energy_reduce(
+    volatile __int128 *shared_data, // [THREADS_PER_BLOCK]
+    int tid) {
     static_assert(THREADS_PER_BLOCK <= 1024 && (THREADS_PER_BLOCK & (THREADS_PER_BLOCK - 1)) == 0);
 
     // For larger blocks larger than a warp
     if (THREADS_PER_BLOCK >= 1024) {
-        if (tid < 512) {
+        if (tid < 512 && tid + 512 < THREADS_PER_BLOCK) {
             shared_data[tid] += shared_data[tid + 512];
         }
         __syncthreads();
     }
     if (THREADS_PER_BLOCK >= 512) {
-        if (tid < 256) {
+        if (tid < 256 && tid + 256 < THREADS_PER_BLOCK) {
             shared_data[tid] += shared_data[tid + 256];
         }
         __syncthreads();
     }
     if (THREADS_PER_BLOCK >= 256) {
-        if (tid < 128) {
+        if (tid < 128 && tid + 128 < THREADS_PER_BLOCK) {
             shared_data[tid] += shared_data[tid + 128];
         }
         __syncthreads();
     }
     if (THREADS_PER_BLOCK >= 128) {
-        if (tid < 64) {
+        if (tid < 64 && tid + 64 < THREADS_PER_BLOCK) {
             shared_data[tid] += shared_data[tid + 64];
         }
         __syncthreads();
     }
 
     if (tid < WARP_SIZE) {
-        energy_warp_reduce(shared_data, tid);
+        energy_warp_reduce<THREADS_PER_BLOCK>(shared_data, tid);
     }
 }
 

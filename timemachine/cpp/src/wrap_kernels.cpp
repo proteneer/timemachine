@@ -27,6 +27,7 @@
 #include "nonbonded_all_pairs.hpp"
 #include "nonbonded_common.hpp"
 #include "nonbonded_interaction_group.hpp"
+#include "nonbonded_mol_energy.hpp"
 #include "nonbonded_pair_list.hpp"
 #include "nonbonded_precomputed.hpp"
 #include "periodic_torsion.hpp"
@@ -213,6 +214,68 @@ template <typename RealType> void declare_weighted_random_sampler(py::module &m,
         -------
         Array of sample indices
             Shape (num_samples, )
+        )pbdoc");
+}
+
+template <typename RealType> void declare_nonbonded_mol_energy(py::module &m, const char *typestr) {
+
+    using Class = NonbondedMolEnergyPotential<RealType>;
+    std::string pyclass_name = std::string("NonbondedMolEnergyPotential_") + typestr;
+    py::class_<Class, std::shared_ptr<Class>>(m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
+        .def(
+            py::init([](const int N,
+                        const std::vector<std::vector<int>> target_mols,
+                        const double beta,
+                        const double cutoff) { return new Class(N, target_mols, beta, cutoff); }),
+            py::arg("N"),
+            py::arg("target_mols"),
+            py::arg("beta"),
+            py::arg("cutoff"))
+        .def(
+            "execute",
+            [](Class &sampler,
+               const py::array_t<double, py::array::c_style> &coords,
+               const py::array_t<double, py::array::c_style> &params,
+               const py::array_t<double, py::array::c_style> &box) -> py::array_t<double, py::array::c_style> {
+                verify_coords_and_box(coords, box);
+                int N = coords.shape()[0];
+                if (N != params.shape()[0]) {
+                    throw std::runtime_error("params N != coords N");
+                }
+
+                int P = params.size();
+
+                std::vector<__int128> fixed_energies =
+                    sampler.mol_energies_host(N, P, coords.data(), params.data(), box.data());
+
+                py::array_t<double, py::array::c_style> py_u(fixed_energies.size());
+
+                for (unsigned int i = 0; i < fixed_energies.size(); i++) {
+                    py_u.mutable_data()[i] = convert_energy_to_fp(fixed_energies[i]);
+                }
+                return py_u;
+            },
+            py::arg("coords"),
+            py::arg("params"),
+            py::arg("box"),
+            R"pbdoc(
+        Compute the energies of the target molecules
+
+        Parameters
+        ----------
+        coords: NDArray
+            A set of coordinates.
+
+        params: NDArray
+            A set of nonbonded parameters for all atoms.
+
+        box: NDArray
+            A box.
+
+        Returns
+        -------
+        Array of energies
+            Shape (num_mols, )
         )pbdoc");
 }
 
@@ -1595,6 +1658,9 @@ PYBIND11_MODULE(custom_ops, m) {
 
     declare_log_sum_exp<double>(m, "f64");
     declare_log_sum_exp<float>(m, "f32");
+
+    declare_nonbonded_mol_energy<double>(m, "f64");
+    declare_nonbonded_mol_energy<float>(m, "f32");
 
     declare_context(m);
 }

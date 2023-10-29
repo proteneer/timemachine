@@ -101,8 +101,10 @@ def test_image_frame_energy_invariance():
 
     bond_idxs = []
     atom_idxs = np.arange(n_atoms)
-    for _ in range(n_bonds):
-        bond_idxs.append(np.random.choice(atom_idxs, size=2, replace=False))
+    # Get a list of atoms to make up the first element of the bonds, then increment by one to ensure consecutive
+    bond_atoms = np.random.choice(atom_idxs[:-1], size=n_bonds, replace=False)
+    for first_bond in bond_atoms:
+        bond_idxs.append([first_bond, first_bond + 1])
 
     group_idxs = get_group_indices(bond_idxs, n_atoms)
     new_coords = image_frame(group_idxs, old_coords, box)
