@@ -3,10 +3,11 @@ from importlib import resources
 import numpy as np
 import pytest
 
-from timemachine.constants import DEFAULT_TEMP
+from timemachine.constants import DEFAULT_PRESSURE, DEFAULT_TEMP
+from timemachine.fe.model_utils import apply_hmr
 from timemachine.ff import Forcefield
 from timemachine.ff.handlers import openmm_deserializer
-from timemachine.lib import custom_ops
+from timemachine.lib import LangevinIntegrator, MonteCarloBarostat, custom_ops
 from timemachine.md import builders
 from timemachine.md.barostat.utils import get_bond_list, get_group_indices
 from timemachine.md.exchange.exchange_mover import BDExchangeMove, randomly_rotate_and_translate
@@ -187,20 +188,59 @@ def test_nonbonded_mol_energy_random_moves(num_mols, moves, precision, atol, rto
         assert np.all(np.abs(test_mol_energies[large_energy_indices][non_nan_idx]) >= threshold)
 
 
-@pytest.mark.parametrize("precision,atol,rtol", [(np.float64, 1e-8, 1e-8), (np.float32, 5e-4, 3e-3)])
+@pytest.mark.parametrize("precision,atol,rtol", [(np.float64, 1e-8, 1e-8), (np.float32, 1e-4, 3e-4)])
 def test_nonbonded_mol_energy_matches_exchange_mover_batch_U_in_complex(precision, atol, rtol):
     """Test that computing the per water energies of a system with a complex is equivalent."""
     ff = Forcefield.load_default()
     with resources.path("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as path_to_ligand:
         complex_system, conf, box, _, _ = builders.build_protein_system(str(path_to_ligand), ff.protein_ff, ff.water_ff)
-    bps, _ = openmm_deserializer.deserialize_system(complex_system, cutoff=1.2)
+    bps, masses = openmm_deserializer.deserialize_system(complex_system, cutoff=1.2)
     nb = next(bp for bp in bps if isinstance(bp.potential, Nonbonded))
     bond_pot = next(bp for bp in bps if isinstance(bp.potential, HarmonicBond)).potential
 
-    all_group_idxs = get_group_indices(get_bond_list(bond_pot), conf.shape[0])
+    bond_list = get_bond_list(bond_pot)
+    all_group_idxs = get_group_indices(bond_list, conf.shape[0])
+
+    # Equilibrate the system a bit before hand, which reduces clashes in the system which results greater differences
+    # between the reference and test case.
+    seed = 2023
+    dt = 1.5e-3
+    temperature = DEFAULT_TEMP
+    pressure = DEFAULT_PRESSURE
+
+    masses = apply_hmr(masses, bond_list)
+    intg = LangevinIntegrator(temperature, dt, 1.0, np.array(masses), seed).impl()
+
+    bound_impls = []
+
+    for potential in bps:
+        bound_impls.append(potential.to_gpu(precision=np.float32).bound_impl)  # get the bound implementation
+
+    barostat_interval = 5
+    baro = MonteCarloBarostat(
+        conf.shape[0],
+        pressure,
+        temperature,
+        all_group_idxs,
+        barostat_interval,
+        seed,
+    )
+    baro_impl = baro.impl(bound_impls)
+
+    ctxt = custom_ops.Context(
+        conf,
+        np.zeros_like(conf),
+        box,
+        intg,
+        bound_impls,
+        barostat=baro_impl,
+    )
+    ctxt.multiple_steps(1000)
+    conf = ctxt.get_x_t()
+    box = ctxt.get_box()
 
     # only act on waters
-    group_idxs = [group for group in all_group_idxs if len(group) == 3]
+    water_groups = [group for group in all_group_idxs if len(group) == 3]
 
     N = conf.shape[0]
 
@@ -212,16 +252,16 @@ def test_nonbonded_mol_energy_matches_exchange_mover_batch_U_in_complex(precisio
     if precision == np.float64:
         klass = custom_ops.NonbondedMolEnergyPotential_f64
 
-    mover = BDExchangeMove(beta, cutoff, params, group_idxs, DEFAULT_TEMP)
+    mover = BDExchangeMove(beta, cutoff, params, water_groups, DEFAULT_TEMP)
 
-    mol_by_mol_pot = klass(N, group_idxs, beta, cutoff)
+    mol_by_mol_pot = klass(N, water_groups, beta, cutoff)
 
     def u_ref(x, box, params):
         return mover.batch_U_fn(x, box, mover.all_a_idxs, mover.all_b_idxs)
 
     def u_test(x, box, params):
         mol_energies = mol_by_mol_pot.execute(x, params, box)
-        assert mol_energies.shape == (len(group_idxs),)
+        assert mol_energies.shape == (len(water_groups),)
 
         # Make sure running again gives bitwise identical results
         comp_mol_energies = mol_by_mol_pot.execute(x, params, box)
