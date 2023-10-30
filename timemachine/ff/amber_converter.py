@@ -83,7 +83,6 @@ def dual_sort(src_key, dst_key, src_idx, dst_idx):
 
 def process_ff(args):
     xmldoc = minidom.parse(args.input_path)
-    # forcefield: Dict[str, Any] = {}
 
     # process atom types
     itemlist = xmldoc.getElementsByTagName("Type")
@@ -213,6 +212,7 @@ def process_ff(args):
                     elif cn.nodeName == "Bond" and args.method == "nonbonded":
                         # generate BCCs based on nonbonded atom types formed by the concatenation of q,sig,eps
                         # this roughly generates the correct symmetries (probably at the cost of having more parameters)
+                        # Note: the xml is always ordered Atom tags are before Bond tags
                         src_idx = int(cn.attributes["from"].value)
                         dst_idx = int(cn.attributes["to"].value)
                         src_type = atom_idxs_to_types[src_idx]
