@@ -41,7 +41,7 @@ def randomly_translate(coords, new_loc):
 
 class BDExchangeMove(moves.MonteCarloMove):
     """
-    Untargetted, biased deletion move where we selectively prefer certain waters over others.
+    Untargeted, biased deletion move where we selectively prefer certain waters over others.
     """
 
     def __init__(
@@ -205,7 +205,7 @@ def inner_insertion(radius, center, box):
     xyz = np.random.randn(3)
     n = np.linalg.norm(xyz)
     xyz = xyz / n
-    # (ytz): this might not be inside the box, but it doesnt' matter
+    # (ytz): this might not be inside the box, but it doesn't matter
     # since all of our distances are computed using PBCs
     c = np.cbrt(np.random.rand())
     new_xyz = xyz * c * radius + center
@@ -239,9 +239,9 @@ def get_water_groups(coords, box, center, water_idxs, radius):
 
 class TIBDExchangeMove(BDExchangeMove):
     r"""
-    Targetted Insertion and Biased Deletion Exchange Move
+    Targeted Insertion and Biased Deletion Exchange Move
 
-    Insertions are targetted over two regions V1 and V2 such that V1 is a sphere whose origin
+    Insertions are targeted over two regions V1 and V2 such that V1 is a sphere whose origin
     is at the centroid of a set of indices, and V2 = box - V1.
 
     Deletions are biased such that each water x_i has a weight equal to exp(u_ixn_nrg(x_i, x \ x_i)).
