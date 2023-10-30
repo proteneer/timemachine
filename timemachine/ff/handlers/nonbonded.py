@@ -1,3 +1,4 @@
+import ast
 import base64
 import pickle
 from collections import Counter
@@ -5,9 +6,13 @@ from collections import Counter
 import jax.numpy as jnp
 import networkx as nx
 import numpy as np
+import openmm
+from openmm import app
+from openmm.app.forcefield import ForceField
 from rdkit import Chem
 
 from timemachine import constants
+from timemachine.ff.handlers import openmm_deserializer
 from timemachine.ff.handlers.bcc_aromaticity import AromaticityModel
 from timemachine.ff.handlers.bcc_aromaticity import match_smirks as oe_match_smirks
 from timemachine.ff.handlers.serialize import SerializableMixIn
@@ -504,6 +509,108 @@ class AM1BCCIntraHandler(AM1BCCHandler):
 
 class AM1BCCSolventHandler(AM1BCCHandler):
     pass
+
+
+class EnvironmentBCCHandler(SerializableMixIn):
+    """
+    Applies BCCs to residues in a forcefield.
+    """
+
+    def __init__(self, patterns, params, protein_ff_name, water_ff_name, topology):
+        self.patterns = patterns
+        self.params = np.array(params)
+        self.env_ff = ForceField(protein_ff_name, water_ff_name)
+
+        # nested map of residue names to bonds to param_idxs:
+        # kv = {
+        #    "ACE": {
+        #      (1, 0): bcc_0,
+        #      (2, 3): bcc_0,
+        #      (4, 2): bcc_1,
+        #   },
+        #    "TYR": {
+        #      (6, 2): bcc_0,
+        #      (4, 1): bcc_0,
+        #      ...
+        #   },
+        #   ...
+        # }
+        self.res_to_bonds_to_param_idxs = dict()
+        for param_idx, pattern in enumerate(self.patterns):
+            res = pattern.split()
+            res_name = res[0]
+            # evaluate a string "[(1, 0), (1, 2), (1, 3)]" into actual list
+            bonds = ast.literal_eval(" ".join(res[1:]))
+            if res_name not in self.res_to_bonds_to_param_idxs:
+                self.res_to_bonds_to_param_idxs[res_name] = dict()
+            for bond in bonds:
+                self.res_to_bonds_to_param_idxs[res_name][bond] = param_idx
+
+        # reverse engineered from openmm's Forcefield class
+        self.topology = topology
+        residueTemplates = dict()
+        ignoreExternalBonds = False
+        data = ForceField._SystemData(topology)
+
+        # template_for_residue is list a of _templateData objects,
+        # where the index is the residue index and the value is a template type, which
+        # may be different from the standard residue type in the PDB file itself, eg:
+        # a standard HIS tag in the input PDB is processed into the specific template type:
+        # {HID,HIE,HIP}
+        template_for_residue = self.env_ff._matchAllResiduesToTemplates(
+            data, topology, residueTemplates, ignoreExternalBonds
+        )
+
+        env_system = self.env_ff.createSystem(
+            topology, nonbondedMethod=app.NoCutoff, constraints=None, rigidWater=False
+        )
+
+        self.initial_charges = None
+        for force in env_system.getForces():
+            if isinstance(force, openmm.NonbondedForce):
+                nb_params, _, _, _ = openmm_deserializer.deserialize_nonbonded_force(
+                    force, env_system.getNumParticles()
+                )
+                self.initial_charges = nb_params[:, 0]  # already scaled by sqrt(ONE_4PI_EPS0)
+        assert self.initial_charges is not None
+
+        bond_idxs = []
+        param_idxs = []
+        signs = []
+
+        # find typing information for each bond in the topology
+        for src_atom, dst_atom in topology.bonds():
+            # don't compare name, ASP-ASP would break this when processing the amide C-N bond since
+            # those are not part of the type definitions.
+            if src_atom.residue.index == dst_atom.residue.index:
+                bond_idxs.append((src_atom.index, dst_atom.index))
+                src_res_template_name = template_for_residue[src_atom.residue.index].name
+                dst_res_template_name = template_for_residue[dst_atom.residue.index].name
+                assert src_res_template_name == dst_res_template_name
+                residue_bond_kv = self.res_to_bonds_to_param_idxs[src_res_template_name]
+                # we have to do one extra level of indirection where by we want the src_atom, dst_atom to be matched
+                # to the corresponding src_template_atom, dst_template_atom in the template definitions themselves.
+                tmpl_src_idx, tmpl_dst_idx = data.atomTemplateIndexes[src_atom], data.atomTemplateIndexes[dst_atom]
+                if (tmpl_src_idx, tmpl_dst_idx) in residue_bond_kv:
+                    param_idxs.append(residue_bond_kv[(tmpl_src_idx, tmpl_dst_idx)])
+                    signs.append(1.0)
+                elif (tmpl_dst_idx, tmpl_src_idx) in residue_bond_kv:
+                    param_idxs.append(residue_bond_kv[(tmpl_dst_idx, tmpl_src_idx)])
+                    signs.append(-1.0)
+                else:
+                    assert 0
+
+        self.bond_idxs = np.array(bond_idxs)
+        self.param_idxs = np.array(param_idxs)
+        self.signs = np.array(signs)
+
+    def parameterize(self, params):
+        bond_deltas = params[self.param_idxs] * self.signs
+        final_charges = apply_bond_charge_corrections(
+            self.initial_charges, self.bond_idxs, bond_deltas, runtime_validate=False
+        )
+
+        return final_charges
 
 
 class AM1CCCHandler(SerializableMixIn):
