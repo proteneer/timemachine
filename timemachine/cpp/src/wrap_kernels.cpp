@@ -6,6 +6,7 @@
 #include <set>
 
 #include "barostat.hpp"
+#include "bd_exchange_move.hpp"
 #include "bound_potential.hpp"
 #include "centroid_restraint.hpp"
 #include "chiral_atom_restraint.hpp"
@@ -1496,6 +1497,55 @@ template <typename RealType> void declare_log_sum_exp(py::module &m, const char 
     ;
 }
 
+template <typename RealType> void declare_bias_deletion_exchange_mover(py::module &m, const char *typestr) {
+
+    using Class = BDExchangeMove<RealType>;
+    std::string pyclass_name = std::string("BDExchangeMove_") + typestr;
+    py::class_<Class, std::shared_ptr<Class>>(m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
+        .def(
+            py::init([](const int N,
+                        const std::vector<std::vector<int>> &target_mols,
+                        const std::vector<double> &params,
+                        const double temperature,
+                        const double beta,
+                        const double cutoff,
+                        const int seed) { return new Class(N, target_mols, params, temperature, beta, cutoff, seed); }),
+            py::arg("N"),
+            py::arg("target_mols"),
+            py::arg("params"),
+            py::arg("temperature"),
+            py::arg("nb_beta"),
+            py::arg("cutoff"),
+            py::arg("seed"))
+        .def(
+            "move",
+            [](Class &mover,
+               const py::array_t<double, py::array::c_style> &coords,
+               const py::array_t<double, py::array::c_style> &box,
+               const int n_steps) -> py::tuple {
+                if (n_steps <= 0) {
+                    throw std::runtime_error("n_steps must be greater than 0");
+                }
+                verify_coords_and_box(coords, box);
+                const int N = coords.shape()[0];
+                const int D = coords.shape()[1];
+
+                std::array<std::vector<double>, 2> result = mover.move_host(N, n_steps, coords.data(), box.data());
+
+                py::array_t<double, py::array::c_style> out_x_buffer({N, D});
+                std::memcpy(
+                    out_x_buffer.mutable_data(), result[0].data(), result[0].size() * sizeof(*result[0].data()));
+
+                py::array_t<double, py::array::c_style> box_buffer({D, D});
+                std::memcpy(box_buffer.mutable_data(), result[1].data(), result[1].size() * sizeof(*result[1].data()));
+
+                return py::make_tuple(out_x_buffer, box_buffer);
+            },
+            py::arg("coords"),
+            py::arg("box"),
+            py::arg("n_steps"));
+}
+
 const py::array_t<double, py::array::c_style>
 py_rmsd_align(const py::array_t<double, py::array::c_style> &x1, const py::array_t<double, py::array::c_style> &x2) {
 
@@ -1661,6 +1711,9 @@ PYBIND11_MODULE(custom_ops, m) {
 
     declare_nonbonded_mol_energy<double>(m, "f64");
     declare_nonbonded_mol_energy<float>(m, "f32");
+
+    declare_bias_deletion_exchange_mover<double>(m, "f64");
+    declare_bias_deletion_exchange_mover<float>(m, "f32");
 
     declare_context(m);
 }

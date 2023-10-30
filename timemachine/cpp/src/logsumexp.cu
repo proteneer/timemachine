@@ -63,7 +63,7 @@ void LogSumExp<RealType>::sum_host(const int N, const RealType *h_values, RealTy
     RealType h_intermediate[2];
     d_out.copy_to(h_intermediate);
     // Compute the log and add back in the max value
-    h_out[0] = compute_logsumexp_final(
+    h_out[0] = compute_logsumexp_final<RealType>(
         &h_intermediate[0]); // Compute the log in host space, to be done by the consuming kernel later.
 };
 
