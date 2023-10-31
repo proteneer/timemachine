@@ -224,7 +224,7 @@ template <typename RealType> void declare_nonbonded_mol_energy(py::module &m, co
     py::class_<Class, std::shared_ptr<Class>>(m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
         .def(
             py::init([](const int N,
-                        const std::vector<std::vector<int>> target_mols,
+                        const std::vector<std::vector<int>> &target_mols,
                         const double beta,
                         const double cutoff) { return new Class(N, target_mols, beta, cutoff); }),
             py::arg("N"),
@@ -289,7 +289,7 @@ void declare_context(py::module &m) {
                         const py::array_t<double, py::array::c_style> &v0,
                         const py::array_t<double, py::array::c_style> &box0,
                         std::shared_ptr<Integrator> intg,
-                        std::vector<std::shared_ptr<BoundPotential>> bps,
+                        std::vector<std::shared_ptr<BoundPotential>> &bps,
                         std::optional<std::shared_ptr<MonteCarloBarostat<float>>> barostat) {
                 int N = x0.shape()[0];
                 int D = x0.shape()[1];
@@ -1389,9 +1389,9 @@ void declare_barostat(py::module &m) {
             py::init([](const int N,
                         const double pressure,
                         const double temperature,
-                        std::vector<std::vector<int>> group_idxs,
+                        std::vector<std::vector<int>> &group_idxs,
                         const int frequency,
-                        std::vector<std::shared_ptr<BoundPotential>> bps,
+                        std::vector<std::shared_ptr<BoundPotential>> &bps,
                         const int seed,
                         const bool adaptive_scaling_enabled,
                         const double initial_volume_scale_factor) {
@@ -1450,8 +1450,8 @@ void declare_summed_potential(py::module &m) {
     py::class_<Class, std::shared_ptr<Class>, Potential>(
         m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
         .def(
-            py::init([](std::vector<std::shared_ptr<Potential>> potentials,
-                        std::vector<int> params_sizes,
+            py::init([](std::vector<std::shared_ptr<Potential>> &potentials,
+                        std::vector<int> &params_sizes,
                         bool parallel) { return new SummedPotential(potentials, params_sizes, parallel); }),
 
             py::arg("potentials"),
@@ -1467,7 +1467,7 @@ void declare_fanout_summed_potential(py::module &m) {
     py::class_<Class, std::shared_ptr<Class>, Potential>(
         m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
         .def(
-            py::init([](std::vector<std::shared_ptr<Potential>> potentials, bool parallel) {
+            py::init([](std::vector<std::shared_ptr<Potential>> &potentials, bool parallel) {
                 return new FanoutSummedPotential(potentials, parallel);
             }),
             py::arg("potentials"),
