@@ -9,7 +9,8 @@
 namespace timemachine {
 
 template <typename RealType>
-LogSumExp<RealType>::LogSumExp(const int N) : N_(N), temp_storage_bytes_(0), d_temp_storage_buffer_(0) {
+LogSumExp<RealType>::LogSumExp(const int N)
+    : N_(N), d_temp_buffer_(N), temp_storage_bytes_(0), d_temp_storage_buffer_(0) {
     void *dummy_temp = nullptr;
     RealType *dummy_in = nullptr;
     size_t max_storage_bytes = 0;
@@ -28,7 +29,7 @@ template <typename RealType> LogSumExp<RealType>::~LogSumExp(){};
 template <typename RealType>
 void LogSumExp<RealType>::sum_device(
     const int N,
-    RealType *d_values,
+    const RealType *d_values,
     RealType *d_exp_sum_out, // [2] First value is the max value, the second value is the log sum
     cudaStream_t stream) {
     if (N > N_) {
@@ -40,12 +41,12 @@ void LogSumExp<RealType>::sum_device(
     gpuErrchk(cub::DeviceReduce::Max(d_temp_storage_buffer_.data, temp_storage_bytes_, d_values, d_exp_sum_out, N));
 
     int tpb = DEFAULT_THREADS_PER_BLOCK;
-    // TBD: Determine if modifying the values in place is appropriate
     // TBD: Combine Exp and Sum into a single kernel like energy accumulation
-    k_exp_sub_max<<<ceil_divide(N, tpb), tpb, 0, stream>>>(N, d_exp_sum_out, d_values);
+    k_exp_sub_max<<<ceil_divide(N, tpb), tpb, 0, stream>>>(N, d_exp_sum_out, d_values, d_temp_buffer_.data);
     gpuErrchk(cudaPeekAtLastError());
 
-    gpuErrchk(cub::DeviceReduce::Sum(d_temp_storage_buffer_.data, temp_storage_bytes_, d_values, d_exp_sum_out + 1, N));
+    gpuErrchk(cub::DeviceReduce::Sum(
+        d_temp_storage_buffer_.data, temp_storage_bytes_, d_temp_buffer_.data, d_exp_sum_out + 1, N));
     // Skips the final `log` and addition of the max value call on the device, as it would be a kernel launch
 }
 
