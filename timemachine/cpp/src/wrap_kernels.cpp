@@ -1497,7 +1497,7 @@ template <typename RealType> void declare_log_sum_exp(py::module &m, const char 
     ;
 }
 
-template <typename RealType> void declare_bias_deletion_exchange_mover(py::module &m, const char *typestr) {
+template <typename RealType> void declare_bias_deletion_exchange_move(py::module &m, const char *typestr) {
 
     using Class = BDExchangeMove<RealType>;
     std::string pyclass_name = std::string("BDExchangeMove_") + typestr;
@@ -1546,7 +1546,8 @@ template <typename RealType> void declare_bias_deletion_exchange_mover(py::modul
             },
             py::arg("coords"),
             py::arg("box"),
-            py::arg("n_steps"));
+            py::arg("n_steps"))
+        .def("last_log_probability", &Class::log_probability_host);
 }
 
 const py::array_t<double, py::array::c_style>
@@ -1715,8 +1716,8 @@ PYBIND11_MODULE(custom_ops, m) {
     declare_nonbonded_mol_energy<double>(m, "f64");
     declare_nonbonded_mol_energy<float>(m, "f32");
 
-    declare_bias_deletion_exchange_mover<double>(m, "f64");
-    declare_bias_deletion_exchange_mover<float>(m, "f32");
+    declare_bias_deletion_exchange_move<double>(m, "f64");
+    declare_bias_deletion_exchange_move<float>(m, "f32");
 
     declare_context(m);
 }

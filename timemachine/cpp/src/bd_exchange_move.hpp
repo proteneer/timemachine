@@ -58,6 +58,8 @@ public:
 
     std::array<std::vector<double>, 2>
     move_host(const int N, const int num_moves, const double *h_coords, const double *h_box);
+
+    double log_probability_host();
 };
 
 } // namespace timemachine
