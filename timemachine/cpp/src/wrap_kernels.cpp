@@ -1505,11 +1505,14 @@ template <typename RealType> void declare_bias_deletion_exchange_mover(py::modul
         .def(
             py::init([](const int N,
                         const std::vector<std::vector<int>> &target_mols,
-                        const std::vector<double> &params,
+                        const py::array_t<double, py::array::c_style> &params,
                         const double temperature,
-                        const double beta,
+                        const double nb_beta,
                         const double cutoff,
-                        const int seed) { return new Class(N, target_mols, params, temperature, beta, cutoff, seed); }),
+                        const int seed) {
+                std::vector<double> v_params = py_array_to_vector(params);
+                return new Class(N, target_mols, v_params, temperature, nb_beta, cutoff, seed);
+            }),
             py::arg("N"),
             py::arg("target_mols"),
             py::arg("params"),

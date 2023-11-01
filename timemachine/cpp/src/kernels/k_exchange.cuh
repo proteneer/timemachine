@@ -6,7 +6,7 @@ namespace timemachine {
 template <typename RealType>
 void __global__ k_attempt_exchange_move(
     const int N,
-    const RealType *__restrict__ rand,               // [8]
+    const RealType *__restrict__ rand,               // [4] last value is of interest
     const RealType *__restrict__ before_log_sum_exp, // [2]
     const RealType *__restrict__ after_log_sum_exp,  // [2]
     const double *__restrict__ moved_coords,
@@ -18,7 +18,7 @@ void __global__ k_attempt_exchange_move(
     RealType log_acceptance_prob = min(
         compute_logsumexp_final<RealType>(before_log_sum_exp) - compute_logsumexp_final<RealType>(after_log_sum_exp),
         static_cast<RealType>(0.0));
-    const bool accepted = rand[7] < exp(log_acceptance_prob);
+    const bool accepted = rand[3] < exp(log_acceptance_prob);
     // If accepted, move the coords into place
     while (accepted && idx < N) {
         dest_coords[idx * 3 + 0] = moved_coords[idx * 3 + 0];
@@ -39,13 +39,13 @@ void __global__ k_rotate_and_translate_mols(
     const RealType *__restrict__ translations, // [num_samples, 3]
     double *__restrict__ coords_out) {
     int sample_idx = blockIdx.x * blockDim.x + threadIdx.x;
-    if (sample_idx > num_samples) {
+    if (sample_idx >= num_samples) {
         return;
     }
     const int mol_sample = samples[sample_idx];
     const int mol_start = mol_offsets[mol_sample];
-    const int num_atoms = mol_offsets[mol_sample + 1] - mol_start;
-
+    const int mol_end = mol_offsets[mol_sample + 1];
+    const int num_atoms = mol_end - mol_start;
     const RealType box_x = box[0 * 3 + 0];
     const RealType box_y = box[1 * 3 + 1];
     const RealType box_z = box[2 * 3 + 2];
@@ -64,14 +64,15 @@ void __global__ k_rotate_and_translate_mols(
         quat[3] = quaternions[sample_idx * 4 + 3];
 
         local_coords[0] = 0;
-        local_coords[1] = coords[mol_start * 3 + 0];
-        local_coords[2] = coords[mol_start * 3 + 1];
-        local_coords[3] = coords[mol_start * 3 + 2];
+        local_coords[1] = coords[(mol_start + i) * 3 + 0];
+        local_coords[2] = coords[(mol_start + i) * 3 + 1];
+        local_coords[3] = coords[(mol_start + i) * 3 + 2];
 
         rotate_coordinates_by_quaternion(local_coords, quat);
-        coords_out[mol_start * 3 + 0] = local_coords[1] + translation_x;
-        coords_out[mol_start * 3 + 1] = local_coords[2] + translation_y;
-        coords_out[mol_start * 3 + 2] = local_coords[3] + translation_z;
+
+        coords_out[(mol_start + i) * 3 + 0] = local_coords[1] + translation_x;
+        coords_out[(mol_start + i) * 3 + 1] = local_coords[2] + translation_y;
+        coords_out[(mol_start + i) * 3 + 2] = local_coords[3] + translation_z;
     }
 }
 
