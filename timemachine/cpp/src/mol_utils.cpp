@@ -1,6 +1,7 @@
 #include "mol_utils.hpp"
 #include <algorithm>
 #include <set>
+#include <stdexcept>
 
 namespace timemachine {
 
