@@ -22,6 +22,30 @@ hamilton_product(const RealType *__restrict__ q1, const RealType *__restrict__ q
 }
 
 template <typename RealType>
+void __device__ __forceinline__
+rotate_coordinates_by_quaternion(RealType *__restrict__ local_coords, RealType *__restrict__ quaternion) {
+    RealType intermediate[4];
+
+    RealType quat2 = quaternion[0] * quaternion[0] + quaternion[1] * quaternion[1] + quaternion[2] * quaternion[2] +
+                     quaternion[3] * quaternion[3];
+    RealType inv_norm = rsqrt(quat2);
+    quaternion[0] = quaternion[0] * inv_norm;
+    quaternion[1] = quaternion[1] * inv_norm;
+    quaternion[2] = quaternion[2] * inv_norm;
+    quaternion[3] = quaternion[3] * inv_norm;
+
+    hamilton_product(quaternion, local_coords, intermediate);
+
+    RealType quat_conjugate[4];
+    quat_conjugate[0] = quaternion[0];
+    quat_conjugate[1] = -quaternion[1];
+    quat_conjugate[2] = -quaternion[2];
+    quat_conjugate[3] = -quaternion[3];
+
+    hamilton_product(intermediate, quat_conjugate, local_coords);
+}
+
+template <typename RealType>
 void __global__ k_rotate_coordinates(
     const int N,                              // Number of coordinates
     const int n_rotations,                    // Number of quaternions
@@ -52,23 +76,7 @@ void __global__ k_rotate_coordinates(
     quat[2] = quaternions[rotation_idx * 4 + 2];
     quat[3] = quaternions[rotation_idx * 4 + 3];
 
-    // Normalize the quaternions
-    RealType quat2 = quat[0] * quat[0] + quat[1] * quat[1] + quat[2] * quat[2] + quat[3] * quat[3];
-    RealType inv_norm = rsqrt(quat2);
-    quat[0] = quat[0] * inv_norm;
-    quat[1] = quat[1] * inv_norm;
-    quat[2] = quat[2] * inv_norm;
-    quat[3] = quat[3] * inv_norm;
-
-    hamilton_product(quat, local_coords, intermediate);
-
-    RealType quat_conjugate[4];
-    quat_conjugate[0] = quat[0];
-    quat_conjugate[1] = -quat[1];
-    quat_conjugate[2] = -quat[2];
-    quat_conjugate[3] = -quat[3];
-
-    hamilton_product(intermediate, quat_conjugate, local_coords);
+    rotate_coordinates_by_quaternion(local_coords, quat);
 
     // Truncate off the first of the local coords
     rotated_coords[(coord_idx * n_rotations * 3) + (rotation_idx * 3) + 0] = local_coords[1];

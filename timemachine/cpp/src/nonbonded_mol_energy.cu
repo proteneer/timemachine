@@ -12,7 +12,7 @@ namespace timemachine {
 
 template <typename RealType>
 NonbondedMolEnergyPotential<RealType>::NonbondedMolEnergyPotential(
-    const int N, const std::vector<std::vector<int>> target_mols, const double beta, const double cutoff)
+    const int N, const std::vector<std::vector<int>> &target_mols, const double beta, const double cutoff)
     : N_(N), num_target_mols_(target_mols.size()), beta_(static_cast<RealType>(beta)),
       cutoff_squared_(static_cast<RealType>(cutoff * cutoff)) {
     verify_group_idxs(N_, target_mols);
