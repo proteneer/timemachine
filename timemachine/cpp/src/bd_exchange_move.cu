@@ -22,10 +22,10 @@ BDExchangeMove<RealType>::BDExchangeMove(
     : N_(N), num_target_mols_(target_mols.size()), beta_(static_cast<RealType>(1.0 / (BOLTZ * temperature))),
       mol_potential_(N, target_mols, nb_beta, cutoff), sampler_(num_target_mols_, seed), logsumexp_(N),
       d_intermediate_coords_(N * 3), d_params_(params.size()), d_mol_energy_buffer_(num_target_mols_),
-      d_mol_offsets_(get_mol_offsets(target_mols).size()), d_log_weights_(num_target_mols_),
-      d_log_probabilities_before_(num_target_mols_), d_log_probabilities_after_(num_target_mols_),
-      d_log_sum_exp_before_(2), d_log_sum_exp_after_(2), d_samples_(1), d_quaternions_(round_up_even(4)),
-      d_translations_(round_up_even(4)), d_num_accepted_(1), num_attempted_(0) {
+      d_mol_offsets_(get_mol_offsets(target_mols).size()), d_log_weights_before_(num_target_mols_),
+      d_log_weights_after_(num_target_mols_), d_log_probabilities_before_(num_target_mols_),
+      d_log_probabilities_after_(num_target_mols_), d_log_sum_exp_before_(2), d_log_sum_exp_after_(2), d_samples_(1),
+      d_quaternions_(round_up_even(4)), d_translations_(round_up_even(4)), d_num_accepted_(1), num_attempted_(0) {
     d_params_.copy_from(&params[0]);
     d_mol_offsets_.copy_from(&get_mol_offsets(target_mols)[0]);
 
@@ -57,32 +57,48 @@ void BDExchangeMove<RealType>::move_device(
 
     const int tpb = DEFAULT_THREADS_PER_BLOCK;
     const int mol_blocks = ceil_divide(num_target_mols_, tpb);
+    // Compute logsumexp of energies once upfront to get log probabilities
+    mol_potential_.mol_energies_device(
+        N,
+        num_target_mols_,
+        d_coords,
+        d_params_.data,
+        d_box,
+        d_mol_energy_buffer_.data, // Don't need to zero, will be overridden
+        stream);
+
+    // Don't need to normalize to sample
+    k_compute_log_weights_from_energies<RealType><<<mol_blocks, tpb, 0, stream>>>(
+        num_target_mols_, beta_, d_mol_energy_buffer_.data, d_log_weights_before_.data);
+    gpuErrchk(cudaPeekAtLastError());
+
+    logsumexp_.sum_device(num_target_mols_, d_log_weights_before_.data, d_log_sum_exp_before_.data, stream);
 
     const int num_samples = 1;
     for (int move = 0; move < num_moves; move++) {
+        // Run only after the first pass, to maintain meaningful `log_probability_host` values
+        if (move > 0) {
+            // Run a separate kernel to replace the before log probs and weights with the after if accepted a move
+            // Need the weights to sample a value and the log probs are just because they aren't expensive to copy
+            k_store_accepted_log_probability<RealType><<<1, tpb, 0>>>(
+                num_target_mols_,
+                d_translations_.data + 3, // Offset to get the last value for the acceptance criteria
+                d_log_sum_exp_before_.data,
+                d_log_sum_exp_after_.data,
+                d_log_weights_before_.data,
+                d_log_weights_after_.data);
+            gpuErrchk(cudaPeekAtLastError());
+        }
         // Make a copy of the coordinates
         gpuErrchk(cudaMemcpyAsync(
             d_intermediate_coords_.data, d_coords, d_intermediate_coords_.size(), cudaMemcpyDeviceToDevice, stream));
-        mol_potential_.mol_energies_device(
-            N,
-            num_target_mols_,
-            d_coords,
-            d_params_.data,
-            d_box,
-            d_mol_energy_buffer_.data, // Don't need to zero, will be overridden
-            stream);
 
-        // Don't need to normalize to sample
-        k_compute_log_weights_from_energies<RealType>
-            <<<mol_blocks, tpb, 0, stream>>>(num_target_mols_, beta_, d_mol_energy_buffer_.data, d_log_weights_.data);
-        gpuErrchk(cudaPeekAtLastError());
-
-        logsumexp_.sum_device(num_target_mols_, d_log_weights_.data, d_log_sum_exp_before_.data, stream);
         // Quaternions generated from normal noise, while translations and the acceptance value are uniform
         curandErrchk(templateCurandNormal(cr_rng_, d_quaternions_.data, d_quaternions_.length, 0.0, 1.0));
+        // The last translation value is to be used to determine acceptance
         curandErrchk(templateCurandUniform(cr_rng_, d_translations_.data, d_translations_.length));
 
-        sampler_.sample_device(num_target_mols_, num_samples, d_log_weights_.data, d_samples_.data, stream);
+        sampler_.sample_device(num_target_mols_, num_samples, d_log_weights_before_.data, d_samples_.data, stream);
         k_rotate_and_translate_mols<RealType><<<ceil_divide(num_samples, tpb), tpb, 0, stream>>>(
             num_samples,
             d_coords,
@@ -103,15 +119,15 @@ void BDExchangeMove<RealType>::move_device(
             d_mol_energy_buffer_.data, // Don't need to zero, will be overridden
             stream);
 
-        k_compute_log_weights_from_energies<RealType>
-            <<<mol_blocks, tpb, 0, stream>>>(num_target_mols_, beta_, d_mol_energy_buffer_.data, d_log_weights_.data);
+        k_compute_log_weights_from_energies<RealType><<<mol_blocks, tpb, 0, stream>>>(
+            num_target_mols_, beta_, d_mol_energy_buffer_.data, d_log_weights_after_.data);
         gpuErrchk(cudaPeekAtLastError());
 
-        logsumexp_.sum_device(num_target_mols_, d_log_weights_.data, d_log_sum_exp_after_.data, stream);
+        logsumexp_.sum_device(num_target_mols_, d_log_weights_after_.data, d_log_sum_exp_after_.data, stream);
 
         k_attempt_exchange_move<RealType><<<ceil_divide(N_, tpb), tpb, 0, stream>>>(
             N,
-            d_translations_.data,
+            d_translations_.data + 3, // Offset to get the last value for the acceptance criteria
             d_log_sum_exp_before_.data,
             d_log_sum_exp_after_.data,
             d_intermediate_coords_.data,

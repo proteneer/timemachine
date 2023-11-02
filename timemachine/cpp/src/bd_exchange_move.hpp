@@ -25,7 +25,8 @@ private:
     const DeviceBuffer<double> d_params_;
     const DeviceBuffer<__int128> d_mol_energy_buffer_;
     const DeviceBuffer<int> d_mol_offsets_;
-    const DeviceBuffer<RealType> d_log_weights_;
+    const DeviceBuffer<RealType> d_log_weights_before_;
+    const DeviceBuffer<RealType> d_log_weights_after_;
     const DeviceBuffer<RealType> d_log_probabilities_before_;
     const DeviceBuffer<RealType> d_log_probabilities_after_;
     const DeviceBuffer<RealType> d_log_sum_exp_before_; // [2]
