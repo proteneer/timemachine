@@ -1,15 +1,15 @@
 import numpy as np
 import pytest
-
 from scipy.special import logsumexp
-from timemachine.constants import DEFAULT_TEMP, DEFAULT_KT
+
+from timemachine.constants import DEFAULT_TEMP
 from timemachine.ff import Forcefield
 from timemachine.ff.handlers import openmm_deserializer
 from timemachine.lib import custom_ops
 from timemachine.md import builders
 from timemachine.md.barostat.utils import get_bond_list, get_group_indices
-from timemachine.potentials import HarmonicBond, Nonbonded
 from timemachine.md.exchange.exchange_mover import BDExchangeMove as RefBDExchangeMove
+from timemachine.potentials import HarmonicBond, Nonbonded
 
 
 @pytest.mark.memcheck
@@ -75,3 +75,68 @@ def test_two_clashy_water_moves(moves, precision, rtol, atol, seed):
             np.testing.assert_array_equal(last_conf, x_move)
         assert num_moved <= 1, "More than one mol moved, something is wrong"
         last_conf = x_move
+
+
+@pytest.mark.parametrize("steps_per_move", [1, 10])
+@pytest.mark.parametrize("moves", [2500])
+@pytest.mark.parametrize("precision,rtol,atol", [(np.float64, 5e-6, 5e-6), (np.float32, 1e-4, 2e-3)])
+@pytest.mark.parametrize("seed", [2023])
+def test_moves_in_a_water_box(steps_per_move, moves, precision, rtol, atol, seed):
+    """Verify that the log acceptance probability between the reference and cuda implementation agree"""
+    ff = Forcefield.load_default()
+    system, conf, box, _ = builders.build_water_system(3.0, ff.water_ff)
+    bps, _ = openmm_deserializer.deserialize_system(system, cutoff=1.2)
+
+    nb = next(bp for bp in bps if isinstance(bp.potential, Nonbonded))
+    bond_pot = next(bp for bp in bps if isinstance(bp.potential, HarmonicBond)).potential
+
+    group_idxs = get_group_indices(get_bond_list(bond_pot), conf.shape[0])
+
+    N = conf.shape[0]
+
+    params = nb.params
+
+    cutoff = nb.potential.cutoff
+    klass = custom_ops.BDExchangeMove_f32
+    if precision == np.float64:
+        klass = custom_ops.BDExchangeMove_f64
+
+    bdem = klass(N, group_idxs, params, DEFAULT_TEMP, nb.potential.beta, cutoff, seed)
+
+    ref_bdem = RefBDExchangeMove(nb.potential.beta, cutoff, params, group_idxs, DEFAULT_TEMP)
+
+    assert bdem.last_log_probability() == 0.0, "First log probability expected to be zero"
+    accepted = 0
+    last_conf = conf
+    for _ in range(moves // steps_per_move):
+        x_move, x_box = bdem.move(last_conf, box, steps_per_move)
+        # The box will never change
+        np.testing.assert_array_equal(box, x_box)
+        num_moved = 0
+        for i, mol_idxs in enumerate(group_idxs):
+            if not np.all(x_move[mol_idxs] == last_conf[mol_idxs]):
+                num_moved += 1
+        if num_moved > 0:
+            accepted += 1
+            # Verify that the probabilities and per mol energies agree when we do accept moves
+            # can only be done when we only attempt a single move per step
+            if steps_per_move == 1:
+                before_log_weights = ref_bdem.batch_log_weights(last_conf, box)
+                after_log_weights = ref_bdem.batch_log_weights(x_move, x_box)
+                np.testing.assert_allclose(
+                    np.exp(bdem.last_log_probability()),
+                    np.exp(np.minimum(logsumexp(before_log_weights) - logsumexp(after_log_weights), 0.0)),
+                    rtol=rtol,
+                    atol=atol,
+                )
+        if num_moved == 0:
+            np.testing.assert_array_equal(last_conf, x_move)
+        assert num_moved <= 1, "More than one mol moved, something is wrong"
+        last_conf = x_move
+    assert accepted > 0, "No moves were made, nothing was tested"
+    if steps_per_move == 1:
+        assert bdem.n_accepted() == accepted
+    else:
+        assert bdem.n_accepted() >= accepted
+    assert bdem.n_proposed() == moves
+    np.testing.assert_allclose(bdem.acceptance_fraction(), accepted / moves)

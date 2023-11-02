@@ -1547,7 +1547,10 @@ template <typename RealType> void declare_bias_deletion_exchange_move(py::module
             py::arg("coords"),
             py::arg("box"),
             py::arg("n_steps"))
-        .def("last_log_probability", &Class::log_probability_host);
+        .def("last_log_probability", &Class::log_probability_host)
+        .def("n_accepted", &Class::n_accepted)
+        .def("n_proposed", &Class::n_proposed)
+        .def("acceptance_fraction", &Class::acceptance_fraction);
 }
 
 const py::array_t<double, py::array::c_style>
@@ -1620,6 +1623,32 @@ py::array_t<double, py::array::c_style> py_rotate_coords(
     return py_rotated_coords;
 }
 
+template <typename RealType>
+py::array_t<double, py::array::c_style> py_rotate_and_translate_mol(
+    const py::array_t<double, py::array::c_style> &coords,
+    const py::array_t<double, py::array::c_style> &box,
+    const py::array_t<double, py::array::c_style> &quaternion,
+    const py::array_t<double, py::array::c_style> &translation) {
+    verify_coords(coords);
+
+    if (quaternion.size() != 4) {
+        throw std::runtime_error("quaternion must be of size 4");
+    }
+
+    if (translation.size() != 3) {
+        throw std::runtime_error("translation must be of size 3");
+    }
+
+    std::vector<RealType> v_quaternion = py_array_to_vector_with_cast<double, RealType>(quaternion);
+    std::vector<RealType> v_translation = py_array_to_vector_with_cast<double, RealType>(translation);
+
+    const int N = coords.shape(0);
+    py::array_t<double, py::array::c_style> py_rotated_coords({N, 3});
+    rotate_coordinates_and_translate_mol_host<RealType>(
+        N, coords.data(), box.data(), &v_quaternion[0], &v_translation[0], py_rotated_coords.mutable_data());
+    return py_rotated_coords;
+}
+
 void py_cuda_device_reset() { cudaDeviceReset(); }
 
 PYBIND11_MODULE(custom_ops, m) {
@@ -1647,6 +1676,23 @@ PYBIND11_MODULE(custom_ops, m) {
         "Function for testing rotation of coordinates in CUDA",
         py::arg("coords"),
         py::arg("quaternions"));
+    m.def(
+        "rotate_and_translate_mol_f32",
+        &py_rotate_and_translate_mol<float>,
+        "Function for testing kernel for rotating and translating a mol in CUDA",
+        py::arg("coords"),
+        py::arg("box"),
+        py::arg("quaternion"),
+        py::arg("translation"));
+    m.def(
+        "rotate_and_translate_mol_f64",
+        &py_rotate_and_translate_mol<double>,
+        "Function for testing kernel for rotating and translating a mol in CUDA",
+        py::arg("coords"),
+        py::arg("box"),
+        py::arg("quaternion"),
+        py::arg("translation"));
+
     m.attr("FIXED_EXPONENT") = py::int_(FIXED_EXPONENT);
 
     declare_barostat(m);

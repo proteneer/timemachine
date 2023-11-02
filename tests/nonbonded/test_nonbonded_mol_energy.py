@@ -2,6 +2,7 @@ from importlib import resources
 
 import numpy as np
 import pytest
+from common import assert_energy_arrays_match
 from scipy.special import logsumexp
 
 from timemachine.constants import DEFAULT_KT, DEFAULT_PRESSURE, DEFAULT_TEMP
@@ -168,9 +169,6 @@ def test_nonbonded_mol_energy_random_moves(num_mols, moves, precision, atol, rto
 
     mols_to_move = rng.choice(np.arange(len(group_idxs)), size=moves)
 
-    # empirical threshold based on testing
-    threshold = 1e8
-
     true_log_z = logsumexp(u_ref(conf, box, params) / DEFAULT_KT)
     test_log_z = logsumexp(u_test(conf, box, params) / DEFAULT_KT)
 
@@ -183,15 +181,7 @@ def test_nonbonded_mol_energy_random_moves(num_mols, moves, precision, atol, rto
         test_mol_energies = u_test(updated_conf, box, params)
         ref_mol_energies = u_ref(updated_conf, box, params)
 
-        large_energy_indices = np.argwhere(np.abs(ref_mol_energies) >= threshold)
-        comparable_energies = np.delete(np.arange(len(test_mol_energies)), large_energy_indices)
-        np.testing.assert_allclose(
-            ref_mol_energies[comparable_energies], test_mol_energies[comparable_energies], rtol=rtol, atol=atol
-        )
-        # Pull out nans, as they are effectively greater than the threshold
-        non_nan_idx = np.isfinite(test_mol_energies[large_energy_indices])
-        # Large energies are not reliable, so beyond the threshold we simply verify that both the reference and test both exceed the threshold
-        assert np.all(np.abs(test_mol_energies[large_energy_indices][non_nan_idx]) >= threshold)
+        assert_energy_arrays_match(ref_mol_energies, test_mol_energies, rtol=rtol, atol=atol)
 
         # Verify that if we compute the acceptance difference they are very close
         ref_mol_unitless = (1 / DEFAULT_KT) * ref_mol_energies

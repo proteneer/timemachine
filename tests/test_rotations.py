@@ -59,3 +59,37 @@ def test_cuda_rotation_by_quaternion(seed, precision, atol, rtol, n_rotations, n
                 atol=atol,
                 err_msg=f"Coords {j} didn't get back to original value",
             )
+
+
+@pytest.mark.memcheck
+@pytest.mark.parametrize("seed", [2023])
+@pytest.mark.parametrize("precision,atol,rtol", [(np.float64, 1e-8, 1e-8), (np.float32, 2e-5, 1e-5)])
+@pytest.mark.parametrize("n_moves", [2, 33, 100])
+@pytest.mark.parametrize("n_coords", [8, 33, 65])
+def test_cuda_rotation_and_translation_by_quaternion(seed, precision, atol, rtol, n_moves, n_coords):
+    rng = np.random.default_rng(seed)
+
+    mol_coords = rng.normal(size=(n_coords, 3)) * 10.0
+    box = np.eye(3) * 100.0
+
+    quaternions = rng.normal(size=(n_moves, 4))
+    translations = rng.uniform(size=(n_moves, 3))
+    rotate_function = custom_ops.rotate_and_translate_mol_f32
+    if precision == np.float64:
+        rotate_function = custom_ops.rotate_and_translate_mol_f64
+
+    for quat, translation in zip(quaternions, translations):
+        rotated_translated_mol = rotate_function(mol_coords, box, quat, translation)
+
+        translation_shift = np.diag(box) * translation
+        assert rotated_translated_mol.shape == mol_coords.shape
+        rotation = Rotation.from_quat(convert_quaternion_for_scipy(quat))
+
+        ref_rotated_translated_mol = rotation.apply(mol_coords) + translation_shift
+
+        np.testing.assert_allclose(
+            rotated_translated_mol,
+            ref_rotated_translated_mol,
+            rtol=rtol,
+            atol=atol,
+        )

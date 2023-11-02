@@ -4,11 +4,11 @@
 #include "gpu_utils.cuh"
 #include "kernels/k_exchange.cuh"
 #include "kernels/k_probability.cuh"
+#include "kernels/k_rotations.cuh"
 #include "math_utils.cuh"
 #include "mol_utils.hpp"
 
 namespace timemachine {
-
 
 template <typename RealType>
 BDExchangeMove<RealType>::BDExchangeMove(
@@ -24,8 +24,8 @@ BDExchangeMove<RealType>::BDExchangeMove(
       d_intermediate_coords_(N * 3), d_params_(params.size()), d_mol_energy_buffer_(num_target_mols_),
       d_mol_offsets_(get_mol_offsets(target_mols).size()), d_log_weights_(num_target_mols_),
       d_log_probabilities_before_(num_target_mols_), d_log_probabilities_after_(num_target_mols_),
-      d_log_sum_exp_before_(2), d_log_sum_exp_after_(2), d_samples_(1),
-      d_quaternions_(round_up_even(4)), d_translations_(round_up_even(4)) {
+      d_log_sum_exp_before_(2), d_log_sum_exp_after_(2), d_samples_(1), d_quaternions_(round_up_even(4)),
+      d_translations_(round_up_even(4)), d_num_accepted_(1), num_attempted_(0) {
     d_params_.copy_from(&params[0]);
     d_mol_offsets_.copy_from(&get_mol_offsets(target_mols)[0]);
 
@@ -33,6 +33,7 @@ BDExchangeMove<RealType>::BDExchangeMove(
     gpuErrchk(cudaMemset(d_log_sum_exp_before_.data, 0, d_log_sum_exp_before_.size()));
     gpuErrchk(cudaMemset(d_log_sum_exp_after_.data, 0, d_log_sum_exp_after_.size()));
     curandErrchk(curandCreateGenerator(&cr_rng_, CURAND_RNG_PSEUDO_DEFAULT));
+    curandErrchk(curandSetPseudoRandomGeneratorSeed(cr_rng_, seed));
 }
 
 template <typename RealType> BDExchangeMove<RealType>::~BDExchangeMove() {
@@ -57,17 +58,11 @@ void BDExchangeMove<RealType>::move_device(
     const int tpb = DEFAULT_THREADS_PER_BLOCK;
     const int mol_blocks = ceil_divide(num_target_mols_, tpb);
 
-    // Don't need normalized weights to sample
-    // k_compute_log_probs<RealType><<<mol_blocks, tpb, 0, stream>>>(
-    //     num_target_mols_, d_log_weights_, d_log_sum_exp_before_.data, d_log_probabilities_before_.data);
-    // gpuErrchk(cudaPeekAtLastError());
-
     const int num_samples = 1;
     for (int move = 0; move < num_moves; move++) {
         // Make a copy of the coordinates
         gpuErrchk(cudaMemcpyAsync(
             d_intermediate_coords_.data, d_coords, d_intermediate_coords_.size(), cudaMemcpyDeviceToDevice, stream));
-        // TBD Maybe have this return RealType energies?
         mol_potential_.mol_energies_device(
             N,
             num_target_mols_,
@@ -77,18 +72,18 @@ void BDExchangeMove<RealType>::move_device(
             d_mol_energy_buffer_.data, // Don't need to zero, will be overridden
             stream);
 
+        // Don't need to normalize to sample
         k_compute_log_weights_from_energies<RealType>
             <<<mol_blocks, tpb, 0, stream>>>(num_target_mols_, beta_, d_mol_energy_buffer_.data, d_log_weights_.data);
         gpuErrchk(cudaPeekAtLastError());
 
         logsumexp_.sum_device(num_target_mols_, d_log_weights_.data, d_log_sum_exp_before_.data, stream);
-
         // Quaternions generated from normal noise, while translations and the acceptance value are uniform
         curandErrchk(templateCurandNormal(cr_rng_, d_quaternions_.data, d_quaternions_.length, 0.0, 1.0));
         curandErrchk(templateCurandUniform(cr_rng_, d_translations_.data, d_translations_.length));
 
         sampler_.sample_device(num_target_mols_, num_samples, d_log_weights_.data, d_samples_.data, stream);
-        k_rotate_and_translate_mols<<<num_samples, tpb, 0, stream>>>(
+        k_rotate_and_translate_mols<RealType><<<ceil_divide(num_samples, tpb), tpb, 0, stream>>>(
             num_samples,
             d_coords,
             d_box,
@@ -120,8 +115,10 @@ void BDExchangeMove<RealType>::move_device(
             d_log_sum_exp_before_.data,
             d_log_sum_exp_after_.data,
             d_intermediate_coords_.data,
-            d_coords);
+            d_coords,
+            d_num_accepted_.data);
         gpuErrchk(cudaPeekAtLastError());
+        num_attempted_++;
     }
 }
 
@@ -149,14 +146,22 @@ BDExchangeMove<RealType>::move_host(const int N, const int num_moves, const doub
     return std::array<std::vector<double>, 2>({out_coords, out_box});
 }
 
-template <typename RealType>
-double BDExchangeMove<RealType>::log_probability_host() {
+template <typename RealType> double BDExchangeMove<RealType>::log_probability_host() {
     std::vector<RealType> h_log_exp_before(2);
     std::vector<RealType> h_log_exp_after(2);
     d_log_sum_exp_before_.copy_to(&h_log_exp_before[0]);
     d_log_sum_exp_after_.copy_to(&h_log_exp_after[0]);
 
-    return min(static_cast<double>(compute_logsumexp_final(&h_log_exp_before[0]) - compute_logsumexp_final(&h_log_exp_after[0])), 0.0);
+    RealType before_log_prob = convert_nan_to_inf(compute_logsumexp_final(&h_log_exp_before[0]));
+    RealType after_log_prob = convert_nan_to_inf(compute_logsumexp_final(&h_log_exp_after[0]));
+
+    return min(static_cast<double>(before_log_prob - after_log_prob), 0.0);
+}
+
+template <typename RealType> size_t BDExchangeMove<RealType>::n_accepted() const {
+    size_t h_accepted;
+    d_num_accepted_.copy_to(&h_accepted);
+    return h_accepted;
 }
 
 template class BDExchangeMove<float>;

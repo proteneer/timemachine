@@ -34,7 +34,9 @@ private:
         d_samples_; // where the indices to sample a molecule come from, currently fixed to a single sample
     const DeviceBuffer<RealType> d_quaternions_;  // Normal noise for uniform random rotations
     const DeviceBuffer<RealType> d_translations_; // Uniform noise for translation + the check
+    const DeviceBuffer<size_t> d_num_accepted_;
 
+    size_t num_attempted_;
     curandGenerator_t cr_rng_;
 
 public:
@@ -60,6 +62,14 @@ public:
     move_host(const int N, const int num_moves, const double *h_coords, const double *h_box);
 
     double log_probability_host();
+
+    size_t n_proposed() const { return num_attempted_; }
+
+    size_t n_accepted() const;
+
+    double acceptance_fraction() const {
+        return static_cast<double>(this->n_accepted()) / static_cast<double>(this->n_proposed());
+    }
 };
 
 } // namespace timemachine

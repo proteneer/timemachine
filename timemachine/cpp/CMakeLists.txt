@@ -104,6 +104,7 @@ pybind11_add_module(${LIBRARY_NAME} SHARED NO_EXTRAS
   src/kernels/k_hilbert.cu
   src/kernels/k_indices.cu
   src/kernels/k_logsumexp.cu
+  src/kernels/k_rotations.cu
 )
 
 include_directories(src/kernels)
