@@ -73,17 +73,6 @@ void verify_coords_and_box(
     }
 }
 
-// convert_energy_to_fp handles the combining of energies, summing them up deterministically
-// and returning nan if there are overflows.
-// The energies are collected in int128
-double convert_energy_to_fp(__int128 fixed_u) {
-    double res = std::numeric_limits<double>::quiet_NaN();
-    if (!fixed_point_overflow(fixed_u)) {
-        res = FIXED_ENERGY_TO_FLOAT<double>(fixed_u);
-    }
-    return res;
-}
-
 template <typename T> std::vector<T> py_array_to_vector(const py::array_t<T, py::array::c_style> &arr) {
     std::vector<T> v(arr.data(), arr.data() + arr.size());
     return v;
@@ -251,7 +240,7 @@ template <typename RealType> void declare_nonbonded_mol_energy(py::module &m, co
                 py::array_t<double, py::array::c_style> py_u(fixed_energies.size());
 
                 for (unsigned int i = 0; i < fixed_energies.size(); i++) {
-                    py_u.mutable_data()[i] = convert_energy_to_fp(fixed_energies[i]);
+                    py_u.mutable_data()[i] = FIXED_ENERGY_TO_FLOAT<double>(fixed_energies[i]);
                 }
                 return py_u;
             },
@@ -765,7 +754,7 @@ void declare_potential(py::module &m) {
                     py::array_t<double, py::array::c_style> py_u({coord_batches, param_batches});
 
                     for (unsigned int i = 0; i < py_u.size(); i++) {
-                        py_u.mutable_data()[i] = convert_energy_to_fp(u[i]);
+                        py_u.mutable_data()[i] = FIXED_ENERGY_TO_FLOAT<double>(u[i]);
                     }
                     result[2] = py_u;
                 }
@@ -871,7 +860,7 @@ void declare_potential(py::module &m) {
                     result[1] = py_du_dp;
                 }
                 if (compute_u) {
-                    double u_sum = convert_energy_to_fp(u[0]);
+                    double u_sum = FIXED_ENERGY_TO_FLOAT<double>(u[0]);
                     result[2] = u_sum;
                 }
 
@@ -964,7 +953,7 @@ void declare_bound_potential(py::module &m) {
                     result[0] = py_du_dx;
                 }
                 if (compute_u) {
-                    double u_sum = convert_energy_to_fp(u[0]);
+                    double u_sum = FIXED_ENERGY_TO_FLOAT<double>(u[0]);
                     result[1] = u_sum;
                 }
 
@@ -1023,7 +1012,7 @@ void declare_bound_potential(py::module &m) {
                     py::array_t<double, py::array::c_style> py_u(coord_batches);
 
                     for (unsigned int i = 0; i < py_u.size(); i++) {
-                        py_u.mutable_data()[i] = convert_energy_to_fp(u[i]);
+                        py_u.mutable_data()[i] = FIXED_ENERGY_TO_FLOAT<double>(u[i]);
                     }
                     result[1] = py_u;
                 }
