@@ -15,6 +15,7 @@ template <typename RealType> class BDExchangeMove {
 
 private:
     const int N_;
+    const int proposals_per_move_;
     const int num_target_mols_;
     const RealType beta_; // 1 / kT
     NonbondedMolEnergyPotential<RealType> mol_potential_;
@@ -48,19 +49,18 @@ public:
         const double temperature,
         const double nb_beta,
         const double cutoff,
-        const int seed);
+        const int seed,
+        const int proposals_per_move);
 
     ~BDExchangeMove();
 
     void move_device(
         const int N,
-        const int num_moves,
         double *d_coords, // [N, 3]
         double *d_box,    // [3, 3]
         cudaStream_t stream);
 
-    std::array<std::vector<double>, 2>
-    move_host(const int N, const int num_moves, const double *h_coords, const double *h_box);
+    std::array<std::vector<double>, 2> move_host(const int N, const double *h_coords, const double *h_box);
 
     double log_probability_host();
 

@@ -1509,9 +1509,17 @@ template <typename RealType> void declare_bias_deletion_exchange_move(py::module
                         const double temperature,
                         const double nb_beta,
                         const double cutoff,
-                        const int seed) {
+                        const int seed,
+                        const int proposals_per_move) {
+                size_t params_dim = params.ndim();
+                if (params_dim != 2) {
+                    throw std::runtime_error("parameters dimensions must be 2");
+                }
+                if (params.shape(0) != N) {
+                    throw std::runtime_error("Number of parameters must match N");
+                }
                 std::vector<double> v_params = py_array_to_vector(params);
-                return new Class(N, target_mols, v_params, temperature, nb_beta, cutoff, seed);
+                return new Class(N, target_mols, v_params, temperature, nb_beta, cutoff, seed, proposals_per_move);
             }),
             py::arg("N"),
             py::arg("target_mols"),
@@ -1519,21 +1527,18 @@ template <typename RealType> void declare_bias_deletion_exchange_move(py::module
             py::arg("temperature"),
             py::arg("nb_beta"),
             py::arg("cutoff"),
-            py::arg("seed"))
+            py::arg("seed"),
+            py::arg("proposals_per_move"))
         .def(
             "move",
             [](Class &mover,
                const py::array_t<double, py::array::c_style> &coords,
-               const py::array_t<double, py::array::c_style> &box,
-               const int n_steps) -> py::tuple {
-                if (n_steps <= 0) {
-                    throw std::runtime_error("n_steps must be greater than 0");
-                }
+               const py::array_t<double, py::array::c_style> &box) -> py::tuple {
                 verify_coords_and_box(coords, box);
                 const int N = coords.shape()[0];
                 const int D = coords.shape()[1];
 
-                std::array<std::vector<double>, 2> result = mover.move_host(N, n_steps, coords.data(), box.data());
+                std::array<std::vector<double>, 2> result = mover.move_host(N, coords.data(), box.data());
 
                 py::array_t<double, py::array::c_style> out_x_buffer({N, D});
                 std::memcpy(
@@ -1545,8 +1550,7 @@ template <typename RealType> void declare_bias_deletion_exchange_move(py::module
                 return py::make_tuple(out_x_buffer, box_buffer);
             },
             py::arg("coords"),
-            py::arg("box"),
-            py::arg("n_steps"))
+            py::arg("box"))
         .def("last_log_probability", &Class::log_probability_host)
         .def("n_accepted", &Class::n_accepted)
         .def("n_proposed", &Class::n_proposed)

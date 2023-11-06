@@ -18,14 +18,16 @@ BDExchangeMove<RealType>::BDExchangeMove(
     const double temperature,
     const double nb_beta,
     const double cutoff,
-    const int seed)
-    : N_(N), num_target_mols_(target_mols.size()), beta_(static_cast<RealType>(1.0 / (BOLTZ * temperature))),
-      mol_potential_(N, target_mols, nb_beta, cutoff), sampler_(num_target_mols_, seed), logsumexp_(N),
-      d_intermediate_coords_(N * 3), d_params_(params.size()), d_mol_energy_buffer_(num_target_mols_),
-      d_mol_offsets_(get_mol_offsets(target_mols).size()), d_log_weights_before_(num_target_mols_),
-      d_log_weights_after_(num_target_mols_), d_log_probabilities_before_(num_target_mols_),
-      d_log_probabilities_after_(num_target_mols_), d_log_sum_exp_before_(2), d_log_sum_exp_after_(2), d_samples_(1),
-      d_quaternions_(round_up_even(4)), d_translations_(round_up_even(4)), d_num_accepted_(1), num_attempted_(0) {
+    const int seed,
+    const int proposals_per_move)
+    : N_(N), proposals_per_move_(proposals_per_move), num_target_mols_(target_mols.size()),
+      beta_(static_cast<RealType>(1.0 / (BOLTZ * temperature))), mol_potential_(N, target_mols, nb_beta, cutoff),
+      sampler_(num_target_mols_, seed), logsumexp_(N), d_intermediate_coords_(N * 3), d_params_(params.size()),
+      d_mol_energy_buffer_(num_target_mols_), d_mol_offsets_(get_mol_offsets(target_mols).size()),
+      d_log_weights_before_(num_target_mols_), d_log_weights_after_(num_target_mols_),
+      d_log_probabilities_before_(num_target_mols_), d_log_probabilities_after_(num_target_mols_),
+      d_log_sum_exp_before_(2), d_log_sum_exp_after_(2), d_samples_(1), d_quaternions_(round_up_even(4)),
+      d_translations_(round_up_even(4)), d_num_accepted_(1), num_attempted_(0) {
     d_params_.copy_from(&params[0]);
     d_mol_offsets_.copy_from(&get_mol_offsets(target_mols)[0]);
 
@@ -43,7 +45,6 @@ template <typename RealType> BDExchangeMove<RealType>::~BDExchangeMove() {
 template <typename RealType>
 void BDExchangeMove<RealType>::move_device(
     const int N,
-    const int num_moves,
     double *d_coords, // [N, 3]
     double *d_box,    // [3, 3]
     cudaStream_t stream) {
@@ -75,7 +76,7 @@ void BDExchangeMove<RealType>::move_device(
     logsumexp_.sum_device(num_target_mols_, d_log_weights_before_.data, d_log_sum_exp_before_.data, stream);
 
     const int num_samples = 1;
-    for (int move = 0; move < num_moves; move++) {
+    for (int move = 0; move < proposals_per_move_; move++) {
         // Run only after the first pass, to maintain meaningful `log_probability_host` values
         if (move > 0) {
             // Run a separate kernel to replace the before log probs and weights with the after if accepted a move
@@ -140,7 +141,7 @@ void BDExchangeMove<RealType>::move_device(
 
 template <typename RealType>
 std::array<std::vector<double>, 2>
-BDExchangeMove<RealType>::move_host(const int N, const int num_moves, const double *h_coords, const double *h_box) {
+BDExchangeMove<RealType>::move_host(const int N, const double *h_coords, const double *h_box) {
 
     DeviceBuffer<double> d_coords(N * 3);
     d_coords.copy_from(h_coords);
@@ -150,7 +151,7 @@ BDExchangeMove<RealType>::move_host(const int N, const int num_moves, const doub
 
     cudaStream_t stream = static_cast<cudaStream_t>(0);
 
-    this->move_device(N, num_moves, d_coords.data, d_box.data, stream);
+    this->move_device(N, d_coords.data, d_box.data, stream);
     gpuErrchk(cudaStreamSynchronize(stream));
 
     std::vector<double> out_coords(d_coords.length);

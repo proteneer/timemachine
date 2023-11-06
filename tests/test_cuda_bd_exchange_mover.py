@@ -47,17 +47,17 @@ def test_two_clashy_water_moves(moves, precision, rtol, atol, seed):
     if precision == np.float64:
         klass = custom_ops.BDExchangeMove_f64
 
-    bdem = klass(N, group_idxs, params, DEFAULT_TEMP, nb.potential.beta, cutoff, seed)
+    proposals_per_move = 1
+    bdem = klass(N, group_idxs, params, DEFAULT_TEMP, nb.potential.beta, cutoff, seed, proposals_per_move)
 
     ref_bdem = RefBDExchangeMove(nb.potential.beta, cutoff, params, group_idxs, DEFAULT_TEMP)
 
     assert bdem.last_log_probability() == 0.0, "First log probability expected to be zero"
-    num_steps = 1
     last_conf = conf
     accepted = 0
     for _ in range(moves):
         before_log_weights = ref_bdem.batch_log_weights(last_conf, box)
-        x_move, x_box = bdem.move(last_conf, box, num_steps)
+        x_move, x_box = bdem.move(last_conf, box)
         after_log_weights = ref_bdem.batch_log_weights(x_move, x_box)
         # The box will never change
         np.testing.assert_array_equal(box, x_box)
@@ -65,7 +65,7 @@ def test_two_clashy_water_moves(moves, precision, rtol, atol, seed):
         for mol_idxs in group_idxs:
             if not np.all(x_move[mol_idxs] == last_conf[mol_idxs]):
                 num_moved += 1
-        if num_moved > 0:
+        if num_moved > 0 and proposals_per_move == 1:
             accepted += 1
             # Verify that the probabilities agree when we do accept moves
             np.testing.assert_allclose(
@@ -113,14 +113,16 @@ def test_bd_exchange_deterministic_moves(moves, precision, seed):
     if precision == np.float64:
         klass = custom_ops.BDExchangeMove_f64
 
-    bdem_a = klass(N, group_idxs, params, DEFAULT_TEMP, nb.potential.beta, cutoff, seed)
-    bdem_b = klass(N, group_idxs, params, DEFAULT_TEMP, nb.potential.beta, cutoff, seed)
+    # Reference that makes a single proposal per move
+    bdem_a = klass(N, group_idxs, params, DEFAULT_TEMP, nb.potential.beta, cutoff, seed, 1)
+    # Test version that makes all proposals in a single move
+    bdem_b = klass(N, group_idxs, params, DEFAULT_TEMP, nb.potential.beta, cutoff, seed, moves)
 
     iterative_moved_coords = conf.copy()
     for _ in range(moves):
-        iterative_moved_coords, _ = bdem_a.move(iterative_moved_coords, box, 1)
+        iterative_moved_coords, _ = bdem_a.move(iterative_moved_coords, box)
         assert not np.all(conf == iterative_moved_coords)  # We should move every time since its a single mol
-    batch_moved_coords, _ = bdem_b.move(conf, box, moves)
+    batch_moved_coords, _ = bdem_b.move(conf, box)
     # Moves should be deterministic regardless the number of steps taken per move
     np.testing.assert_array_equal(iterative_moved_coords, batch_moved_coords)
 
@@ -149,7 +151,7 @@ def test_moves_in_a_water_box(steps_per_move, moves, precision, rtol, atol, seed
     if precision == np.float64:
         klass = custom_ops.BDExchangeMove_f64
 
-    bdem = klass(N, group_idxs, params, DEFAULT_TEMP, nb.potential.beta, cutoff, seed)
+    bdem = klass(N, group_idxs, params, DEFAULT_TEMP, nb.potential.beta, cutoff, seed, steps_per_move)
 
     ref_bdem = RefBDExchangeMove(nb.potential.beta, cutoff, params, group_idxs, DEFAULT_TEMP)
 
@@ -157,7 +159,7 @@ def test_moves_in_a_water_box(steps_per_move, moves, precision, rtol, atol, seed
     accepted = 0
     last_conf = conf
     for _ in range(moves // steps_per_move):
-        x_move, x_box = bdem.move(last_conf, box, steps_per_move)
+        x_move, x_box = bdem.move(last_conf, box)
         # The box will never change
         np.testing.assert_array_equal(box, x_box)
         num_moved = 0
