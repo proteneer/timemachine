@@ -27,7 +27,10 @@ from timemachine.md.states import CoordsVelBox
 
 
 def image_xvb(initial_state, xvb_t):
-    new_coords = image_frames(initial_state, [xvb_t.coords], [xvb_t.box])[0]
+    new_coords = xvb_t.coords
+    # Only image if there is a ligand
+    if len(initial_state.ligand_idxs) > 0:
+        new_coords = image_frames(initial_state, [xvb_t.coords], [xvb_t.box])[0]
     return CoordsVelBox(new_coords, xvb_t.velocities, xvb_t.box)
 
 
@@ -135,7 +138,8 @@ def test_exchange():
     else:
         writer = cif_writer.CIFWriter([topology], args.out_cif)
 
-    cur_x_t = image_frames(initial_state, [cur_x_t], [cur_box])[0]
+    xvb_t = CoordsVelBox(cur_x_t, cur_v_t, cur_box)
+    xvb_t = image_xvb(initial_state, xvb_t)
     writer.write_frame(cur_x_t * 10)
 
     npt_mover = NPTMove(
@@ -156,7 +160,6 @@ def test_exchange():
     equilibration_steps = 50000
     # equilibrate using the npt mover
     npt_mover.n_steps = equilibration_steps
-    xvb_t = CoordsVelBox(cur_x_t, cur_v_t, cur_box)
     xvb_t = npt_mover.move(xvb_t)
     print("done")
 
@@ -175,9 +178,12 @@ def test_exchange():
             assert np.amax(np.abs(xvb_t.coords)) < 1e3
             xvb_t = exc_mover.move(xvb_t)
 
-        # compute occupancy at the end of MC moves (as opposed to MD moves), as its more sensitive to any possible
-        # biases and/or correctness issues.
-        occ = compute_occupancy(xvb_t.coords, xvb_t.box, initial_state.ligand_idxs, threshold=DEFAULT_BB_RADIUS)
+        occ = 0
+        # (fey) Don't compute occupancy if there is no ligand
+        if len(initial_state.ligand_idxs) > 0:
+            occ = compute_occupancy(xvb_t.coords, xvb_t.box, initial_state.ligand_idxs, threshold=DEFAULT_BB_RADIUS)
+            # compute occupancy at the end of MC moves (as opposed to MD moves), as its more sensitive to any possible
+            # biases and/or correctness issues.
         print(
             f"{exc_mover.n_accepted} / {exc_mover.n_proposed} | density {density} | # of waters in spherical region {occ // 3} | md step: {idx * args.md_steps_per_batch}",
             flush=True,
@@ -210,5 +216,5 @@ if __name__ == "__main__":
     # python -u examples/water_sampling_mc.py --water_pdb timemachine/datasets/water_exchange/bb_0_waters.pdb --ligand_sdf timemachine/datasets/water_exchange/bb_centered_neutral.sdf --out_cif traj_0_waters.cif --md_steps_per_batch 10000 --mc_steps_per_batch 10000 --insertion_type targeted --use_hmr 1
 
     # running in bulk, 10k mc steps, 10k md steps, untargeted insertion
-    # python -u examples/water_sampling_mc.py --water_pdb timemachine/datasets/water_exchange/bb_0_waters.pdb --out_cif bulk.cif --md_steps_per_batch 10000 --mc_steps_per_batch 10000 --insertion_type untargeted
+    # python -u examples/water_sampling_mc.py --water_pdb timemachine/datasets/water_exchange/bb_0_waters.pdb --out_cif bulk.cif --md_steps_per_batch 10000 --mc_steps_per_batch 10000 --insertion_type untargeted --use_hmr 1
     test_exchange()

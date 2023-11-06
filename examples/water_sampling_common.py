@@ -9,6 +9,7 @@ from timemachine.fe.model_utils import apply_hmr
 from timemachine.fe.topology import BaseTopology
 from timemachine.fe.utils import get_romol_conf
 from timemachine.ff import Forcefield
+from timemachine.ff.handlers import openmm_deserializer
 from timemachine.ff.handlers.nonbonded import PrecomputedChargeHandler
 from timemachine.lib import LangevinIntegrator, MonteCarloBarostat
 from timemachine.md.barostat.utils import get_bond_list, get_group_indices
@@ -102,31 +103,39 @@ def get_initial_state(water_pdb, mol, ff, seed, nb_cutoff, use_hmr, lamb):
 
     assert num_water_atoms == len(solvent_conf)
 
-    bt = BaseTopology(mol, ff)
-    afe = AbsoluteFreeEnergy(mol, bt)
     host_config = HostConfig(solvent_sys, solvent_conf, solvent_box, num_water_atoms)
-    potentials, params, combined_masses = afe.prepare_host_edge(ff.get_params(), host_config, lamb)
-    ligand_idxs = np.arange(num_water_atoms, num_water_atoms + mol.GetNumAtoms())
-    nb_params = np.array(params[-1])
+    if mol is not None:
+        # Assumes the mol is a buckyball
+        bt = BaseTopology(mol, ff)
+        afe = AbsoluteFreeEnergy(mol, bt)
+        potentials, params, combined_masses = afe.prepare_host_edge(ff.get_params(), host_config, lamb)
+        ligand_idxs = np.arange(num_water_atoms, num_water_atoms + mol.GetNumAtoms())
+        nb_params = np.array(params[-1])
+        final_conf = np.concatenate([solvent_conf, get_romol_conf(mol)], axis=0)
+        component_dim = 4  # q,s,e,w
+        num_atoms = len(final_conf)
 
-    final_conf = np.concatenate([solvent_conf, get_romol_conf(mol)], axis=0)
-
-    component_dim = 4  # q,s,e,w
-    num_atoms = len(final_conf)
-
-    ligand_water_flat_idxs = np.s_[component_dim * num_atoms : 2 * component_dim * num_atoms]  # water
-    ligand_water_params = nb_params[ligand_water_flat_idxs].reshape(-1, 4)
-    # Forms a hole on the "flat" side of the buckyball, 1-indexed, over the selected atoms
-    # previously failed attempts:
-    # 1) uniformly decoupling half of the buckyball
-    # 2) uniformly decoupling entire buckyball
-    # 3) uniformly shrinking vdw radii of every buckyball atom
-    # 4) uniformly shrinking vdw radii of half of the buckyball atoms
-    lambda_coupled_ligand_atoms = num_water_atoms + np.array([10, 11, 16, 17, 21, 22, 12, 14, 13, 25, 24, 23, 20]) - 1
-    fully_coupled_ligand_atoms = np.setdiff1d(ligand_idxs, lambda_coupled_ligand_atoms)
-
-    ligand_water_params[fully_coupled_ligand_atoms, -1] = 0
-    nb_params[ligand_water_flat_idxs] = ligand_water_params.reshape(-1)
+        ligand_water_flat_idxs = np.s_[component_dim * num_atoms : 2 * component_dim * num_atoms]  # water
+        ligand_water_params = nb_params[ligand_water_flat_idxs].reshape(-1, 4)
+        # Forms a hole on the "flat" side of the buckyball, 1-indexed, over the selected atoms
+        # previously failed attempts:
+        # 1) uniformly decoupling half of the buckyball
+        # 2) uniformly decoupling entire buckyball
+        # 3) uniformly shrinking vdw radii of every buckyball atom
+        # 4) uniformly shrinking vdw radii of half of the buckyball atoms
+        lambda_coupled_ligand_atoms = (
+            num_water_atoms + np.array([10, 11, 16, 17, 21, 22, 12, 14, 13, 25, 24, 23, 20]) - 1
+        )
+        fully_coupled_ligand_atoms = np.setdiff1d(ligand_idxs, lambda_coupled_ligand_atoms)
+        ligand_water_params[fully_coupled_ligand_atoms, -1] = 0
+        nb_params[ligand_water_flat_idxs] = ligand_water_params.reshape(-1)
+    else:
+        host_fns, combined_masses = openmm_deserializer.deserialize_system(host_config.omm_system, cutoff=nb_cutoff)
+        potentials = [bp.potential for bp in host_fns]
+        params = [bp.params for bp in host_fns]
+        final_conf = solvent_conf
+        ligand_idxs = np.array([])
+        nb_params = np.array(params[-1])
 
     # override last potential with the updated nb_params
     host_bps = []
