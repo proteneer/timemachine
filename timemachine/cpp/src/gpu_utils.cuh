@@ -39,6 +39,7 @@ inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort =
             case cudaErrorInvalidPtx:
             case cudaErrorUnsupportedPtxVersion:
             case cudaErrorDevicesUnavailable:
+            case cudaErrorUnknown:
                 throw InvalidHardware(code);
             default:
                 break;
