@@ -28,7 +28,7 @@ def test_two_clashy_water_moves(moves, precision, rtol, atol, seed):
     all_group_idxs = get_group_indices(get_bond_list(bond_pot), conf.shape[0])
 
     # Get first two mols
-    group_idxs = all_group_idxs[:5]
+    group_idxs = all_group_idxs[:2]
 
     conf_idxs = np.array(group_idxs).reshape(-1)
 
