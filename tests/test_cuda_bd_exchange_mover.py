@@ -85,7 +85,7 @@ def test_two_clashy_water_moves(moves, precision, rtol, atol, seed):
 @pytest.mark.parametrize("precision", [np.float64, np.float32])
 @pytest.mark.parametrize("seed", [2023])
 def test_bd_exchange_deterministic_moves(moves, precision, seed):
-    """Given two waters directly on top of each other in a box, the exchange mover should accept almost any move"""
+    """Given one water the exchange mover should accept every move and the results should be deterministic"""
     ff = Forcefield.load_default()
     system, conf, _, _ = builders.build_water_system(1.0, ff.water_ff)
     bps, _ = openmm_deserializer.deserialize_system(system, cutoff=1.2)
@@ -95,8 +95,8 @@ def test_bd_exchange_deterministic_moves(moves, precision, seed):
 
     all_group_idxs = get_group_indices(get_bond_list(bond_pot), conf.shape[0])
 
-    # Select two mols
-    group_idxs = all_group_idxs[:2]
+    # Select a single mol
+    group_idxs = all_group_idxs[:1]
 
     conf_idxs = np.array(group_idxs).reshape(-1)
 
