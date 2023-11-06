@@ -71,6 +71,8 @@ def test_exchange():
         help="Whether or not we apply HMR. 1 for yes, 0 for no.",
         required=True,
     )
+    parser.add_argument("--iterations", type=int, help="Number of iterations", default=1000000)
+    parser.add_argument("--equilibration_steps", type=int, help="Number of equilibration steps", default=50000)
 
     args = parser.parse_args()
 
@@ -123,6 +125,7 @@ def test_exchange():
             initial_state.ligand_idxs,
             DEFAULT_BB_RADIUS,
         )
+        assert mol is not None, "Requires a mol for targeted exchange"
     elif args.insertion_type == "untargeted":
         # vanilla reference
         exc_mover = exchange_mover.BDExchangeMove(nb_beta, nb_cutoff, nb_water_ligand_params, water_idxs, DEFAULT_TEMP)
@@ -157,7 +160,7 @@ def test_exchange():
     # equilibration
     print("Equilibrating the system... ", end="", flush=True)
 
-    equilibration_steps = 50000
+    equilibration_steps = args.equilibration_steps
     # equilibrate using the npt mover
     npt_mover.n_steps = equilibration_steps
     xvb_t = npt_mover.move(xvb_t)
@@ -168,7 +171,7 @@ def test_exchange():
     # (ytz): If I start with pure MC, and no MD, it's actually very easy to remove the waters.
     # since the starting waters have very very high energy. If I re-run MD, then it becomes progressively harder
     # remove the water since we will re-equilibriate the waters.
-    for idx in range(1000000):
+    for idx in range(args.iterations):
         density = compute_density(nwm, xvb_t.box)
 
         xvb_t = image_xvb(initial_state, xvb_t)
