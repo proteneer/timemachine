@@ -1591,8 +1591,7 @@ double py_accumulate_energy(const py::array_t<long long, py::array::c_style> &in
 
     std::vector<__int128> h_buffer = py_array_to_vector_with_cast<long long, __int128>(input_data);
 
-    DeviceBuffer<__int128> d_input_buffer(N);
-    d_input_buffer.copy_from(&h_buffer[0]);
+    DeviceBuffer<__int128> d_input_buffer(h_buffer);
 
     DeviceBuffer<__int128> d_output_buffer(1);
 

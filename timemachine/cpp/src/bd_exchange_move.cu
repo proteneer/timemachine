@@ -22,14 +22,12 @@ BDExchangeMove<RealType>::BDExchangeMove(
     const int proposals_per_move)
     : N_(N), proposals_per_move_(proposals_per_move), num_target_mols_(target_mols.size()),
       beta_(static_cast<RealType>(1.0 / (BOLTZ * temperature))), mol_potential_(N, target_mols, nb_beta, cutoff),
-      sampler_(num_target_mols_, seed), logsumexp_(N), d_intermediate_coords_(N * 3), d_params_(params.size()),
-      d_mol_energy_buffer_(num_target_mols_), d_mol_offsets_(get_mol_offsets(target_mols).size()),
+      sampler_(num_target_mols_, seed), logsumexp_(N), d_intermediate_coords_(N * 3), d_params_(params),
+      d_mol_energy_buffer_(num_target_mols_), d_mol_offsets_(get_mol_offsets(target_mols)),
       d_log_weights_before_(num_target_mols_), d_log_weights_after_(num_target_mols_),
       d_log_probabilities_before_(num_target_mols_), d_log_probabilities_after_(num_target_mols_),
       d_log_sum_exp_before_(2), d_log_sum_exp_after_(2), d_samples_(1), d_quaternions_(round_up_even(4)),
       d_translations_(round_up_even(4)), d_num_accepted_(1), num_attempted_(0) {
-    d_params_.copy_from(&params[0]);
-    d_mol_offsets_.copy_from(&get_mol_offsets(target_mols)[0]);
 
     // Clear out the logsumexp values so the log probability starts off as zero
     gpuErrchk(cudaMemset(d_log_sum_exp_before_.data, 0, d_log_sum_exp_before_.size()));
