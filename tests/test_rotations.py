@@ -3,6 +3,7 @@ import pytest
 from numpy.typing import NDArray
 from scipy.spatial.transform import Rotation
 
+from timemachine.fe.model_utils import image_molecule
 from timemachine.lib import custom_ops
 
 
@@ -64,13 +65,13 @@ def test_cuda_rotation_by_quaternion(seed, precision, atol, rtol, n_rotations, n
 @pytest.mark.memcheck
 @pytest.mark.parametrize("seed", [2023])
 @pytest.mark.parametrize("precision,atol,rtol", [(np.float64, 1e-8, 1e-8), (np.float32, 2e-5, 1e-5)])
-@pytest.mark.parametrize("n_moves", [2, 33, 100])
+@pytest.mark.parametrize("n_moves", [2, 33, 100, 1000])
 @pytest.mark.parametrize("n_coords", [8, 33, 65])
 def test_cuda_rotation_and_translation_by_quaternion(seed, precision, atol, rtol, n_moves, n_coords):
     rng = np.random.default_rng(seed)
 
     mol_coords = rng.normal(size=(n_coords, 3)) * 10.0
-    box = np.eye(3) * 100.0
+    box = np.eye(3) * 10.0
 
     quaternions = rng.normal(size=(n_moves, 4))
     translations = rng.uniform(size=(n_moves, 3))
@@ -89,7 +90,7 @@ def test_cuda_rotation_and_translation_by_quaternion(seed, precision, atol, rtol
 
         np.testing.assert_allclose(
             rotated_translated_mol,
-            ref_rotated_translated_mol,
+            image_molecule(ref_rotated_translated_mol, box),
             rtol=rtol,
             atol=atol,
         )
