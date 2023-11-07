@@ -21,7 +21,7 @@ void __global__ k_attempt_exchange_move(
     double *__restrict__ dest_coords,                // [N, 3]
     size_t *__restrict__ num_accepted                // [1]
 ) {
-    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    int atom_idx = blockIdx.x * blockDim.x + threadIdx.x;
 
     // All kernels compute the same acceptance
     // TBD investigate shared memory for speed
@@ -30,16 +30,16 @@ void __global__ k_attempt_exchange_move(
 
     RealType log_acceptance_prob = min(before_log_prob - after_log_prob, static_cast<RealType>(0.0));
     const bool accepted = rand[0] < exp(log_acceptance_prob);
-    if (idx == 0 && accepted) {
+    if (atom_idx == 0 && accepted) {
         num_accepted[0]++;
     }
 
     // If accepted, move the coords into place
-    while (accepted && idx < N) {
-        dest_coords[idx * 3 + 0] = moved_coords[idx * 3 + 0];
-        dest_coords[idx * 3 + 1] = moved_coords[idx * 3 + 1];
-        dest_coords[idx * 3 + 2] = moved_coords[idx * 3 + 2];
-        idx += gridDim.x * blockDim.x;
+    while (accepted && atom_idx < N) {
+        dest_coords[atom_idx * 3 + 0] = moved_coords[atom_idx * 3 + 0];
+        dest_coords[atom_idx * 3 + 1] = moved_coords[atom_idx * 3 + 1];
+        dest_coords[atom_idx * 3 + 2] = moved_coords[atom_idx * 3 + 2];
+        atom_idx += gridDim.x * blockDim.x;
     }
 }
 
