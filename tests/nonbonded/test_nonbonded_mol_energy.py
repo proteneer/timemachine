@@ -2,12 +2,15 @@ from importlib import resources
 
 import numpy as np
 import pytest
+from common import assert_energy_arrays_match
+from scipy.special import logsumexp
 
-from timemachine.constants import DEFAULT_PRESSURE, DEFAULT_TEMP
+from timemachine.constants import DEFAULT_KT, DEFAULT_PRESSURE, DEFAULT_TEMP
 from timemachine.fe.model_utils import apply_hmr
 from timemachine.ff import Forcefield
 from timemachine.ff.handlers import openmm_deserializer
 from timemachine.lib import LangevinIntegrator, MonteCarloBarostat, custom_ops
+from timemachine.lib.fixed_point import fixed_to_float
 from timemachine.md import builders
 from timemachine.md.barostat.utils import get_bond_list, get_group_indices
 from timemachine.md.exchange.exchange_mover import BDExchangeMove, randomly_rotate_and_translate
@@ -166,8 +169,8 @@ def test_nonbonded_mol_energy_random_moves(num_mols, moves, precision, atol, rto
 
     mols_to_move = rng.choice(np.arange(len(group_idxs)), size=moves)
 
-    # empirical threshold based on testing
-    threshold = 1e8
+    true_log_z = logsumexp(u_ref(conf, box, params) / DEFAULT_KT)
+    test_log_z = logsumexp(u_test(conf, box, params) / DEFAULT_KT)
 
     for mol_idx in mols_to_move:
         translation = np.diag(box) * rng.uniform(size=3)
@@ -177,15 +180,22 @@ def test_nonbonded_mol_energy_random_moves(num_mols, moves, precision, atol, rto
         updated_conf[atom_idxs] = moved_coords
         test_mol_energies = u_test(updated_conf, box, params)
         ref_mol_energies = u_ref(updated_conf, box, params)
-        large_energy_indices = np.argwhere(np.abs(ref_mol_energies) >= threshold)
-        comparable_energies = np.delete(np.arange(len(test_mol_energies)), large_energy_indices)
-        np.testing.assert_allclose(
-            ref_mol_energies[comparable_energies], test_mol_energies[comparable_energies], rtol=rtol, atol=atol
+
+        assert_energy_arrays_match(ref_mol_energies, test_mol_energies, rtol=rtol, atol=atol)
+
+        # Verify that if we compute the acceptance difference they are very close
+        ref_mol_unitless = (1 / DEFAULT_KT) * ref_mol_energies
+        # Replace nans with the max value we can get
+        test_mol_unitless = (1 / DEFAULT_KT) * np.where(
+            np.isfinite(test_mol_energies), test_mol_energies, fixed_to_float(np.iinfo(np.int64).max)
         )
-        # Pull out nans, as they are effectively greater than the threshold
-        non_nan_idx = np.isfinite(test_mol_energies[large_energy_indices])
-        # Large energies are not reliable, so beyond the threshold we simply verify that both the reference and test both exceed the threshold
-        assert np.all(np.abs(test_mol_energies[large_energy_indices][non_nan_idx]) >= threshold)
+
+        true_log_z_prime = logsumexp(ref_mol_unitless)
+        test_log_z_prime = logsumexp(test_mol_unitless)
+
+        np.testing.assert_allclose(
+            np.exp(true_log_z - true_log_z_prime), np.exp(test_log_z - test_log_z_prime), atol=atol, rtol=rtol
+        )
 
 
 @pytest.mark.parametrize("precision,atol,rtol", [(np.float64, 1e-8, 1e-8), (np.float32, 1e-4, 3e-4)])
@@ -268,4 +278,15 @@ def test_nonbonded_mol_energy_matches_exchange_mover_batch_U_in_complex(precisio
         np.testing.assert_array_equal(mol_energies, comp_mol_energies)
         return mol_energies
 
-    np.testing.assert_allclose(u_test(conf, box, params), u_ref(conf, box, params), rtol=rtol, atol=atol)
+    test_mol_energies = u_test(conf, box, params)
+    ref_mol_energies = u_ref(conf, box, params)
+    np.testing.assert_allclose(test_mol_energies, ref_mol_energies, rtol=rtol, atol=atol)
+
+    test_mol_unitless = (1 / DEFAULT_KT) * test_mol_energies
+    ref_mol_unitless = (1 / DEFAULT_KT) * ref_mol_energies
+    np.testing.assert_allclose(
+        np.exp(test_mol_unitless - logsumexp(test_mol_unitless)),
+        np.exp(ref_mol_unitless - logsumexp(ref_mol_unitless)),
+        rtol=rtol,
+        atol=atol,
+    )

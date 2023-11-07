@@ -110,6 +110,46 @@ def prepare_water_system(x, p_scale, cutoff):
     return params, potential
 
 
+def assert_energy_arrays_match(
+    reference_energies: NDArray, test_energies: NDArray, threshold: float = 1e8, rtol: float = 1e-8, atol: float = 1e-8
+):
+    """When comparing the reference platform (jax) to the cuda platform we can get Nans beyond a certain
+    value and these NaNs will cause issues when comparing energies. This method compares all of the values that aren't
+    nans and makes sure that all the cases where the values are Nan are very large in the reference energies.
+
+    Parameters
+    ----------
+
+    reference_energies: np.ndarray
+        Energies from the reference platform, method is not trustworthy otherwise
+
+    test_energies: np.ndarray
+        Energies from the C++ platform
+
+    threshold: float
+        Threshold to use, defaults to 1e8 which is empirically selected
+
+    rtol: float
+        Relative tolerance, defaults to 1e-8
+
+    atol: float
+        Absolute tolerance, defaults to 1e-8
+
+    Raises
+    ------
+    AssertionError - Don't match
+    """
+    large_energy_indices = np.argwhere(np.abs(reference_energies) >= threshold)
+    comparable_energies = np.delete(np.arange(len(test_energies)), large_energy_indices)
+    np.testing.assert_allclose(
+        reference_energies[comparable_energies], test_energies[comparable_energies], rtol=rtol, atol=atol
+    )
+    # Pull out nans, as they are effectively greater than the threshold
+    non_nan_idx = np.isfinite(test_energies[large_energy_indices])
+    # Large energies are not reliable, so beyond the threshold we simply verify that both the reference and test both exceed the threshold
+    assert np.all(np.abs(test_energies[large_energy_indices][non_nan_idx]) >= threshold)
+
+
 def prepare_nb_system(
     x,
     E,  # number of exclusions

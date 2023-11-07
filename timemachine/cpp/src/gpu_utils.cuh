@@ -188,7 +188,6 @@ void __global__ k_accumulate_energy(
         shared_mem[tid] += input_buffer[i] + (i + BLOCK_SIZE < N ? input_buffer[i + BLOCK_SIZE] : 0);
         i += stride;
     }
-    //
     __syncthreads();
 
     block_energy_reduce<BLOCK_SIZE>(shared_mem, threadIdx.x);

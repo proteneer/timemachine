@@ -1,3 +1,4 @@
+#pragma once
 
 namespace timemachine {
 
@@ -11,14 +12,9 @@ RealType __host__ __device__ __forceinline__ compute_logsumexp_final(const RealT
 template <typename RealType>
 void __global__ k_exp_sub_max(
     const int N,
-    const RealType *__restrict__ max, // [0]
-    RealType *__restrict__ vals       // [N]
-) {
-    int idx = blockIdx.x * blockDim.x + threadIdx.x;
-    if (idx >= N) {
-        return;
-    }
-    vals[idx] = exp(vals[idx] - max[0]);
-}
+    const RealType *__restrict__ max,  // [1]
+    const RealType *__restrict__ vals, // [N]
+    RealType *__restrict__ out         // [N]
+);
 
 } // namespace timemachine

@@ -1,6 +1,7 @@
 #include "mol_utils.hpp"
 #include <algorithm>
 #include <set>
+#include <stdexcept>
 
 namespace timemachine {
 
@@ -61,6 +62,10 @@ std::array<std::vector<int>, 3> prepare_group_idxs_for_gpu(const std::vector<std
     mol_offsets[num_mols] = offset;
 
     return std::array<std::vector<int>, 3>({atom_idxs, mol_idxs, mol_offsets});
+}
+
+std::vector<int> get_mol_offsets(const std::vector<std::vector<int>> &group_idxs) {
+    return prepare_group_idxs_for_gpu(group_idxs)[2];
 }
 
 } // namespace timemachine
