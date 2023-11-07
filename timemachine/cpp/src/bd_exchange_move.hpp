@@ -22,21 +22,21 @@ private:
     WeightedRandomSampler<RealType> sampler_;
     LogSumExp<RealType> logsumexp_;
     // Buffer for evaluating moves without touching the original coords
-    const DeviceBuffer<double> d_intermediate_coords_;
-    const DeviceBuffer<double> d_params_;
-    const DeviceBuffer<__int128> d_mol_energy_buffer_;
-    const DeviceBuffer<int> d_mol_offsets_;
-    const DeviceBuffer<RealType> d_log_weights_before_;
-    const DeviceBuffer<RealType> d_log_weights_after_;
-    const DeviceBuffer<RealType> d_log_probabilities_before_;
-    const DeviceBuffer<RealType> d_log_probabilities_after_;
-    const DeviceBuffer<RealType> d_log_sum_exp_before_; // [2]
-    const DeviceBuffer<RealType> d_log_sum_exp_after_;  // [2]
-    const DeviceBuffer<int>
+    DeviceBuffer<double> d_intermediate_coords_;
+    DeviceBuffer<double> d_params_;
+    DeviceBuffer<__int128> d_mol_energy_buffer_;
+    DeviceBuffer<int> d_mol_offsets_;
+    DeviceBuffer<RealType> d_log_weights_before_;
+    DeviceBuffer<RealType> d_log_weights_after_;
+    DeviceBuffer<RealType> d_log_probabilities_before_;
+    DeviceBuffer<RealType> d_log_probabilities_after_;
+    DeviceBuffer<RealType> d_log_sum_exp_before_; // [2]
+    DeviceBuffer<RealType> d_log_sum_exp_after_;  // [2]
+    DeviceBuffer<int>
         d_samples_; // where the indices to sample a molecule come from, currently fixed to a single sample
-    const DeviceBuffer<RealType> d_quaternions_;  // Normal noise for uniform random rotations
-    const DeviceBuffer<RealType> d_translations_; // Uniform noise for translation + the check
-    const DeviceBuffer<size_t> d_num_accepted_;
+    DeviceBuffer<RealType> d_quaternions_;  // Normal noise for uniform random rotations
+    DeviceBuffer<RealType> d_translations_; // Uniform noise for translation + the check
+    DeviceBuffer<size_t> d_num_accepted_;
 
     size_t num_attempted_;
     curandGenerator_t cr_rng_;
