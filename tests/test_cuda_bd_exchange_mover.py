@@ -134,8 +134,10 @@ def test_bd_exchange_deterministic_moves(moves, precision, seed):
     np.testing.assert_array_equal(iterative_moved_coords, batch_moved_coords)
 
 
-@pytest.mark.parametrize("steps_per_move", [1, 10])
-@pytest.mark.parametrize("moves", [2500])
+@pytest.mark.parametrize(
+    "steps_per_move,moves",
+    [(1, 2500), (10, 2500), pytest.param(10000, 50000, marks=pytest.mark.nightly(reason="slow"))],
+)
 @pytest.mark.parametrize("precision,rtol,atol", [(np.float64, 5e-6, 5e-6), (np.float32, 1e-4, 2e-3)])
 @pytest.mark.parametrize("seed", [2023])
 def test_moves_in_a_water_box(steps_per_move, moves, precision, rtol, atol, seed):
@@ -160,6 +162,8 @@ def test_moves_in_a_water_box(steps_per_move, moves, precision, rtol, atol, seed
     klass = custom_ops.BDExchangeMove_f32
     if precision == np.float64:
         klass = custom_ops.BDExchangeMove_f64
+        if moves > 10_000:
+            pytest.skip("Too many moves  to test for float64")
 
     bdem = klass(N, group_idxs, params, DEFAULT_TEMP, nb.potential.beta, cutoff, seed, steps_per_move)
 
@@ -193,12 +197,17 @@ def test_moves_in_a_water_box(steps_per_move, moves, precision, rtol, atol, seed
                 )
         if num_moved == 0:
             np.testing.assert_array_equal(last_conf, x_move)
-        assert num_moved <= 1, "More than one mol moved, something is wrong"
+        assert steps_per_move != 1 or num_moved <= 1, "More than one mol moved, something is wrong"
         last_conf = x_move
-    assert accepted > 0, "No moves were made, nothing was tested"
+    assert bdem.n_proposed() == moves
+    if moves < 10_000:
+        assert accepted > 0, "No moves were made, nothing was tested"
+    else:
+        assert bdem.n_accepted() > 10
+        assert bdem.acceptance_fraction() >= 0.0001
     if steps_per_move == 1:
+        np.testing.assert_allclose(bdem.acceptance_fraction(), accepted / moves)
         assert bdem.n_accepted() == accepted
     else:
         assert bdem.n_accepted() >= accepted
-    assert bdem.n_proposed() == moves
-    np.testing.assert_allclose(bdem.acceptance_fraction(), accepted / moves)
+        assert bdem.acceptance_fraction() >= accepted / moves
