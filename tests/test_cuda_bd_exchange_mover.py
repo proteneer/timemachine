@@ -78,7 +78,8 @@ def test_two_clashy_water_moves(moves, precision, rtol, atol, seed):
             np.testing.assert_array_equal(last_conf, x_move)
         assert num_moved <= 1, "More than one mol moved, something is wrong"
         last_conf = x_move
-    assert accepted > 0
+    # All moves are accepted, however the two waters could clash do to a proposal.
+    assert accepted == moves
 
 
 @pytest.mark.parametrize("moves", [1, 100])
