@@ -94,9 +94,9 @@ void BDExchangeMove<RealType>::move_device(
         gpuErrchk(cudaMemcpyAsync(
             d_intermediate_coords_.data, d_coords, d_intermediate_coords_.size(), cudaMemcpyDeviceToDevice, stream));
 
-        // Quaternions generated from normal noise, while translations and the acceptance value are uniform
+        // Quaternions generated from normal noise generate uniform rotations
         curandErrchk(templateCurandNormal(cr_rng_, d_quaternions_.data, d_quaternions_.length, 0.0, 1.0));
-        // The last translation value is to be used to determine acceptance
+        // The d_translation_ buffer is [x,y,z,w] where [x,y,z] are a random translation and w is used for acceptance
         curandErrchk(templateCurandUniform(cr_rng_, d_translations_.data, d_translations_.length));
 
         sampler_.sample_device(num_target_mols_, num_samples, d_log_weights_before_.data, d_samples_.data, stream);
