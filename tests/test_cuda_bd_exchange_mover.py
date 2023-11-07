@@ -3,6 +3,7 @@ import pytest
 from scipy.special import logsumexp
 
 from timemachine.constants import DEFAULT_TEMP
+from timemachine.fe.model_utils import image_frame
 from timemachine.ff import Forcefield
 from timemachine.ff.handlers import openmm_deserializer
 from timemachine.lib import custom_ops
@@ -37,6 +38,9 @@ def test_two_clashy_water_moves(moves, precision, rtol, atol, seed):
     conf[group_idxs[0], :] = conf[group_idxs[1], :]
 
     box = np.eye(3) * 100.0
+
+    # Re-image coords so that everything is imaged to begin with
+    conf = image_frame(group_idxs, conf, box)
 
     N = conf.shape[0]
 
@@ -74,6 +78,8 @@ def test_two_clashy_water_moves(moves, precision, rtol, atol, seed):
                 rtol=rtol,
                 atol=atol,
             )
+            # The molecules should all be imaged in the home box
+            np.testing.assert_allclose(image_frame(group_idxs, x_move, x_box), x_move)
         if num_moved == 0:
             np.testing.assert_array_equal(last_conf, x_move)
         assert num_moved <= 1, "More than one mol moved, something is wrong"
@@ -145,6 +151,9 @@ def test_moves_in_a_water_box(steps_per_move, moves, precision, rtol, atol, seed
 
     N = conf.shape[0]
 
+    # Re-image coords so that everything is imaged to begin with
+    conf = image_frame(group_idxs, conf, box)
+
     params = nb.params
 
     cutoff = nb.potential.cutoff
@@ -169,6 +178,8 @@ def test_moves_in_a_water_box(steps_per_move, moves, precision, rtol, atol, seed
                 num_moved += 1
         if num_moved > 0:
             accepted += 1
+            # The molecules should all be imaged in the home box
+            np.testing.assert_allclose(image_frame(group_idxs, x_move, x_box), x_move)
             # Verify that the probabilities and per mol energies agree when we do accept moves
             # can only be done when we only attempt a single move per step
             if steps_per_move == 1:
