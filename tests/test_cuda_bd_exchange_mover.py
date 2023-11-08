@@ -136,7 +136,7 @@ def test_bd_exchange_deterministic_moves(moves, precision, seed):
 
 @pytest.mark.parametrize(
     "steps_per_move,moves",
-    [(1, 2500), (10, 2500), (10000, 50000)],
+    [(1, 2500), (10, 2500), (200000, 200000)],
 )
 @pytest.mark.parametrize("precision,rtol,atol", [(np.float64, 5e-6, 5e-6), (np.float32, 1e-4, 2e-3)])
 @pytest.mark.parametrize("seed", [2023])
@@ -209,7 +209,7 @@ def test_moves_in_a_water_box(steps_per_move, moves, precision, rtol, atol, seed
         assert accepted > 0, "No moves were made, nothing was tested"
     else:
         assert bdem.n_accepted() > 10
-        assert bdem.acceptance_fraction() >= 0.0001
+        np.testing.assert_allclose(0.0002, bdem.acceptance_fraction(), atol=5e-5)
     if steps_per_move == 1:
         np.testing.assert_allclose(bdem.acceptance_fraction(), accepted / moves)
         assert bdem.n_accepted() == accepted
