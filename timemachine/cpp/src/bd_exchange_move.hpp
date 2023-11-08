@@ -15,9 +15,17 @@ template <typename RealType> class BDExchangeMove {
 
 private:
     const int N_;
+    // Number of atom in all mols
+    // All molecules are currently expected to have same number of atoms (typically 3 for waters)
+    // Done to avoid having to determine the size of the sample and allows us to test ion sampling by having
+    // two different BDExchangemoves
+    const int mol_size_;
     const int proposals_per_move_;
     const int num_target_mols_;
+    const RealType nb_beta_;
     const RealType beta_; // 1 / kT
+    const RealType cutoff_squared_;
+    size_t num_attempted_;
     NonbondedMolEnergyPotential<RealType> mol_potential_;
     WeightedRandomSampler<RealType> sampler_;
     LogSumExp<RealType> logsumexp_;
@@ -25,11 +33,10 @@ private:
     DeviceBuffer<double> d_intermediate_coords_;
     DeviceBuffer<double> d_params_;
     DeviceBuffer<__int128> d_mol_energy_buffer_;
+    DeviceBuffer<RealType> d_sample_per_atom_energy_buffer_; // [mol_size_ * N]
     DeviceBuffer<int> d_mol_offsets_;
     DeviceBuffer<RealType> d_log_weights_before_;
     DeviceBuffer<RealType> d_log_weights_after_;
-    DeviceBuffer<RealType> d_log_probabilities_before_;
-    DeviceBuffer<RealType> d_log_probabilities_after_;
     DeviceBuffer<RealType> d_log_sum_exp_before_; // [2]
     DeviceBuffer<RealType> d_log_sum_exp_after_;  // [2]
     DeviceBuffer<int>
@@ -37,8 +44,8 @@ private:
     DeviceBuffer<RealType> d_quaternions_;  // Normal noise for uniform random rotations
     DeviceBuffer<RealType> d_translations_; // Uniform noise for translation + the check
     DeviceBuffer<size_t> d_num_accepted_;
+    DeviceBuffer<int> d_target_mol_atoms_;
 
-    size_t num_attempted_;
     curandGenerator_t cr_rng_;
 
 public:

@@ -143,9 +143,12 @@ class BDExchangeMove(moves.MonteCarloMove):
                 new_water_ixn_nrgs[: (self.num_waters - 1) * 3].reshape((self.num_waters - 1), 3), axis=1
             )
 
+            # print("initial_weights", initial_weights)
             new_water_water_ixn_nrgs_full = jnp.insert(new_water_water_ixn_nrgs, water_idx, 0)
             final_weights = initial_weights - old_water_water_ixn_nrgs_full + new_water_water_ixn_nrgs_full
             final_weights = final_weights.at[water_idx].set(jnp.sum(new_water_ixn_nrgs))
+            # print(np.array(U_fn_unsummed(new_conf, box, a_idxs, b_idxs)))
+            # print("FINAL", np.array(final_weights).tolist())
 
             # (ytz): sanity check to ensure we're doing incremental log weights correctly
             # note that jax 64bit needs to be enabled first.

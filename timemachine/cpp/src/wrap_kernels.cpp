@@ -248,7 +248,7 @@ template <typename RealType> void declare_nonbonded_mol_energy(py::module &m, co
                 int P = params.size();
 
                 std::vector<__int128> fixed_energies =
-                    sampler.mol_energies_host(N, P, coords.data(), params.data(), box.data());
+                    potential.mol_energies_host(N, P, coords.data(), params.data(), box.data());
 
                 py::array_t<double, py::array::c_style> py_u(fixed_energies.size());
 

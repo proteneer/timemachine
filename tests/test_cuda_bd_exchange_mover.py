@@ -136,7 +136,7 @@ def test_bd_exchange_deterministic_moves(moves, precision, seed):
 
 @pytest.mark.parametrize(
     "steps_per_move,moves",
-    [(1, 2500), (10, 2500), pytest.param(10000, 50000, marks=pytest.mark.nightly(reason="slow"))],
+    [(1, 2500), (10, 2500), (10000, 50000)],
 )
 @pytest.mark.parametrize("precision,rtol,atol", [(np.float64, 5e-6, 5e-6), (np.float32, 1e-4, 2e-3)])
 @pytest.mark.parametrize("seed", [2023])
@@ -162,8 +162,6 @@ def test_moves_in_a_water_box(steps_per_move, moves, precision, rtol, atol, seed
     klass = custom_ops.BDExchangeMove_f32
     if precision == np.float64:
         klass = custom_ops.BDExchangeMove_f64
-        if moves > 10_000:
-            pytest.skip("Too many moves  to test for float64")
 
     bdem = klass(N, group_idxs, params, DEFAULT_TEMP, nb.potential.beta, cutoff, seed, steps_per_move)
 
@@ -177,9 +175,13 @@ def test_moves_in_a_water_box(steps_per_move, moves, precision, rtol, atol, seed
         # The box will never change
         np.testing.assert_array_equal(box, x_box)
         num_moved = 0
+        new_pos = None
+        idx = -1
         for i, mol_idxs in enumerate(group_idxs):
             if not np.all(x_move[mol_idxs] == last_conf[mol_idxs]):
                 num_moved += 1
+                new_pos = x_move[mol_idxs]
+                idx = i
         if num_moved > 0:
             accepted += 1
             # The molecules should all be imaged in the home box
@@ -188,7 +190,10 @@ def test_moves_in_a_water_box(steps_per_move, moves, precision, rtol, atol, seed
             # can only be done when we only attempt a single move per step
             if steps_per_move == 1:
                 before_log_weights = ref_bdem.batch_log_weights(last_conf, box)
-                after_log_weights = ref_bdem.batch_log_weights(x_move, x_box)
+                after_log_weights, tested = ref_bdem.batch_log_weights_incremental(
+                    last_conf, x_box, idx, new_pos, before_log_weights
+                )
+                np.testing.assert_array_equal(tested, x_move)
                 np.testing.assert_allclose(
                     np.exp(bdem.last_log_probability()),
                     np.exp(np.minimum(logsumexp(before_log_weights) - logsumexp(after_log_weights), 0.0)),
