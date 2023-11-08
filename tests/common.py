@@ -139,8 +139,13 @@ def assert_energy_arrays_match(
     ------
     AssertionError - Don't match
     """
+    reference_energies = reference_energies.copy()
+    test_energies = test_energies.copy()
+    assert reference_energies.shape == test_energies.shape
+    reference_energies = reference_energies.reshape(-1)
+    test_energies = test_energies.reshape(-1)
+    comparable_energies = np.argwhere(np.abs(reference_energies) < threshold)
     large_energy_indices = np.argwhere(np.abs(reference_energies) >= threshold)
-    comparable_energies = np.delete(np.arange(len(test_energies)), large_energy_indices)
     np.testing.assert_allclose(
         reference_energies[comparable_energies], test_energies[comparable_energies], rtol=rtol, atol=atol
     )
