@@ -25,6 +25,7 @@ from timemachine.fe.free_energy import image_frames
 from timemachine.lib import custom_ops
 from timemachine.md.barostat.moves import NPTMove
 from timemachine.md.exchange import exchange_mover
+from timemachine.md.moves import MonteCarloMove
 from timemachine.md.states import CoordsVelBox
 
 
@@ -116,6 +117,16 @@ def test_exchange():
     print("number of water atoms", nwm * 3)
     print("water_ligand parameters", nb_water_ligand_params)
 
+    def run_mc_proposals(mover, state: CoordsVelBox, steps: int) -> CoordsVelBox:
+        if isinstance(mover, MonteCarloMove):
+            for _ in range(steps):
+                state = mover.move(state)
+            return state
+        else:
+            # C++ implementations have a different API
+            x_mv, _ = exc_mover.move(xvb_t.coords, xvb_t.box)
+            return CoordsVelBox(x_mv, xvb_t.velocities, xvb_t.box)
+
     # tibd optimized
     if args.insertion_type == "targeted":
         exc_mover = exchange_mover.TIBDExchangeMove(
@@ -188,9 +199,8 @@ def test_exchange():
         xvb_t = image_xvb(initial_state, xvb_t)
 
         start_time = time.perf_counter_ns()
-        x_mv, _ = exc_mover.move(xvb_t.coords, xvb_t.box)
+        xvb_t = run_mc_proposals(exc_mover, xvb_t, args.mc_steps_per_batch)
         end_time = time.perf_counter_ns()
-        xvb_t = CoordsVelBox(x_mv, xvb_t.velocities, xvb_t.box)
 
         occ = 0
         # (fey) Don't compute occupancy if there is no ligand
@@ -198,8 +208,14 @@ def test_exchange():
             occ = compute_occupancy(xvb_t.coords, xvb_t.box, initial_state.ligand_idxs, threshold=DEFAULT_BB_RADIUS)
             # compute occupancy at the end of MC moves (as opposed to MD moves), as its more sensitive to any possible
             # biases and/or correctness issues.
+        if isinstance(exc_mover, MonteCarloMove):
+            accepted = exc_mover.n_accepted
+            proposed = exc_mover.n_proposed
+        else:
+            accepted = exc_mover.n_accepted()
+            proposed = exc_mover.n_proposed()
         print(
-            f"{exc_mover.n_accepted()} / {exc_mover.n_proposed()} | density {density} | # of waters in spherical region {occ // 3} | md step: {idx * args.md_steps_per_batch} | time per mc move: {(end_time - start_time) / args.mc_steps_per_batch }ns",
+            f"{accepted} / {proposed} | density {density} | # of waters in spherical region {occ // 3} | md step: {idx * args.md_steps_per_batch} | time per mc move: {(end_time - start_time) / args.mc_steps_per_batch }ns",
             flush=True,
         )
 
