@@ -14,6 +14,49 @@ from timemachine.potentials import HarmonicBond, Nonbonded
 
 
 @pytest.mark.memcheck
+@pytest.mark.parametrize("precision", [np.float64, np.float32])
+def test_bd_exchange_validation(precision):
+    N = 10
+    beta = 1.2
+    cutoff = 1.2
+    seed = 2023
+    klass = custom_ops.BDExchangeMove_f32
+    if precision == np.float64:
+        klass = custom_ops.BDExchangeMove_f64
+
+    rng = np.random.default_rng(2023)
+    proposals_per_move = 1
+    params = rng.random(size=(10, 4))
+
+    # Test group indices verification
+    group_idxs = []
+    with pytest.raises(RuntimeError, match="must provide at least one molecule"):
+        klass(N, group_idxs, params, DEFAULT_TEMP, beta, cutoff, seed, proposals_per_move)
+
+    # Molecule that doesn't start from 0
+    group_idxs = [[3, 4, 5]]
+    with pytest.raises(RuntimeError, match="Molecules are not contiguous: mol 0"):
+        klass(N, group_idxs, params, DEFAULT_TEMP, beta, cutoff, seed, proposals_per_move)
+
+    # Second molecule is not contiguous with first
+    group_idxs = [[0, 1, 2], [4, 5]]
+    with pytest.raises(RuntimeError, match="Molecules are not contiguous: mol 1"):
+        klass(N, group_idxs, params, DEFAULT_TEMP, beta, cutoff, seed, proposals_per_move)
+
+    group_idxs = [[0, 1, 2], [3, 4]]
+    with pytest.raises(RuntimeError, match="only support running with mols with constant size, got mixed sizes"):
+        klass(N, group_idxs, params, DEFAULT_TEMP, beta, cutoff, seed, proposals_per_move)
+
+    group_idxs = [[]]
+    with pytest.raises(RuntimeError, match="must provide non-empty molecule indices"):
+        klass(N, group_idxs, params, DEFAULT_TEMP, beta, cutoff, seed, proposals_per_move)
+
+    # Proposals must be non-zero
+    with pytest.raises(RuntimeError, match="proposals per move must be greater than 0"):
+        klass(N, group_idxs, params, DEFAULT_TEMP, beta, cutoff, seed, 0)
+
+
+@pytest.mark.memcheck
 @pytest.mark.parametrize("moves", [1, 2, 10])
 @pytest.mark.parametrize("precision,rtol,atol", [(np.float64, 5e-7, 5e-7), (np.float32, 1e-6, 2e-6)])
 @pytest.mark.parametrize("seed", [2023])

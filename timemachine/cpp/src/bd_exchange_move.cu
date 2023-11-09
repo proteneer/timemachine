@@ -30,16 +30,23 @@ BDExchangeMove<RealType>::BDExchangeMove(
       num_target_mols_(target_mols.size()), nb_beta_(static_cast<RealType>(nb_beta)),
       beta_(static_cast<RealType>(1.0 / (BOLTZ * temperature))),
       cutoff_squared_(static_cast<RealType>(cutoff * cutoff)), num_attempted_(0),
-      mol_potential_(N, target_mols, nb_beta, cutoff), sampler_(num_target_mols_, seed), logsumexp_(N),
+      mol_potential_(N, target_mols, nb_beta, cutoff), sampler_(num_target_mols_, seed), logsumexp_(num_target_mols_),
       d_intermediate_coords_(N * 3), d_params_(params), d_mol_energy_buffer_(num_target_mols_),
       d_sample_per_atom_energy_buffer_(mol_size_ * N), d_mol_offsets_(get_mol_offsets(target_mols)),
       d_log_weights_before_(num_target_mols_), d_log_weights_after_(num_target_mols_), d_log_sum_exp_before_(2),
       d_log_sum_exp_after_(2), d_samples_(1), d_quaternions_(round_up_even(4)), d_translations_(round_up_even(4)),
       d_num_accepted_(1), d_target_mol_atoms_(mol_size_) {
 
+    if (proposals_per_move_ <= 0) {
+        throw std::runtime_error("proposals per move must be greater than 0");
+    }
+    if (mol_size_ == 0) {
+        throw std::runtime_error("must provide non-empty molecule indices");
+    }
+    verify_mols_contiguous(target_mols);
     for (int i = 0; i < target_mols.size(); i++) {
         if (target_mols[i].size() != mol_size_) {
-            std::runtime_error("Only support running with mols with constant size, got mixed sizes");
+            throw std::runtime_error("only support running with mols with constant size, got mixed sizes");
         }
     }
     // Clear out the logsumexp values so the log probability starts off as zero

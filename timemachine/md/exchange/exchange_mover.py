@@ -58,9 +58,12 @@ class BDExchangeMove(moves.MonteCarloMove):
         self.nb_params = jnp.array(nb_params)
         self.num_waters = len(water_idxs)
 
+        last_water_end = -1
         for wi, wj, wk in water_idxs:
+            assert wi == last_water_end + 1
             assert wi + 1 == wj
             assert wi + 2 == wk
+            last_water_end = wk
 
         self.water_idxs_jnp = jnp.array(water_idxs)  # make jit happy
         self.water_idxs_np = np.array(water_idxs)

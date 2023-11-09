@@ -74,7 +74,7 @@ MonteCarloBarostat<RealType>::MonteCarloBarostat(
         d_volume_scale_, &initial_volume_scale_factor, 1 * sizeof(*d_volume_scale_), cudaMemcpyHostToDevice));
 
     cudaSafeMalloc(&d_centroids_, num_mols * 3 * sizeof(*d_centroids_));
-    cudaSafeMalloc(&d_mol_offsets_, (num_mols + 1) * sizeof(*d_mol_offsets_));
+    cudaSafeMalloc(&d_mol_offsets_, flattened_groups[2].size() * sizeof(*d_mol_offsets_));
 
     cudaSafeMalloc(&d_atom_idxs_, num_grouped_atoms_ * sizeof(*d_atom_idxs_));
     cudaSafeMalloc(&d_mol_idxs_, num_grouped_atoms_ * sizeof(*d_mol_idxs_));

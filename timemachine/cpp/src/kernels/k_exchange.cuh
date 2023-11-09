@@ -125,7 +125,6 @@ void __global__ k_adjust_weights(
         // A loop that in the case of water will be 3x3
         for (int i = 0; i < mol_size; i++) {
             for (int j = mol_start; j < mol_end; j++) {
-                // TBD any issue multiplying by kT inside the loop?
                 weight_accumulator += FLOAT_TO_FIXED_ENERGY<RealType>(inv_kT * per_atom_energies[i * N + j]);
             }
         }
@@ -165,7 +164,6 @@ void __global__ k_set_sampled_weight(
     while (atom_idx < N) {
         if (atom_idx < min_atom_idx || atom_idx > max_atom_idx) {
             for (int i = 0; i < mol_size; i++) {
-                // printf("Min %d Max %d Atom i %d Atom j %d: %f\n", min_atom_idx, max_atom_idx, i, atom_idx, per_atom_energies[i * N + atom_idx]);
                 accumulators[threadIdx.x] +=
                     FLOAT_TO_FIXED_ENERGY<RealType>(inv_kT * per_atom_energies[i * N + atom_idx]);
             }
@@ -176,15 +174,8 @@ void __global__ k_set_sampled_weight(
     block_energy_reduce<THREADS_PER_BLOCK>(accumulators, threadIdx.x);
     __syncthreads();
     if (threadIdx.x == 0) {
-        // printf("Index %d: %f Overflowed %d\n", sample_idx, FIXED_ENERGY_TO_FLOAT<RealType>(accumulators[0]), fixed_point_overflow(accumulators[0]));
         log_weights[sample_idx] =
             fixed_point_overflow(accumulators[0]) ? INFINITY : FIXED_ENERGY_TO_FLOAT<RealType>(accumulators[0]);
-    }
-}
-
-template <typename RealType> void __global__ k_print_weights(const int num_mols, const int prefix, RealType *weights) {
-    for (int i = 0; i < num_mols; i++) {
-        printf("%d: %d - %f\n", prefix, i, weights[i]);
     }
 }
 

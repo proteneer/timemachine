@@ -671,7 +671,7 @@ void __global__ k_atom_by_atom_energies(
                         1.0, eps_i, eps_j, sig_i, sig_j, inv_dij, inv_d2ij, u, delta_prefactor, sig_grad, eps_grad);
                 }
             }
-            // Store the atom by atom energy, can be in float since there is no accumulation in the kernel
+            // Store the atom by atom energy, can be in floating point since there is no accumulation in the kernel
             output_energies[row_idx * N + atom_j_idx] = u;
             atom_j_idx += gridDim.x * blockDim.x;
         }

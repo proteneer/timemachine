@@ -1519,6 +1519,9 @@ template <typename RealType> void declare_bias_deletion_exchange_move(py::module
                 if (params.shape(0) != N) {
                     throw std::runtime_error("Number of parameters must match N");
                 }
+                if (target_mols.size() == 0) {
+                    throw std::runtime_error("must provide at least one molecule");
+                }
                 std::vector<double> v_params = py_array_to_vector(params);
                 return new Class(N, target_mols, v_params, temperature, nb_beta, cutoff, seed, proposals_per_move);
             }),
