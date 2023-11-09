@@ -88,4 +88,8 @@ std::vector<int> get_mol_offsets(const std::vector<std::vector<int>> &group_idxs
     return prepare_group_idxs_for_gpu(group_idxs)[2];
 }
 
+std::vector<int> get_atom_indices(const std::vector<std::vector<int>> &group_idxs) {
+    return prepare_group_idxs_for_gpu(group_idxs)[0];
+}
+
 } // namespace timemachine

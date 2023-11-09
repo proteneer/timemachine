@@ -1,12 +1,14 @@
+from importlib import resources
+
 import numpy as np
 import pytest
 from scipy.special import logsumexp
 
-from timemachine.constants import DEFAULT_TEMP
-from timemachine.fe.model_utils import image_frame
+from timemachine.constants import DEFAULT_PRESSURE, DEFAULT_TEMP
+from timemachine.fe.model_utils import apply_hmr, image_frame
 from timemachine.ff import Forcefield
 from timemachine.ff.handlers import openmm_deserializer
-from timemachine.lib import custom_ops
+from timemachine.lib import LangevinIntegrator, MonteCarloBarostat, custom_ops
 from timemachine.md import builders
 from timemachine.md.barostat.utils import get_bond_list, get_group_indices
 from timemachine.md.exchange.exchange_mover import BDExchangeMove as RefBDExchangeMove
@@ -248,6 +250,130 @@ def test_moves_in_a_water_box(steps_per_move, moves, precision, rtol, atol, seed
     else:
         assert bdem.n_accepted() > 10
         np.testing.assert_allclose(0.0002, bdem.acceptance_fraction(), atol=5e-5)
+    if steps_per_move == 1:
+        np.testing.assert_allclose(bdem.acceptance_fraction(), accepted / moves)
+        assert bdem.n_accepted() == accepted
+    else:
+        assert bdem.n_accepted() >= accepted
+        assert bdem.acceptance_fraction() >= accepted / moves
+
+
+@pytest.mark.parametrize(
+    "steps_per_move,moves",
+    [(1, 500), (5000, 5000)],
+)
+@pytest.mark.parametrize("precision,rtol,atol", [(np.float64, 5e-6, 5e-6), (np.float32, 1e-4, 2e-3)])
+@pytest.mark.parametrize("seed", [2023])
+def test_moves_with_complex(steps_per_move, moves, precision, rtol, atol, seed):
+    ff = Forcefield.load_default()
+    with resources.path("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as path_to_ligand:
+        complex_system, conf, box, _, _ = builders.build_protein_system(str(path_to_ligand), ff.protein_ff, ff.water_ff)
+    bps, masses = openmm_deserializer.deserialize_system(complex_system, cutoff=1.2)
+    nb = next(bp for bp in bps if isinstance(bp.potential, Nonbonded))
+    bond_pot = next(bp for bp in bps if isinstance(bp.potential, HarmonicBond)).potential
+
+    bond_list = get_bond_list(bond_pot)
+    all_group_idxs = get_group_indices(bond_list, conf.shape[0])
+
+    # Equilibrate the system a bit before hand, which reduces clashes in the system which results greater differences
+    # between the reference and test case.
+    seed = 2023
+    dt = 1.5e-3
+    temperature = DEFAULT_TEMP
+    pressure = DEFAULT_PRESSURE
+    # only act on waters
+    water_idxs = [group for group in all_group_idxs if len(group) == 3]
+
+    masses = apply_hmr(masses, bond_list)
+    intg = LangevinIntegrator(temperature, dt, 1.0, np.array(masses), seed).impl()
+
+    bound_impls = []
+
+    for potential in bps:
+        bound_impls.append(potential.to_gpu(precision=np.float32).bound_impl)  # get the bound implementation
+
+    barostat_interval = 5
+    baro = MonteCarloBarostat(
+        conf.shape[0],
+        pressure,
+        temperature,
+        all_group_idxs,
+        barostat_interval,
+        seed,
+    )
+    baro_impl = baro.impl(bound_impls)
+
+    ctxt = custom_ops.Context(
+        conf,
+        np.zeros_like(conf),
+        box,
+        intg,
+        bound_impls,
+        barostat=baro_impl,
+    )
+    ctxt.multiple_steps(1000)
+    conf = ctxt.get_x_t()
+    box = ctxt.get_box()
+
+    N = conf.shape[0]
+
+    # Re-image coords so that everything is imaged to begin with
+    conf = image_frame(all_group_idxs, conf, box)
+
+    N = conf.shape[0]
+
+    params = nb.params
+
+    cutoff = nb.potential.cutoff
+    klass = custom_ops.BDExchangeMove_f32
+    if precision == np.float64:
+        klass = custom_ops.BDExchangeMove_f64
+
+    bdem = klass(N, water_idxs, params, DEFAULT_TEMP, nb.potential.beta, cutoff, seed, steps_per_move)
+
+    ref_bdem = RefBDExchangeMove(nb.potential.beta, cutoff, params, water_idxs, DEFAULT_TEMP)
+
+    assert bdem.last_log_probability() == 0.0, "First log probability expected to be zero"
+    accepted = 0
+    last_conf = conf
+    for step in range(moves // steps_per_move):
+        x_move, x_box = bdem.move(last_conf, box)
+        # The box will never change
+        np.testing.assert_array_equal(box, x_box)
+        num_moved = 0
+        new_pos = None
+        idx = -1
+        for i, mol_idxs in enumerate(water_idxs):
+            if not np.all(x_move[mol_idxs] == last_conf[mol_idxs]):
+                num_moved += 1
+                new_pos = x_move[mol_idxs]
+                idx = i
+        if num_moved > 0:
+            accepted += 1
+            # The molecules should all be imaged in the home box
+            np.testing.assert_allclose(image_frame(all_group_idxs, x_move, x_box), x_move)
+            # Verify that the probabilities and per mol energies agree when we do accept moves
+            # can only be done when we only attempt a single move per step
+            if steps_per_move == 1:
+                before_log_weights = ref_bdem.batch_log_weights(last_conf, box)
+                after_log_weights, tested = ref_bdem.batch_log_weights_incremental(
+                    last_conf, x_box, idx, new_pos, before_log_weights
+                )
+                np.testing.assert_array_equal(tested, x_move)
+                np.testing.assert_allclose(
+                    np.exp(bdem.last_log_probability()),
+                    np.exp(np.minimum(logsumexp(before_log_weights) - logsumexp(after_log_weights), 0.0)),
+                    rtol=rtol,
+                    atol=atol,
+                    err_msg=f"Step {step} failed",
+                )
+        elif num_moved == 0:
+            np.testing.assert_array_equal(last_conf, x_move)
+        assert steps_per_move != 1 or num_moved <= 1, "More than one mol moved, something is wrong"
+
+        last_conf = x_move
+    assert bdem.n_proposed() == moves
+    assert accepted > 0, "No moves were made, nothing was tested"
     if steps_per_move == 1:
         np.testing.assert_allclose(bdem.acceptance_fraction(), accepted / moves)
         assert bdem.n_accepted() == accepted

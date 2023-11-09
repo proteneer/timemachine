@@ -34,6 +34,7 @@ private:
     DeviceBuffer<double> d_params_;
     DeviceBuffer<__int128> d_mol_energy_buffer_;
     DeviceBuffer<RealType> d_sample_per_atom_energy_buffer_; // [mol_size_ * N]
+    DeviceBuffer<int> d_atom_idxs_;
     DeviceBuffer<int> d_mol_offsets_;
     DeviceBuffer<RealType> d_log_weights_before_;
     DeviceBuffer<RealType> d_log_weights_after_;
@@ -45,6 +46,7 @@ private:
     DeviceBuffer<RealType> d_translations_; // Uniform noise for translation + the check
     DeviceBuffer<size_t> d_num_accepted_;
     DeviceBuffer<int> d_target_mol_atoms_;
+    DeviceBuffer<int> d_target_mol_offsets_;
 
     curandGenerator_t cr_rng_;
 

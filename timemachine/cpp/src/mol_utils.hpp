@@ -19,4 +19,6 @@ std::array<std::vector<int>, 3> prepare_group_idxs_for_gpu(const std::vector<std
 
 std::vector<int> get_mol_offsets(const std::vector<std::vector<int>> &group_idxs);
 
+std::vector<int> get_atom_indices(const std::vector<std::vector<int>> &group_idxs);
+
 } // namespace timemachine

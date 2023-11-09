@@ -18,19 +18,23 @@ void __global__ k_setup_sample_atoms(
     const int num_samples,
     const int sample_atoms,          // number of atoms in each sample
     const int *__restrict__ samples, // [num_samples]
+    const int *__restrict__ target_atoms,
     const int *__restrict__ mol_offsets,
-    int *__restrict__ output_atom_idxs) {
+    int *__restrict__ output_atom_idxs,
+    int *__restrict__ output_mol_offsets) {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     while (idx < num_samples) {
         int mol_idx = samples[idx];
         int mol_start = mol_offsets[mol_idx];
         int mol_end = mol_offsets[mol_idx + 1];
+        output_mol_offsets[mol_idx] = target_atoms[mol_start];
+        output_mol_offsets[mol_idx + 1] = target_atoms[mol_end - 1] + 1;
         int num_atoms = mol_end - mol_start;
 
         assert(num_atoms == sample_atoms);
 
         for (int i = 0; i < num_atoms; i++) {
-            output_atom_idxs[idx * num_samples * sample_atoms + i] = mol_start + i;
+            output_atom_idxs[idx * num_samples * sample_atoms + i] = target_atoms[mol_start + i];
         }
 
         idx += gridDim.x * blockDim.x;
@@ -109,6 +113,7 @@ void __global__ k_adjust_weights(
     const int N,
     const int num_target_mols,
     const int mol_size,
+    const int *__restrict__ mol_atoms_idxs,
     const int *__restrict__ mol_offsets,
     const RealType *__restrict__ per_atom_energies,
     const RealType inv_kT, // 1 / kT
@@ -121,10 +126,12 @@ void __global__ k_adjust_weights(
 
         int mol_start = mol_offsets[mol_idx];
         int mol_end = mol_offsets[mol_idx + 1];
+        int min_atom_idx = mol_atoms_idxs[mol_start];
+        int max_atom_idx = mol_atoms_idxs[mol_end - 1];
 
         // A loop that in the case of water will be 3x3
         for (int i = 0; i < mol_size; i++) {
-            for (int j = mol_start; j < mol_end; j++) {
+            for (int j = min_atom_idx; j <= max_atom_idx; j++) {
                 weight_accumulator += FLOAT_TO_FIXED_ENERGY<RealType>(inv_kT * per_atom_energies[i * N + j]);
             }
         }
@@ -145,6 +152,7 @@ void __global__ k_set_sampled_weight(
     const int mol_size,
     const int num_samples,
     const int *__restrict__ samples, // [num_samples]
+    const int *__restrict__ target_atoms,
     const int *__restrict__ mol_offsets,
     const RealType *__restrict__ per_atom_energies,
     const RealType inv_kT, // 1 / kT
@@ -155,8 +163,8 @@ void __global__ k_set_sampled_weight(
     __shared__ __int128 accumulators[THREADS_PER_BLOCK];
 
     int sample_idx = samples[0];
-    int min_atom_idx = mol_offsets[sample_idx];
-    int max_atom_idx = mol_offsets[sample_idx + 1] - 1;
+    int min_atom_idx = target_atoms[0];
+    int max_atom_idx = target_atoms[mol_size - 1];
 
     int atom_idx = blockIdx.x * blockDim.x + threadIdx.x;
     // Zero all of the accumulators

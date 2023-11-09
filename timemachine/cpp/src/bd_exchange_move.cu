@@ -13,6 +13,8 @@
 // The number of threads per block for the setting of the final weight of the moved mol is low
 // if using the same number as in the rest of the kernels of DEFAULT_THREADS_PER_BLOCK
 #define WEIGHT_THREADS_PER_BLOCK 512
+// Currently only support one sample at a time
+#define NUM_SAMPLES 1
 
 namespace timemachine {
 
@@ -32,10 +34,11 @@ BDExchangeMove<RealType>::BDExchangeMove(
       cutoff_squared_(static_cast<RealType>(cutoff * cutoff)), num_attempted_(0),
       mol_potential_(N, target_mols, nb_beta, cutoff), sampler_(num_target_mols_, seed), logsumexp_(num_target_mols_),
       d_intermediate_coords_(N * 3), d_params_(params), d_mol_energy_buffer_(num_target_mols_),
-      d_sample_per_atom_energy_buffer_(mol_size_ * N), d_mol_offsets_(get_mol_offsets(target_mols)),
-      d_log_weights_before_(num_target_mols_), d_log_weights_after_(num_target_mols_), d_log_sum_exp_before_(2),
-      d_log_sum_exp_after_(2), d_samples_(1), d_quaternions_(round_up_even(4)), d_translations_(round_up_even(4)),
-      d_num_accepted_(1), d_target_mol_atoms_(mol_size_) {
+      d_sample_per_atom_energy_buffer_(mol_size_ * N), d_atom_idxs_(get_atom_indices(target_mols)),
+      d_mol_offsets_(get_mol_offsets(target_mols)), d_log_weights_before_(num_target_mols_),
+      d_log_weights_after_(num_target_mols_), d_log_sum_exp_before_(2), d_log_sum_exp_after_(2),
+      d_samples_(NUM_SAMPLES), d_quaternions_(round_up_even(4)), d_translations_(round_up_even(4)), d_num_accepted_(1),
+      d_target_mol_atoms_(mol_size_), d_target_mol_offsets_(num_target_mols_ + 1) {
 
     if (proposals_per_move_ <= 0) {
         throw std::runtime_error("proposals per move must be greater than 0");
@@ -95,8 +98,7 @@ void BDExchangeMove<RealType>::move_device(
 
     dim3 atom_by_atom_grid(ceil_divide(N, tpb), mol_size_, 1);
 
-    // TBD Allow the number of samples to change, currently fixed at 1
-    const int num_samples = 1;
+    const int num_samples = NUM_SAMPLES;
     for (int move = 0; move < proposals_per_move_; move++) {
         // Run only after the first pass, to maintain meaningful `log_probability_host` values
         if (move > 0) {
@@ -131,7 +133,13 @@ void BDExchangeMove<RealType>::move_device(
         sampler_.sample_device(num_target_mols_, num_samples, d_log_weights_before_.data, d_samples_.data, stream);
 
         k_setup_sample_atoms<<<ceil_divide(num_samples, tpb), tpb, 0, stream>>>(
-            num_samples, mol_size_, d_samples_.data, d_mol_offsets_.data, d_target_mol_atoms_.data);
+            num_samples,
+            mol_size_,
+            d_samples_.data,
+            d_atom_idxs_.data,
+            d_mol_offsets_.data,
+            d_target_mol_atoms_.data,
+            d_target_mol_offsets_.data);
         gpuErrchk(cudaPeekAtLastError());
 
         k_atom_by_atom_energies<<<atom_by_atom_grid, tpb, 0, stream>>>(
@@ -152,6 +160,7 @@ void BDExchangeMove<RealType>::move_device(
             N,
             num_target_mols_,
             mol_size_,
+            d_atom_idxs_.data,
             d_mol_offsets_.data,
             d_sample_per_atom_energy_buffer_.data,
             beta_, // 1 / kT
@@ -163,7 +172,7 @@ void BDExchangeMove<RealType>::move_device(
             d_coords,
             d_box,
             d_samples_.data,
-            d_mol_offsets_.data,
+            d_target_mol_offsets_.data,
             d_quaternions_.data,
             d_translations_.data,
             d_intermediate_coords_.data);
@@ -187,6 +196,7 @@ void BDExchangeMove<RealType>::move_device(
             N,
             num_target_mols_,
             mol_size_,
+            d_atom_idxs_.data,
             d_mol_offsets_.data,
             d_sample_per_atom_energy_buffer_.data,
             beta_, // 1 / kT
@@ -199,6 +209,7 @@ void BDExchangeMove<RealType>::move_device(
             mol_size_,
             num_samples,
             d_samples_.data,
+            d_target_mol_atoms_.data,
             d_mol_offsets_.data,
             d_sample_per_atom_energy_buffer_.data,
             beta_, // 1 / kT
