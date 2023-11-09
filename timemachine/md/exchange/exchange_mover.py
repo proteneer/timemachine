@@ -94,6 +94,8 @@ class BDExchangeMove(moves.MonteCarloMove):
 
             return jnp.where(jnp.isnan(nrgs), np.inf, nrgs)
 
+        self.U_fn_unsummed = U_fn_unsummed
+
         @jax.jit
         def U_fn(conf, box, a_idxs, b_idxs):
             return jnp.sum(U_fn_unsummed(conf, box, a_idxs, b_idxs))
