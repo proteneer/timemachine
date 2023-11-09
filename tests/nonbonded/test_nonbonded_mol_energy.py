@@ -63,7 +63,6 @@ def test_nonbonded_mol_energy_potential_validation(precision):
 def test_nonbonded_mol_energy_matches_exchange_mover_batch_U(num_mols, precision, atol, rtol):
     """Assert that NonbondedMolEnergyPotential Cuda implementation produces the same
     energies as the reference jax version in the BDExchangeMover"""
-    rng = np.random.default_rng(2023)
     ff = Forcefield.load_default()
     system, conf, box, _ = builders.build_water_system(5.0, ff.water_ff)
     bps, _ = openmm_deserializer.deserialize_system(system, cutoff=1.2)
@@ -76,9 +75,6 @@ def test_nonbonded_mol_energy_matches_exchange_mover_batch_U(num_mols, precision
 
     # Get the indices of atoms within each molecule
     group_idxs = all_group_idxs[:num_mols]
-
-    # Shuffle the indices to be sure ordering doesn't matter
-    rng.shuffle(group_idxs)
 
     conf_idxs = np.array(group_idxs).reshape(-1)
     conf = conf[conf_idxs]

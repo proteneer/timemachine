@@ -33,11 +33,6 @@ def test_bd_exchange_validation(precision):
     with pytest.raises(RuntimeError, match="must provide at least one molecule"):
         klass(N, group_idxs, params, DEFAULT_TEMP, beta, cutoff, seed, proposals_per_move)
 
-    # Molecule that doesn't start from 0
-    group_idxs = [[3, 4, 5]]
-    with pytest.raises(RuntimeError, match="Molecules are not contiguous: mol 0"):
-        klass(N, group_idxs, params, DEFAULT_TEMP, beta, cutoff, seed, proposals_per_move)
-
     # Second molecule is not contiguous with first
     group_idxs = [[0, 1, 2], [4, 5]]
     with pytest.raises(RuntimeError, match="Molecules are not contiguous: mol 1"):
@@ -123,7 +118,7 @@ def test_two_clashy_water_moves(moves, precision, rtol, atol, seed):
             )
             # The molecules should all be imaged in the home box
             np.testing.assert_allclose(image_frame(group_idxs, x_move, x_box), x_move)
-        if num_moved == 0:
+        elif num_moved == 0:
             np.testing.assert_array_equal(last_conf, x_move)
         assert num_moved <= 1, "More than one mol moved, something is wrong"
         last_conf = x_move
@@ -243,7 +238,7 @@ def test_moves_in_a_water_box(steps_per_move, moves, precision, rtol, atol, seed
                     rtol=rtol,
                     atol=atol,
                 )
-        if num_moved == 0:
+        elif num_moved == 0:
             np.testing.assert_array_equal(last_conf, x_move)
         assert steps_per_move != 1 or num_moved <= 1, "More than one mol moved, something is wrong"
         last_conf = x_move

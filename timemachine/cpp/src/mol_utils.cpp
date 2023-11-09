@@ -27,7 +27,7 @@ void verify_group_idxs(const int N, const std::vector<std::vector<int>> &group_i
 }
 
 void verify_mols_contiguous(const std::vector<std::vector<int>> &group_idxs) {
-    int last_water_end = -1;
+    int last_water_end = group_idxs[0][0] - 1;
     for (unsigned int i = 0; i < group_idxs.size(); i++) {
         std::vector<int> atoms = group_idxs[i];
         const int num_atoms = atoms.size();
