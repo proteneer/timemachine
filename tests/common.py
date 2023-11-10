@@ -13,7 +13,10 @@ import numpy as np
 from hilbertcurve.hilbertcurve import HilbertCurve
 from numpy.typing import NDArray
 
-from timemachine.constants import ONE_4PI_EPS0
+from timemachine.constants import DEFAULT_TEMP, ONE_4PI_EPS0
+from timemachine.fe import rbfe
+from timemachine.fe.free_energy import HostConfig
+from timemachine.fe.single_topology import SingleTopology
 from timemachine.ff import Forcefield
 from timemachine.ff.handlers import openmm_deserializer
 from timemachine.lib import custom_ops
@@ -41,6 +44,13 @@ def fixed_overflowed(a):
     converted_a = np.int64(np.uint64(a))
     assert converted_a != np.iinfo(np.int64).min, "Unexpected value for fixed point energy"
     return converted_a == np.iinfo(np.int64).max
+
+
+def prepare_single_topology_initial_state(st: SingleTopology, host_config: HostConfig, lamb: float = 0.1):
+    temperature = DEFAULT_TEMP
+    host = rbfe.setup_optimized_host(st, host_config)
+    initial_state = rbfe.setup_initial_states(st, host, temperature, [lamb], seed=2022)[0]
+    return initial_state
 
 
 def prepare_system_params(x: NDArray, cutoff: float, sigma_scale: float = 5.0) -> NDArray:
