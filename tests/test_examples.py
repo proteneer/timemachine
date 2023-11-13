@@ -304,3 +304,24 @@ def test_water_sampling_mc_bulk_water(insertion_type):
         proc = run_example("water_sampling_mc.py", get_cli_args(config), cwd=temp_dir)
         assert proc.returncode == 0
         assert (Path(temp_dir) / config["out_cif"]).is_file()
+
+
+@pytest.mark.parametrize("insertion_type", ["targeted", "untargeted"])
+def test_water_sampling_mc_buckyball(insertion_type):
+    with resources.as_file(resources.files("timemachine.datasets.water_exchange")) as water_exchange:
+        config = dict(
+            out_cif="bulk.cif",
+            water_pdb=water_exchange / "bb_6_waters.pdb",
+            ligand_sdf=water_exchange / "bb_centered_espaloma.sdf",
+            iterations=5,
+            md_steps_per_batch=1000,
+            mc_steps_per_batch=1000,
+            equilibration_steps=5000,
+            insertion_type=insertion_type,
+            use_hmr=1,
+        )
+    with temporary_working_dir() as temp_dir:
+        # expect running this script to write summary_result_result_{mol_name}_*.pkl files
+        proc = run_example("water_sampling_mc.py", get_cli_args(config), cwd=temp_dir)
+        assert proc.returncode == 0
+        assert (Path(temp_dir) / config["out_cif"]).is_file()

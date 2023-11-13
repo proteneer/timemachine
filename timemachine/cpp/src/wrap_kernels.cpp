@@ -5,6 +5,7 @@
 #include <pybind11/stl.h>
 #include <set>
 
+#include "all_atom_energies.hpp"
 #include "barostat.hpp"
 #include "bd_exchange_move.hpp"
 #include "bound_potential.hpp"
@@ -234,7 +235,7 @@ template <typename RealType> void declare_nonbonded_mol_energy(py::module &m, co
             py::arg("cutoff"))
         .def(
             "execute",
-            [](Class &sampler,
+            [](Class &potential,
                const py::array_t<double, py::array::c_style> &coords,
                const py::array_t<double, py::array::c_style> &params,
                const py::array_t<double, py::array::c_style> &box) -> py::array_t<double, py::array::c_style> {
@@ -247,7 +248,7 @@ template <typename RealType> void declare_nonbonded_mol_energy(py::module &m, co
                 int P = params.size();
 
                 std::vector<__int128> fixed_energies =
-                    sampler.mol_energies_host(N, P, coords.data(), params.data(), box.data());
+                    potential.mol_energies_host(N, P, coords.data(), params.data(), box.data());
 
                 py::array_t<double, py::array::c_style> py_u(fixed_energies.size());
 
@@ -1518,6 +1519,9 @@ template <typename RealType> void declare_bias_deletion_exchange_move(py::module
                 if (params.shape(0) != N) {
                     throw std::runtime_error("Number of parameters must match N");
                 }
+                if (target_mols.size() == 0) {
+                    throw std::runtime_error("must provide at least one molecule");
+                }
                 std::vector<double> v_params = py_array_to_vector(params);
                 return new Class(N, target_mols, v_params, temperature, nb_beta, cutoff, seed, proposals_per_move);
             }),
@@ -1591,8 +1595,7 @@ double py_accumulate_energy(const py::array_t<long long, py::array::c_style> &in
 
     std::vector<__int128> h_buffer = py_array_to_vector_with_cast<long long, __int128>(input_data);
 
-    DeviceBuffer<__int128> d_input_buffer(N);
-    d_input_buffer.copy_from(&h_buffer[0]);
+    DeviceBuffer<__int128> d_input_buffer(h_buffer);
 
     DeviceBuffer<__int128> d_output_buffer(1);
 
@@ -1602,6 +1605,33 @@ double py_accumulate_energy(const py::array_t<long long, py::array::c_style> &in
     d_output_buffer.copy_to(&res[0]);
 
     return static_cast<long long>(res[0]);
+}
+
+template <typename RealType>
+py::array_t<RealType, py::array::c_style> py_atom_by_atom_energies(
+    const py::array_t<int, py::array::c_style> &target_atoms,
+    const py::array_t<double, py::array::c_style> &coords,
+    const py::array_t<double, py::array::c_style> &params,
+    const py::array_t<double, py::array::c_style> &box,
+    const double nb_beta,
+    const double cutoff) {
+
+    const int N = coords.shape()[0];
+    verify_coords_and_box(coords, box);
+
+    std::vector<int> v_target_atoms = py_array_to_vector(target_atoms);
+    std::vector<double> v_coords = py_array_to_vector(coords);
+    std::vector<double> v_params = py_array_to_vector(params);
+    std::vector<double> v_box = py_array_to_vector(box);
+
+    std::vector<RealType> output_energies = compute_atom_by_atom_energies<RealType>(
+        N, v_target_atoms, v_coords, v_params, v_box, static_cast<RealType>(nb_beta), static_cast<RealType>(cutoff));
+
+    py::array_t<RealType, py::array::c_style> py_energy({static_cast<int>(target_atoms.size()), N});
+    for (unsigned int i = 0; i < output_energies.size(); i++) {
+        py_energy.mutable_data()[i] = output_energies[i];
+    }
+    return py_energy;
 }
 
 template <typename RealType>
@@ -1696,6 +1726,26 @@ PYBIND11_MODULE(custom_ops, m) {
         py::arg("box"),
         py::arg("quaternion"),
         py::arg("translation"));
+    m.def(
+        "atom_by_atom_energies_f32",
+        &py_atom_by_atom_energies<float>,
+        "Function for testing atom by atom energies",
+        py::arg("target_atoms"),
+        py::arg("coords"),
+        py::arg("params"),
+        py::arg("box"),
+        py::arg("nb_beta"),
+        py::arg("nb_cutoff"));
+    m.def(
+        "atom_by_atom_energies_f64",
+        &py_atom_by_atom_energies<double>,
+        "Function for testing atom by atom energies",
+        py::arg("target_atoms"),
+        py::arg("coords"),
+        py::arg("params"),
+        py::arg("box"),
+        py::arg("nb_beta"),
+        py::arg("nb_cutoff"));
 
     m.attr("FIXED_EXPONENT") = py::int_(FIXED_EXPONENT);
 

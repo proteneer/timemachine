@@ -1,12 +1,13 @@
 # Water sampling script that tests that we can use an instantaneous monte carlo
 # mover to insert/delete waters from a buckyball
 
+import argparse
+import sys
+
 # enable for 2x slow down
 # from jax import config
 # config.update("jax_enable_x64", True)
-
-import argparse
-import sys
+import time
 
 import numpy as np
 from rdkit import Chem
@@ -21,8 +22,10 @@ from water_sampling_common import (
 from timemachine.constants import DEFAULT_TEMP
 from timemachine.fe import cif_writer
 from timemachine.fe.free_energy import image_frames
+from timemachine.lib import custom_ops
 from timemachine.md.barostat.moves import NPTMove
 from timemachine.md.exchange import exchange_mover
+from timemachine.md.moves import MonteCarloMove
 from timemachine.md.states import CoordsVelBox
 
 
@@ -114,6 +117,16 @@ def test_exchange():
     print("number of water atoms", nwm * 3)
     print("water_ligand parameters", nb_water_ligand_params)
 
+    def run_mc_proposals(mover, state: CoordsVelBox, steps: int) -> CoordsVelBox:
+        if isinstance(mover, MonteCarloMove):
+            for _ in range(steps):
+                state = mover.move(state)
+            return state
+        else:
+            # C++ implementations have a different API
+            x_mv, _ = exc_mover.move(xvb_t.coords, xvb_t.box)
+            return CoordsVelBox(x_mv, xvb_t.velocities, xvb_t.box)
+
     # tibd optimized
     if args.insertion_type == "targeted":
         exc_mover = exchange_mover.TIBDExchangeMove(
@@ -128,7 +141,16 @@ def test_exchange():
         assert mol is not None, "Requires a mol for targeted exchange"
     elif args.insertion_type == "untargeted":
         # vanilla reference
-        exc_mover = exchange_mover.BDExchangeMove(nb_beta, nb_cutoff, nb_water_ligand_params, water_idxs, DEFAULT_TEMP)
+        exc_mover = custom_ops.BDExchangeMove_f32(
+            initial_state.x0.shape[0],
+            water_idxs,
+            nb_water_ligand_params,
+            DEFAULT_TEMP,
+            nb_beta,
+            nb_cutoff,
+            seed,
+            args.mc_steps_per_batch,
+        )
 
     cur_box = initial_state.box0
     cur_x_t = initial_state.x0
@@ -176,10 +198,9 @@ def test_exchange():
 
         xvb_t = image_xvb(initial_state, xvb_t)
 
-        # start_time = time.time()
-        for _ in range(args.mc_steps_per_batch):
-            assert np.amax(np.abs(xvb_t.coords)) < 1e3
-            xvb_t = exc_mover.move(xvb_t)
+        start_time = time.perf_counter_ns()
+        xvb_t = run_mc_proposals(exc_mover, xvb_t, args.mc_steps_per_batch)
+        end_time = time.perf_counter_ns()
 
         occ = 0
         # (fey) Don't compute occupancy if there is no ligand
@@ -187,15 +208,19 @@ def test_exchange():
             occ = compute_occupancy(xvb_t.coords, xvb_t.box, initial_state.ligand_idxs, threshold=DEFAULT_BB_RADIUS)
             # compute occupancy at the end of MC moves (as opposed to MD moves), as its more sensitive to any possible
             # biases and/or correctness issues.
+        if isinstance(exc_mover, MonteCarloMove):
+            accepted = exc_mover.n_accepted
+            proposed = exc_mover.n_proposed
+        else:
+            accepted = exc_mover.n_accepted()
+            proposed = exc_mover.n_proposed()
         print(
-            f"{exc_mover.n_accepted} / {exc_mover.n_proposed} | density {density} | # of waters in spherical region {occ // 3} | md step: {idx * args.md_steps_per_batch}",
+            f"{accepted} / {proposed} | density {density} | # of waters in spherical region {occ // 3} | md step: {idx * args.md_steps_per_batch} | time per mc move: {(end_time - start_time) / args.mc_steps_per_batch }ns",
             flush=True,
         )
 
         if idx % 10 == 0:
             writer.write_frame(xvb_t.coords * 10)
-
-        # print("time per mc move", (time.time() - start_time) / mc_steps_per_batch)
 
         # run MD
         xvb_t = npt_mover.move(xvb_t)

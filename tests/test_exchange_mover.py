@@ -12,7 +12,8 @@ from timemachine.md.exchange.exchange_mover import delta_r_np
 pytestmark = [pytest.mark.nocuda]
 
 
-def test_batch_log_weights_incremental():
+@pytest.mark.parametrize("add_offset", [True, False])
+def test_batch_log_weights_incremental(add_offset):
     # test that our trick for computing incremental batched log weights is correct
     np.random.seed(2023)
     W = 111  # num waters
@@ -26,8 +27,12 @@ def test_batch_log_weights_incremental():
     beta = 1 / DEFAULT_KT
 
     water_idxs = []
+    # Add an offset to the waters to emulate proteins
+    offset = 0
+    if add_offset:
+        offset = N - (W * 3)
     for wi in range(W):
-        water_idxs.append([wi * 3 + 0, wi * 3 + 1, wi * 3 + 2])  # has to be contiguous
+        water_idxs.append([wi * 3 + offset + 0, wi * 3 + offset + 1, wi * 3 + offset + 2])  # has to be contiguous
 
     bdem = exchange_mover.BDExchangeMove(nb_beta, nb_cutoff, nb_params, water_idxs, beta)
 

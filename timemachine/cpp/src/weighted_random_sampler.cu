@@ -62,8 +62,7 @@ WeightedRandomSampler<RealType>::sample_host(const int num_samples, const std::v
     }
 
     DeviceBuffer<int> d_samples_buffer(num_samples);
-    DeviceBuffer<RealType> d_probability_buffer_(h_log_probs.size());
-    d_probability_buffer_.copy_from(&h_log_probs[0]);
+    DeviceBuffer<RealType> d_probability_buffer_(h_log_probs);
 
     cudaStream_t stream = static_cast<cudaStream_t>(0);
     this->sample_device(h_log_probs.size(), num_samples, d_probability_buffer_.data, d_samples_buffer.data, stream);

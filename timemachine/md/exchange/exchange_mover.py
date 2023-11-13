@@ -58,10 +58,17 @@ class BDExchangeMove(moves.MonteCarloMove):
         self.nb_params = jnp.array(nb_params)
         self.num_waters = len(water_idxs)
 
+        assert self.num_waters > 0
+        last_water_end = water_idxs[0][0] - 1
         for wi, wj, wk in water_idxs:
+            assert wi == last_water_end + 1
             assert wi + 1 == wj
             assert wi + 2 == wk
+            last_water_end = wk
 
+        # Determine where the start of the waters begin so we can compute the water-water ixn energies
+        # in the incremental version
+        self.starting_water_position = water_idxs[0][0]
         self.water_idxs_jnp = jnp.array(water_idxs)  # make jit happy
         self.water_idxs_np = np.array(water_idxs)
 
@@ -93,6 +100,8 @@ class BDExchangeMove(moves.MonteCarloMove):
             )
 
             return jnp.where(jnp.isnan(nrgs), np.inf, nrgs)
+
+        self.U_fn_unsummed = U_fn_unsummed
 
         @jax.jit
         def U_fn(conf, box, a_idxs, b_idxs):
@@ -130,7 +139,10 @@ class BDExchangeMove(moves.MonteCarloMove):
             # sum interaction energy of all the atoms in a water molecule
             old_water_ixn_nrgs = jnp.sum(self.beta * U_fn_unsummed(conf, box, a_idxs, b_idxs), axis=0)
             old_water_water_ixn_nrgs = jnp.sum(
-                old_water_ixn_nrgs[: (self.num_waters - 1) * 3].reshape((self.num_waters - 1), 3), axis=1
+                old_water_ixn_nrgs[self.starting_water_position :][: (self.num_waters - 1) * 3].reshape(
+                    (self.num_waters - 1), 3
+                ),
+                axis=1,
             )
 
             assert len(old_water_water_ixn_nrgs) == self.num_waters - 1
@@ -140,7 +152,10 @@ class BDExchangeMove(moves.MonteCarloMove):
             new_conf = new_conf.at[a_idxs].set(new_pos)
             new_water_ixn_nrgs = jnp.sum(self.beta * U_fn_unsummed(new_conf, box, a_idxs, b_idxs), axis=0)
             new_water_water_ixn_nrgs = jnp.sum(
-                new_water_ixn_nrgs[: (self.num_waters - 1) * 3].reshape((self.num_waters - 1), 3), axis=1
+                new_water_ixn_nrgs[self.starting_water_position :][: (self.num_waters - 1) * 3].reshape(
+                    (self.num_waters - 1), 3
+                ),
+                axis=1,
             )
 
             new_water_water_ixn_nrgs_full = jnp.insert(new_water_water_ixn_nrgs, water_idx, 0)

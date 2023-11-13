@@ -11,6 +11,10 @@ template <typename T> T *allocate(const std::size_t length) {
     return buffer;
 }
 
+template <typename T> DeviceBuffer<T>::DeviceBuffer(const std::vector<T> &vec) : DeviceBuffer(vec.size()) {
+    this->copy_from(&vec[0]);
+}
+
 template <typename T> DeviceBuffer<T>::DeviceBuffer() : DeviceBuffer(0) {}
 
 template <typename T>

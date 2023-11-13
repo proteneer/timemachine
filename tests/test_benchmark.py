@@ -10,10 +10,10 @@ from typing import List
 
 import numpy as np
 import pytest
+from common import prepare_single_topology_initial_state
 from numpy.typing import NDArray
 
 from timemachine import constants
-from timemachine.fe import rbfe
 from timemachine.fe.free_energy import HostConfig
 from timemachine.fe.model_utils import apply_hmr
 from timemachine.fe.single_topology import SingleTopology
@@ -59,7 +59,7 @@ def generate_hif2a_frames(n_frames: int, frame_interval: int, seed=None, barosta
             str(path_to_pdb), forcefield.protein_ff, forcefield.water_ff
         )
     host_config = HostConfig(host_system, host_coords, host_box, num_water_atoms)
-    initial_state = prepare_hif2a_initial_state(st, host_config)
+    initial_state = prepare_single_topology_initial_state(st, host_config)
 
     ligand_idxs = np.arange(len(host_coords), len(initial_state.x0), dtype=np.int32)
 
@@ -333,7 +333,7 @@ def run_single_topology_benchmarks(
     host_fns, host_masses = openmm_deserializer.deserialize_system(host_config.omm_system, cutoff=1.2)
 
     # RBFE
-    initial_state = prepare_hif2a_initial_state(st, host_config)
+    initial_state = prepare_single_topology_initial_state(st, host_config)
     x0 = initial_state.x0[: len(host_config.conf)]
     v0 = np.zeros_like(x0)
 
@@ -391,21 +391,6 @@ def benchmark_dhfr(config: BenchmarkConfig):
             host_fns,
             barostat_interval=barostat_interval,
         )
-
-
-def prepare_hif2a_initial_state(st: SingleTopology, host_config: HostConfig, lamb: float = 0.1):
-    temperature = constants.DEFAULT_TEMP
-    host = rbfe.setup_optimized_host(st, host_config)
-    initial_state = rbfe.setup_initial_states(st, host, temperature, [lamb], seed=2022)[0]
-    free_idxs = rbfe.get_free_idxs(initial_state)
-    initial_state.x0 = rbfe.optimize_coords_state(
-        initial_state.potentials,
-        initial_state.x0,
-        initial_state.box0,
-        free_idxs,
-        assert_energy_decreased=False,
-    )
-    return initial_state
 
 
 def benchmark_hif2a(config: BenchmarkConfig):

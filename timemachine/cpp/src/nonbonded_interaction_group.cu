@@ -270,10 +270,8 @@ void NonbondedInteractionGroup<RealType>::set_atom_idxs(
     if (row_atom_idxs_v.size() == 0 || row_atom_idxs_v.size() == N_) {
         this->set_atom_idxs_device(col_atom_idxs_v.size(), row_atom_idxs_v.size(), nullptr, nullptr, stream);
     } else {
-        DeviceBuffer<unsigned int> d_col(col_atom_idxs_v.size());
-        DeviceBuffer<unsigned int> d_row(row_atom_idxs_v.size());
-        d_col.copy_from(&col_atom_idxs_v[0]);
-        d_row.copy_from(&row_atom_idxs_v[0]);
+        DeviceBuffer<unsigned int> d_col(col_atom_idxs_v);
+        DeviceBuffer<unsigned int> d_row(row_atom_idxs_v);
 
         this->set_atom_idxs_device(col_atom_idxs_v.size(), row_atom_idxs_v.size(), d_col.data, d_row.data, stream);
     }
