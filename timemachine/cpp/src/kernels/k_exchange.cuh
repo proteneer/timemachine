@@ -108,6 +108,11 @@ void __global__ k_store_accepted_log_probability(
     }
 }
 
+// k_adjust_weights takes a set of molecules and either subtracts (Negated=true) or adds (Negated=false)
+// the sum of the per atom weights for the molecules from some initial weights.
+// This is used to do the transposition trick where we subtract off the weight contribution of the
+// moved atom followed by adding back in the weight of the sampled mol in the new position.
+// Does NOT special case the weight of the sampled mol and instead use `k_set_sampled_weight`.
 template <typename RealType, bool Negated>
 void __global__ k_adjust_weights(
     const int N,
