@@ -172,20 +172,19 @@ void __global__ k_set_sampled_weight(
     int max_atom_idx = target_atoms[mol_size - 1];
 
     int atom_idx = blockIdx.x * blockDim.x + threadIdx.x;
+    __int128 accumulator = 0;
     // Zero all of the accumulators
-    accumulators[threadIdx.x] = 0;
     while (atom_idx < N) {
         if (atom_idx < min_atom_idx || atom_idx > max_atom_idx) {
             for (int i = 0; i < mol_size; i++) {
-                accumulators[threadIdx.x] +=
-                    FLOAT_TO_FIXED_ENERGY<RealType>(inv_kT * per_atom_energies[i * N + atom_idx]);
+                accumulator += FLOAT_TO_FIXED_ENERGY<RealType>(inv_kT * per_atom_energies[i * N + atom_idx]);
             }
         }
         atom_idx += gridDim.x * blockDim.x;
     }
+    accumulators[threadIdx.x] = accumulator;
     __syncthreads();
     block_energy_reduce<THREADS_PER_BLOCK>(accumulators, threadIdx.x);
-    __syncthreads();
     if (threadIdx.x == 0) {
         log_weights[sample_idx] =
             fixed_point_overflow(accumulators[0]) ? INFINITY : FIXED_ENERGY_TO_FLOAT<RealType>(accumulators[0]);
