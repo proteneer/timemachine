@@ -40,9 +40,10 @@ def test_nonbonded_atom_by_atom_energies_match(precision, atol, rtol, threshold)
         func = custom_ops.atom_by_atom_energies_f64
 
     target_atoms = np.array(target_atoms).astype(np.int32)
-    comp_atoms = np.arange(N).astype(np.int32)
+    all_atoms = np.arange(N).astype(np.int32)
+
     mover = BDExchangeMove(beta, cutoff, params, all_group_idxs, DEFAULT_TEMP)
-    ref_energies = mover.U_fn_unsummed(conf, box, target_atoms, comp_atoms)
+    ref_energies = mover.U_fn_unsummed(conf, box, target_atoms, all_atoms)
     comp_energies = func(target_atoms, conf, params, box, beta, cutoff)
     assert ref_energies.shape == comp_energies.shape
     assert_energy_arrays_match(ref_energies, comp_energies, atol=atol, rtol=rtol, threshold=threshold)
