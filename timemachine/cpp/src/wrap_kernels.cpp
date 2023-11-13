@@ -15,6 +15,7 @@
 #include "context.hpp"
 #include "energy_accumulation.hpp"
 #include "exceptions.hpp"
+#include "exchange.hpp"
 #include "fanout_summed_potential.hpp"
 #include "fixed_point.hpp"
 #include "flat_bottom_bond.hpp"
@@ -1635,6 +1636,26 @@ py::array_t<RealType, py::array::c_style> py_atom_by_atom_energies(
 }
 
 template <typename RealType>
+py::tuple py_inner_outer_mols(
+    const py::array_t<int, py::array::c_style> &center_atoms,
+    const py::array_t<double, py::array::c_style> &coords,
+    const py::array_t<double, py::array::c_style> &box,
+    const std::vector<std::vector<int>> &group_idxs,
+    const double radius) {
+
+    verify_coords_and_box(coords, box);
+
+    std::vector<int> v_center_atoms = py_array_to_vector(center_atoms);
+    std::vector<double> v_coords = py_array_to_vector(coords);
+    std::vector<double> v_box = py_array_to_vector(box);
+
+    std::array<std::vector<int>, 2> inner_and_outer =
+        get_inner_and_outer_mols<RealType>(v_center_atoms, v_coords, v_box, group_idxs, radius);
+
+    return py::make_tuple(inner_and_outer[0], inner_and_outer[1]);
+}
+
+template <typename RealType>
 py::array_t<double, py::array::c_style> py_rotate_coords(
     const py::array_t<double, py::array::c_style> &coords, const py::array_t<double, py::array::c_style> &quaternions) {
     verify_coords(coords);
@@ -1746,6 +1767,24 @@ PYBIND11_MODULE(custom_ops, m) {
         py::arg("box"),
         py::arg("nb_beta"),
         py::arg("nb_cutoff"));
+    m.def(
+        "inner_and_outer_mols_f32",
+        &py_inner_outer_mols<float>,
+        "Function to test computation of inner and outer mols",
+        py::arg("center_atoms"),
+        py::arg("coords"),
+        py::arg("box"),
+        py::arg("group_idxs"),
+        py::arg("radius"));
+    m.def(
+        "inner_and_outer_mols_f64",
+        &py_inner_outer_mols<double>,
+        "Function to test computation of inner and outer mols",
+        py::arg("center_atoms"),
+        py::arg("coords"),
+        py::arg("box"),
+        py::arg("group_idxs"),
+        py::arg("radius"));
 
     m.attr("FIXED_EXPONENT") = py::int_(FIXED_EXPONENT);
 
