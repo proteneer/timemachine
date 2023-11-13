@@ -40,6 +40,8 @@ def test_nonbonded_atom_by_atom_energies_match(precision, atol, rtol, threshold)
         func = custom_ops.atom_by_atom_energies_f64
 
     target_atoms = np.array(target_atoms).astype(np.int32)
+    # Shuffling all atoms will break the test as the atom_by_atom_energies function assumes
+    # the ordering is sequential
     all_atoms = np.arange(N).astype(np.int32)
 
     mover = BDExchangeMove(beta, cutoff, params, all_group_idxs, DEFAULT_TEMP)
