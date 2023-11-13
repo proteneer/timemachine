@@ -154,8 +154,9 @@ void BDExchangeMove<RealType>::move_device(
             d_sample_per_atom_energy_buffer_.data);
         gpuErrchk(cudaPeekAtLastError());
 
-        // Subtract off the weights for the individual waters from the sampled water
-        // clobbers the sampled mol energy value, but we have to special case that anyways
+        // Subtract off the weights for the individual waters from the sampled water.
+        // It modifies the sampled mol energy value, leaving it in an invalid state, which is why
+        // we later call k_set_sampled_weight to set the weight of the sampled mol
         k_adjust_weights<RealType, true><<<ceil_divide(num_target_mols_, tpb), tpb, 0, stream>>>(
             N,
             num_target_mols_,
