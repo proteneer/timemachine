@@ -21,4 +21,13 @@ curandStatus_t templateCurandUniform(curandGenerator_t generator, double *output
     return curandGenerateUniformDouble(generator, outputPtr, n);
 }
 
+void __global__ k_initialize_curand_states(const int count, const int seed, curandState_t *states) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+
+    while (idx < count) {
+        curand_init(seed + idx, 0, 0, &states[idx]);
+        idx += gridDim.x * blockDim.x;
+    }
+}
+
 } // namespace timemachine

@@ -39,6 +39,7 @@
 #include "rotations.hpp"
 #include "set_utils.hpp"
 #include "summed_potential.hpp"
+#include "translations.hpp"
 #include "verlet_integrator.hpp"
 #include "weighted_random_sampler.hpp"
 
@@ -1704,89 +1705,58 @@ py::array_t<double, py::array::c_style> py_rotate_and_translate_mol(
     return py_rotated_coords;
 }
 
+template <typename RealType>
+py::array_t<RealType, py::array::c_style> py_translation_within_sphere(
+    const int num_translations,
+    const py::array_t<double, py::array::c_style> &center,
+    const double radius,
+    const int seed) {
+
+    if (center.size() != 3) {
+        throw std::runtime_error("Center must be of length 3");
+    }
+
+    std::vector<RealType> v_center = py_array_to_vector_with_cast<double, RealType>(center);
+
+    std::vector<RealType> translations =
+        get_translations_within_sphere_host<RealType>(num_translations, v_center, static_cast<RealType>(radius), seed);
+    py::array_t<RealType, py::array::c_style> py_translations({num_translations, 3});
+    for (unsigned int i = 0; i < translations.size(); i++) {
+        py_translations.mutable_data()[i] = translations[i];
+    }
+    return py_translations;
+}
+
+template <typename RealType>
+py::array_t<RealType, py::array::c_style> py_translation_outside_sphere(
+    const int num_translations,
+    const py::array_t<double, py::array::c_style> &center,
+    const py::array_t<double, py::array::c_style> &box,
+    const double radius,
+    const int seed) {
+
+    if (center.size() != 3) {
+        throw std::runtime_error("Center must be of length 3");
+    }
+
+    std::vector<RealType> v_center = py_array_to_vector_with_cast<double, RealType>(center);
+    std::vector<double> v_box = py_array_to_vector(box);
+
+    std::vector<RealType> translations = get_translations_outside_sphere_host<RealType>(
+        num_translations, v_box, v_center, static_cast<RealType>(radius), seed);
+    py::array_t<RealType, py::array::c_style> py_translations({num_translations, 3});
+    for (unsigned int i = 0; i < translations.size(); i++) {
+        py_translations.mutable_data()[i] = translations[i];
+    }
+    return py_translations;
+}
+
 void py_cuda_device_reset() { cudaDeviceReset(); }
 
 PYBIND11_MODULE(custom_ops, m) {
     py::register_exception<InvalidHardware>(m, "InvalidHardware");
-    m.def(
-        "cuda_device_reset",
-        &py_cuda_device_reset,
-        "Destroy all allocations and reset all state on the current device in the current process.");
 
     m.def("rmsd_align", &py_rmsd_align, "RMSD align two molecules", py::arg("x1"), py::arg("x2"));
-    m.def(
-        "_accumulate_energy",
-        &py_accumulate_energy,
-        "Function for testing accumulating energy in a block reduce",
-        py::arg("x"));
-    m.def(
-        "rotate_coords_f32",
-        &py_rotate_coords<float>,
-        "Function for testing rotation of coordinates in CUDA",
-        py::arg("coords"),
-        py::arg("quaternions"));
-    m.def(
-        "rotate_coords_f64",
-        &py_rotate_coords<double>,
-        "Function for testing rotation of coordinates in CUDA",
-        py::arg("coords"),
-        py::arg("quaternions"));
-    m.def(
-        "rotate_and_translate_mol_f32",
-        &py_rotate_and_translate_mol<float>,
-        "Function for testing kernel for rotating and translating a mol in CUDA",
-        py::arg("coords"),
-        py::arg("box"),
-        py::arg("quaternion"),
-        py::arg("translation"));
-    m.def(
-        "rotate_and_translate_mol_f64",
-        &py_rotate_and_translate_mol<double>,
-        "Function for testing kernel for rotating and translating a mol in CUDA",
-        py::arg("coords"),
-        py::arg("box"),
-        py::arg("quaternion"),
-        py::arg("translation"));
-    m.def(
-        "atom_by_atom_energies_f32",
-        &py_atom_by_atom_energies<float>,
-        "Function for testing atom by atom energies",
-        py::arg("target_atoms"),
-        py::arg("coords"),
-        py::arg("params"),
-        py::arg("box"),
-        py::arg("nb_beta"),
-        py::arg("nb_cutoff"));
-    m.def(
-        "atom_by_atom_energies_f64",
-        &py_atom_by_atom_energies<double>,
-        "Function for testing atom by atom energies",
-        py::arg("target_atoms"),
-        py::arg("coords"),
-        py::arg("params"),
-        py::arg("box"),
-        py::arg("nb_beta"),
-        py::arg("nb_cutoff"));
-    m.def(
-        "inner_and_outer_mols_f32",
-        &py_inner_outer_mols<float>,
-        "Function to test computation of inner and outer mols",
-        py::arg("center_atoms"),
-        py::arg("coords"),
-        py::arg("box"),
-        py::arg("group_idxs"),
-        py::arg("radius"));
-    m.def(
-        "inner_and_outer_mols_f64",
-        &py_inner_outer_mols<double>,
-        "Function to test computation of inner and outer mols",
-        py::arg("center_atoms"),
-        py::arg("coords"),
-        py::arg("box"),
-        py::arg("group_idxs"),
-        py::arg("radius"));
-
-    m.attr("FIXED_EXPONENT") = py::int_(FIXED_EXPONENT);
 
     declare_barostat(m);
 
@@ -1859,4 +1829,117 @@ PYBIND11_MODULE(custom_ops, m) {
     declare_bias_deletion_exchange_move<float>(m, "f32");
 
     declare_context(m);
+
+    // TESTING DEFINITIONS
+    m.def(
+        "cuda_device_reset",
+        &py_cuda_device_reset,
+        "Destroy all allocations and reset all state on the current device in the current process.");
+    m.def(
+        "_accumulate_energy",
+        &py_accumulate_energy,
+        "Function for testing accumulating energy in a block reduce",
+        py::arg("x"));
+    m.def(
+        "rotate_coords_f32",
+        &py_rotate_coords<float>,
+        "Function for testing rotation of coordinates in CUDA",
+        py::arg("coords"),
+        py::arg("quaternions"));
+    m.def(
+        "rotate_coords_f64",
+        &py_rotate_coords<double>,
+        "Function for testing rotation of coordinates in CUDA",
+        py::arg("coords"),
+        py::arg("quaternions"));
+    m.def(
+        "rotate_and_translate_mol_f32",
+        &py_rotate_and_translate_mol<float>,
+        "Function for testing kernel for rotating and translating a mol in CUDA",
+        py::arg("coords"),
+        py::arg("box"),
+        py::arg("quaternion"),
+        py::arg("translation"));
+    m.def(
+        "rotate_and_translate_mol_f64",
+        &py_rotate_and_translate_mol<double>,
+        "Function for testing kernel for rotating and translating a mol in CUDA",
+        py::arg("coords"),
+        py::arg("box"),
+        py::arg("quaternion"),
+        py::arg("translation"));
+    m.def(
+        "atom_by_atom_energies_f32",
+        &py_atom_by_atom_energies<float>,
+        "Function for testing atom by atom energies",
+        py::arg("target_atoms"),
+        py::arg("coords"),
+        py::arg("params"),
+        py::arg("box"),
+        py::arg("nb_beta"),
+        py::arg("nb_cutoff"));
+    m.def(
+        "atom_by_atom_energies_f64",
+        &py_atom_by_atom_energies<double>,
+        "Function for testing atom by atom energies",
+        py::arg("target_atoms"),
+        py::arg("coords"),
+        py::arg("params"),
+        py::arg("box"),
+        py::arg("nb_beta"),
+        py::arg("nb_cutoff"));
+    m.def(
+        "inner_and_outer_mols_f32",
+        &py_inner_outer_mols<float>,
+        "Function to test computation of inner and outer mols",
+        py::arg("center_atoms"),
+        py::arg("coords"),
+        py::arg("box"),
+        py::arg("group_idxs"),
+        py::arg("radius"));
+    m.def(
+        "inner_and_outer_mols_f64",
+        &py_inner_outer_mols<double>,
+        "Function to test computation of inner and outer mols",
+        py::arg("center_atoms"),
+        py::arg("coords"),
+        py::arg("box"),
+        py::arg("group_idxs"),
+        py::arg("radius"));
+    m.def(
+        "translation_within_sphere_f32",
+        &py_translation_within_sphere<float>,
+        "Function to test translations within sphere",
+        py::arg("num_translations"),
+        py::arg("center"),
+        py::arg("radius"),
+        py::arg("seed"));
+    m.def(
+        "translation_within_sphere_f64",
+        &py_translation_within_sphere<double>,
+        "Function to test translations within sphere",
+        py::arg("num_translations"),
+        py::arg("center"),
+        py::arg("radius"),
+        py::arg("seed"));
+    m.def(
+        "translation_outside_sphere_f32",
+        &py_translation_outside_sphere<float>,
+        "Function to test translations outside sphere",
+        py::arg("num_translations"),
+        py::arg("center"),
+        py::arg("box"),
+        py::arg("radius"),
+        py::arg("seed"));
+    m.def(
+        "translation_outside_sphere_f64",
+        &py_translation_outside_sphere<double>,
+        "Function to test translations outside sphere",
+        py::arg("num_translations"),
+        py::arg("center"),
+        py::arg("box"),
+        py::arg("radius"),
+        py::arg("seed"));
+
+    m.attr("FIXED_EXPONENT") = py::int_(FIXED_EXPONENT);
 }

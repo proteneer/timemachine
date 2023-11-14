@@ -1,3 +1,4 @@
+#include "curand_kernel.h"
 #include "device_buffer.hpp"
 #include "gpu_utils.cuh"
 #include <cstddef>
@@ -58,4 +59,5 @@ template class DeviceBuffer<unsigned long long>;
 template class DeviceBuffer<__int128>;
 template class DeviceBuffer<cub::KeyValuePair<int, double>>;
 template class DeviceBuffer<cub::KeyValuePair<int, float>>;
+template class DeviceBuffer<curandState_t>;
 } // namespace timemachine

@@ -108,6 +108,7 @@ pybind11_add_module(${LIBRARY_NAME} SHARED NO_EXTRAS
   src/kernels/k_exchange.cu
   src/all_atom_energies.cu
   src/exchange.cu
+  src/translations.cu
 )
 
 include_directories(src/kernels)
