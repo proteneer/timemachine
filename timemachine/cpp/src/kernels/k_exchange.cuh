@@ -87,4 +87,35 @@ void __global__ k_split_mols_inner_outer(
     int *__restrict__ outer_mols         // [num_molecules]
 );
 
+template <typename RealType>
+void __global__ k_decide_targeted_move(
+    const RealType *__restrict__ rand,
+    const int *__restrict__ inner_count,
+    const int *__restrict__ outer_count,
+    int *__restrict__ inner_flag);
+
+template <typename RealType>
+void __global__ k_separate_weights_for_targeted(
+    const int num_target_mols,
+    const int *__restrict__ inner_flag,   // [1]
+    const int *__restrict__ inner_count,  // [1]
+    const int *__restrict__ outer_count,  // [1]
+    const int *__restrict__ inner_idxs,   // [inner_count]
+    const int *__restrict__ outer_idxs,   // [outer_count]
+    const RealType *__restrict__ weights, // [num_target_mols]
+    RealType *__restrict__ output_weights);
+
+template <typename RealType>
+void __global__ k_setup_destination_weights_for_targeted(
+    const int num_target_mols,
+    const int num_samples,
+    const int *__restrict__ samples,      // [num_samples]
+    const int *__restrict__ inner_flag,   // [1]
+    const int *__restrict__ inner_count,  // [1]
+    const int *__restrict__ outer_count,  // [1]
+    const int *__restrict__ inner_idxs,   // [inner_count]
+    const int *__restrict__ outer_idxs,   // [outer_count]
+    const RealType *__restrict__ weights, // [num_target_mols]
+    RealType *__restrict__ output_weights);
+
 } // namespace timemachine

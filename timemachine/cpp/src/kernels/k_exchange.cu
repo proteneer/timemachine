@@ -424,4 +424,133 @@ template void __global__ k_split_mols_inner_outer<double>(
     int *__restrict__ outer_count,
     int *__restrict__ outer_mols);
 
+template <typename RealType>
+void __global__ k_decide_targeted_move(
+    const RealType *__restrict__ rand,
+    const int *__restrict__ inner_count,
+    const int *__restrict__ outer_count,
+    int *__restrict__ inner_flag) {
+    const int count_inside = inner_count[0];
+    const int count_outside = outer_count[0];
+
+    if (count_inside == 0 && count_outside == 0) {
+        assert(0);
+    } else if (count_inside > 0 && count_outside == 0) {
+        inner_flag[0] = 0;
+    } else if (count_inside == 0 && count_outside > 0) {
+        inner_flag[0] = 1;
+    } else if (count_inside > 0 && count_outside > 0) {
+        if (rand[0] < static_cast<RealType>(0.5)) {
+            inner_flag[0] = 1;
+        } else {
+            inner_flag[0] = 0;
+        }
+    } else {
+        assert(0);
+    }
+}
+
+template void __global__ k_decide_targeted_move<float>(
+    const float *__restrict__ rand,
+    const int *__restrict__ inner_count,
+    const int *__restrict__ outer_count,
+    int *__restrict__ inner_flag);
+template void __global__ k_decide_targeted_move<double>(
+    const double *__restrict__ rand,
+    const int *__restrict__ inner_count,
+    const int *__restrict__ outer_count,
+    int *__restrict__ inner_flag);
+
+// k_separate_weights_for_targeted takes the flag and the mol indices and writes them out
+// to a new buffer.
+template <typename RealType>
+void __global__ k_separate_weights_for_targeted(
+    const int num_target_mols,
+    const int *__restrict__ inner_flag,   // [1]
+    const int *__restrict__ inner_count,  // [1]
+    const int *__restrict__ outer_count,  // [1]
+    const int *__restrict__ inner_idxs,   // [inner_count]
+    const int *__restrict__ outer_idxs,   // [outer_count]
+    const RealType *__restrict__ weights, // [num_target_mols]
+    RealType *__restrict__ output_weights) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    const int flag = inner_flag[0];
+    const int count = flag == 1 ? inner_count[0] : outer_count[0];
+    while (idx < count) {
+        output_weights[idx] = flag == 1 ? outer_idxs[idx] : inner_idxs[idx];
+
+        idx += gridDim.x * blockDim.x;
+    }
+}
+
+template void __global__ k_separate_weights_for_targeted<float>(
+    const int num_target_mols,
+    const int *__restrict__ inner_flag,  // [1]
+    const int *__restrict__ inner_count, // [1]
+    const int *__restrict__ outer_count, // [1]
+    const int *__restrict__ inner_idxs,  // [inner_count]
+    const int *__restrict__ outer_idxs,  // [outer_count]
+    const float *__restrict__ weights,   // [num_target_mols]
+    float *__restrict__ output_weights);
+template void __global__ k_separate_weights_for_targeted<double>(
+    const int num_target_mols,
+    const int *__restrict__ inner_flag,  // [1]
+    const int *__restrict__ inner_count, // [1]
+    const int *__restrict__ outer_count, // [1]
+    const int *__restrict__ inner_idxs,  // [inner_count]
+    const int *__restrict__ outer_idxs,  // [outer_count]
+    const double *__restrict__ weights,  // [num_target_mols]
+    double *__restrict__ output_weights);
+
+template <typename RealType>
+void __global__ k_setup_destination_weights_for_targeted(
+    const int num_target_mols,
+    const int num_samples,
+    const int *__restrict__ samples,      // [num_samples]
+    const int *__restrict__ inner_flag,   // [1]
+    const int *__restrict__ inner_count,  // [1]
+    const int *__restrict__ outer_count,  // [1]
+    const int *__restrict__ inner_idxs,   // [inner_count]
+    const int *__restrict__ outer_idxs,   // [outer_count]
+    const RealType *__restrict__ weights, // [num_target_mols]
+    RealType *__restrict__ output_weights) {
+    assert(num_samples == 1);
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    const int flag = inner_flag[0];
+    const int count = flag == 1 ? outer_count[0] : inner_count[0];
+    while (idx < count) {
+        output_weights[idx] = flag == 1 ? inner_idxs[idx] : outer_idxs[idx];
+        if (idx < num_samples) {
+            int sample_idx = samples[idx];
+            output_weights[count + idx] = flag == 1 ? inner_idxs[sample_idx] : outer_idxs[sample_idx];
+        }
+
+        idx += gridDim.x * blockDim.x;
+    }
+}
+
+template void __global__ k_setup_destination_weights_for_targeted<float>(
+    const int num_target_mols,
+    const int num_samples,
+    const int *__restrict__ samples,     // [num_samples]
+    const int *__restrict__ inner_flag,  // [1]
+    const int *__restrict__ inner_count, // [1]
+    const int *__restrict__ outer_count, // [1]
+    const int *__restrict__ inner_idxs,  // [inner_count]
+    const int *__restrict__ outer_idxs,  // [outer_count]
+    const float *__restrict__ weights,   // [num_target_mols]
+    float *__restrict__ output_weights);
+
+template void __global__ k_setup_destination_weights_for_targeted<double>(
+    const int num_target_mols,
+    const int num_samples,
+    const int *__restrict__ samples,     // [num_samples]
+    const int *__restrict__ inner_flag,  // [1]
+    const int *__restrict__ inner_count, // [1]
+    const int *__restrict__ outer_count, // [1]
+    const int *__restrict__ inner_idxs,  // [inner_count]
+    const int *__restrict__ outer_idxs,  // [outer_count]
+    const double *__restrict__ weights,  // [num_target_mols]
+    double *__restrict__ output_weights);
+
 } // namespace timemachine

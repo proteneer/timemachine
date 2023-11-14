@@ -1,0 +1,109 @@
+#pragma once
+
+#include "curand_kernel.h"
+#include "device_buffer.hpp"
+#include "logsumexp.hpp"
+#include "nonbonded_mol_energy.hpp"
+#include "pinned_host_buffer.hpp"
+#include "weighted_random_sampler.hpp"
+#include <array>
+#include <vector>
+
+namespace timemachine {
+
+// TIBDExchangeMove uses targeted insertion and biased deletion to move into a sphere around a set of ligand atoms. The reference implementation
+// is in timemachine/md/exchange/exchange_mover.py::TIBDExchangeMove
+template <typename RealType> class TIBDExchangeMove {
+
+private:
+    const int N_;
+    // Number of atom in all mols
+    // All molecules are currently expected to have same number of atoms (typically 3 for waters)
+    // Done to avoid having to determine the size of the sample and allows us to test ion sampling by having
+    // two different TIBDExchangeMove classes
+    const int mol_size_;
+    const int proposals_per_move_;
+    const int num_target_mols_;
+    const RealType nb_beta_;
+    const RealType beta_; // 1 / kT
+    const RealType cutoff_squared_;
+    const RealType radius_;
+    const RealType target_volume_;
+    size_t num_attempted_;
+    NonbondedMolEnergyPotential<RealType> mol_potential_;
+    WeightedRandomSampler<RealType> sampler_;
+    LogSumExp<RealType> logsumexp_;
+    // Buffer for evaluating moves without touching the original coords
+    DeviceBuffer<double> d_intermediate_coords_;
+    DeviceBuffer<double> d_params_;
+    DeviceBuffer<__int128> d_mol_energy_buffer_;
+    DeviceBuffer<RealType> d_sample_per_atom_energy_buffer_; // [mol_size_ * N]
+    DeviceBuffer<int> d_atom_idxs_;
+    DeviceBuffer<int> d_mol_offsets_;
+    DeviceBuffer<RealType> d_log_weights_before_;
+    DeviceBuffer<RealType> d_log_weights_after_;
+    DeviceBuffer<RealType> d_log_sum_exp_before_; // [2]
+    DeviceBuffer<RealType> d_log_sum_exp_after_;  // [2]
+    DeviceBuffer<int>
+        d_samples_; // where the indices to sample a molecule come from, currently fixed to a single sample
+    DeviceBuffer<RealType> d_quaternions_; // Normal noise for uniform random rotations
+    DeviceBuffer<RealType> d_acceptance_;  // Uniform noise for translation + the check
+    DeviceBuffer<size_t> d_num_accepted_;
+    DeviceBuffer<int> d_target_mol_atoms_;
+    DeviceBuffer<int> d_target_mol_offsets_;
+
+    DeviceBuffer<curandState_t> d_rand_states_;
+
+    DeviceBuffer<int> d_inner_mols_count_; // [1]
+    DeviceBuffer<int> d_inner_mols_;
+    DeviceBuffer<int> d_outer_mols_count_; // [1]
+    DeviceBuffer<int> d_outer_mols_;
+
+    DeviceBuffer<RealType> d_center_; // [3]
+    DeviceBuffer<RealType> d_translation_;
+    DeviceBuffer<int> d_inner_flag_; // [1]
+
+    DeviceBuffer<int> d_ligand_idxs_;
+    DeviceBuffer<RealType> d_src_weights_;
+    DeviceBuffer<RealType> d_dest_weights_;
+    PinnedHostBuffer<int> p_inner_count_; // [1]
+    PinnedHostBuffer<int> p_inner_flag_;  // [1]
+
+    cudaEvent_t host_copy_event_;
+    curandGenerator_t cr_rng_;
+
+public:
+    TIBDExchangeMove(
+        const int N,
+        const std::vector<int> ligand_idxs,
+        const std::vector<std::vector<int>> &target_mols,
+        const std::vector<double> &params,
+        const double temperature,
+        const double nb_beta,
+        const double cutoff,
+        const double radius,
+        const int seed,
+        const int proposals_per_move);
+
+    ~TIBDExchangeMove();
+
+    void move_device(
+        const int N,
+        double *d_coords, // [N, 3]
+        double *d_box,    // [3, 3]
+        cudaStream_t stream);
+
+    std::array<std::vector<double>, 2> move_host(const int N, const double *h_coords, const double *h_box);
+
+    double log_probability_host();
+
+    size_t n_proposed() const { return num_attempted_; }
+
+    size_t n_accepted() const;
+
+    double acceptance_fraction() const {
+        return static_cast<double>(this->n_accepted()) / static_cast<double>(this->n_proposed());
+    }
+};
+
+} // namespace timemachine
