@@ -69,7 +69,7 @@ void rotate_coordinates_and_translate_mol_host(
     // Only do a single sample
     const int num_samples = 1;
 
-    k_rotate_and_translate_mols<RealType><<<ceil_divide(num_samples, tpb), tpb, 0, stream>>>(
+    k_rotate_and_translate_mols<RealType, true><<<ceil_divide(num_samples, tpb), tpb, 0, stream>>>(
         num_samples,
         d_coords.data,
         d_box.data,

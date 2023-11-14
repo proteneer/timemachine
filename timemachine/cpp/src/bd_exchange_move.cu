@@ -168,7 +168,7 @@ void BDExchangeMove<RealType>::move_device(
             d_log_weights_after_.data);
         gpuErrchk(cudaPeekAtLastError());
 
-        k_rotate_and_translate_mols<RealType><<<ceil_divide(num_samples, tpb), tpb, 0, stream>>>(
+        k_rotate_and_translate_mols<RealType, true><<<ceil_divide(num_samples, tpb), tpb, 0, stream>>>(
             num_samples,
             d_coords,
             d_box,

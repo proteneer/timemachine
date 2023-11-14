@@ -19,7 +19,7 @@ void __global__ k_rotate_coordinates(
     double *__restrict__ rotated_coords       // [N * n_rotations, 3]
 );
 
-template <typename RealType>
+template <typename RealType, bool SCALE>
 void __global__ k_rotate_and_translate_mols(
     const int num_samples,
     const double *__restrict__ coords,         // [N, 3]

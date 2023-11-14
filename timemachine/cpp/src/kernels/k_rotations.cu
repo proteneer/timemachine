@@ -85,7 +85,7 @@ void __global__ k_rotate_coordinates(
     rotated_coords[(coord_idx * n_rotations * 3) + (rotation_idx * 3) + 2] = local_coords[3];
 }
 
-template <typename RealType>
+template <typename RealType, bool SCALE>
 void __global__ k_rotate_and_translate_mols(
     const int num_samples,
     const double *__restrict__ coords,         // [N, 3]
@@ -112,9 +112,9 @@ void __global__ k_rotate_and_translate_mols(
         int mol_end = mol_offsets[mol_sample + 1];
         int num_atoms = mol_end - mol_start;
 
-        RealType translation_x = box_x * translations[sample_idx * 3 + 0];
-        RealType translation_y = box_y * translations[sample_idx * 3 + 1];
-        RealType translation_z = box_z * translations[sample_idx * 3 + 2];
+        RealType translation_x = SCALE ? box_x * translations[sample_idx * 3 + 0] : translations[sample_idx * 3 + 0];
+        RealType translation_y = SCALE ? box_y * translations[sample_idx * 3 + 1] : translations[sample_idx * 3 + 1];
+        RealType translation_z = SCALE ? box_z * translations[sample_idx * 3 + 2] : translations[sample_idx * 3 + 2];
         unsigned long long centroid_accum_x = 0;
         unsigned long long centroid_accum_y = 0;
         unsigned long long centroid_accum_z = 0;
@@ -167,9 +167,13 @@ void __global__ k_rotate_and_translate_mols(
 template void __global__ k_rotate_coordinates<float>(int, int, const double *, const float *, double *);
 template void __global__ k_rotate_coordinates<double>(int, int, const double *, const double *, double *);
 
-template void __global__ k_rotate_and_translate_mols<float>(
+template void __global__ k_rotate_and_translate_mols<float, false>(
     int, const double *, const double *, const int *, const int *, const float *, const float *, double *);
-template void __global__ k_rotate_and_translate_mols<double>(
+template void __global__ k_rotate_and_translate_mols<float, true>(
+    int, const double *, const double *, const int *, const int *, const float *, const float *, double *);
+template void __global__ k_rotate_and_translate_mols<double, false>(
+    int, const double *, const double *, const int *, const int *, const double *, const double *, double *);
+template void __global__ k_rotate_and_translate_mols<double, true>(
     int, const double *, const double *, const int *, const int *, const double *, const double *, double *);
 
 } // namespace timemachine
