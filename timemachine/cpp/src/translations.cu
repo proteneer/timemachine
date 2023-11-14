@@ -12,6 +12,10 @@ std::vector<RealType> get_translations_within_sphere_host(
 
     const int tpb = DEFAULT_THREADS_PER_BLOCK;
 
+    DeviceBuffer<int> d_inner(1);
+    int flag = 1;
+    d_inner.copy_from(&flag);
+    DeviceBuffer<double> d_box(3 * 3); // Dummy value, not important
     DeviceBuffer<RealType> d_center(center);
     DeviceBuffer<curandState_t> d_states(tpb);
     DeviceBuffer<RealType> d_output(n_translations * 3);
@@ -21,8 +25,8 @@ std::vector<RealType> get_translations_within_sphere_host(
     k_initialize_curand_states<<<1, tpb, 0, stream>>>(tpb, seed, d_states.data);
     gpuErrchk(cudaPeekAtLastError());
 
-    k_generate_translations_within_sphere<<<ceil_divide(n_translations, tpb), tpb, 0, stream>>>(
-        n_translations, d_center.data, radius, d_states.data, d_output.data);
+    k_generate_translations_within_or_outside_a_sphere<RealType><<<ceil_divide(n_translations, tpb), tpb, 0, stream>>>(
+        n_translations, d_box.data, d_center.data, d_inner.data, radius, d_states.data, d_output.data);
     gpuErrchk(cudaPeekAtLastError());
 
     gpuErrchk(cudaStreamSynchronize(stream));
@@ -46,6 +50,9 @@ std::vector<RealType> get_translations_outside_sphere_host(
     const int seed) {
     const int tpb = DEFAULT_THREADS_PER_BLOCK;
 
+    DeviceBuffer<int> d_inner(1);
+    int flag = 0;
+    d_inner.copy_from(&flag);
     DeviceBuffer<double> d_box(box);
     DeviceBuffer<RealType> d_center(center);
     DeviceBuffer<curandState_t> d_states(tpb);
@@ -56,13 +63,8 @@ std::vector<RealType> get_translations_outside_sphere_host(
     k_initialize_curand_states<<<1, tpb, 0, stream>>>(tpb, seed, d_states.data);
     gpuErrchk(cudaPeekAtLastError());
 
-    k_generate_translations_outside_sphere<<<ceil_divide(n_translations, tpb), tpb, 0, stream>>>(
-        n_translations,
-        d_box.data,
-        d_center.data,
-        radius * radius, // Square radius
-        d_states.data,
-        d_output.data);
+    k_generate_translations_within_or_outside_a_sphere<RealType><<<ceil_divide(n_translations, tpb), tpb, 0, stream>>>(
+        n_translations, d_box.data, d_center.data, d_inner.data, radius, d_states.data, d_output.data);
     gpuErrchk(cudaPeekAtLastError());
 
     gpuErrchk(cudaStreamSynchronize(stream));
