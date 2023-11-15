@@ -49,6 +49,9 @@ TIBDExchangeMove<RealType>::TIBDExchangeMove(
       d_inner_flag_(1), d_ligand_idxs_(ligand_idxs), d_src_weights_(num_target_mols_),
       d_dest_weights_(num_target_mols_), p_inner_count_(1), p_inner_flag_(1) {
 
+    if (radius <= 0.0) {
+        throw std::runtime_error("radius must be greater than 0.0");
+    }
     if (proposals_per_move_ <= 0) {
         throw std::runtime_error("proposals per move must be greater than 0");
     }

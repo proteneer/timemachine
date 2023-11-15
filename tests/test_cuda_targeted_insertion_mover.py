@@ -170,6 +170,10 @@ def test_tibd_exchange_validation(precision):
     with pytest.raises(RuntimeError, match="proposals per move must be greater than 0"):
         klass(N, ligand_idxs, group_idxs, params, DEFAULT_TEMP, beta, cutoff, radius, seed, 0)
 
+    # Radius must be non-zero
+    with pytest.raises(RuntimeError, match="radius must be greater than 0.0"):
+        klass(N, ligand_idxs, group_idxs, params, DEFAULT_TEMP, beta, cutoff, 0.0, seed, proposals_per_move)
+
 
 @pytest.fixture(scope="module")
 def hif2a_rbfe_state() -> InitialState:
