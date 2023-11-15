@@ -36,7 +36,7 @@ TIBDExchangeMove<RealType>::TIBDExchangeMove(
       num_target_mols_(target_mols.size()), nb_beta_(static_cast<RealType>(nb_beta)),
       beta_(static_cast<RealType>(1.0 / (BOLTZ * temperature))),
       cutoff_squared_(static_cast<RealType>(cutoff * cutoff)), radius_(static_cast<RealType>(radius)),
-      target_volume_(static_cast<RealType>((4 / 3) * M_PI * pow(radius_, 3))), num_attempted_(0),
+      inner_volume_(static_cast<RealType>((4 / 3) * M_PI * pow(radius_, 3))), num_attempted_(0),
       mol_potential_(N, target_mols, nb_beta, cutoff), sampler_(num_target_mols_, seed), logsumexp_(num_target_mols_),
       d_intermediate_coords_(N * 3), d_params_(params), d_mol_energy_buffer_(num_target_mols_),
       d_sample_per_atom_energy_buffer_(mol_size_ * N), d_atom_idxs_(get_atom_indices(target_mols)),
@@ -123,8 +123,11 @@ void TIBDExchangeMove<RealType>::move_device(
         if (move > 0) {
             // Run a separate kernel to replace the before log probs and weights with the after if accepted a move
             // Need the weights to sample a value and the log probs are just because they aren't expensive to copy
-            k_store_accepted_log_probability<RealType><<<1, tpb, 0>>>(
+            k_store_accepted_log_probability_targeted<RealType><<<1, tpb, 0>>>(
                 num_target_mols_,
+                d_inner_flag_.data,
+                d_box,
+                inner_volume_,
                 d_acceptance_.data + 1, // Offset to get the last value for the acceptance criteria
                 d_log_sum_exp_before_.data,
                 d_log_sum_exp_after_.data,
@@ -304,8 +307,11 @@ void TIBDExchangeMove<RealType>::move_device(
         // Add one to the destination count, as we just moved a mol there
         logsumexp_.sum_device(dest_count + 1, d_dest_weights_.data, d_log_sum_exp_after_.data, stream);
 
-        k_attempt_exchange_move<RealType><<<ceil_divide(N_, tpb), tpb, 0, stream>>>(
+        k_attempt_exchange_move_targeted<RealType><<<ceil_divide(N_, tpb), tpb, 0, stream>>>(
             N,
+            d_inner_flag_.data,
+            d_box,
+            inner_volume_,
             d_acceptance_.data + 1, // Offset to get the last value for the acceptance criteria
             d_log_sum_exp_before_.data,
             d_log_sum_exp_after_.data,

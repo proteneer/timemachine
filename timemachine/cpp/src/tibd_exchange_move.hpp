@@ -28,7 +28,7 @@ private:
     const RealType beta_; // 1 / kT
     const RealType cutoff_squared_;
     const RealType radius_;
-    const RealType target_volume_;
+    const RealType inner_volume_;
     size_t num_attempted_;
     NonbondedMolEnergyPotential<RealType> mol_potential_;
     WeightedRandomSampler<RealType> sampler_;
