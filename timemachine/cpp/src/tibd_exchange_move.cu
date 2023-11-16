@@ -10,6 +10,7 @@
 #include "kernels/k_translations.cuh"
 #include "math_utils.cuh"
 #include "mol_utils.hpp"
+#include <cub/cub.cuh>
 #include <math.h>
 
 // The number of threads per block for the setting of the final weight of the moved mol is low
@@ -45,9 +46,10 @@ TIBDExchangeMove<RealType>::TIBDExchangeMove(
       d_samples_(NUM_SAMPLES), d_quaternions_(round_up_even(4)), d_acceptance_(round_up_even(2)), d_num_accepted_(1),
       d_target_mol_atoms_(mol_size_), d_target_mol_offsets_(num_target_mols_ + 1),
       d_rand_states_(DEFAULT_THREADS_PER_BLOCK), d_inner_mols_count_(1), d_inner_mols_(num_target_mols_),
-      d_outer_mols_count_(1), d_outer_mols_(num_target_mols_), d_center_(3), d_translation_(NUM_SAMPLES * 3),
-      d_targeting_inner_vol_(1), d_ligand_idxs_(ligand_idxs), d_src_weights_(num_target_mols_),
-      d_dest_weights_(num_target_mols_), d_box_volume_(1), p_inner_count_(1), p_targeting_inner_vol_(1) {
+      d_outer_mols_count_(1), d_outer_mols_(num_target_mols_), d_sorted_indices_(num_target_mols_), d_sort_storage_(0),
+      d_center_(3), d_translation_(NUM_SAMPLES * 3), d_targeting_inner_vol_(1), d_ligand_idxs_(ligand_idxs),
+      d_src_weights_(num_target_mols_), d_dest_weights_(num_target_mols_), d_box_volume_(1), p_inner_count_(1),
+      p_targeting_inner_vol_(1) {
 
     if (radius <= 0.0) {
         throw std::runtime_error("radius must be greater than 0.0");
@@ -76,6 +78,13 @@ TIBDExchangeMove<RealType>::TIBDExchangeMove(
     k_initialize_curand_states<<<1, DEFAULT_THREADS_PER_BLOCK, 0>>>(
         DEFAULT_THREADS_PER_BLOCK, seed, d_rand_states_.data);
     gpuErrchk(cudaPeekAtLastError());
+
+    // estimate size needed to do radix sorting
+    // reuse d_sort_keys_in_ rather than constructing a dummy output idxs buffer
+    gpuErrchk(cub::DeviceRadixSort::SortKeys(
+        nullptr, sort_storage_bytes_, d_inner_mols_.data, d_sorted_indices_.data, num_target_mols_));
+
+    d_sort_storage_.realloc(sort_storage_bytes_);
 }
 
 template <typename RealType> TIBDExchangeMove<RealType>::~TIBDExchangeMove() {
@@ -116,6 +125,8 @@ void TIBDExchangeMove<RealType>::move_device(
 
     dim3 atom_by_atom_grid(ceil_divide(N, tpb), mol_size_, 1);
 
+    // gpuErrchk(cudaMemsetAsync(d_center_.data, 0, d_center_.size(), stream));
+
     k_compute_centroid_of_atoms<RealType><<<ceil_divide(d_ligand_idxs_.length, tpb), tpb, 0, stream>>>(
         static_cast<int>(d_ligand_idxs_.length), d_ligand_idxs_.data, d_coords, d_center_.data);
     gpuErrchk(cudaPeekAtLastError());
@@ -144,6 +155,9 @@ void TIBDExchangeMove<RealType>::move_device(
 
         gpuErrchk(cudaMemsetAsync(d_inner_mols_count_.data, 0, d_inner_mols_count_.size(), stream));
         gpuErrchk(cudaMemsetAsync(d_outer_mols_count_.data, 0, d_outer_mols_count_.size(), stream));
+        // Make a copy of the coordinates
+        gpuErrchk(cudaMemcpyAsync(
+            d_intermediate_coords_.data, d_coords, d_intermediate_coords_.size(), cudaMemcpyDeviceToDevice, stream));
 
         k_split_mols_inner_outer<RealType><<<mol_blocks, tpb, 0, stream>>>(
             num_target_mols_,
@@ -151,12 +165,13 @@ void TIBDExchangeMove<RealType>::move_device(
             d_mol_offsets_.data,
             d_center_.data,
             radius_ * radius_,
-            d_coords,
+            d_intermediate_coords_.data,
             d_box,
             d_inner_mols_count_.data,
             d_inner_mols_.data,
             d_outer_mols_count_.data,
             d_outer_mols_.data);
+        gpuErrchk(cudaPeekAtLastError());
 
         // The d_acceptance_ buffer contains the random value for determining where to insert and whether to accept the move
         curandErrchk(templateCurandUniform(cr_rng_, d_acceptance_.data, d_acceptance_.length));
@@ -194,12 +209,53 @@ void TIBDExchangeMove<RealType>::move_device(
             d_log_weights_after_.size(),
             cudaMemcpyDeviceToDevice,
             stream));
-        // Make a copy of the coordinates
-        gpuErrchk(cudaMemcpyAsync(
-            d_intermediate_coords_.data, d_coords, d_intermediate_coords_.size(), cudaMemcpyDeviceToDevice, stream));
 
         // Quaternions generated from normal noise generate uniform rotations
         curandErrchk(templateCurandNormal(cr_rng_, d_quaternions_.data, d_quaternions_.length, 0.0, 1.0));
+
+        gpuErrchk(cudaEventSynchronize(host_copy_event_));
+        int inner_count = p_inner_count_.data[0];
+        int targeting_inner_vol = p_targeting_inner_vol_.data[0];
+
+        // printf("Inner count host %d\n", inner_count);
+        // targeting_inner_vol == 1 indicates that we are target the inner volume, starting from the outer mols
+        int src_count = targeting_inner_vol == 0 ? inner_count : num_target_mols_ - inner_count;
+        // k_print_weights<<<1, 1, 0, stream>>>(src_count, d_src_weights_.data);
+        // gpuErrchk(cudaPeekAtLastError());
+
+        // Sort the inner mol idxs to ensure deterministic results
+        gpuErrchk(cub::DeviceRadixSort::SortKeys(
+            d_sort_storage_.data,
+            sort_storage_bytes_,
+            d_inner_mols_.data,
+            d_sorted_indices_.data,
+            inner_count,
+            0,
+            sizeof(*d_sorted_indices_.data) * 8,
+            stream));
+        gpuErrchk(cudaMemcpyAsync(
+            d_sorted_indices_.data,
+            d_inner_mols_.data,
+            inner_count * sizeof(*d_sorted_indices_.data),
+            cudaMemcpyDeviceToHost,
+            stream));
+
+        // Sort the outer mol idxs to ensure deterministic results
+        gpuErrchk(cub::DeviceRadixSort::SortKeys(
+            d_sort_storage_.data,
+            sort_storage_bytes_,
+            d_outer_mols_.data,
+            d_sorted_indices_.data,
+            (num_target_mols_ - inner_count),
+            0,
+            sizeof(*d_sorted_indices_.data) * 8,
+            stream));
+        gpuErrchk(cudaMemcpyAsync(
+            d_sorted_indices_.data,
+            d_outer_mols_.data,
+            (num_target_mols_ - inner_count) * sizeof(*d_sorted_indices_.data),
+            cudaMemcpyDeviceToHost,
+            stream));
 
         k_separate_weights_for_targeted<RealType><<<mol_blocks, tpb, 0, stream>>>(
             num_target_mols_,
@@ -212,24 +268,20 @@ void TIBDExchangeMove<RealType>::move_device(
             d_src_weights_.data);
         gpuErrchk(cudaPeekAtLastError());
 
-        gpuErrchk(cudaEventSynchronize(host_copy_event_));
-        int inner_count = p_inner_count_.data[0];
-        int targeting_inner_vol = p_targeting_inner_vol_.data[0];
-
-        printf("Inner count host %d\n", inner_count);
-        // targeting_inner_vol == 1 indicates that we are target the inner volume, starting from the outer mols
-        int src_count = targeting_inner_vol == 0 ? inner_count : num_target_mols_ - inner_count;
-        k_print_weights<<<1, 1, 0, stream>>>(src_count, d_src_weights_.data);
-        gpuErrchk(cudaPeekAtLastError());
-
         int dest_count = num_target_mols_ - src_count;
-        printf("Targetting inner %d: %d - %d\n", targeting_inner_vol, src_count, dest_count);
+        // printf("Targetting inner %d: %d - %d - %d\n", targeting_inner_vol, src_count, dest_count, inner_count);
 
         logsumexp_.sum_device(src_count, d_src_weights_.data, d_log_sum_exp_before_.data, stream);
 
-        // Past here pretty much 'normal'
+        // printf("SRC COUNT %d\n", src_count);
         sampler_.sample_device(src_count, num_samples, d_src_weights_.data, d_samples_.data, stream);
 
+        // Selected an index from the src weights, need to remap the samples idx to the mol indices
+        k_adjust_sample_idxs<<<ceil_divide(num_samples, tpb), tpb, 0, stream>>>(
+            num_samples, targeting_inner_vol == 1 ? d_outer_mols_.data : d_inner_mols_.data, d_samples_.data);
+        gpuErrchk(cudaPeekAtLastError());
+
+        // Past here pretty much 'normal'
         k_setup_sample_atoms<<<ceil_divide(num_samples, tpb), tpb, 0, stream>>>(
             num_samples,
             mol_size_,
@@ -277,6 +329,32 @@ void TIBDExchangeMove<RealType>::move_device(
             d_translation_.data,
             d_intermediate_coords_.data);
         gpuErrchk(cudaPeekAtLastError());
+
+        // REMOVE
+        // gpuErrchk(cudaMemsetAsync(d_inner_mols_count_.data, 0, d_inner_mols_count_.size(), stream));
+        // gpuErrchk(cudaMemsetAsync(d_outer_mols_count_.data, 0, d_outer_mols_count_.size(), stream));
+        // k_split_mols_inner_outer<RealType><<<mol_blocks, tpb, 0, stream>>>(
+        //     num_target_mols_,
+        //     d_atom_idxs_.data,
+        //     d_mol_offsets_.data,
+        //     d_center_.data,
+        //     radius_ * radius_,
+        //     d_intermediate_coords_.data,
+        //     d_box,
+        //     d_inner_mols_count_.data,
+        //     d_inner_mols_.data,
+        //     d_outer_mols_count_.data,
+        //     d_outer_mols_.data);
+        // gpuErrchk(cudaPeekAtLastError());
+
+        // gpuErrchk(cudaMemcpyAsync(
+        //     p_inner_count_.data, d_inner_mols_count_.data, d_inner_mols_count_.size(), cudaMemcpyDeviceToHost, stream));
+
+        // gpuErrchk(cudaStreamSynchronize(stream));
+        // int inner_count_two = p_inner_count_.data[0];
+
+        // printf("Inner count host post translate %d - Targetting %d\n", inner_count_two, targeting_inner_vol);
+        // // REMOVE
 
         k_atom_by_atom_energies<<<atom_by_atom_grid, tpb, 0, stream>>>(
             N,
@@ -329,8 +407,8 @@ void TIBDExchangeMove<RealType>::move_device(
             d_dest_weights_.data);
         gpuErrchk(cudaPeekAtLastError());
 
-        k_print_weights<<<1, 1, 0, stream>>>(dest_count + 1, d_dest_weights_.data);
-        gpuErrchk(cudaPeekAtLastError());
+        // k_print_weights<<<1, 1, 0, stream>>>(dest_count + 1, d_dest_weights_.data);
+        // gpuErrchk(cudaPeekAtLastError());
 
         // Add one to the destination count, as we just moved a mol there
         logsumexp_.sum_device(dest_count + 1, d_dest_weights_.data, d_log_sum_exp_after_.data, stream);
@@ -349,6 +427,31 @@ void TIBDExchangeMove<RealType>::move_device(
         gpuErrchk(cudaPeekAtLastError());
         num_attempted_++;
     }
+    // // REMOVE
+    // gpuErrchk(cudaMemsetAsync(d_inner_mols_count_.data, 0, d_inner_mols_count_.size(), stream));
+    // gpuErrchk(cudaMemsetAsync(d_outer_mols_count_.data, 0, d_outer_mols_count_.size(), stream));
+    // k_split_mols_inner_outer<RealType><<<mol_blocks, tpb, 0, stream>>>(
+    //     num_target_mols_,
+    //     d_atom_idxs_.data,
+    //     d_mol_offsets_.data,
+    //     d_center_.data,
+    //     radius_ * radius_,
+    //     d_coords,
+    //     d_box,
+    //     d_inner_mols_count_.data,
+    //     d_inner_mols_.data,
+    //     d_outer_mols_count_.data,
+    //     d_outer_mols_.data);
+    // gpuErrchk(cudaPeekAtLastError());
+
+    // gpuErrchk(cudaMemcpyAsync(
+    //     p_inner_count_.data, d_inner_mols_count_.data, d_inner_mols_count_.size(), cudaMemcpyDeviceToHost, stream));
+
+    // gpuErrchk(cudaStreamSynchronize(stream));
+    // int inner_count_three = p_inner_count_.data[0];
+
+    // printf("Inner count host last %d - Targeting %d\n", inner_count_three, p_targeting_inner_vol_.data[0]);
+    // // REMOVE
 }
 
 template <typename RealType>
@@ -392,17 +495,10 @@ template <typename RealType> double TIBDExchangeMove<RealType>::log_probability_
 
     RealType outer_vol = h_box_vol - inner_volume_;
 
-    RealType log_vol_prob = h_targeting_inner_vol == 0 ? log(inner_volume_) - log(h_box_vol - inner_volume_)
+    RealType log_vol_prob = h_targeting_inner_vol == 1 ? log(inner_volume_) - log(h_box_vol - inner_volume_)
                                                        : log(h_box_vol - inner_volume_) - log(inner_volume_);
-    printf("Before log prob %f After %f Vol Prob %f\n", before_log_prob, after_log_prob, log_vol_prob);
-    printf(
-        "--Vol i %f, Vol j %f\n",
-        h_targeting_inner_vol == 1 ? h_box_vol - inner_volume_ : inner_volume_,
-        h_targeting_inner_vol == 1 ? inner_volume_ : h_box_vol - inner_volume_);
 
     double log_prob = min(static_cast<double>(before_log_prob - after_log_prob + log_vol_prob), 0.0);
-    // printf("Post Log Prob %f\n", log_prob);
-    // printf("Post Prob %f\n", exp(log_prob));
     return log_prob;
 }
 

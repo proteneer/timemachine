@@ -110,11 +110,12 @@ void __global__ k_attempt_exchange_move_targeted(
 ) {
     int atom_idx = blockIdx.x * blockDim.x + threadIdx.x;
 
-    int flag = targeting_inner_volume[0];
+    int targetting_inner = targeting_inner_volume[0];
 
     const RealType outer_vol = box_vol[0] - inner_volume;
 
-    const RealType log_vol_prob = flag == 1 ? log(inner_volume) - log(outer_vol) : log(outer_vol) - log(inner_volume);
+    const RealType log_vol_prob =
+        targetting_inner == 1 ? log(inner_volume) - log(outer_vol) : log(outer_vol) - log(inner_volume);
 
     // All kernels compute the same acceptance
     // TBD investigate shared memory for speed
@@ -122,10 +123,15 @@ void __global__ k_attempt_exchange_move_targeted(
     RealType after_log_prob = convert_nan_to_inf<RealType>(compute_logsumexp_final<RealType>(after_log_sum_exp));
 
     RealType log_acceptance_prob = min(before_log_prob - after_log_prob + log_vol_prob, static_cast<RealType>(0.0));
-    if (atom_idx == 0) {
-        printf("Acceptance Prob %f, Rand %f\n", exp(log_acceptance_prob), rand[0]);
-        printf("Vol Log Prob %f: inner  %f outer %f\n", log_vol_prob, log(inner_volume), log(outer_vol));
-    }
+    // if (atom_idx == 0) {
+    //     printf(
+    //         "Vol i %f, Vol J %f\n",
+    //         targetting_inner == 1 ? outer_vol : inner_volume,
+    //         targetting_inner == 1 ? inner_volume : outer_vol);
+    //     printf("Acceptance Log Prob %f, Rand %f\n", log_acceptance_prob, rand[0]);
+    //     printf("Before log Prob %f After %f\n,", before_log_prob, after_log_prob);
+    //     printf("Vol Log Prob %f: inner  %f outer %f\n", log_vol_prob, log(inner_volume), log(outer_vol));
+    // }
     const bool accepted = rand[0] < exp(log_acceptance_prob);
     if (atom_idx == 0 && accepted) {
         num_accepted[0]++;
@@ -458,6 +464,11 @@ void __global__ k_compute_centroid_of_atoms(
 
     int atom_idx;
 
+    if (threadIdx.x < 3)
+        ;
+    { fixed_centroid[threadIdx.x] = 0; }
+    __syncthreads();
+
     while (idx < num_atoms) {
         atom_idx = atom_idxs[idx];
 
@@ -543,6 +554,7 @@ void __global__ k_split_mols_inner_outer(
         centroid_z -= box_z * nearbyint(centroid_z * inv_box_z);
 
         RealType dist = (centroid_x * centroid_x) + (centroid_y * centroid_y) + (centroid_z * centroid_z);
+        // This is not deterministic in the ordering....
         if (dist < square_radius) {
             int index = atomicAdd(inner_count, 1);
             inner_mols[index] = mol_idx;
@@ -553,9 +565,10 @@ void __global__ k_split_mols_inner_outer(
 
         mol_idx += gridDim.x * blockDim.x;
     }
-    if (threadIdx.x == 0) {
-        printf("Inner %d, OUter %d\n", inner_count[0], outer_count[0]);
-    }
+    __syncthreads();
+    // if (threadIdx.x == 0 && blockIdx.x == 0) {
+    //     printf("Last Inner %d Outer %d\n", inner_count[0], outer_count[0]);
+    // }
 }
 
 template void __global__ k_split_mols_inner_outer<float>(
@@ -593,23 +606,23 @@ void __global__ k_decide_targeted_move(
     const int count_inside = inner_count[0];
     const int count_outside = outer_count[0];
     // if(threadIdx.x == 0) {
-    printf("Inner %d, OUter %d\n", inner_count[0], outer_count[0]);
+    // printf("Decide - Inner %d, OUter %d\n", inner_count[0], outer_count[0]);
     // }
     if (count_inside == 0 && count_outside == 0) {
         assert(0);
     } else if (count_inside > 0 && count_outside == 0) {
         targeting_inner_volume[0] = 0;
-        printf("Targetting outer, A\n");
+        // printf("Targetting outer, A\n");
     } else if (count_inside == 0 && count_outside > 0) {
         targeting_inner_volume[0] = 1;
-        printf("Targetting inner B\n");
+        // printf("Targetting inner B\n");
     } else if (count_inside > 0 && count_outside > 0) {
         if (rand[0] < static_cast<RealType>(0.5)) {
             targeting_inner_volume[0] = 1;
-            printf("Targetting inner C\n");
+            // printf("Targetting inner C\n");
         } else {
             targeting_inner_volume[0] = 0;
-            printf("Targetting outer D\n");
+            // printf("Targetting outer D\n");
         }
     } else {
         assert(0);
@@ -640,10 +653,10 @@ void __global__ k_separate_weights_for_targeted(
     const RealType *__restrict__ weights,           // [num_target_mols]
     RealType *__restrict__ output_weights) {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
-    const int flag = targeting_inner_volume[0];
-    const int count = flag == 1 ? outer_count[0] : inner_count[0];
+    const int target_inner = targeting_inner_volume[0];
+    const int count = target_inner == 1 ? outer_count[0] : inner_count[0];
     while (idx < count) {
-        output_weights[idx] = flag == 1 ? weights[outer_idxs[idx]] : weights[inner_idxs[idx]];
+        output_weights[idx] = target_inner == 1 ? weights[outer_idxs[idx]] : weights[inner_idxs[idx]];
 
         idx += gridDim.x * blockDim.x;
     }
@@ -688,13 +701,13 @@ void __global__ k_setup_destination_weights_for_targeted(
     if (idx < num_samples) {
         int sample_idx = samples[idx];
         output_weights[count + idx] = flag == 1 ? weights[sample_idx] : weights[sample_idx];
-        printf("Sample Idx %d Weight %f\n", sample_idx, flag == 1 ? weights[sample_idx] : weights[sample_idx]);
+        // printf("Sample Idx %d Weight %f\n", sample_idx, flag == 1 ? weights[sample_idx] : weights[sample_idx]);
     }
     while (idx < count) {
-        printf(
-            "Idx %d Weight %f\n",
-            flag == 1 ? inner_idxs[idx] : outer_idxs[idx],
-            flag == 1 ? weights[inner_idxs[idx]] : weights[outer_idxs[idx]]);
+        // printf(
+        //     "Idx %d Weight %f\n",
+        //     flag == 1 ? inner_idxs[idx] : outer_idxs[idx],
+        //     flag == 1 ? weights[inner_idxs[idx]] : weights[outer_idxs[idx]]);
         output_weights[idx] = flag == 1 ? weights[inner_idxs[idx]] : weights[outer_idxs[idx]];
 
         idx += gridDim.x * blockDim.x;
@@ -724,6 +737,17 @@ template void __global__ k_setup_destination_weights_for_targeted<double>(
     const int *__restrict__ outer_idxs,             // [outer_count]
     const double *__restrict__ weights,             // [num_target_mols]
     double *__restrict__ output_weights);
+
+void __global__
+k_adjust_sample_idxs(const int num_samples, const int *__restrict__ mol_indices, int *__restrict__ sample_idxs) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    while (idx < num_samples) {
+
+        sample_idxs[idx] = mol_indices[sample_idxs[idx]];
+
+        idx += gridDim.x * blockDim.x;
+    }
+}
 
 void __global__ k_print_weights(const int num_weights, float *__restrict__ weights) {
     if (blockIdx.x * blockDim.x + threadIdx.x > 0) {

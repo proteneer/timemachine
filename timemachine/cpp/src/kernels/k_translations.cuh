@@ -68,7 +68,7 @@ void __global__ k_generate_translations_within_or_outside_a_sphere(
 
         RealType dist;
 
-        const int num_iterations = 100;
+        const int num_iterations = 1000;
 
         while (idx < num_translations) {
 

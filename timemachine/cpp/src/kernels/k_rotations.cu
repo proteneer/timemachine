@@ -136,10 +136,6 @@ void __global__ k_rotate_and_translate_mols(
 
             rotate_coordinates_by_quaternion(local_coords, quat);
 
-            local_coords[1] += translation_x;
-            local_coords[2] += translation_y;
-            local_coords[3] += translation_z;
-
             coords_out[(mol_start + i) * 3 + 0] = local_coords[1];
             coords_out[(mol_start + i) * 3 + 1] = local_coords[2];
             coords_out[(mol_start + i) * 3 + 2] = local_coords[3];
@@ -153,15 +149,19 @@ void __global__ k_rotate_and_translate_mols(
         RealType centroid_y = FIXED_TO_FLOAT<RealType>(centroid_accum_y) / num_atoms;
         RealType centroid_z = FIXED_TO_FLOAT<RealType>(centroid_accum_z) / num_atoms;
 
-        RealType new_center_x = box_x * floor(centroid_x * inv_box_x);
-        RealType new_center_y = box_y * floor(centroid_y * inv_box_y);
-        RealType new_center_z = box_z * floor(centroid_z * inv_box_z);
+        centroid_x -= translation_x;
+        centroid_y -= translation_y;
+        centroid_z -= translation_z;
+
+        RealType new_center_x = centroid_x - box_x * floor(centroid_x * inv_box_x);
+        RealType new_center_y = centroid_y - box_y * floor(centroid_y * inv_box_y);
+        RealType new_center_z = centroid_z - box_z * floor(centroid_z * inv_box_z);
 
         for (int i = 0; i < num_atoms; i++) {
             coords_out[(mol_start + i) * 3 + 0] -= new_center_x;
             coords_out[(mol_start + i) * 3 + 1] -= new_center_y;
             coords_out[(mol_start + i) * 3 + 2] -= new_center_z;
-            // printf("translation x %f, y %f, z %f\n", coords_out[(mol_start + i) * 3 + 0], coords_out[(mol_start + i) * 3 + 1], coords_out[(mol_start + i) * 3 + 2]);
+            // printf("Mol %d translation x %f, y %f, z %f\n", mol_sample, coords_out[(mol_start + i) * 3 + 0], coords_out[(mol_start + i) * 3 + 1], coords_out[(mol_start + i) * 3 + 2]);
         }
         sample_idx += gridDim.x * blockDim.x;
     }

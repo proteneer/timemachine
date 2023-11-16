@@ -55,9 +55,13 @@ private:
     DeviceBuffer<curandState_t> d_rand_states_;
 
     DeviceBuffer<int> d_inner_mols_count_; // [1]
-    DeviceBuffer<int> d_inner_mols_;
+    DeviceBuffer<int> d_inner_mols_;       // [num_target_mols_]
     DeviceBuffer<int> d_outer_mols_count_; // [1]
-    DeviceBuffer<int> d_outer_mols_;
+    DeviceBuffer<int> d_outer_mols_;       // [num_target_mols_]
+    // Array to sort the inner/outer indices to ensure that the results are deterministic
+    DeviceBuffer<int> d_sorted_indices_; // [num_target_mols_]
+    DeviceBuffer<char> d_sort_storage_;
+    size_t sort_storage_bytes_;
 
     DeviceBuffer<RealType> d_center_; // [3]
     DeviceBuffer<RealType> d_translation_;
