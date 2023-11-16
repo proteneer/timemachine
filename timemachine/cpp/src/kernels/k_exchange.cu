@@ -605,24 +605,17 @@ void __global__ k_decide_targeted_move(
     int *__restrict__ targeting_inner_volume) {
     const int count_inside = inner_count[0];
     const int count_outside = outer_count[0];
-    // if(threadIdx.x == 0) {
-    // printf("Decide - Inner %d, OUter %d\n", inner_count[0], outer_count[0]);
-    // }
     if (count_inside == 0 && count_outside == 0) {
         assert(0);
     } else if (count_inside > 0 && count_outside == 0) {
         targeting_inner_volume[0] = 0;
-        // printf("Targetting outer, A\n");
     } else if (count_inside == 0 && count_outside > 0) {
         targeting_inner_volume[0] = 1;
-        // printf("Targetting inner B\n");
     } else if (count_inside > 0 && count_outside > 0) {
         if (rand[0] < static_cast<RealType>(0.5)) {
             targeting_inner_volume[0] = 1;
-            // printf("Targetting inner C\n");
         } else {
             targeting_inner_volume[0] = 0;
-            // printf("Targetting outer D\n");
         }
     } else {
         assert(0);
@@ -701,13 +694,8 @@ void __global__ k_setup_destination_weights_for_targeted(
     if (idx < num_samples) {
         int sample_idx = samples[idx];
         output_weights[count + idx] = flag == 1 ? weights[sample_idx] : weights[sample_idx];
-        // printf("Sample Idx %d Weight %f\n", sample_idx, flag == 1 ? weights[sample_idx] : weights[sample_idx]);
     }
     while (idx < count) {
-        // printf(
-        //     "Idx %d Weight %f\n",
-        //     flag == 1 ? inner_idxs[idx] : outer_idxs[idx],
-        //     flag == 1 ? weights[inner_idxs[idx]] : weights[outer_idxs[idx]]);
         output_weights[idx] = flag == 1 ? weights[inner_idxs[idx]] : weights[outer_idxs[idx]];
 
         idx += gridDim.x * blockDim.x;
@@ -746,24 +734,6 @@ k_adjust_sample_idxs(const int num_samples, const int *__restrict__ mol_indices,
         sample_idxs[idx] = mol_indices[sample_idxs[idx]];
 
         idx += gridDim.x * blockDim.x;
-    }
-}
-
-void __global__ k_print_weights(const int num_weights, float *__restrict__ weights) {
-    if (blockIdx.x * blockDim.x + threadIdx.x > 0) {
-        return;
-    }
-    for (int i = 0; i < num_weights; i++) {
-        printf("Weight %d: %f\n", i, weights[i]);
-    }
-}
-
-void __global__ k_print_weights(const int num_weights, double *__restrict__ weights) {
-    if (blockIdx.x * blockDim.x + threadIdx.x > 0) {
-        return;
-    }
-    for (int i = 0; i < num_weights; i++) {
-        printf("N %d Weight %d: %f\n", num_weights, i, weights[i]);
     }
 }
 

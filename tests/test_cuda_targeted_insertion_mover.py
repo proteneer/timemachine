@@ -285,8 +285,6 @@ def test_targeted_moves_in_bulk_water(radius, steps_per_move, moves, precision, 
     conf = image_frame(all_group_idxs, conf, box)
 
     group_idxs = all_group_idxs[:-1]
-    print(center_group)
-    print(group_idxs)
 
     N = conf.shape[0]
 
@@ -316,9 +314,7 @@ def test_targeted_moves_in_bulk_water(radius, steps_per_move, moves, precision, 
     accepted = 0
     last_conf = conf
     for step in range(moves // steps_per_move):
-        print("Before", np.linalg.norm(last_conf))
         x_move, x_box = bdem.move(last_conf, box)
-        print("After", np.linalg.norm(last_conf), np.linalg.norm(x_move))
         # The box will never change
         np.testing.assert_array_equal(box, x_box)
         num_moved = 0
@@ -331,15 +327,14 @@ def test_targeted_moves_in_bulk_water(radius, steps_per_move, moves, precision, 
                 idx = i
         if num_moved > 0:
             accepted += 1
-            # # The molecules should all be imaged in the home box
-            # np.testing.assert_allclose(image_frame(all_group_idxs, x_move, x_box), x_move)
+            # The molecules should all be imaged in the home box
+            np.testing.assert_allclose(image_frame(all_group_idxs, x_move, x_box), x_move)
             # Verify that the probabilities and per mol energies agree when we do accept moves
             # can only be done when we only attempt a single move per step
             if steps_per_move == 1:
                 vol_inner = (4 / 3) * np.pi * radius**3
                 vol_outer = np.prod(np.diag(box)) - vol_inner
 
-                center = np.mean(last_conf[center_group], axis=0)
                 assert np.all(last_conf[center_group] == x_move[center_group])
 
                 # Use the same inner/outer method that the Cuda version uses, can differ
@@ -348,14 +343,6 @@ def test_targeted_moves_in_bulk_water(radius, steps_per_move, moves, precision, 
                 if precision == np.float64:
                     func = custom_ops.inner_and_outer_mols_f64
 
-                from timemachine.fe import cif_writer
-
-                writer = cif_writer.CIFWriter([topo], f"step_{step}.cif")
-                writer.write_frame(last_conf * 10)
-                writer.write_frame(x_move * 10)
-                writer.close()
-
-                print(center_group, np.linalg.norm(last_conf), len(group_idxs), radius, idx)
                 np.testing.assert_array_equal(last_conf[center_group], x_move[center_group])
                 inner, outer = func(center_group, last_conf, box, group_idxs, radius)
                 inner_after, outer_after = func(center_group, x_move, box, group_idxs, radius)
@@ -365,16 +352,12 @@ def test_targeted_moves_in_bulk_water(radius, steps_per_move, moves, precision, 
                     vol_i = vol_inner
                     vj_mols = outer
                     vol_j = vol_outer
-                    print("Was inner", len(vi_mols), len(vj_mols))
                 else:
                     assert idx in inner_after
                     vi_mols = outer
                     vol_i = vol_outer
                     vj_mols = inner
                     vol_j = vol_inner
-                    print("Was outer", len(vi_mols), len(vj_mols))
-                print(last_conf[group_idxs[idx]], np.linalg.norm(delta_r_np(last_conf[group_idxs[idx]], center, box)))
-                print(new_pos, np.linalg.norm(delta_r_np(new_pos, center, box)))
                 tested, ref_log_prob = compute_ref_log_prob(
                     ref_bdem, idx, vi_mols, vj_mols, vol_i, vol_j, last_conf, box, new_pos
                 )
@@ -483,8 +466,8 @@ def test_moves_with_three_waters(radius, steps_per_move, moves, precision, rtol,
                 idx = i
         if num_moved > 0:
             accepted += 1
-            # # The molecules should all be imaged in the home box
-            # np.testing.assert_allclose(image_frame(all_group_idxs, x_move, x_box), x_move)
+            # The molecules should all be imaged in the home box
+            np.testing.assert_allclose(image_frame(all_group_idxs, x_move, x_box), x_move)
             # Verify that the probabilities and per mol energies agree when we do accept moves
             # can only be done when we only attempt a single move per step
             if steps_per_move == 1:
@@ -518,7 +501,6 @@ def test_moves_with_three_waters(radius, steps_per_move, moves, precision, rtol,
                     err_msg=f"Step {step} failed",
                 )
         elif num_moved == 0:
-            print()
             np.testing.assert_array_equal(last_conf, x_move)
         assert steps_per_move != 1 or num_moved <= 1, "More than one mol moved, something is wrong"
 
@@ -594,7 +576,6 @@ def test_moves_with_complex_and_ligand(hif2a_rbfe_state, radius, steps_per_move,
     assert bdem.last_log_probability() == 0.0, "First log probability expected to be zero"
     accepted = 0
     last_conf = conf
-    print("STARTING")
     for step in range(moves // steps_per_move):
         x_move, x_box = bdem.move(last_conf, box)
         # The box will never change
@@ -608,10 +589,9 @@ def test_moves_with_complex_and_ligand(hif2a_rbfe_state, radius, steps_per_move,
                 new_pos = x_move[mol_idxs]
                 idx = i
         if num_moved > 0:
-            print("MOVED", step)
             accepted += 1
-            # # The molecules should all be imaged in the home box
-            # np.testing.assert_allclose(image_frame(all_group_idxs, x_move, x_box), x_move)
+            # The molecules should all be imaged in the home box
+            np.testing.assert_allclose(image_frame(all_group_idxs, x_move, x_box), x_move)
             # Verify that the probabilities and per mol energies agree when we do accept moves
             # can only be done when we only attempt a single move per step
             if steps_per_move == 1:

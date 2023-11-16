@@ -82,11 +82,14 @@ def test_cuda_rotation_and_translation_by_quaternion(seed, precision, atol, rtol
     for quat, translation in zip(quaternions, translations):
         rotated_translated_mol = rotate_function(mol_coords, box, quat, translation)
 
-        translation_shift = np.diag(box) * translation
+        new_translation = np.diag(box) * translation
         assert rotated_translated_mol.shape == mol_coords.shape
         rotation = Rotation.from_quat(convert_quaternion_for_scipy(quat))
 
-        ref_rotated_translated_mol = rotation.apply(mol_coords) + translation_shift
+        ref_rotated_translated_mol = rotation.apply(mol_coords)
+        # Subtract off the centroid and move the center to the translation
+        ref_rotated_translated_mol -= np.mean(ref_rotated_translated_mol, axis=0)
+        ref_rotated_translated_mol += new_translation
 
         np.testing.assert_allclose(
             rotated_translated_mol,

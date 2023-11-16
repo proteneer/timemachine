@@ -217,11 +217,8 @@ void TIBDExchangeMove<RealType>::move_device(
         int inner_count = p_inner_count_.data[0];
         int targeting_inner_vol = p_targeting_inner_vol_.data[0];
 
-        // printf("Inner count host %d\n", inner_count);
         // targeting_inner_vol == 1 indicates that we are target the inner volume, starting from the outer mols
         int src_count = targeting_inner_vol == 0 ? inner_count : num_target_mols_ - inner_count;
-        // k_print_weights<<<1, 1, 0, stream>>>(src_count, d_src_weights_.data);
-        // gpuErrchk(cudaPeekAtLastError());
 
         // Sort the inner mol idxs to ensure deterministic results
         gpuErrchk(cub::DeviceRadixSort::SortKeys(
@@ -269,11 +266,9 @@ void TIBDExchangeMove<RealType>::move_device(
         gpuErrchk(cudaPeekAtLastError());
 
         int dest_count = num_target_mols_ - src_count;
-        // printf("Targetting inner %d: %d - %d - %d\n", targeting_inner_vol, src_count, dest_count, inner_count);
 
         logsumexp_.sum_device(src_count, d_src_weights_.data, d_log_sum_exp_before_.data, stream);
 
-        // printf("SRC COUNT %d\n", src_count);
         sampler_.sample_device(src_count, num_samples, d_src_weights_.data, d_samples_.data, stream);
 
         // Selected an index from the src weights, need to remap the samples idx to the mol indices
@@ -330,32 +325,6 @@ void TIBDExchangeMove<RealType>::move_device(
             d_intermediate_coords_.data);
         gpuErrchk(cudaPeekAtLastError());
 
-        // REMOVE
-        // gpuErrchk(cudaMemsetAsync(d_inner_mols_count_.data, 0, d_inner_mols_count_.size(), stream));
-        // gpuErrchk(cudaMemsetAsync(d_outer_mols_count_.data, 0, d_outer_mols_count_.size(), stream));
-        // k_split_mols_inner_outer<RealType><<<mol_blocks, tpb, 0, stream>>>(
-        //     num_target_mols_,
-        //     d_atom_idxs_.data,
-        //     d_mol_offsets_.data,
-        //     d_center_.data,
-        //     radius_ * radius_,
-        //     d_intermediate_coords_.data,
-        //     d_box,
-        //     d_inner_mols_count_.data,
-        //     d_inner_mols_.data,
-        //     d_outer_mols_count_.data,
-        //     d_outer_mols_.data);
-        // gpuErrchk(cudaPeekAtLastError());
-
-        // gpuErrchk(cudaMemcpyAsync(
-        //     p_inner_count_.data, d_inner_mols_count_.data, d_inner_mols_count_.size(), cudaMemcpyDeviceToHost, stream));
-
-        // gpuErrchk(cudaStreamSynchronize(stream));
-        // int inner_count_two = p_inner_count_.data[0];
-
-        // printf("Inner count host post translate %d - Targetting %d\n", inner_count_two, targeting_inner_vol);
-        // // REMOVE
-
         k_atom_by_atom_energies<<<atom_by_atom_grid, tpb, 0, stream>>>(
             N,
             mol_size_,
@@ -407,9 +376,6 @@ void TIBDExchangeMove<RealType>::move_device(
             d_dest_weights_.data);
         gpuErrchk(cudaPeekAtLastError());
 
-        // k_print_weights<<<1, 1, 0, stream>>>(dest_count + 1, d_dest_weights_.data);
-        // gpuErrchk(cudaPeekAtLastError());
-
         // Add one to the destination count, as we just moved a mol there
         logsumexp_.sum_device(dest_count + 1, d_dest_weights_.data, d_log_sum_exp_after_.data, stream);
 
@@ -427,31 +393,6 @@ void TIBDExchangeMove<RealType>::move_device(
         gpuErrchk(cudaPeekAtLastError());
         num_attempted_++;
     }
-    // // REMOVE
-    // gpuErrchk(cudaMemsetAsync(d_inner_mols_count_.data, 0, d_inner_mols_count_.size(), stream));
-    // gpuErrchk(cudaMemsetAsync(d_outer_mols_count_.data, 0, d_outer_mols_count_.size(), stream));
-    // k_split_mols_inner_outer<RealType><<<mol_blocks, tpb, 0, stream>>>(
-    //     num_target_mols_,
-    //     d_atom_idxs_.data,
-    //     d_mol_offsets_.data,
-    //     d_center_.data,
-    //     radius_ * radius_,
-    //     d_coords,
-    //     d_box,
-    //     d_inner_mols_count_.data,
-    //     d_inner_mols_.data,
-    //     d_outer_mols_count_.data,
-    //     d_outer_mols_.data);
-    // gpuErrchk(cudaPeekAtLastError());
-
-    // gpuErrchk(cudaMemcpyAsync(
-    //     p_inner_count_.data, d_inner_mols_count_.data, d_inner_mols_count_.size(), cudaMemcpyDeviceToHost, stream));
-
-    // gpuErrchk(cudaStreamSynchronize(stream));
-    // int inner_count_three = p_inner_count_.data[0];
-
-    // printf("Inner count host last %d - Targeting %d\n", inner_count_three, p_targeting_inner_vol_.data[0]);
-    // // REMOVE
 }
 
 template <typename RealType>

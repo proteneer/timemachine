@@ -151,8 +151,4 @@ void __global__ k_setup_destination_weights_for_targeted(
 void __global__
 k_adjust_sample_idxs(const int num_samples, const int *__restrict__ mol_indices, int *__restrict__ sample_idxs);
 
-void __global__ k_print_weights(const int num_weights, float *__restrict__ weights);
-
-void __global__ k_print_weights(const int num_weights, double *__restrict__ weights);
-
 } // namespace timemachine
