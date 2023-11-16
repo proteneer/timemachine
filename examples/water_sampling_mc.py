@@ -24,7 +24,6 @@ from timemachine.fe import cif_writer
 from timemachine.fe.free_energy import image_frames
 from timemachine.lib import custom_ops
 from timemachine.md.barostat.moves import NPTMove
-from timemachine.md.exchange import exchange_mover
 from timemachine.md.moves import MonteCarloMove
 from timemachine.md.states import CoordsVelBox
 
@@ -129,14 +128,17 @@ def test_exchange():
 
     # tibd optimized
     if args.insertion_type == "targeted":
-        exc_mover = exchange_mover.TIBDExchangeMove(
+        exc_mover = custom_ops.TIBDExchangeMove_f32(
+            initial_state.x0.shape[0],
+            initial_state.ligand_idxs,
+            water_idxs,
+            nb_water_ligand_params,
+            DEFAULT_TEMP,
             nb_beta,
             nb_cutoff,
-            nb_water_ligand_params,
-            water_idxs,
-            DEFAULT_TEMP,
-            initial_state.ligand_idxs,
             DEFAULT_BB_RADIUS,
+            seed,
+            args.mc_steps_per_batch,
         )
         assert mol is not None, "Requires a mol for targeted exchange"
     elif args.insertion_type == "untargeted":
