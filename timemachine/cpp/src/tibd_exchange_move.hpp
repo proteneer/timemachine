@@ -61,13 +61,14 @@ private:
 
     DeviceBuffer<RealType> d_center_; // [3]
     DeviceBuffer<RealType> d_translation_;
-    DeviceBuffer<int> d_inner_flag_; // [1]
+    DeviceBuffer<int> d_targeting_inner_vol_; // [1]
 
     DeviceBuffer<int> d_ligand_idxs_;
     DeviceBuffer<RealType> d_src_weights_;
     DeviceBuffer<RealType> d_dest_weights_;
-    PinnedHostBuffer<int> p_inner_count_; // [1]
-    PinnedHostBuffer<int> p_inner_flag_;  // [1]
+    DeviceBuffer<RealType> d_box_volume_;         // [1]
+    PinnedHostBuffer<int> p_inner_count_;         // [1]
+    PinnedHostBuffer<int> p_targeting_inner_vol_; // [1]
 
     cudaEvent_t host_copy_event_;
     curandGenerator_t cr_rng_;

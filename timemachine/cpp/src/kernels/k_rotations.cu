@@ -1,5 +1,6 @@
 #include "k_fixed_point.cuh"
 #include "k_rotations.cuh"
+#include "stdio.h"
 
 namespace timemachine {
 
@@ -115,6 +116,7 @@ void __global__ k_rotate_and_translate_mols(
         RealType translation_x = SCALE ? box_x * translations[sample_idx * 3 + 0] : translations[sample_idx * 3 + 0];
         RealType translation_y = SCALE ? box_y * translations[sample_idx * 3 + 1] : translations[sample_idx * 3 + 1];
         RealType translation_z = SCALE ? box_z * translations[sample_idx * 3 + 2] : translations[sample_idx * 3 + 2];
+        // printf("translation x %f, y %f, z %f\n", translation_x, translation_y, translation_z);
         unsigned long long centroid_accum_x = 0;
         unsigned long long centroid_accum_y = 0;
         unsigned long long centroid_accum_z = 0;
@@ -159,6 +161,7 @@ void __global__ k_rotate_and_translate_mols(
             coords_out[(mol_start + i) * 3 + 0] -= new_center_x;
             coords_out[(mol_start + i) * 3 + 1] -= new_center_y;
             coords_out[(mol_start + i) * 3 + 2] -= new_center_z;
+            // printf("translation x %f, y %f, z %f\n", coords_out[(mol_start + i) * 3 + 0], coords_out[(mol_start + i) * 3 + 1], coords_out[(mol_start + i) * 3 + 2]);
         }
         sample_idx += gridDim.x * blockDim.x;
     }

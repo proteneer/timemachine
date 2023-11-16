@@ -6,13 +6,13 @@ namespace timemachine {
 
 // k_generate_translations_within_or_outside_a_sphere will either generate
 // translations inside of a sphere or outside of a sphere depending on the value
-// of inner_flag[0]. If it is 1 then it will be in the sphere else outside the sphere
+// of targeting_inner[0]. If it is 1 then it will be in the sphere else outside the sphere
 template <typename RealType>
 void __global__ k_generate_translations_within_or_outside_a_sphere(
     const int num_translations,
     const double *__restrict__ box,
-    const RealType *__restrict__ center, // [3]
-    const int *__restrict__ inner_flag,  // [1]
+    const RealType *__restrict__ center,     // [3]
+    const int *__restrict__ targeting_inner, // [1]
     const RealType radius,
     curandState_t *__restrict__ rand_states,   // [threads_per_block]
     RealType *__restrict__ output_translations // [num_translations, 3]
@@ -26,7 +26,7 @@ void __global__ k_generate_translations_within_or_outside_a_sphere(
     curandState_t local_state;
     local_state = rand_states[threadIdx.x];
 
-    if (inner_flag[0] == 1) {
+    if (targeting_inner[0] == 1) {
         while (idx < num_translations) {
             // TBD: Whether or not this randomness needs to be double
             // Done this way initially due to issues with ptxas
@@ -68,7 +68,7 @@ void __global__ k_generate_translations_within_or_outside_a_sphere(
 
         RealType dist;
 
-        const int num_iterations = 10000;
+        const int num_iterations = 100;
 
         while (idx < num_translations) {
 

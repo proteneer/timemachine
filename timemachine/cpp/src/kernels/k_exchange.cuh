@@ -29,8 +29,8 @@ void __global__ k_attempt_exchange_move(
 template <typename RealType>
 void __global__ k_attempt_exchange_move_targeted(
     const int N,
-    const int *__restrict__ inner_flag,
-    const double *__restrict__ box,
+    const int *__restrict__ targeting_inner_volume,
+    const RealType *__restrict__ box_vol,
     const RealType inner_volume,
     const RealType *__restrict__ rand,               // [1]
     const RealType *__restrict__ before_log_sum_exp, // [2]
@@ -53,8 +53,8 @@ void __global__ k_store_accepted_log_probability(
 template <typename RealType>
 void __global__ k_store_accepted_log_probability_targeted(
     const int num_weights,
-    const int *__restrict__ inner_flag,
-    const double *__restrict__ box,
+    const int *__restrict__ targeting_inner_volume,
+    const RealType *__restrict__ box_vol,
     const RealType inner_volume,
     const RealType *__restrict__ rand,              // [1]
     RealType *__restrict__ before_log_sum_exp,      // [2]
@@ -62,6 +62,9 @@ void __global__ k_store_accepted_log_probability_targeted(
     RealType *__restrict__ before_weights,          // [num_weights]
     const RealType *__restrict__ after_weights      // [num_weights]
 );
+
+template <typename RealType>
+void __global__ k_compute_box_volume(const double *__restrict__ box, RealType *__restrict__ output_volume);
 
 // k_adjust_weights takes a set of molecules and either subtracts (Negated=true) or adds (Negated=false)
 // the sum of the per atom weights for the molecules from some initial weights.
@@ -119,30 +122,34 @@ void __global__ k_decide_targeted_move(
     const RealType *__restrict__ rand,
     const int *__restrict__ inner_count,
     const int *__restrict__ outer_count,
-    int *__restrict__ inner_flag);
+    int *__restrict__ targeting_inner_volume);
 
 template <typename RealType>
 void __global__ k_separate_weights_for_targeted(
     const int num_target_mols,
-    const int *__restrict__ inner_flag,   // [1]
-    const int *__restrict__ inner_count,  // [1]
-    const int *__restrict__ outer_count,  // [1]
-    const int *__restrict__ inner_idxs,   // [inner_count]
-    const int *__restrict__ outer_idxs,   // [outer_count]
-    const RealType *__restrict__ weights, // [num_target_mols]
+    const int *__restrict__ targeting_inner_volume, // [1]
+    const int *__restrict__ inner_count,            // [1]
+    const int *__restrict__ outer_count,            // [1]
+    const int *__restrict__ inner_idxs,             // [inner_count]
+    const int *__restrict__ outer_idxs,             // [outer_count]
+    const RealType *__restrict__ weights,           // [num_target_mols]
     RealType *__restrict__ output_weights);
 
 template <typename RealType>
 void __global__ k_setup_destination_weights_for_targeted(
     const int num_target_mols,
     const int num_samples,
-    const int *__restrict__ samples,      // [num_samples]
-    const int *__restrict__ inner_flag,   // [1]
-    const int *__restrict__ inner_count,  // [1]
-    const int *__restrict__ outer_count,  // [1]
-    const int *__restrict__ inner_idxs,   // [inner_count]
-    const int *__restrict__ outer_idxs,   // [outer_count]
-    const RealType *__restrict__ weights, // [num_target_mols]
+    const int *__restrict__ samples,                // [num_samples]
+    const int *__restrict__ targeting_inner_volume, // [1]
+    const int *__restrict__ inner_count,            // [1]
+    const int *__restrict__ outer_count,            // [1]
+    const int *__restrict__ inner_idxs,             // [inner_count]
+    const int *__restrict__ outer_idxs,             // [outer_count]
+    const RealType *__restrict__ weights,           // [num_target_mols]
     RealType *__restrict__ output_weights);
+
+void __global__ k_print_weights(const int num_weights, float *__restrict__ weights);
+
+void __global__ k_print_weights(const int num_weights, double *__restrict__ weights);
 
 } // namespace timemachine

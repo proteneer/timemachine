@@ -98,8 +98,8 @@ template void __global__ k_attempt_exchange_move<double>(
 template <typename RealType>
 void __global__ k_attempt_exchange_move_targeted(
     const int N,
-    const int *__restrict__ inner_flag,
-    const double *__restrict__ box,
+    const int *__restrict__ targeting_inner_volume,
+    const RealType *__restrict__ box_vol, // [1]
     const RealType inner_volume,
     const RealType *__restrict__ rand,               // [1]
     const RealType *__restrict__ before_log_sum_exp, // [2]
@@ -110,10 +110,9 @@ void __global__ k_attempt_exchange_move_targeted(
 ) {
     int atom_idx = blockIdx.x * blockDim.x + threadIdx.x;
 
-    int flag = inner_flag[0];
+    int flag = targeting_inner_volume[0];
 
-    const RealType box_vol = box[0 * 3 + 0] * box[1 * 3 + 1] * box[2 * 3 + 2];
-    const RealType outer_vol = box_vol - inner_volume;
+    const RealType outer_vol = box_vol[0] - inner_volume;
 
     const RealType log_vol_prob = flag == 1 ? log(inner_volume) - log(outer_vol) : log(outer_vol) - log(inner_volume);
 
@@ -123,6 +122,10 @@ void __global__ k_attempt_exchange_move_targeted(
     RealType after_log_prob = convert_nan_to_inf<RealType>(compute_logsumexp_final<RealType>(after_log_sum_exp));
 
     RealType log_acceptance_prob = min(before_log_prob - after_log_prob + log_vol_prob, static_cast<RealType>(0.0));
+    if (atom_idx == 0) {
+        printf("Acceptance Prob %f, Rand %f\n", exp(log_acceptance_prob), rand[0]);
+        printf("Vol Log Prob %f: inner  %f outer %f\n", log_vol_prob, log(inner_volume), log(outer_vol));
+    }
     const bool accepted = rand[0] < exp(log_acceptance_prob);
     if (atom_idx == 0 && accepted) {
         num_accepted[0]++;
@@ -139,8 +142,8 @@ void __global__ k_attempt_exchange_move_targeted(
 
 template void __global__ k_attempt_exchange_move_targeted<float>(
     const int N,
-    const int *__restrict__ inner_flag,
-    const double *__restrict__ box,
+    const int *__restrict__ targeting_inner_volume,
+    const float *__restrict__ box_vol,
     const float inner_volume,
     const float *__restrict__ rand,
     const float *__restrict__ before_log_sum_exp,
@@ -150,8 +153,8 @@ template void __global__ k_attempt_exchange_move_targeted<float>(
     size_t *__restrict__ num_accepted);
 template void __global__ k_attempt_exchange_move_targeted<double>(
     const int N,
-    const int *__restrict__ inner_flag,
-    const double *__restrict__ box,
+    const int *__restrict__ targeting_inner_volume,
+    const double *__restrict__ box_vol,
     const double inner_volume,
     const double *__restrict__ rand,
     const double *__restrict__ before_log_sum_exp,
@@ -213,8 +216,8 @@ template void __global__ k_store_accepted_log_probability<double>(
 template <typename RealType>
 void __global__ k_store_accepted_log_probability_targeted(
     const int num_weights,
-    const int *__restrict__ inner_flag,
-    const double *__restrict__ box,
+    const int *__restrict__ targeting_inner_volume,
+    const RealType *__restrict__ box_vol, // [1]
     const RealType inner_volume,
     const RealType *__restrict__ rand,              // [1]
     RealType *__restrict__ before_log_sum_exp,      // [2]
@@ -227,10 +230,9 @@ void __global__ k_store_accepted_log_probability_targeted(
         return; // Only one block can run this
     }
 
-    int flag = inner_flag[0];
+    int flag = targeting_inner_volume[0];
 
-    const RealType box_vol = box[0 * 3 + 0] * box[1 * 3 + 1] * box[2 * 3 + 2];
-    const RealType outer_vol = box_vol - inner_volume;
+    const RealType outer_vol = box_vol[0] - inner_volume;
 
     const RealType log_vol_prob = flag == 1 ? log(inner_volume) - log(outer_vol) : log(outer_vol) - log(inner_volume);
 
@@ -259,8 +261,8 @@ void __global__ k_store_accepted_log_probability_targeted(
 
 template void __global__ k_store_accepted_log_probability_targeted<float>(
     const int num_weights,
-    const int *__restrict__ inner_flag,
-    const double *__restrict__ box,
+    const int *__restrict__ targeting_inner_volume,
+    const float *__restrict__ box_vol,
     const float inner_volume,
     const float *__restrict__ rand,
     float *__restrict__ before_log_sum_exp,
@@ -269,14 +271,36 @@ template void __global__ k_store_accepted_log_probability_targeted<float>(
     const float *__restrict__ after_weights);
 template void __global__ k_store_accepted_log_probability_targeted<double>(
     const int num_weights,
-    const int *__restrict__ inner_flag,
-    const double *__restrict__ box,
+    const int *__restrict__ targeting_inner_volume,
+    const double *__restrict__ box_vol,
     const double inner_volume,
     const double *__restrict__ rand,
     double *__restrict__ before_log_sum_exp,
     const double *__restrict__ after_log_sum_exp,
     double *__restrict__ before_weights,
     const double *__restrict__ after_weights);
+
+template <typename RealType>
+void __global__ k_compute_box_volume(
+    const double *__restrict__ box,      // [3]
+    RealType *__restrict__ output_volume // [1]
+) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx > 0) {
+        return;
+    }
+    RealType out = box[0 * 3 + 0] * box[1 * 3 + 1] * box[2 * 3 + 2];
+    output_volume[idx] = out;
+}
+
+template void __global__ k_compute_box_volume<float>(
+    const double *__restrict__ box,   // [3]
+    float *__restrict__ output_volume // [1]
+);
+template void __global__ k_compute_box_volume<double>(
+    const double *__restrict__ box,    // [3]
+    double *__restrict__ output_volume // [1]
+);
 
 // k_adjust_weights takes a set of molecules and either subtracts (Negated=true) or adds (Negated=false)
 // the sum of the per atom weights for the molecules from some initial weights.
@@ -529,6 +553,9 @@ void __global__ k_split_mols_inner_outer(
 
         mol_idx += gridDim.x * blockDim.x;
     }
+    if (threadIdx.x == 0) {
+        printf("Inner %d, OUter %d\n", inner_count[0], outer_count[0]);
+    }
 }
 
 template void __global__ k_split_mols_inner_outer<float>(
@@ -562,21 +589,27 @@ void __global__ k_decide_targeted_move(
     const RealType *__restrict__ rand,
     const int *__restrict__ inner_count,
     const int *__restrict__ outer_count,
-    int *__restrict__ inner_flag) {
+    int *__restrict__ targeting_inner_volume) {
     const int count_inside = inner_count[0];
     const int count_outside = outer_count[0];
-
+    // if(threadIdx.x == 0) {
+    printf("Inner %d, OUter %d\n", inner_count[0], outer_count[0]);
+    // }
     if (count_inside == 0 && count_outside == 0) {
         assert(0);
     } else if (count_inside > 0 && count_outside == 0) {
-        inner_flag[0] = 0;
+        targeting_inner_volume[0] = 0;
+        printf("Targetting outer, A\n");
     } else if (count_inside == 0 && count_outside > 0) {
-        inner_flag[0] = 1;
+        targeting_inner_volume[0] = 1;
+        printf("Targetting inner B\n");
     } else if (count_inside > 0 && count_outside > 0) {
         if (rand[0] < static_cast<RealType>(0.5)) {
-            inner_flag[0] = 1;
+            targeting_inner_volume[0] = 1;
+            printf("Targetting inner C\n");
         } else {
-            inner_flag[0] = 0;
+            targeting_inner_volume[0] = 0;
+            printf("Targetting outer D\n");
         }
     } else {
         assert(0);
@@ -587,30 +620,30 @@ template void __global__ k_decide_targeted_move<float>(
     const float *__restrict__ rand,
     const int *__restrict__ inner_count,
     const int *__restrict__ outer_count,
-    int *__restrict__ inner_flag);
+    int *__restrict__ targeting_inner_volume);
 template void __global__ k_decide_targeted_move<double>(
     const double *__restrict__ rand,
     const int *__restrict__ inner_count,
     const int *__restrict__ outer_count,
-    int *__restrict__ inner_flag);
+    int *__restrict__ targeting_inner_volume);
 
 // k_separate_weights_for_targeted takes the flag and the mol indices and writes them out
 // to a new buffer.
 template <typename RealType>
 void __global__ k_separate_weights_for_targeted(
     const int num_target_mols,
-    const int *__restrict__ inner_flag,   // [1]
-    const int *__restrict__ inner_count,  // [1]
-    const int *__restrict__ outer_count,  // [1]
-    const int *__restrict__ inner_idxs,   // [inner_count]
-    const int *__restrict__ outer_idxs,   // [outer_count]
-    const RealType *__restrict__ weights, // [num_target_mols]
+    const int *__restrict__ targeting_inner_volume, // [1]
+    const int *__restrict__ inner_count,            // [1]
+    const int *__restrict__ outer_count,            // [1]
+    const int *__restrict__ inner_idxs,             // [inner_count]
+    const int *__restrict__ outer_idxs,             // [outer_count]
+    const RealType *__restrict__ weights,           // [num_target_mols]
     RealType *__restrict__ output_weights) {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
-    const int flag = inner_flag[0];
-    const int count = flag == 1 ? inner_count[0] : outer_count[0];
+    const int flag = targeting_inner_volume[0];
+    const int count = flag == 1 ? outer_count[0] : inner_count[0];
     while (idx < count) {
-        output_weights[idx] = flag == 1 ? outer_idxs[idx] : inner_idxs[idx];
+        output_weights[idx] = flag == 1 ? weights[outer_idxs[idx]] : weights[inner_idxs[idx]];
 
         idx += gridDim.x * blockDim.x;
     }
@@ -618,45 +651,51 @@ void __global__ k_separate_weights_for_targeted(
 
 template void __global__ k_separate_weights_for_targeted<float>(
     const int num_target_mols,
-    const int *__restrict__ inner_flag,  // [1]
-    const int *__restrict__ inner_count, // [1]
-    const int *__restrict__ outer_count, // [1]
-    const int *__restrict__ inner_idxs,  // [inner_count]
-    const int *__restrict__ outer_idxs,  // [outer_count]
-    const float *__restrict__ weights,   // [num_target_mols]
+    const int *__restrict__ targeting_inner_volume, // [1]
+    const int *__restrict__ inner_count,            // [1]
+    const int *__restrict__ outer_count,            // [1]
+    const int *__restrict__ inner_idxs,             // [inner_count]
+    const int *__restrict__ outer_idxs,             // [outer_count]
+    const float *__restrict__ weights,              // [num_target_mols]
     float *__restrict__ output_weights);
 template void __global__ k_separate_weights_for_targeted<double>(
     const int num_target_mols,
-    const int *__restrict__ inner_flag,  // [1]
-    const int *__restrict__ inner_count, // [1]
-    const int *__restrict__ outer_count, // [1]
-    const int *__restrict__ inner_idxs,  // [inner_count]
-    const int *__restrict__ outer_idxs,  // [outer_count]
-    const double *__restrict__ weights,  // [num_target_mols]
+    const int *__restrict__ targeting_inner_volume, // [1]
+    const int *__restrict__ inner_count,            // [1]
+    const int *__restrict__ outer_count,            // [1]
+    const int *__restrict__ inner_idxs,             // [inner_count]
+    const int *__restrict__ outer_idxs,             // [outer_count]
+    const double *__restrict__ weights,             // [num_target_mols]
     double *__restrict__ output_weights);
 
 template <typename RealType>
 void __global__ k_setup_destination_weights_for_targeted(
     const int num_target_mols,
     const int num_samples,
-    const int *__restrict__ samples,      // [num_samples]
-    const int *__restrict__ inner_flag,   // [1]
-    const int *__restrict__ inner_count,  // [1]
-    const int *__restrict__ outer_count,  // [1]
-    const int *__restrict__ inner_idxs,   // [inner_count]
-    const int *__restrict__ outer_idxs,   // [outer_count]
-    const RealType *__restrict__ weights, // [num_target_mols]
+    const int *__restrict__ samples,                // [num_samples]
+    const int *__restrict__ targeting_inner_volume, // [1]
+    const int *__restrict__ inner_count,            // [1]
+    const int *__restrict__ outer_count,            // [1]
+    const int *__restrict__ inner_idxs,             // [inner_count]
+    const int *__restrict__ outer_idxs,             // [outer_count]
+    const RealType *__restrict__ weights,           // [num_target_mols]
     RealType *__restrict__ output_weights) {
     assert(num_samples == 1);
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
-    const int flag = inner_flag[0];
-    const int count = flag == 1 ? outer_count[0] : inner_count[0];
+    const int flag = targeting_inner_volume[0];
+    const int count = flag == 1 ? inner_count[0] : outer_count[0];
+    // TBD Will break if num_samples is non-1
+    if (idx < num_samples) {
+        int sample_idx = samples[idx];
+        output_weights[count + idx] = flag == 1 ? weights[sample_idx] : weights[sample_idx];
+        printf("Sample Idx %d Weight %f\n", sample_idx, flag == 1 ? weights[sample_idx] : weights[sample_idx]);
+    }
     while (idx < count) {
-        output_weights[idx] = flag == 1 ? inner_idxs[idx] : outer_idxs[idx];
-        if (idx < num_samples) {
-            int sample_idx = samples[idx];
-            output_weights[count + idx] = flag == 1 ? inner_idxs[sample_idx] : outer_idxs[sample_idx];
-        }
+        printf(
+            "Idx %d Weight %f\n",
+            flag == 1 ? inner_idxs[idx] : outer_idxs[idx],
+            flag == 1 ? weights[inner_idxs[idx]] : weights[outer_idxs[idx]]);
+        output_weights[idx] = flag == 1 ? weights[inner_idxs[idx]] : weights[outer_idxs[idx]];
 
         idx += gridDim.x * blockDim.x;
     }
@@ -665,25 +704,43 @@ void __global__ k_setup_destination_weights_for_targeted(
 template void __global__ k_setup_destination_weights_for_targeted<float>(
     const int num_target_mols,
     const int num_samples,
-    const int *__restrict__ samples,     // [num_samples]
-    const int *__restrict__ inner_flag,  // [1]
-    const int *__restrict__ inner_count, // [1]
-    const int *__restrict__ outer_count, // [1]
-    const int *__restrict__ inner_idxs,  // [inner_count]
-    const int *__restrict__ outer_idxs,  // [outer_count]
-    const float *__restrict__ weights,   // [num_target_mols]
+    const int *__restrict__ samples,                // [num_samples]
+    const int *__restrict__ targeting_inner_volume, // [1]
+    const int *__restrict__ inner_count,            // [1]
+    const int *__restrict__ outer_count,            // [1]
+    const int *__restrict__ inner_idxs,             // [inner_count]
+    const int *__restrict__ outer_idxs,             // [outer_count]
+    const float *__restrict__ weights,              // [num_target_mols]
     float *__restrict__ output_weights);
 
 template void __global__ k_setup_destination_weights_for_targeted<double>(
     const int num_target_mols,
     const int num_samples,
-    const int *__restrict__ samples,     // [num_samples]
-    const int *__restrict__ inner_flag,  // [1]
-    const int *__restrict__ inner_count, // [1]
-    const int *__restrict__ outer_count, // [1]
-    const int *__restrict__ inner_idxs,  // [inner_count]
-    const int *__restrict__ outer_idxs,  // [outer_count]
-    const double *__restrict__ weights,  // [num_target_mols]
+    const int *__restrict__ samples,                // [num_samples]
+    const int *__restrict__ targeting_inner_volume, // [1]
+    const int *__restrict__ inner_count,            // [1]
+    const int *__restrict__ outer_count,            // [1]
+    const int *__restrict__ inner_idxs,             // [inner_count]
+    const int *__restrict__ outer_idxs,             // [outer_count]
+    const double *__restrict__ weights,             // [num_target_mols]
     double *__restrict__ output_weights);
+
+void __global__ k_print_weights(const int num_weights, float *__restrict__ weights) {
+    if (blockIdx.x * blockDim.x + threadIdx.x > 0) {
+        return;
+    }
+    for (int i = 0; i < num_weights; i++) {
+        printf("Weight %d: %f\n", i, weights[i]);
+    }
+}
+
+void __global__ k_print_weights(const int num_weights, double *__restrict__ weights) {
+    if (blockIdx.x * blockDim.x + threadIdx.x > 0) {
+        return;
+    }
+    for (int i = 0; i < num_weights; i++) {
+        printf("N %d Weight %d: %f\n", num_weights, i, weights[i]);
+    }
+}
 
 } // namespace timemachine
