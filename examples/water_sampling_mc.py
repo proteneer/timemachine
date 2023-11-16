@@ -192,7 +192,7 @@ def test_exchange():
     npt_mover.n_steps = args.md_steps_per_batch
     # (ytz): If I start with pure MC, and no MD, it's actually very easy to remove the waters.
     # since the starting waters have very very high energy. If I re-run MD, then it becomes progressively harder
-    # remove the water since we will re-equilibriate the waters.
+    # remove the water since we will re-equilibrate the waters.
     for idx in range(args.iterations):
         density = compute_density(nwm, xvb_t.box)
 
