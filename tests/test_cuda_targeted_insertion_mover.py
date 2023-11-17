@@ -198,6 +198,15 @@ def test_tibd_exchange_validation(precision):
     with pytest.raises(RuntimeError, match="radius must be greater than 0.0"):
         klass(N, ligand_idxs, group_idxs, params, DEFAULT_TEMP, beta, cutoff, 0.0, seed, proposals_per_move)
 
+    # Verify that if the box is too small this will trigger a failure
+    # no such protection in the move_device call for performance reasons though an assert will be triggered
+    box = np.eye(3) * 0.1
+    radius = 1
+    coords = rng.random((N, 3))
+    mover = klass(N, ligand_idxs, group_idxs, params, DEFAULT_TEMP, beta, cutoff, radius, seed, proposals_per_move)
+    with pytest.raises(RuntimeError, match="volume of inner radius greater than box volume"):
+        mover.move(coords, box)
+
 
 @pytest.fixture(scope="module")
 def hif2a_rbfe_state() -> InitialState:

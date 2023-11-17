@@ -258,6 +258,35 @@ void TIBDExchangeMove<RealType>::move_device(
     }
 }
 
+template <typename RealType>
+std::array<std::vector<double>, 2>
+TIBDExchangeMove<RealType>::move_host(const int N, const double *h_coords, const double *h_box) {
+
+    const double box_vol = h_box[0 * 3 + 0] * h_box[2 * 3 + 1] * h_box[2 * 3 + 2];
+    if (box_vol <= inner_volume_) {
+        throw std::runtime_error("volume of inner radius greater than box volume");
+    }
+
+    DeviceBuffer<double> d_coords(N * 3);
+    d_coords.copy_from(h_coords);
+
+    DeviceBuffer<double> d_box(3 * 3);
+    d_box.copy_from(h_box);
+
+    cudaStream_t stream = static_cast<cudaStream_t>(0);
+
+    this->move_device(N, d_coords.data, d_box.data, stream);
+    gpuErrchk(cudaStreamSynchronize(stream));
+
+    std::vector<double> out_coords(d_coords.length);
+    d_coords.copy_to(&out_coords[0]);
+
+    std::vector<double> out_box(d_box.length);
+    d_box.copy_to(&out_box[0]);
+
+    return std::array<std::vector<double>, 2>({out_coords, out_box});
+}
+
 template <typename RealType> double TIBDExchangeMove<RealType>::log_probability_host() {
     std::vector<RealType> h_log_exp_before(2);
     std::vector<RealType> h_log_exp_after(2);

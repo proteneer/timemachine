@@ -74,7 +74,7 @@ public:
         double *d_box,    // [3, 3]
         cudaStream_t stream);
 
-    std::array<std::vector<double>, 2> move_host(const int N, const double *h_coords, const double *h_box);
+    virtual std::array<std::vector<double>, 2> move_host(const int N, const double *h_coords, const double *h_box);
 
     virtual double log_probability_host();
 
