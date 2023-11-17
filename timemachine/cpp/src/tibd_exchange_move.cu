@@ -166,10 +166,6 @@ void TIBDExchangeMove<RealType>::move_device(
 
         gpuErrchk(cudaEventSynchronize(host_copy_event_));
         int inner_count = p_inner_count_.data[0];
-        int targeting_inner_vol = p_targeting_inner_vol_.data[0];
-
-        // targeting_inner_vol == 1 indicates that we are target the inner volume, starting from the outer mols
-        int src_count = targeting_inner_vol == 0 ? inner_count : this->num_target_mols_ - inner_count;
 
         // Sort the inner mol idxs to ensure deterministic results
         gpuErrchk(cub::DeviceRadixSort::SortKeys(
@@ -198,12 +194,6 @@ void TIBDExchangeMove<RealType>::move_device(
             0,
             sizeof(*d_sorted_indices_.data) * 8,
             stream));
-        gpuErrchk(cudaMemcpyAsync(
-            d_sorted_indices_.data,
-            d_outer_mols_.data,
-            (this->num_target_mols_ - inner_count) * sizeof(*d_sorted_indices_.data),
-            cudaMemcpyDeviceToHost,
-            stream));
 
         k_separate_weights_for_targeted<RealType><<<mol_blocks, tpb, 0, stream>>>(
             this->num_target_mols_,
@@ -211,11 +201,15 @@ void TIBDExchangeMove<RealType>::move_device(
             d_inner_mols_count_.data,
             d_outer_mols_count_.data,
             d_inner_mols_.data,
-            d_outer_mols_.data,
+            // Avoid an additional copy and directly copy from the sorted array
+            d_sorted_indices_.data,
             this->d_log_weights_before_.data,
             d_src_weights_.data);
         gpuErrchk(cudaPeekAtLastError());
 
+        // targeting_inner_vol == 1 indicates that we are target the inner volume, starting from the outer mols
+        int targeting_inner_vol = p_targeting_inner_vol_.data[0];
+        int src_count = targeting_inner_vol == 0 ? inner_count : this->num_target_mols_ - inner_count;
         int dest_count = this->num_target_mols_ - src_count;
 
         this->logsumexp_.sum_device(src_count, d_src_weights_.data, this->d_log_sum_exp_before_.data, stream);
