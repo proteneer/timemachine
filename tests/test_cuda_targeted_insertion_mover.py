@@ -261,6 +261,87 @@ def hif2a_rbfe_state() -> InitialState:
     return replace(initial_state, v0=ctxt.get_v_t(), x0=conf, box0=box)
 
 
+@pytest.mark.parametrize("radius", [1.0])
+@pytest.mark.parametrize("moves", [1, 100])
+@pytest.mark.parametrize("precision", [np.float64, np.float32])
+@pytest.mark.parametrize("seed", [2023])
+def test_tibd_exchange_deterministic_moves(radius, moves, precision, seed):
+    """Given one water the exchange mover should accept every move and the results should be deterministic"""
+    ff = Forcefield.load_default()
+    system, conf, _, _ = builders.build_water_system(1.0, ff.water_ff)
+    bps, _ = openmm_deserializer.deserialize_system(system, cutoff=1.2)
+
+    nb = next(bp for bp in bps if isinstance(bp.potential, Nonbonded))
+    bond_pot = next(bp for bp in bps if isinstance(bp.potential, HarmonicBond)).potential
+
+    all_group_idxs = get_group_indices(get_bond_list(bond_pot), conf.shape[0])
+
+    # Get first two mols as the ones two move
+    group_idxs = all_group_idxs[:2]
+
+    center_group = all_group_idxs[2]
+
+    all_group_idxs = all_group_idxs[:3]
+
+    conf_idxs = np.array(all_group_idxs).reshape(-1)
+
+    conf = conf[conf_idxs]
+
+    # Set the two waters on top of each other
+    conf[group_idxs[0], :] = conf[group_idxs[1], :]
+
+    box = np.eye(3) * 100.0
+
+    # Re-image coords so that everything is imaged to begin with
+    conf = image_frame(all_group_idxs, conf, box)
+
+    N = conf.shape[0]
+
+    params = nb.params[conf_idxs]
+
+    cutoff = nb.potential.cutoff
+    klass = custom_ops.TIBDExchangeMove_f32
+    if precision == np.float64:
+        klass = custom_ops.TIBDExchangeMove_f64
+
+    bdem_a = klass(
+        N,
+        center_group,
+        group_idxs,
+        params,
+        DEFAULT_TEMP,
+        nb.potential.beta,
+        cutoff,
+        radius,
+        seed,
+        1,
+    )
+
+    bdem_b = klass(
+        N,
+        center_group,
+        group_idxs,
+        params,
+        DEFAULT_TEMP,
+        nb.potential.beta,
+        cutoff,
+        radius,
+        seed,
+        moves,
+    )
+
+    iterative_moved_coords = conf.copy()
+    for _ in range(moves):
+        iterative_moved_coords, _ = bdem_a.move(iterative_moved_coords, box)
+    batch_moved_coords, _ = bdem_b.move(conf, box)
+    # Moves should be deterministic regardless the number of steps taken per move
+    np.testing.assert_array_equal(iterative_moved_coords, batch_moved_coords)
+    assert bdem_a.n_accepted() > 0
+    assert bdem_a.n_proposed() == moves
+    assert bdem_a.n_accepted() == bdem_b.n_accepted()
+    assert bdem_a.n_proposed() == bdem_b.n_proposed()
+
+
 @pytest.mark.parametrize("radius", [1.2])
 @pytest.mark.parametrize(
     "steps_per_move,moves",
@@ -416,8 +497,6 @@ def test_moves_with_three_waters(radius, steps_per_move, moves, precision, rtol,
 
     conf = conf[conf_idxs]
 
-    # # Shift the third water away
-    # conf[center_group] += np.eye(3) * 10
     # Set the two waters on top of each other
     conf[group_idxs[0], :] = conf[group_idxs[1], :]
 
