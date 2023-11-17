@@ -13,7 +13,7 @@ namespace timemachine {
 // is in timemachine/md/exchange/exchange_mover.py::BDExchangeMove
 template <typename RealType> class BDExchangeMove {
 
-private:
+protected:
     const int N_;
     // Number of atom in all mols
     // All molecules are currently expected to have same number of atoms (typically 3 for waters)
@@ -50,6 +50,11 @@ private:
 
     curandGenerator_t cr_rng_;
 
+    void compute_initial_weights(const int N, double *d_coords, double *d_box, cudaStream_t stream);
+
+    void compute_incremental_weights(
+        const int N, const int num_samples, const bool scale, double *d_coords, double *d_box, cudaStream_t stream);
+
 public:
     BDExchangeMove(
         const int N,
@@ -63,7 +68,7 @@ public:
 
     ~BDExchangeMove();
 
-    void move_device(
+    virtual void move_device(
         const int N,
         double *d_coords, // [N, 3]
         double *d_box,    // [3, 3]
@@ -71,7 +76,7 @@ public:
 
     std::array<std::vector<double>, 2> move_host(const int N, const double *h_coords, const double *h_box);
 
-    double log_probability_host();
+    virtual double log_probability_host();
 
     size_t n_proposed() const { return num_attempted_; }
 
