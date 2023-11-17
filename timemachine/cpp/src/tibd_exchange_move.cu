@@ -262,7 +262,7 @@ template <typename RealType>
 std::array<std::vector<double>, 2>
 TIBDExchangeMove<RealType>::move_host(const int N, const double *h_coords, const double *h_box) {
 
-    const double box_vol = h_box[0 * 3 + 0] * h_box[2 * 3 + 1] * h_box[2 * 3 + 2];
+    const double box_vol = h_box[0 * 3 + 0] * h_box[1 * 3 + 1] * h_box[2 * 3 + 2];
     if (box_vol <= inner_volume_) {
         throw std::runtime_error("volume of inner radius greater than box volume");
     }
