@@ -199,6 +199,7 @@ def test_exchange():
         density = compute_density(nwm, xvb_t.box)
 
         xvb_t = image_xvb(initial_state, xvb_t)
+        assert np.amax(np.abs(xvb_t.coords)) < 1e3
 
         start_time = time.perf_counter_ns()
         xvb_t = run_mc_proposals(exc_mover, xvb_t, args.mc_steps_per_batch)
