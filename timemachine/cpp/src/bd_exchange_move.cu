@@ -13,8 +13,6 @@
 // The number of threads per block for the setting of the final weight of the moved mol is low
 // if using the same number as in the rest of the kernels of DEFAULT_THREADS_PER_BLOCK
 #define WEIGHT_THREADS_PER_BLOCK 512
-// Currently only support one sample at a time
-#define NUM_SAMPLES 1
 
 namespace timemachine {
 
@@ -36,8 +34,8 @@ BDExchangeMove<RealType>::BDExchangeMove(
       d_intermediate_coords_(N * 3), d_params_(params), d_mol_energy_buffer_(num_target_mols_),
       d_sample_per_atom_energy_buffer_(mol_size_ * N), d_atom_idxs_(get_atom_indices(target_mols)),
       d_mol_offsets_(get_mol_offsets(target_mols)), d_log_weights_before_(num_target_mols_),
-      d_log_weights_after_(num_target_mols_), d_log_sum_exp_before_(2), d_log_sum_exp_after_(2),
-      d_samples_(NUM_SAMPLES), d_quaternions_(round_up_even(4)), d_translations_(round_up_even(4)), d_num_accepted_(1),
+      d_log_weights_after_(num_target_mols_), d_log_sum_exp_before_(2), d_log_sum_exp_after_(2), d_samples_(1),
+      d_quaternions_(round_up_even(4)), d_translations_(round_up_even(4)), d_num_accepted_(1),
       d_target_mol_atoms_(mol_size_), d_target_mol_offsets_(num_target_mols_ + 1) {
 
     if (proposals_per_move_ <= 0) {
@@ -81,7 +79,6 @@ void BDExchangeMove<RealType>::move_device(
 
     this->compute_initial_weights(N, d_coords, d_box, stream);
 
-    const int num_samples = NUM_SAMPLES;
     for (int move = 0; move < proposals_per_move_; move++) {
         // Run only after the first pass, to maintain meaningful `log_probability_host` values
         if (move > 0) {
@@ -107,12 +104,13 @@ void BDExchangeMove<RealType>::move_device(
         // The d_translation_ buffer is [x,y,z,w] where [x,y,z] are a random translation and w is used for acceptance
         curandErrchk(templateCurandUniform(cr_rng_, d_translations_.data, d_translations_.length));
 
-        sampler_.sample_device(num_target_mols_, num_samples, d_log_weights_before_.data, d_samples_.data, stream);
+        // We only ever sample a single molecule
+        sampler_.sample_device(num_target_mols_, 1, d_log_weights_before_.data, d_samples_.data, stream);
 
         // Don't move translations into computation of the incremental, as different translations can be used
         // by different bias deletion movers (such as targeted insertion)
         // scale the translations as they are between [0, 1]
-        this->compute_incremental_weights(N, num_samples, true, d_coords, d_box, stream);
+        this->compute_incremental_weights(N, true, d_coords, d_box, stream);
 
         logsumexp_.sum_device(num_target_mols_, d_log_weights_after_.data, d_log_sum_exp_after_.data, stream);
 
@@ -156,7 +154,7 @@ void BDExchangeMove<RealType>::compute_initial_weights(
 
 template <typename RealType>
 void BDExchangeMove<RealType>::compute_incremental_weights(
-    const int N, const int num_samples, const bool scale, double *d_coords, double *d_box, cudaStream_t stream) {
+    const int N, const bool scale, double *d_coords, double *d_box, cudaStream_t stream) {
     const int tpb = DEFAULT_THREADS_PER_BLOCK;
     dim3 atom_by_atom_grid(ceil_divide(N, tpb), mol_size_, 1);
 
@@ -167,8 +165,8 @@ void BDExchangeMove<RealType>::compute_incremental_weights(
     // Quaternions generated from normal noise generate uniform rotations
     curandErrchk(templateCurandNormal(cr_rng_, d_quaternions_.data, d_quaternions_.length, 0.0, 1.0));
 
-    k_setup_sample_atoms<<<ceil_divide(num_samples, tpb), tpb, 0, stream>>>(
-        num_samples,
+    // Only support sampling a single mol at this time, so only one block
+    k_setup_sample_atoms<<<1, tpb, 0, stream>>>(
         mol_size_,
         d_samples_.data,
         d_atom_idxs_.data,
@@ -178,8 +176,8 @@ void BDExchangeMove<RealType>::compute_incremental_weights(
     gpuErrchk(cudaPeekAtLastError());
 
     if (scale) {
-        k_rotate_and_translate_mols<RealType, true><<<ceil_divide(num_samples, tpb), tpb, 0, stream>>>(
-            num_samples,
+        k_rotate_and_translate_mols<RealType, true><<<1, tpb, 0, stream>>>(
+            1,
             d_coords,
             d_box,
             d_samples_.data,
@@ -189,8 +187,8 @@ void BDExchangeMove<RealType>::compute_incremental_weights(
             d_intermediate_coords_.data);
         gpuErrchk(cudaPeekAtLastError());
     } else {
-        k_rotate_and_translate_mols<RealType, false><<<ceil_divide(num_samples, tpb), tpb, 0, stream>>>(
-            num_samples,
+        k_rotate_and_translate_mols<RealType, false><<<1, tpb, 0, stream>>>(
+            1,
             d_coords,
             d_box,
             d_samples_.data,
@@ -256,7 +254,6 @@ void BDExchangeMove<RealType>::compute_incremental_weights(
     k_set_sampled_weight<RealType, WEIGHT_THREADS_PER_BLOCK><<<1, WEIGHT_THREADS_PER_BLOCK, 0, stream>>>(
         N,
         mol_size_,
-        num_samples,
         d_samples_.data,
         d_target_mol_atoms_.data,
         d_mol_offsets_.data,

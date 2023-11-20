@@ -7,9 +7,8 @@ namespace timemachine {
 template <typename RealType> RealType __host__ __device__ convert_nan_to_inf(const RealType input);
 
 void __global__ k_setup_sample_atoms(
-    const int num_samples,
     const int sample_atoms,          // number of atoms in each sample
-    const int *__restrict__ samples, // [num_samples]
+    const int *__restrict__ samples, // [1]
     const int *__restrict__ target_atoms,
     const int *__restrict__ mol_offsets,
     int *__restrict__ output_atom_idxs,
@@ -86,8 +85,7 @@ template <typename RealType, int THREADS_PER_BLOCK>
 void __global__ k_set_sampled_weight(
     const int N,
     const int mol_size,
-    const int num_samples,
-    const int *__restrict__ samples, // [num_samples]
+    const int *__restrict__ samples, // [1]
     const int *__restrict__ target_atoms,
     const int *__restrict__ mol_offsets,
     const RealType *__restrict__ per_atom_energies,
@@ -138,8 +136,7 @@ void __global__ k_separate_weights_for_targeted(
 template <typename RealType>
 void __global__ k_setup_destination_weights_for_targeted(
     const int num_target_mols,
-    const int num_samples,
-    const int *__restrict__ samples,                // [num_samples]
+    const int *__restrict__ samples,                // [1]
     const int *__restrict__ targeting_inner_volume, // [1]
     const int *__restrict__ inner_count,            // [1]
     const int *__restrict__ outer_count,            // [1]
@@ -148,7 +145,6 @@ void __global__ k_setup_destination_weights_for_targeted(
     const RealType *__restrict__ weights,           // [num_target_mols]
     RealType *__restrict__ output_weights);
 
-void __global__
-k_adjust_sample_idxs(const int num_samples, const int *__restrict__ mol_indices, int *__restrict__ sample_idxs);
+void __global__ k_adjust_sample_idx(const int *__restrict__ mol_indices, int *__restrict__ sample_idxs);
 
 } // namespace timemachine

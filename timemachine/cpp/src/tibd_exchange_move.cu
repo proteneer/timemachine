@@ -92,7 +92,6 @@ void TIBDExchangeMove<RealType>::move_device(
     k_compute_box_volume<<<1, 1, 0, stream>>>(d_box, d_box_volume_.data);
     gpuErrchk(cudaPeekAtLastError());
 
-    const int num_samples = NUM_SAMPLES;
     for (int move = 0; move < this->proposals_per_move_; move++) {
         // Run only after the first pass, to maintain meaningful `log_probability_host` values
         if (move > 0) {
@@ -154,8 +153,8 @@ void TIBDExchangeMove<RealType>::move_device(
             stream));
         gpuErrchk(cudaEventRecord(host_copy_event_, stream));
 
-        k_generate_translations_within_or_outside_a_sphere<<<ceil_divide(num_samples, tpb), tpb, 0, stream>>>(
-            num_samples,
+        k_generate_translations_within_or_outside_a_sphere<<<1, tpb, 0, stream>>>(
+            1,
             d_box,
             d_center_.data,
             d_targeting_inner_vol_.data,
@@ -214,21 +213,21 @@ void TIBDExchangeMove<RealType>::move_device(
 
         this->logsumexp_.sum_device(src_count, d_src_weights_.data, this->d_log_sum_exp_before_.data, stream);
 
-        this->sampler_.sample_device(src_count, num_samples, d_src_weights_.data, this->d_samples_.data, stream);
+        // Only sample one mol
+        this->sampler_.sample_device(src_count, 1, d_src_weights_.data, this->d_samples_.data, stream);
 
         // Selected an index from the src weights, need to remap the samples idx to the mol indices
-        k_adjust_sample_idxs<<<ceil_divide(num_samples, tpb), tpb, 0, stream>>>(
-            num_samples, targeting_inner_vol == 1 ? d_outer_mols_.data : d_inner_mols_.data, this->d_samples_.data);
+        k_adjust_sample_idx<<<1, tpb, 0, stream>>>(
+            targeting_inner_vol == 1 ? d_outer_mols_.data : d_inner_mols_.data, this->d_samples_.data);
         gpuErrchk(cudaPeekAtLastError());
 
         // Don't move translations into computation of the incremental, as different translations can be used
         // by different bias deletion movers (such as targeted insertion)
         // Don't scale the translations as they computed to be within the region
-        this->compute_incremental_weights(N, num_samples, false, d_coords, d_box, stream);
+        this->compute_incremental_weights(N, false, d_coords, d_box, stream);
 
         k_setup_destination_weights_for_targeted<RealType><<<mol_blocks, tpb, 0, stream>>>(
             this->num_target_mols_,
-            num_samples,
             this->d_samples_.data,
             d_targeting_inner_vol_.data,
             d_inner_mols_count_.data,

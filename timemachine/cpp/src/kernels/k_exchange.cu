@@ -20,29 +20,27 @@ template float __host__ __device__ convert_nan_to_inf<float>(const float input);
 template double __host__ __device__ convert_nan_to_inf<double>(const double input);
 
 void __global__ k_setup_sample_atoms(
-    const int num_samples,
     const int sample_atoms,          // number of atoms in each sample
-    const int *__restrict__ samples, // [num_samples]
+    const int *__restrict__ samples, // [1]
     const int *__restrict__ target_atoms,
     const int *__restrict__ mol_offsets,
     int *__restrict__ output_atom_idxs,
     int *__restrict__ output_mol_offsets) {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
-    while (idx < num_samples) {
-        int mol_idx = samples[idx];
-        int mol_start = mol_offsets[mol_idx];
-        int mol_end = mol_offsets[mol_idx + 1];
-        output_mol_offsets[mol_idx] = target_atoms[mol_start];
-        output_mol_offsets[mol_idx + 1] = target_atoms[mol_end - 1] + 1;
-        int num_atoms = mol_end - mol_start;
+    if (idx > 0) {
+        return;
+    }
+    int mol_idx = samples[idx];
+    int mol_start = mol_offsets[mol_idx];
+    int mol_end = mol_offsets[mol_idx + 1];
+    output_mol_offsets[mol_idx] = target_atoms[mol_start];
+    output_mol_offsets[mol_idx + 1] = target_atoms[mol_end - 1] + 1;
+    int num_atoms = mol_end - mol_start;
 
-        assert(num_atoms == sample_atoms);
+    assert(num_atoms == sample_atoms);
 
-        for (int i = 0; i < num_atoms; i++) {
-            output_atom_idxs[idx * num_samples * sample_atoms + i] = target_atoms[mol_start + i];
-        }
-
-        idx += gridDim.x * blockDim.x;
+    for (int i = 0; i < num_atoms; i++) {
+        output_atom_idxs[idx * sample_atoms + i] = target_atoms[mol_start + i];
     }
 }
 
@@ -123,15 +121,7 @@ void __global__ k_attempt_exchange_move_targeted(
     RealType after_log_prob = convert_nan_to_inf<RealType>(compute_logsumexp_final<RealType>(after_log_sum_exp));
 
     RealType log_acceptance_prob = min(before_log_prob - after_log_prob + log_vol_prob, static_cast<RealType>(0.0));
-    // if (atom_idx == 0) {
-    //     printf(
-    //         "Vol i %f, Vol J %f\n",
-    //         targetting_inner == 1 ? outer_vol : inner_volume,
-    //         targetting_inner == 1 ? inner_volume : outer_vol);
-    //     printf("Acceptance Log Prob %f, Rand %f\n", log_acceptance_prob, rand[0]);
-    //     printf("Before log Prob %f After %f\n,", before_log_prob, after_log_prob);
-    //     printf("Vol Log Prob %f: inner  %f outer %f\n", log_vol_prob, log(inner_volume), log(outer_vol));
-    // }
+
     const bool accepted = rand[0] < exp(log_acceptance_prob);
     if (atom_idx == 0 && accepted) {
         num_accepted[0]++;
@@ -393,15 +383,13 @@ template <typename RealType, int THREADS_PER_BLOCK>
 void __global__ k_set_sampled_weight(
     const int N,
     const int mol_size,
-    const int num_samples,
-    const int *__restrict__ samples, // [num_samples]
+    const int *__restrict__ samples, // [1]
     const int *__restrict__ target_atoms,
     const int *__restrict__ mol_offsets,
     const RealType *__restrict__ per_atom_energies,
     const RealType inv_kT, // 1 / kT
     RealType *__restrict__ log_weights) {
     static_assert(THREADS_PER_BLOCK <= 512 && (THREADS_PER_BLOCK & (THREADS_PER_BLOCK - 1)) == 0);
-    assert(num_samples == 1);
     assert(gridDim.x == 1);
     __shared__ __int128 accumulators[THREADS_PER_BLOCK];
 
@@ -432,8 +420,7 @@ void __global__ k_set_sampled_weight(
 template void __global__ k_set_sampled_weight<float, 512>(
     const int N,
     const int mol_size,
-    const int num_samples,
-    const int *__restrict__ samples, // [num_samples]
+    const int *__restrict__ samples, // [1]
     const int *__restrict__ target_atoms,
     const int *__restrict__ mol_offsets,
     const float *__restrict__ per_atom_energies,
@@ -442,8 +429,7 @@ template void __global__ k_set_sampled_weight<float, 512>(
 template void __global__ k_set_sampled_weight<double, 512>(
     const int N,
     const int mol_size,
-    const int num_samples,
-    const int *__restrict__ samples, // [num_samples]
+    const int *__restrict__ samples, // [1]
     const int *__restrict__ target_atoms,
     const int *__restrict__ mol_offsets,
     const double *__restrict__ per_atom_energies,
@@ -566,9 +552,6 @@ void __global__ k_split_mols_inner_outer(
         mol_idx += gridDim.x * blockDim.x;
     }
     __syncthreads();
-    // if (threadIdx.x == 0 && blockIdx.x == 0) {
-    //     printf("Last Inner %d Outer %d\n", inner_count[0], outer_count[0]);
-    // }
 }
 
 template void __global__ k_split_mols_inner_outer<float>(
@@ -677,8 +660,7 @@ template void __global__ k_separate_weights_for_targeted<double>(
 template <typename RealType>
 void __global__ k_setup_destination_weights_for_targeted(
     const int num_target_mols,
-    const int num_samples,
-    const int *__restrict__ samples,                // [num_samples]
+    const int *__restrict__ samples,                // [1]
     const int *__restrict__ targeting_inner_volume, // [1]
     const int *__restrict__ inner_count,            // [1]
     const int *__restrict__ outer_count,            // [1]
@@ -686,12 +668,10 @@ void __global__ k_setup_destination_weights_for_targeted(
     const int *__restrict__ outer_idxs,             // [outer_count]
     const RealType *__restrict__ weights,           // [num_target_mols]
     RealType *__restrict__ output_weights) {
-    assert(num_samples == 1);
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     const int flag = targeting_inner_volume[0];
     const int count = flag == 1 ? inner_count[0] : outer_count[0];
-    // TBD Will break if num_samples is non-1
-    if (idx < num_samples) {
+    if (idx == 0) {
         int sample_idx = samples[idx];
         output_weights[count + idx] = flag == 1 ? weights[sample_idx] : weights[sample_idx];
     }
@@ -704,8 +684,7 @@ void __global__ k_setup_destination_weights_for_targeted(
 
 template void __global__ k_setup_destination_weights_for_targeted<float>(
     const int num_target_mols,
-    const int num_samples,
-    const int *__restrict__ samples,                // [num_samples]
+    const int *__restrict__ samples,                // [1]
     const int *__restrict__ targeting_inner_volume, // [1]
     const int *__restrict__ inner_count,            // [1]
     const int *__restrict__ outer_count,            // [1]
@@ -716,8 +695,7 @@ template void __global__ k_setup_destination_weights_for_targeted<float>(
 
 template void __global__ k_setup_destination_weights_for_targeted<double>(
     const int num_target_mols,
-    const int num_samples,
-    const int *__restrict__ samples,                // [num_samples]
+    const int *__restrict__ samples,                // [1]
     const int *__restrict__ targeting_inner_volume, // [1]
     const int *__restrict__ inner_count,            // [1]
     const int *__restrict__ outer_count,            // [1]
@@ -726,15 +704,11 @@ template void __global__ k_setup_destination_weights_for_targeted<double>(
     const double *__restrict__ weights,             // [num_target_mols]
     double *__restrict__ output_weights);
 
-void __global__
-k_adjust_sample_idxs(const int num_samples, const int *__restrict__ mol_indices, int *__restrict__ sample_idxs) {
-    int idx = blockIdx.x * blockDim.x + threadIdx.x;
-    while (idx < num_samples) {
-
-        sample_idxs[idx] = mol_indices[sample_idxs[idx]];
-
-        idx += gridDim.x * blockDim.x;
-    }
+void __global__ k_adjust_sample_idx(
+    const int *__restrict__ mol_indices, // [N]
+    int *__restrict__ sample_idxs        // [1]
+) {
+    sample_idxs[0] = mol_indices[sample_idxs[0]];
 }
 
 } // namespace timemachine
