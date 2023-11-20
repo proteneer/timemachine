@@ -4,7 +4,11 @@ namespace timemachine {
 
 // When we are considering exchange we want to treat Nan probabilities as inf
 // Allows us to go from a clashy state to a non-clashy state. And no nan poisoning
-template <typename RealType> RealType __host__ __device__ convert_nan_to_inf(const RealType input);
+// When we are considering exchange we want to treat Nan probabilities as inf
+// Allows us to go from a clashy state to a non-clashy state. And no nan poisoning
+template <typename RealType> RealType __host__ __device__ __forceinline__ convert_nan_to_inf(const RealType input) {
+    return isnan(input) ? INFINITY : input;
+}
 
 void __global__ k_setup_sample_atoms(
     const int sample_atoms,          // number of atoms in each sample
