@@ -10,6 +10,8 @@ template <typename RealType>
 void __device__ __forceinline__
 rotate_coordinates_by_quaternion(RealType *__restrict__ local_coords, RealType *__restrict__ quaternion);
 
+// k_rotate_coordinates rotates coordinates by quaternions. Does *NOT* modify the coordintes centroid.
+// This method is for validating rotations by quaternions.
 template <typename RealType>
 void __global__ k_rotate_coordinates(
     const int N,                              // Number of coordinates
@@ -19,6 +21,8 @@ void __global__ k_rotate_coordinates(
     double *__restrict__ rotated_coords       // [N * n_rotations, 3]
 );
 
+// k_rotate_and_translate_mols rotates coordinates about its centroid given a quaternion. Places the molecule's centroid
+// at the translation as the final step, if SCALE=true then the translation that is provided will be scaled by the box vectors.
 template <typename RealType, bool SCALE>
 void __global__ k_rotate_and_translate_mols(
     const int num_samples,
