@@ -108,12 +108,12 @@ void __global__ k_attempt_exchange_move_targeted(
 ) {
     int atom_idx = blockIdx.x * blockDim.x + threadIdx.x;
 
-    int targetting_inner = targeting_inner_volume[0];
+    int targeting_inner = targeting_inner_volume[0];
 
     const RealType outer_vol = box_vol[0] - inner_volume;
 
     const RealType log_vol_prob =
-        targetting_inner == 1 ? log(inner_volume) - log(outer_vol) : log(outer_vol) - log(inner_volume);
+        targeting_inner == 1 ? log(inner_volume) - log(outer_vol) : log(outer_vol) - log(inner_volume);
 
     // All kernels compute the same acceptance
     // TBD investigate shared memory for speed
