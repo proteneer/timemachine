@@ -85,8 +85,8 @@ void TIBDExchangeMove<RealType>::move_device(
 
     dim3 atom_by_atom_grid(ceil_divide(N, tpb), this->mol_size_, 1);
 
-    k_compute_centroid_of_atoms<RealType><<<ceil_divide(d_ligand_idxs_.length, tpb), tpb, 0, stream>>>(
-        static_cast<int>(d_ligand_idxs_.length), d_ligand_idxs_.data, d_coords, d_center_.data);
+    k_compute_centroid_of_atoms<RealType>
+        <<<1, tpb, 0, stream>>>(static_cast<int>(d_ligand_idxs_.length), d_ligand_idxs_.data, d_coords, d_center_.data);
     gpuErrchk(cudaPeekAtLastError());
 
     k_compute_box_volume<<<1, 1, 0, stream>>>(d_box, d_box_volume_.data);
