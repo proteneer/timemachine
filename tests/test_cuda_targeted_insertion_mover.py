@@ -14,7 +14,7 @@ from timemachine.ff import Forcefield
 from timemachine.ff.handlers import openmm_deserializer
 from timemachine.lib import MonteCarloBarostat, custom_ops
 from timemachine.md import builders
-from timemachine.md.barostat.utils import get_bond_list, get_group_indices
+from timemachine.md.barostat.utils import compute_box_volume, get_bond_list, get_group_indices
 from timemachine.md.exchange.exchange_mover import TIBDExchangeMove as RefTIBDExchangeMove
 from timemachine.md.exchange.exchange_mover import delta_r_np, get_water_groups
 from timemachine.potentials import HarmonicBond, Nonbonded
@@ -359,9 +359,9 @@ def test_tibd_exchange_deterministic_moves(radius, moves, precision, seed):
 @pytest.mark.parametrize("precision,rtol,atol", [(np.float64, 5e-6, 5e-6), (np.float32, 1e-4, 2e-3)])
 @pytest.mark.parametrize("seed", [2023])
 def test_targeted_moves_in_bulk_water(radius, steps_per_move, moves, precision, rtol, atol, seed):
-    """Given three water molecules with one of them treated as the targeted region"""
+    """Given bulk water molecules with one of them treated as the targeted region"""
     ff = Forcefield.load_default()
-    system, conf, _, topo = builders.build_water_system(1.0, ff.water_ff)
+    system, conf, ref_box, topo = builders.build_water_system(4.0, ff.water_ff)
     bps, _ = openmm_deserializer.deserialize_system(system, cutoff=1.2)
 
     nb = next(bp for bp in bps if isinstance(bp.potential, Nonbonded))
@@ -371,6 +371,9 @@ def test_targeted_moves_in_bulk_water(radius, steps_per_move, moves, precision, 
 
     center_group = all_group_idxs[-1]
     box = np.eye(3) * (radius * 2)
+    # If box volume of system is larger than the box defined by radius, use that instead
+    if compute_box_volume(ref_box) > compute_box_volume(box):
+        box = ref_box
 
     # Re-image coords so that everything is imaged to begin with
     conf = image_frame(all_group_idxs, conf, box)
