@@ -10,7 +10,7 @@ template <typename RealType>
 void __device__ __forceinline__
 rotate_coordinates_by_quaternion(RealType *__restrict__ local_coords, RealType *__restrict__ quaternion);
 
-// k_rotate_coordinates rotates coordinates by quaternions. Does *NOT* modify the coordintes centroid.
+// k_rotate_coordinates rotates coordinates by quaternions. Does *NOT* modify the coordinates centroid.
 // This method is for validating rotations by quaternions.
 template <typename RealType>
 void __global__ k_rotate_coordinates(
