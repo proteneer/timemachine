@@ -105,7 +105,7 @@ void __global__ k_compute_centroid_of_atoms(
 );
 
 template <typename RealType>
-void __global__ k_split_mols_inner_outer(
+void __global__ k_flag_mols_inner_outer(
     const int num_molecules,
     const int *__restrict__ atom_idxs,
     const int *__restrict__ mol_offsets, // [num_molecules + 1]
@@ -113,17 +113,14 @@ void __global__ k_split_mols_inner_outer(
     const RealType square_radius,        // squared radius from center that defines inner
     const double *__restrict__ coords,   // [N, 3]
     const double *__restrict__ box,      // [3, 3]
-    int *__restrict__ inner_count,       // [1]
-    int *__restrict__ inner_mols,        // [num_molecules]
-    int *__restrict__ outer_count,       // [1]
-    int *__restrict__ outer_mols         // [num_molecules]
+    int *__restrict__ inner_flags        // [num_molecules]
 );
 
 template <typename RealType>
 void __global__ k_decide_targeted_move(
+    const int num_target_mols,
     const RealType *__restrict__ rand,
     const int *__restrict__ inner_count,
-    const int *__restrict__ outer_count,
     int *__restrict__ targeting_inner_volume);
 
 template <typename RealType>
@@ -131,9 +128,7 @@ void __global__ k_separate_weights_for_targeted(
     const int num_target_mols,
     const int *__restrict__ targeting_inner_volume, // [1]
     const int *__restrict__ inner_count,            // [1]
-    const int *__restrict__ outer_count,            // [1]
-    const int *__restrict__ inner_idxs,             // [inner_count]
-    const int *__restrict__ outer_idxs,             // [outer_count]
+    const int *__restrict__ partitioned_indices,    // [inner_count]
     const RealType *__restrict__ weights,           // [num_target_mols]
     RealType *__restrict__ output_weights);
 
@@ -143,12 +138,15 @@ void __global__ k_setup_destination_weights_for_targeted(
     const int *__restrict__ samples,                // [1]
     const int *__restrict__ targeting_inner_volume, // [1]
     const int *__restrict__ inner_count,            // [1]
-    const int *__restrict__ outer_count,            // [1]
-    const int *__restrict__ inner_idxs,             // [inner_count]
-    const int *__restrict__ outer_idxs,             // [outer_count]
+    const int *__restrict__ partitioned_indices,    // [inner_count]
     const RealType *__restrict__ weights,           // [num_target_mols]
     RealType *__restrict__ output_weights);
 
-void __global__ k_adjust_sample_idx(const int *__restrict__ mol_indices, int *__restrict__ sample_idxs);
+void __global__ k_adjust_sample_idx(
+    const int *__restrict__ targeting_inner_volume, // [1]
+    const int *__restrict__ inner_count,            // [1]
+    const int *__restrict__ partitioned_indices,    // [inner_count]
+    int *__restrict__ sample_idxs                   // [1]
+);
 
 } // namespace timemachine

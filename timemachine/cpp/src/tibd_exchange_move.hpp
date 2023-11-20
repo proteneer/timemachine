@@ -22,14 +22,11 @@ protected:
 
     DeviceBuffer<curandState_t> d_rand_states_;
 
-    DeviceBuffer<int> d_inner_mols_count_; // [1]
-    DeviceBuffer<int> d_inner_mols_;       // [num_target_mols_]
-    DeviceBuffer<int> d_outer_mols_count_; // [1]
-    DeviceBuffer<int> d_outer_mols_;       // [num_target_mols_]
-    // Array to sort the inner/outer indices to ensure that the results are deterministic
-    DeviceBuffer<int> d_sorted_indices_; // [num_target_mols_]
-    DeviceBuffer<char> d_sort_storage_;
-    size_t sort_storage_bytes_;
+    DeviceBuffer<int> d_inner_mols_count_;    // [1]
+    DeviceBuffer<int> d_identify_indices_;    // [num_target_mols_]
+    DeviceBuffer<int> d_partitioned_indices_; // [num_target_mols_]
+    DeviceBuffer<char> d_temp_storage_buffer_;
+    size_t temp_storage_bytes_;
 
     DeviceBuffer<RealType> d_center_;      // [3]
     DeviceBuffer<RealType> d_translation_; // [3]
@@ -38,8 +35,9 @@ protected:
     DeviceBuffer<int> d_targeting_inner_vol_; // [1]
 
     DeviceBuffer<int> d_ligand_idxs_;
-    DeviceBuffer<RealType> d_src_weights_;        // [num_target_mols_]
-    DeviceBuffer<RealType> d_dest_weights_;       // [num_target_mols_]
+    DeviceBuffer<RealType> d_src_weights_;  // [num_target_mols_]
+    DeviceBuffer<RealType> d_dest_weights_; // [num_target_mols_]
+    DeviceBuffer<int> d_inner_flags_;
     DeviceBuffer<RealType> d_box_volume_;         // [1]
     PinnedHostBuffer<int> p_inner_count_;         // [1]
     PinnedHostBuffer<int> p_targeting_inner_vol_; // [1]

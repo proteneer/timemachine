@@ -15,6 +15,7 @@ void __global__ k_setup_sample_atoms(
     int *__restrict__ output_atom_idxs,
     int *__restrict__ output_mol_offsets) {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    assert(gridDim.x == 1);
     if (idx > 0) {
         return;
     }
@@ -157,6 +158,7 @@ void __global__ k_store_accepted_log_probability(
     const RealType *__restrict__ after_weights      // [num_weights]
 ) {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    assert(gridDim.x == 1);
     if (blockIdx.x > 0) {
         return; // Only one block can run this
     }
@@ -210,6 +212,7 @@ void __global__ k_store_accepted_log_probability_targeted(
     const RealType *__restrict__ after_weights      // [num_weights]
 ) {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    assert(gridDim.x == 1);
     if (blockIdx.x > 0) {
         return; // Only one block can run this
     }
@@ -473,7 +476,7 @@ template void __global__ k_compute_centroid_of_atoms<double>(
     double *__restrict__ centroid);
 
 template <typename RealType>
-void __global__ k_split_mols_inner_outer(
+void __global__ k_flag_mols_inner_outer(
     const int num_molecules,
     const int *__restrict__ atom_idxs,
     const int *__restrict__ mol_offsets, // [num_molecules + 1]
@@ -481,10 +484,7 @@ void __global__ k_split_mols_inner_outer(
     const RealType square_radius,        // squared radius from center that defines inner
     const double *__restrict__ coords,   // [N, 3]
     const double *__restrict__ box,      // [3, 3]
-    int *__restrict__ inner_count,       // [1]
-    int *__restrict__ inner_mols,        // [num_molecules]
-    int *__restrict__ outer_count,       // [1]
-    int *__restrict__ outer_mols         // [num_molecules]
+    int *__restrict__ inner_flags        // [num_molecules]
 ) {
     int mol_idx = blockIdx.x * blockDim.x + threadIdx.x;
 
@@ -528,54 +528,43 @@ void __global__ k_split_mols_inner_outer(
         centroid_z -= box_z * nearbyint(centroid_z * inv_box_z);
 
         RealType dist = (centroid_x * centroid_x) + (centroid_y * centroid_y) + (centroid_z * centroid_z);
-        // This is not deterministic in the ordering....
-        if (dist < square_radius) {
-            int index = atomicAdd(inner_count, 1);
-            inner_mols[index] = mol_idx;
-        } else {
-            int index = atomicAdd(outer_count, 1);
-            outer_mols[index] = mol_idx;
-        }
+        inner_flags[mol_idx] = dist < square_radius ? 1 : 0;
 
         mol_idx += gridDim.x * blockDim.x;
     }
     __syncthreads();
 }
 
-template void __global__ k_split_mols_inner_outer<float>(
+template void __global__ k_flag_mols_inner_outer<float>(
     const int num_molecules,
     const int *__restrict__ atom_idxs,
-    const int *__restrict__ mol_offsets,
-    const float *__restrict__ center,
-    const float square_radius,
-    const double *__restrict__ coords,
-    const double *__restrict__ box,
-    int *__restrict__ inner_count,
-    int *__restrict__ inner_mols,
-    int *__restrict__ outer_count,
-    int *__restrict__ outer_mols);
+    const int *__restrict__ mol_offsets, // [num_molecules + 1]
+    const float *__restrict__ center,    // [3] Center that determines inner vs outer
+    const float square_radius,           // squared radius from center that defines inner
+    const double *__restrict__ coords,   // [N, 3]
+    const double *__restrict__ box,      // [3, 3]
+    int *__restrict__ inner_flags        // [num_molecules]
+);
 
-template void __global__ k_split_mols_inner_outer<double>(
+template void __global__ k_flag_mols_inner_outer<double>(
     const int num_molecules,
     const int *__restrict__ atom_idxs,
-    const int *__restrict__ mol_offsets,
-    const double *__restrict__ center,
-    const double square_radius,
-    const double *__restrict__ coords,
-    const double *__restrict__ box,
-    int *__restrict__ inner_count,
-    int *__restrict__ inner_mols,
-    int *__restrict__ outer_count,
-    int *__restrict__ outer_mols);
+    const int *__restrict__ mol_offsets, // [num_molecules + 1]
+    const double *__restrict__ center,   // [3] Center that determines inner vs outer
+    const double square_radius,          // squared radius from center that defines inner
+    const double *__restrict__ coords,   // [N, 3]
+    const double *__restrict__ box,      // [3, 3]
+    int *__restrict__ inner_flags        // [num_molecules]
+);
 
 template <typename RealType>
 void __global__ k_decide_targeted_move(
+    const int num_target_mols,
     const RealType *__restrict__ rand,
     const int *__restrict__ inner_count,
-    const int *__restrict__ outer_count,
     int *__restrict__ targeting_inner_volume) {
     const int count_inside = inner_count[0];
-    const int count_outside = outer_count[0];
+    const int count_outside = num_target_mols - count_inside;
     if (count_inside == 0 && count_outside == 0) {
         assert(0);
     } else if (count_inside > 0 && count_outside == 0) {
@@ -594,33 +583,34 @@ void __global__ k_decide_targeted_move(
 }
 
 template void __global__ k_decide_targeted_move<float>(
+    const int num_target_mols,
     const float *__restrict__ rand,
     const int *__restrict__ inner_count,
-    const int *__restrict__ outer_count,
     int *__restrict__ targeting_inner_volume);
 template void __global__ k_decide_targeted_move<double>(
+    const int num_target_mols,
     const double *__restrict__ rand,
     const int *__restrict__ inner_count,
-    const int *__restrict__ outer_count,
     int *__restrict__ targeting_inner_volume);
 
 // k_separate_weights_for_targeted takes the flag and the mol indices and writes them out
-// to a new buffer.
+// to a new buffer the weights associated with the source molecules.
 template <typename RealType>
 void __global__ k_separate_weights_for_targeted(
     const int num_target_mols,
     const int *__restrict__ targeting_inner_volume, // [1]
     const int *__restrict__ inner_count,            // [1]
-    const int *__restrict__ outer_count,            // [1]
-    const int *__restrict__ inner_idxs,             // [inner_count]
-    const int *__restrict__ outer_idxs,             // [outer_count]
+    const int *__restrict__ partitioned_indices,    // [inner_count]
     const RealType *__restrict__ weights,           // [num_target_mols]
     RealType *__restrict__ output_weights) {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     const int target_inner = targeting_inner_volume[0];
-    const int count = target_inner == 1 ? outer_count[0] : inner_count[0];
+    const int local_inner_count = inner_count[0];
+    const int outer_count = num_target_mols - local_inner_count;
+    const int count = target_inner == 1 ? outer_count : local_inner_count;
+    const int offset = target_inner == 1 ? local_inner_count : 0;
     while (idx < count) {
-        output_weights[idx] = target_inner == 1 ? weights[outer_idxs[idx]] : weights[inner_idxs[idx]];
+        output_weights[idx] = weights[partitioned_indices[idx + offset]];
 
         idx += gridDim.x * blockDim.x;
     }
@@ -630,18 +620,14 @@ template void __global__ k_separate_weights_for_targeted<float>(
     const int num_target_mols,
     const int *__restrict__ targeting_inner_volume, // [1]
     const int *__restrict__ inner_count,            // [1]
-    const int *__restrict__ outer_count,            // [1]
-    const int *__restrict__ inner_idxs,             // [inner_count]
-    const int *__restrict__ outer_idxs,             // [outer_count]
+    const int *__restrict__ partitioned_indices,    // [inner_count]
     const float *__restrict__ weights,              // [num_target_mols]
     float *__restrict__ output_weights);
 template void __global__ k_separate_weights_for_targeted<double>(
     const int num_target_mols,
     const int *__restrict__ targeting_inner_volume, // [1]
     const int *__restrict__ inner_count,            // [1]
-    const int *__restrict__ outer_count,            // [1]
-    const int *__restrict__ inner_idxs,             // [inner_count]
-    const int *__restrict__ outer_idxs,             // [outer_count]
+    const int *__restrict__ partitioned_indices,    // [inner_count]
     const double *__restrict__ weights,             // [num_target_mols]
     double *__restrict__ output_weights);
 
@@ -651,20 +637,21 @@ void __global__ k_setup_destination_weights_for_targeted(
     const int *__restrict__ samples,                // [1]
     const int *__restrict__ targeting_inner_volume, // [1]
     const int *__restrict__ inner_count,            // [1]
-    const int *__restrict__ outer_count,            // [1]
-    const int *__restrict__ inner_idxs,             // [inner_count]
-    const int *__restrict__ outer_idxs,             // [outer_count]
+    const int *__restrict__ partitioned_indices,    // [inner_count]
     const RealType *__restrict__ weights,           // [num_target_mols]
     RealType *__restrict__ output_weights) {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
-    const int flag = targeting_inner_volume[0];
-    const int count = flag == 1 ? inner_count[0] : outer_count[0];
+    const int target_inner = targeting_inner_volume[0];
+    const int local_inner_count = inner_count[0];
+    const int outer_count = num_target_mols - local_inner_count;
+    const int count = target_inner == 1 ? local_inner_count : outer_count;
+    const int offset = target_inner == 1 ? 0 : local_inner_count;
     if (idx == 0) {
         int sample_idx = samples[idx];
-        output_weights[count + idx] = flag == 1 ? weights[sample_idx] : weights[sample_idx];
+        output_weights[count + idx] = weights[sample_idx];
     }
     while (idx < count) {
-        output_weights[idx] = flag == 1 ? weights[inner_idxs[idx]] : weights[outer_idxs[idx]];
+        output_weights[idx] = weights[partitioned_indices[idx + offset]];
 
         idx += gridDim.x * blockDim.x;
     }
@@ -675,9 +662,7 @@ template void __global__ k_setup_destination_weights_for_targeted<float>(
     const int *__restrict__ samples,                // [1]
     const int *__restrict__ targeting_inner_volume, // [1]
     const int *__restrict__ inner_count,            // [1]
-    const int *__restrict__ outer_count,            // [1]
-    const int *__restrict__ inner_idxs,             // [inner_count]
-    const int *__restrict__ outer_idxs,             // [outer_count]
+    const int *__restrict__ partitioned_indices,    // [inner_count]
     const float *__restrict__ weights,              // [num_target_mols]
     float *__restrict__ output_weights);
 
@@ -686,17 +671,20 @@ template void __global__ k_setup_destination_weights_for_targeted<double>(
     const int *__restrict__ samples,                // [1]
     const int *__restrict__ targeting_inner_volume, // [1]
     const int *__restrict__ inner_count,            // [1]
-    const int *__restrict__ outer_count,            // [1]
-    const int *__restrict__ inner_idxs,             // [inner_count]
-    const int *__restrict__ outer_idxs,             // [outer_count]
+    const int *__restrict__ partitioned_indices,    // [inner_count]
     const double *__restrict__ weights,             // [num_target_mols]
     double *__restrict__ output_weights);
 
 void __global__ k_adjust_sample_idx(
-    const int *__restrict__ mol_indices, // [N]
-    int *__restrict__ sample_idxs        // [1]
+    const int *__restrict__ targeting_inner_volume, // [1]
+    const int *__restrict__ inner_count,            // [1]
+    const int *__restrict__ partitioned_indices,    // [inner_count]
+    int *__restrict__ sample_idxs                   // [1]
 ) {
-    sample_idxs[0] = mol_indices[sample_idxs[0]];
+    const int target_inner = targeting_inner_volume[0];
+    const int local_inner_count = inner_count[0];
+    const int offset = target_inner == 1 ? local_inner_count : 0;
+    sample_idxs[0] = partitioned_indices[sample_idxs[0] + offset];
 }
 
 } // namespace timemachine

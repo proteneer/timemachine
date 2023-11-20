@@ -16,5 +16,6 @@ void __global__ k_unique_indices(
 void __global__ k_invert_indices(const int N, unsigned int *__restrict__ arr);
 
 void __global__ k_arange(const int N, unsigned int *__restrict__ arr, unsigned int offset = 0);
+void __global__ k_arange(const int N, int *__restrict__ arr, int offset = 0);
 
 } // namespace timemachine

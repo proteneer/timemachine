@@ -16,8 +16,6 @@
 // The number of threads per block for the setting of the final weight of the moved mol is low
 // if using the same number as in the rest of the kernels of DEFAULT_THREADS_PER_BLOCK
 #define WEIGHT_THREADS_PER_BLOCK 512
-// Currently only support one sample at a time
-#define NUM_SAMPLES 1
 
 namespace timemachine {
 
@@ -35,11 +33,11 @@ TIBDExchangeMove<RealType>::TIBDExchangeMove(
     const int proposals_per_move)
     : BDExchangeMove<RealType>(N, target_mols, params, temperature, nb_beta, cutoff, seed, proposals_per_move),
       radius_(static_cast<RealType>(radius)), inner_volume_(static_cast<RealType>((4.0 / 3.0) * M_PI * pow(radius, 3))),
-      d_rand_states_(DEFAULT_THREADS_PER_BLOCK), d_inner_mols_count_(1), d_inner_mols_(this->num_target_mols_),
-      d_outer_mols_count_(1), d_outer_mols_(this->num_target_mols_), d_sorted_indices_(this->num_target_mols_),
-      d_sort_storage_(0), d_center_(3), d_acceptance_(round_up_even(2)), d_targeting_inner_vol_(1),
-      d_ligand_idxs_(ligand_idxs), d_src_weights_(this->num_target_mols_), d_dest_weights_(this->num_target_mols_),
-      d_box_volume_(1), p_inner_count_(1), p_targeting_inner_vol_(1) {
+      d_rand_states_(DEFAULT_THREADS_PER_BLOCK), d_inner_mols_count_(1), d_identify_indices_(this->num_target_mols_),
+      d_partitioned_indices_(this->num_target_mols_), d_temp_storage_buffer_(0), d_center_(3),
+      d_acceptance_(round_up_even(2)), d_targeting_inner_vol_(1), d_ligand_idxs_(ligand_idxs),
+      d_src_weights_(this->num_target_mols_), d_dest_weights_(this->num_target_mols_),
+      d_inner_flags_(this->num_target_mols_), d_box_volume_(1), p_inner_count_(1), p_targeting_inner_vol_(1) {
 
     if (radius <= 0.0) {
         throw std::runtime_error("radius must be greater than 0.0");
@@ -52,12 +50,18 @@ TIBDExchangeMove<RealType>::TIBDExchangeMove(
         DEFAULT_THREADS_PER_BLOCK, seed, d_rand_states_.data);
     gpuErrchk(cudaPeekAtLastError());
 
-    // estimate size needed to do radix sorting
-    // reuse d_sort_keys_in_ rather than constructing a dummy output idxs buffer
-    gpuErrchk(cub::DeviceRadixSort::SortKeys(
-        nullptr, sort_storage_bytes_, d_inner_mols_.data, d_sorted_indices_.data, this->num_target_mols_));
-
-    d_sort_storage_.realloc(sort_storage_bytes_);
+    // Setup buffer for doing the flagged partition
+    gpuErrchk(cub::DevicePartition::Flagged(
+        nullptr,
+        temp_storage_bytes_,
+        d_identify_indices_.data,
+        d_inner_flags_.data,
+        d_partitioned_indices_.data,
+        d_inner_mols_count_.data,
+        this->num_target_mols_));
+    // Allocate char as temp_storage_bytes_ is in raw bytes and the type doesn't matter in practice.
+    // Equivalent to DeviceBuffer<int> buf(temp_storage_bytes_ / sizeof(int))
+    d_temp_storage_buffer_.realloc(temp_storage_bytes_);
 }
 
 template <typename RealType> TIBDExchangeMove<RealType>::~TIBDExchangeMove() {
@@ -109,18 +113,11 @@ void TIBDExchangeMove<RealType>::move_device(
                 this->d_log_weights_after_.data);
             gpuErrchk(cudaPeekAtLastError());
         }
-        // Copy the before log weights to the after weights, we will adjust the after weights incrementally
-        gpuErrchk(cudaMemcpyAsync(
-            this->d_log_weights_after_.data,
-            this->d_log_weights_before_.data,
-            this->d_log_weights_after_.size(),
-            cudaMemcpyDeviceToDevice,
-            stream));
 
-        gpuErrchk(cudaMemsetAsync(d_inner_mols_count_.data, 0, d_inner_mols_count_.size(), stream));
-        gpuErrchk(cudaMemsetAsync(d_outer_mols_count_.data, 0, d_outer_mols_count_.size(), stream));
+        k_arange<<<mol_blocks, tpb, 0, stream>>>(this->num_target_mols_, d_identify_indices_.data, 0);
+        gpuErrchk(cudaPeekAtLastError());
 
-        k_split_mols_inner_outer<RealType><<<mol_blocks, tpb, 0, stream>>>(
+        k_flag_mols_inner_outer<RealType><<<mol_blocks, tpb, 0, stream>>>(
             this->num_target_mols_,
             this->d_atom_idxs_.data,
             this->d_mol_offsets_.data,
@@ -128,17 +125,24 @@ void TIBDExchangeMove<RealType>::move_device(
             radius_ * radius_,
             d_coords,
             d_box,
-            d_inner_mols_count_.data,
-            d_inner_mols_.data,
-            d_outer_mols_count_.data,
-            d_outer_mols_.data);
+            d_inner_flags_.data);
         gpuErrchk(cudaPeekAtLastError());
+
+        gpuErrchk(cub::DevicePartition::Flagged(
+            d_temp_storage_buffer_.data,
+            temp_storage_bytes_,
+            d_identify_indices_.data,
+            d_inner_flags_.data,
+            d_partitioned_indices_.data,
+            d_inner_mols_count_.data,
+            this->num_target_mols_,
+            stream));
 
         // The this->d_acceptance_ buffer contains the random value for determining where to insert and whether to accept the move
         curandErrchk(templateCurandUniform(this->cr_rng_, this->d_acceptance_.data, this->d_acceptance_.length));
 
         k_decide_targeted_move<<<1, 1, 0, stream>>>(
-            this->d_acceptance_.data, d_inner_mols_count_.data, d_outer_mols_count_.data, d_targeting_inner_vol_.data);
+            this->num_target_mols_, this->d_acceptance_.data, d_inner_mols_count_.data, d_targeting_inner_vol_.data);
         gpuErrchk(cudaPeekAtLastError());
 
         // Copy count and flag to the host, needed to know how many values to look at for
@@ -153,6 +157,14 @@ void TIBDExchangeMove<RealType>::move_device(
             stream));
         gpuErrchk(cudaEventRecord(host_copy_event_, stream));
 
+        // Copy the before log weights to the after weights, we will adjust the after weights incrementally
+        gpuErrchk(cudaMemcpyAsync(
+            this->d_log_weights_after_.data,
+            this->d_log_weights_before_.data,
+            this->d_log_weights_after_.size(),
+            cudaMemcpyDeviceToDevice,
+            stream));
+
         k_generate_translations_within_or_outside_a_sphere<<<1, tpb, 0, stream>>>(
             1,
             d_box,
@@ -166,42 +178,11 @@ void TIBDExchangeMove<RealType>::move_device(
         gpuErrchk(cudaEventSynchronize(host_copy_event_));
         int inner_count = p_inner_count_.data[0];
 
-        // Sort the inner mol idxs to ensure deterministic results
-        gpuErrchk(cub::DeviceRadixSort::SortKeys(
-            d_sort_storage_.data,
-            sort_storage_bytes_,
-            d_inner_mols_.data,
-            d_sorted_indices_.data,
-            inner_count,
-            0,
-            sizeof(*d_sorted_indices_.data) * 8,
-            stream));
-        gpuErrchk(cudaMemcpyAsync(
-            d_sorted_indices_.data,
-            d_inner_mols_.data,
-            inner_count * sizeof(*d_sorted_indices_.data),
-            cudaMemcpyDeviceToHost,
-            stream));
-
-        // Sort the outer mol idxs to ensure deterministic results
-        gpuErrchk(cub::DeviceRadixSort::SortKeys(
-            d_sort_storage_.data,
-            sort_storage_bytes_,
-            d_outer_mols_.data,
-            d_sorted_indices_.data,
-            (this->num_target_mols_ - inner_count),
-            0,
-            sizeof(*d_sorted_indices_.data) * 8,
-            stream));
-
         k_separate_weights_for_targeted<RealType><<<mol_blocks, tpb, 0, stream>>>(
             this->num_target_mols_,
             d_targeting_inner_vol_.data,
             d_inner_mols_count_.data,
-            d_outer_mols_count_.data,
-            d_inner_mols_.data,
-            // Avoid an additional copy and directly copy from the sorted array
-            d_sorted_indices_.data,
+            d_partitioned_indices_.data,
             this->d_log_weights_before_.data,
             d_src_weights_.data);
         gpuErrchk(cudaPeekAtLastError());
@@ -218,7 +199,7 @@ void TIBDExchangeMove<RealType>::move_device(
 
         // Selected an index from the src weights, need to remap the samples idx to the mol indices
         k_adjust_sample_idx<<<1, tpb, 0, stream>>>(
-            targeting_inner_vol == 1 ? d_outer_mols_.data : d_inner_mols_.data, this->d_samples_.data);
+            d_targeting_inner_vol_.data, d_inner_mols_count_.data, d_partitioned_indices_.data, this->d_samples_.data);
         gpuErrchk(cudaPeekAtLastError());
 
         // Don't move translations into computation of the incremental, as different translations can be used
@@ -231,9 +212,7 @@ void TIBDExchangeMove<RealType>::move_device(
             this->d_samples_.data,
             d_targeting_inner_vol_.data,
             d_inner_mols_count_.data,
-            d_outer_mols_count_.data,
-            d_inner_mols_.data,
-            d_outer_mols_.data,
+            d_partitioned_indices_.data,
             this->d_log_weights_after_.data,
             d_dest_weights_.data);
         gpuErrchk(cudaPeekAtLastError());
