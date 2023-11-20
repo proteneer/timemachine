@@ -75,6 +75,7 @@ def test_exchange():
     )
     parser.add_argument("--iterations", type=int, help="Number of iterations", default=1000000)
     parser.add_argument("--equilibration_steps", type=int, help="Number of equilibration steps", default=50000)
+    parser.add_argument("--seed", default=2024, type=int, help="Random seed")
 
     args = parser.parse_args()
 
@@ -87,7 +88,7 @@ def test_exchange():
         mol = None
 
     ff = setup_forcefield()
-    seed = 2024
+    seed = args.seed
     np.random.seed(seed)
 
     nb_cutoff = 1.2  # this has to be 1.2 since the builders hard code this in (should fix later)
