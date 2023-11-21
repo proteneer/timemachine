@@ -532,7 +532,6 @@ void __global__ k_flag_mols_inner_outer(
 
         mol_idx += gridDim.x * blockDim.x;
     }
-    __syncthreads();
 }
 
 template void __global__ k_flag_mols_inner_outer<float>(
