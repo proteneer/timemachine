@@ -30,9 +30,10 @@ protected:
 
     DeviceBuffer<RealType> d_center_;      // [3]
     DeviceBuffer<RealType> d_translation_; // [3]
-    // Uniform noise for determining where to insert and whether to accept the move
-    DeviceBuffer<RealType> d_acceptance_;     // [2]
-    DeviceBuffer<int> d_targeting_inner_vol_; // [1]
+    // Uniform noise with the first element used for deciding directionality of insertion
+    // and the second element is used for comparison against the acceptance rate in the Metropolis-Hastings check
+    DeviceBuffer<RealType> d_uniform_noise_buffer_; // [2]
+    DeviceBuffer<int> d_targeting_inner_vol_;       // [1]
 
     DeviceBuffer<int> d_ligand_idxs_;
     DeviceBuffer<RealType> d_src_weights_;  // [num_target_mols_]

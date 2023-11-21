@@ -638,13 +638,16 @@ void __global__ k_setup_destination_weights_for_targeted(
     const int *__restrict__ inner_count,            // [1]
     const int *__restrict__ partitioned_indices,    // [inner_count]
     const RealType *__restrict__ weights,           // [num_target_mols]
-    RealType *__restrict__ output_weights) {
+    RealType *__restrict__ output_weights           // [num_target_mols] Only access up to count + 1
+) {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     const int target_inner = targeting_inner_volume[0];
     const int local_inner_count = inner_count[0];
     const int outer_count = num_target_mols - local_inner_count;
     const int count = target_inner == 1 ? local_inner_count : outer_count;
     const int offset = target_inner == 1 ? 0 : local_inner_count;
+    // Handle the sampled molecule being moved from one region to another by appending
+    // the sampled mol's weight to the target region's weight.
     if (idx == 0) {
         int sample_idx = samples[idx];
         output_weights[count + idx] = weights[sample_idx];

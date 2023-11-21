@@ -35,7 +35,7 @@ TIBDExchangeMove<RealType>::TIBDExchangeMove(
       radius_(static_cast<RealType>(radius)), inner_volume_(static_cast<RealType>((4.0 / 3.0) * M_PI * pow(radius, 3))),
       d_rand_states_(DEFAULT_THREADS_PER_BLOCK), d_inner_mols_count_(1), d_identify_indices_(this->num_target_mols_),
       d_partitioned_indices_(this->num_target_mols_), d_temp_storage_buffer_(0), d_center_(3),
-      d_acceptance_(round_up_even(2)), d_targeting_inner_vol_(1), d_ligand_idxs_(ligand_idxs),
+      d_uniform_noise_buffer_(round_up_even(2)), d_targeting_inner_vol_(1), d_ligand_idxs_(ligand_idxs),
       d_src_weights_(this->num_target_mols_), d_dest_weights_(this->num_target_mols_),
       d_inner_flags_(this->num_target_mols_), d_box_volume_(1), p_inner_count_(1), p_targeting_inner_vol_(1) {
 
@@ -106,7 +106,7 @@ void TIBDExchangeMove<RealType>::move_device(
                 d_targeting_inner_vol_.data,
                 d_box_volume_.data,
                 inner_volume_,
-                this->d_acceptance_.data + 1, // Offset to get the last value for the acceptance criteria
+                this->d_uniform_noise_buffer_.data + 1, // Offset to get the last value for the acceptance criteria
                 this->d_log_sum_exp_before_.data,
                 this->d_log_sum_exp_after_.data,
                 this->d_log_weights_before_.data,
@@ -138,11 +138,15 @@ void TIBDExchangeMove<RealType>::move_device(
             this->num_target_mols_,
             stream));
 
-        // The this->d_acceptance_ buffer contains the random value for determining where to insert and whether to accept the move
-        curandErrchk(templateCurandUniform(this->cr_rng_, this->d_acceptance_.data, this->d_acceptance_.length));
+        // The this->d_uniform_noise_buffer_ buffer contains the random value for determining where to insert and whether to accept the move
+        curandErrchk(templateCurandUniform(
+            this->cr_rng_, this->d_uniform_noise_buffer_.data, this->d_uniform_noise_buffer_.length));
 
         k_decide_targeted_move<<<1, 1, 0, stream>>>(
-            this->num_target_mols_, this->d_acceptance_.data, d_inner_mols_count_.data, d_targeting_inner_vol_.data);
+            this->num_target_mols_,
+            this->d_uniform_noise_buffer_.data,
+            d_inner_mols_count_.data,
+            d_targeting_inner_vol_.data);
         gpuErrchk(cudaPeekAtLastError());
 
         // Copy count and flag to the host, needed to know how many values to look at for
@@ -175,9 +179,6 @@ void TIBDExchangeMove<RealType>::move_device(
             this->d_translations_.data);
         gpuErrchk(cudaPeekAtLastError());
 
-        gpuErrchk(cudaEventSynchronize(host_copy_event_));
-        int inner_count = p_inner_count_.data[0];
-
         k_separate_weights_for_targeted<RealType><<<mol_blocks, tpb, 0, stream>>>(
             this->num_target_mols_,
             d_targeting_inner_vol_.data,
@@ -187,7 +188,10 @@ void TIBDExchangeMove<RealType>::move_device(
             d_src_weights_.data);
         gpuErrchk(cudaPeekAtLastError());
 
-        // targeting_inner_vol == 1 indicates that we are target the inner volume, starting from the outer mols
+        gpuErrchk(cudaEventSynchronize(host_copy_event_));
+        int inner_count = p_inner_count_.data[0];
+
+        // targeting_inner_vol == 1 indicates that we are targeting the inner volume, starting from the outer mols
         int targeting_inner_vol = p_targeting_inner_vol_.data[0];
         int src_count = targeting_inner_vol == 0 ? inner_count : this->num_target_mols_ - inner_count;
         int dest_count = this->num_target_mols_ - src_count;
@@ -204,7 +208,7 @@ void TIBDExchangeMove<RealType>::move_device(
 
         // Don't move translations into computation of the incremental, as different translations can be used
         // by different bias deletion movers (such as targeted insertion)
-        // Don't scale the translations as they computed to be within the region
+        // Don't scale the translations as they are computed to be within the region
         this->compute_incremental_weights(N, false, d_coords, d_box, stream);
 
         k_setup_destination_weights_for_targeted<RealType><<<mol_blocks, tpb, 0, stream>>>(
@@ -225,7 +229,7 @@ void TIBDExchangeMove<RealType>::move_device(
             d_targeting_inner_vol_.data,
             d_box_volume_.data,
             inner_volume_,
-            this->d_acceptance_.data + 1, // Offset to get the last value for the acceptance criteria
+            this->d_uniform_noise_buffer_.data + 1, // Offset to get the last value for the acceptance criteria
             this->d_log_sum_exp_before_.data,
             this->d_log_sum_exp_after_.data,
             this->d_intermediate_coords_.data,
