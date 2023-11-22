@@ -143,6 +143,62 @@ def test_two_clashy_water_moves(moves, precision, rtol, atol, seed):
     assert accepted == moves
 
 
+@pytest.mark.parametrize("precision", [np.float32])
+@pytest.mark.parametrize("seed", [2023])
+def test_bias_deletion_bulk_water_with_context(precision, seed):
+    ff = Forcefield.load_default()
+    system, conf, box, _ = builders.build_water_system(4.0, ff.water_ff)
+    bps, masses = openmm_deserializer.deserialize_system(system, cutoff=1.2)
+    nb = next(bp for bp in bps if isinstance(bp.potential, Nonbonded))
+    bond_pot = next(bp for bp in bps if isinstance(bp.potential, HarmonicBond)).potential
+
+    bond_list = get_bond_list(bond_pot)
+    all_group_idxs = get_group_indices(bond_list, conf.shape[0])
+
+    # only act on waters
+    water_idxs = [group for group in all_group_idxs if len(group) == 3]
+
+    dt = 1.5e-3
+
+    bound_impls = []
+
+    for potential in bps:
+        bound_impls.append(potential.to_gpu(precision=np.float32).bound_impl)
+
+    klass = custom_ops.BDExchangeMove_f32
+    if precision == np.float64:
+        klass = custom_ops.BDExchangeMove_f64
+
+    proposals_per_move = 1000
+    interval = 100
+    steps = 500
+    bdem = klass(
+        conf.shape[0],
+        water_idxs,
+        nb.params,
+        DEFAULT_TEMP,
+        nb.potential.beta,
+        nb.potential.cutoff,
+        seed,
+        proposals_per_move,
+        interval,
+    )
+
+    intg = LangevinIntegrator(DEFAULT_TEMP, dt, 1.0, np.array(masses), seed).impl()
+
+    ctxt = custom_ops.Context(
+        conf,
+        np.zeros_like(conf),
+        box,
+        intg,
+        bound_impls,
+        movers=[bdem],
+    )
+    ctxt.multiple_steps(steps)
+    assert bdem.n_proposed() == (steps // interval) * proposals_per_move
+    assert bdem.n_accepted() > 0
+
+
 @pytest.mark.parametrize("moves", [1, 100])
 @pytest.mark.parametrize("precision", [np.float64, np.float32])
 @pytest.mark.parametrize("seed", [2023])

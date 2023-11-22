@@ -274,6 +274,73 @@ def hif2a_rbfe_state() -> InitialState:
     return replace(initial_state, v0=ctxt.get_v_t(), x0=conf, box0=box)
 
 
+@pytest.mark.parametrize("radius", [2.0])
+@pytest.mark.parametrize("precision", [np.float32])
+@pytest.mark.parametrize("seed", [2023])
+def test_targeted_insertion_hif2a_rbfe(hif2a_rbfe_state, radius, precision, seed):
+    proposals_per_move = 10000
+    interval = 100
+    steps = 500
+    initial_state = hif2a_rbfe_state
+
+    conf = initial_state.x0
+    box = initial_state.box0
+
+    bps = initial_state.potentials
+    nb = next(bp for bp in bps if isinstance(bp.potential, Nonbonded))
+    bond_pot = next(bp for bp in bps if isinstance(bp.potential, HarmonicBond)).potential
+
+    bond_list = get_bond_list(bond_pot)
+    all_group_idxs = get_group_indices(bond_list, conf.shape[0])
+
+    # only act on waters
+    water_idxs = [group for group in all_group_idxs if len(group) == 3]
+
+    N = conf.shape[0]
+
+    # Re-image coords so that everything is imaged to begin with
+    conf = image_frame(all_group_idxs, conf, box)
+
+    N = conf.shape[0]
+
+    params = nb.params
+
+    cutoff = nb.potential.cutoff
+    klass = custom_ops.TIBDExchangeMove_f32
+    if precision == np.float64:
+        klass = custom_ops.TIBDExchangeMove_f64
+
+    bound_impls = []
+    for potential in initial_state.potentials:
+        bound_impls.append(potential.to_gpu(precision=np.float32).bound_impl)
+
+    bdem = klass(
+        N,
+        initial_state.ligand_idxs,
+        water_idxs,
+        params,
+        DEFAULT_TEMP,
+        nb.potential.beta,
+        cutoff,
+        radius,
+        seed,
+        proposals_per_move,
+        interval,
+    )
+
+    ctxt = custom_ops.Context(
+        conf,
+        np.zeros_like(conf),
+        box,
+        initial_state.integrator.impl(),
+        bound_impls,
+        movers=[bdem],
+    )
+    ctxt.multiple_steps(steps)
+    assert bdem.n_proposed() == (steps // interval) * proposals_per_move
+    assert bdem.n_accepted() > 0
+
+
 @pytest.mark.parametrize("radius", [1.0])
 @pytest.mark.parametrize("moves", [1, 100])
 @pytest.mark.parametrize("precision", [np.float64, np.float32])
