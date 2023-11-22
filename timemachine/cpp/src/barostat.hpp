@@ -3,13 +3,14 @@
 
 #include "bound_potential.hpp"
 #include "curand.h"
+#include "mover.hpp"
 #include "streamed_potential_runner.hpp"
 #include <memory>
 #include <vector>
 
 namespace timemachine {
 
-template <typename RealType> class MonteCarloBarostat {
+template <typename RealType> class MonteCarloBarostat : public Mover {
 
 public:
     MonteCarloBarostat(
@@ -26,14 +27,7 @@ public:
     ~MonteCarloBarostat();
 
     // inplace_move() may modify d_x and d_box
-    void inplace_move(double *d_x, double *d_box, cudaStream_t stream);
-
-    // used for testing, bool return tells you if move was accepted
-    bool inplace_move_host(double *h_x, double *h_box);
-
-    void set_interval(const int interval);
-
-    int get_interval();
+    virtual void move(const int N, double *d_x, double *d_box, cudaStream_t stream) override;
 
     double get_volume_scale_factor();
 
@@ -44,6 +38,10 @@ public:
     void set_adaptive_scaling(const bool adaptive_scaling_enabled);
 
     bool get_adaptive_scaling();
+
+    virtual void set_interval(const int interval) override;
+
+    virtual int get_interval() override;
 
 private:
     const int N_;
@@ -93,8 +91,5 @@ private:
 
     StreamedPotentialRunner runner_;
 };
-
-template class MonteCarloBarostat<float>;
-template class MonteCarloBarostat<double>;
 
 } // namespace timemachine

@@ -112,7 +112,7 @@ def test_barostat_with_clashes():
     )
 
     # The clashes will result in overflows, so the box should never change as no move is accepted
-    ctxt = custom_ops.Context(coords, v_0, box, integrator_impl, u_impls, barostat=baro)
+    ctxt = custom_ops.Context(coords, v_0, box, integrator_impl, u_impls, movers=[baro])
     ctxt.multiple_steps(barostat_interval * 100)
     assert np.all(box == ctxt.get_box())
 
@@ -212,7 +212,7 @@ def test_barostat_partial_group_idxs():
         coords.shape[0], pressure, temperature, group_indices, barostat_interval, u_impls, seed, True, 0.0
     )
 
-    ctxt = custom_ops.Context(coords, v_0, complex_box, integrator_impl, u_impls, barostat=baro)
+    ctxt = custom_ops.Context(coords, v_0, complex_box, integrator_impl, u_impls, movers=[baro])
     ctxt.multiple_steps(barostat_interval * 100)
 
 
@@ -267,7 +267,7 @@ def test_barostat_is_deterministic():
         coords.shape[0], pressure, temperature, group_indices, barostat_interval, u_impls, seed, True, 0.0
     )
 
-    ctxt = custom_ops.Context(coords, v_0, host_box, integrator.impl(), u_impls, barostat=baro)
+    ctxt = custom_ops.Context(coords, v_0, host_box, integrator.impl(), u_impls, movers=[baro])
     ctxt.multiple_steps(15)
     atm_box = ctxt.get_box()
     # Verify that the volume of the box has changed
@@ -276,7 +276,7 @@ def test_barostat_is_deterministic():
     baro = custom_ops.MonteCarloBarostat(
         coords.shape[0], pressure, temperature, group_indices, barostat_interval, u_impls, seed, True, 0.0
     )
-    ctxt = custom_ops.Context(coords, v_0, host_box, integrator.impl(), u_impls, barostat=baro)
+    ctxt = custom_ops.Context(coords, v_0, host_box, integrator.impl(), u_impls, movers=[baro])
     ctxt.multiple_steps(15)
     # Verify that we get back bitwise reproducible boxes
     assert compute_box_volume(atm_box) == compute_box_volume(ctxt.get_box())
@@ -323,7 +323,7 @@ def test_barostat_varying_pressure():
         coords.shape[0], pressure, temperature, group_indices, barostat_interval, u_impls, seed, True, 0.0
     )
 
-    ctxt = custom_ops.Context(coords, v_0, complex_box, integrator_impl, u_impls, barostat=baro)
+    ctxt = custom_ops.Context(coords, v_0, complex_box, integrator_impl, u_impls, movers=[baro])
     ctxt.multiple_steps(1000)
     ten_atm_box = ctxt.get_box()
     ten_atm_box_vol = compute_box_volume(ten_atm_box)
@@ -381,7 +381,7 @@ def test_barostat_recentering_upon_acceptance():
     baro = custom_ops.MonteCarloBarostat(
         coords.shape[0], pressure, temperature, group_indices, barostat_interval, u_impls, seed, True, 0.0
     )
-    ctxt = custom_ops.Context(coords, v_0, complex_box, integrator_impl, u_impls, barostat=baro)
+    ctxt = custom_ops.Context(coords, v_0, complex_box, integrator_impl, u_impls, movers=[baro])
     # mini equilibrate the system to get barostat proposals to be reasonable
     ctxt.multiple_steps(1000)
     num_accepted = 0
@@ -389,8 +389,8 @@ def test_barostat_recentering_upon_acceptance():
         ctxt.multiple_steps(100)
         x_t = ctxt.get_x_t()
         box_t = ctxt.get_box()
-        accepted, new_x_t, new_box_t = baro.move_host(x_t, box_t)
-        if accepted:
+        new_x_t, new_box_t = baro.move(x_t, box_t)
+        if not np.all(box_t == new_box_t):
             for atom_idxs in group_indices:
                 xyz = np.mean(new_x_t[atom_idxs], axis=0)
                 ref_xyz = np.mean(model_utils.image_molecule(new_x_t[atom_idxs], new_box_t), axis=0)
@@ -492,7 +492,7 @@ def test_molecular_ideal_gas():
             new_coords.shape[0], pressure, temperature, group_indices, barostat_interval, u_impls, seed, True, 0.0
         )
 
-        ctxt = custom_ops.Context(new_coords, v_0, new_box, integrator_impl, u_impls, barostat=baro)
+        ctxt = custom_ops.Context(new_coords, v_0, new_box, integrator_impl, u_impls, movers=[baro])
         vols = []
         for move in range(n_moves // barostat_interval):
             ctxt.multiple_steps(barostat_interval)
@@ -606,7 +606,7 @@ def test_barostat_scaling_behavior():
     assert baro.get_volume_scale_factor() == 0.0
     assert baro.get_adaptive_scaling()
 
-    ctxt = custom_ops.Context(coords, v_0, host_box, integrator.impl(), u_impls, barostat=baro)
+    ctxt = custom_ops.Context(coords, v_0, host_box, integrator.impl(), u_impls, movers=[baro])
     ctxt.multiple_steps(15)
 
     # Verify that the volume scaling is non-zero

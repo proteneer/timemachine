@@ -70,8 +70,8 @@ def test_deterministic_energies():
             bps.append(bp.to_gpu(precision=precision).bound_impl)  # get the bound implementation
             ubps.append(bp.potential.to_gpu(precision).unbound_impl)
 
-        for barostat in [None, baro.impl(bps)]:
-            ctxt = custom_ops.Context(x0, v0, complex_box, intg.impl(), bps, barostat=barostat)
+        for movers in [None, [baro.impl(bps)]]:
+            ctxt = custom_ops.Context(x0, v0, complex_box, intg.impl(), bps, movers=movers)
             xs, boxes = ctxt.multiple_steps(200, 10)
 
             for x, b in zip(xs, boxes):
@@ -89,6 +89,6 @@ def test_deterministic_energies():
                     _, _, U_selective = unbound.execute(x, fn.params, b, False, False, True)
                     test_u_selective += U_selective
                 assert ref_U == fixed_to_float(test_U_fixed), precision
-                assert test_u == test_u_selective, str(barostat)
+                assert test_u == test_u_selective, str(movers)
                 np.testing.assert_allclose(ref_U, test_u, rtol=rtol, atol=atol)
                 np.testing.assert_allclose(ref_U, test_u_selective, rtol=rtol, atol=atol)

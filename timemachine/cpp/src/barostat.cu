@@ -145,30 +145,15 @@ void MonteCarloBarostat<RealType>::set_adaptive_scaling(const bool adaptive_scal
     this->adaptive_scaling_enabled_ = adaptive_scaling_enabled;
 }
 
-template <typename RealType> bool MonteCarloBarostat<RealType>::inplace_move_host(double *h_x, double *h_box) {
-
-    DeviceBuffer<double> d_x(N_ * 3);
-    DeviceBuffer<double> d_box(3 * 3);
-    int h_accepted_before;
-
-    cudaMemcpy(&h_accepted_before, d_num_accepted_, 1 * sizeof(h_accepted_before), cudaMemcpyDeviceToHost);
-    d_x.copy_from(h_x);
-    d_box.copy_from(h_box);
-    this->inplace_move(d_x.data, d_box.data, 0);
-    gpuErrchk(cudaStreamSynchronize(0));
-    d_x.copy_to(h_x);
-    d_box.copy_to(h_box);
-    int h_accepted_after;
-
-    cudaMemcpy(&h_accepted_after, d_num_accepted_, 1 * sizeof(h_accepted_after), cudaMemcpyDeviceToHost);
-    return h_accepted_after > h_accepted_before;
-}
-
 template <typename RealType>
-void MonteCarloBarostat<RealType>::inplace_move(
+void MonteCarloBarostat<RealType>::move(
+    const int N,
     double *d_x,   // [N*3]
     double *d_box, // [3*3]
     cudaStream_t stream) {
+    if (N != N_) {
+        throw std::runtime_error("N != N_");
+    }
     step_++;
     if (step_ % interval_ != 0) {
         return;
@@ -265,5 +250,8 @@ template <typename RealType> void MonteCarloBarostat<RealType>::set_pressure(con
     // adjustment, ie num attempted = 300 and num accepted = 150
     this->reset_counters();
 }
+
+template class MonteCarloBarostat<float>;
+template class MonteCarloBarostat<double>;
 
 } // namespace timemachine

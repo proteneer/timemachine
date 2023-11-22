@@ -459,7 +459,7 @@ def test_multiple_steps_local_consistency(freeze_reference):
 
     intg_impl = intg.impl()
 
-    ctxt = custom_ops.Context(coords, v0, box, intg_impl, bps, barostat=barostat_impl)
+    ctxt = custom_ops.Context(coords, v0, box, intg_impl, bps, movers=[barostat_impl])
 
     ctxt.setup_local_md(temperature, freeze_reference)
     baro_xs, baro_boxes = ctxt.multiple_steps_local(num_steps, local_idxs, store_x_interval=x_interval, radius=radius)
@@ -743,18 +743,19 @@ def test_setup_context_with_references():
 
         intg = LangevinIntegrator(temperature, dt, friction, masses, seed)
 
-        barostat_impl = None
+        movers = []
         if barostat_interval > 0:
             group_idxs = get_group_indices(get_bond_list(unbound_potentials[0]), len(masses))
 
             barostat = MonteCarloBarostat(coords.shape[0], pressure, temperature, group_idxs, 1, seed)
             barostat_impl = barostat.impl(bps)
+            movers.append(barostat_impl)
             weak_refs.append(weakref.ref(barostat_impl))
 
         intg_impl = intg.impl()
         weak_refs.append(weakref.ref(intg_impl))
 
-        return custom_ops.Context(coords, v0, box, intg_impl, bps, barostat=barostat_impl), weak_refs
+        return custom_ops.Context(coords, v0, box, intg_impl, bps, movers=movers), weak_refs
 
     # Without barostat
     ctxt, reffed_objs = build_context(0)

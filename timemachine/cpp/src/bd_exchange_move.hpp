@@ -2,6 +2,7 @@
 
 #include "device_buffer.hpp"
 #include "logsumexp.hpp"
+#include "mover.hpp"
 #include "nonbonded_mol_energy.hpp"
 #include "weighted_random_sampler.hpp"
 #include <array>

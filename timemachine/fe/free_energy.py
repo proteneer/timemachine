@@ -390,16 +390,11 @@ class AbsoluteFreeEnergy(BaseFreeEnergy):
 def get_context(initial_state: InitialState) -> Context:
     bound_impls = [p.to_gpu(np.float32).bound_impl for p in initial_state.potentials]
     intg_impl = initial_state.integrator.impl()
-    baro_impl = initial_state.barostat.impl(bound_impls) if initial_state.barostat else None
+    movers = []
+    if initial_state.barostat:
+        movers.append(initial_state.barostat.impl(bound_impls))
 
-    return Context(
-        initial_state.x0,
-        initial_state.v0,
-        initial_state.box0,
-        intg_impl,
-        bound_impls,
-        baro_impl,
-    )
+    return Context(initial_state.x0, initial_state.v0, initial_state.box0, intg_impl, bound_impls, movers=movers)
 
 
 def sample_with_context(
@@ -884,14 +879,16 @@ def run_sims_hrex(
         bound_impl = potential.bind_params_list(params).bound_impl
         bound_impls = [bound_impl]
         intg_impl = initial_state.integrator.impl()
-        baro_impl = initial_state.barostat.impl(bound_impls) if initial_state.barostat else None
+        movers = []
+        if initial_state.barostat:
+            movers.append(initial_state.barostat.impl(bound_impls))
         context = Context(
             initial_state.x0,
             initial_state.v0,
             initial_state.box0,
             intg_impl,
             bound_impls,
-            baro_impl,
+            movers=movers,
         )
 
         return potential, context

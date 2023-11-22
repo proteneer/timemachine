@@ -82,7 +82,7 @@ def generate_hif2a_frames(n_frames: int, frame_interval: int, seed=None, barosta
     for potential in initial_state.potentials:
         bps.append(potential.to_gpu(precision=np.float32).bound_impl)  # get the bound implementation
 
-    baro_impl = None
+    movers = []
 
     if barostat_interval > 0:
         group_idxs = get_group_indices(bond_list, len(masses))
@@ -95,6 +95,7 @@ def generate_hif2a_frames(n_frames: int, frame_interval: int, seed=None, barosta
             seed,
         )
         baro_impl = baro.impl(bps)
+        movers.append(baro_impl)
 
     ctxt = custom_ops.Context(
         initial_state.x0,
@@ -102,7 +103,7 @@ def generate_hif2a_frames(n_frames: int, frame_interval: int, seed=None, barosta
         host_box,
         intg,
         bps,
-        barostat=baro_impl,
+        movers=movers,
     )
     steps = n_frames * frame_interval
     coords, boxes = ctxt.multiple_steps(steps, frame_interval)
@@ -186,7 +187,7 @@ def benchmark(
     for potential in bound_potentials:
         bps.append(potential.to_gpu(precision=np.float32).bound_impl)  # get the bound implementation
 
-    baro_impl = None
+    movers = []
     if barostat_interval > 0:
         group_idxs = get_group_indices(bond_list, len(masses))
         baro = MonteCarloBarostat(
@@ -197,7 +198,7 @@ def benchmark(
             barostat_interval,
             seed,
         )
-        baro_impl = baro.impl(bps)
+        movers.append(baro.impl(bps))
 
     ctxt = custom_ops.Context(
         x0,
@@ -205,7 +206,7 @@ def benchmark(
         box,
         intg,
         bps,
-        barostat=baro_impl,
+        movers=movers,
     )
 
     batch_times = []

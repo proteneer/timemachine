@@ -262,7 +262,7 @@ def hif2a_rbfe_state() -> InitialState:
         box,
         intg,
         bound_impls,
-        barostat=baro_impl,
+        movers=[baro_impl],
     )
     ctxt.multiple_steps(1000)
     conf = ctxt.get_x_t()
