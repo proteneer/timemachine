@@ -414,7 +414,7 @@ def equilibrate_host(
     ).impl([u_impl])
 
     # context components: positions, velocities, box, integrator, energy fxns
-    ctxt = custom_ops.Context(x0, v0, host_config.box, integrator, [u_impl], barostat)
+    ctxt = custom_ops.Context(x0, v0, host_config.box, integrator, [u_impl], movers=[barostat])
 
     xs, boxes = ctxt.multiple_steps(n_steps)
     assert len(xs) == 1
