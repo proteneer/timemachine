@@ -1525,7 +1525,7 @@ template <typename RealType> void declare_bias_deletion_exchange_move(py::module
 
     using Class = BDExchangeMove<RealType>;
     std::string pyclass_name = std::string("BDExchangeMove_") + typestr;
-    py::class_<Class, std::shared_ptr<Class>>(m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
+    py::class_<Class, std::shared_ptr<Class>, Mover>(m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
         .def(
             py::init([](const int N,
                         const std::vector<std::vector<int>> &target_mols,
@@ -1534,7 +1534,8 @@ template <typename RealType> void declare_bias_deletion_exchange_move(py::module
                         const double nb_beta,
                         const double cutoff,
                         const int seed,
-                        const int proposals_per_move) {
+                        const int proposals_per_move,
+                        const int interval) {
                 size_t params_dim = params.ndim();
                 if (params_dim != 2) {
                     throw std::runtime_error("parameters dimensions must be 2");
@@ -1545,8 +1546,12 @@ template <typename RealType> void declare_bias_deletion_exchange_move(py::module
                 if (target_mols.size() == 0) {
                     throw std::runtime_error("must provide at least one molecule");
                 }
+                if (interval <= 0) {
+                    throw std::runtime_error("must provide interval greater than 0");
+                }
                 std::vector<double> v_params = py_array_to_vector(params);
-                return new Class(N, target_mols, v_params, temperature, nb_beta, cutoff, seed, proposals_per_move);
+                return new Class(
+                    N, target_mols, v_params, temperature, nb_beta, cutoff, seed, proposals_per_move, interval);
             }),
             py::arg("N"),
             py::arg("target_mols"),
@@ -1555,7 +1560,8 @@ template <typename RealType> void declare_bias_deletion_exchange_move(py::module
             py::arg("nb_beta"),
             py::arg("cutoff"),
             py::arg("seed"),
-            py::arg("proposals_per_move"))
+            py::arg("proposals_per_move"),
+            py::arg("interval"))
         .def(
             "move",
             [](Class &mover,
@@ -1589,7 +1595,7 @@ void declare_targeted_insertion_bias_deletion_exchange_move(py::module &m, const
 
     using Class = TIBDExchangeMove<RealType>;
     std::string pyclass_name = std::string("TIBDExchangeMove_") + typestr;
-    py::class_<Class, std::shared_ptr<Class>>(m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
+    py::class_<Class, std::shared_ptr<Class>, Mover>(m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
         .def(
             py::init([](const int N,
                         const std::vector<int> &ligand_idxs,
@@ -1600,7 +1606,8 @@ void declare_targeted_insertion_bias_deletion_exchange_move(py::module &m, const
                         const double cutoff,
                         const double radius,
                         const int seed,
-                        const int proposals_per_move) {
+                        const int proposals_per_move,
+                        const int interval) {
                 size_t params_dim = params.ndim();
                 if (params_dim != 2) {
                     throw std::runtime_error("parameters dimensions must be 2");
@@ -1614,6 +1621,9 @@ void declare_targeted_insertion_bias_deletion_exchange_move(py::module &m, const
                 if (target_mols.size() == 0) {
                     throw std::runtime_error("must provide at least one molecule");
                 }
+                if (interval <= 0) {
+                    throw std::runtime_error("must provide interval greater than 0");
+                }
                 std::vector<double> v_params = py_array_to_vector(params);
                 return new Class(
                     N,
@@ -1625,7 +1635,8 @@ void declare_targeted_insertion_bias_deletion_exchange_move(py::module &m, const
                     cutoff,
                     radius,
                     seed,
-                    proposals_per_move);
+                    proposals_per_move,
+                    interval);
             }),
             py::arg("N"),
             py::arg("target_mols"),
@@ -1636,7 +1647,8 @@ void declare_targeted_insertion_bias_deletion_exchange_move(py::module &m, const
             py::arg("cutoff"),
             py::arg("radius"),
             py::arg("seed"),
-            py::arg("proposals_per_move"))
+            py::arg("proposals_per_move"),
+            py::arg("interval"))
         .def(
             "move",
             [](Class &mover,

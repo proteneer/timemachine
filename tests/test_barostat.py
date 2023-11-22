@@ -36,7 +36,7 @@ def test_barostat_validation():
         u_impls.append(unbound_pot.bind(params).to_gpu(precision=np.float32).bound_impl)
 
     # Invalid interval
-    with pytest.raises(RuntimeError, match="Barostat interval must be greater than 0"):
+    with pytest.raises(RuntimeError, match="interval must be greater than 0"):
         custom_ops.MonteCarloBarostat(coords.shape[0], pressure, temperature, [[0, 1]], -1, u_impls, seed, True, 0.0)
 
     # Atom index over N

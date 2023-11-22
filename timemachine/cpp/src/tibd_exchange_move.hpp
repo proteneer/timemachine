@@ -56,11 +56,12 @@ public:
         const double cutoff,
         const double radius,
         const int seed,
-        const int proposals_per_move);
+        const int proposals_per_move,
+        const int interval);
 
     ~TIBDExchangeMove();
 
-    void move_device(
+    void move(
         const int N,
         double *d_coords, // [N, 3]
         double *d_box,    // [3, 3]

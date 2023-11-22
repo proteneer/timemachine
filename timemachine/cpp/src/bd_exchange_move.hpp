@@ -12,7 +12,7 @@ namespace timemachine {
 
 // BDExchangeMove uses biased deletion to move waters randomly in a box. The reference implementation
 // is in timemachine/md/exchange/exchange_mover.py::BDExchangeMove
-template <typename RealType> class BDExchangeMove {
+template <typename RealType> class BDExchangeMove : public Mover {
 
 protected:
     const int N_;
@@ -65,17 +65,16 @@ public:
         const double nb_beta,
         const double cutoff,
         const int seed,
-        const int proposals_per_move);
+        const int proposals_per_move,
+        const int interval);
 
     ~BDExchangeMove();
 
-    virtual void move_device(
+    virtual void move(
         const int N,
         double *d_coords, // [N, 3]
         double *d_box,    // [3, 3]
-        cudaStream_t stream);
-
-    virtual std::array<std::vector<double>, 2> move_host(const int N, const double *h_coords, const double *h_box);
+        cudaStream_t stream) override;
 
     virtual double log_probability_host();
 

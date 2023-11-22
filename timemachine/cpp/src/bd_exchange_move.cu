@@ -25,8 +25,9 @@ BDExchangeMove<RealType>::BDExchangeMove(
     const double nb_beta,
     const double cutoff,
     const int seed,
-    const int proposals_per_move)
-    : N_(N), mol_size_(target_mols[0].size()), proposals_per_move_(proposals_per_move),
+    const int proposals_per_move,
+    const int interval)
+    : Mover(interval), N_(N), mol_size_(target_mols[0].size()), proposals_per_move_(proposals_per_move),
       num_target_mols_(target_mols.size()), nb_beta_(static_cast<RealType>(nb_beta)),
       beta_(static_cast<RealType>(1.0 / (BOLTZ * temperature))),
       cutoff_squared_(static_cast<RealType>(cutoff * cutoff)), num_attempted_(0),
@@ -62,7 +63,7 @@ template <typename RealType> BDExchangeMove<RealType>::~BDExchangeMove() {
 }
 
 template <typename RealType>
-void BDExchangeMove<RealType>::move_device(
+void BDExchangeMove<RealType>::move(
     const int N,
     double *d_coords, // [N, 3]
     double *d_box,    // [3, 3]
@@ -70,6 +71,10 @@ void BDExchangeMove<RealType>::move_device(
 
     if (N != N_) {
         throw std::runtime_error("N != N_");
+    }
+    this->step_++;
+    if (this->step_ % this->interval_ != 0) {
+        return;
     }
 
     // Set the stream for the generator
@@ -261,30 +266,6 @@ void BDExchangeMove<RealType>::compute_incremental_weights(
         beta_, // 1 / kT
         d_log_weights_after_.data);
     gpuErrchk(cudaPeekAtLastError());
-}
-
-template <typename RealType>
-std::array<std::vector<double>, 2>
-BDExchangeMove<RealType>::move_host(const int N, const double *h_coords, const double *h_box) {
-
-    DeviceBuffer<double> d_coords(N * 3);
-    d_coords.copy_from(h_coords);
-
-    DeviceBuffer<double> d_box(3 * 3);
-    d_box.copy_from(h_box);
-
-    cudaStream_t stream = static_cast<cudaStream_t>(0);
-
-    this->move_device(N, d_coords.data, d_box.data, stream);
-    gpuErrchk(cudaStreamSynchronize(stream));
-
-    std::vector<double> out_coords(d_coords.length);
-    d_coords.copy_to(&out_coords[0]);
-
-    std::vector<double> out_box(d_box.length);
-    d_box.copy_to(&out_box[0]);
-
-    return std::array<std::vector<double>, 2>({out_coords, out_box});
 }
 
 template <typename RealType> double BDExchangeMove<RealType>::log_probability_host() {

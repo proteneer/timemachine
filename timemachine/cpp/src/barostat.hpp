@@ -39,10 +39,6 @@ public:
 
     bool get_adaptive_scaling();
 
-    virtual void set_interval(const int interval) override;
-
-    virtual int get_interval() override;
-
 private:
     const int N_;
 
@@ -54,7 +50,6 @@ private:
 
     RealType pressure_;
     const RealType temperature_;
-    int interval_;
     const int seed_;
     const std::vector<std::vector<int>> group_idxs_;
 
@@ -62,8 +57,6 @@ private:
     RealType *d_rand_;
     curandGenerator_t cr_rng_;
 
-    // internals
-    int step_;
     int num_grouped_atoms_;
 
     int *d_num_attempted_;

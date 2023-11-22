@@ -26,9 +26,9 @@ MonteCarloBarostat<RealType>::MonteCarloBarostat(
     const int seed,
     const bool adaptive_scaling_enabled,
     const double initial_volume_scale_factor)
-    : N_(N), adaptive_scaling_enabled_(adaptive_scaling_enabled), bps_(bps), pressure_(static_cast<RealType>(pressure)),
-      temperature_(static_cast<RealType>(temperature)), interval_(interval), seed_(seed), group_idxs_(group_idxs),
-      step_(0), num_grouped_atoms_(0), runner_() {
+    : Mover(interval), N_(N), adaptive_scaling_enabled_(adaptive_scaling_enabled), bps_(bps),
+      pressure_(static_cast<RealType>(pressure)), temperature_(static_cast<RealType>(temperature)), seed_(seed),
+      group_idxs_(group_idxs), num_grouped_atoms_(0), runner_() {
 
     // Trigger check that interval is valid
     this->set_interval(interval_);
@@ -154,8 +154,8 @@ void MonteCarloBarostat<RealType>::move(
     if (N != N_) {
         throw std::runtime_error("N != N_");
     }
-    step_++;
-    if (step_ % interval_ != 0) {
+    this->step_++;
+    if (this->step_ % this->interval_ != 0) {
         return;
     }
 
@@ -232,17 +232,6 @@ void MonteCarloBarostat<RealType>::move(
         d_num_attempted_);
     gpuErrchk(cudaPeekAtLastError());
 };
-
-template <typename RealType> void MonteCarloBarostat<RealType>::set_interval(const int interval) {
-    if (interval <= 0) {
-        throw std::runtime_error("Barostat interval must be greater than 0");
-    }
-    interval_ = interval;
-    // Clear the step, to ensure user can expect that in N steps the barostat will trigger
-    step_ = 0;
-}
-
-template <typename RealType> int MonteCarloBarostat<RealType>::get_interval() { return interval_; }
 
 template <typename RealType> void MonteCarloBarostat<RealType>::set_pressure(const double pressure) {
     pressure_ = static_cast<RealType>(pressure);

@@ -30,8 +30,10 @@ TIBDExchangeMove<RealType>::TIBDExchangeMove(
     const double cutoff,
     const double radius,
     const int seed,
-    const int proposals_per_move)
-    : BDExchangeMove<RealType>(N, target_mols, params, temperature, nb_beta, cutoff, seed, proposals_per_move),
+    const int proposals_per_move,
+    const int interval)
+    : BDExchangeMove<RealType>(
+          N, target_mols, params, temperature, nb_beta, cutoff, seed, proposals_per_move, interval),
       radius_(static_cast<RealType>(radius)), inner_volume_(static_cast<RealType>((4.0 / 3.0) * M_PI * pow(radius, 3))),
       d_rand_states_(DEFAULT_THREADS_PER_BLOCK), d_inner_mols_count_(1), d_identify_indices_(this->num_target_mols_),
       d_partitioned_indices_(this->num_target_mols_), d_temp_storage_buffer_(0), d_center_(3),
@@ -69,7 +71,7 @@ template <typename RealType> TIBDExchangeMove<RealType>::~TIBDExchangeMove() {
 }
 
 template <typename RealType>
-void TIBDExchangeMove<RealType>::move_device(
+void TIBDExchangeMove<RealType>::move(
     const int N,
     double *d_coords, // [N, 3]
     double *d_box,    // [3, 3]
@@ -77,6 +79,10 @@ void TIBDExchangeMove<RealType>::move_device(
 
     if (N != this->N_) {
         throw std::runtime_error("N != N_");
+    }
+    this->step_++;
+    if (this->step_ % this->interval_ != 0) {
+        return;
     }
 
     // Set the stream for the generator
@@ -257,7 +263,7 @@ TIBDExchangeMove<RealType>::move_host(const int N, const double *h_coords, const
 
     cudaStream_t stream = static_cast<cudaStream_t>(0);
 
-    this->move_device(N, d_coords.data, d_box.data, stream);
+    this->move(N, d_coords.data, d_box.data, stream);
     gpuErrchk(cudaStreamSynchronize(stream));
 
     std::vector<double> out_coords(d_coords.length);

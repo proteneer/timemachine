@@ -38,24 +38,31 @@ def test_bd_exchange_validation(precision):
     # Test group indices verification
     group_idxs = []
     with pytest.raises(RuntimeError, match="must provide at least one molecule"):
-        klass(N, group_idxs, params, DEFAULT_TEMP, beta, cutoff, seed, proposals_per_move)
+        klass(N, group_idxs, params, DEFAULT_TEMP, beta, cutoff, seed, proposals_per_move, 1)
 
     # Second molecule is not contiguous with first
     group_idxs = [[0, 1, 2], [4, 5]]
     with pytest.raises(RuntimeError, match="Molecules are not contiguous: mol 1"):
-        klass(N, group_idxs, params, DEFAULT_TEMP, beta, cutoff, seed, proposals_per_move)
+        klass(N, group_idxs, params, DEFAULT_TEMP, beta, cutoff, seed, proposals_per_move, 1)
 
     group_idxs = [[0, 1, 2], [3, 4]]
     with pytest.raises(RuntimeError, match="only support running with mols with constant size, got mixed sizes"):
-        klass(N, group_idxs, params, DEFAULT_TEMP, beta, cutoff, seed, proposals_per_move)
+        klass(N, group_idxs, params, DEFAULT_TEMP, beta, cutoff, seed, proposals_per_move, 1)
 
     group_idxs = [[]]
     with pytest.raises(RuntimeError, match="must provide non-empty molecule indices"):
-        klass(N, group_idxs, params, DEFAULT_TEMP, beta, cutoff, seed, proposals_per_move)
+        klass(N, group_idxs, params, DEFAULT_TEMP, beta, cutoff, seed, proposals_per_move, 1)
 
     # Proposals must be non-zero
     with pytest.raises(RuntimeError, match="proposals per move must be greater than 0"):
-        klass(N, group_idxs, params, DEFAULT_TEMP, beta, cutoff, seed, 0)
+        klass(N, group_idxs, params, DEFAULT_TEMP, beta, cutoff, seed, 0, 1)
+
+    group_idxs = [[0], [1]]
+    # Interval must be greater than zero
+    with pytest.raises(RuntimeError, match="must provide interval greater than 0"):
+        klass(N, group_idxs, params, DEFAULT_TEMP, beta, cutoff, seed, proposals_per_move, 0)
+
+    klass(N, group_idxs, params, DEFAULT_TEMP, beta, cutoff, seed, proposals_per_move, 1)
 
 
 @pytest.mark.memcheck
@@ -97,7 +104,7 @@ def test_two_clashy_water_moves(moves, precision, rtol, atol, seed):
         klass = custom_ops.BDExchangeMove_f64
 
     proposals_per_move = 1
-    bdem = klass(N, group_idxs, params, DEFAULT_TEMP, nb.potential.beta, cutoff, seed, proposals_per_move)
+    bdem = klass(N, group_idxs, params, DEFAULT_TEMP, nb.potential.beta, cutoff, seed, proposals_per_move, 1)
 
     ref_bdem = RefBDExchangeMove(nb.potential.beta, cutoff, params, group_idxs, DEFAULT_TEMP)
 
@@ -169,9 +176,9 @@ def test_bd_exchange_deterministic_moves(moves, precision, seed):
         klass = custom_ops.BDExchangeMove_f64
 
     # Reference that makes a single proposal per move
-    bdem_a = klass(N, group_idxs, params, DEFAULT_TEMP, nb.potential.beta, cutoff, seed, 1)
+    bdem_a = klass(N, group_idxs, params, DEFAULT_TEMP, nb.potential.beta, cutoff, seed, 1, 1)
     # Test version that makes all proposals in a single move
-    bdem_b = klass(N, group_idxs, params, DEFAULT_TEMP, nb.potential.beta, cutoff, seed, moves)
+    bdem_b = klass(N, group_idxs, params, DEFAULT_TEMP, nb.potential.beta, cutoff, seed, moves, 1)
 
     iterative_moved_coords = conf.copy()
     for _ in range(moves):
@@ -211,7 +218,7 @@ def test_moves_in_a_water_box(steps_per_move, moves, precision, rtol, atol, seed
     if precision == np.float64:
         klass = custom_ops.BDExchangeMove_f64
 
-    bdem = klass(N, group_idxs, params, DEFAULT_TEMP, nb.potential.beta, cutoff, seed, steps_per_move)
+    bdem = klass(N, group_idxs, params, DEFAULT_TEMP, nb.potential.beta, cutoff, seed, steps_per_move, 1)
 
     ref_bdem = RefBDExchangeMove(nb.potential.beta, cutoff, params, group_idxs, DEFAULT_TEMP)
 
@@ -350,7 +357,7 @@ def test_moves_with_complex(hif2a_complex, steps_per_move, moves, precision, rto
     if precision == np.float64:
         klass = custom_ops.BDExchangeMove_f64
 
-    bdem = klass(N, water_idxs, params, DEFAULT_TEMP, nb.potential.beta, cutoff, seed, steps_per_move)
+    bdem = klass(N, water_idxs, params, DEFAULT_TEMP, nb.potential.beta, cutoff, seed, steps_per_move, 1)
 
     ref_bdem = RefBDExchangeMove(nb.potential.beta, cutoff, params, water_idxs, DEFAULT_TEMP)
 
@@ -505,7 +512,7 @@ def test_moves_with_complex_and_ligand(hif2a_rbfe_state, steps_per_move, moves, 
     if precision == np.float64:
         klass = custom_ops.BDExchangeMove_f64
 
-    bdem = klass(N, water_idxs, params, DEFAULT_TEMP, nb.potential.beta, cutoff, seed, steps_per_move)
+    bdem = klass(N, water_idxs, params, DEFAULT_TEMP, nb.potential.beta, cutoff, seed, steps_per_move, 1)
 
     ref_bdem = RefBDExchangeMove(nb.potential.beta, cutoff, params, water_idxs, DEFAULT_TEMP)
 
