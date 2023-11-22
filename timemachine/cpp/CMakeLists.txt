@@ -100,12 +100,16 @@ pybind11_add_module(${LIBRARY_NAME} SHARED NO_EXTRAS
   src/stream_manager.cu
   src/weighted_random_sampler.cu
   src/bd_exchange_move.cu
+  src/tibd_exchange_move.cu
   src/nonbonded_mol_energy.cu
   src/kernels/k_hilbert.cu
   src/kernels/k_indices.cu
   src/kernels/k_logsumexp.cu
   src/kernels/k_rotations.cu
+  src/kernels/k_exchange.cu
   src/all_atom_energies.cu
+  src/exchange.cu
+  src/translations.cu
 )
 
 include_directories(src/kernels)

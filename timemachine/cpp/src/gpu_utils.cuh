@@ -1,10 +1,10 @@
 #pragma once
 
 #include "curand.h"
+#include "curand_kernel.h"
 #include "exceptions.hpp"
 #include "fixed_point.hpp"
 #include "kernels/kernel_utils.cuh"
-#include <cstdio>
 #include <iostream>
 
 namespace timemachine {
@@ -78,6 +78,10 @@ template <typename T> T *gpuErrchkCudaMallocAndCopy(const T *host_array, int cou
     gpuErrchk(cudaMemcpy(device_array, host_array, count * sizeof(*host_array), cudaMemcpyHostToDevice));
     return device_array;
 }
+
+// k_initialize_curand_states initializes an array of curandState_t objects such that each object
+// uses the seed provided + the index in the array. Offsets and sequences always set to 0
+void __global__ k_initialize_curand_states(const int count, const int seed, curandState_t *states);
 
 template <typename T> void __global__ k_initialize_array(int count, T *array, T val) {
     const int idx = blockIdx.x * blockDim.x + threadIdx.x;

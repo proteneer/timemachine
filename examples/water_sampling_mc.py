@@ -24,7 +24,6 @@ from timemachine.fe import cif_writer
 from timemachine.fe.free_energy import image_frames
 from timemachine.lib import custom_ops
 from timemachine.md.barostat.moves import NPTMove
-from timemachine.md.exchange import exchange_mover
 from timemachine.md.moves import MonteCarloMove
 from timemachine.md.states import CoordsVelBox
 
@@ -76,6 +75,7 @@ def test_exchange():
     )
     parser.add_argument("--iterations", type=int, help="Number of iterations", default=1000000)
     parser.add_argument("--equilibration_steps", type=int, help="Number of equilibration steps", default=50000)
+    parser.add_argument("--seed", default=2024, type=int, help="Random seed")
 
     args = parser.parse_args()
 
@@ -88,7 +88,7 @@ def test_exchange():
         mol = None
 
     ff = setup_forcefield()
-    seed = 2024
+    seed = args.seed
     np.random.seed(seed)
 
     nb_cutoff = 1.2  # this has to be 1.2 since the builders hard code this in (should fix later)
@@ -129,14 +129,17 @@ def test_exchange():
 
     # tibd optimized
     if args.insertion_type == "targeted":
-        exc_mover = exchange_mover.TIBDExchangeMove(
+        exc_mover = custom_ops.TIBDExchangeMove_f32(
+            initial_state.x0.shape[0],
+            initial_state.ligand_idxs,
+            water_idxs,
+            nb_water_ligand_params,
+            DEFAULT_TEMP,
             nb_beta,
             nb_cutoff,
-            nb_water_ligand_params,
-            water_idxs,
-            DEFAULT_TEMP,
-            initial_state.ligand_idxs,
             DEFAULT_BB_RADIUS,
+            seed,
+            args.mc_steps_per_batch,
         )
         assert mol is not None, "Requires a mol for targeted exchange"
     elif args.insertion_type == "untargeted":
@@ -192,11 +195,12 @@ def test_exchange():
     npt_mover.n_steps = args.md_steps_per_batch
     # (ytz): If I start with pure MC, and no MD, it's actually very easy to remove the waters.
     # since the starting waters have very very high energy. If I re-run MD, then it becomes progressively harder
-    # remove the water since we will re-equilibriate the waters.
+    # remove the water since we will re-equilibrate the waters.
     for idx in range(args.iterations):
         density = compute_density(nwm, xvb_t.box)
 
         xvb_t = image_xvb(initial_state, xvb_t)
+        assert np.amax(np.abs(xvb_t.coords)) < 1e3
 
         start_time = time.perf_counter_ns()
         xvb_t = run_mc_proposals(exc_mover, xvb_t, args.mc_steps_per_batch)

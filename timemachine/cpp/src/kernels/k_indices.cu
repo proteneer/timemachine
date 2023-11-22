@@ -38,4 +38,12 @@ void __global__ k_arange(const int N, unsigned int *__restrict__ arr, unsigned i
     arr[atom_idx] = atom_idx + offset;
 }
 
+void __global__ k_arange(const int N, int *__restrict__ arr, int offset) {
+    const int atom_idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (atom_idx >= N) {
+        return;
+    }
+    arr[atom_idx] = atom_idx + offset;
+}
+
 } // namespace timemachine

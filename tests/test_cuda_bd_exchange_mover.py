@@ -117,9 +117,12 @@ def test_two_clashy_water_moves(moves, precision, rtol, atol, seed):
         if num_moved > 0 and proposals_per_move == 1:
             accepted += 1
             # Verify that the probabilities agree when we do accept moves
+            ref_log_prob = np.minimum(logsumexp(before_log_weights) - logsumexp(after_log_weights), 0.0)
+            ref_prob = np.exp(ref_log_prob)
+            assert np.isfinite(ref_prob) and ref_prob > 0.0
             np.testing.assert_allclose(
                 np.exp(bdem.last_log_probability()),
-                np.exp(np.minimum(logsumexp(before_log_weights) - logsumexp(after_log_weights), 0.0)),
+                ref_prob,
                 rtol=rtol,
                 atol=atol,
             )
@@ -239,9 +242,12 @@ def test_moves_in_a_water_box(steps_per_move, moves, precision, rtol, atol, seed
                     last_conf, x_box, idx, new_pos, before_log_weights
                 )
                 np.testing.assert_array_equal(tested, x_move)
+                ref_log_prob = np.minimum(logsumexp(before_log_weights) - logsumexp(after_log_weights), 0.0)
+                ref_prob = np.exp(ref_log_prob)
+                assert np.isfinite(ref_prob) and ref_prob > 0.0
                 np.testing.assert_allclose(
                     np.exp(bdem.last_log_probability()),
-                    np.exp(np.minimum(logsumexp(before_log_weights) - logsumexp(after_log_weights), 0.0)),
+                    ref_prob,
                     rtol=rtol,
                     atol=atol,
                 )
@@ -375,9 +381,12 @@ def test_moves_with_complex(hif2a_complex, steps_per_move, moves, precision, rto
                     last_conf, x_box, idx, new_pos, before_log_weights
                 )
                 np.testing.assert_array_equal(tested, x_move)
+                ref_log_prob = np.minimum(logsumexp(before_log_weights) - logsumexp(after_log_weights), 0.0)
+                ref_prob = np.exp(ref_log_prob)
+                assert np.isfinite(ref_prob) and ref_prob > 0.0
                 np.testing.assert_allclose(
                     np.exp(bdem.last_log_probability()),
-                    np.exp(np.minimum(logsumexp(before_log_weights) - logsumexp(after_log_weights), 0.0)),
+                    ref_prob,
                     rtol=rtol,
                     atol=atol,
                     err_msg=f"Step {step} failed",
@@ -461,7 +470,7 @@ def hif2a_rbfe_state() -> InitialState:
 
 @pytest.mark.parametrize(
     "steps_per_move,moves",
-    [(1, 500), (5000, 5000)],
+    [(1, 7000), (7000, 7000)],
 )
 @pytest.mark.parametrize("precision,rtol,atol", [(np.float64, 5e-6, 5e-6), (np.float32, 1e-4, 2e-3)])
 @pytest.mark.parametrize("seed", [2023])
@@ -527,9 +536,12 @@ def test_moves_with_complex_and_ligand(hif2a_rbfe_state, steps_per_move, moves, 
                     last_conf, x_box, idx, new_pos, before_log_weights
                 )
                 np.testing.assert_array_equal(tested, x_move)
+                ref_log_prob = np.minimum(logsumexp(before_log_weights) - logsumexp(after_log_weights), 0.0)
+                ref_prob = np.exp(ref_log_prob)
+                assert np.isfinite(ref_prob) and ref_prob > 0.0
                 np.testing.assert_allclose(
                     np.exp(bdem.last_log_probability()),
-                    np.exp(np.minimum(logsumexp(before_log_weights) - logsumexp(after_log_weights), 0.0)),
+                    ref_prob,
                     rtol=rtol,
                     atol=atol,
                     err_msg=f"Step {step} failed",
