@@ -280,7 +280,7 @@ def hif2a_rbfe_state() -> InitialState:
 def test_targeted_insertion_hif2a_rbfe(hif2a_rbfe_state, radius, precision, seed):
     proposals_per_move = 10000
     interval = 100
-    steps = 500
+    steps = 1000
     initial_state = hif2a_rbfe_state
 
     conf = initial_state.x0
