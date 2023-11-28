@@ -334,7 +334,7 @@ def test_targeted_insertion_hif2a_rbfe(hif2a_rbfe_state, radius, precision, seed
         box,
         initial_state.integrator.impl(),
         bound_impls,
-        movers=[bdem],
+        movers=[bdem, initial_state.barostat.impl(bound_impls)],
     )
     ctxt.multiple_steps(steps)
     assert bdem.n_proposed() == (steps // interval) * proposals_per_move

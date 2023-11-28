@@ -186,13 +186,24 @@ def test_bias_deletion_bulk_water_with_context(precision, seed):
 
     intg = LangevinIntegrator(DEFAULT_TEMP, dt, 1.0, np.array(masses), seed).impl()
 
+    barostat_interval = 5
+    baro = MonteCarloBarostat(
+        conf.shape[0],
+        DEFAULT_PRESSURE,
+        DEFAULT_TEMP,
+        all_group_idxs,
+        barostat_interval,
+        seed,
+    )
+    baro_impl = baro.impl(bound_impls)
+
     ctxt = custom_ops.Context(
         conf,
         np.zeros_like(conf),
         box,
         intg,
         bound_impls,
-        movers=[bdem],
+        movers=[bdem, baro_impl],
     )
     ctxt.multiple_steps(steps)
     assert bdem.n_proposed() == (steps // interval) * proposals_per_move
