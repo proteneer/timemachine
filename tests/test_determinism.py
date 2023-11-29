@@ -52,6 +52,7 @@ def test_deterministic_energies(precision, rtol, atol):
     bond_list = get_bond_list(harmonic_bond_potential.potential)
     group_idxs = get_group_indices(bond_list, len(host_masses))
     water_idxs = [group for group in group_idxs if len(group) == 3]
+
     baro = MonteCarloBarostat(
         x0.shape[0],
         pressure,
@@ -63,15 +64,18 @@ def test_deterministic_energies(precision, rtol, atol):
 
     nb = next(bp for bp in host_fns if isinstance(bp.potential, Nonbonded))
 
+    # Select the protein as the target for targeted insertion
+    radius = 1.0
+    target_idxs = next(group for group in group_idxs if len(group) > 3)
     bdem = custom_ops.TIBDExchangeMove_f32(
         x0.shape[0],
-        np.arange(complex_coords.shape[0], x0.shape[0]),
+        target_idxs,
         water_idxs,
         nb.params,
         DEFAULT_TEMP,
         nb.potential.beta,
         nb.potential.cutoff,
-        1.0,
+        radius,
         seed,
         proposals_per_move,
         targeted_water_sampling_interval,
@@ -93,6 +97,7 @@ def test_deterministic_energies(precision, rtol, atol):
     for movers in [None, [baro.impl(bps)], [baro.impl(bps), bdem]]:
         if movers is not None:
             for mover in movers:
+                # Make sure we are actually running all of the movers
                 assert mover.get_interval() <= num_steps
         ctxt = custom_ops.Context(x0, v0, complex_box, intg.impl(), bps, movers=movers)
         xs, boxes = ctxt.multiple_steps(num_steps, 10)
