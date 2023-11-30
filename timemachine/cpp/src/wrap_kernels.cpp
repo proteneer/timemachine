@@ -1584,6 +1584,23 @@ template <typename RealType> void declare_bias_deletion_exchange_move(py::module
             },
             py::arg("coords"),
             py::arg("box"))
+        .def(
+            "get_params",
+            [](Class &mover) -> py::array_t<double, py::array::c_style> {
+                std::vector<double> flat_params = mover.get_params();
+                const int D = PARAMS_PER_ATOM;
+                const int N = flat_params.size() / D;
+                py::array_t<double, py::array::c_style> out_params({N, D});
+                std::memcpy(
+                    out_params.mutable_data(), flat_params.data(), flat_params.size() * sizeof(*flat_params.data()));
+                return out_params;
+            })
+        .def(
+            "set_params",
+            [](Class &mover, const py::array_t<double, py::array::c_style> &params) {
+                mover.set_params(py_array_to_vector(params));
+            },
+            py::arg("params"))
         .def("last_log_probability", &Class::log_probability_host)
         .def("n_accepted", &Class::n_accepted)
         .def("n_proposed", &Class::n_proposed)
@@ -1595,7 +1612,8 @@ void declare_targeted_insertion_bias_deletion_exchange_move(py::module &m, const
 
     using Class = TIBDExchangeMove<RealType>;
     std::string pyclass_name = std::string("TIBDExchangeMove_") + typestr;
-    py::class_<Class, std::shared_ptr<Class>, Mover>(m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
+    py::class_<Class, std::shared_ptr<Class>, BDExchangeMove<RealType>, Mover>(
+        m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
         .def(
             py::init([](const int N,
                         const std::vector<int> &ligand_idxs,

@@ -82,6 +82,12 @@ public:
 
     size_t n_accepted() const;
 
+    std::vector<double> get_params();
+
+    void set_params(const std::vector<double> &params);
+
+    void set_params_device(const int size, const double *d_p, const cudaStream_t stream);
+
     double acceptance_fraction() const {
         return static_cast<double>(this->n_accepted()) / static_cast<double>(this->n_proposed());
     }
