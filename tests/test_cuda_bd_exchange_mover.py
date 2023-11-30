@@ -38,24 +38,31 @@ def test_bd_exchange_validation(precision):
     # Test group indices verification
     group_idxs = []
     with pytest.raises(RuntimeError, match="must provide at least one molecule"):
-        klass(N, group_idxs, params, DEFAULT_TEMP, beta, cutoff, seed, proposals_per_move)
+        klass(N, group_idxs, params, DEFAULT_TEMP, beta, cutoff, seed, proposals_per_move, 1)
 
     # Second molecule is not contiguous with first
     group_idxs = [[0, 1, 2], [4, 5]]
     with pytest.raises(RuntimeError, match="Molecules are not contiguous: mol 1"):
-        klass(N, group_idxs, params, DEFAULT_TEMP, beta, cutoff, seed, proposals_per_move)
+        klass(N, group_idxs, params, DEFAULT_TEMP, beta, cutoff, seed, proposals_per_move, 1)
 
     group_idxs = [[0, 1, 2], [3, 4]]
     with pytest.raises(RuntimeError, match="only support running with mols with constant size, got mixed sizes"):
-        klass(N, group_idxs, params, DEFAULT_TEMP, beta, cutoff, seed, proposals_per_move)
+        klass(N, group_idxs, params, DEFAULT_TEMP, beta, cutoff, seed, proposals_per_move, 1)
 
     group_idxs = [[]]
     with pytest.raises(RuntimeError, match="must provide non-empty molecule indices"):
-        klass(N, group_idxs, params, DEFAULT_TEMP, beta, cutoff, seed, proposals_per_move)
+        klass(N, group_idxs, params, DEFAULT_TEMP, beta, cutoff, seed, proposals_per_move, 1)
 
     # Proposals must be non-zero
     with pytest.raises(RuntimeError, match="proposals per move must be greater than 0"):
-        klass(N, group_idxs, params, DEFAULT_TEMP, beta, cutoff, seed, 0)
+        klass(N, group_idxs, params, DEFAULT_TEMP, beta, cutoff, seed, 0, 1)
+
+    group_idxs = [[0], [1]]
+    # Interval must be greater than zero
+    with pytest.raises(RuntimeError, match="must provide interval greater than 0"):
+        klass(N, group_idxs, params, DEFAULT_TEMP, beta, cutoff, seed, proposals_per_move, 0)
+
+    klass(N, group_idxs, params, DEFAULT_TEMP, beta, cutoff, seed, proposals_per_move, 1)
 
 
 @pytest.mark.memcheck
@@ -97,7 +104,7 @@ def test_two_clashy_water_moves(moves, precision, rtol, atol, seed):
         klass = custom_ops.BDExchangeMove_f64
 
     proposals_per_move = 1
-    bdem = klass(N, group_idxs, params, DEFAULT_TEMP, nb.potential.beta, cutoff, seed, proposals_per_move)
+    bdem = klass(N, group_idxs, params, DEFAULT_TEMP, nb.potential.beta, cutoff, seed, proposals_per_move, 1)
 
     ref_bdem = RefBDExchangeMove(nb.potential.beta, cutoff, params, group_idxs, DEFAULT_TEMP)
 
@@ -136,6 +143,73 @@ def test_two_clashy_water_moves(moves, precision, rtol, atol, seed):
     assert accepted == moves
 
 
+@pytest.mark.parametrize("precision", [np.float32])
+@pytest.mark.parametrize("seed", [2023])
+def test_bias_deletion_bulk_water_with_context(precision, seed):
+    ff = Forcefield.load_default()
+    system, conf, box, _ = builders.build_water_system(4.0, ff.water_ff)
+    bps, masses = openmm_deserializer.deserialize_system(system, cutoff=1.2)
+    nb = next(bp for bp in bps if isinstance(bp.potential, Nonbonded))
+    bond_pot = next(bp for bp in bps if isinstance(bp.potential, HarmonicBond)).potential
+
+    bond_list = get_bond_list(bond_pot)
+    all_group_idxs = get_group_indices(bond_list, conf.shape[0])
+
+    # only act on waters
+    water_idxs = [group for group in all_group_idxs if len(group) == 3]
+
+    dt = 1.5e-3
+
+    bound_impls = []
+
+    for potential in bps:
+        bound_impls.append(potential.to_gpu(precision=np.float32).bound_impl)
+
+    klass = custom_ops.BDExchangeMove_f32
+    if precision == np.float64:
+        klass = custom_ops.BDExchangeMove_f64
+
+    proposals_per_move = 1000
+    interval = 100
+    steps = 500
+    bdem = klass(
+        conf.shape[0],
+        water_idxs,
+        nb.params,
+        DEFAULT_TEMP,
+        nb.potential.beta,
+        nb.potential.cutoff,
+        seed,
+        proposals_per_move,
+        interval,
+    )
+
+    intg = LangevinIntegrator(DEFAULT_TEMP, dt, 1.0, np.array(masses), seed).impl()
+
+    barostat_interval = 5
+    baro = MonteCarloBarostat(
+        conf.shape[0],
+        DEFAULT_PRESSURE,
+        DEFAULT_TEMP,
+        all_group_idxs,
+        barostat_interval,
+        seed,
+    )
+    baro_impl = baro.impl(bound_impls)
+
+    ctxt = custom_ops.Context(
+        conf,
+        np.zeros_like(conf),
+        box,
+        intg,
+        bound_impls,
+        movers=[bdem, baro_impl],
+    )
+    ctxt.multiple_steps(steps)
+    assert bdem.n_proposed() == (steps // interval) * proposals_per_move
+    assert bdem.n_accepted() > 0
+
+
 @pytest.mark.parametrize("moves", [1, 100])
 @pytest.mark.parametrize("precision", [np.float64, np.float32])
 @pytest.mark.parametrize("seed", [2023])
@@ -169,9 +243,9 @@ def test_bd_exchange_deterministic_moves(moves, precision, seed):
         klass = custom_ops.BDExchangeMove_f64
 
     # Reference that makes a single proposal per move
-    bdem_a = klass(N, group_idxs, params, DEFAULT_TEMP, nb.potential.beta, cutoff, seed, 1)
+    bdem_a = klass(N, group_idxs, params, DEFAULT_TEMP, nb.potential.beta, cutoff, seed, 1, 1)
     # Test version that makes all proposals in a single move
-    bdem_b = klass(N, group_idxs, params, DEFAULT_TEMP, nb.potential.beta, cutoff, seed, moves)
+    bdem_b = klass(N, group_idxs, params, DEFAULT_TEMP, nb.potential.beta, cutoff, seed, moves, 1)
 
     iterative_moved_coords = conf.copy()
     for _ in range(moves):
@@ -211,7 +285,7 @@ def test_moves_in_a_water_box(steps_per_move, moves, precision, rtol, atol, seed
     if precision == np.float64:
         klass = custom_ops.BDExchangeMove_f64
 
-    bdem = klass(N, group_idxs, params, DEFAULT_TEMP, nb.potential.beta, cutoff, seed, steps_per_move)
+    bdem = klass(N, group_idxs, params, DEFAULT_TEMP, nb.potential.beta, cutoff, seed, steps_per_move, 1)
 
     ref_bdem = RefBDExchangeMove(nb.potential.beta, cutoff, params, group_idxs, DEFAULT_TEMP)
 
@@ -312,7 +386,7 @@ def hif2a_complex():
         box,
         intg,
         bound_impls,
-        barostat=baro_impl,
+        movers=[baro_impl],
     )
     ctxt.multiple_steps(1000)
     conf = ctxt.get_x_t()
@@ -350,7 +424,7 @@ def test_moves_with_complex(hif2a_complex, steps_per_move, moves, precision, rto
     if precision == np.float64:
         klass = custom_ops.BDExchangeMove_f64
 
-    bdem = klass(N, water_idxs, params, DEFAULT_TEMP, nb.potential.beta, cutoff, seed, steps_per_move)
+    bdem = klass(N, water_idxs, params, DEFAULT_TEMP, nb.potential.beta, cutoff, seed, steps_per_move, 1)
 
     ref_bdem = RefBDExchangeMove(nb.potential.beta, cutoff, params, water_idxs, DEFAULT_TEMP)
 
@@ -460,7 +534,7 @@ def hif2a_rbfe_state() -> InitialState:
         box,
         intg,
         bound_impls,
-        barostat=baro_impl,
+        movers=[baro_impl],
     )
     ctxt.multiple_steps(1000)
     conf = ctxt.get_x_t()
@@ -505,7 +579,7 @@ def test_moves_with_complex_and_ligand(hif2a_rbfe_state, steps_per_move, moves, 
     if precision == np.float64:
         klass = custom_ops.BDExchangeMove_f64
 
-    bdem = klass(N, water_idxs, params, DEFAULT_TEMP, nb.potential.beta, cutoff, seed, steps_per_move)
+    bdem = klass(N, water_idxs, params, DEFAULT_TEMP, nb.potential.beta, cutoff, seed, steps_per_move, 1)
 
     ref_bdem = RefBDExchangeMove(nb.potential.beta, cutoff, params, water_idxs, DEFAULT_TEMP)
 

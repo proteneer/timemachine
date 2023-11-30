@@ -2,6 +2,7 @@
 #include "bound_potential.hpp"
 #include "integrator.hpp"
 #include "local_md_potentials.hpp"
+#include "mover.hpp"
 #include <array>
 #include <vector>
 
@@ -16,8 +17,8 @@ public:
         const double *v_0,
         const double *box_0,
         std::shared_ptr<Integrator> intg,
-        std::vector<std::shared_ptr<BoundPotential>> bps,
-        std::shared_ptr<MonteCarloBarostat<float>> barostat = nullptr);
+        std::vector<std::shared_ptr<BoundPotential>> &bps,
+        std::vector<std::shared_ptr<Mover>> &movers);
 
     ~Context();
 
@@ -68,7 +69,7 @@ public:
 private:
     int N_; // number of particles
 
-    std::shared_ptr<MonteCarloBarostat<float>> barostat_;
+    std::vector<std::shared_ptr<Mover>> movers_;
 
     void _step(std::vector<std::shared_ptr<BoundPotential>> &bps, unsigned int *d_atom_idxs, const cudaStream_t stream);
 

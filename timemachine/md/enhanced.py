@@ -486,7 +486,9 @@ def equilibrate_solvent_phase(
     barostat_impl = barostat.impl(all_impls)
 
     # equilibration/minimization doesn't need a barostat
-    equil_ctxt = custom_ops.Context(coords, np.zeros_like(coords), box, intg_equil_impl, all_impls, barostat_impl)
+    equil_ctxt = custom_ops.Context(
+        coords, np.zeros_like(coords), box, intg_equil_impl, all_impls, movers=[barostat_impl]
+    )
 
     # TODO: revert to 50k
     equil_ctxt.multiple_steps(num_steps)

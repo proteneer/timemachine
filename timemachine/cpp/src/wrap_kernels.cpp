@@ -26,6 +26,7 @@
 #include "local_md_utils.hpp"
 #include "log_flat_bottom_bond.hpp"
 #include "logsumexp.hpp"
+#include "mover.hpp"
 #include "neighborlist.hpp"
 #include "nonbonded_all_pairs.hpp"
 #include "nonbonded_common.hpp"
@@ -295,7 +296,7 @@ void declare_context(py::module &m) {
                         const py::array_t<double, py::array::c_style> &box0,
                         std::shared_ptr<Integrator> intg,
                         std::vector<std::shared_ptr<BoundPotential>> &bps,
-                        std::optional<std::shared_ptr<MonteCarloBarostat<float>>> barostat) {
+                        std::optional<std::vector<std::shared_ptr<Mover>>> movers) {
                 int N = x0.shape()[0];
                 int D = x0.shape()[1];
                 verify_coords_and_box(x0, box0);
@@ -307,15 +308,24 @@ void declare_context(py::module &m) {
                     throw std::runtime_error("v0 D != x0 D");
                 }
 
-                return new Context(
-                    N, x0.data(), v0.data(), box0.data(), intg, bps, barostat.has_value() ? barostat.value() : nullptr);
+                std::vector<std::shared_ptr<Mover>> v_movers(0);
+                if (movers.has_value()) {
+                    v_movers = movers.value();
+                }
+                for (auto mover : v_movers) {
+                    if (mover == nullptr) {
+                        throw std::runtime_error("got nullptr instead of mover");
+                    }
+                }
+
+                return new Context(N, x0.data(), v0.data(), box0.data(), intg, bps, v_movers);
             }),
             py::arg("x0"),
             py::arg("v0"),
             py::arg("box"),
             py::arg("integrator"),
             py::arg("bps"),
-            py::arg("barostat") = py::none())
+            py::arg("movers") = py::none())
         .def(
             "step",
             &Context::step,
@@ -1385,17 +1395,48 @@ template <typename RealType, bool Negated> void declare_nonbonded_pair_list(py::
             py::arg("cutoff"));
 }
 
+void declare_mover(py::module &m) {
+
+    using Class = Mover;
+    std::string pyclass_name = std::string("Mover");
+    py::class_<Class, std::shared_ptr<Class>>(m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
+        .def("set_interval", &Class::set_interval, py::arg("interval"))
+        .def("get_interval", &Class::get_interval)
+        .def(
+            "move",
+            [](Class &mover,
+               const py::array_t<double, py::array::c_style> &coords,
+               const py::array_t<double, py::array::c_style> &box) -> py::tuple {
+                verify_coords_and_box(coords, box);
+                const int N = coords.shape()[0];
+                const int D = box.shape()[0];
+
+                std::array<std::vector<double>, 2> result = mover.move_host(N, coords.data(), box.data());
+
+                py::array_t<double, py::array::c_style> out_x_buffer({N, D});
+                std::memcpy(
+                    out_x_buffer.mutable_data(), result[0].data(), result[0].size() * sizeof(*result[0].data()));
+
+                py::array_t<double, py::array::c_style> box_buffer({D, D});
+                std::memcpy(box_buffer.mutable_data(), result[1].data(), result[1].size() * sizeof(*result[1].data()));
+
+                return py::make_tuple(out_x_buffer, box_buffer);
+            },
+            py::arg("coords"),
+            py::arg("box"));
+}
+
 void declare_barostat(py::module &m) {
 
     using Class = MonteCarloBarostat<float>;
     std::string pyclass_name = std::string("MonteCarloBarostat");
-    py::class_<Class, std::shared_ptr<Class>>(m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
+    py::class_<Class, std::shared_ptr<Class>, Mover>(m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
         .def(
             py::init([](const int N,
                         const double pressure,
                         const double temperature,
                         std::vector<std::vector<int>> &group_idxs,
-                        const int frequency,
+                        const int interval,
                         std::vector<std::shared_ptr<BoundPotential>> &bps,
                         const int seed,
                         const bool adaptive_scaling_enabled,
@@ -1405,7 +1446,7 @@ void declare_barostat(py::module &m) {
                     pressure,
                     temperature,
                     group_idxs,
-                    frequency,
+                    interval,
                     bps,
                     seed,
                     adaptive_scaling_enabled,
@@ -1415,37 +1456,16 @@ void declare_barostat(py::module &m) {
             py::arg("pressure"),
             py::arg("temperature"),
             py::arg("group_idxs"),
-            py::arg("frequency"),
+            py::arg("interval"),
             py::arg("bps"),
             py::arg("seed"),
             py::arg("adaptive_scaling_enabled"),
             py::arg("initial_volume_scale_factor"))
-        .def("set_interval", &Class::set_interval, py::arg("interval"))
-        .def("get_interval", &Class::get_interval)
         .def("set_volume_scale_factor", &Class::set_volume_scale_factor, py::arg("volume_scale_factor"))
         .def("get_volume_scale_factor", &Class::get_volume_scale_factor)
         .def("set_adaptive_scaling", &Class::set_adaptive_scaling, py::arg("adaptive_scaling_enabled"))
         .def("get_adaptive_scaling", &Class::get_adaptive_scaling)
-        .def("set_pressure", &Class::set_pressure, py::arg("pressure"))
-        .def(
-            "move_host",
-            [](MonteCarloBarostat<float> &barostat,
-               const py::array_t<double, py::array::c_style> &coords,
-               const py::array_t<double, py::array::c_style> &box) -> py::tuple {
-                const int N = coords.shape()[0];
-
-                py::array_t<double, py::array::c_style> py_x({N, 3});
-                py::array_t<double, py::array::c_style> py_box({3, 3});
-                std::memcpy(py_x.mutable_data(), coords.data(), coords.size() * sizeof(double));
-                std::memcpy(py_box.mutable_data(), box.data(), box.size() * sizeof(double));
-                verify_coords_and_box(coords, box);
-
-                bool accepted = barostat.inplace_move_host(py_x.mutable_data(), py_box.mutable_data());
-
-                return py::make_tuple(accepted, py_x, py_box);
-            },
-            py::arg("coords"),
-            py::arg("box"));
+        .def("set_pressure", &Class::set_pressure, py::arg("pressure"));
 }
 
 void declare_summed_potential(py::module &m) {
@@ -1505,7 +1525,7 @@ template <typename RealType> void declare_bias_deletion_exchange_move(py::module
 
     using Class = BDExchangeMove<RealType>;
     std::string pyclass_name = std::string("BDExchangeMove_") + typestr;
-    py::class_<Class, std::shared_ptr<Class>>(m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
+    py::class_<Class, std::shared_ptr<Class>, Mover>(m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
         .def(
             py::init([](const int N,
                         const std::vector<std::vector<int>> &target_mols,
@@ -1514,7 +1534,8 @@ template <typename RealType> void declare_bias_deletion_exchange_move(py::module
                         const double nb_beta,
                         const double cutoff,
                         const int seed,
-                        const int proposals_per_move) {
+                        const int proposals_per_move,
+                        const int interval) {
                 size_t params_dim = params.ndim();
                 if (params_dim != 2) {
                     throw std::runtime_error("parameters dimensions must be 2");
@@ -1525,8 +1546,12 @@ template <typename RealType> void declare_bias_deletion_exchange_move(py::module
                 if (target_mols.size() == 0) {
                     throw std::runtime_error("must provide at least one molecule");
                 }
+                if (interval <= 0) {
+                    throw std::runtime_error("must provide interval greater than 0");
+                }
                 std::vector<double> v_params = py_array_to_vector(params);
-                return new Class(N, target_mols, v_params, temperature, nb_beta, cutoff, seed, proposals_per_move);
+                return new Class(
+                    N, target_mols, v_params, temperature, nb_beta, cutoff, seed, proposals_per_move, interval);
             }),
             py::arg("N"),
             py::arg("target_mols"),
@@ -1535,7 +1560,8 @@ template <typename RealType> void declare_bias_deletion_exchange_move(py::module
             py::arg("nb_beta"),
             py::arg("cutoff"),
             py::arg("seed"),
-            py::arg("proposals_per_move"))
+            py::arg("proposals_per_move"),
+            py::arg("interval"))
         .def(
             "move",
             [](Class &mover,
@@ -1569,7 +1595,7 @@ void declare_targeted_insertion_bias_deletion_exchange_move(py::module &m, const
 
     using Class = TIBDExchangeMove<RealType>;
     std::string pyclass_name = std::string("TIBDExchangeMove_") + typestr;
-    py::class_<Class, std::shared_ptr<Class>>(m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
+    py::class_<Class, std::shared_ptr<Class>, Mover>(m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
         .def(
             py::init([](const int N,
                         const std::vector<int> &ligand_idxs,
@@ -1580,7 +1606,8 @@ void declare_targeted_insertion_bias_deletion_exchange_move(py::module &m, const
                         const double cutoff,
                         const double radius,
                         const int seed,
-                        const int proposals_per_move) {
+                        const int proposals_per_move,
+                        const int interval) {
                 size_t params_dim = params.ndim();
                 if (params_dim != 2) {
                     throw std::runtime_error("parameters dimensions must be 2");
@@ -1594,6 +1621,9 @@ void declare_targeted_insertion_bias_deletion_exchange_move(py::module &m, const
                 if (target_mols.size() == 0) {
                     throw std::runtime_error("must provide at least one molecule");
                 }
+                if (interval <= 0) {
+                    throw std::runtime_error("must provide interval greater than 0");
+                }
                 std::vector<double> v_params = py_array_to_vector(params);
                 return new Class(
                     N,
@@ -1605,7 +1635,8 @@ void declare_targeted_insertion_bias_deletion_exchange_move(py::module &m, const
                     cutoff,
                     radius,
                     seed,
-                    proposals_per_move);
+                    proposals_per_move,
+                    interval);
             }),
             py::arg("N"),
             py::arg("target_mols"),
@@ -1616,7 +1647,8 @@ void declare_targeted_insertion_bias_deletion_exchange_move(py::module &m, const
             py::arg("cutoff"),
             py::arg("radius"),
             py::arg("seed"),
-            py::arg("proposals_per_move"))
+            py::arg("proposals_per_move"),
+            py::arg("interval"))
         .def(
             "move",
             [](Class &mover,
@@ -1840,6 +1872,7 @@ PYBIND11_MODULE(custom_ops, m) {
 
     m.def("rmsd_align", &py_rmsd_align, "RMSD align two molecules", py::arg("x1"), py::arg("x2"));
 
+    declare_mover(m);
     declare_barostat(m);
 
     declare_integrator(m);

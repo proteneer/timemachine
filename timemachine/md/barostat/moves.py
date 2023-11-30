@@ -115,6 +115,6 @@ class NPTMove(NVTMove):
     def move(self, x: CoordsVelBox) -> CoordsVelBox:
         # note: context creation overhead here is actually very small!
         ctxt = custom_ops.Context(
-            x.coords, x.velocities, x.box, self.integrator_impl, self.bound_impls, self.barostat_impl
+            x.coords, x.velocities, x.box, self.integrator_impl, self.bound_impls, movers=[self.barostat_impl]
         )
         return self._steps(ctxt)

@@ -23,9 +23,9 @@ Context::Context(
     const double *v_0,
     const double *box_0,
     std::shared_ptr<Integrator> intg,
-    std::vector<std::shared_ptr<BoundPotential>> bps,
-    std::shared_ptr<MonteCarloBarostat<float>> barostat)
-    : N_(N), barostat_(barostat), step_(0), intg_(intg), bps_(bps), nonbonded_pots_(0) {
+    std::vector<std::shared_ptr<BoundPotential>> &bps,
+    std::vector<std::shared_ptr<Mover>> &movers)
+    : N_(N), movers_(movers), step_(0), intg_(intg), bps_(bps), nonbonded_pots_(0) {
 
     d_x_t_ = gpuErrchkCudaMallocAndCopy(x_0, N * 3);
     d_v_t_ = gpuErrchkCudaMallocAndCopy(v_0, N * 3);
@@ -40,6 +40,14 @@ Context::~Context() {
     gpuErrchk(cudaFree(d_v_t_));
     gpuErrchk(cudaFree(d_box_t_));
 };
+
+bool is_barostat(std::shared_ptr<Mover> &mover) {
+    if (std::shared_ptr<MonteCarloBarostat<float>> baro = std::dynamic_pointer_cast<MonteCarloBarostat<float>>(mover);
+        baro) {
+        return true;
+    }
+    return false;
+}
 
 void Context::_verify_box(cudaStream_t stream) {
     // If there are no nonbonded potentials, nothing to check.
@@ -315,10 +323,13 @@ void Context::_step(
     intg_->step_fwd(bps, d_x_t_, d_v_t_, d_box_t_, d_atom_idxs, stream);
 
     // If atom idxs are passed, indicates that only a subset of the system should move. Don't
-    // run the barostat in this situation.
-    if (d_atom_idxs == nullptr && barostat_) {
-        // May modify coords, du_dx and box size
-        barostat_->inplace_move(d_x_t_, d_box_t_, stream);
+    // run any additional movers in this situation.
+    // TBD: Handle movers in the local MD case.
+    if (d_atom_idxs == nullptr) {
+        for (auto mover : movers_) {
+            // May modify coords and box size
+            mover->move(N_, d_x_t_, d_box_t_, stream);
+        }
     }
 
     step_ += 1;
@@ -354,6 +365,15 @@ std::shared_ptr<Integrator> Context::get_integrator() const { return intg_; }
 
 std::vector<std::shared_ptr<BoundPotential>> Context::get_potentials() const { return bps_; }
 
-std::shared_ptr<MonteCarloBarostat<float>> Context::get_barostat() const { return barostat_; }
+std::shared_ptr<MonteCarloBarostat<float>> Context::get_barostat() const {
+    for (auto mover : movers_) {
+        if (is_barostat(mover)) {
+            std::shared_ptr<MonteCarloBarostat<float>> baro =
+                std::dynamic_pointer_cast<MonteCarloBarostat<float>>(mover);
+            return baro;
+        }
+    }
+    return nullptr;
+}
 
 } // namespace timemachine

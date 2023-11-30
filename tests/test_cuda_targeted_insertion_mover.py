@@ -174,36 +174,40 @@ def test_tibd_exchange_validation(precision):
     # Test group indices verification
     group_idxs = []
     with pytest.raises(RuntimeError, match="must provide at least one molecule"):
-        klass(N, ligand_idxs, group_idxs, params, DEFAULT_TEMP, beta, cutoff, radius, seed, proposals_per_move)
+        klass(N, ligand_idxs, group_idxs, params, DEFAULT_TEMP, beta, cutoff, radius, seed, proposals_per_move, 1)
 
     # Second molecule is not contiguous with first
     group_idxs = [[0, 1, 2], [4, 5]]
     with pytest.raises(RuntimeError, match="Molecules are not contiguous: mol 1"):
-        klass(N, ligand_idxs, group_idxs, params, DEFAULT_TEMP, beta, cutoff, radius, seed, proposals_per_move)
+        klass(N, ligand_idxs, group_idxs, params, DEFAULT_TEMP, beta, cutoff, radius, seed, proposals_per_move, 1)
 
     group_idxs = [[0, 1, 2], [3, 4]]
     with pytest.raises(RuntimeError, match="only support running with mols with constant size, got mixed sizes"):
-        klass(N, ligand_idxs, group_idxs, params, DEFAULT_TEMP, beta, cutoff, radius, seed, proposals_per_move)
+        klass(N, ligand_idxs, group_idxs, params, DEFAULT_TEMP, beta, cutoff, radius, seed, proposals_per_move, 1)
 
     group_idxs = [[]]
     with pytest.raises(RuntimeError, match="must provide non-empty molecule indices"):
-        klass(N, ligand_idxs, group_idxs, params, DEFAULT_TEMP, beta, cutoff, radius, seed, proposals_per_move)
+        klass(N, ligand_idxs, group_idxs, params, DEFAULT_TEMP, beta, cutoff, radius, seed, proposals_per_move, 1)
 
     # Proposals must be non-zero
     with pytest.raises(RuntimeError, match="proposals per move must be greater than 0"):
-        klass(N, ligand_idxs, group_idxs, params, DEFAULT_TEMP, beta, cutoff, radius, seed, 0)
+        klass(N, ligand_idxs, group_idxs, params, DEFAULT_TEMP, beta, cutoff, radius, seed, 0, 1)
 
     group_idxs = [[0]]
     # Radius must be non-zero
     with pytest.raises(RuntimeError, match="radius must be greater than 0.0"):
-        klass(N, ligand_idxs, group_idxs, params, DEFAULT_TEMP, beta, cutoff, 0.0, seed, proposals_per_move)
+        klass(N, ligand_idxs, group_idxs, params, DEFAULT_TEMP, beta, cutoff, 0.0, seed, proposals_per_move, 1)
+
+    # Interval must be greater than zero
+    with pytest.raises(RuntimeError, match="must provide interval greater than 0"):
+        klass(N, ligand_idxs, group_idxs, params, DEFAULT_TEMP, beta, cutoff, radius, seed, proposals_per_move, 0)
 
     # Verify that if the box is too small this will trigger a failure
     # no such protection in the move_device call for performance reasons though an assert will be triggered
     box = np.eye(3) * 0.1
     radius = 1
     coords = rng.random((N, 3))
-    mover = klass(N, ligand_idxs, group_idxs, params, DEFAULT_TEMP, beta, cutoff, radius, seed, proposals_per_move)
+    mover = klass(N, ligand_idxs, group_idxs, params, DEFAULT_TEMP, beta, cutoff, radius, seed, proposals_per_move, 1)
     with pytest.raises(RuntimeError, match="volume of inner radius greater than box volume"):
         mover.move(coords, box)
 
@@ -262,12 +266,79 @@ def hif2a_rbfe_state() -> InitialState:
         box,
         intg,
         bound_impls,
-        barostat=baro_impl,
+        movers=[baro_impl],
     )
     ctxt.multiple_steps(1000)
     conf = ctxt.get_x_t()
     box = ctxt.get_box()
     return replace(initial_state, v0=ctxt.get_v_t(), x0=conf, box0=box)
+
+
+@pytest.mark.parametrize("radius", [2.0])
+@pytest.mark.parametrize("precision", [np.float32])
+@pytest.mark.parametrize("seed", [2023])
+def test_targeted_insertion_hif2a_rbfe(hif2a_rbfe_state, radius, precision, seed):
+    proposals_per_move = 10000
+    interval = 100
+    steps = 1000
+    initial_state = hif2a_rbfe_state
+
+    conf = initial_state.x0
+    box = initial_state.box0
+
+    bps = initial_state.potentials
+    nb = next(bp for bp in bps if isinstance(bp.potential, Nonbonded))
+    bond_pot = next(bp for bp in bps if isinstance(bp.potential, HarmonicBond)).potential
+
+    bond_list = get_bond_list(bond_pot)
+    all_group_idxs = get_group_indices(bond_list, conf.shape[0])
+
+    # only act on waters
+    water_idxs = [group for group in all_group_idxs if len(group) == 3]
+
+    N = conf.shape[0]
+
+    # Re-image coords so that everything is imaged to begin with
+    conf = image_frame(all_group_idxs, conf, box)
+
+    N = conf.shape[0]
+
+    params = nb.params
+
+    cutoff = nb.potential.cutoff
+    klass = custom_ops.TIBDExchangeMove_f32
+    if precision == np.float64:
+        klass = custom_ops.TIBDExchangeMove_f64
+
+    bound_impls = []
+    for potential in initial_state.potentials:
+        bound_impls.append(potential.to_gpu(precision=np.float32).bound_impl)
+
+    bdem = klass(
+        N,
+        initial_state.ligand_idxs,
+        water_idxs,
+        params,
+        DEFAULT_TEMP,
+        nb.potential.beta,
+        cutoff,
+        radius,
+        seed,
+        proposals_per_move,
+        interval,
+    )
+
+    ctxt = custom_ops.Context(
+        conf,
+        np.zeros_like(conf),
+        box,
+        initial_state.integrator.impl(),
+        bound_impls,
+        movers=[bdem, initial_state.barostat.impl(bound_impls)],
+    )
+    ctxt.multiple_steps(steps)
+    assert bdem.n_proposed() == (steps // interval) * proposals_per_move
+    assert bdem.n_accepted() > 0
 
 
 @pytest.mark.parametrize("radius", [1.0])
@@ -324,6 +395,7 @@ def test_tibd_exchange_deterministic_moves(radius, moves, precision, seed):
         radius,
         seed,
         1,
+        1,
     )
 
     bdem_b = klass(
@@ -337,6 +409,7 @@ def test_tibd_exchange_deterministic_moves(radius, moves, precision, seed):
         radius,
         seed,
         moves,
+        1,
     )
 
     iterative_moved_coords = conf.copy()
@@ -390,16 +463,7 @@ def test_targeted_moves_in_bulk_water(radius, steps_per_move, moves, precision, 
         klass = custom_ops.TIBDExchangeMove_f64
 
     bdem = klass(
-        N,
-        center_group,
-        group_idxs,
-        params,
-        DEFAULT_TEMP,
-        nb.potential.beta,
-        cutoff,
-        radius,
-        seed,
-        steps_per_move,
+        N, center_group, group_idxs, params, DEFAULT_TEMP, nb.potential.beta, cutoff, radius, seed, steps_per_move, 1
     )
 
     ref_bdem = RefTIBDExchangeMove(nb.potential.beta, cutoff, params, group_idxs, DEFAULT_TEMP, center_group, radius)
@@ -527,16 +591,7 @@ def test_moves_with_three_waters(radius, steps_per_move, moves, precision, rtol,
         klass = custom_ops.TIBDExchangeMove_f64
 
     bdem = klass(
-        N,
-        center_group,
-        group_idxs,
-        params,
-        DEFAULT_TEMP,
-        nb.potential.beta,
-        cutoff,
-        radius,
-        seed,
-        steps_per_move,
+        N, center_group, group_idxs, params, DEFAULT_TEMP, nb.potential.beta, cutoff, radius, seed, steps_per_move, 1
     )
 
     ref_bdem = RefTIBDExchangeMove(nb.potential.beta, cutoff, params, group_idxs, DEFAULT_TEMP, center_group, radius)
@@ -659,6 +714,7 @@ def test_moves_with_complex_and_ligand(hif2a_rbfe_state, radius, steps_per_move,
         radius,
         seed,
         steps_per_move,
+        1,
     )
 
     ref_bdem = RefTIBDExchangeMove(

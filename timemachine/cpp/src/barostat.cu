@@ -26,9 +26,9 @@ MonteCarloBarostat<RealType>::MonteCarloBarostat(
     const int seed,
     const bool adaptive_scaling_enabled,
     const double initial_volume_scale_factor)
-    : N_(N), adaptive_scaling_enabled_(adaptive_scaling_enabled), bps_(bps), pressure_(static_cast<RealType>(pressure)),
-      temperature_(static_cast<RealType>(temperature)), interval_(interval), seed_(seed), group_idxs_(group_idxs),
-      step_(0), num_grouped_atoms_(0), runner_() {
+    : Mover(interval), N_(N), adaptive_scaling_enabled_(adaptive_scaling_enabled), bps_(bps),
+      pressure_(static_cast<RealType>(pressure)), temperature_(static_cast<RealType>(temperature)), seed_(seed),
+      group_idxs_(group_idxs), num_grouped_atoms_(0), runner_() {
 
     // Trigger check that interval is valid
     this->set_interval(interval_);
@@ -145,32 +145,17 @@ void MonteCarloBarostat<RealType>::set_adaptive_scaling(const bool adaptive_scal
     this->adaptive_scaling_enabled_ = adaptive_scaling_enabled;
 }
 
-template <typename RealType> bool MonteCarloBarostat<RealType>::inplace_move_host(double *h_x, double *h_box) {
-
-    DeviceBuffer<double> d_x(N_ * 3);
-    DeviceBuffer<double> d_box(3 * 3);
-    int h_accepted_before;
-
-    cudaMemcpy(&h_accepted_before, d_num_accepted_, 1 * sizeof(h_accepted_before), cudaMemcpyDeviceToHost);
-    d_x.copy_from(h_x);
-    d_box.copy_from(h_box);
-    this->inplace_move(d_x.data, d_box.data, 0);
-    gpuErrchk(cudaStreamSynchronize(0));
-    d_x.copy_to(h_x);
-    d_box.copy_to(h_box);
-    int h_accepted_after;
-
-    cudaMemcpy(&h_accepted_after, d_num_accepted_, 1 * sizeof(h_accepted_after), cudaMemcpyDeviceToHost);
-    return h_accepted_after > h_accepted_before;
-}
-
 template <typename RealType>
-void MonteCarloBarostat<RealType>::inplace_move(
+void MonteCarloBarostat<RealType>::move(
+    const int N,
     double *d_x,   // [N*3]
     double *d_box, // [3*3]
     cudaStream_t stream) {
-    step_++;
-    if (step_ % interval_ != 0) {
+    if (N != N_) {
+        throw std::runtime_error("N != N_");
+    }
+    this->step_++;
+    if (this->step_ % this->interval_ != 0) {
         return;
     }
 
@@ -248,22 +233,14 @@ void MonteCarloBarostat<RealType>::inplace_move(
     gpuErrchk(cudaPeekAtLastError());
 };
 
-template <typename RealType> void MonteCarloBarostat<RealType>::set_interval(const int interval) {
-    if (interval <= 0) {
-        throw std::runtime_error("Barostat interval must be greater than 0");
-    }
-    interval_ = interval;
-    // Clear the step, to ensure user can expect that in N steps the barostat will trigger
-    step_ = 0;
-}
-
-template <typename RealType> int MonteCarloBarostat<RealType>::get_interval() { return interval_; }
-
 template <typename RealType> void MonteCarloBarostat<RealType>::set_pressure(const double pressure) {
     pressure_ = static_cast<RealType>(pressure);
     // Could have equilibrated and be a large number of steps from shifting volume
     // adjustment, ie num attempted = 300 and num accepted = 150
     this->reset_counters();
 }
+
+template class MonteCarloBarostat<float>;
+template class MonteCarloBarostat<double>;
 
 } // namespace timemachine
