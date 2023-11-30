@@ -67,7 +67,7 @@ def test_deterministic_energies(precision, rtol, atol):
     # Select the protein as the target for targeted insertion
     radius = 1.0
     target_idxs = next(group for group in group_idxs if len(group) > 3)
-    bdem = custom_ops.TIBDExchangeMove_f32(
+    tibdem = custom_ops.TIBDExchangeMove_f32(
         x0.shape[0],
         target_idxs,
         water_idxs,
@@ -94,7 +94,7 @@ def test_deterministic_energies(precision, rtol, atol):
         ubps.append(bp.potential.to_gpu(precision).unbound_impl)
 
     num_steps = 200
-    for movers in [None, [baro.impl(bps)], [baro.impl(bps), bdem]]:
+    for movers in [None, [baro.impl(bps)], [tibdem], [baro.impl(bps), tibdem]]:
         if movers is not None:
             for mover in movers:
                 # Make sure we are actually running all of the movers
