@@ -127,6 +127,8 @@ def test_exchange():
             x_mv, _ = exc_mover.move(xvb_t.coords, xvb_t.box)
             return CoordsVelBox(x_mv, xvb_t.velocities, xvb_t.box)
 
+    # Interval is always 1 as we want this to be called every time we call `move`
+    exchange_interval = 1
     # tibd optimized
     if args.insertion_type == "targeted":
         exc_mover = custom_ops.TIBDExchangeMove_f32(
@@ -140,6 +142,7 @@ def test_exchange():
             DEFAULT_BB_RADIUS,
             seed,
             args.mc_steps_per_batch,
+            exchange_interval,
         )
         assert mol is not None, "Requires a mol for targeted exchange"
     elif args.insertion_type == "untargeted":
@@ -153,6 +156,7 @@ def test_exchange():
             nb_cutoff,
             seed,
             args.mc_steps_per_batch,
+            exchange_interval,
         )
 
     cur_box = initial_state.box0
