@@ -6,12 +6,14 @@ Easiest special cases:
 * Varying ligand LJ epsilons (holding ligand LJ sigmas fixed, and all environment LJ parameters fixed)
     (regardless of environment size, can summarize each snapshot using [N_ligand] floats)
 
-Slightly trickier special case:
+Slightly trickier special cases:
 * Varying ligand LJ (eps, sig) simultaneously
     * Requires a larger summary, see https://github.com/proteneer/timemachine/pull/931 for refs and details
+* Reaction field models not based on damping (see e.g. https://github.com/proteneer/timemachine/pull/969 )
 
 TODO:
-[ ] Reduce repetition between LJ and charge
+[ ] Reduce code repetition between LJ and charge
+[ ] Develop optimizations for case where both ligand and protein params can vary simultaneously
 """
 
 import jax.numpy as jnp
