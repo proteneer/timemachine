@@ -64,6 +64,8 @@ public:
 
     std::vector<std::shared_ptr<BoundPotential>> get_potentials() const;
 
+    std::vector<std::shared_ptr<Mover>> get_movers() const;
+
     std::shared_ptr<MonteCarloBarostat<float>> get_barostat() const;
 
 private:

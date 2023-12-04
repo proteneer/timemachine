@@ -650,7 +650,8 @@ void declare_context(py::module &m) {
             })
         .def("get_integrator", &Context::get_integrator)
         .def("get_potentials", &Context::get_potentials)
-        .def("get_barostat", &Context::get_barostat);
+        .def("get_barostat", &Context::get_barostat)
+        .def("get_movers", &Context::get_movers);
 }
 
 void declare_integrator(py::module &m) {
