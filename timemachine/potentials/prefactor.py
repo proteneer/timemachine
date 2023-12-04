@@ -423,43 +423,63 @@ class ReweightableTrajectory:
             self.q_prefactors = coulomb_prefactors_on_traj(
                 traj, boxes, charges, ligand_indices, env_indices, beta=beta, cutoff=cutoff
             )
+            self.U_q0 = self._compute_q(self.ligand_q0)
 
-        self.ligand_lj_eps = eps[ligand_indices]
+        self.ligand_lj_eps0 = eps[ligand_indices]
         if support_ligand_lj_eps:
             self.supports_ligand_lj_eps = True
             self.lj_eps_prefactors = lj_eps_prefactors_on_traj(
                 traj, boxes, sig, eps, ligand_indices, env_indices, cutoff
             )
+            self.U_lj0 = self._compute_lj_eps(self.ligand_lj_eps0)
 
-        self.ligand_lj_sig = sig[ligand_indices]
+        self.ligand_lj_sig0 = sig[ligand_indices]
         if support_ligand_lj_sig:
             self.supports_ligand_lj_sig = True
             self.lj_sig_prefactors = lj_prefactors_on_traj(traj, boxes, sig, eps, ligand_indices, env_indices, cutoff)
+            self.U_lj0 = self._compute_lj(self.ligand_lj_eps, self.ligand_lj_sig0)
 
-    def compute_potential_energy(self, ligand_q, ligand_lj_eps, ligand_lj_sig):
+    @jit
+    def _compute_q(self, ligand_q):
+        assert self.supports_ligand_q
+        return vmap(coulomb_interaction_group_energy, (0, 0))(ligand_q, self.q_prefactors)
+
+    @jit
+    def _compute_lj(self, ligand_lj_eps, ligand_lj_sig):
+        assert self.supports_ligand_lj_sig
+        return vmap(lj_interaction_group_energy, (0, 0, 0))(ligand_lj_sig, ligand_lj_eps, self.lj_sig_prefactors)
+
+    @jit
+    def _compute_lj_eps(self, ligand_lj_eps):
+        assert self.supports_ligand_lj_eps
+        return jnp.sum(ligand_lj_eps[np.newaxis, :] * self.lj_eps_prefactors, axis=1)
+
+    def compute_delta_U(self, ligand_q, ligand_lj_eps, ligand_lj_sig):
+        """compute [U(x; params) - U(x; params0) for x in traj]"""
+
         q_changed = not np.allclose(ligand_q, self.ligand_q0)
-        lj_eps_changed = not np.allclose(ligand_lj_eps, self.ligand_lj_eps)
-        lj_sig_changed = not np.allclose(ligand_lj_sig, self.ligand_lj_sig)
+        lj_eps_changed = not np.allclose(ligand_lj_eps, self.ligand_lj_eps0)
+        lj_sig_changed = not np.allclose(ligand_lj_sig, self.ligand_lj_sig0)
 
-        Us = jnp.zeros(self.n_frames)
         if q_changed:
             if not self.supports_ligand_q:
                 raise RuntimeError("did not construct this object to support varying ligand q")
-            U_q = vmap(coulomb_interaction_group_energy, (0, 0))(ligand_q, self.q_prefactors)
-            Us += U_q
+            delta_U_q = self._compute_q(ligand_q) - self.U_q0
+        else:
+            delta_U_q = jnp.zeros(self.n_frames)
 
         # lennard-jones: 2 code paths: costlier if LJ sigma is changing, cheaper if only LJ eps is changing
         if lj_sig_changed:
-            if not self.supports_ligand_lj_sig:  # or (lj_eps_changed and not self.supports_ligand_lj_eps):
+            if not self.supports_ligand_lj_sig:
                 raise RuntimeError("did not construct this object to support varying ligand LJ sig")
-            U_lj = lj_interaction_group_energy(ligand_lj_sig, ligand_lj_eps, self.lj_sig_prefactors)
-            Us += U_lj
+            delta_U_lj = self._compute_lj(ligand_lj_eps, ligand_lj_sig) - self.U_lj0
 
         elif lj_eps_changed:
             if not self.supports_ligand_lj_eps:
                 raise RuntimeError("did not construct this object to support varying ligand LJ eps")
+            delta_U_lj = self._compute_lj_eps(ligand_lj_eps) - self.U_lj0
 
-            U_lj = jnp.sum(ligand_lj_eps[np.newaxis, :] * self.lj_eps_prefactors, axis=1)
-            Us += U_lj
+        else:
+            delta_U_lj = jnp.zeros(self.n_frames)
 
-        return Us
+        return delta_U_q + delta_U_lj
