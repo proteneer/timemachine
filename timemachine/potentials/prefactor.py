@@ -168,6 +168,31 @@ def lj_eps_prefactor_on_atom(x_i, x_others, sig_i, sig_others, eps_others, box=N
     return prefactor_i
 
 
+def lj_eps_prefactors_on_snapshot(x_ligand, x_env, sig_ligand, sig_env, eps_env, box=None, cutoff=jnp.inf):
+    def f_atom(x_i, sig_i):
+        return lj_eps_prefactor_on_atom(x_i, x_env, sig_i, sig_env, eps_env, box, cutoff)
+
+    return vmap(f_atom, (0, 0))(x_ligand, sig_ligand)
+
+
+def lj_eps_prefactors_on_traj(
+    traj, boxes, sigmas, epsilons, ligand_indices, env_indices, cutoff=jnp.inf, chunk_size=DEFAULT_CHUNK_SIZE
+):
+    validate_interaction_group_idxs(len(traj[0]), ligand_indices, env_indices)
+
+    eps_env = epsilons[env_indices]
+    sig_env = sigmas[env_indices]
+
+    sig_ligand = sigmas[ligand_indices]
+
+    def f_snapshot(coords, box):
+        x_ligand = coords[ligand_indices]
+        x_env = coords[env_indices]
+        return jit(lj_eps_prefactors_on_snapshot)(x_ligand, x_env, sig_ligand, sig_env, eps_env, box, cutoff)
+
+    return process_traj_in_chunks(f_snapshot, traj, boxes, chunk_size)
+
+
 #   (where (x_ligand, x_env, sig_env, eps_env) are all constant, but (sig_ligand, eps_ligand) are variable)
 #   using [Naden, Shirts]'s linear basis-function approach
 
@@ -367,3 +392,75 @@ def lj_interaction_group_energy(sig_ligand, eps_ligand, lj_prefactors):
 
     projection = vmap(basis_expand_lj_atom)(sig_ligand, eps_ligand)
     return jnp.sum(projection * lj_prefactors)
+
+
+class ReweightableTrajectory:
+    def __init__(
+        self,
+        traj,
+        boxes,
+        nb_params,
+        ligand_indices,
+        env_indices,
+        beta=2.0,
+        cutoff=1.2,
+        support_ligand_q=True,
+        support_ligand_lj_eps=True,
+        support_ligand_lj_sig=False,
+    ):
+        """"""
+        n_frames, n_atoms, dim = traj.shape
+        self.n_frames = n_frames
+
+        assert dim == 3
+
+        charges, eps, sig = nb_params.T
+        assert len(charges) == n_atoms
+
+        self.ligand_q0 = charges[ligand_indices]
+        if support_ligand_q:
+            self.supports_ligand_q = True
+            self.q_prefactors = coulomb_prefactors_on_traj(
+                traj, boxes, charges, ligand_indices, env_indices, beta=beta, cutoff=cutoff
+            )
+
+        self.ligand_lj_eps = eps[ligand_indices]
+        if support_ligand_lj_eps:
+            self.supports_ligand_lj_eps = True
+            self.lj_eps_prefactors = lj_eps_prefactors_on_traj(
+                traj, boxes, sig, eps, ligand_indices, env_indices, cutoff
+            )
+
+        self.ligand_lj_sig = sig[ligand_indices]
+        if support_ligand_lj_sig:
+            self.supports_ligand_lj_sig = True
+            self.lj_sig_prefactors = lj_prefactors_on_traj(traj, boxes, sig, eps, ligand_indices, env_indices, cutoff)
+
+    def compute_potential_energy(self, ligand_q, ligand_lj_eps, ligand_lj_sig):
+        q_changed = not np.allclose(ligand_q, self.ligand_q0)
+        lj_eps_changed = not np.allclose(ligand_lj_eps, self.ligand_lj_eps)
+        lj_sig_changed = not np.allclose(ligand_lj_sig, self.ligand_lj_sig)
+
+        Us = jnp.zeros(self.n_frames)
+        if q_changed:
+            if not self.supports_ligand_q:
+                raise RuntimeError("did not construct this object to support varying ligand q")
+            U_q = vmap(coulomb_interaction_group_energy, (0, 0))(ligand_q, self.q_prefactors)
+            Us += U_q
+
+        # lennard-jones: 2 code paths: costlier if LJ sigma is changing, cheaper if only LJ eps is changing
+        if lj_sig_changed:
+            if not self.supports_ligand_lj_sig:  # or (lj_eps_changed and not self.supports_ligand_lj_eps):
+                raise RuntimeError("did not construct this object to support varying ligand LJ sig")
+            U_lj = lj_interaction_group_energy(ligand_lj_sig, ligand_lj_eps, self.lj_sig_prefactors)
+            Us += U_lj
+
+        elif lj_eps_changed:
+            if not self.supports_ligand_lj_eps:
+                raise RuntimeError("did not construct this object to support varying ligand LJ eps")
+
+            raise NotImplementedError("this branch is incomplete...")
+            Us += U_lj
+        assert 0, "incomplete"
+
+        return Us
