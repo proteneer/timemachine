@@ -454,12 +454,8 @@ class ReweightableTrajectory:
         assert self.supports_ligand_lj_eps
         return jnp.sum(ligand_lj_eps[np.newaxis, :] * self.lj_eps_prefactors, axis=1)
 
-    def compute_delta_U(self, ligand_q, ligand_lj_eps, ligand_lj_sig):
-        """compute [U(x; params) - U(x; params0) for x in traj]"""
-
+    def compute_delta_U_q(self, ligand_q):
         q_changed = not np.allclose(ligand_q, self.ligand_q0)
-        lj_eps_changed = not np.allclose(ligand_lj_eps, self.ligand_lj_eps0)
-        lj_sig_changed = not np.allclose(ligand_lj_sig, self.ligand_lj_sig0)
 
         if q_changed:
             if not self.supports_ligand_q:
@@ -467,6 +463,12 @@ class ReweightableTrajectory:
             delta_U_q = self._compute_q(ligand_q) - self.U_q0
         else:
             delta_U_q = jnp.zeros(self.n_frames)
+
+        return delta_U_q
+
+    def compute_delta_U_lj(self, ligand_lj_eps, ligand_lj_sig):
+        lj_eps_changed = not np.allclose(ligand_lj_eps, self.ligand_lj_eps0)
+        lj_sig_changed = not np.allclose(ligand_lj_sig, self.ligand_lj_sig0)
 
         # lennard-jones: 2 code paths: costlier if LJ sigma is changing, cheaper if only LJ eps is changing
         if lj_sig_changed:
@@ -482,4 +484,7 @@ class ReweightableTrajectory:
         else:
             delta_U_lj = jnp.zeros(self.n_frames)
 
-        return delta_U_q + delta_U_lj
+        return delta_U_lj
+
+    def compute_delta_U(self, ligand_q, ligand_lj_eps, ligand_lj_sig):
+        return self.compute_delta_U_q(ligand_q) + self.compute_delta_U_lj(ligand_lj_eps, ligand_lj_sig)
