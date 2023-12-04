@@ -19,18 +19,20 @@ from timemachine.ff.handlers import openmm_deserializer
 from timemachine.md import builders
 from timemachine.potentials.jax_utils import get_all_pairs_indices, pairs_from_interaction_groups, pairwise_distances
 from timemachine.potentials.nonbonded import (
-    basis_expand_lj_atom,
-    basis_expand_lj_env,
     convert_exclusions_to_rescale_masks,
-    coulomb_interaction_group_energy,
-    coulomb_prefactors_on_traj,
     lennard_jones,
-    lj_interaction_group_energy,
-    lj_prefactors_on_traj,
     nonbonded,
     nonbonded_block,
     nonbonded_block_unsummed,
     nonbonded_on_specific_pairs,
+)
+from timemachine.potentials.prefactor import (
+    basis_expand_lj_atom,
+    basis_expand_lj_env,
+    coulomb_interaction_group_energy,
+    coulomb_prefactors_on_traj,
+    lj_interaction_group_energy,
+    lj_prefactors_on_traj,
 )
 
 Array = Any
