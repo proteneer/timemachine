@@ -2,6 +2,7 @@
 
 #include <array>
 #include <cuda_runtime.h>
+#include <stdexcept>
 #include <vector>
 
 namespace timemachine {
