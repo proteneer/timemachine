@@ -2,14 +2,14 @@
 where only a subset of parameters change.
 
 Easiest special cases:
-* Varying ligand charges (but holding environment parameters fixed) with damping-based ES model
-* Varying ligand LJ epsilons (holding ligand LJ sigmas fixed, and all environment LJ parameters fixed)
-    (regardless of environment size, can summarize each snapshot using [N_ligand] floats)
+* Varying ligand parameters with multiplicative combining rules
+    u(x_i, x_j, theta_i, theta_j) = theta_i * theta_j * f(distance(x_i, x_j))
+    * Varying ligand *charges* (but holding environment parameters fixed) for (damped) Coulomb interactions
+    * Varying ligand *LJ epsilons* (holding ligand LJ sigmas fixed, and all environment LJ parameters fixed)
 
 Slightly trickier special cases:
 * Varying ligand LJ (eps, sig) simultaneously
     * Requires a larger summary, see https://github.com/proteneer/timemachine/pull/931 for refs and details
-* Reaction field models not based on damping (see e.g. https://github.com/proteneer/timemachine/pull/969 )
 
 TODO:
 [ ] Reduce code repetition between LJ and charge
