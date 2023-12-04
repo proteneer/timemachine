@@ -1,4 +1,5 @@
-"""Utilities for efficiently computing interaction-group energies on stored trajectories,
+"""
+Utilities for efficiently computing interaction-group energies on stored trajectories,
 where only a subset of parameters change.
 
 Easiest special cases:
@@ -8,12 +9,17 @@ Easiest special cases:
     * Varying ligand *LJ epsilons* (holding ligand LJ sigmas fixed, and all environment LJ parameters fixed)
 
 Slightly trickier special cases:
-* Varying ligand LJ (eps, sig) simultaneously
+* Varying ligand *LJ sig* (or LJ eps, sig simultaneously)
     * Requires a larger summary, see https://github.com/proteneer/timemachine/pull/931 for refs and details
 
-TODO:
+TODO
+----
 [ ] Reduce code repetition between LJ and charge
-[ ] Develop optimizations for case where both ligand and protein params can vary simultaneously
+    * compute contribution from one atom -> map over multiple atoms in snapshot -> map over multiple snapshots in traj
+[ ] Develop optimizations for case where both ligand and env params can vary simultaneously
+    * To do this in a *lossless* way, probably need to store the positions of all ligand atoms and environment atoms
+        within distance cutoff of each other (e.g. using jax_utils.idxs_within_cutoff)
+    * Lossy compression schemes TBD
 """
 
 import jax.numpy as jnp
@@ -28,7 +34,7 @@ from timemachine.potentials.jax_utils import DEFAULT_CHUNK_SIZE, process_traj_in
 from timemachine.potentials.nonbonded import combining_rule_sigma, validate_interaction_group_idxs
 
 
-def coulomb_prefactor_on_atom(x_i, x_others, q_others, box=None, beta=2.0, cutoff=jnp.inf) -> float:
+def coulomb_prefactor_on_atom(x_i, x_others, q_others, box=None, beta=2.0, cutoff=1.2) -> float:
     """Precompute part of (sum_i q_i * q_j / d_ij * rxn_field(d_ij)) that does not depend on q_i
 
     Parameters
@@ -53,7 +59,7 @@ def coulomb_prefactor_on_atom(x_i, x_others, q_others, box=None, beta=2.0, cutof
     return prefactor_i
 
 
-def coulomb_prefactors_on_snapshot(x_ligand, x_env, q_env, box=None, beta=2.0, cutoff=np.inf) -> Array:
+def coulomb_prefactors_on_snapshot(x_ligand, x_env, q_env, box=None, beta=2.0, cutoff=1.2) -> Array:
     """Map coulomb_prefactor_on_atom over atoms in x_ligand
 
     Parameters
@@ -78,7 +84,7 @@ def coulomb_prefactors_on_snapshot(x_ligand, x_env, q_env, box=None, beta=2.0, c
 
 
 def coulomb_prefactors_on_traj(
-    traj, boxes, charges, ligand_indices, env_indices, beta=2.0, cutoff=jnp.inf, chunk_size=DEFAULT_CHUNK_SIZE
+    traj, boxes, charges, ligand_indices, env_indices, beta=2.0, cutoff=1.2, chunk_size=DEFAULT_CHUNK_SIZE
 ):
     """Map coulomb_prefactors_on_snapshot over snapshots in a trajectory
 
@@ -135,7 +141,7 @@ def coulomb_interaction_group_energy(q_ligand: Array, q_prefactors: Array) -> fl
 # (2) simultaneously varying LJ eps and sig parameters (summarized using 20 floats per ligand atom)
 
 
-def lj_eps_prefactor_on_atom(x_i, x_others, sig_i, sig_others, eps_others, box=None, cutoff=jnp.inf) -> float:
+def lj_eps_prefactor_on_atom(x_i, x_others, sig_i, sig_others, eps_others, box=None, cutoff=1.2) -> float:
     """Precompute part of (sum_j LennardJones(x_i, x_j; (sig_i, eps_i), (sig_j, eps_j))) that does not depend on eps_i
 
     Parameters
@@ -168,7 +174,7 @@ def lj_eps_prefactor_on_atom(x_i, x_others, sig_i, sig_others, eps_others, box=N
     return prefactor_i
 
 
-def lj_eps_prefactors_on_snapshot(x_ligand, x_env, sig_ligand, sig_env, eps_env, box=None, cutoff=jnp.inf):
+def lj_eps_prefactors_on_snapshot(x_ligand, x_env, sig_ligand, sig_env, eps_env, box=None, cutoff=1.2):
     def f_atom(x_i, sig_i):
         return lj_eps_prefactor_on_atom(x_i, x_env, sig_i, sig_env, eps_env, box, cutoff)
 
@@ -176,7 +182,7 @@ def lj_eps_prefactors_on_snapshot(x_ligand, x_env, sig_ligand, sig_env, eps_env,
 
 
 def lj_eps_prefactors_on_traj(
-    traj, boxes, sigmas, epsilons, ligand_indices, env_indices, cutoff=jnp.inf, chunk_size=DEFAULT_CHUNK_SIZE
+    traj, boxes, sigmas, epsilons, ligand_indices, env_indices, cutoff=1.2, chunk_size=DEFAULT_CHUNK_SIZE
 ):
     validate_interaction_group_idxs(len(traj[0]), ligand_indices, env_indices)
 
@@ -286,7 +292,7 @@ def basis_expand_lj_atom(sig: float, eps: float) -> Array:
     return eps * (sig**exponents)
 
 
-def lj_prefactors_on_atom(x, x_others, sig_others, eps_others, box=None, cutoff=jnp.inf):
+def lj_prefactors_on_atom(x, x_others, sig_others, eps_others, box=None, cutoff=1.2):
     """Precompute part of
 
         sum_j LennardJones(x_i, x_j; (sig_i, eps_i), (sig_j, eps_j))
@@ -317,7 +323,7 @@ def lj_prefactors_on_atom(x, x_others, sig_others, eps_others, box=None, cutoff=
     return prefactors
 
 
-def lj_prefactors_on_snapshot(x_ligand, x_env, sig_env, eps_env, box=None, cutoff=jnp.inf):
+def lj_prefactors_on_snapshot(x_ligand, x_env, sig_env, eps_env, box=None, cutoff=1.2):
     """Map lj_prefactor_on_atom over atoms in x_ligand
 
     Parameters
@@ -342,7 +348,7 @@ def lj_prefactors_on_snapshot(x_ligand, x_env, sig_env, eps_env, box=None, cutof
 
 
 def lj_prefactors_on_traj(
-    traj, boxes, sigmas, epsilons, ligand_indices, env_indices, cutoff=jnp.inf, chunk_size=DEFAULT_CHUNK_SIZE
+    traj, boxes, sigmas, epsilons, ligand_indices, env_indices, cutoff=1.2, chunk_size=DEFAULT_CHUNK_SIZE
 ):
     """Map lj_prefactors_on_snapshot over snapshots in a trajectory
 
@@ -408,7 +414,13 @@ class ReweightableTrajectory:
         support_ligand_lj_eps=True,
         support_ligand_lj_sig=False,
     ):
-        """"""
+        """Support fast computation of delta_U(params) = [U(x; params) - U(x; params0) for x in traj]
+            in easy-to-handle special cases. (Where ligand charge/eps/sig parameters vary, but env params are fixed.)
+
+        Notes
+        -----
+
+        """
         n_frames, n_atoms, dim = traj.shape
         self.n_frames = n_frames
 
@@ -435,9 +447,10 @@ class ReweightableTrajectory:
 
         self.ligand_lj_sig0 = sig[ligand_indices]
         if support_ligand_lj_sig:
+            print("Warning: support_ligand_lj_sig=True requires ~20x memory of support_ligand_lj_eps=True")
             self.supports_ligand_lj_sig = True
             self.lj_sig_prefactors = lj_prefactors_on_traj(traj, boxes, sig, eps, ligand_indices, env_indices, cutoff)
-            self.U_lj0 = self._compute_lj(self.ligand_lj_eps, self.ligand_lj_sig0)
+            self.U_lj0 = self._compute_lj(self.ligand_lj_eps0, self.ligand_lj_sig0)
 
     @jit
     def _compute_q(self, ligand_q):
