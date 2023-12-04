@@ -459,8 +459,7 @@ class ReweightableTrajectory:
             if not self.supports_ligand_lj_eps:
                 raise RuntimeError("did not construct this object to support varying ligand LJ eps")
 
-            raise NotImplementedError("this branch is incomplete...")
+            U_lj = jnp.sum(ligand_lj_eps[np.newaxis, :] * self.lj_eps_prefactors, axis=1)
             Us += U_lj
-        assert 0, "incomplete"
 
         return Us
