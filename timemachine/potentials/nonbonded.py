@@ -562,6 +562,93 @@ def coulomb_interaction_group_energy(q_ligand: Array, q_prefactors: Array) -> fl
 
 
 # utilities for efficiently recomputing energy as a function of ligand LJ parameters
+
+# note: two cases:
+# (1) only varying LJ eps parameters (can summarize using 1 float per ligand atom)
+# (2) simultaneously varying LJ eps and sig parameters (summarized using 20 floats per ligand atom)
+
+
+# case (1) : only varying ligand LJ eps parameters
+def lj_eps_prefactor_on_atom(x_i, x_others, sig_i, sig_others, eps_others, box=None, cutoff=1.2) -> float:
+    """Precompute part of (sum_j LennardJones(x_i, x_j; (sig_i, eps_i), (sig_j, eps_j))) that does not depend on eps_i
+
+    Parameters
+    ----------
+    x_i : [D] array
+        position of focus atom (in ligand)
+    x_others: [N_env, D] array
+        positions of all other atoms (in environment)
+    sig_i: float
+        LJ_sig of focus atom
+    sig_others: [N_env] array
+        LJ_sig of all other atoms (in environment)
+    eps_others: [N_env] array
+        LJ_eps of all other atoms (in environment)
+    box: optional diagonal [D, D] array
+    cutoff: float
+
+    Returns
+    -------
+    prefactor_i : float
+        sum_j 4 * sqrt(eps_j) * ((sig_ij/r_ij)**12 - (sig_ij/r_ij)**6)
+    """
+    d_ij = jax_utils.distance_from_one_to_others(x_i, x_others, box, cutoff)
+
+    sig_ij = combining_rule_sigma(sig_i, sig_others)
+    sig6 = (sig_ij / d_ij) ** 6
+    sig12 = sig6**2
+    # note: eps_others rather than sqrt(eps_others) -- see `combining_rule_epsilon`
+    prefactor_i = np.sum(4 * eps_others * (sig12 - sig6))
+    return prefactor_i
+
+
+def lj_eps_prefactors_on_snapshot(x_ligand, x_env, sig_ligand, sig_env, eps_env, box=None, cutoff=1.2):
+    """apply lj_eps_prefactor_on_atom to all atoms in x_ligand"""
+
+    def f_atom(x_i, sig_i):
+        return lj_eps_prefactor_on_atom(x_i, x_env, sig_i, sig_env, eps_env, box, cutoff)
+
+    lj_eps_prefactors = vmap(f_atom, (0, 0))(x_ligand, sig_ligand)
+
+    return lj_eps_prefactors
+
+
+def lj_eps_prefactors_on_traj(
+    traj, boxes, sigmas, epsilons, ligand_indices, env_indices, cutoff=1.2, chunk_size=DEFAULT_CHUNK_SIZE
+):
+    """apply lj_eps_prefactors_on_snapshot to all snapshots in traj"""
+    validate_interaction_group_idxs(len(traj[0]), ligand_indices, env_indices)
+
+    eps_env = epsilons[env_indices]
+    sig_env = sigmas[env_indices]
+
+    sig_ligand = sigmas[ligand_indices]
+
+    def f_snapshot(coords, box):
+        x_ligand = coords[ligand_indices]
+        x_env = coords[env_indices]
+        return jit(lj_eps_prefactors_on_snapshot)(x_ligand, x_env, sig_ligand, sig_env, eps_env, box, cutoff)
+
+    return process_traj_in_chunks(f_snapshot, traj, boxes, chunk_size)
+
+
+def lj_eps_interaction_group_energy(eps_ligand, lj_eps_prefactors):
+    """Assuming lj_eps_prefactors = lj_eps_prefactors_on_snapshot(x_ligand, ...),
+    ligand-environment interaction group energy as fxn of eps_ligand is a dot product.
+
+    Parameters
+    ----------
+    eps_ligand: [N_lig] arrays
+    lj_eps_prefactors: [N_lig] array
+
+    Returns
+    -------
+    energy: float
+    """
+    return jnp.sum(eps_ligand * lj_eps_prefactors)
+
+
+# case (2) -- (sig, eps) vary simultaneously
 #   (where (x_ligand, x_env, sig_env, eps_env) are all constant, but (sig_ligand, eps_ligand) are variable)
 #   using [Naden, Shirts]'s linear basis-function approach
 #   TODO: avoid repetition between this and coulomb
