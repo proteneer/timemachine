@@ -33,7 +33,7 @@ def test_bd_exchange_validation(precision):
 
     rng = np.random.default_rng(2023)
     proposals_per_move = 1
-    params = rng.random(size=(10, 4))
+    params = rng.random(size=(N, 4))
 
     # Test group indices verification
     group_idxs = []
@@ -63,6 +63,35 @@ def test_bd_exchange_validation(precision):
         klass(N, group_idxs, params, DEFAULT_TEMP, beta, cutoff, seed, proposals_per_move, 0)
 
     klass(N, group_idxs, params, DEFAULT_TEMP, beta, cutoff, seed, proposals_per_move, 1)
+
+
+@pytest.mark.memcheck
+@pytest.mark.parametrize("precision", [np.float64, np.float32])
+def test_bd_exchange_get_set_params(precision):
+    N = 10
+    beta = 1.2
+    cutoff = 1.2
+    seed = 2023
+    klass = custom_ops.BDExchangeMove_f32
+    if precision == np.float64:
+        klass = custom_ops.BDExchangeMove_f64
+
+    rng = np.random.default_rng(2023)
+    proposals_per_move = 1
+    params = rng.random(size=(N, 4))
+
+    group_idxs = [[0], [1]]
+
+    exchange_move = klass(N, group_idxs, params, DEFAULT_TEMP, beta, cutoff, seed, proposals_per_move, 1)
+
+    np.testing.assert_array_equal(params, exchange_move.get_params())
+
+    params = rng.random(size=(N, 4))
+    exchange_move.set_params(params)
+    np.testing.assert_array_equal(params, exchange_move.get_params())
+
+    with pytest.raises(RuntimeError, match="number of params don't match"):
+        exchange_move.set_params(rng.random(size=(N, 3)))
 
 
 @pytest.mark.memcheck

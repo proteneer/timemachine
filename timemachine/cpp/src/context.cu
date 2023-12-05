@@ -365,6 +365,8 @@ std::shared_ptr<Integrator> Context::get_integrator() const { return intg_; }
 
 std::vector<std::shared_ptr<BoundPotential>> Context::get_potentials() const { return bps_; }
 
+std::vector<std::shared_ptr<Mover>> Context::get_movers() const { return movers_; }
+
 std::shared_ptr<MonteCarloBarostat<float>> Context::get_barostat() const {
     for (auto mover : movers_) {
         if (is_barostat(mover)) {
