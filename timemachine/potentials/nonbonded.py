@@ -569,7 +569,7 @@ def coulomb_interaction_group_energy(q_ligand: Array, q_prefactors: Array) -> fl
 
 
 # case (1) : only varying ligand LJ eps parameters
-def lj_eps_prefactor_on_atom(x_i, x_others, sig_i, sig_others, eps_others, box=None, cutoff=1.2) -> float:
+def lj_eps_prefactor_on_atom(x_i, x_others, sig_i, sig_others, eps_others, box=None, cutoff=np.inf) -> float:
     """Precompute part of (sum_j LennardJones(x_i, x_j; (sig_i, eps_i), (sig_j, eps_j))) that does not depend on eps_i
 
     Parameters
@@ -602,7 +602,7 @@ def lj_eps_prefactor_on_atom(x_i, x_others, sig_i, sig_others, eps_others, box=N
     return prefactor_i
 
 
-def lj_eps_prefactors_on_snapshot(x_ligand, x_env, sig_ligand, sig_env, eps_env, box=None, cutoff=1.2):
+def lj_eps_prefactors_on_snapshot(x_ligand, x_env, sig_ligand, sig_env, eps_env, box=None, cutoff=np.inf):
     """apply lj_eps_prefactor_on_atom to all atoms in x_ligand"""
 
     def f_atom(x_i, sig_i):
@@ -614,7 +614,7 @@ def lj_eps_prefactors_on_snapshot(x_ligand, x_env, sig_ligand, sig_env, eps_env,
 
 
 def lj_eps_prefactors_on_traj(
-    traj, boxes, sigmas, epsilons, ligand_indices, env_indices, cutoff=1.2, chunk_size=DEFAULT_CHUNK_SIZE
+    traj, boxes, sigmas, epsilons, ligand_indices, env_indices, cutoff=np.inf, chunk_size=DEFAULT_CHUNK_SIZE
 ):
     """apply lj_eps_prefactors_on_snapshot to all snapshots in traj"""
     validate_interaction_group_idxs(len(traj[0]), ligand_indices, env_indices)
