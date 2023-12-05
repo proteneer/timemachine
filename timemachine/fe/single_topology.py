@@ -1011,8 +1011,8 @@ class SingleTopology(AtomMapMixin):
 
             n_pairs = len(pair_idxs_and_params)
 
-            is_excluded_src = jnp.all(src_qlj == 0, axis=1, keepdims=True)
-            is_excluded_dst = jnp.all(dst_qlj == 0, axis=1, keepdims=True)
+            is_excluded_src = jnp.all(src_qlj == 0.0, axis=1, keepdims=True)
+            is_excluded_dst = jnp.all(dst_qlj == 0.0, axis=1, keepdims=True)
 
             pair_params = jnp.where(
                 is_excluded_src,
