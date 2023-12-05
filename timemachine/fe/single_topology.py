@@ -970,9 +970,12 @@ class SingleTopology(AtomMapMixin):
             dst_bond.params,
         )
         bond_idxs = np.array([x for x, _, _ in bond_idxs_and_params])
-        src_params = jnp.array([x for _, x, _ in bond_idxs_and_params])
-        dst_params = jnp.array([x for _, _, x in bond_idxs_and_params])
-        bond_params = jax.vmap(interpolate_fn, (0, 0, None))(src_params, dst_params, lamb)
+        if bond_idxs_and_params:
+            src_params = jnp.array([x for _, x, _ in bond_idxs_and_params])
+            dst_params = jnp.array([x for _, _, x in bond_idxs_and_params])
+            bond_params = jax.vmap(interpolate_fn, (0, 0, None))(src_params, dst_params, lamb)
+        else:
+            bond_params = jnp.array([])
 
         r = src_cls_bond(np.array(bond_idxs)).bind(jnp.array(bond_params))
         return cast(BoundPotential[_Bonded], r)  # unclear why cast is needed for mypy
@@ -998,32 +1001,36 @@ class SingleTopology(AtomMapMixin):
         )
 
         pair_idxs = np.array([x for x, _, _ in pair_idxs_and_params])
-        src_params = jnp.array([x for _, x, _ in pair_idxs_and_params])
-        dst_params = jnp.array([x for _, _, x in pair_idxs_and_params])
 
-        src_qlj, src_w = src_params[:, :3], src_params[:, 3]
-        dst_qlj, dst_w = dst_params[:, :3], dst_params[:, 3]
+        if pair_idxs_and_params:
+            src_params = jnp.array([x for _, x, _ in pair_idxs_and_params])
+            dst_params = jnp.array([x for _, _, x in pair_idxs_and_params])
 
-        n_pairs = len(pair_idxs_and_params)
+            src_qlj, src_w = src_params[:, :3], src_params[:, 3]
+            dst_qlj, dst_w = dst_params[:, :3], dst_params[:, 3]
 
-        is_excluded_src = jnp.all(src_qlj == 0, axis=1, keepdims=True)
-        is_excluded_dst = jnp.all(dst_qlj == 0, axis=1, keepdims=True)
+            n_pairs = len(pair_idxs_and_params)
 
-        pair_params = jnp.where(
-            is_excluded_src,
-            jnp.concatenate((dst_qlj, jnp.full((n_pairs, 1), interpolate_w_coord(cutoff, 0, lamb))), axis=1),
-            jnp.where(
-                is_excluded_dst,
-                jnp.concatenate((src_qlj, jnp.full((n_pairs, 1), interpolate_w_coord(0, cutoff, lamb))), axis=1),
-                jnp.concatenate(
-                    (
-                        interpolate_qlj_fn(src_qlj, dst_qlj, lamb),
-                        jax.vmap(interpolate_w_coord, (0, 0, None))(src_w, dst_w, lamb).reshape(-1, 1),
+            is_excluded_src = jnp.all(src_qlj == 0, axis=1, keepdims=True)
+            is_excluded_dst = jnp.all(dst_qlj == 0, axis=1, keepdims=True)
+
+            pair_params = jnp.where(
+                is_excluded_src,
+                jnp.concatenate((dst_qlj, jnp.full((n_pairs, 1), interpolate_w_coord(cutoff, 0, lamb))), axis=1),
+                jnp.where(
+                    is_excluded_dst,
+                    jnp.concatenate((src_qlj, jnp.full((n_pairs, 1), interpolate_w_coord(0, cutoff, lamb))), axis=1),
+                    jnp.concatenate(
+                        (
+                            interpolate_qlj_fn(src_qlj, dst_qlj, lamb),
+                            jax.vmap(interpolate_w_coord, (0, 0, None))(src_w, dst_w, lamb).reshape(-1, 1),
+                        ),
+                        axis=1,
                     ),
-                    axis=1,
                 ),
-            ),
-        )
+            )
+        else:
+            pair_params = jnp.array([])
 
         return NonbondedPairListPrecomputed(
             np.array(pair_idxs), src_nonbonded.potential.beta, src_nonbonded.potential.cutoff
