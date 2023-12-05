@@ -590,7 +590,7 @@ def lj_eps_prefactor_on_atom(x_i, x_others, sig_i, sig_others, eps_others, box=N
     Returns
     -------
     prefactor_i : float
-        sum_j 4 * sqrt(eps_j) * ((sig_ij/r_ij)**12 - (sig_ij/r_ij)**6)
+        sum_j 4 * eps_j * ((sig_ij/r_ij)**12 - (sig_ij/r_ij)**6)
     """
     d_ij = jax_utils.distance_from_one_to_others(x_i, x_others, box, cutoff)
 
