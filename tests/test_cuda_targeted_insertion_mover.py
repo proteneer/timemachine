@@ -698,7 +698,7 @@ def test_moves_with_three_waters(radius, steps_per_move, moves, precision, rtol,
 @pytest.mark.parametrize("radius", [2.0])
 @pytest.mark.parametrize(
     "steps_per_move,moves",
-    [(1, 12500), (12500, 12500)],
+    [pytest.param(1, 12500, marks=pytest.mark.nightly(reason="slow")), (12500, 12500)],
 )
 @pytest.mark.parametrize(
     "precision,rtol,atol",
