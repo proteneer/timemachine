@@ -286,6 +286,28 @@ template <typename RealType> size_t BDExchangeMove<RealType>::n_accepted() const
     return h_accepted;
 }
 
+template <typename RealType> std::vector<double> BDExchangeMove<RealType>::get_params() {
+    std::vector<double> h_params(d_params_.length);
+    d_params_.copy_to(&h_params[0]);
+    return h_params;
+};
+
+template <typename RealType> void BDExchangeMove<RealType>::set_params(const std::vector<double> &params) {
+    cudaStream_t stream = static_cast<cudaStream_t>(0);
+    DeviceBuffer<double> d_params(params.size());
+    d_params.copy_from(&params[0]);
+    this->set_params_device(params.size(), d_params.data, stream);
+    gpuErrchk(cudaStreamSynchronize(stream));
+};
+
+template <typename RealType>
+void BDExchangeMove<RealType>::set_params_device(const int size, const double *d_p, const cudaStream_t stream) {
+    if (d_params_.length != size) {
+        throw std::runtime_error("number of params don't match");
+    }
+    gpuErrchk(cudaMemcpyAsync(d_params_.data, d_p, d_params_.size(), cudaMemcpyDeviceToDevice, stream));
+};
+
 template class BDExchangeMove<float>;
 template class BDExchangeMove<double>;
 

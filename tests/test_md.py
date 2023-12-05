@@ -494,6 +494,44 @@ def test_multiple_steps_local_consistency(freeze_reference):
     np.testing.assert_array_equal(summed_pot_boxes, boxes)
 
 
+def test_get_movers():
+    mol, _ = get_biphenyl()
+    ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
+
+    pressure = constants.DEFAULT_PRESSURE
+    temperature = constants.DEFAULT_TEMP
+    dt = 1.5e-3
+    friction = 0.0
+    seed = 2022
+
+    unbound_potentials, sys_params, masses, coords, box = get_solvent_phase_system(mol, ff, 0.0, minimize_energy=True)
+    v0 = np.zeros_like(coords)
+    bps = []
+    for p, bp in zip(sys_params, unbound_potentials):
+        bps.append(bp.bind(p).to_gpu(np.float32).bound_impl)
+
+    reference_values = []
+    for bp in bps:
+        reference_values.append(bp.execute(coords, box))
+
+    intg = LangevinIntegrator(temperature, dt, friction, masses, seed)
+
+    intg_impl = intg.impl()
+
+    group_idxs = get_group_indices(get_bond_list(unbound_potentials[0]), len(masses))
+
+    barostat = MonteCarloBarostat(coords.shape[0], pressure, temperature, group_idxs, 1, seed)
+    barostat_impl = barostat.impl(bps)
+
+    ctxt = custom_ops.Context(coords, v0, box, intg_impl, bps, movers=[barostat_impl])
+
+    assert barostat_impl == ctxt.get_barostat()
+
+    movers = ctxt.get_movers()
+    assert len(movers) == 1
+    assert movers[0] == barostat_impl
+
+
 @pytest.mark.parametrize("freeze_reference", [True, False])
 def test_multiple_steps_local_entire_system(freeze_reference):
     """Verify that running multiple_steps_local is valid even when consuming the entire system, IE radius ~= inf.
