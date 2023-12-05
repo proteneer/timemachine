@@ -166,7 +166,7 @@ def test_tibd_exchange_validation(precision):
 
     rng = np.random.default_rng(2023)
     proposals_per_move = 1
-    params = rng.random(size=(10, 4))
+    params = rng.random(size=(N, 4))
 
     ligand_idxs = np.array([0])
     radius = 1.0
@@ -210,6 +210,39 @@ def test_tibd_exchange_validation(precision):
     mover = klass(N, ligand_idxs, group_idxs, params, DEFAULT_TEMP, beta, cutoff, radius, seed, proposals_per_move, 1)
     with pytest.raises(RuntimeError, match="volume of inner radius greater than box volume"):
         mover.move(coords, box)
+
+
+@pytest.mark.memcheck
+@pytest.mark.parametrize("precision", [np.float64, np.float32])
+def test_tibd_exchange_get_set_params(precision):
+    N = 10
+    beta = 1.2
+    cutoff = 1.2
+    seed = 2023
+    klass = custom_ops.TIBDExchangeMove_f32
+    if precision == np.float64:
+        klass = custom_ops.TIBDExchangeMove_f64
+
+    rng = np.random.default_rng(2023)
+    proposals_per_move = 1
+    params = rng.random(size=(N, 4))
+
+    ligand_idxs = np.array([0])
+    radius = 1.0
+    group_idxs = [[0]]
+
+    exchange_move = klass(
+        N, ligand_idxs, group_idxs, params, DEFAULT_TEMP, beta, cutoff, radius, seed, proposals_per_move, 1
+    )
+
+    np.testing.assert_array_equal(params, exchange_move.get_params())
+
+    params = rng.random(size=(N, 4))
+    exchange_move.set_params(params)
+    np.testing.assert_array_equal(params, exchange_move.get_params())
+
+    with pytest.raises(RuntimeError, match="number of params don't match"):
+        exchange_move.set_params(rng.random(size=(N, 3)))
 
 
 @pytest.fixture(scope="module")

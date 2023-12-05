@@ -25,6 +25,8 @@ from timemachine.potentials.nonbonded import (
     coulomb_interaction_group_energy,
     coulomb_prefactors_on_traj,
     lennard_jones,
+    lj_eps_interaction_group_energy,
+    lj_eps_prefactors_on_traj,
     lj_interaction_group_energy,
     lj_prefactors_on_traj,
     nonbonded,
@@ -473,11 +475,18 @@ def test_precomputation():
     # test version: with precomputation
     charges, sigmas, epsilons, _ = params.T
     lj_prefactors = lj_prefactors_on_traj(traj, boxes, sigmas, epsilons, ligand_idx, env_idx, cutoff)
+    lj_eps_prefactors = lj_eps_prefactors_on_traj(traj, boxes, sigmas, epsilons, ligand_idx, env_idx, cutoff)
     q_prefactors = coulomb_prefactors_on_traj(traj, boxes, charges, ligand_idx, env_idx, beta, cutoff)
 
     @jit
     def u_batch_test(sig_ligand, eps_ligand, q_ligand):
         vdw = vmap(lj_interaction_group_energy, (None, None, 0))(sig_ligand, eps_ligand, lj_prefactors)
+        es = coulomb_interaction_group_energy(q_ligand, q_prefactors)
+        return vdw + es
+
+    @jit
+    def u_batch_test_eps(eps_ligand, q_ligand):
+        vdw = vmap(lj_eps_interaction_group_energy, (None, 0))(eps_ligand, lj_eps_prefactors)
         es = coulomb_interaction_group_energy(q_ligand, q_prefactors)
         return vdw + es
 
@@ -498,24 +507,51 @@ def test_precomputation():
 
         return reweight
 
+    def make_reweighter_eps(u_batch_fxn_eps):
+        u_0 = u_batch_fxn_eps(eps_ligand_0, q_ligand_0)
+
+        def reweight(eps_ligand, q_ligand):
+            delta_us = (u_batch_fxn_eps(eps_ligand, q_ligand) - u_0) / kBT
+            return one_sided_exp(delta_us)
+
+        return reweight
+
     reweight_ref = jit(make_reweighter(u_batch_ref))
     reweight_test = jit(make_reweighter(u_batch_test))
+    reweight_test_eps = jit(make_reweighter_eps(u_batch_test_eps))
 
-    for _ in range(5):
+    for i in range(10):
         # abs() so sig, eps will be non-negative
-        sig_ligand = jnp.abs(sig_ligand_0 + (0.2 * np.random.randn(n_ligand) - 0.1))
         eps_ligand = jnp.abs(eps_ligand_0 + (0.2 * np.random.rand(n_ligand) - 0.1))
         q_ligand = q_ligand_0 + np.random.randn(n_ligand)
 
+        test_eps_path = i % 2 == 0
+        test_full_path = not test_eps_path
+
+        if test_full_path:
+            # test full path: (sig, eps) simultaneously
+            sig_ligand = jnp.abs(sig_ligand_0 + (0.2 * np.random.randn(n_ligand) - 0.1))
+            actual = u_batch_test(sig_ligand, eps_ligand, q_ligand)
+            # test that reweighting estimates and gradients are ~equal to reference
+            v_test, gs_test = value_and_grad(reweight_test, argnums=(0, 1, 2))(sig_ligand, eps_ligand, q_ligand)
+
+        else:
+            # test eps-only path
+            sig_ligand = jnp.array(sig_ligand_0)
+            actual = u_batch_test_eps(eps_ligand, q_ligand)
+            # test that reweighting estimates and gradients are ~equal to reference
+            v_test, gs_test = value_and_grad(reweight_test_eps, argnums=(0, 1))(eps_ligand, q_ligand)
+
         expected = u_batch_ref(sig_ligand, eps_ligand, q_ligand)
-        actual = u_batch_test(sig_ligand, eps_ligand, q_ligand)
 
         # test array of energies is ~equal to reference
         np.testing.assert_allclose(actual, expected)
 
         # test that reweighting estimates and gradients are ~equal to reference
-        v_ref, gs_ref = value_and_grad(reweight_ref, argnums=(0, 1, 2))(sig_ligand, eps_ligand, q_ligand)
-        v_test, gs_test = value_and_grad(reweight_test, argnums=(0, 1, 2))(sig_ligand, eps_ligand, q_ligand)
-
+        if test_full_path:
+            v_ref, gs_ref = value_and_grad(reweight_ref, argnums=(0, 1, 2))(sig_ligand, eps_ligand, q_ligand)
+        else:
+            # skip df/dsig_ligand
+            v_ref, gs_ref = value_and_grad(reweight_ref, argnums=(1, 2))(sig_ligand, eps_ligand, q_ligand)
         np.testing.assert_allclose(v_ref, v_test)
         np.testing.assert_allclose(gs_ref, gs_test)
