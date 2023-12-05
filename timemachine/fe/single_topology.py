@@ -969,7 +969,7 @@ class SingleTopology(AtomMapMixin):
             dst_bond.potential.idxs,
             dst_bond.params,
         )
-        bond_idxs = np.array([x for x, _, _ in bond_idxs_and_params])
+        bond_idxs = np.array([x for x, _, _ in bond_idxs_and_params], dtype=np.int32)
         if bond_idxs_and_params:
             src_params = jnp.array([x for _, x, _ in bond_idxs_and_params])
             dst_params = jnp.array([x for _, _, x in bond_idxs_and_params])
@@ -977,7 +977,7 @@ class SingleTopology(AtomMapMixin):
         else:
             bond_params = jnp.array([])
 
-        r = src_cls_bond(np.array(bond_idxs)).bind(jnp.array(bond_params))
+        r = src_cls_bond(bond_idxs).bind(bond_params)
         return cast(BoundPotential[_Bonded], r)  # unclear why cast is needed for mypy
 
     def _setup_intermediate_nonbonded_term(
@@ -1000,7 +1000,7 @@ class SingleTopology(AtomMapMixin):
             dst_nonbonded.params,
         )
 
-        pair_idxs = np.array([x for x, _, _ in pair_idxs_and_params])
+        pair_idxs = np.array([x for x, _, _ in pair_idxs_and_params], dtype=np.int32)
 
         if pair_idxs_and_params:
             src_params = jnp.array([x for _, x, _ in pair_idxs_and_params])
@@ -1033,8 +1033,8 @@ class SingleTopology(AtomMapMixin):
             pair_params = jnp.array([])
 
         return NonbondedPairListPrecomputed(
-            np.array(pair_idxs), src_nonbonded.potential.beta, src_nonbonded.potential.cutoff
-        ).bind(jnp.array(pair_params))
+            pair_idxs, src_nonbonded.potential.beta, src_nonbonded.potential.cutoff
+        ).bind(pair_params)
 
     def _setup_intermediate_chiral_bond_term(
         self,

@@ -515,7 +515,7 @@ def test_setup_intermediate_nonbonded_term(arbitrary_transformation):
                 new_params = (*src_qlj, interpolate_w_coord(0, cutoff, lamb))
             else:
                 new_params = (
-                    *interpolate_qlj_fn(src_qlj, dst_qlj, lamb),
+                    *interpolate_qlj_fn(jnp.array(src_qlj), jnp.array(dst_qlj), lamb),
                     interpolate_w_coord(src_w, dst_w, lamb),
                 )
 
