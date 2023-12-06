@@ -1009,23 +1009,21 @@ class SingleTopology(AtomMapMixin):
             src_qlj, src_w = src_params[:, :3], src_params[:, 3]
             dst_qlj, dst_w = dst_params[:, :3], dst_params[:, 3]
 
-            n_pairs = len(pair_idxs_and_params)
-
             is_excluded_src = jnp.all(src_qlj == 0.0, axis=1, keepdims=True)
             is_excluded_dst = jnp.all(dst_qlj == 0.0, axis=1, keepdims=True)
 
             # parameters for pairs that do not interact in the src state
-            w = jnp.full((n_pairs, 1), interpolate_w_coord(cutoff, 0, lamb))
-            pair_params_excluded_src = jnp.concatenate((dst_qlj, w), axis=1)
+            w = interpolate_w_coord(cutoff, dst_w, lamb)
+            pair_params_excluded_src = jnp.concatenate((dst_qlj, w[:, None]), axis=1)
 
             # parameters for pairs that do not interact in the dst state
-            w = jnp.full((n_pairs, 1), interpolate_w_coord(0, cutoff, lamb))
-            pair_params_excluded_dst = jnp.concatenate((src_qlj, w), axis=1)
+            w = interpolate_w_coord(src_w, cutoff, lamb)
+            pair_params_excluded_dst = jnp.concatenate((src_qlj, w[:, None]), axis=1)
 
             # parameters for pairs that interact in both src and dst states
-            w = jax.vmap(interpolate_w_coord, (0, 0, None))(src_w, dst_w, lamb)[:, None]
+            w = jax.vmap(interpolate_w_coord, (0, 0, None))(src_w, dst_w, lamb)
             qlj = interpolate_qlj_fn(src_qlj, dst_qlj, lamb)
-            pair_params_not_excluded = jnp.concatenate((qlj, w), axis=1)
+            pair_params_not_excluded = jnp.concatenate((qlj, w[:, None]), axis=1)
 
             pair_params = jnp.where(
                 is_excluded_src,
