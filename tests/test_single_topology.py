@@ -1,4 +1,5 @@
 import functools
+import time
 from importlib import resources
 
 import hypothesis.strategies as st
@@ -17,7 +18,12 @@ from timemachine.constants import DEFAULT_ATOM_MAPPING_KWARGS
 from timemachine.fe import atom_mapping, single_topology
 from timemachine.fe.dummy import MultipleAnchorWarning
 from timemachine.fe.free_energy import HostConfig
-from timemachine.fe.interpolate import linear_interpolation, log_linear_interpolation
+from timemachine.fe.interpolate import (
+    align_harmonic_bond_idxs_and_params,
+    align_nonbonded_idxs_and_params,
+    linear_interpolation,
+    log_linear_interpolation,
+)
 from timemachine.fe.single_topology import (
     ChargePertubationError,
     CoreBondChangeWarning,
@@ -25,6 +31,7 @@ from timemachine.fe.single_topology import (
     canonicalize_improper_idxs,
     cyclic_difference,
     handle_ring_opening_closing,
+    interpolate_harmonic_bond_params,
     interpolate_harmonic_force_constant,
     interpolate_w_coord,
     setup_dummy_interactions_from_ff,
@@ -399,24 +406,26 @@ def test_combine_masses_hmr():
     np.testing.assert_almost_equal(test_masses, ref_masses)
 
 
+@pytest.fixture()
+def arbitrary_transformation():
+    # NOTE: test system can probably be simplified; we just need
+    # any SingleTopology and conformation
+    with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
+        mols = {get_mol_name(mol): mol for mol in read_sdf(path_to_ligand)}
+
+    mol_a = mols["206"]
+    mol_b = mols["57"]
+
+    core = _get_core_by_mcs(mol_a, mol_b)
+    ff = Forcefield.load_default()
+    st = SingleTopology(mol_a, mol_b, core, ff)
+    conf = st.combine_confs(get_romol_conf(mol_a), get_romol_conf(mol_b))
+    return st, conf
+
+
 @pytest.mark.nocuda
-def test_jax_transform_intermediate_potential():
-    def setup_arbitary_transformation():
-        # NOTE: test system can probably be simplified; we just need
-        # any SingleTopology and conformation
-        with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
-            mols = {get_mol_name(mol): mol for mol in read_sdf(path_to_ligand)}
-
-        mol_a = mols["206"]
-        mol_b = mols["57"]
-
-        core = _get_core_by_mcs(mol_a, mol_b)
-        ff = Forcefield.load_default()
-        st = SingleTopology(mol_a, mol_b, core, ff)
-        conf = st.combine_confs(get_romol_conf(mol_a), get_romol_conf(mol_b))
-        return st, conf
-
-    st, conf = setup_arbitary_transformation()
+def test_jax_transform_intermediate_potential(arbitrary_transformation):
+    st, conf = arbitrary_transformation
 
     def U(x, lam):
         return st.setup_intermediate_state(lam).get_U_fn()(x)
@@ -427,6 +436,114 @@ def test_jax_transform_intermediate_potential():
     lambdas = jnp.linspace(0, 1, 10)
     _ = jax.vmap(U)(confs, lambdas)
     _ = jax.jit(jax.vmap(U))(confs, lambdas)
+
+
+@pytest.mark.nocuda
+def test_setup_intermediate_state_not_unreasonably_slow(arbitrary_transformation):
+    st, _ = arbitrary_transformation
+    n_states = 10
+    start_time = time.perf_counter()
+    for lam in np.linspace(0, 1, n_states):
+        _ = st.setup_intermediate_state(lam)
+    end_time = time.perf_counter()
+    elapsed_time = end_time - start_time
+
+    # weak assertion to catch egregious perf issues while being unlikely to raise false positives
+    assert elapsed_time / n_states <= 1.0
+
+
+def test_setup_intermediate_bonded_term(arbitrary_transformation):
+    """Tests that the current vectorized implementation _setup_intermediate_bonded_term is consistent with the previous
+    implementation"""
+    st, _ = arbitrary_transformation
+    interpolate_fn = functools.partial(interpolate_harmonic_bond_params, k_min=0.1, lambda_min=0.0, lambda_max=0.7)
+
+    def setup_intermediate_bonded_term_ref(src_bond, dst_bond, lamb, align_fn, interpolate_fn):
+        bond_idxs_and_params = align_fn(
+            src_bond.potential.idxs,
+            src_bond.params,
+            dst_bond.potential.idxs,
+            dst_bond.params,
+        )
+
+        bond_idxs = []
+        bond_params = []
+
+        for idxs, src_params, dst_params in bond_idxs_and_params:
+            bond_idxs.append(idxs)
+            new_params = interpolate_fn(src_params, dst_params, lamb)
+            bond_params.append(new_params)
+
+        return type(src_bond.potential)(np.array(bond_idxs)).bind(jnp.array(bond_params))
+
+    for lamb in np.linspace(0.0, 1.0, 10):
+        bonded_ref = setup_intermediate_bonded_term_ref(
+            st.src_system.bond, st.dst_system.bond, lamb, align_harmonic_bond_idxs_and_params, interpolate_fn
+        )
+        bonded_test = st._setup_intermediate_bonded_term(
+            st.src_system.bond, st.dst_system.bond, lamb, align_harmonic_bond_idxs_and_params, interpolate_fn
+        )
+
+        np.testing.assert_array_equal(bonded_ref.potential.idxs, bonded_test.potential.idxs)
+        np.testing.assert_array_equal(bonded_ref.params, bonded_test.params)
+
+
+def test_setup_intermediate_nonbonded_term(arbitrary_transformation):
+    """Tests that the current vectorized implementation _setup_intermediate_nonbonded_term is consistent with the
+    previous implementation"""
+    st, _ = arbitrary_transformation
+
+    def setup_intermediate_nonbonded_term_ref(src_nonbonded, dst_nonbonded, lamb, align_fn, interpolate_qlj_fn):
+        pair_idxs_and_params = align_fn(
+            src_nonbonded.potential.idxs,
+            src_nonbonded.params,
+            dst_nonbonded.potential.idxs,
+            dst_nonbonded.params,
+        )
+
+        cutoff = src_nonbonded.potential.cutoff
+
+        pair_idxs = []
+        pair_params = []
+        for idxs, src_params, dst_params in pair_idxs_and_params:
+            src_qlj, src_w = src_params[:3], src_params[3]
+            dst_qlj, dst_w = dst_params[:3], dst_params[3]
+
+            if src_qlj == (0, 0, 0):  # i.e. excluded in src state
+                new_params = (*dst_qlj, interpolate_w_coord(cutoff, 0, lamb))
+            elif dst_qlj == (0, 0, 0):
+                new_params = (*src_qlj, interpolate_w_coord(0, cutoff, lamb))
+            else:
+                new_params = (
+                    *interpolate_qlj_fn(jnp.array(src_qlj), jnp.array(dst_qlj), lamb),
+                    interpolate_w_coord(src_w, dst_w, lamb),
+                )
+
+            pair_idxs.append(idxs)
+            pair_params.append(new_params)
+
+        return potentials.NonbondedPairListPrecomputed(
+            np.array(pair_idxs), src_nonbonded.potential.beta, src_nonbonded.potential.cutoff
+        ).bind(jnp.array(pair_params))
+
+    for lamb in np.linspace(0.0, 1.0, 10):
+        nonbonded_ref = setup_intermediate_nonbonded_term_ref(
+            st.src_system.nonbonded,
+            st.dst_system.nonbonded,
+            lamb,
+            align_nonbonded_idxs_and_params,
+            linear_interpolation,
+        )
+        nonbonded_test = st._setup_intermediate_nonbonded_term(
+            st.src_system.nonbonded,
+            st.dst_system.nonbonded,
+            lamb,
+            align_nonbonded_idxs_and_params,
+            linear_interpolation,
+        )
+
+        np.testing.assert_array_equal(nonbonded_ref.potential.idxs, nonbonded_test.potential.idxs)
+        np.testing.assert_array_equal(nonbonded_ref.params, nonbonded_test.params)
 
 
 @pytest.mark.nocuda

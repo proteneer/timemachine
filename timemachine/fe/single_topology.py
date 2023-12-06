@@ -694,7 +694,7 @@ def interpolate_periodic_torsion_params(src_params, dst_params, lamb, lambda_min
     return jnp.array([k, phase, src_period])
 
 
-def interpolate_w_coord(w0: float, w1: float, lamb: float):
+def interpolate_w_coord(w0: float | jax.Array, w1: float | jax.Array, lamb: float):
     """Interpolate 4D coordinate using schedule optimized for RBFE calculations.
 
     Parameters
@@ -969,14 +969,15 @@ class SingleTopology(AtomMapMixin):
             dst_bond.potential.idxs,
             dst_bond.params,
         )
-        bond_idxs = []
-        bond_params = []
-        for idxs, src_params, dst_params in bond_idxs_and_params:
-            bond_idxs.append(idxs)
-            new_params = interpolate_fn(src_params, dst_params, lamb)
-            bond_params.append(new_params)
+        bond_idxs = np.array([x for x, _, _ in bond_idxs_and_params], dtype=np.int32)
+        if bond_idxs_and_params:
+            src_params = jnp.array([x for _, x, _ in bond_idxs_and_params])
+            dst_params = jnp.array([x for _, _, x in bond_idxs_and_params])
+            bond_params = jax.vmap(interpolate_fn, (0, 0, None))(src_params, dst_params, lamb)
+        else:
+            bond_params = jnp.array([])
 
-        r = src_cls_bond(np.array(bond_idxs)).bind(jnp.array(bond_params))
+        r = src_cls_bond(bond_idxs).bind(bond_params)
         return cast(BoundPotential[_Bonded], r)  # unclear why cast is needed for mypy
 
     def _setup_intermediate_nonbonded_term(
@@ -998,28 +999,47 @@ class SingleTopology(AtomMapMixin):
             dst_nonbonded.potential.idxs,
             dst_nonbonded.params,
         )
-        pair_idxs = []
-        pair_params = []
-        for idxs, src_params, dst_params in pair_idxs_and_params:
-            src_qlj, src_w = src_params[:3], src_params[3]
-            dst_qlj, dst_w = dst_params[:3], dst_params[3]
 
-            if src_qlj == (0, 0, 0):  # i.e. excluded in src state
-                new_params = (*dst_qlj, interpolate_w_coord(cutoff, 0, lamb))
-            elif dst_qlj == (0, 0, 0):
-                new_params = (*src_qlj, interpolate_w_coord(0, cutoff, lamb))
-            else:
-                new_params = (
-                    *interpolate_qlj_fn(src_qlj, dst_qlj, lamb),
-                    interpolate_w_coord(src_w, dst_w, lamb),
-                )
+        pair_idxs = np.array([x for x, _, _ in pair_idxs_and_params], dtype=np.int32)
 
-            pair_idxs.append(idxs)
-            pair_params.append(new_params)
+        if pair_idxs_and_params:
+            src_params = jnp.array([x for _, x, _ in pair_idxs_and_params])
+            dst_params = jnp.array([x for _, _, x in pair_idxs_and_params])
+
+            src_qlj, src_w = src_params[:, :3], src_params[:, 3]
+            dst_qlj, dst_w = dst_params[:, :3], dst_params[:, 3]
+
+            is_excluded_src = jnp.all(src_qlj == 0.0, axis=1, keepdims=True)
+            is_excluded_dst = jnp.all(dst_qlj == 0.0, axis=1, keepdims=True)
+
+            # parameters for pairs that do not interact in the src state
+            w = interpolate_w_coord(cutoff, dst_w, lamb)
+            pair_params_excluded_src = jnp.concatenate((dst_qlj, w[:, None]), axis=1)
+
+            # parameters for pairs that do not interact in the dst state
+            w = interpolate_w_coord(src_w, cutoff, lamb)
+            pair_params_excluded_dst = jnp.concatenate((src_qlj, w[:, None]), axis=1)
+
+            # parameters for pairs that interact in both src and dst states
+            w = jax.vmap(interpolate_w_coord, (0, 0, None))(src_w, dst_w, lamb)
+            qlj = interpolate_qlj_fn(src_qlj, dst_qlj, lamb)
+            pair_params_not_excluded = jnp.concatenate((qlj, w[:, None]), axis=1)
+
+            pair_params = jnp.where(
+                is_excluded_src,
+                pair_params_excluded_src,
+                jnp.where(
+                    is_excluded_dst,
+                    pair_params_excluded_dst,
+                    pair_params_not_excluded,
+                ),
+            )
+        else:
+            pair_params = jnp.array([])
 
         return NonbondedPairListPrecomputed(
-            np.array(pair_idxs), src_nonbonded.potential.beta, src_nonbonded.potential.cutoff
-        ).bind(jnp.array(pair_params))
+            pair_idxs, src_nonbonded.potential.beta, src_nonbonded.potential.cutoff
+        ).bind(pair_params)
 
     def _setup_intermediate_chiral_bond_term(
         self,
