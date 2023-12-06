@@ -573,7 +573,7 @@ def hif2a_rbfe_state() -> InitialState:
 
 @pytest.mark.parametrize(
     "steps_per_move,moves",
-    [(1, 7000), (7000, 7000)],
+    [pytest.param(1, 10000, marks=pytest.mark.nightly(reason="slow")), (10000, 10000)],
 )
 @pytest.mark.parametrize("precision,rtol,atol", [(np.float64, 5e-6, 5e-6), (np.float32, 1e-4, 2e-3)])
 @pytest.mark.parametrize("seed", [2023])
