@@ -1006,8 +1006,8 @@ class SingleTopology(AtomMapMixin):
             src_params = jnp.array([x for _, x, _ in pair_idxs_and_params])
             dst_params = jnp.array([x for _, _, x in pair_idxs_and_params])
 
-            src_qlj, src_w = src_params[:, :3], src_params[:, 3:]
-            dst_qlj, dst_w = dst_params[:, :3], dst_params[:, 3:]
+            src_qlj, src_w = src_params[:, :3], src_params[:, 3]
+            dst_qlj, dst_w = dst_params[:, :3], dst_params[:, 3]
 
             n_pairs = len(pair_idxs_and_params)
 
@@ -1023,7 +1023,7 @@ class SingleTopology(AtomMapMixin):
                     jnp.concatenate(
                         (
                             interpolate_qlj_fn(src_qlj, dst_qlj, lamb),
-                            jax.vmap(interpolate_w_coord, (0, 0, None))(src_w, dst_w, lamb),
+                            jax.vmap(interpolate_w_coord, (0, 0, None))(src_w, dst_w, lamb)[:, None],
                         ),
                         axis=1,
                     ),
