@@ -41,6 +41,7 @@ def compute_ref_log_prob(ref_exchange, water_idx, vi_mols, vj_mols, vol_i, vol_j
     return trial_coords, log_p_accept
 
 
+@pytest.mark.memcheck
 @pytest.mark.parametrize("seed", [2023, 2024])
 @pytest.mark.parametrize("radius", [0.1, 0.5, 1.2, 2.0])
 @pytest.mark.parametrize("precision", [np.float64, np.float32])
