@@ -441,9 +441,9 @@ void __global__ k_compute_centroid_of_atoms(
 
     int atom_idx;
 
-    if (threadIdx.x < 3)
-        ;
-    { fixed_centroid[threadIdx.x] = 0; }
+    if (threadIdx.x < 3) {
+        fixed_centroid[threadIdx.x] = 0;
+    }
     __syncthreads();
 
     while (idx < num_atoms) {
