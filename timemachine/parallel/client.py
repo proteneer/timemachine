@@ -197,20 +197,24 @@ class CUDAPoolClient(ProcessPoolClient):
 
     def __init__(self, max_workers):
         super().__init__(max_workers)
+        visible_devices = os.environ.get("CUDA_VISIBLE_DEVICES")
+        if visible_devices:
+            self._gpu_list = [int(i) for i in visible_devices.split(",")]
+        else:
+            self._gpu_list = list(range(max_workers))
 
     @staticmethod
     def wrapper(max_workers, idx, fn, *args, **kwargs):
-        # for a single worker, do not overwrite CUDA_VISIBLE_DEVICES
-        # so that multiple single gpu jobs can be run on the same node
-        if max_workers > 1:
-            os.environ["CUDA_VISIBLE_DEVICES"] = str(idx)
+        os.environ["CUDA_VISIBLE_DEVICES"] = str(idx)
         return fn(*args, **kwargs)
 
     def submit(self, task_fn, *args, **kwargs) -> BaseFuture:
         """
         See abstract class for documentation.
         """
-        future = self.executor.submit(self.wrapper, self.max_workers, self._idx, task_fn, *args, **kwargs)
+        future = self.executor.submit(
+            self.wrapper, self.max_workers, self._gpu_list[self._idx], task_fn, *args, **kwargs
+        )
         job_id = str(self._total_idx)
         self._total_idx += 1
         self._idx = (self._idx + 1) % self.max_workers
@@ -222,6 +226,10 @@ class CUDAPoolClient(ProcessPoolClient):
         """
         gpus = get_gpu_count()
         assert self.max_workers <= gpus, f"More workers '{self.max_workers}' requested than GPUs '{gpus}'"
+        assert (
+            len(self._gpu_list) >= self.max_workers
+        ), "Fewer available GPUs than max workers expects, check CUDA_VISIBLE_DEVICES"
+        assert len(self._gpu_list) <= gpus, "More GPUs requested than the machine has, check CUDA_VISIBLE_DEVICES"
 
 
 class BinaryFutureWrapper:

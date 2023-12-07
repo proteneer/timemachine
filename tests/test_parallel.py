@@ -188,10 +188,18 @@ class TestCUDAPoolClient(unittest.TestCase):
             cli.verify()
 
     def test_single_worker(self):
-        cli = client.CUDAPoolClient(1)
         with patch.dict("os.environ", {"CUDA_VISIBLE_DEVICES": "123"}):
-            result = cli.submit(environ_check).result()
+            cli = client.CUDAPoolClient(1)
+        # Don't patch this, else it will use the patched value rather than the true value
+        result = cli.submit(environ_check).result()
         assert result == "123"
+
+    def test_multiple_workers_cuda_visible_devices(self):
+        with patch.dict("os.environ", {"CUDA_VISIBLE_DEVICES": "5,6,7"}):
+            cli = client.CUDAPoolClient(3)
+        for i in range(10):
+            result = cli.submit(environ_check).result()
+            assert result == str(i % 3 + 5)
 
 
 def test_batch_list():
