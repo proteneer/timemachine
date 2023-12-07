@@ -199,7 +199,7 @@ class CUDAPoolClient(ProcessPoolClient):
         super().__init__(max_workers)
         visible_devices = os.environ.get("CUDA_VISIBLE_DEVICES")
         if visible_devices:
-            self._gpu_list = [i for i in map(int, visible_devices.split(","))]
+            self._gpu_list = [int(i) for i in visible_devices.split(",")]
         else:
             self._gpu_list = list(range(max_workers))
 
