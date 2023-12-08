@@ -217,22 +217,22 @@ def run_hrex(
 
     Parameters
     ----------
-    replicas: sequence of _Replica
+    replicas: sequence of Replica
         Sequence of initial states of each replica
 
-    sample_replica: (_Replica, StateIdx, n_samples: int) -> _Samples
+    sample_replica: (Replica, StateIdx, n_samples: int) -> Samples
         Local sampling function. Should return n_samples samples from the given replica and state
 
-    replica_from_samples: _Samples -> _Replica
+    replica_from_samples: Samples -> Replica
         Function that returns a replica state given a sequence of local samples. This is used to update the state of
         individual replicas following local sampling.
 
     neighbor_pairs: sequence of (StateIdx, StateIdx)
         Pairs of states for which to attempt swap moves
 
-    get_log_q_fn: sequence of _Replica -> ((ReplicaIdx, StateIdx) -> float)
+    get_log_q_fn: sequence of Replica -> ((ReplicaIdx, StateIdx) -> float)
         Function that returns a function from replica-state pairs to log unnormalized probability. Note that this is
-        equivalent to the simpler signature (_Replica, StateIdx) -> float; the "curried" form here is to allow for the
+        equivalent to the simpler signature (Replica, StateIdx) -> float; the "curried" form here is to allow for the
         implementation to compute the full matrix as a batch operation when this is more efficient.
 
     n_samples: int
@@ -246,7 +246,7 @@ def run_hrex(
 
     Returns
     -------
-    List[List[_Samples]]
+    List[List[Samples]]
         samples grouped by state and iteration
 
     HREXDiagnostics
