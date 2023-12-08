@@ -167,13 +167,10 @@ def get_samples_by_iter_by_replica(
     def inverse_permutation(p):
         return [i for i, _ in sorted(enumerate(p), key=lambda t: t[1])]
 
-    state_idx_by_replica_by_iter = [
-        inverse_permutation(replica_idx_by_state) for replica_idx_by_state in replica_idx_by_state_by_iter
-    ]
-
     samples_by_replica_by_iter = [
         [samples_by_state[state_idx] for state_idx in state_idx_by_replica]
-        for samples_by_state, state_idx_by_replica in zip(samples_by_state_by_iter, state_idx_by_replica_by_iter)
+        for samples_by_state, replica_idx_by_state in zip(samples_by_state_by_iter, replica_idx_by_state_by_iter)
+        for state_idx_by_replica in [inverse_permutation(replica_idx_by_state)]
     ]
 
     # transpose
