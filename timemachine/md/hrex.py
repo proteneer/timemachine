@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Callable, Generic, List, NewType, Optional, Sequence, Tuple, TypeVar
+from typing import Callable, Generic, List, NewType, Optional, Sequence, Tuple, TypeVar, cast
 
 import numpy as np
 from numpy.typing import NDArray
@@ -150,6 +150,36 @@ def estimate_relaxation_time(transition_matrix: NDArray) -> float:
     eigvals_ascending = np.linalg.eigvalsh(transition_matrix_symmetric)
     mu_2 = eigvals_ascending[-2]  # second-largest eigenvalue
     return 1 / (1 - mu_2)
+
+
+def get_samples_by_iter_by_replica(
+    samples_by_state_by_iter: List[List[Samples]], replica_idx_by_state_by_iter: List[List[ReplicaIdx]]
+) -> List[List[Samples]]:
+    """Permute and reshape samples returned by :py:func:`run_hrex` having shape
+
+        (hrex_iter, state_idx) -> samples
+
+    to a more convenient form for analyzing the trajectories of individual replicas
+
+        (replica_idx, hrex_iter) -> samples
+    """
+
+    def inverse_permutation(p):
+        return [i for i, _ in sorted(enumerate(p), key=lambda t: t[1])]
+
+    state_idx_by_replica_by_iter = [
+        inverse_permutation(replica_idx_by_state) for replica_idx_by_state in replica_idx_by_state_by_iter
+    ]
+
+    samples_by_replica_by_iter = [
+        [samples_by_state[state_idx] for state_idx in state_idx_by_replica]
+        for samples_by_state, state_idx_by_replica in zip(samples_by_state_by_iter, state_idx_by_replica_by_iter)
+    ]
+
+    # transpose
+    samples_by_iter_by_replica = cast(List[List[Samples]], [list(xs) for xs in zip(*samples_by_replica_by_iter)])
+
+    return samples_by_iter_by_replica
 
 
 @dataclass
