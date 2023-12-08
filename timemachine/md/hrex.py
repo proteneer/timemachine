@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Callable, Generic, List, NewType, Optional, Sequence, Tuple, TypeVar, cast
+from typing import Callable, Generic, List, NewType, Optional, Sequence, Tuple, TypeVar
 
 import numpy as np
 from numpy.typing import NDArray
@@ -172,8 +172,7 @@ def get_samples_by_iter_by_replica(
         for samples_by_state, replica_idx_by_state in zip(samples_by_state_by_iter, replica_idx_by_state_by_iter)
     ]
 
-    # transpose
-    samples_by_iter_by_replica = cast(List[List[Samples]], [list(xs) for xs in zip(*samples_by_replica_by_iter)])
+    samples_by_iter_by_replica = [list(xs) for xs in zip(*samples_by_replica_by_iter)]  # transpose
 
     return samples_by_iter_by_replica
 
