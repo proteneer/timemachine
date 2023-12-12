@@ -460,15 +460,20 @@ def test_tibd_exchange_deterministic_moves(radius, moves, precision, seed):
 
 @pytest.mark.parametrize("radius", [1.2])
 @pytest.mark.parametrize(
-    "steps_per_move,moves",
-    [(1, 500), (5000, 5000)],
+    "steps_per_move,moves,box_size",
+    [
+        (1, 500, 4.0),
+        (5000, 5000, 4.0),
+        # The 6.0nm box triggers a failure that would occur with systems of certain sizes, may be flaky in identifying issues
+        pytest.param(1, 5000, 6.0, marks=pytest.mark.nightly(reason="slow")),
+    ],
 )
 @pytest.mark.parametrize("precision,rtol,atol", [(np.float64, 5e-6, 5e-6), (np.float32, 1e-4, 2e-3)])
 @pytest.mark.parametrize("seed", [2023])
-def test_targeted_moves_in_bulk_water(radius, steps_per_move, moves, precision, rtol, atol, seed):
+def test_targeted_moves_in_bulk_water(radius, steps_per_move, moves, box_size, precision, rtol, atol, seed):
     """Given bulk water molecules with one of them treated as the targeted region"""
     ff = Forcefield.load_default()
-    system, conf, ref_box, topo = builders.build_water_system(4.0, ff.water_ff)
+    system, conf, ref_box, topo = builders.build_water_system(box_size, ff.water_ff)
     bps, _ = openmm_deserializer.deserialize_system(system, cutoff=1.2)
 
     nb = next(bp for bp in bps if isinstance(bp.potential, Nonbonded))
