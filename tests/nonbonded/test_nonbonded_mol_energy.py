@@ -43,6 +43,10 @@ def test_nonbonded_mol_energy_potential_validation(precision):
     with pytest.raises(RuntimeError, match="All grouped indices must be unique"):
         klass(N, indices_in_multiple_groups, beta, cutoff)
 
+    empty_groups = []
+    with pytest.raises(RuntimeError, match="must provide at least one target mol"):
+        klass(N, empty_groups, beta, cutoff)
+
     group_idxs = [[0, 1, 2]]
     pot = klass(N, group_idxs, beta, cutoff)
     with pytest.raises(RuntimeError, match="params N != coords N"):

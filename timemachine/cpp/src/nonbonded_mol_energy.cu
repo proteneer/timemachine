@@ -17,6 +17,10 @@ NonbondedMolEnergyPotential<RealType>::NonbondedMolEnergyPotential(
       cutoff_squared_(static_cast<RealType>(cutoff * cutoff)) {
     verify_group_idxs(N_, target_mols);
 
+    if (num_target_mols_ <= 0) {
+        throw std::runtime_error("must provide at least one target mol");
+    }
+
     std::array<std::vector<int>, 3> target_flattened_groups = prepare_group_idxs_for_gpu(target_mols);
 
     d_target_atom_idxs_.realloc(target_flattened_groups[0].size());
