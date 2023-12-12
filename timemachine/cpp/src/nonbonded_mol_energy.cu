@@ -70,14 +70,10 @@ void NonbondedMolEnergyPotential<RealType>::mol_energies_device(
         cutoff_squared_,
         d_atom_energy_buffer_.data);
     gpuErrchk(cudaPeekAtLastError());
+
     k_accumulate_atom_energies_to_per_mol_energies<RealType, BLOCK_SIZE>
         <<<ceil_divide(target_mols, tpb), tpb, 0, stream>>>(
-            static_cast<int>(d_target_atom_idxs_.length),
-            target_mols,
-            d_target_mol_idxs_.data,
-            d_target_mol_offsets_.data,
-            d_atom_energy_buffer_.data,
-            d_output_energies);
+            target_mols, d_target_mol_offsets_.data, d_atom_energy_buffer_.data, d_output_energies);
     gpuErrchk(cudaPeekAtLastError());
 }
 
