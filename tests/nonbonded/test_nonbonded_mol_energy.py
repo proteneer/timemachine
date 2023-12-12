@@ -107,16 +107,16 @@ def test_nonbonded_mol_energy_matches_exchange_mover_batch_U(num_mols, precision
     np.testing.assert_allclose(u_test(conf, box, params), u_ref(conf, box, params), rtol=rtol, atol=atol)
 
 
-@pytest.mark.parametrize("num_mols", [500])
-@pytest.mark.parametrize("moves", [100])
+@pytest.mark.parametrize("moves,box_size,num_mols", [(100, 4.0, 500), (1, 8.0, 10000)])
 @pytest.mark.parametrize("precision,atol,rtol", [(np.float64, 1e-8, 1e-8), (np.float32, 5e-4, 2e-3)])
-def test_nonbonded_mol_energy_random_moves(num_mols, moves, precision, atol, rtol):
+def test_nonbonded_mol_energy_random_moves(box_size, num_mols, moves, precision, atol, rtol):
     """Verify that with random move for waters that the exchange mover and Nonbonded water match in the case
     where clashes are likely to be introduced
     """
     rng = np.random.default_rng(2023)
     ff = Forcefield.load_default()
-    system, conf, _, _ = builders.build_water_system(4.0, ff.water_ff)
+
+    system, conf, _, _ = builders.build_water_system(box_size, ff.water_ff)
     bps, _ = openmm_deserializer.deserialize_system(system, cutoff=1.2)
     nb = next(bp for bp in bps if isinstance(bp.potential, Nonbonded))
     bond_pot = next(bp for bp in bps if isinstance(bp.potential, HarmonicBond)).potential
