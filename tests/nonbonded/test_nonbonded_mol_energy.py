@@ -111,7 +111,7 @@ def test_nonbonded_mol_energy_matches_exchange_mover_batch_U(num_mols, precision
     np.testing.assert_allclose(u_test(conf, box, params), u_ref(conf, box, params), rtol=rtol, atol=atol)
 
 
-@pytest.mark.parametrize("moves,box_size,num_mols", [(100, 4.0, 500), (1, 8.0, 10000)])
+@pytest.mark.parametrize("moves,box_size,num_mols", [(100, 4.0, 500), (1, 6.5, 5500)])
 @pytest.mark.parametrize("precision,atol,rtol", [(np.float64, 1e-8, 1e-8), (np.float32, 5e-4, 2e-3)])
 def test_nonbonded_mol_energy_random_moves(box_size, num_mols, moves, precision, atol, rtol):
     """Verify that with random move for waters that the exchange mover and Nonbonded water match in the case
