@@ -799,6 +799,9 @@ def run_vacuum(
     if md_params is not None and md_params.local_steps > 0:
         md_params = replace(md_params, local_steps=0)
         warnings.warn("Vacuum simulations don't support local steps, will use all global steps")
+    if md_params is not None and md_params.water_sampling_params is not None:
+        md_params = replace(md_params, water_sampling_params=None)
+        warnings.warn("Vacuum simulations don't support water sampling, disabling")
     # min_cutoff defaults to None since there is no environment to prevent conformational changes in the ligand
     return estimate_relative_free_energy_bisection_or_hrex(
         mol_a,
@@ -825,6 +828,10 @@ def run_solvent(
     min_overlap: Optional[float] = None,
     min_cutoff: Optional[float] = 0.7,
 ):
+    # Unclear if this matters yet
+    # if md_params is not None and md_params.water_sampling_params is not None:
+    #     md_params = replace(md_params, water_sampling_params=None)
+    #     warnings.warn("Solvent simulations don't support water sampling, disabling")
     box_width = 4.0
     solvent_sys, solvent_conf, solvent_box, solvent_top = builders.build_water_system(box_width, forcefield.water_ff)
     solvent_box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes, deboggle later
