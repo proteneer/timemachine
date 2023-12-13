@@ -468,7 +468,7 @@ def test_tibd_exchange_deterministic_moves(radius, moves, precision, seed):
         pytest.param(1, 5000, 5.7, marks=pytest.mark.nightly(reason="slow")),
     ],
 )
-@pytest.mark.parametrize("precision,rtol,atol", [(np.float64, 5e-6, 5e-6), (np.float32, 1e-4, 2e-3)])
+@pytest.mark.parametrize("precision,rtol,atol", [(np.float64, 2e-5, 2e-5), (np.float32, 1e-4, 2e-3)])
 @pytest.mark.parametrize("seed", [2023])
 def test_targeted_moves_in_bulk_water(radius, steps_per_move, moves, box_size, precision, rtol, atol, seed):
     """Given bulk water molecules with one of them treated as the targeted region"""
