@@ -663,9 +663,16 @@ def estimate_relative_free_energy_bisection_hrex_impl(
             for initial_state, traj in zip(initial_states, trajectories_by_state)
         ]
 
+        hrex_md_params = replace(md_params, n_eq_steps=0)  # using pre-equilibrated samples
+        if hrex_md_params.water_sampling_params is not None:
+            # Water sampling will have already been applied
+            hrex_md_params = replace(
+                hrex_md_params,
+                water_sampling_params=replace(hrex_md_params.water_sampling_params, n_initial_iterations=0),
+            )
         pair_bar_result, trajectories_by_state, diagnostics = run_sims_hrex(
             initial_states_hrex,
-            replace(md_params, n_eq_steps=0),  # using pre-equilibrated samples
+            hrex_md_params,
             n_frames_per_iter=md_params.hrex_params.n_frames_per_iter,
         )
 
@@ -810,6 +817,9 @@ def run_vacuum(
     if md_params is not None and md_params.local_steps > 0:
         md_params = replace(md_params, local_steps=0)
         warnings.warn("Vacuum simulations don't support local steps, will use all global steps")
+    if md_params is not None and md_params.water_sampling_params is not None:
+        md_params = replace(md_params, water_sampling_params=None)
+        warnings.warn("Vacuum simulations don't support water sampling, disabling")
     # min_cutoff defaults to None since there is no environment to prevent conformational changes in the ligand
     return estimate_relative_free_energy_bisection_or_hrex(
         mol_a,
@@ -836,6 +846,9 @@ def run_solvent(
     min_overlap: Optional[float] = None,
     min_cutoff: Optional[float] = 0.7,
 ):
+    if md_params is not None and md_params.water_sampling_params is not None:
+        md_params = replace(md_params, water_sampling_params=None)
+        warnings.warn("Solvent simulations don't benefit from water sampling, disabling")
     box_width = 4.0
     solvent_sys, solvent_conf, solvent_box, solvent_top = builders.build_water_system(box_width, forcefield.water_ff)
     solvent_box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes, deboggle later
@@ -913,6 +926,8 @@ def run_edge_and_save_results(
     # Without this get_mol_name(mol) will fail on roundtripped mol
     Chem.SetDefaultPickleProperties(Chem.PropertyPickleOptions.AllProps)
 
+    edge_prefix = f"{edge.mol_a_name}_{edge.mol_b_name}"
+
     try:
         mol_a = mols[edge.mol_a_name]
         mol_b = mols[edge.mol_b_name]
@@ -933,6 +948,24 @@ def run_edge_and_save_results(
             md_params,
             n_windows=n_windows,
         )
+
+        if complex_res.hrex_plots:
+            file_client.store(
+                f"{edge_prefix}_complex_hrex_transition_matrix.png", complex_res.hrex_plots.transition_matrix_png
+            )
+            file_client.store(
+                f"{edge_prefix}_complex_hrex_swap_acceptance_rates_convergence.png",
+                complex_res.hrex_plots.swap_acceptance_rates_convergence_png,
+            )
+            file_client.store(
+                f"{edge_prefix}_complex_hrex_replica_state_distribution_convergence.png",
+                complex_res.hrex_plots.replica_state_distribution_convergence_png,
+            )
+            file_client.store(
+                f"{edge_prefix}_complex_hrex_replica_state_distribution_heatmap.png",
+                complex_res.hrex_plots.replica_state_distribution_heatmap_png,
+            )
+
         solvent_res, solvent_top, _ = run_solvent(
             mol_a,
             mol_b,
@@ -942,6 +975,22 @@ def run_edge_and_save_results(
             md_params,
             n_windows=n_windows,
         )
+        if solvent_res.hrex_plots:
+            file_client.store(
+                f"{edge_prefix}_solvent_hrex_transition_matrix.png", solvent_res.hrex_plots.transition_matrix_png
+            )
+            file_client.store(
+                f"{edge_prefix}_solvent_hrex_swap_acceptance_rates_convergence.png",
+                solvent_res.hrex_plots.swap_acceptance_rates_convergence_png,
+            )
+            file_client.store(
+                f"{edge_prefix}_solvent_hrex_replica_state_distribution_convergence.png",
+                solvent_res.hrex_plots.replica_state_distribution_convergence_png,
+            )
+            file_client.store(
+                f"{edge_prefix}_solvent_hrex_replica_state_distribution_heatmap.png",
+                solvent_res.hrex_plots.replica_state_distribution_heatmap_png,
+            )
 
     except Exception as err:
         print(
