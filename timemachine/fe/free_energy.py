@@ -32,7 +32,7 @@ from timemachine.fe.stored_arrays import StoredArrays
 from timemachine.fe.utils import get_mol_masses, get_romol_conf
 from timemachine.ff import ForcefieldParams
 from timemachine.ff.handlers import openmm_deserializer
-from timemachine.lib import LangevinIntegrator, MonteCarloBarostat
+from timemachine.lib import LangevinIntegrator, MonteCarloBarostat, custom_ops
 from timemachine.lib.custom_ops import Context
 from timemachine.md.barostat.utils import compute_box_center, get_bond_list, get_group_indices
 from timemachine.md.hrex import (
@@ -44,8 +44,7 @@ from timemachine.md.hrex import (
     get_swap_attempts_per_iter_heuristic,
 )
 from timemachine.md.states import CoordsVelBox
-from timemachine.potentials import BoundPotential, HarmonicBond, SummedPotential
-from timemachine.potentials.potential import GpuImplWrapper
+from timemachine.potentials import BoundPotential, HarmonicBond, NonbondedInteractionGroup, SummedPotential
 from timemachine.utils import batches, pairwise_transform_and_combine
 
 
@@ -79,6 +78,39 @@ class HREXParams:
 
 
 @dataclass(frozen=True)
+class WaterSamplingParams:
+    """
+    Parameters
+    ----------
+
+    interval:
+        How many steps of MD before running a set of water sampling moves
+
+    n_proposals:
+        Number of proposals to make at a time.
+
+    n_intial_iterations:
+        Number of times to make n_proposals before running equilibration
+
+    radius:
+        Radius, in nanometers, from the centroid of the molecule to treat as the inner target volume
+    """
+
+    interval: int = 2000
+    n_proposals: int = 10000
+    batch_size: int = 250
+    n_initial_iterations: int = 0
+    radius: float = 1.0
+
+    def __post_init__(self):
+        assert self.interval > 0
+        assert self.n_proposals > 0
+        assert self.n_initial_iterations >= 0
+        assert self.radius > 0.0
+        assert self.batch_size <= self.n_proposals
+
+
+@dataclass(frozen=True)
 class MDParams:
     n_frames: int
     n_eq_steps: int
@@ -92,6 +124,8 @@ class MDParams:
 
     # Set to HREXParams or None to disable HREX
     hrex_params: Optional[HREXParams] = None
+    # Setting water_sampling_params to None disables water sampling.
+    water_sampling_params: Optional[WaterSamplingParams] = None
 
     def __post_init__(self):
         assert self.steps_per_frame > 0
@@ -392,12 +426,59 @@ class AbsoluteFreeEnergy(BaseFreeEnergy):
         return np.concatenate([host_values, ligand_values])
 
 
-def get_context(initial_state: InitialState) -> Context:
-    bound_impls = [p.to_gpu(np.float32).bound_impl for p in initial_state.potentials]
+def get_water_params(initial_state: InitialState) -> NDArray:
+    summed_pot = next(p.potential for p in initial_state.potentials if isinstance(p.potential, SummedPotential))
+    # TBD Figure out a better way of handling the jankyness of having to select the IxnGroup that defines the Ligand-Water
+    # Currently this just hardcodes to the second potential which is the ordering returned by HostTopology.parameterize_nonbonded
+    ixn_group_idx = next(i for i, pot in enumerate(summed_pot.potentials) if isinstance(pot, NonbondedInteractionGroup))
+    assert isinstance(summed_pot.potentials[ixn_group_idx], NonbondedInteractionGroup)
+    water_params = summed_pot.params_init[ixn_group_idx]
+    assert water_params.shape[1] == 4
+    return water_params
+
+
+def get_context(initial_state: InitialState, md_params: Optional[MDParams] = None) -> Context:
+    """
+    Construct a Context that has a single SummedPotential that combines the potentials defined by the initial state
+    """
+    potentials = [bp.potential for bp in initial_state.potentials]
+    params = [bp.params for bp in initial_state.potentials]
+    potential = SummedPotential(potentials, params).to_gpu(np.float32)
+
+    # Set up context for MD using overall potential
+    bound_impl = potential.bind_params_list(params).bound_impl
+    bound_impls = [bound_impl]
     intg_impl = initial_state.integrator.impl()
     movers = []
     if initial_state.barostat:
         movers.append(initial_state.barostat.impl(bound_impls))
+    if md_params is not None and md_params.water_sampling_params is not None:
+        # Setup the water indices
+        hb_potential = next(p.potential for p in initial_state.potentials if isinstance(p.potential, HarmonicBond))
+        group_indices = get_group_indices(get_bond_list(hb_potential), len(initial_state.integrator.masses))
+        water_idxs = [group for group in group_indices if len(group) == 3]
+
+        summed_pot = next(p.potential for p in initial_state.potentials if isinstance(p.potential, SummedPotential))
+        # Select the Nonbonded Potential, though doesn't particularly matter use it for the cutoff/beta.
+        nb = next(p for p in summed_pot.potentials if isinstance(p, NonbondedInteractionGroup))
+
+        water_params = get_water_params(initial_state)
+
+        water_sampler = custom_ops.TIBDExchangeMove_f32(
+            initial_state.x0.shape[0],
+            initial_state.ligand_idxs.tolist(),
+            [water_group.tolist() for water_group in water_idxs],
+            water_params,
+            initial_state.integrator.temperature,
+            nb.beta,
+            nb.cutoff,
+            md_params.water_sampling_params.radius,
+            md_params.seed,
+            md_params.water_sampling_params.n_proposals,
+            md_params.water_sampling_params.interval,
+            batch_size=md_params.water_sampling_params.batch_size,
+        )
+        movers.append(water_sampler)
 
     return Context(initial_state.x0, initial_state.v0, initial_state.box0, intg_impl, bound_impls, movers=movers)
 
@@ -420,6 +501,19 @@ def sample_with_context(
         if barostat is not None:
             barostat.set_interval(original_interval)
 
+    # Run water sampling after equilibrating to ensure there aren't voids that would change the impact of sampling
+    if md_params.water_sampling_params is not None and md_params.water_sampling_params.n_initial_iterations > 0:
+        for mover in ctxt.get_movers():
+            if isinstance(mover, custom_ops.TIBDExchangeMove_f32):
+                mover.set_interval(1)
+                x = ctxt.get_x_t()
+                b = ctxt.get_box()
+                for _ in range(md_params.water_sampling_params.n_initial_iterations):
+                    x, b = mover.move(x, b)
+                ctxt.set_x_t(x)
+                ctxt.set_box(b)
+                # Set the interval back to the proper value
+                mover.set_interval(md_params.water_sampling_params.interval)
     rng = np.random.default_rng(md_params.seed)
 
     if md_params.local_steps > 0:
@@ -512,7 +606,7 @@ def sample(initial_state: InitialState, md_params: MDParams, max_buffer_frames: 
     * Assertion error if coords become NaN
     """
 
-    ctxt = get_context(initial_state)
+    ctxt = get_context(initial_state, md_params)
 
     return sample_with_context(
         ctxt, md_params, initial_state.integrator.temperature, initial_state.ligand_idxs, max_buffer_frames
@@ -888,33 +982,12 @@ def run_sims_hrex(
     warn(f"Setting numpy global random state using seed {md_params.seed}")
     np.random.seed(md_params.seed)
 
-    def get_potential_and_context(initial_state: InitialState) -> Tuple[GpuImplWrapper, Context]:
-        # Set up overall potential
-        potentials = [bp.potential for bp in initial_state.potentials]
-        params = [bp.params for bp in initial_state.potentials]
-        potential = SummedPotential(potentials, params).to_gpu(np.float32)
-
-        # Set up context for MD using overall potential
-        bound_impl = potential.bind_params_list(params).bound_impl
-        bound_impls = [bound_impl]
-        intg_impl = initial_state.integrator.impl()
-        movers = []
-        if initial_state.barostat:
-            movers.append(initial_state.barostat.impl(bound_impls))
-        context = Context(
-            initial_state.x0,
-            initial_state.v0,
-            initial_state.box0,
-            intg_impl,
-            bound_impls,
-            movers=movers,
-        )
-
-        return potential, context
-
     # Set up overall potential and context using the first state.
     # NOTE: this assumes that states differ only in their parameters, but we do not check this!
-    potential, context = get_potential_and_context(initial_states[0])
+    context = get_context(initial_states[0], md_params=md_params)
+    bound_potentials = context.get_potentials()
+    assert len(bound_potentials) == 1
+    potential = bound_potentials[0].get_potential()
     temperature = initial_states[0].integrator.temperature
     ligand_idxs = initial_states[0].ligand_idxs
 
@@ -922,11 +995,14 @@ def run_sims_hrex(
         return np.concatenate([bp.params.flatten() for bp in initial_state.potentials])
 
     params_by_state = np.array([get_flattened_params(initial_state) for initial_state in initial_states])
+    water_params_by_state: Optional[NDArray] = None
+    if md_params.water_sampling_params is not None:
+        water_params_by_state = np.array([get_water_params(initial_state) for initial_state in initial_states])
 
     def compute_log_q_matrix(xvbs: List[CoordsVelBox]):
         coords = np.array([xvb.coords for xvb in xvbs])
         boxes = np.array([xvb.box for xvb in xvbs])
-        _, _, U = potential.unbound_impl.execute_batch(coords, params_by_state, boxes, False, False, True)
+        _, _, U = potential.execute_batch(coords, params_by_state, boxes, False, False, True)
         log_q = -U / (BOLTZ * temperature)
         return log_q
 
@@ -951,30 +1027,48 @@ def run_sims_hrex(
     if barostat is not None:
         barostat.set_interval(equil_barostat_interval)
 
-    def get_equilibrated_xvb(xvb: CoordsVelBox, params: NDArray) -> CoordsVelBox:
-        if md_params.n_eq_steps == 0:
-            return xvb
-        # Ensure initial mover state is consistent across replicas
-        for mover in context.get_movers():
-            mover.set_step(0)
+    def get_equilibrated_xvb(xvb: CoordsVelBox, state_idx: StateIdx) -> CoordsVelBox:
+        if md_params.n_eq_steps > 0:
+            # Set the movers to 0 to ensure they all equilibrate the same way
+            # Ensure initial mover state is consistent across replicas
+            for mover in context.get_movers():
+                mover.set_step(0)
 
-        context.set_x_t(xvb.coords)
-        context.set_v_t(xvb.velocities)
-        context.set_box(xvb.box)
+            context.set_x_t(xvb.coords)
+            context.set_v_t(xvb.velocities)
+            context.set_box(xvb.box)
 
-        assert len(context.get_potentials()) == 1
-        context.get_potentials()[0].set_params(params)
+            params = params_by_state[state_idx]
+            assert len(context.get_potentials()) == 1
+            context.get_potentials()[0].set_params(params)
+            if md_params.water_sampling_params is not None:
+                for mover in context.get_movers():
+                    if isinstance(mover, custom_ops.TIBDExchangeMove_f32):
+                        assert water_params_by_state is not None
+                        mover.set_params(water_params_by_state[state_idx])
 
-        xs, boxes = context.multiple_steps(md_params.n_eq_steps, store_x_interval=0)
-        x0 = xs[0]
-        v0 = context.get_v_t()
-        box0 = boxes[0]
-
-        return CoordsVelBox(x0, v0, box0)
+            xs, boxes = context.multiple_steps(md_params.n_eq_steps, store_x_interval=0)
+            x0 = xs[0]
+            v0 = context.get_v_t()
+            box0 = boxes[0]
+            xvb = CoordsVelBox(x0, v0, box0)
+        # Equilibrate before running water sampling
+        if md_params.water_sampling_params is not None and md_params.water_sampling_params.n_initial_iterations > 0:
+            for mover in context.get_movers():
+                if isinstance(mover, custom_ops.TIBDExchangeMove_f32):
+                    # Set the interval to 1 to allow making moves
+                    mover.set_interval(1)
+                    x = xvb.coords
+                    b = xvb.box
+                    for _ in range(md_params.water_sampling_params.n_initial_iterations):
+                        x, b = mover.move(x, b)
+                    xvb = CoordsVelBox(coords=x, velocities=xvb.velocities, box=b)
+                    # Set the interval back to the proper value
+                    mover.set_interval(md_params.water_sampling_params.interval)
+        return xvb
 
     initial_replicas = [
-        get_equilibrated_xvb(CoordsVelBox(s.x0, s.v0, s.box0), params)
-        for s, params in zip(initial_states, params_by_state)
+        get_equilibrated_xvb(CoordsVelBox(s.x0, s.v0, s.box0), StateIdx(i)) for i, s in enumerate(initial_states)
     ]
 
     hrex = HREX.from_replicas(initial_replicas)
@@ -989,6 +1083,14 @@ def run_sims_hrex(
     if barostat is not None and state.barostat is not None:
         barostat.set_interval(state.barostat.interval)
 
+    if md_params.water_sampling_params is not None:
+        if md_params.steps_per_frame * n_frames_per_iter > md_params.water_sampling_params.interval:
+            warn("May not be running water sampling on every window.")
+        # Prevent initial iterations after equilibration
+        md_params = replace(
+            md_params, water_sampling_params=replace(md_params.water_sampling_params, n_initial_iterations=0)
+        )
+
     for iteration, n_frames_iter in enumerate(batches(md_params.n_frames, n_frames_per_iter), 1):
 
         def sample_replica(xvb: CoordsVelBox, state_idx: StateIdx) -> Trajectory:
@@ -1001,10 +1103,14 @@ def run_sims_hrex(
             context.get_potentials()[0].set_params(params)
 
             current_step = (iteration - 1) * n_frames_per_iter * md_params.steps_per_frame
+
             # Setup the MC movers of the Context
             for mover in context.get_movers():
                 # Set the step so that all windows have the movers behave the same way.
                 mover.set_step(current_step)
+                if md_params.water_sampling_params is not None and isinstance(mover, custom_ops.TIBDExchangeMove_f32):
+                    assert water_params_by_state is not None
+                    mover.set_params(water_params_by_state[state_idx])
 
             md_params_replica = replace(
                 md_params, n_frames=n_frames_iter, n_eq_steps=0, seed=np.random.randint(np.iinfo(np.int32).max)

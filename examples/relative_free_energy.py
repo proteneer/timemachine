@@ -6,12 +6,11 @@ from rdkit import Chem
 
 from timemachine.constants import DEFAULT_ATOM_MAPPING_KWARGS
 from timemachine.fe import atom_mapping, cif_writer
-from timemachine.fe.free_energy import MDParams
-from timemachine.fe.rbfe import HostConfig, estimate_relative_free_energy
+from timemachine.fe.free_energy import HREXParams, MDParams, WaterSamplingParams
+from timemachine.fe.rbfe import run_complex, run_solvent
 from timemachine.fe.single_topology import AtomMapMixin
 from timemachine.fe.utils import plot_atom_mapping_grid, read_sdf
 from timemachine.ff import Forcefield
-from timemachine.md import builders
 from timemachine.testsystems.relative import get_hif2a_ligand_pair_single_topology
 
 
@@ -29,13 +28,8 @@ def write_trajectory_as_cif(mol_a, mol_b, core, all_frames, host_topology, prefi
 
 
 def run_pair(mol_a, mol_b, core, forcefield, md_params, protein_path):
-    box_width = 4.0
-    solvent_sys, solvent_conf, solvent_box, solvent_top = builders.build_water_system(box_width, forcefield.water_ff)
-    solvent_box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes
-    solvent_host_config = HostConfig(solvent_sys, solvent_conf, solvent_box, solvent_conf.shape[0])
-
-    solvent_res = estimate_relative_free_energy(
-        mol_a, mol_b, core, forcefield, solvent_host_config, md_params=md_params, prefix="solvent"
+    solvent_res, solvent_top, solvent_host_config = run_solvent(
+        mol_a, mol_b, core, forcefield, None, md_params=md_params
     )
 
     with open("solvent_overlap.png", "wb") as fh:
@@ -45,23 +39,18 @@ def run_pair(mol_a, mol_b, core, forcefield, md_params, protein_path):
     write_trajectory_as_cif(mol_a, mol_b, core, solvent_res.frames, solvent_top, "solvent_traj")
 
     print(
-        f"solvent dG: {np.sum(solvent_res.result.all_dGs):.3f} +- {np.linalg.norm(solvent_res.result.all_errs):.3f} kJ/mol"
+        f"solvent dG: {np.sum(solvent_res.final_result.dGs):.3f} +- {np.linalg.norm(solvent_res.final_result.dG_errs):.3f} kJ/mol"
     )
 
-    complex_sys, complex_conf, complex_box, complex_top, num_water_atoms = builders.build_protein_system(
-        protein_path, forcefield.protein_ff, forcefield.water_ff
-    )
-    complex_box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes
-    complex_host_config = HostConfig(complex_sys, complex_conf, complex_box, num_water_atoms)
-    complex_res = estimate_relative_free_energy(
-        mol_a, mol_b, core, forcefield, complex_host_config, md_params=md_params, prefix="complex"
+    complex_res, complex_top, complex_host_config = run_complex(
+        mol_a, mol_b, core, forcefield, protein_path, md_params=md_params
     )
     with open("complex_overlap.png", "wb") as fh:
         fh.write(complex_res.plots.overlap_detail_png)
     write_trajectory_as_cif(mol_a, mol_b, core, complex_res.frames, complex_top, "complex_traj")
 
     print(
-        f"complex dG: {np.sum(complex_res.result.all_dGs):.3f} +- {np.linalg.norm(complex_res.result.all_errs):.3f} kJ/mol"
+        f"complex dG: {np.sum(complex_res.final_result.dGs):.3f} +- {np.linalg.norm(complex_res.final_result.dG_errs):.3f} kJ/mol"
     )
 
 
@@ -121,7 +110,14 @@ def read_from_args():
 
     forcefield = Forcefield.load_from_file(args.forcefield)
 
-    md_params = MDParams(n_frames=args.n_frames, n_eq_steps=200_000, steps_per_frame=400, seed=args.seed)
+    md_params = MDParams(
+        n_frames=args.n_frames,
+        n_eq_steps=200_000,
+        steps_per_frame=400,
+        seed=args.seed,
+        hrex_params=HREXParams(),
+        water_sampling_params=WaterSamplingParams(),
+    )
 
     run_pair(mol_a, mol_b, core, forcefield, md_params, args.protein)
 
