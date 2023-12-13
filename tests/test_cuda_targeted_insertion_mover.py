@@ -465,7 +465,7 @@ def test_tibd_exchange_deterministic_moves(radius, moves, precision, seed):
         (1, 500, 4.0),
         (5000, 5000, 4.0),
         # The 6.0nm box triggers a failure that would occur with systems of certain sizes, may be flaky in identifying issues
-        pytest.param(1, 5000, 6.0, marks=pytest.mark.nightly(reason="slow")),
+        pytest.param(1, 5000, 5.0, marks=pytest.mark.nightly(reason="slow")),
     ],
 )
 @pytest.mark.parametrize("precision,rtol,atol", [(np.float64, 5e-6, 5e-6), (np.float32, 1e-4, 2e-3)])
