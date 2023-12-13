@@ -481,13 +481,12 @@ void __global__ k_compute_nonbonded_target_atom_energies(
         RealType ci_z = coords[atom_i_idx * 3 + 2];
 
         int atom_j_idx = blockIdx.x * blockDim.x + threadIdx.x;
-        // All threads in the threadblock must loop to allow for __syncthreads() and the row accumulation.
-        while (atom_j_idx - threadIdx.x < N) {
-            // Zero out the energy buffer
-            block_energy_buffer[threadIdx.x] = 0;
+        // Zero out the energy buffer
+        block_energy_buffer[threadIdx.x] = 0;
+        while (atom_j_idx < N) {
             // The two atoms are in the same molecule, don't compute the energies
             // requires that the atom indices in each target mol is consecutive
-            if (atom_j_idx < N && (atom_j_idx < min_atom_idx || atom_j_idx > max_atom_idx)) {
+            if (atom_j_idx < min_atom_idx || atom_j_idx > max_atom_idx) {
 
                 int params_j_idx = atom_j_idx * PARAMS_PER_ATOM;
                 int charge_param_idx_j = params_j_idx + PARAM_OFFSET_CHARGE;
@@ -524,7 +523,8 @@ void __global__ k_compute_nonbonded_target_atom_energies(
                     RealType inv_d2ij;
                     compute_electrostatics<RealType, true>(
                         1.0, qi, qj, d2ij, beta, dij, inv_dij, inv_d2ij, ebd, delta_prefactor, u);
-                    // lennard jones energy
+
+                    // lennard jones force
                     if (eps_i != 0 && eps_j != 0) {
                         RealType sig_grad;
                         RealType eps_grad;
@@ -547,6 +547,8 @@ void __global__ k_compute_nonbonded_target_atom_energies(
             __syncthreads();
 
             atom_j_idx += gridDim.x * blockDim.x;
+            // Always zero before the end of the loop, in case one thread no longer loops
+            block_energy_buffer[threadIdx.x] = 0;
         }
         row_idx += gridDim.y * blockDim.y;
     }
@@ -556,7 +558,9 @@ void __global__ k_compute_nonbonded_target_atom_energies(
 // of values that need to be accumulated per atom.
 template <typename RealType, int NUM_BLOCKS>
 void __global__ k_accumulate_atom_energies_to_per_mol_energies(
+    const int target_atoms,
     const int target_mols,
+    const int *__restrict__ mol_idxs,               // [target_atoms]
     const int *__restrict__ mol_offsets,            // [target_mols + 1]
     const __int128 *__restrict__ per_atom_energies, // [target_atoms, NUM_BLOCKS]
     __int128 *__restrict__ per_mol_energies) {
