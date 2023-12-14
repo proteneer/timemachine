@@ -17,6 +17,10 @@ NonbondedMolEnergyPotential<RealType>::NonbondedMolEnergyPotential(
       cutoff_squared_(static_cast<RealType>(cutoff * cutoff)) {
     verify_group_idxs(N_, target_mols);
 
+    if (num_target_mols_ <= 0) {
+        throw std::runtime_error("must provide at least one target mol");
+    }
+
     std::array<std::vector<int>, 3> target_flattened_groups = prepare_group_idxs_for_gpu(target_mols);
 
     d_target_atom_idxs_.realloc(target_flattened_groups[0].size());
@@ -70,14 +74,10 @@ void NonbondedMolEnergyPotential<RealType>::mol_energies_device(
         cutoff_squared_,
         d_atom_energy_buffer_.data);
     gpuErrchk(cudaPeekAtLastError());
+
     k_accumulate_atom_energies_to_per_mol_energies<RealType, BLOCK_SIZE>
         <<<ceil_divide(target_mols, tpb), tpb, 0, stream>>>(
-            static_cast<int>(d_target_atom_idxs_.length),
-            target_mols,
-            d_target_mol_idxs_.data,
-            d_target_mol_offsets_.data,
-            d_atom_energy_buffer_.data,
-            d_output_energies);
+            target_mols, d_target_mol_offsets_.data, d_atom_energy_buffer_.data, d_output_energies);
     gpuErrchk(cudaPeekAtLastError());
 }
 
