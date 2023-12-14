@@ -929,6 +929,9 @@ def run_sims_hrex(
     def get_equilibrated_xvb(xvb: CoordsVelBox, params: NDArray) -> CoordsVelBox:
         if md_params.n_eq_steps == 0:
             return xvb
+        # Set the movers to 0 to ensure they all equilibrate the same way
+        for mover in context.get_movers():
+            mover.set_step(0)
 
         context.set_x_t(xvb.coords)
         context.set_v_t(xvb.velocities)
@@ -956,6 +959,7 @@ def run_sims_hrex(
     fraction_accepted_by_pair_by_iter: List[List[Tuple[int, int]]] = []
 
     for iteration, n_frames_iter in enumerate(batches(md_params.n_frames, n_frames_per_iter), 1):
+        current_step = (iteration - 1) * n_frames_per_iter * md_params.steps_per_frame
 
         def sample_replica(xvb: CoordsVelBox, state_idx: StateIdx) -> Trajectory:
             context.set_x_t(xvb.coords)
@@ -965,6 +969,11 @@ def run_sims_hrex(
             params = params_by_state[state_idx]
             assert len(context.get_potentials()) == 1
             context.get_potentials()[0].set_params(params)
+
+            # Setup the MC movers of the Context
+            for mover in context.get_movers():
+                # Set the step so that all windows have the movers behave the same way.
+                mover.set_step(current_step)
 
             md_params_replica = replace(
                 md_params, n_frames=n_frames_iter, n_eq_steps=0, seed=np.random.randint(np.iinfo(np.int32).max)
