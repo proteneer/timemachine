@@ -36,3 +36,7 @@ def test_get_samples_by_iter_by_replica(perms):
 def test_get_samples_by_iter_by_replica_invalid_args():
     with pytest.raises(AssertionError):
         get_samples_by_iter_by_replica([[1]], [[ReplicaIdx(0)], [ReplicaIdx(0)]])
+    with pytest.raises(AssertionError):
+        get_samples_by_iter_by_replica([[1], [2, 3]], [[ReplicaIdx(0)], [ReplicaIdx(0)]])
+    with pytest.raises(AssertionError):
+        get_samples_by_iter_by_replica([[1, 2], [3, 4]], [[ReplicaIdx(0)], [ReplicaIdx(0), ReplicaIdx(1)]])

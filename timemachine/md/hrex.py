@@ -5,7 +5,7 @@ import numpy as np
 from numpy.typing import NDArray
 
 from timemachine.md.moves import MixtureOfMoves, MonteCarloMove
-from timemachine.utils import batches
+from timemachine.utils import batches, not_ragged
 
 Replica = TypeVar("Replica")
 
@@ -165,6 +165,8 @@ def get_samples_by_iter_by_replica(
     """
 
     assert len(samples_by_state_by_iter) == len(replica_idx_by_state_by_iter)
+    assert not_ragged(samples_by_state_by_iter)
+    assert not_ragged(replica_idx_by_state_by_iter)
 
     samples_by_replica_by_iter = [
         [samples_by_state[state_idx] for state_idx in np.argsort(replica_idx_by_state)]

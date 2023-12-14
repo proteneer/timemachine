@@ -1,4 +1,4 @@
-from typing import Callable, Iterable, Iterator, Optional, TypeVar
+from typing import Callable, Iterable, Iterator, Optional, Sequence, TypeVar
 
 
 def batches(n: int, batch_size: int) -> Iterator[int]:
@@ -14,6 +14,10 @@ def batches(n: int, batch_size: int) -> Iterator[int]:
 A = TypeVar("A")
 B = TypeVar("B")
 C = TypeVar("C")
+
+
+def not_ragged(xss: Sequence[Sequence]) -> bool:
+    return all(len(xs) == len(xss[0]) for xs in xss)
 
 
 def pairwise_transform_and_combine(xs: Iterable[A], f: Callable[[A], B], g: Callable[[B, B], C]) -> Iterator[C]:
