@@ -1,15 +1,19 @@
 import os
 from glob import glob
 from pathlib import Path
+from tempfile import NamedTemporaryFile
 from warnings import catch_warnings
 
 import numpy as np
 import pytest
 from common import load_split_forcefields, temporary_working_dir
+from rdkit import Chem
 
 from timemachine import constants
 from timemachine.ff import Forcefield, combine_params
+from timemachine.ff.handlers import openmm_deserializer
 from timemachine.ff.handlers.deserialize import deserialize_handlers
+from timemachine.md import builders
 
 pytestmark = [pytest.mark.nocuda]
 
@@ -132,3 +136,31 @@ def test_split():
     check(ffs.solv)
     check(ffs.prot)
     check(ffs.prot)
+
+
+def test_amber14_tip3p_matches_tip3p():
+    """Verify that given a water box, the same parameters are produced for amber14/tip3p as tip3p, but with additional
+    support for Ions"""
+    tip3p_ff = "tip3p"
+    cutoff = 1.2
+    assert constants.DEFAULT_WATER_FF != tip3p_ff
+    ref_system, _, _, _ = builders.build_water_system(4.0, constants.DEFAULT_WATER_FF)
+    tip3p_system, _, _, _ = builders.build_water_system(4.0, tip3p_ff)
+
+    ref_pots, ref_masses = openmm_deserializer.deserialize_system(ref_system, cutoff)
+    test_pots, test_masses = openmm_deserializer.deserialize_system(ref_system, cutoff)
+    np.testing.assert_array_equal(ref_masses, test_masses)
+
+    assert len(ref_pots) == len(test_pots)
+    for ref, test in zip(ref_pots, test_pots):
+        np.testing.assert_array_equal(ref.params, test.params)
+
+    mol = Chem.MolFromSmiles("[Zn+2]")
+    with NamedTemporaryFile(suffix=".pdb") as temp:
+        Chem.MolToPDBFile(mol, temp.name)
+        # tip3p will fail to handle ions
+        with pytest.raises(ValueError, match="No template found for residue 1"):
+            builders.build_protein_system(temp.name, constants.DEFAULT_PROTEIN_FF, tip3p_ff)
+
+        # Amber14/tip3p handles ions without issue
+        builders.build_protein_system(temp.name, constants.DEFAULT_PROTEIN_FF, constants.DEFAULT_WATER_FF)

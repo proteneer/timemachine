@@ -19,7 +19,7 @@ KCAL_TO_DEFAULT_KT = KCAL_TO_KJ / DEFAULT_KT
 # default force fields
 DEFAULT_FF = "smirnoff_2_0_0_ccc.py"
 DEFAULT_PROTEIN_FF = "amber99sbildn"
-DEFAULT_WATER_FF = "tip3p"
+DEFAULT_WATER_FF = "amber14/tip3p"
 
 # thresholds
 MAX_FORCE_NORM = 50000.0  # used to check norms in the gradient computations
