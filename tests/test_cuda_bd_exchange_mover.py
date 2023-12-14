@@ -286,15 +286,21 @@ def test_bd_exchange_deterministic_moves(moves, precision, seed):
 
 
 @pytest.mark.parametrize(
-    "steps_per_move,moves",
-    [(1, 2500), (10, 2500), (200000, 200000)],
+    "steps_per_move,moves,box_size",
+    [
+        (1, 2500, 3.0),
+        (10, 2500, 3.0),
+        (200000, 200000, 3.0),
+        # The 6.0nm box triggers a failure that would occur with systems of certain sizes, may be flaky in identifying issues
+        pytest.param(1, 2500, 6.0, marks=pytest.mark.nightly(reason="slow")),
+    ],
 )
 @pytest.mark.parametrize("precision,rtol,atol", [(np.float64, 5e-6, 5e-6), (np.float32, 1e-4, 2e-3)])
 @pytest.mark.parametrize("seed", [2023])
-def test_moves_in_a_water_box(steps_per_move, moves, precision, rtol, atol, seed):
+def test_moves_in_a_water_box(steps_per_move, moves, box_size, precision, rtol, atol, seed):
     """Verify that the log acceptance probability between the reference and cuda implementation agree"""
     ff = Forcefield.load_default()
-    system, conf, box, _ = builders.build_water_system(3.0, ff.water_ff)
+    system, conf, box, _ = builders.build_water_system(box_size, ff.water_ff)
     bps, _ = openmm_deserializer.deserialize_system(system, cutoff=1.2)
 
     nb = next(bp for bp in bps if isinstance(bp.potential, Nonbonded))
