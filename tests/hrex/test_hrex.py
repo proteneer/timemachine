@@ -1,8 +1,9 @@
 import hypothesis.strategies as st
 import numpy as np
+import pytest
 from hypothesis import given, seed
 
-from timemachine.md.hrex import get_samples_by_iter_by_replica
+from timemachine.md.hrex import ReplicaIdx, get_samples_by_iter_by_replica
 
 
 @given(
@@ -30,3 +31,8 @@ def test_get_samples_by_iter_by_replica(perms):
     )
 
     np.testing.assert_array_equal(samples_by_iter_by_replica, samples_by_iter_by_replica_ref)
+
+
+def test_get_samples_by_iter_by_replica_invalid_args():
+    with pytest.raises(AssertionError):
+        get_samples_by_iter_by_replica([[1]], [[ReplicaIdx(0)], [ReplicaIdx(0)]])

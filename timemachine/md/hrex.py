@@ -164,6 +164,8 @@ def get_samples_by_iter_by_replica(
         (replica_idx, hrex_iter) -> samples
     """
 
+    assert len(samples_by_state_by_iter) == len(replica_idx_by_state_by_iter)
+
     def inverse_permutation(p):
         return [i for i, _ in sorted(enumerate(p), key=lambda t: t[1])]
 
