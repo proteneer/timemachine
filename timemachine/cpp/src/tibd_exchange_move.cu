@@ -52,6 +52,10 @@ TIBDExchangeMove<RealType>::TIBDExchangeMove(
         DEFAULT_THREADS_PER_BLOCK, seed, d_rand_states_.data);
     gpuErrchk(cudaPeekAtLastError());
 
+    k_arange<<<ceil_divide(this->num_target_mols_, DEFAULT_THREADS_PER_BLOCK), DEFAULT_THREADS_PER_BLOCK, 0>>>(
+        this->num_target_mols_, d_identify_indices_.data, 0);
+    gpuErrchk(cudaPeekAtLastError());
+
     // Setup buffer for doing the flagged partition
     gpuErrchk(cub::DevicePartition::Flagged(
         nullptr,
@@ -119,9 +123,6 @@ void TIBDExchangeMove<RealType>::move(
                 this->d_log_weights_after_.data);
             gpuErrchk(cudaPeekAtLastError());
         }
-
-        k_arange<<<mol_blocks, tpb, 0, stream>>>(this->num_target_mols_, d_identify_indices_.data, 0);
-        gpuErrchk(cudaPeekAtLastError());
 
         k_flag_mols_inner_outer<RealType><<<mol_blocks, tpb, 0, stream>>>(
             this->num_target_mols_,
