@@ -1403,6 +1403,7 @@ void declare_mover(py::module &m) {
     py::class_<Class, std::shared_ptr<Class>>(m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
         .def("set_interval", &Class::set_interval, py::arg("interval"))
         .def("get_interval", &Class::get_interval)
+        .def("set_step", &Class::set_step, py::arg("step"))
         .def(
             "move",
             [](Class &mover,
