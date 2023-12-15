@@ -18,6 +18,16 @@ protected:
 public:
     virtual ~Mover(){};
 
+    // set_step is to deal with HREX where a mover may not be called during the singular frame being
+    // generated.
+    // TBD come up with an explicit, chainable API that works around this jank
+    void set_step(const int step) {
+        if (step < 0) {
+            throw std::runtime_error("step must be at least 0");
+        }
+        this->step_ = step;
+    }
+
     void set_interval(const int interval) {
         if (interval <= 0) {
             throw std::runtime_error("interval must be greater than 0");
