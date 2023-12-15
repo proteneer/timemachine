@@ -209,7 +209,7 @@ void TIBDExchangeMove<RealType>::move(
         this->sampler_.sample_device(src_count, 1, d_src_weights_.data, this->d_samples_.data, stream);
 
         // Selected an index from the src weights, need to remap the samples idx to the mol indices
-        k_adjust_sample_idx<<<1, tpb, 0, stream>>>(
+        k_adjust_sample_idx<<<1, 1, 0, stream>>>(
             d_targeting_inner_vol_.data, d_inner_mols_count_.data, d_partitioned_indices_.data, this->d_samples_.data);
         gpuErrchk(cudaPeekAtLastError());
 
