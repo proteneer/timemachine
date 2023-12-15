@@ -959,7 +959,6 @@ def run_sims_hrex(
     fraction_accepted_by_pair_by_iter: List[List[Tuple[int, int]]] = []
 
     for iteration, n_frames_iter in enumerate(batches(md_params.n_frames, n_frames_per_iter), 1):
-        current_step = (iteration - 1) * n_frames_per_iter * md_params.steps_per_frame
 
         def sample_replica(xvb: CoordsVelBox, state_idx: StateIdx) -> Trajectory:
             context.set_x_t(xvb.coords)
@@ -970,6 +969,7 @@ def run_sims_hrex(
             assert len(context.get_potentials()) == 1
             context.get_potentials()[0].set_params(params)
 
+            current_step = (iteration - 1) * n_frames_per_iter * md_params.steps_per_frame
             # Setup the MC movers of the Context
             for mover in context.get_movers():
                 # Set the step so that all windows have the movers behave the same way.
