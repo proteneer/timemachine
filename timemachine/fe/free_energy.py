@@ -929,6 +929,9 @@ def run_sims_hrex(
     def get_equilibrated_xvb(xvb: CoordsVelBox, params: NDArray) -> CoordsVelBox:
         if md_params.n_eq_steps == 0:
             return xvb
+        # Ensure initial mover state is consistent across replicas
+        for mover in context.get_movers():
+            mover.set_step(0)
 
         context.set_x_t(xvb.coords)
         context.set_v_t(xvb.velocities)
@@ -965,6 +968,12 @@ def run_sims_hrex(
             params = params_by_state[state_idx]
             assert len(context.get_potentials()) == 1
             context.get_potentials()[0].set_params(params)
+
+            current_step = (iteration - 1) * n_frames_per_iter * md_params.steps_per_frame
+            # Setup the MC movers of the Context
+            for mover in context.get_movers():
+                # Set the step so that all windows have the movers behave the same way.
+                mover.set_step(current_step)
 
             md_params_replica = replace(
                 md_params, n_frames=n_frames_iter, n_eq_steps=0, seed=np.random.randint(np.iinfo(np.int32).max)
