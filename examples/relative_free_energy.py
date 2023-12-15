@@ -39,7 +39,7 @@ def run_pair(mol_a, mol_b, core, forcefield, md_params, protein_path):
     write_trajectory_as_cif(mol_a, mol_b, core, solvent_res.frames, solvent_top, "solvent_traj")
 
     print(
-        f"solvent dG: {np.sum(solvent_res.result.all_dGs):.3f} +- {np.linalg.norm(solvent_res.result.all_errs):.3f} kJ/mol"
+        f"solvent dG: {np.sum(solvent_res.final_result.dGs):.3f} +- {np.linalg.norm(solvent_res.final_result.dG_errs):.3f} kJ/mol"
     )
 
     complex_res, complex_top, complex_host_config = run_complex(
@@ -50,7 +50,7 @@ def run_pair(mol_a, mol_b, core, forcefield, md_params, protein_path):
     write_trajectory_as_cif(mol_a, mol_b, core, complex_res.frames, complex_top, "complex_traj")
 
     print(
-        f"complex dG: {np.sum(complex_res.result.all_dGs):.3f} +- {np.linalg.norm(complex_res.result.all_errs):.3f} kJ/mol"
+        f"complex dG: {np.sum(complex_res.final_result.dGs):.3f} +- {np.linalg.norm(complex_res.final_result.dG_errs):.3f} kJ/mol"
     )
 
 
