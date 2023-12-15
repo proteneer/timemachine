@@ -32,8 +32,8 @@ from timemachine.fe.stored_arrays import StoredArrays
 from timemachine.fe.utils import get_mol_masses, get_romol_conf
 from timemachine.ff import ForcefieldParams
 from timemachine.ff.handlers import openmm_deserializer
-from timemachine.lib import LangevinIntegrator, MonteCarloBarostat
-from timemachine.lib.custom_ops import Context, TIBDExchangeMove_f32
+from timemachine.lib import LangevinIntegrator, MonteCarloBarostat, custom_ops
+from timemachine.lib.custom_ops import Context
 from timemachine.md.barostat.utils import compute_box_center, get_bond_list, get_group_indices
 from timemachine.md.hrex import (
     HREX,
@@ -456,7 +456,7 @@ def get_context(initial_state: InitialState, md_params: Optional[MDParams] = Non
 
         water_params = get_water_params(initial_state)
 
-        water_sampler = TIBDExchangeMove_f32(
+        water_sampler = custom_ops.TIBDExchangeMove_f32(
             initial_state.x0.shape[0],
             initial_state.ligand_idxs,
             water_idxs,
@@ -479,7 +479,7 @@ def sample_with_context(
 ) -> Trajectory:
     if md_params.water_sampling_params is not None and md_params.water_sampling_params.n_initial_iterations > 0:
         for mover in ctxt.get_movers():
-            if isinstance(mover, TIBDExchangeMove_f32):
+            if isinstance(mover, custom_ops.TIBDExchangeMove_f32):
                 mover.set_interval(1)
                 x = ctxt.get_x_t()
                 b = ctxt.get_box()
@@ -1000,7 +1000,7 @@ def run_sims_hrex(
     def get_equilibrated_xvb(xvb: CoordsVelBox, state_idx: StateIdx) -> CoordsVelBox:
         if md_params.water_sampling_params is not None and md_params.water_sampling_params.n_initial_iterations > 0:
             for mover in context.get_movers():
-                if isinstance(mover, TIBDExchangeMove_f32):
+                if isinstance(mover, custom_ops.TIBDExchangeMove_f32):
                     # Set the interval to 1 to allow making moves
                     mover.set_interval(1)
                     x = xvb.coords
@@ -1025,7 +1025,7 @@ def run_sims_hrex(
         context.get_potentials()[0].set_params(params)
         if md_params.water_sampling_params is not None:
             for mover in context.get_movers():
-                if isinstance(mover, TIBDExchangeMove_f32):
+                if isinstance(mover, custom_ops.TIBDExchangeMove_f32):
                     assert water_params_by_state is not None
                     mover.set_params(water_params_by_state[state_idx])
 
@@ -1063,7 +1063,7 @@ def run_sims_hrex(
             context.get_potentials()[0].set_params(params)
             if md_params.water_sampling_params is not None:
                 for mover in context.get_movers():
-                    if isinstance(mover, TIBDExchangeMove_f32):
+                    if isinstance(mover, custom_ops.TIBDExchangeMove_f32):
                         assert water_params_by_state is not None
                         mover.set_params(water_params_by_state[state_idx])
 
