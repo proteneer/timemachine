@@ -13,10 +13,6 @@
 #include <cub/cub.cuh>
 #include <math.h>
 
-// The number of threads per block for the setting of the final weight of the moved mol is low
-// if using the same number as in the rest of the kernels of DEFAULT_THREADS_PER_BLOCK
-#define WEIGHT_THREADS_PER_BLOCK 512
-
 namespace timemachine {
 
 template <typename RealType>
