@@ -1061,16 +1061,14 @@ def run_sims_hrex(
             params = params_by_state[state_idx]
             assert len(context.get_potentials()) == 1
             context.get_potentials()[0].set_params(params)
-            if md_params.water_sampling_params is not None:
-                for mover in context.get_movers():
-                    if isinstance(mover, custom_ops.TIBDExchangeMove_f32):
-                        assert water_params_by_state is not None
-                        mover.set_params(water_params_by_state[state_idx])
-
             # Setup the MC movers of the Context
             for mover in context.get_movers():
                 # Set the step so that all windows have the movers behave the same way.
                 mover.set_step(current_step)
+                if md_params.water_sampling_params is not None and isinstance(mover, custom_ops.TIBDExchangeMove_f32):
+                    assert water_params_by_state is not None
+                    mover.set_params(water_params_by_state[state_idx])
+                    print(mover.n_accepted(), mover.n_proposed())
 
             md_params_replica = replace(
                 md_params, n_frames=n_frames_iter, n_eq_steps=0, seed=np.random.randint(np.iinfo(np.int32).max)
