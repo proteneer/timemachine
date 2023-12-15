@@ -72,9 +72,7 @@ def test_benchmark_hif2a_single_topology(hif2a_single_topology_leg, enable_hrex,
     n_frames = 500 // n_windows
     md_params = MDParams(n_frames=n_frames, n_eq_steps=1, steps_per_frame=400, seed=2023)
     if enable_water_sampling:
-        md_params = replace(
-            md_params, water_sampling_params=WaterSamplingParams(interval=md_params.steps_per_frame, n_proposals=1000)
-        )
+        md_params = replace(md_params, water_sampling_params=WaterSamplingParams())
     temperature = DEFAULT_TEMP
 
     if enable_hrex:

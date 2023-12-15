@@ -96,7 +96,7 @@ class WaterSamplingParams:
         Radius, in nanometers, from the centroid of the molecule to treat as the inner target volume
     """
 
-    interval: int = 400
+    interval: int = 1600
     n_proposals: int = 10000
     n_initial_iterations: int = 0
     radius: float = 1.0
@@ -423,8 +423,9 @@ def get_water_params(initial_state: InitialState) -> NDArray:
     summed_pot = next(p.potential for p in initial_state.potentials if isinstance(p.potential, SummedPotential))
     # TBD Figure out a better way of handling the jankyness of having to select the IxnGroup that defines the Ligand-Water
     # Currently this just hardcodes to the second potential which is the ordering returned by HostTopology.parameterize_nonbonded
-    assert isinstance(summed_pot.potentials[1], NonbondedInteractionGroup)
-    water_params = summed_pot.params_init[1]
+    ixn_group_idx = next(i for i, pot in enumerate(summed_pot.potentials) if isinstance(pot, NonbondedInteractionGroup))
+    assert isinstance(summed_pot.potentials[ixn_group_idx], NonbondedInteractionGroup)
+    water_params = summed_pot.params_init[ixn_group_idx]
     assert water_params.shape[1] == 4
     return water_params
 
