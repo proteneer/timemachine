@@ -909,6 +909,8 @@ def run_edge_and_save_results(
     # Without this get_mol_name(mol) will fail on roundtripped mol
     Chem.SetDefaultPickleProperties(Chem.PropertyPickleOptions.AllProps)
 
+    edge_prefix = f"{edge.mol_a_name}_{edge.mol_b_name}"
+
     try:
         mol_a = mols[edge.mol_a_name]
         mol_b = mols[edge.mol_b_name]
@@ -929,6 +931,24 @@ def run_edge_and_save_results(
             md_params,
             n_windows=n_windows,
         )
+
+        if complex_res.hrex_plots:
+            file_client.store(
+                f"{edge_prefix}_complex_hrex_transition_matrix.png", complex_res.hrex_plots.transition_matrix_png
+            )
+            file_client.store(
+                f"{edge_prefix}_complex_hrex_swap_acceptance_rates_convergence.png",
+                complex_res.hrex_plots.swap_acceptance_rates_convergence_png,
+            )
+            file_client.store(
+                f"{edge_prefix}_complex_hrex_replica_state_distribution_convergence.png",
+                complex_res.hrex_plots.replica_state_distribution_convergence_png,
+            )
+            file_client.store(
+                f"{edge_prefix}_complex_hrex_replica_state_distribution_heatmap.png",
+                complex_res.hrex_plots.replica_state_distribution_heatmap_png,
+            )
+
         solvent_res, solvent_top, _ = run_solvent(
             mol_a,
             mol_b,
@@ -938,6 +958,22 @@ def run_edge_and_save_results(
             md_params,
             n_windows=n_windows,
         )
+        if complex_res.hrex_plots:
+            file_client.store(
+                f"{edge_prefix}_solvent_hrex_transition_matrix.png", solvent_res.hrex_plots.transition_matrix_png
+            )
+            file_client.store(
+                f"{edge_prefix}_solvent_hrex_swap_acceptance_rates_convergence.png",
+                solvent_res.hrex_plots.swap_acceptance_rates_convergence_png,
+            )
+            file_client.store(
+                f"{edge_prefix}_solvent_hrex_replica_state_distribution_convergence.png",
+                solvent_res.hrex_plots.replica_state_distribution_convergence_png,
+            )
+            file_client.store(
+                f"{edge_prefix}_solvent_hrex_replica_state_distribution_heatmap.png",
+                solvent_res.hrex_plots.replica_state_distribution_heatmap_png,
+            )
 
     except Exception as err:
         print(

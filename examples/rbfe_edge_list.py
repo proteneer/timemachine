@@ -1,12 +1,13 @@
 import argparse
 import csv
+from dataclasses import replace
 from typing import List
 
 from openmm import app
 
 from timemachine.constants import KCAL_TO_KJ
 from timemachine.fe import rbfe
-from timemachine.fe.free_energy import MDParams
+from timemachine.fe.free_energy import WaterSamplingParams
 from timemachine.fe.utils import read_sdf
 from timemachine.ff import Forcefield
 
@@ -26,6 +27,9 @@ def parse_args():
     parser.add_argument("--seed", type=int, help="random seed for the runs", required=True)
     parser.add_argument("--n_eq_steps", type=int, help="number of steps used for equilibration", required=False)
     parser.add_argument("--n_windows", type=int, help="number of lambda windows", required=False)
+    parser.add_argument(
+        "--water_sampling_interval", type=int, help="how often to run water sampling", required=False, default=None
+    )
 
     return parser.parse_args()
 
@@ -66,7 +70,9 @@ if __name__ == "__main__":
     forcefield = Forcefield.load_from_file(args.forcefield)
     protein = app.PDBFile(str(args.protein))
 
-    md_params = MDParams(n_frames=args.n_frames, n_eq_steps=args.n_eq_steps, steps_per_frame=400, seed=args.seed)
+    md_params = replace(rbfe.DEFAULT_HREX_PARAMS, n_frames=args.n_frames, n_eq_steps=args.n_eq_steps, seed=args.seed)
+    if args.water_sampling_interval is not None and args.water_sampling_interval > 0:
+        md_params = replace(md_params, water_sampling_params=WaterSamplingParams(interval=args.water_sampling_interval))
 
     _ = rbfe.run_edges_parallel(
         ligands,
