@@ -15,6 +15,16 @@
 
 namespace timemachine {
 
+static const int NOISE_PER_STEP = 2;
+
+int max_random_values(int moves) {
+    const int max_noise_per_batch = 10000;
+    if (moves > max_noise_per_batch) {
+        moves = max_noise_per_batch;
+    }
+    return moves;
+}
+
 template <typename RealType>
 TIBDExchangeMove<RealType>::TIBDExchangeMove(
     const int N,
@@ -33,8 +43,8 @@ TIBDExchangeMove<RealType>::TIBDExchangeMove(
       radius_(static_cast<RealType>(radius)), inner_volume_(static_cast<RealType>((4.0 / 3.0) * M_PI * pow(radius, 3))),
       d_rand_states_(DEFAULT_THREADS_PER_BLOCK), d_inner_mols_count_(1), d_identify_indices_(this->num_target_mols_),
       d_partitioned_indices_(this->num_target_mols_), d_temp_storage_buffer_(0), d_center_(3),
-      d_uniform_noise_buffer_(round_up_even(2)), d_targeting_inner_vol_(1), d_ligand_idxs_(ligand_idxs),
-      d_src_weights_(this->num_target_mols_), d_dest_weights_(this->num_target_mols_),
+      d_uniform_noise_buffer_(round_up_even(2 * max_random_values(proposals_per_move))), d_targeting_inner_vol_(1),
+      d_ligand_idxs_(ligand_idxs), d_src_weights_(this->num_target_mols_), d_dest_weights_(this->num_target_mols_),
       d_inner_flags_(this->num_target_mols_), d_box_volume_(1), p_inner_count_(1), p_targeting_inner_vol_(1) {
 
     if (radius <= 0.0) {
@@ -102,7 +112,18 @@ void TIBDExchangeMove<RealType>::move(
     k_compute_box_volume<<<1, 1, 0, stream>>>(d_box, d_box_volume_.data);
     gpuErrchk(cudaPeekAtLastError());
 
+    // The d_uniform_noise_buffer_ buffer contains the random value for determining where to insert and whether to accept the move
+    curandErrchk(
+        templateCurandUniform(this->cr_rng_, this->d_uniform_noise_buffer_.data, this->d_uniform_noise_buffer_.length));
+
+    int noise_offset = 0;
     for (int move = 0; move < this->proposals_per_move_; move++) {
+        if (noise_offset >= this->d_uniform_noise_buffer_.length) {
+            // reset the noise to zero and generate more noise
+            noise_offset = 0;
+            curandErrchk(templateCurandUniform(
+                this->cr_rng_, this->d_uniform_noise_buffer_.data, this->d_uniform_noise_buffer_.length));
+        }
         // Run only after the first pass, to maintain meaningful `log_probability_host` values
         if (move > 0) {
             // Run a separate kernel to replace the before log probs and weights with the after if accepted a move
@@ -112,7 +133,8 @@ void TIBDExchangeMove<RealType>::move(
                 d_targeting_inner_vol_.data,
                 d_box_volume_.data,
                 inner_volume_,
-                this->d_uniform_noise_buffer_.data + 1, // Offset to get the last value for the acceptance criteria
+                this->d_uniform_noise_buffer_.data + noise_offset +
+                    1, // Offset to get the last value for the acceptance criteria
                 this->d_log_sum_exp_before_.data,
                 this->d_log_sum_exp_after_.data,
                 this->d_log_weights_before_.data,
@@ -141,13 +163,9 @@ void TIBDExchangeMove<RealType>::move(
             this->num_target_mols_,
             stream));
 
-        // The this->d_uniform_noise_buffer_ buffer contains the random value for determining where to insert and whether to accept the move
-        curandErrchk(templateCurandUniform(
-            this->cr_rng_, this->d_uniform_noise_buffer_.data, this->d_uniform_noise_buffer_.length));
-
         k_decide_targeted_move<<<1, 1, 0, stream>>>(
             this->num_target_mols_,
-            this->d_uniform_noise_buffer_.data,
+            this->d_uniform_noise_buffer_.data + noise_offset,
             d_inner_mols_count_.data,
             d_targeting_inner_vol_.data);
         gpuErrchk(cudaPeekAtLastError());
@@ -232,7 +250,8 @@ void TIBDExchangeMove<RealType>::move(
             d_targeting_inner_vol_.data,
             d_box_volume_.data,
             inner_volume_,
-            this->d_uniform_noise_buffer_.data + 1, // Offset to get the last value for the acceptance criteria
+            this->d_uniform_noise_buffer_.data + noise_offset +
+                1, // Offset to get the last value for the acceptance criteria
             this->d_log_sum_exp_before_.data,
             this->d_log_sum_exp_after_.data,
             this->d_intermediate_coords_.data,
@@ -240,6 +259,7 @@ void TIBDExchangeMove<RealType>::move(
             this->d_num_accepted_.data);
         gpuErrchk(cudaPeekAtLastError());
         this->num_attempted_++;
+        noise_offset += NOISE_PER_STEP;
     }
 }
 
