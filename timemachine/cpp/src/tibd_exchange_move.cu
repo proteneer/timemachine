@@ -13,10 +13,6 @@
 #include <cub/cub.cuh>
 #include <math.h>
 
-// The number of threads per block for the setting of the final weight of the moved mol is low
-// if using the same number as in the rest of the kernels of DEFAULT_THREADS_PER_BLOCK
-#define WEIGHT_THREADS_PER_BLOCK 512
-
 namespace timemachine {
 
 template <typename RealType>
@@ -50,6 +46,10 @@ TIBDExchangeMove<RealType>::TIBDExchangeMove(
 
     k_initialize_curand_states<<<1, DEFAULT_THREADS_PER_BLOCK, 0>>>(
         DEFAULT_THREADS_PER_BLOCK, seed, d_rand_states_.data);
+    gpuErrchk(cudaPeekAtLastError());
+
+    k_arange<<<ceil_divide(this->num_target_mols_, DEFAULT_THREADS_PER_BLOCK), DEFAULT_THREADS_PER_BLOCK, 0>>>(
+        this->num_target_mols_, d_identify_indices_.data, 0);
     gpuErrchk(cudaPeekAtLastError());
 
     // Setup buffer for doing the flagged partition
@@ -119,9 +119,6 @@ void TIBDExchangeMove<RealType>::move(
                 this->d_log_weights_after_.data);
             gpuErrchk(cudaPeekAtLastError());
         }
-
-        k_arange<<<mol_blocks, tpb, 0, stream>>>(this->num_target_mols_, d_identify_indices_.data, 0);
-        gpuErrchk(cudaPeekAtLastError());
 
         k_flag_mols_inner_outer<RealType><<<mol_blocks, tpb, 0, stream>>>(
             this->num_target_mols_,
@@ -208,7 +205,7 @@ void TIBDExchangeMove<RealType>::move(
         this->sampler_.sample_device(src_count, 1, d_src_weights_.data, this->d_samples_.data, stream);
 
         // Selected an index from the src weights, need to remap the samples idx to the mol indices
-        k_adjust_sample_idx<<<1, tpb, 0, stream>>>(
+        k_adjust_sample_idx<<<1, 1, 0, stream>>>(
             d_targeting_inner_vol_.data, d_inner_mols_count_.data, d_partitioned_indices_.data, this->d_samples_.data);
         gpuErrchk(cudaPeekAtLastError());
 
