@@ -1014,6 +1014,7 @@ def run_sims_hrex(
         if md_params.n_eq_steps == 0:
             return xvb
         # Set the movers to 0 to ensure they all equilibrate the same way
+        # Ensure initial mover state is consistent across replicas
         for mover in context.get_movers():
             mover.set_step(0)
 
@@ -1070,6 +1071,11 @@ def run_sims_hrex(
                     assert water_params_by_state is not None
                     mover.set_params(water_params_by_state[state_idx])
                     print(mover.n_accepted(), mover.n_proposed())
+
+            # Setup the MC movers of the Context
+            for mover in context.get_movers():
+                # Set the step so that all windows have the movers behave the same way.
+                mover.set_step(current_step)
 
             md_params_replica = replace(
                 md_params, n_frames=n_frames_iter, n_eq_steps=0, seed=np.random.randint(np.iinfo(np.int32).max)
