@@ -683,10 +683,15 @@ void __global__ k_adjust_sample_idx(
     const int *__restrict__ partitioned_indices,    // [inner_count]
     int *__restrict__ sample_idxs                   // [1]
 ) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    // At the moment we only have one sample
+    if (idx > 0) {
+        return;
+    }
     const int target_inner = targeting_inner_volume[0];
     const int local_inner_count = inner_count[0];
     const int offset = target_inner == 1 ? local_inner_count : 0;
-    sample_idxs[0] = partitioned_indices[sample_idxs[0] + offset];
+    sample_idxs[idx] = partitioned_indices[sample_idxs[idx] + offset];
 }
 
 } // namespace timemachine
