@@ -315,7 +315,8 @@ def plot_hrex_transition_matrix(
     transition_rate: NDArray,
     figsize: Tuple[float, float] = (13, 10),
     annotate_threshold: int = DEFAULT_HEATMAP_ANNOTATE_THRESHOLD,
-    format_rate: Callable[[float], str] = lambda x: f"{100.0*x:.1f}",
+    format_rate: Callable[[float], str] = lambda x: f"{100.0*x:.2g}",
+    cbar_tick_label_suffix: str = "%",
 ):
     """Plot matrix of estimated transition rates for permutation moves as a heatmap."""
     n_states, _ = transition_rate.shape
@@ -339,7 +340,7 @@ def plot_hrex_transition_matrix(
     ax.yaxis.get_major_locator().set_params(integer=True)
     ax.set_aspect("equal")
 
-    fig.colorbar(p, label="transition rate")
+    fig.colorbar(p, label="fraction of iterations", format=lambda x, _: format_rate(x) + cbar_tick_label_suffix)
 
 
 def plot_hrex_swap_acceptance_rates_convergence(cumulative_swap_acceptance_rates: NDArray):
@@ -383,7 +384,8 @@ def plot_hrex_replica_state_distribution_heatmap(
     cumulative_replica_state_counts: NDArray,
     figsize: Tuple[float, float] = (13, 10),
     annotate_threshold: int = DEFAULT_HEATMAP_ANNOTATE_THRESHOLD,
-    format_rate: Callable[[float], str] = lambda x: f"{100.0*x:.1f}",
+    format_rate: Callable[[float], str] = lambda x: f"{100.0*x:.2g}",
+    cbar_tick_label_suffix: str = "%",
 ):
     """Plot distribution of (replica, state) pairs as a heatmap."""
     n_iters, n_states, n_replicas = cumulative_replica_state_counts.shape
@@ -409,7 +411,7 @@ def plot_hrex_replica_state_distribution_heatmap(
     ax.yaxis.get_major_locator().set_params(integer=True)
     ax.set_aspect("equal")
 
-    fig.colorbar(p, label="fraction of iterations")
+    fig.colorbar(p, label="fraction of iterations", format=lambda x, _: format_rate(x) + cbar_tick_label_suffix)
 
 
 def plot_hrex_replica_state_distribution_convergence(cumulative_replica_state_counts: NDArray, ncols: int = 4):
