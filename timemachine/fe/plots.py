@@ -312,26 +312,26 @@ def plot_fwd_reverse_predictions(
 
 
 def plot_hrex_transition_matrix(
-    transition_rate: NDArray,
+    transition_probability: NDArray,
     figsize: Tuple[float, float] = (13, 10),
     annotate_threshold: int = DEFAULT_HEATMAP_ANNOTATE_THRESHOLD,
     format_annotation: Callable[[float], str] = lambda x: f"{100.0*x:.2g}",
     format_cbar_tick: Callable[[float], str] = lambda x: f"{100.0*x:.2g}%",
 ):
-    """Plot matrix of estimated transition rates for permutation moves as a heatmap."""
-    n_states, _ = transition_rate.shape
+    """Plot matrix of estimated transition probabilities for permutation moves as a heatmap."""
+    n_states, _ = transition_probability.shape
     states = np.arange(n_states)
 
     fig, ax = plt.subplots(figsize=figsize)
-    p = ax.pcolormesh(states, states, transition_rate)
+    p = ax.pcolormesh(states, states, transition_probability)
 
     # Skip text annotations when number of states is large
     if n_states <= annotate_threshold:
         for from_state in states:
             for to_state in states:
-                rate = transition_rate[to_state, from_state]
-                if rate > 0.0:
-                    label = format_annotation(cast(float, rate))
+                prob = transition_probability[to_state, from_state]
+                if prob > 0.0:
+                    label = format_annotation(cast(float, prob))
                     ax.text(from_state, to_state, label, ha="center", va="center", color="w", fontsize=8)
 
     ax.set_xlabel("from state")
