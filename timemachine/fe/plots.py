@@ -315,8 +315,8 @@ def plot_hrex_transition_matrix(
     transition_rate: NDArray,
     figsize: Tuple[float, float] = (13, 10),
     annotate_threshold: int = DEFAULT_HEATMAP_ANNOTATE_THRESHOLD,
-    format_rate: Callable[[float], str] = lambda x: f"{100.0*x:.2g}",
-    cbar_tick_label_suffix: str = "%",
+    format_heatmap_cell: Callable[[float], str] = lambda x: f"{100.0*x:.1f}",
+    format_cbar_tick: Callable[[float], str] = lambda x: f"{100.0*x:.2g}%",
 ):
     """Plot matrix of estimated transition rates for permutation moves as a heatmap."""
     n_states, _ = transition_rate.shape
