@@ -400,10 +400,10 @@ def get_context(initial_state: InitialState) -> Context:
 def sample_with_context(
     ctxt: Context, md_params: MDParams, temperature: float, ligand_idxs: NDArray, max_buffer_frames: int
 ) -> Trajectory:
-    barostat = ctxt.get_barostat()
-    default_interval = 0 if barostat is None else barostat.get_interval()
     # burn-in
     if md_params.n_eq_steps:
+        barostat = ctxt.get_barostat()
+        default_interval = 0 if barostat is None else barostat.get_interval()
         equil_barostat_interval = 15
         if barostat is not None:
             barostat.set_interval(equil_barostat_interval)
