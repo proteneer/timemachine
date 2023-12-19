@@ -47,7 +47,8 @@ BDExchangeMove<RealType>::BDExchangeMove(
       d_log_weights_after_(num_target_mols_), d_log_sum_exp_before_(2), d_log_sum_exp_after_(2), d_samples_(1),
       d_quaternions_(round_up_even(QUATERNIONS_PER_STEP * get_random_batch_size(proposals_per_move))),
       d_translations_(round_up_even(4)), d_num_accepted_(1), d_target_mol_atoms_(mol_size_),
-      d_target_mol_offsets_(num_target_mols_ + 1) {
+      d_target_mol_offsets_(num_target_mols_ + 1),
+      d_intermediate_sample_weights_(ceil_divide(N_, WEIGHT_THREADS_PER_BLOCK)) {
 
     if (proposals_per_move_ <= 0) {
         throw std::runtime_error("proposals per move must be greater than 0");
@@ -277,14 +278,20 @@ void BDExchangeMove<RealType>::compute_incremental_weights(
     gpuErrchk(cudaPeekAtLastError());
 
     // Set the sampled weight to be the correct value
-    k_set_sampled_weight<RealType, WEIGHT_THREADS_PER_BLOCK><<<1, WEIGHT_THREADS_PER_BLOCK, 0, stream>>>(
-        N,
-        mol_size_,
-        d_samples_.data,
-        d_target_mol_atoms_.data,
-        d_mol_offsets_.data,
-        d_sample_per_atom_energy_buffer_.data,
-        beta_, // 1 / kT
+    k_set_sampled_weight_block<RealType, WEIGHT_THREADS_PER_BLOCK>
+        <<<static_cast<int>(d_intermediate_sample_weights_.length), WEIGHT_THREADS_PER_BLOCK, 0, stream>>>(
+            N,
+            mol_size_,
+            d_target_mol_atoms_.data,
+            d_sample_per_atom_energy_buffer_.data,
+            beta_, // 1 / kT
+            d_intermediate_sample_weights_.data);
+    gpuErrchk(cudaPeekAtLastError());
+
+    k_set_sampled_weight_reduce<RealType, WEIGHT_THREADS_PER_BLOCK><<<1, WEIGHT_THREADS_PER_BLOCK, 0, stream>>>(
+        static_cast<int>(d_intermediate_sample_weights_.length), // Number of intermediates
+        d_samples_.data,                                         // where to set the value
+        d_intermediate_sample_weights_.data,                     // intermediate fixed point weights
         d_log_weights_after_.data);
     gpuErrchk(cudaPeekAtLastError());
 }

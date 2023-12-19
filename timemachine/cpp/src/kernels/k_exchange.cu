@@ -255,7 +255,7 @@ template void __global__ k_compute_box_volume<double>(
 // the sum of the per atom weights for the molecules from some initial weights.
 // This is used to do the transposition trick where we subtract off the weight contribution of the
 // moved atom followed by adding back in the weight of the sampled mol in the new position.
-// Does NOT special case the weight of the sampled mol and instead use `k_set_sampled_weight`.
+// Does NOT special case the weight of the sampled mol and instead use `k_set_sampled_weight_block`.
 template <typename RealType, bool Negated>
 void __global__ k_adjust_weights(
     const int N,
@@ -333,20 +333,15 @@ template void __global__ k_adjust_weights<double, 1>(
     double *__restrict__ log_weights);
 
 template <typename RealType, int THREADS_PER_BLOCK>
-void __global__ k_set_sampled_weight(
+void __global__ k_set_sampled_weight_block(
     const int N,
     const int mol_size,
-    const int *__restrict__ samples, // [1]
     const int *__restrict__ target_atoms,
-    const int *__restrict__ mol_offsets,
     const RealType *__restrict__ per_atom_energies,
     const RealType inv_kT, // 1 / kT
-    RealType *__restrict__ log_weights) {
-    static_assert(THREADS_PER_BLOCK <= 512 && (THREADS_PER_BLOCK & (THREADS_PER_BLOCK - 1)) == 0);
-    assert(gridDim.x == 1);
+    __int128 *__restrict__ intermediate_accum) {
     __shared__ __int128 accumulators[THREADS_PER_BLOCK];
 
-    int sample_idx = samples[0];
     int min_atom_idx = target_atoms[0];
     int max_atom_idx = target_atoms[mol_size - 1];
 
@@ -365,28 +360,60 @@ void __global__ k_set_sampled_weight(
     __syncthreads();
     block_energy_reduce<THREADS_PER_BLOCK>(accumulators, threadIdx.x);
     if (threadIdx.x == 0) {
+        intermediate_accum[blockIdx.x] = accumulators[0];
+    }
+}
+
+template void __global__ k_set_sampled_weight_block<float, 512>(
+    const int N,
+    const int mol_size,
+    const int *__restrict__ target_atoms,
+    const float *__restrict__ per_atom_energies,
+    const float inv_kT,
+    __int128 *__restrict__ intermediate_accum);
+template void __global__ k_set_sampled_weight_block<double, 512>(
+    const int N,
+    const int mol_size,
+    const int *__restrict__ target_atoms,
+    const double *__restrict__ per_atom_energies,
+    const double inv_kT,
+    __int128 *__restrict__ intermediate_accum);
+
+template <typename RealType, int THREADS_PER_BLOCK>
+void __global__ k_set_sampled_weight_reduce(
+    const int intermediates,
+    const int *__restrict__ samples, // [1]
+    const __int128 *__restrict__ intermediate_accum,
+    RealType *__restrict__ log_weights) {
+    __shared__ __int128 accumulators[THREADS_PER_BLOCK];
+
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+
+    // Zero all of the accumulators
+    __int128 accumulator = 0;
+    while (idx < intermediates) {
+        accumulator += intermediate_accum[idx];
+        idx += gridDim.x * blockDim.x;
+    }
+    accumulators[threadIdx.x] = accumulator;
+    __syncthreads();
+    block_energy_reduce<THREADS_PER_BLOCK>(accumulators, threadIdx.x);
+    if (threadIdx.x == 0) {
+        int sample_idx = samples[0];
         log_weights[sample_idx] =
             fixed_point_overflow(accumulators[0]) ? INFINITY : FIXED_ENERGY_TO_FLOAT<RealType>(accumulators[0]);
     }
 }
 
-template void __global__ k_set_sampled_weight<float, 512>(
-    const int N,
-    const int mol_size,
+template void __global__ k_set_sampled_weight_reduce<float, 512>(
+    const int intermediates,
     const int *__restrict__ samples, // [1]
-    const int *__restrict__ target_atoms,
-    const int *__restrict__ mol_offsets,
-    const float *__restrict__ per_atom_energies,
-    const float inv_kT,
+    const __int128 *__restrict__ intermediate_accum,
     float *__restrict__ log_weights);
-template void __global__ k_set_sampled_weight<double, 512>(
-    const int N,
-    const int mol_size,
+template void __global__ k_set_sampled_weight_reduce<double, 512>(
+    const int intermediates,
     const int *__restrict__ samples, // [1]
-    const int *__restrict__ target_atoms,
-    const int *__restrict__ mol_offsets,
-    const double *__restrict__ per_atom_energies,
-    const double inv_kT,
+    const __int128 *__restrict__ intermediate_accum,
     double *__restrict__ log_weights);
 
 template <typename RealType>

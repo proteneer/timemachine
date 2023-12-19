@@ -51,6 +51,7 @@ protected:
     DeviceBuffer<size_t> d_num_accepted_;
     DeviceBuffer<int> d_target_mol_atoms_;
     DeviceBuffer<int> d_target_mol_offsets_;
+    DeviceBuffer<__int128> d_intermediate_sample_weights_; // ceil_divide(N_, DEFAULT_THREADS_PER_BLOCK)
 
     curandGenerator_t cr_rng_;
 
