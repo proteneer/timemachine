@@ -10,11 +10,14 @@
 
 namespace timemachine {
 
+int get_random_batch_size(int moves);
+
 // BDExchangeMove uses biased deletion to move waters randomly in a box. The reference implementation
 // is in timemachine/md/exchange/exchange_mover.py::BDExchangeMove
 template <typename RealType> class BDExchangeMove : public Mover {
 
 protected:
+    static const int QUATERNIONS_PER_STEP = 4;
     const int N_;
     // Number of atom in all mols
     // All molecules are currently expected to have same number of atoms (typically 3 for waters)
@@ -53,8 +56,8 @@ protected:
 
     void compute_initial_weights(const int N, double *d_coords, double *d_box, cudaStream_t stream);
 
-    void
-    compute_incremental_weights(const int N, const bool scale, double *d_coords, double *d_box, cudaStream_t stream);
+    void compute_incremental_weights(
+        const int N, const bool scale, double *d_coords, double *d_box, RealType *d_quaternions, cudaStream_t stream);
 
 public:
     BDExchangeMove(

@@ -17,14 +17,6 @@ namespace timemachine {
 
 static const int NOISE_PER_STEP = 2;
 
-int max_random_values(int moves) {
-    const int max_noise_per_batch = 10000;
-    if (moves > max_noise_per_batch) {
-        moves = max_noise_per_batch;
-    }
-    return moves;
-}
-
 template <typename RealType>
 TIBDExchangeMove<RealType>::TIBDExchangeMove(
     const int N,
@@ -43,12 +35,16 @@ TIBDExchangeMove<RealType>::TIBDExchangeMove(
       radius_(static_cast<RealType>(radius)), inner_volume_(static_cast<RealType>((4.0 / 3.0) * M_PI * pow(radius, 3))),
       d_rand_states_(DEFAULT_THREADS_PER_BLOCK), d_inner_mols_count_(1), d_identify_indices_(this->num_target_mols_),
       d_partitioned_indices_(this->num_target_mols_), d_temp_storage_buffer_(0), d_center_(3),
-      d_uniform_noise_buffer_(round_up_even(2 * max_random_values(proposals_per_move))), d_targeting_inner_vol_(1),
-      d_ligand_idxs_(ligand_idxs), d_src_weights_(this->num_target_mols_), d_dest_weights_(this->num_target_mols_),
-      d_inner_flags_(this->num_target_mols_), d_box_volume_(1), p_inner_count_(1), p_targeting_inner_vol_(1) {
+      d_uniform_noise_buffer_(round_up_even(NOISE_PER_STEP * get_random_batch_size(proposals_per_move))),
+      d_targeting_inner_vol_(1), d_ligand_idxs_(ligand_idxs), d_src_weights_(this->num_target_mols_),
+      d_dest_weights_(this->num_target_mols_), d_inner_flags_(this->num_target_mols_), d_box_volume_(1),
+      p_inner_count_(1), p_targeting_inner_vol_(1) {
 
     if (radius <= 0.0) {
         throw std::runtime_error("radius must be greater than 0.0");
+    }
+    if (d_uniform_noise_buffer_.length / NOISE_PER_STEP != this->d_quaternions_.length / this->QUATERNIONS_PER_STEP) {
+        throw std::runtime_error("bug in the code: buffers with random values don't match in batch size");
     }
 
     // Create event with timings disabled as timings slow down events
@@ -115,14 +111,20 @@ void TIBDExchangeMove<RealType>::move(
     // The d_uniform_noise_buffer_ buffer contains the random value for determining where to insert and whether to accept the move
     curandErrchk(
         templateCurandUniform(this->cr_rng_, this->d_uniform_noise_buffer_.data, this->d_uniform_noise_buffer_.length));
+    // Quaternions generated from normal noise generate uniform rotations
+    curandErrchk(templateCurandNormal(this->cr_rng_, this->d_quaternions_.data, this->d_quaternions_.length, 0.0, 1.0));
 
     int noise_offset = 0;
+    int quaternion_offset = 0;
     for (int move = 0; move < this->proposals_per_move_; move++) {
         if (noise_offset >= this->d_uniform_noise_buffer_.length) {
             // reset the noise to zero and generate more noise
             noise_offset = 0;
+            quaternion_offset = 0;
             curandErrchk(templateCurandUniform(
                 this->cr_rng_, this->d_uniform_noise_buffer_.data, this->d_uniform_noise_buffer_.length));
+            curandErrchk(
+                templateCurandNormal(this->cr_rng_, this->d_quaternions_.data, this->d_quaternions_.length, 0.0, 1.0));
         }
         // Run only after the first pass, to maintain meaningful `log_probability_host` values
         if (move > 0) {
@@ -230,7 +232,8 @@ void TIBDExchangeMove<RealType>::move(
         // Don't move translations into computation of the incremental, as different translations can be used
         // by different bias deletion movers (such as targeted insertion)
         // Don't scale the translations as they are computed to be within the region
-        this->compute_incremental_weights(N, false, d_coords, d_box, stream);
+        this->compute_incremental_weights(
+            N, false, d_coords, d_box, this->d_quaternions_.data + quaternion_offset, stream);
 
         k_setup_destination_weights_for_targeted<RealType><<<mol_blocks, tpb, 0, stream>>>(
             this->num_target_mols_,
@@ -260,6 +263,7 @@ void TIBDExchangeMove<RealType>::move(
         gpuErrchk(cudaPeekAtLastError());
         this->num_attempted_++;
         noise_offset += NOISE_PER_STEP;
+        quaternion_offset += this->QUATERNIONS_PER_STEP;
     }
 }
 

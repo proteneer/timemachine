@@ -16,6 +16,15 @@
 
 namespace timemachine {
 
+int get_random_batch_size(int moves) {
+    int batch_size = moves;
+    const int max_noise_per_batch = 10000;
+    if (batch_size > max_noise_per_batch) {
+        batch_size = max_noise_per_batch;
+    }
+    return batch_size;
+}
+
 template <typename RealType>
 BDExchangeMove<RealType>::BDExchangeMove(
     const int N,
@@ -84,7 +93,17 @@ void BDExchangeMove<RealType>::move(
 
     this->compute_initial_weights(N, d_coords, d_box, stream);
 
+    // Quaternions generated from normal noise generate uniform rotations
+    curandErrchk(templateCurandNormal(cr_rng_, d_quaternions_.data, d_quaternions_.length, 0.0, 1.0));
+
+    int quaternion_offset = 0;
     for (int move = 0; move < proposals_per_move_; move++) {
+        if (quaternion_offset >= this->d_quaternions_.length) {
+            // reset the noise to zero and generate more noise
+            quaternion_offset = 0;
+            // Quaternions generated from normal noise generate uniform rotations
+            curandErrchk(templateCurandNormal(cr_rng_, d_quaternions_.data, d_quaternions_.length, 0.0, 1.0));
+        }
         // Run only after the first pass, to maintain meaningful `log_probability_host` values
         if (move > 0) {
             // Run a separate kernel to replace the before log probs and weights with the after if accepted a move
@@ -115,7 +134,8 @@ void BDExchangeMove<RealType>::move(
         // Don't move translations into computation of the incremental, as different translations can be used
         // by different bias deletion movers (such as targeted insertion)
         // scale the translations as they are between [0, 1]
-        this->compute_incremental_weights(N, true, d_coords, d_box, stream);
+        this->compute_incremental_weights(
+            N, true, d_coords, d_box, this->d_quaternions_.data + quaternion_offset, stream);
 
         logsumexp_.sum_device(num_target_mols_, d_log_weights_after_.data, d_log_sum_exp_after_.data, stream);
 
@@ -129,6 +149,7 @@ void BDExchangeMove<RealType>::move(
             d_num_accepted_.data);
         gpuErrchk(cudaPeekAtLastError());
         num_attempted_++;
+        quaternion_offset += QUATERNIONS_PER_STEP;
     }
 }
 
@@ -157,16 +178,18 @@ void BDExchangeMove<RealType>::compute_initial_weights(
 
 template <typename RealType>
 void BDExchangeMove<RealType>::compute_incremental_weights(
-    const int N, const bool scale, double *d_coords, double *d_box, cudaStream_t stream) {
+    const int N,
+    const bool scale,
+    double *d_coords,        // [N, 3]
+    double *d_box,           // [3, 3]
+    RealType *d_quaternions, // [4]
+    cudaStream_t stream) {
     const int tpb = DEFAULT_THREADS_PER_BLOCK;
     dim3 atom_by_atom_grid(ceil_divide(N, tpb), mol_size_, 1);
 
     // Make a copy of the coordinates
     gpuErrchk(cudaMemcpyAsync(
         d_intermediate_coords_.data, d_coords, d_intermediate_coords_.size(), cudaMemcpyDeviceToDevice, stream));
-
-    // Quaternions generated from normal noise generate uniform rotations
-    curandErrchk(templateCurandNormal(cr_rng_, d_quaternions_.data, d_quaternions_.length, 0.0, 1.0));
 
     // Only support sampling a single mol at this time, so only one block
     k_setup_sample_atoms<<<1, tpb, 0, stream>>>(
@@ -185,7 +208,7 @@ void BDExchangeMove<RealType>::compute_incremental_weights(
             d_box,
             d_samples_.data,
             d_target_mol_offsets_.data,
-            d_quaternions_.data,
+            d_quaternions,
             d_translations_.data,
             d_intermediate_coords_.data);
         gpuErrchk(cudaPeekAtLastError());
@@ -196,7 +219,7 @@ void BDExchangeMove<RealType>::compute_incremental_weights(
             d_box,
             d_samples_.data,
             d_target_mol_offsets_.data,
-            d_quaternions_.data,
+            d_quaternions,
             d_translations_.data,
             d_intermediate_coords_.data);
         gpuErrchk(cudaPeekAtLastError());
