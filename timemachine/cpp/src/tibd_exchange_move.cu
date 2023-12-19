@@ -43,6 +43,8 @@ TIBDExchangeMove<RealType>::TIBDExchangeMove(
     if (radius <= 0.0) {
         throw std::runtime_error("radius must be greater than 0.0");
     }
+    this->d_quaternions_.realloc(
+        round_up_even(this->QUATERNIONS_PER_STEP * get_random_batch_size(this->proposals_per_move_)));
     if (d_uniform_noise_buffer_.length / NOISE_PER_STEP != this->d_quaternions_.length / this->QUATERNIONS_PER_STEP) {
         throw std::runtime_error("bug in the code: buffers with random values don't match in batch size");
     }
@@ -96,6 +98,14 @@ void TIBDExchangeMove<RealType>::move(
 
     this->compute_initial_weights(N, d_coords, d_box, stream);
 
+    // Copy the before log weights to the after weights, we will adjust incrementally afterwards
+    gpuErrchk(cudaMemcpyAsync(
+        this->d_log_weights_after_.data,
+        this->d_log_weights_before_.data,
+        this->d_log_weights_after_.size(),
+        cudaMemcpyDeviceToDevice,
+        stream));
+
     const int tpb = DEFAULT_THREADS_PER_BLOCK;
     const int mol_blocks = ceil_divide(this->num_target_mols_, tpb);
 
@@ -125,23 +135,6 @@ void TIBDExchangeMove<RealType>::move(
                 this->cr_rng_, this->d_uniform_noise_buffer_.data, this->d_uniform_noise_buffer_.length));
             curandErrchk(
                 templateCurandNormal(this->cr_rng_, this->d_quaternions_.data, this->d_quaternions_.length, 0.0, 1.0));
-        }
-        // Run only after the first pass, to maintain meaningful `log_probability_host` values
-        if (move > 0) {
-            // Run a separate kernel to replace the before log probs and weights with the after if accepted a move
-            // Need the weights to sample a value and the log probs are just because they aren't expensive to copy
-            k_store_accepted_log_probability_targeted<RealType><<<1, tpb, 0>>>(
-                this->num_target_mols_,
-                d_targeting_inner_vol_.data,
-                d_box_volume_.data,
-                inner_volume_,
-                this->d_uniform_noise_buffer_.data + noise_offset +
-                    1, // Offset to get the last value for the acceptance criteria
-                this->d_log_sum_exp_before_.data,
-                this->d_log_sum_exp_after_.data,
-                this->d_log_weights_before_.data,
-                this->d_log_weights_after_.data);
-            gpuErrchk(cudaPeekAtLastError());
         }
 
         k_flag_mols_inner_outer<RealType><<<mol_blocks, tpb, 0, stream>>>(
@@ -183,14 +176,6 @@ void TIBDExchangeMove<RealType>::move(
             cudaMemcpyDeviceToHost,
             stream));
         gpuErrchk(cudaEventRecord(host_copy_event_, stream));
-
-        // Copy the before log weights to the after weights, we will adjust the after weights incrementally
-        gpuErrchk(cudaMemcpyAsync(
-            this->d_log_weights_after_.data,
-            this->d_log_weights_before_.data,
-            this->d_log_weights_after_.size(),
-            cudaMemcpyDeviceToDevice,
-            stream));
 
         k_generate_translations_within_or_outside_a_sphere<<<1, tpb, 0, stream>>>(
             1,
@@ -250,15 +235,18 @@ void TIBDExchangeMove<RealType>::move(
 
         k_attempt_exchange_move_targeted<RealType><<<ceil_divide(N, tpb), tpb, 0, stream>>>(
             N,
+            this->num_target_mols_,
             d_targeting_inner_vol_.data,
             d_box_volume_.data,
             inner_volume_,
-            this->d_uniform_noise_buffer_.data + noise_offset +
-                1, // Offset to get the last value for the acceptance criteria
+            // Offset to get the last value for the acceptance criteria
+            this->d_uniform_noise_buffer_.data + noise_offset + 1,
             this->d_log_sum_exp_before_.data,
             this->d_log_sum_exp_after_.data,
             this->d_intermediate_coords_.data,
             d_coords,
+            this->d_log_weights_before_.data,
+            this->d_log_weights_after_.data,
             this->d_num_accepted_.data);
         gpuErrchk(cudaPeekAtLastError());
         this->num_attempted_++;

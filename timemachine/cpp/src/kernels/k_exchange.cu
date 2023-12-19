@@ -85,6 +85,7 @@ template void __global__ k_attempt_exchange_move<double>(
 template <typename RealType>
 void __global__ k_attempt_exchange_move_targeted(
     const int N,
+    const int num_target_mols,
     const int *__restrict__ targeting_inner_volume,
     const RealType *__restrict__ box_vol, // [1]
     const RealType inner_volume,
@@ -93,6 +94,8 @@ void __global__ k_attempt_exchange_move_targeted(
     const RealType *__restrict__ after_log_sum_exp,  // [2]
     const double *__restrict__ moved_coords,         // [N, 3]
     double *__restrict__ dest_coords,                // [N, 3]
+    RealType *__restrict__ before_weights,           // [num_target_mols]
+    RealType *__restrict__ after_weights,            // [num_target_mols]
     size_t *__restrict__ num_accepted                // [1]
 ) {
     int atom_idx = blockIdx.x * blockDim.x + threadIdx.x;
@@ -117,16 +120,29 @@ void __global__ k_attempt_exchange_move_targeted(
     }
 
     // If accepted, move the coords into place
-    while (accepted && atom_idx < N) {
-        dest_coords[atom_idx * 3 + 0] = moved_coords[atom_idx * 3 + 0];
-        dest_coords[atom_idx * 3 + 1] = moved_coords[atom_idx * 3 + 1];
-        dest_coords[atom_idx * 3 + 2] = moved_coords[atom_idx * 3 + 2];
+    // Always move the weights
+    while (atom_idx < N) {
+        if (accepted) {
+            dest_coords[atom_idx * 3 + 0] = moved_coords[atom_idx * 3 + 0];
+            dest_coords[atom_idx * 3 + 1] = moved_coords[atom_idx * 3 + 1];
+            dest_coords[atom_idx * 3 + 2] = moved_coords[atom_idx * 3 + 2];
+        }
+        // Store the weights. If accepted store the after weights as before else
+        // copy the before weights to the after so the next iteration can incrementally update the weights
+        if (atom_idx < num_target_mols) {
+            if (accepted) {
+                before_weights[atom_idx] = after_weights[atom_idx];
+            } else {
+                after_weights[atom_idx] = before_weights[atom_idx];
+            }
+        }
         atom_idx += gridDim.x * blockDim.x;
     }
 }
 
 template void __global__ k_attempt_exchange_move_targeted<float>(
     const int N,
+    const int num_target_mols,
     const int *__restrict__ targeting_inner_volume,
     const float *__restrict__ box_vol,
     const float inner_volume,
@@ -135,9 +151,12 @@ template void __global__ k_attempt_exchange_move_targeted<float>(
     const float *__restrict__ after_log_sum_exp,
     const double *__restrict__ moved_coords,
     double *__restrict__ dest_coords,
+    float *__restrict__ before_weights,
+    float *__restrict__ after_weights,
     size_t *__restrict__ num_accepted);
 template void __global__ k_attempt_exchange_move_targeted<double>(
     const int N,
+    const int num_target_mols,
     const int *__restrict__ targeting_inner_volume,
     const double *__restrict__ box_vol,
     const double inner_volume,
@@ -146,6 +165,8 @@ template void __global__ k_attempt_exchange_move_targeted<double>(
     const double *__restrict__ after_log_sum_exp,
     const double *__restrict__ moved_coords,
     double *__restrict__ dest_coords,
+    double *__restrict__ before_weights,
+    double *__restrict__ after_weights,
     size_t *__restrict__ num_accepted);
 
 template <typename RealType>
@@ -193,74 +214,6 @@ template void __global__ k_store_accepted_log_probability<float>(
     const float *__restrict__ after_weights);
 template void __global__ k_store_accepted_log_probability<double>(
     const int num_weights,
-    const double *__restrict__ rand,
-    double *__restrict__ before_log_sum_exp,
-    const double *__restrict__ after_log_sum_exp,
-    double *__restrict__ before_weights,
-    const double *__restrict__ after_weights);
-
-template <typename RealType>
-void __global__ k_store_accepted_log_probability_targeted(
-    const int num_weights,
-    const int *__restrict__ targeting_inner_volume,
-    const RealType *__restrict__ box_vol, // [1]
-    const RealType inner_volume,
-    const RealType *__restrict__ rand,              // [1]
-    RealType *__restrict__ before_log_sum_exp,      // [2]
-    const RealType *__restrict__ after_log_sum_exp, // [2]
-    RealType *__restrict__ before_weights,          // [num_weights]
-    const RealType *__restrict__ after_weights      // [num_weights]
-) {
-    int idx = blockIdx.x * blockDim.x + threadIdx.x;
-    assert(gridDim.x == 1);
-    if (blockIdx.x > 0) {
-        return; // Only one block can run this
-    }
-
-    int flag = targeting_inner_volume[0];
-
-    const RealType outer_vol = box_vol[0] - inner_volume;
-
-    const RealType log_vol_prob = flag == 1 ? log(inner_volume) - log(outer_vol) : log(outer_vol) - log(inner_volume);
-
-    // All kernels compute the same acceptance
-    // TBD investigate shared memory for speed
-    RealType before_log_prob = convert_nan_to_inf<RealType>(compute_logsumexp_final<RealType>(before_log_sum_exp));
-    RealType after_log_prob = convert_nan_to_inf<RealType>(compute_logsumexp_final<RealType>(after_log_sum_exp));
-
-    RealType log_acceptance_prob = min(before_log_prob - after_log_prob + log_vol_prob, static_cast<RealType>(0.0));
-    const bool accepted = rand[0] < exp(log_acceptance_prob);
-    if (!accepted) {
-        return;
-    }
-    __syncthreads();
-    // Swap the values after all threads have computed the log probability
-    if (idx == 0) {
-        before_log_sum_exp[0] = after_log_sum_exp[0];
-        before_log_sum_exp[1] = after_log_sum_exp[1];
-    }
-    // Copy over the weights
-    while (idx < num_weights) {
-        before_weights[idx] = after_weights[idx];
-        idx += gridDim.x * blockDim.x;
-    }
-}
-
-template void __global__ k_store_accepted_log_probability_targeted<float>(
-    const int num_weights,
-    const int *__restrict__ targeting_inner_volume,
-    const float *__restrict__ box_vol,
-    const float inner_volume,
-    const float *__restrict__ rand,
-    float *__restrict__ before_log_sum_exp,
-    const float *__restrict__ after_log_sum_exp,
-    float *__restrict__ before_weights,
-    const float *__restrict__ after_weights);
-template void __global__ k_store_accepted_log_probability_targeted<double>(
-    const int num_weights,
-    const int *__restrict__ targeting_inner_volume,
-    const double *__restrict__ box_vol,
-    const double inner_volume,
     const double *__restrict__ rand,
     double *__restrict__ before_log_sum_exp,
     const double *__restrict__ after_log_sum_exp,
