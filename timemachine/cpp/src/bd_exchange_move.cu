@@ -137,7 +137,6 @@ void BDExchangeMove<RealType>::compute_initial_weights(
     const int N, double *d_coords, double *d_box, cudaStream_t stream) {
     const int tpb = DEFAULT_THREADS_PER_BLOCK;
     const int mol_blocks = ceil_divide(num_target_mols_, tpb);
-    // Compute logsumexp of energies once upfront to get log probabilities
     mol_potential_.mol_energies_device(
         N,
         num_target_mols_,
@@ -152,8 +151,7 @@ void BDExchangeMove<RealType>::compute_initial_weights(
         num_target_mols_, beta_, d_mol_energy_buffer_.data, d_log_weights_before_.data);
     gpuErrchk(cudaPeekAtLastError());
 
-    // Copy the before log weights to the after weights, we will adjust the after weights incrementally
-
+    // Compute logsumexp of energies once upfront to get log probabilities
     logsumexp_.sum_device(num_target_mols_, d_log_weights_before_.data, d_log_sum_exp_before_.data, stream);
 }
 
