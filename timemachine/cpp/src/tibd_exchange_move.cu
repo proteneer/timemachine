@@ -122,6 +122,17 @@ void TIBDExchangeMove<RealType>::move(
     // Quaternions generated from normal noise generate uniform rotations
     curandErrchk(templateCurandNormal(this->cr_rng_, this->d_quaternions_.data, this->d_quaternions_.length, 0.0, 1.0));
 
+    k_flag_mols_inner_outer<RealType><<<mol_blocks, tpb, 0, stream>>>(
+        this->num_target_mols_,
+        this->d_atom_idxs_.data,
+        this->d_mol_offsets_.data,
+        d_center_.data,
+        radius_ * radius_,
+        d_coords,
+        d_box,
+        d_inner_flags_.data);
+    gpuErrchk(cudaPeekAtLastError());
+
     int noise_offset = 0;
     int quaternion_offset = 0;
     for (int move = 0; move < this->proposals_per_move_; move++) {
@@ -134,17 +145,6 @@ void TIBDExchangeMove<RealType>::move(
             curandErrchk(
                 templateCurandNormal(this->cr_rng_, this->d_quaternions_.data, this->d_quaternions_.length, 0.0, 1.0));
         }
-
-        k_flag_mols_inner_outer<RealType><<<mol_blocks, tpb, 0, stream>>>(
-            this->num_target_mols_,
-            this->d_atom_idxs_.data,
-            this->d_mol_offsets_.data,
-            d_center_.data,
-            radius_ * radius_,
-            d_coords,
-            d_box,
-            d_inner_flags_.data);
-        gpuErrchk(cudaPeekAtLastError());
 
         gpuErrchk(cub::DevicePartition::Flagged(
             d_temp_storage_buffer_.data,
@@ -239,12 +239,14 @@ void TIBDExchangeMove<RealType>::move(
             inner_volume_,
             // Offset to get the last value for the acceptance criteria
             this->d_uniform_noise_buffer_.data + noise_offset + 1,
+            this->d_samples_.data,
             this->d_log_sum_exp_before_.data,
             this->d_log_sum_exp_after_.data,
             this->d_intermediate_coords_.data,
             d_coords,
             this->d_log_weights_before_.data,
             this->d_log_weights_after_.data,
+            d_inner_flags_.data,
             this->d_num_accepted_.data);
         gpuErrchk(cudaPeekAtLastError());
         this->num_attempted_++;

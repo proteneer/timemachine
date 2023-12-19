@@ -36,14 +36,16 @@ void __global__ k_attempt_exchange_move_targeted(
     const int *__restrict__ targeting_inner_volume,
     const RealType *__restrict__ box_vol, // [1]
     const RealType inner_volume,
-    const RealType *__restrict__ rand,               // [1]
+    const RealType *__restrict__ rand, // [1]
+    const int *__restrict__ samples,
     const RealType *__restrict__ before_log_sum_exp, // [2]
     const RealType *__restrict__ after_log_sum_exp,  // [2]
     const double *__restrict__ moved_coords,         // [N, 3]
     double *__restrict__ dest_coords,                // [N, 3]
     RealType *__restrict__ before_weights,           // [num_target_mols]
     RealType *__restrict__ after_weights,            // [num_target_mols]
-    size_t *__restrict__ num_accepted                // [1]
+    int *__restrict__ inner_flags,
+    size_t *__restrict__ num_accepted // [1]
 );
 
 template <typename RealType>

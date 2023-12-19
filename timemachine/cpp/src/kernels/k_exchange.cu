@@ -90,12 +90,14 @@ void __global__ k_attempt_exchange_move_targeted(
     const RealType *__restrict__ box_vol, // [1]
     const RealType inner_volume,
     const RealType *__restrict__ rand,               // [1]
+    const int *__restrict__ samples,                 // [1]
     const RealType *__restrict__ before_log_sum_exp, // [2]
     const RealType *__restrict__ after_log_sum_exp,  // [2]
     const double *__restrict__ moved_coords,         // [N, 3]
     double *__restrict__ dest_coords,                // [N, 3]
     RealType *__restrict__ before_weights,           // [num_target_mols]
     RealType *__restrict__ after_weights,            // [num_target_mols]
+    int *__restrict__ inner_flags,                   // [num_target_mols]
     size_t *__restrict__ num_accepted                // [1]
 ) {
     int atom_idx = blockIdx.x * blockDim.x + threadIdx.x;
@@ -117,6 +119,9 @@ void __global__ k_attempt_exchange_move_targeted(
     const bool accepted = rand[0] < exp(log_acceptance_prob);
     if (atom_idx == 0 && accepted) {
         num_accepted[0]++;
+        int mol_idx = samples[0];
+        // XOR 1 to flip the flag from 0 to 1 or 1 to 0
+        inner_flags[mol_idx] ^= 1;
     }
 
     // If accepted, move the coords into place
@@ -147,12 +152,14 @@ template void __global__ k_attempt_exchange_move_targeted<float>(
     const float *__restrict__ box_vol,
     const float inner_volume,
     const float *__restrict__ rand,
+    const int *__restrict__ samples,
     const float *__restrict__ before_log_sum_exp,
     const float *__restrict__ after_log_sum_exp,
     const double *__restrict__ moved_coords,
     double *__restrict__ dest_coords,
     float *__restrict__ before_weights,
     float *__restrict__ after_weights,
+    int *__restrict__ inner_flags,
     size_t *__restrict__ num_accepted);
 template void __global__ k_attempt_exchange_move_targeted<double>(
     const int N,
@@ -161,12 +168,14 @@ template void __global__ k_attempt_exchange_move_targeted<double>(
     const double *__restrict__ box_vol,
     const double inner_volume,
     const double *__restrict__ rand,
+    const int *__restrict__ samples,
     const double *__restrict__ before_log_sum_exp,
     const double *__restrict__ after_log_sum_exp,
     const double *__restrict__ moved_coords,
     double *__restrict__ dest_coords,
     double *__restrict__ before_weights,
     double *__restrict__ after_weights,
+    int *__restrict__ inner_flags,
     size_t *__restrict__ num_accepted);
 
 template <typename RealType>
