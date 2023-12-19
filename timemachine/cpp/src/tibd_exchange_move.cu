@@ -43,8 +43,6 @@ TIBDExchangeMove<RealType>::TIBDExchangeMove(
     if (radius <= 0.0) {
         throw std::runtime_error("radius must be greater than 0.0");
     }
-    this->d_quaternions_.realloc(
-        round_up_even(this->QUATERNIONS_PER_STEP * get_random_batch_size(this->proposals_per_move_)));
     if (d_uniform_noise_buffer_.length / NOISE_PER_STEP != this->d_quaternions_.length / this->QUATERNIONS_PER_STEP) {
         throw std::runtime_error("bug in the code: buffers with random values don't match in batch size");
     }

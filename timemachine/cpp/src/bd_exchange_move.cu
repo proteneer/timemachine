@@ -45,8 +45,9 @@ BDExchangeMove<RealType>::BDExchangeMove(
       d_sample_per_atom_energy_buffer_(mol_size_ * N), d_atom_idxs_(get_atom_indices(target_mols)),
       d_mol_offsets_(get_mol_offsets(target_mols)), d_log_weights_before_(num_target_mols_),
       d_log_weights_after_(num_target_mols_), d_log_sum_exp_before_(2), d_log_sum_exp_after_(2), d_samples_(1),
-      d_quaternions_(round_up_even(4)), d_translations_(round_up_even(4)), d_num_accepted_(1),
-      d_target_mol_atoms_(mol_size_), d_target_mol_offsets_(num_target_mols_ + 1) {
+      d_quaternions_(round_up_even(QUATERNIONS_PER_STEP * get_random_batch_size(proposals_per_move))),
+      d_translations_(round_up_even(4)), d_num_accepted_(1), d_target_mol_atoms_(mol_size_),
+      d_target_mol_offsets_(num_target_mols_ + 1) {
 
     if (proposals_per_move_ <= 0) {
         throw std::runtime_error("proposals per move must be greater than 0");
@@ -101,7 +102,6 @@ void BDExchangeMove<RealType>::move(
         if (quaternion_offset >= this->d_quaternions_.length) {
             // reset the noise to zero and generate more noise
             quaternion_offset = 0;
-            // Quaternions generated from normal noise generate uniform rotations
             curandErrchk(templateCurandNormal(cr_rng_, d_quaternions_.data, d_quaternions_.length, 0.0, 1.0));
         }
         // Run only after the first pass, to maintain meaningful `log_probability_host` values
