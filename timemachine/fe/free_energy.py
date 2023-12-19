@@ -974,10 +974,9 @@ def run_sims_hrex(
 
     # Reset the barostat from the equilibration interval to the production interval
     barostat = context.get_barostat()
-    if barostat is not None:
-        state = initial_states[0]
-        if state.barostat is not None:
-            barostat.set_interval(state.barostat.interval)
+    state = initial_states[0]
+    if barostat is not None and state.barostat is not None:
+        barostat.set_interval(state.barostat.interval)
 
     for iteration, n_frames_iter in enumerate(batches(md_params.n_frames, n_frames_per_iter), 1):
 
