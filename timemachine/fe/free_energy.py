@@ -942,7 +942,6 @@ def run_sims_hrex(
     def get_equilibrated_xvb(xvb: CoordsVelBox, params: NDArray) -> CoordsVelBox:
         if md_params.n_eq_steps == 0:
             return xvb
-        # Set the movers to 0 to ensure they all equilibrate the same way
         # Ensure initial mover state is consistent across replicas
         for mover in context.get_movers():
             mover.set_step(0)
