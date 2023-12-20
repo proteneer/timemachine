@@ -652,9 +652,16 @@ def estimate_relative_free_energy_bisection_hrex_impl(
             for initial_state, traj in zip(initial_states, trajectories_by_state)
         ]
 
+        hrex_md_params = replace(md_params, n_eq_steps=0)  # using pre-equilibrated samples
+        if hrex_md_params.water_sampling_params is not None:
+            # Water sampling will have already been applied
+            hrex_md_params = replace(
+                hrex_md_params,
+                water_sampling_params=replace(hrex_md_params.water_sampling_params, n_initial_iterations=0),
+            )
         pair_bar_result, trajectories_by_state, diagnostics = run_sims_hrex(
             initial_states_hrex,
-            replace(md_params, n_eq_steps=0),  # using pre-equilibrated samples
+            hrex_md_params,
             n_frames_per_iter=md_params.hrex_params.n_frames_per_iter,
         )
 

@@ -1051,6 +1051,10 @@ def run_sims_hrex(
     if md_params.water_sampling_params is not None:
         if md_params.steps_per_frame * n_frames_per_iter > md_params.water_sampling_params.interval:
             warn("May not be running water sampling on every window.")
+        # Prevent initial iterations after equilibration
+        md_params = replace(
+            md_params, water_sampling_params=replace(md_params.water_sampling_params, n_initial_iterations=0)
+        )
 
     for iteration, n_frames_iter in enumerate(batches(md_params.n_frames, n_frames_per_iter), 1):
         current_step = (iteration - 1) * n_frames_per_iter * md_params.steps_per_frame
@@ -1070,7 +1074,6 @@ def run_sims_hrex(
                 if md_params.water_sampling_params is not None and isinstance(mover, custom_ops.TIBDExchangeMove_f32):
                     assert water_params_by_state is not None
                     mover.set_params(water_params_by_state[state_idx])
-                    print(mover.n_accepted(), mover.n_proposed())
 
             # Setup the MC movers of the Context
             for mover in context.get_movers():
