@@ -402,8 +402,9 @@ def sample_with_context(
 ) -> Trajectory:
     # burn-in
     if md_params.n_eq_steps:
+        # Set barostat interval to 15 for equilibration, then back to the original interval for production
         barostat = ctxt.get_barostat()
-        default_interval = 0 if barostat is None else barostat.get_interval()
+        original_interval = 0 if barostat is None else barostat.get_interval()
         equil_barostat_interval = 15
         if barostat is not None:
             barostat.set_interval(equil_barostat_interval)
@@ -412,7 +413,7 @@ def sample_with_context(
             store_x_interval=0,
         )
         if barostat is not None:
-            barostat.set_interval(default_interval)
+            barostat.set_interval(original_interval)
 
     rng = np.random.default_rng(md_params.seed)
 
