@@ -1,10 +1,15 @@
 import itertools
 from enum import Enum
+from functools import partial
 from typing import List, Set, Tuple
 
 import numpy as np
 from rdkit import Chem
 
+from timemachine.fe.dummy import canonicalize_bond
+from timemachine.fe.mcgregor import UNMAPPED
+from timemachine.fe.utils import get_romol_conf
+from timemachine.graph_utils import convert_to_nx, enumerate_simple_paths
 from timemachine.potentials.chiral_restraints import pyramidal_volume, torsion_volume
 
 FourTuple = Tuple[int, int, int, int]
@@ -342,3 +347,92 @@ def find_chiral_bonds(mol):
             chiral_bonds.add(tuple(sorted([match[0], match[1]])))
 
     return chiral_bonds
+
+
+def _find_torsion_flips_mask(pt_idxs_a, pt_idxs_b, signs_a, signs_b, core):
+    """Returns proper torsions in the core that are flipped (i.e. the sign of whose volume changes) by the mapping.
+
+    NOTE: the following symbols are used below:
+    - n_a (n_b): number of atoms in A (B)
+    - t_a (t_b): number of proper_torsions in A (B)
+
+    Parameters
+    ----------
+    pt_idxs_a : NDArray
+        Canonicalized proper torsion indices for A. (t_a, 4) -> int
+
+    pt_idxs_b : NDArray
+        Canonicalized proper torsion indices for B. (t_b, 4) -> int
+
+    signs_a : NDArray
+        Signs of torsion volumes for A. (t_a,) -> float
+
+    signs_b : NDArray
+        Signs of torsion volumes for B. (t_b,) -> float
+
+    Returns
+    -------
+    NDArray
+        Boolean array indicating whether each proper torsion in A is flipped by the mapping.
+        (t_a,) -> bool
+    """
+
+    a_to_b = core
+
+    # Does this proper torsion in A (B) consist of core atoms only?
+    pt_core_atoms_only_a = (a_to_b[pt_idxs_a] != UNMAPPED).all(1)  # (t_a,) -> bool
+    pt_core_atoms_only_b = np.isin(pt_idxs_b, a_to_b).all(1)  # (t_b,) -> bool
+
+    # (t_a, t_b) -> bool
+    # Does the given proper torsion in A map to the given proper torsion in B?
+    is_pt_mapped_ab_fwd = (a_to_b[pt_idxs_a][:, None] == pt_idxs_b).all(2)
+    is_pt_mapped_ab_rev = (a_to_b[pt_idxs_a][:, None] == pt_idxs_b[:, ::-1]).all(2)
+    is_valid_mapping_ab = pt_core_atoms_only_a[:, None] & pt_core_atoms_only_b[None, :]
+    is_pt_mapped_ab = (is_pt_mapped_ab_fwd | is_pt_mapped_ab_rev) & is_valid_mapping_ab
+
+    # (t_a,) -> bool
+    # Is this proper torsion in A preserved by the atom mapping?
+    is_pt_mapped_a = is_pt_mapped_ab.any(1)
+
+    # (t_a,) -> int
+    # To which proper torsion in B does this map?
+    pt_a_to_b = is_pt_mapped_ab.argmax(1)
+
+    # (t_a,) -> bool
+    is_flipped_a = np.isfinite(signs_a) & np.isfinite(signs_b[pt_a_to_b]) & (signs_a != signs_b[pt_a_to_b])
+
+    return pt_core_atoms_only_a & pt_core_atoms_only_b[pt_a_to_b] & is_pt_mapped_a & is_flipped_a
+
+
+def find_torsion_flips(pt_idxs_a, pt_idxs_b, signs_a, signs_b, core):
+    mask = _find_torsion_flips_mask(pt_idxs_a, pt_idxs_b, signs_a, signs_b, core)
+    return pt_idxs_a[mask]
+
+
+def count_torsion_flips(pt_idxs_a, pt_idxs_b, signs_a, signs_b, core):
+    return _find_torsion_flips_mask(pt_idxs_a, pt_idxs_b, signs_a, signs_b, core).sum()
+
+
+def setup_find_torsion_flips(mol_a, mol_b):
+    conf_a = get_romol_conf(mol_a)
+    conf_b = get_romol_conf(mol_b)
+
+    def enumerate_canonical_proper_torsions(mol):
+        graph = convert_to_nx(mol)
+        pt_idxs = {canonicalize_bond(tuple(idxs)) for idxs in enumerate_simple_paths(graph, 4)}
+        return np.array(list(pt_idxs))
+
+    pt_idxs_a = enumerate_canonical_proper_torsions(mol_a)
+    pt_idxs_b = enumerate_canonical_proper_torsions(mol_b)
+
+    signs_a = np.array([np.sign(torsion_volume(ci, cj, ck, cl)) for ci, cj, ck, cl in conf_a[pt_idxs_a]])
+    signs_b = np.array([np.sign(torsion_volume(ci, cj, ck, cl)) for ci, cj, ck, cl in conf_b[pt_idxs_b]])
+
+    # Trivial case if A or B does not have any possible proper torsions
+    if len(pt_idxs_a) == 0 or len(pt_idxs_b) == 0:
+        return (lambda _: 0, lambda _: np.array([]).reshape(0, 4))
+
+    count_torsion_flips_partial = partial(count_torsion_flips, pt_idxs_a, pt_idxs_b, signs_a, signs_b)
+    find_torsion_flips_partial = partial(find_torsion_flips, pt_idxs_a, pt_idxs_b, signs_a, signs_b)
+
+    return count_torsion_flips_partial, find_torsion_flips_partial

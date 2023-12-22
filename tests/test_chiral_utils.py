@@ -1,10 +1,20 @@
+import hypothesis.strategies as st
 import numpy as np
 import pytest
+from hypothesis import given
 from rdkit import Chem
 from rdkit.Chem import AllChem
 
 from timemachine.fe import chiral_utils, utils
-from timemachine.fe.chiral_utils import ChiralCheckMode, ChiralRestrIdxSet, find_atom_map_chiral_conflicts
+from timemachine.fe.chiral_utils import (
+    ChiralCheckMode,
+    ChiralRestrIdxSet,
+    find_atom_map_chiral_conflicts,
+    find_torsion_flips,
+    torsion_volume,
+)
+from timemachine.fe.dummy import canonicalize_bond, translate_bonds
+from timemachine.fe.mcgregor import UNMAPPED
 from timemachine.potentials.chiral_restraints import U_chiral_atom_batch, U_chiral_bond_batch
 
 pytestmark = [pytest.mark.nocuda]
@@ -308,3 +318,69 @@ def test_chiral_conflict_mixed():
 
     assert len(mixed_map_flips) == 8
     assert len(mixed_map_undefineds) == 1
+
+
+@st.composite
+def perturbations(draw):
+    n_atoms_a = draw(st.integers(4, 30))
+    n_atoms_b = draw(st.integers(4, 30))
+    n_atoms_c = draw(st.integers(4, min(n_atoms_a, n_atoms_b)))
+
+    def unique_indices(arr_size, n):
+        return st.lists(st.integers(0, arr_size - 1), min_size=n, max_size=n, unique=True)
+
+    core_a = draw(unique_indices(n_atoms_a, n_atoms_c))
+    core_b = draw(unique_indices(n_atoms_b, n_atoms_c))
+    a_to_b = {a: b for a, b in zip(core_a, core_b)}
+    core = [a_to_b.get(i_a) or UNMAPPED for i_a in range(n_atoms_a)]
+
+    def pt_idxs(n_atoms):
+        return st.lists(unique_indices(n_atoms, 4).map(tuple).map(canonicalize_bond), min_size=1, unique=True)
+
+    pt_idxs_c = draw(pt_idxs(n_atoms_c))
+    pt_idxs_a = draw(pt_idxs(n_atoms_a)) + pt_idxs_c
+    pt_idxs_b = draw(pt_idxs(n_atoms_b)) + translate_bonds(pt_idxs_c, a_to_b)
+
+    return n_atoms_a, n_atoms_b, pt_idxs_a, pt_idxs_b, core
+
+
+seeds = st.integers(0, np.iinfo(np.int32).max - 1)
+
+
+@given(perturbations(), seeds)
+def test_find_torsion_flips(perturbation, seed):
+    n_atoms_a, n_atoms_b, pt_idxs_a, pt_idxs_b, core = perturbation
+
+    rng = np.random.default_rng(seed)
+    conf_a = rng.uniform(0, 1, (n_atoms_a, 3))
+    conf_b = rng.uniform(0, 1, (n_atoms_b, 3))
+
+    signs_a = [np.sign(torsion_volume(ci, cj, ck, cl)) for ci, cj, ck, cl in conf_a[pt_idxs_a]]
+    signs_b = [np.sign(torsion_volume(ci, cj, ck, cl)) for ci, cj, ck, cl in conf_b[pt_idxs_b]]
+
+    sign_by_idxs_a = {idxs: sign for idxs, sign in zip(pt_idxs_a, signs_a)}
+    sign_by_idxs_b = {idxs: sign for idxs, sign in zip(pt_idxs_b, signs_b)}
+
+    def find_torsion_flips_ref(core):
+        b_to_a = {b: a for a, b in enumerate(core) if b != UNMAPPED}
+        pt_idxs = set(pt_idxs_a).intersection(translate_bonds(pt_idxs_b, b_to_a))
+
+        def is_flipped(idxs_a, idxs_b):
+            sign_a = sign_by_idxs_a[idxs_a]
+            sign_b = sign_by_idxs_b[idxs_b]
+            return np.isfinite(sign_a) and np.isfinite(sign_b) and sign_a != sign_b
+
+        a_to_b = {a: b for b, a in b_to_a.items()}
+
+        return {
+            idxs_a for idxs_a in pt_idxs for idxs_b in translate_bonds([idxs_a], a_to_b) if is_flipped(idxs_a, idxs_b)
+        }
+
+    ref = find_torsion_flips_ref(core)
+
+    test_arr = find_torsion_flips(
+        np.array(pt_idxs_a), np.array(pt_idxs_b), np.array(signs_a), np.array(signs_b), np.array(core)
+    )
+    test = {tuple(idxs) for idxs in test_arr}
+
+    assert ref == test
