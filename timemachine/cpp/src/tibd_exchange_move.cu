@@ -33,12 +33,12 @@ TIBDExchangeMove<RealType>::TIBDExchangeMove(
     : BDExchangeMove<RealType>(
           N, target_mols, params, temperature, nb_beta, cutoff, seed, proposals_per_move, interval),
       radius_(static_cast<RealType>(radius)), inner_volume_(static_cast<RealType>((4.0 / 3.0) * M_PI * pow(radius, 3))),
-      d_rand_states_(DEFAULT_THREADS_PER_BLOCK), d_inner_mols_count_(1), d_identify_indices_(this->num_target_mols_),
-      d_partitioned_indices_(this->num_target_mols_), d_temp_storage_buffer_(0), d_center_(3),
-      d_uniform_noise_buffer_(round_up_even(NOISE_PER_STEP * get_random_batch_size(proposals_per_move))),
-      d_targeting_inner_vol_(1), d_ligand_idxs_(ligand_idxs), d_src_weights_(this->num_target_mols_),
-      d_dest_weights_(this->num_target_mols_), d_inner_flags_(this->num_target_mols_), d_box_volume_(1),
-      p_inner_count_(1), p_targeting_inner_vol_(1) {
+      quaternion_offset_(0), d_rand_states_(DEFAULT_THREADS_PER_BLOCK), d_inner_mols_count_(1),
+      d_identify_indices_(this->num_target_mols_), d_partitioned_indices_(this->num_target_mols_),
+      d_temp_storage_buffer_(0), d_center_(3),
+      d_uniform_noise_buffer_(round_up_even(NOISE_PER_STEP * this->RANDOM_BATCH_SIZE)), d_targeting_inner_vol_(1),
+      d_ligand_idxs_(ligand_idxs), d_src_weights_(this->num_target_mols_), d_dest_weights_(this->num_target_mols_),
+      d_inner_flags_(this->num_target_mols_), d_box_volume_(1), p_inner_count_(1), p_targeting_inner_vol_(1) {
 
     if (radius <= 0.0) {
         throw std::runtime_error("radius must be greater than 0.0");
@@ -70,6 +70,9 @@ TIBDExchangeMove<RealType>::TIBDExchangeMove(
     // Allocate char as temp_storage_bytes_ is in raw bytes and the type doesn't matter in practice.
     // Equivalent to DeviceBuffer<int> buf(temp_storage_bytes_ / sizeof(int))
     d_temp_storage_buffer_.realloc(temp_storage_bytes_);
+
+    // Set the offset to the length of the random vector to ensure noise is triggered on first step
+    this->noise_offset_ = this->d_uniform_noise_buffer_.length;
 }
 
 template <typename RealType> TIBDExchangeMove<RealType>::~TIBDExchangeMove() {
@@ -116,12 +119,6 @@ void TIBDExchangeMove<RealType>::move(
     k_compute_box_volume<<<1, 1, 0, stream>>>(d_box, d_box_volume_.data);
     gpuErrchk(cudaPeekAtLastError());
 
-    // The d_uniform_noise_buffer_ buffer contains the random value for determining where to insert and whether to accept the move
-    curandErrchk(
-        templateCurandUniform(this->cr_rng_, this->d_uniform_noise_buffer_.data, this->d_uniform_noise_buffer_.length));
-    // Quaternions generated from normal noise generate uniform rotations
-    curandErrchk(templateCurandNormal(this->cr_rng_, this->d_quaternions_.data, this->d_quaternions_.length, 0.0, 1.0));
-
     k_flag_mols_inner_outer<RealType><<<mol_blocks, tpb, 0, stream>>>(
         this->num_target_mols_,
         this->d_atom_idxs_.data,
@@ -133,13 +130,11 @@ void TIBDExchangeMove<RealType>::move(
         d_inner_flags_.data);
     gpuErrchk(cudaPeekAtLastError());
 
-    int noise_offset = 0;
-    int quaternion_offset = 0;
     for (int move = 0; move < this->proposals_per_move_; move++) {
-        if (noise_offset >= this->d_uniform_noise_buffer_.length) {
+        if (this->noise_offset_ >= this->d_uniform_noise_buffer_.length) {
             // reset the noise to zero and generate more noise
-            noise_offset = 0;
-            quaternion_offset = 0;
+            this->noise_offset_ = 0;
+            quaternion_offset_ = 0;
             curandErrchk(templateCurandUniform(
                 this->cr_rng_, this->d_uniform_noise_buffer_.data, this->d_uniform_noise_buffer_.length));
             curandErrchk(
@@ -158,7 +153,7 @@ void TIBDExchangeMove<RealType>::move(
 
         k_decide_targeted_move<<<1, 1, 0, stream>>>(
             this->num_target_mols_,
-            this->d_uniform_noise_buffer_.data + noise_offset,
+            this->d_uniform_noise_buffer_.data + this->noise_offset_,
             d_inner_mols_count_.data,
             d_targeting_inner_vol_.data);
         gpuErrchk(cudaPeekAtLastError());
@@ -216,7 +211,7 @@ void TIBDExchangeMove<RealType>::move(
         // by different bias deletion movers (such as targeted insertion)
         // Don't scale the translations as they are computed to be within the region
         this->compute_incremental_weights(
-            N, false, d_coords, d_box, this->d_quaternions_.data + quaternion_offset, stream);
+            N, false, d_coords, d_box, this->d_quaternions_.data + quaternion_offset_, stream);
 
         k_setup_destination_weights_for_targeted<RealType><<<mol_blocks, tpb, 0, stream>>>(
             this->num_target_mols_,
@@ -238,7 +233,7 @@ void TIBDExchangeMove<RealType>::move(
             d_box_volume_.data,
             inner_volume_,
             // Offset to get the last value for the acceptance criteria
-            this->d_uniform_noise_buffer_.data + noise_offset + 1,
+            this->d_uniform_noise_buffer_.data + this->noise_offset_ + 1,
             this->d_samples_.data,
             this->d_log_sum_exp_before_.data,
             this->d_log_sum_exp_after_.data,
@@ -250,8 +245,8 @@ void TIBDExchangeMove<RealType>::move(
             this->d_num_accepted_.data);
         gpuErrchk(cudaPeekAtLastError());
         this->num_attempted_++;
-        noise_offset += NOISE_PER_STEP;
-        quaternion_offset += this->QUATERNIONS_PER_STEP;
+        this->noise_offset_ += NOISE_PER_STEP;
+        quaternion_offset_ += this->QUATERNIONS_PER_STEP;
     }
 }
 

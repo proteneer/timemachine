@@ -16,15 +16,6 @@
 
 namespace timemachine {
 
-int get_random_batch_size(int moves) {
-    int batch_size = moves;
-    const int max_noise_per_batch = 10000;
-    if (batch_size > max_noise_per_batch) {
-        batch_size = max_noise_per_batch;
-    }
-    return batch_size;
-}
-
 template <typename RealType>
 BDExchangeMove<RealType>::BDExchangeMove(
     const int N,
@@ -39,15 +30,14 @@ BDExchangeMove<RealType>::BDExchangeMove(
     : Mover(interval), N_(N), mol_size_(target_mols[0].size()), proposals_per_move_(proposals_per_move),
       num_target_mols_(target_mols.size()), nb_beta_(static_cast<RealType>(nb_beta)),
       beta_(static_cast<RealType>(1.0 / (BOLTZ * temperature))),
-      cutoff_squared_(static_cast<RealType>(cutoff * cutoff)), num_attempted_(0),
+      cutoff_squared_(static_cast<RealType>(cutoff * cutoff)), noise_offset_(0), num_attempted_(0),
       mol_potential_(N, target_mols, nb_beta, cutoff), sampler_(num_target_mols_, seed), logsumexp_(num_target_mols_),
       d_intermediate_coords_(N * 3), d_params_(params), d_mol_energy_buffer_(num_target_mols_),
       d_sample_per_atom_energy_buffer_(mol_size_ * N), d_atom_idxs_(get_atom_indices(target_mols)),
       d_mol_offsets_(get_mol_offsets(target_mols)), d_log_weights_before_(num_target_mols_),
       d_log_weights_after_(num_target_mols_), d_log_sum_exp_before_(2), d_log_sum_exp_after_(2), d_samples_(1),
-      d_quaternions_(round_up_even(QUATERNIONS_PER_STEP * get_random_batch_size(proposals_per_move))),
-      d_translations_(round_up_even(4)), d_num_accepted_(1), d_target_mol_atoms_(mol_size_),
-      d_target_mol_offsets_(num_target_mols_ + 1),
+      d_quaternions_(round_up_even(QUATERNIONS_PER_STEP * this->RANDOM_BATCH_SIZE)), d_translations_(round_up_even(4)),
+      d_num_accepted_(1), d_target_mol_atoms_(mol_size_), d_target_mol_offsets_(num_target_mols_ + 1),
       d_intermediate_sample_weights_(ceil_divide(N_, WEIGHT_THREADS_PER_BLOCK)) {
 
     if (proposals_per_move_ <= 0) {
@@ -67,6 +57,9 @@ BDExchangeMove<RealType>::BDExchangeMove(
     gpuErrchk(cudaMemset(d_log_sum_exp_after_.data, 0, d_log_sum_exp_after_.size()));
     curandErrchk(curandCreateGenerator(&cr_rng_, CURAND_RNG_PSEUDO_DEFAULT));
     curandErrchk(curandSetPseudoRandomGeneratorSeed(cr_rng_, seed));
+
+    // Set the offset to the length of the random vector to ensure noise is triggered on first step
+    noise_offset_ = d_quaternions_.length;
 }
 
 template <typename RealType> BDExchangeMove<RealType>::~BDExchangeMove() {
@@ -95,14 +88,10 @@ void BDExchangeMove<RealType>::move(
 
     this->compute_initial_weights(N, d_coords, d_box, stream);
 
-    // Quaternions generated from normal noise generate uniform rotations
-    curandErrchk(templateCurandNormal(cr_rng_, d_quaternions_.data, d_quaternions_.length, 0.0, 1.0));
-
-    int quaternion_offset = 0;
     for (int move = 0; move < proposals_per_move_; move++) {
-        if (quaternion_offset >= this->d_quaternions_.length) {
+        if (noise_offset_ >= this->d_quaternions_.length) {
             // reset the noise to zero and generate more noise
-            quaternion_offset = 0;
+            noise_offset_ = 0;
             curandErrchk(templateCurandNormal(cr_rng_, d_quaternions_.data, d_quaternions_.length, 0.0, 1.0));
         }
         // Run only after the first pass, to maintain meaningful `log_probability_host` values
@@ -135,8 +124,7 @@ void BDExchangeMove<RealType>::move(
         // Don't move translations into computation of the incremental, as different translations can be used
         // by different bias deletion movers (such as targeted insertion)
         // scale the translations as they are between [0, 1]
-        this->compute_incremental_weights(
-            N, true, d_coords, d_box, this->d_quaternions_.data + quaternion_offset, stream);
+        this->compute_incremental_weights(N, true, d_coords, d_box, this->d_quaternions_.data + noise_offset_, stream);
 
         logsumexp_.sum_device(num_target_mols_, d_log_weights_after_.data, d_log_sum_exp_after_.data, stream);
 
@@ -150,7 +138,7 @@ void BDExchangeMove<RealType>::move(
             d_num_accepted_.data);
         gpuErrchk(cudaPeekAtLastError());
         num_attempted_++;
-        quaternion_offset += QUATERNIONS_PER_STEP;
+        noise_offset_ += QUATERNIONS_PER_STEP;
     }
 }
 

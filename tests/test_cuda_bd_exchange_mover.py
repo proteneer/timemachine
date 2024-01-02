@@ -272,14 +272,18 @@ def test_bd_exchange_deterministic_moves(moves, precision, seed):
         klass = custom_ops.BDExchangeMove_f64
 
     # Reference that makes a single proposal per move
-    bdem_a = klass(N, group_idxs, params, DEFAULT_TEMP, nb.potential.beta, cutoff, seed, moves, 1)
+    bdem_a = klass(N, group_idxs, params, DEFAULT_TEMP, nb.potential.beta, cutoff, seed, 1, 1)
     # Test version that makes all proposals in a single move
     bdem_b = klass(N, group_idxs, params, DEFAULT_TEMP, nb.potential.beta, cutoff, seed, moves, 1)
 
-    moved_a, _ = bdem_a.move(conf, box)
-    moved_b, _ = bdem_b.move(conf, box)
-    # Moves will be deterministic if the the number of steps taken per move match
-    np.testing.assert_array_equal(moved_a, moved_b)
+    iterative_moved_coords = conf.copy()
+    for _ in range(moves):
+        iterative_moved_coords, _ = bdem_a.move(iterative_moved_coords, box)
+        assert not np.all(conf == iterative_moved_coords)  # We should move every time since its a single mol
+    batch_moved_coords, _ = bdem_b.move(conf, box)
+    # Moves should be deterministic regardless the number of steps taken per move
+    np.testing.assert_array_equal(iterative_moved_coords, batch_moved_coords)
+
     assert bdem_a.n_accepted() > 0
     assert bdem_a.n_proposed() == moves
     assert bdem_a.n_accepted() == bdem_b.n_accepted()

@@ -19,6 +19,7 @@ template <typename RealType> class TIBDExchangeMove : public BDExchangeMove<Real
 protected:
     const RealType radius_;
     const RealType inner_volume_;
+    size_t quaternion_offset_;
 
     DeviceBuffer<curandState_t> d_rand_states_;
 

@@ -428,7 +428,7 @@ def test_tibd_exchange_deterministic_moves(radius, moves, precision, seed):
         cutoff,
         radius,
         seed,
-        moves,
+        1,
         1,
     )
 
@@ -446,10 +446,13 @@ def test_tibd_exchange_deterministic_moves(radius, moves, precision, seed):
         1,
     )
 
-    moved_a, _ = bdem_a.move(conf, box)
-    moved_b, _ = bdem_b.move(conf, box)
-    # Moves are only deterministic if the number of steps taken per move is the same
-    np.testing.assert_array_equal(moved_a, moved_b)
+    iterative_moved_coords = conf.copy()
+    for _ in range(moves):
+        iterative_moved_coords, _ = bdem_a.move(iterative_moved_coords, box)
+
+    batch_moved_coords, _ = bdem_b.move(conf, box)
+    # Moves should be deterministic regardless the number of steps taken per move
+    np.testing.assert_array_equal(iterative_moved_coords, batch_moved_coords)
     assert bdem_a.n_accepted() > 0
     assert bdem_a.n_proposed() == moves
     assert bdem_a.n_accepted() == bdem_b.n_accepted()
