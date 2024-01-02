@@ -351,6 +351,7 @@ $$$$""",
         ring_matches_ring_only=False,
         complete_rings=True,
         enforce_chiral=True,
+        disallow_torsion_flips=False,
         min_threshold=0,
     )
     assert len(all_cores) > 0
@@ -390,6 +391,7 @@ def test_all_pairs(filepath):
                 ring_matches_ring_only=False,
                 complete_rings=False,
                 enforce_chiral=True,
+                disallow_torsion_flips=False,
                 min_threshold=0,
             )
 
@@ -441,6 +443,7 @@ def test_complete_rings_only():
         ring_matches_ring_only=True,
         complete_rings=True,
         enforce_chiral=True,
+        disallow_torsion_flips=False,
         min_threshold=0,
     )
 
@@ -577,6 +580,7 @@ $$$$""",
         ring_matches_ring_only=False,
         complete_rings=False,
         enforce_chiral=True,
+        disallow_torsion_flips=False,
         min_threshold=0,
     )
 
@@ -599,6 +603,7 @@ $$$$""",
         ring_matches_ring_only=False,
         complete_rings=False,
         enforce_chiral=True,
+        disallow_torsion_flips=False,
         min_threshold=0,
     )
 
@@ -623,6 +628,7 @@ $$$$""",
         ring_matches_ring_only=False,
         complete_rings=False,
         enforce_chiral=True,
+        disallow_torsion_flips=False,
         min_threshold=0,
     )
 
@@ -754,6 +760,7 @@ def test_hif2a_failure():
         ring_matches_ring_only=False,
         complete_rings=True,
         enforce_chiral=True,
+        disallow_torsion_flips=False,
         min_threshold=0,
     )
 
@@ -811,6 +818,7 @@ def test_cyclohexane_stereo():
         ring_matches_ring_only=True,
         complete_rings=False,
         enforce_chiral=True,
+        disallow_torsion_flips=False,
         min_threshold=0,
     )
 
@@ -871,8 +879,12 @@ def test_chiral_atom_map():
         min_threshold=0,
     )
 
-    chiral_aware_cores = atom_mapping.get_cores(mol_a, mol_b, enforce_chiral=True, **core_kwargs)
-    chiral_oblivious_cores = atom_mapping.get_cores(mol_a, mol_b, enforce_chiral=False, **core_kwargs)
+    chiral_aware_cores = atom_mapping.get_cores(
+        mol_a, mol_b, enforce_chiral=True, disallow_torsion_flips=False, **core_kwargs
+    )
+    chiral_oblivious_cores = atom_mapping.get_cores(
+        mol_a, mol_b, enforce_chiral=False, disallow_torsion_flips=False, **core_kwargs
+    )
 
     assert len(chiral_oblivious_cores) == 4 * 3 * 2 * 1, "expected all hydrogen permutations to be valid"
     assert len(chiral_aware_cores) == (len(chiral_oblivious_cores) // 2), "expected only rotations to be valid"
@@ -905,6 +917,7 @@ def test_ring_matches_ring_only(ring_matches_ring_only):
         enforce_core_core=False,
         complete_rings=False,
         enforce_chiral=False,
+        disallow_torsion_flips=False,
         min_threshold=0,
     )
 
@@ -932,6 +945,7 @@ def test_max_visits_warning():
         ring_matches_ring_only=False,
         complete_rings=False,
         enforce_chiral=True,
+        disallow_torsion_flips=False,
         min_threshold=0,
     )
     cores = atom_mapping.get_cores(mol_a, mol_b, **core_kwargs, max_visits=10000)
@@ -952,6 +966,7 @@ def test_max_cores_warning():
         ring_matches_ring_only=False,
         complete_rings=False,
         enforce_chiral=True,
+        disallow_torsion_flips=False,
         min_threshold=0,
         max_visits=1e7,
     )
@@ -970,6 +985,7 @@ def test_min_threshold():
         ring_matches_ring_only=False,
         complete_rings=False,
         enforce_chiral=True,
+        disallow_torsion_flips=False,
         min_threshold=mol_a.GetNumAtoms(),
     )
 
