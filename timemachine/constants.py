@@ -35,6 +35,6 @@ DEFAULT_ATOM_MAPPING_KWARGS = {
     "ring_matches_ring_only": True,
     "complete_rings": False,
     "enforce_chiral": True,
-    "disallow_torsion_flips": False,
+    "disallow_torsion_flips": True,
     "min_threshold": 0,
 }
