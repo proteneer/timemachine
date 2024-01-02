@@ -125,15 +125,16 @@ void __global__ k_attempt_exchange_move_targeted(
     }
 
     // If accepted, move the coords into place
-    // Always move the weights
+    // Always copy the weights, either copying from before to after or after to before
     while (atom_idx < N) {
         if (accepted) {
             dest_coords[atom_idx * 3 + 0] = moved_coords[atom_idx * 3 + 0];
             dest_coords[atom_idx * 3 + 1] = moved_coords[atom_idx * 3 + 1];
             dest_coords[atom_idx * 3 + 2] = moved_coords[atom_idx * 3 + 2];
         }
-        // Store the weights. If accepted store the after weights as before else
-        // copy the before weights to the after so the next iteration can incrementally update the weights
+        // If accepted store the after weights as before weights else copy the before weights to the after weights
+        // so the next iteration can incrementally update the weights. The copying of the before to the after is
+        // to avoid an additional memcpy kernel.
         if (atom_idx < num_target_mols) {
             if (accepted) {
                 before_weights[atom_idx] = after_weights[atom_idx];
