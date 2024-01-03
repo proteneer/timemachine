@@ -86,13 +86,16 @@ def setup_in_env(
     run_seed: int,
 ):
     """Prepare potentials, concatenate environment and ligand coords, apply HMR, and construct barostat"""
+    barostat_interval = 25
     system = st.combine_with_host(host.system, lamb, host.num_water_atoms)
     host_hmr_masses = model_utils.apply_hmr(host.physical_masses, host.system.bond.potential.idxs)
     hmr_masses = np.concatenate([host_hmr_masses, st.combine_masses(use_hmr=True)])
 
     potentials = system.get_U_fns()
     group_idxs = get_group_indices(get_bond_list(system.bond.potential), len(hmr_masses))
-    baro = MonteCarloBarostat(len(hmr_masses), DEFAULT_PRESSURE, temperature, group_idxs, 15, run_seed + 1)
+    baro = MonteCarloBarostat(
+        len(hmr_masses), DEFAULT_PRESSURE, temperature, group_idxs, barostat_interval, run_seed + 1
+    )
 
     x0 = np.concatenate([host.conf, ligand_conf])
 
