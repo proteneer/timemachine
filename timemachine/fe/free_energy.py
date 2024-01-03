@@ -402,10 +402,18 @@ def sample_with_context(
 ) -> Trajectory:
     # burn-in
     if md_params.n_eq_steps:
+        # Set barostat interval to 15 for equilibration, then back to the original interval for production
+        barostat = ctxt.get_barostat()
+        original_interval = 0 if barostat is None else barostat.get_interval()
+        equil_barostat_interval = 15
+        if barostat is not None:
+            barostat.set_interval(equil_barostat_interval)
         ctxt.multiple_steps(
             n_steps=md_params.n_eq_steps,
             store_x_interval=0,
         )
+        if barostat is not None:
+            barostat.set_interval(original_interval)
 
     rng = np.random.default_rng(md_params.seed)
 
@@ -926,6 +934,12 @@ def run_sims_hrex(
         # Add an identity move to the mixture to ensure aperiodicity
         neighbor_pairs = [(StateIdx(0), StateIdx(0))] + neighbor_pairs
 
+    # Setup the barostat to run more often for equilibration
+    equil_barostat_interval = 15
+    barostat = context.get_barostat()
+    if barostat is not None:
+        barostat.set_interval(equil_barostat_interval)
+
     def get_equilibrated_xvb(xvb: CoordsVelBox, params: NDArray) -> CoordsVelBox:
         if md_params.n_eq_steps == 0:
             return xvb
@@ -957,6 +971,12 @@ def run_sims_hrex(
     samples_by_state: List[Trajectory] = [Trajectory.empty() for _ in initial_states]
     replica_idx_by_state_by_iter: List[List[ReplicaIdx]] = []
     fraction_accepted_by_pair_by_iter: List[List[Tuple[int, int]]] = []
+
+    # Reset the barostat from the equilibration interval to the production interval
+    barostat = context.get_barostat()
+    state = initial_states[0]
+    if barostat is not None and state.barostat is not None:
+        barostat.set_interval(state.barostat.interval)
 
     for iteration, n_frames_iter in enumerate(batches(md_params.n_frames, n_frames_per_iter), 1):
 
