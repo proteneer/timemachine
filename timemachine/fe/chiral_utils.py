@@ -1,10 +1,15 @@
 import itertools
 from enum import Enum
-from typing import List, Set, Tuple
+from functools import partial
+from typing import List, Mapping, Sequence, Set, Tuple
 
 import numpy as np
 from rdkit import Chem
+from rdkit.Chem.rdchem import BondType
 
+from timemachine.fe.dummy import canonicalize_bond
+from timemachine.fe.utils import get_romol_conf
+from timemachine.graph_utils import convert_to_nx, enumerate_simple_paths
 from timemachine.potentials.chiral_restraints import pyramidal_volume, torsion_volume
 
 FourTuple = Tuple[int, int, int, int]
@@ -342,3 +347,44 @@ def find_chiral_bonds(mol):
             chiral_bonds.add(tuple(sorted([match[0], match[1]])))
 
     return chiral_bonds
+
+
+def _find_flipped_torsions(
+    torsions_a: Mapping[FourTuple, float], torsions_b: Mapping[FourTuple, float], core: Sequence[int]
+) -> List[ChiralConflict]:
+    results = []
+    for (ia, ja, ka, la), sign_a in torsions_a.items():
+        idxs_b = core[ia], core[ja], core[ka], core[la]
+        try:
+            sign_b = torsions_b[idxs_b]
+            if sign_a != sign_b:
+                results.append(((ia, ja, ka, la), idxs_b))
+        except KeyError:
+            pass
+
+    return results
+
+
+def setup_find_flipped_planar_torsions(mol_a, mol_b):
+    def enumerate_planar_torsions(mol):
+        conf = get_romol_conf(mol)
+        graph = convert_to_nx(mol)
+        idxs = {canonicalize_bond(tuple(idxs)) for idxs in enumerate_simple_paths(graph, 4)}
+
+        planar_torsions = dict()
+        for i, j, k, l in idxs:
+            bond_type = mol.GetBondBetweenAtoms(j, k).GetBondType()
+            if bond_type == BondType.DOUBLE or bond_type == BondType.AROMATIC:
+                volume = torsion_volume(conf[i], conf[j], conf[k], conf[l])
+                planar_torsions[(i, j, k, l)] = np.sign(volume)
+        return planar_torsions
+
+    planar_torsions_a = enumerate_planar_torsions(mol_a)
+    planar_torsions_b = enumerate_planar_torsions(mol_b)
+
+    # add reversed tuples to avoid needing to canonicalize
+    planar_torsions_b.update({(l, k, j, i): sign for (i, j, k, l), sign in planar_torsions_b.items()})
+
+    find_flipped_planar_torsions = partial(_find_flipped_torsions, planar_torsions_a, planar_torsions_b)
+
+    return find_flipped_planar_torsions
