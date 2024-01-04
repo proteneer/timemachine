@@ -355,8 +355,29 @@ class TIBDExchangeMove(BDExchangeMove):
         log_weights_after_full = np.array(log_weights_after_full)
         log_weights_after = log_weights_after_full[vj_plus_one_idxs]
 
+        # directionality is going from region i into region j
+        # take care of asymmetric boundary conditions
+        if len(vi_mols) == self.num_waters:
+            # region i has every water, so fwd probability is 100%, rev probability is 50%
+            g_fwd = 1.0
+            g_rev = 0.5
+        elif len(vi_mols) == 1:
+            # region i has only one water, so fwd probability is 50%, rev probability is 100%
+            g_fwd = 0.5
+            g_rev = 1.0
+        else:
+            # symmetric
+            g_fwd = 0.5
+            g_rev = 0.5
+
         log_p_accept = min(
-            0, logsumexp(log_weights_before) - logsumexp(log_weights_after) + np.log(vol_j) - np.log(vol_i)
+            0,
+            logsumexp(log_weights_before)
+            - logsumexp(log_weights_after)
+            + np.log(vol_j)
+            - np.log(vol_i)
+            + np.log(g_rev)
+            - np.log(g_fwd),
         )
 
         new_state = CoordsVelBox(trial_coords, x.velocities, x.box)
