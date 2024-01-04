@@ -1,15 +1,19 @@
 from dataclasses import replace
 from importlib import resources
+from typing import List
 
 import numpy as np
 import pytest
 from common import prepare_single_topology_initial_state
+from numpy.typing import NDArray
 from scipy.special import logsumexp
 
 from timemachine.constants import DEFAULT_PRESSURE, DEFAULT_TEMP
-from timemachine.fe.free_energy import HostConfig, InitialState
+from timemachine.fe.free_energy import AbsoluteFreeEnergy, HostConfig, InitialState
 from timemachine.fe.model_utils import apply_hmr, image_frame
 from timemachine.fe.single_topology import SingleTopology
+from timemachine.fe.topology import BaseTopology
+from timemachine.fe.utils import read_sdf
 from timemachine.ff import Forcefield
 from timemachine.ff.handlers import openmm_deserializer
 from timemachine.lib import MonteCarloBarostat, custom_ops
@@ -17,7 +21,7 @@ from timemachine.md import builders
 from timemachine.md.barostat.utils import compute_box_volume, get_bond_list, get_group_indices
 from timemachine.md.exchange.exchange_mover import TIBDExchangeMove as RefTIBDExchangeMove
 from timemachine.md.exchange.exchange_mover import delta_r_np, get_water_groups
-from timemachine.potentials import HarmonicBond, Nonbonded
+from timemachine.potentials import HarmonicBond, Nonbonded, SummedPotential
 from timemachine.testsystems.relative import get_hif2a_ligand_pair_single_topology
 
 
@@ -39,6 +43,83 @@ def compute_ref_log_prob(ref_exchange, water_idx, vi_mols, vj_mols, vol_i, vol_j
     log_p_accept = min(0, logsumexp(log_weights_before) - logsumexp(log_weights_after) + np.log(vol_j) - np.log(vol_i))
 
     return trial_coords, log_p_accept
+
+
+def verify_targeted_moves(
+    mol_groups: List,
+    bdem: custom_ops.TIBDExchangeMove_f32 | custom_ops.TIBDExchangeMove_f64,
+    ref_bdem: RefTIBDExchangeMove,
+    conf: NDArray,
+    box: NDArray,
+    moves: int,
+    steps_per_move: int,
+    rtol: float,
+    atol: float,
+):
+    assert bdem.last_log_probability() == 0.0, "First log probability expected to be zero"
+    accepted = 0
+    last_conf = conf
+    for step in range(moves // steps_per_move):
+        x_move, x_box = bdem.move(last_conf, box)
+        # The box will never change
+        np.testing.assert_array_equal(box, x_box)
+        num_moved = 0
+        new_pos = None
+        idx = -1
+        for i, mol_idxs in enumerate(ref_bdem.water_idxs_np):
+            if not np.all(x_move[mol_idxs] == last_conf[mol_idxs]):
+                num_moved += 1
+                new_pos = x_move[mol_idxs]
+                idx = i
+        if num_moved > 0:
+            accepted += 1
+            # The molecules should all be imaged in the home box
+            np.testing.assert_allclose(image_frame(mol_groups, x_move, x_box), x_move)
+            # Verify that the probabilities and per mol energies agree when we do accept moves
+            # can only be done when we only attempt a single move per step
+            if steps_per_move == 1:
+                vol_inner = (4 / 3) * np.pi * ref_bdem.radius**3
+                vol_outer = np.prod(np.diag(box)) - vol_inner
+
+                center = np.mean(last_conf[ref_bdem.ligand_idxs], axis=0)
+
+                inner, outer = get_water_groups(last_conf, box, center, ref_bdem.water_idxs_np, ref_bdem.radius)
+                if idx in inner:
+                    vi_mols = inner
+                    vol_i = vol_inner
+                    vj_mols = outer
+                    vol_j = vol_outer
+                else:
+                    vi_mols = outer
+                    vol_i = vol_outer
+                    vj_mols = inner
+                    vol_j = vol_inner
+                tested, ref_log_prob = compute_ref_log_prob(
+                    ref_bdem, idx, vi_mols, vj_mols, vol_i, vol_j, last_conf, box, new_pos
+                )
+                ref_prob = np.exp(ref_log_prob)
+                assert np.isfinite(ref_prob) and ref_prob > 0.0
+                np.testing.assert_array_equal(tested, x_move)
+                np.testing.assert_allclose(
+                    np.exp(bdem.last_log_probability()),
+                    np.exp(ref_log_prob),
+                    rtol=rtol,
+                    atol=atol,
+                    err_msg=f"Step {step} failed",
+                )
+        elif num_moved == 0:
+            np.testing.assert_array_equal(last_conf, x_move)
+        assert steps_per_move != 1 or num_moved <= 1, "More than one mol moved, something is wrong"
+
+        last_conf = x_move
+    assert bdem.n_proposed() == moves
+    assert accepted > 0, "No moves were made, nothing was tested"
+    if steps_per_move == 1:
+        np.testing.assert_allclose(bdem.acceptance_fraction(), accepted / moves)
+        assert bdem.n_accepted() == accepted
+    else:
+        assert bdem.n_accepted() >= accepted
+        assert bdem.acceptance_fraction() >= accepted / moves
 
 
 @pytest.mark.memcheck
@@ -308,6 +389,78 @@ def hif2a_rbfe_state() -> InitialState:
     return replace(initial_state, v0=ctxt.get_v_t(), x0=conf, box0=box)
 
 
+@pytest.mark.parametrize("radius", [0.4])
+@pytest.mark.parametrize("moves", [10000])
+@pytest.mark.parametrize("precision,rtol,atol", [(np.float64, 2e-5, 2e-5), (np.float32, 1e-4, 2e-3)])
+@pytest.mark.parametrize("seed", [2024])
+def test_targeted_insertion_buckyball_single_water(radius, moves, precision, rtol, atol, seed):
+    proposals_per_move = 1
+    ff = Forcefield.load_default()
+    with resources.as_file(resources.files("timemachine.datasets.water_exchange")) as water_exchange:
+        host_pdb = water_exchange / "bb_0_waters.pdb"
+        mols = read_sdf(water_exchange / "bb_centered_espaloma.sdf")
+        assert len(mols) == 1
+        mol = mols[0]
+
+    # Build the protein system using the solvent PDB for buckyball
+    host_sys, host_conf, host_box, host_topology, num_water_atoms = builders.build_protein_system(
+        str(host_pdb), ff.protein_ff, ff.water_ff
+    )
+    host_box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes
+    host_config = HostConfig(host_sys, host_conf, host_box, num_water_atoms)
+
+    bt = BaseTopology(mol, ff)
+    afe = AbsoluteFreeEnergy(mol, bt)
+    # Fully embed the ligand
+    potentials, params, combined_masses = afe.prepare_host_edge(ff.get_params(), host_config, 0.0)
+    ligand_idxs = np.arange(num_water_atoms, num_water_atoms + mol.GetNumAtoms())
+
+    conf = afe.prepare_combined_coords(host_config.conf)
+    box = host_box
+
+    bps = [pot.bind(p) for pot, p in zip(potentials, params)]
+    summed_pot = next(bp.potential for bp in bps if isinstance(bp.potential, SummedPotential))
+    nb = next(
+        pot.bind(p) for pot, p in zip(summed_pot.potentials, summed_pot.params_init) if isinstance(pot, Nonbonded)
+    )
+    bond_pot = next(bp for bp in bps if isinstance(bp.potential, HarmonicBond)).potential
+
+    bond_list = get_bond_list(bond_pot)
+    all_group_idxs = get_group_indices(bond_list, conf.shape[0])
+
+    # Select an arbitrary water, will be the only water considered for insertion/deletion
+    water_idxs = [[group for group in all_group_idxs if len(group) == 3][-1]]
+
+    conf = image_frame(all_group_idxs, conf, box)
+
+    N = conf.shape[0]
+
+    params = nb.params
+
+    cutoff = nb.potential.cutoff
+    klass = custom_ops.TIBDExchangeMove_f32
+    if precision == np.float64:
+        klass = custom_ops.TIBDExchangeMove_f64
+
+    bdem = klass(
+        N,
+        ligand_idxs,
+        water_idxs,
+        params,
+        DEFAULT_TEMP,
+        nb.potential.beta,
+        cutoff,
+        radius,
+        seed,
+        proposals_per_move,
+        1,
+    )
+
+    ref_bdem = RefTIBDExchangeMove(nb.potential.beta, cutoff, params, water_idxs, DEFAULT_TEMP, ligand_idxs, radius)
+
+    verify_targeted_moves(all_group_idxs, bdem, ref_bdem, conf, box, moves, proposals_per_move, rtol, atol)
+
+
 @pytest.mark.parametrize("radius", [2.0])
 @pytest.mark.parametrize("precision", [np.float32])
 @pytest.mark.parametrize("seed", [2023])
@@ -506,81 +659,7 @@ def test_targeted_moves_in_bulk_water(radius, steps_per_move, moves, box_size, p
     )
 
     ref_bdem = RefTIBDExchangeMove(nb.potential.beta, cutoff, params, group_idxs, DEFAULT_TEMP, center_group, radius)
-
-    assert bdem.last_log_probability() == 0.0, "First log probability expected to be zero"
-    accepted = 0
-    last_conf = conf
-    for step in range(moves // steps_per_move):
-        x_move, x_box = bdem.move(last_conf, box)
-        # The box will never change
-        np.testing.assert_array_equal(box, x_box)
-        num_moved = 0
-        new_pos = None
-        idx = -1
-        for i, mol_idxs in enumerate(group_idxs):
-            if not np.all(x_move[mol_idxs] == last_conf[mol_idxs]):
-                num_moved += 1
-                new_pos = x_move[mol_idxs]
-                idx = i
-        if num_moved > 0:
-            accepted += 1
-            # The molecules should all be imaged in the home box
-            np.testing.assert_allclose(image_frame(all_group_idxs, x_move, x_box), x_move)
-            # Verify that the probabilities and per mol energies agree when we do accept moves
-            # can only be done when we only attempt a single move per step
-            if steps_per_move == 1:
-                vol_inner = (4 / 3) * np.pi * radius**3
-                vol_outer = np.prod(np.diag(box)) - vol_inner
-
-                assert np.all(last_conf[center_group] == x_move[center_group])
-
-                # Use the same inner/outer method that the Cuda version uses, can differ
-                # slightly
-                func = custom_ops.inner_and_outer_mols_f32
-                if precision == np.float64:
-                    func = custom_ops.inner_and_outer_mols_f64
-
-                np.testing.assert_array_equal(last_conf[center_group], x_move[center_group])
-                inner, outer = func(center_group, last_conf, box, group_idxs, radius)
-                inner_after, outer_after = func(center_group, x_move, box, group_idxs, radius)
-                if idx in inner:
-                    assert idx in outer_after
-                    vi_mols = inner
-                    vol_i = vol_inner
-                    vj_mols = outer
-                    vol_j = vol_outer
-                else:
-                    assert idx in inner_after
-                    vi_mols = outer
-                    vol_i = vol_outer
-                    vj_mols = inner
-                    vol_j = vol_inner
-                tested, ref_log_prob = compute_ref_log_prob(
-                    ref_bdem, idx, vi_mols, vj_mols, vol_i, vol_j, last_conf, box, new_pos
-                )
-                ref_prob = np.exp(ref_log_prob)
-                assert np.isfinite(ref_prob) and ref_prob > 0.0
-                np.testing.assert_array_equal(tested, x_move)
-                np.testing.assert_allclose(
-                    np.exp(bdem.last_log_probability()),
-                    np.exp(ref_log_prob),
-                    rtol=rtol,
-                    atol=atol,
-                    err_msg=f"Step {step} failed",
-                )
-        elif num_moved == 0:
-            np.testing.assert_array_equal(last_conf, x_move)
-        assert steps_per_move != 1 or num_moved <= 1, "More than one mol moved, something is wrong"
-
-        last_conf = x_move
-    assert bdem.n_proposed() == moves
-    assert accepted > 0, "No moves were made, nothing was tested"
-    if steps_per_move == 1:
-        np.testing.assert_allclose(bdem.acceptance_fraction(), accepted / moves)
-        assert bdem.n_accepted() == accepted
-    else:
-        assert bdem.n_accepted() >= accepted
-        assert bdem.acceptance_fraction() >= accepted / moves
+    verify_targeted_moves(all_group_idxs, bdem, ref_bdem, conf, box, moves, steps_per_move, rtol, atol)
 
 
 @pytest.mark.parametrize("radius", [1.2])
@@ -635,70 +714,7 @@ def test_moves_with_three_waters(radius, steps_per_move, moves, precision, rtol,
 
     ref_bdem = RefTIBDExchangeMove(nb.potential.beta, cutoff, params, group_idxs, DEFAULT_TEMP, center_group, radius)
 
-    assert bdem.last_log_probability() == 0.0, "First log probability expected to be zero"
-    accepted = 0
-    last_conf = conf
-    for step in range(moves // steps_per_move):
-        x_move, x_box = bdem.move(last_conf, box)
-        # The box will never change
-        np.testing.assert_array_equal(box, x_box)
-        num_moved = 0
-        new_pos = None
-        idx = -1
-        for i, mol_idxs in enumerate(group_idxs):
-            if not np.all(x_move[mol_idxs] == last_conf[mol_idxs]):
-                num_moved += 1
-                new_pos = x_move[mol_idxs]
-                idx = i
-        if num_moved > 0:
-            accepted += 1
-            # The molecules should all be imaged in the home box
-            np.testing.assert_allclose(image_frame(all_group_idxs, x_move, x_box), x_move)
-            # Verify that the probabilities and per mol energies agree when we do accept moves
-            # can only be done when we only attempt a single move per step
-            if steps_per_move == 1:
-                vol_inner = (4 / 3) * np.pi * radius**3
-                vol_outer = np.prod(np.diag(box)) - vol_inner
-
-                center = np.mean(last_conf[center_group], axis=0)
-
-                inner, outer = get_water_groups(last_conf, box, center, group_idxs, radius)
-                if idx in inner:
-                    vi_mols = inner
-                    vol_i = vol_inner
-                    vj_mols = outer
-                    vol_j = vol_outer
-                else:
-                    vi_mols = outer
-                    vol_i = vol_outer
-                    vj_mols = inner
-                    vol_j = vol_inner
-                tested, ref_log_prob = compute_ref_log_prob(
-                    ref_bdem, idx, vi_mols, vj_mols, vol_i, vol_j, last_conf, box, new_pos
-                )
-                ref_prob = np.exp(ref_log_prob)
-                assert np.isfinite(ref_prob) and ref_prob > 0.0
-                np.testing.assert_array_equal(tested, x_move)
-                np.testing.assert_allclose(
-                    np.exp(bdem.last_log_probability()),
-                    np.exp(ref_log_prob),
-                    rtol=rtol,
-                    atol=atol,
-                    err_msg=f"Step {step} failed",
-                )
-        elif num_moved == 0:
-            np.testing.assert_array_equal(last_conf, x_move)
-        assert steps_per_move != 1 or num_moved <= 1, "More than one mol moved, something is wrong"
-
-        last_conf = x_move
-    assert bdem.n_proposed() == moves
-    assert accepted > 0, "No moves were made, nothing was tested"
-    if steps_per_move == 1:
-        np.testing.assert_allclose(bdem.acceptance_fraction(), accepted / moves)
-        assert bdem.n_accepted() == accepted
-    else:
-        assert bdem.n_accepted() >= accepted
-        assert bdem.acceptance_fraction() >= accepted / moves
+    verify_targeted_moves(all_group_idxs, bdem, ref_bdem, conf, box, moves, steps_per_move, rtol, atol)
 
 
 @pytest.mark.parametrize("radius", [2.0])
@@ -760,66 +776,4 @@ def test_moves_with_complex_and_ligand(hif2a_rbfe_state, radius, steps_per_move,
         nb.potential.beta, cutoff, params, water_idxs, DEFAULT_TEMP, initial_state.ligand_idxs, radius
     )
 
-    assert bdem.last_log_probability() == 0.0, "First log probability expected to be zero"
-    accepted = 0
-    last_conf = conf
-    for step in range(moves // steps_per_move):
-        x_move, x_box = bdem.move(last_conf, box)
-        # The box will never change
-        np.testing.assert_array_equal(box, x_box)
-        num_moved = 0
-        new_pos = None
-        idx = -1
-        for i, mol_idxs in enumerate(water_idxs):
-            if not np.all(x_move[mol_idxs] == last_conf[mol_idxs]):
-                num_moved += 1
-                new_pos = x_move[mol_idxs]
-                idx = i
-        if num_moved > 0:
-            accepted += 1
-            # The molecules should all be imaged in the home box
-            np.testing.assert_allclose(image_frame(all_group_idxs, x_move, x_box), x_move)
-            # Verify that the probabilities and per mol energies agree when we do accept moves
-            # can only be done when we only attempt a single move per step
-            if steps_per_move == 1:
-                vol_inner = (4 / 3) * np.pi * radius**3
-                vol_outer = np.prod(np.diag(box)) - vol_inner
-
-                center = np.mean(last_conf[initial_state.ligand_idxs], axis=0)
-                inner, outer = get_water_groups(last_conf, box, center, water_idxs, radius)
-                if idx in inner:
-                    vi_mols = inner
-                    vol_i = vol_inner
-                    vj_mols = outer
-                    vol_j = vol_outer
-                else:
-                    vi_mols = outer
-                    vol_i = vol_outer
-                    vj_mols = inner
-                    vol_j = vol_inner
-                tested, ref_log_prob = compute_ref_log_prob(
-                    ref_bdem, idx, vi_mols, vj_mols, vol_i, vol_j, last_conf, box, new_pos
-                )
-                np.testing.assert_array_equal(tested, x_move)
-                ref_prob = np.exp(ref_log_prob)
-                assert np.isfinite(ref_prob) and ref_prob > 0.0
-                np.testing.assert_allclose(
-                    np.exp(bdem.last_log_probability()),
-                    np.exp(ref_log_prob),
-                    rtol=rtol,
-                    atol=atol,
-                    err_msg=f"Step {step} failed",
-                )
-        elif num_moved == 0:
-            np.testing.assert_array_equal(last_conf, x_move)
-        assert steps_per_move != 1 or num_moved <= 1, "More than one mol moved, something is wrong"
-
-        last_conf = x_move
-    assert bdem.n_proposed() == moves
-    assert accepted > 0, "No moves were made, nothing was tested"
-    if steps_per_move == 1:
-        np.testing.assert_allclose(bdem.acceptance_fraction(), accepted / moves)
-        assert bdem.n_accepted() == accepted
-    else:
-        assert bdem.n_accepted() >= accepted
-        assert bdem.acceptance_fraction() >= accepted / moves
+    verify_targeted_moves(all_group_idxs, bdem, ref_bdem, conf, box, moves, steps_per_move, rtol, atol)
