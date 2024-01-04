@@ -40,7 +40,28 @@ def compute_ref_log_prob(ref_exchange, water_idx, vi_mols, vj_mols, vol_i, vol_j
     log_weights_after_full = np.array(log_weights_after_full)
     log_weights_after = log_weights_after_full[vj_plus_one_idxs]
 
-    log_p_accept = min(0, logsumexp(log_weights_before) - logsumexp(log_weights_after) + np.log(vol_j) - np.log(vol_i))
+    if len(vi_mols) == ref_exchange.num_waters:
+        # region i has every water, so fwd probability is 100%, rev probability is 50%
+        g_fwd = 1.0
+        g_rev = 0.5
+    elif len(vi_mols) == 1:
+        # region i has only one water, so fwd probability is 50%, rev probability is 100%
+        g_fwd = 0.5
+        g_rev = 1.0
+    else:
+        # symmetric
+        g_fwd = 0.5
+        g_rev = 0.5
+
+    log_p_accept = min(
+        0,
+        logsumexp(log_weights_before)
+        - logsumexp(log_weights_after)
+        + np.log(vol_j)
+        - np.log(vol_i)
+        + np.log(g_rev)
+        - np.log(g_fwd),
+    )
 
     return trial_coords, log_p_accept
 
