@@ -6,7 +6,6 @@ import numpy as np
 import pytest
 from common import prepare_single_topology_initial_state
 from numpy.typing import NDArray
-from scipy.special import logsumexp
 
 from timemachine.constants import DEFAULT_PRESSURE, DEFAULT_TEMP
 from timemachine.fe.free_energy import AbsoluteFreeEnergy, HostConfig, InitialState
@@ -20,12 +19,12 @@ from timemachine.lib import MonteCarloBarostat, custom_ops
 from timemachine.md import builders
 from timemachine.md.barostat.utils import compute_box_volume, get_bond_list, get_group_indices
 from timemachine.md.exchange.exchange_mover import TIBDExchangeMove as RefTIBDExchangeMove
-from timemachine.md.exchange.exchange_mover import delta_r_np, get_water_groups
+from timemachine.md.exchange.exchange_mover import compute_raw_ratio_given_weights, delta_r_np, get_water_groups
 from timemachine.potentials import HarmonicBond, Nonbonded, SummedPotential
 from timemachine.testsystems.relative import get_hif2a_ligand_pair_single_topology
 
 
-def compute_ref_log_prob(ref_exchange, water_idx, vi_mols, vj_mols, vol_i, vol_j, coords, box, new_coords):
+def compute_ref_raw_log_prob(ref_exchange, water_idx, vi_mols, vj_mols, vol_i, vol_j, coords, box, new_coords):
     """Modified from timemachine.md.exchange.exchange_mover.TIBDExchangeMove.swap_vi_into_vj
     to support not resampling"""
     coords = coords.copy()
@@ -40,30 +39,9 @@ def compute_ref_log_prob(ref_exchange, water_idx, vi_mols, vj_mols, vol_i, vol_j
     log_weights_after_full = np.array(log_weights_after_full)
     log_weights_after = log_weights_after_full[vj_plus_one_idxs]
 
-    if len(vi_mols) == ref_exchange.num_waters:
-        # region i has every water, so fwd probability is 100%, rev probability is 50%
-        g_fwd = 1.0
-        g_rev = 0.5
-    elif len(vi_mols) == 1:
-        # region i has only one water, so fwd probability is 50%, rev probability is 100%
-        g_fwd = 0.5
-        g_rev = 1.0
-    else:
-        # symmetric
-        g_fwd = 0.5
-        g_rev = 0.5
+    raw_log_p = compute_raw_ratio_given_weights(log_weights_before, log_weights_after, vi_mols, vj_mols, vol_i, vol_j)
 
-    log_p_accept = min(
-        0,
-        logsumexp(log_weights_before)
-        - logsumexp(log_weights_after)
-        + np.log(vol_j)
-        - np.log(vol_i)
-        + np.log(g_rev)
-        - np.log(g_fwd),
-    )
-
-    return trial_coords, log_p_accept
+    return trial_coords, raw_log_p
 
 
 def verify_targeted_moves(
@@ -93,6 +71,7 @@ def verify_targeted_moves(
                 new_pos = x_move[mol_idxs]
                 idx = i
         if num_moved > 0:
+            print("Accepted a move")
             accepted += 1
             # The molecules should all be imaged in the home box
             np.testing.assert_allclose(image_frame(mol_groups, x_move, x_box), x_move)
@@ -115,15 +94,15 @@ def verify_targeted_moves(
                     vol_i = vol_outer
                     vj_mols = inner
                     vol_j = vol_inner
-                tested, ref_log_prob = compute_ref_log_prob(
+                tested, raw_ref_log_prob = compute_ref_raw_log_prob(
                     ref_bdem, idx, vi_mols, vj_mols, vol_i, vol_j, last_conf, box, new_pos
                 )
-                ref_prob = np.exp(ref_log_prob)
+                ref_prob = np.exp(raw_ref_log_prob)
                 assert np.isfinite(ref_prob) and ref_prob > 0.0
                 np.testing.assert_array_equal(tested, x_move)
                 np.testing.assert_allclose(
-                    np.exp(bdem.last_log_probability()),
-                    np.exp(ref_log_prob),
+                    np.exp(bdem.last_raw_log_probability()),
+                    np.exp(raw_ref_log_prob),
                     rtol=rtol,
                     atol=atol,
                     err_msg=f"Step {step} failed",
@@ -416,7 +395,7 @@ def hif2a_rbfe_state() -> InitialState:
 @pytest.mark.parametrize("seed", [2024])
 def test_targeted_insertion_buckyball_single_water(radius, moves, precision, rtol, atol, seed):
     proposals_per_move = 1
-    ff = Forcefield.load_default()
+    ff = Forcefield.load_precomputed_default()
     with resources.as_file(resources.files("timemachine.datasets.water_exchange")) as water_exchange:
         host_pdb = water_exchange / "bb_0_waters.pdb"
         mols = read_sdf(water_exchange / "bb_centered_espaloma.sdf")

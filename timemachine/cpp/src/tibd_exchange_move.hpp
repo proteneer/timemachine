@@ -70,6 +70,7 @@ public:
     std::array<std::vector<double>, 2> move_host(const int N, const double *h_coords, const double *h_box) override;
 
     double log_probability_host() override;
+    double raw_log_probability_host() override;
 };
 
 } // namespace timemachine

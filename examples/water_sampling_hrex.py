@@ -6,7 +6,7 @@ from typing import List
 import matplotlib.pyplot as plt
 import numpy as np
 from rdkit import Chem
-from water_sampling_common import DEFAULT_BB_RADIUS, compute_occupancy, get_initial_state, setup_forcefield
+from water_sampling_common import DEFAULT_BB_RADIUS, compute_occupancy, get_initial_state
 
 from timemachine.constants import DEFAULT_TEMP
 from timemachine.fe.free_energy import HREXParams, InitialState, MDParams, SimulationResult
@@ -127,7 +127,7 @@ def test_hrex():
     suppl = list(Chem.SDMolSupplier(args.ligand_sdf, removeHs=False))
     mol = suppl[0]
 
-    ff = setup_forcefield()
+    ff = Forcefield.load_precomputed_default()
     seed = 2024
     np.random.seed(seed)
 

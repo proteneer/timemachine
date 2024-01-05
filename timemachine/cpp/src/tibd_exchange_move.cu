@@ -272,7 +272,7 @@ TIBDExchangeMove<RealType>::move_host(const int N, const double *h_coords, const
     return std::array<std::vector<double>, 2>({out_coords, out_box});
 }
 
-template <typename RealType> double TIBDExchangeMove<RealType>::log_probability_host() {
+template <typename RealType> double TIBDExchangeMove<RealType>::raw_log_probability_host() {
     std::vector<RealType> h_log_exp_before(2);
     std::vector<RealType> h_log_exp_after(2);
     this->d_log_sum_exp_before_.copy_to(&h_log_exp_before[0]);
@@ -292,8 +292,11 @@ template <typename RealType> double TIBDExchangeMove<RealType>::log_probability_
     RealType log_vol_prob = h_targeting_inner_vol == 1 ? log(inner_volume_) - log(h_box_vol - inner_volume_)
                                                        : log(h_box_vol - inner_volume_) - log(inner_volume_);
 
-    double log_prob = min(static_cast<double>(before_log_prob - after_log_prob + log_vol_prob), 0.0);
-    return log_prob;
+    return static_cast<double>(before_log_prob - after_log_prob + log_vol_prob);
+}
+
+template <typename RealType> double TIBDExchangeMove<RealType>::log_probability_host() {
+    return min(raw_log_probability_host(), 0.0);
 }
 
 template class TIBDExchangeMove<float>;

@@ -266,7 +266,7 @@ void BDExchangeMove<RealType>::compute_incremental_weights(
     gpuErrchk(cudaPeekAtLastError());
 }
 
-template <typename RealType> double BDExchangeMove<RealType>::log_probability_host() {
+template <typename RealType> double BDExchangeMove<RealType>::raw_log_probability_host() {
     std::vector<RealType> h_log_exp_before(2);
     std::vector<RealType> h_log_exp_after(2);
     d_log_sum_exp_before_.copy_to(&h_log_exp_before[0]);
@@ -275,7 +275,11 @@ template <typename RealType> double BDExchangeMove<RealType>::log_probability_ho
     RealType before_log_prob = convert_nan_to_inf(compute_logsumexp_final(&h_log_exp_before[0]));
     RealType after_log_prob = convert_nan_to_inf(compute_logsumexp_final(&h_log_exp_after[0]));
 
-    return min(static_cast<double>(before_log_prob - after_log_prob), 0.0);
+    return static_cast<double>(before_log_prob - after_log_prob);
+}
+
+template <typename RealType> double BDExchangeMove<RealType>::log_probability_host() {
+    return min(raw_log_probability_host(), 0.0);
 }
 
 template <typename RealType> size_t BDExchangeMove<RealType>::n_accepted() const {
