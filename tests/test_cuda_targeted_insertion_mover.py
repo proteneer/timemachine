@@ -449,6 +449,7 @@ def test_tibd_exchange_deterministic_moves(radius, moves, precision, seed):
     iterative_moved_coords = conf.copy()
     for _ in range(moves):
         iterative_moved_coords, _ = bdem_a.move(iterative_moved_coords, box)
+
     batch_moved_coords, _ = bdem_b.move(conf, box)
     # Moves should be deterministic regardless the number of steps taken per move
     np.testing.assert_array_equal(iterative_moved_coords, batch_moved_coords)

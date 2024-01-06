@@ -30,14 +30,15 @@ BDExchangeMove<RealType>::BDExchangeMove(
     : Mover(interval), N_(N), mol_size_(target_mols[0].size()), proposals_per_move_(proposals_per_move),
       num_target_mols_(target_mols.size()), nb_beta_(static_cast<RealType>(nb_beta)),
       beta_(static_cast<RealType>(1.0 / (BOLTZ * temperature))),
-      cutoff_squared_(static_cast<RealType>(cutoff * cutoff)), num_attempted_(0),
+      cutoff_squared_(static_cast<RealType>(cutoff * cutoff)), noise_offset_(0), num_attempted_(0),
       mol_potential_(N, target_mols, nb_beta, cutoff), sampler_(num_target_mols_, seed), logsumexp_(num_target_mols_),
       d_intermediate_coords_(N * 3), d_params_(params), d_mol_energy_buffer_(num_target_mols_),
       d_sample_per_atom_energy_buffer_(mol_size_ * N), d_atom_idxs_(get_atom_indices(target_mols)),
       d_mol_offsets_(get_mol_offsets(target_mols)), d_log_weights_before_(num_target_mols_),
       d_log_weights_after_(num_target_mols_), d_log_sum_exp_before_(2), d_log_sum_exp_after_(2), d_samples_(1),
-      d_quaternions_(round_up_even(4)), d_translations_(round_up_even(4)), d_num_accepted_(1),
-      d_target_mol_atoms_(mol_size_), d_target_mol_offsets_(num_target_mols_ + 1) {
+      d_quaternions_(round_up_even(QUATERNIONS_PER_STEP * this->RANDOM_BATCH_SIZE)), d_translations_(round_up_even(4)),
+      d_num_accepted_(1), d_target_mol_atoms_(mol_size_), d_target_mol_offsets_(num_target_mols_ + 1),
+      d_intermediate_sample_weights_(ceil_divide(N_, WEIGHT_THREADS_PER_BLOCK)) {
 
     if (proposals_per_move_ <= 0) {
         throw std::runtime_error("proposals per move must be greater than 0");
@@ -56,6 +57,9 @@ BDExchangeMove<RealType>::BDExchangeMove(
     gpuErrchk(cudaMemset(d_log_sum_exp_after_.data, 0, d_log_sum_exp_after_.size()));
     curandErrchk(curandCreateGenerator(&cr_rng_, CURAND_RNG_PSEUDO_DEFAULT));
     curandErrchk(curandSetPseudoRandomGeneratorSeed(cr_rng_, seed));
+
+    // Set the offset to the length of the random vector to ensure noise is triggered on first step
+    noise_offset_ = d_quaternions_.length;
 }
 
 template <typename RealType> BDExchangeMove<RealType>::~BDExchangeMove() {
@@ -85,6 +89,11 @@ void BDExchangeMove<RealType>::move(
     this->compute_initial_weights(N, d_coords, d_box, stream);
 
     for (int move = 0; move < proposals_per_move_; move++) {
+        if (noise_offset_ >= this->d_quaternions_.length) {
+            // reset the noise to zero and generate more noise
+            noise_offset_ = 0;
+            curandErrchk(templateCurandNormal(cr_rng_, d_quaternions_.data, d_quaternions_.length, 0.0, 1.0));
+        }
         // Run only after the first pass, to maintain meaningful `log_probability_host` values
         if (move > 0) {
             // Run a separate kernel to replace the before log probs and weights with the after if accepted a move
@@ -115,7 +124,7 @@ void BDExchangeMove<RealType>::move(
         // Don't move translations into computation of the incremental, as different translations can be used
         // by different bias deletion movers (such as targeted insertion)
         // scale the translations as they are between [0, 1]
-        this->compute_incremental_weights(N, true, d_coords, d_box, stream);
+        this->compute_incremental_weights(N, true, d_coords, d_box, this->d_quaternions_.data + noise_offset_, stream);
 
         logsumexp_.sum_device(num_target_mols_, d_log_weights_after_.data, d_log_sum_exp_after_.data, stream);
 
@@ -129,6 +138,7 @@ void BDExchangeMove<RealType>::move(
             d_num_accepted_.data);
         gpuErrchk(cudaPeekAtLastError());
         num_attempted_++;
+        noise_offset_ += QUATERNIONS_PER_STEP;
     }
 }
 
@@ -157,16 +167,18 @@ void BDExchangeMove<RealType>::compute_initial_weights(
 
 template <typename RealType>
 void BDExchangeMove<RealType>::compute_incremental_weights(
-    const int N, const bool scale, double *d_coords, double *d_box, cudaStream_t stream) {
+    const int N,
+    const bool scale,
+    double *d_coords,        // [N, 3]
+    double *d_box,           // [3, 3]
+    RealType *d_quaternions, // [4]
+    cudaStream_t stream) {
     const int tpb = DEFAULT_THREADS_PER_BLOCK;
     dim3 atom_by_atom_grid(ceil_divide(N, tpb), mol_size_, 1);
 
     // Make a copy of the coordinates
     gpuErrchk(cudaMemcpyAsync(
         d_intermediate_coords_.data, d_coords, d_intermediate_coords_.size(), cudaMemcpyDeviceToDevice, stream));
-
-    // Quaternions generated from normal noise generate uniform rotations
-    curandErrchk(templateCurandNormal(cr_rng_, d_quaternions_.data, d_quaternions_.length, 0.0, 1.0));
 
     // Only support sampling a single mol at this time, so only one block
     k_setup_sample_atoms<<<1, tpb, 0, stream>>>(
@@ -185,7 +197,7 @@ void BDExchangeMove<RealType>::compute_incremental_weights(
             d_box,
             d_samples_.data,
             d_target_mol_offsets_.data,
-            d_quaternions_.data,
+            d_quaternions,
             d_translations_.data,
             d_intermediate_coords_.data);
         gpuErrchk(cudaPeekAtLastError());
@@ -196,7 +208,7 @@ void BDExchangeMove<RealType>::compute_incremental_weights(
             d_box,
             d_samples_.data,
             d_target_mol_offsets_.data,
-            d_quaternions_.data,
+            d_quaternions,
             d_translations_.data,
             d_intermediate_coords_.data);
         gpuErrchk(cudaPeekAtLastError());
@@ -254,14 +266,20 @@ void BDExchangeMove<RealType>::compute_incremental_weights(
     gpuErrchk(cudaPeekAtLastError());
 
     // Set the sampled weight to be the correct value
-    k_set_sampled_weight<RealType, WEIGHT_THREADS_PER_BLOCK><<<1, WEIGHT_THREADS_PER_BLOCK, 0, stream>>>(
-        N,
-        mol_size_,
-        d_samples_.data,
-        d_target_mol_atoms_.data,
-        d_mol_offsets_.data,
-        d_sample_per_atom_energy_buffer_.data,
-        beta_, // 1 / kT
+    k_set_sampled_weight_block<RealType, WEIGHT_THREADS_PER_BLOCK>
+        <<<static_cast<int>(d_intermediate_sample_weights_.length), WEIGHT_THREADS_PER_BLOCK, 0, stream>>>(
+            N,
+            mol_size_,
+            d_target_mol_atoms_.data,
+            d_sample_per_atom_energy_buffer_.data,
+            beta_, // 1 / kT
+            d_intermediate_sample_weights_.data);
+    gpuErrchk(cudaPeekAtLastError());
+
+    k_set_sampled_weight_reduce<RealType, WEIGHT_THREADS_PER_BLOCK><<<1, WEIGHT_THREADS_PER_BLOCK, 0, stream>>>(
+        static_cast<int>(d_intermediate_sample_weights_.length), // Number of intermediates
+        d_samples_.data,                                         // where to set the value
+        d_intermediate_sample_weights_.data,                     // intermediate fixed point weights
         d_log_weights_after_.data);
     gpuErrchk(cudaPeekAtLastError());
 }
