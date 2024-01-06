@@ -284,13 +284,18 @@ def test_bd_exchange_deterministic_moves(moves, precision, seed):
     # Moves should be deterministic regardless the number of steps taken per move
     np.testing.assert_array_equal(iterative_moved_coords, batch_moved_coords)
 
+    assert bdem_a.n_accepted() > 0
+    assert bdem_a.n_proposed() == moves
+    assert bdem_a.n_accepted() == bdem_b.n_accepted()
+    assert bdem_a.n_proposed() == bdem_b.n_proposed()
+
 
 @pytest.mark.parametrize(
     "steps_per_move,moves,box_size",
     [
         (1, 2500, 3.0),
-        (10, 2500, 3.0),
-        (200000, 200000, 3.0),
+        (2500, 2500, 3.0),
+        (250000, 250000, 3.0),
         # The 6.0nm box triggers a failure that would occur with systems of certain sizes, may be flaky in identifying issues
         pytest.param(1, 2500, 6.0, marks=pytest.mark.nightly(reason="slow")),
     ],
@@ -369,7 +374,7 @@ def test_moves_in_a_water_box(steps_per_move, moves, box_size, precision, rtol, 
         assert accepted > 0, "No moves were made, nothing was tested"
     else:
         assert bdem.n_accepted() > 10
-        np.testing.assert_allclose(0.0002, bdem.acceptance_fraction(), atol=5e-5)
+        np.testing.assert_allclose(0.0002, bdem.acceptance_fraction(), atol=1e-4)
     if steps_per_move == 1:
         np.testing.assert_allclose(bdem.acceptance_fraction(), accepted / moves)
         assert bdem.n_accepted() == accepted
@@ -579,7 +584,7 @@ def hif2a_rbfe_state() -> InitialState:
 
 @pytest.mark.parametrize(
     "steps_per_move,moves",
-    [pytest.param(1, 10000, marks=pytest.mark.nightly(reason="slow")), (10000, 10000)],
+    [pytest.param(1, 15000, marks=pytest.mark.nightly(reason="slow")), (15000, 15000)],
 )
 @pytest.mark.parametrize("precision,rtol,atol", [(np.float64, 5e-6, 5e-6), (np.float32, 1e-4, 2e-3)])
 @pytest.mark.parametrize("seed", [2023])

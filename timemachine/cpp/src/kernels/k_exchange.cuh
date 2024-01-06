@@ -32,33 +32,25 @@ void __global__ k_attempt_exchange_move(
 template <typename RealType>
 void __global__ k_attempt_exchange_move_targeted(
     const int N,
+    const int num_target_mols,
     const int *__restrict__ targeting_inner_volume,
-    const RealType *__restrict__ box_vol,
+    const RealType *__restrict__ box_vol, // [1]
     const RealType inner_volume,
-    const RealType *__restrict__ rand,               // [1]
+    const RealType *__restrict__ rand, // [1]
+    const int *__restrict__ samples,
     const RealType *__restrict__ before_log_sum_exp, // [2]
     const RealType *__restrict__ after_log_sum_exp,  // [2]
     const double *__restrict__ moved_coords,         // [N, 3]
     double *__restrict__ dest_coords,                // [N, 3]
-    size_t *__restrict__ num_accepted                // [1]
+    RealType *__restrict__ before_weights,           // [num_target_mols]
+    RealType *__restrict__ after_weights,            // [num_target_mols]
+    int *__restrict__ inner_flags,
+    size_t *__restrict__ num_accepted // [1]
 );
 
 template <typename RealType>
 void __global__ k_store_accepted_log_probability(
     const int num_weights,
-    const RealType *__restrict__ rand,              // [1]
-    RealType *__restrict__ before_log_sum_exp,      // [2]
-    const RealType *__restrict__ after_log_sum_exp, // [2]
-    RealType *__restrict__ before_weights,          // [num_weights]
-    const RealType *__restrict__ after_weights      // [num_weights]
-);
-
-template <typename RealType>
-void __global__ k_store_accepted_log_probability_targeted(
-    const int num_weights,
-    const int *__restrict__ targeting_inner_volume,
-    const RealType *__restrict__ box_vol,
-    const RealType inner_volume,
     const RealType *__restrict__ rand,              // [1]
     RealType *__restrict__ before_log_sum_exp,      // [2]
     const RealType *__restrict__ after_log_sum_exp, // [2]
@@ -86,14 +78,19 @@ void __global__ k_adjust_weights(
     RealType *__restrict__ log_weights);
 
 template <typename RealType, int THREADS_PER_BLOCK>
-void __global__ k_set_sampled_weight(
+void __global__ k_set_sampled_weight_block(
     const int N,
     const int mol_size,
-    const int *__restrict__ samples, // [1]
     const int *__restrict__ target_atoms,
-    const int *__restrict__ mol_offsets,
     const RealType *__restrict__ per_atom_energies,
     const RealType inv_kT, // 1 / kT
+    __int128 *__restrict__ intermediate_accum);
+
+template <typename RealType, int THREADS_PER_BLOCK>
+void __global__ k_set_sampled_weight_reduce(
+    const int num_intermediates,
+    const int *__restrict__ samples, // [1]
+    const __int128 *__restrict__ intermediate_accum,
     RealType *__restrict__ log_weights);
 
 template <typename RealType>

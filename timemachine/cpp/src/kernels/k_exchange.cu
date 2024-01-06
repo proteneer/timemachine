@@ -85,14 +85,19 @@ template void __global__ k_attempt_exchange_move<double>(
 template <typename RealType>
 void __global__ k_attempt_exchange_move_targeted(
     const int N,
+    const int num_target_mols,
     const int *__restrict__ targeting_inner_volume,
     const RealType *__restrict__ box_vol, // [1]
     const RealType inner_volume,
     const RealType *__restrict__ rand,               // [1]
+    const int *__restrict__ samples,                 // [1]
     const RealType *__restrict__ before_log_sum_exp, // [2]
     const RealType *__restrict__ after_log_sum_exp,  // [2]
     const double *__restrict__ moved_coords,         // [N, 3]
     double *__restrict__ dest_coords,                // [N, 3]
+    RealType *__restrict__ before_weights,           // [num_target_mols]
+    RealType *__restrict__ after_weights,            // [num_target_mols]
+    int *__restrict__ inner_flags,                   // [num_target_mols]
     size_t *__restrict__ num_accepted                // [1]
 ) {
     int atom_idx = blockIdx.x * blockDim.x + threadIdx.x;
@@ -114,38 +119,64 @@ void __global__ k_attempt_exchange_move_targeted(
     const bool accepted = rand[0] < exp(log_acceptance_prob);
     if (atom_idx == 0 && accepted) {
         num_accepted[0]++;
+        int mol_idx = samples[0];
+        // XOR 1 to flip the flag from 0 to 1 or 1 to 0
+        inner_flags[mol_idx] ^= 1;
     }
 
     // If accepted, move the coords into place
-    while (accepted && atom_idx < N) {
-        dest_coords[atom_idx * 3 + 0] = moved_coords[atom_idx * 3 + 0];
-        dest_coords[atom_idx * 3 + 1] = moved_coords[atom_idx * 3 + 1];
-        dest_coords[atom_idx * 3 + 2] = moved_coords[atom_idx * 3 + 2];
+    // Always copy the weights, either copying from before to after or after to before
+    while (atom_idx < N) {
+        if (accepted) {
+            dest_coords[atom_idx * 3 + 0] = moved_coords[atom_idx * 3 + 0];
+            dest_coords[atom_idx * 3 + 1] = moved_coords[atom_idx * 3 + 1];
+            dest_coords[atom_idx * 3 + 2] = moved_coords[atom_idx * 3 + 2];
+        }
+        // If accepted store the after weights as before weights else copy the before weights to the after weights
+        // so the next iteration can incrementally update the weights. The copying of the before to the after is
+        // to avoid an additional memcpy kernel.
+        if (atom_idx < num_target_mols) {
+            if (accepted) {
+                before_weights[atom_idx] = after_weights[atom_idx];
+            } else {
+                after_weights[atom_idx] = before_weights[atom_idx];
+            }
+        }
         atom_idx += gridDim.x * blockDim.x;
     }
 }
 
 template void __global__ k_attempt_exchange_move_targeted<float>(
     const int N,
+    const int num_target_mols,
     const int *__restrict__ targeting_inner_volume,
     const float *__restrict__ box_vol,
     const float inner_volume,
     const float *__restrict__ rand,
+    const int *__restrict__ samples,
     const float *__restrict__ before_log_sum_exp,
     const float *__restrict__ after_log_sum_exp,
     const double *__restrict__ moved_coords,
     double *__restrict__ dest_coords,
+    float *__restrict__ before_weights,
+    float *__restrict__ after_weights,
+    int *__restrict__ inner_flags,
     size_t *__restrict__ num_accepted);
 template void __global__ k_attempt_exchange_move_targeted<double>(
     const int N,
+    const int num_target_mols,
     const int *__restrict__ targeting_inner_volume,
     const double *__restrict__ box_vol,
     const double inner_volume,
     const double *__restrict__ rand,
+    const int *__restrict__ samples,
     const double *__restrict__ before_log_sum_exp,
     const double *__restrict__ after_log_sum_exp,
     const double *__restrict__ moved_coords,
     double *__restrict__ dest_coords,
+    double *__restrict__ before_weights,
+    double *__restrict__ after_weights,
+    int *__restrict__ inner_flags,
     size_t *__restrict__ num_accepted);
 
 template <typename RealType>
@@ -200,74 +231,6 @@ template void __global__ k_store_accepted_log_probability<double>(
     const double *__restrict__ after_weights);
 
 template <typename RealType>
-void __global__ k_store_accepted_log_probability_targeted(
-    const int num_weights,
-    const int *__restrict__ targeting_inner_volume,
-    const RealType *__restrict__ box_vol, // [1]
-    const RealType inner_volume,
-    const RealType *__restrict__ rand,              // [1]
-    RealType *__restrict__ before_log_sum_exp,      // [2]
-    const RealType *__restrict__ after_log_sum_exp, // [2]
-    RealType *__restrict__ before_weights,          // [num_weights]
-    const RealType *__restrict__ after_weights      // [num_weights]
-) {
-    int idx = blockIdx.x * blockDim.x + threadIdx.x;
-    assert(gridDim.x == 1);
-    if (blockIdx.x > 0) {
-        return; // Only one block can run this
-    }
-
-    int flag = targeting_inner_volume[0];
-
-    const RealType outer_vol = box_vol[0] - inner_volume;
-
-    const RealType log_vol_prob = flag == 1 ? log(inner_volume) - log(outer_vol) : log(outer_vol) - log(inner_volume);
-
-    // All kernels compute the same acceptance
-    // TBD investigate shared memory for speed
-    RealType before_log_prob = convert_nan_to_inf<RealType>(compute_logsumexp_final<RealType>(before_log_sum_exp));
-    RealType after_log_prob = convert_nan_to_inf<RealType>(compute_logsumexp_final<RealType>(after_log_sum_exp));
-
-    RealType log_acceptance_prob = min(before_log_prob - after_log_prob + log_vol_prob, static_cast<RealType>(0.0));
-    const bool accepted = rand[0] < exp(log_acceptance_prob);
-    if (!accepted) {
-        return;
-    }
-    __syncthreads();
-    // Swap the values after all threads have computed the log probability
-    if (idx == 0) {
-        before_log_sum_exp[0] = after_log_sum_exp[0];
-        before_log_sum_exp[1] = after_log_sum_exp[1];
-    }
-    // Copy over the weights
-    while (idx < num_weights) {
-        before_weights[idx] = after_weights[idx];
-        idx += gridDim.x * blockDim.x;
-    }
-}
-
-template void __global__ k_store_accepted_log_probability_targeted<float>(
-    const int num_weights,
-    const int *__restrict__ targeting_inner_volume,
-    const float *__restrict__ box_vol,
-    const float inner_volume,
-    const float *__restrict__ rand,
-    float *__restrict__ before_log_sum_exp,
-    const float *__restrict__ after_log_sum_exp,
-    float *__restrict__ before_weights,
-    const float *__restrict__ after_weights);
-template void __global__ k_store_accepted_log_probability_targeted<double>(
-    const int num_weights,
-    const int *__restrict__ targeting_inner_volume,
-    const double *__restrict__ box_vol,
-    const double inner_volume,
-    const double *__restrict__ rand,
-    double *__restrict__ before_log_sum_exp,
-    const double *__restrict__ after_log_sum_exp,
-    double *__restrict__ before_weights,
-    const double *__restrict__ after_weights);
-
-template <typename RealType>
 void __global__ k_compute_box_volume(
     const double *__restrict__ box,      // [3]
     RealType *__restrict__ output_volume // [1]
@@ -293,7 +256,7 @@ template void __global__ k_compute_box_volume<double>(
 // the sum of the per atom weights for the molecules from some initial weights.
 // This is used to do the transposition trick where we subtract off the weight contribution of the
 // moved atom followed by adding back in the weight of the sampled mol in the new position.
-// Does NOT special case the weight of the sampled mol and instead use `k_set_sampled_weight`.
+// Does NOT special case the weight of the sampled mol and instead use `k_set_sampled_weight_block`.
 template <typename RealType, bool Negated>
 void __global__ k_adjust_weights(
     const int N,
@@ -371,20 +334,15 @@ template void __global__ k_adjust_weights<double, 1>(
     double *__restrict__ log_weights);
 
 template <typename RealType, int THREADS_PER_BLOCK>
-void __global__ k_set_sampled_weight(
+void __global__ k_set_sampled_weight_block(
     const int N,
     const int mol_size,
-    const int *__restrict__ samples, // [1]
     const int *__restrict__ target_atoms,
-    const int *__restrict__ mol_offsets,
     const RealType *__restrict__ per_atom_energies,
     const RealType inv_kT, // 1 / kT
-    RealType *__restrict__ log_weights) {
-    static_assert(THREADS_PER_BLOCK <= 512 && (THREADS_PER_BLOCK & (THREADS_PER_BLOCK - 1)) == 0);
-    assert(gridDim.x == 1);
+    __int128 *__restrict__ intermediate_accum) {
     __shared__ __int128 accumulators[THREADS_PER_BLOCK];
 
-    int sample_idx = samples[0];
     int min_atom_idx = target_atoms[0];
     int max_atom_idx = target_atoms[mol_size - 1];
 
@@ -403,28 +361,60 @@ void __global__ k_set_sampled_weight(
     __syncthreads();
     block_energy_reduce<THREADS_PER_BLOCK>(accumulators, threadIdx.x);
     if (threadIdx.x == 0) {
+        intermediate_accum[blockIdx.x] = accumulators[0];
+    }
+}
+
+template void __global__ k_set_sampled_weight_block<float, 512>(
+    const int N,
+    const int mol_size,
+    const int *__restrict__ target_atoms,
+    const float *__restrict__ per_atom_energies,
+    const float inv_kT,
+    __int128 *__restrict__ intermediate_accum);
+template void __global__ k_set_sampled_weight_block<double, 512>(
+    const int N,
+    const int mol_size,
+    const int *__restrict__ target_atoms,
+    const double *__restrict__ per_atom_energies,
+    const double inv_kT,
+    __int128 *__restrict__ intermediate_accum);
+
+template <typename RealType, int THREADS_PER_BLOCK>
+void __global__ k_set_sampled_weight_reduce(
+    const int num_intermediates,
+    const int *__restrict__ samples,                 // [1]
+    const __int128 *__restrict__ intermediate_accum, // [num_intermediates]
+    RealType *__restrict__ log_weights) {
+    __shared__ __int128 accumulators[THREADS_PER_BLOCK];
+
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+
+    // Zero all of the accumulators
+    __int128 accumulator = 0;
+    while (idx < num_intermediates) {
+        accumulator += intermediate_accum[idx];
+        idx += gridDim.x * blockDim.x;
+    }
+    accumulators[threadIdx.x] = accumulator;
+    __syncthreads();
+    block_energy_reduce<THREADS_PER_BLOCK>(accumulators, threadIdx.x);
+    if (threadIdx.x == 0) {
+        int sample_idx = samples[0];
         log_weights[sample_idx] =
             fixed_point_overflow(accumulators[0]) ? INFINITY : FIXED_ENERGY_TO_FLOAT<RealType>(accumulators[0]);
     }
 }
 
-template void __global__ k_set_sampled_weight<float, 512>(
-    const int N,
-    const int mol_size,
-    const int *__restrict__ samples, // [1]
-    const int *__restrict__ target_atoms,
-    const int *__restrict__ mol_offsets,
-    const float *__restrict__ per_atom_energies,
-    const float inv_kT,
+template void __global__ k_set_sampled_weight_reduce<float, 512>(
+    const int num_intermediates,
+    const int *__restrict__ samples,                 // [1]
+    const __int128 *__restrict__ intermediate_accum, // [num_intermediates]
     float *__restrict__ log_weights);
-template void __global__ k_set_sampled_weight<double, 512>(
-    const int N,
-    const int mol_size,
-    const int *__restrict__ samples, // [1]
-    const int *__restrict__ target_atoms,
-    const int *__restrict__ mol_offsets,
-    const double *__restrict__ per_atom_energies,
-    const double inv_kT,
+template void __global__ k_set_sampled_weight_reduce<double, 512>(
+    const int num_intermediates,
+    const int *__restrict__ samples,                 // [1]
+    const __int128 *__restrict__ intermediate_accum, // [num_intermediates]
     double *__restrict__ log_weights);
 
 template <typename RealType>
