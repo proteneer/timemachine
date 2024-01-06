@@ -71,7 +71,6 @@ def verify_targeted_moves(
                 new_pos = x_move[mol_idxs]
                 idx = i
         if num_moved > 0:
-            print("Accepted a move")
             accepted += 1
             # The molecules should all be imaged in the home box
             np.testing.assert_allclose(image_frame(mol_groups, x_move, x_box), x_move)
@@ -98,11 +97,22 @@ def verify_targeted_moves(
                     ref_bdem, idx, vi_mols, vj_mols, vol_i, vol_j, last_conf, box, new_pos
                 )
                 ref_prob = np.exp(raw_ref_log_prob)
-                assert np.isfinite(ref_prob) and ref_prob > 0.0
+                # positive inf is acceptable, negative inf is not
+                assert not np.isnan(ref_prob) and ref_prob > 0.0
                 np.testing.assert_array_equal(tested, x_move)
+                raw_test_log_prob = bdem.last_raw_log_probability()
+                # Verify that the raw, without min(x, 0.0), probabilities match coarsely
                 np.testing.assert_allclose(
-                    np.exp(bdem.last_raw_log_probability()),
+                    np.exp(raw_test_log_prob),
                     np.exp(raw_ref_log_prob),
+                    rtol=1e-2,
+                    atol=1e-5,
+                    err_msg=f"Step {step} failed",
+                )
+                # Verify that the true log probabilities match with the specified rtol/atol
+                np.testing.assert_allclose(
+                    np.exp(min(raw_test_log_prob, 0.0)),
+                    np.exp(min(raw_ref_log_prob, 0.0)),
                     rtol=rtol,
                     atol=atol,
                     err_msg=f"Step {step} failed",

@@ -232,6 +232,7 @@ void TIBDExchangeMove<RealType>::move(
             N,
             this->num_target_mols_,
             d_targeting_inner_vol_.data,
+            d_inner_mols_count_.data,
             d_box_volume_.data,
             inner_volume_,
             // Offset to get the last value for the acceptance criteria
@@ -290,9 +291,22 @@ template <typename RealType> double TIBDExchangeMove<RealType>::raw_log_probabil
     int h_targeting_inner_vol;
     d_targeting_inner_vol_.copy_to(&h_targeting_inner_vol);
 
+    int local_inner_count = p_inner_count_.data[0];
+
     RealType h_box_vol;
     d_box_volume_.copy_to(&h_box_vol);
 
+    // Account for the move probability, in the case of there being 0 or 1 mol in a volume
+    // the probability will differ.
+    // log(1.0) == 0.0, thus removed. Only +/-log(0.5)
+    RealType move_probability = 0.0;
+    if (local_inner_count == 0 || local_inner_count == this->num_target_mols_) {
+        // Zero inner/outer, fwd probability is 100% and reverse is 50%
+        move_probability = static_cast<RealType>(log(0.5));
+    } else if (local_inner_count == 1 || this->num_target_mols_ - local_inner_count == 1) {
+        // One inner/outer, fwd probability is 50% and reverse is 100%
+        move_probability = static_cast<RealType>(-log(0.5));
+    }
     RealType before_log_prob = convert_nan_to_inf(compute_logsumexp_final(&h_log_exp_before[0]));
     RealType after_log_prob = convert_nan_to_inf(compute_logsumexp_final(&h_log_exp_after[0]));
 
@@ -301,7 +315,7 @@ template <typename RealType> double TIBDExchangeMove<RealType>::raw_log_probabil
     RealType log_vol_prob = h_targeting_inner_vol == 1 ? log(inner_volume_) - log(h_box_vol - inner_volume_)
                                                        : log(h_box_vol - inner_volume_) - log(inner_volume_);
 
-    return static_cast<double>(before_log_prob - after_log_prob + log_vol_prob);
+    return static_cast<double>(before_log_prob - after_log_prob + log_vol_prob + move_probability);
 }
 
 template <typename RealType> double TIBDExchangeMove<RealType>::log_probability_host() {

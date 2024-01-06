@@ -87,6 +87,7 @@ void __global__ k_attempt_exchange_move_targeted(
     const int N,
     const int num_target_mols,
     const int *__restrict__ targeting_inner_volume,
+    const int *__restrict__ inner_count,  // [1]
     const RealType *__restrict__ box_vol, // [1]
     const RealType inner_volume,
     const RealType *__restrict__ rand,               // [1]
@@ -109,12 +110,27 @@ void __global__ k_attempt_exchange_move_targeted(
     const RealType log_vol_prob =
         targeting_inner == 1 ? log(inner_volume) - log(outer_vol) : log(outer_vol) - log(inner_volume);
 
+    const int local_inner_count = inner_count[0];
+
+    // Account for the move probability, in the case of there being 0 or 1 mol in a volume
+    // the probability will differ.
+    // log(1.0) == 0.0, thus removed. Only +/-log(0.5)
+    RealType move_probability = 0.0;
+    if (local_inner_count == 0 || local_inner_count == num_target_mols) {
+        // Zero inner/outer, fwd probability is 100% and reverse is 50%
+        move_probability = static_cast<RealType>(log(0.5));
+    } else if (local_inner_count == 1 || num_target_mols - local_inner_count == 1) {
+        // One inner/outer, fwd probability is 50% and reverse is 100%
+        move_probability = static_cast<RealType>(-log(0.5));
+    }
+
     // All kernels compute the same acceptance
     // TBD investigate shared memory for speed
     RealType before_log_prob = convert_nan_to_inf<RealType>(compute_logsumexp_final<RealType>(before_log_sum_exp));
     RealType after_log_prob = convert_nan_to_inf<RealType>(compute_logsumexp_final<RealType>(after_log_sum_exp));
 
-    RealType log_acceptance_prob = min(before_log_prob - after_log_prob + log_vol_prob, static_cast<RealType>(0.0));
+    RealType log_acceptance_prob =
+        min(before_log_prob - after_log_prob + log_vol_prob + move_probability, static_cast<RealType>(0.0));
 
     const bool accepted = rand[0] < exp(log_acceptance_prob);
     if (atom_idx == 0 && accepted) {
@@ -150,6 +166,7 @@ template void __global__ k_attempt_exchange_move_targeted<float>(
     const int N,
     const int num_target_mols,
     const int *__restrict__ targeting_inner_volume,
+    const int *__restrict__ inner_count,
     const float *__restrict__ box_vol,
     const float inner_volume,
     const float *__restrict__ rand,
@@ -166,6 +183,7 @@ template void __global__ k_attempt_exchange_move_targeted<double>(
     const int N,
     const int num_target_mols,
     const int *__restrict__ targeting_inner_volume,
+    const int *__restrict__ inner_count,
     const double *__restrict__ box_vol,
     const double inner_volume,
     const double *__restrict__ rand,

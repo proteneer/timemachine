@@ -34,6 +34,7 @@ void __global__ k_attempt_exchange_move_targeted(
     const int N,
     const int num_target_mols,
     const int *__restrict__ targeting_inner_volume,
+    const int *__restrict__ inner_count,  // [1]
     const RealType *__restrict__ box_vol, // [1]
     const RealType inner_volume,
     const RealType *__restrict__ rand, // [1]
