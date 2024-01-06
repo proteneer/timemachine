@@ -88,7 +88,7 @@ void __global__ k_set_sampled_weight_block(
 
 template <typename RealType, int THREADS_PER_BLOCK>
 void __global__ k_set_sampled_weight_reduce(
-    const int intermediates,
+    const int num_intermediates,
     const int *__restrict__ samples, // [1]
     const __int128 *__restrict__ intermediate_accum,
     RealType *__restrict__ log_weights);

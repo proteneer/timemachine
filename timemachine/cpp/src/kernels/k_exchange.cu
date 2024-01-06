@@ -382,9 +382,9 @@ template void __global__ k_set_sampled_weight_block<double, 512>(
 
 template <typename RealType, int THREADS_PER_BLOCK>
 void __global__ k_set_sampled_weight_reduce(
-    const int intermediates,
-    const int *__restrict__ samples, // [1]
-    const __int128 *__restrict__ intermediate_accum,
+    const int num_intermediates,
+    const int *__restrict__ samples,                 // [1]
+    const __int128 *__restrict__ intermediate_accum, // [num_intermediates]
     RealType *__restrict__ log_weights) {
     __shared__ __int128 accumulators[THREADS_PER_BLOCK];
 
@@ -392,7 +392,7 @@ void __global__ k_set_sampled_weight_reduce(
 
     // Zero all of the accumulators
     __int128 accumulator = 0;
-    while (idx < intermediates) {
+    while (idx < num_intermediates) {
         accumulator += intermediate_accum[idx];
         idx += gridDim.x * blockDim.x;
     }
@@ -407,14 +407,14 @@ void __global__ k_set_sampled_weight_reduce(
 }
 
 template void __global__ k_set_sampled_weight_reduce<float, 512>(
-    const int intermediates,
-    const int *__restrict__ samples, // [1]
-    const __int128 *__restrict__ intermediate_accum,
+    const int num_intermediates,
+    const int *__restrict__ samples,                 // [1]
+    const __int128 *__restrict__ intermediate_accum, // [num_intermediates]
     float *__restrict__ log_weights);
 template void __global__ k_set_sampled_weight_reduce<double, 512>(
-    const int intermediates,
-    const int *__restrict__ samples, // [1]
-    const __int128 *__restrict__ intermediate_accum,
+    const int num_intermediates,
+    const int *__restrict__ samples,                 // [1]
+    const __int128 *__restrict__ intermediate_accum, // [num_intermediates]
     double *__restrict__ log_weights);
 
 template <typename RealType>

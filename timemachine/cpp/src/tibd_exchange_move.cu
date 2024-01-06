@@ -15,6 +15,8 @@
 
 namespace timemachine {
 
+// NOISE_PER_STEP is the uniform generated per step that is used for deciding the targeted move as well as the acceptance
+// in the metropolis hasting check.
 static const int NOISE_PER_STEP = 2;
 
 template <typename RealType>
