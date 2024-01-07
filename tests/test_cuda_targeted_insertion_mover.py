@@ -46,7 +46,7 @@ def compute_ref_raw_log_prob(ref_exchange, water_idx, vi_mols, vj_mols, vol_i, v
 
 def verify_targeted_moves(
     mol_groups: List,
-    bdem: custom_ops.TIBDExchangeMove_f32 | custom_ops.TIBDExchangeMove_f64,
+    bdem,
     ref_bdem: RefTIBDExchangeMove,
     conf: NDArray,
     box: NDArray,
