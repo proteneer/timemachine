@@ -2,7 +2,6 @@
 #include "../gpu_utils.cuh"
 #include "k_exchange.cuh"
 #include "k_fixed_point.cuh"
-#include "k_logsumexp.cuh"
 #include <assert.h>
 
 namespace timemachine {
@@ -107,30 +106,18 @@ void __global__ k_attempt_exchange_move_targeted(
 
     const RealType outer_vol = box_vol[0] - inner_volume;
 
-    const RealType log_vol_prob =
-        targeting_inner == 1 ? log(inner_volume) - log(outer_vol) : log(outer_vol) - log(inner_volume);
-
     const int local_inner_count = inner_count[0];
 
-    // Account for the move probability, in the case of there being 0 or 1 mol in a volume
-    // the probability will differ.
-    // log(1.0) == 0.0, thus removed. Only +/-log(0.5)
-    RealType move_probability = 0.0;
-    if (local_inner_count == 0 || local_inner_count == num_target_mols) {
-        // Zero inner/outer, fwd probability is 100% and reverse is 50%
-        move_probability = static_cast<RealType>(log(0.5));
-    } else if (local_inner_count == 1 || num_target_mols - local_inner_count == 1) {
-        // One inner/outer, fwd probability is 50% and reverse is 100%
-        move_probability = static_cast<RealType>(-log(0.5));
-    }
+    const RealType raw_log_acceptance = compute_raw_log_probability_targeted<RealType>(
+        targeting_inner,
+        inner_volume,
+        outer_vol,
+        local_inner_count,
+        num_target_mols,
+        before_log_sum_exp,
+        after_log_sum_exp);
 
-    // All kernels compute the same acceptance
-    // TBD investigate shared memory for speed
-    RealType before_log_prob = convert_nan_to_inf<RealType>(compute_logsumexp_final<RealType>(before_log_sum_exp));
-    RealType after_log_prob = convert_nan_to_inf<RealType>(compute_logsumexp_final<RealType>(after_log_sum_exp));
-
-    RealType log_acceptance_prob =
-        min(before_log_prob - after_log_prob + log_vol_prob + move_probability, static_cast<RealType>(0.0));
+    RealType log_acceptance_prob = min(raw_log_acceptance, static_cast<RealType>(0.0));
 
     const bool accepted = rand[0] < exp(log_acceptance_prob);
     if (atom_idx == 0 && accepted) {

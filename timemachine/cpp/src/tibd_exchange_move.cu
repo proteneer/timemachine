@@ -296,26 +296,18 @@ template <typename RealType> double TIBDExchangeMove<RealType>::raw_log_probabil
     RealType h_box_vol;
     d_box_volume_.copy_to(&h_box_vol);
 
-    // Account for the move probability, in the case of there being 0 or 1 mol in a volume
-    // the probability will differ.
-    // log(1.0) == 0.0, thus removed. Only +/-log(0.5)
-    RealType move_probability = 0.0;
-    if (local_inner_count == 0 || local_inner_count == this->num_target_mols_) {
-        // Zero inner/outer, fwd probability is 100% and reverse is 50%
-        move_probability = static_cast<RealType>(log(0.5));
-    } else if (local_inner_count == 1 || this->num_target_mols_ - local_inner_count == 1) {
-        // One inner/outer, fwd probability is 50% and reverse is 100%
-        move_probability = static_cast<RealType>(-log(0.5));
-    }
-    RealType before_log_prob = convert_nan_to_inf(compute_logsumexp_final(&h_log_exp_before[0]));
-    RealType after_log_prob = convert_nan_to_inf(compute_logsumexp_final(&h_log_exp_after[0]));
-
     RealType outer_vol = h_box_vol - inner_volume_;
 
-    RealType log_vol_prob = h_targeting_inner_vol == 1 ? log(inner_volume_) - log(h_box_vol - inner_volume_)
-                                                       : log(h_box_vol - inner_volume_) - log(inner_volume_);
+    const RealType raw_log_acceptance = compute_raw_log_probability_targeted<RealType>(
+        h_targeting_inner_vol,
+        inner_volume_,
+        outer_vol,
+        local_inner_count,
+        this->num_target_mols_,
+        &h_log_exp_before[0],
+        &h_log_exp_after[0]);
 
-    return static_cast<double>(before_log_prob - after_log_prob + log_vol_prob + move_probability);
+    return static_cast<double>(raw_log_acceptance);
 }
 
 template <typename RealType> double TIBDExchangeMove<RealType>::log_probability_host() {

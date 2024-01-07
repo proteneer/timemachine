@@ -1,5 +1,7 @@
 #pragma once
 
+#include "k_logsumexp.cuh"
+
 namespace timemachine {
 
 // When we are considering exchange we want to treat Nan probabilities as inf
@@ -8,6 +10,37 @@ namespace timemachine {
 // Allows us to go from a clashy state to a non-clashy state. And no nan poisoning
 template <typename RealType> RealType __host__ __device__ __forceinline__ convert_nan_to_inf(const RealType input) {
     return isnan(input) ? INFINITY : input;
+}
+
+template <typename RealType>
+RealType __host__ __device__ __forceinline__ compute_raw_log_probability_targeted(
+    const int targeting_inner_volume, // 1 or 0
+    const RealType inner_volume,
+    const RealType outer_vol,
+    const int inner_count,
+    const int num_target_mols,
+    const RealType *__restrict__ before_log_sum_exp, // [2]
+    const RealType *__restrict__ after_log_sum_exp   // [2]
+) {
+    const RealType log_vol_prob =
+        targeting_inner_volume == 1 ? log(inner_volume) - log(outer_vol) : log(outer_vol) - log(inner_volume);
+
+    // Account for the move probability, in the case of there being 0 or 1 mol in a volume
+    // the probability will differ.
+    // log(1.0) == 0.0, thus removed. Only +/-log(0.5)
+    RealType move_probability = 0.0;
+    if (inner_count == 0 || inner_count == num_target_mols) {
+        // Zero inner/outer, fwd probability is 100% and reverse is 50%
+        move_probability = static_cast<RealType>(log(0.5));
+    } else if (inner_count == 1 || num_target_mols - inner_count == 1) {
+        // One inner/outer, fwd probability is 50% and reverse is 100%
+        move_probability = static_cast<RealType>(-log(0.5));
+    }
+
+    RealType before_log_prob = convert_nan_to_inf<RealType>(compute_logsumexp_final<RealType>(before_log_sum_exp));
+    RealType after_log_prob = convert_nan_to_inf<RealType>(compute_logsumexp_final<RealType>(after_log_sum_exp));
+
+    return before_log_prob - after_log_prob + log_vol_prob + move_probability;
 }
 
 void __global__ k_setup_sample_atoms(
