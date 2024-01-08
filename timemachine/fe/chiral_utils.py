@@ -349,6 +349,12 @@ def find_chiral_bonds(mol):
     return chiral_bonds
 
 
+def find_canonical_amide_bonds(mol):
+    query = Chem.MolFromSmarts("[NX3][CX3](=[OX1])[#6]")
+    amide_bonds = {canonicalize_bond((i, j)) for i, j, _, _ in mol.GetSubstructMatches(query)}
+    return amide_bonds
+
+
 def _find_flipped_torsions(
     torsions_a: Mapping[FourTuple, float], torsions_b: Mapping[FourTuple, float], core: Sequence[int]
 ) -> List[ChiralConflict]:
@@ -370,13 +376,19 @@ def setup_find_flipped_planar_torsions(mol_a, mol_b):
         conf = get_romol_conf(mol)
         graph = convert_to_nx(mol)
         idxs = {canonicalize_bond(tuple(idxs)) for idxs in enumerate_simple_paths(graph, 4)}
+        amide_bonds = find_canonical_amide_bonds(mol)
 
         planar_torsions = dict()
         for i, j, k, l in idxs:
-            bond_type = mol.GetBondBetweenAtoms(j, k).GetBondType()
-            if bond_type == BondType.DOUBLE or bond_type == BondType.AROMATIC:
-                volume = torsion_volume(conf[i], conf[j], conf[k], conf[l])
-                planar_torsions[(i, j, k, l)] = np.sign(volume)
+            if (j, k) not in amide_bonds:
+                bond_type = mol.GetBondBetweenAtoms(j, k).GetBondType()
+                if bond_type != BondType.DOUBLE and bond_type != BondType.AROMATIC:
+                    continue
+
+            # (j, k) is double, aromatic, or amide
+            volume = torsion_volume(conf[i], conf[j], conf[k], conf[l])
+            planar_torsions[(i, j, k, l)] = np.sign(volume)
+
         return planar_torsions
 
     planar_torsions_a = enumerate_planar_torsions(mol_a)

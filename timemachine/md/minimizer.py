@@ -551,3 +551,17 @@ def local_minimize(
         warnings.warn(f"WARNING: Energy did not decrease: u_0: {u_0:.3f}, u_f: {U_final:.3f}", MinimizationWarning)
 
     return x_final
+
+
+def replace_conformer_with_minimized(mol: Chem.rdchem.Mol, ff: Forcefield):
+    top = topology.BaseTopology(mol, ff)
+    system = top.setup_end_state()
+    val_and_grad_fn = get_val_and_grad_fn(system.get_U_fns(), 1e9 * np.eye(3))
+    xs = get_romol_conf(mol)
+    all_idxs = np.arange(mol.GetNumAtoms())
+    xs_opt = local_minimize(xs, val_and_grad_fn, all_idxs, verbose=False)
+    conf = Chem.Conformer(mol.GetNumAtoms())
+    for i in range(mol.GetNumAtoms()):
+        conf.SetAtomPosition(i, 10.0 * xs_opt[i].astype(np.float64))
+    mol.RemoveAllConformers()
+    mol.AddConformer(conf)
