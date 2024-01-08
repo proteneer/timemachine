@@ -838,10 +838,9 @@ def run_solvent(
     min_overlap: Optional[float] = None,
     min_cutoff: Optional[float] = 0.7,
 ):
-    # Unclear if this matters yet
-    # if md_params is not None and md_params.water_sampling_params is not None:
-    #     md_params = replace(md_params, water_sampling_params=None)
-    #     warnings.warn("Solvent simulations don't benefit from water sampling, disabling")
+    if md_params is not None and md_params.water_sampling_params is not None:
+        md_params = replace(md_params, water_sampling_params=None)
+        warnings.warn("Solvent simulations don't benefit from water sampling, disabling")
     box_width = 4.0
     solvent_sys, solvent_conf, solvent_box, solvent_top = builders.build_water_system(box_width, forcefield.water_ff)
     solvent_box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes, deboggle later
