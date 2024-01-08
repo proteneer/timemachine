@@ -75,6 +75,11 @@ TIBDExchangeMove<RealType>::TIBDExchangeMove(
 
     // Set the offset to the length of the random vector to ensure noise is triggered on first step
     this->noise_offset_ = this->d_uniform_noise_buffer_.length;
+
+    // Set the inner count to zero and target the inner at the start to ensure that calling `log_probability` produces
+    // a zero
+    p_inner_count_.data[0] = 0;
+    p_targeting_inner_vol_.data[0] = 1;
 }
 
 template <typename RealType> TIBDExchangeMove<RealType>::~TIBDExchangeMove() {
@@ -288,8 +293,7 @@ template <typename RealType> double TIBDExchangeMove<RealType>::raw_log_probabil
     this->d_log_sum_exp_before_.copy_to(&h_log_exp_before[0]);
     this->d_log_sum_exp_after_.copy_to(&h_log_exp_after[0]);
 
-    int h_targeting_inner_vol;
-    d_targeting_inner_vol_.copy_to(&h_targeting_inner_vol);
+    int h_targeting_inner_vol = p_targeting_inner_vol_.data[0];
 
     int local_inner_count = p_inner_count_.data[0];
 

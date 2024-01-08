@@ -1,6 +1,7 @@
 #pragma once
 
 #include "k_logsumexp.cuh"
+#include <assert.h>
 
 namespace timemachine {
 
@@ -10,6 +11,21 @@ namespace timemachine {
 // Allows us to go from a clashy state to a non-clashy state. And no nan poisoning
 template <typename RealType> RealType __host__ __device__ __forceinline__ convert_nan_to_inf(const RealType input) {
     return isnan(input) ? INFINITY : input;
+}
+
+template <typename RealType>
+RealType __host__ __device__ __forceinline__
+compute_log_proposal_probabilities_given_counts(const int src_count, const int dest_count) {
+    if (src_count > 0 && dest_count > 0) {
+        return static_cast<RealType>(log(0.5));
+    } else if (src_count > 0 && dest_count == 0) {
+        return static_cast<RealType>(log(1.0));
+    } else if (src_count == 0 && dest_count > 0) {
+        return static_cast<RealType>(log(1.0));
+    }
+    // Invalid case
+    assert(0);
+    return 0.0; // Here to ensure the code compiles, assertion will trigger failure
 }
 
 template <typename RealType>
@@ -25,22 +41,18 @@ RealType __host__ __device__ __forceinline__ compute_raw_log_probability_targete
     const RealType log_vol_prob =
         targeting_inner_volume == 1 ? log(inner_volume) - log(outer_vol) : log(outer_vol) - log(inner_volume);
 
-    // Account for the move probability, in the case of there being 0 or 1 mol in a volume
-    // the probability will differ.
-    // log(1.0) == 0.0, thus removed. Only +/-log(0.5)
-    RealType move_probability = 0.0;
-    if (inner_count == 0 || inner_count == num_target_mols) {
-        // Zero inner/outer, fwd probability is 100% and reverse is 50%
-        move_probability = static_cast<RealType>(log(0.5));
-    } else if (inner_count == 1 || num_target_mols - inner_count == 1) {
-        // One inner/outer, fwd probability is 50% and reverse is 100%
-        move_probability = static_cast<RealType>(-log(0.5));
-    }
+    // Account for the proposal probability, in the case of there being 0 or 1 mol in a volume
+    // the probability will not be symmetric.
+    int src_count = targeting_inner_volume == 1 ? num_target_mols - inner_count : inner_count;
+    int dest_count = targeting_inner_volume == 1 ? inner_count : num_target_mols - inner_count;
+    const RealType log_fwd_prob = compute_log_proposal_probabilities_given_counts<RealType>(src_count, dest_count);
+    const RealType log_rev_prob =
+        compute_log_proposal_probabilities_given_counts<RealType>(src_count - 1, dest_count + 1);
 
     RealType before_log_prob = convert_nan_to_inf<RealType>(compute_logsumexp_final<RealType>(before_log_sum_exp));
     RealType after_log_prob = convert_nan_to_inf<RealType>(compute_logsumexp_final<RealType>(after_log_sum_exp));
 
-    return before_log_prob - after_log_prob + log_vol_prob + move_probability;
+    return before_log_prob - after_log_prob + log_vol_prob + (log_rev_prob - log_fwd_prob);
 }
 
 void __global__ k_setup_sample_atoms(
