@@ -252,21 +252,36 @@ def get_water_groups(coords, box, center, water_idxs, radius):
     return inner_mols, outer_mols
 
 
-def compute_raw_ratio_given_weights(log_weights_before, log_weights_after, vi_mols, vj_mols, vol_i, vol_j):
-    n_waters = len(vi_mols) + len(vj_mols)
+def compute_proposal_probabilities_given_counts(n_a, n_b):
+    assert n_a >= 0
+    assert n_b >= 0
 
-    if len(vi_mols) == n_waters:
-        # region i has every water, so fwd probability is 100%, rev probability is 50%
-        g_fwd = 1.0
-        g_rev = 0.5
-    elif len(vi_mols) == 1:
-        # region i has only one water, so fwd probability is 50%, rev probability is 100%
-        g_fwd = 0.5
-        g_rev = 1.0
+    if n_a > 0 and n_b > 0:
+        return 0.5
+    elif n_a > 0 and n_b == 0:
+        return 1.0
+    elif n_a == 0 and n_b > 0:
+        return 1.0
     else:
-        # symmetric
-        g_fwd = 0.5
-        g_rev = 0.5
+        # invalid corner
+        assert 0
+
+
+def compute_raw_ratio_given_weights(log_weights_before, log_weights_after, vi_mols, vj_mols, vol_i, vol_j):
+    assert len(vi_mols) > 0
+
+    # fwd counts
+    fwd_n_i = len(vi_mols)
+    fwd_n_j = len(vj_mols)
+
+    # compute fwd_probability
+    g_fwd = compute_proposal_probabilities_given_counts(fwd_n_i, fwd_n_j)
+
+    # modify counts after water has been from vol_i -> vol_j
+    rev_n_i = fwd_n_i - 1
+    rev_n_j = fwd_n_j + 1
+
+    g_rev = compute_proposal_probabilities_given_counts(rev_n_i, rev_n_j)
 
     raw_log_p = (
         logsumexp(log_weights_before)

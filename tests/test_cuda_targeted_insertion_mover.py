@@ -439,36 +439,38 @@ def test_targeted_insertion_buckyball_single_water(radius, moves, precision, rto
     all_group_idxs = get_group_indices(bond_list, conf.shape[0])
 
     # Select an arbitrary water, will be the only water considered for insertion/deletion
-    water_idxs = [[group for group in all_group_idxs if len(group) == 3][-1]]
+    water_idxs_single = [[group for group in all_group_idxs if len(group) == 3][-1]]
+    water_idxs_double = [group for group in all_group_idxs if len(group) == 3][-2:]
 
-    conf = image_frame(all_group_idxs, conf, box)
+    for water_idxs in [water_idxs_single, water_idxs_double]:
+        conf = image_frame(all_group_idxs, conf, box)
 
-    N = conf.shape[0]
+        N = conf.shape[0]
 
-    params = nb.params
+        params = nb.params
 
-    cutoff = nb.potential.cutoff
-    klass = custom_ops.TIBDExchangeMove_f32
-    if precision == np.float64:
-        klass = custom_ops.TIBDExchangeMove_f64
+        cutoff = nb.potential.cutoff
+        klass = custom_ops.TIBDExchangeMove_f32
+        if precision == np.float64:
+            klass = custom_ops.TIBDExchangeMove_f64
 
-    bdem = klass(
-        N,
-        ligand_idxs,
-        water_idxs,
-        params,
-        DEFAULT_TEMP,
-        nb.potential.beta,
-        cutoff,
-        radius,
-        seed,
-        proposals_per_move,
-        1,
-    )
+        bdem = klass(
+            N,
+            ligand_idxs,
+            water_idxs,
+            params,
+            DEFAULT_TEMP,
+            nb.potential.beta,
+            cutoff,
+            radius,
+            seed,
+            proposals_per_move,
+            1,
+        )
 
-    ref_bdem = RefTIBDExchangeMove(nb.potential.beta, cutoff, params, water_idxs, DEFAULT_TEMP, ligand_idxs, radius)
+        ref_bdem = RefTIBDExchangeMove(nb.potential.beta, cutoff, params, water_idxs, DEFAULT_TEMP, ligand_idxs, radius)
 
-    verify_targeted_moves(all_group_idxs, bdem, ref_bdem, conf, box, moves, proposals_per_move, rtol, atol)
+        verify_targeted_moves(all_group_idxs, bdem, ref_bdem, conf, box, moves, proposals_per_move, rtol, atol)
 
 
 @pytest.mark.parametrize("radius", [2.0])
