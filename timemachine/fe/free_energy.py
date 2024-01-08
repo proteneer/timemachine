@@ -492,10 +492,18 @@ def sample_with_context(
                 mover.set_interval(md_params.water_sampling_params.interval)
     # burn-in
     if md_params.n_eq_steps:
+        # Set barostat interval to 15 for equilibration, then back to the original interval for production
+        barostat = ctxt.get_barostat()
+        original_interval = 0 if barostat is None else barostat.get_interval()
+        equil_barostat_interval = 15
+        if barostat is not None:
+            barostat.set_interval(equil_barostat_interval)
         ctxt.multiple_steps(
             n_steps=md_params.n_eq_steps,
             store_x_interval=0,
         )
+        if barostat is not None:
+            barostat.set_interval(original_interval)
 
     rng = np.random.default_rng(md_params.seed)
 
@@ -998,6 +1006,12 @@ def run_sims_hrex(
         # Add an identity move to the mixture to ensure aperiodicity
         neighbor_pairs = [(StateIdx(0), StateIdx(0))] + neighbor_pairs
 
+    # Setup the barostat to run more often for equilibration
+    equil_barostat_interval = 15
+    barostat = context.get_barostat()
+    if barostat is not None:
+        barostat.set_interval(equil_barostat_interval)
+
     def get_equilibrated_xvb(xvb: CoordsVelBox, state_idx: StateIdx) -> CoordsVelBox:
         if md_params.water_sampling_params is not None and md_params.water_sampling_params.n_initial_iterations > 0:
             for mover in context.get_movers():
@@ -1055,6 +1069,11 @@ def run_sims_hrex(
         md_params = replace(
             md_params, water_sampling_params=replace(md_params.water_sampling_params, n_initial_iterations=0)
         )
+    # Reset the barostat from the equilibration interval to the production interval
+    barostat = context.get_barostat()
+    state = initial_states[0]
+    if barostat is not None and state.barostat is not None:
+        barostat.set_interval(state.barostat.interval)
 
     for iteration, n_frames_iter in enumerate(batches(md_params.n_frames, n_frames_per_iter), 1):
         current_step = (iteration - 1) * n_frames_per_iter * md_params.steps_per_frame
