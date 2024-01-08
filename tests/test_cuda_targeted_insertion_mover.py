@@ -403,7 +403,11 @@ def hif2a_rbfe_state() -> InitialState:
 @pytest.mark.parametrize("moves", [10000])
 @pytest.mark.parametrize("precision,rtol,atol", [(np.float64, 2e-5, 2e-5), (np.float32, 1e-4, 2e-3)])
 @pytest.mark.parametrize("seed", [2024])
-def test_targeted_insertion_buckyball_single_water(radius, moves, precision, rtol, atol, seed):
+def test_targeted_insertion_buckyball_edge_cases(radius, moves, precision, rtol, atol, seed):
+    """Test the edges cases of targeted insertion where the proposal probability isn't symmetric.
+
+    Tests a single water and two waters being moved into an empty buckyball.
+    """
     proposals_per_move = 1
     ff = Forcefield.load_precomputed_default()
     with resources.as_file(resources.files("timemachine.datasets.water_exchange")) as water_exchange:
@@ -442,18 +446,17 @@ def test_targeted_insertion_buckyball_single_water(radius, moves, precision, rto
     water_idxs_single = [[group for group in all_group_idxs if len(group) == 3][-1]]
     water_idxs_double = [group for group in all_group_idxs if len(group) == 3][-2:]
 
+    conf = image_frame(all_group_idxs, conf, box)
+
+    N = conf.shape[0]
+
+    params = nb.params
+
+    cutoff = nb.potential.cutoff
+    klass = custom_ops.TIBDExchangeMove_f32
+    if precision == np.float64:
+        klass = custom_ops.TIBDExchangeMove_f64
     for water_idxs in [water_idxs_single, water_idxs_double]:
-        conf = image_frame(all_group_idxs, conf, box)
-
-        N = conf.shape[0]
-
-        params = nb.params
-
-        cutoff = nb.potential.cutoff
-        klass = custom_ops.TIBDExchangeMove_f32
-        if precision == np.float64:
-            klass = custom_ops.TIBDExchangeMove_f64
-
         bdem = klass(
             N,
             ligand_idxs,
