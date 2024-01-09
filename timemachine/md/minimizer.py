@@ -1,6 +1,7 @@
 import warnings
 from typing import Iterable, List, Optional, Sequence, Tuple
 
+import jax
 import numpy as np
 import scipy.optimize
 from numpy.typing import NDArray
@@ -556,7 +557,7 @@ def local_minimize(
 def replace_conformer_with_minimized(mol: Chem.rdchem.Mol, ff: Forcefield):
     top = topology.BaseTopology(mol, ff)
     system = top.setup_end_state()
-    val_and_grad_fn = get_val_and_grad_fn(system.get_U_fns(), 1e9 * np.eye(3))
+    val_and_grad_fn = jax.value_and_grad(system.get_U_fn())
     xs = get_romol_conf(mol)
     all_idxs = np.arange(mol.GetNumAtoms())
     xs_opt = local_minimize(xs, val_and_grad_fn, all_idxs, verbose=False)
