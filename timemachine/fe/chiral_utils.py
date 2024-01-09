@@ -238,14 +238,13 @@ def _find_atom_map_chiral_conflicts_one_direction(
 
 
 def has_chiral_atom_flips(
-    core: np.ndarray,
+    core: Sequence[int],
     chiral_set_a: ChiralRestrIdxSet,
     chiral_set_b: ChiralRestrIdxSet,
 ) -> bool:
     # _find_atom_map_chiral_conflicts_one_direction, except (1) return bool not set, (2) hard-code mode = FLIP
 
-    # initialize convenient representations
-    mapping_a_to_b = {int(a_i): int(b_i) for (a_i, b_i) in core}
+    mapping_a_to_b = core
 
     # iterate over restraints defined in A, searching for possible conflicts
     for c_a, i_a, j_a, k_a in chiral_set_a.restr_idxs:

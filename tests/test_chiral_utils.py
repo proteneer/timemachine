@@ -1,7 +1,9 @@
 from collections import Counter
+from typing import Sequence
 
 import numpy as np
 import pytest
+from numpy.typing import NDArray
 from rdkit import Chem
 from rdkit.Chem import AllChem
 
@@ -14,6 +16,7 @@ from timemachine.fe.chiral_utils import (
     has_chiral_atom_flips,
     setup_find_flipped_planar_torsions,
 )
+from timemachine.fe.mcgregor import UNMAPPED
 from timemachine.fe.utils import get_romol_conf
 from timemachine.ff import Forcefield
 from timemachine.md.minimizer import replace_conformer_with_minimized
@@ -229,6 +232,11 @@ molblock_CN = """
 M  END"""
 
 
+def core_to_perm(core: NDArray, num_atoms_a: int) -> Sequence[int]:
+    a_to_b = {a: b for a, b in core}
+    return [a_to_b.get(a, UNMAPPED) for a in range(num_atoms_a)]
+
+
 def test_chiral_conflict_flip():
     # exercise case of no conflicts or a flip conflict
 
@@ -258,7 +266,7 @@ def test_chiral_conflict_flip():
     assert len(identity_flips) == 0
     assert len(identity_undefineds) == 0
 
-    assert not has_chiral_atom_flips(identity_map, chiral_set_a, chiral_set_b)
+    assert not has_chiral_atom_flips(core_to_perm(identity_map, mol_a.GetNumAtoms()), chiral_set_a, chiral_set_b)
 
     swap_map_flips = find_atom_map_chiral_conflicts(swap_map, chiral_set_a, chiral_set_b, mode=ChiralCheckMode.FLIP)
     swap_map_undefineds = find_atom_map_chiral_conflicts(
@@ -267,7 +275,7 @@ def test_chiral_conflict_flip():
     assert len(swap_map_flips) == 8  # TODO: deduplicate idxs?
     assert len(swap_map_undefineds) == 0
 
-    assert has_chiral_atom_flips(swap_map, chiral_set_a, chiral_set_b)
+    assert has_chiral_atom_flips(core_to_perm(swap_map, mol_a.GetNumAtoms()), chiral_set_a, chiral_set_b)
 
 
 def test_chiral_conflict_undefined():
@@ -325,7 +333,7 @@ def test_chiral_conflict_mixed():
     assert len(mixed_map_flips) == 8
     assert len(mixed_map_undefineds) == 1
 
-    assert has_chiral_atom_flips(mixed_map, chiral_set_a, chiral_set_b)
+    assert has_chiral_atom_flips(core_to_perm(mixed_map, mol_a.GetNumAtoms()), chiral_set_a, chiral_set_b)
 
 
 def test_has_chiral_atom_flips_symmetric(n_trials=100):
@@ -369,8 +377,8 @@ def test_has_chiral_atom_flips_symmetric(n_trials=100):
         core_size = min(len(_core_a), len(_core_b))
         core = np.array([_core_a[:core_size], _core_b[:core_size]]).T
 
-        ans_fwd = has_chiral_atom_flips(core, chiral_set_a, chiral_set_b)
-        ans_rev = has_chiral_atom_flips(core[:, ::-1], chiral_set_b, chiral_set_a)
+        ans_fwd = has_chiral_atom_flips(core_to_perm(core, N_a), chiral_set_a, chiral_set_b)
+        ans_rev = has_chiral_atom_flips(core_to_perm(core[:, ::-1], N_b), chiral_set_b, chiral_set_a)
 
         answers.append(ans_fwd)
 

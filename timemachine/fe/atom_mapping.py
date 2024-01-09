@@ -391,9 +391,7 @@ def _get_cores_impl(
         chiral_set_b = ChiralRestrIdxSet.from_mol(mol_b, conf_b)
 
         def chiral_filter(trial_core):
-            # TODO: avoid conversion
-            np_core = np.array([(i, trial_core[i]) for i in range(len(trial_core)) if trial_core[i] != -1])
-            passed = not has_chiral_atom_flips(np_core, chiral_set_a, chiral_set_b)
+            passed = not has_chiral_atom_flips(trial_core, chiral_set_a, chiral_set_b)
             return passed
 
         filter_fxns.append(chiral_filter)
