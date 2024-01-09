@@ -218,7 +218,13 @@ void TIBDExchangeMove<RealType>::move(
         // by different bias deletion movers (such as targeted insertion)
         // Don't scale the translations as they are computed to be within the region
         this->compute_incremental_weights(
-            N, false, d_coords, d_box, this->d_quaternions_.data + quaternion_offset_, stream);
+            N,
+            false,
+            d_coords,
+            d_box,
+            this->d_quaternions_.data + quaternion_offset_,
+            this->d_translations_.data,
+            stream);
 
         k_setup_destination_weights_for_targeted<RealType><<<mol_blocks, tpb, 0, stream>>>(
             this->num_target_mols_,

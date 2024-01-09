@@ -59,7 +59,13 @@ protected:
     void compute_initial_weights(const int N, double *d_coords, double *d_box, cudaStream_t stream);
 
     void compute_incremental_weights(
-        const int N, const bool scale, double *d_coords, double *d_box, RealType *d_quaternions, cudaStream_t stream);
+        const int N,
+        const bool scale,
+        double *d_coords,
+        double *d_box,
+        RealType *d_quaternions,
+        RealType *d_translations,
+        cudaStream_t stream);
 
 public:
     BDExchangeMove(

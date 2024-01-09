@@ -13,6 +13,9 @@
 // The number of threads per block for the setting of the final weight of the moved mol is low
 // if using the same number as in the rest of the kernels of DEFAULT_THREADS_PER_BLOCK
 #define WEIGHT_THREADS_PER_BLOCK 512
+// The number of translations to generate each step. The first three values are a unit vector translation and the fourth
+// value is used for the metropolis hasting check
+#define TRANSLATIONS_PER_STEP 4
 
 namespace timemachine {
 
@@ -36,8 +39,9 @@ BDExchangeMove<RealType>::BDExchangeMove(
       d_sample_per_atom_energy_buffer_(mol_size_ * N), d_atom_idxs_(get_atom_indices(target_mols)),
       d_mol_offsets_(get_mol_offsets(target_mols)), d_log_weights_before_(num_target_mols_),
       d_log_weights_after_(num_target_mols_), d_log_sum_exp_before_(2), d_log_sum_exp_after_(2), d_samples_(1),
-      d_quaternions_(round_up_even(QUATERNIONS_PER_STEP * this->RANDOM_BATCH_SIZE)), d_translations_(round_up_even(4)),
-      d_num_accepted_(1), d_target_mol_atoms_(mol_size_), d_target_mol_offsets_(num_target_mols_ + 1),
+      d_quaternions_(round_up_even(QUATERNIONS_PER_STEP * this->RANDOM_BATCH_SIZE)),
+      d_translations_(round_up_even(TRANSLATIONS_PER_STEP * this->RANDOM_BATCH_SIZE)), d_num_accepted_(1),
+      d_target_mol_atoms_(mol_size_), d_target_mol_offsets_(num_target_mols_ + 1),
       d_intermediate_sample_weights_(ceil_divide(N_, WEIGHT_THREADS_PER_BLOCK)) {
 
     if (proposals_per_move_ <= 0) {
@@ -45,6 +49,9 @@ BDExchangeMove<RealType>::BDExchangeMove(
     }
     if (mol_size_ == 0) {
         throw std::runtime_error("must provide non-empty molecule indices");
+    }
+    if (d_translations_.length / TRANSLATIONS_PER_STEP != this->d_quaternions_.length / this->QUATERNIONS_PER_STEP) {
+        throw std::runtime_error("bug in the code: buffers with random values don't match in batch size");
     }
     verify_mols_contiguous(target_mols);
     for (int i = 0; i < target_mols.size(); i++) {
@@ -58,8 +65,8 @@ BDExchangeMove<RealType>::BDExchangeMove(
     curandErrchk(curandCreateGenerator(&cr_rng_, CURAND_RNG_PSEUDO_DEFAULT));
     curandErrchk(curandSetPseudoRandomGeneratorSeed(cr_rng_, seed));
 
-    // Set the offset to the length of the random vector to ensure noise is triggered on first step
-    noise_offset_ = d_quaternions_.length;
+    // Set the batch size of random values to ensure noise is triggered on first step
+    noise_offset_ = RANDOM_BATCH_SIZE;
 }
 
 template <typename RealType> BDExchangeMove<RealType>::~BDExchangeMove() {
@@ -89,23 +96,26 @@ void BDExchangeMove<RealType>::move(
     this->compute_initial_weights(N, d_coords, d_box, stream);
 
     for (int move = 0; move < proposals_per_move_; move++) {
-        if (noise_offset_ >= this->d_quaternions_.length) {
-            // reset the noise to zero and generate more noise
-            noise_offset_ = 0;
-            curandErrchk(templateCurandNormal(cr_rng_, d_quaternions_.data, d_quaternions_.length, 0.0, 1.0));
-        }
         // Run only after the first pass, to maintain meaningful `log_probability_host` values
         if (move > 0) {
             // Run a separate kernel to replace the before log probs and weights with the after if accepted a move
             // Need the weights to sample a value and the log probs are just because they aren't expensive to copy
             k_store_accepted_log_probability<RealType><<<1, tpb, 0>>>(
                 num_target_mols_,
-                d_translations_.data + 3, // Offset to get the last value for the acceptance criteria
+                d_translations_.data + (noise_offset_ * TRANSLATIONS_PER_STEP) +
+                    3, // Offset to get the last value for the acceptance criteria
                 d_log_sum_exp_before_.data,
                 d_log_sum_exp_after_.data,
                 d_log_weights_before_.data,
                 d_log_weights_after_.data);
             gpuErrchk(cudaPeekAtLastError());
+        }
+        if (noise_offset_ >= RANDOM_BATCH_SIZE) {
+            // reset the noise to zero and generate more noise
+            noise_offset_ = 0;
+            curandErrchk(templateCurandNormal(cr_rng_, d_quaternions_.data, d_quaternions_.length, 0.0, 1.0));
+            // The d_translation_ buffer is [x,y,z,w] where [x,y,z] are a random translation and w is used for acceptance
+            curandErrchk(templateCurandUniform(cr_rng_, d_translations_.data, d_translations_.length));
         }
 
         gpuErrchk(cudaMemcpyAsync(
@@ -115,22 +125,27 @@ void BDExchangeMove<RealType>::move(
             cudaMemcpyDeviceToDevice,
             stream));
 
-        // The d_translation_ buffer is [x,y,z,w] where [x,y,z] are a random translation and w is used for acceptance
-        curandErrchk(templateCurandUniform(cr_rng_, d_translations_.data, d_translations_.length));
-
         // We only ever sample a single molecule
         sampler_.sample_device(num_target_mols_, 1, d_log_weights_before_.data, d_samples_.data, stream);
 
         // Don't move translations into computation of the incremental, as different translations can be used
         // by different bias deletion movers (such as targeted insertion)
         // scale the translations as they are between [0, 1]
-        this->compute_incremental_weights(N, true, d_coords, d_box, this->d_quaternions_.data + noise_offset_, stream);
+        this->compute_incremental_weights(
+            N,
+            true,
+            d_coords,
+            d_box,
+            this->d_quaternions_.data + (noise_offset_ * QUATERNIONS_PER_STEP),
+            this->d_translations_.data + (noise_offset_ * TRANSLATIONS_PER_STEP),
+            stream);
 
         logsumexp_.sum_device(num_target_mols_, d_log_weights_after_.data, d_log_sum_exp_after_.data, stream);
 
         k_attempt_exchange_move<RealType><<<ceil_divide(N_, tpb), tpb, 0, stream>>>(
             N,
-            d_translations_.data + 3, // Offset to get the last value for the acceptance criteria
+            d_translations_.data + (noise_offset_ * TRANSLATIONS_PER_STEP) +
+                3, // Offset to get the last value for the acceptance criteria
             d_log_sum_exp_before_.data,
             d_log_sum_exp_after_.data,
             d_intermediate_coords_.data,
@@ -138,7 +153,7 @@ void BDExchangeMove<RealType>::move(
             d_num_accepted_.data);
         gpuErrchk(cudaPeekAtLastError());
         num_attempted_++;
-        noise_offset_ += QUATERNIONS_PER_STEP;
+        noise_offset_++;
     }
 }
 
@@ -169,9 +184,10 @@ template <typename RealType>
 void BDExchangeMove<RealType>::compute_incremental_weights(
     const int N,
     const bool scale,
-    double *d_coords,        // [N, 3]
-    double *d_box,           // [3, 3]
-    RealType *d_quaternions, // [4]
+    double *d_coords,         // [N, 3]
+    double *d_box,            // [3, 3]
+    RealType *d_quaternions,  // [4]
+    RealType *d_translations, // [3]
     cudaStream_t stream) {
     const int tpb = DEFAULT_THREADS_PER_BLOCK;
     dim3 atom_by_atom_grid(ceil_divide(N, tpb), mol_size_, 1);
@@ -198,7 +214,7 @@ void BDExchangeMove<RealType>::compute_incremental_weights(
             d_samples_.data,
             d_target_mol_offsets_.data,
             d_quaternions,
-            d_translations_.data,
+            d_translations,
             d_intermediate_coords_.data);
         gpuErrchk(cudaPeekAtLastError());
     } else {
@@ -209,7 +225,7 @@ void BDExchangeMove<RealType>::compute_incremental_weights(
             d_samples_.data,
             d_target_mol_offsets_.data,
             d_quaternions,
-            d_translations_.data,
+            d_translations,
             d_intermediate_coords_.data);
         gpuErrchk(cudaPeekAtLastError());
     }
