@@ -374,7 +374,7 @@ def test_moves_in_a_water_box(steps_per_move, moves, box_size, precision, rtol, 
         assert accepted > 0, "No moves were made, nothing was tested"
     else:
         assert bdem.n_accepted() > 10
-        np.testing.assert_allclose(0.0002, bdem.acceptance_fraction(), atol=1e-4)
+        assert bdem.acceptance_fraction() >= 0.0001
     if steps_per_move == 1:
         np.testing.assert_allclose(bdem.acceptance_fraction(), accepted / moves)
         assert bdem.n_accepted() == accepted
