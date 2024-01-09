@@ -3,8 +3,15 @@ import pytest
 from rdkit import Chem
 from rdkit.Chem import AllChem
 
+from timemachine.datasets import fetch_freesolv
 from timemachine.fe import chiral_utils, utils
-from timemachine.fe.chiral_utils import ChiralCheckMode, ChiralRestrIdxSet, find_atom_map_chiral_conflicts
+from timemachine.fe.chiral_utils import (
+    ChiralCheckMode,
+    ChiralRestrIdxSet,
+    find_atom_map_chiral_conflicts,
+    has_chiral_atom_flips,
+)
+from timemachine.fe.utils import get_romol_conf
 from timemachine.potentials.chiral_restraints import U_chiral_atom_batch, U_chiral_bond_batch
 
 pytestmark = [pytest.mark.nocuda]
@@ -246,12 +253,16 @@ def test_chiral_conflict_flip():
     assert len(identity_flips) == 0
     assert len(identity_undefineds) == 0
 
+    assert not has_chiral_atom_flips(identity_map, chiral_set_a, chiral_set_b)
+
     swap_map_flips = find_atom_map_chiral_conflicts(swap_map, chiral_set_a, chiral_set_b, mode=ChiralCheckMode.FLIP)
     swap_map_undefineds = find_atom_map_chiral_conflicts(
         swap_map, chiral_set_a, chiral_set_b, mode=ChiralCheckMode.UNDEFINED
     )
     assert len(swap_map_flips) == 8  # TODO: deduplicate idxs?
     assert len(swap_map_undefineds) == 0
+
+    assert not has_chiral_atom_flips(swap_map, chiral_set_a, chiral_set_b)
 
 
 def test_chiral_conflict_undefined():
@@ -308,3 +319,33 @@ def test_chiral_conflict_mixed():
 
     assert len(mixed_map_flips) == 8
     assert len(mixed_map_undefineds) == 1
+
+    assert has_chiral_atom_flips(mixed_map, chiral_set_a, chiral_set_b)
+
+
+def test_has_chiral_atom_conflicts_symmetric(n_trials=100):
+    """On random atom mappings of random pairs of freesolv molecules,
+    assert has_chiral_atom_flips(core, a, b) == has_chiral_atom_flips(core[:,::-1], b, a)
+    """
+    rng = np.random.default_rng(2024)
+
+    mols = fetch_freesolv()
+
+    for _ in range(n_trials):
+        mol_a = mols[rng.integers(0, len(mols))]
+        mol_b = mols[rng.integers(0, len(mols))]
+
+        N_a, N_b = mol_a.GetNumAtoms(), mol_b.GetNumAtoms()
+        core_size = rng.integers(1, min(N_a, N_b))
+
+        _core_a = rng.shuffle(np.arange(N_a))[:core_size]
+        _core_b = rng.shuffle(np.arange(N_b))[:core_size]
+        core = np.array([_core_a, _core_b])
+
+        chiral_set_a = ChiralRestrIdxSet.from_mol(mol_a, get_romol_conf(mol_a))
+        chiral_set_b = ChiralRestrIdxSet.from_mol(mol_b, get_romol_conf(mol_b))
+
+        ans_fwd = has_chiral_atom_flips(core, chiral_set_a, chiral_set_b)
+        ans_rev = has_chiral_atom_flips(core[:, ::-1], chiral_set_b, chiral_set_a)
+
+        assert ans_fwd == ans_rev
