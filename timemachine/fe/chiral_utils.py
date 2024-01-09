@@ -237,7 +237,7 @@ def _find_atom_map_chiral_conflicts_one_direction(
     return conflicts
 
 
-def _has_chiral_atom_map_flips_one_direction(
+def has_chiral_atom_flips(
     core: np.ndarray,
     chiral_set_a: ChiralRestrIdxSet,
     chiral_set_b: ChiralRestrIdxSet,
@@ -299,16 +299,6 @@ def find_atom_map_chiral_conflicts(
     conflicts = conflicts_a2b.union(set((a, b) for (b, a) in conflicts_b2a))
 
     return conflicts
-
-
-def has_chiral_atom_flips(core, chiral_set_a, chiral_set_b) -> bool:
-    """find_atom_map_chiral_conflicts, except (1) return bool not set, (2) hard-code mode = FLIP"""
-    # both directions
-    if _has_chiral_atom_map_flips_one_direction(core, chiral_set_a, chiral_set_b):
-        return True
-    if _has_chiral_atom_map_flips_one_direction(core[:, ::-1], chiral_set_b, chiral_set_a):
-        return True
-    return False
 
 
 def find_chiral_bonds(mol):
