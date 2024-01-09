@@ -555,6 +555,20 @@ def local_minimize(
 
 
 def replace_conformer_with_minimized(mol: Chem.rdchem.Mol, ff: Forcefield):
+    """
+    Replace the first conformation of the given mol with a conformation minimized with respect to the given forcefield.
+
+    Intended to be a drop-in replacement for :py:func:`rdkit.Chem.AllChem.EmbedMolecule` that allows specifying the
+    forcefield to use.
+
+    Parameters
+    ----------
+    mol : rdkit.Chem.rdchem.Mol
+        Input mol
+
+    ff : Forcefield
+        Forcefield to use in energy minimization
+    """
     top = topology.BaseTopology(mol, ff)
     system = top.setup_end_state()
     val_and_grad_fn = jax.value_and_grad(system.get_U_fn())

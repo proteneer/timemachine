@@ -1,3 +1,5 @@
+from typing import List, TypeVar
+
 import networkx as nx
 
 
@@ -16,7 +18,31 @@ def convert_to_nx(mol):
     return g
 
 
-def enumerate_simple_paths_from(graph, start_node, cutoff):
+_Node = TypeVar("_Node")
+
+
+def enumerate_simple_paths_from(graph: nx.Graph, start_node: _Node, length: int) -> List[List[_Node]]:
+    """Return all simple paths of a given length starting from a given node.
+
+    A simple path is a path without repeated nodes.
+
+    Parameters
+    ----------
+    graph : networkx.Graph
+        Input graph
+
+    start_node : node
+        Initial node for all paths
+
+    length : int
+        Length of returned paths
+
+    Returns
+    -------
+    list of list of node
+        Simple paths
+    """
+
     def go(node, cutoff, visited):
         if cutoff == 1:
             return [[node]]
@@ -27,8 +53,23 @@ def enumerate_simple_paths_from(graph, start_node, cutoff):
             for path in go(neighbor, cutoff - 1, visited | {node})
         ]
 
-    return go(start_node, cutoff, set())
+    return go(start_node, length, set())
 
 
-def enumerate_simple_paths(graph, cutoff):
-    return [path for start_node in graph for path in enumerate_simple_paths_from(graph, start_node, cutoff)]
+def enumerate_simple_paths(graph: nx.Graph, length: int) -> List[List]:
+    """Return all simple paths of a given length.
+
+    Parameters
+    ----------
+    graph : networkx.Graph
+        Input graph
+
+    length : int
+        Length of returned paths
+
+    Returns
+    -------
+    list of list of node
+        Simple paths
+    """
+    return [path for start_node in graph for path in enumerate_simple_paths_from(graph, start_node, length)]

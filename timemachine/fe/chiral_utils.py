@@ -1,7 +1,7 @@
 import itertools
 from enum import Enum
 from functools import partial
-from typing import List, Mapping, Sequence, Set, Tuple
+from typing import Callable, List, Mapping, Sequence, Set, Tuple
 
 import numpy as np
 from rdkit import Chem
@@ -371,7 +371,27 @@ def _find_flipped_torsions(
     return results
 
 
-def setup_find_flipped_planar_torsions(mol_a, mol_b):
+def setup_find_flipped_planar_torsions(
+    mol_a: Chem.rdchem.Mol, mol_b: Chem.rdchem.Mol
+) -> Callable[[Sequence[int]], List[Tuple[FourTuple, FourTuple]]]:
+    """Returns a function that enumerates core planar torsions that would be flipped by the given mapping.
+
+    A planar torsion is defined here to be a torsion whose central bond is one of
+
+    - a double or aromatic bond
+    - an amide bond, as defined by :py:func:`find_canonical_amide_bonds`
+
+    Parameters
+    ----------
+    mol_a, mol_b : rdkit.Chem.rdchem.Mol
+        Input mols. Each mol must have a conformer defined.
+
+    Returns
+    -------
+    Function with signature ((core: sequence of int) -> list of pairs of four-tuples)
+        In the returned pairs, the first (second) tuple corresponds to the indices of the flipped torsion in mol_a (mol_b).
+    """
+
     def enumerate_planar_torsions(mol):
         conf = get_romol_conf(mol)
         graph = convert_to_nx(mol)
