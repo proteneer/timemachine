@@ -380,7 +380,7 @@ def setup_find_flipped_planar_torsions(mol_a, mol_b):
 
         planar_torsions = dict()
         for i, j, k, l in idxs:
-            if (j, k) not in amide_bonds:
+            if canonicalize_bond((j, k)) not in amide_bonds:
                 bond_type = mol.GetBondBetweenAtoms(j, k).GetBondType()
                 if bond_type != BondType.DOUBLE and bond_type != BondType.AROMATIC:
                     continue
