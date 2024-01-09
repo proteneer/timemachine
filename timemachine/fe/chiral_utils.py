@@ -244,22 +244,17 @@ def _has_chiral_atom_map_flips_one_direction(
 ) -> bool:
     # _find_atom_map_chiral_conflicts_one_direction, except (1) return bool not set, (2) hard-code mode = FLIP
 
-    conflict_condition_fxn = chiral_set_b.disallows
-
     # initialize convenient representations
-    mapped_set_a = set(core[:, 0])
     mapping_a_to_b = {int(a_i): int(b_i) for (a_i, b_i) in core}
 
-    def apply_mapping(c, i, j, k):
-        return mapping_a_to_b[c], mapping_a_to_b[i], mapping_a_to_b[j], mapping_a_to_b[k]
-
     # iterate over restraints defined in A, searching for possible conflicts
-    for restr_tuple_a in chiral_set_a.restr_idxs:
-        if set(restr_tuple_a).issubset(mapped_set_a):
-            mapped_tuple_b = apply_mapping(*restr_tuple_a)
-
-            if conflict_condition_fxn(mapped_tuple_b):
-                return True
+    for c_a, i_a, j_a, k_a in chiral_set_a.restr_idxs:
+        try:
+            mapped_tuple_b = mapping_a_to_b[c_a], mapping_a_to_b[i_a], mapping_a_to_b[j_a], mapping_a_to_b[k_a]
+        except KeyError:
+            continue
+        if chiral_set_b.disallows(mapped_tuple_b):
+            return True
     return False
 
 
