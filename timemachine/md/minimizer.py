@@ -555,8 +555,7 @@ def local_minimize(
 
 
 def replace_conformer_with_minimized(mol: Chem.rdchem.Mol, ff: Forcefield):
-    """
-    Replace the first conformation of the given mol with a conformation minimized with respect to the given forcefield.
+    """Replace the first conformer of the given mol with a conformer minimized with respect to the given forcefield.
 
     Intended to be a drop-in replacement for :py:func:`rdkit.Chem.AllChem.EmbedMolecule` that allows specifying the
     forcefield to use.
