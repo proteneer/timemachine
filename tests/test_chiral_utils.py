@@ -336,6 +336,8 @@ def test_find_flipped_planar_torsions():
     # amide
     mol = Chem.AddHs(Chem.MolFromSmiles("O=C(N)C"))
     AllChem.EmbedMolecule(mol, randomSeed=0)
+
+    # rdkit embedding has non-planar torsions spanning the amide bond
     replace_conformer_with_minimized(mol, Forcefield.load_default())
 
     core_ok = [0, 1, 2, 3, 4, 5, 6, 7, 8]
