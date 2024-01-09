@@ -363,10 +363,10 @@ def _find_flipped_torsions(
         idxs_b = core[ia], core[ja], core[ka], core[la]
         try:
             sign_b = torsions_b[idxs_b]
-            if sign_a != sign_b:
-                results.append(((ia, ja, ka, la), idxs_b))
         except KeyError:
-            pass
+            continue
+        if sign_a != sign_b:
+            results.append(((ia, ja, ka, la), idxs_b))
 
     return results
 
