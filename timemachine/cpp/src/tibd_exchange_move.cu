@@ -75,6 +75,11 @@ TIBDExchangeMove<RealType>::TIBDExchangeMove(
 
     // Set the offset to the length of the random vector to ensure noise is triggered on first step
     this->noise_offset_ = this->d_uniform_noise_buffer_.length;
+
+    // Set the inner count to zero and target the inner at the start to ensure that calling `log_probability` produces
+    // a zero
+    p_inner_count_.data[0] = 0;
+    p_targeting_inner_vol_.data[0] = 1;
 }
 
 template <typename RealType> TIBDExchangeMove<RealType>::~TIBDExchangeMove() {
@@ -232,6 +237,7 @@ void TIBDExchangeMove<RealType>::move(
             N,
             this->num_target_mols_,
             d_targeting_inner_vol_.data,
+            d_inner_mols_count_.data,
             d_box_volume_.data,
             inner_volume_,
             // Offset to get the last value for the acceptance criteria
@@ -281,28 +287,35 @@ TIBDExchangeMove<RealType>::move_host(const int N, const double *h_coords, const
     return std::array<std::vector<double>, 2>({out_coords, out_box});
 }
 
-template <typename RealType> double TIBDExchangeMove<RealType>::log_probability_host() {
+template <typename RealType> double TIBDExchangeMove<RealType>::raw_log_probability_host() {
     std::vector<RealType> h_log_exp_before(2);
     std::vector<RealType> h_log_exp_after(2);
     this->d_log_sum_exp_before_.copy_to(&h_log_exp_before[0]);
     this->d_log_sum_exp_after_.copy_to(&h_log_exp_after[0]);
 
-    int h_targeting_inner_vol;
-    d_targeting_inner_vol_.copy_to(&h_targeting_inner_vol);
+    int h_targeting_inner_vol = p_targeting_inner_vol_.data[0];
+
+    int local_inner_count = p_inner_count_.data[0];
 
     RealType h_box_vol;
     d_box_volume_.copy_to(&h_box_vol);
 
-    RealType before_log_prob = convert_nan_to_inf(compute_logsumexp_final(&h_log_exp_before[0]));
-    RealType after_log_prob = convert_nan_to_inf(compute_logsumexp_final(&h_log_exp_after[0]));
-
     RealType outer_vol = h_box_vol - inner_volume_;
 
-    RealType log_vol_prob = h_targeting_inner_vol == 1 ? log(inner_volume_) - log(h_box_vol - inner_volume_)
-                                                       : log(h_box_vol - inner_volume_) - log(inner_volume_);
+    const RealType raw_log_acceptance = compute_raw_log_probability_targeted<RealType>(
+        h_targeting_inner_vol,
+        inner_volume_,
+        outer_vol,
+        local_inner_count,
+        this->num_target_mols_,
+        &h_log_exp_before[0],
+        &h_log_exp_after[0]);
 
-    double log_prob = min(static_cast<double>(before_log_prob - after_log_prob + log_vol_prob), 0.0);
-    return log_prob;
+    return static_cast<double>(raw_log_acceptance);
+}
+
+template <typename RealType> double TIBDExchangeMove<RealType>::log_probability_host() {
+    return min(raw_log_probability_host(), 0.0);
 }
 
 template class TIBDExchangeMove<float>;

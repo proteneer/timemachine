@@ -82,6 +82,7 @@ public:
         cudaStream_t stream) override;
 
     virtual double log_probability_host();
+    virtual double raw_log_probability_host();
 
     size_t n_proposed() const { return num_attempted_; }
 

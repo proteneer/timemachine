@@ -8,9 +8,7 @@ from timemachine.fe.free_energy import AbsoluteFreeEnergy, HostConfig, InitialSt
 from timemachine.fe.model_utils import apply_hmr
 from timemachine.fe.topology import BaseTopology
 from timemachine.fe.utils import get_romol_conf
-from timemachine.ff import Forcefield
 from timemachine.ff.handlers import openmm_deserializer
-from timemachine.ff.handlers.nonbonded import PrecomputedChargeHandler
 from timemachine.lib import LangevinIntegrator, MonteCarloBarostat
 from timemachine.md.barostat.utils import get_bond_list, get_group_indices
 from timemachine.md.builders import strip_units
@@ -47,28 +45,6 @@ def build_system(host_pdbfile: str, water_ff: str, padding: float):
     solvated_topology = host_pdb.topology
 
     return solvated_host_system, solvated_host_coords, box, solvated_topology, nwa
-
-
-def setup_forcefield():
-    # use a precomputed charge handler on the ligand to avoid running AM1 on a buckyball
-    ff = Forcefield.load_default()
-    q_handle = PrecomputedChargeHandler()
-    q_handle_intra = PrecomputedChargeHandler()
-    q_handle_solv = PrecomputedChargeHandler()
-    return Forcefield(
-        ff.hb_handle,
-        ff.ha_handle,
-        ff.pt_handle,
-        ff.it_handle,
-        q_handle=q_handle,
-        q_handle_solv=q_handle_solv,
-        q_handle_intra=q_handle_intra,
-        lj_handle=ff.lj_handle,
-        lj_handle_solv=ff.lj_handle_solv,
-        lj_handle_intra=ff.lj_handle_intra,
-        protein_ff=ff.protein_ff,
-        water_ff=ff.water_ff,
-    )
 
 
 def compute_density(n_waters, box):
