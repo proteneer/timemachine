@@ -9,7 +9,7 @@ from rdkit import Chem
 from timemachine.constants import BOLTZ, DEFAULT_TEMP, MAX_FORCE_NORM
 from timemachine.fe import model_utils, topology
 from timemachine.fe.free_energy import HostConfig
-from timemachine.fe.utils import get_mol_masses, get_romol_conf
+from timemachine.fe.utils import get_mol_masses, get_romol_conf, set_romol_conf
 from timemachine.ff import Forcefield
 from timemachine.ff.handlers import openmm_deserializer
 from timemachine.lib import LangevinIntegrator, MonteCarloBarostat, custom_ops
@@ -560,8 +560,4 @@ def replace_conformer_with_minimized(mol: Chem.rdchem.Mol, ff: Forcefield):
     xs = get_romol_conf(mol)
     all_idxs = np.arange(mol.GetNumAtoms())
     xs_opt = local_minimize(xs, val_and_grad_fn, all_idxs, verbose=False)
-    conf = Chem.Conformer(mol.GetNumAtoms())
-    for i in range(mol.GetNumAtoms()):
-        conf.SetAtomPosition(i, 10.0 * xs_opt[i].astype(np.float64))
-    mol.RemoveAllConformers()
-    mol.AddConformer(conf)
+    set_romol_conf(mol, xs_opt)
