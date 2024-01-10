@@ -4,5 +4,5 @@ channels:
   - openeye
 dependencies:
   - python=3.10.10
-  - jax=0.4.19
-  - jaxlib=0.4.19=cpu*
+  - jax=0.4.23
+  - jaxlib=0.4.23=cpu*
