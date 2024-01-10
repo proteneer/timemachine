@@ -1,3 +1,5 @@
+from collections import Counter
+
 import numpy as np
 import pytest
 from rdkit import Chem
@@ -331,21 +333,46 @@ def test_has_chiral_atom_conflicts_symmetric(n_trials=100):
 
     mols = fetch_freesolv()
 
+    answers = []  # keep track of fraction of time has_chiral_atom_flips(core, a, b) is True or False
+
     for _ in range(n_trials):
         mol_a = mols[rng.integers(0, len(mols))]
         mol_b = mols[rng.integers(0, len(mols))]
 
+        chiral_set_a = ChiralRestrIdxSet.from_mol(mol_a, get_romol_conf(mol_a))
+        chiral_set_b = ChiralRestrIdxSet.from_mol(mol_b, get_romol_conf(mol_b))
+
         N_a, N_b = mol_a.GetNumAtoms(), mol_b.GetNumAtoms()
         core_size = rng.integers(1, min(N_a, N_b))
 
-        _core_a = rng.shuffle(np.arange(N_a))[:core_size]
-        _core_b = rng.shuffle(np.arange(N_b))[:core_size]
-        core = np.array([_core_a, _core_b])
+        # on a large fraction of instances, include a random conflict
+        if rng.uniform() < 0.75 and len(chiral_set_a.disallowed_set) > 0 and len(chiral_set_b.disallowed_set) > 0:
+            # on half of these, introduce the conflict in one direction vs. another
+            if rng.uniform() < 0.5:
+                _core_a = rng.choice(list(chiral_set_a.allowed_set))
+                _core_b = rng.choice(list(chiral_set_b.disallowed_set))
+            else:
+                _core_a = rng.choice(list(chiral_set_a.disallowed_set))
+                _core_b = rng.choice(list(chiral_set_b.allowed_set))
+        else:
+            _core_a = np.arange(N_a)
+            rng.shuffle(_core_a)
+            _core_a = _core_a[:4]
 
-        chiral_set_a = ChiralRestrIdxSet.from_mol(mol_a, get_romol_conf(mol_a))
-        chiral_set_b = ChiralRestrIdxSet.from_mol(mol_b, get_romol_conf(mol_b))
+            _core_b = np.arange(N_b)
+            rng.shuffle(_core_b)
+            _core_b = _core_b[:4]
+
+        core_size = min(len(_core_a), len(_core_b))
+        core = np.array([_core_a[:core_size], _core_b[:core_size]]).T
 
         ans_fwd = has_chiral_atom_flips(core, chiral_set_a, chiral_set_b)
         ans_rev = has_chiral_atom_flips(core[:, ::-1], chiral_set_b, chiral_set_a)
 
+        answers.append(ans_fwd)
+
         assert ans_fwd == ans_rev
+
+    num_instances_true_v_false = Counter(answers)
+    print("test_has_chiral_atom_conflicts_symmetric::num_instances_true_v_false", Counter(answers))
+    assert set(num_instances_true_v_false) == {True, False}, "random test likely uninformative"
