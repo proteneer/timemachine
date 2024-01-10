@@ -1,7 +1,9 @@
 from collections import defaultdict
+from typing import List, Tuple
 
 import networkx as nx
 import numpy as np
+from numpy.typing import NDArray
 from rdkit import Chem
 
 from timemachine.fe import mcgregor
@@ -44,6 +46,52 @@ from timemachine.fe.utils import get_romol_bonds, get_romol_conf
 # - refinement of marcs matrix is done on uint8 arrays
 
 
+def get_cores_and_diagnostics(
+    mol_a,
+    mol_b,
+    ring_cutoff,
+    chain_cutoff,
+    max_visits,
+    connected_core,
+    max_cores,
+    enforce_core_core,
+    ring_matches_ring_only,
+    complete_rings,
+    enforce_chiral,
+    disallow_planar_torsion_flips,
+    min_threshold,
+) -> Tuple[List[NDArray], mcgregor.MCSResult]:
+    """Like :py:func:`get_cores`, but additionally returns an MCSResult object containing diagnostic information about
+    the MCS search."""
+    assert max_cores > 0
+
+    core_kwargs = dict(
+        ring_cutoff=ring_cutoff,
+        chain_cutoff=chain_cutoff,
+        max_visits=max_visits,
+        connected_core=connected_core,
+        max_cores=max_cores,
+        enforce_core_core=enforce_core_core,
+        ring_matches_ring_only=ring_matches_ring_only,
+        complete_rings=complete_rings,
+        enforce_chiral=enforce_chiral,
+        disallow_planar_torsion_flips=disallow_planar_torsion_flips,
+        min_threshold=min_threshold,
+    )
+
+    # we require that mol_a.GetNumAtoms() <= mol_b.GetNumAtoms()
+    if mol_a.GetNumAtoms() > mol_b.GetNumAtoms():
+        all_cores, mcs_result = _get_cores_impl(mol_b, mol_a, **core_kwargs)
+        new_cores = []
+        for core in all_cores:
+            core = np.array([(x[1], x[0]) for x in core], dtype=core.dtype)
+            new_cores.append(core)
+        return new_cores, mcs_result
+    else:
+        all_cores, mcs_result = _get_cores_impl(mol_a, mol_b, **core_kwargs)
+        return all_cores, mcs_result
+
+
 def get_cores(
     mol_a,
     mol_b,
@@ -58,7 +106,7 @@ def get_cores(
     enforce_chiral,
     disallow_planar_torsion_flips,
     min_threshold,
-):
+) -> List[NDArray]:
     """
     Finds set of cores between two molecules that maximizes the number of common edges.
 
@@ -127,34 +175,23 @@ def get_cores(
     timemachine.fe.mcgregor.NoMappingError
         If no mapping is found
     """
-
-    assert max_cores > 0
-
-    core_kwargs = dict(
-        ring_cutoff=ring_cutoff,
-        chain_cutoff=chain_cutoff,
-        max_visits=max_visits,
-        connected_core=connected_core,
-        max_cores=max_cores,
-        enforce_core_core=enforce_core_core,
-        ring_matches_ring_only=ring_matches_ring_only,
-        complete_rings=complete_rings,
-        enforce_chiral=enforce_chiral,
-        disallow_planar_torsion_flips=disallow_planar_torsion_flips,
-        min_threshold=min_threshold,
+    all_cores, _ = get_cores_and_diagnostics(
+        mol_a,
+        mol_b,
+        ring_cutoff,
+        chain_cutoff,
+        max_visits,
+        connected_core,
+        max_cores,
+        enforce_core_core,
+        ring_matches_ring_only,
+        complete_rings,
+        enforce_chiral,
+        disallow_planar_torsion_flips,
+        min_threshold,
     )
 
-    # we require that mol_a.GetNumAtoms() <= mol_b.GetNumAtoms()
-    if mol_a.GetNumAtoms() > mol_b.GetNumAtoms():
-        all_cores = _get_cores_impl(mol_b, mol_a, **core_kwargs)
-        new_cores = []
-        for core in all_cores:
-            core = np.array([(x[1], x[0]) for x in core], dtype=core.dtype)
-            new_cores.append(core)
-        return new_cores
-    else:
-        all_cores = _get_cores_impl(mol_a, mol_b, **core_kwargs)
-        return all_cores
+    return all_cores
 
 
 def bfs(g, atom):
@@ -431,7 +468,7 @@ def _get_cores_impl(
             inv_core.append(perm[atom])
         core[:, 0] = inv_core
 
-    return sorted_cores
+    return sorted_cores, mcs_result
 
 
 # maintainer: jkaus
