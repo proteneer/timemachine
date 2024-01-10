@@ -264,7 +264,7 @@ def test_chiral_conflict_flip():
     assert len(swap_map_flips) == 8  # TODO: deduplicate idxs?
     assert len(swap_map_undefineds) == 0
 
-    assert not has_chiral_atom_flips(swap_map, chiral_set_a, chiral_set_b)
+    assert has_chiral_atom_flips(swap_map, chiral_set_a, chiral_set_b)
 
 
 def test_chiral_conflict_undefined():
