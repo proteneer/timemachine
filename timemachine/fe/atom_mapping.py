@@ -5,7 +5,7 @@ import numpy as np
 from rdkit import Chem
 
 from timemachine.fe import mcgregor
-from timemachine.fe.chiral_utils import ChiralRestrIdxSet, has_chiral_atom_flips
+from timemachine.fe.chiral_utils import ChiralRestrIdxSet, has_chiral_atom_flips, setup_find_flipped_planar_torsions
 from timemachine.fe.utils import get_romol_bonds, get_romol_conf
 
 # (ytz): Just like how one should never re-write an MD engine, one should never rewrite an MCS library.
@@ -56,6 +56,7 @@ def get_cores(
     ring_matches_ring_only,
     complete_rings,
     enforce_chiral,
+    disallow_planar_torsion_flips,
     min_threshold,
 ):
     """
@@ -111,6 +112,9 @@ def get_cores(
     enforce_chiral: bool
         Filter out cores that would flip atom chirality
 
+    disallow_planar_torsion_flips: bool
+        Filter out cores that would flip a mapped planar torsion (i.e. change the sign of the torsion volume)
+
     min_threshold: int
         Number of atoms to require for a valid mapping
 
@@ -136,6 +140,7 @@ def get_cores(
         ring_matches_ring_only=ring_matches_ring_only,
         complete_rings=complete_rings,
         enforce_chiral=enforce_chiral,
+        disallow_planar_torsion_flips=disallow_planar_torsion_flips,
         min_threshold=min_threshold,
     )
 
@@ -304,6 +309,7 @@ def _get_cores_impl(
     ring_matches_ring_only,
     complete_rings,
     enforce_chiral,
+    disallow_planar_torsion_flips,
     min_threshold,
 ):
     mol_a, perm = reorder_atoms_by_degree(mol_a)  # UNINVERT
@@ -343,19 +349,31 @@ def _get_cores_impl(
     n_a = len(conf_a)
     n_b = len(conf_b)
 
-    chiral_set_a = ChiralRestrIdxSet.from_mol(mol_a, conf_a)
-    chiral_set_b = ChiralRestrIdxSet.from_mol(mol_b, conf_b)
-
-    def chiral_filter(trial_core):
-        # TODO: avoid conversion
-        np_core = np.array([(i, trial_core[i]) for i in range(len(trial_core)) if trial_core[i] != -1])
-        passed = not has_chiral_atom_flips(np_core, chiral_set_a, chiral_set_b)
-        return passed
-
+    filter_fxns = []
     if enforce_chiral:
-        filter_fxn = chiral_filter
-    else:
-        filter_fxn = lambda core: True
+        chiral_set_a = ChiralRestrIdxSet.from_mol(mol_a, conf_a)
+        chiral_set_b = ChiralRestrIdxSet.from_mol(mol_b, conf_b)
+
+        def chiral_filter(trial_core):
+            # TODO: avoid conversion
+            np_core = np.array([(i, trial_core[i]) for i in range(len(trial_core)) if trial_core[i] != -1])
+            passed = not has_chiral_atom_flips(np_core, chiral_set_a, chiral_set_b)
+            return passed
+
+        filter_fxns.append(chiral_filter)
+
+    if disallow_planar_torsion_flips:
+        find_flipped_planar_torsions = setup_find_flipped_planar_torsions(mol_a, mol_b)
+
+        def planar_torsion_flip_filter(trial_core):
+            flipped = find_flipped_planar_torsions(trial_core)
+            passed = len(flipped) == 0
+            return passed
+
+        filter_fxns.append(planar_torsion_flip_filter)
+
+    def filter_fxn(trial_core):
+        return all(f(trial_core) for f in filter_fxns)
 
     all_cores, all_marcs = mcgregor.mcs(
         n_a,

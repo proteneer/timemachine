@@ -1604,6 +1604,7 @@ template <typename RealType> void declare_bias_deletion_exchange_move(py::module
             },
             py::arg("params"))
         .def("last_log_probability", &Class::log_probability_host)
+        .def("last_raw_log_probability", &Class::raw_log_probability_host)
         .def("n_accepted", &Class::n_accepted)
         .def("n_proposed", &Class::n_proposed)
         .def("acceptance_fraction", &Class::acceptance_fraction);

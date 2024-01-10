@@ -7,6 +7,7 @@ from warnings import warn
 from timemachine.constants import DEFAULT_FF, DEFAULT_PROTEIN_FF, DEFAULT_WATER_FF
 from timemachine.ff.handlers import bonded, nonbonded
 from timemachine.ff.handlers.deserialize import deserialize_handlers
+from timemachine.ff.handlers.nonbonded import PrecomputedChargeHandler
 from timemachine.ff.handlers.serialize import serialize_handlers
 
 _T = TypeVar("_T")
@@ -56,6 +57,7 @@ class Forcefield:
             nonbonded.SimpleChargeHandler,
             nonbonded.AM1BCCHandler,
             nonbonded.AM1CCCHandler,
+            nonbonded.PrecomputedChargeHandler,
         ]
     ]
     q_handle_intra: Optional[
@@ -63,6 +65,7 @@ class Forcefield:
             nonbonded.SimpleChargeIntraHandler,
             nonbonded.AM1BCCIntraHandler,
             nonbonded.AM1CCCIntraHandler,
+            nonbonded.PrecomputedChargeHandler,
         ]
     ]
     q_handle_solv: Optional[
@@ -70,6 +73,7 @@ class Forcefield:
             nonbonded.SimpleChargeSolventHandler,
             nonbonded.AM1BCCSolventHandler,
             nonbonded.AM1CCCSolventHandler,
+            nonbonded.PrecomputedChargeHandler,
         ]
     ]
     lj_handle: Optional[nonbonded.LennardJonesHandler]
@@ -122,6 +126,28 @@ class Forcefield:
     def load_default(cls) -> "Forcefield":
         """alias for load_from_file(DEFAULT_FF)"""
         return cls.load_from_file(DEFAULT_FF)
+
+    @classmethod
+    def load_precomputed_default(cls) -> "Forcefield":
+        """load a default forcefield where charges are read in from the Molblock"""
+        ff = cls.load_default()
+        q_handle = PrecomputedChargeHandler()
+        q_handle_intra = PrecomputedChargeHandler()
+        q_handle_solv = PrecomputedChargeHandler()
+        return Forcefield(
+            ff.hb_handle,
+            ff.ha_handle,
+            ff.pt_handle,
+            ff.it_handle,
+            q_handle=q_handle,
+            q_handle_solv=q_handle_solv,
+            q_handle_intra=q_handle_intra,
+            lj_handle=ff.lj_handle,
+            lj_handle_solv=ff.lj_handle_solv,
+            lj_handle_intra=ff.lj_handle_intra,
+            protein_ff=ff.protein_ff,
+            water_ff=ff.water_ff,
+        )
 
     @classmethod
     def from_handlers(

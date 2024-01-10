@@ -252,6 +252,49 @@ def get_water_groups(coords, box, center, water_idxs, radius):
     return inner_mols, outer_mols
 
 
+def compute_proposal_probabilities_given_counts(n_a, n_b):
+    assert n_a >= 0
+    assert n_b >= 0
+
+    if n_a > 0 and n_b > 0:
+        return 0.5
+    elif n_a > 0 and n_b == 0:
+        return 1.0
+    elif n_a == 0 and n_b > 0:
+        return 1.0
+    else:
+        # invalid corner
+        assert 0
+
+
+def compute_raw_ratio_given_weights(log_weights_before, log_weights_after, vi_mols, vj_mols, vol_i, vol_j):
+    assert len(vi_mols) > 0
+
+    # fwd counts
+    fwd_n_i = len(vi_mols)
+    fwd_n_j = len(vj_mols)
+
+    # compute fwd_probability
+    g_fwd = compute_proposal_probabilities_given_counts(fwd_n_i, fwd_n_j)
+
+    # modify counts after water has been from vol_i -> vol_j
+    rev_n_i = fwd_n_i - 1
+    rev_n_j = fwd_n_j + 1
+
+    g_rev = compute_proposal_probabilities_given_counts(rev_n_i, rev_n_j)
+
+    raw_log_p = (
+        logsumexp(log_weights_before)
+        - logsumexp(log_weights_after)
+        + np.log(vol_j)
+        - np.log(vol_i)
+        + np.log(g_rev)
+        - np.log(g_fwd)
+    )
+
+    return raw_log_p
+
+
 class TIBDExchangeMove(BDExchangeMove):
     r"""
     Targeted Insertion and Biased Deletion Exchange Move
@@ -355,9 +398,11 @@ class TIBDExchangeMove(BDExchangeMove):
         log_weights_after_full = np.array(log_weights_after_full)
         log_weights_after = log_weights_after_full[vj_plus_one_idxs]
 
-        log_p_accept = min(
-            0, logsumexp(log_weights_before) - logsumexp(log_weights_after) + np.log(vol_j) - np.log(vol_i)
+        raw_log_p = compute_raw_ratio_given_weights(
+            log_weights_before, log_weights_after, vi_mols, vj_mols, vol_i, vol_j
         )
+
+        log_p_accept = min(0, raw_log_p)
 
         new_state = CoordsVelBox(trial_coords, x.velocities, x.box)
 

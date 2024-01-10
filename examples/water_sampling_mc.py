@@ -11,17 +11,12 @@ import time
 
 import numpy as np
 from rdkit import Chem
-from water_sampling_common import (
-    DEFAULT_BB_RADIUS,
-    compute_density,
-    compute_occupancy,
-    get_initial_state,
-    setup_forcefield,
-)
+from water_sampling_common import DEFAULT_BB_RADIUS, compute_density, compute_occupancy, get_initial_state
 
 from timemachine.constants import DEFAULT_TEMP
 from timemachine.fe import cif_writer
 from timemachine.fe.free_energy import image_frames
+from timemachine.ff import Forcefield
 from timemachine.lib import custom_ops
 from timemachine.md.barostat.moves import NPTMove
 from timemachine.md.moves import MonteCarloMove
@@ -87,7 +82,7 @@ def test_exchange():
     else:
         mol = None
 
-    ff = setup_forcefield()
+    ff = Forcefield.load_precomputed_default()
     seed = args.seed
     np.random.seed(seed)
 

@@ -19,6 +19,7 @@ template <typename RealType> class TIBDExchangeMove : public BDExchangeMove<Real
 protected:
     const RealType radius_;
     const RealType inner_volume_;
+    size_t quaternion_offset_;
 
     DeviceBuffer<curandState_t> d_rand_states_;
 
@@ -70,6 +71,7 @@ public:
     std::array<std::vector<double>, 2> move_host(const int N, const double *h_coords, const double *h_box) override;
 
     double log_probability_host() override;
+    double raw_log_probability_host() override;
 };
 
 } // namespace timemachine

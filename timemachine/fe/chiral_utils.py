@@ -1,10 +1,15 @@
 import itertools
 from enum import Enum
-from typing import List, Set, Tuple
+from functools import partial
+from typing import Callable, List, Mapping, Sequence, Set, Tuple
 
 import numpy as np
 from rdkit import Chem
+from rdkit.Chem.rdchem import BondType
 
+from timemachine.fe.dummy import canonicalize_bond
+from timemachine.fe.utils import get_romol_conf
+from timemachine.graph_utils import convert_to_nx, enumerate_simple_paths
 from timemachine.potentials.chiral_restraints import pyramidal_volume, torsion_volume
 
 FourTuple = Tuple[int, int, int, int]
@@ -342,3 +347,76 @@ def find_chiral_bonds(mol):
             chiral_bonds.add(tuple(sorted([match[0], match[1]])))
 
     return chiral_bonds
+
+
+def find_canonical_amide_bonds(mol):
+    query = Chem.MolFromSmarts("[NX3][CX3](=[OX1])[#6]")
+    amide_bonds = {canonicalize_bond((i, j)) for i, j, _, _ in mol.GetSubstructMatches(query)}
+    return amide_bonds
+
+
+def _find_flipped_torsions(
+    torsions_a: Mapping[FourTuple, float], torsions_b: Mapping[FourTuple, float], core: Sequence[int]
+) -> List[ChiralConflict]:
+    results = []
+    for (ia, ja, ka, la), sign_a in torsions_a.items():
+        idxs_b = core[ia], core[ja], core[ka], core[la]
+        try:
+            sign_b = torsions_b[idxs_b]
+        except KeyError:
+            continue
+        if sign_a != sign_b:
+            results.append(((ia, ja, ka, la), idxs_b))
+
+    return results
+
+
+def setup_find_flipped_planar_torsions(
+    mol_a: Chem.rdchem.Mol, mol_b: Chem.rdchem.Mol
+) -> Callable[[Sequence[int]], List[Tuple[FourTuple, FourTuple]]]:
+    """Returns a function that enumerates core planar torsions that would be flipped by the given mapping.
+
+    A planar torsion is defined here to be a torsion whose central bond is one of
+
+    - a double or aromatic bond
+    - an amide bond, as defined by :py:func:`find_canonical_amide_bonds`
+
+    Parameters
+    ----------
+    mol_a, mol_b : rdkit.Chem.rdchem.Mol
+        Input mols. Each mol must have a conformer defined.
+
+    Returns
+    -------
+    Function with signature ((core: sequence of int) -> list of pairs of four-tuples)
+        In the returned pairs, the first (second) tuple corresponds to the indices of the flipped torsion in mol_a (mol_b).
+    """
+
+    def enumerate_planar_torsions(mol):
+        conf = get_romol_conf(mol)
+        graph = convert_to_nx(mol)
+        idxs = {canonicalize_bond(tuple(idxs)) for idxs in enumerate_simple_paths(graph, 4)}
+        amide_bonds = find_canonical_amide_bonds(mol)
+
+        planar_torsions = dict()
+        for i, j, k, l in idxs:
+            if canonicalize_bond((j, k)) not in amide_bonds:
+                bond_type = mol.GetBondBetweenAtoms(j, k).GetBondType()
+                if bond_type != BondType.DOUBLE and bond_type != BondType.AROMATIC:
+                    continue
+
+            # (j, k) is double, aromatic, or amide
+            volume = torsion_volume(conf[i], conf[j], conf[k], conf[l])
+            planar_torsions[(i, j, k, l)] = np.sign(volume)
+
+        return planar_torsions
+
+    planar_torsions_a = enumerate_planar_torsions(mol_a)
+    planar_torsions_b = enumerate_planar_torsions(mol_b)
+
+    # add reversed tuples to avoid needing to canonicalize
+    planar_torsions_b.update({(l, k, j, i): sign for (i, j, k, l), sign in planar_torsions_b.items()})
+
+    find_flipped_planar_torsions = partial(_find_flipped_torsions, planar_torsions_a, planar_torsions_b)
+
+    return find_flipped_planar_torsions

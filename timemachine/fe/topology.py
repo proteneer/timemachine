@@ -115,7 +115,8 @@ class HostGuestTopology:
 
         guest_idxs = guest_potential.idxs + self.num_host_atoms
 
-        if host_potential is not None:
+        # If the host has no parameters, treat it as empty to handle concatenation of empty lists
+        if host_potential is not None and host_potential.params.size > 0:
             # the host is always on.
             host_params = host_potential.params
             host_idxs = host_potential.potential.idxs
