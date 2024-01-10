@@ -12,8 +12,11 @@ from timemachine.fe.chiral_utils import (
     ChiralRestrIdxSet,
     find_atom_map_chiral_conflicts,
     has_chiral_atom_flips,
+    setup_find_flipped_planar_torsions,
 )
 from timemachine.fe.utils import get_romol_conf
+from timemachine.ff import Forcefield
+from timemachine.md.minimizer import replace_conformer_with_minimized
 from timemachine.potentials.chiral_restraints import U_chiral_atom_batch, U_chiral_bond_batch
 
 pytestmark = [pytest.mark.nocuda]
@@ -376,3 +379,39 @@ def test_has_chiral_atom_conflicts_symmetric(n_trials=100):
     num_instances_true_v_false = Counter(answers)
     print("test_has_chiral_atom_conflicts_symmetric::num_instances_true_v_false", Counter(answers))
     assert set(num_instances_true_v_false) == {True, False}, "random test likely uninformative"
+
+
+def test_find_flipped_planar_torsions():
+    # double bond
+    mol = Chem.MolFromSmiles(r"Cl\C(F)=N/F")
+    AllChem.EmbedMolecule(mol, randomSeed=0)
+
+    core_ok = [0, 1, 2, 3, 4]
+    core_bad = [2, 1, 0, 3, 4]
+
+    find_flipped_planar_torsions = setup_find_flipped_planar_torsions(mol, mol)
+
+    assert find_flipped_planar_torsions(core_ok) == []
+    assert set(find_flipped_planar_torsions(core_bad)) == {
+        ((0, 1, 3, 4), (2, 1, 3, 4)),
+        ((2, 1, 3, 4), (0, 1, 3, 4)),
+    }
+
+    # amide
+    mol = Chem.AddHs(Chem.MolFromSmiles("O=C(N)C"))
+    AllChem.EmbedMolecule(mol, randomSeed=0)
+
+    # rdkit embedding has non-planar torsions spanning the amide bond
+    replace_conformer_with_minimized(mol, Forcefield.load_default())
+
+    core_ok = [0, 1, 2, 3, 4, 5, 6, 7, 8]
+    core_bad = [0, 1, 2, 3, 5, 4, 6, 7, 8]
+
+    find_flipped_planar_torsions = setup_find_flipped_planar_torsions(mol, mol)
+    assert find_flipped_planar_torsions(core_ok) == []
+    assert set(find_flipped_planar_torsions(core_bad)) == {
+        ((0, 1, 2, 4), (0, 1, 2, 5)),
+        ((0, 1, 2, 5), (0, 1, 2, 4)),
+        ((3, 1, 2, 4), (3, 1, 2, 5)),
+        ((3, 1, 2, 5), (3, 1, 2, 4)),
+    }

@@ -1,6 +1,7 @@
 import warnings
 from typing import Iterable, List, Optional, Sequence, Tuple
 
+import jax
 import numpy as np
 import scipy.optimize
 from numpy.typing import NDArray
@@ -9,7 +10,7 @@ from rdkit import Chem
 from timemachine.constants import BOLTZ, DEFAULT_TEMP, MAX_FORCE_NORM
 from timemachine.fe import model_utils, topology
 from timemachine.fe.free_energy import HostConfig
-from timemachine.fe.utils import get_mol_masses, get_romol_conf
+from timemachine.fe.utils import get_mol_masses, get_romol_conf, set_romol_conf
 from timemachine.ff import Forcefield
 from timemachine.ff.handlers import openmm_deserializer
 from timemachine.lib import LangevinIntegrator, MonteCarloBarostat, custom_ops
@@ -551,3 +552,23 @@ def local_minimize(
         warnings.warn(f"WARNING: Energy did not decrease: u_0: {u_0:.3f}, u_f: {U_final:.3f}", MinimizationWarning)
 
     return x_final
+
+
+def replace_conformer_with_minimized(mol: Chem.rdchem.Mol, ff: Forcefield):
+    """Replace the first conformer of the given mol with a conformer minimized with respect to the given forcefield.
+
+    Parameters
+    ----------
+    mol : rdkit.Chem.rdchem.Mol
+        Input mol. Must have at least one conformer.
+
+    ff : Forcefield
+        Forcefield to use in energy minimization
+    """
+    top = topology.BaseTopology(mol, ff)
+    system = top.setup_end_state()
+    val_and_grad_fn = jax.value_and_grad(system.get_U_fn())
+    xs = get_romol_conf(mol)
+    all_idxs = np.arange(mol.GetNumAtoms())
+    xs_opt = local_minimize(xs, val_and_grad_fn, all_idxs, verbose=False)
+    set_romol_conf(mol, xs_opt)
