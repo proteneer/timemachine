@@ -177,7 +177,7 @@ def mcs(
     enforce_core_core,
     min_threshold,
     filter_fxn: Callable[[Sequence[int]], bool] = lambda core: True,
-) -> Tuple[List[NDArray], MCSResult]:
+) -> Tuple[List[NDArray], List[NDArray], int]:
     assert n_a <= n_b
 
     g_a = Graph(n_a, bonds_a)
@@ -194,6 +194,7 @@ def mcs(
 
     # run in reverse by guessing max # of edges to avoid getting stuck in minima.
     max_threshold = _arcs_left(marcs)
+    total_nodes_visited = 0
     for idx in range(max_threshold):
         cur_threshold = max_threshold - idx
         if cur_threshold < min_threshold:
@@ -216,6 +217,8 @@ def mcs(
             enforce_core_core,
             filter_fxn,
         )
+
+        total_nodes_visited += mcs_result.nodes_visited
 
         # If timed out, either due to max_visits or max_cores, raise exception.
         if mcs_result.timed_out:
@@ -251,7 +254,7 @@ def mcs(
         core_array = np.array(sorted(core))
         all_cores.append(core_array)
 
-    return all_cores, mcs_result
+    return all_cores, mcs_result.all_marcs, total_nodes_visited
 
 
 def atom_map_add(map_1_to_2, map_2_to_1, idx, jdx):
