@@ -364,9 +364,21 @@ def get_romol_bonds(mol):
 
 def get_romol_conf(mol) -> NDArray:
     """Coordinates of mol's 0th conformer, in nanometers"""
+    if mol.GetNumConformers() != 1:
+        assert 0, "number of conformers must be exactly 1."
     conformer = mol.GetConformer(0)
     guest_conf = np.array(conformer.GetPositions(), dtype=np.float64)
     return guest_conf / 10  # from angstroms to nm
+
+
+def get_multiple_romol_confs(mol) -> NDArray:
+    """Coordinates of mol's 0th conformer, in nanometers"""
+    confs = []
+    for idx in range(mol.GetNumConformers()):
+        conformer = mol.GetConformer(idx)
+        confs.append(np.array(conformer.GetPositions(), dtype=np.float64))
+    np_confs = np.array(confs)
+    return np_confs / 10  # from angstroms to nm
 
 
 def set_romol_conf(mol, new_coords: NDArray):

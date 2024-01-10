@@ -766,6 +766,21 @@ class AtomMapMixin:
         self.c_to_a = {v: k for k, v in enumerate(self.a_to_c)}
         self.c_to_b = {v: k for k, v in enumerate(self.b_to_c)}
 
+    def get_dummy_atoms_in_mol_a(self):
+        # get the dummy atoms from mol_a indexed into mol c
+        dummies = []
+        for idx, flag in enumerate(self.c_flags):
+            if flag == 1:
+                dummies.append(idx)
+        return dummies
+
+    def get_dummy_atoms_in_mol_b(self):
+        dummies = []
+        for idx, flag in enumerate(self.c_flags):
+            if flag == 2:
+                dummies.append(idx)
+        return dummies
+
     def get_num_atoms(self):
         """
         Get the total number of atoms in the alchemical hybrid.
