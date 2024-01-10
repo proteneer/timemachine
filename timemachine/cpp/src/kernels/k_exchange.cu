@@ -556,7 +556,9 @@ void __global__ k_decide_targeted_move(
     const int num_target_mols,
     const RealType *__restrict__ rand,
     const int *__restrict__ inner_count,
-    int *__restrict__ targeting_inner_volume) {
+    const RealType *__restrict__ translations, // [2, 3] first translation is inside, second is outer
+    int *__restrict__ targeting_inner_volume,
+    RealType *__restrict__ output_translation) {
     const int count_inside = inner_count[0];
     const int count_outside = num_target_mols - count_inside;
     if (count_inside == 0 && count_outside == 0) {
@@ -565,6 +567,7 @@ void __global__ k_decide_targeted_move(
         targeting_inner_volume[0] = 0;
     } else if (count_inside == 0 && count_outside > 0) {
         targeting_inner_volume[0] = 1;
+
     } else if (count_inside > 0 && count_outside > 0) {
         if (rand[0] < static_cast<RealType>(0.5)) {
             targeting_inner_volume[0] = 1;
@@ -574,18 +577,25 @@ void __global__ k_decide_targeted_move(
     } else {
         assert(0);
     }
+    output_translation[0] = targeting_inner_volume[0] == 1 ? translations[0] : translations[3 + 0];
+    output_translation[1] = targeting_inner_volume[0] == 1 ? translations[1] : translations[3 + 1];
+    output_translation[2] = targeting_inner_volume[0] == 1 ? translations[2] : translations[3 + 2];
 }
 
 template void __global__ k_decide_targeted_move<float>(
     const int num_target_mols,
     const float *__restrict__ rand,
     const int *__restrict__ inner_count,
-    int *__restrict__ targeting_inner_volume);
+    const float *__restrict__ translations,
+    int *__restrict__ targeting_inner_volume,
+    float *__restrict__ output_translation);
 template void __global__ k_decide_targeted_move<double>(
     const int num_target_mols,
     const double *__restrict__ rand,
     const int *__restrict__ inner_count,
-    int *__restrict__ targeting_inner_volume);
+    const double *__restrict__ translations,
+    int *__restrict__ targeting_inner_volume,
+    double *__restrict__ output_translation);
 
 // k_separate_weights_for_targeted takes the flag and the mol indices and writes them out
 // to a new buffer the weights associated with the source molecules.

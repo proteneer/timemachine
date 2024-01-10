@@ -39,10 +39,10 @@ BDExchangeMove<RealType>::BDExchangeMove(
       d_sample_per_atom_energy_buffer_(mol_size_ * N), d_atom_idxs_(get_atom_indices(target_mols)),
       d_mol_offsets_(get_mol_offsets(target_mols)), d_log_weights_before_(num_target_mols_),
       d_log_weights_after_(num_target_mols_), d_log_sum_exp_before_(2), d_log_sum_exp_after_(2), d_samples_(1),
-      d_quaternions_(round_up_even(QUATERNIONS_PER_STEP * this->RANDOM_BATCH_SIZE)),
-      d_translations_(round_up_even(TRANSLATIONS_PER_STEP * this->RANDOM_BATCH_SIZE)), d_num_accepted_(1),
+      d_quaternions_(round_up_even(QUATERNIONS_PER_STEP * this->RANDOM_BATCH_SIZE)), d_num_accepted_(1),
       d_target_mol_atoms_(mol_size_), d_target_mol_offsets_(num_target_mols_ + 1),
-      d_intermediate_sample_weights_(ceil_divide(N_, WEIGHT_THREADS_PER_BLOCK)) {
+      d_intermediate_sample_weights_(ceil_divide(N_, WEIGHT_THREADS_PER_BLOCK)),
+      d_translations_(round_up_even(TRANSLATIONS_PER_STEP * this->RANDOM_BATCH_SIZE)) {
 
     if (proposals_per_move_ <= 0) {
         throw std::runtime_error("proposals per move must be greater than 0");
@@ -134,8 +134,8 @@ void BDExchangeMove<RealType>::move(
         this->compute_incremental_weights(
             N,
             true,
-            d_coords,
             d_box,
+            d_coords,
             this->d_quaternions_.data + (noise_offset_ * QUATERNIONS_PER_STEP),
             this->d_translations_.data + (noise_offset_ * TRANSLATIONS_PER_STEP),
             stream);
@@ -184,8 +184,8 @@ template <typename RealType>
 void BDExchangeMove<RealType>::compute_incremental_weights(
     const int N,
     const bool scale,
+    const double *d_box,      // [3, 3]
     double *d_coords,         // [N, 3]
-    double *d_box,            // [3, 3]
     RealType *d_quaternions,  // [4]
     RealType *d_translations, // [3]
     cudaStream_t stream) {

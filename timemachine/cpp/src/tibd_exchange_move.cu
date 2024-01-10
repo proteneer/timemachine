@@ -18,6 +18,8 @@ namespace timemachine {
 // NOISE_PER_STEP is the uniform generated per step that is used for deciding the targeted move as well as the acceptance
 // in the metropolis hasting check.
 static const int NOISE_PER_STEP = 2;
+// Each step will have 6 values for a translation, first 3 is the inner translation and second 3 is outer translation
+static const int TRANSLATIONS_PER_STEP = 6;
 
 template <typename RealType>
 TIBDExchangeMove<RealType>::TIBDExchangeMove(
@@ -35,12 +37,12 @@ TIBDExchangeMove<RealType>::TIBDExchangeMove(
     : BDExchangeMove<RealType>(
           N, target_mols, params, temperature, nb_beta, cutoff, seed, proposals_per_move, interval),
       radius_(static_cast<RealType>(radius)), inner_volume_(static_cast<RealType>((4.0 / 3.0) * M_PI * pow(radius, 3))),
-      quaternion_offset_(0), d_rand_states_(DEFAULT_THREADS_PER_BLOCK), d_inner_mols_count_(1),
-      d_identify_indices_(this->num_target_mols_), d_partitioned_indices_(this->num_target_mols_),
-      d_temp_storage_buffer_(0), d_center_(3),
+      d_rand_states_(DEFAULT_THREADS_PER_BLOCK), d_inner_mols_count_(1), d_identify_indices_(this->num_target_mols_),
+      d_partitioned_indices_(this->num_target_mols_), d_temp_storage_buffer_(0), d_center_(3),
       d_uniform_noise_buffer_(round_up_even(NOISE_PER_STEP * this->RANDOM_BATCH_SIZE)), d_targeting_inner_vol_(1),
       d_ligand_idxs_(ligand_idxs), d_src_weights_(this->num_target_mols_), d_dest_weights_(this->num_target_mols_),
-      d_inner_flags_(this->num_target_mols_), d_box_volume_(1), p_inner_count_(1), p_targeting_inner_vol_(1) {
+      d_inner_flags_(this->num_target_mols_), d_box_volume_(1), p_inner_count_(1), p_targeting_inner_vol_(1),
+      d_translations_(round_up_even(TRANSLATIONS_PER_STEP * this->RANDOM_BATCH_SIZE)), d_selected_translation_(3) {
 
     if (radius <= 0.0) {
         throw std::runtime_error("radius must be greater than 0.0");
@@ -52,8 +54,10 @@ TIBDExchangeMove<RealType>::TIBDExchangeMove(
     // Create event with timings disabled as timings slow down events
     gpuErrchk(cudaEventCreateWithFlags(&host_copy_event_, cudaEventDisableTiming));
 
-    k_initialize_curand_states<<<1, DEFAULT_THREADS_PER_BLOCK, 0>>>(
-        DEFAULT_THREADS_PER_BLOCK, seed, d_rand_states_.data);
+    k_initialize_curand_states<<<
+        ceil_divide(d_rand_states_.length, DEFAULT_THREADS_PER_BLOCK),
+        DEFAULT_THREADS_PER_BLOCK,
+        0>>>(static_cast<int>(d_rand_states_.length), seed, d_rand_states_.data);
     gpuErrchk(cudaPeekAtLastError());
 
     k_arange<<<ceil_divide(this->num_target_mols_, DEFAULT_THREADS_PER_BLOCK), DEFAULT_THREADS_PER_BLOCK, 0>>>(
@@ -74,7 +78,7 @@ TIBDExchangeMove<RealType>::TIBDExchangeMove(
     d_temp_storage_buffer_.realloc(temp_storage_bytes_);
 
     // Set the offset to the length of the random vector to ensure noise is triggered on first step
-    this->noise_offset_ = this->d_uniform_noise_buffer_.length;
+    this->noise_offset_ = this->RANDOM_BATCH_SIZE;
 
     // Set the inner count to zero and target the inner at the start to ensure that calling `log_probability` produces
     // a zero
@@ -138,14 +142,16 @@ void TIBDExchangeMove<RealType>::move(
     gpuErrchk(cudaPeekAtLastError());
 
     for (int move = 0; move < this->proposals_per_move_; move++) {
-        if (this->noise_offset_ >= this->d_uniform_noise_buffer_.length) {
+        if (this->noise_offset_ >= this->RANDOM_BATCH_SIZE) {
             // reset the noise to zero and generate more noise
             this->noise_offset_ = 0;
-            quaternion_offset_ = 0;
             curandErrchk(templateCurandUniform(
                 this->cr_rng_, this->d_uniform_noise_buffer_.data, this->d_uniform_noise_buffer_.length));
             curandErrchk(
                 templateCurandNormal(this->cr_rng_, this->d_quaternions_.data, this->d_quaternions_.length, 0.0, 1.0));
+            k_generate_translations_inside_and_outside_sphere<<<1, d_rand_states_.length, 0, stream>>>(
+                this->RANDOM_BATCH_SIZE, d_box, d_center_.data, radius_, d_rand_states_.data, d_translations_.data);
+            gpuErrchk(cudaPeekAtLastError());
         }
 
         gpuErrchk(cub::DevicePartition::Flagged(
@@ -160,9 +166,11 @@ void TIBDExchangeMove<RealType>::move(
 
         k_decide_targeted_move<<<1, 1, 0, stream>>>(
             this->num_target_mols_,
-            this->d_uniform_noise_buffer_.data + this->noise_offset_,
+            this->d_uniform_noise_buffer_.data + (this->noise_offset_ * NOISE_PER_STEP),
             d_inner_mols_count_.data,
-            d_targeting_inner_vol_.data);
+            d_translations_.data + (this->noise_offset_ * TRANSLATIONS_PER_STEP),
+            d_targeting_inner_vol_.data,
+            d_selected_translation_.data);
         gpuErrchk(cudaPeekAtLastError());
 
         // Copy count and flag to the host, needed to know how many values to look at for
@@ -176,16 +184,6 @@ void TIBDExchangeMove<RealType>::move(
             cudaMemcpyDeviceToHost,
             stream));
         gpuErrchk(cudaEventRecord(host_copy_event_, stream));
-
-        k_generate_translations_within_or_outside_a_sphere<<<1, tpb, 0, stream>>>(
-            1,
-            d_box,
-            d_center_.data,
-            d_targeting_inner_vol_.data,
-            radius_,
-            d_rand_states_.data,
-            this->d_translations_.data);
-        gpuErrchk(cudaPeekAtLastError());
 
         k_separate_weights_for_targeted<RealType><<<mol_blocks, tpb, 0, stream>>>(
             this->num_target_mols_,
@@ -220,10 +218,10 @@ void TIBDExchangeMove<RealType>::move(
         this->compute_incremental_weights(
             N,
             false,
-            d_coords,
             d_box,
-            this->d_quaternions_.data + quaternion_offset_,
-            this->d_translations_.data,
+            d_coords,
+            this->d_quaternions_.data + (this->noise_offset_ * this->QUATERNIONS_PER_STEP),
+            this->d_selected_translation_.data,
             stream);
 
         k_setup_destination_weights_for_targeted<RealType><<<mol_blocks, tpb, 0, stream>>>(
@@ -247,7 +245,7 @@ void TIBDExchangeMove<RealType>::move(
             d_box_volume_.data,
             inner_volume_,
             // Offset to get the last value for the acceptance criteria
-            this->d_uniform_noise_buffer_.data + this->noise_offset_ + 1,
+            this->d_uniform_noise_buffer_.data + (this->noise_offset_ * NOISE_PER_STEP) + 1,
             this->d_samples_.data,
             this->d_log_sum_exp_before_.data,
             this->d_log_sum_exp_after_.data,
@@ -259,8 +257,7 @@ void TIBDExchangeMove<RealType>::move(
             this->d_num_accepted_.data);
         gpuErrchk(cudaPeekAtLastError());
         this->num_attempted_++;
-        this->noise_offset_ += NOISE_PER_STEP;
-        quaternion_offset_ += this->QUATERNIONS_PER_STEP;
+        this->noise_offset_++;
     }
 }
 

@@ -47,8 +47,7 @@ protected:
     DeviceBuffer<RealType> d_log_sum_exp_after_;  // [2]
     DeviceBuffer<int>
         d_samples_; // where the indices to sample a molecule come from, currently fixed to a single sample
-    DeviceBuffer<RealType> d_quaternions_;  // Normal noise for uniform random rotations
-    DeviceBuffer<RealType> d_translations_; // Uniform noise for translation + the check
+    DeviceBuffer<RealType> d_quaternions_; // Normal noise for uniform random rotations
     DeviceBuffer<size_t> d_num_accepted_;
     DeviceBuffer<int> d_target_mol_atoms_;
     DeviceBuffer<int> d_target_mol_offsets_;
@@ -61,12 +60,15 @@ protected:
     void compute_incremental_weights(
         const int N,
         const bool scale,
+        const double *d_box,
         double *d_coords,
-        double *d_box,
         RealType *d_quaternions,
         RealType *d_translations,
         cudaStream_t stream);
 
+private:
+    // Keep this private, so we can realloc the buffer in the targeted case
+    DeviceBuffer<RealType> d_translations_; // Uniform noise for translation + the check
 public:
     BDExchangeMove(
         const int N,
