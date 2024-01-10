@@ -375,7 +375,7 @@ def _get_cores_impl(
     def filter_fxn(trial_core):
         return all(f(trial_core) for f in filter_fxns)
 
-    all_cores, all_marcs = mcgregor.mcs(
+    all_cores, mcs_result = mcgregor.mcs(
         n_a,
         n_b,
         priority_idxs,
@@ -388,7 +388,7 @@ def _get_cores_impl(
         filter_fxn=filter_fxn,
     )
 
-    all_bond_cores = [_compute_bond_cores(mol_a, mol_b, marcs) for marcs in all_marcs]
+    all_bond_cores = [_compute_bond_cores(mol_a, mol_b, marcs) for marcs in mcs_result.all_marcs]
 
     if connected_core and complete_rings:
         # 1) remove any disconnected components or lone atoms in the mapping

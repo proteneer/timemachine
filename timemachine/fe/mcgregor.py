@@ -2,9 +2,10 @@
 import copy
 import time
 import warnings
-from typing import Callable, Sequence
+from typing import Callable, List, Sequence, Tuple
 
 import numpy as np
+from numpy.typing import NDArray
 
 
 def _arcs_left(marcs):
@@ -176,7 +177,7 @@ def mcs(
     enforce_core_core,
     min_threshold,
     filter_fxn: Callable[[Sequence[int]], bool] = lambda core: True,
-):
+) -> Tuple[List[NDArray], MCSResult]:
     assert n_a <= n_b
 
     g_a = Graph(n_a, bonds_a)
@@ -188,6 +189,8 @@ def mcs(
     priority_idxs = tuple(tuple(x) for x in priority_idxs)
     # Keep start time for debugging purposes below
     start_time = time.time()  # noqa
+
+    mcs_result = None
 
     # run in reverse by guessing max # of edges to avoid getting stuck in minima.
     max_threshold = _arcs_left(marcs)
@@ -233,6 +236,8 @@ def mcs(
         # f"==FAILED==[NODES VISITED {mcs_result.nodes_visited} | time taken: {time.time()-start_time} | time out? {mcs_result.timed_out}]====="
         # )
 
+    assert mcs_result is not None
+
     if len(mcs_result.all_maps) == 0:
         raise NoMappingError("Unable to find mapping")
 
@@ -246,7 +251,7 @@ def mcs(
         core_array = np.array(sorted(core))
         all_cores.append(core_array)
 
-    return all_cores, mcs_result.all_marcs
+    return all_cores, mcs_result
 
 
 def atom_map_add(map_1_to_2, map_2_to_1, idx, jdx):
