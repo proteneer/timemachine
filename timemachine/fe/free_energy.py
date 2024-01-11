@@ -478,18 +478,6 @@ def get_context(initial_state: InitialState, md_params: Optional[MDParams] = Non
 def sample_with_context(
     ctxt: Context, md_params: MDParams, temperature: float, ligand_idxs: NDArray, max_buffer_frames: int
 ) -> Trajectory:
-    if md_params.water_sampling_params is not None and md_params.water_sampling_params.n_initial_iterations > 0:
-        for mover in ctxt.get_movers():
-            if isinstance(mover, custom_ops.TIBDExchangeMove_f32):
-                mover.set_interval(1)
-                x = ctxt.get_x_t()
-                b = ctxt.get_box()
-                for _ in range(md_params.water_sampling_params.n_initial_iterations):
-                    x, b = mover.move(x, b)
-                ctxt.set_x_t(x)
-                ctxt.set_box(b)
-                # Set the interval back to the proper value
-                mover.set_interval(md_params.water_sampling_params.interval)
     # burn-in
     if md_params.n_eq_steps:
         # Set barostat interval to 15 for equilibration, then back to the original interval for production
@@ -505,6 +493,19 @@ def sample_with_context(
         if barostat is not None:
             barostat.set_interval(original_interval)
 
+    # Run water sampling after equilibrating to ensure there aren't voids that would change the impact of sampling
+    if md_params.water_sampling_params is not None and md_params.water_sampling_params.n_initial_iterations > 0:
+        for mover in ctxt.get_movers():
+            if isinstance(mover, custom_ops.TIBDExchangeMove_f32):
+                mover.set_interval(1)
+                x = ctxt.get_x_t()
+                b = ctxt.get_box()
+                for _ in range(md_params.water_sampling_params.n_initial_iterations):
+                    x, b = mover.move(x, b)
+                ctxt.set_x_t(x)
+                ctxt.set_box(b)
+                # Set the interval back to the proper value
+                mover.set_interval(md_params.water_sampling_params.interval)
     rng = np.random.default_rng(md_params.seed)
 
     if md_params.local_steps > 0:
@@ -1013,6 +1014,31 @@ def run_sims_hrex(
         barostat.set_interval(equil_barostat_interval)
 
     def get_equilibrated_xvb(xvb: CoordsVelBox, state_idx: StateIdx) -> CoordsVelBox:
+        if md_params.n_eq_steps > 0:
+            # Set the movers to 0 to ensure they all equilibrate the same way
+            # Ensure initial mover state is consistent across replicas
+            for mover in context.get_movers():
+                mover.set_step(0)
+
+            context.set_x_t(xvb.coords)
+            context.set_v_t(xvb.velocities)
+            context.set_box(xvb.box)
+
+            params = params_by_state[state_idx]
+            assert len(context.get_potentials()) == 1
+            context.get_potentials()[0].set_params(params)
+            if md_params.water_sampling_params is not None:
+                for mover in context.get_movers():
+                    if isinstance(mover, custom_ops.TIBDExchangeMove_f32):
+                        assert water_params_by_state is not None
+                        mover.set_params(water_params_by_state[state_idx])
+
+            xs, boxes = context.multiple_steps(md_params.n_eq_steps, store_x_interval=0)
+            x0 = xs[0]
+            v0 = context.get_v_t()
+            box0 = boxes[0]
+            xvb = CoordsVelBox(x0, v0, box0)
+        # Equilibrate before running water sampling
         if md_params.water_sampling_params is not None and md_params.water_sampling_params.n_initial_iterations > 0:
             for mover in context.get_movers():
                 if isinstance(mover, custom_ops.TIBDExchangeMove_f32):
@@ -1025,32 +1051,8 @@ def run_sims_hrex(
                     xvb = CoordsVelBox(coords=x, velocities=xvb.velocities, box=b)
                     # Set the interval back to the proper value
                     mover.set_interval(md_params.water_sampling_params.interval)
-        if md_params.n_eq_steps == 0:
-            return xvb
-        # Set the movers to 0 to ensure they all equilibrate the same way
-        # Ensure initial mover state is consistent across replicas
-        for mover in context.get_movers():
-            mover.set_step(0)
 
-        context.set_x_t(xvb.coords)
-        context.set_v_t(xvb.velocities)
-        context.set_box(xvb.box)
-
-        params = params_by_state[state_idx]
-        assert len(context.get_potentials()) == 1
-        context.get_potentials()[0].set_params(params)
-        if md_params.water_sampling_params is not None:
-            for mover in context.get_movers():
-                if isinstance(mover, custom_ops.TIBDExchangeMove_f32):
-                    assert water_params_by_state is not None
-                    mover.set_params(water_params_by_state[state_idx])
-
-        xs, boxes = context.multiple_steps(md_params.n_eq_steps, store_x_interval=0)
-        x0 = xs[0]
-        v0 = context.get_v_t()
-        box0 = boxes[0]
-
-        return CoordsVelBox(x0, v0, box0)
+        return xvb
 
     initial_replicas = [
         get_equilibrated_xvb(CoordsVelBox(s.x0, s.v0, s.box0), StateIdx(i)) for i, s in enumerate(initial_states)
