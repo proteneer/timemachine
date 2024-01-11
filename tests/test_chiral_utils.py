@@ -399,7 +399,7 @@ def test_find_flipped_planar_torsions():
 
     find_flipped_planar_torsions = setup_find_flipped_planar_torsions(mol, mol)
 
-    assert find_flipped_planar_torsions(core_ok) == []
+    assert next(find_flipped_planar_torsions(core_ok), None) is None
     assert set(find_flipped_planar_torsions(core_bad)) == {
         ((0, 1, 3, 4), (2, 1, 3, 4)),
         ((2, 1, 3, 4), (0, 1, 3, 4)),
@@ -416,7 +416,7 @@ def test_find_flipped_planar_torsions():
     core_bad = [0, 1, 2, 3, 5, 4, 6, 7, 8]
 
     find_flipped_planar_torsions = setup_find_flipped_planar_torsions(mol, mol)
-    assert find_flipped_planar_torsions(core_ok) == []
+    assert next(find_flipped_planar_torsions(core_ok), None) is None
     assert set(find_flipped_planar_torsions(core_bad)) == {
         ((0, 1, 2, 4), (0, 1, 2, 5)),
         ((0, 1, 2, 5), (0, 1, 2, 4)),

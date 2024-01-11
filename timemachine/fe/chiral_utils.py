@@ -1,7 +1,7 @@
 import itertools
 from enum import Enum
 from functools import partial
-from typing import Callable, List, Mapping, Sequence, Set, Tuple
+from typing import Callable, Iterator, List, Mapping, Sequence, Set, Tuple
 
 import numpy as np
 from rdkit import Chem
@@ -341,8 +341,7 @@ def find_canonical_amide_bonds(mol):
 
 def _find_flipped_torsions(
     torsions_a: Mapping[FourTuple, float], torsions_b: Mapping[FourTuple, float], core: Sequence[int]
-) -> List[ChiralConflict]:
-    results = []
+) -> Iterator[ChiralConflict]:
     for (ia, ja, ka, la), sign_a in torsions_a.items():
         idxs_b = core[ia], core[ja], core[ka], core[la]
         try:
@@ -350,14 +349,12 @@ def _find_flipped_torsions(
         except KeyError:
             continue
         if sign_a != sign_b:
-            results.append(((ia, ja, ka, la), idxs_b))
-
-    return results
+            yield ((ia, ja, ka, la), idxs_b)
 
 
 def setup_find_flipped_planar_torsions(
     mol_a: Chem.rdchem.Mol, mol_b: Chem.rdchem.Mol
-) -> Callable[[Sequence[int]], List[Tuple[FourTuple, FourTuple]]]:
+) -> Callable[[Sequence[int]], Iterator[Tuple[FourTuple, FourTuple]]]:
     """Returns a function that enumerates core planar torsions that would be flipped by the given mapping.
 
     A planar torsion is defined here to be a torsion whose central bond is one of
@@ -372,7 +369,7 @@ def setup_find_flipped_planar_torsions(
 
     Returns
     -------
-    Function with signature ((core: sequence of int) -> list of pairs of four-tuples)
+    Function with signature ((core: sequence of int) -> iterator over pairs of four-tuples)
         In the returned pairs, the first (second) tuple corresponds to the indices of the flipped torsion in mol_a (mol_b).
     """
 

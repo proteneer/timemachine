@@ -401,7 +401,7 @@ def _get_cores_impl(
 
         def planar_torsion_flip_filter(trial_core):
             flipped = find_flipped_planar_torsions(trial_core)
-            passed = len(flipped) == 0
+            passed = next(flipped, None) is None  # i.e. iterator is empty
             return passed
 
         filter_fxns.append(planar_torsion_flip_filter)
