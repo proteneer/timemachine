@@ -61,7 +61,7 @@ def get_cores_and_diagnostics(
     disallow_planar_torsion_flips,
     min_threshold,
 ) -> Tuple[List[NDArray], mcgregor.MCSDiagnostics]:
-    """Like :py:func:`get_cores`, but additionally returns diagnostics collected during the MCS search."""
+    """Same as :py:func:`get_cores`, but additionally returns diagnostics collected during the MCS search."""
     assert max_cores > 0
 
     core_kwargs = dict(
