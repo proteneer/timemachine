@@ -5,6 +5,7 @@ import pytest
 from rdkit import Chem
 from rdkit.Chem import AllChem
 
+from timemachine.constants import DEFAULT_ATOM_MAPPING_KWARGS
 from timemachine.fe import atom_mapping
 from timemachine.fe.mcgregor import MaxVisitsWarning, NoMappingError
 from timemachine.fe.utils import plot_atom_mapping_grid
@@ -988,3 +989,22 @@ def test_min_threshold():
 
     with pytest.raises(NoMappingError, match="Unable to find mapping with at least 18 atoms"):
         atom_mapping.get_cores(mol_a, mol_b, **core_kwargs, max_visits=10000)
+
+
+def test_get_cores_and_diagnostics():
+    mols = Chem.SDMolSupplier(hif2a_set, removeHs=False)
+    mols = [m for m in mols]
+    n_pairs = 30
+    random_pair_idxs = np.random.default_rng(2024).choice(len(mols), size=(n_pairs, 2))
+
+    for i_a, i_b in random_pair_idxs:
+        mol_a = mols[i_a]
+        mol_b = mols[i_b]
+        all_cores, diagnostics = atom_mapping.get_cores_and_diagnostics(mol_a, mol_b, **DEFAULT_ATOM_MAPPING_KWARGS)
+
+        assert len(all_cores) > 0
+        assert all(len(core) == len(all_cores[0]) for core in all_cores)
+
+        assert diagnostics.core_size >= len(all_cores[0])
+        assert diagnostics.num_cores >= len(all_cores)
+        assert diagnostics.total_nodes_visited >= diagnostics.core_size
