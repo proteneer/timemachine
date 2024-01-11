@@ -46,7 +46,7 @@ from timemachine.fe.utils import get_romol_bonds, get_romol_conf
 # - refinement of marcs matrix is done on uint8 arrays
 
 
-def get_cores_and_total_nodes_visited(
+def get_cores_and_diagnostics(
     mol_a,
     mol_b,
     ring_cutoff,
@@ -60,7 +60,7 @@ def get_cores_and_total_nodes_visited(
     enforce_chiral,
     disallow_planar_torsion_flips,
     min_threshold,
-) -> Tuple[List[NDArray], int]:
+) -> Tuple[List[NDArray], mcgregor.MCSDiagnostics]:
     """Like :py:func:`get_cores`, but additionally returns the total number of nodes visited during the MCS search."""
     assert max_cores > 0
 
@@ -80,15 +80,15 @@ def get_cores_and_total_nodes_visited(
 
     # we require that mol_a.GetNumAtoms() <= mol_b.GetNumAtoms()
     if mol_a.GetNumAtoms() > mol_b.GetNumAtoms():
-        all_cores, total_nodes_visited = _get_cores_impl(mol_b, mol_a, **core_kwargs)
+        all_cores, mcs_diagnostics = _get_cores_impl(mol_b, mol_a, **core_kwargs)
         new_cores = []
         for core in all_cores:
             core = np.array([(x[1], x[0]) for x in core], dtype=core.dtype)
             new_cores.append(core)
-        return new_cores, total_nodes_visited
+        return new_cores, mcs_diagnostics
     else:
-        all_cores, total_nodes_visited = _get_cores_impl(mol_a, mol_b, **core_kwargs)
-        return all_cores, total_nodes_visited
+        all_cores, mcs_diagnostics = _get_cores_impl(mol_a, mol_b, **core_kwargs)
+        return all_cores, mcs_diagnostics
 
 
 def get_cores(
@@ -174,7 +174,7 @@ def get_cores(
     timemachine.fe.mcgregor.NoMappingError
         If no mapping is found
     """
-    all_cores, _ = get_cores_and_total_nodes_visited(
+    all_cores, _ = get_cores_and_diagnostics(
         mol_a,
         mol_b,
         ring_cutoff,
@@ -347,7 +347,7 @@ def _get_cores_impl(
     enforce_chiral,
     disallow_planar_torsion_flips,
     min_threshold,
-) -> Tuple[List[NDArray], int]:
+) -> Tuple[List[NDArray], mcgregor.MCSDiagnostics]:
     mol_a, perm = reorder_atoms_by_degree(mol_a)  # UNINVERT
 
     bonds_a = get_romol_bonds(mol_a)
@@ -411,7 +411,7 @@ def _get_cores_impl(
     def filter_fxn(trial_core):
         return all(f(trial_core) for f in filter_fxns)
 
-    all_cores, all_marcs, total_nodes_visited = mcgregor.mcs(
+    all_cores, all_marcs, mcs_diagnostics = mcgregor.mcs(
         n_a,
         n_b,
         priority_idxs,
@@ -467,7 +467,7 @@ def _get_cores_impl(
             inv_core.append(perm[atom])
         core[:, 0] = inv_core
 
-    return sorted_cores, total_nodes_visited
+    return sorted_cores, mcs_diagnostics
 
 
 # maintainer: jkaus

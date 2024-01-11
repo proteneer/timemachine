@@ -2,6 +2,7 @@
 import copy
 import time
 import warnings
+from dataclasses import dataclass
 from typing import Callable, List, Sequence, Tuple
 
 import numpy as np
@@ -166,6 +167,11 @@ class NoMappingError(Exception):
     pass
 
 
+@dataclass
+class MCSDiagnostics:
+    total_nodes_visited: int
+
+
 def mcs(
     n_a,
     n_b,
@@ -177,7 +183,7 @@ def mcs(
     enforce_core_core,
     min_threshold,
     filter_fxn: Callable[[Sequence[int]], bool] = lambda core: True,
-) -> Tuple[List[NDArray], List[NDArray], int]:
+) -> Tuple[List[NDArray], List[NDArray], MCSDiagnostics]:
     assert n_a <= n_b
 
     g_a = Graph(n_a, bonds_a)
@@ -254,7 +260,7 @@ def mcs(
         core_array = np.array(sorted(core))
         all_cores.append(core_array)
 
-    return all_cores, mcs_result.all_marcs, total_nodes_visited
+    return all_cores, mcs_result.all_marcs, MCSDiagnostics(total_nodes_visited)
 
 
 def atom_map_add(map_1_to_2, map_2_to_1, idx, jdx):
