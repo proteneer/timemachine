@@ -1005,4 +1005,6 @@ def test_get_cores_and_diagnostics():
 
         assert diagnostics.core_size >= len(all_cores[0])
         assert diagnostics.num_cores >= len(all_cores)
-        assert diagnostics.total_nodes_visited >= diagnostics.core_size  # must visit at least one node per edge in core
+        assert (
+            diagnostics.total_nodes_visited >= diagnostics.core_size
+        )  # must visit at least one node per atom pair in core
