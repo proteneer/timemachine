@@ -8,7 +8,7 @@ from rdkit.Chem import AllChem
 from timemachine.constants import DEFAULT_ATOM_MAPPING_KWARGS
 from timemachine.fe import atom_mapping
 from timemachine.fe.mcgregor import MaxVisitsWarning, NoMappingError
-from timemachine.fe.utils import plot_atom_mapping_grid
+from timemachine.fe.utils import plot_atom_mapping_grid, read_sdf
 
 pytestmark = [pytest.mark.nocuda]
 
@@ -376,8 +376,7 @@ def get_mol_name(mol) -> str:
 @pytest.mark.parametrize("filepath", datasets)
 @pytest.mark.nightly(reason="Slow")
 def test_all_pairs(filepath):
-    mols = Chem.SDMolSupplier(filepath, removeHs=False)
-    mols = [m for m in mols]
+    mols = read_sdf(filepath)
     for idx, mol_a in enumerate(mols):
         for mol_b in mols[idx + 1 :]:
             all_cores = atom_mapping.get_cores(
@@ -992,8 +991,7 @@ def test_min_threshold():
 
 
 def test_get_cores_and_diagnostics():
-    mols = Chem.SDMolSupplier(hif2a_set, removeHs=False)
-    mols = [m for m in mols]
+    mols = read_sdf(hif2a_set)
     n_pairs = 30
     random_pair_idxs = np.random.default_rng(2024).choice(len(mols), size=(n_pairs, 2))
 
