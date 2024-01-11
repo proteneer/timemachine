@@ -170,6 +170,8 @@ class NoMappingError(Exception):
 @dataclass
 class MCSDiagnostics:
     total_nodes_visited: int
+    core_size: int
+    num_cores: int
 
 
 def mcs(
@@ -260,7 +262,15 @@ def mcs(
         core_array = np.array(sorted(core))
         all_cores.append(core_array)
 
-    return all_cores, mcs_result.all_marcs, MCSDiagnostics(total_nodes_visited)
+    return (
+        all_cores,
+        mcs_result.all_marcs,
+        MCSDiagnostics(
+            total_nodes_visited=total_nodes_visited,
+            core_size=len(all_cores[0]),
+            num_cores=len(all_cores),
+        ),
+    )
 
 
 def atom_map_add(map_1_to_2, map_2_to_1, idx, jdx):
