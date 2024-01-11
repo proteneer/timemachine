@@ -328,7 +328,7 @@ def test_chiral_conflict_mixed():
     assert has_chiral_atom_flips(mixed_map, chiral_set_a, chiral_set_b)
 
 
-def test_has_chiral_atom_conflicts_symmetric(n_trials=100):
+def test_has_chiral_atom_flips_symmetric(n_trials=100):
     """On random atom mappings of random pairs of freesolv molecules,
     assert has_chiral_atom_flips(core, a, b) == has_chiral_atom_flips(core[:,::-1], b, a)
     """
