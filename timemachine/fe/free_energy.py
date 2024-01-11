@@ -96,7 +96,7 @@ class WaterSamplingParams:
         Radius, in nanometers, from the centroid of the molecule to treat as the inner target volume
     """
 
-    interval: int = 1600
+    interval: int = 2000
     n_proposals: int = 10000
     n_initial_iterations: int = 0
     radius: float = 1.0
