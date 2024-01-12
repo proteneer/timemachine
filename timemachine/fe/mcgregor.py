@@ -2,9 +2,11 @@
 import copy
 import time
 import warnings
-from typing import Callable, Sequence
+from dataclasses import dataclass
+from typing import Callable, List, Sequence, Tuple
 
 import numpy as np
+from numpy.typing import NDArray
 
 
 def _arcs_left(marcs):
@@ -165,6 +167,13 @@ class NoMappingError(Exception):
     pass
 
 
+@dataclass
+class MCSDiagnostics:
+    total_nodes_visited: int
+    core_size: int
+    num_cores: int
+
+
 def mcs(
     n_a,
     n_b,
@@ -176,7 +185,7 @@ def mcs(
     enforce_core_core,
     min_threshold,
     filter_fxn: Callable[[Sequence[int]], bool] = lambda core: True,
-):
+) -> Tuple[List[NDArray], List[NDArray], MCSDiagnostics]:
     assert n_a <= n_b
 
     g_a = Graph(n_a, bonds_a)
@@ -189,8 +198,11 @@ def mcs(
     # Keep start time for debugging purposes below
     start_time = time.time()  # noqa
 
+    mcs_result = None
+
     # run in reverse by guessing max # of edges to avoid getting stuck in minima.
     max_threshold = _arcs_left(marcs)
+    total_nodes_visited = 0
     for idx in range(max_threshold):
         cur_threshold = max_threshold - idx
         if cur_threshold < min_threshold:
@@ -214,6 +226,8 @@ def mcs(
             filter_fxn,
         )
 
+        total_nodes_visited += mcs_result.nodes_visited
+
         # If timed out, either due to max_visits or max_cores, raise exception.
         if mcs_result.timed_out:
             warnings.warn(
@@ -233,6 +247,8 @@ def mcs(
         # f"==FAILED==[NODES VISITED {mcs_result.nodes_visited} | time taken: {time.time()-start_time} | time out? {mcs_result.timed_out}]====="
         # )
 
+    assert mcs_result is not None
+
     if len(mcs_result.all_maps) == 0:
         raise NoMappingError("Unable to find mapping")
 
@@ -246,7 +262,15 @@ def mcs(
         core_array = np.array(sorted(core))
         all_cores.append(core_array)
 
-    return all_cores, mcs_result.all_marcs
+    return (
+        all_cores,
+        mcs_result.all_marcs,
+        MCSDiagnostics(
+            total_nodes_visited=total_nodes_visited,
+            core_size=len(all_cores[0]),
+            num_cores=len(all_cores),
+        ),
+    )
 
 
 def atom_map_add(map_1_to_2, map_2_to_1, idx, jdx):
