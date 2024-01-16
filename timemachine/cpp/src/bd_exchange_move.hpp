@@ -50,6 +50,7 @@ protected:
     DeviceBuffer<int> d_target_mol_atoms_;
     DeviceBuffer<int> d_target_mol_offsets_;
     DeviceBuffer<__int128> d_intermediate_sample_weights_;
+    DeviceBuffer<RealType> d_sample_noise_; // Noise to use for selecting molecules
 
     curandGenerator_t cr_rng_;
 

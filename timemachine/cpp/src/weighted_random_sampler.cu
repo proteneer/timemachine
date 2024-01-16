@@ -35,21 +35,31 @@ void WeightedRandomSampler<RealType>::sample_device(
     // Perform sampling using the gumbel-max-trick like cupy
     // https://github.com/cupy/cupy/blob/46f6ed6e78661fb1d31b41a072519f119f5a2385/cupy/random/_generator.py#L1115-L1121
     curandErrchk(curandSetStream(cr_rng_, stream));
-    const int tpb = DEFAULT_THREADS_PER_BLOCK;
-    const int blocks = ceil_divide(N, tpb);
     for (int i = 0; i < num_samples; i++) {
         curandErrchk(templateCurandUniform(cr_rng_, d_gumbel_.data, round_up_even(N)));
 
-        k_setup_gumbel_max_trick<<<blocks, tpb, 0, stream>>>(N, d_log_probabilities, d_gumbel_.data);
-        gpuErrchk(cudaPeekAtLastError());
-
-        gpuErrchk(
-            cub::DeviceReduce::ArgMax(d_sort_storage_.data, temp_storage_bytes_, d_gumbel_.data, d_arg_max_.data, N));
-
-        k_copy_kv_key<RealType><<<1, 1, 0, stream>>>(1, d_arg_max_.data, d_samples + i);
-        gpuErrchk(cudaPeekAtLastError());
+        this->sample_device_given_noise(N, num_samples, d_log_probabilities, d_gumbel_.data, d_samples + i, stream);
     }
 };
+
+template <typename RealType>
+void WeightedRandomSampler<RealType>::sample_device_given_noise(
+    const int N,
+    const int num_samples,
+    const RealType *d_log_probabilities,
+    RealType *d_noise,
+    int *d_samples,
+    cudaStream_t stream) {
+    const int tpb = DEFAULT_THREADS_PER_BLOCK;
+    const int blocks = ceil_divide(N, tpb);
+    k_setup_gumbel_max_trick<<<blocks, tpb, 0, stream>>>(N, d_log_probabilities, d_noise);
+    gpuErrchk(cudaPeekAtLastError());
+
+    gpuErrchk(cub::DeviceReduce::ArgMax(d_sort_storage_.data, temp_storage_bytes_, d_noise, d_arg_max_.data, N));
+
+    k_copy_kv_key<RealType><<<1, 1, 0, stream>>>(1, d_arg_max_.data, d_samples);
+    gpuErrchk(cudaPeekAtLastError());
+}
 
 template <typename RealType>
 std::vector<int>

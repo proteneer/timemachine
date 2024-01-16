@@ -139,14 +139,15 @@ void TIBDExchangeMove<RealType>::move(
         d_inner_flags_.data);
     gpuErrchk(cudaPeekAtLastError());
 
+    // Generate all noise upfront for all proposals within a move
     curandErrchk(
         templateCurandUniform(this->cr_rng_, this->d_uniform_noise_buffer_.data, this->d_uniform_noise_buffer_.length));
     curandErrchk(templateCurandNormal(this->cr_rng_, this->d_quaternions_.data, this->d_quaternions_.length, 0.0, 1.0));
+    curandErrchk(templateCurandUniform(this->cr_rng_, this->d_sample_noise_.data, this->d_sample_noise_.length));
     k_generate_translations_inside_and_outside_sphere<<<1, d_rand_states_.length, 0, stream>>>(
         this->proposals_per_move_, d_box, d_center_.data, radius_, d_rand_states_.data, d_translations_.data);
     gpuErrchk(cudaPeekAtLastError());
     for (int move = 0; move < this->proposals_per_move_; move++) {
-
         gpuErrchk(cub::DevicePartition::Flagged(
             d_temp_storage_buffer_.data,
             temp_storage_bytes_,
@@ -198,7 +199,13 @@ void TIBDExchangeMove<RealType>::move(
         this->logsumexp_.sum_device(src_count, d_src_weights_.data, this->d_log_sum_exp_before_.data, stream);
 
         // Only sample one mol
-        this->sampler_.sample_device(src_count, 1, d_src_weights_.data, this->d_samples_.data, stream);
+        this->sampler_.sample_device_given_noise(
+            src_count,
+            1,
+            d_src_weights_.data,
+            this->d_sample_noise_.data + (move * this->num_target_mols_),
+            this->d_samples_.data,
+            stream);
 
         // Selected an index from the src weights, need to remap the samples idx to the mol indices
         k_adjust_sample_idx<<<1, 1, 0, stream>>>(

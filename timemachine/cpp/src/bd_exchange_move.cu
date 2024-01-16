@@ -41,6 +41,7 @@ BDExchangeMove<RealType>::BDExchangeMove(
       d_quaternions_(round_up_even(QUATERNIONS_PER_STEP * proposals_per_move_)), d_num_accepted_(1),
       d_target_mol_atoms_(mol_size_), d_target_mol_offsets_(num_target_mols_ + 1),
       d_intermediate_sample_weights_(ceil_divide(N_, WEIGHT_THREADS_PER_BLOCK)),
+      d_sample_noise_(round_up_even(num_target_mols_ * proposals_per_move_)),
       d_translations_(round_up_even(BD_TRANSLATIONS_PER_STEP_XYZW * proposals_per_move_)) {
 
     if (proposals_per_move_ <= 0) {
@@ -96,6 +97,7 @@ void BDExchangeMove<RealType>::move(
     curandErrchk(templateCurandNormal(cr_rng_, d_quaternions_.data, d_quaternions_.length, 0.0, 1.0));
     // The d_translation_ buffer is [x,y,z,w] where [x,y,z] are a random translation and w is used for acceptance
     curandErrchk(templateCurandUniform(cr_rng_, d_translations_.data, d_translations_.length));
+    curandErrchk(templateCurandUniform(cr_rng_, d_sample_noise_.data, d_sample_noise_.length));
     for (int move = 0; move < proposals_per_move_; move++) {
         // Run only after the first pass, to maintain meaningful `log_probability_host` values
         if (move > 0) {
@@ -120,7 +122,13 @@ void BDExchangeMove<RealType>::move(
             stream));
 
         // We only ever sample a single molecule
-        sampler_.sample_device(num_target_mols_, 1, d_log_weights_before_.data, d_samples_.data, stream);
+        sampler_.sample_device_given_noise(
+            num_target_mols_,
+            1,
+            d_log_weights_before_.data,
+            d_sample_noise_.data + (move * num_target_mols_),
+            d_samples_.data,
+            stream);
 
         // Don't move translations into computation of the incremental, as different translations can be used
         // by different bias deletion movers (such as targeted insertion)
