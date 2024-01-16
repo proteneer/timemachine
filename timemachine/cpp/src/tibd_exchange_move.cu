@@ -39,10 +39,10 @@ TIBDExchangeMove<RealType>::TIBDExchangeMove(
       radius_(static_cast<RealType>(radius)), inner_volume_(static_cast<RealType>((4.0 / 3.0) * M_PI * pow(radius, 3))),
       d_rand_states_(DEFAULT_THREADS_PER_BLOCK), d_inner_mols_count_(1), d_identify_indices_(this->num_target_mols_),
       d_partitioned_indices_(this->num_target_mols_), d_temp_storage_buffer_(0), d_center_(3),
-      d_uniform_noise_buffer_(round_up_even(NOISE_PER_STEP * this->RANDOM_BATCH_SIZE)), d_targeting_inner_vol_(1),
+      d_uniform_noise_buffer_(round_up_even(NOISE_PER_STEP * this->proposals_per_move_)), d_targeting_inner_vol_(1),
       d_ligand_idxs_(ligand_idxs), d_src_weights_(this->num_target_mols_), d_dest_weights_(this->num_target_mols_),
       d_inner_flags_(this->num_target_mols_), d_box_volume_(1), p_inner_count_(1), p_targeting_inner_vol_(1),
-      d_translations_(round_up_even(TIBD_TRANSLATIONS_PER_STEP_XYZXYZ * this->RANDOM_BATCH_SIZE)),
+      d_translations_(round_up_even(TIBD_TRANSLATIONS_PER_STEP_XYZXYZ * this->proposals_per_move_)),
       d_selected_translation_(3) {
 
     if (radius <= 0.0) {
@@ -77,9 +77,6 @@ TIBDExchangeMove<RealType>::TIBDExchangeMove(
     // Allocate char as temp_storage_bytes_ is in raw bytes and the type doesn't matter in practice.
     // Equivalent to DeviceBuffer<int> buf(temp_storage_bytes_ / sizeof(int))
     d_temp_storage_buffer_.realloc(temp_storage_bytes_);
-
-    // Set the offset to the length of the random vector to ensure noise is triggered on first step
-    this->noise_offset_ = this->RANDOM_BATCH_SIZE;
 
     // Set the inner count to zero and target the inner at the start to ensure that calling `log_probability` produces
     // a zero
@@ -142,18 +139,13 @@ void TIBDExchangeMove<RealType>::move(
         d_inner_flags_.data);
     gpuErrchk(cudaPeekAtLastError());
 
+    curandErrchk(
+        templateCurandUniform(this->cr_rng_, this->d_uniform_noise_buffer_.data, this->d_uniform_noise_buffer_.length));
+    curandErrchk(templateCurandNormal(this->cr_rng_, this->d_quaternions_.data, this->d_quaternions_.length, 0.0, 1.0));
+    k_generate_translations_inside_and_outside_sphere<<<1, d_rand_states_.length, 0, stream>>>(
+        this->proposals_per_move_, d_box, d_center_.data, radius_, d_rand_states_.data, d_translations_.data);
+    gpuErrchk(cudaPeekAtLastError());
     for (int move = 0; move < this->proposals_per_move_; move++) {
-        if (this->noise_offset_ >= this->RANDOM_BATCH_SIZE) {
-            // reset the noise to zero and generate more noise
-            this->noise_offset_ = 0;
-            curandErrchk(templateCurandUniform(
-                this->cr_rng_, this->d_uniform_noise_buffer_.data, this->d_uniform_noise_buffer_.length));
-            curandErrchk(
-                templateCurandNormal(this->cr_rng_, this->d_quaternions_.data, this->d_quaternions_.length, 0.0, 1.0));
-            k_generate_translations_inside_and_outside_sphere<<<1, d_rand_states_.length, 0, stream>>>(
-                this->RANDOM_BATCH_SIZE, d_box, d_center_.data, radius_, d_rand_states_.data, d_translations_.data);
-            gpuErrchk(cudaPeekAtLastError());
-        }
 
         gpuErrchk(cub::DevicePartition::Flagged(
             d_temp_storage_buffer_.data,
@@ -167,9 +159,9 @@ void TIBDExchangeMove<RealType>::move(
 
         k_decide_targeted_move<<<1, 1, 0, stream>>>(
             this->num_target_mols_,
-            this->d_uniform_noise_buffer_.data + (this->noise_offset_ * NOISE_PER_STEP),
+            this->d_uniform_noise_buffer_.data + (move * NOISE_PER_STEP),
             d_inner_mols_count_.data,
-            d_translations_.data + (this->noise_offset_ * TIBD_TRANSLATIONS_PER_STEP_XYZXYZ),
+            d_translations_.data + (move * TIBD_TRANSLATIONS_PER_STEP_XYZXYZ),
             d_targeting_inner_vol_.data,
             d_selected_translation_.data);
         gpuErrchk(cudaPeekAtLastError());
@@ -221,7 +213,7 @@ void TIBDExchangeMove<RealType>::move(
             false,
             d_box,
             d_coords,
-            this->d_quaternions_.data + (this->noise_offset_ * this->QUATERNIONS_PER_STEP),
+            this->d_quaternions_.data + (move * this->QUATERNIONS_PER_STEP),
             this->d_selected_translation_.data,
             stream);
 
@@ -246,7 +238,7 @@ void TIBDExchangeMove<RealType>::move(
             d_box_volume_.data,
             inner_volume_,
             // Offset to get the last value for the acceptance criteria
-            this->d_uniform_noise_buffer_.data + (this->noise_offset_ * NOISE_PER_STEP) + 1,
+            this->d_uniform_noise_buffer_.data + (move * NOISE_PER_STEP) + 1,
             this->d_samples_.data,
             this->d_log_sum_exp_before_.data,
             this->d_log_sum_exp_after_.data,
@@ -258,7 +250,6 @@ void TIBDExchangeMove<RealType>::move(
             this->d_num_accepted_.data);
         gpuErrchk(cudaPeekAtLastError());
         this->num_attempted_++;
-        this->noise_offset_++;
     }
 }
 

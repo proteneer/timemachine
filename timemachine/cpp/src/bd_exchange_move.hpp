@@ -16,7 +16,6 @@ template <typename RealType> class BDExchangeMove : public Mover {
 
 protected:
     // Amount of random values to generate at a time
-    static const int RANDOM_BATCH_SIZE = 10000;
     static const int QUATERNIONS_PER_STEP = 4;
     const int N_;
     // Number of atom in all mols
@@ -29,7 +28,6 @@ protected:
     const RealType nb_beta_;
     const RealType beta_; // 1 / kT
     const RealType cutoff_squared_;
-    size_t noise_offset_;
     size_t num_attempted_;
     NonbondedMolEnergyPotential<RealType> mol_potential_;
     WeightedRandomSampler<RealType> sampler_;
