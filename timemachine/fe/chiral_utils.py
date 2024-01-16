@@ -248,10 +248,7 @@ def has_chiral_atom_flips(
 
     # iterate over restraints defined in A, searching for possible conflicts
     for c_a, i_a, j_a, k_a in chiral_set_a.restr_idxs:
-        try:
-            mapped_tuple_b = mapping_a_to_b[c_a], mapping_a_to_b[i_a], mapping_a_to_b[j_a], mapping_a_to_b[k_a]
-        except KeyError:
-            continue
+        mapped_tuple_b = mapping_a_to_b[c_a], mapping_a_to_b[i_a], mapping_a_to_b[j_a], mapping_a_to_b[k_a]
         if chiral_set_b.disallows(mapped_tuple_b):
             return True
     return False
