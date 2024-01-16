@@ -1,9 +1,7 @@
 from collections import Counter
-from typing import Sequence
 
 import numpy as np
 import pytest
-from numpy.typing import NDArray
 from rdkit import Chem
 from rdkit.Chem import AllChem
 
@@ -16,7 +14,7 @@ from timemachine.fe.chiral_utils import (
     has_chiral_atom_flips,
     setup_find_flipped_planar_torsions,
 )
-from timemachine.fe.mcgregor import UNMAPPED
+from timemachine.fe.mcgregor import core_to_perm
 from timemachine.fe.utils import get_romol_conf
 from timemachine.ff import Forcefield
 from timemachine.md.minimizer import replace_conformer_with_minimized
@@ -230,11 +228,6 @@ molblock_CN = """
   2  6  1  0
   2  7  1  0
 M  END"""
-
-
-def core_to_perm(core: NDArray, num_atoms_a: int) -> Sequence[int]:
-    a_to_b = {a: b for a, b in core}
-    return [a_to_b.get(a, UNMAPPED) for a in range(num_atoms_a)]
 
 
 def test_chiral_conflict_flip():

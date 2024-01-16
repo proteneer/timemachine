@@ -169,6 +169,20 @@ class MCSDiagnostics:
     num_cores: int
 
 
+def core_to_perm(core: NDArray, num_atoms_a: int) -> Sequence[int]:
+    a_to_b = {a: b for a, b in core}
+    return [a_to_b.get(a, UNMAPPED) for a in range(num_atoms_a)]
+
+
+def perm_to_core(perm: Sequence[int]) -> NDArray:
+    core = []
+    for a, b in enumerate(perm):
+        if b != UNMAPPED:
+            core.append((a, b))
+    core_array = np.array(sorted(core))
+    return core_array
+
+
 def mcs(
     n_a,
     n_b,
@@ -250,11 +264,7 @@ def mcs(
     all_cores = []
 
     for atom_map_1_to_2 in mcs_result.all_maps:
-        core = []
-        for a, b in enumerate(atom_map_1_to_2):
-            if b != UNMAPPED:
-                core.append((a, b))
-        core_array = np.array(sorted(core))
+        core_array = perm_to_core(atom_map_1_to_2)
         all_cores.append(core_array)
 
     return (
