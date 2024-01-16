@@ -16,7 +16,7 @@ namespace timemachine {
 static const int WEIGHT_THREADS_PER_BLOCK = 512;
 // The number of translations to generate each step. The first three values are a unit vector translation and the fourth
 // value is used for the metropolis hasting check
-static const int TRANSLATIONS_PER_STEP = 4;
+static const int BD_TRANSLATIONS_PER_STEP_XYZW = 4;
 
 template <typename RealType>
 BDExchangeMove<RealType>::BDExchangeMove(
@@ -41,7 +41,7 @@ BDExchangeMove<RealType>::BDExchangeMove(
       d_quaternions_(round_up_even(QUATERNIONS_PER_STEP * this->RANDOM_BATCH_SIZE)), d_num_accepted_(1),
       d_target_mol_atoms_(mol_size_), d_target_mol_offsets_(num_target_mols_ + 1),
       d_intermediate_sample_weights_(ceil_divide(N_, WEIGHT_THREADS_PER_BLOCK)),
-      d_translations_(round_up_even(TRANSLATIONS_PER_STEP * this->RANDOM_BATCH_SIZE)) {
+      d_translations_(round_up_even(BD_TRANSLATIONS_PER_STEP_XYZW * this->RANDOM_BATCH_SIZE)) {
 
     if (proposals_per_move_ <= 0) {
         throw std::runtime_error("proposals per move must be greater than 0");
@@ -49,7 +49,8 @@ BDExchangeMove<RealType>::BDExchangeMove(
     if (mol_size_ == 0) {
         throw std::runtime_error("must provide non-empty molecule indices");
     }
-    if (d_translations_.length / TRANSLATIONS_PER_STEP != this->d_quaternions_.length / this->QUATERNIONS_PER_STEP) {
+    if (d_translations_.length / BD_TRANSLATIONS_PER_STEP_XYZW !=
+        this->d_quaternions_.length / this->QUATERNIONS_PER_STEP) {
         throw std::runtime_error("bug in the code: buffers with random values don't match in batch size");
     }
     verify_mols_contiguous(target_mols);
@@ -101,7 +102,7 @@ void BDExchangeMove<RealType>::move(
             // Need the weights to sample a value and the log probs are just because they aren't expensive to copy
             k_store_accepted_log_probability<RealType><<<1, tpb, 0>>>(
                 num_target_mols_,
-                d_translations_.data + (noise_offset_ * TRANSLATIONS_PER_STEP) +
+                d_translations_.data + (noise_offset_ * BD_TRANSLATIONS_PER_STEP_XYZW) +
                     3, // Offset to get the last value for the acceptance criteria
                 d_log_sum_exp_before_.data,
                 d_log_sum_exp_after_.data,
@@ -136,14 +137,14 @@ void BDExchangeMove<RealType>::move(
             d_box,
             d_coords,
             this->d_quaternions_.data + (noise_offset_ * QUATERNIONS_PER_STEP),
-            this->d_translations_.data + (noise_offset_ * TRANSLATIONS_PER_STEP),
+            this->d_translations_.data + (noise_offset_ * BD_TRANSLATIONS_PER_STEP_XYZW),
             stream);
 
         logsumexp_.sum_device(num_target_mols_, d_log_weights_after_.data, d_log_sum_exp_after_.data, stream);
 
         k_attempt_exchange_move<RealType><<<ceil_divide(N_, tpb), tpb, 0, stream>>>(
             N,
-            d_translations_.data + (noise_offset_ * TRANSLATIONS_PER_STEP) +
+            d_translations_.data + (noise_offset_ * BD_TRANSLATIONS_PER_STEP_XYZW) +
                 3, // Offset to get the last value for the acceptance criteria
             d_log_sum_exp_before_.data,
             d_log_sum_exp_after_.data,

@@ -19,7 +19,7 @@ namespace timemachine {
 // in the metropolis hasting check.
 static const int NOISE_PER_STEP = 2;
 // Each step will have 6 values for a translation, first 3 is the inner translation and second 3 is outer translation
-static const int TRANSLATIONS_PER_STEP = 6;
+static const int TIBD_TRANSLATIONS_PER_STEP_XYZXYZ = 6;
 
 template <typename RealType>
 TIBDExchangeMove<RealType>::TIBDExchangeMove(
@@ -42,7 +42,8 @@ TIBDExchangeMove<RealType>::TIBDExchangeMove(
       d_uniform_noise_buffer_(round_up_even(NOISE_PER_STEP * this->RANDOM_BATCH_SIZE)), d_targeting_inner_vol_(1),
       d_ligand_idxs_(ligand_idxs), d_src_weights_(this->num_target_mols_), d_dest_weights_(this->num_target_mols_),
       d_inner_flags_(this->num_target_mols_), d_box_volume_(1), p_inner_count_(1), p_targeting_inner_vol_(1),
-      d_translations_(round_up_even(TRANSLATIONS_PER_STEP * this->RANDOM_BATCH_SIZE)), d_selected_translation_(3) {
+      d_translations_(round_up_even(TIBD_TRANSLATIONS_PER_STEP_XYZXYZ * this->RANDOM_BATCH_SIZE)),
+      d_selected_translation_(3) {
 
     if (radius <= 0.0) {
         throw std::runtime_error("radius must be greater than 0.0");
@@ -168,7 +169,7 @@ void TIBDExchangeMove<RealType>::move(
             this->num_target_mols_,
             this->d_uniform_noise_buffer_.data + (this->noise_offset_ * NOISE_PER_STEP),
             d_inner_mols_count_.data,
-            d_translations_.data + (this->noise_offset_ * TRANSLATIONS_PER_STEP),
+            d_translations_.data + (this->noise_offset_ * TIBD_TRANSLATIONS_PER_STEP_XYZXYZ),
             d_targeting_inner_vol_.data,
             d_selected_translation_.data);
         gpuErrchk(cudaPeekAtLastError());
