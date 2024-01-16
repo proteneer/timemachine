@@ -71,12 +71,10 @@ def refine_marcs(g1, g2, new_v1, new_v2, marcs):
         # zero out rows corresponding to the edges of new_v1
         new_marcs[g1.get_edges_as_vector(new_v1)] = False
     else:
-        mask = g2.get_edges_as_vector(new_v2)
-        mask = np.where(
-            g1.get_edges_as_vector(new_v1)[:, np.newaxis],
-            mask,
-            ~mask,
-        )
+        # mask out every row in marcs
+        adj1 = g1.get_edges_as_vector(new_v1)
+        adj2 = g2.get_edges_as_vector(new_v2)
+        mask = np.where(adj1[:, np.newaxis], adj2, ~adj2)
         new_marcs &= mask
 
     return new_marcs
