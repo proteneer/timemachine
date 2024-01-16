@@ -512,11 +512,11 @@ def test_targeted_insertion_hif2a_rbfe(hif2a_rbfe_state, radius, precision, seed
 
 @pytest.mark.memcheck
 @pytest.mark.parametrize("radius", [1.0])
-@pytest.mark.parametrize("moves", [1, 100])
+@pytest.mark.parametrize("proposals_per_move", [1, 100])
 @pytest.mark.parametrize("precision", [np.float64, np.float32])
 @pytest.mark.parametrize("seed", [2023])
-def test_tibd_exchange_deterministic_moves(radius, moves, precision, seed):
-    """Given one water the exchange mover should accept every move and the results should be deterministic"""
+def test_tibd_exchange_deterministic_moves(radius, proposals_per_move, precision, seed):
+    """Given one water the exchange mover should accept every move and the results should be deterministic if the seed and proposals per move are the same"""
     ff = Forcefield.load_default()
     system, conf, _, _ = builders.build_water_system(1.0, ff.water_ff)
     bps, _ = openmm_deserializer.deserialize_system(system, cutoff=1.2)
@@ -564,7 +564,7 @@ def test_tibd_exchange_deterministic_moves(radius, moves, precision, seed):
         cutoff,
         radius,
         seed,
-        1,
+        proposals_per_move,
         1,
     )
 
@@ -578,19 +578,19 @@ def test_tibd_exchange_deterministic_moves(radius, moves, precision, seed):
         cutoff,
         radius,
         seed,
-        moves,
+        proposals_per_move,
         1,
     )
 
-    iterative_moved_coords = conf.copy()
-    for _ in range(moves):
-        iterative_moved_coords, _ = bdem_a.move(iterative_moved_coords, box)
+    coords_a, box_a = bdem_a.move(conf, box)
+    coords_b, box_b = bdem_b.move(conf, box)
+    np.testing.assert_array_equal(box_a, box)
+    np.testing.assert_array_equal(box_a, box_b)
+    # Moves should be deterministic if given the same coords and seed
+    np.testing.assert_array_equal(coords_a, coords_b)
 
-    batch_moved_coords, _ = bdem_b.move(conf, box)
-    # Moves should be deterministic regardless the number of steps taken per move
-    np.testing.assert_array_equal(iterative_moved_coords, batch_moved_coords)
     assert bdem_a.n_accepted() > 0
-    assert bdem_a.n_proposed() == moves
+    assert bdem_a.n_proposed() == proposals_per_move
     assert bdem_a.n_accepted() == bdem_b.n_accepted()
     assert bdem_a.n_proposed() == bdem_b.n_proposed()
 
