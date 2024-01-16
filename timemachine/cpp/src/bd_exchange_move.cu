@@ -10,14 +10,13 @@
 #include "math_utils.cuh"
 #include "mol_utils.hpp"
 
+namespace timemachine {
 // The number of threads per block for the setting of the final weight of the moved mol is low
 // if using the same number as in the rest of the kernels of DEFAULT_THREADS_PER_BLOCK
-#define WEIGHT_THREADS_PER_BLOCK 512
+static const int WEIGHT_THREADS_PER_BLOCK = 512;
 // The number of translations to generate each step. The first three values are a unit vector translation and the fourth
 // value is used for the metropolis hasting check
-#define TRANSLATIONS_PER_STEP 4
-
-namespace timemachine {
+static const int TRANSLATIONS_PER_STEP = 4;
 
 template <typename RealType>
 BDExchangeMove<RealType>::BDExchangeMove(
