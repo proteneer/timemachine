@@ -1,7 +1,7 @@
 import itertools
 from enum import Enum
 from functools import partial
-from typing import Callable, List, Mapping, Sequence, Set, Tuple
+from typing import Callable, Iterator, List, Mapping, Sequence, Set, Tuple
 
 import numpy as np
 from rdkit import Chem
@@ -237,29 +237,20 @@ def _find_atom_map_chiral_conflicts_one_direction(
     return conflicts
 
 
-def _has_chiral_atom_map_flips_one_direction(
-    core: np.ndarray,
+def has_chiral_atom_flips(
+    core: Sequence[int],
     chiral_set_a: ChiralRestrIdxSet,
     chiral_set_b: ChiralRestrIdxSet,
 ) -> bool:
     # _find_atom_map_chiral_conflicts_one_direction, except (1) return bool not set, (2) hard-code mode = FLIP
 
-    conflict_condition_fxn = chiral_set_b.disallows
-
-    # initialize convenient representations
-    mapped_set_a = set(core[:, 0])
-    mapping_a_to_b = {int(a_i): int(b_i) for (a_i, b_i) in core}
-
-    def apply_mapping(c, i, j, k):
-        return mapping_a_to_b[c], mapping_a_to_b[i], mapping_a_to_b[j], mapping_a_to_b[k]
+    mapping_a_to_b = core
 
     # iterate over restraints defined in A, searching for possible conflicts
-    for restr_tuple_a in chiral_set_a.restr_idxs:
-        if set(restr_tuple_a).issubset(mapped_set_a):
-            mapped_tuple_b = apply_mapping(*restr_tuple_a)
-
-            if conflict_condition_fxn(mapped_tuple_b):
-                return True
+    for c_a, i_a, j_a, k_a in chiral_set_a.restr_idxs:
+        mapped_tuple_b = mapping_a_to_b[c_a], mapping_a_to_b[i_a], mapping_a_to_b[j_a], mapping_a_to_b[k_a]
+        if chiral_set_b.disallows(mapped_tuple_b):
+            return True
     return False
 
 
@@ -306,16 +297,6 @@ def find_atom_map_chiral_conflicts(
     return conflicts
 
 
-def has_chiral_atom_flips(core, chiral_set_a, chiral_set_b) -> bool:
-    """find_atom_map_chiral_conflicts, except (1) return bool not set, (2) hard-code mode = FLIP"""
-    # both directions
-    if _has_chiral_atom_map_flips_one_direction(core, chiral_set_a, chiral_set_b):
-        return True
-    if _has_chiral_atom_map_flips_one_direction(core[:, ::-1], chiral_set_b, chiral_set_a):
-        return True
-    return False
-
-
 def find_chiral_bonds(mol):
     """
     Find chiral bonds in a molecule. Current limited to double bonds and amides. Similarly,
@@ -357,8 +338,7 @@ def find_canonical_amide_bonds(mol):
 
 def _find_flipped_torsions(
     torsions_a: Mapping[FourTuple, float], torsions_b: Mapping[FourTuple, float], core: Sequence[int]
-) -> List[ChiralConflict]:
-    results = []
+) -> Iterator[ChiralConflict]:
     for (ia, ja, ka, la), sign_a in torsions_a.items():
         idxs_b = core[ia], core[ja], core[ka], core[la]
         try:
@@ -366,14 +346,12 @@ def _find_flipped_torsions(
         except KeyError:
             continue
         if sign_a != sign_b:
-            results.append(((ia, ja, ka, la), idxs_b))
-
-    return results
+            yield ((ia, ja, ka, la), idxs_b)
 
 
 def setup_find_flipped_planar_torsions(
     mol_a: Chem.rdchem.Mol, mol_b: Chem.rdchem.Mol
-) -> Callable[[Sequence[int]], List[Tuple[FourTuple, FourTuple]]]:
+) -> Callable[[Sequence[int]], Iterator[Tuple[FourTuple, FourTuple]]]:
     """Returns a function that enumerates core planar torsions that would be flipped by the given mapping.
 
     A planar torsion is defined here to be a torsion whose central bond is one of
@@ -388,7 +366,7 @@ def setup_find_flipped_planar_torsions(
 
     Returns
     -------
-    Function with signature ((core: sequence of int) -> list of pairs of four-tuples)
+    Function with signature ((core: sequence of int) -> iterator over pairs of four-tuples)
         In the returned pairs, the first (second) tuple corresponds to the indices of the flipped torsion in mol_a (mol_b).
     """
 

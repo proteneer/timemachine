@@ -21,7 +21,7 @@ UNMAPPED = -1
 def _initialize_marcs_given_predicate(g1, g2, predicate):
     num_a_edges = g1.n_edges
     num_b_edges = g2.n_edges
-    marcs = np.ones((num_a_edges, num_b_edges), dtype=np.byte)
+    marcs = np.full((num_a_edges, num_b_edges), True, dtype=bool)
     for e_a in range(num_a_edges):
         src_a, dst_a = g1.edges[e_a]
         for e_b in range(num_b_edges):
@@ -36,7 +36,7 @@ def _initialize_marcs_given_predicate(g1, g2, predicate):
             elif predicate[src_a][dst_b] and predicate[dst_a][src_b]:
                 continue
             else:
-                marcs[e_a][e_b] = 0
+                marcs[e_a][e_b] = False
 
     return marcs
 
@@ -48,7 +48,7 @@ def _verify_core_impl(g1, g2, new_v1, map_1_to_2):
         src_2, dst_2 = map_1_to_2[src], map_1_to_2[dst]
         if src_2 != UNMAPPED and dst_2 != UNMAPPED:
             # see if this edge is present in g2
-            if g2.cmat[src_2][dst_2] == 0:
+            if not g2.cmat[src_2][dst_2]:
                 return False
     return True
 
@@ -69,20 +69,13 @@ def refine_marcs(g1, g2, new_v1, new_v2, marcs):
 
     if new_v2 == UNMAPPED:
         # zero out rows corresponding to the edges of new_v1
-        for e1 in g1.get_edges(new_v1):
-            # this is equivalent to new_marcs[e1] = np.zeros(marcs.shape[1])
-            new_marcs[e1] = 0
+        new_marcs[g1.get_edges_as_vector(new_v1)] = False
     else:
         # mask out every row in marcs
-        # eg. returns [0,1,0,0,1,0,1]
-        mask = g2.get_edges_as_vector(new_v2)
-        # eg. returns [1,0,1,1,0,1,0]
-        antimask = 1 - mask
-        for e1_idx, is_v1_edge in enumerate(g1.get_edges_as_vector(new_v1)):
-            if is_v1_edge:
-                new_marcs[e1_idx] &= mask
-            else:
-                new_marcs[e1_idx] &= antimask
+        adj1 = g1.get_edges_as_vector(new_v1)
+        adj2 = g2.get_edges_as_vector(new_v2)
+        mask = np.where(adj1[:, np.newaxis], adj2, ~adj2)
+        new_marcs &= mask
 
     return new_marcs
 
@@ -102,10 +95,10 @@ class Graph:
         self.n_edges = len(edges)
         self.edges = edges
 
-        cmat = np.zeros((n_vertices, n_vertices), dtype=np.byte)
+        cmat = np.full((n_vertices, n_vertices), False, dtype=bool)
         for i, j in edges:
-            cmat[i][j] = 1
-            cmat[j][i] = 1
+            cmat[i][j] = True
+            cmat[j][i] = True
 
         self.cmat = cmat
 
@@ -126,10 +119,10 @@ class Graph:
             self.lol_edges[src].append(edge_idx)
             self.lol_edges[dst].append(edge_idx)
 
-        self.ve_matrix = np.zeros((self.n_vertices, self.n_edges), dtype=np.byte)
+        self.ve_matrix = np.full((self.n_vertices, self.n_edges), False, dtype=bool)
         for vertex_idx, edges in enumerate(self.lol_edges):
             for edge_idx in edges:
-                self.ve_matrix[vertex_idx][edge_idx] = 1
+                self.ve_matrix[vertex_idx][edge_idx] = True
 
     def get_neighbors(self, vertex):
         return self.lol_vertices[vertex]
@@ -152,10 +145,10 @@ def max_tree_size(priority_list):
 
 def build_predicate_matrix(n_a, n_b, priority_idxs):
     assert len(priority_idxs) == n_a
-    pmat = np.zeros((n_a, n_b), dtype=np.int32)
+    pmat = np.full((n_a, n_b), False, dtype=bool)
     for idx, jdxs in enumerate(priority_idxs):
         for jdx in jdxs:
-            pmat[idx][jdx] = 1
+            pmat[idx][jdx] = True
     return pmat
 
 
@@ -172,6 +165,20 @@ class MCSDiagnostics:
     total_nodes_visited: int
     core_size: int
     num_cores: int
+
+
+def core_to_perm(core: NDArray, num_atoms_a: int) -> Sequence[int]:
+    a_to_b = {a: b for a, b in core}
+    return [a_to_b.get(a, UNMAPPED) for a in range(num_atoms_a)]
+
+
+def perm_to_core(perm: Sequence[int]) -> NDArray:
+    core = []
+    for a, b in enumerate(perm):
+        if b != UNMAPPED:
+            core.append((a, b))
+    core_array = np.array(sorted(core))
+    return core_array
 
 
 def mcs(
@@ -255,11 +262,7 @@ def mcs(
     all_cores = []
 
     for atom_map_1_to_2 in mcs_result.all_maps:
-        core = []
-        for a, b in enumerate(atom_map_1_to_2):
-            if b != UNMAPPED:
-                core.append((a, b))
-        core_array = np.array(sorted(core))
+        core_array = perm_to_core(atom_map_1_to_2)
         all_cores.append(core_array)
 
     return (
