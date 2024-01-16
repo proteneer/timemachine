@@ -38,12 +38,12 @@ void WeightedRandomSampler<RealType>::sample_device(
     for (int i = 0; i < num_samples; i++) {
         curandErrchk(templateCurandUniform(cr_rng_, d_gumbel_.data, round_up_even(N)));
 
-        this->sample_device_given_noise(N, num_samples, d_log_probabilities, d_gumbel_.data, d_samples + i, stream);
+        this->sample_given_noise_device(N, num_samples, d_log_probabilities, d_gumbel_.data, d_samples + i, stream);
     }
 };
 
 template <typename RealType>
-void WeightedRandomSampler<RealType>::sample_device_given_noise(
+void WeightedRandomSampler<RealType>::sample_given_noise_device(
     const int N,
     const int num_samples,
     const RealType *d_log_probabilities,

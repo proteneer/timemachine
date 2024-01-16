@@ -122,7 +122,7 @@ void BDExchangeMove<RealType>::move(
             stream));
 
         // We only ever sample a single molecule
-        sampler_.sample_device_given_noise(
+        sampler_.sample_given_noise_device(
             num_target_mols_,
             1,
             d_log_weights_before_.data,

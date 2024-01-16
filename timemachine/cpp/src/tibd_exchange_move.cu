@@ -199,7 +199,7 @@ void TIBDExchangeMove<RealType>::move(
         this->logsumexp_.sum_device(src_count, d_src_weights_.data, this->d_log_sum_exp_before_.data, stream);
 
         // Only sample one mol
-        this->sampler_.sample_device_given_noise(
+        this->sampler_.sample_given_noise_device(
             src_count,
             1,
             d_src_weights_.data,
