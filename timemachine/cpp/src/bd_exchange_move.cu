@@ -63,6 +63,7 @@ BDExchangeMove<RealType>::BDExchangeMove(
     // Clear out the logsumexp values so the log probability starts off as zero
     gpuErrchk(cudaMemset(d_log_sum_exp_before_.data, 0, d_log_sum_exp_before_.size()));
     gpuErrchk(cudaMemset(d_log_sum_exp_after_.data, 0, d_log_sum_exp_after_.size()));
+    gpuErrchk(cudaMemset(d_num_accepted_.data, 0, d_num_accepted_.size()));
     curandErrchk(curandCreateGenerator(&cr_rng_, CURAND_RNG_PSEUDO_DEFAULT));
     curandErrchk(curandSetPseudoRandomGeneratorSeed(cr_rng_, seed));
 }
