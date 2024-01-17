@@ -1855,7 +1855,7 @@ py::array_t<RealType, py::array::c_style> py_translations_inside_and_outside_sph
     std::vector<RealType> v_center = py_array_to_vector_with_cast<double, RealType>(center);
     std::vector<double> v_box = py_array_to_vector(box);
 
-    std::vector<RealType> translations = get_translations_inside_and_outside_sphere_host<RealType>(
+    std::vector<RealType> translations = translations_inside_and_outside_sphere_host<RealType>(
         num_translations, v_box, v_center, static_cast<RealType>(radius), seed);
     py::array_t<RealType, py::array::c_style> py_translations({num_translations, 2, 3});
     for (unsigned int i = 0; i < translations.size(); i++) {

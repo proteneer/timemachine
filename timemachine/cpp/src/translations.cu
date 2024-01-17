@@ -7,7 +7,7 @@
 namespace timemachine {
 
 template <typename RealType>
-std::vector<RealType> get_translations_inside_and_outside_sphere_host(
+std::vector<RealType> translations_inside_and_outside_sphere_host(
     const int n_translations,
     const std::vector<double> &box,
     const std::vector<RealType> &center,
@@ -40,9 +40,9 @@ std::vector<RealType> get_translations_inside_and_outside_sphere_host(
     return h_out;
 }
 
-template std::vector<float> get_translations_inside_and_outside_sphere_host<float>(
+template std::vector<float> translations_inside_and_outside_sphere_host<float>(
     const int, const std::vector<double> &box, const std::vector<float> &center, const float, const int);
-template std::vector<double> get_translations_inside_and_outside_sphere_host<double>(
+template std::vector<double> translations_inside_and_outside_sphere_host<double>(
     const int, const std::vector<double> &box, const std::vector<double> &center, const double, const int);
 
 } // namespace timemachine
