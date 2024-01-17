@@ -96,7 +96,8 @@ void BDExchangeMove<RealType>::move(
 
     // All of the noise is generated upfront
     curandErrchk(templateCurandNormal(cr_rng_, d_quaternions_.data, d_quaternions_.length, 0.0, 1.0));
-    // The d_translation_ buffer is [x,y,z,w] where [x,y,z] are a random translation and w is used for acceptance
+    // The d_translation_ buffer contains uniform noise over [0, 1] containing [x,y,z,w] where [x,y,z] are a random
+    // translation and w is used in the metropolis-hastings check
     curandErrchk(templateCurandUniform(cr_rng_, d_translations_.data, d_translations_.length));
     curandErrchk(templateCurandUniform(cr_rng_, d_sample_noise_.data, d_sample_noise_.length));
     for (int move = 0; move < proposals_per_move_; move++) {
