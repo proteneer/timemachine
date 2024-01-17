@@ -60,9 +60,9 @@ protected:
         const int N,
         const bool scale,
         const double *d_box,
-        double *d_coords,
-        RealType *d_quaternions,
-        RealType *d_translations,
+        const double *d_coords,
+        const RealType *d_quaternions,
+        const RealType *d_translations,
         cudaStream_t stream);
 
 private:

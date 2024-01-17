@@ -186,10 +186,10 @@ template <typename RealType>
 void BDExchangeMove<RealType>::compute_incremental_weights(
     const int N,
     const bool scale,
-    const double *d_box,      // [3, 3]
-    double *d_coords,         // [N, 3]
-    RealType *d_quaternions,  // [4]
-    RealType *d_translations, // [3]
+    const double *d_box,            // [3, 3]
+    const double *d_coords,         // [N, 3]
+    const RealType *d_quaternions,  // [4]
+    const RealType *d_translations, // [3]
     cudaStream_t stream) {
     const int tpb = DEFAULT_THREADS_PER_BLOCK;
     dim3 atom_by_atom_grid(ceil_divide(N, tpb), mol_size_, 1);
