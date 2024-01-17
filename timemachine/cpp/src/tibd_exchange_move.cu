@@ -35,14 +35,22 @@ TIBDExchangeMove<RealType>::TIBDExchangeMove(
     const int proposals_per_move,
     const int interval)
     : BDExchangeMove<RealType>(
-          N, target_mols, params, temperature, nb_beta, cutoff, seed, proposals_per_move, interval),
+          N,
+          target_mols,
+          params,
+          temperature,
+          nb_beta,
+          cutoff,
+          seed,
+          proposals_per_move,
+          interval,
+          round_up_even(TIBD_TRANSLATIONS_PER_STEP_XYZXYZ * proposals_per_move)),
       radius_(static_cast<RealType>(radius)), inner_volume_(static_cast<RealType>((4.0 / 3.0) * M_PI * pow(radius, 3))),
       d_rand_states_(DEFAULT_THREADS_PER_BLOCK), d_inner_mols_count_(1), d_identify_indices_(this->num_target_mols_),
       d_partitioned_indices_(this->num_target_mols_), d_temp_storage_buffer_(0), d_center_(3),
       d_uniform_noise_buffer_(round_up_even(NOISE_PER_STEP * this->proposals_per_move_)), d_targeting_inner_vol_(1),
       d_ligand_idxs_(ligand_idxs), d_src_weights_(this->num_target_mols_), d_dest_weights_(this->num_target_mols_),
       d_inner_flags_(this->num_target_mols_), d_box_volume_(1), p_inner_count_(1), p_targeting_inner_vol_(1),
-      d_translations_(round_up_even(TIBD_TRANSLATIONS_PER_STEP_XYZXYZ * this->proposals_per_move_)),
       d_selected_translation_(3) {
 
     if (radius <= 0.0) {
@@ -150,7 +158,7 @@ void TIBDExchangeMove<RealType>::move(
     curandErrchk(
         templateCurandUniform(this->cr_rng_samples_, this->d_sample_noise_.data, this->d_sample_noise_.length));
     k_generate_translations_inside_and_outside_sphere<<<1, d_rand_states_.length, 0, stream>>>(
-        this->proposals_per_move_, d_box, d_center_.data, radius_, d_rand_states_.data, d_translations_.data);
+        this->proposals_per_move_, d_box, d_center_.data, radius_, d_rand_states_.data, this->d_translations_.data);
     gpuErrchk(cudaPeekAtLastError());
     for (int move = 0; move < this->proposals_per_move_; move++) {
         gpuErrchk(cub::DevicePartition::Flagged(
@@ -167,7 +175,7 @@ void TIBDExchangeMove<RealType>::move(
             this->num_target_mols_,
             this->d_uniform_noise_buffer_.data + (move * NOISE_PER_STEP),
             d_inner_mols_count_.data,
-            d_translations_.data + (move * TIBD_TRANSLATIONS_PER_STEP_XYZXYZ),
+            this->d_translations_.data + (move * TIBD_TRANSLATIONS_PER_STEP_XYZXYZ),
             d_targeting_inner_vol_.data,
             d_selected_translation_.data);
         gpuErrchk(cudaPeekAtLastError());

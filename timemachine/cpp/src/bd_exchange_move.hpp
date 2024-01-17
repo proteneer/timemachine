@@ -52,6 +52,7 @@ protected:
     DeviceBuffer<__int128> d_intermediate_sample_weights_;
     DeviceBuffer<RealType> d_sample_noise_;          // Noise to use for selecting molecules
     DeviceBuffer<RealType> d_sampling_intermediate_; // [num_target_mols_] Intermediate buffer for weighted sampling
+    DeviceBuffer<RealType> d_translations_;          // Uniform noise for translation + the check
 
     curandGenerator_t cr_rng_quat_;
     curandGenerator_t cr_rng_translations_;
@@ -68,9 +69,18 @@ protected:
         const RealType *d_translations,
         cudaStream_t stream);
 
-private:
-    // Keep this private, so we can realloc the buffer in the targeted case
-    DeviceBuffer<RealType> d_translations_; // Uniform noise for translation + the check
+    BDExchangeMove(
+        const int N,
+        const std::vector<std::vector<int>> &target_mols,
+        const std::vector<double> &params,
+        const double temperature,
+        const double nb_beta,
+        const double cutoff,
+        const int seed,
+        const int proposals_per_move,
+        const int interval,
+        const int translation_buffer_size);
+
 public:
     BDExchangeMove(
         const int N,

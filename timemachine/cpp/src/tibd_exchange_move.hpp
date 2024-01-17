@@ -46,8 +46,6 @@ protected:
     cudaEvent_t host_copy_event_;
 
 private:
-    DeviceBuffer<RealType>
-        d_translations_; // [3 * 2 * proposals_per_move_] // First half is inner translations, second half is outer
     DeviceBuffer<RealType> d_selected_translation_; // [3] The translation selected to run
 
 public:

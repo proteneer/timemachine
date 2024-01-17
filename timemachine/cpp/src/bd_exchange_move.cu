@@ -29,6 +29,30 @@ BDExchangeMove<RealType>::BDExchangeMove(
     const int seed,
     const int proposals_per_move,
     const int interval)
+    : BDExchangeMove<RealType>(
+          N,
+          target_mols,
+          params,
+          temperature,
+          nb_beta,
+          cutoff,
+          seed,
+          proposals_per_move,
+          interval,
+          round_up_even(BD_TRANSLATIONS_PER_STEP_XYZW * proposals_per_move)) {}
+
+template <typename RealType>
+BDExchangeMove<RealType>::BDExchangeMove(
+    const int N,
+    const std::vector<std::vector<int>> &target_mols,
+    const std::vector<double> &params,
+    const double temperature,
+    const double nb_beta,
+    const double cutoff,
+    const int seed,
+    const int proposals_per_move,
+    const int interval,
+    const int translation_buffer_size)
     : Mover(interval), N_(N), mol_size_(target_mols[0].size()), proposals_per_move_(proposals_per_move),
       num_target_mols_(target_mols.size()), nb_beta_(static_cast<RealType>(nb_beta)),
       beta_(static_cast<RealType>(1.0 / (BOLTZ * temperature))),
@@ -42,18 +66,13 @@ BDExchangeMove<RealType>::BDExchangeMove(
       d_target_mol_atoms_(mol_size_), d_target_mol_offsets_(num_target_mols_ + 1),
       d_intermediate_sample_weights_(ceil_divide(N_, WEIGHT_THREADS_PER_BLOCK)),
       d_sample_noise_(round_up_even(num_target_mols_ * proposals_per_move_)),
-      d_sampling_intermediate_(num_target_mols_),
-      d_translations_(round_up_even(BD_TRANSLATIONS_PER_STEP_XYZW * proposals_per_move_)) {
+      d_sampling_intermediate_(num_target_mols_), d_translations_(translation_buffer_size) {
 
     if (proposals_per_move_ <= 0) {
         throw std::runtime_error("proposals per move must be greater than 0");
     }
     if (mol_size_ == 0) {
         throw std::runtime_error("must provide non-empty molecule indices");
-    }
-    if (d_translations_.length / BD_TRANSLATIONS_PER_STEP_XYZW !=
-        this->d_quaternions_.length / this->QUATERNIONS_PER_STEP) {
-        throw std::runtime_error("bug in the code: buffers with random values don't match in batch size");
     }
     verify_mols_contiguous(target_mols);
     for (int i = 0; i < target_mols.size(); i++) {
@@ -96,6 +115,10 @@ void BDExchangeMove<RealType>::move(
     this->step_++;
     if (this->step_ % this->interval_ != 0) {
         return;
+    }
+    if (d_translations_.length / BD_TRANSLATIONS_PER_STEP_XYZW !=
+        this->d_quaternions_.length / this->QUATERNIONS_PER_STEP) {
+        throw std::runtime_error("bug in the code: buffers with random values don't match in batch size");
     }
 
     // Set the stream for the generators
