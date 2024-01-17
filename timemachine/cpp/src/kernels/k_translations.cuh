@@ -16,6 +16,7 @@ void __global__ k_generate_translations_inside_and_outside_sphere(
     curandState_t *__restrict__ rand_states,   // [threads_per_block]
     RealType *__restrict__ output_translations // [num_translations, 3]
 ) {
+    const int block_size = gridDim.x * blockDim.x;
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
 
     const RealType center_x = center[0];
@@ -89,11 +90,15 @@ void __global__ k_generate_translations_inside_and_outside_sphere(
             }
             assert(iterations < num_iterations);
         }
-        idx += gridDim.x * blockDim.x;
+        idx += block_size;
     }
 
+    // Cycle the index that the states are written to, this ensures that calling TIBD with 1 step or 20 steps
+    // produces the same sequence of translations.
+    int new_idx = threadIdx.x - ((num_translations * 2) % block_size);
+    new_idx = new_idx >= 0 ? new_idx : block_size + new_idx;
     // Write back out the states to ensure that the next time the kernel is called the random states are different
-    rand_states[threadIdx.x] = local_state;
+    rand_states[new_idx] = local_state;
 }
 
 } // namespace timemachine

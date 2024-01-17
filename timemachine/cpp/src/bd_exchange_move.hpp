@@ -53,7 +53,9 @@ protected:
     DeviceBuffer<RealType> d_sample_noise_;          // Noise to use for selecting molecules
     DeviceBuffer<RealType> d_sampling_intermediate_; // [num_target_mols_] Intermediate buffer for weighted sampling
 
-    curandGenerator_t cr_rng_;
+    curandGenerator_t cr_rng_quat_;
+    curandGenerator_t cr_rng_translations_;
+    curandGenerator_t cr_rng_samples_;
 
     void compute_initial_weights(const int N, double *d_coords, double *d_box, cudaStream_t stream);
 

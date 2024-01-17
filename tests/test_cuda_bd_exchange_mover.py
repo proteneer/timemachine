@@ -243,7 +243,15 @@ def test_bias_deletion_bulk_water_with_context(precision, seed):
 @pytest.mark.parametrize("precision", [np.float64, np.float32])
 @pytest.mark.parametrize("seed", [2023])
 def test_bd_exchange_deterministic_moves(proposals_per_move, precision, seed):
-    """Given one water the exchange mover should accept every move and the results should be deterministic given the same seed and number of proposals per move"""
+    """Given one water the exchange mover should accept every move and the results should be deterministic given the same seed and number of proposals per move
+
+
+    There are three forms of determinism we require:
+    * Constructing an exchange move produces the same results every time
+    * Calling an exchange move with one proposals per move or K proposals per move produce the same state.
+      * It is difficult to test each move when there are K proposals per move so we need to know that it matches the single proposals per move case
+    * TBD: When we attempt K proposals in a batch (each proposal is made up of K proposals) it produces the same as the serial version
+    """
     ff = Forcefield.load_default()
     system, conf, _, _ = builders.build_water_system(1.0, ff.water_ff)
     bps, _ = openmm_deserializer.deserialize_system(system, cutoff=1.2)
@@ -271,17 +279,18 @@ def test_bd_exchange_deterministic_moves(proposals_per_move, precision, seed):
     if precision == np.float64:
         klass = custom_ops.BDExchangeMove_f64
 
-    # Reference version
-    bdem_a = klass(N, group_idxs, params, DEFAULT_TEMP, nb.potential.beta, cutoff, seed, proposals_per_move, 1)
+    # Reference that makes a single proposal per move
+    bdem_a = klass(N, group_idxs, params, DEFAULT_TEMP, nb.potential.beta, cutoff, seed, 1, 1)
     # Test version that makes all proposals in a single move
     bdem_b = klass(N, group_idxs, params, DEFAULT_TEMP, nb.potential.beta, cutoff, seed, proposals_per_move, 1)
 
-    coords_a, box_a = bdem_a.move(conf, box)
-    coords_b, box_b = bdem_b.move(conf, box)
-    np.testing.assert_array_equal(box_a, box)
-    np.testing.assert_array_equal(box_a, box_b)
-    # Moves should be deterministic if given the same coords and seed
-    np.testing.assert_array_equal(coords_a, coords_b)
+    iterative_moved_coords = conf.copy()
+    for _ in range(proposals_per_move):
+        iterative_moved_coords, _ = bdem_a.move(iterative_moved_coords, box)
+        assert not np.all(conf == iterative_moved_coords)  # We should move every time since its a single mol
+    batch_moved_coords, _ = bdem_b.move(conf, box)
+    # Moves should be deterministic regardless the number of steps taken per move
+    np.testing.assert_array_equal(iterative_moved_coords, batch_moved_coords)
 
     assert bdem_a.n_accepted() > 0
     assert bdem_a.n_proposed() == proposals_per_move

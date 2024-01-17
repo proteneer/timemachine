@@ -103,8 +103,10 @@ void TIBDExchangeMove<RealType>::move(
         return;
     }
 
-    // Set the stream for the generator
-    curandErrchk(curandSetStream(this->cr_rng_, stream));
+    // Set the stream for the generators
+    curandErrchk(curandSetStream(this->cr_rng_quat_, stream));
+    curandErrchk(curandSetStream(this->cr_rng_translations_, stream));
+    curandErrchk(curandSetStream(this->cr_rng_samples_, stream));
 
     this->compute_initial_weights(N, d_coords, d_box, stream);
 
@@ -140,10 +142,13 @@ void TIBDExchangeMove<RealType>::move(
     gpuErrchk(cudaPeekAtLastError());
 
     // Generate all noise upfront for all proposals within a move
+    // Using the translations RNG from the BDExchangeMove to generate noise for the targeting probability and the acceptance criteria
+    curandErrchk(templateCurandUniform(
+        this->cr_rng_translations_, this->d_uniform_noise_buffer_.data, this->d_uniform_noise_buffer_.length));
     curandErrchk(
-        templateCurandUniform(this->cr_rng_, this->d_uniform_noise_buffer_.data, this->d_uniform_noise_buffer_.length));
-    curandErrchk(templateCurandNormal(this->cr_rng_, this->d_quaternions_.data, this->d_quaternions_.length, 0.0, 1.0));
-    curandErrchk(templateCurandUniform(this->cr_rng_, this->d_sample_noise_.data, this->d_sample_noise_.length));
+        templateCurandNormal(this->cr_rng_quat_, this->d_quaternions_.data, this->d_quaternions_.length, 0.0, 1.0));
+    curandErrchk(
+        templateCurandUniform(this->cr_rng_samples_, this->d_sample_noise_.data, this->d_sample_noise_.length));
     k_generate_translations_inside_and_outside_sphere<<<1, d_rand_states_.length, 0, stream>>>(
         this->proposals_per_move_, d_box, d_center_.data, radius_, d_rand_states_.data, d_translations_.data);
     gpuErrchk(cudaPeekAtLastError());

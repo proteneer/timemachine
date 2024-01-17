@@ -65,12 +65,22 @@ BDExchangeMove<RealType>::BDExchangeMove(
     gpuErrchk(cudaMemset(d_log_sum_exp_before_.data, 0, d_log_sum_exp_before_.size()));
     gpuErrchk(cudaMemset(d_log_sum_exp_after_.data, 0, d_log_sum_exp_after_.size()));
     gpuErrchk(cudaMemset(d_num_accepted_.data, 0, d_num_accepted_.size()));
-    curandErrchk(curandCreateGenerator(&cr_rng_, CURAND_RNG_PSEUDO_DEFAULT));
-    curandErrchk(curandSetPseudoRandomGeneratorSeed(cr_rng_, seed));
+
+    // Initialize several different RNGs to allow for determinism between numbers of proposals per move
+    curandErrchk(curandCreateGenerator(&cr_rng_quat_, CURAND_RNG_PSEUDO_DEFAULT));
+    curandErrchk(curandSetPseudoRandomGeneratorSeed(cr_rng_quat_, seed));
+
+    curandErrchk(curandCreateGenerator(&cr_rng_translations_, CURAND_RNG_PSEUDO_DEFAULT));
+    curandErrchk(curandSetPseudoRandomGeneratorSeed(cr_rng_translations_, seed));
+
+    curandErrchk(curandCreateGenerator(&cr_rng_samples_, CURAND_RNG_PSEUDO_DEFAULT));
+    curandErrchk(curandSetPseudoRandomGeneratorSeed(cr_rng_samples_, seed));
 }
 
 template <typename RealType> BDExchangeMove<RealType>::~BDExchangeMove() {
-    curandErrchk(curandDestroyGenerator(cr_rng_));
+    curandErrchk(curandDestroyGenerator(cr_rng_quat_));
+    curandErrchk(curandDestroyGenerator(cr_rng_translations_));
+    curandErrchk(curandDestroyGenerator(cr_rng_samples_));
 }
 
 template <typename RealType>
@@ -88,19 +98,21 @@ void BDExchangeMove<RealType>::move(
         return;
     }
 
-    // Set the stream for the generator
-    curandErrchk(curandSetStream(cr_rng_, stream));
+    // Set the stream for the generators
+    curandErrchk(curandSetStream(cr_rng_quat_, stream));
+    curandErrchk(curandSetStream(cr_rng_translations_, stream));
+    curandErrchk(curandSetStream(cr_rng_samples_, stream));
 
     const int tpb = DEFAULT_THREADS_PER_BLOCK;
 
     this->compute_initial_weights(N, d_coords, d_box, stream);
 
     // All of the noise is generated upfront
-    curandErrchk(templateCurandNormal(cr_rng_, d_quaternions_.data, d_quaternions_.length, 0.0, 1.0));
+    curandErrchk(templateCurandNormal(cr_rng_quat_, d_quaternions_.data, d_quaternions_.length, 0.0, 1.0));
     // The d_translation_ buffer contains uniform noise over [0, 1] containing [x,y,z,w] where [x,y,z] are a random
     // translation and w is used in the metropolis-hastings check
-    curandErrchk(templateCurandUniform(cr_rng_, d_translations_.data, d_translations_.length));
-    curandErrchk(templateCurandUniform(cr_rng_, d_sample_noise_.data, d_sample_noise_.length));
+    curandErrchk(templateCurandUniform(cr_rng_translations_, d_translations_.data, d_translations_.length));
+    curandErrchk(templateCurandUniform(cr_rng_samples_, d_sample_noise_.data, d_sample_noise_.length));
     for (int move = 0; move < proposals_per_move_; move++) {
         // Run only after the first pass, to maintain meaningful `log_probability_host` values
         if (move > 0) {
