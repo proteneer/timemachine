@@ -121,7 +121,7 @@ void BDExchangeMove<RealType>::move(
             k_store_accepted_log_probability<RealType><<<1, tpb, 0>>>(
                 num_target_mols_,
                 d_translations_.data + (move * BD_TRANSLATIONS_PER_STEP_XYZW) +
-                    3, // Offset to get the last value for the acceptance criteria
+                    (BD_TRANSLATIONS_PER_STEP_XYZW - 1), // Offset to get the last value for the acceptance criteria
                 d_log_sum_exp_before_.data,
                 d_log_sum_exp_after_.data,
                 d_log_weights_before_.data,
@@ -163,7 +163,7 @@ void BDExchangeMove<RealType>::move(
         k_attempt_exchange_move<RealType><<<ceil_divide(N_, tpb), tpb, 0, stream>>>(
             N,
             d_translations_.data + (move * BD_TRANSLATIONS_PER_STEP_XYZW) +
-                3, // Offset to get the last value for the acceptance criteria
+                (BD_TRANSLATIONS_PER_STEP_XYZW - 1), // Offset to get the last value for the acceptance criteria
             d_log_sum_exp_before_.data,
             d_log_sum_exp_after_.data,
             d_intermediate_coords_.data,

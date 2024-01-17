@@ -251,7 +251,7 @@ void TIBDExchangeMove<RealType>::move(
             d_box_volume_.data,
             inner_volume_,
             // Offset to get the last value for the acceptance criteria
-            this->d_uniform_noise_buffer_.data + (move * NOISE_PER_STEP) + 1,
+            this->d_uniform_noise_buffer_.data + (move * NOISE_PER_STEP) + (NOISE_PER_STEP - 1),
             this->d_samples_.data,
             this->d_log_sum_exp_before_.data,
             this->d_log_sum_exp_after_.data,
