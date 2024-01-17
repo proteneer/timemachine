@@ -32,7 +32,8 @@ void __global__ k_generate_translations_inside_and_outside_sphere(
     const RealType inv_box_y = 1 / box_y;
     const RealType inv_box_z = 1 / box_z;
 
-    while (idx < num_translations) {
+    // Generate twice the number of translations, each translation will produce an inner and outer translation
+    while (idx < num_translations * 2) {
         // TBD: Whether or not this randomness needs to be double
         // Done this way initially due to issues with ptxas
         if (idx % 2 == 0) {

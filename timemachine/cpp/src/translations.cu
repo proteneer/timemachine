@@ -27,7 +27,7 @@ std::vector<RealType> get_translations_inside_and_outside_sphere_host(
     gpuErrchk(cudaPeekAtLastError());
 
     // Generate two translations per translation requested, one inner, one outer
-    const int N = n_translations * 2;
+    const int N = n_translations;
 
     k_generate_translations_inside_and_outside_sphere<RealType>
         <<<ceil_divide(N, tpb), tpb, 0, stream>>>(N, d_box.data, d_center.data, radius, d_states.data, d_output.data);
