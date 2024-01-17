@@ -204,6 +204,7 @@ void TIBDExchangeMove<RealType>::move(
             1,
             d_src_weights_.data,
             this->d_sample_noise_.data + (move * this->num_target_mols_),
+            this->d_sampling_intermediate_.data,
             this->d_samples_.data,
             stream);
 

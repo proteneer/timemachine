@@ -42,6 +42,7 @@ BDExchangeMove<RealType>::BDExchangeMove(
       d_target_mol_atoms_(mol_size_), d_target_mol_offsets_(num_target_mols_ + 1),
       d_intermediate_sample_weights_(ceil_divide(N_, WEIGHT_THREADS_PER_BLOCK)),
       d_sample_noise_(round_up_even(num_target_mols_ * proposals_per_move_)),
+      d_sampling_intermediate_(num_target_mols_),
       d_translations_(round_up_even(BD_TRANSLATIONS_PER_STEP_XYZW * proposals_per_move_)) {
 
     if (proposals_per_move_ <= 0) {
@@ -129,6 +130,7 @@ void BDExchangeMove<RealType>::move(
             1,
             d_log_weights_before_.data,
             d_sample_noise_.data + (move * num_target_mols_),
+            d_sampling_intermediate_.data,
             d_samples_.data,
             stream);
 

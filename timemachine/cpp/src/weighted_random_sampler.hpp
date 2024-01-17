@@ -35,7 +35,8 @@ public:
         const int N,
         const int num_samples,
         const RealType *d_log_probabilities,
-        RealType *d_noise,
+        const RealType *d_noise,
+        RealType *d_intermediate,
         int *d_samples,
         cudaStream_t stream);
 
