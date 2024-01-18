@@ -31,6 +31,15 @@ public:
     void sample_device(
         const int N, const int num_samples, const RealType *d_log_probabilities, int *d_samples, cudaStream_t stream);
 
+    void sample_given_noise_device(
+        const int N,
+        const int num_samples,
+        const RealType *d_log_probabilities,
+        const RealType *d_noise,
+        RealType *d_intermediate,
+        int *d_samples,
+        cudaStream_t stream);
+
     std::vector<int> sample_host(const int num_samples, const std::vector<RealType> &probabilities);
 };
 

@@ -1841,32 +1841,10 @@ py::array_t<double, py::array::c_style> py_rotate_and_translate_mol(
 }
 
 template <typename RealType>
-py::array_t<RealType, py::array::c_style> py_translation_within_sphere(
+py::array_t<RealType, py::array::c_style> py_translations_inside_and_outside_sphere_host(
     const int num_translations,
-    const py::array_t<double, py::array::c_style> &center,
-    const double radius,
-    const int seed) {
-
-    if (center.size() != 3) {
-        throw std::runtime_error("Center must be of length 3");
-    }
-
-    std::vector<RealType> v_center = py_array_to_vector_with_cast<double, RealType>(center);
-
-    std::vector<RealType> translations =
-        get_translations_within_sphere_host<RealType>(num_translations, v_center, static_cast<RealType>(radius), seed);
-    py::array_t<RealType, py::array::c_style> py_translations({num_translations, 3});
-    for (unsigned int i = 0; i < translations.size(); i++) {
-        py_translations.mutable_data()[i] = translations[i];
-    }
-    return py_translations;
-}
-
-template <typename RealType>
-py::array_t<RealType, py::array::c_style> py_translation_outside_sphere(
-    const int num_translations,
-    const py::array_t<double, py::array::c_style> &center,
     const py::array_t<double, py::array::c_style> &box,
+    const py::array_t<double, py::array::c_style> &center,
     const double radius,
     const int seed) {
 
@@ -1877,9 +1855,9 @@ py::array_t<RealType, py::array::c_style> py_translation_outside_sphere(
     std::vector<RealType> v_center = py_array_to_vector_with_cast<double, RealType>(center);
     std::vector<double> v_box = py_array_to_vector(box);
 
-    std::vector<RealType> translations = get_translations_outside_sphere_host<RealType>(
+    std::vector<RealType> translations = translations_inside_and_outside_sphere_host<RealType>(
         num_translations, v_box, v_center, static_cast<RealType>(radius), seed);
-    py::array_t<RealType, py::array::c_style> py_translations({num_translations, 3});
+    py::array_t<RealType, py::array::c_style> py_translations({num_translations, 2, 3});
     for (unsigned int i = 0; i < translations.size(); i++) {
         py_translations.mutable_data()[i] = translations[i];
     }
@@ -2046,37 +2024,21 @@ PYBIND11_MODULE(custom_ops, m) {
         py::arg("group_idxs"),
         py::arg("radius"));
     m.def(
-        "translation_within_sphere_f32",
-        &py_translation_within_sphere<float>,
+        "translations_inside_and_outside_sphere_host_f32",
+        &py_translations_inside_and_outside_sphere_host<float>,
         "Function to test translations within sphere",
         py::arg("num_translations"),
+        py::arg("box"),
         py::arg("center"),
         py::arg("radius"),
         py::arg("seed"));
     m.def(
-        "translation_within_sphere_f64",
-        &py_translation_within_sphere<double>,
+        "translations_inside_and_outside_sphere_host_f64",
+        &py_translations_inside_and_outside_sphere_host<double>,
         "Function to test translations within sphere",
         py::arg("num_translations"),
-        py::arg("center"),
-        py::arg("radius"),
-        py::arg("seed"));
-    m.def(
-        "translation_outside_sphere_f32",
-        &py_translation_outside_sphere<float>,
-        "Function to test translations outside sphere",
-        py::arg("num_translations"),
-        py::arg("center"),
         py::arg("box"),
-        py::arg("radius"),
-        py::arg("seed"));
-    m.def(
-        "translation_outside_sphere_f64",
-        &py_translation_outside_sphere<double>,
-        "Function to test translations outside sphere",
-        py::arg("num_translations"),
         py::arg("center"),
-        py::arg("box"),
         py::arg("radius"),
         py::arg("seed"));
 

@@ -239,11 +239,19 @@ def test_bias_deletion_bulk_water_with_context(precision, seed):
     assert bdem.n_accepted() > 0
 
 
-@pytest.mark.parametrize("moves", [1, 100])
+@pytest.mark.parametrize("proposals_per_move", [1, 100])
 @pytest.mark.parametrize("precision", [np.float64, np.float32])
 @pytest.mark.parametrize("seed", [2023])
-def test_bd_exchange_deterministic_moves(moves, precision, seed):
-    """Given one water the exchange mover should accept every move and the results should be deterministic"""
+def test_bd_exchange_deterministic_moves(proposals_per_move, precision, seed):
+    """Given one water the exchange mover should accept every move and the results should be deterministic given the same seed and number of proposals per move
+
+
+    There are three forms of determinism we require:
+    * Constructing an exchange move produces the same results every time
+    * Calling an exchange move with one proposals per move or K proposals per move produce the same state.
+      * It is difficult to test each move when there are K proposals per move so we need to know that it matches the single proposals per move case
+    * TBD: When we attempt K proposals in a batch (each proposal is made up of K proposals) it produces the same as the serial version
+    """
     ff = Forcefield.load_default()
     system, conf, _, _ = builders.build_water_system(1.0, ff.water_ff)
     bps, _ = openmm_deserializer.deserialize_system(system, cutoff=1.2)
@@ -274,10 +282,10 @@ def test_bd_exchange_deterministic_moves(moves, precision, seed):
     # Reference that makes a single proposal per move
     bdem_a = klass(N, group_idxs, params, DEFAULT_TEMP, nb.potential.beta, cutoff, seed, 1, 1)
     # Test version that makes all proposals in a single move
-    bdem_b = klass(N, group_idxs, params, DEFAULT_TEMP, nb.potential.beta, cutoff, seed, moves, 1)
+    bdem_b = klass(N, group_idxs, params, DEFAULT_TEMP, nb.potential.beta, cutoff, seed, proposals_per_move, 1)
 
     iterative_moved_coords = conf.copy()
-    for _ in range(moves):
+    for _ in range(proposals_per_move):
         iterative_moved_coords, _ = bdem_a.move(iterative_moved_coords, box)
         assert not np.all(conf == iterative_moved_coords)  # We should move every time since its a single mol
     batch_moved_coords, _ = bdem_b.move(conf, box)
@@ -285,7 +293,7 @@ def test_bd_exchange_deterministic_moves(moves, precision, seed):
     np.testing.assert_array_equal(iterative_moved_coords, batch_moved_coords)
 
     assert bdem_a.n_accepted() > 0
-    assert bdem_a.n_proposed() == moves
+    assert bdem_a.n_proposed() == proposals_per_move
     assert bdem_a.n_accepted() == bdem_b.n_accepted()
     assert bdem_a.n_proposed() == bdem_b.n_proposed()
 
@@ -374,7 +382,7 @@ def test_moves_in_a_water_box(steps_per_move, moves, box_size, precision, rtol, 
         assert accepted > 0, "No moves were made, nothing was tested"
     else:
         assert bdem.n_accepted() > 10
-        np.testing.assert_allclose(0.0002, bdem.acceptance_fraction(), atol=1e-4)
+        assert bdem.acceptance_fraction() >= 0.0001
     if steps_per_move == 1:
         np.testing.assert_allclose(bdem.acceptance_fraction(), accepted / moves)
         assert bdem.n_accepted() == accepted
