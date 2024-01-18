@@ -99,6 +99,7 @@ pybind11_add_module(${LIBRARY_NAME} SHARED NO_EXTRAS
   src/pinned_host_buffer.cu
   src/streamed_potential_runner.cu
   src/stream_manager.cu
+  src/segmented_weighted_random_sampler.cu
   src/weighted_random_sampler.cu
   src/bd_exchange_move.cu
   src/tibd_exchange_move.cu

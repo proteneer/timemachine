@@ -38,6 +38,7 @@
 #include "potential.hpp"
 #include "rmsd_align.hpp"
 #include "rotations.hpp"
+#include "segmented_weighted_random_sampler.hpp"
 #include "set_utils.hpp"
 #include "summed_potential.hpp"
 #include "tibd_exchange_move.hpp"
@@ -100,6 +101,14 @@ std::vector<T2> py_array_to_vector_with_cast(const py::array_t<T1, py::array::c_
     std::vector<T2> v(arr.size());
     for (int i = 0; i < arr.size(); i++) {
         v[i] = static_cast<T2>(arr.data()[i]);
+    }
+    return v;
+}
+
+template <typename T1, typename T2> std::vector<T2> py_vector_to_vector_with_cast(const std::vector<T1> &arr) {
+    std::vector<T2> v(arr.size());
+    for (unsigned long i = 0; i < arr.size(); i++) {
+        v[i] = static_cast<T2>(arr[i]);
     }
     return v;
 }
@@ -220,6 +229,44 @@ template <typename RealType> void declare_weighted_random_sampler(py::module &m,
         -------
         Array of sample indices
             Shape (num_samples, )
+        )pbdoc");
+}
+
+template <typename RealType> void declare_segmented_weighted_random_sampler(py::module &m, const char *typestr) {
+
+    using Class = SegmentedWeightedRandomSampler<RealType>;
+    std::string pyclass_name = std::string("SegmentedWeightedRandomSampler_") + typestr;
+    py::class_<Class, std::shared_ptr<Class>>(m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
+        .def(
+            py::init([](const int N, const int segments, const int seed) { return new Class(N, segments, seed); }),
+            py::arg("size"),
+            py::arg("segments"),
+            py::arg("seed"))
+        .def(
+            "sample",
+            [](Class &sampler, const std::vector<std::vector<double>> &probabilities) -> std::vector<int> {
+                std::vector<std::vector<RealType>> real_batches(probabilities.size());
+                for (unsigned long i = 0; i < probabilities.size(); i++) {
+                    real_batches[i] = py_vector_to_vector_with_cast<double, RealType>(probabilities[i]);
+                }
+
+                std::vector<int> samples = sampler.sample_host(real_batches);
+                return samples;
+            },
+            py::arg("probabilities"),
+            R"pbdoc(
+        Randomly select a value from batches of probability distributions.
+
+        Parameters
+        ----------
+
+        probabilities: vector of vectors containing doubles
+            Probabilities to assign to each index. Do not need to be normalized.
+
+        Returns
+        -------
+        Array of sample indices
+            Shape (num_batches, )
         )pbdoc");
 }
 
@@ -1932,6 +1979,9 @@ PYBIND11_MODULE(custom_ops, m) {
 
     declare_weighted_random_sampler<double>(m, "f64");
     declare_weighted_random_sampler<float>(m, "f32");
+
+    declare_segmented_weighted_random_sampler<double>(m, "f64");
+    declare_segmented_weighted_random_sampler<float>(m, "f32");
 
     declare_log_sum_exp<double>(m, "f64");
     declare_log_sum_exp<float>(m, "f32");
