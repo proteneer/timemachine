@@ -1095,6 +1095,7 @@ class SingleTopology(AtomMapMixin):
         Note that the above only applies to the interactions whose force constant is zero in one end state; otherwise,
         valence terms are interpolated simultaneously in the interval :math:`0 \leq \lambda \leq 1`)
         """
+        # TODO: ensure it returns _setup_end_state_src, _setup_end_state_dst at lam = 0, lam = 1?
 
         src_system = self.src_system
         dst_system = self.dst_system
@@ -1143,15 +1144,50 @@ class SingleTopology(AtomMapMixin):
             interpolate.linear_interpolation,
         )
 
+        # chiral atoms: option A: interpolate chiral restraint params between their values in each endstate
+        # assert src_system.chiral_atom
+        # assert dst_system.chiral_atom
+        # chiral_atom = self._setup_intermediate_bonded_term(
+        #     src_system.chiral_atom,
+        #     dst_system.chiral_atom,
+        #     lamb,
+        #     interpolate.align_chiral_atom_idxs_and_params,
+        #     interpolate.linear_interpolation,
+        # )
+
+        # chiral atoms: option B: define restrs only using core atoms,
+        # so restr idxs and ks will be constant as a function of lam
         assert src_system.chiral_atom
         assert dst_system.chiral_atom
-        chiral_atom = self._setup_intermediate_bonded_term(
-            src_system.chiral_atom,
-            dst_system.chiral_atom,
-            lamb,
-            interpolate.align_chiral_atom_idxs_and_params,
-            interpolate.linear_interpolation,
-        )
+
+        # TODO: double-check this
+        restr_idxs_a = src_system.chiral_atom.potential.idxs
+        restr_idxs_b = dst_system.chiral_atom.potential.idxs
+        params_a = src_system.chiral_atom.params
+        params_b = dst_system.chiral_atom.params
+
+        assert (
+            len(set(np.hstack([params_a, params_b]).flatten())) == 1
+        ), "assuming for simplicity that all restrs have the same force constant"
+        _merged_param = params_a[0]
+        # TODO: properly merge params from a and b
+
+        def find_restr_idxs_defined_only_in_terms_of_core_atoms(restr_idxs, core_idxs):
+            core_set = set(core_idxs)
+            filtered = []
+            for tup in restr_idxs:
+                if set(tup).issubset(core_set):
+                    filtered.append(tuple(tup))
+            return np.array(filtered)
+
+        core_restr_idxs_a = find_restr_idxs_defined_only_in_terms_of_core_atoms(restr_idxs_a, self.core[:, 0])
+        core_restr_idxs_b = find_restr_idxs_defined_only_in_terms_of_core_atoms(restr_idxs_b, self.core[:, 1])
+        core_restr_idxs_a_in_c = self.a_to_c[core_restr_idxs_a]
+        core_restr_idxs_b_in_c = self.b_to_c[core_restr_idxs_b]
+        stacked = np.vstack([core_restr_idxs_a_in_c, core_restr_idxs_b_in_c])
+        core_restr_idxs_in_c = np.array(sorted(set(map(tuple, stacked))))
+        merged_params = np.ones(len(core_restr_idxs_in_c)) * _merged_param
+        chiral_atom = ChiralAtomRestraint(core_restr_idxs_in_c).bind(merged_params)
 
         assert src_system.chiral_bond
         assert dst_system.chiral_bond
