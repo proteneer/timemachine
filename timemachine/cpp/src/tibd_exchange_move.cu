@@ -63,10 +63,11 @@ TIBDExchangeMove<RealType>::TIBDExchangeMove(
     // Create event with timings disabled as timings slow down events
     gpuErrchk(cudaEventCreateWithFlags(&host_copy_event_, cudaEventDisableTiming));
 
+    // Add 3 to the seed provided to avoid correlating with the three other RNGs
     k_initialize_curand_states<<<
         ceil_divide(d_rand_states_.length, DEFAULT_THREADS_PER_BLOCK),
         DEFAULT_THREADS_PER_BLOCK,
-        0>>>(static_cast<int>(d_rand_states_.length), seed, d_rand_states_.data);
+        0>>>(static_cast<int>(d_rand_states_.length), seed + 3, d_rand_states_.data);
     gpuErrchk(cudaPeekAtLastError());
 
     k_arange<<<ceil_divide(this->num_target_mols_, DEFAULT_THREADS_PER_BLOCK), DEFAULT_THREADS_PER_BLOCK, 0>>>(
