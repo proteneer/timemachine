@@ -29,8 +29,7 @@ protected:
     DeviceBuffer<char> d_temp_storage_buffer_;
     size_t temp_storage_bytes_;
 
-    DeviceBuffer<RealType> d_center_;      // [3]
-    DeviceBuffer<RealType> d_translation_; // [3]
+    DeviceBuffer<RealType> d_center_; // [3]
     // Uniform noise with the first element used for deciding directionality of insertion
     // and the second element is used for comparison against the acceptance rate in the Metropolis-Hastings check
     DeviceBuffer<RealType> d_uniform_noise_buffer_; // [2]
@@ -45,6 +44,9 @@ protected:
     PinnedHostBuffer<int> p_targeting_inner_vol_; // [1]
 
     cudaEvent_t host_copy_event_;
+
+private:
+    DeviceBuffer<RealType> d_selected_translation_; // [3] The translation selected to run
 
 public:
     TIBDExchangeMove(

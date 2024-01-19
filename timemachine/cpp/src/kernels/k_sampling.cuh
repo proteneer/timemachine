@@ -6,17 +6,20 @@ namespace timemachine {
 // https://timvieira.github.io/blog/post/2014/07/31/gumbel-max-trick/
 // https://lips.cs.princeton.edu/the-gumbel-max-trick-for-discrete-distributions/
 template <typename RealType>
-void __global__
-k_setup_gumbel_max_trick(const int N, const RealType *__restrict__ log_weights, RealType *__restrict__ gumbel) {
+void __global__ k_setup_gumbel_max_trick(
+    const int N,
+    const RealType *__restrict__ log_weights,
+    const RealType *__restrict__ gumbel_noise,
+    RealType *__restrict__ prepared_gumbel) {
     const int idx = blockIdx.x * blockDim.x + threadIdx.x;
 
     if (idx >= N) {
         return;
     }
 
-    const RealType gumbel_rand = -log(-log(gumbel[idx]));
+    const RealType gumbel_rand = -log(-log(gumbel_noise[idx]));
 
-    gumbel[idx] = log_weights[idx] + gumbel_rand;
+    prepared_gumbel[idx] = log_weights[idx] + gumbel_rand;
 }
 
 template <typename T>

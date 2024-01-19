@@ -164,7 +164,9 @@ void __global__ k_decide_targeted_move(
     const int num_target_mols,
     const RealType *__restrict__ rand,
     const int *__restrict__ inner_count,
-    int *__restrict__ targeting_inner_volume);
+    const RealType *__restrict__ translations, // [2, 3] first translation is inside, second is outer
+    int *__restrict__ targeting_inner_volume,
+    RealType *__restrict__ output_translation);
 
 template <typename RealType>
 void __global__ k_separate_weights_for_targeted(
