@@ -33,7 +33,7 @@ public:
     void sample_device(
         const int total_values,
         const int num_segments,
-        const int *d_segments,
+        const int *d_segment_offsets,
         const RealType *d_log_probabilities,
         int *d_samples,
         cudaStream_t stream);
@@ -41,10 +41,10 @@ public:
     void sample_given_noise_device(
         const int total_values,
         const int num_segments,
-        const int *d_segments,
+        const int *d_segment_offsets,
         const RealType *d_log_probabilities,
         const RealType *d_noise,
-        RealType *d_intermediate,
+        RealType *d_gumbel_dist, // Buffer to store the gumbel distribution
         int *d_samples,
         cudaStream_t stream);
 

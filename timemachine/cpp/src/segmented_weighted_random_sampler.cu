@@ -36,7 +36,7 @@ template <typename RealType>
 void SegmentedWeightedRandomSampler<RealType>::sample_device(
     const int total_values,
     const int num_segments,
-    const int *d_segments,               // [num_segments + 1]
+    const int *d_segment_offsets,        // [num_segments + 1]
     const RealType *d_log_probabilities, // [total_values]
     int *d_samples,                      // [num_segments]
     cudaStream_t stream) {
@@ -45,19 +45,26 @@ void SegmentedWeightedRandomSampler<RealType>::sample_device(
     curandErrchk(curandSetStream(cr_rng_, stream));
     curandErrchk(templateCurandUniform(cr_rng_, d_gumbel_.data, d_gumbel_.length));
 
-    // Use the noise both as the noise and the intermediate, does change the values in d_gumbel
+    // Use the noise both as the noise and the buffer for the gumbel noise, does change the values in d_gumbel
     this->sample_given_noise_device(
-        total_values, num_segments, d_segments, d_log_probabilities, d_gumbel_.data, d_gumbel_.data, d_samples, stream);
+        total_values,
+        num_segments,
+        d_segment_offsets,
+        d_log_probabilities,
+        d_gumbel_.data,
+        d_gumbel_.data,
+        d_samples,
+        stream);
 };
 
 template <typename RealType>
 void SegmentedWeightedRandomSampler<RealType>::sample_given_noise_device(
     const int total_values,
     const int num_segments,
-    const int *d_segments,               // [num_segments]
+    const int *d_segment_offsets,        // [num_segments]
     const RealType *d_log_probabilities, // [total_values]
     const RealType *d_noise,             // [total_values]
-    RealType *d_intermediate,            // [total_values]
+    RealType *d_gumbel_noise,            // [total_values] Buffer to store the gumbel distribution
     int *d_samples,                      // [num_segments]
     cudaStream_t stream) {
     if (total_values > max_vals_per_segment_ * num_segments_) {
@@ -73,17 +80,17 @@ void SegmentedWeightedRandomSampler<RealType>::sample_given_noise_device(
     const int tpb = DEFAULT_THREADS_PER_BLOCK;
     const int blocks = ceil_divide(total_values, tpb);
 
-    k_setup_gumbel_max_trick<<<blocks, tpb, 0, stream>>>(total_values, d_log_probabilities, d_noise, d_intermediate);
+    k_setup_gumbel_max_trick<<<blocks, tpb, 0, stream>>>(total_values, d_log_probabilities, d_noise, d_gumbel_noise);
     gpuErrchk(cudaPeekAtLastError());
 
     gpuErrchk(cub::DeviceSegmentedReduce::ArgMax(
         d_argmax_storage_.data,
         temp_storage_bytes_,
-        d_intermediate,
+        d_gumbel_noise,
         d_arg_max_.data,
         num_segments_,
-        d_segments,
-        d_segments + 1));
+        d_segment_offsets,
+        d_segment_offsets + 1));
 
     k_copy_kv_key<RealType>
         <<<ceil_divide(num_segments, tpb), tpb, 0, stream>>>(num_segments, d_arg_max_.data, d_samples);
@@ -111,11 +118,16 @@ SegmentedWeightedRandomSampler<RealType>::sample_host(const std::vector<std::vec
 
     DeviceBuffer<RealType> d_log_probs(h_log_probs);
     DeviceBuffer<int> d_samples_buffer(num_segments);
-    DeviceBuffer<int> d_segments(h_segments);
+    DeviceBuffer<int> d_segment_offsets(h_segments);
 
     cudaStream_t stream = static_cast<cudaStream_t>(0);
     this->sample_device(
-        h_segments[num_segments], num_segments, d_segments.data, d_log_probs.data, d_samples_buffer.data, stream);
+        h_segments[num_segments],
+        num_segments,
+        d_segment_offsets.data,
+        d_log_probs.data,
+        d_samples_buffer.data,
+        stream);
     gpuErrchk(cudaStreamSynchronize(stream));
 
     d_samples_buffer.copy_to(&h_selection[0]);
