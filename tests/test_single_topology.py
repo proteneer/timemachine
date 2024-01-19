@@ -570,7 +570,9 @@ def test_combine_with_host():
         potentials.NonbondedPairListPrecomputed,
         potentials.Nonbonded,
         potentials.SummedPotential,  # P-L + L-W interactions
-        # NOTE: chiral bond and chiral atom restraints excluded
+        potentials.ChiralAtomRestraint,
+        # potentials.ChiralBondRestraint,
+        # NOTE: chiral bond restraints excluded
         # This should be updated when chiral restraints are re-enabled.
     }
 
@@ -858,7 +860,7 @@ def test_no_chiral_atom_restraints():
     init_conf = st.combine_confs(get_romol_conf(mol_a), get_romol_conf(mol_b))
     state = st.setup_intermediate_state(0.1)
 
-    assert len(state.chiral_atom.potential.idxs) == 0
+    assert len(state.chiral_atom.potential.idxs) == 0  # TODO: update
     U = state.get_U_fn()
     _ = U(init_conf)
 

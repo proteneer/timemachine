@@ -24,7 +24,7 @@ from timemachine.potentials import (
     SummedPotential,
 )
 
-# Chiral restraints are disabled until checks are added (see GH #815)
+# Chiral bond restraints are disabled until checks are added (see GH #815)
 # from timemachine.potentials import bonded, chiral_restraints, nonbonded
 
 
@@ -133,14 +133,14 @@ class VacuumSystem(Generic[_Nonbonded, _HarmonicAngle]):
         def U_fn(x):
             assert self.torsion
 
-            # Chiral restraints are disabled until checks are added (see GH #815)
+            # Chiral bond restraints are disabled until checks are added (see GH #815)
             # chiral_U = chiral_atom_U(x) + chiral_bond_U(x)
             return (
                 self.bond(x, box=None)
                 + self.angle(x, box=None)
                 + self.torsion(x, box=None)
                 + self.nonbonded(x, box=None)
-                # + self.chiral_atom(x, box=None)
+                + self.chiral_atom(x, box=None)
                 # + self.chiral_bond(x, box=None)
             )
 
@@ -172,9 +172,9 @@ class HostGuestSystem:
             self.bond,
             self.angle,
             self.torsion,
-            # Chiral restraints are disabled until checks are added
+            # Chiral bond restraints are disabled until checks are added
             # for consistency.
-            # self.chiral_atom,
+            self.chiral_atom,
             # self.chiral_bond,
             self.nonbonded_guest_pairs,
             self.nonbonded_host,
