@@ -437,8 +437,6 @@ $$$$""",
     assert ks < 0.05 or pv > 0.10
 
 
-# Expected to fail until chiral restraints are re-enabled for vacuum simulations
-@pytest.mark.xfail
 def test_chiral_topology():
     # test adding chiral restraints to the base topology
     # this molecule has several chiral atoms and bonds

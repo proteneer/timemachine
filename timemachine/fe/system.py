@@ -84,7 +84,7 @@ def simulate_system(U_fn, x0, num_samples=20000, steps_per_batch=500, num_worker
 
 
 def convert_bps_into_system(bps: Sequence[potentials.BoundPotential]):
-    bond = angle = torsion = nonbonded = None
+    bond = angle = torsion = nonbonded = chiral_atom = chiral_bond = None
 
     for bp in bps:
         if isinstance(bp.potential, potentials.HarmonicBond):
@@ -95,6 +95,11 @@ def convert_bps_into_system(bps: Sequence[potentials.BoundPotential]):
             torsion = bp
         elif isinstance(bp.potential, potentials.Nonbonded):
             nonbonded = bp
+        elif isinstance(bp.potential, potentials.ChiralAtomRestraint):
+            chiral_atom = bp
+        # TODO: uncomment when re-enabling chiral_bond
+        # elif isinstance(bp.potential, potentials.ChiralBondRestraint):
+        #     chiral_bond = bp
         else:
             assert 0, "Unknown potential"
 
@@ -102,7 +107,7 @@ def convert_bps_into_system(bps: Sequence[potentials.BoundPotential]):
     assert angle
     assert nonbonded
 
-    return VacuumSystem(bond, angle, torsion, nonbonded, None, None)
+    return VacuumSystem(bond, angle, torsion, nonbonded, chiral_atom, chiral_bond)
 
 
 def convert_omm_system(omm_system: openmm.System) -> Tuple["VacuumSystem", List[float]]:
@@ -149,9 +154,10 @@ class VacuumSystem(Generic[_Nonbonded, _HarmonicAngle]):
     def get_U_fns(self) -> List[BoundPotential[Potential]]:
         # For molecules too small for to have certain terms,
         # skip when no params are present
+        potentials = [self.bond, self.angle, self.torsion, self.nonbonded, self.chiral_atom]  # , self.chiral_bond]
         terms = cast(
             List[BoundPotential[Potential]],
-            [p for p in [self.bond, self.angle, self.torsion, self.nonbonded] if p],
+            [p for p in potentials if p],
         )
         return [p for p in terms if p and len(p.params) > 0]
 
