@@ -38,6 +38,7 @@
 #include "potential.hpp"
 #include "rmsd_align.hpp"
 #include "rotations.hpp"
+#include "segmented_logsumexp.hpp"
 #include "segmented_weighted_random_sampler.hpp"
 #include "set_utils.hpp"
 #include "summed_potential.hpp"
@@ -1533,6 +1534,45 @@ template <typename RealType> void declare_log_sum_exp(py::module &m, const char 
     ;
 }
 
+template <typename RealType> void declare_segmented_log_sum_exp(py::module &m, const char *typestr) {
+
+    using Class = SegmentedLogSumExp<RealType>;
+    std::string pyclass_name = std::string("SegmentedLogSumExp_") + typestr;
+    py::class_<Class, std::shared_ptr<Class>>(m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
+        .def(
+            py::init([](const int max_vals_per_segment, const int segments) {
+                return new Class(max_vals_per_segment, segments);
+            }),
+            py::arg("max_vals_per_segment"),
+            py::arg("num_segments"))
+        .def(
+            "sum",
+            [](Class &summer, const std::vector<std::vector<double>> &vals) -> std::vector<RealType> {
+                std::vector<std::vector<RealType>> real_batches(vals.size());
+                for (unsigned long i = 0; i < vals.size(); i++) {
+                    real_batches[i] = py_vector_to_vector_with_cast<double, RealType>(vals[i]);
+                }
+                std::vector<RealType> results = summer.sum_host(real_batches);
+
+                return results;
+            },
+            py::arg("values"),
+            R"pbdoc(
+        Compute the logsumexp of a batch of vectors
+
+        Parameters
+        ----------
+
+        vals: vector of vectors containing doubles
+            A vector of vectors to compute the logsumexp
+
+        Returns
+        -------
+        Array of sample indices
+            Shape (vals.size(), )
+        )pbdoc");
+}
+
 template <typename RealType> void declare_bias_deletion_exchange_move(py::module &m, const char *typestr) {
 
     using Class = BDExchangeMove<RealType>;
@@ -1945,6 +1985,9 @@ PYBIND11_MODULE(custom_ops, m) {
 
     declare_log_sum_exp<double>(m, "f64");
     declare_log_sum_exp<float>(m, "f32");
+
+    declare_segmented_log_sum_exp<double>(m, "f64");
+    declare_segmented_log_sum_exp<float>(m, "f32");
 
     declare_nonbonded_mol_energy<double>(m, "f64");
     declare_nonbonded_mol_energy<float>(m, "f32");

@@ -360,8 +360,8 @@ template <typename RealType> double BDExchangeMove<RealType>::raw_log_probabilit
     d_log_sum_exp_before_.copy_to(&h_log_exp_before[0]);
     d_log_sum_exp_after_.copy_to(&h_log_exp_after[0]);
 
-    RealType before_log_prob = convert_nan_to_inf(compute_logsumexp_final(&h_log_exp_before[0]));
-    RealType after_log_prob = convert_nan_to_inf(compute_logsumexp_final(&h_log_exp_after[0]));
+    RealType before_log_prob = convert_nan_to_inf(compute_logsumexp_final(h_log_exp_before[0], h_log_exp_before[1]));
+    RealType after_log_prob = convert_nan_to_inf(compute_logsumexp_final(h_log_exp_after[0], h_log_exp_after[1]));
 
     return static_cast<double>(before_log_prob - after_log_prob);
 }
