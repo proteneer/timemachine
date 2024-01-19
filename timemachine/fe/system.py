@@ -167,7 +167,9 @@ class HostGuestSystem:
     bond: BoundPotential[HarmonicBond]
     angle: BoundPotential[HarmonicAngleStable]
     torsion: BoundPotential[PeriodicTorsion]
-    chiral_atom: BoundPotential[ChiralAtomRestraint]
+    chiral_atom: BoundPotential[
+        ChiralAtomRestraint
+    ]  # TODO: confirm if ordering should be consistent btwn HostGuestSystem and VacuumSystem
     chiral_bond: BoundPotential[ChiralBondRestraint]
     nonbonded_guest_pairs: BoundPotential[NonbondedPairListPrecomputed]
     nonbonded_host: BoundPotential[Nonbonded]
