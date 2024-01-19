@@ -552,49 +552,75 @@ template void __global__ k_flag_mols_inner_outer<double>(
 );
 
 template <typename RealType>
-void __global__ k_decide_targeted_move(
+void __global__ k_decide_targeted_moves(
+    const int samples,
     const int num_target_mols,
-    const RealType *__restrict__ rand,
-    const int *__restrict__ inner_count,
-    const RealType *__restrict__ translations, // [2, 3] first translation is inside, second is outer
-    int *__restrict__ targeting_inner_volume,
-    RealType *__restrict__ output_translation) {
+    const RealType *__restrict__ rand,         // [samples]
+    const int *__restrict__ inner_count,       // [1]
+    const RealType *__restrict__ translations, // [samples, 2, 3] first translation is inside, second is outer
+    int *__restrict__ targeting_inner_volume,  // [samples]
+    int *__restrict__ src_weights_counts,      // [samples]
+    int *__restrict__ target_weights_counts,   // [samples]
+    RealType *__restrict__ output_translation  // [samples, 3]
+) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+
     const int count_inside = inner_count[0];
     const int count_outside = num_target_mols - count_inside;
-    if (count_inside == 0 && count_outside == 0) {
-        assert(0);
-    } else if (count_inside > 0 && count_outside == 0) {
-        targeting_inner_volume[0] = 0;
-    } else if (count_inside == 0 && count_outside > 0) {
-        targeting_inner_volume[0] = 1;
+    int flag;
+    while (idx < samples) {
+        if (count_inside == 0 && count_outside == 0) {
+            assert(0);
+        } else if (count_inside > 0 && count_outside == 0) {
+            flag = 0;
+        } else if (count_inside == 0 && count_outside > 0) {
+            flag = 1;
 
-    } else if (count_inside > 0 && count_outside > 0) {
-        if (rand[0] < static_cast<RealType>(0.5)) {
-            targeting_inner_volume[0] = 1;
+        } else if (count_inside > 0 && count_outside > 0) {
+            // TBD determine if accessing rand in if matters
+            if (rand[idx] < static_cast<RealType>(0.5)) {
+                flag = 1;
+            } else {
+                flag = 0;
+            }
         } else {
-            targeting_inner_volume[0] = 0;
+            assert(0);
         }
-    } else {
-        assert(0);
+        output_translation[idx * 3 + 0] =
+            flag == 1 ? translations[idx * (3 * 2) + 0] : translations[idx * (3 * 2) + 3 + 0];
+        output_translation[idx * 3 + 1] =
+            flag == 1 ? translations[idx * (3 * 2) + 1] : translations[idx * (3 * 2) + 3 + 1];
+        output_translation[idx * 3 + 2] =
+            flag == 1 ? translations[idx * (3 * 2) + 2] : translations[idx * (3 * 2) + 3 + 2];
+
+        // Will look at the src weights
+        src_weights_counts[idx] = flag == 1 ? count_outside : count_inside;
+        // The target weights will be the count of the target region + 1, the new mol being inserted
+        target_weights_counts[idx] = flag == 1 ? count_inside + 1 : count_outside + 1;
+        targeting_inner_volume[idx] = flag;
+        idx += gridDim.x * blockDim.x;
     }
-    output_translation[0] = targeting_inner_volume[0] == 1 ? translations[0] : translations[3 + 0];
-    output_translation[1] = targeting_inner_volume[0] == 1 ? translations[1] : translations[3 + 1];
-    output_translation[2] = targeting_inner_volume[0] == 1 ? translations[2] : translations[3 + 2];
 }
 
-template void __global__ k_decide_targeted_move<float>(
+template void __global__ k_decide_targeted_moves<float>(
+    const int samples,
     const int num_target_mols,
     const float *__restrict__ rand,
     const int *__restrict__ inner_count,
     const float *__restrict__ translations,
     int *__restrict__ targeting_inner_volume,
+    int *__restrict__ src_weights_counts,
+    int *__restrict__ target_weights_counts,
     float *__restrict__ output_translation);
-template void __global__ k_decide_targeted_move<double>(
+template void __global__ k_decide_targeted_moves<double>(
+    const int samples,
     const int num_target_mols,
     const double *__restrict__ rand,
     const int *__restrict__ inner_count,
     const double *__restrict__ translations,
     int *__restrict__ targeting_inner_volume,
+    int *__restrict__ src_weights_counts,
+    int *__restrict__ target_weights_counts,
     double *__restrict__ output_translation);
 
 // k_separate_weights_for_targeted takes the flag and the mol indices and writes them out
@@ -682,21 +708,23 @@ template void __global__ k_setup_destination_weights_for_targeted<double>(
     const double *__restrict__ weights,             // [num_target_mols]
     double *__restrict__ output_weights);
 
-void __global__ k_adjust_sample_idx(
-    const int *__restrict__ targeting_inner_volume, // [1]
+void __global__ k_adjust_sample_idxs(
+    const int num_samples,
+    const int *__restrict__ targeting_inner_volume, // [num_samples]
     const int *__restrict__ inner_count,            // [1]
     const int *__restrict__ partitioned_indices,    // [inner_count]
-    int *__restrict__ sample_idxs                   // [1]
+    int *__restrict__ sample_idxs                   // [num_samples]
 ) {
+    const int local_inner_count = inner_count[0];
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     // At the moment we only have one sample
-    if (idx > 0) {
-        return;
+    while (idx < num_samples) {
+        const int target_inner = targeting_inner_volume[idx];
+        const int offset = target_inner == 1 ? local_inner_count : 0;
+        sample_idxs[idx] = partitioned_indices[sample_idxs[idx] + offset];
+
+        idx += gridDim.x * blockDim.x;
     }
-    const int target_inner = targeting_inner_volume[0];
-    const int local_inner_count = inner_count[0];
-    const int offset = target_inner == 1 ? local_inner_count : 0;
-    sample_idxs[idx] = partitioned_indices[sample_idxs[idx] + offset];
 }
 
 } // namespace timemachine

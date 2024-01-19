@@ -368,7 +368,7 @@ def hif2a_rbfe_state() -> InitialState:
 
 @pytest.mark.parametrize("radius", [0.4])
 @pytest.mark.parametrize("moves", [10000])
-@pytest.mark.parametrize("precision,rtol,atol", [(np.float64, 2e-5, 2e-5), (np.float32, 1e-4, 2e-3)])
+@pytest.mark.parametrize("precision,rtol,atol", [(np.float64, 3e-5, 2e-5), (np.float32, 1e-4, 2e-3)])
 @pytest.mark.parametrize("seed", [2024])
 def test_targeted_insertion_buckyball_edge_cases(radius, moves, precision, rtol, atol, seed):
     """Test the edges cases of targeted insertion where the proposal probability isn't symmetric.

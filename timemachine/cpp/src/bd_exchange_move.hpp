@@ -4,7 +4,7 @@
 #include "logsumexp.hpp"
 #include "mover.hpp"
 #include "nonbonded_mol_energy.hpp"
-#include "weighted_random_sampler.hpp"
+#include "segmented_weighted_random_sampler.hpp"
 #include <array>
 #include <vector>
 
@@ -28,9 +28,10 @@ protected:
     const RealType nb_beta_;
     const RealType beta_; // 1 / kT
     const RealType cutoff_squared_;
+    const int samples_per_proposal_;
     size_t num_attempted_;
     NonbondedMolEnergyPotential<RealType> mol_potential_;
-    WeightedRandomSampler<RealType> sampler_;
+    SegmentedWeightedRandomSampler<RealType> sampler_;
     LogSumExp<RealType> logsumexp_;
     // Buffer for evaluating moves without touching the original coords
     DeviceBuffer<double> d_intermediate_coords_;
@@ -53,6 +54,7 @@ protected:
     DeviceBuffer<RealType> d_sample_noise_;          // Noise to use for selecting molecules
     DeviceBuffer<RealType> d_sampling_intermediate_; // [num_target_mols_] Intermediate buffer for weighted sampling
     DeviceBuffer<RealType> d_translations_;          // Uniform noise for translation + the check
+    DeviceBuffer<int> d_sample_segments_;            // Segment offsets for the sampler
 
     curandGenerator_t cr_rng_quat_;
     curandGenerator_t cr_rng_translations_;
