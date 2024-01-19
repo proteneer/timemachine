@@ -49,8 +49,10 @@ RealType __host__ __device__ __forceinline__ compute_raw_log_probability_targete
     const RealType log_rev_prob =
         compute_log_proposal_probabilities_given_counts<RealType>(src_count - 1, dest_count + 1);
 
-    RealType before_log_prob = convert_nan_to_inf<RealType>(compute_logsumexp_final<RealType>(before_log_sum_exp));
-    RealType after_log_prob = convert_nan_to_inf<RealType>(compute_logsumexp_final<RealType>(after_log_sum_exp));
+    RealType before_log_prob =
+        convert_nan_to_inf<RealType>(compute_logsumexp_final<RealType>(before_log_sum_exp[0], before_log_sum_exp[1]));
+    RealType after_log_prob =
+        convert_nan_to_inf<RealType>(compute_logsumexp_final<RealType>(after_log_sum_exp[0], after_log_sum_exp[1]));
 
     return before_log_prob - after_log_prob + log_vol_prob + (log_rev_prob - log_fwd_prob);
 }

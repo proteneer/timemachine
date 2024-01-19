@@ -77,6 +77,7 @@ pybind11_add_module(${LIBRARY_NAME} SHARED NO_EXTRAS
   src/local_md_utils.cu
   src/neighborlist.cu
   src/logsumexp.cu
+  src/segmented_logsumexp.cu
   src/harmonic_bond.cu
   src/flat_bottom_bond.cu
   src/log_flat_bottom_bond.cu

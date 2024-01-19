@@ -46,8 +46,10 @@ void __global__ k_attempt_exchange_move(
 
     // All kernels compute the same acceptance
     // TBD investigate shared memory for speed
-    RealType before_log_prob = convert_nan_to_inf<RealType>(compute_logsumexp_final<RealType>(before_log_sum_exp));
-    RealType after_log_prob = convert_nan_to_inf<RealType>(compute_logsumexp_final<RealType>(after_log_sum_exp));
+    RealType before_log_prob =
+        convert_nan_to_inf<RealType>(compute_logsumexp_final<RealType>(before_log_sum_exp[0], before_log_sum_exp[1]));
+    RealType after_log_prob =
+        convert_nan_to_inf<RealType>(compute_logsumexp_final<RealType>(after_log_sum_exp[0], after_log_sum_exp[1]));
 
     RealType log_acceptance_prob = min(before_log_prob - after_log_prob, static_cast<RealType>(0.0));
     const bool accepted = rand[0] < exp(log_acceptance_prob);
@@ -199,8 +201,10 @@ void __global__ k_store_accepted_log_probability(
         return; // Only one block can run this
     }
 
-    RealType before_log_prob = convert_nan_to_inf(compute_logsumexp_final<RealType>(before_log_sum_exp));
-    RealType after_log_prob = convert_nan_to_inf(compute_logsumexp_final<RealType>(after_log_sum_exp));
+    RealType before_log_prob =
+        convert_nan_to_inf(compute_logsumexp_final<RealType>(before_log_sum_exp[0], before_log_sum_exp[1]));
+    RealType after_log_prob =
+        convert_nan_to_inf(compute_logsumexp_final<RealType>(after_log_sum_exp[0], after_log_sum_exp[1]));
 
     RealType log_acceptance_prob = min(before_log_prob - after_log_prob, static_cast<RealType>(0.0));
     const bool accepted = rand[0] < exp(log_acceptance_prob);
