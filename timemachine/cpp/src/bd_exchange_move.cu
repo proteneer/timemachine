@@ -149,14 +149,14 @@ void BDExchangeMove<RealType>::move(
     // translation and w is used in the metropolis-hastings check
     curandErrchk(templateCurandUniform(cr_rng_translations_, d_translations_.data, d_translations_.length));
     curandErrchk(templateCurandUniform(cr_rng_samples_, d_sample_noise_.data, d_sample_noise_.length));
-    for (int move = 0; move < proposals_per_move_; move++) {
+    for (int step = 0; step < proposals_per_move_; step++) {
         // Run only after the first pass, to maintain meaningful `log_probability_host` values
-        if (move > 0) {
+        if (step > 0) {
             // Run a separate kernel to replace the before log probs and weights with the after if accepted a move
             // Need the weights to sample a value and the log probs are just because they aren't expensive to copy
             k_store_accepted_log_probability<RealType><<<1, tpb, 0>>>(
                 num_target_mols_,
-                d_translations_.data + (move * BD_TRANSLATIONS_PER_STEP_XYZW * samples_per_proposal_) +
+                d_translations_.data + (step * BD_TRANSLATIONS_PER_STEP_XYZW * samples_per_proposal_) +
                     (BD_TRANSLATIONS_PER_STEP_XYZW - 1), // Offset to get the last value for the acceptance criteria
                 d_log_sum_exp_before_.data,
                 d_log_sum_exp_after_.data,
@@ -178,7 +178,7 @@ void BDExchangeMove<RealType>::move(
             samples_per_proposal_,
             d_sample_segments_.data,
             d_log_weights_before_.data,
-            d_sample_noise_.data + (move * num_target_mols_ * samples_per_proposal_),
+            d_sample_noise_.data + (step * num_target_mols_ * samples_per_proposal_),
             d_sampling_intermediate_.data,
             d_samples_.data,
             stream);
@@ -191,15 +191,15 @@ void BDExchangeMove<RealType>::move(
             true,
             d_box,
             d_coords,
-            this->d_quaternions_.data + (move * QUATERNIONS_PER_STEP * samples_per_proposal_),
-            this->d_translations_.data + (move * BD_TRANSLATIONS_PER_STEP_XYZW * samples_per_proposal_),
+            this->d_quaternions_.data + (step * QUATERNIONS_PER_STEP * samples_per_proposal_),
+            this->d_translations_.data + (step * BD_TRANSLATIONS_PER_STEP_XYZW * samples_per_proposal_),
             stream);
 
         logsumexp_.sum_device(num_target_mols_, d_log_weights_after_.data, d_log_sum_exp_after_.data, stream);
 
         k_attempt_exchange_move<RealType><<<ceil_divide(N_, tpb), tpb, 0, stream>>>(
             N,
-            d_translations_.data + (move * BD_TRANSLATIONS_PER_STEP_XYZW * samples_per_proposal_) +
+            d_translations_.data + (step * BD_TRANSLATIONS_PER_STEP_XYZW * samples_per_proposal_) +
                 (BD_TRANSLATIONS_PER_STEP_XYZW - 1), // Offset to get the last value for the acceptance criteria
             d_log_sum_exp_before_.data,
             d_log_sum_exp_after_.data,

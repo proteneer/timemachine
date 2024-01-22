@@ -176,7 +176,7 @@ void TIBDExchangeMove<RealType>::move(
     k_generate_translations_inside_and_outside_sphere<<<1, d_rand_states_.length, 0, stream>>>(
         this->proposals_per_move_, d_box, d_center_.data, radius_, d_rand_states_.data, this->d_translations_.data);
     gpuErrchk(cudaPeekAtLastError());
-    for (int move = 0; move < this->proposals_per_move_; move++) {
+    for (int step = 0; step < this->proposals_per_move_; step++) {
         gpuErrchk(cub::DevicePartition::Flagged(
             d_temp_storage_buffer_.data,
             temp_storage_bytes_,
@@ -190,9 +190,9 @@ void TIBDExchangeMove<RealType>::move(
         k_decide_targeted_moves<<<sample_blocks, tpb, 0, stream>>>(
             this->samples_per_proposal_,
             this->num_target_mols_,
-            this->d_uniform_noise_buffer_.data + (move * NOISE_PER_STEP * this->samples_per_proposal_),
+            this->d_uniform_noise_buffer_.data + (step * NOISE_PER_STEP * this->samples_per_proposal_),
             d_inner_mols_count_.data,
-            this->d_translations_.data + (move * TIBD_TRANSLATIONS_PER_STEP_XYZXYZ * this->samples_per_proposal_),
+            this->d_translations_.data + (step * TIBD_TRANSLATIONS_PER_STEP_XYZXYZ * this->samples_per_proposal_),
             d_targeting_inner_vol_.data,
             d_weights_before_counts_.data,
             d_weights_after_counts_.data,
@@ -241,7 +241,7 @@ void TIBDExchangeMove<RealType>::move(
             this->samples_per_proposal_,
             this->d_sample_segments_.data,
             this->d_log_weights_before_.data,
-            this->d_sample_noise_.data + (move * this->num_target_mols_ * this->samples_per_proposal_),
+            this->d_sample_noise_.data + (step * this->num_target_mols_ * this->samples_per_proposal_),
             this->d_sampling_intermediate_.data,
             this->d_samples_.data,
             stream);
@@ -273,7 +273,7 @@ void TIBDExchangeMove<RealType>::move(
             false,
             d_box,
             d_coords,
-            this->d_quaternions_.data + (move * this->QUATERNIONS_PER_STEP),
+            this->d_quaternions_.data + (step * this->QUATERNIONS_PER_STEP),
             this->d_selected_translation_.data,
             stream);
 
@@ -298,7 +298,7 @@ void TIBDExchangeMove<RealType>::move(
             d_box_volume_.data,
             inner_volume_,
             // Offset to get the last value for the acceptance criteria
-            this->d_uniform_noise_buffer_.data + (move * NOISE_PER_STEP) + (NOISE_PER_STEP - 1),
+            this->d_uniform_noise_buffer_.data + (step * NOISE_PER_STEP) + (NOISE_PER_STEP - 1),
             this->d_samples_.data,
             this->d_log_sum_exp_before_.data,
             this->d_log_sum_exp_after_.data,
