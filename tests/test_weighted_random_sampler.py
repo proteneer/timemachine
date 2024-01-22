@@ -49,16 +49,14 @@ def test_segmented_random_sampler_validation(seed, precision):
 
 
 @pytest.mark.parametrize("seed", [2024, 2025, 2026, 2027])
-@pytest.mark.parametrize("size, num_samples", [(100, 3000), (200, 3000), (1000, 10000)])
+@pytest.mark.parametrize("size, num_samples", [(50, 6000), (100, 20000)])
 @pytest.mark.parametrize("precision", [np.float32, np.float64])
 def test_segmented_random_sampler(seed, size, num_samples, precision):
     rng = np.random.default_rng(seed)
 
     # Get a random probability vector.
-    probs = []
-    for _ in range(num_samples):
-        probs.append(rng.dirichlet(rng.normal(loc=10.0, size=size)))
-    probs = np.array(probs)
+    alpha = rng.normal(loc=10.0, size=size)
+    probs = rng.dirichlet(alpha, size=num_samples)
 
     klass = custom_ops.SegmentedWeightedRandomSampler_f32
     if precision == np.float64:
@@ -79,7 +77,7 @@ def test_segmented_random_sampler(seed, size, num_samples, precision):
     _, ref_counts = np.unique(ref_selection, axis=-1, return_counts=True)
     ref_percentages = ref_counts / ref_selection.shape[0]
 
-    np.testing.assert_allclose(test_percentages, ref_percentages, atol=0.05)
+    np.testing.assert_allclose(test_percentages, ref_percentages, rtol=0.45, atol=1e-5)
 
 
 @pytest.mark.parametrize("seed", [2024])
