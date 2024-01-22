@@ -178,6 +178,9 @@ void TIBDExchangeMove<RealType>::move(
         this->proposals_per_move_, d_box, d_center_.data, radius_, d_rand_states_.data, this->d_translations_.data);
     gpuErrchk(cudaPeekAtLastError());
     for (int step = 0; step < this->proposals_per_move_; step++) {
+        // To ensure determinism between running 1 step per move or K steps per move we have to partition each pass
+        // Ordering is consistent, with the tail reversed.
+        // https://nvlabs.github.io/cub/structcub_1_1_device_partition.html#a47515ec2a15804719db1b8f3b3124e43
         gpuErrchk(cub::DevicePartition::Flagged(
             d_temp_storage_buffer_.data,
             temp_storage_bytes_,
