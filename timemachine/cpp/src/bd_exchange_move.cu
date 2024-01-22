@@ -93,10 +93,10 @@ BDExchangeMove<RealType>::BDExchangeMove(
     curandErrchk(curandSetPseudoRandomGeneratorSeed(cr_rng_quat_, seed));
 
     curandErrchk(curandCreateGenerator(&cr_rng_translations_, CURAND_RNG_PSEUDO_DEFAULT));
-    curandErrchk(curandSetPseudoRandomGeneratorSeed(cr_rng_translations_, seed));
+    curandErrchk(curandSetPseudoRandomGeneratorSeed(cr_rng_translations_, seed + 1));
 
     curandErrchk(curandCreateGenerator(&cr_rng_samples_, CURAND_RNG_PSEUDO_DEFAULT));
-    curandErrchk(curandSetPseudoRandomGeneratorSeed(cr_rng_samples_, seed));
+    curandErrchk(curandSetPseudoRandomGeneratorSeed(cr_rng_samples_, seed + 2));
 
     // Setup the sample segments
     // constant for BDExchangeMove since the sample size is always batches of num_target_mols_ weights
