@@ -74,8 +74,8 @@ void SegmentedWeightedRandomSampler<RealType>::sample_given_noise_device(
     }
     if (num_segments != num_segments_) {
         throw std::runtime_error(
-            "segments doesn't match: num_segments=" + std::to_string(num_segments) +
-            ", num_segments_=" + std::to_string(num_segments));
+            "number of segments don't match: num_segments=" + std::to_string(num_segments) +
+            ", num_segments_=" + std::to_string(num_segments_));
     }
     const int tpb = DEFAULT_THREADS_PER_BLOCK;
     const int blocks = ceil_divide(total_values, tpb);
@@ -108,11 +108,20 @@ SegmentedWeightedRandomSampler<RealType>::sample_host(const std::vector<std::vec
     h_segments[0] = offset;
     std::vector<RealType> h_log_probs;
     for (unsigned long i = 0; i < num_segments; i++) {
-        offset += probabilities[i].size();
+        const int num_vals = probabilities[i].size();
+        if (num_vals == 0) {
+            throw std::runtime_error("empty probability distribution not allowed");
+        }
+        offset += num_vals;
         h_segments[i + 1] = offset;
         // Convert the probabilities into log probabilities
-        for (unsigned long j = 0; j < probabilities[i].size(); j++) {
-            h_log_probs.push_back(log(probabilities[i][j]));
+        for (unsigned long j = 0; j < num_vals; j++) {
+            RealType log_weight = log(probabilities[i][j]);
+            if (!valid_log_weight(log_weight)) {
+                throw std::runtime_error(
+                    "all values in log space must be finite and non-negative: " + std::to_string(probabilities[i][j]));
+            }
+            h_log_probs.push_back(log_weight);
         }
     }
 

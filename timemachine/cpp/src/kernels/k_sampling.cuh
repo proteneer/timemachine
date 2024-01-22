@@ -2,6 +2,10 @@
 
 namespace timemachine {
 
+template <typename RealType> bool __host__ __device__ __forceinline__ valid_log_weight(const RealType val) {
+    return isfinite(val);
+}
+
 // References:
 // https://timvieira.github.io/blog/post/2014/07/31/gumbel-max-trick/
 // https://lips.cs.princeton.edu/the-gumbel-max-trick-for-discrete-distributions/
@@ -10,28 +14,10 @@ void __global__ k_setup_gumbel_max_trick(
     const int N,
     const RealType *__restrict__ log_weights,
     const RealType *__restrict__ gumbel_noise,
-    RealType *__restrict__ prepared_gumbel) {
-    const int idx = blockIdx.x * blockDim.x + threadIdx.x;
-
-    if (idx >= N) {
-        return;
-    }
-
-    const RealType gumbel_rand = -log(-log(gumbel_noise[idx]));
-
-    prepared_gumbel[idx] = log_weights[idx] + gumbel_rand;
-}
+    RealType *__restrict__ prepared_gumbel);
 
 template <typename T>
 void __global__
-k_copy_kv_key(const int N, const cub::KeyValuePair<int, T> *__restrict__ kv_pairs, int *__restrict__ out) {
-    const int idx = blockIdx.x * blockDim.x + threadIdx.x;
-
-    if (idx >= N) {
-        return;
-    }
-
-    out[idx] = kv_pairs[idx].key;
-}
+k_copy_kv_key(const int N, const cub::KeyValuePair<int, T> *__restrict__ kv_pairs, int *__restrict__ out);
 
 } // namespace timemachine

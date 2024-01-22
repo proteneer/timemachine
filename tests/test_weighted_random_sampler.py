@@ -13,6 +13,40 @@ def normalize_probabilities(vals: NDArray) -> NDArray:
 
 
 @pytest.mark.parametrize("seed", [2024])
+@pytest.mark.parametrize("precision", [np.float32, np.float64])
+def test_segmented_random_sampler_validation(seed, precision):
+    klass = custom_ops.SegmentedWeightedRandomSampler_f32
+    if precision == np.float64:
+        klass = custom_ops.SegmentedWeightedRandomSampler_f64
+
+    max_vals_per_segment = 5
+    segments = 2
+
+    sampler = klass(max_vals_per_segment, segments, seed)
+
+    with pytest.raises(RuntimeError, match="number of segments don't match"):
+        sampler.sample([[1.0]])
+
+    with pytest.raises(RuntimeError, match="total values is greater than buffer size"):
+        sampler.sample([[1.0] * (max_vals_per_segment + 1) for _ in range(segments)])
+
+    with pytest.raises(RuntimeError, match="empty probability distribution not allowed"):
+        sampler.sample([[5.0, 3.0, 10.0], []])
+
+    with pytest.raises(RuntimeError, match="all values in log space must be finite and non-negative"):
+        sampler.sample([[np.inf], [np.inf]])
+
+    with pytest.raises(RuntimeError, match="all values in log space must be finite and non-negative"):
+        sampler.sample([[-np.inf], [-np.inf]])
+
+    with pytest.raises(RuntimeError, match="all values in log space must be finite and non-negative"):
+        sampler.sample([[np.nan], [np.nan]])
+
+    with pytest.raises(RuntimeError, match="all values in log space must be finite and non-negative"):
+        sampler.sample([[1.0], [-0.1]])
+
+
+@pytest.mark.parametrize("seed", [2024])
 @pytest.mark.parametrize("size, num_samples", [(500, 1500), (1000, 3000), (1000, 10000)])
 @pytest.mark.parametrize("precision", [np.float32, np.float64])
 def test_segmented_random_sampler(seed, size, num_samples, precision):

@@ -663,37 +663,31 @@ def test_targeted_moves_in_bulk_water(radius, steps_per_move, moves, box_size, p
 @pytest.mark.parametrize("precision,rtol,atol", [(np.float64, 5e-6, 5e-6), (np.float32, 1e-4, 2e-3)])
 @pytest.mark.parametrize("seed", [2023])
 def test_moves_with_three_waters(radius, steps_per_move, moves, precision, rtol, atol, seed):
-    """Given three water molecules with one of them treated as the targeted region"""
+    """Given three water molecules with one of them treated as the targeted region."""
     ff = Forcefield.load_default()
-    system, conf, _, _ = builders.build_water_system(1.0, ff.water_ff)
+    system, host_conf, _, _ = builders.build_water_system(1.0, ff.water_ff)
     bps, _ = openmm_deserializer.deserialize_system(system, cutoff=1.2)
 
     nb = next(bp for bp in bps if isinstance(bp.potential, Nonbonded))
     bond_pot = next(bp for bp in bps if isinstance(bp.potential, HarmonicBond)).potential
 
-    all_group_idxs = get_group_indices(get_bond_list(bond_pot), conf.shape[0])
+    all_group_idxs = get_group_indices(get_bond_list(bond_pot), host_conf.shape[0])
 
     # Get first two mols as the ones two move
     group_idxs = all_group_idxs[:2]
 
+    # Third mol is the 'center' of the inner volume
     center_group = all_group_idxs[2]
 
     all_group_idxs = all_group_idxs[:3]
 
-    conf_idxs = np.array(all_group_idxs).reshape(-1)
-
-    conf = conf[conf_idxs]
-
-    # Set the two waters on top of each other
-    conf[group_idxs[0], :] = conf[group_idxs[1], :]
-
     box = np.eye(3) * 100.0
 
+    conf_idxs = np.array(all_group_idxs).reshape(-1)
+    conf = host_conf[conf_idxs]
     # Re-image coords so that everything is imaged to begin with
     conf = image_frame(all_group_idxs, conf, box)
-
     N = conf.shape[0]
-
     params = nb.params[conf_idxs]
 
     cutoff = nb.potential.cutoff
