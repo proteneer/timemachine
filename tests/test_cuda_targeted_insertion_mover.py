@@ -448,8 +448,9 @@ def test_targeted_insertion_buckyball_edge_cases(radius, moves, precision, rtol,
 @pytest.mark.parametrize("seed", [2023])
 def test_targeted_insertion_hif2a_rbfe(hif2a_rbfe_state, radius, precision, seed):
     proposals_per_move = 10000
-    interval = 100
-    steps = 1000
+    # Interval has to be large enough to resolve clashes in the MD steps
+    interval = 800
+    steps = interval * 3
     initial_state = hif2a_rbfe_state
 
     conf = initial_state.x0
