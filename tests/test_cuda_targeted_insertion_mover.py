@@ -546,9 +546,6 @@ def test_tibd_exchange_deterministic_moves(radius, proposals_per_move, precision
 
     conf = conf[conf_idxs]
 
-    # Set the two waters on top of each other
-    conf[group_idxs[0], :] = conf[group_idxs[1], :]
-
     box = np.eye(3) * 100.0
 
     # Re-image coords so that everything is imaged to begin with
