@@ -33,4 +33,4 @@ Timemachine does not currently support the full OpenForceField definition. The f
 
 ## AM1BCC Charges
 
-The AM1BCC charges we use as the basis for our CCC originally come from the [recharge](https://github.com/openforcefield/openff-recharge) project. The source of the charges comes directly from the charges defined [here](https://github.com/openforcefield/openff-recharge/blob/cf18f1920d35af0025ce90c4e1a7f7280b4bd76d/openff/recharge/data/bcc/original-am1-bcc.json).
+The AM1BCC charges used as the basis for our CCC originally come from the [recharge](https://github.com/openforcefield/openff-recharge) project, a port of the original AM1BCC parameters by Christopher Bayly. The source of the charges comes directly from the charges defined [here](https://github.com/openforcefield/openff-recharge/blob/cf18f1920d35af0025ce90c4e1a7f7280b4bd76d/openff/recharge/data/bcc/original-am1-bcc.json).
