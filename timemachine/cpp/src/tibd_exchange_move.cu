@@ -53,8 +53,8 @@ TIBDExchangeMove<RealType>::TIBDExchangeMove(
       d_src_weights_(this->num_target_mols_), d_dest_weights_(this->num_target_mols_),
       d_inner_flags_(this->num_target_mols_), d_box_volume_(1), p_inner_count_(1), p_targeting_inner_vol_(1),
       d_selected_translation_(this->samples_per_proposal_ * 3),
-      d_sample_after_segments_(this->d_sample_segments_.length), d_weights_before_counts_(this->samples_per_proposal_),
-      d_weights_after_counts_(this->samples_per_proposal_) {
+      d_sample_after_segments_(this->d_sample_segments_offsets_.length),
+      d_weights_before_counts_(this->samples_per_proposal_), d_weights_after_counts_(this->samples_per_proposal_) {
 
     if (radius <= 0.0) {
         throw std::runtime_error("radius must be greater than 0.0");
@@ -89,14 +89,18 @@ TIBDExchangeMove<RealType>::TIBDExchangeMove(
         this->num_target_mols_));
 
     size_t sum_bytes = 0;
-    // Will need to compute prefix sums of the before and after weights
+    // Will need to compute prefix sums of the count of before and after weights to construct the segment offsets
     gpuErrchk(cub::DeviceScan::InclusiveSum(
-        nullptr, sum_bytes, d_weights_before_counts_.data, this->d_sample_segments_.data, this->samples_per_proposal_));
+        nullptr,
+        sum_bytes,
+        d_weights_before_counts_.data,
+        this->d_sample_segments_offsets_.data,
+        this->samples_per_proposal_));
     // Take the larger of the two to use as the temp storage data for CUB
     temp_storage_bytes_ = max(flagged_bytes, sum_bytes);
 
-    // Zero out the sample segments, the first index will always be zero and the inclusive sum will be offset by 1
-    gpuErrchk(cudaMemset(this->d_sample_segments_.data, 0, this->d_sample_segments_.size()));
+    // Zero out the sample segments offsets, the first index will always be zero and the inclusive sum will be offset by 1
+    gpuErrchk(cudaMemset(this->d_sample_segments_offsets_.data, 0, this->d_sample_segments_offsets_.size()));
 
     // Allocate char as temp_storage_bytes_ is in raw bytes and the type doesn't matter in practice.
     // Equivalent to DeviceBuffer<int> buf(temp_storage_bytes_ / sizeof(int))
@@ -227,7 +231,7 @@ void TIBDExchangeMove<RealType>::move(
             d_temp_storage_buffer_.data,
             temp_storage_bytes_,
             d_weights_before_counts_.data,
-            this->d_sample_segments_.data + 1, // Offset by one as the first idx is always 0
+            this->d_sample_segments_offsets_.data + 1, // Offset by one as the first idx is always 0
             this->samples_per_proposal_,
             stream));
 
@@ -243,7 +247,7 @@ void TIBDExchangeMove<RealType>::move(
         this->sampler_.sample_given_noise_device(
             this->num_target_mols_ * this->samples_per_proposal_,
             this->samples_per_proposal_,
-            this->d_sample_segments_.data,
+            this->d_sample_segments_offsets_.data,
             this->d_log_weights_before_.data,
             this->d_sample_noise_.data + (step * this->num_target_mols_ * this->samples_per_proposal_),
             this->d_sampling_intermediate_.data,

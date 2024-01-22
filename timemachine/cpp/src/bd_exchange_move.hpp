@@ -54,7 +54,7 @@ protected:
     DeviceBuffer<RealType> d_sample_noise_;          // Noise to use for selecting molecules
     DeviceBuffer<RealType> d_sampling_intermediate_; // [num_target_mols_] Intermediate buffer for weighted sampling
     DeviceBuffer<RealType> d_translations_;          // Uniform noise for translation + the check
-    DeviceBuffer<int> d_sample_segments_;            // Segment offsets for the sampler
+    DeviceBuffer<int> d_sample_segments_offsets_;    // Segment offsets for the sampler
 
     curandGenerator_t cr_rng_quat_;
     curandGenerator_t cr_rng_translations_;

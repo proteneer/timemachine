@@ -69,7 +69,7 @@ BDExchangeMove<RealType>::BDExchangeMove(
       d_intermediate_sample_weights_(ceil_divide(N_, WEIGHT_THREADS_PER_BLOCK)),
       d_sample_noise_(round_up_even(num_target_mols_ * proposals_per_move_)),
       d_sampling_intermediate_(num_target_mols_), d_translations_(translation_buffer_size),
-      d_sample_segments_(samples_per_proposal_ + 1) {
+      d_sample_segments_offsets_(samples_per_proposal_ + 1) {
 
     if (proposals_per_move_ <= 0) {
         throw std::runtime_error("proposals per move must be greater than 0");
@@ -100,13 +100,13 @@ BDExchangeMove<RealType>::BDExchangeMove(
 
     // Setup the sample segments
     // constant for BDExchangeMove since the sample size is always batches of num_target_mols_ weights
-    std::vector<int> h_sample_segments(d_sample_segments_.length);
+    std::vector<int> h_sample_segments(d_sample_segments_offsets_.length);
     int offset = 0;
     for (unsigned int i = 0; i < h_sample_segments.size(); i++) {
         h_sample_segments[i] = offset;
         offset += num_target_mols_;
     }
-    d_sample_segments_.copy_from(&h_sample_segments[0]);
+    d_sample_segments_offsets_.copy_from(&h_sample_segments[0]);
 }
 
 template <typename RealType> BDExchangeMove<RealType>::~BDExchangeMove() {
@@ -176,7 +176,7 @@ void BDExchangeMove<RealType>::move(
         sampler_.sample_given_noise_device(
             num_target_mols_ * samples_per_proposal_,
             samples_per_proposal_,
-            d_sample_segments_.data,
+            d_sample_segments_offsets_.data,
             d_log_weights_before_.data,
             d_sample_noise_.data + (step * num_target_mols_ * samples_per_proposal_),
             d_sampling_intermediate_.data,
