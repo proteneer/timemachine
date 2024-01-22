@@ -1,7 +1,6 @@
 import numpy as np
 import pytest
 from numpy.typing import NDArray
-from scipy.stats import ks_2samp
 
 from timemachine.lib import custom_ops
 
@@ -45,15 +44,21 @@ def test_segmented_random_sampler_validation(seed, precision):
     with pytest.raises(RuntimeError, match="all values in log space must be finite and non-negative"):
         sampler.sample([[1.0], [-0.1]])
 
+    with pytest.raises(RuntimeError, match="all values in log space must be finite and non-negative"):
+        sampler.sample([[1.0], [0.0]])
 
-@pytest.mark.parametrize("seed", [2024])
-@pytest.mark.parametrize("size, num_samples", [(500, 1500), (1000, 3000), (1000, 10000)])
+
+@pytest.mark.parametrize("seed", [2024, 2025, 2026, 2027])
+@pytest.mark.parametrize("size, num_samples", [(100, 3000), (200, 3000), (1000, 10000)])
 @pytest.mark.parametrize("precision", [np.float32, np.float64])
 def test_segmented_random_sampler(seed, size, num_samples, precision):
     rng = np.random.default_rng(seed)
 
     # Get a random probability vector.
-    probs = rng.exponential(scale=1 / 250, size=(num_samples, size))
+    probs = []
+    for _ in range(num_samples):
+        probs.append(rng.dirichlet(rng.normal(loc=10.0, size=size)))
+    probs = np.array(probs)
 
     klass = custom_ops.SegmentedWeightedRandomSampler_f32
     if precision == np.float64:
@@ -61,13 +66,20 @@ def test_segmented_random_sampler(seed, size, num_samples, precision):
 
     x = np.arange(size)
     ref_selection = np.array([rng.choice(x, size=1, p=normalize_probabilities(batch)) for batch in probs]).reshape(-1)
+    assert len(ref_selection) == num_samples
     sampler = klass(size, num_samples, seed)
 
     test_selection = sampler.sample(probs.tolist())
     assert len(test_selection) == num_samples
+    test_selection = np.array(test_selection)
 
-    ks, pv = ks_2samp(ref_selection, test_selection)
-    assert ks < 0.05, (pv, ks)
+    _, test_counts = np.unique(test_selection, axis=-1, return_counts=True)
+    test_percentages = test_counts / test_selection.shape[0]
+
+    _, ref_counts = np.unique(ref_selection, axis=-1, return_counts=True)
+    ref_percentages = ref_counts / ref_selection.shape[0]
+
+    np.testing.assert_allclose(test_percentages, ref_percentages, atol=0.05)
 
 
 @pytest.mark.parametrize("seed", [2024])
