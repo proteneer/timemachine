@@ -53,12 +53,12 @@ def test_segmented_random_sampler_jagged_batches_simple_distributions(seed, num_
     test_selection = sampler.sample(weights)
     assert len(test_selection) == len(weights)
 
-    # Check the pairs of two
+    # Check the pairs of two by grabbing the even indices
     _, counts = np.unique(np.array(test_selection)[::2], return_counts=True)
     percentages = counts / (len(weights) // 2)
     np.testing.assert_allclose(expected_percentages[0], percentages, atol=0.05)
 
-    # Check the triplet
+    # Check the set of three values by grabbing the odd indices
     _, counts = np.unique(np.array(test_selection)[1:][::2], return_counts=True)
     percentages = counts / (len(weights) // 2)
     np.testing.assert_allclose(expected_percentages[1], percentages, atol=0.05)

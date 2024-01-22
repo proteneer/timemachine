@@ -13,8 +13,8 @@ namespace timemachine {
 template <typename RealType> class SegmentedWeightedRandomSampler {
 
 private:
-    const int max_vals_per_segment_; // Max number of values that can be had per segment
-    const int num_segments_;         // Number of segments to run at a time
+    const int max_vals_per_segment_; // Max number of elements per segment
+    const int num_segments_;         // Number of segments
     size_t temp_storage_bytes_;
 
     // Stores both the initial uniform random values and the final gumbel distribution
@@ -26,7 +26,7 @@ private:
     curandGenerator_t cr_rng_;
 
 public:
-    SegmentedWeightedRandomSampler(const int max_vals_per_segment, const int segments, const int seed);
+    SegmentedWeightedRandomSampler(const int max_vals_per_segment, const int num_segments, const int seed);
 
     ~SegmentedWeightedRandomSampler();
 

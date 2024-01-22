@@ -202,7 +202,7 @@ template <typename RealType> void declare_segmented_weighted_random_sampler(py::
     py::class_<Class, std::shared_ptr<Class>>(m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
         .def(
             py::init([](const int N, const int segments, const int seed) { return new Class(N, segments, seed); }),
-            py::arg("size"),
+            py::arg("max_vals_per_segment"),
             py::arg("segments"),
             py::arg("seed"))
         .def(
@@ -224,7 +224,7 @@ template <typename RealType> void declare_segmented_weighted_random_sampler(py::
         ----------
 
         probabilities: vector of vectors containing doubles
-            Probabilities to assign to each index. Do not need to be normalized.
+            Probabilities to sample from. Do not need to be normalized.
 
         Returns
         -------
