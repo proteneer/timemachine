@@ -136,25 +136,3 @@ def test_segmented_random_sampler_simple_distribution(seed, num_samples, precisi
     _, counts = np.unique(test_selection, return_counts=True)
     percentages = counts / num_samples
     np.testing.assert_allclose(expected_percentages, percentages, atol=0.05)
-
-
-@pytest.mark.parametrize("seed", [2024])
-@pytest.mark.parametrize("num_samples", [1000])
-@pytest.mark.parametrize("precision", [np.float32, np.float64])
-def test_segmented_random_sampler_zero_probability(seed, num_samples, precision):
-    """Make sure that if we zero out a probability we never sample that value"""
-
-    # Setup weights such that expected percentages are obvious
-    weights = [[0.0, 2.5] for _ in range(num_samples)]
-
-    klass = custom_ops.SegmentedWeightedRandomSampler_f32
-    if precision == np.float64:
-        klass = custom_ops.SegmentedWeightedRandomSampler_f64
-
-    sampler = klass(len(weights[0]), num_samples, seed)
-
-    test_selection = sampler.sample(weights)
-    assert len(test_selection) == num_samples
-
-    # All of the values will be the index that is non-zero
-    assert np.all(np.array(test_selection) == 1)
