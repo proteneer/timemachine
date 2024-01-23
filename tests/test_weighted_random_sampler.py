@@ -49,27 +49,36 @@ def test_segmented_random_sampler_validation(seed, precision):
 
 
 @pytest.mark.parametrize("seed", [2024, 2025, 2026, 2027])
-@pytest.mark.parametrize("size, num_samples", [(50, 6000), (100, 20000)])
+@pytest.mark.parametrize("size, num_distributions, num_samples", [(50, 1000, 5), (500, 1000, 5)])
 @pytest.mark.parametrize("precision", [np.float32, np.float64])
-def test_segmented_random_sampler(seed, size, num_samples, precision):
+def test_segmented_random_sampler(seed, size, num_distributions, num_samples, precision):
     rng = np.random.default_rng(seed)
 
     # Get a random probability vector.
-    alpha = rng.normal(loc=10.0, size=size)
-    probs = rng.dirichlet(alpha, size=num_samples)
+    probs = []
+    for _ in range(num_distributions):
+        # some rows will be "spiky" (small alpha), some rows will be more uniform (large alpha)
+        alpha = rng.uniform(0.5, 10.0) * np.ones(size)
+        prob_vec = rng.dirichlet(alpha)
+
+        # Modify the probability to denormalize it
+        unnormalized_prob_vec = prob_vec * rng.uniform(5, 100.0)
+        probs.append(unnormalized_prob_vec)
+    probs = np.array(probs)
 
     klass = custom_ops.SegmentedWeightedRandomSampler_f32
     if precision == np.float64:
         klass = custom_ops.SegmentedWeightedRandomSampler_f64
 
     x = np.arange(size)
-    ref_selection = np.array([rng.choice(x, size=1, p=normalize_probabilities(batch)) for batch in probs]).reshape(-1)
-    assert len(ref_selection) == num_samples
-    sampler = klass(size, num_samples, seed)
+    ref_selection = np.array([rng.choice(x, size=num_samples, p=normalize_probabilities(batch)) for batch in probs])
+    assert len(ref_selection) == num_distributions
+    sampler = klass(size, num_distributions, seed)
 
-    test_selection = sampler.sample(probs.tolist())
+    test_selection = [sampler.sample(probs.tolist()) for _ in range(num_samples)]
     assert len(test_selection) == num_samples
     test_selection = np.array(test_selection)
+    test_selection = test_selection.transpose()
 
     _, test_counts = np.unique(test_selection, axis=-1, return_counts=True)
     test_percentages = test_counts / test_selection.shape[0]
