@@ -35,8 +35,10 @@ RealType __host__ __device__ __forceinline__ compute_raw_log_probability_targete
     const RealType outer_vol,
     const int inner_count,
     const int num_target_mols,
-    const RealType *__restrict__ before_log_sum_exp, // [2]
-    const RealType *__restrict__ after_log_sum_exp   // [2]
+    const RealType *__restrict__ before_max,     // [1]
+    const RealType *__restrict__ before_log_sum, // [1]
+    const RealType *__restrict__ after_max,      // [1]
+    const RealType *__restrict__ after_log_sum   // [1]
 ) {
     const RealType log_vol_prob =
         targeting_inner_volume == 1 ? log(inner_volume) - log(outer_vol) : log(outer_vol) - log(inner_volume);
@@ -50,14 +52,15 @@ RealType __host__ __device__ __forceinline__ compute_raw_log_probability_targete
         compute_log_proposal_probabilities_given_counts<RealType>(src_count - 1, dest_count + 1);
 
     RealType before_log_prob =
-        convert_nan_to_inf<RealType>(compute_logsumexp_final<RealType>(before_log_sum_exp[0], before_log_sum_exp[1]));
+        convert_nan_to_inf<RealType>(compute_logsumexp_final<RealType>(before_max[0], before_log_sum[0]));
     RealType after_log_prob =
-        convert_nan_to_inf<RealType>(compute_logsumexp_final<RealType>(after_log_sum_exp[0], after_log_sum_exp[1]));
+        convert_nan_to_inf<RealType>(compute_logsumexp_final<RealType>(after_max[0], after_log_sum[0]));
 
     return before_log_prob - after_log_prob + log_vol_prob + (log_rev_prob - log_fwd_prob);
 }
 
 void __global__ k_setup_sample_atoms(
+    const int num_samples,
     const int sample_atoms,          // number of atoms in each sample
     const int *__restrict__ samples, // [1]
     const int *__restrict__ target_atoms,
@@ -68,12 +71,15 @@ void __global__ k_setup_sample_atoms(
 template <typename RealType>
 void __global__ k_attempt_exchange_move(
     const int N,
-    const RealType *__restrict__ rand,               // [1]
-    const RealType *__restrict__ before_log_sum_exp, // [2]
-    const RealType *__restrict__ after_log_sum_exp,  // [2]
-    const double *__restrict__ moved_coords,         // [N, 3]
-    double *__restrict__ dest_coords,                // [N, 3]
-    size_t *__restrict__ num_accepted                // [1]
+    const int num_samples,
+    const RealType *__restrict__ rand,                   // [1]
+    const RealType *__restrict__ before_log_sum_exp_max, // [1]
+    const RealType *__restrict__ before_log_sum_exp_sum, // [1]
+    const RealType *__restrict__ after_log_sum_exp_max,  // [num_samples]
+    const RealType *__restrict__ after_log_sum_exp_sum,  // [num_samples]
+    const double *__restrict__ moved_coords,             // [N, 3]
+    double *__restrict__ dest_coords,                    // [N, 3]
+    size_t *__restrict__ num_accepted                    // [1]
 );
 
 template <typename RealType>
@@ -84,26 +90,30 @@ void __global__ k_attempt_exchange_move_targeted(
     const int *__restrict__ inner_count,  // [1]
     const RealType *__restrict__ box_vol, // [1]
     const RealType inner_volume,
-    const RealType *__restrict__ rand, // [1]
-    const int *__restrict__ samples,
-    const RealType *__restrict__ before_log_sum_exp, // [2]
-    const RealType *__restrict__ after_log_sum_exp,  // [2]
-    const double *__restrict__ moved_coords,         // [N, 3]
-    double *__restrict__ dest_coords,                // [N, 3]
-    RealType *__restrict__ before_weights,           // [num_target_mols]
-    RealType *__restrict__ after_weights,            // [num_target_mols]
-    int *__restrict__ inner_flags,
-    size_t *__restrict__ num_accepted // [1]
+    const RealType *__restrict__ rand,           // [1]
+    const int *__restrict__ samples,             // [1]
+    const RealType *__restrict__ before_max,     // [1]
+    const RealType *__restrict__ before_log_sum, // [1]
+    const RealType *__restrict__ after_max,      // [1]
+    const RealType *__restrict__ after_log_sum,  // [1]
+    const double *__restrict__ moved_coords,     // [N, 3]
+    double *__restrict__ dest_coords,            // [N, 3]
+    RealType *__restrict__ before_weights,       // [num_target_mols]
+    RealType *__restrict__ after_weights,        // [num_target_mols]
+    int *__restrict__ inner_flags,               // [num_target_mols]
+    size_t *__restrict__ num_accepted            // [1]
 );
 
 template <typename RealType>
 void __global__ k_store_accepted_log_probability(
     const int num_weights,
-    const RealType *__restrict__ rand,              // [1]
-    RealType *__restrict__ before_log_sum_exp,      // [2]
-    const RealType *__restrict__ after_log_sum_exp, // [2]
-    RealType *__restrict__ before_weights,          // [num_weights]
-    const RealType *__restrict__ after_weights      // [num_weights]
+    const RealType *__restrict__ rand,                  // [1]
+    RealType *__restrict__ before_log_sum_exp_max,      // [1]
+    RealType *__restrict__ before_log_sum_exp_sum,      // [1]
+    const RealType *__restrict__ after_log_sum_exp_max, // [num_samples]
+    const RealType *__restrict__ after_log_sum_exp_sum, // [num_samples]
+    RealType *__restrict__ before_weights,              // [num_weights]
+    const RealType *__restrict__ after_weights          // [num_weights]
 );
 
 template <typename RealType>

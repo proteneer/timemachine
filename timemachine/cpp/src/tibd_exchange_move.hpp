@@ -38,17 +38,13 @@ protected:
     DeviceBuffer<RealType> d_src_weights_;  // [num_target_mols_]
     DeviceBuffer<RealType> d_dest_weights_; // [num_target_mols_]
     DeviceBuffer<int> d_inner_flags_;
-    DeviceBuffer<RealType> d_box_volume_;         // [1]
-    PinnedHostBuffer<int> p_inner_count_;         // [1]
-    PinnedHostBuffer<int> p_targeting_inner_vol_; // [1]
-
-    cudaEvent_t host_copy_event_;
+    DeviceBuffer<RealType> d_box_volume_; // [1]
 
 private:
-    DeviceBuffer<RealType> d_selected_translation_; // [3] The translation selected to run
-    DeviceBuffer<int> d_sample_after_segments_;     // [this->samples_per_proposal_ + 1]
-    DeviceBuffer<int> d_weights_before_counts_;     // [this->samples_per_proposal_]
-    DeviceBuffer<int> d_weights_after_counts_;      // [this->samples_per_proposal_]
+    DeviceBuffer<RealType> d_selected_translation_;    // [3] The translation selected to run
+    DeviceBuffer<int> d_sample_after_segment_offsets_; // [this->samples_per_proposal_ + 1]
+    DeviceBuffer<int> d_weights_before_counts_;        // [this->samples_per_proposal_]
+    DeviceBuffer<int> d_weights_after_counts_;         // [this->samples_per_proposal_]
 
 public:
     TIBDExchangeMove(
