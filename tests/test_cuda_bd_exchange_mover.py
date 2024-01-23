@@ -98,33 +98,28 @@ def test_bd_exchange_get_set_params(precision):
 @pytest.mark.parametrize("moves", [1, 2, 10])
 @pytest.mark.parametrize("precision,rtol,atol", [(np.float64, 5e-7, 5e-7), (np.float32, 1e-6, 2e-6)])
 @pytest.mark.parametrize("seed", [2023])
-def test_two_clashy_water_moves(moves, precision, rtol, atol, seed):
-    """Given two waters directly on top of each other in a box, the exchange mover should accept almost any move"""
+def test_pair_of_waters_in_box(moves, precision, rtol, atol, seed):
+    """Given two waters in a large box most moves should be accepted. This is a useful test for verifying memory doesn't leak"""
     ff = Forcefield.load_default()
-    system, conf, _, _ = builders.build_water_system(1.0, ff.water_ff)
+    system, host_conf, _, _ = builders.build_water_system(1.0, ff.water_ff)
     bps, _ = openmm_deserializer.deserialize_system(system, cutoff=1.2)
 
     nb = next(bp for bp in bps if isinstance(bp.potential, Nonbonded))
     bond_pot = next(bp for bp in bps if isinstance(bp.potential, HarmonicBond)).potential
 
-    all_group_idxs = get_group_indices(get_bond_list(bond_pot), conf.shape[0])
+    all_group_idxs = get_group_indices(get_bond_list(bond_pot), host_conf.shape[0])
 
     # Get first two mols
     group_idxs = all_group_idxs[:2]
 
-    conf_idxs = np.array(group_idxs).reshape(-1)
-
-    conf = conf[conf_idxs]
-    # Set the two waters ontop of each other
-    conf[group_idxs[0], :] = conf[group_idxs[1], :]
-
     box = np.eye(3) * 100.0
 
     # Re-image coords so that everything is imaged to begin with
-    conf = image_frame(group_idxs, conf, box)
+    host_conf = image_frame(all_group_idxs, host_conf, box)
 
+    conf_idxs = np.array(group_idxs).reshape(-1)
+    conf = host_conf[conf_idxs]
     N = conf.shape[0]
-
     params = nb.params[conf_idxs]
 
     cutoff = nb.potential.cutoff

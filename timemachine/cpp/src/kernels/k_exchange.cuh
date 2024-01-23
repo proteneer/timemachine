@@ -160,13 +160,17 @@ void __global__ k_flag_mols_inner_outer(
 );
 
 template <typename RealType>
-void __global__ k_decide_targeted_move(
+void __global__ k_decide_targeted_moves(
+    const int num_samples,
     const int num_target_mols,
-    const RealType *__restrict__ rand,
-    const int *__restrict__ inner_count,
-    const RealType *__restrict__ translations, // [2, 3] first translation is inside, second is outer
-    int *__restrict__ targeting_inner_volume,
-    RealType *__restrict__ output_translation);
+    const RealType *__restrict__ rand,         // [num_samples]
+    const int *__restrict__ inner_count,       // [1]
+    const RealType *__restrict__ translations, // [num_samples, 2, 3] first translation is inside, second is outer
+    int *__restrict__ targeting_inner_volume,  // [num_samples]
+    int *__restrict__ src_weights_counts,
+    int *__restrict__ target_weights_counts,
+    RealType *__restrict__ output_translation // [num_samples, 3]
+);
 
 template <typename RealType>
 void __global__ k_separate_weights_for_targeted(
@@ -187,11 +191,12 @@ void __global__ k_setup_destination_weights_for_targeted(
     const RealType *__restrict__ weights,           // [num_target_mols]
     RealType *__restrict__ output_weights);
 
-void __global__ k_adjust_sample_idx(
-    const int *__restrict__ targeting_inner_volume, // [1]
+void __global__ k_adjust_sample_idxs(
+    const int num_samples,
+    const int *__restrict__ targeting_inner_volume, // [num_samples]
     const int *__restrict__ inner_count,            // [1]
     const int *__restrict__ partitioned_indices,    // [inner_count]
-    int *__restrict__ sample_idxs                   // [1]
+    int *__restrict__ sample_idxs                   // [num_samples]
 );
 
 } // namespace timemachine

@@ -99,7 +99,7 @@ pybind11_add_module(${LIBRARY_NAME} SHARED NO_EXTRAS
   src/pinned_host_buffer.cu
   src/streamed_potential_runner.cu
   src/stream_manager.cu
-  src/weighted_random_sampler.cu
+  src/segmented_weighted_random_sampler.cu
   src/bd_exchange_move.cu
   src/tibd_exchange_move.cu
   src/nonbonded_mol_energy.cu
@@ -108,6 +108,7 @@ pybind11_add_module(${LIBRARY_NAME} SHARED NO_EXTRAS
   src/kernels/k_logsumexp.cu
   src/kernels/k_rotations.cu
   src/kernels/k_exchange.cu
+  src/kernels/k_sampling.cu
   src/all_atom_energies.cu
   src/exchange.cu
   src/translations.cu

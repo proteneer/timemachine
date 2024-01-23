@@ -6,7 +6,6 @@
 #include "logsumexp.hpp"
 #include "nonbonded_mol_energy.hpp"
 #include "pinned_host_buffer.hpp"
-#include "weighted_random_sampler.hpp"
 #include <array>
 #include <vector>
 
@@ -47,6 +46,9 @@ protected:
 
 private:
     DeviceBuffer<RealType> d_selected_translation_; // [3] The translation selected to run
+    DeviceBuffer<int> d_sample_after_segments_;     // [this->samples_per_proposal_ + 1]
+    DeviceBuffer<int> d_weights_before_counts_;     // [this->samples_per_proposal_]
+    DeviceBuffer<int> d_weights_after_counts_;      // [this->samples_per_proposal_]
 
 public:
     TIBDExchangeMove(
