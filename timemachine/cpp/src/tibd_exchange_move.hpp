@@ -3,8 +3,6 @@
 #include "bd_exchange_move.hpp"
 #include "curand_kernel.h"
 #include "device_buffer.hpp"
-#include "logsumexp.hpp"
-#include "nonbonded_mol_energy.hpp"
 #include "pinned_host_buffer.hpp"
 #include <array>
 #include <vector>

@@ -25,7 +25,6 @@
 #include "langevin_integrator.hpp"
 #include "local_md_utils.hpp"
 #include "log_flat_bottom_bond.hpp"
-#include "logsumexp.hpp"
 #include "mover.hpp"
 #include "neighborlist.hpp"
 #include "nonbonded_all_pairs.hpp"
@@ -1513,27 +1512,6 @@ void declare_fanout_summed_potential(py::module &m) {
         .def("get_potentials", &FanoutSummedPotential::get_potentials);
 }
 
-template <typename RealType> void declare_log_sum_exp(py::module &m, const char *typestr) {
-
-    using Class = LogSumExp<RealType>;
-    std::string pyclass_name = std::string("LogSumExp_") + typestr;
-    py::class_<Class, std::shared_ptr<Class>>(m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
-        .def(py::init([](const int N) { return new Class(N); }), py::arg("N"))
-        .def(
-            "sum",
-            [](Class &summer,
-               const py::array_t<double, py::array::c_style> &values) -> py::array_t<RealType, py::array::c_style> {
-                std::vector<RealType> h_vals = py_array_to_vector_with_cast<double, RealType>(values);
-                int N = h_vals.size();
-                py::array_t<RealType, py::array::c_style> py_res(1);
-                summer.sum_host(N, &h_vals[0], py_res.mutable_data());
-
-                return py_res;
-            },
-            py::arg("values"));
-    ;
-}
-
 template <typename RealType> void declare_segmented_log_sum_exp(py::module &m, const char *typestr) {
 
     using Class = SegmentedLogSumExp<RealType>;
@@ -1982,9 +1960,6 @@ PYBIND11_MODULE(custom_ops, m) {
 
     declare_segmented_weighted_random_sampler<double>(m, "f64");
     declare_segmented_weighted_random_sampler<float>(m, "f32");
-
-    declare_log_sum_exp<double>(m, "f64");
-    declare_log_sum_exp<float>(m, "f32");
 
     declare_segmented_log_sum_exp<double>(m, "f64");
     declare_segmented_log_sum_exp<float>(m, "f32");
