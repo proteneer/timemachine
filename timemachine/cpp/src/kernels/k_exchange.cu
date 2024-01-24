@@ -7,26 +7,26 @@
 namespace timemachine {
 
 void __global__ k_setup_sample_atoms(
-    const int num_samples,
-    const int sample_atoms,          // number of atoms in each sample
-    const int *__restrict__ samples, // [1]
+    const int batch_size,                      // Number of molecules to setup
+    const int num_atoms_in_each_mol,           // number of atoms in each sample
+    const int *__restrict__ mol_idx_per_batch, // [batch_size] The index of the molecules to sample
     const int *__restrict__ target_atoms,
     const int *__restrict__ mol_offsets,
     int *__restrict__ output_atom_idxs,
     int *__restrict__ output_mol_offsets) {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
-    while (idx < num_samples) {
-        int mol_idx = samples[idx];
+    while (idx < batch_size) {
+        int mol_idx = mol_idx_per_batch[idx];
         int mol_start = mol_offsets[mol_idx];
         int mol_end = mol_offsets[mol_idx + 1];
         output_mol_offsets[mol_idx] = target_atoms[mol_start];
         output_mol_offsets[mol_idx + 1] = target_atoms[mol_end - 1] + 1;
         int num_atoms = mol_end - mol_start;
 
-        assert(num_atoms == sample_atoms);
+        assert(num_atoms == num_atoms_in_each_mol);
 
         for (int i = 0; i < num_atoms; i++) {
-            output_atom_idxs[idx * sample_atoms + i] = target_atoms[mol_start + i];
+            output_atom_idxs[idx * num_atoms_in_each_mol + i] = target_atoms[mol_start + i];
         }
         idx += gridDim.x * blockDim.x;
     }
@@ -35,12 +35,12 @@ void __global__ k_setup_sample_atoms(
 template <typename RealType>
 void __global__ k_attempt_exchange_move(
     const int N,
-    const int num_samples,
+    const int batch_size,
     const RealType *__restrict__ rand,           // [1]
     const RealType *__restrict__ before_max,     // [1]
     const RealType *__restrict__ before_log_sum, // [1]
-    const RealType *__restrict__ after_max,      // [num_samples]
-    const RealType *__restrict__ after_log_sum,  // [num_samples]
+    const RealType *__restrict__ after_max,      // [batch_size]
+    const RealType *__restrict__ after_log_sum,  // [batch_size]
     const double *__restrict__ moved_coords,     // [N, 3]
     double *__restrict__ dest_coords,            // [N, 3]
     size_t *__restrict__ num_accepted            // [1]
@@ -74,7 +74,7 @@ void __global__ k_attempt_exchange_move(
 
 template void __global__ k_attempt_exchange_move<float>(
     const int N,
-    const int num_samples,
+    const int batch_size,
     const float *__restrict__ rand,
     const float *__restrict__ before_max,
     const float *__restrict__ before_log_sum,
@@ -85,7 +85,7 @@ template void __global__ k_attempt_exchange_move<float>(
     size_t *__restrict__ num_accepted);
 template void __global__ k_attempt_exchange_move<double>(
     const int N,
-    const int num_samples,
+    const int batch_size,
     const double *__restrict__ rand,
     const double *__restrict__ before_max,
     const double *__restrict__ before_log_sum,
@@ -737,16 +737,16 @@ template void __global__ k_setup_destination_weights_for_targeted<double>(
     double *__restrict__ output_weights);
 
 void __global__ k_adjust_sample_idxs(
-    const int num_samples,
-    const int *__restrict__ targeting_inner_volume, // [num_samples]
+    const int batch_size,
+    const int *__restrict__ targeting_inner_volume, // [batch_size]
     const int *__restrict__ inner_count,            // [1]
     const int *__restrict__ partitioned_indices,    // [inner_count]
-    int *__restrict__ sample_idxs                   // [num_samples]
+    int *__restrict__ sample_idxs                   // [batch_size]
 ) {
     const int local_inner_count = inner_count[0];
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     // At the moment we only have one sample
-    while (idx < num_samples) {
+    while (idx < batch_size) {
         const int target_inner = targeting_inner_volume[idx];
         const int offset = target_inner == 1 ? local_inner_count : 0;
         sample_idxs[idx] = partitioned_indices[sample_idxs[idx] + offset];

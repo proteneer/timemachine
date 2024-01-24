@@ -24,7 +24,7 @@ template void __global__ k_exp_sub_max<double>(const int, const double *, const 
 template <typename RealType>
 void __global__ k_segmented_exp_sub_max(
     const int num_segments,
-    const int *__restrict__ d_segment_offsets, // [num_segments]
+    const int *__restrict__ d_segment_offsets, // [num_segments + 1]
     const RealType *__restrict__ max,          // [num_segments]
     const RealType *__restrict__ vals,         // [num_segments, K]
     RealType *__restrict__ out                 // [num_segments, K]
