@@ -66,15 +66,19 @@ def test_segmented_cuda_logsumexp_ragged_arrays(precision, atol, rtol, seed, loc
     max_values_per_segment = 100
     values = [rng.normal(size=rng.integers(1, max_values_per_segment), loc=loc) * 1000.0 for _ in range(num_samples)]
 
+    klass = custom_ops.SegmentedLogSumExp_f64
     if precision == np.float32:
-        summer = custom_ops.SegmentedLogSumExp_f32(max_values_per_segment, num_samples)
-    else:
-        summer = custom_ops.SegmentedLogSumExp_f64(max_values_per_segment, num_samples)
+        klass = custom_ops.SegmentedLogSumExp_f32
+
+    summer = klass(max_values_per_segment, num_samples)
 
     test_vals = summer.sum(values)
     assert len(test_vals) == num_samples
     # Verify that the results are deterministic
     np.testing.assert_array_equal(test_vals, summer.sum(values))
 
+    unsegmented_version = klass(max_values_per_segment, 1)
     for test_val, vals in zip(test_vals, values):
-        np.testing.assert_allclose(logsumexp(vals), test_val, atol=atol, rtol=rtol)
+        ref_logsumexp = logsumexp(vals)
+        np.testing.assert_allclose(ref_logsumexp, test_val, atol=atol, rtol=rtol)
+        np.testing.assert_allclose(ref_logsumexp, unsegmented_version.sum([vals])[0], atol=atol, rtol=rtol)
