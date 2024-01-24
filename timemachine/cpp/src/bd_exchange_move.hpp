@@ -3,7 +3,7 @@
 #include "device_buffer.hpp"
 #include "mover.hpp"
 #include "nonbonded_mol_energy.hpp"
-#include "segmented_logsumexp.hpp"
+#include "segmented_sumexp.hpp"
 #include "segmented_weighted_random_sampler.hpp"
 #include <array>
 #include <vector>
@@ -32,7 +32,7 @@ protected:
     size_t num_attempted_;
     NonbondedMolEnergyPotential<RealType> mol_potential_;
     SegmentedWeightedRandomSampler<RealType> sampler_;
-    SegmentedLogSumExp<RealType> logsumexp_;
+    SegmentedSumExp<RealType> logsumexp_;
     // Buffer for evaluating moves without touching the original coords
     DeviceBuffer<double> d_intermediate_coords_;
     DeviceBuffer<double> d_params_;

@@ -1,3 +1,6 @@
+"""Tests the SegmentedSumExp class that is used in the Cuda code to compute LogSumExp.
+The host code computes the logsumexp directly"""
+
 import numpy as np
 import pytest
 from scipy.special import logsumexp
@@ -11,15 +14,15 @@ def test_segmented_cuda_logsumexp_validation(precision):
     max_values_per_segment = 5
     num_segments = 2
     if precision == np.float32:
-        summer = custom_ops.SegmentedLogSumExp_f32(max_values_per_segment, num_segments)
+        summer = custom_ops.SegmentedSumExp_f32(max_values_per_segment, num_segments)
     else:
-        summer = custom_ops.SegmentedLogSumExp_f64(max_values_per_segment, num_segments)
+        summer = custom_ops.SegmentedSumExp_f64(max_values_per_segment, num_segments)
 
     with pytest.raises(RuntimeError, match="number of segments don't match"):
-        summer.sum([[1.0]])
+        summer.logsumexp([[1.0]])
 
     with pytest.raises(RuntimeError, match="empty array not allowed"):
-        summer.sum(
+        summer.logsumexp(
             [
                 [
                     1.0,
@@ -29,7 +32,7 @@ def test_segmented_cuda_logsumexp_validation(precision):
         )
 
     with pytest.raises(RuntimeError, match="total values is greater than buffer size"):
-        summer.sum([[1.0] * (max_values_per_segment + 1) for _ in range(num_segments)])
+        summer.logsumexp([[1.0] * (max_values_per_segment + 1) for _ in range(num_segments)])
 
 
 @pytest.mark.memcheck
@@ -43,14 +46,14 @@ def test_segmented_cuda_logsumexp(precision, atol, rtol, seed, loc, shape):
     values = rng.normal(size=shape, loc=loc) * 1000.0
 
     if precision == np.float32:
-        summer = custom_ops.SegmentedLogSumExp_f32(shape[1], shape[0])
+        summer = custom_ops.SegmentedSumExp_f32(shape[1], shape[0])
     else:
-        summer = custom_ops.SegmentedLogSumExp_f64(shape[1], shape[0])
+        summer = custom_ops.SegmentedSumExp_f64(shape[1], shape[0])
 
-    test_vals = summer.sum(values)
+    test_vals = summer.logsumexp(values)
     assert len(test_vals) == shape[0]
     # Verify that the results are deterministic
-    np.testing.assert_array_equal(test_vals, summer.sum(values))
+    np.testing.assert_array_equal(test_vals, summer.logsumexp(values))
 
     for test_val, vals in zip(test_vals, values):
         np.testing.assert_allclose(logsumexp(vals), test_val, atol=atol, rtol=rtol)
@@ -66,22 +69,22 @@ def test_segmented_cuda_logsumexp_ragged_arrays(precision, atol, rtol, seed, loc
     max_values_per_segment = 100
     values = [rng.normal(size=rng.integers(1, max_values_per_segment), loc=loc) * 1000.0 for _ in range(num_samples)]
 
-    klass = custom_ops.SegmentedLogSumExp_f64
+    klass = custom_ops.SegmentedSumExp_f64
     if precision == np.float32:
-        klass = custom_ops.SegmentedLogSumExp_f32
+        klass = custom_ops.SegmentedSumExp_f32
 
     summer = klass(max_values_per_segment, num_samples)
 
-    test_vals = summer.sum(values)
+    test_vals = summer.logsumexp(values)
     assert len(test_vals) == num_samples
     # Verify that the results are deterministic
-    np.testing.assert_array_equal(test_vals, summer.sum(values))
+    np.testing.assert_array_equal(test_vals, summer.logsumexp(values))
 
     unsegmented_version = klass(max_values_per_segment, 1)
     for test_val, vals in zip(test_vals, values):
         ref_logsumexp = logsumexp(vals)
         np.testing.assert_allclose(ref_logsumexp, test_val, atol=atol, rtol=rtol)
-        np.testing.assert_allclose(ref_logsumexp, unsegmented_version.sum([vals])[0], atol=atol, rtol=rtol)
+        np.testing.assert_allclose(ref_logsumexp, unsegmented_version.logsumexp([vals])[0], atol=atol, rtol=rtol)
 
 
 @pytest.mark.memcheck
@@ -103,14 +106,14 @@ def test_segmented_cuda_logsumexp_edge_cases(precision, atol, rtol, seed, count,
     rng.shuffle(samples)
 
     if precision == np.float32:
-        summer = custom_ops.SegmentedLogSumExp_f32(max_values_per_segment, len(samples))
+        summer = custom_ops.SegmentedSumExp_f32(max_values_per_segment, len(samples))
     else:
-        summer = custom_ops.SegmentedLogSumExp_f64(max_values_per_segment, len(samples))
+        summer = custom_ops.SegmentedSumExp_f64(max_values_per_segment, len(samples))
 
-    test_vals = summer.sum(samples)
+    test_vals = summer.logsumexp(samples)
     assert len(test_vals) == len(samples)
     # Verify that the results are deterministic
-    np.testing.assert_array_equal(test_vals, summer.sum(samples))
+    np.testing.assert_array_equal(test_vals, summer.logsumexp(samples))
 
     for test_val, vals in zip(test_vals, samples):
         ref_logsumexp = logsumexp(vals)

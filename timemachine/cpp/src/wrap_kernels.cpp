@@ -37,7 +37,7 @@
 #include "potential.hpp"
 #include "rmsd_align.hpp"
 #include "rotations.hpp"
-#include "segmented_logsumexp.hpp"
+#include "segmented_sumexp.hpp"
 #include "segmented_weighted_random_sampler.hpp"
 #include "set_utils.hpp"
 #include "summed_potential.hpp"
@@ -1512,10 +1512,10 @@ void declare_fanout_summed_potential(py::module &m) {
         .def("get_potentials", &FanoutSummedPotential::get_potentials);
 }
 
-template <typename RealType> void declare_segmented_log_sum_exp(py::module &m, const char *typestr) {
+template <typename RealType> void declare_segmented_sum_exp(py::module &m, const char *typestr) {
 
-    using Class = SegmentedLogSumExp<RealType>;
-    std::string pyclass_name = std::string("SegmentedLogSumExp_") + typestr;
+    using Class = SegmentedSumExp<RealType>;
+    std::string pyclass_name = std::string("SegmentedSumExp_") + typestr;
     py::class_<Class, std::shared_ptr<Class>>(m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
         .def(
             py::init([](const int max_vals_per_segment, const int segments) {
@@ -1524,13 +1524,13 @@ template <typename RealType> void declare_segmented_log_sum_exp(py::module &m, c
             py::arg("max_vals_per_segment"),
             py::arg("num_segments"))
         .def(
-            "sum",
+            "logsumexp",
             [](Class &summer, const std::vector<std::vector<double>> &vals) -> std::vector<RealType> {
                 std::vector<std::vector<RealType>> real_batches(vals.size());
                 for (unsigned long i = 0; i < vals.size(); i++) {
                     real_batches[i] = py_vector_to_vector_with_cast<double, RealType>(vals[i]);
                 }
-                std::vector<RealType> results = summer.sum_host(real_batches);
+                std::vector<RealType> results = summer.logsumexp_host(real_batches);
 
                 return results;
             },
@@ -1961,8 +1961,8 @@ PYBIND11_MODULE(custom_ops, m) {
     declare_segmented_weighted_random_sampler<double>(m, "f64");
     declare_segmented_weighted_random_sampler<float>(m, "f32");
 
-    declare_segmented_log_sum_exp<double>(m, "f64");
-    declare_segmented_log_sum_exp<float>(m, "f32");
+    declare_segmented_sum_exp<double>(m, "f64");
+    declare_segmented_sum_exp<float>(m, "f32");
 
     declare_nonbonded_mol_energy<double>(m, "f64");
     declare_nonbonded_mol_energy<float>(m, "f32");

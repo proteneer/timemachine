@@ -3,13 +3,13 @@
 #include "kernels/k_logsumexp.cuh"
 #include "kernels/kernel_utils.cuh"
 #include "math_utils.cuh"
-#include "segmented_logsumexp.hpp"
+#include "segmented_sumexp.hpp"
 #include <cub/cub.cuh>
 
 namespace timemachine {
 
 template <typename RealType>
-SegmentedLogSumExp<RealType>::SegmentedLogSumExp(const int max_vals_per_segment, const int num_segments)
+SegmentedSumExp<RealType>::SegmentedSumExp(const int max_vals_per_segment, const int num_segments)
     : max_vals_per_segment_(max_vals_per_segment), num_segments_(num_segments),
       d_temp_buffer_(max_vals_per_segment_ * num_segments_), temp_storage_bytes_(0), d_temp_storage_buffer_(0) {
     void *dummy_temp = nullptr;
@@ -27,10 +27,10 @@ SegmentedLogSumExp<RealType>::SegmentedLogSumExp(const int max_vals_per_segment,
     d_temp_storage_buffer_.realloc(temp_storage_bytes_);
 };
 
-template <typename RealType> SegmentedLogSumExp<RealType>::~SegmentedLogSumExp(){};
+template <typename RealType> SegmentedSumExp<RealType>::~SegmentedSumExp(){};
 
 template <typename RealType>
-void SegmentedLogSumExp<RealType>::sum_device(
+void SegmentedSumExp<RealType>::sum_device(
     const int total_values,
     const int num_segments,
     const int *d_segment_offsets, // [num_segments + 1]
@@ -79,7 +79,7 @@ void SegmentedLogSumExp<RealType>::sum_device(
 }
 
 template <typename RealType>
-std::vector<RealType> SegmentedLogSumExp<RealType>::sum_host(std::vector<std::vector<RealType>> &vals) {
+std::vector<RealType> SegmentedSumExp<RealType>::logsumexp_host(std::vector<std::vector<RealType>> &vals) {
     const int num_segments = static_cast<int>(vals.size());
     std::vector<int> h_segments(num_segments + 1);
 
@@ -126,7 +126,7 @@ std::vector<RealType> SegmentedLogSumExp<RealType>::sum_host(std::vector<std::ve
     return h_logsumexp;
 };
 
-template class SegmentedLogSumExp<double>;
-template class SegmentedLogSumExp<float>;
+template class SegmentedSumExp<double>;
+template class SegmentedSumExp<float>;
 
 } // namespace timemachine

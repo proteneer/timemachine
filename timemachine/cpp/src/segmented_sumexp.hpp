@@ -4,7 +4,10 @@
 
 namespace timemachine {
 
-template <typename RealType> class SegmentedLogSumExp {
+// SegmentedSumExp is a class for computing the max and sum(exp(x - max) for x in xs) of a set of values
+// To compute the logsumexp you can use the code in kernels/k_logsumexp.cuh::compute_logsumexp_final given the
+// max and exp sum.
+template <typename RealType> class SegmentedSumExp {
 
 private:
     const int max_vals_per_segment_;
@@ -15,9 +18,9 @@ private:
     DeviceBuffer<char> d_temp_storage_buffer_;
 
 public:
-    SegmentedLogSumExp(const int max_vals_per_segment, const int num_segments);
+    SegmentedSumExp(const int max_vals_per_segment, const int num_segments);
 
-    ~SegmentedLogSumExp();
+    ~SegmentedSumExp();
 
     // sum_device stores the max value of each segment as well as the sum(exp(x - max) for x in xs)
     // in two separate arrays. This is done to avoid having to run an additional kernel to combine the values
@@ -31,9 +34,9 @@ public:
         RealType *d_exp_sum_out,
         cudaStream_t stream);
 
-    // sum_host returns a vector of the final logsumexp value of a set of segments.
+    // logsumexp_host returns a vector of the final logsumexp value of a set of segments.
     // This code combines the max value and the exp_sum that values are written to by sum_device
-    std::vector<RealType> sum_host(std::vector<std::vector<RealType>> &vals);
+    std::vector<RealType> logsumexp_host(std::vector<std::vector<RealType>> &vals);
 };
 
 } // namespace timemachine
