@@ -272,8 +272,7 @@ void BDExchangeMove<RealType>::compute_incremental_weights(
     gpuErrchk(cudaMemcpyAsync(
         d_intermediate_coords_.data, d_coords, d_intermediate_coords_.size(), cudaMemcpyDeviceToDevice, stream));
 
-    dim3 block(ceil_divide(mol_size_, tpb), samples_per_proposal_);
-    k_setup_sample_atoms<<<block, tpb, 0, stream>>>(
+    k_setup_sample_atoms<<<ceil_divide(samples_per_proposal_, tpb), tpb, 0, stream>>>(
         samples_per_proposal_,
         mol_size_,
         d_samples_.data,
