@@ -24,7 +24,7 @@ public:
         const int num_segments,
         const int *d_segment_offsets,
         const RealType *d_values,
-        RealType *d_max_sum_out,
+        RealType *d_max_out,
         RealType *d_exp_sum_out,
         cudaStream_t stream);
 
