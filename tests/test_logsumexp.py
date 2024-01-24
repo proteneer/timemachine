@@ -33,7 +33,7 @@ def test_segmented_cuda_logsumexp_validation(precision):
 
 
 @pytest.mark.memcheck
-@pytest.mark.parametrize("precision,atol,rtol", [(np.float64, 1e-8, 1e-8), (np.float32, 2e-5, 1e-5)])
+@pytest.mark.parametrize("precision,atol,rtol", [(np.float64, 0.0, 0.0), (np.float32, 1e-7, 1e-7)])
 @pytest.mark.parametrize("seed", [2024])
 @pytest.mark.parametrize("loc", [1000, 0, -1000])
 @pytest.mark.parametrize("shape", [(1, 2), (100, 100), (1000, 1000)])
@@ -52,11 +52,11 @@ def test_segmented_cuda_logsumexp(precision, atol, rtol, seed, loc, shape):
     np.testing.assert_array_equal(test_vals, summer.sum(values))
 
     for test_val, vals in zip(test_vals, values):
-        np.testing.assert_allclose(logsumexp(vals), test_val)
+        np.testing.assert_allclose(logsumexp(vals), test_val, atol=atol, rtol=rtol)
 
 
 @pytest.mark.memcheck
-@pytest.mark.parametrize("precision,atol,rtol", [(np.float64, 1e-8, 1e-8), (np.float32, 2e-5, 1e-5)])
+@pytest.mark.parametrize("precision,atol,rtol", [(np.float64, 0.0, 0.0), (np.float32, 1e-7, 1e-7)])
 @pytest.mark.parametrize("seed", [2024])
 @pytest.mark.parametrize("loc", [1000, 0, -1000])
 @pytest.mark.parametrize("num_samples", [2, 5, 10, 100])
@@ -75,4 +75,4 @@ def test_segmented_cuda_logsumexp_ragged_arrays(precision, atol, rtol, seed, loc
     np.testing.assert_array_equal(test_vals, summer.sum(values))
 
     for test_val, vals in zip(test_vals, values):
-        np.testing.assert_allclose(logsumexp(vals), test_val)
+        np.testing.assert_allclose(logsumexp(vals), test_val, atol=atol, rtol=rtol)
