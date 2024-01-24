@@ -82,3 +82,39 @@ def test_segmented_cuda_logsumexp_ragged_arrays(precision, atol, rtol, seed, loc
         ref_logsumexp = logsumexp(vals)
         np.testing.assert_allclose(ref_logsumexp, test_val, atol=atol, rtol=rtol)
         np.testing.assert_allclose(ref_logsumexp, unsegmented_version.sum([vals])[0], atol=atol, rtol=rtol)
+
+
+@pytest.mark.memcheck
+@pytest.mark.parametrize("precision,atol,rtol", [(np.float64, 0.0, 0.0), (np.float32, 1e-7, 1e-7)])
+@pytest.mark.parametrize("seed", [2024])
+@pytest.mark.parametrize("count", [1, 5])
+@pytest.mark.parametrize(
+    "edge_case",
+    [[1000.0, np.nan, 0.4], [100.0, np.inf, 5.0], [2024.0, -np.inf, 0.5], [np.inf, -np.inf, np.inf]],
+)
+def test_segmented_cuda_logsumexp_edge_cases(precision, atol, rtol, seed, count, edge_case):
+    max_values_per_segment = 20
+    rng = np.random.default_rng(seed)
+    # Shuffle the ordering of the edge case, should be independent of ordering
+    rng.shuffle(edge_case)
+    # Only one sample will
+    samples = [edge_case * count, rng.normal(size=max_values_per_segment).tolist()]
+
+    rng.shuffle(samples)
+
+    if precision == np.float32:
+        summer = custom_ops.SegmentedLogSumExp_f32(max_values_per_segment, len(samples))
+    else:
+        summer = custom_ops.SegmentedLogSumExp_f64(max_values_per_segment, len(samples))
+
+    test_vals = summer.sum(samples)
+    assert len(test_vals) == len(samples)
+    # Verify that the results are deterministic
+    np.testing.assert_array_equal(test_vals, summer.sum(samples))
+
+    for test_val, vals in zip(test_vals, samples):
+        ref_logsumexp = logsumexp(vals)
+        if np.isfinite(ref_logsumexp):
+            np.testing.assert_allclose(ref_logsumexp, test_val, atol=atol, rtol=rtol)
+        else:
+            assert np.isnan(test_val)
