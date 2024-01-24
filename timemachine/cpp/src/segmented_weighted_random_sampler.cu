@@ -99,28 +99,34 @@ void SegmentedWeightedRandomSampler<RealType>::sample_given_noise_device(
 
 template <typename RealType>
 std::vector<int>
-SegmentedWeightedRandomSampler<RealType>::sample_host(const std::vector<std::vector<RealType>> &probabilities) {
-    const int num_segments = static_cast<int>(probabilities.size());
+SegmentedWeightedRandomSampler<RealType>::sample_host(const std::vector<std::vector<RealType>> &weights) {
+    const int num_segments = static_cast<int>(weights.size());
     std::vector<int> h_selection(num_segments);
     std::vector<int> h_segments(num_segments + 1);
 
+    const RealType inf = std::numeric_limits<RealType>::infinity();
     int offset = 0;
     h_segments[0] = offset;
     std::vector<RealType> h_log_probs;
     for (unsigned long i = 0; i < num_segments; i++) {
-        const int num_vals = probabilities[i].size();
+        const int num_vals = weights[i].size();
         if (num_vals == 0) {
             throw std::runtime_error("empty probability distribution not allowed");
         }
         offset += num_vals;
         h_segments[i + 1] = offset;
-        // Convert the probabilities into log probabilities
+        // Convert the weights into log weights
         for (unsigned long j = 0; j < num_vals; j++) {
-            RealType log_weight = log(probabilities[i][j]);
-            if (!valid_log_weight(log_weight)) {
-                throw std::runtime_error(
-                    "all values in log space must be finite and non-negative: " + std::to_string(probabilities[i][j]));
+            RealType weight = weights[i][j];
+            if (weight == -inf || weight == inf) {
+                throw std::runtime_error("unable to use infinity as a weight");
+            } else if (isnan(weight)) {
+                throw std::runtime_error("unable to use nan as a weight");
+            } else if (weight < static_cast<RealType>(0.0)) {
+                throw std::runtime_error("unable to use negative values as a weight");
             }
+
+            RealType log_weight = log(weight);
             h_log_probs.push_back(log_weight);
         }
     }

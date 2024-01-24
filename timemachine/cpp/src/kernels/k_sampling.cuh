@@ -2,10 +2,6 @@
 
 namespace timemachine {
 
-template <typename RealType> bool __host__ __device__ __forceinline__ valid_log_weight(const RealType val) {
-    return isfinite(val);
-}
-
 // References:
 // https://timvieira.github.io/blog/post/2014/07/31/gumbel-max-trick/
 // https://lips.cs.princeton.edu/the-gumbel-max-trick-for-discrete-distributions/

@@ -19,7 +19,6 @@ void __global__ k_setup_gumbel_max_trick(
     }
 
     const RealType weight = log_weights[idx];
-    assert(valid_log_weight(weight));
 
     const RealType gumbel_rand = -log(-log(gumbel_noise[idx]));
 
