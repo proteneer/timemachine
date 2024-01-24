@@ -19,6 +19,9 @@ public:
 
     ~SegmentedLogSumExp();
 
+    // sum_device stores the max value of each segment as well as the sum(exp(x - max) for x in xs)
+    // in two separate arrays. This is done to avoid having to run an additional kernel to combine the values
+    // when it is trivial to do in a downstream kernel consuming the logsumexp.
     void sum_device(
         const int total_values,
         const int num_segments,
@@ -28,6 +31,8 @@ public:
         RealType *d_exp_sum_out,
         cudaStream_t stream);
 
+    // sum_host returns a vector of the final logsumexp value of a set of segments.
+    // This code combines the max value and the exp_sum that values are written to by sum_device
     std::vector<RealType> sum_host(std::vector<std::vector<RealType>> &vals);
 };
 
