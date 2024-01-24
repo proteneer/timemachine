@@ -49,6 +49,7 @@ def test_segmented_cuda_logsumexp(precision, atol, rtol, seed, loc, shape):
 
     test_vals = summer.sum(values)
     assert len(test_vals) == shape[0]
+    # Verify that the results are deterministic
     np.testing.assert_array_equal(test_vals, summer.sum(values))
 
     for test_val, vals in zip(test_vals, values):
@@ -72,6 +73,7 @@ def test_segmented_cuda_logsumexp_ragged_arrays(precision, atol, rtol, seed, loc
 
     test_vals = summer.sum(values)
     assert len(test_vals) == num_samples
+    # Verify that the results are deterministic
     np.testing.assert_array_equal(test_vals, summer.sum(values))
 
     for test_val, vals in zip(test_vals, values):
