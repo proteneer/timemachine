@@ -66,6 +66,50 @@ def estimate_radii(qljws):
     return r_min
 
 
+import jax
+from jax import numpy as jnp
+from scipy.integrate import tplquad
+
+from timemachine.potentials.nonbonded import nonbonded_block
+
+
+def estimate_Z(system_coords, qljws, box):
+    # Z = int dx dy dz exp(-u(x,y,z;qljws))
+    @jax.jit
+    def U_fn(x, y, z):
+        # complete_coords_copy = np.copy(complete_coords_initial)
+        # complete_coords_copy[-1] = np.array([x,y,z,0])
+        xi = system_coords
+        xj = jnp.array([[x, y, z]])
+        params_i = qljws
+        params_j = jnp.array([[0.0, 0.15, 0.9, 0]])
+        beta = 1.0
+        cutoff = 1.2
+        return nonbonded_block(xi, xj, box, params_i, params_j, beta, cutoff)
+
+    thermo_beta = 1 / DEFAULT_KT
+
+    @jax.jit
+    def q_fn(x, y, z):
+        return jnp.exp(-thermo_beta * U_fn(x, y, z))
+
+    Z, err = tplquad(
+        q_fn,
+        0,
+        box[0][0],
+        lambda _: 0,
+        lambda _: box[1][1],
+        lambda _, __: 0,
+        lambda _, __: box[2][2],
+        epsabs=1e-3,
+        epsrel=1e-3,
+    )
+
+    print(-np.log(Z), Z, err)
+
+    return Z
+
+
 def estimate_volumes_along_schedule(mol_a, mol_b, core, ff, lamb_schedule):
     """
     Estimate volumes as we alchemically morph mol_a into mol_b along the lamb_schedule
@@ -88,14 +132,25 @@ def estimate_volumes_along_schedule(mol_a, mol_b, core, ff, lamb_schedule):
     conf_a = get_romol_conf(mol_a)
     conf_b = get_romol_conf(mol_b)
 
+    # use a consistent conf
+    box_conf = st.combine_confs(conf_a, conf_b, 0.0)
+    max_radius = 0.2  # 2 A padding
+    fbl_corner = np.amin(box_conf, axis=0) - max_radius
+    btr_corner = np.amax(box_conf, axis=0) + max_radius
+    box_size = btr_corner - fbl_corner
+    box = np.eye(3, dtype=np.float32) * box_size
+
+    print("box", box)
+
     for lamb in lamb_schedule:
         # note, "meet in the middle"
         conf_c = st.combine_confs(conf_a, conf_b, lamb)
         cutoff = 1.2  # doesn't really too matter much except for scaling of w
         qljws = st._get_guest_params(st.ff.q_handle_solv, st.ff.lj_handle_solv, lamb, cutoff=cutoff)
         qljws = np.array(qljws)
-        radii = estimate_radii(qljws)
-        vol = estimate_volume(conf_c, radii, n_samples=1000000)
+        # radii = estimate_radii(qljws)
+        # vol = estimate_volume(conf_c, radii, n_samples=1000000)
+        vol = estimate_Z(conf_c, qljws, box)
         vols.append(vol)
 
     return vols

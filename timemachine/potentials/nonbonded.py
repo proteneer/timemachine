@@ -107,15 +107,14 @@ def nonbonded_block_unsummed(xi, xj, box, params_i, params_j, beta, cutoff):
     sig_ij = combining_rule_sigma(sig_i, sig_j)
     eps_ij = combining_rule_epsilon(eps_i, eps_j)
 
-    qi = jnp.expand_dims(params_i[:, 0], axis=1)
-    qj = jnp.expand_dims(params_j[:, 0], axis=0)
-
-    qij = jnp.multiply(qi, qj)
-
-    es = direct_space_pme(dij, qij, beta)
+    # qi = jnp.expand_dims(params_i[:, 0], axis=1)
+    # qj = jnp.expand_dims(params_j[:, 0], axis=0)
+    # qij = jnp.multiply(qi, qj)
+    # es = direct_space_pme(dij, qij, beta)
     lj = lennard_jones(dij, sig_ij, eps_ij)
 
-    nrgs = jnp.where(dij < cutoff, es + lj, 0)
+    # nrgs = jnp.where(dij < cutoff, es + lj, 0)
+    nrgs = jnp.where(dij < cutoff, lj, 0)
     return nrgs
 
 

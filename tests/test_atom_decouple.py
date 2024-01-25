@@ -1,3 +1,4 @@
+import jax
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -6,6 +7,8 @@ from timemachine.fe.atom_decouple import estimate_volumes_along_schedule
 from timemachine.fe.atom_mapping import get_cores
 from timemachine.fe.utils import read_sdf
 from timemachine.ff import Forcefield
+
+jax.config.update("jax_enable_x64", False)
 
 
 def test_atom_by_atom_decouple():
